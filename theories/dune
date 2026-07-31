@@ -1,0 +1,4 @@
+(coq.theory
+ (name PackageCalculus)
+ (package pac)
+ (theories Stdlib))

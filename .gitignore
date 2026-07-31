@@ -1,0 +1,6 @@
+_build/
+_opam/
+*.install
+*.glob
+.lia.cache
+.dir-locals.el
