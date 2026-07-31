@@ -84,4 +84,143 @@ Module Core (N V : UsualOrderedType).
           DepRel.In (p, (n, vs)) D ->
           exists v, VSet.In v vs /\ PkgSet.In (n, v) S
     ; res_version_unique : VersionUnique S }.
+
+  Module Merge.
+    Definition mergedVS (D : DepRel.t) (p : Pkg.t) (n : N.t) : VSet.t :=
+      VSet.filter
+        (fun v => DepRel.for_all
+            (fun '(q, (m, vs)) =>
+                      if Pkg.eq_dec q p
+                      then if N.eq_dec m n then VSet.mem v vs else true
+                      else true)
+            D)
+        (DepRel.fold (fun '(q, (m, vs)) acc =>
+             if Pkg.eq_dec q p
+             then if N.eq_dec m n then VSet.union vs acc else acc
+             else acc)
+           D VSet.empty).
+
+    Module SOdv := SetOps DepElt V DepRel VSet.
+    Lemma mergedVS_union_spec : forall D p n v,
+        VSet.In v
+          (DepRel.fold (fun '(q, (m, vs)) acc =>
+               if Pkg.eq_dec q p
+               then if N.eq_dec m n then VSet.union vs acc else acc
+               else acc)
+             D VSet.empty) <->
+        exists vs, DepRel.In (p, (n, vs)) D /\ VSet.In v vs.
+    Proof.
+      intros D p n v.
+      rewrite (SOdv.in_fold _
+        (fun e => if Pkg.eq_dec (fst e) p
+                  then if N.eq_dec (fst (snd e)) n
+                       then snd (snd e) else VSet.empty
+                  else VSet.empty)).
+      2:{ intros [q [m vs]] a y; simpl.
+          destruct (Pkg.eq_dec q p); [destruct (N.eq_dec m n) |].
+          - rewrite VSet.union_spec; tauto.
+          - split; [tauto | intros [H | H];
+              [exfalso; exact (SOdv.empty_in _ H) | exact H]].
+          - split; [tauto | intros [H | H];
+              [exfalso; exact (SOdv.empty_in _ H) | exact H]]. }
+      split.
+      - intros [H | [e [HeD He]]].
+        + exfalso; exact (SOdv.empty_in _ H).
+        + destruct e as [q [m vs]]; simpl in He.
+          destruct (Pkg.eq_dec q p) as [-> | NE];
+            [destruct (N.eq_dec m n) as [-> | NE] |];
+            try (exfalso; exact (SOdv.empty_in _ He)).
+          exists vs; split; assumption.
+      - intros [vs [HD Hv]].
+        right; exists (p, (n, vs)); split; [exact HD | simpl].
+        destruct (Pkg.eq_dec p p) as [_ | NE];
+          [| contradiction NE; reflexivity].
+        destruct (N.eq_dec n n) as [_ | NE];
+          [exact Hv | contradiction NE; reflexivity].
+    Qed.
+
+    Lemma mem_mergedVS : forall D p n v,
+        VSet.In v (mergedVS D p n) <->
+        (exists vs, DepRel.In (p, (n, vs)) D) /\
+        (forall vs, DepRel.In (p, (n, vs)) D -> VSet.In v vs).
+    Proof.
+      intros D p n v; unfold mergedVS.
+      rewrite VSet.filter_spec'.
+      rewrite mergedVS_union_spec.
+      rewrite DepRel.for_all_spec'.
+      split.
+      - intros [[vs [HD Hv]] Hall].
+        split; [exists vs; exact HD |].
+        intros vs' HD'.
+        specialize (Hall _ HD'); simpl in Hall.
+        destruct (Pkg.eq_dec p p) as [_ | NE];
+          [| contradiction NE; reflexivity].
+        destruct (N.eq_dec n n) as [_ | NE];
+          [| contradiction NE; reflexivity].
+        apply VSet.mem_spec; exact Hall.
+      - intros [[vs0 H0] Hall].
+        split.
+        + exists vs0; split; [exact H0 | apply Hall; exact H0].
+        + intros [q [m vs]] He; simpl.
+          destruct (Pkg.eq_dec q p) as [-> | NE]; [| reflexivity].
+          destruct (N.eq_dec m n) as [-> | NE]; [| reflexivity].
+          apply VSet.mem_spec; apply Hall; exact He.
+    Qed.
+
+    Definition merge (D : DepRel.t) : DepRel.t :=
+      DepRel.fold (fun '(q, (n, _)) acc =>
+          DepRel.add (q, (n, mergedVS D q n)) acc)
+        D DepRel.empty.
+
+    Module SOdd := SetOps DepElt DepElt DepRel DepRel.
+    Lemma mem_merge : forall D p n vs,
+        DepRel.In (p, (n, vs)) (merge D) <->
+        (exists vs0, DepRel.In (p, (n, vs0)) D) /\ vs = mergedVS D p n.
+    Proof.
+      intros D p n vs; unfold merge.
+      rewrite (SOdd.in_fold _
+        (fun e => DepRel.singleton
+                    (fst e, (fst (snd e), mergedVS D (fst e) (fst (snd e)))))).
+      2:{ intros [q [m ws]] a y; simpl.
+          rewrite SOdd.add_in, SOdd.singleton_in; tauto. }
+      split.
+      - intros [H | [e [HeD He]]].
+        + exfalso; exact (SOdd.empty_in _ H).
+        + destruct e as [q [m ws]]; rewrite SOdd.singleton_in in He;
+            simpl in He.
+          injection He as -> -> ->.
+          split; [exists ws; exact HeD | reflexivity].
+      - intros [[vs0 H0] ->].
+        right; exists (p, (n, vs0)); split; [exact H0 | simpl].
+        rewrite SOdd.singleton_in; reflexivity.
+    Qed.
+
+    Theorem merge_functionalInName : forall D, FunctionalInName (merge D).
+    Proof.
+      intros D p n vs1 vs2 H1 H2.
+      apply mem_merge in H1; apply mem_merge in H2.
+      destruct H1 as [_ ->]; destruct H2 as [_ ->]; reflexivity.
+    Qed.
+
+    Theorem merge_resolution_iff : forall R D r S,
+        IsResolution R (merge D) r S <-> IsResolution R D r S.
+    Proof.
+      intros R D r S; split; intros [Hsub Hroot Hdep Huniq]; constructor;
+        try assumption.
+      - intros p Hp m vs HD.
+        destruct (Hdep p Hp m (mergedVS D p m)) as [v [Hv HvS]].
+        + apply mem_merge; split; [exists vs; exact HD | reflexivity].
+        + apply mem_mergedVS in Hv; destruct Hv as [_ Hall].
+          exists v; split; [apply Hall; exact HD | exact HvS].
+      - intros p Hp m ws Hmem.
+        apply mem_merge in Hmem; destruct Hmem as [[vs0 H0] ->].
+        destruct (Hdep p Hp m vs0 H0) as [v [Hv HvS]].
+        exists v; split; [| exact HvS].
+        apply mem_mergedVS; split; [exists vs0; exact H0 |].
+        intros vs' HD'.
+        destruct (Hdep p Hp m vs' HD') as [v' [Hv' Hv'S]].
+        assert (v = v') as -> by (apply (Huniq m); assumption).
+        exact Hv'.
+    Qed.
+  End Merge.
 End Core.

@@ -16,3 +16,10 @@ Example core_depRel_computes :
     (C.DepRel.add ((1, 2), (3, C.VSet.singleton 4)) C.DepRel.empty) = true.
 Proof. reflexivity. Qed.
 
+Example core_merge_computes :
+  C.DepRel.cardinal
+    (C.Merge.merge (C.DepRel.add ((1, 2), (3, C.VSet.singleton 4))
+                (C.DepRel.add ((1, 2), (3, C.VSet.singleton 5))
+                   C.DepRel.empty))) = 1.
+Proof. reflexivity. Qed.
+
