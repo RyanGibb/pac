@@ -14,4 +14,4 @@ Set Extraction Output Directory ".".
 Set Warnings "-extraction-opaque-accessed".
 
 Extraction "pac_extraction.ml"
-  Smoke.C Smoke.Ver Smoke.Cfl.
+  Smoke.C Smoke.Ver Smoke.Cfl Smoke.Conc.

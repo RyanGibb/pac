@@ -159,6 +159,30 @@ Tactic Notation "cmp_lt_trans" ident(db) :=
   intros x y z; destruct x, y, z; cbn; intros H1 H2;
   first [ solve [congruence] | solve [auto with db] | cmp_stuck ].
 
+(* Deciding equality inside a set-comprehension guard means an if-then-else on
+   eq_dec, whose two branches then have to be re-derived at every proof that
+   reads the guard back; this packages the test with its three laws. *)
+Module UOTEqb (X : UsualOrderedType).
+  Definition eqb (a b : X.t) : bool := if X.eq_dec a b then true else false.
+
+  Lemma eqb_true_iff : forall a b, eqb a b = true <-> a = b.
+  Proof.
+    intros a b; unfold eqb; destruct (X.eq_dec a b) as [E | NE];
+      split; intro H; solve [exact E | reflexivity | discriminate
+                            | contradiction NE].
+  Qed.
+
+  Lemma eqb_refl : forall a, eqb a a = true.
+  Proof. intro a; apply eqb_true_iff; reflexivity. Qed.
+
+  Lemma eqb_false_iff : forall a b, eqb a b = false <-> a <> b.
+  Proof.
+    intros a b; unfold eqb; destruct (X.eq_dec a b) as [E | NE];
+      split; intro H;
+      [discriminate | contradiction (H E) | exact NE | reflexivity].
+  Qed.
+End UOTEqb.
+
 (* Stdlib's pair-ordered-type functors build setoid eq; none preserves
    UsualOrderedType. *)
 Module PairUOT (A B : UsualOrderedType) <: UsualOrderedType.
