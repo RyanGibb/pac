@@ -52,6 +52,101 @@ Proof.
     + rewrite (Hta eq_refl eq_refl); reflexivity.
 Qed.
 
+Module Type ComparableType.
+  Parameter t : Type.
+  Parameter compare : t -> t -> comparison.
+  Axiom compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
+  Axiom compare_antisym : forall x y, compare y x = CompOpp (compare x y).
+  Axiom compare_lt_trans : forall x y z,
+      compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
+End ComparableType.
+
+Module UOTFromCompare (X : ComparableType) <: UsualOrderedType.
+  Definition t := X.t.
+  Definition eq := @Logic.eq t.
+  Definition eq_equiv := @eq_equivalence t.
+  Definition lt (x y : t) : Prop := X.compare x y = Lt.
+
+  Lemma compare_refl : forall x, X.compare x x = Eq.
+  Proof. intro x; apply X.compare_eq_iff; reflexivity. Qed.
+
+  #[global] Instance lt_strorder : StrictOrder lt.
+  Proof.
+    split.
+    - intros x H; unfold lt in H; rewrite compare_refl in H; discriminate.
+    - intros x y z; unfold lt; apply X.compare_lt_trans.
+  Qed.
+
+  #[global] Instance lt_compat : Proper (eq ==> eq ==> iff) lt.
+  Proof. intros x x' -> y y' ->; reflexivity. Qed.
+
+  Definition compare := X.compare.
+
+  Lemma compare_spec : forall x y, CompSpec eq lt x y (compare x y).
+  Proof.
+    intros x y; unfold compare, eq, lt.
+    destruct (X.compare x y) eqn:E.
+    - constructor; apply X.compare_eq_iff; exact E.
+    - constructor; exact E.
+    - constructor; rewrite X.compare_antisym, E; reflexivity.
+  Qed.
+
+  Definition eq_dec : forall x y : t, {x = y} + {x <> y}.
+  Proof.
+    intros x y; destruct (X.compare x y) eqn:E.
+    - left; apply X.compare_eq_iff; exact E.
+    - right; intro H; subst; rewrite compare_refl in E; discriminate.
+    - right; intro H; subst; rewrite compare_refl in E; discriminate.
+  (* Defined, not Qed: eq_dec feeds if-then-else, so it must stay reducible *)
+  Defined.
+End UOTFromCompare.
+
+(* Same facts as OrderedTypeFacts but stated with plain Logic.eq, so that
+   subst works on the results. *)
+Module UOTCompareFacts (X : UsualOrderedType).
+  Module F := OrderedTypeFacts X.
+
+  Lemma compare_eq_iff : forall a b, X.compare a b = Eq <-> a = b.
+  Proof. intros a b; exact (F.compare_eq_iff a b). Qed.
+
+  Lemma compare_antisym : forall a b, X.compare b a = CompOpp (X.compare a b).
+  Proof. intros a b; exact (F.compare_antisym a b). Qed.
+
+  Lemma compare_lt_trans : forall a b c,
+      X.compare a b = Lt -> X.compare b c = Lt -> X.compare a c = Lt.
+  Proof.
+    intros a b c A B; apply F.compare_lt_iff in A, B; apply F.compare_lt_iff.
+    eapply StrictOrder_Transitive; eassumption.
+  Qed.
+End UOTCompareFacts.
+
+(* solve would report only "No applicable tactic"; the constructor pair that
+   went wrong is legible only from the goal itself. *)
+Ltac cmp_stuck := match goal with |- ?G => fail 2 "no delegate for" G end.
+
+(* Every synthetic name/version inductive proves the three ComparableType laws
+   by the same case bash over constructor pairs: off-diagonal pairs are settled
+   by constructor disjointness, diagonal pairs delegate to a UOTCompareFacts
+   instance registered in db: compare_eq_iff as a rewrite rule, the other two
+   as cmp_by hints. The database is an argument rather than one fixed name so
+   that a file only ever searches the delegates it registered; a shared
+   database would grow with every Require and make the proofs order-dependent.
+   cbn rather than simpl because a rank-indexed compare stays stuck under
+   simpl, while cbn still declines to unfold the delegates. *)
+Tactic Notation "cmp_eq_iff" ident(db) :=
+  intros x y; destruct x, y; cbn;
+  first [ solve [split; intro H; congruence]
+        | solve [autorewrite with db; split; intro H; congruence]
+        | cmp_stuck ].
+
+Tactic Notation "cmp_antisym" ident(db) :=
+  intros x y; destruct x, y; cbn;
+  first [ reflexivity | solve [auto with db] | cmp_stuck ].
+
+Tactic Notation "cmp_lt_trans" ident(db) :=
+  intros x y z; destruct x, y, z; cbn; intros H1 H2;
+  first [ solve [congruence] | solve [auto with db] | cmp_stuck ].
+
 (* Stdlib's pair-ordered-type functors build setoid eq; none preserves
    UsualOrderedType. *)
 Module PairUOT (A B : UsualOrderedType) <: UsualOrderedType.
