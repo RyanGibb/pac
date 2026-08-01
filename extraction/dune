@@ -1,0 +1,19 @@
+(coq.extraction
+ (prelude Extract)
+ (extracted_modules pac_extraction)
+ (theories Stdlib PackageCalculus))
+
+; The extraction-generated .mli does not match the .ml for functor-heavy
+; code (internal Coq__N aliases), so compile a copy without an interface.
+
+(rule
+ (deps pac_extraction.ml)
+ (action
+  (copy pac_extraction.ml pac.ml)))
+
+(library
+ (name pac)
+ (wrapped false)
+ (modules pac)
+ (flags
+  (:standard -w -a)))

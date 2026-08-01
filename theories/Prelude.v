@@ -120,6 +120,18 @@ Module UOTCompareFacts (X : UsualOrderedType).
   Qed.
 End UOTCompareFacts.
 
+(* Discharging a goal by a UOTCompareFacts instance of a functor-built
+   comparator needs delta to see through the instance's statement, which only
+   full elaboration does -- Hint Resolve's simple apply and eassumption both
+   fail. So transitivity, whose middle element resolution would anyway have to
+   guess, takes both premises from the context and lets the application
+   typecheck; antisymmetry is a plain apply. *)
+Ltac cmp_by t :=
+  first [ match goal with
+          | A : _ = Lt, B : _ = Lt |- _ => exact (t _ _ _ A B)
+          end
+        | apply t ].
+
 (* solve would report only "No applicable tactic"; the constructor pair that
    went wrong is legible only from the goal itself. *)
 Ltac cmp_stuck := match goal with |- ?G => fail 2 "no delegate for" G end.

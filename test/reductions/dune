@@ -1,0 +1,6 @@
+(executable
+ (name reductions)
+ (libraries pac))
+
+(cram
+ (deps reductions.exe))
