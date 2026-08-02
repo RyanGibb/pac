@@ -227,6 +227,72 @@ let peer () =
     (R.T.DepRel.elements (R.reduceDeps d th g))
 
 (* ------------------------------------------------------------------ *)
+(* Package formula:                                                    *)
+(*   (A,1) :- ((B,{2}) /\ (C,{1})) \/ ((B,{1}) /\ ~(C,{1}))            *)
+(* ------------------------------------------------------------------ *)
+let package_formula () =
+  let module M = E.PkgF in
+  let module R = M.Reduction in
+  let pkg n v = (i2n n, i2n v) in
+  let vset l =
+    List.fold_left (fun s v -> M.VSet.add (i2n v) s) M.VSet.empty l
+  in
+  let pset l = List.fold_left (fun s p -> M.PkgSet.add p s) M.PkgSet.empty l in
+  let pp_vs vs =
+    "{"
+    ^ String.concat ","
+        (List.map (fun v -> string_of_int (n2i v)) (M.VSet.elements vs))
+    ^ "}"
+  in
+  let dep n vs = M.FDep (i2n n, vset vs) in
+  let form =
+    M.FDisj
+      ( M.FConj (dep 2 [ 2 ], dep 3 [ 1 ]),
+        M.FConj (dep 2 [ 1 ], M.FNeg (dep 3 [ 1 ])) )
+  in
+  let r = pset [ pkg 1 1; pkg 2 1; pkg 2 2; pkg 3 1 ] in
+  let d = M.DepRel.add (pkg 1 1, form) M.DepRel.empty in
+  let pp_src (n, v) = Printf.sprintf "(%s,%d)" (nm (n2i n)) (n2i v) in
+  let rec pp_form = function
+    | M.FDep (n, vs) -> Printf.sprintf "(%s,%s)" (nm (n2i n)) (pp_vs vs)
+    | M.FConj (a, b) -> Printf.sprintf "(%s /\\ %s)" (pp_form a) (pp_form b)
+    | M.FDisj (a, b) -> Printf.sprintf "(%s \\/ %s)" (pp_form a) (pp_form b)
+    | M.FNeg a -> Printf.sprintf "~%s" (pp_form a)
+  in
+  Printf.printf "Package Formula Calculus\n";
+  Printf.printf "  packages R: %s\n"
+    (String.concat " " (List.map pp_src (M.PkgSet.elements r)));
+  Printf.printf "  dependencies D_Psi:\n";
+  List.iter
+    (fun (p, f) -> Printf.printf "    %s :- %s\n" (pp_src p) (pp_form f))
+    (M.DepRel.elements d);
+  let pp_tn = function
+    | R.Name.Orig n -> nm (n2i n)
+    | R.Name.Disjunct (f1, f2) ->
+        Printf.sprintf "or<%s ; %s>" (pp_form f1) (pp_form f2)
+    | R.Name.NegDep (n, vs) ->
+        Printf.sprintf "neg<%s,%s>" (nm (n2i n)) (pp_vs vs)
+  in
+  let pp_tv = function
+    | R.Version.Orig v -> string_of_int (n2i v)
+    | R.Version.Zero -> "0"
+    | R.Version.One -> "1"
+  in
+  let pp_tp (n, v) = Printf.sprintf "(%s,%s)" (pp_tn n) (pp_tv v) in
+  let pp_tvs vs =
+    "{" ^ String.concat "," (List.map pp_tv (R.T.VSet.elements vs)) ^ "}"
+  in
+  Printf.printf "reduceReal -> core packages:\n";
+  List.iter
+    (fun p -> Printf.printf "    %s\n" (pp_tp p))
+    (R.T.PkgSet.elements (R.reduceReal r d));
+  Printf.printf "reduceDeps -> core dependencies:\n";
+  List.iter
+    (fun (s, (n, vs)) ->
+      Printf.printf "    %s -> (%s,%s)\n" (pp_tp s) (pp_tn n) (pp_tvs vs))
+    (R.T.DepRel.elements (R.reduceDeps d))
+
+(* ------------------------------------------------------------------ *)
 (* Virtual: D virtual, provided by B and C; E real but also provided   *)
 (* by F.                                                               *)
 (* ------------------------------------------------------------------ *)
@@ -305,8 +371,11 @@ let () =
   | "conflict" -> conflict ()
   | "concurrent" -> concurrent ()
   | "peer" -> peer ()
+  | "package-formula" -> package_formula ()
   | "virtual" -> virtual_ ()
   | s ->
       Printf.eprintf
-        "usage: reductions <conflict|concurrent|peer|virtual> (got %S)\n" s;
+        "usage: reductions <conflict|concurrent|peer|package-formula|virtual> \
+         (got %S)\n"
+        s;
       exit 2
