@@ -226,11 +226,87 @@ let peer () =
       Printf.printf "    %s -> (%s,%s)\n" (pp_tp s) (pp_tn n) (pp_tvs vs))
     (R.T.DepRel.elements (R.reduceDeps d th g))
 
+(* ------------------------------------------------------------------ *)
+(* Virtual: D virtual, provided by B and C; E real but also provided   *)
+(* by F.                                                               *)
+(* ------------------------------------------------------------------ *)
+let virtual_ () =
+  let module M = E.Virt in
+  let module R = M.Reduction in
+  let pkg n v = (i2n n, i2n v) in
+  let vset l =
+    List.fold_left (fun s v -> M.VSet.add (i2n v) s) M.VSet.empty l
+  in
+  let pset l = List.fold_left (fun s p -> M.PkgSet.add p s) M.PkgSet.empty l in
+  let drel l =
+    List.fold_left
+      (fun s ((sn, sv), (dn, dvs)) ->
+        M.C.DepRel.add ((i2n sn, i2n sv), (i2n dn, vset dvs)) s)
+      M.C.DepRel.empty l
+  in
+  (* Provides Pi: element (provider-pkg, (provided-name, version-value)). *)
+  let prov l =
+    List.fold_left
+      (fun s ((pn, pv), (nm', ver)) ->
+        M.ProvidesRel.add ((i2n pn, i2n pv), (i2n nm', M.VTVal (i2n ver))) s)
+      M.ProvidesRel.empty l
+  in
+  (* D (name 4) is virtual: no real (D,1). *)
+  let r = pset [ pkg 1 1; pkg 2 1; pkg 3 1; pkg 5 1; pkg 6 1 ] in
+  let d = drel [ ((1, 1), (4, [ 1 ])); ((1, 1), (5, [ 1 ])) ] in
+  let pi = prov [ ((2, 1), (4, 1)); ((3, 1), (4, 1)); ((6, 1), (5, 1)) ] in
+  let pp_src (n, v) = Printf.sprintf "(%s,%d)" (nm (n2i n)) (n2i v) in
+  let pp_vs vs =
+    "{"
+    ^ String.concat ","
+        (List.map (fun v -> string_of_int (n2i v)) (M.VSet.elements vs))
+    ^ "}"
+  in
+  let pp_vt = function M.VTVal v -> string_of_int (n2i v) | M.VTTop -> "*" in
+  Printf.printf "Virtual Package Calculus\n";
+  Printf.printf "  packages R (D is virtual): %s\n"
+    (String.concat " " (List.map pp_src (M.PkgSet.elements r)));
+  Printf.printf "  provides Pi:\n";
+  List.iter
+    (fun (p, (n, vt)) ->
+      Printf.printf "    %s provides %s (=%s)\n" (pp_src p)
+        (nm (n2i n))
+        (pp_vt vt))
+    (M.ProvidesRel.elements pi);
+  Printf.printf "  dependencies D_Pi:\n";
+  List.iter
+    (fun (s, (n, vs)) ->
+      Printf.printf "    %s -> %s %s\n" (pp_src s) (nm (n2i n)) (pp_vs vs))
+    (M.C.DepRel.elements d);
+  let pp_tn = function
+    | R.Name.Orig n -> nm (n2i n)
+    | R.Name.Selector (p, m) -> Printf.sprintf "<%s,%s>" (pp_src p) (nm (n2i m))
+  in
+  let pp_tv = function
+    | R.Version.Orig v -> string_of_int (n2i v)
+    | R.Version.Provider (n, w) -> Printf.sprintf "<%s,%d>" (nm (n2i n)) (n2i w)
+  in
+  let pp_tp (n, v) = Printf.sprintf "(%s,%s)" (pp_tn n) (pp_tv v) in
+  let pp_tvs vs =
+    "{" ^ String.concat "," (List.map pp_tv (R.T.VSet.elements vs)) ^ "}"
+  in
+  Printf.printf "reduceReal -> core packages:\n";
+  List.iter
+    (fun p -> Printf.printf "    %s\n" (pp_tp p))
+    (R.T.PkgSet.elements (R.reduceReal r d pi));
+  Printf.printf "reduceDeps -> core dependencies:\n";
+  List.iter
+    (fun (s, (n, vs)) ->
+      Printf.printf "    %s -> (%s,%s)\n" (pp_tp s) (pp_tn n) (pp_tvs vs))
+    (R.T.DepRel.elements (R.reduceDeps r d pi))
+
 let () =
   match if Array.length Sys.argv > 1 then Sys.argv.(1) else "" with
   | "conflict" -> conflict ()
   | "concurrent" -> concurrent ()
   | "peer" -> peer ()
+  | "virtual" -> virtual_ ()
   | s ->
-      Printf.eprintf "usage: reductions <conflict|concurrent|peer> (got %S)\n" s;
+      Printf.eprintf
+        "usage: reductions <conflict|concurrent|peer|virtual> (got %S)\n" s;
       exit 2
