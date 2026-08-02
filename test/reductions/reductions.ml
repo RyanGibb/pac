@@ -160,10 +160,77 @@ let concurrent () =
       Printf.printf "    %s -> (%s,%s)\n" (pp_tp s) (pp_tn n) (pp_tvs vs))
     (R.T.DepRel.elements (R.reduceDeps d g))
 
+(* ------------------------------------------------------------------ *)
+(* Peer dependency, g(v)=v.                                            *)
+(* ------------------------------------------------------------------ *)
+let peer () =
+  let module M = E.Peer in
+  let module R = M.Reduction in
+  let pkg n v = (i2n n, i2n v) in
+  let vset l =
+    List.fold_left (fun s v -> M.C.VSet.add (i2n v) s) M.C.VSet.empty l
+  in
+  let pset l = List.fold_left (fun s p -> M.PkgSet.add p s) M.PkgSet.empty l in
+  let drel l =
+    List.fold_left
+      (fun s ((sn, sv), (dn, dvs)) ->
+        M.C.DepRel.add ((i2n sn, i2n sv), (i2n dn, vset dvs)) s)
+      M.C.DepRel.empty l
+  in
+  let g u = u in
+  let r = pset [ pkg 1 1; pkg 2 1; pkg 3 1; pkg 3 2; pkg 3 3 ] in
+  let d = drel [ ((1, 1), (2, [ 1 ])); ((1, 1), (3, [ 2; 3 ])) ] in
+  let th =
+    M.PeerRel.add ((i2n 2, i2n 1), (i2n 3, vset [ 1; 2 ])) M.PeerRel.empty
+  in
+  let pp_src (n, v) = Printf.sprintf "(%s,%d)" (nm (n2i n)) (n2i v) in
+  let pp_vs vs =
+    "{"
+    ^ String.concat ","
+        (List.map (fun v -> string_of_int (n2i v)) (M.C.VSet.elements vs))
+    ^ "}"
+  in
+  Printf.printf "Peer Package Calculus, g(v)=v\n";
+  Printf.printf "  packages R: %s\n"
+    (String.concat " " (List.map pp_src (M.PkgSet.elements r)));
+  Printf.printf "  dependencies D_C:\n";
+  List.iter
+    (fun (s, (n, vs)) ->
+      Printf.printf "    %s -> %s %s\n" (pp_src s) (nm (n2i n)) (pp_vs vs))
+    (M.C.DepRel.elements d);
+  Printf.printf "  peer dependencies Theta:\n";
+  List.iter
+    (fun (s, (n, vs)) ->
+      Printf.printf "    %s peer %s %s\n" (pp_src s) (nm (n2i n)) (pp_vs vs))
+    (M.PeerRel.elements th);
+  let pp_tn = function
+    | R.Name.Granular (n, w) -> Printf.sprintf "<%s,%d>" (nm (n2i n)) (n2i w)
+    | R.Name.Intermediate (n, v, m) ->
+        Printf.sprintf "<%s,%d,%s>" (nm (n2i n)) (n2i v) (nm (n2i m))
+  in
+  let pp_tv = function
+    | R.Version.Orig v -> string_of_int (n2i v)
+    | R.Version.Gran w -> string_of_int (n2i w)
+  in
+  let pp_tp (n, v) = Printf.sprintf "(%s,%s)" (pp_tn n) (pp_tv v) in
+  let pp_tvs vs =
+    "{" ^ String.concat "," (List.map pp_tv (R.T.VSet.elements vs)) ^ "}"
+  in
+  Printf.printf "reduceReal -> core packages:\n";
+  List.iter
+    (fun p -> Printf.printf "    %s\n" (pp_tp p))
+    (R.T.PkgSet.elements (R.reduceReal r d th g));
+  Printf.printf "reduceDeps -> core dependencies:\n";
+  List.iter
+    (fun (s, (n, vs)) ->
+      Printf.printf "    %s -> (%s,%s)\n" (pp_tp s) (pp_tn n) (pp_tvs vs))
+    (R.T.DepRel.elements (R.reduceDeps d th g))
+
 let () =
   match if Array.length Sys.argv > 1 then Sys.argv.(1) else "" with
   | "conflict" -> conflict ()
   | "concurrent" -> concurrent ()
+  | "peer" -> peer ()
   | s ->
-      Printf.eprintf "usage: reductions <conflict|concurrent> (got %S)\n" s;
+      Printf.eprintf "usage: reductions <conflict|concurrent|peer> (got %S)\n" s;
       exit 2
