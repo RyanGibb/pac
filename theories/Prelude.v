@@ -20,6 +20,14 @@ From Stdlib Require Import MSetList.
    unergonomic because they land in setoid equality; this file contains the
    small Leibniz-preserving replacement for that ecosystem gap. *)
 
+(* enum is data, not an "exists a listing" fact (Stdlib's Finite): witnesses
+   iterate it, so it must survive extraction. *)
+Module Type FiniteUsualOrderedType.
+  Include UsualOrderedType.
+  Parameter enum : list t.
+  Axiom enum_complete : forall x : t, List.In x enum.
+End FiniteUsualOrderedType.
+
 Definition lex (c d : comparison) : comparison :=
   match c with Eq => d | _ => c end.
 
@@ -182,6 +190,23 @@ Module UOTEqb (X : UsualOrderedType).
       [discriminate | contradiction (H E) | exact NE | reflexivity].
   Qed.
 End UOTEqb.
+
+Module BoolComp <: ComparableType.
+  Definition t := bool.
+  Definition compare (a b : bool) : comparison :=
+    match a, b with
+    | false, false => Eq | false, true => Lt
+    | true, false => Gt | true, true => Eq
+    end.
+  Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
+  Proof. intros [|] [|]; simpl; split; intro; congruence. Qed.
+  Lemma compare_antisym : forall x y, compare y x = CompOpp (compare x y).
+  Proof. intros [|] [|]; reflexivity. Qed.
+  Lemma compare_lt_trans : forall x y z,
+      compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
+  Proof. intros [|] [|] [|]; simpl; congruence. Qed.
+End BoolComp.
+Module BoolOT := UOTFromCompare BoolComp.
 
 (* Stdlib's pair-ordered-type functors build setoid eq; none preserves
    UsualOrderedType. *)

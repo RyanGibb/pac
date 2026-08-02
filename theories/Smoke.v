@@ -4,13 +4,21 @@
    terms in the computational path), which extraction depends on. *)
 
 From Stdlib Require Import MSets.
-From PackageCalculus Require Import Prelude Core Versions Conflict Concurrent PeerDependency.
+From PackageCalculus Require Import Prelude Core Versions Conflict Concurrent PeerDependency Feature.
 
 Module C := Core Nat_as_OT Nat_as_OT.
 Module Cfl := Conflict Nat_as_OT Nat_as_OT.
 Module Ver := Versions Nat_as_OT Nat_as_OT.
 Module Conc := Concurrent Nat_as_OT Nat_as_OT Nat_as_OT.
 Module Peer := PeerDependency Nat_as_OT Nat_as_OT Nat_as_OT.
+Module BoolFin <: FiniteUsualOrderedType.
+  Include UOTFromCompare BoolComp.
+  Definition enum : list t := (false :: true :: nil).
+  Lemma enum_complete : forall x : t, List.In x enum.
+  Proof. intros [|]; simpl; auto. Qed.
+End BoolFin.
+
+Module Feat := Feature Nat_as_OT Nat_as_OT BoolFin.
 Example core_pkgSet_computes :
   C.PkgSet.mem (1, 2) (C.PkgSet.add (1, 2) C.PkgSet.empty) = true.
 Proof. reflexivity. Qed.
