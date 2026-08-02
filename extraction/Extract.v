@@ -15,4 +15,4 @@ Set Warnings "-extraction-opaque-accessed".
 
 Extraction "pac_extraction.ml"
   Smoke.C Smoke.Ver Smoke.Cfl Smoke.Conc Smoke.Peer
-  Smoke.Feat Smoke.Virt Smoke.PkgF.
+  Smoke.Feat Smoke.Virt Smoke.PkgF Smoke.VarF.

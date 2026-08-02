@@ -4,7 +4,7 @@
    terms in the computational path), which extraction depends on. *)
 
 From Stdlib Require Import MSets.
-From PackageCalculus Require Import Prelude Core Versions Conflict Concurrent PeerDependency Feature Virtual PackageFormula.
+From PackageCalculus Require Import Prelude Core Versions Conflict Concurrent PeerDependency Feature Virtual PackageFormula VariableFormula.
 
 Module C := Core Nat_as_OT Nat_as_OT.
 Module Cfl := Conflict Nat_as_OT Nat_as_OT.
@@ -21,6 +21,7 @@ End BoolFin.
 Module Feat := Feature Nat_as_OT Nat_as_OT BoolFin.
 Module Virt := Virtual Nat_as_OT Nat_as_OT.
 Module PkgF := PackageFormula Nat_as_OT Nat_as_OT.
+Module VarF := VariableFormula Nat_as_OT Nat_as_OT BoolFin Nat_as_OT.
 Example core_pkgSet_computes :
   C.PkgSet.mem (1, 2) (C.PkgSet.add (1, 2) C.PkgSet.empty) = true.
 Proof. reflexivity. Qed.
