@@ -4,7 +4,7 @@
    terms in the computational path), which extraction depends on. *)
 
 From Stdlib Require Import MSets.
-From PackageCalculus Require Import Prelude Core Versions Conflict Concurrent PeerDependency Visibility Feature Virtual PackageFormula VariableFormula FeatureConcurrent Debian.
+From PackageCalculus Require Import Prelude Core Versions Conflict Concurrent PeerDependency Visibility Feature Virtual PackageFormula VariableFormula FeatureConcurrent Debian DebianMA.
 
 Module C := Core Nat_as_OT Nat_as_OT.
 Module Cfl := Conflict Nat_as_OT Nat_as_OT.
@@ -27,6 +27,13 @@ Module VarF := VariableFormula Nat_as_OT Nat_as_OT BoolFin Nat_as_OT.
 Module FC := FeatureConcurrent Nat_as_OT Nat_as_OT BoolFin Nat_as_OT.
 Module NatTriv := TrivialGroup Nat_as_OT.
 Module Deb := Debian Nat_as_OT Nat_as_OT NatTriv.
+
+Module BoolArch <: ArchParam.
+  Module A := BoolFin.
+
+  Definition native : A.t := false.
+End BoolArch.
+Module DMA := DebianMA Nat_as_OT Nat_as_OT BoolArch.
 
 Example core_pkgSet_computes :
   C.PkgSet.mem (1, 2) (C.PkgSet.add (1, 2) C.PkgSet.empty) = true.
@@ -116,6 +123,19 @@ Example debian_dependees_computes :
   Deb.T.DependeesSet.cardinal
     (Deb.dependees debR debD Deb.Prov.empty Deb.Conf.empty
        (Deb.Name.Orig 1, Deb.Version.Orig 10)) = 1.
+Proof. reflexivity. Qed.
+
+Definition maR : DMA.PkgSet.t :=
+  DMA.PkgSet.add ((1, false), 10)
+    (DMA.PkgSet.add ((1, true), 10) DMA.PkgSet.empty).
+
+Example debianMA_reduceReal_computes :
+  DMA.Deb.Ver.C.PkgSet.cardinal (DMA.reduceReal maR) = 2.
+Proof. reflexivity. Qed.
+
+Example debianMA_reduceConf_computes :
+  DMA.Deb.Conf.cardinal
+    (DMA.reduceConf maR DMA.Conf.empty DMA.Cls.empty) = 2.
 Proof. reflexivity. Qed.
 
 (* One private dependency, so (1, 1) mints its own subgraph: two occurrences,
