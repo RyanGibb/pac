@@ -366,6 +366,93 @@ let virtual_ () =
       Printf.printf "    %s -> (%s,%s)\n" (pp_tp s) (pp_tn n) (pp_tvs vs))
     (R.T.DepRel.elements (R.reduceDeps r d pi))
 
+(* ------------------------------------------------------------------ *)
+(* Visibility: public deps Upsilon; write a=(A,1), d=(D,1).  D's       *)
+(* dependency on C is private.                                          *)
+(* ------------------------------------------------------------------ *)
+let visibility () =
+  let module M = E.Vis in
+  let module R = M.Reduction in
+  let pkg n v = (i2n n, i2n v) in
+  let vset l =
+    List.fold_left (fun s v -> M.C.VSet.add (i2n v) s) M.C.VSet.empty l
+  in
+  let pset l = List.fold_left (fun s p -> M.PkgSet.add p s) M.PkgSet.empty l in
+  let drel l =
+    List.fold_left
+      (fun s ((sn, sv), (dn, dvs)) ->
+        M.C.DepRel.add ((i2n sn, i2n sv), (i2n dn, vset dvs)) s)
+      M.C.DepRel.empty l
+  in
+  (* Upsilon: element (package, public-dependency-name). *)
+  let pubr l =
+    List.fold_left
+      (fun s ((pn, pv), dn) -> M.PubRel.add ((i2n pn, i2n pv), i2n dn) s)
+      M.PubRel.empty l
+  in
+  let r = pset [ pkg 1 1; pkg 2 1; pkg 3 1; pkg 3 2; pkg 4 1; pkg 5 1 ] in
+  let d =
+    drel
+      [
+        ((1, 1), (2, [ 1 ]));
+        ((1, 1), (3, [ 1; 2 ]));
+        ((1, 1), (4, [ 1 ]));
+        ((2, 1), (3, [ 1 ]));
+        ((4, 1), (3, [ 2 ]));
+        ((4, 1), (5, [ 1 ]));
+      ]
+  in
+  let pub =
+    pubr [ ((1, 1), 2); ((1, 1), 3); ((1, 1), 4); ((2, 1), 3); ((4, 1), 5) ]
+  in
+  let root = pkg 1 1 in
+  let pp_src (n, v) = Printf.sprintf "(%s,%d)" (nm (n2i n)) (n2i v) in
+  let pp_vs vs =
+    "{"
+    ^ String.concat ","
+        (List.map (fun v -> string_of_int (n2i v)) (M.C.VSet.elements vs))
+    ^ "}"
+  in
+  Printf.printf "Visibility Package Calculus, root A 1\n";
+  Printf.printf "  packages R: %s\n"
+    (String.concat " " (List.map pp_src (M.PkgSet.elements r)));
+  Printf.printf "  dependencies D_C:\n";
+  List.iter
+    (fun (s, (n, vs)) ->
+      Printf.printf "    %s -> %s %s\n" (pp_src s) (nm (n2i n)) (pp_vs vs))
+    (M.C.DepRel.elements d);
+  Printf.printf "  public dependencies Upsilon:\n";
+  List.iter
+    (fun (p, n) -> Printf.printf "    %s public %s\n" (pp_src p) (nm (n2i n)))
+    (M.PubRel.elements pub);
+  (* target version type is plain nat *)
+  let pp_tn = function
+    | R.Name.Occurrence (n, q) ->
+        Printf.sprintf "<%s,%s>" (nm (n2i n)) (pp_src q)
+    | R.Name.Intermediate (n, v, m, q) ->
+        Printf.sprintf "<%s,%d,%s,%s>"
+          (nm (n2i n))
+          (n2i v)
+          (nm (n2i m))
+          (pp_src q)
+    | R.Name.Agreement (n, v, m) ->
+        Printf.sprintf "<%s,%d,%s>" (nm (n2i n)) (n2i v) (nm (n2i m))
+  in
+  let pp_tv v = string_of_int (n2i v) in
+  let pp_tp (n, v) = Printf.sprintf "(%s,%s)" (pp_tn n) (pp_tv v) in
+  let pp_tvs vs =
+    "{" ^ String.concat "," (List.map pp_tv (R.T.VSet.elements vs)) ^ "}"
+  in
+  Printf.printf "reduceReal -> core packages:\n";
+  List.iter
+    (fun p -> Printf.printf "    %s\n" (pp_tp p))
+    (R.T.PkgSet.elements (R.reduceReal r d pub root));
+  Printf.printf "reduceDeps -> core dependencies:\n";
+  List.iter
+    (fun (s, (n, vs)) ->
+      Printf.printf "    %s -> (%s,%s)\n" (pp_tp s) (pp_tn n) (pp_tvs vs))
+    (R.T.DepRel.elements (R.reduceDeps r d pub root))
+
 let () =
   match if Array.length Sys.argv > 1 then Sys.argv.(1) else "" with
   | "conflict" -> conflict ()
@@ -373,9 +460,10 @@ let () =
   | "peer" -> peer ()
   | "package-formula" -> package_formula ()
   | "virtual" -> virtual_ ()
+  | "visibility" -> visibility ()
   | s ->
       Printf.eprintf
-        "usage: reductions <conflict|concurrent|peer|package-formula|virtual> \
-         (got %S)\n"
+        "usage: reductions \
+         <conflict|concurrent|peer|package-formula|virtual|visibility> (got %S)\n"
         s;
       exit 2

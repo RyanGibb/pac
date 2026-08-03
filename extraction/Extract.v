@@ -1,4 +1,5 @@
-From PackageCalculus Require Import Prelude Core Versions Conflict Smoke.
+From PackageCalculus Require Import Prelude Core Versions Conflict Visibility
+  Smoke.
 From Stdlib Require Import Extraction ExtrOcamlBasic.
 
 Extraction Language OCaml.
@@ -14,5 +15,5 @@ Set Extraction Output Directory ".".
 Set Warnings "-extraction-opaque-accessed".
 
 Extraction "pac_extraction.ml"
-  Smoke.C Smoke.Ver Smoke.Cfl Smoke.Conc Smoke.Peer
+  Smoke.C Smoke.Ver Smoke.Cfl Smoke.Conc Smoke.Peer Smoke.Vis
   Smoke.Feat Smoke.Virt Smoke.PkgF Smoke.VarF.
