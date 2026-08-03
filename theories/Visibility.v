@@ -1431,5 +1431,291 @@ Module Visibility (N V : UsualOrderedType).
             as E2.
           congruence.
     Qed.
+
+    Module Lookup.
+      Module DepFibred :=
+        FibredLabelledRel Pkg N VSet.AsUOT C.DepElt C.DepRel.
+      Module PubFibred := FibredRel Pkg N PubElt PubRel.
+      Module PkgPreimage := PreimageOfKeys Pkg Pkg PkgSet PkgSet.
+
+      Definition realPreimage (R : PkgSet.t) (ps : PkgSet.t) : PkgSet.t :=
+        PkgPreimage.ofKeys (fun p : Pkg.t => p) ps R.
+
+      Lemma mem_realPreimage : forall R ps (p : Pkg.t),
+          PkgSet.In p (realPreimage R ps) <-> PkgSet.In p R /\ PkgSet.In p ps.
+      Proof.
+        intros R ps p; unfold realPreimage.
+        rewrite PkgPreimage.mem_ofKeys; reflexivity.
+      Qed.
+
+      Lemma realPreimage_subset : forall R ps,
+          PkgSet.Subset (realPreimage R ps) R.
+      Proof. intros R ps; apply PkgPreimage.ofKeys_subset. Qed.
+
+      Definition depBlocks (D : C.DepRel.t) (p q : Pkg.t) : C.DepRel.t :=
+        C.DepRel.union (DepFibred.tailFibre D p) (DepFibred.tailFibre D q).
+
+      Definition pubBlocks (pub : PubRel.t) (p q : Pkg.t) : PubRel.t :=
+        PubRel.union (PubFibred.tailFibre pub p) (PubFibred.tailFibre pub q).
+
+      Lemma mem_depBlocks : forall D p q (x : Pkg.t) (m : N.t) (vs : VSet.t),
+          C.DepRel.In (x, (m, vs)) (depBlocks D p q) <->
+          C.DepRel.In (x, (m, vs)) D /\ (x = p \/ x = q).
+      Proof.
+        intros D p q x m vs; unfold depBlocks.
+        rewrite C.DepRel.union_spec, !DepFibred.mem_tailFibre; tauto.
+      Qed.
+
+      Lemma mem_pubBlocks : forall pub p q (x : Pkg.t) (m : N.t),
+          PubRel.In (x, m) (pubBlocks pub p q) <->
+          PubRel.In (x, m) pub /\ (x = p \/ x = q).
+      Proof.
+        intros pub p q x m; unfold pubBlocks.
+        rewrite PubRel.union_spec, !PubFibred.mem_tailFibre; tauto.
+      Qed.
+
+      Lemma depBlocks_subset : forall D p q,
+          C.DepRel.Subset (depBlocks D p q) D.
+      Proof.
+        intros D p q [x [m vs]] H; apply mem_depBlocks in H; exact (proj1 H).
+      Qed.
+
+      Lemma pubBlocks_subset : forall pub p q,
+          PubRel.Subset (pubBlocks pub p q) pub.
+      Proof.
+        intros pub p q [x m] H; apply mem_pubBlocks in H; exact (proj1 H).
+      Qed.
+
+      Lemma Priv_block : forall D D' pub pub' (p : Pkg.t),
+          C.DepRel.Subset (DepFibred.tailFibre D p) D' ->
+          C.DepRel.Subset D' D ->
+          PubRel.Subset (PubFibred.tailFibre pub p) pub' ->
+          PubRel.Subset pub' pub ->
+          (Priv D' pub' p <-> Priv D pub p).
+      Proof.
+        intros D D' pub pub' p HDl HDr Hpl Hpr; split.
+        - intros [n [vs [He Hn]]]; exists n, vs; split; [exact (HDr _ He) |].
+          intro Hin; apply Hn, Hpl, PubFibred.mem_tailFibre.
+          split; [exact Hin | reflexivity].
+        - intros [n [vs [He Hn]]]; exists n, vs; split.
+          + apply HDl, DepFibred.mem_tailFibre; split; [exact He | reflexivity].
+          + intro Hin; exact (Hn (Hpr _ Hin)).
+      Qed.
+
+      Lemma priv_blocks : forall D pub (p q x : Pkg.t),
+          x = p \/ x = q ->
+          (Priv (depBlocks D p q) (pubBlocks pub p q) x <-> Priv D pub x).
+      Proof.
+        intros D pub p q x Hx; apply Priv_block.
+        - intros [y [m vs]] He; apply DepFibred.mem_tailFibre in He.
+          destruct He as [HD ->]; apply mem_depBlocks.
+          split; [exact HD | exact Hx].
+        - apply depBlocks_subset.
+        - intros [y m] He; apply PubFibred.mem_tailFibre in He.
+          destruct He as [Hp ->]; apply mem_pubBlocks.
+          split; [exact Hp | exact Hx].
+        - apply pubBlocks_subset.
+      Qed.
+
+      Lemma priv_blocks_mono : forall D pub (p q x : Pkg.t),
+          Priv (depBlocks D p q) (pubBlocks pub p q) x -> Priv D pub x.
+      Proof.
+        intros D pub p q x Hpriv.
+        assert (Hx : x = p \/ x = q).
+        { destruct Hpriv as [n [vs [He _]]].
+          exact (proj2 (proj1 (mem_depBlocks D p q x n vs) He)). }
+        exact (proj1 (priv_blocks D pub p q x Hx) Hpriv).
+      Qed.
+
+      Lemma carried_blocks : forall pub (p : Pkg.t) (m : N.t) (q : Pkg.t),
+          Carried pub p m q -> Carried (pubBlocks pub p q) p m q.
+      Proof.
+        intros pub p m q [Hin | ->]; [left | right; reflexivity].
+        apply mem_pubBlocks; split; [exact Hin | left; reflexivity].
+      Qed.
+
+      Lemma carriedb_mono : forall pub pub' (p : Pkg.t) (m : N.t) (q : Pkg.t),
+          PubRel.Subset pub' pub -> carriedb pub' p m q = true ->
+          carriedb pub p m q = true.
+      Proof.
+        intros pub pub' p m q Hs Hb.
+        apply carriedb_iff in Hb; apply carriedb_iff.
+        destruct Hb as [Hb | ->]; [left; exact (Hs _ Hb) | right; reflexivity].
+      Qed.
+
+      Lemma potentialOrigins_mono : forall R R' D D' pub pub' r,
+          PkgSet.Subset R' R ->
+          (forall p, Priv D' pub' p -> Priv D pub p) ->
+          PkgSet.Subset (potentialOrigins R' D' pub' r)
+            (potentialOrigins R D pub r).
+      Proof.
+        intros R R' D D' pub pub' r HR Hpriv q Hq.
+        apply mem_potentialOrigins in Hq; apply mem_potentialOrigins.
+        destruct Hq as [-> | [HqR Hqp]]; [left; reflexivity |].
+        right; split; [exact (HR _ HqR) | exact (Hpriv _ Hqp)].
+      Qed.
+
+      Lemma potentialOrigins_blocks : forall R D pub r ps (p q : Pkg.t),
+          PkgSet.In q ps -> PkgSet.In q (potentialOrigins R D pub r) ->
+          PkgSet.In q (potentialOrigins (realPreimage R ps) (depBlocks D p q)
+                         (pubBlocks pub p q) r).
+      Proof.
+        intros R D pub r ps p q Hps Hq.
+        apply mem_potentialOrigins in Hq; apply mem_potentialOrigins.
+        destruct Hq as [-> | [HqR Hqp]]; [left; reflexivity |].
+        right; split; [apply mem_realPreimage; split; assumption |].
+        apply priv_blocks; [right; reflexivity | exact Hqp].
+      Qed.
+
+      (* Privacy is antitone in pub, so containment of the sliced pub does
+         not by itself transfer the guards that read it; the premise carries
+         what the slices in use establish instead. *)
+      Lemma reduceDeps_mono : forall R R' D D' pub pub' r (y : T.DepElt.t),
+          PkgSet.Subset R' R -> C.DepRel.Subset D' D ->
+          PubRel.Subset pub' pub ->
+          (forall p, Priv D' pub' p -> Priv D pub p) ->
+          T.DepRel.In y (reduceDeps R' D' pub' r) ->
+          T.DepRel.In y (reduceDeps R D pub r).
+      Proof.
+        intros R R' D D' pub pub' r y HR HD Hpub Hpriv; revert y.
+        pose proof (potentialOrigins_mono R R' D D' pub pub' r HR Hpriv) as Ho.
+        unfold reduceDeps, reduceDepsSelf, reduceDepsOccToInt,
+          reduceDepsIntToOcc, reduceDepsIntToAgr.
+        repeat apply SOdtd.union_subset.
+        - apply SOptd.unionMap_mono; [exact HR |].
+          intros [n v]; cbn beta iota.
+          apply SOptd.filterMap_mono; [exact Ho |].
+          intros q z Hz; cbn beta iota in Hz |- *.
+          destruct (andb (privb D' pub' (n, v)) (negb (PkgEqb.eqb q (n, v))))
+            eqn:Hb; [| discriminate Hz].
+          apply Bool.andb_true_iff in Hb; destruct Hb as [H1 H2].
+          assert (privb D pub (n, v) = true) as H1'
+            by (apply privb_iff; apply Hpriv; apply privb_iff; exact H1).
+          rewrite H1', H2; exact Hz.
+        - apply SOdtd.unionMap_mono; [exact HD |].
+          intros [[n v] [m vs]]; cbn beta iota.
+          apply SOptd.filterMap_mono; [exact Ho |].
+          intros q z Hz; cbn beta iota in Hz |- *.
+          destruct (carriedb pub' (n, v) m q) eqn:Hb; [| discriminate Hz].
+          assert (carriedb pub (n, v) m q = true) as ->
+            by exact (carriedb_mono pub pub' (n, v) m q Hpub Hb).
+          exact Hz.
+        - apply SOdtd.unionMap_mono; [exact HD |].
+          intros [[n v] [m vs]]; cbn beta iota.
+          apply SOptd.unionMap_mono; [exact Ho |].
+          intro q; cbn beta iota.
+          destruct (carriedb pub' (n, v) m q) eqn:Hb;
+            [| apply T.DepRel.empty_subset].
+          assert (carriedb pub (n, v) m q = true) as ->
+            by exact (carriedb_mono pub pub' (n, v) m q Hpub Hb).
+          apply SOvtd.map_mono; [intros z Hz; exact Hz | intro; reflexivity].
+        - apply SOdtd.unionMap_mono; [exact HD |].
+          intros [[n v] [m vs]]; cbn beta iota.
+          apply SOptd.unionMap_mono; [exact Ho |].
+          intro q; cbn beta iota.
+          destruct (carriedb pub' (n, v) m q) eqn:Hb;
+            [| apply T.DepRel.empty_subset].
+          assert (carriedb pub (n, v) m q = true) as ->
+            by exact (carriedb_mono pub pub' (n, v) m q Hpub Hb).
+          apply SOvtd.map_mono; [intros z Hz; exact Hz | intro; reflexivity].
+      Qed.
+
+      Theorem dependees_lookupOccurrence :
+        forall R D pub r (n : N.t) (v : V.t) (q : Pkg.t),
+          T.dependees (reduceDeps R D pub r) (Name.Occurrence n q, v) =
+          T.dependees
+            (reduceDeps
+               (realPreimage R (PkgSet.add (n, v) (PkgSet.singleton q)))
+               (depBlocks D (n, v) q) (pubBlocks pub (n, v) q) r)
+            (Name.Occurrence n q, v).
+      Proof.
+        intros R D pub r n v q; apply T.dependees_ext; intros [tn tvs].
+        split;
+          [| intro H;
+             exact (reduceDeps_mono R _ D _ pub _ r _
+                      (realPreimage_subset R _) (depBlocks_subset D (n, v) q)
+                      (pubBlocks_subset pub (n, v) q)
+                      (priv_blocks_mono D pub (n, v) q) H)].
+        intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
+        destruct H as [H | [H | [H | H]]].
+        - destruct H as [n1 [v1 [q1 [HR [Hq1 [Hpriv [Hne Heq]]]]]]].
+          injection Heq as <- <- <- -> ->.
+          left; exists n, v, q; repeat split.
+          + apply mem_realPreimage; split;
+              [exact HR | apply SOppp.add_in; left; reflexivity].
+          + apply potentialOrigins_blocks; [| exact Hq1].
+            apply SOppp.add_in; right; apply SOppp.singleton_in; reflexivity.
+          + apply priv_blocks; [left; reflexivity | exact Hpriv].
+          + exact Hne.
+        - destruct H as [n1 [v1 [m [vs [q1 [HD1 [Hq1 [Hc Heq]]]]]]]].
+          injection Heq as <- <- <- -> ->.
+          right; left; exists n, v, m, vs, q; repeat split.
+          + apply mem_depBlocks; split; [exact HD1 | left; reflexivity].
+          + apply potentialOrigins_blocks; [| exact Hq1].
+            apply SOppp.add_in; right; apply SOppp.singleton_in; reflexivity.
+          + exact (carried_blocks pub (n, v) m q Hc).
+        - destruct H as [n1 [v1 [m [vs [q1 [u [_ [_ [_ [_ Heq]]]]]]]]]];
+            discriminate Heq.
+        - destruct H as [n1 [v1 [m [vs [q1 [u [_ [_ [_ [_ Heq]]]]]]]]]];
+            discriminate Heq.
+      Qed.
+
+      Theorem dependees_lookupIntermediate :
+        forall R D pub r (n : N.t) (v : V.t) (m : N.t) (q : Pkg.t) (u : V.t),
+          T.dependees (reduceDeps R D pub r) (Name.Intermediate n v m q, u) =
+          T.dependees
+            (reduceDeps (realPreimage R (PkgSet.singleton q))
+               (depBlocks D (n, v) q) (pubBlocks pub (n, v) q) r)
+            (Name.Intermediate n v m q, u).
+      Proof.
+        intros R D pub r n v m q u; apply T.dependees_ext; intros [tn tvs].
+        split;
+          [| intro H;
+             exact (reduceDeps_mono R _ D _ pub _ r _
+                      (realPreimage_subset R _) (depBlocks_subset D (n, v) q)
+                      (pubBlocks_subset pub (n, v) q)
+                      (priv_blocks_mono D pub (n, v) q) H)].
+        intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
+        destruct H as [H | [H | [H | H]]].
+        - destruct H as [n1 [v1 [q1 [_ [_ [_ [_ Heq]]]]]]]; discriminate Heq.
+        - destruct H as [n1 [v1 [m1 [vs [q1 [_ [_ [_ Heq]]]]]]]];
+            discriminate Heq.
+        - destruct H
+            as [n1 [v1 [m1 [vs [q1 [u1 [HD1 [Hq1 [Hc [Hu1 Heq]]]]]]]]]].
+          injection Heq as <- <- <- <- <- -> ->.
+          right; right; left; exists n, v, m, vs, q, u; repeat split.
+          + apply mem_depBlocks; split; [exact HD1 | left; reflexivity].
+          + apply potentialOrigins_blocks;
+              [apply SOppp.singleton_in; reflexivity | exact Hq1].
+          + exact (carried_blocks pub (n, v) m q Hc).
+          + exact Hu1.
+        - destruct H
+            as [n1 [v1 [m1 [vs [q1 [u1 [HD1 [Hq1 [Hc [Hu1 Heq]]]]]]]]]].
+          injection Heq as <- <- <- <- <- -> ->.
+          right; right; right; exists n, v, m, vs, q, u; repeat split.
+          + apply mem_depBlocks; split; [exact HD1 | left; reflexivity].
+          + apply potentialOrigins_blocks;
+              [apply SOppp.singleton_in; reflexivity | exact Hq1].
+          + exact (carried_blocks pub (n, v) m q Hc).
+          + exact Hu1.
+      Qed.
+
+      Theorem dependees_lookupAgreement :
+        forall R D pub r (n : N.t) (v : V.t) (m : N.t) (u : V.t),
+          T.dependees (reduceDeps R D pub r) (Name.Agreement n v m, u) =
+          T.DependeesSet.empty.
+      Proof.
+        intros R D pub r n v m u; apply T.dependees_empty_iff.
+        intros [tn tvs] H; apply mem_reduceDeps in H.
+        destruct H as [H | [H | [H | H]]].
+        - destruct H as [n1 [v1 [q1 [_ [_ [_ [_ Heq]]]]]]]; discriminate Heq.
+        - destruct H as [n1 [v1 [m1 [vs [q1 [_ [_ [_ Heq]]]]]]]];
+            discriminate Heq.
+        - destruct H as [n1 [v1 [m1 [vs [q1 [u1 [_ [_ [_ [_ Heq]]]]]]]]]];
+            discriminate Heq.
+        - destruct H as [n1 [v1 [m1 [vs [q1 [u1 [_ [_ [_ [_ Heq]]]]]]]]]];
+            discriminate Heq.
+      Qed.
+    End Lookup.
   End Reduction.
 End Visibility.

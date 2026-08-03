@@ -224,5 +224,95 @@ Module Versions (N V : UsualOrderedType).
         apply mem_reduce in Hmem; destruct Hmem as [f [HD ->]].
         exact (Hdep p Hp m f HD).
     Qed.
+
+    Module Lookup.
+      Module DepRelFibred := FibredLabelledRel Pkg N FOT DepElt DepRel.
+      Module DepKeys := RelKeys N DepElt DepRel.
+      Module PkgPreimage := Preimage Pkg PkgSet.
+
+      Definition realPreimage (R : PkgSet.t) (Dp : DepRel.t) : PkgSet.t :=
+        PkgPreimage.preimage fst (DepKeys.hasKey DepRelFibred.node Dp) R.
+
+      Lemma realVersions_realPreimage : forall R Dp n,
+          (exists q m f, DepRel.In (q, (m, f)) Dp /\ m = n) ->
+          realVersions (realPreimage R Dp) n = realVersions R n.
+      Proof.
+        intros R Dp m [q [m' [f [He Hm]]]].
+        apply VSet.ext; intro v.
+        rewrite !realVersions_spec; unfold realPreimage.
+        rewrite PkgPreimage.mem_preimage.
+        split.
+        - intros [H _]; exact H.
+        - intro H; split; [exact H |].
+          apply DepKeys.hasKey_iff.
+          exists (q, (m', f)); split; [exact He | exact Hm].
+      Qed.
+
+      Lemma dependees_fibre : forall R D (p : Pkg.t),
+          C.dependees (reduce R D) p =
+          C.dependees (reduce R (DepRelFibred.tailFibre D p)) p.
+      Proof.
+        intros R D p; apply C.dependees_ext; intros [n vs]; rewrite !mem_reduce.
+        split; intros [f [HD ->]]; exists f; split; try reflexivity.
+        - apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
+        - exact (DepRelFibred.tailFibre_subset _ _ _ HD).
+      Qed.
+
+      Lemma reduce_realPreimage : forall R Dp,
+          reduce (realPreimage R Dp) Dp = reduce R Dp.
+      Proof.
+        intros R Dp; apply C.DepRel.ext; intros [q [n vs]].
+        rewrite !mem_reduce.
+        split; intros [f [HD ->]]; exists f; split; [exact HD | | exact HD |];
+          rewrite (realVersions_realPreimage R Dp n);
+          solve [reflexivity | exists q, n, f; split; [exact HD | reflexivity]].
+      Qed.
+
+      Theorem dependees_lookup : forall R D (p : Pkg.t),
+        let Dp := DepRelFibred.tailFibre D p in
+        C.dependees (reduce R D) p =
+        C.dependees (reduce (realPreimage R Dp) Dp) p.
+      Proof.
+        intros R D p; cbv zeta;
+          rewrite reduce_realPreimage; apply dependees_fibre.
+      Qed.
+
+      Module SOdp := SetOps DepElt Pkg DepRel PkgSet.
+      Definition tails (D : DepRel.t) : PkgSet.t :=
+        SOdp.map (fun '(q, _) => q) D.
+
+      Lemma mem_tails : forall D (q : Pkg.t),
+          PkgSet.In q (tails D) <-> exists d, DepRel.In (q, d) D.
+      Proof.
+        intros D q; unfold tails; rewrite SOdp.mem_map.
+        split.
+        - intros [[q0 d] [HeD He]]; cbn beta iota in He; subst q0; eauto.
+        - intros [d HD]; exists (q, d); split; [exact HD | reflexivity].
+      Qed.
+
+      Module SOpcd := SetOps Pkg C.DepElt PkgSet C.DepRel.
+      Corollary reduce_glue : forall R D,
+          reduce R D =
+          SOpcd.unionMap
+            (fun p => reduce (realPreimage R (DepRelFibred.tailFibre D p))
+                             (DepRelFibred.tailFibre D p))
+            (tails D).
+      Proof.
+        intros R D; apply C.DepRel.ext; intros [q [n ws]].
+        rewrite SOpcd.mem_unionMap, mem_reduce.
+        split.
+        - intros [f [HD ->]].
+          exists q; split; [apply mem_tails; eauto |].
+          rewrite reduce_realPreimage, mem_reduce.
+          exists f; split; [| reflexivity].
+          apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
+        - intros [p [_ Hy]].
+          rewrite reduce_realPreimage, mem_reduce in Hy.
+          destruct Hy as [f [Hf ->]].
+          apply DepRelFibred.mem_tailFibre in Hf; destruct Hf as [HD _].
+          exists f; split; [exact HD | reflexivity].
+      Qed.
+
+    End Lookup.
   End Reduction.
 End Versions.

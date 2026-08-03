@@ -1763,5 +1763,201 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           apply witnessCondb_iff in Hc2; destruct Hc2 as [_ [_ Hpi2]].
           rewrite (Hpif m1 u1 u2 (n1, v1) Hpi1 Hpi2); reflexivity.
     Qed.
+
+    Module Lookup.
+      Module NEqb := UOTEqb N.
+      Definition pkgNodeFibre (Da : Feat.AddlDepRel.t) (p : Pkg.t) (m : N.t) :
+          Feat.AddlDepRel.t :=
+        Feat.AddlDepRel.filter
+          (fun '((q, _), (m', _)) => andb (PkgEqb.eqb q p) (NEqb.eqb m' m))
+          Da.
+
+      Lemma mem_pkgNodeFibre :
+        forall Da (p q : Pkg.t) (f : F.t) (m m' : N.t) (d : Feat.VSFS.t),
+          Feat.AddlDepRel.In ((q, f), (m', d)) (pkgNodeFibre Da p m) <->
+          Feat.AddlDepRel.In ((q, f), (m', d)) Da /\ q = p /\ m' = m.
+      Proof.
+        intros Da p q f m m' d; unfold pkgNodeFibre.
+        rewrite Feat.AddlDepRel.filter_spec'; cbn beta iota.
+        rewrite Bool.andb_true_iff, PkgEqb.eqb_true_iff, NEqb.eqb_true_iff.
+        tauto.
+      Qed.
+
+      Lemma reduceDeps_mono :
+        forall R R' support support' Df Df' Da Da' g (y : T.DepElt.t),
+          PkgSet.Subset R' R -> Feat.SupportSet.Subset support' support ->
+          Feat.FeatDepRel.Subset Df' Df -> Feat.AddlDepRel.Subset Da' Da ->
+          T.DepRel.In y (reduceDeps R' support' Df' Da' g) ->
+          T.DepRel.In y (reduceDeps R support Df Da g).
+      Proof.
+        intros R R' support support' Df Df' Da Da' g y HR Hsup HDf HDa;
+          revert y.
+        unfold reduceDeps, supportEdges, fDepToInterEdges, fInterToOrigEdges,
+          fDepToInterFeatEdges, fInterToFeatEdges, fInterFeatToInterEdges,
+          aDepToInterEdges, aInterToOrigEdges, aDepToInterFeatEdges,
+          aInterToFeatEdges, aInterFeatToInterEdges.
+        repeat apply SOsd.union_subset.
+        - apply SOsd.filterMap_mono; [exact Hsup |].
+          intros [[n v] f] z Hz; cbn beta iota in Hz |- *.
+          destruct (PkgSet.mem (n, v) R') eqn:Em; [| discriminate Hz].
+          rewrite PkgSet.mem_spec in Em; apply HR in Em.
+          rewrite <- PkgSet.mem_spec in Em; rewrite Em; exact Hz.
+        - apply SOfd.map_mono; [exact HDf | intros x; reflexivity].
+        - apply SOfd.unionMap_mono; [exact HDf | intros x z Hz; exact Hz].
+        - apply SOfd.unionMap_mono; [exact HDf | intros x z Hz; exact Hz].
+        - apply SOfd.unionMap_mono; [exact HDf | intros x z Hz; exact Hz].
+        - apply SOfd.unionMap_mono; [exact HDf | intros x z Hz; exact Hz].
+        - apply SOad.map_mono; [exact HDa | intros x; reflexivity].
+        - apply SOad.unionMap_mono; [exact HDa | intros x z Hz; exact Hz].
+        - apply SOad.unionMap_mono; [exact HDa | intros x z Hz; exact Hz].
+        - apply SOad.unionMap_mono; [exact HDa | intros x z Hz; exact Hz].
+        - apply SOad.unionMap_mono; [exact HDa | intros x z Hz; exact Hz].
+      Qed.
+
+      Module FeatDepRelFibred := Feat.Reduction.Lookup.FeatDepRelFibred.
+      Theorem dependees_lookupGranularOrig : forall R support Df Da g n v,
+          T.dependees (reduceDeps R support Df Da g)
+            (Name.GranularOrig n (g v), v) =
+          T.dependees
+            (reduceDeps PkgSet.empty Feat.SupportSet.empty
+               (FeatDepRelFibred.tailFibre Df (n, v))
+               Feat.AddlDepRel.empty g)
+            (Name.GranularOrig n (g v), v).
+      Proof.
+        intros R support Df Da g n v; apply T.dependees_ext; intros [m ws].
+        split; [| apply reduceDeps_mono;
+                  [apply PkgSet.empty_subset
+                  | apply Feat.SupportSet.empty_subset
+                  | apply FeatDepRelFibred.tailFibre_subset
+                  | apply Feat.AddlDepRel.empty_subset]].
+        intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
+        inversion H; subst.
+        - eapply EdgeFDepToInter; apply FeatDepRelFibred.mem_tailFibre;
+            split; [eassumption | reflexivity].
+        - eapply EdgeFDepToInterFeat;
+            [apply FeatDepRelFibred.mem_tailFibre;
+               split; [eassumption | reflexivity]
+            | eassumption].
+      Qed.
+
+      Module PkgFibred := Feat.Reduction.Lookup.PkgFibred.
+      Module SupportFibred := Feat.Reduction.Lookup.SupportFibred.
+      Module AddlDepRelFibred := Feat.Reduction.Lookup.AddlDepRelFibred.
+      Theorem dependees_lookupGranularFeatPkg : forall R support Df Da g n v f,
+          T.dependees (reduceDeps R support Df Da g)
+            (Name.GranularFeatPkg n f (g v), v) =
+          T.dependees
+            (reduceDeps (PkgFibred.idFibre R (n, v))
+               (SupportFibred.idFibre support ((n, v), f))
+               Feat.FeatDepRel.empty
+               (AddlDepRelFibred.tailFibre Da ((n, v), f)) g)
+            (Name.GranularFeatPkg n f (g v), v).
+      Proof.
+        intros R support Df Da g n v f; apply T.dependees_ext; intros [m ws].
+        split; [| apply reduceDeps_mono;
+                  [apply PkgFibred.idFibre_subset
+                  | apply SupportFibred.idFibre_subset
+                  | apply Feat.FeatDepRel.empty_subset
+                  | apply AddlDepRelFibred.tailFibre_subset]].
+        intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
+        inversion H; subst.
+        - apply EdgeSupport;
+            [apply SupportFibred.mem_idFibre;
+               split; [eassumption | reflexivity]
+            | apply PkgFibred.mem_idFibre; split; [eassumption | reflexivity]].
+        - eapply EdgeADepToInter; apply AddlDepRelFibred.mem_tailFibre;
+            split; [eassumption | reflexivity].
+        - eapply EdgeADepToInterFeat;
+            [apply AddlDepRelFibred.mem_tailFibre;
+               split; [eassumption | reflexivity]
+            | eassumption].
+      Qed.
+
+      Theorem dependees_lookupIntermediate : forall R support Df Da g n v m u,
+          T.dependees (reduceDeps R support Df Da g)
+            (Name.Intermediate n v m, u) =
+          T.dependees
+            (reduceDeps PkgSet.empty Feat.SupportSet.empty
+               (FeatDepRelFibred.endsFibre Df (n, v) m)
+               (pkgNodeFibre Da (n, v) m) g)
+            (Name.Intermediate n v m, u).
+      Proof.
+        intros R support Df Da g n v m u.
+        apply T.dependees_ext; intros [m' ws].
+        split; [| apply reduceDeps_mono;
+                  [apply PkgSet.empty_subset
+                  | apply Feat.SupportSet.empty_subset
+                  | apply FeatDepRelFibred.endsFibre_subset
+                  | intros [[q f0] [m0 d]] Hq; apply mem_pkgNodeFibre in Hq;
+                    destruct Hq as [Hq _]; exact Hq]].
+        intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
+        inversion H; subst.
+        - eapply EdgeFInterToOrig;
+            [apply FeatDepRelFibred.mem_endsFibre;
+               split; [eassumption | split; reflexivity]
+            | eassumption].
+        - eapply EdgeAInterToOrig;
+            [apply mem_pkgNodeFibre; split; [eassumption | split; reflexivity]
+            | eassumption].
+      Qed.
+
+      Theorem dependees_lookupIntermediateF :
+        forall R support Df Da g n v m f u,
+          T.dependees (reduceDeps R support Df Da g)
+            (Name.IntermediateF n v m f, u) =
+          T.dependees
+            (reduceDeps PkgSet.empty Feat.SupportSet.empty
+               (FeatDepRelFibred.endsFibre Df (n, v) m)
+               Feat.AddlDepRel.empty g)
+            (Name.IntermediateF n v m f, u).
+      Proof.
+        intros R support Df Da g n v m f u.
+        apply T.dependees_ext; intros [m' ws].
+        split; [| apply reduceDeps_mono;
+                  [apply PkgSet.empty_subset
+                  | apply Feat.SupportSet.empty_subset
+                  | apply FeatDepRelFibred.endsFibre_subset
+                  | apply Feat.AddlDepRel.empty_subset]].
+        intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
+        inversion H; subst.
+        - eapply EdgeFInterToFeat;
+            [apply FeatDepRelFibred.mem_endsFibre;
+               split; [eassumption | split; reflexivity]
+            | eassumption | eassumption].
+        - eapply EdgeFInterFeatToInter;
+            [apply FeatDepRelFibred.mem_endsFibre;
+               split; [eassumption | split; reflexivity]
+            | eassumption | eassumption].
+      Qed.
+
+      Theorem dependees_lookupIntermediateA :
+        forall R support Df Da g n v f m f' u,
+          T.dependees (reduceDeps R support Df Da g)
+            (Name.IntermediateA n v f m f', u) =
+          T.dependees
+            (reduceDeps PkgSet.empty Feat.SupportSet.empty Feat.FeatDepRel.empty
+               (AddlDepRelFibred.endsFibre Da ((n, v), f) m) g)
+            (Name.IntermediateA n v f m f', u).
+      Proof.
+        intros R support Df Da g n v f m f' u.
+        apply T.dependees_ext; intros [m' ws].
+        split; [| apply reduceDeps_mono;
+                  [apply PkgSet.empty_subset
+                  | apply Feat.SupportSet.empty_subset
+                  | apply Feat.FeatDepRel.empty_subset
+                  | apply AddlDepRelFibred.endsFibre_subset]].
+        intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
+        inversion H; subst.
+        - eapply EdgeAInterToFeat;
+            [apply AddlDepRelFibred.mem_endsFibre;
+               split; [eassumption | split; reflexivity]
+            | eassumption | eassumption].
+        - eapply EdgeAInterFeatToInter;
+            [apply AddlDepRelFibred.mem_endsFibre;
+               split; [eassumption | split; reflexivity]
+            | eassumption | eassumption].
+      Qed.
+
+    End Lookup.
   End Reduction.
 End FeatureConcurrent.

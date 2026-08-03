@@ -830,6 +830,110 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           pose proof (Huniq u2 (conj Hu2 (conj Hmu2 Hpi2))) as E2.
           congruence.
     Qed.
+
+    Module Lookup.
+      Lemma reduceDeps_mono : forall D D' g (y : T.DepElt.t),
+          C.DepRel.Subset D' D ->
+          T.DepRel.In y (reduceDeps D' g) ->
+          T.DepRel.In y (reduceDeps D g).
+      Proof.
+        intros D D' g y HD; revert y.
+        unfold reduceDeps, reduceDepsDirect, reduceDepsSplitEntry,
+          reduceDepsSplitFanout, reduceDepsEmpty.
+        repeat apply SOdtd.union_subset.
+        - apply SOdtd.unionMap_mono; [exact HD | intros x z Hz; exact Hz].
+        - apply SOdtd.filterMap_mono; [exact HD | intros x z Hz; exact Hz].
+        - apply SOdtd.unionMap_mono; [exact HD | intros x z Hz; exact Hz].
+        - apply SOdtd.filterMap_mono; [exact HD | intros x z Hz; exact Hz].
+      Qed.
+
+      Module DepRelFibred :=
+        FibredLabelledRel Pkg N VSet.AsUOT C.DepElt C.DepRel.
+      Theorem dependees_lookupGranular : forall D g n v,
+          T.dependees (reduceDeps D g) (Name.Granular n (g v), Version.Orig v) =
+          T.dependees (reduceDeps (DepRelFibred.tailFibre D (n, v)) g)
+            (Name.Granular n (g v), Version.Orig v).
+      Proof.
+        intros D g n v; apply T.dependees_ext; intros [m ws].
+        split; [| apply reduceDeps_mono, DepRelFibred.tailFibre_subset].
+        intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
+        destruct H as [H | [H | [H | H]]].
+        - destruct H as [n' [v' [m' [vs [u [HD [Hdir [Hu Heq]]]]]]]].
+          injection Heq as <- Hgv <- -> ->.
+          left; exists n, v, m', vs, u.
+          split; [apply DepRelFibred.mem_tailFibre;
+                  split; [exact HD | reflexivity] |].
+          split; [exact Hdir | split; [exact Hu | reflexivity]].
+        - destruct H as [n' [v' [m' [vs [HD [Hs Heq]]]]]].
+          injection Heq as <- Hgv <- -> ->.
+          right; left; exists n, v, m', vs.
+          split; [apply DepRelFibred.mem_tailFibre;
+                  split; [exact HD | reflexivity] |].
+          split; [exact Hs | reflexivity].
+        - destruct H as [n' [v' [m' [vs [u [HD [Hs [Hu Heq]]]]]]]];
+            discriminate Heq.
+        - destruct H as [n' [v' [m' [HD Heq]]]].
+          injection Heq as <- Hgv <- -> ->.
+          right; right; right; exists n, v, m'.
+          split;
+            [apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity]
+            | reflexivity].
+      Qed.
+
+      Theorem dependees_lookupGranularGran : forall D g n (w w' : G.t),
+          T.dependees (reduceDeps D g) (Name.Granular n w, Version.Gran w') =
+          T.DependeesSet.empty.
+      Proof.
+        intros D g n w w'; apply T.dependees_empty_iff; intros [m ws] H.
+        apply mem_reduceDeps in H.
+        destruct H as [H | [H | [H | H]]].
+        - destruct H as [n' [v' [m' [vs [u [_ [_ [_ Heq]]]]]]]];
+            discriminate Heq.
+        - destruct H as [n' [v' [m' [vs [_ [_ Heq]]]]]]; discriminate Heq.
+        - destruct H as [n' [v' [m' [vs [u [_ [_ [_ Heq]]]]]]]];
+            discriminate Heq.
+        - destruct H as [n' [v' [m' [_ Heq]]]]; discriminate Heq.
+      Qed.
+
+      Theorem dependees_lookupIntermediate : forall D g n v m w,
+          T.dependees (reduceDeps D g)
+            (Name.Intermediate n v m, Version.Gran w) =
+          T.dependees (reduceDeps (DepRelFibred.endsFibre D (n, v) m) g)
+            (Name.Intermediate n v m, Version.Gran w).
+      Proof.
+        intros D g n v m w; apply T.dependees_ext; intros [m0 ws].
+        split; [| apply reduceDeps_mono, DepRelFibred.endsFibre_subset].
+        intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
+        destruct H as [H | [H | [H | H]]].
+        - destruct H as [n' [v' [m' [vs [u [HD [Hdir [Hu Heq]]]]]]]];
+            discriminate Heq.
+        - destruct H as [n' [v' [m' [vs [HD [Hs Heq]]]]]]; discriminate Heq.
+        - destruct H as [n' [v' [m' [vs [u [HD [Hs [Hu Heq]]]]]]]].
+          injection Heq as <- <- <- Hw -> ->.
+          subst w.
+          right; right; left; exists n, v, m, vs, u.
+          split; [apply DepRelFibred.mem_endsFibre;
+                  split; [exact HD | split; reflexivity] |].
+          split; [exact Hs | split; [exact Hu | reflexivity]].
+        - destruct H as [n' [v' [m' [HD Heq]]]]; discriminate Heq.
+      Qed.
+
+      Theorem dependees_lookupIntermediateOrig : forall D g n v m u,
+          T.dependees (reduceDeps D g)
+            (Name.Intermediate n v m, Version.Orig u) =
+          T.DependeesSet.empty.
+      Proof.
+        intros D g n v m u; apply T.dependees_empty_iff; intros [m0 ws] H.
+        apply mem_reduceDeps in H.
+        destruct H as [H | [H | [H | H]]].
+        - destruct H as [n' [v' [m' [vs [u' [_ [_ [_ Heq]]]]]]]];
+            discriminate Heq.
+        - destruct H as [n' [v' [m' [vs [_ [_ Heq]]]]]]; discriminate Heq.
+        - destruct H as [n' [v' [m' [vs [u' [_ [_ [_ Heq]]]]]]]];
+            discriminate Heq.
+        - destruct H as [n' [v' [m' [_ Heq]]]]; discriminate Heq.
+      Qed.
+    End Lookup.
   End Reduction.
 
 End Concurrent.

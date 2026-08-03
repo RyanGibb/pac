@@ -493,5 +493,101 @@ Module Conflict (N V : UsualOrderedType).
           exact (Havoid p' Hp'S n vs HG' Hex).
         + congruence.
     Qed.
+
+    Module Lookup.
+      Module ConflictRelFibred :=
+        FibredLabelledRel Pkg N VSet.AsUOT ConfElt ConflictRel.
+      Definition conflictsAgainst (G : ConflictRel.t) (n : N.t) (u : V.t) :
+          ConflictRel.t :=
+        ConflictRel.filter (fun '(_, (_, vs)) => VSet.mem u vs)
+          (ConflictRelFibred.nodeFibre G n).
+
+      Lemma mem_conflictsAgainst :
+        forall G (n : N.t) (u : V.t) (q : Pkg.t) (m : N.t) (vs : VSet.t),
+          ConflictRel.In (q, (m, vs)) (conflictsAgainst G n u) <->
+          ConflictRel.In (q, (m, vs)) G /\ m = n /\ VSet.In u vs.
+      Proof.
+        intros G n u q m vs; unfold conflictsAgainst.
+        rewrite ConflictRel.filter_spec'.
+        rewrite ConflictRelFibred.mem_nodeFibre.
+        cbn beta iota.
+        rewrite VSet.mem_spec.
+        tauto.
+      Qed.
+
+      Lemma conflictSlice_sub : forall G (n : N.t) (v : V.t),
+          ConflictRel.Subset
+            (ConflictRel.union (ConflictRelFibred.tailFibre G (n, v))
+                               (conflictsAgainst G n v)) G.
+      Proof.
+        intros G n v [q [m vs]] H; apply ConflictRel.union_spec in H.
+        destruct H as [H | H].
+        - apply ConflictRelFibred.mem_tailFibre in H;
+            destruct H as [H _]; exact H.
+        - apply mem_conflictsAgainst in H; destruct H as [H _]; exact H.
+      Qed.
+
+      Lemma reduceDeps_mono : forall D D' G G' (y : T.DepElt.t),
+          C.DepRel.Subset D' D -> ConflictRel.Subset G' G ->
+          T.DepRel.In y (reduceDeps D' G') -> T.DepRel.In y (reduceDeps D G).
+      Proof.
+        intros D D' G G' y HD HG; revert y.
+        unfold reduceDeps, origEdges, declarerEdges, conflicteeEdges.
+        repeat apply SOdtd.union_subset.
+        - apply SOdtd.map_mono; [exact HD | intros x; reflexivity].
+        - apply SOctd.map_mono; [exact HG | intros x; reflexivity].
+        - apply SOctd.unionMap_mono; [exact HG | intros x z Hz; exact Hz].
+      Qed.
+
+      Module DepRelFibred := FibredRel Pkg C.Dependees C.DepElt C.DepRel.
+      Theorem dependees_lookupOrig : forall D G (n : N.t) (v : V.t),
+          T.dependees (reduceDeps D G) (embedPkg (n, v)) =
+          T.dependees
+            (reduceDeps (DepRelFibred.tailFibre D (n, v))
+               (ConflictRel.union (ConflictRelFibred.tailFibre G (n, v))
+                                  (conflictsAgainst G n v)))
+            (embedPkg (n, v)).
+      Proof.
+        intros D G n v; apply T.dependees_ext; intros [m ws].
+        split; [| intro H; exact (reduceDeps_mono _ _ _ _ _
+                    (DepRelFibred.tailFibre_subset _ _)
+                    (conflictSlice_sub G n v) H)].
+        intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
+        destruct H as [[q [n' [vs [HD Hy]]]]
+                      | [[q [n' [vs [HG Hy]]]]
+                         | [q [n' [vs [u [HG [Hu Hy]]]]]]]].
+        - destruct q as [qn qv]; unfold embedPkg in Hy; simpl in Hy.
+          injection Hy as <- <- -> ->.
+          left; exists (n, v), n', vs; split; [| reflexivity].
+          apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
+        - destruct q as [qn qv]; unfold embedPkg in Hy; simpl in Hy.
+          injection Hy as <- <- -> ->.
+          right; left; exists (n, v), n', vs; split; [| reflexivity].
+          apply ConflictRel.union_spec; left.
+          apply ConflictRelFibred.mem_tailFibre;
+            split; [exact HG | reflexivity].
+        - unfold embedPkg in Hy; simpl in Hy.
+          injection Hy as <- <- -> ->.
+          right; right; exists q, n, vs, v; split;
+            [| split; [exact Hu | reflexivity]].
+          apply ConflictRel.union_spec; right.
+          apply mem_conflictsAgainst; repeat split; [exact HG | exact Hu].
+      Qed.
+
+      Theorem dependees_lookupSynthetic :
+        forall D G (n : N.t) (vs : VSet.t) (cv : Version.t),
+          T.dependees (reduceDeps D G) (Name.Synthetic n vs, cv) =
+          T.DependeesSet.empty.
+      Proof.
+        intros D G n vs cv; apply T.dependees_empty_iff; intros [m ws] H.
+        apply mem_reduceDeps in H.
+        destruct H as [[q [n' [vs' [_ Hy]]]]
+                      | [[q [n' [vs' [_ Hy]]]]
+                         | [q [n' [vs' [u [_ [_ Hy]]]]]]]].
+        - destruct q; unfold embedPkg in Hy; simpl in Hy; congruence.
+        - destruct q; unfold embedPkg in Hy; simpl in Hy; congruence.
+        - congruence.
+      Qed.
+    End Lookup.
   End Reduction.
 End Conflict.

@@ -705,6 +705,167 @@ Module Feature (N V F : UsualOrderedType).
           injection Hq2 as E3 E4 E5; subst n2 f2 v2.
           exact (Hvu _ _ _ _ _ HS1 HS2).
     Qed.
+
+    Module Lookup.
+      Lemma reduceDeps_mono :
+        forall R R' support support' Df Df' Da Da' (y : T.DepElt.t),
+          PkgSet.Subset R' R -> SupportSet.Subset support' support ->
+          FeatDepRel.Subset Df' Df -> AddlDepRel.Subset Da' Da ->
+          T.DepRel.In y (reduceDeps R' support' Df' Da') ->
+          T.DepRel.In y (reduceDeps R support Df Da).
+      Proof.
+        intros R R' support support' Df Df' Da Da' y HR Hs HDf HDa; revert y.
+        unfold reduceDeps, supportEdges, featDepOrigEdges,
+          featDepFeatPkgEdges, addlDepOrigEdges, addlDepFeatPkgEdges.
+        repeat apply SOsd.union_subset.
+        - apply SOsd.filterMap_mono; [exact Hs |].
+          intros [[n v] f] z Hz; cbn beta iota in Hz |- *.
+          destruct (PkgSet.mem (n, v) R') eqn:Em; [| discriminate Hz].
+          rewrite PkgSet.mem_spec in Em; apply HR in Em.
+          rewrite <- PkgSet.mem_spec in Em; rewrite Em; exact Hz.
+        - apply SOfd.filterMap_mono; [exact HDf | intros x z Hz; exact Hz].
+        - apply SOfd.unionMap_mono; [exact HDf | intros x z Hz; exact Hz].
+        - apply SOad.filterMap_mono; [exact HDa | intros x z Hz; exact Hz].
+        - apply SOad.unionMap_mono; [exact HDa | intros x z Hz; exact Hz].
+      Qed.
+
+      Module FeatDepRelFibred :=
+        FibredLabelledRel Pkg N VSFS FeatDepElt FeatDepRel.
+      Theorem dependees_lookupOrig :
+        forall R support Df Da (n : N.t) (v : V.t),
+          T.dependees (reduceDeps R support Df Da) (Name.Orig n, v) =
+          T.dependees
+            (reduceDeps PkgSet.empty SupportSet.empty
+               (FeatDepRelFibred.tailFibre Df (n, v))
+               AddlDepRel.empty)
+            (Name.Orig n, v).
+      Proof.
+        intros R support Df Da n v; apply T.dependees_ext; intros [m ws].
+        split; [| apply reduceDeps_mono;
+                  [apply PkgSet.empty_subset
+                  | apply SupportSet.empty_subset
+                  | apply FeatDepRelFibred.tailFibre_subset
+                  | apply AddlDepRel.empty_subset]].
+        intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
+        destruct H as [D1 | [D2 | [D3 | [D4 | D5]]]].
+        - destruct D1 as [n1 [v1 [f1 [_ [_ [Hsrc _]]]]]]; discriminate Hsrc.
+        - destruct D2 as [p [m0 [vs0 [HD [Hsrc [Htn Htvs]]]]]].
+          destruct p as [qn qv]; unfold embedPkg in Hsrc; simpl in Hsrc.
+          injection Hsrc as E1 E2; subst qn qv.
+          right; left; exists (n, v), m0, vs0.
+          split; [rewrite FeatDepRelFibred.mem_tailFibre;
+                  split; [exact HD | reflexivity] |].
+          split; [reflexivity | split; [exact Htn | exact Htvs]].
+        - destruct D3
+            as [p [m0 [vs0 [fs0 [f [HD [E0 [Hf [Hsrc [Htn Htvs]]]]]]]]]].
+          destruct p as [qn qv]; unfold embedPkg in Hsrc; simpl in Hsrc.
+          injection Hsrc as E1 E2; subst qn qv.
+          right; right; left; exists (n, v), m0, vs0, fs0, f.
+          split; [rewrite FeatDepRelFibred.mem_tailFibre;
+                  split; [exact HD | reflexivity] |].
+          split; [exact E0 | split; [exact Hf |]].
+          split; [reflexivity | split; [exact Htn | exact Htvs]].
+        - destruct D4 as [n1 [v1 [f1 [m0 [vs0 [_ [Hsrc _]]]]]]];
+            discriminate Hsrc.
+        - destruct D5
+            as [n1 [v1 [f1 [m0 [vs0 [fs0 [f' [_ [_ [_ [Hsrc _]]]]]]]]]]];
+            discriminate Hsrc.
+      Qed.
+
+      Module PkgFibred := FibredRel N V Pkg PkgSet.
+      Module SupportFibred := FibredRel Pkg F PkgF SupportSet.
+      Module AddlDepRelFibred :=
+        FibredLabelledRel PkgF N VSFS AddlDepElt AddlDepRel.
+      Theorem dependees_lookupFeatPkg : forall R support Df Da n v f,
+          T.dependees (reduceDeps R support Df Da) (Name.FeatPkg n f, v) =
+          T.dependees
+            (reduceDeps (PkgFibred.idFibre R (n, v))
+               (SupportFibred.idFibre support ((n, v), f)) FeatDepRel.empty
+               (AddlDepRelFibred.tailFibre Da ((n, v), f)))
+            (Name.FeatPkg n f, v).
+      Proof.
+        intros R support Df Da n v f; apply T.dependees_ext; intros [m ws].
+        split; [| apply reduceDeps_mono;
+                  [apply PkgFibred.idFibre_subset
+                  | apply SupportFibred.idFibre_subset
+                  | apply FeatDepRel.empty_subset
+                  | apply AddlDepRelFibred.tailFibre_subset]].
+        intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
+        destruct H as [D1 | [D2 | [D3 | [D4 | D5]]]].
+        - destruct D1 as [n1 [v1 [f1 [Hsupp [HR [Hsrc [Htn Htvs]]]]]]].
+          injection Hsrc as E1 E2 E3; subst n1 f1 v1.
+          left; exists n, v, f.
+          split; [rewrite SupportFibred.mem_idFibre;
+                  split; [exact Hsupp | reflexivity] |].
+          split; [rewrite PkgFibred.mem_idFibre;
+                  split; [exact HR | reflexivity] |].
+          split; [reflexivity | split; [exact Htn | exact Htvs]].
+        - destruct D2 as [p [m0 [vs0 [_ [Hsrc _]]]]].
+          destruct p as [qn qv]; unfold embedPkg in Hsrc; simpl in Hsrc;
+            discriminate Hsrc.
+        - destruct D3 as [p [m0 [vs0 [fs0 [f1 [_ [_ [_ [Hsrc _]]]]]]]]].
+          destruct p as [qn qv]; unfold embedPkg in Hsrc; simpl in Hsrc;
+            discriminate Hsrc.
+        - destruct D4 as [n1 [v1 [f1 [m0 [vs0 [Hda [Hsrc [Htn Htvs]]]]]]]].
+          injection Hsrc as E1 E2 E3; subst n1 f1 v1.
+          right; right; right; left; exists n, v, f, m0, vs0.
+          split; [rewrite AddlDepRelFibred.mem_tailFibre;
+                  split; [exact Hda | reflexivity] |].
+          split; [reflexivity | split; [exact Htn | exact Htvs]].
+        - destruct D5 as
+            [n1 [v1 [f1 [m0 [vs0 [fs0 [f'
+              [Hda [E0 [Hf' [Hsrc [Htn Htvs]]]]]]]]]]]].
+          injection Hsrc as E1 E2 E3; subst n1 f1 v1.
+          right; right; right; right; exists n, v, f, m0, vs0, fs0, f'.
+          split; [rewrite AddlDepRelFibred.mem_tailFibre;
+                  split; [exact Hda | reflexivity] |].
+          split; [exact E0 | split; [exact Hf' |]].
+          split; [reflexivity | split; [exact Htn | exact Htvs]].
+      Qed.
+
+      Theorem reduceReal_lookupOrig : forall R support n v,
+          T.PkgSet.In (Name.Orig n, v) (reduceReal R support) <->
+          T.PkgSet.In (Name.Orig n, v)
+            (reduceReal (PkgFibred.idFibre R (n, v)) SupportSet.empty).
+      Proof.
+        intros R support n v; rewrite !mem_reduceReal.
+        split.
+        - intros [[[qn qv] [HR Hq]] | [n1 [v1 [f1 [_ [_ Hq]]]]]].
+          + unfold embedPkg in Hq; injection Hq as <- <-.
+            left; exists (n, v).
+            split; [apply PkgFibred.mem_idFibre; split; [exact HR | reflexivity]
+                   | reflexivity].
+          + discriminate Hq.
+        - intros [[[qn qv] [HR Hq]] | [n1 [v1 [f1 [Hs _]]]]].
+          + apply PkgFibred.mem_idFibre in HR; destruct HR as [HR _].
+            left; exists (qn, qv); split; [exact HR | exact Hq].
+          + destruct (SupportSet.empty_spec Hs).
+      Qed.
+
+      Theorem reduceReal_lookupFeatPkg : forall R support n v f,
+          T.PkgSet.In (Name.FeatPkg n f, v) (reduceReal R support) <->
+          T.PkgSet.In (Name.FeatPkg n f, v)
+            (reduceReal (PkgFibred.idFibre R (n, v))
+               (SupportFibred.idFibre support ((n, v), f))).
+      Proof.
+        intros R support n v f; rewrite !mem_reduceReal.
+        split.
+        - intros [[[qn qv] [_ Hq]] | [n1 [v1 [f1 [Hs [HR Hq]]]]]].
+          + unfold embedPkg in Hq; discriminate Hq.
+          + injection Hq as <- <- <-.
+            right; exists n, v, f.
+            split; [apply SupportFibred.mem_idFibre;
+                    split; [exact Hs | reflexivity] |].
+            split; [apply PkgFibred.mem_idFibre; split; [exact HR | reflexivity]
+                   | reflexivity].
+        - intros [[[qn qv] [_ Hq]] | [n1 [v1 [f1 [Hs [HR Hq]]]]]].
+          + unfold embedPkg in Hq; discriminate Hq.
+          + apply SupportFibred.mem_idFibre in Hs; destruct Hs as [Hs _].
+            apply PkgFibred.mem_idFibre in HR; destruct HR as [HR _].
+            right; exists n1, v1, f1;
+              split; [exact Hs | split; [exact HR | exact Hq]].
+      Qed.
+    End Lookup.
   End Reduction.
 
 End Feature.

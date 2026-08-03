@@ -41,6 +41,61 @@ Example core_merge_computes :
                    C.DepRel.empty))) = 1.
 Proof. reflexivity. Qed.
 
+Definition verR : Ver.PkgSet.t := Ver.PkgSet.add (1, 2) Ver.PkgSet.empty.
+
+Definition verD : Ver.DepRel.t :=
+  Ver.DepRel.add ((1, 2), (1, Ver.FTop)) Ver.DepRel.empty.
+
+Example versions_reduce_computes :
+  Ver.C.DepRel.cardinal (Ver.Reduction.reduce verR verD) = 1.
+Proof. reflexivity. Qed.
+
+Example versions_realPreimage_computes :
+  Ver.PkgSet.cardinal (Ver.Reduction.Lookup.realPreimage verR verD) = 1.
+Proof. reflexivity. Qed.
+
+Example packageFormula_reduceDeps_computes :
+  PkgF.Reduction.T.DepRel.cardinal
+    (PkgF.Reduction.reduceDeps
+       (PkgF.DepRel.add ((1, 2), PkgF.FDep 3 (PkgF.VSet.singleton 4))
+          PkgF.DepRel.empty)) = 1.
+Proof. reflexivity. Qed.
+
+Example variableFormula_reduceDeps_computes :
+  VarF.Reduction.T.DepRel.cardinal
+    (VarF.Reduction.reduceDeps (fun _ => VarF.Reduction.YSet.singleton 0)
+       (VarF.DepRel.add ((1, 2), VarF.FDep 3 (VarF.VSet.singleton 4))
+          VarF.DepRel.empty)) = 1.
+Proof. reflexivity. Qed.
+
+Example feature_reduceDeps_computes :
+  Feat.Reduction.T.DepRel.cardinal
+    (Feat.Reduction.reduceDeps Feat.PkgSet.empty Feat.SupportSet.empty
+       (Feat.FeatDepRel.add
+          ((1, 2), (3, (Feat.VSet.singleton 4, Feat.FSet.empty)))
+          Feat.FeatDepRel.empty)
+       Feat.AddlDepRel.empty) = 1.
+Proof. reflexivity. Qed.
+
+(* Built in Cfl.C, the core instance living inside the Conflict
+   instantiation, rather than in the C above. *)
+Definition conflictR : Cfl.C.PkgSet.t :=
+  Cfl.C.PkgSet.add (1, 10)
+    (Cfl.C.PkgSet.add (1, 11) (Cfl.C.PkgSet.add (2, 20) Cfl.C.PkgSet.empty)).
+
+Example conflict_conflictResolution_roundtrip_computes :
+  Cfl.C.PkgSet.equal
+    (Cfl.Reduction.conflictResolution (Cfl.Reduction.embedSet conflictR))
+    conflictR = true.
+Proof. reflexivity. Qed.
+
+Example conflict_reduceReal_computes :
+  Cfl.Reduction.T.PkgSet.cardinal
+    (Cfl.Reduction.reduceReal conflictR
+       (Cfl.ConflictRel.add ((2, 20), (1, Cfl.C.VSet.singleton 11))
+          Cfl.ConflictRel.empty)) = 5.
+Proof. reflexivity. Qed.
+
 (* One private dependency, so (1, 1) mints its own subgraph: two occurrences,
    one intermediate and one agreement. *)
 Definition visR : Vis.PkgSet.t :=
@@ -63,5 +118,10 @@ Example visibility_sub_computes :
   Vis.PkgSet.cardinal
     (Vis.sub Vis.PubRel.empty
        (Vis.ParentRel.add ((2, 1), (1, 1)) Vis.ParentRel.empty) (1, 1)) = 2.
+Proof. reflexivity. Qed.
+
+Example visibility_depBlocks_computes :
+  Vis.C.DepRel.cardinal (Vis.Reduction.Lookup.depBlocks visD (1, 1) (1, 1))
+  = 1.
 Proof. reflexivity. Qed.
 

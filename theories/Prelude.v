@@ -400,6 +400,204 @@ Module FSetUOT (X : UsualOrderedType).
   End AsUOT.
 End FSetUOT.
 
+(* A relation read as a set of directed edges from tail T to head H: the
+   functor equips it with the fibres of its tail projection -- one tail's
+   edges as a sub-relation -- which is what the lookup theorems compute
+   over. *)
+Module FibredRel (T H : UsualOrderedType)
+    (* the with-constraint exposes E's pair structure, so edges of an existing
+       relation can be destructured here *)
+    (E : UsualOrderedType with Definition t := (T.t * H.t)%type)
+    (S : SetsOn E).
+  Module SS := SetSpecs E S.
+
+  Definition tail '((q, _) : E.t) : T.t := q.
+
+  (* The fibre of p under the tail projection. *)
+  Definition tailFibre (D : S.t) (p : T.t) : S.t :=
+    S.filter (fun e => if T.eq_dec (tail e) p then true else false) D.
+
+  Lemma mem_tailFibre : forall D (p q : T.t) (h : H.t),
+      S.In (q, h) (tailFibre D p) <-> S.In (q, h) D /\ q = p.
+  Proof.
+    intros D p q h; unfold tailFibre.
+    rewrite SS.filter_spec'.
+    simpl.
+    destruct (T.eq_dec q p); intuition congruence.
+  Qed.
+
+  Lemma tailFibre_subset : forall D (p : T.t), S.Subset (tailFibre D p) D.
+  Proof.
+    intros D p [q h] Hin; apply mem_tailFibre in Hin; destruct Hin as [Hin _];
+      exact Hin.
+  Qed.
+
+  Definition head '((_, h) : E.t) : H.t := h.
+
+  (* The fibre of h under the head projection. *)
+  Definition headFibre (D : S.t) (h : H.t) : S.t :=
+    S.filter (fun e => if H.eq_dec (head e) h then true else false) D.
+
+  Lemma mem_headFibre : forall D (q : T.t) (h g : H.t),
+      S.In (q, g) (headFibre D h) <-> S.In (q, g) D /\ g = h.
+  Proof.
+    intros D q h g; unfold headFibre.
+    rewrite SS.filter_spec'.
+    simpl.
+    destruct (H.eq_dec g h); intuition congruence.
+  Qed.
+
+  Lemma headFibre_subset : forall D (h : H.t), S.Subset (headFibre D h) D.
+  Proof.
+    intros D h [q g] Hin; apply mem_headFibre in Hin; destruct Hin as [Hin _];
+      exact Hin.
+  Qed.
+
+  (* The fibre of x under the identity projection. *)
+  Definition idFibre (D : S.t) (x : E.t) : S.t :=
+    S.filter (fun e => if E.eq_dec e x then true else false) D.
+
+  Lemma mem_idFibre : forall D (x y : E.t),
+      S.In y (idFibre D x) <-> S.In y D /\ y = x.
+  Proof.
+    intros D x y; unfold idFibre.
+    rewrite SS.filter_spec'.
+    destruct (E.eq_dec y x); intuition congruence.
+  Qed.
+
+  Lemma idFibre_subset : forall D (x : E.t), S.Subset (idFibre D x) D.
+  Proof.
+    intros D x y Hin; apply mem_idFibre in Hin; destruct Hin as [Hin _];
+      exact Hin.
+  Qed.
+End FibredRel.
+
+(* The labelled reading: the head factors into a node N and a label L, so an
+   edge runs from tail T to node N with L riding along. The factoring makes
+   ends = (tail, node) coarser than the whole edge, so a second fibre exists:
+   endsFibre, the parallel edges between two endpoints differing only in
+   label, which is what the lookup theorems keyed by both endpoints compute
+   over. *)
+Module FibredLabelledRel (T N L : UsualOrderedType)
+    (E : UsualOrderedType with Definition t := (T.t * (N.t * L.t))%type)
+    (S : SetsOn E).
+  Module H := PairUOT N L.
+  Include FibredRel T H E S.
+
+  Definition ends '((q, (m, _)) : E.t) : (T.t * N.t)%type := (q, m).
+
+  (* The fibre of (p, n) under the ends projection. *)
+  Definition endsFibre (D : S.t) (p : T.t) (n : N.t) : S.t :=
+    S.filter (fun e => let '(q, m) := ends e in
+        if T.eq_dec q p
+        then if N.eq_dec m n then true else false
+        else false)
+      D.
+
+  Lemma mem_endsFibre : forall D (p q : T.t) (n m : N.t) (l : L.t),
+      S.In (q, (m, l)) (endsFibre D p n) <->
+      S.In (q, (m, l)) D /\ q = p /\ m = n.
+  Proof.
+    intros D p q n m l; unfold endsFibre.
+    rewrite SS.filter_spec'.
+    simpl.
+    destruct (T.eq_dec q p); [destruct (N.eq_dec m n) |];
+      intuition congruence.
+  Qed.
+
+  Lemma endsFibre_subset : forall D (p : T.t) (n : N.t),
+      S.Subset (endsFibre D p n) D.
+  Proof.
+    intros D p n [q [m l]] Hin; apply mem_endsFibre in Hin;
+      destruct Hin as [Hin _]; exact Hin.
+  Qed.
+
+  Definition node '((_, (n, _)) : E.t) : N.t := n.
+
+  (* The fibre of n under the head-node projection. *)
+  Definition nodeFibre (D : S.t) (n : N.t) : S.t :=
+    S.filter (fun e => if N.eq_dec (node e) n then true else false) D.
+
+  Lemma mem_nodeFibre : forall D (q : T.t) (n m : N.t) (l : L.t),
+      S.In (q, (m, l)) (nodeFibre D n) <-> S.In (q, (m, l)) D /\ m = n.
+  Proof.
+    intros D q n m l; unfold nodeFibre.
+    rewrite SS.filter_spec'.
+    simpl.
+    destruct (N.eq_dec m n); intuition congruence.
+  Qed.
+
+  Lemma nodeFibre_subset : forall D (n : N.t), S.Subset (nodeFibre D n) D.
+  Proof.
+    intros D n [q [m l]] Hin; apply mem_nodeFibre in Hin;
+      destruct Hin as [Hin _]; exact Hin.
+  Qed.
+End FibredLabelledRel.
+
+(* The other way a lookup theorem cuts a set down: its elements carry a key --
+   a package set read as a name-to-version relation projects to names -- and
+   the preimage of the wanted keys under that projection is all of the set a
+   computation that consults only those keys can see. Which keys are wanted
+   arrives as a test rather than as a set, so that the two entry points share
+   this one definition: keys already materialized (PreimageOfKeys.ofKeys), and
+   the keys a relation's edges point at (RelKeys.hasKey), which stays a
+   semijoin and never materializes them. *)
+Module Preimage (A : UsualOrderedType) (S : SetsOn A).
+  Module SS := SetSpecs A S.
+
+  Section OfTest.
+    Context {K : Type}.
+    Variables (key : A.t -> K) (test : K -> bool).
+
+    Definition preimage (s : S.t) : S.t :=
+      S.filter (fun x => test (key x)) s.
+
+    Lemma mem_preimage : forall (s : S.t) (x : A.t),
+        S.In x (preimage s) <-> S.In x s /\ test (key x) = true.
+    Proof. intros s x; unfold preimage; apply SS.filter_spec'. Qed.
+
+    Lemma preimage_subset : forall s : S.t, S.Subset (preimage s) s.
+    Proof. intros s x Hx; apply mem_preimage in Hx; exact (proj1 Hx). Qed.
+  End OfTest.
+End Preimage.
+
+Module PreimageOfKeys (K A : UsualOrderedType) (SK : SetsOn K) (SA : SetsOn A).
+  Include Preimage A SA.
+
+  Definition ofKeys (key : A.t -> K.t) (ks : SK.t) (s : SA.t) : SA.t :=
+    preimage key (fun k => SK.mem k ks) s.
+
+  Lemma mem_ofKeys : forall key ks (s : SA.t) (x : A.t),
+      SA.In x (ofKeys key ks s) <-> SA.In x s /\ SK.In (key x) ks.
+  Proof.
+    intros key ks s x; unfold ofKeys.
+    rewrite mem_preimage, SK.mem_spec; reflexivity.
+  Qed.
+
+  Lemma ofKeys_subset : forall key ks (s : SA.t),
+      SA.Subset (ofKeys key ks s) s.
+  Proof. intros key ks s; apply preimage_subset. Qed.
+
+End PreimageOfKeys.
+
+(* Asking the relation one key at a time is what keeps the preimage along it a
+   semijoin; the key set it stands for is never built. *)
+Module RelKeys (K B : UsualOrderedType) (SB : SetsOn B).
+  Module SS := SetSpecs B SB.
+  Module KEqb := UOTEqb K.
+
+  Definition hasKey (tgt : B.t -> K.t) (D : SB.t) (k : K.t) : bool :=
+    SB.exists_ (fun e => KEqb.eqb (tgt e) k) D.
+
+  Lemma hasKey_iff : forall tgt (D : SB.t) (k : K.t),
+      hasKey tgt D k = true <-> exists e : B.t, SB.In e D /\ tgt e = k.
+  Proof.
+    intros tgt D k; unfold hasKey; rewrite SS.exists_spec'.
+    split; (intros [e [He Hk]]; exists e;
+            split; [exact He | apply KEqb.eqb_true_iff; exact Hk]).
+  Qed.
+End RelKeys.
+
 (* MSets provide no cross-type map, so set comprehensions are folds under
    the hood; SetOps reifies the missing combinators (map, filterMap,
    unionMap, filterExists, ofList) together with their membership specs.
