@@ -1,0 +1,40 @@
+#!/bin/sh
+# Fetch a repository index for each package manager into repos/.
+# Usage: scripts/fetch-repos.sh [debian]...  (default: all)
+
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+out=$root/repos
+
+DEBIAN_SUITE=${DEBIAN_SUITE:-stable}
+DEBIAN_ARCH=${DEBIAN_ARCH:-amd64}
+
+fetch() {
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$1" -o "$2"
+  else
+    wget -q "$1" -O "$2"
+  fi
+}
+
+debian() {
+  dir=$out/debian
+  [ -f "$dir/Packages" ] && { echo "debian: already present"; return; }
+  mkdir -p "$dir"
+  url=https://deb.debian.org/debian/dists/$DEBIAN_SUITE/main/binary-$DEBIAN_ARCH/Packages.gz
+  echo "debian: $url"
+  fetch "$url" "$dir/Packages.gz"
+  gunzip -f "$dir/Packages.gz"
+}
+
+[ $# -gt 0 ] || set -- debian
+for eco; do
+  case $eco in
+  debian) "$eco" ;;
+  *)
+    echo "unknown: $eco (want debian)" >&2
+    exit 2
+    ;;
+  esac
+done

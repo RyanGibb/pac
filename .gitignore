@@ -4,3 +4,4 @@ _opam/
 *.glob
 .lia.cache
 .dir-locals.el
+repos/

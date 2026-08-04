@@ -2,6 +2,13 @@
  (name debian_frontend)
  (modules deb_version deb_packages))
 
+(library
+ (name deb_solve)
+ (modules deb_solve)
+ (flags
+  (:standard -w -a))
+ (libraries debian_frontend pac pubgrub))
+
 (test
  (name test_version)
  (modules test_version)

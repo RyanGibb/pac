@@ -1,0 +1,43 @@
+Package: app
+Version: 1
+Architecture: amd64
+Depends: virt (= 1), lib (= 1)
+
+Package: prov1
+Version: 1
+Architecture: amd64
+Provides: virt (= 1)
+
+Package: prov2
+Version: 1
+Architecture: amd64
+Provides: virt (= 1)
+
+Package: lib
+Version: 1
+Architecture: amd64
+
+Package: altlib
+Version: 1
+Architecture: amd64
+Provides: lib (= 1)
+
+Package: zzz
+Version: 1
+Architecture: amd64
+
+Package: folded
+Version: 1
+Architecture: amd64
+Depends: lib (= 1),
+ zzz
+
+Package: zzlib
+Version: 1
+Architecture: amd64
+Provides: lib (= 1)
+
+Package: realdep
+Version: 1
+Architecture: amd64
+Depends: lib (= 1)
