@@ -1,6 +1,6 @@
 #!/bin/sh
 # Fetch a repository index for each package manager into repos/.
-# Usage: scripts/fetch-repos.sh [debian]...  (default: all)
+# Usage: scripts/fetch-repos.sh [debian|opam]...  (default: all)
 
 set -eu
 
@@ -28,12 +28,22 @@ debian() {
   gunzip -f "$dir/Packages.gz"
 }
 
-[ $# -gt 0 ] || set -- debian
+clone() {
+  dir=$out/$2
+  [ -d "$dir" ] && { echo "$2: already present"; return; }
+  mkdir -p "$out"
+  echo "$2: $1"
+  git clone --depth 1 --quiet "$1" "$dir"
+}
+
+opam() { clone https://github.com/ocaml/opam-repository opam-repository; }
+
+[ $# -gt 0 ] || set -- debian opam
 for eco; do
   case $eco in
-  debian) "$eco" ;;
+  debian | opam) "$eco" ;;
   *)
-    echo "unknown: $eco (want debian)" >&2
+    echo "unknown: $eco (want debian or opam)" >&2
     exit 2
     ;;
   esac

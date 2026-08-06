@@ -2,4 +2,4 @@
  (name main)
  (public_name pac)
  (modules main)
- (libraries cmdliner pubgrub deb_solve))
+ (libraries cmdliner unix pubgrub deb_solve opam_frontend opam_solve))

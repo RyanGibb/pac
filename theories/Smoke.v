@@ -4,7 +4,7 @@
    terms in the computational path), which extraction depends on. *)
 
 From Stdlib Require Import MSets.
-From PackageCalculus Require Import Prelude Core Versions Conflict Concurrent PeerDependency Visibility Feature Virtual PackageFormula VariableFormula FeatureConcurrent Debian DebianMA.
+From PackageCalculus Require Import Prelude Core Versions Conflict Concurrent PeerDependency Visibility Feature Virtual PackageFormula VariableFormula FeatureConcurrent Debian DebianMA Opam.
 
 Module C := Core Nat_as_OT Nat_as_OT.
 Module Cfl := Conflict Nat_as_OT Nat_as_OT.
@@ -165,5 +165,50 @@ Proof. reflexivity. Qed.
 Example visibility_depBlocks_computes :
   Vis.C.DepRel.cardinal (Vis.Reduction.Lookup.depBlocks visD (1, 1) (1, 1))
   = 1.
+Proof. reflexivity. Qed.
+
+Module Op := Opam Nat_as_OT Nat_as_OT BoolFin Nat_as_OT Nat_as_OT.
+
+Definition opRho : Op.Valuation := fun _ => Some 1.
+Definition opRepo : Op.PkgSet.t :=
+  Op.PkgSet.add (1, 10) (Op.PkgSet.add (2, 20) Op.PkgSet.empty).
+
+(* (1,10) depends on name 2 at >= 15 gated on a variable comparison that
+   holds under opRho; (2,20) carries a depext on system package 7; the
+   goal wants name 1 and the invariant is gated away entirely. *)
+Definition opInst : Op.Inst :=
+  Op.MkInst opRepo
+    (((1, 10),
+      Op.OFAtom 2 (Op.FlCmp OpEq false 1) (Op.VCCmp OpGe 15)) :: nil)
+    nil
+    nil
+    Op.ClsRel.empty
+    nil
+    (((2, 20), (7, Op.FlTrue)) :: nil)
+    Op.PkgSet.empty
+    nil
+    (Op.OFAtom 1 Op.FlTrue Op.VCTop)
+    (Op.OFAtom 1 Op.FlFalse Op.VCTop).
+
+Example opam_transR_computes :
+  Op.Reduction.VF.PkgSet.cardinal (Op.Reduction.transR opRho opInst) = 3.
+Proof. reflexivity. Qed.
+
+Example opam_transD_computes :
+  Op.Reduction.VF.DepRel.cardinal
+    (Op.Reduction.transD opRho opInst) = 2.
+Proof. reflexivity. Qed.
+
+(* The depext row of (2,20) reaches no formula; it is read off the
+   resolution instead. *)
+Example opam_depexts_computes :
+  Op.ESet.elements
+    (Op.depextsOf opRho opInst (Op.PkgSet.add (2, 20) Op.PkgSet.empty))
+  = 7 :: nil.
+Proof. reflexivity. Qed.
+
+Example opam_depexts_unselected :
+  Op.depextsOf opRho opInst (Op.PkgSet.add (1, 10) Op.PkgSet.empty)
+  = Op.ESet.empty.
 Proof. reflexivity. Qed.
 

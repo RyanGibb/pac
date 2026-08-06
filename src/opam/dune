@@ -1,0 +1,17 @@
+(library
+ (name opam_frontend)
+ (wrapped false)
+ (modules opam_version opam_parse)
+ (libraries opam-file-format))
+
+(library
+ (name opam_solve)
+ (modules opam_solve)
+ (flags
+  (:standard -w -a))
+ (libraries opam_frontend pac pubgrub))
+
+(test
+ (name test_opam_version)
+ (modules test_opam_version)
+ (libraries opam_frontend))

@@ -22,6 +22,9 @@ scripts/fetch-repos.sh
 ```sh
 # Debian: nano for amd64
 pac debian --native amd64 nano repos/debian/Packages
+
+# opam: lwt
+pac opam repos/opam-repository lwt
 ```
 
 *Programmed with [Claude Code](https://claude.ai/code)*
