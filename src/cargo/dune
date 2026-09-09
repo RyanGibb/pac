@@ -1,0 +1,17 @@
+(library
+ (name cargo_frontend)
+ (wrapped false)
+ (modules cargo_version cargo_parse)
+ (libraries yojson))
+
+(library
+ (name cargo_solve)
+ (modules cargo_solve)
+ (flags
+  (:standard -w -a))
+ (libraries cargo_frontend pac pubgrub unix))
+
+(test
+ (name test_cargo_version)
+ (modules test_cargo_version)
+ (libraries cargo_frontend))

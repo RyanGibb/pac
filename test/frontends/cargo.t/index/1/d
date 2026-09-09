@@ -1,0 +1,2 @@
+{"name":"d","vers":"1.0.0","deps":[{"name":"f","req":"1","features":[],"optional":true,"default_features":true,"kind":"normal"}],"features":{"a":["f/c"],"b":["f/d"]},"yanked":false}
+{"name":"d","vers":"2.0.0","deps":[{"name":"f","req":"1","features":[],"optional":true,"default_features":true,"kind":"normal"}],"features":{"a":["f/c"],"b":["f/d"]},"yanked":false}

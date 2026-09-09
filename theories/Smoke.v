@@ -4,7 +4,7 @@
    terms in the computational path), which extraction depends on. *)
 
 From Stdlib Require Import MSets.
-From PackageCalculus Require Import Prelude Core Versions Conflict Concurrent PeerDependency Visibility Feature Virtual PackageFormula VariableFormula FeatureConcurrent Debian DebianMA Opam.
+From PackageCalculus Require Import Prelude Core Versions Semver Conflict Concurrent PeerDependency Visibility Feature Virtual PackageFormula VariableFormula FeatureConcurrent Debian DebianMA Opam Cargo.
 
 Module C := Core Nat_as_OT Nat_as_OT.
 Module Cfl := Conflict Nat_as_OT Nat_as_OT.
@@ -210,5 +210,48 @@ Proof. reflexivity. Qed.
 Example opam_depexts_unselected :
   Op.depextsOf opRho opInst (Op.PkgSet.add (1, 10) Op.PkgSet.empty)
   = Op.ESet.empty.
+Proof. reflexivity. Qed.
+
+(* Odd versions code prereleases of the release v / 2, so that the
+   admission rule is exercised and not just the ordering. *)
+Module CgoVM <: SemverMatch Nat_as_OT.
+  Definition isPre (v : nat) : bool := Nat.odd v.
+  Definition sameCore (a b : nat) : bool :=
+    Nat.eqb (Nat.div a 2) (Nat.div b 2).
+End CgoVM.
+
+Module Cgo := Cargo Nat_as_OT Nat_as_OT Nat_as_OT BoolFin
+  Nat_as_OT Nat_as_OT Nat_as_OT CgoVM.
+
+Definition cgoAny : Cgo.Range := (Cgo.CAny :: nil) :: nil.
+
+Example cargo_rgHolds_computes :
+  Cgo.rgHolds cgoAny 4 = true.
+Proof. reflexivity. Qed.
+
+Example cargo_evalReq_computes :
+  Cgo.VSet.cardinal
+    (Cgo.evalReq (Cgo.PkgSet.add (0, 4) (Cgo.PkgSet.add (0, 6)
+       Cgo.PkgSet.empty)) 0 cgoAny) = 2.
+Proof. reflexivity. Qed.
+
+(* A requirement that names no prerelease admits none, while the whole
+   repository of a crate name is still every version of it. *)
+Example cargo_prerelease_excluded :
+  Cgo.VSet.elements
+    (Cgo.evalReq (Cgo.PkgSet.add (0, 4) (Cgo.PkgSet.add (0, 5)
+       Cgo.PkgSet.empty)) 0 ((Cgo.COp OpGe 4 :: nil) :: nil)) = 4 :: nil.
+Proof. reflexivity. Qed.
+
+Example cargo_prerelease_admitted :
+  Cgo.VSet.elements
+    (Cgo.evalReq (Cgo.PkgSet.add (0, 4) (Cgo.PkgSet.add (0, 5)
+       Cgo.PkgSet.empty)) 0 ((Cgo.COp OpGe 5 :: nil) :: nil)) = 5 :: nil.
+Proof. reflexivity. Qed.
+
+Example cargo_srcVersions_computes :
+  Cgo.VSet.cardinal
+    (Cgo.srcVersions (Cgo.PkgSet.add (0, 4) (Cgo.PkgSet.add (0, 5)
+       Cgo.PkgSet.empty)) 0) = 2.
 Proof. reflexivity. Qed.
 

@@ -1,0 +1,1 @@
+{"name":"g","vers":"1.0.0","deps":[{"name":"p","req":"^1.0.0","features":[],"optional":false,"default_features":true,"kind":"normal"},{"name":"q","req":"^1.0.0-alpha","features":[],"optional":false,"default_features":true,"kind":"normal"}],"features":{},"yanked":false}

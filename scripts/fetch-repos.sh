@@ -1,6 +1,6 @@
 #!/bin/sh
 # Fetch a repository index for each package manager into repos/.
-# Usage: scripts/fetch-repos.sh [debian|opam]...  (default: all)
+# Usage: scripts/fetch-repos.sh [debian|opam|cargo]...  (default: all)
 
 set -eu
 
@@ -37,13 +37,14 @@ clone() {
 }
 
 opam() { clone https://github.com/ocaml/opam-repository opam-repository; }
+cargo() { clone https://github.com/rust-lang/crates.io-index crates.io-index; }
 
-[ $# -gt 0 ] || set -- debian opam
+[ $# -gt 0 ] || set -- debian opam cargo
 for eco; do
   case $eco in
-  debian | opam) "$eco" ;;
+  debian | opam | cargo) "$eco" ;;
   *)
-    echo "unknown: $eco (want debian or opam)" >&2
+    echo "unknown: $eco (want debian, opam or cargo)" >&2
     exit 2
     ;;
   esac

@@ -208,6 +208,48 @@ Module BoolComp <: ComparableType.
 End BoolComp.
 Module BoolOT := UOTFromCompare BoolComp.
 
+(* Syntax whose shape is a list -- a conjunction, a disjunction of those --
+   needs an order as soon as it is carried inside a set element. Ordering
+   head-first with nil least keeps the three laws one appeal to the
+   element's own, exactly as PairUOT does for products. *)
+Module ListComp (A : ComparableType) <: ComparableType.
+  Definition t : Type := list A.t.
+
+  Fixpoint compare (x y : t) : comparison :=
+    match x, y with
+    | nil, nil => Eq
+    | nil, _ :: _ => Lt
+    | _ :: _, nil => Gt
+    | a :: x', b :: y' => lex (A.compare a b) (compare x' y')
+    end.
+
+  Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
+  Proof.
+    intro x; induction x as [| a x IH]; intros y; destruct y as [| b y];
+      simpl; try (split; intro H; congruence).
+    rewrite lex_eq_iff, A.compare_eq_iff, IH.
+    split;
+      [intros [-> ->]; reflexivity | intro H; injection H as -> ->; auto].
+  Qed.
+
+  Lemma compare_antisym : forall x y, compare y x = CompOpp (compare x y).
+  Proof.
+    intro x; induction x as [| a x IH]; intros y; destruct y as [| b y];
+      simpl; try reflexivity.
+    rewrite lex_opp, A.compare_antisym, IH; reflexivity.
+  Qed.
+
+  Lemma compare_lt_trans : forall x y z,
+      compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
+  Proof.
+    intro x; induction x as [| a x IH]; intros y z;
+      destruct y as [| b y], z as [| c z]; simpl; intros H1 H2;
+      try congruence.
+    exact (lex_lt_trans A.compare_eq_iff (A.compare_lt_trans a b c)
+             (IH y z) H1 H2).
+  Qed.
+End ListComp.
+
 (* Stdlib's pair-ordered-type functors build setoid eq; none preserves
    UsualOrderedType. *)
 Module PairUOT (A B : UsualOrderedType) <: UsualOrderedType.

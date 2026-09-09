@@ -86,6 +86,102 @@ let opam_cmd =
     (Cmd.info "opam" ~doc:"Solve against an opam repository.")
     Term.(const opam_run $ debug_arg $ repo $ goal)
 
+let cargo_run debug index goal wanted rfeats =
+  let t0 = Unix.gettimeofday () in
+  let ar = Cargo_solve.empty_archive index in
+  let vs = Cargo_solve.versions_of ar goal in
+  if vs = [] then (
+    Printf.eprintf "no resolvable versions of %s under %s\n" goal index;
+    1)
+  else begin
+    let rv =
+      match wanted with
+      | Some v -> v
+      | None ->
+          List.fold_left
+            (fun a b -> if Cargo_version.compare b a > 0 then b else a)
+            (List.hd vs) vs
+    in
+    let rc = (goal, rv) in
+    Printf.printf "root %s %s%s\n%!" goal rv
+      (match rfeats with
+      | None -> ""
+      | Some fs -> " with features " ^ String.concat "," fs);
+    let module S = Cargo_solve.Make () in
+    let r =
+      match rfeats with
+      | None -> S.solve ~debug ar rc
+      | Some fs -> S.solve ~debug ~rfeats:fs ar rc
+    in
+    (* the crates the run parsed, known only once it is over: there is no
+       cone, so this is what the solver asked for and nothing more *)
+    let loaded () =
+      let t2 = Unix.gettimeofday () in
+      Printf.printf "loaded: %d crates, %d versions\n" ar.Cargo_solve.n_names
+        ar.Cargo_solve.n_vers;
+      if !Cargo_parse.rejected > 0 then
+        Printf.printf "parser dropped %d rows\n" !Cargo_parse.rejected;
+      Printf.printf "parse %.2fs\nsolve %.2fs\n" ar.Cargo_solve.t_parse
+        (t2 -. t0 -. ar.Cargo_solve.t_parse)
+    in
+    match r with
+    | None ->
+        loaded ();
+        1
+    | Some r ->
+        Printf.printf "crates (%d):\n" (List.length r.S.crates);
+        List.iter
+          (fun (n, v) ->
+            let fs =
+              match
+                List.find_opt (fun (m, u, _) -> m = n && u = v) r.S.feats
+              with
+              | Some (_, _, fs) -> fs
+              | None -> []
+            in
+            Printf.printf "  %s %s%s\n" n v
+              (if fs = [] then "" else " [" ^ String.concat "," fs ^ "]"))
+          r.S.crates;
+        Printf.printf
+          "encoded solution: %d core nodes (%d crate versions encoded)\n"
+          r.S.nodes r.S.processed;
+        Printf.printf "selections: %d\n" (List.length r.S.sel);
+        loaded ();
+        0
+  end
+
+let cargo_cmd =
+  let index =
+    Arg.(
+      required
+      & pos 0 (some dir) None
+      & info [] ~docv:"INDEX" ~doc:"crates.io-index checkout.")
+  in
+  let goal =
+    Arg.(
+      required
+      & pos 1 (some string) None
+      & info [] ~docv:"CRATE" ~doc:"Crate to build.")
+  in
+  let wanted =
+    Arg.(
+      value
+      & pos 2 (some string) None
+      & info [] ~docv:"VERSION" ~doc:"Root version; defaults to the newest.")
+  in
+  let rfeats =
+    Arg.(
+      value
+      & opt (some (list string)) None
+      & info [ "features" ] ~docv:"FEATS"
+          ~doc:"Comma-separated features to enable on the root crate.")
+  in
+  Cmd.v
+    (Cmd.info "cargo" ~doc:"Solve against a crates.io index.")
+    Term.(const cargo_run $ debug_arg $ index $ goal $ wanted $ rfeats)
+
 let () =
   let doc = "Solve dependencies through the verified package calculus." in
-  exit (Cmd.eval' (Cmd.group (Cmd.info "pac" ~doc) [ debian_cmd; opam_cmd ]))
+  exit
+    (Cmd.eval'
+       (Cmd.group (Cmd.info "pac" ~doc) [ debian_cmd; opam_cmd; cargo_cmd ]))
