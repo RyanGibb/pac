@@ -1,0 +1,16 @@
+(library
+ (name apk_frontend)
+ (wrapped false)
+ (modules apk_version apk_parse))
+
+(library
+ (name apk_solve)
+ (modules apk_solve)
+ (flags
+  (:standard -w -a))
+ (libraries apk_frontend pac pubgrub))
+
+(test
+ (name test_apk_version)
+ (modules test_apk_version)
+ (libraries apk_frontend))

@@ -4,7 +4,10 @@
    terms in the computational path), which extraction depends on. *)
 
 From Stdlib Require Import MSets.
-From PackageCalculus Require Import Prelude Core Versions Semver Conflict Concurrent PeerDependency Visibility Feature Virtual PackageFormula VariableFormula FeatureConcurrent Debian DebianMA Opam Cargo.
+From PackageCalculus Require Import Prelude Core Versions Semver Conflict
+  Concurrent PeerDependency Visibility Feature
+  Virtual PackageFormula VariableFormula FeatureConcurrent Debian DebianMA
+  Opam Cargo Alpine.
 
 Module C := Core Nat_as_OT Nat_as_OT.
 Module Cfl := Conflict Nat_as_OT Nat_as_OT.
@@ -255,3 +258,37 @@ Example cargo_srcVersions_computes :
        Cgo.PkgSet.empty)) 0) = 2.
 Proof. reflexivity. Qed.
 
+Module NatPM <: ApkVerMatch Nat_as_OT.
+  Definition prefix := Nat.eqb.
+  Definition hash := Nat.eqb.
+End NatPM.
+Module Alp := Alpine Nat_as_OT Nat_as_OT NatPM.
+
+Definition alpI : Alp.Inst :=
+  {| Alp.inst_repo :=
+       Alp.PkgSet.add (1, 10)
+         (Alp.PkgSet.add (2, 20) (Alp.PkgSet.add (3, 30) Alp.PkgSet.empty))
+   ; Alp.inst_deps :=
+       Alp.Deps.add ((1, 10), Alp.DPos (2, Alp.COp OpGe 20)) Alp.Deps.empty
+   ; Alp.inst_prov :=
+       Alp.Prov.add ((3, 30), (4, Alp.PVer 5))
+         (Alp.Prov.add ((2, 20), (6, Alp.PVirt)) Alp.Prov.empty)
+   ; Alp.inst_trig :=
+       Alp.Trig.add ((2, 20), Alp.CondSet.add (1, Alp.CAny)
+                                Alp.CondSet.empty) Alp.Trig.empty
+   ; Alp.inst_world := Alp.WSet.add (Alp.DPos (1, Alp.CAny)) Alp.WSet.empty
+   ; Alp.inst_prio := Alp.Prio.empty
+   ; Alp.inst_repl := Alp.Repl.empty |}.
+
+Example alpine_transR_computes :
+  Alp.Reduction.PF.PkgSet.cardinal (Alp.Reduction.transR alpI) = 5.
+Proof. reflexivity. Qed.
+
+Example alpine_root_dependees_computes :
+  Alp.Reduction.FSet.cardinal
+    (Alp.Reduction.dependees alpI Alp.Reduction.rootPkg) = 2.
+Proof. reflexivity. Qed.
+
+Example alpine_versions_computes :
+  Alp.Reduction.PF.VSet.cardinal (Alp.Reduction.versions alpI 4) = 1.
+Proof. reflexivity. Qed.

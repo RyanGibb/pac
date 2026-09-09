@@ -28,6 +28,9 @@ pac opam repos/opam-repository lwt
 
 # Cargo: serde with a feature enabled
 pac cargo repos/crates.io-index serde --features derive
+
+# Alpine: nginx
+pac alpine repos/alpine/APKINDEX nginx
 ```
 
 *Programmed with [Claude Code](https://claude.ai/code)*

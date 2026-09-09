@@ -180,8 +180,52 @@ let cargo_cmd =
     (Cmd.info "cargo" ~doc:"Solve against a crates.io index.")
     Term.(const cargo_run $ debug_arg $ index $ goal $ wanted $ rfeats)
 
+let alpine_run debug path goals =
+  let t0 = Unix.gettimeofday () in
+  let ar = Apk_solve.load_index path in
+  let t1 = Unix.gettimeofday () in
+  Printf.printf
+    "index %s\n\
+     cone: %d packages, %d provide rows, %d install_if rows\n\
+     parse %.2fs\n\
+     %!"
+    path ar.Apk_solve.n_pkgs ar.Apk_solve.n_provs ar.Apk_solve.n_trigs (t1 -. t0);
+  if !Apk_parse.rejected > 0 then
+    Printf.printf "parser dropped %d rows\n%!" !Apk_parse.rejected;
+  let world = Apk_solve.world_of_args goals in
+  if world = [] then 2
+  else
+    match Apk_solve.solve ~debug ar world with
+    | None -> 1
+    | Some r ->
+        let t2 = Unix.gettimeofday () in
+        Printf.printf "packages (%d):\n" (List.length r.Apk_solve.pkgs);
+        List.iter (fun (n, v) -> Printf.printf "  %s %s\n" n v) r.Apk_solve.pkgs;
+        Printf.printf
+          "encoded solution: %d core nodes (%d Alpine packages encoded)\n"
+          r.Apk_solve.nodes r.Apk_solve.processed;
+        Printf.printf "solve %.2fs\n" (t2 -. t1);
+        0
+
+let alpine_cmd =
+  let path =
+    Arg.(
+      required
+      & pos 0 (some file) None
+      & info [] ~docv:"APKINDEX" ~doc:"Uncompressed APKINDEX file.")
+  in
+  let goals =
+    Arg.(
+      non_empty & pos_right 0 string []
+      & info [] ~docv:"PKG" ~doc:"Packages forming the world.")
+  in
+  Cmd.v
+    (Cmd.info "alpine" ~doc:"Solve against an Alpine APKINDEX.")
+    Term.(const alpine_run $ debug_arg $ path $ goals)
+
 let () =
   let doc = "Solve dependencies through the verified package calculus." in
   exit
     (Cmd.eval'
-       (Cmd.group (Cmd.info "pac" ~doc) [ debian_cmd; opam_cmd; cargo_cmd ]))
+       (Cmd.group (Cmd.info "pac" ~doc)
+          [ debian_cmd; opam_cmd; cargo_cmd; alpine_cmd ]))

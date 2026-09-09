@@ -1,6 +1,6 @@
 #!/bin/sh
 # Fetch a repository index for each package manager into repos/.
-# Usage: scripts/fetch-repos.sh [debian|opam|cargo]...  (default: all)
+# Usage: scripts/fetch-repos.sh [debian|opam|cargo|alpine]...  (default: all)
 
 set -eu
 
@@ -9,6 +9,8 @@ out=$root/repos
 
 DEBIAN_SUITE=${DEBIAN_SUITE:-stable}
 DEBIAN_ARCH=${DEBIAN_ARCH:-amd64}
+ALPINE_VER=${ALPINE_VER:-v3.21}
+ALPINE_ARCH=${ALPINE_ARCH:-x86_64}
 
 fetch() {
   if command -v curl >/dev/null 2>&1; then
@@ -28,6 +30,17 @@ debian() {
   gunzip -f "$dir/Packages.gz"
 }
 
+alpine() {
+  dir=$out/alpine
+  [ -f "$dir/APKINDEX" ] && { echo "alpine: already present"; return; }
+  mkdir -p "$dir"
+  url=https://dl-cdn.alpinelinux.org/alpine/$ALPINE_VER/main/$ALPINE_ARCH/APKINDEX.tar.gz
+  echo "alpine: $url"
+  fetch "$url" "$dir/APKINDEX.tar.gz"
+  tar -xzf "$dir/APKINDEX.tar.gz" -C "$dir" APKINDEX
+  rm -f "$dir/APKINDEX.tar.gz"
+}
+
 clone() {
   dir=$out/$2
   [ -d "$dir" ] && { echo "$2: already present"; return; }
@@ -39,12 +52,12 @@ clone() {
 opam() { clone https://github.com/ocaml/opam-repository opam-repository; }
 cargo() { clone https://github.com/rust-lang/crates.io-index crates.io-index; }
 
-[ $# -gt 0 ] || set -- debian opam cargo
+[ $# -gt 0 ] || set -- debian opam cargo alpine
 for eco; do
   case $eco in
-  debian | opam | cargo) "$eco" ;;
+  debian | opam | cargo | alpine) "$eco" ;;
   *)
-    echo "unknown: $eco (want debian, opam or cargo)" >&2
+    echo "unknown: $eco (want debian, opam, cargo or alpine)" >&2
     exit 2
     ;;
   esac

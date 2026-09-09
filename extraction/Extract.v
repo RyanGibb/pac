@@ -1,5 +1,5 @@
 From PackageCalculus Require Import Prelude Core Versions Conflict Visibility
-  Debian DebianMA Opam Cargo Smoke.
+  Debian DebianMA Opam Cargo Alpine Smoke.
 From Stdlib Require Import Extraction ExtrOcamlBasic.
 
 Extraction Language OCaml.
@@ -16,5 +16,5 @@ Set Warnings "-extraction-opaque-accessed".
 
 Extraction "pac_extraction.ml"
   Smoke.C Smoke.Ver Smoke.Cfl Smoke.Conc Smoke.Peer Smoke.Vis
-  Smoke.Feat Smoke.Virt Smoke.PkgF Smoke.VarF Smoke.FC Smoke.Op Smoke.Cgo
-  Debian DebianMA Opam Cargo.
+  Smoke.Feat Smoke.Virt Smoke.PkgF Smoke.VarF Smoke.FC Smoke.Op Smoke.Cgo Smoke.Alp
+  Debian DebianMA Opam Cargo Alpine.

@@ -1,0 +1,13 @@
+P:app
+V:1.0
+A:x86_64
+
+P:docs
+V:1.0
+A:x86_64
+
+P:app-doc
+V:1.0
+A:x86_64
+i:app docs
+
