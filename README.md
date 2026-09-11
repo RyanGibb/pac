@@ -31,6 +31,9 @@ pac cargo repos/crates.io-index serde --features derive
 
 # Alpine: nginx
 pac alpine repos/alpine/APKINDEX nginx
+
+# npm: a library whose mandatory peer dependency is installed beside it
+pac npm --tree use-sync-external-store
 ```
 
 *Programmed with [Claude Code](https://claude.ai/code)*

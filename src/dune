@@ -11,5 +11,7 @@
   cargo_frontend
   cargo_solve
   deb_solve
+  npm_frontend
+  npm_solve
   opam_frontend
   opam_solve))

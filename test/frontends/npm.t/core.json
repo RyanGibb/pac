@@ -1,0 +1,6 @@
+{"name":"core","dist-tags":{"latest":"3.0.0"},
+ "versions":{
+  "1.0.0":{"name":"core","version":"1.0.0"},
+  "2.0.0":{"name":"core","version":"2.0.0"},
+  "2.1.0":{"name":"core","version":"2.1.0","os":["win32"]},
+  "3.0.0":{"name":"core","version":"3.0.0"}}}

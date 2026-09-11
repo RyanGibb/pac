@@ -1,0 +1,6 @@
+{"name":"dual-app","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"dual-app","version":"1.0.0",
+    "dependencies":{"dual":">=1.1.0","shim":"^1"},
+    "peerDependencies":{"dual":"<=1.2.0","shim":"<=1.0.0"},
+    "peerDependenciesMeta":{"shim":{"optional":true}}}}}

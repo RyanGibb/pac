@@ -1,0 +1,5 @@
+{"name":"widget","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"widget","version":"1.0.0",
+    "peerDependencies":{"theme":"^1"},
+    "peerDependenciesMeta":{"theme":{"optional":true}}}}}

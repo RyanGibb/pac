@@ -1,0 +1,4 @@
+{"name":"parser","dist-tags":{"latest":"1.0.0-alpha.1"},
+ "versions":{
+  "1.0.0-alpha.1":{"name":"parser","version":"1.0.0-alpha.1"},
+  "2.0.0-beta.1":{"name":"parser","version":"2.0.0-beta.1"}}}

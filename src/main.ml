@@ -223,9 +223,102 @@ let alpine_cmd =
     (Cmd.info "alpine" ~doc:"Solve against an Alpine APKINDEX.")
     Term.(const alpine_run $ debug_arg $ path $ goals)
 
+let npm_run debug cache offline tree goal wanted =
+  let t0 = Unix.gettimeofday () in
+  let ar = Npm_solve.empty_archive ~cache ~offline in
+  let vs =
+    List.map
+      (fun (v : Npm_parse.ver) -> v.Npm_parse.v_vers)
+      (Npm_solve.load_name ar ~root:true goal)
+  in
+  if vs = [] then (
+    Printf.eprintf "no packument for %s under %s%s\n" goal cache
+      (if offline then " (offline)" else "");
+    1)
+  else begin
+    let rv =
+      match wanted with
+      | Some v -> v
+      | None -> (
+          match Hashtbl.find_opt ar.Npm_solve.latest goal with
+          | Some l when List.mem l vs -> l
+          | _ ->
+              List.fold_left
+                (fun a b -> if Npm_version.compare b a > 0 then b else a)
+                (List.hd vs) vs)
+    in
+    let rc = (goal, rv) in
+    Printf.printf "root %s %s\n%!" goal rv;
+    match Npm_solve.solve ~debug ar rc with
+    | None -> 1
+    | Some r ->
+        let t2 = Unix.gettimeofday () in
+        let show (a, t) v =
+          if a = t then Printf.sprintf "%s %s" t v
+          else Printf.sprintf "%s %s at %s" t v a
+        in
+        Printf.printf "packages (%d):\n" (List.length r.Npm_solve.installs);
+        List.iter
+          (fun (k, v) -> Printf.printf "  %s\n" (show k v))
+          r.Npm_solve.installs;
+        if tree then begin
+          Printf.printf "node_modules (%d edges):\n"
+            (List.length r.Npm_solve.tree);
+          List.iter
+            (fun ((ck, cv), (pk, pv)) ->
+              Printf.printf "  %s <- %s\n" (show pk pv) (show ck cv))
+            r.Npm_solve.tree
+        end
+        else
+          Printf.printf "node_modules edges: %d\n"
+            (List.length r.Npm_solve.tree);
+        Printf.printf "cone: %d packages, %d versions, %d packuments fetched\n"
+          ar.Npm_solve.n_names ar.Npm_solve.n_vers ar.Npm_solve.n_fetched;
+        if !Npm_parse.rejected > 0 then
+          Printf.printf "parser dropped %d rows\n" !Npm_parse.rejected;
+        if !Npm_parse.skipped_optional > 0 then
+          Printf.printf "optionalDependencies not modelled: %d\n"
+            !Npm_parse.skipped_optional;
+        Printf.printf "encoded solution: %d core nodes (%d lookups)\n"
+          r.Npm_solve.nodes r.Npm_solve.queries;
+        Printf.printf "solve %.2fs\n" (t2 -. t0);
+        0
+  end
+
+let npm_cmd =
+  let cache =
+    Arg.(
+      value & opt string "repos/npm"
+      & info [ "cache" ] ~docv:"DIR" ~doc:"Packument cache directory.")
+  in
+  let offline =
+    Arg.(
+      value & flag
+      & info [ "offline" ] ~doc:"Fail rather than fetch a missing packument.")
+  in
+  let tree =
+    Arg.(value & flag & info [ "tree" ] ~doc:"Print the node_modules nesting.")
+  in
+  let goal =
+    Arg.(
+      required
+      & pos 0 (some string) None
+      & info [] ~docv:"PACKAGE" ~doc:"Package to install.")
+  in
+  let wanted =
+    Arg.(
+      value
+      & pos 1 (some string) None
+      & info [] ~docv:"VERSION"
+          ~doc:"Root version; defaults to dist-tags.latest.")
+  in
+  Cmd.v
+    (Cmd.info "npm" ~doc:"Solve against the npm registry.")
+    Term.(const npm_run $ debug_arg $ cache $ offline $ tree $ goal $ wanted)
+
 let () =
   let doc = "Solve dependencies through the verified package calculus." in
   exit
     (Cmd.eval'
        (Cmd.group (Cmd.info "pac" ~doc)
-          [ debian_cmd; opam_cmd; cargo_cmd; alpine_cmd ]))
+          [ debian_cmd; opam_cmd; cargo_cmd; alpine_cmd; npm_cmd ]))

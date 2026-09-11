@@ -1,0 +1,17 @@
+(library
+ (name npm_frontend)
+ (wrapped false)
+ (modules npm_version npm_parse)
+ (libraries yojson))
+
+(library
+ (name npm_solve)
+ (modules npm_solve)
+ (flags
+  (:standard -w -a))
+ (libraries npm_frontend pac pubgrub))
+
+(test
+ (name test_npm_version)
+ (modules test_npm_version)
+ (libraries npm_frontend))
