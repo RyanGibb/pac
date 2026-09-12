@@ -183,7 +183,7 @@ module Make () = struct
     | P.Build -> Cg.Kind.KBuild
     | P.Dev -> Cg.Kind.KDev
 
-  let fset_of l = List.fold_left (fun s f -> Cg.FSet.add f s) Cg.FSet.empty l
+  let fset_of = Cg.FSet.ofList
 
   let xentry : P.fentry -> Cg.FEntry.t = function
     | P.FFeat f -> Cg.FEntry.EFeat f
@@ -284,22 +284,17 @@ module Make () = struct
           | Some m ->
               let ds = slots_of m in
               let slots =
-                List.fold_left
-                  (fun s d -> Cg.SlotRel.add (p, slot_data d) s)
-                  Cg.SlotRel.empty ds
+                Cg.SlotRel.ofList (List.map (fun d -> (p, slot_data d)) ds)
               in
               let fdefs =
-                List.fold_left
-                  (fun s (f, es) ->
-                    List.fold_left
-                      (fun s e -> Cg.FDefRel.add ((p, f), xentry e) s)
-                      s es)
-                  Cg.FDefRel.empty m.P.v_feats
+                Cg.FDefRel.ofList
+                  (List.concat_map
+                     (fun (f, es) -> List.map (fun e -> ((p, f), xentry e)) es)
+                     m.P.v_feats)
               in
               let supp =
-                List.fold_left
-                  (fun s (f, _) -> Cg.SupportSet.add (p, f) s)
-                  Cg.SupportSet.empty m.P.v_feats
+                Cg.SupportSet.ofList
+                  (List.map (fun (f, _) -> (p, f)) m.P.v_feats)
               in
               let links =
                 match m.P.v_links with
@@ -336,9 +331,7 @@ module Make () = struct
     | Some s -> s
     | None ->
         let s =
-          List.fold_left
-            (fun s v -> Cg.PkgSet.add (n, v) s)
-            Cg.PkgSet.empty (versions_of ar n)
+          Cg.PkgSet.ofList (List.map (fun v -> (n, v)) (versions_of ar n))
         in
         Hashtbl.replace name_set_cache n s;
         s
@@ -354,11 +347,7 @@ module Make () = struct
     match Hashtbl.find_opt slice_cache reads with
     | Some s -> s
     | None ->
-        let s =
-          List.fold_left
-            (fun acc n -> Cg.PkgSet.union acc (name_set ar n))
-            Cg.PkgSet.empty reads
-        in
+        let s = Cg.PkgSet.unions (List.map (name_set ar) reads) in
         Hashtbl.replace slice_cache reads s;
         s
 
@@ -423,10 +412,10 @@ module Make () = struct
      support rows sit on.  reduceDeps reads R only to filter those rows,
      and every one of them is a package of the global translation. *)
   let support_owners (sup : FC.Feat.SupportSet.t) : FC.PkgSet.t =
-    List.fold_left
-      (fun s ((q, _) : FC.Feat.PkgF.t) -> FC.PkgSet.add q s)
-      FC.PkgSet.empty
-      (FC.Feat.SupportSet.elements sup)
+    FC.PkgSet.ofList
+      (List.map
+         (fun ((q, _) : FC.Feat.PkgF.t) -> q)
+         (FC.Feat.SupportSet.elements sup))
 
   let process_root st =
     if not st.root_done then begin
@@ -528,18 +517,10 @@ module Make () = struct
                  repository rows here, rather than because links_idx happens
                  to be built from them *)
               let r =
-                List.fold_left
-                  (fun s ((n, v) as q) ->
-                    match meta st.ar n v with
-                    | None -> s
-                    | Some _ -> Cg.PkgSet.add q s)
-                  Cg.PkgSet.empty rs
+                Cg.PkgSet.ofList
+                  (List.filter (fun (n, v) -> meta st.ar n v <> None) rs)
               in
-              let links =
-                List.fold_left
-                  (fun s q -> Cg.LinkRel.add (q, l) s)
-                  Cg.LinkRel.empty rs
-              in
+              let links = Cg.LinkRel.ofList (List.map (fun q -> (q, l)) rs) in
               call r Cg.FDefRel.empty Cg.SlotRel.empty links
         in
         if memo then Hashtbl.replace st.npv_cache np vs;
@@ -675,11 +656,7 @@ module Make () = struct
         Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
         None
     | Ok sol ->
-        let s =
-          List.fold_left
-            (fun s (nm, u) -> T.PkgSet.add (nm, u) s)
-            T.PkgSet.empty sol
-        in
+        let s = T.PkgSet.ofList sol in
         (* back through the proved decoders *)
         let s_fc = Red.featureConcurrentResolution gp s in
         let crates = Cg.PkgSet.elements (Cg.decodeS s_fc) in

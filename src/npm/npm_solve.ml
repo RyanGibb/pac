@@ -311,9 +311,7 @@ let repo_at st (n : string) : Np.RepoSet.t =
   | Some s -> s
   | None ->
       let s =
-        List.fold_left
-          (fun s v -> Np.RepoSet.add (n, v) s)
-          Np.RepoSet.empty (versions_of st.ar n)
+        Np.RepoSet.ofList (List.map (fun v -> (n, v)) (versions_of st.ar n))
       in
       Hashtbl.replace st.repo_at n s;
       s
@@ -337,11 +335,7 @@ let repo_of st (ns : string list) : Np.RepoSet.t =
   match Hashtbl.find_opt st.repo_of ns with
   | Some s -> s
   | None ->
-      let s =
-        List.fold_left
-          (fun acc n -> Np.RepoSet.union acc (repo_at st n))
-          Np.RepoSet.empty ns
-      in
+      let s = Np.RepoSet.unions (List.map (repo_at st) ns) in
       Hashtbl.replace st.repo_of ns s;
       s
 
@@ -538,11 +532,7 @@ let solve ?(debug = false) ar (root : string * string) =
       Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
       None
   | Ok sol ->
-      let s =
-        List.fold_left
-          (fun s (nm, u) -> T.PkgSet.add (nm, u) s)
-          T.PkgSet.empty sol
-      in
+      let s = T.PkgSet.ofList sol in
       (* back through the proved decoders *)
       let installs = Np.PkgSet.elements (R.npmResolution s) in
       let tree = Np.Conc.ParentRel.elements (R.npmParents s) in

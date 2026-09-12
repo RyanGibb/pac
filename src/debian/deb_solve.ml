@@ -65,9 +65,7 @@ struct
     (a.name, (qual_of a.aqual, formula_of_constr a.constr))
 
   let dtop_of = function Some v -> DMA.Deb.DTVal v | None -> DMA.Deb.DTTop
-
-  let maset_of alts =
-    List.fold_left (fun s a -> DMA.AtomSet.add a s) DMA.AtomSet.empty alts
+  let maset_of = DMA.AtomSet.ofList
 
   (* Normalized stanza: apt rewrites arch:all packages to the native arch
      and downgrades all+same to no (arch:all content is arch-invariant). *)
@@ -176,71 +174,52 @@ struct
     match Hashtbl.find_opt tbl k with Some l -> l | None -> []
 
   let ma_real_at idx (n, b) =
-    List.fold_left
-      (fun s v -> DMA.PkgSet.add ((n, b), v) s)
-      DMA.PkgSet.empty
-      (find_list idx.versions_of (n, b))
+    DMA.PkgSet.ofList
+      (List.map (fun v -> ((n, b), v)) (find_list idx.versions_of (n, b)))
 
   (* Every group member at any arch: foreign provides and group provides
      come from any member, so name slices must span the whole group. *)
   let ma_group_of_names idx ns =
-    List.fold_left
-      (fun s n ->
-        List.fold_left
-          (fun s (b, v) -> DMA.PkgSet.add ((n, b), v) s)
-          s (find_list idx.group_of n))
-      DMA.PkgSet.empty ns
+    DMA.PkgSet.ofList
+      (List.concat_map
+         (fun n ->
+           List.map (fun (b, v) -> ((n, b), v)) (find_list idx.group_of n))
+         ns)
 
   let ma_prov_of_names idx ns =
-    List.fold_left
-      (fun pi n ->
-        List.fold_left
-          (fun pi (q, vt) -> DMA.Prov.add (q, (n, vt)) pi)
-          pi
-          (find_list idx.providers_of n))
-      DMA.Prov.empty ns
+    DMA.Prov.ofList
+      (List.concat_map
+         (fun n ->
+           List.map (fun (q, vt) -> (q, (n, vt))) (find_list idx.providers_of n))
+         ns)
 
   let ma_prov_of_pkg idx p =
     match Hashtbl.find_opt idx.stanza_of p with
     | None -> DMA.Prov.empty
     | Some ns ->
-        List.fold_left
-          (fun pi (m, vt) -> DMA.Prov.add (p, (m, vt)) pi)
-          DMA.Prov.empty ns.nprovs
+        DMA.Prov.ofList (List.map (fun (m, vt) -> (p, (m, vt))) ns.nprovs)
 
   let ma_deps_of_pkg idx p =
     match Hashtbl.find_opt idx.stanza_of p with
     | None -> DMA.Deps.empty
     | Some ns ->
-        List.fold_left
-          (fun d alts -> DMA.Deps.add (p, maset_of alts) d)
-          DMA.Deps.empty ns.ndeps
+        DMA.Deps.ofList (List.map (fun alts -> (p, maset_of alts)) ns.ndeps)
 
   let ma_conf_of_pkg idx p =
     match Hashtbl.find_opt idx.stanza_of p with
     | None -> DMA.Conf.empty
-    | Some ns ->
-        List.fold_left
-          (fun g ma -> DMA.Conf.add (p, ma) g)
-          DMA.Conf.empty ns.nconfs
+    | Some ns -> DMA.Conf.ofList (List.map (fun ma -> (p, ma)) ns.nconfs)
 
   let ma_conf_on_names idx ns =
-    List.fold_left
-      (fun g n ->
-        List.fold_left
-          (fun g (q, ma) -> DMA.Conf.add (q, ma) g)
-          g
-          (find_list idx.conflicts_on n))
-      DMA.Conf.empty ns
+    DMA.Conf.ofList (List.concat_map (find_list idx.conflicts_on) ns)
 
   (* classOf defaults to MANo, so unindexed packages need no entry. *)
   let classes_of idx pkgs =
-    List.fold_left
-      (fun m p ->
-        match Hashtbl.find_opt idx.class_of p with
-        | Some c -> DMA.Cls.add (p, c) m
-        | None -> m)
-      DMA.Cls.empty pkgs
+    DMA.Cls.ofList
+      (List.filter_map
+         (fun p ->
+           Option.map (fun c -> (p, c)) (Hashtbl.find_opt idx.class_of p))
+         pkgs)
 
   let atom_names_of idx p =
     match Hashtbl.find_opt idx.stanza_of p with
@@ -345,10 +324,11 @@ struct
            p through (n, group); hand-written negatives reach p only via
            its name or a name it provides *)
         let g_r =
-          List.fold_left
-            (fun s (b', v') -> DMA.PkgSet.add ((n, b'), v') s)
-            (DMA.PkgSet.add p DMA.PkgSet.empty)
-            (find_list idx.group_of n)
+          DMA.PkgSet.ofList
+            (p
+            :: List.map
+                 (fun (b', v') -> ((n, b'), v'))
+                 (find_list idx.group_of n))
         in
         let g_conf =
           DMA.Conf.union (ma_conf_of_pkg idx p)
@@ -492,11 +472,7 @@ struct
           List.iter
             (fun (n, v) -> Format.printf "  %a = %a@." PName.pp n PVersion.pp v)
             sol);
-        let s' =
-          List.fold_left
-            (fun s (n, v) -> DMA.Deb.T.PkgSet.add (n, v) s)
-            DMA.Deb.T.PkgSet.empty sol
-        in
+        let s' = DMA.Deb.T.PkgSet.ofList sol in
         Some
           (List.map
              (fun ((n, b), v) -> (n, b, v))
@@ -549,45 +525,30 @@ struct
     r
 
   (* Fixture-scale oracle: the whole instance through the translation in
-     one shot, no slicing.  Folds follow descending package order so the
-     MA-side sorted-list builds stay linear, but the translated sets are
-     still built by extracted folds — use for cross-checks, not archives. *)
+     one shot, no slicing -- use for cross-checks, not archives. *)
   let solve_monolithic ?debug (idx : index) (goal_name : string)
       (goal_arch : string) =
-    let stz =
-      Hashtbl.fold (fun _ ns acc -> ns :: acc) idx.stanza_of []
-      |> List.sort (fun a b -> r2c (DMA.Pkg.compare b.npkg a.npkg))
-    in
-    let r_ma =
-      List.fold_left (fun s ns -> DMA.PkgSet.add ns.npkg s) DMA.PkgSet.empty stz
-    in
+    let stz = Hashtbl.fold (fun _ ns acc -> ns :: acc) idx.stanza_of [] in
+    let r_ma = DMA.PkgSet.ofList (List.map (fun ns -> ns.npkg) stz) in
     let d_ma =
-      List.fold_left
-        (fun d ns ->
-          List.fold_left
-            (fun d alts -> DMA.Deps.add (ns.npkg, maset_of alts) d)
-            d ns.ndeps)
-        DMA.Deps.empty stz
+      DMA.Deps.ofList
+        (List.concat_map
+           (fun ns -> List.map (fun alts -> (ns.npkg, maset_of alts)) ns.ndeps)
+           stz)
     in
     let pi_ma =
-      List.fold_left
-        (fun pi ns ->
-          List.fold_left
-            (fun pi (m, vt) -> DMA.Prov.add (ns.npkg, (m, vt)) pi)
-            pi ns.nprovs)
-        DMA.Prov.empty stz
+      DMA.Prov.ofList
+        (List.concat_map
+           (fun ns -> List.map (fun (m, vt) -> (ns.npkg, (m, vt))) ns.nprovs)
+           stz)
     in
     let g_ma =
-      List.fold_left
-        (fun g ns ->
-          List.fold_left (fun g ma -> DMA.Conf.add (ns.npkg, ma) g) g ns.nconfs)
-        DMA.Conf.empty stz
+      DMA.Conf.ofList
+        (List.concat_map
+           (fun ns -> List.map (fun ma -> (ns.npkg, ma)) ns.nconfs)
+           stz)
     in
-    let cls =
-      List.fold_left
-        (fun m ns -> DMA.Cls.add (ns.npkg, ns.ncls) m)
-        DMA.Cls.empty stz
-    in
+    let cls = DMA.Cls.ofList (List.map (fun ns -> (ns.npkg, ns.ncls)) stz) in
     let r = DMA.reduceReal r_ma in
     let d = DMA.reduceDeps d_ma in
     let pi = DMA.reduceProv r_ma pi_ma cls in

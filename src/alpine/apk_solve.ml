@@ -143,8 +143,7 @@ let xdep (d : P.dep) : Alp.coq_Dep =
 let ptag (v : string option) : Alp.coq_PTag =
   match v with Some pv -> Alp.PVer pv | None -> Alp.PVirt
 
-let condset_of ds =
-  List.fold_left (fun s d -> Alp.CondSet.add (xatom d) s) Alp.CondSet.empty ds
+let condset_of ds = Alp.CondSet.ofList (List.map xatom ds)
 
 (* ---- slices ------------------------------------------------------------
 
@@ -166,20 +165,19 @@ let empty_inst =
   }
 
 let slice_at ar (names : string list) =
-  let repo = ref Alp.PkgSet.empty and prov = ref Alp.Prov.empty in
+  let repo = ref [] and prov = ref [] in
   List.iter
     (fun n ->
       List.iter
-        (fun (p : P.pkg) ->
-          repo := Alp.PkgSet.add (p.P.name, p.P.version) !repo)
+        (fun (p : P.pkg) -> repo := (p.P.name, p.P.version) :: !repo)
         (versions_of ar n);
       List.iter
         (fun (owner, pv) ->
-          repo := Alp.PkgSet.add owner !repo;
-          prov := Alp.Prov.add (owner, (n, ptag pv)) !prov)
+          repo := owner :: !repo;
+          prov := (owner, (n, ptag pv)) :: !prov)
         (providers_of ar n))
     (List.sort_uniq String.compare names);
-  (!repo, !prov)
+  (Alp.PkgSet.ofList !repo, Alp.Prov.ofList !prov)
 
 (* Lookup.nameSlice *)
 let name_inst ar (n : string) : Alp.coq_Inst =
@@ -195,15 +193,14 @@ let pkg_inst ar ((n, v) : string * string) : Alp.coq_Inst =
       let ns = List.map (fun (d : P.dep) -> d.P.d_name) m.P.depends in
       let repo, prov = slice_at ar ns in
       let deps =
-        List.fold_left
-          (fun s d -> Alp.Deps.add ((n, v), xdep d) s)
-          Alp.Deps.empty m.P.depends
+        Alp.Deps.ofList (List.map (fun d -> ((n, v), xdep d)) m.P.depends)
       in
       let prov =
-        List.fold_left
-          (fun s (pr : P.prov) ->
-            Alp.Prov.add ((n, v), (pr.P.p_name, ptag pr.P.p_ver)) s)
-          prov m.P.provides
+        Alp.Prov.union prov
+          (Alp.Prov.ofList
+             (List.map
+                (fun (pr : P.prov) -> ((n, v), (pr.P.p_name, ptag pr.P.p_ver)))
+                m.P.provides))
       in
       {
         empty_inst with
@@ -223,20 +220,19 @@ let root_inst ar (world : P.dep list) : Alp.coq_Inst =
     ar.trigs;
   let repo, prov = slice_at ar !ns in
   let trig =
-    List.fold_left
-      (fun s ((p : P.pkg), conds) ->
-        (* a CondSet is positive-only, so a negated install_if condition
-           cannot be represented; dropping the sign would invert it, so the
-           whole trigger is dropped and counted instead *)
-        if List.exists (fun (d : P.dep) -> d.P.d_neg) conds then (
-          P.reject ();
-          s)
-        else Alp.Trig.add ((p.P.name, p.P.version), condset_of conds) s)
-      Alp.Trig.empty ar.trigs
+    Alp.Trig.ofList
+      (List.filter_map
+         (fun ((p : P.pkg), conds) ->
+           (* a CondSet is positive-only, so a negated install_if condition
+              cannot be represented; dropping the sign would invert it, so the
+              whole trigger is dropped and counted instead *)
+           if List.exists (fun (d : P.dep) -> d.P.d_neg) conds then (
+             P.reject ();
+             None)
+           else Some ((p.P.name, p.P.version), condset_of conds))
+         ar.trigs)
   in
-  let wset =
-    List.fold_left (fun s d -> Alp.WSet.add (xdep d) s) Alp.WSet.empty world
-  in
+  let wset = Alp.WSet.ofList (List.map xdep world) in
   {
     empty_inst with
     Alp.inst_repo = repo;
@@ -307,9 +303,7 @@ let process st (q : PF.Pkg.t) (inst : Alp.coq_Inst) =
       Printf.eprintf "[%d] %.1fs\n%!" st.n_proc (Sys.time ());
     let forms = Red.dependees inst q in
     let d_q =
-      List.fold_left
-        (fun d f -> PF.DepRel.add (q, f) d)
-        PF.DepRel.empty (Red.FSet.elements forms)
+      PF.DepRel.ofList (List.map (fun f -> (q, f)) (Red.FSet.elements forms))
     in
     let r_q = PF.PkgSet.singleton q in
     record_deprel st (PFR.reduceDeps d_q);
@@ -476,11 +470,7 @@ let solve ?(debug = false) (ar : archive) (world : P.dep list) : result option =
       Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
       None
   | Ok sol ->
-      let s =
-        List.fold_left
-          (fun s (n, v) -> T.PkgSet.add (n, v) s)
-          T.PkgSet.empty sol
-      in
+      let s = T.PkgSet.ofList sol in
       (* back through the two proved decoders *)
       let s_pf = PFR.packageFormulaResolution s in
       let pkgs = Alp.PkgSet.elements (Red.alpineResolution s_pf) in

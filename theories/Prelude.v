@@ -1,4 +1,4 @@
-From Stdlib Require Import MSetList.
+From Stdlib Require Import MSetList Lia.
 
 (* Sets are MSetList.MakeWithLeibniz -- sorted duplicate-free lists -- because
    the representation is canonical: two sets with the same elements are the same
@@ -367,6 +367,108 @@ Module SetSpecs (E : UsualOrderedType) (S : SetsOn E).
   Qed.
 End SetSpecs.
 
+(* Building a sorted-list set by repeated add is quadratic, since every add
+   walks the list. union, however, is a linear merge of two sorted lists, so
+   pairing off a list of sets and repeating until one remains is a merge sort
+   over proved primitives -- O(n log n), with dedup falling out of the merge --
+   and never needs the representation or a Sorted proof, which is what keeps it
+   usable through the abstract SetsOn interface. The fuel is the input's
+   length, which each round halves, so the fold branch is never reached; it
+   still meets the spec so that the proof need not argue about reachability. *)
+Module SetBuild (B : UsualOrderedType) (SB : SetsOn B).
+  Fixpoint pairUp (l : list SB.t) : list SB.t :=
+    match l with
+    | a :: b :: l' => SB.union a b :: pairUp l'
+    | _ => l
+    end.
+
+  Fixpoint unionsFuel (fuel : nat) (l : list SB.t) : SB.t :=
+    match l with
+    | nil => SB.empty
+    | s :: nil => s
+    | _ => match fuel with
+           | O => List.fold_left SB.union l SB.empty
+           | S k => unionsFuel k (pairUp l)
+           end
+    end.
+
+  Definition unions (l : list SB.t) : SB.t := unionsFuel (List.length l) l.
+
+  Definition ofList (l : list B.t) : SB.t := unions (List.map SB.singleton l).
+
+  Lemma in_pairUp : forall (n : nat) (l : list SB.t) (y : B.t),
+      List.length l <= n ->
+      ((exists s, List.In s (pairUp l) /\ SB.In y s) <->
+       (exists s, List.In s l /\ SB.In y s)).
+  Proof.
+    induction n as [| n IH]; intros [| a [| b l]] y Hlen; simpl in Hlen;
+      cbn [pairUp]; try reflexivity; [inversion Hlen |].
+    assert (List.length l <= n) as Hl by lia.
+    split.
+    - intros [s [[<- | Hs] Hy]].
+      + apply SB.union_spec in Hy; destruct Hy as [Hy | Hy];
+          [exists a; split; [left; reflexivity | exact Hy]
+          | exists b; split; [right; left; reflexivity | exact Hy]].
+      + destruct (proj1 (IH l y Hl) (ex_intro _ s (conj Hs Hy)))
+          as [s' [Hs' Hy']].
+        exists s'; split; [right; right; exact Hs' | exact Hy'].
+    - intros [s [[<- | [<- | Hs]] Hy]].
+      + exists (SB.union a b); split;
+          [left; reflexivity | apply SB.union_spec; left; exact Hy].
+      + exists (SB.union a b); split;
+          [left; reflexivity | apply SB.union_spec; right; exact Hy].
+      + destruct (proj2 (IH l y Hl) (ex_intro _ s (conj Hs Hy)))
+          as [s' [Hs' Hy']].
+        exists s'; split; [right; exact Hs' | exact Hy'].
+  Qed.
+
+  Lemma in_fold_union : forall (l : list SB.t) (i : SB.t) (y : B.t),
+      SB.In y (List.fold_left SB.union l i) <->
+      SB.In y i \/ exists s, List.In s l /\ SB.In y s.
+  Proof.
+    induction l as [| s l IH]; intros i y; simpl.
+    - split; [tauto | intros [H | [s [[] _]]]; exact H].
+    - rewrite IH, SB.union_spec; split.
+      + intros [[Hi | Hs] | [s' [Hs' Hy]]];
+          [left; exact Hi | right; exists s; auto | right; exists s'; auto].
+      + intros [Hi | [s' [[<- | Hs'] Hy]]];
+          [left; left; exact Hi | left; right; exact Hy
+          | right; exists s'; auto].
+  Qed.
+
+  Lemma mem_unionsFuel : forall (fuel : nat) (l : list SB.t) (y : B.t),
+      SB.In y (unionsFuel fuel l) <-> exists s, List.In s l /\ SB.In y s.
+  Proof.
+    induction fuel as [| fuel IH]; intros [| a [| b l]] y; cbn [unionsFuel].
+    - split; [intro H; destruct (SB.empty_spec H) | intros [s [[] _]]].
+    - split; [intro H; exists a; split; [left; reflexivity | exact H]
+             | intros [s [[<- | []] H]]; exact H].
+    - rewrite in_fold_union; split;
+        [intros [H | H]; [destruct (SB.empty_spec H) | exact H]
+        | intro H; right; exact H].
+    - split; [intro H; destruct (SB.empty_spec H) | intros [s [[] _]]].
+    - split; [intro H; exists a; split; [left; reflexivity | exact H]
+             | intros [s [[<- | []] H]]; exact H].
+    - rewrite IH; exact (in_pairUp _ (a :: b :: l) y (le_n _)).
+  Qed.
+
+  Lemma mem_unions : forall (l : list SB.t) (y : B.t),
+      SB.In y (unions l) <-> exists s, List.In s l /\ SB.In y s.
+  Proof. intros l y; apply mem_unionsFuel. Qed.
+
+  Lemma mem_ofList : forall (l : list B.t) (y : B.t),
+      SB.In y (ofList l) <-> List.In y l.
+  Proof.
+    intros l y; unfold ofList; rewrite mem_unions; split.
+    - intros [s [Hs Hy]]; apply List.in_map_iff in Hs;
+        destruct Hs as [x [<- Hx]].
+      apply SB.singleton_spec in Hy; assert (y = x) as -> by exact Hy; exact Hx.
+    - intro Hy; exists (SB.singleton y); split;
+        [apply List.in_map_iff; exists y; auto
+        | apply SB.singleton_spec; reflexivity].
+  Qed.
+End SetBuild.
+
 Module FSetUOT (X : UsualOrderedType).
   Module OTWL <: OrderedTypeWithLeibniz.
     Include X.
@@ -376,6 +478,7 @@ Module FSetUOT (X : UsualOrderedType).
   Module M := MSetList.MakeWithLeibniz OTWL.
   Include M.
   Include SetSpecs OTWL M.
+  Include SetBuild OTWL M.
 
   Lemma ext : forall s s' : t, (forall x, In x s <-> In x s') -> s = s'.
   Proof. intros s s' H; apply eq_leibniz; exact H. Qed.
@@ -640,14 +743,15 @@ Module RelKeys (K B : UsualOrderedType) (SB : SetsOn B).
   Qed.
 End RelKeys.
 
-(* MSets provide no cross-type map, so set comprehensions are folds under
-   the hood; SetOps reifies the missing combinators (map, filterMap,
-   unionMap, filterExists, ofList) together with their membership specs.
-   [in_fold] is the master lemma the specs are proved with, and remains the
-   tool for folds that fit none of them. *)
+(* MSets provide no cross-type map; SetOps reifies the missing combinators
+   (map, filterMap, unionMap, filterExists, ofList) together with their
+   membership specs. The comprehensions list their images and hand the list
+   to SetBuild, so each is one merge sort; [in_fold] remains the tool for
+   hand-written folds that fit none of them. *)
 Module SetOps (A B : UsualOrderedType) (SA : SetsOn A) (SB : SetsOn B).
   Module SSA := SetSpecs A SA.
   Module SSB := SetSpecs B SB.
+  Include SetBuild B SB.
 
   Lemma add_in : forall (x : B.t) (s : SB.t) (y : B.t),
       SB.In y (SB.add x s) <-> y = x \/ SB.In y s.
@@ -758,8 +862,12 @@ Module SetOps (A B : UsualOrderedType) (SA : SetsOn A) (SB : SetsOn B).
       split; [exact Hx | exact (proj2 (singleton_in _ _) eq_refl)].
   Qed.
 
+  (* The comprehensions go through ofList/unions rather than a fold of add or
+     union, so that each builds its result with one merge sort instead of n
+     quadratic insertions; the specs are extensional, so nothing downstream
+     sees the change. *)
   Definition map (f : A.t -> B.t) (s : SA.t) : SB.t :=
-    SA.fold (fun x acc => SB.add (f x) acc) s SB.empty.
+    ofList (List.map f (SA.elements s)).
 
   (* The witness is annotated at A.t rather than left to unify at SA.elt:
      tactics downstream build the witness out of pieces typed at A.t, and the
@@ -768,10 +876,12 @@ Module SetOps (A B : UsualOrderedType) (SA : SetsOn A) (SB : SetsOn B).
   Lemma mem_map : forall f s y,
       SB.In y (map f s) <-> exists x : A.t, SA.In x s /\ y = f x.
   Proof.
-    intros f s y; unfold map; rewrite in_fold_add.
+    intros f s y; unfold map; rewrite mem_ofList, List.in_map_iff.
     split.
-    - intros [H | H]; [exfalso; exact (empty_in _ H) | exact H].
-    - intro H; right; exact H.
+    - intros [x [Hf Hx]]; exists x;
+        split; [apply elements_in; exact Hx | symmetry; exact Hf].
+    - intros [x [Hx Hy]]; exists x;
+        split; [symmetry; exact Hy | apply elements_in; exact Hx].
   Qed.
 
   (* Containment transfers through each combinator pointwise, so callers do
@@ -787,30 +897,19 @@ Module SetOps (A B : UsualOrderedType) (SA : SetsOn A) (SB : SetsOn B).
   Qed.
 
   Definition filterMap (f : A.t -> option B.t) (s : SA.t) : SB.t :=
-    SA.fold (fun x acc =>
-        match f x with Some y => SB.add y acc | None => acc end)
-      s SB.empty.
+    ofList (List.flat_map
+              (fun x => match f x with Some y => y :: nil | None => nil end)
+              (SA.elements s)).
 
   Lemma mem_filterMap : forall f s y,
       SB.In y (filterMap f s) <-> exists x : A.t, SA.In x s /\ f x = Some y.
   Proof.
-    intros f s y; unfold filterMap.
-    rewrite (in_fold _
-      (fun x => match f x with
-                | Some z => SB.singleton z
-                | None => SB.empty
-                end)).
-    2:{ intros x a z; destruct (f x).
-        - rewrite add_in, singleton_in; tauto.
-        - split; [tauto | intros [H | H];
-            [exfalso; exact (empty_in _ H) | exact H]]. }
-    split.
-    - intros [H | [x [Hx Hy]]]; [exfalso; exact (empty_in _ H) |].
-      exists x; split; [exact Hx |].
-      destruct (f x) as [z | ]; [| exfalso; exact (empty_in _ Hy)].
-      apply singleton_in in Hy; rewrite Hy; reflexivity.
-    - intros [x [Hx Hf]]; right; exists x; split; [exact Hx |].
-      rewrite Hf; apply singleton_in; reflexivity.
+    intros f s y; unfold filterMap; rewrite mem_ofList, List.in_flat_map.
+    split; intros [x [Hx Hy]]; exists x.
+    - apply elements_in in Hx; split; [exact Hx |].
+      destruct (f x) as [z | ];
+        [destruct Hy as [-> | []]; reflexivity | destruct Hy].
+    - split; [apply elements_in; exact Hx | rewrite Hy; left; reflexivity].
   Qed.
 
   Lemma filterMap_mono : forall (f g : A.t -> option B.t) (s s' : SA.t),
@@ -823,16 +922,19 @@ Module SetOps (A B : UsualOrderedType) (SA : SetsOn A) (SB : SetsOn B).
   Qed.
 
   Definition unionMap (f : A.t -> SB.t) (s : SA.t) : SB.t :=
-    SA.fold (fun x acc => SB.union (f x) acc) s SB.empty.
+    unions (List.map f (SA.elements s)).
 
   Lemma mem_unionMap : forall f s y,
       SB.In y (unionMap f s) <-> exists x : A.t, SA.In x s /\ SB.In y (f x).
   Proof.
-    intros f s y; unfold unionMap.
-    rewrite (in_fold _ f) by (intros ? ? ?; rewrite SB.union_spec; tauto).
+    intros f s y; unfold unionMap; rewrite mem_unions.
     split.
-    - intros [H | H]; [exfalso; exact (empty_in _ H) | exact H].
-    - intro H; right; exact H.
+    - intros [t [Ht Hy]]; apply List.in_map_iff in Ht;
+        destruct Ht as [x [<- Hx]].
+      exists x; split; [apply elements_in; exact Hx | exact Hy].
+    - intros [x [Hx Hy]]; exists (f x); split; [| exact Hy].
+      apply List.in_map_iff; exists x;
+        split; [reflexivity | apply elements_in; exact Hx].
   Qed.
 
   Lemma unionMap_mono : forall (f g : A.t -> SB.t) (s s' : SA.t),
@@ -842,24 +944,6 @@ Module SetOps (A B : UsualOrderedType) (SA : SetsOn A) (SB : SetsOn B).
     intros f g s s' Hs Hfg y Hy; apply mem_unionMap in Hy.
     destruct Hy as [x [Hx Hf]]; apply mem_unionMap.
     exists x; split; [exact (Hs _ Hx) | exact (Hfg _ _ Hf)].
-  Qed.
-
-  Definition ofList (l : list B.t) : SB.t :=
-    List.fold_left (fun acc x => SB.add x acc) l SB.empty.
-
-  Lemma mem_ofList : forall (l : list B.t) (y : B.t),
-      SB.In y (ofList l) <-> List.In y l.
-  Proof.
-    intros l y; unfold ofList.
-    enough (H : forall (m : list B.t) (i : SB.t),
-        SB.In y (List.fold_left (fun acc x => SB.add x acc) m i) <->
-        List.In y m \/ SB.In y i)
-      by (rewrite H; split;
-          [intros [Hy | Hy]; [exact Hy | exfalso; exact (empty_in _ Hy)]
-          | intro Hy; left; exact Hy]).
-    intro m; induction m as [ | x m IH ]; intro i; simpl.
-    - tauto.
-    - rewrite IH, add_in; intuition congruence.
   Qed.
 
   Definition filterExists (p : A.t -> B.t -> bool) (s2 : SB.t) (s1 : SA.t)

@@ -164,11 +164,8 @@ struct
 
   (* ---- slice instances (the shapes the lookup lemmas justify) ---- *)
 
-  let pkgset_of l =
-    List.fold_left (fun s p -> Op.PkgSet.add p s) Op.PkgSet.empty l
-
-  let clsrel_of l =
-    List.fold_left (fun s r -> Op.ClsRel.add r s) Op.ClsRel.empty l
+  let pkgset_of = Op.PkgSet.ofList
+  let clsrel_of = Op.ClsRel.ofList
 
   let repo_and_avail ar (names : string list) =
     let repo = ref [] and avl = ref [] in
@@ -361,9 +358,7 @@ struct
          | _ -> Printf.eprintf "[%d] root %.1fs\n%!" !nproc (Sys.time ()));
       let forms = Red.dependees rho inst q in
       let d_q =
-        List.fold_left
-          (fun d f -> VF.DepRel.add (q, f) d)
-          VF.DepRel.empty (Red.FSet.elements forms)
+        VF.DepRel.ofList (List.map (fun f -> (q, f)) (Red.FSet.elements forms))
       in
       let r_q = VF.PkgSet.singleton q in
       record_deprel st (VR.reduceDeps yx d_q);
