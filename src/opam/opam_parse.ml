@@ -30,6 +30,12 @@ type pkg_meta = {
   available : filt;
   depexts : (string * filt) list;
   pindeps : ((string * string) * string) list;
+  (* opam 2.1's avoid-version and 2.2's deprecated: "select this version
+     only if nothing else works".  Not a constraint -- a flagged version
+     stays installable -- so they are recorded here and spent on solver
+     preference, never on the rows. *)
+  avoid_version : bool;
+  deprecated : bool;
 }
 
 let rejected = ref 0
@@ -278,6 +284,19 @@ let class_names (v : value) : string list =
       reject ();
       []
 
+(* a flag is an ident (opam also accepts the string form) *)
+let flag_names (v : value) : string list =
+  let one (x : value) =
+    match x.pelem with
+    | Ident f | String f -> Some f
+    | _ ->
+        reject ();
+        None
+  in
+  match v.pelem with
+  | List { pelem = l; _ } | Group { pelem = l; _ } -> List.filter_map one l
+  | _ -> ( match one v with Some f -> [ f ] | None -> [])
+
 let pindep_rows (v : value) : ((string * string) * string) list =
   let entry (v : value) =
     match v.pelem with
@@ -316,6 +335,8 @@ let parse_file ~name ~version path : pkg_meta =
         available = FT;
         depexts = [];
         pindeps = [];
+        avoid_version = false;
+        deprecated = false;
       }
   in
   List.iter
@@ -348,6 +369,14 @@ let parse_file ~name ~version path : pkg_meta =
           meta := { !meta with depexts = depext_rows ~owner ~selfv v }
       | Variable ({ pelem = "pin-depends"; _ }, v) ->
           meta := { !meta with pindeps = pindep_rows v }
+      | Variable ({ pelem = "flags"; _ }, v) ->
+          let fl = flag_names v in
+          meta :=
+            {
+              !meta with
+              avoid_version = List.mem "avoid-version" fl;
+              deprecated = List.mem "deprecated" fl;
+            }
       | _ -> ())
     file.file_contents;
   !meta

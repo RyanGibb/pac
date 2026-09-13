@@ -31,11 +31,16 @@ end
 type archive = {
   pkgs : (string, (string * Opam_parse.pkg_meta) list) Hashtbl.t;
   class_idx : (string, (string * string) list) Hashtbl.t;
+  (* the versions a name flags avoid-version or deprecated; indexed
+     because the comparator asks this of every version it is handed, and
+     because all but a hundred or so names answer no *)
+  avoid_idx : (string, string list) Hashtbl.t;
 }
 
 let load_repo dir : archive =
   let pkgs = Hashtbl.create 4096 in
   let class_idx = Hashtbl.create 64 in
+  let avoid_idx = Hashtbl.create 64 in
   let pkgdir = Filename.concat dir "packages" in
   Array.iter
     (fun name ->
@@ -62,12 +67,18 @@ let load_repo dir : archive =
                           ::
                             (try Hashtbl.find class_idx k with Not_found -> [])
                           ))
-                      m.classes
+                      m.classes;
+                    if m.avoid_version || m.deprecated then
+                      Hashtbl.replace avoid_idx name
+                        (version
+                        ::
+                          (try Hashtbl.find avoid_idx name
+                           with Not_found -> []))
                   with _ -> ())
             | _ -> ())
           (Sys.readdir ndir))
     (Sys.readdir pkgdir);
-  { pkgs; class_idx }
+  { pkgs; class_idx; avoid_idx }
 
 let versions_of ar n =
   try List.map fst (Hashtbl.find ar.pkgs n) with Not_found -> []
@@ -84,7 +95,14 @@ let meta_of ar n v =
       available = Opam_parse.FT;
       depexts = [];
       pindeps = [];
+      avoid_version = false;
+      deprecated = false;
     }
+
+let avoided ar n v =
+  match Hashtbl.find_opt ar.avoid_idx n with
+  | None -> false
+  | Some vs -> List.exists (fun w -> Opam_version.equal w v) vs
 
 module Make (XV : sig
   val vars : string list
@@ -300,6 +318,72 @@ struct
     in
     Op.ESet.elements (Op.depextsOf rho inst (pkgset_of reals))
 
+  (* ---- PubGrub interface ---- *)
+
+  module PName = struct
+    type t = VR.Name.t
+
+    (* NameOT is a UsualOrderedType, so a name compares Eq to itself; the
+       pointer test only skips the walk on interned names *)
+    let compare a b = if a == b then 0 else r2c (VR.NameOT.compare a b)
+
+    let pp_t fmt (tn : Red.TName.t) =
+      match tn with
+      | Red.TName.Root -> Format.fprintf fmt "root"
+      | Red.TName.Real n -> Format.fprintf fmt "%s" n
+
+    let pp fmt (n : t) =
+      match n with
+      | VR.Name.Orig tn -> pp_t fmt tn
+      | VR.Name.Var x -> Format.fprintf fmt "var:%s" x
+      | VR.Name.Disjunct (_, _) -> Format.fprintf fmt "<disj>"
+      | VR.Name.NegDep (_, _) -> Format.fprintf fmt "<negdep>"
+  end
+
+  (* PubGrub decides the compare-maximum candidate, so preference lives
+     here.  Newest-first among a name's own versions falls out of the
+     encoded order, since V.compare is the opam order.  On top of it, a
+     version flagged avoid-version or deprecated is a last resort rather
+     than an impossibility, so it sits in a class below every unflagged
+     version of its name and newest-first decides within each class --
+     what opam does when it numbers a name's versions for the CUDF
+     version-lag, avoid-versions after the rest.
+
+     The class is carried on the version rather than read off it: which
+     package a version belongs to is what decides, and a comparator sees
+     two versions and not their name.  Every version PubGrub holds is
+     handed to it by [versions] or by a dependency range, both of which
+     know the name, so both tag as they go and the class is a function
+     of the (name, version) pair -- keeping this a total order, and one
+     consistent with the tags on any range the same name is compared
+     against. *)
+  module PVersion = struct
+    type t = { avoid : bool; v : VR.Version.t }
+
+    let compare a b =
+      match (a.avoid, b.avoid) with
+      | true, false -> -1
+      | false, true -> 1
+      | _ -> if a.v == b.v then 0 else r2c (VR.VersionOT.compare a.v b.v)
+
+    let pp fmt (x : t) =
+      match x.v with
+      | VR.Version.Orig (Red.TVer.RV v) -> Format.fprintf fmt "%s" v
+      | VR.Version.Orig Red.TVer.UnitV -> Format.fprintf fmt "()"
+      | VR.Version.Zero -> Format.fprintf fmt "z0"
+      | VR.Version.One -> Format.fprintf fmt "z1"
+      | VR.Version.VarVal Red.YU.Undef -> Format.fprintf fmt "undef"
+      | VR.Version.VarVal (Red.YU.YVal y) -> Format.fprintf fmt "%s" y
+  end
+
+  module PG = Pubgrub.Make (PName) (PVersion)
+
+  let tag ar (tn : VR.Name.t) (tv : VR.Version.t) : PVersion.t =
+    match (tn, tv) with
+    | VR.Name.Orig (Red.TName.Real n), VR.Version.Orig (Red.TVer.RV v) ->
+        { PVersion.avoid = avoided ar n v; v = tv }
+    | _ -> { PVersion.avoid = false; v = tv }
+
   (* ---- lazy core graph from per-package reductions ---- *)
 
   let yx x = VR.YSet.singleton (Red.pin rho x)
@@ -313,9 +397,9 @@ struct
   type state = {
     ar : archive;
     edges : (VR.Name.t * VR.Version.t, T.DependeesSet.t) Hashtbl.t;
-    gadget_vers : (VR.Name.t, VR.Version.t list) Hashtbl.t;
+    gadget_vers : (VR.Name.t, PVersion.t list) Hashtbl.t;
     processed : (VF.Pkg.t, unit) Hashtbl.t;
-    real_vers : (string, VR.Version.t list) Hashtbl.t;
+    real_vers : (string, PVersion.t list) Hashtbl.t;
     mutable canon : VR.Name.t NameMap.t;
   }
 
@@ -358,6 +442,7 @@ struct
         match tn with
         | VR.Name.Orig _ | VR.Name.Var _ -> ()
         | _ ->
+            let tv = tag st.ar tn tv in
             let prev =
               try Hashtbl.find st.gadget_vers tn with Not_found -> []
             in
@@ -387,44 +472,6 @@ struct
       record_real st (VR.reduceReal yx r_q d_q)
     end
 
-  (* PubGrub interface *)
-  module PName = struct
-    type t = VR.Name.t
-
-    (* NameOT is a UsualOrderedType, so a name compares Eq to itself; the
-       pointer test only skips the walk on interned names *)
-    let compare a b = if a == b then 0 else r2c (VR.NameOT.compare a b)
-
-    let pp_t fmt (tn : Red.TName.t) =
-      match tn with
-      | Red.TName.Root -> Format.fprintf fmt "root"
-      | Red.TName.Real n -> Format.fprintf fmt "%s" n
-
-    let pp fmt (n : t) =
-      match n with
-      | VR.Name.Orig tn -> pp_t fmt tn
-      | VR.Name.Var x -> Format.fprintf fmt "var:%s" x
-      | VR.Name.Disjunct (_, _) -> Format.fprintf fmt "<disj>"
-      | VR.Name.NegDep (_, _) -> Format.fprintf fmt "<negdep>"
-  end
-
-  module PVersion = struct
-    type t = VR.Version.t
-
-    let compare a b = if a == b then 0 else r2c (VR.VersionOT.compare a b)
-
-    let pp fmt (v : t) =
-      match v with
-      | VR.Version.Orig (Red.TVer.RV v) -> Format.fprintf fmt "%s" v
-      | VR.Version.Orig Red.TVer.UnitV -> Format.fprintf fmt "()"
-      | VR.Version.Zero -> Format.fprintf fmt "z0"
-      | VR.Version.One -> Format.fprintf fmt "z1"
-      | VR.Version.VarVal Red.YU.Undef -> Format.fprintf fmt "undef"
-      | VR.Version.VarVal (Red.YU.YVal y) -> Format.fprintf fmt "%s" y
-  end
-
-  module PG = Pubgrub.Make (PName) (PVersion)
-
   let solve ?(debug = false) ar (goal : string) =
     Pubgrub.set_debug debug;
     let st = mk_state ar in
@@ -445,7 +492,7 @@ struct
       end
       else f ()
     in
-    let versions (tn : VR.Name.t) : VR.Version.t list =
+    let versions (tn : VR.Name.t) : PVersion.t list =
       timed @@ fun () ->
       match tn with
       | VR.Name.Orig (Red.TName.Real n) -> (
@@ -455,16 +502,18 @@ struct
               VF.VSet.elements
                 (Red.versions rho (name_inst ar n) (Red.TName.Real n))
             in
-            let vs = List.map (fun tv -> VR.Version.Orig tv) vs in
+            let vs = List.map (fun tv -> tag ar tn (VR.Version.Orig tv)) vs in
             Hashtbl.replace st.real_vers n vs;
             vs)
-      | VR.Name.Orig Red.TName.Root -> [ VR.Version.Orig Red.TVer.UnitV ]
-      | VR.Name.Var x -> [ VR.Version.VarVal (Red.pin rho x) ]
+      | VR.Name.Orig Red.TName.Root ->
+          [ { PVersion.avoid = false; v = VR.Version.Orig Red.TVer.UnitV } ]
+      | VR.Name.Var x ->
+          [ { PVersion.avoid = false; v = VR.Version.VarVal (Red.pin rho x) } ]
       | _ -> ( try Hashtbl.find st.gadget_vers tn with Not_found -> [])
     in
     let deps_cache = Hashtbl.create 65536 in
     let nq = ref 0 in
-    let dependencies (tn : VR.Name.t) (tv : VR.Version.t) =
+    let dependencies (tn : VR.Name.t) ({ PVersion.v = tv; _ } : PVersion.t) =
       incr nq;
       if verbose && !nq mod 10000 = 0 then
         Printf.eprintf "[q%d] %.1fs\n%!" !nq (Sys.time ());
@@ -484,7 +533,8 @@ struct
           in
           List.map
             (fun ((m, vs) : T.Dependees.t) ->
-              (intern st m, PG.Ranges.of_list (T.VSet.elements vs)))
+              ( intern st m,
+                PG.Ranges.of_list (List.map (tag ar m) (T.VSet.elements vs)) ))
             (T.DependeesSet.elements hs)
         in
         Hashtbl.replace deps_cache (tn, tv) r;
@@ -510,7 +560,7 @@ struct
     | Ok sol ->
         let reals =
           List.filter_map
-            (fun ((tn, tv) : VR.Name.t * VR.Version.t) ->
+            (fun ((tn, { PVersion.v = tv; _ }) : VR.Name.t * PVersion.t) ->
               match (tn, tv) with
               | VR.Name.Orig (Red.TName.Real n), VR.Version.Orig (Red.TVer.RV v)
                 ->

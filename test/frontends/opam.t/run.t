@@ -36,3 +36,27 @@ unconditionally for pkg-config, which is named once:
   system packages (2):
     libfoo-dev
     pkg-config
+
+The avoid-version and deprecated flags say "select this only if nothing
+else works", which is a preference and not a constraint.  A flagged
+version is ranked below every unflagged version of its name, so the older
+avoid.1 and depr.1 are taken over the newer flagged ones:
+
+  $ ../../../src/main.exe opam . avoid | sed -E 's/, [0-9.]+s$//; /^solve [0-9.]+s$/d'
+  archive loaded: 1 variables
+  opam packages (1, core solution 6 nodes):
+    avoid.1
+
+  $ ../../../src/main.exe opam . depr | sed -E 's/, [0-9.]+s$//; /^solve [0-9.]+s$/d'
+  archive loaded: 1 variables
+  opam packages (1, core solution 6 nodes):
+    depr.1
+
+Nothing else works when a dependency pins the flagged version, and it is
+selected:
+
+  $ ../../../src/main.exe opam . needav | sed -E 's/, [0-9.]+s$//; /^solve [0-9.]+s$/d'
+  archive loaded: 1 variables
+  opam packages (2, core solution 8 nodes):
+    avoid.2
+    needav.1
