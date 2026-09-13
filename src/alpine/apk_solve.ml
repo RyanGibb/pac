@@ -53,11 +53,12 @@ module T = PFR.T
    APKINDEX is per-arch, so no A: filtering is applied and no
    cross-arch reasoning is possible here. *)
 
-(* provider_priority is carried as data but not applied.  It is apk's
-   preference among unversioned providers of a name, and preference in
-   this pipeline lives in PVersion.compare; the calculus records it in
-   inst_prio precisely because it does not constrain which sets are
-   resolutions.  The slices below leave inst_prio empty for that reason. *)
+(* provider_priority is apk's preference among the unversioned providers
+   of a name, and preference in this pipeline lives in PVersion.compare,
+   which is where it is applied -- off the archive, not off an instance.
+   The calculus records it in inst_prio precisely because it does not
+   constrain which sets are resolutions, so the slices below leave
+   inst_prio empty and no resolution turns on a k: line. *)
 
 (* replaces (r:/q:) never appears in a repository index -- it is an
    installed-db field -- so inst_repl is empty. *)
@@ -117,8 +118,20 @@ let load_index (path : string) : archive =
 let versions_of ar n =
   match Hashtbl.find_opt ar.by_name n with Some l -> l | None -> []
 
+(* apk-package(5): "By default a non-versioned provides will not be
+   selected automatically for installation.  But specifying
+   provider-priority enables this automatic selection".  So a bare
+   provides without k: is not a low-ranked candidate, it is not a
+   candidate: its row never enters the instance, which is an
+   availability cut on the alias rather than on its owner -- the owner
+   stays installable when the world names it directly. *)
+let auto_selectable ar (owner : string * string) (pv : string option) =
+  pv <> None || Hashtbl.mem ar.prio owner
+
 let providers_of ar n =
-  match Hashtbl.find_opt ar.providers n with Some l -> l | None -> []
+  match Hashtbl.find_opt ar.providers n with
+  | Some l -> List.filter (fun (owner, pv) -> auto_selectable ar owner pv) l
+  | None -> []
 
 (* ---- encoding into the calculus ---------------------------------------- *)
 
@@ -198,8 +211,11 @@ let pkg_inst ar ((n, v) : string * string) : Alp.coq_Inst =
       let prov =
         Alp.Prov.union prov
           (Alp.Prov.ofList
-             (List.map
-                (fun (pr : P.prov) -> ((n, v), (pr.P.p_name, ptag pr.P.p_ver)))
+             (List.filter_map
+                (fun (pr : P.prov) ->
+                  if auto_selectable ar (n, v) pr.P.p_ver then
+                    Some ((n, v), (pr.P.p_name, ptag pr.P.p_ver))
+                  else None)
                 m.P.provides))
       in
       {
@@ -240,109 +256,6 @@ let root_inst ar (world : P.dep list) : Alp.coq_Inst =
     inst_trig = trig;
     inst_world = wset;
   }
-
-(* ---- the lazy core graph ----------------------------------------------- *)
-
-type state = {
-  ar : archive;
-  world : P.dep list;
-  edges : (T.Pkg.t, T.DependeesSet.t) Hashtbl.t;
-  gadget_vers : (PFR.Name.t, PFR.Version.t list) Hashtbl.t;
-  processed : (PF.Pkg.t, unit) Hashtbl.t;
-  real_vers : (string, PFR.Version.t list) Hashtbl.t;
-  mutable n_proc : int;
-}
-
-let mk_state ar world =
-  {
-    ar;
-    world;
-    edges = Hashtbl.create 65536;
-    gadget_vers = Hashtbl.create 65536;
-    processed = Hashtbl.create 16384;
-    real_vers = Hashtbl.create 16384;
-    n_proc = 0;
-  }
-
-let verbose = Sys.getenv_opt "PACPROG" <> None
-
-let record_deprel st (d : T.DepRel.t) =
-  List.iter
-    (fun ((s, h) : T.DepElt.t) ->
-      let prev =
-        match Hashtbl.find_opt st.edges s with
-        | Some x -> x
-        | None -> T.DependeesSet.empty
-      in
-      Hashtbl.replace st.edges s (T.DependeesSet.add h prev))
-    (T.DepRel.elements d)
-
-(* Only the gadget names PackageFormula mints are harvested; the Orig
-   names are answered by versions_lookupName below. *)
-let record_real st (r : T.PkgSet.t) =
-  List.iter
-    (fun ((tn, tv) : T.Pkg.t) ->
-      match tn with
-      | PFR.Name.Orig _ -> ()
-      | _ ->
-          let prev =
-            match Hashtbl.find_opt st.gadget_vers tn with
-            | Some x -> x
-            | None -> []
-          in
-          if not (List.mem tv prev) then
-            Hashtbl.replace st.gadget_vers tn (tv :: prev))
-    (T.PkgSet.elements r)
-
-(* one Alpine package's dependee formulas, reduced to core edges *)
-let process st (q : PF.Pkg.t) (inst : Alp.coq_Inst) =
-  if not (Hashtbl.mem st.processed q) then begin
-    Hashtbl.replace st.processed q ();
-    st.n_proc <- st.n_proc + 1;
-    if verbose && st.n_proc mod 500 = 0 then
-      Printf.eprintf "[%d] %.1fs\n%!" st.n_proc (Sys.time ());
-    let forms = Red.dependees inst q in
-    let d_q =
-      PF.DepRel.ofList (List.map (fun f -> (q, f)) (Red.FSet.elements forms))
-    in
-    let r_q = PF.PkgSet.singleton q in
-    record_deprel st (PFR.reduceDeps d_q);
-    record_real st (PFR.reduceReal r_q d_q)
-  end
-
-let touch st ((tn, tv) : T.Pkg.t) =
-  match (tn, tv) with
-  | PFR.Name.Orig Red.Name.Root, PFR.Version.Orig Red.Version.RootV ->
-      (* Lookup.dependees_lookupRoot *)
-      process st Red.rootPkg (root_inst st.ar st.world)
-  | PFR.Name.Orig (Red.Name.Orig n), PFR.Version.Orig (Red.Version.Orig v) ->
-      (* Lookup.dependees_lookupOrig *)
-      process st (Red.Name.Orig n, Red.Version.Orig v) (pkg_inst st.ar (n, v))
-  | ( PFR.Name.Orig (Red.Name.Orig m),
-      PFR.Version.Orig (Red.Version.Prov (q0, pv)) ) ->
-      (* Lookup.dependees_lookupProv: an alias row reads no instance *)
-      process st (Red.Name.Orig m, Red.Version.Prov (q0, pv)) empty_inst
-  | _ ->
-      (* a gadget's edges were harvested when its owner was processed *)
-      ()
-
-let versions st (tn : PFR.Name.t) : PFR.Version.t list =
-  match tn with
-  | PFR.Name.Orig Red.Name.Root -> [ PFR.Version.Orig Red.Version.RootV ]
-  | PFR.Name.Orig (Red.Name.Orig n) -> (
-      match Hashtbl.find_opt st.real_vers n with
-      | Some vs -> vs
-      | None ->
-          (* Lookup.versions_lookupName *)
-          let vs =
-            List.map
-              (fun w -> PFR.Version.Orig w)
-              (PF.VSet.elements (Red.versions (name_inst st.ar n) n))
-          in
-          Hashtbl.replace st.real_vers n vs;
-          vs)
-  | _ -> (
-      match Hashtbl.find_opt st.gadget_vers tn with Some vs -> vs | None -> [])
 
 (* ---- PubGrub ----------------------------------------------------------- *)
 
@@ -387,10 +300,76 @@ module PName = struct
           (List.length (PF.VSet.elements vs))
 end
 
-module PVersion = struct
-  type t = PFR.Version.t
+(* The rank a provider disjunction's two branches are compared on: the
+   k: line where a provider carries one, [rank_unranked] below all of
+   them where it does not, since apk-package(5) says a provides without
+   a provider-priority is not selected automatically at all and the
+   nearest a preference can come to that is last place; [rank_pkg] for a
+   package claiming the name with a version, above every provider; and
+   [rank_none] for a branch that offers nothing. *)
+let rank_pkg = max_int
+let rank_unranked = -1
+let rank_none = min_int
 
-  let pp fmt (v : t) =
+let prov_rank ar (q : string * string) : int =
+  match Hashtbl.find_opt ar.prio q with Some k -> k | None -> rank_unranked
+
+(* encPos nests the unversioned providers of a name into a right-leaning
+   disjunction whose last alternative is the name's own versions, so one
+   link's left branch is a lone provider and its right branch is every
+   remaining alternative.  A trigger disjunction and a negated dependency
+   both nest FNeg on the left, so a left branch naming a single package
+   identifies a provider chain. *)
+let chain_head (f : PF.coq_Formula) : (string * string) option =
+  match f with
+  | PF.FDep (Red.Name.Orig m, vs) -> (
+      match PF.VSet.elements vs with
+      | [ Red.Version.Orig w ] -> Some (m, w)
+      | _ -> None)
+  | _ -> None
+
+let rec chain_rank ar (f : PF.coq_Formula) : int =
+  match f with
+  | PF.FDisj (a, b) -> (
+      match chain_head a with
+      | Some q -> max (prov_rank ar q) (chain_rank ar b)
+      | None -> rank_none)
+  | PF.FDep (_, vs) -> if PF.VSet.elements vs = [] then rank_none else rank_pkg
+  | _ -> rank_none
+
+(* PubGrub decides the compare-maximum candidate, so preference lives
+   here.  Newest-first among a name's own versions falls out of the
+   encoded order, since V.compare is the apk order.  Two choices are
+   made on top of it.
+
+   A real package of a name beats an alias claiming it, which is apk's
+   own preference and the reason provider_priority only ever arbitrates
+   between unversioned providers.
+
+   Zero selects a disjunction's left alternative and One its right, and
+   which branch is wanted depends on the disjunction.  trigForm nests the
+   negated install_if conditions on the left and the triggered package
+   last, so Zero is apk's rule that a trigger fires only when its
+   conditions already hold -- without it every install_if row in the
+   index is discharged by installing its target.  encPos nests the
+   unversioned providers of a name on the left and its own versions last,
+   so there Zero takes a provider and One defers to the rest, and apk
+   ranks those by provider_priority with a package of the name itself
+   above all of them.
+
+   The rank is carried on the version rather than read off it: which
+   disjunction a Zero belongs to is what decides, and a comparator sees
+   two versions and not their name.  Every version PubGrub holds is
+   handed to it by [versions] or by a dependency range, both of which
+   know the name, so both tag as they go and the rank is a function of
+   the (name, version) pair -- keeping this a total order, and one
+   consistent with the tags on any range the same name is compared
+   against.  Ranks order Zero against One and break no other tie, so the
+   versions of a name that has no provider disjunction are unaffected. *)
+module PVersion = struct
+  type t = { rank : int; v : PFR.Version.t }
+
+  let pp fmt ({ v; _ } : t) =
     match v with
     | PFR.Version.Orig Red.Version.RootV -> Format.fprintf fmt "()"
     | PFR.Version.Orig (Red.Version.Orig s) -> Format.fprintf fmt "%s" s
@@ -399,41 +378,143 @@ module PVersion = struct
     | PFR.Version.Zero -> Format.fprintf fmt "0"
     | PFR.Version.One -> Format.fprintf fmt "1"
 
-  (* PubGrub decides the compare-maximum candidate, so preference lives
-     here.  Newest-first among a name's own versions falls out of the
-     encoded order, since V.compare is the apk order.  Two choices are
-     made on top of it.
-
-     A real package of a name beats an alias claiming it, which is apk's
-     own preference and the reason provider_priority only ever arbitrates
-     between unversioned providers.
-
-     Zero selects a disjunction's left alternative and One its right, and
-     the two encoded disjunctions want opposite branches.  trigForm nests
-     the negated install_if conditions on the left and the triggered
-     package last, so Zero is apk's rule that a trigger fires only when
-     its conditions already hold -- without it every install_if row in
-     the index is discharged by installing its target.  encPos nests the
-     unversioned providers of a name on the left and its real packages
-     last, so Zero takes the first such provider instead; in the loaded
-     index exactly one name (rng-tools) has both an unversioned provider
-     and a real package, so that is the only row where the two readings
-     disagree.  A name-dependent preference is not expressible: PubGrub
-     ranks candidates by this comparison alone. *)
   let compare a b =
-    match (a, b) with
+    match (a.v, b.v) with
     | ( PFR.Version.Orig (Red.Version.Orig _),
         PFR.Version.Orig (Red.Version.Prov _) ) ->
         1
     | ( PFR.Version.Orig (Red.Version.Prov _),
         PFR.Version.Orig (Red.Version.Orig _) ) ->
         -1
-    | PFR.Version.Zero, PFR.Version.One -> 1
-    | PFR.Version.One, PFR.Version.Zero -> -1
-    | _ -> r2c (PFR.VersionOT.compare a b)
+    | PFR.Version.Zero, PFR.Version.One ->
+        if a.rank = b.rank then 1 else Stdlib.compare a.rank b.rank
+    | PFR.Version.One, PFR.Version.Zero ->
+        if a.rank = b.rank then -1 else Stdlib.compare a.rank b.rank
+    | _ ->
+        let c = r2c (PFR.VersionOT.compare a.v b.v) in
+        if c <> 0 then c else Stdlib.compare a.rank b.rank
 end
 
+let tag ar (tn : PFR.Name.t) (tv : PFR.Version.t) : PVersion.t =
+  match (tn, tv) with
+  | PFR.Name.Disjunct (a, b), (PFR.Version.Zero | PFR.Version.One) -> (
+      match chain_head a with
+      | None -> { PVersion.rank = 0; v = tv }
+      | Some q ->
+          let rank =
+            match tv with
+            | PFR.Version.Zero -> prov_rank ar q
+            | _ -> chain_rank ar b
+          in
+          { PVersion.rank; v = tv })
+  | _ -> { PVersion.rank = 0; v = tv }
+
 module PG = Pubgrub.Make (PName) (PVersion)
+
+(* ---- the lazy core graph ----------------------------------------------- *)
+
+type state = {
+  ar : archive;
+  world : P.dep list;
+  edges : (T.Pkg.t, T.DependeesSet.t) Hashtbl.t;
+  gadget_vers : (PFR.Name.t, PVersion.t list) Hashtbl.t;
+  processed : (PF.Pkg.t, unit) Hashtbl.t;
+  real_vers : (string, PVersion.t list) Hashtbl.t;
+  mutable n_proc : int;
+}
+
+let mk_state ar world =
+  {
+    ar;
+    world;
+    edges = Hashtbl.create 65536;
+    gadget_vers = Hashtbl.create 65536;
+    processed = Hashtbl.create 16384;
+    real_vers = Hashtbl.create 16384;
+    n_proc = 0;
+  }
+
+let verbose = Sys.getenv_opt "PACPROG" <> None
+
+let record_deprel st (d : T.DepRel.t) =
+  List.iter
+    (fun ((s, h) : T.DepElt.t) ->
+      let prev =
+        match Hashtbl.find_opt st.edges s with
+        | Some x -> x
+        | None -> T.DependeesSet.empty
+      in
+      Hashtbl.replace st.edges s (T.DependeesSet.add h prev))
+    (T.DepRel.elements d)
+
+(* Only the gadget names PackageFormula mints are harvested; the Orig
+   names are answered by versions_lookupName below. *)
+let record_real st (r : T.PkgSet.t) =
+  List.iter
+    (fun ((tn, tv) : T.Pkg.t) ->
+      match tn with
+      | PFR.Name.Orig _ -> ()
+      | _ ->
+          let tv = tag st.ar tn tv in
+          let prev =
+            match Hashtbl.find_opt st.gadget_vers tn with
+            | Some x -> x
+            | None -> []
+          in
+          if not (List.mem tv prev) then
+            Hashtbl.replace st.gadget_vers tn (tv :: prev))
+    (T.PkgSet.elements r)
+
+(* one Alpine package's dependee formulas, reduced to core edges *)
+let process st (q : PF.Pkg.t) (inst : Alp.coq_Inst) =
+  if not (Hashtbl.mem st.processed q) then begin
+    Hashtbl.replace st.processed q ();
+    st.n_proc <- st.n_proc + 1;
+    if verbose && st.n_proc mod 500 = 0 then
+      Printf.eprintf "[%d] %.1fs\n%!" st.n_proc (Sys.time ());
+    let forms = Red.dependees inst q in
+    let d_q =
+      PF.DepRel.ofList (List.map (fun f -> (q, f)) (Red.FSet.elements forms))
+    in
+    let r_q = PF.PkgSet.singleton q in
+    record_deprel st (PFR.reduceDeps d_q);
+    record_real st (PFR.reduceReal r_q d_q)
+  end
+
+let touch st ((tn, tv) : T.Pkg.t) =
+  match (tn, tv) with
+  | PFR.Name.Orig Red.Name.Root, PFR.Version.Orig Red.Version.RootV ->
+      (* Lookup.dependees_lookupRoot *)
+      process st Red.rootPkg (root_inst st.ar st.world)
+  | PFR.Name.Orig (Red.Name.Orig n), PFR.Version.Orig (Red.Version.Orig v) ->
+      (* Lookup.dependees_lookupOrig *)
+      process st (Red.Name.Orig n, Red.Version.Orig v) (pkg_inst st.ar (n, v))
+  | ( PFR.Name.Orig (Red.Name.Orig m),
+      PFR.Version.Orig (Red.Version.Prov (q0, pv)) ) ->
+      (* Lookup.dependees_lookupProv: an alias row reads no instance *)
+      process st (Red.Name.Orig m, Red.Version.Prov (q0, pv)) empty_inst
+  | _ ->
+      (* a gadget's edges were harvested when its owner was processed *)
+      ()
+
+let versions st (tn : PFR.Name.t) : PVersion.t list =
+  match tn with
+  | PFR.Name.Orig Red.Name.Root ->
+      [ tag st.ar tn (PFR.Version.Orig Red.Version.RootV) ]
+  | PFR.Name.Orig (Red.Name.Orig n) -> (
+      match Hashtbl.find_opt st.real_vers n with
+      | Some vs -> vs
+      | None ->
+          (* Lookup.versions_lookupName *)
+          let vs =
+            List.map
+              (fun w -> tag st.ar tn (PFR.Version.Orig w))
+              (PF.VSet.elements (Red.versions (name_inst st.ar n) n))
+          in
+          Hashtbl.replace st.real_vers n vs;
+          vs)
+  | _ -> (
+      match Hashtbl.find_opt st.gadget_vers tn with Some vs -> vs | None -> [])
 
 type result = { pkgs : (string * string) list; nodes : int; processed : int }
 
@@ -444,7 +525,7 @@ let solve ?(debug = false) (ar : archive) (world : P.dep list) : result option =
   (* the decisive memoization: PubGrub asks for the same node's
      dependencies over and over during propagation *)
   let cache = Hashtbl.create 65536 in
-  let dependencies nm (u : PFR.Version.t) =
+  let dependencies nm ({ PVersion.v = u; _ } : PVersion.t) =
     match Hashtbl.find_opt cache (nm, u) with
     | Some r -> r
     | None ->
@@ -457,20 +538,22 @@ let solve ?(debug = false) (ar : archive) (world : P.dep list) : result option =
         let r =
           List.map
             (fun ((m, vs) : T.Dependees.t) ->
-              (m, PG.Ranges.of_list (T.VSet.elements vs)))
+              (m, PG.Ranges.of_list (List.map (tag ar m) (T.VSet.elements vs))))
             (T.DependeesSet.elements hs)
         in
         Hashtbl.replace cache (nm, u) r;
         r
   in
   let root = PFR.Name.Orig Red.Name.Root in
-  let root_range = PG.Ranges.of_list [ PFR.Version.Orig Red.Version.RootV ] in
+  let root_range = PG.Ranges.of_list (versions root) in
   match PG.solve ~versions ~dependencies [ (root, root_range) ] with
   | Error inc ->
       Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
       None
   | Ok sol ->
-      let s = T.PkgSet.ofList sol in
+      let s =
+        T.PkgSet.ofList (List.map (fun (m, { PVersion.v; _ }) -> (m, v)) sol)
+      in
       (* back through the two proved decoders *)
       let s_pf = PFR.packageFormulaResolution s in
       let pkgs = Alp.PkgSet.elements (Red.alpineResolution s_pf) in
