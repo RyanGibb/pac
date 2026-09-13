@@ -475,7 +475,13 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
             (VF.FConj (VF.FDisj (fD rho a) (fS rho Vq a))
                (VF.FDisj (fD rho b) (fS rho Vq b)))
             (VF.FNeg (VF.FConj (fD rho a) (fD rho b)))
-      | OFOr a b => VF.FDisj (fS rho Vq a) (fS rho Vq b)
+      (* Reversed: the target prefers a disjunction's right branch (Zero
+         selects the left and One the right, and One is the larger), while
+         opam prefers the alternative written first.  The swap is only
+         ever preference -- disjunction is commutative, and it is confined
+         to this constructor so that the fD-or-fS disjunctions above and
+         in encodeOF keep One meaning satisfied. *)
+      | OFOr a b => VF.FDisj (fS rho Vq b) (fS rho Vq a)
       end.
 
     Definition encodeOF (rho : Valuation) (Vq : N.t -> VSet.t)
@@ -918,7 +924,7 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
         destruct (redOF rho a) eqn:Ha; destruct (redOF rho b) eqn:Hb;
           simpl in H; try discriminate.
         intros [Hs | Hs];
-          [exact (IHa eq_refl Hs) | exact (IHb eq_refl Hs)].
+          [exact (IHb eq_refl Hs) | exact (IHa eq_refl Hs)].
     Qed.
 
     Lemma fS_correct : forall rho Vq S' sigma,
@@ -991,12 +997,12 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
           simpl.
         + rewrite <- (IHa _ eq_refl), <- (IHb _ eq_refl); tauto.
         + rewrite <- (IHa _ eq_refl).
-          split; [| intro H; left; exact H].
-          intros [H | H]; [exact H |].
-          destruct (fS_absent rho Vq S' sigma Hsig b Hb H).
-        + rewrite <- (IHb _ eq_refl).
           split; [| intro H; right; exact H].
           intros [H | H]; [| exact H].
+          destruct (fS_absent rho Vq S' sigma Hsig b Hb H).
+        + rewrite <- (IHb _ eq_refl).
+          split; [| intro H; left; exact H].
+          intros [H | H]; [exact H |].
           destruct (fS_absent rho Vq S' sigma Hsig a Ha H).
     Qed.
 

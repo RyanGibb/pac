@@ -60,3 +60,14 @@ selected:
   opam packages (2, core solution 8 nodes):
     avoid.2
     needav.1
+
+opam takes a disjunction's first satisfiable alternative, so a dependency
+on three installable packages selects the one written first.  The encoding
+inverts the pair -- PubGrub decides the larger version and the disjunction
+gadget's One selects the right branch -- so that this is what falls out:
+
+  $ ../../../src/main.exe opam . pick | sed -E 's/, [0-9.]+s$//; /^solve [0-9.]+s$/d'
+  archive loaded: 1 variables
+  opam packages (2, core solution 10 nodes):
+    alt1.1
+    pick.1
