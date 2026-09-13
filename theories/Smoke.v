@@ -116,16 +116,35 @@ Definition debD : Deb.Deps.t :=
   Deb.Deps.add ((1, 10), Deb.AtomSet.singleton (1, Deb.Ver.FTop))
     Deb.Deps.empty.
 
+(* one recommends clause on (1, 10), naming a package that does not exist *)
+Definition debRec : Deb.Deps.t :=
+  Deb.Deps.add ((1, 10), Deb.AtomSet.singleton (2, Deb.Ver.FTop))
+    Deb.Deps.empty.
+
 Example debian_vers_computes :
   Deb.T.VSet.cardinal
-    (Deb.versions debR debD Deb.Prov.empty Deb.Conf.empty
+    (Deb.versions debR debD Deb.Deps.empty Deb.Prov.empty Deb.Conf.empty
        (Deb.Name.Orig 1)) = 2.
 Proof. reflexivity. Qed.
 
 Example debian_dependees_computes :
   Deb.T.DependeesSet.cardinal
-    (Deb.dependees debR debD Deb.Prov.empty Deb.Conf.empty
+    (Deb.dependees debR debD Deb.Deps.empty Deb.Prov.empty Deb.Conf.empty
        (Deb.Name.Orig 1, Deb.Version.Orig 10)) = 1.
+Proof. reflexivity. Qed.
+
+(* the alternative plus the escape, even though nothing can satisfy it *)
+Example debian_soft_vers_computes :
+  Deb.T.VSet.cardinal
+    (Deb.versions debR debD debRec Deb.Prov.empty Deb.Conf.empty
+       (Deb.Name.Soft (Deb.AtomSet.singleton (2, Deb.Ver.FTop)))) = 2.
+Proof. reflexivity. Qed.
+
+Example debian_soft_escape_computes :
+  Deb.T.DependeesSet.cardinal
+    (Deb.dependees debR debD debRec Deb.Prov.empty Deb.Conf.empty
+       (Deb.Name.Soft (Deb.AtomSet.singleton (2, Deb.Ver.FTop)),
+        Deb.Version.Zero)) = 0.
 Proof. reflexivity. Qed.
 
 Definition maR : DMA.PkgSet.t :=

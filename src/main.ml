@@ -3,9 +3,12 @@ open Cmdliner
 let debug_arg =
   Arg.(value & flag & info [ "debug" ] ~doc:"Trace the PubGrub search.")
 
-let debian_run debug mono native goal paths =
+let debian_run debug mono no_recs native goal paths =
   Pubgrub.set_debug debug;
-  match Deb_solve.solve_files ~debug ~monolithic:mono ~native ~paths ~goal with
+  match
+    Deb_solve.solve_files ~debug ~monolithic:mono ~recommends:(not no_recs)
+      ~native ~paths ~goal
+  with
   | None -> 1
   | Some pkgs ->
       List.iter (fun (n, b, v) -> Printf.printf "%s:%s %s\n" n b v) pkgs;
@@ -17,6 +20,14 @@ let debian_cmd =
       value & flag
       & info [ "mono" ]
           ~doc:"Translate the whole archive instead of per-name slices.")
+  in
+  (* Recommends are installed by default, as under apt's
+     APT::Install-Recommends; the flag spells the same opt-out apt does. *)
+  let no_recs =
+    Arg.(
+      value & flag
+      & info [ "no-install-recommends" ]
+          ~doc:"Ignore Recommends fields rather than satisfying them.")
   in
   let native =
     Arg.(
@@ -36,7 +47,8 @@ let debian_cmd =
   in
   Cmd.v
     (Cmd.info "debian" ~doc:"Solve against Debian Packages indices.")
-    Term.(const debian_run $ debug_arg $ mono $ native $ goal $ paths)
+    Term.(
+      const debian_run $ debug_arg $ mono $ no_recs $ native $ goal $ paths)
 
 let opam_run debug repo goal =
   let t0 = Unix.gettimeofday () in

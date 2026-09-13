@@ -73,11 +73,14 @@ struct
     npkg : DMA.Pkg.t;
     ncls : DMA.coq_MAClass;
     ndeps : DMA.Atom.t list list;
+    nrecs : DMA.Atom.t list list;
     nprovs : (string * DMA.Deb.coq_DTop) list;
     nconfs : DMA.Atom.t list;
   }
 
-  let normalize (st : DF.stanza) : nstanza =
+  (* ~recommends false is the --no-install-recommends reading: the Rec
+     instance is empty, so every Soft gadget is empty and unreachable. *)
+  let normalize ~recommends (st : DF.stanza) : nstanza =
     let arch = if st.architecture = "all" then AP.native else st.architecture in
     let ncls =
       match st.multi_arch with
@@ -91,6 +94,8 @@ struct
       npkg = ((st.package, arch), st.version);
       ncls;
       ndeps = List.map (List.map matom_of) st.depends;
+      nrecs =
+        (if recommends then List.map (List.map matom_of) st.recommends else []);
       nprovs =
         List.map
           (fun (pr : DF.provide) -> (pr.pname, dtop_of pr.pversion))
@@ -117,6 +122,11 @@ struct
     conflicts_on : (string, (DMA.Pkg.t * DMA.Atom.t) list) Hashtbl.t;
     clause_of_aset : (DMA.Deb.AtomSet.t, DMA.Pkg.t * DMA.AtomSet.t) Hashtbl.t;
     clause_of_atom : (DMA.Deb.Atom.t, DMA.Pkg.t * DMA.AtomSet.t) Hashtbl.t;
+    (* Recommends clauses are keyed separately from Depends: Soft A and
+       Disjunct A are distinct names over the same atom set, and one clause
+       may be a Depends of one package and a Recommends of another. *)
+    rclause_of_aset : (DMA.Deb.AtomSet.t, DMA.Pkg.t * DMA.AtomSet.t) Hashtbl.t;
+    rclause_of_atom : (DMA.Deb.Atom.t, DMA.Pkg.t * DMA.AtomSet.t) Hashtbl.t;
     class_of : (DMA.Pkg.t, DMA.coq_MAClass) Hashtbl.t;
   }
 
@@ -124,7 +134,7 @@ struct
     Hashtbl.replace tbl k
       (v :: (match Hashtbl.find_opt tbl k with Some l -> l | None -> []))
 
-  let build_index (stanzas : DF.stanza list) : index =
+  let build_index ?(recommends = true) (stanzas : DF.stanza list) : index =
     let idx =
       {
         versions_of = Hashtbl.create 65536;
@@ -134,12 +144,31 @@ struct
         conflicts_on = Hashtbl.create 4096;
         clause_of_aset = Hashtbl.create 65536;
         clause_of_atom = Hashtbl.create 65536;
+        rclause_of_aset = Hashtbl.create 65536;
+        rclause_of_atom = Hashtbl.create 65536;
         class_of = Hashtbl.create 65536;
       }
     in
+    (* clauses are content-keyed, so one entry per mangled clause is all a
+       hasClauseb/occursAtomb slice needs *)
+    let index_clauses by_aset by_atom (p : DMA.Pkg.t) alts_list =
+      let b = snd (fst p) in
+      List.iter
+        (fun alts ->
+          let aset = maset_of alts in
+          Hashtbl.replace by_aset (DMA.reduceClause b aset) (p, aset);
+          List.iteri
+            (fun i ma ->
+              let ea = DMA.reduceAtom b ma in
+              if not (Hashtbl.mem atom_rank ea) then
+                Hashtbl.replace atom_rank ea i;
+              Hashtbl.replace by_atom ea (p, aset))
+            alts)
+        alts_list
+    in
     List.iter
       (fun st ->
-        let ns = normalize st in
+        let ns = normalize ~recommends st in
         let (n, b), v = ns.npkg in
         push idx.versions_of (n, b) v;
         Hashtbl.replace idx.stanza_of ns.npkg ns;
@@ -151,19 +180,8 @@ struct
         List.iter
           (fun ma -> push idx.conflicts_on (DMA.aname ma) (ns.npkg, ma))
           ns.nconfs;
-        List.iter
-          (fun alts ->
-            let aset = maset_of alts in
-            Hashtbl.replace idx.clause_of_aset (DMA.reduceClause b aset)
-              (ns.npkg, aset);
-            List.iteri
-              (fun i ma ->
-                let ea = DMA.reduceAtom b ma in
-                if not (Hashtbl.mem atom_rank ea) then
-                  Hashtbl.replace atom_rank ea i;
-                Hashtbl.replace idx.clause_of_atom ea (ns.npkg, aset))
-              alts)
-          ns.ndeps)
+        index_clauses idx.clause_of_aset idx.clause_of_atom ns.npkg ns.ndeps;
+        index_clauses idx.rclause_of_aset idx.rclause_of_atom ns.npkg ns.nrecs)
       stanzas;
     idx
 
@@ -205,6 +223,12 @@ struct
     | Some ns ->
         DMA.Deps.ofList (List.map (fun alts -> (p, maset_of alts)) ns.ndeps)
 
+  let ma_recs_of_pkg idx p =
+    match Hashtbl.find_opt idx.stanza_of p with
+    | None -> DMA.Deps.empty
+    | Some ns ->
+        DMA.Deps.ofList (List.map (fun alts -> (p, maset_of alts)) ns.nrecs)
+
   let ma_conf_of_pkg idx p =
     match Hashtbl.find_opt idx.stanza_of p with
     | None -> DMA.Conf.empty
@@ -243,6 +267,17 @@ struct
     match Hashtbl.find_opt idx.clause_of_atom a with
     | None -> DMA.Deb.Deps.empty
     | Some (p, mal) -> DMA.reduceDeps (DMA.Deps.add (p, mal) DMA.Deps.empty)
+
+  (* the same slices on the Recommends side, through reduceRec *)
+  let rec_clause_by_aset idx aset =
+    match Hashtbl.find_opt idx.rclause_of_aset aset with
+    | None -> DMA.Deb.Deps.empty
+    | Some (p, mal) -> DMA.reduceRec (DMA.Deps.add (p, mal) DMA.Deps.empty)
+
+  let rec_clause_by_atom idx a =
+    match Hashtbl.find_opt idx.rclause_of_atom a with
+    | None -> DMA.Deb.Deps.empty
+    | Some (p, mal) -> DMA.reduceRec (DMA.Deps.add (p, mal) DMA.Deps.empty)
 
   (* R/Pi slices for a mangled name (m, x): whichever x is, every provider
      of (m, x) is either a group member of m (reals, implicit group /
@@ -285,23 +320,36 @@ struct
         (* Lookup.versions_lookupOrig *)
         DMA.Deb.versions
           (DMA.reduceReal (ma_real_at idx (n, b)))
-          DMA.Deb.Deps.empty DMA.Deb.Prov.empty DMA.Deb.Conf.empty n'
+          DMA.Deb.Deps.empty DMA.Deb.Deps.empty DMA.Deb.Prov.empty
+          DMA.Deb.Conf.empty n'
     | DMA.Deb.Name.Orig _ ->
         (* embedPkg mints only QAArch names: no reals at :any/group names *)
         DMA.Deb.versions DMA.Deb.Ver.C.PkgSet.empty DMA.Deb.Deps.empty
-          DMA.Deb.Prov.empty DMA.Deb.Conf.empty n'
+          DMA.Deb.Deps.empty DMA.Deb.Prov.empty DMA.Deb.Conf.empty n'
     | DMA.Deb.Name.Disjunct aset ->
         (* Lookup.versions_lookupDisjunct *)
         DMA.Deb.versions DMA.Deb.Ver.C.PkgSet.empty (clause_by_aset idx aset)
+          DMA.Deb.Deps.empty DMA.Deb.Prov.empty DMA.Deb.Conf.empty n'
+    | DMA.Deb.Name.Soft aset ->
+        (* Lookup.versions_lookupSoft *)
+        DMA.Deb.versions DMA.Deb.Ver.C.PkgSet.empty DMA.Deb.Deps.empty
+          (rec_clause_by_aset idx aset)
           DMA.Deb.Prov.empty DMA.Deb.Conf.empty n'
     | DMA.Deb.Name.Selector a ->
-        (* Lookup.versions_lookupSelector *)
+        (* Lookup.versions_lookupSelectorAgreeMA: both slices at once is
+           sound because the selector reads them only through the occurrence
+           test, which both slices together answer as the whole pair does.
+           Lookup.versions_lookupSelectorMA and
+           Lookup.versions_lookupSelectorRecMA are its one-sided cases: a
+           selector is minted from allClauses, so an atom reached only
+           through a Recommends needs its recommends clause here too. *)
         let r, pi = sel_slices idx (fst a) in
-        DMA.Deb.versions r (clause_by_atom idx a) pi DMA.Deb.Conf.empty n'
+        DMA.Deb.versions r (clause_by_atom idx a) (rec_clause_by_atom idx a) pi
+          DMA.Deb.Conf.empty n'
     | DMA.Deb.Name.Guard (p, _, _) ->
         (* Lookup.versions_lookupGuard *)
         DMA.Deb.versions DMA.Deb.Ver.C.PkgSet.empty DMA.Deb.Deps.empty
-          DMA.Deb.Prov.empty (guard_conf idx p) n'
+          DMA.Deb.Deps.empty DMA.Deb.Prov.empty (guard_conf idx p) n'
 
   let dependees_sparse idx (s : DMA.Deb.T.Pkg.t) =
     match s with
@@ -340,18 +388,32 @@ struct
         in
         DMA.Deb.dependees (DMA.reduceReal r_ma)
           (DMA.reduceDeps (ma_deps_of_pkg idx p))
+          (DMA.reduceRec (ma_recs_of_pkg idx p))
           (DMA.reduceProv r_pi pi_decl pi_cls)
           (DMA.reduceConf g_r g_conf g_cls)
           s
     | DMA.Deb.Name.Disjunct aset, DMA.Deb.Version.Atom a ->
         (* Lookup.dependees_lookupDisjunct *)
         let r, pi = sel_slices idx (fst a) in
-        DMA.Deb.dependees r (clause_by_aset idx aset) pi DMA.Deb.Conf.empty s
+        DMA.Deb.dependees r (clause_by_aset idx aset) DMA.Deb.Deps.empty pi
+          DMA.Deb.Conf.empty s
+    | DMA.Deb.Name.Soft aset, DMA.Deb.Version.Atom a ->
+        (* Lookup.dependees_lookupSoft: an alternative of a recommends clause
+           reaches its targets exactly as one of a Depends clause does.  The
+           escape (Soft _, Zero) has no case: it falls to the empty catch-all
+           below, which is what discharges the clause for free. *)
+        let r, pi = sel_slices idx (fst a) in
+        DMA.Deb.dependees r DMA.Deb.Deps.empty (rec_clause_by_aset idx aset) pi
+          DMA.Deb.Conf.empty s
     | ( DMA.Deb.Name.Selector a,
         (DMA.Deb.Version.Ref (_, _) | DMA.Deb.Version.RefReal _) ) ->
-        (* Lookup.dependees_lookupSelector *)
+        (* Lookup.dependees_lookupSelectorAgreeMA, over allClauses as in
+           vers_sparse; Lookup.dependees_lookupSelectorMA and
+           Lookup.dependees_lookupSelectorRecMA are its one-sided cases, the
+           latter for an atom reached only through a Recommends *)
         let r, pi = sel_slices idx (fst a) in
-        DMA.Deb.dependees r (clause_by_atom idx a) pi DMA.Deb.Conf.empty s
+        DMA.Deb.dependees r (clause_by_atom idx a) (rec_clause_by_atom idx a) pi
+          DMA.Deb.Conf.empty s
     | _ ->
         (* Lookup.dependees_lookupGuard; other shape mismatches are empty
            by definition of dependees *)
@@ -395,6 +457,7 @@ struct
     let pp fmt = function
       | DMA.Deb.Name.Orig m -> pp_mname fmt m
       | DMA.Deb.Name.Disjunct _ -> Format.fprintf fmt "<alts>"
+      | DMA.Deb.Name.Soft _ -> Format.fprintf fmt "<rec>"
       | DMA.Deb.Name.Selector a -> Format.fprintf fmt "<sel %a>" pp_atom a
       | DMA.Deb.Name.Guard ((m, v), a, _) ->
           Format.fprintf fmt "<guard %a=%s vs %a>" pp_mname m v pp_atom a
@@ -413,7 +476,15 @@ struct
        referents first within each, encoded order otherwise.  The calculus
        only makes the real/provided split legible -- RefReal carries no name,
        so it is the one candidate that cannot be an alias -- and says nothing
-       about which to try first. *)
+       about which to try first.
+
+       The escape is likewise a preference and not a constraint: the calculus
+       tags it above Version.Atom, but we want the recommends gadget to try
+       every real alternative before giving up on the clause, so it is ranked
+       below them here.  Only candidates of one name are ever compared
+       (PubGrub ranges are per name), and Version.Zero shares a name with
+       Version.Atom in the Soft gadget and with Version.One in a guard and
+       nowhere else, so the two escape cases cannot disturb any other pair. *)
     let compare a b =
       match (a, b) with
       | DMA.Deb.Version.Orig x, DMA.Deb.Version.Orig y ->
@@ -422,6 +493,8 @@ struct
           (* leftmost alternative first: lower rank = greater version *)
           let c = Stdlib.compare (rank y) (rank x) in
           if c <> 0 then c else r2c (DMA.Deb.VersionOT.compare a b)
+      | DMA.Deb.Version.Zero, DMA.Deb.Version.Atom _ -> -1
+      | DMA.Deb.Version.Atom _, DMA.Deb.Version.Zero -> 1
       | DMA.Deb.Version.RefReal w, DMA.Deb.Version.RefReal w' ->
           (* one selector's real candidates all share its name, hence its
              arch: only the version separates them *)
@@ -507,6 +580,7 @@ struct
     let vname : DMA.Deb.Name.t -> string = function
       | DMA.Deb.Name.Orig _ -> "orig"
       | DMA.Deb.Name.Disjunct _ -> "disj"
+      | DMA.Deb.Name.Soft _ -> "soft"
       | DMA.Deb.Name.Selector _ -> "sel"
       | DMA.Deb.Name.Guard _ -> "guard"
     in
@@ -548,19 +622,26 @@ struct
            (fun ns -> List.map (fun ma -> (ns.npkg, ma)) ns.nconfs)
            stz)
     in
+    let rec_ma =
+      DMA.Deps.ofList
+        (List.concat_map
+           (fun ns -> List.map (fun alts -> (ns.npkg, maset_of alts)) ns.nrecs)
+           stz)
+    in
     let cls = DMA.Cls.ofList (List.map (fun ns -> (ns.npkg, ns.ncls)) stz) in
     let r = DMA.reduceReal r_ma in
     let d = DMA.reduceDeps d_ma in
+    let rc = DMA.reduceRec rec_ma in
     let pi = DMA.reduceProv r_ma pi_ma cls in
     let g = DMA.reduceConf r_ma g_ma cls in
     run_pubgrub ?debug
-      ~versions:(DMA.Deb.versions r d pi g)
-      ~dependencies:(DMA.Deb.dependees r d pi g)
+      ~versions:(DMA.Deb.versions r d rc pi g)
+      ~dependencies:(DMA.Deb.dependees r d rc pi g)
       (goal_name, DMA.QAArch goal_arch)
 end
 
-let solve_files ?debug ?(monolithic = false) ~native ~paths ~goal :
-    (string * string * string) list option =
+let solve_files ?debug ?(monolithic = false) ?(recommends = true) ~native ~paths
+    ~goal : (string * string * string) list option =
   let stanzas = List.concat_map DF.parse_file paths in
   let arches =
     List.sort_uniq String.compare
@@ -581,6 +662,6 @@ let solve_files ?debug ?(monolithic = false) ~native ~paths ~goal :
           String.sub goal (i + 1) (String.length goal - i - 1) )
     | None -> (goal, native)
   in
-  let idx = M.build_index stanzas in
+  let idx = M.build_index ~recommends stanzas in
   if monolithic then M.solve_monolithic ?debug idx goal_name goal_arch
   else M.solve ?debug idx goal_name goal_arch

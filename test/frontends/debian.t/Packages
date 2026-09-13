@@ -41,3 +41,46 @@ Package: realdep
 Version: 1
 Architecture: amd64
 Depends: lib (= 1)
+
+Package: softpair
+Version: 1
+Architecture: amd64
+Recommends: softa | softb
+
+Package: softa
+Version: 1
+Architecture: amd64
+
+Package: softb
+Version: 1
+Architecture: amd64
+
+Package: softone
+Version: 1
+Architecture: amd64
+Recommends: softlib
+
+Package: softlib
+Version: 1
+Architecture: amd64
+
+Package: softkeep
+Version: 1
+Architecture: amd64
+Conflicts: softnope
+
+Package: softnope
+Version: 1
+Architecture: amd64
+
+Package: softconf
+Version: 1
+Architecture: amd64
+Depends: softkeep
+Recommends: softnope
+
+Package: softalt
+Version: 1
+Architecture: amd64
+Depends: softkeep
+Recommends: softnope | softb

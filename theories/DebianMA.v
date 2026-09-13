@@ -284,6 +284,11 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         (embedPkg (fst c), reduceClause (parch (fst c)) (snd c)))
       D.
 
+  (* A Recommends clause mangles exactly as a Depends clause does: the
+     architecture qualifiers on its atoms mean the same thing either way, and
+     it is the target gadget, not the mangling, that makes it optional. *)
+  Definition reduceRec (Rec : Deps.t) : Deb.Deps.t := reduceDeps Rec.
+
   (* Declared Provides, replicated by the provider's class: no/same reach
      the provider's own arch, foreign every arch, allowed additionally the
      :any pseudo-name. *)
@@ -969,44 +974,44 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
   (* The two reductions compose into one Core instance; a Core resolution of
      it decodes, through both decoders in turn, to a multiarch resolution. *)
-  Corollary debian_ma_core_soundness : forall R D Pi G M r S,
+  Corollary debian_ma_core_soundness : forall R D Rec Pi G M r S,
       Deb.T.IsResolution
-        (Deb.reduceReal (reduceReal R) (reduceDeps D) (reduceProv R Pi M)
-           (reduceConf R G M))
-        (Deb.reduceDeps (reduceReal R) (reduceDeps D) (reduceProv R Pi M)
-           (reduceConf R G M))
+        (Deb.reduceReal (reduceReal R) (reduceDeps D) (reduceRec Rec)
+           (reduceProv R Pi M) (reduceConf R G M))
+        (Deb.reduceDeps (reduceReal R) (reduceDeps D) (reduceRec Rec)
+           (reduceProv R Pi M) (reduceConf R G M))
         (Deb.embedPkg (embedPkg r)) S ->
       IsResolution R D Pi G M r
         (multiarchResolution (Deb.debianResolution S)).
   Proof.
-    intros R D Pi G M r S H.
+    intros R D Rec Pi G M r S H.
     exact (debian_ma_soundness R D Pi G M r (Deb.debianResolution S)
-             (Deb.debian_soundness _ _ _ _ (embedPkg r) S H)).
+             (Deb.debian_soundness _ _ _ _ _ (embedPkg r) S H)).
   Qed.
 
-  Corollary debian_ma_core_completeness : forall R D Pi G M r S,
+  Corollary debian_ma_core_completeness : forall R D Rec Pi G M r S,
       IsResolution R D Pi G M r S ->
       Deb.T.IsResolution
-        (Deb.reduceReal (reduceReal R) (reduceDeps D) (reduceProv R Pi M)
-           (reduceConf R G M))
-        (Deb.reduceDeps (reduceReal R) (reduceDeps D) (reduceProv R Pi M)
-           (reduceConf R G M))
+        (Deb.reduceReal (reduceReal R) (reduceDeps D) (reduceRec Rec)
+           (reduceProv R Pi M) (reduceConf R G M))
+        (Deb.reduceDeps (reduceReal R) (reduceDeps D) (reduceRec Rec)
+           (reduceProv R Pi M) (reduceConf R G M))
         (Deb.embedPkg (embedPkg r))
-        (Deb.coreResolution (reduceReal R) (reduceDeps D) (reduceProv R Pi M)
-           (reduceConf R G M) (reduceReal S)).
+        (Deb.coreResolution (reduceReal R) (reduceDeps D) (reduceRec Rec)
+           (reduceProv R Pi M) (reduceConf R G M) (reduceReal S)).
   Proof.
-    intros R D Pi G M r S H.
-    exact (Deb.debian_completeness _ _ _ _ (embedPkg r) (reduceReal S)
+    intros R D Rec Pi G M r S H.
+    exact (Deb.debian_completeness _ _ _ _ _ (embedPkg r) (reduceReal S)
              (debian_ma_completeness R D Pi G M r S H)).
   Qed.
 
-  Corollary multiarchResolution_core : forall R D Pi G M S,
+  Corollary multiarchResolution_core : forall R D Rec Pi G M S,
       multiarchResolution
         (Deb.debianResolution
-           (Deb.coreResolution (reduceReal R) (reduceDeps D)
+           (Deb.coreResolution (reduceReal R) (reduceDeps D) (reduceRec Rec)
               (reduceProv R Pi M) (reduceConf R G M) (reduceReal S))) = S.
   Proof.
-    intros R D Pi G M S.
+    intros R D Rec Pi G M S.
     rewrite Deb.debianResolution_coreResolution.
     apply multiarchResolution_reduceReal.
   Qed.
@@ -1612,13 +1617,15 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
     (* Real packages live only at QAArch names, so the arch fibre of one
        mangled name is the whole slice a versions query at it can read. *)
-    Theorem versions_lookupOrigMA : forall R D Pi G M (n : N.t) (b : A.t),
-        Deb.versions (reduceReal R) (reduceDeps D) (reduceProv R Pi M)
+    Theorem versions_lookupOrigMA : forall R D Rec Pi G M (n : N.t) (b : A.t),
+        Deb.versions (reduceReal R) (reduceDeps D) (reduceRec Rec)
+          (reduceProv R Pi M)
           (reduceConf R G M) (Deb.Name.Orig (n, QAArch b)) =
         Deb.versions (reduceReal (realAt R n b)) Deb.Deps.empty
-          Deb.Prov.empty Deb.Conf.empty (Deb.Name.Orig (n, QAArch b)).
+          Deb.Deps.empty Deb.Prov.empty Deb.Conf.empty
+          (Deb.Name.Orig (n, QAArch b)).
     Proof.
-      intros R D Pi G M n b; apply Deb.T.VSet.ext; intro w.
+      intros R D Rec Pi G M n b; apply Deb.T.VSet.ext; intro w.
       rewrite !Deb.versions_orig_spec.
       split; intros [v [Hv Hw]]; exists v; (split; [| exact Hw]);
         rewrite mem_reduceReal in Hv |- *;
@@ -1632,12 +1639,13 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     Theorem versions_lookupOrigMA_pseudo :
-      forall R D Pi G M (n : N.t) (x : NameArch),
+      forall R D Rec Pi G M (n : N.t) (x : NameArch),
         (forall b, x <> QAArch b) ->
-        Deb.versions (reduceReal R) (reduceDeps D) (reduceProv R Pi M)
+        Deb.versions (reduceReal R) (reduceDeps D) (reduceRec Rec)
+          (reduceProv R Pi M)
           (reduceConf R G M) (Deb.Name.Orig (n, x)) = Deb.T.VSet.empty.
     Proof.
-      intros R D Pi G M n x Hx; apply Deb.T.VSet.ext; intro w.
+      intros R D Rec Pi G M n x Hx; apply Deb.T.VSet.ext; intro w.
       rewrite Deb.versions_orig_spec.
       split.
       - intros [v [Hv _]]; exfalso.
@@ -1646,16 +1654,17 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       - intro Hw; exfalso; exact (Deb.SOvw.empty_in _ Hw).
     Qed.
 
-    Theorem versions_lookupDisjunctMA : forall R D Pi G M (p : Pkg.t) Al,
+    Theorem versions_lookupDisjunctMA : forall R D Rec Pi G M (p : Pkg.t) Al,
         Deps.In (p, Al) D ->
-        Deb.versions (reduceReal R) (reduceDeps D) (reduceProv R Pi M)
+        Deb.versions (reduceReal R) (reduceDeps D) (reduceRec Rec)
+          (reduceProv R Pi M)
           (reduceConf R G M)
           (Deb.Name.Disjunct (reduceClause (parch p) Al)) =
         Deb.versions Deb.PkgSet.empty (reduceDeps (Deps.singleton (p, Al)))
-          Deb.Prov.empty Deb.Conf.empty
+          Deb.Deps.empty Deb.Prov.empty Deb.Conf.empty
           (Deb.Name.Disjunct (reduceClause (parch p) Al)).
     Proof.
-      intros R D Pi G M p Al HD; apply Deb.T.VSet.ext; intro w.
+      intros R D Rec Pi G M p Al HD; apply Deb.T.VSet.ext; intro w.
       rewrite !Deb.versions_disjunct_spec,
         (hasClauseb_reduceDeps D p Al HD),
         (hasClauseb_reduceDeps (Deps.singleton (p, Al)) p Al
@@ -1663,28 +1672,86 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       reflexivity.
     Qed.
 
+    (* The recommends gadget reads only the clause it is keyed by, exactly
+       as the disjunction gadget does; the escape it adds is a constant of
+       the clause, so no wider slice can change it. *)
+    Theorem versions_lookupSoftMA : forall R D Rec Pi G M (p : Pkg.t) Al,
+        Deps.In (p, Al) Rec ->
+        Deb.versions (reduceReal R) (reduceDeps D) (reduceRec Rec)
+          (reduceProv R Pi M) (reduceConf R G M)
+          (Deb.Name.Soft (reduceClause (parch p) Al)) =
+        Deb.versions Deb.PkgSet.empty Deb.Deps.empty
+          (reduceRec (Deps.singleton (p, Al))) Deb.Prov.empty Deb.Conf.empty
+          (Deb.Name.Soft (reduceClause (parch p) Al)).
+    Proof.
+      intros R D Rec Pi G M p Al HD; apply Deb.T.VSet.ext; intro w.
+      unfold reduceRec.
+      rewrite !Deb.versions_soft_spec,
+        (hasClauseb_reduceDeps Rec p Al HD),
+        (hasClauseb_reduceDeps (Deps.singleton (p, Al)) p Al
+           (singleton_clause p Al)).
+      reflexivity.
+    Qed.
+
+    Theorem dependees_lookupSoftMA :
+      forall R D Rec Pi G M (p : Pkg.t) Al (a' : Deb.Atom.t),
+        Deps.In (p, Al) Rec ->
+        Deb.dependees (reduceReal R) (reduceDeps D) (reduceRec Rec)
+          (reduceProv R Pi M) (reduceConf R G M)
+          (Deb.Name.Soft (reduceClause (parch p) Al),
+           Deb.Version.Atom a') =
+        Deb.dependees
+          (reduceReal (groupOf R (NSet.singleton (fst (fst a')))))
+          Deb.Deps.empty (reduceRec (Deps.singleton (p, Al)))
+          (reduceProv (groupOf R (NSet.singleton (fst (fst a'))))
+             (provOf Pi (NSet.singleton (fst (fst a')))) M)
+          Deb.Conf.empty
+          (Deb.Name.Soft (reduceClause (parch p) Al),
+           Deb.Version.Atom a').
+    Proof.
+      intros R D Rec Pi G M p Al a' HD.
+      assert (Hm : NSet.In (fst (fst a')) (NSet.singleton (fst (fst a'))))
+        by (apply NSet.singleton_spec; reflexivity).
+      apply Deb.T.DependeesSet.ext; intro y.
+      unfold reduceRec.
+      rewrite !Deb.dependees_soft_spec,
+        (hasClauseb_reduceDeps Rec p Al HD),
+        (hasClauseb_reduceDeps (Deps.singleton (p, Al)) p Al
+           (singleton_clause p Al)),
+        (tgt_restrict R Pi M (NSet.singleton (fst (fst a')))
+           (groupOf R (NSet.singleton (fst (fst a'))))
+           (groupOf R (NSet.singleton (fst (fst a'))))
+           (provOf Pi (NSet.singleton (fst (fst a')))) a'
+           (groupOf_sub R _) (groupOf_cov R _) (groupProvSlice R Pi _) Hm).
+      reflexivity.
+    Qed.
+
     (* An atom's providers are its base name's whole group across
-       architectures, plus that name's declared providers. *)
-    Theorem versions_lookupSelectorMA :
-      forall R D Pi G M (p : Pkg.t) Al (a : Atom.t),
-        Deps.In (p, Al) D -> AtomSet.In a Al ->
-        Deb.versions (reduceReal R) (reduceDeps D) (reduceProv R Pi M)
+       architectures, plus that name's declared providers.  The clause sets
+       reach the selector through one test and no other -- whether the atom
+       occurs at all -- so a slice may carry the atom's depends row, its
+       recommends row, or both, and the name's group is what fixes the
+       rest. *)
+    Theorem versions_lookupSelectorAgreeMA :
+      forall R D Rec (D' Rec' : Deb.Deps.t) Pi G M (p : Pkg.t) (a : Atom.t),
+        Deb.occursAtomb (Deb.allClauses (reduceDeps D) (reduceRec Rec))
+          (reduceAtom (parch p) a) =
+        Deb.occursAtomb (Deb.allClauses D' Rec') (reduceAtom (parch p) a) ->
+        Deb.versions (reduceReal R) (reduceDeps D) (reduceRec Rec)
+          (reduceProv R Pi M)
           (reduceConf R G M) (Deb.Name.Selector (reduceAtom (parch p) a)) =
         Deb.versions (reduceReal (groupOf R (NSet.singleton (aname a))))
-          (reduceDeps (Deps.singleton (p, Al)))
+          D' Rec'
           (reduceProv (groupOf R (NSet.singleton (aname a)))
              (provOf Pi (NSet.singleton (aname a))) M)
           Deb.Conf.empty (Deb.Name.Selector (reduceAtom (parch p) a)).
     Proof.
-      intros R D Pi G M p Al a HD Ha.
+      intros R D Rec D' Rec' Pi G M p a Hagree.
       assert (Hm : NSet.In (fst (fst (reduceAtom (parch p) a)))
                      (NSet.singleton (aname a)))
         by (apply NSet.singleton_spec; reflexivity).
       apply Deb.T.VSet.ext; intro w.
-      rewrite !Deb.versions_selector_spec,
-        (occursAtomb_reduceDeps D p Al a HD Ha),
-        (occursAtomb_reduceDeps (Deps.singleton (p, Al)) p Al a
-           (singleton_clause p Al) Ha),
+      rewrite !Deb.versions_selector_spec, <- Hagree,
         (provb_restrict R Pi M (NSet.singleton (aname a))
            (groupOf R (NSet.singleton (aname a)))
            (provOf Pi (NSet.singleton (aname a)))
@@ -1698,15 +1765,68 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       reflexivity.
     Qed.
 
-    Theorem versions_lookupGuardMA : forall R D Pi G M (q : Pkg.t) ea z,
+    Theorem versions_lookupSelectorMA :
+      forall R D Rec Pi G M (p : Pkg.t) Al (a : Atom.t),
+        Deps.In (p, Al) D -> AtomSet.In a Al ->
+        Deb.versions (reduceReal R) (reduceDeps D) (reduceRec Rec)
+          (reduceProv R Pi M)
+          (reduceConf R G M) (Deb.Name.Selector (reduceAtom (parch p) a)) =
+        Deb.versions (reduceReal (groupOf R (NSet.singleton (aname a))))
+          (reduceDeps (Deps.singleton (p, Al))) Deb.Deps.empty
+          (reduceProv (groupOf R (NSet.singleton (aname a)))
+             (provOf Pi (NSet.singleton (aname a))) M)
+          Deb.Conf.empty (Deb.Name.Selector (reduceAtom (parch p) a)).
+    Proof.
+      intros R D Rec Pi G M p Al a HD Ha.
+      apply versions_lookupSelectorAgreeMA.
+      rewrite (Deb.occursAtomb_allClausesL (reduceDeps D) (reduceRec Rec)
+                 (reduceAtom (parch p) a)
+                 (occursAtomb_reduceDeps D p Al a HD Ha)),
+        (Deb.occursAtomb_allClausesL (reduceDeps (Deps.singleton (p, Al)))
+           Deb.Deps.empty (reduceAtom (parch p) a)
+           (occursAtomb_reduceDeps (Deps.singleton (p, Al)) p Al a
+              (singleton_clause p Al) Ha)).
+      reflexivity.
+    Qed.
+
+    (* An atom occurring only in a recommends clause still mints a selector,
+       so its slice has to carry the recommends row rather than a depends
+       one; otherwise the selector would see no versions and every provided
+       recommend would take the escape. *)
+    Theorem versions_lookupSelectorRecMA :
+      forall R D Rec Pi G M (p : Pkg.t) Al (a : Atom.t),
+        Deps.In (p, Al) Rec -> AtomSet.In a Al ->
+        Deb.versions (reduceReal R) (reduceDeps D) (reduceRec Rec)
+          (reduceProv R Pi M)
+          (reduceConf R G M) (Deb.Name.Selector (reduceAtom (parch p) a)) =
+        Deb.versions (reduceReal (groupOf R (NSet.singleton (aname a))))
+          Deb.Deps.empty (reduceRec (Deps.singleton (p, Al)))
+          (reduceProv (groupOf R (NSet.singleton (aname a)))
+             (provOf Pi (NSet.singleton (aname a))) M)
+          Deb.Conf.empty (Deb.Name.Selector (reduceAtom (parch p) a)).
+    Proof.
+      intros R D Rec Pi G M p Al a HRec Ha.
+      apply versions_lookupSelectorAgreeMA.
+      rewrite (Deb.occursAtomb_allClausesR (reduceDeps D) (reduceRec Rec)
+                 (reduceAtom (parch p) a)
+                 (occursAtomb_reduceDeps Rec p Al a HRec Ha)),
+        (Deb.occursAtomb_allClausesR Deb.Deps.empty
+           (reduceRec (Deps.singleton (p, Al))) (reduceAtom (parch p) a)
+           (occursAtomb_reduceDeps (Deps.singleton (p, Al)) p Al a
+              (singleton_clause p Al) Ha)).
+      reflexivity.
+    Qed.
+
+    Theorem versions_lookupGuardMA : forall R D Rec Pi G M (q : Pkg.t) ea z,
         PkgSet.In q R ->
-        Deb.versions (reduceReal R) (reduceDeps D) (reduceProv R Pi M)
+        Deb.versions (reduceReal R) (reduceDeps D) (reduceRec Rec)
+          (reduceProv R Pi M)
           (reduceConf R G M) (Deb.Name.Guard (embedPkg q) ea z) =
-        Deb.versions Deb.PkgSet.empty Deb.Deps.empty Deb.Prov.empty
-          (reduceConf (PkgSet.singleton q) (confBy G q) M)
+        Deb.versions Deb.PkgSet.empty Deb.Deps.empty Deb.Deps.empty
+          Deb.Prov.empty (reduceConf (PkgSet.singleton q) (confBy G q) M)
           (Deb.Name.Guard (embedPkg q) ea z).
     Proof.
-      intros R D Pi G M q ea z HqR.
+      intros R D Rec Pi G M q ea z HqR.
       assert (Hr : PkgSet.Subset (PkgSet.singleton q) R).
       { intros y Hy; apply PkgSet.singleton_spec in Hy; subst y; exact HqR. }
       assert (Hg : Conf.Subset (confBy G q) G).
@@ -1727,13 +1847,14 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     Theorem versions_lookupGuardMA_pseudo :
-      forall R D Pi G M (n : N.t) (x : NameArch) (v : V.t) ea z,
+      forall R D Rec Pi G M (n : N.t) (x : NameArch) (v : V.t) ea z,
         (forall b, x <> QAArch b) ->
-        Deb.versions (reduceReal R) (reduceDeps D) (reduceProv R Pi M)
+        Deb.versions (reduceReal R) (reduceDeps D) (reduceRec Rec)
+          (reduceProv R Pi M)
           (reduceConf R G M) (Deb.Name.Guard ((n, x), v) ea z) =
         Deb.T.VSet.empty.
     Proof.
-      intros R D Pi G M n x v ea z Hx; apply Deb.T.VSet.ext; intro w.
+      intros R D Rec Pi G M n x v ea z Hx; apply Deb.T.VSet.ext; intro w.
       rewrite Deb.versions_guard_spec.
       split.
       - intros [Hc _]; exfalso.
@@ -1744,22 +1865,23 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     Theorem dependees_lookupDisjunctMA :
-      forall R D Pi G M (p : Pkg.t) Al (a' : Deb.Atom.t),
+      forall R D Rec Pi G M (p : Pkg.t) Al (a' : Deb.Atom.t),
         Deps.In (p, Al) D ->
-        Deb.dependees (reduceReal R) (reduceDeps D) (reduceProv R Pi M)
+        Deb.dependees (reduceReal R) (reduceDeps D) (reduceRec Rec)
+          (reduceProv R Pi M)
           (reduceConf R G M)
           (Deb.Name.Disjunct (reduceClause (parch p) Al),
            Deb.Version.Atom a') =
         Deb.dependees
           (reduceReal (groupOf R (NSet.singleton (fst (fst a')))))
-          (reduceDeps (Deps.singleton (p, Al)))
+          (reduceDeps (Deps.singleton (p, Al))) Deb.Deps.empty
           (reduceProv (groupOf R (NSet.singleton (fst (fst a'))))
              (provOf Pi (NSet.singleton (fst (fst a')))) M)
           Deb.Conf.empty
           (Deb.Name.Disjunct (reduceClause (parch p) Al),
            Deb.Version.Atom a').
     Proof.
-      intros R D Pi G M p Al a' HD.
+      intros R D Rec Pi G M p Al a' HD.
       assert (Hm : NSet.In (fst (fst a')) (NSet.singleton (fst (fst a'))))
         by (apply NSet.singleton_spec; reflexivity).
       apply Deb.T.DependeesSet.ext; intro y.
@@ -1776,27 +1898,30 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     (* every candidate shape at once: a provided and a real candidate under
-       the same selector read the same slice, and the rest are empty *)
-    Theorem dependees_lookupSelectorMA :
-      forall R D Pi G M (p : Pkg.t) Al (a : Atom.t) (y : Deb.Version.t),
-        Deps.In (p, Al) D -> AtomSet.In a Al ->
-        Deb.dependees (reduceReal R) (reduceDeps D) (reduceProv R Pi M)
+       the same selector read the same slice, and the rest are empty.  As
+       for versions, the two clause sets are read only through the
+       occurrence test, so any pair answering it alike serves. *)
+    Theorem dependees_lookupSelectorAgreeMA :
+      forall R D Rec (D' Rec' : Deb.Deps.t) Pi G M (p : Pkg.t) (a : Atom.t)
+             (y : Deb.Version.t),
+        Deb.occursAtomb (Deb.allClauses (reduceDeps D) (reduceRec Rec))
+          (reduceAtom (parch p) a) =
+        Deb.occursAtomb (Deb.allClauses D' Rec') (reduceAtom (parch p) a) ->
+        Deb.dependees (reduceReal R) (reduceDeps D) (reduceRec Rec)
+          (reduceProv R Pi M)
           (reduceConf R G M)
           (Deb.Name.Selector (reduceAtom (parch p) a), y) =
         Deb.dependees (reduceReal (groupOf R (NSet.singleton (aname a))))
-          (reduceDeps (Deps.singleton (p, Al)))
+          D' Rec'
           (reduceProv (groupOf R (NSet.singleton (aname a)))
              (provOf Pi (NSet.singleton (aname a))) M)
           Deb.Conf.empty
           (Deb.Name.Selector (reduceAtom (parch p) a), y).
     Proof.
-      intros R D Pi G M p Al a y HD Ha.
+      intros R D Rec D' Rec' Pi G M p a y Hagree.
       assert (Hm : NSet.In (fst (fst (reduceAtom (parch p) a)))
                      (NSet.singleton (aname a)))
         by (apply NSet.singleton_spec; reflexivity).
-      assert (Ho := occursAtomb_reduceDeps D p Al a HD Ha).
-      assert (Ho1 := occursAtomb_reduceDeps (Deps.singleton (p, Al)) p Al a
-                       (singleton_clause p Al) Ha).
       assert (Hpb := provb_restrict R Pi M (NSet.singleton (aname a))
                        (groupOf R (NSet.singleton (aname a)))
                        (provOf Pi (NSet.singleton (aname a)))
@@ -1809,18 +1934,75 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                        (groupOf_cov R _) (groupProvSlice R Pi _) Hm).
       destruct y; try reflexivity;
         apply Deb.T.DependeesSet.ext; intro z.
-      - rewrite !Deb.dependees_selector_spec, Ho, Ho1, Hpb, Hus; reflexivity.
-      - rewrite !Deb.dependees_selector_real_spec, Ho, Ho1, Hpb, Hus;
+      - rewrite !Deb.dependees_selector_spec, <- Hagree, Hpb, Hus;
+          reflexivity.
+      - rewrite !Deb.dependees_selector_real_spec, <- Hagree, Hpb, Hus;
           reflexivity.
     Qed.
 
+    Theorem dependees_lookupSelectorMA :
+      forall R D Rec Pi G M (p : Pkg.t) Al (a : Atom.t) (y : Deb.Version.t),
+        Deps.In (p, Al) D -> AtomSet.In a Al ->
+        Deb.dependees (reduceReal R) (reduceDeps D) (reduceRec Rec)
+          (reduceProv R Pi M)
+          (reduceConf R G M)
+          (Deb.Name.Selector (reduceAtom (parch p) a), y) =
+        Deb.dependees (reduceReal (groupOf R (NSet.singleton (aname a))))
+          (reduceDeps (Deps.singleton (p, Al))) Deb.Deps.empty
+          (reduceProv (groupOf R (NSet.singleton (aname a)))
+             (provOf Pi (NSet.singleton (aname a))) M)
+          Deb.Conf.empty
+          (Deb.Name.Selector (reduceAtom (parch p) a), y).
+    Proof.
+      intros R D Rec Pi G M p Al a y HD Ha.
+      apply dependees_lookupSelectorAgreeMA.
+      rewrite (Deb.occursAtomb_allClausesL (reduceDeps D) (reduceRec Rec)
+                 (reduceAtom (parch p) a)
+                 (occursAtomb_reduceDeps D p Al a HD Ha)),
+        (Deb.occursAtomb_allClausesL (reduceDeps (Deps.singleton (p, Al)))
+           Deb.Deps.empty (reduceAtom (parch p) a)
+           (occursAtomb_reduceDeps (Deps.singleton (p, Al)) p Al a
+              (singleton_clause p Al) Ha)).
+      reflexivity.
+    Qed.
+
+    (* The recommends counterpart: the selector minted by an atom that only
+       a recommends clause mentions reads the same group slice, with the
+       recommends row in the Rec position. *)
+    Theorem dependees_lookupSelectorRecMA :
+      forall R D Rec Pi G M (p : Pkg.t) Al (a : Atom.t) (y : Deb.Version.t),
+        Deps.In (p, Al) Rec -> AtomSet.In a Al ->
+        Deb.dependees (reduceReal R) (reduceDeps D) (reduceRec Rec)
+          (reduceProv R Pi M)
+          (reduceConf R G M)
+          (Deb.Name.Selector (reduceAtom (parch p) a), y) =
+        Deb.dependees (reduceReal (groupOf R (NSet.singleton (aname a))))
+          Deb.Deps.empty (reduceRec (Deps.singleton (p, Al)))
+          (reduceProv (groupOf R (NSet.singleton (aname a)))
+             (provOf Pi (NSet.singleton (aname a))) M)
+          Deb.Conf.empty
+          (Deb.Name.Selector (reduceAtom (parch p) a), y).
+    Proof.
+      intros R D Rec Pi G M p Al a y HRec Ha.
+      apply dependees_lookupSelectorAgreeMA.
+      rewrite (Deb.occursAtomb_allClausesR (reduceDeps D) (reduceRec Rec)
+                 (reduceAtom (parch p) a)
+                 (occursAtomb_reduceDeps Rec p Al a HRec Ha)),
+        (Deb.occursAtomb_allClausesR Deb.Deps.empty
+           (reduceRec (Deps.singleton (p, Al))) (reduceAtom (parch p) a)
+           (occursAtomb_reduceDeps (Deps.singleton (p, Al)) p Al a
+              (singleton_clause p Al) Ha)).
+      reflexivity.
+    Qed.
+
     Theorem dependees_lookupGuardMA :
-      forall R D Pi G M (pq : Deb.Pkg.t) (ea : Deb.Atom.t) z w,
-        Deb.dependees (reduceReal R) (reduceDeps D) (reduceProv R Pi M)
+      forall R D Rec Pi G M (pq : Deb.Pkg.t) (ea : Deb.Atom.t) z w,
+        Deb.dependees (reduceReal R) (reduceDeps D) (reduceRec Rec)
+          (reduceProv R Pi M)
           (reduceConf R G M) (Deb.Name.Guard pq ea z, w) =
         Deb.T.DependeesSet.empty.
     Proof.
-      intros R D Pi G M pq ea z w; apply Deb.Lookup.dependees_lookupGuard.
+      intros R D Rec Pi G M pq ea z w; apply Deb.Lookup.dependees_lookupGuard.
     Qed.
 
     (* The crux: p's own row pulls three slices. Dependency targets need the
@@ -1830,12 +2012,13 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
        carrier; and the conflicts that can reach p are p's own negatives,
        every negative naming p's name or something p provides, and the
        implicit group exclusions of p's own group. *)
-    Theorem dependees_lookupOrigMA : forall R D Pi G M (p : Pkg.t),
+    Theorem dependees_lookupOrigMA : forall R D Rec Pi G M (p : Pkg.t),
         PkgSet.In p R ->
-        Deb.dependees (reduceReal R) (reduceDeps D) (reduceProv R Pi M)
+        Deb.dependees (reduceReal R) (reduceDeps D) (reduceRec Rec)
+          (reduceProv R Pi M)
           (reduceConf R G M) (Deb.embedPkg (embedPkg p)) =
         Deb.dependees (reduceReal (groupOf R (atomNames D p)))
-          (reduceDeps (depsOf D p))
+          (reduceDeps (depsOf D p)) (reduceRec (depsOf Rec p))
           (reduceProv (PkgSet.add p (groupOf R (atomNames D p)))
              (Prov.union (provOf Pi (atomNames D p)) (provBy Pi p)) M)
           (reduceConf (PkgSet.add p (groupOf R (NSet.singleton (pname p))))
@@ -1843,7 +2026,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                 (confOn G (NSet.add (pname p) (provNames Pi p)))) M)
           (Deb.embedPkg (embedPkg p)).
     Proof.
-      intros R D Pi G M p HpR.
+      intros R D Rec Pi G M p HpR.
       set (ns := atomNames D p).
       set (Rr := groupOf R ns).
       set (Rp := PkgSet.add p Rr).
@@ -1918,8 +2101,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       rewrite !Deb.dependees_orig_spec.
       split.
       - intros [[A [HA Hcase]] |
-                [[a0 [z [Ha0 Hy]]] |
-                 [m0 [u0 [a0 [z [Hg [Hmbt [Hne [Hex Hy]]]]]]]]]].
+                [[A [HA Hy]] |
+                 [[a0 [z [Ha0 Hy]]] |
+                  [m0 [u0 [a0 [z [Hg [Hmbt [Hne [Hex Hy]]]]]]]]]]].
         + left; exists A; split;
             [exact (proj1 (reduceDeps_fibre D p A) HA) |].
           destruct Hcase as [[Hcard [a1 [Hmin Hy]]] | [Hcard Hy]].
@@ -1930,10 +2114,12 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             exact (reduceDeps_atomNames D p A a1 HA
                      (Deb.AtomSet.min_elt_spec1 Hmin)).
           * right; split; [exact Hcard | exact Hy].
-        + right; left; exists a0, z; split; [| exact Hy].
+        + right; left; exists A; split;
+            [exact (proj1 (reduceDeps_fibre Rec p A) HA) | exact Hy].
+        + right; right; left; exists a0, z; split; [| exact Hy].
           exact (proj1 (reduceConf_pkg R G M p Rc Gs a0 z HRc HGs Hinp Hown)
                    Ha0).
-        + right; right; exists m0, u0, a0, z.
+        + right; right; right; exists m0, u0, a0, z.
           split;
             [ exact (proj1 (reduceConf_target R Pi G M ns2 p Rc Gs
                               (m0, u0) a0 z HpR Hcsl Hpn Hprovns
@@ -1942,8 +2128,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                      | split; [exact Hne
                               | split; [exact Hex | exact Hy]]]].
       - intros [[A [HA Hcase]] |
-                [[a0 [z [Ha0 Hy]]] |
-                 [m0 [u0 [a0 [z [Hg [Hmbt [Hne [Hex Hy]]]]]]]]]].
+                [[A [HA Hy]] |
+                 [[a0 [z [Ha0 Hy]]] |
+                  [m0 [u0 [a0 [z [Hg [Hmbt [Hne [Hex Hy]]]]]]]]]]].
         + assert (HA' : Deb.Deps.In (embedPkg p, A) (reduceDeps D))
             by exact (proj2 (reduceDeps_fibre D p A) HA).
           left; exists A; split; [exact HA' |].
@@ -1955,13 +2142,15 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             exact (reduceDeps_atomNames D p A a1 HA'
                      (Deb.AtomSet.min_elt_spec1 Hmin)).
           * right; split; [exact Hcard | exact Hy].
-        + right; left; exists a0, z; split; [| exact Hy].
+        + right; left; exists A; split;
+            [exact (proj2 (reduceDeps_fibre Rec p A) HA) | exact Hy].
+        + right; right; left; exists a0, z; split; [| exact Hy].
           exact (proj2 (reduceConf_pkg R G M p Rc Gs a0 z HRc HGs Hinp Hown)
                    Ha0).
         + assert (Hmbt' : Deb.matchb (reduceProv R Pi M)
                             ((pname p, QAArch (parch p)), pver p) a0 = true)
             by (rewrite <- Hmb; exact Hmbt).
-          right; right; exists m0, u0, a0, z.
+          right; right; right; exists m0, u0, a0, z.
           split;
             [ exact (proj2 (reduceConf_target R Pi G M ns2 p Rc Gs
                               (m0, u0) a0 z HpR Hcsl Hpn Hprovns

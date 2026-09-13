@@ -193,6 +193,12 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Inductive name : Type :=
     | Orig (n : N.t)
     | Disjunct (A : AtomSet.t)
+    (* a recommends clause: its alternatives as for Disjunct, and an escape
+       version besides, so that the clause is discharged either way and
+       constrains nothing.  Kept apart from Disjunct because the two are
+       content-keyed by the same atom set, and one clause may be a Depends
+       of one package and a Recommends of another. *)
+    | Soft (A : AtomSet.t)
     | Selector (a : Atom.t)
     | Guard (p : Pkg.t) (a : Atom.t) (x : bool).
     Definition t := name.
@@ -204,6 +210,10 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       | Disjunct _, Orig _ => Gt
       | Disjunct A1, Disjunct A2 => AtomSet.AsUOT.compare A1 A2
       | Disjunct _, _ => Lt
+      | Soft _, Orig _ => Gt
+      | Soft _, Disjunct _ => Gt
+      | Soft A1, Soft A2 => AtomSet.AsUOT.compare A1 A2
+      | Soft _, _ => Lt
       | Selector a1, Selector a2 => Atom.compare a1 a2
       | Selector _, Guard _ _ _ => Lt
       | Selector _, _ => Gt
@@ -307,6 +317,11 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Definition versionsDisj (A : AtomSet.t) : T.VSet.t :=
     SOaw.map (fun a => Version.Atom a) A.
 
+  (* the escape: a candidate of the recommends gadget that discharges nothing,
+     so the clause is always satisfiable and constrains nothing *)
+  Definition versionsSoft (A : AtomSet.t) : T.VSet.t :=
+    T.VSet.add Version.Zero (versionsDisj A).
+
   Module ASEqb := UOTEqb AtomSet.AsUOT.
   Definition hasClauseb (D : Deps.t) (A : AtomSet.t) : bool :=
     Deps.exists_ (fun '(_, Al) => ASEqb.eqb Al A) D.
@@ -314,21 +329,31 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Definition occursAtomb (D : Deps.t) (a : Atom.t) : bool :=
     Deps.exists_ (fun '(_, A) => AtomSet.mem a A) D.
 
+  (* An atom's selector gadget is minted from its Depends and its Recommends
+     occurrences alike: a recommended alternative needs the same provider
+     fan-out to reach, and a candidate nothing is forced to pick constrains
+     nothing. *)
+  Definition allClauses (D Rec : Deps.t) : Deps.t := Deps.union D Rec.
+
   Definition exemptb (x : bool) (m n : N.t) : bool :=
     andb x (NG.groupEq m n).
 
   Definition zeroOne : T.VSet.t :=
     T.VSet.add Version.Zero (T.VSet.singleton Version.One).
 
-  Definition versions (R : PkgSet.t) (D : Deps.t) (Pi : Prov.t)
+  Definition versions (R : PkgSet.t) (D Rec : Deps.t) (Pi : Prov.t)
       (G : Conf.t) (n' : Name.t) : T.VSet.t :=
     match n' with
     | Name.Orig n => embedVS (Ver.realVersions R n)
     | Name.Disjunct A =>
         if andb (hasClauseb D A) (2 <=? AtomSet.cardinal A)
         then versionsDisj A else T.VSet.empty
+    (* no cardinality test, unlike Disjunct: a one-alternative Recommends
+       still needs its escape, which is the whole of the gadget *)
+    | Name.Soft A =>
+        if hasClauseb Rec A then versionsSoft A else T.VSet.empty
     | Name.Selector a =>
-        if andb (occursAtomb D a) (provb Pi a)
+        if andb (occursAtomb (allClauses D Rec) a) (provb Pi a)
         then us R Pi a else T.VSet.empty
     | Name.Guard p a x =>
         if Conf.mem (p, (a, x)) G then zeroOne else T.VSet.empty
@@ -336,7 +361,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
 
   Module SOde := SetOps ClauseElt T.Dependees Deps T.DependeesSet.
   Module SOge := SetOps ConfElt T.Dependees Conf T.DependeesSet.
-  Definition dependees (R : PkgSet.t) (D : Deps.t) (Pi : Prov.t)
+  Definition dependees (R : PkgSet.t) (D Rec : Deps.t) (Pi : Prov.t)
       (G : Conf.t) (s : T.Pkg.t) : T.DependeesSet.t :=
     match s with
     | (Name.Orig n, Version.Orig v) =>
@@ -352,29 +377,44 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
                else None)
              D)
           (T.DependeesSet.union
-             (SOge.filterMap (fun e =>
-                  if Pkg.eq_dec (fst e) (n, v)
-                  then Some (Name.Guard (n, v) (fst (snd e)) (snd (snd e)),
-                             T.VSet.singleton Version.One)
+             (* the edge offers the escape alongside the alternatives, so the
+                clause is dischargeable whatever else is installed *)
+             (SOde.filterMap (fun c =>
+                  if Pkg.eq_dec (fst c) (n, v)
+                  then Some (Name.Soft (snd c), versionsSoft (snd c))
                   else None)
-                G)
-             (SOge.filterMap (fun e =>
-                  if andb (matchb Pi (n, v) (fst (snd e)))
-                       (andb
-                          (negb (if Pkg.eq_dec (fst e) (n, v)
-                                 then true else false))
-                          (negb (exemptb (snd (snd e)) n (fst (fst e)))))
-                  then Some (Name.Guard (fst e) (fst (snd e)) (snd (snd e)),
-                             T.VSet.singleton Version.Zero)
-                  else None)
-                G))
+                Rec)
+             (T.DependeesSet.union
+                (SOge.filterMap (fun e =>
+                     if Pkg.eq_dec (fst e) (n, v)
+                     then Some (Name.Guard (n, v) (fst (snd e)) (snd (snd e)),
+                                T.VSet.singleton Version.One)
+                     else None)
+                   G)
+                (SOge.filterMap (fun e =>
+                     if andb (matchb Pi (n, v) (fst (snd e)))
+                          (andb
+                             (negb (if Pkg.eq_dec (fst e) (n, v)
+                                    then true else false))
+                             (negb (exemptb (snd (snd e)) n (fst (fst e)))))
+                     then Some (Name.Guard (fst e) (fst (snd e)) (snd (snd e)),
+                                T.VSet.singleton Version.Zero)
+                     else None)
+                   G)))
     | (Name.Disjunct A, Version.Atom a) =>
         if andb (hasClauseb D A)
              (andb (2 <=? AtomSet.cardinal A) (AtomSet.mem a A))
         then T.DependeesSet.singleton (tgt R Pi a)
         else T.DependeesSet.empty
+    (* the escape (Name.Soft A, Version.Zero) falls through to the empty
+       catch-all: picking it discharges nothing, which is what makes the
+       clause free *)
+    | (Name.Soft A, Version.Atom a) =>
+        if andb (hasClauseb Rec A) (AtomSet.mem a A)
+        then T.DependeesSet.singleton (tgt R Pi a)
+        else T.DependeesSet.empty
     | (Name.Selector a, Version.Ref m w) =>
-        if andb (occursAtomb D a)
+        if andb (occursAtomb (allClauses D Rec) a)
              (andb (provb Pi a) (T.VSet.mem (Version.Ref m w) (us R Pi a)))
         then T.DependeesSet.singleton
                (Name.Orig m, T.VSet.singleton (Version.Orig w))
@@ -383,7 +423,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
        does not carry one -- it does not have to, since the selector it hangs
        under is the only name it could have had *)
     | (Name.Selector a, Version.RefReal w) =>
-        if andb (occursAtomb D a)
+        if andb (occursAtomb (allClauses D Rec) a)
              (andb (provb Pi a) (T.VSet.mem (Version.RefReal w) (us R Pi a)))
         then T.DependeesSet.singleton
                (Name.Orig (aname a), T.VSet.singleton (Version.Orig w))
@@ -410,6 +450,14 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         else T.PkgSet.empty)
       D.
 
+  Definition softAtoms (A : AtomSet.t) : T.PkgSet.t :=
+    SOap.map (fun a => (Name.Soft A, Version.Atom a)) A.
+
+  Definition realSoft (Rec : Deps.t) : T.PkgSet.t :=
+    SOcp.unionMap (fun '(_, A) =>
+        T.PkgSet.add (Name.Soft A, Version.Zero) (softAtoms A))
+      Rec.
+
   Module SOwp := SetOps VersionOT T.Pkg T.VSet T.PkgSet.
   Definition selectorVers (a : Atom.t) (ws : T.VSet.t) : T.PkgSet.t :=
     SOwp.map (fun w => (Name.Selector a, w)) ws.
@@ -433,21 +481,23 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           (T.PkgSet.singleton (Name.Guard p a x, Version.One)))
       G.
 
-  Definition reduceReal (R : PkgSet.t) (D : Deps.t) (Pi : Prov.t)
+  Definition reduceReal (R : PkgSet.t) (D Rec : Deps.t) (Pi : Prov.t)
       (G : Conf.t) : T.PkgSet.t :=
     T.PkgSet.union (realOrig R)
       (T.PkgSet.union (realDisjunct D)
-         (T.PkgSet.union (realSelector R D Pi) (realGuard G))).
+         (T.PkgSet.union (realSoft Rec)
+            (T.PkgSet.union (realSelector R (allClauses D Rec) Pi)
+               (realGuard G)))).
 
   Module SOee := SetOps T.Dependees T.DepElt T.DependeesSet T.DepRel.
   Definition depEdges (s : T.Pkg.t) (es : T.DependeesSet.t) : T.DepRel.t :=
     SOee.map (fun e => (s, e)) es.
 
   Module SOse := SetOps T.Pkg T.DepElt T.PkgSet T.DepRel.
-  Definition reduceDeps (R : PkgSet.t) (D : Deps.t) (Pi : Prov.t)
+  Definition reduceDeps (R : PkgSet.t) (D Rec : Deps.t) (Pi : Prov.t)
       (G : Conf.t) : T.DepRel.t :=
-    SOse.unionMap (fun s => depEdges s (dependees R D Pi G s))
-      (reduceReal R D Pi G).
+    SOse.unionMap (fun s => depEdges s (dependees R D Rec Pi G s))
+      (reduceReal R D Rec Pi G).
 
   Lemma provb_iff : forall Pi (n : N.t) (f : Ver.Formula),
       provb Pi (n, f) = true <->
@@ -517,6 +567,42 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       apply AtomSet.mem_spec; exact Hm.
   Qed.
 
+  Lemma occursAtomb_allClauses : forall D Rec a,
+      occursAtomb (allClauses D Rec) a =
+      orb (occursAtomb D a) (occursAtomb Rec a).
+  Proof.
+    intros D Rec a; apply Bool.eq_true_iff_eq.
+    rewrite Bool.orb_true_iff, !occursAtomb_iff; unfold allClauses.
+    split.
+    - intros [p [Al [Hc Hm]]]; apply Deps.union_spec in Hc.
+      destruct Hc as [Hc | Hc]; [left | right]; exists p, Al; split;
+        assumption.
+    - intros [[p [Al [Hc Hm]]] | [p [Al [Hc Hm]]]]; exists p, Al.
+      + split; [apply Deps.union_spec; left; exact Hc | exact Hm].
+      + split; [apply Deps.union_spec; right; exact Hc | exact Hm].
+  Qed.
+
+  Lemma allClauses_inL : forall D Rec (p : Pkg.t) A,
+      Deps.In (p, A) D -> Deps.In (p, A) (allClauses D Rec).
+  Proof. intros D Rec p A H; apply Deps.union_spec; left; exact H. Qed.
+
+  Lemma allClauses_inR : forall D Rec (p : Pkg.t) A,
+      Deps.In (p, A) Rec -> Deps.In (p, A) (allClauses D Rec).
+  Proof. intros D Rec p A H; apply Deps.union_spec; right; exact H. Qed.
+
+  Lemma occursAtomb_allClausesL : forall D Rec a,
+      occursAtomb D a = true -> occursAtomb (allClauses D Rec) a = true.
+  Proof.
+    intros D Rec a H; rewrite occursAtomb_allClauses, H; reflexivity.
+  Qed.
+
+  Lemma occursAtomb_allClausesR : forall D Rec a,
+      occursAtomb Rec a = true -> occursAtomb (allClauses D Rec) a = true.
+  Proof.
+    intros D Rec a H; rewrite occursAtomb_allClauses, H, Bool.orb_true_r;
+      reflexivity.
+  Qed.
+
   Lemma exemptb_iff : forall x (m n : N.t),
       exemptb x m n = false <-> (x = true -> NG.groupEq m n = false).
   Proof.
@@ -571,6 +657,41 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       rewrite Hcard.
       apply mem_disjunctAtoms.
       exists a; split; [exact Ha | reflexivity].
+  Qed.
+
+  Lemma mem_versionsSoft : forall A w,
+      T.VSet.In w (versionsSoft A) <->
+      w = Version.Zero \/ exists a, AtomSet.In a A /\ w = Version.Atom a.
+  Proof.
+    intros A w; unfold versionsSoft, versionsDisj.
+    rewrite SOvw.add_in, SOaw.mem_map; reflexivity.
+  Qed.
+
+  Lemma mem_softAtoms : forall A y,
+      T.PkgSet.In y (softAtoms A) <->
+      exists a, AtomSet.In a A /\ y = (Name.Soft A, Version.Atom a).
+  Proof.
+    intros A y; unfold softAtoms; rewrite SOap.mem_map; tauto.
+  Qed.
+
+  Lemma mem_realSoft : forall Rec y,
+      T.PkgSet.In y (realSoft Rec) <->
+      exists p Al, Deps.In (p, Al) Rec /\
+        (y = (Name.Soft Al, Version.Zero) \/
+         exists a, AtomSet.In a Al /\ y = (Name.Soft Al, Version.Atom a)).
+  Proof.
+    intros Rec y; unfold realSoft; rewrite SOcp.mem_unionMap.
+    split.
+    - intros [[p Al] [Hc Hy]]; cbn beta iota in Hy.
+      rewrite SOcp.add_in in Hy.
+      exists p, Al; split; [exact Hc |].
+      destruct Hy as [Hy | Hy]; [left; exact Hy |].
+      right; apply mem_softAtoms; exact Hy.
+    - intros [p [Al [Hc Hy]]].
+      exists (p, Al); split; [exact Hc | cbn beta iota].
+      rewrite SOcp.add_in.
+      destruct Hy as [Hy | Hy]; [left; exact Hy |].
+      right; apply mem_softAtoms; exact Hy.
   Qed.
 
   Lemma mem_selectorVers : forall a ws y,
@@ -634,22 +755,22 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       rewrite SOgp.add_in, SOgp.singleton_in; exact Hy.
   Qed.
 
-  Lemma versions_orig_spec : forall R D Pi G n w,
-      T.VSet.In w (versions R D Pi G (Name.Orig n)) <->
+  Lemma versions_orig_spec : forall R D Rec Pi G n w,
+      T.VSet.In w (versions R D Rec Pi G (Name.Orig n)) <->
       exists v, PkgSet.In (n, v) R /\ w = Version.Orig v.
   Proof.
-    intros R D Pi G n w; cbn [versions].
+    intros R D Rec Pi G n w; cbn [versions].
     unfold embedVS; rewrite SOvw.mem_map.
     split; intros [v [Hv Hw]]; exists v;
       (split; [apply Ver.realVersions_spec; exact Hv | exact Hw]).
   Qed.
 
-  Lemma versions_disjunct_spec : forall R D Pi G A w,
-      T.VSet.In w (versions R D Pi G (Name.Disjunct A)) <->
+  Lemma versions_disjunct_spec : forall R D Rec Pi G A w,
+      T.VSet.In w (versions R D Rec Pi G (Name.Disjunct A)) <->
       hasClauseb D A = true /\ (2 <=? AtomSet.cardinal A) = true /\
       T.VSet.In w (versionsDisj A).
   Proof.
-    intros R D Pi G A w; cbn [versions].
+    intros R D Rec Pi G A w; cbn [versions].
     destruct (hasClauseb D A) eqn:H1; cbn [andb].
     - destruct (2 <=? AtomSet.cardinal A) eqn:H2.
       + split.
@@ -661,13 +782,25 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
               intros (H & _); discriminate H].
   Qed.
 
-  Lemma versions_selector_spec : forall R D Pi G a w,
-      T.VSet.In w (versions R D Pi G (Name.Selector a)) <->
-      occursAtomb D a = true /\ provb Pi a = true /\
+  Lemma versions_soft_spec : forall R D Rec Pi G A w,
+      T.VSet.In w (versions R D Rec Pi G (Name.Soft A)) <->
+      hasClauseb Rec A = true /\ T.VSet.In w (versionsSoft A).
+  Proof.
+    intros R D Rec Pi G A w; cbn [versions].
+    destruct (hasClauseb Rec A) eqn:H1.
+    - split; [intro H; split; [reflexivity | exact H] |
+              intros (_ & H); exact H].
+    - split; [intro H; exfalso; exact (SOvw.empty_in _ H) |
+              intros (H & _); discriminate H].
+  Qed.
+
+  Lemma versions_selector_spec : forall R D Rec Pi G a w,
+      T.VSet.In w (versions R D Rec Pi G (Name.Selector a)) <->
+      occursAtomb (allClauses D Rec) a = true /\ provb Pi a = true /\
       T.VSet.In w (us R Pi a).
   Proof.
-    intros R D Pi G a w; cbn [versions].
-    destruct (occursAtomb D a) eqn:H1; cbn [andb].
+    intros R D Rec Pi G a w; cbn [versions].
+    destruct (occursAtomb (allClauses D Rec) a) eqn:H1; cbn [andb].
     - destruct (provb Pi a) eqn:H2.
       + split.
         * intro H; split; [reflexivity | split; [reflexivity | exact H]].
@@ -678,11 +811,11 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
               intros (H & _); discriminate H].
   Qed.
 
-  Lemma versions_guard_spec : forall R D Pi G p a x w,
-      T.VSet.In w (versions R D Pi G (Name.Guard p a x)) <->
+  Lemma versions_guard_spec : forall R D Rec Pi G p a x w,
+      T.VSet.In w (versions R D Rec Pi G (Name.Guard p a x)) <->
       Conf.In (p, (a, x)) G /\ (w = Version.Zero \/ w = Version.One).
   Proof.
-    intros R D Pi G p a x w; cbn [versions].
+    intros R D Rec Pi G p a x w; cbn [versions].
     destruct (Conf.mem (p, (a, x)) G) eqn:Hm.
     - apply Conf.mem_spec in Hm.
       split.
@@ -692,26 +825,28 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
               intros [H _]; apply Conf.mem_spec in H; congruence].
   Qed.
 
-  Lemma mem_reduceReal : forall R D Pi G (n' : Name.t) (w : Version.t),
-      T.PkgSet.In (n', w) (reduceReal R D Pi G) <->
-      T.VSet.In w (versions R D Pi G n').
+  Lemma mem_reduceReal : forall R D Rec Pi G (n' : Name.t) (w : Version.t),
+      T.PkgSet.In (n', w) (reduceReal R D Rec Pi G) <->
+      T.VSet.In w (versions R D Rec Pi G n').
   Proof.
-    intros R D Pi G n' w; unfold reduceReal.
+    intros R D Rec Pi G n' w; unfold reduceReal.
     rewrite !T.PkgSet.union_spec.
-    rewrite mem_realOrig, mem_realDisjunct, mem_realSelector, mem_realGuard.
-    destruct n' as [n | A | a | p a x].
+    rewrite mem_realOrig, mem_realDisjunct, mem_realSoft, mem_realSelector,
+      mem_realGuard.
+    destruct n' as [n | A | A | a | p a x].
     - rewrite versions_orig_spec; split.
-      + intros [[n0 [v0 [HqR Hy]]] | [H2 | [H3 | H4]]].
+      + intros [[n0 [v0 [HqR Hy]]] | [H2 | [H3 | [H4 | H5]]]].
         * injection Hy as -> ->.
           exists v0; split; [exact HqR | reflexivity].
         * destruct H2 as [p0 [Al [_ [_ [a0 [_ Hy]]]]]]; discriminate Hy.
-        * destruct H3 as [p0 [Al [_ [a0 [_ [_ [w0 [_ Hy]]]]]]]];
+        * destruct H3 as [p0 [Al [_ [Hy | [a0 [_ Hy]]]]]]; discriminate Hy.
+        * destruct H4 as [p0 [Al [_ [a0 [_ [_ [w0 [_ Hy]]]]]]]];
             discriminate Hy.
-        * destruct H4 as [p0 [a0 [x0 [_ [Hy | Hy]]]]]; discriminate Hy.
+        * destruct H5 as [p0 [a0 [x0 [_ [Hy | Hy]]]]]; discriminate Hy.
       + intros [v [Hv ->]].
         left; exists n, v; split; [exact Hv | reflexivity].
     - rewrite versions_disjunct_spec; split.
-      + intros [[n0 [v0 [_ Hy]]] | [H2 | [H3 | H4]]].
+      + intros [[n0 [v0 [_ Hy]]] | [H2 | [H3 | [H4 | H5]]]].
         * discriminate Hy.
         * destruct H2 as [p0 [Al [Hc [Hcard [a0 [Ha0 Hy]]]]]].
           injection Hy as -> ->.
@@ -719,9 +854,10 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           split; [exact Hcard |].
           unfold versionsDisj; apply SOaw.mem_map;
             exists a0; split; [exact Ha0 | reflexivity].
-        * destruct H3 as [p0 [Al [_ [a0 [_ [_ [w0 [_ Hy]]]]]]]];
+        * destruct H3 as [p0 [Al [_ [Hy | [a0 [_ Hy]]]]]]; discriminate Hy.
+        * destruct H4 as [p0 [Al [_ [a0 [_ [_ [w0 [_ Hy]]]]]]]];
             discriminate Hy.
-        * destruct H4 as [p0 [a0 [x0 [_ [Hy | Hy]]]]]; discriminate Hy.
+        * destruct H5 as [p0 [a0 [x0 [_ [Hy | Hy]]]]]; discriminate Hy.
       + intros (Hhc & Hcard & H).
         unfold versionsDisj in H; apply SOaw.mem_map in H;
           destruct H as [a0 [Ha0 ->]].
@@ -729,42 +865,64 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         right; left; exists p0, A; split; [exact Hc |].
         split; [exact Hcard |].
         exists a0; split; [exact Ha0 | reflexivity].
-    - rewrite versions_selector_spec; split.
-      + intros [[n0 [v0 [_ Hy]]] | [H2 | [H3 | H4]]].
+    - rewrite versions_soft_spec; split.
+      + intros [[n0 [v0 [_ Hy]]] | [H2 | [H3 | [H4 | H5]]]].
         * discriminate Hy.
         * destruct H2 as [p0 [Al [_ [_ [a0 [_ Hy]]]]]]; discriminate Hy.
-        * destruct H3 as [p0 [Al [Hc [a0 [Ha0 [Hp [w0 [Hw0 Hy]]]]]]]].
+        * destruct H3 as [p0 [Al [Hc Hy]]].
+          assert (Hhc : hasClauseb Rec Al = true)
+            by (apply hasClauseb_iff; exists p0; exact Hc).
+          destruct Hy as [Hy | [a0 [Ha0 Hy]]]; injection Hy as -> ->.
+          { split; [exact Hhc | apply mem_versionsSoft; left; reflexivity]. }
+          { split; [exact Hhc | apply mem_versionsSoft; right].
+            exists a0; split; [exact Ha0 | reflexivity]. }
+        * destruct H4 as [p0 [Al [_ [a0 [_ [_ [w0 [_ Hy]]]]]]]];
+            discriminate Hy.
+        * destruct H5 as [p0 [a0 [x0 [_ [Hy | Hy]]]]]; discriminate Hy.
+      + intros (Hhc & H).
+        apply hasClauseb_iff in Hhc; destruct Hhc as [p0 Hc].
+        right; right; left; exists p0, A; split; [exact Hc |].
+        apply mem_versionsSoft in H.
+        destruct H as [-> | [a0 [Ha0 ->]]]; [left; reflexivity |].
+        right; exists a0; split; [exact Ha0 | reflexivity].
+    - rewrite versions_selector_spec; split.
+      + intros [[n0 [v0 [_ Hy]]] | [H2 | [H3 | [H4 | H5]]]].
+        * discriminate Hy.
+        * destruct H2 as [p0 [Al [_ [_ [a0 [_ Hy]]]]]]; discriminate Hy.
+        * destruct H3 as [p0 [Al [_ [Hy | [a0 [_ Hy]]]]]]; discriminate Hy.
+        * destruct H4 as [p0 [Al [Hc [a0 [Ha0 [Hp [w0 [Hw0 Hy]]]]]]]].
           injection Hy as -> ->.
           split; [apply occursAtomb_iff; exists p0, Al; split; assumption |].
           split; [exact Hp | exact Hw0].
-        * destruct H4 as [p0 [a0 [x0 [_ [Hy | Hy]]]]]; discriminate Hy.
+        * destruct H5 as [p0 [a0 [x0 [_ [Hy | Hy]]]]]; discriminate Hy.
       + intros (Hocc & Hp & H).
         apply occursAtomb_iff in Hocc; destruct Hocc as [p0 [Al [Hc Ha0]]].
-        right; right; left; exists p0, Al; split; [exact Hc |].
+        right; right; right; left; exists p0, Al; split; [exact Hc |].
         exists a; split; [exact Ha0 |].
         split; [exact Hp |].
         exists w; split; [exact H | reflexivity].
     - rewrite versions_guard_spec; split.
-      + intros [[n0 [v0 [_ Hy]]] | [H2 | [H3 | H4]]].
+      + intros [[n0 [v0 [_ Hy]]] | [H2 | [H3 | [H4 | H5]]]].
         * discriminate Hy.
         * destruct H2 as [p0 [Al [_ [_ [a0 [_ Hy]]]]]]; discriminate Hy.
-        * destruct H3 as [p0 [Al [_ [a0 [_ [_ [w0 [_ Hy]]]]]]]];
+        * destruct H3 as [p0 [Al [_ [Hy | [a0 [_ Hy]]]]]]; discriminate Hy.
+        * destruct H4 as [p0 [Al [_ [a0 [_ [_ [w0 [_ Hy]]]]]]]];
             discriminate Hy.
-        * destruct H4 as [p0 [a0 [x0 [He [Hy | Hy]]]]];
+        * destruct H5 as [p0 [a0 [x0 [He [Hy | Hy]]]]];
             injection Hy as -> -> -> ->.
           { split; [exact He | left; reflexivity]. }
           { split; [exact He | right; reflexivity]. }
       + intros [He Hw].
-        right; right; right; exists p, a, x; split; [exact He |].
+        right; right; right; right; exists p, a, x; split; [exact He |].
         destruct Hw as [-> | ->]; [left | right]; reflexivity.
   Qed.
 
-  Lemma mem_reduceDeps : forall R D Pi G (s : T.Pkg.t) (h : T.Dependees.t),
-      T.DepRel.In (s, h) (reduceDeps R D Pi G) <->
-      T.PkgSet.In s (reduceReal R D Pi G) /\
-      T.DependeesSet.In h (dependees R D Pi G s).
+  Lemma mem_reduceDeps : forall R D Rec Pi G (s : T.Pkg.t) (h : T.Dependees.t),
+      T.DepRel.In (s, h) (reduceDeps R D Rec Pi G) <->
+      T.PkgSet.In s (reduceReal R D Rec Pi G) /\
+      T.DependeesSet.In h (dependees R D Rec Pi G s).
   Proof.
-    intros R D Pi G s [n vs]; unfold reduceDeps;
+    intros R D Rec Pi G s [n vs]; unfold reduceDeps;
       rewrite SOse.mem_unionMap.
     split.
     - intros [s0 [Hs0 Hy]]; cbn beta iota in Hy.
@@ -808,13 +966,16 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
              tryInvPkg_some).
   Qed.
 
-  Lemma dependees_orig_spec : forall R D Pi G (n : N.t) (v : V.t) y,
-      T.DependeesSet.In y (dependees R D Pi G (Name.Orig n, Version.Orig v)) <->
+  Lemma dependees_orig_spec : forall R D Rec Pi G (n : N.t) (v : V.t) y,
+      T.DependeesSet.In y
+        (dependees R D Rec Pi G (Name.Orig n, Version.Orig v)) <->
       (exists A, Deps.In ((n, v), A) D /\
          (((AtomSet.cardinal A =? 1) = true /\
            exists a, AtomSet.min_elt A = Some a /\ y = tgt R Pi a) \/
           ((AtomSet.cardinal A =? 1) = false /\
            y = (Name.Disjunct A, versionsDisj A)))) \/
+      (exists A, Deps.In ((n, v), A) Rec /\
+         y = (Name.Soft A, versionsSoft A)) \/
       (exists a x, Conf.In ((n, v), (a, x)) G /\
          y = (Name.Guard (n, v) a x, T.VSet.singleton Version.One)) \/
       (exists m u a x, Conf.In ((m, u), (a, x)) G /\
@@ -822,12 +983,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
          (m, u) <> (n, v) /\ (x = true -> NG.groupEq n m = false) /\
          y = (Name.Guard (m, u) a x, T.VSet.singleton Version.Zero)).
   Proof.
-    intros R D Pi G n v y; cbn [dependees].
-    rewrite !T.DependeesSet.union_spec, SOde.mem_filterMap,
+    intros R D Rec Pi G n v y; cbn [dependees].
+    rewrite !T.DependeesSet.union_spec, !SOde.mem_filterMap,
       !SOge.mem_filterMap.
     split.
     - intros [[[cp cA] [Hc Hy]] |
-              [[[ep [ea ex]] [He Hy]] | [[[em eu] [ea ex]] [He Hy]]]];
+              [[[rp rA] [Hr Hy]] |
+               [[[ep [ea ex]] [He Hy]] | [[[em eu] [ea ex]] [He Hy]]]]];
         cbn [fst snd] in Hy.
       + destruct (Pkg.eq_dec cp (n, v)) as [-> | NE]; [| discriminate].
         destruct (AtomSet.cardinal cA =? 1) eqn:Hcard.
@@ -839,9 +1001,12 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         * injection Hy as <-.
           left; exists cA; split; [exact Hc |].
           right; split; [exact Hcard | reflexivity].
+      + destruct (Pkg.eq_dec rp (n, v)) as [-> | NE]; [| discriminate].
+        injection Hy as <-.
+        right; left; exists rA; split; [exact Hr | reflexivity].
       + destruct (Pkg.eq_dec ep (n, v)) as [-> | NE]; [| discriminate].
         injection Hy as <-.
-        right; left; exists ea, ex; split; [exact He | reflexivity].
+        right; right; left; exists ea, ex; split; [exact He | reflexivity].
       + destruct (andb (matchb Pi (n, v) ea)
                     (andb
                        (negb (if Pkg.eq_dec (em, eu) (n, v)
@@ -853,7 +1018,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         destruct (Pkg.eq_dec (em, eu) (n, v)) as [E | NE];
           [discriminate Hneg |].
         injection Hy as <-.
-        right; right; exists em, eu, ea, ex.
+        right; right; right; exists em, eu, ea, ex.
         split; [exact He |].
         split; [exact Hm |].
         split; [exact NE |].
@@ -861,8 +1026,9 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         exact (proj1 (exemptb_iff ex n em)
                  (proj1 (Bool.negb_true_iff _) Hex)).
     - intros [[A [HA Hcase]] |
-              [[a0 [x0 [Ha0 ->]]] |
-               [m0 [u0 [a0 [x0 [Hg0 [Hm [Hne [Hex ->]]]]]]]]]].
+              [[A [HA ->]] |
+               [[a0 [x0 [Ha0 ->]]] |
+                [m0 [u0 [a0 [x0 [Hg0 [Hm [Hne [Hex ->]]]]]]]]]]].
       + left; exists ((n, v), A); split; [exact HA |].
         cbn [fst snd].
         destruct (Pkg.eq_dec (n, v) (n, v)) as [_ | NE];
@@ -870,12 +1036,18 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         destruct Hcase as [[Hcard [a0 [Hmin ->]]] | [Hcard ->]].
         * rewrite Hcard, Hmin; reflexivity.
         * rewrite Hcard; reflexivity.
-      + right; left; exists ((n, v), (a0, x0)); split; [exact Ha0 |].
+      + right; left; exists ((n, v), A); split; [exact HA |].
         cbn [fst snd].
         destruct (Pkg.eq_dec (n, v) (n, v)) as [_ | NE];
           [| contradiction NE; reflexivity].
         reflexivity.
-      + right; right; exists ((m0, u0), (a0, x0)); split; [exact Hg0 |].
+      + right; right; left; exists ((n, v), (a0, x0)); split; [exact Ha0 |].
+        cbn [fst snd].
+        destruct (Pkg.eq_dec (n, v) (n, v)) as [_ | NE];
+          [| contradiction NE; reflexivity].
+        reflexivity.
+      + right; right; right; exists ((m0, u0), (a0, x0));
+          split; [exact Hg0 |].
         cbn [fst snd].
         rewrite Hm.
         destruct (Pkg.eq_dec (m0, u0) (n, v)) as [E | _];
@@ -885,13 +1057,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         rewrite Hx; reflexivity.
   Qed.
 
-  Lemma dependees_disjunct_spec : forall R D Pi G A a y,
+  Lemma dependees_disjunct_spec : forall R D Rec Pi G A a y,
       T.DependeesSet.In y
-        (dependees R D Pi G (Name.Disjunct A, Version.Atom a)) <->
+        (dependees R D Rec Pi G (Name.Disjunct A, Version.Atom a)) <->
       hasClauseb D A = true /\ (2 <=? AtomSet.cardinal A) = true /\
       AtomSet.mem a A = true /\ y = tgt R Pi a.
   Proof.
-    intros R D Pi G A a y; cbn [dependees].
+    intros R D Rec Pi G A a y; cbn [dependees].
     destruct (hasClauseb D A) eqn:H1; cbn [andb].
     - destruct (2 <=? AtomSet.cardinal A) eqn:H2; cbn [andb].
       + destruct (AtomSet.mem a A) eqn:H3; cbn [andb].
@@ -909,15 +1081,39 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
               intros (H & _); discriminate H].
   Qed.
 
-  Lemma dependees_selector_spec : forall R D Pi G a (m : N.t) (w : V.t) y,
+  Lemma dependees_soft_spec : forall R D Rec Pi G A a y,
       T.DependeesSet.In y
-        (dependees R D Pi G (Name.Selector a, Version.Ref m w)) <->
-      occursAtomb D a = true /\ provb Pi a = true /\
+        (dependees R D Rec Pi G (Name.Soft A, Version.Atom a)) <->
+      hasClauseb Rec A = true /\ AtomSet.mem a A = true /\ y = tgt R Pi a.
+  Proof.
+    intros R D Rec Pi G A a y; cbn [dependees].
+    destruct (hasClauseb Rec A) eqn:H1; cbn [andb].
+    - destruct (AtomSet.mem a A) eqn:H2; cbn [andb].
+      + rewrite SOde.singleton_in.
+        split.
+        { intro H; split; [reflexivity |].
+          split; [reflexivity | exact H]. }
+        { intros (_ & _ & H); exact H. }
+      + split; [intro H; exfalso; exact (SOde.empty_in _ H) |
+                intros (_ & H & _); discriminate H].
+    - split; [intro H; exfalso; exact (SOde.empty_in _ H) |
+              intros (H & _); discriminate H].
+  Qed.
+
+  Lemma dependees_soft_escape : forall R D Rec Pi G A,
+      dependees R D Rec Pi G (Name.Soft A, Version.Zero) =
+      T.DependeesSet.empty.
+  Proof. reflexivity. Qed.
+
+  Lemma dependees_selector_spec : forall R D Rec Pi G a (m : N.t) (w : V.t) y,
+      T.DependeesSet.In y
+        (dependees R D Rec Pi G (Name.Selector a, Version.Ref m w)) <->
+      occursAtomb (allClauses D Rec) a = true /\ provb Pi a = true /\
       T.VSet.mem (Version.Ref m w) (us R Pi a) = true /\
       y = (Name.Orig m, T.VSet.singleton (Version.Orig w)).
   Proof.
-    intros R D Pi G a m w y; cbn [dependees].
-    destruct (occursAtomb D a) eqn:H1; cbn [andb].
+    intros R D Rec Pi G a m w y; cbn [dependees].
+    destruct (occursAtomb (allClauses D Rec) a) eqn:H1; cbn [andb].
     - destruct (provb Pi a) eqn:H2; cbn [andb].
       + destruct (T.VSet.mem (Version.Ref m w) (us R Pi a)) eqn:H3; cbn [andb].
         * rewrite SOde.singleton_in.
@@ -934,15 +1130,15 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
               intros (H & _); discriminate H].
   Qed.
 
-  Lemma dependees_selector_real_spec : forall R D Pi G a (w : V.t) y,
+  Lemma dependees_selector_real_spec : forall R D Rec Pi G a (w : V.t) y,
       T.DependeesSet.In y
-        (dependees R D Pi G (Name.Selector a, Version.RefReal w)) <->
-      occursAtomb D a = true /\ provb Pi a = true /\
+        (dependees R D Rec Pi G (Name.Selector a, Version.RefReal w)) <->
+      occursAtomb (allClauses D Rec) a = true /\ provb Pi a = true /\
       T.VSet.mem (Version.RefReal w) (us R Pi a) = true /\
       y = (Name.Orig (aname a), T.VSet.singleton (Version.Orig w)).
   Proof.
-    intros R D Pi G a w y; cbn [dependees].
-    destruct (occursAtomb D a) eqn:H1; cbn [andb].
+    intros R D Rec Pi G a w y; cbn [dependees].
+    destruct (occursAtomb (allClauses D Rec) a) eqn:H1; cbn [andb].
     - destruct (provb Pi a) eqn:H2; cbn [andb].
       + destruct (T.VSet.mem (Version.RefReal w) (us R Pi a)) eqn:H3;
           cbn [andb].
@@ -986,16 +1182,16 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Qed.
 
   Theorem debian_soundness :
-    forall R D Pi G (r : Pkg.t) (S : T.PkgSet.t),
-      T.IsResolution (reduceReal R D Pi G) (reduceDeps R D Pi G)
+    forall R D Rec Pi G (r : Pkg.t) (S : T.PkgSet.t),
+      T.IsResolution (reduceReal R D Rec Pi G) (reduceDeps R D Rec Pi G)
         (embedPkg r) S ->
       IsResolution R D Pi G r (debianResolution S).
   Proof.
-    intros R D Pi G r S [Hsub Hroot Hdep Huniq].
+    intros R D Rec Pi G r S [Hsub Hroot Hdep Huniq].
     assert (Htgt : forall (s : T.Pkg.t) (a : Atom.t),
         T.PkgSet.In s S ->
-        T.DependeesSet.In (tgt R Pi a) (dependees R D Pi G s) ->
-        occursAtomb D a = true ->
+        T.DependeesSet.In (tgt R Pi a) (dependees R D Rec Pi G s) ->
+        occursAtomb (allClauses D Rec) a = true ->
         exists q, PkgSet.In q (debianResolution S) /\ Match Pi q a).
     { intros s [an af] HsS Hedge Hocc.
       assert (HsReal := Hsub _ HsS).
@@ -1003,7 +1199,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       destruct (provb Pi (an, af)) eqn:Hpb; rewrite ?Hpb in Hedge.
       - assert (Hd : T.DepRel.In
             (s, (Name.Selector (an, af), us R Pi (an, af)))
-            (reduceDeps R D Pi G))
+            (reduceDeps R D Rec Pi G))
           by (apply mem_reduceDeps; split; [exact HsReal | exact Hedge]).
         destruct (Hdep _ HsS _ _ Hd) as [dv [Hdv HdvS]].
         apply mem_us in Hdv.
@@ -1014,7 +1210,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
             exists u; split; [exact Hu | reflexivity]. }
           assert (Hedge2 : T.DependeesSet.In
               (Name.Orig an, T.VSet.singleton (Version.Orig u))
-              (dependees R D Pi G
+              (dependees R D Rec Pi G
                  (Name.Selector (an, af), Version.RefReal u))).
           { apply dependees_selector_real_spec.
             split; [exact Hocc |].
@@ -1023,7 +1219,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           assert (Hd2 : T.DepRel.In
               ((Name.Selector (an, af), Version.RefReal u),
                (Name.Orig an, T.VSet.singleton (Version.Orig u)))
-              (reduceDeps R D Pi G))
+              (reduceDeps R D Rec Pi G))
             by (apply mem_reduceDeps; split;
                 [apply Hsub; exact HdvS | exact Hedge2]).
           destruct (Hdep _ HdvS _ _ Hd2) as [dv2 [Hdv2 Hdv2S]].
@@ -1040,7 +1236,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
             split; [exact Hin | split; [exact Hvt | reflexivity]]. }
           assert (Hedge2 : T.DependeesSet.In
               (Name.Orig m0, T.VSet.singleton (Version.Orig u0))
-              (dependees R D Pi G (Name.Selector (an, af), Version.Ref m0 u0))).
+              (dependees R D Rec Pi G
+                 (Name.Selector (an, af), Version.Ref m0 u0))).
           { apply dependees_selector_spec.
             split; [exact Hocc |].
             split; [exact Hpb |].
@@ -1048,7 +1245,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           assert (Hd2 : T.DepRel.In
               ((Name.Selector (an, af), Version.Ref m0 u0),
                (Name.Orig m0, T.VSet.singleton (Version.Orig u0)))
-              (reduceDeps R D Pi G))
+              (reduceDeps R D Rec Pi G))
             by (apply mem_reduceDeps; split;
                 [apply Hsub; exact HdvS | exact Hedge2]).
           destruct (Hdep _ HdvS _ _ Hd2) as [dv2 [Hdv2 Hdv2S]].
@@ -1058,7 +1255,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           { right; exists vt; split; [exact Hin | exact Hvt]. }
       - assert (Hd : T.DepRel.In
             (s, (Name.Orig an, embedVS (evalAt R (an, af))))
-            (reduceDeps R D Pi G))
+            (reduceDeps R D Rec Pi G))
           by (apply mem_reduceDeps; split; [exact HsReal | exact Hedge]).
         destruct (Hdep _ HsS _ _ Hd) as [dv [Hdv HdvS]].
         unfold embedVS in Hdv; apply SOvw.mem_map in Hdv;
@@ -1073,7 +1270,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       apply mem_debianResolution in Hp.
       apply Hsub in Hp.
       rewrite (surjective_pairing p).
-      assert (Hv := proj1 (mem_reduceReal R D Pi G
+      assert (Hv := proj1 (mem_reduceReal R D Rec Pi G
                              (Name.Orig (fst p)) (Version.Orig (snd p))) Hp).
       apply versions_orig_spec in Hv.
       destruct Hv as [v [HvR Hv]]; injection Hv as Hv; subst v.
@@ -1085,12 +1282,12 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       + destruct (AtomSet.min_elt A) as [a |] eqn:Hmin.
         * assert (HaA : AtomSet.In a A)
             by (apply AtomSet.min_elt_spec1; exact Hmin).
-          assert (Hocc : occursAtomb D a = true)
-            by (apply occursAtomb_iff; exists p, A; split;
-                [exact HA | exact HaA]).
+          assert (Hocc : occursAtomb (allClauses D Rec) a = true)
+            by (apply occursAtomb_allClausesL, occursAtomb_iff;
+                exists p, A; split; [exact HA | exact HaA]).
           assert (Hedge : T.DependeesSet.In (tgt R Pi a)
-                            (dependees R D Pi G (embedPkg p))).
-          { apply (dependees_orig_spec R D Pi G (fst p) (snd p)).
+                            (dependees R D Rec Pi G (embedPkg p))).
+          { apply (dependees_orig_spec R D Rec Pi G (fst p) (snd p)).
             left; exists A; split.
             - rewrite <- (surjective_pairing p); exact HA.
             - left; split; [exact Hcard |].
@@ -1107,28 +1304,28 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           apply SOap.elements_in.
           rewrite He; left; reflexivity.
       + assert (Hedge : T.DependeesSet.In (Name.Disjunct A, versionsDisj A)
-                          (dependees R D Pi G (embedPkg p))).
-        { apply (dependees_orig_spec R D Pi G (fst p) (snd p)).
+                          (dependees R D Rec Pi G (embedPkg p))).
+        { apply (dependees_orig_spec R D Rec Pi G (fst p) (snd p)).
           left; exists A; split.
           - rewrite <- (surjective_pairing p); exact HA.
           - right; split; [exact Hcard | reflexivity]. }
         assert (Hd : T.DepRel.In (embedPkg p, (Name.Disjunct A, versionsDisj A))
-                       (reduceDeps R D Pi G))
+                       (reduceDeps R D Rec Pi G))
           by (apply mem_reduceDeps; split;
               [apply Hsub; exact Hp | exact Hedge]).
         destruct (Hdep _ Hp _ _ Hd) as [dv [Hdv HdvS]].
         unfold versionsDisj in Hdv; apply SOaw.mem_map in Hdv;
           destruct Hdv as [a [HaA ->]].
-        assert (Hocc : occursAtomb D a = true)
-          by (apply occursAtomb_iff; exists p, A; split;
-              [exact HA | exact HaA]).
+        assert (Hocc : occursAtomb (allClauses D Rec) a = true)
+          by (apply occursAtomb_allClausesL, occursAtomb_iff;
+              exists p, A; split; [exact HA | exact HaA]).
         assert (Hcard2 : (2 <=? AtomSet.cardinal A) = true).
         { apply Nat.leb_le.
           apply Nat.eqb_neq in Hcard.
           assert (H1 := cardinal_in A a HaA).
           lia. }
         assert (Hedge2 : T.DependeesSet.In (tgt R Pi a)
-                           (dependees R D Pi G
+                           (dependees R D Rec Pi G
                               (Name.Disjunct A, Version.Atom a))).
         { apply dependees_disjunct_spec.
           split; [apply hasClauseb_iff; exists p; exact HA |].
@@ -1143,30 +1340,30 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       apply mem_debianResolution in HqS.
       assert (Hedge1 : T.DependeesSet.In
           (Name.Guard (pn, pv) a x, T.VSet.singleton Version.One)
-          (dependees R D Pi G (embedPkg (pn, pv)))).
-      { apply (dependees_orig_spec R D Pi G pn pv).
-        right; left; exists a, x; split; [exact HaG | reflexivity]. }
+          (dependees R D Rec Pi G (embedPkg (pn, pv)))).
+      { apply (dependees_orig_spec R D Rec Pi G pn pv).
+        right; right; left; exists a, x; split; [exact HaG | reflexivity]. }
       assert (Hd1 : T.DepRel.In
           (embedPkg (pn, pv),
            (Name.Guard (pn, pv) a x, T.VSet.singleton Version.One))
-          (reduceDeps R D Pi G))
+          (reduceDeps R D Rec Pi G))
         by (apply mem_reduceDeps; split;
             [apply Hsub; exact Hp | exact Hedge1]).
       destruct (Hdep _ Hp _ _ Hd1) as [dv1 [Hdv1 Hdv1S]].
       apply T.VSet.singleton_spec in Hdv1; rewrite Hdv1 in Hdv1S.
       assert (Hedge0 : T.DependeesSet.In
           (Name.Guard (pn, pv) a x, T.VSet.singleton Version.Zero)
-          (dependees R D Pi G (embedPkg q))).
-      { apply (dependees_orig_spec R D Pi G (fst q) (snd q)).
+          (dependees R D Rec Pi G (embedPkg q))).
+      { apply (dependees_orig_spec R D Rec Pi G (fst q) (snd q)).
         rewrite <- (surjective_pairing q).
-        right; right; exists pn, pv, a, x.
+        right; right; right; exists pn, pv, a, x.
         split; [exact HaG |].
         split; [apply matchb_iff; exact HqM |].
         split; [intro E; exact (Hqp (eq_sym E)) |].
         split; [exact Hxq | reflexivity]. }
       assert (Hd0 : T.DepRel.In
           (embedPkg q, (Name.Guard (pn, pv) a x, T.VSet.singleton Version.Zero))
-          (reduceDeps R D Pi G))
+          (reduceDeps R D Rec Pi G))
         by (apply mem_reduceDeps; split;
             [apply Hsub; exact HqS | exact Hedge0]).
       destruct (Hdep _ HqS _ _ Hd0) as [dv0 [Hdv0 Hdv0S]].
@@ -1215,7 +1412,16 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         else None)
       A.
 
-  Definition coreResolution (R : PkgSet.t) (D : Deps.t)
+  (* the recommends gadget reaches for a satisfied alternative when S has one
+     and takes the escape otherwise: the escape is always there, so no
+     recommends clause can make the witness fail *)
+  Definition cwSoft (Pi : Prov.t) (S : PkgSet.t) (A : AtomSet.t) : Version.t :=
+    match AtomSet.min_elt (satAtoms Pi S A) with
+    | Some a => Version.Atom a
+    | None => Version.Zero
+    end.
+
+  Definition coreResolution (R : PkgSet.t) (D Rec : Deps.t)
       (Pi : Prov.t) (G : Conf.t) (S : PkgSet.t) : T.PkgSet.t :=
     T.PkgSet.union (SOrp.map embedPkg S)
       (T.PkgSet.union
@@ -1229,28 +1435,34 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
               else None)
             D)
          (T.PkgSet.union
-            (SOcp.unionMap (fun '(p, A) =>
-                 if PkgSet.mem p S
-                 then cwSelector Pi S A
-                 else T.PkgSet.empty)
-               D)
-            (SOgp.filterMap (fun e =>
-                 if PkgSet.mem (fst e) S
-                 then Some (Name.Guard (fst e) (fst (snd e)) (snd (snd e)),
-                            Version.One)
-                 else if PkgSet.exists_ (fun q =>
-                           andb (matchb Pi q (fst (snd e)))
-                             (andb
-                                (negb (if Pkg.eq_dec q (fst e)
-                                       then true else false))
-                                (negb (exemptb (snd (snd e)) (fst q)
-                                         (fst (fst e))))))
-                        S
-                      then Some
-                             (Name.Guard (fst e) (fst (snd e)) (snd (snd e)),
-                              Version.Zero)
-                      else None)
-               G))).
+            (SOcp.filterMap (fun c =>
+                 if PkgSet.mem (fst c) S
+                 then Some (Name.Soft (snd c), cwSoft Pi S (snd c))
+                 else None)
+               Rec)
+            (T.PkgSet.union
+               (SOcp.unionMap (fun '(p, A) =>
+                    if PkgSet.mem p S
+                    then cwSelector Pi S A
+                    else T.PkgSet.empty)
+                  (allClauses D Rec))
+               (SOgp.filterMap (fun e =>
+                    if PkgSet.mem (fst e) S
+                    then Some (Name.Guard (fst e) (fst (snd e)) (snd (snd e)),
+                               Version.One)
+                    else if PkgSet.exists_ (fun q =>
+                              andb (matchb Pi q (fst (snd e)))
+                                (andb
+                                   (negb (if Pkg.eq_dec q (fst e)
+                                          then true else false))
+                                   (negb (exemptb (snd (snd e)) (fst q)
+                                            (fst (fst e))))))
+                           S
+                         then Some
+                                (Name.Guard (fst e) (fst (snd e))
+                                   (snd (snd e)), Version.Zero)
+                         else None)
+                  G)))).
 
   Lemma cardinal1_eq : forall A (a b : Atom.t),
       AtomSet.cardinal A = 1 ->
@@ -1325,14 +1537,29 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       rewrite Hp, Hcs; reflexivity.
   Qed.
 
-  Lemma mem_coreResolution : forall R D Pi G S y,
-      T.PkgSet.In y (coreResolution R D Pi G S) <->
+  (* whatever S looks like, the gadget has a version to take: that is the
+     whole conservativity claim in one line *)
+  Lemma cwSoft_versionsSoft : forall Pi S A,
+      T.VSet.In (cwSoft Pi S A) (versionsSoft A).
+  Proof.
+    intros Pi S A; unfold cwSoft.
+    destruct (AtomSet.min_elt (satAtoms Pi S A)) as [a |] eqn:Hmin;
+      apply mem_versionsSoft; [right | left; reflexivity].
+    apply AtomSet.min_elt_spec1, mem_satAtoms in Hmin.
+    exists a; split; [exact (proj1 Hmin) | reflexivity].
+  Qed.
+
+  Lemma mem_coreResolution : forall R D Rec Pi G S y,
+      T.PkgSet.In y (coreResolution R D Rec Pi G S) <->
       (exists p, PkgSet.In p S /\ y = embedPkg p) \/
       (exists p Al, Deps.In (p, Al) D /\ PkgSet.mem p S = true /\
          (2 <=? AtomSet.cardinal Al) = true /\
          exists a, AtomSet.min_elt (satAtoms Pi S Al) = Some a /\
            y = (Name.Disjunct Al, Version.Atom a)) \/
-      (exists p Al, Deps.In (p, Al) D /\ PkgSet.mem p S = true /\
+      (exists p Al, Deps.In (p, Al) Rec /\ PkgSet.mem p S = true /\
+         y = (Name.Soft Al, cwSoft Pi S Al)) \/
+      (exists p Al, Deps.In (p, Al) (allClauses D Rec) /\
+         PkgSet.mem p S = true /\
          exists a, AtomSet.In a Al /\ provb Pi a = true /\
            exists w, chooseSatisfier Pi S a = Some w /\
              y = (Name.Selector a, w)) \/
@@ -1348,11 +1575,11 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
              = true /\
            y = (Name.Guard (m, u) a x, Version.Zero)))).
   Proof.
-    intros R D Pi G S y; unfold coreResolution.
-    rewrite !T.PkgSet.union_spec, SOrp.mem_map, SOcp.mem_filterMap,
+    intros R D Rec Pi G S y; unfold coreResolution.
+    rewrite !T.PkgSet.union_spec, SOrp.mem_map, !SOcp.mem_filterMap,
       SOcp.mem_unionMap, SOgp.mem_filterMap.
     split.
-    - intros [H1 | [H2 | [H3 | H4]]].
+    - intros [H1 | [H2 | [H3 | [H4 | H5]]]].
       + left; exact H1.
       + destruct H2 as [[cp cA] [Hc Hy]]; cbn [fst snd] in Hy.
         destruct (andb (PkgSet.mem cp S) (2 <=? AtomSet.cardinal cA))
@@ -1365,21 +1592,27 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         split; [exact Hm |].
         split; [exact Hcard |].
         exists a0; split; [exact Hmin | reflexivity].
-      + destruct H3 as [[cp cA] [Hc Hy]]; cbn beta iota in Hy.
+      + destruct H3 as [[cp cA] [Hc Hy]]; cbn [fst snd] in Hy.
+        destruct (PkgSet.mem cp S) eqn:Hm; [| discriminate].
+        injection Hy as <-.
+        right; right; left; exists cp, cA; split; [exact Hc |].
+        split; [exact Hm | reflexivity].
+      + destruct H4 as [[cp cA] [Hc Hy]]; cbn beta iota in Hy.
         destruct (PkgSet.mem cp S) eqn:Hm;
           [| exfalso; exact (SOcp.empty_in _ Hy)].
         apply mem_cwSelector in Hy.
         destruct Hy as [a0 [Ha0 [Hp0 [w0 [Hcs Hy]]]]].
-        right; right; left; exists cp, cA; split; [exact Hc |].
+        right; right; right; left; exists cp, cA; split; [exact Hc |].
         split; [exact Hm |].
         exists a0; split; [exact Ha0 |].
         split; [exact Hp0 |].
         exists w0; split; [exact Hcs | exact Hy].
-      + destruct H4 as [[[em eu] [ea ex]] [He Hy]];
+      + destruct H5 as [[[em eu] [ea ex]] [He Hy]];
           cbn [fst snd] in Hy.
         destruct (PkgSet.mem (em, eu) S) eqn:Hm.
         * injection Hy as <-.
-          right; right; right; exists em, eu, ea, ex; split; [exact He |].
+          right; right; right; right; exists em, eu, ea, ex;
+            split; [exact He |].
           left; split; [exact Hm | reflexivity].
         * destruct (PkgSet.exists_ (fun q =>
                         andb (matchb Pi q ea)
@@ -1389,25 +1622,31 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
                              (negb (exemptb ex (fst q) em))))
                       S) eqn:Hex; [| discriminate].
           injection Hy as <-.
-          right; right; right; exists em, eu, ea, ex; split; [exact He |].
+          right; right; right; right; exists em, eu, ea, ex;
+            split; [exact He |].
           right; split; [exact Hm |].
           split; [exact Hex | reflexivity].
-    - intros [H1 | [H2 | [H3 | H4]]].
+    - intros [H1 | [H2 | [H3 | [H4 | H5]]]].
       + left; exact H1.
       + destruct H2 as [cp [cA [Hc [Hm [Hcard [a0 [Hmin ->]]]]]]].
         right; left; exists (cp, cA); split; [exact Hc |].
         cbn [fst snd].
         rewrite Hm, Hcard, Hmin; reflexivity.
-      + destruct H3 as [cp [cA [Hc [Hm [a0 [Ha0 [Hp0 [w0 [Hcs ->]]]]]]]]].
+      + destruct H3 as [cp [cA [Hc [Hm ->]]]].
         right; right; left; exists (cp, cA); split; [exact Hc |].
+        cbn [fst snd].
+        rewrite Hm; reflexivity.
+      + destruct H4 as [cp [cA [Hc [Hm [a0 [Ha0 [Hp0 [w0 [Hcs ->]]]]]]]]].
+        right; right; right; left; exists (cp, cA); split; [exact Hc |].
         cbn beta iota.
         rewrite Hm.
         apply mem_cwSelector.
         exists a0; split; [exact Ha0 |].
         split; [exact Hp0 |].
         exists w0; split; [exact Hcs | reflexivity].
-      + destruct H4 as [em [eu [ea [ex [He Hcase]]]]].
-        right; right; right; exists ((em, eu), (ea, ex)); split; [exact He |].
+      + destruct H5 as [em [eu [ea [ex [He Hcase]]]]].
+        right; right; right; right; exists ((em, eu), (ea, ex));
+          split; [exact He |].
         cbn [fst snd].
         destruct Hcase as [[Hm ->] | [Hm [Hex ->]]].
         * rewrite Hm; reflexivity.
@@ -1415,12 +1654,12 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Qed.
 
   Theorem debian_completeness :
-    forall R D Pi G (r : Pkg.t) (S : PkgSet.t),
+    forall R D Rec Pi G (r : Pkg.t) (S : PkgSet.t),
       IsResolution R D Pi G r S ->
-      T.IsResolution (reduceReal R D Pi G) (reduceDeps R D Pi G)
-        (embedPkg r) (coreResolution R D Pi G S).
+      T.IsResolution (reduceReal R D Rec Pi G) (reduceDeps R D Rec Pi G)
+        (embedPkg r) (coreResolution R D Rec Pi G S).
   Proof.
-    intros R D Pi G r S [Hsub Hroot Hclo Hconf Huniq].
+    intros R D Rec Pi G r S [Hsub Hroot Hclo Hconf Huniq].
     assert (Hus : forall (q : Pkg.t) (a : Atom.t),
         PkgSet.In q S -> Match Pi q a ->
         T.VSet.In (chosenVersion q a) (us R Pi a)).
@@ -1441,11 +1680,11 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           split; [exact Hin | split; [exact Hvt | reflexivity]]. }
     assert (Hfwd : forall (a : Atom.t) (q : Pkg.t) n vs,
         PkgSet.In q S -> Match Pi q a ->
-        (exists p A, Deps.In (p, A) D /\ PkgSet.In p S /\
+        (exists p A, Deps.In (p, A) (allClauses D Rec) /\ PkgSet.In p S /\
            AtomSet.In a A) ->
         (n, vs) = tgt R Pi a ->
         exists dv, T.VSet.In dv vs /\
-          T.PkgSet.In (n, dv) (coreResolution R D Pi G S)).
+          T.PkgSet.In (n, dv) (coreResolution R D Rec Pi G S)).
     { intros a q n vs HqS HM Hcl Heq.
       unfold tgt in Heq.
       destruct (provb Pi a) eqn:Hpb; cbn [andb] in Heq;
@@ -1457,7 +1696,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         exists (chosenVersion (qn0, qv0) a); split.
         + apply (Hus (qn0, qv0)); [exact Hq0S | apply matchb_iff; exact Hq0m].
         + apply mem_coreResolution.
-          right; right; left.
+          right; right; right; left.
           destruct Hcl as [cp [cA [Hc [HcpS HaA]]]].
           exists cp, cA; split; [exact Hc |].
           split; [apply PkgSet.mem_spec; exact HcpS |].
@@ -1486,15 +1725,16 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     constructor.
     - intros y Hy.
       apply mem_coreResolution in Hy.
-      destruct Hy as [H1 | [H2 | [H3 | H4]]].
+      destruct Hy as [H1 | [H2 | [H3 | [H4 | H5]]]].
       + destruct H1 as [p [Hp ->]].
-        apply (mem_reduceReal R D Pi G
+        apply (mem_reduceReal R D Rec Pi G
                  (Name.Orig (fst p)) (Version.Orig (snd p))).
         apply versions_orig_spec.
         exists (snd p); split; [| reflexivity].
         rewrite <- (surjective_pairing p); apply Hsub; exact Hp.
       + destruct H2 as [cp [cA [Hc [Hm [Hcard [a0 [Hmin ->]]]]]]].
-        apply (mem_reduceReal R D Pi G (Name.Disjunct cA) (Version.Atom a0)).
+        apply (mem_reduceReal R D Rec Pi G
+                 (Name.Disjunct cA) (Version.Atom a0)).
         apply versions_disjunct_spec.
         split; [apply hasClauseb_iff; exists cp; exact Hc |].
         split; [exact Hcard |].
@@ -1502,8 +1742,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         apply AtomSet.min_elt_spec1 in Hmin.
         apply mem_satAtoms in Hmin; destruct Hmin as [Ha0 _].
         exists a0; split; [exact Ha0 | reflexivity].
-      + destruct H3 as [cp [cA [Hc [Hm [a0 [Ha0 [Hp0 [w0 [Hcs ->]]]]]]]]].
-        apply (mem_reduceReal R D Pi G (Name.Selector a0) w0).
+      + destruct H3 as [cp [cA [Hc [Hm ->]]]].
+        apply (mem_reduceReal R D Rec Pi G (Name.Soft cA) (cwSoft Pi S cA)).
+        apply versions_soft_spec.
+        split; [apply hasClauseb_iff; exists cp; exact Hc |].
+        apply cwSoft_versionsSoft.
+      + destruct H4 as [cp [cA [Hc [Hm [a0 [Ha0 [Hp0 [w0 [Hcs ->]]]]]]]]].
+        apply (mem_reduceReal R D Rec Pi G (Name.Selector a0) w0).
         apply versions_selector_spec.
         split; [apply occursAtomb_iff; exists cp, cA; split;
                 [exact Hc | exact Ha0] |].
@@ -1511,13 +1756,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         apply chooseSatisfier_spec in Hcs.
         destruct Hcs as [qn [qv [HqS [Hqm ->]]]].
         apply (Hus (qn, qv)); [exact HqS | apply matchb_iff; exact Hqm].
-      + destruct H4 as [em [eu [ea [ex [He Hcase]]]]].
+      + destruct H5 as [em [eu [ea [ex [He Hcase]]]]].
         destruct Hcase as [[Hm ->] | [Hm [Hex ->]]].
-        * apply (mem_reduceReal R D Pi G
+        * apply (mem_reduceReal R D Rec Pi G
                    (Name.Guard (em, eu) ea ex) Version.One).
           apply versions_guard_spec.
           split; [exact He | right; reflexivity].
-        * apply (mem_reduceReal R D Pi G
+        * apply (mem_reduceReal R D Rec Pi G
                    (Name.Guard (em, eu) ea ex) Version.Zero).
           apply versions_guard_spec.
           split; [exact He | left; reflexivity].
@@ -1526,12 +1771,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     - intros y Hy n vs Hd.
       apply mem_coreResolution in Hy.
       apply mem_reduceDeps in Hd; destruct Hd as [_ Hout].
-      destruct Hy as [H1 | [H2 | [H3 | H4]]].
+      destruct Hy as [H1 | [H2 | [H3 | [H4 | H5]]]].
       + destruct H1 as [[pn pv] [HpS ->]].
-        apply (dependees_orig_spec R D Pi G pn pv) in Hout.
+        apply (dependees_orig_spec R D Rec Pi G pn pv) in Hout.
         destruct Hout as [[A [HA Hcase]] |
-                          [[a0 [x0 [Ha0 Heq]]] |
-                           [m0 [u0 [a0 [x0 [Hg0 [Hm [Hne [Hxq Heq]]]]]]]]]].
+                          [[A [HA Heq]] |
+                           [[a0 [x0 [Ha0 Heq]]] |
+                            [m0 [u0 [a0 [x0 [Hg0 [Hm [Hne [Hxq Heq]]]]]]]]]]].
         * assert (HpA : Deps.In ((pn, pv), A) D) by exact HA.
           destruct (Hclo (pn, pv) HpS A HpA) as [aw [HawA [q [HqS HqM]]]].
           destruct Hcase as [[Hcard [am [Hmin Heq]]] | [Hcard Heq]].
@@ -1543,7 +1789,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
             subst aw.
             apply (Hfwd am q n vs HqS HqM); [| exact Heq].
             exists (pn, pv), A.
-            split; [exact HpA |].
+            split; [apply allClauses_inL; exact HpA |].
             split; [exact HpS | exact HamA]. }
           { injection Heq as -> ->.
             assert (Hsat : AtomSet.In aw (satAtoms Pi S A)).
@@ -1568,11 +1814,19 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
                 assert (Hle := cardinal_in A aw HawA).
                 lia. }
               exists am; split; [exact Hmin | reflexivity]. }
+        (* the recommends edge: the escape is in the target set, so this
+           obligation is discharged without consulting S at all *)
+        * injection Heq as -> ->.
+          exists (cwSoft Pi S A); split; [apply cwSoft_versionsSoft |].
+          apply mem_coreResolution.
+          right; right; left.
+          exists (pn, pv), A; split; [exact HA |].
+          split; [apply PkgSet.mem_spec; exact HpS | reflexivity].
         * injection Heq as -> ->.
           exists Version.One; split.
           { apply T.VSet.singleton_spec; reflexivity. }
           { apply mem_coreResolution.
-            right; right; right.
+            right; right; right; right.
             exists pn, pv, a0, x0; split; [exact Ha0 |].
             left.
             split; [| reflexivity].
@@ -1581,7 +1835,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           exists Version.Zero; split.
           { apply T.VSet.singleton_spec; reflexivity. }
           { apply mem_coreResolution.
-            right; right; right.
+            right; right; right; right.
             exists m0, u0, a0, x0; split; [exact Hg0 |].
             right.
             assert (Hp0 : PkgSet.mem (m0, u0) S = false).
@@ -1610,9 +1864,23 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         apply mem_satAtoms in Hmin1; destruct Hmin1 as [Ha0A [q [HqS Hqm]]].
         apply (Hfwd a0 q n vs HqS);
           [apply matchb_iff; exact Hqm | | exact Heq].
-        exists cp, cA; split; [exact Hc |].
+        exists cp, cA; split; [apply allClauses_inL; exact Hc |].
         split; [apply PkgSet.mem_spec; exact Hmem | exact Ha0A].
-      + destruct H3 as [cp [cA [Hc [Hmem [a0 [Ha0 [Hpv [w0 [Hcs ->]]]]]]]]].
+      + destruct H3 as [cp [cA [Hc [Hmem ->]]]].
+        unfold cwSoft in Hout.
+        destruct (AtomSet.min_elt (satAtoms Pi S cA)) as [a0 |] eqn:Hmin.
+        * apply dependees_soft_spec in Hout.
+          destruct Hout as (Hhc & Hmm & Heq).
+          assert (Hmin1 := AtomSet.min_elt_spec1 Hmin).
+          apply mem_satAtoms in Hmin1; destruct Hmin1 as [Ha0A [q [HqS Hqm]]].
+          apply (Hfwd a0 q n vs HqS);
+            [apply matchb_iff; exact Hqm | | exact Heq].
+          exists cp, cA; split; [apply allClauses_inR; exact Hc |].
+          split; [apply PkgSet.mem_spec; exact Hmem | exact Ha0A].
+        (* the escape has no dependees, so there is nothing to discharge *)
+        * rewrite dependees_soft_escape in Hout.
+          exfalso; exact (SOde.empty_in _ Hout).
+      + destruct H4 as [cp [cA [Hc [Hmem [a0 [Ha0 [Hpv [w0 [Hcs ->]]]]]]]]].
         pose proof (chooseSatisfier_spec Pi S a0 w0 Hcs)
           as [qn0 [qv0 [Hq0S [Hq0m Ew]]]].
         subst w0.
@@ -1636,7 +1904,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           { apply T.VSet.singleton_spec; reflexivity. }
           { apply mem_coreResolution; left.
             exists (qn0, qv0); split; [exact Hq0S | reflexivity]. }
-      + destruct H4 as [em [eu [ea [ex [He Hcase]]]]];
+      + destruct H5 as [em [eu [ea [ex [He Hcase]]]]];
           destruct Hcase as [[Hg ->] | [Hg [Hex ->]]];
           cbn [dependees] in Hout; exfalso; exact (SOde.empty_in _ Hout).
     - intros nm cv1 cv2 H1 H2.
@@ -1644,76 +1912,46 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       apply mem_coreResolution in H2.
       destruct H1 as [[[n1 v1] [Hp1 E1]] |
                       [[cp1 [cA1 [Hc1 [Hg1 [Hd1 [a1 [Hmin1 E1]]]]]]] |
-                       [[cp1 [cA1 [Hc1 [Hg1
-                           [a1 [Ha1 [Hpv1 [w1 [Hcs1 E1]]]]]]]]] |
-                        [em1 [eu1 [ea1 [ex1
-                          [He1 [[Hg1 E1] | [Hg1 [Hex1 E1]]]]]]]]]]];
-        cbn [fst snd] in E1; injection E1 as -> ->.
-      + destruct H2 as [[[n2 v2] [Hp2 E2]] |
+                       [[cp1 [cA1 [Hc1 [Hg1 E1]]]] |
+                        [[cp1 [cA1 [Hc1 [Hg1
+                            [a1 [Ha1 [Hpv1 [w1 [Hcs1 E1]]]]]]]]] |
+                         [em1 [eu1 [ea1 [ex1
+                           [He1 [[Hg1 E1] | [Hg1 [Hex1 E1]]]]]]]]]]]];
+        cbn [fst snd] in E1; injection E1 as -> ->;
+        destruct H2 as [[[n2 v2] [Hp2 E2]] |
                         [[cp2 [cA2 [Hc2 [Hg2 [Hd2 [a2 [Hmin2 E2]]]]]]] |
-                         [[cp2 [cA2 [Hc2 [Hg2
-                             [a2 [Ha2 [Hpv2 [w2 [Hcs2 E2]]]]]]]]] |
-                          [em2 [eu2 [ea2 [ex2
-                            [He2 [[Hg2 E2] | [Hg2 [Hex2 E2]]]]]]]]]]];
-          cbn [fst snd] in E2; try discriminate E2.
-        injection E2 as <- ->.
+                         [[cp2 [cA2 [Hc2 [Hg2 E2]]]] |
+                          [[cp2 [cA2 [Hc2 [Hg2
+                              [a2 [Ha2 [Hpv2 [w2 [Hcs2 E2]]]]]]]]] |
+                           [em2 [eu2 [ea2 [ex2
+                             [He2 [[Hg2 E2] | [Hg2 [Hex2 E2]]]]]]]]]]]];
+        cbn [fst snd] in E2; try discriminate E2.
+      + injection E2 as <- ->.
         rewrite (Huniq n1 v1 v2 Hp1 Hp2); reflexivity.
-      + destruct H2 as [[[n2 v2] [Hp2 E2]] |
-                        [[cp2 [cA2 [Hc2 [Hg2 [Hd2 [a2 [Hmin2 E2]]]]]]] |
-                         [[cp2 [cA2 [Hc2 [Hg2
-                             [a2 [Ha2 [Hpv2 [w2 [Hcs2 E2]]]]]]]]] |
-                          [em2 [eu2 [ea2 [ex2
-                            [He2 [[Hg2 E2] | [Hg2 [Hex2 E2]]]]]]]]]]];
-          cbn [fst snd] in E2; try discriminate E2.
-        injection E2 as <- ->.
-        congruence.
-      + destruct H2 as [[[n2 v2] [Hp2 E2]] |
-                        [[cp2 [cA2 [Hc2 [Hg2 [Hd2 [a2 [Hmin2 E2]]]]]]] |
-                         [[cp2 [cA2 [Hc2 [Hg2
-                             [a2 [Ha2 [Hpv2 [w2 [Hcs2 E2]]]]]]]]] |
-                          [em2 [eu2 [ea2 [ex2
-                            [He2 [[Hg2 E2] | [Hg2 [Hex2 E2]]]]]]]]]]];
-          cbn [fst snd] in E2; try discriminate E2.
-        injection E2 as <- ->.
-        congruence.
-      + destruct H2 as [[[n2 v2] [Hp2 E2]] |
-                        [[cp2 [cA2 [Hc2 [Hg2 [Hd2 [a2 [Hmin2 E2]]]]]]] |
-                         [[cp2 [cA2 [Hc2 [Hg2
-                             [a2 [Ha2 [Hpv2 [w2 [Hcs2 E2]]]]]]]]] |
-                          [em2 [eu2 [ea2 [ex2
-                            [He2 [[Hg2 E2] | [Hg2 [Hex2 E2]]]]]]]]]]];
-          cbn [fst snd] in E2; try discriminate E2.
-        * injection E2 as <- <- <- <- ->.
-          reflexivity.
-        * injection E2 as <- <- <- <- ->.
-          congruence.
-      + destruct H2 as [[[n2 v2] [Hp2 E2]] |
-                        [[cp2 [cA2 [Hc2 [Hg2 [Hd2 [a2 [Hmin2 E2]]]]]]] |
-                         [[cp2 [cA2 [Hc2 [Hg2
-                             [a2 [Ha2 [Hpv2 [w2 [Hcs2 E2]]]]]]]]] |
-                          [em2 [eu2 [ea2 [ex2
-                            [He2 [[Hg2 E2] | [Hg2 [Hex2 E2]]]]]]]]]]];
-          cbn [fst snd] in E2; try discriminate E2.
-        * injection E2 as <- <- <- <- ->.
-          congruence.
-        * injection E2 as <- <- <- <- ->.
-          reflexivity.
+      + injection E2 as <- ->; congruence.
+      + injection E2 as <- ->; reflexivity.
+      + injection E2 as <- ->; congruence.
+      + injection E2 as <- <- <- <- ->; reflexivity.
+      + injection E2 as <- <- <- <- ->; congruence.
+      + injection E2 as <- <- <- <- ->; congruence.
+      + injection E2 as <- <- <- <- ->; reflexivity.
   Qed.
 
   (* The completeness witness puts S in the Orig block and every synthetic
-     package it adds carries a Disjunct/Selector/Guard name, so the decoder
-     -- which inverts embedPkg exactly on Orig names -- recovers S. *)
-  Corollary debianResolution_coreResolution : forall R D Pi G S,
-      debianResolution (coreResolution R D Pi G S) = S.
+     package it adds carries a Disjunct/Soft/Selector/Guard name, so the
+     decoder -- which inverts embedPkg exactly on Orig names -- recovers S. *)
+  Corollary debianResolution_coreResolution : forall R D Rec Pi G S,
+      debianResolution (coreResolution R D Rec Pi G S) = S.
   Proof.
-    intros R D Pi G S; apply PkgSet.ext; intros [n v].
+    intros R D Rec Pi G S; apply PkgSet.ext; intros [n v].
     rewrite mem_debianResolution, mem_coreResolution.
     unfold embedPkg; cbn [fst snd].
     split.
     - intros [[q [HqS Hq]] |
               [[cp [cA [_ [_ [_ [a [_ Hy]]]]]]] |
-               [[cp [cA [_ [_ [a [_ [_ [w [_ Hy]]]]]]]]] |
-                [em [eu [ea [ex [_ [[_ Hy] | [_ [_ Hy]]]]]]]]]]];
+               [[cp [cA [_ [_ Hy]]]] |
+                [[cp [cA [_ [_ [a [_ [_ [w [_ Hy]]]]]]]]] |
+                 [em [eu [ea [ex [_ [[_ Hy] | [_ [_ Hy]]]]]]]]]]]];
         try discriminate Hy.
       destruct q as [qn qv]; unfold embedPkg in Hq; cbn [fst snd] in Hq.
       injection Hq as -> ->; exact HqS.
@@ -1795,32 +2033,70 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       rewrite Deps.filter_spec'; split; [exact Hc | exact Hb].
     Qed.
 
-    (* stated for every candidate shape at once: the real and the provided
-       branch of us read the same slice, and the rest are empty *)
-    Theorem dependees_lookupSelector :
-      forall R D Pi G (n : N.t) (f : Ver.Formula) (y : Version.t),
-        occursAtomb D (n, f) = true ->
-        dependees R D Pi G (Name.Selector (n, f), y) =
-        dependees (PkgFibred.tailFibre R n) (clausesWith D (n, f))
-          (ProvFibred.nodeFibre Pi n) Conf.empty
-          (Name.Selector (n, f), y).
+    Lemma occursAtomb_slice : forall D Rec a,
+        occursAtomb (allClauses (clausesWith D a) (clausesWith Rec a)) a =
+        occursAtomb (allClauses D Rec) a.
     Proof.
-      intros R D Pi G n f y Hocc; destruct y; cbn [dependees]; try reflexivity;
-        rewrite occursAtomb_clausesWith, provb_nodeFibre, us_filter;
+      intros D Rec a; rewrite !occursAtomb_allClauses,
+        !occursAtomb_clausesWith; reflexivity.
+    Qed.
+
+    (* A selector consults D and Rec through one test and no other, so the
+       slice is free to redistribute the atom's occurrences between the two
+       positions -- or to drop every clause that does not mention it -- as
+       long as the test still answers the same.  Stated for every candidate
+       shape at once: the real and the provided branch of us read the same
+       slice, and the rest are empty. *)
+    Theorem dependees_lookupSelectorAgree :
+      forall R D Rec D' Rec' Pi G (n : N.t) (f : Ver.Formula)
+             (y : Version.t),
+        occursAtomb (allClauses D Rec) (n, f) =
+        occursAtomb (allClauses D' Rec') (n, f) ->
+        dependees R D Rec Pi G (Name.Selector (n, f), y) =
+        dependees (PkgFibred.tailFibre R n) D' Rec'
+          (ProvFibred.nodeFibre Pi n) Conf.empty (Name.Selector (n, f), y).
+    Proof.
+      intros R D Rec D' Rec' Pi G n f y Hagree; destruct y; cbn [dependees];
+        try reflexivity;
+        rewrite <- Hagree, provb_nodeFibre, us_filter;
         reflexivity.
     Qed.
 
+    Theorem versions_lookupSelectorAgree :
+      forall R D Rec D' Rec' Pi G (n : N.t) (f : Ver.Formula),
+        occursAtomb (allClauses D Rec) (n, f) =
+        occursAtomb (allClauses D' Rec') (n, f) ->
+        versions R D Rec Pi G (Name.Selector (n, f)) =
+        versions (PkgFibred.tailFibre R n) D' Rec'
+          (ProvFibred.nodeFibre Pi n) Conf.empty (Name.Selector (n, f)).
+    Proof.
+      intros R D Rec D' Rec' Pi G n f Hagree; cbn [versions].
+      rewrite <- Hagree, provb_nodeFibre, us_filter.
+      reflexivity.
+    Qed.
+
+    Theorem dependees_lookupSelector :
+      forall R D Rec Pi G (n : N.t) (f : Ver.Formula) (y : Version.t),
+        occursAtomb (allClauses D Rec) (n, f) = true ->
+        dependees R D Rec Pi G (Name.Selector (n, f), y) =
+        dependees (PkgFibred.tailFibre R n) (clausesWith D (n, f))
+          (clausesWith Rec (n, f)) (ProvFibred.nodeFibre Pi n) Conf.empty
+          (Name.Selector (n, f), y).
+    Proof.
+      intros R D Rec Pi G n f y Hocc; apply dependees_lookupSelectorAgree.
+      symmetry; apply occursAtomb_slice.
+    Qed.
+
     Theorem versions_lookupSelector :
-      forall R D Pi G (n : N.t) (f : Ver.Formula),
-        occursAtomb D (n, f) = true ->
-        versions R D Pi G (Name.Selector (n, f)) =
+      forall R D Rec Pi G (n : N.t) (f : Ver.Formula),
+        occursAtomb (allClauses D Rec) (n, f) = true ->
+        versions R D Rec Pi G (Name.Selector (n, f)) =
         versions (PkgFibred.tailFibre R n) (clausesWith D (n, f))
-          (ProvFibred.nodeFibre Pi n) Conf.empty
+          (clausesWith Rec (n, f)) (ProvFibred.nodeFibre Pi n) Conf.empty
           (Name.Selector (n, f)).
     Proof.
-      intros R D Pi G n f Hocc; cbn [versions].
-      rewrite occursAtomb_clausesWith, provb_nodeFibre, us_filter.
-      reflexivity.
+      intros R D Rec Pi G n f Hocc; apply versions_lookupSelectorAgree.
+      symmetry; apply occursAtomb_slice.
     Qed.
 
     Lemma mem_clauseNames : forall A (n : N.t),
@@ -1959,46 +2235,55 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
 
     Module DepsFibred := FibredRel Pkg AtomSet.AsUOT ClauseElt Deps.
     Module ConfFibred := FibredRel Pkg Conflictees ConfElt Conf.
-    Theorem dependees_lookupOrig : forall R D Pi G n v,
-        dependees R D Pi G (Name.Orig n, Version.Orig v) =
+    Theorem dependees_lookupOrig : forall R D Rec Pi G n v,
+        dependees R D Rec Pi G (Name.Orig n, Version.Orig v) =
         dependees (realPreimage R (atomNames D (n, v)))
           (DepsFibred.tailFibre D (n, v))
+          (DepsFibred.tailFibre Rec (n, v))
           (Prov.union (provPreimage Pi (atomNames D (n, v)))
              (ProvFibred.tailFibre Pi (n, v)))
           (Conf.union (ConfFibred.tailFibre G (n, v))
              (conflictsAgainst Pi G (n, v)))
           (Name.Orig n, Version.Orig v).
     Proof.
-      intros R D Pi G n v; apply T.DependeesSet.ext; intro y.
+      intros R D Rec Pi G n v; apply T.DependeesSet.ext; intro y.
       rewrite !dependees_orig_spec.
+      assert (Hfib : forall (E : Deps.t) A,
+                 Deps.In ((n, v), A) (DepsFibred.tailFibre E (n, v)) <->
+                 Deps.In ((n, v), A) E).
+      { intros E A; unfold DepsFibred.tailFibre.
+        rewrite Deps.filter_spec'; cbn [DepsFibred.tail fst].
+        split.
+        - intros [HA _]; exact HA.
+        - intro HA; split; [exact HA |].
+          destruct (Pkg.eq_dec (n, v) (n, v)) as [_ | NE];
+            [reflexivity | contradiction NE; reflexivity]. }
       split.
       - intros [[A [HA Hcase]] |
-                [[a [x [Ha Hy]]] |
-                 [m0 [u0 [a [x [Hg [Hmb [Hne [Hex Hy]]]]]]]]]].
-        + left; exists A; split.
-          * unfold DepsFibred.tailFibre.
-            rewrite Deps.filter_spec'.
-            split; [exact HA | cbn [DepsFibred.tail fst]].
-            destruct (Pkg.eq_dec (n, v) (n, v)) as [_ | NE];
-              [reflexivity | contradiction NE; reflexivity].
-          * destruct Hcase as [[Hcard [a0 [Hmin Hy]]] | [Hcard Hy]].
-            { destruct a0 as [an af].
-              assert (Hin : NSet.In an (atomNames D (n, v))).
-              { apply mem_atomNames; exists A; split; [exact HA |].
-                exists af; exact (AtomSet.min_elt_spec1 Hmin). }
-              left; split; [exact Hcard |].
-              exists (an, af); split; [exact Hmin |].
-              rewrite tgt_union_restrict by exact Hin.
-              exact Hy. }
-            { right; split; [exact Hcard | exact Hy]. }
-        + right; left; exists a, x; split; [| exact Hy].
+                [[A [HA Hy]] |
+                 [[a [x [Ha Hy]]] |
+                  [m0 [u0 [a [x [Hg [Hmb [Hne [Hex Hy]]]]]]]]]]].
+        + left; exists A; split; [apply (proj2 (Hfib D A)); exact HA |].
+          destruct Hcase as [[Hcard [a0 [Hmin Hy]]] | [Hcard Hy]].
+          * destruct a0 as [an af].
+            assert (Hin : NSet.In an (atomNames D (n, v))).
+            { apply mem_atomNames; exists A; split; [exact HA |].
+              exists af; exact (AtomSet.min_elt_spec1 Hmin). }
+            left; split; [exact Hcard |].
+            exists (an, af); split; [exact Hmin |].
+            rewrite tgt_union_restrict by exact Hin.
+            exact Hy.
+          * right; split; [exact Hcard | exact Hy].
+        + right; left; exists A; split;
+            [apply (proj2 (Hfib Rec A)); exact HA | exact Hy].
+        + right; right; left; exists a, x; split; [| exact Hy].
           apply Conf.union_spec; left.
           unfold ConfFibred.tailFibre.
           rewrite Conf.filter_spec'.
           split; [exact Ha | cbn [ConfFibred.tail fst]].
           destruct (Pkg.eq_dec (n, v) (n, v)) as [_ | NE];
             [reflexivity | contradiction NE; reflexivity].
-        + right; right; exists m0, u0, a, x.
+        + right; right; right; exists m0, u0, a, x.
           split.
           * apply Conf.union_spec; right.
             unfold conflictsAgainst.
@@ -2010,11 +2295,10 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
             split; [exact Hne |].
             split; [exact Hex | exact Hy].
       - intros [[A [HA Hcase]] |
-                [[a [x [Ha Hy]]] |
-                 [m0 [u0 [a [x [Hg [Hmb [Hne [Hex Hy]]]]]]]]]].
-        + unfold DepsFibred.tailFibre in HA.
-          rewrite Deps.filter_spec' in HA.
-          destruct HA as [HA _].
+                [[A [HA Hy]] |
+                 [[a [x [Ha Hy]]] |
+                  [m0 [u0 [a [x [Hg [Hmb [Hne [Hex Hy]]]]]]]]]]].
+        + apply (proj1 (Hfib D A)) in HA.
           left; exists A; split; [exact HA |].
           destruct Hcase as [[Hcard [a0 [Hmin Hy]]] | [Hcard Hy]].
           * destruct a0 as [an af].
@@ -2026,6 +2310,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
             rewrite tgt_union_restrict in Hy by exact Hin.
             exact Hy.
           * right; split; [exact Hcard | exact Hy].
+        + right; left; exists A; split;
+            [apply (proj1 (Hfib Rec A)); exact HA | exact Hy].
         + assert (HaG : Conf.In ((n, v), (a, x)) G).
           { apply Conf.union_spec in Ha.
             destruct Ha as [Ha | Ha];
@@ -2033,7 +2319,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
               | unfold conflictsAgainst in Ha];
               rewrite Conf.filter_spec' in Ha;
               exact (proj1 Ha). }
-          right; left; exists a, x; split; [exact HaG | exact Hy].
+          right; right; left; exists a, x; split; [exact HaG | exact Hy].
         + rewrite matchb_union_restrict in Hmb.
           assert (HgG : Conf.In ((m0, u0), (a, x)) G).
           { apply Conf.union_spec in Hg.
@@ -2042,19 +2328,19 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
               | unfold conflictsAgainst in Hg];
               rewrite Conf.filter_spec' in Hg;
               exact (proj1 Hg). }
-          right; right; exists m0, u0, a, x.
+          right; right; right; exists m0, u0, a, x.
           split; [exact HgG |].
           split; [exact Hmb |].
           split; [exact Hne |].
           split; [exact Hex | exact Hy].
     Qed.
 
-    Theorem versions_lookupOrig : forall R D Pi G n,
-        versions R D Pi G (Name.Orig n) =
-        versions (PkgFibred.tailFibre R n) Deps.empty Prov.empty Conf.empty
-          (Name.Orig n).
+    Theorem versions_lookupOrig : forall R D Rec Pi G n,
+        versions R D Rec Pi G (Name.Orig n) =
+        versions (PkgFibred.tailFibre R n) Deps.empty Deps.empty Prov.empty
+          Conf.empty (Name.Orig n).
     Proof.
-      intros R D Pi G n; cbn [versions].
+      intros R D Rec Pi G n; cbn [versions].
       rewrite realVersions_tailFibre; reflexivity.
     Qed.
 
@@ -2068,23 +2354,48 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         [exact Hc | apply ASEqb.eqb_true_iff; exact Hb].
     Qed.
 
-    Theorem versions_lookupDisjunct : forall R D Pi G A,
-        versions R D Pi G (Name.Disjunct A) =
-        versions PkgSet.empty (DepsFibred.headFibre D A) Prov.empty Conf.empty
-          (Name.Disjunct A).
+    Theorem versions_lookupDisjunct : forall R D Rec Pi G A,
+        versions R D Rec Pi G (Name.Disjunct A) =
+        versions PkgSet.empty (DepsFibred.headFibre D A) Deps.empty
+          Prov.empty Conf.empty (Name.Disjunct A).
     Proof.
-      intros R D Pi G A; cbn [versions].
+      intros R D Rec Pi G A; cbn [versions].
       rewrite hasClauseb_headFibre; reflexivity.
     Qed.
 
     Theorem dependees_lookupDisjunct :
-      forall R D Pi G A (n : N.t) (f : Ver.Formula),
-        dependees R D Pi G (Name.Disjunct A, Version.Atom (n, f)) =
+      forall R D Rec Pi G A (n : N.t) (f : Ver.Formula),
+        dependees R D Rec Pi G (Name.Disjunct A, Version.Atom (n, f)) =
         dependees (PkgFibred.tailFibre R n) (DepsFibred.headFibre D A)
-          (ProvFibred.nodeFibre Pi n) Conf.empty
+          Deps.empty (ProvFibred.nodeFibre Pi n) Conf.empty
           (Name.Disjunct A, Version.Atom (n, f)).
     Proof.
-      intros R D Pi G A n f; cbn [dependees].
+      intros R D Rec Pi G A n f; cbn [dependees].
+      rewrite hasClauseb_headFibre.
+      unfold tgt.
+      rewrite provb_nodeFibre, us_filter, evalAt_tailFibre.
+      reflexivity.
+    Qed.
+
+    (* the recommends gadget reads its own clause and nothing else, exactly
+       as the disjunction gadget does *)
+    Theorem versions_lookupSoft : forall R D Rec Pi G A,
+        versions R D Rec Pi G (Name.Soft A) =
+        versions PkgSet.empty Deps.empty (DepsFibred.headFibre Rec A)
+          Prov.empty Conf.empty (Name.Soft A).
+    Proof.
+      intros R D Rec Pi G A; cbn [versions].
+      rewrite hasClauseb_headFibre; reflexivity.
+    Qed.
+
+    Theorem dependees_lookupSoft :
+      forall R D Rec Pi G A (n : N.t) (f : Ver.Formula),
+        dependees R D Rec Pi G (Name.Soft A, Version.Atom (n, f)) =
+        dependees (PkgFibred.tailFibre R n) Deps.empty
+          (DepsFibred.headFibre Rec A) (ProvFibred.nodeFibre Pi n) Conf.empty
+          (Name.Soft A, Version.Atom (n, f)).
+    Proof.
+      intros R D Rec Pi G A n f; cbn [dependees].
       rewrite hasClauseb_headFibre.
       unfold tgt.
       rewrite provb_nodeFibre, us_filter, evalAt_tailFibre.
@@ -2101,18 +2412,18 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Qed.
 
     Theorem versions_lookupGuard :
-      forall R D Pi G (p : Pkg.t) (a : Atom.t) (x : bool),
-        versions R D Pi G (Name.Guard p a x) =
-        versions PkgSet.empty Deps.empty Prov.empty (ConfFibred.tailFibre G p)
-          (Name.Guard p a x).
+      forall R D Rec Pi G (p : Pkg.t) (a : Atom.t) (x : bool),
+        versions R D Rec Pi G (Name.Guard p a x) =
+        versions PkgSet.empty Deps.empty Deps.empty Prov.empty
+          (ConfFibred.tailFibre G p) (Name.Guard p a x).
     Proof.
-      intros R D Pi G p a x; cbn [versions].
+      intros R D Rec Pi G p a x; cbn [versions].
       rewrite memb_fibre; reflexivity.
     Qed.
 
     Theorem dependees_lookupGuard :
-      forall R D Pi G (p : Pkg.t) (a : Atom.t) (x : bool) w,
-        dependees R D Pi G (Name.Guard p a x, w) = T.DependeesSet.empty.
-    Proof. intros R D Pi G p a x w; destruct w; reflexivity. Qed.
+      forall R D Rec Pi G (p : Pkg.t) (a : Atom.t) (x : bool) w,
+        dependees R D Rec Pi G (Name.Guard p a x, w) = T.DependeesSet.empty.
+    Proof. intros R D Rec Pi G p a x w; destruct w; reflexivity. Qed.
   End Lookup.
 End Debian.

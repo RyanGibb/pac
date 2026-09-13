@@ -14,6 +14,9 @@ type stanza = {
   architecture : string;
   multi_arch : string option;
   depends : atom list list; (* conjunction of alternative groups *)
+  (* same syntax as depends (Policy 7.2), and kept apart from it because a
+     recommends clause need not be satisfiable for the solve to succeed *)
+  recommends : atom list list;
   provides : provide list;
   conflicts : atom list; (* Conflicts + Breaks atoms *)
 }
@@ -175,6 +178,10 @@ let parse_file path =
             architecture;
             multi_arch;
             depends = List.concat_map parse_depends dep_fields;
+            recommends =
+              (match get "Recommends" with
+              | Some d -> parse_depends d
+              | None -> []);
             provides =
               (match get "Provides" with
               | Some p -> parse_provides p
