@@ -25,26 +25,38 @@ let rec cmp_nondigit s1 i1 s2 i2 =
       let c = compare (char_key s1.[i1]) (char_key s2.[i2]) in
       if c <> 0 then (c, i1, i2) else cmp_nondigit s1 (i1 + 1) s2 (i2 + 1)
 
-let digit_run s i =
+(* end of the digit run starting at i *)
+let digit_end s i =
   let n = String.length s in
   let j = ref i in
   while !j < n && is_digit s.[!j] do
     incr j
   done;
-  (String.sub s i (!j - i), !j)
+  !j
 
+(* first significant digit of the run [i, j): leading zeros dropped, but
+   an all-zero run keeps its last digit so it still counts as a number *)
+let skip_zeros s i j =
+  let k = ref i in
+  while !k < j - 1 && s.[!k] = '0' do
+    incr k
+  done;
+  !k
+
+(* numeric comparison of two digit runs, in place: PubGrub compares
+   versions millions of times per solve, so this must not allocate *)
 let cmp_digit s1 i1 s2 i2 =
-  let d1, j1 = digit_run s1 i1 and d2, j2 = digit_run s2 i2 in
-  let strip s =
-    let k = ref 0 in
-    while !k < String.length s - 1 && s.[!k] = '0' do
-      incr k
-    done;
-    String.sub s !k (String.length s - !k)
+  let j1 = digit_end s1 i1 and j2 = digit_end s2 i2 in
+  let k1 = skip_zeros s1 i1 j1 and k2 = skip_zeros s2 i2 j2 in
+  let l1 = j1 - k1 and l2 = j2 - k2 in
+  let c = compare l1 l2 in
+  let rec lex d =
+    if d >= l1 then 0
+    else
+      let c = Char.compare s1.[k1 + d] s2.[k2 + d] in
+      if c <> 0 then compare c 0 else lex (d + 1)
   in
-  let d1 = strip d1 and d2 = strip d2 in
-  let c = compare (String.length d1) (String.length d2) in
-  let c = if c <> 0 then c else String.compare d1 d2 in
+  let c = if c <> 0 then c else lex 0 in
   (c, j1, j2)
 
 let compare v1 v2 =

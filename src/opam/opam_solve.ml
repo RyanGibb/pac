@@ -304,12 +304,19 @@ struct
 
   let yx x = VR.YSet.singleton (Red.pin rho x)
 
+  module NameMap = Map.Make (struct
+    type t = VR.Name.t
+
+    let compare a b = r2c (VR.NameOT.compare a b)
+  end)
+
   type state = {
     ar : archive;
     edges : (VR.Name.t * VR.Version.t, T.DependeesSet.t) Hashtbl.t;
     gadget_vers : (VR.Name.t, VR.Version.t list) Hashtbl.t;
     processed : (VF.Pkg.t, unit) Hashtbl.t;
     real_vers : (string, VR.Version.t list) Hashtbl.t;
+    mutable canon : VR.Name.t NameMap.t;
   }
 
   let mk_state ar =
@@ -319,7 +326,22 @@ struct
       gadget_vers = Hashtbl.create 65536;
       processed = Hashtbl.create 4096;
       real_vers = Hashtbl.create 4096;
+      canon = NameMap.empty;
     }
+
+  (* A Disjunct or NegDep gadget name carries its formulas, so comparing
+     two equal names walks both in full, and PubGrub does that on every
+     dependency-list scan and map hit.  Each version's reduction builds
+     its own copy of a gadget name shared across versions; one
+     representative per name lets PName.compare answer equality by
+     pointer.  The map is keyed by NameOT itself, so which names unify
+     is exactly NameOT equality and PubGrub's ordering is unchanged. *)
+  let intern st (m : VR.Name.t) : VR.Name.t =
+    match NameMap.find_opt m st.canon with
+    | Some c -> c
+    | None ->
+        st.canon <- NameMap.add m m st.canon;
+        m
 
   let record_deprel st (d : T.DepRel.t) =
     List.iter
@@ -369,7 +391,9 @@ struct
   module PName = struct
     type t = VR.Name.t
 
-    let compare a b = r2c (VR.NameOT.compare a b)
+    (* NameOT is a UsualOrderedType, so a name compares Eq to itself; the
+       pointer test only skips the walk on interned names *)
+    let compare a b = if a == b then 0 else r2c (VR.NameOT.compare a b)
 
     let pp_t fmt (tn : Red.TName.t) =
       match tn with
@@ -387,7 +411,7 @@ struct
   module PVersion = struct
     type t = VR.Version.t
 
-    let compare a b = r2c (VR.VersionOT.compare a b)
+    let compare a b = if a == b then 0 else r2c (VR.VersionOT.compare a b)
 
     let pp fmt (v : t) =
       match v with
@@ -407,7 +431,22 @@ struct
     let root_q =
       (VR.Name.Orig Red.TName.Root, VR.Version.Orig Red.TVer.UnitV)
     in
+    (* Wall time inside the two callbacks; the rest of PG.solve is
+       PubGrub's own search.  Only accumulated when verbose, and with
+       gettimeofday rather than Sys.time: the callbacks run ~10^6 times
+       per solve and a getrusage syscall each would be seconds. *)
+    let t_callbacks = ref 0. in
+    let timed f =
+      if verbose then begin
+        let t0 = Unix.gettimeofday () in
+        let r = f () in
+        t_callbacks := !t_callbacks +. (Unix.gettimeofday () -. t0);
+        r
+      end
+      else f ()
+    in
     let versions (tn : VR.Name.t) : VR.Version.t list =
+      timed @@ fun () ->
       match tn with
       | VR.Name.Orig (Red.TName.Real n) -> (
           try Hashtbl.find st.real_vers n
@@ -429,6 +468,7 @@ struct
       incr nq;
       if verbose && !nq mod 10000 = 0 then
         Printf.eprintf "[q%d] %.1fs\n%!" !nq (Sys.time ());
+      timed @@ fun () ->
       try Hashtbl.find deps_cache (tn, tv)
       with Not_found ->
         let r =
@@ -444,14 +484,26 @@ struct
           in
           List.map
             (fun ((m, vs) : T.Dependees.t) ->
-              (m, PG.Ranges.of_list (T.VSet.elements vs)))
+              (intern st m, PG.Ranges.of_list (T.VSet.elements vs)))
             (T.DependeesSet.elements hs)
         in
         Hashtbl.replace deps_cache (tn, tv) r;
         r
     in
     let goal_range = PG.Ranges.of_list (versions (fst root_q)) in
-    match PG.solve ~versions ~dependencies [ (fst root_q, goal_range) ] with
+    let t0 = Unix.gettimeofday () in
+    let result =
+      PG.solve ~versions ~dependencies [ (fst root_q, goal_range) ]
+    in
+    if verbose then begin
+      let total = Unix.gettimeofday () -. t0 in
+      Printf.eprintf
+        "PG.solve %.2fs: %.2fs in callbacks (%d dependencies queries, %d \
+         packages reduced), %.2fs PubGrub\n\
+         %!"
+        total !t_callbacks !nq !nproc (total -. !t_callbacks)
+    end;
+    match result with
     | Error inc ->
         Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
         None
