@@ -1,0 +1,4 @@
+{"name":"nativefs","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"nativefs","version":"1.0.0","os":["darwin"],
+    "dependencies":{"native-core":"^1"}}}}

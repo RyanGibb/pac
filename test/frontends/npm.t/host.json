@@ -1,0 +1,4 @@
+{"name":"host","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"host","version":"1.0.0",
+    "peerDependencies":{"gadget":"^2"}}}}

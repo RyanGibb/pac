@@ -76,6 +76,9 @@ let rho (x : string) : string option =
 type archive = {
   cache : string;
   offline : bool;
+  (* false under --omit=optional: an optional row is then dropped
+     outright rather than only when the registry cannot satisfy it *)
+  optional : bool;
   pkgs : (string, P.ver list) Hashtbl.t;
   latest : (string, string) Hashtbl.t;
   entry : (string * string, P.ver) Hashtbl.t;
@@ -87,12 +90,14 @@ type archive = {
   mutable n_names : int;
   mutable n_vers : int;
   mutable n_fetched : int;
+  mutable n_opt_dropped : int;
 }
 
-let empty_archive ~cache ~offline =
+let empty_archive ?(optional = true) ~cache ~offline () =
   {
     cache;
     offline;
+    optional;
     pkgs = Hashtbl.create 1024;
     latest = Hashtbl.create 1024;
     entry = Hashtbl.create 16384;
@@ -101,6 +106,7 @@ let empty_archive ~cache ~offline =
     n_names = 0;
     n_vers = 0;
     n_fetched = 0;
+    n_opt_dropped = 0;
   }
 
 (* ---- registry access ---- *)
@@ -245,6 +251,8 @@ type state = {
   repo_of : (string list, Np.RepoSet.t) Hashtbl.t;
   plat_of : (string list, ((string * string) * Np.coq_Gate) list) Hashtbl.t;
   vcache : (Np.Nm.name, Np.Vs.version list) Hashtbl.t;
+  (* the optional-row verdict, keyed by what decides it *)
+  opt_keep : (string * string, bool) Hashtbl.t;
   mutable n_queries : int;
 }
 
@@ -266,20 +274,9 @@ let mk_state ar root =
     repo_of = Hashtbl.create 4096;
     plat_of = Hashtbl.create 4096;
     vcache = Hashtbl.create 65536;
+    opt_keep = Hashtbl.create 1024;
     n_queries = 0;
   }
-
-let dep_rows st p =
-  match Hashtbl.find_opt st.rows p with
-  | Some l -> l
-  | None ->
-      let l =
-        match meta st.ar p with
-        | None -> []
-        | Some v -> List.map xdep v.P.v_deps
-      in
-      Hashtbl.replace st.rows p l;
-      l
 
 let peer_rows st p =
   match Hashtbl.find_opt st.prows p with
@@ -358,6 +355,88 @@ let mk_inst st ~repo ~plat ~deps ~peers : Np.coq_Inst =
     Np.inst_root = st.root;
   }
 
+(* ---- optionalDependencies ----------------------------------------------
+
+   An optional row is an ordinary dependency that npm abandons in exactly
+   one situation: the target cannot be resolved.  #pruneFailedOptional
+   then makes the whole optionalSet inert, and nothing else drops the row
+   -- a peer conflict over an optional dependency is an ordinary
+   ERESOLVE.  So the test is whether any version of the target is
+   available to satisfy the range, and it lives here rather than in the
+   parser, which sees one manifest at a time and has no registry.
+
+   Available, not merely published: engines/os/cpu are an availability
+   cut in this model, effRepo removing a gated-out package from the
+   repository outright, so for resolution it does not exist.  npm reaches
+   the same outcome by a different route -- ENOTARGET at fetch for a
+   range nothing matches, EBADPLATFORM at reify for a platform mismatch,
+   both pruned because the row is optional -- and the outcome is what is
+   modelled.  Testing published versions instead would make the commonest
+   optional dependency in the ecosystem, a darwin-only binary such as
+   fsevents, a false unsatisfiable on every other platform.
+
+   The instance is the one effRepo reads and no more: it takes inst_repo
+   and the gate rows in inst_plat, so this is granSlice's narrowing to a
+   single name -- repoAt and platAt at the target -- with the row and
+   peer fields empty, since nothing here consults them.  Both halves are
+   already memoized per name, so the check reuses whatever the slices
+   built.
+
+   It is applied where a row is read rather than where a packument is
+   loaded, because deciding at load time would have to resolve every
+   optional target of every version eagerly -- the cone pass the driver
+   deliberately does not do, and it would not even terminate on a cycle.
+   Read lazily it costs nothing: the target of a row that survives is a
+   slot target the slice was going to load anyway.
+
+   Evaluation is the calculus's throughout, via the extracted effRepo and
+   rgHolds and under the same flat override the calculus would apply; the
+   mirror in npm_version.ml is not used. *)
+let dep_keep st (d : P.dep) : bool =
+  (not d.P.d_optional)
+  || st.ar.optional
+     &&
+     let n = d.P.d_target in
+     let key = (n, Npm_version.string_of_range d.P.d_range) in
+     match Hashtbl.find_opt st.opt_keep key with
+     | Some b -> b
+     | None ->
+         let rg =
+           match List.assoc_opt n st.ovr with
+           | Some rg -> rg
+           | None -> xrange d.P.d_range
+         in
+         let inst =
+           mk_inst st ~repo:(repo_at st n) ~plat:(plat_at st n) ~deps:[]
+             ~peers:[]
+         in
+         let b =
+           Np.VSet.exists_ (Np.rgHolds rg)
+             (Np.realVersions (Np.effRepo rho inst) n)
+         in
+         if not b then st.ar.n_opt_dropped <- st.ar.n_opt_dropped + 1;
+         Hashtbl.replace st.opt_keep key b;
+         b
+
+let dep_rows st p =
+  match Hashtbl.find_opt st.rows p with
+  | Some l -> l
+  | None ->
+      let l =
+        match meta st.ar p with
+        | None -> []
+        | Some v -> List.map xdep (List.filter (dep_keep st) v.P.v_deps)
+      in
+      Hashtbl.replace st.rows p l;
+      l
+
+(* the rows minting key k, for granSlice; the same filter as dep_rows, so
+   the two views of a package's rows cannot disagree about keysOf *)
+let dep_rows_by_key st (k : string * string) =
+  List.filter_map
+    (fun (p, d) -> if dep_keep st d then Some (p, xdep d) else None)
+    (Hashtbl.find_all st.ar.dep_by_key k)
+
 (* depRows I p: the rows depActive keeps, i.e. dev rows only at the root *)
 let active_rows st p =
   List.filter
@@ -400,9 +479,7 @@ let gran_slice st (k : string * string) (w : string) =
     else Np.RepoSet.empty
   in
   let plat = List.map (fun g -> (p, g)) (gate_rows st p) in
-  let deps =
-    List.map (fun (p, d) -> (p, xdep d)) (Hashtbl.find_all st.ar.dep_by_key k)
-  in
+  let deps = dep_rows_by_key st k in
   let peers = if fst k = snd k then peer_rows_named st (fst k) else [] in
   mk_inst st ~repo ~plat ~deps ~peers
 

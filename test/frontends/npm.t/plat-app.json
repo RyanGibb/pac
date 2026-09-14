@@ -1,0 +1,4 @@
+{"name":"plat-app","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"plat-app","version":"1.0.0",
+    "dependencies":{"theme":"^1","nativefs":"^1"}}}}

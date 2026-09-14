@@ -1,0 +1,4 @@
+{"name":"native","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"native","version":"1.0.0",
+    "dependencies":{"native-core":"^1"}}}}
