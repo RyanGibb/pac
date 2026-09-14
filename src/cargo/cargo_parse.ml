@@ -96,9 +96,10 @@ let dep_of (j : Yojson.Safe.t) : dep option =
       reject ();
       None
 
-(* "dep:a" activates an optional slot, "a?/feat" is the weak form that
-   delivers without activating, "a/feat" is the strong form, and a bare
-   name is another feature of the same crate *)
+(* "dep:a" activates an optional slot, "a/feat" is the strong dependency
+   feature and "a?/feat" the weak one, and a bare name is another feature
+   of the same crate.  The two forms stay apart here because the manifest
+   spells them differently; the calculus resolves them alike. *)
 let entry_of (s : string) : fentry =
   let dep_prefix = "dep:" in
   let n = String.length s in

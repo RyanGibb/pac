@@ -7,11 +7,11 @@ Create Rewrite HintDb cmp_cargo.
 
 (* Cargo: crates resolve with at most one version per semver-compatibility
    class (the granularity g), feature unification per crate version,
-   optional dependencies activated by features, weak (dep?/feat) feature
-   edges, and native-library mutual exclusion via the links key.  The
-   calculus is a source record over honest manifest data plus a verified
-   translation into a FeatureConcurrent instance; composing with that
-   functor's proved reduction reaches Core.  Caret/tilde/wildcard
+   optional dependencies activated by features, and native-library mutual
+   exclusion via the links key.  The calculus is a source record over
+   honest manifest data plus a verified translation into a
+   FeatureConcurrent instance; composing with that functor's proved
+   reduction reaches Core.  Caret/tilde/wildcard
    requirements, implicit features of optional dependencies, and the
    dep: suppression rule are frontend desugarings into the carried
    range/feature-table data. *)
@@ -49,7 +49,11 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
   (* One entry of a crate feature's enable list: another feature of the
      same crate, activation of an optional dependency slot (dep:a), a
-     strong dependency feature (a/feat), or a weak one (a?/feat). *)
+     strong dependency feature (a/feat), or a weak one (a?/feat).  The
+     weak form is kept as its own constructor because the manifest
+     distinguishes it and a later narrowing pass over a fixed resolution
+     would need to; version resolution here reduces it exactly as the
+     strong form, which is what cargo's resolver does. *)
   Module FEntry.
     Inductive fentry : Type :=
     | EFeat (f : F.t)
@@ -166,13 +170,17 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
        end).
 
   (* An optional slot is activated when some enabled feature of its
-     owner lists it via dep:a or a strong a/feat entry; a?/feat entries
-     never activate. *)
+     owner names it, by dep:a or by either a/feat or a?/feat.  A weak
+     entry activating is cargo's resolver behaviour: it activates weak
+     entries unconditionally and narrows them only in a later pass over
+     an already-fixed resolution, which is what keeps a lockfile
+     complete as --features varies. *)
   Definition Activated (FDefs : FDefRel.t) (fs : FSet.t) (p : Pkg.t)
       (a : N.t) : Prop :=
     exists f, FSet.In f fs /\
       (FDefRel.In ((p, f), FEntry.EDep a) FDefs \/
-       exists feat, FDefRel.In ((p, f), FEntry.EDepFeat a feat) FDefs).
+       (exists feat, FDefRel.In ((p, f), FEntry.EDepFeat a feat) FDefs) \/
+       (exists feat, FDefRel.In ((p, f), FEntry.EWeakFeat a feat) FDefs)).
 
   Definition slotRequests (d : SlotData.t) (dflt : F.t) : FSet.t :=
     if sDefault d then FSet.add dflt (sReqFeats d) else sReqFeats d.
@@ -219,8 +227,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     ; res_feat_closure_dep :
         forall p fs f a feat, FeaturedSet.In (p, fs) FS -> FSet.In f fs ->
         (FDefRel.In ((p, f), FEntry.EDepFeat a feat) FDefs \/
-         (FDefRel.In ((p, f), FEntry.EWeakFeat a feat) FDefs /\
-          Activated FDefs fs p a)) ->
+         FDefRel.In ((p, f), FEntry.EWeakFeat a feat) FDefs) ->
         forall d u, SlotRel.In (p, d) Slots -> sAlias d = a ->
         SelRel.In ((p, a), u) sel ->
         forall fs', FeaturedSet.In ((sTarget d, u), fs') FS ->
@@ -258,8 +265,10 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
      features, which res_no_root_support forbids of the FC root); Slot is
      the per-dependency-edge choice node, whose single granule makes each
      edge resolve to one version even across compatibility classes and
-     under renames; DecisionN delivers a/feat and a?/feat entries, firing
-     only when its FWit feature is enabled by the entry's owner. *)
+     under renames; DecisionN delivers a/feat and a?/feat entries to the
+     version the slot picked, since only a node carrying that version can
+     name it, and carries FWit so the delivery is enabled by the entry's
+     owner. *)
   Module NPlus.
     Inductive name : Type :=
     | Root
@@ -308,7 +317,6 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     | VOrig (v : V.t)
     | VChoice (v : V.t)
     | VFire (v : V.t)
-    | VOff
     | VMember (p : Pkg.t)
     | VUnit.
     Definition t := version.
@@ -316,7 +324,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Definition rank (x : t) : nat :=
       match x with
       | VOrig _ => 0 | VChoice _ => 1 | VFire _ => 2
-      | VOff => 3 | VMember _ => 4 | VUnit => 5
+      | VMember _ => 3 | VUnit => 4
       end.
 
     Definition compare (x y : t) : comparison :=
@@ -413,7 +421,6 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     | VPlus.VOrig v => GPlus.GOrig (g v)
     | VPlus.VChoice _ => GPlus.GChoice
     | VPlus.VFire _ => GPlus.GDecide
-    | VPlus.VOff => GPlus.GDecide
     | VPlus.VMember _ => GPlus.GLink
     | VPlus.VUnit => GPlus.GUnit
     end.
@@ -520,8 +527,8 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       subst a; rewrite NEqb.eqb_refl, Hact; reflexivity.
   Qed.
 
-  (* Feature-table entries that create a decision gadget, with the feat they
-     deliver; weak entries never activate, strong ones do. *)
+  (* Feature-table entries that create a decision gadget, with the feat
+     they deliver. *)
   Definition entryFeatD (e : FEntry.t) : option (N.t * F.t) :=
     match e with
     | FEntry.EDepFeat a feat => Some (a, feat)
@@ -529,10 +536,13 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     | _ => None
     end.
 
+  (* Entries that activate an optional slot: dep:a, and both a/feat and
+     a?/feat -- the weak form is reduced as the strong one. *)
   Definition entryActivates (e : FEntry.t) : option N.t :=
     match e with
     | FEntry.EDep a => Some a
     | FEntry.EDepFeat a _ => Some a
+    | FEntry.EWeakFeat a _ => Some a
     | _ => None
     end.
 
@@ -561,11 +571,9 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         match entryFeatD e with
         | Some (a, feat) =>
             SOsp.unionMap (fun '(_, d) =>
-                FC.PkgSet.add
-                  (NPlus.DecisionN n v f a feat, VPlus.VOff)
-                  (SOvp.map
-                     (fun u => (NPlus.DecisionN n v f a feat, VPlus.VFire u))
-                     (evalReq R (sTarget d) (sReq d))))
+                SOvp.map
+                  (fun u => (NPlus.DecisionN n v f a feat, VPlus.VFire u))
+                  (evalReq R (sTarget d) (sReq d)))
               (slotsAt Slots cfgActive rc (n, v) a)
         | None => FC.PkgSet.empty
         end)
@@ -707,9 +715,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     | NPlus.DecisionN n v f a feat =>
         if fdEntryb FDefs (n, v) f a feat
         then SOsv.unionMap (fun '(_, d) =>
-               FC.VSet.add VPlus.VOff
-                 (SOvv.map VPlus.VFire
-                    (evalReq R (sTarget d) (sReq d))))
+               SOvv.map VPlus.VFire (evalReq R (sTarget d) (sReq d)))
              (slotsAt Slots cfgActive rc (n, v) a)
         else FC.VSet.empty
     | NPlus.LinkN l =>
@@ -749,13 +755,10 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
            match entryFeatD e with
            | Some (a, feat) =>
                SOss2.unionMap (fun '(_, d) =>
-                   FC.Feat.SupportSet.add
-                     ((NPlus.DecisionN n v f a feat, VPlus.VOff),
-                      FPlusComp.FWit)
-                     (SOvs.map (fun u =>
-                          ((NPlus.DecisionN n v f a feat, VPlus.VFire u),
-                           FPlusComp.FWit))
-                        (evalReq R (sTarget d) (sReq d))))
+                   SOvs.map (fun u =>
+                       ((NPlus.DecisionN n v f a feat, VPlus.VFire u),
+                        FPlusComp.FWit))
+                     (evalReq R (sTarget d) (sReq d)))
                  (slotsAt Slots cfgActive rc (n, v) a)
            | None => FC.Feat.SupportSet.empty
            end)
@@ -907,7 +910,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             SOsa.map (fun '(_, d) =>
                 (((NPlus.Crate n, VPlus.VOrig v), FPlusComp.FOrigF f),
                  (NPlus.DecisionN n v f a feat,
-                  (FC.VSet.add VPlus.VOff (firesOf R d),
+                  (firesOf R d,
                    FC.Feat.FSet.singleton FPlusComp.FWit))))
               (slotsAt Slots cfgActive rc (n, v) a)
         | None => FC.Feat.AddlDepRel.empty
@@ -992,8 +995,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         entryFeatD e = Some (a, feat) /\
         SlotRel.In ((n, v), d) Slots /\ sAlias d = a /\
         slotActive cfgActive rc (n, v) d = true /\
-        (x = (NPlus.DecisionN n v f a feat, VPlus.VOff) \/
-         exists u, VSet.In u (evalReq R (sTarget d) (sReq d)) /\
+        (exists u, VSet.In u (evalReq R (sTarget d) (sReq d)) /\
            x = (NPlus.DecisionN n v f a feat, VPlus.VFire u)).
   Proof.
     intros R FDefs Slots cfgActive rc x; unfold featdBlock.
@@ -1005,10 +1007,8 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       apply SOsp.mem_unionMap in Hx; destruct Hx as [[q d] [Hq Hx]];
         cbn beta iota in Hx.
       apply mem_slotsAt in Hq; destruct Hq as [Hs [-> [Ha Hact]]].
-      apply FC.PkgSet.add_spec in Hx.
       exists n, v, f, e, a, feat, d.
       repeat split; try assumption.
-      destruct Hx as [-> | Hx]; [left; reflexivity | right].
       apply SOvp.mem_map in Hx; destruct Hx as [u [Hu ->]].
       exists u; split; [exact Hu | reflexivity].
     - intros [n [v [f [e [a [feat [d [He [Ee [Hs [Ha [Hact Hx]]]]]]]]]]]].
@@ -1016,8 +1016,8 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       rewrite Ee.
       apply SOsp.mem_unionMap; exists ((n, v), d); split.
       + apply mem_slotsAt; repeat split; assumption.
-      + cbn beta iota; apply FC.PkgSet.add_spec.
-        destruct Hx as [-> | [u [Hu ->]]]; [left; reflexivity | right].
+      + cbn beta iota.
+        destruct Hx as [u [Hu ->]].
         apply SOvp.mem_map; exists u; split; [exact Hu | reflexivity].
   Qed.
 
@@ -1111,13 +1111,11 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         apply SOsv.mem_unionMap in Hw.
         destruct Hw as [[q d] [Hq Hw]]; cbn beta iota in Hw.
         apply mem_slotsAt in Hq; destruct Hq as [Hq [-> [Ha Hact]]].
-        apply FC.VSet.add_spec in Hw.
         right; right; right; left; apply mem_featdBlock.
         exists n, v, f, e, a, feat, d.
         repeat split; try assumption.
-        destruct Hw as [-> | Hw]; [left; reflexivity |].
         apply SOvv.mem_map in Hw; destruct Hw as [u [Hu ->]].
-        right; exists u; split; [exact Hu | reflexivity].
+        exists u; split; [exact Hu | reflexivity].
       + destruct H as [q0 [l [Hl0 ->]]]; simpl in Hw.
         apply SOlv.mem_filterMap in Hw.
         destruct Hw as [[q l'] [Hq He]]; cbn beta iota in He.
@@ -1160,18 +1158,13 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         apply SOvp2.mem_map.
         assert (Hb : fdEntryb FDefs (n, v) f a feat = true)
           by (apply fdEntryb_iff; eauto).
-        destruct Hw as [-> | [u [Hu ->]]].
-        * exists VPlus.VOff; split; [| reflexivity].
-          simpl; rewrite Hb.
-          apply SOsv.mem_unionMap; exists ((n, v), d); split.
-          { apply mem_slotsAt; repeat split; assumption. }
-          cbn beta iota; apply FC.VSet.add_spec; left; reflexivity.
-        * exists (VPlus.VFire u); split; [| reflexivity].
-          simpl; rewrite Hb.
-          apply SOsv.mem_unionMap; exists ((n, v), d); split.
-          { apply mem_slotsAt; repeat split; assumption. }
-          cbn beta iota; apply FC.VSet.add_spec; right.
-          apply SOvv.mem_map; exists u; split; [exact Hu | reflexivity].
+        destruct Hw as [u [Hu ->]].
+        exists (VPlus.VFire u); split; [| reflexivity].
+        simpl; rewrite Hb.
+        apply SOsv.mem_unionMap; exists ((n, v), d); split.
+        { apply mem_slotsAt; repeat split; assumption. }
+        cbn beta iota.
+        apply SOvv.mem_map; exists u; split; [exact Hu | reflexivity].
       + apply mem_linkBlock in H; destruct H as [n [v [l [Hl [HR ->]]]]].
         exists (NPlus.LinkN l); split;
           [apply mem_targetNames; right; right; right; right; eauto |].
@@ -1195,9 +1188,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
          entryFeatD e = Some (a, feat) /\
          SlotRel.In ((n, v), d) Slots /\ sAlias d = a /\
          slotActive cfgActive rc (n, v) d = true /\
-         (y = ((NPlus.DecisionN n v f a feat, VPlus.VOff),
-               FPlusComp.FWit) \/
-          exists u, VSet.In u (evalReq R (sTarget d) (sReq d)) /\
+         (exists u, VSet.In u (evalReq R (sTarget d) (sReq d)) /\
             y = ((NPlus.DecisionN n v f a feat, VPlus.VFire u),
                  FPlusComp.FWit))).
   Proof.
@@ -1217,10 +1208,8 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         apply SOss2.mem_unionMap in Hy; destruct Hy as [[q d] [Hq Hy]];
           cbn beta iota in Hy.
         apply mem_slotsAt in Hq; destruct Hq as [Hs [-> [Ha Hact]]].
-        apply FC.Feat.SupportSet.add_spec in Hy.
         exists n, v, f, e, a, feat, d.
         repeat split; try assumption.
-        destruct Hy as [-> | Hy]; [left; reflexivity | right].
         apply SOvs.mem_map in Hy; destruct Hy as [u [Hu ->]].
         exists u; split; [exact Hu | reflexivity].
     - intros [[n [v [f [Hs ->]]]]
@@ -1242,8 +1231,8 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         cbn beta iota; rewrite Ee.
         apply SOss2.mem_unionMap; exists ((n, v), d); split.
         * apply mem_slotsAt; repeat split; assumption.
-        * cbn beta iota; apply FC.Feat.SupportSet.add_spec.
-          destruct Hy as [-> | [u [Hu ->]]]; [left; reflexivity | right].
+        * cbn beta iota.
+          destruct Hy as [u [Hu ->]].
           apply SOvs.mem_map; exists u; split; [exact Hu | reflexivity].
   Qed.
 
@@ -1506,7 +1495,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         slotActive cfgActive rc (n, v) d = true /\
         e = (((NPlus.Crate n, VPlus.VOrig v), FPlusComp.FOrigF f),
              (NPlus.DecisionN n v f a feat,
-              (FC.VSet.add VPlus.VOff (firesOf R d),
+              (firesOf R d,
                FC.Feat.FSet.singleton FPlusComp.FWit))).
   Proof.
     intros R FDefs Slots cfgActive rc e; unfold witEnableEdges.
@@ -1778,7 +1767,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       - apply mem_featdBlock in He;
           destruct He as
             [? [? [? [? [? [? [? [_ [_ [_ [_ [_ He]]]]]]]]]]]];
-          destruct He as [He | [? [_ He]]]; discriminate He.
+          destruct He as [? [_ He]]; discriminate He.
       - apply mem_linkBlock in He;
           destruct He as [? [? [? [_ [_ He]]]]]; discriminate He. }
     assert (A2 : forall n v a u fs,
@@ -1800,7 +1789,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       - apply mem_featdBlock in He;
           destruct He as
             [? [? [? [? [? [? [? [_ [_ [_ [_ [_ He]]]]]]]]]]]];
-          destruct He as [He | [? [_ He]]]; discriminate He.
+          destruct He as [? [_ He]]; discriminate He.
       - apply mem_linkBlock in He;
           destruct He as [? [? [? [_ [_ He]]]]]; discriminate He. }
     assert (A4 : forall nm x x' fs fs',
@@ -1872,7 +1861,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       + injection He as -> -> ->; exact Hsp.
       + destruct Hbad as
           [? [? [? [? [? [? [? [_ [_ [_ [_ [_ He]]]]]]]]]]]];
-          destruct He as [He | [? [_ He]]]; discriminate He.
+          destruct He as [? [_ He]]; discriminate He.
     - (* res_sel_functional *)
       intros [n v] a u u' Hu Hu'.
       apply mem_decodeSel in Hu; destruct Hu as [fs Hu].
@@ -1935,10 +1924,12 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         assert (Hea : exists e',
             FDefRel.In (((n, v), f), e') FDefs /\
             entryActivates e' = Some (sAlias d)).
-        { destruct Hent as [He | [feat He]].
+        { destruct Hent as [He | [[feat He] | [feat He]]].
           - exists (FEntry.EDep (sAlias d)); split;
               [exact He | reflexivity].
           - exists (FEntry.EDepFeat (sAlias d) feat); split;
+              [exact He | reflexivity].
+          - exists (FEntry.EWeakFeat (sAlias d) feat); split;
               [exact He | reflexivity]. }
         destruct Hea as [e' [He' Ea]].
         assert (Hga : FC.Feat.AddlDepRel.In
@@ -1976,7 +1967,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       apply mem_stripFS in Hf.
       assert (He' : exists e', FDefRel.In (((n, v), f), e') FDefs /\
           entryFeatD e' = Some (a, feat)).
-      { destruct Hent as [He | [He _]].
+      { destruct Hent as [He | He].
         - exists (FEntry.EDepFeat a feat); split; [exact He | reflexivity].
         - exists (FEntry.EWeakFeat a feat); split;
             [exact He | reflexivity]. }
@@ -1988,8 +1979,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       assert (Hwe : FC.Feat.AddlDepRel.In
           (((NPlus.Crate n, VPlus.VOrig v), FPlusComp.FOrigF f),
            (NPlus.DecisionN n v f (sAlias d) feat,
-            (FC.VSet.add VPlus.VOff (firesOf R d),
-             FC.Feat.FSet.singleton FPlusComp.FWit)))
+            (firesOf R d, FC.Feat.FSet.singleton FPlusComp.FWit)))
           (transDa R FDefs Slots cfgActive (rn, rv))).
       { apply mem_transDa; right; right; left; apply mem_witEnableEdges.
         exists n, v, f, e', (sAlias d), feat, d; repeat split;
@@ -2010,9 +2000,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         as [y [[Hy [[fsy [Hsuby HyS]] Hpiy]] _]].
       apply FC.VSet.singleton_spec in Hy; subst y.
       assert (Hwg : gPlus g w = gPlus g (VPlus.VFire u)).
-      { apply FC.VSet.add_spec in Hw.
-        destruct Hw as [-> | Hw]; [reflexivity |].
-        unfold firesOf in Hw; apply SOvv.mem_map in Hw;
+      { unfold firesOf in Hw; apply SOvv.mem_map in Hw;
           destruct Hw as [u' [_ ->]]; reflexivity. }
       specialize (A4 _ _ _ _ _ HwS HyS Hwg); subst w.
       assert (Hwd : FC.Feat.AddlDepRel.In
@@ -2096,13 +2084,18 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       destruct e; cbn in Ha; try discriminate;
         apply NEqb.eqb_true_iff in Ha; subst a.
       + exists f; split; [exact Hf | left; exact He].
-      + exists f; split; [exact Hf | right; eexists; exact He].
-    - intros [f [Hf [He | [feat He]]]].
+      + exists f; split; [exact Hf | right; left; eexists; exact He].
+      + exists f; split; [exact Hf | right; right; eexists; exact He].
+    - intros [f [Hf [He | [[feat He] | [feat He]]]]].
       + exists ((p, f), FEntry.EDep a); split; [exact He |].
         cbn beta iota; rewrite PkgEqb.eqb_refl; cbn.
         apply FSet.mem_spec in Hf; rewrite Hf; cbn.
         rewrite NEqb.eqb_refl; reflexivity.
       + exists ((p, f), FEntry.EDepFeat a feat); split; [exact He |].
+        cbn beta iota; rewrite PkgEqb.eqb_refl; cbn.
+        apply FSet.mem_spec in Hf; rewrite Hf; cbn.
+        rewrite NEqb.eqb_refl; reflexivity.
+      + exists ((p, f), FEntry.EWeakFeat a feat); split; [exact He |].
         cbn beta iota; rewrite PkgEqb.eqb_refl; cbn.
         apply FSet.mem_spec in Hf; rewrite Hf; cbn.
         rewrite NEqb.eqb_refl; reflexivity.
@@ -2193,35 +2186,6 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       apply requiredb_iff in Hreq; rewrite Hreq; reflexivity.
   Qed.
 
-  Definition hasActiveSlotb (Slots : SlotRel.t)
-      (cfgActive : CfgS.t -> bool) (rc : Pkg.t) (q : Pkg.t) (a : N.t)
-    : bool :=
-    SlotRel.exists_ (fun '(q', d) =>
-        andb (PkgEqb.eqb q' q)
-          (andb (NEqb.eqb (sAlias d) a)
-             (slotActive cfgActive rc q' d)))
-      Slots.
-
-  Lemma hasActiveSlotb_iff : forall Slots cfgActive rc q a,
-      hasActiveSlotb Slots cfgActive rc q a = true <->
-      exists d, SlotRel.In (q, d) Slots /\ sAlias d = a /\
-        slotActive cfgActive rc q d = true.
-  Proof.
-    intros Slots cfgActive rc q a; unfold hasActiveSlotb.
-    rewrite SlotRel.exists_spec'.
-    split.
-    - intros [[q' d] [Hd Hb]]; cbn beta iota in Hb.
-      apply andb_true_iff in Hb; destruct Hb as [Hq Hb].
-      apply andb_true_iff in Hb; destruct Hb as [Ha Hact].
-      apply PkgEqb.eqb_true_iff in Hq; subst q'.
-      apply NEqb.eqb_true_iff in Ha.
-      exists d; repeat split; assumption.
-    - intros [d [Hd [Ha Hact]]].
-      exists (q, d); split; [exact Hd | cbn beta iota].
-      rewrite PkgEqb.eqb_refl; cbn.
-      subst a; rewrite NEqb.eqb_refl; cbn; exact Hact.
-  Qed.
-
   (* -- the completeness witness: the FC featured resolution and parent
      relation a Cargo resolution induces -- *)
 
@@ -2266,24 +2230,6 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         else FC.Feat.FeaturedSet.empty)
       sel.
 
-  Definition wOffs (FDefs : FDefRel.t) (Slots : SlotRel.t)
-      (cfgActive : CfgS.t -> bool) (rc : Pkg.t) (S : PkgSet.t)
-      (FS : FeaturedSet.t) : FC.Feat.FeaturedSet.t :=
-    SOfdw.filterMap (fun '(((n0, v0), f), e) =>
-        match entryFeatD e with
-        | Some (a, feat) =>
-            if andb (PkgSet.mem (n0, v0) S)
-                 (andb (FSet.mem f (fsAt FS (n0, v0)))
-                    (andb (hasActiveSlotb Slots cfgActive rc (n0, v0) a)
-                       (negb (selectsb FDefs Slots cfgActive rc S FS
-                                (n0, v0) a))))
-            then Some ((NPlus.DecisionN n0 v0 f a feat, VPlus.VOff),
-                       FC.Feat.FSet.singleton FPlusComp.FWit)
-            else None
-        | None => None
-        end)
-      FDefs.
-
   Module SOlw := SetOps LinkElt FC.Feat.Featured LinkRel
     FC.Feat.FeaturedSet.
   Definition wLinks (S : PkgSet.t) (Links : LinkRel.t)
@@ -2304,9 +2250,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             (wChoices FDefs Slots cfgActive rc S FS sel)
             (FC.Feat.FeaturedSet.union
                (wFires FDefs Slots cfgActive rc S FS sel)
-               (FC.Feat.FeaturedSet.union
-                  (wOffs FDefs Slots cfgActive rc S FS)
-                  (wLinks S Links))))).
+               (wLinks S Links)))).
 
   Lemma mem_wCrates : forall FS y,
       FC.Feat.FeaturedSet.In y (wCrates FS) <->
@@ -2376,42 +2320,6 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       rewrite Hd, PkgEqb.eqb_refl, NEqb.eqb_refl; reflexivity.
   Qed.
 
-  Lemma mem_wOffs : forall FDefs Slots cfgActive rc S FS y,
-      FC.Feat.FeaturedSet.In y (wOffs FDefs Slots cfgActive rc S FS) <->
-      exists n0 v0 f e a feat,
-        FDefRel.In (((n0, v0), f), e) FDefs /\
-        entryFeatD e = Some (a, feat) /\
-        PkgSet.In (n0, v0) S /\
-        FSet.In f (fsAt FS (n0, v0)) /\
-        hasActiveSlotb Slots cfgActive rc (n0, v0) a = true /\
-        selectsb FDefs Slots cfgActive rc S FS (n0, v0) a = false /\
-        y = ((NPlus.DecisionN n0 v0 f a feat, VPlus.VOff),
-             FC.Feat.FSet.singleton FPlusComp.FWit).
-  Proof.
-    intros FDefs Slots cfgActive rc S FS y; unfold wOffs.
-    rewrite SOfdw.mem_filterMap.
-    split.
-    - intros [[[[n0 v0] f] e] [Hf He]]; cbn beta iota in He.
-      destruct (entryFeatD e) as [[a feat] |] eqn:Hd; [| discriminate].
-      destruct (andb (PkgSet.mem (n0, v0) S) _) eqn:Hg in He;
-        [| discriminate].
-      injection He as <-.
-      apply andb_true_iff in Hg; destruct Hg as [HS Hg].
-      apply andb_true_iff in Hg; destruct Hg as [Hfs Hg].
-      apply andb_true_iff in Hg; destruct Hg as [Hslot Hns].
-      apply negb_true_iff in Hns.
-      apply PkgSet.mem_spec in HS.
-      apply FSet.mem_spec in Hfs.
-      exists n0, v0, f, e, a, feat; repeat split; assumption.
-    - intros [n0 [v0 [f [e [a [feat
-        [Hf [Hd [HS [Hfs [Hslot [Hns ->]]]]]]]]]]]].
-      exists (((n0, v0), f), e); split; [exact Hf | cbn beta iota].
-      rewrite Hd.
-      apply PkgSet.mem_spec in HS; rewrite HS.
-      apply FSet.mem_spec in Hfs; rewrite Hfs.
-      rewrite Hslot, Hns; reflexivity.
-  Qed.
-
   Lemma mem_wLinks : forall S Links y,
       FC.Feat.FeaturedSet.In y (wLinks S Links) <->
       exists p l, LinkRel.In (p, l) Links /\ PkgSet.In p S /\
@@ -2438,7 +2346,6 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         (wChoices FDefs Slots cfgActive rc S FS sel) \/
       FC.Feat.FeaturedSet.In y
         (wFires FDefs Slots cfgActive rc S FS sel) \/
-      FC.Feat.FeaturedSet.In y (wOffs FDefs Slots cfgActive rc S FS) \/
       FC.Feat.FeaturedSet.In y (wLinks S Links).
   Proof.
     intros; unfold fcResolution.
@@ -2515,24 +2422,6 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
              FDefs
         else FC.ParentRel.empty)
       sel.
-
-  Definition piEnablesN (FDefs : FDefRel.t) (Slots : SlotRel.t)
-      (cfgActive : CfgS.t -> bool) (rc : Pkg.t) (S : PkgSet.t)
-      (FS : FeaturedSet.t) : FC.ParentRel.t :=
-    SOfdr.filterMap (fun '(((n0, v0), f), e) =>
-        match entryFeatD e with
-        | Some (a, feat) =>
-            if andb (PkgSet.mem (n0, v0) S)
-                 (andb (FSet.mem f (fsAt FS (n0, v0)))
-                    (andb (hasActiveSlotb Slots cfgActive rc (n0, v0) a)
-                       (negb (selectsb FDefs Slots cfgActive rc S FS
-                                (n0, v0) a))))
-            then Some ((NPlus.DecisionN n0 v0 f a feat, VPlus.VOff),
-                       (NPlus.Crate n0, VPlus.VOrig v0))
-            else None
-        | None => None
-        end)
-      FDefs.
 
   Definition piDelivers (FDefs : FDefRel.t) (Slots : SlotRel.t)
       (cfgActive : CfgS.t -> bool) (rc : Pkg.t) (S : PkgSet.t)
@@ -2698,42 +2587,6 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       rewrite Hd, PkgEqb.eqb_refl, NEqb.eqb_refl; reflexivity.
   Qed.
 
-  Lemma mem_piEnablesN : forall FDefs Slots cfgActive rc S FS y,
-      FC.ParentRel.In y (piEnablesN FDefs Slots cfgActive rc S FS) <->
-      exists n0 v0 f e a feat,
-        FDefRel.In (((n0, v0), f), e) FDefs /\
-        entryFeatD e = Some (a, feat) /\
-        PkgSet.In (n0, v0) S /\
-        FSet.In f (fsAt FS (n0, v0)) /\
-        hasActiveSlotb Slots cfgActive rc (n0, v0) a = true /\
-        selectsb FDefs Slots cfgActive rc S FS (n0, v0) a = false /\
-        y = ((NPlus.DecisionN n0 v0 f a feat, VPlus.VOff),
-             (NPlus.Crate n0, VPlus.VOrig v0)).
-  Proof.
-    intros FDefs Slots cfgActive rc S FS y; unfold piEnablesN.
-    rewrite SOfdr.mem_filterMap.
-    split.
-    - intros [[[[n0 v0] f] e] [Hf He]]; cbn beta iota in He.
-      destruct (entryFeatD e) as [[a feat] |] eqn:Hd; [| discriminate].
-      destruct (andb (PkgSet.mem (n0, v0) S) _) eqn:Hg in He;
-        [| discriminate].
-      injection He as <-.
-      apply andb_true_iff in Hg; destruct Hg as [HS Hg].
-      apply andb_true_iff in Hg; destruct Hg as [Hfs Hg].
-      apply andb_true_iff in Hg; destruct Hg as [Hslot Hns].
-      apply negb_true_iff in Hns.
-      apply PkgSet.mem_spec in HS.
-      apply FSet.mem_spec in Hfs.
-      exists n0, v0, f, e, a, feat; repeat split; assumption.
-    - intros [n0 [v0 [f [e [a [feat
-        [Hf [Hd [HS [Hfs [Hslot [Hns ->]]]]]]]]]]]].
-      exists (((n0, v0), f), e); split; [exact Hf | cbn beta iota].
-      rewrite Hd.
-      apply PkgSet.mem_spec in HS; rewrite HS.
-      apply FSet.mem_spec in Hfs; rewrite Hfs.
-      rewrite Hslot, Hns; reflexivity.
-  Qed.
-
   Lemma mem_piDelivers : forall FDefs Slots cfgActive rc S FS sel y,
       FC.ParentRel.In y (piDelivers FDefs Slots cfgActive rc S FS sel) <->
       exists n v a u f e feat d,
@@ -2828,11 +2681,9 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                (FC.ParentRel.union
                   (piEnablesF FDefs Slots cfgActive rc S FS sel)
                   (FC.ParentRel.union
-                     (piEnablesN FDefs Slots cfgActive rc S FS)
-                     (FC.ParentRel.union
-                        (piDelivers FDefs Slots cfgActive rc S FS sel)
-                        (FC.ParentRel.union (piLinks S Links)
-                           (piSelves S)))))))).
+                     (piDelivers FDefs Slots cfgActive rc S FS sel)
+                     (FC.ParentRel.union (piLinks S Links)
+                        (piSelves S))))))).
 
   Lemma mem_fcParents : forall FDefs Slots Links cfgActive rc S FS sel y,
       FC.ParentRel.In y
@@ -2842,7 +2693,6 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       FC.ParentRel.In y (piHops FDefs Slots cfgActive rc S FS sel) \/
       FC.ParentRel.In y (piDecides FDefs Slots cfgActive rc S FS sel) \/
       FC.ParentRel.In y (piEnablesF FDefs Slots cfgActive rc S FS sel) \/
-      FC.ParentRel.In y (piEnablesN FDefs Slots cfgActive rc S FS) \/
       FC.ParentRel.In y (piDelivers FDefs Slots cfgActive rc S FS sel) \/
       FC.ParentRel.In y (piLinks S Links) \/
       FC.ParentRel.In y (piSelves S).
@@ -2850,18 +2700,6 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     intros; unfold fcParents.
     rewrite FC.ParentRel.add_spec, !FC.ParentRel.union_spec; tauto.
   Qed.
-
-  (* Weak feature entries may only reference optional slots -- Cargo
-     itself rejects dep?/feat on a non-optional dependency, and the
-     decision gadget hard-codes that reading: a non-optional slot's
-     choice is always selected, which would fire a weak delivery the
-     source semantics does not demand. *)
-  Definition WeakOptional (FDefs : FDefRel.t) (Slots : SlotRel.t)
-    : Prop :=
-    forall p f a feat,
-      FDefRel.In ((p, f), FEntry.EWeakFeat a feat) FDefs ->
-      forall d, SlotRel.In (p, d) Slots -> sAlias d = a ->
-      sOptional d = true.
 
   (* The synthetic root carries no support entries whatever the source
      resolution does: transSupport only ever names crates and gadgets. *)
@@ -2875,7 +2713,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     - discriminate He.
     - destruct Hy
         as [n [v [f0 [e [a [feat [d [_ [_ [_ [_ [_ Hy]]]]]]]]]]]].
-      destruct Hy as [He | [u [_ He]]]; discriminate He.
+      destruct Hy as [u [_ He]]; discriminate He.
   Qed.
 
   Lemma fc_root_mem : forall FDefs Slots Links cfgActive rc S FS sel,
@@ -2939,7 +2777,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       S FS sel Half Hres p fs Hy.
     pose proof Hres as Hres0; destruct Hres0.
     apply mem_fcResolution in Hy.
-    destruct Hy as [Hy | [Hy | [Hy | [Hy | [Hy | Hy]]]]].
+    destruct Hy as [Hy | [Hy | [Hy | [Hy | Hy]]]].
     - injection Hy as -> ->.
       apply mem_transReal; left; reflexivity.
     - apply mem_wCrates in Hy; destruct Hy as [n [v [fs0 [Hfs He]]]].
@@ -2966,18 +2804,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       apply mem_featdBlock.
       exists n, v, f, e, a, feat, d.
       repeat split; try assumption.
-      right; exists u; split; [exact Hu | reflexivity].
-    - apply mem_wOffs in Hy.
-      destruct Hy as [n0 [v0 [f [e [a [feat
-        [Hf [Hd [HS [Hfs [Hslot [Hns He]]]]]]]]]]]].
-      injection He as -> ->.
-      apply hasActiveSlotb_iff in Hslot.
-      destruct Hslot as [d [Hdd [Ha Hact]]].
-      apply mem_transReal; right; right; right; left.
-      apply mem_featdBlock.
-      exists n0, v0, f, e, a, feat, d.
-      repeat split; try assumption.
-      left; reflexivity.
+      exists u; split; [exact Hu | reflexivity].
     - apply mem_wLinks in Hy.
       destruct Hy as [q [l [Hl [HS He]]]].
       injection He as -> ->.
@@ -3005,7 +2832,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       S FS sel Half Hres n v fs f Hy Hf.
     pose proof Hres as Hres0; destruct Hres0.
     apply mem_fcResolution in Hy.
-    destruct Hy as [Hy | [Hy | [Hy | [Hy | [Hy | Hy]]]]].
+    destruct Hy as [Hy | [Hy | [Hy | [Hy | Hy]]]].
     - injection Hy as -> -> ->.
       exfalso; exact (FC.Feat.FSet.empty_spec Hf).
     - apply mem_wCrates in Hy.
@@ -3033,18 +2860,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       apply mem_transSupport; right.
       exists n1, v1, f0, e, a, feat, d.
       repeat split; try assumption.
-      right; exists u; split; [exact Hu | reflexivity].
-    - apply mem_wOffs in Hy.
-      destruct Hy as [n0 [v0 [f0 [e [a [feat
-        [Hfd [Hd [HS [Hfs [Hslot [Hns He]]]]]]]]]]]].
-      injection He as -> -> ->.
-      apply FC.Feat.FSet.singleton_spec in Hf; subst f.
-      apply hasActiveSlotb_iff in Hslot.
-      destruct Hslot as [d [Hdd [Ha Hact]]].
-      apply mem_transSupport; right.
-      exists n0, v0, f0, e, a, feat, d.
-      repeat split; try assumption.
-      left; reflexivity.
+      exists u; split; [exact Hu | reflexivity].
     - apply mem_wLinks in Hy.
       destruct Hy as [q [l [Hl [HS He]]]].
       injection He as -> -> ->.
@@ -3055,7 +2871,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
      congruence can discharge every cross-family pairing. *)
   Ltac fc_node_cases H :=
     apply mem_fcResolution in H;
-    destruct H as [H | [H | [H | [H | [H | H]]]]];
+    destruct H as [H | [H | [H | [H | H]]]];
     [ unfold transRoot in H
     | apply mem_wCrates in H;
       let n := fresh "cn" in let v := fresh "cv" in
@@ -3067,10 +2883,6 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       destruct H
         as [?n [?v [?a [?u [?f [?e [?feat
            [?Hin [?Hsel [?Hfd [?Hd ?He]]]]]]]]]]]
-    | apply mem_wOffs in H;
-      destruct H
-        as [?n [?v [?f [?e [?a [?feat
-           [?Hfd [?Hd [?HS [?Hfs [?Hslot [?Hns ?He]]]]]]]]]]]]
     | apply mem_wLinks in H;
       destruct H as [?q [?l [?Hl [?HS ?He]]]] ].
 
@@ -3153,7 +2965,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
   Ltac fc_pi_cases H :=
     apply mem_fcParents in H;
-    destruct H as [H | [H | [H | [H | [H | [H | [H | [H | H]]]]]]]];
+    destruct H as [H | [H | [H | [H | [H | [H | [H | H]]]]]]];
     [ unfold transRoot in H
     | apply mem_piChoices in H;
       destruct H as [?n [?v [?a [?u [?Hin [?Hsel ?He]]]]]]
@@ -3168,10 +2980,6 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       destruct H
         as [?n [?v [?a [?u [?f [?e [?feat
            [?Hin [?Hsel [?Hfd [?Hdd ?He]]]]]]]]]]]
-    | apply mem_piEnablesN in H;
-      destruct H
-        as [?n [?v [?f [?e [?a [?feat
-           [?Hfd [?Hdd [?HS [?Hfs [?Hslot [?Hns ?He]]]]]]]]]]]]
     | apply mem_piDelivers in H;
       destruct H
         as [?n [?v [?a [?u [?f [?e [?feat [?d
@@ -3350,14 +3158,14 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           ((NPlus.LinkN l, VPlus.VMember (n, v)),
            (NPlus.Crate n, VPlus.VOrig v))
           (fcParents FDefs Slots Links cfgActive (rn, rv) S FS sel)).
-      { apply mem_fcParents; do 7 right; left; apply mem_piLinks.
+      { apply mem_fcParents; do 6 right; left; apply mem_piLinks.
         exists (n, v), l; repeat split; try assumption. }
       exists (VPlus.VMember (n, v)); split.
       + split; [| split].
         * apply FC.VSet.singleton_spec; reflexivity.
         * exists FC.Feat.FSet.empty; split.
           -- apply FC.Feat.FSet.empty_subset.
-          -- apply mem_fcResolution; do 5 right; apply mem_wLinks.
+          -- apply mem_fcResolution; do 4 right; apply mem_wLinks.
              exists (n, v), l; repeat split; try assumption.
         * exact Hpi.
       + fc_closure_unique Hres Hpi.
@@ -3395,7 +3203,6 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     forall R support FDefs Slots Links g cfgActive dflt rc rootFeats
            S FS sel,
       AliasFunctional Slots ->
-      WeakOptional FDefs Slots ->
       IsResolution R support FDefs Slots Links g cfgActive dflt rc
         rootFeats S FS sel ->
       forall p fs_p,
@@ -3413,7 +3220,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
               (fcParents FDefs Slots Links cfgActive rc S FS sel).
   Proof.
     intros R support FDefs Slots Links g cfgActive dflt rc rootFeats
-      S FS sel Half Hwo Hres p fs_p Hp ft Hft nm vs fs Hed.
+      S FS sel Half Hres p fs_p Hp ft Hft nm vs fs Hed.
     destruct rc as [rn rv].
     pose proof Hres as Hres0; destruct Hres0.
     apply mem_transDa in Hed.
@@ -3437,7 +3244,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           ((NPlus.Crate n, VPlus.VOrig v),
            (NPlus.Crate n, VPlus.VOrig v))
           (fcParents FDefs Slots Links cfgActive (rn, rv) S FS sel)).
-      { apply mem_fcParents; do 8 right; apply mem_piSelves.
+      { apply mem_fcParents; do 7 right; apply mem_piSelves.
         exists n, v; split; [exact HS | reflexivity]. }
       exists (VPlus.VOrig v); split.
       + split; [| split].
@@ -3471,7 +3278,8 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         destruct e as [f2 | a2 | a2 feat | a2 feat]; cbn in Hea;
           try discriminate; injection Hea as ->.
         - left; exact Hfd.
-        - right; exists feat; exact Hfd. }
+        - right; left; exists feat; exact Hfd.
+        - right; right; exists feat; exact Hfd. }
       assert (Hreq : sOptional d = false \/
                      Activated FDefs cfs (n, v) (sAlias d))
         by (right; rewrite Ha; exact Hacted).
@@ -3519,64 +3327,47 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       assert (HS : PkgSet.In (n, v) S) by exact (res_fs_dom0 _ _ Hfs).
       assert (Hfsa : fsAt FS (n, v) = cfs)
         by exact (fsAt_in FS (n, v) cfs res_fs_functional0 Hfs).
-      assert (Hfm : FSet.In f (fsAt FS (n, v)))
-        by (rewrite Hfsa; exact Hf0).
       assert (Hfmb : FSet.mem f (fsAt FS (n, v)) = true)
-        by (apply FSet.mem_spec; exact Hfm).
-      destruct (selectsb FDefs Slots cfgActive (rn, rv) S FS (n, v) a)
-        eqn:Hsel.
-      + (* the slot's choice is taken, so the gadget fires *)
-        pose proof Hsel as Hsb; apply selectsb_iff in Hsb.
-        destruct Hsb as [_ [d0 [Hd0 [Ha0 [Hact0 Hreq0]]]]].
-        assert (Ea0 : sAlias d0 = sAlias d) by congruence.
-        pose proof (Half (n, v) d0 d Hd0 Hd Ea0) as Ed; subst d0.
-        rewrite Hfsa in Hreq0.
-        destruct (res_slot_closure0 (n, v) cfs HS Hfs d Hd Hact Hreq0)
-          as [u [Hsu [Hvf [HtS Hsub]]]].
-        rewrite Ha in Hsu.
-        assert (Hu : VSet.In u (evalReq R (sTarget d) (sReq d))).
-        { apply mem_evalReq; split;
-            [apply res_subset0; exact HtS | exact Hvf]. }
-        assert (Hpi : FC.ParentRel.In
-            ((NPlus.DecisionN n v f a feat, VPlus.VFire u),
-             (NPlus.Crate n, VPlus.VOrig v))
-            (fcParents FDefs Slots Links cfgActive (rn, rv) S FS sel)).
-        { apply mem_fcParents; do 4 right; left; apply mem_piEnablesF.
-          exists n, v, a, u, f, e, feat; repeat split; try assumption. }
-        exists (VPlus.VFire u); split.
-        * split; [| split].
-          -- apply FC.VSet.add_spec; right; unfold firesOf.
-             apply SOvv.mem_map; exists u; split;
-               [exact Hu | reflexivity].
-          -- exists (FC.Feat.FSet.singleton FPlusComp.FWit); split;
-               [intros y Hy; exact Hy |].
-             apply mem_fcResolution; do 3 right; left; apply mem_wFires.
-             exists n, v, a, u, f, e, feat; repeat split;
-               try assumption.
-             rewrite Hfmb; reflexivity.
-          -- exact Hpi.
-        * fc_closure_unique Hres Hpi.
-      + (* no choice is taken, so the gadget takes its off version *)
-        assert (Hslot : hasActiveSlotb Slots cfgActive (rn, rv) (n, v) a
-                        = true).
-        { apply hasActiveSlotb_iff; exists d; repeat split;
-            try assumption. }
-        assert (Hpi : FC.ParentRel.In
-            ((NPlus.DecisionN n v f a feat, VPlus.VOff),
-             (NPlus.Crate n, VPlus.VOrig v))
-            (fcParents FDefs Slots Links cfgActive (rn, rv) S FS sel)).
-        { apply mem_fcParents; do 5 right; left; apply mem_piEnablesN.
-          exists n, v, f, e, a, feat; repeat split; try assumption. }
-        exists VPlus.VOff; split.
-        * split; [| split].
-          -- apply FC.VSet.add_spec; left; reflexivity.
-          -- exists (FC.Feat.FSet.singleton FPlusComp.FWit); split;
-               [intros y Hy; exact Hy |].
-             apply mem_fcResolution; do 4 right; left;
-               apply mem_wOffs.
-             exists n, v, f, e, a, feat; repeat split; try assumption.
-          -- exact Hpi.
-        * fc_closure_unique Hres Hpi.
+        by (apply FSet.mem_spec; rewrite Hfsa; exact Hf0).
+      (* both a/feat and a?/feat activate the slot, so its choice is
+         always taken and the gadget always fires *)
+      assert (Hacted : Activated FDefs cfs (n, v) a).
+      { exists f; split; [exact Hf0 |].
+        destruct e as [f2 | a2 | a2 feat2 | a2 feat2]; cbn in Hen;
+          try discriminate; injection Hen as -> ->.
+        - right; left; exists feat; exact Hfd.
+        - right; right; exists feat; exact Hfd. }
+      assert (Hreq : sOptional d = false \/
+                     Activated FDefs cfs (n, v) (sAlias d))
+        by (right; rewrite Ha; exact Hacted).
+      assert (Hsel : selectsb FDefs Slots cfgActive (rn, rv) S FS (n, v)
+                       a = true).
+      { apply selectsb_iff; split; [exact HS |].
+        exists d; repeat split; try assumption.
+        right; rewrite Hfsa, Ha; exact Hacted. }
+      destruct (res_slot_closure0 (n, v) cfs HS Hfs d Hd Hact Hreq)
+        as [u [Hsu [Hvf [HtS Hsub]]]].
+      rewrite Ha in Hsu.
+      assert (Hu : VSet.In u (evalReq R (sTarget d) (sReq d))).
+      { apply mem_evalReq; split;
+          [apply res_subset0; exact HtS | exact Hvf]. }
+      assert (Hpi : FC.ParentRel.In
+          ((NPlus.DecisionN n v f a feat, VPlus.VFire u),
+           (NPlus.Crate n, VPlus.VOrig v))
+          (fcParents FDefs Slots Links cfgActive (rn, rv) S FS sel)).
+      { apply mem_fcParents; do 4 right; left; apply mem_piEnablesF.
+        exists n, v, a, u, f, e, feat; repeat split; try assumption. }
+      exists (VPlus.VFire u); split.
+      + split; [| split].
+        * unfold firesOf; apply SOvv.mem_map; exists u; split;
+            [exact Hu | reflexivity].
+        * exists (FC.Feat.FSet.singleton FPlusComp.FWit); split;
+            [intros y Hy; exact Hy |].
+          apply mem_fcResolution; do 3 right; left; apply mem_wFires.
+          exists n, v, a, u, f, e, feat; repeat split; try assumption.
+          rewrite Hfmb; reflexivity.
+        * exact Hpi.
+      + fc_closure_unique Hres Hpi.
     - (* a gadget delivering feat to the crate its slot selected *)
       apply mem_witDeliverEdges in Hed.
       destruct Hed as [n [v [f [e [a [feat [d [u
@@ -3606,19 +3397,13 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       assert (Hfsa : fsAt FS (n, v) = fs1)
         by exact (fsAt_in FS (n, v) fs1 res_fs_functional0 Hfs1).
       rewrite Hfsa in Hfm, Hreq1.
-      (* a?/feat only ever names an optional slot, so a taken choice
-         means the entry's alias really was activated *)
       assert (Hent :
           FDefRel.In (((n, v), f), FEntry.EDepFeat a feat) FDefs \/
-          (FDefRel.In (((n, v), f), FEntry.EWeakFeat a feat) FDefs /\
-           Activated FDefs fs1 (n, v) a)).
+          FDefRel.In (((n, v), f), FEntry.EWeakFeat a feat) FDefs).
       { destruct e as [f2 | a2 | a2 feat2 | a2 feat2]; cbn in Hen;
           try discriminate; injection Hen as -> ->.
         - left; exact Hfd.
-        - right; split; [exact Hfd |].
-          pose proof (Hwo (n, v) f a feat Hfd d Hd Ha) as Hopt.
-          destruct Hreq1 as [Hbad | Hacted]; [congruence |].
-          rewrite Ha in Hacted; exact Hacted. }
+        - right; exact Hfd. }
       destruct (selects_sound R support FDefs Slots Links g cfgActive
                   dflt (rn, rv) rootFeats S FS sel n v a u Half Hres Hin
                   Hsel)
@@ -3633,7 +3418,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           ((NPlus.Crate (sTarget d), VPlus.VOrig u),
            (NPlus.DecisionN n v f a feat, VPlus.VFire u))
           (fcParents FDefs Slots Links cfgActive (rn, rv) S FS sel)).
-      { apply mem_fcParents; do 6 right; left; apply mem_piDelivers.
+      { apply mem_fcParents; do 5 right; left; apply mem_piDelivers.
         exists n, v, a, u, f, e, feat, d; repeat split;
           try assumption. }
       exists (VPlus.VOrig u); split.
@@ -3654,7 +3439,6 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     forall R support FDefs Slots Links g cfgActive dflt rc rootFeats
            S FS sel,
       AliasFunctional Slots ->
-      WeakOptional FDefs Slots ->
       IsResolution R support FDefs Slots Links g cfgActive dflt rc
         rootFeats S FS sel ->
       FC.IsResolution (transReal R FDefs Slots Links cfgActive rc)
@@ -3666,7 +3450,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         (fcParents FDefs Slots Links cfgActive rc S FS sel).
   Proof.
     intros R support FDefs Slots Links g cfgActive dflt rc rootFeats
-      S FS sel Half Hwo Hres.
+      S FS sel Half Hres.
     constructor.
     - intro f; apply fc_no_root_support.
     - intros q fs Hq.
@@ -3683,7 +3467,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                Hed).
     - intros q fs_q Hq ft Hft nm vs fs Hed.
       exact (fc_parent_closure_addl R support FDefs Slots Links g
-               cfgActive dflt rc rootFeats S FS sel Half Hwo Hres q fs_q
+               cfgActive dflt rc rootFeats S FS sel Half Hres q fs_q
                Hq ft Hft nm vs fs Hed).
     - intros nm x x' pp H1 H2.
       exact (fc_pi_functional R support FDefs Slots Links g cfgActive
@@ -3877,8 +3661,8 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       rewrite !H; reflexivity.
     Qed.
 
-    (* A decision name's versions add VOff to the fires of the same slots
-       the slot name reads, gated by the owner's own feature entry: the
+    (* A decision name's versions are the fires of the same slots the
+       slot name reads, gated by the owner's own feature entry: the
        link table is never consulted, the feature table only at the
        owner's rows, and the repository only at those slots' targets. *)
     Lemma versions_decisionN_agree :

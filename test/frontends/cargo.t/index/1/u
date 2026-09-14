@@ -1,0 +1,1 @@
+{"name":"u","vers":"1.0.0","deps":[{"name":"w","req":"1","features":[],"optional":true,"default_features":true,"kind":"normal"}],"features":{"default":["cap"],"cap":["w?/extra"]},"yanked":false}

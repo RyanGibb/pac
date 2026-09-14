@@ -58,3 +58,19 @@ without it.
   encoded solution: 23 core nodes (7 crate versions encoded)
   selections: 3
   loaded: 4 crates, 7 versions
+
+A weak feature entry resolves as the strong one.  u's default feature
+enables cap, whose only entry is "w?/extra", and w is optional and named
+nowhere else; cargo's resolver activates such an entry unconditionally and
+narrows it only in a later pass over the fixed resolution, so that w keeps
+its place in the lock as --features varies, and w is installed with extra.
+
+  $ ../../../src/main.exe cargo index s | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root s 1.0.0
+  crates (3):
+    s 1.0.0
+    u 1.0.0 [cap,default]
+    w 1.0.0 [default,extra]
+  encoded solution: 26 core nodes (3 crate versions encoded)
+  selections: 2
+  loaded: 3 crates, 3 versions

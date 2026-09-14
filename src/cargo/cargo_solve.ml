@@ -597,7 +597,6 @@ module Make () = struct
       | Cg.VPlus.VOrig v -> Format.fprintf fmt "%s" v
       | Cg.VPlus.VChoice v -> Format.fprintf fmt "choose:%s" v
       | Cg.VPlus.VFire v -> Format.fprintf fmt "fire:%s" v
-      | Cg.VPlus.VOff -> Format.fprintf fmt "off"
       | Cg.VPlus.VMember (n, v) -> Format.fprintf fmt "member:%s@%s" n v
       | Cg.VPlus.VUnit -> Format.fprintf fmt "()"
   end
