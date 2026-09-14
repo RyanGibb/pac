@@ -32,6 +32,12 @@ type ver = {
   v_deps : dep list;
   v_feats : (string * fentry list) list;
   v_links : string option;
+  (* the declared MSRV, kept as written: the index spells it as a partial
+     version ("1.71", not "1.71.0"), and the comparison it feeds is a
+     caret requirement, which reads a partial spec directly.  None is the
+     field absent, which is not the same as an MSRV of 0 -- see
+     cargo_solve's msrv_ok. *)
+  v_msrv : string option;
 }
 
 let rejected = ref 0
@@ -206,6 +212,7 @@ let parse_line (line : string) : ver option =
                 v_deps = deps;
                 v_feats = tbl;
                 v_links = str_opt (member "links" j);
+                v_msrv = str_opt (member "rust_version" j);
               }
       | _ ->
           reject ();

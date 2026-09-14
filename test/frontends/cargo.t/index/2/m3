@@ -1,0 +1,1 @@
+{"name":"m3","vers":"1.0.0","deps":[{"name":"d3","req":"^2","features":[],"optional":false,"default_features":true,"kind":"normal"}],"features":{},"yanked":false}

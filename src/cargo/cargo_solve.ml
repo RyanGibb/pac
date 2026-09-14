@@ -60,10 +60,41 @@ let root_feats : string list = []
 (* dev dependencies participate only from the root crate: that is
    slotActive's rule in the theory, not a choice made here. *)
 
-(* Resolver v1 feature reading: build and normal dependencies share one
-   feature-unified graph.  Cargo's resolver v2 splits them (and splits
-   target-specific features); the theory carries the kind but does not
-   separate them, so this matches the theory. *)
+(* rustVersion: the toolchain resolver v3 ranks candidates against.  None
+   leaves the preference off, which is cargo's own guard -- sort_summaries
+   consults msrv_compat_count only under [if !self.rust_versions.is_empty()]
+   -- so with no toolchain configured every candidate ties and the order is
+   the plain newest-first that v1 and v2 use. *)
+let rust_version : string option = None
+
+(* cargo's RustVersion::is_compatible_with: the declared MSRV read as a
+   caret requirement and matched against the toolchain with its missing
+   components zeroed and any pre-release dropped.  The index writes an
+   MSRV as a partial version ("1.71"), and caret expansion is defined on
+   exactly that, so nothing has to pad it.
+
+   A crate declaring no MSRV is compatible with every toolchain, not with
+   none: msrv_compat_count returns self.rust_versions.len() -- the
+   maximum -- when summary.rust_version() is None, so the field's absence
+   ranks a candidate up. *)
+let msrv_ok (rustc : string) (msrv : string option) : bool =
+  match msrv with
+  | None -> true
+  | Some m ->
+      let p = Cargo_version.parse rustc in
+      let rustc =
+        Printf.sprintf "%d.%d.%d" p.Cargo_version.major p.Cargo_version.minor
+          p.Cargo_version.patch
+      in
+      Cargo_version.holds rustc (Cargo_version.comparator ("^" ^ m))
+
+(* Build and normal edges share one feature-unified graph here.  Resolver
+   v2 decouples them, and v3 inherits that, but cargo decouples in
+   FeatureResolver, which runs over an already-fixed resolution: it
+   decides which features each unit is compiled with and cannot move a
+   version.  So the decoupling is not part of what a resolution is, and
+   the only half of v3 that reaches version selection is the MSRV
+   preference above. *)
 
 (* Pre-release versions stay in the index.  The calculus admits one only
    inside a comparator set that names a pre-release at the same release
@@ -357,6 +388,7 @@ module Make () = struct
     ar : archive;
     rc : string * string;
     rfeats : Cg.FSet.t;
+    rustv : string option;
     edges : (T.Pkg.t, T.DependeesSet.t) Hashtbl.t;
     gadget_vers : (Red.Name.name, Cg.VPlus.t list) Hashtbl.t;
     processed : (string * string, unit) Hashtbl.t;
@@ -365,11 +397,12 @@ module Make () = struct
     mutable n_proc : int;
   }
 
-  let mk_state ar rc rfeats =
+  let mk_state ar rc rfeats rustv =
     {
       ar;
       rc;
       rfeats = fset_of rfeats;
+      rustv;
       edges = Hashtbl.create 65536;
       gadget_vers = Hashtbl.create 65536;
       processed = Hashtbl.create 4096;
@@ -587,12 +620,37 @@ module Make () = struct
           Format.fprintf fmt "<%a/%a=>%a/%a>" pp_np np pp_f f pp_np m pp_f g
   end
 
+  (* PubGrub decides the compare-maximum candidate, so preference lives
+     here.  Newest-first among a crate's own versions falls out of the
+     encoded order, since VPlus.compare carries the semver order.  On top
+     of it, resolver v3 puts a candidate whose declared MSRV the
+     configured toolchain does not satisfy in a class below every
+     candidate it does satisfy, and newest-first decides within each
+     class.  That is version_prefs.rs's sort_summaries, which compares
+     msrv_compat_count ahead of version_ordering while sorting one
+     crate's candidate list: a preference and not a constraint, so an
+     incompatible version that is the only candidate in range is still
+     taken.  With no toolchain configured every candidate is tagged
+     compatible and this degenerates to the v1/v2 order.
+
+     The class is carried on the version rather than read off it: which
+     crate version a package belongs to is what decides, and a comparator
+     sees two versions and not the name they belong to.  Every version
+     PubGrub holds is handed to it by [versions] or by a dependency
+     range, both of which know the name, so both tag as they go and the
+     class is a function of the (name, version) pair -- keeping this a
+     total order, and one consistent with the tags on any range the same
+     name is compared against. *)
   module PVersion = struct
-    type t = Cg.VPlus.t
+    type t = { msrv : bool; v : Cg.VPlus.t }
 
-    let compare a b = r2c (Cg.VPlus.compare a b)
+    let compare a b =
+      match (a.msrv, b.msrv) with
+      | false, true -> -1
+      | true, false -> 1
+      | _ -> r2c (Cg.VPlus.compare a.v b.v)
 
-    let pp fmt (v : t) =
+    let pp fmt ({ v; _ } : t) =
       match v with
       | Cg.VPlus.VOrig v -> Format.fprintf fmt "%s" v
       | Cg.VPlus.VChoice v -> Format.fprintf fmt "choose:%s" v
@@ -602,6 +660,86 @@ module Make () = struct
   end
 
   module PG = Pubgrub.Make (PName) (PVersion)
+
+  (* cached because a slot's whole candidate list is retagged whenever
+     PubGrub asks for it, and unify_alias is not cheap *)
+  let alias_cache : (string * string, (string, string) Hashtbl.t) Hashtbl.t =
+    Hashtbl.create 4096
+
+  let alias_target st (p : string * string) (a : string) : string option =
+    let tbl =
+      match Hashtbl.find_opt alias_cache p with
+      | Some t -> t
+      | None ->
+          let t = Hashtbl.create 8 in
+          (match meta st.ar (fst p) (snd p) with
+          | None -> ()
+          | Some m ->
+              List.iter
+                (fun (d : P.dep) -> Hashtbl.replace t d.P.d_alias d.P.d_target)
+                (slots_of m));
+          Hashtbl.replace alias_cache p t;
+          t
+    in
+    Hashtbl.find_opt tbl a
+
+  (* The crate version an encoded version stands for, which is not the
+     crate that minted the package: owner_of answers the latter, and is
+     what [touch] wants, while the candidate being ranked is the one the
+     version names.  A slot's VChoice and a decision gadget's VFire both
+     range over the versions of the slot's target, so each is read through
+     the declaring manifest; a link gadget's VMember carries its declarer
+     outright; a crate node's VOrig is the crate itself.  The slot is the
+     one that matters: it is where cargo sorts candidates too, and where
+     PubGrub decides first -- the crate node then only follows the version
+     the slot already chose. *)
+  let candidate st (np : Cg.NPlus.t) (u : Cg.VPlus.t) =
+    let via n v a w =
+      match alias_target st (n, v) a with Some t -> Some (t, w) | None -> None
+    in
+    match (np, u) with
+    | Cg.NPlus.Crate n, Cg.VPlus.VOrig v -> Some (n, v)
+    | Cg.NPlus.LinkN _, Cg.VPlus.VMember (n, v) -> Some (n, v)
+    | Cg.NPlus.SlotN (n, v, a), Cg.VPlus.VChoice w
+    | Cg.NPlus.DecisionN (n, v, _, a, _), Cg.VPlus.VFire w ->
+        via n v a w
+    | _ -> None
+
+  (* an intermediate's versions are the target name's, so the target name
+     is what its candidate is read off; a granular name is its own *)
+  let carrier (nm : Red.Name.name) : Cg.NPlus.t =
+    match nm with
+    | Red.Name.GranularOrig (np, _) | Red.Name.GranularFeatPkg (np, _, _) -> np
+    | Red.Name.Intermediate (_, _, m)
+    | Red.Name.IntermediateF (_, _, m, _)
+    | Red.Name.IntermediateA (_, _, _, m, _) ->
+        m
+
+  let msrv_cache : (string * string * string, bool) Hashtbl.t =
+    Hashtbl.create 65536
+
+  let crate_msrv_ok st (rustc : string) ((n, v) : string * string) : bool =
+    match Hashtbl.find_opt msrv_cache (rustc, n, v) with
+    | Some b -> b
+    | None ->
+        let b =
+          match meta st.ar n v with
+          | None -> true
+          | Some m -> msrv_ok rustc m.P.v_msrv
+        in
+        Hashtbl.replace msrv_cache (rustc, n, v) b;
+        b
+
+  let tag st (nm : Red.Name.name) (u : Cg.VPlus.t) : PVersion.t =
+    match st.rustv with
+    | None -> { PVersion.msrv = true; v = u }
+    | Some rustc ->
+        let ok =
+          match candidate st (carrier nm) u with
+          | None -> true
+          | Some p -> crate_msrv_ok st rustc p
+        in
+        { PVersion.msrv = ok; v = u }
 
   let root_name = Red.Name.GranularOrig (Cg.NPlus.Root, Cg.GPlus.GUnit)
 
@@ -613,14 +751,37 @@ module Make () = struct
     processed : int;
   }
 
-  let solve ?(debug = false) ?(rfeats = root_feats) ar (rc : string * string) =
+  let solve ?(debug = false) ?(rfeats = root_feats) ?(rustv = rust_version) ar
+      (rc : string * string) =
     Pubgrub.set_debug debug;
-    let st = mk_state ar rc rfeats in
-    let versions nm = versions st nm in
+    let st = mk_state ar rc rfeats rustv in
+    (* the tagged list, not just the untagged one, has to be memoized:
+       PubGrub asks a name for its versions at every propagation step.
+       Only the granular names are safe to hold, and not those over a
+       link -- exactly the ones np_versions itself memoizes, for the same
+       reason: an intermediate's versions grow as gadgets are minted, and
+       LinkN's grow as declarers are parsed. *)
+    let tagged = Hashtbl.create 65536 in
+    let holdable (nm : Red.Name.name) =
+      match nm with
+      | Red.Name.GranularOrig (Cg.NPlus.LinkN _, _)
+      | Red.Name.GranularFeatPkg (Cg.NPlus.LinkN _, _, _) ->
+          false
+      | Red.Name.GranularOrig _ | Red.Name.GranularFeatPkg _ -> true
+      | _ -> false
+    in
+    let versions nm =
+      match Hashtbl.find_opt tagged nm with
+      | Some vs -> vs
+      | None ->
+          let vs = List.map (tag st nm) (versions st nm) in
+          if holdable nm then Hashtbl.replace tagged nm vs;
+          vs
+    in
     (* the decisive memoization: PubGrub asks for the same node's
        dependencies over and over during propagation *)
     let cache = Hashtbl.create 65536 in
-    let dependencies nm (u : Cg.VPlus.t) =
+    let dependencies nm ({ PVersion.v = u; _ } : PVersion.t) =
       match Hashtbl.find_opt cache (nm, u) with
       | Some r -> r
       | None ->
@@ -633,7 +794,9 @@ module Make () = struct
           let r =
             List.map
               (fun ((m, vs) : T.Dependees.t) ->
-                (m, PG.Ranges.of_list (T.VSet.elements vs)))
+                ( m,
+                  PG.Ranges.of_list
+                    (List.map (tag st m) (T.VSet.elements vs)) ))
               (T.DependeesSet.elements hs)
           in
           Hashtbl.replace cache (nm, u) r;
@@ -649,12 +812,18 @@ module Make () = struct
        declarer would be refused against a version set fixed without it. *)
     match
       PG.solve ~versions ~dependencies
-        [ (root_name, PG.Ranges.of_list [ Cg.VPlus.VUnit ]) ]
+        [ (root_name, PG.Ranges.of_list [ tag st root_name Cg.VPlus.VUnit ]) ]
     with
     | Error inc ->
         Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
         None
     | Ok sol ->
+        let sol =
+          List.map
+            (fun ((nm, { PVersion.v; _ }) : Red.Name.name * PVersion.t) ->
+              (nm, v))
+            sol
+        in
         let s = T.PkgSet.ofList sol in
         (* back through the proved decoders *)
         let s_fc = Red.featureConcurrentResolution gp s in

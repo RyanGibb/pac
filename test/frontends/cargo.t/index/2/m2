@@ -1,0 +1,1 @@
+{"name":"m2","vers":"1.0.0","deps":[{"name":"d2","req":"^1","features":[],"optional":false,"default_features":true,"kind":"normal"}],"features":{},"yanked":false}

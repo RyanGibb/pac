@@ -98,7 +98,7 @@ let opam_cmd =
     (Cmd.info "opam" ~doc:"Solve against an opam repository.")
     Term.(const opam_run $ debug_arg $ repo $ goal)
 
-let cargo_run debug index goal wanted rfeats =
+let cargo_run debug index goal wanted rfeats rustv =
   let t0 = Unix.gettimeofday () in
   let ar = Cargo_solve.empty_archive index in
   let vs = Cargo_solve.versions_of ar goal in
@@ -115,15 +115,16 @@ let cargo_run debug index goal wanted rfeats =
             (List.hd vs) vs
     in
     let rc = (goal, rv) in
-    Printf.printf "root %s %s%s\n%!" goal rv
+    Printf.printf "root %s %s%s%s\n%!" goal rv
       (match rfeats with
       | None -> ""
-      | Some fs -> " with features " ^ String.concat "," fs);
+      | Some fs -> " with features " ^ String.concat "," fs)
+      (match rustv with None -> "" | Some t -> " for rust " ^ t);
     let module S = Cargo_solve.Make () in
     let r =
       match rfeats with
-      | None -> S.solve ~debug ar rc
-      | Some fs -> S.solve ~debug ~rfeats:fs ar rc
+      | None -> S.solve ~debug ~rustv ar rc
+      | Some fs -> S.solve ~debug ~rfeats:fs ~rustv ar rc
     in
     (* the crates the run parsed, known only once it is over: there is no
        cone, so this is what the solver asked for and nothing more *)
@@ -188,9 +189,21 @@ let cargo_cmd =
       & info [ "features" ] ~docv:"FEATS"
           ~doc:"Comma-separated features to enable on the root crate.")
   in
+  (* resolver v3's MSRV-aware preference, which is off unless a toolchain
+     is configured -- cargo reads one from rust-version or rustc, this
+     asks for it *)
+  let rustv =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "rust-version" ] ~docv:"VERSION"
+          ~doc:
+            "Toolchain version to prefer MSRV-compatible crate versions \
+             for, as resolver v3 does; unset leaves the preference off.")
+  in
   Cmd.v
     (Cmd.info "cargo" ~doc:"Solve against a crates.io index.")
-    Term.(const cargo_run $ debug_arg $ index $ goal $ wanted $ rfeats)
+    Term.(const cargo_run $ debug_arg $ index $ goal $ wanted $ rfeats $ rustv)
 
 let alpine_run debug path goals =
   let t0 = Unix.gettimeofday () in
