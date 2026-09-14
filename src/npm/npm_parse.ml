@@ -18,14 +18,18 @@
      order agree with version order.  Prerelease tags in an engines range
      are dropped.
 
-   Not modelled, and counted where it matters: optionalDependencies
-   (use-if-present is a post-resolution decision, not a constraint),
-   bundledDependencies (placement), and "deprecated" (npm warns and
-   installs anyway).  npm marks an optional dependency by listing the
-   same key in both tables, so the optional keys are removed from the
-   dependency rows rather than left standing as ordinary ones: keeping
-   them would make optional what the calculus reads as mandatory, which
-   is the opposite of imposing nothing. *)
+   - The optional half of optionalDependencies that is modelled.  npm
+     proceeds when such a dependency cannot be *found*, which is a
+     resolution question and is the soft dependency the calculus gets;
+     it also proceeds when the dependency fails to *install*, which is a
+     build or postinstall failure long after resolution and is not
+     modelled at all.
+
+   Not modelled, and counted where it matters: bundledDependencies
+   (placement) and "deprecated" (npm warns and installs anyway).  npm
+   marks an optional dependency by listing the same key in both tables,
+   and an optionalDependencies entry overrides a dependencies entry of
+   the same name, so the row kept is the optional one. *)
 
 type gate =
   | GTrue
@@ -40,6 +44,7 @@ type dep = {
   d_target : string; (* the registry package, differing under npm: *)
   d_range : Npm_version.range;
   d_dev : bool;
+  d_optional : bool;
 }
 
 type peer = { p_name : string; p_range : Npm_version.range; p_optional : bool }
@@ -61,7 +66,7 @@ type packument = {
 }
 
 let rejected = ref 0
-let skipped_optional = ref 0
+let optional_count = ref 0
 let deprecated_count = ref 0
 let reject () = incr rejected
 
@@ -121,7 +126,7 @@ let split_alias (s : string) : (string * string) option =
     | -1 -> Some (body, "*")
     | i -> Some (String.sub body 0 i, String.sub body (i + 1) (n - i - 1))
 
-let dep_of ~dev (key, spec) : dep option =
+let dep_of ~dev ~optional (key, spec) : dep option =
   match spec with
   | `String spec -> (
       match split_alias spec with
@@ -136,6 +141,7 @@ let dep_of ~dev (key, spec) : dep option =
                 d_target = target;
                 d_range = Npm_version.parse_range rg;
                 d_dev = dev;
+                d_optional = optional;
               }
       | None ->
           if unresolvable spec then (
@@ -148,6 +154,7 @@ let dep_of ~dev (key, spec) : dep option =
                 d_target = key;
                 d_range = Npm_version.parse_range spec;
                 d_dev = dev;
+                d_optional = optional;
               })
   | _ ->
       reject ();
@@ -263,16 +270,16 @@ let is_deprecated = function `Null -> false | `Bool b -> b | _ -> true
 let ver_of ~(root : bool) (vers : string) (j : Yojson.Safe.t) : ver option =
   match j with
   | `Assoc _ ->
-      let deps_of ~dev field =
-        List.filter_map (dep_of ~dev) (assoc_of (member field j))
+      let deps_of ~dev ~optional field =
+        List.filter_map (dep_of ~dev ~optional) (assoc_of (member field j))
       in
       let meta = assoc_of (member "peerDependenciesMeta" j) in
       let peers =
         List.filter_map (peer_of meta) (assoc_of (member "peerDependencies" j))
       in
-      let optKeys = List.map fst (assoc_of (member "optionalDependencies" j)) in
-      let opt = List.length optKeys in
-      if opt > 0 then skipped_optional := !skipped_optional + opt;
+      let opts = deps_of ~dev:false ~optional:true "optionalDependencies" in
+      optional_count := !optional_count + List.length opts;
+      let optKeys = List.map (fun d -> d.d_dir) opts in
       let dep = is_deprecated (member "deprecated" j) in
       if dep then incr deprecated_count;
       Some
@@ -280,10 +287,16 @@ let ver_of ~(root : bool) (vers : string) (j : Yojson.Safe.t) : ver option =
           v_name = (match member "name" j with `String n -> n | _ -> "");
           v_vers = vers;
           v_deps =
-            List.filter
-              (fun d -> not (List.mem d.d_dir optKeys))
-              (deps_of ~dev:false "dependencies"
-              @ if root then deps_of ~dev:true "devDependencies" else []);
+            (* an optionalDependencies entry overrides a dependencies
+               entry of the same name, so the plain row goes and the
+               optional one stands *)
+            opts
+            @ List.filter
+                (fun d -> not (List.mem d.d_dir optKeys))
+                (deps_of ~dev:false ~optional:false "dependencies"
+                @
+                if root then deps_of ~dev:true ~optional:false "devDependencies"
+                else []);
           v_peers = peers;
           v_gates = gates_of j;
           v_ovr = (if root then overrides_of j else []);

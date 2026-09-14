@@ -76,6 +76,11 @@ let rho (x : string) : string option =
 type archive = {
   cache : string;
   offline : bool;
+  (* --omit=optional: the rows are dropped from the instance altogether,
+     so an optional dependency mints no directory and no gadget.  The
+     calculus is parameterised over the rows, so which ones an instance
+     carries is the driver's to decide. *)
+  optional : bool;
   pkgs : (string, P.ver list) Hashtbl.t;
   latest : (string, string) Hashtbl.t;
   entry : (string * string, P.ver) Hashtbl.t;
@@ -89,10 +94,11 @@ type archive = {
   mutable n_fetched : int;
 }
 
-let empty_archive ~cache ~offline =
+let empty_archive ?(optional = true) ~cache ~offline () =
   {
     cache;
     offline;
+    optional;
     pkgs = Hashtbl.create 1024;
     latest = Hashtbl.create 1024;
     entry = Hashtbl.create 16384;
@@ -168,7 +174,19 @@ let load_name ar ~(root : bool) (n : string) : P.ver list =
                 | None -> ());
                 (* the packument's "name" is authoritative; a manifest
                    with a different one is not this package's *)
-                List.map (fun v -> { v with P.v_name = n }) pk.P.pk_vers)
+                List.map
+                  (fun (v : P.ver) ->
+                    {
+                      v with
+                      P.v_name = n;
+                      P.v_deps =
+                        (if ar.optional then v.P.v_deps
+                         else
+                           List.filter
+                             (fun (d : P.dep) -> not d.P.d_optional)
+                             v.P.v_deps);
+                    })
+                  pk.P.pk_vers)
       in
       Hashtbl.replace ar.pkgs n vs;
       ar.n_names <- ar.n_names + 1;
@@ -219,6 +237,7 @@ let xdep (d : P.dep) : Np.coq_DepRow =
     Np.d_target = d.P.d_target;
     Np.d_range = xrange d.P.d_range;
     Np.d_dev = d.P.d_dev;
+    Np.d_optional = d.P.d_optional;
   }
 
 let xpeer (r : P.peer) : Np.coq_PeerRow =
@@ -381,6 +400,11 @@ let peer_names_at st q =
 let peer_rows_named st (n : string) =
   List.map (fun (p, r) -> (p, xpeer r)) (Hashtbl.find_all st.ar.peer_by_name n)
 
+(* dirs I p *)
+let slot_dirs st p =
+  List.sort_uniq String.compare
+    (List.map (fun (d : Np.coq_DepRow) -> d.Np.d_dir) (active_rows st p))
+
 (* ---- the four slices, one per lookup theorem ---- *)
 
 (* versions_lookupGran: granSlice I k cuts the repository to the key's
@@ -392,7 +416,8 @@ let peer_rows_named st (n : string) =
    the repository only whether the queried version is available, so it is
    cut to that one package -- and platSlice then selects that package's
    gate rows by itself. *)
-let gran_slice st (k : string * string) (w : string) =
+let gran_slice st (k : Np.NKey.t) (w : string) =
+  let a = Np.dirOf k in
   let p = (snd k, w) in
   let repo =
     if List.mem w (versions_of st.ar (snd k)) then
@@ -401,19 +426,21 @@ let gran_slice st (k : string * string) (w : string) =
   in
   let plat = List.map (fun g -> (p, g)) (gate_rows st p) in
   let deps =
-    List.map (fun (p, d) -> (p, xdep d)) (Hashtbl.find_all st.ar.dep_by_key k)
+    List.map
+      (fun (p, d) -> (p, xdep d))
+      (Hashtbl.find_all st.ar.dep_by_key (a, snd k))
   in
-  let peers = if fst k = snd k then peer_rows_named st (fst k) else [] in
+  let peers = if a = snd k then peer_rows_named st a else [] in
   mk_inst st ~repo ~plat ~deps ~peers
 
 (* versions_lookupInt: intSlice I p m is p's own dependency rows, the peer
    rows naming the key's directory, and the repository and gates at the
    key's registry name together with p's slot targets. *)
-let int_slice st (p : string * string) (m : string * string) =
+let int_slice st (p : string * string) (m : Np.NKey.t) =
   let ns = snd m :: slot_targets st p in
   mk_inst st ~repo:(repo_of st ns) ~plat:(plat_of st ns)
     ~deps:(own_dep_rows st p)
-    ~peers:(peer_rows_named st (fst m))
+    ~peers:(peer_rows_named st (Np.dirOf m))
 
 (* dependees_lookupGran: pkgSlice I p is p's own dependency rows, its own
    peer rows, and the repository and gates at their targets.  The peer
@@ -429,7 +456,7 @@ let pkg_slice st (p : string * string) =
    peer rows of the dependee that was selected, and the repository and
    gates at p's slot targets and at the directories those peers name.
    This is the second hop npm's peer auto-installation costs. *)
-let peer_slice st (p : string * string) (m : string * string) (u : string) =
+let peer_slice st (p : string * string) (m : Np.NKey.t) (u : string) =
   let q = (snd m, u) in
   let ns = slot_targets st p @ peer_names_at st q in
   mk_inst st ~repo:(repo_of st ns) ~plat:(plat_of st ns)
@@ -471,9 +498,14 @@ module PName = struct
 
   let compare a b = r2c (Np.Nm.compare a b)
 
-  let pp_key fmt ((a, t) : string * string) =
-    if a = t then Format.fprintf fmt "%s" a
-    else Format.fprintf fmt "%s(npm:%s)" a t
+  (* the soft node an optional dependency hangs off is a name of its own,
+     printed so that an explanation naming one is not mistaken for the
+     directory behind it *)
+  let pp_key fmt ((s, t) : Np.NKey.t) =
+    let a = Np.dirName s in
+    let soft = match s with Np.Slot.SDir _ -> "" | Np.Slot.SSoft _ -> "?" in
+    if a = t then Format.fprintf fmt "%s%s" a soft
+    else Format.fprintf fmt "%s(npm:%s)%s" a t soft
 
   let pp fmt (n : t) =
     match n with
@@ -485,12 +517,24 @@ end
 module PVersion = struct
   type t = Np.Vs.version
 
-  let compare a b = r2c (Np.Vs.compare a b)
+  (* PubGrub decides the greatest candidate first, and the calculus tags
+     the escape -- Vs.Gran, which in npm's reduction only the soft gadget
+     mints -- above every Vs.Orig.  Which to try first is a preference and
+     not a constraint, and we want a soft slot to try every satisfier
+     before giving up on the dependency, so the escape is ranked below
+     them here.  Only candidates of one name are ever compared (PubGrub
+     ranges are per name), and the escape shares a name with the
+     satisfiers of its own directory and with nothing else. *)
+  let compare a b =
+    match (a, b) with
+    | Np.Vs.Gran _, Np.Vs.Orig _ -> -1
+    | Np.Vs.Orig _, Np.Vs.Gran _ -> 1
+    | _ -> r2c (Np.Vs.compare a b)
 
   let pp fmt (v : t) =
     match v with
     | Np.Vs.Orig v -> Format.fprintf fmt "%s" v
-    | Np.Vs.Gran w -> Format.fprintf fmt "gran:%s" w
+    | Np.Vs.Gran _ -> Format.fprintf fmt "absent"
 end
 
 module PG = Pubgrub.Make (PName) (PVersion)
@@ -505,7 +549,7 @@ type result = {
 let solve ?(debug = false) ar (root : string * string) =
   Pubgrub.set_debug debug;
   let st = mk_state ar root in
-  let root_key = (fst root, fst root) in
+  let root_key = (Np.Slot.SDir (fst root), fst root) in
   let root_nm = Np.Nm.Granular (root_key, snd root) in
   let versions nm = versions st nm in
   (* the decisive memoization: PubGrub asks for the same node's
@@ -533,9 +577,16 @@ let solve ?(debug = false) ar (root : string * string) =
       None
   | Ok sol ->
       let s = T.PkgSet.ofList sol in
-      (* back through the proved decoders *)
-      let installs = Np.PkgSet.elements (R.npmResolution s) in
-      let tree = Np.Conc.ParentRel.elements (R.npmParents s) in
+      (* back through the proved decoders.  Both decoders yield real
+         directory keys only -- nothing is installed at a gate -- so the
+         slot constructor carries no information here and is dropped. *)
+      let flat (k, v) = ((Np.dirOf k, snd k), v) in
+      let installs = List.map flat (Np.PkgSet.elements (R.npmResolution s)) in
+      let tree =
+        List.map
+          (fun (c, p) -> (flat c, flat p))
+          (Np.Conc.ParentRel.elements (R.npmParents s))
+      in
       Some
         {
           installs = List.sort compare installs;

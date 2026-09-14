@@ -76,3 +76,96 @@ A package with no packument in the cache cannot be fetched when offline.
   $ ../../../src/main.exe npm --offline --cache . missing
   no packument for missing under . (offline)
   [1]
+
+An optional dependency is installed by default, as npm does, and is a soft
+dependency: its directory carries an escape beside its satisfiers, so the
+resolution is valid with or without it.  opt-app 1.0.0 names theme ^1 in
+optionalDependencies, and the escape sorts below every satisfier, so theme
+arrives rather than nothing:
+
+  $ ../../../src/main.exe npm --offline --cache . --tree opt-app 1.0.0 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root opt-app 1.0.0
+  packages (3):
+    opt-app 1.0.0
+    tester 1.0.0
+    theme 1.0.0
+  node_modules (2 edges):
+    opt-app 1.0.0 <- tester 1.0.0
+    opt-app 1.0.0 <- theme 1.0.0
+  cone: 3 packages, 5 versions, 0 packuments fetched
+  optionalDependencies: 3
+  encoded solution: 6 core nodes (13 lookups)
+
+  $ ../../../src/main.exe npm --offline --cache . --tree --omit=optional opt-app 1.0.0 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root opt-app 1.0.0
+  packages (2):
+    opt-app 1.0.0
+    tester 1.0.0
+  node_modules (1 edges):
+    opt-app 1.0.0 <- tester 1.0.0
+  cone: 2 packages, 4 versions, 0 packuments fetched
+  optionalDependencies: 3
+  encoded solution: 3 core nodes (6 lookups)
+
+An optional dependency nothing satisfies is not an error, which is the point
+of the encoding: opt-app 2.0.0 names theme ^9 and theme publishes only 1.0.0,
+so the directory takes the escape and the solve succeeds without it.  The
+fourth core node is that escaped directory, which --omit=optional above does
+not mint at all:
+
+  $ ../../../src/main.exe npm --offline --cache . --tree opt-app 2.0.0 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root opt-app 2.0.0
+  packages (2):
+    opt-app 2.0.0
+    tester 1.0.0
+  node_modules (1 edges):
+    opt-app 2.0.0 <- tester 1.0.0
+  cone: 3 packages, 5 versions, 0 packuments fetched
+  optionalDependencies: 3
+  encoded solution: 4 core nodes (8 lookups)
+
+An optional dependency on a name something also peer-depends on is still
+soft: the gate and the directory are separate nodes, so the escape and the
+peer edge never meet.  opt-peer-app 1.0.0 names core ^9 -- which core does
+not publish -- in optionalDependencies, while plugin declares a mandatory
+peer on core ^2, so the gate escapes and the peer still installs core 2.0.0
+into opt-peer-app's own node_modules:
+
+  $ ../../../src/main.exe npm --offline --cache . --tree opt-peer-app 1.0.0 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root opt-peer-app 1.0.0
+  packages (3):
+    core 2.0.0
+    opt-peer-app 1.0.0
+    plugin 1.0.0
+  node_modules (2 edges):
+    opt-peer-app 1.0.0 <- core 2.0.0
+    opt-peer-app 1.0.0 <- plugin 1.0.0
+  cone: 3 packages, 7 versions, 0 packuments fetched
+  optionalDependencies: 1
+  encoded solution: 6 core nodes (14 lookups)
+
+The escape is what carries that, and nothing else: opt-peer-app 2.0.0 is the
+same manifest with core ^9 listed as an ordinary dependency -- which is how
+the guarded encoding read the optional one whenever any peer row named the
+same directory -- and it has no solution.
+
+  $ ../../../src/main.exe npm --offline --cache . opt-peer-app 2.0.0 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root opt-peer-app 2.0.0
+  unsatisfiable:
+  Because opt-peer-app@2.0.0 2.0.0 -> <opt-peer-app@2.0.0=>core> ∅ and root -> opt-peer-app@2.0.0 2.0.0, version solving failed..
+
+A platform gate needs no special handling: it cuts the repository before
+anything else, so an optional dependency whose only candidate the gate
+rejects has no satisfiers left and takes the escape.  opt-app 3.0.0 pins
+core 2.1.0, which declares os win32:
+
+  $ ../../../src/main.exe npm --offline --cache . --tree opt-app 3.0.0 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root opt-app 3.0.0
+  packages (2):
+    opt-app 3.0.0
+    tester 1.0.0
+  node_modules (1 edges):
+    opt-app 3.0.0 <- tester 1.0.0
+  cone: 3 packages, 8 versions, 0 packuments fetched
+  optionalDependencies: 3
+  encoded solution: 4 core nodes (8 lookups)
