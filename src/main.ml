@@ -235,13 +235,9 @@ let alpine_cmd =
     (Cmd.info "alpine" ~doc:"Solve against an Alpine APKINDEX.")
     Term.(const alpine_run $ debug_arg $ path $ goals)
 
-let npm_run debug cache offline tree omit goal wanted =
+let npm_run debug cache offline tree goal wanted =
   let t0 = Unix.gettimeofday () in
-  let ar =
-    Npm_solve.empty_archive
-      ~optional:(not (List.mem "optional" omit))
-      ~cache ~offline ()
-  in
+  let ar = Npm_solve.empty_archive ~cache ~offline in
   let vs =
     List.map
       (fun (v : Npm_parse.ver) -> v.Npm_parse.v_vers)
@@ -292,8 +288,9 @@ let npm_run debug cache offline tree omit goal wanted =
           ar.Npm_solve.n_names ar.Npm_solve.n_vers ar.Npm_solve.n_fetched;
         if !Npm_parse.rejected > 0 then
           Printf.printf "parser dropped %d rows\n" !Npm_parse.rejected;
-        if !Npm_parse.optional_count > 0 then
-          Printf.printf "optionalDependencies: %d\n" !Npm_parse.optional_count;
+        if !Npm_parse.skipped_optional > 0 then
+          Printf.printf "optionalDependencies not modelled: %d\n"
+            !Npm_parse.skipped_optional;
         Printf.printf "encoded solution: %d core nodes (%d lookups)\n"
           r.Npm_solve.nodes r.Npm_solve.queries;
         Printf.printf "solve %.2fs\n" (t2 -. t0);
@@ -314,17 +311,6 @@ let npm_cmd =
   let tree =
     Arg.(value & flag & info [ "tree" ] ~doc:"Print the node_modules nesting.")
   in
-  (* optionalDependencies are installed by default, as npm does; the flag
-     spells the same opt-out npm does, and only the class the calculus
-     models is recognised. *)
-  let omit =
-    Arg.(
-      value & opt_all string []
-      & info [ "omit" ] ~docv:"TYPE"
-          ~doc:
-            "Omit a dependency class; $(b,optional) is the class modelled \
-             here.")
-  in
   let goal =
     Arg.(
       required
@@ -340,8 +326,7 @@ let npm_cmd =
   in
   Cmd.v
     (Cmd.info "npm" ~doc:"Solve against the npm registry.")
-    Term.(
-      const npm_run $ debug_arg $ cache $ offline $ tree $ omit $ goal $ wanted)
+    Term.(const npm_run $ debug_arg $ cache $ offline $ tree $ goal $ wanted)
 
 let () =
   let doc = "Solve dependencies through the verified package calculus." in

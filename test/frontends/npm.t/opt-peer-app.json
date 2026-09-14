@@ -1,7 +1,0 @@
-{"name":"opt-peer-app","dist-tags":{"latest":"1.0.0"},
- "versions":{
-  "1.0.0":{"name":"opt-peer-app","version":"1.0.0",
-    "dependencies":{"plugin":"^1"},
-    "optionalDependencies":{"core":"^9"}},
-  "2.0.0":{"name":"opt-peer-app","version":"2.0.0",
-    "dependencies":{"plugin":"^1","core":"^9"}}}}

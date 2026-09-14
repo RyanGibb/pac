@@ -1,9 +1,6 @@
 From Stdlib Require Import MSets List Bool.
 From PackageCalculus Require Import Prelude Core Versions Semver Concurrent.
 
-Create HintDb cmp_npm.
-Create Rewrite HintDb cmp_npm.
-
 (* npm's dependency semantics over the concurrent calculus at per-version
    granularity: nested node_modules is concurrency with g = id, and this
    file owns its peer encoding rather than reusing PeerDependency, whose
@@ -14,140 +11,17 @@ Create Rewrite HintDb cmp_npm.
    legacy guard and only constrains a directory the depender fills itself.
    Nothing installs the root, so the root's own peers are the same pair of
    rules anchored at its granular node instead of at a parent.
-   An optional dependency asks for a directory but constrains nothing, so
-   its row points at a node of its own -- a soft node carrying the
-   directory's satisfiers and an escape -- whose satisfier versions then
-   fill the directory in the ordinary way.  Peer edges land on the
-   directory and so never meet the escape, which is the whole reason the
-   two are separate names.
    Ranges stay formulas evaluated by the translation, and engines/os/cpu
    gate repository membership rather than individual edges.  Source names
-   are pairs (slot, registry name): an npm node is a directory of some
-   package, or the soft node in front of one, and the parent relation is
-   over source packages, so two aliases of one registry package under one
-   depender are only distinguishable if the key is part of the name. *)
+   are pairs (directory key, registry name): an npm node is a directory,
+   and the parent relation is over source packages, so two aliases of one
+   registry package under one depender are only distinguishable if the key
+   is part of the name. *)
 
 Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
-  Module NF := UOTCompareFacts N.
-  #[local] Hint Rewrite NF.compare_eq_iff : cmp_npm.
-  #[local] Hint Extern 1 => cmp_by NF.compare_antisym : cmp_npm.
-  #[local] Hint Extern 1 => cmp_by NF.compare_lt_trans : cmp_npm.
-
-  (* A slot is a place a package can hold one version of one other
-     package: a directory of its node_modules, or the soft node an optional
-     dependency puts in front of that directory.  The soft node offers an
-     escape and the directory never does, which is the whole reason the
-     two are separate names: a peer edge is satisfied by whatever the
-     parent put in the directory, so it lands on the directory, and an
-     escape offered there would be a candidate no peer range admits.
-     A sum rather than a directory carrying a flag: a real directory
-     then carries no marker at all, and no read of one can forget to
-     test it. *)
-  Module Slot.
-    Inductive slot : Type :=
-    | SDir (a : N.t)
-    | SSoft (a : N.t).
-    Definition t := slot.
-
-    Definition compare (x y : t) : comparison :=
-      match x, y with
-      | SDir a, SDir b => N.compare a b
-      | SDir _, SSoft _ => Lt
-      | SSoft _, SDir _ => Gt
-      | SSoft a, SSoft b => N.compare a b
-      end.
-
-    Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
-    Proof. cmp_eq_iff cmp_npm. Qed.
-
-    Lemma compare_antisym : forall x y, compare y x = CompOpp (compare x y).
-    Proof. cmp_antisym cmp_npm. Qed.
-
-    Lemma compare_lt_trans : forall x y z,
-        compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
-    Proof. cmp_lt_trans cmp_npm. Qed.
-  End Slot.
-
-  (* Spelled out rather than taken from UOTFromCompare for eq_dec alone:
-     the pair comparator's eq_dec substitutes with whatever its first
-     component's returns, so a decision justified only by an opaque
-     comparison lemma leaves every closed key stuck, and with it every
-     example that asks a set of keys to compute.  Deciding by cases hands
-     back eq_refl, which reduces. *)
-  Module SlotOT <: UsualOrderedType.
-    Definition t := Slot.t.
-    Definition eq := @Logic.eq t.
-    Definition eq_equiv : Equivalence eq := eq_equivalence.
-    Definition lt (x y : t) : Prop := Slot.compare x y = Lt.
-
-    Lemma compare_refl : forall x, Slot.compare x x = Eq.
-    Proof. intro x; apply Slot.compare_eq_iff; reflexivity. Qed.
-
-    #[global] Instance lt_strorder : StrictOrder lt.
-    Proof.
-      split.
-      - intros x H; unfold lt in H; rewrite compare_refl in H; discriminate.
-      - intros x y z; unfold lt; apply Slot.compare_lt_trans.
-    Qed.
-
-    #[global] Instance lt_compat : Proper (eq ==> eq ==> iff) lt.
-    Proof. intros x x' -> y y' ->; reflexivity. Qed.
-
-    Definition compare := Slot.compare.
-
-    Lemma compare_spec : forall x y, CompSpec eq lt x y (compare x y).
-    Proof.
-      intros x y; unfold compare, eq, lt.
-      destruct (Slot.compare x y) eqn:E.
-      - constructor; apply Slot.compare_eq_iff; exact E.
-      - constructor; exact E.
-      - constructor; rewrite Slot.compare_antisym, E; reflexivity.
-    Qed.
-
-    Definition eq_dec : forall x y : t, {x = y} + {x <> y}.
-    Proof.
-      intros [a | a] [b | b]; try (right; discriminate);
-        destruct (N.eq_dec a b) as [-> | Hn];
-        solve [left; reflexivity | right; intro H; apply Hn; congruence].
-    Defined.
-  End SlotOT.
-
   (* Module application is generative, so the concurrent instance is the
      only one: every set keyed by source names goes through C. *)
-  Module NKey := PairUOT SlotOT N.
-
-  (* The directory a key names, whichever of the two slots it is, and the
-     two keys over that directory.  A soft node and the directory it guards
-     share everything but the slot constructor, so each is recoverable
-     from the other and the gadget needs no table to pair them. *)
-  Definition dirName (s : Slot.t) : N.t :=
-    match s with Slot.SDir a => a | Slot.SSoft a => a end.
-
-  Definition dirOf (m : NKey.t) : N.t := dirName (fst m).
-
-  Definition dirKey (m : NKey.t) : NKey.t := (Slot.SDir (dirOf m), snd m).
-
-  Definition softOf (m : NKey.t) : NKey.t := (Slot.SSoft (dirOf m), snd m).
-
-  (* A real directory key, as opposed to a soft node's.  Only these name
-     something a package installs, so only these mint a parent edge. *)
-  Definition dirKeyb (m : NKey.t) : bool :=
-    match fst m with Slot.SDir _ => true | Slot.SSoft _ => false end.
-
-  Lemma dirKey_id : forall m, dirKeyb m = true -> dirKey m = m.
-  Proof.
-    intros [[a | a] n] H; [reflexivity | discriminate H].
-  Qed.
-
-  Lemma dirKeyb_dirKey : forall m, dirKeyb (dirKey m) = true.
-  Proof. intros [[a | a] n]; reflexivity. Qed.
-
-  Lemma snd_dirKey : forall m, snd (dirKey m) = snd m.
-  Proof. intros [[a | a] n]; reflexivity. Qed.
-
-  Lemma dirKey_softOf : forall m, dirKey (softOf m) = dirKey m.
-  Proof. intros [[a | a] n]; reflexivity. Qed.
-
+  Module NKey := PairUOT N N.
   Module Conc := Concurrent NKey V V.
   Module C := Conc.C.
   Module Pkg := C.Pkg.
@@ -174,7 +48,6 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
   Module PkgEqb := UOTEqb Pkg.
 
   Module RSS := SetSpecs RPkg RepoSet.
-  Module NSS := SetSpecs N NSet.
 
   Module SOkk := SetOps NKey NKey KeySet KeySet.
   Module SOnn := SetOps N N NSet NSet.
@@ -232,14 +105,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
     { d_dir : N.t
     ; d_target : N.t
     ; d_range : Range
-    ; d_dev : bool
-      (* optionalDependencies.  npm proceeds when such a dependency cannot
-         be found, so the row constrains nothing: the same resolution is
-         valid whether or not it is met, and IsResolution below has no
-         clause for it.  The field's other half -- proceeding when the
-         dependency fails to *install* -- is a build or postinstall
-         failure, decided long after resolution, and is not modelled. *)
-    ; d_optional : bool }.
+    ; d_dev : bool }.
 
   Record PeerRow : Type := MkPeer
     { p_name : N.t
@@ -248,11 +114,9 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
 
   (* Row-valued fields are lists: they feed only the spec and the
      translation, and sets would demand comparators for Range and Gate
-     used nowhere.  An optional dependency is a dependency row carrying
-     d_optional rather than a table of its own, so every read of a row --
-     slotOf, slotKey, slotCands -- sees it unchanged and the flag cannot
-     drift from the row it annotates.  bundledDependencies are
-     placement. *)
+     used nowhere.  optionalDependencies are absent rather than inert --
+     use-if-present is a post-resolution decision, not a constraint --
+     and bundledDependencies are placement. *)
   Record Inst : Type := MkInst
     { inst_repo : RepoSet.t
     ; inst_dep : list (RPkg.t * DepRow)
@@ -494,36 +358,12 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
      key alone does not determine under "npm:" aliasing. *)
   Definition slotKey (I : Inst) (p : RPkg.t) (a : N.t) : NKey.t :=
     match slotOf I p a with
-    | Some d => (Slot.SDir a, d_target d)
-    | None => (Slot.SDir a, a)
+    | Some d => (a, d_target d)
+    | None => (a, a)
     end.
 
-  (* The soft node in front of that directory, where the gadget lives.
-     It differs from the directory in the slot constructor alone, so the
-     one edge the soft node carries knows where to land. *)
-  Definition softKey (I : Inst) (p : RPkg.t) (a : N.t) : NKey.t :=
-    softOf (slotKey I p a).
-
-  Lemma slotKey_dir : forall I p a, dirOf (slotKey I p a) = a.
+  Lemma slotKey_fst : forall I p a, fst (slotKey I p a) = a.
   Proof. intros I p a; unfold slotKey; destruct (slotOf I p a); reflexivity.
-  Qed.
-
-  Lemma slotKey_real : forall I p a, dirKeyb (slotKey I p a) = true.
-  Proof. intros I p a; unfold slotKey; destruct (slotOf I p a); reflexivity.
-  Qed.
-
-  Lemma dirKey_slotKey : forall I p a, dirKey (slotKey I p a) = slotKey I p a.
-  Proof. intros I p a; apply dirKey_id, slotKey_real. Qed.
-
-  Lemma softKey_dir : forall I p a, dirOf (softKey I p a) = a.
-  Proof. intros I p a; unfold softKey, softOf, dirOf; apply slotKey_dir. Qed.
-
-  Lemma softKey_soft : forall I p a, dirKeyb (softKey I p a) = false.
-  Proof. reflexivity. Qed.
-
-  Lemma dirKey_softKey : forall I p a, dirKey (softKey I p a) = slotKey I p a.
-  Proof.
-    intros I p a; unfold softKey; rewrite dirKey_softOf; apply dirKey_slotKey.
   Qed.
 
   Definition slotCands (rho : Valuation) (I : Inst) (p : RPkg.t) (a : N.t)
@@ -544,35 +384,6 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
     apply mem_realVersions; exact Hv.
   Qed.
 
-  (* A soft directory: one an optional dependency asks for.  Its soft node
-     below carries an escape, so the directory constrains nothing -- the
-     same resolution is valid whether or not the dependency is met. *)
-  Definition softDir (I : Inst) (p : RPkg.t) (a : N.t) : bool :=
-    match slotOf I p a with
-    | Some d => d_optional d
-    | None => false
-    end.
-
-  Lemma softDir_dirs : forall I p a,
-      softDir I p a = true -> NSet.In a (dirs I p).
-  Proof.
-    intros I p a H; unfold softDir in H.
-    destruct (slotOf I p a) as [d |] eqn:Hd; [| discriminate H].
-    exact (slotOf_dirs I p a d Hd).
-  Qed.
-
-  (* The directories of p that carry a soft node. *)
-  Definition softDirs (I : Inst) (p : RPkg.t) : NSet.t :=
-    NSet.filter (softDir I p) (dirs I p).
-
-  Lemma mem_softDirs : forall I p a,
-      NSet.In a (softDirs I p) <-> softDir I p a = true.
-  Proof.
-    intros I p a; unfold softDirs; rewrite NSS.filter_spec'.
-    split; [exact (@proj2 _ _) |].
-    intro H; split; [exact (softDir_dirs I p a H) | exact H].
-  Qed.
-
   Definition peerRowsAt (I : Inst) (p : RPkg.t) : list PeerRow :=
     ownRows (inst_peer I) p.
 
@@ -588,15 +399,9 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
 
   (* A mandatory peer is installed beside its declarer whatever the
      depender declares; an optional one keeps npm's legacy rule and only
-     constrains a directory the depender fills itself -- and a soft
-     directory is not one the depender certainly fills, since whether the
-     optional dependency that asks for it is met is an outcome of
-     resolution rather than a row, exactly as a path-scoped override is.
-     So the legacy rule reads a directory the depender fills come what
-     may, which is the only reading a static test has. *)
+     constrains a directory the depender fills itself. *)
   Definition peerActive (I : Inst) (p : RPkg.t) (r : PeerRow) : bool :=
-    orb (negb (p_optional r))
-      (andb (NSet.mem (p_name r) (dirs I p)) (negb (softDir I p (p_name r)))).
+    orb (negb (p_optional r)) (NSet.mem (p_name r) (dirs I p)).
 
   Definition activePeers (I : Inst) (p : RPkg.t) (q : RPkg.t)
     : list PeerRow :=
@@ -614,70 +419,27 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
   Definition childDirs (I : Inst) (p : RPkg.t) : NSet.t :=
     NSet.union (dirs I p) (peerDirs I).
 
-  (* A soft directory mints two names: the soft node and the directory
-     behind it. *)
   Definition childKeys (I : Inst) (p : RPkg.t) : KeySet.t :=
-    KeySet.union (SOnk.map (slotKey I p) (childDirs I p))
-      (SOnk.map (softKey I p) (softDirs I p)).
+    SOnk.map (slotKey I p) (childDirs I p).
 
-  Lemma mem_childKeys_dir : forall I p a,
-      NSet.In a (childDirs I p) -> KeySet.In (slotKey I p a) (childKeys I p).
-  Proof.
-    intros I p a Ha; apply KeySet.union_spec; left.
-    apply SOnk.mem_map; exists a; split; [exact Ha | reflexivity].
-  Qed.
-
-  Lemma mem_childKeys_soft : forall I p a,
-      softDir I p a = true -> KeySet.In (softKey I p a) (childKeys I p).
-  Proof.
-    intros I p a Ha; apply KeySet.union_spec; right.
-    apply SOnk.mem_map; exists a; split;
-      [apply mem_softDirs; exact Ha | reflexivity].
-  Qed.
-
-  Lemma mem_childKeys : forall I p m,
-      KeySet.In m (childKeys I p) ->
-      (dirKeyb m = true /\ NSet.In (dirOf m) (childDirs I p) /\
-       m = slotKey I p (dirOf m)) \/
-      (dirKeyb m = false /\ softDir I p (dirOf m) = true /\
-       m = softKey I p (dirOf m)).
-  Proof.
-    intros I p m Hm; apply KeySet.union_spec in Hm; destruct Hm as [Hm | Hm];
-      apply SOnk.mem_map in Hm; destruct Hm as [a [Ha ->]].
-    - left; rewrite slotKey_dir; split;
-        [apply slotKey_real | split; [exact Ha | reflexivity]].
-    - apply mem_softDirs in Ha; right; rewrite softKey_dir; split;
-        [apply softKey_soft | split; [exact Ha | reflexivity]].
-  Qed.
-
-  (* The versions a package may install under a child key.  A directory
-     it declares an ordinary dependency for takes that dependency's
-     range; a directory only a peer asks for, or one whose own row is
-     optional and hence pinned by the soft node rather than by the row, takes
-     every published version, which the edges that reach it then narrow;
-     and a soft node takes its dependency's satisfiers, the escape being added
-     by the reduction rather than here. *)
+  (* The versions a package may install under a child key: its own
+     dependency range when it declares one, else -- for a key only a peer
+     asks for -- every version of that package, which the peer edges then
+     narrow. *)
   Definition childCands (rho : Valuation) (I : Inst) (p : RPkg.t)
       (m : NKey.t) : VSet.t :=
-    if dirKeyb m
-    then if KeyEqb.eqb m (slotKey I p (dirOf m))
-         then if softDir I p (dirOf m)
+    if KeyEqb.eqb m (slotKey I p (fst m))
+    then if NSet.mem (fst m) (dirs I p)
+         then slotCands rho I p (fst m)
+         else if NSet.mem (fst m) (peerDirs I)
               then realVersions (effRepo rho I) (snd m)
-              else if NSet.mem (dirOf m) (dirs I p)
-                   then slotCands rho I p (dirOf m)
-                   else if NSet.mem (dirOf m) (peerDirs I)
-                        then realVersions (effRepo rho I) (snd m)
-                        else VSet.empty
-         else VSet.empty
-    else if andb (KeyEqb.eqb m (softKey I p (dirOf m)))
-                 (softDir I p (dirOf m))
-         then slotCands rho I p (dirOf m)
-         else VSet.empty.
+              else VSet.empty
+    else VSet.empty.
 
   Definition base (q : Pkg.t) : RPkg.t := (snd (fst q), snd q).
 
   Definition rootKey (I : Inst) : NKey.t :=
-    (Slot.SDir (fst (inst_root I)), fst (inst_root I)).
+    (fst (inst_root I), fst (inst_root I)).
 
   Definition rootPkg (I : Inst) : Pkg.t :=
     (rootKey I, snd (inst_root I)).
@@ -689,15 +451,13 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
   Qed.
 
   (* The directory keys the instance can mint: the root's own, every
-     dependency row's, and every peer row's.  A soft node's key is not one of
-     them: nothing is ever installed at a soft node, which is why a
-     package's own key never carries the marker. *)
+     dependency row's, and every peer row's. *)
   Definition keysOf (I : Inst) : KeySet.t :=
     KeySet.add (rootKey I)
       (KeySet.union
-         (keysOfL (fun q => (Slot.SDir (d_dir (snd q)), d_target (snd q)))
+         (keysOfL (fun q => (d_dir (snd q), d_target (snd q)))
             (inst_dep I))
-         (keysOfL (fun q => (Slot.SDir (p_name (snd q)), p_name (snd q)))
+         (keysOfL (fun q => (p_name (snd q), p_name (snd q)))
             (inst_peer I))).
 
   Definition Available (rho : Valuation) (I : Inst) (q : Pkg.t) : Prop :=
@@ -738,13 +498,9 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
     ; nres_root : PkgSet.In (rootPkg I) S
     ; nres_unique :
         forall p m v v', Installs S pi p m v -> Installs S pi p m v' -> v = v'
-      (* A soft directory is exempt, and that absence is the whole
-         specification of an optional dependency: nothing here mentions
-         it, so a resolution is valid whether or not it is met. *)
     ; nres_slot :
         forall p, PkgSet.In p S ->
         forall a, NSet.In a (dirs I (base p)) ->
-          softDir I (base p) a = false ->
         exists v, VSet.In v (slotCands rho I (base p) a) /\
           Installs S pi p (slotKey I (base p) a) v
       (* A mandatory peer of anything p installs is installed by p too,
@@ -758,17 +514,13 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
           Installs S pi p (peerKeyAt I (base p) r) v
       (* An optional peer forces nothing; it constrains only a directory
          p fills itself -- npm's legacy rule, which is what
-         peerDependenciesMeta.optional means.  A soft directory is not
-         one of those: p declares a row for it but may end up filling
-         nothing, and the rule has no reading under which an absent
-         package narrows anything. *)
+         peerDependenciesMeta.optional means. *)
     ; nres_peer_match :
         forall p, PkgSet.In p S ->
         forall m u, Installs S pi p m u ->
         forall r, In ((snd m, u), r) (inst_peer I) ->
           p_optional r = true ->
           NSet.In (p_name r) (dirs I (base p)) ->
-          softDir I (base p) (p_name r) = false ->
         forall v, Installs S pi p (peerKeyAt I (base p) r) v ->
           VSet.In v (peerCandsAt rho I (base p) r)
       (* Nothing installs the root, so the two clauses above never range
@@ -786,7 +538,6 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         forall r, In (inst_root I, r) (inst_peer I) ->
           p_optional r = true ->
           NSet.In (p_name r) (dirs I (inst_root I)) ->
-          softDir I (inst_root I) (p_name r) = false ->
         forall v, Installs S pi (rootPkg I) (peerKeyAt I (inst_root I) r) v ->
           VSet.In v (peerCandsAt rho I (inst_root I) r)
     ; nres_parents :
@@ -799,121 +550,6 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
        installed copy is its own core name. *)
     Definition idg (v : V.t) : V.t := v.
 
-    (* The escape.  npm's granularity is the identity, so the reduction
-       mints Vs.Orig and nothing else and the Gran constructor is free;
-       it is the soft gadget's escape, and a soft node parked there falls
-       through to the empty catch-all of dependees below, carrying no
-       edge at all and hence filling its directory with nothing.  It is
-       tagged by the owner's version only because Gran takes an
-       argument. *)
-    Definition escape (v : V.t) : Vs.t := Vs.Gran v.
-
-    (* The gadget: a soft node's candidates are its dependency's
-       satisfiers plus the escape, so it is dischargeable whatever the
-       repository holds and adds no constraint of its own. *)
-    Definition softAdd (b : bool) (v : V.t) (ws : T.VSet.t) : T.VSet.t :=
-      if b then T.VSet.add (escape v) ws else ws.
-
-    (* m is the soft node p's own optional row puts in front of one of its
-       directories.  A real directory key fails outright, its slot
-       constructor being the other one, so the escape below can never
-       reach the node a peer edge lands on. *)
-    Definition softKeyb (I : Inst) (p : RPkg.t) (m : NKey.t) : bool :=
-      andb (KeyEqb.eqb m (softKey I p (dirOf m))) (softDir I p (dirOf m)).
-
-    Lemma softKeyb_softKey : forall I p a,
-        softKeyb I p (softKey I p a) = softDir I p a.
-    Proof.
-      intros I p a; unfold softKeyb; rewrite softKey_dir, KeyEqb.eqb_refl.
-      reflexivity.
-    Qed.
-
-    Lemma softKeyb_eq : forall I p m,
-        softKeyb I p m = true -> softKey I p (dirOf m) = m.
-    Proof.
-      intros I p m H; unfold softKeyb in H.
-      apply Bool.andb_true_iff in H; destruct H as [H _].
-      symmetry; apply KeyEqb.eqb_true_iff; exact H.
-    Qed.
-
-    Lemma softKeyb_soft : forall I p m,
-        softKeyb I p m = true -> dirKeyb m = false.
-    Proof.
-      intros I p m H; rewrite <- (softKeyb_eq I p m H); apply softKey_soft.
-    Qed.
-
-    Lemma softKeyb_dirKey : forall I p m,
-        softKeyb I p m = true -> dirKey m = slotKey I p (dirOf m).
-    Proof.
-      intros I p m H; rewrite <- (softKeyb_eq I p m H) at 1.
-      apply dirKey_softKey.
-    Qed.
-
-    Lemma softKeyb_dirKeyb : forall I p m,
-        dirKeyb m = true -> softKeyb I p m = false.
-    Proof.
-      intros I p m H; destruct (softKeyb I p m) eqn:Hs; [| reflexivity].
-      rewrite (softKeyb_soft I p m Hs) in H; discriminate H.
-    Qed.
-
-    Lemma softKeyb_softDir : forall I p m,
-        softKeyb I p m = true -> softDir I p (dirOf m) = true.
-    Proof.
-      intros I p m H; unfold softKeyb in H.
-      apply Bool.andb_true_iff in H; exact (proj2 H).
-    Qed.
-
-    (* A child key that is not a soft node's is a directory, there being nothing
-       else childKeys mints. *)
-    Lemma childKey_dirKeyb : forall I p m,
-        KeySet.In m (childKeys I p) -> softKeyb I p m = false ->
-        dirKeyb m = true.
-    Proof.
-      intros I p m Hm Hsk.
-      destruct (mem_childKeys I p m Hm) as [[Hd _] | [_ [Hs He]]];
-        [exact Hd |].
-      rewrite He, softKeyb_softKey, Hs in Hsk; discriminate Hsk.
-    Qed.
-
-    (* What the two flavours of key read out of childCands: a soft node
-       offers its dependency's satisfiers, and the directory behind one
-       offers every published version, since what pins it is the soft
-       node's one edge and not the row. *)
-    Lemma childCands_soft : forall rho I p m,
-        softKeyb I p m = true ->
-        childCands rho I p m = slotCands rho I p (dirOf m).
-    Proof.
-      intros rho I p m H; unfold childCands.
-      rewrite (softKeyb_soft I p m H); unfold softKeyb in H.
-      rewrite H; reflexivity.
-    Qed.
-
-    Lemma childCands_dir : forall rho I p a,
-        childCands rho I p (slotKey I p a) =
-        if softDir I p a
-        then realVersions (effRepo rho I) (snd (slotKey I p a))
-        else if NSet.mem a (dirs I p)
-             then slotCands rho I p a
-             else if NSet.mem a (peerDirs I)
-                  then realVersions (effRepo rho I) (snd (slotKey I p a))
-                  else VSet.empty.
-    Proof.
-      intros rho I p a; unfold childCands.
-      rewrite slotKey_dir, slotKey_real, KeyEqb.eqb_refl; reflexivity.
-    Qed.
-
-    Lemma mem_softAdd : forall b v ws x,
-        T.VSet.In x (softAdd b v ws) <->
-        (b = true /\ x = escape v) \/ T.VSet.In x ws.
-    Proof.
-      intros b v ws x; unfold softAdd; destruct b.
-      - rewrite SOvcv.add_in; split.
-        + intros [-> | H]; [left; split; reflexivity | right; exact H].
-        + intros [[_ ->] | H]; [left; reflexivity | right; exact H].
-      - split; [intro H; right; exact H |].
-        intros [[H _] | H]; [discriminate H | exact H].
-    Qed.
-
     (* -- the per-query lookups: these are the definitions, and the global
        translation below is their aggregation -- *)
 
@@ -925,24 +561,14 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
           then T.VSet.singleton (Vs.Orig w)
           else T.VSet.empty
       | Nm.Intermediate k v m =>
-          softAdd (softKeyb I (snd k, v) m) v
-            (Conc.Reduction.embedVS (childCands rho I (snd k, v) m))
+          Conc.Reduction.embedVS (childCands rho I (snd k, v) m)
       end.
 
-    (* The node a package's own row for a directory points at: the soft
-       node when the row is optional, the directory itself otherwise. *)
-    Definition entryKey (I : Inst) (p : RPkg.t) (a : N.t) : NKey.t :=
-      if softDir I p a then softKey I p a else slotKey I p a.
-
-    (* A soft directory's entry edge lands on its soft node, which offers the
-       escape alongside the satisfiers, so the row is discharged either
-       way; every other directory is the plain entry edge it was. *)
     Definition entryEdges (rho : Valuation) (I : Inst) (q : Pkg.t)
       : T.DependeesSet.t :=
       depsOfL (fun a =>
-          (Nm.Intermediate (fst q) (snd q) (entryKey I (base q) a),
-           softAdd (softDir I (base q) a) (snd q)
-             (Conc.Reduction.embedVS (slotCands rho I (base q) a))))
+          (Nm.Intermediate (fst q) (snd q) (slotKey I (base q) a),
+           Conc.Reduction.embedVS (slotCands rho I (base q) a)))
         (NSet.elements (dirs I (base q))).
 
     (* The root's own peers have no parent to hang off, so their edges
@@ -980,24 +606,16 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
                  (rootPeerEdges rho I (k, v))
           else T.DependeesSet.empty
       | (Nm.Intermediate k v m, Vs.Orig u) =>
-          if dirKeyb m
-          then T.DependeesSet.add (Nm.Granular m u, T.VSet.singleton (Vs.Orig u))
-                 (peerEdgesAt rho I (k, v) m u)
-          else
-            (* the soft node's one edge, taken only when it did not escape: a
-               dependency that was met fills its directory in the
-               ordinary way, where the peer edges see it *)
-            T.DependeesSet.singleton
-              (Nm.Intermediate k v (dirKey m), T.VSet.singleton (Vs.Orig u))
+          T.DependeesSet.add (Nm.Granular m u, T.VSet.singleton (Vs.Orig u))
+            (peerEdgesAt rho I (k, v) m u)
       | _ => T.DependeesSet.empty
       end.
 
     Lemma mem_entryEdges : forall rho I q h,
         T.DependeesSet.In h (entryEdges rho I q) <->
         exists a, NSet.In a (dirs I (base q)) /\
-          h = (Nm.Intermediate (fst q) (snd q) (entryKey I (base q) a),
-               softAdd (softDir I (base q) a) (snd q)
-                 (Conc.Reduction.embedVS (slotCands rho I (base q) a))).
+          h = (Nm.Intermediate (fst q) (snd q) (slotKey I (base q) a),
+               Conc.Reduction.embedVS (slotCands rho I (base q) a)).
     Proof.
       intros rho I q h; unfold entryEdges; rewrite mem_depsOfL.
       split; intros [a [Ha He]]; exists a; split;
@@ -1109,15 +727,12 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       Conc.Reduction.concurrentResolution idg S.
 
     (* The nesting is read straight off the selected intermediates: each
-       one is a directory of its owner holding one chosen version.  A
-       soft node is not a directory -- nothing is installed there and its key
-       names no package -- so only the real ones are read. *)
+       one is a directory of its owner holding one chosen version. *)
     Definition npmParents (S : T.PkgSet.t) : Conc.ParentRel.t :=
       SOtp.filterMap
         (fun s => match s with
                   | (Nm.Intermediate k v m, Vs.Orig u) =>
-                      if andb (dirKeyb m)
-                           (T.PkgSet.mem (Conc.Reduction.embedPkg idg (k, v)) S)
+                      if T.PkgSet.mem (Conc.Reduction.embedPkg idg (k, v)) S
                       then Some ((m, u), (k, v))
                       else None
                   | _ => None
@@ -1126,7 +741,6 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
 
     Lemma mem_npmParents : forall S c q,
         Conc.ParentRel.In (c, q) (npmParents S) <->
-        dirKeyb (fst c) = true /\
         T.PkgSet.In
           (Nm.Intermediate (fst q) (snd q) (fst c), Vs.Orig (snd c)) S /\
         T.PkgSet.In (Conc.Reduction.embedPkg idg q) S.
@@ -1135,20 +749,15 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       unfold npmParents; rewrite SOtp.mem_filterMap; split.
       - intros [[nm x] [Hs He]]; destruct nm as [k' w | k' v' m'];
           destruct x as [u' | w']; try discriminate He.
-        destruct (andb (dirKeyb m')
-                    (T.PkgSet.mem (Conc.Reduction.embedPkg idg (k', v')) S))
-          eqn:Hm; [| discriminate He].
-        apply Bool.andb_true_iff in Hm; destruct Hm as [Hd Hm].
+        destruct (T.PkgSet.mem (Conc.Reduction.embedPkg idg (k', v')) S) eqn:Hm;
+          [| discriminate He].
         injection He as He1 He2 He3 He4; subst.
-        split; [exact Hd |].
         split; [exact Hs | apply T.PkgSet.mem_spec; exact Hm].
-      - intros [Hd [H1 H2]].
+      - intros [H1 H2].
         exists (Nm.Intermediate k v m, Vs.Orig u); split; [exact H1 |].
-        assert (andb (dirKeyb m)
-                  (T.PkgSet.mem (Conc.Reduction.embedPkg idg (k, v)) S) = true)
+        assert (T.PkgSet.mem (Conc.Reduction.embedPkg idg (k, v)) S = true)
           as Hm
-          by (apply Bool.andb_true_iff; split;
-              [exact Hd | apply T.PkgSet.mem_spec; exact H2]).
+          by (apply T.PkgSet.mem_spec; exact H2).
         rewrite Hm; reflexivity.
     Qed.
 
@@ -1160,65 +769,40 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       cbn [dependees]; rewrite VEqb.eqb_refl; reflexivity.
     Qed.
 
-    (* A soft node that did not escape fills its directory at the version it
-       took, so the directory behind it is selected exactly when the
-       optional dependency was met. *)
-    Lemma soft_selected : forall rho I S k v m u,
-        T.IsResolution (transR rho I) (transD rho I) (transRoot I) S ->
-        T.PkgSet.In (Nm.Intermediate k v m, Vs.Orig u) S ->
-        T.PkgSet.In (Nm.Intermediate k v (dirKey m), Vs.Orig u) S.
-    Proof.
-      intros rho I S k v m u Hres Hin.
-      destruct (dirKeyb m) eqn:Hd; [rewrite (dirKey_id m Hd); exact Hin |].
-      destruct Hres as [Hsub Hroot Hdep Huniq].
-      destruct (Hdep _ Hin (Nm.Intermediate k v (dirKey m))
-                  (T.VSet.singleton (Vs.Orig u))) as [x [Hx HxS]].
-      { apply mem_transD; split; [exact (Hsub _ Hin) |].
-        cbn [dependees]; rewrite Hd; apply SOhh.singleton_in; reflexivity. }
-      apply SOvcv.singleton_in in Hx; subst x; exact HxS.
-    Qed.
-
-    (* Every selected directory drags its chosen version in: the exit
+    (* Every selected intermediate drags its chosen version in: the exit
        edge is the only edge a directory node carries unconditionally. *)
     Lemma exit_selected : forall rho I S k v m u,
         T.IsResolution (transR rho I) (transD rho I) (transRoot I) S ->
-        dirKeyb m = true ->
         T.PkgSet.In (Nm.Intermediate k v m, Vs.Orig u) S ->
         T.PkgSet.In (Conc.Reduction.embedPkg idg (m, u)) S.
     Proof.
-      intros rho I S k v m u [Hsub Hroot Hdep Huniq] Hd Hin.
+      intros rho I S k v m u [Hsub Hroot Hdep Huniq] Hin.
       destruct (Hdep _ Hin (Nm.Granular m u) (T.VSet.singleton (Vs.Orig u)))
         as [x [Hx HxS]].
       { apply mem_transD; split; [exact (Hsub _ Hin) |].
-        cbn [dependees]; rewrite Hd; apply SOhh.add_in; left; reflexivity. }
+        cbn [dependees]; apply SOhh.add_in; left; reflexivity. }
       apply SOvcv.singleton_in in Hx; subst x.
       unfold Conc.Reduction.embedPkg, idg; cbn [fst snd]; exact HxS.
     Qed.
 
-    (* A soft directory is exempt: its entry edge lands on the soft node and
-       carries the escape, so nothing is forced and the hypothesis below
-       is exactly the case the spec's nres_slot still speaks about. *)
     Lemma entry_selected : forall rho I S q a,
         T.IsResolution (transR rho I) (transD rho I) (transRoot I) S ->
         T.PkgSet.In (Conc.Reduction.embedPkg idg q) S ->
         NSet.In a (dirs I (base q)) ->
-        softDir I (base q) a = false ->
         exists v, VSet.In v (slotCands rho I (base q) a) /\
           T.PkgSet.In
             (Nm.Intermediate (fst q) (snd q) (slotKey I (base q) a),
              Vs.Orig v) S.
     Proof.
-      intros rho I S q a [Hsub Hroot Hdep Huniq] Hq Ha Hsoft.
+      intros rho I S q a [Hsub Hroot Hdep Huniq] Hq Ha.
       destruct (Hdep _ Hq
-                  (Nm.Intermediate (fst q) (snd q) (entryKey I (base q) a))
-                  (softAdd (softDir I (base q) a) (snd q)
-                     (Conc.Reduction.embedVS (slotCands rho I (base q) a))))
+                  (Nm.Intermediate (fst q) (snd q) (slotKey I (base q) a))
+                  (Conc.Reduction.embedVS (slotCands rho I (base q) a)))
         as [x [Hx HxS]].
       { apply mem_transD; split; [exact (Hsub _ Hq) |].
         rewrite dependees_embedPkg.
         apply T.DependeesSet.union_spec; left; apply mem_entryEdges.
         exists a; split; [exact Ha | reflexivity]. }
-      unfold entryKey in HxS; rewrite Hsoft in Hx, HxS; cbn [softAdd] in Hx.
       apply SOvcv.mem_map in Hx; destruct Hx as [v [Hv ->]].
       exists v; split; assumption.
     Qed.
@@ -1252,7 +836,6 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
 
     Lemma peer_selected : forall rho I S q m u r,
         T.IsResolution (transR rho I) (transD rho I) (transRoot I) S ->
-        dirKeyb m = true ->
         T.PkgSet.In (Nm.Intermediate (fst q) (snd q) m, Vs.Orig u) S ->
         In ((snd m, u), r) (inst_peer I) ->
         peerActive I (base q) r = true ->
@@ -1261,13 +844,13 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
             (Nm.Intermediate (fst q) (snd q) (peerKeyAt I (base q) r),
              Vs.Orig v) S.
     Proof.
-      intros rho I S q m u r [Hsub Hroot Hdep Huniq] Hd Hin Hr Hact.
+      intros rho I S q m u r [Hsub Hroot Hdep Huniq] Hin Hr Hact.
       destruct (Hdep _ Hin
                   (Nm.Intermediate (fst q) (snd q) (peerKeyAt I (base q) r))
                   (Conc.Reduction.embedVS (peerCandsAt rho I (base q) r)))
         as [x [Hx HxS]].
       { apply mem_transD; split; [exact (Hsub _ Hin) |].
-        cbn [dependees]; rewrite Hd; apply SOhh.add_in; right.
+        cbn [dependees]; apply SOhh.add_in; right.
         apply mem_peerEdgesAt; exists r; split;
           [exact Hr | split; [exact Hact | reflexivity]]. }
       apply SOvcv.mem_map in Hx; destruct Hx as [v [Hv ->]].
@@ -1282,16 +865,14 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       assert (Hres' := Hres); destruct Hres' as [Hsub Hroot Hdep Huniq].
       (* the parent edges a selected intermediate contributes *)
       assert (Hpi : forall q m v,
-                 dirKeyb m = true ->
                  T.PkgSet.In (Conc.Reduction.embedPkg idg q) S ->
                  T.PkgSet.In
                    (Nm.Intermediate (fst q) (snd q) m, Vs.Orig v) S ->
                  Installs (npmResolution S) (npmParents S) q m v).
-      { intros [k w] m v Hd Hq Hi; split.
+      { intros [k w] m v Hq Hi; split.
         - apply Conc.Reduction.mem_concurrentResolution.
-          exact (exit_selected rho I S k w m v Hres Hd Hi).
-        - apply mem_npmParents; cbn [fst snd];
-            split; [exact Hd | split; assumption]. }
+          exact (exit_selected rho I S k w m v Hres Hi).
+        - apply mem_npmParents; cbn [fst snd]; split; assumption. }
       constructor.
       - intros [k w] Hq; apply Conc.Reduction.mem_concurrentResolution in Hq.
         pose proof (Hsub _ Hq) as Hr; apply mem_transR in Hr.
@@ -1304,37 +885,32 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       - apply Conc.Reduction.mem_concurrentResolution; exact Hroot.
       - intros p m v v' [_ H1] [_ H2].
         apply mem_npmParents in H1; apply mem_npmParents in H2.
-        destruct H1 as [_ [Hi1 _]]; destruct H2 as [_ [Hi2 _]];
+        destruct H1 as [Hi1 _]; destruct H2 as [Hi2 _];
           cbn [fst snd] in Hi1, Hi2.
         pose proof (Huniq _ _ _ Hi1 Hi2) as He; injection He as ->;
           reflexivity.
-      - intros p Hp a Ha Hsoft;
-          apply Conc.Reduction.mem_concurrentResolution in Hp.
-        destruct (entry_selected rho I S p a Hres Hp Ha Hsoft) as [v [Hv Hi]].
-        exists v; split;
-          [exact Hv | exact (Hpi p _ v (slotKey_real I (base p) a) Hp Hi)].
+      - intros p Hp a Ha; apply Conc.Reduction.mem_concurrentResolution in Hp.
+        destruct (entry_selected rho I S p a Hres Hp Ha) as [v [Hv Hi]].
+        exists v; split; [exact Hv | exact (Hpi p _ v Hp Hi)].
       - intros p Hp m u [_ Hu] r Hr Hopt.
         apply Conc.Reduction.mem_concurrentResolution in Hp.
-        apply mem_npmParents in Hu; destruct Hu as [Hd [Hi _]];
-          cbn [fst snd] in Hd, Hi.
-        destruct (peer_selected rho I S p _ u r Hres Hd Hi Hr
+        apply mem_npmParents in Hu; destruct Hu as [Hi _];
+          cbn [fst snd] in Hi.
+        destruct (peer_selected rho I S p _ u r Hres Hi Hr
                     (proj2 (Bool.orb_true_iff _ _)
                        (or_introl (proj2 (Bool.negb_true_iff _) Hopt))))
           as [v [Hv Hj]].
-        exists v; split;
-          [exact Hv
-          | exact (Hpi p _ v (slotKey_real I (base p) (p_name r)) Hp Hj)].
-      - intros p Hp m u [_ Hu] r Hr Hopt Hname Hsd v [_ Hv].
+        exists v; split; [exact Hv | exact (Hpi p _ v Hp Hj)].
+      - intros p Hp m u [_ Hu] r Hr Hopt Hname v [_ Hv].
         apply Conc.Reduction.mem_concurrentResolution in Hp.
-        apply mem_npmParents in Hu; destruct Hu as [Hd [Hi _]];
-          cbn [fst snd] in Hd, Hi.
+        apply mem_npmParents in Hu; destruct Hu as [Hi _];
+          cbn [fst snd] in Hi.
         assert (Hact : peerActive I (base p) r = true)
           by (unfold peerActive; apply Bool.orb_true_iff; right;
-              apply Bool.andb_true_iff; split;
-              [apply NSet.mem_spec; exact Hname | rewrite Hsd; reflexivity]).
-        destruct (peer_selected rho I S p _ u r Hres Hd Hi Hr Hact)
+              apply NSet.mem_spec; exact Hname).
+        destruct (peer_selected rho I S p _ u r Hres Hi Hr Hact)
           as [v0 [Hv0 Hj]].
-        apply mem_npmParents in Hv; destruct Hv as [_ [Hi' _]];
+        apply mem_npmParents in Hv; destruct Hv as [Hi' _];
           cbn [fst snd] in Hi'.
         pose proof (Huniq _ _ _ Hi' Hj) as Heq; injection Heq as ->; exact Hv0.
       - intros r Hr Hopt.
@@ -1342,62 +918,50 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
                     (proj2 (Bool.orb_true_iff _ _)
                        (or_introl (proj2 (Bool.negb_true_iff _) Hopt))))
           as [v [Hv Hj]].
-        exists v; split;
-          [exact Hv
-          | exact (Hpi (rootPkg I) _ v
-                     (slotKey_real I (inst_root I) (p_name r)) Hroot Hj)].
-      - intros r Hr Hopt Hname Hsd v [_ Hv].
+        exists v; split; [exact Hv | exact (Hpi (rootPkg I) _ v Hroot Hj)].
+      - intros r Hr Hopt Hname v [_ Hv].
         assert (Hact : peerActive I (inst_root I) r = true)
           by (unfold peerActive; apply Bool.orb_true_iff; right;
-              apply Bool.andb_true_iff; split;
-              [apply NSet.mem_spec; exact Hname | rewrite Hsd; reflexivity]).
+              apply NSet.mem_spec; exact Hname).
         destruct (root_peer_selected rho I S r Hres Hr Hact) as [v0 [Hv0 Hj]].
-        apply mem_npmParents in Hv; destruct Hv as [_ [Hi' _]];
+        apply mem_npmParents in Hv; destruct Hv as [Hi' _];
           cbn [fst snd] in Hi'.
         pose proof (Huniq _ _ _ Hi' Hj) as Heq; injection Heq as ->; exact Hv0.
       - intros [m u] [k w] Hcq; apply mem_npmParents in Hcq.
-        cbn [fst snd] in Hcq; destruct Hcq as [Hd [Hi Hq]].
+        cbn [fst snd] in Hcq; destruct Hcq as [Hi Hq].
         split; apply Conc.Reduction.mem_concurrentResolution;
-          [exact (exit_selected rho I S k w m u Hres Hd Hi) | exact Hq].
+          [exact (exit_selected rho I S k w m u Hres Hi) | exact Hq].
     Qed.
 
     (* -- completeness -- *)
 
-    (* The version a depender installs under one of its directories is one
-       the encoding minted there: the directory's own range when its row
-       is an ordinary one -- pinned by the slot obligation and by
-       uniqueness -- and otherwise any published version, which the peer
-       edges and the soft node narrow.  Nothing is ever installed at a soft
-       node, whose key names no package, so only real directories are
-       read. *)
+    (* The version a depender installs under one of its keys is one the
+       encoding minted there: a slot's own range when it declares one --
+       pinned by the slot obligation and by uniqueness -- and otherwise
+       any published version, which the peer edges narrow. *)
     Lemma installs_childCands : forall rho I S pi p m v,
         IsResolution rho I S pi -> PkgSet.In p S ->
         KeySet.In m (childKeys I (base p)) ->
-        dirKeyb m = true ->
         Installs S pi p m v ->
         VSet.In v (childCands rho I (base p) m).
     Proof.
-      intros rho I S pi p m v Hres Hp Hm Hd Hi.
+      intros rho I S pi p m v Hres Hp Hm Hi.
       destruct Hres as [Hsub Hroot Huniq Hslot Hpin Hpm Hrp Hrpm Hpar].
-      destruct (mem_childKeys I (base p) m Hm) as [[_ [Ha He]] | [Hc _]];
-        [| rewrite Hd in Hc; discriminate Hc].
-      assert (Hreal : VSet.In v (realVersions (effRepo rho I) (snd m))).
-      { destruct Hi as [HinS _]; destruct (Hsub _ HinS) as [_ Hb];
-          unfold base in Hb; cbn [fst snd] in Hb.
-        apply mem_realVersions; exact Hb. }
-      rewrite He at 1; rewrite childCands_dir, <- He.
-      destruct (softDir I (base p) (dirOf m)) eqn:Hsd; [exact Hreal |].
-      destruct (NSet.mem (dirOf m) (dirs I (base p))) eqn:Hsa.
+      unfold childKeys in Hm; apply SOnk.mem_map in Hm.
+      destruct Hm as [a [Ha ->]].
+      unfold childCands; rewrite slotKey_fst, KeyEqb.eqb_refl.
+      destruct (NSet.mem a (dirs I (base p))) eqn:Hsa.
       - apply NSet.mem_spec in Hsa.
-        destruct (Hslot p Hp (dirOf m) Hsa Hsd) as [v' [Hv' Hi']].
-        rewrite <- He in Hi'.
-        rewrite (Huniq p m v v' Hi Hi'); exact Hv'.
+        destruct (Hslot p Hp a Hsa) as [v' [Hv' Hi']].
+        rewrite (Huniq p (slotKey I (base p) a) v v' Hi Hi'); exact Hv'.
       - unfold childDirs in Ha; apply NSet.union_spec in Ha.
         destruct Ha as [Ha | Ha];
           [apply NSet.mem_spec in Ha; rewrite Ha in Hsa; discriminate |].
-        assert (Hpa : NSet.mem (dirOf m) (peerDirs I) = true)
+        assert (Hpa : NSet.mem a (peerDirs I) = true)
           by (apply NSet.mem_spec; exact Ha).
-        rewrite Hpa; exact Hreal.
+        rewrite Hpa; destruct Hi as [HinS _].
+        destruct (Hsub _ HinS) as [_ Hb]; unfold base in Hb.
+        cbn [fst snd] in Hb; apply mem_realVersions; exact Hb.
     Qed.
 
     (* The two root-peer clauses read as one obligation: whichever flavour
@@ -1414,17 +978,13 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       destruct Hres as [_ Hroot _ Hslot _ _ Hrp Hrpm _].
       destruct (p_optional r) eqn:Hopt; [| exact (Hrp r Hr Hopt)].
       unfold peerActive in Hact; rewrite Hopt in Hact;
-        cbn [negb orb] in Hact; apply Bool.andb_true_iff in Hact.
-      destruct Hact as [Hmem Hsd]; apply NSet.mem_spec in Hmem.
-      apply Bool.negb_true_iff in Hsd.
+        cbn [negb orb] in Hact; apply NSet.mem_spec in Hact.
       assert (Hdir : NSet.In (p_name r) (dirs I (base (rootPkg I))))
-        by (rewrite base_rootPkg; exact Hmem).
-      destruct (Hslot (rootPkg I) Hroot (p_name r) Hdir
-                  (eq_ind_r (fun p => softDir I p (p_name r) = false) Hsd
-                     (base_rootPkg I))) as [w [_ Hi]].
+        by (rewrite base_rootPkg; exact Hact).
+      destruct (Hslot (rootPkg I) Hroot (p_name r) Hdir) as [w [_ Hi]].
       rewrite base_rootPkg in Hi.
       exists w; unfold peerKeyAt;
-        split; [exact (Hrpm r Hr Hopt Hmem Hsd w Hi) | exact Hi].
+        split; [exact (Hrpm r Hr Hopt Hact w Hi) | exact Hi].
     Qed.
 
     Definition instNode (S : PkgSet.t) (pi : Conc.ParentRel.t)
@@ -1450,108 +1010,15 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       - intros [H _]; apply PkgSet.mem_spec in H; congruence.
     Qed.
 
-    (* The soft node's own node at a version, which is the directory
-       behind it holding that version rather than the soft node holding
-       anything: its one edge is what puts it there. *)
-    Definition softNode (S : PkgSet.t) (pi : Conc.ParentRel.t)
-        (p : Pkg.t) (m : NKey.t) (u : V.t) : option T.Pkg.t :=
-      if andb (PkgSet.mem (dirKey m, u) S)
-           (Conc.ParentRel.mem ((dirKey m, u), p) pi)
-      then Some (Nm.Intermediate (fst p) (snd p) m, Vs.Orig u)
-      else None.
-
-    Lemma softNode_some : forall S pi p m u s,
-        softNode S pi p m u = Some s <->
-        Installs S pi p (dirKey m) u /\
-        s = (Nm.Intermediate (fst p) (snd p) m, Vs.Orig u).
-    Proof.
-      intros S pi p m u s; unfold softNode, Installs.
-      destruct (PkgSet.mem (dirKey m, u) S) eqn:H1;
-        destruct (Conc.ParentRel.mem ((dirKey m, u), p) pi) eqn:H2;
-        cbn [andb]; split; try discriminate.
-      - intro H; split; [split |].
-        + apply PkgSet.mem_spec; exact H1.
-        + apply Conc.ParentRel.mem_spec; exact H2.
-        + congruence.
-      - intros [_ ->]; reflexivity.
-      - intros [[_ H] _]; apply Conc.ParentRel.mem_spec in H; congruence.
-      - intros [[H _] _]; apply PkgSet.mem_spec in H; congruence.
-      - intros [[H _] _]; apply PkgSet.mem_spec in H; congruence.
-    Qed.
-
-    (* The satisfiers a soft node can be equipped with: the version the
-       resolution installs in the directory behind it, when the
-       dependency's own range admits it. *)
-    Definition softSat (rho : Valuation) (I : Inst) (S : PkgSet.t)
-        (pi : Conc.ParentRel.t) (p : Pkg.t) (m : NKey.t) : T.PkgSet.t :=
-      SOvt.filterMap (softNode S pi p m)
-        (slotCands rho I (base p) (dirOf m)).
-
-    (* and the escape otherwise, which is always available -- that is what
-       makes the gadget conservative: it adds a candidate, never a
-       constraint. *)
-    Definition softPark (rho : Valuation) (I : Inst) (S : PkgSet.t)
-        (pi : Conc.ParentRel.t) (p : Pkg.t) (m : NKey.t) : T.PkgSet.t :=
-      if T.PkgSet.is_empty (softSat rho I S pi p m)
-      then T.PkgSet.singleton
-             (Nm.Intermediate (fst p) (snd p) m, escape (snd p))
-      else softSat rho I S pi p m.
-
     Definition coreResolution (rho : Valuation) (I : Inst)
         (S : PkgSet.t) (pi : Conc.ParentRel.t) : T.PkgSet.t :=
       T.PkgSet.union (Conc.Reduction.embedSet idg S)
         (SOpt.unionMap (fun p =>
              SOkt.unionMap (fun m =>
-                 if softKeyb I (base p) m
-                 then softPark rho I S pi p m
-                 else SOvt.filterMap (instNode S pi p m)
-                        (realVersions (effRepo rho I) (snd m)))
+                 SOvt.filterMap (instNode S pi p m)
+                   (realVersions (effRepo rho I) (snd m)))
                (childKeys I (base p)))
            S).
-
-    Lemma mem_softSat : forall rho I S pi p m s,
-        T.PkgSet.In s (softSat rho I S pi p m) <->
-        exists u, VSet.In u (slotCands rho I (base p) (dirOf m)) /\
-          Installs S pi p (dirKey m) u /\
-          s = (Nm.Intermediate (fst p) (snd p) m, Vs.Orig u).
-    Proof.
-      intros rho I S pi p m s; unfold softSat.
-      rewrite SOvt.mem_filterMap; split.
-      - intros [u [Hu Hc]]; apply softNode_some in Hc.
-        destruct Hc as [H1 H2].
-        exists u; split; [exact Hu | split; assumption].
-      - intros [u [Hu [H1 H2]]]; exists u; split; [exact Hu |].
-        apply softNode_some; split; assumption.
-    Qed.
-
-    Lemma mem_softPark : forall rho I S pi p m s,
-        T.PkgSet.In s (softPark rho I S pi p m) <->
-        (exists u, VSet.In u (slotCands rho I (base p) (dirOf m)) /\
-           Installs S pi p (dirKey m) u /\
-           s = (Nm.Intermediate (fst p) (snd p) m, Vs.Orig u)) \/
-        ((forall u, VSet.In u (slotCands rho I (base p) (dirOf m)) ->
-            ~ Installs S pi p (dirKey m) u) /\
-         s = (Nm.Intermediate (fst p) (snd p) m, escape (snd p))).
-    Proof.
-      intros rho I S pi p m s; unfold softPark.
-      destruct (T.PkgSet.is_empty (softSat rho I S pi p m)) eqn:He.
-      - apply T.PkgSet.is_empty_spec in He.
-        assert (Hno : forall u, VSet.In u (slotCands rho I (base p) (dirOf m)) ->
-                   ~ Installs S pi p (dirKey m) u).
-        { intros u Hu Hi; apply (He (Nm.Intermediate (fst p) (snd p) m,
-                                      Vs.Orig u)).
-          apply mem_softSat; exists u; split;
-            [exact Hu | split; [exact Hi | reflexivity]]. }
-        rewrite SOvt.singleton_in; split.
-        + intros ->; right; split; [exact Hno | reflexivity].
-        + intros [[u [Hu [Hi _]]] | [_ ->]];
-            [destruct (Hno u Hu Hi) | reflexivity].
-      - rewrite mem_softSat; split; [intro H; left; exact H |].
-        intros [H | [Hno ->]]; [exact H | exfalso].
-        destruct (T.PkgSet.choose_nonempty _ He) as [s0 Hs0].
-        apply mem_softSat in Hs0; destruct Hs0 as [u [Hu [Hi _]]].
-        exact (Hno u Hu Hi).
-    Qed.
 
     Lemma embedSet_gran : forall S s,
         T.PkgSet.In s (Conc.Reduction.embedSet idg S) <->
@@ -1572,105 +1039,31 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       intros rho I k v; cbn [dependees]; rewrite VEqb.eqb_refl; reflexivity.
     Qed.
 
-    (* the escape reads nothing and carries nothing: dependees falls
-       through to its empty catch-all, whatever instance it is asked
-       about *)
-    Lemma dependees_escape : forall rho I k v m u,
-        dependees rho I (Nm.Intermediate k v m, escape u) =
-        T.DependeesSet.empty.
-    Proof. reflexivity. Qed.
-
-    Lemma softPark_cases : forall rho I S pi p m,
-        (exists u, VSet.In u (slotCands rho I (base p) (dirOf m)) /\
-           Installs S pi p (dirKey m) u) \/
-        (forall u, VSet.In u (slotCands rho I (base p) (dirOf m)) ->
-           ~ Installs S pi p (dirKey m) u).
-    Proof.
-      intros rho I S pi p m.
-      destruct (T.PkgSet.is_empty (softSat rho I S pi p m)) eqn:He.
-      - right; apply T.PkgSet.is_empty_spec in He.
-        intros u Hu Hi.
-        apply (He (Nm.Intermediate (fst p) (snd p) m, Vs.Orig u)).
-        apply mem_softSat; exists u; split;
-          [exact Hu | split; [exact Hi | reflexivity]].
-      - left; destruct (T.PkgSet.choose_nonempty _ He) as [s0 Hs0].
-        apply mem_softSat in Hs0; destruct Hs0 as [u [Hu [Hi _]]].
-        exists u; split; assumption.
-    Qed.
-
-    (* A soft node's satisfier is a published version of the directory's
-       own registry package, the two naming the same one. *)
-    Lemma softSat_real : forall rho I p m u,
-        softKeyb I (base p) m = true ->
-        VSet.In u (slotCands rho I (base p) (dirOf m)) ->
-        VSet.In u (realVersions (effRepo rho I) (snd m)).
-    Proof.
-      intros rho I p m u Hsk Hu; apply mem_realVersions.
-      pose proof (slotCands_real rho I (base p) (dirOf m) u Hu) as Hr.
-      rewrite <- (softKeyb_dirKey I (base p) m Hsk), snd_dirKey in Hr.
-      exact Hr.
-    Qed.
-
-    (* Four kinds of node: an installed package, a directory holding one,
-       a soft node that took a satisfier, and one that escaped. *)
     Lemma mem_coreResolution : forall rho I S pi s,
         T.PkgSet.In s (coreResolution rho I S pi) <->
         (exists k v, PkgSet.In (k, v) S /\
            s = (Nm.Granular k v, Vs.Orig v)) \/
         (exists p m u, PkgSet.In p S /\ KeySet.In m (childKeys I (base p)) /\
-           softKeyb I (base p) m = false /\
            VSet.In u (realVersions (effRepo rho I) (snd m)) /\
-           Installs S pi p m u /\
-           s = (Nm.Intermediate (fst p) (snd p) m, Vs.Orig u)) \/
-        (exists p m u, PkgSet.In p S /\ KeySet.In m (childKeys I (base p)) /\
-           softKeyb I (base p) m = true /\
-           VSet.In u (slotCands rho I (base p) (dirOf m)) /\
-           Installs S pi p (dirKey m) u /\
-           s = (Nm.Intermediate (fst p) (snd p) m, Vs.Orig u)) \/
-        (exists p m, PkgSet.In p S /\ KeySet.In m (childKeys I (base p)) /\
-           softKeyb I (base p) m = true /\
-           (forall u, VSet.In u (slotCands rho I (base p) (dirOf m)) ->
-              ~ Installs S pi p (dirKey m) u) /\
-           s = (Nm.Intermediate (fst p) (snd p) m, escape (snd p))).
+           PkgSet.In (m, u) S /\ Conc.ParentRel.In ((m, u), p) pi /\
+           s = (Nm.Intermediate (fst p) (snd p) m, Vs.Orig u)).
     Proof.
       intros rho I S pi s; unfold coreResolution.
       rewrite T.PkgSet.union_spec, embedSet_gran, SOpt.mem_unionMap.
       split.
-      - intros [H | [p [Hp Hm]]]; [left; exact H |].
+      - intros [H | [p [Hp Hm]]]; [left; exact H | right].
         cbn beta in Hm; apply SOkt.mem_unionMap in Hm.
         destruct Hm as [m [Hm Hu]]; cbn beta in Hu.
-        destruct (softKeyb I (base p) m) eqn:Hsk.
-        + apply mem_softPark in Hu.
-          destruct Hu as [[u [Hu [Hi ->]]] | [Hno ->]].
-          * right; right; left; exists p, m, u.
-            split; [exact Hp | split; [exact Hm | split; [exact Hsk |
-              split; [exact Hu | split; [exact Hi | reflexivity]]]]].
-          * right; right; right; exists p, m.
-            split; [exact Hp | split; [exact Hm | split; [exact Hsk |
-              split; [exact Hno | reflexivity]]]].
-        + right; left.
-          apply SOvt.mem_filterMap in Hu; destruct Hu as [u [Hu Hc]].
-          apply instNode_some in Hc; destruct Hc as [Hg1 [Hg2 Hg3]].
-          exists p, m, u.
-          split; [exact Hp | split; [exact Hm | split; [exact Hsk |
-            split; [exact Hu | split; [split; assumption | exact Hg3]]]]].
-      - intros [H | [[p [m [u [Hp [Hm [Hsk [Hu [[HS Hpi] ->]]]]]]]]
-                    | [[p [m [u [Hp [Hm [Hsk [Hu [Hi ->]]]]]]]]
-                      | [p [m [Hp [Hm [Hsk [Hno ->]]]]]]]]];
-          [left; exact H | right | right | right].
-        + exists p; split; [exact Hp | cbn beta].
-          apply SOkt.mem_unionMap; exists m; split; [exact Hm | cbn beta].
-          rewrite Hsk; apply SOvt.mem_filterMap; exists u; split; [exact Hu |].
-          apply instNode_some; split;
-            [exact HS | split; [exact Hpi | reflexivity]].
-        + exists p; split; [exact Hp | cbn beta].
-          apply SOkt.mem_unionMap; exists m; split; [exact Hm | cbn beta].
-          rewrite Hsk; apply mem_softPark; left; exists u.
-          split; [exact Hu | split; [exact Hi | reflexivity]].
-        + exists p; split; [exact Hp | cbn beta].
-          apply SOkt.mem_unionMap; exists m; split; [exact Hm | cbn beta].
-          rewrite Hsk; apply mem_softPark; right;
-            split; [exact Hno | reflexivity].
+        apply SOvt.mem_filterMap in Hu; destruct Hu as [u [Hu Hc]].
+        apply instNode_some in Hc; destruct Hc as [Hg1 [Hg2 Hg3]].
+        exists p, m, u; repeat split; assumption.
+      - intros [H | [p [m [u [Hp [Hm [Hu [HS [Hpi ->]]]]]]]]];
+          [left; exact H | right].
+        exists p; split; [exact Hp | cbn beta].
+        apply SOkt.mem_unionMap; exists m; split; [exact Hm | cbn beta].
+        apply SOvt.mem_filterMap; exists u; split; [exact Hu |].
+        apply instNode_some; split;
+          [exact HS | split; [exact Hpi | reflexivity]].
     Qed.
 
     Lemma mem_targetNames_gran : forall rho I p,
@@ -1713,28 +1106,14 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       constructor.
       - intros s Hs; apply mem_coreResolution in Hs.
         destruct Hs as
-          [[k [v [Hp ->]]]
-          | [[p [m [u [Hp [Hm [Hsk [Hu [Hi ->]]]]]]]]
-            | [[p [m [u [Hp [Hm [Hsk [Hu [Hi ->]]]]]]]]
-              | [p [m [Hp [Hm [Hsk [Hno ->]]]]]]]]];
-          [exact (Hgran k v Hp) | | |].
-        + apply mem_transR; split.
-          * exact (mem_targetNames_int rho I p m (Hreal _ Hp) Hm).
-          * assert (Hc : VSet.In u (childCands rho I (base p) m))
-              by exact (installs_childCands rho I S pi p m u Hres Hp Hm
-                          (childKey_dirKeyb I (base p) m Hm Hsk) Hi).
-            cbn [versions]; apply mem_softAdd; right.
-            apply SOvcv.mem_map; exists u; split; [exact Hc | reflexivity].
-        + apply mem_transR; split.
-          * exact (mem_targetNames_int rho I p m (Hreal _ Hp) Hm).
-          * assert (Hc : VSet.In u (childCands rho I (base p) m))
-              by (rewrite (childCands_soft rho I (base p) m Hsk); exact Hu).
-            cbn [versions]; apply mem_softAdd; right.
-            apply SOvcv.mem_map; exists u; split; [exact Hc | reflexivity].
-        + apply mem_transR; split.
-          * exact (mem_targetNames_int rho I p m (Hreal _ Hp) Hm).
-          * cbn [versions]; apply mem_softAdd; left.
-            split; [exact Hsk | reflexivity].
+          [[k [v [Hp ->]]] | [p [m [u [Hp [Hm [Hu [HS [Hpi ->]]]]]]]]];
+          [exact (Hgran k v Hp) |].
+        apply mem_transR; split.
+        + exact (mem_targetNames_int rho I p m (Hreal _ Hp) Hm).
+        + cbn [versions]; apply SOvcv.mem_map; exists u; split;
+            [| reflexivity].
+          exact (installs_childCands rho I S pi p m u Hres Hp Hm
+                   (conj HS Hpi)).
       - apply mem_coreResolution; left.
         exists (rootKey I), (snd (inst_root I)); split;
           [exact Hroot |].
@@ -1743,54 +1122,22 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         apply mem_transD in Hd; destruct Hd as [_ Hd].
         apply mem_coreResolution in Hs.
         destruct Hs as
-          [[k [v [Hp He]]]
-          | [[p [m [u [Hp [Hm [Hsk [Hu [Hi He]]]]]]]]
-            | [[p [m [u [Hp [Hm [Hsk [Hu [Hi He]]]]]]]]
-              | [p [m [Hp [Hm [Hsk [Hno He]]]]]]]]].
+          [[k [v [Hp He]]] | [p [m [u [Hp [Hm [Hu [HS [Hpi He]]]]]]]]].
         + subst s; rewrite dependees_gran in Hd.
           apply T.DependeesSet.union_spec in Hd; destruct Hd as [Hd | Hd].
           * apply mem_entryEdges in Hd; destruct Hd as [a [Ha He]].
             injection He as -> ->.
-            unfold entryKey; destruct (softDir I (base (k, v)) a) eqn:Hsd.
-            (* the gadget: the soft node takes a satisfier where the resolution
-               has one, and the escape where it does not -- which is
-               always there *)
-            -- destruct (softPark_cases rho I S pi (k, v)
-                           (softKey I (base (k, v)) a))
-                 as [[w [Hw Hi]] | Hno].
-               ++ assert (Hw' : VSet.In w (slotCands rho I (base (k, v)) a))
-                    by (rewrite <- (softKey_dir I (base (k, v)) a); exact Hw).
-                  exists (Vs.Orig w); split.
-                  { apply mem_softAdd; right; apply SOvcv.mem_map.
-                    exists w; split; [exact Hw' | reflexivity]. }
-                  apply mem_coreResolution; right; right; left.
-                  exists (k, v), (softKey I (base (k, v)) a), w.
-                  split; [exact Hp |].
-                  split; [exact (mem_childKeys_soft I (base (k, v)) a Hsd) |].
-                  split; [rewrite softKeyb_softKey; exact Hsd |].
-                  split; [exact Hw |].
-                  split; [exact Hi | reflexivity].
-               ++ exists (escape v); split.
-                  { apply mem_softAdd; left; split; reflexivity. }
-                  apply mem_coreResolution; right; right; right.
-                  exists (k, v), (softKey I (base (k, v)) a).
-                  split; [exact Hp |].
-                  split; [exact (mem_childKeys_soft I (base (k, v)) a Hsd) |].
-                  split; [rewrite softKeyb_softKey; exact Hsd |].
-                  split; [exact Hno | reflexivity].
-            -- destruct (Hslot (k, v) Hp a Ha Hsd) as [w [Hw Hi]].
-               exists (Vs.Orig w); split.
-               { apply mem_softAdd; right; apply SOvcv.mem_map.
-                 exists w; split; [exact Hw | reflexivity]. }
-               apply mem_coreResolution; right; left.
-               exists (k, v), (slotKey I (base (k, v)) a), w.
-               split; [exact Hp |].
-               split; [apply mem_childKeys_dir, NSet.union_spec;
-                       left; exact Ha |].
-               split; [apply softKeyb_dirKeyb, slotKey_real |].
-               split; [apply mem_realVersions;
-                       exact (slotCands_real rho I (base (k, v)) a w Hw) |].
-               split; [exact Hi | reflexivity].
+            destruct (Hslot (k, v) Hp a Ha) as [w [Hw [HwS Hwpi]]].
+            exists (Vs.Orig w); split.
+            { apply SOvcv.mem_map; exists w; split;
+                [exact Hw | reflexivity]. }
+            apply mem_coreResolution; right.
+            exists (k, v), (slotKey I (base (k, v)) a), w.
+            repeat split; try assumption; try reflexivity.
+            -- unfold childKeys; apply SOnk.mem_map; exists a; split;
+                 [apply NSet.union_spec; left; exact Ha | reflexivity].
+            -- apply mem_realVersions.
+               exact (slotCands_real rho I (base (k, v)) a w Hw).
           * apply mem_rootPeerEdges in Hd.
             destruct Hd as [Hq [r [Hr [Hact He]]]].
             injection He as -> ->.
@@ -1798,33 +1145,30 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
               by (rewrite Hq; apply base_rootPkg).
             rewrite Hbr in Hr, Hact |- *.
             destruct (root_peer_installs rho I S pi r Hres Hr Hact)
-              as [w [Hw Hi]].
-            rewrite <- Hq in Hi.
+              as [w [Hw [HwS Hwpi]]].
+            rewrite <- Hq in Hwpi.
             exists (Vs.Orig w); split.
             { apply SOvcv.mem_map; exists w; split;
                 [exact Hw | reflexivity]. }
-            apply mem_coreResolution; right; left.
+            apply mem_coreResolution; right.
             exists (k, v), (peerKeyAt I (inst_root I) r), w.
-            split; [exact Hp |].
-            split.
-            { rewrite Hbr; apply mem_childKeys_dir, NSet.union_spec; right.
-              unfold peerDirs; apply mem_namesOfL.
-              exists (inst_root I, r); split; [exact Hr | reflexivity]. }
-            split; [apply softKeyb_dirKeyb, slotKey_real |].
-            split.
-            { apply mem_realVersions; destruct Hi as [HwS _].
-              destruct (Hsub _ HwS) as [_ Hb]; unfold base in Hb.
-              cbn [fst snd] in Hb; exact Hb. }
-            split; [exact Hi | reflexivity].
+            repeat split; try assumption; try reflexivity.
+            -- rewrite Hbr; unfold childKeys, peerKeyAt.
+               apply SOnk.mem_map; exists (p_name r); split; [| reflexivity].
+               apply NSet.union_spec; right; unfold peerDirs.
+               apply mem_namesOfL; exists (inst_root I, r); split;
+                 [exact Hr | reflexivity].
+            -- apply mem_realVersions.
+               destruct (Hsub _ HwS) as [_ Hb]; unfold base in Hb.
+               cbn [fst snd] in Hb; exact Hb.
         + destruct p as [pk pv]; cbn [fst snd] in He; subst s.
-          assert (Hdk : dirKeyb m = true)
-            by exact (childKey_dirKeyb I (base (pk, pv)) m Hm Hsk).
-          cbn [dependees] in Hd; rewrite Hdk in Hd; apply SOhh.add_in in Hd.
+          cbn [dependees] in Hd; apply SOhh.add_in in Hd.
+          assert (HI : Installs S pi (pk, pv) m u) by (split; assumption).
           destruct Hd as [He | Hd]; [injection He as -> -> |].
           * exists (Vs.Orig u); split;
               [apply SOvcv.singleton_in; reflexivity |].
             apply mem_coreResolution; left; exists m, u; split;
-              [exact (proj1 Hi) | reflexivity].
+              [exact HS | reflexivity].
           * apply mem_peerEdgesAt in Hd; destruct Hd as [r [Hr [Hact He]]].
             injection He as -> ->.
             assert (Hgot : exists w,
@@ -1833,88 +1177,46 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
                          (peerKeyAt I (base (pk, pv)) r) w).
             { destruct (p_optional r) eqn:Hopt.
               - unfold peerActive in Hact; rewrite Hopt in Hact;
-                  cbn [negb orb] in Hact; apply Bool.andb_true_iff in Hact.
-                destruct Hact as [Hmem Hsd]; apply NSet.mem_spec in Hmem;
-                  apply Bool.negb_true_iff in Hsd.
-                destruct (Hslot (pk, pv) Hp (p_name r) Hmem Hsd) as [w [_ Hj]].
-                exists w; split; [| exact Hj].
-                exact (Hpm (pk, pv) Hp m u Hi r Hr Hopt Hmem Hsd w Hj).
-              - exact (Hpin (pk, pv) Hp m u Hi r Hr Hopt). }
-            destruct Hgot as [w [Hw Hj]].
+                  cbn [negb orb] in Hact.
+                apply NSet.mem_spec in Hact.
+                destruct (Hslot (pk, pv) Hp (p_name r) Hact) as [w [_ Hi]].
+                exists w; split; [| exact Hi].
+                exact (Hpm (pk, pv) Hp m u HI r Hr Hopt Hact w Hi).
+              - exact (Hpin (pk, pv) Hp m u HI r Hr Hopt). }
+            destruct Hgot as [w [Hw [HwS Hwpi]]].
             exists (Vs.Orig w); split.
             { apply SOvcv.mem_map; exists w; split;
                 [exact Hw | reflexivity]. }
-            apply mem_coreResolution; right; left.
+            apply mem_coreResolution; right.
             exists (pk, pv), (peerKeyAt I (base (pk, pv)) r), w.
-            split; [exact Hp |].
-            split.
-            { apply mem_childKeys_dir, NSet.union_spec; right.
-              unfold peerDirs; apply mem_namesOfL.
-              exists ((snd m, u), r); split; [exact Hr | reflexivity]. }
-            split; [apply softKeyb_dirKeyb, slotKey_real |].
-            split.
-            { apply mem_realVersions; destruct Hj as [HwS _].
-              destruct (Hsub _ HwS) as [_ Hb]; unfold base in Hb.
-              cbn [fst snd] in Hb; exact Hb. }
-            split; [exact Hj | reflexivity].
-        (* the soft node's one edge: the directory behind it, at the version
-           it took *)
-        + destruct p as [pk pv]; cbn [fst snd] in He; subst s.
-          cbn [dependees] in Hd;
-            rewrite (softKeyb_soft I (base (pk, pv)) m Hsk) in Hd.
-          apply SOhh.singleton_in in Hd; injection Hd as -> ->.
-          exists (Vs.Orig u); split;
-            [apply SOvcv.singleton_in; reflexivity |].
-          apply mem_coreResolution; right; left.
-          exists (pk, pv), (dirKey m), u.
-          split; [exact Hp |].
-          split.
-          { rewrite (softKeyb_dirKey I (base (pk, pv)) m Hsk).
-            apply mem_childKeys_dir, NSet.union_spec; left.
-            apply softDir_dirs, (softKeyb_softDir I (base (pk, pv)) m Hsk). }
-          split; [apply softKeyb_dirKeyb, dirKeyb_dirKey |].
-          split; [rewrite snd_dirKey;
-                  exact (softSat_real rho I (pk, pv) m u Hsk Hu) |].
-          split; [exact Hi | reflexivity].
-        (* the escape carries no edges at all, so there is nothing to
-           discharge -- which is what makes an optional dependency free *)
-        + subst s; rewrite dependees_escape in Hd.
-          destruct (SOhh.empty_in _ Hd).
+            repeat split; try assumption; try reflexivity.
+            -- unfold childKeys, peerKeyAt; apply SOnk.mem_map.
+               exists (p_name r); split; [| reflexivity].
+               apply NSet.union_spec; right; unfold peerDirs.
+               apply mem_namesOfL; exists ((snd m, u), r); split;
+                 [exact Hr | reflexivity].
+            -- apply mem_realVersions.
+               destruct (Hsub _ HwS) as [_ Hb]; unfold base in Hb.
+               cbn [fst snd] in Hb; exact Hb.
       - intros nm x1 x2 H1 H2.
         apply mem_coreResolution in H1; apply mem_coreResolution in H2.
         destruct H1 as
           [[k1 [v1 [Hp1 He1]]]
-          | [[p1 [m1 [u1 [Hp1 [Hm1 [Hsk1 [Hu1 [Hi1 He1]]]]]]]]
-            | [[p1 [m1 [u1 [Hp1 [Hm1 [Hsk1 [Hu1 [Hi1 He1]]]]]]]]
-              | [p1 [m1 [Hp1 [Hm1 [Hsk1 [Hno1 He1]]]]]]]]];
+          | [p1 [m1 [u1 [Hp1 [Hm1 [Hu1 [HS1 [Hpi1 He1]]]]]]]]];
         destruct H2 as
           [[k2 [v2 [Hp2 He2]]]
-          | [[p2 [m2 [u2 [Hp2 [Hm2 [Hsk2 [Hu2 [Hi2 He2]]]]]]]]
-            | [[p2 [m2 [u2 [Hp2 [Hm2 [Hsk2 [Hu2 [Hi2 He2]]]]]]]]
-              | [p2 [m2 [Hp2 [Hm2 [Hsk2 [Hno2 He2]]]]]]]]];
-          try destruct p1 as [k1' v1']; try destruct p2 as [k2' v2'];
-          cbn [fst snd] in He1, He2; try congruence.
-        (* two directories: one version apiece, by uniqueness *)
-        + assert (k1' = k2') by congruence; assert (v1' = v2') by congruence;
+          | [p2 [m2 [u2 [Hp2 [Hm2 [Hu2 [HS2 [Hpi2 He2]]]]]]]]].
+        + congruence.
+        + congruence.
+        + congruence.
+        + destruct p1 as [k1 v1]; destruct p2 as [k2 v2];
+            cbn [fst snd] in He1, He2.
+          assert (k1 = k2) by congruence; assert (v1 = v2) by congruence;
             assert (m1 = m2) by congruence; subst.
           assert (u1 = u2) as Hu
-            by exact (Huniq (k2', v2') m2 u1 u2 Hi1 Hi2).
+            by exact (Huniq (k2, v2) m2 u1 u2 (conj HS1 Hpi1)
+                        (conj HS2 Hpi2)).
           congruence.
-        (* two soft nodes: the directory behind them pins both *)
-        + assert (k1' = k2') by congruence; assert (v1' = v2') by congruence;
-            assert (m1 = m2) by congruence; subst.
-          assert (u1 = u2) as Hu
-            by exact (Huniq (k2', v2') (dirKey m2) u1 u2 Hi1 Hi2).
-          congruence.
-        (* a soft node cannot both take a satisfier and have none *)
-        + exfalso; assert (k1' = k2') by congruence;
-            assert (v1' = v2') by congruence;
-            assert (m1 = m2) by congruence; subst.
-          exact (Hno2 u1 Hu1 Hi1).
-        + exfalso; assert (k1' = k2') by congruence;
-            assert (v1' = v2') by congruence;
-            assert (m1 = m2) by congruence; subst.
-          exact (Hno1 u2 Hu2 Hi2).
     Qed.
 
     (* What the encoding buys over the guarded form: the mandatory peer of
@@ -1939,21 +1241,13 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       pose proof (npm_soundness rho I S Hres) as Hsrc.
       assert (Hp : PkgSet.In (k, v) (npmResolution S))
         by (apply Conc.Reduction.mem_concurrentResolution; exact Hq).
-      (* a soft node is not a directory, so read the directory behind it: it
-         holds the same version, and it is the node the rows hang off *)
-      pose proof (soft_selected rho I S k v m u Hres Hi) as Hi'.
-      assert (HI : Installs (npmResolution S) (npmParents S) (k, v)
-                     (dirKey m) u).
+      assert (HI : Installs (npmResolution S) (npmParents S) (k, v) m u).
       { split.
         - apply Conc.Reduction.mem_concurrentResolution.
-          exact (exit_selected rho I S k v (dirKey m) u Hres
-                   (dirKeyb_dirKey m) Hi').
-        - apply mem_npmParents; cbn [fst snd];
-            split; [apply dirKeyb_dirKey | split; assumption]. }
+          exact (exit_selected rho I S k v m u Hres Hi).
+        - apply mem_npmParents; cbn [fst snd]; split; assumption. }
       destruct Hsrc as [_ _ _ _ Hpin _ _ _ _].
-      rewrite <- (snd_dirKey m) in Hr.
-      destruct (Hpin (k, v) Hp (dirKey m) u HI r Hr Hopt)
-        as [w [Hw [HwS Hwpi]]].
+      destruct (Hpin (k, v) Hp m u HI r Hr Hopt) as [w [Hw [HwS Hwpi]]].
       exists w; split; [exact HwS | split; [exact Hwpi | exact Hw]].
     Qed.
 
@@ -2185,74 +1479,27 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         exists d; split; [exact Hd | reflexivity].
       Qed.
 
-      (* Whether a directory is soft is read off the depender's own rows
-         alone, so a slice that carries them carries the answer. *)
-      Lemma softDir_agree : forall I ns deps prs p (a : N.t),
-          ownRows deps p = ownRows (inst_dep I) p ->
-          softDir (sliceInst I ns deps prs) p a = softDir I p a.
-      Proof.
-        intros I ns deps prs p a Hdeps; unfold softDir.
-        rewrite (slotOf_agree I ns deps prs p a Hdeps); reflexivity.
-      Qed.
-
-      Lemma softKey_agree : forall I ns deps prs p (a : N.t),
-          ownRows deps p = ownRows (inst_dep I) p ->
-          softKey (sliceInst I ns deps prs) p a = softKey I p a.
-      Proof.
-        intros I ns deps prs p a Hdeps; unfold softKey.
-        rewrite (slotKey_agree I ns deps prs p a Hdeps); reflexivity.
-      Qed.
-
-      Lemma softKeyb_agree : forall I ns deps prs p (m : NKey.t),
-          ownRows deps p = ownRows (inst_dep I) p ->
-          softKeyb (sliceInst I ns deps prs) p m = softKeyb I p m.
-      Proof.
-        intros I ns deps prs p m Hdeps; unfold softKeyb.
-        rewrite (softKey_agree I ns deps prs p (dirOf m) Hdeps).
-        rewrite (softDir_agree I ns deps prs p (dirOf m) Hdeps).
-        reflexivity.
-      Qed.
-
       Lemma childCands_agree : forall rho I ns deps prs
           (p : RPkg.t) (m : NKey.t),
           ownRows deps p = ownRows (inst_dep I) p ->
           (forall d, In d (depRows I p) -> NSet.In (d_target d) ns) ->
           NSet.In (snd m) ns ->
-          NSet.mem (dirOf m) (peerDirs (sliceInst I ns deps prs)) =
-            NSet.mem (dirOf m) (peerDirs I) ->
+          NSet.mem (fst m) (peerDirs (sliceInst I ns deps prs)) =
+            NSet.mem (fst m) (peerDirs I) ->
           childCands rho (sliceInst I ns deps prs) p m =
           childCands rho I p m.
       Proof.
         intros rho I ns deps prs p m Hd Ht Hm Hpa; unfold childCands.
-        rewrite (slotKey_agree I ns deps prs p (dirOf m) Hd).
-        rewrite (softKey_agree I ns deps prs p (dirOf m) Hd).
-        rewrite (softDir_agree I ns deps prs p (dirOf m) Hd).
+        rewrite (slotKey_agree I ns deps prs p (fst m) Hd).
         rewrite (dirs_agree I ns deps prs p Hd).
         rewrite Hpa.
-        destruct (dirKeyb m);
-          destruct (KeyEqb.eqb m (slotKey I p (dirOf m)));
-          destruct (KeyEqb.eqb m (softKey I p (dirOf m)));
-          destruct (softDir I p (dirOf m));
-          destruct (NSet.mem (dirOf m) (dirs I p));
-          destruct (NSet.mem (dirOf m) (peerDirs I));
-          cbn [andb];
-          try reflexivity;
-          try (apply slotCands_agree; assumption);
-          try (apply realVersions_slice; exact Hm).
-      Qed.
-
-      (* peerActive now reads softDir too, and the filter it drives has
-         the row bound, so the two instances have to agree pointwise
-         rather than at one directory. *)
-      Lemma peerActive_agree : forall I ns deps prs p,
-          ownRows deps p = ownRows (inst_dep I) p ->
-          forall r, peerActive (sliceInst I ns deps prs) p r =
-                    peerActive I p r.
-      Proof.
-        intros I ns deps prs p Hdeps r; unfold peerActive.
-        rewrite (dirs_agree I ns deps prs p Hdeps).
-        rewrite (softDir_agree I ns deps prs p (p_name r) Hdeps).
-        reflexivity.
+        destruct (KeyEqb.eqb m (slotKey I p (fst m)));
+          destruct (NSet.mem (fst m) (dirs I p));
+          destruct (NSet.mem (fst m) (peerDirs I));
+          try reflexivity.
+        - apply slotCands_agree; assumption.
+        - apply slotCands_agree; assumption.
+        - apply realVersions_slice; exact Hm.
       Qed.
 
       (* -- the four lookups -- *)
@@ -2279,41 +1526,19 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
 
       Definition intSlice (I : Inst) (p : RPkg.t) (m : NKey.t) : Inst :=
         sliceInst I (NSet.add (snd m) (slotTargets I p)) (ownDepRows I p)
-          (peerRowsNamed I (dirOf m)).
+          (peerRowsNamed I (fst m)).
 
       Theorem versions_lookupInt : forall rho I k v m,
           versions rho (intSlice I (snd k, v) m) (Nm.Intermediate k v m) =
           versions rho I (Nm.Intermediate k v m).
       Proof.
-        intros rho I k v m; cbn [versions]; unfold intSlice.
-        rewrite (softKeyb_agree I _ _ _ (snd k, v) m (ownDepRows_id I _)).
-        f_equal; f_equal; apply childCands_agree.
+        intros rho I k v m; cbn [versions]; f_equal.
+        unfold intSlice; apply childCands_agree.
         - apply ownDepRows_id.
         - intros d Hd; apply NSet.add_spec; right;
             apply slotTargets_spec; exact Hd.
         - apply NSet.add_spec; left; reflexivity.
         - apply mem_peerDirs_named.
-      Qed.
-
-      (* The gadget's own lookups, beside the four above.  The escape is a
-         candidate of a soft slot whatever the repository holds, so the
-         slot is dischargeable even when nothing satisfies it; and a
-         directory parked at the escape reads no instance at all, which is
-         what leaves the resolution free of it. *)
-      Theorem versions_lookupSoft : forall rho I k v m,
-          softKeyb I (snd k, v) m = true ->
-          T.VSet.In (escape v)
-            (versions rho (intSlice I (snd k, v) m) (Nm.Intermediate k v m)).
-      Proof.
-        intros rho I k v m Hsk; rewrite versions_lookupInt.
-        cbn [versions]; apply mem_softAdd; left;
-          split; [exact Hsk | reflexivity].
-      Qed.
-
-      Theorem dependees_lookupSoft : forall rho I I' k v m u,
-          dependees rho I (Nm.Intermediate k v m, escape u) =
-          dependees rho I' (Nm.Intermediate k v m, escape u).
-      Proof. intros rho I I' k v m u; rewrite !dependees_escape; reflexivity.
       Qed.
 
       (* A package's own peer rows come along because the granular node of
@@ -2347,12 +1572,10 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
           - cbn [snd]; apply NSet.union_spec; right; unfold peerNamesAt.
             apply mem_namesOfL; exists r; split; [exact Hr | reflexivity]. }
         unfold pkgSlice; f_equal.
-        - unfold entryEdges, entryKey, base; cbn [fst snd].
+        - unfold entryEdges, base; cbn [fst snd].
           rewrite (dirs_agree I _ _ _ (snd k, v) Hd).
           unfold depsOfL; f_equal; apply map_ext_in; intros a _.
           rewrite (slotKey_agree I _ _ _ (snd k, v) a Hd).
-          rewrite (softKey_agree I _ _ _ (snd k, v) a Hd).
-          rewrite (softDir_agree I _ _ _ (snd k, v) a Hd).
           rewrite (slotCands_agree I _ _ _ (snd k, v) Hd Htgt rho a).
           reflexivity.
         - assert (Hrt : rootPkg (sliceInst I
@@ -2372,9 +1595,8 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
                         peerRowsAt I (snd k, v))
             by (unfold peerRowsAt; cbn [inst_peer sliceInst];
                 apply ownPeerRows_id).
-          unfold activePeers; rewrite Hpr.
-          rewrite (List.filter_ext _ _
-                     (peerActive_agree I _ _ _ (snd k, v) Hd)).
+          unfold activePeers, peerActive; rewrite Hpr.
+          rewrite (dirs_agree I _ _ _ (snd k, v) Hd).
           unfold depsOfL; f_equal; apply map_ext_in; intros r Hr.
           apply List.filter_In in Hr; destruct Hr as [Hr _].
           unfold peerKeyAt, peerCandsAt, peerKeyAt.
@@ -2392,11 +1614,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
             (Nm.Intermediate k v m, Vs.Orig u) =
           dependees rho I (Nm.Intermediate k v m, Vs.Orig u).
       Proof.
-        intros rho I k v m u; cbn [dependees].
-        (* a soft node reads no instance at all, so only a directory's
-           has anything to slice *)
-        destruct (dirKeyb m); [| reflexivity].
-        f_equal.
+        intros rho I k v m u; cbn [dependees]; f_equal.
         unfold peerEdgesAt, base; cbn [fst snd].
         pose proof (ownDepRows_id I (snd k, v)) as Hd.
         assert (Hpr : peerRowsAt (peerSlice I (snd k, v) m u) (snd m, u) =
@@ -2413,14 +1631,13 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
             apply slotTargets_spec; exact (proj1 (findDepL_some _ _ _ Hd2)).
           - cbn [snd]; apply NSet.union_spec; right; unfold peerNamesAt.
             apply mem_namesOfL; exists r; split; [exact Hr | reflexivity]. }
-        unfold peerSlice in Hpr |- *; unfold activePeers.
+        unfold peerSlice in Hpr |- *; unfold activePeers, peerActive.
         rewrite Hpr.
-        rewrite (List.filter_ext _ _
-                   (peerActive_agree I
-                      (NSet.union (slotTargets I (snd k, v))
-                         (peerNamesAt I (snd m, u)))
-                      (ownDepRows I (snd k, v)) (ownPeerRows I (snd m, u))
-                      (snd k, v) Hd)).
+        rewrite (dirs_agree I
+                   (NSet.union (slotTargets I (snd k, v))
+                      (peerNamesAt I (snd m, u)))
+                   (ownDepRows I (snd k, v)) (ownPeerRows I (snd m, u))
+                   (snd k, v) Hd).
         unfold depsOfL; f_equal; apply map_ext_in; intros r Hr.
         apply List.filter_In in Hr; destruct Hr as [Hr _].
         unfold peerKeyAt, peerCandsAt, peerKeyAt.
@@ -2464,10 +1681,9 @@ Definition npmRepo : NpmS.RepoSet.t :=
   fold_right NpmS.RepoSet.add NpmS.RepoSet.empty
     ((npmA, 1) :: (npmB, 1) :: (npmC, 1) :: (npmC, 2) :: (npmC, 3) :: nil).
 
-Definition npmDepB : NpmS.DepRow :=
-  NpmS.MkDep npmB npmB (npmEq 1) false false.
+Definition npmDepB : NpmS.DepRow := NpmS.MkDep npmB npmB (npmEq 1) false.
 Definition npmDepC : NpmS.DepRow :=
-  NpmS.MkDep npmC npmC (npmBetween 2 4) false false.
+  NpmS.MkDep npmC npmC (npmBetween 2 4) false.
 Definition npmPeerC : NpmS.PeerRow :=
   NpmS.MkPeer npmC (npmBetween 1 3) false.
 Definition npmPeerCOpt : NpmS.PeerRow :=
@@ -2475,13 +1691,10 @@ Definition npmPeerCOpt : NpmS.PeerRow :=
 
 Definition npmRho : NpmS.Valuation := fun _ => None.
 
-Definition kA : NpmS.NKey.t := (NpmS.Slot.SDir npmA, npmA).
-Definition kB : NpmS.NKey.t := (NpmS.Slot.SDir npmB, npmB).
-Definition kC : NpmS.NKey.t := (NpmS.Slot.SDir npmC, npmC).
-Definition kX : NpmS.NKey.t := (NpmS.Slot.SDir npmX, npmC).
-
-(* the soft node in front of the C directory *)
-Definition softC : NpmS.NKey.t := (NpmS.Slot.SSoft npmC, npmC).
+Definition kA : NpmS.NKey.t := (npmA, npmA).
+Definition kB : NpmS.NKey.t := (npmB, npmB).
+Definition kC : NpmS.NKey.t := (npmC, npmC).
+Definition kX : NpmS.NKey.t := (npmX, npmC).
 
 Definition npmShow (h : NpmS.T.Dependees.t)
   : NpmS.Nm.t * list NpmS.Vs.t :=
@@ -2529,8 +1742,7 @@ Definition npmInstOpt : NpmS.Inst :=
 
 (* An alias installs the registry package under another directory, so one
    depender can hold two copies of one package. *)
-Definition npmDepAlias : NpmS.DepRow :=
-  NpmS.MkDep npmX npmC (npmEq 1) false false.
+Definition npmDepAlias : NpmS.DepRow := NpmS.MkDep npmX npmC (npmEq 1) false.
 
 Definition npmInstAlias : NpmS.Inst :=
   NpmS.MkInst npmRepo
@@ -2618,92 +1830,6 @@ Example npm_alias_computes :
   = (NpmS.Nm.Intermediate kA 1 kC,
      NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: nil)
     :: (NpmS.Nm.Intermediate kA 1 kX, NpmS.Vs.Orig 1 :: nil) :: nil.
-Proof. reflexivity. Qed.
-
-(* An optional dependency: its own row points at a soft node carrying the
-   escape beside the satisfiers, so the row is discharged either way and
-   constrains nothing. *)
-Definition npmDepCOpt : NpmS.DepRow :=
-  NpmS.MkDep npmC npmC (npmBetween 2 4) false true.
-
-Definition npmInstOptDep : NpmS.Inst :=
-  NpmS.MkInst npmRepo (((npmA, 1), npmDepCOpt) :: nil) nil nil nil (npmA, 1).
-
-Example npm_optional_soft_versions_computes :
-  NpmS.T.VSet.elements
-    (NpmS.Reduction.versions npmRho npmInstOptDep
-       (NpmS.Nm.Intermediate kA 1 softC))
-  = NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: NpmS.Vs.Gran 1 :: nil.
-Proof. reflexivity. Qed.
-
-(* The directory behind the soft node carries no escape, and its own row
-   no longer binds it -- the soft node's edge does -- so it offers every
-   published version, which is what leaves a peer edge free to land
-   here. *)
-Example npm_optional_dir_versions_computes :
-  NpmS.T.VSet.elements
-    (NpmS.Reduction.versions npmRho npmInstOptDep
-       (NpmS.Nm.Intermediate kA 1 kC))
-  = NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: nil.
-Proof. reflexivity. Qed.
-
-Example npm_optional_dep_edge_computes :
-  npmDeps npmInstOptDep (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
-  = (NpmS.Nm.Intermediate kA 1 softC,
-     NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: NpmS.Vs.Gran 1 :: nil) :: nil.
-Proof. reflexivity. Qed.
-
-(* A soft node that took a satisfier fills its directory at that version,
-   and
-   there the ordinary exit and peer edges pick it up. *)
-Example npm_optional_soft_taken_computes :
-  npmDeps npmInstOptDep (NpmS.Nm.Intermediate kA 1 softC, NpmS.Vs.Orig 2)
-  = (NpmS.Nm.Intermediate kA 1 kC, NpmS.Vs.Orig 2 :: nil) :: nil.
-Proof. reflexivity. Qed.
-
-(* An optional dependency nothing satisfies: the gadget is the escape
-   alone, so the resolution stands without it rather than failing. *)
-Definition softX : NpmS.NKey.t := (NpmS.Slot.SSoft npmX, npmX).
-
-Definition npmDepXOpt : NpmS.DepRow :=
-  NpmS.MkDep npmX npmX (npmEq 1) false true.
-
-Definition npmInstOptMissing : NpmS.Inst :=
-  NpmS.MkInst npmRepo (((npmA, 1), npmDepXOpt) :: nil) nil nil nil (npmA, 1).
-
-Example npm_optional_missing_computes :
-  npmDeps npmInstOptMissing (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
-  = (NpmS.Nm.Intermediate kA 1 softX, NpmS.Vs.Gran 1 :: nil) :: nil.
-Proof. reflexivity. Qed.
-
-(* The escape carries no edges: a soft node parked there fills its directory
-   with nothing, and the directory node is never reached. *)
-Example npm_optional_escape_computes :
-  npmDeps npmInstOptMissing (NpmS.Nm.Intermediate kA 1 softX, NpmS.Vs.Gran 1)
-  = nil.
-Proof. reflexivity. Qed.
-
-(* A directory a peer row names may still be soft, the two no longer
-   sharing a node: A's optional row points at the gate, which carries
-   the escape, while B's mandatory peer lands on the directory, which
-   does not. *)
-Definition npmInstOptPeer : NpmS.Inst :=
-  NpmS.MkInst npmRepo
-    (((npmA, 1), npmDepB) :: ((npmA, 1), npmDepCOpt) :: nil)
-    (((npmB, 1), npmPeerC) :: nil) nil nil (npmA, 1).
-
-Example npm_optional_peer_entry_computes :
-  npmDeps npmInstOptPeer (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
-  = (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1 :: nil)
-    :: (NpmS.Nm.Intermediate kA 1 softC,
-        NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: NpmS.Vs.Gran 1 :: nil) :: nil.
-Proof. reflexivity. Qed.
-
-Example npm_optional_peer_edge_computes :
-  npmDeps npmInstOptPeer (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1)
-  = (NpmS.Nm.Granular kB 1, NpmS.Vs.Orig 1 :: nil)
-    :: (NpmS.Nm.Intermediate kA 1 kC,
-        NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
 (* engines/os/cpu cut the repository before anything else. *)
