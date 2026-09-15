@@ -47,25 +47,25 @@ let debian_cmd =
 
 let opam_run debug repo goal =
   let t0 = Unix.gettimeofday () in
-  let ar = Opam_solve.load_repo repo in
-  let vars = ref [] in
-  Hashtbl.iter
-    (fun _ vs ->
-      List.iter (fun (_, m) -> vars := Opam_parse.meta_vars m @ !vars) vs)
-    ar.Opam_solve.pkgs;
-  let vars = List.sort_uniq String.compare !vars in
-  let t1 = Unix.gettimeofday () in
-  Printf.printf "archive loaded: %d variables, %.2fs\n%!" (List.length vars)
-    (t1 -. t0);
-  if !Opam_parse.rejected > 0 then
-    Printf.printf "parser dropped %d rows\n%!" !Opam_parse.rejected;
-  let module S = Opam_solve.Make (struct
-    let vars = vars
-  end) in
-  match S.solve ~debug ar goal with
-  | None -> 1
+  let ar = Opam_solve.empty_archive repo in
+  let module S = Opam_solve.Make () in
+  let r = S.solve ~debug ar goal in
+  (* the names the run parsed, known only once it is over: there is no
+     cone, so this is what the solver asked for and nothing more *)
+  let loaded () =
+    let t1 = Unix.gettimeofday () in
+    Printf.printf "loaded: %d names, %d package versions\n"
+      ar.Opam_solve.n_names ar.Opam_solve.n_vers;
+    if !Opam_parse.rejected > 0 then
+      Printf.printf "parser dropped %d rows\n" !Opam_parse.rejected;
+    Printf.printf "parse %.2fs\nsolve %.2fs\n" ar.Opam_solve.t_parse
+      (t1 -. t0 -. ar.Opam_solve.t_parse)
+  in
+  match r with
+  | None ->
+      loaded ();
+      1
   | Some (reals, total, depexts) ->
-      let t3 = Unix.gettimeofday () in
       Printf.printf "opam packages (%d, core solution %d nodes):\n"
         (List.length reals) total;
       List.iter (fun (n, v) -> Printf.printf "  %s.%s\n" n v) reals;
@@ -73,7 +73,7 @@ let opam_run debug repo goal =
         Printf.printf "system packages (%d):\n" (List.length depexts);
         List.iter (fun e -> Printf.printf "  %s\n" e) depexts
       end;
-      Printf.printf "solve %.2fs\n" (t3 -. t1);
+      loaded ();
       0
 
 let opam_cmd =

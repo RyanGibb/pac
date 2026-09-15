@@ -29,23 +29,44 @@ end
 (* ---- the archive ---- *)
 
 type archive = {
+  root : string;
   pkgs : (string, (string * Opam_parse.pkg_meta) list) Hashtbl.t;
+  (* class -> its members among the names loaded so far.  Unlike every
+     other index here this one is a preimage and so grows as names load;
+     see the comment above [Make]. *)
   class_idx : (string, (string * string) list) Hashtbl.t;
   (* the versions a name flags avoid-version or deprecated; indexed
      because the comparator asks this of every version it is handed, and
      because all but a hundred or so names answer no *)
   avoid_idx : (string, string list) Hashtbl.t;
+  mutable n_names : int;
+  mutable n_vers : int;
+  (* wall time inside the parser, which the solve now interleaves with *)
+  mutable t_parse : float;
 }
 
-let load_repo dir : archive =
-  let pkgs = Hashtbl.create 4096 in
-  let class_idx = Hashtbl.create 64 in
-  let avoid_idx = Hashtbl.create 64 in
-  let pkgdir = Filename.concat dir "packages" in
-  Array.iter
-    (fun name ->
-      let ndir = Filename.concat pkgdir name in
-      if Sys.is_directory ndir then
+let empty_archive root =
+  {
+    root;
+    pkgs = Hashtbl.create 4096;
+    class_idx = Hashtbl.create 64;
+    avoid_idx = Hashtbl.create 64;
+    n_names = 0;
+    n_vers = 0;
+    t_parse = 0.;
+  }
+
+(* A name's versions are one directory listing -- packages/<n>/<n>.<v>/opam
+   -- so a name is parsed whole, the first time a slice reads it, and a run
+   touches the names the solver asks about and no others. *)
+let load_name ar (name : string) : (string * Opam_parse.pkg_meta) list =
+  match Hashtbl.find_opt ar.pkgs name with
+  | Some vs -> vs
+  | None ->
+      let t = Unix.gettimeofday () in
+      let ndir = Filename.concat (Filename.concat ar.root "packages") name in
+      let acc = ref [] in
+      if Sys.file_exists ndir && Sys.is_directory ndir then
         Array.iter
           (fun nv ->
             match String.index_opt nv '.' with
@@ -57,34 +78,42 @@ let load_repo dir : archive =
                 if Sys.file_exists opam then
                   try
                     let m = Opam_parse.parse_file ~name ~version opam in
-                    Hashtbl.replace pkgs name
-                      ((version, m)
-                      :: (try Hashtbl.find pkgs name with Not_found -> []));
-                    List.iter
-                      (fun k ->
-                        Hashtbl.replace class_idx k
-                          ((name, version)
-                          ::
-                            (try Hashtbl.find class_idx k with Not_found -> [])
-                          ))
-                      m.classes;
-                    if m.avoid_version || m.deprecated then
-                      Hashtbl.replace avoid_idx name
-                        (version
-                        ::
-                          (try Hashtbl.find avoid_idx name
-                           with Not_found -> []))
+                    acc := (version, m) :: !acc
                   with _ -> ())
             | _ -> ())
-          (Sys.readdir ndir))
-    (Sys.readdir pkgdir);
-  { pkgs; class_idx; avoid_idx }
+          (Sys.readdir ndir);
+      let vs = !acc in
+      Hashtbl.replace ar.pkgs name vs;
+      ar.n_names <- ar.n_names + 1;
+      ar.n_vers <- ar.n_vers + List.length vs;
+      List.iter
+        (fun (version, (m : Opam_parse.pkg_meta)) ->
+          List.iter
+            (fun k ->
+              Hashtbl.replace ar.class_idx k
+                ((name, version)
+                ::
+                (match Hashtbl.find_opt ar.class_idx k with
+                | Some x -> x
+                | None -> [])))
+            m.classes;
+          if m.avoid_version || m.deprecated then
+            Hashtbl.replace ar.avoid_idx name
+              (version
+              ::
+              (match Hashtbl.find_opt ar.avoid_idx name with
+              | Some x -> x
+              | None -> [])))
+        vs;
+      ar.t_parse <- ar.t_parse +. (Unix.gettimeofday () -. t);
+      vs
 
-let versions_of ar n =
-  try List.map fst (Hashtbl.find ar.pkgs n) with Not_found -> []
+let versions_of ar n = List.map fst (load_name ar n)
 
+(* a package's rows are read only through its name's load, so they are
+   never taken from a name parsed in part *)
 let meta_of ar n v =
-  try List.assoc v (Hashtbl.find ar.pkgs n)
+  try List.assoc v (load_name ar n)
   with Not_found ->
     {
       Opam_parse.name = n;
@@ -99,21 +128,74 @@ let meta_of ar n v =
       deprecated = false;
     }
 
+(* loads, because the answer decides the class a version sorts into and
+   the same version must sort the same way whether it is met in a name's
+   candidate list or in a depender's range *)
 let avoided ar n v =
+  ignore (load_name ar n);
   match Hashtbl.find_opt ar.avoid_idx n with
   | None -> false
   | Some vs -> List.exists (fun w -> Opam_version.equal w v) vs
 
-module Make (XV : sig
-  val vars : string list
-end) =
-struct
+let class_members ar k =
+  match Hashtbl.find_opt ar.class_idx k with Some x -> x | None -> []
+
+(* There is no cone pass: the repository is uncovered as the solver asks
+   for it, so each lookup theorem's slice must be complete at the moment
+   it answers.  That holds by construction for all but one row: versions
+   and root_inst read the repository at one name, which load_name takes
+   whole; inst_for reads (n, v)'s own dep/conflict/depext/pin-depends
+   rows and the repository at rowNames, the names those rows mention, and
+   loads every one of them; available filters ride along with the name
+   they belong to; depexts_of reads the selected packages' own rows.
+
+   Conflict classes are the exception.  clsForms gives a package one
+   negative dependency per same-class partner of a different name, and
+   that partner set is the class relation's preimage at the class -- no
+   row of any one package names the others -- so class_idx holds the
+   members among the names loaded so far and may grow after a package has
+   been reduced.  Two things keep that honest.  A class-membership answer
+   is never memoised: cls_rows recomputes it from class_idx at every ask,
+   so a package parsed later is simply there.  And recomputing is not by
+   itself enough, because PubGrub consumes a node's dependency list once
+   and need not ask again, so a partner that arrives after the ask would
+   never reach the search: Make.solve records, for each package it
+   reduces, how many members each of that package's classes had at the
+   time, and re-runs the whole search on the now-warmer archive if any of
+   those counts grew.  The archive only grows and the repository is
+   finite, so the re-runs converge; in practice they do not fire at all,
+   because a class's members are the alternatives of one disjunction --
+   ocaml-base-compiler | ocaml-variants | ocaml-system | ... -- and
+   rowNames loads all of them together, before any of them is reduced. *)
+
+module Make () = struct
   module XF = struct
     type t = string
 
     let compare a b = c2r (compare (String.compare a b) 0)
     let eq_dec (a : string) b = String.equal a b
-    let enum = XV.vars
+
+    (* X's inhabitants are opam's filter variables, of which there is no
+       finite listing to hand: a lazy run does not know which ones the
+       rows it has yet to read will mention, and enumerating them would
+       mean parsing the archive up front, which is the whole cost this
+       driver exists to avoid.  Nothing is lost by leaving it empty.  The
+       list has exactly two readers.  varBlock, in reduceReal, declares
+       (Var x, VarVal y) a package for each x -- but this driver never
+       reads Var candidates off reduceReal (record_real drops Var names);
+       the versions callback below answers Var x with yx x directly, for
+       every x, which is that block for the full universe rather than for
+       a list.  pinsFormula, at the root, conjoins x = pin rho x for each
+       x, to force the solved-for assignment to agree with rho; here yx x
+       is the singleton {pin rho x}, so every Var edge encodeNNF emits
+       already lands inside it and extractAssignment falls back to its
+       least element when no Var x node was forced at all -- the
+       assignment is rho pointwise whether or not the root says so, and
+       each conjunct is a dependency on a name with one candidate that
+       equals the pinned value.  Listing the archive's 4942 variables
+       therefore only added 4942 tautological root edges, and 4942 nodes
+       to the reported core solution size. *)
+    let enum = []
   end
 
   module Op = E.Opam (SName) (OVerOT) (XF) (OVerOT) (SName)
@@ -212,13 +294,11 @@ struct
         (fun (cn, (g, c)) -> (p, (cn, (xfilt g, xvc c))))
         m.Opam_parse.conflicts
     in
+    (* read afresh, never held: this is the one slice that can grow *)
     let cls_rows =
       List.concat_map
         (fun k ->
-          ((n, v), k)
-          :: List.map
-               (fun q -> (q, k))
-               (try Hashtbl.find ar.class_idx k with Not_found -> []))
+          ((n, v), k) :: List.map (fun q -> (q, k)) (class_members ar k))
         m.Opam_parse.classes
     in
     let dxt_rows =
@@ -400,6 +480,9 @@ struct
     gadget_vers : (VR.Name.t, PVersion.t list) Hashtbl.t;
     processed : (VF.Pkg.t, unit) Hashtbl.t;
     real_vers : (string, PVersion.t list) Hashtbl.t;
+    (* per reduced package, how many members each of its own conflict
+       classes had when its rows were read; the one thing a later load can
+       invalidate *)
     mutable canon : VR.Name.t NameMap.t;
   }
 
@@ -474,105 +557,119 @@ struct
 
   let solve ?(debug = false) ar (goal : string) =
     Pubgrub.set_debug debug;
-    let st = mk_state ar in
     let root_q =
       (VR.Name.Orig Red.TName.Root, VR.Version.Orig Red.TVer.UnitV)
     in
-    (* Wall time inside the two callbacks; the rest of PG.solve is
-       PubGrub's own search.  Only accumulated when verbose, and with
-       gettimeofday rather than Sys.time: the callbacks run ~10^6 times
-       per solve and a getrusage syscall each would be seconds. *)
-    let t_callbacks = ref 0. in
-    let timed f =
-      if verbose then begin
-        let t0 = Unix.gettimeofday () in
-        let r = f () in
-        t_callbacks := !t_callbacks +. (Unix.gettimeofday () -. t0);
-        r
-      end
-      else f ()
-    in
-    let versions (tn : VR.Name.t) : PVersion.t list =
-      timed @@ fun () ->
-      match tn with
-      | VR.Name.Orig (Red.TName.Real n) -> (
-          try Hashtbl.find st.real_vers n
-          with Not_found ->
-            let vs =
-              VF.VSet.elements
-                (Red.versions rho (name_inst ar n) (Red.TName.Real n))
+    (* One pass of the search over the archive as it stands.  PubGrub
+       consumes a node's dependencies once, so a conflict-class partner
+       that loads after that node was asked never reaches it; the caller
+       re-enters here on the warmer archive when that happened. *)
+    let attempt () =
+      let st = mk_state ar in
+      nproc := 0;
+      (* Wall time inside the two callbacks; the rest of PG.solve is
+         PubGrub's own search.  Only accumulated when verbose, and with
+         gettimeofday rather than Sys.time: the callbacks run ~10^6 times
+         per solve and a getrusage syscall each would be seconds. *)
+      let t_callbacks = ref 0. in
+      let timed f =
+        if verbose then begin
+          let t0 = Unix.gettimeofday () in
+          let r = f () in
+          t_callbacks := !t_callbacks +. (Unix.gettimeofday () -. t0);
+          r
+        end
+        else f ()
+      in
+      let versions (tn : VR.Name.t) : PVersion.t list =
+        timed @@ fun () ->
+        match tn with
+        | VR.Name.Orig (Red.TName.Real n) -> (
+            try Hashtbl.find st.real_vers n
+            with Not_found ->
+              let vs =
+                VF.VSet.elements
+                  (Red.versions rho (name_inst ar n) (Red.TName.Real n))
+              in
+              let vs = List.map (fun tv -> tag ar tn (VR.Version.Orig tv)) vs in
+              Hashtbl.replace st.real_vers n vs;
+              vs)
+        | VR.Name.Orig Red.TName.Root ->
+            [ { PVersion.avoid = false; v = VR.Version.Orig Red.TVer.UnitV } ]
+        | VR.Name.Var x ->
+            [
+              { PVersion.avoid = false; v = VR.Version.VarVal (Red.pin rho x) };
+            ]
+        | _ -> ( try Hashtbl.find st.gadget_vers tn with Not_found -> [])
+      in
+      let deps_cache = Hashtbl.create 65536 in
+      let nq = ref 0 in
+      let dependencies (tn : VR.Name.t) ({ PVersion.v = tv; _ } : PVersion.t) =
+        incr nq;
+        if verbose && !nq mod 10000 = 0 then
+          Printf.eprintf "[q%d] %.1fs\n%!" !nq (Sys.time ());
+        timed @@ fun () ->
+        try Hashtbl.find deps_cache (tn, tv)
+        with Not_found ->
+          let r =
+            (match (tn, tv) with
+            | VR.Name.Orig Red.TName.Root, _ ->
+                process st Red.rootPkg (root_inst ar goal)
+            | VR.Name.Orig (Red.TName.Real n), VR.Version.Orig (Red.TVer.RV v)
+              ->
+                process st
+                  (Red.TName.Real n, Red.TVer.RV v)
+                  (inst_for ar (n, v))
+            | _ -> ());
+            let hs =
+              try Hashtbl.find st.edges (tn, tv)
+              with Not_found -> T.DependeesSet.empty
             in
-            let vs = List.map (fun tv -> tag ar tn (VR.Version.Orig tv)) vs in
-            Hashtbl.replace st.real_vers n vs;
-            vs)
-      | VR.Name.Orig Red.TName.Root ->
-          [ { PVersion.avoid = false; v = VR.Version.Orig Red.TVer.UnitV } ]
-      | VR.Name.Var x ->
-          [ { PVersion.avoid = false; v = VR.Version.VarVal (Red.pin rho x) } ]
-      | _ -> ( try Hashtbl.find st.gadget_vers tn with Not_found -> [])
-    in
-    let deps_cache = Hashtbl.create 65536 in
-    let nq = ref 0 in
-    let dependencies (tn : VR.Name.t) ({ PVersion.v = tv; _ } : PVersion.t) =
-      incr nq;
-      if verbose && !nq mod 10000 = 0 then
-        Printf.eprintf "[q%d] %.1fs\n%!" !nq (Sys.time ());
-      timed @@ fun () ->
-      try Hashtbl.find deps_cache (tn, tv)
-      with Not_found ->
-        let r =
-          (match (tn, tv) with
-          | VR.Name.Orig Red.TName.Root, _ ->
-              process st Red.rootPkg (root_inst ar goal)
-          | VR.Name.Orig (Red.TName.Real n), VR.Version.Orig (Red.TVer.RV v) ->
-              process st (Red.TName.Real n, Red.TVer.RV v) (inst_for ar (n, v))
-          | _ -> ());
-          let hs =
-            try Hashtbl.find st.edges (tn, tv)
-            with Not_found -> T.DependeesSet.empty
+            List.map
+              (fun ((m, vs) : T.Dependees.t) ->
+                ( intern st m,
+                  PG.Ranges.of_list (List.map (tag ar m) (T.VSet.elements vs))
+                ))
+              (T.DependeesSet.elements hs)
           in
-          List.map
-            (fun ((m, vs) : T.Dependees.t) ->
-              ( intern st m,
-                PG.Ranges.of_list (List.map (tag ar m) (T.VSet.elements vs)) ))
-            (T.DependeesSet.elements hs)
-        in
-        Hashtbl.replace deps_cache (tn, tv) r;
-        r
-    in
-    let goal_range = PG.Ranges.of_list (versions (fst root_q)) in
-    let t0 = Unix.gettimeofday () in
-    let result =
-      PG.solve ~versions ~dependencies [ (fst root_q, goal_range) ]
-    in
-    if verbose then begin
-      let total = Unix.gettimeofday () -. t0 in
-      Printf.eprintf
-        "PG.solve %.2fs: %.2fs in callbacks (%d dependencies queries, %d \
-         packages reduced), %.2fs PubGrub\n\
-         %!"
-        total !t_callbacks !nq !nproc (total -. !t_callbacks)
-    end;
-    match result with
-    | Error inc ->
-        Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
-        None
-    | Ok sol ->
-        (* back through the proved decoders, in the two layers the
+          Hashtbl.replace deps_cache (tn, tv) r;
+          r
+      in
+      let goal_range = PG.Ranges.of_list (versions (fst root_q)) in
+      let t0 = Unix.gettimeofday () in
+      let result =
+        PG.solve ~versions ~dependencies [ (fst root_q, goal_range) ]
+      in
+      if verbose then begin
+        let total = Unix.gettimeofday () -. t0 in
+        Printf.eprintf
+          "PG.solve %.2fs: %.2fs in callbacks (%d dependencies queries, %d \
+           packages reduced), %.2fs PubGrub\n\
+           %!"
+          total !t_callbacks !nq !nproc (total -. !t_callbacks)
+      end;
+      match result with
+      | Error inc ->
+          Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
+          None
+      | Ok sol ->
+          (* back through the proved decoders, in the two layers the
            reduction composes: the core solution decodes to the variable
            formula's packages, and those to opam's.  Reading the reals off
            the solution here instead would be a third, unproved, decoder --
            and it is what the soundness theorem is stated about. *)
-        let core =
-          T.PkgSet.ofList
-            (List.map
-               (fun ((tn, { PVersion.v = tv; _ }) : VR.Name.t * PVersion.t) ->
-                 (tn, tv))
-               sol)
-        in
-        let reals =
-          Op.PkgSet.elements (Red.decodeS (VR.variableFormulaResolution core))
-        in
-        let reals = List.sort compare reals in
-        Some (reals, List.length sol, depexts_of ar reals)
+          let core =
+            T.PkgSet.ofList
+              (List.map
+                 (fun ((tn, { PVersion.v = tv; _ }) : VR.Name.t * PVersion.t) ->
+                   (tn, tv))
+                 sol)
+          in
+          let reals =
+            Op.PkgSet.elements (Red.decodeS (VR.variableFormulaResolution core))
+          in
+          let reals = List.sort compare reals in
+          Some (reals, List.length sol, depexts_of ar reals)
+    in
+    attempt ()
 end
