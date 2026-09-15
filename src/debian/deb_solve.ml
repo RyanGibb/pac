@@ -79,6 +79,10 @@ struct
     mutable nclauses : (DMA.Atom.t list list * DMA.Atom.t list list) option;
     nprovs : (string * DMA.Deb.coq_DTop) list;
     nconfs : DMA.Atom.t list;
+    (* apt ranks the providers claiming a name by these; see pref below *)
+    ness : bool;
+    nimp : bool;
+    nprio : int;
   }
 
   (* ~recommends false is the --no-install-recommends reading: the Rec
@@ -104,6 +108,9 @@ struct
           (fun (pr : DF.provide) -> (pr.pname, dtop_of pr.pversion))
           st.provides;
       nconfs = List.map matom_of st.conflicts;
+      ness = st.essential;
+      nimp = st.important;
+      nprio = st.priority;
     }
 
   (* Untrusted whole-archive index; faithfulness to the parsed instance is
@@ -521,110 +528,198 @@ struct
     | DMA.QAArch a -> String.equal a AP.native
     | _ -> false
 
-  module PVersion = struct
-    (* pos is the candidate's position in the clause whose name is being
-       decided -- supplied by tag, where that name is known -- and is a
-       constant for every candidate that is not an alternative of one. *)
-    type t = { pos : int; v : DMA.Deb.Version.t }
+  (* apt's CompareProviders3 (apt-pkg/solver3.cc) sorts the candidates of one
+     alternative and takes the first undecided one.  Resolving from an empty
+     system with no pins leaves it these keys, in this order: the Essential
+     flag, the Important flag (which Protected also sets), the native
+     architecture, the Priority field, and the package name.  Its earlier keys
+     are a pin, the upgrade candidate, the installed version, obsoleteness and
+     a Multi-Arch:same package with another arch installed, none of which an
+     empty system can distinguish; the one live key above these is "same group
+     as the target", which is the real-before-provided split PVersion.compare
+     already makes. *)
+  type pref = {
+    pess : bool;
+    pimp : bool;
+    pnat : bool;
+    pprio : int; (* apt's VerPriority enum: the smaller rank is preferred *)
+    pname : string;
+  }
 
-    (* PubGrub decides the V.compare-maximum candidate, so preference lives
-       here: dpkg-newest for real versions, leftmost alternative by clause
-       position, a real package above any alias claiming its name, native-arch
-       referents first within each, encoded order otherwise.  The calculus
-       only makes the real/provided split legible -- RefReal carries no name,
-       so it is the one candidate that cannot be an alias -- and says nothing
-       about which to try first.
+  (* apt sorts the preferred candidate first and PubGrub decides the greatest,
+     so the two rank-ordered keys are read backwards here. *)
+  let pref_compare a b =
+    let c = Bool.compare a.pess b.pess in
+    if c <> 0 then c
+    else
+      let c = Bool.compare a.pimp b.pimp in
+      if c <> 0 then c
+      else
+        let c = Bool.compare a.pnat b.pnat in
+        if c <> 0 then c
+        else
+          let c = Int.compare b.pprio a.pprio in
+          if c <> 0 then c else String.compare b.pname a.pname
 
-       The escape is likewise a preference and not a constraint: the calculus
-       tags it above Version.Atom, but we want the recommends gadget to try
-       every real alternative before giving up on the clause, so it is ranked
-       below them here.  Only candidates of one name are ever compared
-       (PubGrub ranges are per name), and Version.Zero shares a name with
-       Version.Atom in the Soft gadget and with Version.One in a guard and
-       nowhere else, so the two escape cases cannot disturb any other pair. *)
-    let compare (a : t) (b : t) =
-      let fallback () = r2c (DMA.Deb.VersionOT.compare a.v b.v) in
-      match (a.v, b.v) with
-      | DMA.Deb.Version.Orig x, DMA.Deb.Version.Orig y ->
-          Debian_frontend.Deb_version.compare x y
-      | DMA.Deb.Version.Atom _, DMA.Deb.Version.Atom _ ->
-          (* leftmost alternative first: lower position = greater version *)
-          let c = Stdlib.compare b.pos a.pos in
-          if c <> 0 then c else fallback ()
-      | DMA.Deb.Version.Zero, DMA.Deb.Version.Atom _ -> -1
-      | DMA.Deb.Version.Atom _, DMA.Deb.Version.Zero -> 1
-      | DMA.Deb.Version.RefReal w, DMA.Deb.Version.RefReal w' ->
-          (* one selector's real candidates all share its name, hence its
-             arch: only the version separates them *)
-          let c = Debian_frontend.Deb_version.compare w w' in
-          if c <> 0 then c else fallback ()
-      | DMA.Deb.Version.RefReal _, DMA.Deb.Version.Ref (_, _) -> 1
-      | DMA.Deb.Version.Ref (_, _), DMA.Deb.Version.RefReal _ -> -1
-      | DMA.Deb.Version.Ref ((_, x), w), DMA.Deb.Version.Ref ((_, x'), w') ->
-          let c = Stdlib.compare (is_native x) (is_native x') in
-          if c <> 0 then c
-          else
+  let pref_of_pkg idx (p : DMA.Pkg.t) =
+    let (n, b), _ = p in
+    let nat = String.equal b AP.native in
+    match Hashtbl.find_opt idx.stanza_of p with
+    | Some ns ->
+        {
+          pess = ns.ness;
+          pimp = ns.nimp;
+          pnat = nat;
+          pprio = ns.nprio;
+          pname = n;
+        }
+    | None ->
+        {
+          pess = false;
+          pimp = false;
+          pnat = nat;
+          pprio = DF.priority_lowest;
+          pname = n;
+        }
+
+  (* A Ref names the provider package it came from, so its keys are that
+     package's own.  embedPkg mints only QAArch names, so the other cases are
+     unreachable and rank as an unindexed package would. *)
+  let ref_pref idx ((n, x) : string * DMA.coq_NameArch) w =
+    match x with
+    | DMA.QAArch b -> pref_of_pkg idx ((n, b), w)
+    | _ ->
+        {
+          pess = false;
+          pimp = false;
+          pnat = is_native x;
+          pprio = DF.priority_lowest;
+          pname = n;
+        }
+
+  (* The candidate order reads the index the candidates were minted from, so
+     the comparator and the PubGrub instance over it are built per solve. *)
+  module Search (I : sig
+    val idx : index
+  end) =
+  struct
+    module PVersion = struct
+      (* pos is the candidate's position in the clause whose name is being
+         decided -- supplied by tag, where that name is known -- and is a
+         constant for every candidate that is not an alternative of one. *)
+      type t = { pos : int; v : DMA.Deb.Version.t }
+
+      (* PubGrub decides the V.compare-maximum candidate, so preference lives
+         here: dpkg-newest for real versions, leftmost alternative by clause
+         position, a real package above any alias claiming its name, and apt's
+         candidate order among the aliases.  The calculus only makes the
+         real/provided split legible -- RefReal carries no name, so it is the
+         one candidate that cannot be an alias -- and says nothing about which
+         to try first.
+
+         Position is the whole of the alternative order because apt's sort is
+         per alternative: TranslateOrGroup (apt-pkg/solver3.cc) sorts each
+         alternative's targets among themselves and leaves the alternatives in
+         the field's order, and Solve takes the first solution not already
+         decided.  So pref only ever separates the providers of one atom.
+
+         The escape is likewise a preference and not a constraint: the calculus
+         tags it above Version.Atom, but we want the recommends gadget to try
+         every real alternative before giving up on the clause, so it is ranked
+         below them here.  Only candidates of one name are ever compared
+         (PubGrub ranges are per name), and Version.Zero shares a name with
+         Version.Atom in the Soft gadget and with Version.One in a guard and
+         nowhere else, so the two escape cases cannot disturb any other pair. *)
+      let compare (a : t) (b : t) =
+        let fallback () = r2c (DMA.Deb.VersionOT.compare a.v b.v) in
+        match (a.v, b.v) with
+        | DMA.Deb.Version.Orig x, DMA.Deb.Version.Orig y ->
+            Debian_frontend.Deb_version.compare x y
+        | DMA.Deb.Version.Atom _, DMA.Deb.Version.Atom _ ->
+            (* leftmost alternative first: lower position = greater version *)
+            let c = Stdlib.compare b.pos a.pos in
+            if c <> 0 then c else fallback ()
+        | DMA.Deb.Version.Zero, DMA.Deb.Version.Atom _ -> -1
+        | DMA.Deb.Version.Atom _, DMA.Deb.Version.Zero -> 1
+        | DMA.Deb.Version.RefReal w, DMA.Deb.Version.RefReal w' ->
+            (* one selector's real candidates all share its name, hence its
+               arch: only the version separates them *)
             let c = Debian_frontend.Deb_version.compare w w' in
             if c <> 0 then c else fallback ()
-      | _ -> fallback ()
+        | DMA.Deb.Version.RefReal _, DMA.Deb.Version.Ref (_, _) -> 1
+        | DMA.Deb.Version.Ref (_, _), DMA.Deb.Version.RefReal _ -> -1
+        | DMA.Deb.Version.Ref (m, w), DMA.Deb.Version.Ref (m', w') ->
+            let c = pref_compare (ref_pref I.idx m w) (ref_pref I.idx m' w') in
+            if c <> 0 then c
+            else
+              (* two versions of one provider are apt's same-package case,
+                 which the version alone settles *)
+              let c = Debian_frontend.Deb_version.compare w w' in
+              if c <> 0 then c else fallback ()
+        | _ -> fallback ()
 
-    let pp fmt ({ v; _ } : t) =
-      match v with
-      | DMA.Deb.Version.Orig v -> Format.fprintf fmt "%s" v
-      | DMA.Deb.Version.Atom a -> Format.fprintf fmt "alt:%a" pp_atom a
-      | DMA.Deb.Version.Ref (m, w) ->
-          Format.fprintf fmt "ref:%a=%s" pp_mname m w
-      | DMA.Deb.Version.RefReal w -> Format.fprintf fmt "real:%s" w
-      | DMA.Deb.Version.Zero -> Format.fprintf fmt "0"
-      | DMA.Deb.Version.One -> Format.fprintf fmt "1"
+      let pp fmt ({ v; _ } : t) =
+        match v with
+        | DMA.Deb.Version.Orig v -> Format.fprintf fmt "%s" v
+        | DMA.Deb.Version.Atom a -> Format.fprintf fmt "alt:%a" pp_atom a
+        | DMA.Deb.Version.Ref (m, w) ->
+            Format.fprintf fmt "ref:%a=%s" pp_mname m w
+        | DMA.Deb.Version.RefReal w -> Format.fprintf fmt "real:%s" w
+        | DMA.Deb.Version.Zero -> Format.fprintf fmt "0"
+        | DMA.Deb.Version.One -> Format.fprintf fmt "1"
+    end
+
+    (* The clause position is known only where the name is: a Disjunct or Soft
+       name carries the clause its candidates are alternatives of, and no other
+       name has Version.Atom candidates at all. *)
+    let tag (n' : DMA.Deb.Name.t) (v : DMA.Deb.Version.t) : PVersion.t =
+      match (n', v) with
+      | ( (DMA.Deb.Name.Disjunct aset | DMA.Deb.Name.Soft aset),
+          DMA.Deb.Version.Atom a ) ->
+          { PVersion.pos = atom_pos I.idx aset a; v }
+      | _ -> { PVersion.pos = 0; v }
+
+    module PG = Pubgrub.Make (PName) (PVersion)
+
+    let run_pubgrub ?(debug = false) ~versions ~dependencies goal =
+      let dependencies n (pv : PVersion.t) =
+        DMA.Deb.T.DependeesSet.elements (dependencies (n, pv.PVersion.v))
+        |> List.map (fun (tn, tvs) ->
+            ( tn,
+              PG.Ranges.of_list
+                (List.map (tag tn) (DMA.Deb.T.VSet.elements tvs)) ))
+      in
+      let versions n =
+        List.map (tag n) (DMA.Deb.T.VSet.elements (versions n))
+      in
+      (* Ranges.full here trips an upstream pubgrub edge case (initial
+         Neg-term status); the goal's available versions are what we mean
+         anyway. *)
+      let goal_range = PG.Ranges.of_list (versions (DMA.Deb.Name.Orig goal)) in
+      match
+        PG.solve ~versions ~dependencies
+          [ (DMA.Deb.Name.Orig goal, goal_range) ]
+      with
+      | Error inc ->
+          Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
+          None
+      | Ok sol ->
+          if debug then (
+            Format.printf "raw solution (%d):@." (List.length sol);
+            List.iter
+              (fun (n, v) ->
+                Format.printf "  %a = %a@." PName.pp n PVersion.pp v)
+              sol);
+          let s' =
+            DMA.Deb.T.PkgSet.ofList
+              (List.map (fun (n, (pv : PVersion.t)) -> (n, pv.PVersion.v)) sol)
+          in
+          Some
+            (List.map
+               (fun ((n, b), v) -> (n, b, v))
+               (DMA.PkgSet.elements
+                  (DMA.multiarchResolution (DMA.Deb.debianResolution s'))))
   end
-
-  (* The clause position is known only where the name is: a Disjunct or Soft
-     name carries the clause its candidates are alternatives of, and no other
-     name has Version.Atom candidates at all. *)
-  let tag idx (n' : DMA.Deb.Name.t) (v : DMA.Deb.Version.t) : PVersion.t =
-    match (n', v) with
-    | ( (DMA.Deb.Name.Disjunct aset | DMA.Deb.Name.Soft aset),
-        DMA.Deb.Version.Atom a ) ->
-        { PVersion.pos = atom_pos idx aset a; v }
-    | _ -> { PVersion.pos = 0; v }
-
-  module PG = Pubgrub.Make (PName) (PVersion)
-
-  let run_pubgrub ?(debug = false) ~tag ~versions ~dependencies goal =
-    let dependencies n (pv : PVersion.t) =
-      DMA.Deb.T.DependeesSet.elements (dependencies (n, pv.PVersion.v))
-      |> List.map (fun (tn, tvs) ->
-          ( tn,
-            PG.Ranges.of_list (List.map (tag tn) (DMA.Deb.T.VSet.elements tvs))
-          ))
-    in
-    let versions n = List.map (tag n) (DMA.Deb.T.VSet.elements (versions n)) in
-    (* Ranges.full here trips an upstream pubgrub edge case (initial
-       Neg-term status); the goal's available versions are what we mean
-       anyway. *)
-    let goal_range = PG.Ranges.of_list (versions (DMA.Deb.Name.Orig goal)) in
-    match
-      PG.solve ~versions ~dependencies [ (DMA.Deb.Name.Orig goal, goal_range) ]
-    with
-    | Error inc ->
-        Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
-        None
-    | Ok sol ->
-        if debug then (
-          Format.printf "raw solution (%d):@." (List.length sol);
-          List.iter
-            (fun (n, v) -> Format.printf "  %a = %a@." PName.pp n PVersion.pp v)
-            sol);
-        let s' =
-          DMA.Deb.T.PkgSet.ofList
-            (List.map (fun (n, (pv : PVersion.t)) -> (n, pv.PVersion.v)) sol)
-        in
-        Some
-          (List.map
-             (fun ((n, b), v) -> (n, b, v))
-             (DMA.PkgSet.elements
-                (DMA.multiarchResolution (DMA.Deb.debianResolution s'))))
 
   let prof_vc = ref 0
   let prof_vt = ref 0.
@@ -658,8 +753,11 @@ struct
       | DMA.Deb.Name.Selector _ -> "sel"
       | DMA.Deb.Name.Guard _ -> "guard"
     in
+    let module S = Search (struct
+      let idx = idx
+    end) in
     let r =
-      run_pubgrub ?debug ~tag:(tag idx)
+      S.run_pubgrub ?debug
         ~versions:(fun n' -> bucket (vname n') (vers_sparse idx) n')
         ~dependencies:(timed prof_oc prof_ot (dependees_sparse idx))
         (goal_name, DMA.QAArch goal_arch)

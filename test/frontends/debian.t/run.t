@@ -1,7 +1,18 @@
+Two providers of a name that differ in nothing apt ranks on -- no Essential or
+Important flag, the same architecture, the same Priority -- are separated by
+its last key, the package name:
+
   $ ../../../src/main.exe debian --native amd64 app Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
   app:amd64 1
   lib:amd64 1
-  prov2:amd64 1
+  prov1:amd64 1
+
+The Priority field outranks the name, and sorts the other way round -- this is
+apt taking mawk, which is Priority: required, for a bare Depends on awk:
+
+  $ ../../../src/main.exe debian --native amd64 prioapp Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  prioapp:amd64 1
+  zprio:amd64 1
 
 A relationship field may be folded over several lines (Policy 5.1); the
 newline is not part of the atom that follows it:

@@ -84,3 +84,20 @@ Version: 1
 Architecture: amd64
 Depends: softkeep
 Recommends: softnope | softb
+
+Package: prioapp
+Version: 1
+Architecture: amd64
+Depends: prio
+
+Package: aprio
+Version: 1
+Architecture: amd64
+Priority: optional
+Provides: prio
+
+Package: zprio
+Version: 1
+Architecture: amd64
+Priority: required
+Provides: prio

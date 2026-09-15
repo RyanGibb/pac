@@ -27,7 +27,31 @@ type stanza = {
   recommends_raw : string list;
   provides : provide list;
   conflicts : atom list; (* Conflicts + Breaks atoms *)
+  essential : bool;
+  (* apt folds Protected into the same flag as Important (deblistparser.cc
+     UsePackage), so the two fields are read as one here *)
+  important : bool;
+  priority : int;
 }
+
+(* apt's pkgCache::State::VerPriority, which is an enum ordered
+   required(1) .. extra(5), and its comparator prefers the *smaller* rank.
+   A stanza with no Priority field is read as extra, the lowest; apt leaves
+   the cache's zero there instead, which would sort above required, but no
+   stanza of a Debian index omits the field. *)
+let priority_rank = function
+  | "required" -> 1
+  | "important" -> 2
+  | "standard" -> 3
+  | "optional" -> 4
+  | _ -> 5
+
+let priority_lowest = 5
+
+(* apt's pkgTagSection::FindFlag spelling of a boolean field *)
+let flag_yes = function
+  | "yes" | "true" | "with" | "on" | "1" -> true
+  | _ -> false
 
 (* newlines count as whitespace: a relationship field may be folded over
    several lines (Policy 5.1), and its continuations are joined with "\n",
@@ -134,7 +158,7 @@ let parse_provides field =
       | None -> None)
 
 (* One pass over a stanza's fields, rather than an assoc lookup per field:
-   the ten fields below were each a linear scan of the stanza, and an
+   the fourteen fields below were each a linear scan of the stanza, and an
    archive is ~69k stanzas.  First occurrence wins, as List.assoc_opt did. *)
 let stanza_of_fields (fs : (string * string) list) : stanza option =
   let package = ref None
@@ -146,7 +170,11 @@ let stanza_of_fields (fs : (string * string) list) : stanza option =
   and recommends = ref None
   and provides = ref None
   and conflicts = ref None
-  and breaks = ref None in
+  and breaks = ref None
+  and essential = ref None
+  and important = ref None
+  and protected_ = ref None
+  and priority = ref None in
   let set r v = if !r = None then r := Some v in
   List.iter
     (fun (k, v) ->
@@ -161,11 +189,19 @@ let stanza_of_fields (fs : (string * string) list) : stanza option =
       | "Provides" -> set provides v
       | "Conflicts" -> set conflicts v
       | "Breaks" -> set breaks v
+      | "Essential" -> set essential v
+      | "Important" -> set important v
+      | "Protected" -> set protected_ v
+      | "Priority" -> set priority v
       | _ -> ())
     fs;
   match (!package, !version) with
   | Some package, Some version ->
       let opt f = function Some d -> f d | None -> [] in
+      let yes = function
+        | Some s -> flag_yes (String.lowercase_ascii s)
+        | None -> false
+      in
       let raw = List.filter_map Fun.id in
       Some
         {
@@ -179,6 +215,12 @@ let stanza_of_fields (fs : (string * string) list) : stanza option =
           provides = opt parse_provides !provides;
           conflicts =
             opt parse_conflicts !conflicts @ opt parse_conflicts !breaks;
+          essential = yes !essential;
+          important = yes !important || yes !protected_;
+          priority =
+            (match !priority with
+            | Some p -> priority_rank (String.lowercase_ascii p)
+            | None -> priority_lowest);
         }
   | _ -> None
 
