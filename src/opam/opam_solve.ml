@@ -558,15 +558,20 @@ struct
         Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
         None
     | Ok sol ->
+        (* back through the proved decoders, in the two layers the
+           reduction composes: the core solution decodes to the variable
+           formula's packages, and those to opam's.  Reading the reals off
+           the solution here instead would be a third, unproved, decoder --
+           and it is what the soundness theorem is stated about. *)
+        let core =
+          T.PkgSet.ofList
+            (List.map
+               (fun ((tn, { PVersion.v = tv; _ }) : VR.Name.t * PVersion.t) ->
+                 (tn, tv))
+               sol)
+        in
         let reals =
-          List.filter_map
-            (fun ((tn, { PVersion.v = tv; _ }) : VR.Name.t * PVersion.t) ->
-              match (tn, tv) with
-              | VR.Name.Orig (Red.TName.Real n), VR.Version.Orig (Red.TVer.RV v)
-                ->
-                  Some (n, v)
-              | _ -> None)
-            sol
+          Op.PkgSet.elements (Red.decodeS (VR.variableFormulaResolution core))
         in
         let reals = List.sort compare reals in
         Some (reals, List.length sol, depexts_of ar reals)
