@@ -7,7 +7,7 @@
  (modules deb_solve)
  (flags
   (:standard -w -a))
- (libraries debian_frontend pac pubgrub))
+ (libraries debian_frontend pac pubgrub unix))
 
 (test
  (name test_version)

@@ -598,50 +598,16 @@ struct
       Printf.eprintf "PACPROF dependees: %d calls %.2fs\n%!" !prof_oc !prof_ot);
     r
 
-  (* Fixture-scale oracle: the whole instance through the translation in
-     one shot, no slicing -- use for cross-checks, not archives. *)
-  let solve_monolithic ?debug (idx : index) (goal_name : string)
-      (goal_arch : string) =
-    let stz = Hashtbl.fold (fun _ ns acc -> ns :: acc) idx.stanza_of [] in
-    let r_ma = DMA.PkgSet.ofList (List.map (fun ns -> ns.npkg) stz) in
-    let d_ma =
-      DMA.Deps.ofList
-        (List.concat_map
-           (fun ns -> List.map (fun alts -> (ns.npkg, maset_of alts)) ns.ndeps)
-           stz)
-    in
-    let pi_ma =
-      DMA.Prov.ofList
-        (List.concat_map
-           (fun ns -> List.map (fun (m, vt) -> (ns.npkg, (m, vt))) ns.nprovs)
-           stz)
-    in
-    let g_ma =
-      DMA.Conf.ofList
-        (List.concat_map
-           (fun ns -> List.map (fun ma -> (ns.npkg, ma)) ns.nconfs)
-           stz)
-    in
-    let rec_ma =
-      DMA.Deps.ofList
-        (List.concat_map
-           (fun ns -> List.map (fun alts -> (ns.npkg, maset_of alts)) ns.nrecs)
-           stz)
-    in
-    let cls = DMA.Cls.ofList (List.map (fun ns -> (ns.npkg, ns.ncls)) stz) in
-    let r = DMA.reduceReal r_ma in
-    let d = DMA.reduceDeps d_ma in
-    let rc = DMA.reduceRec rec_ma in
-    let pi = DMA.reduceProv r_ma pi_ma cls in
-    let g = DMA.reduceConf r_ma g_ma cls in
-    run_pubgrub ?debug
-      ~versions:(DMA.Deb.versions r d rc pi g)
-      ~dependencies:(DMA.Deb.dependees r d rc pi g)
-      (goal_name, DMA.QAArch goal_arch)
 end
 
-let solve_files ?debug ?(monolithic = false) ?(recommends = true) ~native ~paths
-    ~goal : (string * string * string) list option =
+(* Parsing and index construction are reported apart from solving because
+   they scale differently: the archive is read whole, while the solve
+   touches only the slices the lookup theorems bound.  Which of the two
+   dominates is the frontend's headline number, so it is printed rather
+   than inferred. *)
+let solve_files ?debug ?(recommends = true) ~native ~paths ~goal :
+    ((string * string * string) list * float * float) option =
+  let t0 = Unix.gettimeofday () in
   let stanzas = List.concat_map DF.parse_file paths in
   let arches =
     List.sort_uniq String.compare
@@ -663,5 +629,7 @@ let solve_files ?debug ?(monolithic = false) ?(recommends = true) ~native ~paths
     | None -> (goal, native)
   in
   let idx = M.build_index ~recommends stanzas in
-  if monolithic then M.solve_monolithic ?debug idx goal_name goal_arch
-  else M.solve ?debug idx goal_name goal_arch
+  let t1 = Unix.gettimeofday () in
+  match M.solve ?debug idx goal_name goal_arch with
+  | None -> None
+  | Some pkgs -> Some (pkgs, t1 -. t0, Unix.gettimeofday () -. t1)
