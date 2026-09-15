@@ -106,15 +106,6 @@ struct
       nconfs = List.map matom_of st.conflicts;
     }
 
-  (* Debian prefers the leftmost alternative in a Depends clause; ranks
-     are keyed by the mangled atom
-     (reduceAtom of the depending stanza's arch), which is what appears in
-     encoded DVAtom versions. *)
-  let atom_rank : (DMA.Deb.Atom.t, int) Hashtbl.t = Hashtbl.create 65536
-
-  let rank a =
-    match Hashtbl.find_opt atom_rank a with Some i -> i | None -> max_int
-
   (* Untrusted whole-archive index; faithfulness to the parsed instance is
      this module's only trusted-computing-base beyond the parser itself. *)
   type index = {
@@ -130,6 +121,12 @@ struct
        may be a Depends of one package and a Recommends of another. *)
     rclause_of_aset : (DMA.Deb.AtomSet.t, DMA.Pkg.t * DMA.AtomSet.t) Hashtbl.t;
     rclause_of_atom : (DMA.Deb.Atom.t, DMA.Pkg.t * DMA.AtomSet.t) Hashtbl.t;
+    (* Debian prefers the leftmost alternative of a clause, and a mangled
+       clause is an atom *set*, so the field's left-to-right order has to be
+       carried beside it.  Keyed by the mangled clause, exactly as
+       clause_of_aset is, and shared between Depends and Recommends because
+       Disjunct A and Soft A range over the same A. *)
+    clause_order : (DMA.Deb.AtomSet.t, DMA.Deb.Atom.t array) Hashtbl.t;
     class_of : (DMA.Pkg.t, DMA.coq_MAClass) Hashtbl.t;
     (* stanzas whose clauses a slice has asked for, reported under PACPROF:
        the whole point of deferring them is that this stays small *)
@@ -143,35 +140,42 @@ struct
   let mangle fields =
     List.map (List.map matom_of) (DF.parse_depends_fields fields)
 
-  (* Ranking is the one archive-wide reading here that is neither a preimage
-     nor fillable as stanzas arrive: an atom's rank is the position it holds
-     in the first clause to mention it, so deferring one stanza's clauses
-     re-ranks the alternatives of clauses that have nothing to do with it,
-     and a solve then prefers a different alternative.  So the ranks are
-     taken in one eager pass that drops its atoms as soon as it has ranked
-     them: what survives is an int per distinct atom, not 340k list cells. *)
-  let rank_atoms b alts_list =
-    List.iter
-      (fun alts ->
-        List.iteri
-          (fun i ma ->
-            let ea = DMA.reduceAtom b ma in
-            if not (Hashtbl.mem atom_rank ea) then Hashtbl.replace atom_rank ea i)
-          alts)
-      alts_list
-
   (* clauses are content-keyed, so one entry per mangled clause is all a
      hasClauseb/occursAtomb slice needs *)
-  let index_clauses by_aset by_atom (p : DMA.Pkg.t) alts_list =
+  let index_clauses idx by_aset by_atom (p : DMA.Pkg.t) alts_list =
     let b = snd (fst p) in
     List.iter
       (fun alts ->
         let aset = maset_of alts in
-        Hashtbl.replace by_aset (DMA.reduceClause b aset) (p, aset);
-        List.iter
-          (fun ma -> Hashtbl.replace by_atom (DMA.reduceAtom b ma) (p, aset))
-          alts)
+        let ma_set = DMA.reduceClause b aset in
+        Hashtbl.replace by_aset ma_set (p, aset);
+        let eatoms = List.map (DMA.reduceAtom b) alts in
+        List.iter (fun ea -> Hashtbl.replace by_atom ea (p, aset)) eatoms;
+        (* Two clauses may list the same alternatives in different orders;
+           whichever is recorded first wins.  That is exactly as sound as the
+           content-keying above: both packages already reduce to one gadget
+           name, hence to one PubGrub decision, so there was never room for
+           the two to be ordered apart.  (Checked: the disagreement is about a
+           preference between alternatives all of which remain candidates, so
+           nothing becomes satisfiable or unsatisfiable either way.) *)
+        if not (Hashtbl.mem idx.clause_order ma_set) then
+          Hashtbl.replace idx.clause_order ma_set (Array.of_list eatoms))
       alts_list
+
+  (* the alternative's position in the clause being decided, which is what
+     PVersion.compare ranks on; max_int for an atom the clause does not list,
+     which cannot arise for a name minted from that clause *)
+  let atom_pos idx aset a =
+    match Hashtbl.find_opt idx.clause_order aset with
+    | None -> max_int
+    | Some alts ->
+        let n = Array.length alts in
+        let rec go i =
+          if i >= n then max_int
+          else if DMA.Deb.Atom.eq_dec alts.(i) a then i
+          else go (i + 1)
+        in
+        go 0
 
   let build_index ?(recommends = true) (stanzas : DF.stanza list) : index =
     let idx =
@@ -185,6 +189,7 @@ struct
         clause_of_atom = Hashtbl.create 65536;
         rclause_of_aset = Hashtbl.create 65536;
         rclause_of_atom = Hashtbl.create 65536;
+        clause_order = Hashtbl.create 65536;
         class_of = Hashtbl.create 65536;
         n_clauses_parsed = 0;
       }
@@ -202,9 +207,7 @@ struct
           ns.nprovs;
         List.iter
           (fun ma -> push idx.conflicts_on (DMA.aname ma) (ns.npkg, ma))
-          ns.nconfs;
-        rank_atoms b (mangle ns.raw_deps);
-        rank_atoms b (mangle ns.raw_recs))
+          ns.nconfs)
       stanzas;
     idx
 
@@ -214,7 +217,11 @@ struct
      before the owner it came from has been through here.  That is not true
      of conflicts_on or providers_of, which are preimages -- who conflicts
      with me, and who provides the name I want -- that no row of the asking
-     package can reach, so Conflicts, Breaks and Provides stay eager. *)
+     package can reach, so Conflicts, Breaks and Provides stay eager.
+
+     clause_order rides along for the same reason: the alternative order a
+     Disjunct or Soft name is ranked by is recorded here, before reduceDeps
+     has even built the name, so no lookup can outrun it. *)
   let clauses_of idx (ns : nstanza) =
     match ns.nclauses with
     | Some c -> c
@@ -222,8 +229,9 @@ struct
         let c = (mangle ns.raw_deps, mangle ns.raw_recs) in
         ns.nclauses <- Some c;
         idx.n_clauses_parsed <- idx.n_clauses_parsed + 1;
-        index_clauses idx.clause_of_aset idx.clause_of_atom ns.npkg (fst c);
-        index_clauses idx.rclause_of_aset idx.rclause_of_atom ns.npkg (snd c);
+        index_clauses idx idx.clause_of_aset idx.clause_of_atom ns.npkg (fst c);
+        index_clauses idx idx.rclause_of_aset idx.rclause_of_atom ns.npkg
+          (snd c);
         c
 
   let deps_of idx ns = fst (clauses_of idx ns)
@@ -514,11 +522,14 @@ struct
     | _ -> false
 
   module PVersion = struct
-    type t = DMA.Deb.Version.t
+    (* pos is the candidate's position in the clause whose name is being
+       decided -- supplied by tag, where that name is known -- and is a
+       constant for every candidate that is not an alternative of one. *)
+    type t = { pos : int; v : DMA.Deb.Version.t }
 
     (* PubGrub decides the V.compare-maximum candidate, so preference lives
-       here: dpkg-newest for real versions, leftmost alternative via atom
-       rank, a real package above any alias claiming its name, native-arch
+       here: dpkg-newest for real versions, leftmost alternative by clause
+       position, a real package above any alias claiming its name, native-arch
        referents first within each, encoded order otherwise.  The calculus
        only makes the real/provided split legible -- RefReal carries no name,
        so it is the one candidate that cannot be an alias -- and says nothing
@@ -531,21 +542,22 @@ struct
        (PubGrub ranges are per name), and Version.Zero shares a name with
        Version.Atom in the Soft gadget and with Version.One in a guard and
        nowhere else, so the two escape cases cannot disturb any other pair. *)
-    let compare a b =
-      match (a, b) with
+    let compare (a : t) (b : t) =
+      let fallback () = r2c (DMA.Deb.VersionOT.compare a.v b.v) in
+      match (a.v, b.v) with
       | DMA.Deb.Version.Orig x, DMA.Deb.Version.Orig y ->
           Debian_frontend.Deb_version.compare x y
-      | DMA.Deb.Version.Atom x, DMA.Deb.Version.Atom y ->
-          (* leftmost alternative first: lower rank = greater version *)
-          let c = Stdlib.compare (rank y) (rank x) in
-          if c <> 0 then c else r2c (DMA.Deb.VersionOT.compare a b)
+      | DMA.Deb.Version.Atom _, DMA.Deb.Version.Atom _ ->
+          (* leftmost alternative first: lower position = greater version *)
+          let c = Stdlib.compare b.pos a.pos in
+          if c <> 0 then c else fallback ()
       | DMA.Deb.Version.Zero, DMA.Deb.Version.Atom _ -> -1
       | DMA.Deb.Version.Atom _, DMA.Deb.Version.Zero -> 1
       | DMA.Deb.Version.RefReal w, DMA.Deb.Version.RefReal w' ->
           (* one selector's real candidates all share its name, hence its
              arch: only the version separates them *)
           let c = Debian_frontend.Deb_version.compare w w' in
-          if c <> 0 then c else r2c (DMA.Deb.VersionOT.compare a b)
+          if c <> 0 then c else fallback ()
       | DMA.Deb.Version.RefReal _, DMA.Deb.Version.Ref (_, _) -> 1
       | DMA.Deb.Version.Ref (_, _), DMA.Deb.Version.RefReal _ -> -1
       | DMA.Deb.Version.Ref ((_, x), w), DMA.Deb.Version.Ref ((_, x'), w') ->
@@ -553,10 +565,11 @@ struct
           if c <> 0 then c
           else
             let c = Debian_frontend.Deb_version.compare w w' in
-            if c <> 0 then c else r2c (DMA.Deb.VersionOT.compare a b)
-      | _ -> r2c (DMA.Deb.VersionOT.compare a b)
+            if c <> 0 then c else fallback ()
+      | _ -> fallback ()
 
-    let pp fmt = function
+    let pp fmt ({ v; _ } : t) =
+      match v with
       | DMA.Deb.Version.Orig v -> Format.fprintf fmt "%s" v
       | DMA.Deb.Version.Atom a -> Format.fprintf fmt "alt:%a" pp_atom a
       | DMA.Deb.Version.Ref (m, w) ->
@@ -566,15 +579,27 @@ struct
       | DMA.Deb.Version.One -> Format.fprintf fmt "1"
   end
 
+  (* The clause position is known only where the name is: a Disjunct or Soft
+     name carries the clause its candidates are alternatives of, and no other
+     name has Version.Atom candidates at all. *)
+  let tag idx (n' : DMA.Deb.Name.t) (v : DMA.Deb.Version.t) : PVersion.t =
+    match (n', v) with
+    | ( (DMA.Deb.Name.Disjunct aset | DMA.Deb.Name.Soft aset),
+        DMA.Deb.Version.Atom a ) ->
+        { PVersion.pos = atom_pos idx aset a; v }
+    | _ -> { PVersion.pos = 0; v }
+
   module PG = Pubgrub.Make (PName) (PVersion)
 
-  let run_pubgrub ?(debug = false) ~versions ~dependencies goal =
-    let dependencies n v =
-      DMA.Deb.T.DependeesSet.elements (dependencies (n, v))
+  let run_pubgrub ?(debug = false) ~tag ~versions ~dependencies goal =
+    let dependencies n (pv : PVersion.t) =
+      DMA.Deb.T.DependeesSet.elements (dependencies (n, pv.PVersion.v))
       |> List.map (fun (tn, tvs) ->
-          (tn, PG.Ranges.of_list (DMA.Deb.T.VSet.elements tvs)))
+          ( tn,
+            PG.Ranges.of_list (List.map (tag tn) (DMA.Deb.T.VSet.elements tvs))
+          ))
     in
-    let versions n = DMA.Deb.T.VSet.elements (versions n) in
+    let versions n = List.map (tag n) (DMA.Deb.T.VSet.elements (versions n)) in
     (* Ranges.full here trips an upstream pubgrub edge case (initial
        Neg-term status); the goal's available versions are what we mean
        anyway. *)
@@ -591,7 +616,10 @@ struct
           List.iter
             (fun (n, v) -> Format.printf "  %a = %a@." PName.pp n PVersion.pp v)
             sol);
-        let s' = DMA.Deb.T.PkgSet.ofList sol in
+        let s' =
+          DMA.Deb.T.PkgSet.ofList
+            (List.map (fun (n, (pv : PVersion.t)) -> (n, pv.PVersion.v)) sol)
+        in
         Some
           (List.map
              (fun ((n, b), v) -> (n, b, v))
@@ -631,7 +659,7 @@ struct
       | DMA.Deb.Name.Guard _ -> "guard"
     in
     let r =
-      run_pubgrub ?debug
+      run_pubgrub ?debug ~tag:(tag idx)
         ~versions:(fun n' -> bucket (vname n') (vers_sparse idx) n')
         ~dependencies:(timed prof_oc prof_ot (dependees_sparse idx))
         (goal_name, DMA.QAArch goal_arch)
