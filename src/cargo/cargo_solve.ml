@@ -3,11 +3,10 @@
    first asks for each; every query is answered from a small
    slice instance in the shape one of Cargo.v's lookup theorems justifies
    (own rows, and the repository restricted to realPreimage of crateReads,
-   or to a link's declarers), pushed through the Cargo encoder and then
-   through FeatureConcurrent's proved reduction to Core; PubGrub solves the
-   accumulated core graph lazily and the solution comes back through the
-   proved decoders.  Trusted here (TCB): the parser, the version
-   comparator, the policy defaults below, and the plumbing. *)
+   or to a link's declarers), pushed through the Cargo encoder straight to
+   Core; PubGrub solves the accumulated core graph lazily and the solution
+   comes back through the proved decoders.  Trusted here (TCB): the parser,
+   the version comparator, the policy defaults below, and the plumbing. *)
 
 module E = Pac
 module P = Cargo_parse
@@ -162,37 +161,40 @@ let meta ar n v : P.ver option =
    its name, as cargo's sparse protocol fetches it, so a run touches the
    crates the solver asks about and no others.  Because the instance is
    still being uncovered, each lookup theorem's slice must be complete at
-   the moment it answers.  That holds by construction for three of the four
-   queries: Crate n reads the repository at n alone; SlotN and DecisionN at
-   (n, v) read (n, v)'s own rows and the repository at crateReads, the
-   names its slots target; and name_set and slice load every name they
-   read, while meta loads the owner.  LinkN l is the exception.  Its slice
+   the moment it answers.  That holds by construction for all but one
+   query: CCrate n and CFeatP n read the repository at n alone; CSlot and
+   CDec at (n, v) read (n, v)'s own rows and the repository at crateReads,
+   the names its slots target; and name_set and slice load every name they
+   read, while meta loads the owner.  CLink l is the exception.  Its slice
    is the link relation's preimage at l -- every crate version declaring l
    -- and no row of any one crate names the other declarers, so nothing a
    loaded crate carries can bring them in: links_idx holds the declarers
-   among the names loaded so far, and may grow after LinkN l has answered.
-   Make.solve detects that and repeats the run; see there. *)
+   among the names loaded so far, and may grow after CLink l has answered.
+   Make.solve answers it afresh each time rather than memoizing it. *)
 
 module Make () = struct
   module Cg =
-    E.Cargo (StringOT) (CVerOT) (StringOT) (StringOT) (StringOT) (StringOT)
+    E.Cargo (StringOT) (CVerOT) (StringOT) (StringOT) (CVerOT) (StringOT)
       (StringOT)
       (PM)
 
-  module FC = Cg.FC
-  module Red = FC.Reduction
-  module T = Red.T
+  module T = Cg.T
 
   (* ---- granularity: at most one version per semver compatibility class,
-     the leftmost-nonzero component ---- *)
+     the leftmost-nonzero component ----
+
+     The label is the class's least version rather than a tag like "^1",
+     and G is ordered as versions are, because the encoding hands PubGrub
+     a class where the version would otherwise go: what the solver
+     maximises is the label, so an order on labels that disagrees with the
+     order on versions silently reverses the preference.  Lexical order on
+     "0.9" against "0.10" is exactly that disagreement. *)
   let compat_class (v : string) : string =
     let p = Cargo_version.parse v in
-    if p.Cargo_version.major > 0 then Printf.sprintf "^%d" p.Cargo_version.major
+    if p.Cargo_version.major > 0 then Printf.sprintf "%d.0.0" p.Cargo_version.major
     else if p.Cargo_version.minor > 0 then
-      Printf.sprintf "0.%d" p.Cargo_version.minor
+      Printf.sprintf "0.%d.0" p.Cargo_version.minor
     else Printf.sprintf "0.0.%d" p.Cargo_version.patch
-
-  let gp = Cg.gPlus compat_class
 
   (* ---- parse-AST -> extracted terms ---- *)
 
@@ -345,14 +347,6 @@ module Make () = struct
         Hashtbl.replace rows_cache p r;
         r
 
-  (* the support of a crate version is its feature table's domain: this is
-     ownSupport support p read straight off the manifest, without paying
-     for the encoded rows *)
-  let has_feature ar ((n, v) : string * string) (f : string) : bool =
-    match meta ar n v with
-    | None -> false
-    | Some m -> List.mem_assoc f m.P.v_feats
-
   (* ---- repository slices ---- *)
 
   let name_set_cache : (string, Cg.PkgSet.t) Hashtbl.t = Hashtbl.create 4096
@@ -389,331 +383,15 @@ module Make () = struct
     rc : string * string;
     rfeats : Cg.FSet.t;
     rustv : string option;
-    edges : (T.Pkg.t, T.DependeesSet.t) Hashtbl.t;
-    gadget_vers : (Red.Name.name, Cg.VPlus.t list) Hashtbl.t;
-    processed : (string * string, unit) Hashtbl.t;
-    mutable root_done : bool;
-    npv_cache : (Cg.NPlus.t, Cg.VPlus.t list) Hashtbl.t;
-    mutable n_proc : int;
   }
 
   let mk_state ar rc rfeats rustv =
-    {
-      ar;
-      rc;
-      rfeats = fset_of rfeats;
-      rustv;
-      edges = Hashtbl.create 65536;
-      gadget_vers = Hashtbl.create 65536;
-      processed = Hashtbl.create 4096;
-      root_done = false;
-      npv_cache = Hashtbl.create 65536;
-      n_proc = 0;
-    }
-
-  let verbose = Sys.getenv_opt "PACPROG" <> None
-
-  let record_deprel st (d : T.DepRel.t) =
-    List.iter
-      (fun ((s, h) : T.DepElt.t) ->
-        let prev =
-          match Hashtbl.find_opt st.edges s with
-          | Some x -> x
-          | None -> T.DependeesSet.empty
-        in
-        Hashtbl.replace st.edges s (T.DependeesSet.add h prev))
-      (T.DepRel.elements d)
-
-  (* only the intermediate gadgets are harvested; the granular names are
-     answered by the per-name lookups below *)
-  let record_real st (r : T.PkgSet.t) =
-    List.iter
-      (fun ((nm, u) : T.Pkg.t) ->
-        match nm with
-        | Red.Name.GranularOrig _ | Red.Name.GranularFeatPkg _ -> ()
-        | _ ->
-            let prev =
-              match Hashtbl.find_opt st.gadget_vers nm with
-              | Some x -> x
-              | None -> []
-            in
-            if not (List.mem u prev) then
-              Hashtbl.replace st.gadget_vers nm (u :: prev))
-      (T.PkgSet.elements r)
-
-  (* the FC-side repository a crate's own rows need: the packages its
-     support rows sit on.  reduceDeps reads R only to filter those rows,
-     and every one of them is a package of the global translation. *)
-  let support_owners (sup : FC.Feat.SupportSet.t) : FC.PkgSet.t =
-    FC.PkgSet.ofList
-      (List.map
-         (fun ((q, _) : FC.Feat.PkgF.t) -> q)
-         (FC.Feat.SupportSet.elements sup))
-
-  let process_root st =
-    if not st.root_done then begin
-      st.root_done <- true;
-      let df = Cg.rootEdge st.rc st.rfeats in
-      record_deprel st
-        (Red.reduceDeps FC.PkgSet.empty FC.Feat.SupportSet.empty df
-           FC.Feat.AddlDepRel.empty gp);
-      record_real st
-        (Red.reduceReal FC.PkgSet.empty FC.Feat.SupportSet.empty df
-           FC.Feat.AddlDepRel.empty gp)
-    end
-
-  let process st (p : string * string) =
-    if not (Hashtbl.mem st.processed p) then begin
-      Hashtbl.replace st.processed p ();
-      st.n_proc <- st.n_proc + 1;
-      if verbose then
-        Printf.eprintf "[%d] %s %s %.1fs\n%!" st.n_proc (fst p) (snd p)
-          (Sys.time ());
-      let rw = rows_of st.ar p in
-      let r = slice st.ar p in
-      let df =
-        Cg.dependees r rw.r_fdefs rw.r_slots rw.r_links cfg_active
-          default_feature st.rc p
-      in
-      let da = Cg.addlDependees r rw.r_fdefs rw.r_slots cfg_active st.rc p in
-      let sup =
-        Cg.supportAt r rw.r_supp rw.r_fdefs rw.r_slots cfg_active st.rc p
-      in
-      let rfc = support_owners sup in
-      record_deprel st (Red.reduceDeps rfc sup df da gp);
-      record_real st (Red.reduceReal rfc sup df da gp)
-    end
-
-  (* the Cargo crate owning an encoded package, recoverable from the name
-     alone: every row of the translation is minted by one crate version *)
-  let owner_of_np (np : Cg.NPlus.t) (u : Cg.VPlus.t) =
-    match (np, u) with
-    | Cg.NPlus.Root, _ -> `Root
-    | Cg.NPlus.Crate n, Cg.VPlus.VOrig v -> `Crate (n, v)
-    | Cg.NPlus.SlotN (n, v, _), _ -> `Crate (n, v)
-    | Cg.NPlus.DecisionN (n, v, _, _, _), _ -> `Crate (n, v)
-    | _ -> `None
-
-  let owner_of ((nm, u) : T.Pkg.t) =
-    match nm with
-    | Red.Name.GranularOrig (np, _) -> owner_of_np np u
-    | Red.Name.GranularFeatPkg (np, _, _) -> owner_of_np np u
-    | Red.Name.Intermediate (np, w, _) -> owner_of_np np w
-    | Red.Name.IntermediateF (np, w, _, _) -> owner_of_np np w
-    | Red.Name.IntermediateA (np, w, _, _, _) -> owner_of_np np w
-
-  let touch st q =
-    match owner_of q with
-    | `Root -> process_root st
-    | `Crate p -> process st p
-    | `None -> ()
+    { ar; rc; rfeats = fset_of rfeats; rustv }
 
   (* ---- the per-name version lookups ---- *)
 
   let link_rows st (l : string) =
     match Hashtbl.find_opt st.ar.links_idx l with Some x -> x | None -> []
-
-  (* Cargo.versions on the slice each name's lookup theorem allows: the
-     name's own repository rows for a crate, and the owning crate's rows
-     for a slot, decision or link gadget *)
-  let np_versions st (np : Cg.NPlus.t) : Cg.VPlus.t list =
-    (* every shape but LinkN is a function of rows already loaded when the
-       query is asked, so memoizing is safe; LinkN is not (see solve) *)
-    let memo = match np with Cg.NPlus.LinkN _ -> false | _ -> true in
-    match if memo then Hashtbl.find_opt st.npv_cache np else None with
-    | Some vs -> vs
-    | None ->
-        let vs =
-          let call r fdefs slots links =
-            Cg.FC.VSet.elements
-              (Cg.versions r fdefs slots links cfg_active st.rc np)
-          in
-          match np with
-          | Cg.NPlus.Root ->
-              call Cg.PkgSet.empty Cg.FDefRel.empty Cg.SlotRel.empty
-                Cg.LinkRel.empty
-          | Cg.NPlus.Crate n ->
-              call (name_set st.ar n) Cg.FDefRel.empty Cg.SlotRel.empty
-                Cg.LinkRel.empty
-          | Cg.NPlus.SlotN (n, v, _) ->
-              let rw = rows_of st.ar (n, v) in
-              call
-                (slice st.ar (n, v))
-                Cg.FDefRel.empty rw.r_slots Cg.LinkRel.empty
-          | Cg.NPlus.DecisionN (n, v, _, _, _) ->
-              let rw = rows_of st.ar (n, v) in
-              call (slice st.ar (n, v)) rw.r_fdefs rw.r_slots Cg.LinkRel.empty
-          | Cg.NPlus.LinkN l ->
-              let rs = link_rows st l in
-              (* PkgSet.inter R (linkPkgs Links l): versions_lookupLink is
-                 hypothesis-free only because the declarers are cut down to
-                 repository rows here, rather than because links_idx happens
-                 to be built from them *)
-              let r =
-                Cg.PkgSet.ofList
-                  (List.filter (fun (n, v) -> meta st.ar n v <> None) rs)
-              in
-              let links = Cg.LinkRel.ofList (List.map (fun q -> (q, l)) rs) in
-              call r Cg.FDefRel.empty Cg.SlotRel.empty links
-        in
-        if memo then Hashtbl.replace st.npv_cache np vs;
-        vs
-
-  (* the FC support at an encoded package: a crate version carries its own
-     features, and a decision gadget carries the witness feature *)
-  let fc_support st (np : Cg.NPlus.t) (u : Cg.VPlus.t) (f : Cg.FPlusComp.t) =
-    match (np, u, f) with
-    | Cg.NPlus.Crate n, Cg.VPlus.VOrig v, Cg.FPlusComp.FOrigF f0 ->
-        has_feature st.ar (n, v) f0
-    | Cg.NPlus.DecisionN _, _, Cg.FPlusComp.FWit -> true
-    | _ -> false
-
-  let versions st (nm : Red.Name.name) : Cg.VPlus.t list =
-    match nm with
-    | Red.Name.GranularOrig (np, w) ->
-        List.filter (fun u -> gp u = w) (np_versions st np)
-    | Red.Name.GranularFeatPkg (np, f, w) ->
-        List.filter
-          (fun u -> gp u = w && fc_support st np u f)
-          (np_versions st np)
-    | _ -> (
-        (* an intermediate is minted by its owner's rows alone *)
-        (match owner_of (nm, Cg.VPlus.VUnit) with
-        | `Root -> process_root st
-        | `Crate p -> process st p
-        | `None -> ());
-        match Hashtbl.find_opt st.gadget_vers nm with
-        | Some vs -> vs
-        | None -> [])
-
-  (* ---- PubGrub ---- *)
-
-  module PName = struct
-    type t = Red.Name.name
-
-    let compare a b = r2c (Red.Name.compare a b)
-
-    let pp_np fmt (np : Cg.NPlus.t) =
-      match np with
-      | Cg.NPlus.Root -> Format.fprintf fmt "root"
-      | Cg.NPlus.Crate n -> Format.fprintf fmt "%s" n
-      | Cg.NPlus.LinkN l -> Format.fprintf fmt "links:%s" l
-      | Cg.NPlus.SlotN (n, v, a) -> Format.fprintf fmt "%s@%s->%s" n v a
-      | Cg.NPlus.DecisionN (n, v, f, a, g) ->
-          Format.fprintf fmt "%s@%s[%s]->%s/%s" n v f a g
-
-    let pp_f fmt (f : Cg.FPlusComp.t) =
-      match f with
-      | Cg.FPlusComp.FOrigF x -> Format.fprintf fmt "%s" x
-      | Cg.FPlusComp.FWit -> Format.fprintf fmt "wit"
-
-    let pp fmt (n : t) =
-      match n with
-      | Red.Name.GranularOrig (np, _) -> pp_np fmt np
-      | Red.Name.GranularFeatPkg (np, f, _) ->
-          Format.fprintf fmt "%a/%a" pp_np np pp_f f
-      | Red.Name.Intermediate (np, _, m) ->
-          Format.fprintf fmt "<%a=>%a>" pp_np np pp_np m
-      | Red.Name.IntermediateF (np, _, m, f) ->
-          Format.fprintf fmt "<%a=>%a/%a>" pp_np np pp_np m pp_f f
-      | Red.Name.IntermediateA (np, _, f, m, g) ->
-          Format.fprintf fmt "<%a/%a=>%a/%a>" pp_np np pp_f f pp_np m pp_f g
-  end
-
-  (* PubGrub decides the compare-maximum candidate, so preference lives
-     here.  Newest-first among a crate's own versions falls out of the
-     encoded order, since VPlus.compare carries the semver order.  On top
-     of it, resolver v3 puts a candidate whose declared MSRV the
-     configured toolchain does not satisfy in a class below every
-     candidate it does satisfy, and newest-first decides within each
-     class.  That is version_prefs.rs's sort_summaries, which compares
-     msrv_compat_count ahead of version_ordering while sorting one
-     crate's candidate list: a preference and not a constraint, so an
-     incompatible version that is the only candidate in range is still
-     taken.  With no toolchain configured every candidate is tagged
-     compatible and this degenerates to the v1/v2 order.
-
-     The class is carried on the version rather than read off it: which
-     crate version a package belongs to is what decides, and a comparator
-     sees two versions and not the name they belong to.  Every version
-     PubGrub holds is handed to it by [versions] or by a dependency
-     range, both of which know the name, so both tag as they go and the
-     class is a function of the (name, version) pair -- keeping this a
-     total order, and one consistent with the tags on any range the same
-     name is compared against. *)
-  module PVersion = struct
-    type t = { msrv : bool; v : Cg.VPlus.t }
-
-    let compare a b =
-      match (a.msrv, b.msrv) with
-      | false, true -> -1
-      | true, false -> 1
-      | _ -> r2c (Cg.VPlus.compare a.v b.v)
-
-    let pp fmt ({ v; _ } : t) =
-      match v with
-      | Cg.VPlus.VOrig v -> Format.fprintf fmt "%s" v
-      | Cg.VPlus.VChoice v -> Format.fprintf fmt "choose:%s" v
-      | Cg.VPlus.VFire v -> Format.fprintf fmt "fire:%s" v
-      | Cg.VPlus.VMember (n, v) -> Format.fprintf fmt "member:%s@%s" n v
-      | Cg.VPlus.VUnit -> Format.fprintf fmt "()"
-  end
-
-  module PG = Pubgrub.Make (PName) (PVersion)
-
-  (* cached because a slot's whole candidate list is retagged whenever
-     PubGrub asks for it, and unify_alias is not cheap *)
-  let alias_cache : (string * string, (string, string) Hashtbl.t) Hashtbl.t =
-    Hashtbl.create 4096
-
-  let alias_target st (p : string * string) (a : string) : string option =
-    let tbl =
-      match Hashtbl.find_opt alias_cache p with
-      | Some t -> t
-      | None ->
-          let t = Hashtbl.create 8 in
-          (match meta st.ar (fst p) (snd p) with
-          | None -> ()
-          | Some m ->
-              List.iter
-                (fun (d : P.dep) -> Hashtbl.replace t d.P.d_alias d.P.d_target)
-                (slots_of m));
-          Hashtbl.replace alias_cache p t;
-          t
-    in
-    Hashtbl.find_opt tbl a
-
-  (* The crate version an encoded version stands for, which is not the
-     crate that minted the package: owner_of answers the latter, and is
-     what [touch] wants, while the candidate being ranked is the one the
-     version names.  A slot's VChoice and a decision gadget's VFire both
-     range over the versions of the slot's target, so each is read through
-     the declaring manifest; a link gadget's VMember carries its declarer
-     outright; a crate node's VOrig is the crate itself.  The slot is the
-     one that matters: it is where cargo sorts candidates too, and where
-     PubGrub decides first -- the crate node then only follows the version
-     the slot already chose. *)
-  let candidate st (np : Cg.NPlus.t) (u : Cg.VPlus.t) =
-    let via n v a w =
-      match alias_target st (n, v) a with Some t -> Some (t, w) | None -> None
-    in
-    match (np, u) with
-    | Cg.NPlus.Crate n, Cg.VPlus.VOrig v -> Some (n, v)
-    | Cg.NPlus.LinkN _, Cg.VPlus.VMember (n, v) -> Some (n, v)
-    | Cg.NPlus.SlotN (n, v, a), Cg.VPlus.VChoice w
-    | Cg.NPlus.DecisionN (n, v, _, a, _), Cg.VPlus.VFire w ->
-        via n v a w
-    | _ -> None
-
-  (* an intermediate's versions are the target name's, so the target name
-     is what its candidate is read off; a granular name is its own *)
-  let carrier (nm : Red.Name.name) : Cg.NPlus.t =
-    match nm with
-    | Red.Name.GranularOrig (np, _) | Red.Name.GranularFeatPkg (np, _, _) -> np
-    | Red.Name.Intermediate (_, _, m)
-    | Red.Name.IntermediateF (_, _, m, _)
-    | Red.Name.IntermediateA (_, _, _, m, _) ->
-        m
 
   let msrv_cache : (string * string * string, bool) Hashtbl.t =
     Hashtbl.create 65536
@@ -730,18 +408,116 @@ module Make () = struct
         Hashtbl.replace msrv_cache (rustc, n, v) b;
         b
 
-  let tag st (nm : Red.Name.name) (u : Cg.VPlus.t) : PVersion.t =
-    match st.rustv with
-    | None -> { PVersion.msrv = true; v = u }
-    | Some rustc ->
-        let ok =
-          match candidate st (carrier nm) u with
-          | None -> true
-          | Some p -> crate_msrv_ok st rustc p
-        in
-        { PVersion.msrv = ok; v = u }
+  (* ownSupport summed over a name's versions, which is the slice a feature
+     name's lookup reads.  Cached for the same reason name_set is: load_name
+     takes a name whole, so this cannot grow once it has been asked. *)
+  let support_cache : (string, Cg.SupportSet.t) Hashtbl.t = Hashtbl.create 4096
 
-  let root_name = Red.Name.GranularOrig (Cg.NPlus.Root, Cg.GPlus.GUnit)
+  let support_of_name st (n : string) : Cg.SupportSet.t =
+    match Hashtbl.find_opt support_cache n with
+    | Some s -> s
+    | None ->
+        let s =
+          Cg.SupportSet.unions
+            (List.map
+               (fun (v : P.ver) -> (rows_of st.ar (n, v.P.v_vers)).r_supp)
+               (load_name st.ar n))
+        in
+        Hashtbl.replace support_cache n s;
+        s
+
+  let versions st (nm : Cg.NPlus.t) : Cg.VPlus.t list =
+    let call r supp fdefs slots links =
+      T.VSet.elements
+        (Cg.versions compat_class r supp fdefs slots links cfg_active st.rc nm)
+    in
+    let none = Cg.PkgSet.empty in
+    let nosupp = Cg.SupportSet.empty in
+    let nofd = Cg.FDefRel.empty in
+    let nosl = Cg.SlotRel.empty in
+    let nolk = Cg.LinkRel.empty in
+    match nm with
+    | Cg.NPlus.CRoot -> call none nosupp nofd nosl nolk
+    | Cg.NPlus.CCrate (n, _) -> call (name_set st.ar n) nosupp nofd nosl nolk
+    | Cg.NPlus.CFeatP (n, _, _) ->
+        call (name_set st.ar n) (support_of_name st n) nofd nosl nolk
+    | Cg.NPlus.CSlot (n, v, _) ->
+        let rw = rows_of st.ar (n, v) in
+        call (slice st.ar (n, v)) nosupp nofd rw.r_slots nolk
+    | Cg.NPlus.CDec (n, v, _, _, _) ->
+        let rw = rows_of st.ar (n, v) in
+        call (slice st.ar (n, v)) nosupp rw.r_fdefs rw.r_slots nolk
+    | Cg.NPlus.CLink l ->
+        let rs = link_rows st l in
+        let r =
+          Cg.PkgSet.ofList
+            (List.filter (fun (n, v) -> meta st.ar n v <> None) rs)
+        in
+        call r nosupp nofd nosl (Cg.LinkRel.ofList (List.map (fun q -> (q, l)) rs))
+
+  let deps st (p : T.Pkg.t) : T.Dependees.t list =
+    let call r supp fdefs slots links rootf =
+      T.DependeesSet.elements
+        (Cg.dependees compat_class r supp fdefs slots links cfg_active
+           default_feature st.rc rootf p)
+    in
+    let none = Cg.PkgSet.empty in
+    let nosupp = Cg.SupportSet.empty in
+    let nofd = Cg.FDefRel.empty in
+    let nosl = Cg.SlotRel.empty in
+    let nolk = Cg.LinkRel.empty in
+    let nofs = Cg.FSet.empty in
+    let owner n v k =
+      let rw = rows_of st.ar (n, v) in
+      k (slice st.ar (n, v)) rw
+    in
+    match (fst p, snd p) with
+    | Cg.NPlus.CRoot, _ -> call none nosupp nofd nosl nolk st.rfeats
+    | Cg.NPlus.CCrate (n, _), Cg.VPlus.WOrig v ->
+        owner n v (fun r rw -> call r nosupp nofd rw.r_slots rw.r_links nofs)
+    | Cg.NPlus.CFeatP (n, _, _), Cg.VPlus.WOrig v ->
+        owner n v (fun r rw ->
+            call r rw.r_supp rw.r_fdefs rw.r_slots nolk nofs)
+    | Cg.NPlus.CSlot (n, v, _), Cg.VPlus.WClass _ ->
+        owner n v (fun r rw -> call r nosupp nofd rw.r_slots nolk nofs)
+    | Cg.NPlus.CDec (n, v, _, _, _), Cg.VPlus.WClass _ ->
+        owner n v (fun r rw -> call r nosupp rw.r_fdefs rw.r_slots nolk nofs)
+    | _, _ -> []
+
+  module PName = struct
+    type t = Cg.NPlus.t
+
+    let compare a b = r2c (Cg.NPlus.compare a b)
+
+    let pp fmt (nm : t) =
+      match nm with
+      | Cg.NPlus.CRoot -> Format.fprintf fmt "root"
+      | Cg.NPlus.CCrate (n, gr) -> Format.fprintf fmt "%s@%s" n gr
+      | Cg.NPlus.CFeatP (n, f, gr) -> Format.fprintf fmt "%s/%s@%s" n f gr
+      | Cg.NPlus.CSlot (n, v, a) -> Format.fprintf fmt "%s@%s->%s" n v a
+      | Cg.NPlus.CDec (n, v, f, a, feat) ->
+          Format.fprintf fmt "<%s@%s/%s=>%s/%s>" n v f a feat
+      | Cg.NPlus.CLink l -> Format.fprintf fmt "links:%s" l
+  end
+
+  module PVersion = struct
+    type t = { msrv : bool; v : Cg.VPlus.t }
+
+    let compare a b =
+      match (a.msrv, b.msrv) with
+      | false, true -> -1
+      | true, false -> 1
+      | _ -> r2c (Cg.VPlus.compare a.v b.v)
+
+    let pp fmt ({ v; _ } : t) =
+      match v with
+      | Cg.VPlus.WUnit -> Format.fprintf fmt "()"
+      | Cg.VPlus.WOrig x -> Format.fprintf fmt "%s" x
+      | Cg.VPlus.WClass gr -> Format.fprintf fmt "class:%s" gr
+      | Cg.VPlus.WMember (n, x) -> Format.fprintf fmt "member:%s-%s" n x
+  end
+
+  module PG = Pubgrub.Make (PName) (PVersion)
 
   type result = {
     crates : (string * string) list;
@@ -755,64 +531,58 @@ module Make () = struct
       (rc : string * string) =
     Pubgrub.set_debug debug;
     let st = mk_state ar rc rfeats rustv in
+    (* the preference lands on the crate name, which is where the dependers'
+       ranges already meet; every gadget candidate is a class and carries no
+       standing of its own *)
+    let tag (nm : Cg.NPlus.t) (w : Cg.VPlus.t) : PVersion.t =
+      match (st.rustv, nm, w) with
+      | Some rustc, Cg.NPlus.CCrate (n, _), Cg.VPlus.WOrig v ->
+          { PVersion.msrv = crate_msrv_ok st rustc (n, v); v = w }
+      | _ -> { PVersion.msrv = true; v = w }
+    in
     (* the tagged list, not just the untagged one, has to be memoized:
        PubGrub asks a name for its versions at every propagation step.
-       Only the granular names are safe to hold, and not those over a
-       link -- exactly the ones np_versions itself memoizes, for the same
-       reason: an intermediate's versions grow as gadgets are minted, and
-       LinkN's grow as declarers are parsed. *)
-    let tagged = Hashtbl.create 65536 in
-    let holdable (nm : Red.Name.name) =
-      match nm with
-      | Red.Name.GranularOrig (Cg.NPlus.LinkN _, _)
-      | Red.Name.GranularFeatPkg (Cg.NPlus.LinkN _, _, _) ->
-          false
-      | Red.Name.GranularOrig _ | Red.Name.GranularFeatPkg _ -> true
-      | _ -> false
-    in
+       CLink l is the one name that cannot be held: its versions are the
+       whole preimage of the link relation at l, and no row of any one
+       declarer names the others, so links_idx holds only the declarers
+       among the names loaded so far and may grow after CLink l has
+       answered.  Recomputing the filter -- a handful of rows -- lets a
+       declarer loaded later simply be there, where a cache would freeze
+       the answer mid-run and refuse it against a set fixed without it. *)
+    let vcache = Hashtbl.create 65536 in
     let versions nm =
-      match Hashtbl.find_opt tagged nm with
+      match Hashtbl.find_opt vcache nm with
       | Some vs -> vs
       | None ->
-          let vs = List.map (tag st nm) (versions st nm) in
-          if holdable nm then Hashtbl.replace tagged nm vs;
+          let vs = List.map (tag nm) (versions st nm) in
+          (match nm with
+          | Cg.NPlus.CLink _ -> ()
+          | _ -> Hashtbl.replace vcache nm vs);
           vs
     in
     (* the decisive memoization: PubGrub asks for the same node's
        dependencies over and over during propagation *)
-    let cache = Hashtbl.create 65536 in
-    let dependencies nm ({ PVersion.v = u; _ } : PVersion.t) =
-      match Hashtbl.find_opt cache (nm, u) with
+    let dcache = Hashtbl.create 65536 in
+    let dependencies nm ({ PVersion.v = w; _ } : PVersion.t) =
+      match Hashtbl.find_opt dcache (nm, w) with
       | Some r -> r
       | None ->
-          touch st (nm, u);
-          let hs =
-            match Hashtbl.find_opt st.edges (nm, u) with
-            | Some x -> x
-            | None -> T.DependeesSet.empty
-          in
           let r =
             List.map
               (fun ((m, vs) : T.Dependees.t) ->
                 ( m,
                   PG.Ranges.of_list
-                    (List.map (tag st m) (T.VSet.elements vs)) ))
-              (T.DependeesSet.elements hs)
+                    (List.map (tag m) (T.VSet.elements vs)) ))
+              (deps st (nm, w))
           in
-          Hashtbl.replace cache (nm, u) r;
+          Hashtbl.replace dcache (nm, w) r;
           r
     in
-    (* LinkN l's versions are the whole preimage of the link relation at l,
-       and no row of any one declarer names the others, so this is the one
-       query lazy loading cannot complete from what a loaded crate carries.
-       It needs no remedy beyond not memoizing it: PubGrub asks versions
-       afresh at every decision, so recomputing the filter over links_idx --
-       a handful of rows -- lets a declarer loaded later simply be there.
-       Caching it instead would freeze the answer mid-run and a late
-       declarer would be refused against a version set fixed without it. *)
     match
       PG.solve ~versions ~dependencies
-        [ (root_name, PG.Ranges.of_list [ tag st root_name Cg.VPlus.VUnit ]) ]
+        [ ( Cg.NPlus.CRoot,
+            PG.Ranges.of_list [ tag Cg.NPlus.CRoot Cg.VPlus.WUnit ] )
+        ]
     with
     | Error inc ->
         Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
@@ -820,23 +590,29 @@ module Make () = struct
     | Ok sol ->
         let sol =
           List.map
-            (fun ((nm, { PVersion.v; _ }) : Red.Name.name * PVersion.t) ->
-              (nm, v))
+            (fun ((nm, { PVersion.v; _ }) : Cg.NPlus.t * PVersion.t) -> (nm, v))
             sol
         in
         let s = T.PkgSet.ofList sol in
         (* back through the proved decoders *)
-        let s_fc = Red.featureConcurrentResolution gp s in
-        let crates = Cg.PkgSet.elements (Cg.decodeS s_fc) in
+        let crates = Cg.PkgSet.elements (Cg.decodeS s) in
         let feats =
           List.map
             (fun (((n, v), fs) : Cg.Featured.t) -> (n, v, Cg.FSet.elements fs))
-            (Cg.FeaturedSet.elements (Cg.decodeFS s_fc))
+            (Cg.FeaturedSet.elements (Cg.decodeFS s))
+        in
+        (* decodeSel is the one decoder that reads Slots, and a lazy run
+           has no global relation to hand it; the slots of the crates it
+           decodes are all it looks at, since slotsAt filters to the owner
+           named by the node *)
+        let slots =
+          Cg.SlotRel.unions
+            (List.map (fun p -> (rows_of st.ar p).r_slots) (st.rc :: crates))
         in
         let sel =
           List.map
             (fun ((((n, v), a), u) : Cg.SelElt.t) -> (n, v, a, u))
-            (Cg.SelRel.elements (Cg.decodeSel s_fc))
+            (Cg.SelRel.elements (Cg.decodeSel slots cfg_active st.rc s))
         in
         Some
           {
@@ -844,6 +620,7 @@ module Make () = struct
             feats;
             sel;
             nodes = List.length sol;
-            processed = st.n_proc;
+            (* the crate versions whose manifests became encoded rows *)
+            processed = Hashtbl.length rows_cache;
           }
 end

@@ -203,7 +203,8 @@ let cargo_cmd =
   in
   Cmd.v
     (Cmd.info "cargo" ~doc:"Solve against a crates.io index.")
-    Term.(const cargo_run $ debug_arg $ index $ goal $ wanted $ rfeats $ rustv)
+    Term.(
+      const cargo_run $ debug_arg $ index $ goal $ wanted $ rfeats $ rustv)
 
 let alpine_run debug path goals =
   let t0 = Unix.gettimeofday () in

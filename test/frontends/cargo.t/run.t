@@ -7,7 +7,7 @@
     d 1.0.0 [a,default]
     d 2.0.0 [b,default]
     f 1.0.0 [c,d,default]
-  encoded solution: 61 core nodes (6 crate versions encoded)
+  encoded solution: 24 core nodes (6 crate versions encoded)
   selections: 6
   loaded: 5 crates, 6 versions
 
@@ -22,7 +22,7 @@ q publishes 1.0.0-alpha.1 alone, which ^1.0.0-alpha reaches.
     g 1.0.0
     p 1.0.0 [default]
     q 1.0.0-alpha.1 [default]
-  encoded solution: 15 core nodes (4 crate versions encoded)
+  encoded solution: 8 core nodes (4 crate versions encoded)
   selections: 2
   loaded: 3 crates, 4 versions
 
@@ -36,7 +36,7 @@ activated and the dev one does not participate.
   crates (2):
     h 1.0.0
     k 1.0.0 [default]
-  encoded solution: 9 core nodes (2 crate versions encoded)
+  encoded solution: 5 core nodes (2 crate versions encoded)
   selections: 1
   loaded: 3 crates, 3 versions
 
@@ -55,7 +55,7 @@ without it.
     x 0.9.0 [default]
     y 1.0.2 [default]
     z 1.0.0 [default]
-  encoded solution: 23 core nodes (7 crate versions encoded)
+  encoded solution: 12 core nodes (7 crate versions encoded)
   selections: 3
   loaded: 4 crates, 7 versions
 
@@ -71,7 +71,7 @@ its place in the lock as --features varies, and w is installed with extra.
     s 1.0.0
     u 1.0.0 [cap,default]
     w 1.0.0 [default,extra]
-  encoded solution: 26 core nodes (3 crate versions encoded)
+  encoded solution: 11 core nodes (3 crate versions encoded)
   selections: 2
   loaded: 3 crates, 3 versions
 
@@ -86,7 +86,7 @@ m1 takes the older 1.0.0.
   crates (2):
     d1 1.0.0 [default]
     m1 1.0.0
-  encoded solution: 9 core nodes (3 crate versions encoded)
+  encoded solution: 5 core nodes (3 crate versions encoded)
   selections: 1
   loaded: 2 crates, 3 versions
 
@@ -98,7 +98,7 @@ the rust-versions list is empty, and the same index takes the newest.
   crates (2):
     d1 1.1.0 [default]
     m1 1.0.0
-  encoded solution: 9 core nodes (3 crate versions encoded)
+  encoded solution: 5 core nodes (3 crate versions encoded)
   selections: 1
   loaded: 2 crates, 3 versions
 
@@ -114,7 +114,7 @@ would give.
   crates (2):
     d2 1.1.0 [default]
     m2 1.0.0
-  encoded solution: 9 core nodes (3 crate versions encoded)
+  encoded solution: 5 core nodes (4 crate versions encoded)
   selections: 1
   loaded: 2 crates, 4 versions
 
@@ -123,7 +123,7 @@ would give.
   crates (2):
     d2 1.2.0 [default]
     m2 1.0.0
-  encoded solution: 9 core nodes (3 crate versions encoded)
+  encoded solution: 5 core nodes (4 crate versions encoded)
   selections: 1
   loaded: 2 crates, 4 versions
 
@@ -136,6 +136,6 @@ out of range, so 2.0.0 is taken rather than the solve failing.
   crates (2):
     d3 2.0.0 [default]
     m3 1.0.0
-  encoded solution: 9 core nodes (2 crate versions encoded)
+  encoded solution: 5 core nodes (3 crate versions encoded)
   selections: 1
   loaded: 2 crates, 3 versions
