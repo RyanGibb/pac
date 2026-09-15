@@ -71,3 +71,32 @@ gadget's One selects the right branch -- so that this is what falls out:
     alt1.1
     pick.1
   loaded: 4 names, 4 package versions
+
+A conflict class admits at most one name.  cc-a.1, cc-b.1 and cc-b.2 all
+declare the class "ccls"; the gadget package for that class has one version
+per declaring name, each declarer depends on it at its own name, and version
+uniqueness does the excluding -- so two versions of cc-b never exclude each
+other, exactly as opam's own rule, which removes the declarer's own name
+from the member map, does not.  cc-pick prefers cc-b, being the alternative
+written first, but cannot have it beside cc-a and falls back to cc-plain.
+The class name is also a package name here, and ccls.1 is installed
+regardless: a class and a real package of the same name are separate target
+names, as opam's ocaml-system -- both a class and a package -- requires.
+
+  $ ../../../src/main.exe opam . cc-pick | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (4, core solution 8 nodes):
+    cc-a.1
+    cc-pick.1
+    cc-plain.1
+    ccls.1
+  loaded: 5 names, 6 package versions
+
+Asking for both names of the class outright has no resolution, and the
+gadget is what the explanation names:
+
+  $ ../../../src/main.exe opam . cc-both | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  Because cc-a 1 -> conflict-class:ccls cc-a and cc-b 2 -> conflict-class:ccls cc-b, cc-a * or cc-b * is forbidden..
+  And because cc-both 1 -> cc-a 1 and cc-both 1 -> cc-b 1 ∪ 2, cc-both * is forbidden.
+  And because root () -> cc-both 1 and root -> root (), version solving failed.
+  loaded: 3 names, 4 package versions

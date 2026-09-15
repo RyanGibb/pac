@@ -1,8 +1,8 @@
 (* opam solving over the verified pipeline, deb_solve-style: the archive
    lives in hashtables; the extracted per-package/per-name lookups are
    called on slice instances justified by Opam.dependees_lookup* /
-   versions_lookupReal, which evaluate every filter against [rho] as they
-   run; each package's package-formula rows are then reduced to core edges
+   Opam.versions_lookup*, which evaluate every filter against [rho] as
+   they run; each package's package-formula rows are then reduced to core edges
    by the extracted PackageFormula reduction on its own sub-instance;
    PubGrub solves the accumulated core graph lazily.  Trusted here (TCB):
    the parser, the version comparator, the valuation defaults, and the
@@ -150,24 +150,19 @@ let class_members ar k =
    loads every one of them; available filters ride along with the name
    they belong to; depexts_of reads the selected packages' own rows.
 
-   Conflict classes are the exception.  clsForms gives a package one
-   negative dependency per same-class partner of a different name, and
-   that partner set is the class relation's preimage at the class -- no
-   row of any one package names the others -- so class_idx holds the
-   members among the names loaded so far and may grow after a package has
-   been reduced.  Two things keep that honest.  A class-membership answer
-   is never memoised: cls_rows recomputes it from class_idx at every ask,
-   so a package parsed later is simply there.  And recomputing is not by
-   itself enough, because PubGrub consumes a node's dependency list once
-   and need not ask again, so a partner that arrives after the ask would
-   never reach the search: Make.solve records, for each package it
-   reduces, how many members each of that package's classes had at the
-   time, and re-runs the whole search on the now-warmer archive if any of
-   those counts grew.  The archive only grows and the repository is
-   finite, so the re-runs converge; in practice they do not fire at all,
-   because a class's members are the alternatives of one disjunction --
-   ocaml-base-compiler | ocaml-variants | ocaml-system | ... -- and
-   rowNames loads all of them together, before any of them is reduced. *)
+   Conflict classes are the exception, and only on one side.  A package's
+   class formulas are read off its own declarations, so inst_for stays
+   local; what is a preimage is the class gadget's version list, which is
+   every declarer of the class and which no row of any one package names.
+   class_idx therefore holds the declarers among the names loaded so far
+   and may grow at any point in the run.  Not memoising is enough here,
+   where it would not have been under a pairwise encoding: the growing
+   answer is a versions answer, and PubGrub re-asks a name for its
+   versions at every propagation step, whereas it consumes a node's
+   dependency list once.  So cls_inst rebuilds the slice from class_idx
+   at every ask and a declarer parsed later is simply there.  A gadget
+   version is also never asked for before its claimant's name has loaded,
+   since the claim is that package's own edge. *)
 
 module Make () = struct
   module Op = E.Opam (SName) (OVerOT) (SName) (OVerOT) (SName)
@@ -266,13 +261,9 @@ module Make () = struct
         (fun (cn, (g, c)) -> (p, (cn, (xfilt g, xvc c))))
         m.Opam_parse.conflicts
     in
-    (* read afresh, never held: this is the one slice that can grow *)
-    let cls_rows =
-      List.concat_map
-        (fun k ->
-          ((n, v), k) :: List.map (fun q -> (q, k)) (class_members ar k))
-        m.Opam_parse.classes
-    in
+    (* only this package's own declarations: the class gadget carries the
+       partners, so no partner's rows are read here *)
+    let cls_rows = List.map (fun k -> ((n, v), k)) m.Opam_parse.classes in
     let dxt_rows =
       List.map (fun (e, g) -> (p, (e, xfilt g))) m.Opam_parse.depexts
     in
@@ -321,6 +312,24 @@ module Make () = struct
       inst_pind = [];
       inst_goal = Op.OFAtom (goal, Op.FlTrue, Op.VCTop);
       inst_inv = Op.OFAtom (goal, Op.FlFalse, Op.VCTop);
+    }
+
+  (* Op.Reduction.classSlice: the class relation restricted to k, which is
+     all the gadget's version lookup reads.  Built from class_idx at every
+     ask and never held -- see the note above [Make]. *)
+  let cls_inst ar (k : string) : Op.coq_Inst =
+    {
+      Op.inst_repo = Op.PkgSet.empty;
+      inst_dep = [];
+      inst_dpo = [];
+      inst_cfl = [];
+      inst_cls = clsrel_of (List.map (fun q -> (q, k)) (class_members ar k));
+      inst_avl = [];
+      inst_dxt = [];
+      inst_pins = Op.PkgSet.empty;
+      inst_pind = [];
+      inst_goal = dummy;
+      inst_inv = dummy;
     }
 
   let name_inst ar (n : string) : Op.coq_Inst =
@@ -383,6 +392,7 @@ module Make () = struct
       match tn with
       | Red.TName.Root -> Format.fprintf fmt "root"
       | Red.TName.Real n -> Format.fprintf fmt "%s" n
+      | Red.TName.Cls k -> Format.fprintf fmt "conflict-class:%s" k
 
     let pp fmt (n : t) =
       match n with
@@ -421,6 +431,7 @@ module Make () = struct
       match x.v with
       | PFR.Version.Orig (Red.TVer.RV v) -> Format.fprintf fmt "%s" v
       | PFR.Version.Orig Red.TVer.UnitV -> Format.fprintf fmt "()"
+      | PFR.Version.Orig (Red.TVer.NV n) -> Format.fprintf fmt "%s" n
       | PFR.Version.Zero -> Format.fprintf fmt "z0"
       | PFR.Version.One -> Format.fprintf fmt "z1"
   end
@@ -447,9 +458,6 @@ module Make () = struct
     gadget_vers : (PFR.Name.t, PVersion.t list) Hashtbl.t;
     processed : (PF.Pkg.t, unit) Hashtbl.t;
     real_vers : (string, PVersion.t list) Hashtbl.t;
-    (* per reduced package, how many members each of its own conflict
-       classes had when its rows were read; the one thing a later load can
-       invalidate *)
     mutable canon : PFR.Name.t NameMap.t;
   }
 
@@ -528,114 +536,112 @@ module Make () = struct
     let root_q =
       (PFR.Name.Orig Red.TName.Root, PFR.Version.Orig Red.TVer.UnitV)
     in
-    (* One pass of the search over the archive as it stands.  PubGrub
-       consumes a node's dependencies once, so a conflict-class partner
-       that loads after that node was asked never reaches it; the caller
-       re-enters here on the warmer archive when that happened. *)
-    let attempt () =
-      let st = mk_state ar in
-      nproc := 0;
-      (* Wall time inside the two callbacks; the rest of PG.solve is
-         PubGrub's own search.  Only accumulated when verbose, and with
-         gettimeofday rather than Sys.time: the callbacks run ~10^6 times
-         per solve and a getrusage syscall each would be seconds. *)
-      let t_callbacks = ref 0. in
-      let timed f =
-        if verbose then begin
-          let t0 = Unix.gettimeofday () in
-          let r = f () in
-          t_callbacks := !t_callbacks +. (Unix.gettimeofday () -. t0);
-          r
-        end
-        else f ()
-      in
-      let versions (tn : PFR.Name.t) : PVersion.t list =
-        timed @@ fun () ->
-        match tn with
-        | PFR.Name.Orig (Red.TName.Real n) -> (
-            try Hashtbl.find st.real_vers n
-            with Not_found ->
-              let vs =
-                PF.VSet.elements
-                  (Red.versions rho (name_inst ar n) (Red.TName.Real n))
-              in
-              let vs =
-                List.map (fun tv -> tag ar tn (PFR.Version.Orig tv)) vs
-              in
-              Hashtbl.replace st.real_vers n vs;
-              vs)
-        | PFR.Name.Orig Red.TName.Root ->
-            [ { PVersion.avoid = false; v = PFR.Version.Orig Red.TVer.UnitV } ]
-        | _ -> ( try Hashtbl.find st.gadget_vers tn with Not_found -> [])
-      in
-      let deps_cache = Hashtbl.create 65536 in
-      let nq = ref 0 in
-      let dependencies (tn : PFR.Name.t) ({ PVersion.v = tv; _ } : PVersion.t) =
-        incr nq;
-        if verbose && !nq mod 10000 = 0 then
-          Printf.eprintf "[q%d] %.1fs\n%!" !nq (Sys.time ());
-        timed @@ fun () ->
-        try Hashtbl.find deps_cache (tn, tv)
-        with Not_found ->
-          let r =
-            (match (tn, tv) with
-            | PFR.Name.Orig Red.TName.Root, _ ->
-                process st Red.rootPkg (root_inst ar goal)
-            | PFR.Name.Orig (Red.TName.Real n), PFR.Version.Orig (Red.TVer.RV v)
-              ->
-                process st
-                  (Red.TName.Real n, Red.TVer.RV v)
-                  (inst_for ar (n, v))
-            | _ -> ());
-            let hs =
-              try Hashtbl.find st.edges (tn, tv)
-              with Not_found -> T.DependeesSet.empty
-            in
-            List.map
-              (fun ((m, vs) : T.Dependees.t) ->
-                ( intern st m,
-                  PG.Ranges.of_list (List.map (tag ar m) (T.VSet.elements vs))
-                ))
-              (T.DependeesSet.elements hs)
-          in
-          Hashtbl.replace deps_cache (tn, tv) r;
-          r
-      in
-      let goal_range = PG.Ranges.of_list (versions (fst root_q)) in
-      let t0 = Unix.gettimeofday () in
-      let result =
-        PG.solve ~versions ~dependencies [ (fst root_q, goal_range) ]
-      in
+    let st = mk_state ar in
+    nproc := 0;
+    (* Wall time inside the two callbacks; the rest of PG.solve is
+       PubGrub's own search.  Only accumulated when verbose, and with
+       gettimeofday rather than Sys.time: the callbacks run ~10^6 times
+       per solve and a getrusage syscall each would be seconds. *)
+    let t_callbacks = ref 0. in
+    let timed f =
       if verbose then begin
-        let total = Unix.gettimeofday () -. t0 in
-        Printf.eprintf
-          "PG.solve %.2fs: %.2fs in callbacks (%d dependencies queries, %d \
-           packages reduced), %.2fs PubGrub\n\
-           %!"
-          total !t_callbacks !nq !nproc (total -. !t_callbacks)
-      end;
-      match result with
-      | Error inc ->
-          Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
-          None
-      | Ok sol ->
-          (* back through the proved decoders, in the two layers the
+        let t0 = Unix.gettimeofday () in
+        let r = f () in
+        t_callbacks := !t_callbacks +. (Unix.gettimeofday () -. t0);
+        r
+      end
+      else f ()
+    in
+    let versions (tn : PFR.Name.t) : PVersion.t list =
+      timed @@ fun () ->
+      match tn with
+      | PFR.Name.Orig (Red.TName.Real n) -> (
+          try Hashtbl.find st.real_vers n
+          with Not_found ->
+            let vs =
+              PF.VSet.elements
+                (Red.versions rho (name_inst ar n) (Red.TName.Real n))
+            in
+            let vs = List.map (fun tv -> tag ar tn (PFR.Version.Orig tv)) vs in
+            Hashtbl.replace st.real_vers n vs;
+            vs)
+      | PFR.Name.Orig Red.TName.Root ->
+          [ { PVersion.avoid = false; v = PFR.Version.Orig Red.TVer.UnitV } ]
+      (* The one name that cannot be held: its versions are the whole
+         preimage of the class relation at k, so class_idx knows only the
+         declarers among the names loaded so far.  Recomputing the handful
+         of rows at every ask lets a declarer parsed later simply be
+         there, where a cache would freeze the answer mid-run. *)
+      | PFR.Name.Orig (Red.TName.Cls k) ->
+          List.map
+            (fun tv -> tag ar tn (PFR.Version.Orig tv))
+            (PF.VSet.elements
+               (Red.versions rho (cls_inst ar k) (Red.TName.Cls k)))
+      | _ -> ( try Hashtbl.find st.gadget_vers tn with Not_found -> [])
+    in
+    let deps_cache = Hashtbl.create 65536 in
+    let nq = ref 0 in
+    let dependencies (tn : PFR.Name.t) ({ PVersion.v = tv; _ } : PVersion.t) =
+      incr nq;
+      if verbose && !nq mod 10000 = 0 then
+        Printf.eprintf "[q%d] %.1fs\n%!" !nq (Sys.time ());
+      timed @@ fun () ->
+      try Hashtbl.find deps_cache (tn, tv)
+      with Not_found ->
+        let r =
+          (match (tn, tv) with
+          | PFR.Name.Orig Red.TName.Root, _ ->
+              process st Red.rootPkg (root_inst ar goal)
+          | PFR.Name.Orig (Red.TName.Real n), PFR.Version.Orig (Red.TVer.RV v)
+            ->
+              process st (Red.TName.Real n, Red.TVer.RV v) (inst_for ar (n, v))
+          | _ -> ());
+          let hs =
+            try Hashtbl.find st.edges (tn, tv)
+            with Not_found -> T.DependeesSet.empty
+          in
+          List.map
+            (fun ((m, vs) : T.Dependees.t) ->
+              ( intern st m,
+                PG.Ranges.of_list (List.map (tag ar m) (T.VSet.elements vs)) ))
+            (T.DependeesSet.elements hs)
+        in
+        Hashtbl.replace deps_cache (tn, tv) r;
+        r
+    in
+    let goal_range = PG.Ranges.of_list (versions (fst root_q)) in
+    let t0 = Unix.gettimeofday () in
+    let result =
+      PG.solve ~versions ~dependencies [ (fst root_q, goal_range) ]
+    in
+    if verbose then begin
+      let total = Unix.gettimeofday () -. t0 in
+      Printf.eprintf
+        "PG.solve %.2fs: %.2fs in callbacks (%d dependencies queries, %d \
+         packages reduced), %.2fs PubGrub\n\
+         %!"
+        total !t_callbacks !nq !nproc (total -. !t_callbacks)
+    end;
+    match result with
+    | Error inc ->
+        Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
+        None
+    | Ok sol ->
+        (* back through the proved decoders, in the two layers the
            reduction composes: the core solution decodes to the package
            formula's packages, and those to opam's.  Reading the reals off
-           the solution here instead would be a third, unproved, decoder --
-           and it is what the soundness theorem is stated about. *)
-          let core =
-            T.PkgSet.ofList
-              (List.map
-                 (fun ((tn, { PVersion.v = tv; _ }) : PFR.Name.t * PVersion.t)
-                    -> (tn, tv))
-                 sol)
-          in
-          let reals =
-            Op.PkgSet.elements (Red.decodeS (PFR.packageFormulaResolution core))
-          in
-          let reals = List.sort compare reals in
-          Some (reals, List.length sol, depexts_of ar reals)
-    in
-    attempt ()
+           the solution here instead would be a third, unproved, decoder
+           -- and it is what the soundness theorem is stated about. *)
+        let core =
+          T.PkgSet.ofList
+            (List.map
+               (fun ((tn, { PVersion.v = tv; _ }) : PFR.Name.t * PVersion.t) ->
+                 (tn, tv))
+               sol)
+        in
+        let reals =
+          Op.PkgSet.elements (Red.decodeS (PFR.packageFormulaResolution core))
+        in
+        let reals = List.sort compare reals in
+        Some (reals, List.length sol, depexts_of ar reals)
 end

@@ -266,16 +266,25 @@ Module Opam (N V X Y E : UsualOrderedType).
     #[local] Hint Extern 1 => cmp_by VF'.compare_lt_trans : cmp_opam.
 
     (* Target names: a synthetic root carrying the request (opam has no
-       root package -- the goal and switch invariant are formulas) and the
-       real opam packages.  There is no name for a filter variable: the
-       reduction evaluates filters under rho as opam's own pre-pass does,
-       so no variable survives into the target.  There is no name for a
-       system package either: a depext cannot decide between opam
-       packages, so nothing external reaches the target. *)
+       root package -- the goal and switch invariant are formulas), the
+       real opam packages, and one shared gadget per conflict class.
+       There is no name for a filter variable: the reduction evaluates
+       filters under rho as opam's own pre-pass does, so no variable
+       survives into the target.  There is no name for a system package
+       either: a depext cannot decide between opam packages, so nothing
+       external reaches the target.
+
+       Cls is a separate constructor rather than Real applied to the class
+       name because the two namespaces overlap: opam's ocaml-system is
+       both a conflict class (declared by system-mingw and system-msvc)
+       and a package, and that package declares the unrelated class
+       ocaml-core-compiler.  Conflating them would fuse one name's
+       versions with another class's claimants. *)
     Module TName.
       Inductive name : Type :=
       | Root
-      | Real (n : N.t).
+      | Real (n : N.t)
+      | Cls (k : N.t).
       Definition t := name.
 
       Definition compare (x y : t) : comparison :=
@@ -284,6 +293,9 @@ Module Opam (N V X Y E : UsualOrderedType).
         | Root, _ => Lt
         | _, Root => Gt
         | Real n1, Real n2 => N.compare n1 n2
+        | Real _, _ => Lt
+        | _, Real _ => Gt
+        | Cls k1, Cls k2 => N.compare k1 k2
         end.
 
       Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
@@ -299,19 +311,31 @@ Module Opam (N V X Y E : UsualOrderedType).
     End TName.
     Module TNOT := UOTFromCompare TName.
 
-    (* The root carries a unit version. *)
+    (* The root carries a unit version; a class gadget's versions are the
+       names of the class's declarers.  Keying them by name and not by
+       package is what reproduces opam's rule, which is stated over names
+       ("any two packages having a common conflict class") and implemented
+       by removing the declarer's own name from the member map: every
+       version of a member claims the same gadget version, so two versions
+       of one package never exclude each other through a class, while two
+       different names claiming one gadget version are ruled out by the
+       target's version uniqueness. *)
     Module TVer.
       Inductive version : Type :=
       | RV (v : V.t)
-      | UnitV.
+      | UnitV
+      | NV (n : N.t).
       Definition t := version.
 
       Definition compare (x y : t) : comparison :=
         match x, y with
         | RV v1, RV v2 => V.compare v1 v2
-        | RV _, UnitV => Lt
-        | UnitV, RV _ => Gt
+        | RV _, _ => Lt
+        | _, RV _ => Gt
         | UnitV, UnitV => Eq
+        | UnitV, _ => Lt
+        | _, UnitV => Gt
+        | NV n1, NV n2 => N.compare n1 n2
         end.
 
       Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
@@ -416,10 +440,6 @@ Module Opam (N V X Y E : UsualOrderedType).
         (c : VConstraint) : PF.VSet.t :=
       if N.eq_dec (fst p) n then PF.VSet.empty else versSetBy Vq n c.
 
-    Definition memberAtom (q : Pkg.t) : PF.Formula :=
-      PF.FDep (TName.Real (fst q))
-        (PF.VSet.singleton (TVer.RV (snd q))).
-
     Module FSet := FSetUOT PF.Dependees.
     Module NSet := FSetUOT N.
 
@@ -448,17 +468,41 @@ Module Opam (N V X Y E : UsualOrderedType).
         (p : Pkg.t) : list PF.Formula :=
       List.map (cflForm rho Vq p) (ownRows p (inst_cfl I)).
 
-    (* Conflict classes as pairwise prohibitions: p forbids every
-       same-class partner with a different name. *)
+    (* Conflict classes through a shared gadget, one package per class,
+       whose versions are the declaring names.  A declarer depends on its
+       class's gadget at its own name, so two declarers of different names
+       demand two versions of one gadget name and version uniqueness
+       refuses them -- the same exclusion opam writes as a quadratic web
+       of pairwise conflicts, by a linear mechanism: a class of n
+       declarers costs n edges here and n^2 there, which on opam's own
+       largest class is a couple of hundred terms against tens of
+       thousands. *)
     Module SOcf := SetOps ClsElt PF.Dependees ClsRel FSet.
     Definition clsForms (cls : ClsRel.t) (p : Pkg.t) : FSet.t :=
       SOcf.filterMap
         (fun '(q, k) =>
-           if ClsRel.mem (p, k) cls
-           then
-             if N.eq_dec (fst q) (fst p) then None
-             else Some (PF.FNeg (memberAtom q))
+           if Pkg.eq_dec q p
+           then Some (PF.FDep (TName.Cls k)
+                        (PF.VSet.singleton (TVer.NV (fst p))))
            else None)
+        cls.
+
+    (* The gadget packages themselves: one version per declaring name of
+       each class.  They carry no outgoing formula (dependeesBy answers
+       FSet.empty at them), so they constrain only by being claimed. *)
+    Module SOcp := SetOps ClsElt PF.Pkg ClsRel PF.PkgSet.
+    Definition clsPkg (qk : ClsElt.t) : PF.Pkg.t :=
+      (TName.Cls (snd qk), TVer.NV (fst (fst qk))).
+
+    Definition clsPkgs (cls : ClsRel.t) : PF.PkgSet.t :=
+      SOcp.map clsPkg cls.
+
+    (* The gadget versions a class has: the names that declare it. *)
+    Module SOcv := SetOps ClsElt TVOT ClsRel PF.VSet.
+    Definition clsVersions (cls : ClsRel.t) (k : N.t) : PF.VSet.t :=
+      SOcv.filterMap
+        (fun '(q, k') =>
+           if N.eq_dec k' k then Some (TVer.NV (fst q)) else None)
         cls.
 
     Definition pindForm (Vq : N.t -> VSet.t) (nvu : Pkg.t * Y.t)
@@ -503,13 +547,15 @@ Module Opam (N V X Y E : UsualOrderedType).
       match tn with
       | TName.Root => PF.VSet.singleton TVer.UnitV
       | TName.Real n => SOvv.map TVer.RV (srcVersions rho I n)
+      | TName.Cls k => clsVersions (inst_cls I) k
       end.
 
     (* -- derived aggregation: the global translation -- *)
 
     Definition transR (rho : Valuation) (I : Inst) : PF.PkgSet.t :=
       PF.PkgSet.union (embedSet (effRepo rho I))
-        (PF.PkgSet.singleton rootPkg).
+        (PF.PkgSet.union (PF.PkgSet.singleton rootPkg)
+           (clsPkgs (inst_cls I))).
 
     Module SOfd := SetOps PF.Dependees PF.DepElt FSet PF.DepRel.
     Definition depEdges (q : PF.Pkg.t) (fs : FSet.t) : PF.DepRel.t :=
@@ -520,8 +566,14 @@ Module Opam (N V X Y E : UsualOrderedType).
       SOqd.unionMap (fun q => depEdges q (dependees rho I q))
         (transR rho I).
 
-    Definition transS (S : PkgSet.t) : PF.PkgSet.t :=
-      PF.PkgSet.union (embedSet S) (PF.PkgSet.singleton rootPkg).
+    (* The gadget versions a selection claims: one per class a selected
+       package declares, at that package's name. *)
+    Definition clsSel (cls : ClsRel.t) (S : PkgSet.t) : PF.PkgSet.t :=
+      SOcp.map clsPkg (ClsRel.filter (fun qk => PkgSet.mem (fst qk) S) cls).
+
+    Definition transS (cls : ClsRel.t) (S : PkgSet.t) : PF.PkgSet.t :=
+      PF.PkgSet.union (embedSet S)
+        (PF.PkgSet.union (PF.PkgSet.singleton rootPkg) (clsSel cls S)).
 
     Module SOtp := SetOps PF.Pkg Pkg PF.PkgSet PkgSet.
     Definition tryInvPkg (q : PF.Pkg.t) : option Pkg.t :=
@@ -578,11 +630,54 @@ Module Opam (N V X Y E : UsualOrderedType).
       intros S' n v; unfold decodeS; rewrite SOtp.mem_filterMap.
       split.
       - intros [[tn tv] [Hm Hf]];
-          destruct tn as [| m]; destruct tv as [w |];
+          destruct tn as [| m | k]; destruct tv as [w | | m'];
           simpl in Hf; try discriminate.
         injection Hf as -> ->; exact Hm.
       - intro H; exists (TName.Real n, TVer.RV v); split;
           [exact H | reflexivity].
+    Qed.
+
+    Lemma mem_clsPkgs : forall cls q,
+        PF.PkgSet.In q (clsPkgs cls) <->
+        exists p k, ClsRel.In (p, k) cls /\
+                    q = (TName.Cls k, TVer.NV (fst p)).
+    Proof.
+      intros cls q; unfold clsPkgs; rewrite SOcp.mem_map; split.
+      - intros [[p k] [Hm ->]]; exists p, k; split;
+          [exact Hm | reflexivity].
+      - intros [p [k [Hm ->]]]; exists (p, k); split;
+          [exact Hm | reflexivity].
+    Qed.
+
+    Lemma mem_clsSel : forall cls S q,
+        PF.PkgSet.In q (clsSel cls S) <->
+        exists p k, PkgSet.In p S /\ ClsRel.In (p, k) cls /\
+                    q = (TName.Cls k, TVer.NV (fst p)).
+    Proof.
+      intros cls S q; unfold clsSel; rewrite SOcp.mem_map; split.
+      - intros [[p k] [Hm ->]]; apply ClsRel.filter_spec' in Hm;
+          destruct Hm as [Hm Hs]; simpl in Hs.
+        exists p, k; split;
+          [apply PkgSet.mem_spec; exact Hs
+          | split; [exact Hm | reflexivity]].
+      - intros [p [k [Hs [Hm ->]]]]; exists (p, k); split;
+          [| reflexivity].
+        apply ClsRel.filter_spec'; split;
+          [exact Hm | simpl; apply PkgSet.mem_spec; exact Hs].
+    Qed.
+
+    Lemma mem_clsVersions : forall cls k tv,
+        PF.VSet.In tv (clsVersions cls k) <->
+        exists p, ClsRel.In (p, k) cls /\ tv = TVer.NV (fst p).
+    Proof.
+      intros cls k tv; unfold clsVersions; rewrite SOcv.mem_filterMap.
+      split.
+      - intros [[p k'] [Hm Hf]]; cbn beta iota in Hf.
+        destruct (N.eq_dec k' k) as [-> |]; [| discriminate].
+        injection Hf as <-; exists p; split; [exact Hm | reflexivity].
+      - intros [p [Hm ->]]; exists (p, k); split; [exact Hm |].
+        cbn beta iota; destruct (N.eq_dec k k) as [_ | NE];
+          [reflexivity | contradiction NE; reflexivity].
     Qed.
 
     Definition PinOK (Pins : PkgSet.t) (p : Pkg.t) : Prop :=
@@ -622,39 +717,79 @@ Module Opam (N V X Y E : UsualOrderedType).
     Lemma mem_transR : forall rho I q,
         PF.PkgSet.In q (transR rho I) <->
         (exists p, PkgSet.In p (effRepo rho I) /\ q = embedPkg p) \/
-        q = rootPkg.
+        q = rootPkg \/
+        (exists p k, ClsRel.In (p, k) (inst_cls I) /\
+                     q = (TName.Cls k, TVer.NV (fst p))).
     Proof.
       intros rho I q; unfold transR, embedSet.
-      rewrite PF.PkgSet.union_spec, PF.PkgSet.singleton_spec,
-        SOpt.mem_map.
+      rewrite !PF.PkgSet.union_spec, PF.PkgSet.singleton_spec,
+        SOpt.mem_map, mem_clsPkgs.
       tauto.
     Qed.
 
-    Lemma mem_transS : forall S q,
-        PF.PkgSet.In q (transS S) <->
-        (exists p, PkgSet.In p S /\ q = embedPkg p) \/ q = rootPkg.
+    Lemma mem_transS : forall cls S q,
+        PF.PkgSet.In q (transS cls S) <->
+        (exists p, PkgSet.In p S /\ q = embedPkg p) \/ q = rootPkg \/
+        (exists p k, PkgSet.In p S /\ ClsRel.In (p, k) cls /\
+                     q = (TName.Cls k, TVer.NV (fst p))).
     Proof.
-      intros S q; unfold transS, embedSet.
-      rewrite PF.PkgSet.union_spec, PF.PkgSet.singleton_spec,
-        SOpt.mem_map.
+      intros cls S q; unfold transS, embedSet.
+      rewrite !PF.PkgSet.union_spec, PF.PkgSet.singleton_spec,
+        SOpt.mem_map, mem_clsSel.
       tauto.
     Qed.
 
-    Lemma mem_transS_real : forall S n v,
-        PF.PkgSet.In (TName.Real n, TVer.RV v) (transS S) <->
+    Lemma mem_transS_real : forall cls S n v,
+        PF.PkgSet.In (TName.Real n, TVer.RV v) (transS cls S) <->
         PkgSet.In (n, v) S.
     Proof.
-      intros S n v; rewrite mem_transS; split.
-      - intros [[p [Hp He]] | He]; [| discriminate].
+      intros cls S n v; rewrite mem_transS; split.
+      - intros [[p [Hp He]] | [He | [p [k [_ [_ He]]]]]];
+          try discriminate.
         destruct p as [m w]; unfold embedPkg in He; simpl in He.
         injection He as -> ->; exact Hp.
       - intro H; left; exists (n, v); split; [exact H | reflexivity].
     Qed.
 
-    Lemma decode_transS : forall S, decodeS (transS S) = S.
+    Lemma decode_transS : forall cls S, decodeS (transS cls S) = S.
     Proof.
-      intros S; apply PkgSet.ext; intros [n v].
+      intros cls S; apply PkgSet.ext; intros [n v].
       rewrite mem_decodeS, mem_transS_real; reflexivity.
+    Qed.
+
+    (* Each target name draws its versions from one branch of transS, so
+       version uniqueness splits three ways rather than nine. *)
+    Lemma transS_at_root : forall cls S tv,
+        PF.PkgSet.In (TName.Root, tv) (transS cls S) -> tv = TVer.UnitV.
+    Proof.
+      intros cls S tv H; apply mem_transS in H.
+      destruct H as [[[m w] [_ He]] | [He | [p [k [_ [_ He]]]]]];
+        unfold embedPkg, rootPkg in He; try discriminate.
+      injection He as ->; reflexivity.
+    Qed.
+
+    Lemma transS_at_real : forall cls S n tv,
+        PF.PkgSet.In (TName.Real n, tv) (transS cls S) ->
+        exists v, tv = TVer.RV v /\ PkgSet.In (n, v) S.
+    Proof.
+      intros cls S n tv H; apply mem_transS in H.
+      destruct H as [[[m w] [Hp He]] | [He | [p [k [_ [_ He]]]]]];
+        unfold embedPkg, rootPkg in He; cbn [fst snd] in He;
+        try discriminate.
+      injection He as -> ->; exists w; split; [reflexivity | exact Hp].
+    Qed.
+
+    Lemma transS_at_cls : forall cls S k tv,
+        PF.PkgSet.In (TName.Cls k, tv) (transS cls S) ->
+        exists p, tv = TVer.NV (fst p) /\ PkgSet.In p S /\
+                  ClsRel.In (p, k) cls.
+    Proof.
+      intros cls S k tv H; apply mem_transS in H.
+      destruct H as [[[m w] [_ He]] | [He | [p [k' [Hp [Hpk He]]]]]];
+        unfold embedPkg, rootPkg in He; cbn [fst snd] in He;
+        try discriminate.
+      injection He as -> ->; exists p; split;
+        [reflexivity | split; [exact Hp | exact Hpk]].
     Qed.
 
     Lemma PTrue_sat : forall S', PF.Satisfies S' PTrue.
@@ -732,9 +867,9 @@ Module Opam (N V X Y E : UsualOrderedType).
                     f = encodeOF rho Vq f0) \/
         (exists nc, In ((n, v), nc) (inst_cfl I) /\
                     f = cflForm rho Vq (n, v) nc) \/
-        (exists q k, ClsRel.In ((n, v), k) (inst_cls I) /\
-                     ClsRel.In (q, k) (inst_cls I) /\ fst q <> n /\
-                     f = PF.FNeg (memberAtom q)) \/
+        (exists k, ClsRel.In ((n, v), k) (inst_cls I) /\
+                   f = PF.FDep (TName.Cls k)
+                         (PF.VSet.singleton (TVer.NV n))) \/
         (exists nvu, In ((n, v), nvu) (inst_pind I) /\
                      f = pindForm Vq nvu).
     Proof.
@@ -750,17 +885,12 @@ Module Opam (N V X Y E : UsualOrderedType).
         + destruct H as [nc [He Hnc]]; apply ownRows_in in Hnc.
           right; left; exists nc; auto.
         + destruct H as [[q k] [Hq He]]; cbn beta iota in He.
-          revert He.
+          revert Hq; revert He.
           match goal with
-          | |- (if ?b then _ else _) = _ -> _ => destruct b eqn:Hm
-          end; [| intro He; cbn iota in He; discriminate He].
-          cbn iota.
-          apply ClsRel.mem_spec in Hm.
-          match goal with
-          | |- (if ?d then _ else _) = _ -> _ => destruct d as [E | NE]
-          end; intro He; cbn iota in He; [discriminate He |].
-          injection He as <-.
-          right; right; left; exists q, k; simpl in NE; auto.
+          | |- (if ?d then _ else _) = _ -> _ => destruct d as [-> | NE]
+          end; intro He; cbn iota in He; [| discriminate He].
+          injection He as <-; intro Hq.
+          right; right; left; exists k; auto.
         + destruct H as [nvu [He Hnvu]]; apply ownRows_in in Hnvu.
           right; right; right; exists nvu; auto.
       - intros [H | [H | [H | H]]].
@@ -770,18 +900,12 @@ Module Opam (N V X Y E : UsualOrderedType).
         + destruct H as [nc [Hin ->]].
           right; left; exists nc; split;
             [reflexivity | apply ownRows_in; exact Hin].
-        + destruct H as [q [k [Hp [Hq [NE ->]]]]].
-          right; right; left; exists (q, k); split; [exact Hq |].
+        + destruct H as [k [Hp ->]].
+          right; right; left; exists ((n, v), k); split; [exact Hp |].
           cbn beta iota.
           match goal with
-          | |- (if ?b then _ else _) = _ =>
-              assert (Hb : b = true)
-                by (apply ClsRel.mem_spec; exact Hp);
-              rewrite Hb
-          end.
-          match goal with
-          | |- (if ?d then _ else _) = _ => destruct d as [E | _]
-          end; [simpl in E; contradiction NE; exact E | reflexivity].
+          | |- (if ?d then _ else _) = _ => destruct d as [_ | NE]
+          end; [reflexivity | contradiction NE; reflexivity].
         + destruct H as [nvu [Hin ->]].
           right; right; right; exists nvu; split;
             [reflexivity | apply ownRows_in; exact Hin].
@@ -826,7 +950,8 @@ Module Opam (N V X Y E : UsualOrderedType).
       { intros n v Hnv; apply mem_decodeS in Hnv.
         apply (PF.res_subset _ _ _ _ HR) in Hnv.
         apply mem_transR in Hnv.
-        destruct Hnv as [[p [Hp He]] | He]; [| discriminate].
+        destruct Hnv as [[p [Hp He]] | [He | [p [k [_ He]]]]];
+          try discriminate.
         destruct p as [m w]; unfold embedPkg in He; simpl in He.
         injection He as -> ->; exact Hp. }
       assert (HV : forall n v,
@@ -839,7 +964,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       { intros n v Hnv; apply mem_decodeS in Hnv; exact Hnv. }
       assert (Hroot := PF.res_root_mem _ _ _ _ HR).
       assert (HrootR : PF.PkgSet.In rootPkg (transR rho I)).
-      { apply mem_transR; right; reflexivity. }
+      { apply mem_transR; right; left; reflexivity. }
       assert (Hrow : PF.DepRel.In (rootPkg, rootForm rho
                        (srcVersions rho I) I) (transD rho I)).
       { apply mem_transD; split; [exact HrootR |].
@@ -892,18 +1017,27 @@ Module Opam (N V X Y E : UsualOrderedType).
         apply mem_versSetBy; exists v; split;
           [reflexivity
           | split; [exact (HV _ _ Hv) | exact Hh]].
+      (* Both declarers claim the class gadget, each at its own name; two
+         versions of the one gadget name is what version uniqueness
+         refuses. *)
       - intros k [pn pv] [qn qv] Hp Hq Hpk Hqk Hne.
-        assert (Hs : PF.Satisfies S'
-                       (PF.FNeg (memberAtom (qn, qv)))).
-        { apply (Hdeps _ _ _ Hp); unfold dependees.
-          apply mem_dependees_real; right; right; left.
-          exists (qn, qv), k; simpl.
-          repeat split; try assumption.
-          exact (not_eq_sym Hne). }
-        simpl in Hs; apply Hs; clear Hs.
-        exists (TVer.RV qv); split;
-          [apply PF.VSet.singleton_spec; reflexivity
-          | apply mem_decodeS; exact Hq].
+        assert (Hcl : forall m w,
+                   PkgSet.In (m, w) (decodeS S') ->
+                   ClsRel.In ((m, w), k) (inst_cls I) ->
+                   PF.PkgSet.In (TName.Cls k, TVer.NV m) S').
+        { intros m w Hm Hmk.
+          assert (Hs : PF.Satisfies S'
+                         (PF.FDep (TName.Cls k)
+                            (PF.VSet.singleton (TVer.NV m)))).
+          { apply (Hdeps _ _ _ Hm); unfold dependees.
+            apply mem_dependees_real; right; right; left.
+            exists k; split; [exact Hmk | reflexivity]. }
+          destruct Hs as [tv [Htv Hin]].
+          apply PF.VSet.singleton_spec in Htv; subst tv; exact Hin. }
+        assert (E := PF.res_version_unique _ _ _ _ HR (TName.Cls k)
+                       _ _ (Hcl _ _ Hp Hpk) (Hcl _ _ Hq Hqk)).
+        injection E as ->; simpl in Hne; contradiction Hne;
+          reflexivity.
       - intros n v Hpin v' Hv'.
         assert (H := Hsub _ _ Hv'); apply mem_effRepo in H.
         destruct H as [_ [Hp _]]; symmetry.
@@ -926,35 +1060,38 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Theorem opam_completeness : forall rho I S,
         IsResolution rho I S ->
-        PF.IsResolution (transR rho I) (transD rho I) rootPkg (transS S).
+        PF.IsResolution (transR rho I) (transD rho I) rootPkg
+          (transS (inst_cls I) S).
     Proof.
       intros rho I S HR.
       assert (Hse := res_sub_eff _ _ _ HR).
       assert (HV : forall n v,
-                 PkgSet.In (n, v) (decodeS (transS S)) ->
+                 PkgSet.In (n, v) (decodeS (transS (inst_cls I) S)) ->
                  VSet.In v (srcVersions rho I n)).
       { intros n v Hm; rewrite decode_transS in Hm.
         apply mem_srcVersions; exact (Hse _ Hm). }
       constructor.
       - intros q Hq; apply mem_transS in Hq; apply mem_transR.
-        destruct Hq as [[p [Hp ->]] | H]; [| tauto].
-        left; exists p; split; [exact (Hse _ Hp) | reflexivity].
-      - apply mem_transS; right; reflexivity.
+        destruct Hq as [[p [Hp ->]] | [H | [p [k [_ [Hpk ->]]]]]];
+          [| tauto |].
+        + left; exists p; split; [exact (Hse _ Hp) | reflexivity].
+        + right; right; exists p, k; split; [exact Hpk | reflexivity].
+      - apply mem_transS; right; left; reflexivity.
       - intros p' Hp' f' Hf'.
         apply mem_transD in Hf'; destruct Hf' as [_ Hf'].
         apply mem_transS in Hp'.
-        destruct Hp' as [[[pn pv] [Hp0 ->]] | ->].
+        destruct Hp' as [[[pn pv] [Hp0 ->]] | [-> | [p [k [_ [_ ->]]]]]].
         + unfold dependees in Hf'.
           apply mem_dependees_real in Hf'.
           destruct Hf'
             as [[f0 [Hin ->]] | [[nc [Hin ->]]
-               | [[q [k [Hpk [Hqk [NE ->]]]]] | [nvu [Hin ->]]]]].
+               | [[k [Hpk ->]] | [nvu [Hin ->]]]]].
           * apply (encodeOF_correct rho _ _ HV).
             rewrite decode_transS.
             exact (ores_dep_closure _ _ _ HR _ Hp0 _ Hin).
           * destruct nc as [n [g c]]; unfold cflForm; cbn [fst snd].
             destruct (defTrue rho g) eqn:Hg;
-              [| exact (PTrue_sat (transS S))].
+              [| exact (PTrue_sat (transS (inst_cls I) S))].
             cbn [PF.Satisfies]; intros [tv [Htv Hm]].
             unfold confVS in Htv.
             destruct (N.eq_dec (fst (pn, pv)) n) as [| Hne].
@@ -964,12 +1101,12 @@ Module Opam (N V X Y E : UsualOrderedType).
             apply mem_transS_real in Hm.
             exact (ores_conflict_avoidance _ _ _ HR _ Hp0 _ _ _ Hin
                      Hg _ Hm Hne Hh).
-          * destruct q as [qn qv]; simpl.
-            intros [tv [Htv Hm]].
-            apply PF.VSet.singleton_spec in Htv; subst tv.
-            apply mem_transS_real in Hm.
-            exact (ores_class_exclusion _ _ _ HR _ _ _ Hp0 Hm
-                     Hpk Hqk (not_eq_sym NE)).
+          * cbn [PF.Satisfies].
+            exists (TVer.NV pn); split;
+              [apply PF.VSet.singleton_spec; reflexivity |].
+            apply mem_transS; right; right.
+            exists (pn, pv), k; split;
+              [exact Hp0 | split; [exact Hpk | reflexivity]].
           * destruct nvu as [[n v] u]; unfold pindForm; simpl.
             intros [tv [Htv Hm]].
             apply SOvv.mem_map in Htv; destruct Htv as [v' [Hv' ->]].
@@ -983,16 +1120,22 @@ Module Opam (N V X Y E : UsualOrderedType).
           split; apply (encodeOF_correct rho _ _ HV);
             rewrite decode_transS;
             [exact (ores_goal _ _ _ HR) | exact (ores_invariant _ _ _ HR)].
-      - intros tn tv tv' Hv Hv'.
-        apply mem_transS in Hv, Hv'.
-        destruct Hv as [[[n v] [Hp He]] | He];
-          destruct Hv' as [[[n' w] [Hq He']] | He'];
-          unfold embedPkg, rootPkg in *;
-          injection He as E1 E2; injection He' as E1' E2';
-          subst; simpl in *; try discriminate; try reflexivity.
-        injection E1' as ->.
-        f_equal.
-        exact (ores_version_unique _ _ _ HR _ _ _ Hp Hq).
+        (* a class gadget carries no outgoing formula *)
+        + unfold dependees, dependeesBy in Hf'; cbn beta iota in Hf'.
+          destruct (FSet.empty_spec Hf').
+      - intros tn tv tv' Hv Hv'; destruct tn as [| n | k].
+        + rewrite (transS_at_root _ _ _ Hv),
+            (transS_at_root _ _ _ Hv'); reflexivity.
+        + destruct (transS_at_real _ _ _ _ Hv) as [v [-> Hp]].
+          destruct (transS_at_real _ _ _ _ Hv') as [w [-> Hq]].
+          f_equal; exact (ores_version_unique _ _ _ HR _ _ _ Hp Hq).
+        + destruct (transS_at_cls _ _ _ _ Hv) as [p [-> [Hp Hpk]]].
+          destruct (transS_at_cls _ _ _ _ Hv') as [q [-> [Hq Hqk]]].
+          f_equal.
+          destruct (N.eq_dec (fst p) (fst q)) as [E | NE];
+            [exact E |].
+          destruct (ores_class_exclusion _ _ _ HR _ _ _ Hp Hq
+                      Hpk Hqk NE).
     Qed.
 
     (* -- slice reuse: the lookup lemmas.  A package's rows read the
@@ -1024,8 +1167,18 @@ Module Opam (N V X Y E : UsualOrderedType).
            (listNames (fun nvu => NSet.singleton (fst (fst nvu)))
               (ownRows p (inst_pind I)))).
 
+    (* A package's class formulas read only its own declarations: the
+       gadget carries the partners, so no row of a partner is consulted
+       here.  A class name's versions are the other way round -- the whole
+       preimage of the relation at that class -- and that is the one
+       lookup whose slice no single package's rows determine. *)
     Definition clsSlice (cls : ClsRel.t) (p : Pkg.t) : ClsRel.t :=
-      ClsRel.filter (fun qk => ClsRel.mem (p, snd qk) cls) cls.
+      ClsRel.filter
+        (fun qk => if Pkg.eq_dec (fst qk) p then true else false) cls.
+
+    Definition clsNameSlice (cls : ClsRel.t) (k : N.t) : ClsRel.t :=
+      ClsRel.filter
+        (fun qk => if N.eq_dec (snd qk) k then true else false) cls.
 
     Definition pkgSlice (I : Inst) (p : Pkg.t) : Inst :=
       MkInst (nameRestrict (rowNames I p) (inst_repo I))
@@ -1044,6 +1197,10 @@ Module Opam (N V X Y E : UsualOrderedType).
         (inst_dep I) (inst_dpo I) (inst_cfl I) (inst_cls I)
         (inst_avl I) (inst_dxt I) (inst_pins I)
         (inst_pind I) (inst_goal I) (inst_inv I).
+
+    Definition classSlice (I : Inst) (k : N.t) : Inst :=
+      MkInst PkgSet.empty nil nil nil (clsNameSlice (inst_cls I) k)
+        nil nil PkgSet.empty nil (inst_goal I) (inst_inv I).
 
     Definition rootSlice (I : Inst) : Inst :=
       MkInst
@@ -1198,6 +1355,26 @@ Module Opam (N V X Y E : UsualOrderedType).
       apply NSet.singleton_spec; reflexivity.
     Qed.
 
+    (* The one lookup whose slice is a preimage: answering it needs every
+       declarer of k, which no single package's rows name.  A driver
+       uncovering the repository as it goes must therefore recompute this
+       answer at every ask rather than hold it, so a declarer parsed later
+       is simply there. *)
+    Theorem versions_lookupCls : forall rho I k,
+        versions rho (classSlice I k) (TName.Cls k) =
+        versions rho I (TName.Cls k).
+    Proof.
+      intros rho I k; cbn [versions classSlice inst_cls].
+      apply PF.VSet.ext; intro tv; rewrite !mem_clsVersions.
+      unfold clsNameSlice; split.
+      - intros [p [Hm ->]]; apply ClsRel.filter_spec' in Hm.
+        exists p; split; [tauto | reflexivity].
+      - intros [p [Hm ->]]; exists p; split; [| reflexivity].
+        apply ClsRel.filter_spec'; split; [exact Hm | cbn [snd]].
+        destruct (N.eq_dec k k) as [_ | NE];
+          [reflexivity | contradiction NE; reflexivity].
+    Qed.
+
     Theorem dependees_lookupRoot : forall rho I,
         dependees rho (rootSlice I) rootPkg = dependees rho I rootPkg.
     Proof.
@@ -1258,11 +1435,10 @@ Module Opam (N V X Y E : UsualOrderedType).
           apply (listNames_in _ _ _ _ nc);
             [apply ownRows_in; exact Hin
             | apply NSet.singleton_spec; reflexivity].
-        + destruct H as [q [k [Hpk [Hqk [NE ->]]]]].
-          unfold clsSlice in Hpk, Hqk.
+        + destruct H as [k [Hpk ->]].
+          unfold clsSlice in Hpk.
           apply ClsRel.filter_spec' in Hpk; destruct Hpk as [Hpk _].
-          apply ClsRel.filter_spec' in Hqk; destruct Hqk as [Hqk _].
-          right; right; left; exists q, k; auto.
+          right; right; left; exists k; auto.
         + destruct H as [nvu [Hin ->]].
           apply (proj1 (own_filter_in _ _ _ _)) in Hin.
           right; right; right; exists nvu; split;
@@ -1290,15 +1466,12 @@ Module Opam (N V X Y E : UsualOrderedType).
           apply (listNames_in _ _ _ _ nc);
             [apply ownRows_in; exact Hin
             | apply NSet.singleton_spec; reflexivity].
-        + destruct H as [q [k [Hpk [Hqk [NE ->]]]]].
-          right; right; left; exists q, k.
-          repeat split; try assumption.
-          * unfold clsSlice; apply ClsRel.filter_spec'; split;
-              [exact Hpk | simpl].
-            apply ClsRel.mem_spec; exact Hpk.
-          * unfold clsSlice; apply ClsRel.filter_spec'; split;
-              [exact Hqk | simpl].
-            apply ClsRel.mem_spec; exact Hpk.
+        + destruct H as [k [Hpk ->]].
+          right; right; left; exists k; split; [| reflexivity].
+          unfold clsSlice; apply ClsRel.filter_spec'; split;
+            [exact Hpk | cbn [fst]].
+          destruct (Pkg.eq_dec (n, v) (n, v)) as [_ | NE];
+            [reflexivity | contradiction NE; reflexivity].
         + destruct H as [nvu [Hin ->]].
           right; right; right; exists nvu; split;
             [apply (proj2 (own_filter_in _ _ _ _)); exact Hin |].
