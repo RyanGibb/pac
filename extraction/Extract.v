@@ -14,6 +14,11 @@ Set Extraction Output Directory ".".
    Closed under the global context (notes/validate.sh). *)
 Set Warnings "-extraction-opaque-accessed".
 
+(* lex is a function, so OCaml's strictness evaluates both legs of every
+   lexicographic comparison even when the first decides; inlining restores
+   the short circuit. *)
+Extraction Inline lex.
+
 Extraction "pac_extraction.ml"
   Smoke.C Smoke.Ver Smoke.Cfl Smoke.Conc Smoke.Peer Smoke.Vis
   Smoke.Feat Smoke.Virt Smoke.PkgF Smoke.VarF Smoke.FC Smoke.Op Smoke.Cgo Smoke.Alp
