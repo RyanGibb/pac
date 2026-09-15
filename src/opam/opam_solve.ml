@@ -1,11 +1,12 @@
 (* opam solving over the verified pipeline, deb_solve-style: the archive
    lives in hashtables; the extracted per-package/per-name lookups are
    called on slice instances justified by Opam.dependees_lookup* /
-   versions_lookupReal; each package's variable-formula rows are reduced
-   to core edges by the extracted VariableFormula reduction on its own
-   sub-instance (VF's reduceReal_lookup* precedent); PubGrub solves the
-   accumulated core graph lazily.  Trusted here (TCB): the parser, the
-   version comparator, the valuation defaults, and the plumbing. *)
+   versions_lookupReal, which evaluate every filter against [rho] as they
+   run; each package's package-formula rows are then reduced to core edges
+   by the extracted PackageFormula reduction on its own sub-instance;
+   PubGrub solves the accumulated core graph lazily.  Trusted here (TCB):
+   the parser, the version comparator, the valuation defaults, and the
+   plumbing. *)
 
 module E = Pac
 
@@ -169,40 +170,11 @@ let class_members ar k =
    rowNames loads all of them together, before any of them is reduced. *)
 
 module Make () = struct
-  module XF = struct
-    type t = string
-
-    let compare a b = c2r (compare (String.compare a b) 0)
-    let eq_dec (a : string) b = String.equal a b
-
-    (* X's inhabitants are opam's filter variables, of which there is no
-       finite listing to hand: a lazy run does not know which ones the
-       rows it has yet to read will mention, and enumerating them would
-       mean parsing the archive up front, which is the whole cost this
-       driver exists to avoid.  Nothing is lost by leaving it empty.  The
-       list has exactly two readers.  varBlock, in reduceReal, declares
-       (Var x, VarVal y) a package for each x -- but this driver never
-       reads Var candidates off reduceReal (record_real drops Var names);
-       the versions callback below answers Var x with yx x directly, for
-       every x, which is that block for the full universe rather than for
-       a list.  pinsFormula, at the root, conjoins x = pin rho x for each
-       x, to force the solved-for assignment to agree with rho; here yx x
-       is the singleton {pin rho x}, so every Var edge encodeNNF emits
-       already lands inside it and extractAssignment falls back to its
-       least element when no Var x node was forced at all -- the
-       assignment is rho pointwise whether or not the root says so, and
-       each conjunct is a dependency on a name with one candidate that
-       equals the pinned value.  Listing the archive's 4942 variables
-       therefore only added 4942 tautological root edges, and 4942 nodes
-       to the reported core solution size. *)
-    let enum = []
-  end
-
-  module Op = E.Opam (SName) (OVerOT) (XF) (OVerOT) (SName)
+  module Op = E.Opam (SName) (OVerOT) (SName) (OVerOT) (SName)
   module Red = Op.Reduction
-  module VF = Red.VF
-  module VR = VF.Reduction
-  module T = VR.T
+  module PF = Red.PF
+  module PFR = PF.Reduction
+  module T = PFR.T
 
   (* ---- valuation: the fixed environment ---- *)
 
@@ -401,11 +373,11 @@ module Make () = struct
   (* ---- PubGrub interface ---- *)
 
   module PName = struct
-    type t = VR.Name.t
+    type t = PFR.Name.t
 
     (* NameOT is a UsualOrderedType, so a name compares Eq to itself; the
        pointer test only skips the walk on interned names *)
-    let compare a b = if a == b then 0 else r2c (VR.NameOT.compare a b)
+    let compare a b = if a == b then 0 else r2c (PFR.NameOT.compare a b)
 
     let pp_t fmt (tn : Red.TName.t) =
       match tn with
@@ -414,10 +386,9 @@ module Make () = struct
 
     let pp fmt (n : t) =
       match n with
-      | VR.Name.Orig tn -> pp_t fmt tn
-      | VR.Name.Var x -> Format.fprintf fmt "var:%s" x
-      | VR.Name.Disjunct (_, _) -> Format.fprintf fmt "<disj>"
-      | VR.Name.NegDep (_, _) -> Format.fprintf fmt "<negdep>"
+      | PFR.Name.Orig tn -> pp_t fmt tn
+      | PFR.Name.Disjunct (_, _) -> Format.fprintf fmt "<disj>"
+      | PFR.Name.NegDep (_, _) -> Format.fprintf fmt "<negdep>"
   end
 
   (* PubGrub decides the compare-maximum candidate, so preference lives
@@ -438,52 +409,48 @@ module Make () = struct
      consistent with the tags on any range the same name is compared
      against. *)
   module PVersion = struct
-    type t = { avoid : bool; v : VR.Version.t }
+    type t = { avoid : bool; v : PFR.Version.t }
 
     let compare a b =
       match (a.avoid, b.avoid) with
       | true, false -> -1
       | false, true -> 1
-      | _ -> if a.v == b.v then 0 else r2c (VR.VersionOT.compare a.v b.v)
+      | _ -> if a.v == b.v then 0 else r2c (PFR.VersionOT.compare a.v b.v)
 
     let pp fmt (x : t) =
       match x.v with
-      | VR.Version.Orig (Red.TVer.RV v) -> Format.fprintf fmt "%s" v
-      | VR.Version.Orig Red.TVer.UnitV -> Format.fprintf fmt "()"
-      | VR.Version.Zero -> Format.fprintf fmt "z0"
-      | VR.Version.One -> Format.fprintf fmt "z1"
-      | VR.Version.VarVal Red.YU.Undef -> Format.fprintf fmt "undef"
-      | VR.Version.VarVal (Red.YU.YVal y) -> Format.fprintf fmt "%s" y
+      | PFR.Version.Orig (Red.TVer.RV v) -> Format.fprintf fmt "%s" v
+      | PFR.Version.Orig Red.TVer.UnitV -> Format.fprintf fmt "()"
+      | PFR.Version.Zero -> Format.fprintf fmt "z0"
+      | PFR.Version.One -> Format.fprintf fmt "z1"
   end
 
   module PG = Pubgrub.Make (PName) (PVersion)
 
-  let tag ar (tn : VR.Name.t) (tv : VR.Version.t) : PVersion.t =
+  let tag ar (tn : PFR.Name.t) (tv : PFR.Version.t) : PVersion.t =
     match (tn, tv) with
-    | VR.Name.Orig (Red.TName.Real n), VR.Version.Orig (Red.TVer.RV v) ->
+    | PFR.Name.Orig (Red.TName.Real n), PFR.Version.Orig (Red.TVer.RV v) ->
         { PVersion.avoid = avoided ar n v; v = tv }
     | _ -> { PVersion.avoid = false; v = tv }
 
   (* ---- lazy core graph from per-package reductions ---- *)
 
-  let yx x = VR.YSet.singleton (Red.pin rho x)
-
   module NameMap = Map.Make (struct
-    type t = VR.Name.t
+    type t = PFR.Name.t
 
-    let compare a b = r2c (VR.NameOT.compare a b)
+    let compare a b = r2c (PFR.NameOT.compare a b)
   end)
 
   type state = {
     ar : archive;
-    edges : (VR.Name.t * VR.Version.t, T.DependeesSet.t) Hashtbl.t;
-    gadget_vers : (VR.Name.t, PVersion.t list) Hashtbl.t;
-    processed : (VF.Pkg.t, unit) Hashtbl.t;
+    edges : (PFR.Name.t * PFR.Version.t, T.DependeesSet.t) Hashtbl.t;
+    gadget_vers : (PFR.Name.t, PVersion.t list) Hashtbl.t;
+    processed : (PF.Pkg.t, unit) Hashtbl.t;
     real_vers : (string, PVersion.t list) Hashtbl.t;
     (* per reduced package, how many members each of its own conflict
        classes had when its rows were read; the one thing a later load can
        invalidate *)
-    mutable canon : VR.Name.t NameMap.t;
+    mutable canon : PFR.Name.t NameMap.t;
   }
 
   let mk_state ar =
@@ -503,7 +470,7 @@ module Make () = struct
      representative per name lets PName.compare answer equality by
      pointer.  The map is keyed by NameOT itself, so which names unify
      is exactly NameOT equality and PubGrub's ordering is unchanged. *)
-  let intern st (m : VR.Name.t) : VR.Name.t =
+  let intern st (m : PFR.Name.t) : PFR.Name.t =
     match NameMap.find_opt m st.canon with
     | Some c -> c
     | None ->
@@ -523,7 +490,7 @@ module Make () = struct
     List.iter
       (fun ((tn, tv) : T.Pkg.t) ->
         match tn with
-        | VR.Name.Orig _ | VR.Name.Var _ -> ()
+        | PFR.Name.Orig _ -> ()
         | _ ->
             let tv = tag st.ar tn tv in
             let prev =
@@ -533,11 +500,12 @@ module Make () = struct
               Hashtbl.replace st.gadget_vers tn (tv :: prev))
       (T.PkgSet.elements r)
 
-  (* reduce one VF package's rows to core, via the extracted lookups *)
+  (* reduce one package-formula package's rows to core, via the extracted
+     lookups *)
   let verbose = Sys.getenv_opt "PACPROG" <> None
   let nproc = ref 0
 
-  let process st (q : VF.Pkg.t) (inst : Op.coq_Inst) =
+  let process st (q : PF.Pkg.t) (inst : Op.coq_Inst) =
     if not (Hashtbl.mem st.processed q) then begin
       Hashtbl.replace st.processed q ();
       incr nproc;
@@ -548,17 +516,17 @@ module Make () = struct
          | _ -> Printf.eprintf "[%d] root %.1fs\n%!" !nproc (Sys.time ()));
       let forms = Red.dependees rho inst q in
       let d_q =
-        VF.DepRel.ofList (List.map (fun f -> (q, f)) (Red.FSet.elements forms))
+        PF.DepRel.ofList (List.map (fun f -> (q, f)) (Red.FSet.elements forms))
       in
-      let r_q = VF.PkgSet.singleton q in
-      record_deprel st (VR.reduceDeps yx d_q);
-      record_real st (VR.reduceReal yx r_q d_q)
+      let r_q = PF.PkgSet.singleton q in
+      record_deprel st (PFR.reduceDeps d_q);
+      record_real st (PFR.reduceReal r_q d_q)
     end
 
   let solve ?(debug = false) ar (goal : string) =
     Pubgrub.set_debug debug;
     let root_q =
-      (VR.Name.Orig Red.TName.Root, VR.Version.Orig Red.TVer.UnitV)
+      (PFR.Name.Orig Red.TName.Root, PFR.Version.Orig Red.TVer.UnitV)
     in
     (* One pass of the search over the archive as it stands.  PubGrub
        consumes a node's dependencies once, so a conflict-class partner
@@ -581,30 +549,28 @@ module Make () = struct
         end
         else f ()
       in
-      let versions (tn : VR.Name.t) : PVersion.t list =
+      let versions (tn : PFR.Name.t) : PVersion.t list =
         timed @@ fun () ->
         match tn with
-        | VR.Name.Orig (Red.TName.Real n) -> (
+        | PFR.Name.Orig (Red.TName.Real n) -> (
             try Hashtbl.find st.real_vers n
             with Not_found ->
               let vs =
-                VF.VSet.elements
+                PF.VSet.elements
                   (Red.versions rho (name_inst ar n) (Red.TName.Real n))
               in
-              let vs = List.map (fun tv -> tag ar tn (VR.Version.Orig tv)) vs in
+              let vs =
+                List.map (fun tv -> tag ar tn (PFR.Version.Orig tv)) vs
+              in
               Hashtbl.replace st.real_vers n vs;
               vs)
-        | VR.Name.Orig Red.TName.Root ->
-            [ { PVersion.avoid = false; v = VR.Version.Orig Red.TVer.UnitV } ]
-        | VR.Name.Var x ->
-            [
-              { PVersion.avoid = false; v = VR.Version.VarVal (Red.pin rho x) };
-            ]
+        | PFR.Name.Orig Red.TName.Root ->
+            [ { PVersion.avoid = false; v = PFR.Version.Orig Red.TVer.UnitV } ]
         | _ -> ( try Hashtbl.find st.gadget_vers tn with Not_found -> [])
       in
       let deps_cache = Hashtbl.create 65536 in
       let nq = ref 0 in
-      let dependencies (tn : VR.Name.t) ({ PVersion.v = tv; _ } : PVersion.t) =
+      let dependencies (tn : PFR.Name.t) ({ PVersion.v = tv; _ } : PVersion.t) =
         incr nq;
         if verbose && !nq mod 10000 = 0 then
           Printf.eprintf "[q%d] %.1fs\n%!" !nq (Sys.time ());
@@ -613,9 +579,9 @@ module Make () = struct
         with Not_found ->
           let r =
             (match (tn, tv) with
-            | VR.Name.Orig Red.TName.Root, _ ->
+            | PFR.Name.Orig Red.TName.Root, _ ->
                 process st Red.rootPkg (root_inst ar goal)
-            | VR.Name.Orig (Red.TName.Real n), VR.Version.Orig (Red.TVer.RV v)
+            | PFR.Name.Orig (Red.TName.Real n), PFR.Version.Orig (Red.TVer.RV v)
               ->
                 process st
                   (Red.TName.Real n, Red.TVer.RV v)
@@ -654,19 +620,19 @@ module Make () = struct
           None
       | Ok sol ->
           (* back through the proved decoders, in the two layers the
-           reduction composes: the core solution decodes to the variable
+           reduction composes: the core solution decodes to the package
            formula's packages, and those to opam's.  Reading the reals off
            the solution here instead would be a third, unproved, decoder --
            and it is what the soundness theorem is stated about. *)
           let core =
             T.PkgSet.ofList
               (List.map
-                 (fun ((tn, { PVersion.v = tv; _ }) : VR.Name.t * PVersion.t) ->
-                   (tn, tv))
+                 (fun ((tn, { PVersion.v = tv; _ }) : PFR.Name.t * PVersion.t)
+                    -> (tn, tv))
                  sol)
           in
           let reals =
-            Op.PkgSet.elements (Red.decodeS (VR.variableFormulaResolution core))
+            Op.PkgSet.elements (Red.decodeS (PFR.packageFormulaResolution core))
           in
           let reals = List.sort compare reals in
           Some (reals, List.length sol, depexts_of ar reals)

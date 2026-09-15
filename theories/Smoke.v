@@ -213,11 +213,11 @@ Definition opInst : Op.Inst :=
     (Op.OFAtom 1 Op.FlFalse Op.VCTop).
 
 Example opam_transR_computes :
-  Op.Reduction.VF.PkgSet.cardinal (Op.Reduction.transR opRho opInst) = 3.
+  Op.Reduction.PF.PkgSet.cardinal (Op.Reduction.transR opRho opInst) = 3.
 Proof. reflexivity. Qed.
 
 Example opam_transD_computes :
-  Op.Reduction.VF.DepRel.cardinal
+  Op.Reduction.PF.DepRel.cardinal
     (Op.Reduction.transD opRho opInst) = 2.
 Proof. reflexivity. Qed.
 

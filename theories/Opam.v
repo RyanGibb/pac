@@ -1,19 +1,19 @@
 From Stdlib Require Import MSets List Bool.
-From PackageCalculus Require Import Prelude Core Versions VariableFormula.
+From PackageCalculus Require Import Prelude Core Versions PackageFormula.
 
 Create HintDb cmp_opam.
 Create Rewrite HintDb cmp_opam.
 
 (* opam's dependency semantics at a fixed environment, translated into the
-   variable-formula calculus: filters become variable-comparison atoms in
-   the target formulas rather than being evaluated away as pre-processing,
-   and the given valuation is pinned through the root's formula, so the
-   target's solved-for assignment is forced to agree with it.  Variable
-   names X are opam's qualified names (a package-local variable like
-   with-test is the instance's p:with-test element of X); values live in
-   one totally ordered sort Y, as opam itself compares them. *)
-Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
-    (Y E : UsualOrderedType).
+   package-formula calculus.  The source language has filters, so the
+   calculus below does; the reduction evaluates every one of them against
+   the given valuation as it runs, which is what opam's own pre-pass does
+   before its solver ever sees a formula, and so emits plain package
+   formulas.  Variable names X are opam's qualified names (a package-local
+   variable like with-test is the instance's p:with-test element of X);
+   values live in one totally ordered sort Y, as opam itself compares
+   them. *)
+Module Opam (N V X Y E : UsualOrderedType).
   Module C := Core N V.
   Module Pkg := C.Pkg.
   Module PkgSet := C.PkgSet.
@@ -259,21 +259,19 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
   Module Reduction.
     Module NF := UOTCompareFacts N.
     Module VF' := UOTCompareFacts V.
-    Module YF := UOTCompareFacts Y.
-    #[local] Hint Rewrite NF.compare_eq_iff
-      VF'.compare_eq_iff YF.compare_eq_iff : cmp_opam.
+    #[local] Hint Rewrite NF.compare_eq_iff VF'.compare_eq_iff : cmp_opam.
     #[local] Hint Extern 1 => cmp_by NF.compare_antisym : cmp_opam.
     #[local] Hint Extern 1 => cmp_by VF'.compare_antisym : cmp_opam.
-    #[local] Hint Extern 1 => cmp_by YF.compare_antisym : cmp_opam.
     #[local] Hint Extern 1 => cmp_by NF.compare_lt_trans : cmp_opam.
     #[local] Hint Extern 1 => cmp_by VF'.compare_lt_trans : cmp_opam.
-    #[local] Hint Extern 1 => cmp_by YF.compare_lt_trans : cmp_opam.
 
     (* Target names: a synthetic root carrying the request (opam has no
        root package -- the goal and switch invariant are formulas) and the
-       real opam packages.  There is no name for a system package: a
-       depext cannot decide between opam packages, so nothing external
-       reaches the target. *)
+       real opam packages.  There is no name for a filter variable: the
+       reduction evaluates filters under rho as opam's own pre-pass does,
+       so no variable survives into the target.  There is no name for a
+       system package either: a depext cannot decide between opam
+       packages, so nothing external reaches the target. *)
     Module TName.
       Inductive name : Type :=
       | Root
@@ -329,54 +327,17 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
     End TVer.
     Module TVOT := UOTFromCompare TVer.
 
-    (* Target values: Y extended with a distinguished undefined element,
-       so an unbound variable is pinned to a value and definedness tests
-       become ordinary comparisons. *)
-    Module YU.
-      Inductive yval : Type :=
-      | Undef
-      | YVal (y : Y.t).
-      Definition t := yval.
+    Module PF := PackageFormula TNOT TVOT.
 
-      Definition compare (x y : t) : comparison :=
-        match x, y with
-        | Undef, Undef => Eq
-        | Undef, YVal _ => Lt
-        | YVal _, Undef => Gt
-        | YVal a, YVal b => Y.compare a b
-        end.
-
-      Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
-      Proof. cmp_eq_iff cmp_opam. Qed.
-
-      Lemma compare_antisym : forall x y,
-          compare y x = CompOpp (compare x y).
-      Proof. cmp_antisym cmp_opam. Qed.
-
-      Lemma compare_lt_trans : forall x y z,
-          compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
-      Proof. cmp_lt_trans cmp_opam. Qed.
-    End YU.
-    Module YUOT := UOTFromCompare YU.
-    Module YUF := UOTCompareFacts YUOT.
-
-    Module VF := VariableFormula TNOT TVOT X YUOT.
-
-    Definition pin (rho : Valuation) (x : X.t) : YUOT.t :=
-      match rho x with
-      | Some y => YU.YVal y
-      | None => YU.Undef
-      end.
-
-    Definition embedPkg (p : Pkg.t) : VF.Pkg.t :=
+    Definition embedPkg (p : Pkg.t) : PF.Pkg.t :=
       (TName.Real (fst p), TVer.RV (snd p)).
-    Definition rootPkg : VF.Pkg.t := (TName.Root, TVer.UnitV).
+    Definition rootPkg : PF.Pkg.t := (TName.Root, TVer.UnitV).
 
-    Module SOpt := SetOps Pkg VF.Pkg PkgSet VF.PkgSet.
-    Definition embedSet (S : PkgSet.t) : VF.PkgSet.t :=
+    Module SOpt := SetOps Pkg PF.Pkg PkgSet PF.PkgSet.
+    Definition embedSet (S : PkgSet.t) : PF.PkgSet.t :=
       SOpt.map embedPkg S.
 
-    Module SOvv := SetOps V TVOT VSet VF.VSet.
+    Module SOvv := SetOps V TVOT VSet PF.VSet.
     Module SOpv := SetOps Pkg V PkgSet VSet.
     Definition realVersions (R : PkgSet.t) (n : N.t) : VSet.t :=
       SOpv.filterMap
@@ -384,7 +345,8 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
 
     (* The effective repository: switch pins and availability filters are
        unconditional cuts of R, applied before anything else -- pins and
-       availability cut repository membership, not formulas. *)
+       availability cut repository membership, not formulas.  availb is
+       where an available: field meets rho. *)
     Definition pinOKb (Pins : PkgSet.t) (p : Pkg.t) : bool :=
       PkgSet.for_all
         (fun '(m, w) =>
@@ -404,39 +366,10 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
         (fun p => andb (pinOKb (inst_pins I) p) (availb rho (inst_avl I) p))
         (inst_repo I).
 
-    (* VF.Formula has no truth constant; an unsatisfiable dependency on
-       the root name provides one. *)
-    Definition PFalse : VF.Formula := VF.FDep TName.Root VF.VSet.empty.
-    Definition PTrue : VF.Formula := VF.FNeg PFalse.
-
-    (* Filters become variable-comparison formulas: the two-sided Kleene
-       encoding (definitely-true and definitely-false halves) is exact --
-       negation swaps the halves, so undefined never collapses under a
-       negation the way a one-sided defaulting encoding would. *)
-    Fixpoint fT (rho : Valuation) (f : Filter) : VF.Formula :=
-      match f with
-      | FlTrue => PTrue
-      | FlFalse => PFalse
-      | FlCmp op x y =>
-          VF.FConj (VF.FVarCmp x OpNe YU.Undef)
-            (VF.FVarCmp x op (YU.YVal y))
-      | FlDef x => VF.FVarCmp x OpNe YU.Undef
-      | FlAnd f g => VF.FConj (fT rho f) (fT rho g)
-      | FlOr f g => VF.FDisj (fT rho f) (fT rho g)
-      | FlNot f => fF rho f
-      end
-    with fF (rho : Valuation) (f : Filter) : VF.Formula :=
-      match f with
-      | FlTrue => PFalse
-      | FlFalse => PTrue
-      | FlCmp op x y =>
-          VF.FConj (VF.FVarCmp x OpNe YU.Undef)
-            (VF.FVarCmp x (cmpComplement op) (YU.YVal y))
-      | FlDef x => VF.FVarCmp x OpEq YU.Undef
-      | FlAnd f g => VF.FDisj (fF rho f) (fF rho g)
-      | FlOr f g => VF.FConj (fF rho f) (fF rho g)
-      | FlNot f => fT rho f
-      end.
+    (* PF.Formula has no truth constant; an unsatisfiable dependency on
+       the root name provides one, and its negation the other. *)
+    Definition PFalse : PF.Formula := PF.FDep TName.Root PF.VSet.empty.
+    Definition PTrue : PF.Formula := PF.FNeg PFalse.
 
     (* -- lookup-primary layer: the per-name and per-package queries are
        the definitions; the global translation is their aggregation,
@@ -451,54 +384,43 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
     (* Encoders consult versions only through an oracle Vq, so slice
        reuse is oracle agreement (the lookup lemmas below). *)
     Definition versSetBy (Vq : N.t -> VSet.t) (n : N.t) (c : VConstraint)
-      : VF.VSet.t :=
+      : PF.VSet.t :=
       SOvv.map TVer.RV (VSet.filter (fun v => vcHolds c v) (Vq n)).
 
-    (* The Empty-neutrality of dropped atoms, lifted into the target: D
-       holds when the sub-formula reduces to Empty, S when it reduces to
-       something the resolution satisfies.  A conjunction is present when
-       either side is, so S also asserts not-both-dropped. *)
-    Fixpoint fD (rho : Valuation) (f : OFormula) : VF.Formula :=
-      match f with
-      | OFAtom _ g _ => VF.FNeg (fT rho g)
-      | OFAnd a b => VF.FConj (fD rho a) (fD rho b)
-      | OFOr a b => VF.FConj (fD rho a) (fD rho b)
-      end.
-
-    Fixpoint fS (rho : Valuation) (Vq : N.t -> VSet.t) (f : OFormula)
-      : VF.Formula :=
-      match f with
-      | OFAtom n g c =>
-          VF.FConj (fT rho g) (VF.FDep (TName.Real n) (versSetBy Vq n c))
-      | OFAnd a b =>
-          VF.FConj
-            (VF.FConj (VF.FDisj (fD rho a) (fS rho Vq a))
-               (VF.FDisj (fD rho b) (fS rho Vq b)))
-            (VF.FNeg (VF.FConj (fD rho a) (fD rho b)))
+    (* redOF has already evaluated every filter under rho and deleted the
+       atoms opam's Empty absorbs, so what is left is an unguarded
+       formula and encodes one constructor at a time. *)
+    Fixpoint encR (Vq : N.t -> VSet.t) (g : RFormula) : PF.Formula :=
+      match g with
+      | RAtom n c => PF.FDep (TName.Real n) (versSetBy Vq n c)
+      | RAnd a b => PF.FConj (encR Vq a) (encR Vq b)
       (* Reversed: the target prefers a disjunction's right branch (Zero
          selects the left and One the right, and One is the larger), while
          opam prefers the alternative written first.  The swap is only
-         ever preference -- disjunction is commutative, and it is confined
-         to this constructor so that the fD-or-fS disjunctions above and
-         in encodeOF keep One meaning satisfied. *)
-      | OFOr a b => VF.FDisj (fS rho Vq b) (fS rho Vq a)
+         ever preference -- disjunction is commutative. *)
+      | ROr a b => PF.FDisj (encR Vq b) (encR Vq a)
       end.
 
+    (* A formula every one of whose atoms rho gated away is opam's Empty,
+       and imposes nothing. *)
     Definition encodeOF (rho : Valuation) (Vq : N.t -> VSet.t)
-        (f : OFormula) : VF.Formula :=
-      VF.FDisj (fD rho f) (fS rho Vq f).
+        (f : OFormula) : PF.Formula :=
+      match redOF rho f with
+      | Some g => encR Vq g
+      | None => PTrue
+      end.
 
     (* The versions a conflict atom forbids; the declarer's own name is
        exempt (CUDF conflicts never apply to their declarer). *)
     Definition confVS (Vq : N.t -> VSet.t) (p : Pkg.t) (n : N.t)
-        (c : VConstraint) : VF.VSet.t :=
-      if N.eq_dec (fst p) n then VF.VSet.empty else versSetBy Vq n c.
+        (c : VConstraint) : PF.VSet.t :=
+      if N.eq_dec (fst p) n then PF.VSet.empty else versSetBy Vq n c.
 
-    Definition memberAtom (q : Pkg.t) : VF.Formula :=
-      VF.FDep (TName.Real (fst q))
-        (VF.VSet.singleton (TVer.RV (snd q))).
+    Definition memberAtom (q : Pkg.t) : PF.Formula :=
+      PF.FDep (TName.Real (fst q))
+        (PF.VSet.singleton (TVer.RV (snd q))).
 
-    Module FSet := FSetUOT VF.Dependees.
+    Module FSet := FSetUOT PF.Dependees.
     Module NSet := FSetUOT N.
 
     Definition ownb {A : Type} (p : Pkg.t) (r : Pkg.t * A) : bool :=
@@ -509,66 +431,58 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
       List.map snd (List.filter (ownb p) l).
 
     Definition depForms (rho : Valuation) (Vq : N.t -> VSet.t) (I : Inst)
-        (p : Pkg.t) : list VF.Formula :=
+        (p : Pkg.t) : list PF.Formula :=
       List.map (encodeOF rho Vq) (ownRows p (inst_dep I)).
 
+    (* A conflict whose filter rho makes false is not a conflict. *)
     Definition cflForm (rho : Valuation) (Vq : N.t -> VSet.t) (p : Pkg.t)
-        (nc : N.t * (Filter * VConstraint)) : VF.Formula :=
-      VF.FNeg
-        (VF.FConj (fT rho (fst (snd nc)))
-           (VF.FDep (TName.Real (fst nc))
-              (confVS Vq p (fst nc) (snd (snd nc))))).
+        (nc : N.t * (Filter * VConstraint)) : PF.Formula :=
+      if defTrue rho (fst (snd nc))
+      then
+        PF.FNeg
+          (PF.FDep (TName.Real (fst nc))
+             (confVS Vq p (fst nc) (snd (snd nc))))
+      else PTrue.
 
     Definition cflForms (rho : Valuation) (Vq : N.t -> VSet.t) (I : Inst)
-        (p : Pkg.t) : list VF.Formula :=
+        (p : Pkg.t) : list PF.Formula :=
       List.map (cflForm rho Vq p) (ownRows p (inst_cfl I)).
 
     (* Conflict classes as pairwise prohibitions: p forbids every
        same-class partner with a different name. *)
-    Module SOcf := SetOps ClsElt VF.Dependees ClsRel FSet.
+    Module SOcf := SetOps ClsElt PF.Dependees ClsRel FSet.
     Definition clsForms (cls : ClsRel.t) (p : Pkg.t) : FSet.t :=
       SOcf.filterMap
         (fun '(q, k) =>
            if ClsRel.mem (p, k) cls
            then
              if N.eq_dec (fst q) (fst p) then None
-             else Some (VF.FNeg (memberAtom q))
+             else Some (PF.FNeg (memberAtom q))
            else None)
         cls.
 
     Definition pindForm (Vq : N.t -> VSet.t) (nvu : Pkg.t * Y.t)
-      : VF.Formula :=
-      VF.FNeg
-        (VF.FDep (TName.Real (fst (fst nvu)))
+      : PF.Formula :=
+      PF.FNeg
+        (PF.FDep (TName.Real (fst (fst nvu)))
            (SOvv.map TVer.RV
               (VSet.remove (snd (fst nvu)) (Vq (fst (fst nvu)))))).
 
     Definition pindForms (Vq : N.t -> VSet.t) (I : Inst) (p : Pkg.t)
-      : list VF.Formula :=
+      : list PF.Formula :=
       List.map (pindForm Vq) (ownRows p (inst_pind I)).
 
-    (* The given environment, pinned through the root: closure at the root
-       forces the solved-for assignment to agree with rho pointwise.  This
-       conjunction is the only place rho reaches the target, so widening
-       an instance to genuinely solve for variables (the paper's freedom)
-       is a matter of weakening it. *)
-    Definition pinsFormula (rho : Valuation) : VF.Formula :=
-      List.fold_right
-        (fun x acc => VF.FConj (VF.FVarCmp x OpEq (pin rho x)) acc)
-        PTrue X.enum.
-
     Definition rootForm (rho : Valuation) (Vq : N.t -> VSet.t) (I : Inst)
-      : VF.Formula :=
-      VF.FConj (pinsFormula rho)
-        (VF.FConj (encodeOF rho Vq (inst_goal I))
-           (encodeOF rho Vq (inst_inv I))).
+      : PF.Formula :=
+      PF.FConj (encodeOF rho Vq (inst_goal I))
+        (encodeOF rho Vq (inst_inv I)).
 
-    Module SOlf := SetOps Pkg VF.Dependees PkgSet FSet.
+    Module SOlf := SetOps Pkg PF.Dependees PkgSet FSet.
 
     (* THE per-package lookup: a target package's formulas, from its own
        instance rows under the valuation. *)
     Definition dependeesBy (rho : Valuation) (Vq : N.t -> VSet.t)
-        (I : Inst) (q : VF.Pkg.t) : FSet.t :=
+        (I : Inst) (q : PF.Pkg.t) : FSet.t :=
       match q with
       | (TName.Real n, TVer.RV v) =>
           FSet.union (SOlf.ofList (depForms rho Vq I (n, v)))
@@ -579,45 +493,46 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
       | _ => FSet.empty
       end.
 
-    Definition dependees (rho : Valuation) (I : Inst) (q : VF.Pkg.t)
+    Definition dependees (rho : Valuation) (I : Inst) (q : PF.Pkg.t)
       : FSet.t :=
       dependeesBy rho (srcVersions rho I) I q.
 
     (* The per-target-name version lookup. *)
     Definition versions (rho : Valuation) (I : Inst) (tn : TName.t)
-      : VF.VSet.t :=
+      : PF.VSet.t :=
       match tn with
-      | TName.Root => VF.VSet.singleton TVer.UnitV
+      | TName.Root => PF.VSet.singleton TVer.UnitV
       | TName.Real n => SOvv.map TVer.RV (srcVersions rho I n)
       end.
 
     (* -- derived aggregation: the global translation -- *)
 
-    Definition transR (rho : Valuation) (I : Inst) : VF.PkgSet.t :=
-      VF.PkgSet.union (embedSet (effRepo rho I))
-        (VF.PkgSet.singleton rootPkg).
+    Definition transR (rho : Valuation) (I : Inst) : PF.PkgSet.t :=
+      PF.PkgSet.union (embedSet (effRepo rho I))
+        (PF.PkgSet.singleton rootPkg).
 
-    Module SOfd := SetOps VF.Dependees VF.DepElt FSet VF.DepRel.
-    Definition depEdges (q : VF.Pkg.t) (fs : FSet.t) : VF.DepRel.t :=
+    Module SOfd := SetOps PF.Dependees PF.DepElt FSet PF.DepRel.
+    Definition depEdges (q : PF.Pkg.t) (fs : FSet.t) : PF.DepRel.t :=
       SOfd.map (fun f => (q, f)) fs.
 
-    Module SOqd := SetOps VF.Pkg VF.DepElt VF.PkgSet VF.DepRel.
-    Definition transD (rho : Valuation) (I : Inst) : VF.DepRel.t :=
+    Module SOqd := SetOps PF.Pkg PF.DepElt PF.PkgSet PF.DepRel.
+    Definition transD (rho : Valuation) (I : Inst) : PF.DepRel.t :=
       SOqd.unionMap (fun q => depEdges q (dependees rho I q))
         (transR rho I).
 
-    Definition transS (S : PkgSet.t) : VF.PkgSet.t :=
-      VF.PkgSet.union (embedSet S) (VF.PkgSet.singleton rootPkg).
+    Definition transS (S : PkgSet.t) : PF.PkgSet.t :=
+      PF.PkgSet.union (embedSet S) (PF.PkgSet.singleton rootPkg).
 
-    Module SOtp := SetOps VF.Pkg Pkg VF.PkgSet PkgSet.
-    Definition tryInvPkg (q : VF.Pkg.t) : option Pkg.t :=
+    Module SOtp := SetOps PF.Pkg Pkg PF.PkgSet PkgSet.
+    Definition tryInvPkg (q : PF.Pkg.t) : option Pkg.t :=
       match q with
       | (TName.Real n, TVer.RV v) => Some (n, v)
       | _ => None
       end.
 
-    Definition decodeS (S' : VF.PkgSet.t) : PkgSet.t :=
+    Definition decodeS (S' : PF.PkgSet.t) : PkgSet.t :=
       SOtp.filterMap tryInvPkg S'.
+
     Lemma embedPkg_inj : forall p q, embedPkg p = embedPkg q -> p = q.
     Proof.
       intros [n v] [m w] H; unfold embedPkg in H; simpl in H.
@@ -638,7 +553,7 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
     Qed.
 
     Lemma mem_versSetBy : forall Vq n c tv,
-        VF.VSet.In tv (versSetBy Vq n c) <->
+        PF.VSet.In tv (versSetBy Vq n c) <->
         exists v, tv = TVer.RV v /\ VSet.In v (Vq n) /\
                   vcHolds c v = true.
     Proof.
@@ -658,7 +573,7 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
 
     Lemma mem_decodeS : forall S' n v,
         PkgSet.In (n, v) (decodeS S') <->
-        VF.PkgSet.In (TName.Real n, TVer.RV v) S'.
+        PF.PkgSet.In (TName.Real n, TVer.RV v) S'.
     Proof.
       intros S' n v; unfold decodeS; rewrite SOtp.mem_filterMap.
       split.
@@ -705,28 +620,28 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
     Qed.
 
     Lemma mem_transR : forall rho I q,
-        VF.PkgSet.In q (transR rho I) <->
+        PF.PkgSet.In q (transR rho I) <->
         (exists p, PkgSet.In p (effRepo rho I) /\ q = embedPkg p) \/
         q = rootPkg.
     Proof.
       intros rho I q; unfold transR, embedSet.
-      rewrite VF.PkgSet.union_spec, VF.PkgSet.singleton_spec,
+      rewrite PF.PkgSet.union_spec, PF.PkgSet.singleton_spec,
         SOpt.mem_map.
       tauto.
     Qed.
 
     Lemma mem_transS : forall S q,
-        VF.PkgSet.In q (transS S) <->
+        PF.PkgSet.In q (transS S) <->
         (exists p, PkgSet.In p S /\ q = embedPkg p) \/ q = rootPkg.
     Proof.
       intros S q; unfold transS, embedSet.
-      rewrite VF.PkgSet.union_spec, VF.PkgSet.singleton_spec,
+      rewrite PF.PkgSet.union_spec, PF.PkgSet.singleton_spec,
         SOpt.mem_map.
       tauto.
     Qed.
 
     Lemma mem_transS_real : forall S n v,
-        VF.PkgSet.In (TName.Real n, TVer.RV v) (transS S) <->
+        PF.PkgSet.In (TName.Real n, TVer.RV v) (transS S) <->
         PkgSet.In (n, v) S.
     Proof.
       intros S n v; rewrite mem_transS; split.
@@ -742,69 +657,16 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
       rewrite mem_decodeS, mem_transS_real; reflexivity.
     Qed.
 
-    Lemma PTrue_sat : forall S' sigma, VF.Satisfies S' sigma PTrue.
+    Lemma PTrue_sat : forall S', PF.Satisfies S' PTrue.
     Proof.
-      intros S' sigma; simpl; intros [tv [Htv _]].
-      destruct (VF.VSet.empty_spec Htv).
+      intros S'; simpl; intros [tv [Htv _]].
+      destruct (PF.VSet.empty_spec Htv).
     Qed.
 
-    Lemma PFalse_unsat : forall S' sigma,
-        ~ VF.Satisfies S' sigma PFalse.
+    Lemma PFalse_unsat : forall S', ~ PF.Satisfies S' PFalse.
     Proof.
-      intros S' sigma [tv [Htv _]].
-      destruct (VF.VSet.empty_spec Htv).
-    Qed.
-
-    Lemma andK_true_iff : forall a b,
-        andK a b = Some true <-> a = Some true /\ b = Some true.
-    Proof. intros [[|]|] [[|]|]; simpl; intuition congruence. Qed.
-
-    Lemma andK_false_iff : forall a b,
-        andK a b = Some false <-> a = Some false \/ b = Some false.
-    Proof. intros [[|]|] [[|]|]; simpl; intuition congruence. Qed.
-
-    Lemma orK_true_iff : forall a b,
-        orK a b = Some true <-> a = Some true \/ b = Some true.
-    Proof. intros [[|]|] [[|]|]; simpl; intuition congruence. Qed.
-
-    Lemma orK_false_iff : forall a b,
-        orK a b = Some false <-> a = Some false /\ b = Some false.
-    Proof. intros [[|]|] [[|]|]; simpl; intuition congruence. Qed.
-
-    Lemma notK_true_iff : forall a,
-        notK a = Some true <-> a = Some false.
-    Proof. intros [[|]|]; simpl; intuition congruence. Qed.
-
-    Lemma notK_false_iff : forall a,
-        notK a = Some false <-> a = Some true.
-    Proof. intros [[|]|]; simpl; intuition congruence. Qed.
-
-    Lemma opEvalY_vals : forall op w y,
-        VF.opEvalY op (YU.YVal w) (YU.YVal y) =
-        cmpOpEvalBy Y.compare op w y.
-    Proof. intros [ | | | | | ] w y; reflexivity. Qed.
-
-    Lemma opEvalY_ne_undef : forall a,
-        VF.opEvalY OpNe a YU.Undef = true <-> a <> YU.Undef.
-    Proof.
-      intros [| y]; simpl; split; intro H;
-        try discriminate; try reflexivity;
-        try (contradiction H; reflexivity); congruence.
-    Qed.
-
-    Lemma opEqY_iff : forall a b, VF.opEvalY OpEq a b = true <-> a = b.
-    Proof.
-      intros a b; split.
-      - intro H; apply YU.compare_eq_iff.
-        destruct (YU.compare a b) eqn:C; [reflexivity | |];
-          exfalso; revert H;
-          change (VF.opEvalY OpEq a b) with
-            (match YU.compare a b with Eq => true | _ => false end);
-          rewrite C; discriminate.
-      - intro H; subst b.
-        change (match YU.compare a a with Eq => true | _ => false end
-                = true).
-        rewrite (proj2 (YU.compare_eq_iff a a) eq_refl); reflexivity.
+      intros S' [tv [Htv _]].
+      destruct (PF.VSet.empty_spec Htv).
     Qed.
 
     Lemma defTrue_iff : forall rho g,
@@ -814,245 +676,38 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
       destruct (evalF rho g) as [[|]|]; intuition congruence.
     Qed.
 
-    Lemma TF_correct : forall rho S' sigma,
-        (forall x, sigma x = pin rho x) ->
-        forall f,
-          (VF.Satisfies S' sigma (fT rho f) <->
-           evalF rho f = Some true) /\
-          (VF.Satisfies S' sigma (fF rho f) <->
-           evalF rho f = Some false).
+    Lemma encR_correct : forall Vq S',
+        (forall n v, PkgSet.In (n, v) (decodeS S') -> VSet.In v (Vq n)) ->
+        forall g, PF.Satisfies S' (encR Vq g) <-> rSat (decodeS S') g.
     Proof.
-      intros rho S' sigma Hsig.
-      induction f as [| | op x y | x | a IHa b IHb | a IHa b IHb
-                      | a IHa]; simpl.
-      - split; [split | split].
-        + intros _; reflexivity.
-        + intros _; exact (PTrue_sat S' sigma).
-        + intro H; destruct (PFalse_unsat S' sigma H).
-        + intro H; discriminate H.
-      - split; [split | split].
-        + intro H; destruct (PFalse_unsat S' sigma H).
-        + intro H; discriminate H.
-        + intros _; reflexivity.
-        + intros _; exact (PTrue_sat S' sigma).
-      - rewrite !Hsig; unfold pin; destruct (rho x) as [w |].
-        + split; split.
-          * intros [_ Hc]; rewrite opEvalY_vals in Hc.
-            rewrite Hc; reflexivity.
-          * intro H; injection H as H; split;
-              [apply opEvalY_ne_undef; discriminate
-              | rewrite opEvalY_vals, H; reflexivity].
-          * intros [_ Hc]; rewrite opEvalY_vals in Hc.
-            rewrite cmpOpEvalBy_complement in Hc.
-            apply Bool.negb_true_iff in Hc; rewrite Hc; reflexivity.
-          * intro H; injection H as H; split;
-              [apply opEvalY_ne_undef; discriminate |].
-            rewrite opEvalY_vals, cmpOpEvalBy_complement, H;
-              reflexivity.
-        + split; split.
-          * intros [Hd _]; apply opEvalY_ne_undef in Hd.
-            contradiction Hd; reflexivity.
-          * discriminate.
-          * intros [Hd _]; apply opEvalY_ne_undef in Hd.
-            contradiction Hd; reflexivity.
-          * discriminate.
-      - rewrite !Hsig; unfold pin; destruct (rho x) as [w |].
-        + split; split.
-          * intros _; reflexivity.
-          * intros _; apply opEvalY_ne_undef; discriminate.
-          * intro H; apply opEqY_iff in H; discriminate.
-          * discriminate.
-        + split; split.
-          * intro H; apply opEvalY_ne_undef in H.
-            contradiction H; reflexivity.
-          * discriminate.
-          * intros _; reflexivity.
-          * intros _; apply opEqY_iff; reflexivity.
-      - destruct IHa as [IHaT IHaF]; destruct IHb as [IHbT IHbF].
-        split.
-        + rewrite andK_true_iff; simpl; rewrite IHaT, IHbT; tauto.
-        + rewrite andK_false_iff; simpl; rewrite IHaF, IHbF; tauto.
-      - destruct IHa as [IHaT IHaF]; destruct IHb as [IHbT IHbF].
-        split.
-        + rewrite orK_true_iff; simpl; rewrite IHaT, IHbT; tauto.
-        + rewrite orK_false_iff; simpl; rewrite IHaF, IHbF; tauto.
-      - destruct IHa as [IHaT IHaF].
-        split; [rewrite notK_true_iff | rewrite notK_false_iff];
-          tauto.
-    Qed.
-
-    Lemma fD_correct : forall rho S' sigma,
-        (forall x, sigma x = pin rho x) ->
-        forall f,
-          VF.Satisfies S' sigma (fD rho f) <-> redOF rho f = None.
-    Proof.
-      intros rho S' sigma Hsig.
-      induction f as [n g c | a IHa b IHb | a IHa b IHb]; simpl.
-      - destruct (TF_correct rho S' sigma Hsig g) as [HT _].
-        destruct (defTrue rho g) eqn:Hg.
-        + apply defTrue_iff in Hg; split;
-            [intro H; contradiction (H (proj2 HT Hg)) | discriminate].
-        + split; [intros _; reflexivity |].
-          intros _ Hs; apply HT in Hs.
-          apply defTrue_iff in Hs; rewrite Hs in Hg; discriminate.
-      - rewrite IHa, IHb.
-        destruct (redOF rho a); destruct (redOF rho b); simpl;
-          intuition congruence.
-      - rewrite IHa, IHb.
-        destruct (redOF rho a); destruct (redOF rho b); simpl;
-          intuition congruence.
-    Qed.
-
-    Lemma fS_absent : forall rho Vq S' sigma,
-        (forall x, sigma x = pin rho x) ->
-        forall f, redOF rho f = None ->
-          ~ VF.Satisfies S' sigma (fS rho Vq f).
-    Proof.
-      intros rho Vq S' sigma Hsig.
-      induction f as [n g c | a IHa b IHb | a IHa b IHb]; simpl.
-      - destruct (defTrue rho g) eqn:Hg; [discriminate |].
-        intros _ [HT _].
-        destruct (TF_correct rho S' sigma Hsig g) as [HTi _].
-        apply HTi in HT; apply defTrue_iff in HT.
-        rewrite HT in Hg; discriminate.
-      - intro H.
-        destruct (redOF rho a) eqn:Ha; destruct (redOF rho b) eqn:Hb;
-          simpl in H; try discriminate.
-        intros [_ Hne]; apply Hne; split;
-          apply (fD_correct rho S' sigma Hsig); assumption.
-      - intro H.
-        destruct (redOF rho a) eqn:Ha; destruct (redOF rho b) eqn:Hb;
-          simpl in H; try discriminate.
-        intros [Hs | Hs];
-          [exact (IHb eq_refl Hs) | exact (IHa eq_refl Hs)].
-    Qed.
-
-    Lemma fS_correct : forall rho Vq S' sigma,
-        (forall x, sigma x = pin rho x) ->
-        (forall n v, PkgSet.In (n, v) (decodeS S') ->
-                     VSet.In v (Vq n)) ->
-        forall f g, redOF rho f = Some g ->
-          (VF.Satisfies S' sigma (fS rho Vq f) <->
-           rSat (decodeS S') g).
-    Proof.
-      intros rho Vq S' sigma Hsig HV.
-      induction f as [n g0 c | a IHa b IHb | a IHa b IHb];
-        intros g Hred; simpl in Hred; simpl.
-      - destruct (defTrue rho g0) eqn:Hg; [| discriminate].
-        injection Hred as <-; simpl.
-        destruct (TF_correct rho S' sigma Hsig g0) as [HT _].
-        apply defTrue_iff in Hg.
-        split.
-        + intros [_ [tv [Htv Hm]]].
-          apply mem_versSetBy in Htv;
-            destruct Htv as [v [-> [Hra Hh]]].
+      intros Vq S' HV.
+      induction g as [n c | a IHa b IHb | a IHa b IHb]; simpl.
+      - split.
+        + intros [tv [Htv Hm]].
+          apply mem_versSetBy in Htv; destruct Htv as [v [-> [_ Hh]]].
           exists v; split; [apply mem_decodeS; exact Hm | exact Hh].
-        + intros [v [Hv Hh]]; split; [apply HT; exact Hg |].
+        + intros [v [Hv Hh]].
           assert (Hvq := HV _ _ Hv).
           apply mem_decodeS in Hv.
           exists (TVer.RV v); split; [| exact Hv].
           apply mem_versSetBy; exists v; split;
             [reflexivity | split; [exact Hvq | exact Hh]].
-      - destruct (redOF rho a) eqn:Ha; destruct (redOF rho b) eqn:Hb;
-          simpl in Hred; try discriminate; injection Hred as <-;
-          simpl.
-        + assert (Da : ~ VF.Satisfies S' sigma (fD rho a)).
-          { intro H; apply (fD_correct rho S' sigma Hsig) in H;
-              congruence. }
-          assert (Db : ~ VF.Satisfies S' sigma (fD rho b)).
-          { intro H; apply (fD_correct rho S' sigma Hsig) in H;
-              congruence. }
-          rewrite <- (IHa _ eq_refl), <- (IHb _ eq_refl).
-          split.
-          * intros [[[Hda | Hsa] [Hdb | Hsb]] _];
-              try contradiction; split; assumption.
-          * intros [Hsa Hsb]; split;
-              [split; right; assumption
-              | intros [Hda _]; exact (Da Hda)].
-        + assert (Da : ~ VF.Satisfies S' sigma (fD rho a)).
-          { intro H; apply (fD_correct rho S' sigma Hsig) in H;
-              congruence. }
-          rewrite <- (IHa _ eq_refl).
-          split.
-          * intros [[[Hda | Hsa] _] _]; [contradiction | exact Hsa].
-          * intro Hsa; split;
-              [split;
-                [right; exact Hsa
-                | left; apply (fD_correct rho S' sigma Hsig);
-                  exact Hb]
-              | intros [Hda _]; exact (Da Hda)].
-        + assert (Db : ~ VF.Satisfies S' sigma (fD rho b)).
-          { intro H; apply (fD_correct rho S' sigma Hsig) in H;
-              congruence. }
-          rewrite <- (IHb _ eq_refl).
-          split.
-          * intros [[_ [Hdb | Hsb]] _]; [contradiction | exact Hsb].
-          * intro Hsb; split;
-              [split;
-                [left; apply (fD_correct rho S' sigma Hsig); exact Ha
-                | right; exact Hsb]
-              | intros [_ Hdb]; exact (Db Hdb)].
-      - destruct (redOF rho a) eqn:Ha; destruct (redOF rho b) eqn:Hb;
-          simpl in Hred; try discriminate; injection Hred as <-;
-          simpl.
-        + rewrite <- (IHa _ eq_refl), <- (IHb _ eq_refl); tauto.
-        + rewrite <- (IHa _ eq_refl).
-          split; [| intro H; right; exact H].
-          intros [H | H]; [| exact H].
-          destruct (fS_absent rho Vq S' sigma Hsig b Hb H).
-        + rewrite <- (IHb _ eq_refl).
-          split; [| intro H; left; exact H].
-          intros [H | H]; [exact H |].
-          destruct (fS_absent rho Vq S' sigma Hsig a Ha H).
+      - rewrite IHa, IHb; reflexivity.
+      - rewrite IHa, IHb; tauto.
     Qed.
 
-    Lemma encodeOF_correct : forall rho Vq S' sigma,
-        (forall x, sigma x = pin rho x) ->
-        (forall n v, PkgSet.In (n, v) (decodeS S') ->
-                     VSet.In v (Vq n)) ->
+    Lemma encodeOF_correct : forall rho Vq S',
+        (forall n v, PkgSet.In (n, v) (decodeS S') -> VSet.In v (Vq n)) ->
         forall f,
-          (VF.Satisfies S' sigma (encodeOF rho Vq f) <->
-           oSat rho (decodeS S') f).
+          PF.Satisfies S' (encodeOF rho Vq f) <-> oSat rho (decodeS S') f.
     Proof.
-      intros rho Vq S' sigma Hsig HV f; unfold encodeOF, oSat; simpl.
+      intros rho Vq S' HV f; unfold encodeOF, oSat.
       destruct (redOF rho f) as [g |] eqn:Hred.
-      - split.
-        + intros [Hd | Hs] g' Hg'; injection Hg' as <-.
-          * apply (fD_correct rho S' sigma Hsig) in Hd; congruence.
-          * apply (fS_correct rho Vq S' sigma Hsig HV _ _ Hred);
-              exact Hs.
-        + intro H; right.
-          apply (fS_correct rho Vq S' sigma Hsig HV _ _ Hred).
-          apply H; reflexivity.
-      - split.
-        + intros _ g' Hg'; discriminate.
-        + intros _; left.
-          apply (fD_correct rho S' sigma Hsig); exact Hred.
-    Qed.
-
-    Lemma pins_aux : forall rho S' sigma l,
-        VF.Satisfies S' sigma
-          (List.fold_right
-             (fun x acc => VF.FConj (VF.FVarCmp x OpEq (pin rho x)) acc)
-             PTrue l) <->
-        (forall x, In x l -> sigma x = pin rho x).
-    Proof.
-      intros rho S' sigma; induction l as [| x l IH]; simpl.
-      - split; [intros _ x [] | intros _; exact (PTrue_sat S' sigma)].
-      - rewrite IH; split.
-        + intros [Hx Hl] x' [-> | Hin];
-            [apply opEqY_iff; exact Hx | exact (Hl _ Hin)].
-        + intro H; split;
-            [apply opEqY_iff; apply H; left; reflexivity
-            | intros x' Hin; apply H; right; exact Hin].
-    Qed.
-
-    Lemma pins_pin : forall rho S' sigma,
-        VF.Satisfies S' sigma (pinsFormula rho) <->
-        (forall x, sigma x = pin rho x).
-    Proof.
-      intros rho S' sigma; unfold pinsFormula; rewrite pins_aux.
-      split; [intros H x; apply H, X.enum_complete | auto].
+      - rewrite (encR_correct Vq S' HV g); split.
+        + intros H g' Hg'; injection Hg' as <-; exact H.
+        + intro H; apply H; reflexivity.
+      - split; [intros _ g' Hg'; discriminate |].
+        intros _; exact (PTrue_sat S').
     Qed.
 
     Lemma ownRows_in : forall (A : Type) (p : Pkg.t)
@@ -1079,7 +734,7 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
                     f = cflForm rho Vq (n, v) nc) \/
         (exists q k, ClsRel.In ((n, v), k) (inst_cls I) /\
                      ClsRel.In (q, k) (inst_cls I) /\ fst q <> n /\
-                     f = VF.FNeg (memberAtom q)) \/
+                     f = PF.FNeg (memberAtom q)) \/
         (exists nvu, In ((n, v), nvu) (inst_pind I) /\
                      f = pindForm Vq nvu).
     Proof.
@@ -1133,8 +788,8 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
     Qed.
 
     Lemma mem_transD : forall rho I q f,
-        VF.DepRel.In (q, f) (transD rho I) <->
-        VF.PkgSet.In q (transR rho I) /\
+        PF.DepRel.In (q, f) (transD rho I) <->
+        PF.PkgSet.In q (transR rho I) /\
         FSet.In f (dependees rho I q).
     Proof.
       intros rho I q f; unfold transD; rewrite SOqd.mem_unionMap.
@@ -1160,16 +815,16 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
       - exact (ores_available _ _ _ HR _ Hp).
     Qed.
 
-    Theorem opam_soundness : forall rho I S' sigma,
-        VF.IsResolution (transR rho I) (transD rho I) rootPkg S' sigma ->
+    Theorem opam_soundness : forall rho I S',
+        PF.IsResolution (transR rho I) (transD rho I) rootPkg S' ->
         IsResolution rho I (decodeS S').
     Proof.
-      intros rho I S' sigma HR.
+      intros rho I S' HR.
       assert (Hsub : forall n v,
                  PkgSet.In (n, v) (decodeS S') ->
                  PkgSet.In (n, v) (effRepo rho I)).
       { intros n v Hnv; apply mem_decodeS in Hnv.
-        apply (VF.res_subset _ _ _ _ _ HR) in Hnv.
+        apply (PF.res_subset _ _ _ _ HR) in Hnv.
         apply mem_transR in Hnv.
         destruct Hnv as [[p [Hp He]] | He]; [| discriminate].
         destruct p as [m w]; unfold embedPkg in He; simpl in He.
@@ -1180,27 +835,26 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
       { intros n v Hnv; apply mem_srcVersions, Hsub; exact Hnv. }
       assert (Hemb : forall n v,
                  PkgSet.In (n, v) (decodeS S') ->
-                 VF.PkgSet.In (embedPkg (n, v)) S').
+                 PF.PkgSet.In (embedPkg (n, v)) S').
       { intros n v Hnv; apply mem_decodeS in Hnv; exact Hnv. }
-      assert (Hroot := VF.res_root_mem _ _ _ _ _ HR).
-      assert (HrootR : VF.PkgSet.In rootPkg (transR rho I)).
+      assert (Hroot := PF.res_root_mem _ _ _ _ HR).
+      assert (HrootR : PF.PkgSet.In rootPkg (transR rho I)).
       { apply mem_transR; right; reflexivity. }
-      assert (Hrow : VF.DepRel.In (rootPkg, rootForm rho
+      assert (Hrow : PF.DepRel.In (rootPkg, rootForm rho
                        (srcVersions rho I) I) (transD rho I)).
       { apply mem_transD; split; [exact HrootR |].
-        simpl; apply FSet.singleton_spec; reflexivity. }
+        unfold dependees, dependeesBy, rootPkg.
+        apply FSet.singleton_spec; reflexivity. }
       assert (Hrootrow :=
-                VF.res_formula_closure _ _ _ _ _ HR _ Hroot _ Hrow).
-      simpl in Hrootrow.
-      destruct Hrootrow as [Hpins [Hgoal Hinv]].
-      assert (Hsig : forall x, sigma x = pin rho x).
-      { apply (pins_pin rho S' sigma); exact Hpins. }
+                PF.res_formula_closure _ _ _ _ HR _ Hroot _ Hrow).
+      unfold rootForm in Hrootrow; cbn [PF.Satisfies] in Hrootrow.
+      destruct Hrootrow as [Hgoal Hinv].
       assert (Hdeps : forall n v f,
                  PkgSet.In (n, v) (decodeS S') ->
                  FSet.In f (dependees rho I (embedPkg (n, v))) ->
-                 VF.Satisfies S' sigma f).
+                 PF.Satisfies S' f).
       { intros n v f Hnv Hf.
-        apply (VF.res_formula_closure _ _ _ _ _ HR _ (Hemb _ _ Hnv)).
+        apply (PF.res_formula_closure _ _ _ _ HR _ (Hemb _ _ Hnv)).
         apply mem_transD; split; [| exact Hf].
         apply mem_transR; left; exists (n, v); split;
           [exact (Hsub _ _ Hnv) | reflexivity]. }
@@ -1209,39 +863,38 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
         assert (H := Hsub _ _ Hp); apply mem_effRepo in H; tauto.
       - intros n v v' Hv Hv'.
         apply mem_decodeS in Hv, Hv'.
-        assert (E := VF.res_version_unique _ _ _ _ _ HR
+        assert (E := PF.res_version_unique _ _ _ _ HR
                        (TName.Real n) _ _ Hv Hv').
         injection E as ->; reflexivity.
       - intros [n v] Hp.
         assert (H := Hsub _ _ Hp); apply mem_effRepo in H; tauto.
-      - apply (encodeOF_correct rho _ _ _ Hsig HV); exact Hgoal.
-      - apply (encodeOF_correct rho _ _ _ Hsig HV); exact Hinv.
+      - apply (encodeOF_correct rho _ _ HV); exact Hgoal.
+      - apply (encodeOF_correct rho _ _ HV); exact Hinv.
       - intros [n v] Hp f Hf.
-        assert (Hs : VF.Satisfies S' sigma
+        assert (Hs : PF.Satisfies S'
                        (encodeOF rho (srcVersions rho I) f)).
         { apply (Hdeps _ _ _ Hp); unfold dependees.
           apply mem_dependees_real; left; exists f; auto. }
-        apply (encodeOF_correct rho _ _ _ Hsig HV) in Hs; exact Hs.
+        apply (encodeOF_correct rho _ _ HV) in Hs; exact Hs.
       - intros [pn pv] Hp n g c Hrowc Hg v Hv Hne Hh.
-        assert (Hs : VF.Satisfies S' sigma
+        assert (Hs : PF.Satisfies S'
                        (cflForm rho (srcVersions rho I) (pn, pv)
                           (n, (g, c)))).
         { apply (Hdeps _ _ _ Hp); unfold dependees.
           apply mem_dependees_real; right; left.
           exists (n, (g, c)); auto. }
-        unfold cflForm in Hs; simpl in Hs; apply Hs; clear Hs; split.
-        + destruct (TF_correct rho S' sigma Hsig g) as [HT _].
-          apply HT, defTrue_iff; exact Hg.
-        + exists (TVer.RV v); split; [| apply mem_decodeS; exact Hv].
-          unfold confVS.
-          destruct (N.eq_dec (fst (pn, pv)) n) as [E | _];
-            [contradiction Hne; exact E |].
-          apply mem_versSetBy; exists v; split;
-            [reflexivity
-            | split; [exact (HV _ _ Hv) | exact Hh]].
+        unfold cflForm in Hs; cbn [fst snd] in Hs; rewrite Hg in Hs.
+        cbn [PF.Satisfies] in Hs; apply Hs; clear Hs.
+        exists (TVer.RV v); split; [| apply mem_decodeS; exact Hv].
+        unfold confVS.
+        destruct (N.eq_dec (fst (pn, pv)) n) as [E | _];
+          [contradiction Hne; exact E |].
+        apply mem_versSetBy; exists v; split;
+          [reflexivity
+          | split; [exact (HV _ _ Hv) | exact Hh]].
       - intros k [pn pv] [qn qv] Hp Hq Hpk Hqk Hne.
-        assert (Hs : VF.Satisfies S' sigma
-                       (VF.FNeg (memberAtom (qn, qv)))).
+        assert (Hs : PF.Satisfies S'
+                       (PF.FNeg (memberAtom (qn, qv)))).
         { apply (Hdeps _ _ _ Hp); unfold dependees.
           apply mem_dependees_real; right; right; left.
           exists (qn, qv), k; simpl.
@@ -1249,14 +902,14 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
           exact (not_eq_sym Hne). }
         simpl in Hs; apply Hs; clear Hs.
         exists (TVer.RV qv); split;
-          [apply VF.VSet.singleton_spec; reflexivity
+          [apply PF.VSet.singleton_spec; reflexivity
           | apply mem_decodeS; exact Hq].
       - intros n v Hpin v' Hv'.
         assert (H := Hsub _ _ Hv'); apply mem_effRepo in H.
         destruct H as [_ [Hp _]]; symmetry.
         exact (Hp _ _ Hpin eq_refl).
       - intros [pn pv] Hp n v u Hrowc v' Hv'.
-        assert (Hs : VF.Satisfies S' sigma
+        assert (Hs : PF.Satisfies S'
                        (pindForm (srcVersions rho I) ((n, v), u))).
         { apply (Hdeps _ _ _ Hp); unfold dependees.
           apply mem_dependees_real; right; right; right.
@@ -1273,13 +926,10 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
 
     Theorem opam_completeness : forall rho I S,
         IsResolution rho I S ->
-        VF.IsResolution (transR rho I) (transD rho I) rootPkg
-          (transS S) (pin rho).
+        PF.IsResolution (transR rho I) (transD rho I) rootPkg (transS S).
     Proof.
       intros rho I S HR.
       assert (Hse := res_sub_eff _ _ _ HR).
-      assert (Hsig : forall x, pin rho x = pin rho x)
-        by (intro x; reflexivity).
       assert (HV : forall n v,
                  PkgSet.In (n, v) (decodeS (transS S)) ->
                  VSet.In v (srcVersions rho I n)).
@@ -1299,25 +949,24 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
           destruct Hf'
             as [[f0 [Hin ->]] | [[nc [Hin ->]]
                | [[q [k [Hpk [Hqk [NE ->]]]]] | [nvu [Hin ->]]]]].
-          * apply (encodeOF_correct rho _ _ _ Hsig HV).
+          * apply (encodeOF_correct rho _ _ HV).
             rewrite decode_transS.
             exact (ores_dep_closure _ _ _ HR _ Hp0 _ Hin).
-          * destruct nc as [n [g c]]; unfold cflForm; simpl.
-            intros [HT [tv [Htv Hm]]].
-            destruct (TF_correct rho (transS S) (pin rho) Hsig g)
-              as [HTi _].
-            apply HTi in HT; apply defTrue_iff in HT.
+          * destruct nc as [n [g c]]; unfold cflForm; cbn [fst snd].
+            destruct (defTrue rho g) eqn:Hg;
+              [| exact (PTrue_sat (transS S))].
+            cbn [PF.Satisfies]; intros [tv [Htv Hm]].
             unfold confVS in Htv.
             destruct (N.eq_dec (fst (pn, pv)) n) as [| Hne].
-            { destruct (VF.VSet.empty_spec Htv). }
+            { destruct (PF.VSet.empty_spec Htv). }
             apply mem_versSetBy in Htv;
               destruct Htv as [v [-> [Hra Hh]]].
             apply mem_transS_real in Hm.
             exact (ores_conflict_avoidance _ _ _ HR _ Hp0 _ _ _ Hin
-                     HT _ Hm Hne Hh).
+                     Hg _ Hm Hne Hh).
           * destruct q as [qn qv]; simpl.
             intros [tv [Htv Hm]].
-            apply VF.VSet.singleton_spec in Htv; subst tv.
+            apply PF.VSet.singleton_spec in Htv; subst tv.
             apply mem_transS_real in Hm.
             exact (ores_class_exclusion _ _ _ HR _ _ _ Hp0 Hm
                      Hpk Hqk (not_eq_sym NE)).
@@ -1328,10 +977,10 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
             apply mem_transS_real in Hm.
             exact (NE (ores_pin_depends _ _ _ HR _ Hp0 _ _ _ Hin
                          _ Hm)).
-        + simpl in Hf'; apply FSet.singleton_spec in Hf'; subst f'.
-          unfold rootForm; simpl; split;
-            [apply (pins_pin rho (transS S) (pin rho)); exact Hsig |].
-          split; apply (encodeOF_correct rho _ _ _ Hsig HV);
+        + unfold dependees, dependeesBy, rootPkg in Hf'.
+          apply FSet.singleton_spec in Hf'; subst f'.
+          unfold rootForm; cbn [PF.Satisfies].
+          split; apply (encodeOF_correct rho _ _ HV);
             rewrite decode_transS;
             [exact (ores_goal _ _ _ HR) | exact (ores_invariant _ _ _ HR)].
       - intros tn tv tv' Hv Hv'.
@@ -1446,21 +1095,43 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
     Proof. intros Vq Vq' n c H; unfold versSetBy; rewrite H;
       reflexivity. Qed.
 
-    Lemma fS_agree : forall rho Vq Vq' f,
+    (* redOF only ever keeps atoms of f, so agreeing on f's names is
+       enough to fix the encoding of whatever f reduces to. *)
+    Lemma encR_agree : forall rho Vq Vq' f,
         (forall n, NSet.In n (ofNames f) -> Vq n = Vq' n) ->
-        fS rho Vq f = fS rho Vq' f.
+        forall g, redOF rho f = Some g -> encR Vq g = encR Vq' g.
     Proof.
       intros rho Vq Vq'.
-      induction f as [n g c | a IHa b IHb | a IHa b IHb]; intro H;
-        simpl.
-      - rewrite (versSetBy_agree Vq Vq' n c); [reflexivity |].
+      induction f as [n g0 c | a IHa b IHb | a IHa b IHb];
+        intros H g Hred; simpl in Hred.
+      - destruct (defTrue rho g0); [| discriminate].
+        injection Hred as <-; simpl.
+        rewrite (versSetBy_agree Vq Vq' n c); [reflexivity |].
         apply H; simpl; apply NSet.singleton_spec; reflexivity.
-      - rewrite IHa, IHb; try reflexivity;
-          intros n Hn; apply H; simpl; apply NSet.union_spec;
-          [right | left]; exact Hn.
-      - rewrite IHa, IHb; try reflexivity;
-          intros n Hn; apply H; simpl; apply NSet.union_spec;
-          [right | left]; exact Hn.
+      - assert (Ha : forall m, NSet.In m (ofNames a) -> Vq m = Vq' m).
+        { intros m Hm; apply H; simpl; apply NSet.union_spec;
+            left; exact Hm. }
+        assert (Hb : forall m, NSet.In m (ofNames b) -> Vq m = Vq' m).
+        { intros m Hm; apply H; simpl; apply NSet.union_spec;
+            right; exact Hm. }
+        destruct (redOF rho a) eqn:Ea; destruct (redOF rho b) eqn:Eb;
+          simpl in Hred; try discriminate; injection Hred as <-;
+          simpl.
+        + rewrite (IHa Ha _ eq_refl), (IHb Hb _ eq_refl); reflexivity.
+        + exact (IHa Ha _ eq_refl).
+        + exact (IHb Hb _ eq_refl).
+      - assert (Ha : forall m, NSet.In m (ofNames a) -> Vq m = Vq' m).
+        { intros m Hm; apply H; simpl; apply NSet.union_spec;
+            left; exact Hm. }
+        assert (Hb : forall m, NSet.In m (ofNames b) -> Vq m = Vq' m).
+        { intros m Hm; apply H; simpl; apply NSet.union_spec;
+            right; exact Hm. }
+        destruct (redOF rho a) eqn:Ea; destruct (redOF rho b) eqn:Eb;
+          simpl in Hred; try discriminate; injection Hred as <-;
+          simpl.
+        + rewrite (IHa Ha _ eq_refl), (IHb Hb _ eq_refl); reflexivity.
+        + exact (IHa Ha _ eq_refl).
+        + exact (IHb Hb _ eq_refl).
     Qed.
 
     Lemma encodeOF_agree : forall rho Vq Vq' f,
@@ -1468,15 +1139,18 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
         encodeOF rho Vq f = encodeOF rho Vq' f.
     Proof.
       intros rho Vq Vq' f H; unfold encodeOF.
-      rewrite (fS_agree rho Vq Vq' f H); reflexivity.
+      destruct (redOF rho f) as [g |] eqn:Hred;
+        [exact (encR_agree rho Vq Vq' f H g Hred) | reflexivity].
     Qed.
 
     Lemma cflForm_agree : forall rho Vq Vq' p nc,
         Vq (fst nc) = Vq' (fst nc) ->
         cflForm rho Vq p nc = cflForm rho Vq' p nc.
     Proof.
-      intros rho Vq Vq' p [n [g c]] H; unfold cflForm, confVS; simpl.
-      simpl in H.
+      intros rho Vq Vq' p [n [g c]] H; unfold cflForm, confVS;
+        cbn [fst snd].
+      cbn [fst snd] in H.
+      destruct (defTrue rho g); [| reflexivity].
       destruct (N.eq_dec (fst p) n); [reflexivity |].
       rewrite (versSetBy_agree Vq Vq' n c H); reflexivity.
     Qed.
@@ -1527,8 +1201,8 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
     Theorem dependees_lookupRoot : forall rho I,
         dependees rho (rootSlice I) rootPkg = dependees rho I rootPkg.
     Proof.
-      intros rho I; unfold dependees; simpl.
-      unfold rootForm; simpl.
+      intros rho I; unfold dependees, dependeesBy, rootPkg.
+      unfold rootForm.
       assert (Hg : forall n,
                  NSet.In n (ofNames (inst_goal I)) ->
                  srcVersions rho (rootSlice I) n = srcVersions rho I n).
@@ -1545,6 +1219,7 @@ Module Opam (N V : UsualOrderedType) (X : FiniteUsualOrderedType)
                  (NSet.union (ofNames (inst_goal I))
                     (ofNames (inst_inv I))) n); try reflexivity.
         apply NSet.union_spec; right; exact Hn. }
+      cbn [rootSlice inst_goal inst_inv].
       rewrite (encodeOF_agree rho _ _ _ Hg).
       rewrite (encodeOF_agree rho _ _ _ Hi).
       reflexivity.
