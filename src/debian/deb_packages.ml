@@ -8,15 +8,23 @@ type arch_qual = Unqual | AnyArch | NativeArch | ExplicitArch of string
 type atom = { name : string; aqual : arch_qual; constr : (cmp * string) option }
 type provide = { pname : string; pversion : string option }
 
+(* Depends and Recommends are held as the unparsed field text -- Pre-Depends
+   then Depends, in that order -- because they carry the bulk of an archive's
+   relationship atoms while a query reduces a few dozen of its ~69k stanzas.
+   Keeping 340k atom records and list cells live in the major heap cost more
+   than reading the whole file did; whoever needs a stanza's clauses calls
+   parse_depends_fields on them and keeps only those.  Provides and Conflicts
+   are parsed here because their reverse indices are preimages that no single
+   stanza's rows can reach (see deb_solve.ml). *)
 type stanza = {
   package : string;
   version : string;
   architecture : string;
   multi_arch : string option;
-  depends : atom list list; (* conjunction of alternative groups *)
+  depends_raw : string list;
   (* same syntax as depends (Policy 7.2), and kept apart from it because a
      recommends clause need not be satisfiable for the solve to succeed *)
-  recommends : atom list list;
+  recommends_raw : string list;
   provides : provide list;
   conflicts : atom list; (* Conflicts + Breaks atoms *)
 }
@@ -99,6 +107,10 @@ let parse_depends field =
         let alts = split_on '|' clause |> List.filter_map parse_atom in
         match alts with [] -> None | _ -> Some alts)
 
+(* conjunction of alternative groups, one field after another: a clause never
+   straddles a field boundary, so the concatenation is the parse of each *)
+let parse_depends_fields fields = List.concat_map parse_depends fields
+
 let parse_conflicts field =
   (* Alternatives are not permitted in Conflicts/Breaks (Policy 7.4). *)
   split_on ',' field |> List.filter_map parse_atom
@@ -154,6 +166,7 @@ let stanza_of_fields (fs : (string * string) list) : stanza option =
   match (!package, !version) with
   | Some package, Some version ->
       let opt f = function Some d -> f d | None -> [] in
+      let raw = List.filter_map Fun.id in
       Some
         {
           package;
@@ -161,8 +174,8 @@ let stanza_of_fields (fs : (string * string) list) : stanza option =
           architecture =
             (match !architecture with Some a -> a | None -> "all");
           multi_arch = !multi_arch;
-          depends = opt parse_depends !predepends @ opt parse_depends !depends;
-          recommends = opt parse_depends !recommends;
+          depends_raw = raw [ !predepends; !depends ];
+          recommends_raw = raw [ !recommends ];
           provides = opt parse_provides !provides;
           conflicts =
             opt parse_conflicts !conflicts @ opt parse_conflicts !breaks;

@@ -68,12 +68,15 @@ struct
   let maset_of = DMA.AtomSet.ofList
 
   (* Normalized stanza: apt rewrites arch:all packages to the native arch
-     and downgrades all+same to no (arch:all content is arch-invariant). *)
+     and downgrades all+same to no (arch:all content is arch-invariant).
+     Its Depends and Recommends clauses are still the raw field text, and
+     are mangled once, on the first slice that reads them. *)
   type nstanza = {
     npkg : DMA.Pkg.t;
     ncls : DMA.coq_MAClass;
-    ndeps : DMA.Atom.t list list;
-    nrecs : DMA.Atom.t list list;
+    raw_deps : string list;
+    raw_recs : string list;
+    mutable nclauses : (DMA.Atom.t list list * DMA.Atom.t list list) option;
     nprovs : (string * DMA.Deb.coq_DTop) list;
     nconfs : DMA.Atom.t list;
   }
@@ -93,9 +96,9 @@ struct
     {
       npkg = ((st.package, arch), st.version);
       ncls;
-      ndeps = List.map (List.map matom_of) st.depends;
-      nrecs =
-        (if recommends then List.map (List.map matom_of) st.recommends else []);
+      raw_deps = st.depends_raw;
+      raw_recs = (if recommends then st.recommends_raw else []);
+      nclauses = None;
       nprovs =
         List.map
           (fun (pr : DF.provide) -> (pr.pname, dtop_of pr.pversion))
@@ -128,11 +131,47 @@ struct
     rclause_of_aset : (DMA.Deb.AtomSet.t, DMA.Pkg.t * DMA.AtomSet.t) Hashtbl.t;
     rclause_of_atom : (DMA.Deb.Atom.t, DMA.Pkg.t * DMA.AtomSet.t) Hashtbl.t;
     class_of : (DMA.Pkg.t, DMA.coq_MAClass) Hashtbl.t;
+    (* stanzas whose clauses a slice has asked for, reported under PACPROF:
+       the whole point of deferring them is that this stays small *)
+    mutable n_clauses_parsed : int;
   }
 
   let push tbl k v =
     Hashtbl.replace tbl k
       (v :: (match Hashtbl.find_opt tbl k with Some l -> l | None -> []))
+
+  let mangle fields =
+    List.map (List.map matom_of) (DF.parse_depends_fields fields)
+
+  (* Ranking is the one archive-wide reading here that is neither a preimage
+     nor fillable as stanzas arrive: an atom's rank is the position it holds
+     in the first clause to mention it, so deferring one stanza's clauses
+     re-ranks the alternatives of clauses that have nothing to do with it,
+     and a solve then prefers a different alternative.  So the ranks are
+     taken in one eager pass that drops its atoms as soon as it has ranked
+     them: what survives is an int per distinct atom, not 340k list cells. *)
+  let rank_atoms b alts_list =
+    List.iter
+      (fun alts ->
+        List.iteri
+          (fun i ma ->
+            let ea = DMA.reduceAtom b ma in
+            if not (Hashtbl.mem atom_rank ea) then Hashtbl.replace atom_rank ea i)
+          alts)
+      alts_list
+
+  (* clauses are content-keyed, so one entry per mangled clause is all a
+     hasClauseb/occursAtomb slice needs *)
+  let index_clauses by_aset by_atom (p : DMA.Pkg.t) alts_list =
+    let b = snd (fst p) in
+    List.iter
+      (fun alts ->
+        let aset = maset_of alts in
+        Hashtbl.replace by_aset (DMA.reduceClause b aset) (p, aset);
+        List.iter
+          (fun ma -> Hashtbl.replace by_atom (DMA.reduceAtom b ma) (p, aset))
+          alts)
+      alts_list
 
   let build_index ?(recommends = true) (stanzas : DF.stanza list) : index =
     let idx =
@@ -147,24 +186,8 @@ struct
         rclause_of_aset = Hashtbl.create 65536;
         rclause_of_atom = Hashtbl.create 65536;
         class_of = Hashtbl.create 65536;
+        n_clauses_parsed = 0;
       }
-    in
-    (* clauses are content-keyed, so one entry per mangled clause is all a
-       hasClauseb/occursAtomb slice needs *)
-    let index_clauses by_aset by_atom (p : DMA.Pkg.t) alts_list =
-      let b = snd (fst p) in
-      List.iter
-        (fun alts ->
-          let aset = maset_of alts in
-          Hashtbl.replace by_aset (DMA.reduceClause b aset) (p, aset);
-          List.iteri
-            (fun i ma ->
-              let ea = DMA.reduceAtom b ma in
-              if not (Hashtbl.mem atom_rank ea) then
-                Hashtbl.replace atom_rank ea i;
-              Hashtbl.replace by_atom ea (p, aset))
-            alts)
-        alts_list
     in
     List.iter
       (fun st ->
@@ -180,10 +203,31 @@ struct
         List.iter
           (fun ma -> push idx.conflicts_on (DMA.aname ma) (ns.npkg, ma))
           ns.nconfs;
-        index_clauses idx.clause_of_aset idx.clause_of_atom ns.npkg ns.ndeps;
-        index_clauses idx.rclause_of_aset idx.rclause_of_atom ns.npkg ns.nrecs)
+        rank_atoms b (mangle ns.raw_deps);
+        rank_atoms b (mangle ns.raw_recs))
       stanzas;
     idx
+
+  (* A Disjunct, Soft or Selector name is minted only by reducing a stanza
+     that carries the clause, so the clause indices can be filled as stanzas
+     are read: nothing can ask about a mangled clause, or an atom of one,
+     before the owner it came from has been through here.  That is not true
+     of conflicts_on or providers_of, which are preimages -- who conflicts
+     with me, and who provides the name I want -- that no row of the asking
+     package can reach, so Conflicts, Breaks and Provides stay eager. *)
+  let clauses_of idx (ns : nstanza) =
+    match ns.nclauses with
+    | Some c -> c
+    | None ->
+        let c = (mangle ns.raw_deps, mangle ns.raw_recs) in
+        ns.nclauses <- Some c;
+        idx.n_clauses_parsed <- idx.n_clauses_parsed + 1;
+        index_clauses idx.clause_of_aset idx.clause_of_atom ns.npkg (fst c);
+        index_clauses idx.rclause_of_aset idx.rclause_of_atom ns.npkg (snd c);
+        c
+
+  let deps_of idx ns = fst (clauses_of idx ns)
+  let recs_of idx ns = snd (clauses_of idx ns)
 
   (* MA-side slice builders, in the shapes DebianMA.Lookup proves
      sufficient (versions_lookup*MA / dependees_lookup*MA). *)
@@ -221,13 +265,15 @@ struct
     match Hashtbl.find_opt idx.stanza_of p with
     | None -> DMA.Deps.empty
     | Some ns ->
-        DMA.Deps.ofList (List.map (fun alts -> (p, maset_of alts)) ns.ndeps)
+        DMA.Deps.ofList
+          (List.map (fun alts -> (p, maset_of alts)) (deps_of idx ns))
 
   let ma_recs_of_pkg idx p =
     match Hashtbl.find_opt idx.stanza_of p with
     | None -> DMA.Deps.empty
     | Some ns ->
-        DMA.Deps.ofList (List.map (fun alts -> (p, maset_of alts)) ns.nrecs)
+        DMA.Deps.ofList
+          (List.map (fun alts -> (p, maset_of alts)) (recs_of idx ns))
 
   let ma_conf_of_pkg idx p =
     match Hashtbl.find_opt idx.stanza_of p with
@@ -248,7 +294,7 @@ struct
   let atom_names_of idx p =
     match Hashtbl.find_opt idx.stanza_of p with
     | None -> []
-    | Some ns -> List.concat_map (List.map DMA.aname) ns.ndeps
+    | Some ns -> List.concat_map (List.map DMA.aname) (deps_of idx ns)
 
   let prov_names_of idx p =
     match Hashtbl.find_opt idx.stanza_of p with
@@ -595,7 +641,10 @@ struct
         (fun name (c, t) ->
           Printf.eprintf "PACPROF versions/%s: %d calls %.2fs\n%!" name !c !t)
         buckets;
-      Printf.eprintf "PACPROF dependees: %d calls %.2fs\n%!" !prof_oc !prof_ot);
+      Printf.eprintf "PACPROF dependees: %d calls %.2fs\n%!" !prof_oc !prof_ot;
+      Printf.eprintf "PACPROF clauses parsed: %d of %d stanzas\n%!"
+        idx.n_clauses_parsed
+        (Hashtbl.length idx.stanza_of));
     r
 
 end
