@@ -522,7 +522,11 @@ module Make () = struct
   type result = {
     crates : (string * string) list;
     feats : (string * string * string list) list;
-    sel : (string * string * string * string) list;
+    (* the parent relation, keyed by alias: a cargo rename lets one crate
+       depend on a single crate name twice, and the two aliases may land
+       on different compatibility classes, so the edge has to record which
+       alias received which version *)
+    parents : (string * string * string * string) list;
     nodes : int;
     processed : int;
   }
@@ -601,24 +605,25 @@ module Make () = struct
             (fun (((n, v), fs) : Cg.Featured.t) -> (n, v, Cg.FSet.elements fs))
             (Cg.FeaturedSet.elements (Cg.decodeFS s))
         in
-        (* decodeSel is the one decoder that reads Slots, and a lazy run
-           has no global relation to hand it; the slots of the crates it
-           decodes are all it looks at, since slotsAt filters to the owner
-           named by the node *)
+        (* decodeParents is the one decoder that reads Slots, and a lazy
+           run has no global relation to hand it; the slots of the crates
+           it decodes are all it looks at, since slotsAt filters to the
+           owner named by the node *)
         let slots =
           Cg.SlotRel.unions
             (List.map (fun p -> (rows_of st.ar p).r_slots) (st.rc :: crates))
         in
-        let sel =
+        let parents =
           List.map
-            (fun ((((n, v), a), u) : Cg.SelElt.t) -> (n, v, a, u))
-            (Cg.SelRel.elements (Cg.decodeSel slots cfg_active st.rc s))
+            (fun ((((n, v), a), u) : Cg.ParentElt.t) -> (n, v, a, u))
+            (Cg.ParentRel.elements
+               (Cg.decodeParents slots cfg_active st.rc s))
         in
         Some
           {
             crates = List.sort compare crates;
             feats;
-            sel;
+            parents;
             nodes = List.length sol;
             (* the crate versions whose manifests became encoded rows *)
             processed = Hashtbl.length rows_cache;

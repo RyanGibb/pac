@@ -8,7 +8,7 @@
     d 2.0.0 [b,default]
     f 1.0.0 [c,d,default]
   encoded solution: 24 core nodes (6 crate versions encoded)
-  selections: 6
+  parent edges: 6
   loaded: 5 crates, 6 versions
 
 A requirement admits a prerelease only when one of its own comparators
@@ -23,7 +23,7 @@ q publishes 1.0.0-alpha.1 alone, which ^1.0.0-alpha reaches.
     p 1.0.0 [default]
     q 1.0.0-alpha.1 [default]
   encoded solution: 8 core nodes (4 crate versions encoded)
-  selections: 2
+  parent edges: 2
   loaded: 3 crates, 4 versions
 
 A dev-dependency participates only from the root crate.  k declares m both
@@ -37,7 +37,7 @@ activated and the dev one does not participate.
     h 1.0.0
     k 1.0.0 [default]
   encoded solution: 5 core nodes (2 crate versions encoded)
-  selections: 1
+  parent edges: 1
   loaded: 3 crates, 3 versions
 
 Crates are parsed as the solver first asks for them, so a link's declarers
@@ -56,7 +56,7 @@ without it.
     y 1.0.2 [default]
     z 1.0.0 [default]
   encoded solution: 12 core nodes (7 crate versions encoded)
-  selections: 3
+  parent edges: 3
   loaded: 4 crates, 7 versions
 
 A weak feature entry resolves as the strong one.  u's default feature
@@ -72,7 +72,7 @@ its place in the lock as --features varies, and w is installed with extra.
     u 1.0.0 [cap,default]
     w 1.0.0 [default,extra]
   encoded solution: 11 core nodes (3 crate versions encoded)
-  selections: 2
+  parent edges: 2
   loaded: 3 crates, 3 versions
 
 Resolver v3's one effect on version selection: a candidate whose declared
@@ -87,7 +87,7 @@ m1 takes the older 1.0.0.
     d1 1.0.0 [default]
     m1 1.0.0
   encoded solution: 5 core nodes (3 crate versions encoded)
-  selections: 1
+  parent edges: 1
   loaded: 2 crates, 3 versions
 
 With no toolchain configured the preference is off, as it is in cargo when
@@ -99,7 +99,7 @@ the rust-versions list is empty, and the same index takes the newest.
     d1 1.1.0 [default]
     m1 1.0.0
   encoded solution: 5 core nodes (3 crate versions encoded)
-  selections: 1
+  parent edges: 1
   loaded: 2 crates, 3 versions
 
 A crate declaring no MSRV is compatible with every toolchain rather than
@@ -115,7 +115,7 @@ would give.
     d2 1.1.0 [default]
     m2 1.0.0
   encoded solution: 5 core nodes (4 crate versions encoded)
-  selections: 1
+  parent edges: 1
   loaded: 2 crates, 4 versions
 
   $ ../../../src/main.exe cargo index m2 | sed -E '/^(parse|solve) [0-9.]+s$/d'
@@ -124,7 +124,7 @@ would give.
     d2 1.2.0 [default]
     m2 1.0.0
   encoded solution: 5 core nodes (4 crate versions encoded)
-  selections: 1
+  parent edges: 1
   loaded: 2 crates, 4 versions
 
 This is a preference and not a constraint.  m3 requires ^2 of d3, whose
@@ -137,5 +137,5 @@ out of range, so 2.0.0 is taken rather than the solve failing.
     d3 2.0.0 [default]
     m3 1.0.0
   encoded solution: 5 core nodes (3 crate versions encoded)
-  selections: 1
+  parent edges: 1
   loaded: 2 crates, 3 versions

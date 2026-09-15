@@ -158,7 +158,7 @@ let cargo_run debug index goal wanted rfeats rustv =
         Printf.printf
           "encoded solution: %d core nodes (%d crate versions encoded)\n"
           r.S.nodes r.S.processed;
-        Printf.printf "selections: %d\n" (List.length r.S.sel);
+        Printf.printf "parent edges: %d\n" (List.length r.S.parents);
         loaded ();
         0
   end
