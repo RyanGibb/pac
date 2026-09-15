@@ -121,74 +121,87 @@ let parse_provides field =
             (Printf.sprintf "non-'=' version constraint in Provides: %S" s)
       | None -> None)
 
-let fold_stanzas f acc lines =
-  (* Group physical lines into stanzas, folding continuation lines. *)
-  let flush fields acc =
-    match List.rev fields with [] -> acc | fs -> f acc fs
-  in
-  let rec go fields acc = function
-    | [] -> flush fields acc
-    | "" :: rest -> go [] (flush fields acc) rest
-    | line :: rest
-      when String.length line > 0 && (line.[0] = ' ' || line.[0] = '\t') -> (
-        match fields with
-        | (k, v) :: tl -> go ((k, v ^ "\n" ^ strip line) :: tl) acc rest
-        | [] -> go fields acc rest)
-    | line :: rest -> (
-        match String.index_opt line ':' with
-        | Some i ->
-            let k = String.sub line 0 i in
-            let v =
-              strip (String.sub line (i + 1) (String.length line - i - 1))
-            in
-            go ((k, v) :: fields) acc rest
-        | None -> go fields acc rest)
-  in
-  go [] acc lines
+(* One pass over a stanza's fields, rather than an assoc lookup per field:
+   the ten fields below were each a linear scan of the stanza, and an
+   archive is ~69k stanzas.  First occurrence wins, as List.assoc_opt did. *)
+let stanza_of_fields (fs : (string * string) list) : stanza option =
+  let package = ref None
+  and version = ref None
+  and architecture = ref None
+  and multi_arch = ref None
+  and predepends = ref None
+  and depends = ref None
+  and recommends = ref None
+  and provides = ref None
+  and conflicts = ref None
+  and breaks = ref None in
+  let set r v = if !r = None then r := Some v in
+  List.iter
+    (fun (k, v) ->
+      match k with
+      | "Package" -> set package v
+      | "Version" -> set version v
+      | "Architecture" -> set architecture v
+      | "Multi-Arch" -> set multi_arch v
+      | "Pre-Depends" -> set predepends v
+      | "Depends" -> set depends v
+      | "Recommends" -> set recommends v
+      | "Provides" -> set provides v
+      | "Conflicts" -> set conflicts v
+      | "Breaks" -> set breaks v
+      | _ -> ())
+    fs;
+  match (!package, !version) with
+  | Some package, Some version ->
+      let opt f = function Some d -> f d | None -> [] in
+      Some
+        {
+          package;
+          version;
+          architecture =
+            (match !architecture with Some a -> a | None -> "all");
+          multi_arch = !multi_arch;
+          depends = opt parse_depends !predepends @ opt parse_depends !depends;
+          recommends = opt parse_depends !recommends;
+          provides = opt parse_provides !provides;
+          conflicts =
+            opt parse_conflicts !conflicts @ opt parse_conflicts !breaks;
+        }
+  | _ -> None
 
+(* Stanzas are built as the file is read.  Accumulating every physical line
+   first cost 1.27M live strings and conses on a Debian archive before any
+   stanza was looked at; nothing needs a line once its stanza is closed. *)
 let parse_file path =
   let ic = open_in path in
-  let lines = ref [] in
+  let acc = ref [] and fields = ref [] in
+  let flush () =
+    (match !fields with
+    | [] -> ()
+    | fs -> (
+        match stanza_of_fields (List.rev fs) with
+        | Some st -> acc := st :: !acc
+        | None -> ()));
+    fields := []
+  in
   (try
      while true do
-       lines := input_line ic :: !lines
+       let line = input_line ic in
+       if line = "" then flush ()
+       else if line.[0] = ' ' || line.[0] = '\t' then
+         match !fields with
+         | (k, v) :: tl -> fields := (k, v ^ "\n" ^ strip line) :: tl
+         | [] -> ()
+       else
+         match String.index_opt line ':' with
+         | Some i ->
+             let k = String.sub line 0 i in
+             let v =
+               strip (String.sub line (i + 1) (String.length line - i - 1))
+             in
+             fields := (k, v) :: !fields
+         | None -> ()
      done
    with End_of_file -> close_in ic);
-  let lines = List.rev !lines in
-  fold_stanzas
-    (fun acc fields ->
-      let get k = List.assoc_opt k fields in
-      match (get "Package", get "Version") with
-      | Some package, Some version ->
-          let architecture =
-            match get "Architecture" with Some a -> a | None -> "all"
-          in
-          let multi_arch = get "Multi-Arch" in
-          let dep_fields =
-            (match get "Pre-Depends" with Some d -> [ d ] | None -> [])
-            @ match get "Depends" with Some d -> [ d ] | None -> []
-          in
-          let conf_fields =
-            (match get "Conflicts" with Some d -> [ d ] | None -> [])
-            @ match get "Breaks" with Some d -> [ d ] | None -> []
-          in
-          {
-            package;
-            version;
-            architecture;
-            multi_arch;
-            depends = List.concat_map parse_depends dep_fields;
-            recommends =
-              (match get "Recommends" with
-              | Some d -> parse_depends d
-              | None -> []);
-            provides =
-              (match get "Provides" with
-              | Some p -> parse_provides p
-              | None -> []);
-            conflicts = List.concat_map parse_conflicts conf_fields;
-          }
-          :: acc
-      | _ -> acc)
-    [] lines
-  |> List.rev
+  flush ();
+  List.rev !acc
