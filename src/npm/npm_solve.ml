@@ -602,7 +602,7 @@ let solve ?(debug = false) ar (root : string * string) =
         r
   in
   match
-    PG.solve ~versions ~dependencies
+    PG.solve ~vers:versions ~deps:dependencies
       [ (root_nm, PG.Ranges.of_list [ Np.Vs.Orig (snd root) ]) ]
   with
   | Error inc ->

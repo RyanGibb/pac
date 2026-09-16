@@ -557,7 +557,7 @@ let solve ?(debug = false) (ar : archive) (world : P.dep list) : result option =
   in
   let root = PFR.Name.Orig Red.Name.Root in
   let root_range = PG.Ranges.of_list (versions root) in
-  match PG.solve ~versions ~dependencies [ (root, root_range) ] with
+  match PG.solve ~vers:versions ~deps:dependencies [ (root, root_range) ] with
   | Error inc ->
       Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
       None

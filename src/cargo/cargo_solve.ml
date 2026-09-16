@@ -583,7 +583,7 @@ module Make () = struct
           r
     in
     match
-      PG.solve ~versions ~dependencies
+      PG.solve ~vers:versions ~deps:dependencies
         [ ( Cg.NPlus.CRoot,
             PG.Ranges.of_list [ tag Cg.NPlus.CRoot Cg.VPlus.WUnit ] )
         ]

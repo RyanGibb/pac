@@ -614,7 +614,7 @@ module Make () = struct
     let goal_range = PG.Ranges.of_list (versions (fst root_q)) in
     let t0 = Unix.gettimeofday () in
     let result =
-      PG.solve ~versions ~dependencies [ (fst root_q, goal_range) ]
+      PG.solve ~vers:versions ~deps:dependencies [ (fst root_q, goal_range) ]
     in
     if verbose then begin
       let total = Unix.gettimeofday () -. t0 in

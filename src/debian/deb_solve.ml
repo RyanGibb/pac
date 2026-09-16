@@ -681,6 +681,45 @@ struct
 
     module PG = Pubgrub.Make (PName) (PVersion)
 
+    let greatest = function
+      | [] -> invalid_arg "greatest"
+      | c :: cs ->
+          List.fold_left
+            (fun a b -> if PVersion.compare b a > 0 then b else a)
+            c cs
+
+    (* The back edge a selector candidate would add: dependees sends Ref m w
+       to (Orig m, Orig w) and RefReal w to (Orig (aname a), Orig w). *)
+    let sel_target a (pv : PVersion.t) =
+      match pv.PVersion.v with
+      | DMA.Deb.Version.Ref (m, w) -> Some (DMA.Deb.Name.Orig m, w)
+      | DMA.Deb.Version.RefReal w -> Some (DMA.Deb.Name.Orig (fst a), w)
+      | _ -> None
+
+    (* apt never resolves a clause one of whose alternatives is already
+       satisfied: it leaves the clause alone and installs nothing for it.
+       PubGrub has to decide the name either way, so the nearest thing is to
+       decide it at no cost -- a provider the solution already carries.  A
+       selector none of whose candidates is carried, and every other name,
+       keep PVersion.compare's answer exactly. *)
+    let choose ~assigned n cands =
+      match n with
+      | DMA.Deb.Name.Selector a -> (
+          let carried pv =
+            match sel_target a pv with
+            | None -> false
+            | Some (tn, w) -> (
+                let tv = tag tn (DMA.Deb.Version.Orig w) in
+                match assigned tn with
+                | PG.Unselected -> false
+                | PG.Decided u -> PVersion.compare u tv = 0
+                | PG.Entailed r -> PG.Ranges.contains tv r)
+          in
+          match List.filter carried cands with
+          | [] -> greatest cands
+          | free -> greatest free)
+      | _ -> greatest cands
+
     let run_pubgrub ?(debug = false) ~versions ~dependencies goal =
       let dependencies n (pv : PVersion.t) =
         DMA.Deb.T.DependeesSet.elements (dependencies (n, pv.PVersion.v))
@@ -697,7 +736,7 @@ struct
          anyway. *)
       let goal_range = PG.Ranges.of_list (versions (DMA.Deb.Name.Orig goal)) in
       match
-        PG.solve ~versions ~dependencies
+        PG.solve ~choose ~vers:versions ~deps:dependencies
           [ (DMA.Deb.Name.Orig goal, goal_range) ]
       with
       | Error inc ->
