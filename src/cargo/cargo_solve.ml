@@ -228,19 +228,11 @@ module Make () = struct
      calculus wants at most one slot per (crate, alias) -- AliasFunctional
      -- so unify them the way cargo does: conjoin the requirements, union
      the requested features, and prefer the unconditional rows when there
-     are any *)
+     are any.  Rows of one kind partition only across dev and non-dev, in
+     slots_of below, so no call here mixes the two *)
   let unify_alias (ds : P.dep list) : P.dep =
     let active = List.filter (fun (d : P.dep) -> cfg_active d.P.d_cfg) ds in
     let ds = if active <> [] then active else ds in
-    (* a dev row participates only from the root, so an alias that is also
-       declared non-dev is a non-dev slot: conjoining the two would make the
-       dev row's requirement -- and its non-optionality -- bind on every
-       depender.  When every row is dev the slot stays dev and slotActive
-       gates it.  The residual is that the root loses a dev-only requirement
-       on an alias it also depends on normally, which AliasFunctional cannot
-       express *)
-    let nondev = List.filter (fun (d : P.dep) -> d.P.d_kind <> P.Dev) ds in
-    let ds = if nondev <> [] then nondev else ds in
     let d0 = List.hd ds in
     let rank (d : P.dep) =
       match d.P.d_kind with P.Normal -> 0 | P.Build -> 1 | P.Dev -> 2
@@ -274,7 +266,31 @@ module Make () = struct
           | Some l -> l
           | None -> [])))
       v.P.v_deps;
-    List.rev_map (fun a -> unify_alias (List.rev (Hashtbl.find tbl a))) !order
+    (* a dev row participates only from the root, so conjoining it with a
+       non-dev row on the same alias would make its requirement -- and its
+       non-optionality -- bind on every depender.  cargo keeps both rows:
+       a root's mandatory dev dependency resolves even when the optional
+       normal row it shares an alias with is never activated (once_cell's
+       critical-section, bitflags's arbitrary and bytemuck).  So a
+       colliding dev row becomes its own slot under an alias no manifest
+       can spell.  AliasFunctional holds because the aliases differ;
+       slotActive already confines the dev slot to the root; and no
+       feature entry names the synthetic alias, so dep:a and a/f keep
+       binding to the normal row, which is where cargo points them too *)
+    List.concat_map
+      (fun a ->
+        let rows = List.rev (Hashtbl.find tbl a) in
+        let dev, nondev =
+          List.partition (fun (d : P.dep) -> d.P.d_kind = P.Dev) rows
+        in
+        match (dev, nondev) with
+        | [], _ | _, [] -> [ unify_alias rows ]
+        | _ ->
+            [
+              unify_alias nondev;
+              { (unify_alias dev) with P.d_alias = a ^ "#dev" };
+            ])
+      (List.rev !order)
 
   (* ---- per-crate rows: exactly ownSlots/ownFDefs/ownLinks/ownSupport ---- *)
 

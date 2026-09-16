@@ -40,6 +40,20 @@ activated and the dev one does not participate.
   parent edges: 1
   loaded: 3 crates, 3 versions
 
+From root k itself the same two rows both matter: the mandatory dev row
+installs m even though nothing activates the optional normal row sharing
+its alias.  The two stay separate slots -- conjoined, the dev row's
+non-optionality would bind on every depender, which is the h case above.
+
+  $ ../../../src/main.exe cargo index k | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root k 1.0.0
+  crates (2):
+    k 1.0.0
+    m 1.0.0 [default]
+  encoded solution: 5 core nodes (2 crate versions encoded)
+  parent edges: 1
+  loaded: 2 crates, 2 versions
+
 Crates are parsed as the solver first asks for them, so a link's declarers
 can be discovered after the link has been asked about.  x 1.0.0 and z 1.0.0
 both claim links=foo, so they cannot coexist; x is reached from the root's
