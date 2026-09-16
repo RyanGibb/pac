@@ -5,7 +5,7 @@
     app 1.0
     app-doc 1.0
     docs 1.0
-  encoded solution: 8 core nodes (4 Alpine packages encoded)
+  encoded solution: 7 core nodes (4 Alpine packages encoded)
 
 provider_priority (k:) is apk's preference among the unversioned providers
 of a name.  nano and vim both provide editor, nano sorts first and so heads
@@ -17,7 +17,7 @@ installs:
   cone: 5 packages, 4 provide rows, 0 install_if rows
   packages (1):
     vim 1.0
-  encoded solution: 4 core nodes (2 Alpine packages encoded)
+  encoded solution: 3 core nodes (2 Alpine packages encoded)
 
 A package of the name itself outranks every unversioned provider of it,
 which is apk's rule and the reason k: only ever arbitrates between

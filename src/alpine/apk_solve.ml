@@ -14,6 +14,9 @@ module P = Apk_parse
 let c2r c = if c < 0 then E.Lt else if c > 0 then E.Gt else E.Eq
 let r2c = function E.Lt -> -1 | E.Eq -> 0 | E.Gt -> 1
 
+let rec nat_int (n : E.nat) : int =
+  match n with E.O -> 0 | E.S k -> 1 + nat_int k
+
 module StringOT = struct
   type t = string
 
@@ -293,8 +296,12 @@ module PName = struct
   let pp fmt (n : t) =
     match n with
     | PFR.Name.Orig m -> pp_alp_name fmt m
-    | PFR.Name.Disjunct (a, b) ->
-        Format.fprintf fmt "<%a|%a>" (pp_formula 2) a (pp_formula 2) b
+    | PFR.Name.Disjunct fs ->
+        Format.fprintf fmt "<%a>"
+          (Format.pp_print_list
+             ~pp_sep:(fun fmt () -> Format.fprintf fmt "|")
+             (pp_formula 2))
+          fs
     | PFR.Name.NegDep (m, vs) ->
         Format.fprintf fmt "<!%a{%d}>" pp_alp_name m
           (List.length (PF.VSet.elements vs))
@@ -314,12 +321,11 @@ let rank_none = min_int
 let prov_rank ar (q : string * string) : int =
   match Hashtbl.find_opt ar.prio q with Some k -> k | None -> rank_unranked
 
-(* encPos nests the unversioned providers of a name into a right-leaning
-   disjunction whose last alternative is the name's own versions, so one
-   link's left branch is a lone provider and its right branch is every
-   remaining alternative.  A trigger disjunction and a negated dependency
-   both nest FNeg on the left, so a left branch naming a single package
-   identifies a provider chain. *)
+(* encPos lists the unversioned providers of a name as a disjunction whose
+   last alternative is the name's own versions, so every alternative but
+   the last is a lone provider.  A trigger disjunction and a negated
+   dependency both list FNeg alternatives, so an alternative naming a
+   single package identifies a provider list. *)
 let chain_head (f : PF.coq_Formula) : (string * string) option =
   match f with
   | PF.FDep (Red.Name.Orig m, vs) -> (
@@ -328,14 +334,25 @@ let chain_head (f : PF.coq_Formula) : (string * string) option =
       | _ -> None)
   | _ -> None
 
-let rec chain_rank ar (f : PF.coq_Formula) : int =
-  match f with
-  | PF.FDisj (a, b) -> (
-      match chain_head a with
-      | Some q -> max (prov_rank ar q) (chain_rank ar b)
-      | None -> rank_none)
-  | PF.FDep (_, vs) -> if PF.VSet.elements vs = [] then rank_none else rank_pkg
-  | _ -> rank_none
+(* The alternative a gadget version selects, and whether it is the last
+   one -- the last alternative is the only one that is not a provider. *)
+let rec alt_at (fs : PF.coq_Formula list) (i : E.nat) :
+    (PF.coq_Formula * bool) option =
+  match (fs, i) with
+  | [ f ], E.O -> Some (f, true)
+  | f :: _, E.O -> Some (f, false)
+  | _ :: fs', E.S k -> alt_at fs' k
+  | [], _ -> None
+
+(* The rank of one alternative: a provider by its k: line, the last
+   alternative -- the name's own versions -- above every provider. *)
+let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
+  if last then
+    match f with
+    | PF.FDep (_, vs) ->
+        if PF.VSet.elements vs = [] then rank_none else rank_pkg
+    | _ -> rank_none
+  else match chain_head f with Some q -> prov_rank ar q | None -> rank_none
 
 (* PubGrub decides the compare-maximum candidate, so preference lives
    here.  Newest-first among a name's own versions falls out of the
@@ -346,26 +363,27 @@ let rec chain_rank ar (f : PF.coq_Formula) : int =
    own preference and the reason provider_priority only ever arbitrates
    between unversioned providers.
 
-   Zero selects a disjunction's left alternative and One its right, and
-   which branch is wanted depends on the disjunction.  trigForm nests the
-   negated install_if conditions on the left and the triggered package
-   last, so Zero is apk's rule that a trigger fires only when its
-   conditions already hold -- without it every install_if row in the
-   index is discharged by installing its target.  encPos nests the
-   unversioned providers of a name on the left and its own versions last,
-   so there Zero takes a provider and One defers to the rest, and apk
-   ranks those by provider_priority with a package of the name itself
-   above all of them.
+   A gadget version selects one alternative of its disjunction by
+   position, and which alternative is wanted depends on the disjunction.
+   trigForm lists the negated install_if conditions first and the
+   triggered package last, so preferring the earliest alternative is
+   apk's rule that a trigger fires only when its conditions already hold
+   -- without it every install_if row in the index is discharged by
+   installing its target.  encPos lists the unversioned providers of a
+   name first and its own versions last, and apk ranks those by
+   provider_priority with a package of the name itself above all of them.
 
    The rank is carried on the version rather than read off it: which
-   disjunction a Zero belongs to is what decides, and a comparator sees
-   two versions and not their name.  Every version PubGrub holds is
+   disjunction a position belongs to is what decides, and a comparator
+   sees two versions and not their name.  Every version PubGrub holds is
    handed to it by [versions] or by a dependency range, both of which
    know the name, so both tag as they go and the rank is a function of
    the (name, version) pair -- keeping this a total order, and one
    consistent with the tags on any range the same name is compared
-   against.  Ranks order Zero against One and break no other tie, so the
-   versions of a name that has no provider disjunction are unaffected. *)
+   against.  Ranks order a disjunction's alternatives against each other
+   and break no other tie, so the versions of a name that has no provider
+   disjunction are unaffected; an untagged disjunction leaves every
+   alternative at rank 0, where the earliest one wins. *)
 module PVersion = struct
   type t = { rank : int; v : PFR.Version.t }
 
@@ -375,8 +393,7 @@ module PVersion = struct
     | PFR.Version.Orig (Red.Version.Orig s) -> Format.fprintf fmt "%s" s
     | PFR.Version.Orig (Red.Version.Prov ((n, w), pv)) ->
         Format.fprintf fmt "%s=%s(%s-%s)" "provided" pv n w
-    | PFR.Version.Zero -> Format.fprintf fmt "0"
-    | PFR.Version.One -> Format.fprintf fmt "1"
+    | PFR.Version.Idx i -> Format.fprintf fmt "%d" (nat_int i)
 
   let compare a b =
     match (a.v, b.v) with
@@ -386,10 +403,9 @@ module PVersion = struct
     | ( PFR.Version.Orig (Red.Version.Prov _),
         PFR.Version.Orig (Red.Version.Orig _) ) ->
         -1
-    | PFR.Version.Zero, PFR.Version.One ->
-        if a.rank = b.rank then 1 else Stdlib.compare a.rank b.rank
-    | PFR.Version.One, PFR.Version.Zero ->
-        if a.rank = b.rank then -1 else Stdlib.compare a.rank b.rank
+    | PFR.Version.Idx _, PFR.Version.Idx _ ->
+        let c = Stdlib.compare a.rank b.rank in
+        if c <> 0 then c else -r2c (PFR.VersionOT.compare a.v b.v)
     | _ ->
         let c = r2c (PFR.VersionOT.compare a.v b.v) in
         if c <> 0 then c else Stdlib.compare a.rank b.rank
@@ -397,16 +413,11 @@ end
 
 let tag ar (tn : PFR.Name.t) (tv : PFR.Version.t) : PVersion.t =
   match (tn, tv) with
-  | PFR.Name.Disjunct (a, b), (PFR.Version.Zero | PFR.Version.One) -> (
-      match chain_head a with
+  | PFR.Name.Disjunct (f0 :: _ as fs), PFR.Version.Idx i
+    when chain_head f0 <> None -> (
+      match alt_at fs i with
       | None -> { PVersion.rank = 0; v = tv }
-      | Some q ->
-          let rank =
-            match tv with
-            | PFR.Version.Zero -> prov_rank ar q
-            | _ -> chain_rank ar b
-          in
-          { PVersion.rank; v = tv })
+      | Some (f, last) -> { PVersion.rank = alt_rank ar last f; v = tv })
   | _ -> { PVersion.rank = 0; v = tv }
 
 module PG = Pubgrub.Make (PName) (PVersion)

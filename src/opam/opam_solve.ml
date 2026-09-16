@@ -13,6 +13,9 @@ module E = Pac
 let c2r = function -1 -> E.Lt | 0 -> E.Eq | _ -> E.Gt
 let r2c = function E.Eq -> 0 | E.Lt -> -1 | E.Gt -> 1
 
+let rec nat_int (n : E.nat) : int =
+  match n with E.O -> 0 | E.S k -> 1 + nat_int k
+
 module SName = struct
   type t = string
 
@@ -397,7 +400,7 @@ module Make () = struct
     let pp fmt (n : t) =
       match n with
       | PFR.Name.Orig tn -> pp_t fmt tn
-      | PFR.Name.Disjunct (_, _) -> Format.fprintf fmt "<disj>"
+      | PFR.Name.Disjunct _ -> Format.fprintf fmt "<disj>"
       | PFR.Name.NegDep (_, _) -> Format.fprintf fmt "<negdep>"
   end
 
@@ -432,8 +435,7 @@ module Make () = struct
       | PFR.Version.Orig (Red.TVer.RV v) -> Format.fprintf fmt "%s" v
       | PFR.Version.Orig Red.TVer.UnitV -> Format.fprintf fmt "()"
       | PFR.Version.Orig (Red.TVer.NV n) -> Format.fprintf fmt "%s" n
-      | PFR.Version.Zero -> Format.fprintf fmt "z0"
-      | PFR.Version.One -> Format.fprintf fmt "z1"
+      | PFR.Version.Idx i -> Format.fprintf fmt "z%d" (nat_int i)
   end
 
   module PG = Pubgrub.Make (PName) (PVersion)

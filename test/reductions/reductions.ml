@@ -268,15 +268,14 @@ let package_formula () =
     (M.DepRel.elements d);
   let pp_tn = function
     | R.Name.Orig n -> nm (n2i n)
-    | R.Name.Disjunct (f1, f2) ->
-        Printf.sprintf "or<%s ; %s>" (pp_form f1) (pp_form f2)
+    | R.Name.Disjunct fs ->
+        Printf.sprintf "or<%s>" (String.concat " ; " (List.map pp_form fs))
     | R.Name.NegDep (n, vs) ->
         Printf.sprintf "neg<%s,%s>" (nm (n2i n)) (pp_vs vs)
   in
   let pp_tv = function
     | R.Version.Orig v -> string_of_int (n2i v)
-    | R.Version.Zero -> "0"
-    | R.Version.One -> "1"
+    | R.Version.Idx i -> string_of_int (n2i i)
   in
   let pp_tp (n, v) = Printf.sprintf "(%s,%s)" (pp_tn n) (pp_tv v) in
   let pp_tvs vs =
