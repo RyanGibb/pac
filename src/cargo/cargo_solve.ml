@@ -535,12 +535,16 @@ module Make () = struct
       (rc : string * string) =
     Pubgrub.set_debug debug;
     let st = mk_state ar rc rfeats rustv in
-    (* the preference lands on the crate name, which is where the dependers'
-       ranges already meet; every gadget candidate is a class and carries no
-       standing of its own *)
+    (* the preference must land on every name whose candidates are concrete
+       crate versions, not just the crate name: CFeatP also carries WOrig,
+       and whichever of the two families is decided first entails the other,
+       so a family left untagged decides by bare semver and the demotion
+       never acts.  Class gadgets carry WClass/WMember and no standing. *)
     let tag (nm : Cg.NPlus.t) (w : Cg.VPlus.t) : PVersion.t =
       match (st.rustv, nm, w) with
-      | Some rustc, Cg.NPlus.CCrate (n, _), Cg.VPlus.WOrig v ->
+      | ( Some rustc,
+          (Cg.NPlus.CCrate (n, _) | Cg.NPlus.CFeatP (n, _, _)),
+          Cg.VPlus.WOrig v ) ->
           { PVersion.msrv = crate_msrv_ok st rustc (n, v); v = w }
       | _ -> { PVersion.msrv = true; v = w }
     in
