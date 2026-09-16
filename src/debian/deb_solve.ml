@@ -693,45 +693,64 @@ struct
             (fun a b -> if PVersion.compare b a > 0 then b else a)
             c cs
 
+    (* Does the partial solution already carry [tn] at one of [tvs]? *)
+    let carried_at ~assigned tn tvs =
+      match assigned tn with
+      | PG.Unselected -> false
+      | PG.Decided u -> List.exists (fun v -> PVersion.compare u v = 0) tvs
+      | PG.Entailed r -> List.exists (fun v -> PG.Ranges.contains v r) tvs
+
     (* The back edge a selector candidate would add: dependees sends Ref m w
        to (Orig m, Orig w) and RefReal w to (Orig (aname a), Orig w). *)
-    let sel_target a (pv : PVersion.t) =
+    let sel_carried ~assigned a (pv : PVersion.t) =
+      let at m w =
+        carried_at ~assigned (DMA.Deb.Name.Orig m)
+          [ tag (DMA.Deb.Name.Orig m) (DMA.Deb.Version.Orig w) ]
+      in
       match pv.PVersion.v with
-      | DMA.Deb.Version.Ref (m, w) -> Some (DMA.Deb.Name.Orig m, w)
-      | DMA.Deb.Version.RefReal w -> Some (DMA.Deb.Name.Orig (fst a), w)
-      | _ -> None
-
-    (* apt never resolves a clause one of whose alternatives is already
-       satisfied: it leaves the clause alone and installs nothing for it.
-       PubGrub has to decide the name either way, so the nearest thing is to
-       decide it at no cost -- a provider the solution already carries.  A
-       selector none of whose candidates is carried, and every other name,
-       keep PVersion.compare's answer exactly. *)
-    let choose ~assigned n cands =
-      match n with
-      | DMA.Deb.Name.Selector a -> (
-          let carried pv =
-            match sel_target a pv with
-            | None -> false
-            | Some (tn, w) -> (
-                let tv = tag tn (DMA.Deb.Version.Orig w) in
-                match assigned tn with
-                | PG.Unselected -> false
-                | PG.Decided u -> PVersion.compare u tv = 0
-                | PG.Entailed r -> PG.Ranges.contains tv r)
-          in
-          match List.filter carried cands with
-          | [] -> greatest cands
-          | free -> greatest free)
-      | _ -> greatest cands
+      | DMA.Deb.Version.Ref (m, w) -> at m w
+      | DMA.Deb.Version.RefReal w -> at (fst a) w
+      | _ -> false
 
     let run_pubgrub ?(debug = false) ~versions ~dependencies goal =
-      let dependencies n (pv : PVersion.t) =
-        DMA.Deb.T.DependeesSet.elements (dependencies (n, pv.PVersion.v))
+      let targets n (v : DMA.Deb.Version.t) =
+        DMA.Deb.T.DependeesSet.elements (dependencies (n, v))
         |> List.map (fun (tn, tvs) ->
-            ( tn,
-              PG.Ranges.of_list
-                (List.map (tag tn) (DMA.Deb.T.VSet.elements tvs)) ))
+            (tn, List.map (tag tn) (DMA.Deb.T.VSet.elements tvs)))
+      in
+      let dependencies n (pv : PVersion.t) =
+        List.map
+          (fun (tn, tvs) -> (tn, PG.Ranges.of_list tvs))
+          (targets n pv.PVersion.v)
+      in
+      (* apt never resolves a clause one of whose alternatives is already
+         satisfied: it leaves the clause alone and installs nothing for it.
+         PubGrub has to decide the gadget either way, so the nearest thing is
+         to decide it at no cost -- an alternative, or a provider of one, the
+         solution already carries.  Where nothing is carried, and for every
+         other name, PVersion.compare's answer stands unchanged. *)
+      let choose ~assigned n cands =
+        (* an alternative is discharged if its target is already carried, or
+           if it resolves through a selector one of whose providers is *)
+        let alt_carried (pv : PVersion.t) =
+          List.exists
+            (fun (tn, tvs) ->
+              carried_at ~assigned tn tvs
+              ||
+              match tn with
+              | DMA.Deb.Name.Selector a ->
+                  List.exists (sel_carried ~assigned a) tvs
+              | _ -> false)
+            (targets n pv.PVersion.v)
+        in
+        let free =
+          match n with
+          | DMA.Deb.Name.Selector a -> List.filter (sel_carried ~assigned a) cands
+          | DMA.Deb.Name.Disjunct _ | DMA.Deb.Name.Soft _ ->
+              List.filter alt_carried cands
+          | _ -> []
+        in
+        match free with [] -> greatest cands | free -> greatest free
       in
       let versions n =
         List.map (tag n) (DMA.Deb.T.VSet.elements (versions n))
