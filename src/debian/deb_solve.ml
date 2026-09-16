@@ -162,9 +162,14 @@ struct
            whichever is recorded first wins.  That is exactly as sound as the
            content-keying above: both packages already reduce to one gadget
            name, hence to one PubGrub decision, so there was never room for
-           the two to be ordered apart.  (Checked: the disagreement is about a
-           preference between alternatives all of which remain candidates, so
-           nothing becomes satisfiable or unsatisfiable either way.) *)
+           the two to be ordered apart.  The order is a preference and nothing
+           more, but not because every alternative is a live candidate -- a
+           good few of the clause sets written both ways round list an
+           alternative no version satisfies, such as fuse (<< 3) against
+           fuse3, or makedev against udev.  Recording such an order first puts
+           a dead alternative at the head and costs a backtrack; it cannot
+           change the answer, because an alternative nothing satisfies is one
+           PubGrub can never decide the gadget to. *)
         if not (Hashtbl.mem idx.clause_order ma_set) then
           Hashtbl.replace idx.clause_order ma_set (Array.of_list eatoms))
       alts_list
