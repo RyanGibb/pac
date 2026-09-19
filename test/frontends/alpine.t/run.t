@@ -5,7 +5,7 @@
     app 1.0
     app-doc 1.0
     docs 1.0
-  encoded solution: 7 core nodes (4 Alpine packages encoded)
+  encoded solution: 6 core nodes (4 Alpine packages encoded)
 
 provider_priority (k:) is apk's preference among the unversioned providers
 of a name.  nano and vim both provide editor, nano sorts first and so heads

@@ -39,7 +39,26 @@ module PM = struct
 end
 
 module Alp = E.Alpine (StringOT) (AVerOT) (PM)
-module Red = Alp.Reduction
+
+(* Which condition a rule designates is free, and is a performance
+   choice: the rule is materialised only once that condition is selected.
+   Alpine writes the switch name (docs, openrc) first and nothing depends
+   on those, where CondSet.choose's alphabetical pick lands on a name most
+   of the archive carries -- so the first-listed atom is recorded as the
+   set is built, keyed by the element list, which is canonical where the
+   set's own representation need not be.  The fallback keeps desig total,
+   discharging desig_designates: a TCB obligation here, as ApkVerMatch's
+   prefix/hash are. *)
+let desig_tbl : (Alp.Atom.t list, Alp.Atom.t) Hashtbl.t = Hashtbl.create 4096
+
+module FirstDesig = struct
+  let desig (conds : Alp.CondSet.t) : Alp.Atom.t option =
+    match Hashtbl.find_opt desig_tbl (Alp.CondSet.elements conds) with
+    | Some _ as a -> a
+    | None -> Alp.CondSet.choose conds
+end
+
+module Red = Alp.Reduct (FirstDesig)
 module PF = Red.PF
 module PFR = PF.Reduction
 module T = PFR.T
@@ -67,76 +86,6 @@ module T = PFR.T
 (* replaces (r:/q:) never appears in a repository index -- it is an
    installed-db field -- so inst_repl is empty. *)
 
-(* ---- archive ---------------------------------------------------------- *)
-
-type archive = {
-  by_name : (string, P.pkg list) Hashtbl.t;
-  meta : (string * string, P.pkg) Hashtbl.t;
-  (* provided name -> the rows claiming it *)
-  providers : (string, ((string * string) * string option) list) Hashtbl.t;
-  trigs : (P.pkg * P.dep list) list;
-  prio : (string * string, int) Hashtbl.t;
-  mutable n_pkgs : int;
-  mutable n_provs : int;
-  mutable n_trigs : int;
-}
-
-let push tbl k v =
-  let prev = match Hashtbl.find_opt tbl k with Some l -> l | None -> [] in
-  Hashtbl.replace tbl k (v :: prev)
-
-let load_index (path : string) : archive =
-  let pkgs = P.parse_file path in
-  let ar =
-    {
-      by_name = Hashtbl.create 16384;
-      meta = Hashtbl.create 16384;
-      providers = Hashtbl.create 16384;
-      trigs = [];
-      prio = Hashtbl.create 1024;
-      n_pkgs = 0;
-      n_provs = 0;
-      n_trigs = 0;
-    }
-  in
-  let trigs = ref [] in
-  List.iter
-    (fun (p : P.pkg) ->
-      push ar.by_name p.P.name p;
-      Hashtbl.replace ar.meta (p.P.name, p.P.version) p;
-      ar.n_pkgs <- ar.n_pkgs + 1;
-      List.iter
-        (fun (pr : P.prov) ->
-          push ar.providers pr.P.p_name ((p.P.name, p.P.version), pr.P.p_ver);
-          ar.n_provs <- ar.n_provs + 1)
-        p.P.provides;
-      (match p.P.priority with
-      | Some k -> Hashtbl.replace ar.prio (p.P.name, p.P.version) k
-      | None -> ());
-      if p.P.install_if <> [] then (
-        trigs := (p, p.P.install_if) :: !trigs;
-        ar.n_trigs <- ar.n_trigs + 1))
-    pkgs;
-  { ar with trigs = List.rev !trigs }
-
-let versions_of ar n =
-  match Hashtbl.find_opt ar.by_name n with Some l -> l | None -> []
-
-(* apk-package(5): "By default a non-versioned provides will not be
-   selected automatically for installation.  But specifying
-   provider-priority enables this automatic selection".  So a bare
-   provides without k: is not a low-ranked candidate, it is not a
-   candidate: its row never enters the instance, which is an
-   availability cut on the alias rather than on its owner -- the owner
-   stays installable when the world names it directly. *)
-let auto_selectable ar (owner : string * string) (pv : string option) =
-  pv <> None || Hashtbl.mem ar.prio owner
-
-let providers_of ar n =
-  match Hashtbl.find_opt ar.providers n with
-  | Some l -> List.filter (fun (owner, pv) -> auto_selectable ar owner pv) l
-  | None -> []
-
 (* ---- encoding into the calculus ---------------------------------------- *)
 
 let xconstr (c : P.constr) : Alp.coq_Constr =
@@ -160,7 +109,113 @@ let xdep (d : P.dep) : Alp.coq_Dep =
 let ptag (v : string option) : Alp.coq_PTag =
   match v with Some pv -> Alp.PVer pv | None -> Alp.PVirt
 
-let condset_of ds = Alp.CondSet.ofList (List.map xatom ds)
+(* building the set is also where the row's first-listed atom is offered
+   to [FirstDesig]; an earlier row keeps the designation when two rows
+   share a set, so the table does not depend on when it is read *)
+let condset_of ds =
+  let atoms = List.map xatom ds in
+  let cs = Alp.CondSet.ofList atoms in
+  (match atoms with
+  | a :: _ ->
+      let key = Alp.CondSet.elements cs in
+      if not (Hashtbl.mem desig_tbl key) then Hashtbl.add desig_tbl key a
+  | [] -> ());
+  cs
+
+(* ---- archive ---------------------------------------------------------- *)
+
+type trigrow = {
+  t_pkg : string * string;
+  t_conds : Alp.CondSet.t;
+  t_desig : Alp.Atom.t;
+}
+
+type archive = {
+  by_name : (string, P.pkg list) Hashtbl.t;
+  meta : (string * string, P.pkg) Hashtbl.t;
+  (* provided name -> the rows claiming it *)
+  providers : (string, ((string * string) * string option) list) Hashtbl.t;
+  (* install-if rows by their designated condition's name: only a package
+     bearing that name, or providing it, can carry the rule *)
+  trig_by_cond : (string, trigrow list) Hashtbl.t;
+  prio : (string * string, int) Hashtbl.t;
+  mutable n_pkgs : int;
+  mutable n_provs : int;
+  mutable n_trigs : int;
+}
+
+let push tbl k v =
+  let prev = match Hashtbl.find_opt tbl k with Some l -> l | None -> [] in
+  Hashtbl.replace tbl k (v :: prev)
+
+let load_index (path : string) : archive =
+  let pkgs = P.parse_file path in
+  let ar =
+    {
+      by_name = Hashtbl.create 16384;
+      meta = Hashtbl.create 16384;
+      providers = Hashtbl.create 16384;
+      trig_by_cond = Hashtbl.create 1024;
+      prio = Hashtbl.create 1024;
+      n_pkgs = 0;
+      n_provs = 0;
+      n_trigs = 0;
+    }
+  in
+  let trigs = ref [] in
+  List.iter
+    (fun (p : P.pkg) ->
+      push ar.by_name p.P.name p;
+      Hashtbl.replace ar.meta (p.P.name, p.P.version) p;
+      ar.n_pkgs <- ar.n_pkgs + 1;
+      List.iter
+        (fun (pr : P.prov) ->
+          push ar.providers pr.P.p_name ((p.P.name, p.P.version), pr.P.p_ver);
+          ar.n_provs <- ar.n_provs + 1)
+        p.P.provides;
+      (match p.P.priority with
+      | Some k -> Hashtbl.replace ar.prio (p.P.name, p.P.version) k
+      | None -> ());
+      if p.P.install_if <> [] then (
+        ar.n_trigs <- ar.n_trigs + 1;
+        (* a CondSet is positive-only, so a negated install_if condition
+           cannot be represented; dropping the sign would invert it, so
+           the whole rule is dropped and counted instead *)
+        if List.exists (fun (d : P.dep) -> d.P.d_neg) p.P.install_if then
+          P.reject ()
+        else
+          trigs :=
+            ((p.P.name, p.P.version), condset_of p.P.install_if) :: !trigs))
+    pkgs;
+  (* keyed only once every set has offered its designation, so the key a
+     row is filed under is the one [attachDesig] will ask about *)
+  List.iter
+    (fun (z, conds) ->
+      match FirstDesig.desig conds with
+      | Some a ->
+          push ar.trig_by_cond (fst a)
+            { t_pkg = z; t_conds = conds; t_desig = a }
+      | None -> ())
+    (List.rev !trigs);
+  ar
+
+let versions_of ar n =
+  match Hashtbl.find_opt ar.by_name n with Some l -> l | None -> []
+
+(* apk-package(5): "By default a non-versioned provides will not be
+   selected automatically for installation.  But specifying
+   provider-priority enables this automatic selection".  So a bare
+   provides without k: is not a low-ranked candidate, it is not a
+   candidate: its row never enters the instance, which is an
+   availability cut on the alias rather than on its owner -- the owner
+   stays installable when the world names it directly. *)
+let auto_selectable ar (owner : string * string) (pv : string option) =
+  pv <> None || Hashtbl.mem ar.prio owner
+
+let providers_of ar n =
+  match Hashtbl.find_opt ar.providers n with
+  | Some l -> List.filter (fun (owner, pv) -> auto_selectable ar owner pv) l
+  | None -> []
 
 (* ---- slices ------------------------------------------------------------
 
@@ -201,81 +256,77 @@ let name_inst ar (n : string) : Alp.coq_Inst =
   let repo, prov = slice_at ar [ n ] in
   { empty_inst with Alp.inst_repo = repo; inst_prov = prov }
 
-(* Lookup.pkgSlice: the package's own dependency and provide rows, and
-   the repository at the names those dependencies mention *)
+(* Lookup.installIfFibre: of the rows designating a name this package
+   bears or provides, the ones whose designated condition it actually
+   satisfies.  attachAt reads the package itself and the provide rows it
+   heads and nothing else, so deciding it against an instance carrying
+   just those rows is the whole archive's answer (attachAt_slice). *)
+let rows_at ar ((n, v) : string * string) (own : Alp.Prov.t) : trigrow list =
+  let inst = { empty_inst with Alp.inst_prov = own } in
+  let at m =
+    match Hashtbl.find_opt ar.trig_by_cond m with Some l -> l | None -> []
+  in
+  let cands =
+    List.fold_left
+      (fun acc ((_, (m, _)) : Alp.ProvElt.t) -> List.rev_append (at m) acc)
+      (at n) (Alp.Prov.elements own)
+  in
+  List.filter (fun r -> Red.attachAt inst (n, v) r.t_desig) cands
+
+(* Lookup.pkgSlice: the package's own dependency, provide and install-if
+   rows, and the repository at the names those dependencies mention --
+   together with, per install-if rule the package carries, the rule's
+   declaring name and the names of the conditions it did not designate *)
 let pkg_inst ar ((n, v) : string * string) : Alp.coq_Inst =
   match Hashtbl.find_opt ar.meta (n, v) with
   | None -> empty_inst
   | Some m ->
-      let ns = List.map (fun (d : P.dep) -> d.P.d_name) m.P.depends in
+      let own =
+        Alp.Prov.ofList
+          (List.filter_map
+             (fun (pr : P.prov) ->
+               if auto_selectable ar (n, v) pr.P.p_ver then
+                 Some ((n, v), (pr.P.p_name, ptag pr.P.p_ver))
+               else None)
+             m.P.provides)
+      in
+      let rows = rows_at ar (n, v) own in
+      let ns =
+        List.fold_left
+          (fun acc r ->
+            fst r.t_pkg
+            :: List.rev_append
+                 (List.map fst (Alp.CondSet.elements (Red.condRest r.t_conds)))
+                 acc)
+          (List.map (fun (d : P.dep) -> d.P.d_name) m.P.depends)
+          rows
+      in
       let repo, prov = slice_at ar ns in
       let deps =
         Alp.Deps.ofList (List.map (fun d -> ((n, v), xdep d)) m.P.depends)
-      in
-      let prov =
-        Alp.Prov.union prov
-          (Alp.Prov.ofList
-             (List.filter_map
-                (fun (pr : P.prov) ->
-                  if auto_selectable ar (n, v) pr.P.p_ver then
-                    Some ((n, v), (pr.P.p_name, ptag pr.P.p_ver))
-                  else None)
-                m.P.provides))
       in
       {
         empty_inst with
         Alp.inst_repo = repo;
         inst_deps = deps;
-        inst_prov = prov;
+        inst_prov = Alp.Prov.union prov own;
+        inst_trig =
+          Alp.Trig.ofList (List.map (fun r -> (r.t_pkg, r.t_conds)) rows);
       }
 
-(* Lookup.rootSlice one row at a time.  rootSlice keeps the repository at
-   rootNames -- every name the world and the whole trigger table mention
-   -- but dependees @root is a union of per-row formulas, and each row's
-   formula reads the instance only at its own names' fibres: encDep d at
-   depName d, and trigForm p conds at fst p and the condition names
-   (Alpine.v's encDep_slice/trigForm_slice, both resting on
-   constrVers_slice and uprovSet_slice).  So splitting the world half and
-   each trigger row into their own slices and unioning the formulas gives
-   the same set, and no encPos scans rows belonging to another row's
-   names -- which is what makes the whole-index root slice quadratic in
-   the number of triggers. *)
-let root_forms ar (world : P.dep list) : PF.coq_Formula list =
-  let wnames = List.map (fun (d : P.dep) -> d.P.d_name) world in
-  let repo, prov = slice_at ar wnames in
-  let winst =
-    {
-      empty_inst with
-      Alp.inst_repo = repo;
-      inst_prov = prov;
-      inst_world = Alp.WSet.ofList (List.map xdep world);
-    }
+(* Lookup.rootSlice: the world set and the repository at the names it
+   mentions.  Every install-if rule is carried by a package, so the root
+   reads no part of the rule table. *)
+let root_inst ar (world : P.dep list) : Alp.coq_Inst =
+  let repo, prov =
+    slice_at ar (List.map (fun (d : P.dep) -> d.P.d_name) world)
   in
-  let out = ref (Red.FSet.elements (Red.dependees winst Red.rootPkg)) in
-  List.iter
-    (fun ((p : P.pkg), conds) ->
-      (* a CondSet is positive-only, so a negated install_if condition
-         cannot be represented; dropping the sign would invert it, so the
-         whole trigger is dropped and counted instead *)
-      if List.exists (fun (d : P.dep) -> d.P.d_neg) conds then P.reject ()
-      else
-        let ns = p.P.name :: List.map (fun (d : P.dep) -> d.P.d_name) conds in
-        let repo, prov = slice_at ar ns in
-        let inst =
-          {
-            empty_inst with
-            Alp.inst_repo = repo;
-            inst_prov = prov;
-            inst_trig =
-              Alp.Trig.ofList [ ((p.P.name, p.P.version), condset_of conds) ];
-          }
-        in
-        out :=
-          List.rev_append
-            (Red.FSet.elements (Red.dependees inst Red.rootPkg))
-            !out)
-    ar.trigs;
-  !out
+  {
+    empty_inst with
+    Alp.inst_repo = repo;
+    inst_prov = prov;
+    inst_world = Alp.WSet.ofList (List.map xdep world);
+  }
 
 (* ---- PubGrub ----------------------------------------------------------- *)
 
@@ -524,12 +575,12 @@ let choose ar ~assigned (tn : PFR.Name.t) (cands : PVersion.t list) =
                    p ps)))
   | _ -> greatest cands
 
-(* Every install_if gadget in the index is a dependee of @root
-   ([root_inst] below), so PubGrub reaches them all before the goal's
-   own providers -- and a gadget decided against an empty partial
-   solution asserts the condition it discharges on absent for the rest
-   of the search.  Deferred behind every other open name, the conditions
-   have settled and [choose] reads them. *)
+(* An install-if gadget exists only once its designated condition has
+   been selected, so the conditions it discharges on have largely settled
+   by the time [choose] sees it.  Deferring it behind every other open
+   name settles the rest of them; measured on this index the deferral no
+   longer changes the answer, but it is the invariant [choose] wants and
+   it costs nothing. *)
 let next ~assigned:_ (opens : (PFR.Name.t * int) list) =
   match List.find_opt (fun (tn, _) -> not (is_trig tn)) opens with
   | Some (tn, _) -> tn
@@ -583,9 +634,10 @@ let intern st (m : PFR.Name.t) : PFR.Name.t =
 
 let verbose = Sys.getenv_opt "PACPROG" <> None
 
-(* @root carries ~1700 dependees, one per install_if row, so inserting
-   them one at a time into a sorted-list set is quadratic: group by
-   source first and build each source's set in a single pass. *)
+(* A package designated by many install-if rules carries one dependee per
+   rule -- 1023 of them for docs -- so inserting them one at a time into
+   a sorted-list set is quadratic: group by source first and build each
+   source's set in a single pass. *)
 let record_deprel st (d : T.DepRel.t) =
   let by_src = Hashtbl.create 64 in
   List.iter (fun ((s, h) : T.DepElt.t) -> push by_src s h) (T.DepRel.elements d);
@@ -616,29 +668,25 @@ let record_real st (r : T.PkgSet.t) =
             Hashtbl.replace st.gadget_vers tn (tv :: prev))
     (T.PkgSet.elements r)
 
-(* one Alpine package's dependee formulas, reduced to core edges; the
-   formulas arrive as a thunk because @root's are a union over slices
-   rather than one dependees call *)
-let process_forms st (q : PF.Pkg.t) (mk : unit -> PF.coq_Formula list) =
+(* one Alpine package's dependee formulas, reduced to core edges *)
+let process st (q : PF.Pkg.t) (inst : unit -> Alp.coq_Inst) =
   if not (Hashtbl.mem st.processed q) then begin
     Hashtbl.replace st.processed q ();
     st.n_proc <- st.n_proc + 1;
     if verbose && st.n_proc mod 500 = 0 then
       Printf.eprintf "[%d] %.1fs\n%!" st.n_proc (Sys.time ());
-    let d_q = PF.DepRel.ofList (List.map (fun f -> (q, f)) (mk ())) in
+    let fs = Red.FSet.elements (Red.dependees (inst ()) q) in
+    let d_q = PF.DepRel.ofList (List.map (fun f -> (q, f)) fs) in
     let r_q = PF.PkgSet.singleton q in
     record_deprel st (PFR.reduceDeps d_q);
     record_real st (PFR.reduceReal r_q d_q)
   end
 
-let process st (q : PF.Pkg.t) (inst : unit -> Alp.coq_Inst) =
-  process_forms st q (fun () -> Red.FSet.elements (Red.dependees (inst ()) q))
-
 let touch st ((tn, tv) : T.Pkg.t) =
   match (tn, tv) with
   | PFR.Name.Orig Red.Name.Root, PFR.Version.Orig Red.Version.RootV ->
       (* Lookup.dependees_lookupRoot *)
-      process_forms st Red.rootPkg (fun () -> root_forms st.ar st.world)
+      process st Red.rootPkg (fun () -> root_inst st.ar st.world)
   | PFR.Name.Orig (Red.Name.Orig n), PFR.Version.Orig (Red.Version.Orig v) ->
       (* Lookup.dependees_lookupOrig *)
       process st (Red.Name.Orig n, Red.Version.Orig v) (fun () ->
