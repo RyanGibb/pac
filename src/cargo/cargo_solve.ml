@@ -540,8 +540,13 @@ module Make () = struct
     (* the parent relation, keyed by alias: a cargo rename lets one crate
        depend on a single crate name twice, and the two aliases may land
        on different compatibility classes, so the edge has to record which
-       alias received which version *)
-    parents : (string * string * string * string) list;
+       alias received which version.  ParentElt carries only the target's
+       version, since the alias already determines the slot it came
+       through; the target name is read back off that slot here, because a
+       consumer comparing against cargo's (depender, dependee) edges has
+       no other way to name the crate the version belongs to.
+       (owner, owner version, alias, target name, target version) *)
+    parents : (string * string * string * string * string) list;
     nodes : int;
     processed : int;
   }
@@ -632,9 +637,27 @@ module Make () = struct
           Cg.SlotRel.unions
             (List.map (fun p -> (rows_of st.ar p).r_slots) (st.rc :: crates))
         in
+        (* alias -> target name, over the same slots decodeParents reads *)
+        let target_of = Hashtbl.create 256 in
+        List.iter
+          (fun ((n, v) as p) ->
+            match meta st.ar n v with
+            | None -> ()
+            | Some m ->
+                List.iter
+                  (fun (d : P.dep) ->
+                    Hashtbl.replace target_of (p, d.P.d_alias) d.P.d_target)
+                  (slots_of m))
+          (st.rc :: crates);
         let parents =
           List.map
-            (fun ((((n, v), a), u) : Cg.ParentElt.t) -> (n, v, a, u))
+            (fun ((((n, v), a), u) : Cg.ParentElt.t) ->
+              let t =
+                match Hashtbl.find_opt target_of ((n, v), a) with
+                | Some t -> t
+                | None -> a
+              in
+              (n, v, a, t, u))
             (Cg.ParentRel.elements
                (Cg.decodeParents slots cfg_active st.rc s))
         in

@@ -99,7 +99,7 @@ let opam_cmd =
     (Cmd.info "opam" ~doc:"Solve against an opam repository.")
     Term.(const opam_run $ debug_arg $ repo $ goal)
 
-let cargo_run debug index goal wanted rfeats rustv =
+let cargo_run debug print_parents index goal wanted rfeats rustv =
   let t0 = Unix.gettimeofday () in
   let ar = Cargo_solve.empty_archive index in
   let vs = Cargo_solve.versions_of ar goal in
@@ -160,6 +160,13 @@ let cargo_run debug index goal wanted rfeats rustv =
           "encoded solution: %d core nodes (%d crate versions encoded)\n"
           r.S.nodes r.S.processed;
         Printf.printf "parent edges: %d\n" (List.length r.S.parents);
+        if print_parents then begin
+          Printf.printf "parent-edges:\n";
+          List.iter
+            (fun (n, v, a, t, u) ->
+              Printf.printf "  %s %s -> %s(%s) %s\n" n v a t u)
+            r.S.parents
+        end;
         loaded ();
         0
   end
@@ -202,10 +209,20 @@ let cargo_cmd =
             "Toolchain version to prefer MSRV-compatible crate versions \
              for, as resolver v3 does; unset leaves the preference off.")
   in
+  (* the decoded parent relation, one line per edge, for a correspondence
+     harness to diff against cargo's own (depender, dependee) edges; off by
+     default because the edge list dwarfs the version set it accompanies *)
+  let print_parents =
+    Arg.(
+      value & flag
+      & info [ "print-parents" ]
+          ~doc:"Print the decoded parent relation, one edge per line.")
+  in
   Cmd.v
     (Cmd.info "cargo" ~doc:"Solve against a crates.io index.")
     Term.(
-      const cargo_run $ debug_arg $ index $ goal $ wanted $ rfeats $ rustv)
+      const cargo_run $ debug_arg $ print_parents $ index $ goal $ wanted
+      $ rfeats $ rustv)
 
 let alpine_run debug path goals =
   let t0 = Unix.gettimeofday () in
