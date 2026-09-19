@@ -229,37 +229,53 @@ let pkg_inst ar ((n, v) : string * string) : Alp.coq_Inst =
         inst_prov = prov;
       }
 
-(* Lookup.rootSlice: the whole world set and the whole trigger table, and
-   the repository at rootNames -- every name they mention *)
-let root_inst ar (world : P.dep list) : Alp.coq_Inst =
-  let ns = ref (List.map (fun (d : P.dep) -> d.P.d_name) world) in
+(* Lookup.rootSlice one row at a time.  rootSlice keeps the repository at
+   rootNames -- every name the world and the whole trigger table mention
+   -- but dependees @root is a union of per-row formulas, and each row's
+   formula reads the instance only at its own names' fibres: encDep d at
+   depName d, and trigForm p conds at fst p and the condition names
+   (Alpine.v's encDep_slice/trigForm_slice, both resting on
+   constrVers_slice and uprovSet_slice).  So splitting the world half and
+   each trigger row into their own slices and unioning the formulas gives
+   the same set, and no encPos scans rows belonging to another row's
+   names -- which is what makes the whole-index root slice quadratic in
+   the number of triggers. *)
+let root_forms ar (world : P.dep list) : PF.coq_Formula list =
+  let wnames = List.map (fun (d : P.dep) -> d.P.d_name) world in
+  let repo, prov = slice_at ar wnames in
+  let winst =
+    {
+      empty_inst with
+      Alp.inst_repo = repo;
+      inst_prov = prov;
+      inst_world = Alp.WSet.ofList (List.map xdep world);
+    }
+  in
+  let out = ref (Red.FSet.elements (Red.dependees winst Red.rootPkg)) in
   List.iter
     (fun ((p : P.pkg), conds) ->
-      ns := p.P.name :: !ns;
-      List.iter (fun (d : P.dep) -> ns := d.P.d_name :: !ns) conds)
+      (* a CondSet is positive-only, so a negated install_if condition
+         cannot be represented; dropping the sign would invert it, so the
+         whole trigger is dropped and counted instead *)
+      if List.exists (fun (d : P.dep) -> d.P.d_neg) conds then P.reject ()
+      else
+        let ns = p.P.name :: List.map (fun (d : P.dep) -> d.P.d_name) conds in
+        let repo, prov = slice_at ar ns in
+        let inst =
+          {
+            empty_inst with
+            Alp.inst_repo = repo;
+            inst_prov = prov;
+            inst_trig =
+              Alp.Trig.ofList [ ((p.P.name, p.P.version), condset_of conds) ];
+          }
+        in
+        out :=
+          List.rev_append
+            (Red.FSet.elements (Red.dependees inst Red.rootPkg))
+            !out)
     ar.trigs;
-  let repo, prov = slice_at ar !ns in
-  let trig =
-    Alp.Trig.ofList
-      (List.filter_map
-         (fun ((p : P.pkg), conds) ->
-           (* a CondSet is positive-only, so a negated install_if condition
-              cannot be represented; dropping the sign would invert it, so the
-              whole trigger is dropped and counted instead *)
-           if List.exists (fun (d : P.dep) -> d.P.d_neg) conds then (
-             P.reject ();
-             None)
-           else Some ((p.P.name, p.P.version), condset_of conds))
-         ar.trigs)
-  in
-  let wset = Alp.WSet.ofList (List.map xdep world) in
-  {
-    empty_inst with
-    Alp.inst_repo = repo;
-    inst_prov = prov;
-    inst_trig = trig;
-    inst_world = wset;
-  }
+  !out
 
 (* ---- PubGrub ----------------------------------------------------------- *)
 
@@ -292,7 +308,10 @@ and pp_alp_name fmt (n : Red.Name.name) =
 module PName = struct
   type t = PFR.Name.t
 
-  let compare a b = r2c (PFR.NameOT.compare a b)
+  (* NameOT is a UsualOrderedType, so a name compares Eq to itself; the
+     pointer test only skips the walk on interned names (see [intern]),
+     and leaves the order PubGrub sees exactly as NameOT gives it *)
+  let compare a b = if a == b then 0 else r2c (PFR.NameOT.compare a b)
 
   let pp fmt (n : t) =
     match n with
@@ -518,6 +537,12 @@ let next ~assigned:_ (opens : (PFR.Name.t * int) list) =
 
 (* ---- the lazy core graph ----------------------------------------------- *)
 
+module NameMap = Map.Make (struct
+  type t = PFR.Name.t
+
+  let compare a b = r2c (PFR.NameOT.compare a b)
+end)
+
 type state = {
   ar : archive;
   world : P.dep list;
@@ -525,6 +550,7 @@ type state = {
   gadget_vers : (PFR.Name.t, PVersion.t list) Hashtbl.t;
   processed : (PF.Pkg.t, unit) Hashtbl.t;
   real_vers : (string, PVersion.t list) Hashtbl.t;
+  mutable canon : PFR.Name.t NameMap.t;
   mutable n_proc : int;
 }
 
@@ -536,21 +562,41 @@ let mk_state ar world =
     gadget_vers = Hashtbl.create 65536;
     processed = Hashtbl.create 16384;
     real_vers = Hashtbl.create 16384;
+    canon = NameMap.empty;
     n_proc = 0;
   }
 
+(* A Disjunct or NegDep gadget name carries its formulas, so comparing
+   two equal names walks both in full, and PubGrub does that on every
+   dependency-list scan and map hit.  Each version's reduction builds its
+   own copy of a gadget name shared across versions; one representative
+   per name lets PName.compare answer equality by pointer.  The map is
+   keyed by NameOT itself, so which names unify is exactly NameOT
+   equality and the order PubGrub sees -- [next]'s pick included -- is
+   unchanged. *)
+let intern st (m : PFR.Name.t) : PFR.Name.t =
+  match NameMap.find_opt m st.canon with
+  | Some c -> c
+  | None ->
+      st.canon <- NameMap.add m m st.canon;
+      m
+
 let verbose = Sys.getenv_opt "PACPROG" <> None
 
+(* @root carries ~1700 dependees, one per install_if row, so inserting
+   them one at a time into a sorted-list set is quadratic: group by
+   source first and build each source's set in a single pass. *)
 let record_deprel st (d : T.DepRel.t) =
-  List.iter
-    (fun ((s, h) : T.DepElt.t) ->
-      let prev =
-        match Hashtbl.find_opt st.edges s with
-        | Some x -> x
-        | None -> T.DependeesSet.empty
-      in
-      Hashtbl.replace st.edges s (T.DependeesSet.add h prev))
-    (T.DepRel.elements d)
+  let by_src = Hashtbl.create 64 in
+  List.iter (fun ((s, h) : T.DepElt.t) -> push by_src s h) (T.DepRel.elements d);
+  Hashtbl.iter
+    (fun s hs ->
+      let fresh = T.DependeesSet.ofList hs in
+      Hashtbl.replace st.edges s
+        (match Hashtbl.find_opt st.edges s with
+        | Some prev -> T.DependeesSet.union prev fresh
+        | None -> fresh))
+    by_src
 
 (* Only the gadget names PackageFormula mints are harvested; the Orig
    names are answered by versions_lookupName below. *)
@@ -570,34 +616,39 @@ let record_real st (r : T.PkgSet.t) =
             Hashtbl.replace st.gadget_vers tn (tv :: prev))
     (T.PkgSet.elements r)
 
-(* one Alpine package's dependee formulas, reduced to core edges *)
-let process st (q : PF.Pkg.t) (inst : Alp.coq_Inst) =
+(* one Alpine package's dependee formulas, reduced to core edges; the
+   formulas arrive as a thunk because @root's are a union over slices
+   rather than one dependees call *)
+let process_forms st (q : PF.Pkg.t) (mk : unit -> PF.coq_Formula list) =
   if not (Hashtbl.mem st.processed q) then begin
     Hashtbl.replace st.processed q ();
     st.n_proc <- st.n_proc + 1;
     if verbose && st.n_proc mod 500 = 0 then
       Printf.eprintf "[%d] %.1fs\n%!" st.n_proc (Sys.time ());
-    let forms = Red.dependees inst q in
-    let d_q =
-      PF.DepRel.ofList (List.map (fun f -> (q, f)) (Red.FSet.elements forms))
-    in
+    let d_q = PF.DepRel.ofList (List.map (fun f -> (q, f)) (mk ())) in
     let r_q = PF.PkgSet.singleton q in
     record_deprel st (PFR.reduceDeps d_q);
     record_real st (PFR.reduceReal r_q d_q)
   end
 
+let process st (q : PF.Pkg.t) (inst : unit -> Alp.coq_Inst) =
+  process_forms st q (fun () -> Red.FSet.elements (Red.dependees (inst ()) q))
+
 let touch st ((tn, tv) : T.Pkg.t) =
   match (tn, tv) with
   | PFR.Name.Orig Red.Name.Root, PFR.Version.Orig Red.Version.RootV ->
       (* Lookup.dependees_lookupRoot *)
-      process st Red.rootPkg (root_inst st.ar st.world)
+      process_forms st Red.rootPkg (fun () -> root_forms st.ar st.world)
   | PFR.Name.Orig (Red.Name.Orig n), PFR.Version.Orig (Red.Version.Orig v) ->
       (* Lookup.dependees_lookupOrig *)
-      process st (Red.Name.Orig n, Red.Version.Orig v) (pkg_inst st.ar (n, v))
+      process st (Red.Name.Orig n, Red.Version.Orig v) (fun () ->
+          pkg_inst st.ar (n, v))
   | ( PFR.Name.Orig (Red.Name.Orig m),
       PFR.Version.Orig (Red.Version.Prov (q0, pv)) ) ->
       (* Lookup.dependees_lookupProv: an alias row reads no instance *)
-      process st (Red.Name.Orig m, Red.Version.Prov (q0, pv)) empty_inst
+      process st
+        (Red.Name.Orig m, Red.Version.Prov (q0, pv))
+        (fun () -> empty_inst)
   | _ ->
       (* a gadget's edges were harvested when its owner was processed *)
       ()
@@ -643,6 +694,7 @@ let solve ?(debug = false) (ar : archive) (world : P.dep list) : result option =
         let r =
           List.map
             (fun ((m, vs) : T.Dependees.t) ->
+              let m = intern st m in
               (m, PG.Ranges.of_list (List.map (tag ar m) (T.VSet.elements vs))))
             (T.DependeesSet.elements hs)
         in
