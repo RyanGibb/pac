@@ -56,9 +56,10 @@ module T = PFR.T
    APKINDEX is per-arch, so no A: filtering is applied and no
    cross-arch reasoning is possible here. *)
 
-(* provider_priority is apk's preference among the unversioned providers
-   of a name, and preference in this pipeline lives in PVersion.compare,
-   which is where it is applied -- off the archive, not off an instance.
+(* provider_priority is apk's preference among the providers of a name,
+   versioned ones included, and preference in this pipeline lives in
+   PVersion.compare, which is where it is applied -- off the archive, not
+   off an instance.
    The calculus records it in inst_prio precisely because it does not
    constrain which sets are resolutions, so the slices below leave
    inst_prio empty and no resolution turns on a k: line. *)
@@ -360,8 +361,9 @@ let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
    made on top of it.
 
    A real package of a name beats an alias claiming it, which is apk's
-   own preference and the reason provider_priority only ever arbitrates
-   between unversioned providers.
+   own preference.  Among the aliases themselves provider_priority
+   decides, the versioned ones included: apk-package(5) reserves only
+   automatic selection for the unversioned case, not the ranking.
 
    A gadget version selects one alternative of its disjunction by
    position, and which alternative is wanted depends on the disjunction.
@@ -403,6 +405,10 @@ module PVersion = struct
     | ( PFR.Version.Orig (Red.Version.Prov _),
         PFR.Version.Orig (Red.Version.Orig _) ) ->
         -1
+    | ( PFR.Version.Orig (Red.Version.Prov _),
+        PFR.Version.Orig (Red.Version.Prov _) ) ->
+        let c = Stdlib.compare a.rank b.rank in
+        if c <> 0 then c else r2c (PFR.VersionOT.compare a.v b.v)
     | PFR.Version.Idx _, PFR.Version.Idx _ ->
         let c = Stdlib.compare a.rank b.rank in
         if c <> 0 then c else -r2c (PFR.VersionOT.compare a.v b.v)
@@ -418,9 +424,97 @@ let tag ar (tn : PFR.Name.t) (tv : PFR.Version.t) : PVersion.t =
       match alt_at fs i with
       | None -> { PVersion.rank = 0; v = tv }
       | Some (f, last) -> { PVersion.rank = alt_rank ar last f; v = tv })
+  (* a versioned provides is auto-selected with or without a k:, so a
+     missing one is apk's default of 0 and not [rank_unranked] *)
+  | _, PFR.Version.Orig (Red.Version.Prov (q, _)) ->
+      let rank =
+        match Hashtbl.find_opt ar.prio q with Some k -> k | None -> 0
+      in
+      { PVersion.rank; v = tv }
   | _ -> { PVersion.rank = 0; v = tv }
 
 module PG = Pubgrub.Make (PName) (PVersion)
+
+let greatest = function
+  | [] -> invalid_arg "greatest"
+  | c :: cs ->
+      List.fold_left (fun a b -> if PVersion.compare b a > 0 then b else a) c cs
+
+(* only trigForm's gadgets open on FNeg: encDep negates whole formulas *)
+let is_trig (tn : PFR.Name.t) =
+  match tn with PFR.Name.Disjunct (PF.FNeg _ :: _) -> true | _ -> false
+
+let carried_at ~assigned tn tvs =
+  match assigned tn with
+  | PG.Unselected -> false
+  | PG.Decided u -> List.exists (fun v -> PVersion.compare u v = 0) tvs
+  | PG.Entailed r -> List.exists (fun v -> PG.Ranges.contains v r) tvs
+
+let rec neg_leaves ar (f : PF.coq_Formula) : (PFR.Name.t * PVersion.t list) list
+    =
+  match f with
+  | PF.FDep (m, vs) ->
+      let tn = PFR.Name.Orig m in
+      [
+        ( tn,
+          List.map
+            (fun w -> tag ar tn (PFR.Version.Orig w))
+            (PF.VSet.elements vs) );
+      ]
+  | PF.FDisj (a, b) | PF.FConj (a, b) -> neg_leaves ar a @ neg_leaves ar b
+  | PF.FNeg _ -> []
+
+(* apk never asserts a condition package absent: it installs the
+   augmented package when all the conditions hold and otherwise does
+   nothing at all.  PubGrub has to decide the gadget either way, so the
+   nearest thing is to discharge it on a condition the solution does not
+   carry -- free, constraining nothing -- and to take the triggered
+   package only when it carries them all. *)
+let choose ar ~assigned (tn : PFR.Name.t) (cands : PVersion.t list) =
+  match tn with
+  | PFR.Name.Disjunct fs when is_trig tn -> (
+      let free = ref [] and pos = ref [] in
+      List.iter
+        (fun (pv : PVersion.t) ->
+          match pv.PVersion.v with
+          | PFR.Version.Idx i -> (
+              match alt_at fs i with
+              | Some (PF.FNeg f, _) ->
+                  if
+                    not
+                      (List.exists
+                         (fun (m, tvs) -> carried_at ~assigned m tvs)
+                         (neg_leaves ar f))
+                  then free := pv :: !free
+              | Some (f, last) -> pos := (alt_rank ar last f, pv) :: !pos
+              | None -> ())
+          | _ -> ())
+        cands;
+      match !free with
+      | _ :: _ as free -> greatest free
+      | [] -> (
+          match !pos with
+          | [] -> greatest cands
+          | p :: ps ->
+              snd
+                (List.fold_left
+                   (fun ((ra, a) as best) ((rb, b) as cand) ->
+                     if rb > ra || (rb = ra && PVersion.compare b a > 0) then
+                       cand
+                     else best)
+                   p ps)))
+  | _ -> greatest cands
+
+(* Every install_if gadget in the index is a dependee of @root
+   ([root_inst] below), so PubGrub reaches them all before the goal's
+   own providers -- and a gadget decided against an empty partial
+   solution asserts the condition it discharges on absent for the rest
+   of the search.  Deferred behind every other open name, the conditions
+   have settled and [choose] reads them. *)
+let next ~assigned:_ (opens : (PFR.Name.t * int) list) =
+  match List.find_opt (fun (tn, _) -> not (is_trig tn)) opens with
+  | Some (tn, _) -> tn
+  | None -> fst (List.hd opens)
 
 (* ---- the lazy core graph ----------------------------------------------- *)
 
@@ -557,7 +651,10 @@ let solve ?(debug = false) (ar : archive) (world : P.dep list) : result option =
   in
   let root = PFR.Name.Orig Red.Name.Root in
   let root_range = PG.Ranges.of_list (versions root) in
-  match PG.solve ~vers:versions ~deps:dependencies [ (root, root_range) ] with
+  match
+    PG.solve ~next ~choose:(choose ar) ~vers:versions ~deps:dependencies
+      [ (root, root_range) ]
+  with
   | Error inc ->
       Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
       None
