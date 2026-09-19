@@ -1966,9 +1966,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           andb (matchb Pi p a) (negb (exemptb x (fst p) (fst q))))
         G.
 
-    Definition clausesWith (D : Deps.t) (a : Atom.t) : Deps.t :=
-      Deps.filter (fun c => AtomSet.mem a (snd c)) D.
-
     Module NSet := FSetUOT N.
     Module SOan := SetOps Atom N AtomSet NSet.
     Definition clauseNames (A : AtomSet.t) : NSet.t :=
@@ -2023,80 +2020,83 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         [exact Hin | apply NEqb.eqb_true_iff; exact Hn].
     Qed.
 
-    Lemma occursAtomb_clausesWith : forall D a,
-        occursAtomb (clausesWith D a) a = occursAtomb D a.
+    Lemma tgt_filter : forall R Pi (n : N.t) (f : Ver.Formula),
+        tgt (PkgFibred.tailFibre R n) (ProvFibred.nodeFibre Pi n) (n, f) =
+        tgt R Pi (n, f).
     Proof.
-      intros D a; unfold occursAtomb, clausesWith.
-      apply Deps.exists_restrict;
-        [intros c Hc; rewrite Deps.filter_spec' in Hc; exact (proj1 Hc) |].
-      intros [p Al] Hc Hb; cbn beta iota in Hb.
-      rewrite Deps.filter_spec'; split; [exact Hc | exact Hb].
+      intros R Pi n f; unfold tgt.
+      rewrite provb_nodeFibre, us_filter, evalAt_tailFibre; reflexivity.
     Qed.
 
-    Lemma occursAtomb_slice : forall D Rec a,
-        occursAtomb (allClauses (clausesWith D a) (clausesWith Rec a)) a =
-        occursAtomb (allClauses D Rec) a.
+    Definition Minted (D Rec : Deps.t) (Pi : Prov.t) (G : Conf.t)
+        (n' : Name.t) : Prop :=
+      match n' with
+      | Name.Orig _ => True
+      | Name.Disjunct A =>
+          hasClauseb D A = true /\ (AtomSet.cardinal A =? 1) = false
+      | Name.Soft A => hasClauseb Rec A = true
+      | Name.Selector a =>
+          occursAtomb (allClauses D Rec) a = true /\ provb Pi a = true
+      | Name.Guard p a x => Conf.In (p, (a, x)) G
+      end.
+
+    Lemma tgt_minted : forall D Rec R Pi G (a : Atom.t) (n' : Name.t)
+                              (h : T.VSet.t),
+        occursAtomb (allClauses D Rec) a = true ->
+        tgt R Pi a = (n', h) -> Minted D Rec Pi G n'.
     Proof.
-      intros D Rec a; rewrite !occursAtomb_allClauses,
-        !occursAtomb_clausesWith; reflexivity.
+      intros D Rec R Pi G a n' h Hocc Ht; unfold tgt in Ht.
+      destruct (provb Pi a) eqn:Hp; injection Ht as Hn _; subst n';
+        [split; [exact Hocc | exact Hp] | exact I].
     Qed.
 
-    (* A selector consults D and Rec through one test and no other, so the
-       slice is free to redistribute the atom's occurrences between the two
-       positions -- or to drop every clause that does not mention it -- as
-       long as the test still answers the same.  Stated for every candidate
-       shape at once: the real and the provided branch of us read the same
-       slice, and the rest are empty. *)
-    Theorem dependees_lookupSelectorAgree :
-      forall R D Rec D' Rec' Pi G (n : N.t) (f : Ver.Formula)
-             (y : Version.t),
-        occursAtomb (allClauses D Rec) (n, f) =
-        occursAtomb (allClauses D' Rec') (n, f) ->
-        dependees R D Rec Pi G (Name.Selector (n, f), y) =
-        dependees (PkgFibred.tailFibre R n) D' Rec'
-          (ProvFibred.nodeFibre Pi n) Conf.empty (Name.Selector (n, f), y).
+    Lemma dependees_minted : forall R D Rec Pi G (s : T.Pkg.t) (n' : Name.t)
+                                    (h : T.VSet.t),
+        T.DependeesSet.In (n', h) (dependees R D Rec Pi G s) ->
+        Minted D Rec Pi G n'.
     Proof.
-      intros R D Rec D' Rec' Pi G n f y Hagree; destruct y; cbn [dependees];
-        try reflexivity;
-        rewrite <- Hagree, provb_nodeFibre, us_filter;
-        reflexivity.
+      intros R D Rec Pi G [nm y] n' h H; destruct nm, y;
+        try (exfalso; exact (SOde.empty_in _ H)).
+      - apply dependees_orig_spec in H.
+        destruct H as [[A [HA [[_ [a [Hmin Hy]]] | [Hcard Hy]]]] |
+                       [[A [HA Hy]] |
+                        [[a [x [Hg Hy]]] |
+                         [m0 [u0 [a [x [Hg [_ [_ [_ Hy]]]]]]]]]]].
+        + apply (tgt_minted D Rec R Pi G a n' h); [| symmetry; exact Hy].
+          apply occursAtomb_allClausesL, occursAtomb_iff.
+          exists (n, v), A; split;
+            [exact HA | exact (AtomSet.min_elt_spec1 Hmin)].
+        + injection Hy as Hn _; subst n'; split;
+            [apply hasClauseb_iff; exists (n, v); exact HA | exact Hcard].
+        + injection Hy as Hn _; subst n';
+            apply hasClauseb_iff; exists (n, v); exact HA.
+        + injection Hy as Hn _; subst n'; exact Hg.
+        + injection Hy as Hn _; subst n'; exact Hg.
+      - apply dependees_disjunct_spec in H.
+        destruct H as [Hhc [_ [Hmem Hy]]].
+        apply (tgt_minted D Rec R Pi G a n' h); [| symmetry; exact Hy].
+        apply hasClauseb_iff in Hhc; destruct Hhc as [p Hp].
+        apply occursAtomb_allClausesL, occursAtomb_iff.
+        exists p, A; split; [exact Hp | apply AtomSet.mem_spec; exact Hmem].
+      - apply dependees_soft_spec in H.
+        destruct H as [Hhc [Hmem Hy]].
+        apply (tgt_minted D Rec R Pi G a n' h); [| symmetry; exact Hy].
+        apply hasClauseb_iff in Hhc; destruct Hhc as [p Hp].
+        apply occursAtomb_allClausesR, occursAtomb_iff.
+        exists p, A; split; [exact Hp | apply AtomSet.mem_spec; exact Hmem].
+      - apply dependees_selector_spec in H.
+        destruct H as [_ [_ [_ Hy]]]; injection Hy as Hn _; subst n'; exact I.
+      - apply dependees_selector_real_spec in H.
+        destruct H as [_ [_ [_ Hy]]]; injection Hy as Hn _; subst n'; exact I.
     Qed.
 
-    Theorem versions_lookupSelectorAgree :
-      forall R D Rec D' Rec' Pi G (n : N.t) (f : Ver.Formula),
-        occursAtomb (allClauses D Rec) (n, f) =
-        occursAtomb (allClauses D' Rec') (n, f) ->
-        versions R D Rec Pi G (Name.Selector (n, f)) =
-        versions (PkgFibred.tailFibre R n) D' Rec'
-          (ProvFibred.nodeFibre Pi n) Conf.empty (Name.Selector (n, f)).
+    Lemma reduceDeps_minted : forall R D Rec Pi G (s : T.Pkg.t)
+                                     (n' : Name.t) (h : T.VSet.t),
+        T.DepRel.In (s, (n', h)) (reduceDeps R D Rec Pi G) ->
+        Minted D Rec Pi G n'.
     Proof.
-      intros R D Rec D' Rec' Pi G n f Hagree; cbn [versions].
-      rewrite <- Hagree, provb_nodeFibre, us_filter.
-      reflexivity.
-    Qed.
-
-    Theorem dependees_lookupSelector :
-      forall R D Rec Pi G (n : N.t) (f : Ver.Formula) (y : Version.t),
-        occursAtomb (allClauses D Rec) (n, f) = true ->
-        dependees R D Rec Pi G (Name.Selector (n, f), y) =
-        dependees (PkgFibred.tailFibre R n) (clausesWith D (n, f))
-          (clausesWith Rec (n, f)) (ProvFibred.nodeFibre Pi n) Conf.empty
-          (Name.Selector (n, f), y).
-    Proof.
-      intros R D Rec Pi G n f y Hocc; apply dependees_lookupSelectorAgree.
-      symmetry; apply occursAtomb_slice.
-    Qed.
-
-    Theorem versions_lookupSelector :
-      forall R D Rec Pi G (n : N.t) (f : Ver.Formula),
-        occursAtomb (allClauses D Rec) (n, f) = true ->
-        versions R D Rec Pi G (Name.Selector (n, f)) =
-        versions (PkgFibred.tailFibre R n) (clausesWith D (n, f))
-          (clausesWith Rec (n, f)) (ProvFibred.nodeFibre Pi n) Conf.empty
-          (Name.Selector (n, f)).
-    Proof.
-      intros R D Rec Pi G n f Hocc; apply versions_lookupSelectorAgree.
-      symmetry; apply occursAtomb_slice.
+      intros R D Rec Pi G s n' h H; apply mem_reduceDeps in H.
+      exact (dependees_minted R D Rec Pi G s n' h (proj2 H)).
     Qed.
 
     Lemma mem_clauseNames : forall A (n : N.t),
@@ -2235,7 +2235,20 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
 
     Module DepsFibred := FibredRel Pkg AtomSet.AsUOT ClauseElt Deps.
     Module ConfFibred := FibredRel Pkg Conflictees ConfElt Conf.
-    Theorem dependees_lookupOrig : forall R D Rec Pi G n v,
+    Theorem versions_lookupOrig : forall R D Rec Pi G (r : Pkg.t) (n : N.t),
+        (exists s h,
+            T.DepRel.In (s, (Name.Orig n, h)) (reduceDeps R D Rec Pi G)) \/
+        Name.Orig n = Name.Orig (fst r) ->
+        versions R D Rec Pi G (Name.Orig n) =
+        versions (PkgFibred.tailFibre R n) Deps.empty Deps.empty Prov.empty
+          Conf.empty (Name.Orig n).
+    Proof.
+      intros R D Rec Pi G r n _; cbn [versions].
+      rewrite realVersions_tailFibre; reflexivity.
+    Qed.
+
+    Theorem dependees_lookupOrig : forall R D Rec Pi G (n : N.t) (v : V.t),
+        T.PkgSet.In (embedPkg (n, v)) (reduceReal R D Rec Pi G) ->
         dependees R D Rec Pi G (Name.Orig n, Version.Orig v) =
         dependees (realPreimage R (atomNames D (n, v)))
           (DepsFibred.tailFibre D (n, v))
@@ -2246,7 +2259,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
              (conflictsAgainst Pi G (n, v)))
           (Name.Orig n, Version.Orig v).
     Proof.
-      intros R D Rec Pi G n v; apply T.DependeesSet.ext; intro y.
+      intros R D Rec Pi G n v _; apply T.DependeesSet.ext; intro y.
       rewrite !dependees_orig_spec.
       assert (Hfib : forall (E : Deps.t) A,
                  Deps.In ((n, v), A) (DepsFibred.tailFibre E (n, v)) <->
@@ -2335,95 +2348,174 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           split; [exact Hex | exact Hy].
     Qed.
 
-    Theorem versions_lookupOrig : forall R D Rec Pi G n,
-        versions R D Rec Pi G (Name.Orig n) =
-        versions (PkgFibred.tailFibre R n) Deps.empty Deps.empty Prov.empty
-          Conf.empty (Name.Orig n).
+    Theorem versions_lookupDisjunct : forall R D Rec Pi G (A : AtomSet.t),
+        (exists s h,
+            T.DepRel.In (s, (Name.Disjunct A, h))
+              (reduceDeps R D Rec Pi G)) ->
+        versions R D Rec Pi G (Name.Disjunct A) = versionsDisj A.
     Proof.
-      intros R D Rec Pi G n; cbn [versions].
-      rewrite realVersions_tailFibre; reflexivity.
-    Qed.
-
-    Lemma hasClauseb_headFibre : forall D A,
-        hasClauseb (DepsFibred.headFibre D A) A = hasClauseb D A.
-    Proof.
-      intros D A; unfold hasClauseb.
-      apply Deps.exists_restrict; [apply DepsFibred.headFibre_subset |].
-      intros [p Al] Hc Hb; cbn beta iota in Hb.
-      apply DepsFibred.mem_headFibre; split;
-        [exact Hc | apply ASEqb.eqb_true_iff; exact Hb].
-    Qed.
-
-    Theorem versions_lookupDisjunct : forall R D Rec Pi G A,
-        versions R D Rec Pi G (Name.Disjunct A) =
-        versions PkgSet.empty (DepsFibred.headFibre D A) Deps.empty
-          Prov.empty Conf.empty (Name.Disjunct A).
-    Proof.
-      intros R D Rec Pi G A; cbn [versions].
-      rewrite hasClauseb_headFibre; reflexivity.
+      intros R D Rec Pi G A [s [h Hd]].
+      destruct (reduceDeps_minted R D Rec Pi G s (Name.Disjunct A) h Hd)
+        as [Hhc Hcard].
+      apply T.VSet.ext; intro w; rewrite versions_disjunct_spec.
+      split; [intros (_ & _ & Hw); exact Hw |].
+      intro Hw; split; [exact Hhc | split; [| exact Hw]].
+      unfold versionsDisj in Hw; apply SOaw.mem_map in Hw.
+      destruct Hw as [a [Ha _]].
+      apply Nat.leb_le; apply Nat.eqb_neq in Hcard.
+      assert (H1 := cardinal_in A a Ha); lia.
     Qed.
 
     Theorem dependees_lookupDisjunct :
-      forall R D Rec Pi G A (n : N.t) (f : Ver.Formula),
+      forall R D Rec Pi G (A : AtomSet.t) (n : N.t) (f : Ver.Formula),
+        T.PkgSet.In (Name.Disjunct A, Version.Atom (n, f))
+          (reduceReal R D Rec Pi G) ->
         dependees R D Rec Pi G (Name.Disjunct A, Version.Atom (n, f)) =
-        dependees (PkgFibred.tailFibre R n) (DepsFibred.headFibre D A)
-          Deps.empty (ProvFibred.nodeFibre Pi n) Conf.empty
-          (Name.Disjunct A, Version.Atom (n, f)).
+        T.DependeesSet.singleton
+          (tgt (PkgFibred.tailFibre R n) (ProvFibred.nodeFibre Pi n) (n, f)).
     Proof.
-      intros R D Rec Pi G A n f; cbn [dependees].
-      rewrite hasClauseb_headFibre.
-      unfold tgt.
-      rewrite provb_nodeFibre, us_filter, evalAt_tailFibre.
-      reflexivity.
+      intros R D Rec Pi G A n f H.
+      apply mem_reduceReal, versions_disjunct_spec in H.
+      destruct H as (Hhc & Hcard & Hw).
+      unfold versionsDisj in Hw; apply SOaw.mem_map in Hw.
+      destruct Hw as [a [Ha Heq]]; injection Heq as Heq; subst a.
+      apply T.DependeesSet.ext; intro y.
+      rewrite dependees_disjunct_spec, SOde.singleton_in, tgt_filter.
+      split; [intros (_ & _ & _ & Hy); exact Hy |].
+      intro Hy; split; [exact Hhc |].
+      split; [exact Hcard |].
+      split; [apply AtomSet.mem_spec; exact Ha | exact Hy].
     Qed.
 
-    (* the recommends gadget reads its own clause and nothing else, exactly
-       as the disjunction gadget does *)
-    Theorem versions_lookupSoft : forall R D Rec Pi G A,
-        versions R D Rec Pi G (Name.Soft A) =
-        versions PkgSet.empty Deps.empty (DepsFibred.headFibre Rec A)
-          Prov.empty Conf.empty (Name.Soft A).
+    Theorem versions_lookupSoft : forall R D Rec Pi G (A : AtomSet.t),
+        (exists s h,
+            T.DepRel.In (s, (Name.Soft A, h)) (reduceDeps R D Rec Pi G)) ->
+        versions R D Rec Pi G (Name.Soft A) = versionsSoft A.
     Proof.
-      intros R D Rec Pi G A; cbn [versions].
-      rewrite hasClauseb_headFibre; reflexivity.
+      intros R D Rec Pi G A [s [h Hd]].
+      pose proof (reduceDeps_minted R D Rec Pi G s (Name.Soft A) h Hd) as Hhc.
+      cbn [versions]; rewrite Hhc; reflexivity.
     Qed.
 
     Theorem dependees_lookupSoft :
-      forall R D Rec Pi G A (n : N.t) (f : Ver.Formula),
+      forall R D Rec Pi G (A : AtomSet.t) (n : N.t) (f : Ver.Formula),
+        T.PkgSet.In (Name.Soft A, Version.Atom (n, f))
+          (reduceReal R D Rec Pi G) ->
         dependees R D Rec Pi G (Name.Soft A, Version.Atom (n, f)) =
-        dependees (PkgFibred.tailFibre R n) Deps.empty
-          (DepsFibred.headFibre Rec A) (ProvFibred.nodeFibre Pi n) Conf.empty
-          (Name.Soft A, Version.Atom (n, f)).
+        T.DependeesSet.singleton
+          (tgt (PkgFibred.tailFibre R n) (ProvFibred.nodeFibre Pi n) (n, f)).
     Proof.
-      intros R D Rec Pi G A n f; cbn [dependees].
-      rewrite hasClauseb_headFibre.
-      unfold tgt.
-      rewrite provb_nodeFibre, us_filter, evalAt_tailFibre.
+      intros R D Rec Pi G A n f H.
+      apply mem_reduceReal, versions_soft_spec in H.
+      destruct H as (Hhc & Hw); apply mem_versionsSoft in Hw.
+      destruct Hw as [Hz | [a [Ha Heq]]]; [discriminate Hz |].
+      injection Heq as Heq; subst a.
+      apply T.DependeesSet.ext; intro y.
+      rewrite dependees_soft_spec, SOde.singleton_in, tgt_filter.
+      split; [intros (_ & _ & Hy); exact Hy |].
+      intro Hy; split; [exact Hhc |].
+      split; [apply AtomSet.mem_spec; exact Ha | exact Hy].
+    Qed.
+
+    (* A selector consults D and Rec through one test and no other, so the
+       slice is free to redistribute the atom's occurrences between the two
+       positions -- or to drop every clause that does not mention it -- as
+       long as the test still answers the same.  Stated for every candidate
+       shape at once: the real and the provided branch of us read the same
+       slice, and the rest are empty. *)
+    Theorem versions_lookupSelectorAgree :
+      forall R D Rec D' Rec' Pi G (n : N.t) (f : Ver.Formula),
+        occursAtomb (allClauses D Rec) (n, f) =
+        occursAtomb (allClauses D' Rec') (n, f) ->
+        versions R D Rec Pi G (Name.Selector (n, f)) =
+        versions (PkgFibred.tailFibre R n) D' Rec'
+          (ProvFibred.nodeFibre Pi n) Conf.empty (Name.Selector (n, f)).
+    Proof.
+      intros R D Rec D' Rec' Pi G n f Hagree; cbn [versions].
+      rewrite <- Hagree, provb_nodeFibre, us_filter.
       reflexivity.
     Qed.
 
-    Lemma memb_fibre : forall G (p : Pkg.t) (a : Atom.t) (x : bool),
-        Conf.mem (p, (a, x)) (ConfFibred.tailFibre G p) =
-        Conf.mem (p, (a, x)) G.
+    Theorem dependees_lookupSelectorAgree :
+      forall R D Rec D' Rec' Pi G (n : N.t) (f : Ver.Formula)
+             (y : Version.t),
+        occursAtomb (allClauses D Rec) (n, f) =
+        occursAtomb (allClauses D' Rec') (n, f) ->
+        dependees R D Rec Pi G (Name.Selector (n, f), y) =
+        dependees (PkgFibred.tailFibre R n) D' Rec'
+          (ProvFibred.nodeFibre Pi n) Conf.empty (Name.Selector (n, f), y).
     Proof.
-      intros G p a x; apply Conf.mem_restrict;
-        [apply ConfFibred.tailFibre_subset |].
-      intro H; apply ConfFibred.mem_tailFibre; split; [exact H | reflexivity].
+      intros R D Rec D' Rec' Pi G n f y Hagree; destruct y; cbn [dependees];
+        try reflexivity;
+        rewrite <- Hagree, provb_nodeFibre, us_filter;
+        reflexivity.
+    Qed.
+
+    Theorem versions_lookupSelector :
+      forall R D Rec Pi G (n : N.t) (f : Ver.Formula),
+        (exists s h,
+            T.DepRel.In (s, (Name.Selector (n, f), h))
+              (reduceDeps R D Rec Pi G)) ->
+        versions R D Rec Pi G (Name.Selector (n, f)) =
+        us (PkgFibred.tailFibre R n) (ProvFibred.nodeFibre Pi n) (n, f).
+    Proof.
+      intros R D Rec Pi G n f [s [h Hd]].
+      destruct (reduceDeps_minted R D Rec Pi G s (Name.Selector (n, f)) h Hd)
+        as [Hocc Hp].
+      cbn [versions]; rewrite Hocc, Hp; cbn [andb].
+      symmetry; apply us_filter.
+    Qed.
+
+    Theorem dependees_lookupSelector :
+      forall R D Rec Pi G (n : N.t) (f : Ver.Formula) (y : Version.t),
+        T.PkgSet.In (Name.Selector (n, f), y) (reduceReal R D Rec Pi G) ->
+        dependees R D Rec Pi G (Name.Selector (n, f), y) =
+        match y with
+        | Version.Ref m w =>
+            T.DependeesSet.singleton
+              (Name.Orig m, T.VSet.singleton (Version.Orig w))
+        | Version.RefReal w =>
+            T.DependeesSet.singleton
+              (Name.Orig n, T.VSet.singleton (Version.Orig w))
+        | _ => T.DependeesSet.empty
+        end.
+    Proof.
+      intros R D Rec Pi G n f y H.
+      apply mem_reduceReal, versions_selector_spec in H.
+      destruct H as (Hocc & Hp & Hw).
+      destruct y; try reflexivity; apply T.DependeesSet.ext; intro z.
+      - rewrite dependees_selector_spec, SOde.singleton_in.
+        split; [intros (_ & _ & _ & Hz); exact Hz |].
+        intro Hz; split; [exact Hocc |].
+        split; [exact Hp |].
+        split; [apply T.VSet.mem_spec; exact Hw | exact Hz].
+      - rewrite dependees_selector_real_spec, SOde.singleton_in.
+        split; [intros (_ & _ & _ & Hz); exact Hz |].
+        intro Hz; split; [exact Hocc |].
+        split; [exact Hp |].
+        split; [apply T.VSet.mem_spec; exact Hw | exact Hz].
     Qed.
 
     Theorem versions_lookupGuard :
       forall R D Rec Pi G (p : Pkg.t) (a : Atom.t) (x : bool),
-        versions R D Rec Pi G (Name.Guard p a x) =
-        versions PkgSet.empty Deps.empty Deps.empty Prov.empty
-          (ConfFibred.tailFibre G p) (Name.Guard p a x).
+        (exists s h,
+            T.DepRel.In (s, (Name.Guard p a x, h))
+              (reduceDeps R D Rec Pi G)) ->
+        versions R D Rec Pi G (Name.Guard p a x) = zeroOne.
     Proof.
-      intros R D Rec Pi G p a x; cbn [versions].
-      rewrite memb_fibre; reflexivity.
+      intros R D Rec Pi G p a x [s [h Hd]].
+      pose proof (reduceDeps_minted R D Rec Pi G s (Name.Guard p a x) h Hd)
+        as Hg.
+      cbn [versions].
+      replace (Conf.mem (p, (a, x)) G) with true;
+        [reflexivity | symmetry; apply Conf.mem_spec; exact Hg].
     Qed.
 
     Theorem dependees_lookupGuard :
-      forall R D Rec Pi G (p : Pkg.t) (a : Atom.t) (x : bool) w,
+      forall R D Rec Pi G (p : Pkg.t) (a : Atom.t) (x : bool)
+             (w : Version.t),
+        T.PkgSet.In (Name.Guard p a x, w) (reduceReal R D Rec Pi G) ->
         dependees R D Rec Pi G (Name.Guard p a x, w) = T.DependeesSet.empty.
-    Proof. intros R D Rec Pi G p a x w; destruct w; reflexivity. Qed.
+    Proof. intros R D Rec Pi G p a x w _; destruct w; reflexivity. Qed.
   End Lookup.
 End Debian.
