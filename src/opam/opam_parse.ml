@@ -120,9 +120,10 @@ let rec brace_of ~owner ~selfv (v : value) : brace =
   | Pfxop ({ pelem = `Not; _ }, a) -> BNot (brace_of a)
   | Pfxop ({ pelem = `Defined; _ }, { pelem = Ident x; _ }) ->
       BF (FDef (qualify ~owner x))
-  (* a group's elements are implicitly conjoined, as they are at the top
-     level of a brace: (a b) is a & b, not a parse failure *)
-  | Group { pelem = a :: rest; _ } ->
+  (* a group's or list's elements are implicitly conjoined, as they are at the
+     top level of a brace: (a b) is a & b, not a parse failure; the list form
+     is how `available:` is usually written *)
+  | Group { pelem = a :: rest; _ } | List { pelem = a :: rest; _ } ->
       List.fold_left (fun acc v -> BAnd (acc, brace_of v)) (brace_of a) rest
   | _ ->
       reject ();
