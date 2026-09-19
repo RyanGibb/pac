@@ -268,12 +268,23 @@ Module Versions (N V : UsualOrderedType).
           solve [reflexivity | exists q, n, f; split; [exact HD | reflexivity]].
       Qed.
 
+      Module PkgFibred := FibredRel N V Pkg PkgSet.
+      Theorem versions_lookup : forall R D (r : Pkg.t) (n : N.t),
+          (exists p ws, C.DepRel.In (p, (n, ws)) (reduce R D)) \/
+          n = fst r ->
+          C.versions R n = C.versions (PkgFibred.tailFibre R n) n.
+      Proof.
+        intros R D r n _; apply C.versions_ext; intro v.
+        rewrite PkgFibred.mem_tailFibre; tauto.
+      Qed.
+
       Theorem dependees_lookup : forall R D (p : Pkg.t),
+        PkgSet.In p R ->
         let Dp := DepRelFibred.tailFibre D p in
         C.dependees (reduce R D) p =
         C.dependees (reduce (realPreimage R Dp) Dp) p.
       Proof.
-        intros R D p; cbv zeta;
+        intros R D p _; cbv zeta;
           rewrite reduce_realPreimage; apply dependees_fibre.
       Qed.
 

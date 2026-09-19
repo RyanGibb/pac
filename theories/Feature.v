@@ -731,8 +731,59 @@ Module Feature (N V F : UsualOrderedType).
 
       Module FeatDepRelFibred :=
         FibredLabelledRel Pkg N VSFS FeatDepElt FeatDepRel.
+      Module PkgFibred := FibredRel N V Pkg PkgSet.
+      Module SupportFibred := FibredRel Pkg F PkgF SupportSet.
+      Module AddlDepRelFibred :=
+        FibredLabelledRel PkgF N VSFS AddlDepElt AddlDepRel.
+      (* support is a relation between packages and features, so neither of
+         its fibres alone cuts it down to the rows that mint one name: those
+         are pinned by the base name and the feature at once. *)
+      Definition supportFibre (support : SupportSet.t) (n : N.t) (f : F.t)
+          : SupportSet.t :=
+        SupportSet.filter (fun '((m, _), g) =>
+            if N.eq_dec m n then if F.eq_dec g f then true else false
+            else false)
+          support.
+
+      Lemma mem_supportFibre :
+        forall support (n m : N.t) (v : V.t) (f g : F.t),
+          SupportSet.In ((m, v), g) (supportFibre support n f) <->
+          SupportSet.In ((m, v), g) support /\ m = n /\ g = f.
+      Proof.
+        intros support n m v f g; unfold supportFibre.
+        rewrite SupportSet.filter_spec'; cbn beta iota.
+        destruct (N.eq_dec m n); [destruct (F.eq_dec g f) |];
+          intuition congruence.
+      Qed.
+
+      Theorem versions_lookupOrig :
+        forall R support Df Da (r : Pkg.t) n,
+          (exists p h, T.DepRel.In (p, (Name.Orig n, h))
+                         (reduceDeps R support Df Da)) \/
+          Name.Orig n = Name.Orig (fst r) ->
+          T.versions (reduceReal R support) (Name.Orig n) =
+          T.versions (reduceReal (PkgFibred.tailFibre R n) SupportSet.empty)
+            (Name.Orig n).
+      Proof.
+        intros R support Df Da r n _; apply T.versions_ext; intro v.
+        rewrite !mem_reduceReal.
+        split.
+        - intros [[[qn qv] [HR Hq]] | [n1 [v1 [f1 [_ [_ Hq]]]]]].
+          + unfold embedPkg in Hq; injection Hq as <- <-.
+            left; exists (n, v).
+            split; [apply PkgFibred.mem_tailFibre;
+                    split; [exact HR | reflexivity]
+                   | reflexivity].
+          + discriminate Hq.
+        - intros [[[qn qv] [HR Hq]] | [n1 [v1 [f1 [Hs _]]]]].
+          + apply PkgFibred.mem_tailFibre in HR; destruct HR as [HR _].
+            left; exists (qn, qv); split; [exact HR | exact Hq].
+          + destruct (SupportSet.empty_spec Hs).
+      Qed.
+
       Theorem dependees_lookupOrig :
         forall R support Df Da (n : N.t) (v : V.t),
+          T.PkgSet.In (Name.Orig n, v) (reduceReal R support) ->
           T.dependees (reduceDeps R support Df Da) (Name.Orig n, v) =
           T.dependees
             (reduceDeps PkgSet.empty SupportSet.empty
@@ -740,7 +791,7 @@ Module Feature (N V F : UsualOrderedType).
                AddlDepRel.empty)
             (Name.Orig n, v).
       Proof.
-        intros R support Df Da n v; apply T.dependees_ext; intros [m ws].
+        intros R support Df Da n v _; apply T.dependees_ext; intros [m ws].
         split; [| apply reduceDeps_mono;
                   [apply PkgSet.empty_subset
                   | apply SupportSet.empty_subset
@@ -772,11 +823,35 @@ Module Feature (N V F : UsualOrderedType).
             discriminate Hsrc.
       Qed.
 
-      Module PkgFibred := FibredRel N V Pkg PkgSet.
-      Module SupportFibred := FibredRel Pkg F PkgF SupportSet.
-      Module AddlDepRelFibred :=
-        FibredLabelledRel PkgF N VSFS AddlDepElt AddlDepRel.
-      Theorem dependees_lookupFeatPkg : forall R support Df Da n v f,
+      Theorem versions_lookupFeatPkg : forall R support Df Da n f,
+          (exists p h, T.DepRel.In (p, (Name.FeatPkg n f, h))
+                         (reduceDeps R support Df Da)) ->
+          T.versions (reduceReal R support) (Name.FeatPkg n f) =
+          T.versions
+            (reduceReal (PkgFibred.tailFibre R n) (supportFibre support n f))
+            (Name.FeatPkg n f).
+      Proof.
+        intros R support Df Da n f _; apply T.versions_ext; intro v.
+        rewrite !mem_reduceReal.
+        split.
+        - intros [[[qn qv] [_ Hq]] | [n1 [v1 [f1 [Hs [HR Hq]]]]]].
+          + unfold embedPkg in Hq; discriminate Hq.
+          + injection Hq as <- <- <-.
+            right; exists n, v, f.
+            split; [apply mem_supportFibre;
+                    split; [exact Hs | split; reflexivity] |].
+            split; [apply PkgFibred.mem_tailFibre;
+                    split; [exact HR | reflexivity]
+                   | reflexivity].
+        - intros [[[qn qv] [_ Hq]] | [n1 [v1 [f1 [Hs [HR Hq]]]]]].
+          + unfold embedPkg in Hq; discriminate Hq.
+          + apply mem_supportFibre in Hs; destruct Hs as [Hs _].
+            apply PkgFibred.mem_tailFibre in HR; destruct HR as [HR _].
+            right; exists n1, v1, f1;
+              split; [exact Hs | split; [exact HR | exact Hq]].
+      Qed.
+
+      Lemma dependees_lookupFeatPkg_any : forall R support Df Da n v f,
           T.dependees (reduceDeps R support Df Da) (Name.FeatPkg n f, v) =
           T.dependees
             (reduceDeps (PkgFibred.idFibre R (n, v))
@@ -823,48 +898,34 @@ Module Feature (N V F : UsualOrderedType).
           split; [reflexivity | split; [exact Htn | exact Htvs]].
       Qed.
 
-      Theorem reduceReal_lookupOrig : forall R support n v,
-          T.PkgSet.In (Name.Orig n, v) (reduceReal R support) <->
-          T.PkgSet.In (Name.Orig n, v)
-            (reduceReal (PkgFibred.idFibre R (n, v)) SupportSet.empty).
+      Theorem dependees_lookupFeatPkg : forall R support Df Da n v f,
+          T.PkgSet.In (Name.FeatPkg n f, v) (reduceReal R support) ->
+          T.dependees (reduceDeps R support Df Da) (Name.FeatPkg n f, v) =
+          T.dependees
+            (reduceDeps (PkgSet.singleton (n, v))
+               (SupportSet.singleton ((n, v), f)) FeatDepRel.empty
+               (AddlDepRelFibred.tailFibre Da ((n, v), f)))
+            (Name.FeatPkg n f, v).
       Proof.
-        intros R support n v; rewrite !mem_reduceReal.
-        split.
-        - intros [[[qn qv] [HR Hq]] | [n1 [v1 [f1 [_ [_ Hq]]]]]].
-          + unfold embedPkg in Hq; injection Hq as <- <-.
-            left; exists (n, v).
-            split; [apply PkgFibred.mem_idFibre; split; [exact HR | reflexivity]
-                   | reflexivity].
-          + discriminate Hq.
-        - intros [[[qn qv] [HR Hq]] | [n1 [v1 [f1 [Hs _]]]]].
-          + apply PkgFibred.mem_idFibre in HR; destruct HR as [HR _].
-            left; exists (qn, qv); split; [exact HR | exact Hq].
-          + destruct (SupportSet.empty_spec Hs).
+        intros R support Df Da n v f Hin.
+        apply mem_reduceReal in Hin.
+        destruct Hin as [[[qn qv] [_ Hq]] | [n1 [v1 [f1 [Hs [HR Hq]]]]]];
+          [unfold embedPkg in Hq; discriminate Hq |].
+        injection Hq as <- <- <-.
+        assert (PkgFibred.idFibre R (n, v) = PkgSet.singleton (n, v)) as ER.
+        { apply PkgSet.ext; intro x.
+          rewrite PkgFibred.mem_idFibre, PkgSet.singleton_spec.
+          split; [intros [_ E]; exact E
+                 | intro E; split; [rewrite E; exact HR | exact E]]. }
+        assert (SupportFibred.idFibre support ((n, v), f)
+                = SupportSet.singleton ((n, v), f)) as ES.
+        { apply SupportSet.ext; intro x.
+          rewrite SupportFibred.mem_idFibre, SupportSet.singleton_spec.
+          split; [intros [_ E]; exact E
+                 | intro E; split; [rewrite E; exact Hs | exact E]]. }
+        rewrite dependees_lookupFeatPkg_any, ER, ES; reflexivity.
       Qed.
 
-      Theorem reduceReal_lookupFeatPkg : forall R support n v f,
-          T.PkgSet.In (Name.FeatPkg n f, v) (reduceReal R support) <->
-          T.PkgSet.In (Name.FeatPkg n f, v)
-            (reduceReal (PkgFibred.idFibre R (n, v))
-               (SupportFibred.idFibre support ((n, v), f))).
-      Proof.
-        intros R support n v f; rewrite !mem_reduceReal.
-        split.
-        - intros [[[qn qv] [_ Hq]] | [n1 [v1 [f1 [Hs [HR Hq]]]]]].
-          + unfold embedPkg in Hq; discriminate Hq.
-          + injection Hq as <- <- <-.
-            right; exists n, v, f.
-            split; [apply SupportFibred.mem_idFibre;
-                    split; [exact Hs | reflexivity] |].
-            split; [apply PkgFibred.mem_idFibre; split; [exact HR | reflexivity]
-                   | reflexivity].
-        - intros [[[qn qv] [_ Hq]] | [n1 [v1 [f1 [Hs [HR Hq]]]]]].
-          + unfold embedPkg in Hq; discriminate Hq.
-          + apply SupportFibred.mem_idFibre in Hs; destruct Hs as [Hs _].
-            apply PkgFibred.mem_idFibre in HR; destruct HR as [HR _].
-            right; exists n1, v1, f1;
-              split; [exact Hs | split; [exact HR | exact Hq]].
-      Qed.
     End Lookup.
   End Reduction.
 

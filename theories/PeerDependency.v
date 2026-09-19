@@ -710,14 +710,96 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
       Qed.
 
       Module DepRelFibred := FibredRel Pkg C.Dependees C.DepElt C.DepRel.
-      Theorem dependees_lookupGranular : forall D Th g n v,
+      Module PeerRelFibred := FibredRel Pkg C.Dependees PeerElt PeerRel.
+
+      Definition dependsOnb (D : C.DepRel.t) (p q : Pkg.t) : bool :=
+        C.DepRel.exists_ (fun '(p0, (m0, vs)) =>
+            andb (PkgEqb.eqb p0 p)
+              (andb (NEqb.eqb m0 (fst q)) (VSet.mem (snd q) vs)))
+          D.
+
+      Lemma dependsOnb_iff : forall D (p q : Pkg.t),
+          dependsOnb D p q = true <->
+          exists vs, C.DepRel.In (p, (fst q, vs)) D /\ VSet.In (snd q) vs.
+      Proof.
+        intros D p q; unfold dependsOnb.
+        rewrite C.DepRel.exists_spec'.
+        split.
+        - intros [e [He Hb]]; destruct e as [p0 [m0 vs]]; cbn [fst snd] in Hb.
+          apply Bool.andb_true_iff in Hb; destruct Hb as [H1 Hb].
+          apply Bool.andb_true_iff in Hb; destruct Hb as [H2 H3].
+          apply PkgEqb.eqb_true_iff in H1 as ->.
+          apply NEqb.eqb_true_iff in H2 as ->.
+          exists vs; split; [exact He | apply VSet.mem_spec; exact H3].
+        - intros [vs [He Hu]]; exists (p, (fst q, vs)); split; [exact He |].
+          cbn [fst snd]; rewrite PkgEqb.eqb_refl, NEqb.eqb_refl; cbn [andb].
+          apply VSet.mem_spec; exact Hu.
+      Qed.
+
+      Definition peersOfDeps (D : C.DepRel.t) (Th : PeerRel.t) (p : Pkg.t)
+          (m : N.t) : PeerRel.t :=
+        PeerRel.filter (fun '(q, (m0, _)) =>
+            andb (NEqb.eqb m0 m) (dependsOnb D p q))
+          Th.
+
+      Lemma mem_peersOfDeps :
+        forall D Th (p q : Pkg.t) (m m0 : N.t) (ws : VSet.t),
+          PeerRel.In (q, (m0, ws)) (peersOfDeps D Th p m) <->
+          PeerRel.In (q, (m0, ws)) Th /\ m0 = m /\
+          (exists vs, C.DepRel.In (p, (fst q, vs)) D /\ VSet.In (snd q) vs).
+      Proof.
+        intros D Th p q m m0 ws; unfold peersOfDeps.
+        rewrite PeerRel.filter_spec'; cbn beta iota.
+        rewrite Bool.andb_true_iff, NEqb.eqb_true_iff, dependsOnb_iff.
+        tauto.
+      Qed.
+
+      Theorem versions_lookupGranular :
+        forall R D Th g (r : Pkg.t) (n : N.t) (w : G.t),
+          (exists p h,
+              T.DepRel.In (p, (Name.Granular n w, h)) (reduceDeps D Th g)) \/
+          Name.Granular n w = Name.Granular (fst r) (g (snd r)) ->
+          T.versions (reduceReal R D Th g) (Name.Granular n w) =
+          T.versions
+            (reduceReal (Conc.Reduction.Lookup.granFibre g R n w)
+               C.DepRel.empty PeerRel.empty g)
+            (Name.Granular n w).
+      Proof.
+        intros R D Th g r n w _; apply T.versions_ext; intro y.
+        rewrite !mem_reduceReal.
+        split.
+        - intros [[[qn qv] [HR Hq]] | [H | H]].
+          + unfold Conc.Reduction.embedPkg in Hq; cbn [fst snd] in Hq.
+            injection Hq as -> -> ->.
+            left; exists (qn, qv); split;
+              [apply Conc.Reduction.Lookup.mem_granFibre;
+               split; [exact HR | split; reflexivity]
+              | reflexivity].
+          + destruct H as [n' [v' [m' [vs [u [_ [_ Heq]]]]]]];
+              discriminate Heq.
+          + destruct H as
+              [n' [v' [o [us [u [m' [ws [w' [_ [_ [_ [_ [_ Heq]]]]]]]]]]]]];
+              discriminate Heq.
+        - intros [[[qn qv] [HR Hq]] | [H | H]].
+          + apply Conc.Reduction.Lookup.mem_granFibre in HR;
+              destruct HR as [HR _].
+            left; exists (qn, qv); split; [exact HR | exact Hq].
+          + destruct H as [n' [v' [m' [vs [u [HD _]]]]]].
+            destruct (C.DepRel.empty_spec HD).
+          + destruct H as [n' [v' [o [us [u [m' [ws [w' [HD _]]]]]]]]].
+            destruct (C.DepRel.empty_spec HD).
+      Qed.
+
+      Theorem dependees_lookupGranular : forall R D Th g n v,
+          T.PkgSet.In (Name.Granular n (g v), Version.Orig v)
+            (reduceReal R D Th g) ->
           T.dependees (reduceDeps D Th g)
             (Name.Granular n (g v), Version.Orig v) =
           T.dependees
             (reduceDeps (DepRelFibred.tailFibre D (n, v)) PeerRel.empty g)
             (Name.Granular n (g v), Version.Orig v).
       Proof.
-        intros D Th g n v; apply T.dependees_ext; intros [m ws].
+        intros R D Th g n v _; apply T.dependees_ext; intros [m ws].
         split; [| intro H; exact (reduceDeps_mono _ _ _ _ _ _
                     (DepRelFibred.tailFibre_subset _ _)
                     (PeerRel.empty_subset _) H)].
@@ -733,8 +815,66 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
             discriminate Heq.
       Qed.
 
-      Module PeerRelFibred := FibredRel Pkg C.Dependees PeerElt PeerRel.
-      Theorem dependees_lookupIntermediate : forall D Th g n v o u,
+      Theorem versions_lookupIntermediate : forall R D Th g n v m,
+          (exists p h,
+              T.DepRel.In (p, (Name.Intermediate n v m, h))
+                (reduceDeps D Th g)) ->
+          T.versions (reduceReal R D Th g) (Name.Intermediate n v m) =
+          T.versions
+            (reduceReal PkgSet.empty (DepRelFibred.tailFibre D (n, v))
+               (peersOfDeps D Th (n, v) m) g)
+            (Name.Intermediate n v m).
+      Proof.
+        intros R D Th g n v m _; apply T.versions_ext; intro y.
+        rewrite !mem_reduceReal.
+        split.
+        - intros [[[qn qv] [_ Hq]] | [H | H]].
+          + unfold Conc.Reduction.embedPkg in Hq; cbn [fst snd] in Hq;
+              discriminate Hq.
+          + destruct H as [n' [v' [m' [vs [u [HD [Hu Heq]]]]]]].
+            injection Heq as -> -> -> ->.
+            right; left; exists n', v', m', vs, u.
+            split; [apply DepRelFibred.mem_tailFibre;
+                    split; [exact HD | reflexivity] |].
+            split; [exact Hu | reflexivity].
+          + destruct H as
+              [n' [v' [o [us [u [m' [ws [w'
+                [HD [Hu [HTh [Hb [Hw Heq]]]]]]]]]]]]].
+            injection Heq as -> -> -> ->.
+            right; right; exists n', v', o, us, u, m', ws, w'.
+            split; [apply DepRelFibred.mem_tailFibre;
+                    split; [exact HD | reflexivity] |].
+            split; [exact Hu |].
+            split; [apply mem_peersOfDeps; split; [exact HTh |];
+                    split; [reflexivity |];
+                    exists us; split; [exact HD | exact Hu] |].
+            split; [| split; [exact Hw | reflexivity]].
+            apply hasDepOnb_iff in Hb; destruct Hb as [vs2 HD2].
+            apply hasDepOnb_iff; exists vs2.
+            apply DepRelFibred.mem_tailFibre;
+              split; [exact HD2 | reflexivity].
+        - intros [[[qn qv] [HR _]] | [H | H]].
+          + destruct (PkgSet.empty_spec HR).
+          + destruct H as [n' [v' [m' [vs [u [HD [Hu Heq]]]]]]].
+            apply DepRelFibred.mem_tailFibre in HD; destruct HD as [HD _].
+            right; left; exists n', v', m', vs, u.
+            split; [exact HD | split; [exact Hu | exact Heq]].
+          + destruct H as
+              [n' [v' [o [us [u [m' [ws [w'
+                [HD [Hu [HTh [Hb [Hw Heq]]]]]]]]]]]]].
+            apply DepRelFibred.mem_tailFibre in HD; destruct HD as [HD _].
+            apply mem_peersOfDeps in HTh; destruct HTh as [HTh _].
+            right; right; exists n', v', o, us, u, m', ws, w'.
+            split; [exact HD | split; [exact Hu | split; [exact HTh |]]].
+            split; [| split; [exact Hw | exact Heq]].
+            apply hasDepOnb_iff in Hb; destruct Hb as [vs2 HD2].
+            apply hasDepOnb_iff; exists vs2.
+            exact (DepRelFibred.tailFibre_subset _ _ _ HD2).
+      Qed.
+
+      Theorem dependees_lookupIntermediate : forall R D Th g n v o u,
+          T.PkgSet.In (Name.Intermediate n v o, Version.Orig u)
+            (reduceReal R D Th g) ->
           T.dependees (reduceDeps D Th g)
             (Name.Intermediate n v o, Version.Orig u) =
           T.dependees
@@ -742,7 +882,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
                         (PeerRelFibred.tailFibre Th (o, u)) g)
             (Name.Intermediate n v o, Version.Orig u).
       Proof.
-        intros D Th g n v o u; apply T.dependees_ext; intros [m ws].
+        intros R D Th g n v o u _; apply T.dependees_ext; intros [m ws].
         split; [| intro H; exact (reduceDeps_mono _ _ _ _ _ _
                     (DepRelFibred.tailFibre_subset _ _)
                     (PeerRelFibred.tailFibre_subset _ _) H)].
@@ -784,6 +924,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
             as [qn [qv [o' [us0 [u0 [m' [ws' [_ [_ [_ [_ Heq]]]]]]]]]]];
             discriminate Heq.
       Qed.
+
     End Lookup.
   End Reduction.
 

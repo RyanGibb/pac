@@ -849,12 +849,57 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
 
       Module DepRelFibred :=
         FibredLabelledRel Pkg N VSet.AsUOT C.DepElt C.DepRel.
-      Theorem dependees_lookupGranular : forall D g n v,
+      Definition granFibre (g : V.t -> G.t) (R : PkgSet.t) (n : N.t) (w : G.t)
+          : PkgSet.t :=
+        PkgSet.filter (fun '(m, v) =>
+            if N.eq_dec m n then granEqb (g v) w else false)
+          R.
+
+      Lemma mem_granFibre : forall g R (n m : N.t) (w : G.t) (v : V.t),
+          PkgSet.In (m, v) (granFibre g R n w) <->
+          PkgSet.In (m, v) R /\ m = n /\ g v = w.
+      Proof.
+        intros g R n m w v; unfold granFibre.
+        rewrite PkgSet.filter_spec'; cbn beta iota.
+        destruct (N.eq_dec m n) as [-> | NE];
+          [rewrite granEqb_iff | ]; intuition congruence.
+      Qed.
+
+      Theorem versions_lookupGranular :
+        forall R D g (r : Pkg.t) (n : N.t) (w : G.t),
+          (exists p h,
+              T.DepRel.In (p, (Name.Granular n w, h)) (reduceDeps D g)) \/
+          Name.Granular n w = Name.Granular (fst r) (g (snd r)) ->
+          T.versions (reduceReal R D g) (Name.Granular n w) =
+          T.versions (reduceReal (granFibre g R n w) C.DepRel.empty g)
+            (Name.Granular n w).
+      Proof.
+        intros R D g r n w _; apply T.versions_ext; intro y.
+        rewrite !mem_reduceReal.
+        split.
+        - intros [[[qn qv] [HR Hq]]
+                 | [n' [v' [m' [vs [u [_ [_ [_ Heq]]]]]]]]];
+            [| discriminate Heq].
+          unfold embedPkg in Hq; cbn [fst snd] in Hq.
+          injection Hq as -> -> ->.
+          left; exists (qn, qv); split;
+            [apply mem_granFibre; split;
+               [exact HR | split; reflexivity]
+            | reflexivity].
+        - intros [[[qn qv] [HR Hq]] | [n' [v' [m' [vs [u [HD _]]]]]]].
+          + apply mem_granFibre in HR; destruct HR as [HR _].
+            left; exists (qn, qv); split; [exact HR | exact Hq].
+          + destruct (C.DepRel.empty_spec HD).
+      Qed.
+
+      Theorem dependees_lookupGranular : forall R D g n v,
+          T.PkgSet.In (Name.Granular n (g v), Version.Orig v)
+            (reduceReal R D g) ->
           T.dependees (reduceDeps D g) (Name.Granular n (g v), Version.Orig v) =
           T.dependees (reduceDeps (DepRelFibred.tailFibre D (n, v)) g)
             (Name.Granular n (g v), Version.Orig v).
       Proof.
-        intros D g n v; apply T.dependees_ext; intros [m ws].
+        intros R D g n v _; apply T.dependees_ext; intros [m ws].
         split; [| apply reduceDeps_mono, DepRelFibred.tailFibre_subset].
         intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
         destruct H as [H | [H | [H | H]]].
@@ -895,13 +940,41 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         - destruct H as [n' [v' [m' [_ Heq]]]]; discriminate Heq.
       Qed.
 
-      Theorem dependees_lookupIntermediate : forall D g n v m w,
+      Theorem versions_lookupIntermediate : forall R D g n v m,
+          (exists p h,
+              T.DepRel.In (p, (Name.Intermediate n v m, h))
+                (reduceDeps D g)) ->
+          T.versions (reduceReal R D g) (Name.Intermediate n v m) =
+          T.versions
+            (reduceReal PkgSet.empty (DepRelFibred.endsFibre D (n, v) m) g)
+            (Name.Intermediate n v m).
+      Proof.
+        intros R D g n v m _; apply T.versions_ext; intro y.
+        rewrite !mem_reduceReal.
+        split.
+        - intros [[[qn qv] [_ Hq]]
+                 | [n' [v' [m' [vs [u [HD [Hs [Hu Heq]]]]]]]]].
+          + unfold embedPkg in Hq; cbn [fst snd] in Hq; discriminate Hq.
+          + injection Heq as -> -> -> ->.
+            right; exists n', v', m', vs, u.
+            split; [apply DepRelFibred.mem_endsFibre;
+                    split; [exact HD | split; reflexivity] |].
+            split; [exact Hs | split; [exact Hu | reflexivity]].
+        - intros [[[qn qv] [HR _]] | [n' [v' [m' [vs [u [HD Hrest]]]]]]].
+          + destruct (PkgSet.empty_spec HR).
+          + apply DepRelFibred.mem_endsFibre in HD; destruct HD as [HD _].
+            right; exists n', v', m', vs, u; split; [exact HD | exact Hrest].
+      Qed.
+
+      Theorem dependees_lookupIntermediate : forall R D g n v m w,
+          T.PkgSet.In (Name.Intermediate n v m, Version.Gran w)
+            (reduceReal R D g) ->
           T.dependees (reduceDeps D g)
             (Name.Intermediate n v m, Version.Gran w) =
           T.dependees (reduceDeps (DepRelFibred.endsFibre D (n, v) m) g)
             (Name.Intermediate n v m, Version.Gran w).
       Proof.
-        intros D g n v m w; apply T.dependees_ext; intros [m0 ws].
+        intros R D g n v m w _; apply T.dependees_ext; intros [m0 ws].
         split; [| apply reduceDeps_mono, DepRelFibred.endsFibre_subset].
         intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
         destruct H as [H | [H | [H | H]]].
@@ -933,6 +1006,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
             discriminate Heq.
         - destruct H as [n' [v' [m' [_ Heq]]]]; discriminate Heq.
       Qed.
+
     End Lookup.
   End Reduction.
 

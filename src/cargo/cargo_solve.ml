@@ -2,7 +2,7 @@
    the index is parsed into hashtables a crate at a time, as the solver
    first asks for each; every query is answered from a small
    slice instance in the shape one of Cargo.v's lookup theorems justifies
-   (own rows, and the repository restricted to realPreimage of crateReads,
+   (own rows, and the repository restricted to the names those rows read,
    or to a link's declarers), pushed through the Cargo encoder straight to
    Core; PubGrub solves the accumulated core graph lazily and the solution
    comes back through the proved decoders.  Trusted here (TCB): the parser,
@@ -163,8 +163,8 @@ let meta ar n v : P.ver option =
    still being uncovered, each lookup theorem's slice must be complete at
    the moment it answers.  That holds by construction for all but one
    query: CCrate n and CFeatP n read the repository at n alone; CSlot and
-   CDec at (n, v) read (n, v)'s own rows and the repository at crateReads,
-   the names its slots target; and name_set and slice load every name they
+   CDec at (n, v) read (n, v)'s own rows and the repository at the names
+   its slots target; and name_set and slice load every name they
    read, while meta loads the owner.  CLink l is the exception.  Its slice
    is the link relation's preimage at l -- every crate version declaring l
    -- and no row of any one crate names the other declarers, so nothing a
@@ -299,7 +299,7 @@ module Make () = struct
     r_fdefs : Cg.FDefRel.t;
     r_links : Cg.LinkRel.t;
     r_supp : Cg.SupportSet.t;
-    r_reads : string list; (* crateReads: own name plus the slot targets *)
+    r_reads : string list; (* own name plus the slot targets *)
   }
 
   let empty_rows n =
@@ -377,8 +377,7 @@ module Make () = struct
         Hashtbl.replace name_set_cache n s;
         s
 
-  (* realPreimage R (crateReads Slots p): every version of every name the
-     crate's rows read, and nothing else *)
+  (* every version of every name the crate's rows read, and nothing else *)
   (* keyed by the read names rather than by the crate version, because
      consecutive versions of a crate almost always read the same names *)
   let slice_cache : (string list, Cg.PkgSet.t) Hashtbl.t = Hashtbl.create 4096

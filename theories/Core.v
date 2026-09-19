@@ -66,6 +66,45 @@ Module Core (N V : UsualOrderedType).
          destruct (DependeesSet.empty_spec Hin)].
   Qed.
 
+  Definition versions (R : PkgSet.t) (n : N.t) : VSet.t :=
+    PkgSet.fold (fun '(m, v) acc =>
+        if N.eq_dec m n then VSet.add v acc else acc)
+      R VSet.empty.
+
+  Module SOpv := SetOps Pkg V PkgSet VSet.
+  Lemma mem_versions : forall R (n : N.t) (v : V.t),
+      VSet.In v (versions R n) <-> PkgSet.In (n, v) R.
+  Proof.
+    intros R n v; unfold versions.
+    rewrite (SOpv.in_fold _
+      (fun e => if N.eq_dec (fst e) n
+                then VSet.singleton (snd e) else VSet.empty)).
+    2:{ intros [m u] a y; simpl.
+        destruct (N.eq_dec m n).
+        - rewrite SOpv.add_in, SOpv.singleton_in; tauto.
+        - split; [tauto | intros [H | H];
+            [exfalso; exact (SOpv.empty_in _ H) | exact H]]. }
+    split.
+    - intros [H | [e [HeR He]]].
+      + exfalso; exact (SOpv.empty_in _ H).
+      + destruct e as [m u]; simpl in He.
+        destruct (N.eq_dec m n) as [-> | NE].
+        * rewrite SOpv.singleton_in in He; subst u; exact HeR.
+        * exfalso; exact (SOpv.empty_in _ He).
+    - intro H; right; exists (n, v); split; [exact H | simpl].
+      destruct (N.eq_dec n n) as [_ | NE];
+        [rewrite SOpv.singleton_in; reflexivity
+        | contradiction NE; reflexivity].
+  Qed.
+
+  Lemma versions_ext : forall R R' (n : N.t),
+      (forall v, PkgSet.In (n, v) R <-> PkgSet.In (n, v) R') ->
+      versions R n = versions R' n.
+  Proof.
+    intros R R' n H; apply VSet.ext; intro v.
+    rewrite !mem_versions; exact (H v).
+  Qed.
+
   Definition VersionUnique (S : PkgSet.t) : Prop :=
     forall (n : N.t) (v v' : V.t),
       PkgSet.In (n, v) S -> PkgSet.In (n, v') S -> v = v'.

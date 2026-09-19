@@ -540,7 +540,33 @@ Module Conflict (N V : UsualOrderedType).
       Qed.
 
       Module DepRelFibred := FibredRel Pkg C.Dependees C.DepElt C.DepRel.
-      Theorem dependees_lookupOrig : forall D G (n : N.t) (v : V.t),
+      Module PkgFibred := FibredRel N V Pkg PkgSet.
+      Theorem versions_lookupOrig : forall R D G (r : Pkg.t) (n : N.t),
+          (exists p h,
+              T.DepRel.In (p, (Name.Orig n, h)) (reduceDeps D G)) \/
+          Name.Orig n = Name.Orig (fst r) ->
+          T.versions (reduceReal R G) (Name.Orig n) =
+          T.versions (reduceReal (PkgFibred.tailFibre R n) ConflictRel.empty)
+            (Name.Orig n).
+      Proof.
+        intros R D G r n _; apply T.versions_ext; intro w.
+        rewrite !mem_reduceReal.
+        split.
+        - intros [[[qn qv] [HR Hq]] | [q [n1 [vs [_ [Hy | Hy]]]]]];
+            [| discriminate Hy | discriminate Hy].
+          unfold embedPkg in Hq; cbn [fst snd] in Hq.
+          injection Hq as -> ->.
+          left; exists (qn, qv); split;
+            [apply PkgFibred.mem_tailFibre; split; [exact HR | reflexivity]
+            | reflexivity].
+        - intros [[[qn qv] [HR Hq]] | [q [n1 [vs [HG _]]]]].
+          + apply PkgFibred.mem_tailFibre in HR; destruct HR as [HR _].
+            left; exists (qn, qv); split; [exact HR | exact Hq].
+          + destruct (ConflictRel.empty_spec HG).
+      Qed.
+
+      Theorem dependees_lookupOrig : forall R D G (n : N.t) (v : V.t),
+          T.PkgSet.In (embedPkg (n, v)) (reduceReal R G) ->
           T.dependees (reduceDeps D G) (embedPkg (n, v)) =
           T.dependees
             (reduceDeps (DepRelFibred.tailFibre D (n, v))
@@ -548,7 +574,7 @@ Module Conflict (N V : UsualOrderedType).
                                   (conflictsAgainst G n v)))
             (embedPkg (n, v)).
       Proof.
-        intros D G n v; apply T.dependees_ext; intros [m ws].
+        intros R D G n v _; apply T.dependees_ext; intros [m ws].
         split; [| intro H; exact (reduceDeps_mono _ _ _ _ _
                     (DepRelFibred.tailFibre_subset _ _)
                     (conflictSlice_sub G n v) H)].
@@ -574,12 +600,49 @@ Module Conflict (N V : UsualOrderedType).
           apply mem_conflictsAgainst; repeat split; [exact HG | exact Hu].
       Qed.
 
+      Lemma synthetic_target_row :
+        forall D G (p : T.Pkg.t) (n : N.t) (vs : VSet.t) (h : T.VSet.t),
+          T.DepRel.In (p, (Name.Synthetic n vs, h)) (reduceDeps D G) ->
+          exists q, ConflictRel.In (q, (n, vs)) G.
+      Proof.
+        intros D G p n vs h Hd; apply mem_reduceDeps in Hd.
+        destruct Hd as [[q [n1 [vs1 [_ Hy]]]]
+                       | [[q [n1 [vs1 [HG Hy]]]]
+                          | [q [n1 [vs1 [u [HG [_ Hy]]]]]]]].
+        - destruct q; unfold embedPkg in Hy; simpl in Hy; congruence.
+        - exists q; replace n1 with n in HG by congruence;
+            replace vs1 with vs in HG by congruence; exact HG.
+        - exists q; replace n1 with n in HG by congruence;
+            replace vs1 with vs in HG by congruence; exact HG.
+      Qed.
+
+      Theorem versions_lookupSynthetic :
+        forall R D G (n : N.t) (vs : VSet.t),
+          (exists p h, T.DepRel.In (p, (Name.Synthetic n vs, h))
+                         (reduceDeps D G)) ->
+          T.versions (reduceReal R G) (Name.Synthetic n vs) =
+          T.VSet.add Version.Zero (T.VSet.singleton Version.One).
+      Proof.
+        intros R D G n vs [p [h Hd]].
+        destruct (synthetic_target_row D G p n vs h Hd) as [q HG].
+        apply T.VSet.ext; intro w.
+        rewrite T.mem_versions, mem_reduceReal, SOvt.add_in, SOvt.singleton_in.
+        split.
+        - intros [[[qn qv] [_ Hq]] | [q1 [n1 [vs1 [_ Hy]]]]].
+          + unfold embedPkg in Hq; cbn [fst snd] in Hq; discriminate Hq.
+          + destruct Hy as [Hy | Hy]; [left | right]; congruence.
+        - intros [-> | ->]; right; exists q, n, vs.
+          + split; [exact HG | left; reflexivity].
+          + split; [exact HG | right; reflexivity].
+      Qed.
+
       Theorem dependees_lookupSynthetic :
-        forall D G (n : N.t) (vs : VSet.t) (cv : Version.t),
+        forall R D G (n : N.t) (vs : VSet.t) (cv : Version.t),
+          T.PkgSet.In (Name.Synthetic n vs, cv) (reduceReal R G) ->
           T.dependees (reduceDeps D G) (Name.Synthetic n vs, cv) =
           T.DependeesSet.empty.
       Proof.
-        intros D G n vs cv; apply T.dependees_empty_iff; intros [m ws] H.
+        intros R D G n vs cv _; apply T.dependees_empty_iff; intros [m ws] H.
         apply mem_reduceDeps in H.
         destruct H as [[q [n' [vs' [_ Hy]]]]
                       | [[q [n' [vs' [_ Hy]]]]
@@ -588,6 +651,7 @@ Module Conflict (N V : UsualOrderedType).
         - destruct q; unfold embedPkg in Hy; simpl in Hy; congruence.
         - congruence.
       Qed.
+
     End Lookup.
   End Reduction.
 End Conflict.

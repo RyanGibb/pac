@@ -1114,13 +1114,48 @@ Module Virtual (N V : UsualOrderedType).
               | reflexivity].
       Qed.
 
+      Module PkgFibred := FibredRel N V Pkg PkgSet.
+      Theorem versions_lookupOrig : forall R D Pi (r : Pkg.t) (n : N.t),
+          (exists q h,
+              T.DepRel.In (q, (Name.Orig n, h)) (reduceDeps R D Pi)) \/
+          Name.Orig n = Name.Orig (fst r) ->
+          T.versions (reduceReal R D Pi) (Name.Orig n) =
+          T.versions
+            (reduceReal (PkgFibred.tailFibre R n) C.DepRel.empty
+               ProvidesRel.empty)
+            (Name.Orig n).
+      Proof.
+        intros R D Pi r n _; apply T.versions_ext; intro y.
+        rewrite !mem_reduceReal.
+        split.
+        - intros [[n1 [v1 [HR [Hn Hv]]]] | [C2 | C3]].
+          + injection Hn as ->.
+            left; exists n1, v1.
+            split; [apply PkgFibred.mem_tailFibre;
+                    split; [exact HR | reflexivity] |].
+            split; [reflexivity | exact Hv].
+          + destruct C2 as [q [n' [vs [m [u [v [_ [_ [_ [Hn _]]]]]]]]]];
+              discriminate Hn.
+          + destruct C3 as [q [n' [vs [u [_ [_ [_ [_ [Hn _]]]]]]]]];
+              discriminate Hn.
+        - intros [[n1 [v1 [HR [Hn Hv]]]] | [C2 | C3]].
+          + apply PkgFibred.mem_tailFibre in HR; destruct HR as [HR _].
+            left; exists n1, v1;
+              split; [exact HR | split; [exact Hn | exact Hv]].
+          + destruct C2 as [q [n' [vs [m [u [v [HD _]]]]]]].
+            destruct (C.DepRel.empty_spec HD).
+          + destruct C3 as [q [n' [vs [u [HD _]]]]].
+            destruct (C.DepRel.empty_spec HD).
+      Qed.
+
       Theorem dependees_lookupOrig : forall D R Pi (p : Pkg.t),
+          T.PkgSet.In (embedPkg p) (reduceReal R D Pi) ->
           let Dp := DepRelFibred.tailFibre D p in
           T.dependees (reduceDeps R D Pi) (embedPkg p) =
           T.dependees (reduceDeps (realPreimage R Dp) Dp (provPreimage Pi Dp))
             (embedPkg p).
       Proof.
-        intros D R Pi p; cbv zeta; apply T.dependees_ext; intros [m ws];
+        intros D R Pi p _; cbv zeta; apply T.dependees_ext; intros [m ws];
           rewrite !mem_reduceDeps.
         split.
         - intros [C1 | [C2 | [C3 | C4]]].
@@ -1182,8 +1217,60 @@ Module Virtual (N V : UsualOrderedType).
             exfalso; destruct p; discriminate Hp.
       Qed.
 
-      Module PkgFibred := FibredRel N V Pkg PkgSet.
+      Theorem versions_lookupSelector : forall R D Pi (p : Pkg.t) (n : N.t),
+          (exists q h,
+              T.DepRel.In (q, (Name.Selector p n, h)) (reduceDeps R D Pi)) ->
+          T.versions (reduceReal R D Pi) (Name.Selector p n) =
+          T.versions
+            (reduceReal (PkgFibred.tailFibre R n)
+               (DepRelFibred.endsFibre D p n) (ProvFibred.nodeFibre Pi n))
+            (Name.Selector p n).
+      Proof.
+        intros R D Pi p n _; apply T.versions_ext; intro y.
+        rewrite !mem_reduceReal.
+        split.
+        - intros [C1 | [C2 | C3]].
+          + destruct C1 as [n1 [v1 [_ [Hn _]]]]; discriminate Hn.
+          + destruct C2 as [q [n' [vs [m [u [v [HD [HP [Hm [Hn Hv]]]]]]]]]].
+            injection Hn as -> ->.
+            right; left; exists q, n', vs, m, u, v.
+            split; [apply DepRelFibred.mem_endsFibre;
+                    split; [exact HD | split; reflexivity] |].
+            split; [apply ProvFibred.mem_nodeFibre;
+                    split; [exact HP | reflexivity] |].
+            split; [exact Hm | split; [reflexivity | exact Hv]].
+          + destruct C3 as [q [n' [vs [u [HD [Hb [Hu [HuR [Hn Hv]]]]]]]]].
+            injection Hn as -> ->.
+            right; right; exists q, n', vs, u.
+            split; [apply DepRelFibred.mem_endsFibre;
+                    split; [exact HD | split; reflexivity] |].
+            split; [apply (proj2 (hasProvider_nodeFibre Pi n' vs)); exact Hb |].
+            split; [exact Hu |].
+            split; [apply PkgFibred.mem_tailFibre;
+                    split; [exact HuR | reflexivity] |].
+            split; [reflexivity | exact Hv].
+        - intros [C1 | [C2 | C3]].
+          + destruct C1 as [n1 [v1 [_ [Hn _]]]]; discriminate Hn.
+          + destruct C2 as [q [n' [vs [m [u [v [HD [HP [Hm [Hn Hv]]]]]]]]]].
+            apply DepRelFibred.mem_endsFibre in HD; destruct HD as [HD _].
+            apply ProvFibred.mem_nodeFibre in HP; destruct HP as [HP _].
+            right; left; exists q, n', vs, m, u, v.
+            split; [exact HD | split; [exact HP |]].
+            split; [exact Hm | split; [exact Hn | exact Hv]].
+          + destruct C3 as [q [n' [vs [u [HD [Hb [Hu [HuR [Hn Hv]]]]]]]]].
+            injection Hn as -> ->.
+            apply DepRelFibred.mem_endsFibre in HD; destruct HD as [HD _].
+            apply PkgFibred.mem_tailFibre in HuR; destruct HuR as [HuR _].
+            apply (proj1 (hasProvider_nodeFibre Pi n' vs)) in Hb.
+            right; right; exists q, n', vs, u.
+            split; [exact HD | split; [exact Hb |]].
+            split; [exact Hu | split; [exact HuR |]].
+            split; [reflexivity | exact Hv].
+      Qed.
+
       Theorem dependees_lookupSelector : forall D R Pi (p : Pkg.t) n m w,
+          T.PkgSet.In (Name.Selector p n, Version.Provider m w)
+            (reduceReal R D Pi) ->
           T.dependees (reduceDeps R D Pi)
             (Name.Selector p n, Version.Provider m w) =
           T.dependees
@@ -1191,7 +1278,7 @@ Module Virtual (N V : UsualOrderedType).
                         (ProvFibred.nodeFibre Pi n))
             (Name.Selector p n, Version.Provider m w).
       Proof.
-        intros D R Pi p n m w; apply T.dependees_ext; intros [m0 ws];
+        intros D R Pi p n m w _; apply T.dependees_ext; intros [m0 ws];
           rewrite !mem_reduceDeps.
         split.
         - intros [C1 | [C2 | [C3 | C4]]].
@@ -1241,6 +1328,7 @@ Module Virtual (N V : UsualOrderedType).
             split; [exact Hu | split; [exact HuR |]].
             split; [reflexivity | split; reflexivity].
       Qed.
+
     End Lookup.
   End Reduction.
 
