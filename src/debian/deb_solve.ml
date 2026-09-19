@@ -121,18 +121,11 @@ struct
     group_of : (string, (string * string) list) Hashtbl.t;
     providers_of : (string, (DMA.Pkg.t * DMA.Deb.coq_DTop) list) Hashtbl.t;
     conflicts_on : (string, (DMA.Pkg.t * DMA.Atom.t) list) Hashtbl.t;
-    clause_of_aset : (DMA.Deb.AtomSet.t, DMA.Pkg.t * DMA.AtomSet.t) Hashtbl.t;
-    clause_of_atom : (DMA.Deb.Atom.t, DMA.Pkg.t * DMA.AtomSet.t) Hashtbl.t;
-    (* Recommends clauses are keyed separately from Depends: Soft A and
-       Disjunct A are distinct names over the same atom set, and one clause
-       may be a Depends of one package and a Recommends of another. *)
-    rclause_of_aset : (DMA.Deb.AtomSet.t, DMA.Pkg.t * DMA.AtomSet.t) Hashtbl.t;
-    rclause_of_atom : (DMA.Deb.Atom.t, DMA.Pkg.t * DMA.AtomSet.t) Hashtbl.t;
     (* Debian prefers the leftmost alternative of a clause, and a mangled
        clause is an atom *set*, so the field's left-to-right order has to be
-       carried beside it.  Keyed by the mangled clause, exactly as
-       clause_of_aset is, and shared between Depends and Recommends because
-       Disjunct A and Soft A range over the same A. *)
+       carried beside it.  Keyed by the mangled clause, and shared between
+       Depends and Recommends because Disjunct A and Soft A range over the
+       same A. *)
     clause_order : (DMA.Deb.AtomSet.t, DMA.Deb.Atom.t array) Hashtbl.t;
     class_of : (DMA.Pkg.t, DMA.coq_MAClass) Hashtbl.t;
     (* stanzas whose clauses a slice has asked for, reported under PACPROF:
@@ -147,31 +140,26 @@ struct
   let mangle fields =
     List.map (List.map matom_of) (DF.parse_depends_fields fields)
 
-  (* clauses are content-keyed, so one entry per mangled clause is all a
-     hasClauseb/occursAtomb slice needs *)
-  let index_clauses idx by_aset by_atom (p : DMA.Pkg.t) alts_list =
+  let index_clauses idx (p : DMA.Pkg.t) alts_list =
     let b = snd (fst p) in
     List.iter
       (fun alts ->
-        let aset = maset_of alts in
-        let ma_set = DMA.reduceClause b aset in
-        Hashtbl.replace by_aset ma_set (p, aset);
-        let eatoms = List.map (DMA.reduceAtom b) alts in
-        List.iter (fun ea -> Hashtbl.replace by_atom ea (p, aset)) eatoms;
+        let ma_set = DMA.reduceClause b (maset_of alts) in
         (* Two clauses may list the same alternatives in different orders;
-           whichever is recorded first wins.  That is exactly as sound as the
-           content-keying above: both packages already reduce to one gadget
-           name, hence to one PubGrub decision, so there was never room for
-           the two to be ordered apart.  The order is a preference and nothing
-           more, but not because every alternative is a live candidate -- a
-           good few of the clause sets written both ways round list an
+           whichever is recorded first wins.  Both packages already reduce to
+           one gadget name, hence to one PubGrub decision, so there was never
+           room for the two to be ordered apart.  The order is a preference
+           and nothing more, but not because every alternative is a live
+           candidate -- a good few of the clause sets written both ways
+           round list an
            alternative no version satisfies, such as fuse (<< 3) against
            fuse3, or makedev against udev.  Recording such an order first puts
            a dead alternative at the head and costs a backtrack; it cannot
            change the answer, because an alternative nothing satisfies is one
            PubGrub can never decide the gadget to. *)
         if not (Hashtbl.mem idx.clause_order ma_set) then
-          Hashtbl.replace idx.clause_order ma_set (Array.of_list eatoms))
+          Hashtbl.replace idx.clause_order ma_set
+            (Array.of_list (List.map (DMA.reduceAtom b) alts)))
       alts_list
 
   (* the alternative's position in the clause being decided, which is what
@@ -197,10 +185,6 @@ struct
         group_of = Hashtbl.create 65536;
         providers_of = Hashtbl.create 4096;
         conflicts_on = Hashtbl.create 4096;
-        clause_of_aset = Hashtbl.create 65536;
-        clause_of_atom = Hashtbl.create 65536;
-        rclause_of_aset = Hashtbl.create 65536;
-        rclause_of_atom = Hashtbl.create 65536;
         clause_order = Hashtbl.create 65536;
         class_of = Hashtbl.create 65536;
         n_clauses_parsed = 0;
@@ -224,16 +208,12 @@ struct
     idx
 
   (* A Disjunct, Soft or Selector name is minted only by reducing a stanza
-     that carries the clause, so the clause indices can be filled as stanzas
-     are read: nothing can ask about a mangled clause, or an atom of one,
-     before the owner it came from has been through here.  That is not true
-     of conflicts_on or providers_of, which are preimages -- who conflicts
-     with me, and who provides the name I want -- that no row of the asking
-     package can reach, so Conflicts, Breaks and Provides stay eager.
-
-     clause_order rides along for the same reason: the alternative order a
-     Disjunct or Soft name is ranked by is recorded here, before reduceDeps
-     has even built the name, so no lookup can outrun it. *)
+     that carries the clause, so clause_order can be filled as stanzas are
+     read: nothing can ask about a mangled clause, or an atom of one, before
+     the owner it came from has been through here.  That is not true of
+     conflicts_on or providers_of, which are preimages -- who conflicts with
+     me, and who provides the name I want -- that no row of the asking
+     package can reach, so Conflicts, Breaks and Provides stay eager. *)
   let clauses_of idx (ns : nstanza) =
     match ns.nclauses with
     | Some c -> c
@@ -241,9 +221,8 @@ struct
         let c = (mangle ns.raw_deps, mangle ns.raw_recs) in
         ns.nclauses <- Some c;
         idx.n_clauses_parsed <- idx.n_clauses_parsed + 1;
-        index_clauses idx idx.clause_of_aset idx.clause_of_atom ns.npkg (fst c);
-        index_clauses idx idx.rclause_of_aset idx.rclause_of_atom ns.npkg
-          (snd c);
+        index_clauses idx ns.npkg (fst c);
+        index_clauses idx ns.npkg (snd c);
         c
 
   let deps_of idx ns = fst (clauses_of idx ns)
@@ -321,30 +300,6 @@ struct
     | None -> []
     | Some ns -> List.map fst ns.nprovs
 
-  (* Singleton clause slices as in deb_solve.ml, except the stored clause is
-     MA-side and the mangled clause is recomputed by reduceDeps, so the
-     translated slice is the translation of a sub-instance by construction. *)
-  let clause_by_aset idx aset =
-    match Hashtbl.find_opt idx.clause_of_aset aset with
-    | None -> DMA.Deb.Deps.empty
-    | Some (p, mal) -> DMA.reduceDeps (DMA.Deps.add (p, mal) DMA.Deps.empty)
-
-  let clause_by_atom idx a =
-    match Hashtbl.find_opt idx.clause_of_atom a with
-    | None -> DMA.Deb.Deps.empty
-    | Some (p, mal) -> DMA.reduceDeps (DMA.Deps.add (p, mal) DMA.Deps.empty)
-
-  (* the same slices on the Recommends side, through reduceRec *)
-  let rec_clause_by_aset idx aset =
-    match Hashtbl.find_opt idx.rclause_of_aset aset with
-    | None -> DMA.Deb.Deps.empty
-    | Some (p, mal) -> DMA.reduceRec (DMA.Deps.add (p, mal) DMA.Deps.empty)
-
-  let rec_clause_by_atom idx a =
-    match Hashtbl.find_opt idx.rclause_of_atom a with
-    | None -> DMA.Deb.Deps.empty
-    | Some (p, mal) -> DMA.reduceRec (DMA.Deps.add (p, mal) DMA.Deps.empty)
-
   (* R/Pi slices for a mangled name (m, x): whichever x is, every provider
      of (m, x) is either a group member of m (reals, implicit group /
      foreign / :any provides) or a declared provider of m. *)
@@ -357,28 +312,6 @@ struct
         (DMA.PkgSet.elements r_ma @ List.map fst (DMA.Prov.elements pi_decl))
     in
     (DMA.reduceReal r_ma, DMA.reduceProv r_ma pi_decl cls)
-
-  (* Conflict entries owned by one mangled package: its hand-written
-     negatives plus its implicit group exclusion.  PubGrub re-queries each
-     guard name many times during propagation, so memoize per owner. *)
-  let guard_memo : (DMA.Deb.Ver.C.Pkg.t, DMA.Deb.Conf.t) Hashtbl.t =
-    Hashtbl.create 1024
-
-  let guard_conf idx (pm : DMA.Deb.Ver.C.Pkg.t) =
-    match Hashtbl.find_opt guard_memo pm with
-    | Some g -> g
-    | None ->
-        let g =
-          match pm with
-          | (n, DMA.QAArch b), v ->
-              let p = ((n, b), v) in
-              DMA.reduceConf
-                (DMA.PkgSet.add p DMA.PkgSet.empty)
-                (ma_conf_of_pkg idx p) (classes_of idx [ p ])
-          | _ -> DMA.Deb.Conf.empty
-        in
-        Hashtbl.replace guard_memo pm g;
-        g
 
   let vers_sparse idx (n' : DMA.Deb.Name.t) =
     match n' with
@@ -394,28 +327,17 @@ struct
           DMA.Deb.Deps.empty DMA.Deb.Prov.empty DMA.Deb.Conf.empty n'
     | DMA.Deb.Name.Disjunct aset ->
         (* Lookup.versions_lookupDisjunct *)
-        DMA.Deb.versions DMA.Deb.Ver.C.PkgSet.empty (clause_by_aset idx aset)
-          DMA.Deb.Deps.empty DMA.Deb.Prov.empty DMA.Deb.Conf.empty n'
+        DMA.Deb.versionsDisj aset
     | DMA.Deb.Name.Soft aset ->
         (* Lookup.versions_lookupSoft *)
-        DMA.Deb.versions DMA.Deb.Ver.C.PkgSet.empty DMA.Deb.Deps.empty
-          (rec_clause_by_aset idx aset)
-          DMA.Deb.Prov.empty DMA.Deb.Conf.empty n'
+        DMA.Deb.versionsSoft aset
     | DMA.Deb.Name.Selector a ->
-        (* Lookup.versions_lookupSelectorAgreeMA: both slices at once is
-           sound because the selector reads them only through the occurrence
-           test, which both slices together answer as the whole pair does.
-           Lookup.versions_lookupSelectorMA and
-           Lookup.versions_lookupSelectorRecMA are its one-sided cases: a
-           selector is minted from allClauses, so an atom reached only
-           through a Recommends needs its recommends clause here too. *)
+        (* Lookup.versions_lookupSelector *)
         let r, pi = sel_slices idx (fst a) in
-        DMA.Deb.versions r (clause_by_atom idx a) (rec_clause_by_atom idx a) pi
-          DMA.Deb.Conf.empty n'
-    | DMA.Deb.Name.Guard (p, _, _) ->
+        DMA.Deb.us r pi a
+    | DMA.Deb.Name.Guard (_, _, _) ->
         (* Lookup.versions_lookupGuard *)
-        DMA.Deb.versions DMA.Deb.Ver.C.PkgSet.empty DMA.Deb.Deps.empty
-          DMA.Deb.Deps.empty DMA.Deb.Prov.empty (guard_conf idx p) n'
+        DMA.Deb.zeroOne
 
   let dependees_sparse idx (s : DMA.Deb.T.Pkg.t) =
     match s with
@@ -458,28 +380,23 @@ struct
           (DMA.reduceProv r_pi pi_decl pi_cls)
           (DMA.reduceConf g_r g_conf g_cls)
           s
-    | DMA.Deb.Name.Disjunct aset, DMA.Deb.Version.Atom a ->
+    | DMA.Deb.Name.Disjunct _, DMA.Deb.Version.Atom a ->
         (* Lookup.dependees_lookupDisjunct *)
         let r, pi = sel_slices idx (fst a) in
-        DMA.Deb.dependees r (clause_by_aset idx aset) DMA.Deb.Deps.empty pi
-          DMA.Deb.Conf.empty s
-    | DMA.Deb.Name.Soft aset, DMA.Deb.Version.Atom a ->
-        (* Lookup.dependees_lookupSoft: an alternative of a recommends clause
-           reaches its targets exactly as one of a Depends clause does.  The
-           escape (Soft _, Zero) has no case: it falls to the empty catch-all
-           below, which is what discharges the clause for free. *)
+        DMA.Deb.T.DependeesSet.singleton (DMA.Deb.tgt r pi a)
+    | DMA.Deb.Name.Soft _, DMA.Deb.Version.Atom a ->
+        (* Lookup.dependees_lookupSoft *)
         let r, pi = sel_slices idx (fst a) in
-        DMA.Deb.dependees r DMA.Deb.Deps.empty (rec_clause_by_aset idx aset) pi
-          DMA.Deb.Conf.empty s
-    | ( DMA.Deb.Name.Selector a,
-        (DMA.Deb.Version.Ref (_, _) | DMA.Deb.Version.RefReal _) ) ->
-        (* Lookup.dependees_lookupSelectorAgreeMA, over allClauses as in
-           vers_sparse; Lookup.dependees_lookupSelectorMA and
-           Lookup.dependees_lookupSelectorRecMA are its one-sided cases, the
-           latter for an atom reached only through a Recommends *)
-        let r, pi = sel_slices idx (fst a) in
-        DMA.Deb.dependees r (clause_by_atom idx a) (rec_clause_by_atom idx a) pi
-          DMA.Deb.Conf.empty s
+        DMA.Deb.T.DependeesSet.singleton (DMA.Deb.tgt r pi a)
+    | DMA.Deb.Name.Selector _, DMA.Deb.Version.Ref (m, w) ->
+        (* Lookup.dependees_lookupSelector *)
+        DMA.Deb.T.DependeesSet.singleton
+          ( DMA.Deb.Name.Orig m,
+            DMA.Deb.T.VSet.singleton (DMA.Deb.Version.Orig w) )
+    | DMA.Deb.Name.Selector a, DMA.Deb.Version.RefReal w ->
+        DMA.Deb.T.DependeesSet.singleton
+          ( DMA.Deb.Name.Orig (DMA.Deb.aname a),
+            DMA.Deb.T.VSet.singleton (DMA.Deb.Version.Orig w) )
     | _ ->
         (* Lookup.dependees_lookupGuard; other shape mismatches are empty
            by definition of dependees *)
