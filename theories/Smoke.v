@@ -305,7 +305,11 @@ Proof. reflexivity. Qed.
 
 Example alpine_root_dependees_computes :
   Alp.Reduction.FSet.cardinal
-    (Alp.Reduction.dependees alpI Alp.Reduction.rootPkg) = 2.
+    (Alp.Reduction.dependees alpI Alp.Reduction.rootPkg) = 1.
+Proof. reflexivity. Qed.
+
+Example alpine_installif_attaches :
+  Alp.Trig.cardinal (Alp.Reduction.installIfFibre alpI (1, 10)) = 1.
 Proof. reflexivity. Qed.
 
 Example alpine_versions_computes :
