@@ -4,7 +4,7 @@
 
 (library
  (name deb_solve)
- (modules deb_solve)
+ (modules deb_solve apt_heap)
  (flags
   (:standard -w -a))
  (libraries debian_frontend pac pubgrub unix))

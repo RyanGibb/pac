@@ -3,11 +3,11 @@ open Cmdliner
 let debug_arg =
   Arg.(value & flag & info [ "debug" ] ~doc:"Trace the PubGrub search.")
 
-let debian_run debug no_recs native goal paths =
+let debian_run debug apt_heap no_recs native goal paths =
   Pubgrub.set_debug debug;
   match
-    Deb_solve.solve_files ~debug ~recommends:(not no_recs) ~native ~paths
-      ~goal
+    Deb_solve.solve_files ~debug ~apt_heap ~recommends:(not no_recs) ~native
+      ~paths ~goal
   with
   | None -> 1
   | Some (pkgs, t_parse, t_solve) ->
@@ -23,6 +23,12 @@ let debian_cmd =
       value & flag
       & info [ "no-install-recommends" ]
           ~doc:"Ignore Recommends fields rather than satisfying them.")
+  in
+  let apt_heap =
+    Arg.(
+      value & flag
+      & info [ "apt-heap" ]
+          ~doc:"Replay apt's work-heap scheduling for exact correspondence.")
   in
   let native =
     Arg.(
@@ -43,7 +49,7 @@ let debian_cmd =
   Cmd.v
     (Cmd.info "debian" ~doc:"Solve against Debian Packages indices.")
     Term.(
-      const debian_run $ debug_arg $ no_recs $ native $ goal $ paths)
+      const debian_run $ debug_arg $ apt_heap $ no_recs $ native $ goal $ paths)
 
 let opam_run debug repo goal =
   let t0 = Unix.gettimeofday () in
