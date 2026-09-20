@@ -1,8 +1,9 @@
 A mandatory peer dependency is installed beside its declarer: app depends
 on plugin and widget but on neither core nor theme.  plugin's peer on core
 is not optional, so core arrives as app's own sibling of plugin; widget's
-peer on theme is optional, so theme is not installed at all.  core 2.1.0 is
-cut by its os gate, leaving 2.0.0 as the newest ^2.  lodash is an alias
+peer on theme is optional, so theme is not installed at all.  core 2.1.0
+declares os win32 and is still the newest ^2 -- resolution does not read
+os -- so it is the one installed.  lodash is an alias
 directory holding the util-lib package, and tester is a devDependency, so
 it participates only from the root.
 
@@ -17,14 +18,14 @@ polyfill is in the cache.
   root app 1.0.0
   packages (7):
     app 1.0.0
-    core 2.0.0
+    core 2.1.0
     util-lib 1.2.0 at lodash
     plugin 1.0.0
     runtime 1.1.0
     tester 1.0.0
     widget 1.0.0
   node_modules (6 edges):
-    app 1.0.0 <- core 2.0.0
+    app 1.0.0 <- core 2.1.0
     app 1.0.0 <- util-lib 1.2.0 at lodash
     app 1.0.0 <- plugin 1.0.0
     app 1.0.0 <- runtime 1.1.0
@@ -114,35 +115,48 @@ loaded at all.
   optionalDependencies: 3 entries, 0 dropped
   encoded solution: 3 core nodes (6 lookups)
 
-A target whose every version is cut by an os or cpu gate is unresolvable
-too, because gates are an availability cut: effRepo removes the package
-outright, so for resolution it does not exist.  nativefs publishes only
-1.0.0 and only for darwin, and the host is linux, so opt-plat-app's
-optional dependency on it goes -- with native-core, which nativefs depends on
-and nothing else does.  This is fsevents, the commonest optional
-dependency there is; testing published rather than available versions
-would make it a false unsatisfiable on every platform but macOS.
+os, cpu and libc are not read at all: npm resolves for every platform at
+once and filters at install time, and a package-lock.json records every
+variant whatever host wrote it.  nativefs publishes only 1.0.0 and only
+for darwin, and the host here is linux, yet opt-plat-app's optional
+dependency on it stands -- and brings native-core, which nativefs
+depends on and nothing else does.  This is fsevents, the commonest
+optional dependency there is, and npm puts it in the lockfile on linux
+too; dropping it here would make our answer smaller than npm's on every
+platform but macOS.
 
   $ ../../../src/main.exe npm --offline --cache . --tree opt-plat-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root opt-plat-app 1.0.0
-  packages (2):
+  packages (4):
+    native-core 1.0.0
+    nativefs 1.0.0
     opt-plat-app 1.0.0
     theme 1.0.0
-  node_modules (1 edges):
+  node_modules (3 edges):
+    nativefs 1.0.0 <- native-core 1.0.0
+    opt-plat-app 1.0.0 <- nativefs 1.0.0
     opt-plat-app 1.0.0 <- theme 1.0.0
-  cone: 3 packages, 3 versions, 0 packuments fetched
-  optionalDependencies: 1 entries, 1 dropped
-  encoded solution: 3 core nodes (6 lookups)
+  cone: 4 packages, 4 versions, 0 packuments fetched
+  optionalDependencies: 1 entries, 0 dropped
+  encoded solution: 7 core nodes (14 lookups)
 
-That it is the gate doing the cutting, and not a missing packument, is
-what plat-app shows: the same dependency, not optional, against the same
-cache.
+A non-optional dependency on the same package resolves alike, which is
+what plat-app shows: the same dependency against the same cache, and
+nothing about the host enters into it.
 
-  $ ../../../src/main.exe npm --offline --cache . --tree plat-app
+  $ ../../../src/main.exe npm --offline --cache . --tree plat-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root plat-app 1.0.0
-  unsatisfiable:
-  Because plat-app@1.0.0 1.0.0 -> <plat-app@1.0.0=>nativefs> ∅ and root -> plat-app@1.0.0 1.0.0, version solving failed..
-  [1]
+  packages (4):
+    native-core 1.0.0
+    nativefs 1.0.0
+    plat-app 1.0.0
+    theme 1.0.0
+  node_modules (3 edges):
+    nativefs 1.0.0 <- native-core 1.0.0
+    plat-app 1.0.0 <- nativefs 1.0.0
+    plat-app 1.0.0 <- theme 1.0.0
+  cone: 4 packages, 4 versions, 0 packuments fetched
+  encoded solution: 7 core nodes (14 lookups)
 
 A satisfiable optional entry that conflicts is a conflict, not a drop.
 opt-peer-app depends on host, whose peer on gadget is ^2, and optionally

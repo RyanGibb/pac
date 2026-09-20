@@ -11,14 +11,18 @@ From PackageCalculus Require Import Prelude Core Versions Semver Concurrent.
    legacy guard and only constrains a directory the depender fills itself.
    Nothing installs the root, so the root's own peers are the same pair of
    rules anchored at its granular node instead of at a parent.
-   Ranges stay formulas evaluated by the translation, and engines/os/cpu
-   gate repository membership rather than individual edges.  Source names
+   Ranges stay formulas evaluated by the translation, and resolution is
+   platform-independent: npm consults neither engines nor os/cpu/libc
+   while resolving, and a package-lock.json records every optional
+   variant whatever host wrote it, filtering at install time instead, so
+   there is no environment to resolve against and nothing cuts the
+   repository.  Source names
    are pairs (directory key, registry name): an npm node is a directory,
    and the parent relation is over source packages, so two aliases of one
    registry package under one depender are only distinguishable if the key
    is part of the name. *)
 
-Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
+Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   (* Module application is generative, so the concurrent instance is the
      only one: every set keyed by source names goes through C. *)
   Module NKey := PairUOT N N.
@@ -74,33 +78,6 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
   Module Sv := Semver V VSet PM.
   Include Sv.
 
-  Definition Valuation : Type := X.t -> option Y.t.
-
-  Inductive Gate : Type :=
-  | GTrue
-  | GFalse
-  | GCmp (op : CmpOp) (x : X.t) (y : Y.t)
-  | GAnd (a b : Gate)
-  | GOr (a b : Gate)
-  | GNot (a : Gate).
-
-  (* An unset platform variable fails its comparison: this models
-     engine-strict, under which npm refuses a package whose engines, os
-     or cpu it cannot satisfy. *)
-  Fixpoint gateEval (rho : Valuation) (g : Gate) : bool :=
-    match g with
-    | GTrue => true
-    | GFalse => false
-    | GCmp op x y =>
-        match rho x with
-        | Some w => cmpOpEvalBy Y.compare op w y
-        | None => false
-        end
-    | GAnd a b => andb (gateEval rho a) (gateEval rho b)
-    | GOr a b => orb (gateEval rho a) (gateEval rho b)
-    | GNot a => negb (gateEval rho a)
-    end.
-
   Record Dependency : Type := MkDep
     { d_dir : N.t
     ; d_target : N.t
@@ -113,15 +90,14 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
     ; p_optional : bool }.
 
   (* The relation fields are lists: they feed only the spec and the
-     translation, and sets would demand comparators for Range and Gate
-     used nowhere.  optionalDependencies are absent rather than inert --
+     translation, and sets would demand a comparator for Range used
+     nowhere.  optionalDependencies are absent rather than inert --
      use-if-present is a post-resolution decision, not a constraint --
      and bundledDependencies are placement. *)
   Record Inst : Type := MkInst
     { inst_repo : RepoSet.t
     ; inst_dep : list (RPkg.t * Dependency)
     ; inst_peer : list (RPkg.t * PeerDependency)
-    ; inst_plat : list (RPkg.t * Gate)
     ; inst_ovr : list (N.t * Range)
     ; inst_root : RPkg.t }.
 
@@ -209,73 +185,6 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       injection He as <-; exact HR.
     - intro H; exists (n, v); split; [exact H | simpl].
       rewrite NEqb.eqb_refl; reflexivity.
-  Qed.
-
-  Definition platOK (rho : Valuation) (I : Inst) (p : RPkg.t) : Prop :=
-    forall g, In (p, g) (inst_plat I) -> gateEval rho g = true.
-
-  Definition platOKb (rho : Valuation) (I : Inst) (p : RPkg.t) : bool :=
-    forallb (gateEval rho) (ownedBy (inst_plat I) p).
-
-  Lemma platOKb_iff : forall rho I p,
-      platOKb rho I p = true <-> platOK rho I p.
-  Proof.
-    intros rho I p; unfold platOKb, platOK; rewrite forallb_forall.
-    split; intros H g Hg; apply H, in_ownedBy; exact Hg.
-  Qed.
-
-  (* The packages some gate of theirs rejects, collected in one pass over
-     the gates.  Asking platOKb once per candidate instead would scan
-     every gate for every candidate, which is quadratic wherever a package
-     gates all of its own versions -- the common case, since a package
-     that declares engines declares them throughout its history. *)
-  Definition badPkgs (rho : Valuation) (I : Inst) : RepoSet.t :=
-    fold_right
-      (fun q acc =>
-         if gateEval rho (snd q) then acc else RepoSet.add (fst q) acc)
-      RepoSet.empty (inst_plat I).
-
-  Lemma mem_badPkgs : forall rho I p,
-      RepoSet.In p (badPkgs rho I) <->
-      exists g, In (p, g) (inst_plat I) /\ gateEval rho g = false.
-  Proof.
-    intros rho I p; unfold badPkgs.
-    induction (inst_plat I) as [| [q g] l IH]; cbn [fold_right fst snd].
-    - split; [intro H; destruct (SOrr.empty_in _ H) | intros [g [[] _]]].
-    - destruct (gateEval rho g) eqn:Hg.
-      + split.
-        * intro H; apply IH in H; destruct H as [g0 [H1 H2]].
-          exists g0; split; [right; exact H1 | exact H2].
-        * intros [g0 [[He | H1] H2]];
-            [exfalso; congruence
-            | apply IH; exists g0; split; assumption].
-      + split.
-        * intro H; apply SOrr.add_in in H; destruct H as [He | H].
-          -- exists g; split; [left; rewrite He; reflexivity | exact Hg].
-          -- apply IH in H; destruct H as [g0 [H1 H2]].
-             exists g0; split; [right; exact H1 | exact H2].
-        * intros [g0 [[He | H1] H2]]; apply SOrr.add_in.
-          -- injection He as Hq _; left; symmetry; exact Hq.
-          -- right; apply IH; exists g0; split; assumption.
-  Qed.
-
-  (* engines/os/cpu gate repository membership, not individual edges:
-     they are properties of a package against a fixed environment, never
-     solved for, so they cut R the way opam's available: does. *)
-  Definition effRepo (rho : Valuation) (I : Inst) : RepoSet.t :=
-    RepoSet.diff (inst_repo I) (badPkgs rho I).
-
-  Lemma mem_effRepo : forall rho I p,
-      RepoSet.In p (effRepo rho I) <->
-      RepoSet.In p (inst_repo I) /\ platOKb rho I p = true.
-  Proof.
-    intros rho I p; unfold effRepo; rewrite RepoSet.diff_spec.
-    split; intros [H1 H2]; split; try exact H1.
-    - apply platOKb_iff; intros g Hg.
-      destruct (gateEval rho g) eqn:He; [reflexivity | exfalso].
-      apply H2, mem_badPkgs; exists g; split; assumption.
-    - intro Hc; apply mem_badPkgs in Hc; destruct Hc as [g [Hg He]].
-      apply platOKb_iff in H2; rewrite (H2 g Hg) in He; discriminate.
   Qed.
 
   Fixpoint lookupOvr (l : list (N.t * Range)) (n : N.t) : option Range :=
@@ -367,19 +276,19 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
   Proof. intros I p a; unfold slotKey; destruct (slotOf I p a); reflexivity.
   Qed.
 
-  Definition slotCands (rho : Valuation) (I : Inst) (p : RPkg.t) (a : N.t)
+  Definition slotCands (I : Inst) (p : RPkg.t) (a : N.t)
     : VSet.t :=
     match slotOf I p a with
     | Some d => rangeEval (override I (d_target d) (d_range d))
-                  (realVersions (effRepo rho I) (d_target d))
+                  (realVersions (inst_repo I) (d_target d))
     | None => VSet.empty
     end.
 
-  Lemma slotCands_real : forall rho I p a v,
-      VSet.In v (slotCands rho I p a) ->
-      RepoSet.In (snd (slotKey I p a), v) (effRepo rho I).
+  Lemma slotCands_real : forall I p a v,
+      VSet.In v (slotCands I p a) ->
+      RepoSet.In (snd (slotKey I p a), v) (inst_repo I).
   Proof.
-    intros rho I p a v Hv; unfold slotCands, slotKey in *.
+    intros I p a v Hv; unfold slotCands, slotKey in *.
     destruct (slotOf I p a) as [d |]; [| destruct (SOrv.empty_in _ Hv)].
     apply mem_rangeEval in Hv; destruct Hv as [Hv _]; simpl.
     apply mem_realVersions; exact Hv.
@@ -396,10 +305,10 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
   (* An override names a registry package, so it replaces a peer's declared
      range exactly as it replaces a dependency's -- npm lets it win over
      the peer range rather than intersecting the two. *)
-  Definition peerCandsAt (rho : Valuation) (I : Inst) (p : RPkg.t)
+  Definition peerCandsAt (I : Inst) (p : RPkg.t)
       (r : PeerDependency) : VSet.t :=
     rangeEval (override I (snd (peerKeyAt I p r)) (p_range r))
-      (realVersions (effRepo rho I) (snd (peerKeyAt I p r))).
+      (realVersions (inst_repo I) (snd (peerKeyAt I p r))).
 
   (* A mandatory peer is installed beside its declarer whatever the
      depender declares; an optional one keeps npm's legacy rule and only
@@ -430,13 +339,13 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
      dependency range when it declares one, else -- for a key only a peer
      asks for -- every version of that package, which the peer edges then
      narrow. *)
-  Definition childCands (rho : Valuation) (I : Inst) (p : RPkg.t)
+  Definition childCands (I : Inst) (p : RPkg.t)
       (m : NKey.t) : VSet.t :=
     if KeyEqb.eqb m (slotKey I p (fst m))
     then if NSet.mem (fst m) (dirs I p)
-         then slotCands rho I p (fst m)
+         then slotCands I p (fst m)
          else if NSet.mem (fst m) (peerDirs I)
-              then realVersions (effRepo rho I) (snd m)
+              then realVersions (inst_repo I) (snd m)
               else VSet.empty
     else VSet.empty.
 
@@ -464,18 +373,18 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
          (keysOfL (fun q => (p_name (snd q), p_name (snd q)))
             (inst_peer I))).
 
-  Definition Available (rho : Valuation) (I : Inst) (q : Pkg.t) : Prop :=
-    KeySet.In (fst q) (keysOf I) /\ RepoSet.In (base q) (effRepo rho I).
+  Definition Available (I : Inst) (q : Pkg.t) : Prop :=
+    KeySet.In (fst q) (keysOf I) /\ RepoSet.In (base q) (inst_repo I).
 
-  Definition realPkgs (rho : Valuation) (I : Inst) : PkgSet.t :=
+  Definition realPkgs (I : Inst) : PkgSet.t :=
     SOkp.unionMap (fun k =>
-        SOvp.map (fun v => (k, v)) (realVersions (effRepo rho I) (snd k)))
+        SOvp.map (fun v => (k, v)) (realVersions (inst_repo I) (snd k)))
       (keysOf I).
 
-  Lemma mem_realPkgs : forall rho I q,
-      PkgSet.In q (realPkgs rho I) <-> Available rho I q.
+  Lemma mem_realPkgs : forall I q,
+      PkgSet.In q (realPkgs I) <-> Available I q.
   Proof.
-    intros rho I [k v]; unfold realPkgs, Available, base; simpl.
+    intros I [k v]; unfold realPkgs, Available, base; simpl.
     rewrite SOkp.mem_unionMap; split.
     - intros [k0 [Hk0 Hm]]; apply SOvp.mem_map in Hm.
       destruct Hm as [u [Hu He]].
@@ -496,16 +405,16 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
      nesting.  There is no version-uniqueness field: g is the identity,
      so any number of versions of a package may coexist; what is unique
      is the version a given depender installs under a given key. *)
-  Record IsResolution (rho : Valuation) (I : Inst)
+  Record IsResolution (I : Inst)
       (S : PkgSet.t) (pi : Conc.ParentRel.t) : Prop :=
-    { nres_subset : forall q, PkgSet.In q S -> Available rho I q
+    { nres_subset : forall q, PkgSet.In q S -> Available I q
     ; nres_root : PkgSet.In (rootPkg I) S
     ; nres_unique :
         forall p m v v', Installs S pi p m v -> Installs S pi p m v' -> v = v'
     ; nres_slot :
         forall p, PkgSet.In p S ->
         forall a, NSet.In a (dirs I (base p)) ->
-        exists v, VSet.In v (slotCands rho I (base p) a) /\
+        exists v, VSet.In v (slotCands I (base p) a) /\
           Installs S pi p (slotKey I (base p) a) v
       (* A mandatory peer of anything p installs is installed by p too,
          beside its declarer, at a version the peer range admits. *)
@@ -514,7 +423,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         forall m u, Installs S pi p m u ->
         forall r, In ((snd m, u), r) (inst_peer I) ->
           p_optional r = false ->
-        exists v, VSet.In v (peerCandsAt rho I (base p) r) /\
+        exists v, VSet.In v (peerCandsAt I (base p) r) /\
           Installs S pi p (peerKeyAt I (base p) r) v
       (* An optional peer forces nothing; it constrains only a directory
          p fills itself -- npm's legacy rule, which is what
@@ -526,7 +435,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
           p_optional r = true ->
           NSet.In (p_name r) (dirs I (base p)) ->
         forall v, Installs S pi p (peerKeyAt I (base p) r) v ->
-          VSet.In v (peerCandsAt rho I (base p) r)
+          VSet.In v (peerCandsAt I (base p) r)
       (* Nothing installs the root, so the two clauses above never range
          over it; npm 7+ nevertheless installs the root project's own
          mandatory peers into the root's node_modules, and these two say
@@ -536,14 +445,14 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
     ; nres_root_peer :
         forall r, In (inst_root I, r) (inst_peer I) ->
           p_optional r = false ->
-        exists v, VSet.In v (peerCandsAt rho I (inst_root I) r) /\
+        exists v, VSet.In v (peerCandsAt I (inst_root I) r) /\
           Installs S pi (rootPkg I) (peerKeyAt I (inst_root I) r) v
     ; nres_root_peer_match :
         forall r, In (inst_root I, r) (inst_peer I) ->
           p_optional r = true ->
           NSet.In (p_name r) (dirs I (inst_root I)) ->
         forall v, Installs S pi (rootPkg I) (peerKeyAt I (inst_root I) r) v ->
-          VSet.In v (peerCandsAt rho I (inst_root I) r)
+          VSet.In v (peerCandsAt I (inst_root I) r)
     ; nres_parents :
         forall c q, Conc.ParentRel.In (c, q) pi ->
           PkgSet.In c S /\ PkgSet.In q S }.
@@ -558,21 +467,21 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
        and the global translation below is their aggregation -- *)
 
     (* THE per-name version lookup. *)
-    Definition versions (rho : Valuation) (I : Inst) (nm : Nm.t) : T.VSet.t :=
+    Definition versions (I : Inst) (nm : Nm.t) : T.VSet.t :=
       match nm with
       | Nm.Granular k w =>
-          if PkgSet.mem (k, w) (realPkgs rho I)
+          if PkgSet.mem (k, w) (realPkgs I)
           then T.VSet.singleton (Vs.Orig w)
           else T.VSet.empty
       | Nm.Intermediate k v m =>
-          Conc.Reduction.embedVS (childCands rho I (snd k, v) m)
+          Conc.Reduction.embedVS (childCands I (snd k, v) m)
       end.
 
-    Definition entryEdges (rho : Valuation) (I : Inst) (q : Pkg.t)
+    Definition entryEdges (I : Inst) (q : Pkg.t)
       : T.DependeesSet.t :=
       depsOfL (fun a =>
           (Nm.Intermediate (fst q) (snd q) (slotKey I (base q) a),
-           Conc.Reduction.embedVS (slotCands rho I (base q) a)))
+           Conc.Reduction.embedVS (slotCands I (base q) a)))
         (NSet.elements (dirs I (base q))).
 
     (* The root's own peers have no parent to hang off, so their edges
@@ -581,62 +490,62 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
        is installed and an optional one only narrows a directory the root
        fills itself; the key is the same peerKeyAt, so a name the root
        also depends on gets one edge kind, narrowed by both ranges. *)
-    Definition rootPeerEdges (rho : Valuation) (I : Inst) (q : Pkg.t)
+    Definition rootPeerEdges (I : Inst) (q : Pkg.t)
       : T.DependeesSet.t :=
       if PkgEqb.eqb q (rootPkg I)
       then depsOfL (fun r =>
                (Nm.Intermediate (fst q) (snd q) (peerKeyAt I (base q) r),
-                Conc.Reduction.embedVS (peerCandsAt rho I (base q) r)))
+                Conc.Reduction.embedVS (peerCandsAt I (base q) r)))
              (activePeers I (base q) (base q))
       else T.DependeesSet.empty.
 
     (* The peer edges leave the dependee's own intermediate node, so a
        mandatory peer is forced only for the dependee version actually
        selected -- npm 7+ auto-installation, conditioned on the choice. *)
-    Definition peerEdgesAt (rho : Valuation) (I : Inst) (q : Pkg.t)
+    Definition peerEdgesAt (I : Inst) (q : Pkg.t)
         (m : NKey.t) (u : V.t) : T.DependeesSet.t :=
       depsOfL (fun r =>
           (Nm.Intermediate (fst q) (snd q) (peerKeyAt I (base q) r),
-           Conc.Reduction.embedVS (peerCandsAt rho I (base q) r)))
+           Conc.Reduction.embedVS (peerCandsAt I (base q) r)))
         (activePeers I (base q) (snd m, u)).
 
     (* THE per-package dependency lookup. *)
-    Definition dependees (rho : Valuation) (I : Inst) (s : T.Pkg.t)
+    Definition dependees (I : Inst) (s : T.Pkg.t)
       : T.DependeesSet.t :=
       match s with
       | (Nm.Granular k w, Vs.Orig v) =>
           if VEqb.eqb w v
-          then T.DependeesSet.union (entryEdges rho I (k, v))
-                 (rootPeerEdges rho I (k, v))
+          then T.DependeesSet.union (entryEdges I (k, v))
+                 (rootPeerEdges I (k, v))
           else T.DependeesSet.empty
       | (Nm.Intermediate k v m, Vs.Orig u) =>
           T.DependeesSet.add (Nm.Granular m u, T.VSet.singleton (Vs.Orig u))
-            (peerEdgesAt rho I (k, v) m u)
+            (peerEdgesAt I (k, v) m u)
       | _ => T.DependeesSet.empty
       end.
 
-    Lemma mem_entryEdges : forall rho I q h,
-        T.DependeesSet.In h (entryEdges rho I q) <->
+    Lemma mem_entryEdges : forall I q h,
+        T.DependeesSet.In h (entryEdges I q) <->
         exists a, NSet.In a (dirs I (base q)) /\
           h = (Nm.Intermediate (fst q) (snd q) (slotKey I (base q) a),
-               Conc.Reduction.embedVS (slotCands rho I (base q) a)).
+               Conc.Reduction.embedVS (slotCands I (base q) a)).
     Proof.
-      intros rho I q h; unfold entryEdges; rewrite mem_depsOfL.
+      intros I q h; unfold entryEdges; rewrite mem_depsOfL.
       split; intros [a [Ha He]]; exists a; split;
         try (apply SOnn.elements_in; exact Ha);
         try (apply SOnn.elements_in in Ha; exact Ha);
         [symmetry; exact He | symmetry; exact He].
     Qed.
 
-    Lemma mem_rootPeerEdges : forall rho I q h,
-        T.DependeesSet.In h (rootPeerEdges rho I q) <->
+    Lemma mem_rootPeerEdges : forall I q h,
+        T.DependeesSet.In h (rootPeerEdges I q) <->
         q = rootPkg I /\
         exists r, In (base q, r) (inst_peer I) /\
           peerActive I (base q) r = true /\
           h = (Nm.Intermediate (fst q) (snd q) (peerKeyAt I (base q) r),
-               Conc.Reduction.embedVS (peerCandsAt rho I (base q) r)).
+               Conc.Reduction.embedVS (peerCandsAt I (base q) r)).
     Proof.
-      intros rho I q h; unfold rootPeerEdges.
+      intros I q h; unfold rootPeerEdges.
       destruct (PkgEqb.eqb q (rootPkg I)) eqn:Hq.
       - apply PkgEqb.eqb_true_iff in Hq.
         rewrite mem_depsOfL; unfold activePeers, peerDependenciesAt; split.
@@ -652,14 +561,14 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         intros [He _]; subst q; rewrite PkgEqb.eqb_refl in Hq; discriminate.
     Qed.
 
-    Lemma mem_peerEdgesAt : forall rho I q m u h,
-        T.DependeesSet.In h (peerEdgesAt rho I q m u) <->
+    Lemma mem_peerEdgesAt : forall I q m u h,
+        T.DependeesSet.In h (peerEdgesAt I q m u) <->
         exists r, In ((snd m, u), r) (inst_peer I) /\
           peerActive I (base q) r = true /\
           h = (Nm.Intermediate (fst q) (snd q) (peerKeyAt I (base q) r),
-               Conc.Reduction.embedVS (peerCandsAt rho I (base q) r)).
+               Conc.Reduction.embedVS (peerCandsAt I (base q) r)).
     Proof.
-      intros rho I q m u h; unfold peerEdgesAt; rewrite mem_depsOfL.
+      intros I q m u h; unfold peerEdgesAt; rewrite mem_depsOfL.
       unfold activePeers, peerDependenciesAt; split.
       - intros [r [Hr He]]; apply List.filter_In in Hr.
         destruct Hr as [Hr Hact]; exists r.
@@ -675,24 +584,24 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
     (* Over-approximating is harmless: a name no edge reaches contributes an
        inert package, and the per-name versions above are empty for a key
        nothing asks for. *)
-    Definition targetNames (rho : Valuation) (I : Inst) : NmSet.t :=
+    Definition targetNames (I : Inst) : NmSet.t :=
       NmSet.union
-        (SOpn.map (fun q => Nm.Granular (fst q) (snd q)) (realPkgs rho I))
+        (SOpn.map (fun q => Nm.Granular (fst q) (snd q)) (realPkgs I))
         (SOpn.unionMap (fun q =>
              SOnm.map (fun m => Nm.Intermediate (fst q) (snd q) m)
                (childKeys I (base q)))
-           (realPkgs rho I)).
+           (realPkgs I)).
 
-    Definition transR (rho : Valuation) (I : Inst) : T.PkgSet.t :=
+    Definition transR (I : Inst) : T.PkgSet.t :=
       SOmt.unionMap
-        (fun nm => SOwt.map (fun x => (nm, x)) (versions rho I nm))
-        (targetNames rho I).
+        (fun nm => SOwt.map (fun x => (nm, x)) (versions I nm))
+        (targetNames I).
 
-    Lemma mem_transR : forall rho I nm x,
-        T.PkgSet.In (nm, x) (transR rho I) <->
-        NmSet.In nm (targetNames rho I) /\ T.VSet.In x (versions rho I nm).
+    Lemma mem_transR : forall I nm x,
+        T.PkgSet.In (nm, x) (transR I) <->
+        NmSet.In nm (targetNames I) /\ T.VSet.In x (versions I nm).
     Proof.
-      intros rho I nm x; unfold transR; rewrite SOmt.mem_unionMap; split.
+      intros I nm x; unfold transR; rewrite SOmt.mem_unionMap; split.
       - intros [nm0 [Hnm Hm]]; apply SOwt.mem_map in Hm.
         destruct Hm as [x0 [Hx He]].
         assert (nm0 = nm) by congruence; assert (x0 = x) by congruence.
@@ -704,15 +613,15 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
     Definition depEdges (s : T.Pkg.t) (hs : T.DependeesSet.t) : T.DepRel.t :=
       SOhd.map (fun h => (s, h)) hs.
 
-    Definition transD (rho : Valuation) (I : Inst) : T.DepRel.t :=
-      SOqd.unionMap (fun s => depEdges s (dependees rho I s)) (transR rho I).
+    Definition transD (I : Inst) : T.DepRel.t :=
+      SOqd.unionMap (fun s => depEdges s (dependees I s)) (transR I).
 
-    Lemma mem_transD : forall rho I s h,
-        T.DepRel.In (s, h) (transD rho I) <->
-        T.PkgSet.In s (transR rho I) /\
-        T.DependeesSet.In h (dependees rho I s).
+    Lemma mem_transD : forall I s h,
+        T.DepRel.In (s, h) (transD I) <->
+        T.PkgSet.In s (transR I) /\
+        T.DependeesSet.In h (dependees I s).
     Proof.
-      intros rho I s h; unfold transD; rewrite SOqd.mem_unionMap; split.
+      intros I s h; unfold transD; rewrite SOqd.mem_unionMap; split.
       - intros [s0 [Hs0 Hm]]; unfold depEdges in Hm.
         apply SOhd.mem_map in Hm; destruct Hm as [h0 [Hh0 He]].
         assert (s0 = s) by congruence; assert (h0 = h) by congruence.
@@ -765,22 +674,22 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         rewrite Hm; reflexivity.
     Qed.
 
-    Lemma dependees_embedPkg : forall rho I q,
-        dependees rho I (Conc.Reduction.embedPkg idg q) =
-        T.DependeesSet.union (entryEdges rho I q) (rootPeerEdges rho I q).
+    Lemma dependees_embedPkg : forall I q,
+        dependees I (Conc.Reduction.embedPkg idg q) =
+        T.DependeesSet.union (entryEdges I q) (rootPeerEdges I q).
     Proof.
-      intros rho I [k v]; unfold Conc.Reduction.embedPkg, idg; cbn [fst snd].
+      intros I [k v]; unfold Conc.Reduction.embedPkg, idg; cbn [fst snd].
       cbn [dependees]; rewrite VEqb.eqb_refl; reflexivity.
     Qed.
 
     (* Every selected intermediate drags its chosen version in: the exit
        edge is the only edge a directory node carries unconditionally. *)
-    Lemma exit_selected : forall rho I S k v m u,
-        T.IsResolution (transR rho I) (transD rho I) (transRoot I) S ->
+    Lemma exit_selected : forall I S k v m u,
+        T.IsResolution (transR I) (transD I) (transRoot I) S ->
         T.PkgSet.In (Nm.Intermediate k v m, Vs.Orig u) S ->
         T.PkgSet.In (Conc.Reduction.embedPkg idg (m, u)) S.
     Proof.
-      intros rho I S k v m u [Hsub Hroot Hdep Huniq] Hin.
+      intros I S k v m u [Hsub Hroot Hdep Huniq] Hin.
       destruct (Hdep _ Hin (Nm.Granular m u) (T.VSet.singleton (Vs.Orig u)))
         as [x [Hx HxS]].
       { apply mem_transD; split; [exact (Hsub _ Hin) |].
@@ -789,19 +698,19 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       unfold Conc.Reduction.embedPkg, idg; cbn [fst snd]; exact HxS.
     Qed.
 
-    Lemma entry_selected : forall rho I S q a,
-        T.IsResolution (transR rho I) (transD rho I) (transRoot I) S ->
+    Lemma entry_selected : forall I S q a,
+        T.IsResolution (transR I) (transD I) (transRoot I) S ->
         T.PkgSet.In (Conc.Reduction.embedPkg idg q) S ->
         NSet.In a (dirs I (base q)) ->
-        exists v, VSet.In v (slotCands rho I (base q) a) /\
+        exists v, VSet.In v (slotCands I (base q) a) /\
           T.PkgSet.In
             (Nm.Intermediate (fst q) (snd q) (slotKey I (base q) a),
              Vs.Orig v) S.
     Proof.
-      intros rho I S q a [Hsub Hroot Hdep Huniq] Hq Ha.
+      intros I S q a [Hsub Hroot Hdep Huniq] Hq Ha.
       destruct (Hdep _ Hq
                   (Nm.Intermediate (fst q) (snd q) (slotKey I (base q) a))
-                  (Conc.Reduction.embedVS (slotCands rho I (base q) a)))
+                  (Conc.Reduction.embedVS (slotCands I (base q) a)))
         as [x [Hx HxS]].
       { apply mem_transD; split; [exact (Hsub _ Hq) |].
         rewrite dependees_embedPkg.
@@ -813,21 +722,21 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
 
     (* The root's peer edge leaves the root's own granular node, which is
        in every resolution, so a mandatory root peer is always forced. *)
-    Lemma root_peer_selected : forall rho I S r,
-        T.IsResolution (transR rho I) (transD rho I) (transRoot I) S ->
+    Lemma root_peer_selected : forall I S r,
+        T.IsResolution (transR I) (transD I) (transRoot I) S ->
         In (inst_root I, r) (inst_peer I) ->
         peerActive I (inst_root I) r = true ->
-        exists v, VSet.In v (peerCandsAt rho I (inst_root I) r) /\
+        exists v, VSet.In v (peerCandsAt I (inst_root I) r) /\
           T.PkgSet.In
             (Nm.Intermediate (fst (rootPkg I)) (snd (rootPkg I))
                (peerKeyAt I (inst_root I) r), Vs.Orig v) S.
     Proof.
-      intros rho I S r [Hsub Hroot Hdep Huniq] Hr Hact.
+      intros I S r [Hsub Hroot Hdep Huniq] Hr Hact.
       destruct (Hdep _ Hroot
                   (Nm.Intermediate (fst (rootPkg I)) (snd (rootPkg I))
                      (peerKeyAt I (inst_root I) r))
                   (Conc.Reduction.embedVS
-                     (peerCandsAt rho I (inst_root I) r)))
+                     (peerCandsAt I (inst_root I) r)))
         as [x [Hx HxS]].
       { apply mem_transD; split; [exact (Hsub _ Hroot) |].
         unfold transRoot; rewrite dependees_embedPkg.
@@ -838,20 +747,20 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       exists v; split; assumption.
     Qed.
 
-    Lemma peer_selected : forall rho I S q m u r,
-        T.IsResolution (transR rho I) (transD rho I) (transRoot I) S ->
+    Lemma peer_selected : forall I S q m u r,
+        T.IsResolution (transR I) (transD I) (transRoot I) S ->
         T.PkgSet.In (Nm.Intermediate (fst q) (snd q) m, Vs.Orig u) S ->
         In ((snd m, u), r) (inst_peer I) ->
         peerActive I (base q) r = true ->
-        exists v, VSet.In v (peerCandsAt rho I (base q) r) /\
+        exists v, VSet.In v (peerCandsAt I (base q) r) /\
           T.PkgSet.In
             (Nm.Intermediate (fst q) (snd q) (peerKeyAt I (base q) r),
              Vs.Orig v) S.
     Proof.
-      intros rho I S q m u r [Hsub Hroot Hdep Huniq] Hin Hr Hact.
+      intros I S q m u r [Hsub Hroot Hdep Huniq] Hin Hr Hact.
       destruct (Hdep _ Hin
                   (Nm.Intermediate (fst q) (snd q) (peerKeyAt I (base q) r))
-                  (Conc.Reduction.embedVS (peerCandsAt rho I (base q) r)))
+                  (Conc.Reduction.embedVS (peerCandsAt I (base q) r)))
         as [x [Hx HxS]].
       { apply mem_transD; split; [exact (Hsub _ Hin) |].
         cbn [dependees]; apply SOhh.add_in; right.
@@ -861,11 +770,11 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       exists v; split; assumption.
     Qed.
 
-    Theorem npm_soundness : forall rho I S,
-        T.IsResolution (transR rho I) (transD rho I) (transRoot I) S ->
-        IsResolution rho I (npmResolution S) (npmParents S).
+    Theorem npm_soundness : forall I S,
+        T.IsResolution (transR I) (transD I) (transRoot I) S ->
+        IsResolution I (npmResolution S) (npmParents S).
     Proof.
-      intros rho I S Hres.
+      intros I S Hres.
       assert (Hres' := Hres); destruct Hres' as [Hsub Hroot Hdep Huniq].
       (* the parent edges a selected intermediate contributes *)
       assert (Hpi : forall q m v,
@@ -875,7 +784,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
                  Installs (npmResolution S) (npmParents S) q m v).
       { intros [k w] m v Hq Hi; split.
         - apply Conc.Reduction.mem_concurrentResolution.
-          exact (exit_selected rho I S k w m v Hres Hi).
+          exact (exit_selected I S k w m v Hres Hi).
         - apply mem_npmParents; cbn [fst snd]; split; assumption. }
       constructor.
       - intros [k w] Hq; apply Conc.Reduction.mem_concurrentResolution in Hq.
@@ -883,7 +792,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         destruct Hr as [_ Hv].
         cbn [versions Conc.Reduction.embedPkg fst snd] in Hv.
         unfold idg in Hv.
-        destruct (PkgSet.mem (k, w) (realPkgs rho I)) eqn:Hm;
+        destruct (PkgSet.mem (k, w) (realPkgs I)) eqn:Hm;
           [| destruct (SOvcv.empty_in _ Hv)].
         apply PkgSet.mem_spec in Hm; apply mem_realPkgs; exact Hm.
       - apply Conc.Reduction.mem_concurrentResolution; exact Hroot.
@@ -894,13 +803,13 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         pose proof (Huniq _ _ _ Hi1 Hi2) as He; injection He as ->;
           reflexivity.
       - intros p Hp a Ha; apply Conc.Reduction.mem_concurrentResolution in Hp.
-        destruct (entry_selected rho I S p a Hres Hp Ha) as [v [Hv Hi]].
+        destruct (entry_selected I S p a Hres Hp Ha) as [v [Hv Hi]].
         exists v; split; [exact Hv | exact (Hpi p _ v Hp Hi)].
       - intros p Hp m u [_ Hu] r Hr Hopt.
         apply Conc.Reduction.mem_concurrentResolution in Hp.
         apply mem_npmParents in Hu; destruct Hu as [Hi _];
           cbn [fst snd] in Hi.
-        destruct (peer_selected rho I S p _ u r Hres Hi Hr
+        destruct (peer_selected I S p _ u r Hres Hi Hr
                     (proj2 (Bool.orb_true_iff _ _)
                        (or_introl (proj2 (Bool.negb_true_iff _) Hopt))))
           as [v [Hv Hj]].
@@ -912,13 +821,13 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         assert (Hact : peerActive I (base p) r = true)
           by (unfold peerActive; apply Bool.orb_true_iff; right;
               apply NSet.mem_spec; exact Hname).
-        destruct (peer_selected rho I S p _ u r Hres Hi Hr Hact)
+        destruct (peer_selected I S p _ u r Hres Hi Hr Hact)
           as [v0 [Hv0 Hj]].
         apply mem_npmParents in Hv; destruct Hv as [Hi' _];
           cbn [fst snd] in Hi'.
         pose proof (Huniq _ _ _ Hi' Hj) as Heq; injection Heq as ->; exact Hv0.
       - intros r Hr Hopt.
-        destruct (root_peer_selected rho I S r Hres Hr
+        destruct (root_peer_selected I S r Hres Hr
                     (proj2 (Bool.orb_true_iff _ _)
                        (or_introl (proj2 (Bool.negb_true_iff _) Hopt))))
           as [v [Hv Hj]].
@@ -927,14 +836,14 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         assert (Hact : peerActive I (inst_root I) r = true)
           by (unfold peerActive; apply Bool.orb_true_iff; right;
               apply NSet.mem_spec; exact Hname).
-        destruct (root_peer_selected rho I S r Hres Hr Hact) as [v0 [Hv0 Hj]].
+        destruct (root_peer_selected I S r Hres Hr Hact) as [v0 [Hv0 Hj]].
         apply mem_npmParents in Hv; destruct Hv as [Hi' _];
           cbn [fst snd] in Hi'.
         pose proof (Huniq _ _ _ Hi' Hj) as Heq; injection Heq as ->; exact Hv0.
       - intros [m u] [k w] Hcq; apply mem_npmParents in Hcq.
         cbn [fst snd] in Hcq; destruct Hcq as [Hi Hq].
         split; apply Conc.Reduction.mem_concurrentResolution;
-          [exact (exit_selected rho I S k w m u Hres Hi) | exact Hq].
+          [exact (exit_selected I S k w m u Hres Hi) | exact Hq].
     Qed.
 
     (* -- completeness -- *)
@@ -943,13 +852,13 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
        encoding introduced there: a slot's own range when it declares one --
        pinned by the slot obligation and by uniqueness -- and otherwise
        any published version, which the peer edges narrow. *)
-    Lemma installs_childCands : forall rho I S pi p m v,
-        IsResolution rho I S pi -> PkgSet.In p S ->
+    Lemma installs_childCands : forall I S pi p m v,
+        IsResolution I S pi -> PkgSet.In p S ->
         KeySet.In m (childKeys I (base p)) ->
         Installs S pi p m v ->
-        VSet.In v (childCands rho I (base p) m).
+        VSet.In v (childCands I (base p) m).
     Proof.
-      intros rho I S pi p m v Hres Hp Hm Hi.
+      intros I S pi p m v Hres Hp Hm Hi.
       destruct Hres as [Hsub Hroot Huniq Hslot Hpin Hpm Hrp Hrpm Hpar].
       unfold childKeys in Hm; apply SOnk.mem_map in Hm.
       destruct Hm as [a [Ha ->]].
@@ -971,14 +880,14 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
     (* The two root-peer clauses read as one obligation: whichever flavour
        a root peer dependency has, an active one names a directory the
        root fills at a version its range admits. *)
-    Lemma root_peer_installs : forall rho I S pi r,
-        IsResolution rho I S pi ->
+    Lemma root_peer_installs : forall I S pi r,
+        IsResolution I S pi ->
         In (inst_root I, r) (inst_peer I) ->
         peerActive I (inst_root I) r = true ->
-        exists w, VSet.In w (peerCandsAt rho I (inst_root I) r) /\
+        exists w, VSet.In w (peerCandsAt I (inst_root I) r) /\
           Installs S pi (rootPkg I) (peerKeyAt I (inst_root I) r) w.
     Proof.
-      intros rho I S pi r Hres Hr Hact.
+      intros I S pi r Hres Hr Hact.
       destruct Hres as [_ Hroot _ Hslot _ _ Hrp Hrpm _].
       destruct (p_optional r) eqn:Hopt; [| exact (Hrp r Hr Hopt)].
       unfold peerActive in Hact; rewrite Hopt in Hact;
@@ -1014,13 +923,13 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       - intros [H _]; apply PkgSet.mem_spec in H; congruence.
     Qed.
 
-    Definition coreResolution (rho : Valuation) (I : Inst)
+    Definition coreResolution (I : Inst)
         (S : PkgSet.t) (pi : Conc.ParentRel.t) : T.PkgSet.t :=
       T.PkgSet.union (Conc.Reduction.embedSet idg S)
         (SOpt.unionMap (fun p =>
              SOkt.unionMap (fun m =>
                  SOvt.filterMap (instNode S pi p m)
-                   (realVersions (effRepo rho I) (snd m)))
+                   (realVersions (inst_repo I) (snd m)))
                (childKeys I (base p)))
            S).
 
@@ -1035,24 +944,24 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
           [exact Hp | unfold Conc.Reduction.embedPkg, idg; reflexivity].
     Qed.
 
-    Lemma dependees_gran : forall rho I k v,
-        dependees rho I (Nm.Granular k v, Vs.Orig v) =
-        T.DependeesSet.union (entryEdges rho I (k, v))
-          (rootPeerEdges rho I (k, v)).
+    Lemma dependees_gran : forall I k v,
+        dependees I (Nm.Granular k v, Vs.Orig v) =
+        T.DependeesSet.union (entryEdges I (k, v))
+          (rootPeerEdges I (k, v)).
     Proof.
-      intros rho I k v; cbn [dependees]; rewrite VEqb.eqb_refl; reflexivity.
+      intros I k v; cbn [dependees]; rewrite VEqb.eqb_refl; reflexivity.
     Qed.
 
-    Lemma mem_coreResolution : forall rho I S pi s,
-        T.PkgSet.In s (coreResolution rho I S pi) <->
+    Lemma mem_coreResolution : forall I S pi s,
+        T.PkgSet.In s (coreResolution I S pi) <->
         (exists k v, PkgSet.In (k, v) S /\
            s = (Nm.Granular k v, Vs.Orig v)) \/
         (exists p m u, PkgSet.In p S /\ KeySet.In m (childKeys I (base p)) /\
-           VSet.In u (realVersions (effRepo rho I) (snd m)) /\
+           VSet.In u (realVersions (inst_repo I) (snd m)) /\
            PkgSet.In (m, u) S /\ Conc.ParentRel.In ((m, u), p) pi /\
            s = (Nm.Intermediate (fst p) (snd p) m, Vs.Orig u)).
     Proof.
-      intros rho I S pi s; unfold coreResolution.
+      intros I S pi s; unfold coreResolution.
       rewrite T.PkgSet.union_spec, embedSet_gran, SOpt.mem_unionMap.
       split.
       - intros [H | [p [Hp Hm]]]; [left; exact H | right].
@@ -1070,41 +979,41 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
           [exact HS | split; [exact Hpi | reflexivity]].
     Qed.
 
-    Lemma mem_targetNames_gran : forall rho I p,
-        PkgSet.In p (realPkgs rho I) ->
-        NmSet.In (Nm.Granular (fst p) (snd p)) (targetNames rho I).
+    Lemma mem_targetNames_gran : forall I p,
+        PkgSet.In p (realPkgs I) ->
+        NmSet.In (Nm.Granular (fst p) (snd p)) (targetNames I).
     Proof.
-      intros rho I p Hp; unfold targetNames; apply NmSet.union_spec; left.
+      intros I p Hp; unfold targetNames; apply NmSet.union_spec; left.
       apply SOpn.mem_map; exists p; split; [exact Hp | reflexivity].
     Qed.
 
-    Lemma mem_targetNames_int : forall rho I p m,
-        PkgSet.In p (realPkgs rho I) ->
+    Lemma mem_targetNames_int : forall I p m,
+        PkgSet.In p (realPkgs I) ->
         KeySet.In m (childKeys I (base p)) ->
-        NmSet.In (Nm.Intermediate (fst p) (snd p) m) (targetNames rho I).
+        NmSet.In (Nm.Intermediate (fst p) (snd p) m) (targetNames I).
     Proof.
-      intros rho I p m Hp Hm; unfold targetNames; apply NmSet.union_spec.
+      intros I p m Hp Hm; unfold targetNames; apply NmSet.union_spec.
       right; apply SOpn.mem_unionMap; exists p; split; [exact Hp | cbn beta].
       apply SOnm.mem_map; exists m; split; [exact Hm | reflexivity].
     Qed.
 
-    Theorem npm_completeness : forall rho I S pi,
-        IsResolution rho I S pi ->
-        T.IsResolution (transR rho I) (transD rho I) (transRoot I)
-          (coreResolution rho I S pi).
+    Theorem npm_completeness : forall I S pi,
+        IsResolution I S pi ->
+        T.IsResolution (transR I) (transD I) (transRoot I)
+          (coreResolution I S pi).
     Proof.
-      intros rho I S pi Hres.
+      intros I S pi Hres.
       assert (Hres' := Hres).
       destruct Hres' as [Hsub Hroot Huniq Hslot Hpin Hpm Hrp Hrpm Hpar].
-      assert (Hreal : forall q, PkgSet.In q S -> PkgSet.In q (realPkgs rho I))
+      assert (Hreal : forall q, PkgSet.In q S -> PkgSet.In q (realPkgs I))
         by (intros q Hq; apply mem_realPkgs; exact (Hsub _ Hq)).
       assert (Hgran : forall k v, PkgSet.In (k, v) S ->
-                 T.PkgSet.In (Nm.Granular k v, Vs.Orig v) (transR rho I)).
+                 T.PkgSet.In (Nm.Granular k v, Vs.Orig v) (transR I)).
       { intros k v Hq; apply mem_transR; split.
-        - pose proof (mem_targetNames_gran rho I (k, v) (Hreal _ Hq)) as Ht.
+        - pose proof (mem_targetNames_gran I (k, v) (Hreal _ Hq)) as Ht.
           cbn [fst snd] in Ht; exact Ht.
         - cbn [versions].
-          assert (PkgSet.mem (k, v) (realPkgs rho I) = true) as ->
+          assert (PkgSet.mem (k, v) (realPkgs I) = true) as ->
             by (apply PkgSet.mem_spec; exact (Hreal _ Hq)).
           apply SOvcv.singleton_in; reflexivity. }
       constructor.
@@ -1113,10 +1022,10 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
           [[k [v [Hp ->]]] | [p [m [u [Hp [Hm [Hu [HS [Hpi ->]]]]]]]]];
           [exact (Hgran k v Hp) |].
         apply mem_transR; split.
-        + exact (mem_targetNames_int rho I p m (Hreal _ Hp) Hm).
+        + exact (mem_targetNames_int I p m (Hreal _ Hp) Hm).
         + cbn [versions]; apply SOvcv.mem_map; exists u; split;
             [| reflexivity].
-          exact (installs_childCands rho I S pi p m u Hres Hp Hm
+          exact (installs_childCands I S pi p m u Hres Hp Hm
                    (conj HS Hpi)).
       - apply mem_coreResolution; left.
         exists (rootKey I), (snd (inst_root I)); split;
@@ -1141,14 +1050,14 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
             -- unfold childKeys; apply SOnk.mem_map; exists a; split;
                  [apply NSet.union_spec; left; exact Ha | reflexivity].
             -- apply mem_realVersions.
-               exact (slotCands_real rho I (base (k, v)) a w Hw).
+               exact (slotCands_real I (base (k, v)) a w Hw).
           * apply mem_rootPeerEdges in Hd.
             destruct Hd as [Hq [r [Hr [Hact He]]]].
             injection He as -> ->.
             assert (Hbr : base (k, v) = inst_root I)
               by (rewrite Hq; apply base_rootPkg).
             rewrite Hbr in Hr, Hact |- *.
-            destruct (root_peer_installs rho I S pi r Hres Hr Hact)
+            destruct (root_peer_installs I S pi r Hres Hr Hact)
               as [w [Hw [HwS Hwpi]]].
             rewrite <- Hq in Hwpi.
             exists (Vs.Orig w); split.
@@ -1176,7 +1085,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
           * apply mem_peerEdgesAt in Hd; destruct Hd as [r [Hr [Hact He]]].
             injection He as -> ->.
             assert (Hgot : exists w,
-                       VSet.In w (peerCandsAt rho I (base (pk, pv)) r) /\
+                       VSet.In w (peerCandsAt I (base (pk, pv)) r) /\
                        Installs S pi (pk, pv)
                          (peerKeyAt I (base (pk, pv)) r) w).
             { destruct (p_optional r) eqn:Hopt.
@@ -1228,8 +1137,8 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
        sibling, under the same depender, at a version its range admits.
        The edge that forces this leaves the dependee's own intermediate
        node, so nothing is forced for a candidate that lost. *)
-    Corollary peer_installed : forall rho I S,
-        T.IsResolution (transR rho I) (transD rho I) (transRoot I) S ->
+    Corollary peer_installed : forall I S,
+        T.IsResolution (transR I) (transD I) (transRoot I) S ->
         forall k v m u,
           T.PkgSet.In (Conc.Reduction.embedPkg idg (k, v)) S ->
           T.PkgSet.In (Nm.Intermediate k v m, Vs.Orig u) S ->
@@ -1239,16 +1148,16 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
           PkgSet.In (peerKeyAt I (snd k, v) r, w) (npmResolution S) /\
           Conc.ParentRel.In
             ((peerKeyAt I (snd k, v) r, w), (k, v)) (npmParents S) /\
-          VSet.In w (peerCandsAt rho I (snd k, v) r).
+          VSet.In w (peerCandsAt I (snd k, v) r).
     Proof.
-      intros rho I S Hres k v m u Hq Hi r Hr Hopt.
-      pose proof (npm_soundness rho I S Hres) as Hsrc.
+      intros I S Hres k v m u Hq Hi r Hr Hopt.
+      pose proof (npm_soundness I S Hres) as Hsrc.
       assert (Hp : PkgSet.In (k, v) (npmResolution S))
         by (apply Conc.Reduction.mem_concurrentResolution; exact Hq).
       assert (HI : Installs (npmResolution S) (npmParents S) (k, v) m u).
       { split.
         - apply Conc.Reduction.mem_concurrentResolution.
-          exact (exit_selected rho I S k v m u Hres Hi).
+          exact (exit_selected I S k v m u Hres Hi).
         - apply mem_npmParents; cbn [fst snd]; split; assumption. }
       destruct Hsrc as [_ _ _ _ Hpin _ _ _ _].
       destruct (Hpin (k, v) Hp m u HI r Hr Hopt) as [w [Hw [HwS Hwpi]]].
@@ -1260,20 +1169,9 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       Definition repoPreimage (I : Inst) (ns : NSet.t) : RepoSet.t :=
         RepoSet.filter (fun p => NSet.mem (fst p) ns) (inst_repo I).
 
-      (* platOKb reads the gates only through the fibre over the
-         package it is asked about, so the cut is by package rather than
-         by name: a package the repository cut keeps takes its own gates
-         with it, and a package the cut drops takes none.  Cutting by name
-         would keep the gates of every version of that name, which a
-         frontend answering a lookup about one version cannot use. *)
-      Definition platPreimage (I : Inst) (R : RepoSet.t)
-        : list (RPkg.t * Gate) :=
-        List.filter (fun q => RepoSet.mem (fst q) R) (inst_plat I).
-
-      (* Any instance whose repository agrees with I at the names in ns,
-         whose gates agree with I on each package that repository
-         keeps, and whose dependencies and peer dependencies are the
-         looked-up package's own, answers that lookup alike. *)
+      (* Any instance whose repository agrees with I at the names in ns
+         and whose dependencies and peer dependencies are the looked-up
+         package's own answers that lookup alike. *)
       Definition subInst (I : Inst) (ns : NSet.t)
           (deps : list (RPkg.t * Dependency))
           (prs : list (RPkg.t * PeerDependency))
@@ -1281,7 +1179,6 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         {| inst_repo := repoPreimage I ns
          ; inst_dep := deps
          ; inst_peer := prs
-         ; inst_plat := platPreimage I (repoPreimage I ns)
          ; inst_ovr := inst_ovr I
          ; inst_root := inst_root I |}.
 
@@ -1322,41 +1219,23 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         rewrite NSet.mem_spec; reflexivity.
       Qed.
 
-      Lemma platOKb_subInst : forall rho I ns deps prs p,
-          RepoSet.In p (repoPreimage I ns) ->
-          platOKb rho (subInst I ns deps prs) p = platOKb rho I p.
+      Lemma repo_subInst : forall I ns deps prs n w,
+          NSet.In n ns ->
+          (RepoSet.In (n, w) (inst_repo (subInst I ns deps prs)) <->
+           RepoSet.In (n, w) (inst_repo I)).
       Proof.
-        intros rho I ns deps prs p Hp; unfold platOKb.
-        cbn [inst_plat subInst]; unfold platPreimage.
-        rewrite ownedBy_filter; [reflexivity |].
-        intros g _; cbn [fst]; apply RepoSet.mem_spec; exact Hp.
+        intros I ns deps prs n w Hn; cbn [inst_repo subInst].
+        rewrite mem_repoPreimage; cbn [fst]; split;
+          [intros [H _]; exact H | intro H; split; [exact H | exact Hn]].
       Qed.
 
-      Lemma effRepo_subInst : forall rho I ns deps prs n w,
+      Lemma realVersions_subInst : forall I ns deps prs n,
           NSet.In n ns ->
-          (RepoSet.In (n, w) (effRepo rho (subInst I ns deps prs)) <->
-           RepoSet.In (n, w) (effRepo rho I)).
+          realVersions (inst_repo (subInst I ns deps prs)) n =
+          realVersions (inst_repo I) n.
       Proof.
-        intros rho I ns deps prs n w Hn.
-        split; intro H; apply mem_effRepo in H; destruct H as [H1 H2];
-          cbn [inst_repo subInst] in H1 |- *.
-        - assert (Hs : RepoSet.In (n, w) (repoPreimage I ns)) by exact H1.
-          apply mem_repoPreimage in H1; apply mem_effRepo; split;
-            [exact (proj1 H1) |].
-          rewrite <- (platOKb_subInst rho I ns deps prs (n, w) Hs); exact H2.
-        - assert (Hs : RepoSet.In (n, w) (repoPreimage I ns))
-            by (apply mem_repoPreimage; split; [exact H1 | exact Hn]).
-          apply mem_effRepo; split; [exact Hs |].
-          rewrite (platOKb_subInst rho I ns deps prs (n, w) Hs); exact H2.
-      Qed.
-
-      Lemma realVersions_subInst : forall rho I ns deps prs n,
-          NSet.In n ns ->
-          realVersions (effRepo rho (subInst I ns deps prs)) n =
-          realVersions (effRepo rho I) n.
-      Proof.
-        intros rho I ns deps prs n Hn; apply VSet.ext; intro w.
-        rewrite !mem_realVersions; apply effRepo_subInst; exact Hn.
+        intros I ns deps prs n Hn; apply VSet.ext; intro w.
+        rewrite !mem_realVersions; apply repo_subInst; exact Hn.
       Qed.
 
       (* -- the declarations a lookup reads -- *)
@@ -1450,11 +1329,11 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       Lemma slotCands_agree : forall I ns deps prs p,
           ownedBy deps p = ownedBy (inst_dep I) p ->
           (forall d, In d (dependenciesOf I p) -> NSet.In (d_target d) ns) ->
-          forall rho a,
-            slotCands rho (subInst I ns deps prs) p a =
-            slotCands rho I p a.
+          forall a,
+            slotCands (subInst I ns deps prs) p a =
+            slotCands I p a.
       Proof.
-        intros I ns deps prs p Hdeps Htgt rho a; unfold slotCands.
+        intros I ns deps prs p Hdeps Htgt a; unfold slotCands.
         rewrite (slotOf_agree I ns deps prs p a Hdeps).
         destruct (slotOf I p a) as [d |] eqn:Hd; [| reflexivity].
         cbn [inst_ovr subInst].
@@ -1485,17 +1364,17 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         exists d; split; [exact Hd | reflexivity].
       Qed.
 
-      Lemma childCands_agree : forall rho I ns deps prs
+      Lemma childCands_agree : forall I ns deps prs
           (p : RPkg.t) (m : NKey.t),
           ownedBy deps p = ownedBy (inst_dep I) p ->
           (forall d, In d (dependenciesOf I p) -> NSet.In (d_target d) ns) ->
           NSet.In (snd m) ns ->
           NSet.mem (fst m) (peerDirs (subInst I ns deps prs)) =
             NSet.mem (fst m) (peerDirs I) ->
-          childCands rho (subInst I ns deps prs) p m =
-          childCands rho I p m.
+          childCands (subInst I ns deps prs) p m =
+          childCands I p m.
       Proof.
-        intros rho I ns deps prs p m Hd Ht Hm Hpa; unfold childCands.
+        intros I ns deps prs p m Hd Ht Hm Hpa; unfold childCands.
         rewrite (slotKey_agree I ns deps prs p (fst m) Hd).
         rewrite (dirs_agree I ns deps prs p Hd).
         rewrite Hpa.
@@ -1513,17 +1392,17 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       Definition granSubInst (I : Inst) (k : NKey.t) : Inst :=
         subInst I (NSet.singleton (snd k)) (inst_dep I) (inst_peer I).
 
-      Theorem versions_lookupGran : forall rho I k w,
-          versions rho (granSubInst I k) (Nm.Granular k w) =
-          versions rho I (Nm.Granular k w).
+      Theorem versions_lookupGran : forall I k w,
+          versions (granSubInst I k) (Nm.Granular k w) =
+          versions I (Nm.Granular k w).
       Proof.
-        intros rho I k w; cbn [versions].
+        intros I k w; cbn [versions].
         assert (Hs : NSet.In (snd k) (NSet.singleton (snd k)))
           by (apply NSet.singleton_spec; reflexivity).
-        pose proof (effRepo_subInst rho I (NSet.singleton (snd k))
+        pose proof (repo_subInst I (NSet.singleton (snd k))
                       (inst_dep I) (inst_peer I) (snd k) w Hs) as He.
-        assert (Hm : PkgSet.mem (k, w) (realPkgs rho (granSubInst I k)) =
-                     PkgSet.mem (k, w) (realPkgs rho I)).
+        assert (Hm : PkgSet.mem (k, w) (realPkgs (granSubInst I k)) =
+                     PkgSet.mem (k, w) (realPkgs I)).
         { apply mem_eq_of_iffP; rewrite !mem_realPkgs.
           unfold Available, base, granSubInst; cbn [fst snd].
           split; intros [H1 H2]; split; try exact H1; apply He; exact H2. }
@@ -1534,11 +1413,11 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         subInst I (NSet.add (snd m) (slotTargets I p)) (ownDependencies I p)
           (peerDependenciesNamed I (fst m)).
 
-      Theorem versions_lookupInt : forall rho I k v m,
-          versions rho (intSubInst I (snd k, v) m) (Nm.Intermediate k v m) =
-          versions rho I (Nm.Intermediate k v m).
+      Theorem versions_lookupInt : forall I k v m,
+          versions (intSubInst I (snd k, v) m) (Nm.Intermediate k v m) =
+          versions I (Nm.Intermediate k v m).
       Proof.
-        intros rho I k v m; cbn [versions]; f_equal.
+        intros I k v m; cbn [versions]; f_equal.
         unfold intSubInst; apply childCands_agree.
         - apply ownDependencies_id.
         - intros d Hd; apply NSet.add_spec; right;
@@ -1555,12 +1434,12 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         subInst I (NSet.union (slotTargets I p) (peerNamesAt I p))
           (ownDependencies I p) (ownPeerDependencies I p).
 
-      Theorem dependees_lookupGran : forall rho I k v,
-          dependees rho (pkgSubInst I (snd k, v))
+      Theorem dependees_lookupGran : forall I k v,
+          dependees (pkgSubInst I (snd k, v))
             (Nm.Granular k v, Vs.Orig v) =
-          dependees rho I (Nm.Granular k v, Vs.Orig v).
+          dependees I (Nm.Granular k v, Vs.Orig v).
       Proof.
-        intros rho I k v; rewrite !dependees_gran.
+        intros I k v; rewrite !dependees_gran.
         pose proof (ownDependencies_id I (snd k, v)) as Hd.
         assert (Htgt : forall d, In d (dependenciesOf I (snd k, v)) ->
                    NSet.In (d_target d)
@@ -1583,7 +1462,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
           rewrite (dirs_agree I _ _ _ (snd k, v) Hd).
           unfold depsOfL; f_equal; apply map_ext_in; intros a _.
           rewrite (slotKey_agree I _ _ _ (snd k, v) a Hd).
-          rewrite (slotCands_agree I _ _ _ (snd k, v) Hd Htgt rho a).
+          rewrite (slotCands_agree I _ _ _ (snd k, v) Hd Htgt a).
           reflexivity.
         - assert (Hrt : rootPkg (subInst I
                             (NSet.union (slotTargets I (snd k, v))
@@ -1616,12 +1495,12 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         subInst I (NSet.union (slotTargets I p) (peerNamesAt I (snd m, u)))
           (ownDependencies I p) (ownPeerDependencies I (snd m, u)).
 
-      Theorem dependees_lookupInt : forall rho I k v m u,
-          dependees rho (peerSubInst I (snd k, v) m u)
+      Theorem dependees_lookupInt : forall I k v m u,
+          dependees (peerSubInst I (snd k, v) m u)
             (Nm.Intermediate k v m, Vs.Orig u) =
-          dependees rho I (Nm.Intermediate k v m, Vs.Orig u).
+          dependees I (Nm.Intermediate k v m, Vs.Orig u).
       Proof.
-        intros rho I k v m u; cbn [dependees]; f_equal.
+        intros I k v m u; cbn [dependees]; f_equal.
         unfold peerEdgesAt, base; cbn [fst snd].
         pose proof (ownDependencies_id I (snd k, v)) as Hd.
         assert (Hpr :
@@ -1675,7 +1554,7 @@ Module NatVM <: SemverMatch Nat_as_OT.
   Definition sameCore (a b : nat) : bool := Nat.eqb a b.
 End NatVM.
 
-Module NpmS := Npm Nat_as_OT Nat_as_OT Nat_as_OT Nat_as_OT NatVM.
+Module NpmS := Npm Nat_as_OT Nat_as_OT NatVM.
 
 Definition npmA : nat := 1.
 Definition npmB : nat := 2.
@@ -1699,8 +1578,6 @@ Definition npmPeerC : NpmS.PeerDependency :=
 Definition npmPeerCOpt : NpmS.PeerDependency :=
   NpmS.MkPeer npmC (npmBetween 1 3) true.
 
-Definition npmRho : NpmS.Valuation := fun _ => None.
-
 Definition kA : NpmS.NKey.t := (npmA, npmA).
 Definition kB : NpmS.NKey.t := (npmB, npmB).
 Definition kC : NpmS.NKey.t := (npmC, npmC).
@@ -1712,18 +1589,18 @@ Definition npmShow (h : NpmS.T.Dependees.t)
 
 Definition npmDeps (I : NpmS.Inst) (s : NpmS.T.Pkg.t) :=
   List.map npmShow
-    (NpmS.T.DependeesSet.elements (NpmS.Reduction.dependees npmRho I s)).
+    (NpmS.T.DependeesSet.elements (NpmS.Reduction.dependees I s)).
 
 (* A depends on B and on C in [2,4); B declares C in [1,3) as a peer. *)
 Definition npmInst : NpmS.Inst :=
   NpmS.MkInst npmRepo
     (((npmA, 1), npmDepB) :: ((npmA, 1), npmDepC) :: nil)
-    (((npmB, 1), npmPeerC) :: nil) nil nil (npmA, 1).
+    (((npmB, 1), npmPeerC) :: nil) nil (npmA, 1).
 
 (* The same, with A's own dependency on C dropped. *)
 Definition npmInstAuto : NpmS.Inst :=
   NpmS.MkInst npmRepo (((npmA, 1), npmDepB) :: nil)
-    (((npmB, 1), npmPeerC) :: nil) nil nil (npmA, 1).
+    (((npmB, 1), npmPeerC) :: nil) nil (npmA, 1).
 
 (* The root's own peers, which npm 7+ installs into the root's own
    node_modules: A names C both as a dependency in [2,4) and as a peer in
@@ -1731,24 +1608,24 @@ Definition npmInstAuto : NpmS.Inst :=
    and only 2 satisfies the two ranges at once. *)
 Definition npmInstRootPeer : NpmS.Inst :=
   NpmS.MkInst npmRepo (((npmA, 1), npmDepC) :: nil)
-    (((npmA, 1), npmPeerC) :: nil) nil nil (npmA, 1).
+    (((npmA, 1), npmPeerC) :: nil) nil (npmA, 1).
 
 (* The same with the root peer optional; A still fills the directory, so
    the range still binds -- the legacy guard, read at the root. *)
 Definition npmInstRootPeerOpt : NpmS.Inst :=
   NpmS.MkInst npmRepo (((npmA, 1), npmDepC) :: nil)
-    (((npmA, 1), npmPeerCOpt) :: nil) nil nil (npmA, 1).
+    (((npmA, 1), npmPeerCOpt) :: nil) nil (npmA, 1).
 
 (* An optional root peer naming a directory A does not fill forces
    nothing, which is the legacy guard again. *)
 Definition npmInstRootPeerOptBare : NpmS.Inst :=
   NpmS.MkInst npmRepo (((npmA, 1), npmDepB) :: nil)
-    (((npmA, 1), npmPeerCOpt) :: nil) nil nil (npmA, 1).
+    (((npmA, 1), npmPeerCOpt) :: nil) nil (npmA, 1).
 
 (* The same again, with the peer marked optional. *)
 Definition npmInstOpt : NpmS.Inst :=
   NpmS.MkInst npmRepo (((npmA, 1), npmDepB) :: nil)
-    (((npmB, 1), npmPeerCOpt) :: nil) nil nil (npmA, 1).
+    (((npmB, 1), npmPeerCOpt) :: nil) nil (npmA, 1).
 
 (* An alias installs the registry package under another directory, so one
    depender can hold two copies of one package. *)
@@ -1758,19 +1635,15 @@ Definition npmDepAlias : NpmS.Dependency :=
 Definition npmInstAlias : NpmS.Inst :=
   NpmS.MkInst npmRepo
     (((npmA, 1), npmDepC) :: ((npmA, 1), npmDepAlias) :: nil)
-    nil nil nil (npmA, 1).
-
-Definition npmInstPlat : NpmS.Inst :=
-  NpmS.MkInst npmRepo (((npmA, 1), npmDepC) :: nil) nil
-    (((npmC, 3), NpmS.GFalse) :: nil) nil (npmA, 1).
+    nil nil (npmA, 1).
 
 Definition npmInstOvr : NpmS.Inst :=
-  NpmS.MkInst npmRepo (((npmA, 1), npmDepC) :: nil) nil nil
+  NpmS.MkInst npmRepo (((npmA, 1), npmDepC) :: nil) nil
     ((npmC, npmEq 3) :: nil) (npmA, 1).
 
 Example npm_versions_computes :
   NpmS.T.VSet.elements
-    (NpmS.Reduction.versions npmRho npmInst (NpmS.Nm.Granular kC 2))
+    (NpmS.Reduction.versions npmInst (NpmS.Nm.Granular kC 2))
   = NpmS.Vs.Orig 2 :: nil.
 Proof. reflexivity. Qed.
 
@@ -1783,7 +1656,7 @@ Proof. reflexivity. Qed.
 
 Example npm_slot_versions_computes :
   NpmS.T.VSet.elements
-    (NpmS.Reduction.versions npmRho npmInst (NpmS.Nm.Intermediate kA 1 kC))
+    (NpmS.Reduction.versions npmInst (NpmS.Nm.Intermediate kA 1 kC))
   = NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: nil.
 Proof. reflexivity. Qed.
 
@@ -1800,7 +1673,7 @@ Proof. reflexivity. Qed.
    every published version and the same edge auto-installs it. *)
 Example npm_auto_versions_computes :
   NpmS.T.VSet.elements
-    (NpmS.Reduction.versions npmRho npmInstAuto
+    (NpmS.Reduction.versions npmInstAuto
        (NpmS.Nm.Intermediate kA 1 kC))
   = NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: nil.
 Proof. reflexivity. Qed.
@@ -1843,18 +1716,6 @@ Example npm_alias_computes :
     :: (NpmS.Nm.Intermediate kA 1 kX, NpmS.Vs.Orig 1 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
-(* engines/os/cpu cut the repository before anything else. *)
-Example npm_platform_cut :
-  NpmS.T.VSet.elements
-    (NpmS.Reduction.versions npmRho npmInstPlat (NpmS.Nm.Granular kC 3))
-  = nil.
-Proof. reflexivity. Qed.
-
-Example npm_platform_edge_computes :
-  npmDeps npmInstPlat (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
-  = (NpmS.Nm.Intermediate kA 1 kC, NpmS.Vs.Orig 2 :: nil) :: nil.
-Proof. reflexivity. Qed.
-
 Example npm_override_computes :
   npmDeps npmInstOvr (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
   = (NpmS.Nm.Intermediate kA 1 kC, NpmS.Vs.Orig 3 :: nil) :: nil.
@@ -1869,7 +1730,7 @@ Module NatVMPre <: SemverMatch Nat_as_OT.
     Nat.eqb (Nat.div a 2) (Nat.div b 2).
 End NatVMPre.
 
-Module NpmP := Npm Nat_as_OT Nat_as_OT Nat_as_OT Nat_as_OT NatVMPre.
+Module NpmP := Npm Nat_as_OT Nat_as_OT NatVMPre.
 
 Definition npmPreRepo : NpmP.RepoSet.t :=
   fold_right NpmP.RepoSet.add NpmP.RepoSet.empty

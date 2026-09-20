@@ -35,7 +35,7 @@ module PM = struct
   let sameCore = Npm_version.same_core
 end
 
-module Np = E.Npm (StringOT) (NVerOT) (StringOT) (StringOT) (PM)
+module Np = E.Npm (StringOT) (NVerOT) (PM)
 module R = Np.Reduction
 module T = Np.T
 
@@ -45,21 +45,9 @@ module T = Np.T
    by the theory, and each is a place where this driver may disagree with
    npm. *)
 
-(* The platform valuation.  os/cpu/libc are gates against a fixed
-   environment; an unset variable fails its gate.  engines is not gated
-   at all -- npm does not consult it when selecting versions -- so the
-   parser creates no gate over "node" or "npm" and this has no entry for
-   them.  A real frontend would read these from the host. *)
-let host_os = "linux"
-let host_cpu = "x64"
-let host_libc = "glibc"
-
-let rho (x : string) : string option =
-  match x with
-  | "os" -> Some host_os
-  | "cpu" -> Some host_cpu
-  | "libc" -> Some host_libc
-  | _ -> None
+(* No platform valuation: resolution here is platform-independent, as
+   npm's is.  engines, os, cpu and libc are all install-time tests, so
+   the parser reads none of them and nothing cuts the repository. *)
 
 (* devDependencies participate only from the root package: that is
    depActive's rule in the theory, not a choice made here, but only the
@@ -211,14 +199,6 @@ let xcomp : Npm_version.comparator -> Np.coq_Comparator = function
 let xrange (rg : Npm_version.range) : Np.coq_Range =
   List.map (fun cs -> List.map xcomp cs) rg
 
-let rec xgate : P.gate -> Np.coq_Gate = function
-  | P.GTrue -> Np.GTrue
-  | P.GFalse -> Np.GFalse
-  | P.GCmp (o, x, y) -> Np.GCmp (xop o, x, y)
-  | P.GAnd (a, b) -> Np.GAnd (xgate a, xgate b)
-  | P.GOr (a, b) -> Np.GOr (xgate a, xgate b)
-  | P.GNot a -> Np.GNot (xgate a)
-
 let xdep (d : P.dep) : Np.coq_Dependency =
   {
     Np.d_dir = d.P.d_dir;
@@ -242,15 +222,12 @@ type state = {
   ovr : (string * Np.coq_Range) list;
   dep_tbl : (string * string, Np.coq_Dependency list) Hashtbl.t;
   peer_tbl : (string * string, Np.coq_PeerDependency list) Hashtbl.t;
-  gate_tbl : (string * string, Np.coq_Gate list) Hashtbl.t;
   repo_at : (string, Np.RepoSet.t) Hashtbl.t;
-  plat_at : (string, ((string * string) * Np.coq_Gate) list) Hashtbl.t;
   (* the sets a sub-instance hands the calculus are sorted lists, so
      building one is quadratic; they are keyed by the names read rather than
      by the package reading them, because consecutive versions read the
      same *)
   repo_of : (string list, Np.RepoSet.t) Hashtbl.t;
-  plat_of : (string list, ((string * string) * Np.coq_Gate) list) Hashtbl.t;
   vcache : (Np.Nm.name, Np.Vs.version list) Hashtbl.t;
   (* the optional-dependency verdict, keyed by what decides it *)
   opt_keep : (string * string, bool) Hashtbl.t;
@@ -269,11 +246,8 @@ let mk_state ar root =
     ovr;
     dep_tbl = Hashtbl.create 16384;
     peer_tbl = Hashtbl.create 16384;
-    gate_tbl = Hashtbl.create 16384;
     repo_at = Hashtbl.create 4096;
-    plat_at = Hashtbl.create 4096;
     repo_of = Hashtbl.create 4096;
-    plat_of = Hashtbl.create 4096;
     vcache = Hashtbl.create 65536;
     opt_keep = Hashtbl.create 1024;
     n_lookups = 0;
@@ -291,19 +265,7 @@ let peer_dependencies st p =
       Hashtbl.replace st.peer_tbl p l;
       l
 
-let gates st p =
-  match Hashtbl.find_opt st.gate_tbl p with
-  | Some l -> l
-  | None ->
-      let l =
-        match meta st.ar p with
-        | None -> []
-        | Some v -> List.map xgate v.P.v_gates
-      in
-      Hashtbl.replace st.gate_tbl p l;
-      l
-
-(* repoPreimage I ns and platPreimage I ns at one name *)
+(* repoPreimage I ns at one name *)
 let repo_at st (n : string) : Np.RepoSet.t =
   match Hashtbl.find_opt st.repo_at n with
   | Some s -> s
@@ -314,20 +276,6 @@ let repo_at st (n : string) : Np.RepoSet.t =
       Hashtbl.replace st.repo_at n s;
       s
 
-let plat_at st (n : string) =
-  match Hashtbl.find_opt st.plat_at n with
-  | Some l -> l
-  | None ->
-      let l =
-        List.concat_map
-          (fun v ->
-            let p = (n, v) in
-            List.map (fun g -> (p, g)) (gates st p))
-          (versions_of st.ar n)
-      in
-      Hashtbl.replace st.plat_at n l;
-      l
-
 let repo_of st (ns : string list) : Np.RepoSet.t =
   let ns = List.sort_uniq String.compare ns in
   match Hashtbl.find_opt st.repo_of ns with
@@ -337,21 +285,11 @@ let repo_of st (ns : string list) : Np.RepoSet.t =
       Hashtbl.replace st.repo_of ns s;
       s
 
-let plat_of st (ns : string list) =
-  let ns = List.sort_uniq String.compare ns in
-  match Hashtbl.find_opt st.plat_of ns with
-  | Some l -> l
-  | None ->
-      let l = List.concat_map (plat_at st) ns in
-      Hashtbl.replace st.plat_of ns l;
-      l
-
-let mk_inst st ~repo ~plat ~deps ~peers : Np.coq_Inst =
+let mk_inst st ~repo ~deps ~peers : Np.coq_Inst =
   {
     Np.inst_repo = repo;
     Np.inst_dep = deps;
     Np.inst_peer = peers;
-    Np.inst_plat = plat;
     Np.inst_ovr = st.ovr;
     Np.inst_root = st.root;
   }
@@ -367,22 +305,16 @@ let mk_inst st ~repo ~plat ~deps ~peers : Np.coq_Inst =
    available to satisfy the range, and it lives here rather than in the
    parser, which sees one manifest at a time and has no registry.
 
-   Available, not merely published: engines/os/cpu are an availability
-   cut in this model, effRepo removing a gated-out package from the
-   repository outright, so for resolution it does not exist.  npm reaches
-   the same outcome by a different route -- ENOTARGET at fetch for a
-   range nothing matches, EBADPLATFORM at reify for a platform mismatch,
-   both pruned because the dependency is optional -- and the outcome is what is
-   modelled.  Testing published versions instead would make the commonest
-   optional dependency in the ecosystem, a darwin-only binary such as
-   fsevents, a false unsatisfiable on every other platform.
+   Published is the whole test, because resolution is
+   platform-independent: the only route to abandonment at resolution
+   time is ENOTARGET, no published version matching the range.  A
+   platform mismatch is EBADPLATFORM at reify, after the lockfile is
+   written, so a darwin-only binary such as fsevents stays in the answer
+   on linux exactly as it stays in npm's lockfile.
 
-   The instance is the one effRepo reads and no more: it takes inst_repo
-   and the gates in inst_plat, so this is granSubInst's narrowing to a
-   single name -- repoAt and platAt at the target -- with the dependency
-   and peer fields empty, since nothing here consults them.  Both halves are
-   already memoized per name, so the check reuses whatever the
-   sub-instances built.
+   The repository read is granSubInst's narrowing to a single name --
+   repoAt at the target -- and it is memoized per name, so the check
+   reuses whatever the sub-instances built.
 
    It is applied where a dependency is read rather than where a packument is
    loaded, because deciding at load time would have to resolve every
@@ -391,9 +323,9 @@ let mk_inst st ~repo ~plat ~deps ~peers : Np.coq_Inst =
    Read lazily it costs nothing: the target of a dependency that survives is a
    slot target the sub-instance was going to load anyway.
 
-   Evaluation is the calculus's throughout, via the extracted effRepo and
-   rgHolds and under the same flat override the calculus would apply; the
-   mirror in npm_version.ml is not used. *)
+   Evaluation is the calculus's throughout, via the extracted rgHolds
+   and under the same flat override the calculus would apply; the mirror
+   in npm_version.ml is not used. *)
 let dep_keep st (d : P.dep) : bool =
   (not d.P.d_optional)
   || st.ar.optional
@@ -408,13 +340,9 @@ let dep_keep st (d : P.dep) : bool =
            | Some rg -> rg
            | None -> xrange d.P.d_range
          in
-         let inst =
-           mk_inst st ~repo:(repo_at st n) ~plat:(plat_at st n) ~deps:[]
-             ~peers:[]
-         in
          let b =
            Np.VSet.exists_ (Np.rgHolds rg)
-             (Np.realVersions (Np.effRepo rho inst) n)
+             (Np.realVersions (repo_at st n) n)
          in
          if not b then st.ar.n_opt_dropped <- st.ar.n_opt_dropped + 1;
          Hashtbl.replace st.opt_keep key b;
@@ -472,15 +400,12 @@ let peer_dependencies_named st (n : string) =
 (* ---- the four sub-instances, one per lookup theorem ---- *)
 
 (* versions_lookupGran: granSubInst I k cuts the repository to the key's
-   registry name, and platPreimage is keyed by package, so the gates
-   that come with it are exactly those of the packages that survive.  Two
-   narrowings below are the driver's own.  keysOf is a union of one key
-   per dependency plus the root's, and the granular lookup asks it only
-   whether it contains k, so dependencies that cannot introduce k are
-   dropped.  The lookup
-   asks the repository only whether the looked-up version is available, so
-   it is cut to that one package -- and platPreimage then selects that
-   package's gates by itself. *)
+   registry name.  Two narrowings below are the driver's own.  keysOf is
+   a union of one key per dependency plus the root's, and the granular
+   lookup asks it only whether it contains k, so dependencies that
+   cannot introduce k are dropped.  The lookup asks the repository only
+   whether the looked-up version is published, so it is cut to that one
+   package. *)
 let gran_sub_inst st (k : string * string) (w : string) =
   let p = (snd k, w) in
   let repo =
@@ -488,41 +413,40 @@ let gran_sub_inst st (k : string * string) (w : string) =
       Np.RepoSet.add p Np.RepoSet.empty
     else Np.RepoSet.empty
   in
-  let plat = List.map (fun g -> (p, g)) (gates st p) in
   let deps = dependencies_by_key st k in
   let peers =
     if fst k = snd k then peer_dependencies_named st (fst k) else []
   in
-  mk_inst st ~repo ~plat ~deps ~peers
+  mk_inst st ~repo ~deps ~peers
 
 (* versions_lookupInt: intSubInst I p m is p's own dependencies, the peer
-   dependencies naming the key's directory, and the repository and gates at
-   the key's registry name together with p's slot targets. *)
+   dependencies naming the key's directory, and the repository at the
+   key's registry name together with p's slot targets. *)
 let int_sub_inst st (p : string * string) (m : string * string) =
   let ns = snd m :: slot_targets st p in
-  mk_inst st ~repo:(repo_of st ns) ~plat:(plat_of st ns)
+  mk_inst st ~repo:(repo_of st ns)
     ~deps:(own_dependencies st p)
     ~peers:(peer_dependencies_named st (fst m))
 
 (* dependees_lookupGran: pkgSubInst I p is p's own dependencies, its own
-   peer dependencies, and the repository and gates at their targets.  The
-   peer dependencies are there for the root, whose granular node carries
-   the edges
+   peer dependencies, and the repository at their targets.  The peer
+   dependencies are there for the root, whose granular node carries the
+   edges
    that install its own peers; for any other package rootPeerEdges tests
    the whole package and emits nothing, so they are inert. *)
 let pkg_sub_inst st (p : string * string) =
   let ns = slot_targets st p @ peer_names_at st p in
-  mk_inst st ~repo:(repo_of st ns) ~plat:(plat_of st ns)
+  mk_inst st ~repo:(repo_of st ns)
     ~deps:(own_dependencies st p) ~peers:(own_peer_dependencies st p)
 
 (* dependees_lookupInt: peerSubInst I p m u is p's own dependencies, the
-   peer dependencies of the dependee that was selected, and the repository and
-   gates at p's slot targets and at the directories those peers name.
-   This is the second hop npm's peer auto-installation costs. *)
+   peer dependencies of the dependee that was selected, and the
+   repository at p's slot targets and at the directories those peers
+   name.  This is the second hop npm's peer auto-installation costs. *)
 let peer_sub_inst st (p : string * string) (m : string * string) (u : string) =
   let q = (snd m, u) in
   let ns = slot_targets st p @ peer_names_at st q in
-  mk_inst st ~repo:(repo_of st ns) ~plat:(plat_of st ns)
+  mk_inst st ~repo:(repo_of st ns)
     ~deps:(own_dependencies st p) ~peers:(own_peer_dependencies st q)
 
 (* ---- the lookups, answered by the extracted calculus ---- *)
@@ -535,9 +459,9 @@ let versions st (n : Np.Nm.name) : Np.Vs.version list =
       let l =
         match n with
         | Np.Nm.Granular (k, w) ->
-            T.VSet.elements (R.versions rho (gran_sub_inst st k w) n)
+            T.VSet.elements (R.versions (gran_sub_inst st k w) n)
         | Np.Nm.Intermediate (k, v, m) ->
-            T.VSet.elements (R.versions rho (int_sub_inst st (snd k, v) m) n)
+            T.VSet.elements (R.versions (int_sub_inst st (snd k, v) m) n)
       in
       Hashtbl.replace st.vcache n l;
       l
@@ -547,9 +471,9 @@ let dependees st (s : T.Pkg.t) : T.Dependees.t list =
   let hs =
     match s with
     | Np.Nm.Granular (k, _), Np.Vs.Orig v ->
-        R.dependees rho (pkg_sub_inst st (snd k, v)) s
+        R.dependees (pkg_sub_inst st (snd k, v)) s
     | Np.Nm.Intermediate (k, v, m), Np.Vs.Orig u ->
-        R.dependees rho (peer_sub_inst st (snd k, v) m u) s
+        R.dependees (peer_sub_inst st (snd k, v) m u) s
     | _ -> T.DependeesSet.empty
   in
   T.DependeesSet.elements hs

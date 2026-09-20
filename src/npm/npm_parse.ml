@@ -12,12 +12,13 @@
    - The dependency-spec classification below.  npm accepts git, file,
      link, workspace and tag specs that no registry lookup can resolve;
      those dependencies are dropped and counted rather than guessed at.
-   - The os/cpu/libc encoding.  Each list becomes a platform gate over
-     the valuation's variable of that name; npm applies the same test at
-     reify time (EBADPLATFORM).  "engines" is deliberately *not* a gate:
-     npm never consults it when choosing versions, and --engine-strict
-     only promotes the install-time warning to an error, so gating on it
-     would make our instance strictly smaller than npm's.
+   Deliberately *not* read: "engines" and "os"/"cpu"/"libc".  npm
+   consults none of them when choosing versions -- a package-lock.json
+   records every platform's variant of an optional dependency whatever
+   host wrote it, and the filtering happens at install time
+   (EBADPLATFORM, and --engine-strict promoting a warning to an error).
+   Reading them here would make our instance strictly smaller than
+   npm's.
 
    - The optionalDependencies reading.  Such an entry is an ordinary
      dependency that npm abandons in exactly one situation: its manifest
@@ -32,14 +33,6 @@
 
    Not modelled, and counted where it matters: bundledDependencies
    (placement) and "deprecated" (npm warns and installs anyway). *)
-
-type gate =
-  | GTrue
-  | GFalse
-  | GCmp of Npm_version.op * string * string
-  | GAnd of gate * gate
-  | GOr of gate * gate
-  | GNot of gate
 
 type dep = {
   d_dir : string; (* the directory key, i.e. the manifest key *)
@@ -58,7 +51,6 @@ type ver = {
   v_vers : string;
   v_deps : dep list;
   v_peers : peer list;
-  v_gates : gate list;
   v_ovr : (string * Npm_version.range) list;
   v_deprecated : bool;
 }
@@ -82,12 +74,6 @@ let member (k : string) (j : Yojson.Safe.t) : Yojson.Safe.t =
   | _ -> `Null
 
 let assoc_of j = match j with `Assoc l -> l | _ -> []
-
-let str_list j =
-  match j with
-  | `List l -> List.filter_map (function `String s -> Some s | _ -> None) l
-  | `String s -> [ s ]
-  | _ -> []
 
 (* ---- dependency specifiers ---- *)
 
@@ -187,42 +173,6 @@ let peer_of (meta : (string * Yojson.Safe.t) list) (key, spec) : peer option =
       reject ();
       None
 
-(* ---- platform gates ---- *)
-
-let conj = List.fold_left (fun a b -> GAnd (a, b)) GTrue
-
-let disj = function
-  | [] -> GFalse
-  | g :: gs -> List.fold_left (fun a b -> GOr (a, b)) g gs
-
-(* os and cpu are lists whose positives are alternatives and whose
-   !-prefixed entries are exclusions *)
-let gate_of_list (x : string) (l : string list) : gate option =
-  (* "any" is the wildcard, not a platform name: a list that is exactly
-     ["any"] declares no restriction at all *)
-  if l = [] || l = [ "any" ] then None
-  else
-    let neg, pos = List.partition (fun s -> starts "!" s) l in
-    let neg =
-      List.map
-        (fun s ->
-          GNot (GCmp (Npm_version.Eq, x, String.sub s 1 (String.length s - 1))))
-        neg
-    in
-    let pos =
-      match pos with
-      | [] -> []
-      | _ -> [ disj (List.map (fun s -> GCmp (Npm_version.Eq, x, s)) pos) ]
-    in
-    match pos @ neg with [] -> None | g :: gs -> Some (conj (g :: gs))
-
-(* "engines" is not read: see the header.  os/cpu/libc are, because npm
-   does refuse a package whose platform its host fails. *)
-let gates_of (j : Yojson.Safe.t) : gate list =
-  List.filter_map
-    (fun (x, l) -> gate_of_list x (str_list (member l j)))
-    [ ("os", "os"); ("cpu", "cpu"); ("libc", "libc") ]
-
 (* ---- manifests ---- *)
 
 (* npm reads overrides from the root project's package.json; only the
@@ -272,7 +222,6 @@ let ver_of ~(root : bool) (vers : string) (j : Yojson.Safe.t) : ver option =
                 if root then deps_of ~dev:true ~optional:false "devDependencies"
                 else []);
           v_peers = peers;
-          v_gates = gates_of j;
           v_ovr = (if root then overrides_of j else []);
           v_deprecated = dep;
         }
