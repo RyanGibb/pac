@@ -688,20 +688,20 @@ Module Feature (N V F : UsualOrderedType).
             rewrite mem_coreResolution.
             right; exists m', v', fs', f'.
             split; [exact Hfs' | split; [exact (Hsub' _ Hf') | reflexivity]].
-      - intros nm v1 v2 H1 H2.
+      - intros n v1 v2 H1 H2.
         rewrite mem_coreResolution in H1, H2.
         destruct H1 as [[n1 [w1 [fs1 [HS1 Hq1]]]] |
                         [n1 [w1 [fs1 [f1 [HS1 [Hf1 Hq1]]]]]]];
           destruct H2 as [[n2 [w2 [fs2 [HS2 Hq2]]]] |
                           [n2 [w2 [fs2 [f2 [HS2 [Hf2 Hq2]]]]]]].
-        + injection Hq1 as E1 E2; subst nm v1.
+        + injection Hq1 as E1 E2; subst n v1.
           injection Hq2 as E3 E4; subst n2 v2.
           exact (Hvu _ _ _ _ _ HS1 HS2).
-        + injection Hq1 as E1 E2; subst nm v1.
+        + injection Hq1 as E1 E2; subst n v1.
           discriminate Hq2.
-        + injection Hq1 as E1 E2; subst nm v1.
+        + injection Hq1 as E1 E2; subst n v1.
           discriminate Hq2.
-        + injection Hq1 as E1 E2; subst nm v1.
+        + injection Hq1 as E1 E2; subst n v1.
           injection Hq2 as E3 E4 E5; subst n2 f2 v2.
           exact (Hvu _ _ _ _ _ HS1 HS2).
     Qed.

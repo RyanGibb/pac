@@ -467,8 +467,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
        and the global translation below is their aggregation -- *)
 
     (* THE per-name version lookup. *)
-    Definition versions (I : Inst) (nm : Nm.t) : T.VSet.t :=
-      match nm with
+    Definition versions (I : Inst) (n : Nm.t) : T.VSet.t :=
+      match n with
       | Nm.Granular k w =>
           if PkgSet.mem (k, w) (realPkgs I)
           then T.VSet.singleton (Vs.Orig w)
@@ -594,19 +594,19 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
 
     Definition transR (I : Inst) : T.PkgSet.t :=
       SOmt.unionMap
-        (fun nm => SOwt.map (fun x => (nm, x)) (versions I nm))
+        (fun n => SOwt.map (fun x => (n, x)) (versions I n))
         (targetNames I).
 
-    Lemma mem_transR : forall I nm x,
-        T.PkgSet.In (nm, x) (transR I) <->
-        NmSet.In nm (targetNames I) /\ T.VSet.In x (versions I nm).
+    Lemma mem_transR : forall I n x,
+        T.PkgSet.In (n, x) (transR I) <->
+        NmSet.In n (targetNames I) /\ T.VSet.In x (versions I n).
     Proof.
-      intros I nm x; unfold transR; rewrite SOmt.mem_unionMap; split.
-      - intros [nm0 [Hnm Hm]]; apply SOwt.mem_map in Hm.
+      intros I n x; unfold transR; rewrite SOmt.mem_unionMap; split.
+      - intros [n0 [Hnm Hm]]; apply SOwt.mem_map in Hm.
         destruct Hm as [x0 [Hx He]].
-        assert (nm0 = nm) by congruence; assert (x0 = x) by congruence.
-        subst nm0 x0; split; assumption.
-      - intros [Hnm Hx]; exists nm; split; [exact Hnm |].
+        assert (n0 = n) by congruence; assert (x0 = x) by congruence.
+        subst n0 x0; split; assumption.
+      - intros [Hnm Hx]; exists n; split; [exact Hnm |].
         apply SOwt.mem_map; exists x; split; [exact Hx | reflexivity].
     Qed.
 
@@ -660,7 +660,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Proof.
       intros S [m u] [k v]; cbn [fst snd].
       unfold npmParents; rewrite SOtp.mem_filterMap; split.
-      - intros [[nm x] [Hs He]]; destruct nm as [k' w | k' v' m'];
+      - intros [[n x] [Hs He]]; destruct n as [k' w | k' v' m'];
           destruct x as [u' | w']; try discriminate He.
         destruct (T.PkgSet.mem (Conc.Reduction.embedPkg idg (k', v')) S) eqn:Hm;
           [| discriminate He].
@@ -1031,7 +1031,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         exists (rootKey I), (snd (inst_root I)); split;
           [exact Hroot |].
         unfold transRoot, rootPkg, Conc.Reduction.embedPkg, idg; reflexivity.
-      - intros s Hs nm vs Hd.
+      - intros s Hs n vs Hd.
         apply mem_transD in Hd; destruct Hd as [_ Hd].
         apply mem_coreResolution in Hs.
         destruct Hs as
@@ -1111,7 +1111,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
             -- apply mem_realVersions.
                destruct (Hsub _ HwS) as [_ Hb]; unfold base in Hb.
                cbn [fst snd] in Hb; exact Hb.
-      - intros nm x1 x2 H1 H2.
+      - intros n x1 x2 H1 H2.
         apply mem_coreResolution in H1; apply mem_coreResolution in H2.
         destruct H1 as
           [[k1 [v1 [Hp1 He1]]]

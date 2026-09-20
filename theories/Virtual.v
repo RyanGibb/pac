@@ -1008,7 +1008,7 @@ Module Virtual (N V : UsualOrderedType).
             exists (Version.Orig u); split.
             { apply T.VSet.singleton_spec; reflexivity. }
             { exact (mem_coreResolution_embed _ _ _ _ (n, u) HmwS). }
-      - intros nm cv1 cv2 H1 H2.
+      - intros n cv1 cv2 H1 H2.
         apply mem_coreResolution in H1.
         apply mem_coreResolution in H2.
         destruct H1 as [[[p1n p1v] [Hp1 He1]] |

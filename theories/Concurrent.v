@@ -808,7 +808,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
               exact (mem_coreResolution_granular S pi D g m u Hmu). }
           * destruct Hd as [n' [v' [m' [HD' Heq]]]].
             discriminate Heq.
-      - intros nm cv1 cv2 H1 H2.
+      - intros n cv1 cv2 H1 H2.
         apply mem_coreResolution in H1, H2.
         destruct H1 as
           [[n1 [v1 [Hm1 He1]]]

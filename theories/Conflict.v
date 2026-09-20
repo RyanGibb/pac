@@ -465,12 +465,12 @@ Module Conflict (N V : UsualOrderedType).
           * apply SOvt.singleton_in; reflexivity.
           * apply (mem_coreResolution_zero S G p n vs HG).
             exists u; auto.
-      - intros nm w w' Hw Hw'.
+      - intros n w w' Hw Hw'.
         apply mem_coreResolution in Hw, Hw'.
-        destruct Hw as [[p [HpS Hp]] | [[p [n [vs [HG [HpS Hp]]]]]
-                       | [p [n [vs [HG [Hex Hp]]]]]]];
-          destruct Hw' as [[p' [Hp'S Hp']] | [[p' [n' [vs' [HG' [Hp'S Hp']]]]]
-                          | [p' [n' [vs' [HG' [Hex' Hp']]]]]]].
+        destruct Hw as [[p [HpS Hp]] | [[p [m [vs [HG [HpS Hp]]]]]
+                       | [p [m [vs [HG [Hex Hp]]]]]]];
+          destruct Hw' as [[p' [Hp'S Hp']] | [[p' [m' [vs' [HG' [Hp'S Hp']]]]]
+                          | [p' [m' [vs' [HG' [Hex' Hp']]]]]]].
         + destruct p as [pn pv]; destruct p' as [pn' pv'];
             unfold embedPkg in Hp, Hp'; simpl in Hp, Hp'.
           injection Hp as -> ->; injection Hp' as -> ->.
@@ -481,16 +481,16 @@ Module Conflict (N V : UsualOrderedType).
         + destruct p'; unfold embedPkg in Hp'; simpl in Hp'; congruence.
         + congruence.
         + exfalso.
-          assert (E : Name.Synthetic n vs = Name.Synthetic n' vs')
+          assert (E : Name.Synthetic m vs = Name.Synthetic m' vs')
             by congruence.
           injection E as <- <-.
-          exact (Havoid p HpS n vs HG Hex').
+          exact (Havoid p HpS m vs HG Hex').
         + destruct p'; unfold embedPkg in Hp'; simpl in Hp'; congruence.
         + exfalso.
-          assert (E : Name.Synthetic n vs = Name.Synthetic n' vs')
+          assert (E : Name.Synthetic m vs = Name.Synthetic m' vs')
             by congruence.
           injection E as <- <-.
-          exact (Havoid p' Hp'S n vs HG' Hex).
+          exact (Havoid p' Hp'S m vs HG' Hex).
         + congruence.
     Qed.
 

@@ -662,7 +662,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
               exact (Hpsat _ Hmu _ _ HTh _ Hpi _ HD2 _ Hw Hpiw). }
             { exact (mem_coreResolution_intermediate S pi D g n v m' vs2 w
                        HD2 Hnv HmwS Hw Hpiw). }
-      - intros nm cv1 cv2 H1 H2.
+      - intros n cv1 cv2 H1 H2.
         apply mem_coreResolution in H1, H2.
         destruct H1 as
           [[n1 [v1 [Hm1 He1]]]

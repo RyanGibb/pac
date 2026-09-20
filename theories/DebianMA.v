@@ -862,8 +862,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                 | intro E; apply Hv; symmetry; exact E ] ] ] ].
     - intros n v v' Hv Hv'.
       rewrite mem_multiarchResolution in Hv, Hv'.
-      destruct n as [nm ar].
-      exact (Hvu (nm, QAArch ar) v v' Hv Hv').
+      destruct n as [m ar].
+      exact (Hvu (m, QAArch ar) v v' Hv Hv').
   Qed.
 
   Theorem debian_ma_completeness : forall R D Pi G M r S,

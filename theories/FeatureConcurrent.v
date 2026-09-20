@@ -1709,7 +1709,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
             [unfold singVS; rewrite SOvv.singleton_in; reflexivity |].
           exact (mem_coreResolution_a_inter S_CF pi Df Da g n v f m vs1 fs1
                    u HD1 Hu1 HinS Htk Hpi).
-      - intros nm cv1 cv2 H1 H2.
+      - intros n cv1 cv2 H1 H2.
         rewrite mem_coreResolution in H1, H2.
         destruct H1 as [[n1 [v1 [fs1 [HS1 Hq1]]]] |
                         [[n1 [v1 [fs1 [f1 [HS1 [Hf1 Hq1]]]]]] |
@@ -1720,7 +1720,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
                            [u1 [HD1 [Hf1 [Hu1 [Hc1 Hq1]]]]]]]]]]] |
                          [n1 [v1 [f1 [m1 [vs1 [fs1
                             [f1' [u1 [HD1 [Hf1' [Hu1 [Hc1 Hq1]]]]]]]]]]]]]]]]];
-          injection Hq1 as E1 E2; subst nm cv1;
+          injection Hq1 as E1 E2; subst n cv1;
           (destruct H2 as
             [[n2 [v2 [fs2 [HS2 Hq2]]]] |
             [[n2 [v2 [fs2 [f2 [HS2 [Hf2 Hq2]]]]]] |

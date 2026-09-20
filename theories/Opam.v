@@ -1157,9 +1157,9 @@ Module Opam (N V X Y E : UsualOrderedType).
       | OFOr a b => NSet.union (ofNames a) (ofNames b)
       end.
 
-    Definition listNames {A : Type} (nm : A -> NSet.t) (l : list A)
+    Definition listNames {A : Type} (names : A -> NSet.t) (l : list A)
       : NSet.t :=
-      List.fold_right (fun a acc => NSet.union (nm a) acc) NSet.empty l.
+      List.fold_right (fun a acc => NSet.union (names a) acc) NSet.empty l.
 
     Definition declaredNames (I : Inst) (p : Pkg.t) : NSet.t :=
       NSet.union (listNames ofNames (ownedBy p (inst_dep I)))
@@ -1323,10 +1323,10 @@ Module Opam (N V X Y E : UsualOrderedType).
       rewrite H; reflexivity.
     Qed.
 
-    Lemma listNames_in : forall (A : Type) (nm : A -> NSet.t) l n a,
-        In a l -> NSet.In n (nm a) -> NSet.In n (listNames nm l).
+    Lemma listNames_in : forall (A : Type) (names : A -> NSet.t) l n a,
+        In a l -> NSet.In n (names a) -> NSet.In n (listNames names l).
     Proof.
-      intros A nm l n a; induction l as [| b l IH]; simpl;
+      intros A names l n a; induction l as [| b l IH]; simpl;
         [intros [] |].
       intros [-> | Hin] Hn; apply NSet.union_spec;
         [left; exact Hn | right; exact (IH Hin Hn)].

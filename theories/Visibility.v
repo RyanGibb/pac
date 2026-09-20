@@ -1373,7 +1373,7 @@ Module Visibility (N V : UsualOrderedType).
           * destruct Hd
               as [n1 [v1 [m1 [vs1 [q1 [u1 [_ [_ [_ [_ Heq]]]]]]]]]];
               discriminate Heq.
-      - intros nm w1 w2 H1 H2.
+      - intros n w1 w2 H1 H2.
         apply mem_coreResolution in H1; apply mem_coreResolution in H2.
         destruct H1 as [H1 | [H1 | H1]]; destruct H2 as [H2 | [H2 | H2]].
         + destruct H1 as [n1 [v1 [q1 [HS1 [Hq1 [Ho1 [Hins1 Heq1]]]]]]].
@@ -1569,38 +1569,38 @@ Module Visibility (N V : UsualOrderedType).
       Qed.
 
       Lemma reduceDeps_target_potentialOrigin :
-        forall R D pub r (p : T.Pkg.t) (nm : Name.t) (h : T.VSet.t)
+        forall R D pub r (p : T.Pkg.t) (n : Name.t) (h : T.VSet.t)
                (q : Pkg.t),
-          T.DepRel.In (p, (nm, h)) (reduceDeps R D pub r) ->
-          (exists n : N.t, nm = Name.Occurrence n q) \/
-          (exists (n : N.t) (v : V.t) (m : N.t),
-              nm = Name.Intermediate n v m q) ->
+          T.DepRel.In (p, (n, h)) (reduceDeps R D pub r) ->
+          (exists m : N.t, n = Name.Occurrence m q) \/
+          (exists (m : N.t) (v : V.t) (o : N.t),
+              n = Name.Intermediate m v o q) ->
           PkgSet.In q (potentialOrigins R D pub r).
       Proof.
-        intros R D pub r p nm h q Hin Hname; apply mem_reduceDeps in Hin.
+        intros R D pub r p n h q Hin Hname; apply mem_reduceDeps in Hin.
         destruct Hin as [H | [H | [H | H]]].
         - destruct H as [n1 [v1 [q1 [HR [_ [Hpriv [_ Heq]]]]]]].
           apply (f_equal (fun e => fst (snd e))) in Heq;
-            cbn [fst snd] in Heq; subst nm.
+            cbn [fst snd] in Heq; subst n.
           destruct Hname as [[n2 Hn] | [n2 [v2 [m2 Hn]]]];
             [| discriminate Hn].
           injection Hn as _ <-.
           apply mem_potentialOrigins; right; split; [exact HR | exact Hpriv].
         - destruct H as [n1 [v1 [m1 [vs [q1 [_ [Hq1 [_ Heq]]]]]]]].
           apply (f_equal (fun e => fst (snd e))) in Heq;
-            cbn [fst snd] in Heq; subst nm.
+            cbn [fst snd] in Heq; subst n.
           destruct Hname as [[n2 Hn] | [n2 [v2 [m2 Hn]]]];
             [discriminate Hn |].
           injection Hn as _ _ _ <-; exact Hq1.
         - destruct H as [n1 [v1 [m1 [vs [q1 [u1 [_ [Hq1 [_ [_ Heq]]]]]]]]]].
           apply (f_equal (fun e => fst (snd e))) in Heq;
-            cbn [fst snd] in Heq; subst nm.
+            cbn [fst snd] in Heq; subst n.
           destruct Hname as [[n2 Hn] | [n2 [v2 [m2 Hn]]]];
             [| discriminate Hn].
           injection Hn as _ <-; exact Hq1.
         - destruct H as [n1 [v1 [m1 [vs [q1 [u1 [_ [_ [_ [_ Heq]]]]]]]]]].
           apply (f_equal (fun e => fst (snd e))) in Heq;
-            cbn [fst snd] in Heq; subst nm.
+            cbn [fst snd] in Heq; subst n.
           destruct Hname as [[n2 Hn] | [n2 [v2 [m2 Hn]]]]; discriminate Hn.
       Qed.
 

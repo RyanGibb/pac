@@ -1907,7 +1907,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       + destruct H5 as [em [eu [ea [ex [He Hcase]]]]];
           destruct Hcase as [[Hg ->] | [Hg [Hex ->]]];
           cbn [dependees] in Hout; exfalso; exact (SOde.empty_in _ Hout).
-    - intros nm cv1 cv2 H1 H2.
+    - intros n cv1 cv2 H1 H2.
       apply mem_coreResolution in H1.
       apply mem_coreResolution in H2.
       destruct H1 as [[[n1 v1] [Hp1 E1]] |
@@ -2055,7 +2055,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         T.DependeesSet.In (n', h) (dependees R D Rec Pi G s) ->
         Introduced D Rec Pi G n'.
     Proof.
-      intros R D Rec Pi G [nm y] n' h H; destruct nm, y;
+      intros R D Rec Pi G [n y] n' h H; destruct n, y;
         try (exfalso; exact (SOde.empty_in _ H)).
       - apply dependees_orig_spec in H.
         destruct H as [[A [HA [[_ [a [Hmin Hy]]] | [Hcard Hy]]]] |
