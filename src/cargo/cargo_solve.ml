@@ -41,11 +41,6 @@ end
    by the theory, and each is a place where this driver may disagree with
    cargo. *)
 
-(* cfg_active: target-specific dependencies are dropped rather than
-   evaluated, so this resolves the cfg-independent subgraph.  A real
-   frontend would evaluate the cfg expression against a target triple. *)
-let cfg_active (cfg : string) : bool = cfg = ""
-
 (* the feature every dependency requests unless it opts out with
    default-features = false *)
 let default_feature = "default"
@@ -227,14 +222,15 @@ module Make () = struct
 
   (* the manifest may name one alias under several kinds or cfgs; the
      calculus wants at most one slot per (crate, alias) -- AliasFunctional
-     -- so unify them the way cargo does: conjoin the requirements, union
-     the requested features, and prefer the unconditional records when
-     there are any.  Records of one kind partition only across dev and
-     non-dev, in
-     slots_of below, so no call here mixes the two *)
+     -- so unify them the way cargo does: conjoin the requirements and
+     union the requested features.  A cfg-gated record is conjoined like
+     any other, because cargo's resolver does not distinguish it; the one
+     case that loses is a manifest naming an alias in a plain and a
+     [target.'cfg(...)'] table with semver-incompatible requirements,
+     where cargo takes two versions and the conjunction here is
+     unsatisfiable.  Records of one kind partition only across dev and
+     non-dev, in slots_of below, so no call here mixes the two *)
   let unify_alias (ds : P.dep list) : P.dep =
-    let active = List.filter (fun (d : P.dep) -> cfg_active d.P.d_cfg) ds in
-    let ds = if active <> [] then active else ds in
     let d0 = List.hd ds in
     let rank (d : P.dep) =
       match d.P.d_kind with P.Normal -> 0 | P.Build -> 1 | P.Dev -> 2
@@ -246,7 +242,6 @@ module Make () = struct
       d0 with
       P.d_target = best.P.d_target;
       d_kind = best.P.d_kind;
-      d_cfg = (if active <> [] then "" else d0.P.d_cfg);
       d_req = List.concat_map (fun (d : P.dep) -> d.P.d_req) ds;
       d_feats =
         List.sort_uniq String.compare
@@ -449,7 +444,7 @@ module Make () = struct
   let versions st (tn : Cg.NPlus.t) : Cg.VPlus.t list =
     let call r supp fdefs slots links =
       T.VSet.elements
-        (Cg.versions compat_class r supp fdefs slots links cfg_active st.rc tn)
+        (Cg.versions compat_class r supp fdefs slots links st.rc tn)
     in
     let none = Cg.PkgSet.empty in
     let nosupp = Cg.SupportSet.empty in
@@ -478,7 +473,7 @@ module Make () = struct
   let deps st (p : T.Pkg.t) : T.Dependees.t list =
     let call r supp fdefs slots links rootf =
       T.DependeesSet.elements
-        (Cg.dependees compat_class r supp fdefs slots links cfg_active
+        (Cg.dependees compat_class r supp fdefs slots links
            default_feature st.rc rootf p)
     in
     let none = Cg.PkgSet.empty in
@@ -664,7 +659,7 @@ module Make () = struct
               in
               (n, v, a, t, u))
             (Cg.ParentRel.elements
-               (Cg.decodeParents slots cfg_active st.rc s))
+               (Cg.decodeParents slots st.rc s))
         in
         Some
           {
