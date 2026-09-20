@@ -208,17 +208,6 @@ let op_of_string = function
   | "><" | "<>" -> Some Hash
   | _ -> None
 
-let string_of_op = function
-  | Eq -> "="
-  | Lt -> "<"
-  | Gt -> ">"
-  | Le -> "<="
-  | Ge -> ">="
-  | Fuzzy -> "~"
-  | Gt_fuzzy -> ">~"
-  | Lt_fuzzy -> "<~"
-  | Hash -> "><"
-
 let matches v o c =
   match o with
   | Eq -> compare v c = 0

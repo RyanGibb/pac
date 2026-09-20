@@ -381,22 +381,3 @@ let parse_file ~name ~version path : pkg_meta =
       | _ -> ())
     file.file_contents;
   !meta
-
-(* every variable mentioned, for the finite X *)
-let rec filt_vars acc = function
-  | FT | FF -> acc
-  | FCmp (_, x, _) | FDef x -> x :: acc
-  | FAnd (a, b) | FOr (a, b) -> filt_vars (filt_vars acc a) b
-  | FNot a -> filt_vars acc a
-
-let rec off_vars acc = function
-  | OAtom (_, g, _) -> filt_vars acc g
-  | OAnd (a, b) | OOr (a, b) -> off_vars (off_vars acc a) b
-
-let meta_vars (m : pkg_meta) : string list =
-  let acc = match m.depends with None -> [] | Some f -> off_vars [] f in
-  let acc =
-    List.fold_left (fun a (_, (g, _)) -> filt_vars a g) acc m.conflicts
-  in
-  let acc = filt_vars acc m.available in
-  List.fold_left (fun a (_, g) -> filt_vars a g) acc m.depexts

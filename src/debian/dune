@@ -5,8 +5,11 @@
 (library
  (name deb_solve)
  (modules deb_solve apt_heap)
+ ; dune's warnings, reporting rather than failing: a warning here is a
+ ; note to the author, and only the extraction this links against needs
+ ; them off wholesale.
  (flags
-  (:standard -w -a))
+  (:standard -warn-error -a))
  (libraries debian_frontend pac pubgrub unix))
 
 (test

@@ -962,8 +962,6 @@ struct
                   (DMA.multiarchResolution (DMA.Deb.debianResolution s'))))
   end
 
-  let prof_vc = ref 0
-  let prof_vt = ref 0.
   let prof_oc = ref 0
   let prof_ot = ref 0.
 

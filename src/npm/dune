@@ -7,8 +7,11 @@
 (library
  (name npm_solve)
  (modules npm_solve)
+ ; dune's warnings, reporting rather than failing: a warning here is a
+ ; note to the author, and only the extraction this links against needs
+ ; them off wholesale.
  (flags
-  (:standard -w -a))
+  (:standard -warn-error -a))
  (libraries npm_frontend pac pubgrub))
 
 (test
