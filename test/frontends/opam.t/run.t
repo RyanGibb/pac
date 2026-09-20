@@ -64,7 +64,7 @@ selected:
 opam takes a disjunction's first satisfiable alternative, so a dependency
 on three installable packages selects the one written first.  The encoding
 reverses the alternatives -- PubGrub decides the larger version and the
-disjunction gadget's largest index selects the last alternative -- so that
+disjunct package's largest index selects the last alternative -- so that
 this is what falls out:
 
   $ ../../../src/main.exe opam . pick | sed -E '/^(parse|solve) [0-9.]+s$/d'
@@ -74,8 +74,8 @@ this is what falls out:
   loaded: 4 names, 4 package versions
 
 A conflict class admits at most one name.  cc-a.1, cc-b.1 and cc-b.2 all
-declare the class "ccls"; the gadget package for that class has one version
-per declaring name, each declarer depends on it at its own name, and version
+declare the class "ccls"; the class package for it has one version per
+declaring name, each declarer depends on it at its own name, and version
 uniqueness does the excluding -- so two versions of cc-b never exclude each
 other, exactly as opam's own rule, which removes the declarer's own name
 from the member map, does not.  cc-pick prefers cc-b, being the alternative
@@ -93,7 +93,7 @@ names, as opam's ocaml-system -- both a class and a package -- requires.
   loaded: 5 names, 6 package versions
 
 Asking for both names of the class outright has no resolution, and the
-gadget is what the explanation names:
+class package is what the explanation names:
 
   $ ../../../src/main.exe opam . cc-both | sed -E '/^(parse|solve) [0-9.]+s$/d'
   unsatisfiable:

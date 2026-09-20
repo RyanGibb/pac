@@ -41,9 +41,9 @@ and the leftmost alternative is preferred as in a Depends clause:
   $ ../../../src/main.exe debian --native amd64 --no-install-recommends softpair Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
   softpair:amd64 1
 
-A one-alternative Recommends still gets its gadget: unlike a Depends clause,
-which is inlined below two alternatives, the escape is the whole point of the
-encoding and there is no cardinality test to skip it:
+A one-alternative Recommends still gets its soft disjunct: unlike a Depends
+clause, which is inlined below two alternatives, the escape is the whole point
+of the encoding and there is no cardinality test to skip it:
 
   $ ../../../src/main.exe debian --native amd64 softone Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
   softlib:amd64 1

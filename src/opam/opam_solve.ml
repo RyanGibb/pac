@@ -747,7 +747,7 @@ module Make () = struct
     if verbose then begin
       let total = Unix.gettimeofday () -. t0 in
       Printf.eprintf
-        "PG.solve %.2fs: %.2fs in callbacks (%d dependencies queries, %d \
+        "PG.solve %.2fs: %.2fs in callbacks (%d dependency lookups, %d \
          packages reduced), %.2fs PubGrub\n\
          %!"
         total !t_callbacks !nq !nproc (total -. !t_callbacks)
