@@ -125,6 +125,30 @@ def cargo_repair(workdir, offline):
     return p.returncode, (p.stderr or p.stdout)[-4000:], time.time() - t0
 
 
+def cargo_strict(workdir, offline):
+    """The question this check used to ask, kept as a second gate: does
+    cargo accept our lock unchanged?  It is the right question exactly
+    when our answer is meant to BE a Cargo.lock -- the all-features
+    resolve -- and it fails today because we model the feature-resolved
+    view instead.  It is reported, never scored, so the disagreement
+    stays visible rather than being explained away: when the model
+    changes it should go green on its own, and if it does not, that is a
+    finding.  Kept because removing it once already hid a real modelling
+    gap for a day."""
+    cmd = ["cargo", "metadata", "--format-version=1", "--locked",
+           "--manifest-path", workdir + "/Cargo.toml"]
+    if offline:
+        cmd += ["--offline"]
+    env = dict(os.environ)
+    env["CARGO_HOME"] = run_goal.CARGO_HOME
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True,
+                           timeout=600, env=env)
+    except subprocess.TimeoutExpired:
+        return None
+    return p.returncode
+
+
 def read_lock(path):
     """The repaired lock as (packages, edges).  Its `dependencies` lists
     are the feature-independent edge set -- the thing our answer cannot
@@ -398,6 +422,8 @@ def main():
     if r.returncode != 0:
         print("%-24s LOCKGEN FAILED %s" % (args.crate, r.stderr.strip()[:200]))
         return 1
+    import shutil as _sh
+    _sh.copy(lock, lock + ".ours")
 
     rc, msg, wall = cargo_repair(workdir, offline=not args.warm)
     ours = {(n, v) for n, v in pac["crates"]}
@@ -417,12 +443,23 @@ def main():
         missed, activated, ambiguous = explain(
             ours, pac["feats"], (root_name, root_version), pkgs, edges)
         v = "VALID" if not (lost or missed or activated) else "INVALID"
+    strict = None
+    if not args.warm:
+        # the lock rewrites itself under repair, so ask the strict
+        # question against a pristine copy of what we wrote
+        import shutil
+        keep = lock + ".ours"
+        if os.path.exists(keep):
+            shutil.copy(keep, lock)
+        strict = cargo_strict(workdir, offline=True)
     detail = ""
     if not args.warm and rc == 0:
         detail = " lost=%d added=%d unexplained=%d" % (
             len(lost), len(added), len(missed) + len(activated))
         if ambiguous:
             detail += " ambig=%d" % len(ambiguous)
+    if strict is not None:
+        detail += " strict=%s" % ("ok" if strict == 0 else "no")
     print("%-24s n=%-4d rc=%-4s %-11s%s %.1fs" % (
         args.crate, len(pac["crates"]), rc, v, detail, wall))
     for label, items in (("lost", lost), ("missed", missed),
