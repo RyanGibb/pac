@@ -12,11 +12,10 @@
 # reproducible.
 #
 # Crate bodies come from CARGO_HOME, which warm.sh fills in one online
-# pass: `cargo metadata` insists on full manifests and will not report
-# without them, but the verification pass itself runs --frozen and so
-# reaches no network at all.  Run warm.sh once per snapshot before
-# sweeping; a goal whose bodies are missing is reported NOCACHE rather
-# than scored.
+# pass: the repair verify.py runs downloads what it resolves, but the
+# measured pass runs it --offline and so reaches no network at all.  Run
+# warm.sh once per snapshot before sweeping; a goal whose bodies are
+# missing is reported NOCACHE rather than scored.
 #
 # usage: valid.sh [goals-file | goal ...]      (default goals.txt)
 #        WARM=1 valid.sh ...  -- the online warming pass (see warm.sh)
