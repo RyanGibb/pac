@@ -1,6 +1,6 @@
   $ ../../../src/main.exe alpine APKINDEX app docs | sed -E '/^(parse|solve) [0-9.]+s$/d'
   index APKINDEX
-  cone: 3 packages, 0 provide rows, 1 install_if rows
+  cone: 3 packages, 0 provides entries, 1 install_if rules
   packages (3):
     app 1.0
     app-doc 1.0
@@ -14,7 +14,7 @@ installs:
 
   $ ../../../src/main.exe alpine PROVIDERS editor | sed -E '/^(parse|solve) [0-9.]+s$/d'
   index PROVIDERS
-  cone: 5 packages, 4 provide rows, 0 install_if rows
+  cone: 5 packages, 4 provides entries, 0 install_if rules
   packages (1):
     vim 1.0
   encoded solution: 3 core nodes (2 Alpine packages encoded)
@@ -26,7 +26,7 @@ real tool is there and is what apk installs:
 
   $ ../../../src/main.exe alpine PROVIDERS tool | sed -E '/^(parse|solve) [0-9.]+s$/d'
   index PROVIDERS
-  cone: 5 packages, 4 provide rows, 0 install_if rows
+  cone: 5 packages, 4 provides entries, 0 install_if rules
   packages (1):
     tool 2.0
   encoded solution: 3 core nodes (2 Alpine packages encoded)
@@ -39,6 +39,6 @@ the dependency has nothing to satisfy it:
 
   $ ../../../src/main.exe alpine PROVIDERS nokey | sed -E '/^(parse|solve) [0-9.]+s$/d'
   index PROVIDERS
-  cone: 5 packages, 4 provide rows, 0 install_if rows
+  cone: 5 packages, 4 provides entries, 0 install_if rules
   unsatisfiable:
   Because @root () -> nokey ∅ and root -> @root (), version solving failed..

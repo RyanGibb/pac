@@ -2,8 +2,9 @@
    lives in hashtables; the extracted per-package/per-name lookups are
    called on sub-instances justified by Opam.dependees_lookup* /
    Opam.versions_lookup*, which evaluate every filter against [rho] as
-   they run; each package's package-formula rows are then reduced to core edges
-   by the extracted PackageFormula reduction on its own sub-instance;
+   they run; each package's package-formula dependencies are then reduced
+   to core edges by the extracted PackageFormula reduction on its own
+   sub-instance;
    PubGrub solves the accumulated core graph lazily.  Trusted here (TCB):
    the parser, the version comparator, the valuation defaults, and the
    plumbing. *)
@@ -114,8 +115,8 @@ let load_name ar (name : string) : (string * Opam_parse.pkg_meta) list =
 
 let versions_of ar n = List.map fst (load_name ar n)
 
-(* a package's rows are read only through its name's load, so they are
-   never taken from a name parsed in part *)
+(* a package's declarations are read only through its name's load, so
+   they are never taken from a name parsed in part *)
 let meta_of ar n v =
   try List.assoc v (load_name ar n)
   with Not_found ->
@@ -146,18 +147,19 @@ let class_members ar k =
 
 (* There is no cone pass: the repository is uncovered as the solver asks
    for it, so each lookup theorem's sub-instance must be complete at the
-   moment it answers.  That holds by construction for all but one row:
-   versions
-   and root_inst read the repository at one name, which load_name takes
-   whole; inst_for reads (n, v)'s own dep/conflict/depext/pin-depends
-   rows and the repository at rowNames, the names those rows mention, and
-   loads every one of them; available filters ride along with the name
-   they belong to; depexts_of reads the selected packages' own rows.
+   moment it answers.  That holds by construction for all but one
+   lookup: versions and root_inst read the repository at one name, which
+   load_name takes whole; inst_for reads (n, v)'s own dependency, conflict, depext and
+   pin-depends declarations and the repository at declaredNames, the
+   names those declarations mention, and loads every one of them;
+   available filters ride along with the name they belong to; depexts_of
+   reads the selected packages' own declarations.
 
    Conflict classes are the exception, and only on one side.  A package's
    class formulas are read off its own declarations, so inst_for stays
    local; what is a preimage is the class package's version list, which is
-   every declarer of the class and which no row of any one package names.
+   every declarer of the class and which no declaration of any one
+   package names.
    class_idx therefore holds the declarers among the names loaded so far
    and may grow at any point in the run.  Not memoising is enough here,
    where it would not have been under a pairwise encoding: the growing
@@ -257,24 +259,24 @@ module Make () = struct
   let inst_for ar (p : string * string) : Op.coq_Inst =
     let n, v = p in
     let m = meta_of ar n v in
-    let dep_rows =
+    let dep_fibre =
       match m.Opam_parse.depends with None -> [] | Some f -> [ (p, xoff f) ]
     in
-    let cfl_rows =
+    let cfl_fibre =
       List.map
         (fun (cn, (g, c)) -> (p, (cn, (xfilt g, xvc c))))
         m.Opam_parse.conflicts
     in
     (* only this package's own declarations: the class package carries the
-       partners, so no partner's rows are read here *)
-    let cls_rows = List.map (fun k -> ((n, v), k)) m.Opam_parse.classes in
-    let dxt_rows =
+       partners, so no partner's declarations are read here *)
+    let cls_fibre = List.map (fun k -> ((n, v), k)) m.Opam_parse.classes in
+    let dxt_fibre =
       List.map (fun (e, g) -> (p, (e, xfilt g))) m.Opam_parse.depexts
     in
-    let pind_rows =
+    let pind_fibre =
       List.map (fun (nv, u) -> (p, (nv, u))) m.Opam_parse.pindeps
     in
-    let row_names =
+    let declared_names =
       let rec offn acc : Opam_parse.off -> string list = function
         | OAtom (m, _, _) -> m :: acc
         | OAnd (a, b) | OOr (a, b) -> offn (offn acc a) b
@@ -287,17 +289,17 @@ module Make () = struct
       in
       List.fold_left (fun a ((pn, _), _) -> pn :: a) acc m.Opam_parse.pindeps
     in
-    let repo, avl = repo_and_avail ar row_names in
+    let repo, avl = repo_and_avail ar declared_names in
     {
       Op.inst_repo = repo;
-      inst_dep = dep_rows;
+      inst_dep = dep_fibre;
       inst_dpo = [];
-      inst_cfl = cfl_rows;
-      inst_cls = clsrel_of cls_rows;
+      inst_cfl = cfl_fibre;
+      inst_cls = clsrel_of cls_fibre;
       inst_avl = avl;
-      inst_dxt = dxt_rows;
+      inst_dxt = dxt_fibre;
       inst_pins = Op.PkgSet.empty;
-      inst_pind = pind_rows;
+      inst_pind = pind_fibre;
       inst_goal = dummy;
       inst_inv = dummy;
     }
@@ -354,10 +356,10 @@ module Make () = struct
 
   (* The system packages a solution needs.  Depexts never reach the
      solver, so this runs once the resolution is fixed, on an instance
-     carrying exactly the selected packages' depext rows; depextsOf, not
+     carrying exactly the selected packages' depext entries; depextsOf, not
      a traversal here, decides which filters fire. *)
   let depexts_of ar (reals : (string * string) list) : string list =
-    let dxt_rows =
+    let dxt_entries =
       List.concat_map
         (fun p ->
           let n, v = p in
@@ -374,7 +376,7 @@ module Make () = struct
         inst_cfl = [];
         inst_cls = Op.ClsRel.empty;
         inst_avl = [];
-        inst_dxt = dxt_rows;
+        inst_dxt = dxt_entries;
         inst_pins = Op.PkgSet.empty;
         inst_pind = [];
         inst_goal = dummy;
@@ -464,7 +466,7 @@ module Make () = struct
   (* ---- 0install's decision order ---- *)
 
   (* The reduction hands a package's dependees back as a set, so the order
-     its rows were written in is gone by the time the core graph holds
+     its dependencies were written in is gone by the time the core graph holds
      them.  Read it back off the parsed formula: opam's CUDF depends list
      is the conjunctive spine in source order (opamSolver.ml,
      [preresolve_deps] then [ands_to_list]), and that is the order
@@ -578,8 +580,8 @@ module Make () = struct
               Hashtbl.replace st.synthetic_vers tn (tv :: prev))
       (T.PkgSet.elements r)
 
-  (* reduce one package-formula package's rows to core, via the extracted
-     lookups *)
+  (* reduce one package-formula package's dependencies to core, via the
+     extracted lookups *)
   let verbose = Sys.getenv_opt "PACPROG" <> None
   let nproc = ref 0
 
@@ -640,7 +642,7 @@ module Make () = struct
       (* The one name that cannot be held: its versions are the whole
          preimage of the class relation at k, so class_idx knows only the
          declarers among the names loaded so far.  Recomputing the handful
-         of rows at every ask lets a declarer parsed later simply be
+         of declarers at every ask lets a declarer parsed later simply be
          there, where a cache would freeze the answer mid-run. *)
       | PFR.Name.Orig (Red.TName.Cls k) ->
           List.map

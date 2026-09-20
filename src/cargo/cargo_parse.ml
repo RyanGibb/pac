@@ -5,7 +5,7 @@
    merged into features, feature entry strings are classified into the
    four FEntry shapes, and an optional dependency gains the implicit
    feature that activates it unless some entry names it with dep:.
-   Unhandled shapes are counted and the enclosing row dropped. *)
+   Unhandled shapes are counted and the enclosing record dropped. *)
 
 type kind = Normal | Build | Dev
 
@@ -92,7 +92,7 @@ let dep_of (j : Yojson.Safe.t) : dep option =
           d_req = Cargo_version.parse_req req;
           d_feats = string_list (member "features" j);
           d_optional = bool_def false (member "optional" j);
-          (* the index omits the key only on very old rows, where cargo's
+          (* the index omits the key only on very old entries, where cargo's
              own default (default features on) applies *)
           d_default = bool_def true (member "default_features" j);
           d_kind = kind_of (member "kind" j);

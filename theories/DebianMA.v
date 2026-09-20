@@ -1662,7 +1662,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       - intro Hw; exfalso; exact (Deb.SOvw.empty_in _ Hw).
     Qed.
 
-    (* The crux: p's own row pulls three sub-instances. Dependency targets
+    (* The crux: p's own fibre pulls three sub-instances. Dependency targets
        need the whole group of every base name p's clauses mention (implicit
        group, foreign and :any provides come from any architecture's member);
        matchb at p needs p itself and p's own Provides in the reduceProv
@@ -1914,9 +1914,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     (* An atom's providers are its base name's whole group across
        architectures, plus that name's declared providers.  The clause sets
        reach the selector through one test and no other -- whether the atom
-       occurs at all -- so a sub-instance may carry the atom's depends row, its
-       recommends row, or both, and the name's group is what fixes the
-       rest. *)
+       occurs at all -- so a sub-instance may carry the atom's depends
+       clause, its recommends clause, or both, and the name's group is
+       what fixes the rest. *)
     Theorem versions_lookupSelectorAgreeMA :
       forall R D Rec (D' Rec' : Deb.Deps.t) Pi G M (p : Pkg.t) (a : Atom.t),
         Deb.occursAtomb (Deb.allClauses (reduceDeps D) (reduceRec Rec))
@@ -2044,8 +2044,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     (* An atom occurring only in a recommends clause still introduces a
-       selector, so its sub-instance has to carry the recommends row rather
-       than a depends one; otherwise the selector would see no versions and
+       selector, so its sub-instance has to carry the recommends clause
+       rather than a depends one; otherwise the selector would see no versions and
        every provided recommend would take the escape. *)
     Theorem versions_lookupSelectorRecMA :
       forall R D Rec Pi G M (p : Pkg.t) Al (a : Atom.t),
@@ -2073,7 +2073,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
     (* The recommends counterpart: the selector introduced by an atom that
        only a recommends clause mentions reads the same group sub-instance,
-       with the recommends row in the Rec position. *)
+       with the recommends clause in the Rec position. *)
     Theorem dependees_lookupSelectorRecMA :
       forall R D Rec Pi G M (p : Pkg.t) Al (a : Atom.t) (y : Deb.Version.t),
         Deps.In (p, Al) Rec -> AtomSet.In a Al ->

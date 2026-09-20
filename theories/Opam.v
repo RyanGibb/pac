@@ -150,11 +150,12 @@ Module Opam (N V X Y E : UsualOrderedType).
   Module ClsRel := FSetUOT ClsElt.
   Module ESet := FSetUOT E.
 
-  (* The opam instance.  Formula-valued rows are lists: they feed only the
-     spec and the translation, and sets would demand formula comparators
-     used nowhere.  inst_pins is switch-level (unconditional); pin-depends
-     rows are conditional on their owner and carry the URL as an opaque
-     value (fetch-time data, not resolution data).
+  (* The opam instance.  Formula-valued relations are lists: they feed
+     only the spec and the translation, and sets would demand formula
+     comparators used nowhere.  inst_pins is switch-level
+     (unconditional); pin-depends entries are conditional on their owner
+     and carry the URL as an opaque value (fetch-time data, not
+     resolution data).
      inst_dpo (depopts) carries no resolution force at all: the manual is
      explicit that a version-constrained depopt does not exclude other
      versions -- that is what conflicts are for -- so depopts are carried
@@ -162,8 +163,9 @@ Module Opam (N V X Y E : UsualOrderedType).
      inst_dxt (depexts) is likewise inert here: opam's solver never sees
      external dependencies, because an external name is a leaf that
      depends on nothing and so cannot decide between opam packages.  The
-     rows are read off a finished resolution by depextsOf below, which is
-     what the system package manager is then asked to install. *)
+     entries are read off a finished resolution by depextsOf below,
+     which is what the system package manager is then asked to
+     install. *)
   Record Inst : Type := MkInst
     { inst_repo : PkgSet.t
     ; inst_dep : list (Pkg.t * OFormula)
@@ -212,7 +214,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         forall v', PkgSet.In (n, v') S -> v' = v }.
 
   (* The system packages a resolution asks for: an output read off S, not
-     a constraint on it.  Every depext row owned by a selected package
+     a constraint on it.  Every depext entry owned by a selected package
      whose filter is definitely true contributes its external name. *)
   Definition depextsOf (rho : Valuation) (I : Inst) (S : PkgSet.t)
     : ESet.t :=
@@ -446,13 +448,13 @@ Module Opam (N V X Y E : UsualOrderedType).
     Definition ownb {A : Type} (p : Pkg.t) (r : Pkg.t * A) : bool :=
       if Pkg.eq_dec (fst r) p then true else false.
 
-    Definition ownRows {A : Type} (p : Pkg.t) (l : list (Pkg.t * A))
+    Definition ownedBy {A : Type} (p : Pkg.t) (l : list (Pkg.t * A))
       : list A :=
       List.map snd (List.filter (ownb p) l).
 
     Definition depForms (rho : Valuation) (Vq : N.t -> VSet.t) (I : Inst)
         (p : Pkg.t) : list PF.Formula :=
-      List.map (encodeOF rho Vq) (ownRows p (inst_dep I)).
+      List.map (encodeOF rho Vq) (ownedBy p (inst_dep I)).
 
     (* A conflict whose filter rho makes false is not a conflict. *)
     Definition cflForm (rho : Valuation) (Vq : N.t -> VSet.t) (p : Pkg.t)
@@ -466,7 +468,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Definition cflForms (rho : Valuation) (Vq : N.t -> VSet.t) (I : Inst)
         (p : Pkg.t) : list PF.Formula :=
-      List.map (cflForm rho Vq p) (ownRows p (inst_cfl I)).
+      List.map (cflForm rho Vq p) (ownedBy p (inst_cfl I)).
 
     (* Conflict classes through a shared class package, one per class,
        whose versions are the declaring names.  A declarer depends on its
@@ -514,7 +516,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Definition pindForms (Vq : N.t -> VSet.t) (I : Inst) (p : Pkg.t)
       : list PF.Formula :=
-      List.map (pindForm Vq) (ownRows p (inst_pind I)).
+      List.map (pindForm Vq) (ownedBy p (inst_pind I)).
 
     Definition rootForm (rho : Valuation) (Vq : N.t -> VSet.t) (I : Inst)
       : PF.Formula :=
@@ -524,7 +526,7 @@ Module Opam (N V X Y E : UsualOrderedType).
     Module SOlf := SetOps Pkg PF.Dependees PkgSet FSet.
 
     (* THE per-package lookup: a target package's formulas, from its own
-       instance rows under the valuation. *)
+       declarations under the valuation. *)
     Definition dependeesBy (rho : Valuation) (Vq : N.t -> VSet.t)
         (I : Inst) (q : PF.Pkg.t) : FSet.t :=
       match q with
@@ -845,11 +847,11 @@ Module Opam (N V X Y E : UsualOrderedType).
         intros _; exact (PTrue_sat S').
     Qed.
 
-    Lemma ownRows_in : forall (A : Type) (p : Pkg.t)
+    Lemma ownedBy_in : forall (A : Type) (p : Pkg.t)
         (l : list (Pkg.t * A)) (a : A),
-        In a (ownRows p l) <-> In (p, a) l.
+        In a (ownedBy p l) <-> In (p, a) l.
     Proof.
-      intros A p l a; unfold ownRows, ownb.
+      intros A p l a; unfold ownedBy, ownb.
       rewrite List.in_map_iff; split.
       - intros [[q b] [Hb Hf]]; simpl in Hb; subst b.
         apply List.filter_In in Hf; destruct Hf as [Hin Ht];
@@ -880,9 +882,9 @@ Module Opam (N V X Y E : UsualOrderedType).
       unfold clsForms; rewrite SOcf.mem_filterMap.
       split.
       - intros [H | [H | [H | H]]].
-        + destruct H as [f0 [He Hf0]]; apply ownRows_in in Hf0.
+        + destruct H as [f0 [He Hf0]]; apply ownedBy_in in Hf0.
           left; exists f0; auto.
-        + destruct H as [nc [He Hnc]]; apply ownRows_in in Hnc.
+        + destruct H as [nc [He Hnc]]; apply ownedBy_in in Hnc.
           right; left; exists nc; auto.
         + destruct H as [[q k] [Hq He]]; cbn beta iota in He.
           revert Hq; revert He.
@@ -891,15 +893,15 @@ Module Opam (N V X Y E : UsualOrderedType).
           end; intro He; cbn iota in He; [| discriminate He].
           injection He as <-; intro Hq.
           right; right; left; exists k; auto.
-        + destruct H as [nvu [He Hnvu]]; apply ownRows_in in Hnvu.
+        + destruct H as [nvu [He Hnvu]]; apply ownedBy_in in Hnvu.
           right; right; right; exists nvu; auto.
       - intros [H | [H | [H | H]]].
         + destruct H as [f0 [Hin ->]].
           left; exists f0; split;
-            [reflexivity | apply ownRows_in; exact Hin].
+            [reflexivity | apply ownedBy_in; exact Hin].
         + destruct H as [nc [Hin ->]].
           right; left; exists nc; split;
-            [reflexivity | apply ownRows_in; exact Hin].
+            [reflexivity | apply ownedBy_in; exact Hin].
         + destruct H as [k [Hp ->]].
           right; right; left; exists ((n, v), k); split; [exact Hp |].
           cbn beta iota.
@@ -908,7 +910,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           end; [reflexivity | contradiction NE; reflexivity].
         + destruct H as [nvu [Hin ->]].
           right; right; right; exists nvu; split;
-            [reflexivity | apply ownRows_in; exact Hin].
+            [reflexivity | apply ownedBy_in; exact Hin].
     Qed.
 
     Lemma mem_transD : forall rho I q f,
@@ -965,15 +967,15 @@ Module Opam (N V X Y E : UsualOrderedType).
       assert (Hroot := PF.res_root_mem _ _ _ _ HR).
       assert (HrootR : PF.PkgSet.In rootPkg (transR rho I)).
       { apply mem_transR; right; left; reflexivity. }
-      assert (Hrow : PF.DepRel.In (rootPkg, rootForm rho
+      assert (Hdep : PF.DepRel.In (rootPkg, rootForm rho
                        (srcVersions rho I) I) (transD rho I)).
       { apply mem_transD; split; [exact HrootR |].
         unfold dependees, dependeesBy, rootPkg.
         apply FSet.singleton_spec; reflexivity. }
-      assert (Hrootrow :=
-                PF.res_formula_closure _ _ _ _ HR _ Hroot _ Hrow).
-      unfold rootForm in Hrootrow; cbn [PF.Satisfies] in Hrootrow.
-      destruct Hrootrow as [Hgoal Hinv].
+      assert (Hrootdep :=
+                PF.res_formula_closure _ _ _ _ HR _ Hroot _ Hdep).
+      unfold rootForm in Hrootdep; cbn [PF.Satisfies] in Hrootdep.
+      destruct Hrootdep as [Hgoal Hinv].
       assert (Hdeps : forall n v f,
                  PkgSet.In (n, v) (decodeS S') ->
                  FSet.In f (dependees rho I (embedPkg (n, v))) ->
@@ -1001,7 +1003,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         { apply (Hdeps _ _ _ Hp); unfold dependees.
           apply mem_dependees_real; left; exists f; auto. }
         apply (encodeOF_correct rho _ _ HV) in Hs; exact Hs.
-      - intros [pn pv] Hp n g c Hrowc Hg v Hv Hne Hh.
+      - intros [pn pv] Hp n g c Hcfl Hg v Hv Hne Hh.
         assert (Hs : PF.Satisfies S'
                        (cflForm rho (srcVersions rho I) (pn, pv)
                           (n, (g, c)))).
@@ -1042,7 +1044,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         assert (H := Hsub _ _ Hv'); apply mem_effRepo in H.
         destruct H as [_ [Hp _]]; symmetry.
         exact (Hp _ _ Hpin eq_refl).
-      - intros [pn pv] Hp n v u Hrowc v' Hv'.
+      - intros [pn pv] Hp n v u Hpind v' Hv'.
         assert (Hs : PF.Satisfies S'
                        (pindForm (srcVersions rho I) ((n, v), u))).
         { apply (Hdeps _ _ _ Hp); unfold dependees.
@@ -1138,11 +1140,11 @@ Module Opam (N V X Y E : UsualOrderedType).
                       Hpk Hqk NE).
     Qed.
 
-    (* -- sub-instance reuse: the lookup lemmas.  A package's rows read the
-       instance only at its own rows and at the versions of the names
-       they mention, so a name-restricted repository and owner-filtered
-       rows answer the same lookups -- what lets a driver hold the
-       archive in per-name tables. -- *)
+    (* -- sub-instance reuse: the lookup lemmas.  A package's lookups
+       read the instance only at its own declarations and at the versions
+       of the names they mention, so a name-restricted repository and
+       owner-filtered declarations answer the same lookups -- what lets a
+       driver hold the archive in per-name tables. -- *)
 
     Module PkgPre := PreimageOfKeys N Pkg NSet PkgSet.
     Definition nameRestrict (ns : NSet.t) (R : PkgSet.t) : PkgSet.t :=
@@ -1159,19 +1161,20 @@ Module Opam (N V X Y E : UsualOrderedType).
       : NSet.t :=
       List.fold_right (fun a acc => NSet.union (nm a) acc) NSet.empty l.
 
-    Definition rowNames (I : Inst) (p : Pkg.t) : NSet.t :=
-      NSet.union (listNames ofNames (ownRows p (inst_dep I)))
+    Definition declaredNames (I : Inst) (p : Pkg.t) : NSet.t :=
+      NSet.union (listNames ofNames (ownedBy p (inst_dep I)))
         (NSet.union
            (listNames (fun nc => NSet.singleton (fst nc))
-              (ownRows p (inst_cfl I)))
+              (ownedBy p (inst_cfl I)))
            (listNames (fun nvu => NSet.singleton (fst (fst nvu)))
-              (ownRows p (inst_pind I)))).
+              (ownedBy p (inst_pind I)))).
 
     (* A package's class formulas read only its own declarations: the
-       class package carries the partners, so no row of a partner is consulted
-       here.  A class name's versions are the other way round -- the whole
-       preimage of the relation at that class -- and that is the one
-       lookup whose sub-instance no single package's rows determine. *)
+       class package carries the partners, so no declaration of a partner
+       is consulted here.  A class name's versions are the other way
+       round -- the whole preimage of the relation at that class -- and
+       that is the one lookup whose sub-instance no single package's
+       declarations determine. *)
     Definition clsFibre (cls : ClsRel.t) (p : Pkg.t) : ClsRel.t :=
       ClsRel.filter
         (fun qk => if Pkg.eq_dec (fst qk) p then true else false) cls.
@@ -1181,7 +1184,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         (fun qk => if N.eq_dec (snd qk) k then true else false) cls.
 
     Definition pkgSubInst (I : Inst) (p : Pkg.t) : Inst :=
-      MkInst (nameRestrict (rowNames I p) (inst_repo I))
+      MkInst (nameRestrict (declaredNames I p) (inst_repo I))
         (List.filter (ownb p) (inst_dep I))
         (List.filter (ownb p) (inst_dpo I))
         (List.filter (ownb p) (inst_cfl I))
@@ -1356,7 +1359,7 @@ Module Opam (N V X Y E : UsualOrderedType).
     Qed.
 
     (* The one lookup whose sub-instance is a preimage: answering it needs every
-       declarer of k, which no single package's rows name.  A driver
+       declarer of k, which no single package's declarations name.  A driver
        uncovering the repository as it goes must therefore recompute this
        answer at every ask rather than hold it, so a declarer parsed later
        is simply there. *)
@@ -1407,12 +1410,12 @@ Module Opam (N V X Y E : UsualOrderedType).
         dependees rho I (embedPkg (n, v)).
     Proof.
       intros rho I n v; unfold dependees.
-      assert (HVq : forall m, NSet.In m (rowNames I (n, v)) ->
+      assert (HVq : forall m, NSet.In m (declaredNames I (n, v)) ->
                  srcVersions rho (pkgSubInst I (n, v)) m =
                  srcVersions rho I m).
       { intros m Hm.
         apply (srcVersions_subInst_agree rho I (pkgSubInst I (n, v))
-                 (rowNames I (n, v)) m); reflexivity || exact Hm. }
+                 (declaredNames I (n, v)) m); reflexivity || exact Hm. }
       apply FSet.ext; intro f.
       unfold embedPkg; cbn [fst snd].
       rewrite !mem_dependees_real.
@@ -1423,17 +1426,17 @@ Module Opam (N V X Y E : UsualOrderedType).
           apply (proj1 (own_filter_in _ _ _ _)) in Hin.
           left; exists f0; split; [exact Hin |].
           apply encodeOF_agree; intros m Hm; apply HVq.
-          unfold rowNames; apply NSet.union_spec; left.
+          unfold declaredNames; apply NSet.union_spec; left.
           apply (listNames_in _ _ _ _ f0);
-            [apply ownRows_in; exact Hin | exact Hm].
+            [apply ownedBy_in; exact Hin | exact Hm].
         + destruct H as [nc [Hin ->]].
           apply (proj1 (own_filter_in _ _ _ _)) in Hin.
           right; left; exists nc; split; [exact Hin |].
           apply cflForm_agree; apply HVq.
-          unfold rowNames; apply NSet.union_spec; right.
+          unfold declaredNames; apply NSet.union_spec; right.
           apply NSet.union_spec; left.
           apply (listNames_in _ _ _ _ nc);
-            [apply ownRows_in; exact Hin
+            [apply ownedBy_in; exact Hin
             | apply NSet.singleton_spec; reflexivity].
         + destruct H as [k [Hpk ->]].
           unfold clsFibre in Hpk.
@@ -1444,27 +1447,27 @@ Module Opam (N V X Y E : UsualOrderedType).
           right; right; right; exists nvu; split;
             [exact Hin |].
           apply pindForm_agree; apply HVq.
-          unfold rowNames; apply NSet.union_spec; right.
+          unfold declaredNames; apply NSet.union_spec; right.
           apply NSet.union_spec; right.
           apply (listNames_in _ _ _ _ nvu);
-            [apply ownRows_in; exact Hin
+            [apply ownedBy_in; exact Hin
             | apply NSet.singleton_spec; reflexivity].
       - intros [H | [H | [H | H]]].
         + destruct H as [f0 [Hin ->]].
           left; exists f0; split;
             [apply (proj2 (own_filter_in _ _ _ _)); exact Hin |].
           apply encodeOF_agree; intros m Hm; symmetry; apply HVq.
-          unfold rowNames; apply NSet.union_spec; left.
+          unfold declaredNames; apply NSet.union_spec; left.
           apply (listNames_in _ _ _ _ f0);
-            [apply ownRows_in; exact Hin | exact Hm].
+            [apply ownedBy_in; exact Hin | exact Hm].
         + destruct H as [nc [Hin ->]].
           right; left; exists nc; split;
             [apply (proj2 (own_filter_in _ _ _ _)); exact Hin |].
           apply cflForm_agree; symmetry; apply HVq.
-          unfold rowNames; apply NSet.union_spec; right.
+          unfold declaredNames; apply NSet.union_spec; right.
           apply NSet.union_spec; left.
           apply (listNames_in _ _ _ _ nc);
-            [apply ownRows_in; exact Hin
+            [apply ownedBy_in; exact Hin
             | apply NSet.singleton_spec; reflexivity].
         + destruct H as [k [Hpk ->]].
           right; right; left; exists k; split; [| reflexivity].
@@ -1476,10 +1479,10 @@ Module Opam (N V X Y E : UsualOrderedType).
           right; right; right; exists nvu; split;
             [apply (proj2 (own_filter_in _ _ _ _)); exact Hin |].
           apply pindForm_agree; symmetry; apply HVq.
-          unfold rowNames; apply NSet.union_spec; right.
+          unfold declaredNames; apply NSet.union_spec; right.
           apply NSet.union_spec; right.
           apply (listNames_in _ _ _ _ nvu);
-            [apply ownRows_in; exact Hin
+            [apply ownedBy_in; exact Hin
             | apply NSet.singleton_spec; reflexivity].
     Qed.
   End Reduction.

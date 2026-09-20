@@ -63,7 +63,7 @@ let opam_run debug zi_order repo goal =
     Printf.printf "loaded: %d names, %d package versions\n"
       ar.Opam_solve.n_names ar.Opam_solve.n_vers;
     if !Opam_parse.rejected > 0 then
-      Printf.printf "parser dropped %d rows\n" !Opam_parse.rejected;
+      Printf.printf "parser dropped %d declarations\n" !Opam_parse.rejected;
     Printf.printf "parse %.2fs\nsolve %.2fs\n" ar.Opam_solve.t_parse
       (t1 -. t0 -. ar.Opam_solve.t_parse)
   in
@@ -145,7 +145,7 @@ let cargo_run debug print_parents index goal wanted rfeats rustv =
       Printf.printf "loaded: %d crates, %d versions\n" ar.Cargo_solve.n_names
         ar.Cargo_solve.n_vers;
       if !Cargo_parse.rejected > 0 then
-        Printf.printf "parser dropped %d rows\n" !Cargo_parse.rejected;
+        Printf.printf "parser dropped %d declarations\n" !Cargo_parse.rejected;
       Printf.printf "parse %.2fs\nsolve %.2fs\n" ar.Cargo_solve.t_parse
         (t2 -. t0 -. ar.Cargo_solve.t_parse)
     in
@@ -241,12 +241,12 @@ let alpine_run debug path goals =
   let t1 = Unix.gettimeofday () in
   Printf.printf
     "index %s\n\
-     cone: %d packages, %d provide rows, %d install_if rows\n\
+     cone: %d packages, %d provides entries, %d install_if rules\n\
      parse %.2fs\n\
      %!"
     path ar.Apk_solve.n_pkgs ar.Apk_solve.n_provs ar.Apk_solve.n_iif (t1 -. t0);
   if !Apk_parse.rejected > 0 then
-    Printf.printf "parser dropped %d rows\n%!" !Apk_parse.rejected;
+    Printf.printf "parser dropped %d declarations\n%!" !Apk_parse.rejected;
   let world = Apk_solve.world_of_args goals in
   if world = [] then 2
   else
@@ -334,9 +334,9 @@ let npm_run debug cache offline tree omit goal wanted =
         Printf.printf "cone: %d packages, %d versions, %d packuments fetched\n"
           ar.Npm_solve.n_names ar.Npm_solve.n_vers ar.Npm_solve.n_fetched;
         if !Npm_parse.rejected > 0 then
-          Printf.printf "parser dropped %d rows\n" !Npm_parse.rejected;
+          Printf.printf "parser dropped %d declarations\n" !Npm_parse.rejected;
         if !Npm_parse.optional_count > 0 then
-          Printf.printf "optionalDependencies: %d rows, %d dropped\n"
+          Printf.printf "optionalDependencies: %d entries, %d dropped\n"
             !Npm_parse.optional_count ar.Npm_solve.n_opt_dropped;
         Printf.printf "encoded solution: %d core nodes (%d lookups)\n"
           r.Npm_solve.nodes r.Npm_solve.lookups;

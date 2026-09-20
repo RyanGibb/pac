@@ -71,16 +71,18 @@ prerelease and the set that does is the other alternative.
   cone: 3 packages, 5 versions, 0 packuments fetched
   encoded solution: 5 core nodes (10 lookups)
 
-An optionalDependencies entry is an ordinary dependency row, abandoned
+An optionalDependencies entry is an ordinary dependency, abandoned
 only where npm abandons it: when its manifest cannot be fetched.  opt-app
 lists three.  gadget ^1 resolves and is installed exactly as a plain
 dependency would be -- and it also demonstrates the override rule, since
 opt-app's dependencies name gadget ^9, which no version satisfies: the
-optional entry replaces that row rather than standing beside it.  native
-^9 names a package that exists at 1.0.0 only, so the range matches
-nothing and the row goes; absent ^1 names a package with no packument at
+optional entry replaces that dependency rather than standing beside it.
+native ^9 names a package that exists at 1.0.0 only, so the range matches
+nothing and the dependency goes; absent ^1 names a package with no
+packument at
 all, the other half of the same failure.  native-core is in the cache and
-native 1.0.0 depends on it, but nothing else does, so dropping the row
+native 1.0.0 depends on it, but nothing else does, so dropping the
+dependency
 takes it with it: transitivity needs no separate rule.
 
   $ ../../../src/main.exe npm --offline --cache . --tree opt-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
@@ -93,7 +95,7 @@ takes it with it: transitivity needs no separate rule.
     opt-app 1.0.0 <- gadget 1.0.0
     opt-app 1.0.0 <- theme 1.0.0
   cone: 5 packages, 5 versions, 0 packuments fetched
-  optionalDependencies: 3 rows, 2 dropped
+  optionalDependencies: 3 entries, 2 dropped
   encoded solution: 5 core nodes (10 lookups)
 
 --omit=optional drops the class outright, without asking the registry
@@ -109,14 +111,14 @@ loaded at all.
   node_modules (1 edges):
     opt-app 1.0.0 <- theme 1.0.0
   cone: 2 packages, 2 versions, 0 packuments fetched
-  optionalDependencies: 3 rows, 0 dropped
+  optionalDependencies: 3 entries, 0 dropped
   encoded solution: 3 core nodes (6 lookups)
 
 A target whose every version is cut by an os or cpu gate is unresolvable
 too, because gates are an availability cut: effRepo removes the package
 outright, so for resolution it does not exist.  nativefs publishes only
 1.0.0 and only for darwin, and the host is linux, so opt-plat-app's
-optional row on it goes -- with native-core, which nativefs depends on
+optional dependency on it goes -- with native-core, which nativefs depends on
 and nothing else does.  This is fsevents, the commonest optional
 dependency there is; testing published rather than available versions
 would make it a false unsatisfiable on every platform but macOS.
@@ -129,11 +131,12 @@ would make it a false unsatisfiable on every platform but macOS.
   node_modules (1 edges):
     opt-plat-app 1.0.0 <- theme 1.0.0
   cone: 3 packages, 3 versions, 0 packuments fetched
-  optionalDependencies: 1 rows, 1 dropped
+  optionalDependencies: 1 entries, 1 dropped
   encoded solution: 3 core nodes (6 lookups)
 
 That it is the gate doing the cutting, and not a missing packument, is
-what plat-app shows: the same row, not optional, against the same cache.
+what plat-app shows: the same dependency, not optional, against the same
+cache.
 
   $ ../../../src/main.exe npm --offline --cache . --tree plat-app
   root plat-app 1.0.0
@@ -143,8 +146,8 @@ what plat-app shows: the same row, not optional, against the same cache.
 
 A satisfiable optional entry that conflicts is a conflict, not a drop.
 opt-peer-app depends on host, whose peer on gadget is ^2, and optionally
-on gadget ^1; gadget publishes both, so the row's manifest is fetchable
-and the row stands.  The two ranges fill the same directory and cannot
+on gadget ^1; gadget publishes both, so the dependency's manifest is
+fetchable and the dependency stands.  The two ranges fill the same directory and cannot
 agree, which is npm's ERESOLVE rather than a reason to abandon the entry.
 
   $ ../../../src/main.exe npm --offline --cache . --tree opt-peer-app
@@ -154,8 +157,9 @@ agree, which is npm's ERESOLVE rather than a reason to abandon the entry.
   And because opt-peer-app@1.0.0 1.0.0 -> <opt-peer-app@1.0.0=>host> 1.0.0 and root -> opt-peer-app@1.0.0 1.0.0, version solving failed.
   [1]
 
-That the optional row is what fails the solve, rather than something else
-in the fixture, is what --omit=optional shows: with the row gone the peer
+That the optional dependency is what fails the solve, rather than
+something else in the fixture, is what --omit=optional shows: with the
+dependency gone the peer
 installs gadget 2.0.0 by itself.
 
   $ ../../../src/main.exe npm --offline --cache . --tree --omit=optional opt-peer-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
@@ -168,7 +172,7 @@ installs gadget 2.0.0 by itself.
     opt-peer-app 1.0.0 <- gadget 2.0.0
     opt-peer-app 1.0.0 <- host 1.0.0
   cone: 3 packages, 4 versions, 0 packuments fetched
-  optionalDependencies: 1 rows, 0 dropped
+  optionalDependencies: 1 entries, 0 dropped
   encoded solution: 5 core nodes (11 lookups)
 
 A root override binds a peer slot too, and wins over the peer's own range

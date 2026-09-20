@@ -65,7 +65,7 @@ Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (PM : SemverMatch V).
       VSet.In v (rangeEval rg Vn) <-> VSet.In v Vn /\ rgHolds rg v = true.
   Proof. intros rg Vn v; apply VSS.filter_spec'. Qed.
 
-  (* An ecosystem that keys its dependency rows on the requirement itself
+  (* An ecosystem that keys its dependencies on the requirement itself
      carries a range inside a set element, which wants an order on the
      syntax; the two list layers take theirs from ListComp. *)
   Module CtComp <: ComparableType.

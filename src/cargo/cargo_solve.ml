@@ -2,8 +2,8 @@
    the index is parsed into hashtables a crate at a time, as the solver
    first asks for each; every lookup is answered from a small
    sub-instance in the shape one of Cargo.v's lookup theorems justifies
-   (own rows, and the repository restricted to the names those rows read,
-   or to a link's declarers), pushed through the Cargo encoder straight to
+   (own fibres, and the repository restricted to the names those fibres
+   read, or to a link's declarers), pushed through the Cargo encoder straight to
    Core; PubGrub solves the accumulated core graph lazily and the solution
    comes back through the proved decoders.  Trusted here (TCB): the parser,
    the version comparator, the policy defaults below, and the plumbing. *)
@@ -152,7 +152,7 @@ let load_name ar (n : string) : P.ver list =
 let versions_of ar n = List.map (fun (v : P.ver) -> v.P.v_vers) (load_name ar n)
 
 (* a manifest is read only through its name's load, so a crate version's
-   rows are never taken from a name parsed in part *)
+   declarations are never taken from a name parsed in part *)
 let meta ar n v : P.ver option =
   ignore (load_name ar n);
   Hashtbl.find_opt ar.entry (n, v)
@@ -163,14 +163,14 @@ let meta ar n v : P.ver option =
    still being uncovered, each lookup theorem's sub-instance must be
    complete at the moment it answers.  That holds by construction for all
    but one lookup: CCrate n and CFeatP n read the repository at n alone;
-   CSlot and CDec at (n, v) read (n, v)'s own rows and the repository at the
-   names its slots target; and name_set and repo_preimage load every name
-   they read, while meta loads the owner.  CLink l is the exception.  Its
-   repository is the link relation's preimage at l -- every crate version
-   declaring l
-   -- and no row of any one crate names the other declarers, so nothing a
-   loaded crate carries can bring them in: links_idx holds the declarers
-   among the names loaded so far, and may grow after CLink l has answered.
+   CSlot and CDec at (n, v) read (n, v)'s own declarations and the
+   repository at the names its slots target; and name_set and
+   repo_preimage load every name they read, while meta loads the owner.
+   CLink l is the exception.  Its repository is the link relation's
+   preimage at l -- every crate version declaring l -- and no declaration
+   of any one crate names the other declarers, so nothing a loaded crate
+   carries can bring them in: links_idx holds the declarers among the
+   names loaded so far, and may grow after CLink l has answered.
    Make.solve answers it afresh each time rather than memoizing it. *)
 
 module Make () = struct
@@ -228,8 +228,9 @@ module Make () = struct
   (* the manifest may name one alias under several kinds or cfgs; the
      calculus wants at most one slot per (crate, alias) -- AliasFunctional
      -- so unify them the way cargo does: conjoin the requirements, union
-     the requested features, and prefer the unconditional rows when there
-     are any.  Rows of one kind partition only across dev and non-dev, in
+     the requested features, and prefer the unconditional records when
+     there are any.  Records of one kind partition only across dev and
+     non-dev, in
      slots_of below, so no call here mixes the two *)
   let unify_alias (ds : P.dep list) : P.dep =
     let active = List.filter (fun (d : P.dep) -> cfg_active d.P.d_cfg) ds in
@@ -267,25 +268,26 @@ module Make () = struct
           | Some l -> l
           | None -> [])))
       v.P.v_deps;
-    (* a dev row participates only from the root, so conjoining it with a
-       non-dev row on the same alias would make its requirement -- and its
-       non-optionality -- bind on every depender.  cargo keeps both rows:
-       a root's mandatory dev dependency resolves even when the optional
-       normal row it shares an alias with is never activated (once_cell's
-       critical-section, bitflags's arbitrary and bytemuck).  So a
-       colliding dev row becomes its own slot under an alias no manifest
+    (* a dev record participates only from the root, so conjoining it
+       with a non-dev record on the same alias would make its requirement
+       -- and its non-optionality -- bind on every depender.  cargo keeps
+       both records: a root's mandatory dev dependency resolves even when
+       the optional normal record it shares an alias with is never
+       activated (once_cell's critical-section, bitflags's arbitrary and
+       bytemuck).  So a colliding dev record becomes its own slot under an
+       alias no manifest
        can spell.  AliasFunctional holds because the aliases differ;
        slotActive already confines the dev slot to the root; and no
        feature entry names the synthetic alias, so dep:a and a/f keep
-       binding to the normal row, which is where cargo points them too *)
+       binding to the normal record, which is where cargo points them too *)
     List.concat_map
       (fun a ->
-        let rows = List.rev (Hashtbl.find tbl a) in
+        let records = List.rev (Hashtbl.find tbl a) in
         let dev, nondev =
-          List.partition (fun (d : P.dep) -> d.P.d_kind = P.Dev) rows
+          List.partition (fun (d : P.dep) -> d.P.d_kind = P.Dev) records
         in
         match (dev, nondev) with
-        | [], _ | _, [] -> [ unify_alias rows ]
+        | [], _ | _, [] -> [ unify_alias records ]
         | _ ->
             [
               unify_alias nondev;
@@ -293,9 +295,9 @@ module Make () = struct
             ])
       (List.rev !order)
 
-  (* ---- per-crate rows: exactly ownSlots/ownFDefs/ownLinks/ownSupport ---- *)
+  (* -- per-crate fibres: exactly ownSlots/ownFDefs/ownLinks/ownSupport -- *)
 
-  type rows = {
+  type fibres = {
     r_slots : Cg.SlotRel.t;
     r_fdefs : Cg.FDefRel.t;
     r_links : Cg.LinkRel.t;
@@ -303,7 +305,7 @@ module Make () = struct
     r_reads : string list; (* own name plus the slot targets *)
   }
 
-  let empty_rows n =
+  let empty_fibres n =
     {
       r_slots = Cg.SlotRel.empty;
       r_fdefs = Cg.FDefRel.empty;
@@ -321,16 +323,16 @@ module Make () = struct
               (d.P.d_default, (fset_of d.P.d_feats, (d.P.d_cfg, "registry"))) )
           ) ) ) )
 
-  let rows_cache : (string * string, rows) Hashtbl.t = Hashtbl.create 4096
+  let fibres_cache : (string * string, fibres) Hashtbl.t = Hashtbl.create 4096
 
-  let rows_of ar (p : string * string) : rows =
-    match Hashtbl.find_opt rows_cache p with
+  let fibres_of ar (p : string * string) : fibres =
+    match Hashtbl.find_opt fibres_cache p with
     | Some r -> r
     | None ->
         let n, v = p in
         let r =
           match meta ar n v with
-          | None -> empty_rows n
+          | None -> empty_fibres n
           | Some m ->
               let ds = slots_of m in
               let slots =
@@ -361,7 +363,7 @@ module Make () = struct
                     (n :: List.map (fun (d : P.dep) -> d.P.d_target) ds);
               }
         in
-        Hashtbl.replace rows_cache p r;
+        Hashtbl.replace fibres_cache p r;
         r
 
   (* ---- repository preimages ---- *)
@@ -378,14 +380,14 @@ module Make () = struct
         Hashtbl.replace name_set_cache n s;
         s
 
-  (* every version of every name the crate's rows read, and nothing else *)
+  (* every version of every name the crate's fibres read, and nothing else *)
   (* keyed by the read names rather than by the crate version, because
      consecutive versions of a crate almost always read the same names *)
   let repo_preimage_cache : (string list, Cg.PkgSet.t) Hashtbl.t =
     Hashtbl.create 4096
 
   let repo_preimage ar (p : string * string) : Cg.PkgSet.t =
-    let reads = (rows_of ar p).r_reads in
+    let reads = (fibres_of ar p).r_reads in
     match Hashtbl.find_opt repo_preimage_cache reads with
     | Some s -> s
     | None ->
@@ -407,7 +409,7 @@ module Make () = struct
 
   (* ---- the per-name version lookups ---- *)
 
-  let link_rows st (l : string) =
+  let link_preimage st (l : string) =
     match Hashtbl.find_opt st.ar.links_idx l with Some x -> x | None -> []
 
   let msrv_cache : (string * string * string, bool) Hashtbl.t =
@@ -438,7 +440,7 @@ module Make () = struct
         let s =
           Cg.SupportSet.unions
             (List.map
-               (fun (v : P.ver) -> (rows_of st.ar (n, v.P.v_vers)).r_supp)
+               (fun (v : P.ver) -> (fibres_of st.ar (n, v.P.v_vers)).r_supp)
                (load_name st.ar n))
         in
         Hashtbl.replace support_cache n s;
@@ -460,13 +462,13 @@ module Make () = struct
     | Cg.NPlus.CFeatP (n, _, _) ->
         call (name_set st.ar n) (support_of_name st n) nofd nosl nolk
     | Cg.NPlus.CSlot (n, v, _) ->
-        let rw = rows_of st.ar (n, v) in
+        let rw = fibres_of st.ar (n, v) in
         call (repo_preimage st.ar (n, v)) nosupp nofd rw.r_slots nolk
     | Cg.NPlus.CDec (n, v, _, _, _) ->
-        let rw = rows_of st.ar (n, v) in
+        let rw = fibres_of st.ar (n, v) in
         call (repo_preimage st.ar (n, v)) nosupp rw.r_fdefs rw.r_slots nolk
     | Cg.NPlus.CLink l ->
-        let rs = link_rows st l in
+        let rs = link_preimage st l in
         let r =
           Cg.PkgSet.ofList
             (List.filter (fun (n, v) -> meta st.ar n v <> None) rs)
@@ -486,7 +488,7 @@ module Make () = struct
     let nolk = Cg.LinkRel.empty in
     let nofs = Cg.FSet.empty in
     let owner n v k =
-      let rw = rows_of st.ar (n, v) in
+      let rw = fibres_of st.ar (n, v) in
       k (repo_preimage st.ar (n, v)) rw
     in
     match (fst p, snd p) with
@@ -574,11 +576,11 @@ module Make () = struct
     (* the tagged list, not just the untagged one, has to be memoized:
        PubGrub asks a name for its versions at every propagation step.
        CLink l is the one name that cannot be held: its versions are the
-       whole preimage of the link relation at l, and no row of any one
-       declarer names the others, so links_idx holds only the declarers
-       among the names loaded so far and may grow after CLink l has
-       answered.  Recomputing the filter -- a handful of rows -- lets a
-       declarer loaded later simply be there, where a cache would freeze
+       whole preimage of the link relation at l, and no declaration of any
+       one declarer names the others, so links_idx holds only the
+       declarers among the names loaded so far and may grow after CLink l
+       has answered.  Recomputing the filter -- a handful of entries --
+       lets a declarer loaded later simply be there, where a cache would freeze
        the answer mid-run and refuse it against a set fixed without it. *)
     let vcache = Hashtbl.create 65536 in
     let versions tn =
@@ -638,7 +640,7 @@ module Make () = struct
            owner named by the node *)
         let slots =
           Cg.SlotRel.unions
-            (List.map (fun p -> (rows_of st.ar p).r_slots) (st.rc :: crates))
+            (List.map (fun p -> (fibres_of st.ar p).r_slots) (st.rc :: crates))
         in
         (* alias -> target name, over the same slots decodeParents reads *)
         let target_of = Hashtbl.create 256 in
@@ -670,7 +672,7 @@ module Make () = struct
             feats;
             parents;
             nodes = List.length sol;
-            (* the crate versions whose manifests became encoded rows *)
-            processed = Hashtbl.length rows_cache;
+            (* the crate versions whose manifests became encoded fibres *)
+            processed = Hashtbl.length fibres_cache;
           }
 end

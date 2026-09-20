@@ -110,9 +110,9 @@ let xdep (d : P.dep) : Alp.coq_Dep =
 let ptag (v : string option) : Alp.coq_PTag =
   match v with Some pv -> Alp.PVer pv | None -> Alp.PVirt
 
-(* building the set is also where the row's first-listed atom is offered
-   to [FirstDesignation]; an earlier row keeps the designation when two rows
-   share a set, so the table does not depend on when it is read *)
+(* building the set is also where the rule's first-listed atom is offered
+   to [FirstDesignation]; an earlier rule keeps the designation when two
+   rules share a set, so the table does not depend on when it is read *)
 let condset_of ds =
   let atoms = List.map xatom ds in
   let cs = Alp.CondSet.ofList atoms in
@@ -135,9 +135,9 @@ type iif_rule = {
 type archive = {
   by_name : (string, P.pkg list) Hashtbl.t;
   meta : (string * string, P.pkg) Hashtbl.t;
-  (* provided name -> the rows claiming it *)
+  (* provided name -> the provides entries claiming it *)
   providers : (string, ((string * string) * string option) list) Hashtbl.t;
-  (* install-if rows by their designated condition's name: only a package
+  (* install-if rules by their designated condition's name: only a package
      bearing that name, or providing it, can carry the rule *)
   iif_by_cond : (string, iif_rule list) Hashtbl.t;
   prio : (string * string, int) Hashtbl.t;
@@ -189,7 +189,7 @@ let load_index (path : string) : archive =
           iifs := ((p.P.name, p.P.version), condset_of p.P.install_if) :: !iifs))
     pkgs;
   (* keyed only once every set has offered its designation, so the key a
-     row is filed under is the one [attachDesignation] will ask about *)
+     rule is filed under is the one [attachDesignation] will ask about *)
   List.iter
     (fun (z, conds) ->
       match FirstDesignation.designation conds with
@@ -207,7 +207,7 @@ let versions_of ar n =
    selected automatically for installation.  But specifying
    provider-priority enables this automatic selection".  So a bare
    provides without k: is not a low-ranked candidate, it is not a
-   candidate: its row never enters the instance, which is an
+   candidate: its provides entry never enters the instance, which is an
    availability cut on the alias rather than on its owner -- the owner
    stays installable when the world names it directly. *)
 let auto_selectable ar (owner : string * string) (pv : string option) =
@@ -220,11 +220,11 @@ let providers_of ar n =
 
 (* ---- sub-instances -----------------------------------------------------
 
-   repoPreimage I ns keeps the repository rows at a name in ns together
-   with the packages providing one of them; provPreimage I ns keeps the
-   provide rows landing on a name in ns.  Both are built from the indexes
-   rather than by filtering a whole-archive instance, which is the only
-   reason a per-lookup sub-instance is cheap. *)
+   repoPreimage I ns keeps the repository's packages at a name in ns
+   together with the packages providing one of them; provPreimage I ns
+   keeps the provides entries landing on a name in ns.  Both are built
+   from the indexes rather than by filtering a whole-archive instance,
+   which is the only reason a per-lookup sub-instance is cheap. *)
 
 let empty_inst =
   {
@@ -257,12 +257,14 @@ let name_inst ar (n : string) : Alp.coq_Inst =
   let repo, prov = preimages_at ar [ n ] in
   { empty_inst with Alp.inst_repo = repo; inst_prov = prov }
 
-(* Lookup.installIfFibre: of the rows designating a name this package
+(* Lookup.installIfFibre: of the rules designating a name this package
    bears or provides, the ones whose designated condition it actually
-   satisfies.  attachAt reads the package itself and the provide rows it
-   heads and nothing else, so deciding it against an instance carrying
-   just those rows is the whole archive's answer (attachAt_subInst). *)
-let rows_at ar ((n, v) : string * string) (own : Alp.Prov.t) : iif_rule list =
+   satisfies.  attachAt reads the package itself and the provides entries
+   it heads and nothing else, so deciding it against an instance carrying
+   just those entries is the whole archive's answer
+   (attachAt_subInst). *)
+let install_if_at ar ((n, v) : string * string) (own : Alp.Prov.t) :
+    iif_rule list =
   let inst = { empty_inst with Alp.inst_prov = own } in
   let at m =
     match Hashtbl.find_opt ar.iif_by_cond m with Some l -> l | None -> []
@@ -274,8 +276,9 @@ let rows_at ar ((n, v) : string * string) (own : Alp.Prov.t) : iif_rule list =
   in
   List.filter (fun r -> Red.attachAt inst (n, v) r.t_designation) cands
 
-(* Lookup.pkgSubInst: the package's own dependency, provide and install-if
-   rows, and the repository at the names those dependencies mention --
+(* Lookup.pkgSubInst: the package's own dependencies, provides entries
+   and install-if rules, and the repository at the names those
+   dependencies mention --
    together with, per install-if rule the package carries, the rule's
    declaring name and the names of the conditions it did not designate *)
 let pkg_inst ar ((n, v) : string * string) : Alp.coq_Inst =
@@ -291,7 +294,7 @@ let pkg_inst ar ((n, v) : string * string) : Alp.coq_Inst =
                else None)
              m.P.provides)
       in
-      let rows = rows_at ar (n, v) own in
+      let rules = install_if_at ar (n, v) own in
       let ns =
         List.fold_left
           (fun acc r ->
@@ -300,7 +303,7 @@ let pkg_inst ar ((n, v) : string * string) : Alp.coq_Inst =
                  (List.map fst (Alp.CondSet.elements (Red.condRest r.t_conds)))
                  acc)
           (List.map (fun (d : P.dep) -> d.P.d_name) m.P.depends)
-          rows
+          rules
       in
       let repo, prov = preimages_at ar ns in
       let deps =
@@ -312,7 +315,7 @@ let pkg_inst ar ((n, v) : string * string) : Alp.coq_Inst =
         inst_deps = deps;
         inst_prov = Alp.Prov.union prov own;
         inst_installIf =
-          Alp.InstallIf.ofList (List.map (fun r -> (r.t_pkg, r.t_conds)) rows);
+          Alp.InstallIf.ofList (List.map (fun r -> (r.t_pkg, r.t_conds)) rules);
       }
 
 (* Lookup.rootSubInst: the world set and the repository at the names it
@@ -441,7 +444,7 @@ let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
    installIfForm lists the negated install_if conditions first and the
    augmented package last, so preferring the earliest alternative is
    apk's rule that an install-if fires only when its conditions already hold
-   -- without it every install_if row in the index is discharged by
+   -- without it every install_if rule in the index is discharged by
    installing its target.  encPos lists the unversioned providers of a
    name first and its own versions last, and apk ranks those by
    provider_priority with a package of the name itself above all of them.
@@ -695,7 +698,7 @@ let touch st ((tn, tv) : T.Pkg.t) =
           pkg_inst st.ar (n, v))
   | ( PFR.Name.Orig (Red.Name.Orig m),
       PFR.Version.Orig (Red.Version.Prov (q0, pv)) ) ->
-      (* Lookup.dependees_lookupProv: an alias row reads no instance *)
+      (* Lookup.dependees_lookupProv: an alias reads no instance *)
       process st
         (Red.Name.Orig m, Red.Version.Prov (q0, pv))
         (fun () -> empty_inst)

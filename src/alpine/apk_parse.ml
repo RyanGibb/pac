@@ -165,7 +165,7 @@ let parse_file (path : string) : pkg list =
          | 'p' -> a.a_provs <- List.rev_append (parse_provs v) a.a_provs
          | 'i' -> a.a_iif <- List.rev_append (parse_deps v) a.a_iif
          | 'k' -> a.a_prio <- int_of_string_opt v
-         (* S I T U L m t c carry no instance rows; an unknown upper-case
+         (* S I T U L m t c carry no instance data; an unknown upper-case
             letter makes the package uninstallable, a lower-case one is
             reserved for forward compatibility and ignored *)
          | 'S' | 'I' | 'T' | 'U' | 'L' | 'm' | 't' | 'c' -> ()

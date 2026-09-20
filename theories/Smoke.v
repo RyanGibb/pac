@@ -221,7 +221,7 @@ Example opam_transD_computes :
     (Op.Reduction.transD opRho opInst) = 2.
 Proof. reflexivity. Qed.
 
-(* The depext row of (2,20) reaches no formula; it is read off the
+(* The depext entry of (2,20) reaches no formula; it is read off the
    resolution instead. *)
 Example opam_depexts_computes :
   Op.ESet.elements

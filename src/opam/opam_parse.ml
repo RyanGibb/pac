@@ -1,4 +1,4 @@
-(* Trusted (TCB) ingestion: opam files to instance rows, applying the
+(* Trusted (TCB) ingestion: opam files to instance declarations, applying the
    documented instance-level desugarings -- mixed brace formulas are
    distributed into (filter, version-constraint) atoms, bare boolean
    variables become =-"true" comparisons, package-local variables are
@@ -33,7 +33,7 @@ type pkg_meta = {
   (* opam 2.1's avoid-version and 2.2's deprecated: "select this version
      only if nothing else works".  Not a constraint -- a flagged version
      stays installable -- so they are recorded here and spent on solver
-     preference, never on the rows. *)
+     preference, never on the declarations. *)
   avoid_version : bool;
   deprecated : bool;
 }
@@ -207,7 +207,7 @@ and merge ~owner ~selfv mk a b =
   | None, None -> None
 
 (* conflicts are a disjunction of atoms; each DNF branch of each atom's
-   braces becomes one prohibition row *)
+   braces becomes one prohibition *)
 let rec conflict_atoms ~owner ~selfv (v : value) : (string * (filt * vc)) list =
   match v.pelem with
   | String n -> [ (n, (FT, VTop)) ]
@@ -226,7 +226,7 @@ let rec conflict_atoms ~owner ~selfv (v : value) : (string * (filt * vc)) list =
       reject ();
       []
 
-let depext_rows ~owner ~selfv (v : value) : (string * filt) list =
+let depext_entries ~owner ~selfv (v : value) : (string * filt) list =
   let entry (v : value) =
     match v.pelem with
     | Option ({ pelem = Group { pelem = pkgs; _ }; _ }, braces)
@@ -298,7 +298,7 @@ let flag_names (v : value) : string list =
   | List { pelem = l; _ } | Group { pelem = l; _ } -> List.filter_map one l
   | _ -> ( match one v with Some f -> [ f ] | None -> [])
 
-let pindep_rows (v : value) : ((string * string) * string) list =
+let pindep_entries (v : value) : ((string * string) * string) list =
   let entry (v : value) =
     match v.pelem with
     | List { pelem = [ { pelem = String nv; _ }; { pelem = String u; _ } ]; _ }
@@ -367,9 +367,9 @@ let parse_file ~name ~version path : pkg_meta =
                           FF l));
             }
       | Variable ({ pelem = "depexts"; _ }, v) ->
-          meta := { !meta with depexts = depext_rows ~owner ~selfv v }
+          meta := { !meta with depexts = depext_entries ~owner ~selfv v }
       | Variable ({ pelem = "pin-depends"; _ }, v) ->
-          meta := { !meta with pindeps = pindep_rows v }
+          meta := { !meta with pindeps = pindep_entries v }
       | Variable ({ pelem = "flags"; _ }, v) ->
           let fl = flag_names v in
           meta :=

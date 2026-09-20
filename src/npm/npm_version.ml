@@ -59,7 +59,7 @@ let parse (s : string) : t =
   }
 
 (* the comparator is called a few million times per solve -- once per
-   candidate per gate row -- so parses are shared *)
+   candidate per gate -- so parses are shared *)
 let memo : (string, t) Hashtbl.t = Hashtbl.create 4096
 
 let parse_memo (s : string) : t =

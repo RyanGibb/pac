@@ -74,15 +74,16 @@ let rho (x : string) : string option =
 type archive = {
   cache : string;
   offline : bool;
-  (* false under --omit=optional: an optional row is then dropped
+  (* false under --omit=optional: an optional dependency is then dropped
      outright rather than only when the registry cannot satisfy it *)
   optional : bool;
   pkgs : (string, P.ver list) Hashtbl.t;
   latest : (string, string) Hashtbl.t;
   entry : (string * string, P.ver) Hashtbl.t;
-  (* peer rows indexed by the directory they name, for peerRowsNamed *)
+  (* peer dependencies indexed by the directory they name, for
+     peerDependenciesNamed *)
   peer_by_name : (string, (string * string) * P.peer) Hashtbl.t;
-  (* dependency rows indexed by the key they introduce, for the granular
+  (* dependencies indexed by the key they introduce, for the granular
      version lookup's key test *)
   dep_by_key : (string * string, (string * string) * P.dep) Hashtbl.t;
   mutable n_names : int;
@@ -188,9 +189,10 @@ let meta ar p : P.ver option = Hashtbl.find_opt ar.entry p
 (* There is no cone pass: the transitive closure over every version of
    every dependency is most of the registry, so a packument is fetched
    only when a sub-instance actually reads that name.  That is sound
-   because a name only ever reaches one through a row of a package already
-   loaded -- an exit edge names the key its own intermediate carries, and
-   a peer edge names a directory its own declarer asked for. *)
+   because a name only ever reaches one through a declaration of a
+   package already loaded -- an exit edge names the key its own
+   intermediate carries, and a peer edge names a directory its own
+   declarer asked for. *)
 
 (* ---- parse-AST -> extracted terms ---- *)
 
@@ -217,7 +219,7 @@ let rec xgate : P.gate -> Np.coq_Gate = function
   | P.GOr (a, b) -> Np.GOr (xgate a, xgate b)
   | P.GNot a -> Np.GNot (xgate a)
 
-let xdep (d : P.dep) : Np.coq_DepRow =
+let xdep (d : P.dep) : Np.coq_Dependency =
   {
     Np.d_dir = d.P.d_dir;
     Np.d_target = d.P.d_target;
@@ -225,7 +227,7 @@ let xdep (d : P.dep) : Np.coq_DepRow =
     Np.d_dev = d.P.d_dev;
   }
 
-let xpeer (r : P.peer) : Np.coq_PeerRow =
+let xpeer (r : P.peer) : Np.coq_PeerDependency =
   {
     Np.p_name = r.P.p_name;
     Np.p_range = xrange r.P.p_range;
@@ -238,9 +240,9 @@ type state = {
   ar : archive;
   root : string * string;
   ovr : (string * Np.coq_Range) list;
-  rows : (string * string, Np.coq_DepRow list) Hashtbl.t;
-  prows : (string * string, Np.coq_PeerRow list) Hashtbl.t;
-  grows : (string * string, Np.coq_Gate list) Hashtbl.t;
+  dep_tbl : (string * string, Np.coq_Dependency list) Hashtbl.t;
+  peer_tbl : (string * string, Np.coq_PeerDependency list) Hashtbl.t;
+  gate_tbl : (string * string, Np.coq_Gate list) Hashtbl.t;
   repo_at : (string, Np.RepoSet.t) Hashtbl.t;
   plat_at : (string, ((string * string) * Np.coq_Gate) list) Hashtbl.t;
   (* the sets a sub-instance hands the calculus are sorted lists, so
@@ -250,7 +252,7 @@ type state = {
   repo_of : (string list, Np.RepoSet.t) Hashtbl.t;
   plat_of : (string list, ((string * string) * Np.coq_Gate) list) Hashtbl.t;
   vcache : (Np.Nm.name, Np.Vs.version list) Hashtbl.t;
-  (* the optional-row verdict, keyed by what decides it *)
+  (* the optional-dependency verdict, keyed by what decides it *)
   opt_keep : (string * string, bool) Hashtbl.t;
   mutable n_lookups : int;
 }
@@ -265,9 +267,9 @@ let mk_state ar root =
     ar;
     root;
     ovr;
-    rows = Hashtbl.create 16384;
-    prows = Hashtbl.create 16384;
-    grows = Hashtbl.create 16384;
+    dep_tbl = Hashtbl.create 16384;
+    peer_tbl = Hashtbl.create 16384;
+    gate_tbl = Hashtbl.create 16384;
     repo_at = Hashtbl.create 4096;
     plat_at = Hashtbl.create 4096;
     repo_of = Hashtbl.create 4096;
@@ -277,8 +279,8 @@ let mk_state ar root =
     n_lookups = 0;
   }
 
-let peer_rows st p =
-  match Hashtbl.find_opt st.prows p with
+let peer_dependencies st p =
+  match Hashtbl.find_opt st.peer_tbl p with
   | Some l -> l
   | None ->
       let l =
@@ -286,11 +288,11 @@ let peer_rows st p =
         | None -> []
         | Some v -> List.map xpeer v.P.v_peers
       in
-      Hashtbl.replace st.prows p l;
+      Hashtbl.replace st.peer_tbl p l;
       l
 
-let gate_rows st p =
-  match Hashtbl.find_opt st.grows p with
+let gates st p =
+  match Hashtbl.find_opt st.gate_tbl p with
   | Some l -> l
   | None ->
       let l =
@@ -298,7 +300,7 @@ let gate_rows st p =
         | None -> []
         | Some v -> List.map xgate v.P.v_gates
       in
-      Hashtbl.replace st.grows p l;
+      Hashtbl.replace st.gate_tbl p l;
       l
 
 (* repoPreimage I ns and platPreimage I ns at one name *)
@@ -320,7 +322,7 @@ let plat_at st (n : string) =
         List.concat_map
           (fun v ->
             let p = (n, v) in
-            List.map (fun g -> (p, g)) (gate_rows st p))
+            List.map (fun g -> (p, g)) (gates st p))
           (versions_of st.ar n)
       in
       Hashtbl.replace st.plat_at n l;
@@ -356,9 +358,10 @@ let mk_inst st ~repo ~plat ~deps ~peers : Np.coq_Inst =
 
 (* ---- optionalDependencies ----------------------------------------------
 
-   An optional row is an ordinary dependency that npm abandons in exactly
-   one situation: the target cannot be resolved.  #pruneFailedOptional
-   then makes the whole optionalSet inert, and nothing else drops the row
+   An optional entry is an ordinary dependency that npm abandons in
+   exactly one situation: the target cannot be resolved.
+   #pruneFailedOptional then makes the whole optionalSet inert, and
+   nothing else drops the dependency
    -- a peer conflict over an optional dependency is an ordinary
    ERESOLVE.  So the test is whether any version of the target is
    available to satisfy the range, and it lives here rather than in the
@@ -369,23 +372,23 @@ let mk_inst st ~repo ~plat ~deps ~peers : Np.coq_Inst =
    repository outright, so for resolution it does not exist.  npm reaches
    the same outcome by a different route -- ENOTARGET at fetch for a
    range nothing matches, EBADPLATFORM at reify for a platform mismatch,
-   both pruned because the row is optional -- and the outcome is what is
+   both pruned because the dependency is optional -- and the outcome is what is
    modelled.  Testing published versions instead would make the commonest
    optional dependency in the ecosystem, a darwin-only binary such as
    fsevents, a false unsatisfiable on every other platform.
 
    The instance is the one effRepo reads and no more: it takes inst_repo
-   and the gate rows in inst_plat, so this is granSubInst's narrowing to a
-   single name -- repoAt and platAt at the target -- with the row and
-   peer fields empty, since nothing here consults them.  Both halves are
+   and the gates in inst_plat, so this is granSubInst's narrowing to a
+   single name -- repoAt and platAt at the target -- with the dependency
+   and peer fields empty, since nothing here consults them.  Both halves are
    already memoized per name, so the check reuses whatever the
    sub-instances built.
 
-   It is applied where a row is read rather than where a packument is
+   It is applied where a dependency is read rather than where a packument is
    loaded, because deciding at load time would have to resolve every
    optional target of every version eagerly -- the cone pass the driver
    deliberately does not do, and it would not even terminate on a cycle.
-   Read lazily it costs nothing: the target of a row that survives is a
+   Read lazily it costs nothing: the target of a dependency that survives is a
    slot target the sub-instance was going to load anyway.
 
    Evaluation is the calculus's throughout, via the extracted effRepo and
@@ -417,8 +420,8 @@ let dep_keep st (d : P.dep) : bool =
          Hashtbl.replace st.opt_keep key b;
          b
 
-let dep_rows st p =
-  match Hashtbl.find_opt st.rows p with
+let dependencies st p =
+  match Hashtbl.find_opt st.dep_tbl p with
   | Some l -> l
   | None ->
       let l =
@@ -426,50 +429,58 @@ let dep_rows st p =
         | None -> []
         | Some v -> List.map xdep (List.filter (dep_keep st) v.P.v_deps)
       in
-      Hashtbl.replace st.rows p l;
+      Hashtbl.replace st.dep_tbl p l;
       l
 
-(* the rows introducing key k, for granSubInst; the same filter as dep_rows, so
-   the two views of a package's rows cannot disagree about keysOf *)
-let dep_rows_by_key st (k : string * string) =
+(* the dependencies introducing key k, for granSubInst; the same filter
+   as dependencies, so the two views of a package's dependencies cannot
+   disagree about keysOf *)
+let dependencies_by_key st (k : string * string) =
   List.filter_map
     (fun (p, d) -> if dep_keep st d then Some (p, xdep d) else None)
     (Hashtbl.find_all st.ar.dep_by_key k)
 
-(* depRows I p: the rows depActive keeps, i.e. dev rows only at the root *)
-let active_rows st p =
+(* dependenciesOf I p: what depActive keeps, i.e. dev dependencies only
+   at the root *)
+let active_dependencies st p =
   List.filter
-    (fun (d : Np.coq_DepRow) -> (not d.Np.d_dev) || p = st.root)
-    (dep_rows st p)
+    (fun (d : Np.coq_Dependency) -> (not d.Np.d_dev) || p = st.root)
+    (dependencies st p)
 
-let own_dep_rows st p = List.map (fun d -> (p, d)) (dep_rows st p)
-let own_peer_rows st p = List.map (fun r -> (p, r)) (peer_rows st p)
+let own_dependencies st p = List.map (fun d -> (p, d)) (dependencies st p)
+let own_peer_dependencies st p =
+  List.map (fun r -> (p, r)) (peer_dependencies st p)
 
 (* slotTargets I p *)
 let slot_targets st p =
   List.sort_uniq String.compare
-    (List.map (fun (d : Np.coq_DepRow) -> d.Np.d_target) (active_rows st p))
+    (List.map
+       (fun (d : Np.coq_Dependency) -> d.Np.d_target)
+       (active_dependencies st p))
 
 (* peerNamesAt I q *)
 let peer_names_at st q =
   List.sort_uniq String.compare
-    (List.map (fun (r : Np.coq_PeerRow) -> r.Np.p_name) (peer_rows st q))
+    (List.map
+       (fun (r : Np.coq_PeerDependency) -> r.Np.p_name)
+       (peer_dependencies st q))
 
-(* peerRowsNamed I n *)
-let peer_rows_named st (n : string) =
+(* peerDependenciesNamed I n *)
+let peer_dependencies_named st (n : string) =
   List.map (fun (p, r) -> (p, xpeer r)) (Hashtbl.find_all st.ar.peer_by_name n)
 
 (* ---- the four sub-instances, one per lookup theorem ---- *)
 
 (* versions_lookupGran: granSubInst I k cuts the repository to the key's
-   registry name, and platPreimage is keyed by package, so the gate rows
+   registry name, and platPreimage is keyed by package, so the gates
    that come with it are exactly those of the packages that survive.  Two
    narrowings below are the driver's own.  keysOf is a union of one key
-   per row plus the root's, and the granular lookup asks it only whether
-   it contains k, so rows that cannot introduce k are dropped.  The lookup
+   per dependency plus the root's, and the granular lookup asks it only
+   whether it contains k, so dependencies that cannot introduce k are
+   dropped.  The lookup
    asks the repository only whether the looked-up version is available, so
    it is cut to that one package -- and platPreimage then selects that
-   package's gate rows by itself. *)
+   package's gates by itself. *)
 let gran_sub_inst st (k : string * string) (w : string) =
   let p = (snd k, w) in
   let repo =
@@ -477,39 +488,42 @@ let gran_sub_inst st (k : string * string) (w : string) =
       Np.RepoSet.add p Np.RepoSet.empty
     else Np.RepoSet.empty
   in
-  let plat = List.map (fun g -> (p, g)) (gate_rows st p) in
-  let deps = dep_rows_by_key st k in
-  let peers = if fst k = snd k then peer_rows_named st (fst k) else [] in
+  let plat = List.map (fun g -> (p, g)) (gates st p) in
+  let deps = dependencies_by_key st k in
+  let peers =
+    if fst k = snd k then peer_dependencies_named st (fst k) else []
+  in
   mk_inst st ~repo ~plat ~deps ~peers
 
-(* versions_lookupInt: intSubInst I p m is p's own dependency rows, the
-   peer rows naming the key's directory, and the repository and gates at
+(* versions_lookupInt: intSubInst I p m is p's own dependencies, the peer
+   dependencies naming the key's directory, and the repository and gates at
    the key's registry name together with p's slot targets. *)
 let int_sub_inst st (p : string * string) (m : string * string) =
   let ns = snd m :: slot_targets st p in
   mk_inst st ~repo:(repo_of st ns) ~plat:(plat_of st ns)
-    ~deps:(own_dep_rows st p)
-    ~peers:(peer_rows_named st (fst m))
+    ~deps:(own_dependencies st p)
+    ~peers:(peer_dependencies_named st (fst m))
 
-(* dependees_lookupGran: pkgSubInst I p is p's own dependency rows, its own
-   peer rows, and the repository and gates at their targets.  The peer
-   rows are there for the root, whose granular node carries the edges
+(* dependees_lookupGran: pkgSubInst I p is p's own dependencies, its own
+   peer dependencies, and the repository and gates at their targets.  The
+   peer dependencies are there for the root, whose granular node carries
+   the edges
    that install its own peers; for any other package rootPeerEdges tests
    the whole package and emits nothing, so they are inert. *)
 let pkg_sub_inst st (p : string * string) =
   let ns = slot_targets st p @ peer_names_at st p in
   mk_inst st ~repo:(repo_of st ns) ~plat:(plat_of st ns)
-    ~deps:(own_dep_rows st p) ~peers:(own_peer_rows st p)
+    ~deps:(own_dependencies st p) ~peers:(own_peer_dependencies st p)
 
-(* dependees_lookupInt: peerSubInst I p m u is p's own dependency rows, the
-   peer rows of the dependee that was selected, and the repository and
+(* dependees_lookupInt: peerSubInst I p m u is p's own dependencies, the
+   peer dependencies of the dependee that was selected, and the repository and
    gates at p's slot targets and at the directories those peers name.
    This is the second hop npm's peer auto-installation costs. *)
 let peer_sub_inst st (p : string * string) (m : string * string) (u : string) =
   let q = (snd m, u) in
   let ns = slot_targets st p @ peer_names_at st q in
   mk_inst st ~repo:(repo_of st ns) ~plat:(plat_of st ns)
-    ~deps:(own_dep_rows st p) ~peers:(own_peer_rows st q)
+    ~deps:(own_dependencies st p) ~peers:(own_peer_dependencies st q)
 
 (* ---- the lookups, answered by the extracted calculus ---- *)
 
@@ -588,12 +602,14 @@ let tagged st (n : string) (cands : PVersion.t list) : PVersion.t option =
       let l = Np.Vs.Orig l in
       List.find_opt (fun c -> PVersion.compare c l = 0) cands
 
-(* A directory no dependency row of p names: only a peer asks for it, so
+(* A directory no dependency of p names: only a peer asks for it, so
    childCands offers every published version of the target and nothing
    narrows the slot but the peer ranges. *)
 let peer_only st p (a : string) =
   not
-    (List.exists (fun (d : Np.coq_DepRow) -> d.Np.d_dir = a) (active_rows st p))
+    (List.exists
+       (fun (d : Np.coq_Dependency) -> d.Np.d_dir = a)
+       (active_dependencies st p))
 
 (* Is the candidate's own granular node already carried?  It holds
    exactly one version, so any assignment to it is that version. *)

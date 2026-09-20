@@ -15,7 +15,7 @@ type provide = { pname : string; pversion : string option }
    than reading the whole file did; whoever needs a stanza's clauses calls
    parse_depends_fields on them and keeps only those.  Provides and Conflicts
    are parsed here because their reverse indices are preimages that no single
-   stanza's rows can reach (see deb_solve.ml). *)
+   stanza's clauses can reach (see deb_solve.ml). *)
 type stanza = {
   package : string;
   version : string;

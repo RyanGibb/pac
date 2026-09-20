@@ -23,7 +23,8 @@ does, so both ends of (>= "2" < "4") bind and dep.9 is out of range:
   loaded: 2 names, 3 package versions
 
 Depexts constrain nothing: they are read off the finished resolution, so
-what is reported is the union over the selected packages of the rows whose
+what is reported is the union over the selected packages of the depext
+entries whose
 filter holds under the environment.  sys.1 asks for libfoo-dev and
 pkg-config on a debian family and libbar-dev on alpine; helper.1 asks
 unconditionally for pkg-config, which is named once:

@@ -101,38 +101,38 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
     | GNot a => negb (gateEval rho a)
     end.
 
-  Record DepRow : Type := MkDep
+  Record Dependency : Type := MkDep
     { d_dir : N.t
     ; d_target : N.t
     ; d_range : Range
     ; d_dev : bool }.
 
-  Record PeerRow : Type := MkPeer
+  Record PeerDependency : Type := MkPeer
     { p_name : N.t
     ; p_range : Range
     ; p_optional : bool }.
 
-  (* Row-valued fields are lists: they feed only the spec and the
+  (* The relation fields are lists: they feed only the spec and the
      translation, and sets would demand comparators for Range and Gate
      used nowhere.  optionalDependencies are absent rather than inert --
      use-if-present is a post-resolution decision, not a constraint --
      and bundledDependencies are placement. *)
   Record Inst : Type := MkInst
     { inst_repo : RepoSet.t
-    ; inst_dep : list (RPkg.t * DepRow)
-    ; inst_peer : list (RPkg.t * PeerRow)
+    ; inst_dep : list (RPkg.t * Dependency)
+    ; inst_peer : list (RPkg.t * PeerDependency)
     ; inst_plat : list (RPkg.t * Gate)
     ; inst_ovr : list (N.t * Range)
     ; inst_root : RPkg.t }.
 
-  Definition ownRows {A : Type} (l : list (RPkg.t * A)) (p : RPkg.t)
+  Definition ownedBy {A : Type} (l : list (RPkg.t * A)) (p : RPkg.t)
     : list A :=
     fold_right
       (fun q acc => if RPkgEqb.eqb (fst q) p then snd q :: acc else acc)
       nil l.
 
-  Lemma in_ownRows : forall (A : Type) (l : list (RPkg.t * A)) p a,
-      In a (ownRows l p) <-> In (p, a) l.
+  Lemma in_ownedBy : forall (A : Type) (l : list (RPkg.t * A)) p a,
+      In a (ownedBy l p) <-> In (p, a) l.
   Proof.
     intros A l p a; induction l as [| [q b] l IH]; simpl.
     - split; intros [].
@@ -148,9 +148,9 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         rewrite RPkgEqb.eqb_refl in Hq; discriminate.
   Qed.
 
-  Lemma ownRows_filter : forall (A : Type) (l : list (RPkg.t * A)) f p,
+  Lemma ownedBy_filter : forall (A : Type) (l : list (RPkg.t * A)) f p,
       (forall a, In (p, a) l -> f (p, a) = true) ->
-      ownRows (List.filter f l) p = ownRows l p.
+      ownedBy (List.filter f l) p = ownedBy l p.
   Proof.
     intros A l f p; induction l as [| [q b] l IH]; simpl; [reflexivity |].
     intro H.
@@ -215,18 +215,18 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
     forall g, In (p, g) (inst_plat I) -> gateEval rho g = true.
 
   Definition platOKb (rho : Valuation) (I : Inst) (p : RPkg.t) : bool :=
-    forallb (gateEval rho) (ownRows (inst_plat I) p).
+    forallb (gateEval rho) (ownedBy (inst_plat I) p).
 
   Lemma platOKb_iff : forall rho I p,
       platOKb rho I p = true <-> platOK rho I p.
   Proof.
     intros rho I p; unfold platOKb, platOK; rewrite forallb_forall.
-    split; intros H g Hg; apply H, in_ownRows; exact Hg.
+    split; intros H g Hg; apply H, in_ownedBy; exact Hg.
   Qed.
 
   (* The packages some gate of theirs rejects, collected in one pass over
-     the gate rows.  Asking platOKb once per candidate instead would scan
-     every row for every candidate, which is quadratic wherever a package
+     the gates.  Asking platOKb once per candidate instead would scan
+     every gate for every candidate, which is quadratic wherever a package
      gates all of its own versions -- the common case, since a package
      that declares engines declares them throughout its history. *)
   Definition badPkgs (rho : Valuation) (I : Inst) : RepoSet.t :=
@@ -286,7 +286,8 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
 
   (* A flat override replaces the declared range wherever the name is
      depended on.  Path-scoped overrides are indexed by the parent chain,
-     which is an output of resolution, so they cannot be a static row. *)
+     which is an output of resolution, so they cannot be a static
+     component of an instance. *)
   Definition override (I : Inst) (n : N.t) (rg : Range) : Range :=
     match lookupOvr (inst_ovr I) n with
     | Some rg' => rg'
@@ -294,26 +295,26 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
     end.
 
   (* devDependencies participate only from the root package. *)
-  Definition depActive (I : Inst) (p : RPkg.t) (d : DepRow) : bool :=
+  Definition depActive (I : Inst) (p : RPkg.t) (d : Dependency) : bool :=
     orb (negb (d_dev d)) (RPkgEqb.eqb p (inst_root I)).
 
-  Definition depRows (I : Inst) (p : RPkg.t) : list DepRow :=
-    List.filter (depActive I p) (ownRows (inst_dep I) p).
+  Definition dependenciesOf (I : Inst) (p : RPkg.t) : list Dependency :=
+    List.filter (depActive I p) (ownedBy (inst_dep I) p).
 
-  Fixpoint findDepL (l : list DepRow) (a : N.t) : option DepRow :=
+  Fixpoint findDepL (l : list Dependency) (a : N.t) : option Dependency :=
     match l with
     | nil => None
     | d :: l' => if NEqb.eqb (d_dir d) a then Some d else findDepL l' a
     end.
 
   (* A slot is a directory a package declares a dependency for; duplicate
-     manifest keys cannot occur, so the first row wins and the lookup is
+     manifest keys cannot occur, so the first dependency wins and the lookup is
      a total function of the key. *)
-  Definition slotOf (I : Inst) (p : RPkg.t) (a : N.t) : option DepRow :=
-    findDepL (depRows I p) a.
+  Definition slotOf (I : Inst) (p : RPkg.t) (a : N.t) : option Dependency :=
+    findDepL (dependenciesOf I p) a.
 
   Definition dirs (I : Inst) (p : RPkg.t) : NSet.t :=
-    namesOfL d_dir (depRows I p).
+    namesOfL d_dir (dependenciesOf I p).
 
   Lemma findDepL_some : forall l a d,
       findDepL l a = Some d -> In d l /\ d_dir d = a.
@@ -340,7 +341,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
   Proof.
     intros I p a Ha; unfold dirs in Ha; apply mem_namesOfL in Ha.
     destruct Ha as [d [Hd Hal]]; unfold slotOf.
-    destruct (findDepL (depRows I p) a) as [e |] eqn:He;
+    destruct (findDepL (dependenciesOf I p) a) as [e |] eqn:He;
       [exists e; reflexivity |].
     exfalso; exact (findDepL_none _ _ He d Hd Hal).
   Qed.
@@ -384,31 +385,31 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
     apply mem_realVersions; exact Hv.
   Qed.
 
-  Definition peerRowsAt (I : Inst) (p : RPkg.t) : list PeerRow :=
-    ownRows (inst_peer I) p.
+  Definition peerDependenciesAt (I : Inst) (p : RPkg.t) : list PeerDependency :=
+    ownedBy (inst_peer I) p.
 
   (* A peer names a directory, so it lands on whatever key the depender
      already uses for that directory, aliased or not. *)
-  Definition peerKeyAt (I : Inst) (p : RPkg.t) (r : PeerRow) : NKey.t :=
+  Definition peerKeyAt (I : Inst) (p : RPkg.t) (r : PeerDependency) : NKey.t :=
     slotKey I p (p_name r).
 
   (* An override names a registry package, so it replaces a peer's declared
      range exactly as it replaces a dependency's -- npm lets it win over
      the peer range rather than intersecting the two. *)
   Definition peerCandsAt (rho : Valuation) (I : Inst) (p : RPkg.t)
-      (r : PeerRow) : VSet.t :=
+      (r : PeerDependency) : VSet.t :=
     rangeEval (override I (snd (peerKeyAt I p r)) (p_range r))
       (realVersions (effRepo rho I) (snd (peerKeyAt I p r))).
 
   (* A mandatory peer is installed beside its declarer whatever the
      depender declares; an optional one keeps npm's legacy rule and only
      constrains a directory the depender fills itself. *)
-  Definition peerActive (I : Inst) (p : RPkg.t) (r : PeerRow) : bool :=
+  Definition peerActive (I : Inst) (p : RPkg.t) (r : PeerDependency) : bool :=
     orb (negb (p_optional r)) (NSet.mem (p_name r) (dirs I p)).
 
   Definition activePeers (I : Inst) (p : RPkg.t) (q : RPkg.t)
-    : list PeerRow :=
-    List.filter (peerActive I p) (peerRowsAt I q).
+    : list PeerDependency :=
+    List.filter (peerActive I p) (peerDependenciesAt I q).
 
   (* Every directory a peer could ask for.  Taking the real set from the
      whole instance rather than from a package's own candidates is what
@@ -454,7 +455,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
   Qed.
 
   (* The directory keys the instance can introduce: the root's own, every
-     dependency row's, and every peer row's. *)
+     dependency's, and every peer dependency's. *)
   Definition keysOf (I : Inst) : KeySet.t :=
     KeySet.add (rootKey I)
       (KeySet.union
@@ -638,15 +639,15 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       intros rho I q h; unfold rootPeerEdges.
       destruct (PkgEqb.eqb q (rootPkg I)) eqn:Hq.
       - apply PkgEqb.eqb_true_iff in Hq.
-        rewrite mem_depsOfL; unfold activePeers, peerRowsAt; split.
+        rewrite mem_depsOfL; unfold activePeers, peerDependenciesAt; split.
         + intros [r [Hr He]]; apply List.filter_In in Hr.
           destruct Hr as [Hr Hact]; split; [exact Hq |].
-          exists r; split; [apply in_ownRows; exact Hr |].
+          exists r; split; [apply in_ownedBy; exact Hr |].
           split; [exact Hact | symmetry; exact He].
         + intros [_ [r [Hr [Hact He]]]]; exists r; split;
             [| symmetry; exact He].
           apply List.filter_In; split;
-            [apply in_ownRows; exact Hr | exact Hact].
+            [apply in_ownedBy; exact Hr | exact Hact].
       - split; [intro H; destruct (SOhh.empty_in _ H) |].
         intros [He _]; subst q; rewrite PkgEqb.eqb_refl in Hq; discriminate.
     Qed.
@@ -659,14 +660,14 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
                Conc.Reduction.embedVS (peerCandsAt rho I (base q) r)).
     Proof.
       intros rho I q m u h; unfold peerEdgesAt; rewrite mem_depsOfL.
-      unfold activePeers, peerRowsAt; split.
+      unfold activePeers, peerDependenciesAt; split.
       - intros [r [Hr He]]; apply List.filter_In in Hr.
         destruct Hr as [Hr Hact]; exists r.
-        split; [apply in_ownRows; exact Hr | split; [exact Hact |]].
+        split; [apply in_ownedBy; exact Hr | split; [exact Hact |]].
         symmetry; exact He.
       - intros [r [Hr [Hact He]]]; exists r; split; [| symmetry; exact He].
         apply List.filter_In; split;
-          [apply in_ownRows; exact Hr | exact Hact].
+          [apply in_ownedBy; exact Hr | exact Hact].
     Qed.
 
     (* -- the global translation: an aggregation of the lookups -- *)
@@ -968,8 +969,8 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     (* The two root-peer clauses read as one obligation: whichever flavour
-       a root peer row has, an active one names a directory the root fills
-       at a version its range admits. *)
+       a root peer dependency has, an active one names a directory the
+       root fills at a version its range admits. *)
     Lemma root_peer_installs : forall rho I S pi r,
         IsResolution rho I S pi ->
         In (inst_root I, r) (inst_peer I) ->
@@ -1259,22 +1260,23 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       Definition repoPreimage (I : Inst) (ns : NSet.t) : RepoSet.t :=
         RepoSet.filter (fun p => NSet.mem (fst p) ns) (inst_repo I).
 
-      (* platOKb reads the gate rows only through the fibre over the
+      (* platOKb reads the gates only through the fibre over the
          package it is asked about, so the cut is by package rather than
-         by name: a package the repository cut keeps takes its own rows
+         by name: a package the repository cut keeps takes its own gates
          with it, and a package the cut drops takes none.  Cutting by name
-         would keep the rows of every version of that name, which a
+         would keep the gates of every version of that name, which a
          frontend answering a lookup about one version cannot use. *)
       Definition platPreimage (I : Inst) (R : RepoSet.t)
         : list (RPkg.t * Gate) :=
         List.filter (fun q => RepoSet.mem (fst q) R) (inst_plat I).
 
       (* Any instance whose repository agrees with I at the names in ns,
-         whose gate rows agree with I on each package that repository
-         keeps, and whose rows are the looked-up package's own, answers that
-         lookup alike. *)
+         whose gates agree with I on each package that repository
+         keeps, and whose dependencies and peer dependencies are the
+         looked-up package's own, answers that lookup alike. *)
       Definition subInst (I : Inst) (ns : NSet.t)
-          (deps : list (RPkg.t * DepRow)) (prs : list (RPkg.t * PeerRow))
+          (deps : list (RPkg.t * Dependency))
+          (prs : list (RPkg.t * PeerDependency))
         : Inst :=
         {| inst_repo := repoPreimage I ns
          ; inst_dep := deps
@@ -1283,23 +1285,23 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
          ; inst_ovr := inst_ovr I
          ; inst_root := inst_root I |}.
 
-      Definition ownDepRows (I : Inst) (p : RPkg.t)
-        : list (RPkg.t * DepRow) :=
+      Definition ownDependencies (I : Inst) (p : RPkg.t)
+        : list (RPkg.t * Dependency) :=
         List.filter (fun q => RPkgEqb.eqb (fst q) p) (inst_dep I).
 
-      Definition ownPeerRows (I : Inst) (p : RPkg.t)
-        : list (RPkg.t * PeerRow) :=
+      Definition ownPeerDependencies (I : Inst) (p : RPkg.t)
+        : list (RPkg.t * PeerDependency) :=
         List.filter (fun q => RPkgEqb.eqb (fst q) p) (inst_peer I).
 
-      Definition peerRowsNamed (I : Inst) (n : N.t)
-        : list (RPkg.t * PeerRow) :=
+      Definition peerDependenciesNamed (I : Inst) (n : N.t)
+        : list (RPkg.t * PeerDependency) :=
         List.filter (fun q => NEqb.eqb (p_name (snd q)) n) (inst_peer I).
 
       Definition slotTargets (I : Inst) (p : RPkg.t) : NSet.t :=
-        namesOfL d_target (depRows I p).
+        namesOfL d_target (dependenciesOf I p).
 
       Definition peerNamesAt (I : Inst) (q : RPkg.t) : NSet.t :=
-        namesOfL p_name (peerRowsAt I q).
+        namesOfL p_name (peerDependenciesAt I q).
 
       Lemma mem_eq_of_iff : forall (s s' : RepoSet.t) x,
           (RepoSet.In x s <-> RepoSet.In x s') ->
@@ -1326,7 +1328,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       Proof.
         intros rho I ns deps prs p Hp; unfold platOKb.
         cbn [inst_plat subInst]; unfold platPreimage.
-        rewrite ownRows_filter; [reflexivity |].
+        rewrite ownedBy_filter; [reflexivity |].
         intros g _; cbn [fst]; apply RepoSet.mem_spec; exact Hp.
       Qed.
 
@@ -1357,42 +1359,43 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         rewrite !mem_realVersions; apply effRepo_subInst; exact Hn.
       Qed.
 
-      (* -- the rows a lookup reads -- *)
+      (* -- the declarations a lookup reads -- *)
 
-      Lemma depRows_subInst : forall I ns deps prs p,
-          ownRows deps p = ownRows (inst_dep I) p ->
-          depRows (subInst I ns deps prs) p = depRows I p.
+      Lemma dependenciesOf_subInst : forall I ns deps prs p,
+          ownedBy deps p = ownedBy (inst_dep I) p ->
+          dependenciesOf (subInst I ns deps prs) p = dependenciesOf I p.
       Proof.
-        intros I ns deps prs p Ho; unfold depRows, depActive.
+        intros I ns deps prs p Ho; unfold dependenciesOf, depActive.
         cbn [inst_dep inst_root subInst]; rewrite Ho; reflexivity.
       Qed.
 
-      Lemma ownDepRows_id : forall I p,
-          ownRows (ownDepRows I p) p = ownRows (inst_dep I) p.
+      Lemma ownDependencies_id : forall I p,
+          ownedBy (ownDependencies I p) p = ownedBy (inst_dep I) p.
       Proof.
-        intros I p; unfold ownDepRows; apply ownRows_filter.
+        intros I p; unfold ownDependencies; apply ownedBy_filter.
         intros d _; cbn [fst]; apply RPkgEqb.eqb_refl.
       Qed.
 
-      Lemma ownPeerRows_id : forall I p,
-          ownRows (ownPeerRows I p) p = ownRows (inst_peer I) p.
+      Lemma ownPeerDependencies_id : forall I p,
+          ownedBy (ownPeerDependencies I p) p = ownedBy (inst_peer I) p.
       Proof.
-        intros I p; unfold ownPeerRows; apply ownRows_filter.
+        intros I p; unfold ownPeerDependencies; apply ownedBy_filter.
         intros r _; cbn [fst]; apply RPkgEqb.eqb_refl.
       Qed.
 
       Lemma mem_peerDirs_named : forall I ns deps n,
-          NSet.mem n (peerDirs (subInst I ns deps (peerRowsNamed I n))) =
+          NSet.mem n
+            (peerDirs (subInst I ns deps (peerDependenciesNamed I n))) =
           NSet.mem n (peerDirs I).
       Proof.
         intros I ns deps n.
         destruct (NSet.mem n
-                    (peerDirs (subInst I ns deps (peerRowsNamed I n))))
+                    (peerDirs (subInst I ns deps (peerDependenciesNamed I n))))
           eqn:H1; destruct (NSet.mem n (peerDirs I)) eqn:H2;
           try reflexivity.
         - apply NSet.mem_spec in H1; unfold peerDirs in H1.
           cbn [inst_peer subInst] in H1; apply mem_namesOfL in H1.
-          destruct H1 as [q [Hq Hn]]; unfold peerRowsNamed in Hq.
+          destruct H1 as [q [Hq Hn]]; unfold peerDependenciesNamed in Hq.
           apply List.filter_In in Hq; destruct Hq as [Hq _].
           assert (NSet.In n (peerDirs I)) as Hc
             by (unfold peerDirs; apply mem_namesOfL; exists q;
@@ -1401,43 +1404,43 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         - apply NSet.mem_spec in H2; unfold peerDirs in H2.
           apply mem_namesOfL in H2; destruct H2 as [q [Hq Hn]].
           assert (NSet.In n
-                    (peerDirs (subInst I ns deps (peerRowsNamed I n))))
+                    (peerDirs (subInst I ns deps (peerDependenciesNamed I n))))
             as Hc.
           { unfold peerDirs; cbn [inst_peer subInst].
             apply mem_namesOfL; exists q; split; [| exact Hn].
-            unfold peerRowsNamed; apply List.filter_In; split;
+            unfold peerDependenciesNamed; apply List.filter_In; split;
               [exact Hq | apply NEqb.eqb_true_iff; exact Hn]. }
           apply NSet.mem_spec in Hc; congruence.
       Qed.
 
       (* -- agreement of the per-lookup reads under a sub-instance -- *)
 
-      Lemma depRows_agree : forall I ns deps prs p,
-          ownRows deps p = ownRows (inst_dep I) p ->
-          depRows (subInst I ns deps prs) p = depRows I p.
+      Lemma dependenciesOf_agree : forall I ns deps prs p,
+          ownedBy deps p = ownedBy (inst_dep I) p ->
+          dependenciesOf (subInst I ns deps prs) p = dependenciesOf I p.
       Proof.
-        intros I ns deps prs p Hdeps; unfold depRows, depActive.
+        intros I ns deps prs p Hdeps; unfold dependenciesOf, depActive.
         cbn [inst_dep inst_root subInst]; rewrite Hdeps; reflexivity.
       Qed.
 
       Lemma slotOf_agree : forall I ns deps prs p a,
-          ownRows deps p = ownRows (inst_dep I) p ->
+          ownedBy deps p = ownedBy (inst_dep I) p ->
           slotOf (subInst I ns deps prs) p a = slotOf I p a.
       Proof.
         intros I ns deps prs p a Hdeps; unfold slotOf.
-        rewrite (depRows_agree I ns deps prs p Hdeps); reflexivity.
+        rewrite (dependenciesOf_agree I ns deps prs p Hdeps); reflexivity.
       Qed.
 
       Lemma dirs_agree : forall I ns deps prs p,
-          ownRows deps p = ownRows (inst_dep I) p ->
+          ownedBy deps p = ownedBy (inst_dep I) p ->
           dirs (subInst I ns deps prs) p = dirs I p.
       Proof.
         intros I ns deps prs p Hdeps; unfold dirs.
-        rewrite (depRows_agree I ns deps prs p Hdeps); reflexivity.
+        rewrite (dependenciesOf_agree I ns deps prs p Hdeps); reflexivity.
       Qed.
 
       Lemma slotKey_agree : forall I ns deps prs p a,
-          ownRows deps p = ownRows (inst_dep I) p ->
+          ownedBy deps p = ownedBy (inst_dep I) p ->
           slotKey (subInst I ns deps prs) p a = slotKey I p a.
       Proof.
         intros I ns deps prs p a Hdeps; unfold slotKey.
@@ -1445,8 +1448,8 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Lemma slotCands_agree : forall I ns deps prs p,
-          ownRows deps p = ownRows (inst_dep I) p ->
-          (forall d, In d (depRows I p) -> NSet.In (d_target d) ns) ->
+          ownedBy deps p = ownedBy (inst_dep I) p ->
+          (forall d, In d (dependenciesOf I p) -> NSet.In (d_target d) ns) ->
           forall rho a,
             slotCands rho (subInst I ns deps prs) p a =
             slotCands rho I p a.
@@ -1476,7 +1479,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Lemma slotTargets_spec : forall I p d,
-          In d (depRows I p) -> NSet.In (d_target d) (slotTargets I p).
+          In d (dependenciesOf I p) -> NSet.In (d_target d) (slotTargets I p).
       Proof.
         intros I p d Hd; unfold slotTargets; apply mem_namesOfL.
         exists d; split; [exact Hd | reflexivity].
@@ -1484,8 +1487,8 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
 
       Lemma childCands_agree : forall rho I ns deps prs
           (p : RPkg.t) (m : NKey.t),
-          ownRows deps p = ownRows (inst_dep I) p ->
-          (forall d, In d (depRows I p) -> NSet.In (d_target d) ns) ->
+          ownedBy deps p = ownedBy (inst_dep I) p ->
+          (forall d, In d (dependenciesOf I p) -> NSet.In (d_target d) ns) ->
           NSet.In (snd m) ns ->
           NSet.mem (fst m) (peerDirs (subInst I ns deps prs)) =
             NSet.mem (fst m) (peerDirs I) ->
@@ -1528,8 +1531,8 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Definition intSubInst (I : Inst) (p : RPkg.t) (m : NKey.t) : Inst :=
-        subInst I (NSet.add (snd m) (slotTargets I p)) (ownDepRows I p)
-          (peerRowsNamed I (fst m)).
+        subInst I (NSet.add (snd m) (slotTargets I p)) (ownDependencies I p)
+          (peerDependenciesNamed I (fst m)).
 
       Theorem versions_lookupInt : forall rho I k v m,
           versions rho (intSubInst I (snd k, v) m) (Nm.Intermediate k v m) =
@@ -1537,19 +1540,20 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       Proof.
         intros rho I k v m; cbn [versions]; f_equal.
         unfold intSubInst; apply childCands_agree.
-        - apply ownDepRows_id.
+        - apply ownDependencies_id.
         - intros d Hd; apply NSet.add_spec; right;
             apply slotTargets_spec; exact Hd.
         - apply NSet.add_spec; left; reflexivity.
         - apply mem_peerDirs_named.
       Qed.
 
-      (* A package's own peer rows come along because the granular node of
-         the root now carries the root's peer edges; for any other package
-         they are inert, since rootPeerEdges tests the whole package. *)
+      (* A package's own peer dependencies come along because the
+         granular node of the root now carries the root's peer edges; for
+         any other package they are inert, since rootPeerEdges tests the
+         whole package. *)
       Definition pkgSubInst (I : Inst) (p : RPkg.t) : Inst :=
         subInst I (NSet.union (slotTargets I p) (peerNamesAt I p))
-          (ownDepRows I p) (ownPeerRows I p).
+          (ownDependencies I p) (ownPeerDependencies I p).
 
       Theorem dependees_lookupGran : forall rho I k v,
           dependees rho (pkgSubInst I (snd k, v))
@@ -1557,14 +1561,14 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
           dependees rho I (Nm.Granular k v, Vs.Orig v).
       Proof.
         intros rho I k v; rewrite !dependees_gran.
-        pose proof (ownDepRows_id I (snd k, v)) as Hd.
-        assert (Htgt : forall d, In d (depRows I (snd k, v)) ->
+        pose proof (ownDependencies_id I (snd k, v)) as Hd.
+        assert (Htgt : forall d, In d (dependenciesOf I (snd k, v)) ->
                    NSet.In (d_target d)
                      (NSet.union (slotTargets I (snd k, v))
                         (peerNamesAt I (snd k, v)))).
         { intros d Hdr; apply NSet.union_spec; left;
             apply slotTargets_spec; exact Hdr. }
-        assert (Hn : forall r, In r (peerRowsAt I (snd k, v)) ->
+        assert (Hn : forall r, In r (peerDependenciesAt I (snd k, v)) ->
                    NSet.In (snd (slotKey I (snd k, v) (p_name r)))
                      (NSet.union (slotTargets I (snd k, v))
                         (peerNamesAt I (snd k, v)))).
@@ -1584,20 +1588,20 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         - assert (Hrt : rootPkg (subInst I
                             (NSet.union (slotTargets I (snd k, v))
                                (peerNamesAt I (snd k, v)))
-                            (ownDepRows I (snd k, v))
-                            (ownPeerRows I (snd k, v))) = rootPkg I)
+                            (ownDependencies I (snd k, v))
+                            (ownPeerDependencies I (snd k, v))) = rootPkg I)
             by reflexivity.
           unfold rootPeerEdges; rewrite Hrt.
           destruct (PkgEqb.eqb (k, v) (rootPkg I)); [| reflexivity].
           unfold base; cbn [fst snd].
-          assert (Hpr : peerRowsAt (subInst I
+          assert (Hpr : peerDependenciesAt (subInst I
                             (NSet.union (slotTargets I (snd k, v))
                                (peerNamesAt I (snd k, v)))
-                            (ownDepRows I (snd k, v))
-                            (ownPeerRows I (snd k, v))) (snd k, v) =
-                        peerRowsAt I (snd k, v))
-            by (unfold peerRowsAt; cbn [inst_peer subInst];
-                apply ownPeerRows_id).
+                            (ownDependencies I (snd k, v))
+                            (ownPeerDependencies I (snd k, v))) (snd k, v) =
+                        peerDependenciesAt I (snd k, v))
+            by (unfold peerDependenciesAt; cbn [inst_peer subInst];
+                apply ownPeerDependencies_id).
           unfold activePeers, peerActive; rewrite Hpr.
           rewrite (dirs_agree I _ _ _ (snd k, v) Hd).
           unfold depsOfL; f_equal; apply map_ext_in; intros r Hr.
@@ -1610,7 +1614,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       Definition peerSubInst (I : Inst) (p : RPkg.t) (m : NKey.t) (u : V.t)
         : Inst :=
         subInst I (NSet.union (slotTargets I p) (peerNamesAt I (snd m, u)))
-          (ownDepRows I p) (ownPeerRows I (snd m, u)).
+          (ownDependencies I p) (ownPeerDependencies I (snd m, u)).
 
       Theorem dependees_lookupInt : forall rho I k v m u,
           dependees rho (peerSubInst I (snd k, v) m u)
@@ -1619,12 +1623,13 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       Proof.
         intros rho I k v m u; cbn [dependees]; f_equal.
         unfold peerEdgesAt, base; cbn [fst snd].
-        pose proof (ownDepRows_id I (snd k, v)) as Hd.
-        assert (Hpr : peerRowsAt (peerSubInst I (snd k, v) m u) (snd m, u) =
-                      peerRowsAt I (snd m, u)).
-        { unfold peerSubInst, peerRowsAt; cbn [inst_peer subInst].
-          apply ownPeerRows_id. }
-        assert (Hn : forall r, In r (peerRowsAt I (snd m, u)) ->
+        pose proof (ownDependencies_id I (snd k, v)) as Hd.
+        assert (Hpr :
+                  peerDependenciesAt (peerSubInst I (snd k, v) m u)
+                    (snd m, u) = peerDependenciesAt I (snd m, u)).
+        { unfold peerSubInst, peerDependenciesAt; cbn [inst_peer subInst].
+          apply ownPeerDependencies_id. }
+        assert (Hn : forall r, In r (peerDependenciesAt I (snd m, u)) ->
                    NSet.In (snd (slotKey I (snd k, v) (p_name r)))
                      (NSet.union (slotTargets I (snd k, v))
                         (peerNamesAt I (snd m, u)))).
@@ -1639,7 +1644,8 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         rewrite (dirs_agree I
                    (NSet.union (slotTargets I (snd k, v))
                       (peerNamesAt I (snd m, u)))
-                   (ownDepRows I (snd k, v)) (ownPeerRows I (snd m, u))
+                   (ownDependencies I (snd k, v))
+                   (ownPeerDependencies I (snd m, u))
                    (snd k, v) Hd).
         unfold depsOfL; f_equal; apply map_ext_in; intros r Hr.
         apply List.filter_In in Hr; destruct Hr as [Hr _].
@@ -1647,7 +1653,8 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         rewrite (slotKey_agree I
                    (NSet.union (slotTargets I (snd k, v))
                       (peerNamesAt I (snd m, u)))
-                   (ownDepRows I (snd k, v)) (ownPeerRows I (snd m, u))
+                   (ownDependencies I (snd k, v))
+                   (ownPeerDependencies I (snd m, u))
                    (snd k, v) (p_name r) Hd).
         rewrite realVersions_subInst; [reflexivity | apply Hn; exact Hr].
       Qed.
@@ -1684,12 +1691,12 @@ Definition npmRepo : NpmS.RepoSet.t :=
   fold_right NpmS.RepoSet.add NpmS.RepoSet.empty
     ((npmA, 1) :: (npmB, 1) :: (npmC, 1) :: (npmC, 2) :: (npmC, 3) :: nil).
 
-Definition npmDepB : NpmS.DepRow := NpmS.MkDep npmB npmB (npmEq 1) false.
-Definition npmDepC : NpmS.DepRow :=
+Definition npmDepB : NpmS.Dependency := NpmS.MkDep npmB npmB (npmEq 1) false.
+Definition npmDepC : NpmS.Dependency :=
   NpmS.MkDep npmC npmC (npmBetween 2 4) false.
-Definition npmPeerC : NpmS.PeerRow :=
+Definition npmPeerC : NpmS.PeerDependency :=
   NpmS.MkPeer npmC (npmBetween 1 3) false.
-Definition npmPeerCOpt : NpmS.PeerRow :=
+Definition npmPeerCOpt : NpmS.PeerDependency :=
   NpmS.MkPeer npmC (npmBetween 1 3) true.
 
 Definition npmRho : NpmS.Valuation := fun _ => None.
@@ -1745,7 +1752,8 @@ Definition npmInstOpt : NpmS.Inst :=
 
 (* An alias installs the registry package under another directory, so one
    depender can hold two copies of one package. *)
-Definition npmDepAlias : NpmS.DepRow := NpmS.MkDep npmX npmC (npmEq 1) false.
+Definition npmDepAlias : NpmS.Dependency :=
+  NpmS.MkDep npmX npmC (npmEq 1) false.
 
 Definition npmInstAlias : NpmS.Inst :=
   NpmS.MkInst npmRepo

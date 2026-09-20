@@ -6,12 +6,12 @@
 
    - The registry itself.  A packument is taken at face value; nothing is
      checked against the tarball it describes.
-   - Range *parsing* (npm_version.ml).  Evaluation is not trusted: a row
-     carries the parsed comparator sets into the calculus, which decides
-     which real versions they admit.
+   - Range *parsing* (npm_version.ml).  Evaluation is not trusted: a
+     dependency carries the parsed comparator sets into the calculus,
+     which decides which real versions they admit.
    - The dependency-spec classification below.  npm accepts git, file,
      link, workspace and tag specs that no registry lookup can resolve;
-     those rows are dropped and counted rather than guessed at.
+     those dependencies are dropped and counted rather than guessed at.
    - The os/cpu/libc encoding.  Each list becomes a platform gate over
      the valuation's variable of that name; npm applies the same test at
      reify time (EBADPLATFORM).  "engines" is deliberately *not* a gate:
@@ -19,16 +19,16 @@
      only promotes the install-time warning to an error, so gating on it
      would make our instance strictly smaller than npm's.
 
-   - The optionalDependencies reading.  Such a row is an ordinary
+   - The optionalDependencies reading.  Such an entry is an ordinary
      dependency that npm abandons in exactly one situation: its manifest
      cannot be fetched, i.e. no published version matches the range.
-     Nothing else drops it -- a peer conflict against an optional row is
-     an ordinary ERESOLVE -- so it is parsed here as an ordinary row
-     that merely remembers it was optional.  Whether the range is
-     satisfiable is a question about the registry, not about this
+     Nothing else drops it -- a peer conflict against an optional
+     dependency is an ordinary ERESOLVE -- so it is parsed here as an
+     ordinary dependency that merely remembers it was optional.  Whether
+     the range is satisfiable is a question about the registry, not about this
      manifest, so the drop itself is in npm_solve.  npm documents an
      optionalDependencies entry as overriding a dependencies entry of
-     the same name, which is what the row assembly below does.
+     the same name, which is what the dependency assembly below does.
 
    Not modelled, and counted where it matters: bundledDependencies
    (placement) and "deprecated" (npm warns and installs anyway). *)
@@ -47,7 +47,7 @@ type dep = {
   d_range : Npm_version.range;
   d_dev : bool;
   (* not carried into the calculus: it only tells the solver that this
-     row may be abandoned when the registry cannot satisfy it *)
+     dependency may be abandoned when the registry cannot satisfy it *)
   d_optional : bool;
 }
 
@@ -226,7 +226,7 @@ let gates_of (j : Yojson.Safe.t) : gate list =
 (* ---- manifests ---- *)
 
 (* npm reads overrides from the root project's package.json; only the
-   flat "name": "range" form is a static row, so a nested object -- which
+   flat "name": "range" form is a static override, so a nested object -- which
    is indexed by the parent chain -- is counted and dropped. *)
 let overrides_of (j : Yojson.Safe.t) : (string * Npm_version.range) list =
   List.filter_map
@@ -262,7 +262,7 @@ let ver_of ~(root : bool) (vers : string) (j : Yojson.Safe.t) : ver option =
           v_vers = vers;
           v_deps =
             (* an optionalDependencies entry overrides a dependencies
-               entry of the same name, so the plain row goes and the
+               entry of the same name, so the plain dependency goes and the
                optional one stands *)
             opts
             @ List.filter

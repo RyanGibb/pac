@@ -28,7 +28,7 @@ q publishes 1.0.0-alpha.1 alone, which ^1.0.0-alpha reaches.
 
 A dev-dependency participates only from the root crate.  k declares m both
 as an optional normal dependency and as a dev-dependency; from root h, k is
-not the root, so neither row installs m -- the optional one is never
+not the root, so neither record installs m -- the optional one is never
 activated and the dev one does not participate.
 
   $ ../../../src/main.exe cargo index h | sed -E '/^(parse|solve) [0-9.]+s$/d'
@@ -40,10 +40,11 @@ activated and the dev one does not participate.
   parent edges: 1
   loaded: 3 crates, 3 versions
 
-From root k itself the same two rows both matter: the mandatory dev row
-installs m even though nothing activates the optional normal row sharing
-its alias.  The two stay separate slots -- conjoined, the dev row's
-non-optionality would bind on every depender, which is the h case above.
+From root k itself the same two records both matter: the mandatory dev
+record installs m even though nothing activates the optional normal
+record sharing its alias.  The two stay separate slots -- conjoined, the
+dev record's non-optionality would bind on every depender, which is the h
+case above.
 
   $ ../../../src/main.exe cargo index k | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root k 1.0.0
@@ -57,7 +58,7 @@ non-optionality would bind on every depender, which is the h case above.
 Crates are parsed as the solver first asks for them, so a link's declarers
 can be discovered after the link has been asked about.  x 1.0.0 and z 1.0.0
 both claim links=foo, so they cannot coexist; x is reached from the root's
-own rows but z only through y, and links:foo is decided while x alone is
+own records but z only through y, and links:foo is decided while x alone is
 known.  z must still be admitted once it arrives -- the answer is the older,
 link-free x beside z, not a rejection of z against a version set fixed
 without it.

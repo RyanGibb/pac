@@ -216,7 +216,7 @@ struct
      read: nothing can ask about a mangled clause, or an atom of one, before
      the owner it came from has been through here.  That is not true of
      conflicts_on or providers_of, which are preimages -- who conflicts with
-     me, and who provides the name I want -- that no row of the asking
+     me, and who provides the name I want -- that no clause of the asking
      package can reach, so Conflicts, Breaks and Provides stay eager. *)
   let clauses_of idx (stz : nstanza) =
     match stz.nclauses with

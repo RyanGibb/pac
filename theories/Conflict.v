@@ -600,7 +600,7 @@ Module Conflict (N V : UsualOrderedType).
           apply mem_conflictsAgainst; repeat split; [exact HG | exact Hu].
       Qed.
 
-      Lemma synthetic_target_row :
+      Lemma synthetic_target_conflict :
         forall D G (p : T.Pkg.t) (n : N.t) (vs : VSet.t) (h : T.VSet.t),
           T.DepRel.In (p, (Name.Synthetic n vs, h)) (reduceDeps D G) ->
           exists q, ConflictRel.In (q, (n, vs)) G.
@@ -624,7 +624,7 @@ Module Conflict (N V : UsualOrderedType).
           T.VSet.add Version.Zero (T.VSet.singleton Version.One).
       Proof.
         intros R D G n vs [p [h Hd]].
-        destruct (synthetic_target_row D G p n vs h Hd) as [q HG].
+        destruct (synthetic_target_conflict D G p n vs h Hd) as [q HG].
         apply T.VSet.ext; intro w.
         rewrite T.mem_versions, mem_reduceReal, SOvt.add_in, SOvt.singleton_in.
         split.
