@@ -1,6 +1,6 @@
 (* Alpine solving over the verified pipeline, opam_solve/deb_solve-style:
-   the APKINDEX lives in hashtables; every query is answered from a small
-   Inst slice in the shape one of Alpine.v's four lookup theorems
+   the APKINDEX lives in hashtables; every lookup is answered from a small
+   Inst sub-instance in the shape one of Alpine.v's four lookup theorems
    justifies, pushed through the Alpine encoder into PackageFormula and
    then through its proved reduction to Core; PubGrub solves the
    accumulated core graph lazily, and the solution comes back through
@@ -81,7 +81,7 @@ module T = PFR.T
    PVersion.compare, which is where it is applied -- off the archive, not
    off an instance.
    The calculus records it in inst_prio precisely because it does not
-   constrain which sets are resolutions, so the slices below leave
+   constrain which sets are resolutions, so the sub-instances below leave
    inst_prio empty and no resolution turns on a k: line. *)
 
 (* replaces (r:/q:) never appears in a repository index -- it is an
@@ -126,7 +126,7 @@ let condset_of ds =
 
 (* ---- archive ---------------------------------------------------------- *)
 
-type trigrow = {
+type iif_rule = {
   t_pkg : string * string;
   t_conds : Alp.CondSet.t;
   t_designation : Alp.Atom.t;
@@ -139,11 +139,11 @@ type archive = {
   providers : (string, ((string * string) * string option) list) Hashtbl.t;
   (* install-if rows by their designated condition's name: only a package
      bearing that name, or providing it, can carry the rule *)
-  trig_by_cond : (string, trigrow list) Hashtbl.t;
+  iif_by_cond : (string, iif_rule list) Hashtbl.t;
   prio : (string * string, int) Hashtbl.t;
   mutable n_pkgs : int;
   mutable n_provs : int;
-  mutable n_trigs : int;
+  mutable n_iif : int;
 }
 
 let push tbl k v =
@@ -157,14 +157,14 @@ let load_index (path : string) : archive =
       by_name = Hashtbl.create 16384;
       meta = Hashtbl.create 16384;
       providers = Hashtbl.create 16384;
-      trig_by_cond = Hashtbl.create 1024;
+      iif_by_cond = Hashtbl.create 1024;
       prio = Hashtbl.create 1024;
       n_pkgs = 0;
       n_provs = 0;
-      n_trigs = 0;
+      n_iif = 0;
     }
   in
-  let trigs = ref [] in
+  let iifs = ref [] in
   List.iter
     (fun (p : P.pkg) ->
       push ar.by_name p.P.name p;
@@ -179,15 +179,14 @@ let load_index (path : string) : archive =
       | Some k -> Hashtbl.replace ar.prio (p.P.name, p.P.version) k
       | None -> ());
       if p.P.install_if <> [] then (
-        ar.n_trigs <- ar.n_trigs + 1;
+        ar.n_iif <- ar.n_iif + 1;
         (* a CondSet is positive-only, so a negated install_if condition
            cannot be represented; dropping the sign would invert it, so
            the whole rule is dropped and counted instead *)
         if List.exists (fun (d : P.dep) -> d.P.d_neg) p.P.install_if then
           P.reject ()
         else
-          trigs :=
-            ((p.P.name, p.P.version), condset_of p.P.install_if) :: !trigs))
+          iifs := ((p.P.name, p.P.version), condset_of p.P.install_if) :: !iifs))
     pkgs;
   (* keyed only once every set has offered its designation, so the key a
      row is filed under is the one [attachDesignation] will ask about *)
@@ -195,10 +194,10 @@ let load_index (path : string) : archive =
     (fun (z, conds) ->
       match FirstDesignation.designation conds with
       | Some a ->
-          push ar.trig_by_cond (fst a)
+          push ar.iif_by_cond (fst a)
             { t_pkg = z; t_conds = conds; t_designation = a }
       | None -> ())
-    (List.rev !trigs);
+    (List.rev !iifs);
   ar
 
 let versions_of ar n =
@@ -219,26 +218,26 @@ let providers_of ar n =
   | Some l -> List.filter (fun (owner, pv) -> auto_selectable ar owner pv) l
   | None -> []
 
-(* ---- slices ------------------------------------------------------------
+(* ---- sub-instances -----------------------------------------------------
 
-   repoSlice I ns keeps the repository rows at a name in ns together with
-   the packages providing one of them; provSlice I ns keeps the provide
-   rows landing on a name in ns.  Both are built from the indexes rather
-   than by filtering a whole-archive instance, which is the only reason a
-   per-query slice is cheap. *)
+   repoPreimage I ns keeps the repository rows at a name in ns together
+   with the packages providing one of them; provPreimage I ns keeps the
+   provide rows landing on a name in ns.  Both are built from the indexes
+   rather than by filtering a whole-archive instance, which is the only
+   reason a per-lookup sub-instance is cheap. *)
 
 let empty_inst =
   {
     Alp.inst_repo = Alp.PkgSet.empty;
     inst_deps = Alp.Deps.empty;
     inst_prov = Alp.Prov.empty;
-    inst_trig = Alp.Trig.empty;
+    inst_installIf = Alp.InstallIf.empty;
     inst_world = Alp.WSet.empty;
     inst_prio = Alp.Prio.empty;
     inst_repl = Alp.Repl.empty;
   }
 
-let slice_at ar (names : string list) =
+let preimages_at ar (ns : string list) =
   let repo = ref [] and prov = ref [] in
   List.iter
     (fun n ->
@@ -250,23 +249,23 @@ let slice_at ar (names : string list) =
           repo := owner :: !repo;
           prov := (owner, (n, ptag pv)) :: !prov)
         (providers_of ar n))
-    (List.sort_uniq String.compare names);
+    (List.sort_uniq String.compare ns);
   (Alp.PkgSet.ofList !repo, Alp.Prov.ofList !prov)
 
-(* Lookup.nameSlice *)
+(* Lookup.nameSubInst *)
 let name_inst ar (n : string) : Alp.coq_Inst =
-  let repo, prov = slice_at ar [ n ] in
+  let repo, prov = preimages_at ar [ n ] in
   { empty_inst with Alp.inst_repo = repo; inst_prov = prov }
 
 (* Lookup.installIfFibre: of the rows designating a name this package
    bears or provides, the ones whose designated condition it actually
    satisfies.  attachAt reads the package itself and the provide rows it
    heads and nothing else, so deciding it against an instance carrying
-   just those rows is the whole archive's answer (attachAt_slice). *)
-let rows_at ar ((n, v) : string * string) (own : Alp.Prov.t) : trigrow list =
+   just those rows is the whole archive's answer (attachAt_subInst). *)
+let rows_at ar ((n, v) : string * string) (own : Alp.Prov.t) : iif_rule list =
   let inst = { empty_inst with Alp.inst_prov = own } in
   let at m =
-    match Hashtbl.find_opt ar.trig_by_cond m with Some l -> l | None -> []
+    match Hashtbl.find_opt ar.iif_by_cond m with Some l -> l | None -> []
   in
   let cands =
     List.fold_left
@@ -275,7 +274,7 @@ let rows_at ar ((n, v) : string * string) (own : Alp.Prov.t) : trigrow list =
   in
   List.filter (fun r -> Red.attachAt inst (n, v) r.t_designation) cands
 
-(* Lookup.pkgSlice: the package's own dependency, provide and install-if
+(* Lookup.pkgSubInst: the package's own dependency, provide and install-if
    rows, and the repository at the names those dependencies mention --
    together with, per install-if rule the package carries, the rule's
    declaring name and the names of the conditions it did not designate *)
@@ -303,7 +302,7 @@ let pkg_inst ar ((n, v) : string * string) : Alp.coq_Inst =
           (List.map (fun (d : P.dep) -> d.P.d_name) m.P.depends)
           rows
       in
-      let repo, prov = slice_at ar ns in
+      let repo, prov = preimages_at ar ns in
       let deps =
         Alp.Deps.ofList (List.map (fun d -> ((n, v), xdep d)) m.P.depends)
       in
@@ -312,16 +311,16 @@ let pkg_inst ar ((n, v) : string * string) : Alp.coq_Inst =
         Alp.inst_repo = repo;
         inst_deps = deps;
         inst_prov = Alp.Prov.union prov own;
-        inst_trig =
-          Alp.Trig.ofList (List.map (fun r -> (r.t_pkg, r.t_conds)) rows);
+        inst_installIf =
+          Alp.InstallIf.ofList (List.map (fun r -> (r.t_pkg, r.t_conds)) rows);
       }
 
-(* Lookup.rootSlice: the world set and the repository at the names it
+(* Lookup.rootSubInst: the world set and the repository at the names it
    mentions.  Every install-if rule is carried by a package, so the root
    reads no part of the rule table. *)
 let root_inst ar (world : P.dep list) : Alp.coq_Inst =
   let repo, prov =
-    slice_at ar (List.map (fun (d : P.dep) -> d.P.d_name) world)
+    preimages_at ar (List.map (fun (d : P.dep) -> d.P.d_name) world)
   in
   {
     empty_inst with
@@ -396,7 +395,7 @@ let prov_rank ar (q : string * string) : int =
 
 (* encPos lists the unversioned providers of a name as a disjunction whose
    last alternative is the name's own versions, so every alternative but
-   the last is a lone provider.  A trigger disjunction and a negated
+   the last is a lone provider.  An install-if disjunction and a negated
    dependency both list FNeg alternatives, so an alternative naming a
    single package identifies a provider list. *)
 let chain_head (f : PF.coq_Formula) : (string * string) option =
@@ -407,7 +406,7 @@ let chain_head (f : PF.coq_Formula) : (string * string) option =
       | _ -> None)
   | _ -> None
 
-(* The alternative a gadget version selects, and whether it is the last
+(* The alternative a synthetic version selects, and whether it is the last
    one -- the last alternative is the only one that is not a provider. *)
 let rec alt_at (fs : PF.coq_Formula list) (i : E.nat) :
     (PF.coq_Formula * bool) option =
@@ -437,11 +436,11 @@ let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
    decides, the versioned ones included: apk-package(5) reserves only
    automatic selection for the unversioned case, not the ranking.
 
-   A gadget version selects one alternative of its disjunction by
+   A synthetic version selects one alternative of its disjunction by
    position, and which alternative is wanted depends on the disjunction.
-   trigForm lists the negated install_if conditions first and the
-   triggered package last, so preferring the earliest alternative is
-   apk's rule that a trigger fires only when its conditions already hold
+   installIfForm lists the negated install_if conditions first and the
+   augmented package last, so preferring the earliest alternative is
+   apk's rule that an install-if fires only when its conditions already hold
    -- without it every install_if row in the index is discharged by
    installing its target.  encPos lists the unversioned providers of a
    name first and its own versions last, and apk ranks those by
@@ -512,8 +511,9 @@ let greatest = function
   | c :: cs ->
       List.fold_left (fun a b -> if PVersion.compare b a > 0 then b else a) c cs
 
-(* only trigForm's gadgets open on FNeg: encDep negates whole formulas *)
-let is_trig (tn : PFR.Name.t) =
+(* only installIfForm's disjuncts open on FNeg: encDep negates whole
+   formulas *)
+let is_install_if (tn : PFR.Name.t) =
   match tn with PFR.Name.Disjunct (PF.FNeg _ :: _) -> true | _ -> false
 
 let carried_at ~assigned tn tvs =
@@ -538,13 +538,13 @@ let rec neg_leaves ar (f : PF.coq_Formula) : (PFR.Name.t * PVersion.t list) list
 
 (* apk never asserts a condition package absent: it installs the
    augmented package when all the conditions hold and otherwise does
-   nothing at all.  PubGrub has to decide the gadget either way, so the
+   nothing at all.  PubGrub has to decide the disjunct either way, so the
    nearest thing is to discharge it on a condition the solution does not
-   carry -- free, constraining nothing -- and to take the triggered
+   carry -- free, constraining nothing -- and to take the augmented
    package only when it carries them all. *)
 let choose ar ~assigned (tn : PFR.Name.t) (cands : PVersion.t list) =
   match tn with
-  | PFR.Name.Disjunct fs when is_trig tn -> (
+  | PFR.Name.Disjunct fs when is_install_if tn -> (
       let free = ref [] and pos = ref [] in
       List.iter
         (fun (pv : PVersion.t) ->
@@ -577,14 +577,14 @@ let choose ar ~assigned (tn : PFR.Name.t) (cands : PVersion.t list) =
                    p ps)))
   | _ -> greatest cands
 
-(* An install-if gadget exists only once its designated condition has
+(* An install-if disjunct exists only once its designated condition has
    been selected, so the conditions it discharges on have largely settled
    by the time [choose] sees it.  Deferring it behind every other open
    name settles the rest of them; measured on this index the deferral no
    longer changes the answer, but it is the invariant [choose] wants and
    it costs nothing. *)
 let next ~assigned:_ (opens : (PFR.Name.t * int) list) =
-  match List.find_opt (fun (tn, _) -> not (is_trig tn)) opens with
+  match List.find_opt (fun (tn, _) -> not (is_install_if tn)) opens with
   | Some (tn, _) -> tn
   | None -> fst (List.hd opens)
 
@@ -600,7 +600,7 @@ type state = {
   ar : archive;
   world : P.dep list;
   edges : (T.Pkg.t, T.DependeesSet.t) Hashtbl.t;
-  gadget_vers : (PFR.Name.t, PVersion.t list) Hashtbl.t;
+  synthetic_vers : (PFR.Name.t, PVersion.t list) Hashtbl.t;
   processed : (PF.Pkg.t, unit) Hashtbl.t;
   real_vers : (string, PVersion.t list) Hashtbl.t;
   mutable canon : PFR.Name.t NameMap.t;
@@ -612,17 +612,17 @@ let mk_state ar world =
     ar;
     world;
     edges = Hashtbl.create 65536;
-    gadget_vers = Hashtbl.create 65536;
+    synthetic_vers = Hashtbl.create 65536;
     processed = Hashtbl.create 16384;
     real_vers = Hashtbl.create 16384;
     canon = NameMap.empty;
     n_proc = 0;
   }
 
-(* A Disjunct or NegDep gadget name carries its formulas, so comparing
+(* A Disjunct or NegDep name carries its formulas, so comparing
    two equal names walks both in full, and PubGrub does that on every
    dependency-list scan and map hit.  Each version's reduction builds its
-   own copy of a gadget name shared across versions; one representative
+   own copy of a synthetic name shared across versions; one representative
    per name lets PName.compare answer equality by pointer.  The map is
    keyed by NameOT itself, so which names unify is exactly NameOT
    equality and the order PubGrub sees -- [next]'s pick included -- is
@@ -652,7 +652,7 @@ let record_deprel st (d : T.DepRel.t) =
         | None -> fresh))
     by_src
 
-(* Only the gadget names PackageFormula mints are harvested; the Orig
+(* Only the synthetic names PackageFormula introduces are harvested; the Orig
    names are answered by versions_lookupName below. *)
 let record_real st (r : T.PkgSet.t) =
   List.iter
@@ -662,12 +662,12 @@ let record_real st (r : T.PkgSet.t) =
       | _ ->
           let tv = tag st.ar tn tv in
           let prev =
-            match Hashtbl.find_opt st.gadget_vers tn with
+            match Hashtbl.find_opt st.synthetic_vers tn with
             | Some x -> x
             | None -> []
           in
           if not (List.mem tv prev) then
-            Hashtbl.replace st.gadget_vers tn (tv :: prev))
+            Hashtbl.replace st.synthetic_vers tn (tv :: prev))
     (T.PkgSet.elements r)
 
 (* one Alpine package's dependee formulas, reduced to core edges *)
@@ -700,7 +700,8 @@ let touch st ((tn, tv) : T.Pkg.t) =
         (Red.Name.Orig m, Red.Version.Prov (q0, pv))
         (fun () -> empty_inst)
   | _ ->
-      (* a gadget's edges were harvested when its owner was processed *)
+      (* a synthetic package's edges were harvested when its owner was
+         processed *)
       ()
 
 let versions st (tn : PFR.Name.t) : PVersion.t list =
@@ -720,24 +721,26 @@ let versions st (tn : PFR.Name.t) : PVersion.t list =
           Hashtbl.replace st.real_vers n vs;
           vs)
   | _ -> (
-      match Hashtbl.find_opt st.gadget_vers tn with Some vs -> vs | None -> [])
+      match Hashtbl.find_opt st.synthetic_vers tn with
+      | Some vs -> vs
+      | None -> [])
 
 type result = { pkgs : (string * string) list; nodes : int; processed : int }
 
 let solve ?(debug = false) (ar : archive) (world : P.dep list) : result option =
   Pubgrub.set_debug debug;
   let st = mk_state ar world in
-  let versions nm = versions st nm in
+  let versions n = versions st n in
   (* the decisive memoization: PubGrub asks for the same node's
      dependencies over and over during propagation *)
   let cache = Hashtbl.create 65536 in
-  let dependencies nm ({ PVersion.v = u; _ } : PVersion.t) =
-    match Hashtbl.find_opt cache (nm, u) with
+  let dependencies n ({ PVersion.v = u; _ } : PVersion.t) =
+    match Hashtbl.find_opt cache (n, u) with
     | Some r -> r
     | None ->
-        touch st (nm, u);
+        touch st (n, u);
         let hs =
-          match Hashtbl.find_opt st.edges (nm, u) with
+          match Hashtbl.find_opt st.edges (n, u) with
           | Some x -> x
           | None -> T.DependeesSet.empty
         in
@@ -748,7 +751,7 @@ let solve ?(debug = false) (ar : archive) (world : P.dep list) : result option =
               (m, PG.Ranges.of_list (List.map (tag ar m) (T.VSet.elements vs))))
             (T.DependeesSet.elements hs)
         in
-        Hashtbl.replace cache (nm, u) r;
+        Hashtbl.replace cache (n, u) r;
         r
   in
   let root = PFR.Name.Orig Red.Name.Root in

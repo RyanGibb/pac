@@ -54,7 +54,7 @@ module Make (D : DRIVER) = struct
     (* trail entries whose propagation wave has already been pushed *)
     mutable waved_upto : int;
     popped_at : (int, witem list ref) Hashtbl.t;
-    (* Selectors opened by deciding a clause gadget to one of its
+    (* Selectors opened by deciding a clause package to one of its
        alternatives: apt chose a concrete solution at that pop or enqueue, so
        the selector is the pending half of the same step and is decided
        before the heap moves on. *)

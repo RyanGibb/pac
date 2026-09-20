@@ -143,8 +143,8 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
   Module Prov := FSetUOT ProvElt.
 
   Module CondSet := FSetUOT Atom.
-  Module TrigElt := PairUOT Pkg CondSet.AsUOT.
-  Module Trig := FSetUOT TrigElt.
+  Module InstallIfElt := PairUOT Pkg CondSet.AsUOT.
+  Module InstallIf := FSetUOT InstallIfElt.
 
   Module WSet := FSetUOT DepOT.
 
@@ -159,7 +159,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     { inst_repo : PkgSet.t
     ; inst_deps : Deps.t
     ; inst_prov : Prov.t
-    ; inst_trig : Trig.t
+    ; inst_installIf : InstallIf.t
     ; inst_world : WSet.t
     ; inst_prio : Prio.t
     ; inst_repl : Repl.t }.
@@ -197,8 +197,8 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         Claims I n p -> Claims I n q -> p = q
     (* install_if obliges the name, not the declaring version: apk is
        satisfied by any installed claimant of the package's name. *)
-    ; res_trig :
-        forall p conds, Trig.In (p, conds) (inst_trig I) ->
+    ; res_installIf :
+        forall p conds, InstallIf.In (p, conds) (inst_installIf I) ->
         (forall n ct, CondSet.In (n, ct) conds -> MatchPos I S n ct) ->
         MatchPos I S (fst p) CAny }.
 
@@ -377,9 +377,9 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       | None => false
       end.
 
-    Definition installIfFibre (I : Inst) (p : Pkg.t) : Trig.t :=
-      Trig.filter (fun '(_, conds) => attachDesignation I p conds)
-        (inst_trig I).
+    Definition installIfFibre (I : Inst) (p : Pkg.t) : InstallIf.t :=
+      InstallIf.filter (fun '(_, conds) => attachDesignation I p conds)
+        (inst_installIf I).
 
     Definition installIfForm (I : Inst) (z : Pkg.t) (conds : CondSet.t) :
         PF.Formula :=
@@ -392,7 +392,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Module FSet := FSetUOT PF.FOT.
     Module SOdf := SetOps DepElt PF.FOT Deps FSet.
     Module SOrf := SetOps ProvElt PF.FOT Prov FSet.
-    Module SOtf := SetOps TrigElt PF.FOT Trig FSet.
+    Module SOtf := SetOps InstallIfElt PF.FOT InstallIf FSet.
     Module SOwf := SetOps DepOT PF.FOT WSet FSet.
     Definition dependees (I : Inst) (q : PF.Pkg.t) : FSet.t :=
       match q with
@@ -605,11 +605,12 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Qed.
 
     Lemma mem_installIfFibre : forall I p z conds,
-        Trig.In (z, conds) (installIfFibre I p) <->
-        Trig.In (z, conds) (inst_trig I) /\ attachDesignation I p conds = true.
+        InstallIf.In (z, conds) (installIfFibre I p) <->
+        InstallIf.In (z, conds) (inst_installIf I) /\
+        attachDesignation I p conds = true.
     Proof.
       intros I p z conds; unfold installIfFibre.
-      rewrite Trig.filter_spec'; reflexivity.
+      rewrite InstallIf.filter_spec'; reflexivity.
     Qed.
 
     Lemma condRest_subset : forall conds a,
@@ -881,9 +882,9 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Qed.
 
     (* A row with no conditions has no atom to designate, so the obligation
-       res_trig states unconditionally would have nothing to carry it. *)
+       res_installIf states unconditionally would have nothing to carry it. *)
     Definition WfInstallIf (I : Inst) : Prop :=
-      forall z conds, Trig.In (z, conds) (inst_trig I) ->
+      forall z conds, InstallIf.In (z, conds) (inst_installIf I) ->
       ~ CondSet.Empty conds.
 
     Theorem alpine_soundness : forall I S',
@@ -961,7 +962,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         apply (matchPos_attachAt I (alpineResolution S') na cta) in HM.
         destruct HM as [p [HpS Hatt]].
         apply mem_alpineResolution in HpS.
-        assert (Hfib : Trig.In (z, conds) (installIfFibre I p)).
+        assert (Hfib : InstallIf.In (z, conds) (installIfFibre I p)).
         { apply mem_installIfFibre; split; [exact Hrow0 |].
           unfold attachDesignation; rewrite Hdes; exact Hatt. }
         assert (Hf : FSet.In (installIfForm I z conds)
@@ -1221,26 +1222,26 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           (inst_prov I).
 
       Module PkgPre := Preimage Pkg PkgSet.
-      (* A dependee query reads the repository at the mentioned names and
+      (* A dependee lookup reads the repository at the mentioned names and
          at their providers, which need not bear those names. *)
-      Definition repoSlice (I : Inst) (ns : NSet.t) : PkgSet.t :=
+      Definition repoPreimage (I : Inst) (ns : NSet.t) : PkgSet.t :=
         PkgPre.preimage (fun p => p)
           (fun q => orb (NSet.mem (fst q) ns) (provTouchb I ns q))
           (inst_repo I).
 
       Module ProvPre := Preimage ProvElt Prov.
-      Definition provSlice (I : Inst) (ns : NSet.t) : Prov.t :=
+      Definition provPreimage (I : Inst) (ns : NSet.t) : Prov.t :=
         ProvPre.preimage (fun '(_, (m, _)) => m)
           (fun m => NSet.mem m ns) (inst_prov I).
 
-      Lemma mem_repoSlice : forall I ns q,
-          PkgSet.In q (repoSlice I ns) <->
+      Lemma mem_repoPreimage : forall I ns q,
+          PkgSet.In q (repoPreimage I ns) <->
           PkgSet.In q (inst_repo I) /\
           (NSet.In (fst q) ns \/
            exists m tg, Prov.In (q, (m, tg)) (inst_prov I) /\
              NSet.In m ns).
       Proof.
-        intros I ns q; unfold repoSlice.
+        intros I ns q; unfold repoPreimage.
         rewrite PkgPre.mem_preimage, Bool.orb_true_iff.
         apply and_iff_compat_l.
         rewrite NSet.mem_spec; apply or_iff_compat_l.
@@ -1256,11 +1257,11 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           rewrite (proj2 (NSet.mem_spec _ _) Hm); reflexivity.
       Qed.
 
-      Lemma mem_provSlice : forall I ns e,
-          Prov.In e (provSlice I ns) <->
+      Lemma mem_provPreimage : forall I ns e,
+          Prov.In e (provPreimage I ns) <->
           Prov.In e (inst_prov I) /\ NSet.In (fst (snd e)) ns.
       Proof.
-        intros I ns [q [m tg]]; unfold provSlice.
+        intros I ns [q [m tg]]; unfold provPreimage.
         rewrite ProvPre.mem_preimage, NSet.mem_spec; cbn.
         reflexivity.
       Qed.
@@ -1276,67 +1277,68 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
       (* Any instance whose repository and provides agree with I at the
          names in ns answers every constraint at those names alike. *)
-      Definition sliceInst (I : Inst) (ns : NSet.t) (deps : Deps.t)
-          (ownProv : Prov.t) (trig : Trig.t) (world : WSet.t) : Inst :=
-        {| inst_repo := repoSlice I ns
+      Definition subInst (I : Inst) (ns : NSet.t) (deps : Deps.t)
+          (ownProv : Prov.t) (installIf : InstallIf.t) (world : WSet.t)
+        : Inst :=
+        {| inst_repo := repoPreimage I ns
          ; inst_deps := deps
-         ; inst_prov := Prov.union ownProv (provSlice I ns)
-         ; inst_trig := trig
+         ; inst_prov := Prov.union ownProv (provPreimage I ns)
+         ; inst_installIf := installIf
          ; inst_world := world
          ; inst_prio := Prio.empty
          ; inst_repl := Repl.empty |}.
 
-      Lemma constrVers_slice : forall I ns deps ownProv trig world n ct,
+      Lemma constrVers_subInst : forall I ns deps ownProv installIf world n ct,
           NSet.In n ns ->
           Prov.Subset ownProv (inst_prov I) ->
-          constrVers (sliceInst I ns deps ownProv trig world) n ct =
+          constrVers (subInst I ns deps ownProv installIf world) n ct =
           constrVers I n ct.
       Proof.
-        intros I ns deps ownProv trig world n ct Hn Hown.
+        intros I ns deps ownProv installIf world n ct Hn Hown.
         apply PF.VSet.ext; intro w.
-        rewrite !mem_constrVers; cbn [sliceInst inst_repo inst_prov].
+        rewrite !mem_constrVers; cbn [subInst inst_repo inst_prov].
         split.
         - intros [[v [Hrep [Hc ->]]] | [q [pv [Hrow [Hrep [Hc ->]]]]]].
-          + apply mem_repoSlice in Hrep; destruct Hrep as [Hrep _].
+          + apply mem_repoPreimage in Hrep; destruct Hrep as [Hrep _].
             left; eauto.
           + apply Prov.union_spec in Hrow.
             assert (Hrow' : Prov.In (q, (n, PVer pv)) (inst_prov I)).
             { destruct Hrow as [Hrow | Hrow]; [exact (Hown _ Hrow) |].
-              apply mem_provSlice in Hrow; exact (proj1 Hrow). }
-            apply mem_repoSlice in Hrep; destruct Hrep as [Hrep _].
+              apply mem_provPreimage in Hrow; exact (proj1 Hrow). }
+            apply mem_repoPreimage in Hrep; destruct Hrep as [Hrep _].
             right; eauto 8.
         - intros [[v [Hrep [Hc ->]]] | [q [pv [Hrow [Hrep [Hc ->]]]]]].
           + left; exists v; repeat split; try assumption.
-            apply mem_repoSlice; split; [exact Hrep |].
+            apply mem_repoPreimage; split; [exact Hrep |].
             left; exact Hn.
           + right; exists q, pv; repeat split; try assumption.
             * apply Prov.union_spec; right.
-              apply mem_provSlice; split; [exact Hrow | exact Hn].
-            * apply mem_repoSlice; split; [exact Hrep |].
+              apply mem_provPreimage; split; [exact Hrow | exact Hn].
+            * apply mem_repoPreimage; split; [exact Hrep |].
               right; exists n, (PVer pv); split; assumption.
       Qed.
 
-      Lemma uprovSet_slice : forall I ns deps ownProv trig world n,
+      Lemma uprovSet_subInst : forall I ns deps ownProv installIf world n,
           NSet.In n ns ->
           Prov.Subset ownProv (inst_prov I) ->
-          uprovSet (sliceInst I ns deps ownProv trig world) n =
+          uprovSet (subInst I ns deps ownProv installIf world) n =
           uprovSet I n.
       Proof.
-        intros I ns deps ownProv trig world n Hn Hown.
+        intros I ns deps ownProv installIf world n Hn Hown.
         apply PkgSet.ext; intro q.
-        rewrite !mem_uprovSet; cbn [sliceInst inst_repo inst_prov].
+        rewrite !mem_uprovSet; cbn [subInst inst_repo inst_prov].
         split.
         - intros [Hrow Hrep].
           apply Prov.union_spec in Hrow.
           assert (Hrow' : Prov.In (q, (n, PVirt)) (inst_prov I)).
           { destruct Hrow as [Hrow | Hrow]; [exact (Hown _ Hrow) |].
-            apply mem_provSlice in Hrow; exact (proj1 Hrow). }
-          apply mem_repoSlice in Hrep; destruct Hrep as [Hrep _].
+            apply mem_provPreimage in Hrow; exact (proj1 Hrow). }
+          apply mem_repoPreimage in Hrep; destruct Hrep as [Hrep _].
           split; assumption.
         - intros [Hrow Hrep]; split.
           + apply Prov.union_spec; right.
-            apply mem_provSlice; split; [exact Hrow | exact Hn].
-          + apply mem_repoSlice; split; [exact Hrep |].
+            apply mem_provPreimage; split; [exact Hrow | exact Hn].
+          + apply mem_repoPreimage; split; [exact Hrep |].
             right; exists n, PVirt; split; assumption.
       Qed.
 
@@ -1348,47 +1350,47 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                (PF.VSet.singleton (Version.Orig (snd q)))).
       Proof. reflexivity. Qed.
 
-      Definition nameSlice (I : Inst) (n : N.t) : Inst :=
-        sliceInst I (NSet.singleton n) Deps.empty Prov.empty
-          Trig.empty WSet.empty.
+      Definition nameSubInst (I : Inst) (n : N.t) : Inst :=
+        subInst I (NSet.singleton n) Deps.empty Prov.empty
+          InstallIf.empty WSet.empty.
 
       Theorem versions_lookupName : forall I n,
-          versions (nameSlice I n) n = versions I n.
+          versions (nameSubInst I n) n = versions I n.
       Proof.
-        intros I n; unfold versions, nameSlice.
-        apply constrVers_slice.
+        intros I n; unfold versions, nameSubInst.
+        apply constrVers_subInst.
         - apply NSet.singleton_spec; reflexivity.
         - intros e He; destruct (Prov.empty_spec He).
       Qed.
 
       Module SOwn := SetOps DepOT N WSet NSet.
       Module SOan := SetOps Atom N CondSet NSet.
-      Module SOtn := SetOps TrigElt N Trig NSet.
+      Module SOtn := SetOps InstallIfElt N InstallIf NSet.
 
       Definition condNames (conds : CondSet.t) : NSet.t :=
         SOan.map fst conds.
 
-      Lemma encPos_slice : forall I ns deps ownProv trig world
+      Lemma encPos_subInst : forall I ns deps ownProv installIf world
               (n : N.t) (ct : Constr),
           NSet.In n ns ->
           Prov.Subset ownProv (inst_prov I) ->
-          encPos (sliceInst I ns deps ownProv trig world) n ct =
+          encPos (subInst I ns deps ownProv installIf world) n ct =
           encPos I n ct.
       Proof.
-        intros I ns deps ownProv trig world n ct Hn Hown.
+        intros I ns deps ownProv installIf world n ct Hn Hown.
         apply encPos_agree.
-        - apply constrVers_slice; assumption.
-        - apply uprovSet_slice; assumption.
+        - apply constrVers_subInst; assumption.
+        - apply uprovSet_subInst; assumption.
       Qed.
 
-      Lemma encDep_slice : forall I ns deps ownProv trig world d,
+      Lemma encDep_subInst : forall I ns deps ownProv installIf world d,
           NSet.In (depName d) ns ->
           Prov.Subset ownProv (inst_prov I) ->
-          encDep (sliceInst I ns deps ownProv trig world) d = encDep I d.
+          encDep (subInst I ns deps ownProv installIf world) d = encDep I d.
       Proof.
-        intros I ns deps ownProv trig world [[m ct] | [m ct]] Hn Hown;
+        intros I ns deps ownProv installIf world [[m ct] | [m ct]] Hn Hown;
           cbn [encDep depName] in *; [| f_equal];
-          apply encPos_slice; assumption.
+          apply encPos_subInst; assumption.
       Qed.
 
       (* The condition fold is a congruence in encPos: only the atoms the
@@ -1409,85 +1411,86 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           intros b Hb; apply H; right; exact Hb.
       Qed.
 
-      Lemma installIfForm_slice : forall I ns deps ownProv trig world
+      Lemma installIfForm_subInst : forall I ns deps ownProv installIf world
               (z : Pkg.t) (conds : CondSet.t),
           NSet.In (fst z) ns ->
           (forall a : Atom.t,
               CondSet.In a (condRest conds) -> NSet.In (fst a) ns) ->
           Prov.Subset ownProv (inst_prov I) ->
-          installIfForm (sliceInst I ns deps ownProv trig world) z conds =
+          installIfForm (subInst I ns deps ownProv installIf world) z conds =
           installIfForm I z conds.
       Proof.
-        intros I ns deps ownProv trig world z conds Hz Hc Hown.
+        intros I ns deps ownProv installIf world z conds Hz Hc Hown.
         unfold installIfForm.
-        rewrite (encPos_slice I ns deps ownProv trig world (fst z) CAny
+        rewrite (encPos_subInst I ns deps ownProv installIf world (fst z) CAny
                    Hz Hown).
         apply negFold_agree; intros a Ha.
         apply in_elements_cond in Ha.
-        apply encPos_slice; [exact (Hc _ Ha) | exact Hown].
+        apply encPos_subInst; [exact (Hc _ Ha) | exact Hown].
       Qed.
 
-      Lemma sliceInst_trig : forall I ns deps ownProv trig world,
-          inst_trig (sliceInst I ns deps ownProv trig world) = trig.
+      Lemma subInst_installIf : forall I ns deps ownProv installIf world,
+          inst_installIf (subInst I ns deps ownProv installIf world) =
+          installIf.
       Proof. reflexivity. Qed.
 
       (* Attachment reads the package itself and the provide rows it is the
          tail of, so a sub-instance keeping that fibre answers alike. *)
-      Lemma attachAt_slice : forall I ns deps ownProv trig world p a,
+      Lemma attachAt_subInst : forall I ns deps ownProv installIf world p a,
           Prov.Subset ownProv (inst_prov I) ->
           (forall m tg, Prov.In (p, (m, tg)) (inst_prov I) ->
              Prov.In (p, (m, tg)) ownProv) ->
-          attachAt (sliceInst I ns deps ownProv trig world) p a =
+          attachAt (subInst I ns deps ownProv installIf world) p a =
           attachAt I p a.
       Proof.
-        intros I ns deps ownProv trig world p a Hown Hcov.
-        unfold attachAt; cbn [sliceInst inst_prov];
+        intros I ns deps ownProv installIf world p a Hown Hcov.
+        unfold attachAt; cbn [subInst inst_prov];
           f_equal; try reflexivity.
         apply Prov.exists_restrict.
         - intros e He; apply Prov.union_spec in He.
           destruct He as [He | He]; [exact (Hown _ He) |].
-          apply mem_provSlice in He; exact (proj1 He).
+          apply mem_provPreimage in He; exact (proj1 He).
         - intros [q [m tg]] He Hb; cbn in Hb.
           apply Bool.andb_true_iff in Hb; destruct Hb as [Hq _].
           apply PkgEqb.eqb_true_iff in Hq; subst q.
           apply Prov.union_spec; left; exact (Hcov _ _ He).
       Qed.
 
-      Lemma attachDesignation_slice :
-        forall I ns deps ownProv trig world p conds,
+      Lemma attachDesignation_subInst :
+        forall I ns deps ownProv installIf world p conds,
           Prov.Subset ownProv (inst_prov I) ->
           (forall m tg, Prov.In (p, (m, tg)) (inst_prov I) ->
              Prov.In (p, (m, tg)) ownProv) ->
-          attachDesignation (sliceInst I ns deps ownProv trig world) p conds =
-          attachDesignation I p conds.
+          attachDesignation (subInst I ns deps ownProv installIf world) p
+            conds = attachDesignation I p conds.
       Proof.
-        intros I ns deps ownProv trig world p conds Hown Hcov.
+        intros I ns deps ownProv installIf world p conds Hown Hcov.
         unfold attachDesignation; destruct (D.designation conds) as [a |];
-          [apply attachAt_slice; assumption | reflexivity].
+          [apply attachAt_subInst; assumption | reflexivity].
       Qed.
 
-      Lemma installIfFibre_slice : forall I ns deps ownProv world p,
+      Lemma installIfFibre_subInst : forall I ns deps ownProv world p,
           Prov.Subset ownProv (inst_prov I) ->
           (forall m tg, Prov.In (p, (m, tg)) (inst_prov I) ->
              Prov.In (p, (m, tg)) ownProv) ->
           installIfFibre
-            (sliceInst I ns deps ownProv (installIfFibre I p) world) p =
+            (subInst I ns deps ownProv (installIfFibre I p) world) p =
           installIfFibre I p.
       Proof.
         intros I ns deps ownProv world p Hown Hcov.
-        apply Trig.ext; intros [z conds].
+        apply InstallIf.ext; intros [z conds].
         rewrite (mem_installIfFibre I p z conds).
         rewrite (mem_installIfFibre
-                   (sliceInst I ns deps ownProv (installIfFibre I p) world)
+                   (subInst I ns deps ownProv (installIfFibre I p) world)
                    p z conds).
-        rewrite sliceInst_trig.
-        rewrite (attachDesignation_slice I ns deps ownProv
+        rewrite subInst_installIf.
+        rewrite (attachDesignation_subInst I ns deps ownProv
                    (installIfFibre I p) world p conds Hown Hcov).
         rewrite (mem_installIfFibre I p z conds).
         tauto.
       Qed.
 
-      (* A package's dependee query reads its own dependency names and,
+      (* A package's dependee lookup reads its own dependency names and,
          per install-if rule it carries, the rule's declaring name and the
          names of the conditions it did not designate. *)
       Definition pkgNames (I : Inst) (p : Pkg.t) : NSet.t :=
@@ -1507,7 +1510,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Qed.
 
       Lemma selfName_pkgNames : forall I p z conds,
-          Trig.In (z, conds) (installIfFibre I p) ->
+          InstallIf.In (z, conds) (installIfFibre I p) ->
           NSet.In (fst z) (pkgNames I p).
       Proof.
         intros I p z conds H; unfold pkgNames; apply NSet.union_spec; right.
@@ -1516,7 +1519,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Qed.
 
       Lemma condName_pkgNames : forall I p z conds a,
-          Trig.In (z, conds) (installIfFibre I p) ->
+          InstallIf.In (z, conds) (installIfFibre I p) ->
           CondSet.In a (condRest conds) ->
           NSet.In (fst a) (pkgNames I p).
       Proof.
@@ -1528,14 +1531,14 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           [exact Ha | reflexivity].
       Qed.
 
-      Definition pkgSlice (I : Inst) (p : Pkg.t) : Inst :=
-        sliceInst I (pkgNames I p)
+      Definition pkgSubInst (I : Inst) (p : Pkg.t) : Inst :=
+        subInst I (pkgNames I p)
           (DepsFibred.tailFibre (inst_deps I) p)
           (ProvFibred.tailFibre (inst_prov I) p)
           (installIfFibre I p) WSet.empty.
 
       Theorem dependees_lookupOrig : forall I n v,
-          dependees (pkgSlice I (n, v)) (embedPkg (n, v)) =
+          dependees (pkgSubInst I (n, v)) (embedPkg (n, v)) =
           dependees I (embedPkg (n, v)).
       Proof.
         intros I n v.
@@ -1549,13 +1552,13 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                      (ProvFibred.tailFibre (inst_prov I) (n, v))).
         { intros m tg H; apply ProvFibred.mem_tailFibre; split;
             [exact H | reflexivity]. }
-        assert (Hfib : installIfFibre (pkgSlice I (n, v)) (n, v) =
+        assert (Hfib : installIfFibre (pkgSubInst I (n, v)) (n, v) =
                          installIfFibre I (n, v)).
-        { unfold pkgSlice; apply installIfFibre_slice; assumption. }
+        { unfold pkgSubInst; apply installIfFibre_subInst; assumption. }
         apply FSet.ext; intro f.
         cbn [dependees embedPkg fst snd].
         rewrite Hfib.
-        cbn [pkgSlice sliceInst inst_deps inst_prov].
+        cbn [pkgSubInst subInst inst_deps inst_prov].
         rewrite !FSet.union_spec, !SOdf.mem_map, !SOrf.mem_filterMap,
           !SOtf.mem_map.
         apply or_iff; [| apply or_iff].
@@ -1564,7 +1567,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             apply DepsFibred.mem_tailFibre in Hin.
             destruct Hin as [Hin ->].
             exists ((n, v), d); split; [exact Hin |].
-            cbv beta iota; apply encDep_slice;
+            cbv beta iota; apply encDep_subInst;
               [exact (dep_pkgNames I (n, v) d Hin) | exact Hown].
           + intros [[p' d] [Hin ->]].
             apply DepsFibred.mem_tailFibre in Hin.
@@ -1576,7 +1579,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             exists ((n, v), d); split.
             { apply DepsFibred.mem_tailFibre; split;
                 [exact Hfb | reflexivity]. }
-            cbv beta iota; symmetry; apply encDep_slice;
+            cbv beta iota; symmetry; apply encDep_subInst;
               [exact (dep_pkgNames I (n, v) d Hfb) | exact Hown].
         - split.
           + intros [[p' [m tg]] [Hin Hv]].
@@ -1587,7 +1590,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             { destruct Hin as [Hin | Hin].
               - apply ProvFibred.mem_tailFibre in Hin;
                   exact (proj1 Hin).
-              - apply mem_provSlice in Hin; exact (proj1 Hin). }
+              - apply mem_provPreimage in Hin; exact (proj1 Hin). }
             exists ((n, v), (m, tg)); split; [| exact Hv].
             apply ProvFibred.mem_tailFibre; split;
               [exact Hin' | reflexivity].
@@ -1602,14 +1605,14 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         - split.
           + intros [[z conds] [Hin ->]].
             exists (z, conds); split; [exact Hin |].
-            cbv beta iota; apply installIfForm_slice;
+            cbv beta iota; apply installIfForm_subInst;
               [ exact (selfName_pkgNames I (n, v) z conds Hin)
               | intros a Ha;
                 exact (condName_pkgNames I (n, v) z conds a Hin Ha)
               | exact Hown ].
           + intros [[z conds] [Hin ->]].
             exists (z, conds); split; [exact Hin |].
-            cbv beta iota; symmetry; apply installIfForm_slice;
+            cbv beta iota; symmetry; apply installIfForm_subInst;
               [ exact (selfName_pkgNames I (n, v) z conds Hin)
               | intros a Ha;
                 exact (condName_pkgNames I (n, v) z conds a Hin Ha)
@@ -1628,25 +1631,25 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         apply SOwn.mem_map; exists d; split; [exact Hd | reflexivity].
       Qed.
 
-      Definition rootSlice (I : Inst) : Inst :=
-        sliceInst I (rootNames I) Deps.empty Prov.empty
-          Trig.empty (inst_world I).
+      Definition rootSubInst (I : Inst) : Inst :=
+        subInst I (rootNames I) Deps.empty Prov.empty
+          InstallIf.empty (inst_world I).
 
-      Lemma rootSlice_world : forall I,
-          inst_world (rootSlice I) = inst_world I.
+      Lemma rootSubInst_world : forall I,
+          inst_world (rootSubInst I) = inst_world I.
       Proof. reflexivity. Qed.
 
       Theorem dependees_lookupRoot : forall I,
-          dependees (rootSlice I) rootPkg = dependees I rootPkg.
+          dependees (rootSubInst I) rootPkg = dependees I rootPkg.
       Proof.
         intro I.
         assert (Hown : Prov.Subset Prov.empty (inst_prov I)).
         { intros e He; destruct (Prov.empty_spec He). }
-        cbn [dependees rootPkg]; rewrite rootSlice_world.
+        cbn [dependees rootPkg]; rewrite rootSubInst_world.
         apply FSet.ext; intro f; rewrite !SOwf.mem_map.
         split; intros [d [Hd ->]]; exists d; split; try exact Hd;
-          [| symmetry]; unfold rootSlice;
-          apply encDep_slice;
+          [| symmetry]; unfold rootSubInst;
+          apply encDep_subInst;
           [ exact (world_rootNames I d Hd) | exact Hown
           | exact (world_rootNames I d Hd) | exact Hown ].
       Qed.

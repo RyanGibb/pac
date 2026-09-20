@@ -244,7 +244,7 @@ let alpine_run debug path goals =
      cone: %d packages, %d provide rows, %d install_if rows\n\
      parse %.2fs\n\
      %!"
-    path ar.Apk_solve.n_pkgs ar.Apk_solve.n_provs ar.Apk_solve.n_trigs (t1 -. t0);
+    path ar.Apk_solve.n_pkgs ar.Apk_solve.n_provs ar.Apk_solve.n_iif (t1 -. t0);
   if !Apk_parse.rejected > 0 then
     Printf.printf "parser dropped %d rows\n%!" !Apk_parse.rejected;
   let world = Apk_solve.world_of_args goals in
@@ -339,7 +339,7 @@ let npm_run debug cache offline tree omit goal wanted =
           Printf.printf "optionalDependencies: %d rows, %d dropped\n"
             !Npm_parse.optional_count ar.Npm_solve.n_opt_dropped;
         Printf.printf "encoded solution: %d core nodes (%d lookups)\n"
-          r.Npm_solve.nodes r.Npm_solve.queries;
+          r.Npm_solve.nodes r.Npm_solve.lookups;
         Printf.printf "solve %.2fs\n" (t2 -. t0);
         0
   end

@@ -1,6 +1,6 @@
 (* opam solving over the verified pipeline, deb_solve-style: the archive
    lives in hashtables; the extracted per-package/per-name lookups are
-   called on slice instances justified by Opam.dependees_lookup* /
+   called on sub-instances justified by Opam.dependees_lookup* /
    Opam.versions_lookup*, which evaluate every filter against [rho] as
    they run; each package's package-formula rows are then reduced to core edges
    by the extracted PackageFormula reduction on its own sub-instance;
@@ -61,8 +61,8 @@ let empty_archive root =
   }
 
 (* A name's versions are one directory listing -- packages/<n>/<n>.<v>/opam
-   -- so a name is parsed whole, the first time a slice reads it, and a run
-   touches the names the solver asks about and no others. *)
+   -- so a name is parsed whole, the first time a sub-instance reads it,
+   and a run touches the names the solver asks about and no others. *)
 let load_name ar (name : string) : (string * Opam_parse.pkg_meta) list =
   match Hashtbl.find_opt ar.pkgs name with
   | Some vs -> vs
@@ -145,8 +145,9 @@ let class_members ar k =
   match Hashtbl.find_opt ar.class_idx k with Some x -> x | None -> []
 
 (* There is no cone pass: the repository is uncovered as the solver asks
-   for it, so each lookup theorem's slice must be complete at the moment
-   it answers.  That holds by construction for all but one row: versions
+   for it, so each lookup theorem's sub-instance must be complete at the
+   moment it answers.  That holds by construction for all but one row:
+   versions
    and root_inst read the repository at one name, which load_name takes
    whole; inst_for reads (n, v)'s own dep/conflict/depext/pin-depends
    rows and the repository at rowNames, the names those rows mention, and
@@ -155,17 +156,17 @@ let class_members ar k =
 
    Conflict classes are the exception, and only on one side.  A package's
    class formulas are read off its own declarations, so inst_for stays
-   local; what is a preimage is the class gadget's version list, which is
+   local; what is a preimage is the class package's version list, which is
    every declarer of the class and which no row of any one package names.
    class_idx therefore holds the declarers among the names loaded so far
    and may grow at any point in the run.  Not memoising is enough here,
    where it would not have been under a pairwise encoding: the growing
    answer is a versions answer, and PubGrub re-asks a name for its
    versions at every propagation step, whereas it consumes a node's
-   dependency list once.  So cls_inst rebuilds the slice from class_idx
-   at every ask and a declarer parsed later is simply there.  A gadget
-   version is also never asked for before its claimant's name has loaded,
-   since the claim is that package's own edge. *)
+   dependency list once.  So cls_inst rebuilds the sub-instance from
+   class_idx at every ask and a declarer parsed later is simply there.  A
+   class version is also never asked for before its claimant's name has
+   loaded, since the claim is that package's own edge. *)
 
 module Make () = struct
   module Op = E.Opam (SName) (OVerOT) (SName) (OVerOT) (SName)
@@ -232,12 +233,12 @@ module Make () = struct
     | OAnd (a, b) -> Op.OFAnd (xoff a, xoff b)
     | OOr (a, b) -> Op.OFOr (xoff a, xoff b)
 
-  (* ---- slice instances (the shapes the lookup lemmas justify) ---- *)
+  (* ---- sub-instances (the shapes the lookup lemmas justify) ---- *)
 
   let pkgset_of = Op.PkgSet.ofList
   let clsrel_of = Op.ClsRel.ofList
 
-  let repo_and_avail ar (names : string list) =
+  let repo_and_avail ar (ns : string list) =
     let repo = ref [] and avl = ref [] in
     List.iter
       (fun m ->
@@ -248,7 +249,7 @@ module Make () = struct
             if meta.Opam_parse.available <> Opam_parse.FT then
               avl := ((m, v), xfilt meta.Opam_parse.available) :: !avl)
           (versions_of ar m))
-      (List.sort_uniq String.compare names);
+      (List.sort_uniq String.compare ns);
     (pkgset_of !repo, !avl)
 
   let dummy = Op.OFAtom ("", Op.FlFalse, Op.VCTop)
@@ -264,7 +265,7 @@ module Make () = struct
         (fun (cn, (g, c)) -> (p, (cn, (xfilt g, xvc c))))
         m.Opam_parse.conflicts
     in
-    (* only this package's own declarations: the class gadget carries the
+    (* only this package's own declarations: the class package carries the
        partners, so no partner's rows are read here *)
     let cls_rows = List.map (fun k -> ((n, v), k)) m.Opam_parse.classes in
     let dxt_rows =
@@ -317,9 +318,9 @@ module Make () = struct
       inst_inv = Op.OFAtom (goal, Op.FlFalse, Op.VCTop);
     }
 
-  (* Op.Reduction.classSlice: the class relation restricted to k, which is
-     all the gadget's version lookup reads.  Built from class_idx at every
-     ask and never held -- see the note above [Make]. *)
+  (* Op.Reduction.classSubInst: the class relation restricted to k, which is
+     all the class package's version lookup reads.  Built from class_idx at
+     every ask and never held -- see the note above [Make]. *)
   let cls_inst ar (k : string) : Op.coq_Inst =
     {
       Op.inst_repo = Op.PkgSet.empty;
@@ -496,11 +497,11 @@ module Make () = struct
     | PF.FConj (a, b) | PF.FDisj (a, b) -> form_names (form_names acc a) b
     | PF.FNeg a -> form_names acc a
 
-  (* where a dependee sits on the depender's spine, or None for the gadgets
-     0install's decider never reaches: a conflict is a `Restricts dependency
-     it skips outright, and a conflict class is an at_most_one clause over
-     implementations rather than a role at all (solver_core.ml,
-     [Conflict_classes] and [check_dep]). *)
+  (* where a dependee sits on the depender's spine, or None for the
+     synthetic packages 0install's decider never reaches: a conflict is a
+     `Restricts dependency it skips outright, and a conflict class is an
+     at_most_one clause over implementations rather than a role at all
+     (solver_core.ml, [Conflict_classes] and [check_dep]). *)
   let zi_rank tbl (m : PFR.Name.t) : int option =
     let best acc s =
       match (Hashtbl.find_opt tbl s, acc) with
@@ -524,7 +525,7 @@ module Make () = struct
   type state = {
     ar : archive;
     edges : (PFR.Name.t * PFR.Version.t, T.DependeesSet.t) Hashtbl.t;
-    gadget_vers : (PFR.Name.t, PVersion.t list) Hashtbl.t;
+    synthetic_vers : (PFR.Name.t, PVersion.t list) Hashtbl.t;
     processed : (PF.Pkg.t, unit) Hashtbl.t;
     real_vers : (string, PVersion.t list) Hashtbl.t;
     mutable canon : PFR.Name.t NameMap.t;
@@ -534,16 +535,16 @@ module Make () = struct
     {
       ar;
       edges = Hashtbl.create 65536;
-      gadget_vers = Hashtbl.create 65536;
+      synthetic_vers = Hashtbl.create 65536;
       processed = Hashtbl.create 4096;
       real_vers = Hashtbl.create 4096;
       canon = NameMap.empty;
     }
 
-  (* A Disjunct or NegDep gadget name carries its formulas, so comparing
+  (* A Disjunct or NegDep name carries its formulas, so comparing
      two equal names walks both in full, and PubGrub does that on every
      dependency-list scan and map hit.  Each version's reduction builds
-     its own copy of a gadget name shared across versions; one
+     its own copy of a synthetic name shared across versions; one
      representative per name lets PName.compare answer equality by
      pointer.  The map is keyed by NameOT itself, so which names unify
      is exactly NameOT equality and PubGrub's ordering is unchanged. *)
@@ -571,10 +572,10 @@ module Make () = struct
         | _ ->
             let tv = tag st.ar tn tv in
             let prev =
-              try Hashtbl.find st.gadget_vers tn with Not_found -> []
+              try Hashtbl.find st.synthetic_vers tn with Not_found -> []
             in
             if not (List.mem tv prev) then
-              Hashtbl.replace st.gadget_vers tn (tv :: prev))
+              Hashtbl.replace st.synthetic_vers tn (tv :: prev))
       (T.PkgSet.elements r)
 
   (* reduce one package-formula package's rows to core, via the extracted
@@ -646,7 +647,7 @@ module Make () = struct
             (fun tv -> tag ar tn (PFR.Version.Orig tv))
             (PF.VSet.elements
                (Red.versions rho (cls_inst ar k) (Red.TName.Cls k)))
-      | _ -> ( try Hashtbl.find st.gadget_vers tn with Not_found -> [])
+      | _ -> ( try Hashtbl.find st.synthetic_vers tn with Not_found -> [])
     in
     let deps_cache = Hashtbl.create 65536 in
     let nq = ref 0 in
@@ -679,7 +680,7 @@ module Make () = struct
         r
     in
     (* the dependees of a decided package, in source order and without the
-       gadgets 0install has no role for *)
+       synthetic packages 0install has no role for *)
     let order_cache = Hashtbl.create 4096 in
     let zi_deps (tn : PFR.Name.t) (pv : PVersion.t) : PFR.Name.t list =
       ignore (dependencies tn pv);
@@ -703,7 +704,7 @@ module Make () = struct
             ds
           |> List.stable_sort (fun (i, _) (j, _) -> compare (i : int) j)
           |> List.map snd
-      (* the root, which carries the goal, and a disjunction gadget, which
+      (* the root, which carries the goal, and a disjunct package, which
          carries the alternative it was decided to: no written order to
          restore either way *)
       | _ -> List.filter zi_walkable ds

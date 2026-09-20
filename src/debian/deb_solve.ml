@@ -1,9 +1,10 @@
 (* PubGrub over the extracted multiarch reduction: stanzas are normalized
    to (name, arch, version) packages with Multi-Arch classes, and every
-   query slice is a small MA-side restriction pushed through the verified
-   translation (reduceReal/reduceDeps/reduceProv/reduceConf in DebianMA.v), so
-   the translation itself computes the mangled Debian-side sets.  Queries
-   then go through per-name slice instances — the Debian.v lookup lemmas
+   lookup's sub-instance is a small MA-side restriction pushed through the
+   verified translation (reduceReal/reduceDeps/reduceProv/reduceConf in
+   DebianMA.v), so the translation itself computes the mangled Debian-side
+   sets.  Lookups then go through per-name sub-instances — the Debian.v
+   lookup lemmas
    applied at mangled names (N * NameArch) — and
    solutions come back through the two verified decoders (Deb.multiarchResolution,
    then DebianMA.multiarchResolution). *)
@@ -70,7 +71,7 @@ struct
   (* Normalized stanza: apt rewrites arch:all packages to the native arch
      and downgrades all+same to no (arch:all content is arch-invariant).
      Its Depends and Recommends clauses are still the raw field text, and
-     are mangled once, on the first slice that reads them. *)
+     are mangled once, on the first sub-instance that reads them. *)
   type nstanza = {
     npkg : DMA.Pkg.t;
     ncls : DMA.coq_MAClass;
@@ -86,7 +87,7 @@ struct
   }
 
   (* ~recommends false is the --no-install-recommends reading: the Rec
-     instance is empty, so every Soft gadget is empty and unreachable. *)
+     instance is empty, so every soft disjunct is empty and unreachable. *)
   let normalize ~recommends (st : DF.stanza) : nstanza =
     let arch = if st.architecture = "all" then AP.native else st.architecture in
     let ncls =
@@ -128,7 +129,8 @@ struct
        same A. *)
     clause_order : (DMA.Deb.AtomSet.t, DMA.Deb.Atom.t array) Hashtbl.t;
     class_of : (DMA.Pkg.t, DMA.coq_MAClass) Hashtbl.t;
-    (* stanzas whose clauses a slice has asked for, reported under PACPROF:
+    (* stanzas whose clauses a sub-instance has asked for, reported under
+       PACPROF:
        the whole point of deferring them is that this stays small *)
     mutable n_clauses_parsed : int;
   }
@@ -147,7 +149,8 @@ struct
         let ma_set = DMA.reduceClause b (maset_of alts) in
         (* Two clauses may list the same alternatives in different orders;
            whichever is recorded first wins.  Both packages already reduce to
-           one gadget name, hence to one PubGrub decision, so there was never
+           one synthetic name, hence to one PubGrub decision, so there was
+           never
            room for the two to be ordered apart.  The order is a preference
            and nothing more, but not because every alternative is a live
            candidate -- a good few of the clause sets written both ways
@@ -156,7 +159,7 @@ struct
            fuse3, or makedev against udev.  Recording such an order first puts
            a dead alternative at the head and costs a backtrack; it cannot
            change the answer, because an alternative nothing satisfies is one
-           PubGrub can never decide the gadget to. *)
+           PubGrub can never decide the disjunct to. *)
         if not (Hashtbl.mem idx.clause_order ma_set) then
           Hashtbl.replace idx.clause_order ma_set
             (Array.of_list (List.map (DMA.reduceAtom b) alts)))
@@ -164,7 +167,7 @@ struct
 
   (* the alternative's position in the clause being decided, which is what
      PVersion.compare ranks on; max_int for an atom the clause does not list,
-     which cannot arise for a name minted from that clause *)
+     which cannot arise for a name introduced from that clause *)
   let atom_pos idx aset a =
     match Hashtbl.find_opt idx.clause_order aset with
     | None -> max_int
@@ -192,69 +195,71 @@ struct
     in
     List.iter
       (fun st ->
-        let ns = normalize ~recommends st in
-        let (n, b), v = ns.npkg in
+        let stz = normalize ~recommends st in
+        let (n, b), v = stz.npkg in
         push idx.versions_of (n, b) v;
-        Hashtbl.replace idx.stanza_of ns.npkg ns;
+        Hashtbl.replace idx.stanza_of stz.npkg stz;
         push idx.group_of n (b, v);
-        Hashtbl.replace idx.class_of ns.npkg ns.ncls;
+        Hashtbl.replace idx.class_of stz.npkg stz.ncls;
         List.iter
-          (fun (m, vt) -> push idx.providers_of m (ns.npkg, vt))
-          ns.nprovs;
+          (fun (m, vt) -> push idx.providers_of m (stz.npkg, vt))
+          stz.nprovs;
         List.iter
-          (fun ma -> push idx.conflicts_on (DMA.aname ma) (ns.npkg, ma))
-          ns.nconfs)
+          (fun ma -> push idx.conflicts_on (DMA.aname ma) (stz.npkg, ma))
+          stz.nconfs)
       stanzas;
     idx
 
-  (* A Disjunct, Soft or Selector name is minted only by reducing a stanza
+  (* A Disjunct, Soft or Selector name is introduced only by reducing a
+     stanza
      that carries the clause, so clause_order can be filled as stanzas are
      read: nothing can ask about a mangled clause, or an atom of one, before
      the owner it came from has been through here.  That is not true of
      conflicts_on or providers_of, which are preimages -- who conflicts with
      me, and who provides the name I want -- that no row of the asking
      package can reach, so Conflicts, Breaks and Provides stay eager. *)
-  let clauses_of idx (ns : nstanza) =
-    match ns.nclauses with
+  let clauses_of idx (stz : nstanza) =
+    match stz.nclauses with
     | Some c -> c
     | None ->
-        let c = (mangle ns.raw_deps, mangle ns.raw_recs) in
-        ns.nclauses <- Some c;
+        let c = (mangle stz.raw_deps, mangle stz.raw_recs) in
+        stz.nclauses <- Some c;
         idx.n_clauses_parsed <- idx.n_clauses_parsed + 1;
-        index_clauses idx ns.npkg (fst c);
-        index_clauses idx ns.npkg (snd c);
+        index_clauses idx stz.npkg (fst c);
+        index_clauses idx stz.npkg (snd c);
         c
 
-  let deps_of idx ns = fst (clauses_of idx ns)
-  let recs_of idx ns = snd (clauses_of idx ns)
+  let deps_of idx stz = fst (clauses_of idx stz)
+  let recs_of idx stz = snd (clauses_of idx stz)
 
   (* One package's clauses in control-file order, Depends before Recommends,
-     each with its mangled alternatives and the gadget name a multi-way
+     each with its mangled alternatives and the synthetic name a multi-way
      clause would carry: the order apt's Propagate walks the watches of a
      package that just became true, which is the order its work items enter
-     the heap.  A one-alternative Depends has no Disjunct gadget (Debian.v
-     mints one only at cardinality >= 2): its work item, when it has one, is
+     the heap.  A one-alternative Depends has no disjunct package (Debian.v
+     introduces one only at cardinality >= 2): its work item, when it has
+     one, is
      the alternative's selector, which the caller resolves because a
      selector in turn exists only for a provided name (tgt, Debian.v). *)
-  let ordered_gadget_clauses idx (p : DMA.Pkg.t) :
+  let ordered_clauses idx (p : DMA.Pkg.t) :
       (bool * DMA.Deb.Name.t * DMA.Deb.Atom.t list) list =
     match Hashtbl.find_opt idx.stanza_of p with
     | None -> []
-    | Some ns ->
+    | Some stz ->
         let b = snd (fst p) in
-        let mk opt gadget alts =
+        let mk opt synth alts =
           let ma = DMA.reduceClause b (maset_of alts) in
           let eatoms =
             List.sort_uniq Stdlib.compare (List.map (DMA.reduceAtom b) alts)
           in
-          (opt, gadget ma, eatoms)
+          (opt, synth ma, eatoms)
         in
         List.map
           (fun alts -> mk false (fun s -> DMA.Deb.Name.Disjunct s) alts)
-          (deps_of idx ns)
+          (deps_of idx stz)
         @ List.map
             (fun alts -> mk true (fun s -> DMA.Deb.Name.Soft s) alts)
-            (recs_of idx ns)
+            (recs_of idx stz)
 
   (* Does version [w] satisfy the atom's formula?  Mangled formulas compare
      raw Debian versions, so dpkg's comparison decides. *)
@@ -274,7 +279,7 @@ struct
         | E.OpEq -> c = 0
         | E.OpNe -> c <> 0)
 
-  (* MA-side slice builders, in the shapes DebianMA.Lookup proves
+  (* MA-side sub-instance builders, in the shapes DebianMA.Lookup proves
      sufficient (versions_lookup*MA / dependees_lookup*MA). *)
 
   let find_list tbl k =
@@ -285,7 +290,7 @@ struct
       (List.map (fun v -> ((n, b), v)) (find_list idx.versions_of (n, b)))
 
   (* Every group member at any arch: foreign provides and group provides
-     come from any member, so name slices must span the whole group. *)
+     come from any member, so name preimages must span the whole group. *)
   let ma_group_of_names idx ns =
     DMA.PkgSet.ofList
       (List.concat_map
@@ -303,27 +308,27 @@ struct
   let ma_prov_of_pkg idx p =
     match Hashtbl.find_opt idx.stanza_of p with
     | None -> DMA.Prov.empty
-    | Some ns ->
-        DMA.Prov.ofList (List.map (fun (m, vt) -> (p, (m, vt))) ns.nprovs)
+    | Some stz ->
+        DMA.Prov.ofList (List.map (fun (m, vt) -> (p, (m, vt))) stz.nprovs)
 
   let ma_deps_of_pkg idx p =
     match Hashtbl.find_opt idx.stanza_of p with
     | None -> DMA.Deps.empty
-    | Some ns ->
+    | Some stz ->
         DMA.Deps.ofList
-          (List.map (fun alts -> (p, maset_of alts)) (deps_of idx ns))
+          (List.map (fun alts -> (p, maset_of alts)) (deps_of idx stz))
 
   let ma_recs_of_pkg idx p =
     match Hashtbl.find_opt idx.stanza_of p with
     | None -> DMA.Deps.empty
-    | Some ns ->
+    | Some stz ->
         DMA.Deps.ofList
-          (List.map (fun alts -> (p, maset_of alts)) (recs_of idx ns))
+          (List.map (fun alts -> (p, maset_of alts)) (recs_of idx stz))
 
   let ma_conf_of_pkg idx p =
     match Hashtbl.find_opt idx.stanza_of p with
     | None -> DMA.Conf.empty
-    | Some ns -> DMA.Conf.ofList (List.map (fun ma -> (p, ma)) ns.nconfs)
+    | Some stz -> DMA.Conf.ofList (List.map (fun ma -> (p, ma)) stz.nconfs)
 
   let ma_conf_on_names idx ns =
     DMA.Conf.ofList (List.concat_map (find_list idx.conflicts_on) ns)
@@ -339,17 +344,17 @@ struct
   let atom_names_of idx p =
     match Hashtbl.find_opt idx.stanza_of p with
     | None -> []
-    | Some ns -> List.concat_map (List.map DMA.aname) (deps_of idx ns)
+    | Some stz -> List.concat_map (List.map DMA.aname) (deps_of idx stz)
 
   let prov_names_of idx p =
     match Hashtbl.find_opt idx.stanza_of p with
     | None -> []
-    | Some ns -> List.map fst ns.nprovs
+    | Some stz -> List.map fst stz.nprovs
 
-  (* R/Pi slices for a mangled name (m, x): whichever x is, every provider
-     of (m, x) is either a group member of m (reals, implicit group /
-     foreign / :any provides) or a declared provider of m. *)
-  let sel_slices idx (mn : string * DMA.coq_NameArch) =
+  (* R/Pi preimages for a mangled name (m, x): whichever x is, every
+     provider of (m, x) is either a group member of m (reals, implicit group
+     / foreign / :any provides) or a declared provider of m. *)
+  let sel_preimages idx (mn : string * DMA.coq_NameArch) =
     let m = fst mn in
     let r_ma = ma_group_of_names idx [ m ] in
     let pi_decl = ma_prov_of_names idx [ m ] in
@@ -368,7 +373,8 @@ struct
           DMA.Deb.Deps.empty DMA.Deb.Deps.empty DMA.Deb.Prov.empty
           DMA.Deb.Conf.empty n'
     | DMA.Deb.Name.Orig _ ->
-        (* embedPkg mints only QAArch names: no reals at :any/group names *)
+        (* embedPkg introduces only QAArch names: no reals at :any/group
+           names *)
         DMA.Deb.versions DMA.Deb.Ver.C.PkgSet.empty DMA.Deb.Deps.empty
           DMA.Deb.Deps.empty DMA.Deb.Prov.empty DMA.Deb.Conf.empty n'
     | DMA.Deb.Name.Disjunct aset ->
@@ -379,7 +385,7 @@ struct
         DMA.Deb.versionsSoft aset
     | DMA.Deb.Name.Selector a ->
         (* Lookup.versions_lookupSelector *)
-        let r, pi = sel_slices idx (fst a) in
+        let r, pi = sel_preimages idx (fst a) in
         DMA.Deb.us r pi a
     | DMA.Deb.Name.Guard (_, _, _) ->
         (* Lookup.versions_lookupGuard *)
@@ -428,11 +434,11 @@ struct
           s
     | DMA.Deb.Name.Disjunct _, DMA.Deb.Version.Atom a ->
         (* Lookup.dependees_lookupDisjunct *)
-        let r, pi = sel_slices idx (fst a) in
+        let r, pi = sel_preimages idx (fst a) in
         DMA.Deb.T.DependeesSet.singleton (DMA.Deb.tgt r pi a)
     | DMA.Deb.Name.Soft _, DMA.Deb.Version.Atom a ->
         (* Lookup.dependees_lookupSoft *)
-        let r, pi = sel_slices idx (fst a) in
+        let r, pi = sel_preimages idx (fst a) in
         DMA.Deb.T.DependeesSet.singleton (DMA.Deb.tgt r pi a)
     | DMA.Deb.Name.Selector _, DMA.Deb.Version.Ref (m, w) ->
         (* Lookup.dependees_lookupSelector *)
@@ -533,12 +539,12 @@ struct
     let (n, b), _ = p in
     let nat = String.equal b AP.native in
     match Hashtbl.find_opt idx.stanza_of p with
-    | Some ns ->
+    | Some stz ->
         {
-          pess = ns.ness;
-          pimp = ns.nimp;
+          pess = stz.ness;
+          pimp = stz.nimp;
           pnat = nat;
-          pprio = ns.nprio;
+          pprio = stz.nprio;
           pname = n;
         }
     | None ->
@@ -551,7 +557,8 @@ struct
         }
 
   (* A Ref names the provider package it came from, so its keys are that
-     package's own.  embedPkg mints only QAArch names, so the other cases are
+     package's own.  embedPkg introduces only QAArch names, so the other
+     cases are
      unreachable and rank as an unindexed package would. *)
   let ref_pref idx ((n, x) : string * DMA.coq_NameArch) w =
     match x with
@@ -565,7 +572,8 @@ struct
           pname = n;
         }
 
-  (* The candidate order reads the index the candidates were minted from, so
+  (* The candidate order reads the index the candidates were introduced
+     from, so
      the comparator and the PubGrub instance over it are built per solve. *)
   module Search (I : sig
     val idx : index
@@ -592,11 +600,12 @@ struct
          decided.  So pref only ever separates the providers of one atom.
 
          The escape is likewise a preference and not a constraint: the calculus
-         tags it above Version.Atom, but we want the recommends gadget to try
+         tags it above Version.Atom, but we want the soft disjunct to try
          every real alternative before giving up on the clause, so it is ranked
          below them here.  Only candidates of one name are ever compared
          (PubGrub ranges are per name), and Version.Zero shares a name with
-         Version.Atom in the Soft gadget and with Version.One in a guard and
+         Version.Atom in the soft disjunct and with Version.One in a guard
+         and
          nowhere else, so the two escape cases cannot disturb any other pair. *)
       let compare (a : t) (b : t) =
         let fallback () = r2c (DMA.Deb.VersionOT.compare a.v b.v) in
@@ -751,10 +760,9 @@ struct
             else 0
         | cs ->
             let allowed = allowed_of (DMA.Deb.Name.Selector a) in
-            let names = ref [] in
+            let ns = ref [] in
             let add n =
-              if not (List.exists (String.equal n) !names) then
-                names := n :: !names
+              if not (List.exists (String.equal n) !ns) then ns := n :: !ns
             in
             List.iter
               (fun (pv : PVersion.t) ->
@@ -764,7 +772,7 @@ struct
                   | DMA.Deb.Version.Ref (m, _) -> add (fst m)
                   | _ -> ())
               cs;
-            List.length !names
+            List.length !ns
       in
       let atom_static a = atom_pkgs ~assigned:(fun _ -> PG.Unselected) a in
       let module D = struct
@@ -788,7 +796,7 @@ struct
               Option.map Array.to_list
                 (Hashtbl.find_opt I.idx.clause_order aset)
           | DMA.Deb.Name.Selector a ->
-              (* a one-alternative Depends has no Disjunct gadget: the
+              (* a one-alternative Depends has no disjunct package: the
                  selector itself is the work item *)
               Some [ a ]
           | _ -> None
@@ -803,10 +811,11 @@ struct
 
         let wave n (pv : PVersion.t) =
           match (n, pv.PVersion.v) with
-          | DMA.Deb.Name.Orig (nm, DMA.QAArch b), DMA.Deb.Version.Orig v ->
+          | DMA.Deb.Name.Orig (m, DMA.QAArch b), DMA.Deb.Version.Orig v ->
               List.map
                 (fun (opt, g, atoms) ->
-                  (* the item's name in this encoding: the clause gadget, or
+                  (* the item's name in this encoding: the clause's synthetic
+                     name, or
                      for a one-alternative Depends the alternative's selector
                      -- and no item at all where the selector does not exist,
                      because the whole chain is then forced (apt's Enqueue) *)
@@ -819,7 +828,7 @@ struct
                     | _ -> Some g
                   in
                   (opt, g, atoms))
-                (ordered_gadget_clauses I.idx ((nm, b), v))
+                (ordered_clauses I.idx ((m, b), v))
           | _ -> []
 
         let continuation n (pv : PVersion.t) =
@@ -860,20 +869,21 @@ struct
                 discover (DMA.Deb.Name.Selector a);
                 discover (DMA.Deb.Name.Orig (fst a)))
               atoms)
-          (ordered_gadget_clauses I.idx p)
+          (ordered_clauses I.idx p)
       in
       (* apt never resolves a clause one of whose alternatives is already
          satisfied: it leaves the clause alone and installs nothing for it.
-         PubGrub has to decide the gadget either way, so the nearest thing is
+         PubGrub has to decide the disjunct either way, so the nearest thing
+         is
          to decide it at no cost -- an alternative, or a provider of one, the
          solution already carries.  Where nothing is carried, and for every
          other name, PVersion.compare's answer stands unchanged. *)
       let choose ~assigned n cands =
         (if apt_heap then
            match n with
-           | DMA.Deb.Name.Orig (nm, DMA.QAArch b) -> (
+           | DMA.Deb.Name.Orig (m, DMA.QAArch b) -> (
                match (greatest cands).PVersion.v with
-               | DMA.Deb.Version.Orig v -> stamp_pkg ((nm, b), v)
+               | DMA.Deb.Version.Orig v -> stamp_pkg ((m, b), v)
                | _ -> ())
            | _ -> ());
         (* an alternative nothing satisfies never enters apt's solutions at
@@ -1009,7 +1019,8 @@ end
 
 (* Parsing and index construction are reported apart from solving because
    they scale differently: the archive is read whole, while the solve
-   touches only the slices the lookup theorems bound.  Which of the two
+   touches only the sub-instances the lookup theorems bound.  Which of the
+   two
    dominates is the frontend's headline number, so it is printed rather
    than inferred. *)
 let solve_files ?debug ?apt_heap ?(recommends = true) ~native ~paths ~goal :

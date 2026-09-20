@@ -294,7 +294,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Qed.
 
   (* The versions of a crate name in the repository; encoders consult R
-     only through an oracle Vq of this shape, so slice reuse below is
+     only through an oracle Vq of this shape, so sub-instance reuse below is
      oracle agreement (the lookup lemmas).  This is not evalReq at some
      top range: no range admits a prerelease it does not name, so none
      denotes the whole repository. *)
@@ -342,7 +342,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       subst a; rewrite NEqb.eqb_refl, Hact; reflexivity.
   Qed.
 
-  (* Feature-table entries that create a decision gadget, with the feat
+  (* Feature-table entries that create a decision name, with the feat
      they deliver. *)
   Definition entryFeatD (e : FEntry.t) : option (N.t * F.t) :=
     match e with
@@ -362,7 +362,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     end.
 
   (* Whether some feature entry of (p, f) delivers (a, feat); weak and
-     strong entries mint the same decision gadget. *)
+     strong entries introduce the same decision name. *)
   Definition fdEntryb (FDefs : FDefRel.t) (p : Pkg.t) (f : F.t)
       (a : N.t) (feat : F.t) : bool :=
     orb (FDefRel.mem ((p, f), FEntry.EDepFeat a feat) FDefs)
@@ -2159,9 +2159,9 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       rewrite Eb; reflexivity.
   Qed.
 
-  (* A gadget is minted only for an enabled feature, so its edge into the
-     target feature name is unconditional rather than gated on a witness
-     the owner has to enable. *)
+  (* A decision name is introduced only for an enabled feature, so its edge
+     into the target feature name is unconditional rather than gated on a
+     witness the owner has to enable. *)
   Definition wDecs (g : V.t -> G.t) (FDefs : FDefRel.t)
       (Slots : SlotRel.t) (cfgActive : CfgS.t -> bool) (rc : Pkg.t)
       (S : PkgSet.t) (FS : FeaturedSet.t) (pi : ParentRel.t) : T.PkgSet.t :=

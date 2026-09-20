@@ -34,29 +34,29 @@ let comparer c = c = '<' || c = '>' || c = '=' || c = '~'
 let parse_atom (tok : string) : dep option =
   let neg = String.length tok > 0 && tok.[0] = '!' in
   let s = if neg then String.sub tok 1 (String.length tok - 1) else tok in
-  let n = String.length s in
+  let len = String.length s in
   (* name@tag pins the atom to a repository, which the calculus does not
      model; apk itself rejects a tag in an index dependency. *)
-  if n = 0 || String.contains s '@' then None
+  if len = 0 || String.contains s '@' then None
   else
     let i = ref 0 in
-    while !i < n && not (comparer s.[!i]) do
+    while !i < len && not (comparer s.[!i]) do
       incr i
     done;
-    if !i = n then Some { d_neg = neg; d_name = s; d_constr = Any }
+    if !i = len then Some { d_neg = neg; d_name = s; d_constr = Any }
     else
       let j = ref !i in
-      while !j < n && comparer s.[!j] do
+      while !j < len && comparer s.[!j] do
         incr j
       done;
-      let nm = String.sub s 0 !i in
+      let n = String.sub s 0 !i in
       let opstr = String.sub s !i (!j - !i) in
-      let ver = String.sub s !j (n - !j) in
-      if nm = "" then None
+      let ver = String.sub s !j (len - !j) in
+      if n = "" then None
       else
         match Apk_version.op_of_string opstr with
         | None -> None
-        | Some o -> Some { d_neg = neg; d_name = nm; d_constr = Op (o, ver) }
+        | Some o -> Some { d_neg = neg; d_name = n; d_constr = Op (o, ver) }
 
 (* Only space and newline separate dependency atoms; a tab does not. *)
 let split_deps (v : string) : string list =

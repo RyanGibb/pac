@@ -161,9 +161,9 @@ Module PackageFormula (N V : UsualOrderedType).
     #[local] Hint Extern 1 => cmp_by DepF.compare_lt_trans : cmp_pkgf.
     #[local] Hint Extern 1 => cmp_by FListF.compare_lt_trans : cmp_pkgf.
 
-    (* One gadget per disjunction, named by all of its alternatives: a
-       chain of two-alternative gadgets would mint an inner name for every
-       proper suffix of the same disjunction. *)
+    (* One disjunct package per disjunction, named by all of its
+       alternatives: a chain of two-alternative disjuncts would introduce an
+       inner name for every proper suffix of the same disjunction. *)
     Module Name.
       Inductive name : Type :=
       | Orig (n : N.t)
@@ -202,8 +202,8 @@ Module PackageFormula (N V : UsualOrderedType).
     #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_pkgf.
     #[local] Hint Extern 1 => cmp_by NatF.compare_lt_trans : cmp_pkgf.
 
-    (* A gadget version is the position of the alternative it selects, so a
-       disjunction of any width is one node. *)
+    (* A synthetic version is the position of the alternative it selects, so
+       a disjunction of any width is one node. *)
     Module Version.
       Inductive version : Type :=
       | Orig (v : V.t)
@@ -241,8 +241,8 @@ Module PackageFormula (N V : UsualOrderedType).
       SOvv.map Version.Orig vs.
 
     (* The alternatives a disjunction offers, and the alternatives De
-       Morgan reads off a negated conjunction: the gadget's own name, and
-       the list its versions index. *)
+       Morgan reads off a negated conjunction: the disjunct package's own
+       name, and the list its versions index. *)
     Fixpoint disjSpine (f : Formula) : list Formula :=
       match f with
       | FDisj a b => a :: disjSpine b
@@ -474,20 +474,20 @@ Module PackageFormula (N V : UsualOrderedType).
                tryInvPkg_some).
     Qed.
 
-    Definition GadgetName (n : Name.t) : Prop :=
+    Definition SyntheticName (n : Name.t) : Prop :=
       (exists n' vs, n = Name.NegDep n' vs) \/ (exists fs, n = Name.Disjunct fs).
 
     Lemma witnessSet_name_classify_aux : forall f : Formula,
         (forall (p : T.Pkg.t) (n : Name.t) (v : Version.t),
-            T.PkgSet.In (n, v) (witnessSet p f) -> GadgetName n) /\
+            T.PkgSet.In (n, v) (witnessSet p f) -> SyntheticName n) /\
         (forall (p : T.Pkg.t) (n : Name.t) (v : Version.t),
-            T.PkgSet.In (n, v) (witnessSetNeg p f) -> GadgetName n) /\
+            T.PkgSet.In (n, v) (witnessSetNeg p f) -> SyntheticName n) /\
         (forall (nm : Name.t) (i : nat) (n : Name.t) (v : Version.t),
-            T.PkgSet.In (n, v) (witnessDisj nm i f) -> GadgetName n) /\
+            T.PkgSet.In (n, v) (witnessDisj nm i f) -> SyntheticName n) /\
         (forall (nm : Name.t) (i : nat) (n : Name.t) (v : Version.t),
-            T.PkgSet.In (n, v) (witnessConjNeg nm i f) -> GadgetName n).
+            T.PkgSet.In (n, v) (witnessConjNeg nm i f) -> SyntheticName n).
     Proof.
-      unfold GadgetName;
+      unfold SyntheticName;
         induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa].
       - repeat split.
         + intros p n v H; exfalso; exact (SOpt.empty_in _ H).
@@ -595,8 +595,8 @@ Module PackageFormula (N V : UsualOrderedType).
           destruct Hw as [v [Hv ->]].
         exists v; split; [exact Hv |].
         apply mem_packageFormulaResolution; exact HwS. }
-      (* the NegDep gadget: version 1 says the dependency is not taken, and
-         every taker of it is pinned to version 0 *)
+      (* the negated atom's package: version 1 says the dependency is not
+         taken, and every taker of it is pinned to version 0 *)
       assert (Hneg : forall (q : T.Pkg.t) n vs,
                  (forall d,
                      T.DepRel.In d (encodeNNFneg q (FDep n vs)) ->
@@ -781,9 +781,9 @@ Module PackageFormula (N V : UsualOrderedType).
       | FNeg a => witnessSetUntaken S a
       end.
 
-    (* The alternative a gadget takes: the first satisfied one, and the last
-       one when none is -- which is what the two-alternative chain this
-       replaces settled on, and keeps the index inside idxSet. *)
+    (* The alternative a disjunct package takes: the first satisfied one,
+       and the last one when none is -- which is what the two-alternative
+       chain this replaces settled on, and keeps the index inside idxSet. *)
     Fixpoint firstSatIdx (Sv : PkgSet.t) (fs : list Formula) : nat :=
       match fs with
       | nil => 0
@@ -847,7 +847,7 @@ Module PackageFormula (N V : UsualOrderedType).
       end.
 
     (* The walkers and their hosts agree everywhere but the spine, so the
-       host's own case is the walker's plus the gadget version it takes. *)
+       host's own case is the walker's plus the synthetic version it takes. *)
     Lemma witnessSetTaken_disj_eq : forall S a b,
         witnessSetTaken S (FDisj a b) =
         T.PkgSet.add
@@ -908,8 +908,9 @@ Module PackageFormula (N V : UsualOrderedType).
         [contradiction Hne; reflexivity | reflexivity].
     Qed.
 
-    (* Which alternative a gadget's taken version stands for: the witness of
-       that alternative is the one the walker actually laid down. *)
+    (* Which alternative a disjunct package's taken version stands for: the
+       witness of that alternative is the one the walker actually laid
+       down. *)
     Lemma takenDisj_firstSat : forall S f,
         Satisfies S f ->
         exists g,
@@ -1007,7 +1008,7 @@ Module PackageFormula (N V : UsualOrderedType).
     Qed.
 
     (* Every alternative but the taken one contributes its untaken witness,
-       so a gadget version that the resolution does not carry still has the
+       so a synthetic version that the resolution does not carry still has the
        shape the encoding's recursive call demands. *)
     Lemma takenDisj_untaken_others : forall S f,
         Satisfies S f ->
@@ -1560,11 +1561,11 @@ Module PackageFormula (N V : UsualOrderedType).
 
     Lemma witnessSetUntaken_name_classify_aux : forall S f,
         (forall (n : Name.t) (v : Version.t),
-            T.PkgSet.In (n, v) (witnessSetUntaken S f) -> GadgetName n) /\
+            T.PkgSet.In (n, v) (witnessSetUntaken S f) -> SyntheticName n) /\
         (forall (n : Name.t) (v : Version.t),
-            T.PkgSet.In (n, v) (witnessSetUntakenNeg S f) -> GadgetName n).
+            T.PkgSet.In (n, v) (witnessSetUntakenNeg S f) -> SyntheticName n).
     Proof.
-      unfold GadgetName; intros S f;
+      unfold SyntheticName; intros S f;
         induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa];
         split; intros n v; simpl.
       - intro H; exfalso; exact (SOpt.empty_in _ H).
@@ -1586,22 +1587,22 @@ Module PackageFormula (N V : UsualOrderedType).
 
     Lemma witnessSetUntaken_name_classify :
       forall S f (n : Name.t) (v : Version.t),
-        T.PkgSet.In (n, v) (witnessSetUntaken S f) -> GadgetName n.
+        T.PkgSet.In (n, v) (witnessSetUntaken S f) -> SyntheticName n.
     Proof.
       intros S f; exact (proj1 (witnessSetUntaken_name_classify_aux S f)).
     Qed.
 
     Lemma witnessSetTaken_name_classify_aux : forall S f,
         (forall (n : Name.t) (v : Version.t),
-            T.PkgSet.In (n, v) (witnessSetTaken S f) -> GadgetName n) /\
+            T.PkgSet.In (n, v) (witnessSetTaken S f) -> SyntheticName n) /\
         (forall (n : Name.t) (v : Version.t),
-            T.PkgSet.In (n, v) (witnessSetTakenNeg S f) -> GadgetName n) /\
+            T.PkgSet.In (n, v) (witnessSetTakenNeg S f) -> SyntheticName n) /\
         (forall (n : Name.t) (v : Version.t),
-            T.PkgSet.In (n, v) (takenDisj S f) -> GadgetName n) /\
+            T.PkgSet.In (n, v) (takenDisj S f) -> SyntheticName n) /\
         (forall (n : Name.t) (v : Version.t),
-            T.PkgSet.In (n, v) (takenConjNeg S f) -> GadgetName n).
+            T.PkgSet.In (n, v) (takenConjNeg S f) -> SyntheticName n).
     Proof.
-      unfold GadgetName; intros S f;
+      unfold SyntheticName; intros S f;
         induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa].
       - split4; intros n v; simpl; intro H;
           solve [exfalso; exact (SOpt.empty_in _ H)
@@ -1611,7 +1612,7 @@ Module PackageFormula (N V : UsualOrderedType).
           destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4);
           pose proof (witnessSetUntaken_name_classify_aux S a) as (Ua1 & Ua2);
           pose proof (witnessSetUntaken_name_classify_aux S b) as (Ub1 & Ub2);
-          unfold GadgetName in Ua1, Ua2, Ub1, Ub2; split4.
+          unfold SyntheticName in Ua1, Ua2, Ub1, Ub2; split4.
         + intros n v; simpl; intro H;
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
             [exact (IHa1 _ _ H) | exact (IHb1 _ _ H)].
@@ -1633,7 +1634,7 @@ Module PackageFormula (N V : UsualOrderedType).
           destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4);
           pose proof (witnessSetUntaken_name_classify_aux S a) as (Ua1 & Ua2);
           pose proof (witnessSetUntaken_name_classify_aux S b) as (Ub1 & Ub2);
-          unfold GadgetName in Ua1, Ua2, Ub1, Ub2; split4.
+          unfold SyntheticName in Ua1, Ua2, Ub1, Ub2; split4.
         + intros n v; rewrite witnessSetTaken_disj_eq; intro H;
             apply SOpt.add_in in H; destruct H as [H | H];
             [injection H as -> _; right; eauto |].
@@ -1658,7 +1659,7 @@ Module PackageFormula (N V : UsualOrderedType).
 
     Lemma witnessSetTaken_name_classify :
       forall S f (n : Name.t) (v : Version.t),
-        T.PkgSet.In (n, v) (witnessSetTaken S f) -> GadgetName n.
+        T.PkgSet.In (n, v) (witnessSetTaken S f) -> SyntheticName n.
     Proof.
       intros S f; exact (proj1 (witnessSetTaken_name_classify_aux S f)).
     Qed.
@@ -1719,7 +1720,7 @@ Module PackageFormula (N V : UsualOrderedType).
       let y0 := fresh "y0" in let Hy0 := fresh "Hy0" in
       intros y0 Hy0; nav; exact (Hu0 y0 Hy0).
 
-    (* Reading a gadget version out of a taken witness: it names an
+    (* Reading a synthetic version out of a taken witness: it names an
        alternative that holds, and that alternative's own taken witness is
        already part of the same set. *)
     Lemma witnessSetTaken_disj_mono_aux : forall S f,
@@ -2668,34 +2669,34 @@ Module PackageFormula (N V : UsualOrderedType).
               symmetry; exact E1.
       Qed.
 
-      (* the witness walkers hand the disjunction gadget's own name down the
+      (* the witness walkers hand the disjunct package's own name down the
          spine, which is why the spine cases carry the extra alternative. *)
-      Definition gadgetAtom (nm : Name.t) : option Atom :=
+      Definition syntheticAtom (nm : Name.t) : option Atom :=
         match nm with
         | Name.Orig _ => None
         | Name.Disjunct fs => Some (ADisj fs)
         | Name.NegDep n vs => Some (ANeg n vs)
         end.
 
-      Definition MintedBy (nm : Name.t) (A : AtomSet.t) : Prop :=
-        exists a, gadgetAtom nm = Some a /\ AtomSet.In a A.
+      Definition IntroducedBy (nm : Name.t) (A : AtomSet.t) : Prop :=
+        exists a, syntheticAtom nm = Some a /\ AtomSet.In a A.
 
-      Lemma MintedBy_unionL : forall nm A B,
-          MintedBy nm A -> MintedBy nm (AtomSet.union A B).
+      Lemma IntroducedBy_unionL : forall nm A B,
+          IntroducedBy nm A -> IntroducedBy nm (AtomSet.union A B).
       Proof.
         intros nm A B [a [Ha HA]]; exists a;
           split; [exact Ha | apply AtomSet.union_spec; left; exact HA].
       Qed.
 
-      Lemma MintedBy_unionR : forall nm A B,
-          MintedBy nm B -> MintedBy nm (AtomSet.union A B).
+      Lemma IntroducedBy_unionR : forall nm A B,
+          IntroducedBy nm B -> IntroducedBy nm (AtomSet.union A B).
       Proof.
         intros nm A B [a [Ha HB]]; exists a;
           split; [exact Ha | apply AtomSet.union_spec; right; exact HB].
       Qed.
 
-      Lemma MintedBy_add : forall nm a A,
-          MintedBy nm A -> MintedBy nm (AtomSet.add a A).
+      Lemma IntroducedBy_add : forall nm a A,
+          IntroducedBy nm A -> IntroducedBy nm (AtomSet.add a A).
       Proof.
         intros nm a A [b [Hb HA]]; exists b;
           split; [exact Hb | apply AtomSet.add_spec; right; exact HA].
@@ -2704,16 +2705,16 @@ Module PackageFormula (N V : UsualOrderedType).
       Lemma witness_atom_aux : forall f : Formula,
           (forall (p : T.Pkg.t) (nm : Name.t) (w : Version.t),
               T.PkgSet.In (nm, w) (witnessSet p f) ->
-              MintedBy nm (deepAtoms f)) /\
+              IntroducedBy nm (deepAtoms f)) /\
           (forall (p : T.Pkg.t) (nm : Name.t) (w : Version.t),
               T.PkgSet.In (nm, w) (witnessSetNeg p f) ->
-              MintedBy nm (deepAtomsNeg f)) /\
+              IntroducedBy nm (deepAtomsNeg f)) /\
           (forall (nm0 : Name.t) (i : nat) (nm : Name.t) (w : Version.t),
               T.PkgSet.In (nm, w) (witnessDisj nm0 i f) ->
-              MintedBy nm (deepAtoms f) \/ nm = nm0) /\
+              IntroducedBy nm (deepAtoms f) \/ nm = nm0) /\
           (forall (nm0 : Name.t) (i : nat) (nm : Name.t) (w : Version.t),
               T.PkgSet.In (nm, w) (witnessConjNeg nm0 i f) ->
-              MintedBy nm (deepAtomsNeg f) \/ nm = nm0).
+              IntroducedBy nm (deepAtomsNeg f) \/ nm = nm0).
       Proof.
         induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa].
         - repeat split.
@@ -2735,8 +2736,8 @@ Module PackageFormula (N V : UsualOrderedType).
             destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); repeat split.
           + intros p nm w H; simpl in H |- *.
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
-              [apply MintedBy_unionL; exact (IHa1 _ _ _ H)
-              | apply MintedBy_unionR; exact (IHb1 _ _ _ H)].
+              [apply IntroducedBy_unionL; exact (IHa1 _ _ _ H)
+              | apply IntroducedBy_unionR; exact (IHb1 _ _ _ H)].
           + intros p nm w H; simpl in H |- *.
             apply T.PkgSet.union_spec in H; destruct H as [H | H].
             * apply mem_idxPkgs in H; destruct H as [j [_ E]];
@@ -2744,20 +2745,22 @@ Module PackageFormula (N V : UsualOrderedType).
               exists (ADisj (FNeg a :: negConjSpine b)); split;
                 [reflexivity | apply AtomSet.add_spec; left; reflexivity].
             * apply T.PkgSet.union_spec in H; destruct H as [H | H].
-              -- apply MintedBy_add, MintedBy_unionL; exact (IHa2 _ _ _ H).
+              -- apply IntroducedBy_add, IntroducedBy_unionL;
+                   exact (IHa2 _ _ _ H).
               -- destruct (IHb4 _ _ _ _ H) as [HM | ->];
-                   [apply MintedBy_add, MintedBy_unionR; exact HM |].
+                   [apply IntroducedBy_add, IntroducedBy_unionR; exact HM |].
                  exists (ADisj (FNeg a :: negConjSpine b)); split;
                    [reflexivity | apply AtomSet.add_spec; left; reflexivity].
           + intros nm0 i nm w H; simpl in H |- *.
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
-              [left; apply MintedBy_unionL; exact (IHa1 _ _ _ H)
-              | left; apply MintedBy_unionR; exact (IHb1 _ _ _ H)].
+              [left; apply IntroducedBy_unionL; exact (IHa1 _ _ _ H)
+              | left; apply IntroducedBy_unionR; exact (IHb1 _ _ _ H)].
           + intros nm0 i nm w H; simpl in H |- *.
             apply T.PkgSet.union_spec in H; destruct H as [H | H].
-            * left; apply MintedBy_add, MintedBy_unionL; exact (IHa2 _ _ _ H).
+            * left; apply IntroducedBy_add, IntroducedBy_unionL;
+                exact (IHa2 _ _ _ H).
             * destruct (IHb4 _ _ _ _ H) as [HM | E];
-                [left; apply MintedBy_add, MintedBy_unionR; exact HM
+                [left; apply IntroducedBy_add, IntroducedBy_unionR; exact HM
                 | right; exact E].
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
             destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); repeat split.
@@ -2768,25 +2771,27 @@ Module PackageFormula (N V : UsualOrderedType).
               exists (ADisj (a :: disjSpine b)); split;
                 [reflexivity | apply AtomSet.add_spec; left; reflexivity].
             * apply T.PkgSet.union_spec in H; destruct H as [H | H].
-              -- apply MintedBy_add, MintedBy_unionL; exact (IHa1 _ _ _ H).
+              -- apply IntroducedBy_add, IntroducedBy_unionL;
+                   exact (IHa1 _ _ _ H).
               -- destruct (IHb3 _ _ _ _ H) as [HM | ->];
-                   [apply MintedBy_add, MintedBy_unionR; exact HM |].
+                   [apply IntroducedBy_add, IntroducedBy_unionR; exact HM |].
                  exists (ADisj (a :: disjSpine b)); split;
                    [reflexivity | apply AtomSet.add_spec; left; reflexivity].
           + intros p nm w H; simpl in H |- *.
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
-              [apply MintedBy_unionL; exact (IHa2 _ _ _ H)
-              | apply MintedBy_unionR; exact (IHb2 _ _ _ H)].
+              [apply IntroducedBy_unionL; exact (IHa2 _ _ _ H)
+              | apply IntroducedBy_unionR; exact (IHb2 _ _ _ H)].
           + intros nm0 i nm w H; simpl in H |- *.
             apply T.PkgSet.union_spec in H; destruct H as [H | H].
-            * left; apply MintedBy_add, MintedBy_unionL; exact (IHa1 _ _ _ H).
+            * left; apply IntroducedBy_add, IntroducedBy_unionL;
+                exact (IHa1 _ _ _ H).
             * destruct (IHb3 _ _ _ _ H) as [HM | E];
-                [left; apply MintedBy_add, MintedBy_unionR; exact HM
+                [left; apply IntroducedBy_add, IntroducedBy_unionR; exact HM
                 | right; exact E].
           + intros nm0 i nm w H; simpl in H |- *.
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
-              [left; apply MintedBy_unionL; exact (IHa2 _ _ _ H)
-              | left; apply MintedBy_unionR; exact (IHb2 _ _ _ H)].
+              [left; apply IntroducedBy_unionL; exact (IHa2 _ _ _ H)
+              | left; apply IntroducedBy_unionR; exact (IHb2 _ _ _ H)].
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); repeat split.
           + intros p nm w H; exact (IHa2 _ _ _ H).
           + intros p nm w H; exact (IHa1 _ _ _ H).
@@ -2806,7 +2811,7 @@ Module PackageFormula (N V : UsualOrderedType).
         cbn beta iota; rewrite AtomSet.mem_spec; reflexivity.
       Qed.
 
-      Definition gadgetPkgs (nm : Name.t) : T.PkgSet.t :=
+      Definition syntheticPkgs (nm : Name.t) : T.PkgSet.t :=
         match nm with
         | Name.Orig _ => T.PkgSet.empty
         | Name.Disjunct fs => idxPkgs (Name.Disjunct fs) (List.length fs)
@@ -2815,32 +2820,32 @@ Module PackageFormula (N V : UsualOrderedType).
               (T.PkgSet.singleton (Name.NegDep n vs, Version.Idx 1))
         end.
 
-      Lemma witnessSet_gadget_aux : forall f : Formula,
+      Lemma witnessSet_synthetic_aux : forall f : Formula,
           (forall (p q : T.Pkg.t),
               T.PkgSet.In q (witnessSet p f) ->
-              T.PkgSet.In q (gadgetPkgs (fst q))) /\
+              T.PkgSet.In q (syntheticPkgs (fst q))) /\
           (forall (p q : T.Pkg.t),
               T.PkgSet.In q (witnessSetNeg p f) ->
-              T.PkgSet.In q (gadgetPkgs (fst q))) /\
+              T.PkgSet.In q (syntheticPkgs (fst q))) /\
           (forall (nm : Name.t) (i : nat) (q : T.Pkg.t),
               T.PkgSet.In q (witnessDisj nm i f) ->
-              T.PkgSet.In q (gadgetPkgs (fst q))) /\
+              T.PkgSet.In q (syntheticPkgs (fst q))) /\
           (forall (nm : Name.t) (i : nat) (q : T.Pkg.t),
               T.PkgSet.In q (witnessConjNeg nm i f) ->
-              T.PkgSet.In q (gadgetPkgs (fst q))).
+              T.PkgSet.In q (syntheticPkgs (fst q))).
       Proof.
         induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa].
         - repeat split.
           + intros p q H; simpl in H; exfalso; exact (SOpt.empty_in _ H).
           + intros p q H; simpl in H;
               rewrite SOpt.add_in, SOpt.singleton_in in H;
-              destruct H as [-> | ->]; cbn [fst gadgetPkgs];
+              destruct H as [-> | ->]; cbn [fst syntheticPkgs];
               rewrite SOpt.add_in, SOpt.singleton_in;
               [left | right]; reflexivity.
           + intros nm i q H; simpl in H; exfalso; exact (SOpt.empty_in _ H).
           + intros nm i q H; simpl in H;
               rewrite SOpt.add_in, SOpt.singleton_in in H;
-              destruct H as [-> | ->]; cbn [fst gadgetPkgs];
+              destruct H as [-> | ->]; cbn [fst syntheticPkgs];
               rewrite SOpt.add_in, SOpt.singleton_in;
               [left | right]; reflexivity.
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
@@ -2850,7 +2855,7 @@ Module PackageFormula (N V : UsualOrderedType).
           + intros p q H; simpl in H; apply T.PkgSet.union_spec in H;
               destruct H as [H | H].
             * apply mem_idxPkgs in H; destruct H as [i [Hi ->]];
-                cbn [fst gadgetPkgs]; apply mem_idxPkgs; exists i;
+                cbn [fst syntheticPkgs]; apply mem_idxPkgs; exists i;
                 split; [exact Hi | reflexivity].
             * apply T.PkgSet.union_spec in H; destruct H as [H | H];
                 [exact (IHa2 _ _ H) | exact (IHb4 _ _ _ H)].
@@ -2864,7 +2869,7 @@ Module PackageFormula (N V : UsualOrderedType).
           + intros p q H; simpl in H; apply T.PkgSet.union_spec in H;
               destruct H as [H | H].
             * apply mem_idxPkgs in H; destruct H as [i [Hi ->]];
-                cbn [fst gadgetPkgs]; apply mem_idxPkgs; exists i;
+                cbn [fst syntheticPkgs]; apply mem_idxPkgs; exists i;
                 split; [exact Hi | reflexivity].
             * apply T.PkgSet.union_spec in H; destruct H as [H | H];
                 [exact (IHa1 _ _ H) | exact (IHb3 _ _ _ H)].
@@ -2882,33 +2887,33 @@ Module PackageFormula (N V : UsualOrderedType).
           + intros nm i q H; simpl in H; exact (IHa1 _ _ H).
       Qed.
 
-      Lemma encodeNNF_target_gadget_aux : forall f : Formula,
+      Lemma encodeNNF_target_synthetic_aux : forall f : Formula,
           (forall (p : T.Pkg.t) (d : T.DepElt.t),
               T.DepRel.In d (encodeNNF p f) ->
-              T.PkgSet.Subset (gadgetPkgs (fst (snd d))) (witnessSet p f)) /\
+              T.PkgSet.Subset (syntheticPkgs (fst (snd d))) (witnessSet p f)) /\
           (forall (p : T.Pkg.t) (d : T.DepElt.t),
               T.DepRel.In d (encodeNNFneg p f) ->
-              T.PkgSet.Subset (gadgetPkgs (fst (snd d)))
+              T.PkgSet.Subset (syntheticPkgs (fst (snd d)))
                 (witnessSetNeg p f)) /\
           (forall (nm : Name.t) (i : nat) (d : T.DepElt.t),
               T.DepRel.In d (encodeDisj nm i f) ->
-              T.PkgSet.Subset (gadgetPkgs (fst (snd d)))
+              T.PkgSet.Subset (syntheticPkgs (fst (snd d)))
                 (witnessDisj nm i f)) /\
           (forall (nm : Name.t) (i : nat) (d : T.DepElt.t),
               T.DepRel.In d (encodeConjNeg nm i f) ->
-              T.PkgSet.Subset (gadgetPkgs (fst (snd d)))
+              T.PkgSet.Subset (syntheticPkgs (fst (snd d)))
                 (witnessConjNeg nm i f)).
       Proof.
         induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa].
         - repeat split.
           + intros p d H; simpl in H; apply SOed.singleton_in in H; subst d;
-              cbn [fst snd gadgetPkgs]; apply T.PkgSet.empty_subset.
+              cbn [fst snd syntheticPkgs]; apply T.PkgSet.empty_subset.
           + intros p d H; simpl in H; rewrite SOed.add_in in H;
               destruct H as [-> | H];
               [| apply SOvd.mem_map in H; destruct H as [u [_ ->]]];
               intros z Hz; exact Hz.
           + intros nm i d H; simpl in H; apply SOed.singleton_in in H; subst d;
-              cbn [fst snd gadgetPkgs]; apply T.PkgSet.empty_subset.
+              cbn [fst snd syntheticPkgs]; apply T.PkgSet.empty_subset.
           + intros nm i d H; simpl in H; rewrite SOed.add_in in H;
               destruct H as [-> | H];
               [| apply SOvd.mem_map in H; destruct H as [u [_ ->]]];
@@ -2920,7 +2925,7 @@ Module PackageFormula (N V : UsualOrderedType).
               [left; exact (IHa1 _ d H z Hz) | right; exact (IHb1 _ d H z Hz)].
           + intros p d H; simpl in H; rewrite SOed.add_in in H;
               destruct H as [-> | H].
-            * intros z Hz; cbn [fst snd gadgetPkgs] in Hz;
+            * intros z Hz; cbn [fst snd syntheticPkgs] in Hz;
                 apply T.PkgSet.union_spec; left; exact Hz.
             * apply T.DepRel.union_spec in H; intros z Hz;
                 apply T.PkgSet.union_spec; right;
@@ -2938,7 +2943,7 @@ Module PackageFormula (N V : UsualOrderedType).
             destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); repeat split.
           + intros p d H; simpl in H; rewrite SOed.add_in in H;
               destruct H as [-> | H].
-            * intros z Hz; cbn [fst snd gadgetPkgs] in Hz;
+            * intros z Hz; cbn [fst snd syntheticPkgs] in Hz;
                 apply T.PkgSet.union_spec; left; exact Hz.
             * apply T.DepRel.union_spec in H; intros z Hz;
                 apply T.PkgSet.union_spec; right;
@@ -3030,7 +3035,7 @@ Module PackageFormula (N V : UsualOrderedType).
       Proof.
         intros R D fs [p [h Hd]].
         apply mem_reduceDeps in Hd; destruct Hd as [r [g [HD He]]].
-        pose proof (proj1 (encodeNNF_target_gadget_aux g) (embedPkg r)
+        pose proof (proj1 (encodeNNF_target_synthetic_aux g) (embedPkg r)
                       (p, (Name.Disjunct fs, h)) He) as Hsub.
         cbn [fst snd] in Hsub.
         apply T.VSet.ext; intro w.
@@ -3038,12 +3043,12 @@ Module PackageFormula (N V : UsualOrderedType).
         split.
         - intros [[[qn qv] [_ Hq]] | [r1 [g1 [_ Hw]]]].
           + unfold embedPkg in Hq; discriminate Hq.
-          + pose proof (proj1 (witnessSet_gadget_aux g1) _ _ Hw) as Hg.
-            cbn [fst gadgetPkgs] in Hg; apply mem_idxPkgs in Hg.
+          + pose proof (proj1 (witnessSet_synthetic_aux g1) _ _ Hw) as Hg.
+            cbn [fst syntheticPkgs] in Hg; apply mem_idxPkgs in Hg.
             destruct Hg as [i [Hi Hq]]; exists i;
               split; [exact Hi | congruence].
         - intros [i [Hi ->]]; right; exists r, g; split; [exact HD |].
-          apply Hsub; cbn [gadgetPkgs]; apply mem_idxPkgs;
+          apply Hsub; cbn [syntheticPkgs]; apply mem_idxPkgs;
             exists i; split; [exact Hi | reflexivity].
       Qed.
 
@@ -3394,8 +3399,8 @@ Module PackageFormula (N V : UsualOrderedType).
         intros R D fs i H; apply mem_reduceReal in H.
         destruct H as [[[pn pv] [_ Hq]] | [p [f [HD Hw]]]];
           [unfold embedPkg in Hq; discriminate Hq |].
-        pose proof (proj1 (witnessSet_gadget_aux f) _ _ Hw) as Hgd.
-        cbn [fst gadgetPkgs] in Hgd; apply mem_idxPkgs in Hgd.
+        pose proof (proj1 (witnessSet_synthetic_aux f) _ _ Hw) as Hgd.
+        cbn [fst syntheticPkgs] in Hgd; apply mem_idxPkgs in Hgd.
         destruct Hgd as [k [Hk Hi]].
         assert (Hv : i = Version.Idx k) by congruence; subst i.
         cbn [disjAlt].
@@ -3421,7 +3426,7 @@ Module PackageFormula (N V : UsualOrderedType).
       Proof.
         intros R D n vs [p [h Hd]].
         apply mem_reduceDeps in Hd; destruct Hd as [r [g [HD He]]].
-        pose proof (proj1 (encodeNNF_target_gadget_aux g) (embedPkg r)
+        pose proof (proj1 (encodeNNF_target_synthetic_aux g) (embedPkg r)
                       (p, (Name.NegDep n vs, h)) He) as Hsub.
         cbn [fst snd] in Hsub.
         apply T.VSet.ext; intro w.
@@ -3430,12 +3435,12 @@ Module PackageFormula (N V : UsualOrderedType).
         split.
         - intros [[[qn qv] [_ Hq]] | [r1 [g1 [_ Hw]]]].
           + unfold embedPkg in Hq; discriminate Hq.
-          + pose proof (proj1 (witnessSet_gadget_aux g1) _ _ Hw) as Hg.
-            cbn [fst gadgetPkgs] in Hg;
+          + pose proof (proj1 (witnessSet_synthetic_aux g1) _ _ Hw) as Hg.
+            cbn [fst syntheticPkgs] in Hg;
               rewrite SOpt.add_in, SOpt.singleton_in in Hg.
             destruct Hg as [Hg | Hg]; [left | right]; congruence.
         - intro Hw; right; exists r, g; split; [exact HD |].
-          apply Hsub; cbn [gadgetPkgs];
+          apply Hsub; cbn [syntheticPkgs];
             rewrite SOpt.add_in, SOpt.singleton_in.
           destruct Hw as [-> | ->]; [left | right]; reflexivity.
       Qed.

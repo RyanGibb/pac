@@ -515,7 +515,7 @@ Module Conflict (N V : UsualOrderedType).
         tauto.
       Qed.
 
-      Lemma conflictSlice_sub : forall G (n : N.t) (v : V.t),
+      Lemma conflictRestrict_sub : forall G (n : N.t) (v : V.t),
           ConflictRel.Subset
             (ConflictRel.union (ConflictRelFibred.tailFibre G (n, v))
                                (conflictsAgainst G n v)) G.
@@ -577,7 +577,7 @@ Module Conflict (N V : UsualOrderedType).
         intros R D G n v _; apply T.dependees_ext; intros [m ws].
         split; [| intro H; exact (reduceDeps_mono _ _ _ _ _
                     (DepRelFibred.tailFibre_subset _ _)
-                    (conflictSlice_sub G n v) H)].
+                    (conflictRestrict_sub G n v) H)].
         intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
         destruct H as [[q [n' [vs [HD Hy]]]]
                       | [[q [n' [vs [HG Hy]]]]

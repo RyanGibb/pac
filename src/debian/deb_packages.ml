@@ -10,7 +10,7 @@ type provide = { pname : string; pversion : string option }
 
 (* Depends and Recommends are held as the unparsed field text -- Pre-Depends
    then Depends, in that order -- because they carry the bulk of an archive's
-   relationship atoms while a query reduces a few dozen of its ~69k stanzas.
+   relationship atoms while a lookup reduces a few dozen of its ~69k stanzas.
    Keeping 340k atom records and list cells live in the major heap cost more
    than reading the whole file did; whoever needs a stanza's clauses calls
    parse_depends_fields on them and keeps only those.  Provides and Conflicts

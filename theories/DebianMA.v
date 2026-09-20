@@ -286,7 +286,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
   (* A Recommends clause mangles exactly as a Depends clause does: the
      architecture qualifiers on its atoms mean the same thing either way, and
-     it is the target gadget, not the mangling, that makes it optional. *)
+     it is the target's soft disjunct, not the mangling, that makes it
+     optional. *)
   Definition reduceRec (Rec : Deps.t) : Deb.Deps.t := reduceDeps Rec.
 
   (* Declared Provides, replicated by the provider's class: no/same reach
@@ -1016,11 +1017,12 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     apply multiarchResolution_reduceReal.
   Qed.
 
-  (* Slice justification for the multiarch solving path: a Core query at a
-     mangled name is answered by translating a small MA-side slice, and each
-     theorem below pins a slice whose translation the Debian lookup theorems
-     cannot tell apart from the whole instance's. Provider and conflict
-     slices span a base name's whole group across architectures, because
+  (* Sub-instance justification for the multiarch solving path: a Core
+     lookup at a mangled name is answered by translating a small MA-side
+     sub-instance, and each theorem below pins a sub-instance whose
+     translation the Debian lookup theorems cannot tell apart from the whole
+     instance's. Provider and conflict sub-instances span a base name's whole
+     group across architectures, because
      every real package implicitly provides its group pseudo-name -- and, at
      M-A: foreign, its own name at every architecture -- so a mangled name's
      providers are not confined to one arch's fibre. *)
@@ -1129,7 +1131,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     (* The class table is read only at packages of R and at the packages
-       declaring the Provides, so the driver's per-query class slice is
+       declaring the Provides, so the driver's per-lookup class preimage is
        invisible to the translation. *)
     Lemma reduceProv_class : forall R Pi M M',
         (forall p, PkgSet.In p R -> classOf M' p = classOf M p) ->
@@ -1171,7 +1173,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         exists q : Pkg.t, PkgSet.In q R /\ y = embedPkg q.
     Proof. intros R y; unfold reduceReal; apply SOmr.mem_map. Qed.
 
-    (* embedPkg mints only QAArch names, so the :any and group pseudo-names
+    (* embedPkg introduces only QAArch names, so the :any and group pseudo-names
        carry no real packages at all. *)
     Lemma reduceReal_arch : forall R (nx : QN.t) (v : V.t),
         Deb.PkgSet.In (nx, v) (reduceReal R) -> exists b, snd nx = QAArch b.
@@ -1196,27 +1198,27 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       - apply Hcov; [exact HqR | exact (f_equal fst (eq_sym Hq))].
     Qed.
 
-    (* A slice that keeps every real package and every declared Provides
+    (* A sub-instance that keeps every real package and every declared Provides
        reaching a base name in ns; reduceProv agrees with the whole
        instance's at every mangled name over ns. *)
-    Definition ProvSlice (R : PkgSet.t) (Pi : Prov.t) (ns : NSet.t)
+    Definition ProvSubInst (R : PkgSet.t) (Pi : Prov.t) (ns : NSet.t)
         (Rp : PkgSet.t) (Pis : Prov.t) : Prop :=
       PkgSet.Subset Rp R /\ Prov.Subset Pis Pi /\
       (forall q, PkgSet.In q R -> NSet.In (pname q) ns -> PkgSet.In q Rp) /\
       (forall (q : Pkg.t) (m : N.t) vt,
           Prov.In (q, (m, vt)) Pi -> NSet.In m ns -> Prov.In (q, (m, vt)) Pis).
 
-    (* A slice that keeps p itself and p's own Provides; matchb at the
+    (* A sub-instance that keeps p itself and p's own Provides; matchb at the
        mangled p agrees with the whole instance's. *)
-    Definition PkgProvSlice (R : PkgSet.t) (Pi : Prov.t) (p : Pkg.t)
+    Definition PkgProvSubInst (R : PkgSet.t) (Pi : Prov.t) (p : Pkg.t)
         (Rp : PkgSet.t) (Pis : Prov.t) : Prop :=
       PkgSet.Subset Rp R /\ Prov.Subset Pis Pi /\ PkgSet.In p Rp /\
       (forall (m : N.t) vt,
           Prov.In (p, (m, vt)) Pi -> Prov.In (p, (m, vt)) Pis).
 
-    (* A slice that keeps p's own group, p's own negatives, and every
+    (* A sub-instance that keeps p's own group, p's own negatives, and every
        negative naming something p answers to. *)
-    Definition ConfSlice (R : PkgSet.t) (G : Conf.t) (ns : NSet.t)
+    Definition ConfSubInst (R : PkgSet.t) (G : Conf.t) (ns : NSet.t)
         (p : Pkg.t) (Rc : PkgSet.t) (Gs : Conf.t) : Prop :=
       PkgSet.Subset Rc R /\ Conf.Subset Gs G /\ PkgSet.In p Rc /\
       (forall q, PkgSet.In q R -> pname q = pname p -> PkgSet.In q Rc) /\
@@ -1264,7 +1266,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
     Lemma reduceProv_node : forall R Pi M ns Rp Pis
         (q : Deb.Pkg.t) (m : N.t) (x : NameArch) vt,
-        ProvSlice R Pi ns Rp Pis -> NSet.In m ns ->
+        ProvSubInst R Pi ns Rp Pis -> NSet.In m ns ->
         (Deb.Prov.In (q, ((m, x), vt)) (reduceProv R Pi M) <->
          Deb.Prov.In (q, ((m, x), vt)) (reduceProv Rp Pis M)).
     Proof.
@@ -1283,7 +1285,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     Lemma reduceProv_pkg : forall R Pi M (p : Pkg.t) Rp Pis (mx : QN.t) vt,
-        PkgProvSlice R Pi p Rp Pis ->
+        PkgProvSubInst R Pi p Rp Pis ->
         (Deb.Prov.In (embedPkg p, (mx, vt)) (reduceProv R Pi M) <->
          Deb.Prov.In (embedPkg p, (mx, vt)) (reduceProv Rp Pis M)).
     Proof.
@@ -1301,7 +1303,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     Lemma provb_restrict : forall R Pi M ns Rp Pis (a' : Deb.Atom.t),
-        ProvSlice R Pi ns Rp Pis -> NSet.In (fst (fst a')) ns ->
+        ProvSubInst R Pi ns Rp Pis -> NSet.In (fst (fst a')) ns ->
         Deb.provb (reduceProv Rp Pis M) a' =
         Deb.provb (reduceProv R Pi M) a'.
     Proof.
@@ -1319,7 +1321,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Lemma us_restrict : forall R Pi M ns Rr Rp Pis (a' : Deb.Atom.t),
         PkgSet.Subset Rr R ->
         (forall q, PkgSet.In q R -> NSet.In (pname q) ns -> PkgSet.In q Rr) ->
-        ProvSlice R Pi ns Rp Pis -> NSet.In (fst (fst a')) ns ->
+        ProvSubInst R Pi ns Rp Pis -> NSet.In (fst (fst a')) ns ->
         Deb.us (reduceReal Rr) (reduceProv Rp Pis M) a' =
         Deb.us (reduceReal R) (reduceProv R Pi M) a'.
     Proof.
@@ -1346,7 +1348,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Lemma tgt_restrict : forall R Pi M ns Rr Rp Pis (a' : Deb.Atom.t),
         PkgSet.Subset Rr R ->
         (forall q, PkgSet.In q R -> NSet.In (pname q) ns -> PkgSet.In q Rr) ->
-        ProvSlice R Pi ns Rp Pis -> NSet.In (fst (fst a')) ns ->
+        ProvSubInst R Pi ns Rp Pis -> NSet.In (fst (fst a')) ns ->
         Deb.tgt (reduceReal Rr) (reduceProv Rp Pis M) a' =
         Deb.tgt (reduceReal R) (reduceProv R Pi M) a'.
     Proof.
@@ -1362,7 +1364,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     Lemma matchb_restrict : forall R Pi M (p : Pkg.t) Rp Pis (a' : Deb.Atom.t),
-        PkgProvSlice R Pi p Rp Pis ->
+        PkgProvSubInst R Pi p Rp Pis ->
         Deb.matchb (reduceProv Rp Pis M) (embedPkg p) a' =
         Deb.matchb (reduceProv R Pi M) (embedPkg p) a'.
     Proof.
@@ -1439,7 +1441,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
     Lemma reduceConf_target : forall R Pi G M ns (p : Pkg.t) Rc Gs
         (q : Deb.Pkg.t) (ea : Deb.Atom.t) z,
-        PkgSet.In p R -> ConfSlice R G ns p Rc Gs ->
+        PkgSet.In p R -> ConfSubInst R G ns p Rc Gs ->
         NSet.In (pname p) ns ->
         (forall (m : N.t) vt, Prov.In (p, (m, vt)) Pi -> NSet.In m ns) ->
         Deb.Match (reduceProv R Pi M) (embedPkg p) ea ->
@@ -1497,10 +1499,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         exact (proj1 (proj1 (mem_provOf Pi ns q m vt) He)).
     Qed.
 
-    Lemma groupProvSlice : forall R Pi ns,
-        ProvSlice R Pi ns (groupOf R ns) (provOf Pi ns).
+    Lemma groupProvSubInst : forall R Pi ns,
+        ProvSubInst R Pi ns (groupOf R ns) (provOf Pi ns).
     Proof.
-      intros R Pi ns; unfold ProvSlice; repeat split.
+      intros R Pi ns; unfold ProvSubInst; repeat split.
       - apply groupOf_sub.
       - apply provOf_sub.
       - apply groupOf_cov.
@@ -1616,7 +1618,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     (* Real packages live only at QAArch names, so the arch fibre of one
-       mangled name is the whole slice a versions query at it can read. *)
+       mangled name is the whole sub-instance a versions lookup can read. *)
     Theorem versions_lookupOrigMA : forall R D Rec Pi G M (r : Deb.Pkg.t)
                                            (n : N.t) (b : A.t),
         (exists s h,
@@ -1660,9 +1662,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       - intro Hw; exfalso; exact (Deb.SOvw.empty_in _ Hw).
     Qed.
 
-    (* The crux: p's own row pulls three slices. Dependency targets need the
-       whole group of every base name p's clauses mention (implicit group,
-       foreign and :any provides come from any architecture's member);
+    (* The crux: p's own row pulls three sub-instances. Dependency targets
+       need the whole group of every base name p's clauses mention (implicit
+       group, foreign and :any provides come from any architecture's member);
        matchb at p needs p itself and p's own Provides in the reduceProv
        carrier; and the conflicts that can reach p are p's own negatives,
        every negative naming p's name or something p provides, and the
@@ -1700,15 +1702,15 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           destruct He as [He | He];
           [ exact (proj1 (proj1 (mem_provOf Pi ns q m vt) He))
           | exact (proj1 (proj1 (mem_provBy Pi p q m vt) He)) ]. }
-      assert (Hsl : ProvSlice R Pi ns Rp Pis).
-      { unfold ProvSlice; repeat split;
+      assert (Hsl : ProvSubInst R Pi ns Rp Pis).
+      { unfold ProvSubInst; repeat split;
           [ exact HRp | exact HPis
           | intros q Hq Hn; apply PkgSet.add_spec; right;
             exact (HcovR q Hq Hn)
           | intros q m vt He Hn; apply Prov.union_spec; left;
             apply mem_provOf; split; [exact He | exact Hn] ]. }
-      assert (Hpsl : PkgProvSlice R Pi p Rp Pis).
-      { unfold PkgProvSlice; repeat split;
+      assert (Hpsl : PkgProvSubInst R Pi p Rp Pis).
+      { unfold PkgProvSubInst; repeat split;
           [ exact HRp | exact HPis
           | apply PkgSet.add_spec; left; reflexivity
           | intros m vt He; apply Prov.union_spec; right;
@@ -1735,8 +1737,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                         NSet.In (aname (snd e)) ns2 -> Conf.In e Gs).
       { intros e He Hn; apply Conf.union_spec; right;
           apply mem_confOn; split; [exact He | exact Hn]. }
-      assert (Hcsl : ConfSlice R G ns2 p Rc Gs)
-        by (unfold ConfSlice; repeat split; assumption).
+      assert (Hcsl : ConfSubInst R G ns2 p Rc Gs)
+        by (unfold ConfSubInst; repeat split; assumption).
       assert (Hpn : NSet.In (pname p) ns2)
         by (apply NSet.add_spec; left; reflexivity).
       assert (Hprovns : forall (m : N.t) vt,
@@ -1860,13 +1862,13 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       exact (tgt_restrict R Pi M (NSet.singleton m)
                (groupOf R (NSet.singleton m)) (groupOf R (NSet.singleton m))
                (provOf Pi (NSet.singleton m)) ((m, x), f)
-               (groupOf_sub R _) (groupOf_cov R _) (groupProvSlice R Pi _)
+               (groupOf_sub R _) (groupOf_cov R _) (groupProvSubInst R Pi _)
                Hm).
     Qed.
 
-    (* The recommends gadget reads only the clause it is keyed by, exactly
-       as the disjunction gadget does; the escape it adds is a constant of
-       the clause, so no wider slice can change it. *)
+    (* The soft disjunct reads only the clause it is keyed by, exactly
+       as the disjunct package does; the escape it adds is a constant of
+       the clause, so no wider sub-instance can change it. *)
     Theorem versions_lookupSoftMA : forall R D Rec Pi G M (p : Pkg.t) Al,
         Deps.In (p, Al) Rec ->
         Deb.versions (reduceReal R) (reduceDeps D) (reduceRec Rec)
@@ -1905,14 +1907,14 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       exact (tgt_restrict R Pi M (NSet.singleton m)
                (groupOf R (NSet.singleton m)) (groupOf R (NSet.singleton m))
                (provOf Pi (NSet.singleton m)) ((m, x), f)
-               (groupOf_sub R _) (groupOf_cov R _) (groupProvSlice R Pi _)
+               (groupOf_sub R _) (groupOf_cov R _) (groupProvSubInst R Pi _)
                Hm).
     Qed.
 
     (* An atom's providers are its base name's whole group across
        architectures, plus that name's declared providers.  The clause sets
        reach the selector through one test and no other -- whether the atom
-       occurs at all -- so a slice may carry the atom's depends row, its
+       occurs at all -- so a sub-instance may carry the atom's depends row, its
        recommends row, or both, and the name's group is what fixes the
        rest. *)
     Theorem versions_lookupSelectorAgreeMA :
@@ -1938,18 +1940,18 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         (provb_restrict R Pi M (NSet.singleton (aname a))
            (groupOf R (NSet.singleton (aname a)))
            (provOf Pi (NSet.singleton (aname a)))
-           (reduceAtom (parch p) a) (groupProvSlice R Pi _) Hm),
+           (reduceAtom (parch p) a) (groupProvSubInst R Pi _) Hm),
         (us_restrict R Pi M (NSet.singleton (aname a))
            (groupOf R (NSet.singleton (aname a)))
            (groupOf R (NSet.singleton (aname a)))
            (provOf Pi (NSet.singleton (aname a)))
            (reduceAtom (parch p) a) (groupOf_sub R _) (groupOf_cov R _)
-           (groupProvSlice R Pi _) Hm).
+           (groupProvSubInst R Pi _) Hm).
       reflexivity.
     Qed.
 
     (* every candidate shape at once: a provided and a real candidate under
-       the same selector read the same slice, and the rest are empty.  As
+       the same selector read the same sub-instance, and the rest are empty.  As
        for versions, the two clause sets are read only through the
        occurrence test, so any pair answering it alike serves. *)
     Theorem dependees_lookupSelectorAgreeMA :
@@ -1976,13 +1978,13 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       assert (Hpb := provb_restrict R Pi M (NSet.singleton (aname a))
                        (groupOf R (NSet.singleton (aname a)))
                        (provOf Pi (NSet.singleton (aname a)))
-                       (reduceAtom (parch p) a) (groupProvSlice R Pi _) Hm).
+                       (reduceAtom (parch p) a) (groupProvSubInst R Pi _) Hm).
       assert (Hus := us_restrict R Pi M (NSet.singleton (aname a))
                        (groupOf R (NSet.singleton (aname a)))
                        (groupOf R (NSet.singleton (aname a)))
                        (provOf Pi (NSet.singleton (aname a)))
                        (reduceAtom (parch p) a) (groupOf_sub R _)
-                       (groupOf_cov R _) (groupProvSlice R Pi _) Hm).
+                       (groupOf_cov R _) (groupProvSubInst R Pi _) Hm).
       destruct y; try reflexivity;
         apply Deb.T.DependeesSet.ext; intro z.
       - rewrite !Deb.dependees_selector_spec, <- Hagree, Hpb, Hus;
@@ -2041,10 +2043,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       reflexivity.
     Qed.
 
-    (* An atom occurring only in a recommends clause still mints a selector,
-       so its slice has to carry the recommends row rather than a depends
-       one; otherwise the selector would see no versions and every provided
-       recommend would take the escape. *)
+    (* An atom occurring only in a recommends clause still introduces a
+       selector, so its sub-instance has to carry the recommends row rather
+       than a depends one; otherwise the selector would see no versions and
+       every provided recommend would take the escape. *)
     Theorem versions_lookupSelectorRecMA :
       forall R D Rec Pi G M (p : Pkg.t) Al (a : Atom.t),
         Deps.In (p, Al) Rec -> AtomSet.In a Al ->
@@ -2069,9 +2071,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       reflexivity.
     Qed.
 
-    (* The recommends counterpart: the selector minted by an atom that only
-       a recommends clause mentions reads the same group slice, with the
-       recommends row in the Rec position. *)
+    (* The recommends counterpart: the selector introduced by an atom that
+       only a recommends clause mentions reads the same group sub-instance,
+       with the recommends row in the Rec position. *)
     Theorem dependees_lookupSelectorRecMA :
       forall R D Rec Pi G M (p : Pkg.t) Al (a : Atom.t) (y : Deb.Version.t),
         Deps.In (p, Al) Rec -> AtomSet.In a Al ->

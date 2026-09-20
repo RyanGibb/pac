@@ -1497,9 +1497,9 @@ Module Visibility (N V : UsualOrderedType).
         right; split; [exact (HR _ HqR) | exact (Hpriv _ Hqp)].
       Qed.
 
-      (* Privacy is antitone in pub, so containment of the sliced pub does
+      (* Privacy is antitone in pub, so containment of the restricted pub does
          not by itself transfer the guards that read it; the premise carries
-         what the slices in use establish instead. *)
+         what the restrictions in use establish instead. *)
       Lemma reduceDeps_mono : forall R R' D D' pub pub' r (y : T.DepElt.t),
           PkgSet.Subset R' R -> C.DepRel.Subset D' D ->
           PubRel.Subset pub' pub ->

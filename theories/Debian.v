@@ -317,7 +317,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Definition versionsDisj (A : AtomSet.t) : T.VSet.t :=
     SOaw.map (fun a => Version.Atom a) A.
 
-  (* the escape: a candidate of the recommends gadget that discharges nothing,
+  (* the escape: a candidate of the soft disjunct that discharges nothing,
      so the clause is always satisfiable and constrains nothing *)
   Definition versionsSoft (A : AtomSet.t) : T.VSet.t :=
     T.VSet.add Version.Zero (versionsDisj A).
@@ -329,7 +329,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Definition occursAtomb (D : Deps.t) (a : Atom.t) : bool :=
     Deps.exists_ (fun '(_, A) => AtomSet.mem a A) D.
 
-  (* An atom's selector gadget is minted from its Depends and its Recommends
+  (* An atom's selector is introduced from its Depends and its Recommends
      occurrences alike: a recommended alternative needs the same provider
      fan-out to reach, and a candidate nothing is forced to pick constrains
      nothing. *)
@@ -349,7 +349,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         if andb (hasClauseb D A) (2 <=? AtomSet.cardinal A)
         then versionsDisj A else T.VSet.empty
     (* no cardinality test, unlike Disjunct: a one-alternative Recommends
-       still needs its escape, which is the whole of the gadget *)
+       still needs its escape, which is the whole of the soft disjunct *)
     | Name.Soft A =>
         if hasClauseb Rec A then versionsSoft A else T.VSet.empty
     | Name.Selector a =>
@@ -1412,7 +1412,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         else None)
       A.
 
-  (* the recommends gadget reaches for a satisfied alternative when S has one
+  (* the soft disjunct reaches for a satisfied alternative when S has one
      and takes the escape otherwise: the escape is always there, so no
      recommends clause can make the witness fail *)
   Definition cwSoft (Pi : Prov.t) (S : PkgSet.t) (A : AtomSet.t) : Version.t :=
@@ -1537,8 +1537,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       rewrite Hp, Hcs; reflexivity.
   Qed.
 
-  (* whatever S looks like, the gadget has a version to take: that is the
-     whole conservativity claim in one line *)
+  (* whatever S looks like, the soft disjunct has a version to take: that is
+     the whole conservativity claim in one line *)
   Lemma cwSoft_versionsSoft : forall Pi S A,
       T.VSet.In (cwSoft Pi S A) (versionsSoft A).
   Proof.
@@ -2028,7 +2028,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       rewrite provb_nodeFibre, us_filter, evalAt_tailFibre; reflexivity.
     Qed.
 
-    Definition Minted (D Rec : Deps.t) (Pi : Prov.t) (G : Conf.t)
+    Definition Introduced (D Rec : Deps.t) (Pi : Prov.t) (G : Conf.t)
         (n' : Name.t) : Prop :=
       match n' with
       | Name.Orig _ => True
@@ -2040,20 +2040,20 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       | Name.Guard p a x => Conf.In (p, (a, x)) G
       end.
 
-    Lemma tgt_minted : forall D Rec R Pi G (a : Atom.t) (n' : Name.t)
+    Lemma tgt_introduced : forall D Rec R Pi G (a : Atom.t) (n' : Name.t)
                               (h : T.VSet.t),
         occursAtomb (allClauses D Rec) a = true ->
-        tgt R Pi a = (n', h) -> Minted D Rec Pi G n'.
+        tgt R Pi a = (n', h) -> Introduced D Rec Pi G n'.
     Proof.
       intros D Rec R Pi G a n' h Hocc Ht; unfold tgt in Ht.
       destruct (provb Pi a) eqn:Hp; injection Ht as Hn _; subst n';
         [split; [exact Hocc | exact Hp] | exact I].
     Qed.
 
-    Lemma dependees_minted : forall R D Rec Pi G (s : T.Pkg.t) (n' : Name.t)
+    Lemma dependees_introduced : forall R D Rec Pi G (s : T.Pkg.t) (n' : Name.t)
                                     (h : T.VSet.t),
         T.DependeesSet.In (n', h) (dependees R D Rec Pi G s) ->
-        Minted D Rec Pi G n'.
+        Introduced D Rec Pi G n'.
     Proof.
       intros R D Rec Pi G [nm y] n' h H; destruct nm, y;
         try (exfalso; exact (SOde.empty_in _ H)).
@@ -2062,7 +2062,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
                        [[A [HA Hy]] |
                         [[a [x [Hg Hy]]] |
                          [m0 [u0 [a [x [Hg [_ [_ [_ Hy]]]]]]]]]]].
-        + apply (tgt_minted D Rec R Pi G a n' h); [| symmetry; exact Hy].
+        + apply (tgt_introduced D Rec R Pi G a n' h); [| symmetry; exact Hy].
           apply occursAtomb_allClausesL, occursAtomb_iff.
           exists (n, v), A; split;
             [exact HA | exact (AtomSet.min_elt_spec1 Hmin)].
@@ -2074,13 +2074,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         + injection Hy as Hn _; subst n'; exact Hg.
       - apply dependees_disjunct_spec in H.
         destruct H as [Hhc [_ [Hmem Hy]]].
-        apply (tgt_minted D Rec R Pi G a n' h); [| symmetry; exact Hy].
+        apply (tgt_introduced D Rec R Pi G a n' h); [| symmetry; exact Hy].
         apply hasClauseb_iff in Hhc; destruct Hhc as [p Hp].
         apply occursAtomb_allClausesL, occursAtomb_iff.
         exists p, A; split; [exact Hp | apply AtomSet.mem_spec; exact Hmem].
       - apply dependees_soft_spec in H.
         destruct H as [Hhc [Hmem Hy]].
-        apply (tgt_minted D Rec R Pi G a n' h); [| symmetry; exact Hy].
+        apply (tgt_introduced D Rec R Pi G a n' h); [| symmetry; exact Hy].
         apply hasClauseb_iff in Hhc; destruct Hhc as [p Hp].
         apply occursAtomb_allClausesR, occursAtomb_iff.
         exists p, A; split; [exact Hp | apply AtomSet.mem_spec; exact Hmem].
@@ -2090,13 +2090,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         destruct H as [_ [_ [_ Hy]]]; injection Hy as Hn _; subst n'; exact I.
     Qed.
 
-    Lemma reduceDeps_minted : forall R D Rec Pi G (s : T.Pkg.t)
+    Lemma reduceDeps_introduced : forall R D Rec Pi G (s : T.Pkg.t)
                                      (n' : Name.t) (h : T.VSet.t),
         T.DepRel.In (s, (n', h)) (reduceDeps R D Rec Pi G) ->
-        Minted D Rec Pi G n'.
+        Introduced D Rec Pi G n'.
     Proof.
       intros R D Rec Pi G s n' h H; apply mem_reduceDeps in H.
-      exact (dependees_minted R D Rec Pi G s n' h (proj2 H)).
+      exact (dependees_introduced R D Rec Pi G s n' h (proj2 H)).
     Qed.
 
     Lemma mem_clauseNames : forall A (n : N.t),
@@ -2156,8 +2156,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       rewrite realVersions_realPreimage by exact Hm; reflexivity.
     Qed.
 
-    (* The three restriction lemmas below all read the same slice of Pi. *)
-    Lemma provSlice_sub : forall Pi ns (p : Pkg.t),
+    (* The three restriction lemmas below all read one restriction of Pi. *)
+    Lemma provRestrict_sub : forall Pi ns (p : Pkg.t),
         Prov.Subset
           (Prov.union (provPreimage Pi ns) (ProvFibred.tailFibre Pi p)) Pi.
     Proof.
@@ -2175,7 +2175,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         = provb Pi (n, f).
     Proof.
       intros Pi ns p n f Hm; unfold provb.
-      apply Prov.exists_restrict; [apply provSlice_sub |].
+      apply Prov.exists_restrict; [apply provRestrict_sub |].
       intros [q [m vt]] Hin Hb; cbn [aname aform fst snd] in Hb.
       apply andb_prop in Hb; destruct Hb as [Hn _].
       apply NEqb.eqb_true_iff in Hn as ->.
@@ -2194,7 +2194,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       intros R Pi ns p n f Hm; apply T.VSet.ext; intro y; unfold us.
       rewrite !T.VSet.union_spec, evalAt_realPreimage by exact Hm.
       apply or_iff_compat_l.
-      apply SOew.filterMap_restrict; [apply provSlice_sub |].
+      apply SOew.filterMap_restrict; [apply provRestrict_sub |].
       intros [q [m vt]] Hin Hf; cbn [fst snd aname aform] in Hf.
       destruct (NEqb.eqb m n) eqn:Hn; [| discriminate Hf].
       apply NEqb.eqb_true_iff in Hn as ->.
@@ -2225,7 +2225,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         = matchb Pi p a.
     Proof.
       intros Pi ns p a; unfold matchb; f_equal.
-      apply Prov.exists_restrict; [apply provSlice_sub |].
+      apply Prov.exists_restrict; [apply provRestrict_sub |].
       intros [q [m vt]] Hin Hb; cbn [fst snd aname aform] in Hb.
       apply andb_prop in Hb; destruct Hb as [Hq _].
       apply PkgEqb.eqb_true_iff in Hq as ->.
@@ -2355,7 +2355,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         versions R D Rec Pi G (Name.Disjunct A) = versionsDisj A.
     Proof.
       intros R D Rec Pi G A [s [h Hd]].
-      destruct (reduceDeps_minted R D Rec Pi G s (Name.Disjunct A) h Hd)
+      destruct (reduceDeps_introduced R D Rec Pi G s (Name.Disjunct A) h Hd)
         as [Hhc Hcard].
       apply T.VSet.ext; intro w; rewrite versions_disjunct_spec.
       split; [intros (_ & _ & Hw); exact Hw |].
@@ -2393,7 +2393,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         versions R D Rec Pi G (Name.Soft A) = versionsSoft A.
     Proof.
       intros R D Rec Pi G A [s [h Hd]].
-      pose proof (reduceDeps_minted R D Rec Pi G s (Name.Soft A) h Hd) as Hhc.
+      pose proof (reduceDeps_introduced R D Rec Pi G s (Name.Soft A) h Hd)
+        as Hhc.
       cbn [versions]; rewrite Hhc; reflexivity.
     Qed.
 
@@ -2418,11 +2419,11 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Qed.
 
     (* A selector consults D and Rec through one test and no other, so the
-       slice is free to redistribute the atom's occurrences between the two
-       positions -- or to drop every clause that does not mention it -- as
-       long as the test still answers the same.  Stated for every candidate
-       shape at once: the real and the provided branch of us read the same
-       slice, and the rest are empty. *)
+       sub-instance is free to redistribute the atom's occurrences between
+       the two positions -- or to drop every clause that does not mention it
+       -- as long as the test still answers the same.  Stated for every
+       candidate shape at once: the real and the provided branch of us read
+       the same sub-instance, and the rest are empty. *)
     Theorem versions_lookupSelectorAgree :
       forall R D Rec D' Rec' Pi G (n : N.t) (f : Ver.Formula),
         occursAtomb (allClauses D Rec) (n, f) =
@@ -2460,7 +2461,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         us (PkgFibred.tailFibre R n) (ProvFibred.nodeFibre Pi n) (n, f).
     Proof.
       intros R D Rec Pi G n f [s [h Hd]].
-      destruct (reduceDeps_minted R D Rec Pi G s (Name.Selector (n, f)) h Hd)
+      destruct (reduceDeps_introduced R D Rec Pi G s (Name.Selector (n, f)) h
+                  Hd)
         as [Hocc Hp].
       cbn [versions]; rewrite Hocc, Hp; cbn [andb].
       symmetry; apply us_filter.
@@ -2504,7 +2506,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         versions R D Rec Pi G (Name.Guard p a x) = zeroOne.
     Proof.
       intros R D Rec Pi G p a x [s [h Hd]].
-      pose proof (reduceDeps_minted R D Rec Pi G s (Name.Guard p a x) h Hd)
+      pose proof (reduceDeps_introduced R D Rec Pi G s (Name.Guard p a x) h Hd)
         as Hg.
       cbn [versions].
       replace (Conf.mem (p, (a, x)) G) with true;

@@ -160,8 +160,8 @@ Example debianMA_reduceConf_computes :
     (DMA.reduceConf maR DMA.Conf.empty DMA.Cls.empty) = 2.
 Proof. reflexivity. Qed.
 
-(* One private dependency, so (1, 1) mints its own subgraph: two occurrences,
-   one intermediate and one agreement. *)
+(* One private dependency, so (1, 1) introduces its own subgraph: two
+   occurrences, one intermediate and one agreement. *)
 Definition visR : Vis.PkgSet.t :=
   Vis.PkgSet.add (1, 1) (Vis.PkgSet.add (2, 1) Vis.PkgSet.empty).
 
@@ -292,9 +292,9 @@ Definition alpI : Alp.Inst :=
    ; Alp.inst_prov :=
        Alp.Prov.add ((3, 30), (4, Alp.PVer 5))
          (Alp.Prov.add ((2, 20), (6, Alp.PVirt)) Alp.Prov.empty)
-   ; Alp.inst_trig :=
-       Alp.Trig.add ((2, 20), Alp.CondSet.add (1, Alp.CAny)
-                                Alp.CondSet.empty) Alp.Trig.empty
+   ; Alp.inst_installIf :=
+       Alp.InstallIf.add ((2, 20), Alp.CondSet.add (1, Alp.CAny)
+                                Alp.CondSet.empty) Alp.InstallIf.empty
    ; Alp.inst_world := Alp.WSet.add (Alp.DPos (1, Alp.CAny)) Alp.WSet.empty
    ; Alp.inst_prio := Alp.Prio.empty
    ; Alp.inst_repl := Alp.Repl.empty |}.
@@ -309,7 +309,7 @@ Example alpine_root_dependees_computes :
 Proof. reflexivity. Qed.
 
 Example alpine_installif_attaches :
-  Alp.Trig.cardinal (Alp.Reduction.installIfFibre alpI (1, 10)) = 1.
+  Alp.InstallIf.cardinal (Alp.Reduction.installIfFibre alpI (1, 10)) = 1.
 Proof. reflexivity. Qed.
 
 Example alpine_versions_computes :

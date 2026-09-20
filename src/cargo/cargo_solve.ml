@@ -1,7 +1,7 @@
 (* Cargo solving over the verified pipeline, deb_solve/opam_solve-style:
    the index is parsed into hashtables a crate at a time, as the solver
-   first asks for each; every query is answered from a small
-   slice instance in the shape one of Cargo.v's lookup theorems justifies
+   first asks for each; every lookup is answered from a small
+   sub-instance in the shape one of Cargo.v's lookup theorems justifies
    (own rows, and the repository restricted to the names those rows read,
    or to a link's declarers), pushed through the Cargo encoder straight to
    Core; PubGrub solves the accumulated core graph lazily and the solution
@@ -157,16 +157,17 @@ let meta ar n v : P.ver option =
   ignore (load_name ar n);
   Hashtbl.find_opt ar.entry (n, v)
 
-(* There is no cone pass: a crate is parsed the first time a slice reads
-   its name, as cargo's sparse protocol fetches it, so a run touches the
-   crates the solver asks about and no others.  Because the instance is
-   still being uncovered, each lookup theorem's slice must be complete at
-   the moment it answers.  That holds by construction for all but one
-   query: CCrate n and CFeatP n read the repository at n alone; CSlot and
-   CDec at (n, v) read (n, v)'s own rows and the repository at the names
-   its slots target; and name_set and slice load every name they
-   read, while meta loads the owner.  CLink l is the exception.  Its slice
-   is the link relation's preimage at l -- every crate version declaring l
+(* There is no cone pass: a crate is parsed the first time a sub-instance
+   reads its name, as cargo's sparse protocol fetches it, so a run touches
+   the crates the solver asks about and no others.  Because the instance is
+   still being uncovered, each lookup theorem's sub-instance must be
+   complete at the moment it answers.  That holds by construction for all
+   but one lookup: CCrate n and CFeatP n read the repository at n alone;
+   CSlot and CDec at (n, v) read (n, v)'s own rows and the repository at the
+   names its slots target; and name_set and repo_preimage load every name
+   they read, while meta loads the owner.  CLink l is the exception.  Its
+   repository is the link relation's preimage at l -- every crate version
+   declaring l
    -- and no row of any one crate names the other declarers, so nothing a
    loaded crate carries can bring them in: links_idx holds the declarers
    among the names loaded so far, and may grow after CLink l has answered.
@@ -363,7 +364,7 @@ module Make () = struct
         Hashtbl.replace rows_cache p r;
         r
 
-  (* ---- repository slices ---- *)
+  (* ---- repository preimages ---- *)
 
   let name_set_cache : (string, Cg.PkgSet.t) Hashtbl.t = Hashtbl.create 4096
 
@@ -380,15 +381,16 @@ module Make () = struct
   (* every version of every name the crate's rows read, and nothing else *)
   (* keyed by the read names rather than by the crate version, because
      consecutive versions of a crate almost always read the same names *)
-  let slice_cache : (string list, Cg.PkgSet.t) Hashtbl.t = Hashtbl.create 4096
+  let repo_preimage_cache : (string list, Cg.PkgSet.t) Hashtbl.t =
+    Hashtbl.create 4096
 
-  let slice ar (p : string * string) : Cg.PkgSet.t =
+  let repo_preimage ar (p : string * string) : Cg.PkgSet.t =
     let reads = (rows_of ar p).r_reads in
-    match Hashtbl.find_opt slice_cache reads with
+    match Hashtbl.find_opt repo_preimage_cache reads with
     | Some s -> s
     | None ->
         let s = Cg.PkgSet.unions (List.map (name_set ar) reads) in
-        Hashtbl.replace slice_cache reads s;
+        Hashtbl.replace repo_preimage_cache reads s;
         s
 
   (* ---- the lazy core graph ---- *)
@@ -423,9 +425,10 @@ module Make () = struct
         Hashtbl.replace msrv_cache (rustc, n, v) b;
         b
 
-  (* ownSupport summed over a name's versions, which is the slice a feature
-     name's lookup reads.  Cached for the same reason name_set is: load_name
-     takes a name whole, so this cannot grow once it has been asked. *)
+  (* ownSupport summed over a name's versions, which is the preimage a
+     feature name's lookup reads.  Cached for the same reason name_set is:
+     load_name takes a name whole, so this cannot grow once it has been
+     asked. *)
   let support_cache : (string, Cg.SupportSet.t) Hashtbl.t = Hashtbl.create 4096
 
   let support_of_name st (n : string) : Cg.SupportSet.t =
@@ -441,27 +444,27 @@ module Make () = struct
         Hashtbl.replace support_cache n s;
         s
 
-  let versions st (nm : Cg.NPlus.t) : Cg.VPlus.t list =
+  let versions st (tn : Cg.NPlus.t) : Cg.VPlus.t list =
     let call r supp fdefs slots links =
       T.VSet.elements
-        (Cg.versions compat_class r supp fdefs slots links cfg_active st.rc nm)
+        (Cg.versions compat_class r supp fdefs slots links cfg_active st.rc tn)
     in
     let none = Cg.PkgSet.empty in
     let nosupp = Cg.SupportSet.empty in
     let nofd = Cg.FDefRel.empty in
     let nosl = Cg.SlotRel.empty in
     let nolk = Cg.LinkRel.empty in
-    match nm with
+    match tn with
     | Cg.NPlus.CRoot -> call none nosupp nofd nosl nolk
     | Cg.NPlus.CCrate (n, _) -> call (name_set st.ar n) nosupp nofd nosl nolk
     | Cg.NPlus.CFeatP (n, _, _) ->
         call (name_set st.ar n) (support_of_name st n) nofd nosl nolk
     | Cg.NPlus.CSlot (n, v, _) ->
         let rw = rows_of st.ar (n, v) in
-        call (slice st.ar (n, v)) nosupp nofd rw.r_slots nolk
+        call (repo_preimage st.ar (n, v)) nosupp nofd rw.r_slots nolk
     | Cg.NPlus.CDec (n, v, _, _, _) ->
         let rw = rows_of st.ar (n, v) in
-        call (slice st.ar (n, v)) nosupp rw.r_fdefs rw.r_slots nolk
+        call (repo_preimage st.ar (n, v)) nosupp rw.r_fdefs rw.r_slots nolk
     | Cg.NPlus.CLink l ->
         let rs = link_rows st l in
         let r =
@@ -484,7 +487,7 @@ module Make () = struct
     let nofs = Cg.FSet.empty in
     let owner n v k =
       let rw = rows_of st.ar (n, v) in
-      k (slice st.ar (n, v)) rw
+      k (repo_preimage st.ar (n, v)) rw
     in
     match (fst p, snd p) with
     | Cg.NPlus.CRoot, _ -> call none nosupp nofd nosl nolk st.rfeats
@@ -504,8 +507,8 @@ module Make () = struct
 
     let compare a b = r2c (Cg.NPlus.compare a b)
 
-    let pp fmt (nm : t) =
-      match nm with
+    let pp fmt (tn : t) =
+      match tn with
       | Cg.NPlus.CRoot -> Format.fprintf fmt "root"
       | Cg.NPlus.CCrate (n, gr) -> Format.fprintf fmt "%s@%s" n gr
       | Cg.NPlus.CFeatP (n, f, gr) -> Format.fprintf fmt "%s/%s@%s" n f gr
@@ -559,9 +562,9 @@ module Make () = struct
        crate versions, not just the crate name: CFeatP also carries WOrig,
        and whichever of the two families is decided first entails the other,
        so a family left untagged decides by bare semver and the demotion
-       never acts.  Class gadgets carry WClass/WMember and no standing. *)
-    let tag (nm : Cg.NPlus.t) (w : Cg.VPlus.t) : PVersion.t =
-      match (st.rustv, nm, w) with
+       never acts.  Synthetic names carry WClass/WMember and no standing. *)
+    let tag (tn : Cg.NPlus.t) (w : Cg.VPlus.t) : PVersion.t =
+      match (st.rustv, tn, w) with
       | ( Some rustc,
           (Cg.NPlus.CCrate (n, _) | Cg.NPlus.CFeatP (n, _, _)),
           Cg.VPlus.WOrig v ) ->
@@ -578,21 +581,21 @@ module Make () = struct
        declarer loaded later simply be there, where a cache would freeze
        the answer mid-run and refuse it against a set fixed without it. *)
     let vcache = Hashtbl.create 65536 in
-    let versions nm =
-      match Hashtbl.find_opt vcache nm with
+    let versions tn =
+      match Hashtbl.find_opt vcache tn with
       | Some vs -> vs
       | None ->
-          let vs = List.map (tag nm) (versions st nm) in
-          (match nm with
+          let vs = List.map (tag tn) (versions st tn) in
+          (match tn with
           | Cg.NPlus.CLink _ -> ()
-          | _ -> Hashtbl.replace vcache nm vs);
+          | _ -> Hashtbl.replace vcache tn vs);
           vs
     in
     (* the decisive memoization: PubGrub asks for the same node's
        dependencies over and over during propagation *)
     let dcache = Hashtbl.create 65536 in
-    let dependencies nm ({ PVersion.v = w; _ } : PVersion.t) =
-      match Hashtbl.find_opt dcache (nm, w) with
+    let dependencies tn ({ PVersion.v = w; _ } : PVersion.t) =
+      match Hashtbl.find_opt dcache (tn, w) with
       | Some r -> r
       | None ->
           let r =
@@ -601,9 +604,9 @@ module Make () = struct
                 ( m,
                   PG.Ranges.of_list
                     (List.map (tag m) (T.VSet.elements vs)) ))
-              (deps st (nm, w))
+              (deps st (tn, w))
           in
-          Hashtbl.replace dcache (nm, w) r;
+          Hashtbl.replace dcache (tn, w) r;
           r
     in
     match
@@ -618,7 +621,7 @@ module Make () = struct
     | Ok sol ->
         let sol =
           List.map
-            (fun ((nm, { PVersion.v; _ }) : Cg.NPlus.t * PVersion.t) -> (nm, v))
+            (fun ((tn, { PVersion.v; _ }) : Cg.NPlus.t * PVersion.t) -> (tn, v))
             sol
         in
         let s = T.PkgSet.ofList sol in

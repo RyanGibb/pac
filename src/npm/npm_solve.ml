@@ -1,6 +1,7 @@
 (* npm solving over the verified pipeline, cargo_solve/apk_solve-style:
-   packuments live in hashtables; every query is answered from a small
-   Inst slice in the shape one of Npm.v's four lookup theorems justifies,
+   packuments live in hashtables; every lookup is answered from a small
+   Inst sub-instance in the shape one of Npm.v's four lookup theorems
+   justifies,
    pushed through the extracted Npm reduction into Core; PubGrub solves
    the accumulated core graph lazily, and the solution comes back through
    npmResolution and npmParents.  Trusted here (TCB): the parser, the
@@ -47,7 +48,7 @@ module T = Np.T
 (* The platform valuation.  os/cpu/libc are gates against a fixed
    environment; an unset variable fails its gate.  engines is not gated
    at all -- npm does not consult it when selecting versions -- so the
-   parser mints no gate over "node" or "npm" and this has no entry for
+   parser creates no gate over "node" or "npm" and this has no entry for
    them.  A real frontend would read these from the host. *)
 let host_os = "linux"
 let host_cpu = "x64"
@@ -81,7 +82,7 @@ type archive = {
   entry : (string * string, P.ver) Hashtbl.t;
   (* peer rows indexed by the directory they name, for peerRowsNamed *)
   peer_by_name : (string, (string * string) * P.peer) Hashtbl.t;
-  (* dependency rows indexed by the key they mint, for the granular
+  (* dependency rows indexed by the key they introduce, for the granular
      version lookup's key test *)
   dep_by_key : (string * string, (string * string) * P.dep) Hashtbl.t;
   mutable n_names : int;
@@ -186,8 +187,8 @@ let meta ar p : P.ver option = Hashtbl.find_opt ar.entry p
 
 (* There is no cone pass: the transitive closure over every version of
    every dependency is most of the registry, so a packument is fetched
-   only when a slice actually reads that name.  That is sound because a
-   name only ever reaches a slice through a row of a package already
+   only when a sub-instance actually reads that name.  That is sound
+   because a name only ever reaches one through a row of a package already
    loaded -- an exit edge names the key its own intermediate carries, and
    a peer edge names a directory its own declarer asked for. *)
 
@@ -242,15 +243,16 @@ type state = {
   grows : (string * string, Np.coq_Gate list) Hashtbl.t;
   repo_at : (string, Np.RepoSet.t) Hashtbl.t;
   plat_at : (string, ((string * string) * Np.coq_Gate) list) Hashtbl.t;
-  (* the sets a slice hands the calculus are sorted lists, so building one
-     is quadratic; they are keyed by the names read rather than by the
-     package reading them, because consecutive versions read the same *)
+  (* the sets a sub-instance hands the calculus are sorted lists, so
+     building one is quadratic; they are keyed by the names read rather than
+     by the package reading them, because consecutive versions read the
+     same *)
   repo_of : (string list, Np.RepoSet.t) Hashtbl.t;
   plat_of : (string list, ((string * string) * Np.coq_Gate) list) Hashtbl.t;
   vcache : (Np.Nm.name, Np.Vs.version list) Hashtbl.t;
   (* the optional-row verdict, keyed by what decides it *)
   opt_keep : (string * string, bool) Hashtbl.t;
-  mutable n_queries : int;
+  mutable n_lookups : int;
 }
 
 let mk_state ar root =
@@ -272,7 +274,7 @@ let mk_state ar root =
     plat_of = Hashtbl.create 4096;
     vcache = Hashtbl.create 65536;
     opt_keep = Hashtbl.create 1024;
-    n_queries = 0;
+    n_lookups = 0;
   }
 
 let peer_rows st p =
@@ -299,7 +301,7 @@ let gate_rows st p =
       Hashtbl.replace st.grows p l;
       l
 
-(* repoSlice I ns and platSlice I ns at one name *)
+(* repoPreimage I ns and platPreimage I ns at one name *)
 let repo_at st (n : string) : Np.RepoSet.t =
   match Hashtbl.find_opt st.repo_at n with
   | Some s -> s
@@ -373,18 +375,18 @@ let mk_inst st ~repo ~plat ~deps ~peers : Np.coq_Inst =
    fsevents, a false unsatisfiable on every other platform.
 
    The instance is the one effRepo reads and no more: it takes inst_repo
-   and the gate rows in inst_plat, so this is granSlice's narrowing to a
+   and the gate rows in inst_plat, so this is granSubInst's narrowing to a
    single name -- repoAt and platAt at the target -- with the row and
    peer fields empty, since nothing here consults them.  Both halves are
-   already memoized per name, so the check reuses whatever the slices
-   built.
+   already memoized per name, so the check reuses whatever the
+   sub-instances built.
 
    It is applied where a row is read rather than where a packument is
    loaded, because deciding at load time would have to resolve every
    optional target of every version eagerly -- the cone pass the driver
    deliberately does not do, and it would not even terminate on a cycle.
    Read lazily it costs nothing: the target of a row that survives is a
-   slot target the slice was going to load anyway.
+   slot target the sub-instance was going to load anyway.
 
    Evaluation is the calculus's throughout, via the extracted effRepo and
    rgHolds and under the same flat override the calculus would apply; the
@@ -427,7 +429,7 @@ let dep_rows st p =
       Hashtbl.replace st.rows p l;
       l
 
-(* the rows minting key k, for granSlice; the same filter as dep_rows, so
+(* the rows introducing key k, for granSubInst; the same filter as dep_rows, so
    the two views of a package's rows cannot disagree about keysOf *)
 let dep_rows_by_key st (k : string * string) =
   List.filter_map
@@ -457,18 +459,18 @@ let peer_names_at st q =
 let peer_rows_named st (n : string) =
   List.map (fun (p, r) -> (p, xpeer r)) (Hashtbl.find_all st.ar.peer_by_name n)
 
-(* ---- the four slices, one per lookup theorem ---- *)
+(* ---- the four sub-instances, one per lookup theorem ---- *)
 
-(* versions_lookupGran: granSlice I k cuts the repository to the key's
-   registry name, and platSlice is keyed by package, so the gate rows that
-   come with it are exactly those of the packages that survive.  Two
+(* versions_lookupGran: granSubInst I k cuts the repository to the key's
+   registry name, and platPreimage is keyed by package, so the gate rows
+   that come with it are exactly those of the packages that survive.  Two
    narrowings below are the driver's own.  keysOf is a union of one key
    per row plus the root's, and the granular lookup asks it only whether
-   it contains k, so rows that cannot mint k are dropped.  The lookup asks
-   the repository only whether the queried version is available, so it is
-   cut to that one package -- and platSlice then selects that package's
-   gate rows by itself. *)
-let gran_slice st (k : string * string) (w : string) =
+   it contains k, so rows that cannot introduce k are dropped.  The lookup
+   asks the repository only whether the looked-up version is available, so
+   it is cut to that one package -- and platPreimage then selects that
+   package's gate rows by itself. *)
+let gran_sub_inst st (k : string * string) (w : string) =
   let p = (snd k, w) in
   let repo =
     if List.mem w (versions_of st.ar (snd k)) then
@@ -480,60 +482,60 @@ let gran_slice st (k : string * string) (w : string) =
   let peers = if fst k = snd k then peer_rows_named st (fst k) else [] in
   mk_inst st ~repo ~plat ~deps ~peers
 
-(* versions_lookupInt: intSlice I p m is p's own dependency rows, the peer
-   rows naming the key's directory, and the repository and gates at the
-   key's registry name together with p's slot targets. *)
-let int_slice st (p : string * string) (m : string * string) =
+(* versions_lookupInt: intSubInst I p m is p's own dependency rows, the
+   peer rows naming the key's directory, and the repository and gates at
+   the key's registry name together with p's slot targets. *)
+let int_sub_inst st (p : string * string) (m : string * string) =
   let ns = snd m :: slot_targets st p in
   mk_inst st ~repo:(repo_of st ns) ~plat:(plat_of st ns)
     ~deps:(own_dep_rows st p)
     ~peers:(peer_rows_named st (fst m))
 
-(* dependees_lookupGran: pkgSlice I p is p's own dependency rows, its own
+(* dependees_lookupGran: pkgSubInst I p is p's own dependency rows, its own
    peer rows, and the repository and gates at their targets.  The peer
    rows are there for the root, whose granular node carries the edges
    that install its own peers; for any other package rootPeerEdges tests
    the whole package and emits nothing, so they are inert. *)
-let pkg_slice st (p : string * string) =
+let pkg_sub_inst st (p : string * string) =
   let ns = slot_targets st p @ peer_names_at st p in
   mk_inst st ~repo:(repo_of st ns) ~plat:(plat_of st ns)
     ~deps:(own_dep_rows st p) ~peers:(own_peer_rows st p)
 
-(* dependees_lookupInt: peerSlice I p m u is p's own dependency rows, the
+(* dependees_lookupInt: peerSubInst I p m u is p's own dependency rows, the
    peer rows of the dependee that was selected, and the repository and
    gates at p's slot targets and at the directories those peers name.
    This is the second hop npm's peer auto-installation costs. *)
-let peer_slice st (p : string * string) (m : string * string) (u : string) =
+let peer_sub_inst st (p : string * string) (m : string * string) (u : string) =
   let q = (snd m, u) in
   let ns = slot_targets st p @ peer_names_at st q in
   mk_inst st ~repo:(repo_of st ns) ~plat:(plat_of st ns)
     ~deps:(own_dep_rows st p) ~peers:(own_peer_rows st q)
 
-(* ---- the per-query lookups, answered by the extracted calculus ---- *)
+(* ---- the lookups, answered by the extracted calculus ---- *)
 
-let versions st (nm : Np.Nm.name) : Np.Vs.version list =
-  match Hashtbl.find_opt st.vcache nm with
+let versions st (n : Np.Nm.name) : Np.Vs.version list =
+  match Hashtbl.find_opt st.vcache n with
   | Some l -> l
   | None ->
-      st.n_queries <- st.n_queries + 1;
+      st.n_lookups <- st.n_lookups + 1;
       let l =
-        match nm with
+        match n with
         | Np.Nm.Granular (k, w) ->
-            T.VSet.elements (R.versions rho (gran_slice st k w) nm)
+            T.VSet.elements (R.versions rho (gran_sub_inst st k w) n)
         | Np.Nm.Intermediate (k, v, m) ->
-            T.VSet.elements (R.versions rho (int_slice st (snd k, v) m) nm)
+            T.VSet.elements (R.versions rho (int_sub_inst st (snd k, v) m) n)
       in
-      Hashtbl.replace st.vcache nm l;
+      Hashtbl.replace st.vcache n l;
       l
 
 let dependees st (s : T.Pkg.t) : T.Dependees.t list =
-  st.n_queries <- st.n_queries + 1;
+  st.n_lookups <- st.n_lookups + 1;
   let hs =
     match s with
     | Np.Nm.Granular (k, _), Np.Vs.Orig v ->
-        R.dependees rho (pkg_slice st (snd k, v)) s
+        R.dependees rho (pkg_sub_inst st (snd k, v)) s
     | Np.Nm.Intermediate (k, v, m), Np.Vs.Orig u ->
-        R.dependees rho (peer_slice st (snd k, v) m u) s
+        R.dependees rho (peer_sub_inst st (snd k, v) m u) s
     | _ -> T.DependeesSet.empty
   in
   T.DependeesSet.elements hs
@@ -610,8 +612,8 @@ let carried ~assigned (m : string * string) (c : PVersion.t) =
    package the answer already holds.  Preference only, as in
    deb_solve's alt_carried: the filter falls back to the whole candidate
    list, so nothing that was satisfiable stops being so. *)
-let choose st ~assigned (nm : PName.t) (cands : PVersion.t list) : PVersion.t =
-  match nm with
+let choose st ~assigned (n : PName.t) (cands : PVersion.t list) : PVersion.t =
+  match n with
   | Np.Nm.Granular _ -> greatest cands
   | Np.Nm.Intermediate (k, v, m) -> (
       let cands =
@@ -627,34 +629,34 @@ type result = {
   installs : ((string * string) * string) list;
   tree : (((string * string) * string) * ((string * string) * string)) list;
   nodes : int;
-  queries : int;
+  lookups : int;
 }
 
 let solve ?(debug = false) ar (root : string * string) =
   Pubgrub.set_debug debug;
   let st = mk_state ar root in
   let root_key = (fst root, fst root) in
-  let root_nm = Np.Nm.Granular (root_key, snd root) in
-  let versions nm = versions st nm in
+  let root_n = Np.Nm.Granular (root_key, snd root) in
+  let versions n = versions st n in
   (* the decisive memoization: PubGrub asks for the same node's
      dependencies over and over during propagation *)
   let cache = Hashtbl.create 65536 in
-  let dependencies nm (u : Np.Vs.version) =
-    match Hashtbl.find_opt cache (nm, u) with
+  let dependencies n (u : Np.Vs.version) =
+    match Hashtbl.find_opt cache (n, u) with
     | Some r -> r
     | None ->
         let r =
           List.map
             (fun ((m, vs) : T.Dependees.t) ->
               (m, PG.Ranges.of_list (T.VSet.elements vs)))
-            (dependees st (nm, u))
+            (dependees st (n, u))
         in
-        Hashtbl.replace cache (nm, u) r;
+        Hashtbl.replace cache (n, u) r;
         r
   in
   match
     PG.solve ~choose:(choose st) ~vers:versions ~deps:dependencies
-      [ (root_nm, PG.Ranges.of_list [ Np.Vs.Orig (snd root) ]) ]
+      [ (root_n, PG.Ranges.of_list [ Np.Vs.Orig (snd root) ]) ]
   with
   | Error inc ->
       Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
@@ -669,5 +671,5 @@ let solve ?(debug = false) ar (root : string * string) =
           installs = List.sort compare installs;
           tree = List.sort compare tree;
           nodes = List.length sol;
-          queries = st.n_queries;
+          lookups = st.n_lookups;
         }

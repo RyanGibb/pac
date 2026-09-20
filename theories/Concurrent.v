@@ -38,7 +38,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       forall u1 u2, VSet.In u1 vs -> VSet.In u2 vs -> g u1 = g u2.
 
     Module GEqb := UOTEqb G.
-    (* kept as an alias: "same granule" is what the guards below mean *)
+    (* kept as an alias: "same granularity" is what the guards below mean *)
     Definition granEqb : G.t -> G.t -> bool := GEqb.eqb.
 
     Lemma granEqb_iff : forall a b, granEqb a b = true <-> a = b.

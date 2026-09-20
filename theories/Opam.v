@@ -267,7 +267,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     (* Target names: a synthetic root carrying the request (opam has no
        root package -- the goal and switch invariant are formulas), the
-       real opam packages, and one shared gadget per conflict class.
+       real opam packages, and one shared class package per conflict class.
        There is no name for a filter variable: the reduction evaluates
        filters under rho as opam's own pre-pass does, so no variable
        survives into the target.  There is no name for a system package
@@ -311,14 +311,14 @@ Module Opam (N V X Y E : UsualOrderedType).
     End TName.
     Module TNOT := UOTFromCompare TName.
 
-    (* The root carries a unit version; a class gadget's versions are the
+    (* The root carries a unit version; a class package's versions are the
        names of the class's declarers.  Keying them by name and not by
        package is what reproduces opam's rule, which is stated over names
        ("any two packages having a common conflict class") and implemented
        by removing the declarer's own name from the member map: every
-       version of a member claims the same gadget version, so two versions
+       version of a member claims the same class version, so two versions
        of one package never exclude each other through a class, while two
-       different names claiming one gadget version are ruled out by the
+       different names claiming one class version are ruled out by the
        target's version uniqueness. *)
     Module TVer.
       Inductive version : Type :=
@@ -395,7 +395,7 @@ Module Opam (N V X Y E : UsualOrderedType).
     Definition PFalse : PF.Formula := PF.FDep TName.Root PF.VSet.empty.
     Definition PTrue : PF.Formula := PF.FNeg PFalse.
 
-    (* -- lookup-primary layer: the per-name and per-package queries are
+    (* -- lookup-primary layer: the per-name and per-package lookups are
        the definitions; the global translation is their aggregation,
        defined after them. -- *)
 
@@ -405,7 +405,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       : VSet.t :=
       realVersions (effRepo rho I) n.
 
-    (* Encoders consult versions only through an oracle Vq, so slice
+    (* Encoders consult versions only through an oracle Vq, so sub-instance
        reuse is oracle agreement (the lookup lemmas below). *)
     Definition versSetBy (Vq : N.t -> VSet.t) (n : N.t) (c : VConstraint)
       : PF.VSet.t :=
@@ -468,10 +468,10 @@ Module Opam (N V X Y E : UsualOrderedType).
         (p : Pkg.t) : list PF.Formula :=
       List.map (cflForm rho Vq p) (ownRows p (inst_cfl I)).
 
-    (* Conflict classes through a shared gadget, one package per class,
+    (* Conflict classes through a shared class package, one per class,
        whose versions are the declaring names.  A declarer depends on its
-       class's gadget at its own name, so two declarers of different names
-       demand two versions of one gadget name and version uniqueness
+       class package at its own name, so two declarers of different names
+       demand two versions of one class name and version uniqueness
        refuses them -- the same exclusion opam writes as a quadratic web
        of pairwise conflicts, by a linear mechanism: a class of n
        declarers costs n edges here and n^2 there, which on opam's own
@@ -487,7 +487,7 @@ Module Opam (N V X Y E : UsualOrderedType).
            else None)
         cls.
 
-    (* The gadget packages themselves: one version per declaring name of
+    (* The class packages themselves: one version per declaring name of
        each class.  They carry no outgoing formula (dependeesBy answers
        FSet.empty at them), so they constrain only by being claimed. *)
     Module SOcp := SetOps ClsElt PF.Pkg ClsRel PF.PkgSet.
@@ -497,7 +497,7 @@ Module Opam (N V X Y E : UsualOrderedType).
     Definition clsPkgs (cls : ClsRel.t) : PF.PkgSet.t :=
       SOcp.map clsPkg cls.
 
-    (* The gadget versions a class has: the names that declare it. *)
+    (* The class versions a class has: the names that declare it. *)
     Module SOcv := SetOps ClsElt TVOT ClsRel PF.VSet.
     Definition clsVersions (cls : ClsRel.t) (k : N.t) : PF.VSet.t :=
       SOcv.filterMap
@@ -566,7 +566,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       SOqd.unionMap (fun q => depEdges q (dependees rho I q))
         (transR rho I).
 
-    (* The gadget versions a selection claims: one per class a selected
+    (* The class versions a selection claims: one per class a selected
        package declares, at that package's name. *)
     Definition clsSel (cls : ClsRel.t) (S : PkgSet.t) : PF.PkgSet.t :=
       SOcp.map clsPkg (ClsRel.filter (fun qk => PkgSet.mem (fst qk) S) cls).
@@ -1017,8 +1017,8 @@ Module Opam (N V X Y E : UsualOrderedType).
         apply mem_versSetBy; exists v; split;
           [reflexivity
           | split; [exact (HV _ _ Hv) | exact Hh]].
-      (* Both declarers claim the class gadget, each at its own name; two
-         versions of the one gadget name is what version uniqueness
+      (* Both declarers claim the class package, each at its own name; two
+         versions of the one class name is what version uniqueness
          refuses. *)
       - intros k [pn pv] [qn qv] Hp Hq Hpk Hqk Hne.
         assert (Hcl : forall m w,
@@ -1120,7 +1120,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           split; apply (encodeOF_correct rho _ _ HV);
             rewrite decode_transS;
             [exact (ores_goal _ _ _ HR) | exact (ores_invariant _ _ _ HR)].
-        (* a class gadget carries no outgoing formula *)
+        (* a class package carries no outgoing formula *)
         + unfold dependees, dependeesBy in Hf'; cbn beta iota in Hf'.
           destruct (FSet.empty_spec Hf').
       - intros tn tv tv' Hv Hv'; destruct tn as [| n | k].
@@ -1138,10 +1138,10 @@ Module Opam (N V X Y E : UsualOrderedType).
                       Hpk Hqk NE).
     Qed.
 
-    (* -- slice reuse: the lookup lemmas.  A package's rows read the
+    (* -- sub-instance reuse: the lookup lemmas.  A package's rows read the
        instance only at its own rows and at the versions of the names
        they mention, so a name-restricted repository and owner-filtered
-       rows answer the same queries -- what lets a driver hold the
+       rows answer the same lookups -- what lets a driver hold the
        archive in per-name tables. -- *)
 
     Module PkgPre := PreimageOfKeys N Pkg NSet PkgSet.
@@ -1168,41 +1168,41 @@ Module Opam (N V X Y E : UsualOrderedType).
               (ownRows p (inst_pind I)))).
 
     (* A package's class formulas read only its own declarations: the
-       gadget carries the partners, so no row of a partner is consulted
+       class package carries the partners, so no row of a partner is consulted
        here.  A class name's versions are the other way round -- the whole
        preimage of the relation at that class -- and that is the one
-       lookup whose slice no single package's rows determine. *)
-    Definition clsSlice (cls : ClsRel.t) (p : Pkg.t) : ClsRel.t :=
+       lookup whose sub-instance no single package's rows determine. *)
+    Definition clsFibre (cls : ClsRel.t) (p : Pkg.t) : ClsRel.t :=
       ClsRel.filter
         (fun qk => if Pkg.eq_dec (fst qk) p then true else false) cls.
 
-    Definition clsNameSlice (cls : ClsRel.t) (k : N.t) : ClsRel.t :=
+    Definition clsNamePreimage (cls : ClsRel.t) (k : N.t) : ClsRel.t :=
       ClsRel.filter
         (fun qk => if N.eq_dec (snd qk) k then true else false) cls.
 
-    Definition pkgSlice (I : Inst) (p : Pkg.t) : Inst :=
+    Definition pkgSubInst (I : Inst) (p : Pkg.t) : Inst :=
       MkInst (nameRestrict (rowNames I p) (inst_repo I))
         (List.filter (ownb p) (inst_dep I))
         (List.filter (ownb p) (inst_dpo I))
         (List.filter (ownb p) (inst_cfl I))
-        (clsSlice (inst_cls I) p)
+        (clsFibre (inst_cls I) p)
         (inst_avl I)
         (List.filter (ownb p) (inst_dxt I))
         (inst_pins I)
         (List.filter (ownb p) (inst_pind I))
         (inst_goal I) (inst_inv I).
 
-    Definition nameSlice (I : Inst) (n : N.t) : Inst :=
+    Definition nameSubInst (I : Inst) (n : N.t) : Inst :=
       MkInst (nameRestrict (NSet.singleton n) (inst_repo I))
         (inst_dep I) (inst_dpo I) (inst_cfl I) (inst_cls I)
         (inst_avl I) (inst_dxt I) (inst_pins I)
         (inst_pind I) (inst_goal I) (inst_inv I).
 
-    Definition classSlice (I : Inst) (k : N.t) : Inst :=
-      MkInst PkgSet.empty nil nil nil (clsNameSlice (inst_cls I) k)
+    Definition classSubInst (I : Inst) (k : N.t) : Inst :=
+      MkInst PkgSet.empty nil nil nil (clsNamePreimage (inst_cls I) k)
         nil nil PkgSet.empty nil (inst_goal I) (inst_inv I).
 
-    Definition rootSlice (I : Inst) : Inst :=
+    Definition rootSubInst (I : Inst) : Inst :=
       MkInst
         (nameRestrict
            (NSet.union (ofNames (inst_goal I)) (ofNames (inst_inv I)))
@@ -1228,7 +1228,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       unfold PinOK, availOK; simpl; intuition.
     Qed.
 
-    Lemma srcVersions_slice_agree : forall rho I sl ns n,
+    Lemma srcVersions_subInst_agree : forall rho I sl ns n,
         inst_repo sl = nameRestrict ns (inst_repo I) ->
         inst_avl sl = inst_avl I -> inst_pins sl = inst_pins I ->
         NSet.In n ns ->
@@ -1346,27 +1346,27 @@ Module Opam (N V X Y E : UsualOrderedType).
     Qed.
 
     Theorem versions_lookupReal : forall rho I n,
-        versions rho (nameSlice I n) (TName.Real n) =
+        versions rho (nameSubInst I n) (TName.Real n) =
         versions rho I (TName.Real n).
     Proof.
       intros rho I n; simpl.
-      rewrite (srcVersions_slice_agree rho I (nameSlice I n)
+      rewrite (srcVersions_subInst_agree rho I (nameSubInst I n)
                  (NSet.singleton n) n); try reflexivity.
       apply NSet.singleton_spec; reflexivity.
     Qed.
 
-    (* The one lookup whose slice is a preimage: answering it needs every
+    (* The one lookup whose sub-instance is a preimage: answering it needs every
        declarer of k, which no single package's rows name.  A driver
        uncovering the repository as it goes must therefore recompute this
        answer at every ask rather than hold it, so a declarer parsed later
        is simply there. *)
     Theorem versions_lookupCls : forall rho I k,
-        versions rho (classSlice I k) (TName.Cls k) =
+        versions rho (classSubInst I k) (TName.Cls k) =
         versions rho I (TName.Cls k).
     Proof.
-      intros rho I k; cbn [versions classSlice inst_cls].
+      intros rho I k; cbn [versions classSubInst inst_cls].
       apply PF.VSet.ext; intro tv; rewrite !mem_clsVersions.
-      unfold clsNameSlice; split.
+      unfold clsNamePreimage; split.
       - intros [p [Hm ->]]; apply ClsRel.filter_spec' in Hm.
         exists p; split; [tauto | reflexivity].
       - intros [p [Hm ->]]; exists p; split; [| reflexivity].
@@ -1376,47 +1376,47 @@ Module Opam (N V X Y E : UsualOrderedType).
     Qed.
 
     Theorem dependees_lookupRoot : forall rho I,
-        dependees rho (rootSlice I) rootPkg = dependees rho I rootPkg.
+        dependees rho (rootSubInst I) rootPkg = dependees rho I rootPkg.
     Proof.
       intros rho I; unfold dependees, dependeesBy, rootPkg.
       unfold rootForm.
       assert (Hg : forall n,
                  NSet.In n (ofNames (inst_goal I)) ->
-                 srcVersions rho (rootSlice I) n = srcVersions rho I n).
+                 srcVersions rho (rootSubInst I) n = srcVersions rho I n).
       { intros n Hn.
-        apply (srcVersions_slice_agree rho I (rootSlice I)
+        apply (srcVersions_subInst_agree rho I (rootSubInst I)
                  (NSet.union (ofNames (inst_goal I))
                     (ofNames (inst_inv I))) n); try reflexivity.
         apply NSet.union_spec; left; exact Hn. }
       assert (Hi : forall n,
                  NSet.In n (ofNames (inst_inv I)) ->
-                 srcVersions rho (rootSlice I) n = srcVersions rho I n).
+                 srcVersions rho (rootSubInst I) n = srcVersions rho I n).
       { intros n Hn.
-        apply (srcVersions_slice_agree rho I (rootSlice I)
+        apply (srcVersions_subInst_agree rho I (rootSubInst I)
                  (NSet.union (ofNames (inst_goal I))
                     (ofNames (inst_inv I))) n); try reflexivity.
         apply NSet.union_spec; right; exact Hn. }
-      cbn [rootSlice inst_goal inst_inv].
+      cbn [rootSubInst inst_goal inst_inv].
       rewrite (encodeOF_agree rho _ _ _ Hg).
       rewrite (encodeOF_agree rho _ _ _ Hi).
       reflexivity.
     Qed.
 
     Theorem dependees_lookupReal : forall rho I n v,
-        dependees rho (pkgSlice I (n, v)) (embedPkg (n, v)) =
+        dependees rho (pkgSubInst I (n, v)) (embedPkg (n, v)) =
         dependees rho I (embedPkg (n, v)).
     Proof.
       intros rho I n v; unfold dependees.
       assert (HVq : forall m, NSet.In m (rowNames I (n, v)) ->
-                 srcVersions rho (pkgSlice I (n, v)) m =
+                 srcVersions rho (pkgSubInst I (n, v)) m =
                  srcVersions rho I m).
       { intros m Hm.
-        apply (srcVersions_slice_agree rho I (pkgSlice I (n, v))
+        apply (srcVersions_subInst_agree rho I (pkgSubInst I (n, v))
                  (rowNames I (n, v)) m); reflexivity || exact Hm. }
       apply FSet.ext; intro f.
       unfold embedPkg; cbn [fst snd].
       rewrite !mem_dependees_real.
-      cbn [pkgSlice inst_dep inst_cfl inst_cls inst_pind].
+      cbn [pkgSubInst inst_dep inst_cfl inst_cls inst_pind].
       split.
       - intros [H | [H | [H | H]]].
         + destruct H as [f0 [Hin ->]].
@@ -1436,7 +1436,7 @@ Module Opam (N V X Y E : UsualOrderedType).
             [apply ownRows_in; exact Hin
             | apply NSet.singleton_spec; reflexivity].
         + destruct H as [k [Hpk ->]].
-          unfold clsSlice in Hpk.
+          unfold clsFibre in Hpk.
           apply ClsRel.filter_spec' in Hpk; destruct Hpk as [Hpk _].
           right; right; left; exists k; auto.
         + destruct H as [nvu [Hin ->]].
@@ -1468,7 +1468,7 @@ Module Opam (N V X Y E : UsualOrderedType).
             | apply NSet.singleton_spec; reflexivity].
         + destruct H as [k [Hpk ->]].
           right; right; left; exists k; split; [| reflexivity].
-          unfold clsSlice; apply ClsRel.filter_spec'; split;
+          unfold clsFibre; apply ClsRel.filter_spec'; split;
             [exact Hpk | cbn [fst]].
           destruct (Pkg.eq_dec (n, v) (n, v)) as [_ | NE];
             [reflexivity | contradiction NE; reflexivity].

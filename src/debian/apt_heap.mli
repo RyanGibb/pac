@@ -1,20 +1,21 @@
 (* A shadow of apt's Solver::Work heap (apt-pkg/solver3.cc), driven by a
    PubGrub search rather than by apt: work items are the driver's clause
-   gadgets, pushed in the propagation waves of the decisions that stand,
+   packages, pushed in the propagation waves of the decisions that stand,
    popped to answer PubGrub's [next] hook, and re-added level by level when
    PubGrub backjumps, which is apt's Solver::Pop.  What the shadow knows of
    the instance it schedules is the [DRIVER] below and nothing else. *)
 
 (* The split apt makes between what it unit-propagates (Enqueue) and what it
-   queues as a work item, seen through the gadget names of the encoding. *)
+   queues as a work item, seen through the synthetic names of the
+   encoding. *)
 type kind =
   (* a guard: apt never queues one *)
   | Forced
   (* a real package name: apt enqueues the package var *)
   | Package
-  (* a clause gadget whose Clause carries eager = true *)
+  (* a clause package whose Clause carries eager = true *)
   | Hard
-  (* an optional (Recommends) clause gadget *)
+  (* an optional (Recommends) clause package *)
   | Soft
   (* a lone alternative standing in for its own clause *)
   | Alternative

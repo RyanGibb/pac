@@ -407,10 +407,10 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
     : list PeerRow :=
     List.filter (peerActive I p) (peerRowsAt I q).
 
-  (* Every directory a peer could ask for.  Minting the real set from the
+  (* Every directory a peer could ask for.  Taking the real set from the
      whole instance rather than from a package's own candidates is what
      makes peers transitive -- an auto-installed peer declares peers of
-     its own -- and over-minting is harmless: only an edge forces an
+     its own -- and over-approximating is harmless: only an edge forces an
      install, and those edges leave the declaring dependee's own
      intermediate node. *)
   Definition peerDirs (I : Inst) : NSet.t :=
@@ -450,7 +450,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       reflexivity.
   Qed.
 
-  (* The directory keys the instance can mint: the root's own, every
+  (* The directory keys the instance can introduce: the root's own, every
      dependency row's, and every peer row's. *)
   Definition keysOf (I : Inst) : KeySet.t :=
     KeySet.add (rootKey I)
@@ -550,8 +550,8 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
        installed copy is its own core name. *)
     Definition idg (v : V.t) : V.t := v.
 
-    (* -- the per-query lookups: these are the definitions, and the global
-       translation below is their aggregation -- *)
+    (* -- the per-name and per-package lookups: these are the definitions,
+       and the global translation below is their aggregation -- *)
 
     (* THE per-name version lookup. *)
     Definition versions (rho : Valuation) (I : Inst) (nm : Nm.t) : T.VSet.t :=
@@ -668,7 +668,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
 
     (* -- the global translation: an aggregation of the lookups -- *)
 
-    (* Over-minting is harmless: a name no edge reaches contributes an
+    (* Over-approximating is harmless: a name no edge reaches contributes an
        inert package, and the per-name versions above are empty for a key
        nothing asks for. *)
     Definition targetNames (rho : Valuation) (I : Inst) : NmSet.t :=
@@ -936,7 +936,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
     (* -- completeness -- *)
 
     (* The version a depender installs under one of its keys is one the
-       encoding minted there: a slot's own range when it declares one --
+       encoding introduced there: a slot's own range when it declares one --
        pinned by the slot obligation and by uniqueness -- and otherwise
        any published version, which the peer edges narrow. *)
     Lemma installs_childCands : forall rho I S pi p m v,
@@ -1253,7 +1253,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
 
     Module Lookup.
 
-      Definition repoSlice (I : Inst) (ns : NSet.t) : RepoSet.t :=
+      Definition repoPreimage (I : Inst) (ns : NSet.t) : RepoSet.t :=
         RepoSet.filter (fun p => NSet.mem (fst p) ns) (inst_repo I).
 
       (* platOKb reads the gate rows only through the fibre over the
@@ -1261,22 +1261,22 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
          by name: a package the repository cut keeps takes its own rows
          with it, and a package the cut drops takes none.  Cutting by name
          would keep the rows of every version of that name, which a
-         frontend answering a query about one version cannot use. *)
-      Definition platSlice (I : Inst) (R : RepoSet.t)
+         frontend answering a lookup about one version cannot use. *)
+      Definition platPreimage (I : Inst) (R : RepoSet.t)
         : list (RPkg.t * Gate) :=
         List.filter (fun q => RepoSet.mem (fst q) R) (inst_plat I).
 
       (* Any instance whose repository agrees with I at the names in ns,
          whose gate rows agree with I on each package that repository
-         keeps, and whose rows are the queried package's own, answers that
-         query alike. *)
-      Definition sliceInst (I : Inst) (ns : NSet.t)
+         keeps, and whose rows are the looked-up package's own, answers that
+         lookup alike. *)
+      Definition subInst (I : Inst) (ns : NSet.t)
           (deps : list (RPkg.t * DepRow)) (prs : list (RPkg.t * PeerRow))
         : Inst :=
-        {| inst_repo := repoSlice I ns
+        {| inst_repo := repoPreimage I ns
          ; inst_dep := deps
          ; inst_peer := prs
-         ; inst_plat := platSlice I (repoSlice I ns)
+         ; inst_plat := platPreimage I (repoPreimage I ns)
          ; inst_ovr := inst_ovr I
          ; inst_root := inst_root I |}.
 
@@ -1309,59 +1309,59 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
             apply RepoSet.mem_spec in H2; congruence.
       Qed.
 
-      Lemma mem_repoSlice : forall I ns p,
-          RepoSet.In p (repoSlice I ns) <->
+      Lemma mem_repoPreimage : forall I ns p,
+          RepoSet.In p (repoPreimage I ns) <->
           RepoSet.In p (inst_repo I) /\ NSet.In (fst p) ns.
       Proof.
-        intros I ns p; unfold repoSlice; rewrite RSS.filter_spec'.
+        intros I ns p; unfold repoPreimage; rewrite RSS.filter_spec'.
         rewrite NSet.mem_spec; reflexivity.
       Qed.
 
-      Lemma platOKb_slice : forall rho I ns deps prs p,
-          RepoSet.In p (repoSlice I ns) ->
-          platOKb rho (sliceInst I ns deps prs) p = platOKb rho I p.
+      Lemma platOKb_subInst : forall rho I ns deps prs p,
+          RepoSet.In p (repoPreimage I ns) ->
+          platOKb rho (subInst I ns deps prs) p = platOKb rho I p.
       Proof.
         intros rho I ns deps prs p Hp; unfold platOKb.
-        cbn [inst_plat sliceInst]; unfold platSlice.
+        cbn [inst_plat subInst]; unfold platPreimage.
         rewrite ownRows_filter; [reflexivity |].
         intros g _; cbn [fst]; apply RepoSet.mem_spec; exact Hp.
       Qed.
 
-      Lemma effRepo_slice : forall rho I ns deps prs n w,
+      Lemma effRepo_subInst : forall rho I ns deps prs n w,
           NSet.In n ns ->
-          (RepoSet.In (n, w) (effRepo rho (sliceInst I ns deps prs)) <->
+          (RepoSet.In (n, w) (effRepo rho (subInst I ns deps prs)) <->
            RepoSet.In (n, w) (effRepo rho I)).
       Proof.
         intros rho I ns deps prs n w Hn.
         split; intro H; apply mem_effRepo in H; destruct H as [H1 H2];
-          cbn [inst_repo sliceInst] in H1 |- *.
-        - assert (Hs : RepoSet.In (n, w) (repoSlice I ns)) by exact H1.
-          apply mem_repoSlice in H1; apply mem_effRepo; split;
+          cbn [inst_repo subInst] in H1 |- *.
+        - assert (Hs : RepoSet.In (n, w) (repoPreimage I ns)) by exact H1.
+          apply mem_repoPreimage in H1; apply mem_effRepo; split;
             [exact (proj1 H1) |].
-          rewrite <- (platOKb_slice rho I ns deps prs (n, w) Hs); exact H2.
-        - assert (Hs : RepoSet.In (n, w) (repoSlice I ns))
-            by (apply mem_repoSlice; split; [exact H1 | exact Hn]).
+          rewrite <- (platOKb_subInst rho I ns deps prs (n, w) Hs); exact H2.
+        - assert (Hs : RepoSet.In (n, w) (repoPreimage I ns))
+            by (apply mem_repoPreimage; split; [exact H1 | exact Hn]).
           apply mem_effRepo; split; [exact Hs |].
-          rewrite (platOKb_slice rho I ns deps prs (n, w) Hs); exact H2.
+          rewrite (platOKb_subInst rho I ns deps prs (n, w) Hs); exact H2.
       Qed.
 
-      Lemma realVersions_slice : forall rho I ns deps prs n,
+      Lemma realVersions_subInst : forall rho I ns deps prs n,
           NSet.In n ns ->
-          realVersions (effRepo rho (sliceInst I ns deps prs)) n =
+          realVersions (effRepo rho (subInst I ns deps prs)) n =
           realVersions (effRepo rho I) n.
       Proof.
         intros rho I ns deps prs n Hn; apply VSet.ext; intro w.
-        rewrite !mem_realVersions; apply effRepo_slice; exact Hn.
+        rewrite !mem_realVersions; apply effRepo_subInst; exact Hn.
       Qed.
 
-      (* -- the rows a query reads -- *)
+      (* -- the rows a lookup reads -- *)
 
-      Lemma depRows_slice : forall I ns deps prs p,
+      Lemma depRows_subInst : forall I ns deps prs p,
           ownRows deps p = ownRows (inst_dep I) p ->
-          depRows (sliceInst I ns deps prs) p = depRows I p.
+          depRows (subInst I ns deps prs) p = depRows I p.
       Proof.
         intros I ns deps prs p Ho; unfold depRows, depActive.
-        cbn [inst_dep inst_root sliceInst]; rewrite Ho; reflexivity.
+        cbn [inst_dep inst_root subInst]; rewrite Ho; reflexivity.
       Qed.
 
       Lemma ownDepRows_id : forall I p,
@@ -1379,16 +1379,16 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Lemma mem_peerDirs_named : forall I ns deps n,
-          NSet.mem n (peerDirs (sliceInst I ns deps (peerRowsNamed I n))) =
+          NSet.mem n (peerDirs (subInst I ns deps (peerRowsNamed I n))) =
           NSet.mem n (peerDirs I).
       Proof.
         intros I ns deps n.
         destruct (NSet.mem n
-                    (peerDirs (sliceInst I ns deps (peerRowsNamed I n))))
+                    (peerDirs (subInst I ns deps (peerRowsNamed I n))))
           eqn:H1; destruct (NSet.mem n (peerDirs I)) eqn:H2;
           try reflexivity.
         - apply NSet.mem_spec in H1; unfold peerDirs in H1.
-          cbn [inst_peer sliceInst] in H1; apply mem_namesOfL in H1.
+          cbn [inst_peer subInst] in H1; apply mem_namesOfL in H1.
           destruct H1 as [q [Hq Hn]]; unfold peerRowsNamed in Hq.
           apply List.filter_In in Hq; destruct Hq as [Hq _].
           assert (NSet.In n (peerDirs I)) as Hc
@@ -1398,28 +1398,28 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
         - apply NSet.mem_spec in H2; unfold peerDirs in H2.
           apply mem_namesOfL in H2; destruct H2 as [q [Hq Hn]].
           assert (NSet.In n
-                    (peerDirs (sliceInst I ns deps (peerRowsNamed I n))))
+                    (peerDirs (subInst I ns deps (peerRowsNamed I n))))
             as Hc.
-          { unfold peerDirs; cbn [inst_peer sliceInst].
+          { unfold peerDirs; cbn [inst_peer subInst].
             apply mem_namesOfL; exists q; split; [| exact Hn].
             unfold peerRowsNamed; apply List.filter_In; split;
               [exact Hq | apply NEqb.eqb_true_iff; exact Hn]. }
           apply NSet.mem_spec in Hc; congruence.
       Qed.
 
-      (* -- agreement of the per-query reads under a slice -- *)
+      (* -- agreement of the per-lookup reads under a sub-instance -- *)
 
       Lemma depRows_agree : forall I ns deps prs p,
           ownRows deps p = ownRows (inst_dep I) p ->
-          depRows (sliceInst I ns deps prs) p = depRows I p.
+          depRows (subInst I ns deps prs) p = depRows I p.
       Proof.
         intros I ns deps prs p Hdeps; unfold depRows, depActive.
-        cbn [inst_dep inst_root sliceInst]; rewrite Hdeps; reflexivity.
+        cbn [inst_dep inst_root subInst]; rewrite Hdeps; reflexivity.
       Qed.
 
       Lemma slotOf_agree : forall I ns deps prs p a,
           ownRows deps p = ownRows (inst_dep I) p ->
-          slotOf (sliceInst I ns deps prs) p a = slotOf I p a.
+          slotOf (subInst I ns deps prs) p a = slotOf I p a.
       Proof.
         intros I ns deps prs p a Hdeps; unfold slotOf.
         rewrite (depRows_agree I ns deps prs p Hdeps); reflexivity.
@@ -1427,7 +1427,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
 
       Lemma dirs_agree : forall I ns deps prs p,
           ownRows deps p = ownRows (inst_dep I) p ->
-          dirs (sliceInst I ns deps prs) p = dirs I p.
+          dirs (subInst I ns deps prs) p = dirs I p.
       Proof.
         intros I ns deps prs p Hdeps; unfold dirs.
         rewrite (depRows_agree I ns deps prs p Hdeps); reflexivity.
@@ -1435,7 +1435,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
 
       Lemma slotKey_agree : forall I ns deps prs p a,
           ownRows deps p = ownRows (inst_dep I) p ->
-          slotKey (sliceInst I ns deps prs) p a = slotKey I p a.
+          slotKey (subInst I ns deps prs) p a = slotKey I p a.
       Proof.
         intros I ns deps prs p a Hdeps; unfold slotKey.
         rewrite (slotOf_agree I ns deps prs p a Hdeps); reflexivity.
@@ -1445,14 +1445,14 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
           ownRows deps p = ownRows (inst_dep I) p ->
           (forall d, In d (depRows I p) -> NSet.In (d_target d) ns) ->
           forall rho a,
-            slotCands rho (sliceInst I ns deps prs) p a =
+            slotCands rho (subInst I ns deps prs) p a =
             slotCands rho I p a.
       Proof.
         intros I ns deps prs p Hdeps Htgt rho a; unfold slotCands.
         rewrite (slotOf_agree I ns deps prs p a Hdeps).
         destruct (slotOf I p a) as [d |] eqn:Hd; [| reflexivity].
-        cbn [inst_ovr sliceInst].
-        rewrite realVersions_slice; [reflexivity |].
+        cbn [inst_ovr subInst].
+        rewrite realVersions_subInst; [reflexivity |].
         apply Htgt; exact (proj1 (findDepL_some _ _ _ Hd)).
       Qed.
 
@@ -1484,9 +1484,9 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
           ownRows deps p = ownRows (inst_dep I) p ->
           (forall d, In d (depRows I p) -> NSet.In (d_target d) ns) ->
           NSet.In (snd m) ns ->
-          NSet.mem (fst m) (peerDirs (sliceInst I ns deps prs)) =
+          NSet.mem (fst m) (peerDirs (subInst I ns deps prs)) =
             NSet.mem (fst m) (peerDirs I) ->
-          childCands rho (sliceInst I ns deps prs) p m =
+          childCands rho (subInst I ns deps prs) p m =
           childCands rho I p m.
       Proof.
         intros rho I ns deps prs p m Hd Ht Hm Hpa; unfold childCands.
@@ -1499,41 +1499,41 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
           try reflexivity.
         - apply slotCands_agree; assumption.
         - apply slotCands_agree; assumption.
-        - apply realVersions_slice; exact Hm.
+        - apply realVersions_subInst; exact Hm.
       Qed.
 
       (* -- the four lookups -- *)
 
-      Definition granSlice (I : Inst) (k : NKey.t) : Inst :=
-        sliceInst I (NSet.singleton (snd k)) (inst_dep I) (inst_peer I).
+      Definition granSubInst (I : Inst) (k : NKey.t) : Inst :=
+        subInst I (NSet.singleton (snd k)) (inst_dep I) (inst_peer I).
 
       Theorem versions_lookupGran : forall rho I k w,
-          versions rho (granSlice I k) (Nm.Granular k w) =
+          versions rho (granSubInst I k) (Nm.Granular k w) =
           versions rho I (Nm.Granular k w).
       Proof.
         intros rho I k w; cbn [versions].
         assert (Hs : NSet.In (snd k) (NSet.singleton (snd k)))
           by (apply NSet.singleton_spec; reflexivity).
-        pose proof (effRepo_slice rho I (NSet.singleton (snd k))
+        pose proof (effRepo_subInst rho I (NSet.singleton (snd k))
                       (inst_dep I) (inst_peer I) (snd k) w Hs) as He.
-        assert (Hm : PkgSet.mem (k, w) (realPkgs rho (granSlice I k)) =
+        assert (Hm : PkgSet.mem (k, w) (realPkgs rho (granSubInst I k)) =
                      PkgSet.mem (k, w) (realPkgs rho I)).
         { apply mem_eq_of_iffP; rewrite !mem_realPkgs.
-          unfold Available, base, granSlice; cbn [fst snd].
+          unfold Available, base, granSubInst; cbn [fst snd].
           split; intros [H1 H2]; split; try exact H1; apply He; exact H2. }
         apply if_scrutinee; exact Hm.
       Qed.
 
-      Definition intSlice (I : Inst) (p : RPkg.t) (m : NKey.t) : Inst :=
-        sliceInst I (NSet.add (snd m) (slotTargets I p)) (ownDepRows I p)
+      Definition intSubInst (I : Inst) (p : RPkg.t) (m : NKey.t) : Inst :=
+        subInst I (NSet.add (snd m) (slotTargets I p)) (ownDepRows I p)
           (peerRowsNamed I (fst m)).
 
       Theorem versions_lookupInt : forall rho I k v m,
-          versions rho (intSlice I (snd k, v) m) (Nm.Intermediate k v m) =
+          versions rho (intSubInst I (snd k, v) m) (Nm.Intermediate k v m) =
           versions rho I (Nm.Intermediate k v m).
       Proof.
         intros rho I k v m; cbn [versions]; f_equal.
-        unfold intSlice; apply childCands_agree.
+        unfold intSubInst; apply childCands_agree.
         - apply ownDepRows_id.
         - intros d Hd; apply NSet.add_spec; right;
             apply slotTargets_spec; exact Hd.
@@ -1544,12 +1544,12 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
       (* A package's own peer rows come along because the granular node of
          the root now carries the root's peer edges; for any other package
          they are inert, since rootPeerEdges tests the whole package. *)
-      Definition pkgSlice (I : Inst) (p : RPkg.t) : Inst :=
-        sliceInst I (NSet.union (slotTargets I p) (peerNamesAt I p))
+      Definition pkgSubInst (I : Inst) (p : RPkg.t) : Inst :=
+        subInst I (NSet.union (slotTargets I p) (peerNamesAt I p))
           (ownDepRows I p) (ownPeerRows I p).
 
       Theorem dependees_lookupGran : forall rho I k v,
-          dependees rho (pkgSlice I (snd k, v))
+          dependees rho (pkgSubInst I (snd k, v))
             (Nm.Granular k v, Vs.Orig v) =
           dependees rho I (Nm.Granular k v, Vs.Orig v).
       Proof.
@@ -1571,14 +1571,14 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
             apply slotTargets_spec; exact (proj1 (findDepL_some _ _ _ Hd2)).
           - cbn [snd]; apply NSet.union_spec; right; unfold peerNamesAt.
             apply mem_namesOfL; exists r; split; [exact Hr | reflexivity]. }
-        unfold pkgSlice; f_equal.
+        unfold pkgSubInst; f_equal.
         - unfold entryEdges, base; cbn [fst snd].
           rewrite (dirs_agree I _ _ _ (snd k, v) Hd).
           unfold depsOfL; f_equal; apply map_ext_in; intros a _.
           rewrite (slotKey_agree I _ _ _ (snd k, v) a Hd).
           rewrite (slotCands_agree I _ _ _ (snd k, v) Hd Htgt rho a).
           reflexivity.
-        - assert (Hrt : rootPkg (sliceInst I
+        - assert (Hrt : rootPkg (subInst I
                             (NSet.union (slotTargets I (snd k, v))
                                (peerNamesAt I (snd k, v)))
                             (ownDepRows I (snd k, v))
@@ -1587,13 +1587,13 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
           unfold rootPeerEdges; rewrite Hrt.
           destruct (PkgEqb.eqb (k, v) (rootPkg I)); [| reflexivity].
           unfold base; cbn [fst snd].
-          assert (Hpr : peerRowsAt (sliceInst I
+          assert (Hpr : peerRowsAt (subInst I
                             (NSet.union (slotTargets I (snd k, v))
                                (peerNamesAt I (snd k, v)))
                             (ownDepRows I (snd k, v))
                             (ownPeerRows I (snd k, v))) (snd k, v) =
                         peerRowsAt I (snd k, v))
-            by (unfold peerRowsAt; cbn [inst_peer sliceInst];
+            by (unfold peerRowsAt; cbn [inst_peer subInst];
                 apply ownPeerRows_id).
           unfold activePeers, peerActive; rewrite Hpr.
           rewrite (dirs_agree I _ _ _ (snd k, v) Hd).
@@ -1601,25 +1601,25 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
           apply List.filter_In in Hr; destruct Hr as [Hr _].
           unfold peerKeyAt, peerCandsAt, peerKeyAt.
           rewrite (slotKey_agree I _ _ _ (snd k, v) (p_name r) Hd).
-          rewrite realVersions_slice; [reflexivity | apply Hn; exact Hr].
+          rewrite realVersions_subInst; [reflexivity | apply Hn; exact Hr].
       Qed.
 
-      Definition peerSlice (I : Inst) (p : RPkg.t) (m : NKey.t) (u : V.t)
+      Definition peerSubInst (I : Inst) (p : RPkg.t) (m : NKey.t) (u : V.t)
         : Inst :=
-        sliceInst I (NSet.union (slotTargets I p) (peerNamesAt I (snd m, u)))
+        subInst I (NSet.union (slotTargets I p) (peerNamesAt I (snd m, u)))
           (ownDepRows I p) (ownPeerRows I (snd m, u)).
 
       Theorem dependees_lookupInt : forall rho I k v m u,
-          dependees rho (peerSlice I (snd k, v) m u)
+          dependees rho (peerSubInst I (snd k, v) m u)
             (Nm.Intermediate k v m, Vs.Orig u) =
           dependees rho I (Nm.Intermediate k v m, Vs.Orig u).
       Proof.
         intros rho I k v m u; cbn [dependees]; f_equal.
         unfold peerEdgesAt, base; cbn [fst snd].
         pose proof (ownDepRows_id I (snd k, v)) as Hd.
-        assert (Hpr : peerRowsAt (peerSlice I (snd k, v) m u) (snd m, u) =
+        assert (Hpr : peerRowsAt (peerSubInst I (snd k, v) m u) (snd m, u) =
                       peerRowsAt I (snd m, u)).
-        { unfold peerSlice, peerRowsAt; cbn [inst_peer sliceInst].
+        { unfold peerSubInst, peerRowsAt; cbn [inst_peer subInst].
           apply ownPeerRows_id. }
         assert (Hn : forall r, In r (peerRowsAt I (snd m, u)) ->
                    NSet.In (snd (slotKey I (snd k, v) (p_name r)))
@@ -1631,7 +1631,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
             apply slotTargets_spec; exact (proj1 (findDepL_some _ _ _ Hd2)).
           - cbn [snd]; apply NSet.union_spec; right; unfold peerNamesAt.
             apply mem_namesOfL; exists r; split; [exact Hr | reflexivity]. }
-        unfold peerSlice in Hpr |- *; unfold activePeers, peerActive.
+        unfold peerSubInst in Hpr |- *; unfold activePeers, peerActive.
         rewrite Hpr.
         rewrite (dirs_agree I
                    (NSet.union (slotTargets I (snd k, v))
@@ -1646,7 +1646,7 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
                       (peerNamesAt I (snd m, u)))
                    (ownDepRows I (snd k, v)) (ownPeerRows I (snd m, u))
                    (snd k, v) (p_name r) Hd).
-        rewrite realVersions_slice; [reflexivity | apply Hn; exact Hr].
+        rewrite realVersions_subInst; [reflexivity | apply Hn; exact Hr].
       Qed.
 
     End Lookup.
@@ -1785,7 +1785,7 @@ Example npm_peer_edge_computes :
         NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
-(* With A declaring no dependency on C, the peer directory is minted at
+(* With A declaring no dependency on C, the peer directory is introduced at
    every published version and the same edge auto-installs it. *)
 Example npm_auto_versions_computes :
   NpmS.T.VSet.elements
