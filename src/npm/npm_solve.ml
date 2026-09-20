@@ -44,20 +44,17 @@ module T = Np.T
    by the theory, and each is a place where this driver may disagree with
    npm. *)
 
-(* The platform valuation.  engines/os/cpu are gates against a fixed
-   environment; an unset variable fails its gate, which is npm's
-   engine-strict reading.  A real frontend would read these from the host
-   and from .npmrc. *)
-let host_node = "22.0.0"
-let host_npm = "10.0.0"
+(* The platform valuation.  os/cpu/libc are gates against a fixed
+   environment; an unset variable fails its gate.  engines is not gated
+   at all -- npm does not consult it when selecting versions -- so the
+   parser mints no gate over "node" or "npm" and this has no entry for
+   them.  A real frontend would read these from the host. *)
 let host_os = "linux"
 let host_cpu = "x64"
 let host_libc = "glibc"
 
 let rho (x : string) : string option =
   match x with
-  | "node" -> Some (P.pad host_node)
-  | "npm" -> Some (P.pad host_npm)
   | "os" -> Some host_os
   | "cpu" -> Some host_cpu
   | "libc" -> Some host_libc
@@ -572,6 +569,60 @@ end
 
 module PG = Pubgrub.Make (PName) (PVersion)
 
+let greatest = function
+  | [] -> invalid_arg "greatest"
+  | c :: cs ->
+      List.fold_left (fun a b -> if PVersion.compare b a > 0 then b else a) c cs
+
+(* npm-pick-manifest offers dist-tags.latest before the highest version
+   the range admits, and takes it whenever the range admits it; only the
+   ordering differs from ours, so a package published ahead of its own
+   latest tag no longer drags its newest release in.  Preference only:
+   the tag is consulted inside the candidates, never outside them. *)
+let tagged st (n : string) (cands : PVersion.t list) : PVersion.t option =
+  match Hashtbl.find_opt st.ar.latest n with
+  | None -> None
+  | Some l ->
+      let l = Np.Vs.Orig l in
+      List.find_opt (fun c -> PVersion.compare c l = 0) cands
+
+(* A directory no dependency row of p names: only a peer asks for it, so
+   childCands offers every published version of the target and nothing
+   narrows the slot but the peer ranges. *)
+let peer_only st p (a : string) =
+  not
+    (List.exists (fun (d : Np.coq_DepRow) -> d.Np.d_dir = a) (active_rows st p))
+
+(* Is the candidate's own granular node already carried?  It holds
+   exactly one version, so any assignment to it is that version. *)
+let carried ~assigned (m : string * string) (c : PVersion.t) =
+  match c with
+  | Np.Vs.Gran _ -> false
+  | Np.Vs.Orig u -> (
+      match assigned (Np.Nm.Granular (m, u)) with
+      | PG.Unselected -> false
+      | PG.Decided w -> PVersion.compare w c = 0
+      | PG.Entailed r -> PG.Ranges.contains c r)
+
+(* npm fills a peer slot from the tree before resolving it, so a version
+   the partial solution already carries outranks both the dist-tag and
+   the newest; resolving afresh is what brings in a second tree of a
+   package the answer already holds.  Preference only, as in
+   deb_solve's alt_carried: the filter falls back to the whole candidate
+   list, so nothing that was satisfiable stops being so. *)
+let choose st ~assigned (nm : PName.t) (cands : PVersion.t list) : PVersion.t =
+  match nm with
+  | Np.Nm.Granular _ -> greatest cands
+  | Np.Nm.Intermediate (k, v, m) -> (
+      let cands =
+        if peer_only st (snd k, v) (fst m) then
+          match List.filter (carried ~assigned m) cands with
+          | [] -> cands
+          | reused -> reused
+        else cands
+      in
+      match tagged st (snd m) cands with Some c -> c | None -> greatest cands)
+
 type result = {
   installs : ((string * string) * string) list;
   tree : (((string * string) * string) * ((string * string) * string)) list;
@@ -602,7 +653,7 @@ let solve ?(debug = false) ar (root : string * string) =
         r
   in
   match
-    PG.solve ~vers:versions ~deps:dependencies
+    PG.solve ~choose:(choose st) ~vers:versions ~deps:dependencies
       [ (root_nm, PG.Ranges.of_list [ Np.Vs.Orig (snd root) ]) ]
   with
   | Error inc ->

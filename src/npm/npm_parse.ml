@@ -12,11 +12,12 @@
    - The dependency-spec classification below.  npm accepts git, file,
      link, workspace and tag specs that no registry lookup can resolve;
      those rows are dropped and counted rather than guessed at.
-   - The engines encoding.  A semver constant is compared inside the
-     calculus by the platform valuation's ordering, which is plain string
-     order, so numeric components are zero-padded here to make string
-     order agree with version order.  Prerelease tags in an engines range
-     are dropped.
+   - The os/cpu/libc encoding.  Each list becomes a platform gate over
+     the valuation's variable of that name; npm applies the same test at
+     reify time (EBADPLATFORM).  "engines" is deliberately *not* a gate:
+     npm never consults it when choosing versions, and --engine-strict
+     only promotes the install-time warning to an error, so gating on it
+     would make our instance strictly smaller than npm's.
 
    - The optionalDependencies reading.  Such a row is an ordinary
      dependency that npm abandons in exactly one situation: its manifest
@@ -188,27 +189,11 @@ let peer_of (meta : (string * Yojson.Safe.t) list) (key, spec) : peer option =
 
 (* ---- platform gates ---- *)
 
-(* the calculus compares a gate's constant with the valuation's ordering,
-   which is plain string order, so a version constant is padded until
-   string order and version order agree *)
-let pad (v : string) : string =
-  let p = Npm_version.parse v in
-  Printf.sprintf "%05d.%05d.%05d" p.Npm_version.major p.Npm_version.minor
-    p.Npm_version.patch
-
-let gate_of_comparator (x : string) (ct : Npm_version.comparator) : gate =
-  match ct with
-  | Npm_version.Any -> GTrue
-  | Npm_version.Cmp (o, c) -> GCmp (o, x, pad c)
-
 let conj = List.fold_left (fun a b -> GAnd (a, b)) GTrue
 
 let disj = function
   | [] -> GFalse
   | g :: gs -> List.fold_left (fun a b -> GOr (a, b)) g gs
-
-let gate_of_range (x : string) (rg : Npm_version.range) : gate =
-  disj (List.map (fun cs -> conj (List.map (gate_of_comparator x) cs)) rg)
 
 (* os and cpu are lists whose positives are alternatives and whose
    !-prefixed entries are exclusions *)
@@ -231,26 +216,12 @@ let gate_of_list (x : string) (l : string list) : gate option =
     in
     match pos @ neg with [] -> None | g :: gs -> Some (conj (g :: gs))
 
+(* "engines" is not read: see the header.  os/cpu/libc are, because npm
+   does refuse a package whose platform its host fails. *)
 let gates_of (j : Yojson.Safe.t) : gate list =
-  (* npm enforces only node and npm from engines; iojs, yarn, pnpm, bun,
-     vscode and friends are informational, and treating an unknown key as
-     a veto would cut every version of a package that carries one. *)
-  let eng =
-    List.filter_map
-      (fun (k, v) ->
-        match v with
-        | `String rg when List.mem k [ "node"; "npm" ] && not (unresolvable rg)
-          ->
-            Some (gate_of_range k (Npm_version.parse_range rg))
-        | _ -> None)
-      (assoc_of (member "engines" j))
-  in
-  let plat =
-    List.filter_map
-      (fun (x, l) -> gate_of_list x (str_list (member l j)))
-      [ ("os", "os"); ("cpu", "cpu"); ("libc", "libc") ]
-  in
-  eng @ plat
+  List.filter_map
+    (fun (x, l) -> gate_of_list x (str_list (member l j)))
+    [ ("os", "os"); ("cpu", "cpu"); ("libc", "libc") ]
 
 (* ---- manifests ---- *)
 
