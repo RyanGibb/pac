@@ -11,9 +11,9 @@ no RustcTargetData), so a [target.'cfg(...)'] row constrains a linux
 resolve exactly as an unconditional one does, and pac's cfg_active says
 the same.  Both sides answer about crates.io as it actually is.
 
-Crate body downloads (needed by `cargo metadata` for full manifest
-detail, not for resolution) still go to the real static.crates.io via the
-served config.json's "dl".
+The served config.json still names the real static.crates.io under "dl",
+but neither sweep ever reaches it: both ask cargo only for a lockfile,
+which it resolves from these rows and writes without downloading a body.
 """
 import http.server, json, os, sys
 

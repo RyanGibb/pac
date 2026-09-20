@@ -1,13 +1,13 @@
   $ ../../../src/main.exe cargo index a | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root a 1.0.0
   crates (6):
-    a 1.0.0
+    a 1.0.0 [default]
     b 1.0.0 [default]
     c 1.0.0 [default]
     d 1.0.0 [a,default]
     d 2.0.0 [b,default]
     f 1.0.0 [c,d,default]
-  encoded solution: 24 core nodes (6 crate versions encoded)
+  encoded solution: 25 core nodes (6 crate versions encoded)
   parent edges: 6
   loaded: 5 crates, 6 versions
 
@@ -19,10 +19,10 @@ q publishes 1.0.0-alpha.1 alone, which ^1.0.0-alpha reaches.
   $ ../../../src/main.exe cargo index g | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root g 1.0.0
   crates (3):
-    g 1.0.0
+    g 1.0.0 [default]
     p 1.0.0 [default]
     q 1.0.0-alpha.1 [default]
-  encoded solution: 8 core nodes (4 crate versions encoded)
+  encoded solution: 9 core nodes (4 crate versions encoded)
   parent edges: 2
   loaded: 3 crates, 4 versions
 
@@ -34,24 +34,39 @@ activated and the dev one does not participate.
   $ ../../../src/main.exe cargo index h | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root h 1.0.0
   crates (2):
-    h 1.0.0
+    h 1.0.0 [default]
     k 1.0.0 [default]
-  encoded solution: 5 core nodes (2 crate versions encoded)
+  encoded solution: 6 core nodes (2 crate versions encoded)
   parent edges: 1
   loaded: 3 crates, 3 versions
 
-From root k itself the same two records both matter: the mandatory dev
-record installs m even though nothing activates the optional normal
-record sharing its alias.  The two stay separate slots -- conjoined, the
-dev record's non-optionality would bind on every depender, which is the h
-case above.
+From root k itself the same two records both matter.  With no features
+named the root gets every feature it declares, which is the lockfile
+resolve: the implicit feature of the optional m is among them, so that
+record activates as well and each of the two binds m through its own
+slot, two parent edges onto the one installed crate.
 
   $ ../../../src/main.exe cargo index k | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root k 1.0.0
   crates (2):
-    k 1.0.0
+    k 1.0.0 [default,m]
     m 1.0.0 [default]
-  encoded solution: 5 core nodes (2 crate versions encoded)
+  encoded solution: 8 core nodes (2 crate versions encoded)
+  parent edges: 2
+  loaded: 2 crates, 2 versions
+
+Naming features asks for the build cargo would run against that lock
+instead, and under default alone nothing activates the optional normal
+record: the mandatory dev record installs m by itself.  The two stay
+separate slots -- conjoined, the dev record's non-optionality would bind
+on every depender, which is the h case above.
+
+  $ ../../../src/main.exe cargo index k --features default | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root k 1.0.0 with features default
+  crates (2):
+    k 1.0.0 [default]
+    m 1.0.0 [default]
+  encoded solution: 6 core nodes (2 crate versions encoded)
   parent edges: 1
   loaded: 2 crates, 2 versions
 
@@ -66,11 +81,11 @@ without it.
   $ ../../../src/main.exe cargo index r | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root r 1.0.0
   crates (4):
-    r 1.0.0
+    r 1.0.0 [default]
     x 0.9.0 [default]
     y 1.0.2 [default]
     z 1.0.0 [default]
-  encoded solution: 12 core nodes (7 crate versions encoded)
+  encoded solution: 13 core nodes (7 crate versions encoded)
   parent edges: 3
   loaded: 4 crates, 7 versions
 
@@ -83,10 +98,10 @@ its place in the lock as --features varies, and w is installed with extra.
   $ ../../../src/main.exe cargo index s | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root s 1.0.0
   crates (3):
-    s 1.0.0
+    s 1.0.0 [default]
     u 1.0.0 [cap,default]
     w 1.0.0 [default,extra]
-  encoded solution: 11 core nodes (3 crate versions encoded)
+  encoded solution: 12 core nodes (3 crate versions encoded)
   parent edges: 2
   loaded: 3 crates, 3 versions
 
@@ -100,8 +115,8 @@ m1 takes the older 1.0.0.
   root m1 1.0.0 for rust 1.70
   crates (2):
     d1 1.0.0 [default]
-    m1 1.0.0
-  encoded solution: 5 core nodes (3 crate versions encoded)
+    m1 1.0.0 [default]
+  encoded solution: 6 core nodes (3 crate versions encoded)
   parent edges: 1
   loaded: 2 crates, 3 versions
 
@@ -112,8 +127,8 @@ the rust-versions list is empty, and the same index takes the newest.
   root m1 1.0.0
   crates (2):
     d1 1.1.0 [default]
-    m1 1.0.0
-  encoded solution: 5 core nodes (3 crate versions encoded)
+    m1 1.0.0 [default]
+  encoded solution: 6 core nodes (3 crate versions encoded)
   parent edges: 1
   loaded: 2 crates, 3 versions
 
@@ -128,8 +143,8 @@ would give.
   root m2 1.0.0 for rust 1.70
   crates (2):
     d2 1.1.0 [default]
-    m2 1.0.0
-  encoded solution: 5 core nodes (4 crate versions encoded)
+    m2 1.0.0 [default]
+  encoded solution: 6 core nodes (4 crate versions encoded)
   parent edges: 1
   loaded: 2 crates, 4 versions
 
@@ -137,8 +152,8 @@ would give.
   root m2 1.0.0
   crates (2):
     d2 1.2.0 [default]
-    m2 1.0.0
-  encoded solution: 5 core nodes (4 crate versions encoded)
+    m2 1.0.0 [default]
+  encoded solution: 6 core nodes (4 crate versions encoded)
   parent edges: 1
   loaded: 2 crates, 4 versions
 
@@ -150,8 +165,8 @@ out of range, so 2.0.0 is taken rather than the solve failing.
   root m3 1.0.0 for rust 1.70
   crates (2):
     d3 2.0.0 [default]
-    m3 1.0.0
-  encoded solution: 5 core nodes (3 crate versions encoded)
+    m3 1.0.0 [default]
+  encoded solution: 6 core nodes (3 crate versions encoded)
   parent edges: 1
   loaded: 2 crates, 3 versions
 
@@ -167,8 +182,8 @@ lockfile with e 0.1.0 beside e 0.2.0.
   crates (3):
     e 0.1.0 [default]
     e 0.2.0 [default]
-    t 1.0.0
-  encoded solution: 8 core nodes (3 crate versions encoded)
+    t 1.0.0 [default]
+  encoded solution: 9 core nodes (3 crate versions encoded)
   parent edges: 2
   loaded: 2 crates, 3 versions
 
@@ -181,8 +196,8 @@ source registry.  rn's x is e under [dependencies] and w under
   root rn 1.0.0
   crates (3):
     e 0.2.0 [default]
-    rn 1.0.0
+    rn 1.0.0 [default]
     w 1.0.0 [default]
-  encoded solution: 8 core nodes (4 crate versions encoded)
+  encoded solution: 9 core nodes (4 crate versions encoded)
   parent edges: 2
   loaded: 3 crates, 4 versions

@@ -40,34 +40,7 @@ directory (sha256 of the sorted list of per-file sha256s):
   measured sweeps then run against a frozen shim.  A changed hash here means
   something wrote into the checkout.
 
-cargo body cache (eval/cargo/valid.sh):
-
-  The cargo validity check runs its repair `--offline`, so the crate bodies in
-  CARGO_HOME are part of the universe it answers about, the way the index
-  checkout is.  eval/cargo/warm.sh fills them in one online pass; record what
-  that pass left behind:
-
-  21535cd8a1f84cf60c3641de81c4ba716361dd116d528f37f22ca47c983a50cf   820 crates, 155M
-
-  cd "$CARGO_CMP_OUT/cargo-home/registry/cache" \
-    && find . -name '*.crate' -printf '%f\n' | LC_ALL=C sort | sha256sum
-
-  Recorded from the warm pass over all 28 goals of eval/cargo/goals.txt, the
-  one the 28/28 sweep then ran offline against.  It covers more than the goals'
-  own answers: warming runs the same repair cargo runs when scoring, so the
-  cache holds the bodies of the repaired resolve -- the unactivated optionals a
-  Cargo.lock carries included.  The hash previously left blank here was never
-  filled because the check it belonged to asked cargo to accept our lock
-  unchanged and `cargo fetch --locked` downloads nothing for a lock it rejects,
-  so a warm pass covered only the 5 goals that passed.
-
-  Filenames, not contents, and basenames, not paths.  Each body is checksummed
-  against the index on download and repos/crates.io-index is already pinned by
-  commit above, so the bytes are pinned transitively; what that does not pin is
-  *which* crates are present, and with the scoring pass offline that is exactly
-  what decides whether a goal can be answered at all.  Basenames also keep the
-  hash independent of the registry directory cargo derives from the proxy's URL
-  and port, which is local to a run rather than to the snapshot.
-
-  A body missing from the cache is reported NOCACHE rather than scored, so a
-  short cache shows up as an unanswered goal and never as an invalid one.
+The cargo sweeps need nothing pinned beyond repos/crates.io-index above: both
+of them ask cargo only for a lockfile, which it resolves from index rows alone
+and writes without downloading a single crate body.  There is no CARGO_HOME
+cache in the universe they answer about, and so none to record here.

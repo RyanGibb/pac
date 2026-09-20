@@ -11,14 +11,11 @@
 # whatever has been published since, and a verdict stops being
 # reproducible.
 #
-# Crate bodies come from CARGO_HOME, which warm.sh fills in one online
-# pass: the repair verify.py runs downloads what it resolves, but the
-# measured pass runs it --offline and so reaches no network at all.  Run
-# warm.sh once per snapshot before sweeping; a goal whose bodies are
-# missing is reported NOCACHE rather than scored.
+# Nothing else has to be in place.  verify.py asks cargo for a lockfile
+# and nothing more, so no crate body is ever fetched and there is no
+# cache to warm before a sweep.
 #
 # usage: valid.sh [goals-file | goal ...]      (default goals.txt)
-#        WARM=1 valid.sh ...  -- the online warming pass (see warm.sh)
 # env: PAC, CARGO_CMP_OUT (run dir), PORT
 set -uo pipefail
 S="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -46,27 +43,17 @@ if ! curl -sf "http://127.0.0.1:$PORT/config.json" > /dev/null; then
   done
 fi
 
-warm=""; sub="valid"; word="valid"
-if [ "${WARM:-}" = 1 ]; then warm="--warm"; sub="warm"; word="warmed"; fi
-
-ok=0; n=0; cold=0
-while IFS= read -r line; do
-  [ -z "$line" ] && continue
-  crate="$(echo "$line" | cut -d' ' -f1)"
-  feats="$(echo "$line" | cut -s -d' ' -f2-)"
+ok=0; n=0
+while IFS= read -r crate; do
+  [ -z "$crate" ] && continue
   n=$((n+1))
-  args=("$crate" --out "$CARGO_CMP_OUT/$sub/$crate.json")
-  [ -n "$warm" ] && args+=("$warm")
-  [ -n "$feats" ] && args+=(--features "$feats")
-  out=$(timeout 900 python3 "$S/verify.py" "${args[@]}" 2>&1)
+  out=$(timeout 900 python3 "$S/verify.py" "$crate" \
+          --out "$CARGO_CMP_OUT/valid/$crate.json" 2>&1)
   printf '%s\n' "$out"
-  # INVALID and WARM-FAILED both contain the word they negate, so the
-  # failing cases have to be ruled out first
+  # INVALID contains the word it negates, so it has to be ruled out first
   case "$out" in
-    *INVALID*|*WARM-FAILED*) ;;
-    *NOCACHE*) cold=$((cold+1)) ;;
-    *VALID*|*WARMED*) ok=$((ok+1)) ;;
+    *INVALID*) ;;
+    *VALID*) ok=$((ok+1)) ;;
   esac
 done < "$GOALS"
-printf 'TOTAL %s=%d/%d' "$word" "$ok" "$n"
-[ "$cold" -eq 0 ] && echo || printf ' nocache=%d (run warm.sh)\n' "$cold"
+printf 'TOTAL valid=%d/%d\n' "$ok" "$n"

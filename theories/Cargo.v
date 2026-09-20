@@ -12,7 +12,14 @@ Create Rewrite HintDb cmp_cargo.
    Caret/tilde/wildcard
    requirements, implicit features of optional dependencies, and the
    dep: suppression rule are frontend desugarings into the carried
-   range/feature-table data. *)
+   range/feature-table data.
+
+   Cargo resolves a project twice, and the difference between the two is
+   only which features the root is asked for: the lockfile resolve takes
+   every feature the root declares, so that one lock serves every later
+   selection, and the build resolve takes the features actually named.
+   Both are IsResolution over the same manifest data at different
+   rootFeats, so neither needs its own record. *)
 Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Module C := Core N V.
   Module Pkg := C.Pkg.
@@ -228,7 +235,19 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     if sDefault d then FSet.add dflt (sReqFeats d) else sReqFeats d.
 
   (* The record quantifies feature sets through FeaturedSet membership;
-     fs_functional makes the projection well defined. *)
+     fs_functional makes the projection well defined.
+
+     rootFeats is a parameter and not a constant because it is the only
+     place cargo's two resolves of one project differ.  Instantiated at
+     every feature the root's table defines -- the implicit feature of
+     each of its optional dependencies included -- res_root_feats forces
+     all of them on and the resolutions are the ones cargo writes as
+     Cargo.lock.  Instantiated at the features actually asked for, they
+     are the builds cargo runs against that lock.  Either way the choice
+     reaches the root alone: every other crate's features are whatever
+     its declarers requested, which is what keeps an unactivated optional
+     of a *dependency* out under sOptional and Activated, in both
+     instantiations alike. *)
   Record IsResolution
       (R : PkgSet.t) (support : SupportSet.t) (FDefs : FDefRel.t)
       (Slots : SlotRel.t) (Links : LinkRel.t)

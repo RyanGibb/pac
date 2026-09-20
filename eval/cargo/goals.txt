@@ -1,4 +1,4 @@
-serde derive,std
+serde
 cfg-if
 itoa
 ryu
@@ -16,13 +16,13 @@ chrono
 uuid
 anyhow
 thiserror
-clap derive
+clap
 tracing
 url
-tokio full
+tokio
 hyper
 tonic
-reqwest json
+reqwest
 wasm-bindgen
-diesel postgres
+diesel
 actix-web

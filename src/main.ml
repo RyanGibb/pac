@@ -133,11 +133,7 @@ let cargo_run debug print_parents index goal wanted rfeats rustv =
       | Some fs -> " with features " ^ String.concat "," fs)
       (match rustv with None -> "" | Some t -> " for rust " ^ t);
     let module S = Cargo_solve.Make () in
-    let r =
-      match rfeats with
-      | None -> S.solve ~debug ~rustv ar rc
-      | Some fs -> S.solve ~debug ~rfeats:fs ~rustv ar rc
-    in
+    let r = S.solve ~debug ?rfeats ~rustv ar rc in
     (* the crates the run parsed, known only once it is over: there is no
        cone, so this is what the solver asked for and nothing more *)
     let loaded () =
@@ -201,12 +197,18 @@ let cargo_cmd =
       & pos 2 (some string) None
       & info [] ~docv:"VERSION" ~doc:"Root version; defaults to the newest.")
   in
+  (* unset, the root gets every feature it declares, which is the
+     resolution cargo writes to Cargo.lock; naming features asks instead
+     for the filtered view cargo builds from that lock *)
   let rfeats =
     Arg.(
       value
       & opt (some (list string)) None
       & info [ "features" ] ~docv:"FEATS"
-          ~doc:"Comma-separated features to enable on the root crate.")
+          ~doc:
+            "Comma-separated features to enable on the root crate; unset, \
+             every feature the root declares is enabled, as when cargo \
+             writes a lockfile.")
   in
   (* resolver v3's MSRV-aware preference, which is off unless a toolchain
      is configured -- cargo reads one from rust-version or rustc, this

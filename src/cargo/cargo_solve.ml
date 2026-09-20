@@ -45,11 +45,25 @@ end
    default-features = false *)
 let default_feature = "default"
 
-(* rootFeats: the root crate's own features start empty, so only what its
-   dependencies request is enabled.  Cargo would enable the root's
-   "default" feature; that is a one-line change here, kept off because the
-   brief pins it. *)
-let root_feats : string list = []
+(* rootFeats when the caller names no features: every key of the root
+   crate's own feature table, which is the instantiation Cargo.lock is.
+   Cargo resolves twice.  The lock comes from resolve_with_registry, which
+   passes CliFeatures::new_all(true) and HasDevUnits::Yes, and
+   build_requirements turns all_features into require_feature for each key
+   of the root summary's feature map; with_implicit_features has already
+   put an optional dependency's implicit feature into that table, so every
+   optional row the root declares is reachable.  The build is a second
+   resolve handed the lock, so it is the same versions filtered by the
+   features actually asked for -- which is what --features selects here.
+
+   The flag reaches workspace members only: ws.members_with_features
+   hands CliFeatures to the root alone, and every other summary arrives as
+   RequestedFeatures::DepFeatures carrying whatever its declaring row
+   asked for, past resolve_features' [if dep.is_optional() && !reqs.deps
+   .contains_key(..) { continue }].  So a *transitive* crate's unactivated
+   optionals stay out of the lock, which is sOptional's guard, and nothing
+   here forces them in. *)
+let root_feats (m : P.ver) : string list = List.map fst m.P.v_feats
 
 (* dev dependencies participate only from the root crate: that is
    slotActive's rule in the theory, not a choice made here. *)
@@ -550,9 +564,17 @@ module Make () = struct
     processed : int;
   }
 
-  let solve ?(debug = false) ?(rfeats = root_feats) ?(rustv = rust_version) ar
+  let solve ?(debug = false) ?rfeats ?(rustv = rust_version) ar
       (rc : string * string) =
     Pubgrub.set_debug debug;
+    let rfeats =
+      match rfeats with
+      | Some fs -> fs
+      | None -> (
+          match meta ar (fst rc) (snd rc) with
+          | None -> []
+          | Some m -> root_feats m)
+    in
     let st = mk_state ar rc rfeats rustv in
     (* A class is compatible when it still offers a crate version the
        toolchain can build, not when all of its versions do: cargo ranks

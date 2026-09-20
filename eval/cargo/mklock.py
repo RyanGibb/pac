@@ -14,7 +14,9 @@ picking the version and cargo only checks it on download.
 The root is the goal crate itself, built as a path package by
 run_goal.py's build_manifest, so its [[package]] carries neither source
 nor checksum -- that absence is what tells cargo which node is the
-workspace member.
+workspace member.  Where the goal crate is also reached as a dependency
+of something, that too is this one node, and build_manifest has told
+cargo so with a [patch].
 
 Dependency entries are written "name version" rather than bare "name":
 both are legal in lockfile v4, but the bare form is only unambiguous
