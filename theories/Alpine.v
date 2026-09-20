@@ -203,25 +203,25 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         MatchPos I S (fst p) CAny }.
 
   Module Type Designation.
-    Parameter desig : CondSet.t -> option Atom.t.
-    Parameter desig_designates : forall conds : CondSet.t,
+    Parameter designation : CondSet.t -> option Atom.t.
+    Parameter designation_spec : forall conds : CondSet.t,
         ~ CondSet.Empty conds ->
-        exists a, desig conds = Some a /\ CondSet.In a conds.
+        exists a, designation conds = Some a /\ CondSet.In a conds.
   End Designation.
 
-  Module LeastDesig <: Designation.
-    Definition desig (conds : CondSet.t) : option Atom.t :=
+  Module LeastDesignation <: Designation.
+    Definition designation (conds : CondSet.t) : option Atom.t :=
       CondSet.choose conds.
-    Lemma desig_designates : forall conds : CondSet.t,
+    Lemma designation_spec : forall conds : CondSet.t,
         ~ CondSet.Empty conds ->
-        exists a, desig conds = Some a /\ CondSet.In a conds.
+        exists a, designation conds = Some a /\ CondSet.In a conds.
     Proof.
-      intros conds Hne; unfold desig.
+      intros conds Hne; unfold designation.
       destruct (CondSet.choose conds) as [a |] eqn:Ec.
       - exists a; split; [reflexivity | exact (CondSet.choose_spec1 Ec)].
       - destruct (Hne (CondSet.choose_spec2 Ec)).
     Qed.
-  End LeastDesig.
+  End LeastDesignation.
 
   Module Reduct (D : Designation).
     Module NF := UOTCompareFacts N.
@@ -365,20 +365,21 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
            (inst_prov I)).
 
     Definition condRest (conds : CondSet.t) : CondSet.t :=
-      match D.desig conds with
+      match D.designation conds with
       | Some a => CondSet.remove a conds
       | None => conds
       end.
 
-    Definition attachDesig (I : Inst) (p : Pkg.t)
+    Definition attachDesignation (I : Inst) (p : Pkg.t)
         (conds : CondSet.t) : bool :=
-      match D.desig conds with
+      match D.designation conds with
       | Some a => attachAt I p a
       | None => false
       end.
 
     Definition installIfFibre (I : Inst) (p : Pkg.t) : Trig.t :=
-      Trig.filter (fun '(_, conds) => attachDesig I p conds) (inst_trig I).
+      Trig.filter (fun '(_, conds) => attachDesignation I p conds)
+        (inst_trig I).
 
     Definition installIfForm (I : Inst) (z : Pkg.t) (conds : CondSet.t) :
         PF.Formula :=
@@ -605,7 +606,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     Lemma mem_installIfFibre : forall I p z conds,
         Trig.In (z, conds) (installIfFibre I p) <->
-        Trig.In (z, conds) (inst_trig I) /\ attachDesig I p conds = true.
+        Trig.In (z, conds) (inst_trig I) /\ attachDesignation I p conds = true.
     Proof.
       intros I p z conds; unfold installIfFibre.
       rewrite Trig.filter_spec'; reflexivity.
@@ -615,7 +616,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         CondSet.In a (condRest conds) -> CondSet.In a conds.
     Proof.
       intros conds a; unfold condRest.
-      destruct (D.desig conds) as [b |]; [| exact (fun H => H)].
+      destruct (D.designation conds) as [b |]; [| exact (fun H => H)].
       intro H; apply CondSet.remove_spec in H; exact (proj1 H).
     Qed.
 
@@ -954,7 +955,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         + injection He as <-; reflexivity.
         + injection He as <- _; reflexivity.
       - intros z conds Hrow0 Hc.
-        destruct (D.desig_designates conds (Hwf _ _ Hrow0))
+        destruct (D.designation_spec conds (Hwf _ _ Hrow0))
           as [[na cta] [Hdes Hin]].
         assert (HM := Hc _ _ Hin).
         apply (matchPos_attachAt I (alpineResolution S') na cta) in HM.
@@ -962,7 +963,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         apply mem_alpineResolution in HpS.
         assert (Hfib : Trig.In (z, conds) (installIfFibre I p)).
         { apply mem_installIfFibre; split; [exact Hrow0 |].
-          unfold attachDesig; rewrite Hdes; exact Hatt. }
+          unfold attachDesignation; rewrite Hdes; exact Hatt. }
         assert (Hf : FSet.In (installIfForm I z conds)
                        (dependees I (embedPkg p))).
         { destruct p as [np vp]; cbn [dependees embedPkg fst snd].
@@ -1098,8 +1099,8 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                exists (n0, v0), m, pv; repeat split; assumption.
           * apply SOtf.mem_map in Hf; destruct Hf as [[z conds] [Hfib ->]].
             apply mem_installIfFibre in Hfib.
-            destruct Hfib as [Ht0 Hatt]; unfold attachDesig in Hatt.
-            destruct (D.desig conds) as [a |] eqn:Edes; [| discriminate].
+            destruct Hfib as [Ht0 Hatt]; unfold attachDesignation in Hatt.
+            destruct (D.designation conds) as [a |] eqn:Edes; [| discriminate].
             apply satisfies_installIfForm.
             destruct (CondSet.exists_
                         (fun b => negb (PF.satisfiesb (transS I S)
@@ -1452,15 +1453,16 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           apply Prov.union_spec; left; exact (Hcov _ _ He).
       Qed.
 
-      Lemma attachDesig_slice : forall I ns deps ownProv trig world p conds,
+      Lemma attachDesignation_slice :
+        forall I ns deps ownProv trig world p conds,
           Prov.Subset ownProv (inst_prov I) ->
           (forall m tg, Prov.In (p, (m, tg)) (inst_prov I) ->
              Prov.In (p, (m, tg)) ownProv) ->
-          attachDesig (sliceInst I ns deps ownProv trig world) p conds =
-          attachDesig I p conds.
+          attachDesignation (sliceInst I ns deps ownProv trig world) p conds =
+          attachDesignation I p conds.
       Proof.
         intros I ns deps ownProv trig world p conds Hown Hcov.
-        unfold attachDesig; destruct (D.desig conds) as [a |];
+        unfold attachDesignation; destruct (D.designation conds) as [a |];
           [apply attachAt_slice; assumption | reflexivity].
       Qed.
 
@@ -1479,7 +1481,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                    (sliceInst I ns deps ownProv (installIfFibre I p) world)
                    p z conds).
         rewrite sliceInst_trig.
-        rewrite (attachDesig_slice I ns deps ownProv
+        rewrite (attachDesignation_slice I ns deps ownProv
                    (installIfFibre I p) world p conds Hown Hcov).
         rewrite (mem_installIfFibre I p z conds).
         tauto.
@@ -1651,5 +1653,5 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     End Lookup.
   End Reduct.
 
-  Module Reduction := Reduct LeastDesig.
+  Module Reduction := Reduct LeastDesignation.
 End Alpine.

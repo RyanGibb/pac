@@ -46,19 +46,20 @@ module Alp = E.Alpine (StringOT) (AVerOT) (PM)
    on those, where CondSet.choose's alphabetical pick lands on a name most
    of the archive carries -- so the first-listed atom is recorded as the
    set is built, keyed by the element list, which is canonical where the
-   set's own representation need not be.  The fallback keeps desig total,
-   discharging desig_designates: a TCB obligation here, as ApkVerMatch's
+   set's own representation need not be.  The fallback keeps designation total,
+   discharging designation_spec: a TCB obligation here, as ApkVerMatch's
    prefix/hash are. *)
-let desig_tbl : (Alp.Atom.t list, Alp.Atom.t) Hashtbl.t = Hashtbl.create 4096
+let designation_tbl : (Alp.Atom.t list, Alp.Atom.t) Hashtbl.t =
+  Hashtbl.create 4096
 
-module FirstDesig = struct
-  let desig (conds : Alp.CondSet.t) : Alp.Atom.t option =
-    match Hashtbl.find_opt desig_tbl (Alp.CondSet.elements conds) with
+module FirstDesignation = struct
+  let designation (conds : Alp.CondSet.t) : Alp.Atom.t option =
+    match Hashtbl.find_opt designation_tbl (Alp.CondSet.elements conds) with
     | Some _ as a -> a
     | None -> Alp.CondSet.choose conds
 end
 
-module Red = Alp.Reduct (FirstDesig)
+module Red = Alp.Reduct (FirstDesignation)
 module PF = Red.PF
 module PFR = PF.Reduction
 module T = PFR.T
@@ -110,7 +111,7 @@ let ptag (v : string option) : Alp.coq_PTag =
   match v with Some pv -> Alp.PVer pv | None -> Alp.PVirt
 
 (* building the set is also where the row's first-listed atom is offered
-   to [FirstDesig]; an earlier row keeps the designation when two rows
+   to [FirstDesignation]; an earlier row keeps the designation when two rows
    share a set, so the table does not depend on when it is read *)
 let condset_of ds =
   let atoms = List.map xatom ds in
@@ -118,7 +119,8 @@ let condset_of ds =
   (match atoms with
   | a :: _ ->
       let key = Alp.CondSet.elements cs in
-      if not (Hashtbl.mem desig_tbl key) then Hashtbl.add desig_tbl key a
+      if not (Hashtbl.mem designation_tbl key) then
+        Hashtbl.add designation_tbl key a
   | [] -> ());
   cs
 
@@ -127,7 +129,7 @@ let condset_of ds =
 type trigrow = {
   t_pkg : string * string;
   t_conds : Alp.CondSet.t;
-  t_desig : Alp.Atom.t;
+  t_designation : Alp.Atom.t;
 }
 
 type archive = {
@@ -188,13 +190,13 @@ let load_index (path : string) : archive =
             ((p.P.name, p.P.version), condset_of p.P.install_if) :: !trigs))
     pkgs;
   (* keyed only once every set has offered its designation, so the key a
-     row is filed under is the one [attachDesig] will ask about *)
+     row is filed under is the one [attachDesignation] will ask about *)
   List.iter
     (fun (z, conds) ->
-      match FirstDesig.desig conds with
+      match FirstDesignation.designation conds with
       | Some a ->
           push ar.trig_by_cond (fst a)
-            { t_pkg = z; t_conds = conds; t_desig = a }
+            { t_pkg = z; t_conds = conds; t_designation = a }
       | None -> ())
     (List.rev !trigs);
   ar
@@ -271,7 +273,7 @@ let rows_at ar ((n, v) : string * string) (own : Alp.Prov.t) : trigrow list =
       (fun acc ((_, (m, _)) : Alp.ProvElt.t) -> List.rev_append (at m) acc)
       (at n) (Alp.Prov.elements own)
   in
-  List.filter (fun r -> Red.attachAt inst (n, v) r.t_desig) cands
+  List.filter (fun r -> Red.attachAt inst (n, v) r.t_designation) cands
 
 (* Lookup.pkgSlice: the package's own dependency, provide and install-if
    rows, and the repository at the names those dependencies mention --
