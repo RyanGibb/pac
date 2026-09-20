@@ -590,7 +590,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
      functors that supply them on their own: the granularity class sits in
      the name, and a crate feature is its own granular name.
 
-     A per-alias node ranges over granularity classes rather than over
+     A per-site node ranges over granularity classes rather than over
      versions, and its edge carries the requirement onto the granular crate
      name, where every depender's range already meets and where version
      uniqueness picks the version.  That is one node per dependency edge
@@ -720,7 +720,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       (fun u => if GEqb.eqb (g u) gr then Some (VPlus.WOrig u) else None) vs.
 
   (* whether a class is one the requirement meets, which is what makes a
-     per-alias node exist: the guard the lookups test so that they answer
+     per-site node exist: the guard the lookups test so that they answer
      nowhere else *)
   Definition classMet (g : V.t -> G.t) (gr : G.t) (vs : VSet.t) : bool :=
     VSet.exists_ (fun u => GEqb.eqb (g u) gr) vs.
@@ -792,7 +792,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
   (* the versions of one name: a crate's are its repository versions in
      that class, a feature name's are the versions supporting it, and a
-     per-alias node's are the classes its requirement meets *)
+     per-site node's are the classes its requirement meets *)
   Definition versions (g : V.t -> G.t) (R : PkgSet.t)
       (support : SupportSet.t) (FDefs : FDefRel.t) (Slots : SlotRel.t)
       (Links : LinkRel.t) (rc : Pkg.t)
