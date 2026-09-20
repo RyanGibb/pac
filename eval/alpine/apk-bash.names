@@ -1,0 +1,7 @@
+bash
+busybox
+busybox-binsh
+libncursesw
+musl
+ncurses-terminfo-base
+readline

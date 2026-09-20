@@ -1,0 +1,14 @@
+busybox
+busybox-binsh
+gdbm
+icu-data-en
+icu-libs
+libcrypto3
+libgcc
+libsasl
+libssl3
+libstdc++
+lmdb
+musl
+postfix
+ssl_client

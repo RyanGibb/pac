@@ -1,0 +1,11 @@
+apache2
+apr
+apr-util
+busybox
+busybox-binsh
+libcrypto3
+libexpat
+libuuid
+musl
+pcre2
+zlib

@@ -1,0 +1,15 @@
+busybox
+busybox-binsh
+libcrypto3
+libedit
+libncursesw
+musl
+ncurses-terminfo-base
+openssh
+openssh-client-common
+openssh-client-default
+openssh-keygen
+openssh-server
+openssh-server-common
+openssh-sftp-server
+zlib

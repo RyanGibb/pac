@@ -1,0 +1,8 @@
+acl-libs
+libxxhash
+lz4-libs
+musl
+popt
+rsync
+zlib
+zstd-libs

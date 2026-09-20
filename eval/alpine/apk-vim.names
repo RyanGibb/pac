@@ -1,0 +1,6 @@
+libncursesw
+musl
+ncurses-terminfo-base
+vim
+vim-common
+xxd

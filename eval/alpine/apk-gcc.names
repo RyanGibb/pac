@@ -1,0 +1,14 @@
+binutils
+gcc
+gmp
+isl26
+jansson
+libatomic
+libgcc
+libgomp
+libstdc++
+mpc1
+mpfr4
+musl
+zlib
+zstd-libs

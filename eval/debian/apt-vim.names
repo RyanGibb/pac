@@ -1,0 +1,15 @@
+gcc-14-base
+libacl1
+libc6
+libgcc-s1
+libgpm2
+libidn2-0
+libpcre2-8-0
+libselinux1
+libsodium23
+libtinfo6
+libunistring5
+vim
+vim-common
+vim-runtime
+xxd

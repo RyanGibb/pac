@@ -1,0 +1,16 @@
+brotli-libs
+busybox
+busybox-binsh
+gdbm
+libcrypto3
+libdbi
+libldap
+libsasl
+libssl3
+lighttpd
+lua5.4-libs
+musl
+pcre2
+ssl_client
+zlib
+zstd-libs

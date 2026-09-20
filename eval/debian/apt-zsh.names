@@ -1,0 +1,14 @@
+debianutils
+gcc-14-base
+libc6
+libcap2
+libgcc-s1
+libgdbm6t64
+libgpm2
+libidn2-0
+libncursesw6
+libpcre2-8-0
+libtinfo6
+libunistring5
+zsh
+zsh-common

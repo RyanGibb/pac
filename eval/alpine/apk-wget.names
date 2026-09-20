@@ -1,0 +1,8 @@
+libcrypto3
+libidn2
+libssl3
+libunistring
+musl
+pcre2
+wget
+zlib

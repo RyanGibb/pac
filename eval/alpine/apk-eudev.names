@@ -1,0 +1,12 @@
+busybox
+busybox-binsh
+eudev
+kmod-libs
+libblkid
+libcrypto3
+libeconf
+musl
+udev-init-scripts
+xz-libs
+zlib
+zstd-libs

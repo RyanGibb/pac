@@ -1,0 +1,15 @@
+busybox
+busybox-binsh
+chrony
+gmp
+gnutls
+libcap2
+libffi
+libidn2
+libseccomp
+libtasn1
+libunistring
+musl
+nettle
+p11-kit
+zlib

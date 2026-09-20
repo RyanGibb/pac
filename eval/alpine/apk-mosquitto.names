@@ -1,0 +1,11 @@
+busybox
+busybox-binsh
+c-ares
+cjson
+libcrypto3
+libssl3
+libwebsockets
+mosquitto
+mosquitto-libs
+musl
+ssl_client

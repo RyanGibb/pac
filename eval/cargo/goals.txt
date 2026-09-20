@@ -1,0 +1,28 @@
+serde derive,std
+cfg-if
+itoa
+ryu
+once_cell
+autocfg
+bitflags
+smallvec
+memchr
+log
+libc
+regex
+serde_json
+rand
+chrono
+uuid
+anyhow
+thiserror
+clap derive
+tracing
+url
+tokio full
+hyper
+tonic
+reqwest json
+wasm-bindgen
+diesel postgres
+actix-web

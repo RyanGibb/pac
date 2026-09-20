@@ -1,0 +1,13 @@
+gcc-14-base
+libc6
+libcap2
+libevent-core-2.1-7t64
+libgcc-s1
+libidn2-0
+libjemalloc2
+libstdc++6
+libsystemd0
+libtinfo6
+libunistring5
+libzstd1
+tmux

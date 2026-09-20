@@ -1,0 +1,17 @@
+brotli-libs
+ca-certificates-bundle
+c-ares
+git
+git-init-template
+libcrypto3
+libcurl
+libexpat
+libidn2
+libpsl
+libssl3
+libunistring
+musl
+nghttp2-libs
+pcre2
+zlib
+zstd-libs

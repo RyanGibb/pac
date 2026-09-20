@@ -1,0 +1,8 @@
+gcc-14-base
+libc6
+libgcc-s1
+libidn2-0
+liblzma5
+libunistring5
+libunwind8
+strace

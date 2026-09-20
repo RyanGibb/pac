@@ -1,0 +1,14 @@
+brotli-libs
+ca-certificates-bundle
+c-ares
+curl
+libcrypto3
+libcurl
+libidn2
+libpsl
+libssl3
+libunistring
+musl
+nghttp2-libs
+zlib
+zstd-libs

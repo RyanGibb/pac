@@ -1,0 +1,7 @@
+libcrypto3
+libevent
+libncursesw
+libssl3
+musl
+ncurses-terminfo-base
+tmux

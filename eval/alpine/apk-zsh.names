@@ -1,0 +1,7 @@
+busybox
+busybox-binsh
+libcap2
+libncursesw
+musl
+ncurses-terminfo-base
+zsh

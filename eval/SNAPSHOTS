@@ -1,0 +1,64 @@
+The repos/ snapshot the recorded baselines were taken against.
+
+Every baseline here (apt-*.names, apk-*.names, opam-*.sel, lock-*.json, and
+cargo's per-goal results) is an answer about one fixed universe, so it is only
+comparable against the same snapshot.  scripts/fetch-repos.sh fetches the
+current head of each source and pins nothing -- it takes today's Debian
+`stable` Packages, today's Alpine v3.21 APKINDEX, a --depth 1 clone of
+whichever commit opam-repository and crates.io-index are on, and whatever the
+npm registry serves -- so a fresh fetch will not in general reproduce these
+identifiers, and a differing one means the baselines must be regenerated
+rather than compared.
+
+Fetched 2026-09-10/11 with scripts/fetch-repos.sh at its defaults
+(DEBIAN_SUITE=stable, DEBIAN_ARCH=amd64, ALPINE_VER=v3.21, ALPINE_ARCH=x86_64).
+
+git checkouts (commit, committer date):
+
+  repos/opam-repository   0bb592dddd707b91459622e5b5f600ffdebd7375  2026-09-10T22:51:08+02:00
+  repos/crates.io-index   26195c270551c53a08aeb7659f25fbf37cbc13fe  2026-09-10T21:06:10Z
+
+  both clean (git -C repos/<dir> status --porcelain is empty)
+
+files (sha256):
+
+  repos/debian/Packages   be70297f6ea499e8ef0bd93906719298c795bc3dc4ce72560f13e6c9836bfedb   54M, 1265204 lines
+  repos/alpine/APKINDEX   5473e1e94885817291cde7ded73dc44c729a2516ffcc9351f5154026c6ad7383   2.1M, 85615 lines
+
+  sha256sum repos/debian/Packages repos/alpine/APKINDEX
+
+directory (sha256 of the sorted list of per-file sha256s):
+
+  repos/npm               a01356cb1a619c150c9979b32ba14fd93604281d7d5cc55f4808d8f77ef88c8b   3829 packuments, 741M
+
+  cd repos/npm && find . -type f -printf '%P\n' | LC_ALL=C sort | tr '\n' '\0' \
+    | xargs -0 sha256sum | awk '{print $1}' | LC_ALL=C sort | sha256sum
+
+  repos/npm is an on-demand cache rather than a bulk index, so it grows when a
+  run asks for a name it lacks; eval/npm/seed.sh deliberately fills a symlink
+  farm under the run directory instead, leaving this tree untouched, and the
+  measured sweeps then run against a frozen shim.  A changed hash here means
+  something wrote into the checkout.
+
+cargo body cache (eval/cargo/valid.sh):
+
+  The cargo validity check runs `cargo metadata --frozen`, so the crate bodies
+  in CARGO_HOME are part of the universe it answers about, the way the index
+  checkout is.  eval/cargo/warm.sh fills them in one online pass; record what
+  that pass left behind:
+
+  <sha256 to be recorded by the run that warms the full goals.txt>   N crates, M MB
+
+  cd "$CARGO_CMP_OUT/cargo-home/registry/cache" \
+    && find . -name '*.crate' -printf '%f\n' | LC_ALL=C sort | sha256sum
+
+  Filenames, not contents, and basenames, not paths.  Each body is checksummed
+  against the index on download and repos/crates.io-index is already pinned by
+  commit above, so the bytes are pinned transitively; what that does not pin is
+  *which* crates are present, and under --frozen that is exactly what decides
+  whether a goal can be answered at all.  Basenames also keep the hash
+  independent of the registry directory cargo derives from the proxy's URL and
+  port, which is local to a run rather than to the snapshot.
+
+  A body missing from the cache is reported NOCACHE rather than scored, so a
+  short cache shows up as an unanswered goal and never as an invalid one.

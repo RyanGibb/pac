@@ -1,0 +1,13 @@
+busybox
+busybox-binsh
+dnssec-root
+libcrypto3
+libevent
+libexpat
+libssl3
+musl
+nghttp2-libs
+protobuf-c
+ssl_client
+unbound
+unbound-libs

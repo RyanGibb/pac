@@ -1,0 +1,10 @@
+libcrypto3
+libgcc
+libpcap
+libssh2
+libssl3
+libstdc++
+lua5.4-libs
+musl
+nmap
+zlib

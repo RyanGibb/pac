@@ -1,0 +1,9 @@
+gcc-14-base
+htop
+libc6
+libgcc-s1
+libgpm2
+libidn2-0
+libncursesw6
+libtinfo6
+libunistring5

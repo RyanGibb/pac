@@ -1,0 +1,5 @@
+libncursesw
+musl
+ncurses-terminfo-base
+readline
+sqlite
