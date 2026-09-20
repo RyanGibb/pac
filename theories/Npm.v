@@ -392,9 +392,12 @@ Module Npm (N V X Y : UsualOrderedType) (PM : SemverMatch V).
   Definition peerKeyAt (I : Inst) (p : RPkg.t) (r : PeerRow) : NKey.t :=
     slotKey I p (p_name r).
 
+  (* An override names a registry package, so it replaces a peer's declared
+     range exactly as it replaces a dependency's -- npm lets it win over
+     the peer range rather than intersecting the two. *)
   Definition peerCandsAt (rho : Valuation) (I : Inst) (p : RPkg.t)
       (r : PeerRow) : VSet.t :=
-    rangeEval (p_range r)
+    rangeEval (override I (snd (peerKeyAt I p r)) (p_range r))
       (realVersions (effRepo rho I) (snd (peerKeyAt I p r))).
 
   (* A mandatory peer is installed beside its declarer whatever the

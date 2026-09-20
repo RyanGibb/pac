@@ -171,6 +171,25 @@ installs gadget 2.0.0 by itself.
   optionalDependencies: 1 rows, 0 dropped
   encoded solution: 5 core nodes (11 lookups)
 
+A root override binds a peer slot too, and wins over the peer's own range
+rather than being intersected with it.  ovr-peer-app depends on host and
+on nothing else; host's mandatory peer on gadget is ^2, so gadget is a
+directory only the peer asks for.  The root overrides gadget to 1.0.0,
+which ^2 refuses, and 1.0.0 is what installs -- the override replaces a
+peer dependency's range exactly as it replaces a dependency's.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree ovr-peer-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root ovr-peer-app 1.0.0
+  packages (3):
+    gadget 1.0.0
+    host 1.0.0
+    ovr-peer-app 1.0.0
+  node_modules (2 edges):
+    ovr-peer-app 1.0.0 <- gadget 1.0.0
+    ovr-peer-app 1.0.0 <- host 1.0.0
+  cone: 3 packages, 4 versions, 0 packuments fetched
+  encoded solution: 5 core nodes (11 lookups)
+
 A package with no packument in the cache cannot be fetched when offline.
 
   $ ../../../src/main.exe npm --offline --cache . missing
