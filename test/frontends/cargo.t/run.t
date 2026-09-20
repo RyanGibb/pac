@@ -154,3 +154,20 @@ out of range, so 2.0.0 is taken rather than the solve failing.
   encoded solution: 5 core nodes (3 crate versions encoded)
   parent edges: 1
   loaded: 2 crates, 3 versions
+
+One alias declared twice is two dependencies, not one.  t names e in
+[dependencies] at ^0.2 and again under [target.'cfg(windows)'.dependencies]
+at ^0.1; cargo's identity for a dependency is the manifest site that
+declared it -- the target section, the kind table, and the key inside it --
+so the two are separate rows of the summary and both resolve, giving a
+lockfile with e 0.1.0 beside e 0.2.0.
+
+  $ ../../../src/main.exe cargo index t | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root t 1.0.0
+  crates (3):
+    e 0.1.0 [default]
+    e 0.2.0 [default]
+    t 1.0.0
+  encoded solution: 8 core nodes (3 crate versions encoded)
+  parent edges: 2
+  loaded: 2 crates, 3 versions

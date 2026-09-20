@@ -123,11 +123,13 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
      formula, kind, optionality, default-features opt-out, requested
      features, and carried cfg predicate and source identity.
 
-     The last two are recorded and never read: cargo's resolver neither
-     evaluates a [target.'cfg(...)'] predicate nor distinguishes a
-     registry, so both are manifest provenance a slot carries rather than
-     anything a resolution turns on.  Reading either would be a claim
-     about cargo that is not true. *)
+     The cfg predicate is never evaluated and the source identity is
+     never read at all: cargo's resolver does not match a
+     [target.'cfg(...)'] against real cfgs, and a dependency's registry
+     only has to agree across the declarations sharing one alias, which
+     the manifest reader checks before resolution begins.  The cfg does
+     decide identity -- see sKey -- but that is where a declaration was
+     written, not what it means. *)
   Module SDCfg := PairUOT CfgS Src.
   Module SDReq := PairUOT FSet.AsUOT SDCfg.
   Module SDDflt := PairUOT BoolOT SDReq.
@@ -154,18 +156,39 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Definition sSrc (d : SlotData.t) : Src.t :=
     snd (snd (snd (snd (snd (snd (snd (snd d))))))).
 
+  (* What cargo takes one dependency to be: the manifest site that
+     declared it.  A manifest offers one table per (cfg target, kind) and
+     each is a map, so the site is the triple (cfg, kind, key), and the
+     key is the alias -- cargo's name_in_toml is the table key whether or
+     not a rename moved the crate name into "package".  Nothing collapses
+     two sites naming one alias: a summary carries a plain list of
+     dependencies, the manifest reader's only cross-table check is that
+     they agree on a registry, and the resolver walks the list, so a
+     crate may ask for libc ^0.2 in [dependencies] and libc ^0.1 in
+     [target.'cfg(windows)'.dependencies] and get both versions.  The
+     alias alone still governs features -- dep:a and a/feat name a table
+     key, and reach every declaration under it. *)
+  Module SKTail := PairUOT KindOT CfgS.
+  Module SlotKey := PairUOT N SKTail.
+  Definition sKey (d : SlotData.t) : SlotKey.t :=
+    (sAlias d, (sKind d, sCfg d)).
+  Definition kAlias (k : SlotKey.t) : N.t := fst k.
+
+  Lemma kAlias_sKey : forall d, kAlias (sKey d) = sAlias d.
+  Proof. reflexivity. Qed.
+
   Module LinkElt := PairUOT Pkg L.
   Module LinkRel := FSetUOT LinkElt.
 
-  (* The concurrent calculus' parent relation, keyed by alias rather than
-     by the (child, parent) pair alone.  A cargo rename lets one crate
-     depend on a single crate name twice -- foo = { package = "bar" }
-     beside baz = { package = "bar" } -- and the two aliases may land on
+  (* The concurrent calculus' parent relation, keyed by declaration site
+     rather than by the (child, parent) pair alone.  A cargo rename lets
+     one crate depend on a single crate name twice -- foo = { package =
+     "bar" } beside baz = { package = "bar" } -- and a repeated alias lets
+     it depend on one name twice again; either way the two may land on
      different compatibility classes, so the parent edge has to say which
-     alias received which version; the requested feature set is per alias
-     too, so a plain child-to-parent relation would not determine which
-     copy the features go to. *)
-  Module NAPair := PairUOT Pkg N.
+     declaration received which version, and the requested feature set is
+     per declaration too. *)
+  Module NAPair := PairUOT Pkg SlotKey.
   Module ParentElt := PairUOT NAPair V.
   Module ParentRel := FSetUOT ParentElt.
 
@@ -180,7 +203,8 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
      already-finished Resolve on its way to the unit graph, never the
      lockfile.  A [target.'cfg(...)'] row is therefore a dependency row
      like any other -- an unsatisfiable windows-only requirement fails a
-     linux resolve -- and sCfg is recorded but never read. *)
+     linux resolve -- and sCfg says only which row this is, never whether
+     the row applies. *)
   Definition slotActive (rc p : Pkg.t) (d : SlotData.t) : bool :=
     match sKind d with
     | Kind.KDev => if Pkg.eq_dec p rc then true else false
@@ -228,14 +252,14 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         forall p fs f, FeaturedSet.In (p, fs) FS -> FSet.In f fs ->
         SupportSet.In (p, f) support
     ; res_pi_functional :
-        forall p a u u', ParentRel.In ((p, a), u) pi ->
-        ParentRel.In ((p, a), u') pi -> u = u'
+        forall p k u u', ParentRel.In ((p, k), u) pi ->
+        ParentRel.In ((p, k), u') pi -> u = u'
     ; res_slot_closure :
         forall p fs, PkgSet.In p S -> FeaturedSet.In (p, fs) FS ->
         forall d, SlotRel.In (p, d) Slots ->
         slotActive rc p d = true ->
         (sOptional d = false \/ Activated FDefs fs p (sAlias d)) ->
-        exists u, ParentRel.In ((p, sAlias d), u) pi /\
+        exists u, ParentRel.In ((p, sKey d), u) pi /\
           rgHolds (sReq d) u = true /\ PkgSet.In (sTarget d, u) S /\
           forall fs', FeaturedSet.In ((sTarget d, u), fs') FS ->
           FSet.Subset (slotRequests d dflt) fs'
@@ -247,7 +271,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         (FDefRel.In ((p, f), FEntry.EDepFeat a feat) FDefs \/
          FDefRel.In ((p, f), FEntry.EWeakFeat a feat) FDefs) ->
         forall d u, SlotRel.In (p, d) Slots -> sAlias d = a ->
-        ParentRel.In ((p, a), u) pi ->
+        ParentRel.In ((p, sKey d), u) pi ->
         forall fs', FeaturedSet.In ((sTarget d, u), fs') FS ->
         FSet.In feat fs'
     ; res_links_unique :
@@ -258,9 +282,9 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Module GF := UOTCompareFacts G.
   Module VF := UOTCompareFacts V.
   Module PkgFct := UOTCompareFacts Pkg.
-  Module SlotName := TripleUOT N V N.
+  Module SlotName := TripleUOT N V SlotKey.
   Module SlotNameF := UOTCompareFacts SlotName.
-  Module FDTail := TripleUOT F N F.
+  Module FDTail := TripleUOT F SlotKey F.
   Module DecName := TripleUOT N V FDTail.
   Module DecNameF := UOTCompareFacts DecName.
   #[local] Hint Rewrite LF.compare_eq_iff GF.compare_eq_iff
@@ -282,6 +306,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Module NEqb := UOTEqb N.
   Module LEqb := UOTEqb L.
   Module PkgEqb := UOTEqb Pkg.
+  Module SKEqb := UOTEqb SlotKey.
 
   Module SOpv := SetOps Pkg V PkgSet VSet.
   Definition evalReq (R : PkgSet.t) (m : N.t) (rg : Range) : VSet.t :=
@@ -354,6 +379,36 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       subst a; rewrite NEqb.eqb_refl, Hact; reflexivity.
   Qed.
 
+  (* and the same cut by declaration site rather than by alias: what one
+     slot node stands for, where slotsAt is what one feature entry
+     reaches *)
+  Definition slotsAtKey (Slots : SlotRel.t)
+      (rc : Pkg.t) (p : Pkg.t) (k : SlotKey.t) : SlotRel.t :=
+    SlotRel.filter (fun '(q, d) =>
+        andb (if Pkg.eq_dec q p then true else false)
+          (andb (SKEqb.eqb (sKey d) k) (slotActive rc q d)))
+      Slots.
+
+  Lemma mem_slotsAtKey : forall Slots rc p k q d,
+      SlotRel.In (q, d) (slotsAtKey Slots rc p k) <->
+      SlotRel.In (q, d) Slots /\ q = p /\ sKey d = k /\
+      slotActive rc q d = true.
+  Proof.
+    intros Slots rc p k q d; unfold slotsAtKey.
+    rewrite SlotRel.filter_spec'.
+    split.
+    - intros [Hin Hb].
+      apply andb_true_iff in Hb; destruct Hb as [Hq Hb].
+      destruct (Pkg.eq_dec q p) as [-> | NE]; [| discriminate].
+      apply andb_true_iff in Hb; destruct Hb as [Ha Hact].
+      apply SKEqb.eqb_true_iff in Ha.
+      repeat split; assumption.
+    - intros [Hin [-> [Ha Hact]]]; split; [exact Hin |].
+      destruct (Pkg.eq_dec p p) as [_ | NE];
+        [| contradiction NE; reflexivity].
+      subst k; rewrite SKEqb.eqb_refl, Hact; reflexivity.
+  Qed.
+
   (* Feature-table entries that create a decision name, with the feat
      they deliver. *)
   Definition entryFeatD (e : FEntry.t) : option (N.t * F.t) :=
@@ -394,11 +449,13 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         injection Hd as -> ->; [left | right]; exact He.
   Qed.
 
-  (* Duplicate manifest aliases are rejected by Cargo; the products assume
-     that well-formedness because the slot node is keyed by alias. *)
-  Definition AliasFunctional (Slots : SlotRel.t) : Prop :=
+  (* One manifest site declares one dependency: the tables a manifest
+     offers are maps, so a crate has at most one slot per (cfg, kind,
+     alias).  The products assume that well-formedness because the slot
+     node is keyed by the site. *)
+  Definition SiteFunctional (Slots : SlotRel.t) : Prop :=
     forall p d d', SlotRel.In (p, d) Slots -> SlotRel.In (p, d') Slots ->
-    sAlias d = sAlias d' -> d = d'.
+    sKey d = sKey d' -> d = d'.
 
   Definition activatedb (FDefs : FDefRel.t) (fs : FSet.t) (p : Pkg.t)
       (a : N.t) : bool :=
@@ -488,24 +545,25 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
      activated). *)
   Definition parentsb (FDefs : FDefRel.t) (Slots : SlotRel.t)
       (rc : Pkg.t)
-      (S : PkgSet.t) (FS : FeaturedSet.t) (q : Pkg.t) (a : N.t) : bool :=
+      (S : PkgSet.t) (FS : FeaturedSet.t) (q : Pkg.t) (k : SlotKey.t)
+    : bool :=
     andb (PkgSet.mem q S)
       (SlotRel.exists_ (fun '(q', d) =>
            andb (PkgEqb.eqb q' q)
-             (andb (NEqb.eqb (sAlias d) a)
+             (andb (SKEqb.eqb (sKey d) k)
                 (andb (slotActive rc q' d)
                    (requiredb FDefs (fsAt FS q) q d))))
          Slots).
 
-  Lemma parentsb_iff : forall FDefs Slots rc S FS q a,
-      parentsb FDefs Slots rc S FS q a = true <->
+  Lemma parentsb_iff : forall FDefs Slots rc S FS q k,
+      parentsb FDefs Slots rc S FS q k = true <->
       PkgSet.In q S /\
-      exists d, SlotRel.In (q, d) Slots /\ sAlias d = a /\
+      exists d, SlotRel.In (q, d) Slots /\ sKey d = k /\
         slotActive rc q d = true /\
         (sOptional d = false \/
          Activated FDefs (fsAt FS q) q (sAlias d)).
   Proof.
-    intros FDefs Slots rc S FS q a; unfold parentsb.
+    intros FDefs Slots rc S FS q k; unfold parentsb.
     rewrite andb_true_iff, PkgSet.mem_spec, SlotRel.exists_spec'.
     split.
     - intros [HS [[q' d] [Hd Hb]]]; cbn beta iota in Hb.
@@ -513,17 +571,15 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       apply andb_true_iff in Hb; destruct Hb as [Ha Hb].
       apply andb_true_iff in Hb; destruct Hb as [Hact Hreq].
       apply PkgEqb.eqb_true_iff in Hq; subst q'.
-      apply NEqb.eqb_true_iff in Ha.
+      apply SKEqb.eqb_true_iff in Ha.
       apply requiredb_iff in Hreq.
-      rewrite Ha in Hreq.
       split; [exact HS |].
-      exists d; repeat split; try assumption.
-      rewrite <- Ha in Hreq; exact Hreq.
+      exists d; repeat split; assumption.
     - intros [HS [d [Hd [Ha [Hact Hreq]]]]].
       split; [exact HS |].
       exists (q, d); split; [exact Hd | cbn beta iota].
       rewrite PkgEqb.eqb_refl; cbn.
-      subst a; rewrite NEqb.eqb_refl; cbn.
+      subst k; rewrite SKEqb.eqb_refl; cbn.
       rewrite Hact; cbn.
       apply requiredb_iff in Hreq; rewrite Hreq; reflexivity.
   Qed.
@@ -564,8 +620,8 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     | CRoot
     | CCrate (m : N.t) (gr : G.t)
     | CFeatP (m : N.t) (f : F.t) (gr : G.t)
-    | CSlot (m : N.t) (v : V.t) (a : N.t)
-    | CDec (m : N.t) (v : V.t) (f : F.t) (a : N.t) (feat : F.t)
+    | CSlot (m : N.t) (v : V.t) (k : SlotKey.t)
+    | CDec (m : N.t) (v : V.t) (f : F.t) (k : SlotKey.t) (feat : F.t)
     | CLink (l : L.t).
     Definition t := name.
 
@@ -682,7 +738,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       (rc : Pkg.t) : T.PkgSet.t :=
     SOslp.unionMap (fun '((m, v), d) =>
         if slotActive rc (m, v) d
-        then SOvp.map (fun u => (NPlus.CSlot m v (sAlias d), VPlus.WClass (g u)))
+        then SOvp.map (fun u => (NPlus.CSlot m v (sKey d), VPlus.WClass (g u)))
                (evalReq R (sTarget d) (sReq d))
         else T.PkgSet.empty)
       Slots.
@@ -695,7 +751,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         | Some (a, feat) =>
             SOslp.unionMap (fun '(_, d) =>
                 SOvp.map (fun u =>
-                    (NPlus.CDec m v f a feat, VPlus.WClass (g u)))
+                    (NPlus.CDec m v f (sKey d) feat, VPlus.WClass (g u)))
                   (evalReq R (sTarget d) (sReq d)))
               (slotsAt Slots rc (m, v) a)
         | None => T.PkgSet.empty
@@ -754,15 +810,15 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                  (GEqb.eqb (g v) gr)
             then Some (VPlus.WOrig v) else None)
           support
-    | NPlus.CSlot m v a =>
+    | NPlus.CSlot m v k =>
         SOsv.unionMap (fun '(_, d) =>
             classesOf g (evalReq R (sTarget d) (sReq d)))
-          (slotsAt Slots rc (m, v) a)
-    | NPlus.CDec m v f a feat =>
-        if fdEntryb FDefs (m, v) f a feat
+          (slotsAtKey Slots rc (m, v) k)
+    | NPlus.CDec m v f k feat =>
+        if fdEntryb FDefs (m, v) f (kAlias k) feat
         then SOsv.unionMap (fun '(_, d) =>
                classesOf g (evalReq R (sTarget d) (sReq d)))
-             (slotsAt Slots rc (m, v) a)
+             (slotsAtKey Slots rc (m, v) k)
         else T.VSet.empty
     | NPlus.CLink l =>
         SOlv.filterMap (fun '(q, l') =>
@@ -795,7 +851,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                if andb (PkgEqb.eqb q (m, v))
                     (andb (slotActive rc (m, v) d)
                        (negb (sOptional d)))
-               then Some (NPlus.CSlot m v (sAlias d),
+               then Some (NPlus.CSlot m v (sKey d),
                           classesOf g (evalReq R (sTarget d) (sReq d)))
                else None)
              Slots)
@@ -827,7 +883,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                       (match entryActivates e with
                        | Some a =>
                            SOsh.map (fun '(_, d) =>
-                               (NPlus.CSlot m v a,
+                               (NPlus.CSlot m v (sKey d),
                                 classesOf g
                                   (evalReq R (sTarget d) (sReq d))))
                              (slotsAt Slots rc (m, v) a)
@@ -836,14 +892,14 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                       (match entryFeatD e with
                        | Some (a, feat) =>
                            SOsh.map (fun '(_, d) =>
-                               (NPlus.CDec m v f a feat,
+                               (NPlus.CDec m v f (sKey d) feat,
                                 classesOf g
                                   (evalReq R (sTarget d) (sReq d))))
                              (slotsAt Slots rc (m, v) a)
                        | None => T.DependeesSet.empty
                        end)))
              FDefs)
-    | (NPlus.CSlot m v a, VPlus.WClass gr) =>
+    | (NPlus.CSlot m v k, VPlus.WClass gr) =>
         SOsh.unionMap (fun '(_, d) =>
             if negb (classMet g gr (evalReq R (sTarget d) (sReq d)))
             then T.DependeesSet.empty else
@@ -854,19 +910,19 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                    (NPlus.CFeatP (sTarget d) f gr,
                     inClass g gr (evalReq R (sTarget d) (sReq d))))
                  (slotRequests d dflt)))
-          (slotsAt Slots rc (m, v) a)
-    | (NPlus.CDec m v f a feat, VPlus.WClass gr) =>
-        if negb (fdEntryb FDefs (m, v) f a feat)
+          (slotsAtKey Slots rc (m, v) k)
+    | (NPlus.CDec m v f k feat, VPlus.WClass gr) =>
+        if negb (fdEntryb FDefs (m, v) f (kAlias k) feat)
         then T.DependeesSet.empty else
         SOsh.unionMap (fun '(_, d) =>
             if negb (classMet g gr (evalReq R (sTarget d) (sReq d)))
             then T.DependeesSet.empty else
             T.DependeesSet.add
-              (NPlus.CSlot m v a, T.VSet.singleton (VPlus.WClass gr))
+              (NPlus.CSlot m v k, T.VSet.singleton (VPlus.WClass gr))
               (T.DependeesSet.singleton
                  (NPlus.CFeatP (sTarget d) feat gr,
                   inClass g gr (evalReq R (sTarget d) (sReq d)))))
-          (slotsAt Slots rc (m, v) a)
+          (slotsAtKey Slots rc (m, v) k)
     | _ => T.DependeesSet.empty
     end.
 
@@ -948,7 +1004,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       exists m v d u, SlotRel.In ((m, v), d) Slots /\
         slotActive rc (m, v) d = true /\
         VSet.In u (evalReq R (sTarget d) (sReq d)) /\
-        x = (NPlus.CSlot m v (sAlias d), VPlus.WClass (g u)).
+        x = (NPlus.CSlot m v (sKey d), VPlus.WClass (g u)).
   Proof.
     intros g R Slots rc x; unfold slotReal.
     rewrite SOslp.mem_unionMap; split.
@@ -971,7 +1027,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         SlotRel.In ((m, v), d) Slots /\ sAlias d = a /\
         slotActive rc (m, v) d = true /\
         VSet.In u (evalReq R (sTarget d) (sReq d)) /\
-        x = (NPlus.CDec m v f a feat, VPlus.WClass (g u)).
+        x = (NPlus.CDec m v f (sKey d) feat, VPlus.WClass (g u)).
   Proof.
     intros g R FDefs Slots rc x; unfold decReal.
     rewrite SOfp.mem_unionMap; split.
@@ -1097,7 +1153,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       ((exists d, SlotRel.In ((m, v), d) Slots /\
           slotActive rc (m, v) d = true /\
           sOptional d = false /\
-          h = (NPlus.CSlot m v (sAlias d),
+          h = (NPlus.CSlot m v (sKey d),
                classesOf g (evalReq R (sTarget d) (sReq d)))) \/
        (exists l, LinkRel.In ((m, v), l) Links /\
           h = (NPlus.CLink l, T.VSet.singleton (VPlus.WMember (m, v))))).
@@ -1152,12 +1208,12 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           (exists a d, entryActivates e0 = Some a /\
              SlotRel.In ((m, v), d) Slots /\ sAlias d = a /\
              slotActive rc (m, v) d = true /\
-             h = (NPlus.CSlot m v a,
+             h = (NPlus.CSlot m v (sKey d),
                   classesOf g (evalReq R (sTarget d) (sReq d)))) \/
           (exists a feat d, entryFeatD e0 = Some (a, feat) /\
              SlotRel.In ((m, v), d) Slots /\ sAlias d = a /\
              slotActive rc (m, v) d = true /\
-             h = (NPlus.CDec m v f a feat,
+             h = (NPlus.CDec m v f (sKey d) feat,
                   classesOf g (evalReq R (sTarget d) (sReq d)))))).
   Proof.
     intros; cbn [dependees].
@@ -1221,11 +1277,11 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
   Lemma mem_dep_slot :
     forall g R support FDefs Slots Links dflt rc rootFeats
-           m v a gr h,
+           m v k gr h,
       T.DependeesSet.In h
         (dependees g R support FDefs Slots Links dflt rc
-           rootFeats (NPlus.CSlot m v a, VPlus.WClass gr)) <->
-      exists d u, SlotRel.In ((m, v), d) Slots /\ sAlias d = a /\
+           rootFeats (NPlus.CSlot m v k, VPlus.WClass gr)) <->
+      exists d u, SlotRel.In ((m, v), d) Slots /\ sKey d = k /\
         slotActive rc (m, v) d = true /\
         VSet.In u (evalReq R (sTarget d) (sReq d)) /\ g u = gr /\
         (h = (NPlus.CCrate (sTarget d) gr,
@@ -1236,7 +1292,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Proof.
     intros; cbn [dependees]; rewrite SOsh.mem_unionMap; split.
     - intros [[q d] [Hq Hh]]; cbn beta iota in Hh.
-      apply mem_slotsAt in Hq; destruct Hq as [Hs [-> [Ha Hact]]].
+      apply mem_slotsAtKey in Hq; destruct Hq as [Hs [-> [Ha Hact]]].
       destruct (classMet g gr (evalReq R (sTarget d) (sReq d))) eqn:Ec;
         cbn [negb] in Hh;
         [| exfalso; exact (T.DependeesSet.empty_spec Hh)].
@@ -1247,7 +1303,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         [left; exact Hh | right; exists f; split; [exact Hf | exact Hh]].
     - intros [d [u [Hs [Ha [Hact [Hu [Hgu Hh]]]]]]].
       exists ((m, v), d); split;
-        [apply mem_slotsAt; repeat split; assumption | cbn beta iota].
+        [apply mem_slotsAtKey; repeat split; assumption | cbn beta iota].
       rewrite (proj2 (classMet_iff _ _ _) (ex_intro _ u (conj Hu Hgu)));
         cbn [negb].
       rewrite T.DependeesSet.add_spec, SOfsh.mem_map.
@@ -1257,21 +1313,21 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
   Lemma mem_dep_dec :
     forall g R support FDefs Slots Links dflt rc rootFeats
-           m v f a feat gr h,
+           m v f k feat gr h,
       T.DependeesSet.In h
         (dependees g R support FDefs Slots Links dflt rc
-           rootFeats (NPlus.CDec m v f a feat, VPlus.WClass gr)) <->
+           rootFeats (NPlus.CDec m v f k feat, VPlus.WClass gr)) <->
       (exists e0, FDefRel.In (((m, v), f), e0) FDefs /\
-         entryFeatD e0 = Some (a, feat)) /\
-      exists d u, SlotRel.In ((m, v), d) Slots /\ sAlias d = a /\
+         entryFeatD e0 = Some (kAlias k, feat)) /\
+      exists d u, SlotRel.In ((m, v), d) Slots /\ sKey d = k /\
         slotActive rc (m, v) d = true /\
         VSet.In u (evalReq R (sTarget d) (sReq d)) /\ g u = gr /\
-        (h = (NPlus.CSlot m v a, T.VSet.singleton (VPlus.WClass gr)) \/
+        (h = (NPlus.CSlot m v k, T.VSet.singleton (VPlus.WClass gr)) \/
          h = (NPlus.CFeatP (sTarget d) feat gr,
               inClass g gr (evalReq R (sTarget d) (sReq d)))).
   Proof.
     intros; cbn [dependees].
-    destruct (fdEntryb FDefs (m, v) f a feat) eqn:Eb; cbn [negb].
+    destruct (fdEntryb FDefs (m, v) f (kAlias k) feat) eqn:Eb; cbn [negb].
     2:{ split; [intro Hc; exfalso; exact (T.DependeesSet.empty_spec Hc) |].
         intros [He _]; exfalso;
           rewrite (proj2 (fdEntryb_iff _ _ _ _ _) He) in Eb;
@@ -1279,7 +1335,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     apply fdEntryb_iff in Eb.
     rewrite SOsh.mem_unionMap; split.
     - intros [[q d] [Hq Hh]]; cbn beta iota in Hh.
-      apply mem_slotsAt in Hq; destruct Hq as [Hs [-> [Ha Hact]]].
+      apply mem_slotsAtKey in Hq; destruct Hq as [Hs [-> [Ha Hact]]].
       destruct (classMet g gr (evalReq R (sTarget d) (sReq d))) eqn:Ec;
         cbn [negb] in Hh;
         [| exfalso; exact (T.DependeesSet.empty_spec Hh)].
@@ -1290,7 +1346,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         in Hh; exact Hh.
     - intros [_ [d [u [Hs [Ha [Hact [Hu [Hgu Hh]]]]]]]].
       exists ((m, v), d); split;
-        [apply mem_slotsAt; repeat split; assumption | cbn beta iota].
+        [apply mem_slotsAtKey; repeat split; assumption | cbn beta iota].
       rewrite (proj2 (classMet_iff _ _ _) (ex_intro _ u (conj Hu Hgu)));
         cbn [negb].
       rewrite T.DependeesSet.add_spec, T.DependeesSet.singleton_spec.
@@ -1310,7 +1366,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Proof.
     intros g R support FDefs Slots Links dflt rc rootFeats
       [n w] h Hh.
-    destruct n as [ | m gr | m f gr | m v a | m v f a feat | l ];
+    destruct n as [ | m gr | m f gr | m v k | m v f k feat | l ];
       destruct w as [ | u | gr' | q ];
       try (rewrite dep_inert in Hh by exact I;
            exfalso; exact (T.DependeesSet.empty_spec Hh));
@@ -1331,8 +1387,10 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         destruct Hh as [[e0 [Hfd Hee]]
                         [d [u [Hs [Ha [Hact [Hu [Hgu _]]]]]]]].
       right; right; right; right; left; apply mem_decReal.
-      exists m, v, f, e0, a, feat, d, u; repeat split; try assumption.
-      rewrite Hgu; reflexivity.
+      exists m, v, f, e0, (kAlias k), feat, d, u; repeat split;
+        try assumption.
+      + rewrite <- Ha; reflexivity.
+      + rewrite Ha, Hgu; reflexivity.
   Qed.
 
   Module SOtp := SetOps T.Pkg Pkg T.PkgSet PkgSet.
@@ -1435,23 +1493,23 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       (rc : Pkg.t) (S : T.PkgSet.t) : ParentRel.t :=
     SOtpar.unionMap (fun '(n, w) =>
         match n, w with
-        | NPlus.CSlot m v a, VPlus.WClass gr =>
+        | NPlus.CSlot m v k, VPlus.WClass gr =>
             SOslpar.unionMap (fun '(_, d) =>
-                SOvpar.map (fun u => (((m, v), a), u))
+                SOvpar.map (fun u => (((m, v), k), u))
                   (targets S (sTarget d) gr))
-              (slotsAt Slots rc (m, v) a)
+              (slotsAtKey Slots rc (m, v) k)
         | _, _ => ParentRel.empty
         end)
       S.
 
-  Lemma mem_decodeParents : forall Slots rc S m v a u,
-      ParentRel.In (((m, v), a), u) (decodeParents Slots rc S) <->
-      exists gr d, T.PkgSet.In (NPlus.CSlot m v a, VPlus.WClass gr) S /\
-        SlotRel.In ((m, v), d) Slots /\ sAlias d = a /\
+  Lemma mem_decodeParents : forall Slots rc S m v k u,
+      ParentRel.In (((m, v), k), u) (decodeParents Slots rc S) <->
+      exists gr d, T.PkgSet.In (NPlus.CSlot m v k, VPlus.WClass gr) S /\
+        SlotRel.In ((m, v), d) Slots /\ sKey d = k /\
         slotActive rc (m, v) d = true /\
         T.PkgSet.In (NPlus.CCrate (sTarget d) gr, VPlus.WOrig u) S.
   Proof.
-    intros Slots rc S m v a u; unfold decodeParents.
+    intros Slots rc S m v k u; unfold decodeParents.
     rewrite SOtpar.mem_unionMap; split.
     - intros [[n w] [Hin Hy]]; cbn beta iota in Hy.
       destruct n; try (exfalso; exact (SOslpar.empty_in _ Hy));
@@ -1460,14 +1518,14 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         cbn beta iota in Hy.
       apply SOvpar.mem_map in Hy; destruct Hy as [u' [Hu' He]].
       injection He as -> -> -> ->.
-      apply mem_slotsAt in Hq; destruct Hq as [Hs [-> [Ha Hact]]].
+      apply mem_slotsAtKey in Hq; destruct Hq as [Hs [-> [Ha Hact]]].
       exists gr, d; repeat split; try assumption.
       apply mem_targets; exact Hu'.
     - intros [gr [d [Hslot [Hs [Ha [Hact Hcr]]]]]].
-      exists (NPlus.CSlot m v a, VPlus.WClass gr); split;
+      exists (NPlus.CSlot m v k, VPlus.WClass gr); split;
         [exact Hslot | cbn beta iota].
       apply SOslpar.mem_unionMap; exists ((m, v), d); split.
-      { apply mem_slotsAt; repeat split; assumption. }
+      { apply mem_slotsAtKey; repeat split; assumption. }
       cbn beta iota; apply SOvpar.mem_map; exists u; split;
         [apply mem_targets; exact Hcr | reflexivity].
   Qed.
@@ -1576,12 +1634,12 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Theorem versions_lookupSlot :
-      forall g R support FDefs Slots Links rc m v a w,
-        T.PkgSet.In (NPlus.CSlot m v a, w)
+      forall g R support FDefs Slots Links rc m v k w,
+        T.PkgSet.In (NPlus.CSlot m v k, w)
           (transReal g R support FDefs Slots Links rc) <->
         T.VSet.In w
           (versions g R support FDefs Slots Links rc
-             (NPlus.CSlot m v a)).
+             (NPlus.CSlot m v k)).
     Proof.
       intros; rewrite mem_transReal; cbn [versions].
       rewrite SOsv.mem_unionMap; split.
@@ -1593,9 +1651,9 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             destruct He as [? [? [? [_ He]]]]; discriminate He.
         + apply mem_slotReal in He;
             destruct He as [n' [v' [d [u [Hs [Hact [Hu He]]]]]]].
-          injection He as E1 E2 E3 E4; subst n' v' a w.
+          injection He as E1 E2 E3 E4; subst n' v' k w.
           exists ((m, v), d); split.
-          { apply mem_slotsAt; repeat split; assumption. }
+          { apply mem_slotsAtKey; repeat split; assumption. }
           cbn beta iota; apply mem_classesOf; exists u; split;
             [exact Hu | reflexivity].
         + apply mem_decReal in He;
@@ -1604,7 +1662,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         + apply mem_linkReal in He;
             destruct He as [? [? [_ [_ He]]]]; discriminate He.
       - intros [[q d] [Hq Hw]]; cbn beta iota in Hw.
-        apply mem_slotsAt in Hq; destruct Hq as [Hs [-> [Ha Hact]]].
+        apply mem_slotsAtKey in Hq; destruct Hq as [Hs [-> [Ha Hact]]].
         apply mem_classesOf in Hw; destruct Hw as [u [Hu ->]].
         right; right; right; left; apply mem_slotReal.
         exists m, v, d, u; repeat split; try assumption.
@@ -1612,12 +1670,12 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Theorem versions_lookupDecision :
-      forall g R support FDefs Slots Links rc m v f a feat w,
-        T.PkgSet.In (NPlus.CDec m v f a feat, w)
+      forall g R support FDefs Slots Links rc m v f k feat w,
+        T.PkgSet.In (NPlus.CDec m v f k feat, w)
           (transReal g R support FDefs Slots Links rc) <->
         T.VSet.In w
           (versions g R support FDefs Slots Links rc
-             (NPlus.CDec m v f a feat)).
+             (NPlus.CDec m v f k feat)).
     Proof.
       intros; rewrite mem_transReal; cbn [versions]; split.
       - intros [He | [He | [He | [He | [He | He]]]]].
@@ -1633,27 +1691,30 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             destruct He as [n' [v' [f' [e0 [a' [feat' [d [u
               [Hf [Ee [Hs [Ha [Hact [Hu He]]]]]]]]]]]]]].
           injection He as E1 E2 E3 E4 E5 E6;
-            subst n' v' f' a' feat' w.
-          assert (Hb : fdEntryb FDefs (m, v) f a feat = true)
+            subst n' v' f' feat' w k.
+          assert (Hb : fdEntryb FDefs (m, v) f (kAlias (sKey d)) feat
+              = true)
             by (apply fdEntryb_iff; exists e0; split;
-                [exact Hf | rewrite E4; exact Ee]).
+                [exact Hf | rewrite kAlias_sKey, Ha; exact Ee]).
           rewrite Hb.
           apply SOsv.mem_unionMap; exists ((m, v), d); split.
-          { apply mem_slotsAt; repeat split; try assumption;
-              try congruence. }
+          { apply mem_slotsAtKey; repeat split; assumption. }
           cbn beta iota; apply mem_classesOf; exists u; split;
             [exact Hu | reflexivity].
         + apply mem_linkReal in He;
             destruct He as [? [? [_ [_ He]]]]; discriminate He.
-      - destruct (fdEntryb FDefs (m, v) f a feat) eqn:Eb;
+      - destruct (fdEntryb FDefs (m, v) f (kAlias k) feat) eqn:Eb;
           [| intro Hw; exfalso; exact (T.VSet.empty_spec Hw)].
         apply fdEntryb_iff in Eb; destruct Eb as [e0 [Hf Ee]].
         intro Hw; apply SOsv.mem_unionMap in Hw;
           destruct Hw as [[q d] [Hq Hw]]; cbn beta iota in Hw.
-        apply mem_slotsAt in Hq; destruct Hq as [Hs [-> [Ha Hact]]].
+        apply mem_slotsAtKey in Hq; destruct Hq as [Hs [-> [Ha Hact]]].
         apply mem_classesOf in Hw; destruct Hw as [u [Hu ->]].
         right; right; right; right; left; apply mem_decReal.
-        exists m, v, f, e0, a, feat, d, u; repeat split; assumption.
+        exists m, v, f, e0, (kAlias k), feat, d, u; repeat split;
+          try assumption.
+        + rewrite <- Ha; reflexivity.
+        + rewrite Ha; reflexivity.
     Qed.
 
     Theorem versions_lookupLink :
@@ -1774,7 +1835,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Theorem cargo_soundness :
     forall R support FDefs Slots Links g dflt rc rootFeats
            (S : T.PkgSet.t),
-      AliasFunctional Slots ->
+      SiteFunctional Slots ->
       T.IsResolution
         (transReal g R support FDefs Slots Links rc)
         (transDeps g R support FDefs Slots Links dflt rc
@@ -1784,7 +1845,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         (decodeParents Slots rc S).
   Proof.
     intros R support FDefs Slots Links g dflt rc rootFeats S
-      Half Hres.
+      Hsite Hres.
     destruct rc as [rn rv].
     destruct Hres as [Hsub Hroot Hdep Huniq].
     assert (A1 : forall m gr v,
@@ -1825,12 +1886,12 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             [_ [_ [_ [_ [_ [_ He]]]]]]]]]]]]]]; discriminate He.
       - apply mem_linkReal in He;
           destruct He as [? [? [_ [_ He]]]]; discriminate He. }
-    assert (A3 : forall m v a gr,
-        T.PkgSet.In (NPlus.CSlot m v a, VPlus.WClass gr) S ->
-        exists d u, SlotRel.In ((m, v), d) Slots /\ sAlias d = a /\
+    assert (A3 : forall m v k gr,
+        T.PkgSet.In (NPlus.CSlot m v k, VPlus.WClass gr) S ->
+        exists d u, SlotRel.In ((m, v), d) Slots /\ sKey d = k /\
           slotActive (rn, rv) (m, v) d = true /\
           VSet.In u (evalReq R (sTarget d) (sReq d)) /\ g u = gr).
-    { intros m v a gr Hin; specialize (Hsub _ Hin).
+    { intros m v k gr Hin; specialize (Hsub _ Hin).
       apply mem_transReal in Hsub.
       destruct Hsub as [He | [He | [He | [He | [He | He]]]]].
       - unfold transRoot in He; discriminate He.
@@ -1915,7 +1976,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       apply mem_decodeParents in Hu';
         destruct Hu' as [gr' [d' [Hslot' [Hs' [Ha' [Hact' Hcr']]]]]].
       assert (d' = d)
-        by exact (Half (m, v) d' d Hs' Hs (eq_trans Ha' (eq_sym Ha))).
+        by exact (Hsite (m, v) d' d Hs' Hs (eq_trans Ha' (eq_sym Ha))).
       subst d'.
       assert (E := Huniq _ _ _ Hslot Hslot'); injection E as E; subst gr'.
       assert (E2 := Huniq _ _ _ Hcr Hcr'); injection E2 as E2; exact E2.
@@ -1924,8 +1985,8 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       apply mem_decodeS in Hp; destruct Hp as [gr0 Hp].
       destruct (A1 _ _ _ Hp) as [_ Egr0]; subst gr0.
       assert (Achain : forall gr,
-          T.PkgSet.In (NPlus.CSlot m v (sAlias d), VPlus.WClass gr) S ->
-          exists u, ParentRel.In (((m, v), sAlias d), u)
+          T.PkgSet.In (NPlus.CSlot m v (sKey d), VPlus.WClass gr) S ->
+          exists u, ParentRel.In (((m, v), sKey d), u)
                       (decodeParents Slots (rn, rv) S) /\
             rgHolds (sReq d) u = true /\
             PkgSet.In (sTarget d, u) (decodeS S) /\
@@ -1935,10 +1996,10 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       { intros gr Hslot.
         destruct (A3 _ _ _ _ Hslot)
           as [d0 [u0 [Hs0 [Ha0 [Hact0 [Hu0 Egr]]]]]].
-        assert (d0 = d) by exact (Half (m, v) d0 d Hs0 Hd Ha0); subst d0.
+        assert (d0 = d) by exact (Hsite (m, v) d0 d Hs0 Hd Ha0); subst d0.
         subst gr.
         assert (Hed : T.DepRel.In
-            ((NPlus.CSlot m v (sAlias d), VPlus.WClass (g u0)),
+            ((NPlus.CSlot m v (sKey d), VPlus.WClass (g u0)),
              (NPlus.CCrate (sTarget d) (g u0),
               inClass g (g u0) (evalReq R (sTarget d) (sReq d))))
             (transDeps g R support FDefs Slots Links dflt
@@ -1956,7 +2017,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         - intros fs' Hfs'; apply mem_decodeFS in Hfs';
             destruct Hfs' as [_ ->]; intros f Hf.
           assert (Hef : T.DepRel.In
-              ((NPlus.CSlot m v (sAlias d), VPlus.WClass (g u0)),
+              ((NPlus.CSlot m v (sKey d), VPlus.WClass (g u0)),
                (NPlus.CFeatP (sTarget d) f (g u0),
                 inClass g (g u0) (evalReq R (sTarget d) (sReq d))))
               (transDeps g R support FDefs Slots Links dflt
@@ -1974,7 +2035,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       destruct Hopt as [Hno | Hacted].
       + assert (Hed : T.DepRel.In
             ((NPlus.CCrate m (g v), VPlus.WOrig v),
-             (NPlus.CSlot m v (sAlias d),
+             (NPlus.CSlot m v (sKey d),
               classesOf g (evalReq R (sTarget d) (sReq d))))
             (transDeps g R support FDefs Slots Links dflt
                (rn, rv) rootFeats)).
@@ -2000,7 +2061,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         destruct Hea as [e' [He' Ea]].
         assert (Hed : T.DepRel.In
             ((NPlus.CFeatP m f (g v), VPlus.WOrig v),
-             (NPlus.CSlot m v (sAlias d),
+             (NPlus.CSlot m v (sKey d),
               classesOf g (evalReq R (sTarget d) (sReq d))))
             (transDeps g R support FDefs Slots Links dflt
                (rn, rv) rootFeats)).
@@ -2044,10 +2105,10 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       destruct He' as [e' [He' Ee]].
       apply mem_decodeParents in Hpi;
         destruct Hpi as [gr2 [d2 [Hslot2 [Hs2 [Ha2 [Hact2 Hcr2]]]]]].
-      assert (d2 = d) by exact (Half (m, v) d2 d Hs2 Hd Ha2); subst d2.
+      assert (d2 = d) by exact (Hsite (m, v) d2 d Hs2 Hd Ha2); subst d2.
       assert (Hed : T.DepRel.In
           ((NPlus.CFeatP m f (g v), VPlus.WOrig v),
-           (NPlus.CDec m v f (sAlias d) feat,
+           (NPlus.CDec m v f (sKey d) feat,
             classesOf g (evalReq R (sTarget d) (sReq d))))
           (transDeps g R support FDefs Slots Links dflt
              (rn, rv) rootFeats)).
@@ -2060,8 +2121,8 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       destruct (Hdep _ Hf _ _ Hed) as [w [Hw HwS]].
       apply mem_classesOf in Hw; destruct Hw as [u1 [Hu1 ->]].
       assert (Hpin : T.DepRel.In
-          ((NPlus.CDec m v f (sAlias d) feat, VPlus.WClass (g u1)),
-           (NPlus.CSlot m v (sAlias d),
+          ((NPlus.CDec m v f (sKey d) feat, VPlus.WClass (g u1)),
+           (NPlus.CSlot m v (sKey d),
             T.VSet.singleton (VPlus.WClass (g u1))))
           (transDeps g R support FDefs Slots Links dflt
              (rn, rv) rootFeats)).
@@ -2072,7 +2133,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       destruct (Hdep _ HwS _ _ Hpin) as [x [Hx HxS]].
       apply T.VSet.singleton_spec in Hx; subst x.
       assert (Hdel : T.DepRel.In
-          ((NPlus.CDec m v f (sAlias d) feat, VPlus.WClass (g u1)),
+          ((NPlus.CDec m v f (sKey d) feat, VPlus.WClass (g u1)),
            (NPlus.CFeatP (sTarget d) feat (g u1),
             inClass g (g u1) (evalReq R (sTarget d) (sReq d))))
           (transDeps g R support FDefs Slots Links dflt
@@ -2148,26 +2209,26 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Definition wSlots (g : V.t -> G.t) (FDefs : FDefRel.t)
       (Slots : SlotRel.t) (rc : Pkg.t)
       (S : PkgSet.t) (FS : FeaturedSet.t) (pi : ParentRel.t) : T.PkgSet.t :=
-    SOparp.filterMap (fun '(((m, v), a), u) =>
-        if parentsb FDefs Slots rc S FS (m, v) a
-        then Some (NPlus.CSlot m v a, VPlus.WClass (g u))
+    SOparp.filterMap (fun '(((m, v), k), u) =>
+        if parentsb FDefs Slots rc S FS (m, v) k
+        then Some (NPlus.CSlot m v k, VPlus.WClass (g u))
         else None)
       pi.
 
   Lemma mem_wSlots : forall g FDefs Slots rc S FS pi x,
       T.PkgSet.In x (wSlots g FDefs Slots rc S FS pi) <->
-      exists m v a u, ParentRel.In (((m, v), a), u) pi /\
-        parentsb FDefs Slots rc S FS (m, v) a = true /\
-        x = (NPlus.CSlot m v a, VPlus.WClass (g u)).
+      exists m v k u, ParentRel.In (((m, v), k), u) pi /\
+        parentsb FDefs Slots rc S FS (m, v) k = true /\
+        x = (NPlus.CSlot m v k, VPlus.WClass (g u)).
   Proof.
     intros g FDefs Slots rc S FS pi x; unfold wSlots.
     rewrite SOparp.mem_filterMap; split.
-    - intros [[[[m v] a] u] [Hin He]]; cbn beta iota in He.
-      destruct (parentsb FDefs Slots rc S FS (m, v) a) eqn:Eb;
+    - intros [[[[m v] k] u] [Hin He]]; cbn beta iota in He.
+      destruct (parentsb FDefs Slots rc S FS (m, v) k) eqn:Eb;
         [| discriminate].
-      injection He as <-; exists m, v, a, u; repeat split; assumption.
-    - intros [m [v [a [u [Hin [Eb ->]]]]]].
-      exists (((m, v), a), u); split; [exact Hin | cbn beta iota].
+      injection He as <-; exists m, v, k, u; repeat split; assumption.
+    - intros [m [v [k [u [Hin [Eb ->]]]]]].
+      exists (((m, v), k), u); split; [exact Hin | cbn beta iota].
       rewrite Eb; reflexivity.
   Qed.
 
@@ -2177,14 +2238,15 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Definition wDecs (g : V.t -> G.t) (FDefs : FDefRel.t)
       (Slots : SlotRel.t) (rc : Pkg.t)
       (S : PkgSet.t) (FS : FeaturedSet.t) (pi : ParentRel.t) : T.PkgSet.t :=
-    SOparp.unionMap (fun '(((m, v), a), u) =>
-        if parentsb FDefs Slots rc S FS (m, v) a
+    SOparp.unionMap (fun '(((m, v), k), u) =>
+        if parentsb FDefs Slots rc S FS (m, v) k
         then SOfp.filterMap (fun '((q, f), e) =>
                match entryFeatD e with
                | Some (a', feat) =>
-                   if andb (andb (PkgEqb.eqb q (m, v)) (NEqb.eqb a' a))
+                   if andb (andb (PkgEqb.eqb q (m, v))
+                              (NEqb.eqb a' (kAlias k)))
                         (FSet.mem f (fsAt FS (m, v)))
-                   then Some (NPlus.CDec m v f a' feat, VPlus.WClass (g u))
+                   then Some (NPlus.CDec m v f k feat, VPlus.WClass (g u))
                    else None
                | None => None
                end)
@@ -2194,22 +2256,23 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
   Lemma mem_wDecs : forall g FDefs Slots rc S FS pi x,
       T.PkgSet.In x (wDecs g FDefs Slots rc S FS pi) <->
-      exists m v a u f e feat, ParentRel.In (((m, v), a), u) pi /\
-        parentsb FDefs Slots rc S FS (m, v) a = true /\
+      exists m v k u f e feat, ParentRel.In (((m, v), k), u) pi /\
+        parentsb FDefs Slots rc S FS (m, v) k = true /\
         FDefRel.In (((m, v), f), e) FDefs /\
-        entryFeatD e = Some (a, feat) /\
+        entryFeatD e = Some (kAlias k, feat) /\
         FSet.In f (fsAt FS (m, v)) /\
-        x = (NPlus.CDec m v f a feat, VPlus.WClass (g u)).
+        x = (NPlus.CDec m v f k feat, VPlus.WClass (g u)).
   Proof.
     intros g FDefs Slots rc S FS pi x; unfold wDecs.
     rewrite SOparp.mem_unionMap; split.
-    - intros [[[[m v] a] u] [Hin Hx]]; cbn beta iota in Hx.
-      destruct (parentsb FDefs Slots rc S FS (m, v) a) eqn:Eb;
+    - intros [[[[m v] k] u] [Hin Hx]]; cbn beta iota in Hx.
+      destruct (parentsb FDefs Slots rc S FS (m, v) k) eqn:Eb;
         [| exfalso; exact (SOfp.empty_in _ Hx)].
       apply SOfp.mem_filterMap in Hx; destruct Hx as [[[q f] e] [Hf He]].
       cbn beta iota in He.
       destruct (entryFeatD e) as [[a' feat] |] eqn:Ee; [| discriminate].
-      destruct (andb (andb (PkgEqb.eqb q (m, v)) (NEqb.eqb a' a))
+      destruct (andb (andb (PkgEqb.eqb q (m, v))
+                       (NEqb.eqb a' (kAlias k)))
                   (FSet.mem f (fsAt FS (m, v)))) eqn:Eg; [| discriminate].
       apply andb_true_iff in Eg; destruct Eg as [Eq Em].
       apply andb_true_iff in Eq; destruct Eq as [Eq Ea].
@@ -2217,10 +2280,10 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       apply NEqb.eqb_true_iff in Ea; subst a'.
       apply FSet.mem_spec in Em.
       injection He as <-.
-      exists m, v, a, u, f, e, feat; repeat split; assumption.
-    - intros [m [v [a [u [f [e [feat
+      exists m, v, k, u, f, e, feat; repeat split; assumption.
+    - intros [m [v [k [u [f [e [feat
         [Hin [Eb [Hf [Ee [Em ->]]]]]]]]]]]].
-      exists (((m, v), a), u); split; [exact Hin | cbn beta iota].
+      exists (((m, v), k), u); split; [exact Hin | cbn beta iota].
       rewrite Eb; apply SOfp.mem_filterMap.
       exists (((m, v), f), e); split; [exact Hf | cbn beta iota].
       rewrite Ee, PkgEqb.eqb_refl, NEqb.eqb_refl,
@@ -2265,16 +2328,17 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       | NPlus.CFeatP m f gr =>
           exists v fs, w = VPlus.WOrig v /\ FeaturedSet.In ((m, v), fs) FS /\
             FSet.In f fs /\ gr = g v
-      | NPlus.CSlot m v a =>
+      | NPlus.CSlot m v k =>
           exists u, w = VPlus.WClass (g u) /\
-            ParentRel.In (((m, v), a), u) pi /\
-            parentsb FDefs Slots rc S FS (m, v) a = true
-      | NPlus.CDec m v f a feat =>
+            ParentRel.In (((m, v), k), u) pi /\
+            parentsb FDefs Slots rc S FS (m, v) k = true
+      | NPlus.CDec m v f k feat =>
           exists u e, w = VPlus.WClass (g u) /\
-            ParentRel.In (((m, v), a), u) pi /\
-            parentsb FDefs Slots rc S FS (m, v) a = true /\
+            ParentRel.In (((m, v), k), u) pi /\
+            parentsb FDefs Slots rc S FS (m, v) k = true /\
             FDefRel.In (((m, v), f), e) FDefs /\
-            entryFeatD e = Some (a, feat) /\ FSet.In f (fsAt FS (m, v))
+            entryFeatD e = Some (kAlias k, feat) /\
+            FSet.In f (fsAt FS (m, v))
       | NPlus.CLink l =>
           exists q, w = VPlus.WMember q /\ LinkRel.In (q, l) Links /\
             PkgSet.In q S
@@ -2291,11 +2355,11 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       injection He as E1 E2; subst n w; cbn beta iota.
       exists v, fs; repeat split; assumption.
     - apply mem_wSlots in He;
-        destruct He as [m [v [a [u [Hpi [Eb He]]]]]].
+        destruct He as [m [v [k [u [Hpi [Eb He]]]]]].
       injection He as E1 E2; subst n w; cbn beta iota.
       exists u; repeat split; assumption.
     - apply mem_wDecs in He;
-        destruct He as [m [v [a [u [f [e [feat
+        destruct He as [m [v [k [u [f [e [feat
           [Hpi [Eb [Hf [Ee [Em He]]]]]]]]]]]].
       injection He as E1 E2; subst n w; cbn beta iota.
       exists u, e; repeat split; assumption.
@@ -2333,8 +2397,8 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       slotActive rc (m, v) d = true ->
       (sOptional d = false \/
        Activated FDefs (fsAt FS (m, v)) (m, v) (sAlias d)) ->
-      exists u, ParentRel.In (((m, v), sAlias d), u) pi /\
-        parentsb FDefs Slots rc S FS (m, v) (sAlias d) = true /\
+      exists u, ParentRel.In (((m, v), sKey d), u) pi /\
+        parentsb FDefs Slots rc S FS (m, v) (sKey d) = true /\
         VSet.In u (evalReq R (sTarget d) (sReq d)) /\
         PkgSet.In (sTarget d, u) S /\
         FSet.Subset (slotRequests d dflt) (fsAt FS (sTarget d, u)).
@@ -2357,30 +2421,27 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Lemma parent_slot :
     forall R support FDefs Slots Links g dflt rc rootFeats
            S FS pi,
-      AliasFunctional Slots ->
+      SiteFunctional Slots ->
       IsResolution R support FDefs Slots Links g dflt rc
         rootFeats S FS pi ->
-      forall m v a u, ParentRel.In (((m, v), a), u) pi ->
-      parentsb FDefs Slots rc S FS (m, v) a = true ->
-      exists d, SlotRel.In ((m, v), d) Slots /\ sAlias d = a /\
+      forall m v k u, ParentRel.In (((m, v), k), u) pi ->
+      parentsb FDefs Slots rc S FS (m, v) k = true ->
+      exists d, SlotRel.In ((m, v), d) Slots /\ sKey d = k /\
         slotActive rc (m, v) d = true /\
         VSet.In u (evalReq R (sTarget d) (sReq d)) /\
         PkgSet.In (sTarget d, u) S /\
         FSet.Subset (slotRequests d dflt) (fsAt FS (sTarget d, u)).
   Proof.
     intros R support FDefs Slots Links g dflt rc rootFeats
-      S FS pi Half Hres m v a u Hpi Eb.
+      S FS pi Hsite Hres m v k u Hpi Eb.
     apply parentsb_iff in Eb; destruct Eb as [HS [d [Hd [Ha [Hact Hreq]]]]].
-    assert (Eb : parentsb FDefs Slots rc S FS (m, v) a = true).
-    { apply parentsb_iff; split; [exact HS |].
-      exists d; repeat split; assumption. }
     rewrite <- Ha in Hpi.
     destruct (parent_pick R support FDefs Slots Links g dflt rc
                 rootFeats S FS pi Hres m v d HS Hd Hact Hreq)
       as [u0 [Hpi0 [_ [Hu0 [Htgt Hsub]]]]].
     assert (u = u0)
       by exact (res_pi_functional _ _ _ _ _ _ _ _ _ _ _ _ Hres
-                  (m, v) (sAlias d) u u0 Hpi Hpi0).
+                  (m, v) (sKey d) u u0 Hpi Hpi0).
     subst u0.
     exists d; repeat split; assumption.
   Qed.
@@ -2388,7 +2449,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Theorem cargo_completeness :
     forall R support FDefs Slots Links g dflt rc rootFeats
            S FS pi,
-      AliasFunctional Slots ->
+      SiteFunctional Slots ->
       IsResolution R support FDefs Slots Links g dflt rc
         rootFeats S FS pi ->
       T.IsResolution
@@ -2398,10 +2459,10 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         (coreRes g FDefs Slots Links rc S FS pi).
   Proof.
     intros R support FDefs Slots Links g dflt rc rootFeats
-      S FS pi Half Hres.
+      S FS pi Hsite Hres.
     assert (HfsAt := fsAt_mem _ _ _ _ _ _ _ _ _ _ _ _ Hres).
     assert (Hpick := parent_pick _ _ _ _ _ _ _ _ _ _ _ _ Hres).
-    assert (Hslot := parent_slot _ _ _ _ _ _ _ _ _ _ _ _ Half Hres).
+    assert (Hslot := parent_slot _ _ _ _ _ _ _ _ _ _ _ _ Hsite Hres).
     destruct rc as [rn rv].
     destruct Hres as [Hsub Hroot Hrootf Hdom Htot Hfun Hclass Hsupp
       Hpifun Hslotc Hfsame Hfdep Hlinks].
@@ -2419,19 +2480,21 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         apply mem_featReal; exists m, v, f; split;
           [exact (Hsupp _ _ _ Hfs Hf) | reflexivity].
       + right; right; right; left; apply mem_wSlots in Hx.
-        destruct Hx as [m [v [a [u [Hpi [Eb ->]]]]]].
+        destruct Hx as [m [v [k [u [Hpi [Eb ->]]]]]].
         destruct (Hslot _ _ _ _ Hpi Eb)
           as [d [Hd [Ha [Hact [Hu [Htgt Hss]]]]]].
         apply mem_slotReal; exists m, v, d, u; repeat split;
           try assumption.
         rewrite Ha; reflexivity.
       + right; right; right; right; left; apply mem_wDecs in Hx.
-        destruct Hx as [m [v [a [u [f [e [feat
+        destruct Hx as [m [v [k [u [f [e [feat
           [Hpi [Eb [Hf [Ee [Em ->]]]]]]]]]]]].
         destruct (Hslot _ _ _ _ Hpi Eb)
           as [d [Hd [Ha [Hact [Hu [Htgt Hss]]]]]].
-        apply mem_decReal; exists m, v, f, e, a, feat, d, u;
-          repeat split; assumption.
+        apply mem_decReal; exists m, v, f, e, (kAlias k), feat, d, u;
+          repeat split; try assumption.
+        * rewrite <- Ha; reflexivity.
+        * rewrite Ha; reflexivity.
       + right; right; right; right; right; apply mem_linkReal in Hx.
         destruct Hx as [q [l [Hl [HS ->]]]].
         apply mem_linkReal; exists q, l; repeat split;
@@ -2441,7 +2504,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     - (* res_dep_closure *)
       intros p Hp n vs Hed.
       apply mem_transDeps in Hed; destruct Hed as [_ Hh].
-      destruct p as [[| m gr | m f gr | m v a | m v f a feat | l]
+      destruct p as [[| m gr | m f gr | m v k | m v f k feat | l]
                      [| v0 | gr0 | q]];
         try (rewrite dep_inert in Hh by exact I;
              exfalso; exact (T.DependeesSet.empty_spec Hh)).
@@ -2471,7 +2534,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
               [exact Hu | reflexivity]. }
           apply mem_coreRes; right; right; right; left;
             apply mem_wSlots.
-          exists m, v0, (sAlias d), u; repeat split; assumption.
+          exists m, v0, (sKey d), u; repeat split; assumption.
         * exists (VPlus.WMember (m, v0)); split;
             [apply T.VSet.singleton_spec; reflexivity |].
           apply mem_coreRes; right; right; right; right; right;
@@ -2515,7 +2578,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                  [exact Hu | reflexivity]. }
              apply mem_coreRes; right; right; right; left;
                apply mem_wSlots.
-             exists m, v0, (sAlias d), u; repeat split; assumption.
+             exists m, v0, (sKey d), u; repeat split; assumption.
           -- destruct Hcase as [a [feat [d [Ea [Hd [Ha [Hact He]]]]]]];
                subst a.
              injection He as E1 E2; subst n vs.
@@ -2533,17 +2596,17 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                  [exact Hu | reflexivity]. }
              apply mem_coreRes; right; right; right; right; left;
                apply mem_wDecs.
-             exists m, v0, (sAlias d), u, f, e0, feat; repeat split;
+             exists m, v0, (sKey d), u, f, e0, feat; repeat split;
                try assumption.
              rewrite Efs; exact Hf.
       + apply mem_dep_slot in Hh.
         destruct Hh as [d [u0 [Hd [Ha [Hact [Hu0 [Hgu Hcase]]]]]]];
-          subst a.
+          subst k.
         apply core_shape in Hp; cbn beta iota in Hp.
         destruct Hp as [u [Eu [Hpi Eb]]]; injection Eu as Eu.
         destruct (Hslot _ _ _ _ Hpi Eb)
           as [d' [Hd' [Ha' [Hact' [Hu' [Htgt Hss]]]]]].
-        assert (Ed : d' = d) by exact (Half (m, v) d' d Hd' Hd Ha').
+        assert (Ed : d' = d) by exact (Hsite (m, v) d' d Hd' Hd Ha').
         subst d'.
         destruct Hcase as [He | [f0 [Hf0 He]]]; injection He as E1 E2;
           subst n vs.
@@ -2570,14 +2633,14 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         destruct (Hslot _ _ _ _ Hpi Eb)
           as [d' [Hd' [Ha' [Hact' [Hu' [Htgt Hss]]]]]].
         assert (Ed : d' = d)
-          by exact (Half (m, v) d' d Hd' Hd (eq_trans Ha' (eq_sym Ha))).
+          by exact (Hsite (m, v) d' d Hd' Hd (eq_trans Ha' (eq_sym Ha))).
         subst d'.
         destruct Hcase as [He | He]; injection He as E1 E2; subst n vs.
         * exists (VPlus.WClass gr0); split;
             [apply T.VSet.singleton_spec; reflexivity |].
           apply mem_coreRes; right; right; right; left;
             apply mem_wSlots.
-          exists m, v, a, u; repeat split; try assumption.
+          exists m, v, k, u; repeat split; try assumption.
           rewrite Eu; reflexivity.
         * exists (VPlus.WOrig u); split.
           { apply mem_inClass; exists u; repeat split;
@@ -2587,14 +2650,18 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           split; [exact (HfsAt _ Htgt) |].
           split; [| rewrite Eu; reflexivity].
           assert (Hor :
-              FDefRel.In (((m, v), f), FEntry.EDepFeat a feat) FDefs \/
-              FDefRel.In (((m, v), f), FEntry.EWeakFeat a feat) FDefs).
+              FDefRel.In (((m, v), f), FEntry.EDepFeat (kAlias k) feat)
+                FDefs \/
+              FDefRel.In (((m, v), f), FEntry.EWeakFeat (kAlias k) feat)
+                FDefs).
           { destruct e as [f0 | a0 | a0 feat0 | a0 feat0];
               cbn [entryFeatD] in Ee2; try discriminate;
               injection Ee2 as Ee1 Ee3; subst a0 feat0;
               [left | right]; exact Hfd2. }
-          exact (Hfdep (m, v) (fsAt FS (m, v)) f a feat
-                   (HfsAt _ HSnv) Hf Hor d u Hd Ha Hpi
+          assert (Hal : sAlias d = kAlias k) by (rewrite <- Ha; reflexivity).
+          rewrite <- Ha in Hpi.
+          exact (Hfdep (m, v) (fsAt FS (m, v)) f (kAlias k) feat
+                   (HfsAt _ HSnv) Hf Hor d u Hd Hal Hpi
                    (fsAt FS (sTarget d, u)) (HfsAt _ Htgt)).
     - (* res_version_unique *)
       intros n w w' Hw Hw'.
@@ -2614,10 +2681,10 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           congruence.
       + destruct Hw as [u [-> [Hpi _]]];
           destruct Hw' as [u' [-> [Hpi' _]]].
-        rewrite (Hpifun (m, v) a u u' Hpi Hpi'); reflexivity.
+        rewrite (Hpifun (m, v) k u u' Hpi Hpi'); reflexivity.
       + destruct Hw as [u [e [-> [Hpi _]]]];
           destruct Hw' as [u' [e' [-> [Hpi' _]]]].
-        rewrite (Hpifun (m, v) a u u' Hpi Hpi'); reflexivity.
+        rewrite (Hpifun (m, v) k u u' Hpi Hpi'); reflexivity.
       + destruct Hw as [q [-> [Hl HS]]];
           destruct Hw' as [q' [-> [Hl' HS']]].
         rewrite (Hlinks q q' l HS HS' Hl Hl'); reflexivity.

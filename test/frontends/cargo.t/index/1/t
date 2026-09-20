@@ -1,0 +1,1 @@
+{"name":"t","vers":"1.0.0","deps":[{"name":"e","req":"0.2","features":[],"optional":false,"default_features":true,"kind":"normal"},{"name":"e","req":"0.1","features":[],"optional":false,"default_features":true,"kind":"normal","target":"cfg(windows)"}],"features":{},"yanked":false}

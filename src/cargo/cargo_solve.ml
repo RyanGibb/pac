@@ -220,29 +220,18 @@ module Make () = struct
     | P.FDepFeat (a, f) -> Cg.FEntry.EDepFeat (a, f)
     | P.FWeakFeat (a, f) -> Cg.FEntry.EWeakFeat (a, f)
 
-  (* the manifest may name one alias under several kinds or cfgs; the
-     calculus wants at most one slot per (crate, alias) -- AliasFunctional
-     -- so unify them the way cargo does: conjoin the requirements and
-     union the requested features.  A cfg-gated record is conjoined like
-     any other, because cargo's resolver does not distinguish it; the one
-     case that loses is a manifest naming an alias in a plain and a
-     [target.'cfg(...)'] table with semver-incompatible requirements,
-     where cargo takes two versions and the conjunction here is
-     unsatisfiable.  Records of one kind partition only across dev and
-     non-dev, in slots_of below, so no call here mixes the two *)
-  let unify_alias (ds : P.dep list) : P.dep =
+  (* one slot per manifest site -- SiteFunctional -- where the site is
+     (cfg, kind, alias): the tables a manifest offers are maps, so two
+     records can only collide here if an index entry repeats a site, which
+     no manifest can spell.  Conjoining the requirements and unioning the
+     requested features is what that unreachable case gets; every real
+     repeat of an alias across kinds or cfgs stays its own slot, because
+     that is what cargo resolves. *)
+  let unify_site (ds : P.dep list) : P.dep =
     let d0 = List.hd ds in
-    let rank (d : P.dep) =
-      match d.P.d_kind with P.Normal -> 0 | P.Build -> 1 | P.Dev -> 2
-    in
-    let best =
-      List.fold_left (fun a b -> if rank b < rank a then b else a) d0 ds
-    in
     {
       d0 with
-      P.d_target = best.P.d_target;
-      d_kind = best.P.d_kind;
-      d_req = List.concat_map (fun (d : P.dep) -> d.P.d_req) ds;
+      P.d_req = List.concat_map (fun (d : P.dep) -> d.P.d_req) ds;
       d_feats =
         List.sort_uniq String.compare
           (List.concat_map (fun (d : P.dep) -> d.P.d_feats) ds);
@@ -250,44 +239,21 @@ module Make () = struct
       d_default = List.exists (fun (d : P.dep) -> d.P.d_default) ds;
     }
 
+  let site_of (d : P.dep) : string * P.kind * string =
+    (d.P.d_alias, d.P.d_kind, d.P.d_cfg)
+
   let slots_of (v : P.ver) : P.dep list =
     let tbl = Hashtbl.create 16 in
     let order = ref [] in
     List.iter
       (fun (d : P.dep) ->
-        if not (Hashtbl.mem tbl d.P.d_alias) then order := d.P.d_alias :: !order;
-        Hashtbl.replace tbl d.P.d_alias
-          (d
-          ::
-          (match Hashtbl.find_opt tbl d.P.d_alias with
-          | Some l -> l
-          | None -> [])))
+        let k = site_of d in
+        if not (Hashtbl.mem tbl k) then order := k :: !order;
+        Hashtbl.replace tbl k
+          (d :: (match Hashtbl.find_opt tbl k with Some l -> l | None -> [])))
       v.P.v_deps;
-    (* a dev record participates only from the root, so conjoining it
-       with a non-dev record on the same alias would make its requirement
-       -- and its non-optionality -- bind on every depender.  cargo keeps
-       both records: a root's mandatory dev dependency resolves even when
-       the optional normal record it shares an alias with is never
-       activated (once_cell's critical-section, bitflags's arbitrary and
-       bytemuck).  So a colliding dev record becomes its own slot under an
-       alias no manifest
-       can spell.  AliasFunctional holds because the aliases differ;
-       slotActive already confines the dev slot to the root; and no
-       feature entry names the synthetic alias, so dep:a and a/f keep
-       binding to the normal record, which is where cargo points them too *)
-    List.concat_map
-      (fun a ->
-        let records = List.rev (Hashtbl.find tbl a) in
-        let dev, nondev =
-          List.partition (fun (d : P.dep) -> d.P.d_kind = P.Dev) records
-        in
-        match (dev, nondev) with
-        | [], _ | _, [] -> [ unify_alias records ]
-        | _ ->
-            [
-              unify_alias nondev;
-              { (unify_alias dev) with P.d_alias = a ^ "#dev" };
-            ])
+    List.map
+      (fun k -> unify_site (List.rev (Hashtbl.find tbl k)))
       (List.rev !order)
 
   (* -- per-crate fibres: exactly ownSlots/ownFDefs/ownLinks/ownSupport -- *)
@@ -499,7 +465,7 @@ module Make () = struct
         owner n v (fun r rw -> call r nosupp rw.r_fdefs rw.r_slots nolk nofs)
     | _, _ -> []
 
-  (* the crate versions a per-alias node's class stands for: its own edges
+  (* the crate versions a slot node's class stands for: its own edges
      already carry them -- CSlot points at CCrate/CFeatP with the members
      of the class the requirement admits, and CDec at CFeatP with the same
      set -- so reading them back off dependees asks the encoder rather
@@ -517,6 +483,17 @@ module Make () = struct
         | _ -> [])
       (deps st (tn, w))
 
+  (* a slot node is one manifest site, so its name has to spell the site
+     out: bare alias for the plain [dependencies] row, and the kind or cfg
+     that told the row apart otherwise *)
+  let pp_site fmt ((a, (k, cfg)) : Cg.SlotKey.t) =
+    Format.fprintf fmt "%s%s%s" a
+      (match k with
+      | Cg.Kind.KNormal -> ""
+      | Cg.Kind.KBuild -> "[build]"
+      | Cg.Kind.KDev -> "[dev]")
+      (if cfg = "" then "" else "[" ^ cfg ^ "]")
+
   module PName = struct
     type t = Cg.NPlus.t
 
@@ -527,9 +504,10 @@ module Make () = struct
       | Cg.NPlus.CRoot -> Format.fprintf fmt "root"
       | Cg.NPlus.CCrate (n, gr) -> Format.fprintf fmt "%s@%s" n gr
       | Cg.NPlus.CFeatP (n, f, gr) -> Format.fprintf fmt "%s/%s@%s" n f gr
-      | Cg.NPlus.CSlot (n, v, a) -> Format.fprintf fmt "%s@%s->%s" n v a
-      | Cg.NPlus.CDec (n, v, f, a, feat) ->
-          Format.fprintf fmt "<%s@%s/%s=>%s/%s>" n v f a feat
+      | Cg.NPlus.CSlot (n, v, k) ->
+          Format.fprintf fmt "%s@%s->%a" n v pp_site k
+      | Cg.NPlus.CDec (n, v, f, k, feat) ->
+          Format.fprintf fmt "<%s@%s/%s=>%a/%s>" n v f pp_site k feat
       | Cg.NPlus.CLink l -> Format.fprintf fmt "links:%s" l
   end
 
@@ -555,14 +533,17 @@ module Make () = struct
   type result = {
     crates : (string * string) list;
     feats : (string * string * string list) list;
-    (* the parent relation, keyed by alias: a cargo rename lets one crate
-       depend on a single crate name twice, and the two aliases may land
-       on different compatibility classes, so the edge has to record which
-       alias received which version.  ParentElt carries only the target's
-       version, since the alias already determines the slot it came
-       through; the target name is read back off that slot here, because a
+    (* the parent relation, keyed in the theory by manifest site: one
+       crate may depend on a single crate name twice -- under two aliases
+       through a rename, or under one alias from two sites -- and the
+       copies may land on different compatibility classes, so the edge has
+       to record which declaration received which version.  ParentElt
+       carries only the target's version, since the site already
+       determines the slot it came through; the target name is read back
+       off that slot here, and the alias is what is reported, because a
        consumer comparing against cargo's (depender, dependee) edges has
-       no other way to name the crate the version belongs to.
+       no other way to name the crate the version belongs to and no notion
+       of a site at all.
        (owner, owner version, alias, target name, target version) *)
     parents : (string * string * string * string * string) list;
     nodes : int;
@@ -677,13 +658,15 @@ module Make () = struct
         in
         (* decodeParents is the one decoder that reads Slots, and a lazy
            run has no global relation to hand it; the slots of the crates
-           it decodes are all it looks at, since slotsAt filters to the
-           owner named by the node *)
+           it decodes are all it looks at, since slotsAtKey filters to
+           the owner named by the node *)
         let slots =
           Cg.SlotRel.unions
             (List.map (fun p -> (fibres_of st.ar p).r_slots) (st.rc :: crates))
         in
-        (* alias -> target name, over the same slots decodeParents reads *)
+        (* site -> target name, over the same slots decodeParents reads.
+           The site and not the alias, because a rename may point two
+           sites sharing an alias at different crates *)
         let target_of = Hashtbl.create 256 in
         List.iter
           (fun ((n, v) as p) ->
@@ -692,14 +675,20 @@ module Make () = struct
             | Some m ->
                 List.iter
                   (fun (d : P.dep) ->
-                    Hashtbl.replace target_of (p, d.P.d_alias) d.P.d_target)
+                    Hashtbl.replace target_of (p, site_of d) d.P.d_target)
                   (slots_of m))
           (st.rc :: crates);
         let parents =
           List.map
-            (fun ((((n, v), a), u) : Cg.ParentElt.t) ->
+            (fun ((((n, v), (a, (k, cfg))), u) : Cg.ParentElt.t) ->
+              let k =
+                match k with
+                | Cg.Kind.KNormal -> P.Normal
+                | Cg.Kind.KBuild -> P.Build
+                | Cg.Kind.KDev -> P.Dev
+              in
               let t =
-                match Hashtbl.find_opt target_of ((n, v), a) with
+                match Hashtbl.find_opt target_of ((n, v), (a, k, cfg)) with
                 | Some t -> t
                 | None -> a
               in
