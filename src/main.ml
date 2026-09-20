@@ -51,11 +51,11 @@ let debian_cmd =
     Term.(
       const debian_run $ debug_arg $ apt_heap $ no_recs $ native $ goal $ paths)
 
-let opam_run debug repo goal =
+let opam_run debug zi_order repo goal =
   let t0 = Unix.gettimeofday () in
   let ar = Opam_solve.empty_archive repo in
   let module S = Opam_solve.Make () in
-  let r = S.solve ~debug ar goal in
+  let r = S.solve ~debug ~zi_order ar goal in
   (* the names the run parsed, known only once it is over: there is no
      cone, so this is what the solver asked for and nothing more *)
   let loaded () =
@@ -83,6 +83,17 @@ let opam_run debug repo goal =
       0
 
 let opam_cmd =
+  (* opam's builtin-0install backend decides a name as soon as its decider
+     walks onto it, which is not the order PubGrub's own heuristic picks;
+     the flag replays that walk for exact correspondence. *)
+  let zi_order =
+    Arg.(
+      value & flag
+      & info [ "0install-order" ]
+          ~doc:
+            "Replay builtin-0install's decision order for exact \
+             correspondence.")
+  in
   let repo =
     Arg.(
       required
@@ -97,7 +108,7 @@ let opam_cmd =
   in
   Cmd.v
     (Cmd.info "opam" ~doc:"Solve against an opam repository.")
-    Term.(const opam_run $ debug_arg $ repo $ goal)
+    Term.(const opam_run $ debug_arg $ zi_order $ repo $ goal)
 
 let cargo_run debug print_parents index goal wanted rfeats rustv =
   let t0 = Unix.gettimeofday () in

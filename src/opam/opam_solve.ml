@@ -454,6 +454,73 @@ module Make () = struct
     let compare a b = r2c (PFR.NameOT.compare a b)
   end)
 
+  module NameSet = Set.Make (struct
+    type t = PFR.Name.t
+
+    let compare = PName.compare
+  end)
+
+  (* ---- 0install's decision order ---- *)
+
+  (* The reduction hands a package's dependees back as a set, so the order
+     its rows were written in is gone by the time the core graph holds
+     them.  Read it back off the parsed formula: opam's CUDF depends list
+     is the conjunctive spine in source order (opamSolver.ml,
+     [preresolve_deps] then [ands_to_list]), and that is the order
+     0install walks. *)
+  let dep_index ar (n : string) (v : string) : (string, int) Hashtbl.t =
+    let tbl = Hashtbl.create 16 in
+    let rec spine acc : Opam_parse.off -> Opam_parse.off list = function
+      | OAnd (a, b) -> spine (spine acc a) b
+      | f -> f :: acc
+    in
+    let rec names acc : Opam_parse.off -> string list = function
+      | OAtom (m, _, _) -> m :: acc
+      | OAnd (a, b) | OOr (a, b) -> names (names acc a) b
+    in
+    (match (meta_of ar n v).Opam_parse.depends with
+    | None -> ()
+    | Some f ->
+        List.iteri
+          (fun i c ->
+            List.iter
+              (fun m -> if not (Hashtbl.mem tbl m) then Hashtbl.add tbl m i)
+              (names [] c))
+          (List.rev (spine [] f)));
+    tbl
+
+  let rec form_names acc (f : PF.coq_Formula) =
+    match f with
+    | PF.FDep (Red.TName.Real m, _) -> m :: acc
+    | PF.FDep (_, _) -> acc
+    | PF.FConj (a, b) | PF.FDisj (a, b) -> form_names (form_names acc a) b
+    | PF.FNeg a -> form_names acc a
+
+  (* where a dependee sits on the depender's spine, or None for the gadgets
+     0install's decider never reaches: a conflict is a `Restricts dependency
+     it skips outright, and a conflict class is an at_most_one clause over
+     implementations rather than a role at all (solver_core.ml,
+     [Conflict_classes] and [check_dep]). *)
+  let zi_rank tbl (m : PFR.Name.t) : int option =
+    let best acc s =
+      match (Hashtbl.find_opt tbl s, acc) with
+      | Some i, Some j -> Some (min i j)
+      | Some i, None -> Some i
+      | None, a -> a
+    in
+    match m with
+    | PFR.Name.Orig (Red.TName.Real s) -> Hashtbl.find_opt tbl s
+    | PFR.Name.Disjunct fs ->
+        List.fold_left
+          (fun a f -> List.fold_left best a (form_names [] f))
+          None fs
+    | _ -> None
+
+  let zi_walkable (m : PFR.Name.t) =
+    match m with
+    | PFR.Name.NegDep (_, _) | PFR.Name.Orig (Red.TName.Cls _) -> false
+    | _ -> true
+
   type state = {
     ar : archive;
     edges : (PFR.Name.t * PFR.Version.t, T.DependeesSet.t) Hashtbl.t;
@@ -533,7 +600,7 @@ module Make () = struct
       record_real st (PFR.reduceReal r_q d_q)
     end
 
-  let solve ?(debug = false) ar (goal : string) =
+  let solve ?(debug = false) ?(zi_order = false) ar (goal : string) =
     Pubgrub.set_debug debug;
     let root_q =
       (PFR.Name.Orig Red.TName.Root, PFR.Version.Orig Red.TVer.UnitV)
@@ -611,10 +678,70 @@ module Make () = struct
         Hashtbl.replace deps_cache (tn, tv) r;
         r
     in
+    (* the dependees of a decided package, in source order and without the
+       gadgets 0install has no role for *)
+    let order_cache = Hashtbl.create 4096 in
+    let zi_deps (tn : PFR.Name.t) (pv : PVersion.t) : PFR.Name.t list =
+      ignore (dependencies tn pv);
+      let hs =
+        try Hashtbl.find st.edges (tn, pv.PVersion.v)
+        with Not_found -> T.DependeesSet.empty
+      in
+      let ds = List.map fst (T.DependeesSet.elements hs) in
+      match (tn, pv.PVersion.v) with
+      | PFR.Name.Orig (Red.TName.Real n), PFR.Version.Orig (Red.TVer.RV v) ->
+          let tbl =
+            match Hashtbl.find_opt order_cache (n, v) with
+            | Some t -> t
+            | None ->
+                let t = dep_index ar n v in
+                Hashtbl.add order_cache (n, v) t;
+                t
+          in
+          List.filter_map
+            (fun m -> Option.map (fun i -> (i, m)) (zi_rank tbl m))
+            ds
+          |> List.stable_sort (fun (i, _) (j, _) -> compare (i : int) j)
+          |> List.map snd
+      (* the root, which carries the goal, and a disjunction gadget, which
+         carries the alternative it was decided to: no written order to
+         restore either way *)
+      | _ -> List.filter zi_walkable ds
+    in
+    (* 0install's [decider] (solver_core.ml): walk the roles already
+       selected depth-first from the root, each one's dependencies in the
+       order they are written, and take the first role still undecided.
+       PubGrub's [Entailed] is that "undecided" -- forced into the solution
+       but not yet decided -- and [Decided] is its "selected". *)
+    let zi_next ~assigned (open_names : (PFR.Name.t * int) list) =
+      let opens =
+        List.fold_left
+          (fun s (n, _) -> NameSet.add n s)
+          NameSet.empty open_names
+      in
+      let exception Found of PFR.Name.t in
+      let rec visit seen n =
+        if NameSet.mem n seen then seen
+        else
+          let seen = NameSet.add n seen in
+          match assigned n with
+          | PG.Unselected -> seen
+          | PG.Entailed _ ->
+              if NameSet.mem n opens then raise (Found n) else seen
+          | PG.Decided v -> List.fold_left visit seen (zi_deps n v)
+      in
+      try
+        ignore (visit NameSet.empty (PFR.Name.Orig Red.TName.Root));
+        (* nothing on the walk is open: leave the solver's own choice *)
+        fst (List.hd open_names)
+      with Found n -> n
+    in
+    let next = if zi_order then Some zi_next else None in
     let goal_range = PG.Ranges.of_list (versions (fst root_q)) in
     let t0 = Unix.gettimeofday () in
     let result =
-      PG.solve ~vers:versions ~deps:dependencies [ (fst root_q, goal_range) ]
+      PG.solve ?next ~vers:versions ~deps:dependencies
+        [ (fst root_q, goal_range) ]
     in
     if verbose then begin
       let total = Unix.gettimeofday () -. t0 in
