@@ -171,3 +171,18 @@ lockfile with e 0.1.0 beside e 0.2.0.
   encoded solution: 8 core nodes (3 crate versions encoded)
   parent edges: 2
   loaded: 2 crates, 3 versions
+
+Two sites may also share an alias while naming different crates, since
+package = renames the target and the cross-table check constrains only the
+source registry.  rn's x is e under [dependencies] and w under
+[target.'cfg(windows)'.dependencies], and both are installed.
+
+  $ ../../../src/main.exe cargo index rn | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root rn 1.0.0
+  crates (3):
+    e 0.2.0 [default]
+    rn 1.0.0
+    w 1.0.0 [default]
+  encoded solution: 8 core nodes (4 crate versions encoded)
+  parent edges: 2
+  loaded: 3 crates, 4 versions
