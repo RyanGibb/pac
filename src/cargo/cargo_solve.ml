@@ -499,6 +499,24 @@ module Make () = struct
         owner n v (fun r rw -> call r nosupp rw.r_fdefs rw.r_slots nolk nofs)
     | _, _ -> []
 
+  (* the crate versions a per-alias node's class stands for: its own edges
+     already carry them -- CSlot points at CCrate/CFeatP with the members
+     of the class the requirement admits, and CDec at CFeatP with the same
+     set -- so reading them back off dependees asks the encoder rather
+     than re-evaluating a requirement here, and cannot drift from what
+     choosing the class actually offers *)
+  let class_members st (tn : Cg.NPlus.t) (w : Cg.VPlus.t) :
+      (string * string) list =
+    List.concat_map
+      (fun ((m, vs) : T.Dependees.t) ->
+        match m with
+        | Cg.NPlus.CCrate (t, _) | Cg.NPlus.CFeatP (t, _, _) ->
+            List.filter_map
+              (function Cg.VPlus.WOrig v -> Some (t, v) | _ -> None)
+              (T.VSet.elements vs)
+        | _ -> [])
+      (deps st (tn, w))
+
   module PName = struct
     type t = Cg.NPlus.t
 
@@ -555,17 +573,45 @@ module Make () = struct
       (rc : string * string) =
     Pubgrub.set_debug debug;
     let st = mk_state ar rc rfeats rustv in
-    (* the preference must land on every name whose candidates are concrete
-       crate versions, not just the crate name: CFeatP also carries WOrig,
-       and whichever of the two families is decided first entails the other,
-       so a family left untagged decides by bare semver and the demotion
-       never acts.  Synthetic names carry WClass/WMember and no standing. *)
+    (* A class is compatible when it still offers a crate version the
+       toolchain can build, not when all of its versions do: cargo ranks
+       the candidate versions themselves, so a class holding one buildable
+       version is a choice it makes without hesitation, and demanding every
+       member be buildable would demote exactly those classes.  Holding
+       this per (name, class) also keeps the tag a function of the version
+       it labels, which is what makes it a preference: two PVersion.t with
+       the same v always carry the same flag, so no candidate is added or
+       dropped anywhere and only the order over them moves. *)
+    let class_cache = Hashtbl.create 4096 in
+    let class_msrv_ok rustc (tn : Cg.NPlus.t) (w : Cg.VPlus.t) : bool =
+      match Hashtbl.find_opt class_cache (tn, w) with
+      | Some b -> b
+      | None ->
+          let ms = class_members st tn w in
+          let b = ms = [] || List.exists (crate_msrv_ok st rustc) ms in
+          Hashtbl.replace class_cache (tn, w) b;
+          b
+    in
+    (* the preference must land on every name whose candidates stand for
+       concrete crate versions, not just the crate name.  CFeatP also
+       carries WOrig, and whichever of the two families is decided first
+       entails the other, so a family left untagged decides by bare semver
+       and the demotion never acts.  CSlot and CDec carry WClass, and a
+       class is where the choice between semver-incompatible versions of
+       one crate is actually made -- 0.60 against 0.61 is a different name,
+       so ranking versions within a name can never reach it.  Only CRoot
+       and CLink, whose candidates are not crate versions at all, have no
+       standing. *)
     let tag (tn : Cg.NPlus.t) (w : Cg.VPlus.t) : PVersion.t =
       match (st.rustv, tn, w) with
       | ( Some rustc,
           (Cg.NPlus.CCrate (n, _) | Cg.NPlus.CFeatP (n, _, _)),
           Cg.VPlus.WOrig v ) ->
           { PVersion.msrv = crate_msrv_ok st rustc (n, v); v = w }
+      | ( Some rustc,
+          (Cg.NPlus.CSlot (_, _, _) | Cg.NPlus.CDec (_, _, _, _, _)),
+          Cg.VPlus.WClass _ ) ->
+          { PVersion.msrv = class_msrv_ok rustc tn w; v = w }
       | _ -> { PVersion.msrv = true; v = w }
     in
     (* the tagged list, not just the untagged one, has to be memoized:
