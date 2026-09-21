@@ -26,3 +26,4 @@ reqwest
 wasm-bindgen
 diesel
 actix-web
+rustradio-ui

@@ -59,6 +59,13 @@ def index_line(name, version):
     return None
 
 
+def installed_rustc():
+    """What cargo falls back to when no member declares rust-version."""
+    out = subprocess.run(["rustc", "--version"], capture_output=True,
+                         text=True).stdout
+    return out.split()[1]
+
+
 def run_pac(crate, rustv=None):
     cmd = [PAC, "cargo", INDEX, crate]
     if rustv:
@@ -264,19 +271,16 @@ def main():
         root_entry = index_line(root_name, root_version)
         rustv = root_entry.get("rust_version") if root_entry else None
 
-        # Pass 2 (only when the root crate itself declares an MSRV): real
-        # cargo's resolver v3 reads that field straight off the manifest it
-        # is resolving and applies the MSRV-preferring sort unconditionally
-        # -- there is no cargo flag that targets a toolchain other than the
-        # one named in rust-version, so pac's --rust-version is only a
-        # correct stand-in for "the toolchain cargo resolves for" when set
-        # to exactly this value.  Left unset (rustv is None), pac's
-        # preference is off, matching a root with no declared rust-version,
-        # where cargo has nothing to prefer by either.
-        if rustv:
-            pac_res = run_pac(args.crate, rustv=rustv)
-        else:
-            pac_res = probe
+        # Pass 2: the toolchain cargo resolves for.  Resolver v3 reads
+        # rust-version off the manifest, and when no workspace member
+        # declares one it falls back to the rustc it finds installed
+        # (ops/resolve.rs, `if rust_versions.is_empty()`).  Leaving pac's
+        # preference off in that case would hand the two sides different
+        # settings and show up as a divergence that is the harness's, so
+        # the fallback is reproduced here rather than assumed away.
+        if rustv is None:
+            rustv = installed_rustc()
+        pac_res = run_pac(args.crate, rustv=rustv)
 
         try:
             cargo_res = run_cargo(root_name, root_version,

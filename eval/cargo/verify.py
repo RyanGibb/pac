@@ -80,7 +80,14 @@ def main():
     root_name, root_version = probe["root"]
     entry = run_goal.index_line(root_name, root_version)
     rustv = entry.get("rust_version") if entry else None
-    pac = run_goal.run_pac(args.crate, rustv=rustv) if rustv else probe
+    # The same fallback run_goal.py reproduces: with no member declaring a
+    # rust-version, resolver v3 ranks against the installed rustc rather
+    # than against nothing, so the lock being verified has to be the one
+    # pac writes for that toolchain.  Verified red-then-green on
+    # rustradio-ui, whose rustradio dependency moves under it.
+    if rustv is None:
+        rustv = run_goal.installed_rustc()
+    pac = run_goal.run_pac(args.crate, rustv=rustv)
     if not pac["ok"]:
         print("%-24s PAC FAILED (msrv pass)" % args.crate)
         return 1
