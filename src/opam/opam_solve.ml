@@ -192,7 +192,10 @@ module Make () = struct
   (* what the caller asked for, which is all the valuation below needs
      beyond the fixed environment *)
   type request = {
-    goal : string;
+    (* the query's names, which are the names the synthetic root depends
+       on: a query is a set of names each with a set of acceptable
+       versions, and the valuation reads only the names *)
+    names : string list;
     with_test : bool;
     with_doc : bool;
     with_dev_setup : bool;
@@ -203,17 +206,16 @@ module Make () = struct
      nothing here is pinned.
 
      with-test, with-doc and with-dev-setup are the three opam does have a
-     flag for, and they are request-scoped rather than global: opam turns
-     the variable on for the packages *named* in the request and for no
-     others, which is why each package's with-test is its own variable
-     here.  [OpamSwitchState.universe] (opamSwitchState.ml:1011-1013) takes
-     the request's names and expands them back to every version of each,
-     and [package_env_t] (opamSwitchState.ml:955-960) then reads with-test
-     as [test && OpamPackage.Set.mem nv requested_allpkgs] -- so the scope
-     is a name, not a version and not a dependency cone, and a one-name
-     goal makes it exactly the goal.  [--with-test]'s own help text says
-     the same: "This only affects packages listed on the command-line"
-     (opamArg.ml:1493-1494). *)
+     flag for, and they are query-scoped rather than global: the variable
+     is on for every name the synthetic root depends on and off
+     everywhere else, which is why each package's with-test is its own
+     variable here.  [OpamSwitchState.universe] (opamSwitchState.ml:1011-1013)
+     takes the request's names and expands them back to every version of
+     each, and [package_env_t] (opamSwitchState.ml:955-960) then reads
+     with-test as [test && OpamPackage.Set.mem nv requested_allpkgs] -- so
+     the scope is a set of names, not of versions and not a dependency
+     cone.  [--with-test]'s own help text says the same: "This only
+     affects packages listed on the command-line" (opamArg.ml:1493-1494). *)
   let rho (rq : request) (x : string) : string option =
     match List.assoc_opt x globals with
     | Some v -> Some v
@@ -224,7 +226,9 @@ module Make () = struct
             let local = String.sub x (i + 1) (String.length x - i - 1) in
             let owner = String.sub x 0 i in
             let requested b =
-              Some (if b && String.equal owner rq.goal then "true" else "false")
+              Some
+                (if b && List.exists (String.equal owner) rq.names then "true"
+                 else "false")
             in
             match local with
             | "build" | "post" -> Some "true"
@@ -334,8 +338,18 @@ module Make () = struct
       inst_inv = dummy;
     }
 
-  let root_inst ar (goal : string) : Op.coq_Inst =
-    let repo, avl = repo_and_avail ar [ goal ] in
+  (* A query is realised as the synthetic root's dependencies: one atom per
+     requested name, admitting the versions that name's constraint admits.
+     The root's other conjunct is the switch invariant, which is empty here
+     -- nothing is installed and nothing is pinned -- and an atom under a
+     false guard is how an empty formula is spelled. *)
+  let root_inst ar (query : (string * Opam_parse.vc) list) : Op.coq_Inst =
+    let repo, avl = repo_and_avail ar (List.map fst query) in
+    let goal =
+      match List.map (fun (n, c) -> Op.OFAtom (n, Op.FlTrue, xvc c)) query with
+      | [] -> dummy
+      | a :: rest -> List.fold_left (fun f b -> Op.OFAnd (f, b)) a rest
+    in
     {
       Op.inst_repo = repo;
       inst_dep = [];
@@ -346,8 +360,8 @@ module Make () = struct
       inst_dxt = [];
       inst_pins = Op.PkgSet.empty;
       inst_pind = [];
-      inst_goal = Op.OFAtom (goal, Op.FlTrue, Op.VCTop);
-      inst_inv = Op.OFAtom (goal, Op.FlFalse, Op.VCTop);
+      inst_goal = goal;
+      inst_inv = dummy;
     }
 
   (* Op.Reduction.classSubInst: the class relation restricted to k, which is
@@ -634,9 +648,12 @@ module Make () = struct
     end
 
   let solve ?(debug = false) ?(zi_order = false) ?(with_test = false)
-      ?(with_doc = false) ?(with_dev_setup = false) ar (goal : string) =
+      ?(with_doc = false) ?(with_dev_setup = false) ar
+      (query : (string * Opam_parse.vc) list) =
     Pubgrub.set_debug debug;
-    let rho = rho { goal; with_test; with_doc; with_dev_setup } in
+    let rho =
+      rho { names = List.map fst query; with_test; with_doc; with_dev_setup }
+    in
     let root_q =
       (PFR.Name.Orig Red.TName.Root, PFR.Version.Orig Red.TVer.UnitV)
     in
@@ -695,7 +712,7 @@ module Make () = struct
         let r =
           (match (tn, tv) with
           | PFR.Name.Orig Red.TName.Root, _ ->
-              process rho st Red.rootPkg (root_inst ar goal)
+              process rho st Red.rootPkg (root_inst ar query)
           | PFR.Name.Orig (Red.TName.Real n), PFR.Version.Orig (Red.TVer.RV v)
             ->
               process rho st
@@ -718,6 +735,13 @@ module Make () = struct
     (* the dependees of a decided package, in source order and without the
        synthetic packages 0install has no role for *)
     let order_cache = Hashtbl.create 4096 in
+    let query_index =
+      let tbl = Hashtbl.create 16 in
+      List.iteri
+        (fun i (n, _) -> if not (Hashtbl.mem tbl n) then Hashtbl.add tbl n i)
+        query;
+      tbl
+    in
     let zi_deps (tn : PFR.Name.t) (pv : PVersion.t) : PFR.Name.t list =
       ignore (dependencies tn pv);
       let hs =
@@ -740,9 +764,16 @@ module Make () = struct
             ds
           |> List.stable_sort (fun (i, _) (j, _) -> compare (i : int) j)
           |> List.map snd
-      (* the root, which carries the goal, and a disjunct package, which
-         carries the alternative it was decided to: no written order to
-         restore either way *)
+      (* the root's dependencies are the query, whose atoms were written
+         in an order of their own *)
+      | PFR.Name.Orig Red.TName.Root, _ ->
+          let rank m =
+            match zi_rank query_index m with Some i -> i | None -> max_int
+          in
+          List.filter zi_walkable ds
+          |> List.stable_sort (fun a b -> compare (rank a) (rank b))
+      (* a disjunct package carries the alternative it was decided to, and
+         there is no written order to restore *)
       | _ -> List.filter zi_walkable ds
     in
     (* 0install's [decider] (solver_core.ml): walk the roles already

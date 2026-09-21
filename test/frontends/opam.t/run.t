@@ -103,12 +103,56 @@ class package is what the explanation names:
   And because root () -> cc-both 1 and root -> root (), version solving failed.
   loaded: 3 names, 4 package versions
 
-with-test, with-doc and with-dev-setup are request-scoped: each flag turns
-its variable on for the goal alone and leaves every package the goal pulls
-in at false, which is what opam does (opamSwitchState.ml, the universe's
-[requested_allpkgs]).  tst.1 asks for tlib under with-test, tdoc under
-with-doc and dsetup under with-dev-setup, and mid.1 asks for mlib under
-with-test.  Off, none of the four is in:
+A request is a query -- a set of names, each with a set of acceptable
+versions -- realised as the dependencies of the synthetic root.  Naming
+two packages asks for both, and each is solved against the same
+repository:
+
+  $ ../../../src/main.exe opam . app tool | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (4, core solution 7 nodes):
+    app.1
+    c.1
+    lib.2
+    tool.2
+  loaded: 5 names, 5 package versions
+
+An atom's version constraint is the set of versions its name is accepted
+at.  Unconstrained, dep takes its newest version:
+
+  $ ../../../src/main.exe opam . dep | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (1, core solution 3 nodes):
+    dep.9
+  loaded: 1 names, 2 package versions
+
+An operator narrows that set, in opam's own command-line syntax:
+
+  $ ../../../src/main.exe opam . 'dep<9' | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (1, core solution 3 nodes):
+    dep.3
+  loaded: 1 names, 2 package versions
+
+and NAME.VERSION is opam's shorthand for the =-constraint:
+
+  $ ../../../src/main.exe opam . dep.3 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (1, core solution 3 nodes):
+    dep.3
+  loaded: 1 names, 2 package versions
+
+Constraints and several names compose, the query being one per name:
+
+  $ ../../../src/main.exe opam . 'dep<9' app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (3, core solution 6 nodes):
+    app.1
+    c.1
+    dep.3
+  loaded: 4 names, 4 package versions
+
+with-test, with-doc and with-dev-setup are query-scoped: each flag turns
+its variable on for the names the query asks for and leaves every package
+they pull in at false, which is what opam does (opamSwitchState.ml, the
+universe's [requested_allpkgs]).  tst.1 asks for tlib under with-test,
+tdoc under with-doc and dsetup under with-dev-setup, and mid.1 asks for
+mlib under with-test.  Off, none of the four is in:
 
   $ ../../../src/main.exe opam . tst | sed -E '/^(parse|solve) [0-9.]+s$/d'
   opam packages (2, core solution 4 nodes):
@@ -116,8 +160,8 @@ with-test.  Off, none of the four is in:
     tst.1
   loaded: 6 names, 6 package versions
 
---with-test brings in tlib, the goal's own test dependency, and not mlib,
-which belongs to a package the goal merely depends on:
+--with-test brings in tlib, the queried package's own test dependency, and
+not mlib, which belongs to a package the query merely reaches:
 
   $ ../../../src/main.exe opam --with-test . tst | sed -E '/^(parse|solve) [0-9.]+s$/d'
   opam packages (3, core solution 5 nodes):
@@ -141,3 +185,15 @@ The other two flags scope the same way, each over its own variable:
     mid.1
     tst.1
   loaded: 6 names, 6 package versions
+
+Naming mid too puts it in the query, so with-test holds of it as well and
+mlib comes in beside tlib.  mlib's own test dependency mleaf stays out:
+mlib is reached, not asked for.
+
+  $ ../../../src/main.exe opam --with-test . tst mid | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (4, core solution 6 nodes):
+    mid.1
+    mlib.1
+    tlib.1
+    tst.1
+  loaded: 7 names, 7 package versions

@@ -58,6 +58,44 @@ let local_vars =
 
 let qualify ~owner x = if List.mem x local_vars then owner ^ ":" ^ x else x
 
+(* The atom syntax opam's command line takes, one element of a query:
+   [OpamFormula.atom_of_string] (opamFormula.ml) matches a name -- the run
+   before the first character an operator can begin with -- then an
+   operator, then a non-empty version, and falls back to reading the whole
+   string as a bare name when that fails.  "." spells "=", and the
+   operators are tried longest first because a shorter one is what the
+   regexp backtracks to when the version would otherwise be empty. *)
+let atom_of_string (s : string) : string * vc =
+  let n = String.length s in
+  let rec cut i =
+    if i >= n then None
+    else if String.contains ">=<.!" s.[i] then Some i
+    else cut (i + 1)
+  in
+  let spellings =
+    [
+      ("<=", Le);
+      (">=", Ge);
+      ("!=", Ne);
+      ("<", Lt);
+      (">", Gt);
+      ("=", Eq);
+      (".", Eq);
+    ]
+  in
+  match cut 0 with
+  | Some i when i > 0 -> (
+      let fits (sp, _) =
+        let l = String.length sp in
+        i + l < n && String.sub s i l = sp
+      in
+      match List.find_opt fits spellings with
+      | Some (sp, o) ->
+          let l = String.length sp in
+          (String.sub s 0 i, VCmp (o, String.sub s (i + l) (n - i - l)))
+      | None -> (s, VTop))
+  | _ -> (s, VTop)
+
 let rel_of = function
   | `Eq -> Eq
   | `Neq -> Ne

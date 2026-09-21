@@ -51,12 +51,13 @@ let debian_cmd =
     Term.(
       const debian_run $ debug_arg $ apt_heap $ no_recs $ native $ goal $ paths)
 
-let opam_run debug zi_order with_test with_doc with_dev_setup repo goal =
+let opam_run debug zi_order with_test with_doc with_dev_setup repo atoms =
   let t0 = Unix.gettimeofday () in
   let ar = Opam_solve.empty_archive repo in
   let module S = Opam_solve.Make () in
+  let query = List.map Opam_parse.atom_of_string atoms in
   let r =
-    S.solve ~debug ~zi_order ~with_test ~with_doc ~with_dev_setup ar goal
+    S.solve ~debug ~zi_order ~with_test ~with_doc ~with_dev_setup ar query
   in
   (* the names the run parsed, known only once it is over: there is no
      cone, so this is what the solver asked for and nothing more *)
@@ -99,25 +100,26 @@ let opam_cmd =
   (* the flags opam install itself has for enabling dependencies, and only
      those: build is true whenever opam solves, since nothing is installed
      without being built, so there is no --with-build to match.  Each is
-     request-scoped rather than global -- it holds of the goal and of
-     nothing the goal pulls in -- which is what the instance's namespaced
-     variables express; see [rho] in opam_solve.ml. *)
+     query-scoped rather than global -- it holds of the names the query
+     asks for and of nothing they pull in -- which is what the instance's
+     namespaced variables express; see [rho] in opam_solve.ml. *)
   let with_test =
     Arg.(
       value & flag
       & info [ "t"; "with-test" ]
-          ~doc:"Enable the goal's test-only dependencies.")
+          ~doc:"Enable the queried packages' test-only dependencies.")
   in
   let with_doc =
     Arg.(
       value & flag
-      & info [ "with-doc" ] ~doc:"Enable the goal's doc-only dependencies.")
+      & info [ "with-doc" ]
+          ~doc:"Enable the queried packages' doc-only dependencies.")
   in
   let with_dev_setup =
     Arg.(
       value & flag
       & info [ "with-dev-setup" ]
-          ~doc:"Enable the goal's developer-only dependencies.")
+          ~doc:"Enable the queried packages' developer-only dependencies.")
   in
   let repo =
     Arg.(
@@ -125,17 +127,24 @@ let opam_cmd =
       & pos 0 (some dir) None
       & info [] ~docv:"REPO" ~doc:"opam repository root.")
   in
-  let goal =
+  (* an installation request is a query: a set of names each with a set of
+     acceptable versions, which the frontend realises as the synthetic
+     root's dependencies.  The syntax of one element is opam's own
+     (OpamFormula.atom_of_string), and many of them make one request, as
+     [atom_list] in opamArg.ml does. *)
+  let query =
     Arg.(
-      required
-      & pos 1 (some string) None
-      & info [] ~docv:"GOAL" ~doc:"Package to install.")
+      non_empty & pos_right 0 string []
+      & info [] ~docv:"PACKAGES"
+          ~doc:
+            "Packages to install, each a name with an optional version or \
+             constraint, e.g. $(b,pkg), $(b,pkg.1.0) or $(b,pkg>=0.5).")
   in
   Cmd.v
     (Cmd.info "opam" ~doc:"Solve against an opam repository.")
     Term.(
       const opam_run $ debug_arg $ zi_order $ with_test $ with_doc
-      $ with_dev_setup $ repo $ goal)
+      $ with_dev_setup $ repo $ query)
 
 let cargo_run debug print_parents index goal wanted rfeats rustv =
   let t0 = Unix.gettimeofday () in
