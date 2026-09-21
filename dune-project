@@ -22,4 +22,7 @@ extraction.")
   (rocq-stdlib (>= 9.2))
   (coq-core (>= 9.2))
   pubgrub
+  cmdliner
+  yojson
+  opam-file-format
   (ocamlformat :with-dev-setup)))

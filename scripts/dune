@@ -1,0 +1,14 @@
+; Print Assumptions over the audited names, which is a claim about the
+; built theories rather than about any one file, so it hangs off an alias
+; and is never part of @default.  The .vo files are named as deps because
+; the action is sandboxed and coqtop loads them at run time.
+(rule
+ (alias axioms)
+ (deps
+  check-axioms.sh
+  (glob_files %{workspace_root}/theories/*.vo))
+ (action
+  (setenv
+   PAC_THEORIES
+   %{workspace_root}/theories
+   (run bash %{dep:check-axioms.sh}))))
