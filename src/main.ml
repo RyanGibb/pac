@@ -51,11 +51,13 @@ let debian_cmd =
     Term.(
       const debian_run $ debug_arg $ apt_heap $ no_recs $ native $ goal $ paths)
 
-let opam_run debug zi_order repo goal =
+let opam_run debug zi_order with_test with_doc with_dev_setup repo goal =
   let t0 = Unix.gettimeofday () in
   let ar = Opam_solve.empty_archive repo in
   let module S = Opam_solve.Make () in
-  let r = S.solve ~debug ~zi_order ar goal in
+  let r =
+    S.solve ~debug ~zi_order ~with_test ~with_doc ~with_dev_setup ar goal
+  in
   (* the names the run parsed, known only once it is over: there is no
      cone, so this is what the solver asked for and nothing more *)
   let loaded () =
@@ -94,6 +96,29 @@ let opam_cmd =
             "Replay builtin-0install's decision order for exact \
              correspondence.")
   in
+  (* the flags opam install itself has for enabling dependencies, and only
+     those: build is true whenever opam solves, since nothing is installed
+     without being built, so there is no --with-build to match.  Each is
+     request-scoped rather than global -- it holds of the goal and of
+     nothing the goal pulls in -- which is what the instance's namespaced
+     variables express; see [rho] in opam_solve.ml. *)
+  let with_test =
+    Arg.(
+      value & flag
+      & info [ "t"; "with-test" ]
+          ~doc:"Enable the goal's test-only dependencies.")
+  in
+  let with_doc =
+    Arg.(
+      value & flag
+      & info [ "with-doc" ] ~doc:"Enable the goal's doc-only dependencies.")
+  in
+  let with_dev_setup =
+    Arg.(
+      value & flag
+      & info [ "with-dev-setup" ]
+          ~doc:"Enable the goal's developer-only dependencies.")
+  in
   let repo =
     Arg.(
       required
@@ -108,7 +133,9 @@ let opam_cmd =
   in
   Cmd.v
     (Cmd.info "opam" ~doc:"Solve against an opam repository.")
-    Term.(const opam_run $ debug_arg $ zi_order $ repo $ goal)
+    Term.(
+      const opam_run $ debug_arg $ zi_order $ with_test $ with_doc
+      $ with_dev_setup $ repo $ goal)
 
 let cargo_run debug print_parents index goal wanted rfeats rustv =
   let t0 = Unix.gettimeofday () in

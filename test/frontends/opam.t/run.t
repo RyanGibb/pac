@@ -102,3 +102,42 @@ class package is what the explanation names:
   And because cc-both 1 -> cc-a 1 and cc-both 1 -> cc-b 1 ∪ 2, cc-both * is forbidden.
   And because root () -> cc-both 1 and root -> root (), version solving failed.
   loaded: 3 names, 4 package versions
+
+with-test, with-doc and with-dev-setup are request-scoped: each flag turns
+its variable on for the goal alone and leaves every package the goal pulls
+in at false, which is what opam does (opamSwitchState.ml, the universe's
+[requested_allpkgs]).  tst.1 asks for tlib under with-test, tdoc under
+with-doc and dsetup under with-dev-setup, and mid.1 asks for mlib under
+with-test.  Off, none of the four is in:
+
+  $ ../../../src/main.exe opam . tst | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (2, core solution 4 nodes):
+    mid.1
+    tst.1
+  loaded: 6 names, 6 package versions
+
+--with-test brings in tlib, the goal's own test dependency, and not mlib,
+which belongs to a package the goal merely depends on:
+
+  $ ../../../src/main.exe opam --with-test . tst | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (3, core solution 5 nodes):
+    mid.1
+    tlib.1
+    tst.1
+  loaded: 6 names, 6 package versions
+
+The other two flags scope the same way, each over its own variable:
+
+  $ ../../../src/main.exe opam --with-doc . tst | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (3, core solution 5 nodes):
+    mid.1
+    tdoc.1
+    tst.1
+  loaded: 6 names, 6 package versions
+
+  $ ../../../src/main.exe opam --with-dev-setup . tst | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (3, core solution 5 nodes):
+    dsetup.1
+    mid.1
+    tst.1
+  loaded: 6 names, 6 package versions

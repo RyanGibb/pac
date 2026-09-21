@@ -189,7 +189,32 @@ module Make () = struct
       ("opam-version", "2.2.0");
     ]
 
-  let rho (x : string) : string option =
+  (* what the caller asked for, which is all the valuation below needs
+     beyond the fixed environment *)
+  type request = {
+    goal : string;
+    with_test : bool;
+    with_doc : bool;
+    with_dev_setup : bool;
+  }
+
+  (* [build] and [post] are true because opam builds what it installs and
+     has no flag to say otherwise; [dev] and [pinned] are false because
+     nothing here is pinned.
+
+     with-test, with-doc and with-dev-setup are the three opam does have a
+     flag for, and they are request-scoped rather than global: opam turns
+     the variable on for the packages *named* in the request and for no
+     others, which is why each package's with-test is its own variable
+     here.  [OpamSwitchState.universe] (opamSwitchState.ml:1011-1013) takes
+     the request's names and expands them back to every version of each,
+     and [package_env_t] (opamSwitchState.ml:955-960) then reads with-test
+     as [test && OpamPackage.Set.mem nv requested_allpkgs] -- so the scope
+     is a name, not a version and not a dependency cone, and a one-name
+     goal makes it exactly the goal.  [--with-test]'s own help text says
+     the same: "This only affects packages listed on the command-line"
+     (opamArg.ml:1493-1494). *)
+  let rho (rq : request) (x : string) : string option =
     match List.assoc_opt x globals with
     | Some v -> Some v
     | None -> (
@@ -198,10 +223,15 @@ module Make () = struct
         | Some i -> (
             let local = String.sub x (i + 1) (String.length x - i - 1) in
             let owner = String.sub x 0 i in
+            let requested b =
+              Some (if b && String.equal owner rq.goal then "true" else "false")
+            in
             match local with
             | "build" | "post" -> Some "true"
-            | "with-test" | "with-doc" | "with-dev-setup" | "dev" | "pinned" ->
-                Some "false"
+            | "with-test" -> requested rq.with_test
+            | "with-doc" -> requested rq.with_doc
+            | "with-dev-setup" -> requested rq.with_dev_setup
+            | "dev" | "pinned" -> Some "false"
             | "name" -> Some owner
             | _ -> None))
 
@@ -358,7 +388,7 @@ module Make () = struct
      solver, so this runs once the resolution is fixed, on an instance
      carrying exactly the selected packages' depext entries; depextsOf, not
      a traversal here, decides which filters fire. *)
-  let depexts_of ar (reals : (string * string) list) : string list =
+  let depexts_of rho ar (reals : (string * string) list) : string list =
     let dxt_entries =
       List.concat_map
         (fun p ->
@@ -585,7 +615,7 @@ module Make () = struct
   let verbose = Sys.getenv_opt "PACPROG" <> None
   let nproc = ref 0
 
-  let process st (q : PF.Pkg.t) (inst : Op.coq_Inst) =
+  let process rho st (q : PF.Pkg.t) (inst : Op.coq_Inst) =
     if not (Hashtbl.mem st.processed q) then begin
       Hashtbl.replace st.processed q ();
       incr nproc;
@@ -603,8 +633,10 @@ module Make () = struct
       record_real st (PFR.reduceReal r_q d_q)
     end
 
-  let solve ?(debug = false) ?(zi_order = false) ar (goal : string) =
+  let solve ?(debug = false) ?(zi_order = false) ?(with_test = false)
+      ?(with_doc = false) ?(with_dev_setup = false) ar (goal : string) =
     Pubgrub.set_debug debug;
+    let rho = rho { goal; with_test; with_doc; with_dev_setup } in
     let root_q =
       (PFR.Name.Orig Red.TName.Root, PFR.Version.Orig Red.TVer.UnitV)
     in
@@ -663,10 +695,12 @@ module Make () = struct
         let r =
           (match (tn, tv) with
           | PFR.Name.Orig Red.TName.Root, _ ->
-              process st Red.rootPkg (root_inst ar goal)
+              process rho st Red.rootPkg (root_inst ar goal)
           | PFR.Name.Orig (Red.TName.Real n), PFR.Version.Orig (Red.TVer.RV v)
             ->
-              process st (Red.TName.Real n, Red.TVer.RV v) (inst_for ar (n, v))
+              process rho st
+                (Red.TName.Real n, Red.TVer.RV v)
+                (inst_for ar (n, v))
           | _ -> ());
           let hs =
             try Hashtbl.find st.edges (tn, tv)
@@ -775,5 +809,5 @@ module Make () = struct
           Op.PkgSet.elements (Red.decodeS (PFR.packageFormulaResolution core))
         in
         let reals = List.sort compare reals in
-        Some (reals, List.length sol, depexts_of ar reals)
+        Some (reals, List.length sol, depexts_of rho ar reals)
 end
