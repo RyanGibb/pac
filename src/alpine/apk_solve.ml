@@ -382,19 +382,27 @@ module PName = struct
           (List.length (PF.VSet.elements vs))
 end
 
-(* The rank a provider disjunction's two branches are compared on: the
-   k: line where a provider carries one, [rank_unranked] below all of
-   them where it does not, since apk-package(5) says a provides without
-   a provider-priority is not selected automatically at all and the
-   nearest a preference can come to that is last place; [rank_pkg] for a
-   package claiming the name with a version, above every provider; and
-   [rank_none] for a branch that offers nothing. *)
+(* The rank an unversioned-provider disjunction's branches are compared
+   on: the k: line where a provider carries one, [rank_unranked] below
+   all of them where it does not, since apk-package(5) says a provides
+   without a provider-priority is not selected automatically at all and
+   the nearest a preference can come to that is last place; [rank_pkg]
+   for the branch holding the name's own versions, above every
+   unversioned provider because those offer no version at the name and
+   apk's first key is the offered version; and [rank_none] for a branch
+   that offers nothing. *)
 let rank_pkg = max_int
 let rank_unranked = -1
 let rank_none = min_int
 
 let prov_rank ar (q : string * string) : int =
   match Hashtbl.find_opt ar.prio q with Some k -> k | None -> rank_unranked
+
+(* apk's provider_priority defaults to 0 for a package with no k: line,
+   and the field is the package's own, read off whichever package offers
+   the name -- an alias and a package claiming the name itself alike. *)
+let prio_of ar (q : string * string) : int =
+  match Hashtbl.find_opt ar.prio q with Some k -> k | None -> 0
 
 (* encPos lists the unversioned providers of a name as a disjunction whose
    last alternative is the name's own versions, so every alternative but
@@ -419,8 +427,10 @@ let rec alt_at (fs : PF.coq_Formula list) (i : E.nat) :
   | _ :: fs', E.S k -> alt_at fs' k
   | [], _ -> None
 
-(* The rank of one alternative: a provider by its k: line, the last
-   alternative -- the name's own versions -- above every provider. *)
+(* The rank of one alternative: an unversioned provider by its k: line,
+   the last alternative -- the name's own versions -- above every one of
+   them, because an unversioned provides offers no version at the name
+   and apk's first key is the offered version. *)
 let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
   if last then
     match f with
@@ -430,14 +440,24 @@ let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
   else match chain_head f with Some q -> prov_rank ar q | None -> rank_none
 
 (* PubGrub decides the compare-maximum candidate, so preference lives
-   here.  Newest-first among a name's own versions falls out of the
-   encoded order, since V.compare is the apk order.  Two choices are
-   made on top of it.
+   here, and what it has to reproduce is apk's compare_providers over
+   the providers of the name being decided.  Most of that comparator's
+   keys read the partial solution or the installed db and are dead
+   against a fresh root; the two that survive are, in order, the version
+   the provider offers *at the requested name* and then
+   provider_priority, with the repository order below both and a single
+   repository here.
 
-   A real package of a name beats an alias claiming it, which is apk's
-   own preference.  Among the aliases themselves provider_priority
-   decides, the versioned ones included: apk-package(5) reserves only
-   automatic selection for the unversioned case, not the ranking.
+   What a provider offers at a name is its own version where it claims
+   the name itself, the p: operand where it is a versioned alias, and
+   nothing at all where the provides carries no version.  So a package
+   of a name is not privileged over an alias of it: the two are compared
+   on the versions they offer, and an alias offering the newer one wins.
+   An unversioned provides is the one case where a real package always
+   wins, and not by privilege either -- it offers no version, and no
+   version loses to every version.  provider_priority is read off
+   whichever package offers the name, alias or not, and so decides only
+   once the offered versions tie.
 
    A synthetic version selects one alternative of its disjunction by
    position, and which alternative is wanted depends on the disjunction.
@@ -445,23 +465,26 @@ let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
    augmented package last, so preferring the earliest alternative is
    apk's rule that an install-if fires only when its conditions already hold
    -- without it every install_if rule in the index is discharged by
-   installing its target.  encPos lists the unversioned providers of a
-   name first and its own versions last, and apk ranks those by
-   provider_priority with a package of the name itself above all of them.
+   installing its target.  encPos folds the versioned aliases of a name
+   into the name's own version set, where the comparison above settles
+   them, and lists only the unversioned providers as separate
+   alternatives ahead of it -- so that disjunction is exactly the case
+   where the name's own versions win outright, with k: ordering the
+   unversioned providers among themselves.
 
-   The rank is carried on the version rather than read off it: which
-   disjunction a position belongs to is what decides, and a comparator
-   sees two versions and not their name.  Every version PubGrub holds is
-   handed to it by [versions] or by a dependency range, both of which
-   know the name, so both tag as they go and the rank is a function of
-   the (name, version) pair -- keeping this a total order, and one
-   consistent with the tags on any range the same name is compared
-   against.  Ranks order a disjunction's alternatives against each other
-   and break no other tie, so the versions of a name that has no provider
-   disjunction are unaffected; an untagged disjunction leaves every
-   alternative at rank 0, where the earliest one wins. *)
+   The offered version and the k: are carried on the version rather than
+   read off it: which disjunction a position belongs to is what decides
+   an [Idx], and a comparator sees two versions and not their name.
+   Every version PubGrub holds is handed to it by [versions] or by a
+   dependency range, both of which know the name, so both tag as they go
+   and both fields are a function of the (name, version) pair -- keeping
+   this a total order, and one consistent with the tags on any range the
+   same name is compared against. *)
 module PVersion = struct
-  type t = { rank : int; v : PFR.Version.t }
+  (* [pv] is the version offered at the name being decided, absent for a
+     version that is not a provider candidate at a name (the root, and a
+     disjunction's positional [Idx]). *)
+  type t = { pv : string option; rank : int; v : PFR.Version.t }
 
   let pp fmt ({ v; _ } : t) =
     match v with
@@ -473,22 +496,22 @@ module PVersion = struct
 
   let compare a b =
     match (a.v, b.v) with
-    | ( PFR.Version.Orig (Red.Version.Orig _),
-        PFR.Version.Orig (Red.Version.Prov _) ) ->
-        1
-    | ( PFR.Version.Orig (Red.Version.Prov _),
-        PFR.Version.Orig (Red.Version.Orig _) ) ->
-        -1
-    | ( PFR.Version.Orig (Red.Version.Prov _),
-        PFR.Version.Orig (Red.Version.Prov _) ) ->
-        let c = Stdlib.compare a.rank b.rank in
-        if c <> 0 then c else r2c (PFR.VersionOT.compare a.v b.v)
     | PFR.Version.Idx _, PFR.Version.Idx _ ->
         let c = Stdlib.compare a.rank b.rank in
         if c <> 0 then c else -r2c (PFR.VersionOT.compare a.v b.v)
-    | _ ->
-        let c = r2c (PFR.VersionOT.compare a.v b.v) in
-        if c <> 0 then c else Stdlib.compare a.rank b.rank
+    | _ -> (
+        match (a.pv, b.pv) with
+        | Some x, Some y ->
+            let c = Apk_version.compare x y in
+            if c <> 0 then c
+            else
+              let c = Stdlib.compare a.rank b.rank in
+              (* two providers apk cannot separate; the encoded order
+                 keeps the pick deterministic *)
+              if c <> 0 then c else r2c (PFR.VersionOT.compare a.v b.v)
+        | _ ->
+            let c = r2c (PFR.VersionOT.compare a.v b.v) in
+            if c <> 0 then c else Stdlib.compare a.rank b.rank)
 end
 
 let tag ar (tn : PFR.Name.t) (tv : PFR.Version.t) : PVersion.t =
@@ -496,16 +519,15 @@ let tag ar (tn : PFR.Name.t) (tv : PFR.Version.t) : PVersion.t =
   | PFR.Name.Disjunct (f0 :: _ as fs), PFR.Version.Idx i
     when chain_head f0 <> None -> (
       match alt_at fs i with
-      | None -> { PVersion.rank = 0; v = tv }
-      | Some (f, last) -> { PVersion.rank = alt_rank ar last f; v = tv })
-  (* a versioned provides is auto-selected with or without a k:, so a
-     missing one is apk's default of 0 and not [rank_unranked] *)
-  | _, PFR.Version.Orig (Red.Version.Prov (q, _)) ->
-      let rank =
-        match Hashtbl.find_opt ar.prio q with Some k -> k | None -> 0
-      in
-      { PVersion.rank; v = tv }
-  | _ -> { PVersion.rank = 0; v = tv }
+      | None -> { PVersion.pv = None; rank = 0; v = tv }
+      | Some (f, last) ->
+          { PVersion.pv = None; rank = alt_rank ar last f; v = tv })
+  | _, PFR.Version.Orig (Red.Version.Prov (q, pv)) ->
+      { PVersion.pv = Some pv; rank = prio_of ar q; v = tv }
+  (* a package claiming the name itself offers its own version there *)
+  | PFR.Name.Orig (Red.Name.Orig n), PFR.Version.Orig (Red.Version.Orig w) ->
+      { PVersion.pv = Some w; rank = prio_of ar (n, w); v = tv }
+  | _ -> { PVersion.pv = None; rank = 0; v = tv }
 
 module PG = Pubgrub.Make (PName) (PVersion)
 

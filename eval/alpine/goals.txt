@@ -41,6 +41,7 @@ perl
 postfix
 postgresql16
 postgresql17
+pssh
 python3
 rsync
 ruby
