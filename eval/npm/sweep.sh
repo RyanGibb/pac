@@ -2,6 +2,8 @@
 # Run every goal against a frozen shim and total the two scores.
 # usage: sweep.sh <exe> <tag> [run-dir] [port]
 set -u
+# byte order, so the output is the same whatever the host's locale
+export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
 exe=$1; tag=$2
 RUN="${3:-/tmp/npm-cmp}"; PORT="${4:-8899}"

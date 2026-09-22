@@ -24,8 +24,8 @@ libcrypt1
 libcurl3t64-gnutls
 libdb5.3t64
 libdebconfclient0
-libdebuginfod1t64
 libdebuginfod-common
+libdebuginfod1t64
 libdw1t64
 libelf1t64
 libexpat1
@@ -45,8 +45,8 @@ libk5crypto3
 libkeyutils1
 libkrb5-3
 libkrb5support0
-libldap2
 libldap-common
+libldap2
 liblocale-gettext-perl
 liblz4-1
 liblzma5
@@ -63,10 +63,10 @@ libp11-kit0
 libpcre2-8-0
 libproc2-0
 libpsl5t64
+libpython3-stdlib
 libpython3.13
 libpython3.13-minimal
 libpython3.13-stdlib
-libpython3-stdlib
 libreadline8t64
 librtmp1
 libsasl2-2
@@ -74,8 +74,8 @@ libsasl2-modules
 libsasl2-modules-db
 libseccomp2
 libselinux1
-libsource-highlight4t64
 libsource-highlight-common
+libsource-highlight4t64
 libsqlite3-0
 libssh2-1t64
 libssl3t64
@@ -102,9 +102,9 @@ procps
 psmisc
 publicsuffix
 python3
+python3-minimal
 python3.13
 python3.13-minimal
-python3-minimal
 readline-common
 sensible-utils
 shared-mime-info

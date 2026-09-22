@@ -2,8 +2,8 @@ ada-libs
 brotli-libs
 busybox
 busybox-binsh
-ca-certificates
 c-ares
+ca-certificates
 icu-data-en
 icu-libs
 libcrypto3

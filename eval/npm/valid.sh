@@ -28,6 +28,8 @@
 # With no goal it starts the frozen shim, sweeps goals.txt and totals;
 # with one it checks that goal and expects a shim already listening.
 set -u
+# byte order, so the output is the same whatever the host's locale
+export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
 RUN="${RUN:-/tmp/npm-cmp}"
 PORT="${PORT:-8899}"

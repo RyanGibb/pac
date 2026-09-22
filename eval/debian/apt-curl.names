@@ -29,8 +29,8 @@ libk5crypto3
 libkeyutils1
 libkrb5-3
 libkrb5support0
-libldap2
 libldap-common
+libldap2
 liblocale-gettext-perl
 liblz4-1
 liblzma5

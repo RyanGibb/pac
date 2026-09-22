@@ -13,14 +13,14 @@ gcc-x86-64-linux-gnu
 libasan8
 libatomic1
 libbinutils
+libc-dev-bin
 libc6
 libc6-dev
 libcc1-0
-libc-dev-bin
-libcrypt1
 libcrypt-dev
-libctf0
+libcrypt1
 libctf-nobfd0
+libctf0
 libgcc-14-dev
 libgcc-s1
 libgmp10

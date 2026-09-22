@@ -1,8 +1,8 @@
 brotli-libs
 busybox
 busybox-binsh
-ca-certificates-bundle
 c-ares
+ca-certificates-bundle
 libaio
 libcrypto3
 libcurl

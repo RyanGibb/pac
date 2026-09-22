@@ -9,6 +9,8 @@
 # differed.
 # usage: cmp.sh <exe> <tag> <goal>
 set -u
+# comm expects its inputs in its own collation, and the baselines are in byte order
+export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
 ROOT="${APKROOT:-/tmp/apk-cmp-root}"
 APK="${APK:-apk}"

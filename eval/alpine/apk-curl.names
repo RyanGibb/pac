@@ -1,6 +1,6 @@
 brotli-libs
-ca-certificates-bundle
 c-ares
+ca-certificates-bundle
 curl
 libcrypto3
 libcurl

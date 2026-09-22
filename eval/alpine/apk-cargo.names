@@ -1,7 +1,7 @@
 binutils
 brotli-libs
-ca-certificates-bundle
 c-ares
+ca-certificates-bundle
 cargo
 gcc
 gmp

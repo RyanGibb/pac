@@ -15,9 +15,9 @@ libxml2
 lz4-libs
 musl
 ncurses-terminfo-base
+postgresql-common
 postgresql17
 postgresql17-client
-postgresql-common
 readline
 ssl_client
 tzdata

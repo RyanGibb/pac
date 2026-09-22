@@ -28,9 +28,9 @@ libmd0
 libncursesw6
 libnettle8t64
 libpcre2-8-0
+libpython3-stdlib
 libpython3.13-minimal
 libpython3.13-stdlib
-libpython3-stdlib
 libreadline8t64
 libseccomp2
 libselinux1
@@ -53,9 +53,9 @@ openssl
 openssl-provider-legacy
 perl-base
 python3
+python3-minimal
 python3.13
 python3.13-minimal
-python3-minimal
 readline-common
 sqv
 tar

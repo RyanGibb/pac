@@ -8,8 +8,8 @@ brotli-libs
 build-base
 busybox
 busybox-binsh
-ca-certificates-bundle
 c-ares
+ca-certificates-bundle
 fakeroot
 file
 fortify-headers
@@ -21,8 +21,8 @@ gmp
 isl26
 jansson
 libatomic
-libcap2
 libcap-getcap
+libcap2
 libcrypto3
 libcurl
 libexpat

@@ -25,6 +25,8 @@
 #
 # usage: seed.sh <exe> [run-dir] [port] [max-walkback]
 set -eu
+# byte order, so the output is the same whatever the host's locale
+export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
 exe=$1; RUN="${2:-/tmp/npm-cmp}"; PORT="${3:-8899}"; BACK="${4:-40}"
 

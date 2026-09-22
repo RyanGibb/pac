@@ -7,6 +7,8 @@
 # agrees when we call it unsatisfiable, and counts in neither install set.
 # usage: cmp.sh <exe> <tag> <goal>          EXTRA=<flags> passes flags to <exe>
 set -u
+# comm expects its inputs in its own collation, and the baselines are in byte order
+export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
 ROOT="${APTROOT:-/tmp/apt-cmp-root}"
 APT="${APT:-apt-get}"

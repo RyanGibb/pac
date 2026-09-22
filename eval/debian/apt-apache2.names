@@ -19,14 +19,14 @@ libaprutil1-ldap
 libaprutil1t64
 libapt-pkg7.0
 libattr1
-libaudit1
 libaudit-common
+libaudit1
 libbrotli1
 libbsd0
 libbz2-1.0
 libc6
-libcap2
 libcap-ng0
+libcap2
 libcom-err2
 libcrypt1
 libcurl4t64
@@ -35,8 +35,8 @@ libdebconfclient0
 libexpat1
 libffi8
 libgcc-s1
-libgdbm6t64
 libgdbm-compat4t64
+libgdbm6t64
 libgmp10
 libgnutls30t64
 libgpm2
@@ -48,8 +48,8 @@ libk5crypto3
 libkeyutils1
 libkrb5-3
 libkrb5support0
-libldap2
 libldap-common
+libldap2
 liblocale-gettext-perl
 liblua5.4-0
 liblz4-1
@@ -60,9 +60,9 @@ libnettle8t64
 libnghttp2-14
 libnghttp3-9
 libp11-kit0
-libpam0g
 libpam-modules
 libpam-modules-bin
+libpam0g
 libpcre2-8-0
 libperl5.40
 libproc2-0
@@ -73,8 +73,8 @@ libsasl2-modules
 libsasl2-modules-db
 libseccomp2
 libselinux1
-libsemanage2
 libsemanage-common
+libsemanage2
 libsepol2
 libsqlite3-0
 libssh2-1t64

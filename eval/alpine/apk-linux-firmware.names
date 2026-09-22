@@ -5,10 +5,10 @@ linux-firmware-adaptec
 linux-firmware-advansys
 linux-firmware-airoha
 linux-firmware-amd
+linux-firmware-amd-ucode
 linux-firmware-amdgpu
 linux-firmware-amdnpu
 linux-firmware-amdtee
-linux-firmware-amd-ucode
 linux-firmware-amlogic
 linux-firmware-amphion
 linux-firmware-ar3k
@@ -94,8 +94,8 @@ linux-firmware-synaptics
 linux-firmware-tehuti
 linux-firmware-ti
 linux-firmware-ti-connectivity
-linux-firmware-tigon
 linux-firmware-ti-keystone
+linux-firmware-tigon
 linux-firmware-ttusb-budget
 linux-firmware-ueagle-atm
 linux-firmware-vicam

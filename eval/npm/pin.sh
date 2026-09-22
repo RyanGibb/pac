@@ -5,6 +5,8 @@
 # a resolution of our instance and only our ordering ranked it second.
 # usage: pin.sh <exe> <base-tag> <tag> [run-dir] [port]
 set -u
+# byte order, so the output is the same whatever the host's locale
+export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
 exe=$1; base=$2; tag=$3
 RUN="${4:-/tmp/npm-cmp}"; PORT="${5:-8899}"

@@ -3,6 +3,8 @@
 # Goals apt has no candidate for are tallied as absent, not as exact matches:
 # the quotable denominator is the comparable count, not the goal count.
 set -u
+# byte order, so the output is the same whatever the host's locale
+export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$S/out"
 exe=$1; tag=$2

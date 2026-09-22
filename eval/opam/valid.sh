@@ -30,6 +30,8 @@
 # usage: valid.sh <exe> <tag> [goal]        EXTRA=<flags> passes flags to <exe>
 # With no goal it sweeps goals.txt and totals; with one it checks that one.
 set -u
+# byte order, so the output is the same whatever the host's locale
+export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
 export OPAMROOT="${OPAMROOT:-/tmp/claude-1000/opam-cmp-root}"
 exe=$1; tag=$2

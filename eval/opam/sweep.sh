@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # usage: sweep.sh <exe> <tag>
 set -u
+# byte order, so the output is the same whatever the host's locale
+export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
 exe=$1; tag=$2
 mkdir -p "$S/out"

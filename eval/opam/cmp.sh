@@ -9,6 +9,8 @@
 # them all or none.
 # usage: cmp.sh <exe> <tag> <goal>
 set -u
+# comm expects its inputs in its own collation, and the baselines are in byte order
+export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
 export OPAMROOT="${OPAMROOT:-/tmp/claude-1000/opam-cmp-root}"
 exe=$1; tag=$2; goal=$3

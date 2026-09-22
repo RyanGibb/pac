@@ -5,8 +5,8 @@ bind-tools
 brotli-libs
 busybox
 busybox-binsh
-ca-certificates-bundle
 c-ares
+ca-certificates-bundle
 curl
 dns-root-hints
 fstrm
