@@ -29,7 +29,7 @@ files (sha256):
 
 directory (sha256 of the sorted list of per-file sha256s):
 
-  repos/npm               a01356cb1a619c150c9979b32ba14fd93604281d7d5cc55f4808d8f77ef88c8b   3829 packuments, 741M
+  repos/npm               9e6e134cc8ec0705f56a84eb9a07a811c5271f8d3fc5937a0c97da331fda5dba   3992 packuments, 765M
 
   cd repos/npm && find . -type f -printf '%P\n' | LC_ALL=C sort | tr '\n' '\0' \
     | xargs -0 sha256sum | awk '{print $1}' | LC_ALL=C sort | sha256sum
@@ -40,14 +40,17 @@ directory (sha256 of the sorted list of per-file sha256s):
   measured sweeps then run against a frozen shim.  A changed hash here means
   something wrote into the checkout.
 
-  What --fill fetches lands in that farm, not here, and the hash above does
-  not cover it: on the workstation that is 163 packuments npm asked for and
-  repos/npm lacked (besides the 32 pac-root-*.json roots seed.sh writes),
-  and pac reads them too, through --cache.  Tarballs would join them in
-  tarballs/ beside the farm; no goal fetches one today, since npm asks for a
-  tarball only for a version that bundles or carries a shrinkwrap, and
-  eval/npm/check-misses.sh fails a frozen run that asks for anything the
-  farm lacks.
+  What --fill fetches lands in that farm, not here, so it has to be copied
+  back to be pinned.  3829 packuments were fetched 2026-09-10/11; the other
+  163 are what seed.sh's --fill fetched on 2026-09-20 for names npm asked for
+  and the snapshot lacked, copied here from the farm unchanged -- pac reads
+  them as well, through --cache, so without them the sweep reproduces only
+  from one machine's /tmp.  A farm built from this tree by setup.sh alone
+  reproduces every recorded npm score.  Tarballs, should a goal ever need
+  one, land in tarballs/ beside the farm and must be pinned the same way; no
+  goal fetches one today, since npm asks for a tarball only for a version
+  that bundles or carries a shrinkwrap, and eval/npm/check-misses.sh fails a
+  frozen run that asks for anything the farm lacks.
 
 The cargo sweeps need nothing pinned beyond repos/crates.io-index above: both
 of them ask cargo only for a lockfile, which it resolves from index rows alone
