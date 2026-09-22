@@ -36,4 +36,18 @@ pac alpine repos/alpine/APKINDEX nginx
 pac npm --tree use-sync-external-store
 ```
 
+## Evaluation
+
+The harnesses in `eval/` compare pac's answers with those of apt, apk, opam, cargo and npm, and a recorded baseline holds only for the version of the tool that produced it.
+`nix/flake.nix` provides each of them at its recorded version, pinned by `nix/flake.lock`, so run the evaluation inside its shell:
+
+```sh
+nix develop ./nix
+```
+
+The flake sits in `nix/` so that entering the shell copies only that directory into the Nix store, not `repos/` with it.
+pac itself is still built with opam, as above.
+Each `eval/*/setup.sh`, and `eval/cargo/run_goal.py`, refuses a tool at any other version.
+The Alpine harness builds its apk root with `apk --usermode --initdb`, which apk refuses as root, so run it as an ordinary user.
+
 *Programmed with [Claude Code](https://claude.ai/code)*

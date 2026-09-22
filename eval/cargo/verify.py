@@ -72,6 +72,7 @@ def main():
     ap.add_argument("crate")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
+    run_goal.check_toolchain()
 
     probe = run_goal.run_pac(args.crate)
     if not probe["ok"]:

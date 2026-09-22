@@ -94,7 +94,7 @@ def resolve_semver():
 
 
 def resolve_host():
-    """npm-version, the file setup.sh writes: npm's version then node's"""
+    """npm-version: npm's version then node's"""
     host = {"os": "linux", "cpu": "x64", "libc": "glibc"}
     try:
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),

@@ -17,7 +17,16 @@ builds from the lock, and to report it at all it must download each
 resolved package's body for the full manifest.  generate-lockfile writes
 the artifact being compared and downloads nothing.
 """
-import argparse, json, os, re, subprocess, time, tomllib
+import argparse, json, os, re, shutil, subprocess, sys, time, tomllib
+
+# The toolchain the recorded results were taken with, pinned by nix/flake.lock.
+# A goal declaring no rust-version resolves for the installed rustc, so
+# under any other the sweep measures a different question.
+RUSTC_VERSION = "1.97.1"
+CARGO_VERSION = "1.97.0"
+# write_cargo_config hands cargo this rustc explicitly, so a build.rustc in
+# some config file cannot pick another than the one checked here.
+RUSTC = os.environ.get("RUSTC") or shutil.which("rustc") or "rustc"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(HERE + "/../..")
@@ -59,11 +68,27 @@ def index_line(name, version):
     return None
 
 
+def tool_version(exe):
+    try:
+        out = subprocess.run([exe, "--version"], capture_output=True,
+                             text=True).stdout
+        return out.split()[1]
+    except (OSError, IndexError):
+        return None
+
+
 def installed_rustc():
     """What cargo falls back to when no member declares rust-version."""
-    out = subprocess.run(["rustc", "--version"], capture_output=True,
-                         text=True).stdout
-    return out.split()[1]
+    return tool_version(RUSTC)
+
+
+def check_toolchain():
+    have = (installed_rustc(), tool_version("cargo"))
+    if have != (RUSTC_VERSION, CARGO_VERSION):
+        sys.exit(f"rustc {have[0]} ({RUSTC}) and cargo {have[1]} here, but the"
+                 f" recorded results were taken with rustc {RUSTC_VERSION} and"
+                 f" cargo {CARGO_VERSION}; run inside nix develop ./nix, where"
+                 f" nix/flake.lock pins them")
 
 
 def run_pac(crate, rustv=None):
@@ -196,6 +221,7 @@ def write_cargo_config():
                     'index = "sparse+http://127.0.0.1:8991/"\n')
     env = dict(os.environ)
     env["CARGO_HOME"] = CARGO_HOME
+    env["RUSTC"] = RUSTC
     return env
 
 
@@ -258,6 +284,7 @@ def main():
     ap.add_argument("crate")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
+    check_toolchain()
 
     # Pass 1: let pac pick the root version (max, independent of any MSRV
     # setting -- main.ml's default-version fold does not consult msrv_ok).

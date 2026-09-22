@@ -22,9 +22,18 @@ sed -n '/^packages (/,/^encoded solution/p' "$S/out/$tag/$goal.out" \
 
 if [ ! -s "$S/apk-$goal.names" ]; then
   "$APK" add --root "$ROOT/root" --usermode --allow-untrusted --no-network \
-    --repository "$ROOT/repo" --simulate "$goal" 2>/dev/null \
+    --repository "$ROOT/repo" --simulate "$goal" 2>"$S/out/$tag/$goal.apkerr" \
     | sed -n 's/^( *[0-9]*\/[0-9]*) Installing \([^ ]*\) .*/\1/p' \
     | sort -u > "$S/apk-$goal.names"
+fi
+# Every goal installs at least itself, so an empty answer is apk failing,
+# typically for want of the root setup.sh builds, which it cannot as root;
+# kept as a baseline it would score as a total divergence, not an error.
+if [ ! -s "$S/apk-$goal.names" ]; then
+  rm -f "$S/apk-$goal.names"
+  printf '%-18s %-7s NO BASELINE (apk: %s)\n' "$goal" "$tag" \
+    "$(head -n 1 "$S/out/$tag/$goal.apkerr" 2>/dev/null)"
+  exit 1
 fi
 
 ours=$(wc -l < "$S/out/$tag/$goal.ours")

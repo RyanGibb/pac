@@ -19,6 +19,13 @@ S="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$S/../../repos/opam-repository" && pwd)"
 export OPAMROOT="${1:-/tmp/claude-1000/opam-cmp-root}"
 
+v=$(opam --version 2>/dev/null || true)
+if [ "$v" != 2.5.2 ]; then
+  echo "setup.sh: opam reports '$v', but the baselines were taken with opam" \
+       "2.5.2; run inside nix develop ./nix, where nix/flake.lock pins it" >&2
+  exit 1
+fi
+
 rm -rf "$OPAMROOT"
 opam init --bare --no-setup --disable-sandboxing --bypass-checks -y \
   -k local snapshot "$REPO"

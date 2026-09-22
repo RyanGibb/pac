@@ -20,6 +20,13 @@ ln -sfn "$SNAP"/*.json "$RUN/cache/"
 : > "$RUN/home/.npmrc"
 : > "$RUN/home/npmrc-global"
 
-npm --version > "$S/npm-version"
-node --version >> "$S/npm-version"
+# npm-version is the host the recorded locks were taken on and the host
+# cmp.sh hands our side, so a different one is refused, not recorded over it
+have="$(npm --version 2>/dev/null || true) $(node --version 2>/dev/null || true)"
+want=$(tr '\n' ' ' < "$S/npm-version")
+if [ "$have " != "$want" ]; then
+  echo "setup.sh: npm and node here are '$have', but npm-version records" \
+       "'${want% }'; run inside nix develop ./nix, where nix/flake.lock pins them" >&2
+  exit 1
+fi
 cat "$S/npm-version"

@@ -8,6 +8,14 @@ ROOT="${1:-/tmp/apt-cmp-root}"
 APT="${APT:-apt-get}"
 PACKAGES="$S/../../repos/debian/Packages"
 
+v=$("$APT" --version 2>/dev/null | head -n 1)
+case $v in
+  "apt 3.3.0 "*) ;;
+  *) echo "setup.sh: $APT reports '$v', but the baselines were taken with" \
+          "apt 3.3.0; run inside nix develop ./nix, where nix/flake.lock pins it" >&2
+     exit 1 ;;
+esac
+
 mkdir -p "$ROOT/repo" "$ROOT/etc/apt" "$ROOT/var/lib/apt" \
   "$ROOT/var/lib/dpkg" "$ROOT/var/cache/apt"
 cp "$PACKAGES" "$ROOT/repo/Packages"
