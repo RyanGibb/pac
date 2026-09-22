@@ -31,3 +31,4 @@ for g in $(cut -d' ' -f1 "$S/roots.txt"); do
   esac
 done
 printf 'PINNED now-exact=%d still-divergent=%d\n' "$ok" "$bad"
+bash "$S/check-misses.sh" "$RUN/pin-miss.log"

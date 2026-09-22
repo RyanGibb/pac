@@ -40,6 +40,15 @@ directory (sha256 of the sorted list of per-file sha256s):
   measured sweeps then run against a frozen shim.  A changed hash here means
   something wrote into the checkout.
 
+  What --fill fetches lands in that farm, not here, and the hash above does
+  not cover it: on the workstation that is 163 packuments npm asked for and
+  repos/npm lacked (besides the 32 pac-root-*.json roots seed.sh writes),
+  and pac reads them too, through --cache.  Tarballs would join them in
+  tarballs/ beside the farm; no goal fetches one today, since npm asks for a
+  tarball only for a version that bundles or carries a shrinkwrap, and
+  eval/npm/check-misses.sh fails a frozen run that asks for anything the
+  farm lacks.
+
 The cargo sweeps need nothing pinned beyond repos/crates.io-index above: both
 of them ask cargo only for a lockfile, which it resolves from index rows alone
 and writes without downloading a single crate body.  There is no CARGO_HOME

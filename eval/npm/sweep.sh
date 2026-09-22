@@ -29,5 +29,4 @@ for g in $(cut -d' ' -f1 "$S/roots.txt"); do
   python3 "$S/verdict.py" "$RUN" "$g" "$S/out/$tag/$slug"
 done
 
-s=$(sort -u "$RUN/frozen-miss.log" | wc -l)
-[ "$s" -eq 0 ] || echo "WARNING: frozen shim refused $s names -- snapshot not closed"
+bash "$S/check-misses.sh" "$RUN/frozen-miss.log"

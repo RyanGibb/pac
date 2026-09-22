@@ -48,9 +48,8 @@ if [ $# -lt 3 ]; then
        {n++; if ($NF=="VALID") ok++; else print}
        END {printf "TOTAL valid=%d/%d dropped=%d\n", ok, n, bad}' \
     "$S/out/$tag.valid"
-  s=$(sort -u "$RUN/valid-miss.log" | wc -l)
-  [ "$s" -eq 0 ] || echo "WARNING: frozen shim refused $s names -- snapshot not closed"
-  exit 0
+  bash "$S/check-misses.sh" "$RUN/valid-miss.log"
+  exit $?
 fi
 goal=$3
 slug=${goal//\//__}

@@ -1,0 +1,7 @@
+# Names the frozen shim may refuse without failing a run: npm asks for
+# each, tolerates the 404, and the lock does not depend on it.
+
+# optional peers (peerDependenciesMeta) of ts-node, rxjs, @swc/core and
+# others: npm fetches the packument to check it and never places it
+@swc/helpers
+@swc/wasm
