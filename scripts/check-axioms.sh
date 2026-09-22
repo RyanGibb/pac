@@ -285,9 +285,12 @@ Alp.Reduction.alpine_completeness
 Alp.Reduction.alpine_soundness
 Alp.Reduction.attachAt
 Alp.Reduction.dependees
+Alp.Reduction.encReq
 Alp.Reduction.installIfFibre
 Alp.Reduction.installIfForm
 Alp.Reduction.matchPos_attachAt
+Alp.Reduction.match_req_decode
+Alp.Reduction.match_req_transS
 Alp.Reduction.rootPkg
 Alp.Reduction.transD
 Alp.Reduction.transR

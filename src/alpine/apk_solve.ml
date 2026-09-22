@@ -78,11 +78,11 @@ module T = PFR.T
 
 (* provider_priority is apk's preference among the providers of a name,
    versioned ones included, and preference in this pipeline lives in
-   PVersion.compare, which is where it is applied -- off the archive, not
-   off an instance.
-   The calculus records it in inst_prio precisely because it does not
-   constrain which sets are resolutions, so the sub-instances below leave
-   inst_prio empty and no resolution turns on a k: line. *)
+   PVersion.compare, which is where its value is applied -- off the
+   archive, not off an instance.  Whether it is non-zero also decides
+   whether a provides without a version is selected automatically, which
+   the calculus reads off inst_prio, so every sub-instance carries the k:
+   lines of the packages in its repository. *)
 
 (* replaces (r:/q:) never appears in a repository index -- it is an
    installed-db field -- so inst_repl is empty. *)
@@ -203,20 +203,8 @@ let load_index (path : string) : archive =
 let versions_of ar n =
   match Hashtbl.find_opt ar.by_name n with Some l -> l | None -> []
 
-(* apk-package(5): "By default a non-versioned provides will not be
-   selected automatically for installation.  But specifying
-   provider-priority enables this automatic selection".  So a bare
-   provides without k: is not a low-ranked candidate, it is not a
-   candidate: its provides entry never enters the instance, which is an
-   availability cut on the alias rather than on its owner -- the owner
-   stays installable when the world names it directly. *)
-let auto_selectable ar (owner : string * string) (pv : string option) =
-  pv <> None || Hashtbl.mem ar.prio owner
-
 let providers_of ar n =
-  match Hashtbl.find_opt ar.providers n with
-  | Some l -> List.filter (fun (owner, pv) -> auto_selectable ar owner pv) l
-  | None -> []
+  match Hashtbl.find_opt ar.providers n with Some l -> l | None -> []
 
 (* ---- sub-instances -----------------------------------------------------
 
@@ -237,6 +225,10 @@ let empty_inst =
     inst_repl = Alp.Repl.empty;
   }
 
+let rec nat_of_int (k : int) : E.nat =
+  if k <= 0 then E.O else E.S (nat_of_int (k - 1))
+
+(* Lookup.subInst's inst_prio is the k: lines of its repository *)
 let preimages_at ar (ns : string list) =
   let repo = ref [] and prov = ref [] in
   List.iter
@@ -250,12 +242,20 @@ let preimages_at ar (ns : string list) =
           prov := (owner, (n, ptag pv)) :: !prov)
         (providers_of ar n))
     (List.sort_uniq String.compare ns);
-  (Alp.PkgSet.ofList !repo, Alp.Prov.ofList !prov)
+  let prio =
+    List.filter_map
+      (fun q ->
+        match Hashtbl.find_opt ar.prio q with
+        | Some k -> Some (q, nat_of_int k)
+        | None -> None)
+      !repo
+  in
+  (Alp.PkgSet.ofList !repo, Alp.Prov.ofList !prov, Alp.Prio.ofList prio)
 
 (* Lookup.nameSubInst *)
 let name_inst ar (n : string) : Alp.coq_Inst =
-  let repo, prov = preimages_at ar [ n ] in
-  { empty_inst with Alp.inst_repo = repo; inst_prov = prov }
+  let repo, prov, prio = preimages_at ar [ n ] in
+  { empty_inst with Alp.inst_repo = repo; inst_prov = prov; inst_prio = prio }
 
 (* Lookup.installIfFibre: of the rules designating a name this package
    bears or provides, the ones whose designated condition it actually
@@ -280,18 +280,16 @@ let install_if_at ar ((n, v) : string * string) (own : Alp.Prov.t) :
    and install-if rules, and the repository at the names those
    dependencies mention --
    together with, per install-if rule the package carries, the rule's
-   declaring name and the names of the conditions it did not designate *)
-let pkg_inst ar ((n, v) : string * string) : Alp.coq_Inst =
+   declaring name and the names of the conditions it did not designate,
+   and the world, which names the providers without k: it lets be selected *)
+let pkg_inst ar (world : P.dep list) ((n, v) : string * string) : Alp.coq_Inst =
   match Hashtbl.find_opt ar.meta (n, v) with
   | None -> empty_inst
   | Some m ->
       let own =
         Alp.Prov.ofList
-          (List.filter_map
-             (fun (pr : P.prov) ->
-               if auto_selectable ar (n, v) pr.P.p_ver then
-                 Some ((n, v), (pr.P.p_name, ptag pr.P.p_ver))
-               else None)
+          (List.map
+             (fun (pr : P.prov) -> ((n, v), (pr.P.p_name, ptag pr.P.p_ver)))
              m.P.provides)
       in
       let rules = install_if_at ar (n, v) own in
@@ -305,7 +303,7 @@ let pkg_inst ar ((n, v) : string * string) : Alp.coq_Inst =
           (List.map (fun (d : P.dep) -> d.P.d_name) m.P.depends)
           rules
       in
-      let repo, prov = preimages_at ar ns in
+      let repo, prov, prio = preimages_at ar ns in
       let deps =
         Alp.Deps.ofList (List.map (fun d -> ((n, v), xdep d)) m.P.depends)
       in
@@ -316,13 +314,15 @@ let pkg_inst ar ((n, v) : string * string) : Alp.coq_Inst =
         inst_prov = Alp.Prov.union prov own;
         inst_installIf =
           Alp.InstallIf.ofList (List.map (fun r -> (r.t_pkg, r.t_conds)) rules);
+        inst_world = Alp.WSet.ofList (List.map xdep world);
+        inst_prio = prio;
       }
 
 (* Lookup.rootSubInst: the world set and the repository at the names it
    mentions.  Every install-if rule is carried by a package, so the root
    reads no part of the rule table. *)
 let root_inst ar (world : P.dep list) : Alp.coq_Inst =
-  let repo, prov =
+  let repo, prov, prio =
     preimages_at ar (List.map (fun (d : P.dep) -> d.P.d_name) world)
   in
   {
@@ -330,6 +330,7 @@ let root_inst ar (world : P.dep list) : Alp.coq_Inst =
     Alp.inst_repo = repo;
     inst_prov = prov;
     inst_world = Alp.WSet.ofList (List.map xdep world);
+    inst_prio = prio;
   }
 
 (* ---- PubGrub ----------------------------------------------------------- *)
@@ -717,7 +718,7 @@ let touch st ((tn, tv) : T.Pkg.t) =
   | PFR.Name.Orig (Red.Name.Orig n), PFR.Version.Orig (Red.Version.Orig v) ->
       (* Lookup.dependees_lookupOrig *)
       process st (Red.Name.Orig n, Red.Version.Orig v) (fun () ->
-          pkg_inst st.ar (n, v))
+          pkg_inst st.ar st.world (n, v))
   | ( PFR.Name.Orig (Red.Name.Orig m),
       PFR.Version.Orig (Red.Version.Prov (q0, pv)) ) ->
       (* Lookup.dependees_lookupProv: an alias reads no instance *)

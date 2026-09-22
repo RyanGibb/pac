@@ -1,0 +1,44 @@
+P:pv-prov
+V:1.0
+A:x86_64
+p:pv-virt
+
+P:pv-user
+V:1.0
+A:x86_64
+D:pv-virt
+
+P:pv-both
+V:1.0
+A:x86_64
+D:pv-prov pv-virt
+
+P:pv-mid
+V:1.0
+A:x86_64
+D:pv-prov
+
+P:al-prov
+V:1.0
+A:x86_64
+p:al-name=1.0 al-virt
+
+P:al-user
+V:1.0
+A:x86_64
+D:al-name al-virt
+
+P:ii-anchor
+V:1.0
+A:x86_64
+
+P:ii-prov
+V:1.0
+A:x86_64
+i:ii-anchor
+p:ii-virt
+
+P:ii-user
+V:1.0
+A:x86_64
+D:ii-virt

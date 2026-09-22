@@ -85,3 +85,56 @@ with none, so the alias wins:
     prio-lo-alt 2.0
     prio-lo-user 1.0
   encoded solution: 4 core nodes (5 Alpine packages encoded)
+
+An unversioned provides without k: still satisfies a dependency when the
+world names its owner: apk-package(5) says that without a provider-priority
+"user is expected to manually select one of the concrete package names in
+world".  pv-prov provides pv-virt with no k:, and here the world names it:
+
+  $ ../../../src/main.exe alpine BARE pv-prov pv-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index BARE
+  cone: 9 packages, 4 provides entries, 1 install_if rules
+  packages (2):
+    pv-prov 1.0
+    pv-user 1.0
+  encoded solution: 4 core nodes (3 Alpine packages encoded)
+
+while without it pv-user has nothing to satisfy pv-virt, as in apk:
+
+  $ ../../../src/main.exe alpine BARE pv-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index BARE
+  cone: 9 packages, 4 provides entries, 1 install_if rules
+  unsatisfiable:
+  Because @root () -> pv-user 1.0 and pv-user 1.0 -> pv-virt ∅, @root * is forbidden..
+  And because root -> @root (), version solving failed.
+
+apk installs each of the next four by behaviour beyond its documentation,
+out of scope here because it depends on why a package is present:
+
+  $ ../../../src/main.exe alpine BARE pv-both | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index BARE
+  cone: 9 packages, 4 provides entries, 1 install_if rules
+  unsatisfiable:
+  Because @root () -> pv-both 1.0 and pv-both 1.0 -> pv-virt ∅, @root * is forbidden..
+  And because root -> @root (), version solving failed.
+
+  $ ../../../src/main.exe alpine BARE pv-user pv-mid | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index BARE
+  cone: 9 packages, 4 provides entries, 1 install_if rules
+  unsatisfiable:
+  Because @root () -> pv-user 1.0 and pv-user 1.0 -> pv-virt ∅, @root * is forbidden..
+  And because root -> @root (), version solving failed.
+
+  $ ../../../src/main.exe alpine BARE al-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index BARE
+  cone: 9 packages, 4 provides entries, 1 install_if rules
+  unsatisfiable:
+  Because @root () -> al-user 1.0 and al-user 1.0 -> al-virt ∅, @root * is forbidden..
+  And because root -> @root (), version solving failed.
+
+  $ ../../../src/main.exe alpine BARE ii-anchor ii-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index BARE
+  cone: 9 packages, 4 provides entries, 1 install_if rules
+  unsatisfiable:
+  Because @root () -> ii-user 1.0 and ii-user 1.0 -> ii-virt ∅, @root * is forbidden..
+  And because root -> @root (), version solving failed.
