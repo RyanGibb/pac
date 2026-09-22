@@ -46,8 +46,27 @@ module T = Np.T
    npm. *)
 
 (* No platform valuation: resolution here is platform-independent, as
-   npm's is.  engines, os, cpu and libc are all install-time tests, so
-   the parser reads none of them and nothing cuts the repository. *)
+   npm's is.  os, cpu and libc are install-time tests alone -- they
+   appear nowhere in npm-pick-manifest -- so the parser reads none of
+   them and nothing cuts the repository. *)
+
+(* The host npm-pick-manifest ranks engines against.  npm always has one,
+   arborist passing process.version as nodeVersion and the CLI its own
+   version as npmVersion, but nothing here can read a node that need not
+   be installed, so an unset half leaves that sub-key untested exactly as
+   checkEngine does for a null version: every candidate then passes and
+   the engine keys tie, leaving deprecated and semver to decide.  A
+   correspondence harness has to supply both, as eval/cargo does for
+   --rust-version, or the two sides rank by different rules. *)
+let node_version : string option = None
+let npm_version : string option = None
+
+(* semver takes a leading v or = on the version it tests, which is the
+   shape `node --version` prints; our comparator parses digits only. *)
+let host_version (s : string) : string =
+  if s <> "" && (s.[0] = 'v' || s.[0] = 'V' || s.[0] = '=') then
+    String.sub s 1 (String.length s - 1)
+  else s
 
 (* devDependencies participate only from the root package: that is
    depActive's rule in the theory, not a choice made here, but only the
@@ -65,6 +84,8 @@ type archive = {
   (* false under --omit=optional: an optional dependency is then dropped
      outright rather than only when the registry cannot satisfy it *)
   optional : bool;
+  node : string option;
+  npm : string option;
   pkgs : (string, P.ver list) Hashtbl.t;
   latest : (string, string) Hashtbl.t;
   entry : (string * string, P.ver) Hashtbl.t;
@@ -80,11 +101,14 @@ type archive = {
   mutable n_opt_dropped : int;
 }
 
-let empty_archive ?(optional = true) ~cache ~offline () =
+let empty_archive ?(optional = true) ?(node = node_version)
+    ?(npm = npm_version) ~cache ~offline () =
   {
     cache;
     offline;
     optional;
+    node = Option.map host_version node;
+    npm = Option.map host_version npm;
     pkgs = Hashtbl.create 1024;
     latest = Hashtbl.create 1024;
     entry = Hashtbl.create 16384;
@@ -514,17 +538,83 @@ let greatest = function
   | c :: cs ->
       List.fold_left (fun a b -> if PVersion.compare b a > 0 then b else a) c cs
 
+(* checkEngine, npm-install-checks/lib/index.js: engines.node and
+   engines.npm are the two sub-keys it tests, and a null host version
+   passes its own sub-key rather than failing it, so a package declaring
+   a requirement we have no host for is ranked as though it declared
+   none. *)
+let engine_ok st (p : string * string) : bool =
+  match meta st.ar p with
+  | None -> true
+  | Some v ->
+      let ok host rg =
+        match (host, rg) with
+        | Some h, Some rg -> Npm_version.holds_pre h rg
+        | _ -> true
+      in
+      ok st.ar.node v.P.v_eng_node && ok st.ar.npm v.P.v_eng_npm
+
+let deprecated st (p : string * string) : bool =
+  match meta st.ar p with None -> false | Some v -> v.P.v_deprecated
+
+(* npm-pick-manifest's sort keys above semver, lib/index.js:167-181:
+
+     ((notdeprb && engineb) - (notdepra && enginea)) ||
+     (engineb - enginea) ||
+     (notdeprb - notdepra) ||
+     semver.rcompare(vera, verb, sortSemverOpt)
+
+   deprecated and engines are one preference because they are one sort
+   function, and the middle key is what orders them against each other: a
+   deprecated version the host can run outranks a current one it cannot.
+   Neither drops a candidate, so neither can make anything unsatisfiable
+   -- a package whose every version is deprecated resolves to its newest,
+   and a pinned version the host cannot run still installs, which is what
+   --engine-strict exists to refuse at install time.
+
+   The three keys npm sorts above these have no counterpart here.  avoid
+   is npm audit fix's, passed by nothing that writes an ordinary
+   lockfile; policyRestrictions and stagedVersions appear in no public
+   packument, and the parser reads neither, so restricted and staged are
+   uniformly false.  A Gran version stands for a granularity class rather
+   than a release, so it carries neither key. *)
+let pick_keys st (n : string) (c : PVersion.t) : bool * bool * bool =
+  match c with
+  | Np.Vs.Gran _ -> (true, true, true)
+  | Np.Vs.Orig v ->
+      let p = (n, v) in
+      let nd = not (deprecated st p) and eng = engine_ok st p in
+      (nd && eng, eng, nd)
+
+let best st (n : string) (cands : PVersion.t list) : PVersion.t =
+  match cands with
+  | [] -> invalid_arg "best"
+  | c :: cs ->
+      List.fold_left
+        (fun a b ->
+          let d = compare (pick_keys st n b) (pick_keys st n a) in
+          if d > 0 || (d = 0 && PVersion.compare b a > 0) then b else a)
+        c cs
+
 (* npm-pick-manifest offers dist-tags.latest before the highest version
    the range admits, and takes it whenever the range admits it; only the
    ordering differs from ours, so a package published ahead of its own
    latest tag no longer drags its newest release in.  Preference only:
-   the tag is consulted inside the candidates, never outside them. *)
+   the tag is consulted inside the candidates, never outside them.
+
+   The fast path is guarded by the same two keys as the sort
+   (index.js:119-132, [engineOk(mani, ..) && !mani.deprecated]), so a
+   deprecated or unrunnable latest is not a shortcut past them.  It is
+   not merely redundant with the sort: the tag may name a version the
+   sort would rank below a newer one. *)
 let tagged st (n : string) (cands : PVersion.t list) : PVersion.t option =
   match Hashtbl.find_opt st.ar.latest n with
   | None -> None
   | Some l ->
-      let l = Np.Vs.Orig l in
-      List.find_opt (fun c -> PVersion.compare c l = 0) cands
+      if deprecated st (n, l) || not (engine_ok st (n, l)) then None
+      else
+        let l = Np.Vs.Orig l in
+        List.find_opt (fun c -> PVersion.compare c l = 0) cands
 
 (* A directory no dependency of p names: only a peer asks for it, so
    childCands offers every published version of the target and nothing
@@ -563,7 +653,9 @@ let choose st ~assigned (n : PName.t) (cands : PVersion.t list) : PVersion.t =
           | reused -> reused
         else cands
       in
-      match tagged st (snd m) cands with Some c -> c | None -> greatest cands)
+      match tagged st (snd m) cands with
+      | Some c -> c
+      | None -> best st (snd m) cands)
 
 type result = {
   installs : ((string * string) * string) list;

@@ -208,6 +208,86 @@ peer dependency's range exactly as it replaces a dependency's.
   cone: 3 packages, 4 versions, 0 packuments fetched
   encoded solution: 5 core nodes (11 lookups)
 
+deprecated is a resolution preference, not a warning printed over a pick
+already made: npm-pick-manifest ranks a non-deprecated version above a
+deprecated one and above semver order, and the dist-tags.latest fast path
+is taken only when the tagged version is not deprecated.  depr publishes
+1.0.0 clean and 2.0.0 deprecated and tags 2.0.0 latest, so the fast path
+is refused and 1.0.0 is picked.  depr-old is the same shape one major
+down, where the tag never enters into it: latest is 3.0.0, which ^1
+refuses, and the sort alone demotes the deprecated 1.1.0 to leave 1.0.0.
+depr-all is the guard that this is a preference: every version in range
+is deprecated, the key ties, and the newest is picked exactly as before.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree depr-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root depr-app 1.0.0
+  packages (4):
+    depr 1.0.0
+    depr-all 2.0.0
+    depr-app 1.0.0
+    depr-old 1.0.0
+  node_modules (3 edges):
+    depr-app 1.0.0 <- depr 1.0.0
+    depr-app 1.0.0 <- depr-all 2.0.0
+    depr-app 1.0.0 <- depr-old 1.0.0
+  cone: 4 packages, 8 versions, 0 packuments fetched
+  encoded solution: 7 core nodes (17 lookups)
+
+engines is the other half of the same sort, so it needs a host to rank
+against and there is none unless one is given.  Unset, every candidate
+passes the engine test, the key ties, and only deprecated and semver
+decide: engine and engine-npm take their newest, and engine-depr takes
+the non-deprecated 2.0.0.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree engine-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root engine-app 1.0.0
+  packages (4):
+    engine 2.0.0
+    engine-app 1.0.0
+    engine-depr 2.0.0
+    engine-npm 2.0.0
+  node_modules (3 edges):
+    engine-app 1.0.0 <- engine 2.0.0
+    engine-app 1.0.0 <- engine-depr 2.0.0
+    engine-app 1.0.0 <- engine-npm 2.0.0
+  cone: 4 packages, 7 versions, 0 packuments fetched
+  encoded solution: 7 core nodes (17 lookups)
+
+Given a host, the preference acts, and engines.npm is as live a sub-key as
+engines.node: engine's 2.0.0 wants node >=99 and engine-npm's wants npm
+>=99, and both fall back to 1.0.0.  engine-depr fixes the order of the two
+keys against each other.  Its 1.0.0 is deprecated and buildable, its 2.0.0
+is current and unbuildable, and npm sorts on (not deprecated and engine
+ok) before engine ok before not deprecated -- the first key ties at false,
+so the engine key decides and the deprecated 1.0.0 wins.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree --node-version v24.19.0 --npm-version 11.17.0 engine-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root engine-app 1.0.0
+  packages (4):
+    engine 1.0.0
+    engine-app 1.0.0
+    engine-depr 1.0.0
+    engine-npm 1.0.0
+  node_modules (3 edges):
+    engine-app 1.0.0 <- engine 1.0.0
+    engine-app 1.0.0 <- engine-depr 1.0.0
+    engine-app 1.0.0 <- engine-npm 1.0.0
+  cone: 4 packages, 7 versions, 0 packuments fetched
+  encoded solution: 7 core nodes (17 lookups)
+
+Neither key is a gate, so pinning past the preference still resolves: the
+root asked for * and engine 2.0.0 is a version the host cannot run, yet
+naming it directly installs it, exactly as npm records an EBADENGINE
+package in a lockfile and complains at install time.
+
+  $ ../../../src/main.exe npm --offline --cache . --node-version v24.19.0 engine 2.0.0 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root engine 2.0.0
+  packages (1):
+    engine 2.0.0
+  node_modules edges: 0
+  cone: 1 packages, 2 versions, 0 packuments fetched
+  encoded solution: 1 core nodes (2 lookups)
+
 A package with no packument in the cache cannot be fetched when offline.
 
   $ ../../../src/main.exe npm --offline --cache . missing

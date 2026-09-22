@@ -67,7 +67,14 @@ mkdir -p "$W"
 root=$(python3 "$S/mkroot.py" "$RUN/cache" "$goal" "$W" "$pin" | cut -d' ' -f1)
 
 cd "$S/../.."
-"$exe" npm --offline --cache "$RUN/cache" --tree "$root" > "$out/$slug.ours" 2>&1
+# the same host cmp.sh gives, so the answer validated here is the answer
+# compared there rather than a differently ranked sibling of it
+npmv=$(sed -n 1p "$S/npm-version")
+nodev=$(sed -n 2p "$S/npm-version")
+
+"$exe" npm --offline --cache "$RUN/cache" --tree \
+  ${nodev:+--node-version "$nodev"} ${npmv:+--npm-version "$npmv"} \
+  "$root" > "$out/$slug.ours" 2>&1
 if ! grep -q '^node_modules' "$out/$slug.ours"; then
   printf '%-24s NO SOLUTION (see %s)\n' "$goal" "$out/$slug.ours"
   exit 1

@@ -1,0 +1,4 @@
+{"name":"engine-npm","dist-tags":{"latest":"2.0.0"},
+ "versions":{
+  "1.0.0":{"name":"engine-npm","version":"1.0.0"},
+  "2.0.0":{"name":"engine-npm","version":"2.0.0","engines":{"npm":">=99"}}}}

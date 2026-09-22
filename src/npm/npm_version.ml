@@ -346,6 +346,15 @@ let cs_holds cs v =
 let holds (v : string) (rg : range) : bool =
   List.exists (fun cs -> cs_holds cs v) rg
 
+(* semver's includePrerelease, which checkEngine passes and a dependency
+   range never does: cs_admits is dropped, so a prerelease version is
+   ordered by an ordinary comparator rather than refused by one that
+   names no prerelease.  It matters only for a prerelease host -- an
+   engines range is matched against the running node or npm, not against
+   a published version. *)
+let holds_pre (v : string) (rg : range) : bool =
+  List.exists (fun cs -> List.for_all (fun ct -> comp_match ct v) cs) rg
+
 let string_of_op = function
   | Ge -> ">="
   | Gt -> ">"

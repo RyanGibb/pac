@@ -12,13 +12,19 @@
    - The dependency-spec classification below.  npm accepts git, file,
      link, workspace and tag specs that no registry lookup can resolve;
      those dependencies are dropped and counted rather than guessed at.
-   Deliberately *not* read: "engines" and "os"/"cpu"/"libc".  npm
-   consults none of them when choosing versions -- a package-lock.json
-   records every platform's variant of an optional dependency whatever
-   host wrote it, and the filtering happens at install time
-   (EBADPLATFORM, and --engine-strict promoting a warning to an error).
-   Reading them here would make our instance strictly smaller than
-   npm's.
+   Deliberately *not* read: "os", "cpu" and "libc".  npm consults none
+   of them when choosing a version -- npm-pick-manifest has no platform
+   key at all -- so a package-lock.json records every platform's variant
+   of an optional dependency whatever host wrote it, and the filtering
+   happens at install time (EBADPLATFORM).  Reading them here would make
+   our instance strictly smaller than npm's.
+
+   "engines" is a different case and is read, because npm-pick-manifest
+   sorts on it.  It is not a gate: a version the host cannot run is
+   ranked below one it can and is still installable when nothing else
+   matches, which is why --engine-strict exists to promote the
+   install-time warning to an error.  Only the "node" and "npm" sub-keys
+   are live, because checkEngine tests those two and nothing else.
 
    - The optionalDependencies reading.  Such an entry is an ordinary
      dependency that npm abandons in exactly one situation: its manifest
@@ -32,7 +38,7 @@
      the same name, which is what the dependency assembly below does.
 
    Not modelled, and counted where it matters: bundledDependencies
-   (placement) and "deprecated" (npm warns and installs anyway). *)
+   (placement). *)
 
 type dep = {
   d_dir : string; (* the directory key, i.e. the manifest key *)
@@ -53,6 +59,11 @@ type ver = {
   v_peers : peer list;
   v_ovr : (string * Npm_version.range) list;
   v_deprecated : bool;
+  (* engines.node and engines.npm, the two sub-keys checkEngine tests;
+     absent means the version imposes no requirement, which is what makes
+     it rank above one whose requirement the host fails *)
+  v_eng_node : Npm_version.range option;
+  v_eng_npm : Npm_version.range option;
 }
 
 type packument = {
@@ -191,6 +202,13 @@ let overrides_of (j : Yojson.Safe.t) : (string * Npm_version.range) list =
 
 let is_deprecated = function `Null -> false | `Bool b -> b | _ -> true
 
+(* checkEngine reads eng.node and eng.npm and ignores everything else in
+   the object, so a sub-key such as "yarn" is not a requirement at all *)
+let engine_of (j : Yojson.Safe.t) (k : string) : Npm_version.range option =
+  match member k (member "engines" j) with
+  | `String rg -> Some (Npm_version.parse_range rg)
+  | _ -> None
+
 let ver_of ~(root : bool) (vers : string) (j : Yojson.Safe.t) : ver option =
   match j with
   | `Assoc _ ->
@@ -224,6 +242,8 @@ let ver_of ~(root : bool) (vers : string) (j : Yojson.Safe.t) : ver option =
           v_peers = peers;
           v_ovr = (if root then overrides_of j else []);
           v_deprecated = dep;
+          v_eng_node = engine_of j "node";
+          v_eng_npm = engine_of j "npm";
         }
   | _ ->
       reject ();

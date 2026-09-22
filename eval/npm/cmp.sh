@@ -10,7 +10,12 @@
 #
 # Baselines are kept in lock-<goal>.json and reused; they were taken with
 # the npm in npm-version, whose arborist differs across majors, so
-# regenerate them all or none.  EXTRA pins names on *both* sides at once
+# regenerate them all or none.  npm-version is also the host our side is
+# given: npm-pick-manifest ranks engines against the running node and
+# npm, so leaving ours unset would have the two sides sorting candidates
+# by different rules -- the mistake eval/cargo made with --rust-version.
+#
+# EXTRA pins names on *both* sides at once
 # -- "name@version ..." appended to the wrapper's dependencies -- so a
 # divergence can be re-asked with npm's pick forced: if the two then
 # coincide, npm's answer was one our instance already admitted and only
@@ -42,7 +47,12 @@ else
   lock="$S/lock-$slug.json"
 fi
 
-"$exe" npm --offline --cache "$RUN/cache" --tree "$root" > "$out/$slug.ours" 2>&1
+npmv=$(sed -n 1p "$S/npm-version")
+nodev=$(sed -n 2p "$S/npm-version")
+
+"$exe" npm --offline --cache "$RUN/cache" --tree \
+  ${nodev:+--node-version "$nodev"} ${npmv:+--npm-version "$npmv"} \
+  "$root" > "$out/$slug.ours" 2>&1
 
 if [ ! -s "$lock" ]; then
   ( cd "$W" && rm -f package-lock.json && \

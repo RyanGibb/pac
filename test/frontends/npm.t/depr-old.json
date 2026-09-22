@@ -1,0 +1,5 @@
+{"name":"depr-old","dist-tags":{"latest":"3.0.0"},
+ "versions":{
+  "1.0.0":{"name":"depr-old","version":"1.0.0"},
+  "1.1.0":{"name":"depr-old","version":"1.1.0","deprecated":"unmaintained"},
+  "3.0.0":{"name":"depr-old","version":"3.0.0"}}}

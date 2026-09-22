@@ -12,21 +12,27 @@ edge (R wants directory d, npm resolved it to V) that is two tests:
           the requirer's row differs from npm's -- an alias or an override
           read differently, or the edge attributed to the wrong requirer --
           and is not a preference at all.
-  gate    does V's manifest pass the gates our frontend applies at its
-          hardcoded host (node 22.0.0, npm 10.0.0, linux/x64/glibc)?
-          A failure here would be our instance being strictly smaller
-          than npm's.
+  gate    does V's manifest pass the gates our frontend applies at the
+          run host (linux/x64/glibc)?  A failure here would be our
+          instance being strictly smaller than npm's.
 
 range and gate both pass  ->  preference gap
 gate fails                ->  instance gap (gate)
 range fails               ->  instance gap (row read differently)
 
-The gate test is now a tripwire rather than a classification: our
-frontend applies no engines gate (dropped in 68d24de) and no
-os/cpu/libc gate (dropped when npm's resolution became
-platform-independent), so it reads the manifests and not our instance.
-A "gate" verdict today means either a regression or a version the
-snapshot simply lacks.
+The gate test is a tripwire rather than a classification: our frontend
+applies no os/cpu/libc gate, npm's resolution being platform-independent,
+so it reads the manifests and not our instance.  A "gate" verdict means
+either a regression or a version the snapshot simply lacks.
+
+engines is deliberately not a gate on either side.  npm-pick-manifest
+sorts on it (lib/index.js:165-179) and installs an unrunnable version
+when nothing else matches, and so do we, so npm picking a version this
+host cannot run is an ordinary preference gap.  It is named separately
+because engines is the one preference key whose input is a host
+constant: both sides have to be given the same node and npm versions, or
+they rank by different rules and every such edge diverges.  The host
+here is npm-version, which is what cmp.sh passes our side.
 
 usage: verdict.py <run-dir> <goal> <out-prefix>
 """
@@ -81,9 +87,21 @@ def resolve_semver():
     return "semver"
 
 
+def resolve_host():
+    """npm-version, the file setup.sh writes: npm's version then node's"""
+    host = {"os": "linux", "cpu": "x64", "libc": "glibc"}
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "npm-version")) as f:
+            npm, node = [l.strip().lstrip("v=") for l in f][:2]
+        host["npm"], host["node"] = npm, node
+    except (OSError, ValueError):
+        host["npm"], host["node"] = "", ""
+    return host
+
+
 SEMVER = resolve_semver()
-HOST = {"node": "22.0.0", "npm": "10.0.0", "os": "linux", "cpu": "x64",
-        "libc": "glibc"}
+HOST = resolve_host()
 
 
 def escape(name):
@@ -159,7 +177,7 @@ def main():
             rg = declared(rm, d) if rm else None
             eng = (vm or {}).get("engines", {})
             eng = {k: v for k, v in eng.items()
-                   if k in ("node", "npm") and isinstance(v, str)}
+                   if k in ("node", "npm") and isinstance(v, str) and HOST[k]}
             rows.append((rn, rv, d, vn, vv, rg, vm, eng))
             if rg is not None:
                 pairs.append([vv, rg])
@@ -172,12 +190,12 @@ def main():
             why = "instance gap (gate): version absent from snapshot"
         elif not all(listed(vm, f, HOST[f]) for f in ("os", "cpu", "libc")):
             why = "instance gap (gate): os/cpu/libc"
-        elif not all(sat[(HOST[k], v)] for k, v in eng.items()):
-            why = "instance gap (gate): engines"
         elif rg is None:
             why = "unclassified: requirer's row not found"
         elif sat[(vv, rg)] is not True:
             why = "instance gap: row read differently"
+        elif not all(sat[(HOST[k], v)] for k, v in eng.items()):
+            why = "preference gap (engines)"
         else:
             why = "preference gap"
         counts[why] = counts.get(why, 0) + 1

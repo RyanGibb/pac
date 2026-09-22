@@ -1,0 +1,4 @@
+{"name":"depr-all","dist-tags":{"latest":"2.0.0"},
+ "versions":{
+  "1.0.0":{"name":"depr-all","version":"1.0.0","deprecated":"unmaintained"},
+  "2.0.0":{"name":"depr-all","version":"2.0.0","deprecated":"unmaintained"}}}

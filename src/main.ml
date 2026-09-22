@@ -316,12 +316,12 @@ let alpine_cmd =
     (Cmd.info "alpine" ~doc:"Solve against an Alpine APKINDEX.")
     Term.(const alpine_run $ debug_arg $ path $ goals)
 
-let npm_run debug cache offline tree omit goal wanted =
+let npm_run debug cache offline tree omit nodev npmv goal wanted =
   let t0 = Unix.gettimeofday () in
   let ar =
     Npm_solve.empty_archive
       ~optional:(not (List.mem "optional" omit))
-      ~cache ~offline ()
+      ~node:nodev ~npm:npmv ~cache ~offline ()
   in
   let vs =
     List.map
@@ -407,6 +407,26 @@ let npm_cmd =
             "Omit a dependency class; $(b,optional) is the class \
              distinguished here.")
   in
+  (* npm-pick-manifest's engines preference, which needs a host to rank
+     against -- npm reads its own and node's, this asks for them *)
+  let nodev =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "node-version" ] ~docv:"VERSION"
+          ~doc:
+            "Host node version to prefer engines-compatible package \
+             versions for; unset leaves engines.node untested.")
+  in
+  let npmv =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "npm-version" ] ~docv:"VERSION"
+          ~doc:
+            "Host npm version, the other sub-key checkEngine reads; unset \
+             leaves engines.npm untested.")
+  in
   let goal =
     Arg.(
       required
@@ -423,7 +443,8 @@ let npm_cmd =
   Cmd.v
     (Cmd.info "npm" ~doc:"Solve against the npm registry.")
     Term.(
-      const npm_run $ debug_arg $ cache $ offline $ tree $ omit $ goal $ wanted)
+      const npm_run $ debug_arg $ cache $ offline $ tree $ omit $ nodev $ npmv
+      $ goal $ wanted)
 
 let () =
   let doc = "Solve dependencies through the verified package calculus." in
