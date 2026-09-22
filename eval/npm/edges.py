@@ -105,9 +105,17 @@ def lock_sets(lock, peer_parent):
         (ident[r][0], ident[r][1], d, ident[q][0], ident[q][1])
         for (r, d, q) in plain + peer
     }
+    # npm copied these out of the bundler's tarball rather than resolving
+    # them, and a bundled version need not even be published, so verdict.py
+    # has to tell them apart by path before identities collapse
+    bundled = {
+        (ident[r][0], ident[r][1], d, ident[q][0], ident[q][1])
+        for (r, d, q) in plain + peer
+        if pkgs[r].get("inBundle") or pkgs[q].get("inBundle")
+    }
     unres = {(node_name(p, pkgs[p]), pkgs[p].get("version", ""), d)
              for (p, d) in unresolved if p in live}
-    return nodes, edges, unres
+    return nodes, edges, unres, bundled
 
 
 # ---- our side: parse the --tree listing ----
@@ -160,7 +168,7 @@ def main():
     flags = sys.argv[5:]
     with open(lockp) as f:
         lock = json.load(f)
-    nn, ne, nu = lock_sets(lock, "--peer-parent" in flags)
+    nn, ne, nu, nb = lock_sets(lock, "--peer-parent" in flags)
     with open(oursp) as f:
         on, oe = our_sets(f.read())
 
@@ -173,6 +181,7 @@ def main():
     dump(prefix + ".edges.oursonly", oe - ne)
     dump(prefix + ".edges.npmonly", ne - oe)
     dump(prefix + ".unresolved.npm", nu)
+    dump(prefix + ".edges.bundled", nb)
 
     # the trailing #-field is what sweep.sh totals; the rest is for reading
     print(

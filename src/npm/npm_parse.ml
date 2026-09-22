@@ -37,8 +37,8 @@
      optionalDependencies entry as overriding a dependencies entry of
      the same name, which is what the dependency assembly below does.
 
-   Not modelled, and counted where it matters: bundledDependencies
-   (placement). *)
+   Not read: bundledDependencies.  npm takes those versions verbatim from
+   the tarball, which this frontend neither fetches nor trusts. *)
 
 type dep = {
   d_dir : string; (* the directory key, i.e. the manifest key *)

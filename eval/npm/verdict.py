@@ -19,6 +19,12 @@ edge (R wants directory d, npm resolved it to V) that is two tests:
 range and gate both pass  ->  preference gap
 gate fails                ->  instance gap (gate)
 range fails               ->  instance gap (row read differently)
+either end inBundle       ->  out of scope (bundled)
+
+The last is decided before either test.  A lock entry marked inBundle was
+never resolved: npm grafts a bundling package's node_modules in from its
+tarball verbatim, so the version there is whatever the publisher packed,
+published or not, and neither test says anything about it.
 
 The gate test is a tripwire rather than a classification: our frontend
 applies no os/cpu/libc gate, npm's resolution being platform-independent,
@@ -168,6 +174,11 @@ def satisfies(pairs):
 def main():
     run, goal, prefix = sys.argv[1], sys.argv[2], sys.argv[3]
     snap = Snapshot(os.path.join(run, "cache"))
+    try:
+        with open(prefix + ".edges.bundled") as f:
+            bundled = {tuple(l.rstrip("\n").split("\t")) for l in f}
+    except OSError:
+        bundled = set()
 
     rows, pairs = [], []
     with open(prefix + ".edges.npmonly") as f:
@@ -186,7 +197,9 @@ def main():
 
     counts, lines = {}, []
     for rn, rv, d, vn, vv, rg, vm, eng in rows:
-        if vm is None:
+        if (rn, rv, d, vn, vv) in bundled:
+            why = "out of scope (bundled)"
+        elif vm is None:
             why = "instance gap (gate): version absent from snapshot"
         elif not all(listed(vm, f, HOST[f]) for f in ("os", "cpu", "libc")):
             why = "instance gap (gate): os/cpu/libc"

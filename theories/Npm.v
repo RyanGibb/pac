@@ -93,7 +93,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
      translation, and sets would demand a comparator for Range used
      nowhere.  optionalDependencies are absent rather than inert --
      use-if-present is a post-resolution decision, not a constraint --
-     and bundledDependencies are placement. *)
+     and bundledDependencies are out of scope: npm takes those versions
+     from the tarball, which is not an input here. *)
   Record Inst : Type := MkInst
     { inst_repo : RepoSet.t
     ; inst_dep : list (RPkg.t * Dependency)
