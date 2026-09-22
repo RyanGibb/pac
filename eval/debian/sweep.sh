@@ -6,10 +6,7 @@ set -u
 S="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$S/out"
 exe=$1; tag=$2
-for f in "$S"/apt-*.names; do
-  g=$(basename "$f" .names); g=${g#apt-}
-  echo "$g"
-done | xargs -P 8 -I{} bash "$S/cmp.sh" "$exe" "$tag" {} > "$S/out/$tag.sweep" 2>&1
+xargs -P 8 -I{} bash "$S/cmp.sh" "$exe" "$tag" {} < "$S/goals.txt" > "$S/out/$tag.sweep" 2>&1
 sort "$S/out/$tag.sweep" -o "$S/out/$tag.sweep"
 awk '{if ($3=="absent") {ab++; next}
       oo=0;ao=0; for(i=1;i<=NF;i++){split($i,a,"="); if(a[1]=="ours-only")oo=a[2]; if(a[1]=="apt-only")ao=a[2]}
