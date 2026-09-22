@@ -280,6 +280,7 @@ Cgo.versions
 Alp.Reduction.Lookup.dependees_lookupOrig
 Alp.Reduction.Lookup.dependees_lookupProv
 Alp.Reduction.Lookup.dependees_lookupRoot
+Alp.Reduction.Lookup.selectableAlts_lookup
 Alp.Reduction.Lookup.versions_lookupName
 Alp.Reduction.alpine_completeness
 Alp.Reduction.alpine_soundness
@@ -292,6 +293,10 @@ Alp.Reduction.matchPos_attachAt
 Alp.Reduction.match_req_decode
 Alp.Reduction.match_req_transS
 Alp.Reduction.rootPkg
+Alp.Reduction.selectableAlts
+Alp.Reduction.selectableAlts_spec
+Alp.Reduction.supportForm
+Alp.Reduction.supportForm_spec
 Alp.Reduction.transD
 Alp.Reduction.transR
 Alp.Reduction.versions

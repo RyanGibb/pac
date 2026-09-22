@@ -80,9 +80,9 @@ module T = PFR.T
    versioned ones included, and preference in this pipeline lives in
    PVersion.compare, which is where its value is applied -- off the
    archive, not off an instance.  Whether it is non-zero also decides
-   whether a provides without a version is selected automatically, which
-   the calculus reads off inst_prio, so every sub-instance carries the k:
-   lines of the packages in its repository. *)
+   whether a provides without a version can be selected at all, which the
+   calculus reads off inst_prio, so a sub-instance carries the k: lines
+   of the unversioned providers it asks about. *)
 
 (* replaces (r:/q:) never appears in a repository index -- it is an
    installed-db field -- so inst_repl is empty. *)
@@ -140,7 +140,14 @@ type archive = {
   (* install-if rules by their designated condition's name: only a package
      bearing that name, or providing it, can carry the rule *)
   iif_by_cond : (string, iif_rule list) Hashtbl.t;
+  (* each package's own install-if rule, as it entered the instance *)
+  iif_own : (string * string, Alp.CondSet.t) Hashtbl.t;
+  (* name -> the packages depending on it positively, with the atom.
+     Only an unversioned provider without k: needs it, so a graph without
+     one never builds it. *)
+  rdeps : (string, ((string * string) * P.dep) list) Hashtbl.t Lazy.t;
   prio : (string * string, int) Hashtbl.t;
+  mutable supp : Alp.PkgSet.t option;
   mutable n_pkgs : int;
   mutable n_provs : int;
   mutable n_iif : int;
@@ -150,6 +157,17 @@ let push tbl k v =
   let prev = match Hashtbl.find_opt tbl k with Some l -> l | None -> [] in
   Hashtbl.replace tbl k (v :: prev)
 
+let reverse_deps (pkgs : P.pkg list) =
+  let t = Hashtbl.create 16384 in
+  List.iter
+    (fun (p : P.pkg) ->
+      List.iter
+        (fun (d : P.dep) ->
+          if not d.P.d_neg then push t d.P.d_name ((p.P.name, p.P.version), d))
+        p.P.depends)
+    pkgs;
+  t
+
 let load_index (path : string) : archive =
   let pkgs = P.parse_file path in
   let ar =
@@ -158,7 +176,10 @@ let load_index (path : string) : archive =
       meta = Hashtbl.create 16384;
       providers = Hashtbl.create 16384;
       iif_by_cond = Hashtbl.create 1024;
+      iif_own = Hashtbl.create 1024;
+      rdeps = lazy (reverse_deps pkgs);
       prio = Hashtbl.create 1024;
+      supp = None;
       n_pkgs = 0;
       n_provs = 0;
       n_iif = 0;
@@ -186,7 +207,9 @@ let load_index (path : string) : archive =
         if List.exists (fun (d : P.dep) -> d.P.d_neg) p.P.install_if then
           P.reject ()
         else
-          iifs := ((p.P.name, p.P.version), condset_of p.P.install_if) :: !iifs))
+          let cs = condset_of p.P.install_if in
+          Hashtbl.replace ar.iif_own (p.P.name, p.P.version) cs;
+          iifs := ((p.P.name, p.P.version), cs) :: !iifs))
     pkgs;
   (* keyed only once every set has offered its designation, so the key a
      rule is filed under is the one [attachDesignation] will ask about *)
@@ -223,12 +246,9 @@ let empty_inst =
     inst_world = Alp.WSet.empty;
     inst_prio = Alp.Prio.empty;
     inst_repl = Alp.Repl.empty;
+    inst_supp = Alp.PkgSet.empty;
   }
 
-let rec nat_of_int (k : int) : E.nat =
-  if k <= 0 then E.O else E.S (nat_of_int (k - 1))
-
-(* Lookup.subInst's inst_prio is the k: lines of its repository *)
 let preimages_at ar (ns : string list) =
   let repo = ref [] and prov = ref [] in
   List.iter
@@ -242,20 +262,245 @@ let preimages_at ar (ns : string list) =
           prov := (owner, (n, ptag pv)) :: !prov)
         (providers_of ar n))
     (List.sort_uniq String.compare ns);
+  (Alp.PkgSet.ofList !repo, Alp.Prov.ofList !prov)
+
+let rec nat_of_int (k : int) : E.nat =
+  if k <= 0 then E.O else E.S (nat_of_int (k - 1))
+
+(* k > 0 rather than k <> 0, since nat_of_int sends a negative k: to 0 *)
+let has_priority ar (q : string * string) =
+  match Hashtbl.find_opt ar.prio q with Some k -> k > 0 | None -> false
+
+(* Lookup.selectableAlts_lookup: the k: lines of the unversioned providers
+   of the bare dependencies being encoded, and for those without one, their
+   provides, the dependencies and world atoms naming what they provide with
+   a version or are named, their install-if rules and those rules'
+   condition names.  Returning early when every provider has a k: is what
+   leaves the reverse-dependency table unbuilt. *)
+type selectable = {
+  g_prio : Alp.Prio.t;
+  g_prov : Alp.Prov.t;
+  g_deps : Alp.Deps.t;
+  g_world : Alp.WSet.t;
+  g_rules : Alp.InstallIf.t;
+  g_names : string list;
+}
+
+let selectable_tables ar (world : P.dep list) (any : string list) : selectable =
+  let vs =
+    List.sort_uniq compare
+      (List.concat_map
+         (fun n ->
+           List.filter_map
+             (fun (owner, pv) -> if pv = None then Some owner else None)
+             (providers_of ar n))
+         (List.sort_uniq String.compare any))
+  in
   let prio =
     List.filter_map
       (fun q ->
         match Hashtbl.find_opt ar.prio q with
         | Some k -> Some (q, nat_of_int k)
         | None -> None)
-      !repo
+      vs
   in
-  (Alp.PkgSet.ofList !repo, Alp.Prov.ofList !prov, Alp.Prio.ofList prio)
+  let gs = List.filter (fun q -> not (has_priority ar q)) vs in
+  if gs = [] then
+    {
+      g_prio = Alp.Prio.ofList prio;
+      g_prov = Alp.Prov.empty;
+      g_deps = Alp.Deps.empty;
+      g_world = Alp.WSet.empty;
+      g_rules = Alp.InstallIf.empty;
+      g_names = [];
+    }
+  else
+    let provides q =
+      match Hashtbl.find_opt ar.meta q with
+      | Some m -> m.P.provides
+      | None -> []
+    in
+    let prov =
+      List.concat_map
+        (fun q ->
+          List.map
+            (fun (pr : P.prov) -> (q, (pr.P.p_name, ptag pr.P.p_ver)))
+            (provides q))
+        gs
+    in
+    let claimed =
+      List.sort_uniq String.compare
+        (List.concat_map
+           (fun q ->
+             fst q
+             :: List.filter_map
+                  (fun (pr : P.prov) ->
+                    if pr.P.p_ver <> None then Some pr.P.p_name else None)
+                  (provides q))
+           gs)
+    in
+    let rdeps = Lazy.force ar.rdeps in
+    let deps =
+      List.concat_map
+        (fun m ->
+          match Hashtbl.find_opt rdeps m with
+          | Some l -> List.map (fun (r, d) -> (r, xdep d)) l
+          | None -> [])
+        claimed
+    in
+    let world_on =
+      List.filter
+        (fun (d : P.dep) -> (not d.P.d_neg) && List.mem d.P.d_name claimed)
+        world
+    in
+    let rules =
+      List.filter_map
+        (fun q ->
+          match Hashtbl.find_opt ar.iif_own q with
+          | Some cs -> Some (q, cs)
+          | None -> None)
+        gs
+    in
+    {
+      g_prio = Alp.Prio.ofList prio;
+      g_prov = Alp.Prov.ofList prov;
+      g_deps = Alp.Deps.ofList deps;
+      g_world = Alp.WSet.ofList (List.map xdep world_on);
+      g_rules = Alp.InstallIf.ofList rules;
+      g_names =
+        List.concat_map
+          (fun (_, cs) -> List.map fst (Alp.CondSet.elements cs))
+          rules;
+    }
+
+(* inst_supp: the requirers and install_if triggers that could make an
+   unversioned provider without k: selectable, and whatever could lead to
+   one of them, since a package added to support one needs support too.
+   PAC_SUPPORT_ALL demands it of every package instead. *)
+let supp_of ar =
+  match ar.supp with
+  | Some s -> s
+  | None ->
+      let rdeps = Lazy.force ar.rdeps in
+      let requirers name =
+        match Hashtbl.find_opt rdeps name with
+        | Some l -> List.map fst l
+        | None -> []
+      in
+      let offerers name =
+        List.map
+          (fun (p : P.pkg) -> (p.P.name, p.P.version))
+          (versions_of ar name)
+        @ List.map fst (providers_of ar name)
+      in
+      let provides q =
+        match Hashtbl.find_opt ar.meta q with
+        | Some m -> m.P.provides
+        | None -> []
+      in
+      let conds q =
+        match Hashtbl.find_opt ar.iif_own q with
+        | Some cs -> List.map fst (Alp.CondSet.elements cs)
+        | None -> []
+      in
+      let seen = Hashtbl.create 64 and queue = Queue.create () in
+      let add q =
+        if not (Hashtbl.mem seen q) then (
+          Hashtbl.replace seen q ();
+          Queue.add q queue)
+      in
+      if Sys.getenv_opt "PAC_SUPPORT_ALL" <> None then
+        Hashtbl.iter (fun q _ -> add q) ar.meta
+      else
+        Hashtbl.iter
+          (fun q (m : P.pkg) ->
+            if
+              (not (has_priority ar q))
+              && List.exists
+                   (fun (pr : P.prov) -> pr.P.p_ver = None)
+                   m.P.provides
+            then (
+              List.iter
+                (fun n -> List.iter add (requirers n))
+                (fst q
+                :: List.filter_map
+                     (fun (pr : P.prov) ->
+                       if pr.P.p_ver <> None then Some pr.P.p_name else None)
+                     m.P.provides);
+              List.iter (fun n -> List.iter add (offerers n)) (conds q)))
+          ar.meta;
+      while not (Queue.is_empty queue) do
+        let x = Queue.pop queue in
+        List.iter
+          (fun n -> List.iter add (requirers n))
+          (fst x :: List.map (fun (pr : P.prov) -> pr.P.p_name) (provides x));
+        List.iter (fun n -> List.iter add (offerers n)) (conds x)
+      done;
+      let s =
+        Alp.PkgSet.ofList (Hashtbl.fold (fun q () acc -> q :: acc) seen [])
+      in
+      ar.supp <- Some s;
+      s
 
 (* Lookup.nameSubInst *)
 let name_inst ar (n : string) : Alp.coq_Inst =
-  let repo, prov, prio = preimages_at ar [ n ] in
-  { empty_inst with Alp.inst_repo = repo; inst_prov = prov; inst_prio = prio }
+  let repo, prov = preimages_at ar [ n ] in
+  {
+    empty_inst with
+    Alp.inst_repo = repo;
+    inst_prov = prov;
+    inst_supp = supp_of ar;
+  }
+
+(* What supportForm reads for one package: the dependencies naming
+   anything it provides, its own install-if rule and that rule's condition
+   names, and its k: line. *)
+type support = {
+  s_deps : Alp.Deps.t;
+  s_rules : Alp.InstallIf.t;
+  s_prio : Alp.Prio.t;
+  s_names : string list;
+}
+
+let support_tables ar ((n, v) : string * string) (m : P.pkg) : support =
+  let offered =
+    List.sort_uniq String.compare
+      (n :: List.map (fun (pr : P.prov) -> pr.P.p_name) m.P.provides)
+  in
+  let deps =
+    if not (Alp.PkgSet.mem (n, v) (supp_of ar)) then []
+    else
+      let rdeps = Lazy.force ar.rdeps in
+      List.concat_map
+        (fun name ->
+          match Hashtbl.find_opt rdeps name with
+          | Some l -> List.map (fun (r, d) -> (r, xdep d)) l
+          | None -> [])
+        offered
+  in
+  let rules =
+    match Hashtbl.find_opt ar.iif_own (n, v) with
+    | Some cs -> [ ((n, v), cs) ]
+    | None -> []
+  in
+  {
+    s_deps = Alp.Deps.ofList deps;
+    s_rules = Alp.InstallIf.ofList rules;
+    s_prio =
+      (match Hashtbl.find_opt ar.prio (n, v) with
+      | Some k -> Alp.Prio.singleton ((n, v), nat_of_int k)
+      | None -> Alp.Prio.empty);
+    s_names =
+      List.concat_map
+        (fun (_, cs) -> List.map fst (Alp.CondSet.elements cs))
+        rules;
+  }
+
+let any_names (ds : P.dep list) =
+  List.filter_map
+    (fun (d : P.dep) ->
+      if (not d.P.d_neg) && d.P.d_constr = P.Any then Some d.P.d_name else None)
+    ds
 
 (* Lookup.installIfFibre: of the rules designating a name this package
    bears or provides, the ones whose designated condition it actually
@@ -281,7 +526,7 @@ let install_if_at ar ((n, v) : string * string) (own : Alp.Prov.t) :
    dependencies mention --
    together with, per install-if rule the package carries, the rule's
    declaring name and the names of the conditions it did not designate,
-   and the world, which names the providers without k: it lets be selected *)
+   and the selectable_tables of its bare dependencies *)
 let pkg_inst ar (world : P.dep list) ((n, v) : string * string) : Alp.coq_Inst =
   match Hashtbl.find_opt ar.meta (n, v) with
   | None -> empty_inst
@@ -303,34 +548,48 @@ let pkg_inst ar (world : P.dep list) ((n, v) : string * string) : Alp.coq_Inst =
           (List.map (fun (d : P.dep) -> d.P.d_name) m.P.depends)
           rules
       in
-      let repo, prov, prio = preimages_at ar ns in
+      let g = selectable_tables ar world (any_names m.P.depends) in
+      let sp = support_tables ar (n, v) m in
+      let repo, prov =
+        preimages_at ar
+          (List.rev_append sp.s_names (List.rev_append g.g_names ns))
+      in
       let deps =
         Alp.Deps.ofList (List.map (fun d -> ((n, v), xdep d)) m.P.depends)
       in
       {
         empty_inst with
         Alp.inst_repo = repo;
-        inst_deps = deps;
-        inst_prov = Alp.Prov.union prov own;
+        inst_deps = Alp.Deps.union deps (Alp.Deps.union g.g_deps sp.s_deps);
+        inst_prov = Alp.Prov.union (Alp.Prov.union own g.g_prov) prov;
         inst_installIf =
-          Alp.InstallIf.ofList (List.map (fun r -> (r.t_pkg, r.t_conds)) rules);
+          Alp.InstallIf.union
+            (Alp.InstallIf.ofList
+               (List.map (fun r -> (r.t_pkg, r.t_conds)) rules))
+            (Alp.InstallIf.union g.g_rules sp.s_rules);
         inst_world = Alp.WSet.ofList (List.map xdep world);
-        inst_prio = prio;
+        inst_prio = Alp.Prio.union g.g_prio sp.s_prio;
+        inst_supp = supp_of ar;
       }
 
-(* Lookup.rootSubInst: the world set and the repository at the names it
-   mentions.  Every install-if rule is carried by a package, so the root
-   reads no part of the rule table. *)
+(* Lookup.rootSubInst: the world set, the repository at the names it
+   mentions, and the selectable_tables of its bare atoms. *)
 let root_inst ar (world : P.dep list) : Alp.coq_Inst =
-  let repo, prov, prio =
-    preimages_at ar (List.map (fun (d : P.dep) -> d.P.d_name) world)
+  let g = selectable_tables ar world (any_names world) in
+  let repo, prov =
+    preimages_at ar
+      (List.rev_append g.g_names
+         (List.map (fun (d : P.dep) -> d.P.d_name) world))
   in
   {
     empty_inst with
     Alp.inst_repo = repo;
-    inst_prov = prov;
+    inst_deps = g.g_deps;
+    inst_prov = Alp.Prov.union g.g_prov prov;
+    inst_installIf = g.g_rules;
     inst_world = Alp.WSet.ofList (List.map xdep world);
-    inst_prio = prio;
+    inst_prio = g.g_prio;
+    inst_supp = supp_of ar;
   }
 
 (* ---- PubGrub ----------------------------------------------------------- *)
@@ -405,18 +664,24 @@ let prov_rank ar (q : string * string) : int =
 let prio_of ar (q : string * string) : int =
   match Hashtbl.find_opt ar.prio q with Some k -> k | None -> 0
 
-(* encPos lists the unversioned providers of a name as a disjunction whose
-   last alternative is the name's own versions, so every alternative but
-   the last is a lone provider.  An install-if disjunction and a negated
-   dependency both list FNeg alternatives, so an alternative naming a
-   single package identifies a provider list. *)
-let chain_head (f : PF.coq_Formula) : (string * string) option =
+(* encPos and encReq list the unversioned providers of a name as a
+   disjunction whose last alternative is the name's own versions, so every
+   alternative but the last selects one provider: the alternative itself,
+   or the last conjunct of one of selectableAlts' conjunctions.  An install-if
+   disjunction and a negated dependency both list FNeg alternatives, so an
+   alternative ending in a single package identifies a provider list. *)
+let rec chain_head (f : PF.coq_Formula) : (string * string) option =
   match f with
   | PF.FDep (Red.Name.Orig m, vs) -> (
       match PF.VSet.elements vs with
       | [ Red.Version.Orig w ] -> Some (m, w)
       | _ -> None)
+  | PF.FConj (_, b) -> chain_head b
   | _ -> None
+
+(* what a selectableAlts alternative needs besides its provider *)
+let rec alt_needs (f : PF.coq_Formula) : PF.coq_Formula list =
+  match f with PF.FConj (a, b) -> a :: alt_needs b | _ -> []
 
 (* The alternative a synthetic version selects, and whether it is the last
    one -- the last alternative is the only one that is not a provider. *)
@@ -542,11 +807,42 @@ let greatest = function
 let is_install_if (tn : PFR.Name.t) =
   match tn with PFR.Name.Disjunct (PF.FNeg _ :: _) -> true | _ -> false
 
+let has_selectable_alts (tn : PFR.Name.t) =
+  match tn with
+  | PFR.Name.Disjunct (f0 :: _ as fs) ->
+      chain_head f0 <> None
+      && List.exists (function PF.FConj _ -> true | _ -> false) fs
+  | _ -> false
+
+module NameMap = Map.Make (struct
+  type t = PFR.Name.t
+
+  let compare a b = r2c (PFR.NameOT.compare a b)
+end)
+
+(* the disjuncts supportForm introduced, recorded as [process] builds them *)
+let support_names : unit NameMap.t ref = ref NameMap.empty
+let is_support tn = NameMap.mem tn !support_names
+
 let carried_at ~assigned tn tvs =
   match assigned tn with
   | PG.Unselected -> false
   | PG.Decided u -> List.exists (fun v -> PVersion.compare u v = 0) tvs
   | PG.Entailed r -> List.exists (fun v -> PG.Ranges.contains v r) tvs
+
+(* whether f already holds of the decisions made so far, reading a
+   negation as holding whenever its operand does not yet *)
+let rec holds ar ~assigned (f : PF.coq_Formula) : bool =
+  match f with
+  | PF.FDep (m, vs) ->
+      let tn = PFR.Name.Orig m in
+      carried_at ~assigned tn
+        (List.map
+           (fun w -> tag ar tn (PFR.Version.Orig w))
+           (PF.VSet.elements vs))
+  | PF.FConj (a, b) -> holds ar ~assigned a && holds ar ~assigned b
+  | PF.FDisj (a, b) -> holds ar ~assigned a || holds ar ~assigned b
+  | PF.FNeg a -> not (holds ar ~assigned a)
 
 let rec neg_leaves ar (f : PF.coq_Formula) : (PFR.Name.t * PVersion.t list) list
     =
@@ -570,6 +866,21 @@ let rec neg_leaves ar (f : PF.coq_Formula) : (PFR.Name.t * PVersion.t list) list
    package only when it carries them all. *)
 let choose ar ~assigned (tn : PFR.Name.t) (cands : PVersion.t list) =
   match tn with
+  (* a supporter is never installed to support: one the solution already
+     carries, or else anything, which fails and backtracks *)
+  | PFR.Name.Disjunct fs when is_support tn -> (
+      let carried =
+        List.filter
+          (fun (pv : PVersion.t) ->
+            match pv.PVersion.v with
+            | PFR.Version.Idx i -> (
+                match alt_at fs i with
+                | Some (f, _) -> holds ar ~assigned f
+                | None -> false)
+            | _ -> false)
+          cands
+      in
+      match carried with [] -> greatest cands | _ -> greatest carried)
   | PFR.Name.Disjunct fs when is_install_if tn -> (
       let free = ref [] and pos = ref [] in
       List.iter
@@ -601,6 +912,23 @@ let choose ar ~assigned (tn : PFR.Name.t) (cands : PVersion.t list) =
                        cand
                      else best)
                    p ps)))
+  (* apk selects such a provider only once a requirer or a trigger is
+     already there, and never installs one to make it selectable; an
+     alternative whose support the solution does not yet carry is taken
+     only when nothing else is left *)
+  | PFR.Name.Disjunct fs when has_selectable_alts tn -> (
+      let ready =
+        List.filter
+          (fun (pv : PVersion.t) ->
+            match pv.PVersion.v with
+            | PFR.Version.Idx i -> (
+                match alt_at fs i with
+                | Some (f, _) -> List.for_all (holds ar ~assigned) (alt_needs f)
+                | None -> true)
+            | _ -> true)
+          cands
+      in
+      match ready with [] -> greatest cands | _ -> greatest ready)
   | _ -> greatest cands
 
 (* An install-if disjunct exists only once its designated condition has
@@ -608,19 +936,27 @@ let choose ar ~assigned (tn : PFR.Name.t) (cands : PVersion.t list) =
    by the time [choose] sees it.  Deferring it behind every other open
    name settles the rest of them; measured on this index the deferral no
    longer changes the answer, but it is the invariant [choose] wants and
-   it costs nothing. *)
+   it costs nothing.  A provider list with conjunctive alternatives waits the
+   same way, behind every name but those, since the requirers and triggers
+   its [choose] looks for are decided elsewhere. *)
 let next ~assigned:_ (opens : (PFR.Name.t * int) list) =
-  match List.find_opt (fun (tn, _) -> not (is_install_if tn)) opens with
-  | Some (tn, _) -> tn
-  | None -> fst (List.hd opens)
+  let rank (tn, _) =
+    if is_support tn then 3
+    else if is_install_if tn then 2
+    else if has_selectable_alts tn then 1
+    else 0
+  in
+  let best =
+    List.fold_left
+      (fun ((_, br) as b) o ->
+        let r = rank o in
+        if r < br then (fst o, r) else b)
+      (fst (List.hd opens), rank (List.hd opens))
+      (List.tl opens)
+  in
+  fst best
 
 (* ---- the lazy core graph ----------------------------------------------- *)
-
-module NameMap = Map.Make (struct
-  type t = PFR.Name.t
-
-  let compare a b = r2c (PFR.NameOT.compare a b)
-end)
 
 type state = {
   ar : archive;
@@ -703,7 +1039,19 @@ let process st (q : PF.Pkg.t) (inst : unit -> Alp.coq_Inst) =
     st.n_proc <- st.n_proc + 1;
     if verbose && st.n_proc mod 500 = 0 then
       Printf.eprintf "[%d] %.1fs\n%!" st.n_proc (Sys.time ());
-    let fs = Red.FSet.elements (Red.dependees (inst ()) q) in
+    let i = inst () in
+    (match q with
+    | Red.Name.Orig n, Red.Version.Orig v -> (
+        match Red.supportForm i (n, v) with
+        | Some (PF.FDisj (a, b)) ->
+            let rec spine f =
+              match f with PF.FDisj (x, y) -> x :: spine y | _ -> [ f ]
+            in
+            support_names :=
+              NameMap.add (PFR.Name.Disjunct (a :: spine b)) () !support_names
+        | _ -> ())
+    | _ -> ());
+    let fs = Red.FSet.elements (Red.dependees i q) in
     let d_q = PF.DepRel.ofList (List.map (fun f -> (q, f)) fs) in
     let r_q = PF.PkgSet.singleton q in
     record_deprel st (PFR.reduceDeps d_q);

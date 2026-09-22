@@ -86,10 +86,11 @@ with none, so the alias wins:
     prio-lo-user 1.0
   encoded solution: 4 core nodes (5 Alpine packages encoded)
 
-An unversioned provides without k: still satisfies a dependency when the
-world names its owner: apk-package(5) says that without a provider-priority
-"user is expected to manually select one of the concrete package names in
-world".  pv-prov provides pv-virt with no k:, and here the world names it:
+An unversioned provides without k: is selectable once something names its
+owner: the world, a package in the solution depending on it or on a name it
+provides with a version, or its own install_if.  Any package that could be
+such a requirer or trigger, and anything that could lead to one, must itself
+be led to from the world, so none is installed only to serve as one.
 
   $ ../../../src/main.exe alpine BARE pv-prov pv-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
   index BARE
@@ -99,42 +100,60 @@ world".  pv-prov provides pv-virt with no k:, and here the world names it:
     pv-user 1.0
   encoded solution: 4 core nodes (3 Alpine packages encoded)
 
-while without it pv-user has nothing to satisfy pv-virt, as in apk:
+  $ ../../../src/main.exe alpine BARE pv-both | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index BARE
+  cone: 9 packages, 4 provides entries, 1 install_if rules
+  packages (2):
+    pv-both 1.0
+    pv-prov 1.0
+  encoded solution: 4 core nodes (3 Alpine packages encoded)
+
+  $ ../../../src/main.exe alpine BARE pv-user pv-mid | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index BARE
+  cone: 9 packages, 4 provides entries, 1 install_if rules
+  packages (3):
+    pv-mid 1.0
+    pv-prov 1.0
+    pv-user 1.0
+  encoded solution: 5 core nodes (4 Alpine packages encoded)
+
+  $ ../../../src/main.exe alpine BARE al-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index BARE
+  cone: 9 packages, 4 provides entries, 1 install_if rules
+  packages (2):
+    al-prov 1.0
+    al-user 1.0
+  encoded solution: 5 core nodes (4 Alpine packages encoded)
+
+  $ ../../../src/main.exe alpine BARE ii-anchor ii-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index BARE
+  cone: 9 packages, 4 provides entries, 1 install_if rules
+  packages (3):
+    ii-anchor 1.0
+    ii-prov 1.0
+    ii-user 1.0
+  encoded solution: 5 core nodes (4 Alpine packages encoded)
+
+pv-both or pv-mid would make pv-prov selectable for pv-user, and
+ii-anchor would trigger ii-prov for ii-user, but nothing leads to them, so
+both refuse, as apk does:
 
   $ ../../../src/main.exe alpine BARE pv-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
   index BARE
   cone: 9 packages, 4 provides entries, 1 install_if rules
   unsatisfiable:
-  Because @root () -> pv-user 1.0 and pv-user 1.0 -> pv-virt ∅, @root * is forbidden..
-  And because root -> @root (), version solving failed.
+  Because <(pv-both{1}&pv-prov{1})|(pv-mid{1}&pv-prov{1})|pv-virt{0}> 2 -> pv-virt ∅ and <(pv-both{1}&pv-prov{1})|(pv-mid{1}&pv-prov{1})|pv-virt{0}> 0 -> pv-both 1.0, <(pv-both{1}&pv-prov{1})|(pv-mid{1}&pv-prov{1})|pv-virt{0}> (-∞, 1) ∪ [0, +∞) requires pv-both 1.0.
+  And because <(pv-both{1}&pv-prov{1})|(pv-mid{1}&pv-prov{1})|pv-virt{0}> 1 -> pv-mid 1.0, not pv-both 1.0 or not pv-mid 1.0 or <(pv-both{1}&pv-prov{1})|(pv-mid{1}&pv-prov{1})|pv-virt{0}> * is forbidden.
+  Because @root () -> pv-user 1.0 and pv-user 1.0 -> <(pv-both{1}&pv-prov{1})|(pv-mid{1}&pv-prov{1})|pv-virt{0}> 2 ∪ 1 ∪ 0, @root * requires <(pv-both{1}&pv-prov{1})|(pv-mid{1}&pv-prov{1})|pv-virt{0}> 2 ∪ 1 ∪ 0.
+  Thus, not pv-both 1.0 or not pv-mid 1.0 or @root * is forbidden.
+  And because pv-mid 1.0 -> pv-mid ∅, @root * requires pv-both 1.0
+  And because pv-both 1.0 -> pv-both ∅ and root -> @root (), version solving failed.
 
-apk installs each of the next four by behaviour beyond its documentation,
-out of scope here because it depends on why a package is present:
-
-  $ ../../../src/main.exe alpine BARE pv-both | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../src/main.exe alpine BARE ii-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
   index BARE
   cone: 9 packages, 4 provides entries, 1 install_if rules
   unsatisfiable:
-  Because @root () -> pv-both 1.0 and pv-both 1.0 -> pv-virt ∅, @root * is forbidden..
-  And because root -> @root (), version solving failed.
-
-  $ ../../../src/main.exe alpine BARE pv-user pv-mid | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index BARE
-  cone: 9 packages, 4 provides entries, 1 install_if rules
-  unsatisfiable:
-  Because @root () -> pv-user 1.0 and pv-user 1.0 -> pv-virt ∅, @root * is forbidden..
-  And because root -> @root (), version solving failed.
-
-  $ ../../../src/main.exe alpine BARE al-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index BARE
-  cone: 9 packages, 4 provides entries, 1 install_if rules
-  unsatisfiable:
-  Because @root () -> al-user 1.0 and al-user 1.0 -> al-virt ∅, @root * is forbidden..
-  And because root -> @root (), version solving failed.
-
-  $ ../../../src/main.exe alpine BARE ii-anchor ii-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index BARE
-  cone: 9 packages, 4 provides entries, 1 install_if rules
-  unsatisfiable:
-  Because @root () -> ii-user 1.0 and ii-user 1.0 -> ii-virt ∅, @root * is forbidden..
-  And because root -> @root (), version solving failed.
+  Because <(ii-anchor{1}&ii-prov{1})|ii-virt{0}> 1 -> ii-virt ∅ and <(ii-anchor{1}&ii-prov{1})|ii-virt{0}> 0 -> ii-anchor 1.0, <(ii-anchor{1}&ii-prov{1})|ii-virt{0}> * requires ii-anchor 1.0.
+  Because @root () -> ii-user 1.0 and ii-user 1.0 -> <(ii-anchor{1}&ii-prov{1})|ii-virt{0}> 1 ∪ 0, @root * requires <(ii-anchor{1}&ii-prov{1})|ii-virt{0}> 1 ∪ 0.
+  Thus, @root * requires ii-anchor 1.0
+  And because ii-anchor 1.0 -> ii-anchor ∅ and root -> @root (), version solving failed.

@@ -297,7 +297,8 @@ Definition alpI : Alp.Inst :=
                                 Alp.CondSet.empty) Alp.InstallIf.empty
    ; Alp.inst_world := Alp.WSet.add (Alp.DPos (1, Alp.CAny)) Alp.WSet.empty
    ; Alp.inst_prio := Alp.Prio.empty
-   ; Alp.inst_repl := Alp.Repl.empty |}.
+   ; Alp.inst_repl := Alp.Repl.empty
+   ; Alp.inst_supp := Alp.PkgSet.empty |}.
 
 Example alpine_transR_computes :
   Alp.Reduction.PF.PkgSet.cardinal (Alp.Reduction.transR alpI) = 5.

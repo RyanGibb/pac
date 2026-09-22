@@ -164,7 +164,9 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     ; inst_installIf : InstallIf.t
     ; inst_world : WSet.t
     ; inst_prio : Prio.t
-    ; inst_repl : Repl.t }.
+    ; inst_repl : Repl.t
+    (* the packages Supported is demanded of: a frontend's choice *)
+    ; inst_supp : PkgSet.t }.
 
   (* A versioned provide is an alias: it satisfies constrained atoms at
      the provided version and claims the name.  An unversioned provide
@@ -180,12 +182,20 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
   Definition HasPriority (I : Inst) (q : Pkg.t) : Prop :=
     exists k, Prio.In (q, k) (inst_prio I) /\ k <> 0.
 
-  (* apk-package(5): a provides without a version is selected
-     automatically only for a provider_priority, "otherwise user is
-     expected to manually select one of the concrete package names in
-     world". *)
-  Definition AutoSelectable (I : Inst) (q : Pkg.t) : Prop :=
-    HasPriority I q \/ exists ct, WSet.In (DPos (fst q, ct)) (inst_world I).
+  Definition HasRequirer (I : Inst) (S : PkgSet.t) (m : N.t) : Prop :=
+    (exists ct, WSet.In (DPos (m, ct)) (inst_world I)) \/
+    (exists r ct, PkgSet.In r S /\ Deps.In (r, DPos (m, ct)) (inst_deps I)).
+
+  (* apk's is_provider_auto_selectable, read over the final set, and
+     widened to a package selected for another reason: apk assigns it every
+     name it provides, so it satisfies a dependency there all the same. *)
+  Definition AutoSelectable (I : Inst) (S : PkgSet.t) (q : Pkg.t) : Prop :=
+    HasPriority I q \/
+    HasRequirer I S (fst q) \/
+    (exists m pv, Prov.In (q, (m, PVer pv)) (inst_prov I) /\
+       HasRequirer I S m) \/
+    (exists conds, InstallIf.In (q, conds) (inst_installIf I) /\
+       forall n ct, CondSet.In (n, ct) conds -> MatchPos I S n ct).
 
   Definition MatchReq (I : Inst) (S : PkgSet.t)
       (n : N.t) (ct : Constr) : Prop :=
@@ -194,7 +204,27 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
        PkgSet.In q S /\ constrMatch ct pv = true) \/
     (isAny ct = true /\
      exists q, Prov.In (q, (n, PVirt)) (inst_prov I) /\ PkgSet.In q S /\
-       AutoSelectable I q).
+       AutoSelectable I S q).
+
+  (* A package satisfies the atom itself: by name and version, by a
+     versioned provides, or by a bare one apk may select it through. *)
+  Definition Offers (I : Inst) (p : Pkg.t) (a : Atom.t) : Prop :=
+    (fst p = fst a /\ constrMatch (snd a) (snd p) = true) \/
+    (exists pv, Prov.In (p, (fst a, PVer pv)) (inst_prov I) /\
+       constrMatch (snd a) pv = true) \/
+    (isAny (snd a) = true /\ Prov.In (p, (fst a, PVirt)) (inst_prov I) /\
+     HasPriority I p).
+
+  (* apk keeps a package only while something leads to it: the world, a
+     dependency of a package it keeps, or the package's own install_if.
+     Read over the final set this admits packages that only lead to each
+     other. *)
+  Definition Supported (I : Inst) (S : PkgSet.t) (p : Pkg.t) : Prop :=
+    (exists a, WSet.In (DPos a) (inst_world I) /\ Offers I p a) \/
+    (exists r a, PkgSet.In r S /\ Deps.In (r, DPos a) (inst_deps I) /\
+       Offers I p a) \/
+    (exists conds, InstallIf.In (p, conds) (inst_installIf I) /\
+       forall n ct, CondSet.In (n, ct) conds -> MatchPos I S n ct).
 
   Definition MatchDep (I : Inst) (S : PkgSet.t) (d : Dep) : Prop :=
     match d with
@@ -221,7 +251,10 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     ; res_installIf :
         forall p conds, InstallIf.In (p, conds) (inst_installIf I) ->
         (forall n ct, CondSet.In (n, ct) conds -> MatchPos I S n ct) ->
-        MatchPos I S (fst p) CAny }.
+        MatchPos I S (fst p) CAny
+    ; res_support :
+        forall p, PkgSet.In p S -> PkgSet.In p (inst_supp I) ->
+        Supported I S p }.
 
   Module Type Designation.
     Parameter designation : CondSet.t -> option Atom.t.
@@ -367,33 +400,116 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           base (uprovL I n)
       else base.
 
+    Module NSet := FSetUOT N.
+
+    Definition provForm (q : Pkg.t) : PF.Formula :=
+      PF.FDep (Name.Orig (fst q)) (PF.VSet.singleton (Version.Orig (snd q))).
+
     Definition hasPriorityb (I : Inst) (q : Pkg.t) : bool :=
       Prio.exists_
         (fun '(q', k) => andb (PkgEqb.eqb q' q) (negb (Nat.eqb k 0)))
         (inst_prio I).
 
-    Definition worldNamesb (I : Inst) (m : N.t) : bool :=
-      WSet.exists_
-        (fun d => match d with
-                  | DPos (m', _) => NEqb.eqb m' m
-                  | DNeg _ => false
-                  end)
-        (inst_world I).
+    Module SOrn := SetOps ProvElt N Prov NSet.
+    Definition ownNames (I : Inst) (q : Pkg.t) : NSet.t :=
+      NSet.add (fst q)
+        (SOrn.filterMap
+           (fun '(q', (m, tg)) =>
+              match tg with
+              | PVer _ => if PkgEqb.eqb q' q then Some m else None
+              | PVirt => None
+              end)
+           (inst_prov I)).
 
-    Definition selectableb (I : Inst) (q : Pkg.t) : bool :=
-      orb (hasPriorityb I q) (worldNamesb I (fst q)).
+    Definition reqName (ms : NSet.t) (d : Dep) : bool :=
+      match d with DPos (m, _) => NSet.mem m ms | DNeg _ => false end.
+
+    Definition rootRequiresb (I : Inst) (ms : NSet.t) : bool :=
+      WSet.exists_ (reqName ms) (inst_world I).
+
+    Module SOdp := SetOps DepElt Pkg Deps PkgSet.
+    Definition requirerSet (I : Inst) (ms : NSet.t) : PkgSet.t :=
+      SOdp.filterMap (fun '(r, d) => if reqName ms d then Some r else None)
+        (inst_deps I).
+
+    Definition ownRules (I : Inst) (q : Pkg.t) : InstallIf.t :=
+      InstallIf.filter (fun '(z, _) => PkgEqb.eqb z q) (inst_installIf I).
+
+    (* The provider is the last conjunct of each of its alternatives, which
+       is where a driver finds it. *)
+    Definition condsForm (I : Inst) (q : Pkg.t) (conds : CondSet.t) :
+        PF.Formula :=
+      fold_right (fun a f => PF.FConj (encPos I (fst a) (snd a)) f)
+        (provForm q) (CondSet.elements conds).
+
+    Definition selectableAlts (I : Inst) (q : Pkg.t) : list PF.Formula :=
+      let ms := ownNames I q in
+      if orb (hasPriorityb I q) (rootRequiresb I ms) then provForm q :: nil
+      else
+        map (fun r => PF.FConj (provForm r) (provForm q))
+          (PkgSet.elements (requirerSet I ms)) ++
+        map (fun '(_, conds) => condsForm I q conds)
+          (InstallIf.elements (ownRules I q)).
 
     Definition encReq (I : Inst) (n : N.t) (ct : Constr) : PF.Formula :=
       let base := PF.FDep (Name.Orig n) (constrVers I n ct) in
       if isAny ct
-      then
-        fold_right
-          (fun q f =>
-             PF.FDisj
-               (PF.FDep (Name.Orig (fst q))
-                  (PF.VSet.singleton (Version.Orig (snd q)))) f)
-          base (List.filter (selectableb I) (uprovL I n))
+      then fold_right PF.FDisj base (flat_map (selectableAlts I) (uprovL I n))
       else base.
+
+    Definition offersb (I : Inst) (p : Pkg.t) (a : Atom.t) : bool :=
+      orb (andb (NEqb.eqb (fst p) (fst a)) (constrMatch (snd a) (snd p)))
+        (Prov.exists_
+           (fun '(q, (m, tg)) =>
+              andb (PkgEqb.eqb q p)
+                (andb (NEqb.eqb m (fst a))
+                   (match tg with
+                    | PVer pv => constrMatch (snd a) pv
+                    | PVirt => andb (isAny (snd a)) (hasPriorityb I p)
+                    end)))
+           (inst_prov I)).
+
+    Definition offersDep (I : Inst) (p : Pkg.t) (d : Dep) : bool :=
+      match d with DPos a => offersb I p a | DNeg _ => false end.
+
+    Definition rootSupportsb (I : Inst) (p : Pkg.t) : bool :=
+      WSet.exists_ (offersDep I p) (inst_world I).
+
+    Definition supporterSet (I : Inst) (p : Pkg.t) : PkgSet.t :=
+      SOdp.filterMap
+        (fun '(r, d) => if offersDep I p d then Some r else None)
+        (inst_deps I).
+
+    Definition condsConj (I : Inst) (conds : CondSet.t) :
+        option PF.Formula :=
+      match CondSet.elements conds with
+      | nil => None
+      | a :: l =>
+          Some (fold_right (fun b f => PF.FConj (encPos I (fst b) (snd b)) f)
+                  (encPos I (fst a) (snd a)) l)
+      end.
+
+    Definition supportAlts (I : Inst) (p : Pkg.t) : list PF.Formula :=
+      map provForm (PkgSet.elements (supporterSet I p)) ++
+      flat_map
+        (fun '(_, conds) =>
+           match condsConj I conds with Some f => f :: nil | None => nil end)
+        (InstallIf.elements (ownRules I p)).
+
+    Definition vacuousRuleb (I : Inst) (p : Pkg.t) : bool :=
+      InstallIf.exists_ (fun '(_, conds) => CondSet.is_empty conds)
+        (ownRules I p).
+
+    (* None where the instance alone supports the package; an empty
+       version set where nothing can. *)
+    Definition supportForm (I : Inst) (p : Pkg.t) : option PF.Formula :=
+      if orb (negb (PkgSet.mem p (inst_supp I)))
+           (orb (rootSupportsb I p) (vacuousRuleb I p)) then None
+      else
+        match supportAlts I p with
+        | nil => Some (PF.FDep (Name.Orig (fst p)) PF.VSet.empty)
+        | g :: l => Some (fold_right PF.FDisj g l)
+        end.
 
     Definition encDep (I : Inst) (d : Dep) : PF.Formula :=
       match d with
@@ -461,8 +577,13 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                      | PVirt => None
                      end)
                   (ProvFibred.tailFibre (inst_prov I) (n, v)))
-               (SOtf.map (fun '(z, conds) => installIfForm I z conds)
-                  (installIfFibre I (n, v))))
+               (FSet.union
+                  (SOtf.map (fun '(z, conds) => installIfForm I z conds)
+                     (installIfFibre I (n, v)))
+                  (match supportForm I (n, v) with
+                   | Some f => FSet.singleton f
+                   | None => FSet.empty
+                   end)))
       | (Name.Orig _, Version.Prov q0 _) =>
           FSet.singleton
             (PF.FDep (Name.Orig (fst q0))
@@ -778,55 +899,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         + intros [[w [Hw Hm]] | [Hany _]]; [eauto | congruence].
     Qed.
 
-    Lemma satisfies_encReq : forall I S' n ct,
-        PF.Satisfies S' (encReq I n ct) <->
-        (exists w, PF.VSet.In w (constrVers I n ct) /\
-           PF.PkgSet.In (Name.Orig n, w) S') \/
-        (isAny ct = true /\
-         exists q, PkgSet.In q (uprovSet I n) /\ selectableb I q = true /\
-           PF.PkgSet.In (embedPkg q) S').
-    Proof.
-      intros I S' n ct; unfold encReq; cbv zeta.
-      destruct (isAny ct) eqn:Ea.
-      - rewrite satisfies_disjFold; cbn [PF.Satisfies].
-        apply or_iff_compat_l; split.
-        + intros [q [Hq Hm]]; apply filter_In in Hq; destruct Hq as [Hq Hs].
-          split; [reflexivity |]; exists q.
-          split; [apply in_elements_pkg; exact Hq | split; assumption].
-        + intros [_ [q [Hq [Hs Hm]]]]; exists q; split; [| exact Hm].
-          apply filter_In; split; [apply in_elements_pkg; exact Hq | exact Hs].
-      - cbn [PF.Satisfies]; split; [intro H; left; exact H |].
-        intros [H | [Hany _]]; [exact H | discriminate Hany].
-    Qed.
-
-    Lemma hasPriorityb_spec : forall I q,
-        hasPriorityb I q = true <-> HasPriority I q.
-    Proof.
-      intros I q; unfold hasPriorityb, HasPriority; rewrite Prio.exists_spec'.
-      split.
-      - intros [[q' k] [Hin Hb]]; cbn in Hb.
-        apply Bool.andb_true_iff in Hb; destruct Hb as [Hq Hk].
-        apply PkgEqb.eqb_true_iff in Hq; subst q'.
-        exists k; split; [exact Hin |].
-        intro Hk0; subst k; discriminate Hk.
-      - intros [k [Hin Hk]]; exists (q, k); split; [exact Hin | cbn].
-        rewrite (proj2 (PkgEqb.eqb_true_iff q q) eq_refl).
-        destruct k; [contradiction | reflexivity].
-    Qed.
-
-    Lemma selectableb_spec : forall I q,
-        selectableb I q = true <-> AutoSelectable I q.
-    Proof.
-      intros I q; unfold selectableb, AutoSelectable.
-      rewrite Bool.orb_true_iff, hasPriorityb_spec.
-      apply or_iff_compat_l.
-      unfold worldNamesb; rewrite WSet.exists_spec'; split.
-      - intros [[[m ct] | [m ct]] [Hd Hb]]; cbn in Hb; [| discriminate].
-        apply NEqb.eqb_true_iff in Hb; subst m; exists ct; exact Hd.
-      - intros [ct Hd]; exists (DPos (fst q, ct)); split; [exact Hd | cbn].
-        apply NEqb.eqb_true_iff; reflexivity.
-    Qed.
-
     Lemma satisfies_negFold : forall I S' l (base : PF.Formula),
         PF.Satisfies S'
           (fold_right
@@ -861,6 +933,452 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       split; intros [[a [Ha Hn]] | Hb];
         try (right; exact Hb); left; exists a;
         (split; [| exact Hn]); apply in_elements_cond; exact Ha.
+    Qed.
+
+    Lemma in_elements_iif : forall s x,
+        List.In x (InstallIf.elements s) <-> InstallIf.In x s.
+    Proof.
+      intros s x; rewrite <- (InstallIf.elements_spec1 s x).
+      rewrite InA_alt; split.
+      - intro H; exists x; split; reflexivity + assumption.
+      - intros [y [-> Hy]]; exact Hy.
+    Qed.
+
+    Lemma satisfies_provForm : forall S' q,
+        PF.Satisfies S' (provForm q) <-> PF.PkgSet.In (embedPkg q) S'.
+    Proof.
+      intros S' [n v]; unfold provForm, embedPkg; cbn [PF.Satisfies fst snd].
+      split.
+      - intros [w [Hw Hm]]; apply PF.VSet.singleton_spec in Hw; subst w.
+        exact Hm.
+      - intro H; exists (Version.Orig v); split;
+          [apply PF.VSet.singleton_spec; reflexivity | exact H].
+    Qed.
+
+    Lemma hasPriorityb_spec : forall I q, hasPriorityb I q = true <-> HasPriority I q.
+    Proof.
+      intros I q; unfold hasPriorityb, HasPriority; rewrite Prio.exists_spec'; split.
+      - intros [[q' k] [Hin Hb]]; cbn in Hb.
+        apply Bool.andb_true_iff in Hb; destruct Hb as [Hq Hk].
+        apply PkgEqb.eqb_true_iff in Hq; subst q'.
+        exists k; split; [exact Hin |].
+        intro Hk0; subst k; discriminate Hk.
+      - intros [k [Hin Hk]]; exists (q, k); split; [exact Hin | cbn].
+        rewrite (proj2 (PkgEqb.eqb_true_iff q q) eq_refl).
+        destruct k; [contradiction | reflexivity].
+    Qed.
+
+    Lemma mem_ownNames : forall I q m,
+        NSet.In m (ownNames I q) <->
+        m = fst q \/ exists pv, Prov.In (q, (m, PVer pv)) (inst_prov I).
+    Proof.
+      intros I q m; unfold ownNames.
+      rewrite NSet.add_spec, SOrn.mem_filterMap.
+      apply or_iff_compat_l; split.
+      - intros [[q' [m' tg]] [Hin Hf]]; cbn in Hf.
+        destruct tg as [pv |]; [| discriminate].
+        destruct (PkgEqb.eqb q' q) eqn:Eq; [| discriminate].
+        apply PkgEqb.eqb_true_iff in Eq; subst q'.
+        injection Hf as <-; exists pv; exact Hin.
+      - intros [pv Hin]; exists (q, (m, PVer pv)); split; [exact Hin | cbn].
+        rewrite (proj2 (PkgEqb.eqb_true_iff q q) eq_refl); reflexivity.
+    Qed.
+
+    Lemma reqName_spec : forall ms d,
+        reqName ms d = true <->
+        exists m ct, d = DPos (m, ct) /\ NSet.In m ms.
+    Proof.
+      intros ms [[m ct] | [m ct]]; cbn [reqName].
+      - rewrite NSet.mem_spec; split.
+        + intro H; exists m, ct; split; [reflexivity | exact H].
+        + intros [m' [ct' [He H]]]; injection He as <- <-; exact H.
+      - split; [discriminate | intros [m' [ct' [He _]]]; discriminate He].
+    Qed.
+
+    Lemma rootRequiresb_spec : forall I ms,
+        rootRequiresb I ms = true <->
+        exists m ct, WSet.In (DPos (m, ct)) (inst_world I) /\ NSet.In m ms.
+    Proof.
+      intros I ms; unfold rootRequiresb; rewrite WSet.exists_spec'; split.
+      - intros [d [Hd Hr]]; apply reqName_spec in Hr.
+        destruct Hr as [m [ct [-> Hm]]]; exists m, ct; split; assumption.
+      - intros [m [ct [Hd Hm]]]; exists (DPos (m, ct)); split; [exact Hd |].
+        apply reqName_spec; exists m, ct; split; [reflexivity | exact Hm].
+    Qed.
+
+    Lemma mem_requirerSet : forall I ms r,
+        PkgSet.In r (requirerSet I ms) <->
+        exists m ct, Deps.In (r, DPos (m, ct)) (inst_deps I) /\ NSet.In m ms.
+    Proof.
+      intros I ms r; unfold requirerSet; rewrite SOdp.mem_filterMap; split.
+      - intros [[r' d] [Hin Hf]]; cbn in Hf.
+        destruct (reqName ms d) eqn:Er; [| discriminate].
+        injection Hf as <-.
+        apply reqName_spec in Er; destruct Er as [m [ct [-> Hm]]].
+        exists m, ct; split; assumption.
+      - intros [m [ct [Hin Hm]]]; exists (r, DPos (m, ct)); split;
+          [exact Hin | cbn].
+        rewrite (proj2 (NSet.mem_spec _ _) Hm); reflexivity.
+    Qed.
+
+    Lemma mem_ownRules : forall I q z conds,
+        InstallIf.In (z, conds) (ownRules I q) <->
+        InstallIf.In (z, conds) (inst_installIf I) /\ z = q.
+    Proof.
+      intros I q z conds; unfold ownRules; rewrite InstallIf.filter_spec'.
+      cbn; rewrite PkgEqb.eqb_true_iff; reflexivity.
+    Qed.
+
+    Lemma satisfies_conjFold : forall I S' l (base : PF.Formula),
+        PF.Satisfies S'
+          (fold_right (fun a f => PF.FConj (encPos I (fst a) (snd a)) f)
+             base l) <->
+        (forall a, List.In a l ->
+           PF.Satisfies S' (encPos I (fst a) (snd a))) /\
+        PF.Satisfies S' base.
+    Proof.
+      intros I S' l base; induction l as [| a l IH]; cbn [fold_right].
+      - split; [intro H; split; [intros _ [] | exact H] |].
+        intros [_ H]; exact H.
+      - cbn [PF.Satisfies]; rewrite IH; split.
+        + intros [Ha [Hl Hb]]; split; [| exact Hb].
+          intros a0 [<- | Ha0]; [exact Ha | exact (Hl _ Ha0)].
+        + intros [Hl Hb]; split; [apply Hl; left; reflexivity |].
+          split; [intros a0 Ha0; apply Hl; right; exact Ha0 | exact Hb].
+    Qed.
+
+    Lemma satisfies_condsForm : forall I S' q conds,
+        PF.Satisfies S' (condsForm I q conds) <->
+        (forall a, CondSet.In a conds ->
+           PF.Satisfies S' (encPos I (fst a) (snd a))) /\
+        PF.PkgSet.In (embedPkg q) S'.
+    Proof.
+      intros I S' q conds; unfold condsForm.
+      rewrite satisfies_conjFold, satisfies_provForm.
+      split; intros [Hl Hb]; split; try exact Hb; intros a Ha; apply Hl;
+        apply in_elements_cond; exact Ha.
+    Qed.
+
+    Lemma satisfies_disjList : forall S' l (base : PF.Formula),
+        PF.Satisfies S' (fold_right PF.FDisj base l) <->
+        PF.Satisfies S' base \/ exists g, List.In g l /\ PF.Satisfies S' g.
+    Proof.
+      intros S' l base; induction l as [| g l IH]; cbn [fold_right].
+      - split; [intro H; left; exact H |].
+        intros [H | [g [[] _]]]; exact H.
+      - cbn [PF.Satisfies]; rewrite IH; split.
+        + intros [Hg | [Hb | [g0 [Hg0 Hs]]]].
+          * right; exists g; split; [left; reflexivity | exact Hg].
+          * left; exact Hb.
+          * right; exists g0; split; [right; exact Hg0 | exact Hs].
+        + intros [Hb | [g0 [[<- | Hg0] Hs]]].
+          * right; left; exact Hb.
+          * left; exact Hs.
+          * right; right; exists g0; split; assumption.
+    Qed.
+
+    Lemma satisfies_encReq : forall I S' n ct,
+        PF.Satisfies S' (encReq I n ct) <->
+        (exists w, PF.VSet.In w (constrVers I n ct) /\
+           PF.PkgSet.In (Name.Orig n, w) S') \/
+        (isAny ct = true /\
+         exists q, PkgSet.In q (uprovSet I n) /\
+           exists g, List.In g (selectableAlts I q) /\ PF.Satisfies S' g).
+    Proof.
+      intros I S' n ct; unfold encReq; cbv zeta.
+      destruct (isAny ct) eqn:Ea.
+      - rewrite satisfies_disjList; cbn [PF.Satisfies].
+        apply or_iff_compat_l; split.
+        + intros [g [Hg Hs]]; apply in_flat_map in Hg.
+          destruct Hg as [q [Hq Hg]].
+          split; [reflexivity |]; exists q; split;
+            [apply in_elements_pkg; exact Hq |].
+          exists g; split; assumption.
+        + intros [_ [q [Hq [g [Hg Hs]]]]]; exists g; split; [| exact Hs].
+          apply in_flat_map; exists q; split;
+            [apply in_elements_pkg; exact Hq | exact Hg].
+      - cbn [PF.Satisfies]; split.
+        + intro H; left; exact H.
+        + intros [H | [Hany _]]; [exact H | discriminate Hany].
+    Qed.
+
+    Lemma autoSelectable_ownNames : forall I S q,
+        AutoSelectable I S q <->
+        HasPriority I q \/
+        (exists m, NSet.In m (ownNames I q) /\ HasRequirer I S m) \/
+        (exists conds, InstallIf.In (q, conds) (inst_installIf I) /\
+           forall n ct, CondSet.In (n, ct) conds -> MatchPos I S n ct).
+    Proof.
+      intros I S q; unfold AutoSelectable; apply or_iff_compat_l; split.
+      - intros [H | [[m [pv [Hp H]]] | H]].
+        + left; exists (fst q); split; [| exact H].
+          apply mem_ownNames; left; reflexivity.
+        + left; exists m; split; [| exact H].
+          apply mem_ownNames; right; exists pv; exact Hp.
+        + right; exact H.
+      - intros [[m [Hm H]] | H].
+        + apply mem_ownNames in Hm; destruct Hm as [-> | [pv Hp]];
+            [left; exact H | right; left; exists m, pv; split; assumption].
+        + right; right; exact H.
+    Qed.
+
+    (* Stated against any pair of sets agreeing on packages and on
+       MatchPos, so that soundness and completeness share it. *)
+    Lemma selectableAlts_spec : forall I S' S q,
+        (forall p, PF.PkgSet.In (embedPkg p) S' <-> PkgSet.In p S) ->
+        (forall n ct, PF.Satisfies S' (encPos I n ct) <-> MatchPos I S n ct) ->
+        ((exists g, List.In g (selectableAlts I q) /\ PF.Satisfies S' g) <->
+         PkgSet.In q S /\ AutoSelectable I S q).
+    Proof.
+      intros I S' S q Hemb Hpos.
+      rewrite autoSelectable_ownNames.
+      unfold selectableAlts; cbv zeta.
+      destruct (hasPriorityb I q) eqn:Ek; cbn [orb].
+      - split.
+        + intros [g [[<- | []] Hs]]; split;
+            [apply Hemb, satisfies_provForm; exact Hs |].
+          left; apply hasPriorityb_spec; exact Ek.
+        + intros [Hq _]; exists (provForm q); split; [left; reflexivity |].
+          apply satisfies_provForm, Hemb; exact Hq.
+      - destruct (rootRequiresb I (ownNames I q)) eqn:Er.
+        + split.
+          * intros [g [[<- | []] Hs]]; split;
+              [apply Hemb, satisfies_provForm; exact Hs |].
+            apply rootRequiresb_spec in Er.
+            destruct Er as [m [ct [Hw Hm]]].
+            right; left; exists m; split; [exact Hm |].
+            left; exists ct; exact Hw.
+          * intros [Hq _]; exists (provForm q); split; [left; reflexivity |].
+            apply satisfies_provForm, Hemb; exact Hq.
+        + split.
+          * intros [g [Hg Hs]]; apply in_app_iff in Hg.
+            destruct Hg as [Hg | Hg]; apply in_map_iff in Hg.
+            -- destruct Hg as [r [<- Hr]].
+               cbn [PF.Satisfies] in Hs; destruct Hs as [Hsr Hsq].
+               apply satisfies_provForm, Hemb in Hsr.
+               apply satisfies_provForm, Hemb in Hsq.
+               split; [exact Hsq |].
+               apply in_elements_pkg, mem_requirerSet in Hr.
+               destruct Hr as [m [ct [Hd Hm]]].
+               right; left; exists m; split; [exact Hm |].
+               right; exists r, ct; split; assumption.
+            -- destruct Hg as [[z conds] [<- Hz]]; cbv beta iota in Hs.
+               apply in_elements_iif, mem_ownRules in Hz.
+               destruct Hz as [Hz ->].
+               apply satisfies_condsForm in Hs; destruct Hs as [Hc Hq].
+               split; [apply Hemb; exact Hq |].
+               right; right; exists conds; split; [exact Hz |].
+               intros m ct Hmc; apply Hpos; exact (Hc (m, ct) Hmc).
+          * intros [Hq [Hk | [[m [Hm [[ct Hw] | [r [ct [Hr Hd]]]]]] |
+                               [conds [Hz Hc]]]]].
+            -- apply hasPriorityb_spec in Hk; congruence.
+            -- exfalso.
+               assert (Ht : rootRequiresb I (ownNames I q) = true)
+                 by (apply rootRequiresb_spec; exists m, ct; split; assumption).
+               congruence.
+            -- exists (PF.FConj (provForm r) (provForm q)); split.
+               ++ apply in_app_iff; left; apply in_map_iff.
+                  exists r; split; [reflexivity |].
+                  apply in_elements_pkg, mem_requirerSet.
+                  exists m, ct; split; assumption.
+               ++ cbn [PF.Satisfies]; split;
+                    apply satisfies_provForm, Hemb; assumption.
+            -- exists (condsForm I q conds); split.
+               ++ apply in_app_iff; right; apply in_map_iff.
+                  exists (q, conds); split; [reflexivity |].
+                  apply in_elements_iif, mem_ownRules; split;
+                    [exact Hz | reflexivity].
+               ++ apply satisfies_condsForm; split;
+                    [| apply Hemb; exact Hq].
+                  intros [m ct] Ha; apply Hpos; exact (Hc m ct Ha).
+    Qed.
+
+    Lemma offersb_spec : forall I p a,
+        offersb I p a = true <-> Offers I p a.
+    Proof.
+      intros I p a; unfold offersb, Offers.
+      rewrite Bool.orb_true_iff, Bool.andb_true_iff, NEqb.eqb_true_iff.
+      rewrite Prov.exists_spec'.
+      apply or_iff_compat_l.
+      split.
+      - intros [[q [m tg]] [Hr Hb]]; cbn in Hb.
+        apply Bool.andb_true_iff in Hb; destruct Hb as [Hq Hb].
+        apply PkgEqb.eqb_true_iff in Hq; subst q.
+        apply Bool.andb_true_iff in Hb; destruct Hb as [Hm Hb].
+        apply NEqb.eqb_true_iff in Hm; subst m.
+        destruct tg as [pv |]; [left; eauto |].
+        apply Bool.andb_true_iff in Hb; destruct Hb as [Ha Hk].
+        right; split; [exact Ha |]; split; [exact Hr |].
+        apply hasPriorityb_spec; exact Hk.
+      - intros [[pv [Hr Hc]] | [Hany [Hr Hk]]].
+        + exists (p, (fst a, PVer pv)); split; [exact Hr | cbn].
+          rewrite (proj2 (PkgEqb.eqb_true_iff p p) eq_refl).
+          rewrite (proj2 (NEqb.eqb_true_iff (fst a) (fst a)) eq_refl).
+          rewrite Hc; reflexivity.
+        + exists (p, (fst a, PVirt)); split; [exact Hr | cbn].
+          rewrite (proj2 (PkgEqb.eqb_true_iff p p) eq_refl).
+          rewrite (proj2 (NEqb.eqb_true_iff (fst a) (fst a)) eq_refl).
+          rewrite Hany, (proj2 (hasPriorityb_spec I p) Hk); reflexivity.
+    Qed.
+
+    Lemma offersDep_spec : forall I p d,
+        offersDep I p d = true <-> exists a, d = DPos a /\ Offers I p a.
+    Proof.
+      intros I p [a | a]; cbn [offersDep].
+      - rewrite offersb_spec; split.
+        + intro H; exists a; split; [reflexivity | exact H].
+        + intros [a' [He H]]; injection He as <-; exact H.
+      - split; [discriminate | intros [a' [He _]]; discriminate He].
+    Qed.
+
+    Lemma rootSupportsb_spec : forall I p,
+        rootSupportsb I p = true <->
+        exists a, WSet.In (DPos a) (inst_world I) /\ Offers I p a.
+    Proof.
+      intros I p; unfold rootSupportsb; rewrite WSet.exists_spec'; split.
+      - intros [d [Hd Ho]]; apply offersDep_spec in Ho.
+        destruct Ho as [a [-> Ho]]; exists a; split; assumption.
+      - intros [a [Hd Ho]]; exists (DPos a); split; [exact Hd |].
+        apply offersDep_spec; exists a; split; [reflexivity | exact Ho].
+    Qed.
+
+    Lemma mem_supporterSet : forall I p r,
+        PkgSet.In r (supporterSet I p) <->
+        exists a, Deps.In (r, DPos a) (inst_deps I) /\ Offers I p a.
+    Proof.
+      intros I p r; unfold supporterSet; rewrite SOdp.mem_filterMap; split.
+      - intros [[r' d] [Hin Hf]]; cbn in Hf.
+        destruct (offersDep I p d) eqn:Eo; [| discriminate].
+        injection Hf as <-.
+        apply offersDep_spec in Eo; destruct Eo as [a [-> Ho]].
+        exists a; split; assumption.
+      - intros [a [Hin Ho]]; exists (r, DPos a); split; [exact Hin | cbn].
+        rewrite (proj2 (offersb_spec I p a) Ho); reflexivity.
+    Qed.
+
+    Lemma vacuousRuleb_spec : forall I p,
+        vacuousRuleb I p = true <->
+        exists conds, InstallIf.In (p, conds) (inst_installIf I) /\
+          CondSet.Empty conds.
+    Proof.
+      intros I p; unfold vacuousRuleb; rewrite InstallIf.exists_spec'; split.
+      - intros [[z conds] [Hin He]]; apply mem_ownRules in Hin.
+        destruct Hin as [Hin ->]; exists conds; split; [exact Hin |].
+        cbn in He; apply CondSet.is_empty_spec; exact He.
+      - intros [conds [Hin He]]; exists (p, conds); split.
+        + apply mem_ownRules; split; [exact Hin | reflexivity].
+        + cbn; apply CondSet.is_empty_spec; exact He.
+    Qed.
+
+    Lemma condsConj_some : forall I S' conds f,
+        condsConj I conds = Some f ->
+        (PF.Satisfies S' f <->
+         forall a, CondSet.In a conds ->
+           PF.Satisfies S' (encPos I (fst a) (snd a))).
+    Proof.
+      intros I S' conds f; unfold condsConj.
+      destruct (CondSet.elements conds) as [| a l] eqn:El; [discriminate |].
+      intro Hf; injection Hf as <-.
+      rewrite satisfies_conjFold; split.
+      - intros [Hl Ha] b Hb; apply in_elements_cond in Hb; rewrite El in Hb.
+        destruct Hb as [<- | Hb]; [exact Ha | exact (Hl _ Hb)].
+      - intro H; split.
+        + intros b Hb; apply H, in_elements_cond; rewrite El; right; exact Hb.
+        + apply H, in_elements_cond; rewrite El; left; reflexivity.
+    Qed.
+
+    Lemma condsConj_none : forall I conds,
+        condsConj I conds = None -> CondSet.Empty conds.
+    Proof.
+      intros I conds; unfold condsConj.
+      destruct (CondSet.elements conds) as [| a l] eqn:El; [| discriminate].
+      intros _ a Ha; apply in_elements_cond in Ha; rewrite El in Ha.
+      destruct Ha.
+    Qed.
+
+    Lemma satisfies_disjCons : forall S' g l,
+        PF.Satisfies S' (fold_right PF.FDisj g l) <->
+        exists h, List.In h (g :: l) /\ PF.Satisfies S' h.
+    Proof.
+      intros S' g l; rewrite satisfies_disjList; split.
+      - intros [H | [h [Hh H]]].
+        + exists g; split; [left; reflexivity | exact H].
+        + exists h; split; [right; exact Hh | exact H].
+      - intros [h [[<- | Hh] H]]; [left; exact H | right; exists h; auto].
+    Qed.
+
+    Definition SupportHolds (S' : PF.PkgSet.t) (I : Inst) (p : Pkg.t) : Prop :=
+      match supportForm I p with
+      | Some f => PF.Satisfies S' f
+      | None => True
+      end.
+
+    Lemma supportForm_spec : forall I S' S p,
+        (forall q, PF.PkgSet.In (embedPkg q) S' <-> PkgSet.In q S) ->
+        (forall n ct, PF.Satisfies S' (encPos I n ct) <-> MatchPos I S n ct) ->
+        (SupportHolds S' I p <->
+         (PkgSet.In p (inst_supp I) -> Supported I S p)).
+    Proof.
+      intros I S' S p Hemb Hpos; unfold SupportHolds, supportForm.
+      assert (Halts : forall h, List.In h (supportAlts I p) ->
+                 PF.Satisfies S' h -> Supported I S p).
+      { intros h Hh Hs; unfold supportAlts in Hh.
+        apply in_app_iff in Hh; destruct Hh as [Hh | Hh].
+        - apply in_map_iff in Hh; destruct Hh as [r [<- Hr]].
+          apply in_elements_pkg, mem_supporterSet in Hr.
+          destruct Hr as [a [Hd Ho]].
+          apply satisfies_provForm, Hemb in Hs.
+          right; left; exists r, a; repeat split; assumption.
+        - apply in_flat_map in Hh; destruct Hh as [[z conds] [Hz Hh]].
+          apply in_elements_iif, mem_ownRules in Hz; destruct Hz as [Hz ->].
+          destruct (condsConj I conds) as [f |] eqn:Ec; [| destruct Hh].
+          destruct Hh as [<- | []].
+          rewrite (condsConj_some I S' conds f Ec) in Hs.
+          right; right; exists conds; split; [exact Hz |].
+          intros n ct Hc; apply Hpos; exact (Hs (n, ct) Hc). }
+      destruct (PkgSet.mem p (inst_supp I)) eqn:Em; cbn [negb orb].
+      2: { split; [intros _ Hm | intros _; exact Logic.I].
+           apply PkgSet.mem_spec in Hm; congruence. }
+      assert (Hm : PkgSet.In p (inst_supp I)) by (apply PkgSet.mem_spec; exact Em).
+      destruct (rootSupportsb I p) eqn:Er; cbn [orb].
+      - split; [intros _ _ | intros _; exact Logic.I].
+        apply rootSupportsb_spec in Er; left; exact Er.
+      - destruct (vacuousRuleb I p) eqn:Ev.
+        + split; [intros _ _ | intros _; exact Logic.I].
+          apply vacuousRuleb_spec in Ev; destruct Ev as [conds [Hin He]].
+          right; right; exists conds; split; [exact Hin |].
+          intros n ct Hc; destruct (He _ Hc).
+        + assert (Hback : Supported I S p ->
+                    exists h, List.In h (supportAlts I p) /\ PF.Satisfies S' h).
+          { intros [Hw | [[r [a [Hr [Hd Ho]]]] | [conds [Hin Hc]]]].
+            - apply rootSupportsb_spec in Hw; congruence.
+            - exists (provForm r); split.
+              + unfold supportAlts; apply in_app_iff; left.
+                apply in_map_iff; exists r; split; [reflexivity |].
+                apply in_elements_pkg, mem_supporterSet.
+                exists a; split; assumption.
+              + apply satisfies_provForm, Hemb; exact Hr.
+            - destruct (condsConj I conds) as [f |] eqn:Ec.
+              + exists f; split.
+                * unfold supportAlts; apply in_app_iff; right.
+                  apply in_flat_map; exists (p, conds); split.
+                  -- apply in_elements_iif, mem_ownRules; split;
+                       [exact Hin | reflexivity].
+                  -- cbv beta iota; rewrite Ec; left; reflexivity.
+                * apply (condsConj_some I S' conds f Ec).
+                  intros [n ct] Ha; apply Hpos; exact (Hc n ct Ha).
+              + exfalso.
+                assert (Hv : vacuousRuleb I p = true).
+                { apply vacuousRuleb_spec; exists conds; split;
+                    [exact Hin | exact (condsConj_none I conds Ec)]. }
+                congruence. }
+          destruct (supportAlts I p) as [| g l] eqn:Ea.
+          * split; [cbn [PF.Satisfies]; intros [w [Hw _]];
+                    destruct (PF.VSet.empty_spec Hw) |].
+            intro Hs; destruct (Hback (Hs Hm)) as [h [[] _]].
+          * rewrite satisfies_disjCons; split.
+            -- intros [h [Hh Hs]] _; exact (Halts h Hh Hs).
+            -- intro Hs; exact (Hback (Hs Hm)).
     Qed.
 
     Lemma embed_transR : forall I p,
@@ -1022,18 +1540,21 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Proof.
       intros I S' n ct Hres.
       assert (Hsub := PF.res_subset _ _ _ _ Hres).
+      assert (Hsel := fun q =>
+                selectableAlts_spec I S' (alpineResolution S') q
+                  (fun p => iff_sym (mem_alpineResolution S' p))
+                  (fun n ct => match_decode I S' n ct Hres)).
       rewrite satisfies_encReq, (base_decode I S' n ct Hres).
       unfold MatchReq; rewrite or_assoc.
       apply or_iff_compat_l, or_iff_compat_l, and_iff_compat_l; split.
-      - intros [q [Hq [Hs Hm]]]; apply mem_uprovSet in Hq.
-        exists q; split; [exact (proj1 Hq) |].
-        split; [apply mem_alpineResolution; exact Hm |].
-        apply selectableb_spec; exact Hs.
-      - intros [q [Hp [HqS Ha]]]; exists q.
-        apply mem_alpineResolution in HqS.
-        split; [apply mem_uprovSet; split;
-                [exact Hp | exact (embed_transR _ _ (Hsub _ HqS))] |].
-        split; [apply selectableb_spec; exact Ha | exact HqS].
+      - intros [q [Hq Hg]]; apply Hsel in Hg; destruct Hg as [HqS Ha].
+        apply mem_uprovSet in Hq.
+        exists q; split; [exact (proj1 Hq) | split; assumption].
+      - intros [q [Hp [HqS Ha]]]; exists q; split.
+        + apply mem_uprovSet; split; [exact Hp |].
+          apply mem_alpineResolution in HqS.
+          exact (embed_transR _ _ (Hsub _ HqS)).
+        + apply Hsel; split; assumption.
     Qed.
 
     (* An install-if rule with no conditions has no atom to designate, so
@@ -1125,6 +1646,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                        (dependees I (embedPkg p))).
         { destruct p as [np vp]; cbn [dependees embedPkg fst snd].
           apply FSet.union_spec; right; apply FSet.union_spec; right.
+          apply FSet.union_spec; left.
           apply SOtf.mem_map; exists (z, conds); split;
             [exact Hfib | reflexivity]. }
         assert (Hdep : PF.DepRel.In (embedPkg p, installIfForm I z conds)
@@ -1138,6 +1660,17 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           apply (proj2 (match_decode _ _ _ _ Hres)).
           exact (Hc _ _ (condRest_subset _ _ Ha)).
         + exact (proj1 (match_decode _ _ _ _ Hres) Hb).
+      - intros p Hp Hm; apply mem_alpineResolution in Hp.
+        refine (proj1 (supportForm_spec I S' (alpineResolution S') p
+                 (fun q => iff_sym (mem_alpineResolution S' q))
+                 (fun n ct => match_decode I S' n ct Hres)) _ Hm).
+        unfold SupportHolds.
+        destruct (supportForm I p) as [f |] eqn:Ef; [| exact Logic.I].
+        apply (Hclo _ Hp); apply mem_transD; split; [apply Hsub; exact Hp |].
+        destruct p as [np vp]; cbn [dependees embedPkg fst snd].
+        apply FSet.union_spec; right; apply FSet.union_spec; right.
+        apply FSet.union_spec; right; rewrite Ef.
+        apply FSet.singleton_spec; reflexivity.
     Qed.
 
     (* A package aliasing one name at two versions, or aliasing its own
@@ -1202,6 +1735,17 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
               [exact HqS | reflexivity].
     Qed.
 
+    Lemma embed_transS : forall I S p,
+        PF.PkgSet.In (embedPkg p) (transS I S) <-> PkgSet.In p S.
+    Proof.
+      intros I S p; rewrite mem_transS; split.
+      - intros [H | [[p0 [Hp0 He]] | [q [m [pv [_ [_ He]]]]]]].
+        + destruct p; discriminate H.
+        + apply embedPkg_injective in He; subst p0; exact Hp0.
+        + destruct p; injection He as _ He; discriminate He.
+      - intro H; right; left; exists p; split; [exact H | reflexivity].
+    Qed.
+
     Lemma base_transS : forall I S n ct,
         PkgSet.Subset S (inst_repo I) ->
         ((exists w, PF.VSet.In w (constrVers I n ct) /\
@@ -1249,22 +1793,19 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
          MatchReq I S n ct).
     Proof.
       intros I S n ct Hsub.
+      assert (Hsel := fun q =>
+                selectableAlts_spec I (transS I S) S q
+                  (embed_transS I S)
+                  (fun n ct => match_transS I S n ct Hsub)).
       rewrite satisfies_encReq, (base_transS I S n ct Hsub).
       unfold MatchReq; rewrite or_assoc.
       apply or_iff_compat_l, or_iff_compat_l, and_iff_compat_l; split.
-      - intros [q [Hq [Hs Hm]]]; apply mem_uprovSet in Hq.
-        exists q; split; [exact (proj1 Hq) |].
-        split; [| apply selectableb_spec; exact Hs].
-        apply mem_transS in Hm.
-        destruct Hm as [Hm | [[p0 [Hp0 He]] | [q0 [m0 [pv0 [_ [_ He]]]]]]].
-        + destruct q; discriminate Hm.
-        + apply embedPkg_injective in He; subst p0; exact Hp0.
-        + destruct q; injection He as _ He; discriminate He.
-      - intros [q [Hp [HqS Ha]]]; exists q.
-        split; [apply mem_uprovSet; split; [exact Hp | exact (Hsub _ HqS)] |].
-        split; [apply selectableb_spec; exact Ha |].
-        apply mem_transS; right; left; exists q; split;
-          [exact HqS | reflexivity].
+      - intros [q [Hq Hg]]; apply Hsel in Hg; destruct Hg as [HqS Ha].
+        apply mem_uprovSet in Hq.
+        exists q; split; [exact (proj1 Hq) | split; assumption].
+      - intros [q [Hp [HqS Ha]]]; exists q; split.
+        + apply mem_uprovSet; split; [exact Hp | exact (Hsub _ HqS)].
+        + apply Hsel; split; assumption.
     Qed.
 
     Theorem alpine_completeness : forall I S,
@@ -1272,7 +1813,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         PF.IsResolution (transR I) (transD I) rootPkg (transS I S).
     Proof.
       intros I S [Wf1 Wf2] Hres.
-      destruct Hres as [Hsub Hw Hd Hcu Ht].
+      destruct Hres as [Hsub Hw Hd Hcu Ht Hsp].
       assert (Hiff := fun n ct => match_transS I S n ct Hsub).
       assert (Hreq := fun n ct => match_req_transS I S n ct Hsub).
       constructor.
@@ -1320,7 +1861,15 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             -- apply PF.VSet.singleton_spec; reflexivity.
             -- apply mem_transS; right; right.
                exists (n0, v0), m, pv; repeat split; assumption.
-          * apply SOtf.mem_map in Hf; destruct Hf as [[z conds] [Hfib ->]].
+          * apply FSet.union_spec in Hf; destruct Hf as [Hf | Hf].
+            2: { destruct (supportForm I (n0, v0)) as [g |] eqn:Eg;
+                   [| destruct (FSet.empty_spec Hf)].
+                 apply FSet.singleton_spec in Hf; subst f.
+                 assert (Hs := proj2 (supportForm_spec I (transS I S) S
+                                        (n0, v0) (embed_transS I S) Hiff)
+                                 (Hsp _ Hp)).
+                 unfold SupportHolds in Hs; rewrite Eg in Hs; exact Hs. }
+            apply SOtf.mem_map in Hf; destruct Hf as [[z conds] [Hfib ->]].
             apply mem_installIfFibre in Hfib.
             destruct Hfib as [Ht0 Hatt]; unfold attachDesignation in Hatt.
             destruct (D.designation conds) as [a |] eqn:Edes; [| discriminate].
@@ -1429,7 +1978,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           (A <-> C) -> (B <-> D) -> (A \/ B <-> C \/ D).
       Proof. tauto. Qed.
 
-      Module NSet := FSetUOT N.
       Module SOdn := SetOps DepElt N Deps NSet.
       Definition depName (d : Dep) : N.t :=
         match d with DPos (n, _) => n | DNeg (n, _) => n end.
@@ -1497,37 +2045,27 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         rewrite Hc, Hu; reflexivity.
       Qed.
 
-      Definition prioOf (I : Inst) (qs : PkgSet.t) : Prio.t :=
-        Prio.filter (fun '(q, _) => PkgSet.mem q qs) (inst_prio I).
-
-      Lemma mem_prioOf : forall I qs q k,
-          Prio.In (q, k) (prioOf I qs) <->
-          Prio.In (q, k) (inst_prio I) /\ PkgSet.In q qs.
-      Proof.
-        intros I qs q k; unfold prioOf; rewrite Prio.filter_spec'.
-        cbn; rewrite PkgSet.mem_spec; reflexivity.
-      Qed.
-
       (* Any instance whose repository and provides agree with I at the
          names in ns answers every constraint at those names alike. *)
       Definition subInst (I : Inst) (ns : NSet.t) (deps : Deps.t)
           (ownProv : Prov.t) (installIf : InstallIf.t) (world : WSet.t)
-        : Inst :=
+          (prio : Prio.t) : Inst :=
         {| inst_repo := repoPreimage I ns
          ; inst_deps := deps
          ; inst_prov := Prov.union ownProv (provPreimage I ns)
          ; inst_installIf := installIf
          ; inst_world := world
-         ; inst_prio := prioOf I (repoPreimage I ns)
-         ; inst_repl := Repl.empty |}.
+         ; inst_prio := prio
+         ; inst_repl := Repl.empty
+         ; inst_supp := inst_supp I |}.
 
-      Lemma constrVers_subInst : forall I ns deps ownProv installIf world n ct,
+      Lemma constrVers_subInst : forall I ns deps ownProv installIf world prio n ct,
           NSet.In n ns ->
           Prov.Subset ownProv (inst_prov I) ->
-          constrVers (subInst I ns deps ownProv installIf world) n ct =
+          constrVers (subInst I ns deps ownProv installIf world prio) n ct =
           constrVers I n ct.
       Proof.
-        intros I ns deps ownProv installIf world n ct Hn Hown.
+        intros I ns deps ownProv installIf world prio n ct Hn Hown.
         apply PF.VSet.ext; intro w.
         rewrite !mem_constrVers; cbn [subInst inst_repo inst_prov].
         split.
@@ -1551,13 +2089,13 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
               right; exists n, (PVer pv); split; assumption.
       Qed.
 
-      Lemma uprovSet_subInst : forall I ns deps ownProv installIf world n,
+      Lemma uprovSet_subInst : forall I ns deps ownProv installIf world prio n,
           NSet.In n ns ->
           Prov.Subset ownProv (inst_prov I) ->
-          uprovSet (subInst I ns deps ownProv installIf world) n =
+          uprovSet (subInst I ns deps ownProv installIf world prio) n =
           uprovSet I n.
       Proof.
-        intros I ns deps ownProv installIf world n Hn Hown.
+        intros I ns deps ownProv installIf world prio n Hn Hown.
         apply PkgSet.ext; intro q.
         rewrite !mem_uprovSet; cbn [subInst inst_repo inst_prov].
         split.
@@ -1585,7 +2123,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
       Definition nameSubInst (I : Inst) (n : N.t) : Inst :=
         subInst I (NSet.singleton n) Deps.empty Prov.empty
-          InstallIf.empty WSet.empty.
+          InstallIf.empty WSet.empty Prio.empty.
 
       Theorem versions_lookupName : forall I n,
           versions (nameSubInst I n) n = versions I n.
@@ -1603,66 +2141,17 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Definition condNames (conds : CondSet.t) : NSet.t :=
         SOan.map fst conds.
 
-      Lemma encPos_subInst : forall I ns deps ownProv installIf world
+      Lemma encPos_subInst : forall I ns deps ownProv installIf world prio
               (n : N.t) (ct : Constr),
           NSet.In n ns ->
           Prov.Subset ownProv (inst_prov I) ->
-          encPos (subInst I ns deps ownProv installIf world) n ct =
+          encPos (subInst I ns deps ownProv installIf world prio) n ct =
           encPos I n ct.
       Proof.
-        intros I ns deps ownProv installIf world n ct Hn Hown.
+        intros I ns deps ownProv installIf world prio n ct Hn Hown.
         apply encPos_agree.
         - apply constrVers_subInst; assumption.
         - apply uprovSet_subInst; assumption.
-      Qed.
-
-      Lemma selectableb_subInst : forall I ns deps ownProv installIf q,
-          PkgSet.In q (repoPreimage I ns) ->
-          selectableb (subInst I ns deps ownProv installIf (inst_world I)) q =
-          selectableb I q.
-      Proof.
-        intros I ns deps ownProv installIf q Hq.
-        unfold selectableb, hasPriorityb, worldNamesb.
-        cbn [subInst inst_prio inst_world]; f_equal.
-        apply Prio.exists_restrict.
-        - intros [q' k] H; apply mem_prioOf in H; exact (proj1 H).
-        - intros [q' k] Hin Hb; cbn in Hb.
-          apply Bool.andb_true_iff in Hb; destruct Hb as [Hq' _].
-          apply PkgEqb.eqb_true_iff in Hq'; subst q'.
-          apply mem_prioOf; split; assumption.
-      Qed.
-
-      Lemma encReq_subInst : forall I ns deps ownProv installIf
-              (n : N.t) (ct : Constr),
-          NSet.In n ns ->
-          Prov.Subset ownProv (inst_prov I) ->
-          encReq (subInst I ns deps ownProv installIf (inst_world I)) n ct =
-          encReq I n ct.
-      Proof.
-        intros I ns deps ownProv installIf n ct Hn Hown.
-        unfold encReq, uprovL; cbv zeta.
-        rewrite (constrVers_subInst I ns deps ownProv installIf
-                   (inst_world I) n ct Hn Hown).
-        rewrite (uprovSet_subInst I ns deps ownProv installIf
-                   (inst_world I) n Hn Hown).
-        destruct (isAny ct); [| reflexivity].
-        f_equal; apply filter_ext_in; intros q Hq.
-        apply selectableb_subInst.
-        apply in_elements_pkg, mem_uprovSet in Hq; destruct Hq as [Hp Hr].
-        apply mem_repoPreimage; split; [exact Hr |].
-        right; exists n, PVirt; split; assumption.
-      Qed.
-
-      Lemma encDep_subInst : forall I ns deps ownProv installIf d,
-          NSet.In (depName d) ns ->
-          Prov.Subset ownProv (inst_prov I) ->
-          encDep (subInst I ns deps ownProv installIf (inst_world I)) d =
-          encDep I d.
-      Proof.
-        intros I ns deps ownProv installIf [[m ct] | [m ct]] Hn Hown;
-          cbn [encDep depName] in *; [| f_equal].
-        - apply encReq_subInst; assumption.
-        - apply encPos_subInst; assumption.
       Qed.
 
       (* The condition fold is a congruence in encPos: only the atoms the
@@ -1683,40 +2172,40 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           intros b Hb; apply H; right; exact Hb.
       Qed.
 
-      Lemma installIfForm_subInst : forall I ns deps ownProv installIf world
+      Lemma installIfForm_subInst : forall I ns deps ownProv installIf world prio
               (z : Pkg.t) (conds : CondSet.t),
           NSet.In (fst z) ns ->
           (forall a : Atom.t,
               CondSet.In a (condRest conds) -> NSet.In (fst a) ns) ->
           Prov.Subset ownProv (inst_prov I) ->
-          installIfForm (subInst I ns deps ownProv installIf world) z conds =
+          installIfForm (subInst I ns deps ownProv installIf world prio) z conds =
           installIfForm I z conds.
       Proof.
-        intros I ns deps ownProv installIf world z conds Hz Hc Hown.
+        intros I ns deps ownProv installIf world prio z conds Hz Hc Hown.
         unfold installIfForm.
-        rewrite (encPos_subInst I ns deps ownProv installIf world (fst z) CAny
+        rewrite (encPos_subInst I ns deps ownProv installIf world prio (fst z) CAny
                    Hz Hown).
         apply negFold_agree; intros a Ha.
         apply in_elements_cond in Ha.
         apply encPos_subInst; [exact (Hc _ Ha) | exact Hown].
       Qed.
 
-      Lemma subInst_installIf : forall I ns deps ownProv installIf world,
-          inst_installIf (subInst I ns deps ownProv installIf world) =
+      Lemma subInst_installIf : forall I ns deps ownProv installIf world prio,
+          inst_installIf (subInst I ns deps ownProv installIf world prio) =
           installIf.
       Proof. reflexivity. Qed.
 
       (* Attachment reads the package itself and the provides entries it
          is the tail of, so a sub-instance keeping that fibre answers
          alike. *)
-      Lemma attachAt_subInst : forall I ns deps ownProv installIf world p a,
+      Lemma attachAt_subInst : forall I ns deps ownProv installIf world prio p a,
           Prov.Subset ownProv (inst_prov I) ->
           (forall m tg, Prov.In (p, (m, tg)) (inst_prov I) ->
              Prov.In (p, (m, tg)) ownProv) ->
-          attachAt (subInst I ns deps ownProv installIf world) p a =
+          attachAt (subInst I ns deps ownProv installIf world prio) p a =
           attachAt I p a.
       Proof.
-        intros I ns deps ownProv installIf world p a Hown Hcov.
+        intros I ns deps ownProv installIf world prio p a Hown Hcov.
         unfold attachAt; cbn [subInst inst_prov];
           f_equal; try reflexivity.
         apply Prov.exists_restrict.
@@ -1730,37 +2219,475 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Qed.
 
       Lemma attachDesignation_subInst :
-        forall I ns deps ownProv installIf world p conds,
+        forall I ns deps ownProv installIf world prio p conds,
           Prov.Subset ownProv (inst_prov I) ->
           (forall m tg, Prov.In (p, (m, tg)) (inst_prov I) ->
              Prov.In (p, (m, tg)) ownProv) ->
-          attachDesignation (subInst I ns deps ownProv installIf world) p
+          attachDesignation (subInst I ns deps ownProv installIf world prio) p
             conds = attachDesignation I p conds.
       Proof.
-        intros I ns deps ownProv installIf world p conds Hown Hcov.
+        intros I ns deps ownProv installIf world prio p conds Hown Hcov.
         unfold attachDesignation; destruct (D.designation conds) as [a |];
           [apply attachAt_subInst; assumption | reflexivity].
       Qed.
 
-      Lemma installIfFibre_subInst : forall I ns deps ownProv world p,
+      Lemma installIfFibre_subInst :
+        forall I ns deps ownProv installIf world prio p,
           Prov.Subset ownProv (inst_prov I) ->
           (forall m tg, Prov.In (p, (m, tg)) (inst_prov I) ->
              Prov.In (p, (m, tg)) ownProv) ->
-          installIfFibre
-            (subInst I ns deps ownProv (installIfFibre I p) world) p =
+          InstallIf.Subset (installIfFibre I p) installIf ->
+          InstallIf.Subset installIf (inst_installIf I) ->
+          installIfFibre (subInst I ns deps ownProv installIf world prio) p =
           installIfFibre I p.
       Proof.
-        intros I ns deps ownProv world p Hown Hcov.
+        intros I ns deps ownProv installIf world prio p Hown Hcov Hfib Hsub.
         apply InstallIf.ext; intros [z conds].
-        rewrite (mem_installIfFibre I p z conds).
         rewrite (mem_installIfFibre
-                   (subInst I ns deps ownProv (installIfFibre I p) world)
+                   (subInst I ns deps ownProv installIf world prio)
                    p z conds).
         rewrite subInst_installIf.
         rewrite (attachDesignation_subInst I ns deps ownProv
-                   (installIfFibre I p) world p conds Hown Hcov).
+                   installIf world prio p conds Hown Hcov).
         rewrite (mem_installIfFibre I p z conds).
-        tauto.
+        split.
+        - intros [Hin Ha]; split; [exact (Hsub _ Hin) | exact Ha].
+        - intros [Hin Ha]; split; [| exact Ha].
+          apply Hfib, mem_installIfFibre; split; assumption.
+      Qed.
+
+      Definition anyName (d : Dep) : option N.t :=
+        match d with
+        | DPos (m, ct) => if isAny ct then Some m else None
+        | DNeg _ => None
+        end.
+
+      Definition anyNames (I : Inst) (p : Pkg.t) : NSet.t :=
+        SOdn.filterMap (fun '(_, d) => anyName d)
+          (DepsFibred.tailFibre (inst_deps I) p).
+
+      Definition rootAnyNames (I : Inst) : NSet.t :=
+        SOwn.filterMap anyName (inst_world I).
+
+      Definition bareProviders (I : Inst) (ns : NSet.t) : PkgSet.t :=
+        SOrp.filterMap
+          (fun '(q, (m, tg)) =>
+             match tg with
+             | PVirt => if NSet.mem m ns then Some q else None
+             | PVer _ => None
+             end)
+          (inst_prov I).
+
+      Definition noPriority (I : Inst) (ns : NSet.t) : PkgSet.t :=
+        PkgSet.filter (fun q => negb (hasPriorityb I q)) (bareProviders I ns).
+
+      Module SOpn := SetOps Pkg N PkgSet NSet.
+      Definition ownNamesOf (I : Inst) (qs : PkgSet.t) : NSet.t :=
+        SOpn.unionMap (ownNames I) qs.
+
+      Definition depsOn (I : Inst) (ms : NSet.t) : Deps.t :=
+        Deps.filter (fun '(_, d) => reqName ms d) (inst_deps I).
+
+      Definition worldOn (I : Inst) (ms : NSet.t) : WSet.t :=
+        WSet.filter (reqName ms) (inst_world I).
+
+      Definition provOf (I : Inst) (qs : PkgSet.t) : Prov.t :=
+        Prov.filter (fun '(q, _) => PkgSet.mem q qs) (inst_prov I).
+
+      Definition rulesOf (I : Inst) (qs : PkgSet.t) : InstallIf.t :=
+        InstallIf.filter (fun '(z, _) => PkgSet.mem z qs) (inst_installIf I).
+
+      Definition prioOf (I : Inst) (qs : PkgSet.t) : Prio.t :=
+        Prio.filter (fun '(q, _) => PkgSet.mem q qs) (inst_prio I).
+
+      Definition ruleCondNames (rs : InstallIf.t) : NSet.t :=
+        SOtn.unionMap (fun '(_, conds) => condNames conds) rs.
+
+      Lemma mem_anyNames : forall I p m,
+          NSet.In m (anyNames I p) <->
+          exists ct, Deps.In (p, DPos (m, ct)) (inst_deps I) /\
+            isAny ct = true.
+      Proof.
+        intros I p m; unfold anyNames; rewrite SOdn.mem_filterMap; split.
+        - intros [[p' d] [Hin Hf]].
+          apply DepsFibred.mem_tailFibre in Hin; destruct Hin as [Hin ->].
+          destruct d as [[m' ct] | [m' ct]]; cbn in Hf; [| discriminate].
+          destruct (isAny ct) eqn:Ea; [| discriminate].
+          injection Hf as <-; exists ct; split; assumption.
+        - intros [ct [Hin Ha]]; exists (p, DPos (m, ct)); split.
+          + apply DepsFibred.mem_tailFibre; split; [exact Hin | reflexivity].
+          + cbn; rewrite Ha; reflexivity.
+      Qed.
+
+      Lemma mem_rootAnyNames : forall I m,
+          NSet.In m (rootAnyNames I) <->
+          exists ct, WSet.In (DPos (m, ct)) (inst_world I) /\
+            isAny ct = true.
+      Proof.
+        intros I m; unfold rootAnyNames; rewrite SOwn.mem_filterMap; split.
+        - intros [d [Hin Hf]].
+          destruct d as [[m' ct] | [m' ct]]; cbn in Hf; [| discriminate].
+          destruct (isAny ct) eqn:Ea; [| discriminate].
+          injection Hf as <-; exists ct; split; assumption.
+        - intros [ct [Hin Ha]]; exists (DPos (m, ct)); split;
+            [exact Hin | cbn; rewrite Ha; reflexivity].
+      Qed.
+
+      Lemma mem_bareProviders : forall I ns q,
+          PkgSet.In q (bareProviders I ns) <->
+          exists m, Prov.In (q, (m, PVirt)) (inst_prov I) /\ NSet.In m ns.
+      Proof.
+        intros I ns q; unfold bareProviders; rewrite SOrp.mem_filterMap.
+        split.
+        - intros [[q' [m tg]] [Hin Hf]]; cbn in Hf.
+          destruct tg as [pv |]; [discriminate |].
+          destruct (NSet.mem m ns) eqn:Em; [| discriminate].
+          injection Hf as <-; apply NSet.mem_spec in Em.
+          exists m; split; assumption.
+        - intros [m [Hin Hm]]; exists (q, (m, PVirt)); split;
+            [exact Hin | cbn].
+          rewrite (proj2 (NSet.mem_spec _ _) Hm); reflexivity.
+      Qed.
+
+      Lemma mem_noPriority : forall I ns q,
+          PkgSet.In q (noPriority I ns) <->
+          PkgSet.In q (bareProviders I ns) /\ hasPriorityb I q = false.
+      Proof.
+        intros I ns q; unfold noPriority; rewrite PkgSet.filter_spec'.
+        rewrite Bool.negb_true_iff; reflexivity.
+      Qed.
+
+      Lemma ownNames_ownNamesOf : forall I qs q,
+          PkgSet.In q qs -> NSet.Subset (ownNames I q) (ownNamesOf I qs).
+      Proof.
+        intros I qs q Hq m Hm; unfold ownNamesOf; apply SOpn.mem_unionMap.
+        exists q; split; assumption.
+      Qed.
+
+      Lemma mem_depsOn : forall I ms r d,
+          Deps.In (r, d) (depsOn I ms) <->
+          Deps.In (r, d) (inst_deps I) /\ reqName ms d = true.
+      Proof.
+        intros I ms r d; unfold depsOn; rewrite Deps.filter_spec'.
+        reflexivity.
+      Qed.
+
+      Lemma mem_worldOn : forall I ms d,
+          WSet.In d (worldOn I ms) <->
+          WSet.In d (inst_world I) /\ reqName ms d = true.
+      Proof.
+        intros I ms d; unfold worldOn; rewrite WSet.filter_spec'.
+        reflexivity.
+      Qed.
+
+      Lemma mem_provOf : forall I qs q x,
+          Prov.In (q, x) (provOf I qs) <->
+          Prov.In (q, x) (inst_prov I) /\ PkgSet.In q qs.
+      Proof.
+        intros I qs q x; unfold provOf; rewrite Prov.filter_spec'.
+        cbn; rewrite PkgSet.mem_spec; reflexivity.
+      Qed.
+
+      Lemma mem_rulesOf : forall I qs z conds,
+          InstallIf.In (z, conds) (rulesOf I qs) <->
+          InstallIf.In (z, conds) (inst_installIf I) /\ PkgSet.In z qs.
+      Proof.
+        intros I qs z conds; unfold rulesOf; rewrite InstallIf.filter_spec'.
+        cbn; rewrite PkgSet.mem_spec; reflexivity.
+      Qed.
+
+      Lemma mem_prioOf : forall I qs q k,
+          Prio.In (q, k) (prioOf I qs) <->
+          Prio.In (q, k) (inst_prio I) /\ PkgSet.In q qs.
+      Proof.
+        intros I qs q k; unfold prioOf; rewrite Prio.filter_spec'.
+        cbn; rewrite PkgSet.mem_spec; reflexivity.
+      Qed.
+
+      Lemma depsOn_subset : forall I ms,
+          Deps.Subset (depsOn I ms) (inst_deps I).
+      Proof.
+        intros I ms [r d] H; apply mem_depsOn in H; exact (proj1 H).
+      Qed.
+
+      Lemma worldOn_subset : forall I ms,
+          WSet.Subset (worldOn I ms) (inst_world I).
+      Proof.
+        intros I ms d H; apply mem_worldOn in H; exact (proj1 H).
+      Qed.
+
+      Lemma provOf_subset : forall I qs,
+          Prov.Subset (provOf I qs) (inst_prov I).
+      Proof.
+        intros I qs [q x] H; apply mem_provOf in H; exact (proj1 H).
+      Qed.
+
+      Lemma rulesOf_subset : forall I qs,
+          InstallIf.Subset (rulesOf I qs) (inst_installIf I).
+      Proof.
+        intros I qs [z conds] H; apply mem_rulesOf in H; exact (proj1 H).
+      Qed.
+
+      Lemma prioOf_subset : forall I qs,
+          Prio.Subset (prioOf I qs) (inst_prio I).
+      Proof.
+        intros I qs [q k] H; apply mem_prioOf in H; exact (proj1 H).
+      Qed.
+
+      Lemma condName_ruleCondNames : forall rs z conds a,
+          InstallIf.In (z, conds) rs -> CondSet.In a conds ->
+          NSet.In (fst a) (ruleCondNames rs).
+      Proof.
+        intros rs z conds a Hr Ha; unfold ruleCondNames.
+        apply SOtn.mem_unionMap; exists (z, conds); split; [exact Hr |].
+        cbv beta iota; unfold condNames; apply SOan.mem_map.
+        exists a; split; [exact Ha | reflexivity].
+      Qed.
+
+      Lemma reqName_mono : forall ms ms' d,
+          NSet.Subset ms ms' -> reqName ms d = true -> reqName ms' d = true.
+      Proof.
+        intros ms ms' d Hs Hr; apply reqName_spec in Hr.
+        destruct Hr as [m [ct [-> Hm]]]; apply reqName_spec.
+        exists m, ct; split; [reflexivity | exact (Hs _ Hm)].
+      Qed.
+
+      Lemma hasPriorityb_subInst : forall I ns deps ownProv installIf world prio q,
+          Prio.Subset prio (inst_prio I) ->
+          (forall k, Prio.In (q, k) (inst_prio I) -> Prio.In (q, k) prio) ->
+          hasPriorityb (subInst I ns deps ownProv installIf world prio) q =
+          hasPriorityb I q.
+      Proof.
+        intros I ns deps ownProv installIf world prio q Hsub Hcov.
+        unfold hasPriorityb; cbn [subInst inst_prio].
+        apply Prio.exists_restrict; [exact Hsub |].
+        intros [q' k] Hin Hb; cbn in Hb.
+        apply Bool.andb_true_iff in Hb; destruct Hb as [Hq _].
+        apply PkgEqb.eqb_true_iff in Hq; subst q'; exact (Hcov _ Hin).
+      Qed.
+
+      Lemma ownNames_subInst : forall I ns deps ownProv installIf world prio q,
+          Prov.Subset ownProv (inst_prov I) ->
+          (forall m tg, Prov.In (q, (m, tg)) (inst_prov I) ->
+             Prov.In (q, (m, tg)) ownProv) ->
+          ownNames (subInst I ns deps ownProv installIf world prio) q =
+          ownNames I q.
+      Proof.
+        intros I ns deps ownProv installIf world prio q Hown Hcov.
+        apply NSet.ext; intro m; rewrite !mem_ownNames.
+        cbn [subInst inst_prov].
+        apply or_iff_compat_l; split; intros [pv Hp]; exists pv.
+        - apply Prov.union_spec in Hp; destruct Hp as [Hp | Hp];
+            [exact (Hown _ Hp) |].
+          apply mem_provPreimage in Hp; exact (proj1 Hp).
+        - apply Prov.union_spec; left; exact (Hcov _ _ Hp).
+      Qed.
+
+      Lemma rootRequiresb_subInst :
+        forall I ns deps ownProv installIf world prio ms,
+          WSet.Subset world (inst_world I) ->
+          (forall d, WSet.In d (inst_world I) -> reqName ms d = true ->
+             WSet.In d world) ->
+          rootRequiresb (subInst I ns deps ownProv installIf world prio) ms =
+          rootRequiresb I ms.
+      Proof.
+        intros I ns deps ownProv installIf world prio ms Hsub Hcov.
+        unfold rootRequiresb; cbn [subInst inst_world].
+        apply WSet.exists_restrict; assumption.
+      Qed.
+
+      Lemma requirerSet_subInst :
+        forall I ns deps ownProv installIf world prio ms,
+          Deps.Subset deps (inst_deps I) ->
+          (forall e, Deps.In e (inst_deps I) -> reqName ms (snd e) = true ->
+             Deps.In e deps) ->
+          requirerSet (subInst I ns deps ownProv installIf world prio) ms =
+          requirerSet I ms.
+      Proof.
+        intros I ns deps ownProv installIf world prio ms Hsub Hcov.
+        apply PkgSet.ext; intro r; unfold requirerSet.
+        cbn [subInst inst_deps].
+        apply SOdp.filterMap_restrict; [exact Hsub |].
+        intros [r' d] Hin Hf; cbn in Hf.
+        destruct (reqName ms d) eqn:E; [| discriminate].
+        exact (Hcov _ Hin E).
+      Qed.
+
+      Lemma ownRules_subInst : forall I ns deps ownProv installIf world prio q,
+          InstallIf.Subset installIf (inst_installIf I) ->
+          (forall conds, InstallIf.In (q, conds) (inst_installIf I) ->
+             InstallIf.In (q, conds) installIf) ->
+          ownRules (subInst I ns deps ownProv installIf world prio) q =
+          ownRules I q.
+      Proof.
+        intros I ns deps ownProv installIf world prio q Hsub Hcov.
+        apply InstallIf.ext; intros [z conds].
+        rewrite !mem_ownRules; cbn [subInst inst_installIf]; split.
+        - intros [H ->]; split; [exact (Hsub _ H) | reflexivity].
+        - intros [H ->]; split; [exact (Hcov _ H) | reflexivity].
+      Qed.
+
+      Lemma condsForm_agree : forall I I' q conds,
+          (forall a, CondSet.In a conds ->
+             encPos I' (fst a) (snd a) = encPos I (fst a) (snd a)) ->
+          condsForm I' q conds = condsForm I q conds.
+      Proof.
+        intros I I' q conds H; unfold condsForm.
+        assert (Hl : forall l,
+                   (forall a, List.In a l ->
+                      encPos I' (fst a) (snd a) = encPos I (fst a) (snd a)) ->
+                   fold_right
+                     (fun a f => PF.FConj (encPos I' (fst a) (snd a)) f)
+                     (provForm q) l =
+                   fold_right
+                     (fun a f => PF.FConj (encPos I (fst a) (snd a)) f)
+                     (provForm q) l).
+        { induction l as [| a l IH]; intro Ha; cbn [fold_right];
+            [reflexivity |].
+          rewrite (Ha a (or_introl eq_refl)), IH; [reflexivity |].
+          intros b Hb; apply Ha; right; exact Hb. }
+        apply Hl; intros a Ha; apply H, in_elements_cond, Ha.
+      Qed.
+
+      Lemma selectableAlts_agree : forall I I' q,
+          hasPriorityb I' q = hasPriorityb I q ->
+          (hasPriorityb I q = false ->
+           ownNames I' q = ownNames I q /\
+           rootRequiresb I' (ownNames I q) = rootRequiresb I (ownNames I q) /\
+           (rootRequiresb I (ownNames I q) = false ->
+            requirerSet I' (ownNames I q) = requirerSet I (ownNames I q) /\
+            ownRules I' q = ownRules I q /\
+            (forall z conds a, InstallIf.In (z, conds) (ownRules I q) ->
+               CondSet.In a conds ->
+               encPos I' (fst a) (snd a) = encPos I (fst a) (snd a)))) ->
+          selectableAlts I' q = selectableAlts I q.
+      Proof.
+        intros I I' q Hk Hrest; unfold selectableAlts; cbv zeta; rewrite Hk.
+        destruct (hasPriorityb I q) eqn:Ek; [reflexivity |].
+        destruct (Hrest eq_refl) as [Hn [Hr Hrest']].
+        rewrite Hn, Hr; cbn [orb].
+        destruct (rootRequiresb I (ownNames I q)) eqn:Er; [reflexivity |].
+        destruct (Hrest' eq_refl) as [Hs [Ho Hc]].
+        rewrite Hs, Ho; f_equal.
+        apply map_ext_in; intros [z conds] Hz; cbv beta iota.
+        apply condsForm_agree; intros a Ha.
+        apply (Hc z conds a); [apply in_elements_iif; exact Hz | exact Ha].
+      Qed.
+
+      Lemma encReq_agree : forall I I' n ct,
+          constrVers I' n ct = constrVers I n ct ->
+          uprovSet I' n = uprovSet I n ->
+          (isAny ct = true -> forall q, PkgSet.In q (uprovSet I n) ->
+             selectableAlts I' q = selectableAlts I q) ->
+          encReq I' n ct = encReq I n ct.
+      Proof.
+        intros I I' n ct Hc Hu Hg; unfold encReq, uprovL; cbv zeta.
+        rewrite Hc, Hu.
+        destruct (isAny ct) eqn:Ea; [| reflexivity].
+        assert (H : forall l,
+                   (forall q, List.In q l -> selectableAlts I' q = selectableAlts I q) ->
+                   flat_map (selectableAlts I') l = flat_map (selectableAlts I) l).
+        { induction l as [| q l IH]; intro Hl; cbn [flat_map];
+            [reflexivity |].
+          rewrite (Hl q (or_introl eq_refl)), IH; [reflexivity |].
+          intros q0 Hq0; apply Hl; right; exact Hq0. }
+        rewrite H; [reflexivity |].
+        intros q Hq; apply (Hg eq_refl), in_elements_pkg, Hq.
+      Qed.
+
+      Lemma selectableAlts_subInst :
+        forall I ns deps ownProv installIf world prio q,
+          Prov.Subset ownProv (inst_prov I) ->
+          Deps.Subset deps (inst_deps I) ->
+          InstallIf.Subset installIf (inst_installIf I) ->
+          WSet.Subset world (inst_world I) ->
+          Prio.Subset prio (inst_prio I) ->
+          (forall k, Prio.In (q, k) (inst_prio I) -> Prio.In (q, k) prio) ->
+          (hasPriorityb I q = false ->
+           (forall m tg, Prov.In (q, (m, tg)) (inst_prov I) ->
+              Prov.In (q, (m, tg)) ownProv) /\
+           (forall d, WSet.In d (inst_world I) ->
+              reqName (ownNames I q) d = true -> WSet.In d world) /\
+           (forall e, Deps.In e (inst_deps I) ->
+              reqName (ownNames I q) (snd e) = true -> Deps.In e deps) /\
+           (forall conds, InstallIf.In (q, conds) (inst_installIf I) ->
+              InstallIf.In (q, conds) installIf) /\
+           (forall conds a, InstallIf.In (q, conds) (inst_installIf I) ->
+              CondSet.In a conds -> NSet.In (fst a) ns)) ->
+          selectableAlts (subInst I ns deps ownProv installIf world prio) q =
+          selectableAlts I q.
+      Proof.
+        intros I ns deps ownProv installIf world prio q
+          Ho Hd Hi Hw Hp Cp Hrest.
+        apply selectableAlts_agree.
+        - apply hasPriorityb_subInst; assumption.
+        - intro Ek; destruct (Hrest Ek) as [Ct [Cw [Cd [Ci Cn]]]].
+          split; [apply ownNames_subInst; assumption |].
+          split; [apply rootRequiresb_subInst; assumption |].
+          intros _; split; [apply requirerSet_subInst; assumption |].
+          split; [apply ownRules_subInst; assumption |].
+          intros z conds a Hz Ha; apply mem_ownRules in Hz.
+          destruct Hz as [Hz ->].
+          apply encPos_subInst; [exact (Cn _ _ Hz Ha) | exact Ho].
+      Qed.
+
+      Theorem selectableAlts_lookup :
+        forall I ns deps ownProv installIf world prio ns0 m q,
+          Prov.Subset ownProv (inst_prov I) ->
+          Deps.Subset deps (inst_deps I) ->
+          InstallIf.Subset installIf (inst_installIf I) ->
+          WSet.Subset world (inst_world I) ->
+          Prio.Subset prio (inst_prio I) ->
+          Prov.Subset (provOf I (noPriority I ns0)) ownProv ->
+          Deps.Subset (depsOn I (ownNamesOf I (noPriority I ns0))) deps ->
+          InstallIf.Subset (rulesOf I (noPriority I ns0)) installIf ->
+          WSet.Subset (worldOn I (ownNamesOf I (noPriority I ns0))) world ->
+          Prio.Subset (prioOf I (bareProviders I ns0)) prio ->
+          NSet.Subset (ruleCondNames (rulesOf I (noPriority I ns0))) ns ->
+          NSet.In m ns0 -> PkgSet.In q (uprovSet I m) ->
+          selectableAlts (subInst I ns deps ownProv installIf world prio) q =
+          selectableAlts I q.
+      Proof.
+        intros I ns deps ownProv installIf world prio ns0 m q
+          Ho Hd Hi Hw Hp Co Cd Ci Cw Cp Cn Hm Hq.
+        apply mem_uprovSet in Hq; destruct Hq as [Hq _].
+        assert (Hv : PkgSet.In q (bareProviders I ns0))
+          by (apply mem_bareProviders; exists m; split; assumption).
+        apply selectableAlts_subInst; try assumption.
+        - intros k Hk; apply Cp, mem_prioOf; split; assumption.
+        - intro Ek.
+          assert (Hg : PkgSet.In q (noPriority I ns0))
+            by (apply mem_noPriority; split; assumption).
+          assert (Hms := ownNames_ownNamesOf I (noPriority I ns0) q Hg).
+          split; [| split; [| split; [| split]]].
+          + intros m' tg H; apply Co, mem_provOf; split; assumption.
+          + intros d Hd' Hr; apply Cw, mem_worldOn; split;
+              [exact Hd' | exact (reqName_mono _ _ d Hms Hr)].
+          + intros [r d] Hd' Hr; apply Cd, mem_depsOn; split;
+              [exact Hd' | exact (reqName_mono _ _ d Hms Hr)].
+          + intros conds H; apply Ci, mem_rulesOf; split; assumption.
+          + intros conds a H Ha; apply Cn.
+            apply (condName_ruleCondNames _ q conds a); [| exact Ha].
+            apply mem_rulesOf; split; assumption.
+      Qed.
+
+      Lemma encDep_subInst : forall I ns deps ownProv installIf world prio d,
+          NSet.In (depName d) ns ->
+          Prov.Subset ownProv (inst_prov I) ->
+          (forall m ct, d = DPos (m, ct) -> isAny ct = true ->
+             forall q, PkgSet.In q (uprovSet I m) ->
+             selectableAlts (subInst I ns deps ownProv installIf world prio) q =
+             selectableAlts I q) ->
+          encDep (subInst I ns deps ownProv installIf world prio) d =
+          encDep I d.
+      Proof.
+        intros I ns deps ownProv installIf world prio [[m ct] | [m ct]]
+          Hn Hown Hg; cbn [encDep depName] in Hn |- *.
+        - apply encReq_agree.
+          + apply constrVers_subInst; assumption.
+          + apply uprovSet_subInst; assumption.
+          + exact (Hg m ct eq_refl).
+        - f_equal; apply encPos_subInst; assumption.
       Qed.
 
       (* A package's dependee lookup reads its own dependency names and,
@@ -1804,11 +2731,224 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           [exact Ha | reflexivity].
       Qed.
 
+      Definition offeredNames (I : Inst) (p : Pkg.t) : NSet.t :=
+        NSet.add (fst p)
+          (SOrn.filterMap
+             (fun '(q, (m, _)) => if PkgEqb.eqb q p then Some m else None)
+             (inst_prov I)).
+
+      Definition supportNames (I : Inst) (p : Pkg.t) : NSet.t :=
+        if PkgSet.mem p (inst_supp I) then offeredNames I p else NSet.empty.
+
+      Lemma offers_offeredNames : forall I p a,
+          Offers I p a -> NSet.In (fst a) (offeredNames I p).
+      Proof.
+        intros I p a Ho; unfold offeredNames; apply NSet.add_spec.
+        destruct Ho as [[He _] | [[pv [Hr _]] | [_ [Hr _]]]];
+          [left; symmetry; exact He | right | right];
+          apply SOrn.mem_filterMap;
+          [exists (p, (fst a, PVer pv)) | exists (p, (fst a, PVirt))];
+          (split; [assumption | cbn]);
+          rewrite (proj2 (PkgEqb.eqb_true_iff p p) eq_refl); reflexivity.
+      Qed.
+
+      Lemma depsOn_mono : forall I ms ms',
+          NSet.Subset ms ms' -> Deps.Subset (depsOn I ms) (depsOn I ms').
+      Proof.
+        intros I ms ms' Hs [r d] H; apply mem_depsOn in H.
+        apply mem_depsOn; split; [exact (proj1 H) |].
+        exact (reqName_mono _ _ d Hs (proj2 H)).
+      Qed.
+
+      Lemma rulesOf_mono : forall I qs qs',
+          PkgSet.Subset qs qs' ->
+          InstallIf.Subset (rulesOf I qs) (rulesOf I qs').
+      Proof.
+        intros I qs qs' Hs [z conds] H; apply mem_rulesOf in H.
+        apply mem_rulesOf; split; [exact (proj1 H) | exact (Hs _ (proj2 H))].
+      Qed.
+
+      Lemma prioOf_mono : forall I qs qs',
+          PkgSet.Subset qs qs' -> Prio.Subset (prioOf I qs) (prioOf I qs').
+      Proof.
+        intros I qs qs' Hs [q k] H; apply mem_prioOf in H.
+        apply mem_prioOf; split; [exact (proj1 H) | exact (Hs _ (proj2 H))].
+      Qed.
+
+      Lemma ruleCondNames_mono : forall rs rs',
+          InstallIf.Subset rs rs' ->
+          NSet.Subset (ruleCondNames rs) (ruleCondNames rs').
+      Proof.
+        intros rs rs' Hs m H; unfold ruleCondNames in *.
+        apply SOtn.mem_unionMap in H; destruct H as [x [Hx Hm]].
+        apply SOtn.mem_unionMap; exists x; split; [exact (Hs _ Hx) | exact Hm].
+      Qed.
+
+      Lemma offersb_subInst :
+        forall I ns deps ownProv installIf world prio p a,
+          Prov.Subset ownProv (inst_prov I) ->
+          (forall m tg, Prov.In (p, (m, tg)) (inst_prov I) ->
+             Prov.In (p, (m, tg)) ownProv) ->
+          Prio.Subset prio (inst_prio I) ->
+          (forall k, Prio.In (p, k) (inst_prio I) -> Prio.In (p, k) prio) ->
+          offersb (subInst I ns deps ownProv installIf world prio) p a =
+          offersb I p a.
+      Proof.
+        intros I ns deps ownProv installIf world prio p a Hown Hcov Hp Cp.
+        unfold offersb.
+        rewrite (hasPriorityb_subInst I ns deps ownProv installIf world prio p
+                   Hp Cp).
+        f_equal; cbn [subInst inst_prov].
+        apply Prov.exists_restrict.
+        - intros e He; apply Prov.union_spec in He.
+          destruct He as [He | He]; [exact (Hown _ He) |].
+          apply mem_provPreimage in He; exact (proj1 He).
+        - intros [q [m tg]] He Hb; cbn in Hb.
+          apply Bool.andb_true_iff in Hb; destruct Hb as [Hq _].
+          apply PkgEqb.eqb_true_iff in Hq; subst q.
+          apply Prov.union_spec; left; exact (Hcov _ _ He).
+      Qed.
+
+      Lemma condsConj_agree : forall I I' conds,
+          (forall a, CondSet.In a conds ->
+             encPos I' (fst a) (snd a) = encPos I (fst a) (snd a)) ->
+          condsConj I' conds = condsConj I conds.
+      Proof.
+        intros I I' conds H; unfold condsConj.
+        destruct (CondSet.elements conds) as [| a l] eqn:El; [reflexivity |].
+        assert (Hl : forall b, List.In b (a :: l) ->
+                   encPos I' (fst b) (snd b) = encPos I (fst b) (snd b)).
+        { intros b Hb; apply H, in_elements_cond; rewrite El; exact Hb. }
+        f_equal; rewrite (Hl a (or_introl eq_refl)).
+        assert (Hf : forall l' base,
+                   (forall b, List.In b l' ->
+                      encPos I' (fst b) (snd b) = encPos I (fst b) (snd b)) ->
+                   fold_right
+                     (fun b f => PF.FConj (encPos I' (fst b) (snd b)) f) base l' =
+                   fold_right
+                     (fun b f => PF.FConj (encPos I (fst b) (snd b)) f) base l').
+        { induction l' as [| b l' IH]; intros base Hb; cbn [fold_right];
+            [reflexivity |].
+          rewrite (Hb b (or_introl eq_refl)), IH; [reflexivity |].
+          intros c Hc; apply Hb; right; exact Hc. }
+        apply Hf; intros b Hb; apply Hl; right; exact Hb.
+      Qed.
+
+      Lemma supportForm_agree : forall I I' p,
+          inst_supp I' = inst_supp I ->
+          rootSupportsb I' p = rootSupportsb I p ->
+          (PkgSet.In p (inst_supp I) -> supporterSet I' p = supporterSet I p) ->
+          ownRules I' p = ownRules I p ->
+          (forall z conds a, InstallIf.In (z, conds) (ownRules I p) ->
+             CondSet.In a conds ->
+             encPos I' (fst a) (snd a) = encPos I (fst a) (snd a)) ->
+          supportForm I' p = supportForm I p.
+      Proof.
+        intros I I' p Hq Hr Hs Ho Hc.
+        unfold supportForm, vacuousRuleb, supportAlts.
+        rewrite Hq, Hr, Ho.
+        destruct (PkgSet.mem p (inst_supp I)) eqn:Em; cbn [negb orb];
+          [| reflexivity].
+        rewrite (Hs (proj1 (PkgSet.mem_spec _ _) Em)).
+        assert (Hl : forall l,
+                   (forall x, List.In x l -> InstallIf.In x (ownRules I p)) ->
+                   flat_map
+                     (fun '(_, conds) =>
+                        match condsConj I' conds with
+                        | Some f => f :: nil | None => nil end) l =
+                   flat_map
+                     (fun '(_, conds) =>
+                        match condsConj I conds with
+                        | Some f => f :: nil | None => nil end) l).
+        { induction l as [| [z conds] l IH]; intro Hin; cbn [flat_map];
+            [reflexivity |].
+          rewrite (condsConj_agree I I' conds).
+          - rewrite IH; [reflexivity |].
+            intros x Hx; apply Hin; right; exact Hx.
+          - intros a Ha; exact (Hc z conds a (Hin _ (or_introl eq_refl)) Ha). }
+        rewrite Hl; [reflexivity |].
+        intros x Hx; apply in_elements_iif; exact Hx.
+      Qed.
+
+      Lemma supportForm_subInst :
+        forall I ns deps ownProv installIf world prio p,
+          Prov.Subset ownProv (inst_prov I) ->
+          (forall m tg, Prov.In (p, (m, tg)) (inst_prov I) ->
+             Prov.In (p, (m, tg)) ownProv) ->
+          Deps.Subset deps (inst_deps I) ->
+          (PkgSet.In p (inst_supp I) ->
+           Deps.Subset (depsOn I (offeredNames I p)) deps) ->
+          InstallIf.Subset installIf (inst_installIf I) ->
+          InstallIf.Subset (rulesOf I (PkgSet.singleton p)) installIf ->
+          (forall d, WSet.In d world <-> WSet.In d (inst_world I)) ->
+          Prio.Subset prio (inst_prio I) ->
+          (forall k, Prio.In (p, k) (inst_prio I) -> Prio.In (p, k) prio) ->
+          NSet.Subset (ruleCondNames (rulesOf I (PkgSet.singleton p))) ns ->
+          supportForm (subInst I ns deps ownProv installIf world prio) p =
+          supportForm I p.
+      Proof.
+        intros I ns deps ownProv installIf world prio p
+          Ho Hcov Hd Cd Hi Ci Hw Hp Cp Cn.
+        assert (Hoff : forall a,
+                   Offers (subInst I ns deps ownProv installIf world prio) p a <->
+                   Offers I p a).
+        { intro a; rewrite <- !offersb_spec.
+          rewrite (offersb_subInst I ns deps ownProv installIf world prio p a
+                     Ho Hcov Hp Cp).
+          reflexivity. }
+        apply supportForm_agree; [reflexivity | | | |].
+        - apply Bool.eq_iff_eq_true; rewrite !rootSupportsb_spec.
+          cbn [subInst inst_world]; split; intros [a [Ha Hb]]; exists a;
+            (split; [apply Hw; exact Ha + exact (proj2 (Hw _) Ha) |]);
+            apply Hoff; exact Hb.
+        - intro Hin; specialize (Cd Hin).
+          apply PkgSet.ext; intro r; rewrite !mem_supporterSet.
+          cbn [subInst inst_deps]; split; intros [a [Ha Hb]]; exists a.
+          + split; [exact (Hd _ Ha) | apply Hoff; exact Hb].
+          + split; [| apply Hoff; exact Hb].
+            apply Cd, mem_depsOn; split; [exact Ha |].
+            apply reqName_spec; exists (fst a), (snd a).
+            split; [destruct a; reflexivity |].
+            apply (offers_offeredNames I p a Hb).
+        - apply ownRules_subInst; [exact Hi |].
+          intros conds H; apply Ci, mem_rulesOf; split;
+            [exact H | apply PkgSet.singleton_spec; reflexivity].
+        - intros z conds a Hz Ha; apply mem_ownRules in Hz.
+          destruct Hz as [Hz ->].
+          apply encPos_subInst; [| exact Ho].
+          apply Cn, (condName_ruleCondNames _ p conds a); [| exact Ha].
+          apply mem_rulesOf; split;
+            [exact Hz | apply PkgSet.singleton_spec; reflexivity].
+      Qed.
+
       Definition pkgSubInst (I : Inst) (p : Pkg.t) : Inst :=
-        subInst I (pkgNames I p)
-          (DepsFibred.tailFibre (inst_deps I) p)
-          (ProvFibred.tailFibre (inst_prov I) p)
-          (installIfFibre I p) (inst_world I).
+        subInst I
+          (NSet.union (pkgNames I p)
+             (ruleCondNames
+                (rulesOf I (PkgSet.add p (noPriority I (anyNames I p))))))
+          (Deps.union (DepsFibred.tailFibre (inst_deps I) p)
+             (depsOn I (NSet.union (supportNames I p)
+                          (ownNamesOf I (noPriority I (anyNames I p))))))
+          (Prov.union (ProvFibred.tailFibre (inst_prov I) p)
+             (provOf I (noPriority I (anyNames I p))))
+          (InstallIf.union (installIfFibre I p)
+             (rulesOf I (PkgSet.add p (noPriority I (anyNames I p)))))
+          (inst_world I)
+          (prioOf I (PkgSet.add p (bareProviders I (anyNames I p)))).
+
+      Lemma tailFibre_union_own : forall D E p,
+          Deps.Subset E D ->
+          DepsFibred.tailFibre (Deps.union (DepsFibred.tailFibre D p) E) p =
+          DepsFibred.tailFibre D p.
+      Proof.
+        intros D E p HE; apply Deps.ext; intros [p' d].
+        rewrite !DepsFibred.mem_tailFibre, Deps.union_spec,
+          DepsFibred.mem_tailFibre.
+        split.
+        - intros [[[H _] | H] Hp]; split; try exact Hp;
+            [exact H | exact (HE _ H)].
+        - intros [H Hp]; split; [left; split; assumption | exact Hp].
+      Qed.
 
       Theorem dependees_lookupOrig : forall I n v,
           dependees (pkgSubInst I (n, v)) (embedPkg (n, v)) =
@@ -1816,84 +2956,146 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Proof.
         intros I n v.
         assert (Hown : Prov.Subset
-                         (ProvFibred.tailFibre (inst_prov I) (n, v))
-                         (inst_prov I))
-          by apply ProvFibred.tailFibre_subset.
+                         (Prov.union (ProvFibred.tailFibre (inst_prov I) (n, v))
+                            (provOf I (noPriority I (anyNames I (n, v)))))
+                         (inst_prov I)).
+        { intros e He; apply Prov.union_spec in He; destruct He as [He | He];
+            [exact (ProvFibred.tailFibre_subset _ _ _ He) |
+             exact (provOf_subset _ _ _ He)]. }
         assert (Hcov : forall m tg,
                    Prov.In ((n, v), (m, tg)) (inst_prov I) ->
                    Prov.In ((n, v), (m, tg))
-                     (ProvFibred.tailFibre (inst_prov I) (n, v))).
-        { intros m tg H; apply ProvFibred.mem_tailFibre; split;
-            [exact H | reflexivity]. }
+                     (Prov.union (ProvFibred.tailFibre (inst_prov I) (n, v))
+                        (provOf I (noPriority I (anyNames I (n, v)))))).
+        { intros m tg H; apply Prov.union_spec; left.
+          apply ProvFibred.mem_tailFibre; split; [exact H | reflexivity]. }
+        assert (Hdeps : Deps.Subset
+                          (Deps.union (DepsFibred.tailFibre (inst_deps I) (n, v))
+                             (depsOn I (NSet.union (supportNames I (n, v))
+                                (ownNamesOf I
+                                   (noPriority I (anyNames I (n, v)))))))
+                          (inst_deps I)).
+        { intros e He; apply Deps.union_spec in He; destruct He as [He | He];
+            [exact (DepsFibred.tailFibre_subset _ _ _ He) |
+             exact (depsOn_subset _ _ _ He)]. }
+        assert (Hrules : InstallIf.Subset
+                           (InstallIf.union (installIfFibre I (n, v))
+                              (rulesOf I (PkgSet.add (n, v)
+                                 (noPriority I (anyNames I (n, v))))))
+                           (inst_installIf I)).
+        { intros [z conds] He; apply InstallIf.union_spec in He.
+          destruct He as [He | He];
+            [apply mem_installIfFibre in He; exact (proj1 He) |
+             exact (rulesOf_subset _ _ _ He)]. }
         assert (Hfib : installIfFibre (pkgSubInst I (n, v)) (n, v) =
                          installIfFibre I (n, v)).
-        { unfold pkgSubInst; apply installIfFibre_subInst; assumption. }
+        { unfold pkgSubInst; apply installIfFibre_subInst;
+            try assumption.
+          intros e He; apply InstallIf.union_spec; left; exact He. }
+        assert (Hsel : forall m ct, Deps.In ((n, v), DPos (m, ct)) (inst_deps I) ->
+                   isAny ct = true -> forall q, PkgSet.In q (uprovSet I m) ->
+                   selectableAlts (pkgSubInst I (n, v)) q = selectableAlts I q).
+        { intros m ct Hd Ha q Hq; unfold pkgSubInst.
+          apply (selectableAlts_lookup I _ _ _ _ _ _ (anyNames I (n, v)) m q);
+            try assumption.
+          - intros d Hd'; exact Hd'.
+          - exact (prioOf_subset _ _).
+          - intros e He; apply Prov.union_spec; right; exact He.
+          - intros e He; apply Deps.union_spec; right.
+            apply (depsOn_mono I _ _ (fun x Hx => proj2 (NSet.union_spec _ _ _)
+                                                   (or_intror Hx))).
+            exact He.
+          - intros e He; apply InstallIf.union_spec; right.
+            apply (rulesOf_mono I _ _ (fun x Hx => proj2 (PkgSet.add_spec _ _ _)
+                                                    (or_intror Hx))).
+            exact He.
+          - exact (worldOn_subset _ _).
+          - apply prioOf_mono; intros x Hx; apply PkgSet.add_spec; right;
+              exact Hx.
+          - intros a Ha'; apply NSet.union_spec; right.
+            apply (ruleCondNames_mono _ _
+                     (rulesOf_mono I _ _ (fun x Hx => proj2 (PkgSet.add_spec _ _ _)
+                                                       (or_intror Hx)))).
+            exact Ha'.
+          - apply mem_anyNames; exists ct; split; assumption. }
+        assert (Hsup : supportForm (pkgSubInst I (n, v)) (n, v) =
+                         supportForm I (n, v)).
+        { unfold pkgSubInst; apply supportForm_subInst; try assumption.
+          - intros Hin e He; apply Deps.union_spec; right.
+            apply (depsOn_mono I (offeredNames I (n, v))).
+            + intros x Hx; apply NSet.union_spec; left.
+              unfold supportNames; rewrite (proj2 (PkgSet.mem_spec _ _) Hin).
+              exact Hx.
+            + exact He.
+          - intros e He; apply InstallIf.union_spec; right.
+            apply (rulesOf_mono I _ _ (fun x Hx =>
+                     proj2 (PkgSet.add_spec _ _ _)
+                       (or_introl (proj1 (PkgSet.singleton_spec _ _) Hx)))).
+            exact He.
+          - intro d; reflexivity.
+          - exact (prioOf_subset _ _).
+          - intros k Hk; apply mem_prioOf; split; [exact Hk |].
+            apply PkgSet.add_spec; left; reflexivity.
+          - intros a Ha'; apply NSet.union_spec; right.
+            apply (ruleCondNames_mono _ _
+                     (rulesOf_mono I _ _ (fun x Hx =>
+                        proj2 (PkgSet.add_spec _ _ _)
+                          (or_introl (proj1 (PkgSet.singleton_spec _ _) Hx))))).
+            exact Ha'. }
         apply FSet.ext; intro f.
         cbn [dependees embedPkg fst snd].
-        rewrite Hfib.
+        rewrite Hfib, Hsup.
         cbn [pkgSubInst subInst inst_deps inst_prov].
+        rewrite (tailFibre_union_own (inst_deps I) _ (n, v)
+                   (depsOn_subset _ _)).
         rewrite !FSet.union_spec, !SOdf.mem_map, !SOrf.mem_filterMap,
           !SOtf.mem_map.
-        apply or_iff; [| apply or_iff].
+        apply or_iff; [| apply or_iff; [| apply or_iff; [| apply iff_refl]]].
+        - split; intros [[p' d] [Hin ->]]; exists (p', d); split;
+            try exact Hin; cbv beta iota;
+            apply DepsFibred.mem_tailFibre in Hin; destruct Hin as [Hin ->];
+            [| symmetry]; apply encDep_subInst.
+          1, 4: apply NSet.union_spec; left; apply dep_pkgNames;
+                apply DepsFibred.mem_tailFibre; split;
+                [exact Hin | reflexivity].
+          1, 3: exact Hown.
+          1, 2: intros m ct -> Ha q Hq; exact (Hsel m ct Hin Ha q Hq).
         - split.
-          + intros [[p' d] [Hin ->]].
-            apply DepsFibred.mem_tailFibre in Hin.
-            destruct Hin as [Hin ->].
-            exists ((n, v), d); split; [exact Hin |].
-            cbv beta iota; apply encDep_subInst;
-              [exact (dep_pkgNames I (n, v) d Hin) | exact Hown].
-          + intros [[p' d] [Hin ->]].
-            apply DepsFibred.mem_tailFibre in Hin.
-            destruct Hin as [Hin ->].
-            assert (Hfb : Deps.In ((n, v), d)
-                            (DepsFibred.tailFibre (inst_deps I) (n, v))).
-            { apply DepsFibred.mem_tailFibre; split;
-                [exact Hin | reflexivity]. }
-            exists ((n, v), d); split.
-            { apply DepsFibred.mem_tailFibre; split;
-                [exact Hfb | reflexivity]. }
-            cbv beta iota; symmetry; apply encDep_subInst;
-              [exact (dep_pkgNames I (n, v) d Hfb) | exact Hown].
-        - split.
-          + intros [[p' [m tg]] [Hin Hv]].
-            apply ProvFibred.mem_tailFibre in Hin.
-            destruct Hin as [Hin ->].
-            apply Prov.union_spec in Hin.
-            assert (Hin' : Prov.In ((n, v), (m, tg)) (inst_prov I)).
-            { destruct Hin as [Hin | Hin].
-              - apply ProvFibred.mem_tailFibre in Hin;
-                  exact (proj1 Hin).
-              - apply mem_provPreimage in Hin; exact (proj1 Hin). }
-            exists ((n, v), (m, tg)); split; [| exact Hv].
-            apply ProvFibred.mem_tailFibre; split;
-              [exact Hin' | reflexivity].
           + intros [[p' [m tg]] [Hin Hv]].
             apply ProvFibred.mem_tailFibre in Hin.
             destruct Hin as [Hin ->].
             exists ((n, v), (m, tg)); split; [| exact Hv].
             apply ProvFibred.mem_tailFibre; split; [| reflexivity].
-            apply Prov.union_spec; left.
-            apply ProvFibred.mem_tailFibre; split;
-              [exact Hin | reflexivity].
+            apply Prov.union_spec in Hin; destruct Hin as [Hin | Hin];
+              [exact (Hown _ Hin) |].
+            apply mem_provPreimage in Hin; exact (proj1 Hin).
+          + intros [[p' [m tg]] [Hin Hv]].
+            apply ProvFibred.mem_tailFibre in Hin.
+            destruct Hin as [Hin ->].
+            exists ((n, v), (m, tg)); split; [| exact Hv].
+            apply ProvFibred.mem_tailFibre; split; [| reflexivity].
+            apply Prov.union_spec; left; exact (Hcov _ _ Hin).
         - split.
           + intros [[z conds] [Hin ->]].
             exists (z, conds); split; [exact Hin |].
             cbv beta iota; apply installIfForm_subInst;
-              [ exact (selfName_pkgNames I (n, v) z conds Hin)
-              | intros a Ha;
+              [ apply NSet.union_spec; left;
+                exact (selfName_pkgNames I (n, v) z conds Hin)
+              | intros a Ha; apply NSet.union_spec; left;
                 exact (condName_pkgNames I (n, v) z conds a Hin Ha)
               | exact Hown ].
           + intros [[z conds] [Hin ->]].
             exists (z, conds); split; [exact Hin |].
             cbv beta iota; symmetry; apply installIfForm_subInst;
-              [ exact (selfName_pkgNames I (n, v) z conds Hin)
-              | intros a Ha;
+              [ apply NSet.union_spec; left;
+                exact (selfName_pkgNames I (n, v) z conds Hin)
+              | intros a Ha; apply NSet.union_spec; left;
                 exact (condName_pkgNames I (n, v) z conds a Hin Ha)
               | exact Hown ].
       Qed.
 
-      (* The root's dependees read the world set at its dependency names
-         alone: every install-if rule is carried by a package. *)
+      (* The root carries no install-if rule: the ones its dependees read
+         belong to providers of its bare atoms. *)
       Definition rootNames (I : Inst) : NSet.t :=
         SOwn.map depName (inst_world I).
 
@@ -1905,8 +3107,14 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Qed.
 
       Definition rootSubInst (I : Inst) : Inst :=
-        subInst I (rootNames I) Deps.empty Prov.empty
-          InstallIf.empty (inst_world I).
+        subInst I
+          (NSet.union (rootNames I)
+             (ruleCondNames (rulesOf I (noPriority I (rootAnyNames I)))))
+          (depsOn I (ownNamesOf I (noPriority I (rootAnyNames I))))
+          (provOf I (noPriority I (rootAnyNames I)))
+          (rulesOf I (noPriority I (rootAnyNames I)))
+          (inst_world I)
+          (prioOf I (bareProviders I (rootAnyNames I))).
 
       Lemma rootSubInst_world : forall I,
           inst_world (rootSubInst I) = inst_world I.
@@ -1916,15 +3124,30 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           dependees (rootSubInst I) rootPkg = dependees I rootPkg.
       Proof.
         intro I.
-        assert (Hown : Prov.Subset Prov.empty (inst_prov I)).
-        { intros e He; destruct (Prov.empty_spec He). }
+        assert (Heq : forall d, WSet.In d (inst_world I) ->
+                   encDep (rootSubInst I) d = encDep I d).
+        { intros d Hd; unfold rootSubInst; apply encDep_subInst.
+          - apply NSet.union_spec; left; exact (world_rootNames I d Hd).
+          - exact (provOf_subset _ _).
+          - intros m ct -> Ha q Hq.
+            apply (selectableAlts_lookup I _ _ _ _ _ _ (rootAnyNames I) m q);
+              try exact Hq.
+            + exact (provOf_subset _ _).
+            + exact (depsOn_subset _ _).
+            + exact (rulesOf_subset _ _).
+            + intros e He; exact He.
+            + exact (prioOf_subset _ _).
+            + intros e He; exact He.
+            + intros e He; exact He.
+            + intros e He; exact He.
+            + exact (worldOn_subset _ _).
+            + intros e He; exact He.
+            + intros a Ha'; apply NSet.union_spec; right; exact Ha'.
+            + apply mem_rootAnyNames; exists ct; split; assumption. }
         cbn [dependees rootPkg]; rewrite rootSubInst_world.
         apply FSet.ext; intro f; rewrite !SOwf.mem_map.
         split; intros [d [Hd ->]]; exists d; split; try exact Hd;
-          [| symmetry]; unfold rootSubInst;
-          apply encDep_subInst;
-          [ exact (world_rootNames I d Hd) | exact Hown
-          | exact (world_rootNames I d Hd) | exact Hown ].
+          [| symmetry]; exact (Heq d Hd).
       Qed.
     End Lookup.
   End Reduct.
