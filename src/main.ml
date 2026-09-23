@@ -51,13 +51,15 @@ let debian_cmd =
     Term.(
       const debian_run $ debug_arg $ apt_heap $ no_recs $ native $ goal $ paths)
 
-let opam_run debug zi_order with_test with_doc with_dev_setup repo atoms =
+let opam_run debug zi_order with_test with_doc with_dev_setup opam_version
+    repo atoms =
   let t0 = Unix.gettimeofday () in
   let ar = Opam_solve.empty_archive repo in
   let module S = Opam_solve.Make () in
   let query = List.map Opam_parse.atom_of_string atoms in
   let r =
-    S.solve ~debug ~zi_order ~with_test ~with_doc ~with_dev_setup ar query
+    S.solve ~debug ~zi_order ~with_test ~with_doc ~with_dev_setup
+      ~opam_version ar query
   in
   (* the names the run parsed, known only once it is over: there is no
      cone, so this is what the solver asked for and nothing more *)
@@ -121,6 +123,18 @@ let opam_cmd =
       & info [ "with-dev-setup" ]
           ~doc:"Enable the queried packages' developer-only dependencies.")
   in
+  (* the one global variable that is a fact about opam itself rather than
+     about the host, which opam answers with its own version and refuses to
+     have set; whoever compares against an opam says which one here *)
+  let opam_version =
+    Arg.(
+      value
+      & opt string Opam_solve.default_opam_version
+      & info [ "opam-version" ] ~docv:"VERSION"
+          ~doc:
+            "Value of the opam-version variable, the version of the opam \
+             whose answer is being matched.")
+  in
   let repo =
     Arg.(
       required
@@ -144,7 +158,7 @@ let opam_cmd =
     (Cmd.info "opam" ~doc:"Solve against an opam repository.")
     Term.(
       const opam_run $ debug_arg $ zi_order $ with_test $ with_doc
-      $ with_dev_setup $ repo $ query)
+      $ with_dev_setup $ opam_version $ repo $ query)
 
 let cargo_run debug print_parents index goal wanted rfeats rustv =
   let t0 = Unix.gettimeofday () in

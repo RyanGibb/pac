@@ -8,10 +8,10 @@
 # different host-system-* gadget, which is a different instance, not a
 # different preference.
 #
-# opam-version is the one global that cannot be set: opam reports its own
-# (2.5.2), our rho says "2.2.0".  In this snapshot that separates only
-# opam-build / opam-test / opam-check-npm-deps, none of which is in any
-# goal's cone; see findings.md.
+# opam-version is the one global that cannot be set here: opam reports its
+# own.  cmp.sh and valid.sh therefore hand it to our driver instead, as
+# --opam-version.  In this snapshot it decides only which opam-build /
+# opam-test / opam-check-npm-deps version is available.
 #
 # usage: setup.sh [opamroot-dir]   (default /tmp/claude-1000/opam-cmp-root)
 set -eu

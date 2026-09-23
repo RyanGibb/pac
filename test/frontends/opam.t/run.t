@@ -197,3 +197,20 @@ mlib is reached, not asked for.
     tlib.1
     tst.1
   loaded: 7 names, 7 package versions
+
+opam-version is the one global variable opam reports as its own and lets no
+switch override, so the valuation carries the version of the opam whose
+answers are being matched, 2.5.2 unless told otherwise.  ov.1 is available
+below 2.3 and ov.2 from 2.3 on:
+
+  $ ../../../src/main.exe opam . ov | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (1, core solution 3 nodes):
+    ov.2
+  loaded: 1 names, 2 package versions
+
+--opam-version asks the same question as another opam would:
+
+  $ ../../../src/main.exe opam --opam-version 2.2.0 . ov | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (1, core solution 3 nodes):
+    ov.1
+  loaded: 1 names, 2 package versions

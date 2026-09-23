@@ -145,6 +145,13 @@ let avoided ar n v =
 let class_members ar k =
   match Hashtbl.find_opt ar.class_idx k with Some x -> x | None -> []
 
+(* opam reports its own version and lets no switch override it, so of the
+   global variables it is the one the harness cannot pin opam to and has
+   to pin us to instead; unasked, the value is the opam nix/flake.lock
+   fixes, so that a run outside the harness answers about the same opam
+   the recorded baselines did *)
+let default_opam_version = "2.5.2"
+
 (* There is no cone pass: the repository is uncovered as the solver asks
    for it, so each lookup theorem's sub-instance must be complete at the
    moment it answers.  That holds by construction for all but one
@@ -186,7 +193,6 @@ module Make () = struct
       ("os-distribution", "debian");
       ("os-version", "12");
       ("arch", "x86_64");
-      ("opam-version", "2.2.0");
     ]
 
   (* what the caller asked for, which is all the valuation below needs
@@ -199,6 +205,7 @@ module Make () = struct
     with_test : bool;
     with_doc : bool;
     with_dev_setup : bool;
+    opam_version : string;
   }
 
   (* [build] and [post] are true because opam builds what it installs and
@@ -216,7 +223,9 @@ module Make () = struct
      the scope is a set of names, not of versions and not a dependency
      cone.  [--with-test]'s own help text says the same: "This only
      affects packages listed on the command-line" (opamArg.ml:1493-1494). *)
-  let rho (rq : request) (x : string) : string option =
+  let rho (rq : request) : string -> string option =
+    let globals = ("opam-version", rq.opam_version) :: globals in
+    fun x ->
     match List.assoc_opt x globals with
     | Some v -> Some v
     | None -> (
@@ -648,11 +657,19 @@ module Make () = struct
     end
 
   let solve ?(debug = false) ?(zi_order = false) ?(with_test = false)
-      ?(with_doc = false) ?(with_dev_setup = false) ar
+      ?(with_doc = false) ?(with_dev_setup = false)
+      ?(opam_version = default_opam_version) ar
       (query : (string * Opam_parse.vc) list) =
     Pubgrub.set_debug debug;
     let rho =
-      rho { names = List.map fst query; with_test; with_doc; with_dev_setup }
+      rho
+        {
+          names = List.map fst query;
+          with_test;
+          with_doc;
+          with_dev_setup;
+          opam_version;
+        }
     in
     let root_q =
       (PFR.Name.Orig Red.TName.Root, PFR.Version.Orig Red.TVer.UnitV)

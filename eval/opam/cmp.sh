@@ -18,8 +18,10 @@ mkdir -p "$S/out/$tag"
 cd "$S/../.."
 
 read -r -a extra <<< "${EXTRA:-}"
-"$exe" opam ${extra[@]+"${extra[@]}"} repos/opam-repository "$goal" \
-  > "$S/out/$tag/$goal.out" 2>&1
+# opam-version is the one global setup.sh cannot pin opam to, so our side
+# is pinned to opam's
+"$exe" opam --opam-version "$(opam --version)" ${extra[@]+"${extra[@]}"} \
+  repos/opam-repository "$goal" > "$S/out/$tag/$goal.out" 2>&1
 sed -n '/^opam packages (/,/^\(system packages\|loaded\)/p' "$S/out/$tag/$goal.out" \
   | sed -n 's/^  \([^ ]*\)$/\1/p' | sort -u > "$S/out/$tag/$goal.ours"
 
