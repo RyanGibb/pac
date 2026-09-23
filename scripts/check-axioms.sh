@@ -48,6 +48,24 @@ Cfl.Reduction.reduce
 Cfl.Reduction.reduceDeps
 Cfl.Reduction.reduceReal
 
+# conflict classes
+Cls.Reduction.Lookup.classRelAt
+Cls.Reduction.Lookup.dependees_lookupClass
+Cls.Reduction.Lookup.dependees_lookupOrig
+Cls.Reduction.Lookup.inClass
+Cls.Reduction.Lookup.versions_lookupClass
+Cls.Reduction.Lookup.versions_lookupOrig
+Cls.Reduction.classPkgs
+Cls.Reduction.classResolution
+Cls.Reduction.classResolution_coreResolution
+Cls.Reduction.conflict_class_completeness
+Cls.Reduction.conflict_class_soundness
+Cls.Reduction.coreResolution
+Cls.Reduction.reduce
+Cls.Reduction.reduceDeps
+Cls.Reduction.reduceDeps_functionalInName
+Cls.Reduction.reduceReal
+
 # concurrent versions
 Conc.Reduction.Lookup.dependees_lookupGranular
 Conc.Reduction.Lookup.dependees_lookupGranularGran

@@ -5,12 +5,13 @@
 
 From Stdlib Require Import MSets.
 From PackageCalculus Require Import Prelude Core Versions Semver Conflict
-  Concurrent PeerDependency Visibility Feature
+  ConflictClass Concurrent PeerDependency Visibility Feature
   Virtual PackageFormula VariableFormula FeatureConcurrent Debian DebianMA
   Opam Cargo Alpine.
 
 Module C := Core Nat_as_OT Nat_as_OT.
 Module Cfl := Conflict Nat_as_OT Nat_as_OT.
+Module Cls := ConflictClass Nat_as_OT Nat_as_OT.
 Module Ver := Versions Nat_as_OT Nat_as_OT.
 Module Conc := Concurrent Nat_as_OT Nat_as_OT Nat_as_OT.
 Module Peer := PeerDependency Nat_as_OT Nat_as_OT Nat_as_OT.
@@ -107,6 +108,43 @@ Example conflict_reduceReal_computes :
     (Cfl.Reduction.reduceReal conflictR
        (Cfl.ConflictRel.add ((2, 20), (1, Cfl.C.VSet.singleton 11))
           Cfl.ConflictRel.empty)) = 5.
+Proof. reflexivity. Qed.
+
+(* Three packages in class 0, two of them versions of name 1. *)
+Definition clsR : Cls.PkgSet.t :=
+  Cls.PkgSet.add (1, 10)
+    (Cls.PkgSet.add (1, 11) (Cls.PkgSet.add (2, 20) Cls.PkgSet.empty)).
+
+Definition clsOm : Cls.InClassRel.t :=
+  Cls.InClassRel.add ((1, 10), 0)
+    (Cls.InClassRel.add ((1, 11), 0)
+       (Cls.InClassRel.add ((2, 20), 0) Cls.InClassRel.empty)).
+
+(* Different names, so it is class exclusion and not version uniqueness
+   that refuses the two together. *)
+Example conflictClass_excludes :
+  ~ Cls.ClassExclusion clsOm
+      (Cls.PkgSet.add (1, 10) (Cls.PkgSet.add (2, 20) Cls.PkgSet.empty)).
+Proof.
+  intro H.
+  assert (E : ((1, 10) : Cls.Pkg.t) = (2, 20))
+    by (apply (H 0);
+        first [apply Cls.PkgSet.mem_spec | apply Cls.InClassRel.mem_spec];
+        reflexivity).
+  discriminate E.
+Qed.
+
+Example conflictClass_reduceReal_computes :
+  Cls.Reduction.T.VSet.cardinal
+    (Cls.Reduction.T.versions (Cls.Reduction.reduceReal clsR clsOm)
+       (Cls.Reduction.Name.Cls 0)) = 3.
+Proof. reflexivity. Qed.
+
+Example conflictClass_roundtrip_computes :
+  Cls.C.PkgSet.equal
+    (Cls.Reduction.classResolution
+       (Cls.Reduction.coreResolution clsR clsOm))
+    clsR = true.
 Proof. reflexivity. Qed.
 
 Definition debR : Deb.PkgSet.t :=
