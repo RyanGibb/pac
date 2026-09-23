@@ -141,6 +141,9 @@ type archive = {
      bearing that name, or providing it, can carry the rule *)
   iif_by_cond : (string, iif_rule list) Hashtbl.t;
   prio : (string * string, int) Hashtbl.t;
+  (* where each package stands in the index: apk_db_pkg_add appends to a
+     name's provider list in the order the index is read *)
+  pos : (string * string, int) Hashtbl.t;
   mutable n_pkgs : int;
   mutable n_provs : int;
   mutable n_iif : int;
@@ -159,6 +162,7 @@ let load_index (path : string) : archive =
       providers = Hashtbl.create 16384;
       iif_by_cond = Hashtbl.create 1024;
       prio = Hashtbl.create 1024;
+      pos = Hashtbl.create 16384;
       n_pkgs = 0;
       n_provs = 0;
       n_iif = 0;
@@ -169,6 +173,7 @@ let load_index (path : string) : archive =
     (fun (p : P.pkg) ->
       push ar.by_name p.P.name p;
       Hashtbl.replace ar.meta (p.P.name, p.P.version) p;
+      Hashtbl.replace ar.pos (p.P.name, p.P.version) ar.n_pkgs;
       ar.n_pkgs <- ar.n_pkgs + 1;
       List.iter
         (fun (pr : P.prov) ->
@@ -447,7 +452,11 @@ let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
    against a fresh root; the two that survive are, in order, the version
    the provider offers *at the requested name* and then
    provider_priority, with the repository order below both and a single
-   repository here.
+   repository here.  Past its last key select_package keeps the provider
+   it met first, since it takes a later one only when compare_providers
+   says strictly better, and it meets them in index order -- so [ord],
+   the provider's place in the index, is the final key, and the encoded
+   order only keeps the comparison total.
 
    What a provider offers at a name is its own version where it claims
    the name itself, the p: operand where it is a versioned alias, and
@@ -485,7 +494,7 @@ module PVersion = struct
   (* [pv] is the version offered at the name being decided, absent for a
      version that is not a provider candidate at a name (the root, and a
      disjunction's positional [Idx]). *)
-  type t = { pv : string option; rank : int; v : PFR.Version.t }
+  type t = { pv : string option; rank : int; ord : int; v : PFR.Version.t }
 
   let pp fmt ({ v; _ } : t) =
     match v with
@@ -499,7 +508,10 @@ module PVersion = struct
     match (a.v, b.v) with
     | PFR.Version.Idx _, PFR.Version.Idx _ ->
         let c = Stdlib.compare a.rank b.rank in
-        if c <> 0 then c else -r2c (PFR.VersionOT.compare a.v b.v)
+        if c <> 0 then c
+        else
+          let c = Stdlib.compare b.ord a.ord in
+          if c <> 0 then c else -r2c (PFR.VersionOT.compare a.v b.v)
     | _ -> (
         match (a.pv, b.pv) with
         | Some x, Some y ->
@@ -507,28 +519,40 @@ module PVersion = struct
             if c <> 0 then c
             else
               let c = Stdlib.compare a.rank b.rank in
-              (* two providers apk cannot separate; the encoded order
-                 keeps the pick deterministic *)
-              if c <> 0 then c else r2c (PFR.VersionOT.compare a.v b.v)
+              if c <> 0 then c
+              else
+                let c = Stdlib.compare b.ord a.ord in
+                if c <> 0 then c else r2c (PFR.VersionOT.compare a.v b.v)
         | _ ->
             let c = r2c (PFR.VersionOT.compare a.v b.v) in
             if c <> 0 then c else Stdlib.compare a.rank b.rank)
 end
+
+let ord_of ar (q : string * string) : int =
+  match Hashtbl.find_opt ar.pos q with Some i -> i | None -> max_int
 
 let tag ar (tn : PFR.Name.t) (tv : PFR.Version.t) : PVersion.t =
   match (tn, tv) with
   | PFR.Name.Disjunct (f0 :: _ as fs), PFR.Version.Idx i
     when chain_head f0 <> None -> (
       match alt_at fs i with
-      | None -> { PVersion.pv = None; rank = 0; v = tv }
+      | None -> { PVersion.pv = None; rank = 0; ord = max_int; v = tv }
       | Some (f, last) ->
-          { PVersion.pv = None; rank = alt_rank ar last f; v = tv })
+          let ord =
+            match chain_head f with Some q -> ord_of ar q | None -> max_int
+          in
+          { PVersion.pv = None; rank = alt_rank ar last f; ord; v = tv })
   | _, PFR.Version.Orig (Red.Version.Prov (q, pv)) ->
-      { PVersion.pv = Some pv; rank = prio_of ar q; v = tv }
+      { PVersion.pv = Some pv; rank = prio_of ar q; ord = ord_of ar q; v = tv }
   (* a package claiming the name itself offers its own version there *)
   | PFR.Name.Orig (Red.Name.Orig n), PFR.Version.Orig (Red.Version.Orig w) ->
-      { PVersion.pv = Some w; rank = prio_of ar (n, w); v = tv }
-  | _ -> { PVersion.pv = None; rank = 0; v = tv }
+      {
+        PVersion.pv = Some w;
+        rank = prio_of ar (n, w);
+        ord = ord_of ar (n, w);
+        v = tv;
+      }
+  | _ -> { PVersion.pv = None; rank = 0; ord = max_int; v = tv }
 
 module PG = Pubgrub.Make (PName) (PVersion)
 
@@ -548,8 +572,7 @@ let carried_at ~assigned tn tvs =
   | PG.Decided u -> List.exists (fun v -> PVersion.compare u v = 0) tvs
   | PG.Entailed r -> List.exists (fun v -> PG.Ranges.contains v r) tvs
 
-let rec neg_leaves ar (f : PF.coq_Formula) : (PFR.Name.t * PVersion.t list) list
-    =
+let rec leaves ar (f : PF.coq_Formula) : (PFR.Name.t * PVersion.t list) list =
   match f with
   | PF.FDep (m, vs) ->
       let tn = PFR.Name.Orig m in
@@ -559,7 +582,7 @@ let rec neg_leaves ar (f : PF.coq_Formula) : (PFR.Name.t * PVersion.t list) list
             (fun w -> tag ar tn (PFR.Version.Orig w))
             (PF.VSet.elements vs) );
       ]
-  | PF.FDisj (a, b) | PF.FConj (a, b) -> neg_leaves ar a @ neg_leaves ar b
+  | PF.FDisj (a, b) | PF.FConj (a, b) -> leaves ar a @ leaves ar b
   | PF.FNeg _ -> []
 
 (* apk never asserts a condition package absent: it installs the
@@ -582,7 +605,7 @@ let choose ar ~assigned (tn : PFR.Name.t) (cands : PVersion.t list) =
                     not
                       (List.exists
                          (fun (m, tvs) -> carried_at ~assigned m tvs)
-                         (neg_leaves ar f))
+                         (leaves ar f))
                   then free := pv :: !free
               | Some (f, last) -> pos := (alt_rank ar last f, pv) :: !pos
               | None -> ())
@@ -601,6 +624,26 @@ let choose ar ~assigned (tn : PFR.Name.t) (cands : PVersion.t list) =
                        cand
                      else best)
                    p ps)))
+  (* apk never chooses among the providers of a name already taken:
+     selecting a package assigns it every name it provides, so a later
+     dependency on one of them is met by that package.  So a provider the
+     solution already carries goes first, and the rank orders the rest. *)
+  | PFR.Name.Disjunct (f0 :: _ as fs) when chain_head f0 <> None -> (
+      let carried =
+        List.filter
+          (fun (pv : PVersion.t) ->
+            match pv.PVersion.v with
+            | PFR.Version.Idx i -> (
+                match alt_at fs i with
+                | Some (f, _) ->
+                    List.exists
+                      (fun (m, tvs) -> carried_at ~assigned m tvs)
+                      (leaves ar f)
+                | None -> false)
+            | _ -> false)
+          cands
+      in
+      match carried with [] -> greatest cands | _ -> greatest carried)
   | _ -> greatest cands
 
 (* An install-if disjunct exists only once its designated condition has

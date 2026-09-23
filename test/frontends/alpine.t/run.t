@@ -138,3 +138,92 @@ out of scope here because it depends on why a package is present:
   unsatisfiable:
   Because @root () -> ii-user 1.0 and ii-user 1.0 -> ii-virt ∅, @root * is forbidden..
   And because root -> @root (), version solving failed.
+
+apk never chooses among the providers of a name that is already taken:
+selecting a package assigns it every name it provides, so a later
+dependency on one of them is already met.  ru-lo and ru-hi both provide
+ru-virt, and ru-app needs ru-lo directly and ru-virt through ru-user, so
+apk keeps ru-lo for ru-virt and never adds ru-hi despite its higher k:
+
+  $ ../../../src/main.exe alpine REUSE ru-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index REUSE
+  cone: 10 packages, 6 provides entries, 0 install_if rules
+  packages (3):
+    ru-app 1.0
+    ru-lo 1.0
+    ru-user 1.0
+  encoded solution: 5 core nodes (4 Alpine packages encoded)
+
+and the same when the owner arrives only several steps below the
+dependency on the virtual name:
+
+  $ ../../../src/main.exe alpine REUSE ru-virt ru-deep | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index REUSE
+  cone: 10 packages, 6 provides entries, 0 install_if rules
+  packages (3):
+    ru-deep 1.0
+    ru-lo 1.0
+    ru-mid 1.0
+  encoded solution: 5 core nodes (4 Alpine packages encoded)
+
+  $ ../../../src/main.exe alpine REUSE ru-user ru-deep | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index REUSE
+  cone: 10 packages, 6 provides entries, 0 install_if rules
+  packages (4):
+    ru-deep 1.0
+    ru-lo 1.0
+    ru-mid 1.0
+    ru-user 1.0
+  encoded solution: 6 core nodes (5 Alpine packages encoded)
+
+With no owner already there, k: still decides:
+
+  $ ../../../src/main.exe alpine REUSE ru-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index REUSE
+  cone: 10 packages, 6 provides entries, 0 install_if rules
+  packages (2):
+    ru-hi 1.0
+    ru-user 1.0
+  encoded solution: 4 core nodes (3 Alpine packages encoded)
+
+Two providers that offer the same version at a name and tie on k: are
+separated by the order apk read them in: select_package replaces its pick
+only on a strictly better compare_providers, and the index is where the
+provider list gets its order.  So tie-a beats tie-b, and tie2-b, listed
+first, beats tie2-a:
+
+  $ ../../../src/main.exe alpine REUSE tie-cmd | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index REUSE
+  cone: 10 packages, 6 provides entries, 0 install_if rules
+  packages (1):
+    tie-a 1.0
+  encoded solution: 3 core nodes (4 Alpine packages encoded)
+
+  $ ../../../src/main.exe alpine REUSE tie2-cmd | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index REUSE
+  cone: 10 packages, 6 provides entries, 0 install_if rules
+  packages (1):
+    tie2-b 1.0
+  encoded solution: 3 core nodes (4 Alpine packages encoded)
+
+LUA is the part of the snapshot's APKINDEX that lua5.1-lyaml and dmvpn can
+reach.  lua-stdlib-debug depends on the bare name lua, which lua5.1 to
+lua5.4 all provide with k:, and each goal already needs one of them:
+lua5.1-lyaml needs lua5.1, and dmvpn needs lua5.2.  apk installs no other
+lua:
+
+  $ ../../../src/main.exe alpine LUA lua5.1-lyaml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index LUA
+  cone: 81 packages, 219 provides entries, 11 install_if rules
+  packages (7):
+    lua-stdlib-debug 1.0.1-r1
+    lua-stdlib-normalize 2.0.3-r1
+    lua5.1 5.1.5-r13
+    lua5.1-libs 5.1.5-r13
+    lua5.1-lyaml 6.2.8-r1
+    musl 1.2.5-r11
+    yaml 0.2.5-r2
+  encoded solution: 24 core nodes (23 Alpine packages encoded)
+
+  $ ../../../src/main.exe alpine LUA dmvpn | grep -E '^  lua5\.[0-9] '
+    lua5.2 5.2.4-r13
