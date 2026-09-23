@@ -101,3 +101,20 @@ Version: 1
 Architecture: amd64
 Priority: required
 Provides: prio
+
+Package: essapp
+Version: 1
+Architecture: amd64
+Depends: essvirt
+
+Package: aaaess
+Version: 1
+Architecture: amd64
+Priority: optional
+Provides: essvirt
+
+Package: apt
+Version: 1
+Architecture: amd64
+Priority: optional
+Provides: essvirt

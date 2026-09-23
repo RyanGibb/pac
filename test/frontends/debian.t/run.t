@@ -14,6 +14,14 @@ apt taking mawk, which is Priority: required, for a bare Depends on awk:
   prioapp:amd64 1
   zprio:amd64 1
 
+The Essential flag outranks both, and apt's cache generator sets it on the
+package named apt whatever the stanza says, so apt beats aaaess for essvirt
+where the name would have gone the other way:
+
+  $ ../../../src/main.exe debian --native amd64 essapp Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  apt:amd64 1
+  essapp:amd64 1
+
 A relationship field may be folded over several lines (Policy 5.1); the
 newline is not part of the atom that follows it:
 

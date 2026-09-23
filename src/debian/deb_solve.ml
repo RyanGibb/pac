@@ -109,8 +109,12 @@ struct
           (fun (pr : DF.provide) -> (pr.pname, dtop_of pr.pversion))
           st.provides;
       nconfs = List.map matom_of st.conflicts;
-      ness = st.essential;
-      nimp = st.important;
+      (* apt's cache generator marks the package named apt Essential and
+         Important whatever its stanza says (deblistparser.cc, UsePackage:
+         pkgCacheGen::ForceEssential defaults to "apt"), and the solver
+         ranks providers on the flags in the cache, not in the stanza *)
+      ness = st.essential || st.package = "apt";
+      nimp = st.important || st.package = "apt";
       nprio = st.priority;
     }
 
