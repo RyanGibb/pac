@@ -273,6 +273,14 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     ; res_pi_functional :
         forall p k u u', ParentRel.In ((p, k), u) pi ->
         ParentRel.In ((p, k), u') pi -> u = u'
+      (* with res_slot_closure, pi is keyed by exactly the slots a
+         resolution enters: a declaration nothing enters receives no
+         version *)
+    ; res_pi_dom :
+        forall p k u, ParentRel.In ((p, k), u) pi ->
+        exists fs d, FeaturedSet.In (p, fs) FS /\ SlotRel.In (p, d) Slots /\
+          sKey d = k /\ slotActive rc p d = true /\
+          (sOptional d = false \/ Activated FDefs fs p (sAlias d))
     ; res_slot_closure :
         forall p fs, PkgSet.In p S -> FeaturedSet.In (p, fs) FS ->
         forall d, SlotRel.In (p, d) Slots ->
@@ -1508,44 +1516,71 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Module SOtpar := SetOps T.Pkg ParentElt T.PkgSet ParentRel.
   Module SOslpar := SetOps SlotElt ParentElt SlotRel ParentRel.
   Module SOvpar := SetOps V ParentElt VSet ParentRel.
-  Definition decodeParents (Slots : SlotRel.t)
+  (* A core resolution may select a slot node nothing demands, so an edge
+     is read only where res_pi_dom allows one: the owner decoded, and the
+     slot required by the owner's decoded features.  The requirement is
+     requiredb spelled out, so the owner's features are gathered only for
+     an optional slot. *)
+  Definition decodeParents (FDefs : FDefRel.t) (Slots : SlotRel.t)
       (rc : Pkg.t) (S : T.PkgSet.t) : ParentRel.t :=
+    let crates := decodeS S in
     SOtpar.unionMap (fun '(n, w) =>
         match n, w with
         | NPlus.CSlot m v k, VPlus.WClass gr =>
-            SOslpar.unionMap (fun '(_, d) =>
-                SOvpar.map (fun u => (((m, v), k), u))
-                  (targets S (sTarget d) gr))
-              (slotsAtKey Slots rc (m, v) k)
+            if PkgSet.mem (m, v) crates
+            then SOslpar.unionMap (fun '(_, d) =>
+                   if orb (negb (sOptional d))
+                        (activatedb FDefs (featsAt S (m, v)) (m, v) (sAlias d))
+                   then SOvpar.map (fun u => (((m, v), k), u))
+                          (targets S (sTarget d) gr)
+                   else ParentRel.empty)
+                 (slotsAtKey Slots rc (m, v) k)
+            else ParentRel.empty
         | _, _ => ParentRel.empty
         end)
       S.
 
-  Lemma mem_decodeParents : forall Slots rc S m v k u,
-      ParentRel.In (((m, v), k), u) (decodeParents Slots rc S) <->
+  Lemma mem_decodeParents : forall FDefs Slots rc S m v k u,
+      ParentRel.In (((m, v), k), u) (decodeParents FDefs Slots rc S) <->
       exists gr d, T.PkgSet.In (NPlus.CSlot m v k, VPlus.WClass gr) S /\
+        PkgSet.In (m, v) (decodeS S) /\
         SlotRel.In ((m, v), d) Slots /\ sKey d = k /\
         slotActive rc (m, v) d = true /\
+        (sOptional d = false \/
+         Activated FDefs (featsAt S (m, v)) (m, v) (sAlias d)) /\
         T.PkgSet.In (NPlus.CCrate (sTarget d) gr, VPlus.WOrig u) S.
   Proof.
-    intros Slots rc S m v k u; unfold decodeParents.
+    intros FDefs Slots rc S m v k u; unfold decodeParents; cbv zeta.
     rewrite SOtpar.mem_unionMap; split.
     - intros [[n w] [Hin Hy]]; cbn beta iota in Hy.
       destruct n; try (exfalso; exact (SOslpar.empty_in _ Hy));
         destruct w; try (exfalso; exact (SOslpar.empty_in _ Hy)).
+      destruct (PkgSet.mem (m0, v0) (decodeS S)) eqn:Eown;
+        [| exfalso; exact (SOslpar.empty_in _ Hy)].
+      apply PkgSet.mem_spec in Eown.
       apply SOslpar.mem_unionMap in Hy; destruct Hy as [[q d] [Hq Hy]];
         cbn beta iota in Hy.
+      destruct (orb (negb (sOptional d))
+                  (activatedb FDefs (featsAt S (m0, v0)) (m0, v0)
+                     (sAlias d))) eqn:Ereq;
+        [| exfalso; exact (SOslpar.empty_in _ Hy)].
+      change (requiredb FDefs (featsAt S (m0, v0)) (m0, v0) d = true)
+        in Ereq.
+      apply requiredb_iff in Ereq.
       apply SOvpar.mem_map in Hy; destruct Hy as [u' [Hu' He]].
       injection He as -> -> -> ->.
       apply mem_slotsAtKey in Hq; destruct Hq as [Hs [-> [Ha Hact]]].
       exists gr, d; repeat split; try assumption.
       apply mem_targets; exact Hu'.
-    - intros [gr [d [Hslot [Hs [Ha [Hact Hcr]]]]]].
+    - intros [gr [d [Hslot [Hown [Hs [Ha [Hact [Hreq Hcr]]]]]]]].
       exists (NPlus.CSlot m v k, VPlus.WClass gr); split;
         [exact Hslot | cbn beta iota].
+      rewrite (proj2 (PkgSet.mem_spec _ _) Hown).
       apply SOslpar.mem_unionMap; exists ((m, v), d); split.
       { apply mem_slotsAtKey; repeat split; assumption. }
-      cbn beta iota; apply SOvpar.mem_map; exists u; split;
+      cbn beta iota.
+      apply requiredb_iff in Hreq; unfold requiredb in Hreq; rewrite Hreq.
+      apply SOvpar.mem_map; exists u; split;
         [apply mem_targets; exact Hcr | reflexivity].
   Qed.
 
@@ -2439,7 +2474,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
            rootFeats) transRoot S ->
       IsResolution R support FDefs Slots Links g dflt rc
         rootFeats (decodeS S) (decodeFS S)
-        (decodeParents Slots rc S).
+        (decodeParents FDefs Slots rc S).
   Proof.
     intros R support FDefs Slots Links g dflt rc rootFeats S
       Hsite Hres.
@@ -2569,22 +2604,28 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       exact (proj1 (A2 _ _ _ _ Hf)).
     - intros [m v] a u u' Hu Hu'.
       apply mem_decodeParents in Hu;
-        destruct Hu as [gr [d [Hslot [Hs [Ha [Hact Hcr]]]]]].
+        destruct Hu as [gr [d [Hslot [_ [Hs [Ha [Hact [_ Hcr]]]]]]]].
       apply mem_decodeParents in Hu';
-        destruct Hu' as [gr' [d' [Hslot' [Hs' [Ha' [Hact' Hcr']]]]]].
+        destruct Hu' as [gr' [d' [Hslot' [_ [Hs' [Ha' [Hact' [_ Hcr']]]]]]]].
       assert (d' = d)
         by exact (Hsite (m, v) d' d Hs' Hs (eq_trans Ha' (eq_sym Ha))).
       subst d'.
       assert (E := Huniq _ _ _ Hslot Hslot'); injection E as E; subst gr'.
       assert (E2 := Huniq _ _ _ Hcr Hcr'); injection E2 as E2; exact E2.
+    - intros [m v] k u Hu.
+      apply mem_decodeParents in Hu;
+        destruct Hu as [gr [d [_ [Hown [Hs [Ha [Hact [Hreq _]]]]]]]].
+      exists (featsAt S (m, v)), d; repeat split; try assumption.
+      apply mem_decodeFS; split; [exact Hown | reflexivity].
     - intros [m v] fs Hp Hfs d Hd Hact Hopt.
       apply mem_decodeFS in Hfs; destruct Hfs as [_ ->].
+      assert (Hown := Hp).
       apply mem_decodeS in Hp; destruct Hp as [gr0 Hp].
       destruct (A1 _ _ _ Hp) as [_ Egr0]; subst gr0.
       assert (Achain : forall gr,
           T.PkgSet.In (NPlus.CSlot m v (sKey d), VPlus.WClass gr) S ->
           exists u, ParentRel.In (((m, v), sKey d), u)
-                      (decodeParents Slots (rn, rv) S) /\
+                      (decodeParents FDefs Slots (rn, rv) S) /\
             rgHolds (sReq d) u = true /\
             PkgSet.In (sTarget d, u) (decodeS S) /\
             forall fs', FeaturedSet.In ((sTarget d, u), fs')
@@ -2701,7 +2742,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             [exact He | reflexivity]. }
       destruct He' as [e' [He' Ee]].
       apply mem_decodeParents in Hpi;
-        destruct Hpi as [gr2 [d2 [Hslot2 [Hs2 [Ha2 [Hact2 Hcr2]]]]]].
+        destruct Hpi as [gr2 [d2 [Hslot2 [_ [Hs2 [Ha2 [Hact2 [_ Hcr2]]]]]]]].
       assert (d2 = d) by exact (Hsite (m, v) d2 d Hs2 Hd Ha2); subst d2.
       assert (Hed : T.DepRel.In
           ((NPlus.CFeatP m f (g v), VPlus.WOrig v),
@@ -3062,7 +3103,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     assert (Hslot := parent_slot _ _ _ _ _ _ _ _ _ _ _ _ Hsite Hres).
     destruct rc as [rn rv].
     destruct Hres as [Hsub Hroot Hrootf Hdom Htot Hfun Hclass Hsupp
-      Hpifun Hslotc Hfsame Hfdep Hlinks].
+      Hpifun _ Hslotc Hfsame Hfdep Hlinks].
     constructor.
     - (* res_subset *)
       intros x Hx; apply mem_coreRes in Hx.
@@ -3285,5 +3326,111 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       + destruct Hw as [q [-> [Hl HS]]];
           destruct Hw' as [q' [-> [Hl' HS']]].
         rewrite (Hlinks q q' l HS HS' Hl Hl'); reflexivity.
+  Qed.
+
+  Theorem decodeS_coreRes : forall g FDefs Slots Links rc S FS pi,
+      decodeS (coreRes g FDefs Slots Links rc S FS pi) = S.
+  Proof.
+    intros g FDefs Slots Links rc S FS pi; apply PkgSet.ext; intros [m v].
+    rewrite mem_decodeS; split.
+    - intros [gr Hin]; apply core_shape in Hin; cbn beta iota in Hin.
+      destruct Hin as [v' [Ev [HS _]]]; injection Ev as <-; exact HS.
+    - intro HS; exists (g v); apply mem_coreRes; right; left.
+      apply mem_crateReal; exists m, v; split; [exact HS | reflexivity].
+  Qed.
+
+  Lemma featsAt_coreRes :
+    forall R support FDefs Slots Links g dflt rc rootFeats S FS pi,
+      IsResolution R support FDefs Slots Links g dflt rc
+        rootFeats S FS pi ->
+      forall p, PkgSet.In p S ->
+      featsAt (coreRes g FDefs Slots Links rc S FS pi) p = fsAt FS p.
+  Proof.
+    intros R support FDefs Slots Links g dflt rc rootFeats
+      S FS pi Hres [m v] Hp.
+    assert (Hfun := res_fs_functional _ _ _ _ _ _ _ _ _ _ _ _ Hres).
+    apply FSet.ext; intro f; rewrite mem_featsAt; split.
+    - intros [gr Hin]; apply core_shape in Hin; cbn beta iota in Hin.
+      destruct Hin as [v' [fs [Ev [Hfs [Hf _]]]]]; injection Ev as <-.
+      rewrite (fsAt_in FS (m, v) fs Hfun Hfs); exact Hf.
+    - intro Hf; exists (g v); apply mem_coreRes; right; right; left.
+      apply mem_wFeats; exists m, v, (fsAt FS (m, v)), f.
+      split; [exact (fsAt_mem _ _ _ _ _ _ _ _ _ _ _ _ Hres _ Hp) |].
+      split; [exact Hf | reflexivity].
+  Qed.
+
+  Theorem decodeFS_coreRes :
+    forall R support FDefs Slots Links g dflt rc rootFeats S FS pi,
+      IsResolution R support FDefs Slots Links g dflt rc
+        rootFeats S FS pi ->
+      decodeFS (coreRes g FDefs Slots Links rc S FS pi) = FS.
+  Proof.
+    intros R support FDefs Slots Links g dflt rc rootFeats
+      S FS pi Hres.
+    assert (Hfeats := featsAt_coreRes _ _ _ _ _ _ _ _ _ _ _ _ Hres).
+    apply FeaturedSet.ext; intros [p fs].
+    rewrite mem_decodeFS, decodeS_coreRes; split.
+    - intros [Hp ->]; rewrite (Hfeats _ Hp).
+      exact (fsAt_mem _ _ _ _ _ _ _ _ _ _ _ _ Hres _ Hp).
+    - intro Hfs.
+      assert (Hp := res_fs_dom _ _ _ _ _ _ _ _ _ _ _ _ Hres _ _ Hfs).
+      split; [exact Hp |].
+      rewrite (Hfeats _ Hp); symmetry.
+      exact (fsAt_in FS p fs
+               (res_fs_functional _ _ _ _ _ _ _ _ _ _ _ _ Hres) Hfs).
+  Qed.
+
+  (* Only this direction holds: a core resolution may carry synthetic
+     packages the witness would not rebuild. *)
+  Theorem decodeParents_coreRes :
+    forall R support FDefs Slots Links g dflt rc rootFeats S FS pi,
+      SiteFunctional Slots ->
+      IsResolution R support FDefs Slots Links g dflt rc
+        rootFeats S FS pi ->
+      decodeParents FDefs Slots rc
+        (coreRes g FDefs Slots Links rc S FS pi) = pi.
+  Proof.
+    intros R support FDefs Slots Links g dflt rc rootFeats
+      S FS pi Hsite Hres.
+    assert (Hslot := parent_slot _ _ _ _ _ _ _ _ _ _ _ _ Hsite Hres).
+    apply ParentRel.ext; intros [[[m v] k] u].
+    rewrite mem_decodeParents; split.
+    - intros [gr [d [Hsl [_ [Hd [Ha [_ [_ Hcr]]]]]]]].
+      apply core_shape in Hsl; cbn beta iota in Hsl.
+      destruct Hsl as [u' [Eu [Hpi Eb]]]; injection Eu as Eu.
+      destruct (Hslot _ _ _ _ Hpi Eb)
+        as [d' [Hd' [Ha' [_ [_ [Htgt' _]]]]]].
+      assert (d' = d)
+        by exact (Hsite (m, v) d' d Hd' Hd (eq_trans Ha' (eq_sym Ha))).
+      subst d'.
+      apply core_shape in Hcr; cbn beta iota in Hcr.
+      destruct Hcr as [u'' [Eu'' [Htgt Eg]]]; injection Eu'' as <-.
+      destruct (V.eq_dec u u') as [-> | NE]; [exact Hpi |].
+      exfalso; apply (res_class_unique _ _ _ _ _ _ _ _ _ _ _ _ Hres
+                        (sTarget d) u u' Htgt Htgt' NE).
+      congruence.
+    - intro Hpi.
+      destruct (res_pi_dom _ _ _ _ _ _ _ _ _ _ _ _ Hres _ _ _ Hpi)
+        as [fs [d [Hfs [Hd [Ha [Hact Hreq]]]]]].
+      assert (HS := res_fs_dom _ _ _ _ _ _ _ _ _ _ _ _ Hres _ _ Hfs).
+      rewrite <- (fsAt_in FS (m, v) fs
+                    (res_fs_functional _ _ _ _ _ _ _ _ _ _ _ _ Hres) Hfs)
+        in Hreq.
+      assert (Eb : parentsb FDefs Slots rc S FS (m, v) k = true).
+      { apply parentsb_iff; split; [exact HS |].
+        exists d; repeat split; assumption. }
+      destruct (Hslot _ _ _ _ Hpi Eb)
+        as [d' [Hd' [Ha' [_ [_ [Htgt _]]]]]].
+      assert (d' = d)
+        by exact (Hsite (m, v) d' d Hd' Hd (eq_trans Ha' (eq_sym Ha))).
+      subst d'.
+      exists (g u), d; repeat split; try assumption.
+      + apply mem_coreRes; right; right; right; left; apply mem_wSlots.
+        exists m, v, k, u; repeat split; assumption.
+      + rewrite decodeS_coreRes; exact HS.
+      + rewrite (featsAt_coreRes _ _ _ _ _ _ _ _ _ _ _ _ Hres _ HS);
+          exact Hreq.
+      + apply mem_coreRes; right; left; apply mem_crateReal.
+        exists (sTarget d), u; split; [exact Htgt | reflexivity].
   Qed.
 End Cargo.

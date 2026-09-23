@@ -454,9 +454,13 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           NSet.In (p_name r) (dirs I (inst_root I)) ->
         forall v, Installs S pi (rootPkg I) (peerKeyAt I (inst_root I) r) v ->
           VSet.In v (peerCandsAt I (inst_root I) r)
+      (* A copy nests only in a directory its parent can have -- one it
+         declares, or one some peer dependency names -- since nothing
+         else creates a directory, and no core resolution records one. *)
     ; nres_parents :
         forall c q, Conc.ParentRel.In (c, q) pi ->
-          PkgSet.In c S /\ PkgSet.In q S }.
+          PkgSet.In c S /\ PkgSet.In q S /\
+          KeySet.In (fst c) (childKeys I (base q)) }.
 
   Module Reduction.
 
@@ -609,6 +613,18 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         subst n0 x0; split; assumption.
       - intros [Hnm Hx]; exists n; split; [exact Hnm |].
         apply SOwt.mem_map; exists x; split; [exact Hx | reflexivity].
+    Qed.
+
+    Lemma targetNames_int : forall I k v m,
+        NmSet.In (Nm.Intermediate k v m) (targetNames I) ->
+        KeySet.In m (childKeys I (snd k, v)).
+    Proof.
+      intros I k v m H; unfold targetNames in H.
+      apply NmSet.union_spec in H; destruct H as [H | H].
+      - apply SOpn.mem_map in H; destruct H as [q [_ He]]; discriminate He.
+      - apply SOpn.mem_unionMap in H; destruct H as [q [_ H]].
+        apply SOnm.mem_map in H; destruct H as [m' [Hm He]].
+        injection He as -> -> ->; exact Hm.
     Qed.
 
     Definition depEdges (s : T.Pkg.t) (hs : T.DependeesSet.t) : T.DepRel.t :=
@@ -843,8 +859,12 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         pose proof (Huniq _ _ _ Hi' Hj) as Heq; injection Heq as ->; exact Hv0.
       - intros [m u] [k w] Hcq; apply mem_npmParents in Hcq.
         cbn [fst snd] in Hcq; destruct Hcq as [Hi Hq].
-        split; apply Conc.Reduction.mem_concurrentResolution;
-          [exact (exit_selected I S k w m u Hres Hi) | exact Hq].
+        split; [| split].
+        + apply Conc.Reduction.mem_concurrentResolution.
+          exact (exit_selected I S k w m u Hres Hi).
+        + apply Conc.Reduction.mem_concurrentResolution; exact Hq.
+        + apply Hsub, mem_transR in Hi; destruct Hi as [Hn _].
+          exact (targetNames_int I k w m Hn).
     Qed.
 
     (* -- completeness -- *)
@@ -1131,6 +1151,43 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
             by exact (Huniq (k2, v2) m2 u1 u2 (conj HS1 Hpi1)
                         (conj HS2 Hpi2)).
           congruence.
+    Qed.
+
+    Theorem npmResolution_coreResolution : forall I S pi,
+        npmResolution (coreResolution I S pi) = S.
+    Proof.
+      intros I S pi; apply PkgSet.ext; intros [k v].
+      unfold npmResolution; rewrite Conc.Reduction.mem_concurrentResolution.
+      rewrite mem_coreResolution.
+      unfold Conc.Reduction.embedPkg, idg; cbn [fst snd]; split.
+      - intros [[k' [v' [Hp He]]] | [p [m [u [_ [_ [_ [_ [_ He]]]]]]]]];
+          [| discriminate He].
+        injection He; intros; subst; exact Hp.
+      - intro Hp; left; exists k, v; split; [exact Hp | reflexivity].
+    Qed.
+
+    (* Only this direction holds: a core resolution may carry
+       intermediates the witness would not rebuild. *)
+    Theorem npmParents_coreResolution : forall I S pi,
+        IsResolution I S pi ->
+        npmParents (coreResolution I S pi) = pi.
+    Proof.
+      intros I S pi Hres.
+      destruct Hres as [Hsub _ _ _ _ _ _ _ Hpar].
+      apply Conc.ParentRel.ext; intros [[m u] [k v]].
+      rewrite mem_npmParents, !mem_coreResolution; cbn [fst snd]; split.
+      - intros [[[k' [v' [_ He]]] | [p [m' [u' [_ [_ [_ [_ [Hpi He]]]]]]]]] _];
+          [discriminate He |].
+        destruct p as [pk pv]; cbn [fst snd] in He.
+        injection He; intros; subst; exact Hpi.
+      - intro Hcq; destruct (Hpar _ _ Hcq) as [Hc [Hq Hk]].
+        split.
+        + right; exists (k, v), m, u.
+          split; [exact Hq |]; split; [exact Hk |].
+          split; [| split; [exact Hc | split; [exact Hcq | reflexivity]]].
+          apply mem_realVersions; exact (proj2 (Hsub _ Hc)).
+        + left; exists k, v; split;
+            [exact Hq | unfold Conc.Reduction.embedPkg, idg; reflexivity].
     Qed.
 
     (* What the encoding buys over the guarded form: the mandatory peer of

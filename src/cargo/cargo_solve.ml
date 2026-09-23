@@ -702,14 +702,14 @@ module Make () = struct
               (n, v, fs))
             (Cg.FeaturedSet.elements (Cg.decodeFS s))
         in
-        (* decodeParents is the one decoder that reads Slots, and a lazy
-           run has no global relation to hand it; the slots of the crates
-           it decodes are all it looks at, since slotsAtKey filters to
-           the owner named by the node *)
-        let slots =
-          Cg.SlotRel.unions
-            (List.map (fun p -> (fibres_of st.ar p).r_slots) (st.rc :: crates))
-        in
+        (* decodeParents is the one decoder that reads the instance, and a
+           lazy run has no global relation to hand it; the fibres of the
+           crates it decodes are all it looks at, since it reads Slots and
+           FDefs only at the owner a slot node names and keeps the node
+           only when that owner is decoded *)
+        let fibres = List.map (fibres_of st.ar) (st.rc :: crates) in
+        let slots = Cg.SlotRel.unions (List.map (fun r -> r.r_slots) fibres) in
+        let fdefs = Cg.FDefRel.unions (List.map (fun r -> r.r_fdefs) fibres) in
         (* site -> target name, over the same slots decodeParents reads.
            The site and not the alias, because a rename may point two
            sites sharing an alias at different crates *)
@@ -740,7 +740,7 @@ module Make () = struct
               in
               (n, v, a, t, u))
             (Cg.ParentRel.elements
-               (Cg.decodeParents slots st.rc s))
+               (Cg.decodeParents fdefs slots st.rc s))
         in
         Some
           {

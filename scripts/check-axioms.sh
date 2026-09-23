@@ -301,8 +301,11 @@ Cgo.coreRes
 Cgo.csAdmits
 Cgo.csHolds
 Cgo.decodeFS
+Cgo.decodeFS_coreRes
 Cgo.decodeParents
+Cgo.decodeParents_coreRes
 Cgo.decodeS
+Cgo.decodeS_coreRes
 Cgo.dependees
 Cgo.evalReq
 Cgo.rangeEval
@@ -338,6 +341,8 @@ NpmS.Reduction.Lookup.dependees_lookupInt
 NpmS.Reduction.Lookup.versions_lookupGran
 NpmS.Reduction.Lookup.versions_lookupInt
 NpmS.Reduction.dependees
+NpmS.Reduction.npmParents_coreResolution
+NpmS.Reduction.npmResolution_coreResolution
 NpmS.Reduction.npm_completeness
 NpmS.Reduction.npm_soundness
 NpmS.Reduction.peer_installed
