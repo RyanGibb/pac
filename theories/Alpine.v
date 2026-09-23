@@ -1424,6 +1424,31 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             rewrite (Wf1 _ _ _ _ Hr1 Hr2); reflexivity.
     Qed.
 
+    (* A resolution is S alone, and the witness adds only the root and the
+       alias versions S's members provide, both functions of S. *)
+    Theorem alpineResolution_transS : forall I S,
+        alpineResolution (transS I S) = S.
+    Proof.
+      intros I S; apply PkgSet.ext; intros [n v].
+      rewrite mem_alpineResolution, mem_transS; unfold embedPkg, rootPkg;
+        cbn [fst snd].
+      split.
+      - intros [E | [[q [Hq E]] | [q [m [pv [_ [_ E]]]]]]];
+          try discriminate E.
+        destruct q as [qn qv]; injection E as -> ->; exact Hq.
+      - intro Hp; right; left; exists (n, v); split; [exact Hp | reflexivity].
+    Qed.
+
+    Theorem alpineResolution_coreResolution : forall I S,
+        alpineResolution
+          (PF.Reduction.packageFormulaResolution
+             (PF.Reduction.coreResolution (transS I S) (transR I) (transD I)))
+        = S.
+    Proof.
+      intros I S; rewrite PF.Reduction.packageFormulaResolution_coreResolution.
+      apply alpineResolution_transS.
+    Qed.
+
     Module Lookup.
       Lemma or_iff : forall A B C D : Prop,
           (A <-> C) -> (B <-> D) -> (A \/ B <-> C \/ D).
@@ -1925,6 +1950,225 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           apply encDep_subInst;
           [ exact (world_rootNames I d Hd) | exact Hown
           | exact (world_rootNames I d Hd) | exact Hown ].
+      Qed.
+
+      Lemma versions_transR : forall I m,
+          PF.C.versions (transR I) (Name.Orig m) = versions I m.
+      Proof.
+        intros I m; apply PF.VSet.ext; intro w.
+        rewrite PF.C.mem_versions, mem_transR; unfold versions.
+        rewrite mem_constrVers; unfold rootPkg.
+        split.
+        - intros [E | [[[n v] [Hp E]] | [q [m' [pv [Hprov [Hq E]]]]]]].
+          + discriminate E.
+          + unfold embedPkg in E; cbn [fst snd] in E; injection E as -> ->.
+            left; exists v; split; [exact Hp | split; reflexivity].
+          + injection E as -> ->.
+            right; exists q, pv; split; [exact Hprov |].
+            split; [exact Hq | split; reflexivity].
+        - intros [[v [Hv [_ ->]]] | [q [pv [Hprov [Hq [_ ->]]]]]].
+          + right; left; exists (m, v); split; [exact Hv | reflexivity].
+          + right; right; exists q, m, pv; split; [exact Hprov |].
+            split; [exact Hq | reflexivity].
+      Qed.
+
+      Lemma versions_transR_root : forall I,
+          PF.C.versions (transR I) Name.Root = PF.VSet.singleton Version.RootV.
+      Proof.
+        intro I; apply PF.VSet.ext; intro w.
+        rewrite PF.C.mem_versions, mem_transR, PF.VSet.singleton_spec.
+        unfold rootPkg; split.
+        - intros [E | [[[n v] [_ E]] | [q [m [pv [_ [_ E]]]]]]];
+            unfold embedPkg in E; try discriminate E.
+          injection E as ->; reflexivity.
+        - intros ->; left; reflexivity.
+      Qed.
+
+      Lemma transD_tailFibre : forall I q,
+          PF.PkgSet.In q (transR I) ->
+          PF.Reduction.Lookup.DepRelFibred.tailFibre (transD I) q =
+          depEdges q (dependees I q).
+      Proof.
+        intros I q Hq; apply PF.DepRel.ext; intros [q' f].
+        rewrite PF.Reduction.Lookup.DepRelFibred.mem_tailFibre, mem_transD.
+        unfold depEdges; rewrite SOfd.mem_map.
+        split.
+        - intros [[_ Hf] ->]; exists f; split; [exact Hf | reflexivity].
+        - intros [f0 [Hf0 E]]; injection E as -> ->.
+          split; [split; [exact Hq | exact Hf0] | reflexivity].
+      Qed.
+
+      (* The core lookups a driver answers: a package's formulas from its
+         own sub-instance, pushed through the package-formula reduction
+         under an oracle agreeing with versions.  That sub-instance cannot
+         serve as the oracle: a negated requirement or install-if condition
+         with no constraint negates each bare provider q at q's own name,
+         whose complement ranges over every version at that name, alias
+         versions included, while repoPreimage keeps only the packages at
+         or providing the names the package mentions -- q itself, and not
+         the rest of q's name.  The versions lookup at q's name does hold
+         them. *)
+      Lemma dependees_core : forall I Vq q,
+          PF.PkgSet.In q (transR I) ->
+          Vq Name.Root = PF.VSet.singleton Version.RootV ->
+          (forall m, Vq (Name.Orig m) = versions I m) ->
+          PF.Reduction.T.dependees
+            (PF.Reduction.reduceDeps (transR I) (transD I))
+            (PF.Reduction.Name.Orig (fst q),
+             PF.Reduction.Version.Orig (snd q)) =
+          PF.Reduction.T.dependees
+            (PF.Reduction.reduceDepsBy Vq (depEdges q (dependees I q)))
+            (PF.Reduction.Name.Orig (fst q),
+             PF.Reduction.Version.Orig (snd q)).
+      Proof.
+        intros I Vq [tn tv] Hq HR HO; cbn [fst snd].
+        rewrite (PF.Reduction.Lookup.dependees_lookupOrigBy _ _ Vq)
+          by (intros [| m] _;
+              [rewrite HR, versions_transR_root | rewrite HO, versions_transR];
+              reflexivity).
+        rewrite (transD_tailFibre I (tn, tv) Hq); reflexivity.
+      Qed.
+
+      Theorem dependees_lookupOrigCore : forall I Vq n v,
+          PkgSet.In (n, v) (inst_repo I) ->
+          Vq Name.Root = PF.VSet.singleton Version.RootV ->
+          (forall m, Vq (Name.Orig m) = versions I m) ->
+          PF.Reduction.T.dependees
+            (PF.Reduction.reduceDeps (transR I) (transD I))
+            (PF.Reduction.embedPkg (embedPkg (n, v))) =
+          PF.Reduction.T.dependees
+            (PF.Reduction.reduceDepsBy Vq
+               (depEdges (embedPkg (n, v))
+                  (dependees (pkgSubInst I (n, v)) (embedPkg (n, v)))))
+            (PF.Reduction.embedPkg (embedPkg (n, v))).
+      Proof.
+        intros I Vq n v Hnv HR HO; rewrite dependees_lookupOrig.
+        apply (dependees_core I Vq (embedPkg (n, v))); [| exact HR | exact HO].
+        apply mem_transR; right; left; exists (n, v); split;
+          [exact Hnv | reflexivity].
+      Qed.
+
+      Theorem dependees_lookupRootCore : forall I Vq,
+          Vq Name.Root = PF.VSet.singleton Version.RootV ->
+          (forall m, Vq (Name.Orig m) = versions I m) ->
+          PF.Reduction.T.dependees
+            (PF.Reduction.reduceDeps (transR I) (transD I))
+            (PF.Reduction.embedPkg rootPkg) =
+          PF.Reduction.T.dependees
+            (PF.Reduction.reduceDepsBy Vq
+               (depEdges rootPkg (dependees (rootSubInst I) rootPkg)))
+            (PF.Reduction.embedPkg rootPkg).
+      Proof.
+        intros I Vq HR HO; rewrite dependees_lookupRoot.
+        exact (dependees_core I Vq rootPkg (root_transR I) HR HO).
+      Qed.
+
+      Theorem dependees_lookupProvCore : forall I I' Vq m q pv,
+          Prov.In (q, (m, PVer pv)) (inst_prov I) ->
+          PkgSet.In q (inst_repo I) ->
+          Vq Name.Root = PF.VSet.singleton Version.RootV ->
+          (forall m, Vq (Name.Orig m) = versions I m) ->
+          PF.Reduction.T.dependees
+            (PF.Reduction.reduceDeps (transR I) (transD I))
+            (PF.Reduction.embedPkg (Name.Orig m, Version.Prov q pv)) =
+          PF.Reduction.T.dependees
+            (PF.Reduction.reduceDepsBy Vq
+               (depEdges (Name.Orig m, Version.Prov q pv)
+                  (dependees I' (Name.Orig m, Version.Prov q pv))))
+            (PF.Reduction.embedPkg (Name.Orig m, Version.Prov q pv)).
+      Proof.
+        intros I I' Vq m q pv Hprov Hq HR HO.
+        rewrite (dependees_lookupProv I' m q pv),
+          <- (dependees_lookupProv I m q pv).
+        apply (dependees_core I Vq (Name.Orig m, Version.Prov q pv));
+          [| exact HR | exact HO].
+        apply mem_transR; right; right; exists q, m, pv.
+        split; [exact Hprov | split; [exact Hq | reflexivity]].
+      Qed.
+
+      (* A disjunct's edges are recorded when its owner is reduced.  An
+         install-if rule's negated conditions are alternatives of its
+         disjunct, so this is where their bare providers' complements are
+         taken. *)
+      Theorem dependees_lookupDisjunctCore : forall I I' Vq q fs i,
+          PF.PkgSet.In q (transR I) ->
+          dependees I' q = dependees I q ->
+          Vq Name.Root = PF.VSet.singleton Version.RootV ->
+          (forall m, Vq (Name.Orig m) = versions I m) ->
+          PF.Reduction.T.PkgSet.In (PF.Reduction.Name.Disjunct fs, i)
+            (PF.Reduction.reduceReal (PF.PkgSet.singleton q)
+               (depEdges q (dependees I' q))) ->
+          PF.Reduction.T.dependees
+            (PF.Reduction.reduceDeps (transR I) (transD I))
+            (PF.Reduction.Name.Disjunct fs, i) =
+          PF.Reduction.T.dependees
+            (PF.Reduction.reduceDepsBy Vq (depEdges q (dependees I' q)))
+            (PF.Reduction.Name.Disjunct fs, i).
+      Proof.
+        intros I I' Vq q fs i Hq HI HR HO Hin; rewrite HI in Hin |- *.
+        assert (Hsub : PF.DepRel.Subset (depEdges q (dependees I q))
+                         (transD I)).
+        { rewrite <- (transD_tailFibre I q Hq).
+          apply PF.Reduction.Lookup.DepRelFibred.tailFibre_subset. }
+        apply (PF.Reduction.Lookup.dependees_lookupDisjunctBy
+                 _ _ _ _ _ _ _ Hsub Hin).
+        intros p f [| m] _ _;
+          [rewrite HR, versions_transR_root | rewrite HO, versions_transR];
+          reflexivity.
+      Qed.
+
+      Lemma versions_core : forall I tn,
+          (exists w, PF.PkgSet.In (tn, w) (transR I)) \/
+          (exists s h,
+              PF.Reduction.T.DepRel.In (s, (PF.Reduction.Name.Orig tn, h))
+                (PF.Reduction.reduceDeps (transR I) (transD I))) ->
+          PF.Reduction.T.versions
+            (PF.Reduction.reduceReal (transR I) (transD I))
+            (PF.Reduction.Name.Orig tn) =
+          PF.Reduction.T.VSet.add PF.Reduction.Version.Bot
+            (PF.Reduction.embedVS (PF.C.versions (transR I) tn)).
+      Proof.
+        intros I tn Hreach.
+        destruct Hreach as [[w Hw] | Hreach];
+          [rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ (tn, w) tn Hw
+                      (or_intror eq_refl))
+          | rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ rootPkg tn
+                       (root_transR I) (or_introl Hreach))];
+          do 2 f_equal; apply PF.C.versions_ext; intro v;
+          rewrite PF.Reduction.Lookup.PkgFibred.mem_tailFibre; tauto.
+      Qed.
+
+      Theorem versions_lookupNameCore : forall I n,
+          (exists v, PkgSet.In (n, v) (inst_repo I)) \/
+          (exists s h,
+              PF.Reduction.T.DepRel.In
+                (s, (PF.Reduction.Name.Orig (Name.Orig n), h))
+                (PF.Reduction.reduceDeps (transR I) (transD I))) ->
+          PF.Reduction.T.versions
+            (PF.Reduction.reduceReal (transR I) (transD I))
+            (PF.Reduction.Name.Orig (Name.Orig n)) =
+          PF.Reduction.T.VSet.add PF.Reduction.Version.Bot
+            (PF.Reduction.embedVS (versions (nameSubInst I n) n)).
+      Proof.
+        intros I n H; rewrite versions_lookupName, <- versions_transR.
+        apply versions_core.
+        destruct H as [[v Hv] | H];
+          [left; exists (Version.Orig v) | right; exact H].
+        apply mem_transR; right; left; exists (n, v); split;
+          [exact Hv | reflexivity].
+      Qed.
+
+      (* As every original name, the root has ⊥ in the core, which a driver
+         may leave out: PF.Reduction.Lookup.root_not_absent. *)
+      Theorem versions_lookupRootCore : forall I,
+          PF.Reduction.T.versions
+            (PF.Reduction.reduceReal (transR I) (transD I))
+            (PF.Reduction.Name.Orig Name.Root) =
+          PF.Reduction.T.VSet.add PF.Reduction.Version.Bot
+            (PF.Reduction.embedVS (PF.VSet.singleton Version.RootV)).
+      Proof.
+        intro I; rewrite <- (versions_transR_root I); apply versions_core.
+        left; exists Version.RootV; exact (root_transR I).
       Qed.
     End Lookup.
   End Reduct.

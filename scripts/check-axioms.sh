@@ -142,10 +142,13 @@ Virt.Reduction.virtual_soundness
 # package formulas
 PkgF.Reduction.Lookup.dependees_lookupAbsent
 PkgF.Reduction.Lookup.dependees_lookupDisjunct
+PkgF.Reduction.Lookup.dependees_lookupDisjunctBy
 PkgF.Reduction.Lookup.dependees_lookupOrig
 PkgF.Reduction.Lookup.dependees_lookupOrigBy
+PkgF.Reduction.Lookup.root_not_absent
 PkgF.Reduction.Lookup.versions_lookupDisjunct
 PkgF.Reduction.Lookup.versions_lookupOrig
+PkgF.Reduction.packageFormulaResolution_coreResolution
 PkgF.Reduction.package_formula_completeness
 PkgF.Reduction.package_formula_soundness
 PkgF.Reduction.reduceDeps
@@ -243,8 +246,12 @@ Op.Reduction.clsVersions
 Op.Reduction.decodeS
 Op.Reduction.dependees
 Op.Reduction.dependeesBy
+Op.Reduction.dependees_lookupClsCore
+Op.Reduction.dependees_lookupDisjunctCore
 Op.Reduction.dependees_lookupReal
+Op.Reduction.dependees_lookupRealCore
 Op.Reduction.dependees_lookupRoot
+Op.Reduction.dependees_lookupRootCore
 Op.Reduction.encR
 Op.Reduction.encodeOF
 Op.Reduction.opam_completeness
@@ -257,7 +264,10 @@ Op.Reduction.transS
 Op.Reduction.versSetBy
 Op.Reduction.versions
 Op.Reduction.versions_lookupCls
+Op.Reduction.versions_lookupClsCore
 Op.Reduction.versions_lookupReal
+Op.Reduction.versions_lookupRealCore
+Op.Reduction.versions_lookupRootCore
 
 # cargo, and the semver range language it Includes
 Cgo.Lookup.claimants
@@ -312,10 +322,18 @@ Cgo.transReal
 Cgo.versions
 
 # alpine
+Alp.Reduction.Lookup.dependees_lookupDisjunctCore
 Alp.Reduction.Lookup.dependees_lookupOrig
+Alp.Reduction.Lookup.dependees_lookupOrigCore
 Alp.Reduction.Lookup.dependees_lookupProv
+Alp.Reduction.Lookup.dependees_lookupProvCore
 Alp.Reduction.Lookup.dependees_lookupRoot
+Alp.Reduction.Lookup.dependees_lookupRootCore
 Alp.Reduction.Lookup.versions_lookupName
+Alp.Reduction.Lookup.versions_lookupNameCore
+Alp.Reduction.Lookup.versions_lookupRootCore
+Alp.Reduction.alpineResolution_coreResolution
+Alp.Reduction.alpineResolution_transS
 Alp.Reduction.alpine_completeness
 Alp.Reduction.alpine_soundness
 Alp.Reduction.attachAt

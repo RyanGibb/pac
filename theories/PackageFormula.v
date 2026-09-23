@@ -1258,6 +1258,20 @@ Module PackageFormula (N V : UsualOrderedType).
           apply mem_absentIn; auto.
     Qed.
 
+    Theorem packageFormulaResolution_coreResolution : forall S R D,
+        packageFormulaResolution (coreResolution S R D) = S.
+    Proof.
+      intros S R D; apply PkgSet.ext; intro p.
+      rewrite mem_packageFormulaResolution, mem_coreResolution.
+      split.
+      - intros [[q [Hq E]] | [[q [f [_ [_ Hw]]]] | [n [_ [_ E]]]]].
+        + apply embedPkg_injective in E; subst q; exact Hq.
+        + destruct p as [m v]; exfalso.
+          exact (witnessSetTaken_not_orig _ _ _ _ Hw).
+        + destruct p as [m v]; discriminate E.
+      - intro Hp; left; exists p; split; [exact Hp | reflexivity].
+    Qed.
+
     Lemma witnessSetTaken_subset_coreResolution : forall S R D p f,
         DepRel.In (p, f) D -> PkgSet.In p S ->
         T.PkgSet.Subset (witnessSetTaken S f) (coreResolution S R D).
@@ -1972,6 +1986,57 @@ Module PackageFormula (N V : UsualOrderedType).
           | rewrite (proj1 (encodeNNF_agree_aux Vq Vq' f Hf))]; exact He.
       Qed.
 
+      (* A negated atom's complement is the encoder's only read of its
+         oracle, so a name a formula mentions only positively is never
+         asked: a driver's oracle may be partial there. *)
+      Fixpoint negNames (f : Formula) : NSet.t :=
+        match f with
+        | FDep _ _ => NSet.empty
+        | FConj a b => NSet.union (negNames a) (negNames b)
+        | FDisj a b => NSet.union (negNames a) (negNames b)
+        | FNeg a => fnames a
+        end.
+
+      Lemma encodeNNF_agreeNeg_aux : forall Vq Vq' f,
+          (forall m, NSet.In m (negNames f) -> Vq m = Vq' m) ->
+          (forall p, encodeNNF Vq p f = encodeNNF Vq' p f) /\
+          (forall n i, encodeDisj Vq n i f = encodeDisj Vq' n i f).
+      Proof.
+        intros Vq Vq' f;
+          induction f as [m vs | a IHa b IHb | a IHa b IHb | a IHa]; intro Hag.
+        - split; intros; reflexivity.
+        - assert (Ha : forall m, NSet.In m (negNames a) -> Vq m = Vq' m)
+            by (intros m Hm; apply Hag; simpl; apply NSet.union_spec; left;
+                exact Hm).
+          assert (Hb : forall m, NSet.In m (negNames b) -> Vq m = Vq' m)
+            by (intros m Hm; apply Hag; simpl; apply NSet.union_spec; right;
+                exact Hm).
+          destruct (IHa Ha) as [IHa1 _]; destruct (IHb Hb) as [IHb1 _];
+            split; intros; simpl; rewrite IHa1, IHb1; reflexivity.
+        - assert (Ha : forall m, NSet.In m (negNames a) -> Vq m = Vq' m)
+            by (intros m Hm; apply Hag; simpl; apply NSet.union_spec; left;
+                exact Hm).
+          assert (Hb : forall m, NSet.In m (negNames b) -> Vq m = Vq' m)
+            by (intros m Hm; apply Hag; simpl; apply NSet.union_spec; right;
+                exact Hm).
+          destruct (IHa Ha) as [IHa1 _]; destruct (IHb Hb) as [_ IHb2];
+            split; intros; simpl; rewrite IHa1, IHb2; reflexivity.
+        - destruct (encodeNNF_agree_aux Vq Vq' a Hag) as (_ & Hn & _ & _);
+            split; intros; simpl; apply Hn.
+      Qed.
+
+      Lemma reduceDepsBy_agreeNeg : forall Vq Vq' D,
+          (forall p f m, DepRel.In (p, f) D -> NSet.In m (negNames f) ->
+                         Vq m = Vq' m) ->
+          reduceDepsBy Vq D = reduceDepsBy Vq' D.
+      Proof.
+        intros Vq Vq' D Hag; apply T.DepRel.ext; intro d.
+        rewrite !mem_reduceDepsBy.
+        split; intros [p [f [Hd He]]]; exists p, f; split; try exact Hd;
+          destruct (encodeNNF_agreeNeg_aux Vq Vq' f (fun m => Hag p f m Hd))
+            as [E _]; [rewrite <- E | rewrite E]; exact He.
+      Qed.
+
       Module PkgFibred := FibredRel N V Pkg PkgSet.
       Module DepRelFibred := FibredRel Pkg Dependees DepElt DepRel.
       Module RKeys := PreimageOfKeys N Pkg NSet PkgSet.
@@ -2216,6 +2281,19 @@ Module PackageFormula (N V : UsualOrderedType).
         intros R D Vq m v HVq; rewrite dependees_lookupOrig; unfold reduceDeps.
         f_equal; apply reduceDepsBy_agree; intros n Hn.
         rewrite versions_nameRestrict by exact Hn; symmetry; apply HVq; exact Hn.
+      Qed.
+
+      (* The root is in every resolution, so version uniqueness already
+         refuses its absence, and a driver may leave the root's ⊥ out of
+         the versions it answers. *)
+      Theorem root_not_absent : forall R D r S,
+          T.IsResolution (reduceReal R D) (reduceDeps R D) (embedPkg r) S ->
+          ~ T.PkgSet.In (Name.Orig (fst r), Version.Bot) S.
+      Proof.
+        intros R D [rn rv] S Hres Hb.
+        assert (E := T.res_version_unique _ _ _ _ Hres _ _ _
+                       (T.res_root_mem _ _ _ _ Hres) Hb).
+        discriminate E.
       Qed.
 
       (* Absence depends on nothing. *)
@@ -2610,6 +2688,193 @@ Module PackageFormula (N V : UsualOrderedType).
           + rewrite E in Hg'; injection Hg' as <-; exact Hin.
         - intro Hin; exists p, f; split; [exact HD |].
           exact (proj1 (witnessSet_alt_aux (C.versions R) f) _ _ _ _ _ Hw E Hin).
+      Qed.
+
+      Lemma negNames_fnames : forall f x,
+          NSet.In x (negNames f) -> NSet.In x (fnames f).
+      Proof.
+        induction f as [m vs | a IHa b IHb | a IHa b IHb | a IHa];
+          intros x Hx; cbn [negNames fnames] in *.
+        - destruct (NSet.empty_spec Hx).
+        - apply NSet.union_spec in Hx; apply NSet.union_spec.
+          destruct Hx as [Hx | Hx];
+            [left; exact (IHa _ Hx) | right; exact (IHb _ Hx)].
+        - apply NSet.union_spec in Hx; apply NSet.union_spec.
+          destruct Hx as [Hx | Hx];
+            [left; exact (IHa _ Hx) | right; exact (IHb _ Hx)].
+        - exact Hx.
+      Qed.
+
+      Lemma disjSpine_negNames : forall b g x,
+          List.In g (disjSpine b) -> NSet.In x (negNames g) ->
+          NSet.In x (negNames b).
+      Proof.
+        induction b as [m vs | a IHa b IHb | a IHa b IHb | a IHa];
+          intros g x Hg Hx; cbn [disjSpine] in Hg;
+          try (destruct Hg as [<- | []]; exact Hx).
+        destruct Hg as [<- | Hg]; cbn [negNames]; apply NSet.union_spec;
+          [left; exact Hx | right; exact (IHb _ _ Hg Hx)].
+      Qed.
+
+      Lemma negConjSpine_negNames : forall b g x,
+          List.In g (negConjSpine b) -> NSet.In x (negNames g) ->
+          NSet.In x (fnames b).
+      Proof.
+        induction b as [m vs | a IHa b IHb | a IHa b IHb | a IHa];
+          intros g x Hg Hx; cbn [negConjSpine] in Hg;
+          try (destruct Hg as [<- | []]; exact Hx).
+        destruct Hg as [<- | Hg]; cbn [fnames]; apply NSet.union_spec;
+          [left; exact Hx | right; exact (IHb _ _ Hg Hx)].
+      Qed.
+
+      (* An alternative's negated names are negated in the formula it came
+         from -- or, under a negation, mentioned there at all. *)
+      Lemma witnessSet_negNames_aux : forall f : Formula,
+          (forall (p : T.Pkg.t) gs w g x,
+              T.PkgSet.In (Name.Disjunct gs, w) (witnessSet p f) ->
+              List.In g gs -> NSet.In x (negNames g) ->
+              NSet.In x (negNames f)) /\
+          (forall (p : T.Pkg.t) gs w g x,
+              T.PkgSet.In (Name.Disjunct gs, w) (witnessSetNeg p f) ->
+              List.In g gs -> NSet.In x (negNames g) ->
+              NSet.In x (fnames f)) /\
+          (forall (n : Name.t) (i : nat) gs w g x,
+              T.PkgSet.In (Name.Disjunct gs, w) (witnessDisj n i f) ->
+              List.In g gs -> NSet.In x (negNames g) ->
+              NSet.In x (negNames f)) /\
+          (forall (n : Name.t) (i : nat) gs w g x,
+              T.PkgSet.In (Name.Disjunct gs, w) (witnessConjNeg n i f) ->
+              List.In g gs -> NSet.In x (negNames g) ->
+              NSet.In x (fnames f)).
+      Proof.
+        induction f as [m vs | a IHa b IHb | a IHa b IHb | a IHa].
+        - split4; intros; exfalso; eapply SOpt.empty_in; eassumption.
+        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
+            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
+          + intros p gs w g x H Hg Hx; simpl in H; cbn [negNames].
+            apply NSet.union_spec; apply T.PkgSet.union_spec in H;
+              destruct H as [H | H];
+              [left; exact (IHa1 _ _ _ _ _ H Hg Hx)
+              | right; exact (IHb1 _ _ _ _ _ H Hg Hx)].
+          + intros p gs w g x H Hg Hx; simpl in H; cbn [fnames].
+            apply NSet.union_spec.
+            apply T.PkgSet.union_spec in H; destruct H as [H | H];
+              [| apply T.PkgSet.union_spec in H; destruct H as [H | H]].
+            * apply mem_idxPkgs in H; destruct H as [k [_ E]].
+              injection E as -> _; destruct Hg as [<- | Hg];
+                [left; exact Hx
+                | right; exact (negConjSpine_negNames _ _ _ Hg Hx)].
+            * left; exact (IHa2 _ _ _ _ _ H Hg Hx).
+            * right; exact (IHb4 _ _ _ _ _ _ H Hg Hx).
+          + intros n i gs w g x H Hg Hx; simpl in H; cbn [negNames].
+            apply NSet.union_spec; apply T.PkgSet.union_spec in H;
+              destruct H as [H | H];
+              [left; exact (IHa1 _ _ _ _ _ H Hg Hx)
+              | right; exact (IHb1 _ _ _ _ _ H Hg Hx)].
+          + intros n i gs w g x H Hg Hx; simpl in H; cbn [fnames].
+            apply NSet.union_spec; apply T.PkgSet.union_spec in H;
+              destruct H as [H | H];
+              [left; exact (IHa2 _ _ _ _ _ H Hg Hx)
+              | right; exact (IHb4 _ _ _ _ _ _ H Hg Hx)].
+        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
+            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
+          + intros p gs w g x H Hg Hx; simpl in H; cbn [negNames].
+            apply NSet.union_spec.
+            apply T.PkgSet.union_spec in H; destruct H as [H | H];
+              [| apply T.PkgSet.union_spec in H; destruct H as [H | H]].
+            * apply mem_idxPkgs in H; destruct H as [k [_ E]].
+              injection E as -> _; destruct Hg as [<- | Hg];
+                [left; exact Hx
+                | right; exact (disjSpine_negNames _ _ _ Hg Hx)].
+            * left; exact (IHa1 _ _ _ _ _ H Hg Hx).
+            * right; exact (IHb3 _ _ _ _ _ _ H Hg Hx).
+          + intros p gs w g x H Hg Hx; simpl in H; cbn [fnames].
+            apply NSet.union_spec; apply T.PkgSet.union_spec in H;
+              destruct H as [H | H];
+              [left; exact (IHa2 _ _ _ _ _ H Hg Hx)
+              | right; exact (IHb2 _ _ _ _ _ H Hg Hx)].
+          + intros n i gs w g x H Hg Hx; simpl in H; cbn [negNames].
+            apply NSet.union_spec; apply T.PkgSet.union_spec in H;
+              destruct H as [H | H];
+              [left; exact (IHa1 _ _ _ _ _ H Hg Hx)
+              | right; exact (IHb3 _ _ _ _ _ _ H Hg Hx)].
+          + intros n i gs w g x H Hg Hx; simpl in H; cbn [fnames].
+            apply NSet.union_spec; apply T.PkgSet.union_spec in H;
+              destruct H as [H | H];
+              [left; exact (IHa2 _ _ _ _ _ H Hg Hx)
+              | right; exact (IHb2 _ _ _ _ _ H Hg Hx)].
+        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4.
+          + intros p gs w g x H Hg Hx; simpl in H.
+            exact (IHa2 _ _ _ _ _ H Hg Hx).
+          + intros p gs w g x H Hg Hx; simpl in H.
+            exact (negNames_fnames _ _ (IHa1 _ _ _ _ _ H Hg Hx)).
+          + intros n i gs w g x H Hg Hx; simpl in H.
+            exact (IHa2 _ _ _ _ _ H Hg Hx).
+          + intros n i gs w g x H Hg Hx; simpl in H.
+            exact (negNames_fnames _ _ (IHa1 _ _ _ _ _ H Hg Hx)).
+      Qed.
+
+      Lemma dependees_disjunctBy : forall Vq D fs i,
+          (exists p f, DepRel.In (p, f) D /\
+             T.PkgSet.In (Name.Disjunct fs, i) (witnessSet (embedPkg p) f)) ->
+          T.dependees (reduceDepsBy Vq D) (Name.Disjunct fs, i) =
+          match disjAlt fs i with
+          | Some g =>
+              T.dependees (encodeNNF Vq (Name.Disjunct fs, i) g)
+                (Name.Disjunct fs, i)
+          | None => T.DependeesSet.empty
+          end.
+      Proof.
+        intros Vq D fs i [p [f [HD Hw]]].
+        pose proof (proj1 (witnessSet_synthetic_aux f) _ _ Hw) as Hgd.
+        cbn [fst syntheticPkgs] in Hgd; apply mem_idxPkgs in Hgd.
+        destruct Hgd as [k [Hk Hi]].
+        assert (Hv : i = Version.Idx k) by congruence; subst i.
+        cbn [disjAlt].
+        destruct (List.nth_error fs k) as [g |] eqn:E;
+          [| apply List.nth_error_None in E; lia].
+        apply T.dependees_ext; intro h; rewrite mem_reduceDepsBy.
+        split.
+        - intros [q [f' [_ He]]].
+          destruct (proj1 (encodeNNF_alt_aux Vq f') _ _ _ _ He)
+            as [Eq | [g' [Hg' Hin]]].
+          + destruct q as [qn qv]; unfold embedPkg in Eq; simpl in Eq;
+              discriminate.
+          + rewrite E in Hg'; injection Hg' as <-; exact Hin.
+        - intro Hin; exists p, f; split; [exact HD |].
+          exact (proj1 (witnessSet_alt_aux Vq f) _ _ _ _ _ Hw E Hin).
+      Qed.
+
+      (* The shape a driver computes: a disjunct's dependees are those the
+         reduction of any formulas it arises in gives it, under an oracle
+         agreeing with the repository at the names those formulas negate. *)
+      Theorem dependees_lookupDisjunctBy : forall R D R' D' Vq fs i,
+          DepRel.Subset D' D ->
+          T.PkgSet.In (Name.Disjunct fs, i) (reduceReal R' D') ->
+          (forall p f n, DepRel.In (p, f) D' -> NSet.In n (negNames f) ->
+                         Vq n = C.versions R n) ->
+          T.dependees (reduceDeps R D) (Name.Disjunct fs, i) =
+          T.dependees (reduceDepsBy Vq D') (Name.Disjunct fs, i).
+      Proof.
+        intros R D R' D' Vq fs i Hsub Hin HVq.
+        apply mem_reduceReal in Hin.
+        destruct Hin as [[[pn pv] [_ Hq]] | [[p [f [HD Hw]]] | [n [_ Hy]]]];
+          [unfold embedPkg in Hq; discriminate Hq | | discriminate Hy].
+        unfold reduceDeps.
+        rewrite (dependees_disjunctBy (C.versions R) D fs i)
+          by (exists p, f; split; [exact (Hsub _ HD) | exact Hw]).
+        rewrite (dependees_disjunctBy Vq D' fs i)
+          by (exists p, f; split; [exact HD | exact Hw]).
+        destruct (disjAlt fs i) as [g |] eqn:Eg; [| reflexivity].
+        assert (Hg : List.In g fs).
+        { destruct i as [v | k |]; cbn [disjAlt] in Eg; try discriminate.
+          exact (nth_error_In _ _ Eg). }
+        rewrite (proj1 (encodeNNF_agreeNeg_aux (C.versions R) Vq g
+                          (fun x Hx =>
+                             eq_sym (HVq p f x HD
+                                       (proj1 (witnessSet_negNames_aux f)
+                                          _ _ _ _ _ Hw Hg Hx))))).
+        reflexivity.
       Qed.
 
     End Lookup.
