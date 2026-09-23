@@ -115,21 +115,40 @@ fi
 state ${roots[@]+"${roots[@]}"} ${keep[@]+"${keep[@]}"}
 opam remove --auto-remove --dry-run "${o[@]}" > "$out/$key.autoremove" 2>&1
 arc=$?
+# opam orders actions, and refuses a cyclic order, only once it has actions
+# to take, and on the installed state the questions above have none.
+# Marking every package for reinstall and reinstalling the roots hands it
+# the whole selection to order, requested as the query requests it, so the
+# flags reach the roots alone, and its ordering drops {post} edges as it
+# does at install time.  A cycle is a verdict of its own: the selection is
+# still a resolution, one opam cannot then install.
+printf '%s\n' "${req[@]/./ }" > "$r/cmp/.opam-switch/reinstall"
+opam reinstall --dry-run "${o[@]}" ${flags[@]+"${flags[@]}"} \
+  ${roots[@]+"${roots[@]}"} > "$out/$key.reinstall" 2>&1
+rrc=$?
 rm -rf "$r"
 
 acts() { grep -c '^  - [a-z]* ' "$@" | awk -F: '{s+=$NF} END {print s+0}'; }
 n=${#req[@]}
 ch=$(acts "$out/$key.install" "$out/$key.fixup")
 un=$(acts "$out/$key.autoremove")
+re=$(grep -c '^  - recompile ' "$out/$key.reinstall")
 rc=$((irc ? irc : frc ? frc : lrc ? lrc : arc))
 
 # fixup and autoremove print this only for an empty solution, and install
-# of atoms already satisfied never reaches the solver
+# of atoms already satisfied never reaches the solver.  The reinstall must
+# reach all n packages, or a cycle among the rest would go unseen.
 if [ "$rc" -eq 0 ] && [ "$ch" -eq 0 ] && [ "$un" -eq 0 ] &&
    grep -qx 'Nothing to do.' "$out/$key.fixup" &&
    grep -qx 'Nothing to do.' "$out/$key.autoremove" &&
    ! grep -q 'actions will be simulated' "$out/$key.install"; then
-  v=VALID
+  if grep -q '^The actions to process have cyclic dependencies:' "$out/$key.reinstall"; then
+    v=CYCLIC
+  elif [ "$rrc" -eq 0 ] && [ "$re" -eq "$n" ] && [ "$(acts "$out/$key.reinstall")" -eq "$n" ]; then
+    v=VALID
+  else
+    v=INVALID
+  fi
 else
   v=INVALID
 fi

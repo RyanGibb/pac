@@ -41,7 +41,7 @@ valid() {  # <recorded answer> <mode> <goal>
   tag=$(realpath -m --relative-to="$S/out" "$run/valid/$2")
   valid=$(REPLAY=$1 EXTRA=$(flag "$2") timeout "$TIMEOUT" \
     bash "$S/valid.sh" "$S/scale.sh" "$tag" "$3" 2>/dev/null |
-    awk '$NF == "VALID" || $NF == "INVALID" {v = $NF} END {print (v ? v : "ERR")}')
+    awk '$NF ~ /^(VALID|INVALID|CYCLIC)$/ {v = $NF} END {print (v ? v : "ERR")}')
 }
 
 snapshot() {  # <path under repos/>

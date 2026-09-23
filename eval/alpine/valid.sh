@@ -47,7 +47,9 @@ if [ $# -lt 3 ]; then
   exit 0
 fi
 goal=$3
-key=${goal// /+}
+# a world atom can be a path (/bin/sh), so the goal is escaped as
+# scale-lib.sh escapes its keys, which keeps distinct goals distinct files
+key=${goal//[%]/%25}; key=${key//[+]/%2B}; key=${key//\//%2F}; key=${key// /+}
 out="$S/out/$tag"
 mkdir -p "$out"
 cd "$S/../.."

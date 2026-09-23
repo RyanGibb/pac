@@ -26,6 +26,10 @@ def classify(r):
         return "pac-" + pac
     if tool == "timeout":
         return "tool-timeout"
+    # a resolution the tool cannot then install, as a cycle in opam's
+    # install order, is not an error of the resolution
+    if pac == "ok" and valid == "CYCLIC":
+        return "post-resolution"
     if pac == "ok" and valid not in ("VALID", "INVALID"):
         return "unchecked"
     if pac == "ok" and tool == "ok":

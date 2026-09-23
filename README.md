@@ -77,6 +77,7 @@ Some ecosystems add fields: opam's `pin` and `mccs`, npm's `closed`, and cargo's
 | `preference-gap` | both answer, the sets differ, and the tool accepts ours |
 | `error` | both answer, the sets differ, and the tool rejects ours |
 | `exact-invalid` | the tool rejects an answer that matches its own, which points at the check |
+| `post-resolution` | the tool accepts our answer as a resolution but cannot install it: for opam, its install order has a cycle |
 | `instance-gap` | the tool's answer is not a resolution of our instance: we are unsatisfiable where it answers, or for opam its answer, pinned, is unsatisfiable for us |
 | `tool-declines` | we answer and the tool refuses |
 | `both-refuse` | neither answers |

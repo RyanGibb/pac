@@ -115,8 +115,10 @@ awk 'NR==FNR {want[$0]=1; nw++; next}
      END {if (got != nw) exit 1}' \
   "$out/$goal.req" RS= "$INDEX" > "$r/status"
 stanzas=$?
+# the rows name packages bare, and a goal qualified with the native
+# architecture names the same package
 for p in "${req[@]}"; do
-  [ "${p%%=*}" = "$goal" ] ||
+  [ "${p%%=*}" = "${goal%:amd64}" ] ||
     printf 'Package: %s\nArchitecture: amd64\nAuto-Installed: 1\n\n' "${p%%=*}"
 done > "$r/extended_states"
 
