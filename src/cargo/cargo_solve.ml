@@ -169,18 +169,22 @@ let meta ar n v : P.ver option =
 (* There is no cone pass: a crate is parsed the first time a sub-instance
    reads its name, as cargo's sparse protocol fetches it, so a run touches
    the crates the solver asks about and no others.  Because the instance is
-   still being uncovered, each lookup theorem's sub-instance must be
-   complete at the moment it answers.  That holds by construction for all
-   but one lookup: CCrate n and CFeatP n read the repository at n alone;
-   CSlot and CDec at (n, v) read (n, v)'s own declarations and the
-   repository at the names its slots target; and name_set and
-   repo_preimage load every name they read, while meta loads the owner.
-   CLink l is the exception.  Its repository is the link relation's
-   preimage at l -- every crate version declaring l -- and no declaration
-   of any one crate names the other declarers, so nothing a loaded crate
-   carries can bring them in: links_idx holds the declarers among the
-   names loaded so far, and may grow after CLink l has answered.
-   Make.solve answers it afresh each time rather than memoizing it. *)
+   still being uncovered, the sub-instance a lookup theorem names must be
+   complete at the moment the lookup answers.  Cargo.v's Lookup module has
+   one theorem per shape asked below, in the components passed here.
+   versions_lookup{Crate,FeatP}Sub read the repository, and the support
+   relation, at the name alone; versions_lookup{Slot,Decision}Sub and
+   dependees_lookup{Crate,FeatP,Slot,Decision}Sub read the owner's fibres
+   and the repository at Lookup.reads, the owner's name and its slots'
+   targets.  Each of those is complete by construction: name_set,
+   support_of_name and repo_preimage load every name they read whole, and
+   meta loads the owner.  versions_lookupLinkSub is the exception.  Its
+   sub-instance is the preimage of the link relation at l -- every crate
+   version declaring l -- and no declaration of any one crate names the
+   other declarers, so nothing a loaded crate carries can bring them in:
+   links_idx holds the declarers among the names loaded so far, and may
+   grow after CLink l has answered.  Make.solve answers it afresh each
+   time rather than memoizing it. *)
 
 module Make () = struct
   module Cg =
@@ -270,7 +274,8 @@ module Make () = struct
       (fun k -> unify_site (List.rev (Hashtbl.find tbl k)))
       (List.rev !order)
 
-  (* -- per-crate fibres: exactly ownSlots/ownFDefs/ownLinks/ownSupport -- *)
+  (* -- per-crate fibres: Lookup's SlotFibred/LinkFibred/SupportFibred
+     .tailFibre and fdefFibre at (n, v), and Lookup.reads -- *)
 
   type fibres = {
     r_slots : Cg.SlotRel.t;
@@ -402,10 +407,10 @@ module Make () = struct
         Hashtbl.replace msrv_cache (rustc, n, v) b;
         b
 
-  (* ownSupport summed over a name's versions, which is the preimage a
-     feature name's lookup reads.  Cached for the same reason name_set is:
-     load_name takes a name whole, so this cannot grow once it has been
-     asked. *)
+  (* the support relation at a name -- Lookup.supportPreimage at {n},
+     which versions_lookupFeatPSub reads -- as the union of its versions'
+     fibres.  Cached for the same reason name_set is: load_name takes a
+     name whole, so this cannot grow once it has been asked. *)
   let support_cache : (string, Cg.SupportSet.t) Hashtbl.t = Hashtbl.create 4096
 
   let support_of_name st (n : string) : Cg.SupportSet.t =
@@ -421,6 +426,8 @@ module Make () = struct
         Hashtbl.replace support_cache n s;
         s
 
+  (* one branch per versions_lookup{Root,Crate,FeatP,Slot,Decision,Link}Sub,
+     each passing the components its theorem names and nothing else *)
   let versions st (tn : Cg.NPlus.t) : Cg.VPlus.t list =
     let call r supp fdefs slots links =
       T.VSet.elements
@@ -443,6 +450,8 @@ module Make () = struct
         let rw = fibres_of st.ar (n, v) in
         call (repo_preimage st.ar (n, v)) nosupp rw.r_fdefs rw.r_slots nolk
     | Cg.NPlus.CLink l ->
+        (* Lookup.claimants and LinkFibred.headFibre at l, over the
+           declarers loaded so far; see the note above Make *)
         let rs = link_preimage st l in
         let r =
           Cg.PkgSet.ofList
@@ -450,33 +459,34 @@ module Make () = struct
         in
         call r nosupp nofd nosl (Cg.LinkRel.ofList (List.map (fun q -> (q, l)) rs))
 
+  (* one branch per dependees_lookup{Root,Crate,FeatP,Slot,Decision}Sub,
+     with the request (rc, rootFeats, default) carried whole as the
+     theorems carry it; the fall-through is dependees_lookupInert, empty *)
   let deps st (p : T.Pkg.t) : T.Dependees.t list =
-    let call r supp fdefs slots links rootf =
+    let call r supp fdefs slots links =
       T.DependeesSet.elements
         (Cg.dependees compat_class r supp fdefs slots links
-           default_feature st.rc rootf p)
+           default_feature st.rc st.rfeats p)
     in
     let none = Cg.PkgSet.empty in
     let nosupp = Cg.SupportSet.empty in
     let nofd = Cg.FDefRel.empty in
     let nosl = Cg.SlotRel.empty in
     let nolk = Cg.LinkRel.empty in
-    let nofs = Cg.FSet.empty in
     let owner n v k =
       let rw = fibres_of st.ar (n, v) in
       k (repo_preimage st.ar (n, v)) rw
     in
     match (fst p, snd p) with
-    | Cg.NPlus.CRoot, _ -> call none nosupp nofd nosl nolk st.rfeats
+    | Cg.NPlus.CRoot, _ -> call none nosupp nofd nosl nolk
     | Cg.NPlus.CCrate (n, _), Cg.VPlus.WOrig v ->
-        owner n v (fun r rw -> call r nosupp nofd rw.r_slots rw.r_links nofs)
+        owner n v (fun r rw -> call r nosupp nofd rw.r_slots rw.r_links)
     | Cg.NPlus.CFeatP (n, _, _), Cg.VPlus.WOrig v ->
-        owner n v (fun r rw ->
-            call r rw.r_supp rw.r_fdefs rw.r_slots nolk nofs)
+        owner n v (fun r rw -> call r rw.r_supp rw.r_fdefs rw.r_slots nolk)
     | Cg.NPlus.CSlot (n, v, _), Cg.VPlus.WClass _ ->
-        owner n v (fun r rw -> call r nosupp nofd rw.r_slots nolk nofs)
+        owner n v (fun r rw -> call r nosupp nofd rw.r_slots nolk)
     | Cg.NPlus.CDec (n, v, _, _, _), Cg.VPlus.WClass _ ->
-        owner n v (fun r rw -> call r nosupp rw.r_fdefs rw.r_slots nolk nofs)
+        owner n v (fun r rw -> call r nosupp rw.r_fdefs rw.r_slots nolk)
     | _, _ -> []
 
   (* the crate versions a slot node's class stands for: its own edges
@@ -620,12 +630,13 @@ module Make () = struct
     (* the tagged list, not just the untagged one, has to be memoized:
        PubGrub asks a name for its versions at every propagation step.
        CLink l is the one name that cannot be held: its versions are the
-       whole preimage of the link relation at l, and no declaration of any
-       one declarer names the others, so links_idx holds only the
-       declarers among the names loaded so far and may grow after CLink l
-       has answered.  Recomputing the filter -- a handful of entries --
-       lets a declarer loaded later simply be there, where a cache would freeze
-       the answer mid-run and refuse it against a set fixed without it. *)
+       whole preimage of the link relation at l (versions_lookupLinkSub),
+       and no declaration of any one declarer names the others, so
+       links_idx holds only the declarers among the names loaded so far
+       and may grow after CLink l has answered.  Recomputing the filter --
+       a handful of entries -- lets a declarer loaded later simply be
+       there, where a cache would freeze the answer mid-run and refuse it
+       against a set fixed without it. *)
     let vcache = Hashtbl.create 65536 in
     let versions tn =
       match Hashtbl.find_opt vcache tn with

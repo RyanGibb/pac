@@ -246,19 +246,37 @@ Op.Reduction.versions_lookupCls
 Op.Reduction.versions_lookupReal
 
 # cargo, and the semver range language it Includes
+Cgo.Lookup.claimants
 Cgo.Lookup.dependees_lookup
 Cgo.Lookup.dependees_lookupCrate
+Cgo.Lookup.dependees_lookupCrateSub
 Cgo.Lookup.dependees_lookupDecision
+Cgo.Lookup.dependees_lookupDecisionSub
 Cgo.Lookup.dependees_lookupFeatP
+Cgo.Lookup.dependees_lookupFeatPSub
 Cgo.Lookup.dependees_lookupInert
 Cgo.Lookup.dependees_lookupRoot
+Cgo.Lookup.dependees_lookupRootSub
 Cgo.Lookup.dependees_lookupSlot
+Cgo.Lookup.dependees_lookupSlotSub
+Cgo.Lookup.dependees_lookupSub
+Cgo.Lookup.fdefFibre
+Cgo.Lookup.owner
+Cgo.Lookup.reads
+Cgo.Lookup.realPreimage
+Cgo.Lookup.supportPreimage
 Cgo.Lookup.versions_lookupCrate
+Cgo.Lookup.versions_lookupCrateSub
 Cgo.Lookup.versions_lookupDecision
+Cgo.Lookup.versions_lookupDecisionSub
 Cgo.Lookup.versions_lookupFeatP
+Cgo.Lookup.versions_lookupFeatPSub
 Cgo.Lookup.versions_lookupLink
+Cgo.Lookup.versions_lookupLinkSub
 Cgo.Lookup.versions_lookupRoot
+Cgo.Lookup.versions_lookupRootSub
 Cgo.Lookup.versions_lookupSlot
+Cgo.Lookup.versions_lookupSlotSub
 Cgo.cargo_completeness
 Cgo.cargo_soundness
 Cgo.coreRes

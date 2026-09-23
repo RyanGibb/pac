@@ -1849,6 +1849,584 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           (transDeps g R support FDefs Slots Links dflt rc
              rootFeats) p.
     Proof. intros; apply dependees_lookup. Qed.
+
+    (* The other half of the lookup theorem: what each lookup reads.  The
+       driver parses a crate the first time a lookup asks for its name, so
+       an answer is trustworthy only if it is a function of the part of
+       the instance loaded when it is given; each theorem below names that
+       part, one per shape the driver asks about, in the components the
+       driver actually passes. *)
+    Module NSet := FSetUOT N.
+    Module PkgPre := PreimageOfKeys N Pkg NSet PkgSet.
+    Module SupportPre := PreimageOfKeys N PkgF NSet SupportSet.
+    Module FDefPre := Preimage FDefElt FDefRel.
+    Module SlotFibred := FibredRel Pkg SlotData SlotElt SlotRel.
+    Module LinkFibred := FibredRel Pkg L LinkElt LinkRel.
+    Module SupportFibred := FibredRel Pkg F PkgF SupportSet.
+    Module SOsn := SetOps SlotElt N SlotRel NSet.
+
+    Definition realPreimage (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
+      PkgPre.ofKeys fst ns R.
+
+    Definition supportPreimage (support : SupportSet.t) (ns : NSet.t)
+      : SupportSet.t :=
+      SupportPre.ofKeys (fun x => fst (fst x)) ns support.
+
+    (* a crate version's feature table is indexed by (crate, feature), and
+       the featured and decision lookups read all of its features at once *)
+    Definition fdefFibre (FDefs : FDefRel.t) (p : Pkg.t) : FDefRel.t :=
+      FDefPre.preimage (fun x => fst (fst x)) (fun q => PkgEqb.eqb q p) FDefs.
+
+    (* the names a crate version's declarations consult: its slots'
+       targets, and its own so that the granular name can decline to
+       answer at a version the repository does not carry *)
+    Definition reads (Slots : SlotRel.t) (p : Pkg.t) : NSet.t :=
+      NSet.add (fst p)
+        (SOsn.map (fun x => sTarget (snd x)) (SlotFibred.tailFibre Slots p)).
+
+    Definition claimants (R : PkgSet.t) (Links : LinkRel.t) (l : L.t)
+      : PkgSet.t :=
+      PkgSet.filter (fun q => LinkRel.mem (q, l) Links) R.
+
+    Lemma mem_realPreimage : forall R ns q,
+        PkgSet.In q (realPreimage R ns) <->
+        PkgSet.In q R /\ NSet.In (fst q) ns.
+    Proof. intros; unfold realPreimage; apply PkgPre.mem_ofKeys. Qed.
+
+    Lemma evalReq_realPreimage : forall R ns m rg,
+        NSet.In m ns ->
+        evalReq (realPreimage R ns) m rg = evalReq R m rg.
+    Proof.
+      intros R ns m rg Hm; apply VSet.ext; intro u.
+      rewrite !mem_evalReq, mem_realPreimage; cbn [fst]; tauto.
+    Qed.
+
+    Lemma mem_supportPreimage : forall support ns m v f,
+        SupportSet.In ((m, v), f) (supportPreimage support ns) <->
+        SupportSet.In ((m, v), f) support /\ NSet.In m ns.
+    Proof.
+      intros; unfold supportPreimage; rewrite SupportPre.mem_ofKeys;
+        cbn [fst]; reflexivity.
+    Qed.
+
+    Lemma mem_fdefFibre : forall FDefs p q f e,
+        FDefRel.In ((q, f), e) (fdefFibre FDefs p) <->
+        FDefRel.In ((q, f), e) FDefs /\ q = p.
+    Proof.
+      intros; unfold fdefFibre; rewrite FDefPre.mem_preimage; cbn [fst].
+      rewrite PkgEqb.eqb_true_iff; reflexivity.
+    Qed.
+
+    Lemma mem_claimants : forall R Links l q,
+        PkgSet.In q (claimants R Links l) <->
+        PkgSet.In q R /\ LinkRel.In (q, l) Links.
+    Proof.
+      intros; unfold claimants; rewrite PkgSet.filter_spec', LinkRel.mem_spec;
+        reflexivity.
+    Qed.
+
+    Lemma reads_own : forall Slots p, NSet.In (fst p) (reads Slots p).
+    Proof. intros; unfold reads; apply NSet.add_spec; left; reflexivity. Qed.
+
+    Lemma reads_target : forall Slots p d,
+        SlotRel.In (p, d) Slots -> NSet.In (sTarget d) (reads Slots p).
+    Proof.
+      intros Slots p d Hs; unfold reads; apply NSet.add_spec; right.
+      apply SOsn.mem_map; exists (p, d); split; [| reflexivity].
+      apply SlotFibred.mem_tailFibre; split; [exact Hs | reflexivity].
+    Qed.
+
+    (* the restrictions seen from the lookups: each is invisible to a test
+       that reads only the owner's fibre, or only names the owner reads *)
+    Lemma in_realPreimage_own : forall R Slots p,
+        PkgSet.In p R <-> PkgSet.In p (realPreimage R (reads Slots p)).
+    Proof.
+      intros; rewrite mem_realPreimage; split;
+        [intro H; split; [exact H | apply reads_own] | intros [H _]; exact H].
+    Qed.
+
+    Lemma evalReq_reads : forall R Slots p d,
+        SlotRel.In (p, d) Slots ->
+        evalReq R (sTarget d) (sReq d) =
+        evalReq (realPreimage R (reads Slots p)) (sTarget d) (sReq d).
+    Proof.
+      intros R Slots p d Hs; symmetry; apply evalReq_realPreimage.
+      apply reads_target; exact Hs.
+    Qed.
+
+    Lemma in_slotFibre : forall Slots p d,
+        SlotRel.In (p, d) Slots <->
+        SlotRel.In (p, d) (SlotFibred.tailFibre Slots p).
+    Proof.
+      intros; rewrite SlotFibred.mem_tailFibre; split;
+        [intro H; split; [exact H | reflexivity] | intros [H _]; exact H].
+    Qed.
+
+    Lemma in_linkFibre : forall Links p l,
+        LinkRel.In (p, l) Links <->
+        LinkRel.In (p, l) (LinkFibred.tailFibre Links p).
+    Proof.
+      intros; rewrite LinkFibred.mem_tailFibre; split;
+        [intro H; split; [exact H | reflexivity] | intros [H _]; exact H].
+    Qed.
+
+    Lemma in_supportFibre : forall support p f,
+        SupportSet.In (p, f) support <->
+        SupportSet.In (p, f) (SupportFibred.tailFibre support p).
+    Proof.
+      intros; rewrite SupportFibred.mem_tailFibre; split;
+        [intro H; split; [exact H | reflexivity] | intros [H _]; exact H].
+    Qed.
+
+    Lemma in_fdefFibre : forall FDefs p f e,
+        FDefRel.In ((p, f), e) FDefs <->
+        FDefRel.In ((p, f), e) (fdefFibre FDefs p).
+    Proof.
+      intros; rewrite mem_fdefFibre; split;
+        [intro H; split; [exact H | reflexivity] | intros [H _]; exact H].
+    Qed.
+
+    Lemma slotsAtKey_tailFibre : forall Slots rc p k,
+        slotsAtKey (SlotFibred.tailFibre Slots p) rc p k =
+        slotsAtKey Slots rc p k.
+    Proof.
+      intros; apply SlotRel.ext; intros [q d].
+      rewrite !mem_slotsAtKey, SlotFibred.mem_tailFibre; tauto.
+    Qed.
+
+    Lemma fdEntryb_fdefFibre : forall FDefs p f a feat,
+        fdEntryb (fdefFibre FDefs p) p f a feat = fdEntryb FDefs p f a feat.
+    Proof.
+      intros; apply Bool.eq_true_iff_eq; rewrite !fdEntryb_iff.
+      split; intros [e [He Hd]]; exists e; split; try exact Hd;
+        [apply mem_fdefFibre in He; exact (proj1 He)
+        | apply mem_fdefFibre; split; [exact He | reflexivity]].
+    Qed.
+
+    (* a slot or decision name's classes read the repository only at the
+       owner's slot targets *)
+    Lemma classesAtKey_agree : forall g R R' Slots rc p k,
+        (forall d, SlotRel.In (p, d) Slots ->
+           evalReq R (sTarget d) (sReq d) = evalReq R' (sTarget d) (sReq d)) ->
+        SOsv.unionMap (fun '(_, d) => classesOf g (evalReq R (sTarget d) (sReq d)))
+          (slotsAtKey Slots rc p k) =
+        SOsv.unionMap (fun '(_, d) => classesOf g (evalReq R' (sTarget d) (sReq d)))
+          (slotsAtKey Slots rc p k).
+    Proof.
+      intros g R R' Slots rc p k Hev; apply T.VSet.ext; intro w.
+      rewrite !SOsv.mem_unionMap; split; intros [[q d] [Hq Hw]];
+        exists (q, d); split; try exact Hq;
+        apply mem_slotsAtKey in Hq; destruct Hq as [Hs [-> _]];
+        cbn beta iota in Hw |- *;
+        [rewrite <- (Hev d Hs) | rewrite (Hev d Hs)]; exact Hw.
+    Qed.
+
+    Theorem versions_lookupRootSub :
+      forall g R support FDefs Slots Links rc,
+        versions g R support FDefs Slots Links rc NPlus.CRoot =
+        versions g PkgSet.empty SupportSet.empty FDefRel.empty SlotRel.empty
+          LinkRel.empty rc NPlus.CRoot.
+    Proof. reflexivity. Qed.
+
+    Theorem versions_lookupCrateSub :
+      forall g R support FDefs Slots Links rc m gr,
+        versions g R support FDefs Slots Links rc (NPlus.CCrate m gr) =
+        versions g (realPreimage R (NSet.singleton m)) SupportSet.empty
+          FDefRel.empty SlotRel.empty LinkRel.empty rc (NPlus.CCrate m gr).
+    Proof.
+      intros; cbn [versions]; apply T.VSet.ext; intro w; symmetry.
+      apply SOpv2.filterMap_restrict; [apply PkgPre.ofKeys_subset |].
+      intros [n' v] HR He; cbn beta iota in He.
+      destruct (andb (NEqb.eqb n' m) (GEqb.eqb (g v) gr)) eqn:Eb;
+        [| discriminate].
+      apply andb_true_iff in Eb; destruct Eb as [En _].
+      apply NEqb.eqb_true_iff in En; subst n'.
+      apply mem_realPreimage; split;
+        [exact HR | apply NSet.singleton_spec; reflexivity].
+    Qed.
+
+    Theorem versions_lookupFeatPSub :
+      forall g R support FDefs Slots Links rc m f gr,
+        versions g R support FDefs Slots Links rc (NPlus.CFeatP m f gr) =
+        versions g (realPreimage R (NSet.singleton m))
+          (supportPreimage support (NSet.singleton m))
+          FDefRel.empty SlotRel.empty LinkRel.empty rc (NPlus.CFeatP m f gr).
+    Proof.
+      intros; cbn [versions]; apply T.VSet.ext; intro w; symmetry.
+      apply SOspv.filterMap_restrict; [apply SupportPre.ofKeys_subset |].
+      intros [[n' v] f'] Hs He; cbn beta iota in He.
+      destruct (andb (andb (NEqb.eqb n' m) (FEqb.eqb f' f))
+                  (GEqb.eqb (g v) gr)) eqn:Eb; [| discriminate].
+      apply andb_true_iff in Eb; destruct Eb as [Enf _].
+      apply andb_true_iff in Enf; destruct Enf as [En _].
+      apply NEqb.eqb_true_iff in En; subst n'.
+      apply mem_supportPreimage; split;
+        [exact Hs | apply NSet.singleton_spec; reflexivity].
+    Qed.
+
+    Theorem versions_lookupSlotSub :
+      forall g R support FDefs Slots Links rc m v k,
+        versions g R support FDefs Slots Links rc (NPlus.CSlot m v k) =
+        versions g (realPreimage R (reads Slots (m, v))) SupportSet.empty
+          FDefRel.empty (SlotFibred.tailFibre Slots (m, v)) LinkRel.empty rc
+          (NPlus.CSlot m v k).
+    Proof.
+      intros; cbn [versions]; rewrite slotsAtKey_tailFibre.
+      apply classesAtKey_agree; intros d Hd; apply evalReq_reads; exact Hd.
+    Qed.
+
+    Theorem versions_lookupDecisionSub :
+      forall g R support FDefs Slots Links rc m v f k feat,
+        versions g R support FDefs Slots Links rc
+          (NPlus.CDec m v f k feat) =
+        versions g (realPreimage R (reads Slots (m, v))) SupportSet.empty
+          (fdefFibre FDefs (m, v)) (SlotFibred.tailFibre Slots (m, v))
+          LinkRel.empty rc (NPlus.CDec m v f k feat).
+    Proof.
+      intros; cbn [versions]; rewrite fdEntryb_fdefFibre, slotsAtKey_tailFibre.
+      destruct (fdEntryb FDefs (m, v) f (kAlias k) feat); [| reflexivity].
+      apply classesAtKey_agree; intros d Hd; apply evalReq_reads; exact Hd.
+    Qed.
+
+    (* The one lookup whose sub-instance is a preimage: the claimants of l
+       are named by no declaration of any one of them, so a driver that
+       reads its repository lazily holds only the claimants loaded so far
+       and must answer this afresh at every ask rather than memoise it. *)
+    Theorem versions_lookupLinkSub :
+      forall g R support FDefs Slots Links rc l,
+        versions g R support FDefs Slots Links rc (NPlus.CLink l) =
+        versions g (claimants R Links l) SupportSet.empty FDefRel.empty
+          SlotRel.empty (LinkFibred.headFibre Links l) rc (NPlus.CLink l).
+    Proof.
+      intros; cbn [versions]; apply T.VSet.ext; intro w.
+      rewrite !SOlv.mem_filterMap; split.
+      - intros [[q l'] [Hl He]]; cbn beta iota in He.
+        destruct (andb (LEqb.eqb l' l) (PkgSet.mem q R)) eqn:Eb;
+          [| discriminate].
+        apply andb_true_iff in Eb; destruct Eb as [El Em].
+        apply LEqb.eqb_true_iff in El; subst l'; apply PkgSet.mem_spec in Em.
+        exists (q, l); split.
+        + apply LinkFibred.mem_headFibre; split; [exact Hl | reflexivity].
+        + cbn beta iota; rewrite LEqb.eqb_refl; cbn [andb].
+          rewrite (proj2 (PkgSet.mem_spec _ _)); [exact He |].
+          apply mem_claimants; split; assumption.
+      - intros [[q l'] [Hl He]]; cbn beta iota in He.
+        destruct (andb (LEqb.eqb l' l) (PkgSet.mem q (claimants R Links l)))
+          eqn:Eb; [| discriminate].
+        apply andb_true_iff in Eb; destruct Eb as [El Em].
+        apply LEqb.eqb_true_iff in El; subst l'; apply PkgSet.mem_spec in Em.
+        apply mem_claimants in Em; destruct Em as [HR _].
+        apply LinkFibred.mem_headFibre in Hl; destruct Hl as [Hl _].
+        exists (q, l); split; [exact Hl | cbn beta iota].
+        rewrite LEqb.eqb_refl; cbn [andb].
+        rewrite (proj2 (PkgSet.mem_spec _ _) HR); exact He.
+    Qed.
+
+    (* The dependee lookups, stated first as agreement between any two
+       instances that coincide on what a shape reads -- the owner's fibres
+       and the repository at the owner's slot targets -- so that the
+       driver's shape and the paper's follow from one proof each. *)
+    Lemma dep_crate_mono :
+      forall g R R' support support' FDefs FDefs' Slots Slots' Links Links'
+             dflt rc rootFeats rootFeats' m gr v,
+        (forall d, SlotRel.In ((m, v), d) Slots ->
+           SlotRel.In ((m, v), d) Slots') ->
+        (forall d, SlotRel.In ((m, v), d) Slots ->
+           evalReq R (sTarget d) (sReq d) = evalReq R' (sTarget d) (sReq d)) ->
+        (PkgSet.In (m, v) R -> PkgSet.In (m, v) R') ->
+        (forall l, LinkRel.In ((m, v), l) Links -> LinkRel.In ((m, v), l) Links') ->
+        forall h,
+          T.DependeesSet.In h
+            (dependees g R support FDefs Slots Links dflt rc rootFeats
+               (NPlus.CCrate m gr, VPlus.WOrig v)) ->
+          T.DependeesSet.In h
+            (dependees g R' support' FDefs' Slots' Links' dflt rc rootFeats'
+               (NPlus.CCrate m gr, VPlus.WOrig v)).
+    Proof.
+      intros * HS Hev HR HL h Hh.
+      apply mem_dep_crate in Hh; apply mem_dep_crate.
+      destruct Hh as [Hg [Hm Hh]]; split; [exact Hg | split; [exact (HR Hm) |]].
+      destruct Hh as [[d [Hd [Ha [Ho ->]]]] | [l [Hl ->]]].
+      - left; exists d; rewrite <- (Hev d Hd).
+        split; [exact (HS d Hd) | split; [exact Ha | split; [exact Ho | reflexivity]]].
+      - right; exists l; split; [exact (HL l Hl) | reflexivity].
+    Qed.
+
+    Lemma dep_featP_mono :
+      forall g R R' support support' FDefs FDefs' Slots Slots' Links Links'
+             dflt rc rootFeats rootFeats' m f gr v,
+        (forall d, SlotRel.In ((m, v), d) Slots ->
+           SlotRel.In ((m, v), d) Slots') ->
+        (forall d, SlotRel.In ((m, v), d) Slots ->
+           evalReq R (sTarget d) (sReq d) = evalReq R' (sTarget d) (sReq d)) ->
+        (SupportSet.In ((m, v), f) support -> SupportSet.In ((m, v), f) support') ->
+        (forall e, FDefRel.In (((m, v), f), e) FDefs ->
+           FDefRel.In (((m, v), f), e) FDefs') ->
+        forall h,
+          T.DependeesSet.In h
+            (dependees g R support FDefs Slots Links dflt rc rootFeats
+               (NPlus.CFeatP m f gr, VPlus.WOrig v)) ->
+          T.DependeesSet.In h
+            (dependees g R' support' FDefs' Slots' Links' dflt rc rootFeats'
+               (NPlus.CFeatP m f gr, VPlus.WOrig v)).
+    Proof.
+      intros * HS Hev Hsp HF h Hh.
+      apply mem_dep_featP in Hh; apply mem_dep_featP.
+      destruct Hh as [Hg [Hs Hh]]; split; [exact Hg | split; [exact (Hsp Hs) |]].
+      destruct Hh as [Hh | [e0 [Hfd Hc]]]; [left; exact Hh | right].
+      exists e0; split; [exact (HF e0 Hfd) |].
+      destruct Hc as [[f' [He ->]] | [[a [d [Ha [Hd [Hal [Hact ->]]]]]]
+                                    | [a [feat [d [Ha [Hd [Hal [Hact ->]]]]]]]]].
+      - left; exists f'; split; [exact He | reflexivity].
+      - right; left; exists a, d; rewrite <- (Hev d Hd).
+        split; [exact Ha | split; [exact (HS d Hd) |
+          split; [exact Hal | split; [exact Hact | reflexivity]]]].
+      - right; right; exists a, feat, d; rewrite <- (Hev d Hd).
+        split; [exact Ha | split; [exact (HS d Hd) |
+          split; [exact Hal | split; [exact Hact | reflexivity]]]].
+    Qed.
+
+    Lemma dep_slot_mono :
+      forall g R R' support support' FDefs FDefs' Slots Slots' Links Links'
+             dflt rc rootFeats rootFeats' m v k gr,
+        (forall d, SlotRel.In ((m, v), d) Slots ->
+           SlotRel.In ((m, v), d) Slots') ->
+        (forall d, SlotRel.In ((m, v), d) Slots ->
+           evalReq R (sTarget d) (sReq d) = evalReq R' (sTarget d) (sReq d)) ->
+        forall h,
+          T.DependeesSet.In h
+            (dependees g R support FDefs Slots Links dflt rc rootFeats
+               (NPlus.CSlot m v k, VPlus.WClass gr)) ->
+          T.DependeesSet.In h
+            (dependees g R' support' FDefs' Slots' Links' dflt rc rootFeats'
+               (NPlus.CSlot m v k, VPlus.WClass gr)).
+    Proof.
+      intros * HS Hev h Hh.
+      apply mem_dep_slot in Hh; apply mem_dep_slot.
+      destruct Hh as [d [u [Hd [Hk [Hact [Hu [Hgu Hh]]]]]]].
+      exists d, u; rewrite <- (Hev d Hd).
+      split; [exact (HS d Hd) | split; [exact Hk | split; [exact Hact |
+        split; [exact Hu | split; [exact Hgu | exact Hh]]]]].
+    Qed.
+
+    Lemma dep_dec_mono :
+      forall g R R' support support' FDefs FDefs' Slots Slots' Links Links'
+             dflt rc rootFeats rootFeats' m v f k feat gr,
+        (forall d, SlotRel.In ((m, v), d) Slots ->
+           SlotRel.In ((m, v), d) Slots') ->
+        (forall d, SlotRel.In ((m, v), d) Slots ->
+           evalReq R (sTarget d) (sReq d) = evalReq R' (sTarget d) (sReq d)) ->
+        (forall e, FDefRel.In (((m, v), f), e) FDefs ->
+           FDefRel.In (((m, v), f), e) FDefs') ->
+        forall h,
+          T.DependeesSet.In h
+            (dependees g R support FDefs Slots Links dflt rc rootFeats
+               (NPlus.CDec m v f k feat, VPlus.WClass gr)) ->
+          T.DependeesSet.In h
+            (dependees g R' support' FDefs' Slots' Links' dflt rc rootFeats'
+               (NPlus.CDec m v f k feat, VPlus.WClass gr)).
+    Proof.
+      intros * HS Hev HF h Hh.
+      apply mem_dep_dec in Hh; apply mem_dep_dec.
+      destruct Hh as [[e0 [Hfd Hee]] [d [u [Hd [Hk [Hact [Hu [Hgu Hh]]]]]]]].
+      split; [exists e0; split; [exact (HF e0 Hfd) | exact Hee] |].
+      exists d, u; rewrite <- (Hev d Hd).
+      split; [exact (HS d Hd) | split; [exact Hk | split; [exact Hact |
+        split; [exact Hu | split; [exact Hgu | exact Hh]]]]].
+    Qed.
+
+    Lemma dep_crate_agree :
+      forall g R R' support support' FDefs FDefs' Slots Slots' Links Links'
+             dflt rc rootFeats rootFeats' m gr v,
+        (forall d, SlotRel.In ((m, v), d) Slots <->
+           SlotRel.In ((m, v), d) Slots') ->
+        (forall d, SlotRel.In ((m, v), d) Slots ->
+           evalReq R (sTarget d) (sReq d) = evalReq R' (sTarget d) (sReq d)) ->
+        (PkgSet.In (m, v) R <-> PkgSet.In (m, v) R') ->
+        (forall l, LinkRel.In ((m, v), l) Links <-> LinkRel.In ((m, v), l) Links') ->
+        dependees g R support FDefs Slots Links dflt rc rootFeats
+          (NPlus.CCrate m gr, VPlus.WOrig v) =
+        dependees g R' support' FDefs' Slots' Links' dflt rc rootFeats'
+          (NPlus.CCrate m gr, VPlus.WOrig v).
+    Proof.
+      intros * HS Hev HR HL; apply T.DependeesSet.ext; intro h; split.
+      - apply dep_crate_mono;
+          [intros d Hd; apply HS; exact Hd | exact Hev
+           | apply HR | intros l Hl; apply HL; exact Hl].
+      - apply dep_crate_mono;
+          [intros d Hd; apply HS; exact Hd
+           | intros d Hd; symmetry; apply Hev; apply HS; exact Hd
+           | apply HR | intros l Hl; apply HL; exact Hl].
+    Qed.
+
+    Lemma dep_featP_agree :
+      forall g R R' support support' FDefs FDefs' Slots Slots' Links Links'
+             dflt rc rootFeats rootFeats' m f gr v,
+        (forall d, SlotRel.In ((m, v), d) Slots <->
+           SlotRel.In ((m, v), d) Slots') ->
+        (forall d, SlotRel.In ((m, v), d) Slots ->
+           evalReq R (sTarget d) (sReq d) = evalReq R' (sTarget d) (sReq d)) ->
+        (SupportSet.In ((m, v), f) support <-> SupportSet.In ((m, v), f) support') ->
+        (forall e, FDefRel.In (((m, v), f), e) FDefs <->
+           FDefRel.In (((m, v), f), e) FDefs') ->
+        dependees g R support FDefs Slots Links dflt rc rootFeats
+          (NPlus.CFeatP m f gr, VPlus.WOrig v) =
+        dependees g R' support' FDefs' Slots' Links' dflt rc rootFeats'
+          (NPlus.CFeatP m f gr, VPlus.WOrig v).
+    Proof.
+      intros * HS Hev Hsp HF; apply T.DependeesSet.ext; intro h; split.
+      - apply dep_featP_mono;
+          [intros d Hd; apply HS; exact Hd | exact Hev
+           | apply Hsp | intros e He; apply HF; exact He].
+      - apply dep_featP_mono;
+          [intros d Hd; apply HS; exact Hd
+           | intros d Hd; symmetry; apply Hev; apply HS; exact Hd
+           | apply Hsp | intros e He; apply HF; exact He].
+    Qed.
+
+    Lemma dep_slot_agree :
+      forall g R R' support support' FDefs FDefs' Slots Slots' Links Links'
+             dflt rc rootFeats rootFeats' m v k gr,
+        (forall d, SlotRel.In ((m, v), d) Slots <->
+           SlotRel.In ((m, v), d) Slots') ->
+        (forall d, SlotRel.In ((m, v), d) Slots ->
+           evalReq R (sTarget d) (sReq d) = evalReq R' (sTarget d) (sReq d)) ->
+        dependees g R support FDefs Slots Links dflt rc rootFeats
+          (NPlus.CSlot m v k, VPlus.WClass gr) =
+        dependees g R' support' FDefs' Slots' Links' dflt rc rootFeats'
+          (NPlus.CSlot m v k, VPlus.WClass gr).
+    Proof.
+      intros * HS Hev; apply T.DependeesSet.ext; intro h; split.
+      - apply dep_slot_mono; [intros d Hd; apply HS; exact Hd | exact Hev].
+      - apply dep_slot_mono;
+          [intros d Hd; apply HS; exact Hd
+           | intros d Hd; symmetry; apply Hev; apply HS; exact Hd].
+    Qed.
+
+    Lemma dep_dec_agree :
+      forall g R R' support support' FDefs FDefs' Slots Slots' Links Links'
+             dflt rc rootFeats rootFeats' m v f k feat gr,
+        (forall d, SlotRel.In ((m, v), d) Slots <->
+           SlotRel.In ((m, v), d) Slots') ->
+        (forall d, SlotRel.In ((m, v), d) Slots ->
+           evalReq R (sTarget d) (sReq d) = evalReq R' (sTarget d) (sReq d)) ->
+        (forall e, FDefRel.In (((m, v), f), e) FDefs <->
+           FDefRel.In (((m, v), f), e) FDefs') ->
+        dependees g R support FDefs Slots Links dflt rc rootFeats
+          (NPlus.CDec m v f k feat, VPlus.WClass gr) =
+        dependees g R' support' FDefs' Slots' Links' dflt rc rootFeats'
+          (NPlus.CDec m v f k feat, VPlus.WClass gr).
+    Proof.
+      intros * HS Hev HF; apply T.DependeesSet.ext; intro h; split.
+      - apply dep_dec_mono;
+          [intros d Hd; apply HS; exact Hd | exact Hev
+           | intros e He; apply HF; exact He].
+      - apply dep_dec_mono;
+          [intros d Hd; apply HS; exact Hd
+           | intros d Hd; symmetry; apply Hev; apply HS; exact Hd
+           | intros e He; apply HF; exact He].
+    Qed.
+
+    Theorem dependees_lookupRootSub :
+      forall g R support FDefs Slots Links dflt rc rootFeats,
+        dependees g R support FDefs Slots Links dflt rc rootFeats transRoot =
+        dependees g PkgSet.empty SupportSet.empty FDefRel.empty SlotRel.empty
+          LinkRel.empty dflt rc rootFeats transRoot.
+    Proof. reflexivity. Qed.
+
+    Theorem dependees_lookupCrateSub :
+      forall g R support FDefs Slots Links dflt rc rootFeats m gr v,
+        dependees g R support FDefs Slots Links dflt rc rootFeats
+          (NPlus.CCrate m gr, VPlus.WOrig v) =
+        dependees g (realPreimage R (reads Slots (m, v))) SupportSet.empty
+          FDefRel.empty (SlotFibred.tailFibre Slots (m, v))
+          (LinkFibred.tailFibre Links (m, v)) dflt rc rootFeats
+          (NPlus.CCrate m gr, VPlus.WOrig v).
+    Proof.
+      intros; apply dep_crate_agree;
+        [intro d; apply in_slotFibre | apply evalReq_reads
+         | apply in_realPreimage_own | intro l; apply in_linkFibre].
+    Qed.
+
+    Theorem dependees_lookupFeatPSub :
+      forall g R support FDefs Slots Links dflt rc rootFeats m f gr v,
+        dependees g R support FDefs Slots Links dflt rc rootFeats
+          (NPlus.CFeatP m f gr, VPlus.WOrig v) =
+        dependees g (realPreimage R (reads Slots (m, v)))
+          (SupportFibred.tailFibre support (m, v)) (fdefFibre FDefs (m, v))
+          (SlotFibred.tailFibre Slots (m, v)) LinkRel.empty dflt rc rootFeats
+          (NPlus.CFeatP m f gr, VPlus.WOrig v).
+    Proof.
+      intros; apply dep_featP_agree;
+        [intro d; apply in_slotFibre | apply evalReq_reads
+         | apply in_supportFibre | intro e; apply in_fdefFibre].
+    Qed.
+
+    Theorem dependees_lookupSlotSub :
+      forall g R support FDefs Slots Links dflt rc rootFeats m v k gr,
+        dependees g R support FDefs Slots Links dflt rc rootFeats
+          (NPlus.CSlot m v k, VPlus.WClass gr) =
+        dependees g (realPreimage R (reads Slots (m, v))) SupportSet.empty
+          FDefRel.empty (SlotFibred.tailFibre Slots (m, v)) LinkRel.empty
+          dflt rc rootFeats (NPlus.CSlot m v k, VPlus.WClass gr).
+    Proof.
+      intros; apply dep_slot_agree;
+        [intro d; apply in_slotFibre | apply evalReq_reads].
+    Qed.
+
+    Theorem dependees_lookupDecisionSub :
+      forall g R support FDefs Slots Links dflt rc rootFeats m v f k feat gr,
+        dependees g R support FDefs Slots Links dflt rc rootFeats
+          (NPlus.CDec m v f k feat, VPlus.WClass gr) =
+        dependees g (realPreimage R (reads Slots (m, v))) SupportSet.empty
+          (fdefFibre FDefs (m, v)) (SlotFibred.tailFibre Slots (m, v))
+          LinkRel.empty dflt rc rootFeats
+          (NPlus.CDec m v f k feat, VPlus.WClass gr).
+    Proof.
+      intros; apply dep_dec_agree;
+        [intro d; apply in_slotFibre | apply evalReq_reads
+         | intro e; apply in_fdefFibre].
+    Qed.
+
+    (* the crate version a package's declarations belong to; the root and
+       the libraries have none, and answer from the request alone or not
+       at all *)
+    Definition owner (p : T.Pkg.t) : option Pkg.t :=
+      match p with
+      | (NPlus.CCrate m _, VPlus.WOrig v) => Some (m, v)
+      | (NPlus.CFeatP m _ _, VPlus.WOrig v) => Some (m, v)
+      | (NPlus.CSlot m v _, VPlus.WClass _) => Some (m, v)
+      | (NPlus.CDec m v _ _ _, VPlus.WClass _) => Some (m, v)
+      | _ => None
+      end.
+
+    (* the paper's statement: every owned package answers from its owner's
+       four fibres and the repository at the names the owner reads *)
+    Theorem dependees_lookupSub :
+      forall g R support FDefs Slots Links dflt rc rootFeats p q,
+        owner p = Some q ->
+        dependees g R support FDefs Slots Links dflt rc rootFeats p =
+        dependees g (realPreimage R (reads Slots q))
+          (SupportFibred.tailFibre support q) (fdefFibre FDefs q)
+          (SlotFibred.tailFibre Slots q) (LinkFibred.tailFibre Links q)
+          dflt rc rootFeats p.
+    Proof.
+      intros g R support FDefs Slots Links dflt rc rootFeats [n w] q Ho.
+      destruct n as [ | m gr | m f gr | m v k | m v f k feat | l ];
+        destruct w as [ | u | gr' | q' ]; cbn [owner] in Ho;
+        try discriminate Ho; injection Ho as <-.
+      - apply dep_crate_agree;
+          [intro d; apply in_slotFibre | apply evalReq_reads
+           | apply in_realPreimage_own | intro l; apply in_linkFibre].
+      - apply dep_featP_agree;
+          [intro d; apply in_slotFibre | apply evalReq_reads
+           | apply in_supportFibre | intro e; apply in_fdefFibre].
+      - apply dep_slot_agree;
+          [intro d; apply in_slotFibre | apply evalReq_reads].
+      - apply dep_dec_agree;
+          [intro d; apply in_slotFibre | apply evalReq_reads
+           | intro e; apply in_fdefFibre].
+    Qed.
   End Lookup.
 
   Theorem cargo_soundness :
