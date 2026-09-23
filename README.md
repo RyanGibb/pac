@@ -84,5 +84,7 @@ Some ecosystems add fields: opam's `pin` and `mccs`, npm's `closed`, and cargo's
 | `unchecked` | we answer, but the validity check could not run |
 
 npm's goals are split further by whether they are closed: whether neither side asked for a name the snapshot lacks.
+`eval/cargo/features.py` also compares the feature set of each crate in pac's answer with `cargo metadata`'s.
+It is not part of the scale run because it downloads crate sources.
 
 *Programmed with [Claude Code](https://claude.ai/code)*
