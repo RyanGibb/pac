@@ -70,7 +70,7 @@ Proof. reflexivity. Qed.
 
 Example packageFormula_reduceDeps_computes :
   PkgF.Reduction.T.DepRel.cardinal
-    (PkgF.Reduction.reduceDeps
+    (PkgF.Reduction.reduceDeps PkgF.PkgSet.empty
        (PkgF.DepRel.add ((1, 2), PkgF.FDep 3 (PkgF.VSet.singleton 4))
           PkgF.DepRel.empty)) = 1.
 Proof. reflexivity. Qed.
@@ -78,6 +78,7 @@ Proof. reflexivity. Qed.
 Example variableFormula_reduceDeps_computes :
   VarF.Reduction.T.DepRel.cardinal
     (VarF.Reduction.reduceDeps (fun _ => VarF.Reduction.YSet.singleton 0)
+       VarF.PkgSet.empty
        (VarF.DepRel.add ((1, 2), VarF.FDep 3 (VarF.VSet.singleton 4))
           VarF.DepRel.empty)) = 1.
 Proof. reflexivity. Qed.
@@ -103,9 +104,10 @@ Example conflict_conflictResolution_roundtrip_computes :
     conflictR = true.
 Proof. reflexivity. Qed.
 
+(* three real packages and the absent version of each of the two names *)
 Example conflict_reduceReal_computes :
   Cfl.Reduction.T.PkgSet.cardinal
-    (Cfl.Reduction.reduceReal conflictR
+    (Cfl.Reduction.reduceReal conflictR Cfl.C.DepRel.empty
        (Cfl.ConflictRel.add ((2, 20), (1, Cfl.C.VSet.singleton 11))
           Cfl.ConflictRel.empty)) = 5.
 Proof. reflexivity. Qed.
@@ -162,7 +164,7 @@ Definition debRec : Deb.Deps.t :=
 Example debian_vers_computes :
   Deb.T.VSet.cardinal
     (Deb.versions debR debD Deb.Deps.empty Deb.Prov.empty Deb.Conf.empty
-       (Deb.Name.Orig 1)) = 2.
+       (Deb.Name.Orig 1)) = 3.
 Proof. reflexivity. Qed.
 
 Example debian_dependees_computes :

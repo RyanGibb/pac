@@ -125,7 +125,6 @@ struct
     stanza_of : (DMA.Pkg.t, nstanza) Hashtbl.t;
     group_of : (string, (string * string) list) Hashtbl.t;
     providers_of : (string, (DMA.Pkg.t * DMA.Deb.coq_DTop) list) Hashtbl.t;
-    conflicts_on : (string, (DMA.Pkg.t * DMA.Atom.t) list) Hashtbl.t;
     (* Debian prefers the leftmost alternative of a clause, and a mangled
        clause is an atom *set*, so the field's left-to-right order has to be
        carried beside it.  Keyed by the mangled clause, and shared between
@@ -191,7 +190,6 @@ struct
         stanza_of = Hashtbl.create 65536;
         group_of = Hashtbl.create 65536;
         providers_of = Hashtbl.create 4096;
-        conflicts_on = Hashtbl.create 4096;
         clause_order = Hashtbl.create 65536;
         class_of = Hashtbl.create 65536;
         n_clauses_parsed = 0;
@@ -207,10 +205,7 @@ struct
         Hashtbl.replace idx.class_of stz.npkg stz.ncls;
         List.iter
           (fun (m, vt) -> push idx.providers_of m (stz.npkg, vt))
-          stz.nprovs;
-        List.iter
-          (fun ma -> push idx.conflicts_on (DMA.aname ma) (stz.npkg, ma))
-          stz.nconfs)
+          stz.nprovs)
       stanzas;
     idx
 
@@ -219,9 +214,9 @@ struct
      that carries the clause, so clause_order can be filled as stanzas are
      read: nothing can ask about a mangled clause, or an atom of one, before
      the owner it came from has been through here.  That is not true of
-     conflicts_on or providers_of, which are preimages -- who conflicts with
-     me, and who provides the name I want -- that no clause of the asking
-     package can reach, so Conflicts, Breaks and Provides stay eager. *)
+     providers_of, which is a preimage -- who provides the name I want --
+     that no clause of the asking package can reach, so Provides stays
+     eager. *)
   let clauses_of idx (stz : nstanza) =
     match stz.nclauses with
     | Some c -> c
@@ -334,9 +329,6 @@ struct
     | None -> DMA.Conf.empty
     | Some stz -> DMA.Conf.ofList (List.map (fun ma -> (p, ma)) stz.nconfs)
 
-  let ma_conf_on_names idx ns =
-    DMA.Conf.ofList (List.concat_map (find_list idx.conflicts_on) ns)
-
   (* classOf defaults to MANo, so unindexed packages need no entry. *)
   let classes_of idx pkgs =
     DMA.Cls.ofList
@@ -350,10 +342,20 @@ struct
     | None -> []
     | Some stz -> List.concat_map (List.map DMA.aname) (deps_of idx stz)
 
-  let prov_names_of idx p =
-    match Hashtbl.find_opt idx.stanza_of p with
-    | None -> []
-    | Some stz -> List.map fst stz.nprovs
+  (* The base names p's conflicts can land on: its own, carrying the implicit
+     group exclusion, each negative's, and the names of their declared
+     providers. *)
+  let conf_read idx p =
+    let names =
+      fst (fst p)
+      :: (match Hashtbl.find_opt idx.stanza_of p with
+         | None -> []
+         | Some stz -> List.map DMA.aname stz.nconfs)
+    in
+    List.concat_map
+      (fun m ->
+        m :: List.map (fun (q, _) -> fst (fst q)) (find_list idx.providers_of m))
+      names
 
   (* R/Pi preimages for a mangled name (m, x): whichever x is, every
      provider of (m, x) is either a group member of m (reals, implicit group
@@ -371,16 +373,17 @@ struct
   let vers_sparse idx (n' : DMA.Deb.Name.t) =
     match n' with
     | DMA.Deb.Name.Orig (n, DMA.QAArch b) ->
-        (* Lookup.versions_lookupOrig *)
-        DMA.Deb.versions
-          (DMA.reduceReal (ma_real_at idx (n, b)))
-          DMA.Deb.Deps.empty DMA.Deb.Deps.empty DMA.Deb.Prov.empty
-          DMA.Deb.Conf.empty n'
+        (* Lookup.versions_lookupOrigMA *)
+        DMA.Deb.T.VSet.add DMA.Deb.Version.Bot
+          (DMA.Deb.embedVS
+             (DMA.Deb.Ver.realVersions
+                (DMA.reduceReal (ma_real_at idx (n, b)))
+                (n, DMA.QAArch b)))
     | DMA.Deb.Name.Orig _ ->
-        (* embedPkg introduces only QAArch names: no reals at :any/group
-           names *)
-        DMA.Deb.versions DMA.Deb.Ver.C.PkgSet.empty DMA.Deb.Deps.empty
-          DMA.Deb.Deps.empty DMA.Deb.Prov.empty DMA.Deb.Conf.empty n'
+        (* Lookup.versions_lookupOrigMA_pseudo: embedPkg introduces only
+           QAArch names, so a :any or group pseudo-name carries absence
+           alone *)
+        DMA.Deb.T.VSet.singleton DMA.Deb.Version.Bot
     | DMA.Deb.Name.Disjunct aset ->
         (* Lookup.versions_lookupDisjunct *)
         DMA.Deb.versionsDisj aset
@@ -391,16 +394,13 @@ struct
         (* Lookup.versions_lookupSelector *)
         let r, pi = sel_preimages idx (fst a) in
         DMA.Deb.us r pi a
-    | DMA.Deb.Name.Guard (_, _, _) ->
-        (* Lookup.versions_lookupGuard *)
-        DMA.Deb.zeroOne
 
   let dependees_sparse idx (s : DMA.Deb.T.Pkg.t) =
     match s with
     | DMA.Deb.Name.Orig (n, DMA.QAArch b), DMA.Deb.Version.Orig v ->
-        (* Lookup.dependees_lookupOrig *)
+        (* Lookup.dependees_lookupOrigMA *)
         let p = ((n, b), v) in
-        let m = atom_names_of idx p in
+        let m = atom_names_of idx p @ conf_read idx p in
         let r_ma = ma_group_of_names idx m in
         (* p itself joins the reduceProv carrier so its implicit provides
            (group pseudo-name, foreign/:any names) are visible to matchb *)
@@ -412,29 +412,11 @@ struct
           classes_of idx
             (DMA.PkgSet.elements r_pi @ List.map fst (DMA.Prov.elements pi_decl))
         in
-        (* group members of n carry the implicit conflicts that can target
-           p through (n, group); hand-written negatives reach p only via
-           its name or a name it provides *)
-        let g_r =
-          DMA.PkgSet.ofList
-            (p
-            :: List.map
-                 (fun (b', v') -> ((n, b'), v'))
-                 (find_list idx.group_of n))
-        in
-        let g_conf =
-          DMA.Conf.union (ma_conf_of_pkg idx p)
-            (ma_conf_on_names idx (n :: prov_names_of idx p))
-        in
-        let g_cls =
-          classes_of idx
-            (DMA.PkgSet.elements g_r @ List.map fst (DMA.Conf.elements g_conf))
-        in
         DMA.Deb.dependees (DMA.reduceReal r_ma)
           (DMA.reduceDeps (ma_deps_of_pkg idx p))
           (DMA.reduceRec (ma_recs_of_pkg idx p))
           (DMA.reduceProv r_pi pi_decl pi_cls)
-          (DMA.reduceConf g_r g_conf g_cls)
+          (DMA.reduceConf (DMA.PkgSet.singleton p) (ma_conf_of_pkg idx p) pi_cls)
           s
     | DMA.Deb.Name.Disjunct _, DMA.Deb.Version.Atom a ->
         (* Lookup.dependees_lookupDisjunct *)
@@ -454,7 +436,7 @@ struct
           ( DMA.Deb.Name.Orig (DMA.Deb.aname a),
             DMA.Deb.T.VSet.singleton (DMA.Deb.Version.Orig w) )
     | _ ->
-        (* Lookup.dependees_lookupGuard; other shape mismatches are empty
+        (* Lookup.dependees_lookupAbsent; other shape mismatches are empty
            by definition of dependees *)
         DMA.Deb.T.DependeesSet.empty
 
@@ -498,8 +480,6 @@ struct
       | DMA.Deb.Name.Disjunct _ -> Format.fprintf fmt "<alts>"
       | DMA.Deb.Name.Soft _ -> Format.fprintf fmt "<rec>"
       | DMA.Deb.Name.Selector a -> Format.fprintf fmt "<sel %a>" pp_atom a
-      | DMA.Deb.Name.Guard ((m, v), a, _) ->
-          Format.fprintf fmt "<guard %a=%s vs %a>" pp_mname m v pp_atom a
   end
 
   let is_native = function
@@ -608,9 +588,10 @@ struct
          every real alternative before giving up on the clause, so it is ranked
          below them here.  Only candidates of one name are ever compared
          (PubGrub ranges are per name), and Version.Zero shares a name with
-         Version.Atom in the soft disjunct and with Version.One in a guard
-         and
-         nowhere else, so the two escape cases cannot disturb any other pair. *)
+         Version.Atom in the soft disjunct and nowhere else, so the escape
+         case cannot disturb any other pair.  Absence is the greatest version
+         of a real name (VersionOT.compare), so a name nothing comes to
+         require is decided absent. *)
       let compare (a : t) (b : t) =
         let fallback () = r2c (DMA.Deb.VersionOT.compare a.v b.v) in
         match (a.v, b.v) with
@@ -647,7 +628,7 @@ struct
             Format.fprintf fmt "ref:%a=%s" pp_mname m w
         | DMA.Deb.Version.RefReal w -> Format.fprintf fmt "real:%s" w
         | DMA.Deb.Version.Zero -> Format.fprintf fmt "0"
-        | DMA.Deb.Version.One -> Format.fprintf fmt "1"
+        | DMA.Deb.Version.Bot -> Format.fprintf fmt "⊥"
     end
 
     (* The clause position is known only where the name is: a Disjunct or Soft
@@ -726,7 +707,6 @@ struct
          satisfiable by a real package, and Ref where only a provider can. *)
       let group n =
         match n with
-        | DMA.Deb.Name.Guard _ -> 0
         | DMA.Deb.Name.Disjunct _ -> 1
         | DMA.Deb.Name.Selector _ -> if has_real n then 1 else 4
         | DMA.Deb.Name.Orig _ -> 2
@@ -789,7 +769,6 @@ struct
         let pp_atom = pp_atom
 
         let kind = function
-          | DMA.Deb.Name.Guard _ -> Apt_heap.Forced
           | DMA.Deb.Name.Orig _ -> Apt_heap.Package
           | DMA.Deb.Name.Disjunct _ -> Apt_heap.Hard
           | DMA.Deb.Name.Soft _ -> Apt_heap.Soft
@@ -850,7 +829,10 @@ struct
       let targets n (v : DMA.Deb.Version.t) =
         DMA.Deb.T.DependeesSet.elements (dependencies (n, v))
         |> List.map (fun (tn, tvs) ->
-            discover tn;
+            (* a conflict's edge admits absence: apt has no work item for
+               the name it lands on *)
+            if not (DMA.Deb.T.VSet.mem DMA.Deb.Version.Bot tvs) then
+              discover tn;
             (tn, List.map (tag tn) (DMA.Deb.T.VSet.elements tvs)))
       in
       let dependencies n (pv : PVersion.t) =
@@ -934,11 +916,43 @@ struct
         if apt_heap then cands_of n
         else List.map (tag n) (DMA.Deb.T.VSet.elements (versions n))
       in
-      let next = if apt_heap then Some (Shadow.next sh) else None in
+      (* A name only conflicts have reached admits absence, its greatest
+         version, and is decided last: deciding it earlier would forbid a
+         dependency that later comes to require it.  apt has no work item
+         for such a name, so the shadow heap never sees it. *)
+      let admits_bot ~assigned tn =
+        match tn with
+        | DMA.Deb.Name.Orig _ -> (
+            match assigned tn with
+            | PG.Entailed r -> PG.Ranges.contains (tag tn DMA.Deb.Version.Bot) r
+            | _ -> false)
+        (* only a real name has the absent version; asking the partial
+           solution about a clause name would compare its atom set *)
+        | _ -> false
+      in
+      let required ~assigned open_names =
+        List.filter (fun (tn, _) -> not (admits_bot ~assigned tn)) open_names
+      in
+      let defer_bot ~assigned open_names =
+        match required ~assigned open_names with
+        | (tn, _) :: _ -> tn
+        | [] -> fst (List.hd open_names)
+      in
+      let heap_next ~assigned open_names =
+        match required ~assigned open_names with
+        | [] -> fst (List.hd open_names)
+        | req -> Shadow.next sh ~assigned req
+      in
+      let next = Some (if apt_heap then heap_next else defer_bot) in
       (* Ranges.full here trips an upstream pubgrub edge case (initial
-         Neg-term status); the goal's available versions are what we mean
-         anyway. *)
-      let goal_range = PG.Ranges.of_list (versions (DMA.Deb.Name.Orig goal)) in
+         Neg-term status); the goal's real versions are what we mean anyway:
+         the query asks for the goal, so it excludes absence. *)
+      let goal_range =
+        PG.Ranges.of_list
+          (List.filter
+             (fun (pv : PVersion.t) -> pv.PVersion.v <> DMA.Deb.Version.Bot)
+             (versions (DMA.Deb.Name.Orig goal)))
+      in
       let r =
         PG.solve ?next ~choose ~vers:versions ~deps:dependencies
           [ (DMA.Deb.Name.Orig goal, goal_range) ]
@@ -995,7 +1009,6 @@ struct
       | DMA.Deb.Name.Disjunct _ -> "disj"
       | DMA.Deb.Name.Soft _ -> "soft"
       | DMA.Deb.Name.Selector _ -> "sel"
-      | DMA.Deb.Name.Guard _ -> "guard"
     in
     let module S = Search (struct
       let idx = idx

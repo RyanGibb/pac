@@ -393,9 +393,11 @@ Module Opam (N V X Y E : UsualOrderedType).
         (inst_repo I).
 
     (* PF.Formula has no truth constant; an unsatisfiable dependency on
-       the root name provides one, and its negation the other. *)
+       the root name provides one, and a dependency on the root itself,
+       which every resolution holds, the other. *)
     Definition PFalse : PF.Formula := PF.FDep TName.Root PF.VSet.empty.
-    Definition PTrue : PF.Formula := PF.FNeg PFalse.
+    Definition PTrue : PF.Formula :=
+      PF.FDep TName.Root (PF.VSet.singleton TVer.UnitV).
 
     (* -- lookup-primary layer: the per-name and per-package lookups are
        the definitions; the global translation is their aggregation,
@@ -794,10 +796,11 @@ Module Opam (N V X Y E : UsualOrderedType).
         [reflexivity | split; [exact Hp | exact Hpk]].
     Qed.
 
-    Lemma PTrue_sat : forall S', PF.Satisfies S' PTrue.
+    Lemma PTrue_sat : forall S',
+        PF.PkgSet.In rootPkg S' -> PF.Satisfies S' PTrue.
     Proof.
-      intros S'; simpl; intros [tv [Htv _]].
-      destruct (PF.VSet.empty_spec Htv).
+      intros S' Hr; exists TVer.UnitV; split;
+        [apply PF.VSet.singleton_spec; reflexivity | exact Hr].
     Qed.
 
     Lemma PFalse_unsat : forall S', ~ PF.Satisfies S' PFalse.
@@ -835,16 +838,17 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Lemma encodeOF_correct : forall rho Vq S',
         (forall n v, PkgSet.In (n, v) (decodeS S') -> VSet.In v (Vq n)) ->
+        PF.PkgSet.In rootPkg S' ->
         forall f,
           PF.Satisfies S' (encodeOF rho Vq f) <-> oSat rho (decodeS S') f.
     Proof.
-      intros rho Vq S' HV f; unfold encodeOF, oSat.
+      intros rho Vq S' HV Hr f; unfold encodeOF, oSat.
       destruct (redOF rho f) as [g |] eqn:Hred.
       - rewrite (encR_correct Vq S' HV g); split.
         + intros H g' Hg'; injection Hg' as <-; exact H.
         + intro H; apply H; reflexivity.
       - split; [intros _ g' Hg'; discriminate |].
-        intros _; exact (PTrue_sat S').
+        intros _; exact (PTrue_sat S' Hr).
     Qed.
 
     Lemma ownedBy_in : forall (A : Type) (p : Pkg.t)
@@ -995,14 +999,14 @@ Module Opam (N V X Y E : UsualOrderedType).
         injection E as ->; reflexivity.
       - intros [n v] Hp.
         assert (H := Hsub _ _ Hp); apply mem_effRepo in H; tauto.
-      - apply (encodeOF_correct rho _ _ HV); exact Hgoal.
-      - apply (encodeOF_correct rho _ _ HV); exact Hinv.
+      - apply (encodeOF_correct rho _ _ HV Hroot); exact Hgoal.
+      - apply (encodeOF_correct rho _ _ HV Hroot); exact Hinv.
       - intros [n v] Hp f Hf.
         assert (Hs : PF.Satisfies S'
                        (encodeOF rho (srcVersions rho I) f)).
         { apply (Hdeps _ _ _ Hp); unfold dependees.
           apply mem_dependees_real; left; exists f; auto. }
-        apply (encodeOF_correct rho _ _ HV) in Hs; exact Hs.
+        apply (encodeOF_correct rho _ _ HV Hroot) in Hs; exact Hs.
       - intros [pn pv] Hp n g c Hcfl Hg v Hv Hne Hh.
         assert (Hs : PF.Satisfies S'
                        (cflForm rho (srcVersions rho I) (pn, pv)
@@ -1072,6 +1076,8 @@ Module Opam (N V X Y E : UsualOrderedType).
                  VSet.In v (srcVersions rho I n)).
       { intros n v Hm; rewrite decode_transS in Hm.
         apply mem_srcVersions; exact (Hse _ Hm). }
+      assert (Hr : PF.PkgSet.In rootPkg (transS (inst_cls I) S))
+        by (apply mem_transS; right; left; reflexivity).
       constructor.
       - intros q Hq; apply mem_transS in Hq; apply mem_transR.
         destruct Hq as [[p [Hp ->]] | [H | [p [k [_ [Hpk ->]]]]]];
@@ -1088,12 +1094,12 @@ Module Opam (N V X Y E : UsualOrderedType).
           destruct Hf'
             as [[f0 [Hin ->]] | [[nc [Hin ->]]
                | [[k [Hpk ->]] | [nvu [Hin ->]]]]].
-          * apply (encodeOF_correct rho _ _ HV).
+          * apply (encodeOF_correct rho _ _ HV Hr).
             rewrite decode_transS.
             exact (ores_dep_closure _ _ _ HR _ Hp0 _ Hin).
           * destruct nc as [n [g c]]; unfold cflForm; cbn [fst snd].
             destruct (defTrue rho g) eqn:Hg;
-              [| exact (PTrue_sat (transS (inst_cls I) S))].
+              [| exact (PTrue_sat (transS (inst_cls I) S) Hr)].
             cbn [PF.Satisfies]; intros [tv [Htv Hm]].
             unfold confVS in Htv.
             destruct (N.eq_dec (fst (pn, pv)) n) as [| Hne].
@@ -1119,7 +1125,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         + unfold dependees, dependeesBy, rootPkg in Hf'.
           apply FSet.singleton_spec in Hf'; subst f'.
           unfold rootForm; cbn [PF.Satisfies].
-          split; apply (encodeOF_correct rho _ _ HV);
+          split; apply (encodeOF_correct rho _ _ HV Hr);
             rewrite decode_transS;
             [exact (ores_goal _ _ _ HR) | exact (ores_invariant _ _ _ HR)].
         (* a class package carries no outgoing formula *)

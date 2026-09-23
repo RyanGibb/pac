@@ -24,59 +24,22 @@ Module Conflict (N V : UsualOrderedType).
           ~ (exists v, VSet.In v vs /\ PkgSet.In (n, v) S) }.
 
   Module Reduction.
-    Module NF := UOTCompareFacts N.
-    Module DF := UOTCompareFacts C.Dependees.
     Module VF := UOTCompareFacts V.
-    #[local] Hint Rewrite NF.compare_eq_iff DF.compare_eq_iff
-      VF.compare_eq_iff : cmp_conf.
-    #[local] Hint Extern 1 => cmp_by NF.compare_antisym : cmp_conf.
-    #[local] Hint Extern 1 => cmp_by DF.compare_antisym : cmp_conf.
+    #[local] Hint Rewrite VF.compare_eq_iff : cmp_conf.
     #[local] Hint Extern 1 => cmp_by VF.compare_antisym : cmp_conf.
-    #[local] Hint Extern 1 => cmp_by NF.compare_lt_trans : cmp_conf.
-    #[local] Hint Extern 1 => cmp_by DF.compare_lt_trans : cmp_conf.
     #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_conf.
 
-    Module Name.
-      Inductive name : Type :=
-      | Orig (n : N.t)
-      | Synthetic (n : N.t) (vs : VSet.t).
-      Definition t := name.
-
-      Definition rank (x : t) : nat :=
-        match x with Orig _ => 0 | Synthetic _ _ => 1 end.
-
-      Definition compare (x y : t) : comparison :=
-        match Nat.compare (rank x) (rank y) with
-        | Eq =>
-            match x, y with
-            | Orig n1, Orig n2 => N.compare n1 n2
-            | Synthetic n1 vs1, Synthetic n2 vs2 =>
-                C.Dependees.compare (n1, vs1) (n2, vs2)
-            | _, _ => Eq
-            end
-        | c => c
-        end.
-
-      Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
-      Proof. cmp_eq_iff cmp_conf. Qed.
-
-      Lemma compare_antisym : forall x y, compare y x = CompOpp (compare x y).
-      Proof. cmp_antisym cmp_conf. Qed.
-
-      Lemma compare_lt_trans : forall x y z,
-          compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
-      Proof. cmp_lt_trans cmp_conf. Qed.
-    End Name.
-
+    (* Every name gains the version Bot, "absent", ordered above every real
+       version so that a solver preferring the greatest version leaves a
+       name nobody needs positively out of the resolution. *)
     Module Version.
       Inductive version : Type :=
       | Orig (v : V.t)
-      | Zero
-      | One.
+      | Bot.
       Definition t := version.
 
       Definition rank (x : t) : nat :=
-        match x with Orig _ => 0 | Zero => 1 | One => 2 end.
+        match x with Orig _ => 0 | Bot => 1 end.
 
       Definition compare (x y : t) : comparison :=
         match Nat.compare (rank x) (rank y) with
@@ -98,13 +61,12 @@ Module Conflict (N V : UsualOrderedType).
       Proof. cmp_lt_trans cmp_conf. Qed.
     End Version.
 
-    Module NameOT := UOTFromCompare Name.
     Module VersionOT := UOTFromCompare Version.
-    (* The target core: the instance the reduction emits into. *)
-    Module T := Core NameOT VersionOT.
+    (* The target core: names are the source's own; only the versions grow. *)
+    Module T := Core N VersionOT.
+    Module NSet := FSetUOT N.
 
-    Definition embedPkg (p : Pkg.t) : T.Pkg.t :=
-      (Name.Orig (fst p), Version.Orig (snd p)).
+    Definition embedPkg (p : Pkg.t) : T.Pkg.t := (fst p, Version.Orig (snd p)).
 
     Module SOpt := SetOps Pkg T.Pkg PkgSet T.PkgSet.
     Definition embedSet (S : PkgSet.t) : T.PkgSet.t := SOpt.map embedPkg S.
@@ -112,72 +74,96 @@ Module Conflict (N V : UsualOrderedType).
     Module SOvt := SetOps V VersionOT VSet T.VSet.
     Definition embedVS (vs : VSet.t) : T.VSet.t := SOvt.map Version.Orig vs.
 
-    Module SOdt := SetOps ConfElt T.Pkg ConflictRel T.PkgSet.
-    Definition synthReal (G : ConflictRel.t) : T.PkgSet.t :=
-      SOdt.unionMap (fun '(_, (n, vs)) =>
-          T.PkgSet.add (Name.Synthetic n vs, Version.Zero)
-            (T.PkgSet.singleton (Name.Synthetic n vs, Version.One)))
-        G.
+    Module SOpn := SetOps Pkg N PkgSet NSet.
+    Module SOdn := SetOps C.DepElt N C.DepRel NSet.
+    Module SOcn := SetOps ConfElt N ConflictRel NSet.
+    Definition instNames (R : PkgSet.t) (D : C.DepRel.t) (G : ConflictRel.t)
+      : NSet.t :=
+      NSet.union (SOpn.map fst R)
+        (NSet.union (SOdn.map (fun '(_, (n, _)) => n) D)
+           (SOcn.map (fun '(_, (n, _)) => n) G)).
 
-    Lemma mem_synthReal : forall (G : ConflictRel.t) (y : T.Pkg.t),
-        T.PkgSet.In y (synthReal G) <->
-        exists p n vs, ConflictRel.In (p, (n, vs)) G /\
-          (y = (Name.Synthetic n vs, Version.Zero) \/
-           y = (Name.Synthetic n vs, Version.One)).
+    Module SOnt := SetOps N T.Pkg NSet T.PkgSet.
+    Definition absentPkgs (ns : NSet.t) : T.PkgSet.t :=
+      SOnt.map (fun n => (n, Version.Bot)) ns.
+
+    Definition reduceReal (R : PkgSet.t) (D : C.DepRel.t) (G : ConflictRel.t)
+      : T.PkgSet.t :=
+      T.PkgSet.union (embedSet R) (absentPkgs (instNames R D G)).
+
+    Lemma mem_instNames : forall R D G (n : N.t),
+        NSet.In n (instNames R D G) <->
+        (exists v, PkgSet.In (n, v) R) \/
+        (exists p vs, C.DepRel.In (p, (n, vs)) D) \/
+        (exists p vs, ConflictRel.In (p, (n, vs)) G).
     Proof.
-      intros G y; unfold synthReal; rewrite SOdt.mem_unionMap.
+      intros R D G n; unfold instNames.
+      rewrite !NSet.union_spec, SOpn.mem_map, SOdn.mem_map, SOcn.mem_map.
       split.
-      - intros [[q [n vs]] [HG Hy]]; cbn beta iota in Hy.
-        rewrite SOdt.add_in, SOdt.singleton_in in Hy.
-        exists q, n, vs; tauto.
-      - intros [p [n [vs [HG Hy]]]].
-        exists (p, (n, vs)); split; [exact HG | cbn beta iota].
-        rewrite SOdt.add_in, SOdt.singleton_in; tauto.
+      - intros [[[m v] [HR Hm]] | [[[p [m vs]] [HD Hm]] | [[p [m vs]] [HG Hm]]]];
+          simpl in Hm; subst.
+        + left; exists v; exact HR.
+        + right; left; exists p, vs; exact HD.
+        + right; right; exists p, vs; exact HG.
+      - intros [[v HR] | [[p [vs HD]] | [p [vs HG]]]].
+        + left; exists (n, v); split; [exact HR | reflexivity].
+        + right; left; exists (p, (n, vs)); split; [exact HD | reflexivity].
+        + right; right; exists (p, (n, vs)); split; [exact HG | reflexivity].
     Qed.
 
-    Definition reduceReal (R : PkgSet.t) (G : ConflictRel.t) : T.PkgSet.t :=
-      T.PkgSet.union (embedSet R) (synthReal G).
+    Lemma mem_absentPkgs : forall ns (y : T.Pkg.t),
+        T.PkgSet.In y (absentPkgs ns) <->
+        exists n, NSet.In n ns /\ y = (n, Version.Bot).
+    Proof. intros ns y; unfold absentPkgs; apply SOnt.mem_map. Qed.
 
     Lemma mem_reduceReal :
-      forall (R : PkgSet.t) (G : ConflictRel.t) (y : T.Pkg.t),
-        T.PkgSet.In y (reduceReal R G) <->
+      forall R D G (y : T.Pkg.t),
+        T.PkgSet.In y (reduceReal R D G) <->
         (exists p, PkgSet.In p R /\ y = embedPkg p) \/
-        (exists p n vs, ConflictRel.In (p, (n, vs)) G /\
-           (y = (Name.Synthetic n vs, Version.Zero) \/
-            y = (Name.Synthetic n vs, Version.One))).
+        (exists n, NSet.In n (instNames R D G) /\ y = (n, Version.Bot)).
     Proof.
       intros; unfold reduceReal, embedSet.
-      rewrite T.PkgSet.union_spec, SOpt.mem_map, mem_synthReal; reflexivity.
+      rewrite T.PkgSet.union_spec, SOpt.mem_map, mem_absentPkgs; reflexivity.
     Qed.
 
     Module SOdtd := SetOps C.DepElt T.DepElt C.DepRel T.DepRel.
     Definition origEdges (D : C.DepRel.t) : T.DepRel.t :=
-      SOdtd.map (fun '(p, (n, vs)) => (embedPkg p, (Name.Orig n, embedVS vs)))
-        D.
+      SOdtd.map (fun '(p, (n, vs)) => (embedPkg p, (n, embedVS vs))) D.
+
+    (* The versions a conflict admits at its target: every real version the
+       conflict does not name, and absence. *)
+    Definition admitVS (R : PkgSet.t) (n : N.t) (vs : VSet.t) : T.VSet.t :=
+      T.VSet.add Version.Bot (embedVS (VSet.diff (C.versions R n) vs)).
 
     Module SOctd := SetOps ConfElt T.DepElt ConflictRel T.DepRel.
-    Definition declarerEdges (G : ConflictRel.t) : T.DepRel.t :=
-      SOctd.map (fun '(p, (n, vs)) =>
-          (embedPkg p, (Name.Synthetic n vs, T.VSet.singleton Version.One)))
-        G.
+    Definition conflictEdges (R : PkgSet.t) (G : ConflictRel.t) : T.DepRel.t :=
+      SOctd.map (fun '(p, (n, vs)) => (embedPkg p, (n, admitVS R n vs))) G.
 
-    Module SOvtd := SetOps V T.DepElt VSet T.DepRel.
-    Definition conflicteeEdges (G : ConflictRel.t) : T.DepRel.t :=
-      SOctd.unionMap (fun '(_, (n, vs)) =>
-          SOvtd.map (fun u =>
-              ((Name.Orig n, Version.Orig u),
-               (Name.Synthetic n vs, T.VSet.singleton Version.Zero)))
-            vs)
-        G.
+    Definition reduceDeps (R : PkgSet.t) (D : C.DepRel.t) (G : ConflictRel.t)
+      : T.DepRel.t :=
+      T.DepRel.union (origEdges D) (conflictEdges R G).
 
-    Definition reduceDeps (D : C.DepRel.t) (G : ConflictRel.t) : T.DepRel.t :=
-      T.DepRel.union (origEdges D)
-        (T.DepRel.union (declarerEdges G) (conflicteeEdges G)).
+    Lemma mem_admitVS : forall R n vs (w : Version.t),
+        T.VSet.In w (admitVS R n vs) <->
+        w = Version.Bot \/
+        exists u, PkgSet.In (n, u) R /\ ~ VSet.In u vs /\ w = Version.Orig u.
+    Proof.
+      intros R n vs w; unfold admitVS.
+      rewrite SOvt.add_in; unfold embedVS; rewrite SOvt.mem_map.
+      split.
+      - intros [-> | [u [Hu ->]]]; [left; reflexivity | right].
+        apply VSet.diff_spec in Hu; destruct Hu as [Hu Hnv].
+        apply C.mem_versions in Hu.
+        exists u; auto.
+      - intros [-> | [u [HR [Hnv ->]]]]; [left; reflexivity | right].
+        exists u; split; [| reflexivity].
+        apply VSet.diff_spec; split; [apply C.mem_versions; exact HR | exact Hnv].
+    Qed.
 
     Lemma mem_origEdges : forall (D : C.DepRel.t) (y : T.DepElt.t),
         T.DepRel.In y (origEdges D) <->
         exists p n vs, C.DepRel.In (p, (n, vs)) D /\
-          y = (embedPkg p, (Name.Orig n, embedVS vs)).
+          y = (embedPkg p, (n, embedVS vs)).
     Proof.
       intros D y; unfold origEdges; rewrite SOdtd.mem_map.
       split.
@@ -187,13 +173,12 @@ Module Conflict (N V : UsualOrderedType).
         exists (p, (n, vs)); split; [exact HD | reflexivity].
     Qed.
 
-    Lemma mem_declarerEdges : forall (G : ConflictRel.t) (y : T.DepElt.t),
-        T.DepRel.In y (declarerEdges G) <->
+    Lemma mem_conflictEdges : forall R (G : ConflictRel.t) (y : T.DepElt.t),
+        T.DepRel.In y (conflictEdges R G) <->
         exists p n vs, ConflictRel.In (p, (n, vs)) G /\
-          y = (embedPkg p,
-               (Name.Synthetic n vs, T.VSet.singleton Version.One)).
+          y = (embedPkg p, (n, admitVS R n vs)).
     Proof.
-      intros G y; unfold declarerEdges; rewrite SOctd.mem_map.
+      intros R G y; unfold conflictEdges; rewrite SOctd.mem_map.
       split.
       - intros [[q [n vs]] [HG Hy]]; cbn beta iota in Hy.
         exists q, n, vs; split; [exact HG | exact Hy].
@@ -201,48 +186,27 @@ Module Conflict (N V : UsualOrderedType).
         exists (p, (n, vs)); split; [exact HG | reflexivity].
     Qed.
 
-    Lemma mem_conflicteeEdges : forall (G : ConflictRel.t) (y : T.DepElt.t),
-        T.DepRel.In y (conflicteeEdges G) <->
-        exists p n vs u, ConflictRel.In (p, (n, vs)) G /\ VSet.In u vs /\
-          y = ((Name.Orig n, Version.Orig u),
-               (Name.Synthetic n vs, T.VSet.singleton Version.Zero)).
-    Proof.
-      intros G y; unfold conflicteeEdges; rewrite SOctd.mem_unionMap.
-      split.
-      - intros [[q [n vs]] [HG Hy]]; cbn beta iota in Hy.
-        apply SOvtd.mem_map in Hy; destruct Hy as [u [Hu ->]].
-        exists q, n, vs, u; auto.
-      - intros [p [n [vs [u [HG [Hu ->]]]]]].
-        exists (p, (n, vs)); split; [exact HG | cbn beta iota].
-        apply SOvtd.mem_map; exists u; split; [exact Hu | reflexivity].
-    Qed.
-
     Lemma mem_reduceDeps :
-      forall (D : C.DepRel.t) (G : ConflictRel.t) (y : T.DepElt.t),
-        T.DepRel.In y (reduceDeps D G) <->
+      forall R (D : C.DepRel.t) (G : ConflictRel.t) (y : T.DepElt.t),
+        T.DepRel.In y (reduceDeps R D G) <->
         (exists p n vs, C.DepRel.In (p, (n, vs)) D /\
-           y = (embedPkg p, (Name.Orig n, embedVS vs))) \/
+           y = (embedPkg p, (n, embedVS vs))) \/
         (exists p n vs, ConflictRel.In (p, (n, vs)) G /\
-           y = (embedPkg p,
-                (Name.Synthetic n vs, T.VSet.singleton Version.One))) \/
-        (exists p n vs u, ConflictRel.In (p, (n, vs)) G /\ VSet.In u vs /\
-           y = ((Name.Orig n, Version.Orig u),
-                (Name.Synthetic n vs, T.VSet.singleton Version.Zero))).
+           y = (embedPkg p, (n, admitVS R n vs))).
     Proof.
-      intros D G y; unfold reduceDeps.
-      rewrite !T.DepRel.union_spec,
-        mem_origEdges, mem_declarerEdges, mem_conflicteeEdges.
+      intros R D G y; unfold reduceDeps.
+      rewrite T.DepRel.union_spec, mem_origEdges, mem_conflictEdges.
       tauto.
     Qed.
 
     Definition reduce (R : PkgSet.t) (D : C.DepRel.t) (G : ConflictRel.t) :
         T.PkgSet.t * T.DepRel.t :=
-      (reduceReal R G, reduceDeps D G).
+      (reduceReal R D G, reduceDeps R D G).
 
     Definition tryInvPkg (p : T.Pkg.t) : option Pkg.t :=
       match p with
-      | (Name.Orig n, Version.Orig v) => Some (n, v)
-      | _ => None
+      | (n, Version.Orig v) => Some (n, v)
+      | (_, Version.Bot) => None
       end.
 
     Lemma tryInvPkg_embed : forall p, tryInvPkg (embedPkg p) = Some p.
@@ -251,7 +215,7 @@ Module Conflict (N V : UsualOrderedType).
     Lemma tryInvPkg_some : forall (p' : T.Pkg.t) (p : Pkg.t),
         tryInvPkg p' = Some p -> embedPkg p = p'.
     Proof.
-      intros [[n | n vs] [v | | ]] p H; simpl in H; try discriminate.
+      intros [n [v | ]] p H; simpl in H; try discriminate.
       injection H as <-; reflexivity.
     Qed.
 
@@ -272,31 +236,30 @@ Module Conflict (N V : UsualOrderedType).
     Qed.
 
     Lemma embedPkg_mem_real :
-      forall (p : Pkg.t) (R : PkgSet.t) (G : ConflictRel.t),
-        T.PkgSet.In (embedPkg p) (reduceReal R G) -> PkgSet.In p R.
+      forall (p : Pkg.t) R D (G : ConflictRel.t),
+        T.PkgSet.In (embedPkg p) (reduceReal R D G) -> PkgSet.In p R.
     Proof.
-      intros p R G H; apply mem_reduceReal in H.
-      destruct H as [[q [HqR Hq]] | [q [n [vs [_ [Hy | Hy]]]]]].
+      intros p R D G H; apply mem_reduceReal in H.
+      destruct H as [[q [HqR Hq]] | [n [_ Hy]]].
       - apply embedPkg_injective in Hq; subst q; exact HqR.
-      - destruct p; unfold embedPkg in Hy; simpl in Hy; congruence.
       - destruct p; unfold embedPkg in Hy; simpl in Hy; congruence.
     Qed.
 
     Theorem conflict_soundness :
       forall (R : PkgSet.t) (D : C.DepRel.t) (G : ConflictRel.t)
              (r : Pkg.t) (S : T.PkgSet.t),
-        T.IsResolution (reduceReal R G) (reduceDeps D G) (embedPkg r) S ->
+        T.IsResolution (reduceReal R D G) (reduceDeps R D G) (embedPkg r) S ->
         IsResolution R D G r (conflictResolution S).
     Proof.
       intros R D G r S [Hsub Hroot Hdep Huniq].
       constructor.
       - constructor.
         + intros p Hp; apply mem_conflictResolution in Hp.
-          exact (embedPkg_mem_real p R G (Hsub _ Hp)).
+          exact (embedPkg_mem_real p R D G (Hsub _ Hp)).
         + apply mem_conflictResolution; exact Hroot.
         + intros p Hp m vs HD; apply mem_conflictResolution in Hp.
-          assert (Hd : T.DepRel.In (embedPkg p, (Name.Orig m, embedVS vs))
-                         (reduceDeps D G))
+          assert (Hd : T.DepRel.In (embedPkg p, (m, embedVS vs))
+                         (reduceDeps R D G))
             by (apply mem_reduceDeps; left; exists p, m, vs;
                 split; [exact HD | reflexivity]).
           destruct (Hdep _ Hp _ _ Hd) as [v' [Hv' Hv'S]].
@@ -306,125 +269,85 @@ Module Conflict (N V : UsualOrderedType).
             [exact Hv | apply mem_conflictResolution; exact Hv'S].
         + intros n v v' Hv Hv'; apply mem_conflictResolution in Hv, Hv'.
           assert (E : Version.Orig v = Version.Orig v')
-            by (apply (Huniq (Name.Orig n)); assumption).
+            by (apply (Huniq n); assumption).
           injection E as E; exact E.
       - intros p Hp n vs Hg [u [Hu HuS]].
         apply mem_conflictResolution in Hp, HuS.
-        assert (Hd1 : T.DepRel.In
-                        (embedPkg p,
-                         (Name.Synthetic n vs, T.VSet.singleton Version.One))
-                        (reduceDeps D G))
-          by (apply mem_reduceDeps; right; left; exists p, n, vs;
+        assert (Hd : T.DepRel.In (embedPkg p, (n, admitVS R n vs))
+                       (reduceDeps R D G))
+          by (apply mem_reduceDeps; right; exists p, n, vs;
               split; [exact Hg | reflexivity]).
-        destruct (Hdep _ Hp _ _ Hd1) as [v1 [Hv1 Hv1S]].
-        rewrite SOvt.singleton_in in Hv1; subst v1.
-        assert (Hd2 : T.DepRel.In
-                        (embedPkg (n, u),
-                         (Name.Synthetic n vs, T.VSet.singleton Version.Zero))
-                        (reduceDeps D G))
-          by (apply mem_reduceDeps; right; right; exists p, n, vs, u;
-              split; [exact Hg | split; [exact Hu | reflexivity]]).
-        destruct (Hdep _ HuS _ _ Hd2) as [v2 [Hv2 Hv2S]].
-        rewrite SOvt.singleton_in in Hv2; subst v2.
-        assert (E : Version.One = Version.Zero)
-          by (apply (Huniq (Name.Synthetic n vs)); assumption).
-        discriminate E.
+        destruct (Hdep _ Hp _ _ Hd) as [w [Hw HwS]].
+        assert (E : w = Version.Orig u) by (apply (Huniq n); assumption).
+        subst w; apply mem_admitVS in Hw.
+        destruct Hw as [Hw | [u' [_ [Hnv E]]]]; [discriminate Hw |].
+        injection E as <-; exact (Hnv Hu).
     Qed.
 
-    Definition coreResolution (S : PkgSet.t) (G : ConflictRel.t) :
+    (* The names of the instance with no version in S, which is where the
+       completeness construction places absence. *)
+    Definition absentIn (S : PkgSet.t) (ns : NSet.t) : NSet.t :=
+      NSet.filter
+        (fun n => negb (PkgSet.exists_
+                          (fun p => if N.eq_dec (fst p) n then true else false)
+                          S))
+        ns.
+
+    Lemma mem_absentIn : forall S ns n,
+        NSet.In n (absentIn S ns) <->
+        NSet.In n ns /\ forall v, ~ PkgSet.In (n, v) S.
+    Proof.
+      intros S ns n; unfold absentIn; rewrite NSet.filter_spec'.
+      rewrite Bool.negb_true_iff.
+      split.
+      - intros [Hn He]; split; [exact Hn |].
+        intros v Hv.
+        assert (Ht : PkgSet.exists_
+                       (fun p => if N.eq_dec (fst p) n then true else false)
+                       S = true).
+        { apply PkgSet.exists_spec'; exists (n, v); split; [exact Hv |].
+          cbn [fst]; destruct (N.eq_dec n n) as [_ | NE];
+            [reflexivity | contradiction NE; reflexivity]. }
+        congruence.
+      - intros [Hn Hnone]; split; [exact Hn |].
+        destruct (PkgSet.exists_
+                    (fun p => if N.eq_dec (fst p) n then true else false) S)
+          eqn:E; [| reflexivity].
+        exfalso; apply PkgSet.exists_spec' in E.
+        destruct E as [[m v] [Hm Ht]]; cbn [fst] in Ht.
+        destruct (N.eq_dec m n) as [-> | ]; [| discriminate].
+        exact (Hnone v Hm).
+    Qed.
+
+    Definition coreResolution (S : PkgSet.t) R D (G : ConflictRel.t) :
         T.PkgSet.t :=
-      T.PkgSet.union (embedSet S)
-        (T.PkgSet.union
-           (SOdt.filterMap (fun '(p, (n, vs)) =>
-                if PkgSet.mem p S
-                then Some (Name.Synthetic n vs, Version.One)
-                else None)
-              G)
-           (SOdt.filterMap (fun '(_, (n, vs)) =>
-                if VSet.exists_ (fun u => PkgSet.mem (n, u) S) vs
-                then Some (Name.Synthetic n vs, Version.Zero)
-                else None)
-              G)).
+      T.PkgSet.union (embedSet S) (absentPkgs (absentIn S (instNames R D G))).
 
     Lemma mem_coreResolution :
-      forall (S : PkgSet.t) (G : ConflictRel.t) (y : T.Pkg.t),
-        T.PkgSet.In y (coreResolution S G) <->
+      forall S R D G (y : T.Pkg.t),
+        T.PkgSet.In y (coreResolution S R D G) <->
         (exists p, PkgSet.In p S /\ y = embedPkg p) \/
-        (exists p n vs, ConflictRel.In (p, (n, vs)) G /\ PkgSet.In p S /\
-           y = (Name.Synthetic n vs, Version.One)) \/
-        (exists p n vs, ConflictRel.In (p, (n, vs)) G /\
-           (exists u, VSet.In u vs /\ PkgSet.In (n, u) S) /\
-           y = (Name.Synthetic n vs, Version.Zero)).
+        (exists n, NSet.In n (instNames R D G) /\
+           (forall v, ~ PkgSet.In (n, v) S) /\ y = (n, Version.Bot)).
     Proof.
-      intros S G y; unfold coreResolution, embedSet.
-      rewrite !T.PkgSet.union_spec, SOpt.mem_map, !SOdt.mem_filterMap.
+      intros S R D G y; unfold coreResolution, embedSet.
+      rewrite T.PkgSet.union_spec, SOpt.mem_map, mem_absentPkgs.
       split.
-      - intros [H | [H | H]]; [left; exact H | right; left | right; right].
-        + destruct H as [[q [n vs]] [HeG He]]; cbn beta iota in He.
-          destruct (PkgSet.mem q S) eqn:Hm; [| discriminate].
-          injection He as <-.
-          exists q, n, vs; split; [exact HeG |].
-          split; [apply PkgSet.mem_spec; exact Hm | reflexivity].
-        + destruct H as [[q [n vs]] [HeG He]]; cbn beta iota in He.
-          destruct (VSet.exists_ (fun u => PkgSet.mem (n, u) S) vs) eqn:Hm;
-            [| discriminate].
-          injection He as <-.
-          rewrite VSet.exists_spec' in Hm.
-          destruct Hm as [u [Hu Hmu]].
-          exists q, n, vs; split; [exact HeG | split; [| reflexivity]].
-          exists u; split; [exact Hu | apply PkgSet.mem_spec; exact Hmu].
-      - intros [H | [[p [n [vs [HG [HpS ->]]]]] | [p [n [vs [HG [Hex ->]]]]]]].
-        + left; exact H.
-        + right; left; exists (p, (n, vs)); split; [exact HG |].
-          assert (Hm : PkgSet.mem p S = true)
-            by (apply PkgSet.mem_spec; exact HpS).
-          cbn beta iota; rewrite Hm; reflexivity.
-        + right; right; exists (p, (n, vs)); split; [exact HG |].
-          assert (Hm : VSet.exists_ (fun u => PkgSet.mem (n, u) S) vs = true).
-          { rewrite VSet.exists_spec'.
-            destruct Hex as [u [Hu HuS]]; exists u; split;
-              [exact Hu | apply PkgSet.mem_spec; exact HuS]. }
-          cbn beta iota; rewrite Hm; reflexivity.
-    Qed.
-
-    Lemma mem_coreResolution_embed :
-      forall (S : PkgSet.t) (G : ConflictRel.t) (p : Pkg.t),
-        PkgSet.In p S -> T.PkgSet.In (embedPkg p) (coreResolution S G).
-    Proof.
-      intros S G p Hp; apply mem_coreResolution.
-      left; exists p; split; [exact Hp | reflexivity].
-    Qed.
-
-    Lemma mem_coreResolution_one :
-      forall (S : PkgSet.t) (G : ConflictRel.t) (p : Pkg.t) (n : N.t)
-             (vs : VSet.t),
-        ConflictRel.In (p, (n, vs)) G -> PkgSet.In p S ->
-        T.PkgSet.In (Name.Synthetic n vs, Version.One) (coreResolution S G).
-    Proof.
-      intros S G p n vs Hg Hp; apply mem_coreResolution.
-      right; left; exists p, n, vs; auto.
-    Qed.
-
-    Lemma mem_coreResolution_zero :
-      forall (S : PkgSet.t) (G : ConflictRel.t) (p : Pkg.t) (n : N.t)
-             (vs : VSet.t),
-        ConflictRel.In (p, (n, vs)) G ->
-        (exists u, VSet.In u vs /\ PkgSet.In (n, u) S) ->
-        T.PkgSet.In (Name.Synthetic n vs, Version.Zero) (coreResolution S G).
-    Proof.
-      intros S G p n vs Hg Hex; apply mem_coreResolution.
-      right; right; exists p, n, vs; auto.
+      - intros [H | [n [Hn ->]]]; [left; exact H | right].
+        apply mem_absentIn in Hn; destruct Hn as [Hn Hnone].
+        exists n; auto.
+      - intros [H | [n [Hn [Hnone ->]]]]; [left; exact H | right].
+        exists n; split; [| reflexivity].
+        apply mem_absentIn; auto.
     Qed.
 
     Lemma embed_mem_coreResolution_inv :
-      forall (S : PkgSet.t) (G : ConflictRel.t) (p : Pkg.t),
-        T.PkgSet.In (embedPkg p) (coreResolution S G) -> PkgSet.In p S.
+      forall S R D G (p : Pkg.t),
+        T.PkgSet.In (embedPkg p) (coreResolution S R D G) -> PkgSet.In p S.
     Proof.
-      intros S G p H; apply mem_coreResolution in H.
-      destruct H as [[q [HqS Hq]] | [[q [n [vs [_ [_ Hq]]]]]
-                    | [q [n [vs [_ [_ Hq]]]]]]].
+      intros S R D G p H; apply mem_coreResolution in H.
+      destruct H as [[q [HqS Hq]] | [n [_ [_ Hq]]]].
       - apply embedPkg_injective in Hq; subst q; exact HqS.
-      - destruct p; unfold embedPkg in Hq; simpl in Hq; congruence.
       - destruct p; unfold embedPkg in Hq; simpl in Hq; congruence.
     Qed.
 
@@ -432,226 +355,196 @@ Module Conflict (N V : UsualOrderedType).
       forall (R : PkgSet.t) (D : C.DepRel.t) (G : ConflictRel.t)
              (r : Pkg.t) (S : PkgSet.t),
         IsResolution R D G r S ->
-        T.IsResolution (reduceReal R G) (reduceDeps D G) (embedPkg r)
-          (coreResolution S G).
+        T.IsResolution (reduceReal R D G) (reduceDeps R D G) (embedPkg r)
+          (coreResolution S R D G).
     Proof.
       intros R D G r S [[Hsub Hroot Hdep Huniq] Havoid].
       constructor.
       - intros y Hy; apply mem_coreResolution in Hy; apply mem_reduceReal.
-        destruct Hy as [[p [HpS ->]] | [[p [n [vs [HG [_ ->]]]]]
-                       | [p [n [vs [HG [_ ->]]]]]]].
+        destruct Hy as [[p [HpS ->]] | [n [Hn [_ ->]]]].
         + left; exists p; split; [apply Hsub; exact HpS | reflexivity].
-        + right; exists p, n, vs; auto.
-        + right; exists p, n, vs; auto.
-      - apply mem_coreResolution_embed; exact Hroot.
+        + right; exists n; auto.
+      - apply mem_coreResolution; left; exists r; auto.
       - intros q Hq m ws Hd; apply mem_reduceDeps in Hd.
-        destruct Hd as [[p [m0 [vs [HD Hy]]]] | [[p [n [vs [HG Hy]]]]
-                       | [p [n [vs [u [HG [Hu Hy]]]]]]]];
+        destruct Hd as [[p [m0 [vs [HD Hy]]]] | [p [n [vs [HG Hy]]]]];
           injection Hy as -> -> ->.
         + assert (HpS : PkgSet.In p S)
-            by (apply (embed_mem_coreResolution_inv S G p); exact Hq).
+            by (apply (embed_mem_coreResolution_inv S R D G p); exact Hq).
           destruct (Hdep p HpS m0 vs HD) as [v [Hv HvS]].
           exists (Version.Orig v); split.
           * unfold embedVS; apply SOvt.mem_map; exists v; auto.
-          * exact (mem_coreResolution_embed S G (m0, v) HvS).
+          * apply mem_coreResolution; left; exists (m0, v); auto.
         + assert (HpS : PkgSet.In p S)
-            by (apply (embed_mem_coreResolution_inv S G p); exact Hq).
-          exists Version.One; split.
-          * apply SOvt.singleton_in; reflexivity.
-          * exact (mem_coreResolution_one S G p n vs HG HpS).
-        + assert (HuS : PkgSet.In (n, u) S)
-            by (apply (embed_mem_coreResolution_inv S G (n, u)); exact Hq).
-          exists Version.Zero; split.
-          * apply SOvt.singleton_in; reflexivity.
-          * apply (mem_coreResolution_zero S G p n vs HG).
-            exists u; auto.
+            by (apply (embed_mem_coreResolution_inv S R D G p); exact Hq).
+          destruct (PkgSet.exists_
+                      (fun q => if N.eq_dec (fst q) n then true else false) S)
+            eqn:E.
+          * apply PkgSet.exists_spec' in E.
+            destruct E as [[m' u] [Hu Ht]]; cbn [fst] in Ht.
+            destruct (N.eq_dec m' n) as [-> | ]; [| discriminate].
+            exists (Version.Orig u); split.
+            -- apply mem_admitVS; right; exists u.
+               split; [apply Hsub; exact Hu | split; [| reflexivity]].
+               intro Huv; apply (Havoid p HpS n vs HG); exists u; auto.
+            -- apply mem_coreResolution; left; exists (n, u); auto.
+          * exists Version.Bot; split; [apply mem_admitVS; left; reflexivity |].
+            apply mem_coreResolution; right; exists n.
+            split; [| split; [| reflexivity]].
+            -- apply mem_instNames; right; right; exists p, vs; exact HG.
+            -- intros v Hv.
+               assert (Ht : PkgSet.exists_
+                              (fun q => if N.eq_dec (fst q) n then true else false)
+                              S = true).
+               { apply PkgSet.exists_spec'; exists (n, v); split; [exact Hv |].
+                 cbn [fst]; destruct (N.eq_dec n n) as [_ | NE];
+                   [reflexivity | contradiction NE; reflexivity]. }
+               congruence.
       - intros n w w' Hw Hw'.
         apply mem_coreResolution in Hw, Hw'.
-        destruct Hw as [[p [HpS Hp]] | [[p [m [vs [HG [HpS Hp]]]]]
-                       | [p [m [vs [HG [Hex Hp]]]]]]];
-          destruct Hw' as [[p' [Hp'S Hp']] | [[p' [m' [vs' [HG' [Hp'S Hp']]]]]
-                          | [p' [m' [vs' [HG' [Hex' Hp']]]]]]].
-        + destruct p as [pn pv]; destruct p' as [pn' pv'];
-            unfold embedPkg in Hp, Hp'; simpl in Hp, Hp'.
-          injection Hp as -> ->; injection Hp' as -> ->.
-          assert (pv = pv') as -> by (apply (Huniq pn'); assumption);
-            reflexivity.
-        + destruct p; unfold embedPkg in Hp; simpl in Hp; congruence.
-        + destruct p; unfold embedPkg in Hp; simpl in Hp; congruence.
-        + destruct p'; unfold embedPkg in Hp'; simpl in Hp'; congruence.
-        + congruence.
-        + exfalso.
-          assert (E : Name.Synthetic m vs = Name.Synthetic m' vs')
-            by congruence.
-          injection E as <- <-.
-          exact (Havoid p HpS m vs HG Hex').
-        + destruct p'; unfold embedPkg in Hp'; simpl in Hp'; congruence.
-        + exfalso.
-          assert (E : Name.Synthetic m vs = Name.Synthetic m' vs')
-            by congruence.
-          injection E as <- <-.
-          exact (Havoid p' Hp'S m vs HG' Hex).
+        destruct Hw as [[[pn pv] [HpS Hp]] | [m [_ [Hnone Hp]]]];
+          destruct Hw' as [[[pn' pv'] [Hp'S Hp']] | [m' [_ [Hnone' Hp']]]];
+          unfold embedPkg in *; cbn [fst snd] in *.
+        + injection Hp as -> ->; injection Hp' as -> ->.
+          f_equal; exact (Huniq _ _ _ HpS Hp'S).
+        + injection Hp as -> ->; injection Hp' as -> ->.
+          exfalso; exact (Hnone' _ HpS).
+        + injection Hp as -> ->; injection Hp' as -> ->.
+          exfalso; exact (Hnone _ Hp'S).
         + congruence.
     Qed.
 
     Module Lookup.
+      Module PkgFibred := FibredRel N V Pkg PkgSet.
+      Module DepRelFibred := FibredRel Pkg C.Dependees C.DepElt C.DepRel.
       Module ConflictRelFibred :=
         FibredLabelledRel Pkg N VSet.AsUOT ConfElt ConflictRel.
-      Definition conflictsAgainst (G : ConflictRel.t) (n : N.t) (u : V.t) :
-          ConflictRel.t :=
-        ConflictRel.filter (fun '(_, (_, vs)) => VSet.mem u vs)
-          (ConflictRelFibred.nodeFibre G n).
+      Module RKeys := PreimageOfKeys N Pkg NSet PkgSet.
 
-      Lemma mem_conflictsAgainst :
-        forall G (n : N.t) (u : V.t) (q : Pkg.t) (m : N.t) (vs : VSet.t),
-          ConflictRel.In (q, (m, vs)) (conflictsAgainst G n u) <->
-          ConflictRel.In (q, (m, vs)) G /\ m = n /\ VSet.In u vs.
+      (* The repository at a set of names. *)
+      Definition nameRestrict (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
+        RKeys.ofKeys fst ns R.
+
+      (* The names a set of conflicts targets. *)
+      Definition conflictNames (G : ConflictRel.t) : NSet.t :=
+        SOcn.map (fun '(_, (n, _)) => n) G.
+
+      Lemma mem_conflictNames : forall G n,
+          NSet.In n (conflictNames G) <->
+          exists p vs, ConflictRel.In (p, (n, vs)) G.
       Proof.
-        intros G n u q m vs; unfold conflictsAgainst.
-        rewrite ConflictRel.filter_spec'.
-        rewrite ConflictRelFibred.mem_nodeFibre.
-        cbn beta iota.
-        rewrite VSet.mem_spec.
-        tauto.
+        intros G n; unfold conflictNames; rewrite SOcn.mem_map; split.
+        - intros [[p [m vs]] [HG Hm]]; cbn beta iota in Hm; subst m.
+          exists p, vs; exact HG.
+        - intros [p [vs HG]]; exists (p, (n, vs)); split;
+            [exact HG | reflexivity].
       Qed.
 
-      Lemma conflictRestrict_sub : forall G (n : N.t) (v : V.t),
-          ConflictRel.Subset
-            (ConflictRel.union (ConflictRelFibred.tailFibre G (n, v))
-                               (conflictsAgainst G n v)) G.
+      Lemma versions_nameRestrict : forall R ns n,
+          NSet.In n ns -> C.versions (nameRestrict R ns) n = C.versions R n.
       Proof.
-        intros G n v [q [m vs]] H; apply ConflictRel.union_spec in H.
-        destruct H as [H | H].
-        - apply ConflictRelFibred.mem_tailFibre in H;
-            destruct H as [H _]; exact H.
-        - apply mem_conflictsAgainst in H; destruct H as [H _]; exact H.
+        intros R ns n Hn; apply C.versions_ext; intro v.
+        unfold nameRestrict; rewrite RKeys.mem_ofKeys; cbn [fst]; tauto.
       Qed.
 
-      Lemma reduceDeps_mono : forall D D' G G' (y : T.DepElt.t),
-          C.DepRel.Subset D' D -> ConflictRel.Subset G' G ->
-          T.DepRel.In y (reduceDeps D' G') -> T.DepRel.In y (reduceDeps D G).
+      Lemma reachable_instNames : forall R D G (n : N.t),
+          (exists p h, T.DepRel.In (p, (n, h)) (reduceDeps R D G)) ->
+          NSet.In n (instNames R D G).
       Proof.
-        intros D D' G G' y HD HG; revert y.
-        unfold reduceDeps, origEdges, declarerEdges, conflicteeEdges.
-        repeat apply SOdtd.union_subset.
-        - apply SOdtd.map_mono; [exact HD | intros x; reflexivity].
-        - apply SOctd.map_mono; [exact HG | intros x; reflexivity].
-        - apply SOctd.unionMap_mono; [exact HG | intros x z Hz; exact Hz].
+        intros R D G n [p [h Hd]]; apply mem_reduceDeps in Hd.
+        apply mem_instNames.
+        destruct Hd as [[q [m [vs [HD Hy]]]] | [q [m [vs [HG Hy]]]]];
+          injection Hy as _ <- _.
+        - right; left; exists q, vs; exact HD.
+        - right; right; exists q, vs; exact HG.
       Qed.
 
-      Module DepRelFibred := FibredRel Pkg C.Dependees C.DepElt C.DepRel.
-      Module PkgFibred := FibredRel N V Pkg PkgSet.
+      (* A reachable name's versions are its real versions and absence:
+         the repository at the name, and nothing of who conflicts with it. *)
       Theorem versions_lookupOrig : forall R D G (r : Pkg.t) (n : N.t),
-          (exists p h,
-              T.DepRel.In (p, (Name.Orig n, h)) (reduceDeps D G)) \/
-          Name.Orig n = Name.Orig (fst r) ->
-          T.versions (reduceReal R G) (Name.Orig n) =
-          T.versions (reduceReal (PkgFibred.tailFibre R n) ConflictRel.empty)
-            (Name.Orig n).
+          PkgSet.In r R ->
+          (exists p h, T.DepRel.In (p, (n, h)) (reduceDeps R D G)) \/
+          n = fst r ->
+          T.versions (reduceReal R D G) n =
+          T.VSet.add Version.Bot
+            (embedVS (C.versions (PkgFibred.tailFibre R n) n)).
       Proof.
-        intros R D G r n _; apply T.versions_ext; intro w.
-        rewrite !mem_reduceReal.
+        intros R D G r n Hr Hreach.
+        assert (Hn : NSet.In n (instNames R D G)).
+        { destruct Hreach as [Hreach | ->];
+            [exact (reachable_instNames R D G n Hreach) |].
+          apply mem_instNames; left; destruct r as [rn rv]; exists rv;
+            exact Hr. }
+        apply T.VSet.ext; intro w.
+        rewrite T.mem_versions, mem_reduceReal, SOvt.add_in.
+        unfold embedVS; rewrite SOvt.mem_map.
         split.
-        - intros [[[qn qv] [HR Hq]] | [q [n1 [vs [_ [Hy | Hy]]]]]];
-            [| discriminate Hy | discriminate Hy].
-          unfold embedPkg in Hq; cbn [fst snd] in Hq.
-          injection Hq as -> ->.
-          left; exists (qn, qv); split;
-            [apply PkgFibred.mem_tailFibre; split; [exact HR | reflexivity]
-            | reflexivity].
-        - intros [[[qn qv] [HR Hq]] | [q [n1 [vs [HG _]]]]].
-          + apply PkgFibred.mem_tailFibre in HR; destruct HR as [HR _].
-            left; exists (qn, qv); split; [exact HR | exact Hq].
-          + destruct (ConflictRel.empty_spec HG).
+        - intros [[[qn qv] [HR Hq]] | [m [_ Hy]]].
+          + unfold embedPkg in Hq; cbn [fst snd] in Hq.
+            injection Hq as -> ->.
+            right; exists qv; split; [| reflexivity].
+            apply C.mem_versions, PkgFibred.mem_tailFibre; auto.
+          + injection Hy as -> ->; left; reflexivity.
+        - intros [-> | [v [Hv ->]]].
+          + right; exists n; auto.
+          + apply C.mem_versions, PkgFibred.mem_tailFibre in Hv.
+            destruct Hv as [Hv _].
+            left; exists (n, v); split; [exact Hv | reflexivity].
       Qed.
 
+      (* A package's dependees read its own dependencies and conflicts and
+         the repository at the names its conflicts target. *)
       Theorem dependees_lookupOrig : forall R D G (n : N.t) (v : V.t),
-          T.PkgSet.In (embedPkg (n, v)) (reduceReal R G) ->
-          T.dependees (reduceDeps D G) (embedPkg (n, v)) =
+          T.dependees (reduceDeps R D G) (embedPkg (n, v)) =
           T.dependees
-            (reduceDeps (DepRelFibred.tailFibre D (n, v))
-               (ConflictRel.union (ConflictRelFibred.tailFibre G (n, v))
-                                  (conflictsAgainst G n v)))
+            (reduceDeps
+               (nameRestrict R
+                  (conflictNames (ConflictRelFibred.tailFibre G (n, v))))
+               (DepRelFibred.tailFibre D (n, v))
+               (ConflictRelFibred.tailFibre G (n, v)))
             (embedPkg (n, v)).
       Proof.
-        intros R D G n v _; apply T.dependees_ext; intros [m ws].
-        split; [| intro H; exact (reduceDeps_mono _ _ _ _ _
-                    (DepRelFibred.tailFibre_subset _ _)
-                    (conflictRestrict_sub G n v) H)].
-        intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
-        destruct H as [[q [n' [vs [HD Hy]]]]
-                      | [[q [n' [vs [HG Hy]]]]
-                         | [q [n' [vs [u [HG [Hu Hy]]]]]]]].
-        - destruct q as [qn qv]; unfold embedPkg in Hy; simpl in Hy.
-          injection Hy as <- <- -> ->.
-          left; exists (n, v), n', vs; split; [| reflexivity].
-          apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
-        - destruct q as [qn qv]; unfold embedPkg in Hy; simpl in Hy.
-          injection Hy as <- <- -> ->.
-          right; left; exists (n, v), n', vs; split; [| reflexivity].
-          apply ConflictRel.union_spec; left.
-          apply ConflictRelFibred.mem_tailFibre;
-            split; [exact HG | reflexivity].
-        - unfold embedPkg in Hy; simpl in Hy.
-          injection Hy as <- <- -> ->.
-          right; right; exists q, n, vs, v; split;
-            [| split; [exact Hu | reflexivity]].
-          apply ConflictRel.union_spec; right.
-          apply mem_conflictsAgainst; repeat split; [exact HG | exact Hu].
-      Qed.
-
-      Lemma synthetic_target_conflict :
-        forall D G (p : T.Pkg.t) (n : N.t) (vs : VSet.t) (h : T.VSet.t),
-          T.DepRel.In (p, (Name.Synthetic n vs, h)) (reduceDeps D G) ->
-          exists q, ConflictRel.In (q, (n, vs)) G.
-      Proof.
-        intros D G p n vs h Hd; apply mem_reduceDeps in Hd.
-        destruct Hd as [[q [n1 [vs1 [_ Hy]]]]
-                       | [[q [n1 [vs1 [HG Hy]]]]
-                          | [q [n1 [vs1 [u [HG [_ Hy]]]]]]]].
-        - destruct q; unfold embedPkg in Hy; simpl in Hy; congruence.
-        - exists q; replace n1 with n in HG by congruence;
-            replace vs1 with vs in HG by congruence; exact HG.
-        - exists q; replace n1 with n in HG by congruence;
-            replace vs1 with vs in HG by congruence; exact HG.
-      Qed.
-
-      Theorem versions_lookupSynthetic :
-        forall R D G (n : N.t) (vs : VSet.t),
-          (exists p h, T.DepRel.In (p, (Name.Synthetic n vs, h))
-                         (reduceDeps D G)) ->
-          T.versions (reduceReal R G) (Name.Synthetic n vs) =
-          T.VSet.add Version.Zero (T.VSet.singleton Version.One).
-      Proof.
-        intros R D G n vs [p [h Hd]].
-        destruct (synthetic_target_conflict D G p n vs h Hd) as [q HG].
-        apply T.VSet.ext; intro w.
-        rewrite T.mem_versions, mem_reduceReal, SOvt.add_in, SOvt.singleton_in.
+        intros R D G n v; apply T.dependees_ext; intros [m ws].
+        rewrite !mem_reduceDeps.
         split.
-        - intros [[[qn qv] [_ Hq]] | [q1 [n1 [vs1 [_ Hy]]]]].
-          + unfold embedPkg in Hq; cbn [fst snd] in Hq; discriminate Hq.
-          + destruct Hy as [Hy | Hy]; [left | right]; congruence.
-        - intros [-> | ->]; right; exists q, n, vs.
-          + split; [exact HG | left; reflexivity].
-          + split; [exact HG | right; reflexivity].
+        - intros [[q [n' [vs [HD Hy]]]] | [q [n' [vs [HG Hy]]]]];
+            destruct q as [qn qv]; unfold embedPkg in Hy; simpl in Hy;
+            injection Hy as <- <- -> ->.
+          + left; exists (n, v), n', vs; split; [| reflexivity].
+            apply DepRelFibred.mem_tailFibre; auto.
+          + right; exists (n, v), n', vs.
+            assert (HG' : ConflictRel.In ((n, v), (n', vs))
+                            (ConflictRelFibred.tailFibre G (n, v)))
+              by (apply ConflictRelFibred.mem_tailFibre; auto).
+            split; [exact HG' |].
+            unfold admitVS.
+            rewrite (versions_nameRestrict R _ n')
+              by (apply mem_conflictNames; exists (n, v), vs; exact HG').
+            reflexivity.
+        - intros [[q [n' [vs [HD Hy]]]] | [q [n' [vs [HG Hy]]]]];
+            destruct q as [qn qv]; unfold embedPkg in Hy; simpl in Hy;
+            injection Hy as <- <- -> ->.
+          + apply DepRelFibred.mem_tailFibre in HD; destruct HD as [HD _].
+            left; exists (n, v), n', vs; auto.
+          + right; exists (n, v), n', vs.
+            assert (HGf := HG).
+            apply ConflictRelFibred.mem_tailFibre in HG; destruct HG as [HG _].
+            split; [exact HG |].
+            unfold admitVS.
+            rewrite (versions_nameRestrict R _ n')
+              by (apply mem_conflictNames; exists (n, v), vs; exact HGf).
+            reflexivity.
       Qed.
 
-      Theorem dependees_lookupSynthetic :
-        forall R D G (n : N.t) (vs : VSet.t) (cv : Version.t),
-          T.PkgSet.In (Name.Synthetic n vs, cv) (reduceReal R G) ->
-          T.dependees (reduceDeps D G) (Name.Synthetic n vs, cv) =
+      (* Absence depends on nothing. *)
+      Theorem dependees_lookupAbsent : forall R D G (n : N.t),
+          T.dependees (reduceDeps R D G) (n, Version.Bot) =
           T.DependeesSet.empty.
       Proof.
-        intros R D G n vs cv _; apply T.dependees_empty_iff; intros [m ws] H.
+        intros R D G n; apply T.dependees_empty_iff; intros [m ws] H.
         apply mem_reduceDeps in H.
-        destruct H as [[q [n' [vs' [_ Hy]]]]
-                      | [[q [n' [vs' [_ Hy]]]]
-                         | [q [n' [vs' [u [_ [_ Hy]]]]]]]].
-        - destruct q; unfold embedPkg in Hy; simpl in Hy; congruence.
-        - destruct q; unfold embedPkg in Hy; simpl in Hy; congruence.
-        - congruence.
+        destruct H as [[q [n' [vs [_ Hy]]]] | [q [n' [vs [_ Hy]]]]];
+          destruct q; unfold embedPkg in Hy; simpl in Hy; congruence.
       Qed.
-
     End Lookup.
   End Reduction.
 End Conflict.

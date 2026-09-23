@@ -73,3 +73,21 @@ the same conflict, so softb is installed rather than nothing:
   softalt:amd64 1
   softb:amd64 1
   softkeep:amd64 1
+
+A Conflicts is an edge of the package that declares it, admitting the
+target's non-matching versions and its absence ⊥.  cfla conflicts with cflb
+(every version), so cfla 1 admits cflb only at ⊥; cflc depends on cfla, and
+cfld depends on cflb (= 1) and cflc, whichever order the solver reaches them:
+
+  $ ../../../src/main.exe debian --native amd64 cfld Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  Because cflc:amd64 1 -> cfla:amd64 1 and cfla:amd64 1 -> cflb:amd64 ⊥, cflc:amd64 (-∞, ⊥) requires cflb:amd64 ⊥.
+  And because cfld:amd64 1 -> cflb:amd64 1, cfld:amd64 (-∞, ⊥) or cflc:amd64 (-∞, ⊥) is forbidden.
+  And because cfld:amd64 1 -> cflc:amd64 1 and root -> cfld:amd64 1, version solving failed.
+
+Absence is a version of the encoding, not an installation: cflc alone
+decides cflb to ⊥, and the answer lists what is present.
+
+  $ ../../../src/main.exe debian --native amd64 cflc Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  cfla:amd64 1
+  cflc:amd64 1

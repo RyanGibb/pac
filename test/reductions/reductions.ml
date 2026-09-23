@@ -50,16 +50,11 @@ let conflict () =
         (nm (n2i n))
         (pp_vs vs))
     (M.ConflictRel.elements g);
-  (* target pretty-printers *)
-  let pp_tn = function
-    | R.Name.Orig n -> nm (n2i n)
-    | R.Name.Synthetic (n, vs) ->
-        Printf.sprintf "<%s,%s>" (nm (n2i n)) (pp_vs vs)
-  in
+  (* target pretty-printers: the names are the source's own *)
+  let pp_tn n = nm (n2i n) in
   let pp_tv = function
     | R.Version.Orig v -> string_of_int (n2i v)
-    | R.Version.Zero -> "0"
-    | R.Version.One -> "1"
+    | R.Version.Bot -> "⊥"
   in
   let pp_tp (n, v) = Printf.sprintf "(%s,%s)" (pp_tn n) (pp_tv v) in
   let pp_tvs vs =
@@ -68,12 +63,12 @@ let conflict () =
   Printf.printf "reduceReal -> core packages:\n";
   List.iter
     (fun p -> Printf.printf "    %s\n" (pp_tp p))
-    (R.T.PkgSet.elements (R.reduceReal r g));
+    (R.T.PkgSet.elements (R.reduceReal r d g));
   Printf.printf "reduceDeps -> core dependencies:\n";
   List.iter
     (fun (s, (n, vs)) ->
       Printf.printf "    %s -> (%s,%s)\n" (pp_tp s) (pp_tn n) (pp_tvs vs))
-    (R.T.DepRel.elements (R.reduceDeps d g))
+    (R.T.DepRel.elements (R.reduceDeps r d g))
 
 (* ------------------------------------------------------------------ *)
 (* Concurrent, g(x.y.z)=x.  Versions map x.y.z -> xyz                   *)
@@ -270,12 +265,11 @@ let package_formula () =
     | R.Name.Orig n -> nm (n2i n)
     | R.Name.Disjunct fs ->
         Printf.sprintf "or<%s>" (String.concat " ; " (List.map pp_form fs))
-    | R.Name.NegDep (n, vs) ->
-        Printf.sprintf "neg<%s,%s>" (nm (n2i n)) (pp_vs vs)
   in
   let pp_tv = function
     | R.Version.Orig v -> string_of_int (n2i v)
     | R.Version.Idx i -> string_of_int (n2i i)
+    | R.Version.Bot -> "⊥"
   in
   let pp_tp (n, v) = Printf.sprintf "(%s,%s)" (pp_tn n) (pp_tv v) in
   let pp_tvs vs =
@@ -289,7 +283,7 @@ let package_formula () =
   List.iter
     (fun (s, (n, vs)) ->
       Printf.printf "    %s -> (%s,%s)\n" (pp_tp s) (pp_tn n) (pp_tvs vs))
-    (R.T.DepRel.elements (R.reduceDeps d))
+    (R.T.DepRel.elements (R.reduceDeps r d))
 
 (* ------------------------------------------------------------------ *)
 (* Virtual: D virtual, provided by B and C; E real but also provided   *)

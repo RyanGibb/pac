@@ -37,10 +37,9 @@ Ver.Reduction.reduce
 Ver.Reduction.version_formula_correct
 
 # conflicts
+Cfl.Reduction.Lookup.dependees_lookupAbsent
 Cfl.Reduction.Lookup.dependees_lookupOrig
-Cfl.Reduction.Lookup.dependees_lookupSynthetic
 Cfl.Reduction.Lookup.versions_lookupOrig
-Cfl.Reduction.Lookup.versions_lookupSynthetic
 Cfl.Reduction.conflictResolution
 Cfl.Reduction.conflict_completeness
 Cfl.Reduction.conflict_soundness
@@ -141,30 +140,30 @@ Virt.Reduction.virtual_completeness
 Virt.Reduction.virtual_soundness
 
 # package formulas
+PkgF.Reduction.Lookup.dependees_lookupAbsent
 PkgF.Reduction.Lookup.dependees_lookupDisjunct
-PkgF.Reduction.Lookup.dependees_lookupNegDep
 PkgF.Reduction.Lookup.dependees_lookupOrig
-PkgF.Reduction.Lookup.subInstanceOrig
+PkgF.Reduction.Lookup.dependees_lookupOrigBy
 PkgF.Reduction.Lookup.versions_lookupDisjunct
-PkgF.Reduction.Lookup.versions_lookupNegDep
 PkgF.Reduction.Lookup.versions_lookupOrig
 PkgF.Reduction.package_formula_completeness
 PkgF.Reduction.package_formula_soundness
 PkgF.Reduction.reduceDeps
+PkgF.Reduction.reduceDepsBy
 PkgF.Reduction.reduceReal
 
 # variable formulas
+VarF.Reduction.Lookup.dependees_lookupAbsent
 VarF.Reduction.Lookup.dependees_lookupDisjunct
-VarF.Reduction.Lookup.dependees_lookupNegDep
 VarF.Reduction.Lookup.dependees_lookupOrig
+VarF.Reduction.Lookup.dependees_lookupOrigBy
 VarF.Reduction.Lookup.dependees_lookupVar
-VarF.Reduction.Lookup.subInstanceOrig
 VarF.Reduction.Lookup.versions_lookupDisjunct
-VarF.Reduction.Lookup.versions_lookupNegDep
 VarF.Reduction.Lookup.versions_lookupOrig
 VarF.Reduction.Lookup.versions_lookupVar
 VarF.Reduction.extractAssignment
 VarF.Reduction.reduceDeps
+VarF.Reduction.reduceDepsBy
 VarF.Reduction.reduceReal
 VarF.Reduction.variable_formula_completeness
 VarF.Reduction.variable_formula_soundness
@@ -181,14 +180,14 @@ FC.Reduction.reduceDeps
 FC.Reduction.reduceReal
 
 # debian
+Deb.Lookup.dependees_lookupAbsent
 Deb.Lookup.dependees_lookupDisjunct
-Deb.Lookup.dependees_lookupGuard
 Deb.Lookup.dependees_lookupOrig
 Deb.Lookup.dependees_lookupSelector
 Deb.Lookup.dependees_lookupSelectorAgree
 Deb.Lookup.dependees_lookupSoft
+Deb.Lookup.reachable_instNames
 Deb.Lookup.versions_lookupDisjunct
-Deb.Lookup.versions_lookupGuard
 Deb.Lookup.versions_lookupOrig
 Deb.Lookup.versions_lookupSelector
 Deb.Lookup.versions_lookupSelectorAgree
@@ -206,15 +205,12 @@ Deb.versionsSoft
 
 # debian multiarch
 DMA.Lookup.dependees_lookupDisjunctMA
-DMA.Lookup.dependees_lookupGuardMA
 DMA.Lookup.dependees_lookupOrigMA
 DMA.Lookup.dependees_lookupSelectorAgreeMA
 DMA.Lookup.dependees_lookupSelectorMA
 DMA.Lookup.dependees_lookupSelectorRecMA
 DMA.Lookup.dependees_lookupSoftMA
 DMA.Lookup.versions_lookupDisjunctMA
-DMA.Lookup.versions_lookupGuardMA
-DMA.Lookup.versions_lookupGuardMA_pseudo
 DMA.Lookup.versions_lookupOrigMA
 DMA.Lookup.versions_lookupOrigMA_pseudo
 DMA.Lookup.versions_lookupSelectorAgreeMA

@@ -383,9 +383,6 @@ module PName = struct
              ~pp_sep:(fun fmt () -> Format.fprintf fmt "|")
              (pp_formula 2))
           fs
-    | PFR.Name.NegDep (m, vs) ->
-        Format.fprintf fmt "<!%a{%d}>" pp_alp_name m
-          (List.length (PF.VSet.elements vs))
 end
 
 (* The rank an unversioned-provider disjunction's branches are compared
@@ -489,7 +486,12 @@ let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
    dependency range, both of which know the name, so both tag as they go
    and both fields are a function of the (name, version) pair -- keeping
    this a total order, and one consistent with the tags on any range the
-   same name is compared against. *)
+   same name is compared against.
+
+   The absent version every original name has offers nothing at the name
+   and is the encoded order's greatest, so it wins wherever it is
+   admitted: a name only a negated requirement reaches is left out rather
+   than installed. *)
 module PVersion = struct
   (* [pv] is the version offered at the name being decided, absent for a
      version that is not a provider candidate at a name (the root, and a
@@ -503,6 +505,7 @@ module PVersion = struct
     | PFR.Version.Orig (Red.Version.Prov ((n, w), pv)) ->
         Format.fprintf fmt "%s=%s(%s-%s)" "provided" pv n w
     | PFR.Version.Idx i -> Format.fprintf fmt "%d" (nat_int i)
+    | PFR.Version.Bot -> Format.fprintf fmt "⊥"
 
   let compare a b =
     match (a.v, b.v) with
@@ -554,6 +557,10 @@ let tag ar (tn : PFR.Name.t) (tv : PFR.Version.t) : PVersion.t =
       }
   | _ -> { PVersion.pv = None; rank = 0; ord = max_int; v = tv }
 
+(* every original name's absent version *)
+let bot : PVersion.t =
+  { PVersion.pv = None; rank = 0; ord = max_int; v = PFR.Version.Bot }
+
 module PG = Pubgrub.Make (PName) (PVersion)
 
 let greatest = function
@@ -566,11 +573,16 @@ let greatest = function
 let is_install_if (tn : PFR.Name.t) =
   match tn with PFR.Name.Disjunct (PF.FNeg _ :: _) -> true | _ -> false
 
+(* A range that still admits ⊥ is what a negated requirement leaves a
+   name, not a need for it: the name may yet be absent, so the solution
+   does not carry it. *)
 let carried_at ~assigned tn tvs =
   match assigned tn with
   | PG.Unselected -> false
   | PG.Decided u -> List.exists (fun v -> PVersion.compare u v = 0) tvs
-  | PG.Entailed r -> List.exists (fun v -> PG.Ranges.contains v r) tvs
+  | PG.Entailed r ->
+      (not (PG.Ranges.contains bot r))
+      && List.exists (fun v -> PG.Ranges.contains v r) tvs
 
 let rec leaves ar (f : PF.coq_Formula) : (PFR.Name.t * PVersion.t list) list =
   match f with
@@ -651,9 +663,36 @@ let choose ar ~assigned (tn : PFR.Name.t) (cands : PVersion.t list) =
    by the time [choose] sees it.  Deferring it behind every other open
    name settles the rest of them; measured on this index the deferral no
    longer changes the answer, but it is the invariant [choose] wants and
-   it costs nothing. *)
-let next ~assigned:_ (opens : (PFR.Name.t * int) list) =
-  match List.find_opt (fun (tn, _) -> not (is_install_if tn)) opens with
+   it costs nothing.
+
+   Absence is the greatest version but the last decision: a name a
+   negated requirement reaches is entailed to a range admitting ⊥ as soon
+   as the requirer is decided, and decided to ⊥ before the packages that
+   need it are, it would narrow their ranges instead of conflicting.  So a
+   name whose open range still admits ⊥ waits behind every name that must
+   be present, and ahead only of the install-if disjuncts. *)
+let next ~assigned (opens : (PFR.Name.t * int) list) =
+  (* only an original name has the absent version; asking the partial
+     solution about a disjunct would compare its formulas *)
+  let admits_bot tn =
+    match tn with
+    | PFR.Name.Orig _ -> (
+        match assigned tn with
+        | PG.Entailed r -> PG.Ranges.contains bot r
+        | _ -> false)
+    | _ -> false
+  in
+  let rank (tn, _) =
+    if is_install_if tn then 2 else if admits_bot tn then 1 else 0
+  in
+  match
+    List.fold_left
+      (fun best c ->
+        match best with
+        | Some b when rank b <= rank c -> best
+        | _ -> Some c)
+      None opens
+  with
   | Some (tn, _) -> tn
   | None -> fst (List.hd opens)
 
@@ -672,6 +711,8 @@ type state = {
   synthetic_vers : (PFR.Name.t, PVersion.t list) Hashtbl.t;
   processed : (PF.Pkg.t, unit) Hashtbl.t;
   real_vers : (string, PVersion.t list) Hashtbl.t;
+  (* the encoder's version oracle at a name, before tagging *)
+  oracle : (string, PF.VSet.t) Hashtbl.t;
   mutable canon : PFR.Name.t NameMap.t;
   mutable n_proc : int;
 }
@@ -684,11 +725,12 @@ let mk_state ar world =
     synthetic_vers = Hashtbl.create 65536;
     processed = Hashtbl.create 16384;
     real_vers = Hashtbl.create 16384;
+    oracle = Hashtbl.create 16384;
     canon = NameMap.empty;
     n_proc = 0;
   }
 
-(* A Disjunct or NegDep name carries its formulas, so comparing
+(* A Disjunct name carries its formulas, so comparing
    two equal names walks both in full, and PubGrub does that on every
    dependency-list scan and map hit.  Each version's reduction builds its
    own copy of a synthetic name shared across versions; one representative
@@ -739,6 +781,23 @@ let record_real st (r : T.PkgSet.t) =
             Hashtbl.replace st.synthetic_vers tn (tv :: prev))
     (T.PkgSet.elements r)
 
+(* Lookup.versions_lookupName: what the versions callback answers, before
+   the tagging PubGrub sees -- the name's own versions and its alias
+   versions.  The encoder reads this at the names a formula negates
+   (PF.Reduction.Lookup.dependees_lookupOrigBy): a negated requirement's
+   complement ranges over the versions offered at the name, alias versions
+   included. *)
+let oracle st (tn : Red.Name.name) : PF.VSet.t =
+  match tn with
+  | Red.Name.Orig n -> (
+      match Hashtbl.find_opt st.oracle n with
+      | Some vs -> vs
+      | None ->
+          let vs = Red.versions (name_inst st.ar n) n in
+          Hashtbl.replace st.oracle n vs;
+          vs)
+  | Red.Name.Root -> PF.VSet.singleton Red.Version.RootV
+
 (* one Alpine package's dependee formulas, reduced to core edges *)
 let process st (q : PF.Pkg.t) (inst : unit -> Alp.coq_Inst) =
   if not (Hashtbl.mem st.processed q) then begin
@@ -749,7 +808,7 @@ let process st (q : PF.Pkg.t) (inst : unit -> Alp.coq_Inst) =
     let fs = Red.FSet.elements (Red.dependees (inst ()) q) in
     let d_q = PF.DepRel.ofList (List.map (fun f -> (q, f)) fs) in
     let r_q = PF.PkgSet.singleton q in
-    record_deprel st (PFR.reduceDeps d_q);
+    record_deprel st (PFR.reduceDepsBy (oracle st) d_q);
     record_real st (PFR.reduceReal r_q d_q)
   end
 
@@ -773,6 +832,10 @@ let touch st ((tn, tv) : T.Pkg.t) =
          processed *)
       ()
 
+(* every original name answers its versions and the absent one
+   (PF.Reduction.Lookup.versions_lookupOrig), except the root, whose absent
+   version the query rules out before the solve starts and whose presence
+   in the list would only widen the ranges PubGrub prints for it *)
 let versions st (tn : PFR.Name.t) : PVersion.t list =
   match tn with
   | PFR.Name.Orig Red.Name.Root ->
@@ -781,11 +844,11 @@ let versions st (tn : PFR.Name.t) : PVersion.t list =
       match Hashtbl.find_opt st.real_vers n with
       | Some vs -> vs
       | None ->
-          (* Lookup.versions_lookupName *)
           let vs =
             List.map
               (fun w -> tag st.ar tn (PFR.Version.Orig w))
-              (PF.VSet.elements (Red.versions (name_inst st.ar n) n))
+              (PF.VSet.elements (oracle st (Red.Name.Orig n)))
+            @ [ bot ]
           in
           Hashtbl.replace st.real_vers n vs;
           vs)

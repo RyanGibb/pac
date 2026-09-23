@@ -5,7 +5,7 @@
     app 1.0
     app-doc 1.0
     docs 1.0
-  encoded solution: 6 core nodes (4 Alpine packages encoded)
+  encoded solution: 5 core nodes (4 Alpine packages encoded)
 
 apk picks among the providers of a name with compare_providers, whose first
 live key on a fresh root is the version the provider offers *at the
@@ -227,3 +227,30 @@ lua:
 
   $ ../../../src/main.exe alpine LUA dmvpn | grep -E '^  lua5\.[0-9] '
     lua5.2 5.2.4-r13
+
+A negated requirement holds whichever side of it is decided first.  nega
+requires !negb and negc requires nega; asking for negc and negb=1.0 has
+PubGrub decide negb before it reaches negc, let alone nega.  The requirement
+is nega's own edge: every name has an absent version ⊥ besides its real
+ones, and !negb is a dependency on negb at the versions the requirement
+does not exclude, or absent -- here ⊥ alone.  Nothing hangs on negb's side,
+so the order in which the two are decided cannot lose it:
+
+  $ ../../../src/main.exe alpine NEGDEP negc negb=1.0 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index NEGDEP
+  cone: 4 packages, 0 provides entries, 0 install_if rules
+  unsatisfiable:
+  Because negc 1.0 -> nega 1.0 and nega 1.0 -> negb ⊥, negc (-∞, ⊥) requires negb ⊥.
+  And because @root () -> negb 1.0, negc (-∞, ⊥) or @root * is forbidden.
+  And because @root () -> negc 1.0 and root -> @root (), version solving failed.
+
+A name only a negated requirement reaches is left absent rather than
+installed: ⊥ is the greatest version, and PubGrub decides the greatest:
+
+  $ ../../../src/main.exe alpine NEGDEP negc | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index NEGDEP
+  cone: 4 packages, 0 provides entries, 0 install_if rules
+  packages (2):
+    nega 1.0
+    negc 1.0
+  encoded solution: 4 core nodes (3 Alpine packages encoded)

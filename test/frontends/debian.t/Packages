@@ -118,3 +118,26 @@ Version: 1
 Architecture: amd64
 Priority: optional
 Provides: essvirt
+
+Package: cfla
+Version: 1
+Architecture: amd64
+Conflicts: cflb
+
+Package: cflb
+Version: 1
+Architecture: amd64
+
+Package: cflb
+Version: 2
+Architecture: amd64
+
+Package: cflc
+Version: 1
+Architecture: amd64
+Depends: cfla
+
+Package: cfld
+Version: 1
+Architecture: amd64
+Depends: cflb (= 1), cflc

@@ -193,6 +193,7 @@ Module VariableFormula (N V : UsualOrderedType)
     #[local] Hint Extern 1 => cmp_by FListF.compare_lt_trans : cmp_varf.
     #[local] Hint Extern 1 => cmp_by XF.compare_lt_trans : cmp_varf.
 
+
     (* One disjunct package per disjunction, named by all of its
        alternatives: a chain of two-alternative disjuncts would introduce an
        inner name for every proper suffix of the same disjunction. *)
@@ -200,8 +201,7 @@ Module VariableFormula (N V : UsualOrderedType)
       Inductive name : Type :=
       | Orig (m : N.t)
       | Var (x : X.t)
-      | Disjunct (fs : list Formula)
-      | NegDep (m : N.t) (vs : VSet.t).
+      | Disjunct (fs : list Formula).
       Definition t := name.
 
       Definition compare (x y : t) : comparison :=
@@ -212,11 +212,7 @@ Module VariableFormula (N V : UsualOrderedType)
         | Var x1, Var x2 => X.compare x1 x2
         | Var _, _ => Lt
         | Disjunct fs1, Disjunct fs2 => FListOT.compare fs1 fs2
-        | Disjunct _, NegDep _ _ => Lt
         | Disjunct _, _ => Gt
-        | NegDep n1 vs1, NegDep n2 vs2 =>
-            C.Dependees.compare (n1, vs1) (n2, vs2)
-        | NegDep _ _, _ => Gt
         end.
 
       Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
@@ -243,12 +239,16 @@ Module VariableFormula (N V : UsualOrderedType)
     #[local] Hint Extern 1 => cmp_by NatF.compare_lt_trans : cmp_varf.
 
     (* A synthetic version is the position of the alternative it selects, so
-       a disjunction of any width is one node. *)
+       a disjunction of any width is one node.  Bot is absence: every original
+       name has it, and it is the greatest version so that a solver preferring
+       the greatest leaves a name nobody needs positively out of the
+       resolution. *)
     Module Version.
       Inductive version : Type :=
       | Orig (v : V.t)
       | Idx (i : nat)
-      | VarVal (y : Y.t).
+      | VarVal (y : Y.t)
+      | Bot.
       Definition t := version.
 
       Definition compare (x y : t) : comparison :=
@@ -259,7 +259,10 @@ Module VariableFormula (N V : UsualOrderedType)
         | Idx i, Idx j => Nat.compare i j
         | Idx _, _ => Lt
         | VarVal y1, VarVal y2 => Y.compare y1 y2
+        | VarVal _, Bot => Lt
         | VarVal _, _ => Gt
+        | Bot, Bot => Eq
+        | Bot, _ => Gt
         end.
 
       Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
@@ -276,6 +279,7 @@ Module VariableFormula (N V : UsualOrderedType)
     Module NameOT := UOTFromCompare Name.
     Module VersionOT := UOTFromCompare Version.
     Module T := Core NameOT VersionOT.
+    Module NSet := FSetUOT N.
 
     Definition embedPkg (p : Pkg.t) : T.Pkg.t :=
       let '(m, v) := p in (Name.Orig m, Version.Orig v).
@@ -312,90 +316,86 @@ Module VariableFormula (N V : UsualOrderedType)
     Definition idxPkgs (n : Name.t) (k : nat) : T.PkgSet.t :=
       T.PkgSet.ofList (List.map (fun i => (n, Version.Idx i)) (List.seq 0 k)).
 
-    Module SOvd := SetOps V T.DepElt VSet T.DepRel.
+    (* The versions a negated atom admits at its name: every real version
+       the atom does not name, and absence.  The encoder reads real versions
+       through the oracle Vq, as it reads variable domains through Y_x. *)
+    Definition negVS (Vq : N.t -> VSet.t) (m : N.t) (vs : VSet.t) : T.VSet.t :=
+      T.VSet.add Version.Bot (embedVS (VSet.diff (Vq m) vs)).
+
     (* Mutual structural pairs avoid well-founded recursion on a measure; the
        De Morgan, double-negation, and complemented-comparison cases are
        inlined.  The spine walkers carry the position of the alternative
        they are encoding, and repeat their sibling's non-spine cases for
        the same reason: calling the sibling on the matched term itself
        would leave the guard condition. *)
-    Fixpoint encodeNNF (Y_x : X.t -> YSet.t) (p : T.Pkg.t) (f : Formula) :
-        T.DepRel.t :=
+    Fixpoint encodeNNF (Y_x : X.t -> YSet.t) (Vq : N.t -> VSet.t)
+        (p : T.Pkg.t) (f : Formula) : T.DepRel.t :=
       match f with
       | FDep m vs => T.DepRel.singleton (p, (Name.Orig m, embedVS vs))
-      | FConj a b => T.DepRel.union (encodeNNF Y_x p a) (encodeNNF Y_x p b)
+      | FConj a b =>
+          T.DepRel.union (encodeNNF Y_x Vq p a) (encodeNNF Y_x Vq p b)
       | FDisj a b =>
           let n := Name.Disjunct (a :: disjSpine b) in
           T.DepRel.add (p, (n, idxSet (List.length (a :: disjSpine b))))
-            (T.DepRel.union (encodeNNF Y_x (n, Version.Idx 0) a)
-               (encodeDisj Y_x n 1 b))
-      | FNeg a => encodeNNFneg Y_x p a
+            (T.DepRel.union (encodeNNF Y_x Vq (n, Version.Idx 0) a)
+               (encodeDisj Y_x Vq n 1 b))
+      | FNeg a => encodeNNFneg Y_x Vq p a
       | FVarCmp x op y =>
           T.DepRel.singleton (p, (Name.Var x, cmpVersionSet (Y_x x) op y))
       end
-    with encodeDisj (Y_x : X.t -> YSet.t) (n : Name.t) (i : nat)
-        (f : Formula) : T.DepRel.t :=
+    with encodeDisj (Y_x : X.t -> YSet.t) (Vq : N.t -> VSet.t) (n : Name.t)
+        (i : nat) (f : Formula) : T.DepRel.t :=
       match f with
       | FDep m vs =>
           T.DepRel.singleton ((n, Version.Idx i), (Name.Orig m, embedVS vs))
       | FConj a b =>
-          T.DepRel.union (encodeNNF Y_x (n, Version.Idx i) a)
-            (encodeNNF Y_x (n, Version.Idx i) b)
+          T.DepRel.union (encodeNNF Y_x Vq (n, Version.Idx i) a)
+            (encodeNNF Y_x Vq (n, Version.Idx i) b)
       | FDisj a b =>
-          T.DepRel.union (encodeNNF Y_x (n, Version.Idx i) a)
-            (encodeDisj Y_x n (S i) b)
-      | FNeg a => encodeNNFneg Y_x (n, Version.Idx i) a
+          T.DepRel.union (encodeNNF Y_x Vq (n, Version.Idx i) a)
+            (encodeDisj Y_x Vq n (S i) b)
+      | FNeg a => encodeNNFneg Y_x Vq (n, Version.Idx i) a
       | FVarCmp x op y =>
           T.DepRel.singleton
             ((n, Version.Idx i), (Name.Var x, cmpVersionSet (Y_x x) op y))
       end
-    with encodeNNFneg (Y_x : X.t -> YSet.t) (p : T.Pkg.t) (f : Formula) :
-        T.DepRel.t :=
+    with encodeNNFneg (Y_x : X.t -> YSet.t) (Vq : N.t -> VSet.t)
+        (p : T.Pkg.t) (f : Formula) : T.DepRel.t :=
       match f with
-      | FDep m vs =>
-          T.DepRel.add (p, (Name.NegDep m vs,
-                            T.VSet.singleton (Version.Idx 1)))
-            (SOvd.map (fun u =>
-                 ((Name.Orig m, Version.Orig u),
-                  (Name.NegDep m vs, T.VSet.singleton (Version.Idx 0))))
-               vs)
+      | FDep m vs => T.DepRel.singleton (p, (Name.Orig m, negVS Vq m vs))
       | FConj a b =>
           let n := Name.Disjunct (FNeg a :: negConjSpine b) in
           T.DepRel.add
             (p, (n, idxSet (List.length (FNeg a :: negConjSpine b))))
-            (T.DepRel.union (encodeNNFneg Y_x (n, Version.Idx 0) a)
-               (encodeConjNeg Y_x n 1 b))
+            (T.DepRel.union (encodeNNFneg Y_x Vq (n, Version.Idx 0) a)
+               (encodeConjNeg Y_x Vq n 1 b))
       | FDisj a b =>
-          T.DepRel.union (encodeNNFneg Y_x p a) (encodeNNFneg Y_x p b)
-      | FNeg a => encodeNNF Y_x p a
+          T.DepRel.union (encodeNNFneg Y_x Vq p a) (encodeNNFneg Y_x Vq p b)
+      | FNeg a => encodeNNF Y_x Vq p a
       | FVarCmp x op y =>
           T.DepRel.singleton
             (p, (Name.Var x, cmpVersionSet (Y_x x) (cmpComplement op) y))
       end
-    with encodeConjNeg (Y_x : X.t -> YSet.t) (n : Name.t) (i : nat)
-        (f : Formula) : T.DepRel.t :=
+    with encodeConjNeg (Y_x : X.t -> YSet.t) (Vq : N.t -> VSet.t)
+        (n : Name.t) (i : nat) (f : Formula) : T.DepRel.t :=
       match f with
       | FDep m vs =>
-          T.DepRel.add
-            ((n, Version.Idx i),
-             (Name.NegDep m vs, T.VSet.singleton (Version.Idx 1)))
-            (SOvd.map (fun u =>
-                 ((Name.Orig m, Version.Orig u),
-                  (Name.NegDep m vs, T.VSet.singleton (Version.Idx 0))))
-               vs)
+          T.DepRel.singleton ((n, Version.Idx i), (Name.Orig m, negVS Vq m vs))
       | FConj a b =>
-          T.DepRel.union (encodeNNFneg Y_x (n, Version.Idx i) a)
-            (encodeConjNeg Y_x n (S i) b)
+          T.DepRel.union (encodeNNFneg Y_x Vq (n, Version.Idx i) a)
+            (encodeConjNeg Y_x Vq n (S i) b)
       | FDisj a b =>
-          T.DepRel.union (encodeNNFneg Y_x (n, Version.Idx i) a)
-            (encodeNNFneg Y_x (n, Version.Idx i) b)
-      | FNeg a => encodeNNF Y_x (n, Version.Idx i) a
+          T.DepRel.union (encodeNNFneg Y_x Vq (n, Version.Idx i) a)
+            (encodeNNFneg Y_x Vq (n, Version.Idx i) b)
+      | FNeg a => encodeNNF Y_x Vq (n, Version.Idx i) a
       | FVarCmp x op y =>
           T.DepRel.singleton
             ((n, Version.Idx i),
              (Name.Var x, cmpVersionSet (Y_x x) (cmpComplement op) y))
       end.
 
+    (* The synthetic packages a formula's encoding introduces: the disjunct
+       packages, and nothing for a negated atom or a comparison. *)
     Fixpoint witnessSet (p : T.Pkg.t) (f : Formula) : T.PkgSet.t :=
       match f with
       | FDep _ _ => T.PkgSet.empty
@@ -422,9 +422,7 @@ Module VariableFormula (N V : UsualOrderedType)
       end
     with witnessSetNeg (p : T.Pkg.t) (f : Formula) : T.PkgSet.t :=
       match f with
-      | FDep m vs =>
-          T.PkgSet.add (Name.NegDep m vs, Version.Idx 0)
-            (T.PkgSet.singleton (Name.NegDep m vs, Version.Idx 1))
+      | FDep _ _ => T.PkgSet.empty
       | FConj a b =>
           let n := Name.Disjunct (FNeg a :: negConjSpine b) in
           T.PkgSet.union (idxPkgs n (List.length (FNeg a :: negConjSpine b)))
@@ -437,9 +435,7 @@ Module VariableFormula (N V : UsualOrderedType)
       end
     with witnessConjNeg (n : Name.t) (i : nat) (f : Formula) : T.PkgSet.t :=
       match f with
-      | FDep m vs =>
-          T.PkgSet.add (Name.NegDep m vs, Version.Idx 0)
-            (T.PkgSet.singleton (Name.NegDep m vs, Version.Idx 1))
+      | FDep _ _ => T.PkgSet.empty
       | FConj a b =>
           T.PkgSet.union (witnessSetNeg (n, Version.Idx i) a)
             (witnessConjNeg n (S i) b)
@@ -449,6 +445,28 @@ Module VariableFormula (N V : UsualOrderedType)
       | FNeg a => witnessSet (n, Version.Idx i) a
       | FVarCmp _ _ _ => T.PkgSet.empty
       end.
+
+    (* The package names a formula mentions; a comparison mentions none. *)
+    Fixpoint fnames (f : Formula) : NSet.t :=
+      match f with
+      | FDep m _ => NSet.singleton m
+      | FConj a b => NSet.union (fnames a) (fnames b)
+      | FDisj a b => NSet.union (fnames a) (fnames b)
+      | FNeg a => fnames a
+      | FVarCmp _ _ _ => NSet.empty
+      end.
+
+    Module SOen := SetOps DepElt N DepRel NSet.
+    Definition depNames (D : DepRel.t) : NSet.t :=
+      SOen.unionMap (fun '(_, f) => fnames f) D.
+
+    Module SOpn := SetOps Pkg N PkgSet NSet.
+    Definition instNames (R : PkgSet.t) (D : DepRel.t) : NSet.t :=
+      NSet.union (SOpn.map fst R) (depNames D).
+
+    Module SOnt := SetOps N T.Pkg NSet T.PkgSet.
+    Definition absentPkgs (ns : NSet.t) : T.PkgSet.t :=
+      SOnt.map (fun n => (Name.Orig n, Version.Bot)) ns.
 
     Module SOyt := SetOps Y T.Pkg YSet T.PkgSet.
     Definition varBlock (Y_x : X.t -> YSet.t) : T.PkgSet.t :=
@@ -466,11 +484,16 @@ Module VariableFormula (N V : UsualOrderedType)
       T.PkgSet.union (SOpt.map embedPkg R)
         (T.PkgSet.union
            (SOet.unionMap (fun '(p, f) => witnessSet (embedPkg p) f) D)
-           (varBlock Y_x)).
+           (T.PkgSet.union (varBlock Y_x) (absentPkgs (instNames R D)))).
 
     Module SOed := SetOps DepElt T.DepElt DepRel T.DepRel.
-    Definition reduceDeps (Y_x : X.t -> YSet.t) (D : DepRel.t) : T.DepRel.t :=
-      SOed.unionMap (fun '(p, f) => encodeNNF Y_x (embedPkg p) f) D.
+    Definition reduceDepsBy (Y_x : X.t -> YSet.t) (Vq : N.t -> VSet.t)
+        (D : DepRel.t) : T.DepRel.t :=
+      SOed.unionMap (fun '(p, f) => encodeNNF Y_x Vq (embedPkg p) f) D.
+
+    Definition reduceDeps (Y_x : X.t -> YSet.t) (R : PkgSet.t) (D : DepRel.t)
+      : T.DepRel.t :=
+      reduceDepsBy Y_x (C.versions R) D.
 
     Lemma mem_idxSet : forall k w,
         T.VSet.In w (idxSet k) <-> exists i, i < k /\ w = Version.Idx i.
@@ -511,6 +534,22 @@ Module VariableFormula (N V : UsualOrderedType)
         rewrite HE; reflexivity.
     Qed.
 
+    Lemma mem_negVS : forall Vq m vs (w : Version.t),
+        T.VSet.In w (negVS Vq m vs) <->
+        w = Version.Bot \/
+        exists u, VSet.In u (Vq m) /\ ~ VSet.In u vs /\ w = Version.Orig u.
+    Proof.
+      intros Vq m vs w; unfold negVS.
+      rewrite SOvv.add_in; unfold embedVS; rewrite SOvv.mem_map.
+      split.
+      - intros [-> | [u [Hu ->]]]; [left; reflexivity | right].
+        apply VSet.diff_spec in Hu; destruct Hu as [Hu Hnv].
+        exists u; auto.
+      - intros [-> | [u [Hu [Hnv ->]]]]; [left; reflexivity | right].
+        exists u; split; [| reflexivity].
+        apply VSet.diff_spec; split; assumption.
+    Qed.
+
     Lemma mem_varBlock : forall Y_x (q : T.Pkg.t),
         T.PkgSet.In q (varBlock Y_x) <->
         exists x y, YSet.In y (Y_x x) /\ q = (Name.Var x, Version.VarVal y).
@@ -542,38 +581,73 @@ Module VariableFormula (N V : UsualOrderedType)
           split; [apply X.enum_complete | split; assumption].
     Qed.
 
+    Lemma mem_depNames : forall D (n : N.t),
+        NSet.In n (depNames D) <->
+        exists p f, DepRel.In (p, f) D /\ NSet.In n (fnames f).
+    Proof.
+      intros D n; unfold depNames; rewrite SOen.mem_unionMap.
+      split.
+      - intros [[q g] [He Hn]]; exists q, g; split; [exact He | exact Hn].
+      - intros [q [g [Hq Hn]]]; exists (q, g); split; [exact Hq | exact Hn].
+    Qed.
+
+    Lemma mem_instNames : forall R D (n : N.t),
+        NSet.In n (instNames R D) <->
+        (exists v, PkgSet.In (n, v) R) \/ NSet.In n (depNames D).
+    Proof.
+      intros R D n; unfold instNames.
+      rewrite NSet.union_spec, SOpn.mem_map.
+      split.
+      - intros [[[m v] [HR Hm]] | H]; [simpl in Hm; subst | right; exact H].
+        left; exists v; exact HR.
+      - intros [[v HR] | H]; [| right; exact H].
+        left; exists (n, v); split; [exact HR | reflexivity].
+    Qed.
+
+    Lemma mem_absentPkgs : forall ns (y : T.Pkg.t),
+        T.PkgSet.In y (absentPkgs ns) <->
+        exists n, NSet.In n ns /\ y = (Name.Orig n, Version.Bot).
+    Proof. intros ns y; unfold absentPkgs; apply SOnt.mem_map. Qed.
+
     Lemma mem_reduceReal : forall Y_x R D (y : T.Pkg.t),
         T.PkgSet.In y (reduceReal Y_x R D) <->
         (exists p, PkgSet.In p R /\ y = embedPkg p) \/
         (exists p f, DepRel.In (p, f) D /\
                      T.PkgSet.In y (witnessSet (embedPkg p) f)) \/
         (exists x y',
-            YSet.In y' (Y_x x) /\ y = (Name.Var x, Version.VarVal y')).
+            YSet.In y' (Y_x x) /\ y = (Name.Var x, Version.VarVal y')) \/
+        (exists n, NSet.In n (instNames R D) /\ y = (Name.Orig n, Version.Bot)).
     Proof.
       intros Y_x R D y; unfold reduceReal.
       rewrite !T.PkgSet.union_spec, SOpt.mem_map, SOet.mem_unionMap,
-        mem_varBlock.
+        mem_varBlock, mem_absentPkgs.
       split.
-      - intros [H | [[[q g] [He Hy]] | H]].
-        + left; exact H.
-        + right; left; exists q, g; split; [exact He | exact Hy].
-        + right; right; exact H.
-      - intros [H | [[q [g [Hd Hy]]] | H]].
-        + left; exact H.
-        + right; left; exists (q, g); split; [exact Hd | exact Hy].
-        + right; right; exact H.
+      - intros [H | [[[q g] [He Hy]] | [H | H]]];
+          [left; exact H | | right; right; left; exact H
+          | right; right; right; exact H].
+        right; left; exists q, g; split; [exact He | exact Hy].
+      - intros [H | [[q [g [Hd Hy]]] | [H | H]]];
+          [left; exact H | | right; right; left; exact H
+          | right; right; right; exact H].
+        right; left; exists (q, g); split; [exact Hd | exact Hy].
     Qed.
 
-    Lemma mem_reduceDeps : forall Y_x D (d : T.DepElt.t),
-        T.DepRel.In d (reduceDeps Y_x D) <->
+    Lemma mem_reduceDepsBy : forall Y_x Vq D (d : T.DepElt.t),
+        T.DepRel.In d (reduceDepsBy Y_x Vq D) <->
         exists p f, DepRel.In (p, f) D /\
-                    T.DepRel.In d (encodeNNF Y_x (embedPkg p) f).
+                    T.DepRel.In d (encodeNNF Y_x Vq (embedPkg p) f).
     Proof.
-      intros Y_x D d; unfold reduceDeps; rewrite SOed.mem_unionMap.
+      intros Y_x Vq D d; unfold reduceDepsBy; rewrite SOed.mem_unionMap.
       split.
       - intros [[q g] [He Hd]]; exists q, g; split; [exact He | exact Hd].
       - intros [q [g [Hq Hd]]]; exists (q, g); split; [exact Hq | exact Hd].
     Qed.
+
+    Lemma mem_reduceDeps : forall Y_x R D (d : T.DepElt.t),
+        T.DepRel.In d (reduceDeps Y_x R D) <->
+        exists p f, DepRel.In (p, f) D /\
+                    T.DepRel.In d (encodeNNF Y_x (C.versions R) (embedPkg p) f).
+    Proof. intros Y_x R D d; apply mem_reduceDepsBy. Qed.
 
     Definition tryInvPkg (p' : T.Pkg.t) : option Pkg.t :=
       match p' with
@@ -633,7 +707,7 @@ Module VariableFormula (N V : UsualOrderedType)
       end.
 
     Definition SyntheticName (n : Name.t) : Prop :=
-      (exists n' vs, n = Name.NegDep n' vs) \/ (exists fs, n = Name.Disjunct fs).
+      exists fs, n = Name.Disjunct fs.
 
     Lemma witnessSet_name_classify_aux : forall f : Formula,
         (forall (p : T.Pkg.t) (o : Name.t) (v : Version.t),
@@ -647,15 +721,7 @@ Module VariableFormula (N V : UsualOrderedType)
     Proof.
       unfold SyntheticName;
         induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa | x op y].
-      - repeat split.
-        + intros p o v H; exfalso; exact (SOpt.empty_in _ H).
-        + intros p o v H; simpl in H;
-            rewrite SOpt.add_in, SOpt.singleton_in in H;
-            destruct H as [H | H]; injection H as -> _; left; eauto.
-        + intros n i o v H; exfalso; exact (SOpt.empty_in _ H).
-        + intros n i o v H; simpl in H;
-            rewrite SOpt.add_in, SOpt.singleton_in in H;
-            destruct H as [H | H]; injection H as -> _; left; eauto.
+      - repeat split; intros; exfalso; eapply SOpt.empty_in; eassumption.
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
           destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); repeat split.
         + intros p o v H; simpl in H;
@@ -664,7 +730,7 @@ Module VariableFormula (N V : UsualOrderedType)
         + intros p o v H; simpl in H;
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
             [apply mem_idxPkgs in H; destruct H as [j [_ E]];
-             injection E as -> _; right; eauto |].
+             injection E as -> _; eauto |].
           apply T.PkgSet.union_spec in H; destruct H as [H | H];
             [exact (IHa2 _ _ _ H) | exact (IHb4 _ _ _ _ H)].
         + intros n i o v H; simpl in H;
@@ -678,7 +744,7 @@ Module VariableFormula (N V : UsualOrderedType)
         + intros p o v H; simpl in H;
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
             [apply mem_idxPkgs in H; destruct H as [j [_ E]];
-             injection E as -> _; right; eauto |].
+             injection E as -> _; eauto |].
           apply T.PkgSet.union_spec in H; destruct H as [H | H];
             [exact (IHa1 _ _ _ H) | exact (IHb3 _ _ _ _ H)].
         + intros p o v H; simpl in H;
@@ -695,36 +761,33 @@ Module VariableFormula (N V : UsualOrderedType)
         + intros p o v H; exact (IHa1 _ _ _ H).
         + intros n i o v H; exact (IHa2 _ _ _ H).
         + intros n i o v H; exact (IHa1 _ _ _ H).
-      - repeat split.
-        + intros p o v H; exfalso; exact (SOpt.empty_in _ H).
-        + intros p o v H; exfalso; exact (SOpt.empty_in _ H).
-        + intros n i o v H; exfalso; exact (SOpt.empty_in _ H).
-        + intros n i o v H; exfalso; exact (SOpt.empty_in _ H).
+      - repeat split; intros; exfalso; eapply SOpt.empty_in; eassumption.
     Qed.
 
     Lemma witnessSet_not_orig : forall (p : T.Pkg.t) (f : Formula) m v,
         ~ T.PkgSet.In (Name.Orig m, v) (witnessSet p f).
     Proof.
       intros p f m v H.
-      destruct (proj1 (witnessSet_name_classify_aux f) _ _ _ H)
-        as [[n' [vs E]] | [fs E]]; discriminate.
+      destruct (proj1 (witnessSet_name_classify_aux f) _ _ _ H) as [fs E];
+        discriminate.
     Qed.
 
     Lemma witnessSet_not_var : forall (p : T.Pkg.t) (f : Formula) x v,
         ~ T.PkgSet.In (Name.Var x, v) (witnessSet p f).
     Proof.
       intros p f x v H.
-      destruct (proj1 (witnessSet_name_classify_aux f) _ _ _ H)
-        as [[n' [vs E]] | [fs E]]; discriminate.
+      destruct (proj1 (witnessSet_name_classify_aux f) _ _ _ H) as [fs E];
+        discriminate.
     Qed.
 
     Lemma embedPkg_mem_reduceReal : forall Y_x (p : Pkg.t) R D,
         T.PkgSet.In (embedPkg p) (reduceReal Y_x R D) -> PkgSet.In p R.
     Proof.
       intros Y_x [pn pv] R D H; apply mem_reduceReal in H.
-      destruct H as [[q [HqR Hq]] | [[q [g [_ Hy]]] | [x [y' [_ Hy]]]]].
+      destruct H as [[q [HqR Hq]] | [[q [g [_ Hy]]] | [[x [y' [_ Hy]]] | [n [_ Hy]]]]].
       - apply embedPkg_injective in Hq as ->; exact HqR.
       - exfalso; exact (witnessSet_not_orig _ _ _ _ Hy).
+      - unfold embedPkg in Hy; discriminate.
       - unfold embedPkg in Hy; discriminate.
     Qed.
 
@@ -734,7 +797,7 @@ Module VariableFormula (N V : UsualOrderedType)
     Proof.
       intros S x y; unfold assignCand; rewrite SOty.mem_filterMap.
       split.
-      - intros [[[n' | x' | fs | n' vs'] [v' | i | y']] [Hp' Hin]];
+      - intros [[[n' | x' | fs] [v' | i | y' | ]] [Hp' Hin]];
           cbn beta iota in Hin; try discriminate.
         destruct (X.eq_dec x' x) as [-> | NE]; [| discriminate].
         injection Hin as <-; exact Hp'.
@@ -766,10 +829,11 @@ Module VariableFormula (N V : UsualOrderedType)
       destruct (YSet.min_elt (assignCand S x)) as [y' |] eqn:E.
       - apply YSet.min_elt_spec1, mem_assignCand in E.
         apply Hsub, mem_reduceReal in E.
-        destruct E as [[q [_ Hq]] | [[q [g [_ Hy]]] | [x' [y'' [Hy'' Hq]]]]].
+        destruct E as [[q [_ Hq]] | [[q [g [_ Hy]]] | [[x' [y'' [Hy'' Hq]]] | [n [_ Hq]]]]].
         + destruct q as [qn qv]; unfold embedPkg in Hq; discriminate.
         + exfalso; exact (witnessSet_not_var _ _ _ _ Hy).
         + injection Hq as Ex Ey; subst; exact Hy''.
+        + discriminate Hq.
       - destruct (YSet.min_elt (Y_x x)) as [y1 |] eqn:E2.
         + apply YSet.min_elt_spec1 in E2; exact E2.
         + exfalso; apply YSet.min_elt_spec3 in E2.
@@ -779,38 +843,38 @@ Module VariableFormula (N V : UsualOrderedType)
     Lemma encodeNNF_satisfies : forall (R : T.PkgSet.t) (D : T.DepRel.t)
                                     (r : T.Pkg.t) (S : T.PkgSet.t),
         T.IsResolution R D r S ->
-        forall y0 Y_x,
+        forall y0 Y_x (Vq : N.t -> VSet.t),
           (forall x, exists y, YSet.In y (Y_x x)) ->
           forall (q : T.Pkg.t) (f : Formula),
-            (forall d, T.DepRel.In d (encodeNNF Y_x q f) -> T.DepRel.In d D) ->
+            (forall d, T.DepRel.In d (encodeNNF Y_x Vq q f) -> T.DepRel.In d D) ->
             T.PkgSet.In q S ->
             Satisfies (variableFormulaResolution S)
               (extractAssignment y0 Y_x S) f.
     Proof.
-      intros R D r S Hres y0 Y_x Hne;
+      intros R D r S Hres y0 Y_x Vq Hne;
         destruct Hres as [Hsub Hroot Hdep Huniq].
       cut (forall f : Formula,
         (forall q : T.Pkg.t,
-            (forall d, T.DepRel.In d (encodeNNF Y_x q f) -> T.DepRel.In d D) ->
+            (forall d, T.DepRel.In d (encodeNNF Y_x Vq q f) -> T.DepRel.In d D) ->
             T.PkgSet.In q S ->
             Satisfies (variableFormulaResolution S)
               (extractAssignment y0 Y_x S) f) /\
         (forall q : T.Pkg.t,
             (forall d,
-                T.DepRel.In d (encodeNNFneg Y_x q f) -> T.DepRel.In d D) ->
+                T.DepRel.In d (encodeNNFneg Y_x Vq q f) -> T.DepRel.In d D) ->
             T.PkgSet.In q S ->
             ~ Satisfies (variableFormulaResolution S)
                 (extractAssignment y0 Y_x S) f) /\
         (forall (n : Name.t) (i0 i : nat),
             (forall d,
-                T.DepRel.In d (encodeDisj Y_x n i0 f) -> T.DepRel.In d D) ->
+                T.DepRel.In d (encodeDisj Y_x Vq n i0 f) -> T.DepRel.In d D) ->
             T.PkgSet.In (n, Version.Idx i) S ->
             i0 <= i -> i < i0 + List.length (disjSpine f) ->
             Satisfies (variableFormulaResolution S)
               (extractAssignment y0 Y_x S) f) /\
         (forall (n : Name.t) (i0 i : nat),
             (forall d,
-                T.DepRel.In d (encodeConjNeg Y_x n i0 f) -> T.DepRel.In d D) ->
+                T.DepRel.In d (encodeConjNeg Y_x Vq n i0 f) -> T.DepRel.In d D) ->
             T.PkgSet.In (n, Version.Idx i) S ->
             i0 <= i -> i < i0 + List.length (negConjSpine f) ->
             ~ Satisfies (variableFormulaResolution S)
@@ -828,31 +892,21 @@ Module VariableFormula (N V : UsualOrderedType)
           destruct Hw as [v [Hv ->]].
         exists v; split; [exact Hv |].
         apply mem_variableFormulaResolution; exact HwS. }
-      (* the negated atom's package: version 1 says the dependency is not
-         taken, and every taker of it is pinned to version 0 *)
+      (* the negated atom's edge: closure picks a version the atom does not
+         name, or absence, and version uniqueness leaves room for no other *)
       assert (Hneg : forall (q : T.Pkg.t) m vs,
-                 (forall d,
-                     T.DepRel.In d (encodeNNFneg Y_x q (FDep m vs)) ->
-                     T.DepRel.In d D) ->
+                 T.DepRel.In (q, (Name.Orig m, negVS Vq m vs)) D ->
                  T.PkgSet.In q S ->
                  ~ Satisfies (variableFormulaResolution S)
                      (extractAssignment y0 Y_x S) (FDep m vs)).
-      { intros q m vs Henc HqS.
-        assert (Hd1 : T.DepRel.In
-                  (q, (Name.NegDep m vs, T.VSet.singleton (Version.Idx 1))) D).
-        { apply Henc; simpl; apply SOed.add_in; left; reflexivity. }
-        destruct (Hdep q HqS _ _ Hd1) as [w [Hw HwS]].
-        apply SOvv.singleton_in in Hw; subst w.
+      { intros q m vs Hd HqS.
+        destruct (Hdep q HqS _ _ Hd) as [w [Hw HwS]].
         intros [v [Hv HvS]].
         apply mem_variableFormulaResolution in HvS.
-        assert (Hd2 : T.DepRel.In ((Name.Orig m, Version.Orig v),
-                        (Name.NegDep m vs,
-                         T.VSet.singleton (Version.Idx 0))) D).
-        { apply Henc; simpl; apply SOed.add_in; right.
-          apply SOvd.mem_map; exists v; split; [exact Hv | reflexivity]. }
-        destruct (Hdep _ HvS _ _ Hd2) as [w2 [Hw2 Hw2S]].
-        apply SOvv.singleton_in in Hw2; subst w2.
-        assert (E := Huniq _ _ _ HwS Hw2S); discriminate. }
+        assert (E := Huniq _ _ _ HwS HvS); subst w.
+        apply mem_negVS in Hw.
+        destruct Hw as [Hw | [u [_ [Hnv E]]]]; [discriminate Hw |].
+        injection E as <-; exact (Hnv Hv). }
       (* the comparison edge: the variable block pins one value per
          variable, and the resolution's choice of it is the assignment *)
       assert (Hvar : forall (q : T.Pkg.t) x op y,
@@ -867,14 +921,16 @@ Module VariableFormula (N V : UsualOrderedType)
       - split4v.
         + intros q Henc HqS; apply (Hpos q); [| exact HqS].
           apply Henc; simpl; apply SOed.singleton_in; reflexivity.
-        + intros q Henc HqS; exact (Hneg q m vs Henc HqS).
+        + intros q Henc HqS; apply (Hneg q m vs); [| exact HqS].
+          apply Henc; simpl; apply SOed.singleton_in; reflexivity.
         + intros n i0 i Henc HiS Hle Hlt; simpl in Hlt.
           assert (i = i0) as -> by lia.
           apply (Hpos (n, Version.Idx i0)); [| exact HiS].
           apply Henc; simpl; apply SOed.singleton_in; reflexivity.
         + intros n i0 i Henc HiS Hle Hlt; simpl in Hlt.
           assert (i = i0) as -> by lia.
-          exact (Hneg (n, Version.Idx i0) m vs Henc HiS).
+          apply (Hneg (n, Version.Idx i0) m vs); [| exact HiS].
+          apply Henc; simpl; apply SOed.singleton_in; reflexivity.
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
           destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
         + intros q Henc HqS; simpl; split.
@@ -996,7 +1052,7 @@ Module VariableFormula (N V : UsualOrderedType)
       forall (y0 : Y.t) (Y_x : X.t -> YSet.t),
         (forall x, exists y, YSet.In y (Y_x x)) ->
         forall (R : PkgSet.t) (D : DepRel.t) (r : Pkg.t) (S : T.PkgSet.t),
-          T.IsResolution (reduceReal Y_x R D) (reduceDeps Y_x D)
+          T.IsResolution (reduceReal Y_x R D) (reduceDeps Y_x R D)
             (embedPkg r) S ->
           IsResolution R D r (variableFormulaResolution S)
             (extractAssignment y0 Y_x S) /\
@@ -1011,7 +1067,8 @@ Module VariableFormula (N V : UsualOrderedType)
         + apply mem_variableFormulaResolution; exact Hroot.
         + intros p Hp f Hdf.
           apply mem_variableFormulaResolution in Hp.
-          apply (encodeNNF_satisfies _ _ _ _ Hres y0 Y_x Hne (embedPkg p) f);
+          apply (encodeNNF_satisfies _ _ _ _ Hres y0 Y_x (C.versions R) Hne
+                   (embedPkg p) f);
             [| exact Hp].
           intros d Hd; apply mem_reduceDeps; exists p, f;
             split; [exact Hdf | exact Hd].
@@ -1022,43 +1079,6 @@ Module VariableFormula (N V : UsualOrderedType)
           injection E as E; exact E.
       - exact (extractAssignment_mem y0 Y_x R D S Hne Hsub).
     Qed.
-
-    Definition depTakenb (S : PkgSet.t) (m : N.t) (vs : VSet.t) : bool :=
-      VSet.exists_ (fun u => PkgSet.mem (m, u) S) vs.
-
-    Lemma depTakenb_iff : forall S m vs,
-        depTakenb S m vs = true <->
-        exists u, VSet.In u vs /\ PkgSet.In (m, u) S.
-    Proof.
-      intros S m vs; unfold depTakenb.
-      rewrite VSet.exists_spec'.
-      split; intros [u [Hu Hm]]; exists u; split; try assumption;
-        apply PkgSet.mem_spec; assumption.
-    Qed.
-
-    Fixpoint witnessSetUntaken (S : PkgSet.t) (f : Formula) : T.PkgSet.t :=
-      match f with
-      | FDep _ _ => T.PkgSet.empty
-      | FConj a b =>
-          T.PkgSet.union (witnessSetUntaken S a) (witnessSetUntaken S b)
-      | FDisj a b =>
-          T.PkgSet.union (witnessSetUntaken S a) (witnessSetUntaken S b)
-      | FNeg a => witnessSetUntakenNeg S a
-      | FVarCmp _ _ _ => T.PkgSet.empty
-      end
-    with witnessSetUntakenNeg (S : PkgSet.t) (f : Formula) : T.PkgSet.t :=
-      match f with
-      | FDep m vs =>
-          if depTakenb S m vs
-          then T.PkgSet.singleton (Name.NegDep m vs, Version.Idx 0)
-          else T.PkgSet.empty
-      | FConj a b =>
-          T.PkgSet.union (witnessSetUntakenNeg S a) (witnessSetUntakenNeg S b)
-      | FDisj a b =>
-          T.PkgSet.union (witnessSetUntakenNeg S a) (witnessSetUntakenNeg S b)
-      | FNeg a => witnessSetUntaken S a
-      | FVarCmp _ _ _ => T.PkgSet.empty
-      end.
 
     (* The alternative a disjunct package takes: the first satisfied one,
        and the last one when none is -- which is what the two-alternative
@@ -1073,6 +1093,10 @@ Module VariableFormula (N V : UsualOrderedType)
           else Datatypes.S (firstSatIdx Sv sigma fs')
       end.
 
+    (* The synthetic packages a selected package's satisfied formula puts in
+       the resolution: each disjunct at the alternative it takes, and that
+       alternative's own witnesses.  A negated atom contributes nothing; its
+       edge is met by the target's version, or by absence. *)
     Fixpoint witnessSetTaken (S : PkgSet.t) (sigma : X.t -> Y.t) (f : Formula) :
         T.PkgSet.t :=
       match f with
@@ -1083,10 +1107,8 @@ Module VariableFormula (N V : UsualOrderedType)
           T.PkgSet.add
             (Name.Disjunct (a :: disjSpine b),
              Version.Idx (firstSatIdx S sigma (a :: disjSpine b)))
-            (if satisfiesb S sigma a
-             then T.PkgSet.union (witnessSetTaken S sigma a)
-                    (witnessSetUntaken S b)
-             else T.PkgSet.union (witnessSetUntaken S a) (takenDisj S sigma b))
+            (if satisfiesb S sigma a then witnessSetTaken S sigma a
+             else takenDisj S sigma b)
       | FNeg a => witnessSetTakenNeg S sigma a
       | FVarCmp _ _ _ => T.PkgSet.empty
       end
@@ -1097,26 +1119,21 @@ Module VariableFormula (N V : UsualOrderedType)
       | FConj a b =>
           T.PkgSet.union (witnessSetTaken S sigma a) (witnessSetTaken S sigma b)
       | FDisj a b =>
-          if satisfiesb S sigma a
-          then T.PkgSet.union (witnessSetTaken S sigma a)
-                 (witnessSetUntaken S b)
-          else T.PkgSet.union (witnessSetUntaken S a) (takenDisj S sigma b)
+          if satisfiesb S sigma a then witnessSetTaken S sigma a
+          else takenDisj S sigma b
       | FNeg a => witnessSetTakenNeg S sigma a
       | FVarCmp _ _ _ => T.PkgSet.empty
       end
     with witnessSetTakenNeg (S : PkgSet.t) (sigma : X.t -> Y.t) (f : Formula) :
         T.PkgSet.t :=
       match f with
-      | FDep m vs => T.PkgSet.singleton (Name.NegDep m vs, Version.Idx 1)
+      | FDep _ _ => T.PkgSet.empty
       | FConj a b =>
           T.PkgSet.add
             (Name.Disjunct (FNeg a :: negConjSpine b),
              Version.Idx (firstSatIdx S sigma (FNeg a :: negConjSpine b)))
-            (if satisfiesb S sigma a
-             then T.PkgSet.union (witnessSetUntakenNeg S a)
-                    (takenConjNeg S sigma b)
-             else T.PkgSet.union (witnessSetTakenNeg S sigma a)
-                    (witnessSetUntakenNeg S b))
+            (if satisfiesb S sigma a then takenConjNeg S sigma b
+             else witnessSetTakenNeg S sigma a)
       | FDisj a b =>
           T.PkgSet.union (witnessSetTakenNeg S sigma a)
             (witnessSetTakenNeg S sigma b)
@@ -1126,13 +1143,10 @@ Module VariableFormula (N V : UsualOrderedType)
     with takenConjNeg (S : PkgSet.t) (sigma : X.t -> Y.t) (f : Formula) :
         T.PkgSet.t :=
       match f with
-      | FDep m vs => T.PkgSet.singleton (Name.NegDep m vs, Version.Idx 1)
+      | FDep _ _ => T.PkgSet.empty
       | FConj a b =>
-          if satisfiesb S sigma a
-          then T.PkgSet.union (witnessSetUntakenNeg S a)
-                 (takenConjNeg S sigma b)
-          else T.PkgSet.union (witnessSetTakenNeg S sigma a)
-                 (witnessSetUntakenNeg S b)
+          if satisfiesb S sigma a then takenConjNeg S sigma b
+          else witnessSetTakenNeg S sigma a
       | FDisj a b =>
           T.PkgSet.union (witnessSetTakenNeg S sigma a)
             (witnessSetTakenNeg S sigma b)
@@ -1160,19 +1174,14 @@ Module VariableFormula (N V : UsualOrderedType)
 
     Lemma takenDisj_disj_eq : forall S sigma a b,
         takenDisj S sigma (FDisj a b) =
-        (if satisfiesb S sigma a
-         then T.PkgSet.union (witnessSetTaken S sigma a)
-                (witnessSetUntaken S b)
-         else T.PkgSet.union (witnessSetUntaken S a) (takenDisj S sigma b)).
+        (if satisfiesb S sigma a then witnessSetTaken S sigma a
+         else takenDisj S sigma b).
     Proof. reflexivity. Qed.
 
     Lemma takenConjNeg_conj_eq : forall S sigma a b,
         takenConjNeg S sigma (FConj a b) =
-        (if satisfiesb S sigma a
-         then T.PkgSet.union (witnessSetUntakenNeg S a)
-                (takenConjNeg S sigma b)
-         else T.PkgSet.union (witnessSetTakenNeg S sigma a)
-                (witnessSetUntakenNeg S b)).
+        (if satisfiesb S sigma a then takenConjNeg S sigma b
+         else witnessSetTakenNeg S sigma a).
     Proof. reflexivity. Qed.
 
     Lemma firstSatIdx_lt : forall S sigma fs,
@@ -1220,22 +1229,19 @@ Module VariableFormula (N V : UsualOrderedType)
         induction f as [m vs | a IHa b IHb | a IHa b IHb | a IHa | x op y];
         intro Hsat;
         try (eexists; split; [reflexivity |]; split;
-             [exact Hsat | intros z Hz; exact Hz]).
+             [exact Hsat | intros y' Hy'; exact Hy']).
       cbn [disjSpine];
-        rewrite (firstSatIdx_cons S sigma a (disjSpine b)
-                   (disjSpine_nonnil b)).
+        rewrite (firstSatIdx_cons S sigma a (disjSpine b) (disjSpine_nonnil b)).
       destruct (satisfiesb S sigma a) eqn:Ea.
       - exists a; split; [reflexivity |]; split;
           [apply satisfiesb_iff; exact Ea |].
-        intros z Hz; simpl; rewrite Ea;
-          apply T.PkgSet.union_spec; left; exact Hz.
+        intros y' Hy'; simpl; rewrite Ea; exact Hy'.
       - assert (Hb : Satisfies S sigma b).
         { destruct Hsat as [Ha | Hb]; [| exact Hb].
           exfalso; exact (proj1 (satisfiesb_false_iff S sigma a) Ea Ha). }
         destruct (IHb Hb) as [g [Hg [Hsg Hsub]]].
         exists g; split; [exact Hg |]; split; [exact Hsg |].
-        intros z Hz; simpl; rewrite Ea;
-          apply T.PkgSet.union_spec; right; exact (Hsub z Hz).
+        intros y' Hy'; simpl; rewrite Ea; exact (Hsub y' Hy').
     Qed.
 
     Lemma takenConjNeg_firstSat : forall S sigma f,
@@ -1250,7 +1256,7 @@ Module VariableFormula (N V : UsualOrderedType)
         induction f as [m vs | a IHa b IHb | a IHa b IHb | a IHa | x op y];
         intro Hsat;
         try (eexists; split; [reflexivity |]; split;
-             [exact Hsat | intros z Hz; exact Hz]).
+             [exact Hsat | intros y' Hy'; exact Hy']).
       cbn [negConjSpine];
         rewrite (firstSatIdx_cons S sigma (FNeg a) (negConjSpine b)
                    (negConjSpine_nonnil b)).
@@ -1263,130 +1269,54 @@ Module VariableFormula (N V : UsualOrderedType)
           [change (satisfiesb S sigma (FNeg a))
              with (negb (satisfiesb S sigma a));
            rewrite Ea; exact Hg |]; split; [exact Hsg |].
-        intros z Hz; simpl; rewrite Ea;
-          apply T.PkgSet.union_spec; right; exact (Hsub z Hz).
+        intros y' Hy'; simpl; rewrite Ea; exact (Hsub y' Hy').
       - exists (FNeg a); split;
           [change (satisfiesb S sigma (FNeg a))
              with (negb (satisfiesb S sigma a));
            rewrite Ea; reflexivity |]; split;
           [apply satisfiesb_false_iff; exact Ea |].
-        intros z Hz; simpl; rewrite Ea;
-          apply T.PkgSet.union_spec; left; exact Hz.
+        intros y' Hy'; simpl; rewrite Ea; exact Hy'.
     Qed.
 
-    Lemma nth_error_single : forall (x g : Formula) k,
-        List.nth_error (x :: nil) k = Some g -> k = 0 /\ x = g.
+    (* Whether a name has a version in S; the names that do not carry
+       absence in the completeness construction. *)
+    Definition hasNameb (S : PkgSet.t) (n : N.t) : bool :=
+      PkgSet.exists_ (fun p => if N.eq_dec (fst p) n then true else false) S.
+
+    Lemma hasNameb_true : forall S n,
+        hasNameb S n = true <-> exists v, PkgSet.In (n, v) S.
     Proof.
-      intros x g [| k'] H;
-        [split; [reflexivity | injection H as ->; reflexivity]
-        | destruct k'; discriminate H].
+      intros S n; unfold hasNameb; rewrite PkgSet.exists_spec'.
+      split.
+      - intros [[m v] [Hm Ht]]; cbn [fst] in Ht.
+        destruct (N.eq_dec m n) as [-> | ]; [| discriminate].
+        exists v; exact Hm.
+      - intros [v Hv]; exists (n, v); split; [exact Hv |].
+        cbn [fst]; destruct (N.eq_dec n n) as [_ | NE];
+          [reflexivity | contradiction NE; reflexivity].
     Qed.
 
-    Lemma disjSpine_untaken_sub : forall S f g,
-        List.In g (disjSpine f) ->
-        T.PkgSet.Subset (witnessSetUntaken S g) (witnessSetUntaken S f).
+    Lemma hasNameb_false : forall S n,
+        hasNameb S n = false <-> forall v, ~ PkgSet.In (n, v) S.
     Proof.
-      intros S f;
-        induction f as [m vs | a IHa b IHb | a IHa b IHb | a IHa | x op y];
-        intros g Hg; simpl in Hg.
-      - destruct Hg as [<- | []]; intros z Hz; exact Hz.
-      - destruct Hg as [<- | []]; intros z Hz; exact Hz.
-      - destruct Hg as [<- | Hg]; intros z Hz; simpl;
-          apply T.PkgSet.union_spec;
-          [left; exact Hz | right; exact (IHb g Hg z Hz)].
-      - destruct Hg as [<- | []]; intros z Hz; exact Hz.
-      - destruct Hg as [<- | []]; intros z Hz; exact Hz.
+      intros S n; split.
+      - intros E v Hv.
+        assert (Ht : hasNameb S n = true)
+          by (apply hasNameb_true; exists v; exact Hv).
+        congruence.
+      - intro Hnone; destruct (hasNameb S n) eqn:E; [| reflexivity].
+        apply hasNameb_true in E; destruct E as [v Hv]; destruct (Hnone v Hv).
     Qed.
 
-    Lemma negConjSpine_untaken_sub : forall S f g,
-        List.In g (negConjSpine f) ->
-        T.PkgSet.Subset (witnessSetUntaken S g) (witnessSetUntakenNeg S f).
-    Proof.
-      intros S f;
-        induction f as [m vs | a IHa b IHb | a IHa b IHb | a IHa | x op y];
-        intros g Hg; simpl in Hg.
-      - destruct Hg as [<- | []]; intros z Hz; exact Hz.
-      - destruct Hg as [<- | Hg]; intros z Hz; simpl;
-          apply T.PkgSet.union_spec;
-          [left; exact Hz | right; exact (IHb g Hg z Hz)].
-      - destruct Hg as [<- | []]; intros z Hz; exact Hz.
-      - destruct Hg as [<- | []]; intros z Hz; exact Hz.
-      - destruct Hg as [<- | []]; intros z Hz; exact Hz.
-    Qed.
+    Definition absentIn (S : PkgSet.t) (ns : NSet.t) : NSet.t :=
+      NSet.filter (fun n => negb (hasNameb S n)) ns.
 
-    (* Every alternative but the taken one contributes its untaken witness,
-       so a synthetic version that the resolution does not carry still has the
-       shape the encoding's recursive call demands. *)
-    Lemma takenDisj_untaken_others : forall S sigma f,
-        Satisfies S sigma f ->
-        forall k g, List.nth_error (disjSpine f) k = Some g ->
-          k <> firstSatIdx S sigma (disjSpine f) ->
-          T.PkgSet.Subset (witnessSetUntaken S g) (takenDisj S sigma f).
+    Lemma mem_absentIn : forall S ns n,
+        NSet.In n (absentIn S ns) <->
+        NSet.In n ns /\ forall v, ~ PkgSet.In (n, v) S.
     Proof.
-      intros S sigma f;
-        induction f as [m vs | a IHa b IHb | a IHa b IHb | a IHa | x op y];
-        intros Hsat k g Hg Hne.
-      1, 2, 4, 5:
-        cbn [disjSpine] in Hg, Hne;
-        apply nth_error_single in Hg; destruct Hg as [-> _];
-        exfalso; apply Hne; reflexivity.
-      cbn [disjSpine] in Hg, Hne;
-        rewrite (firstSatIdx_cons S sigma a (disjSpine b)
-                   (disjSpine_nonnil b)) in Hne.
-      rewrite takenDisj_disj_eq; destruct (satisfiesb S sigma a) eqn:Ea;
-        simpl in Hne.
-      - destruct k as [| k']; [contradiction Hne; reflexivity |].
-        cbn [List.nth_error] in Hg.
-        intros z Hz; apply T.PkgSet.union_spec; right.
-        exact (disjSpine_untaken_sub S b g (List.nth_error_In _ _ Hg) z Hz).
-      - destruct k as [| k'].
-        + cbn [List.nth_error] in Hg; injection Hg as <-.
-          intros z Hz; apply T.PkgSet.union_spec; left; exact Hz.
-        + cbn [List.nth_error] in Hg.
-          assert (Hb : Satisfies S sigma b).
-          { destruct Hsat as [Ha | Hb]; [| exact Hb].
-            exfalso; exact (proj1 (satisfiesb_false_iff S sigma a) Ea Ha). }
-          assert (Hne' : k' <> firstSatIdx S sigma (disjSpine b))
-            by (intro E; apply Hne; f_equal; exact E).
-          intros z Hz; apply T.PkgSet.union_spec; right.
-          exact (IHb Hb k' g Hg Hne' z Hz).
-    Qed.
-
-    Lemma takenConjNeg_untaken_others : forall S sigma f,
-        ~ Satisfies S sigma f ->
-        forall k g, List.nth_error (negConjSpine f) k = Some g ->
-          k <> firstSatIdx S sigma (negConjSpine f) ->
-          T.PkgSet.Subset (witnessSetUntaken S g) (takenConjNeg S sigma f).
-    Proof.
-      intros S sigma f;
-        induction f as [m vs | a IHa b IHb | a IHa b IHb | a IHa | x op y];
-        intros Hsat k g Hg Hne.
-      1, 3, 4, 5:
-        cbn [negConjSpine] in Hg, Hne;
-        apply nth_error_single in Hg; destruct Hg as [-> _];
-        exfalso; apply Hne; reflexivity.
-      cbn [negConjSpine] in Hg, Hne;
-        rewrite (firstSatIdx_cons S sigma (FNeg a) (negConjSpine b)
-                   (negConjSpine_nonnil b)) in Hne.
-      rewrite takenConjNeg_conj_eq;
-        change (satisfiesb S sigma (FNeg a))
-          with (negb (satisfiesb S sigma a)) in Hne;
-        destruct (satisfiesb S sigma a) eqn:Ea; simpl in Hne.
-      - destruct k as [| k'].
-        + cbn [List.nth_error] in Hg; injection Hg as <-.
-          intros z Hz; apply T.PkgSet.union_spec; left; exact Hz.
-        + cbn [List.nth_error] in Hg.
-          assert (Hb : ~ Satisfies S sigma b).
-          { intro Hb; apply Hsat; split;
-              [apply satisfiesb_iff; exact Ea | exact Hb]. }
-          assert (Hne' : k' <> firstSatIdx S sigma (negConjSpine b))
-            by (intro E; apply Hne; f_equal; exact E).
-          intros z Hz; apply T.PkgSet.union_spec; right.
-          exact (IHb Hb k' g Hg Hne' z Hz).
-      - destruct k as [| k']; [contradiction Hne; reflexivity |].
-        cbn [List.nth_error] in Hg.
-        intros z Hz; apply T.PkgSet.union_spec; right.
-        exact (negConjSpine_untaken_sub S b g (List.nth_error_In _ _ Hg) z Hz).
+      intros S ns n; unfold absentIn; rewrite NSet.filter_spec'.
+      rewrite Bool.negb_true_iff, hasNameb_false; reflexivity.
     Qed.
 
     Definition sigmaBlock (sigma : X.t -> Y.t) : T.PkgSet.t :=
@@ -1394,104 +1324,22 @@ Module VariableFormula (N V : UsualOrderedType)
           T.PkgSet.add (Name.Var x, Version.VarVal (sigma x)) acc)
         T.PkgSet.empty X.enum.
 
-    Definition coreResolution (S : PkgSet.t) (D : DepRel.t)
+    Definition coreResolution (S : PkgSet.t) (R : PkgSet.t) (D : DepRel.t)
         (sigma : X.t -> Y.t) : T.PkgSet.t :=
       T.PkgSet.union (SOpt.map embedPkg S)
         (T.PkgSet.union
            (SOet.unionMap (fun '(p, f) =>
-                if PkgSet.mem p S
-                then witnessSetTaken S sigma f
-                else witnessSetUntaken S f)
+                if PkgSet.mem p S then witnessSetTaken S sigma f
+                else T.PkgSet.empty)
               D)
-           (sigmaBlock sigma)).
-
-    Lemma witnessSetUntaken_subset_witnessSet_aux : forall S f,
-        (forall p : T.Pkg.t,
-            T.PkgSet.Subset (witnessSetUntaken S f) (witnessSet p f)) /\
-        (forall p : T.Pkg.t,
-            T.PkgSet.Subset (witnessSetUntakenNeg S f) (witnessSetNeg p f)) /\
-        (forall (n : Name.t) (i : nat),
-            T.PkgSet.Subset (witnessSetUntaken S f) (witnessDisj n i f)) /\
-        (forall (n : Name.t) (i : nat),
-            T.PkgSet.Subset (witnessSetUntakenNeg S f)
-              (witnessConjNeg n i f)).
-    Proof.
-      intros S f;
-        induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa | x op y].
-      - split4v.
-        + intros p z H; exfalso; exact (SOpt.empty_in _ H).
-        + intros p z; simpl; destruct (depTakenb S m ws); intro H;
-            [apply SOpt.singleton_in in H; subst z;
-             apply SOpt.add_in; left; reflexivity
-            | exfalso; exact (SOpt.empty_in _ H)].
-        + intros n i z H; exfalso; exact (SOpt.empty_in _ H).
-        + intros n i z; simpl; destruct (depTakenb S m ws); intro H;
-            [apply SOpt.singleton_in in H; subst z;
-             apply SOpt.add_in; left; reflexivity
-            | exfalso; exact (SOpt.empty_in _ H)].
-      - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
-        + intros p z; simpl; intro H;
-            apply T.PkgSet.union_spec in H; apply T.PkgSet.union_spec;
-            destruct H as [H | H];
-            [left; exact (IHa1 p _ H) | right; exact (IHb1 p _ H)].
-        + intros p z; simpl; intro H;
-            apply T.PkgSet.union_spec in H;
-            apply T.PkgSet.union_spec; right; apply T.PkgSet.union_spec;
-            destruct H as [H | H];
-            [left; exact (IHa2 _ _ H) | right; exact (IHb4 _ _ _ H)].
-        + intros n i z; simpl; intro H;
-            apply T.PkgSet.union_spec in H; apply T.PkgSet.union_spec;
-            destruct H as [H | H];
-            [left; exact (IHa1 _ _ H) | right; exact (IHb1 _ _ H)].
-        + intros n i z; simpl; intro H;
-            apply T.PkgSet.union_spec in H; apply T.PkgSet.union_spec;
-            destruct H as [H | H];
-            [left; exact (IHa2 _ _ H) | right; exact (IHb4 _ _ _ H)].
-      - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
-        + intros p z; simpl; intro H;
-            apply T.PkgSet.union_spec in H;
-            apply T.PkgSet.union_spec; right; apply T.PkgSet.union_spec;
-            destruct H as [H | H];
-            [left; exact (IHa1 _ _ H) | right; exact (IHb3 _ _ _ H)].
-        + intros p z; simpl; intro H;
-            apply T.PkgSet.union_spec in H; apply T.PkgSet.union_spec;
-            destruct H as [H | H];
-            [left; exact (IHa2 p _ H) | right; exact (IHb2 p _ H)].
-        + intros n i z; simpl; intro H;
-            apply T.PkgSet.union_spec in H; apply T.PkgSet.union_spec;
-            destruct H as [H | H];
-            [left; exact (IHa1 _ _ H) | right; exact (IHb3 _ _ _ H)].
-        + intros n i z; simpl; intro H;
-            apply T.PkgSet.union_spec in H; apply T.PkgSet.union_spec;
-            destruct H as [H | H];
-            [left; exact (IHa2 _ _ H) | right; exact (IHb2 _ _ H)].
-      - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4v.
-        + intros p z; exact (IHa2 p z).
-        + intros p z; exact (IHa1 p z).
-        + intros n i z; exact (IHa2 _ z).
-        + intros n i z; exact (IHa1 _ z).
-      - split4v.
-        + intros p z H; exfalso; exact (SOpt.empty_in _ H).
-        + intros p z H; exfalso; exact (SOpt.empty_in _ H).
-        + intros n i z H; exfalso; exact (SOpt.empty_in _ H).
-        + intros n i z H; exfalso; exact (SOpt.empty_in _ H).
-    Qed.
-
-    Lemma witnessSetUntaken_subset_witnessSet : forall S (p : T.Pkg.t) f,
-        T.PkgSet.Subset (witnessSetUntaken S f) (witnessSet p f).
-    Proof.
-      intros S p f;
-        exact (proj1 (witnessSetUntaken_subset_witnessSet_aux S f) p).
-    Qed.
+           (T.PkgSet.union (sigmaBlock sigma)
+              (absentPkgs (absentIn S (instNames R D))))).
 
     Lemma witnessSetTaken_subset_witnessSet_aux : forall S sigma f,
         (forall p : T.Pkg.t,
             T.PkgSet.Subset (witnessSetTaken S sigma f) (witnessSet p f)) /\
         (forall p : T.Pkg.t,
-            T.PkgSet.Subset (witnessSetTakenNeg S sigma f)
-              (witnessSetNeg p f)) /\
+            T.PkgSet.Subset (witnessSetTakenNeg S sigma f) (witnessSetNeg p f)) /\
         (forall (n : Name.t) (i : nat),
             T.PkgSet.Subset (takenDisj S sigma f) (witnessDisj n i f)) /\
         (forall (n : Name.t) (i : nat),
@@ -1499,89 +1347,63 @@ Module VariableFormula (N V : UsualOrderedType)
     Proof.
       intros S sigma f;
         induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa | x op y].
-      - split4v.
-        + intros p z H; exfalso; exact (SOpt.empty_in _ H).
-        + intros p z; simpl; intro H; apply SOpt.singleton_in in H; subst z;
-            apply SOpt.add_in; right; apply SOpt.singleton_in; reflexivity.
-        + intros n i z H; exfalso; exact (SOpt.empty_in _ H).
-        + intros n i z; simpl; intro H; apply SOpt.singleton_in in H; subst z;
-            apply SOpt.add_in; right; apply SOpt.singleton_in; reflexivity.
+      - split4v; intros; intros y H; exfalso; exact (SOpt.empty_in _ H).
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4);
-          pose proof (witnessSetUntaken_subset_witnessSet_aux S a)
-            as (Ua1 & Ua2 & Ua3 & Ua4);
-          pose proof (witnessSetUntaken_subset_witnessSet_aux S b)
-            as (Ub1 & Ub2 & Ub3 & Ub4); split4v.
-        + intros p z; simpl; intro H;
+          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
+        + intros p y; simpl; intro H;
             apply T.PkgSet.union_spec in H; apply T.PkgSet.union_spec;
             destruct H as [H | H];
             [left; exact (IHa1 p _ H) | right; exact (IHb1 p _ H)].
-        + intros p z; rewrite witnessSetTakenNeg_conj_eq; intro H;
+        + intros p y; rewrite witnessSetTakenNeg_conj_eq; intro H;
             apply SOpt.add_in in H; simpl witnessSetNeg;
             apply T.PkgSet.union_spec.
-          * destruct H as [-> | H].
-            -- left; apply mem_idxPkgs;
-                 exists (firstSatIdx S sigma (FNeg a :: negConjSpine b));
-                 split; [apply firstSatIdx_lt; discriminate | reflexivity].
-            -- right; revert H; simpl takenConjNeg;
-                 destruct (satisfiesb S sigma a); intro H;
-                 apply T.PkgSet.union_spec in H;
-                 apply T.PkgSet.union_spec; destruct H as [H | H];
-                 [left; exact (Ua2 _ _ H) | right; exact (IHb4 _ _ _ H)
-                 | left; exact (IHa2 _ _ H) | right; exact (Ub4 _ _ _ H)].
-        + intros n i z; simpl; intro H;
+          destruct H as [-> | H].
+          * left; apply mem_idxPkgs;
+              exists (firstSatIdx S sigma (FNeg a :: negConjSpine b));
+              split; [apply firstSatIdx_lt; discriminate | reflexivity].
+          * right; revert H; rewrite takenConjNeg_conj_eq;
+              destruct (satisfiesb S sigma a); intro H;
+              apply T.PkgSet.union_spec;
+              [right; exact (IHb4 _ _ _ H) | left; exact (IHa2 _ _ H)].
+        + intros n i y; simpl; intro H;
             apply T.PkgSet.union_spec in H; apply T.PkgSet.union_spec;
             destruct H as [H | H];
             [left; exact (IHa1 _ _ H) | right; exact (IHb1 _ _ H)].
-        + intros n i z; simpl;
+        + intros n i y; rewrite takenConjNeg_conj_eq; simpl witnessConjNeg;
             destruct (satisfiesb S sigma a); intro H;
-            apply T.PkgSet.union_spec in H;
-            apply T.PkgSet.union_spec; destruct H as [H | H];
-            [left; exact (Ua2 _ _ H) | right; exact (IHb4 _ _ _ H)
-            | left; exact (IHa2 _ _ H) | right; exact (Ub4 _ _ _ H)].
+            apply T.PkgSet.union_spec;
+            [right; exact (IHb4 _ _ _ H) | left; exact (IHa2 _ _ H)].
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4);
-          pose proof (witnessSetUntaken_subset_witnessSet_aux S a)
-            as (Ua1 & Ua2 & Ua3 & Ua4);
-          pose proof (witnessSetUntaken_subset_witnessSet_aux S b)
-            as (Ub1 & Ub2 & Ub3 & Ub4); split4v.
-        + intros p z; rewrite witnessSetTaken_disj_eq; intro H;
+          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
+        + intros p y; rewrite witnessSetTaken_disj_eq; intro H;
             apply SOpt.add_in in H; simpl witnessSet;
             apply T.PkgSet.union_spec.
-          * destruct H as [-> | H].
-            -- left; apply mem_idxPkgs;
-                 exists (firstSatIdx S sigma (a :: disjSpine b));
-                 split; [apply firstSatIdx_lt; discriminate | reflexivity].
-            -- right; revert H; simpl takenDisj;
-                 destruct (satisfiesb S sigma a); intro H;
-                 apply T.PkgSet.union_spec in H;
-                 apply T.PkgSet.union_spec; destruct H as [H | H];
-                 [left; exact (IHa1 _ _ H) | right; exact (Ub3 _ _ _ H)
-                 | left; exact (Ua1 _ _ H) | right; exact (IHb3 _ _ _ H)].
-        + intros p z; simpl; intro H;
+          destruct H as [-> | H].
+          * left; apply mem_idxPkgs;
+              exists (firstSatIdx S sigma (a :: disjSpine b));
+              split; [apply firstSatIdx_lt; discriminate | reflexivity].
+          * right; revert H; rewrite takenDisj_disj_eq;
+              destruct (satisfiesb S sigma a); intro H;
+              apply T.PkgSet.union_spec;
+              [left; exact (IHa1 _ _ H) | right; exact (IHb3 _ _ _ H)].
+        + intros p y; simpl; intro H;
             apply T.PkgSet.union_spec in H; apply T.PkgSet.union_spec;
             destruct H as [H | H];
             [left; exact (IHa2 p _ H) | right; exact (IHb2 p _ H)].
-        + intros n i z; simpl;
+        + intros n i y; rewrite takenDisj_disj_eq; simpl witnessDisj;
             destruct (satisfiesb S sigma a); intro H;
-            apply T.PkgSet.union_spec in H;
-            apply T.PkgSet.union_spec; destruct H as [H | H];
-            [left; exact (IHa1 _ _ H) | right; exact (Ub3 _ _ _ H)
-            | left; exact (Ua1 _ _ H) | right; exact (IHb3 _ _ _ H)].
-        + intros n i z; simpl; intro H;
+            apply T.PkgSet.union_spec;
+            [left; exact (IHa1 _ _ H) | right; exact (IHb3 _ _ _ H)].
+        + intros n i y; simpl; intro H;
             apply T.PkgSet.union_spec in H; apply T.PkgSet.union_spec;
             destruct H as [H | H];
             [left; exact (IHa2 _ _ H) | right; exact (IHb2 _ _ H)].
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4v.
-        + intros p z; exact (IHa2 p z).
-        + intros p z; exact (IHa1 p z).
-        + intros n i z; exact (IHa2 _ z).
-        + intros n i z; exact (IHa1 _ z).
-      - split4v.
-        + intros p z H; exfalso; exact (SOpt.empty_in _ H).
-        + intros p z H; exfalso; exact (SOpt.empty_in _ H).
-        + intros n i z H; exfalso; exact (SOpt.empty_in _ H).
-        + intros n i z H; exfalso; exact (SOpt.empty_in _ H).
+        + intros p y; exact (IHa2 p y).
+        + intros p y; exact (IHa1 p y).
+        + intros n i y; exact (IHa2 _ y).
+        + intros n i y; exact (IHa1 _ y).
+      - split4v; intros; intros y' H; exfalso; exact (SOpt.empty_in _ H).
     Qed.
 
     Lemma witnessSetTaken_subset_witnessSet : forall S sigma (p : T.Pkg.t) f,
@@ -1589,137 +1411,6 @@ Module VariableFormula (N V : UsualOrderedType)
     Proof.
       intros S sigma p f;
         exact (proj1 (witnessSetTaken_subset_witnessSet_aux S sigma f) p).
-    Qed.
-
-    Lemma witnessSetUntaken_negDep_det_aux : forall S f,
-        (forall m vs v,
-            T.PkgSet.In (Name.NegDep m vs, v) (witnessSetUntaken S f) ->
-            v = Version.Idx 0) /\
-        (forall m vs v,
-            T.PkgSet.In (Name.NegDep m vs, v) (witnessSetUntakenNeg S f) ->
-            v = Version.Idx 0).
-    Proof.
-      intros S f;
-        induction f as [o ws | a IHa b IHb | a IHa b IHb | a IHa | x op y];
-        split; intros m vs v; simpl.
-      - intro H; exfalso; exact (SOpt.empty_in _ H).
-      - destruct (depTakenb S o ws); intro H.
-        + apply SOpt.singleton_in in H; congruence.
-        + exfalso; exact (SOpt.empty_in _ H).
-      - intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-          [exact (proj1 IHa _ _ _ H) | exact (proj1 IHb _ _ _ H)].
-      - intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-          [exact (proj2 IHa _ _ _ H) | exact (proj2 IHb _ _ _ H)].
-      - intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-          [exact (proj1 IHa _ _ _ H) | exact (proj1 IHb _ _ _ H)].
-      - intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-          [exact (proj2 IHa _ _ _ H) | exact (proj2 IHb _ _ _ H)].
-      - exact (proj2 IHa m vs v).
-      - exact (proj1 IHa m vs v).
-      - intro H; exfalso; exact (SOpt.empty_in _ H).
-      - intro H; exfalso; exact (SOpt.empty_in _ H).
-    Qed.
-
-    Lemma witnessSetUntaken_negDep_det : forall S f m vs v,
-        T.PkgSet.In (Name.NegDep m vs, v) (witnessSetUntaken S f) ->
-        v = Version.Idx 0.
-    Proof.
-      intros S f; exact (proj1 (witnessSetUntaken_negDep_det_aux S f)).
-    Qed.
-
-    Lemma witnessSetUntaken_negDep_exists_aux : forall S f,
-        (forall m vs v,
-            T.PkgSet.In (Name.NegDep m vs, v) (witnessSetUntaken S f) ->
-            exists u, VSet.In u vs /\ PkgSet.In (m, u) S) /\
-        (forall m vs v,
-            T.PkgSet.In (Name.NegDep m vs, v) (witnessSetUntakenNeg S f) ->
-            exists u, VSet.In u vs /\ PkgSet.In (m, u) S).
-    Proof.
-      intros S f;
-        induction f as [o ws | a IHa b IHb | a IHa b IHb | a IHa | x op y];
-        split; intros m vs v; simpl.
-      - intro H; exfalso; exact (SOpt.empty_in _ H).
-      - destruct (depTakenb S o ws) eqn:E; intro H.
-        + apply SOpt.singleton_in in H; injection H as -> -> _.
-          apply depTakenb_iff; exact E.
-        + exfalso; exact (SOpt.empty_in _ H).
-      - intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-          [exact (proj1 IHa _ _ _ H) | exact (proj1 IHb _ _ _ H)].
-      - intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-          [exact (proj2 IHa _ _ _ H) | exact (proj2 IHb _ _ _ H)].
-      - intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-          [exact (proj1 IHa _ _ _ H) | exact (proj1 IHb _ _ _ H)].
-      - intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-          [exact (proj2 IHa _ _ _ H) | exact (proj2 IHb _ _ _ H)].
-      - exact (proj2 IHa m vs v).
-      - exact (proj1 IHa m vs v).
-      - intro H; exfalso; exact (SOpt.empty_in _ H).
-      - intro H; exfalso; exact (SOpt.empty_in _ H).
-    Qed.
-
-    Lemma witnessSetUntaken_negDep_exists : forall S f m vs v,
-        T.PkgSet.In (Name.NegDep m vs, v) (witnessSetUntaken S f) ->
-        exists u, VSet.In u vs /\ PkgSet.In (m, u) S.
-    Proof.
-      intros S f; exact (proj1 (witnessSetUntaken_negDep_exists_aux S f)).
-    Qed.
-
-    (* An untaken witness only ever names a NegDep whose dependency is
-       taken, so it pins the same version the taken witness would. *)
-    Lemma witnessSetUntaken_negDep_val_aux : forall S f,
-        (forall m vs v,
-            T.PkgSet.In (Name.NegDep m vs, v) (witnessSetUntaken S f) ->
-            v = (if depTakenb S m vs then Version.Idx 0 else Version.Idx 1)) /\
-        (forall m vs v,
-            T.PkgSet.In (Name.NegDep m vs, v) (witnessSetUntakenNeg S f) ->
-            v = (if depTakenb S m vs then Version.Idx 0 else Version.Idx 1)).
-    Proof.
-      intros S f; split; intros m vs v H;
-        [assert (E : depTakenb S m vs = true)
-          by (apply depTakenb_iff;
-              exact (proj1 (witnessSetUntaken_negDep_exists_aux S f) _ _ _ H));
-         rewrite E;
-         exact (proj1 (witnessSetUntaken_negDep_det_aux S f) _ _ _ H)
-        | assert (E : depTakenb S m vs = true)
-          by (apply depTakenb_iff;
-              exact (proj2 (witnessSetUntaken_negDep_exists_aux S f) _ _ _ H));
-         rewrite E;
-         exact (proj2 (witnessSetUntaken_negDep_det_aux S f) _ _ _ H)].
-    Qed.
-
-    Lemma witnessSetUntaken_disjunct_det_aux : forall S f,
-        (forall fs v,
-            T.PkgSet.In (Name.Disjunct fs, v) (witnessSetUntaken S f) ->
-            False) /\
-        (forall fs v,
-            T.PkgSet.In (Name.Disjunct fs, v) (witnessSetUntakenNeg S f) ->
-            False).
-    Proof.
-      intros S f;
-        induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa | x op y];
-        split; intros fs v; simpl.
-      - intro H; exact (SOpt.empty_in _ H).
-      - destruct (depTakenb S m ws); intro H.
-        + apply SOpt.singleton_in in H; congruence.
-        + exact (SOpt.empty_in _ H).
-      - intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-          [exact (proj1 IHa _ _ H) | exact (proj1 IHb _ _ H)].
-      - intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-          [exact (proj2 IHa _ _ H) | exact (proj2 IHb _ _ H)].
-      - intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-          [exact (proj1 IHa _ _ H) | exact (proj1 IHb _ _ H)].
-      - intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-          [exact (proj2 IHa _ _ H) | exact (proj2 IHb _ _ H)].
-      - exact (proj2 IHa fs v).
-      - exact (proj1 IHa fs v).
-      - intro H; exact (SOpt.empty_in _ H).
-      - intro H; exact (SOpt.empty_in _ H).
-    Qed.
-
-    Lemma witnessSetUntaken_disjunct_det : forall S f fs v,
-        T.PkgSet.In (Name.Disjunct fs, v) (witnessSetUntaken S f) -> False.
-    Proof.
-      intros S f; exact (proj1 (witnessSetUntaken_disjunct_det_aux S f)).
     Qed.
 
     Lemma witnessSetTaken_disjunct_det_aux : forall S sigma f,
@@ -1739,49 +1430,35 @@ Module VariableFormula (N V : UsualOrderedType)
       intros S sigma f;
         induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa | x op y].
       - split4v; intros fs v; simpl; intro H;
-          solve [exfalso; exact (SOpt.empty_in _ H)
-                | apply SOpt.singleton_in in H; congruence].
+          exfalso; exact (SOpt.empty_in _ H).
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4);
-          pose proof (witnessSetUntaken_disjunct_det_aux S a) as (Ua1 & Ua2);
-          pose proof (witnessSetUntaken_disjunct_det_aux S b) as (Ub1 & Ub2);
-          split4v.
+          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
         + intros fs v; simpl; intro H;
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
             [exact (IHa1 _ _ H) | exact (IHb1 _ _ H)].
         + intros fs v; rewrite witnessSetTakenNeg_conj_eq; intro H;
             apply SOpt.add_in in H; destruct H as [H | H];
             [injection H as -> ->; reflexivity |].
-          revert H; simpl takenConjNeg; destruct (satisfiesb S sigma a);
-            intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-            [exfalso; exact (Ua2 _ _ H) | exact (IHb4 _ _ H)
-            | exact (IHa2 _ _ H) | exfalso; exact (Ub2 _ _ H)].
+          revert H; rewrite takenConjNeg_conj_eq; destruct (satisfiesb S sigma a);
+            intro H; [exact (IHb4 _ _ H) | exact (IHa2 _ _ H)].
         + intros fs v; simpl; intro H;
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
             [exact (IHa1 _ _ H) | exact (IHb1 _ _ H)].
-        + intros fs v; simpl; destruct (satisfiesb S sigma a);
-            intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-            [exfalso; exact (Ua2 _ _ H) | exact (IHb4 _ _ H)
-            | exact (IHa2 _ _ H) | exfalso; exact (Ub2 _ _ H)].
+        + intros fs v; rewrite takenConjNeg_conj_eq;
+            destruct (satisfiesb S sigma a);
+            intro H; [exact (IHb4 _ _ H) | exact (IHa2 _ _ H)].
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4);
-          pose proof (witnessSetUntaken_disjunct_det_aux S a) as (Ua1 & Ua2);
-          pose proof (witnessSetUntaken_disjunct_det_aux S b) as (Ub1 & Ub2);
-          split4v.
+          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
         + intros fs v; rewrite witnessSetTaken_disj_eq; intro H;
             apply SOpt.add_in in H; destruct H as [H | H];
             [injection H as -> ->; reflexivity |].
-          revert H; simpl takenDisj; destruct (satisfiesb S sigma a);
-            intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-            [exact (IHa1 _ _ H) | exfalso; exact (Ub1 _ _ H)
-            | exfalso; exact (Ua1 _ _ H) | exact (IHb3 _ _ H)].
+          revert H; rewrite takenDisj_disj_eq; destruct (satisfiesb S sigma a);
+            intro H; [exact (IHa1 _ _ H) | exact (IHb3 _ _ H)].
         + intros fs v; simpl; intro H;
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
             [exact (IHa2 _ _ H) | exact (IHb2 _ _ H)].
-        + intros fs v; simpl; destruct (satisfiesb S sigma a);
-            intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-            [exact (IHa1 _ _ H) | exfalso; exact (Ub1 _ _ H)
-            | exfalso; exact (Ua1 _ _ H) | exact (IHb3 _ _ H)].
+        + intros fs v; rewrite takenDisj_disj_eq; destruct (satisfiesb S sigma a);
+            intro H; [exact (IHa1 _ _ H) | exact (IHb3 _ _ H)].
         + intros fs v; simpl; intro H;
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
             [exact (IHa2 _ _ H) | exact (IHb2 _ _ H)].
@@ -1800,155 +1477,9 @@ Module VariableFormula (N V : UsualOrderedType)
         exact (proj1 (witnessSetTaken_disjunct_det_aux S sigma f)).
     Qed.
 
-    Lemma witnessSetTaken_negDep_det_aux : forall S sigma f,
-        (Satisfies S sigma f ->
-         forall m vs v,
-           T.PkgSet.In (Name.NegDep m vs, v) (witnessSetTaken S sigma f) ->
-           v = (if depTakenb S m vs then Version.Idx 0 else Version.Idx 1)) /\
-        (~ Satisfies S sigma f ->
-         forall m vs v,
-           T.PkgSet.In (Name.NegDep m vs, v) (witnessSetTakenNeg S sigma f) ->
-           v = (if depTakenb S m vs then Version.Idx 0 else Version.Idx 1)) /\
-        (Satisfies S sigma f ->
-         forall m vs v,
-           T.PkgSet.In (Name.NegDep m vs, v) (takenDisj S sigma f) ->
-           v = (if depTakenb S m vs then Version.Idx 0 else Version.Idx 1)) /\
-        (~ Satisfies S sigma f ->
-         forall m vs v,
-           T.PkgSet.In (Name.NegDep m vs, v) (takenConjNeg S sigma f) ->
-           v = (if depTakenb S m vs then Version.Idx 0 else Version.Idx 1)).
-    Proof.
-      intros S sigma f;
-        induction f as [o ws | a IHa b IHb | a IHa b IHb | a IHa | x op y].
-      - split4v; intros Hyp m vs v; simpl; intro H;
-          solve
-            [exfalso; exact (SOpt.empty_in _ H)
-            | apply SOpt.singleton_in in H; injection H as -> -> ->;
-              destruct (depTakenb S o ws) eqn:E; [| reflexivity];
-              exfalso; apply Hyp, depTakenb_iff; exact E].
-      - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4);
-          pose proof (witnessSetUntaken_negDep_val_aux S a) as (Ua1 & Ua2);
-          pose proof (witnessSetUntaken_negDep_val_aux S b) as (Ub1 & Ub2);
-          split4v.
-        + intros Hyp m vs v; simpl; intro H;
-            apply T.PkgSet.union_spec in H; destruct H as [H | H];
-            [exact (IHa1 (proj1 Hyp) _ _ _ H)
-            | exact (IHb1 (proj2 Hyp) _ _ _ H)].
-        + intros Hyp m vs v; rewrite witnessSetTakenNeg_conj_eq; intro H;
-            apply SOpt.add_in in H; destruct H as [H | H]; [congruence |].
-          revert H; simpl takenConjNeg; destruct (satisfiesb S sigma a) eqn:Ea;
-            intro H;
-            apply T.PkgSet.union_spec in H; destruct H as [H | H].
-          * exact (Ua2 _ _ _ H).
-          * apply (IHb4); [| exact H].
-            intro Hb'; apply Hyp; split;
-              [apply satisfiesb_iff; exact Ea | exact Hb'].
-          * apply (IHa2); [apply satisfiesb_false_iff; exact Ea | exact H].
-          * exact (Ub2 _ _ _ H).
-        + intros Hyp m vs v; simpl; intro H;
-            apply T.PkgSet.union_spec in H; destruct H as [H | H];
-            [exact (IHa1 (proj1 Hyp) _ _ _ H)
-            | exact (IHb1 (proj2 Hyp) _ _ _ H)].
-        + intros Hyp m vs v; simpl; destruct (satisfiesb S sigma a) eqn:Ea;
-            intro H;
-            apply T.PkgSet.union_spec in H; destruct H as [H | H].
-          * exact (Ua2 _ _ _ H).
-          * apply (IHb4); [| exact H].
-            intro Hb'; apply Hyp; split;
-              [apply satisfiesb_iff; exact Ea | exact Hb'].
-          * apply (IHa2); [apply satisfiesb_false_iff; exact Ea | exact H].
-          * exact (Ub2 _ _ _ H).
-      - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4);
-          pose proof (witnessSetUntaken_negDep_val_aux S a) as (Ua1 & Ua2);
-          pose proof (witnessSetUntaken_negDep_val_aux S b) as (Ub1 & Ub2);
-          split4v.
-        + intros Hyp m vs v; rewrite witnessSetTaken_disj_eq; intro H;
-            apply SOpt.add_in in H; destruct H as [H | H]; [congruence |].
-          revert H; simpl takenDisj; destruct (satisfiesb S sigma a) eqn:Ea;
-            intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H].
-          * apply (IHa1); [apply satisfiesb_iff; exact Ea | exact H].
-          * exact (Ub1 _ _ _ H).
-          * exact (Ua1 _ _ _ H).
-          * apply (IHb3); [| exact H].
-            destruct Hyp as [Ha | Hb]; [| exact Hb].
-            exfalso; exact (proj1 (satisfiesb_false_iff S sigma a) Ea Ha).
-        + intros Hyp m vs v; simpl; intro H;
-            apply T.PkgSet.union_spec in H; destruct H as [H | H];
-            [apply (IHa2); [intro Ha; exact (Hyp (or_introl Ha)) | exact H]
-            | apply (IHb2); [intro Hb; exact (Hyp (or_intror Hb)) | exact H]].
-        + intros Hyp m vs v; simpl; destruct (satisfiesb S sigma a) eqn:Ea;
-            intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H].
-          * apply (IHa1); [apply satisfiesb_iff; exact Ea | exact H].
-          * exact (Ub1 _ _ _ H).
-          * exact (Ua1 _ _ _ H).
-          * apply (IHb3); [| exact H].
-            destruct Hyp as [Ha | Hb]; [| exact Hb].
-            exfalso; exact (proj1 (satisfiesb_false_iff S sigma a) Ea Ha).
-        + intros Hyp m vs v; simpl; intro H;
-            apply T.PkgSet.union_spec in H; destruct H as [H | H];
-            [apply (IHa2); [intro Ha; exact (Hyp (or_introl Ha)) | exact H]
-            | apply (IHb2); [intro Hb; exact (Hyp (or_intror Hb)) | exact H]].
-      - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4v;
-          intros Hyp m vs v.
-        + exact (IHa2 Hyp m vs v).
-        + exact (IHa1 (satisfies_double_neg S sigma a Hyp) m vs v).
-        + exact (IHa2 Hyp m vs v).
-        + exact (IHa1 (satisfies_double_neg S sigma a Hyp) m vs v).
-      - split4v; intros Hyp m vs v; simpl; intro H;
-          exfalso; exact (SOpt.empty_in _ H).
-    Qed.
-
-    Lemma witnessSetTaken_negDep_det : forall S sigma f,
-        Satisfies S sigma f ->
-        forall m vs v,
-          T.PkgSet.In (Name.NegDep m vs, v) (witnessSetTaken S sigma f) ->
-          v = (if depTakenb S m vs then Version.Idx 0 else Version.Idx 1).
-    Proof.
-      intros S sigma f;
-        exact (proj1 (witnessSetTaken_negDep_det_aux S sigma f)).
-    Qed.
-
-    Lemma witnessSetUntaken_name_classify_aux : forall S f,
-        (forall (n : Name.t) (v : Version.t),
-            T.PkgSet.In (n, v) (witnessSetUntaken S f) -> SyntheticName n) /\
-        (forall (n : Name.t) (v : Version.t),
-            T.PkgSet.In (n, v) (witnessSetUntakenNeg S f) -> SyntheticName n).
-    Proof.
-      unfold SyntheticName; intros S f;
-        induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa | x op y];
-        split; intros n v; simpl.
-      - intro H; exfalso; exact (SOpt.empty_in _ H).
-      - destruct (depTakenb S m ws); intro H.
-        + apply SOpt.singleton_in in H; injection H as -> _.
-          left; exists m, ws; reflexivity.
-        + exfalso; exact (SOpt.empty_in _ H).
-      - intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-          [exact (proj1 IHa _ _ H) | exact (proj1 IHb _ _ H)].
-      - intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-          [exact (proj2 IHa _ _ H) | exact (proj2 IHb _ _ H)].
-      - intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-          [exact (proj1 IHa _ _ H) | exact (proj1 IHb _ _ H)].
-      - intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-          [exact (proj2 IHa _ _ H) | exact (proj2 IHb _ _ H)].
-      - exact (proj2 IHa n v).
-      - exact (proj1 IHa n v).
-      - intro H; exfalso; exact (SOpt.empty_in _ H).
-      - intro H; exfalso; exact (SOpt.empty_in _ H).
-    Qed.
-
-    Lemma witnessSetUntaken_name_classify :
-      forall S f (n : Name.t) (v : Version.t),
-        T.PkgSet.In (n, v) (witnessSetUntaken S f) -> SyntheticName n.
-    Proof.
-      intros S f; exact (proj1 (witnessSetUntaken_name_classify_aux S f)).
-    Qed.
-
     Lemma witnessSetTaken_name_classify_aux : forall S sigma f,
         (forall (n : Name.t) (v : Version.t),
-            T.PkgSet.In (n, v) (witnessSetTaken S sigma f) ->
-            SyntheticName n) /\
+            T.PkgSet.In (n, v) (witnessSetTaken S sigma f) -> SyntheticName n) /\
         (forall (n : Name.t) (v : Version.t),
             T.PkgSet.In (n, v) (witnessSetTakenNeg S sigma f) ->
             SyntheticName n) /\
@@ -1960,50 +1491,35 @@ Module VariableFormula (N V : UsualOrderedType)
       unfold SyntheticName; intros S sigma f;
         induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa | x op y].
       - split4v; intros n v; simpl; intro H;
-          solve [exfalso; exact (SOpt.empty_in _ H)
-                | apply SOpt.singleton_in in H; injection H as -> _;
-                  left; exists m, ws; reflexivity].
+          exfalso; exact (SOpt.empty_in _ H).
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4);
-          pose proof (witnessSetUntaken_name_classify_aux S a) as (Ua1 & Ua2);
-          pose proof (witnessSetUntaken_name_classify_aux S b) as (Ub1 & Ub2);
-          unfold SyntheticName in Ua1, Ua2, Ub1, Ub2; split4v.
+          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
         + intros n v; simpl; intro H;
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
             [exact (IHa1 _ _ H) | exact (IHb1 _ _ H)].
         + intros n v; rewrite witnessSetTakenNeg_conj_eq; intro H;
             apply SOpt.add_in in H; destruct H as [H | H];
-            [injection H as -> _; right; eauto |].
-          revert H; simpl takenConjNeg; destruct (satisfiesb S sigma a);
-            intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-            [exact (Ua2 _ _ H) | exact (IHb4 _ _ H)
-            | exact (IHa2 _ _ H) | exact (Ub2 _ _ H)].
+            [injection H as -> _; eauto |].
+          revert H; rewrite takenConjNeg_conj_eq; destruct (satisfiesb S sigma a);
+            intro H; [exact (IHb4 _ _ H) | exact (IHa2 _ _ H)].
         + intros n v; simpl; intro H;
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
             [exact (IHa1 _ _ H) | exact (IHb1 _ _ H)].
-        + intros n v; simpl; destruct (satisfiesb S sigma a);
-            intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-            [exact (Ua2 _ _ H) | exact (IHb4 _ _ H)
-            | exact (IHa2 _ _ H) | exact (Ub2 _ _ H)].
+        + intros n v; rewrite takenConjNeg_conj_eq;
+            destruct (satisfiesb S sigma a);
+            intro H; [exact (IHb4 _ _ H) | exact (IHa2 _ _ H)].
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4);
-          pose proof (witnessSetUntaken_name_classify_aux S a) as (Ua1 & Ua2);
-          pose proof (witnessSetUntaken_name_classify_aux S b) as (Ub1 & Ub2);
-          unfold SyntheticName in Ua1, Ua2, Ub1, Ub2; split4v.
+          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
         + intros n v; rewrite witnessSetTaken_disj_eq; intro H;
             apply SOpt.add_in in H; destruct H as [H | H];
-            [injection H as -> _; right; eauto |].
-          revert H; simpl takenDisj; destruct (satisfiesb S sigma a);
-            intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-            [exact (IHa1 _ _ H) | exact (Ub1 _ _ H)
-            | exact (Ua1 _ _ H) | exact (IHb3 _ _ H)].
+            [injection H as -> _; eauto |].
+          revert H; rewrite takenDisj_disj_eq; destruct (satisfiesb S sigma a);
+            intro H; [exact (IHa1 _ _ H) | exact (IHb3 _ _ H)].
         + intros n v; simpl; intro H;
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
             [exact (IHa2 _ _ H) | exact (IHb2 _ _ H)].
-        + intros n v; simpl; destruct (satisfiesb S sigma a);
-            intro H; apply T.PkgSet.union_spec in H; destruct H as [H | H];
-            [exact (IHa1 _ _ H) | exact (Ub1 _ _ H)
-            | exact (Ua1 _ _ H) | exact (IHb3 _ _ H)].
+        + intros n v; rewrite takenDisj_disj_eq; destruct (satisfiesb S sigma a);
+            intro H; [exact (IHa1 _ _ H) | exact (IHb3 _ _ H)].
         + intros n v; simpl; intro H;
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
             [exact (IHa2 _ _ H) | exact (IHb2 _ _ H)].
@@ -2014,44 +1530,20 @@ Module VariableFormula (N V : UsualOrderedType)
           exfalso; exact (SOpt.empty_in _ H).
     Qed.
 
-    Lemma witnessSetTaken_name_classify :
-      forall S sigma f (n : Name.t) (v : Version.t),
-        T.PkgSet.In (n, v) (witnessSetTaken S sigma f) -> SyntheticName n.
-    Proof.
-      intros S sigma f;
-        exact (proj1 (witnessSetTaken_name_classify_aux S sigma f)).
-    Qed.
-
-    Lemma witnessSetUntaken_not_orig : forall S f m v,
-        ~ T.PkgSet.In (Name.Orig m, v) (witnessSetUntaken S f).
-    Proof.
-      intros S f m v H.
-      destruct (witnessSetUntaken_name_classify S f _ _ H)
-        as [[n' [vs E]] | [fs E]]; discriminate.
-    Qed.
-
     Lemma witnessSetTaken_not_orig : forall S sigma f m v,
         ~ T.PkgSet.In (Name.Orig m, v) (witnessSetTaken S sigma f).
     Proof.
       intros S sigma f m v H.
-      destruct (witnessSetTaken_name_classify S sigma f _ _ H)
-        as [[n' [vs E]] | [fs E]]; discriminate.
-    Qed.
-
-    Lemma witnessSetUntaken_not_var : forall S f x v,
-        ~ T.PkgSet.In (Name.Var x, v) (witnessSetUntaken S f).
-    Proof.
-      intros S f x v H.
-      destruct (witnessSetUntaken_name_classify S f _ _ H)
-        as [[n' [vs E]] | [fs E]]; discriminate.
+      destruct (proj1 (witnessSetTaken_name_classify_aux S sigma f) _ _ H)
+        as [fs E]; discriminate.
     Qed.
 
     Lemma witnessSetTaken_not_var : forall S sigma f x v,
         ~ T.PkgSet.In (Name.Var x, v) (witnessSetTaken S sigma f).
     Proof.
       intros S sigma f x v H.
-      destruct (witnessSetTaken_name_classify S sigma f _ _ H)
-        as [[n' [vs E]] | [fs E]]; discriminate.
+      destruct (proj1 (witnessSetTaken_name_classify_aux S sigma f) _ _ H)
+        as [fs E]; discriminate.
     Qed.
 
     Lemma mem_sigmaBlock : forall sigma (q : T.Pkg.t),
@@ -2079,44 +1571,49 @@ Module VariableFormula (N V : UsualOrderedType)
       - intros [x Hq]; exists x; split; [apply X.enum_complete | exact Hq].
     Qed.
 
-    Lemma mem_coreResolution : forall S D sigma (y : T.Pkg.t),
-        T.PkgSet.In y (coreResolution S D sigma) <->
+    Lemma mem_coreResolution : forall S R D sigma (y : T.Pkg.t),
+        T.PkgSet.In y (coreResolution S R D sigma) <->
         (exists p, PkgSet.In p S /\ y = embedPkg p) \/
-        (exists p f, DepRel.In (p, f) D /\
-           T.PkgSet.In y (if PkgSet.mem p S
-                          then witnessSetTaken S sigma f
-                          else witnessSetUntaken S f)) \/
-        (exists x, y = (Name.Var x, Version.VarVal (sigma x))).
+        (exists p f, DepRel.In (p, f) D /\ PkgSet.In p S /\
+                     T.PkgSet.In y (witnessSetTaken S sigma f)) \/
+        (exists x, y = (Name.Var x, Version.VarVal (sigma x))) \/
+        (exists n, NSet.In n (instNames R D) /\
+                   (forall v, ~ PkgSet.In (n, v) S) /\
+                   y = (Name.Orig n, Version.Bot)).
     Proof.
-      intros S D sigma y; unfold coreResolution.
+      intros S R D sigma y; unfold coreResolution.
       rewrite !T.PkgSet.union_spec, SOpt.mem_map, SOet.mem_unionMap,
-        mem_sigmaBlock.
+        mem_sigmaBlock, mem_absentPkgs.
       split.
-      - intros [H | [[[q g] [He Hy]] | H]].
-        + left; exact H.
-        + right; left; exists q, g; split; [exact He | exact Hy].
-        + right; right; exact H.
-      - intros [H | [[q [g [Hd Hy]]] | H]].
-        + left; exact H.
-        + right; left; exists (q, g); split; [exact Hd | exact Hy].
-        + right; right; exact H.
+      - intros [H | [[[q g] [He Hy]] | [H | [n [Hn ->]]]]];
+          [left; exact H | | right; right; left; exact H |].
+        + right; left; cbn beta iota in Hy.
+          destruct (PkgSet.mem q S) eqn:E;
+            [| exfalso; exact (SOpt.empty_in _ Hy)].
+          exists q, g; split; [exact He |];
+            split; [apply PkgSet.mem_spec; exact E | exact Hy].
+        + right; right; right; apply mem_absentIn in Hn;
+            destruct Hn as [Hn Hnone].
+          exists n; auto.
+      - intros [H | [[q [g [Hd [HqS Hy]]]] | [H | [n [Hn [Hnone ->]]]]]];
+          [left; exact H | | right; right; left; exact H |].
+        + right; left; exists (q, g); split; [exact Hd |].
+          apply PkgSet.mem_spec in HqS; cbn beta iota; rewrite HqS; exact Hy.
+        + right; right; right; exists n; split; [| reflexivity].
+          apply mem_absentIn; auto.
     Qed.
 
-    Lemma witnessSet_subset_coreResolution : forall S D sigma p f,
-        DepRel.In (p, f) D ->
-        T.PkgSet.Subset
-          (if PkgSet.mem p S
-           then witnessSetTaken S sigma f
-           else witnessSetUntaken S f)
-          (coreResolution S D sigma).
+    Lemma witnessSetTaken_subset_coreResolution : forall S R D sigma p f,
+        DepRel.In (p, f) D -> PkgSet.In p S ->
+        T.PkgSet.Subset (witnessSetTaken S sigma f) (coreResolution S R D sigma).
     Proof.
-      intros S D sigma p f Hd y Hy; apply mem_coreResolution; right; left.
-      exists p, f; split; [exact Hd | exact Hy].
+      intros S R D sigma p f Hd HpS y Hy; apply mem_coreResolution; right; left.
+      exists p, f; auto.
     Qed.
 
     (* Passing an alternative up through one set constructor: nav is the
        step from the inner witness set to the outer one, which is all that
-       differs between the sixteen places this conclusion is rebuilt. *)
+       differs between the places this conclusion is rebuilt. *)
     Ltac pick_alt H nav :=
       let g0 := fresh "g0" in let Hg0 := fresh "Hg0" in
       let Hs0 := fresh "Hs0" in let Hu0 := fresh "Hu0" in
@@ -2145,11 +1642,9 @@ Module VariableFormula (N V : UsualOrderedType)
                (witnessSetTakenNeg S sigma f)) /\
         (Satisfies S sigma f ->
          forall fs i,
-           T.PkgSet.In (Name.Disjunct fs, Version.Idx i)
-             (takenDisj S sigma f) ->
+           T.PkgSet.In (Name.Disjunct fs, Version.Idx i) (takenDisj S sigma f) ->
            exists g, List.nth_error fs i = Some g /\ Satisfies S sigma g /\
-             T.PkgSet.Subset (witnessSetTaken S sigma g)
-               (takenDisj S sigma f)) /\
+             T.PkgSet.Subset (witnessSetTaken S sigma g) (takenDisj S sigma f)) /\
         (~ Satisfies S sigma f ->
          forall fs i,
            T.PkgSet.In (Name.Disjunct fs, Version.Idx i)
@@ -2161,13 +1656,9 @@ Module VariableFormula (N V : UsualOrderedType)
       intros S sigma f;
         induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa | x op y].
       - split4v; intros Hyp fs i; simpl; intro H;
-          solve [exfalso; exact (SOpt.empty_in _ H)
-                | apply SOpt.singleton_in in H; discriminate H].
+          exfalso; exact (SOpt.empty_in _ H).
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4);
-          pose proof (witnessSetUntaken_disjunct_det_aux S a) as (Ua1 & Ua2);
-          pose proof (witnessSetUntaken_disjunct_det_aux S b) as (Ub1 & Ub2);
-          split4v.
+          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
         + intros Hyp fs i; simpl; intro H;
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
             [pick_alt (IHa1 (proj1 Hyp) _ _ H)
@@ -2180,19 +1671,13 @@ Module VariableFormula (N V : UsualOrderedType)
               pick_alt (takenConjNeg_firstSat S sigma (FConj a b) Hyp)
                 ltac:(apply SOpt.add_in; right).
           * revert H; rewrite takenConjNeg_conj_eq;
-              destruct (satisfiesb S sigma a) eqn:Ea; intro H;
-              apply T.PkgSet.union_spec in H; destruct H as [H | H].
-            -- exfalso; exact (Ua2 _ _ H).
+              destruct (satisfiesb S sigma a) eqn:Ea; intro H.
             -- assert (Hb : ~ Satisfies S sigma b).
                { intro Hb; apply Hyp; split;
                    [apply satisfiesb_iff; exact Ea | exact Hb]. }
-               pick_alt (IHb4 Hb _ _ H)
-                 ltac:(apply SOpt.add_in; right;
-                       apply T.PkgSet.union_spec; right).
+               pick_alt (IHb4 Hb _ _ H) ltac:(apply SOpt.add_in; right).
             -- pick_alt (IHa2 (proj1 (satisfiesb_false_iff S sigma a) Ea) _ _ H)
-                 ltac:(apply SOpt.add_in; right;
-                       apply T.PkgSet.union_spec; left).
-            -- exfalso; exact (Ub2 _ _ H).
+                 ltac:(apply SOpt.add_in; right).
         + intros Hyp fs i; simpl; intro H;
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
             [pick_alt (IHa1 (proj1 Hyp) _ _ H)
@@ -2200,42 +1685,28 @@ Module VariableFormula (N V : UsualOrderedType)
             | pick_alt (IHb1 (proj2 Hyp) _ _ H)
                 ltac:(apply T.PkgSet.union_spec; right)].
         + intros Hyp fs i; rewrite takenConjNeg_conj_eq;
-            destruct (satisfiesb S sigma a) eqn:Ea; intro H;
-            apply T.PkgSet.union_spec in H; destruct H as [H | H].
-          * exfalso; exact (Ua2 _ _ H).
+            destruct (satisfiesb S sigma a) eqn:Ea; intro H.
           * assert (Hb : ~ Satisfies S sigma b).
             { intro Hb; apply Hyp; split;
                 [apply satisfiesb_iff; exact Ea | exact Hb]. }
-            pick_alt (IHb4 Hb _ _ H)
-              ltac:(apply T.PkgSet.union_spec; right).
+            pick_alt (IHb4 Hb _ _ H) ltac:(idtac).
           * pick_alt (IHa2 (proj1 (satisfiesb_false_iff S sigma a) Ea) _ _ H)
-              ltac:(apply T.PkgSet.union_spec; left).
-          * exfalso; exact (Ub2 _ _ H).
+              ltac:(idtac).
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4);
-          pose proof (witnessSetUntaken_disjunct_det_aux S a) as (Ua1 & Ua2);
-          pose proof (witnessSetUntaken_disjunct_det_aux S b) as (Ub1 & Ub2);
-          split4v.
+          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
         + intros Hyp fs i; rewrite witnessSetTaken_disj_eq; intro H;
             apply SOpt.add_in in H; destruct H as [H | H].
           * injection H as -> ->;
               pick_alt (takenDisj_firstSat S sigma (FDisj a b) Hyp)
                 ltac:(apply SOpt.add_in; right).
           * revert H; rewrite takenDisj_disj_eq;
-              destruct (satisfiesb S sigma a) eqn:Ea; intro H;
-              apply T.PkgSet.union_spec in H; destruct H as [H | H].
+              destruct (satisfiesb S sigma a) eqn:Ea; intro H.
             -- pick_alt (IHa1 (proj1 (satisfiesb_iff S sigma a) Ea) _ _ H)
-                 ltac:(apply SOpt.add_in; right;
-                       apply T.PkgSet.union_spec; left).
-            -- exfalso; exact (Ub1 _ _ H).
-            -- exfalso; exact (Ua1 _ _ H).
+                 ltac:(apply SOpt.add_in; right).
             -- assert (Hb : Satisfies S sigma b).
                { destruct Hyp as [Ha | Hb]; [| exact Hb].
-                 exfalso;
-                   exact (proj1 (satisfiesb_false_iff S sigma a) Ea Ha). }
-               pick_alt (IHb3 Hb _ _ H)
-                 ltac:(apply SOpt.add_in; right;
-                       apply T.PkgSet.union_spec; right).
+                 exfalso; exact (proj1 (satisfiesb_false_iff S sigma a) Ea Ha). }
+               pick_alt (IHb3 Hb _ _ H) ltac:(apply SOpt.add_in; right).
         + intros Hyp fs i; simpl; intro H;
             apply T.PkgSet.union_spec in H; destruct H as [H | H].
           * pick_alt (IHa2 (fun Ha => Hyp (or_introl Ha)) _ _ H)
@@ -2243,25 +1714,20 @@ Module VariableFormula (N V : UsualOrderedType)
           * pick_alt (IHb2 (fun Hb => Hyp (or_intror Hb)) _ _ H)
               ltac:(apply T.PkgSet.union_spec; right).
         + intros Hyp fs i; rewrite takenDisj_disj_eq;
-            destruct (satisfiesb S sigma a) eqn:Ea; intro H;
-            apply T.PkgSet.union_spec in H; destruct H as [H | H].
+            destruct (satisfiesb S sigma a) eqn:Ea; intro H.
           * pick_alt (IHa1 (proj1 (satisfiesb_iff S sigma a) Ea) _ _ H)
-              ltac:(apply T.PkgSet.union_spec; left).
-          * exfalso; exact (Ub1 _ _ H).
-          * exfalso; exact (Ua1 _ _ H).
+              ltac:(idtac).
           * assert (Hb : Satisfies S sigma b).
             { destruct Hyp as [Ha | Hb]; [| exact Hb].
               exfalso; exact (proj1 (satisfiesb_false_iff S sigma a) Ea Ha). }
-            pick_alt (IHb3 Hb _ _ H)
-              ltac:(apply T.PkgSet.union_spec; right).
+            pick_alt (IHb3 Hb _ _ H) ltac:(idtac).
         + intros Hyp fs i; simpl; intro H;
             apply T.PkgSet.union_spec in H; destruct H as [H | H].
           * pick_alt (IHa2 (fun Ha => Hyp (or_introl Ha)) _ _ H)
               ltac:(apply T.PkgSet.union_spec; left).
           * pick_alt (IHb2 (fun Hb => Hyp (or_intror Hb)) _ _ H)
               ltac:(apply T.PkgSet.union_spec; right).
-      - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4v;
-          intros Hyp fs i.
+      - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4v; intros Hyp fs i.
         + exact (IHa2 Hyp fs i).
         + exact (IHa1 (satisfies_double_neg S sigma a Hyp) fs i).
         + exact (IHa2 Hyp fs i).
@@ -2270,124 +1736,141 @@ Module VariableFormula (N V : UsualOrderedType)
           exfalso; exact (SOpt.empty_in _ H).
     Qed.
 
-    Lemma coreResolution_disj : forall S D sigma fs i,
+    Lemma coreResolution_disj : forall S R D sigma fs i,
         (forall p, PkgSet.In p S ->
          forall f, DepRel.In (p, f) D -> Satisfies S sigma f) ->
         T.PkgSet.In (Name.Disjunct fs, Version.Idx i)
-          (coreResolution S D sigma) ->
+          (coreResolution S R D sigma) ->
         exists g, List.nth_error fs i = Some g /\ Satisfies S sigma g /\
-          T.PkgSet.Subset (witnessSetTaken S sigma g)
-            (coreResolution S D sigma).
+          T.PkgSet.Subset (witnessSetTaken S sigma g) (coreResolution S R D sigma).
     Proof.
-      intros S D sigma fs i Hclo H; apply mem_coreResolution in H.
-      destruct H as [[p [_ Hp]] | [[p [g [Hd Hw]]] | [x Hq]]].
+      intros S R D sigma fs i Hclo H; apply mem_coreResolution in H.
+      destruct H as [[p [_ Hp]] | [[p [g [Hd [HpS Hw]]]] | [[x Hx] | [n [_ [_ Hn]]]]]].
       - destruct p as [pn pv]; unfold embedPkg in Hp; discriminate.
-      - pose proof (witnessSet_subset_coreResolution S D sigma p g Hd) as Hsub.
-        revert Hw Hsub; destruct (PkgSet.mem p S) eqn:Ep; intros Hw Hsub.
-        + assert (Hsat : Satisfies S sigma g).
-          { apply (Hclo p); [apply PkgSet.mem_spec; exact Ep | exact Hd]. }
-          destruct (proj1 (witnessSetTaken_disj_mono_aux S sigma g)
-                      Hsat fs i Hw) as [h [Hh [Hsh Hsubh]]].
-          exists h; split; [exact Hh |]; split; [exact Hsh |].
-          intros z Hz; apply Hsub, Hsubh; exact Hz.
-        + exfalso; exact (witnessSetUntaken_disjunct_det _ _ _ _ Hw).
-      - discriminate.
+      - assert (Hsat : Satisfies S sigma g) by exact (Hclo p HpS g Hd).
+        destruct (proj1 (witnessSetTaken_disj_mono_aux S sigma g) Hsat fs i Hw)
+          as [h [Hh [Hsh Hsubh]]].
+        exists h; split; [exact Hh |]; split; [exact Hsh |].
+        intros y Hy;
+          apply (witnessSetTaken_subset_coreResolution S R D sigma p g Hd HpS),
+            Hsubh; exact Hy.
+      - discriminate Hx.
+      - discriminate Hn.
     Qed.
 
+    (* Dependency closure over one formula's encoding.  Every source is
+       either the owner q0 (then the formula holds and its taken witness is
+       in w) or a disjunct node already in w, whose alternative Hdisj says
+       holds; a negated atom's edge is met by the version its target has in
+       S, or by absence when it has none; a comparison's by the variable
+       block at sigma. *)
     Lemma encodeNNF_dep_closure_aux :
       forall (S : PkgSet.t) (sigma : X.t -> Y.t) (Y_x : X.t -> YSet.t)
-             (w : T.PkgSet.t),
+             (Vq : N.t -> VSet.t) (Ns : NSet.t) (w : T.PkgSet.t),
         (forall x, YSet.In (sigma x) (Y_x x)) ->
         (forall p, PkgSet.In p S -> T.PkgSet.In (embedPkg p) w) ->
-        (forall m v, T.PkgSet.In (Name.Orig m, v) w ->
-           exists p, PkgSet.In p S /\ embedPkg p = (Name.Orig m, v)) ->
+        (forall m u, PkgSet.In (m, u) S -> VSet.In u (Vq m)) ->
+        (forall m, NSet.In m Ns -> (forall u, ~ PkgSet.In (m, u) S) ->
+           T.PkgSet.In (Name.Orig m, Version.Bot) w) ->
         (forall fs i, T.PkgSet.In (Name.Disjunct fs, Version.Idx i) w ->
            exists g, List.nth_error fs i = Some g /\ Satisfies S sigma g /\
              T.PkgSet.Subset (witnessSetTaken S sigma g) w) ->
         (forall x, T.PkgSet.In (Name.Var x, Version.VarVal (sigma x)) w) ->
         forall f : Formula,
+          NSet.Subset (fnames f) Ns ->
           (forall q0 : T.Pkg.t,
-              (~ T.PkgSet.In q0 w /\
-               T.PkgSet.Subset (witnessSetUntaken S f) w) \/
+              ~ T.PkgSet.In q0 w \/
               (Satisfies S sigma f /\
                T.PkgSet.Subset (witnessSetTaken S sigma f) w) ->
               forall (q : T.Pkg.t) (o : NameOT.t) (ws : T.VSet.t),
-                T.DepRel.In (q, (o, ws)) (encodeNNF Y_x q0 f) ->
+                T.DepRel.In (q, (o, ws)) (encodeNNF Y_x Vq q0 f) ->
                 T.PkgSet.In q w ->
                 exists v, T.VSet.In v ws /\ T.PkgSet.In (o, v) w) /\
           (forall q0 : T.Pkg.t,
-              (~ T.PkgSet.In q0 w /\
-               T.PkgSet.Subset (witnessSetUntakenNeg S f) w) \/
+              ~ T.PkgSet.In q0 w \/
               (~ Satisfies S sigma f /\
                T.PkgSet.Subset (witnessSetTakenNeg S sigma f) w) ->
               forall (q : T.Pkg.t) (o : NameOT.t) (ws : T.VSet.t),
-                T.DepRel.In (q, (o, ws)) (encodeNNFneg Y_x q0 f) ->
+                T.DepRel.In (q, (o, ws)) (encodeNNFneg Y_x Vq q0 f) ->
                 T.PkgSet.In q w ->
                 exists v, T.VSet.In v ws /\ T.PkgSet.In (o, v) w) /\
           (forall (n : Name.t) (i0 : nat),
               (forall k g, List.nth_error (disjSpine f) k = Some g ->
-                 (~ T.PkgSet.In (n, Version.Idx (i0 + k)) w /\
-                  T.PkgSet.Subset (witnessSetUntaken S g) w) \/
+                 ~ T.PkgSet.In (n, Version.Idx (i0 + k)) w \/
                  (Satisfies S sigma g /\
                   T.PkgSet.Subset (witnessSetTaken S sigma g) w)) ->
               forall (q : T.Pkg.t) (o : NameOT.t) (ws : T.VSet.t),
-                T.DepRel.In (q, (o, ws)) (encodeDisj Y_x n i0 f) ->
+                T.DepRel.In (q, (o, ws)) (encodeDisj Y_x Vq n i0 f) ->
                 T.PkgSet.In q w ->
                 exists v, T.VSet.In v ws /\ T.PkgSet.In (o, v) w) /\
           (forall (n : Name.t) (i0 : nat),
               (forall k g, List.nth_error (negConjSpine f) k = Some g ->
-                 (~ T.PkgSet.In (n, Version.Idx (i0 + k)) w /\
-                  T.PkgSet.Subset (witnessSetUntaken S g) w) \/
+                 ~ T.PkgSet.In (n, Version.Idx (i0 + k)) w \/
                  (Satisfies S sigma g /\
                   T.PkgSet.Subset (witnessSetTaken S sigma g) w)) ->
               forall (q : T.Pkg.t) (o : NameOT.t) (ws : T.VSet.t),
-                T.DepRel.In (q, (o, ws)) (encodeConjNeg Y_x n i0 f) ->
+                T.DepRel.In (q, (o, ws)) (encodeConjNeg Y_x Vq n i0 f) ->
                 T.PkgSet.In q w ->
                 exists v, T.VSet.In v ws /\ T.PkgSet.In (o, v) w).
     Proof.
-      intros S sigma Y_x w Hins Hemb Horig Hdisj Hvar f.
-      induction f as [m vs | a IHa b IHb | a IHa b IHb | a IHa | x op y].
-      - split4v.
+      intros S sigma Y_x Vq Ns w Hins Hemb HVq Hbot Hdisj Hvar f.
+      (* the negated atom's edge, from any source in w *)
+      assert (Hneg : forall m vs,
+                 NSet.In m Ns ->
+                 ~ Satisfies S sigma (FDep m vs) ->
+                 exists v, T.VSet.In v (negVS Vq m vs) /\
+                           T.PkgSet.In (Name.Orig m, v) w).
+      { intros m vs Hm Hns.
+        destruct (hasNameb S m) eqn:E.
+        - apply hasNameb_true in E; destruct E as [u Hu].
+          exists (Version.Orig u); split; [| exact (Hemb (m, u) Hu)].
+          apply mem_negVS; right; exists u.
+          split; [exact (HVq m u Hu) | split; [| reflexivity]].
+          intro Huv; apply Hns; exists u; auto.
+        - assert (Hnone := proj1 (hasNameb_false S m) E).
+          exists Version.Bot; split; [apply mem_negVS; left; reflexivity |].
+          exact (Hbot m Hm Hnone). }
+      (* the comparison edge, from any source in w *)
+      assert (Hcmp : forall x op y,
+                 Satisfies S sigma (FVarCmp x op y) ->
+                 exists v, T.VSet.In v (cmpVersionSet (Y_x x) op y) /\
+                           T.PkgSet.In (Name.Var x, v) w).
+      { intros x op y Hs; cbn [Satisfies] in Hs.
+        exists (Version.VarVal (sigma x)); split; [| exact (Hvar x)].
+        apply mem_cmpVersionSet; exists (sigma x); auto. }
+      assert (Hcmpn : forall x op y,
+                 ~ Satisfies S sigma (FVarCmp x op y) ->
+                 exists v, T.VSet.In v (cmpVersionSet (Y_x x) (cmpComplement op) y)
+                           /\ T.PkgSet.In (Name.Var x, v) w).
+      { intros x op y Hs; cbn [Satisfies] in Hs.
+        exists (Version.VarVal (sigma x)); split; [| exact (Hvar x)].
+        apply mem_cmpVersionSet; exists (sigma x); split; [apply Hins |].
+        split; [| reflexivity].
+        rewrite opEvalY_complement; apply Bool.negb_true_iff.
+        destruct (opEvalY op (sigma x) y); [exfalso; apply Hs; reflexivity
+                                            | reflexivity]. }
+      induction f as [m vs | a IHa b IHb | a IHa b IHb | a IHa | x op y];
+        intro Hsub.
+      - assert (Hm : NSet.In m Ns)
+          by (apply Hsub; simpl; apply NSet.singleton_spec; reflexivity).
+        split4v.
         + intros q0 Hwit q o ws Henc Hqw.
           apply SOed.singleton_in in Henc; injection Henc as -> -> ->.
-          destruct Hwit as [[Hq0 _] | [Hsat _]];
-            [exfalso; exact (Hq0 Hqw) |].
+          destruct Hwit as [Hq0 | [Hsat _]]; [exfalso; exact (Hq0 Hqw) |].
           destruct Hsat as [u [Hu HuS]].
           exists (Version.Orig u); split;
             [unfold embedVS; apply SOvv.mem_map;
              exists u; split; [exact Hu | reflexivity]
             | exact (Hemb (m, u) HuS)].
         + intros q0 Hwit q o ws Henc Hqw.
-          apply SOed.add_in in Henc; destruct Henc as [He | He].
-          * injection He as -> -> ->.
-            destruct Hwit as [[Hq0 _] | [_ Hsub]];
-              [exfalso; exact (Hq0 Hqw) |].
-            exists (Version.Idx 1); split;
-              [apply SOvv.singleton_in; reflexivity |].
-            apply Hsub, SOpt.singleton_in; reflexivity.
-          * apply SOvd.mem_map in He; destruct He as [u [Hu He]];
-              injection He as -> -> ->.
-            destruct (Horig m (Version.Orig u) Hqw) as [[pn pv] [HpS Hpe]].
-            unfold embedPkg in Hpe; simpl in Hpe; injection Hpe as -> ->.
-            destruct Hwit as [[_ Hsub] | [Hns _]].
-            -- assert (E : depTakenb S m vs = true)
-                 by (apply depTakenb_iff; exists u; split; assumption).
-               exists (Version.Idx 0);
-                 split; [apply SOvv.singleton_in; reflexivity |].
-               apply Hsub.
-               change (T.PkgSet.In (Name.NegDep m vs, Version.Idx 0)
-                         (if depTakenb S m vs
-                          then T.PkgSet.singleton
-                                 (Name.NegDep m vs, Version.Idx 0)
-                          else T.PkgSet.empty)).
-               rewrite E; apply SOpt.singleton_in; reflexivity.
-            -- exfalso; apply Hns; exists u; split; assumption.
+          apply SOed.singleton_in in Henc; injection Henc as -> -> ->.
+          destruct Hwit as [Hq0 | [Hns _]]; [exfalso; exact (Hq0 Hqw) |].
+          exact (Hneg m vs Hm Hns).
         + intros n i0 Hspine q o ws Henc Hqw.
           assert (Hwit := Hspine 0 (FDep m vs) eq_refl);
             replace (i0 + 0) with i0 in Hwit by lia.
           apply SOed.singleton_in in Henc; injection Henc as -> -> ->.
-          destruct Hwit as [[Hq0 _] | [Hsat _]];
-            [exfalso; exact (Hq0 Hqw) |].
+          destruct Hwit as [Hq0 | [Hsat _]]; [exfalso; exact (Hq0 Hqw) |].
           destruct Hsat as [u [Hu HuS]].
           exists (Version.Orig u); split;
             [unfold embedVS; apply SOvv.mem_map;
@@ -2396,55 +1879,37 @@ Module VariableFormula (N V : UsualOrderedType)
         + intros n i0 Hspine q o ws Henc Hqw.
           assert (Hwit := Hspine 0 (FNeg (FDep m vs)) eq_refl);
             replace (i0 + 0) with i0 in Hwit by lia.
-          apply SOed.add_in in Henc; destruct Henc as [He | He].
-          * injection He as -> -> ->.
-            destruct Hwit as [[Hq0 _] | [_ Hsub]];
-              [exfalso; exact (Hq0 Hqw) |].
-            exists (Version.Idx 1); split;
-              [apply SOvv.singleton_in; reflexivity |].
-            apply Hsub, SOpt.singleton_in; reflexivity.
-          * apply SOvd.mem_map in He; destruct He as [u [Hu He]];
-              injection He as -> -> ->.
-            destruct (Horig m (Version.Orig u) Hqw) as [[pn pv] [HpS Hpe]].
-            unfold embedPkg in Hpe; simpl in Hpe; injection Hpe as -> ->.
-            destruct Hwit as [[_ Hsub] | [Hns _]].
-            -- assert (E : depTakenb S m vs = true)
-                 by (apply depTakenb_iff; exists u; split; assumption).
-               exists (Version.Idx 0);
-                 split; [apply SOvv.singleton_in; reflexivity |].
-               apply Hsub.
-               change (T.PkgSet.In (Name.NegDep m vs, Version.Idx 0)
-                         (if depTakenb S m vs
-                          then T.PkgSet.singleton
-                                 (Name.NegDep m vs, Version.Idx 0)
-                          else T.PkgSet.empty)).
-               rewrite E; apply SOpt.singleton_in; reflexivity.
-            -- exfalso; apply Hns; exists u; split; assumption.
-      - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
+          apply SOed.singleton_in in Henc; injection Henc as -> -> ->.
+          destruct Hwit as [Hq0 | [Hns _]]; [exfalso; exact (Hq0 Hqw) |].
+          exact (Hneg m vs Hm Hns).
+      - assert (Hsa : NSet.Subset (fnames a) Ns)
+          by (intros z Hz; apply Hsub; simpl; apply NSet.union_spec; left;
+              exact Hz).
+        assert (Hsb : NSet.Subset (fnames b) Ns)
+          by (intros z Hz; apply Hsub; simpl; apply NSet.union_spec; right;
+              exact Hz).
+        destruct (IHa Hsa) as (IHa1 & IHa2 & IHa3 & IHa4);
+          destruct (IHb Hsb) as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
         + intros q0 Hwit q o ws Henc Hqw.
           apply T.DepRel.union_spec in Henc; destruct Henc as [He | He].
           * refine (IHa1 q0 _ q o ws He Hqw).
-            destruct Hwit as [[Hq0 Hsub] | [Hsat Hsub]];
-              [left; split; [exact Hq0 |]
-              | right; split; [exact (proj1 Hsat) |]];
-              intros z Hz; apply Hsub, T.PkgSet.union_spec; left; exact Hz.
+            destruct Hwit as [Hq0 | [Hsat Hsub']];
+              [left; exact Hq0 | right; split; [exact (proj1 Hsat) |]];
+              intros z Hz; apply Hsub', T.PkgSet.union_spec; left; exact Hz.
           * refine (IHb1 q0 _ q o ws He Hqw).
-            destruct Hwit as [[Hq0 Hsub] | [Hsat Hsub]];
-              [left; split; [exact Hq0 |]
-              | right; split; [exact (proj2 Hsat) |]];
-              intros z Hz; apply Hsub, T.PkgSet.union_spec; right; exact Hz.
+            destruct Hwit as [Hq0 | [Hsat Hsub']];
+              [left; exact Hq0 | right; split; [exact (proj2 Hsat) |]];
+              intros z Hz; apply Hsub', T.PkgSet.union_spec; right; exact Hz.
         + intros q0 Hwit q o ws Henc Hqw.
           apply SOed.add_in in Henc; destruct Henc as [He | He].
           * injection He as -> -> ->.
-            destruct Hwit as [[Hq0 _] | [_ Hsub]];
-              [exfalso; exact (Hq0 Hqw) |].
+            destruct Hwit as [Hq0 | [_ Hsub']]; [exfalso; exact (Hq0 Hqw) |].
             exists (Version.Idx
                       (firstSatIdx S sigma (FNeg a :: negConjSpine b))); split.
             -- apply mem_idxSet;
                  exists (firstSatIdx S sigma (FNeg a :: negConjSpine b)); split;
                  [apply firstSatIdx_lt; discriminate | reflexivity].
-            -- apply Hsub; rewrite witnessSetTakenNeg_conj_eq;
+            -- apply Hsub'; rewrite witnessSetTakenNeg_conj_eq;
                  apply SOpt.add_in; left; reflexivity.
           * apply T.DepRel.union_spec in He; destruct He as [He | He].
             -- refine (IHa2 (Name.Disjunct (FNeg a :: negConjSpine b),
@@ -2453,33 +1918,11 @@ Module VariableFormula (N V : UsualOrderedType)
                            (Name.Disjunct (FNeg a :: negConjSpine b),
                             Version.Idx 0) w) eqn:EM.
                ++ apply T.PkgSet.mem_spec in EM.
-                  destruct (Hdisj _ _ EM) as [g [Hg [Hsg Hsub]]].
+                  destruct (Hdisj _ _ EM) as [g [Hg [Hsg Hsub']]].
                   cbn [List.nth_error] in Hg; injection Hg as <-.
-                  right; split; [exact Hsg | exact Hsub].
-               ++ left; split;
-                    [intro Hin; apply T.PkgSet.mem_spec in Hin;
-                     discriminate (eq_trans (eq_sym Hin) EM) |].
-                  destruct Hwit as [[_ Hsub] | [Hsat Hsub]].
-                  ** intros z Hz; apply Hsub; simpl;
-                       apply T.PkgSet.union_spec; left; exact Hz.
-                  ** destruct (Nat_as_OT.eq_dec 0
-                                 (firstSatIdx S sigma
-                                    (FNeg a :: negConjSpine b)))
-                       as [E0 | Hne].
-                     --- exfalso.
-                         assert (Hin : T.PkgSet.In
-                                   (Name.Disjunct (FNeg a :: negConjSpine b),
-                                    Version.Idx 0) w).
-                         { apply Hsub; rewrite witnessSetTakenNeg_conj_eq,
-                             E0; apply SOpt.add_in; left; reflexivity. }
-                         apply T.PkgSet.mem_spec in Hin;
-                         discriminate (eq_trans (eq_sym Hin) EM).
-                     --- intros z Hz; apply Hsub;
-                           rewrite witnessSetTakenNeg_conj_eq;
-                           apply SOpt.add_in; right;
-                           exact (takenConjNeg_untaken_others S sigma
-                                    (FConj a b) Hsat 0 (FNeg a) eq_refl Hne
-                                    z Hz).
+                  right; split; [exact Hsg | exact Hsub'].
+               ++ left; intro Hin; apply T.PkgSet.mem_spec in Hin;
+                    discriminate (eq_trans (eq_sym Hin) EM).
             -- refine (IHb4 (Name.Disjunct (FNeg a :: negConjSpine b)) 1
                          _ q o ws He Hqw).
                intros k g Hg.
@@ -2489,48 +1932,23 @@ Module VariableFormula (N V : UsualOrderedType)
                            (Name.Disjunct (FNeg a :: negConjSpine b),
                             Version.Idx (1 + k)) w) eqn:EM.
                ++ apply T.PkgSet.mem_spec in EM.
-                  destruct (Hdisj _ _ EM) as [g' [Hg2 [Hsg Hsub]]].
+                  destruct (Hdisj _ _ EM) as [g' [Hg2 [Hsg Hsub']]].
                   rewrite Hg' in Hg2; injection Hg2 as <-.
-                  right; split; [exact Hsg | exact Hsub].
-               ++ left; split;
-                    [intro Hin; apply T.PkgSet.mem_spec in Hin;
-                     discriminate (eq_trans (eq_sym Hin) EM) |].
-                  destruct Hwit as [[_ Hsub] | [Hsat Hsub]].
-                  ** intros z Hz; apply Hsub; simpl;
-                       apply T.PkgSet.union_spec; right;
-                       exact (negConjSpine_untaken_sub S b g
-                                (List.nth_error_In _ _ Hg) z Hz).
-                  ** destruct (Nat_as_OT.eq_dec (1 + k)
-                                 (firstSatIdx S sigma
-                                    (FNeg a :: negConjSpine b)))
-                       as [E0 | Hne].
-                     --- exfalso.
-                         assert (Hin : T.PkgSet.In
-                                   (Name.Disjunct (FNeg a :: negConjSpine b),
-                                    Version.Idx (1 + k)) w).
-                         { apply Hsub; rewrite witnessSetTakenNeg_conj_eq,
-                             E0; apply SOpt.add_in; left; reflexivity. }
-                         apply T.PkgSet.mem_spec in Hin;
-                         discriminate (eq_trans (eq_sym Hin) EM).
-                     --- intros z Hz; apply Hsub;
-                           rewrite witnessSetTakenNeg_conj_eq;
-                           apply SOpt.add_in; right;
-                           exact (takenConjNeg_untaken_others S sigma
-                                    (FConj a b) Hsat (1 + k) g Hg' Hne z Hz).
+                  right; split; [exact Hsg | exact Hsub'].
+               ++ left; intro Hin; apply T.PkgSet.mem_spec in Hin;
+                    discriminate (eq_trans (eq_sym Hin) EM).
         + intros n i0 Hspine q o ws Henc Hqw.
           assert (Hwit := Hspine 0 (FConj a b) eq_refl);
             replace (i0 + 0) with i0 in Hwit by lia.
           apply T.DepRel.union_spec in Henc; destruct Henc as [He | He].
           * refine (IHa1 (n, Version.Idx i0) _ q o ws He Hqw).
-            destruct Hwit as [[Hq0 Hsub] | [Hsat Hsub]];
-              [left; split; [exact Hq0 |]
-              | right; split; [exact (proj1 Hsat) |]];
-              intros z Hz; apply Hsub, T.PkgSet.union_spec; left; exact Hz.
+            destruct Hwit as [Hq0 | [Hsat Hsub']];
+              [left; exact Hq0 | right; split; [exact (proj1 Hsat) |]];
+              intros z Hz; apply Hsub', T.PkgSet.union_spec; left; exact Hz.
           * refine (IHb1 (n, Version.Idx i0) _ q o ws He Hqw).
-            destruct Hwit as [[Hq0 Hsub] | [Hsat Hsub]];
-              [left; split; [exact Hq0 |]
-              | right; split; [exact (proj2 Hsat) |]];
-              intros z Hz; apply Hsub, T.PkgSet.union_spec; right; exact Hz.
+            destruct Hwit as [Hq0 | [Hsat Hsub']];
+              [left; exact Hq0 | right; split; [exact (proj2 Hsat) |]];
+              intros z Hz; apply Hsub', T.PkgSet.union_spec; right; exact Hz.
         + intros n i0 Hspine q o ws Henc Hqw.
           apply T.DepRel.union_spec in Henc; destruct Henc as [He | He].
           * refine (IHa2 (n, Version.Idx i0) _ q o ws He Hqw).
@@ -2542,19 +1960,23 @@ Module VariableFormula (N V : UsualOrderedType)
             assert (H := Hspine (Datatypes.S k) g Hg).
             replace (Datatypes.S i0 + k) with (i0 + Datatypes.S k) by lia.
             exact H.
-      - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
+      - assert (Hsa : NSet.Subset (fnames a) Ns)
+          by (intros z Hz; apply Hsub; simpl; apply NSet.union_spec; left;
+              exact Hz).
+        assert (Hsb : NSet.Subset (fnames b) Ns)
+          by (intros z Hz; apply Hsub; simpl; apply NSet.union_spec; right;
+              exact Hz).
+        destruct (IHa Hsa) as (IHa1 & IHa2 & IHa3 & IHa4);
+          destruct (IHb Hsb) as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
         + intros q0 Hwit q o ws Henc Hqw.
           apply SOed.add_in in Henc; destruct Henc as [He | He].
           * injection He as -> -> ->.
-            destruct Hwit as [[Hq0 _] | [_ Hsub]];
-              [exfalso; exact (Hq0 Hqw) |].
-            exists (Version.Idx (firstSatIdx S sigma (a :: disjSpine b)));
-              split.
+            destruct Hwit as [Hq0 | [_ Hsub']]; [exfalso; exact (Hq0 Hqw) |].
+            exists (Version.Idx (firstSatIdx S sigma (a :: disjSpine b))); split.
             -- apply mem_idxSet;
                  exists (firstSatIdx S sigma (a :: disjSpine b)); split;
                  [apply firstSatIdx_lt; discriminate | reflexivity].
-            -- apply Hsub; rewrite witnessSetTaken_disj_eq;
+            -- apply Hsub'; rewrite witnessSetTaken_disj_eq;
                  apply SOpt.add_in; left; reflexivity.
           * apply T.DepRel.union_spec in He; destruct He as [He | He].
             -- refine (IHa1 (Name.Disjunct (a :: disjSpine b),
@@ -2562,31 +1984,11 @@ Module VariableFormula (N V : UsualOrderedType)
                destruct (T.PkgSet.mem (Name.Disjunct (a :: disjSpine b),
                                        Version.Idx 0) w) eqn:EM.
                ++ apply T.PkgSet.mem_spec in EM.
-                  destruct (Hdisj _ _ EM) as [g [Hg [Hsg Hsub]]].
+                  destruct (Hdisj _ _ EM) as [g [Hg [Hsg Hsub']]].
                   cbn [List.nth_error] in Hg; injection Hg as <-.
-                  right; split; [exact Hsg | exact Hsub].
-               ++ left; split;
-                    [intro Hin; apply T.PkgSet.mem_spec in Hin;
-                     discriminate (eq_trans (eq_sym Hin) EM) |].
-                  destruct Hwit as [[_ Hsub] | [Hsat Hsub]].
-                  ** intros z Hz; apply Hsub; simpl;
-                       apply T.PkgSet.union_spec; left; exact Hz.
-                  ** destruct (Nat_as_OT.eq_dec 0
-                                 (firstSatIdx S sigma (a :: disjSpine b)))
-                       as [E0 | Hne].
-                     --- exfalso.
-                         assert (Hin : T.PkgSet.In
-                                   (Name.Disjunct (a :: disjSpine b),
-                                    Version.Idx 0) w).
-                         { apply Hsub; rewrite witnessSetTaken_disj_eq, E0;
-                             apply SOpt.add_in; left; reflexivity. }
-                         apply T.PkgSet.mem_spec in Hin;
-                         discriminate (eq_trans (eq_sym Hin) EM).
-                     --- intros z Hz; apply Hsub;
-                           rewrite witnessSetTaken_disj_eq;
-                           apply SOpt.add_in; right;
-                           exact (takenDisj_untaken_others S sigma (FDisj a b)
-                                    Hsat 0 a eq_refl Hne z Hz).
+                  right; split; [exact Hsg | exact Hsub'].
+               ++ left; intro Hin; apply T.PkgSet.mem_spec in Hin;
+                    discriminate (eq_trans (eq_sym Hin) EM).
             -- refine (IHb3 (Name.Disjunct (a :: disjSpine b)) 1
                          _ q o ws He Hqw).
                intros k g Hg.
@@ -2595,45 +1997,23 @@ Module VariableFormula (N V : UsualOrderedType)
                destruct (T.PkgSet.mem (Name.Disjunct (a :: disjSpine b),
                                        Version.Idx (1 + k)) w) eqn:EM.
                ++ apply T.PkgSet.mem_spec in EM.
-                  destruct (Hdisj _ _ EM) as [g' [Hg2 [Hsg Hsub]]].
+                  destruct (Hdisj _ _ EM) as [g' [Hg2 [Hsg Hsub']]].
                   rewrite Hg' in Hg2; injection Hg2 as <-.
-                  right; split; [exact Hsg | exact Hsub].
-               ++ left; split;
-                    [intro Hin; apply T.PkgSet.mem_spec in Hin;
-                     discriminate (eq_trans (eq_sym Hin) EM) |].
-                  destruct Hwit as [[_ Hsub] | [Hsat Hsub]].
-                  ** intros z Hz; apply Hsub; simpl;
-                       apply T.PkgSet.union_spec; right;
-                       exact (disjSpine_untaken_sub S b g
-                                (List.nth_error_In _ _ Hg) z Hz).
-                  ** destruct (Nat_as_OT.eq_dec (1 + k)
-                                 (firstSatIdx S sigma (a :: disjSpine b)))
-                       as [E0 | Hne].
-                     --- exfalso.
-                         assert (Hin : T.PkgSet.In
-                                   (Name.Disjunct (a :: disjSpine b),
-                                    Version.Idx (1 + k)) w).
-                         { apply Hsub; rewrite witnessSetTaken_disj_eq, E0;
-                             apply SOpt.add_in; left; reflexivity. }
-                         apply T.PkgSet.mem_spec in Hin;
-                         discriminate (eq_trans (eq_sym Hin) EM).
-                     --- intros z Hz; apply Hsub;
-                           rewrite witnessSetTaken_disj_eq;
-                           apply SOpt.add_in; right;
-                           exact (takenDisj_untaken_others S sigma (FDisj a b)
-                                    Hsat (1 + k) g Hg' Hne z Hz).
+                  right; split; [exact Hsg | exact Hsub'].
+               ++ left; intro Hin; apply T.PkgSet.mem_spec in Hin;
+                    discriminate (eq_trans (eq_sym Hin) EM).
         + intros q0 Hwit q o ws Henc Hqw.
           apply T.DepRel.union_spec in Henc; destruct Henc as [He | He].
           * refine (IHa2 q0 _ q o ws He Hqw).
-            destruct Hwit as [[Hq0 Hsub] | [Hns Hsub]];
-              [left; split; [exact Hq0 |]
+            destruct Hwit as [Hq0 | [Hns Hsub']];
+              [left; exact Hq0
               | right; split; [intro Ha; exact (Hns (or_introl Ha)) |]];
-              intros z Hz; apply Hsub, T.PkgSet.union_spec; left; exact Hz.
+              intros z Hz; apply Hsub', T.PkgSet.union_spec; left; exact Hz.
           * refine (IHb2 q0 _ q o ws He Hqw).
-            destruct Hwit as [[Hq0 Hsub] | [Hns Hsub]];
-              [left; split; [exact Hq0 |]
+            destruct Hwit as [Hq0 | [Hns Hsub']];
+              [left; exact Hq0
               | right; split; [intro Hb; exact (Hns (or_intror Hb)) |]];
-              intros z Hz; apply Hsub, T.PkgSet.union_spec; right; exact Hz.
+              intros z Hz; apply Hsub', T.PkgSet.union_spec; right; exact Hz.
         + intros n i0 Hspine q o ws Henc Hqw.
           apply T.DepRel.union_spec in Henc; destruct Henc as [He | He].
           * refine (IHa1 (n, Version.Idx i0) _ q o ws He Hqw).
@@ -2650,24 +2030,24 @@ Module VariableFormula (N V : UsualOrderedType)
             replace (i0 + 0) with i0 in Hwit by lia.
           apply T.DepRel.union_spec in Henc; destruct Henc as [He | He].
           * refine (IHa2 (n, Version.Idx i0) _ q o ws He Hqw).
-            destruct Hwit as [[Hq0 Hsub] | [Hns Hsub]];
-              [left; split; [exact Hq0 |]
+            destruct Hwit as [Hq0 | [Hns Hsub']];
+              [left; exact Hq0
               | right; split; [intro Ha; exact (Hns (or_introl Ha)) |]];
-              intros z Hz; apply Hsub, T.PkgSet.union_spec; left; exact Hz.
+              intros z Hz; apply Hsub', T.PkgSet.union_spec; left; exact Hz.
           * refine (IHb2 (n, Version.Idx i0) _ q o ws He Hqw).
-            destruct Hwit as [[Hq0 Hsub] | [Hns Hsub]];
-              [left; split; [exact Hq0 |]
+            destruct Hwit as [Hq0 | [Hns Hsub']];
+              [left; exact Hq0
               | right; split; [intro Hb; exact (Hns (or_intror Hb)) |]];
-              intros z Hz; apply Hsub, T.PkgSet.union_spec; right; exact Hz.
-      - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4v.
+              intros z Hz; apply Hsub', T.PkgSet.union_spec; right; exact Hz.
+      - destruct (IHa Hsub) as (IHa1 & IHa2 & IHa3 & IHa4); split4v.
         + intros q0 Hwit q o ws Henc Hqw.
           exact (IHa2 q0 Hwit q o ws Henc Hqw).
         + intros q0 Hwit q o ws Henc Hqw.
-          destruct Hwit as [[Hq0 Hsub] | [Hnn Hsub]];
-            [exact (IHa1 q0 (or_introl (conj Hq0 Hsub)) q o ws Henc Hqw)
+          destruct Hwit as [Hq0 | [Hnn Hsub']];
+            [exact (IHa1 q0 (or_introl Hq0) q o ws Henc Hqw)
             | exact (IHa1 q0
-                       (or_intror
-                          (conj (satisfies_double_neg S sigma a Hnn) Hsub))
+                       (or_intror (conj (satisfies_double_neg S sigma a Hnn)
+                                        Hsub'))
                        q o ws Henc Hqw)].
         + intros n i0 Hspine q o ws Henc Hqw.
           assert (Hwit := Hspine 0 (FNeg a) eq_refl);
@@ -2676,56 +2056,33 @@ Module VariableFormula (N V : UsualOrderedType)
         + intros n i0 Hspine q o ws Henc Hqw.
           assert (Hwit := Hspine 0 (FNeg (FNeg a)) eq_refl);
             replace (i0 + 0) with i0 in Hwit by lia.
-          destruct Hwit as [[Hq0 Hsub] | [Hnn Hsub]];
-            [exact (IHa1 (n, Version.Idx i0) (or_introl (conj Hq0 Hsub))
-                      q o ws Henc Hqw)
+          destruct Hwit as [Hq0 | [Hnn Hsub']];
+            [exact (IHa1 (n, Version.Idx i0) (or_introl Hq0) q o ws Henc Hqw)
             | exact (IHa1 (n, Version.Idx i0)
-                       (or_intror
-                          (conj (satisfies_double_neg S sigma a Hnn) Hsub))
+                       (or_intror (conj (satisfies_double_neg S sigma a Hnn)
+                                        Hsub'))
                        q o ws Henc Hqw)].
       - split4v.
         + intros q0 Hwit q o ws Henc Hqw.
           apply SOed.singleton_in in Henc; injection Henc as -> -> ->.
-          destruct Hwit as [[Hq0 _] | [Hsat _]];
-            [exfalso; exact (Hq0 Hqw) |].
-          exists (Version.VarVal (sigma x)); split;
-            [apply mem_cmpVersionSet; exists (sigma x);
-             split; [apply Hins | split; [exact Hsat | reflexivity]]
-            | exact (Hvar x)].
+          destruct Hwit as [Hq0 | [Hsat _]]; [exfalso; exact (Hq0 Hqw) |].
+          exact (Hcmp x op y Hsat).
         + intros q0 Hwit q o ws Henc Hqw.
           apply SOed.singleton_in in Henc; injection Henc as -> -> ->.
-          destruct Hwit as [[Hq0 _] | [Hns _]];
-            [exfalso; exact (Hq0 Hqw) |].
-          exists (Version.VarVal (sigma x)); split; [| exact (Hvar x)].
-          apply mem_cmpVersionSet; exists (sigma x);
-            split; [apply Hins |].
-          split; [| reflexivity].
-          rewrite opEvalY_complement; apply Bool.negb_true_iff.
-          destruct (opEvalY op (sigma x) y) eqn:E;
-            [exfalso; exact (Hns E) | reflexivity].
+          destruct Hwit as [Hq0 | [Hns _]]; [exfalso; exact (Hq0 Hqw) |].
+          exact (Hcmpn x op y Hns).
         + intros n i0 Hspine q o ws Henc Hqw.
           assert (Hwit := Hspine 0 (FVarCmp x op y) eq_refl);
             replace (i0 + 0) with i0 in Hwit by lia.
           apply SOed.singleton_in in Henc; injection Henc as -> -> ->.
-          destruct Hwit as [[Hq0 _] | [Hsat _]];
-            [exfalso; exact (Hq0 Hqw) |].
-          exists (Version.VarVal (sigma x)); split;
-            [apply mem_cmpVersionSet; exists (sigma x);
-             split; [apply Hins | split; [exact Hsat | reflexivity]]
-            | exact (Hvar x)].
+          destruct Hwit as [Hq0 | [Hsat _]]; [exfalso; exact (Hq0 Hqw) |].
+          exact (Hcmp x op y Hsat).
         + intros n i0 Hspine q o ws Henc Hqw.
           assert (Hwit := Hspine 0 (FNeg (FVarCmp x op y)) eq_refl);
             replace (i0 + 0) with i0 in Hwit by lia.
           apply SOed.singleton_in in Henc; injection Henc as -> -> ->.
-          destruct Hwit as [[Hq0 _] | [Hns _]];
-            [exfalso; exact (Hq0 Hqw) |].
-          exists (Version.VarVal (sigma x)); split; [| exact (Hvar x)].
-          apply mem_cmpVersionSet; exists (sigma x);
-            split; [apply Hins |].
-          split; [| reflexivity].
-          rewrite opEvalY_complement; apply Bool.negb_true_iff.
-          destruct (opEvalY op (sigma x) y) eqn:E;
-            [exfalso; exact (Hns E) | reflexivity].
+          destruct Hwit as [Hq0 | [Hns _]]; [exfalso; exact (Hq0 Hqw) |].
+          exact (Hcmpn x op y Hns).
     Qed.
 
     Theorem variable_formula_completeness :
@@ -2734,227 +2091,104 @@ Module VariableFormula (N V : UsualOrderedType)
         (forall x, YSet.In (sigma x) (Y_x x)) ->
         forall (S : PkgSet.t),
           IsResolution R D r S sigma ->
-          T.IsResolution (reduceReal Y_x R D) (reduceDeps Y_x D) (embedPkg r)
-            (coreResolution S D sigma).
+          T.IsResolution (reduceReal Y_x R D) (reduceDeps Y_x R D) (embedPkg r)
+            (coreResolution S R D sigma).
     Proof.
       intros Y_x R D r sigma Hins S Hres;
         destruct Hres as [Hsub Hroot Hclo Huniq].
       assert (Hemb : forall p, PkgSet.In p S ->
-          T.PkgSet.In (embedPkg p) (coreResolution S D sigma)).
+          T.PkgSet.In (embedPkg p) (coreResolution S R D sigma)).
       { intros p Hp; apply mem_coreResolution; left.
         exists p; split; [exact Hp | reflexivity]. }
+      assert (HVq : forall m u, PkgSet.In (m, u) S ->
+          VSet.In u (C.versions R m)).
+      { intros m u Hu; apply C.mem_versions; apply Hsub; exact Hu. }
+      assert (Hbot : forall m, NSet.In m (instNames R D) ->
+          (forall u, ~ PkgSet.In (m, u) S) ->
+          T.PkgSet.In (Name.Orig m, Version.Bot) (coreResolution S R D sigma)).
+      { intros m Hm Hnone; apply mem_coreResolution; right; right; right.
+        exists m; auto. }
       assert (Horig : forall m v,
-          T.PkgSet.In (Name.Orig m, v) (coreResolution S D sigma) ->
-          exists p, PkgSet.In p S /\ embedPkg p = (Name.Orig m, v)).
+          T.PkgSet.In (Name.Orig m, Version.Orig v) (coreResolution S R D sigma) ->
+          PkgSet.In (m, v) S).
       { intros m v Hv; apply mem_coreResolution in Hv.
-        destruct Hv as [[p [Hp Hpe]] | [[p [g [Hd Hw]]] | [x Hq]]].
-        - exists p; split; [exact Hp | symmetry; exact Hpe].
-        - exfalso; revert Hw; destruct (PkgSet.mem p S); intro Hw;
-            [exact (witnessSetTaken_not_orig _ _ _ _ _ Hw)
-            | exact (witnessSetUntaken_not_orig _ _ _ _ Hw)].
-        - discriminate. }
+        destruct Hv as [[[pn pv] [Hp Hpe]] | [[p [g [_ [_ Hw]]]]
+                       | [[x Hx] | [n [_ [_ Hn]]]]]].
+        - unfold embedPkg in Hpe; injection Hpe as -> ->; exact Hp.
+        - exfalso; exact (witnessSetTaken_not_orig _ _ _ _ _ Hw).
+        - discriminate Hx.
+        - discriminate Hn. }
       assert (Hvar : forall x,
           T.PkgSet.In (Name.Var x, Version.VarVal (sigma x))
-            (coreResolution S D sigma)).
-      { intro x; apply mem_coreResolution; right; right;
+            (coreResolution S R D sigma)).
+      { intro x; apply mem_coreResolution; right; right; left;
           exists x; reflexivity. }
-      assert (Hdisj := fun fs i => coreResolution_disj S D sigma fs i Hclo).
+      assert (Hdisj := fun fs i => coreResolution_disj S R D sigma fs i Hclo).
       constructor.
       - intros y Hy; apply mem_coreResolution in Hy.
         apply mem_reduceReal.
-        destruct Hy as [[p [Hp ->]] | [[p [g [Hd Hw]]] | [x ->]]].
+        destruct Hy as [[p [Hp ->]] | [[p [g [Hd [_ Hw]]]]
+                       | [[x ->] | [n [Hn [_ ->]]]]]].
         + left; exists p; split; [apply Hsub; exact Hp | reflexivity].
         + right; left; exists p, g; split; [exact Hd |].
-          revert Hw; destruct (PkgSet.mem p S); intro Hw;
-            [exact (witnessSetTaken_subset_witnessSet
-                      S sigma (embedPkg p) g _ Hw)
-            | exact (witnessSetUntaken_subset_witnessSet
-                       S (embedPkg p) g _ Hw)].
-        + right; right; exists x, (sigma x);
+          exact (witnessSetTaken_subset_witnessSet S sigma (embedPkg p) g _ Hw).
+        + right; right; left; exists x, (sigma x);
             split; [apply Hins | reflexivity].
+        + right; right; right; exists n; auto.
       - exact (Hemb r Hroot).
       - intros q Hq m vs Hd.
         apply mem_reduceDeps in Hd; destruct Hd as [p [g [Hpg Henc]]].
+        assert (Hfn : NSet.Subset (fnames g) (instNames R D)).
+        { intros z Hz; apply mem_instNames; right; apply mem_depNames.
+          exists p, g; auto. }
+        refine (proj1 (encodeNNF_dep_closure_aux S sigma Y_x (C.versions R)
+                         (instNames R D) _ Hins Hemb HVq Hbot Hdisj Hvar g Hfn)
+                  (embedPkg p) _ q m vs Henc Hq).
         destruct (PkgSet.mem p S) eqn:Ep.
-        + refine (proj1 (encodeNNF_dep_closure_aux S sigma Y_x _
-            Hins Hemb Horig Hdisj Hvar g) (embedPkg p) _ q m vs Henc Hq).
-          right; split.
-          * apply (Hclo p); [apply PkgSet.mem_spec; exact Ep | exact Hpg].
-          * pose proof (witnessSet_subset_coreResolution S D sigma p g Hpg)
-              as Hs; rewrite Ep in Hs; exact Hs.
-        + refine (proj1 (encodeNNF_dep_closure_aux S sigma Y_x _
-            Hins Hemb Horig Hdisj Hvar g) (embedPkg p) _ q m vs Henc Hq).
-          left; split.
-          * intro Hin; destruct p as [pn pv].
-            destruct (Horig pn (Version.Orig pv) Hin) as [[qn qv] [HqS Hqe]].
-            unfold embedPkg in Hqe; simpl in Hqe; injection Hqe as -> ->.
-            apply PkgSet.mem_spec in HqS; congruence.
-          * pose proof (witnessSet_subset_coreResolution S D sigma p g Hpg)
-              as Hs; rewrite Ep in Hs; exact Hs.
+        + apply PkgSet.mem_spec in Ep.
+          right; split; [exact (Hclo p Ep g Hpg) |].
+          exact (witnessSetTaken_subset_coreResolution S R D sigma p g Hpg Ep).
+        + left; intro Hin; destruct p as [pn pv].
+          apply Horig, PkgSet.mem_spec in Hin; congruence.
       - intros n v v' Hv Hv'.
         apply mem_coreResolution in Hv, Hv'.
-        destruct Hv as [[p1 [Hp1 He1]] | [[p1 [g1 [Hd1 Hw1]]] | [x1 Hq1]]];
-          destruct Hv' as [[p2 [Hp2 He2]] | [[p2 [g2 [Hd2 Hw2]]] | [x2 Hq2]]].
-        + destruct p1 as [n1 w1]; destruct p2 as [n2 w2].
-          unfold embedPkg in He1, He2; simpl in He1, He2.
-          injection He1 as -> ->; injection He2 as -> ->.
+        destruct Hv as [[[n1 w1] [Hp1 He1]] | [[p1 [g1 [Hd1 [Hp1 Hw1]]]]
+                       | [[x1 Hq1] | [m1 [_ [Hn1 He1]]]]]];
+          destruct Hv' as [[[n2 w2] [Hp2 He2]] | [[p2 [g2 [Hd2 [Hp2 Hw2]]]]
+                          | [[x2 Hq2] | [m2 [_ [Hn2 He2]]]]]];
+          unfold embedPkg in *.
+        + injection He1 as -> ->; injection He2 as -> ->.
           f_equal; exact (Huniq _ _ _ Hp1 Hp2).
-        + destruct p1 as [n1 w1]; unfold embedPkg in He1; simpl in He1;
-            injection He1 as -> ->.
-          exfalso; revert Hw2; destruct (PkgSet.mem p2 S); intro Hw2;
-            [exact (witnessSetTaken_not_orig _ _ _ _ _ Hw2)
-            | exact (witnessSetUntaken_not_orig _ _ _ _ Hw2)].
-        + destruct p1 as [n1 w1]; unfold embedPkg in He1; simpl in He1;
-            injection He1 as -> ->.
-          discriminate Hq2.
-        + destruct p2 as [n2 w2]; unfold embedPkg in He2; simpl in He2;
-            injection He2 as -> ->.
-          exfalso; revert Hw1; destruct (PkgSet.mem p1 S); intro Hw1;
-            [exact (witnessSetTaken_not_orig _ _ _ _ _ Hw1)
-            | exact (witnessSetUntaken_not_orig _ _ _ _ Hw1)].
-        + destruct n as [n0 | x | fs | n0 vs0].
-          * exfalso; revert Hw1; destruct (PkgSet.mem p1 S); intro Hw1;
-              [exact (witnessSetTaken_not_orig _ _ _ _ _ Hw1)
-              | exact (witnessSetUntaken_not_orig _ _ _ _ Hw1)].
-          * exfalso; revert Hw1; destruct (PkgSet.mem p1 S); intro Hw1;
-              [exact (witnessSetTaken_not_var _ _ _ _ _ Hw1)
-              | exact (witnessSetUntaken_not_var _ _ _ _ Hw1)].
-          * assert (G : forall p g v0, DepRel.In (p, g) D ->
-                T.PkgSet.In (Name.Disjunct fs, v0)
-                  (if PkgSet.mem p S then witnessSetTaken S sigma g
-                   else witnessSetUntaken S g) ->
-                v0 = Version.Idx (firstSatIdx S sigma fs)).
-            { intros p g v0 _ Hw; revert Hw;
-                destruct (PkgSet.mem p S); intro Hw.
-              - exact (witnessSetTaken_disjunct_det _ _ _ _ _ Hw).
-              - exfalso;
-                  exact (witnessSetUntaken_disjunct_det _ _ _ _ Hw). }
-            rewrite (G _ _ _ Hd1 Hw1), (G _ _ _ Hd2 Hw2); reflexivity.
-          * assert (G : forall p g v0, DepRel.In (p, g) D ->
-                T.PkgSet.In (Name.NegDep n0 vs0, v0)
-                  (if PkgSet.mem p S then witnessSetTaken S sigma g
-                   else witnessSetUntaken S g) ->
-                v0 =
-                  (if depTakenb S n0 vs0
-                   then Version.Idx 0 else Version.Idx 1)).
-            { intros p g v0 Hd Hw; revert Hw;
-                destruct (PkgSet.mem p S) eqn:Ep; intro Hw.
-              - apply (witnessSetTaken_negDep_det S sigma g); [| exact Hw].
-                apply (Hclo p); [apply PkgSet.mem_spec; exact Ep | exact Hd].
-              - assert (E : depTakenb S n0 vs0 = true).
-                { apply depTakenb_iff;
-                    exact (witnessSetUntaken_negDep_exists _ _ _ _ _ Hw). }
-                rewrite E;
-                  exact (witnessSetUntaken_negDep_det _ _ _ _ _ Hw). }
-            rewrite (G _ _ _ Hd1 Hw1), (G _ _ _ Hd2 Hw2); reflexivity.
+        + injection He1 as -> ->.
+          exfalso; exact (witnessSetTaken_not_orig _ _ _ _ _ Hw2).
+        + injection He1 as -> ->; discriminate Hq2.
+        + injection He1 as -> ->; injection He2 as -> ->.
+          exfalso; exact (Hn2 _ Hp1).
+        + injection He2 as -> ->.
+          exfalso; exact (witnessSetTaken_not_orig _ _ _ _ _ Hw1).
+        + destruct n as [n0 | x | fs].
+          * exfalso; exact (witnessSetTaken_not_orig _ _ _ _ _ Hw1).
+          * exfalso; exact (witnessSetTaken_not_var _ _ _ _ _ Hw1).
+          * rewrite (witnessSetTaken_disjunct_det _ _ _ _ _ Hw1),
+              (witnessSetTaken_disjunct_det _ _ _ _ _ Hw2); reflexivity.
         + injection Hq2 as -> ->.
-          exfalso; revert Hw1; destruct (PkgSet.mem p1 S); intro Hw1;
-            [exact (witnessSetTaken_not_var _ _ _ _ _ Hw1)
-            | exact (witnessSetUntaken_not_var _ _ _ _ Hw1)].
+          exfalso; exact (witnessSetTaken_not_var _ _ _ _ _ Hw1).
+        + injection He2 as -> ->.
+          exfalso; exact (witnessSetTaken_not_orig _ _ _ _ _ Hw1).
+        + injection Hq1 as -> ->; discriminate He2.
         + injection Hq1 as -> ->.
-          destruct p2 as [n2 w2]; unfold embedPkg in He2; simpl in He2;
-            discriminate He2.
-        + injection Hq1 as -> ->.
-          exfalso; revert Hw2; destruct (PkgSet.mem p2 S); intro Hw2;
-            [exact (witnessSetTaken_not_var _ _ _ _ _ Hw2)
-            | exact (witnessSetUntaken_not_var _ _ _ _ Hw2)].
+          exfalso; exact (witnessSetTaken_not_var _ _ _ _ _ Hw2).
         + injection Hq1 as -> ->; injection Hq2 as -> ->; reflexivity.
+        + injection Hq1 as -> ->; discriminate He2.
+        + injection He1 as -> ->; injection He2 as -> ->.
+          exfalso; exact (Hn1 _ Hp2).
+        + injection He1 as -> ->.
+          exfalso; exact (witnessSetTaken_not_orig _ _ _ _ _ Hw2).
+        + injection He1 as -> ->; discriminate Hq2.
+        + injection He1 as -> ->; injection He2 as _ ->; reflexivity.
     Qed.
 
     Module Lookup.
-      Inductive Atom : Type :=
-      | APos (m : N.t) (vs : VSet.t)
-      | ANeg (m : N.t) (vs : VSet.t)
-      | ADisj (fs : list Formula)
-      | AVar (x : X.t) (ys : YSet.t).
-      Module XYS := PairUOT X YSet.AsUOT.
-      Module XYSF := UOTCompareFacts XYS.
-      #[local] Hint Rewrite XYSF.compare_eq_iff : cmp_varf.
-      #[local] Hint Extern 1 => cmp_by XYSF.compare_antisym : cmp_varf.
-      #[local] Hint Extern 1 => cmp_by XYSF.compare_lt_trans : cmp_varf.
-
-      Module AComp <: ComparableType.
-        Definition t := Atom.
-        Definition compare (x y : t) : comparison :=
-          match x, y with
-          | APos n1 vs1, APos n2 vs2 => C.Dependees.compare (n1, vs1) (n2, vs2)
-          | APos _ _, _ => Lt
-          | ANeg _ _, APos _ _ => Gt
-          | ANeg n1 vs1, ANeg n2 vs2 => C.Dependees.compare (n1, vs1) (n2, vs2)
-          | ANeg _ _, _ => Lt
-          | ADisj fs1, ADisj fs2 => FListOT.compare fs1 fs2
-          | ADisj _, AVar _ _ => Lt
-          | ADisj _, _ => Gt
-          | AVar x1 ys1, AVar x2 ys2 => XYS.compare (x1, ys1) (x2, ys2)
-          | AVar _ _, _ => Gt
-          end.
-
-        Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
-        Proof. cmp_eq_iff cmp_varf. Qed.
-
-        Lemma compare_antisym : forall x y, compare y x = CompOpp (compare x y).
-        Proof. cmp_antisym cmp_varf. Qed.
-
-        Lemma compare_lt_trans : forall x y z,
-            compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
-        Proof. cmp_lt_trans cmp_varf. Qed.
-      End AComp.
-      Module AOT := UOTFromCompare AComp.
-      Module AtomSet := FSetUOT AOT.
-
-      (* Mutual structural pairs for the same reason as encodeNNF. *)
-      Fixpoint deepAtoms (Y_x : X.t -> YSet.t) (f : Formula) : AtomSet.t :=
-        match f with
-        | FDep m vs => AtomSet.singleton (APos m vs)
-        | FConj a b => AtomSet.union (deepAtoms Y_x a) (deepAtoms Y_x b)
-        | FDisj a b =>
-            AtomSet.add (ADisj (a :: disjSpine b))
-              (AtomSet.union (deepAtoms Y_x a) (deepAtoms Y_x b))
-        | FNeg a => deepAtomsNeg Y_x a
-        | FVarCmp x op y =>
-            AtomSet.singleton
-              (AVar x (YSet.filter (fun y' => opEvalY op y' y) (Y_x x)))
-        end
-      with deepAtomsNeg (Y_x : X.t -> YSet.t) (f : Formula) : AtomSet.t :=
-        match f with
-        | FDep m vs => AtomSet.singleton (ANeg m vs)
-        | FConj a b =>
-            AtomSet.add (ADisj (FNeg a :: negConjSpine b))
-              (AtomSet.union (deepAtomsNeg Y_x a) (deepAtomsNeg Y_x b))
-        | FDisj a b => AtomSet.union (deepAtomsNeg Y_x a) (deepAtomsNeg Y_x b)
-        | FNeg a => deepAtoms Y_x a
-        | FVarCmp x op y =>
-            AtomSet.singleton
-              (AVar x (YSet.filter (fun y' => opEvalY (cmpComplement op) y' y)
-                         (Y_x x)))
-        end.
-
-      Fixpoint negAtoms (f : Formula) : AtomSet.t :=
-        match f with
-        | FDep _ _ => AtomSet.empty
-        | FConj a b => AtomSet.union (negAtoms a) (negAtoms b)
-        | FDisj a b => AtomSet.union (negAtoms a) (negAtoms b)
-        | FNeg a => negAtomsNeg a
-        | FVarCmp _ _ _ => AtomSet.empty
-        end
-      with negAtomsNeg (f : Formula) : AtomSet.t :=
-        match f with
-        | FDep m vs => AtomSet.singleton (ANeg m vs)
-        | FConj a b => AtomSet.union (negAtomsNeg a) (negAtomsNeg b)
-        | FDisj a b => AtomSet.union (negAtomsNeg a) (negAtomsNeg b)
-        | FNeg a => negAtoms a
-        | FVarCmp _ _ _ => AtomSet.empty
-        end.
-
-      Module NEqb := UOTEqb N.
-      Definition occursNegOnb (f : Formula) (m : N.t) (v : V.t) : bool :=
-        AtomSet.exists_ (fun a =>
-            match a with
-            | ANeg n' vs => andb (NEqb.eqb n' m) (VSet.mem v vs)
-            | _ => false
-            end)
-          (negAtoms f).
-
       Definition disjAlt (fs : list Formula) (i : Version.t) :
           option Formula :=
         match i with
@@ -2962,482 +2196,235 @@ Module VariableFormula (N V : UsualOrderedType)
         | _ => None
         end.
 
-      Definition withNegOn (D : DepRel.t) (m : N.t) (v : V.t) : DepRel.t :=
-        DepRel.filter (fun '(_, f) => occursNegOnb f m v) D.
+      (* An edge out of an original package is the owner's own: the only
+         other sources an encoding has are the disjunct nodes it introduces,
+         whose versions are indices. *)
+      Definition notIdx (w : Version.t) : Prop :=
+        forall i, w <> Version.Idx i.
 
+      Lemma notIdx_orig : forall v, notIdx (Version.Orig v).
+      Proof. intros v i E; discriminate E. Qed.
+
+      Lemma notIdx_bot : notIdx Version.Bot.
+      Proof. intros i E; discriminate E. Qed.
+
+      Lemma notIdx_varval : forall y, notIdx (Version.VarVal y).
+      Proof. intros y i E; discriminate E. Qed.
+
+      (* Every edge of an encoding leaves its owner q or a disjunct node at
+         an index; so a source at a non-index version is q itself. *)
+      Lemma encodeNNF_src_aux : forall Y_x Vq f,
+          (forall (q q' : T.Pkg.t) (d : T.Dependees.t),
+              notIdx (snd q') ->
+              T.DepRel.In (q', d) (encodeNNF Y_x Vq q f) -> q = q') /\
+          (forall (q q' : T.Pkg.t) (d : T.Dependees.t),
+              notIdx (snd q') ->
+              T.DepRel.In (q', d) (encodeNNFneg Y_x Vq q f) -> q = q') /\
+          (forall (n : Name.t) (i0 : nat) (q' : T.Pkg.t) (d : T.Dependees.t),
+              notIdx (snd q') ->
+              T.DepRel.In (q', d) (encodeDisj Y_x Vq n i0 f) -> False) /\
+          (forall (n : Name.t) (i0 : nat) (q' : T.Pkg.t) (d : T.Dependees.t),
+              notIdx (snd q') ->
+              T.DepRel.In (q', d) (encodeConjNeg Y_x Vq n i0 f) -> False).
+      Proof.
+        intros Y_x Vq f;
+          induction f as [o ws | a IHa b IHb | a IHa b IHb | a IHa | x op y].
+        - split4v.
+          + intros q q' d Hw H; apply SOed.singleton_in in H; congruence.
+          + intros q q' d Hw H; apply SOed.singleton_in in H; congruence.
+          + intros n i0 q' d Hw H; apply SOed.singleton_in in H;
+              injection H as E _; subst q'; exact (Hw i0 eq_refl).
+          + intros n i0 q' d Hw H; apply SOed.singleton_in in H;
+              injection H as E _; subst q'; exact (Hw i0 eq_refl).
+        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
+            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
+          + intros q q' d Hw H; simpl in H.
+            apply T.DepRel.union_spec in H; destruct H as [H | H];
+              [exact (IHa1 _ _ _ Hw H) | exact (IHb1 _ _ _ Hw H)].
+          + intros q q' d Hw H; simpl in H.
+            apply SOed.add_in in H; destruct H as [H | H]; [congruence |].
+            apply T.DepRel.union_spec in H; destruct H as [H | H];
+              [assert (E := IHa2 _ _ _ Hw H); subst q'; destruct (Hw 0 eq_refl)
+              | destruct (IHb4 _ _ _ _ Hw H)].
+          + intros n i0 q' d Hw H; simpl in H.
+            apply T.DepRel.union_spec in H; destruct H as [H | H];
+              [assert (E := IHa1 _ _ _ Hw H) | assert (E := IHb1 _ _ _ Hw H)];
+              subst q'; destruct (Hw i0 eq_refl).
+          + intros n i0 q' d Hw H; simpl in H.
+            apply T.DepRel.union_spec in H; destruct H as [H | H];
+              [assert (E := IHa2 _ _ _ Hw H); subst q'; destruct (Hw i0 eq_refl)
+              | destruct (IHb4 _ _ _ _ Hw H)].
+        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
+            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
+          + intros q q' d Hw H; simpl in H.
+            apply SOed.add_in in H; destruct H as [H | H]; [congruence |].
+            apply T.DepRel.union_spec in H; destruct H as [H | H];
+              [assert (E := IHa1 _ _ _ Hw H); subst q'; destruct (Hw 0 eq_refl)
+              | destruct (IHb3 _ _ _ _ Hw H)].
+          + intros q q' d Hw H; simpl in H.
+            apply T.DepRel.union_spec in H; destruct H as [H | H];
+              [exact (IHa2 _ _ _ Hw H) | exact (IHb2 _ _ _ Hw H)].
+          + intros n i0 q' d Hw H; simpl in H.
+            apply T.DepRel.union_spec in H; destruct H as [H | H];
+              [assert (E := IHa1 _ _ _ Hw H); subst q'; destruct (Hw i0 eq_refl)
+              | destruct (IHb3 _ _ _ _ Hw H)].
+          + intros n i0 q' d Hw H; simpl in H.
+            apply T.DepRel.union_spec in H; destruct H as [H | H];
+              [assert (E := IHa2 _ _ _ Hw H) | assert (E := IHb2 _ _ _ Hw H)];
+              subst q'; destruct (Hw i0 eq_refl).
+        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4v.
+          + intros q q' d Hw H; exact (IHa2 _ _ _ Hw H).
+          + intros q q' d Hw H; exact (IHa1 _ _ _ Hw H).
+          + intros n i0 q' d Hw H; assert (E := IHa2 _ _ _ Hw H); subst q';
+              destruct (Hw i0 eq_refl).
+          + intros n i0 q' d Hw H; assert (E := IHa1 _ _ _ Hw H); subst q';
+              destruct (Hw i0 eq_refl).
+        - split4v.
+          + intros q q' d Hw H; apply SOed.singleton_in in H; congruence.
+          + intros q q' d Hw H; apply SOed.singleton_in in H; congruence.
+          + intros n i0 q' d Hw H; apply SOed.singleton_in in H;
+              injection H as E _; subst q'; exact (Hw i0 eq_refl).
+          + intros n i0 q' d Hw H; apply SOed.singleton_in in H;
+              injection H as E _; subst q'; exact (Hw i0 eq_refl).
+      Qed.
+
+      (* An edge's original target is a name the formula mentions. *)
+      Lemma encodeNNF_tgt_aux : forall Y_x Vq f,
+          (forall (q q' : T.Pkg.t) m (ws : T.VSet.t),
+              T.DepRel.In (q', (Name.Orig m, ws)) (encodeNNF Y_x Vq q f) ->
+              NSet.In m (fnames f)) /\
+          (forall (q q' : T.Pkg.t) m (ws : T.VSet.t),
+              T.DepRel.In (q', (Name.Orig m, ws)) (encodeNNFneg Y_x Vq q f) ->
+              NSet.In m (fnames f)) /\
+          (forall (n : Name.t) (i0 : nat) (q' : T.Pkg.t) m (ws : T.VSet.t),
+              T.DepRel.In (q', (Name.Orig m, ws)) (encodeDisj Y_x Vq n i0 f) ->
+              NSet.In m (fnames f)) /\
+          (forall (n : Name.t) (i0 : nat) (q' : T.Pkg.t) m (ws : T.VSet.t),
+              T.DepRel.In (q', (Name.Orig m, ws)) (encodeConjNeg Y_x Vq n i0 f) ->
+              NSet.In m (fnames f)).
+      Proof.
+        intros Y_x Vq f;
+          induction f as [o vs | a IHa b IHb | a IHa b IHb | a IHa | x op y].
+        - split4v; intros; apply SOed.singleton_in in H; injection H as _ <- _;
+            simpl; apply NSet.singleton_spec; reflexivity.
+        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
+            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
+          + intros q q' m ws H; simpl in H; simpl.
+            apply T.DepRel.union_spec in H; apply NSet.union_spec;
+              destruct H as [H | H];
+              [left; exact (IHa1 _ _ _ _ H) | right; exact (IHb1 _ _ _ _ H)].
+          + intros q q' m ws H; simpl in H; simpl.
+            apply SOed.add_in in H; destruct H as [H | H]; [discriminate |].
+            apply T.DepRel.union_spec in H; apply NSet.union_spec;
+              destruct H as [H | H];
+              [left; exact (IHa2 _ _ _ _ H) | right; exact (IHb4 _ _ _ _ _ H)].
+          + intros n i0 q' m ws H; simpl in H; simpl.
+            apply T.DepRel.union_spec in H; apply NSet.union_spec;
+              destruct H as [H | H];
+              [left; exact (IHa1 _ _ _ _ H) | right; exact (IHb1 _ _ _ _ H)].
+          + intros n i0 q' m ws H; simpl in H; simpl.
+            apply T.DepRel.union_spec in H; apply NSet.union_spec;
+              destruct H as [H | H];
+              [left; exact (IHa2 _ _ _ _ H) | right; exact (IHb4 _ _ _ _ _ H)].
+        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
+            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
+          + intros q q' m ws H; simpl in H; simpl.
+            apply SOed.add_in in H; destruct H as [H | H]; [discriminate |].
+            apply T.DepRel.union_spec in H; apply NSet.union_spec;
+              destruct H as [H | H];
+              [left; exact (IHa1 _ _ _ _ H) | right; exact (IHb3 _ _ _ _ _ H)].
+          + intros q q' m ws H; simpl in H; simpl.
+            apply T.DepRel.union_spec in H; apply NSet.union_spec;
+              destruct H as [H | H];
+              [left; exact (IHa2 _ _ _ _ H) | right; exact (IHb2 _ _ _ _ H)].
+          + intros n i0 q' m ws H; simpl in H; simpl.
+            apply T.DepRel.union_spec in H; apply NSet.union_spec;
+              destruct H as [H | H];
+              [left; exact (IHa1 _ _ _ _ H) | right; exact (IHb3 _ _ _ _ _ H)].
+          + intros n i0 q' m ws H; simpl in H; simpl.
+            apply T.DepRel.union_spec in H; apply NSet.union_spec;
+              destruct H as [H | H];
+              [left; exact (IHa2 _ _ _ _ H) | right; exact (IHb2 _ _ _ _ H)].
+        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4v.
+          + intros q q' m ws H; exact (IHa2 _ _ _ _ H).
+          + intros q q' m ws H; exact (IHa1 _ _ _ _ H).
+          + intros n i0 q' m ws H; exact (IHa2 _ _ _ _ H).
+          + intros n i0 q' m ws H; exact (IHa1 _ _ _ _ H).
+        - split4v; intros; apply SOed.singleton_in in H; discriminate H.
+      Qed.
+
+      (* The encoder reads the version oracle at the names the formula
+         mentions and nowhere else. *)
+      Lemma encodeNNF_agree_aux : forall Y_x Vq Vq' f,
+          (forall m, NSet.In m (fnames f) -> Vq m = Vq' m) ->
+          (forall p, encodeNNF Y_x Vq p f = encodeNNF Y_x Vq' p f) /\
+          (forall p, encodeNNFneg Y_x Vq p f = encodeNNFneg Y_x Vq' p f) /\
+          (forall n i, encodeDisj Y_x Vq n i f = encodeDisj Y_x Vq' n i f) /\
+          (forall n i, encodeConjNeg Y_x Vq n i f = encodeConjNeg Y_x Vq' n i f).
+      Proof.
+        intros Y_x Vq Vq' f;
+          induction f as [m vs | a IHa b IHb | a IHa b IHb | a IHa | x op y];
+          intro Hag.
+        - assert (E : Vq m = Vq' m)
+            by (apply Hag; simpl; apply NSet.singleton_spec; reflexivity).
+          split4v; intros; simpl; unfold negVS; try rewrite E; reflexivity.
+        - assert (Ha : forall m, NSet.In m (fnames a) -> Vq m = Vq' m)
+            by (intros m Hm; apply Hag; simpl; apply NSet.union_spec; left;
+                exact Hm).
+          assert (Hb : forall m, NSet.In m (fnames b) -> Vq m = Vq' m)
+            by (intros m Hm; apply Hag; simpl; apply NSet.union_spec; right;
+                exact Hm).
+          destruct (IHa Ha) as (IHa1 & IHa2 & IHa3 & IHa4);
+            destruct (IHb Hb) as (IHb1 & IHb2 & IHb3 & IHb4); split4v;
+            intros; simpl.
+          + rewrite IHa1, IHb1; reflexivity.
+          + rewrite IHa2, IHb4; reflexivity.
+          + rewrite IHa1, IHb1; reflexivity.
+          + rewrite IHa2, IHb4; reflexivity.
+        - assert (Ha : forall m, NSet.In m (fnames a) -> Vq m = Vq' m)
+            by (intros m Hm; apply Hag; simpl; apply NSet.union_spec; left;
+                exact Hm).
+          assert (Hb : forall m, NSet.In m (fnames b) -> Vq m = Vq' m)
+            by (intros m Hm; apply Hag; simpl; apply NSet.union_spec; right;
+                exact Hm).
+          destruct (IHa Ha) as (IHa1 & IHa2 & IHa3 & IHa4);
+            destruct (IHb Hb) as (IHb1 & IHb2 & IHb3 & IHb4); split4v;
+            intros; simpl.
+          + rewrite IHa1, IHb3; reflexivity.
+          + rewrite IHa2, IHb2; reflexivity.
+          + rewrite IHa1, IHb3; reflexivity.
+          + rewrite IHa2, IHb2; reflexivity.
+        - destruct (IHa Hag) as (IHa1 & IHa2 & IHa3 & IHa4); split4v;
+            intros; simpl; [apply IHa2 | apply IHa1 | apply IHa2 | apply IHa1].
+        - split4v; intros; reflexivity.
+      Qed.
+
+      Lemma reduceDepsBy_agree : forall Y_x Vq Vq' D,
+          (forall m, NSet.In m (depNames D) -> Vq m = Vq' m) ->
+          reduceDepsBy Y_x Vq D = reduceDepsBy Y_x Vq' D.
+      Proof.
+        intros Y_x Vq Vq' D Hag; apply T.DepRel.ext; intro d.
+        rewrite !mem_reduceDepsBy.
+        split; intros [p [f [Hd He]]]; exists p, f; split; try exact Hd;
+          assert (Hf : forall m, NSet.In m (fnames f) -> Vq m = Vq' m)
+            by (intros m Hm; apply Hag, mem_depNames; exists p, f; auto);
+          [rewrite <- (proj1 (encodeNNF_agree_aux Y_x Vq Vq' f Hf))
+          | rewrite (proj1 (encodeNNF_agree_aux Y_x Vq Vq' f Hf))]; exact He.
+      Qed.
+
+      Module PkgFibred := FibredRel N V Pkg PkgSet.
       Module DepRelFibred := FibredRel Pkg Dependees DepElt DepRel.
-      Definition subInstanceOrig (D : DepRel.t) (p : Pkg.t) : DepRel.t :=
-        let '(m, v) := p in
-        DepRel.union (DepRelFibred.tailFibre D (m, v)) (withNegOn D m v).
+      Module RKeys := PreimageOfKeys N Pkg NSet PkgSet.
 
-      Lemma encodeNNF_src_orig_aux : forall Y_x f,
-          (forall (q : T.Pkg.t) m v (d : T.Dependees.t),
-              T.DepRel.In ((Name.Orig m, Version.Orig v), d)
-                (encodeNNF Y_x q f) ->
-              q = (Name.Orig m, Version.Orig v) \/
-              exists vs, AtomSet.In (ANeg m vs) (negAtoms f) /\
-                VSet.In v vs) /\
-          (forall (q : T.Pkg.t) m v (d : T.Dependees.t),
-              T.DepRel.In ((Name.Orig m, Version.Orig v), d)
-                (encodeNNFneg Y_x q f) ->
-              q = (Name.Orig m, Version.Orig v) \/
-              exists vs, AtomSet.In (ANeg m vs) (negAtomsNeg f) /\
-                VSet.In v vs) /\
-          (forall (n : Name.t) (i0 : nat) m v (d : T.Dependees.t),
-              T.DepRel.In ((Name.Orig m, Version.Orig v), d)
-                (encodeDisj Y_x n i0 f) ->
-              exists vs, AtomSet.In (ANeg m vs) (negAtoms f) /\
-                VSet.In v vs) /\
-          (forall (n : Name.t) (i0 : nat) m v (d : T.Dependees.t),
-              T.DepRel.In ((Name.Orig m, Version.Orig v), d)
-                (encodeConjNeg Y_x n i0 f) ->
-              exists vs, AtomSet.In (ANeg m vs) (negAtomsNeg f) /\
-                VSet.In v vs).
+      (* The repository at a set of names. *)
+      Definition nameRestrict (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
+        RKeys.ofKeys fst ns R.
+
+      Lemma versions_nameRestrict : forall R ns n,
+          NSet.In n ns -> C.versions (nameRestrict R ns) n = C.versions R n.
       Proof.
-        intros Y_x;
-          induction f as [o ws | a IHa b IHb | a IHa b IHb | a IHa | x op y].
-        - split4v.
-          + intros q m v d H; apply SOed.singleton_in in H; left; congruence.
-          + intros q m v d H; simpl in H; simpl.
-            apply SOed.add_in in H; destruct H as [H | H]; [left; congruence |].
-            apply SOvd.mem_map in H; destruct H as [u [Hu He]].
-            injection He as -> -> ->.
-            right; exists ws; split;
-              [apply AtomSet.singleton_spec; reflexivity | exact Hu].
-          + intros n i0 m v d H; apply SOed.singleton_in in H; discriminate H.
-          + intros n i0 m v d H; simpl in H; simpl.
-            apply SOed.add_in in H; destruct H as [H | H]; [discriminate H |].
-            apply SOvd.mem_map in H; destruct H as [u [Hu He]].
-            injection He as -> -> ->.
-            exists ws; split;
-              [apply AtomSet.singleton_spec; reflexivity | exact Hu].
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
-          + intros q m v d H; simpl in H; simpl.
-            apply T.DepRel.union_spec in H; destruct H as [H | H].
-            * destruct (IHa1 _ _ _ _ H) as [E | [vs [Ha Hv]]];
-                [left; exact E |].
-              right; exists vs; split;
-                [apply AtomSet.union_spec; left; exact Ha | exact Hv].
-            * destruct (IHb1 _ _ _ _ H) as [E | [vs [Ha Hv]]];
-                [left; exact E |].
-              right; exists vs; split;
-                [apply AtomSet.union_spec; right; exact Ha | exact Hv].
-          + intros q m v d H; simpl in H; simpl.
-            apply SOed.add_in in H; destruct H as [H | H]; [left; congruence |].
-            apply T.DepRel.union_spec in H; destruct H as [H | H].
-            * destruct (IHa2 _ _ _ _ H) as [E | [vs [Ha Hv]]];
-                [discriminate |].
-              right; exists vs; split;
-                [apply AtomSet.union_spec; left; exact Ha | exact Hv].
-            * destruct (IHb4 _ _ _ _ _ H) as [vs [Ha Hv]].
-              right; exists vs; split;
-                [apply AtomSet.union_spec; right; exact Ha | exact Hv].
-          + intros n i0 m v d H; simpl in H; simpl.
-            apply T.DepRel.union_spec in H; destruct H as [H | H].
-            * destruct (IHa1 _ _ _ _ H) as [E | [vs [Ha Hv]]];
-                [discriminate |].
-              exists vs; split;
-                [apply AtomSet.union_spec; left; exact Ha | exact Hv].
-            * destruct (IHb1 _ _ _ _ H) as [E | [vs [Ha Hv]]];
-                [discriminate |].
-              exists vs; split;
-                [apply AtomSet.union_spec; right; exact Ha | exact Hv].
-          + intros n i0 m v d H; simpl in H; simpl.
-            apply T.DepRel.union_spec in H; destruct H as [H | H].
-            * destruct (IHa2 _ _ _ _ H) as [E | [vs [Ha Hv]]];
-                [discriminate |].
-              exists vs; split;
-                [apply AtomSet.union_spec; left; exact Ha | exact Hv].
-            * destruct (IHb4 _ _ _ _ _ H) as [vs [Ha Hv]].
-              exists vs; split;
-                [apply AtomSet.union_spec; right; exact Ha | exact Hv].
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
-          + intros q m v d H; simpl in H; simpl.
-            apply SOed.add_in in H; destruct H as [H | H]; [left; congruence |].
-            apply T.DepRel.union_spec in H; destruct H as [H | H].
-            * destruct (IHa1 _ _ _ _ H) as [E | [vs [Ha Hv]]];
-                [discriminate |].
-              right; exists vs; split;
-                [apply AtomSet.union_spec; left; exact Ha | exact Hv].
-            * destruct (IHb3 _ _ _ _ _ H) as [vs [Ha Hv]].
-              right; exists vs; split;
-                [apply AtomSet.union_spec; right; exact Ha | exact Hv].
-          + intros q m v d H; simpl in H; simpl.
-            apply T.DepRel.union_spec in H; destruct H as [H | H].
-            * destruct (IHa2 _ _ _ _ H) as [E | [vs [Ha Hv]]];
-                [left; exact E |].
-              right; exists vs; split;
-                [apply AtomSet.union_spec; left; exact Ha | exact Hv].
-            * destruct (IHb2 _ _ _ _ H) as [E | [vs [Ha Hv]]];
-                [left; exact E |].
-              right; exists vs; split;
-                [apply AtomSet.union_spec; right; exact Ha | exact Hv].
-          + intros n i0 m v d H; simpl in H; simpl.
-            apply T.DepRel.union_spec in H; destruct H as [H | H].
-            * destruct (IHa1 _ _ _ _ H) as [E | [vs [Ha Hv]]];
-                [discriminate |].
-              exists vs; split;
-                [apply AtomSet.union_spec; left; exact Ha | exact Hv].
-            * destruct (IHb3 _ _ _ _ _ H) as [vs [Ha Hv]].
-              exists vs; split;
-                [apply AtomSet.union_spec; right; exact Ha | exact Hv].
-          + intros n i0 m v d H; simpl in H; simpl.
-            apply T.DepRel.union_spec in H; destruct H as [H | H].
-            * destruct (IHa2 _ _ _ _ H) as [E | [vs [Ha Hv]]];
-                [discriminate |].
-              exists vs; split;
-                [apply AtomSet.union_spec; left; exact Ha | exact Hv].
-            * destruct (IHb2 _ _ _ _ H) as [E | [vs [Ha Hv]]];
-                [discriminate |].
-              exists vs; split;
-                [apply AtomSet.union_spec; right; exact Ha | exact Hv].
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4v.
-          + intros q m v d H; exact (IHa2 _ _ _ _ H).
-          + intros q m v d H; exact (IHa1 _ _ _ _ H).
-          + intros n i0 m v d H.
-            destruct (IHa2 _ _ _ _ H) as [E | Hx]; [discriminate | exact Hx].
-          + intros n i0 m v d H.
-            destruct (IHa1 _ _ _ _ H) as [E | Hx]; [discriminate | exact Hx].
-        - split4v.
-          + intros q m v d H; apply SOed.singleton_in in H; left; congruence.
-          + intros q m v d H; apply SOed.singleton_in in H; left; congruence.
-          + intros n i0 m v d H; apply SOed.singleton_in in H; discriminate H.
-          + intros n i0 m v d H; apply SOed.singleton_in in H; discriminate H.
-      Qed.
-
-      Lemma occursNegOnb_iff : forall f m v,
-          occursNegOnb f m v = true <->
-          exists vs, AtomSet.In (ANeg m vs) (negAtoms f) /\ VSet.In v vs.
-      Proof.
-        intros f m v; unfold occursNegOnb.
-        rewrite AtomSet.exists_spec'.
-        split.
-        - intros [[o ws | o ws | fs | x ys] [Ha Hm]]; simpl in Hm;
-            try discriminate.
-          apply Bool.andb_true_iff in Hm as [Hn Hv].
-          apply NEqb.eqb_true_iff in Hn as ->.
-          exists ws; split; [exact Ha | apply VSet.mem_spec; exact Hv].
-        - intros [vs [Ha Hv]].
-          exists (ANeg m vs); split; [exact Ha |]; simpl.
-          rewrite NEqb.eqb_refl; simpl; apply VSet.mem_spec; exact Hv.
-      Qed.
-
-      Lemma encodeNNF_src_negDep_aux : forall Y_x f,
-          (forall (q : T.Pkg.t) m vs (i : Version.t) (d : T.Dependees.t),
-              T.DepRel.In ((Name.NegDep m vs, i), d) (encodeNNF Y_x q f) ->
-              q = (Name.NegDep m vs, i)) /\
-          (forall (q : T.Pkg.t) m vs (i : Version.t) (d : T.Dependees.t),
-              T.DepRel.In ((Name.NegDep m vs, i), d) (encodeNNFneg Y_x q f) ->
-              q = (Name.NegDep m vs, i)) /\
-          (forall (n : Name.t) (i0 : nat) m vs (i : Version.t)
-                  (d : T.Dependees.t),
-              T.DepRel.In ((Name.NegDep m vs, i), d)
-                (encodeDisj Y_x n i0 f) ->
-              Name.NegDep m vs = n) /\
-          (forall (n : Name.t) (i0 : nat) m vs (i : Version.t)
-                  (d : T.Dependees.t),
-              T.DepRel.In ((Name.NegDep m vs, i), d)
-                (encodeConjNeg Y_x n i0 f) ->
-              Name.NegDep m vs = n).
-      Proof.
-        intros Y_x;
-          induction f as [o ws | a IHa b IHb | a IHa b IHb | a IHa | x op y].
-        - split4v.
-          + intros q m vs i d H; apply SOed.singleton_in in H; congruence.
-          + intros q m vs i d H; simpl in H.
-            apply SOed.add_in in H; destruct H as [H | H]; [congruence |].
-            apply SOvd.mem_map in H; destruct H as [u [_ H]]; discriminate.
-          + intros n i0 m vs i d H; apply SOed.singleton_in in H; congruence.
-          + intros n i0 m vs i d H; simpl in H.
-            apply SOed.add_in in H; destruct H as [H | H]; [congruence |].
-            apply SOvd.mem_map in H; destruct H as [u [_ H]]; discriminate.
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
-          + intros q m vs i d H; simpl in H.
-            apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [exact (IHa1 _ _ _ _ _ H) | exact (IHb1 _ _ _ _ _ H)].
-          + intros q m vs i d H; simpl in H.
-            apply SOed.add_in in H; destruct H as [H | H]; [congruence |].
-            apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [assert (E := IHa2 _ _ _ _ _ H); discriminate
-              | assert (E := IHb4 _ _ _ _ _ _ H); discriminate].
-          + intros n i0 m vs i d H; simpl in H.
-            apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [assert (E := IHa1 _ _ _ _ _ H) | assert (E := IHb1 _ _ _ _ _ H)];
-              injection E as E1 E2; symmetry; exact E1.
-          + intros n i0 m vs i d H; simpl in H.
-            apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [assert (E := IHa2 _ _ _ _ _ H); injection E as E1 E2;
-               symmetry; exact E1
-              | exact (IHb4 _ _ _ _ _ _ H)].
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
-          + intros q m vs i d H; simpl in H.
-            apply SOed.add_in in H; destruct H as [H | H]; [congruence |].
-            apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [assert (E := IHa1 _ _ _ _ _ H); discriminate
-              | assert (E := IHb3 _ _ _ _ _ _ H); discriminate].
-          + intros q m vs i d H; simpl in H.
-            apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [exact (IHa2 _ _ _ _ _ H) | exact (IHb2 _ _ _ _ _ H)].
-          + intros n i0 m vs i d H; simpl in H.
-            apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [assert (E := IHa1 _ _ _ _ _ H); injection E as E1 E2;
-               symmetry; exact E1
-              | exact (IHb3 _ _ _ _ _ _ H)].
-          + intros n i0 m vs i d H; simpl in H.
-            apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [assert (E := IHa2 _ _ _ _ _ H) | assert (E := IHb2 _ _ _ _ _ H)];
-              injection E as E1 E2; symmetry; exact E1.
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4v.
-          + intros q m vs i d H; exact (IHa2 _ _ _ _ _ H).
-          + intros q m vs i d H; exact (IHa1 _ _ _ _ _ H).
-          + intros n i0 m vs i d H.
-            assert (E := IHa2 _ _ _ _ _ H); injection E as E1 E2;
-              symmetry; exact E1.
-          + intros n i0 m vs i d H.
-            assert (E := IHa1 _ _ _ _ _ H); injection E as E1 E2;
-              symmetry; exact E1.
-        - split4v.
-          + intros q m vs i d H; apply SOed.singleton_in in H; congruence.
-          + intros q m vs i d H; apply SOed.singleton_in in H; congruence.
-          + intros n i0 m vs i d H; apply SOed.singleton_in in H; congruence.
-          + intros n i0 m vs i d H; apply SOed.singleton_in in H; congruence.
-      Qed.
-
-      Lemma encodeNNF_src_var_aux : forall Y_x f,
-          (forall (q : T.Pkg.t) x (y : Version.t) (d : T.Dependees.t),
-              T.DepRel.In ((Name.Var x, y), d) (encodeNNF Y_x q f) ->
-              q = (Name.Var x, y)) /\
-          (forall (q : T.Pkg.t) x (y : Version.t) (d : T.Dependees.t),
-              T.DepRel.In ((Name.Var x, y), d) (encodeNNFneg Y_x q f) ->
-              q = (Name.Var x, y)) /\
-          (forall (n : Name.t) (i0 : nat) x (y : Version.t)
-                  (d : T.Dependees.t),
-              T.DepRel.In ((Name.Var x, y), d) (encodeDisj Y_x n i0 f) ->
-              Name.Var x = n) /\
-          (forall (n : Name.t) (i0 : nat) x (y : Version.t)
-                  (d : T.Dependees.t),
-              T.DepRel.In ((Name.Var x, y), d) (encodeConjNeg Y_x n i0 f) ->
-              Name.Var x = n).
-      Proof.
-        intros Y_x;
-          induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa
-                         | x0 op y0].
-        - split4v.
-          + intros q x y d H; apply SOed.singleton_in in H; congruence.
-          + intros q x y d H; simpl in H.
-            apply SOed.add_in in H; destruct H as [H | H]; [congruence |].
-            apply SOvd.mem_map in H; destruct H as [u [_ H]]; discriminate.
-          + intros n i0 x y d H; apply SOed.singleton_in in H; congruence.
-          + intros n i0 x y d H; simpl in H.
-            apply SOed.add_in in H; destruct H as [H | H]; [congruence |].
-            apply SOvd.mem_map in H; destruct H as [u [_ H]]; discriminate.
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
-          + intros q x y d H; simpl in H.
-            apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [exact (IHa1 _ _ _ _ H) | exact (IHb1 _ _ _ _ H)].
-          + intros q x y d H; simpl in H.
-            apply SOed.add_in in H; destruct H as [H | H]; [congruence |].
-            apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [assert (E := IHa2 _ _ _ _ H); discriminate
-              | assert (E := IHb4 _ _ _ _ _ H); discriminate].
-          + intros n i0 x y d H; simpl in H.
-            apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [assert (E := IHa1 _ _ _ _ H) | assert (E := IHb1 _ _ _ _ H)];
-              injection E as E1 E2; symmetry; exact E1.
-          + intros n i0 x y d H; simpl in H.
-            apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [assert (E := IHa2 _ _ _ _ H); injection E as E1 E2;
-               symmetry; exact E1
-              | exact (IHb4 _ _ _ _ _ H)].
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
-          + intros q x y d H; simpl in H.
-            apply SOed.add_in in H; destruct H as [H | H]; [congruence |].
-            apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [assert (E := IHa1 _ _ _ _ H); discriminate
-              | assert (E := IHb3 _ _ _ _ _ H); discriminate].
-          + intros q x y d H; simpl in H.
-            apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [exact (IHa2 _ _ _ _ H) | exact (IHb2 _ _ _ _ H)].
-          + intros n i0 x y d H; simpl in H.
-            apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [assert (E := IHa1 _ _ _ _ H); injection E as E1 E2;
-               symmetry; exact E1
-              | exact (IHb3 _ _ _ _ _ H)].
-          + intros n i0 x y d H; simpl in H.
-            apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [assert (E := IHa2 _ _ _ _ H) | assert (E := IHb2 _ _ _ _ H)];
-              injection E as E1 E2; symmetry; exact E1.
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4v.
-          + intros q x y d H; exact (IHa2 _ _ _ _ H).
-          + intros q x y d H; exact (IHa1 _ _ _ _ H).
-          + intros n i0 x y d H.
-            assert (E := IHa2 _ _ _ _ H); injection E as E1 E2;
-              symmetry; exact E1.
-          + intros n i0 x y d H.
-            assert (E := IHa1 _ _ _ _ H); injection E as E1 E2;
-              symmetry; exact E1.
-        - split4v.
-          + intros q x y d H; apply SOed.singleton_in in H; congruence.
-          + intros q x y d H; apply SOed.singleton_in in H; congruence.
-          + intros n i0 x y d H; apply SOed.singleton_in in H; congruence.
-          + intros n i0 x y d H; apply SOed.singleton_in in H; congruence.
-      Qed.
-
-      (* the witness walkers hand the disjunct package's own name down the
-         spine, which is why the spine cases carry the extra alternative. *)
-      Definition syntheticAtom (n : Name.t) : option Atom :=
-        match n with
-        | Name.Orig _ => None
-        | Name.Var _ => None
-        | Name.Disjunct fs => Some (ADisj fs)
-        | Name.NegDep m vs => Some (ANeg m vs)
-        end.
-
-      Definition IntroducedBy (n : Name.t) (A : AtomSet.t) : Prop :=
-        exists a, syntheticAtom n = Some a /\ AtomSet.In a A.
-
-      Lemma IntroducedBy_unionL : forall n A B,
-          IntroducedBy n A -> IntroducedBy n (AtomSet.union A B).
-      Proof.
-        intros n A B [a [Ha HA]]; exists a;
-          split; [exact Ha | apply AtomSet.union_spec; left; exact HA].
-      Qed.
-
-      Lemma IntroducedBy_unionR : forall n A B,
-          IntroducedBy n B -> IntroducedBy n (AtomSet.union A B).
-      Proof.
-        intros n A B [a [Ha HB]]; exists a;
-          split; [exact Ha | apply AtomSet.union_spec; right; exact HB].
-      Qed.
-
-      Lemma IntroducedBy_add : forall n a A,
-          IntroducedBy n A -> IntroducedBy n (AtomSet.add a A).
-      Proof.
-        intros n a A [b [Hb HA]]; exists b;
-          split; [exact Hb | apply AtomSet.add_spec; right; exact HA].
-      Qed.
-
-      Lemma witness_atom_aux : forall Y_x (f : Formula),
-          (forall (p : T.Pkg.t) (n : Name.t) (w : Version.t),
-              T.PkgSet.In (n, w) (witnessSet p f) ->
-              IntroducedBy n (deepAtoms Y_x f)) /\
-          (forall (p : T.Pkg.t) (n : Name.t) (w : Version.t),
-              T.PkgSet.In (n, w) (witnessSetNeg p f) ->
-              IntroducedBy n (deepAtomsNeg Y_x f)) /\
-          (forall (nm0 : Name.t) (i : nat) (n : Name.t) (w : Version.t),
-              T.PkgSet.In (n, w) (witnessDisj nm0 i f) ->
-              IntroducedBy n (deepAtoms Y_x f) \/ n = nm0) /\
-          (forall (nm0 : Name.t) (i : nat) (n : Name.t) (w : Version.t),
-              T.PkgSet.In (n, w) (witnessConjNeg nm0 i f) ->
-              IntroducedBy n (deepAtomsNeg Y_x f) \/ n = nm0).
-      Proof.
-        intros Y_x;
-          induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa | x op y].
-        - repeat split.
-          + intros p n w H; exfalso; exact (SOpt.empty_in _ H).
-          + intros p n w H; simpl in H |- *.
-            rewrite SOpt.add_in, SOpt.singleton_in in H.
-            destruct H as [H | H]; injection H as -> _;
-              exists (ANeg m ws); split;
-              [reflexivity | apply AtomSet.singleton_spec; reflexivity
-              | reflexivity | apply AtomSet.singleton_spec; reflexivity].
-          + intros nm0 i n w H; exfalso; exact (SOpt.empty_in _ H).
-          + intros nm0 i n w H; simpl in H |- *.
-            rewrite SOpt.add_in, SOpt.singleton_in in H.
-            destruct H as [H | H]; injection H as -> _; left;
-              exists (ANeg m ws); split;
-              [reflexivity | apply AtomSet.singleton_spec; reflexivity
-              | reflexivity | apply AtomSet.singleton_spec; reflexivity].
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); repeat split.
-          + intros p n w H; simpl in H |- *.
-            apply T.PkgSet.union_spec in H; destruct H as [H | H];
-              [apply IntroducedBy_unionL; exact (IHa1 _ _ _ H)
-              | apply IntroducedBy_unionR; exact (IHb1 _ _ _ H)].
-          + intros p n w H; simpl in H |- *.
-            apply T.PkgSet.union_spec in H; destruct H as [H | H].
-            * apply mem_idxPkgs in H; destruct H as [j [_ E]];
-                injection E as -> _.
-              exists (ADisj (FNeg a :: negConjSpine b)); split;
-                [reflexivity | apply AtomSet.add_spec; left; reflexivity].
-            * apply T.PkgSet.union_spec in H; destruct H as [H | H].
-              -- apply IntroducedBy_add, IntroducedBy_unionL;
-                   exact (IHa2 _ _ _ H).
-              -- destruct (IHb4 _ _ _ _ H) as [HM | ->];
-                   [apply IntroducedBy_add, IntroducedBy_unionR; exact HM |].
-                 exists (ADisj (FNeg a :: negConjSpine b)); split;
-                   [reflexivity | apply AtomSet.add_spec; left; reflexivity].
-          + intros nm0 i n w H; simpl in H |- *.
-            apply T.PkgSet.union_spec in H; destruct H as [H | H];
-              [left; apply IntroducedBy_unionL; exact (IHa1 _ _ _ H)
-              | left; apply IntroducedBy_unionR; exact (IHb1 _ _ _ H)].
-          + intros nm0 i n w H; simpl in H |- *.
-            apply T.PkgSet.union_spec in H; destruct H as [H | H].
-            * left; apply IntroducedBy_add, IntroducedBy_unionL;
-                exact (IHa2 _ _ _ H).
-            * destruct (IHb4 _ _ _ _ H) as [HM | E];
-                [left; apply IntroducedBy_add, IntroducedBy_unionR; exact HM
-                | right; exact E].
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); repeat split.
-          + intros p n w H; simpl in H |- *.
-            apply T.PkgSet.union_spec in H; destruct H as [H | H].
-            * apply mem_idxPkgs in H; destruct H as [j [_ E]];
-                injection E as -> _.
-              exists (ADisj (a :: disjSpine b)); split;
-                [reflexivity | apply AtomSet.add_spec; left; reflexivity].
-            * apply T.PkgSet.union_spec in H; destruct H as [H | H].
-              -- apply IntroducedBy_add, IntroducedBy_unionL;
-                   exact (IHa1 _ _ _ H).
-              -- destruct (IHb3 _ _ _ _ H) as [HM | ->];
-                   [apply IntroducedBy_add, IntroducedBy_unionR; exact HM |].
-                 exists (ADisj (a :: disjSpine b)); split;
-                   [reflexivity | apply AtomSet.add_spec; left; reflexivity].
-          + intros p n w H; simpl in H |- *.
-            apply T.PkgSet.union_spec in H; destruct H as [H | H];
-              [apply IntroducedBy_unionL; exact (IHa2 _ _ _ H)
-              | apply IntroducedBy_unionR; exact (IHb2 _ _ _ H)].
-          + intros nm0 i n w H; simpl in H |- *.
-            apply T.PkgSet.union_spec in H; destruct H as [H | H].
-            * left; apply IntroducedBy_add, IntroducedBy_unionL;
-                exact (IHa1 _ _ _ H).
-            * destruct (IHb3 _ _ _ _ H) as [HM | E];
-                [left; apply IntroducedBy_add, IntroducedBy_unionR; exact HM
-                | right; exact E].
-          + intros nm0 i n w H; simpl in H |- *.
-            apply T.PkgSet.union_spec in H; destruct H as [H | H];
-              [left; apply IntroducedBy_unionL; exact (IHa2 _ _ _ H)
-              | left; apply IntroducedBy_unionR; exact (IHb2 _ _ _ H)].
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); repeat split.
-          + intros p n w H; exact (IHa2 _ _ _ H).
-          + intros p n w H; exact (IHa1 _ _ _ H).
-          + intros nm0 i n w H; left; exact (IHa2 _ _ _ H).
-          + intros nm0 i n w H; left; exact (IHa1 _ _ _ H).
-        - repeat split.
-          + intros p n w H; exfalso; exact (SOpt.empty_in _ H).
-          + intros p n w H; exfalso; exact (SOpt.empty_in _ H).
-          + intros nm0 i n w H; exfalso; exact (SOpt.empty_in _ H).
-          + intros nm0 i n w H; exfalso; exact (SOpt.empty_in _ H).
-      Qed.
-
-      Definition withNeg (Y_x : X.t -> YSet.t) (D : DepRel.t)
-          (m : N.t) (vs : VSet.t) : DepRel.t :=
-        DepRel.filter (fun '(_, f) =>
-            AtomSet.mem (ANeg m vs) (deepAtoms Y_x f)) D.
-
-      Lemma mem_withNeg : forall Y_x D m vs (p : Pkg.t) (f : Formula),
-          DepRel.In (p, f) (withNeg Y_x D m vs) <->
-          DepRel.In (p, f) D /\ AtomSet.In (ANeg m vs) (deepAtoms Y_x f).
-      Proof.
-        intros Y_x D m vs p f; unfold withNeg.
-        rewrite DepRel.filter_spec'.
-        cbn beta iota; rewrite AtomSet.mem_spec; reflexivity.
+        intros R ns n Hn; apply C.versions_ext; intro v.
+        unfold nameRestrict; rewrite RKeys.mem_ofKeys; cbn [fst]; tauto.
       Qed.
 
       (* the variable domain arrives as a function, so the fibre that keeps
@@ -3450,9 +2437,6 @@ Module VariableFormula (N V : UsualOrderedType)
         | Name.Orig _ => T.PkgSet.empty
         | Name.Var _ => T.PkgSet.empty
         | Name.Disjunct fs => idxPkgs (Name.Disjunct fs) (List.length fs)
-        | Name.NegDep m vs =>
-            T.PkgSet.add (Name.NegDep m vs, Version.Idx 0)
-              (T.PkgSet.singleton (Name.NegDep m vs, Version.Idx 1))
         end.
 
       Lemma witnessSet_synthetic_aux : forall f : Formula,
@@ -3470,19 +2454,7 @@ Module VariableFormula (N V : UsualOrderedType)
               T.PkgSet.In q (syntheticPkgs (fst q))).
       Proof.
         induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa | x op y].
-        - repeat split.
-          + intros p q H; simpl in H; exfalso; exact (SOpt.empty_in _ H).
-          + intros p q H; simpl in H;
-              rewrite SOpt.add_in, SOpt.singleton_in in H;
-              destruct H as [-> | ->]; cbn [fst syntheticPkgs];
-              rewrite SOpt.add_in, SOpt.singleton_in;
-              [left | right]; reflexivity.
-          + intros n i q H; simpl in H; exfalso; exact (SOpt.empty_in _ H).
-          + intros n i q H; simpl in H;
-              rewrite SOpt.add_in, SOpt.singleton_in in H;
-              destruct H as [-> | ->]; cbn [fst syntheticPkgs];
-              rewrite SOpt.add_in, SOpt.singleton_in;
-              [left | right]; reflexivity.
+        - repeat split; intros; exfalso; eapply SOpt.empty_in; eassumption.
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
             destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); repeat split.
           + intros p q H; simpl in H; apply T.PkgSet.union_spec in H;
@@ -3520,174 +2492,201 @@ Module VariableFormula (N V : UsualOrderedType)
           + intros p q H; simpl in H; exact (IHa1 _ _ H).
           + intros n i q H; simpl in H; exact (IHa2 _ _ H).
           + intros n i q H; simpl in H; exact (IHa1 _ _ H).
-        - repeat split.
-          + intros p q H; simpl in H; exfalso; exact (SOpt.empty_in _ H).
-          + intros p q H; simpl in H; exfalso; exact (SOpt.empty_in _ H).
-          + intros n i q H; simpl in H; exfalso; exact (SOpt.empty_in _ H).
-          + intros n i q H; simpl in H; exfalso; exact (SOpt.empty_in _ H).
+        - repeat split; intros; exfalso; eapply SOpt.empty_in; eassumption.
       Qed.
 
-      Lemma encodeNNF_target_synthetic_aux : forall f : Formula,
-          (forall Y_x (p : T.Pkg.t) (d : T.DepElt.t),
-              T.DepRel.In d (encodeNNF Y_x p f) ->
+      Lemma encodeNNF_target_synthetic_aux : forall Y_x Vq (f : Formula),
+          (forall (p : T.Pkg.t) (d : T.DepElt.t),
+              T.DepRel.In d (encodeNNF Y_x Vq p f) ->
               T.PkgSet.Subset (syntheticPkgs (fst (snd d))) (witnessSet p f)) /\
-          (forall Y_x (p : T.Pkg.t) (d : T.DepElt.t),
-              T.DepRel.In d (encodeNNFneg Y_x p f) ->
+          (forall (p : T.Pkg.t) (d : T.DepElt.t),
+              T.DepRel.In d (encodeNNFneg Y_x Vq p f) ->
               T.PkgSet.Subset (syntheticPkgs (fst (snd d)))
                 (witnessSetNeg p f)) /\
-          (forall Y_x (n : Name.t) (i : nat) (d : T.DepElt.t),
-              T.DepRel.In d (encodeDisj Y_x n i f) ->
+          (forall (n : Name.t) (i : nat) (d : T.DepElt.t),
+              T.DepRel.In d (encodeDisj Y_x Vq n i f) ->
               T.PkgSet.Subset (syntheticPkgs (fst (snd d)))
                 (witnessDisj n i f)) /\
-          (forall Y_x (n : Name.t) (i : nat) (d : T.DepElt.t),
-              T.DepRel.In d (encodeConjNeg Y_x n i f) ->
+          (forall (n : Name.t) (i : nat) (d : T.DepElt.t),
+              T.DepRel.In d (encodeConjNeg Y_x Vq n i f) ->
               T.PkgSet.Subset (syntheticPkgs (fst (snd d)))
                 (witnessConjNeg n i f)).
       Proof.
-        induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa | x op y].
-        - repeat split.
-          + intros Y_x p d H; simpl in H; apply SOed.singleton_in in H; subst d;
-              cbn [fst snd syntheticPkgs]; apply T.PkgSet.empty_subset.
-          + intros Y_x p d H; simpl in H; rewrite SOed.add_in in H;
-              destruct H as [-> | H];
-              [| apply SOvd.mem_map in H; destruct H as [u [_ ->]]];
-              intros z Hz; exact Hz.
-          + intros Y_x n i d H; simpl in H; apply SOed.singleton_in in H;
-              subst d; cbn [fst snd syntheticPkgs]; apply T.PkgSet.empty_subset.
-          + intros Y_x n i d H; simpl in H; rewrite SOed.add_in in H;
-              destruct H as [-> | H];
-              [| apply SOvd.mem_map in H; destruct H as [u [_ ->]]];
-              intros z Hz; exact Hz.
+        intros Y_x Vq f;
+          induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa | x op y].
+        - repeat split; intros; apply SOed.singleton_in in H; subst d;
+            cbn [fst snd syntheticPkgs]; apply T.PkgSet.empty_subset.
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
             destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); repeat split.
-          + intros Y_x p d H; simpl in H; apply T.DepRel.union_spec in H;
+          + intros p d H; simpl in H; apply T.DepRel.union_spec in H;
               intros z Hz; apply T.PkgSet.union_spec; destruct H as [H | H];
-              [left; exact (IHa1 _ _ d H z Hz)
-              | right; exact (IHb1 _ _ d H z Hz)].
-          + intros Y_x p d H; simpl in H; rewrite SOed.add_in in H;
+              [left; exact (IHa1 _ d H z Hz) | right; exact (IHb1 _ d H z Hz)].
+          + intros p d H; simpl in H; rewrite SOed.add_in in H;
               destruct H as [-> | H].
             * intros z Hz; cbn [fst snd syntheticPkgs] in Hz;
                 apply T.PkgSet.union_spec; left; exact Hz.
             * apply T.DepRel.union_spec in H; intros z Hz;
                 apply T.PkgSet.union_spec; right;
                 apply T.PkgSet.union_spec; destruct H as [H | H];
-                [left; exact (IHa2 _ _ d H z Hz)
-                | right; exact (IHb4 _ _ _ d H z Hz)].
-          + intros Y_x n i d H; simpl in H; apply T.DepRel.union_spec in H;
+                [left; exact (IHa2 _ d H z Hz)
+                | right; exact (IHb4 _ _ d H z Hz)].
+          + intros n i d H; simpl in H; apply T.DepRel.union_spec in H;
               intros z Hz; apply T.PkgSet.union_spec; destruct H as [H | H];
-              [left; exact (IHa1 _ _ d H z Hz)
-              | right; exact (IHb1 _ _ d H z Hz)].
-          + intros Y_x n i d H; simpl in H; apply T.DepRel.union_spec in H;
+              [left; exact (IHa1 _ d H z Hz) | right; exact (IHb1 _ d H z Hz)].
+          + intros n i d H; simpl in H; apply T.DepRel.union_spec in H;
               intros z Hz; apply T.PkgSet.union_spec; destruct H as [H | H];
-              [left; exact (IHa2 _ _ d H z Hz)
-              | right; exact (IHb4 _ _ _ d H z Hz)].
+              [left; exact (IHa2 _ d H z Hz)
+              | right; exact (IHb4 _ _ d H z Hz)].
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
             destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); repeat split.
-          + intros Y_x p d H; simpl in H; rewrite SOed.add_in in H;
+          + intros p d H; simpl in H; rewrite SOed.add_in in H;
               destruct H as [-> | H].
             * intros z Hz; cbn [fst snd syntheticPkgs] in Hz;
                 apply T.PkgSet.union_spec; left; exact Hz.
             * apply T.DepRel.union_spec in H; intros z Hz;
                 apply T.PkgSet.union_spec; right;
                 apply T.PkgSet.union_spec; destruct H as [H | H];
-                [left; exact (IHa1 _ _ d H z Hz)
-                | right; exact (IHb3 _ _ _ d H z Hz)].
-          + intros Y_x p d H; simpl in H; apply T.DepRel.union_spec in H;
+                [left; exact (IHa1 _ d H z Hz)
+                | right; exact (IHb3 _ _ d H z Hz)].
+          + intros p d H; simpl in H; apply T.DepRel.union_spec in H;
               intros z Hz; apply T.PkgSet.union_spec; destruct H as [H | H];
-              [left; exact (IHa2 _ _ d H z Hz)
-              | right; exact (IHb2 _ _ d H z Hz)].
-          + intros Y_x n i d H; simpl in H; apply T.DepRel.union_spec in H;
+              [left; exact (IHa2 _ d H z Hz) | right; exact (IHb2 _ d H z Hz)].
+          + intros n i d H; simpl in H; apply T.DepRel.union_spec in H;
               intros z Hz; apply T.PkgSet.union_spec; destruct H as [H | H];
-              [left; exact (IHa1 _ _ d H z Hz)
-              | right; exact (IHb3 _ _ _ d H z Hz)].
-          + intros Y_x n i d H; simpl in H; apply T.DepRel.union_spec in H;
+              [left; exact (IHa1 _ d H z Hz)
+              | right; exact (IHb3 _ _ d H z Hz)].
+          + intros n i d H; simpl in H; apply T.DepRel.union_spec in H;
               intros z Hz; apply T.PkgSet.union_spec; destruct H as [H | H];
-              [left; exact (IHa2 _ _ d H z Hz)
-              | right; exact (IHb2 _ _ d H z Hz)].
+              [left; exact (IHa2 _ d H z Hz) | right; exact (IHb2 _ d H z Hz)].
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); repeat split.
-          + intros Y_x p d H; simpl in H; exact (IHa2 _ _ d H).
-          + intros Y_x p d H; simpl in H; exact (IHa1 _ _ d H).
-          + intros Y_x n i d H; simpl in H; exact (IHa2 _ _ d H).
-          + intros Y_x n i d H; simpl in H; exact (IHa1 _ _ d H).
-        - repeat split.
-          + intros Y_x p d H; simpl in H; apply SOed.singleton_in in H; subst d;
-              cbn [fst snd syntheticPkgs]; apply T.PkgSet.empty_subset.
-          + intros Y_x p d H; simpl in H; apply SOed.singleton_in in H; subst d;
-              cbn [fst snd syntheticPkgs]; apply T.PkgSet.empty_subset.
-          + intros Y_x n i d H; simpl in H; apply SOed.singleton_in in H;
-              subst d; cbn [fst snd syntheticPkgs]; apply T.PkgSet.empty_subset.
-          + intros Y_x n i d H; simpl in H; apply SOed.singleton_in in H;
-              subst d; cbn [fst snd syntheticPkgs]; apply T.PkgSet.empty_subset.
+          + intros p d H; simpl in H; exact (IHa2 _ d H).
+          + intros p d H; simpl in H; exact (IHa1 _ d H).
+          + intros n i d H; simpl in H; exact (IHa2 _ d H).
+          + intros n i d H; simpl in H; exact (IHa1 _ d H).
+        - repeat split; intros; apply SOed.singleton_in in H; subst d;
+            cbn [fst snd syntheticPkgs]; apply T.PkgSet.empty_subset.
       Qed.
 
-      Module PkgFibred := FibredRel N V Pkg PkgSet.
+      Lemma reachable_instNames : forall Y_x R D (m : N.t),
+          (exists p h, T.DepRel.In (p, (Name.Orig m, h)) (reduceDeps Y_x R D)) ->
+          NSet.In m (instNames R D).
+      Proof.
+        intros Y_x R D m [p [h Hd]]; apply mem_reduceDeps in Hd.
+        destruct Hd as [q [f [Hq He]]].
+        apply mem_instNames; right; apply mem_depNames; exists q, f.
+        split; [exact Hq |].
+        exact (proj1 (encodeNNF_tgt_aux Y_x (C.versions R) f) _ _ _ _ He).
+      Qed.
+
+      (* A reachable name's versions are its real versions and absence: the
+         repository at the name, and nothing of who negates it. *)
       Theorem versions_lookupOrig : forall Y_x R D (r : Pkg.t) (m : N.t),
+          PkgSet.In r R ->
           (exists p h,
-              T.DepRel.In (p, (Name.Orig m, h)) (reduceDeps Y_x D)) \/
+              T.DepRel.In (p, (Name.Orig m, h)) (reduceDeps Y_x R D)) \/
           Name.Orig m = Name.Orig (fst r) ->
           T.versions (reduceReal Y_x R D) (Name.Orig m) =
-          T.versions
-            (reduceReal (fun _ => YSet.empty) (PkgFibred.tailFibre R m)
-               DepRel.empty)
-            (Name.Orig m).
+          T.VSet.add Version.Bot
+            (embedVS (C.versions (PkgFibred.tailFibre R m) m)).
       Proof.
-        intros Y_x R D r m _; apply T.versions_ext; intro y.
-        rewrite !mem_reduceReal.
+        intros Y_x R D r m Hr Hreach.
+        assert (Hm : NSet.In m (instNames R D)).
+        { destruct Hreach as [Hreach | E];
+            [exact (reachable_instNames Y_x R D m Hreach) |].
+          injection E as ->; apply mem_instNames; left.
+          destruct r as [rn rv]; exists rv; exact Hr. }
+        apply T.VSet.ext; intro w.
+        rewrite T.mem_versions, mem_reduceReal, SOvv.add_in.
+        unfold embedVS; rewrite SOvv.mem_map.
         split.
-        - intros [[[qn qv] [HR Hq]] | [[p [f [_ Hw]]] | [x [y' [_ Hq]]]]].
+        - intros [[[qn qv] [HR Hq]] | [[p [f [_ Hw]]] | [[x [y' [_ Hq]]] | [n [_ Hy]]]]].
           + unfold embedPkg in Hq; injection Hq as -> ->.
-            left; exists (qn, qv).
-            split; [apply PkgFibred.mem_tailFibre;
-                    split; [exact HR | reflexivity]
-                   | reflexivity].
+            right; exists qv; split; [| reflexivity].
+            apply C.mem_versions, PkgFibred.mem_tailFibre; auto.
           + exfalso; exact (witnessSet_not_orig _ _ _ _ Hw).
           + discriminate Hq.
-        - intros [[[qn qv] [HR Hq]] | [[p [f [Hd _]]] | [x [y' [Hy _]]]]].
-          + apply PkgFibred.mem_tailFibre in HR; destruct HR as [HR _].
-            left; exists (qn, qv); split; [exact HR | exact Hq].
-          + destruct (DepRel.empty_spec Hd).
-          + destruct (YSet.empty_spec Hy).
+          + injection Hy as -> ->; left; reflexivity.
+        - intros [-> | [v [Hv ->]]].
+          + right; right; right; exists m; auto.
+          + apply C.mem_versions, PkgFibred.mem_tailFibre in Hv.
+            destruct Hv as [Hv _].
+            left; exists (m, v); split; [exact Hv | reflexivity].
       Qed.
 
+      (* A package's dependees read its own formulas, the variable domains,
+         and the repository at the names those formulas mention. *)
       Theorem dependees_lookupOrig : forall Y_x R D m v,
-          T.PkgSet.In (Name.Orig m, Version.Orig v) (reduceReal Y_x R D) ->
-          T.dependees (reduceDeps Y_x D) (Name.Orig m, Version.Orig v) =
-          T.dependees (reduceDeps Y_x (subInstanceOrig D (m, v)))
+          T.dependees (reduceDeps Y_x R D) (Name.Orig m, Version.Orig v) =
+          T.dependees
+            (reduceDeps Y_x
+               (nameRestrict R (depNames (DepRelFibred.tailFibre D (m, v))))
+               (DepRelFibred.tailFibre D (m, v)))
             (Name.Orig m, Version.Orig v).
       Proof.
-        intros Y_x R D m v _; apply T.dependees_ext; intro h.
-        split; intro H;
-          apply mem_reduceDeps in H; destruct H as [p [f [Hd He]]];
-          apply mem_reduceDeps; unfold encodeNNF in He.
-        - destruct (proj1 (encodeNNF_src_orig_aux Y_x f) _ _ _ _ He)
-            as [Eq | [vs [Ha Hv]]].
-          + destruct p as [pn pv]; unfold embedPkg in Eq; simpl in Eq;
-              injection Eq as -> ->.
-            exists (m, v), f; split; [| exact He].
-            unfold subInstanceOrig; apply DepRel.union_spec; left.
-            unfold DepRelFibred.tailFibre;
-              rewrite DepRel.filter_spec'.
-            split; [exact Hd |].
-            change ((if Pkg.eq_dec (m, v) (m, v) then true else false) = true).
-            destruct (Pkg.eq_dec (m, v) (m, v)) as [_ | Hne];
-              [reflexivity | exfalso; apply Hne; reflexivity].
-          + exists p, f; split; [| exact He].
-            unfold subInstanceOrig; apply DepRel.union_spec; right.
-            unfold withNegOn;
-              rewrite DepRel.filter_spec'.
-            split; [exact Hd |].
-            apply occursNegOnb_iff; exists vs; split; [exact Ha | exact Hv].
-        - exists p, f; split; [| exact He].
-          unfold subInstanceOrig in Hd; apply DepRel.union_spec in Hd.
-          unfold DepRelFibred.tailFibre, withNegOn in Hd.
-          destruct Hd as [Hd | Hd];
-            rewrite DepRel.filter_spec' in Hd;
-            exact (proj1 Hd).
+        intros Y_x R D m v; apply T.dependees_ext; intro h.
+        rewrite !mem_reduceDeps.
+        assert (Hag : forall f,
+                   DepRel.In ((m, v), f) (DepRelFibred.tailFibre D (m, v)) ->
+                   encodeNNF Y_x (C.versions R) (embedPkg (m, v)) f =
+                   encodeNNF Y_x
+                     (C.versions (nameRestrict R
+                                    (depNames (DepRelFibred.tailFibre D (m, v)))))
+                     (embedPkg (m, v)) f).
+        { intros f Hf.
+          assert (Hag' : forall x, NSet.In x (fnames f) ->
+                     C.versions R x =
+                     C.versions (nameRestrict R
+                                   (depNames (DepRelFibred.tailFibre D (m, v)))) x).
+          { intros x Hx; symmetry; apply versions_nameRestrict.
+            apply mem_depNames; exists (m, v), f; auto. }
+          exact (proj1 (encodeNNF_agree_aux Y_x _ _ f Hag') (embedPkg (m, v))). }
+        split.
+        - intros [p [f [Hd He]]].
+          assert (E := proj1 (encodeNNF_src_aux Y_x (C.versions R) f)
+                         _ (Name.Orig m, Version.Orig v) _ (notIdx_orig v) He).
+          destruct p as [pn pv]; unfold embedPkg in E; injection E as -> ->.
+          assert (Hf : DepRel.In ((m, v), f) (DepRelFibred.tailFibre D (m, v)))
+            by (apply DepRelFibred.mem_tailFibre; auto).
+          exists (m, v), f; split; [exact Hf |].
+          rewrite <- (Hag f Hf); exact He.
+        - intros [p [f [Hd He]]].
+          assert (Hd' := Hd); apply DepRelFibred.mem_tailFibre in Hd';
+            destruct Hd' as [HD ->].
+          exists (m, v), f; split; [exact HD |].
+          rewrite (Hag f Hd); exact He.
+      Qed.
+
+      (* The shape a driver computes: the package's own formulas reduced
+         under any oracle that agrees with the repository at the names they
+         mention. *)
+      Theorem dependees_lookupOrigBy : forall Y_x R D Vq m v,
+          (forall n, NSet.In n (depNames (DepRelFibred.tailFibre D (m, v))) ->
+                     Vq n = C.versions R n) ->
+          T.dependees (reduceDeps Y_x R D) (Name.Orig m, Version.Orig v) =
+          T.dependees (reduceDepsBy Y_x Vq (DepRelFibred.tailFibre D (m, v)))
+            (Name.Orig m, Version.Orig v).
+      Proof.
+        intros Y_x R D Vq m v HVq; rewrite dependees_lookupOrig; unfold reduceDeps.
+        f_equal; apply reduceDepsBy_agree; intros n Hn.
+        rewrite versions_nameRestrict by exact Hn; symmetry; apply HVq; exact Hn.
+      Qed.
+
+      (* Absence depends on nothing. *)
+      Theorem dependees_lookupAbsent : forall Y_x R D m,
+          T.dependees (reduceDeps Y_x R D) (Name.Orig m, Version.Bot) =
+          T.DependeesSet.empty.
+      Proof.
+        intros Y_x R D m; apply T.dependees_empty_iff; intros h H.
+        apply mem_reduceDeps in H.
+        destruct H as [[pn pv] [f [_ He]]].
+        assert (E := proj1 (encodeNNF_src_aux Y_x (C.versions R) f)
+                       _ (Name.Orig m, Version.Bot) _ notIdx_bot He).
+        unfold embedPkg in E; discriminate.
       Qed.
 
       Theorem versions_lookupVar : forall Y_x R D (x : X.t),
           (exists p h,
-              T.DepRel.In (p, (Name.Var x, h)) (reduceDeps Y_x D)) ->
+              T.DepRel.In (p, (Name.Var x, h)) (reduceDeps Y_x R D)) ->
           T.versions (reduceReal Y_x R D) (Name.Var x) =
           T.versions (reduceReal (varFibre Y_x x) PkgSet.empty DepRel.empty)
             (Name.Var x).
@@ -3695,52 +2694,68 @@ Module VariableFormula (N V : UsualOrderedType)
         intros Y_x R D x _; apply T.versions_ext; intro w.
         rewrite !mem_reduceReal.
         split.
-        - intros [[[qn qv] [_ Hq]] | [[p [f [_ Hw]]] | [x' [y [Hy Hq]]]]].
+        - intros [[[qn qv] [_ Hq]] | [[p [f [_ Hw]]] | [[x' [y [Hy Hq]]] | [n [_ Hq]]]]].
           + unfold embedPkg in Hq; discriminate Hq.
           + exfalso; exact (witnessSet_not_var _ _ _ _ Hw).
           + injection Hq as -> ->.
-            right; right; exists x', y; split; [| reflexivity].
+            right; right; left; exists x', y; split; [| reflexivity].
             unfold varFibre; destruct (X.eq_dec x' x') as [_ | NE];
               [exact Hy | contradiction NE; reflexivity].
-        - intros [[p [Hp _]] | [[p [f [Hd _]]] | [x' [y [Hy Hq]]]]].
+          + discriminate Hq.
+        - intros [[p [Hp _]] | [[p [f [Hd _]]] | [[x' [y [Hy Hq]]] | [n [Hn _]]]]].
           + destruct (PkgSet.empty_spec Hp).
           + destruct (DepRel.empty_spec Hd).
-          + right; right; exists x', y; split; [| exact Hq].
+          + right; right; left; exists x', y; split; [| exact Hq].
             unfold varFibre in Hy; destruct (X.eq_dec x' x) as [_ | NE];
               [exact Hy | destruct (YSet.empty_spec Hy)].
+          + apply mem_instNames in Hn.
+            destruct Hn as [[v Hv] | Hn]; [destruct (PkgSet.empty_spec Hv) |].
+            apply mem_depNames in Hn; destruct Hn as [p [f [Hd _]]].
+            destruct (DepRel.empty_spec Hd).
       Qed.
 
       Theorem dependees_lookupVar : forall Y_x R D x (y : Version.t),
           T.PkgSet.In (Name.Var x, y) (reduceReal Y_x R D) ->
-          T.dependees (reduceDeps Y_x D) (Name.Var x, y) = T.DependeesSet.empty.
+          T.dependees (reduceDeps Y_x R D) (Name.Var x, y) = T.DependeesSet.empty.
       Proof.
-        intros Y_x R D x y _; apply T.dependees_empty_iff; intros h H.
+        intros Y_x R D x y Hin; apply T.dependees_empty_iff; intros h H.
         apply mem_reduceDeps in H.
-        destruct H as [[pn pv] [f [_ He]]]; unfold encodeNNF in He.
-        assert (E := proj1 (encodeNNF_src_var_aux Y_x f) _ _ _ _ He).
-        unfold embedPkg in E; simpl in E; discriminate.
+        destruct H as [[pn pv] [f [_ He]]].
+        (* a variable package's version is a value: reduceReal has no other
+           kind at a Var name *)
+        assert (Hw : notIdx y).
+        { apply mem_reduceReal in Hin.
+          destruct Hin as [[[qn qv] [_ Hq]] | [[p [g [_ Hw]]] | [[x' [y' [_ Hq]]] | [n [_ Hq]]]]];
+            [unfold embedPkg in Hq; discriminate Hq
+            | exfalso; exact (witnessSet_not_var _ _ _ _ Hw)
+            | injection Hq as _ ->; apply notIdx_varval
+            | discriminate Hq]. }
+        assert (E := proj1 (encodeNNF_src_aux Y_x (C.versions R) f)
+                       _ (Name.Var x, y) _ Hw He).
+        unfold embedPkg in E; discriminate.
       Qed.
 
       Theorem versions_lookupDisjunct : forall Y_x R D (fs : list Formula),
           (exists p h, T.DepRel.In (p, (Name.Disjunct fs, h))
-                         (reduceDeps Y_x D)) ->
+                         (reduceDeps Y_x R D)) ->
           T.versions (reduceReal Y_x R D) (Name.Disjunct fs) =
           idxSet (List.length fs).
       Proof.
         intros Y_x R D fs [p [h Hd]].
         apply mem_reduceDeps in Hd; destruct Hd as [r [g [HD He]]].
-        pose proof (proj1 (encodeNNF_target_synthetic_aux g) Y_x (embedPkg r)
-                      (p, (Name.Disjunct fs, h)) He) as Hsub.
+        pose proof (proj1 (encodeNNF_target_synthetic_aux Y_x (C.versions R) g)
+                      (embedPkg r) (p, (Name.Disjunct fs, h)) He) as Hsub.
         cbn [fst snd] in Hsub.
         apply T.VSet.ext; intro w.
         rewrite T.mem_versions, mem_idxSet, mem_reduceReal.
         split.
-        - intros [[[qn qv] [_ Hq]] | [[r1 [g1 [_ Hw]]] | [x1 [y1 [_ Hq]]]]].
+        - intros [[[qn qv] [_ Hq]] | [[r1 [g1 [_ Hw]]] | [[x1 [y1 [_ Hq]]] | [n [_ Hq]]]]].
           + unfold embedPkg in Hq; discriminate Hq.
           + pose proof (proj1 (witnessSet_synthetic_aux g1) _ _ Hw) as Hg.
             cbn [fst syntheticPkgs] in Hg; apply mem_idxPkgs in Hg.
             destruct Hg as [i [Hi Hq]]; exists i;
               split; [exact Hi | congruence].
+          + discriminate Hq.
           + discriminate Hq.
         - intros [i [Hi ->]]; right; left; exists r, g; split; [exact HD |].
           apply Hsub; cbn [syntheticPkgs]; apply mem_idxPkgs;
@@ -3748,15 +2763,16 @@ Module VariableFormula (N V : UsualOrderedType)
       Qed.
 
       Lemma encodeDisj_alt : forall (f : Formula) (Y_x : X.t -> YSet.t)
+                                    (Vq : N.t -> VSet.t)
                                     (n : Name.t) (i0 j : nat)
                                     (g : Formula) (d : T.Dependees.t),
           List.nth_error (disjSpine f) j = Some g ->
           T.DepRel.In ((n, Version.Idx (i0 + j)), d)
-            (encodeNNF Y_x (n, Version.Idx (i0 + j)) g) ->
-          T.DepRel.In ((n, Version.Idx (i0 + j)), d) (encodeDisj Y_x n i0 f).
+            (encodeNNF Y_x Vq (n, Version.Idx (i0 + j)) g) ->
+          T.DepRel.In ((n, Version.Idx (i0 + j)), d) (encodeDisj Y_x Vq n i0 f).
       Proof.
         induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa | x op y];
-          intros Y_x n i0 j g d Hg Hd; simpl in Hg.
+          intros Y_x Vq n i0 j g d Hg Hd; simpl in Hg.
         - destruct j as [| j]; [| destruct j; discriminate].
           injection Hg as <-; replace (i0 + 0) with i0 in * by lia; exact Hd.
         - destruct j as [| j]; [| destruct j; discriminate].
@@ -3766,7 +2782,7 @@ Module VariableFormula (N V : UsualOrderedType)
               apply T.DepRel.union_spec; left; exact Hd.
           + apply T.DepRel.union_spec; right;
               replace (i0 + S j) with (S i0 + j) in * by lia;
-              exact (IHb Y_x n (S i0) j g d Hg Hd).
+              exact (IHb Y_x Vq n (S i0) j g d Hg Hd).
         - destruct j as [| j]; [| destruct j; discriminate].
           injection Hg as <-; replace (i0 + 0) with i0 in * by lia; exact Hd.
         - destruct j as [| j]; [| destruct j; discriminate].
@@ -3774,16 +2790,17 @@ Module VariableFormula (N V : UsualOrderedType)
       Qed.
 
       Lemma encodeConjNeg_alt : forall (f : Formula) (Y_x : X.t -> YSet.t)
+                                       (Vq : N.t -> VSet.t)
                                        (n : Name.t) (i0 j : nat)
                                        (g : Formula) (d : T.Dependees.t),
           List.nth_error (negConjSpine f) j = Some g ->
           T.DepRel.In ((n, Version.Idx (i0 + j)), d)
-            (encodeNNF Y_x (n, Version.Idx (i0 + j)) g) ->
+            (encodeNNF Y_x Vq (n, Version.Idx (i0 + j)) g) ->
           T.DepRel.In ((n, Version.Idx (i0 + j)), d)
-            (encodeConjNeg Y_x n i0 f).
+            (encodeConjNeg Y_x Vq n i0 f).
       Proof.
         induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa | x op y];
-          intros Y_x n i0 j g d Hg Hd; simpl in Hg.
+          intros Y_x Vq n i0 j g d Hg Hd; simpl in Hg.
         - destruct j as [| j]; [| destruct j; discriminate].
           injection Hg as <-; replace (i0 + 0) with i0 in * by lia; exact Hd.
         - destruct j as [| j].
@@ -3791,7 +2808,7 @@ Module VariableFormula (N V : UsualOrderedType)
               apply T.DepRel.union_spec; left; exact Hd.
           + apply T.DepRel.union_spec; right;
               replace (i0 + S j) with (S i0 + j) in * by lia;
-              exact (IHb Y_x n (S i0) j g d Hg Hd).
+              exact (IHb Y_x Vq n (S i0) j g d Hg Hd).
         - destruct j as [| j]; [| destruct j; discriminate].
           injection Hg as <-; replace (i0 + 0) with i0 in * by lia; exact Hd.
         - destruct j as [| j]; [| destruct j; discriminate].
@@ -3800,65 +2817,55 @@ Module VariableFormula (N V : UsualOrderedType)
           injection Hg as <-; replace (i0 + 0) with i0 in * by lia; exact Hd.
       Qed.
 
-      Lemma witnessSet_alt_aux : forall f : Formula,
-          (forall (Y_x : X.t -> YSet.t) (p : T.Pkg.t) (gs : list Formula)
-                  (k : nat) (g : Formula) (d : T.Dependees.t),
+      Lemma witnessSet_alt_aux : forall (f : Formula) (Y_x : X.t -> YSet.t)
+                                        (Vq : N.t -> VSet.t),
+          (forall (p : T.Pkg.t) (gs : list Formula) (k : nat) (g : Formula)
+                  (d : T.Dependees.t),
               T.PkgSet.In (Name.Disjunct gs, Version.Idx k) (witnessSet p f) ->
               List.nth_error gs k = Some g ->
               T.DepRel.In ((Name.Disjunct gs, Version.Idx k), d)
-                (encodeNNF Y_x (Name.Disjunct gs, Version.Idx k) g) ->
+                (encodeNNF Y_x Vq (Name.Disjunct gs, Version.Idx k) g) ->
               T.DepRel.In ((Name.Disjunct gs, Version.Idx k), d)
-                (encodeNNF Y_x p f)) /\
-          (forall (Y_x : X.t -> YSet.t) (p : T.Pkg.t) (gs : list Formula)
-                  (k : nat) (g : Formula) (d : T.Dependees.t),
+                (encodeNNF Y_x Vq p f)) /\
+          (forall (p : T.Pkg.t) (gs : list Formula) (k : nat) (g : Formula)
+                  (d : T.Dependees.t),
               T.PkgSet.In (Name.Disjunct gs, Version.Idx k)
                 (witnessSetNeg p f) ->
               List.nth_error gs k = Some g ->
               T.DepRel.In ((Name.Disjunct gs, Version.Idx k), d)
-                (encodeNNF Y_x (Name.Disjunct gs, Version.Idx k) g) ->
+                (encodeNNF Y_x Vq (Name.Disjunct gs, Version.Idx k) g) ->
               T.DepRel.In ((Name.Disjunct gs, Version.Idx k), d)
-                (encodeNNFneg Y_x p f)) /\
-          (forall (Y_x : X.t -> YSet.t) (n : Name.t) (i0 : nat)
-                  (gs : list Formula) (k : nat) (g : Formula)
-                  (d : T.Dependees.t),
+                (encodeNNFneg Y_x Vq p f)) /\
+          (forall (n : Name.t) (i0 : nat) (gs : list Formula) (k : nat)
+                  (g : Formula) (d : T.Dependees.t),
               T.PkgSet.In (Name.Disjunct gs, Version.Idx k)
                 (witnessDisj n i0 f) ->
               List.nth_error gs k = Some g ->
               T.DepRel.In ((Name.Disjunct gs, Version.Idx k), d)
-                (encodeNNF Y_x (Name.Disjunct gs, Version.Idx k) g) ->
+                (encodeNNF Y_x Vq (Name.Disjunct gs, Version.Idx k) g) ->
               T.DepRel.In ((Name.Disjunct gs, Version.Idx k), d)
-                (encodeDisj Y_x n i0 f)) /\
-          (forall (Y_x : X.t -> YSet.t) (n : Name.t) (i0 : nat)
-                  (gs : list Formula) (k : nat) (g : Formula)
-                  (d : T.Dependees.t),
+                (encodeDisj Y_x Vq n i0 f)) /\
+          (forall (n : Name.t) (i0 : nat) (gs : list Formula) (k : nat)
+                  (g : Formula) (d : T.Dependees.t),
               T.PkgSet.In (Name.Disjunct gs, Version.Idx k)
                 (witnessConjNeg n i0 f) ->
               List.nth_error gs k = Some g ->
               T.DepRel.In ((Name.Disjunct gs, Version.Idx k), d)
-                (encodeNNF Y_x (Name.Disjunct gs, Version.Idx k) g) ->
+                (encodeNNF Y_x Vq (Name.Disjunct gs, Version.Idx k) g) ->
               T.DepRel.In ((Name.Disjunct gs, Version.Idx k), d)
-                (encodeConjNeg Y_x n i0 f)).
+                (encodeConjNeg Y_x Vq n i0 f)).
       Proof.
-        induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa | x op y].
-        - split4v.
-          + intros Y_x p gs k g d H Hg Hd; simpl in H;
-              exfalso; exact (SOpt.empty_in _ H).
-          + intros Y_x p gs k g d H Hg Hd; simpl in H;
-              rewrite SOpt.add_in, SOpt.singleton_in in H;
-              destruct H as [H | H]; congruence.
-          + intros Y_x n i0 gs k g d H Hg Hd; simpl in H;
-              exfalso; exact (SOpt.empty_in _ H).
-          + intros Y_x n i0 gs k g d H Hg Hd; simpl in H;
-              rewrite SOpt.add_in, SOpt.singleton_in in H;
-              destruct H as [H | H]; congruence.
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
-          + intros Y_x p gs k g d H Hg Hd; simpl in H; simpl;
+        induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa | x op y];
+          intros Y_x Vq.
+        - split4v; intros; exfalso; eapply SOpt.empty_in; eassumption.
+        - destruct (IHa Y_x Vq) as (IHa1 & IHa2 & IHa3 & IHa4);
+            destruct (IHb Y_x Vq) as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
+          + intros p gs k g d H Hg Hd; simpl in H; simpl;
               apply T.PkgSet.union_spec in H; apply T.DepRel.union_spec;
               destruct H as [H | H];
-              [left; exact (IHa1 _ _ _ _ _ _ H Hg Hd)
-              | right; exact (IHb1 _ _ _ _ _ _ H Hg Hd)].
-          + intros Y_x p gs k g d H Hg Hd; simpl in H; simpl.
+              [left; exact (IHa1 _ _ _ _ _ H Hg Hd)
+              | right; exact (IHb1 _ _ _ _ _ H Hg Hd)].
+          + intros p gs k g d H Hg Hd; simpl in H; simpl.
             apply T.PkgSet.union_spec in H; apply SOed.add_in;
               destruct H as [H | H]; [| right; apply T.DepRel.union_spec].
             * apply mem_idxPkgs in H; destruct H as [i [_ H]];
@@ -3866,25 +2873,25 @@ Module VariableFormula (N V : UsualOrderedType)
                 apply T.DepRel.union_spec; destruct i as [| i];
                 simpl in Hg; [left | right].
               -- injection Hg as <-; exact Hd.
-              -- exact (encodeConjNeg_alt b Y_x
+              -- exact (encodeConjNeg_alt b Y_x Vq
                           (Name.Disjunct (FNeg a :: negConjSpine b))
                           1 i g d Hg Hd).
             * apply T.PkgSet.union_spec in H; destruct H as [H | H];
-                [left; exact (IHa2 _ _ _ _ _ _ H Hg Hd)
-                | right; exact (IHb4 _ _ _ _ _ _ _ H Hg Hd)].
-          + intros Y_x n i0 gs k g d H Hg Hd; simpl in H; simpl;
+                [left; exact (IHa2 _ _ _ _ _ H Hg Hd)
+                | right; exact (IHb4 _ _ _ _ _ _ H Hg Hd)].
+          + intros n i0 gs k g d H Hg Hd; simpl in H; simpl;
               apply T.PkgSet.union_spec in H; apply T.DepRel.union_spec;
               destruct H as [H | H];
-              [left; exact (IHa1 _ _ _ _ _ _ H Hg Hd)
-              | right; exact (IHb1 _ _ _ _ _ _ H Hg Hd)].
-          + intros Y_x n i0 gs k g d H Hg Hd; simpl in H; simpl;
+              [left; exact (IHa1 _ _ _ _ _ H Hg Hd)
+              | right; exact (IHb1 _ _ _ _ _ H Hg Hd)].
+          + intros n i0 gs k g d H Hg Hd; simpl in H; simpl;
               apply T.PkgSet.union_spec in H; apply T.DepRel.union_spec;
               destruct H as [H | H];
-              [left; exact (IHa2 _ _ _ _ _ _ H Hg Hd)
-              | right; exact (IHb4 _ _ _ _ _ _ _ H Hg Hd)].
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
-          + intros Y_x p gs k g d H Hg Hd; simpl in H; simpl.
+              [left; exact (IHa2 _ _ _ _ _ H Hg Hd)
+              | right; exact (IHb4 _ _ _ _ _ _ H Hg Hd)].
+        - destruct (IHa Y_x Vq) as (IHa1 & IHa2 & IHa3 & IHa4);
+            destruct (IHb Y_x Vq) as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
+          + intros p gs k g d H Hg Hd; simpl in H; simpl.
             apply T.PkgSet.union_spec in H; apply SOed.add_in;
               destruct H as [H | H]; [| right; apply T.DepRel.union_spec].
             * apply mem_idxPkgs in H; destruct H as [i [_ H]];
@@ -3892,246 +2899,235 @@ Module VariableFormula (N V : UsualOrderedType)
                 apply T.DepRel.union_spec; destruct i as [| i];
                 simpl in Hg; [left | right].
               -- injection Hg as <-; exact Hd.
-              -- exact (encodeDisj_alt b Y_x
-                          (Name.Disjunct (a :: disjSpine b)) 1 i g d Hg Hd).
+              -- exact (encodeDisj_alt b Y_x Vq (Name.Disjunct (a :: disjSpine b))
+                          1 i g d Hg Hd).
             * apply T.PkgSet.union_spec in H; destruct H as [H | H];
-                [left; exact (IHa1 _ _ _ _ _ _ H Hg Hd)
-                | right; exact (IHb3 _ _ _ _ _ _ _ H Hg Hd)].
-          + intros Y_x p gs k g d H Hg Hd; simpl in H; simpl;
+                [left; exact (IHa1 _ _ _ _ _ H Hg Hd)
+                | right; exact (IHb3 _ _ _ _ _ _ H Hg Hd)].
+          + intros p gs k g d H Hg Hd; simpl in H; simpl;
               apply T.PkgSet.union_spec in H; apply T.DepRel.union_spec;
               destruct H as [H | H];
-              [left; exact (IHa2 _ _ _ _ _ _ H Hg Hd)
-              | right; exact (IHb2 _ _ _ _ _ _ H Hg Hd)].
-          + intros Y_x n i0 gs k g d H Hg Hd; simpl in H; simpl;
+              [left; exact (IHa2 _ _ _ _ _ H Hg Hd)
+              | right; exact (IHb2 _ _ _ _ _ H Hg Hd)].
+          + intros n i0 gs k g d H Hg Hd; simpl in H; simpl;
               apply T.PkgSet.union_spec in H; apply T.DepRel.union_spec;
               destruct H as [H | H];
-              [left; exact (IHa1 _ _ _ _ _ _ H Hg Hd)
-              | right; exact (IHb3 _ _ _ _ _ _ _ H Hg Hd)].
-          + intros Y_x n i0 gs k g d H Hg Hd; simpl in H; simpl;
+              [left; exact (IHa1 _ _ _ _ _ H Hg Hd)
+              | right; exact (IHb3 _ _ _ _ _ _ H Hg Hd)].
+          + intros n i0 gs k g d H Hg Hd; simpl in H; simpl;
               apply T.PkgSet.union_spec in H; apply T.DepRel.union_spec;
               destruct H as [H | H];
-              [left; exact (IHa2 _ _ _ _ _ _ H Hg Hd)
-              | right; exact (IHb2 _ _ _ _ _ _ H Hg Hd)].
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4v.
-          + intros Y_x p gs k g d H Hg Hd; exact (IHa2 _ _ _ _ _ _ H Hg Hd).
-          + intros Y_x p gs k g d H Hg Hd; exact (IHa1 _ _ _ _ _ _ H Hg Hd).
-          + intros Y_x n i0 gs k g d H Hg Hd;
-              exact (IHa2 _ _ _ _ _ _ H Hg Hd).
-          + intros Y_x n i0 gs k g d H Hg Hd;
-              exact (IHa1 _ _ _ _ _ _ H Hg Hd).
-        - split4v.
-          + intros Y_x p gs k g d H Hg Hd; simpl in H;
-              exfalso; exact (SOpt.empty_in _ H).
-          + intros Y_x p gs k g d H Hg Hd; simpl in H;
-              exfalso; exact (SOpt.empty_in _ H).
-          + intros Y_x n i0 gs k g d H Hg Hd; simpl in H;
-              exfalso; exact (SOpt.empty_in _ H).
-          + intros Y_x n i0 gs k g d H Hg Hd; simpl in H;
-              exfalso; exact (SOpt.empty_in _ H).
+              [left; exact (IHa2 _ _ _ _ _ H Hg Hd)
+              | right; exact (IHb2 _ _ _ _ _ H Hg Hd)].
+        - destruct (IHa Y_x Vq) as (IHa1 & IHa2 & IHa3 & IHa4); split4v.
+          + intros p gs k g d H Hg Hd; exact (IHa2 _ _ _ _ _ H Hg Hd).
+          + intros p gs k g d H Hg Hd; exact (IHa1 _ _ _ _ _ H Hg Hd).
+          + intros n i0 gs k g d H Hg Hd; exact (IHa2 _ _ _ _ _ H Hg Hd).
+          + intros n i0 gs k g d H Hg Hd; exact (IHa1 _ _ _ _ _ H Hg Hd).
+        - split4v; intros; exfalso; eapply SOpt.empty_in; eassumption.
       Qed.
 
-      Lemma encodeNNF_alt_aux : forall f : Formula,
-          (forall (Y_x : X.t -> YSet.t) (q : T.Pkg.t) (gs : list Formula)
-                  (k : nat) (d : T.Dependees.t),
+      Lemma encodeNNF_alt_aux : forall (f : Formula) (Y_x : X.t -> YSet.t)
+                                       (Vq : N.t -> VSet.t),
+          (forall (q : T.Pkg.t) (gs : list Formula) (k : nat)
+                  (d : T.Dependees.t),
               T.DepRel.In ((Name.Disjunct gs, Version.Idx k), d)
-                (encodeNNF Y_x q f) ->
+                (encodeNNF Y_x Vq q f) ->
               q = (Name.Disjunct gs, Version.Idx k) \/
               (exists g, List.nth_error gs k = Some g /\
                          T.DepRel.In ((Name.Disjunct gs, Version.Idx k), d)
-                           (encodeNNF Y_x
-                              (Name.Disjunct gs, Version.Idx k) g))) /\
-          (forall (Y_x : X.t -> YSet.t) (q : T.Pkg.t) (gs : list Formula)
-                  (k : nat) (d : T.Dependees.t),
+                           (encodeNNF Y_x Vq (Name.Disjunct gs, Version.Idx k) g))) /\
+          (forall (q : T.Pkg.t) (gs : list Formula) (k : nat)
+                  (d : T.Dependees.t),
               T.DepRel.In ((Name.Disjunct gs, Version.Idx k), d)
-                (encodeNNFneg Y_x q f) ->
+                (encodeNNFneg Y_x Vq q f) ->
               q = (Name.Disjunct gs, Version.Idx k) \/
               (exists g, List.nth_error gs k = Some g /\
                          T.DepRel.In ((Name.Disjunct gs, Version.Idx k), d)
-                           (encodeNNF Y_x
-                              (Name.Disjunct gs, Version.Idx k) g))) /\
-          (forall (Y_x : X.t -> YSet.t) (n : Name.t) (i0 : nat)
-                  (gs : list Formula) (k : nat) (d : T.Dependees.t),
+                           (encodeNNF Y_x Vq (Name.Disjunct gs, Version.Idx k) g))) /\
+          (forall (n : Name.t) (i0 : nat) (gs : list Formula) (k : nat)
+                  (d : T.Dependees.t),
               T.DepRel.In ((Name.Disjunct gs, Version.Idx k), d)
-                (encodeDisj Y_x n i0 f) ->
+                (encodeDisj Y_x Vq n i0 f) ->
               (n = Name.Disjunct gs /\
                exists j g, k = i0 + j /\
                            List.nth_error (disjSpine f) j = Some g /\
                            T.DepRel.In ((Name.Disjunct gs, Version.Idx k), d)
-                             (encodeNNF Y_x
-                                (Name.Disjunct gs, Version.Idx k) g))
+                             (encodeNNF Y_x Vq (Name.Disjunct gs, Version.Idx k) g))
               \/
               (exists g, List.nth_error gs k = Some g /\
                          T.DepRel.In ((Name.Disjunct gs, Version.Idx k), d)
-                           (encodeNNF Y_x
-                              (Name.Disjunct gs, Version.Idx k) g))) /\
-          (forall (Y_x : X.t -> YSet.t) (n : Name.t) (i0 : nat)
-                  (gs : list Formula) (k : nat) (d : T.Dependees.t),
+                           (encodeNNF Y_x Vq (Name.Disjunct gs, Version.Idx k) g))) /\
+          (forall (n : Name.t) (i0 : nat) (gs : list Formula) (k : nat)
+                  (d : T.Dependees.t),
               T.DepRel.In ((Name.Disjunct gs, Version.Idx k), d)
-                (encodeConjNeg Y_x n i0 f) ->
+                (encodeConjNeg Y_x Vq n i0 f) ->
               (n = Name.Disjunct gs /\
                exists j g, k = i0 + j /\
                            List.nth_error (negConjSpine f) j = Some g /\
                            T.DepRel.In ((Name.Disjunct gs, Version.Idx k), d)
-                             (encodeNNF Y_x
-                                (Name.Disjunct gs, Version.Idx k) g))
+                             (encodeNNF Y_x Vq (Name.Disjunct gs, Version.Idx k) g))
               \/
               (exists g, List.nth_error gs k = Some g /\
                          T.DepRel.In ((Name.Disjunct gs, Version.Idx k), d)
-                           (encodeNNF Y_x
-                              (Name.Disjunct gs, Version.Idx k) g))).
+                           (encodeNNF Y_x Vq (Name.Disjunct gs, Version.Idx k) g))).
       Proof.
-        induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa | x op y].
+        induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa | x op y];
+          intros Y_x Vq.
         - split4v.
-          + intros Y_x q gs k d H; apply SOed.singleton_in in H;
+          + intros q gs k d H; apply SOed.singleton_in in H;
               left; congruence.
-          + intros Y_x q gs k d H; simpl in H; apply SOed.add_in in H;
-              destruct H as [H | H]; [left; congruence |].
-            apply SOvd.mem_map in H; destruct H as [u [_ H]]; discriminate.
-          + intros Y_x n i0 gs k d H; apply SOed.singleton_in in H;
+          + intros q gs k d H; apply SOed.singleton_in in H;
+              left; congruence.
+          + intros n i0 gs k d H; apply SOed.singleton_in in H;
               injection H as H1 H2 H3; left; split; [congruence |].
             exists 0, (FDep m ws); subst k;
               split; [lia | split; [reflexivity |]].
             apply SOed.singleton_in; subst d; reflexivity.
-          + intros Y_x n i0 gs k d H; simpl in H; apply SOed.add_in in H;
-              destruct H as [H | H];
-              [| apply SOvd.mem_map in H; destruct H as [u [_ H]];
-                 discriminate].
-            injection H as H1 H2 H3; left; split; [congruence |].
+          + intros n i0 gs k d H; apply SOed.singleton_in in H;
+              injection H as H1 H2 H3; left; split; [congruence |].
             exists 0, (FNeg (FDep m ws)); subst k;
               split; [lia | split; [reflexivity |]].
-            simpl; apply SOed.add_in; left; subst d; reflexivity.
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
-          + intros Y_x q gs k d H; simpl in H;
-              apply T.DepRel.union_spec in H;
+            simpl; apply SOed.singleton_in; subst d; reflexivity.
+        - destruct (IHa Y_x Vq) as (IHa1 & IHa2 & IHa3 & IHa4);
+            destruct (IHb Y_x Vq) as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
+          + intros q gs k d H; simpl in H; apply T.DepRel.union_spec in H;
               destruct H as [H | H];
-              [exact (IHa1 _ _ _ _ _ H) | exact (IHb1 _ _ _ _ _ H)].
-          + intros Y_x q gs k d H; simpl in H; apply SOed.add_in in H;
+              [exact (IHa1 _ _ _ _ H) | exact (IHb1 _ _ _ _ H)].
+          + intros q gs k d H; simpl in H; apply SOed.add_in in H;
               destruct H as [H | H]; [left; congruence |].
             apply T.DepRel.union_spec in H; destruct H as [H | H].
-            * destruct (IHa2 _ _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
+            * destruct (IHa2 _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
               injection Eq as Eq1 Eq2; right; exists (FNeg a);
                 subst gs; subst k; split; [reflexivity | exact H].
-            * destruct (IHb4 _ _ _ _ _ _ H)
-                as [[Eq [j [g [Hk [Hg Hin]]]]] | Hex]; [| right; exact Hex].
+            * destruct (IHb4 _ _ _ _ _ H) as [[Eq [j [g [Hk [Hg Hin]]]]] | Hex];
+                [| right; exact Hex].
               injection Eq as Eq; right; exists g; subst gs; subst k;
                 split; [| exact Hin].
               simpl; exact Hg.
-          + intros Y_x n i0 gs k d H; simpl in H;
+          + intros n i0 gs k d H; simpl in H;
               apply T.DepRel.union_spec in H; destruct H as [H | H].
-            * destruct (IHa1 _ _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
+            * destruct (IHa1 _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
               injection Eq as Eq1 Eq2; subst n; left;
                 split; [reflexivity |].
               exists 0, (FConj a b); subst k;
                 split; [lia | split; [reflexivity |]].
-              simpl; apply T.DepRel.union_spec; left; exact H.
-            * destruct (IHb1 _ _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
+              simpl; apply T.DepRel.union_spec; left;
+                exact H.
+            * destruct (IHb1 _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
               injection Eq as Eq1 Eq2; subst n; left;
                 split; [reflexivity |].
               exists 0, (FConj a b); subst k;
                 split; [lia | split; [reflexivity |]].
-              simpl; apply T.DepRel.union_spec; right; exact H.
-          + intros Y_x n i0 gs k d H; simpl in H;
+              simpl; apply T.DepRel.union_spec; right;
+                exact H.
+          + intros n i0 gs k d H; simpl in H;
               apply T.DepRel.union_spec in H; destruct H as [H | H].
-            * destruct (IHa2 _ _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
+            * destruct (IHa2 _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
               injection Eq as Eq1 Eq2; subst n; left;
                 split; [reflexivity |].
               exists 0, (FNeg a); subst k;
                 split; [lia | split; [reflexivity |]].
               exact H.
-            * destruct (IHb4 _ _ _ _ _ _ H)
-                as [[Eq [j [g [Hk [Hg Hin]]]]] | Hex]; [| right; exact Hex].
+            * destruct (IHb4 _ _ _ _ _ H) as [[Eq [j [g [Hk [Hg Hin]]]]] | Hex];
+                [| right; exact Hex].
               left; split; [exact Eq |]; exists (S j), g;
                 split; [lia | split; [exact Hg | exact Hin]].
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
-          + intros Y_x q gs k d H; simpl in H; apply SOed.add_in in H;
+        - destruct (IHa Y_x Vq) as (IHa1 & IHa2 & IHa3 & IHa4);
+            destruct (IHb Y_x Vq) as (IHb1 & IHb2 & IHb3 & IHb4); split4v.
+          + intros q gs k d H; simpl in H; apply SOed.add_in in H;
               destruct H as [H | H]; [left; congruence |].
             apply T.DepRel.union_spec in H; destruct H as [H | H].
-            * destruct (IHa1 _ _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
+            * destruct (IHa1 _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
               injection Eq as Eq1 Eq2; right; exists a;
                 subst gs; subst k; split; [reflexivity | exact H].
-            * destruct (IHb3 _ _ _ _ _ _ H)
-                as [[Eq [j [g [Hk [Hg Hin]]]]] | Hex]; [| right; exact Hex].
+            * destruct (IHb3 _ _ _ _ _ H) as [[Eq [j [g [Hk [Hg Hin]]]]] | Hex];
+                [| right; exact Hex].
               injection Eq as Eq; right; exists g; subst gs; subst k;
                 split; [| exact Hin].
               simpl; exact Hg.
-          + intros Y_x q gs k d H; simpl in H;
-              apply T.DepRel.union_spec in H;
+          + intros q gs k d H; simpl in H; apply T.DepRel.union_spec in H;
               destruct H as [H | H];
-              [exact (IHa2 _ _ _ _ _ H) | exact (IHb2 _ _ _ _ _ H)].
-          + intros Y_x n i0 gs k d H; simpl in H;
+              [exact (IHa2 _ _ _ _ H) | exact (IHb2 _ _ _ _ H)].
+          + intros n i0 gs k d H; simpl in H;
               apply T.DepRel.union_spec in H; destruct H as [H | H].
-            * destruct (IHa1 _ _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
+            * destruct (IHa1 _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
               injection Eq as Eq1 Eq2; subst n; left;
                 split; [reflexivity |].
               exists 0, a; subst k; split; [lia | split; [reflexivity |]].
               exact H.
-            * destruct (IHb3 _ _ _ _ _ _ H)
-                as [[Eq [j [g [Hk [Hg Hin]]]]] | Hex]; [| right; exact Hex].
+            * destruct (IHb3 _ _ _ _ _ H) as [[Eq [j [g [Hk [Hg Hin]]]]] | Hex];
+                [| right; exact Hex].
               left; split; [exact Eq |]; exists (S j), g;
                 split; [lia | split; [exact Hg | exact Hin]].
-          + intros Y_x n i0 gs k d H; simpl in H;
+          + intros n i0 gs k d H; simpl in H;
               apply T.DepRel.union_spec in H; destruct H as [H | H].
-            * destruct (IHa2 _ _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
+            * destruct (IHa2 _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
               injection Eq as Eq1 Eq2; subst n; left;
                 split; [reflexivity |].
               exists 0, (FNeg (FDisj a b)); subst k;
                 split; [lia | split; [reflexivity |]].
-              simpl; apply T.DepRel.union_spec; left; exact H.
-            * destruct (IHb2 _ _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
+              simpl; apply T.DepRel.union_spec; left;
+                exact H.
+            * destruct (IHb2 _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
               injection Eq as Eq1 Eq2; subst n; left;
                 split; [reflexivity |].
               exists 0, (FNeg (FDisj a b)); subst k;
                 split; [lia | split; [reflexivity |]].
-              simpl; apply T.DepRel.union_spec; right; exact H.
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4v.
-          + intros Y_x q gs k d H; exact (IHa2 _ _ _ _ _ H).
-          + intros Y_x q gs k d H; exact (IHa1 _ _ _ _ _ H).
-          + intros Y_x n i0 gs k d H; simpl in H.
-            destruct (IHa2 _ _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
+              simpl; apply T.DepRel.union_spec; right;
+                exact H.
+        - destruct (IHa Y_x Vq) as (IHa1 & IHa2 & IHa3 & IHa4); split4v.
+          + intros q gs k d H; exact (IHa2 _ _ _ _ H).
+          + intros q gs k d H; exact (IHa1 _ _ _ _ H).
+          + intros n i0 gs k d H; simpl in H.
+            destruct (IHa2 _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
             injection Eq as Eq1 Eq2; subst n; left;
               split; [reflexivity |].
             exists 0, (FNeg a); subst k;
               split; [lia | split; [reflexivity |]].
             exact H.
-          + intros Y_x n i0 gs k d H; simpl in H.
-            destruct (IHa1 _ _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
+          + intros n i0 gs k d H; simpl in H.
+            destruct (IHa1 _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
             injection Eq as Eq1 Eq2; subst n; left;
               split; [reflexivity |].
             exists 0, (FNeg (FNeg a)); subst k;
               split; [lia | split; [reflexivity |]].
             exact H.
         - split4v.
-          + intros Y_x q gs k d H; apply SOed.singleton_in in H;
+          + intros q gs k d H; apply SOed.singleton_in in H;
               left; congruence.
-          + intros Y_x q gs k d H; apply SOed.singleton_in in H;
+          + intros q gs k d H; apply SOed.singleton_in in H;
               left; congruence.
-          + intros Y_x n i0 gs k d H; apply SOed.singleton_in in H;
+          + intros n i0 gs k d H; apply SOed.singleton_in in H;
               injection H as H1 H2 H3; left; split; [congruence |].
             exists 0, (FVarCmp x op y); subst k;
               split; [lia | split; [reflexivity |]].
             apply SOed.singleton_in; subst d; reflexivity.
-          + intros Y_x n i0 gs k d H; apply SOed.singleton_in in H;
+          + intros n i0 gs k d H; apply SOed.singleton_in in H;
               injection H as H1 H2 H3; left; split; [congruence |].
             exists 0, (FNeg (FVarCmp x op y)); subst k;
               split; [lia | split; [reflexivity |]].
             simpl; apply SOed.singleton_in; subst d; reflexivity.
       Qed.
 
+      (* A disjunct's dependees are read off the spine its name carries:
+         version i carries alternative i's own encoding, under the domains
+         and the repository at the names that alternative mentions. *)
       Theorem dependees_lookupDisjunct : forall Y_x R D fs (i : Version.t),
           T.PkgSet.In (Name.Disjunct fs, i) (reduceReal Y_x R D) ->
-          T.dependees (reduceDeps Y_x D) (Name.Disjunct fs, i) =
+          T.dependees (reduceDeps Y_x R D) (Name.Disjunct fs, i) =
           match disjAlt fs i with
           | Some g =>
-              T.dependees (encodeNNF Y_x (Name.Disjunct fs, i) g)
+              T.dependees
+                (encodeNNF Y_x (C.versions R) (Name.Disjunct fs, i) g)
                 (Name.Disjunct fs, i)
           | None => T.DependeesSet.empty
           end.
       Proof.
         intros Y_x R D fs i H; apply mem_reduceReal in H.
-        destruct H as [[[pn pv] [_ Hq]] | [[p [f [HD Hw]]] | [x [y [_ Hq]]]]];
-          [unfold embedPkg in Hq; discriminate Hq | | discriminate Hq].
+        destruct H as [[[pn pv] [_ Hq]] | [[p [f [HD Hw]]] | [[x [y [_ Hq]]] | [n [_ Hq]]]]];
+          [unfold embedPkg in Hq; discriminate Hq | | discriminate Hq
+           | discriminate Hq].
         pose proof (proj1 (witnessSet_synthetic_aux f) _ _ Hw) as Hgd.
         cbn [fst syntheticPkgs] in Hgd; apply mem_idxPkgs in Hgd.
         destruct Hgd as [k [Hk Hi]].
@@ -4142,53 +3138,13 @@ Module VariableFormula (N V : UsualOrderedType)
         apply T.dependees_ext; intro h; rewrite mem_reduceDeps.
         split.
         - intros [q [f' [_ He]]].
-          destruct (proj1 (encodeNNF_alt_aux f') _ _ _ _ _ He)
+          destruct (proj1 (encodeNNF_alt_aux f' Y_x (C.versions R)) _ _ _ _ He)
             as [Eq | [g' [Hg' Hin]]].
           + destruct q as [qn qv]; unfold embedPkg in Eq; simpl in Eq;
               discriminate.
           + rewrite E in Hg'; injection Hg' as <-; exact Hin.
         - intro Hin; exists p, f; split; [exact HD |].
-          exact (proj1 (witnessSet_alt_aux f) _ _ _ _ _ _ Hw E Hin).
-      Qed.
-
-      Theorem versions_lookupNegDep : forall Y_x R D (m : N.t) (vs : VSet.t),
-          (exists p h, T.DepRel.In (p, (Name.NegDep m vs, h))
-                         (reduceDeps Y_x D)) ->
-          T.versions (reduceReal Y_x R D) (Name.NegDep m vs) =
-          T.VSet.add (Version.Idx 0) (T.VSet.singleton (Version.Idx 1)).
-      Proof.
-        intros Y_x R D m vs [p [h Hd]].
-        apply mem_reduceDeps in Hd; destruct Hd as [r [g [HD He]]].
-        pose proof (proj1 (encodeNNF_target_synthetic_aux g) Y_x (embedPkg r)
-                      (p, (Name.NegDep m vs, h)) He) as Hsub.
-        cbn [fst snd] in Hsub.
-        apply T.VSet.ext; intro w.
-        rewrite T.mem_versions, mem_reduceReal, SOvv.add_in,
-          SOvv.singleton_in.
-        split.
-        - intros [[[qn qv] [_ Hq]] | [[r1 [g1 [_ Hw]]] | [x1 [y1 [_ Hq]]]]].
-          + unfold embedPkg in Hq; discriminate Hq.
-          + pose proof (proj1 (witnessSet_synthetic_aux g1) _ _ Hw) as Hg.
-            cbn [fst syntheticPkgs] in Hg;
-              rewrite SOpt.add_in, SOpt.singleton_in in Hg.
-            destruct Hg as [Hg | Hg]; [left | right]; congruence.
-          + discriminate Hq.
-        - intro Hw; right; left; exists r, g; split; [exact HD |].
-          apply Hsub; cbn [syntheticPkgs];
-            rewrite SOpt.add_in, SOpt.singleton_in.
-          destruct Hw as [-> | ->]; [left | right]; reflexivity.
-      Qed.
-
-      Theorem dependees_lookupNegDep : forall Y_x R D m vs (i : Version.t),
-          T.PkgSet.In (Name.NegDep m vs, i) (reduceReal Y_x R D) ->
-          T.dependees (reduceDeps Y_x D) (Name.NegDep m vs, i) =
-          T.DependeesSet.empty.
-      Proof.
-        intros Y_x R D m vs i _; apply T.dependees_empty_iff; intros h H.
-        apply mem_reduceDeps in H.
-        destruct H as [[pn pv] [f [_ He]]]; unfold encodeNNF in He.
-        assert (E := proj1 (encodeNNF_src_negDep_aux Y_x f) _ _ _ _ _ He).
-        unfold embedPkg in E; simpl in E; discriminate.
+          exact (proj1 (witnessSet_alt_aux f Y_x (C.versions R)) _ _ _ _ _ Hw E Hin).
       Qed.
 
     End Lookup.

@@ -4,7 +4,8 @@
    Opam.versions_lookup*, which evaluate every filter against [rho] as
    they run; each package's package-formula dependencies are then reduced
    to core edges by the extracted PackageFormula reduction on its own
-   sub-instance;
+   sub-instance -- a conflict included, which is the declarer's own edge
+   on the conflicting name admitting absence;
    PubGrub solves the accumulated core graph lazily.  Trusted here (TCB):
    the parser, the version comparator, the valuation defaults, and the
    plumbing. *)
@@ -166,7 +167,12 @@ let default_opam_version = "2.5.2"
    class formulas are read off its own declarations, so inst_for stays
    local; what is a preimage is the class package's version list, which is
    every declarer of the class and which no declaration of any one
-   package names.
+   package names.  A conflict or pin-depends is no exception: the
+   package-formula reduction turns a negated atom into the declarer's own
+   edge on the target's name, admitting every version the atom does not
+   name and the absent version every name has
+   (PF.Reduction.Lookup.dependees_lookupOrigBy), so nothing of who
+   conflicts with a name is read when the name answers.
    class_idx therefore holds the declarers among the names loaded so far
    and may grow at any point in the run.  Not memoising is enough here,
    where it would not have been under a pairwise encoding: the growing
@@ -457,12 +463,13 @@ module Make () = struct
       match n with
       | PFR.Name.Orig tn -> pp_t fmt tn
       | PFR.Name.Disjunct _ -> Format.fprintf fmt "<disj>"
-      | PFR.Name.NegDep (_, _) -> Format.fprintf fmt "<negdep>"
   end
 
   (* PubGrub decides the compare-maximum candidate, so preference lives
      here.  Newest-first among a name's own versions falls out of the
-     encoded order, since V.compare is the opam order.  On top of it, a
+     encoded order, since V.compare is the opam order, and the absent
+     version is the encoded order's greatest, so a name only a conflict
+     reaches is left out rather than installed.  On top of it, a
      version flagged avoid-version or deprecated is a last resort rather
      than an impossibility, so it sits in a class below every unflagged
      version of its name and newest-first decides within each class --
@@ -492,6 +499,7 @@ module Make () = struct
       | PFR.Version.Orig Red.TVer.UnitV -> Format.fprintf fmt "()"
       | PFR.Version.Orig (Red.TVer.NV n) -> Format.fprintf fmt "%s" n
       | PFR.Version.Idx i -> Format.fprintf fmt "z%d" (nat_int i)
+      | PFR.Version.Bot -> Format.fprintf fmt "⊥"
   end
 
   module PG = Pubgrub.Make (PName) (PVersion)
@@ -501,6 +509,9 @@ module Make () = struct
     | PFR.Name.Orig (Red.TName.Real n), PFR.Version.Orig (Red.TVer.RV v) ->
         { PVersion.avoid = avoided ar n v; v = tv }
     | _ -> { PVersion.avoid = false; v = tv }
+
+  (* every original name's absent version *)
+  let bot : PVersion.t = { PVersion.avoid = false; v = PFR.Version.Bot }
 
   (* ---- lazy core graph from per-package reductions ---- *)
 
@@ -553,10 +564,11 @@ module Make () = struct
     | PF.FNeg a -> form_names acc a
 
   (* where a dependee sits on the depender's spine, or None for the
-     synthetic packages 0install's decider never reaches: a conflict is a
-     `Restricts dependency it skips outright, and a conflict class is an
-     at_most_one clause over implementations rather than a role at all
-     (solver_core.ml, [Conflict_classes] and [check_dep]). *)
+     dependees 0install's decider never reaches: a conflict is a
+     `Restricts dependency it skips outright -- here an edge on a name the
+     depends formula does not mention, so unranked -- and a conflict class
+     is an at_most_one clause over implementations rather than a role at
+     all (solver_core.ml, [Conflict_classes] and [check_dep]). *)
   let zi_rank tbl (m : PFR.Name.t) : int option =
     let best acc s =
       match (Hashtbl.find_opt tbl s, acc) with
@@ -573,9 +585,7 @@ module Make () = struct
     | _ -> None
 
   let zi_walkable (m : PFR.Name.t) =
-    match m with
-    | PFR.Name.NegDep (_, _) | PFR.Name.Orig (Red.TName.Cls _) -> false
-    | _ -> true
+    match m with PFR.Name.Orig (Red.TName.Cls _) -> false | _ -> true
 
   type state = {
     ar : archive;
@@ -583,6 +593,9 @@ module Make () = struct
     synthetic_vers : (PFR.Name.t, PVersion.t list) Hashtbl.t;
     processed : (PF.Pkg.t, unit) Hashtbl.t;
     real_vers : (string, PVersion.t list) Hashtbl.t;
+    (* the encoder's version oracle at a real name, as the versions
+       lookup computes it and before tagging *)
+    oracle : (string, PF.VSet.t) Hashtbl.t;
     mutable canon : PFR.Name.t NameMap.t;
   }
 
@@ -593,10 +606,11 @@ module Make () = struct
       synthetic_vers = Hashtbl.create 65536;
       processed = Hashtbl.create 4096;
       real_vers = Hashtbl.create 4096;
+      oracle = Hashtbl.create 4096;
       canon = NameMap.empty;
     }
 
-  (* A Disjunct or NegDep name carries its formulas, so comparing
+  (* A Disjunct name carries its formulas, so comparing
      two equal names walks both in full, and PubGrub does that on every
      dependency-list scan and map hit.  Each version's reduction builds
      its own copy of a synthetic name shared across versions; one
@@ -633,11 +647,28 @@ module Make () = struct
               Hashtbl.replace st.synthetic_vers tn (tv :: prev))
       (T.PkgSet.elements r)
 
-  (* reduce one package-formula package's dependencies to core, via the
-     extracted lookups *)
   let verbose = Sys.getenv_opt "PACPROG" <> None
   let nproc = ref 0
 
+  (* Op.versions_lookupReal / versions_lookupCls: what the versions
+     callback answers, before the tagging PubGrub sees.  The encoder reads
+     this at the names a formula negates
+     (PF.Reduction.Lookup.dependees_lookupOrigBy), all of which inst_for
+     has loaded. *)
+  let oracle rho st (tn : Red.TName.t) : PF.VSet.t =
+    match tn with
+    | Red.TName.Real m -> (
+        match Hashtbl.find_opt st.oracle m with
+        | Some vs -> vs
+        | None ->
+            let vs = Red.versions rho (name_inst st.ar m) tn in
+            Hashtbl.replace st.oracle m vs;
+            vs)
+    | Red.TName.Root -> PF.VSet.singleton Red.TVer.UnitV
+    | Red.TName.Cls k -> Red.versions rho (cls_inst st.ar k) tn
+
+  (* reduce one package-formula package's dependencies to core, via the
+     extracted lookups *)
   let process rho st (q : PF.Pkg.t) (inst : Op.coq_Inst) =
     if not (Hashtbl.mem st.processed q) then begin
       Hashtbl.replace st.processed q ();
@@ -652,7 +683,7 @@ module Make () = struct
         PF.DepRel.ofList (List.map (fun f -> (q, f)) (Red.FSet.elements forms))
       in
       let r_q = PF.PkgSet.singleton q in
-      record_deprel st (PFR.reduceDeps d_q);
+      record_deprel st (PFR.reduceDepsBy (oracle rho st) d_q);
       record_real st (PFR.reduceReal r_q d_q)
     end
 
@@ -690,17 +721,20 @@ module Make () = struct
       end
       else f ()
     in
+    (* every original name answers its real versions and the absent one
+       (PF.Reduction.Lookup.versions_lookupOrig), except the root, whose
+       absent version the query rules out before the solve starts and
+       whose presence in the list would only widen the ranges PubGrub
+       prints for it *)
     let versions (tn : PFR.Name.t) : PVersion.t list =
       timed @@ fun () ->
       match tn with
       | PFR.Name.Orig (Red.TName.Real n) -> (
           try Hashtbl.find st.real_vers n
           with Not_found ->
-            let vs =
-              PF.VSet.elements
-                (Red.versions rho (name_inst ar n) (Red.TName.Real n))
-            in
+            let vs = PF.VSet.elements (oracle rho st (Red.TName.Real n)) in
             let vs = List.map (fun tv -> tag ar tn (PFR.Version.Orig tv)) vs in
+            let vs = vs @ [ bot ] in
             Hashtbl.replace st.real_vers n vs;
             vs)
       | PFR.Name.Orig Red.TName.Root ->
@@ -715,6 +749,7 @@ module Make () = struct
             (fun tv -> tag ar tn (PFR.Version.Orig tv))
             (PF.VSet.elements
                (Red.versions rho (cls_inst ar k) (Red.TName.Cls k)))
+          @ [ bot ]
       | _ -> ( try Hashtbl.find st.synthetic_vers tn with Not_found -> [])
     in
     let deps_cache = Hashtbl.create 65536 in
@@ -765,7 +800,14 @@ module Make () = struct
         try Hashtbl.find st.edges (tn, pv.PVersion.v)
         with Not_found -> T.DependeesSet.empty
       in
-      let ds = List.map fst (T.DependeesSet.elements hs) in
+      (* 0install's decider walks requirements, not restrictions: a
+         conflict's edge admits ⊥ and opens no role *)
+      let ds =
+        List.filter_map
+          (fun (m, vs) ->
+            if T.VSet.mem PFR.Version.Bot vs then None else Some m)
+          (T.DependeesSet.elements hs)
+      in
       match (tn, pv.PVersion.v) with
       | PFR.Name.Orig (Red.TName.Real n), PFR.Version.Orig (Red.TVer.RV v) ->
           let tbl =
@@ -793,6 +835,31 @@ module Make () = struct
          there is no written order to restore *)
       | _ -> List.filter zi_walkable ds
     in
+    (* Absence is the greatest version but the last decision.  A name a
+       conflict reaches is entailed to a range admitting ⊥ the moment its
+       declarer is decided, and PubGrub's own order -- fewest candidates
+       first -- would then decide it, to ⊥, before the packages that need
+       it positively are decided, narrowing their ranges to the versions
+       that do not (lwt 6.1.2 needs dune-configurator; dune's conflict on
+       old dune-configurators had it decided absent first, and lwt fell to
+       4.2.1).  So a name whose open range still admits ⊥ waits until every
+       name that must be present is decided; by then either something needs
+       it, and its range excludes ⊥, or nothing does, and ⊥ is right. *)
+    let defer_bot ~assigned (open_names : (PFR.Name.t * int) list) =
+      (* only an original name has the absent version; asking the partial
+         solution about a disjunct would compare its formulas *)
+      let admits_bot n =
+        match n with
+        | PFR.Name.Orig _ -> (
+            match assigned n with
+            | PG.Entailed r -> PG.Ranges.contains bot r
+            | _ -> false)
+        | _ -> false
+      in
+      match List.find_opt (fun (n, _) -> not (admits_bot n)) open_names with
+      | Some (n, _) -> n
+      | None -> fst (List.hd open_names)
+    in
     (* 0install's [decider] (solver_core.ml): walk the roles already
        selected depth-first from the root, each one's dependencies in the
        order they are written, and take the first role still undecided.
@@ -817,11 +884,12 @@ module Make () = struct
       in
       try
         ignore (visit NameSet.empty (PFR.Name.Orig Red.TName.Root));
-        (* nothing on the walk is open: leave the solver's own choice *)
-        fst (List.hd open_names)
+        (* nothing on the walk is open: leave the solver's own choice,
+           absence last *)
+        defer_bot ~assigned open_names
       with Found n -> n
     in
-    let next = if zi_order then Some zi_next else None in
+    let next = Some (if zi_order then zi_next else defer_bot) in
     let goal_range = PG.Ranges.of_list (versions (fst root_q)) in
     let t0 = Unix.gettimeofday () in
     let result =
