@@ -5,12 +5,22 @@ compare.py asks the second question over run_goal.py's dumps; this asks
 the first, and a goal can fail that and pass this.
 
 The check writes our answer out as the goal's Cargo.lock (mklock.py) and
-runs `cargo generate-lockfile --locked`: cargo re-resolves and, because
---locked forbids it to write, either accepts the lock unchanged or
-reports that it needs updating.  Accepted means our answer is a fixed
-point of cargo's own resolver over cargo's own manifest -- every version
-admitted by the requirement that reached it, nothing present that
-nothing needs, nothing absent that something does.
+runs `cargo update --workspace --locked`: cargo re-resolves with our lock
+as the previous resolve and, naming no package, avoids none, so it keeps
+every locked version a requirement still admits and changes only what its
+rules force; --locked makes any change a refusal.  Accepted means our
+answer is a fixed point of cargo's own resolver over cargo's own manifest
+-- every version admitted by the requirement that reached it, nothing
+present that nothing needs, nothing absent that something does -- whether
+or not cargo would have picked it.
+
+`cargo generate-lockfile --locked` cannot ask this: it resolves with no
+previous resolve (ops/cargo_update.rs), so it accepts only a lock equal to
+cargo's own fresh answer, which is correspondence again.  It is still run
+when the keep check refuses, because cargo's own lock can fail that
+check: a crate declaring one package at two sites has both rows re-locked
+to the first previous version matching either (kreuzberg's zip), so a lock
+identical to cargo's fresh one is valid whatever the keep check says.
 
 --locked is the right question only because our answer is meant to BE a
 Cargo.lock.  A lock is the feature-independent resolve: cargo writes it
@@ -23,16 +33,16 @@ strict superset of ours -- unactivated optionals, down to single nodes
 like rustc-std-workspace-core under cfg-if.  The gap was the model's,
 not the check's.)
 
-Nothing is downloaded: generate-lockfile wants index rows, which
+Nothing is downloaded: both commands want index rows, which
 sparse_proxy.py serves byte-for-byte from the snapshot pac read, and no
 crate bodies at all.  So there is no cache to warm and no offline pass
 to distinguish from an online one -- a non-zero exit is cargo's verdict
 and nothing else.
 
-When cargo refuses, it is run once more without --locked over a pristine
-copy of our lock -- the repair -- and the lock it writes is diffed
-against ours.  That names the packages and edges it changed, which is
-the diagnostic worth printing; it is never the verdict.
+When cargo refuses, `cargo update --workspace` is run once more without
+--locked over a pristine copy of our lock -- the repair -- and the lock it
+writes is diffed against ours.  That names the packages and edges it
+changed, which is the diagnostic worth printing; it is never the verdict.
 
 The root's own version and any --rust-version are settled exactly as
 run_goal.py settles them, by importing it, so the pac invocation being
@@ -53,9 +63,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import run_goal  # noqa: E402
 
+KEEP = ["update", "--workspace"]
+FRESH = ["generate-lockfile"]
 
-def cargo_lockfile(workdir, locked):
-    cmd = ["cargo", "generate-lockfile", "--manifest-path", workdir + "/Cargo.toml"]
+
+def cargo_lock(workdir, sub, locked):
+    cmd = ["cargo"] + sub + ["--manifest-path", workdir + "/Cargo.toml"]
     if locked:
         cmd += ["--locked"]
     env = run_goal.write_cargo_config()
@@ -109,14 +122,20 @@ def main():
     ours = lock + ".ours"
     shutil.copy(lock, ours)
 
-    rc, msg, wall = cargo_lockfile(workdir, locked=True)
-    v = "VALID" if rc == 0 else "INVALID"
+    rc, msg, wall = cargo_lock(workdir, KEEP, locked=True)
+    kept = rc == 0
+    identical = None
+    if not kept:
+        shutil.copy(ours, lock)
+        irc, _imsg, _iwall = cargo_lock(workdir, FRESH, locked=True)
+        identical = irc == 0
+    v = "VALID" if kept or identical else "INVALID"
 
     lost, added, lost_edges, added_edges = [], [], [], []
-    if rc != 0:
+    if v == "INVALID":
         # the repair: what cargo does to our lock when allowed to
         shutil.copy(ours, lock)
-        rrc, _rmsg, _rwall = cargo_lockfile(workdir, locked=False)
+        rrc, _rmsg, _rwall = cargo_lock(workdir, KEEP, locked=False)
         if rrc == 0:
             op, oe = run_goal.read_lock(ours)
             tp, te = run_goal.read_lock(lock)
@@ -125,23 +144,26 @@ def main():
             lost_edges, added_edges = sorted(oe - te), sorted(te - oe)
 
     detail = ""
-    if rc != 0:
+    if v == "INVALID":
         detail = " lost=%d added=%d lost-edges=%d added-edges=%d" % (
             len(lost), len(added), len(lost_edges), len(added_edges))
+    elif not kept:
+        detail = " (identical to cargo's; not kept)"
     print("%-24s n=%-4d rc=%-4s %-8s%s %.1fs" % (
         args.crate, len(pac["crates"]), rc, v, detail, wall))
     for label, items in (("lost", lost), ("added", added),
                          ("lost-edge", lost_edges), ("added-edge", added_edges)):
         for it in items[:12]:
             print("    | %s %s" % (label, it))
-    if rc != 0:
+    if v == "INVALID":
         for line in msg.strip().splitlines()[:12]:
             print("    | " + line)
     if args.out:
         os.makedirs(os.path.dirname(args.out), exist_ok=True)
         with open(args.out, "w") as f:
             json.dump({"crate": args.crate, "rc": rc, "verdict": v,
-                       "valid": v == "VALID", "n": len(pac["crates"]),
+                       "valid": v == "VALID", "kept": kept,
+                       "identical": identical, "n": len(pac["crates"]),
                        "root_rust_version": rustv, "lost": lost,
                        "added": added, "lost_edges": lost_edges,
                        "added_edges": added_edges, "cargo": msg}, f, indent=1)
