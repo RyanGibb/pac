@@ -30,15 +30,11 @@ Module ConflictClass (N V : UsualOrderedType).
   Module Reduction.
     Module NF := UOTCompareFacts N.
     Module VF := UOTCompareFacts V.
-    Module PF := UOTCompareFacts Pkg.
-    #[local] Hint Rewrite NF.compare_eq_iff VF.compare_eq_iff
-      PF.compare_eq_iff : cmp_cls.
+    #[local] Hint Rewrite NF.compare_eq_iff VF.compare_eq_iff : cmp_cls.
     #[local] Hint Extern 1 => cmp_by NF.compare_antisym : cmp_cls.
     #[local] Hint Extern 1 => cmp_by VF.compare_antisym : cmp_cls.
-    #[local] Hint Extern 1 => cmp_by PF.compare_antisym : cmp_cls.
     #[local] Hint Extern 1 => cmp_by NF.compare_lt_trans : cmp_cls.
     #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_cls.
-    #[local] Hint Extern 1 => cmp_by PF.compare_lt_trans : cmp_cls.
 
     Module Name.
       Inductive name : Type :=
@@ -68,15 +64,15 @@ Module ConflictClass (N V : UsualOrderedType).
     Module Version.
       Inductive version : Type :=
       | Orig (v : V.t)
-      | Pkg (p : Pkg.t).
+      | Name (n : N.t).
       Definition t := version.
 
       Definition compare (x y : t) : comparison :=
         match x, y with
         | Orig v1, Orig v2 => V.compare v1 v2
-        | Orig _, Pkg _ => Lt
-        | Pkg _, Orig _ => Gt
-        | Pkg p1, Pkg p2 => Pkg.compare p1 p2
+        | Orig _, Name _ => Lt
+        | Name _, Orig _ => Gt
+        | Name n1, Name n2 => N.compare n1 n2
         end.
 
       Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
@@ -103,20 +99,22 @@ Module ConflictClass (N V : UsualOrderedType).
     Module SOvt := SetOps V VersionOT VSet T.VSet.
     Definition embedVS (vs : VSet.t) : T.VSet.t := SOvt.map Version.Orig vs.
 
-    (* One for each class each package of X is in: at R these are the class
-       packages, at a class resolution the ones it selects. *)
+    (* Keyed by name rather than by package, since version uniqueness on the
+       name already admits one of its packages, and a class can have far
+       fewer names than packages.  At R these are the class packages, at a
+       class resolution the ones it selects. *)
     Module SOit := SetOps InClassElt T.Pkg InClassRel T.PkgSet.
     Definition classPkgs (X : PkgSet.t) (Om : InClassRel.t) : T.PkgSet.t :=
       SOit.filterMap (fun '(q, k) =>
           if PkgSet.mem q X
-          then Some (Name.Cls k, Version.Pkg q)
+          then Some (Name.Cls k, Version.Name (fst q))
           else None)
         Om.
 
     Lemma mem_classPkgs : forall X Om (y : T.Pkg.t),
         T.PkgSet.In y (classPkgs X Om) <->
         exists q k, InClassRel.In (q, k) Om /\ PkgSet.In q X /\
-          y = (Name.Cls k, Version.Pkg q).
+          y = (Name.Cls k, Version.Name (fst q)).
     Proof.
       intros X Om y; unfold classPkgs; rewrite SOit.mem_filterMap.
       split.
@@ -137,7 +135,7 @@ Module ConflictClass (N V : UsualOrderedType).
         T.PkgSet.In y (reduceReal R Om) <->
         (exists p, PkgSet.In p R /\ y = embedPkg p) \/
         (exists q k, InClassRel.In (q, k) Om /\ PkgSet.In q R /\
-           y = (Name.Cls k, Version.Pkg q)).
+           y = (Name.Cls k, Version.Name (fst q))).
     Proof.
       intros; unfold reduceReal, embedSet.
       rewrite T.PkgSet.union_spec, SOpt.mem_map, mem_classPkgs; reflexivity.
@@ -148,14 +146,15 @@ Module ConflictClass (N V : UsualOrderedType).
       SOdtd.map (fun '(p, (n, vs)) => (embedPkg p, (Name.Orig n, embedVS vs)))
         D.
 
-    (* Each package in a class depends on itself at that class, and version
-       uniqueness there does the excluding: one edge per package and class it
-       is in, where pairwise conflicts would need one per pair of packages in
-       the class. *)
+    (* Each package in a class depends on the class at its own name: version
+       uniqueness there admits packages of one name, and on that name one of
+       them.  One edge per package and class it is in, where pairwise
+       conflicts would need one per pair of packages in the class. *)
     Module SOitd := SetOps InClassElt T.DepElt InClassRel T.DepRel.
     Definition classEdges (Om : InClassRel.t) : T.DepRel.t :=
       SOitd.map (fun '(q, k) =>
-          (embedPkg q, (Name.Cls k, T.VSet.singleton (Version.Pkg q))))
+          (embedPkg q,
+           (Name.Cls k, T.VSet.singleton (Version.Name (fst q)))))
         Om.
 
     Definition reduceDeps (D : C.DepRel.t) (Om : InClassRel.t) : T.DepRel.t :=
@@ -177,7 +176,8 @@ Module ConflictClass (N V : UsualOrderedType).
     Lemma mem_classEdges : forall Om (y : T.DepElt.t),
         T.DepRel.In y (classEdges Om) <->
         exists q k, InClassRel.In (q, k) Om /\
-          y = (embedPkg q, (Name.Cls k, T.VSet.singleton (Version.Pkg q))).
+          y = (embedPkg q,
+               (Name.Cls k, T.VSet.singleton (Version.Name (fst q)))).
     Proof.
       intros Om y; unfold classEdges; rewrite SOitd.mem_map.
       split.
@@ -193,7 +193,7 @@ Module ConflictClass (N V : UsualOrderedType).
            y = (embedPkg p, (Name.Orig n, embedVS vs))) \/
         (exists q k, InClassRel.In (q, k) Om /\
            y = (embedPkg q,
-                (Name.Cls k, T.VSet.singleton (Version.Pkg q)))).
+                (Name.Cls k, T.VSet.singleton (Version.Name (fst q))))).
     Proof.
       intros; unfold reduceDeps.
       rewrite T.DepRel.union_spec, mem_origEdges, mem_classEdges;
@@ -268,16 +268,21 @@ Module ConflictClass (N V : UsualOrderedType).
       intros R D Om r S [Hsub Hroot Hdep Huniq].
       assert (Hcls : forall q k,
                  PkgSet.In q (classResolution S) -> InClassRel.In (q, k) Om ->
-                 T.PkgSet.In (Name.Cls k, Version.Pkg q) S).
+                 T.PkgSet.In (Name.Cls k, Version.Name (fst q)) S).
       { intros q k Hq Hc; apply mem_classResolution in Hq.
         assert (Hd : T.DepRel.In
                        (embedPkg q,
-                        (Name.Cls k, T.VSet.singleton (Version.Pkg q)))
+                        (Name.Cls k, T.VSet.singleton (Version.Name (fst q))))
                        (reduceDeps D Om))
           by (apply mem_reduceDeps; right; exists q, k;
               split; [exact Hc | reflexivity]).
         destruct (Hdep _ Hq _ _ Hd) as [w [Hw HwS]].
         rewrite SOvt.singleton_in in Hw; subst w; exact HwS. }
+      assert (Hvu : C.VersionUnique (classResolution S)).
+      { intros n v v' Hv Hv'; apply mem_classResolution in Hv, Hv'.
+        assert (E : Version.Orig v = Version.Orig v')
+          by (apply (Huniq (Name.Orig n)); assumption).
+        injection E as E; exact E. }
       constructor.
       - constructor.
         + intros p Hp; apply mem_classResolution in Hp.
@@ -293,18 +298,16 @@ Module ConflictClass (N V : UsualOrderedType).
             destruct Hw as [v [Hv ->]].
           exists v; split;
             [exact Hv | apply mem_classResolution; exact HwS].
-        + intros n v v' Hv Hv'; apply mem_classResolution in Hv, Hv'.
-          assert (E : Version.Orig v = Version.Orig v')
-            by (apply (Huniq (Name.Orig n)); assumption).
-          injection E as E; exact E.
-      - intros k p q Hp Hq Hpk Hqk.
-        assert (E : Version.Pkg p = Version.Pkg q)
-          by exact (Huniq (Name.Cls k) _ _ (Hcls p k Hp Hpk) (Hcls q k Hq Hqk)).
-        injection E as E; exact E.
+        + exact Hvu.
+      - intros k [pn pv] [qn qv] Hp Hq Hpk Hqk.
+        assert (E : Version.Name pn = Version.Name qn)
+          by exact (Huniq (Name.Cls k) _ _ (Hcls _ k Hp Hpk) (Hcls _ k Hq Hqk)).
+        injection E as <-.
+        rewrite (Hvu pn pv qv Hp Hq); reflexivity.
     Qed.
 
     (* The reduction's own package set, taken at the class resolution: <k>
-       is selected at p exactly when p is. *)
+       is selected at n exactly when a package of name n in k is. *)
     Definition coreResolution (S : PkgSet.t) (Om : InClassRel.t) :
         T.PkgSet.t :=
       reduceReal S Om.
@@ -334,7 +337,7 @@ Module ConflictClass (N V : UsualOrderedType).
           * apply mem_reduceReal; left; exists (n, v);
               split; [exact HvS | reflexivity].
         + apply embedPkg_mem_real in Hy.
-          exists (Version.Pkg q); split.
+          exists (Version.Name (fst q)); split.
           * apply SOvt.singleton_in; reflexivity.
           * apply mem_reduceReal; right; exists q, k;
               split; [exact Hc | split; [exact Hy | reflexivity]].
@@ -391,7 +394,7 @@ Module ConflictClass (N V : UsualOrderedType).
       Module SOpv := SetOps Pkg VersionOT PkgSet T.VSet.
       Lemma versions_cls : forall R Om (k : N.t),
           T.versions (reduceReal R Om) (Name.Cls k) =
-          SOpv.map Version.Pkg (inClass R Om k).
+          SOpv.map (fun q => Version.Name (fst q)) (inClass R Om k).
       Proof.
         intros R Om k; apply T.VSet.ext; intro w.
         rewrite T.mem_versions, mem_reduceReal, SOpv.mem_map.

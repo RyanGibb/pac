@@ -136,10 +136,31 @@ Proof.
   discriminate E.
 Qed.
 
+(* In the reduction the same two are refused by version uniqueness on <0>,
+   which each depends on at its own name. *)
+Example conflictClass_reduction_excludes :
+  forall S,
+    Cls.Reduction.T.IsResolution (Cls.Reduction.reduceReal clsR clsOm)
+      (Cls.Reduction.reduceDeps Cls.C.DepRel.empty clsOm)
+      (Cls.Reduction.embedPkg (1, 10)) S ->
+    ~ Cls.Reduction.T.PkgSet.In (Cls.Reduction.embedPkg (2, 20)) S.
+Proof.
+  intros S [_ Hr Hdep Huniq] Hq.
+  destruct (Hdep _ Hr (Cls.Reduction.Name.Cls 0)
+              (Cls.Reduction.T.VSet.singleton (Cls.Reduction.Version.Name 1)))
+    as [w [Hw Hwr]]; [apply Cls.Reduction.T.DepRel.mem_spec; reflexivity |].
+  destruct (Hdep _ Hq (Cls.Reduction.Name.Cls 0)
+              (Cls.Reduction.T.VSet.singleton (Cls.Reduction.Version.Name 2)))
+    as [w' [Hw' Hwq]]; [apply Cls.Reduction.T.DepRel.mem_spec; reflexivity |].
+  apply Cls.Reduction.T.VSet.singleton_spec in Hw, Hw'; subst w w'.
+  discriminate (Huniq _ _ _ Hwr Hwq).
+Qed.
+
+(* Two names, though three packages. *)
 Example conflictClass_reduceReal_computes :
   Cls.Reduction.T.VSet.cardinal
     (Cls.Reduction.T.versions (Cls.Reduction.reduceReal clsR clsOm)
-       (Cls.Reduction.Name.Cls 0)) = 3.
+       (Cls.Reduction.Name.Cls 0)) = 2.
 Proof. reflexivity. Qed.
 
 Example conflictClass_roundtrip_computes :
