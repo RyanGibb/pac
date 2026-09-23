@@ -1,13 +1,13 @@
   $ ../../../src/main.exe cargo index a | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root a 1.0.0
   crates (6):
-    a 1.0.0 [default]
-    b 1.0.0 [default]
-    c 1.0.0 [default]
-    d 1.0.0 [a,default]
-    d 2.0.0 [b,default]
-    f 1.0.0 [c,d,default]
-  encoded solution: 25 core nodes (6 crate versions encoded)
+    a 1.0.0
+    b 1.0.0
+    c 1.0.0
+    d 1.0.0 [a,f]
+    d 2.0.0 [b,f]
+    f 1.0.0 [c,d]
+  encoded solution: 27 core nodes (6 crate versions encoded)
   parent edges: 6
   loaded: 5 crates, 6 versions
 
@@ -19,9 +19,9 @@ q publishes 1.0.0-alpha.1 alone, which ^1.0.0-alpha reaches.
   $ ../../../src/main.exe cargo index g | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root g 1.0.0
   crates (3):
-    g 1.0.0 [default]
-    p 1.0.0 [default]
-    q 1.0.0-alpha.1 [default]
+    g 1.0.0
+    p 1.0.0
+    q 1.0.0-alpha.1
   encoded solution: 9 core nodes (4 crate versions encoded)
   parent edges: 2
   loaded: 3 crates, 4 versions
@@ -34,8 +34,8 @@ activated and the dev one does not participate.
   $ ../../../src/main.exe cargo index h | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root h 1.0.0
   crates (2):
-    h 1.0.0 [default]
-    k 1.0.0 [default]
+    h 1.0.0
+    k 1.0.0
   encoded solution: 6 core nodes (2 crate versions encoded)
   parent edges: 1
   loaded: 3 crates, 3 versions
@@ -49,8 +49,8 @@ slot, two parent edges onto the one installed crate.
   $ ../../../src/main.exe cargo index k | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root k 1.0.0
   crates (2):
-    k 1.0.0 [default,m]
-    m 1.0.0 [default]
+    k 1.0.0 [m]
+    m 1.0.0
   encoded solution: 8 core nodes (2 crate versions encoded)
   parent edges: 2
   loaded: 2 crates, 2 versions
@@ -64,8 +64,8 @@ on every depender, which is the h case above.
   $ ../../../src/main.exe cargo index k --features default | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root k 1.0.0 with features default
   crates (2):
-    k 1.0.0 [default]
-    m 1.0.0 [default]
+    k 1.0.0
+    m 1.0.0
   encoded solution: 6 core nodes (2 crate versions encoded)
   parent edges: 1
   loaded: 2 crates, 2 versions
@@ -81,10 +81,10 @@ without it.
   $ ../../../src/main.exe cargo index r | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root r 1.0.0
   crates (4):
-    r 1.0.0 [default]
-    x 0.9.0 [default]
-    y 1.0.2 [default]
-    z 1.0.0 [default]
+    r 1.0.0
+    x 0.9.0
+    y 1.0.2
+    z 1.0.0
   encoded solution: 13 core nodes (7 crate versions encoded)
   parent edges: 3
   loaded: 4 crates, 7 versions
@@ -98,9 +98,9 @@ its place in the lock as --features varies, and w is installed with extra.
   $ ../../../src/main.exe cargo index s | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root s 1.0.0
   crates (3):
-    s 1.0.0 [default]
+    s 1.0.0
     u 1.0.0 [cap,default]
-    w 1.0.0 [default,extra]
+    w 1.0.0 [extra]
   encoded solution: 12 core nodes (3 crate versions encoded)
   parent edges: 2
   loaded: 3 crates, 3 versions
@@ -114,8 +114,8 @@ m1 takes the older 1.0.0.
   $ ../../../src/main.exe cargo index m1 --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root m1 1.0.0 for rust 1.70
   crates (2):
-    d1 1.0.0 [default]
-    m1 1.0.0 [default]
+    d1 1.0.0
+    m1 1.0.0
   encoded solution: 6 core nodes (3 crate versions encoded)
   parent edges: 1
   loaded: 2 crates, 3 versions
@@ -126,8 +126,8 @@ the rust-versions list is empty, and the same index takes the newest.
   $ ../../../src/main.exe cargo index m1 | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root m1 1.0.0
   crates (2):
-    d1 1.1.0 [default]
-    m1 1.0.0 [default]
+    d1 1.1.0
+    m1 1.0.0
   encoded solution: 6 core nodes (3 crate versions encoded)
   parent edges: 1
   loaded: 2 crates, 3 versions
@@ -142,8 +142,8 @@ would give.
   $ ../../../src/main.exe cargo index m2 --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root m2 1.0.0 for rust 1.70
   crates (2):
-    d2 1.1.0 [default]
-    m2 1.0.0 [default]
+    d2 1.1.0
+    m2 1.0.0
   encoded solution: 6 core nodes (4 crate versions encoded)
   parent edges: 1
   loaded: 2 crates, 4 versions
@@ -151,8 +151,8 @@ would give.
   $ ../../../src/main.exe cargo index m2 | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root m2 1.0.0
   crates (2):
-    d2 1.2.0 [default]
-    m2 1.0.0 [default]
+    d2 1.2.0
+    m2 1.0.0
   encoded solution: 6 core nodes (4 crate versions encoded)
   parent edges: 1
   loaded: 2 crates, 4 versions
@@ -164,8 +164,8 @@ out of range, so 2.0.0 is taken rather than the solve failing.
   $ ../../../src/main.exe cargo index m3 --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root m3 1.0.0 for rust 1.70
   crates (2):
-    d3 2.0.0 [default]
-    m3 1.0.0 [default]
+    d3 2.0.0
+    m3 1.0.0
   encoded solution: 6 core nodes (3 crate versions encoded)
   parent edges: 1
   loaded: 2 crates, 3 versions
@@ -180,9 +180,9 @@ lockfile with e 0.1.0 beside e 0.2.0.
   $ ../../../src/main.exe cargo index t | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root t 1.0.0
   crates (3):
-    e 0.1.0 [default]
-    e 0.2.0 [default]
-    t 1.0.0 [default]
+    e 0.1.0
+    e 0.2.0
+    t 1.0.0
   encoded solution: 9 core nodes (3 crate versions encoded)
   parent edges: 2
   loaded: 2 crates, 3 versions
@@ -195,9 +195,43 @@ source registry.  rn's x is e under [dependencies] and w under
   $ ../../../src/main.exe cargo index rn | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root rn 1.0.0
   crates (3):
-    e 0.2.0 [default]
-    rn 1.0.0 [default]
-    w 1.0.0 [default]
+    e 0.2.0
+    rn 1.0.0
+    w 1.0.0
   encoded solution: 9 core nodes (4 crate versions encoded)
   parent edges: 2
   loaded: 3 crates, 4 versions
+
+A crate's feature set is the one cargo's version resolver records for it
+(Resolve::features, what `cargo metadata` prints), and two of that
+resolver's rules are about names it adds on its own.  A crate declaring no
+default feature gets none -- cargo's handle_default requires the key -- so
+a depender's default-features request lands on nothing, and every crate in
+this index but u shows no default at all.  And a strong a/feat entry over
+an optional dependency a also enables the feature named a when the crate
+has one (dep_cache.rs, require_dep_feature): ir asks i for net alone, net
+is "o/extra" over the optional o, whose implicit feature o exists, so i is
+resolved with o on:
+
+  $ ../../../src/main.exe cargo index ir | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root ir 1.0.0
+  crates (3):
+    i 1.0.0 [net,o]
+    ir 1.0.0
+    o 1.0.0 [extra]
+  encoded solution: 12 core nodes (3 crate versions encoded)
+  parent edges: 2
+  loaded: 3 crates, 3 versions
+
+Where dep:o names the dependency there is no implicit feature o to enable,
+and i3 is resolved with net alone:
+
+  $ ../../../src/main.exe cargo index ir3 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root ir3 1.0.0
+  crates (3):
+    i3 1.0.0 [net]
+    ir3 1.0.0
+    o 1.0.0 [extra]
+  encoded solution: 11 core nodes (3 crate versions encoded)
+  parent edges: 2
+  loaded: 3 crates, 3 versions

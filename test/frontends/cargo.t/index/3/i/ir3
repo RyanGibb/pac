@@ -1,0 +1,1 @@
+{"name":"ir3","vers":"1.0.0","deps":[{"name":"i3","req":"1","features":["net"],"optional":false,"default_features":false,"kind":"normal"}],"features":{},"yanked":false}

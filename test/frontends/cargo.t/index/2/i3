@@ -1,0 +1,1 @@
+{"name":"i3","vers":"1.0.0","deps":[{"name":"o","req":"1","features":[],"optional":true,"default_features":true,"kind":"normal"}],"features":{"net":["dep:o","o/extra"]},"yanked":false}

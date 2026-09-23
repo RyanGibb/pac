@@ -673,9 +673,22 @@ module Make () = struct
         let s = T.PkgSet.ofList sol in
         (* back through the proved decoders *)
         let crates = Cg.PkgSet.elements (Cg.decodeS s) in
+        (* the placeholder default the parser gives a crate declaring none
+           keeps a depender's default-features request satisfiable; cargo
+           records no such feature (dep_cache.rs, handle_default requires
+           the key), so Resolve::features has it only where the manifest
+           does, and the reported set follows *)
         let feats =
           List.map
-            (fun (((n, v), fs) : Cg.Featured.t) -> (n, v, Cg.FSet.elements fs))
+            (fun (((n, v), fs) : Cg.Featured.t) ->
+              let fs = Cg.FSet.elements fs in
+              let fs =
+                match meta ar n v with
+                | Some m when not m.P.v_default_declared ->
+                    List.filter (fun f -> f <> default_feature) fs
+                | _ -> fs
+              in
+              (n, v, fs))
             (Cg.FeaturedSet.elements (Cg.decodeFS s))
         in
         (* decodeParents is the one decoder that reads Slots, and a lazy

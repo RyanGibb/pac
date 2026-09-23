@@ -1,0 +1,1 @@
+{"name":"i","vers":"1.0.0","deps":[{"name":"o","req":"1","features":[],"optional":true,"default_features":true,"kind":"normal"}],"features":{"net":["o/extra"]},"yanked":false}

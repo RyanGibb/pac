@@ -32,6 +32,10 @@ type ver = {
   v_deps : dep list;
   v_feats : (string * fentry list) list;
   v_links : string option;
+  (* whether "default" is the manifest's own feature or the placeholder
+     with_implicit_features adds; the solve needs the placeholder, the
+     reported feature set must not carry it *)
+  v_default_declared : bool;
   (* the declared MSRV, kept as written: the index spells it as a partial
      version ("1.71", not "1.71.0"), and the comparison it feeds is a
      caret requirement, which reads a partial spec directly.  None is the
@@ -166,7 +170,11 @@ let mentions_dep (tbl : (string * fentry list) list) (a : string) : bool =
 let default_feature = "default"
 
 (* an optional dependency's implicit feature, suppressed by any dep: entry
-   naming it and by an explicit feature of the same name *)
+   naming it and by an explicit feature of the same name; and, the table
+   complete, a strong a/feat entry over an optional a also enables the
+   feature named a where the table has one, because cargo's resolver does
+   (dep_cache.rs, require_dep_feature) and the calculus states only what
+   the entry asks of a *)
 let with_implicit_features (deps : dep list) (tbl : (string * fentry list) list)
     : (string * fentry list) list =
   let tbl =
@@ -184,7 +192,22 @@ let with_implicit_features (deps : dep list) (tbl : (string * fentry list) list)
         else None)
       deps
   in
-  tbl @ extra
+  let tbl = tbl @ extra in
+  let optional a = List.exists (fun d -> d.d_optional && d.d_alias = a) deps in
+  List.map
+    (fun (f, es) ->
+      let also =
+        List.filter_map
+          (function
+            | FDepFeat (a, _)
+              when optional a && List.mem_assoc a tbl
+                   && not (List.mem (FFeat a) es) ->
+                Some (FFeat a)
+            | _ -> None)
+          es
+      in
+      (f, es @ List.sort_uniq compare also))
+    tbl
 
 let parse_line (line : string) : ver option =
   match Yojson.Safe.from_string line with
@@ -204,7 +227,8 @@ let parse_line (line : string) : ver option =
                   reject ();
                   []
             in
-            let tbl = with_implicit_features deps (feature_table j) in
+            let declared = feature_table j in
+            let tbl = with_implicit_features deps declared in
             Some
               {
                 v_name = name;
@@ -212,6 +236,7 @@ let parse_line (line : string) : ver option =
                 v_deps = deps;
                 v_feats = tbl;
                 v_links = str_opt (member "links" j);
+                v_default_declared = List.mem_assoc default_feature declared;
                 v_msrv = str_opt (member "rust_version" j);
               }
       | _ ->
