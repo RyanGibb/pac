@@ -19,8 +19,14 @@ End ArchParam.
 Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Module A := AP.A.
 
+  (* QAExact b is the target of an explicit :b.  It cannot share QAArch b,
+     where M-A: foreign replicates its provides, because an explicit
+     qualifier is answered by b's own packages alone; like apt's pkg:b
+     pseudo-package, it is provided by the real packages of b and by the
+     Provides that b's packages declare. *)
   Inductive NameArch : Type :=
   | QAArch (a : A.t)
+  | QAExact (a : A.t)
   | QAAny
   | QAGroup.
 
@@ -36,6 +42,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       | QAArch a1, QAArch a2 => A.compare a1 a2
       | QAArch _, _ => Lt
       | _, QAArch _ => Gt
+      | QAExact a1, QAExact a2 => A.compare a1 a2
+      | QAExact _, _ => Lt
+      | _, QAExact _ => Gt
       | QAAny, QAAny => Eq
       | QAAny, QAGroup => Lt
       | QAGroup, QAAny => Gt
@@ -214,28 +223,32 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     (pname q = n /\ Deb.vfHolds f (pver q) = true) \/
     (exists vt, Prov.In (q, (n, vt)) Pi /\ Deb.vtMatchb vt f = true).
 
-  (* Arch reach (MultiarchSpec): a same-arch candidate always reaches;
-     M-A: foreign reaches any target arch; :any atoms reach any arch but
-     only M-A: allowed candidates. *)
+  (* Arch reach: a same-arch candidate always reaches; M-A: foreign reaches
+     an unqualified atom from any arch but never an explicit one, :native
+     included ("if a dependency has an explicit arch-qualifier then the
+     value foreign is ignored", deb-control(5)); :any atoms reach any arch
+     but only M-A: allowed candidates. *)
   Definition MAMatch (Pi : Prov.t) (M : Cls.t) (da : A.t)
       (a : Atom.t) (q : Pkg.t) : Prop :=
     BaseMatch Pi (aname a) (aform a) q /\
     match aqual a with
     | QUnq => parch q = da \/ classOf M q = MAForeign
-    | QNative => parch q = AP.native \/ classOf M q = MAForeign
-    | QArch b => parch q = b \/ classOf M q = MAForeign
+    | QNative => parch q = AP.native
+    | QArch b => parch q = b
     | QAny => classOf M q = MAAllowed
     end.
 
   (* Conflict-side match: an unqualified negative applies to every
-     architecture (apt replicates it across the group). *)
+     architecture (apt replicates it across the group), and a qualified one
+     reaches what the same atom would satisfy as a dependency, apt's
+     negative on pkg:b being a dependency on the same pseudo-package. *)
   Definition MAConfMatch (Pi : Prov.t) (M : Cls.t)
       (a : Atom.t) (q : Pkg.t) : Prop :=
     BaseMatch Pi (aname a) (aform a) q /\
     match aqual a with
     | QUnq => True
-    | QNative => parch q = AP.native \/ classOf M q = MAForeign
-    | QArch b => parch q = b \/ classOf M q = MAForeign
+    | QNative => parch q = AP.native
+    | QArch b => parch q = b
     | QAny => classOf M q = MAAllowed
     end.
 
@@ -278,8 +291,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     ((aname a,
       match aqual a with
       | QUnq => QAArch da
-      | QNative => QAArch AP.native
-      | QArch b => QAArch b
+      | QNative => QAExact AP.native
+      | QArch b => QAExact b
       | QAny => QAAny
       end), aform a).
 
@@ -308,27 +321,31 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
   (* Declared Provides, replicated by the provider's class: no/same reach
      the provider's own arch, foreign every arch, allowed additionally the
-     :any pseudo-name. *)
+     :any pseudo-name; every class reaches the explicit qualifier of its
+     own arch alone. *)
   Definition reduceProvEntry (M : Cls.t) (e : ProvElt.t) :
       list Deb.ProvElt.t :=
     let p := fst e in
     let m := fst (snd e) in
     let vt := snd (snd e) in
-    match classOf M p with
-    | MAForeign =>
-        List.map (fun b => (embedPkg p, ((m, QAArch b), vt))) A.enum
-    | MAAllowed =>
-        (embedPkg p, ((m, QAAny), vt))
-          :: (embedPkg p, ((m, QAArch (parch p)), vt)) :: nil
-    | _ => (embedPkg p, ((m, QAArch (parch p)), vt)) :: nil
-    end.
+    (embedPkg p, ((m, QAExact (parch p)), vt))
+      :: match classOf M p with
+         | MAForeign =>
+             List.map (fun b => (embedPkg p, ((m, QAArch b), vt))) A.enum
+         | MAAllowed =>
+             (embedPkg p, ((m, QAAny), vt))
+               :: (embedPkg p, ((m, QAArch (parch p)), vt)) :: nil
+         | _ => (embedPkg p, ((m, QAArch (parch p)), vt)) :: nil
+         end.
 
   (* Implicit provides: every real package provides its group pseudo-name
-     at its own version (carrier of the implicit cross-arch exclusion);
-     M-A: foreign packages provide their own name at every arch;
-     M-A: allowed packages provide their own :any pseudo-name. *)
+     at its own version (carrier of the implicit cross-arch exclusion), and
+     the explicit qualifier of its own arch (real packages live only at
+     QAArch names); M-A: foreign packages provide their own name at every
+     arch; M-A: allowed packages provide their own :any pseudo-name. *)
   Definition implProvOf (M : Cls.t) (p : Pkg.t) : list Deb.ProvElt.t :=
     (embedPkg p, ((pname p, QAGroup), Deb.DTVal (pver p)))
+      :: (embedPkg p, ((pname p, QAExact (parch p)), Deb.DTVal (pver p)))
       :: match classOf M p with
          | MAForeign =>
              List.map
@@ -362,8 +379,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         (embedPkg p, (((n, QAGroup), f), true))
           :: (embedPkg p, (((n, QAAny), f), true))
           :: List.map (fun b => (embedPkg p, (((n, QAArch b), f), true))) A.enum
-    | QNative => (embedPkg p, (((n, QAArch AP.native), f), true)) :: nil
-    | QArch b => (embedPkg p, (((n, QAArch b), f), true)) :: nil
+    | QNative => (embedPkg p, (((n, QAExact AP.native), f), true)) :: nil
+    | QArch b => (embedPkg p, (((n, QAExact b), f), true)) :: nil
     | QAny => (embedPkg p, (((n, QAAny), f), true)) :: nil
     end.
 
@@ -402,7 +419,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Lemma tryInvPkg_some : forall (s : Deb.Ver.C.Pkg.t) (p : Pkg.t),
       tryInvPkg s = Some p -> embedPkg p = s.
   Proof.
-    intros [[n [b | |]] v] p H; cbn [tryInvPkg] in H; try discriminate.
+    intros [[n [b | b | |]] v] p H; cbn [tryInvPkg] in H; try discriminate.
     injection H as <-; unfold embedPkg, pname, parch, pver;
       cbn [fst snd]; reflexivity.
   Qed.
@@ -454,6 +471,92 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     cbn beta; setoid_rewrite SOccf.mem_ofList; reflexivity.
   Qed.
 
+  Lemma provElt_eq : forall (p p' : Pkg.t) (m m' : N.t) (x x' : NameArch)
+      (vt vt' : Deb.DTop),
+      (embedPkg p, ((m, x), vt)) = (embedPkg p', ((m', x'), vt')) ->
+      p = p' /\ m = m' /\ x = x' /\ vt = vt'.
+  Proof.
+    intros p p' m m' x x' vt vt' H.
+    pose proof (f_equal fst H) as Hp; cbn [fst] in Hp.
+    pose proof (f_equal (fun y => fst (fst (snd y))) H) as Hm.
+    pose proof (f_equal (fun y => snd (fst (snd y))) H) as Hx.
+    pose proof (f_equal (fun y => snd (snd y)) H) as Hv.
+    cbn [fst snd] in Hm, Hx, Hv.
+    exact (conj (embedPkg_injective _ _ Hp) (conj Hm (conj Hx Hv))).
+  Qed.
+
+  (* Where one declared provide lands, per target-name shape. *)
+  Lemma in_reduceProvEntry : forall M (p : Pkg.t) (m : N.t) vt y,
+      List.In y (reduceProvEntry M (p, (m, vt))) <->
+      exists x, y = (embedPkg p, ((m, x), vt)) /\
+        match x with
+        | QAArch b => parch p = b \/ classOf M p = MAForeign
+        | QAExact b => parch p = b
+        | QAAny => classOf M p = MAAllowed
+        | QAGroup => False
+        end.
+  Proof.
+    intros M p m vt y; unfold reduceProvEntry; cbn [fst snd].
+    split.
+    - intros [<- | H].
+      + exists (QAExact (parch p)); split; reflexivity.
+      + destruct (classOf M p) eqn:Hc.
+        * destruct H as [<- | []].
+          exists (QAArch (parch p)); split; [reflexivity | left; reflexivity].
+        * destruct H as [<- | []].
+          exists (QAArch (parch p)); split; [reflexivity | left; reflexivity].
+        * apply in_map_iff in H; destruct H as [b [<- _]].
+          exists (QAArch b); split; [reflexivity | right; reflexivity].
+        * destruct H as [<- | [<- | []]].
+          -- exists QAAny; split; [reflexivity | reflexivity].
+          -- exists (QAArch (parch p)); split;
+               [reflexivity | left; reflexivity].
+    - intros [x [-> Hx]].
+      destruct x as [b | b | |].
+      + right.
+        destruct (classOf M p) eqn:Hc.
+        * destruct Hx as [<- | Hf]; [left; reflexivity | congruence].
+        * destruct Hx as [<- | Hf]; [left; reflexivity | congruence].
+        * apply in_map_iff; exists b; split;
+            [reflexivity | apply A.enum_complete].
+        * destruct Hx as [<- | Hf]; [right; left; reflexivity | congruence].
+      + left; rewrite Hx; reflexivity.
+      + right; rewrite Hx; left; reflexivity.
+      + contradiction.
+  Qed.
+
+  (* Where a real package's implicit provides land, per target-name
+     shape. *)
+  Lemma in_implProvOf : forall M (p : Pkg.t) y,
+      List.In y (implProvOf M p) <->
+      exists x, y = (embedPkg p, ((pname p, x), Deb.DTVal (pver p))) /\
+        match x with
+        | QAArch _ => classOf M p = MAForeign
+        | QAExact b => parch p = b
+        | QAAny => classOf M p = MAAllowed
+        | QAGroup => True
+        end.
+  Proof.
+    intros M p y; unfold implProvOf.
+    split.
+    - intros [<- | [<- | H]].
+      + exists QAGroup; split; [reflexivity | exact I].
+      + exists (QAExact (parch p)); split; reflexivity.
+      + destruct (classOf M p) eqn:Hc; cbn [List.In] in H; try contradiction.
+        * apply in_map_iff in H; destruct H as [b [<- _]].
+          exists (QAArch b); split; [reflexivity | reflexivity].
+        * destruct H as [<- | []].
+          exists QAAny; split; [reflexivity | reflexivity].
+    - intros [x [-> Hx]].
+      destruct x as [b | b | |].
+      + right; right; rewrite Hx.
+        apply in_map_iff; exists b; split;
+          [reflexivity | apply A.enum_complete].
+      + right; left; rewrite Hx; reflexivity.
+      + right; right; rewrite Hx; left; reflexivity.
+      + left; reflexivity.
+  Qed.
+
   (* Which mangled atoms a real package matches, per target-name
      shape: the shared engine behind the three transfer lemmas. *)
   Lemma debMatch_char : forall R Pi M q n x f,
@@ -462,110 +565,70 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
        match x with
        | QAArch b =>
            BaseMatch Pi n f q /\ (parch q = b \/ classOf M q = MAForeign)
+       | QAExact b => BaseMatch Pi n f q /\ parch q = b
        | QAAny => BaseMatch Pi n f q /\ classOf M q = MAAllowed
        | QAGroup => pname q = n /\ Deb.vfHolds f (pver q) = true
        end).
   Proof.
-    intros R Pi M [[qn qa] qv] n x f HqR.
+    intros R Pi M q n x f HqR.
     unfold Deb.Match; cbn [Deb.aname Deb.aform fst snd].
     split.
     - intros [[He Hv] | [vt [Hin Hvt]]].
-      + injection He; intros; subst.
+      + unfold embedPkg in He, Hv; cbn [fst snd] in He, Hv.
+        injection He as <- <-.
         split; [left; split; [reflexivity | exact Hv] | left; reflexivity].
       + rewrite mem_reduceProv in Hin.
-        destruct Hin as [[e [HePi Hle]] | [p [HpR Hlp]]].
-        * destruct e as [[[pn pa] pv] [m vt']].
-          unfold reduceProvEntry in Hle; cbn [fst snd] in Hle.
-          destruct (classOf M ((pn, pa), pv)) eqn:Hcls.
-          -- destruct Hle as [Heq | []].
-             injection Heq; intros; subst;
-             cbn [pname parch pver fst snd] in *; subst.
-             split;
-               [right; exists vt; split; [exact HePi | exact Hvt]
-               | left; reflexivity].
-          -- destruct Hle as [Heq | []].
-             injection Heq; intros; subst;
-             cbn [pname parch pver fst snd] in *; subst.
-             split;
-               [right; exists vt; split; [exact HePi | exact Hvt]
-               | left; reflexivity].
-          -- apply in_map_iff in Hle; destruct Hle as [b [Heq Hb]].
-             injection Heq; intros; subst;
-             cbn [pname parch pver fst snd] in *; subst.
-             split;
-               [right; exists vt; split; [exact HePi | exact Hvt]
-               | right; exact Hcls].
-          -- destruct Hle as [Heq | [Heq | []]].
-             ++ injection Heq; intros; subst;
-             cbn [pname parch pver fst snd] in *; subst.
-                split;
-                  [right; exists vt; split; [exact HePi | exact Hvt]
-                  | exact Hcls].
-             ++ injection Heq; intros; subst;
-             cbn [pname parch pver fst snd] in *; subst.
-                split;
-                  [right; exists vt; split; [exact HePi | exact Hvt]
-                  | left; reflexivity].
-        * destruct p as [[pn pa] pv].
-          unfold implProvOf in Hlp; simpl in Hlp.
-          destruct Hlp as [Heq | Htail].
-          -- injection Heq; intros; subst;
-             cbn [pname parch pver fst snd] in *; subst.
-             split; [reflexivity | exact Hvt].
-          -- destruct (classOf M ((pn, pa), pv)) eqn:Hcls; simpl in Htail;
-               try contradiction.
-             ++ apply in_map_iff in Htail; destruct Htail as [b [Heq Hb]].
-                injection Heq; intros; subst;
-             cbn [pname parch pver fst snd] in *; subst.
-                split;
-                  [left; split; [reflexivity | exact Hvt]
-                  | right; exact Hcls].
-             ++ destruct Htail as [Heq | []].
-                injection Heq; intros; subst;
-             cbn [pname parch pver fst snd] in *; subst.
-                split;
-                  [left; split; [reflexivity | exact Hvt] | exact Hcls].
-    - destruct x as [b | |].
+        destruct Hin as [[[p0 [m0 vt0]] [HePi Hl]] | [p0 [Hp0 Hl]]].
+        * apply in_reduceProvEntry in Hl; destruct Hl as [x' [Heq Hx']].
+          destruct (provElt_eq _ _ _ _ _ _ _ _ Heq) as [<- [<- [<- <-]]].
+          destruct x as [b | b | |];
+            try (split; [right; exists vt; split; assumption | exact Hx']);
+            contradiction.
+        * apply in_implProvOf in Hl; destruct Hl as [x' [Heq Hx']].
+          destruct (provElt_eq _ _ _ _ _ _ _ _ Heq) as [<- [-> [<- ->]]].
+          destruct x as [b | b | |];
+            [ split; [left; split; [reflexivity | exact Hvt] | right; exact Hx']
+            | split; [left; split; [reflexivity | exact Hvt] | exact Hx']
+            | split; [left; split; [reflexivity | exact Hvt] | exact Hx']
+            | split; [reflexivity | exact Hvt] ].
+    - destruct x as [b | b | |].
       + intros [HB Harch].
         destruct HB as [[Hn Hv] | [vt [HPi Hvt]]].
         * destruct Harch as [Hb | Hf].
-          -- subst; left; split; [reflexivity | exact Hv].
-          -- subst n; right; exists (Deb.DTVal qv); split; [| exact Hv].
-             rewrite mem_reduceProv; right.
-             exists ((qn, qa), qv); split; [exact HqR |].
-             unfold implProvOf; rewrite Hf; simpl.
-             right; apply in_map_iff.
-             exists b; split; [reflexivity | apply A.enum_complete].
+          -- subst n b; left; split; [reflexivity | exact Hv].
+          -- subst n; right; exists (Deb.DTVal (pver q)); split; [| exact Hv].
+             rewrite mem_reduceProv; right; exists q; split; [exact HqR |].
+             apply in_implProvOf; exists (QAArch b); split;
+               [reflexivity | exact Hf].
         * right; exists vt; split; [| exact Hvt].
-          rewrite mem_reduceProv; left.
-          exists (((qn, qa), qv), (n, vt)); split; [exact HPi |].
-          unfold reduceProvEntry; cbn [fst snd].
-          destruct (classOf M ((qn, qa), qv)) eqn:Hc.
-          -- destruct Harch as [Hb | Hf];
-               [subst b; left; reflexivity | congruence].
-          -- destruct Harch as [Hb | Hf];
-               [subst b; left; reflexivity | congruence].
-          -- apply in_map_iff;
-               exists b; split; [reflexivity | apply A.enum_complete].
-          -- destruct Harch as [Hb | Hf];
-               [subst b; right; left; reflexivity | congruence].
+          rewrite mem_reduceProv; left; exists (q, (n, vt)); split;
+            [exact HPi |].
+          apply in_reduceProvEntry; exists (QAArch b); split;
+            [reflexivity | exact Harch].
+      + intros [HB Hb]; subst b.
+        destruct HB as [[Hn Hv] | [vt [HPi Hvt]]].
+        * subst n; right; exists (Deb.DTVal (pver q)); split; [| exact Hv].
+          rewrite mem_reduceProv; right; exists q; split; [exact HqR |].
+          apply in_implProvOf; exists (QAExact (parch q)); split; reflexivity.
+        * right; exists vt; split; [| exact Hvt].
+          rewrite mem_reduceProv; left; exists (q, (n, vt)); split;
+            [exact HPi |].
+          apply in_reduceProvEntry; exists (QAExact (parch q)); split;
+            reflexivity.
       + intros [HB Hall].
         destruct HB as [[Hn Hv] | [vt [HPi Hvt]]].
-        * subst n; right; exists (Deb.DTVal qv); split; [| exact Hv].
-          rewrite mem_reduceProv; right.
-          exists ((qn, qa), qv); split; [exact HqR |].
-          unfold implProvOf; rewrite Hall; simpl.
-          right; left; reflexivity.
+        * subst n; right; exists (Deb.DTVal (pver q)); split; [| exact Hv].
+          rewrite mem_reduceProv; right; exists q; split; [exact HqR |].
+          apply in_implProvOf; exists QAAny; split; [reflexivity | exact Hall].
         * right; exists vt; split; [| exact Hvt].
-          rewrite mem_reduceProv; left.
-          exists (((qn, qa), qv), (n, vt)); split; [exact HPi |].
-          unfold reduceProvEntry; cbn [fst snd]; rewrite Hall.
-          left; reflexivity.
-      + intros [Hn Hv].
-        subst n; right; exists (Deb.DTVal qv); split; [| exact Hv].
-        rewrite mem_reduceProv; right.
-        exists ((qn, qa), qv); split; [exact HqR |].
-        unfold implProvOf; left; reflexivity.
+          rewrite mem_reduceProv; left; exists (q, (n, vt)); split;
+            [exact HPi |].
+          apply in_reduceProvEntry; exists QAAny; split;
+            [reflexivity | exact Hall].
+      + intros [Hn Hv]; subst n.
+        right; exists (Deb.DTVal (pver q)); split; [| exact Hv].
+        rewrite mem_reduceProv; right; exists q; split; [exact HqR |].
+        apply in_implProvOf; exists QAGroup; split; [reflexivity | exact I].
   Qed.
 
   Lemma match_transfer : forall R Pi M da a q,
@@ -581,10 +644,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     - exact (iff_sym
         (debMatch_char R Pi M q (aname a) QAAny (aform a) HqR)).
     - exact (iff_sym
-        (debMatch_char R Pi M q (aname a) (QAArch AP.native) (aform a)
+        (debMatch_char R Pi M q (aname a) (QAExact AP.native) (aform a)
            HqR)).
     - exact (iff_sym
-        (debMatch_char R Pi M q (aname a) (QAArch b) (aform a) HqR)).
+        (debMatch_char R Pi M q (aname a) (QAExact b) (aform a) HqR)).
   Qed.
 
   Lemma conf_transfer : forall R Pi M (p : Pkg.t) a q,
@@ -640,23 +703,23 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       + intros [q' [ea [x [Hce HM]]]].
         destruct Hce as [E | []].
         injection E as _ <- _.
-        exact (proj1 (debMatch_char R Pi M q (aname a) (QAArch AP.native)
+        exact (proj1 (debMatch_char R Pi M q (aname a) (QAExact AP.native)
                         (aform a) HqR) HM).
       + intros H.
-        exists (embedPkg p), ((aname a, QAArch AP.native), aform a), true.
+        exists (embedPkg p), ((aname a, QAExact AP.native), aform a), true.
         split; [left; reflexivity |].
-        exact (proj2 (debMatch_char R Pi M q (aname a) (QAArch AP.native)
+        exact (proj2 (debMatch_char R Pi M q (aname a) (QAExact AP.native)
                         (aform a) HqR) H).
     - split.
       + intros [q' [ea [x [Hce HM]]]].
         destruct Hce as [E | []].
         injection E as _ <- _.
-        exact (proj1 (debMatch_char R Pi M q (aname a) (QAArch b)
+        exact (proj1 (debMatch_char R Pi M q (aname a) (QAExact b)
                         (aform a) HqR) HM).
       + intros H.
-        exists (embedPkg p), ((aname a, QAArch b), aform a), true.
+        exists (embedPkg p), ((aname a, QAExact b), aform a), true.
         split; [left; reflexivity |].
-        exact (proj2 (debMatch_char R Pi M q (aname a) (QAArch b)
+        exact (proj2 (debMatch_char R Pi M q (aname a) (QAExact b)
                         (aform a) HqR) H).
   Qed.
 
@@ -1190,8 +1253,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         exists q : Pkg.t, PkgSet.In q R /\ y = embedPkg q.
     Proof. intros R y; unfold reduceReal; apply SOmr.mem_map. Qed.
 
-    (* embedPkg introduces only QAArch names, so the :any and group pseudo-names
-       carry no real packages at all. *)
+    (* embedPkg introduces only QAArch names, so the explicit-qualifier, :any
+       and group pseudo-names carry no real packages at all. *)
     Lemma reduceReal_arch : forall R (nx : QN.t) (v : V.t),
         Deb.PkgSet.In (nx, v) (reduceReal R) -> exists b, snd nx = QAArch b.
     Proof.
@@ -1248,12 +1311,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         q = embedPkg p0 /\ fst mx = m0.
     Proof.
       intros M p0 m0 vt0 q mx vt H.
-      unfold reduceProvEntry in H; cbn [fst snd] in H.
-      destruct (classOf M p0);
-        [ destruct H as [E | []] | destruct H as [E | []]
-        | apply in_map_iff in H; destruct H as [b [E _]]
-        | destruct H as [E | [E | []]] ];
-        injection E as <- <- <-; cbn [fst]; split; reflexivity.
+      apply in_reduceProvEntry in H; destruct H as [x [E _]].
+      injection E as -> -> _; split; reflexivity.
     Qed.
 
     Lemma implProvOf_shape : forall M (p0 : Pkg.t)
@@ -1261,13 +1320,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         List.In (q, (mx, vt)) (implProvOf M p0) ->
         q = embedPkg p0 /\ fst mx = pname p0.
     Proof.
-      intros M p0 q mx vt H; unfold implProvOf in H.
-      destruct H as [E | H]; [injection E as <- <- <-; split; reflexivity |].
-      destruct (classOf M p0); cbn [List.In] in H; try contradiction.
-      - apply in_map_iff in H; destruct H as [b [E _]];
-          injection E as <- <- <-; split; reflexivity.
-      - destruct H as [E | []]; injection E as <- <- <-;
-          split; reflexivity.
+      intros M p0 q mx vt H.
+      apply in_implProvOf in H; destruct H as [x [E _]].
+      injection E as -> -> _; split; reflexivity.
     Qed.
 
     Lemma reduceProv_mono : forall R Rp Pi Pis M,
@@ -1448,7 +1503,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Proof.
       intros R Pi M p m x f HpR HM.
       apply (debMatch_char R Pi M p m x f HpR) in HM.
-      destruct x as [b | |].
+      destruct x as [b | b | |].
+      - destruct HM as [[[Hn _] | [vt [Hin _]]] _];
+          [left; symmetry; exact Hn | right; exists vt; exact Hin].
       - destruct HM as [[[Hn _] | [vt [Hin _]]] _];
           [left; symmetry; exact Hn | right; exists vt; exact Hin].
       - destruct HM as [[[Hn _] | [vt [Hin _]]] _];
@@ -1846,8 +1903,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         injection Hq as -> ->; reflexivity.
     Qed.
 
-    (* embedPkg introduces only QAArch names, so a reachable :any or group
-       pseudo-name carries absence alone. *)
+    (* embedPkg introduces only QAArch names, so a reachable explicit-qualifier,
+       :any or group pseudo-name carries absence alone. *)
     Theorem versions_lookupOrigMA_pseudo :
       forall R D Rec Pi G M (n : N.t) (x : NameArch),
         (forall b, x <> QAArch b) ->

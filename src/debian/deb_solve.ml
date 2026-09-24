@@ -386,7 +386,8 @@ struct
 
   (* R/Pi preimages for a mangled name (m, x): whichever x is, every
      provider of (m, x) is either a group member of m (reals, implicit group
-     / foreign / :any provides) or a declared provider of m. *)
+     / explicit-qualifier / foreign / :any provides) or a declared provider
+     of m. *)
   let sel_preimages idx (mn : string * DMA.coq_NameArch) =
     let m = fst mn in
     let r_ma = ma_group_of_names idx [ m ] in
@@ -419,8 +420,8 @@ struct
                 (n, DMA.QAArch b)))
     | DMA.Deb.Name.Orig _ ->
         (* Lookup.versions_lookupOrigMA_pseudo: embedPkg introduces only
-           QAArch names, so a :any or group pseudo-name carries absence
-           alone *)
+           QAArch names, so an explicit-qualifier, :any or group
+           pseudo-name carries absence alone *)
         DMA.Deb.T.VSet.singleton DMA.Deb.Version.Bot
     | DMA.Deb.Name.Disjunct aset ->
         (* Lookup.versions_lookupDisjunct *)
@@ -502,6 +503,7 @@ struct
 
   let pp_qarch fmt = function
     | DMA.QAArch a -> Format.fprintf fmt "%s" a
+    | DMA.QAExact a -> Format.fprintf fmt "<%s>" a
     | DMA.QAAny -> Format.fprintf fmt "any"
     | DMA.QAGroup -> Format.fprintf fmt "<group>"
 
@@ -740,8 +742,13 @@ struct
             let b =
               List.exists
                 (fun (pv : PVersion.t) ->
-                  match pv.PVersion.v with
-                  | DMA.Deb.Version.RefReal _ -> true
+                  match (n, pv.PVersion.v) with
+                  | _, DMA.Deb.Version.RefReal _ -> true
+                  (* an explicit :b reaches b's own package only as a
+                     provider, there being no real package at its name *)
+                  | ( DMA.Deb.Name.Selector ((m, DMA.QAExact b), _),
+                      DMA.Deb.Version.Ref ((m', DMA.QAArch b'), _) ) ->
+                      String.equal m m' && String.equal b b'
                   | _ -> false)
                 (cands_of n)
             in
@@ -767,8 +774,10 @@ struct
          resolves through its selector, whose Ref candidates are keyed by
          provider package; the entries apt holds for one are its declared
          Provides of the name, plus the foo:any of a Multi-Arch: allowed
-         package, and none of the calculus's other implicit provides, which
-         apt's cache has only with a second architecture configured.  An
+         package and the foo:b pseudo-package's entry for each version of
+         b's own foo (ParseProvides, deblistparser.cc), and none of the
+         calculus's other implicit provides, which apt's cache has only
+         with a second architecture configured.  An
          unprovided name has no selector (tgt, Debian.v): apt defers its
          version selection to one package var when every version satisfies
          the atom, and lists the satisfying versions otherwise. *)
@@ -803,12 +812,12 @@ struct
                          && not (self_dropped ((m, b), w) n vt))
                        stz.nprovs)
                 in
-                let implicit_any =
+                let implicit =
                   match snd (fst a) with
-                  | DMA.QAAny when String.equal m n -> 1
+                  | (DMA.QAAny | DMA.QAExact _) when String.equal m n -> 1
                   | _ -> 0
                 in
-                declared + implicit_any)
+                declared + implicit)
         | _ -> 1
       in
       let targets n (v : DMA.Deb.Version.t) =
@@ -1464,6 +1473,15 @@ struct
                 (fun (pv : PVersion.t) ->
                   match pv.PVersion.v with
                   | DMA.Deb.Version.RefReal w -> sat (snd na) w
+                  (* an explicit :b has no real candidate: b's own package
+                     is a Ref, providing the name at its version *)
+                  | DMA.Deb.Version.Ref ((m, DMA.QAArch _), w)
+                    when String.equal m (fst (fst na))
+                         &&
+                         match snd (fst na) with
+                         | DMA.QAExact _ -> true
+                         | _ -> false ->
+                      sat (snd na) w
                   | DMA.Deb.Version.Ref ((m, DMA.QAArch b), w) -> (
                       match Hashtbl.find_opt I.idx.stanza_of ((m, b), w) with
                       | Some stz ->

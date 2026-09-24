@@ -311,3 +311,76 @@ and of two stanzas at one version, apt keeps the first read:
 
   $ ../../../src/main.exe debian --native amd64 pindup Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
   pindup:amd64 1
+
+With a second architecture configured, apt satisfies an atom qualified
+with an explicit architecture b only with b's own package, or with a
+Provides one of b's packages declares: a Multi-Arch: foreign package of
+another architecture meets an unqualified atom, but never a qualified one
+("if a dependency has an explicit arch-qualifier then the value foreign is
+ignored", deb-control(5)).  apt, with i386 configured beside amd64, refuses
+xdep, whose xfor:i386 only the foreign xfor:amd64 could meet, while it
+meets the unqualified xfor of xunq:i386:
+
+  $ ../../../src/main.exe debian --native amd64 xdep Packages.multiarch | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  Because xdep:amd64 1 -> xfor:<i386> ∅ and root -> xdep:amd64 1, version solving failed..
+
+  $ ../../../src/main.exe debian --native amd64 xunq:i386 Packages.multiarch | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  xfor:amd64 1
+  xunq:i386 1
+
+:native is an explicit qualifier of the native architecture: xnat:i386
+needs xforn:native, and xforn is foreign but only at i386:
+
+  $ ../../../src/main.exe debian --native amd64 xnat:i386 Packages.multiarch | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  Because xnat:i386 1 -> xforn:<amd64> ∅ and root -> xnat:i386 1, version solving failed..
+
+A declared Provides meets an explicit qualifier from its own architecture
+alone: the foreign xvprov:amd64 does not meet xvdep's xvirt:i386, while
+xvprov2:i386 meets xvok's xvirt2:i386; and where b's own package exists it
+is taken, as xfor2:i386 is for xboth:
+
+  $ ../../../src/main.exe debian --native amd64 xvdep Packages.multiarch | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  Because xvdep:amd64 1 -> xvirt:<i386> ∅ and root -> xvdep:amd64 1, version solving failed..
+
+  $ ../../../src/main.exe debian --native amd64 xvok Packages.multiarch | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  xvok:amd64 1
+  xvprov2:i386 1
+
+  $ ../../../src/main.exe debian --apt-heap --native amd64 xvok Packages.multiarch | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  xvok:amd64 1
+  xvprov2:i386 1
+
+  $ ../../../src/main.exe debian --native amd64 xboth Packages.multiarch | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  xboth:amd64 1
+  xfor2:i386 1
+
+A Conflicts or Breaks on pkg:b is apt's negative on the same
+pseudo-package, so it reaches what the atom would meet as a dependency:
+xcfl's Conflicts: xfc:i386 spares the foreign xfc:amd64 it depends on, and
+xcfl2's xvc:i386 the foreign xpc:amd64 providing xvc, while xcfl3's
+xvc3:i386 excludes the xpc3:i386 it needs:
+
+  $ ../../../src/main.exe debian --native amd64 xcfl Packages.multiarch | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  xcfl:amd64 1
+  xfc:amd64 1
+
+  $ ../../../src/main.exe debian --apt-heap --native amd64 xcfl2 Packages.multiarch | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  xcfl2:amd64 1
+  xpc:amd64 1
+
+  $ ../../../src/main.exe debian --native amd64 xcfl3 Packages.multiarch | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  Because <sel xpc3:<i386> (T)> ref:xpc3:i386=1 -> xpc3:i386 1 and xcfl3:amd64 1 -> xpc3:i386 ⊥, xcfl3:amd64 (-∞, ⊥) or <sel xpc3:<i386> (T)> * is forbidden..
+  And because xcfl3:amd64 1 -> <sel xpc3:<i386> (T)> ref:xpc3:i386=1 and root -> xcfl3:amd64 1, version solving failed.
+
+A query is not a relationship: apt-get's command line takes a name with no
+version of its own to the one package providing it (tryVirtualPackage,
+apt-private/private-cacheset.cc), so apt-get install xfor:i386 installs
+xfor:amd64.  The query here names a real package, and there is none:
+
+  $ ../../../src/main.exe debian --native amd64 xfor:i386 Packages.multiarch | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  root -> xfor:i386 ∅

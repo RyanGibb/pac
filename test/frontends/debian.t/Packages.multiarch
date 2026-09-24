@@ -1,0 +1,94 @@
+Package: xdep
+Version: 1
+Architecture: amd64
+Depends: xfor:i386
+
+Package: xfor
+Version: 1
+Architecture: amd64
+Multi-Arch: foreign
+
+Package: xunq
+Version: 1
+Architecture: i386
+Depends: xfor
+
+Package: xnat
+Version: 1
+Architecture: i386
+Depends: xforn:native
+
+Package: xforn
+Version: 1
+Architecture: i386
+Multi-Arch: foreign
+
+Package: xboth
+Version: 1
+Architecture: amd64
+Depends: xfor2:i386
+
+Package: xfor2
+Version: 1
+Architecture: amd64
+Multi-Arch: foreign
+
+Package: xfor2
+Version: 1
+Architecture: i386
+Multi-Arch: foreign
+
+Package: xvdep
+Version: 1
+Architecture: amd64
+Depends: xvirt:i386
+
+Package: xvprov
+Version: 1
+Architecture: amd64
+Multi-Arch: foreign
+Provides: xvirt
+
+Package: xvok
+Version: 1
+Architecture: amd64
+Depends: xvirt2:i386
+
+Package: xvprov2
+Version: 1
+Architecture: i386
+Provides: xvirt2
+
+Package: xcfl
+Version: 1
+Architecture: amd64
+Depends: xfc
+Conflicts: xfc:i386
+
+Package: xfc
+Version: 1
+Architecture: amd64
+Multi-Arch: foreign
+
+Package: xcfl2
+Version: 1
+Architecture: amd64
+Depends: xpc
+Conflicts: xvc:i386
+
+Package: xpc
+Version: 1
+Architecture: amd64
+Multi-Arch: foreign
+Provides: xvc
+
+Package: xcfl3
+Version: 1
+Architecture: amd64
+Depends: xpc3:i386
+Conflicts: xvc3:i386
+
+Package: xpc3
+Version: 1
+Architecture: i386
+Provides: xvc3
