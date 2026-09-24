@@ -139,3 +139,127 @@ boty | botx takes its leftmost:
   botcfl:amd64 1
   botdep:amd64 1
   boty:amd64 1
+
+Under --apt-heap the shadow of apt's work heap decides which Recommends is
+taken first, and the heap's ties fall to push order, which is apt's
+propagation order: a package's dependencies are queued when its clause is
+found unit, behind everything queued before, not when the package is first
+named as an alternative.  hgoal names hgui as an alternative before hopengl
+requires it, so hgui's Recommends (htheme -> hsysd, providing hsysusers) is
+pushed after hglib's (hdbus: hadduser | hsysusers), and hdbus pops first,
+taking hadduser before hsysd arrives, as apt does:
+
+  $ ../../../src/main.exe debian --apt-heap --native amd64 hgoal Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  hadduser:amd64 1
+  hcore:amd64 1
+  hdbus:amd64 1
+  hglib:amd64 1
+  hgoal:amd64 1
+  hgui:amd64 1
+  hopengl:amd64 1
+  hsysd:amd64 1
+  htheme:amd64 1
+
+apt rejects a package the moment a hard clause of its loses its last
+solution, and the rejection cascades: kgui conflicts with kgui-gles, so
+kquick-gles (which needs it) is rejected, and by the time kcomp is reached
+its kquick | kquick-gles is unit, so kquick is enqueued behind kcomp rather
+than left as a work item for after the queue.  kquick's Recommends (krq ->
+ksysd, providing ksysusers) is then pushed before that of kcore, five
+dependencies deep (krc: kadduser | ksysusers), and krc finds ksysusers
+carried:
+
+  $ ../../../src/main.exe debian --apt-heap --native amd64 kgoal Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  kc1:amd64 1
+  kc2:amd64 1
+  kc3:amd64 1
+  kc4:amd64 1
+  kc5:amd64 1
+  kcomp:amd64 1
+  kcore:amd64 1
+  kgoal:amd64 1
+  kgui:amd64 1
+  kmid:amd64 1
+  kmid2:amd64 1
+  kmid3:amd64 1
+  kquick:amd64 1
+  krc:amd64 1
+  krq:amd64 1
+  ksysd:amd64 1
+
+apt counts a clause's solutions as the entries of its target's provides
+list and versions (AllTargets, pkgcache.cc).  Its cache drops a Provides of
+the package's own name, except through the every-architecture path a
+Multi-Arch: foreign package's Provides take, so mself, foreign, is two
+solutions of ma's Recommends mself | mnone, and nself, not foreign, one.
+A two-solution item ranks behind mb's one-solution mc, which pops first and
+brings in my, and mself's mx | my then finds my carried; the one-solution
+items tie, and na's, pushed first, pops first:
+
+  $ ../../../src/main.exe debian --apt-heap --native amd64 mgoal Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  ma:amd64 1
+  mb:amd64 1
+  mc:amd64 1
+  mgoal:amd64 1
+  mself:amd64 1
+  my:amd64 1
+
+  $ ../../../src/main.exe debian --apt-heap --native amd64 ngoal Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  na:amd64 1
+  nb:amd64 1
+  nc:amd64 1
+  ngoal:amd64 1
+  nself:amd64 1
+  nx:amd64 1
+  ny:amd64 1
+
+A conflict on an explicit :arch names another architecture's package, one
+apt's cache holds as an empty pseudo-package, so ca's Conflicts: cb:x32
+does not reject ca when cb is installed, and cq's ca | cz takes its
+leftmost:
+
+  $ ../../../src/main.exe debian --apt-heap --native amd64 cgoal Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  ca:amd64 1
+  cb:amd64 1
+  cgoal:amd64 1
+  cq:amd64 1
+
+apt folds a second single-target dependency into an earlier one on the
+same target when they share a solution, and takes the first undecided of
+the intersection (RegisterClause, solver3.cc): dfoo (<< 3) has the real
+dfoo and dbar's dfoo (= 2), dfoo (>= 2) has dbar's and dbaz's dfoo (= 3),
+so the merged clause is unit at dbar, and the real dfoo, which each half
+alone would have let a leftmost-first choice install, is never installed:
+
+  $ ../../../src/main.exe debian --apt-heap --native amd64 dgoal Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  dbar:amd64 1
+  dgoal:amd64 1
+
+apt assigns a rejection the moment it is derived but propagates it only when
+its turn in the queue comes, and a package is two literals: fp's Conflicts
+rejects fx's version var during fp's wave, and fx's package var -- what an
+unversioned, unprovided alternative reads -- only when that rejection pops,
+after fq's wave has counted fx | fw as two live solutions.  A two-solution
+Recommends ranks behind fo's one-solution fz, so fz is installed first, and
+its conflict with fw leaves fq's Recommends with nothing:
+
+  $ ../../../src/main.exe debian --apt-heap --native amd64 fgoal Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  fgoal:amd64 1
+  fo:amd64 1
+  fp:amd64 1
+  fq:amd64 1
+  fz:amd64 1
+
+apt takes the first solution of an item that is still undecided (Solve,
+solver3.cc), so a rejected one is never tried: gb's gv is queued as a
+two-solution item, then ga's conflict rejects gq, whose loss rejects gr and
+gv, and the item pops with gw its one solution left.  The answer is the
+same either way; what trying the rejected gv first would cost is a
+backjump, which the shadow heap's counters count:
+
+  $ PACSHADOW=1 ../../../src/main.exe debian --apt-heap --native amd64 ggoal Packages 2>&1 | sed -E '/^(parse|solve) [0-9.]+s$/d; s/^PACSHADOW.* (backjump=[0-9]+).*/\1/'
+  backjump=0
+  ga:amd64 1
+  gb:amd64 1
+  ggoal:amd64 1
+  gw:amd64 1

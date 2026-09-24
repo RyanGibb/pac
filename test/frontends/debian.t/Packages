@@ -211,3 +211,322 @@ Architecture: amd64
 Package: boty
 Version: 1
 Architecture: amd64
+
+Package: hgoal
+Version: 1
+Architecture: amd64
+Depends: hcore, hgui | hgui-gles, hopengl
+
+Package: hcore
+Version: 1
+Architecture: amd64
+Depends: hglib
+
+Package: hglib
+Version: 1
+Architecture: amd64
+Recommends: hdbus
+
+Package: hopengl
+Version: 1
+Architecture: amd64
+Depends: hgui
+
+Package: hgui
+Version: 1
+Architecture: amd64
+Recommends: htheme
+
+Package: hgui-gles
+Version: 1
+Architecture: amd64
+
+Package: htheme
+Version: 1
+Architecture: amd64
+Depends: hsysd
+
+Package: hsysd
+Version: 1
+Architecture: amd64
+Provides: hsysusers
+
+Package: hdbus
+Version: 1
+Architecture: amd64
+Depends: hadduser | hsysusers
+
+Package: hadduser
+Version: 1
+Architecture: amd64
+
+Package: kgoal
+Version: 1
+Architecture: amd64
+Depends: kgui, kmid, kc1
+
+Package: kgui
+Version: 1
+Architecture: amd64
+Conflicts: kgui-gles
+
+Package: kgui-gles
+Version: 1
+Architecture: amd64
+
+Package: kmid
+Version: 1
+Architecture: amd64
+Depends: kmid2
+
+Package: kmid2
+Version: 1
+Architecture: amd64
+Depends: kmid3
+
+Package: kmid3
+Version: 1
+Architecture: amd64
+Depends: kcomp
+
+Package: kcomp
+Version: 1
+Architecture: amd64
+Depends: kquick | kquick-gles
+
+Package: kquick
+Version: 1
+Architecture: amd64
+Recommends: krq
+
+Package: kquick-gles
+Version: 1
+Architecture: amd64
+Depends: kgui-gles
+
+Package: kc1
+Version: 1
+Architecture: amd64
+Depends: kc2
+
+Package: kc2
+Version: 1
+Architecture: amd64
+Depends: kc3
+
+Package: kc3
+Version: 1
+Architecture: amd64
+Depends: kc4
+
+Package: kc4
+Version: 1
+Architecture: amd64
+Depends: kc5
+
+Package: kc5
+Version: 1
+Architecture: amd64
+Depends: kcore
+
+Package: kcore
+Version: 1
+Architecture: amd64
+Recommends: krc
+
+Package: krq
+Version: 1
+Architecture: amd64
+Depends: ksysd
+
+Package: ksysd
+Version: 1
+Architecture: amd64
+Provides: ksysusers
+
+Package: krc
+Version: 1
+Architecture: amd64
+Depends: kadduser | ksysusers
+
+Package: kadduser
+Version: 1
+Architecture: amd64
+
+Package: mgoal
+Version: 1
+Architecture: amd64
+Depends: ma, mb
+
+Package: ma
+Version: 1
+Architecture: amd64
+Recommends: mself | mnone
+
+Package: mself
+Version: 1
+Architecture: amd64
+Multi-Arch: foreign
+Provides: mself
+Depends: mx | my
+
+Package: mx
+Version: 1
+Architecture: amd64
+
+Package: my
+Version: 1
+Architecture: amd64
+
+Package: mb
+Version: 1
+Architecture: amd64
+Recommends: mc
+
+Package: mc
+Version: 1
+Architecture: amd64
+Depends: my
+
+Package: cgoal
+Version: 1
+Architecture: amd64
+Depends: cb, cq
+
+Package: cb
+Version: 1
+Architecture: amd64
+
+Package: cq
+Version: 1
+Architecture: amd64
+Recommends: ca | cz
+
+Package: ca
+Version: 1
+Architecture: amd64
+Conflicts: cb:x32
+
+Package: cz
+Version: 1
+Architecture: amd64
+
+Package: ngoal
+Version: 1
+Architecture: amd64
+Depends: na, nb
+
+Package: na
+Version: 1
+Architecture: amd64
+Recommends: nself | nnone
+
+Package: nself
+Version: 1
+Architecture: amd64
+Provides: nself
+Depends: nx | ny
+
+Package: nx
+Version: 1
+Architecture: amd64
+
+Package: ny
+Version: 1
+Architecture: amd64
+
+Package: nb
+Version: 1
+Architecture: amd64
+Recommends: nc
+
+Package: nc
+Version: 1
+Architecture: amd64
+Depends: ny
+
+Package: dgoal
+Version: 1
+Architecture: amd64
+Depends: dfoo (<< 3), dfoo (>= 2)
+
+Package: dfoo
+Version: 1
+Architecture: amd64
+
+Package: dbar
+Version: 1
+Architecture: amd64
+Provides: dfoo (= 2)
+
+Package: dbaz
+Version: 1
+Architecture: amd64
+Provides: dfoo (= 3)
+
+Package: fgoal
+Version: 1
+Architecture: amd64
+Depends: fp, fq, fo
+
+Package: fp
+Version: 1
+Architecture: amd64
+Conflicts: fx
+
+Package: fq
+Version: 1
+Architecture: amd64
+Recommends: fx | fw
+
+Package: fo
+Version: 1
+Architecture: amd64
+Recommends: fz
+
+Package: fx
+Version: 1
+Architecture: amd64
+
+Package: fw
+Version: 1
+Architecture: amd64
+
+Package: fz
+Version: 1
+Architecture: amd64
+Conflicts: fw
+
+Package: ggoal
+Version: 1
+Architecture: amd64
+Depends: gb, ga
+
+Package: ga
+Version: 1
+Architecture: amd64
+Conflicts: gq
+
+Package: gb
+Version: 1
+Architecture: amd64
+Depends: gv
+
+Package: gv
+Version: 1
+Architecture: amd64
+Depends: gr
+
+Package: gr
+Version: 1
+Architecture: amd64
+Depends: gq
+
+Package: gq
+Version: 1
+Architecture: amd64
+
+Package: gw
+Version: 1
+Architecture: amd64
+Provides: gv
