@@ -380,8 +380,9 @@ Definition alpI : Alp.Inst :=
        Alp.Prov.add ((3, 30), (4, Alp.PVer 5))
          (Alp.Prov.add ((2, 20), (6, Alp.PVirt)) Alp.Prov.empty)
    ; Alp.inst_installIf :=
-       Alp.InstallIf.add ((2, 20), Alp.CondSet.add (1, Alp.CAny)
-                                Alp.CondSet.empty) Alp.InstallIf.empty
+       Alp.InstallIf.add ((2, 20), Alp.CondSet.add (Alp.DPos (1, Alp.CAny))
+                                (Alp.CondSet.add (Alp.DNeg (5, Alp.CAny))
+                                   Alp.CondSet.empty)) Alp.InstallIf.empty
    ; Alp.inst_world := Alp.WSet.add (Alp.DPos (1, Alp.CAny)) Alp.WSet.empty
    ; Alp.inst_prio := Alp.Prio.empty
    ; Alp.inst_repl := Alp.Repl.empty |}.

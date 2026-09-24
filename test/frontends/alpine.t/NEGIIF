@@ -1,0 +1,43 @@
+P:ni-a
+V:1.0
+A:x86_64
+
+P:ni-b
+V:1.0
+A:x86_64
+
+P:ni-b
+V:2.0
+A:x86_64
+
+P:ni-z
+V:1.0
+A:x86_64
+i:ni-a !ni-b
+
+P:ni-lt
+V:1.0
+A:x86_64
+i:ni-a !ni-b<2
+
+P:ni-alias
+V:1.0
+A:x86_64
+p:ni-b=3.0
+
+P:ni-virt
+V:1.0
+A:x86_64
+p:ni-b
+
+P:ni-self
+V:1.0
+A:x86_64
+p:ni-s
+i:ni-a !ni-s
+
+P:ni-only
+V:1.0
+A:x86_64
+i:!ni-b
+

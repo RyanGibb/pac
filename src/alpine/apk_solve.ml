@@ -43,20 +43,25 @@ module Alp = E.Alpine (StringOT) (AVerOT) (PM)
 (* Which condition a rule designates is free, and is a performance
    choice: the rule is materialised only once that condition is selected.
    Alpine writes the switch name (docs, openrc) first and nothing depends
-   on those, where CondSet.choose's alphabetical pick lands on a name most
-   of the archive carries -- so the first-listed atom is recorded as the
-   set is built, keyed by the element list, which is canonical where the
-   set's own representation need not be.  The fallback keeps designation total,
+   on those, where the least positive condition lands on a name most of
+   the archive carries -- so the first-listed positive condition is
+   recorded as the set is built, keyed by the element list, which is
+   canonical where the set's own representation need not be.  The
+   fallback keeps designation total on sets with a positive condition,
    discharging designation_spec: a TCB obligation here, as ApkVerMatch's
    prefix/hash are. *)
-let designation_tbl : (Alp.Atom.t list, Alp.Atom.t) Hashtbl.t =
+let designation_tbl : (Alp.coq_Dep list, Alp.Atom.t) Hashtbl.t =
   Hashtbl.create 4096
+
+let first_pos (ds : Alp.coq_Dep list) : Alp.Atom.t option =
+  List.find_map (function Alp.DPos a -> Some a | Alp.DNeg _ -> None) ds
 
 module FirstDesignation = struct
   let designation (conds : Alp.CondSet.t) : Alp.Atom.t option =
-    match Hashtbl.find_opt designation_tbl (Alp.CondSet.elements conds) with
+    let key = Alp.CondSet.elements conds in
+    match Hashtbl.find_opt designation_tbl key with
     | Some _ as a -> a
-    | None -> Alp.CondSet.choose conds
+    | None -> first_pos key
 end
 
 module Red = Alp.Reduct (FirstDesignation)
@@ -110,18 +115,19 @@ let xdep (d : P.dep) : Alp.coq_Dep =
 let ptag (v : string option) : Alp.coq_PTag =
   match v with Some pv -> Alp.PVer pv | None -> Alp.PVirt
 
-(* building the set is also where the rule's first-listed atom is offered
-   to [FirstDesignation]; an earlier rule keeps the designation when two
-   rules share a set, so the table does not depend on when it is read *)
+(* building the set is also where the rule's first-listed positive
+   condition is offered to [FirstDesignation]; an earlier rule keeps the
+   designation when two rules share a set, so the table does not depend on
+   when it is read *)
 let condset_of ds =
-  let atoms = List.map xatom ds in
-  let cs = Alp.CondSet.ofList atoms in
-  (match atoms with
-  | a :: _ ->
+  let conds = List.map xdep ds in
+  let cs = Alp.CondSet.ofList conds in
+  (match first_pos conds with
+  | Some a ->
       let key = Alp.CondSet.elements cs in
       if not (Hashtbl.mem designation_tbl key) then
         Hashtbl.add designation_tbl key a
-  | [] -> ());
+  | None -> ());
   cs
 
 (* ---- archive ---------------------------------------------------------- *)
@@ -185,12 +191,11 @@ let load_index (path : string) : archive =
       | None -> ());
       if p.P.install_if <> [] then (
         ar.n_iif <- ar.n_iif + 1;
-        (* a CondSet is positive-only, so a negated install_if condition
-           cannot be represented; dropping the sign would invert it, so
-           the whole rule is dropped and counted instead *)
-        if List.exists (fun (d : P.dep) -> d.P.d_neg) p.P.install_if then
-          P.reject ()
-        else
+        (* WfInstallIf: a rule with no positive condition is left out, and
+           nothing is lost -- apk reaches a rule only from an installed
+           package bearing or providing a condition's name, which falsifies
+           a negated condition unless it is the rule's own package *)
+        if List.exists (fun (d : P.dep) -> not d.P.d_neg) p.P.install_if then
           iifs := ((p.P.name, p.P.version), condset_of p.P.install_if) :: !iifs))
     pkgs;
   (* keyed only once every set has offered its designation, so the key a
@@ -303,7 +308,9 @@ let pkg_inst ar (world : P.dep list) ((n, v) : string * string) : Alp.coq_Inst =
           (fun acc r ->
             fst r.t_pkg
             :: List.rev_append
-                 (List.map fst (Alp.CondSet.elements (Red.condRest r.t_conds)))
+                 (List.map
+                    (function Alp.DPos (m, _) | Alp.DNeg (m, _) -> m)
+                    (Alp.CondSet.elements (Red.condRest r.t_conds)))
                  acc)
           (List.map (fun (d : P.dep) -> d.P.d_name) m.P.depends)
           rules
@@ -468,8 +475,8 @@ let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
 
    A synthetic version selects one alternative of its disjunction by
    position, and which alternative is wanted depends on the disjunction.
-   installIfForm lists the negated install_if conditions first and the
-   augmented package last, so preferring the earliest alternative is
+   installIfForm lists the negations of the install_if conditions first
+   and the augmented package last, so preferring the earliest alternative is
    apk's rule that an install-if fires only when its conditions already hold
    -- without it every install_if rule in the index is discharged by
    installing its target.  encPos folds the versioned aliases of a name
@@ -597,12 +604,14 @@ let rec leaves ar (f : PF.coq_Formula) : (PFR.Name.t * PVersion.t list) list =
   | PF.FDisj (a, b) | PF.FConj (a, b) -> leaves ar a @ leaves ar b
   | PF.FNeg _ -> []
 
-(* apk never asserts a condition package absent: it installs the
-   augmented package when all the conditions hold and otherwise does
-   nothing at all.  PubGrub has to decide the disjunct either way, so the
-   nearest thing is to discharge it on a condition the solution does not
-   carry -- free, constraining nothing -- and to take the augmented
-   package only when it carries them all. *)
+(* apk never asserts a condition false: it installs the augmented package
+   when all the conditions hold and otherwise does nothing at all.
+   PubGrub has to decide the disjunct either way, so the nearest thing is
+   to discharge it on a condition the solution already falsifies -- a
+   positive one whose atom it does not carry, or a negated one whose atom
+   it does -- free, constraining nothing, and to take the augmented
+   package only when it falsifies none.  A negated condition's
+   alternative is doubly negated (encCond). *)
 let choose ar ~assigned (tn : PFR.Name.t) (cands : PVersion.t list) =
   match tn with
   | PFR.Name.Disjunct fs when is_install_if tn -> (
@@ -612,6 +621,12 @@ let choose ar ~assigned (tn : PFR.Name.t) (cands : PVersion.t list) =
           match pv.PVersion.v with
           | PFR.Version.Idx i -> (
               match alt_at fs i with
+              | Some (PF.FNeg (PF.FNeg f), _) ->
+                  if
+                    List.exists
+                      (fun (m, tvs) -> carried_at ~assigned m tvs)
+                      (leaves ar f)
+                  then free := pv :: !free
               | Some (PF.FNeg f, _) ->
                   if
                     not

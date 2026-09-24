@@ -142,7 +142,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
   Module ProvElt := PairUOT Pkg Provided.
   Module Prov := FSetUOT ProvElt.
 
-  Module CondSet := FSetUOT Atom.
+  Module CondSet := FSetUOT DepOT.
   Module InstallIfElt := PairUOT Pkg CondSet.AsUOT.
   Module InstallIf := FSetUOT InstallIfElt.
 
@@ -202,6 +202,14 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     | DNeg (n, ct) => ~ MatchPos I S n ct
     end.
 
+  (* apk tests an install_if condition against whichever package holds
+     its name, selectable or not, so both signs read MatchPos. *)
+  Definition MatchCond (I : Inst) (S : PkgSet.t) (c : Dep) : Prop :=
+    match c with
+    | DPos (n, ct) => MatchPos I S n ct
+    | DNeg (n, ct) => ~ MatchPos I S n ct
+    end.
+
   (* Real packages and versioned providers both claim their name; claim
      uniqueness subsumes per-name version uniqueness. *)
   Definition Claims (I : Inst) (n : N.t) (p : Pkg.t) : Prop :=
@@ -220,27 +228,60 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
        satisfied by any installed claimant of the package's name. *)
     ; res_installIf :
         forall p conds, InstallIf.In (p, conds) (inst_installIf I) ->
-        (forall n ct, CondSet.In (n, ct) conds -> MatchPos I S n ct) ->
+        (forall c, CondSet.In c conds -> MatchCond I S c) ->
         MatchPos I S (fst p) CAny }.
 
+  (* Only a positive condition can be designated: a rule is carried by a
+     package satisfying its designated condition, and absence is
+     satisfied by no package. *)
   Module Type Designation.
     Parameter designation : CondSet.t -> option Atom.t.
     Parameter designation_spec : forall conds : CondSet.t,
-        ~ CondSet.Empty conds ->
-        exists a, designation conds = Some a /\ CondSet.In a conds.
+        (exists a, CondSet.In (DPos a) conds) ->
+        exists a, designation conds = Some a /\ CondSet.In (DPos a) conds.
   End Designation.
 
   Module LeastDesignation <: Designation.
-    Definition designation (conds : CondSet.t) : option Atom.t :=
-      CondSet.choose conds.
-    Lemma designation_spec : forall conds : CondSet.t,
-        ~ CondSet.Empty conds ->
-        exists a, designation conds = Some a /\ CondSet.In a conds.
+    Fixpoint firstPos (l : list Dep) : option Atom.t :=
+      match l with
+      | nil => None
+      | DPos a :: _ => Some a
+      | DNeg _ :: l' => firstPos l'
+      end.
+
+    Lemma firstPos_spec : forall l,
+        (exists a, List.In (DPos a) l) ->
+        exists a, firstPos l = Some a /\ List.In (DPos a) l.
     Proof.
-      intros conds Hne; unfold designation.
-      destruct (CondSet.choose conds) as [a |] eqn:Ec.
-      - exists a; split; [reflexivity | exact (CondSet.choose_spec1 Ec)].
-      - destruct (Hne (CondSet.choose_spec2 Ec)).
+      induction l as [| d l IH]; intros [a Ha]; [destruct Ha |].
+      destruct d as [b | b]; cbn [firstPos].
+      - exists b; split; [reflexivity | left; reflexivity].
+      - destruct Ha as [He | Ha]; [discriminate He |].
+        destruct (IH (ex_intro _ a Ha)) as [a' [E H]].
+        exists a'; split; [exact E | right; exact H].
+    Qed.
+
+    Definition designation (conds : CondSet.t) : option Atom.t :=
+      firstPos (CondSet.elements conds).
+
+    Lemma in_elements : forall s d,
+        List.In d (CondSet.elements s) <-> CondSet.In d s.
+    Proof.
+      intros s d; rewrite <- (CondSet.elements_spec1 s d).
+      rewrite InA_alt; split.
+      - intro H; exists d; split; reflexivity + assumption.
+      - intros [y [-> Hy]]; exact Hy.
+    Qed.
+
+    Lemma designation_spec : forall conds : CondSet.t,
+        (exists a, CondSet.In (DPos a) conds) ->
+        exists a, designation conds = Some a /\ CondSet.In (DPos a) conds.
+    Proof.
+      intros conds [a Ha]; unfold designation.
+      destruct (firstPos_spec (CondSet.elements conds)
+                  (ex_intro _ a (proj2 (in_elements _ _) Ha)))
+        as [a' [E H]].
+      exists a'; split; [exact E | apply in_elements; exact H].
     Qed.
   End LeastDesignation.
 
@@ -415,7 +456,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     Definition condRest (conds : CondSet.t) : CondSet.t :=
       match D.designation conds with
-      | Some a => CondSet.remove a conds
+      | Some a => CondSet.remove (DPos a) conds
       | None => conds
       end.
 
@@ -430,10 +471,19 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       InstallIf.filter (fun '(_, conds) => attachDesignation I p conds)
         (inst_installIf I).
 
+    (* installIfForm negates every condition, so a negated one is
+       negated twice; the package-formula encoder cancels the pair, and
+       the alternative it leaves is the atom being present. *)
+    Definition encCond (I : Inst) (c : Dep) : PF.Formula :=
+      match c with
+      | DPos (n, ct) => encPos I n ct
+      | DNeg (n, ct) => PF.FNeg (encPos I n ct)
+      end.
+
     Definition installIfForm (I : Inst) (z : Pkg.t) (conds : CondSet.t) :
         PF.Formula :=
       fold_right
-        (fun a f => PF.FDisj (PF.FNeg (encPos I (fst a) (snd a))) f)
+        (fun c f => PF.FDisj (PF.FNeg (encCond I c)) f)
         (encPos I (fst z) CAny) (CondSet.elements (condRest conds)).
 
     Definition rootPkg : PF.Pkg.t := (Name.Root, Version.RootV).
@@ -720,14 +770,9 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       - intros [y [-> Hy]]; exact Hy.
     Qed.
 
-    Lemma in_elements_cond : forall s a,
-        List.In a (CondSet.elements s) <-> CondSet.In a s.
-    Proof.
-      intros s a; rewrite <- (CondSet.elements_spec1 s a).
-      rewrite InA_alt; split.
-      - intro H; exists a; split; reflexivity + assumption.
-      - intros [y [-> Hy]]; exact Hy.
-    Qed.
+    Lemma in_elements_cond : forall s c,
+        List.In c (CondSet.elements s) <-> CondSet.In c s.
+    Proof. exact LeastDesignation.in_elements. Qed.
 
     Lemma satisfies_disjFold : forall S' l (base : PF.Formula),
         PF.Satisfies S'
@@ -830,11 +875,9 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Lemma satisfies_negFold : forall I S' l (base : PF.Formula),
         PF.Satisfies S'
           (fold_right
-             (fun a f =>
-                PF.FDisj (PF.FNeg (encPos I (fst a) (snd a))) f)
+             (fun c f => PF.FDisj (PF.FNeg (encCond I c)) f)
              base l) <->
-        (exists a, List.In a l /\
-           ~ PF.Satisfies S' (encPos I (fst a) (snd a))) \/
+        (exists c, List.In c l /\ ~ PF.Satisfies S' (encCond I c)) \/
         PF.Satisfies S' base.
     Proof.
       intros I S' l base; induction l as [| a l IH]; cbn.
@@ -852,8 +895,8 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     Lemma satisfies_installIfForm : forall I S' z conds,
         PF.Satisfies S' (installIfForm I z conds) <->
-        (exists a, CondSet.In a (condRest conds) /\
-           ~ PF.Satisfies S' (encPos I (fst a) (snd a))) \/
+        (exists c, CondSet.In c (condRest conds) /\
+           ~ PF.Satisfies S' (encCond I c)) \/
         PF.Satisfies S' (encPos I (fst z) CAny).
     Proof.
       intros I S' z conds; unfold installIfForm.
@@ -1036,12 +1079,24 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         split; [apply selectableb_spec; exact Ha | exact HqS].
     Qed.
 
-    (* An install-if rule with no conditions has no atom to designate, so
-       the obligation res_installIf states unconditionally would have
-       nothing to carry it. *)
+    Lemma cond_decode : forall I S' c,
+        PF.IsResolution (transR I) (transD I) rootPkg S' ->
+        (PF.Satisfies S' (encCond I c) <->
+         MatchCond I (alpineResolution S') c).
+    Proof.
+      intros I S' [[n ct] | [n ct]] Hres;
+        cbn [encCond MatchCond PF.Satisfies];
+        rewrite (match_decode I S' n ct Hres); reflexivity.
+    Qed.
+
+    (* A rule with no positive condition has nothing to designate, so the
+       obligation res_installIf states of it would have nothing to carry
+       it.  apk never fires such a rule: its changeset reaches a rule only
+       from an installed package bearing or providing a condition's name,
+       and for a negated condition that package falsifies it. *)
     Definition WfInstallIf (I : Inst) : Prop :=
       forall z conds, InstallIf.In (z, conds) (inst_installIf I) ->
-      ~ CondSet.Empty conds.
+      exists a, CondSet.In (DPos a) conds.
 
     Theorem alpine_soundness : forall I S',
         WfInstallIf I ->
@@ -1114,7 +1169,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       - intros z conds Hrule Hc.
         destruct (D.designation_spec conds (Hwf _ _ Hrule))
           as [[na cta] [Hdes Hin]].
-        assert (HM := Hc _ _ Hin).
+        assert (HM := Hc _ Hin); cbn [MatchCond] in HM.
         apply (matchPos_attachAt I (alpineResolution S') na cta) in HM.
         destruct HM as [p [HpS Hatt]].
         apply mem_alpineResolution in HpS.
@@ -1132,11 +1187,10 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         { apply mem_transD; split; [apply Hsub; exact HpS | exact Hf]. }
         assert (Hs := Hclo _ HpS _ Hdep).
         apply satisfies_installIfForm in Hs.
-        destruct Hs as [[a [Ha Hn]] | Hb].
+        destruct Hs as [[c [Hcr Hn]] | Hb].
         + exfalso; apply Hn.
-          destruct a as [m ct].
-          apply (proj2 (match_decode _ _ _ _ Hres)).
-          exact (Hc _ _ (condRest_subset _ _ Ha)).
+          apply (proj2 (cond_decode _ _ _ Hres)).
+          exact (Hc _ (condRest_subset _ _ Hcr)).
         + exact (proj1 (match_decode _ _ _ _ Hres) Hb).
     Qed.
 
@@ -1275,6 +1329,10 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       destruct Hres as [Hsub Hw Hd Hcu Ht].
       assert (Hiff := fun n ct => match_transS I S n ct Hsub).
       assert (Hreq := fun n ct => match_req_transS I S n ct Hsub).
+      assert (Hcond : forall c, PF.Satisfies (transS I S) (encCond I c) <->
+                                MatchCond I S c).
+      { intros [[n ct] | [n ct]]; cbn [encCond MatchCond PF.Satisfies];
+          rewrite (Hiff n ct); reflexivity. }
       constructor.
       - intros y Hy; apply mem_transS in Hy; apply mem_transR.
         destruct Hy as [-> | [[p [Hp ->]] | [q [m [pv [Hr [Hq ->]]]]]]].
@@ -1327,7 +1385,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             apply satisfies_installIfForm.
             destruct (CondSet.exists_
                         (fun b => negb (PF.satisfiesb (transS I S)
-                                          (encPos I (fst b) (snd b))))
+                                          (encCond I b)))
                         (condRest conds)) eqn:Ee.
             -- apply CondSet.exists_spec' in Ee.
                destruct Ee as [b [Hb Hnb]].
@@ -1335,28 +1393,29 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                left; exists b; split; [exact Hb |].
                intro Hs; apply PF.satisfiesb_iff in Hs; congruence.
             -- right; apply Hiff, (Ht z conds Ht0).
-               intros m ct Hc.
-               destruct (Atom.eq_dec (m, ct) a) as [He | Hne].
-               ++ apply matchPos_attachAt; exists (n0, v0).
-                  split; [exact Hp | destruct He; exact Hatt].
-               ++ assert (Hr : CondSet.In (m, ct) (condRest conds)).
+               intros c Hc.
+               destruct (DepOT.eq_dec c (DPos a)) as [He | Hne].
+               ++ subst c; destruct a as [ma cta]; cbn [MatchCond].
+                  apply matchPos_attachAt; exists (n0, v0).
+                  split; [exact Hp | exact Hatt].
+               ++ assert (Hr : CondSet.In c (condRest conds)).
                   { unfold condRest; rewrite Edes.
                     apply CondSet.remove_spec; split;
                       [exact Hc | exact Hne]. }
                   assert (Hbt : PF.satisfiesb (transS I S)
-                                  (encPos I m ct) = true).
-                  { destruct (PF.satisfiesb (transS I S) (encPos I m ct))
+                                  (encCond I c) = true).
+                  { destruct (PF.satisfiesb (transS I S) (encCond I c))
                       eqn:Eb; [reflexivity |].
                     exfalso.
                     assert (Hex : CondSet.exists_
                                     (fun b =>
                                        negb (PF.satisfiesb (transS I S)
-                                               (encPos I (fst b) (snd b))))
+                                               (encCond I b)))
                                     (condRest conds) = true).
-                    { apply CondSet.exists_spec'; exists (m, ct); split;
+                    { apply CondSet.exists_spec'; exists c; split;
                         [exact Hr | cbn; rewrite Eb; reflexivity]. }
                     congruence. }
-                  apply Hiff; apply PF.satisfiesb_iff; exact Hbt.
+                  apply Hcond; apply PF.satisfiesb_iff; exact Hbt.
         + cbn [dependees] in Hf.
           apply FSet.singleton_spec in Hf; subst f.
           cbn [PF.Satisfies].
@@ -1622,11 +1681,11 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Qed.
 
       Module SOwn := SetOps DepOT N WSet NSet.
-      Module SOan := SetOps Atom N CondSet NSet.
+      Module SOan := SetOps DepOT N CondSet NSet.
       Module SOtn := SetOps InstallIfElt N InstallIf NSet.
 
       Definition condNames (conds : CondSet.t) : NSet.t :=
-        SOan.map fst conds.
+        SOan.map depName conds.
 
       Lemma encPos_subInst : forall I ns deps ownProv installIf world
               (n : N.t) (ct : Constr),
@@ -1690,29 +1749,37 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         - apply encPos_subInst; assumption.
       Qed.
 
-      (* The condition fold is a congruence in encPos: only the atoms the
+      Lemma encCond_subInst : forall I ns deps ownProv installIf world c,
+          NSet.In (depName c) ns ->
+          Prov.Subset ownProv (inst_prov I) ->
+          encCond (subInst I ns deps ownProv installIf world) c =
+          encCond I c.
+      Proof.
+        intros I ns deps ownProv installIf world [[m ct] | [m ct]] Hn Hown;
+          cbn [encCond depName] in *; [| f_equal];
+          apply encPos_subInst; assumption.
+      Qed.
+
+      (* The condition fold is a congruence in encCond: only the atoms the
          set lists are read, so agreement there transports the formula. *)
       Lemma negFold_agree : forall I I' l base,
-          (forall a, List.In a l ->
-             encPos I' (fst a) (snd a) = encPos I (fst a) (snd a)) ->
+          (forall c, List.In c l -> encCond I' c = encCond I c) ->
           fold_right
-            (fun a f => PF.FDisj (PF.FNeg (encPos I' (fst a) (snd a))) f)
-            base l =
+            (fun c f => PF.FDisj (PF.FNeg (encCond I' c)) f) base l =
           fold_right
-            (fun a f => PF.FDisj (PF.FNeg (encPos I (fst a) (snd a))) f)
-            base l.
+            (fun c f => PF.FDisj (PF.FNeg (encCond I c)) f) base l.
       Proof.
-        intros I I' l base H; induction l as [| a l IH]; cbn.
+        intros I I' l base H; induction l as [| c l IH]; cbn.
         - reflexivity.
-        - rewrite (H a (or_introl eq_refl)), IH; [reflexivity |].
+        - rewrite (H c (or_introl eq_refl)), IH; [reflexivity |].
           intros b Hb; apply H; right; exact Hb.
       Qed.
 
       Lemma installIfForm_subInst : forall I ns deps ownProv installIf world
               (z : Pkg.t) (conds : CondSet.t),
           NSet.In (fst z) ns ->
-          (forall a : Atom.t,
-              CondSet.In a (condRest conds) -> NSet.In (fst a) ns) ->
+          (forall c : Dep,
+              CondSet.In c (condRest conds) -> NSet.In (depName c) ns) ->
           Prov.Subset ownProv (inst_prov I) ->
           installIfForm (subInst I ns deps ownProv installIf world) z conds =
           installIfForm I z conds.
@@ -1721,9 +1788,9 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         unfold installIfForm.
         rewrite (encPos_subInst I ns deps ownProv installIf world (fst z) CAny
                    Hz Hown).
-        apply negFold_agree; intros a Ha.
-        apply in_elements_cond in Ha.
-        apply encPos_subInst; [exact (Hc _ Ha) | exact Hown].
+        apply negFold_agree; intros c Hcl.
+        apply in_elements_cond in Hcl.
+        apply encCond_subInst; [exact (Hc _ Hcl) | exact Hown].
       Qed.
 
       Lemma subInst_installIf : forall I ns deps ownProv installIf world,
@@ -1819,7 +1886,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Lemma condName_pkgNames : forall I p z conds a,
           InstallIf.In (z, conds) (installIfFibre I p) ->
           CondSet.In a (condRest conds) ->
-          NSet.In (fst a) (pkgNames I p).
+          NSet.In (depName a) (pkgNames I p).
       Proof.
         intros I p z conds a Ht Ha; unfold pkgNames.
         apply NSet.union_spec; right.
@@ -2001,13 +2068,13 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       (* The core lookups a driver answers: a package's formulas from its
          own sub-instance, pushed through the package-formula reduction
          under an oracle agreeing with versions.  That sub-instance cannot
-         serve as the oracle: a negated requirement or install-if condition
-         with no constraint negates each bare provider q at q's own name,
-         whose complement ranges over every version at that name, alias
-         versions included, while repoPreimage keeps only the packages at
-         or providing the names the package mentions -- q itself, and not
-         the rest of q's name.  The versions lookup at q's name does hold
-         them. *)
+         serve as the oracle: a negated requirement or positive install-if
+         condition with no constraint negates each bare provider q at q's
+         own name, whose complement ranges over every version at that
+         name, alias versions included, while repoPreimage keeps only the
+         packages at or providing the names the package mentions -- q
+         itself, and not the rest of q's name.  The versions lookup at q's
+         name does hold them. *)
       Lemma dependees_core : forall I Vq q,
           PF.PkgSet.In q (transR I) ->
           Vq Name.Root = PF.VSet.singleton Version.RootV ->
@@ -2087,9 +2154,9 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Qed.
 
       (* A disjunct's edges are recorded when its owner is reduced.  An
-         install-if rule's negated conditions are alternatives of its
-         disjunct, so this is where their bare providers' complements are
-         taken. *)
+         install-if rule's conditions are negated as alternatives of its
+         disjunct, so this is where the bare providers' complements of its
+         positive ones are taken. *)
       Theorem dependees_lookupDisjunctCore : forall I I' Vq q fs i,
           PF.PkgSet.In q (transR I) ->
           dependees I' q = dependees I q ->

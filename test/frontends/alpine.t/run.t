@@ -254,3 +254,45 @@ installed: ⊥ is the greatest version, and PubGrub decides the greatest:
     nega 1.0
     negc 1.0
   encoded solution: 4 core nodes (3 Alpine packages encoded)
+
+An install-if condition may be negated, i:ni-a !ni-b, and apk then fires
+the rule only while no package holds ni-b.  ni-z carries exactly that
+rule, ni-lt the constrained !ni-b<2, and ni-self the negation of a name
+it provides itself, which apk's own package is exempt from.  With ni-b
+absent all three fire; ni-only, whose one condition is negated, does not,
+since apk reaches a rule only from an installed package that bears or
+provides one of its conditions' names:
+
+  $ ../../../src/main.exe alpine NEGIIF ni-a | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index NEGIIF
+  cone: 9 packages, 3 provides entries, 4 install_if rules
+  packages (4):
+    ni-a 1.0
+    ni-lt 1.0
+    ni-self 1.0
+    ni-z 1.0
+  encoded solution: 8 core nodes (5 Alpine packages encoded)
+
+Requiring ni-b falsifies !ni-b.  apk takes the alias ni-alias for it, at
+3.0, which !ni-b<2 does not exclude, so ni-lt still fires:
+
+  $ ../../../src/main.exe alpine NEGIIF ni-a ni-b | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index NEGIIF
+  cone: 9 packages, 3 provides entries, 4 install_if rules
+  packages (4):
+    ni-a 1.0
+    ni-alias 1.0
+    ni-lt 1.0
+    ni-self 1.0
+  encoded solution: 10 core nodes (7 Alpine packages encoded)
+
+and ni-b 1.0 falsifies both:
+
+  $ ../../../src/main.exe alpine NEGIIF ni-a 'ni-b<2' | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index NEGIIF
+  cone: 9 packages, 3 provides entries, 4 install_if rules
+  packages (3):
+    ni-a 1.0
+    ni-b 1.0
+    ni-self 1.0
+  encoded solution: 8 core nodes (4 Alpine packages encoded)
