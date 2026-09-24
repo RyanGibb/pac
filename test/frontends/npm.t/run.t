@@ -512,6 +512,134 @@ package in a lockfile and complains at install time.
   cone: 1 packages, 2 versions, 0 packuments fetched
   encoded solution: 1 core nodes (2 lookups)
 
+The cases from here to the fetch race pin where we deliberately differ
+from npm; each states npm's answer, taken from npm 11.17.0 over the same
+fixtures.
+
+An override applies to a dependency by the package it targets, as the
+paper's override of the target name does; npm applies it by the key the
+dependency is written under (arborist override-set.js:87, edge.js:206).
+The two differ only on an alias, and there npm's override replaces the
+alias spec wholesale.  carrier depends on kit as an alias of util-lib ^1.
+ovr-key-app overrides kit to 1.0.0: npm installs the registry's own kit
+1.0.0 at kit, while here the override names no target in the cone and
+util-lib 1.2.0 stands.  ovr-target-app overrides util-lib to 1.0.0: npm
+leaves the aliased dependency alone and installs util-lib 1.2.0, while
+here the override binds and 1.0.0 is installed.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree ovr-key-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root ovr-key-app 1.0.0
+  packages (3):
+    carrier 1.0.0
+    util-lib 1.2.0 at kit
+    ovr-key-app 1.0.0
+  node_modules (2 edges):
+    ovr-key-app 1.0.0 <- carrier 1.0.0
+    carrier 1.0.0 <- util-lib 1.2.0 at kit
+  cone: 3 packages, 4 versions, 0 packuments fetched
+  encoded solution: 5 core nodes (11 lookups)
+
+  $ ../../../src/main.exe npm --offline --cache . --tree ovr-target-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root ovr-target-app 1.0.0
+  packages (3):
+    carrier 1.0.0
+    util-lib 1.0.0 at kit
+    ovr-target-app 1.0.0
+  node_modules (2 edges):
+    ovr-target-app 1.0.0 <- carrier 1.0.0
+    carrier 1.0.0 <- util-lib 1.0.0 at kit
+  cone: 3 packages, 4 versions, 0 packuments fetched
+  encoded solution: 5 core nodes (10 lookups)
+
+A dependency is met only by the package it names: a source name pairs
+the key with the package installed under it.  npm reads the version
+alone, so a node_modules/tok holding any package at a version in range
+meets a dependency on tok (arborist dep-valid.js:66-74,82-84).
+alias-sat-app installs mark 3.0.2 at tok, as an alias, and depends on
+needer, whose tok is ^3.0.0.  npm finds 3.0.2 at tok and installs no tok
+at all; here needer gets a tok 3.0.2 of its own.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree alias-sat-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root alias-sat-app 1.0.0
+  packages (4):
+    alias-sat-app 1.0.0
+    needer 1.0.0
+    mark 3.0.2 at tok
+    tok 3.0.2
+  node_modules (3 edges):
+    alias-sat-app 1.0.0 <- needer 1.0.0
+    alias-sat-app 1.0.0 <- mark 3.0.2 at tok
+    needer 1.0.0 <- tok 3.0.2
+  cone: 4 packages, 6 versions, 0 packuments fetched
+  encoded solution: 7 core nodes (14 lookups)
+
+A peer dependency resolves in its declarer's depender's directory,
+whichever package holds it; npm resolves it wherever it places the
+declarer, and it hoists.  vplus depends on mocker and on vite as an alias
+of vp-core 1.0.0, and mocker's optional peer on vite is ^6.  Here the
+peer meets vplus's vite, vp-core 1.0.0, which ^6 refuses, and the
+optional peer excuses only an empty directory, so nothing resolves.  npm
+places mocker at the top beside vplus, where vite is not the alias, and
+installs: vite 6.0.0 at the top, vp-core 1.0.0 at vplus's vite.  Choosing
+where a declarer sits is placement, which the logical model does not
+decide.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree vp-app
+  root vp-app 1.0.0
+  unsatisfiable:
+  Because vp-app@1.0.0 1.0.0 -> <vp-app@1.0.0=>vplus> 1.0.0 and <vp-app@1.0.0=>vplus> 1.0.0 -> vplus@1.0.0 1.0.0, vp-app@1.0.0 * requires vplus@1.0.0 1.0.0.
+  And because vplus@1.0.0 1.0.0 -> <vplus@1.0.0=>mocker> 1.0.0, vp-app@1.0.0 * requires <vplus@1.0.0=>mocker> 1.0.0
+  And because <vplus@1.0.0=>mocker> 1.0.0 -> <vplus@1.0.0=>vite(npm:vp-core)> ∅ and root -> vp-app@1.0.0 1.0.0, version solving failed.
+  [1]
+
+A dependency is decided once, when npm's order reaches it; npm's edges
+are live, and one already met from above moves to a copy placed nearer it
+later.  live-app installs buf 5.2.1 at the top, and listy's buf ^5.1.1
+finds it.  listy's rstream 2.0.0, nested under listy, wants buf ~5.1.1,
+which the top refuses, so npm places 5.1.2 in listy's node_modules, the
+highest level whose packages accept it (arborist can-place-dep.js:313-333),
+and listy's edge now resolves there: npm has listy on buf 5.1.2.  Here
+listy keeps 5.2.1 and only rstream takes 5.1.2.  Both answers meet every
+range, so the difference is one of preference, not validity.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree live-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root live-app 1.0.0
+  packages (6):
+    buf 5.1.2
+    buf 5.2.1
+    listy 1.0.0
+    live-app 1.0.0
+    rstream 2.0.0
+    rstream 3.0.0
+  node_modules (6 edges):
+    rstream 2.0.0 <- buf 5.1.2
+    listy 1.0.0 <- buf 5.2.1
+    live-app 1.0.0 <- buf 5.2.1
+    live-app 1.0.0 <- listy 1.0.0
+    listy 1.0.0 <- rstream 2.0.0
+    live-app 1.0.0 <- rstream 3.0.0
+  cone: 4 packages, 6 versions, 0 packuments fetched
+  encoded solution: 12 core nodes (26 lookups)
+
+bundleDependencies are not read, so a bundled dependency resolves from
+the registry like any other: a bundled copy is shipped inside its
+package's tarball rather than resolved, which is out of scope.  bundler
+bundles tok, and its tarball carries tok 3.0.1, a version the registry
+never published; npm takes that copy, nested in bundler, while here tok
+3.0.2 is resolved.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree bundle-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root bundle-app 1.0.0
+  packages (3):
+    bundle-app 1.0.0
+    bundler 1.0.0
+    tok 3.0.2
+  node_modules (2 edges):
+    bundle-app 1.0.0 <- bundler 1.0.0
+    bundler 1.0.0 <- tok 3.0.2
+  cone: 3 packages, 4 versions, 0 packuments fetched
+  encoded solution: 5 core nodes (10 lookups)
+
 Processes sharing a cache fetch into it concurrently, each into a scratch
 file of its own that it renames into place.  This curl writes the
 packument and then waits for the other process's curl to have written its

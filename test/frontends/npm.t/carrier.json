@@ -1,0 +1,4 @@
+{"name":"carrier","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"carrier","version":"1.0.0",
+    "dependencies":{"kit":"npm:util-lib@^1"}}}}

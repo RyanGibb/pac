@@ -1,0 +1,4 @@
+{"name":"vplus","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"vplus","version":"1.0.0",
+    "dependencies":{"vite":"npm:vp-core@1.0.0","mocker":"^1"}}}}

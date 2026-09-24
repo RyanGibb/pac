@@ -1,0 +1,5 @@
+{"name":"rstream","dist-tags":{"latest":"3.0.0"},
+ "versions":{
+  "2.0.0":{"name":"rstream","version":"2.0.0",
+    "dependencies":{"buf":"~5.1.1"}},
+  "3.0.0":{"name":"rstream","version":"3.0.0"}}}

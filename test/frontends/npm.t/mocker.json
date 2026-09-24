@@ -1,0 +1,5 @@
+{"name":"mocker","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"mocker","version":"1.0.0",
+    "peerDependencies":{"vite":"^6"},
+    "peerDependenciesMeta":{"vite":{"optional":true}}}}}

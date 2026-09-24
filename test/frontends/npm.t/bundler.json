@@ -1,0 +1,6 @@
+{"name":"bundler","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"bundler","version":"1.0.0",
+    "dependencies":{"tok":"^3.0.0"},
+    "bundleDependencies":["tok"],
+    "dist":{"tarball":"https://registry.npmjs.org/bundler/-/bundler-1.0.0.tgz"}}}}
