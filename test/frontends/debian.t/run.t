@@ -301,6 +301,80 @@ pinok (<< 2):
   pinok:amd64 1
   pinrange:amd64 1
 
+A query is a list of packages, as apt-get install takes it, and an element
+may name a version, NAME=VERSION.  That version becomes the package's
+candidate, so Strict-Pinning keeps it rather than the newest: pinv=1 makes
+pinapp installable, and so does pinok=1 pinrange:
+
+  $ ../../../src/main.exe debian --native amd64 pinapp pinv=1 Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  pinapp:amd64 1
+  pinv:amd64 1
+
+  $ ../../../src/main.exe debian --apt-heap --native amd64 pinapp pinv=1 Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  pinapp:amd64 1
+  pinv:amd64 1
+
+  $ ../../../src/main.exe debian --native amd64 pinrange pinok=1 Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  pinok:amd64 1
+  pinrange:amd64 1
+
+  $ ../../../src/main.exe debian --native amd64 app prioapp Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  app:amd64 1
+  lib:amd64 1
+  prioapp:amd64 1
+  prov1:amd64 1
+  zprio:amd64 1
+
+Of two elements naming one package the later wins, as apt sets the
+candidate once per element, in order:
+
+  $ ../../../src/main.exe debian --native amd64 pinapp pinv=2 pinv=1 Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  pinapp:amd64 1
+  pinv:amd64 1
+
+  $ ../../../src/main.exe debian --native amd64 pinapp pinv=1 pinv=2 Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  Because pinv:amd64 2 -> pinnone:amd64 ∅ and root -> pinv:amd64 2, version solving failed..
+
+The version is matched as apt's pkgVersionMatch does, the first of the
+package's versions, newest first, that is the string, or matches it as a
+glob; candidate and newest name the newest.  An arch:all stanza is the
+native package's version, so pinmix=1 reaches the amd64 stanza:
+
+  $ ../../../src/main.exe debian --native amd64 'pinok=1*' Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  pinok:amd64 1
+
+  $ ../../../src/main.exe debian --native amd64 'pinv=*' Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  Because pinv:amd64 2 -> pinnone:amd64 ∅ and root -> pinv:amd64 2, version solving failed..
+
+  $ ../../../src/main.exe debian --native amd64 pinv=candidate Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  Because pinv:amd64 2 -> pinnone:amd64 ∅ and root -> pinv:amd64 2, version solving failed..
+
+  $ ../../../src/main.exe debian --native amd64 pinmix:amd64=1 Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  pinmix:amd64 1
+
+A version no stanza matches refuses the query, as does installed, there
+being no installed version, and a release: NAME/RELEASE is matched against
+Release files, which pac does not read, except for the release *, which
+matches every version:
+
+  $ ../../../src/main.exe debian --native amd64 pinv=3 Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  root -> pinv:amd64 ∅
+
+  $ ../../../src/main.exe debian --native amd64 pinv=installed Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  root -> pinv:amd64 ∅
+
+  $ ../../../src/main.exe debian --native amd64 pinv/stable Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  root -> pinv:amd64 ∅
+
+  $ ../../../src/main.exe debian --native amd64 'pinok/*' Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  pinok:amd64 2
+
 apt holds an arch:all stanza under the native architecture's package, so
 pinmix 2 (all), which needs pinnone, is the candidate over pinmix 1 (amd64);
 and of two stanzas at one version, apt keeps the first read:
@@ -326,6 +400,14 @@ meets the unqualified xfor of xunq:i386:
   Because xdep:amd64 1 -> xfor:<i386> ∅ and root -> xdep:amd64 1, version solving failed..
 
   $ ../../../src/main.exe debian --native amd64 xunq:i386 Packages.multiarch | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  xfor:amd64 1
+  xunq:i386 1
+
+An unqualified name in a query is the native package if there is one with
+a version, and otherwise another architecture's (FindPreferredPkg,
+pkgcache.cc): xunq exists only at i386:
+
+  $ ../../../src/main.exe debian --native amd64 xunq Packages.multiarch | sed -E '/^(parse|solve) [0-9.]+s$/d'
   xfor:amd64 1
   xunq:i386 1
 

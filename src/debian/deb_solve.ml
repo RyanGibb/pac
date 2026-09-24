@@ -15,6 +15,10 @@ module DF = Debian_frontend.Deb_packages
 let c2r c = if c < 0 then E.Lt else if c > 0 then E.Gt else E.Eq
 let r2c = function E.Lt -> -1 | E.Eq -> 0 | E.Gt -> 1
 
+(* Nothing is an element whose named version apt finds no match for; it
+   refuses the whole request, which an empty range says. *)
+type accepts = Any | Only of string | Nothing
+
 module StringOT = struct
   type t = string
 
@@ -724,7 +728,7 @@ struct
        first sighted when) and its Solver::Work pushes.  Off, none of them
        fires and the search is the plain PubGrub one. *)
     let run_pubgrub ?(debug = false) ?(apt_heap = false) ~versions ~dependencies
-        goal =
+        query =
       let cands_tbl = Hashtbl.create 4096 in
       let cands_of n =
         match Hashtbl.find_opt cands_tbl n with
@@ -1531,17 +1535,23 @@ struct
       in
       let next = Some (if apt_heap then heap_next else defer_bot) in
       (* Ranges.full here trips an upstream pubgrub edge case (initial
-         Neg-term status); the goal's real versions are what we mean anyway:
-         the query asks for the goal, so it excludes absence. *)
-      let goal_range =
-        PG.Ranges.of_list
-          (List.filter
-             (fun (pv : PVersion.t) -> pv.PVersion.v <> DMA.Deb.Version.Bot)
-             (versions (DMA.Deb.Name.Orig goal)))
+         Neg-term status); real versions are what we mean anyway: the query
+         asks for the name, so it excludes absence. *)
+      let root (n, acc) =
+        let accepted (pv : PVersion.t) =
+          match (pv.PVersion.v, acc) with
+          | DMA.Deb.Version.Orig _, Any -> true
+          | DMA.Deb.Version.Orig w, Only x ->
+              Debian_frontend.Deb_version.compare w x = 0
+          | _ -> false
+        in
+        ( DMA.Deb.Name.Orig n,
+          PG.Ranges.of_list
+            (List.filter accepted (versions (DMA.Deb.Name.Orig n))) )
       in
       let r =
         PG.solve ?next ~choose ~vers:versions ~deps:dependencies
-          [ (DMA.Deb.Name.Orig goal, goal_range) ]
+          (List.map root query)
       in
       if apt_heap then Shadow.report sh;
       match r with
@@ -1576,8 +1586,8 @@ struct
     t := !t +. (Sys.time () -. t0);
     r
 
-  let solve ?debug ?apt_heap (idx : index) (goal_name : string)
-      (goal_arch : string) =
+  let solve ?debug ?apt_heap (idx : index)
+      (query : ((string * string) * accepts) list) =
     let buckets : (string, int ref * float ref) Hashtbl.t = Hashtbl.create 8 in
     let bucket name f x =
       let c, t =
@@ -1603,7 +1613,7 @@ struct
       S.run_pubgrub ?debug ?apt_heap
         ~versions:(fun n' -> bucket (vname n') (vers_sparse idx) n')
         ~dependencies:(timed prof_oc prof_ot (dependees_sparse idx))
-        (goal_name, DMA.QAArch goal_arch)
+        (List.map (fun ((n, b), acc) -> ((n, DMA.QAArch b), acc)) query)
     in
     if Sys.getenv_opt "PACPROF" <> None then (
       Hashtbl.iter
@@ -1630,24 +1640,147 @@ end
    ButAutomaticUpgrades; pac reads Packages files alone, which carry none
    of them, so they are out of scope and every version ties.
    A query naming a version (apt-get install pkg=ver) makes it pkg's
-   candidate, and the goal here names none.  Of two stanzas at one version
-   the first read is kept: apt files the later one behind it in the
-   package's version list, and the candidate is the first to reach the top
-   priority. *)
-let candidates ~native (stanzas : DF.stanza list) =
-  let key (st : DF.stanza) =
-    (st.package, if st.architecture = "all" then native else st.architecture)
-  in
+   candidate (TryToInstall, apt-private/private-install.cc), so [named]
+   overrides the newest.  Of two stanzas at one version the first read is
+   kept: apt files the later one behind it in the package's version list,
+   and the candidate is the first to reach the top priority. *)
+let stanza_key ~native (st : DF.stanza) =
+  (st.package, if st.architecture = "all" then native else st.architecture)
+
+let candidates ~native ~named (stanzas : DF.stanza list) =
+  let key = stanza_key ~native in
   let best = Hashtbl.create 65536 in
+  let better (st : DF.stanza) (b : DF.stanza) =
+    match Hashtbl.find_opt named (key st) with
+    | Some v ->
+        Debian_frontend.Deb_version.compare st.version v = 0
+        && Debian_frontend.Deb_version.compare b.version v <> 0
+    | None -> Debian_frontend.Deb_version.compare st.version b.version > 0
+  in
   List.iter
     (fun (st : DF.stanza) ->
       match Hashtbl.find_opt best (key st) with
-      | Some (b : DF.stanza)
-        when Debian_frontend.Deb_version.compare st.version b.version <= 0 ->
-          ()
+      | Some b when not (better st b) -> ()
       | _ -> Hashtbl.replace best (key st) st)
     stanzas;
   List.filter (fun st -> Hashtbl.find best (key st) == st) stanzas
+
+(* fnmatch(3) with FNM_CASEFOLD, which pkgVersionMatch::ExpressionMatches
+   calls on a version pattern *)
+let fnmatch p s =
+  let p = String.lowercase_ascii p and s = String.lowercase_ascii s in
+  let np = String.length p and ns = String.length s in
+  let bracket i =
+    let neg, i =
+      if i < np && (p.[i] = '!' || p.[i] = '^') then (true, i + 1)
+      else (false, i)
+    in
+    let rec scan k acc first =
+      if k >= np then None
+      else if p.[k] = ']' && not first then Some (k + 1, acc)
+      else if k + 2 < np && p.[k + 1] = '-' && p.[k + 2] <> ']' then
+        scan (k + 3) ((p.[k], p.[k + 2]) :: acc) false
+      else scan (k + 1) ((p.[k], p.[k]) :: acc) false
+    in
+    Option.map
+      (fun (e, rs) ->
+        (e, fun c -> neg <> List.exists (fun (a, b) -> a <= c && c <= b) rs))
+      (scan i [] true)
+  in
+  let rec go i j =
+    if i = np then j = ns
+    else
+      match p.[i] with
+      | '*' -> go (i + 1) j || (j < ns && go i (j + 1))
+      | '?' -> j < ns && go (i + 1) (j + 1)
+      | '\\' when i + 1 < np -> j < ns && p.[i + 1] = s.[j] && go (i + 2) (j + 1)
+      | '[' -> (
+          match bracket (i + 1) with
+          | Some (e, test) -> j < ns && test s.[j] && go e (j + 1)
+          | None -> j < ns && s.[j] = '[' && go (i + 1) (j + 1))
+      | c -> j < ns && c = s.[j] && go (i + 1) (j + 1)
+  in
+  go 0 0
+
+(* pkgVersionMatch::VersionMatches for a Version matcher
+   (apt-pkg/versionmatch.cc): the whole string, case-insensitively, or a
+   prefix of it where the pattern ends in '*', or the pattern as a glob *)
+let version_matches pat v =
+  let n = String.length pat in
+  let pre = n > 0 && pat.[n - 1] = '*' in
+  let b = if pre then String.sub pat 0 (n - 1) else pat in
+  let lb = String.length b and lv = String.length v in
+  (lv = lb || (pre && lv > lb))
+  && String.lowercase_ascii (String.sub v 0 lb) = String.lowercase_ascii b
+  || fnmatch pat v
+
+(* One argument of apt-get install, as VersionContainerInterface::FromString
+   (apt-pkg/cacheset.cc) reads it: whatever follows the last '/' or '='
+   selects a version, by release or by version string, and what precedes it
+   names the package, NAME[:ARCH] (PackageFromPackageName). *)
+let query_element ~native ~arches (stanzas : DF.stanza list) arg =
+  let tag =
+    match (String.rindex_opt arg '=', String.rindex_opt arg '/') with
+    | Some i, Some j -> Some (max i j)
+    | t, None | None, t -> t
+  in
+  let pkg, sel =
+    match tag with
+    | Some i ->
+        ( String.sub arg 0 i,
+          Some (arg.[i], String.sub arg (i + 1) (String.length arg - i - 1)) )
+    | None -> (arg, None)
+  in
+  let has (n, b) =
+    List.exists (fun st -> stanza_key ~native st = (n, b)) stanzas
+  in
+  (* an unqualified name is apt's preferred package of the group
+     (GrpIterator::FindPreferredPkg): the native one if it has a version,
+     else the first architecture that does.  apt tries them in
+     APT::Architectures order, which pac cannot read, and takes the
+     index's architectures in sorted order instead. *)
+  let key =
+    match String.rindex_opt pkg ':' with
+    | Some i ->
+        let b = String.sub pkg (i + 1) (String.length pkg - i - 1) in
+        ( String.sub pkg 0 i,
+          if b = "all" || b = "native" then native else b )
+    | None -> (
+        match
+          List.find_opt
+            (fun b -> has (pkg, b))
+            (native :: List.filter (( <> ) native) arches)
+        with
+        | Some b -> (pkg, b)
+        | None -> (pkg, native))
+  in
+  (* the package's version list, newest first and the first read ahead of
+     a later stanza at the same version *)
+  let vlist =
+    List.stable_sort
+      (fun (a : DF.stanza) (b : DF.stanza) ->
+        Debian_frontend.Deb_version.compare b.version a.version)
+      (List.filter (fun st -> stanza_key ~native st = key) stanzas)
+  in
+  let first p =
+    match List.find_opt (fun (st : DF.stanza) -> p st.version) vlist with
+    | Some st -> Only st.version
+    | None -> Nothing
+  in
+  let acc =
+    match sel with
+    | None -> Any
+    (* nothing is installed: pac reads no dpkg status *)
+    | Some ('=', "installed") -> Nothing
+    (* without pins the candidate is the newest, which heads the list *)
+    | Some ('=', ("candidate" | "newest")) -> first (fun _ -> true)
+    | Some ('=', v) -> first (version_matches v)
+    (* a release is matched against Release files, which pac does not
+       read; "*" matches every file (pkgVersionMatch::FileMatch) *)
+    | Some (_, "*") -> first (fun _ -> true)
+    | Some _ -> Nothing
+  in
+  (key, acc)
 
 (* Parsing and index construction are reported apart from solving because
    they scale differently: the archive is read whole, while the solve
@@ -1656,13 +1789,10 @@ let candidates ~native (stanzas : DF.stanza list) =
    dominates is the frontend's headline number, so it is printed rather
    than inferred. *)
 let solve_files ?debug ?apt_heap ?(recommends = true) ?(strict_pinning = true)
-    ~native ~paths ~goal :
+    ~native ~paths ~query :
     ((string * string * string) list * float * float) option =
   let t0 = Unix.gettimeofday () in
   let stanzas = List.concat_map DF.parse_file paths in
-  let stanzas =
-    if strict_pinning then candidates ~native stanzas else stanzas
-  in
   let arches =
     List.sort_uniq String.compare
       (native
@@ -1671,19 +1801,28 @@ let solve_files ?debug ?apt_heap ?(recommends = true) ?(strict_pinning = true)
              if st.architecture = "all" then None else Some st.architecture)
            stanzas)
   in
+  (* apt installs each element's version in argument order, setting it as
+     the candidate, so of two naming one package the later wins *)
+  let query =
+    List.fold_left
+      (fun acc arg ->
+        let k, a = query_element ~native ~arches stanzas arg in
+        List.remove_assoc k acc @ [ (k, a) ])
+      [] query
+  in
+  let named = Hashtbl.create 8 in
+  List.iter
+    (function k, Only v -> Hashtbl.replace named k v | _ -> ())
+    query;
+  let stanzas =
+    if strict_pinning then candidates ~native ~named stanzas else stanzas
+  in
   let module M = Make (struct
     let arches = arches
     let native = native
   end) in
-  let goal_name, goal_arch =
-    match String.index_opt goal ':' with
-    | Some i ->
-        ( String.sub goal 0 i,
-          String.sub goal (i + 1) (String.length goal - i - 1) )
-    | None -> (goal, native)
-  in
   let idx = M.build_index ~recommends stanzas in
   let t1 = Unix.gettimeofday () in
-  match M.solve ?debug ?apt_heap idx goal_name goal_arch with
+  match M.solve ?debug ?apt_heap idx query with
   | None -> None
   | Some pkgs -> Some (pkgs, t1 -. t0, Unix.gettimeofday () -. t1)

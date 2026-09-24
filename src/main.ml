@@ -3,11 +3,11 @@ open Cmdliner
 let debug_arg =
   Arg.(value & flag & info [ "debug" ] ~doc:"Trace the PubGrub search.")
 
-let debian_run debug apt_heap no_recs no_strict native goal paths =
+let debian_run debug apt_heap no_recs no_strict native query path =
   Pubgrub.set_debug debug;
   match
     Deb_solve.solve_files ~debug ~apt_heap ~recommends:(not no_recs)
-      ~strict_pinning:(not no_strict) ~native ~paths ~goal
+      ~strict_pinning:(not no_strict) ~native ~paths:[ path ] ~query
   with
   | None -> 1
   | Some (pkgs, t_parse, t_solve) ->
@@ -44,22 +44,29 @@ let debian_cmd =
       value & opt string "amd64"
       & info [ "native" ] ~docv:"ARCH" ~doc:"Native architecture.")
   in
-  let goal =
+  (* the index goes last so that a query stays apt-get install's argument
+     list verbatim, however many elements it has *)
+  let query =
+    Arg.(
+      non_empty
+      & pos_left ~rev:true 0 string []
+      & info [] ~docv:"QUERY"
+          ~doc:
+            "Packages to install, as $(b,apt-get install) takes them: \
+             $(b,NAME[:ARCH]), optionally with $(b,=VERSION) or \
+             $(b,/RELEASE).")
+  in
+  let path =
     Arg.(
       required
-      & pos 0 (some string) None
-      & info [] ~docv:"GOAL" ~doc:"Package to install, optionally NAME:ARCH.")
-  in
-  let paths =
-    Arg.(
-      non_empty & pos_right 0 file []
-      & info [] ~docv:"PACKAGES" ~doc:"Debian Packages index files.")
+      & pos ~rev:true 0 (some file) None
+      & info [] ~docv:"PACKAGES" ~doc:"Debian Packages index file.")
   in
   Cmd.v
-    (Cmd.info "debian" ~doc:"Solve against Debian Packages indices.")
+    (Cmd.info "debian" ~doc:"Solve against a Debian Packages index.")
     Term.(
       const debian_run $ debug_arg $ apt_heap $ no_recs $ no_strict $ native
-      $ goal $ paths)
+      $ query $ path)
 
 let opam_run debug zi_order with_test with_doc with_dev_setup opam_version
     repo atoms =
