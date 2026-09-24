@@ -1,8 +1,8 @@
 The repos/ snapshot the recorded baselines were taken against.
 
-Every baseline here (apt-*.names, apk-*.names, opam-*.sel, lock-*.json, and
-cargo's per-goal results) is an answer about one fixed universe, so it is only
-comparable against the same snapshot.  scripts/fetch-repos.sh fetches the
+Every baseline here (eval/<eco>/baseline/, and cargo's per-goal results) is
+an answer about one fixed universe, so it is only comparable against the same
+snapshot.  scripts/fetch-repos.sh fetches the
 current head of each source and pins nothing -- it takes today's Debian
 `stable` Packages, today's Alpine v3.21 APKINDEX, a --depth 1 clone of
 whichever commit opam-repository and crates.io-index are on, and whatever the

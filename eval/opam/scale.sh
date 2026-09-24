@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# cmp.sh's and valid.sh's questions over every package name in the
-# repository, or over the queries a goals file lists (flags included, as in
-# "--with-test fmt"), in each of pac's search modes, answered into the run
-# directory.  Two more per goal: pin, whether 0install's answer is a
+# Whether pac's selection is builtin-0install's, and valid.sh's question,
+# over every package name in the repository, or over the queries a goals
+# file lists (flags included, as in "--with-test fmt"), in each of pac's
+# search modes, answered into the run directory.  Not builtin-mccs, opam's
+# default: that one optimises over whole resolutions and is out of reach by
+# construction.  Two more per goal: pin, whether 0install's answer is a
 # resolution of our instance at all, which is what separates a preference
-# gap from an instance gap; and where 0install refuses, mccs, opam's
-# default solver, since 0install gives up where a solution may still exist.
-# usage: scale.sh <pac-exe> <run-dir> [goals-file]
+# gap from an instance gap; and where 0install refuses, mccs, since 0install
+# gives up where a solution may still exist.
+# usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [goals-file]
 #        MODES="default 0install-order" P=<jobs> TIMEOUT=<s>
 S="$(cd "$(dirname "$0")" && pwd)"
 MODES=${MODES:-default 0install-order}
@@ -26,18 +28,22 @@ prepare() {
   export OPAMROOT=$run/opamroot OV=$(opam --version)
 }
 
+ask() {
+  # opam holds the switch's lock for a whole dry run, so each goal asks its own copy
+  rm -rf "$o.root"; cp -r "$OPAMROOT" "$o.root"
+  OPAMROOT=$o.root timeout "$TIMEOUT" opam install $1 --dry-run --solver=builtin-0install \
+    --switch cmp --no-depexts -y > "$o.0i" 2>&1
+  local rc=$?
+  sed -n 's/^.*installed \([^ ]*\)$/\1/p' "$o.0i" | sort -u > "$o.theirs"
+  return $rc
+}
+
 one() {
   local o=$run/out/$1 m p pac tool corr valid oo to t0 wall pin=- mccs=- last= lastvalid
   local pn=pac-pin-${1//[^A-Za-z0-9_+-]/_}
   set -f
-  # opam holds the switch's lock for a whole dry run, so each goal asks its own copy
-  rm -rf "$o.root"; cp -r "$OPAMROOT" "$o.root"
-  OPAMROOT=$o.root timeout "$TIMEOUT" opam install $2 --dry-run --solver=builtin-0install \
-    --switch cmp --no-depexts -y > "$o.0i" 2>&1
-  tool=$?
-  sed -n 's/^.*installed \([^ ]*\)$/\1/p' "$o.0i" | sort -u > "$o.theirs"
-  tool=$(tool_status "$tool" "$o.theirs")
-  if [ "$tool" = refuse ]; then
+  answer "$S/baseline/opam-$1" sel ask "$2"
+  if [ "$tool" = refuse ] && [ "$BASELINE" != regress ]; then
     OPAMROOT=$o.root timeout "$TIMEOUT" opam install $2 --dry-run --switch cmp --no-depexts -y \
       > "$o.mccs" 2>&1
     mccs=$?

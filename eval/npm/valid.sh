@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Ask npm whether OUR resolution for a goal is a resolution by npm's own
 # rules, rather than whether it is the one npm would have picked.
-# cmp.sh asks the second question against a recorded lock-<goal>.json;
-# this one can pass where that fails, because npm ranking another tree
-# first is preference, not error.
+# scale.sh asks the second question against npm's lock; this one can
+# pass where that fails, because npm ranking another tree first is
+# preference, not error.
 #
 # The check writes our answer out as the project's package-lock.json
-# (mklock.py) beside the same wrapper package.json mkroot.py mints for
-# cmp.sh, and runs `npm ci --dry-run` against the same frozen shim.
+# (mklock.py) beside the wrapper package.json mkroot.py mints, and runs
+# `npm ci --dry-run` against a frozen shim.
 #
 # npm ci verifies rather than re-resolves by design: it never consults
 # the registry for a version, it builds the tree the lockfile describes
@@ -58,17 +58,17 @@ slug=${goal//\//__}
 out="$S/out/$tag"
 mkdir -p "$out"
 
-pin=$(awk -v g="$goal" '$1==g{print $2}' "$S/roots.txt")
+pin=$(awk -v g="$goal" '$1==g{print $2}' "$S/baseline/roots.txt")
 [ -n "$pin" ] || { printf '%-24s NO ROOT (dropped by seed.sh)\n' "$goal"; exit 1; }
 
-# the same wrapper root cmp.sh measures, so validity and correspondence
-# are answering about one question
+# the wrapper root scale.sh --regress measures, so validity and
+# correspondence are answering about one question
 W="$RUN/work/$slug.valid"
 mkdir -p "$W"
 root=$(python3 "$S/mkroot.py" "$RUN/cache" "$goal" "$W" "$pin" | cut -d' ' -f1)
 
 cd "$S/../.."
-# the same host cmp.sh gives, so the answer validated here is the answer
+# the host scale.sh gives, so the answer validated here is the answer
 # compared there rather than a differently ranked sibling of it
 npmv=$(sed -n 1p "$S/npm-version")
 nodev=$(sed -n 2p "$S/npm-version")

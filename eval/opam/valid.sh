@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Ask opam whether OUR opam selection is a resolution by opam's own
 # rules, rather than whether it is the one opam would have picked.
-# cmp.sh asks the second question against builtin-0install; this one can
+# scale.sh asks the second question against builtin-0install; this one can
 # pass where that fails, because 0install ranking another selection first
 # is preference, not error.
 #
@@ -27,7 +27,7 @@
 # keeps them too.
 #
 # The solver is opam's own default (builtin-mccs), not the
-# builtin-0install cmp.sh takes its baseline from: the question here is
+# builtin-0install scale.sh takes its baseline from: the question here is
 # whether opam as shipped accepts the selection.  Each goal gets its own
 # copy of the OPAMROOT setup.sh built, whose pinned global variables are
 # load-bearing -- without them opam reads a different universe from our

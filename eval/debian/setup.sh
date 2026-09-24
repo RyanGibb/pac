@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the apt root cmp.sh solves against: a local flat repo holding
+# Build the apt root scale.sh solves against: a local flat repo holding
 # repos/debian/Packages, an empty dpkg status, and apt's own lists cache.
 # usage: setup.sh [aptroot-dir]   (default /tmp/apt-cmp-root; ~200M)
 set -eu

@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # Ask cargo whether OUR answers are resolutions by cargo's own rules,
 # rather than whether they are the ones cargo would have picked.  The
-# per-goal work is verify.py; this is run_all.sh's shape around it, plus
-# the sparse index both sides must read, which run_all.sh expects to be
-# started by hand.
+# per-goal work is verify.py; this runs it over the goals, with the sparse
+# index both sides must read.
 #
 # The index proxy is not optional and not a speed trick: it serves the
 # repos/crates.io-index snapshot pac reads, so the universe cargo answers

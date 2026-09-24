@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# cmp.sh's and valid.sh's questions over every package in the Packages index,
-# or over the goals a file lists, in each of pac's search modes, answered
-# into the run directory.
-# usage: scale.sh <pac-exe> <run-dir> [goals-file]
+# Whether pac answers as apt-get -s install does, and valid.sh's question,
+# over every package in the Packages index, or over the goals a file lists,
+# in each of pac's search modes, answered into the run directory.
+# usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [goals-file]
 #        MODES="default apt-heap" P=<jobs> TIMEOUT=<s>
 S="$(cd "$(dirname "$0")" && pwd)"
 MODES=${MODES:-default apt-heap}
@@ -16,12 +16,16 @@ prepare() {
   export APTROOT=$run/aptroot APT=${APT:-apt-get}
 }
 
+ask() {
+  APT_CONFIG=$APTROOT/etc/apt/apt.conf timeout "$TIMEOUT" "$APT" -s install "$1" > "$o.apt" 2>&1
+  local rc=$?
+  grep '^Inst ' "$o.apt" | awk '{print $2}' | sort -u > "$o.theirs"
+  return $rc
+}
+
 one() {
   local o=$run/out/$1 m p pac tool corr valid oo to t0 wall last= lastvalid
-  APT_CONFIG=$APTROOT/etc/apt/apt.conf timeout "$TIMEOUT" "$APT" -s install "$2" > "$o.apt" 2>&1
-  tool=$?
-  grep '^Inst ' "$o.apt" | awk '{print $2}' | sort -u > "$o.theirs"
-  tool=$(tool_status "$tool" "$o.theirs")
+  answer "$S/baseline/apt-$1" names ask "$2"
   for m in $MODES; do
     p=$o.$m corr=- valid=- oo=- to=- t0=$EPOCHREALTIME
     (cd "$TOP" && timeout "$TIMEOUT" "$run/pac.exe" debian $(flag "$m") --native amd64 \

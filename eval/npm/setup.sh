@@ -21,7 +21,7 @@ ln -sfn "$SNAP"/*.json "$RUN/cache/"
 : > "$RUN/home/npmrc-global"
 
 # npm-version is the host the recorded locks were taken on and the host
-# cmp.sh hands our side, so a different one is refused, not recorded over it
+# scale.sh hands our side, so a different one is refused, not recorded over it
 have="$(npm --version 2>/dev/null || true) $(node --version 2>/dev/null || true)"
 want=$(tr '\n' ' ' < "$S/npm-version")
 if [ "$have " != "$want" ]; then

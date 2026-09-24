@@ -183,7 +183,7 @@ def main():
     dump(prefix + ".unresolved.npm", nu)
     dump(prefix + ".edges.bundled", nb)
 
-    # the trailing #-field is what sweep.sh totals; the rest is for reading
+    # the trailing #-field is what scale.sh totals; the rest is for reading
     print(
         "%-24s nodes ours=%-4d npm=%-4d agree=%-4d ours-only=%-3d npm-only=%-3d "
         "| edges ours=%-4d npm=%-4d agree=%-4d ours-only=%-3d npm-only=%-3d "

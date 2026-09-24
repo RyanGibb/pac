@@ -11,8 +11,9 @@
 # a root whose engines exclude the host node our frontend hardcodes, and a
 # packument in repos/npm can be old enough that a newer release's own
 # dependency range matches nothing in it, which stops npm as well.  The
-# version that comes out is written to roots.txt and used verbatim by both
-# sides, so the question stays shared whatever the reason for walking back.
+# version that comes out is written to baseline/roots.txt and used
+# verbatim by both sides, so the question stays shared whatever the reason
+# for walking back.
 #
 # Snapshot closure.  repos/npm is an on-demand cache accumulated by earlier
 # `pac npm` runs, so it holds our cone and not necessarily npm's: npm asks
@@ -21,7 +22,7 @@
 # answer those 404 and npm would be solving a different registry from ours.
 # So our side runs online and fills the farm with what it needs, and npm
 # runs against a --fill shim that fetches a miss once into the same farm.
-# After this the farm is closed over both and sweep.sh runs frozen.
+# After this the farm is closed over both and scale.sh runs frozen.
 #
 # usage: seed.sh <exe> [run-dir] [port] [max-walkback]
 set -eu
@@ -36,7 +37,7 @@ shim=$!
 trap 'kill $shim 2>/dev/null' EXIT
 sleep 1
 
-: > "$S/roots.txt"
+: > "$S/baseline/roots.txt"
 while read -r g; do
   [ -n "$g" ] || continue
   slug=${g//\//__}
@@ -63,7 +64,7 @@ while read -r g; do
              "$RUN/cache/${g//\//%2F}.json")
   echo "$g $pin (walked back $back from $latest)"
   # goal, pin, releases walked back, dist-tags.latest
-  printf '%s %s %s %s\n' "$g" "$pin" "$back" "$latest" >> "$S/roots.txt"
+  printf '%s %s %s %s\n' "$g" "$pin" "$back" "$latest" >> "$S/baseline/roots.txt"
 done < "$S/goals.txt"
 
 echo "filled $(sort -u "$RUN/miss.log" | wc -l) names npm asked for and the farm lacked"

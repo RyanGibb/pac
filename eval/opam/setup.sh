@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the throwaway OPAMROOT cmp.sh solves against: repos/opam-repository
+# Build the throwaway OPAMROOT scale.sh solves against: repos/opam-repository
 # as the only repository, an empty switch with an empty invariant and
 # nothing installed, and the environment variables our driver assumes
 # (src/opam/opam_solve.ml, [globals]) pinned through `opam var --global`,
@@ -9,7 +9,7 @@
 # different preference.
 #
 # opam-version is the one global that cannot be set here: opam reports its
-# own.  cmp.sh and valid.sh therefore hand it to our driver instead, as
+# own.  scale.sh and valid.sh therefore hand it to our driver instead, as
 # --opam-version.  In this snapshot it decides only which opam-build /
 # opam-test / opam-check-npm-deps version is available.
 #

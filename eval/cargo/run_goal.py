@@ -2,7 +2,7 @@
 """Correspondence harness: run one Cargo goal through pac and through real
 cargo (against the same crates.io-index checkout) and dump both sides'
 raw facts as JSON for later comparison.  Does not itself judge anything --
-see compare.py.
+scale.py does.
 
 Both sides are asked the lockfile question, and asked it the same way.
 Pac's rootFeats defaults to every feature the goal crate declares;

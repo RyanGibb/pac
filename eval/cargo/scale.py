@@ -191,7 +191,7 @@ def one(crate, o):
     """run_goal.py's and verify.py's answers, in-process so that every
     timeout they set is TIMEOUT, and pac, which verify.py runs again exactly
     as run_goal.py did, runs once."""
-    import compare, run_goal, verify
+    import run_goal, verify
     timeout = float(os.environ["TIMEOUT"])
     sub = types.ModuleType("subprocess")
     sub.__dict__.update(vars(subprocess))
@@ -222,10 +222,11 @@ def one(crate, o):
          "tool": st(cargo, "refuse"), "corr": "-", "valid": "-", "oo": "-", "to": "-",
          "wall": "%.2f" % pac["wall"] if pac.get("wall") is not None else "-", "kept": "-", "identical": "-"}
     if f["pac"] == "ok" == f["tool"]:
-        c = compare.compare_one(res)
-        f["oo"], f["to"] = len(c["nodes_ours_only"]), len(c["nodes_cargo_only"])
-        diff = c["nodes_ours_only"] or c["nodes_cargo_only"] or c["edges_ours_only"] or c["edges_cargo_only"]
-        f["corr"] = "diff" if diff else "exact"
+        pn, cn = ({tuple(x) for x in s["crates"]} for s in (pac, cargo))
+        pe = {(dn, dv, tn, tv) for dn, dv, _alias, tn, tv in pac["edges"]}
+        ce = {tuple(e) for e in cargo["edges"]}
+        f["oo"], f["to"] = len(pn - cn), len(cn - pn)
+        f["corr"] = "exact" if pn == cn and pe == ce else "diff"
     if f["pac"] == "ok":
         v = json.load(open(o + ".valid.json")) if os.path.exists(o + ".valid.json") else {}
         f["valid"] = v.get("verdict", "ERR")

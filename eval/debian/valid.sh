@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Ask apt whether OUR Debian answer is a resolution by apt's own rules,
-# rather than whether it is the one apt would have picked.  cmp.sh asks
+# rather than whether it is the one apt would have picked.  scale.sh asks
 # the second question; a goal can fail that and still pass this, which is
 # the whole point: apt prefers one resolution among many, and preferring
 # another is not an error.

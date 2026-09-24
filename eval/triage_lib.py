@@ -24,6 +24,8 @@ def classify(r):
     pac, tool, valid = r["pac"], r["tool"], r["valid"]
     if pac in ("timeout", "crash"):
         return "pac-" + pac
+    if tool == "unrecorded":
+        return tool
     if tool == "timeout":
         return "tool-timeout"
     # a resolution the tool cannot then install, as a cycle in opam's

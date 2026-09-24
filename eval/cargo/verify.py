@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Ask cargo whether OUR Cargo resolution is a resolution by cargo's own
 rules, rather than whether it is the one cargo would have picked.
-compare.py asks the second question over run_goal.py's dumps; this asks
+scale.py asks the second question over run_goal.py's dumps; this asks
 the first, and a goal can fail that and pass this.
 
 The check writes our answer out as the goal's Cargo.lock (mklock.py) and

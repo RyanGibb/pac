@@ -1,19 +1,23 @@
 #!/usr/bin/env bash
-# cmp.sh's and valid.sh's questions over what a bare `npm install` of each
-# packument in the snapshot installs, or over the name@spec goals a file
-# lists (goals.js makes both), answered into the run directory against a
-# frozen shim.  cmp.sh and valid.sh pin the
-# root to roots.txt, so their steps are repeated here with the goal's own
-# spec, which may be a range.
+# Whether pac resolves as npm install --package-lock-only does, on nodes and
+# on edges, and whether npm ci accepts pac's answer, over what a bare `npm
+# install` of each packument in the snapshot installs, or over the
+# name@spec goals a file lists (goals.js makes both), answered into the run
+# directory against a frozen shim.  The regression set is baseline/roots.txt,
+# each goal pinned to the version seed.sh chose for it.
 # A goal is closed when neither side asked for a name the snapshot lacks,
 # tolerated-misses aside: only then are both answering about the snapshot.
-# usage: scale.sh <pac-exe> <run-dir> [goals-file]    P=<jobs> TIMEOUT=<s> PORT=<shim>
+# NORM is edges.py's normalisation of npm's edges; NORM= scores them raw.
+# usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [goals-file]
+#        P=<jobs> TIMEOUT=<s> PORT=<shim> NORM=<edges.py flag>
 S="$(cd "$(dirname "$0")" && pwd)"
 . "$S/../scale-lib.sh"
-export PORT=${PORT:-8899}
+export PORT=${PORT:-8899} NORM=${NORM---peer-parent}
 NPMV=$(sed -n 1p "$S/npm-version") NODEV=$(sed -n 2p "$S/npm-version")
 
 all_goals() { node "$S/goals.js" "$TOP/repos/npm"; }
+
+regress_goals() { awk '{print $1 "@" $2}' "$S/baseline/roots.txt"; }
 
 prepare() {
   snapshot npm
@@ -26,6 +30,8 @@ prepare() {
   python3 "$S/shim.py" "$PORT" "$run/cache" --frozen &
   trap "kill $!" EXIT
   sleep 1
+  # another run's shim on PORT would answer from its own farm
+  kill -0 $! 2> /dev/null || { echo "$0: no shim on $PORT" >&2; return 1; }
 }
 
 npm_run() {  # <dir> <npm args...>
@@ -35,11 +41,24 @@ npm_run() {  # <dir> <npm args...>
      --no-audit --no-fund --no-update-notifier)
 }
 
+ask() {  # <project dir>
+  rm -f "$1/package-lock.json"
+  npm_run "$1" install --package-lock-only > "$o.npm" 2>&1
+  local rc=$?
+  cp "$1/package-lock.json" "$o.theirs" 2>/dev/null || : > "$o.theirs"
+  return $rc
+}
+
 one() {
-  local o=$run/out/$1 w=$run/work/$1 name=${2%@*} root pac tool corr=- valid=- oo=- to=- t0 wall n closed
-  root=pac-root-$(printf %s "$1" | md5sum | cut -c1-16)
+  local o=$run/out/$1 w=$run/work/$1 name=${2%@*} root pac tool corr=- valid=- oo=- to=- t0 wall
+  local nodes=- edges=- closed n
+  # a recorded lock names its root, and roots.txt pins one version per
+  # name, so a baseline's root is named for the name alone, as mkroot.py
+  # names valid.sh's
+  if [ -n "$BASELINE" ]; then root=${name//@/}; root=pac-root-${root//\//-}
+  else root=pac-root-$(printf %s "$1" | md5sum | cut -c1-16); fi
   mkdir -p "$w/lock" "$w/ci"
-  rm -f "$w/lock/package-lock.json" "$o.pacmiss" "$o.ci"
+  rm -f "$o.pacmiss" "$o.ci" "$run/cache/$root.json"
   jq -n --arg r "$root" --arg n "$name" --arg s "${2##*@}" \
     '{name: $r, version: "1.0.0", private: true, dependencies: {($n): $s}}' > "$w/lock/package.json"
   cp "$w/lock/package.json" "$w/ci/package.json"
@@ -50,13 +69,13 @@ one() {
     --tree --node-version "$NODEV" --npm-version "$NPMV" "$root" > "$o.out" 2>&1
   pac=$(pac_status $? "$o.out" '^node_modules (')
   wall=$(since "$t0")
-  npm_run "$w/lock" install --package-lock-only > "$o.npm" 2>&1
-  tool=$(tool_status $? "$w/lock/package-lock.json")
+  answer "$S/baseline/lock-${name//\//__}" json ask "$w/lock"
   if [ "$pac" = ok ] && [ "$tool" = ok ]; then
-    n=$(python3 "$S/edges.py" "$name" "$w/lock/package-lock.json" "$o.out" "$o" --peer-parent |
-        sed 's/.*#//')
+    n=$(python3 "$S/edges.py" "$name" "$o.theirs" "$o.out" "$o" $NORM | sed 's/.*#//')
     oo=$(wc -l < "$o.nodes.oursonly") to=$(wc -l < "$o.nodes.npmonly")
+    nodes=${n%,*,*,*} edges=${n#*,*,*,}
     echo "$n" | awk -F, '{exit !($1 == $2 && $2 == $3 && $4 == $5 && $5 == $6)}' && corr=exact || corr=diff
+    [ -s "$o.edges.npmonly" ] && python3 "$S/verdict.py" "$run" "$name" "$o" > /dev/null
   fi
   if [ "$pac" = ok ]; then
     if python3 "$S/mklock.py" "$run/cache" "$o.out" "$w/ci/package-lock.json" \
@@ -67,11 +86,21 @@ one() {
   # npm reaches a git dependency past the shim, so that counts as a miss too
   { cat "$o.pacmiss" 2>/dev/null
     sed -n 's|^npm http fetch GET 404 http://[^/]*/\([^ ]*\) .*|\1|p' "$o.npm" "$o.ci" 2>/dev/null
-    grep -o '"resolved": "git[^"]*' "$w/lock/package-lock.json" 2>/dev/null
+    grep -o '"resolved": "git[^"]*' "$o.theirs" 2>/dev/null
   } | sed 's/%2[Ff]/\//g' | sort -u |
     grep -vxF -f <(sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^$/d' "$S/tolerated-misses") > "$o.miss"
   [ -s "$o.miss" ] && closed=no || closed=yes
-  echo "goal=$1 mode=default pac=$pac tool=$tool corr=$corr valid=$valid oo=$oo to=$to wall=$wall closed=$closed"
+  echo "goal=$1 mode=default pac=$pac tool=$tool corr=$corr valid=$valid oo=$oo to=$to wall=$wall closed=$closed nodes=$nodes edges=$edges"
+}
+
+totals() {
+  awk '{for (i = 1; i <= NF; i++) {j = index($i, "="); f[substr($i, 1, j - 1)] = substr($i, j + 1)}
+        c += f["closed"] == "yes"
+        if (f["nodes"] != "-") {g++; split(f["nodes"] "," f["edges"], a, ","); for (i = 1; i <= 6; i++) t[i] += a[i]}}
+    END {printf "closed %d/%d; over the %d both answer, nodes ours=%d npm=%d agree=%d, edges ours=%d npm=%d agree=%d\n",
+           c, NR, g, t[1], t[2], t[3], t[4], t[5], t[6]}' "$run/results.txt"
+  find "$run/out" -name '*.verdict' -exec cut -f1 {} + | sort | uniq -c |
+    sed 's/^ */npm-only edges: /'
 }
 
 main "$@"

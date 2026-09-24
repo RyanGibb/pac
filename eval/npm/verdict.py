@@ -38,7 +38,7 @@ host cannot run is an ordinary preference gap.  It is named separately
 because engines is the one preference key whose input is a host
 constant: both sides have to be given the same node and npm versions, or
 they rank by different rules and every such edge diverges.  The host
-here is npm-version, which is what cmp.sh passes our side.
+here is npm-version, which is what scale.sh passes our side.
 
 usage: verdict.py <run-dir> <goal> <out-prefix>
 """

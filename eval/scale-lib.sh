@@ -1,6 +1,6 @@
 # Sourced by each eval/<eco>/scale.sh, which defines one -- a goal's result
-# lines, one per mode, from its key and goal -- all_goals and prepare, and
-# then calls main.
+# lines, one per mode, from its key and goal -- all_goals and prepare, may
+# redefine regress_goals and define totals, and then calls main.
 set -u
 export LC_ALL=C
 E="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,6 +27,28 @@ tool_status() {  # <rc> <answer>
   if [ "$1" -eq 124 ]; then echo timeout
   elif [ "$1" -eq 0 ] && [ -s "$2" ]; then echo ok
   else echo refuse; fi
+}
+
+regress_goals() { cat "$S/goals.txt"; }
+
+# The tool's answer into $o.theirs and its status into tool: asked afresh,
+# or under --regress read back from the baseline, <stem>.<ext> for an
+# answer and <stem>.absent for a refusal, which --record writes
+answer() {  # <baseline stem> <ext> <command asking the tool into $o.theirs>
+  local b=$1.$2 a=$1.absent; shift 2
+  if [ "$BASELINE" = regress ]; then
+    : > "$o.theirs"
+    if [ -e "$a" ]; then tool=refuse
+    elif [ -s "$b" ]; then cp "$b" "$o.theirs"; tool=ok
+    else tool=unrecorded; fi
+    return
+  fi
+  "$@"
+  tool=$(tool_status $? "$o.theirs")
+  if [ "$BASELINE" = record ]; then
+    rm -f "$b" "$a"
+    case $tool in ok) cp "$o.theirs" "$b" ;; refuse) : > "$a" ;; esac
+  fi
 }
 
 compare() {  # <ours> <theirs>, both sorted
@@ -60,25 +82,40 @@ snapshot() {  # <path under repos/>
 }
 
 main() {
-  [ $# -ge 2 ] || { echo "usage: $0 <pac-exe> <run-dir> [goals-file]" >&2; exit 2; }
-  if [ "$1" = --one ]; then
+  if [ "${1:-}" = --one ]; then
     local k=${2%%$'\t'*}
     one "$k" "${2#*$'\t'}" > "$run/res/.$k" && mv "$run/res/.$k" "$run/res/$k"
     exit
   fi
+  case ${1:-} in --regress|--record) BASELINE=${1#--}; shift ;; *) BASELINE= ;; esac
+  export BASELINE
+  [ $# -ge 2 ] || { echo "usage: $0 [--regress | --record] <pac-exe> <run-dir> [goals-file]" >&2; exit 2; }
   mkdir -p "$2/res" "$2/out" || exit 1
   run=$(cd "$2" && pwd); export run
-  # one binary per run, so a resumed run never mixes two
+  # one binary and one source of answers per run, so a resumed run never mixes two
   if [ -e "$run/pac.exe" ]; then
     cmp -s "$1" "$run/pac.exe" || { echo "$0: $run was started with another pac" >&2; exit 1; }
-  else cp "$1" "$run/pac.exe"; fi
+    [ "$(cat "$run/baseline" 2> /dev/null)" = "$BASELINE" ] || { echo "$0: $run was started in another mode" >&2; exit 1; }
+  else cp "$1" "$run/pac.exe"; echo "$BASELINE" > "$run/baseline"; fi
   prepare || exit 1
   if [ -n "${3:-}" ]; then cp "$3" "$run/goals.txt" || exit 1
-  elif [ ! -s "$run/goals.txt" ]; then all_goals > "$run/goals.txt"; fi
+  elif [ ! -s "$run/goals.txt" ]; then
+    if [ -n "$BASELINE" ]; then regress_goals; else all_goals; fi > "$run/goals.txt"
+  fi
   ls "$run/res" | awk -F'\t' 'FILENAME == "-" {done[$0]; next}
     NF {k = $NF; gsub(/%/, "%25", k); gsub(/\+/, "%2B", k); gsub(/\//, "%2F", k); gsub(/ /, "+", k)
         if (!(k in done)) {done[k]; print k "\t" $NF}}' - "$run/goals.txt" > "$run/todo"
   echo "$0: $(wc -l < "$run/todo") of $(wc -l < "$run/goals.txt") goals to run" >&2
   xargs -r -P "$P" -d '\n' -n 1 bash "$0" --one < "$run/todo"
   find "$run/res" -type f ! -name '.*' -exec cat {} + | sort > "$run/results.txt"
+  awk -v modes="$MODES" '
+    {for (i = 1; i <= NF; i++) {j = index($i, "="); f[substr($i, 1, j - 1)] = substr($i, j + 1)}
+     m = f["mode"]; n[m]++; un[m] += f["tool"] == "unrecorded"
+     if (f["tool"] == "ok") {ans[m]++; ex[m] += f["corr"] == "exact"}
+     if (f["valid"] != "-") {chk[m]++; ok[m] += f["valid"] == "VALID"}}
+    END {k = split(modes, ms, " ")
+      for (i = 1; i <= k; i++) if (ms[i] in n)
+        printf "%s: %d goals, exact %d/%d, valid %d/%d%s\n", ms[i], n[ms[i]], ex[ms[i]], ans[ms[i]],
+          ok[ms[i]], chk[ms[i]], un[ms[i]] ? ", unrecorded " un[ms[i]] : ""}' "$run/results.txt"
+  if declare -F totals > /dev/null; then totals; fi
 }

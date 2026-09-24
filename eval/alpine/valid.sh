@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Ask apk whether OUR Alpine answer is a resolution by apk's own rules,
-# rather than whether it is the one apk would have picked.  cmp.sh asks
+# rather than whether it is the one apk would have picked.  scale.sh asks
 # the second question; this one can pass where that fails, because apk
 # preferring a different provider is preference, not error.
 #
