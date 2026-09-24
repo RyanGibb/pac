@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Whether pac resolves as npm install --package-lock-only does, on nodes and
-# on edges, and whether npm ci accepts pac's answer, over what a bare `npm
+# on edges, and whether npm accepts pac's answer, over what a bare `npm
 # install` of each packument in the snapshot installs, or over the
 # name@spec goals a file lists (goals.js makes both), answered into the run
 # directory against a frozen shim.  The regression set is baseline/roots.txt,
@@ -66,6 +66,9 @@ ask() {  # <project dir>
   return $rc
 }
 
+npmc() { npm_run "$@"; }
+. "$S/accepts.sh"
+
 one() {
   local o=$run/out/$1 w=$run/work/$1 name=${2%@*} root pac tool corr=- valid=- oo=- to=- t0 wall
   local nodes=- edges=- closed n
@@ -75,7 +78,7 @@ one() {
   if [ -n "$BASELINE" ]; then root=${name//@/}; root=pac-root-${root//\//-}
   else root=pac-root-$(printf %s "$1" | md5sum | cut -c1-16); fi
   mkdir -p "$w/lock" "$w/ci"
-  rm -f "$o.pacmiss" "$o.gitmiss" "$o.ci" "$run/cache/$root.json"
+  rm -f "$o.pacmiss" "$o.gitmiss" "$o.ci" "$o.plo" "$run/cache/$root.json"
   jq -n --arg r "$root" --arg n "$name" --arg s "${2##*@}" \
     '{name: $r, version: "1.0.0", private: true, dependencies: {($n): $s}}' > "$w/lock/package.json"
   cp "$w/lock/package.json" "$w/ci/package.json"
@@ -97,13 +100,13 @@ one() {
   if [ "$pac" = ok ]; then
     if python3 "$S/mklock.py" "$run/cache" "$o.out" "$w/ci/package-lock.json" \
          --root-manifest "$w/ci/package.json" > "$o.mklock" 2>&1; then
-      npm_run "$w/ci" ci --dry-run > "$o.ci" 2>&1 && valid=VALID || valid=INVALID
+      accepts "$w/ci" "$o" && valid=VALID || valid=INVALID
     else valid=ERR; fi
   fi
   # a package npm resolved from anywhere but the registry came from outside
   # the snapshot, however it got past the fence, so it is a miss too
   { cat "$o.pacmiss" "$o.gitmiss" 2>/dev/null
-    sed -n 's|^npm http fetch GET 404 http://[^/]*/\([^ ]*\) .*|\1|p' "$o.npm" "$o.ci" 2>/dev/null
+    sed -n 's|^npm http fetch GET 404 http://[^/]*/\([^ ]*\) .*|\1|p' "$o.npm" "$o.ci" "$o.plo" 2>/dev/null
     jq -r '.packages[]?.resolved // empty' "$o.theirs" 2>/dev/null | grep -v '^https://registry\.npmjs\.org/'
   } | sed 's/%2[Ff]/\//g' | sort -u |
     grep -vxF -f <(sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^$/d' "$S/tolerated-misses") > "$o.miss"

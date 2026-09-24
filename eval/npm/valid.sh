@@ -6,8 +6,10 @@
 # preference, not error.
 #
 # The check writes our answer out as the project's package-lock.json
-# (mklock.py) beside the wrapper package.json mkroot.py mints, and runs
-# `npm ci --dry-run` against a frozen shim.
+# (mklock.py) beside the wrapper package.json mkroot.py mints, and asks
+# npm against a frozen shim, as accepts.sh does: `npm ci --dry-run`, then
+# `npm install --package-lock-only` on a copy, which must leave the same
+# version at every path of the lock.
 #
 # npm ci verifies rather than re-resolves by design: it never consults
 # the registry for a version, it builds the tree the lockfile describes
@@ -88,16 +90,18 @@ if ! python3 "$S/mklock.py" "$RUN/cache" "$out/$slug.ours" "$W/package-lock.json
 fi
 
 # the shim fences the registry alone, and npm clones a git dependency itself
-( cd "$W" && HOME="$RUN/home" npm_config_git=false npm ci --dry-run \
+npmc() {  # <dir> <npm args...>
+  (cd "$1" && shift && HOME="$RUN/home" npm_config_git=false npm "$@" \
     --registry "http://127.0.0.1:$PORT" --cache "$RUN/home/npmcache" \
     --userconfig "$RUN/home/.npmrc" --globalconfig "$RUN/home/npmrc-global" \
-    --no-audit --no-fund --no-update-notifier ) > "$out/$slug.npmlog" 2>&1
-nrc=$?
+    --no-audit --no-fund --no-update-notifier)
+}
+. "$S/accepts.sh"
+accepts "$W" "$out/$slug" && v=VALID || v=INVALID
 
 n=$(sed -n 's/^packages (\([0-9]*\)).*/\1/p' "$out/$slug.ours")
 plc=$(sed -n 's/.*: \([0-9]*\) placements.*/\1/p' "$out/$slug.mklock")
 dep=$(sed -n 's/.*max nesting \([0-9]*\).*/\1/p' "$out/$slug.mklock")
-bad=$(grep -cE 'npm error (Invalid|Missing):' "$out/$slug.npmlog")
-[ "$nrc" -eq 0 ] && v=VALID || v=INVALID
-printf '%-24s %-7s n=%-5s placed=%-5s depth=%-3s rc=%-3s bad=%-4s %s\n' \
-  "$goal" "$tag" "$n" "$plc" "$dep" "$nrc" "$bad" "$v"
+bad=$(grep -cE 'npm error (Invalid|Missing):' "$out/$slug.ci")
+printf '%-24s %-7s n=%-5s placed=%-5s depth=%-3s rc=%-3s bad=%-4s relock=%-3s moved=%-4s %s\n' \
+  "$goal" "$tag" "$n" "$plc" "$dep" "$ci_rc" "$bad" "$relock_rc" "$moved" "$v"

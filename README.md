@@ -69,6 +69,30 @@ Where pac has more than one search mode, `MODES` names those to run by flag: Deb
 Keep the run directory outside the source tree, which dune scans.
 The run ends with a line per mode, such as `default: 62 goals, exact 46/60, valid 60/60`: pac's answers that are exactly the tool's, of the goals the tool answers, and pac's answers the tool accepts, of those it checked.
 
+### The validity check
+
+Except for cargo's, each check installs pac's answer as the tool's own installed state, with only the goal requested, and the tool must then find nothing to do.
+The answer is valid when every dependency is met, nothing conflicts, and the goal needs every package in it.
+Asking the tool to install the whole answer at exact versions would make every package one the user asked for, so none could be found unneeded.
+
+- Debian: a dpkg status, then `apt-get check`, `install <goal>` and `autoremove`.
+  autoremove runs over the status with the Essential, Protected and Priority fields removed and `apt` not forced Essential, since apt would keep all of those whether the goal needs them or not.
+  A name at two versions and a row at any architecture but amd64 fail before apt is asked.
+  The whole answer is also installed fresh, because apt finds a Pre-Depends cycle only while it orders an install.
+- Alpine: an installed database with the goal as the world, then `apk fix --simulate`, where any change apk prints fails, an install_if addition included, and so does a name at two versions.
+- opam: a switch state, then `install <goal>`, and `upgrade --fixup` twice: once as it is, and once with every package pinned and the solver told to remove what it can.
+  The pinned fixup stands in for `remove --auto-remove`, which keeps every depopt and both arms of an `|`.
+  A reinstall of the whole selection finds install cycles.
+- npm: the answer written as `package-lock.json`, which `npm ci --dry-run` must accept, and which `npm install --package-lock-only`, run on a copy, must leave with the same version at every path.
+  ci on its own lets through an invalid optional peer, and a peer resolved inside its requirer where npm's repair keeps that copy.
+
+A set that is a resolution but that the tool cannot install, because its install order has a cycle, gets the verdict `CYCLIC` (opam and Debian).
+`eval/<eco>/controls.sh <scratch-dir>` runs the check on small hand-written answers, each of which must get the verdict it names: invalid ones that must fail, and valid ones, some not the tool's own pick, that must pass.
+
+```sh
+eval/debian/controls.sh /tmp/controls/debian
+```
+
 ### The regression set
 
 `eval/<eco>/goals.txt` lists a few dozen hand-picked goals, and `eval/<eco>/baseline/` holds the tool's answer to each, or, for a goal the tool refuses, an empty `.absent` file in its place.
@@ -112,7 +136,7 @@ Some ecosystems add fields: opam's `pin` and `mccs`, npm's `twall` (npm's own wa
 | `preference-gap` | both answer, the sets differ, and the tool accepts ours |
 | `error` | both answer, the sets differ, and the tool rejects ours |
 | `exact-invalid` | the tool rejects an answer that matches its own, which points at the check |
-| `post-resolution` | the tool accepts our answer as a resolution but cannot install it: for opam, its install order has a cycle |
+| `post-resolution` | the tool accepts our answer as a resolution but cannot install it: for opam and Debian, its install order has a cycle |
 | `instance-gap` | the tool's answer is not a resolution of our instance: we are unsatisfiable where it answers, or for opam its answer, pinned, is unsatisfiable for us |
 | `tool-declines` | we answer and the tool refuses |
 | `both-refuse` | neither answers |
