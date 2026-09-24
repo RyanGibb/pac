@@ -1,5 +1,6 @@
 From Stdlib Require Import MSets List Bool.
-From PackageCalculus Require Import Prelude Core Versions PackageFormula.
+From PackageCalculus Require Import Prelude Core Versions PackageFormula
+  ConflictClass.
 
 Create HintDb cmp_opam.
 Create Rewrite HintDb cmp_opam.
@@ -14,7 +15,10 @@ Create Rewrite HintDb cmp_opam.
    values live in one totally ordered sort Y, as opam itself compares
    them. *)
 Module Opam (N V X Y E : UsualOrderedType).
-  Module C := Core N V.
+  (* Its core shared, so that a class relation here is the conflict-class
+     calculus' own and its class lookups apply as they stand. *)
+  Module Cls := ConflictClass N V.
+  Module C := Cls.C.
   Module Pkg := C.Pkg.
   Module PkgSet := C.PkgSet.
   Module VSet := C.VSet.
@@ -146,8 +150,8 @@ Module Opam (N V X Y E : UsualOrderedType).
   Definition oSat (rho : Valuation) (S : PkgSet.t) (f : OFormula) : Prop :=
     forall g, redOF rho f = Some g -> rSat S g.
 
-  Module ClsElt := PairUOT Pkg N.
-  Module ClsRel := FSetUOT ClsElt.
+  Module ClsElt := Cls.InClassElt.
+  Module ClsRel := Cls.InClassRel.
   Module ESet := FSetUOT E.
 
   (* The opam instance.  Formula-valued relations are lists: they feed
@@ -1204,10 +1208,6 @@ Module Opam (N V X Y E : UsualOrderedType).
       ClsRel.filter
         (fun qk => if Pkg.eq_dec (fst qk) p then true else false) cls.
 
-    Definition clsNamePreimage (cls : ClsRel.t) (k : N.t) : ClsRel.t :=
-      ClsRel.filter
-        (fun qk => if N.eq_dec (snd qk) k then true else false) cls.
-
     Definition pkgSubInst (I : Inst) (p : Pkg.t) : Inst :=
       MkInst (nameRestrict (declaredNames I p) (inst_repo I))
         (List.filter (ownb p) (inst_dep I))
@@ -1227,7 +1227,8 @@ Module Opam (N V X Y E : UsualOrderedType).
         (inst_pind I) (inst_goal I) (inst_inv I).
 
     Definition classSubInst (I : Inst) (k : N.t) : Inst :=
-      MkInst PkgSet.empty nil nil nil (clsNamePreimage (inst_cls I) k)
+      MkInst PkgSet.empty nil nil nil
+        (Cls.Reduction.Lookup.classRelAt (inst_cls I) k)
         nil nil PkgSet.empty nil (inst_goal I) (inst_inv I).
 
     Definition rootSubInst (I : Inst) : Inst :=
@@ -1383,6 +1384,35 @@ Module Opam (N V X Y E : UsualOrderedType).
       apply NSet.singleton_spec; reflexivity.
     Qed.
 
+    (* A class package is the conflict-class calculus' at any R holding
+       every declarer, not at the effective repository: opam reads a
+       class's versions off every declaration, and the extra ones are
+       claimed by no package that can be selected. *)
+    Module SOcd := SetOps ClsElt Pkg ClsRel PkgSet.
+    Definition declarers (cls : ClsRel.t) : PkgSet.t := SOcd.map fst cls.
+
+    Lemma clsVersions_reduceReal : forall cls R k tv,
+        (forall q k', ClsRel.In (q, k') cls -> PkgSet.In q R) ->
+        PF.VSet.In tv (clsVersions cls k) <->
+        exists n, tv = TVer.NV n /\
+          Cls.Reduction.T.VSet.In (Cls.Reduction.Version.Name n)
+            (Cls.Reduction.T.versions (Cls.Reduction.reduceReal R cls)
+               (Cls.Reduction.Name.Cls k)).
+    Proof.
+      intros cls R k tv HR.
+      rewrite mem_clsVersions, Cls.Reduction.Lookup.versions_cls.
+      split.
+      - intros [q [Hq ->]]; exists (fst q); split; [reflexivity |].
+        apply Cls.Reduction.Lookup.SOpv.mem_map; exists q; split;
+          [apply Cls.Reduction.Lookup.mem_inClass; split;
+             [exact (HR _ _ Hq) | exact Hq]
+          | reflexivity].
+      - intros [n [-> Hn]]; apply Cls.Reduction.Lookup.SOpv.mem_map in Hn.
+        destruct Hn as [q [Hq E]]; injection E as ->.
+        apply Cls.Reduction.Lookup.mem_inClass in Hq.
+        exists q; split; [exact (proj2 Hq) | reflexivity].
+    Qed.
+
     (* The one lookup whose sub-instance is a preimage: answering it needs every
        declarer of k, which no single package's declarations name.  A driver
        uncovering the repository as it goes must therefore recompute this
@@ -1393,14 +1423,17 @@ Module Opam (N V X Y E : UsualOrderedType).
         versions rho I (TName.Cls k).
     Proof.
       intros rho I k; cbn [versions classSubInst inst_cls].
-      apply PF.VSet.ext; intro tv; rewrite !mem_clsVersions.
-      unfold clsNamePreimage; split.
-      - intros [p [Hm ->]]; apply ClsRel.filter_spec' in Hm.
-        exists p; split; [tauto | reflexivity].
-      - intros [p [Hm ->]]; exists p; split; [| reflexivity].
-        apply ClsRel.filter_spec'; split; [exact Hm | cbn [snd]].
-        destruct (N.eq_dec k k) as [_ | NE];
-          [reflexivity | contradiction NE; reflexivity].
+      assert (HD : forall q k', ClsRel.In (q, k') (inst_cls I) ->
+                     PkgSet.In q (declarers (inst_cls I)))
+        by (intros q k' H; apply SOcd.mem_map; exists (q, k');
+            split; [exact H | reflexivity]).
+      apply PF.VSet.ext; intro tv.
+      rewrite (clsVersions_reduceReal (inst_cls I) _ _ _ HD),
+        (Cls.Reduction.Lookup.versions_lookupClass (declarers (inst_cls I))).
+      apply clsVersions_reduceReal; intros q k' H.
+      apply Cls.Reduction.Lookup.mem_classRelAt in H; destruct H as [H ->].
+      apply Cls.Reduction.Lookup.mem_inClass; split;
+        [exact (HD _ _ H) | exact H].
     Qed.
 
     Theorem dependees_lookupRoot : forall rho I,

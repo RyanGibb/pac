@@ -243,6 +243,8 @@ Op.Reduction.clsForms
 Op.Reduction.clsPkgs
 Op.Reduction.clsSel
 Op.Reduction.clsVersions
+Op.Reduction.clsVersions_reduceReal
+Op.Reduction.declarers
 Op.Reduction.decodeS
 Op.Reduction.dependees
 Op.Reduction.dependeesBy
