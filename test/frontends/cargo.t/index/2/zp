@@ -1,0 +1,2 @@
+{"name":"zp","vers":"0.1.6","deps":[{"name":"ga","req":"^0.14.4","features":[],"optional":false,"default_features":true,"kind":"normal"}],"features":{},"yanked":false}
+{"name":"zp","vers":"0.1.7","deps":[{"name":"ga","req":"=0.14.7","features":[],"optional":false,"default_features":true,"kind":"normal"}],"features":{},"yanked":false}

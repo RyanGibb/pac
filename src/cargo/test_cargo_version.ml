@@ -136,5 +136,30 @@ let () =
   req ">=1.0.0, <2.0.0-rc.1" "2.0.0-rc.0" true;
   req ">=1.0.0, <2.0.0-rc.1" "2.0.0-rc.1" false;
 
+  (* the string-scanning comparison agrees with parsing, odd spellings
+     included *)
+  let corpus =
+    [ ""; "0"; "1"; "1.0"; "1.0.0"; "01.2.3"; "1.02.3"; "1..2"; "1.2."; "1.";
+      "1.2.3.4"; "1a.2b.3c"; "a.b.c"; "0000000001.0.0"; "1234567890.0.0";
+      "123456789.0.0"; "12345678901.0.0"; "999999999.0.0"; "1.0.0+b";
+      "1.0.0+b-1"; "1.0.0+"; "1.0.0-alpha"; "1.0.0-"; "1.0.0-+x"; "1.0.0-0";
+      "2.0.0-rc.1+x"; "0.14.7"; "0.14.10"; "0.0.3"; "10.0.0"; "9.99.999";
+      "1-2.3.4"; "1.2-3.4"; "1.2.3-4.5"; "1+2.3"; "1.0.0-alpha.1";
+      "0.14.7-pre"; "0.14.7+x-y" ]
+  in
+  List.iter
+    (fun a ->
+      List.iter
+        (fun b ->
+          let sgn x = if x < 0 then -1 else if x > 0 then 1 else 0 in
+          let got = sgn (Cargo_version.compare a b)
+          and want = sgn (Cargo_version.compare_parsed a b) in
+          if got <> want then (
+            Printf.eprintf "FAIL: compare %S %S = %d, parsed %d\n" a b got
+              want;
+            incr fail))
+        corpus)
+    corpus;
+
   if !fail > 0 then exit 1;
   print_endline "cargo_version: all tests pass"

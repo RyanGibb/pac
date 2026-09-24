@@ -235,3 +235,146 @@ and i3 is resolved with net alone:
   encoded solution: 11 core nodes (3 crate versions encoded)
   parent edges: 2
   loaded: 3 crates, 3 versions
+
+Which of two crates keeps its newest version, when one pins the other, is
+settled by the order cargo activates them in (core/resolver/mod.rs,
+activate_deps_loop).  cp 0.1.7 pins ga to =0.14.7 where 0.1.6 takes ^0.14.4.
+pa declares ga before cp, both with two candidates, and cargo takes a
+crate's dependencies fewest candidates first and in declaration order
+between equals: ga is activated at 0.14.9, cp 0.1.7 then fails on its pin,
+and cp falls back to 0.1.6.
+
+  $ ../../../src/main.exe cargo index oa | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root oa 1.0.0
+  crates (4):
+    cp 0.1.6
+    ga 0.14.9
+    oa 1.0.0
+    pa 1.0.0
+  encoded solution: 13 core nodes (6 crate versions encoded)
+  parent edges: 4
+  loaded: 4 crates, 6 versions
+
+pb declares zp, a copy of cp, first, so zp 0.1.7 is activated first and its
+pin, with one candidate, is taken before pb's own ^0.14 of ga.
+
+  $ ../../../src/main.exe cargo index ob | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root ob 1.0.0
+  crates (4):
+    ga 0.14.7
+    ob 1.0.0
+    pb 1.0.0
+    zp 0.1.7
+  encoded solution: 13 core nodes (6 crate versions encoded)
+  parent edges: 4
+  loaded: 4 crates, 6 versions
+
+The root's own dependencies are read from its manifest, whose tables cargo
+keys by name, so oc's zp-then-ga reaches the resolver as ga-then-zp.
+
+  $ ../../../src/main.exe cargo index oc | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root oc 1.0.0
+  crates (3):
+    ga 0.14.9
+    oc 1.0.0
+    zp 0.1.6
+  encoded solution: 10 core nodes (5 crate versions encoded)
+  parent edges: 3
+  loaded: 3 crates, 5 versions
+
+Resolver v3 ranks the candidate versions of a dependency, not their
+classes (version_prefs.rs, sort_summaries), and skips a candidate whose
+class is already activated at another version (RemainingCandidates::next).
+ms activates sk 0.5.10 through its pin; mq's >=0.5, <0.7 then meets the
+compatible 0.5.9, which that activation rules out, and takes the newest of
+the rest, 0.6.5, although it needs a newer Rust than 1.70.
+
+  $ ../../../src/main.exe cargo index ms --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root ms 1.0.0 for rust 1.70
+  crates (4):
+    mq 1.0.0
+    ms 1.0.0
+    sk 0.5.10
+    sk 0.6.5
+  encoded solution: 12 core nodes (5 crate versions encoded)
+  parent edges: 3
+  loaded: 3 crates, 5 versions
+
+mu pins sl to 0.6.5, which needs 1.80, so mt's range skips the compatible
+0.6.4 of that class and takes the compatible 0.5.9 of the older one.
+
+  $ ../../../src/main.exe cargo index mu --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root mu 1.0.0 for rust 1.70
+  crates (4):
+    mt 1.0.0
+    mu 1.0.0
+    sl 0.5.9
+    sl 0.6.5
+  encoded solution: 12 core nodes (5 crate versions encoded)
+  parent edges: 3
+  loaded: 3 crates, 5 versions
+
+A candidate one of whose mandatory dependencies has no valid candidate
+left is passed over, as cargo passes it over after activating it and
+failing at once on that dependency.  dz pins sp to 1.0.0, and each zk pins
+sp to its own version, so zk's newest two are dead on arrival: the solve
+takes zk 1.0.0 without a single conflict, where learning it would cost
+one per version, since each version's slot is its own name.
+
+  $ ../../../src/main.exe cargo index dz | grep -E '^  (sp|zk) '
+    sp 1.0.0
+    zk 1.0.0
+  $ ../../../src/main.exe cargo index dz --debug | grep -c '^conflict resolution'
+  0
+  [1]
+
+The dependency can die a step further down.  Each zj past 1.0.0 pins ae
+0.10.3, whose own range for sb misses the 2.6.1 dy pins, so a zj taking
+ae has one candidate for it and that candidate is dead: the chain of
+forced candidates is followed, and zj 1.0.0 is again reached without a
+conflict.
+
+  $ ../../../src/main.exe cargo index dy | grep -E '^  (ae|sb|zj) '
+    sb 2.6.1
+    zj 1.0.0
+  $ ../../../src/main.exe cargo index dy --debug | grep -c '^conflict resolution'
+  0
+  [1]
+
+And the dependency that dies can be an optional one the features asked of
+the candidate turn on.  dx asks tr for url, which in tr 1.1.0 enables sb
+at a range the pinned 2.6.1 misses, so tr 1.0.0 is taken, again without a
+conflict.
+
+  $ ../../../src/main.exe cargo index dx | grep -E '^  (sb|tr) '
+    sb 2.6.1
+    tr 1.0.0 [url]
+  $ ../../../src/main.exe cargo index dx --debug | grep -c '^conflict resolution'
+  0
+  [1]
+
+A dependency with several valid candidates dies when every one of them
+does.  xw 1.1.0 needs zv, and each zv needs sb at a range the pinned 2.6.1
+misses, so xw 1.1.0 is passed over for 1.0.0, again without a conflict.
+
+  $ ../../../src/main.exe cargo index dw | grep -E '^  (sb|xw|zv) '
+    sb 2.6.1
+    xw 1.0.0
+  $ ../../../src/main.exe cargo index dw --debug | grep -c '^conflict resolution'
+  0
+  [1]
+
+Where every candidate is dead the versions can only be refuted, one per
+backjump, and cargo's order would reach the dependency again after each
+only behind everything queued ahead of it.  dv takes sb 2.6.1 before t1,
+t2 and t3, and only then zj, whose versions both need ae 0.10.3 and so sb
+below 2.5.  Once sb 2.6.1 stands again after a backjump, zj is taken up
+first, and refuting it costs a handful of decisions instead of the whole
+queue; cargo, backtracking into its saved frame, lands on sb 2.4.1 too.
+
+  $ ../../../src/main.exe cargo index dv | grep -E '^  (ae|sb|zj) '
+    ae 0.10.3
+    sb 2.4.1
+    zj 1.2.0
+  $ ../../../src/main.exe cargo index dv --debug | grep -c '^deciding on'
+  60

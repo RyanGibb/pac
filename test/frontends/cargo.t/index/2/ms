@@ -1,0 +1,1 @@
+{"name":"ms","vers":"1.0.0","deps":[{"name":"sk","req":"=0.5.10","features":[],"optional":false,"default_features":true,"kind":"normal"},{"name":"mq","req":"^1","features":[],"optional":false,"default_features":true,"kind":"normal"}],"features":{},"yanked":false,"rust_version":"1.70"}

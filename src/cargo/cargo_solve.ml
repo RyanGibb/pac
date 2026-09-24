@@ -201,12 +201,22 @@ module Make () = struct
      maximises is the label, so an order on labels that disagrees with the
      order on versions silently reverses the preference.  Lexical order on
      "0.9" against "0.10" is exactly that disagreement. *)
+  let class_of = Hashtbl.create 65536
+
   let compat_class (v : string) : string =
-    let p = Cargo_version.parse v in
-    if p.Cargo_version.major > 0 then Printf.sprintf "%d.0.0" p.Cargo_version.major
-    else if p.Cargo_version.minor > 0 then
-      Printf.sprintf "0.%d.0" p.Cargo_version.minor
-    else Printf.sprintf "0.0.%d" p.Cargo_version.patch
+    match Hashtbl.find_opt class_of v with
+    | Some c -> c
+    | None ->
+        let p = Cargo_version.parse v in
+        let c =
+          if p.Cargo_version.major > 0 then
+            Printf.sprintf "%d.0.0" p.Cargo_version.major
+          else if p.Cargo_version.minor > 0 then
+            Printf.sprintf "0.%d.0" p.Cargo_version.minor
+          else Printf.sprintf "0.0.%d" p.Cargo_version.patch
+        in
+        Hashtbl.add class_of v c;
+        c
 
   (* ---- parse-AST -> extracted terms ---- *)
 
@@ -487,23 +497,8 @@ module Make () = struct
         owner n v (fun r rw -> call r nosupp rw.r_fdefs rw.r_slots nolk)
     | _, _ -> []
 
-  (* the crate versions a slot node's class stands for: its own edges
-     already carry them -- CSlot points at CCrate/CFeatP with the members
-     of the class the requirement admits, and CDec at CFeatP with the same
-     set -- so reading them back off dependees asks the encoder rather
-     than re-evaluating a requirement here, and cannot drift from what
-     choosing the class actually offers *)
-  let class_members st (tn : Cg.NPlus.t) (w : Cg.VPlus.t) :
-      (string * string) list =
-    List.concat_map
-      (fun ((m, vs) : T.Dependees.t) ->
-        match m with
-        | Cg.NPlus.CCrate (t, _) | Cg.NPlus.CFeatP (t, _, _) ->
-            List.filter_map
-              (function Cg.VPlus.WOrig v -> Some (t, v) | _ -> None)
-              (T.VSet.elements vs)
-        | _ -> [])
-      (deps st (tn, w))
+  let site_key (d : P.dep) : Cg.SlotKey.t =
+    (d.P.d_alias, (xkind d.P.d_kind, d.P.d_cfg))
 
   (* a slot node is one manifest site, so its name has to spell the site
      out: bare alias for the plain [dependencies] row, and the kind or cfg
@@ -575,6 +570,7 @@ module Make () = struct
   let solve ?(debug = false) ?rfeats ?(rustv = rust_version) ar
       (rc : string * string) =
     Pubgrub.set_debug debug;
+    let named = rfeats in
     let rfeats =
       match rfeats with
       | Some fs -> fs
@@ -584,45 +580,20 @@ module Make () = struct
           | Some m -> root_feats m)
     in
     let st = mk_state ar rc rfeats rustv in
-    (* A class is compatible when it still offers a crate version the
-       toolchain can build, not when all of its versions do: cargo ranks
-       the candidate versions themselves, so a class holding one buildable
-       version is a choice it makes without hesitation, and demanding every
-       member be buildable would demote exactly those classes.  Holding
-       this per (name, class) also keeps the tag a function of the version
-       it labels, which is what makes it a preference: two PVersion.t with
-       the same v always carry the same flag, so no candidate is added or
-       dropped anywhere and only the order over them moves. *)
-    let class_cache = Hashtbl.create 4096 in
-    let class_msrv_ok rustc (tn : Cg.NPlus.t) (w : Cg.VPlus.t) : bool =
-      match Hashtbl.find_opt class_cache (tn, w) with
-      | Some b -> b
-      | None ->
-          let ms = class_members st tn w in
-          let b = ms = [] || List.exists (crate_msrv_ok st rustc) ms in
-          Hashtbl.replace class_cache (tn, w) b;
-          b
-    in
-    (* the preference must land on every name whose candidates stand for
-       concrete crate versions, not just the crate name.  CFeatP also
-       carries WOrig, and whichever of the two families is decided first
-       entails the other, so a family left untagged decides by bare semver
-       and the demotion never acts.  CSlot and CDec carry WClass, and a
-       class is where the choice between semver-incompatible versions of
-       one crate is actually made -- 0.60 against 0.61 is a different name,
-       so ranking versions within a name can never reach it.  Only CRoot
-       and CLink, whose candidates are not crate versions at all, have no
-       standing. *)
+    (* the preference must land on both names whose candidates are crate
+       versions: CFeatP carries WOrig as CCrate does, and whichever of the
+       two is decided first entails the other, so a family left untagged
+       decides by bare semver and the demotion never acts.  A class, which
+       CSlot and CDec carry, has no standing: cargo ranks the versions a
+       dependency admits and not their classes, and which class the ranked
+       walk lands on depends on what is already activated, which only
+       choose below can see. *)
     let tag (tn : Cg.NPlus.t) (w : Cg.VPlus.t) : PVersion.t =
       match (st.rustv, tn, w) with
       | ( Some rustc,
           (Cg.NPlus.CCrate (n, _) | Cg.NPlus.CFeatP (n, _, _)),
           Cg.VPlus.WOrig v ) ->
           { PVersion.msrv = crate_msrv_ok st rustc (n, v); v = w }
-      | ( Some rustc,
-          (Cg.NPlus.CSlot (_, _, _) | Cg.NPlus.CDec (_, _, _, _, _)),
-          Cg.VPlus.WClass _ ) ->
-          { PVersion.msrv = class_msrv_ok rustc tn w; v = w }
       | _ -> { PVersion.msrv = true; v = w }
     in
     (* the tagged list, not just the untagged one, has to be memoized:
@@ -664,12 +635,313 @@ module Make () = struct
           Hashtbl.replace dcache (tn, w) r;
           r
     in
-    match
-      PG.solve ~vers:versions ~deps:dependencies
+    let decided assigned x =
+      match assigned x with PG.Decided v -> Some v | _ -> None
+    in
+    let decided_v assigned x =
+      Option.map (fun (pv : PVersion.t) -> pv.PVersion.v) (decided assigned x)
+    in
+    let is_open assigned x =
+      match assigned x with PG.Entailed _ -> true | _ -> false
+    in
+    (* what the registry query returns for one dependency record, in the
+       order sort_summaries leaves it (version_prefs.rs): MSRV-compatible
+       first when a toolchain is set, newest first within each.  The
+       requirement is read by the comparator the encoding is handed through
+       xreq, so these are the members of the classes the slot offers. *)
+    let cand_cache = Hashtbl.create 4096 in
+    let candidates (d : P.dep) =
+      let key = (d.P.d_target, d.P.d_req) in
+      match Hashtbl.find_opt cand_cache key with
+      | Some us -> us
+      | None ->
+          let fits u =
+            match st.rustv with
+            | None -> true
+            | Some r -> crate_msrv_ok st r (d.P.d_target, u)
+          in
+          let us =
+            List.stable_sort
+              (fun a b ->
+                match (fits a, fits b) with
+                | true, false -> -1
+                | false, true -> 1
+                | _ -> Cargo_version.compare b a)
+              (List.filter
+                 (fun u -> Cargo_version.holds u d.P.d_req)
+                 (versions_of ar d.P.d_target))
+          in
+          Hashtbl.replace cand_cache key us;
+          us
+    in
+    let enabled_cache = Hashtbl.create 4096 in
+    let enabled_deps t u feats default =
+      let key = (t, u, Cargo_order.SS.elements feats, default) in
+      match Hashtbl.find_opt enabled_cache key with
+      | Some ds -> ds
+      | None ->
+          let ds =
+            match meta ar t u with
+            | None -> []
+            | Some m ->
+                let _, deps =
+                  Cargo_order.requirements m ~all:false feats default
+                in
+                Cargo_order.enabled ~root:false m deps
+          in
+          Hashtbl.replace enabled_cache key ds;
+          ds
+    in
+    let record (n, v) (k : Cg.SlotKey.t) =
+      match meta ar n v with
+      | None -> None
+      | Some m -> List.find_opt (fun d -> site_key d = k) (slots_of m)
+    in
+    (* RemainingCandidates::next (core/resolver/mod.rs): a candidate is
+       valid unless its class is activated at another version or another
+       crate holds its links key.  That is a rule over the partial
+       solution, and it is where resolver v3's ranking of versions meets
+       the classes a slot decides between.  The partial solution stands
+       still for the length of one lookahead, and the names that made a
+       candidate invalid are kept, as what doomed it. *)
+    let lookahead ~assigned =
+      let culprits = ref [] in
+      let blame x = if not (List.mem x !culprits) then culprits := x :: !culprits in
+      let links_free t u gr =
+        match meta ar t u with
+        | Some { P.v_links = Some l; _ } -> (
+            match decided_v assigned (Cg.NPlus.CLink l) with
+            | Some (Cg.VPlus.WName (Cg.NPlus.CCrate (t', gr'))) ->
+                (t' = t && gr' = gr) || (blame (Cg.NPlus.CLink l); false)
+            | _ -> true)
+        | _ -> true
+      in
+      let valid_memo = Hashtbl.create 64 in
+      let valid t u =
+        match Hashtbl.find_opt valid_memo (t, u) with
+        | Some b -> b
+        | None ->
+            let gr = compat_class u in
+            let g = Cg.NPlus.CCrate (t, gr) in
+            let b =
+              (match assigned g with
+                | PG.Decided { PVersion.v = Cg.VPlus.WOrig w; _ } ->
+                    Cargo_version.compare w u = 0 || (blame g; false)
+                | PG.Entailed r ->
+                    PG.Ranges.contains (tag g (Cg.VPlus.WOrig u)) r
+                    || (blame g; false)
+                | _ -> true)
+              && links_free t u gr
+            in
+            Hashtbl.replace valid_memo (t, u) b;
+            b
+      in
+      (* a candidate one of whose mandatory dependencies has no valid
+         candidate left, or only one that is itself dead: cargo activates
+         it, fails on that dependency and backtracks to this candidate's
+         frame, every frame between being younger than the clash
+         (find_candidate), and the next time the same dependency comes up
+         its conflict cache skips the candidate outright
+         (past_conflicting_activations, keyed by the dependency and not by
+         who declares it).  PubGrub learns the same thing one version at a
+         time, since a slot is named by its owner's version, and each
+         lesson can cost a backjump past every decision since the clashing
+         activation.  What it has learned against the forced candidate is
+         out of sight here, assigned reporting only what a name is
+         entailed to, so the chain of forced candidates is followed a few
+         steps instead. *)
+      let rec first_two t acc = function
+        | [] -> acc
+        | _ when List.length acc = 2 -> acc
+        | w :: ws -> first_two t (if valid t w then w :: acc else acc) ws
+      in
+      (* a dependency with one valid candidate is followed down at no cost
+         in depth, as a forced chain; one with several dies only if all of
+         them do, which is looked into a level at most *)
+      let dead_memo = Hashtbl.create 64 in
+      let rec dead depth chain t u feats default =
+        let key = (depth, chain, t, u, Cargo_order.SS.elements feats, default) in
+        match Hashtbl.find_opt dead_memo key with
+        | Some b -> b
+        | None ->
+            let b =
+              List.exists
+                (fun ((d : P.dep), fs) ->
+                  let t' = d.P.d_target and dflt = d.P.d_default in
+                  match first_two t' [] (candidates d) with
+                  | [] -> true
+                  | [ w ] -> chain > 0 && dead depth (chain - 1) t' w fs dflt
+                  | _ ->
+                      depth > 0
+                      && List.for_all
+                           (fun w ->
+                             (not (valid t' w))
+                             || dead (depth - 1) chain t' w fs dflt)
+                           (candidates d))
+                (enabled_deps t u feats default)
+            in
+            Hashtbl.replace dead_memo key b;
+            b
+      in
+      let live t u feats default = valid t u && not (dead 1 3 t u feats default) in
+      (links_free, live, culprits)
+    in
+    let live_by (d : P.dep) live u =
+      live d.P.d_target u (Cargo_order.SS.of_list d.P.d_feats) d.P.d_default
+    in
+    (* the names that left the last choice with no live candidate, for the
+       replay of cargo's order to come back to it sooner *)
+    let doomed = ref None in
+    let choose ~assigned tn (cands : PVersion.t list) =
+      let links_free, live, culprits = lookahead ~assigned in
+      let offered w =
+        List.find_opt
+          (fun (c : PVersion.t) -> Cg.VPlus.compare c.PVersion.v w = E.Eq)
+          cands
+      in
+      let walk (d : P.dep) =
+        List.find_map
+          (fun u ->
+            if live_by d live u then offered (Cg.VPlus.WClass (compat_class u))
+            else None)
+          (candidates d)
+      in
+      (* the features the encoding already asks of a crate version: an
+         optional dependency they enable can be the one that dies *)
+      let asked m gr u =
+        match meta ar m u with
+        | None -> Cargo_order.SS.empty
+        | Some mm ->
+            List.fold_left
+              (fun acc (f, _) ->
+                let x = Cg.NPlus.CFeatP (m, f, gr) in
+                match assigned x with
+                | PG.Entailed r when PG.Ranges.contains (tag x (Cg.VPlus.WOrig u)) r
+                  ->
+                    Cargo_order.SS.add f acc
+                | PG.Decided { PVersion.v = Cg.VPlus.WOrig w; _ }
+                  when Cargo_version.compare w u = 0 ->
+                    Cargo_order.SS.add f acc
+                | _ -> acc)
+              Cargo_order.SS.empty mm.P.v_feats
+      in
+      let pick =
+        match tn with
+        | Cg.NPlus.CSlot (n, v, k) -> Option.bind (record (n, v) k) walk
+        | Cg.NPlus.CDec (n, v, _, k, _) -> (
+            match decided_v assigned (Cg.NPlus.CSlot (n, v, k)) with
+            | Some w -> offered w
+            | None -> Option.bind (record (n, v) k) walk)
+        | Cg.NPlus.CCrate (m, gr) ->
+            let p =
+              List.find_opt
+                (fun (c : PVersion.t) ->
+                  match c.PVersion.v with
+                  | Cg.VPlus.WOrig u ->
+                      links_free m u gr && live m u (asked m gr u) false
+                  | _ -> true)
+                (List.sort (fun a b -> PVersion.compare b a) cands)
+            in
+            if Option.is_none p && !culprits <> [] then doomed := Some !culprits;
+            p
+        | Cg.NPlus.CFeatP (m, _, gr) ->
+            Option.bind (decided_v assigned (Cg.NPlus.CCrate (m, gr))) offered
+        | _ -> None
+      in
+      match pick with
+      | Some c -> c
+      | None ->
+          List.fold_left
+            (fun a b -> if PVersion.compare b a > 0 then b else a)
+            (List.hd cands) cands
+    in
+    (* processing one of cargo's dependencies is, in the encoding, the slot,
+       then what the parent delivers to it at that site, then the class's
+       crate, then the target's own features, forced by then.  The
+       deliveries go before the crate so that its version is chosen seeing
+       every feature asked of it, as cargo's candidate is activated with
+       them. *)
+    let module O = Cargo_order.Make (struct
+      type name = Cg.NPlus.t
+      type version = PVersion.t
+      type assigned = Cg.NPlus.t -> PG.selection
+
+      let equal a b = Cg.NPlus.compare a b = E.Eq
+      let decided = decided
+      let version_equal a b = PVersion.compare a b = 0
+      let root = st.rc
+      let root_features = named
+      let meta (n, v) = meta ar n v
+
+      let doomed () =
+        let d = !doomed in
+        doomed := None;
+        d
+
+      let hopeless assigned _ (d : P.dep) =
+        let _, live, _ = lookahead ~assigned in
+        not (List.exists (live_by d live) (candidates d))
+
+      let candidates d = List.length (candidates d)
+
+      let owned (t, u) gr =
+        match meta (t, u) with
+        | None -> []
+        | Some m ->
+            List.map (fun (f, _) -> Cg.NPlus.CFeatP (t, f, gr)) m.P.v_feats
+            @ (match m.P.v_links with
+              | Some l -> [ Cg.NPlus.CLink l ]
+              | None -> [])
+
+      let root_step assigned =
+        let n, v = st.rc in
+        let gr = compat_class v in
+        List.find_opt (is_open assigned)
+          (Cg.NPlus.CRoot :: Cg.NPlus.CCrate (n, gr) :: owned (n, v) gr)
+
+      let dep_step assigned (n, v) (d : P.dep) =
+        let sigma = Cg.NPlus.CSlot (n, v, site_key d) in
+        match assigned sigma with
+        | PG.Entailed _ -> Cargo_order.Decide sigma
+        | PG.Decided { PVersion.v = Cg.VPlus.WClass gr; _ } -> (
+            let delivered =
+              match meta (n, v) with
+              | None -> []
+              | Some m ->
+                  List.concat_map
+                    (fun (f, es) ->
+                      List.filter_map
+                        (function
+                          | P.FDepFeat (a, f') | P.FWeakFeat (a, f')
+                            when a = d.P.d_alias ->
+                              Some (Cg.NPlus.CDec (n, v, f, site_key d, f'))
+                          | _ -> None)
+                        es)
+                    m.P.v_feats
+            in
+            let t = d.P.d_target in
+            let g = Cg.NPlus.CCrate (t, gr) in
+            match List.find_opt (is_open assigned) delivered with
+            | Some x -> Cargo_order.Decide x
+            | None -> (
+                match assigned g with
+                | PG.Entailed _ -> Cargo_order.Decide g
+                | PG.Decided { PVersion.v = Cg.VPlus.WOrig u; _ } -> (
+                    match List.find_opt (is_open assigned) (owned (t, u) gr) with
+                    | Some x -> Cargo_order.Decide x
+                    | None -> Cargo_order.Activated (t, u))
+                | _ -> Cargo_order.Skip))
+        | _ -> Cargo_order.Skip
+    end) in
+    let o = O.create () in
+    let r =
+      PG.solve ~next:(O.next o) ~choose ~vers:versions ~deps:dependencies
         [ ( Cg.NPlus.CRoot,
             PG.Ranges.of_list [ tag Cg.NPlus.CRoot Cg.VPlus.WUnit ] )
         ]
-    with
+    in
+    O.report o;
+    match r with
     | Error inc ->
         Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
         None

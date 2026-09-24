@@ -1,0 +1,2 @@
+{"name":"tr","vers":"1.0.0","deps":[],"features":{"url":[]},"yanked":false}
+{"name":"tr","vers":"1.1.0","deps":[{"name":"sb","req":">=2, <2.5","features":[],"optional":true,"default_features":true,"kind":"normal"}],"features":{"url":["sb"]},"yanked":false}

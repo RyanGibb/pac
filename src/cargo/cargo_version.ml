@@ -29,7 +29,7 @@ let int_of_digits s =
 
 let split_on c s = String.split_on_char c s
 
-let parse (s : string) : t =
+let parse_fresh (s : string) : t =
   let s =
     match String.index_opt s '+' with Some i -> String.sub s 0 i | None -> s
   in
@@ -56,6 +56,19 @@ let parse (s : string) : t =
     pre = (if pre = "" then [] else split_on '.' pre);
   }
 
+(* compare sits under every range operation the solver makes, and parsing
+   afresh there was most of a large solve's time; a run meets a few tens
+   of thousands of distinct version strings *)
+let parsed : (string, t) Hashtbl.t = Hashtbl.create 65536
+
+let parse (s : string) : t =
+  match Hashtbl.find_opt parsed s with
+  | Some p -> p
+  | None ->
+      let p = parse_fresh s in
+      Hashtbl.add parsed s p;
+      p
+
 let is_num s = s <> "" && String.for_all is_digit s
 
 let cmp_id a b =
@@ -77,7 +90,7 @@ let rec cmp_ids a b =
       let c = cmp_id x y in
       if c <> 0 then c else cmp_ids xs ys
 
-let compare (a : string) (b : string) : int =
+let compare_parsed (a : string) (b : string) : int =
   let x = parse a and y = parse b in
   let c = compare x.major y.major in
   if c <> 0 then c
@@ -93,6 +106,53 @@ let compare (a : string) (b : string) : int =
         | [], _ -> 1
         | _, [] -> -1
         | p, q -> cmp_ids p q
+
+(* The release cores are compared off the strings themselves, a field at a
+   time as parse reads them and no further than the first that differs:
+   compare runs under every range operation the solver makes, and even a
+   table of parsed versions costs a hash of the string there.  Only equal
+   cores leave the pre-release to decide. *)
+
+(* parse's num of the part at !i, leaving !i at the next part, or at the
+   end once the core has ended *)
+let field s n i =
+  let j = ref !i in
+  while !j < n && s.[!j] = '0' do
+    incr j
+  done;
+  let v = ref 0 and d = ref 0 in
+  while !j < n && is_digit s.[!j] do
+    if !d < 9 then v := (!v * 10) + (Char.code s.[!j] - 48);
+    incr d;
+    incr j
+  done;
+  while !j < n && s.[!j] <> '.' && s.[!j] <> '-' && s.[!j] <> '+' do
+    incr j
+  done;
+  i := if !j < n && s.[!j] = '.' then !j + 1 else n;
+  if !d > 9 then max_int else !v
+
+(* no '-' ahead of the build metadata, so no pre-release *)
+let plain s =
+  let n = String.length s in
+  let rec go i =
+    i = n || match s.[i] with '+' -> true | '-' -> false | _ -> go (i + 1)
+  in
+  go 0
+
+let compare (a : string) (b : string) : int =
+  let na = String.length a and nb = String.length b in
+  let ia = ref 0 and ib = ref 0 in
+  let c = Int.compare (field a na ia) (field b nb ib) in
+  if c <> 0 then c
+  else
+    let c = Int.compare (field a na ia) (field b nb ib) in
+    if c <> 0 then c
+    else
+      let c = Int.compare (field a na ia) (field b nb ib) in
+      if c <> 0 then c
+      else if plain a && plain b then 0
+      else compare_parsed a b
 
 let equal a b = compare a b = 0
 let is_prerelease v = (parse v).pre <> []
