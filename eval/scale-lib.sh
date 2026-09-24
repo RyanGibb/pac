@@ -31,11 +31,13 @@ tool_status() {  # <rc> <answer>
 
 regress_goals() { cat "$S/goals.txt"; }
 
-# The tool's answer into $o.theirs and its status into tool: asked afresh,
-# or under --regress read back from the baseline, <stem>.<ext> for an
-# answer and <stem>.absent for a refusal, which --record writes
+# The tool's answer into $o.theirs, its status into tool and its wall time
+# into twall: asked afresh, or under --regress read back from the
+# baseline, <stem>.<ext> for an answer and <stem>.absent for a refusal,
+# which --record writes
 answer() {  # <baseline stem> <ext> <command asking the tool into $o.theirs>
-  local b=$1.$2 a=$1.absent; shift 2
+  local b=$1.$2 a=$1.absent t0=$EPOCHREALTIME rc; shift 2
+  twall=-
   if [ "$BASELINE" = regress ]; then
     : > "$o.theirs"
     if [ -e "$a" ]; then tool=refuse
@@ -43,8 +45,9 @@ answer() {  # <baseline stem> <ext> <command asking the tool into $o.theirs>
     else tool=unrecorded; fi
     return
   fi
-  "$@"
-  tool=$(tool_status $? "$o.theirs")
+  "$@"; rc=$?
+  twall=$(since "$t0")
+  tool=$(tool_status $rc "$o.theirs")
   if [ "$BASELINE" = record ]; then
     rm -f "$b" "$a"
     case $tool in ok) cp "$o.theirs" "$b" ;; refuse) : > "$a" ;; esac

@@ -108,15 +108,17 @@ one() {
   } | sed 's/%2[Ff]/\//g' | sort -u |
     grep -vxF -f <(sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^$/d' "$S/tolerated-misses") > "$o.miss"
   [ -s "$o.miss" ] && closed=no || closed=yes
-  echo "goal=$1 mode=default pac=$pac tool=$tool corr=$corr valid=$valid oo=$oo to=$to wall=$wall closed=$closed nodes=$nodes edges=$edges"
+  echo "goal=$1 mode=default pac=$pac tool=$tool corr=$corr valid=$valid oo=$oo to=$to wall=$wall twall=$twall closed=$closed nodes=$nodes edges=$edges"
 }
 
 totals() {
   awk '{for (i = 1; i <= NF; i++) {j = index($i, "="); f[substr($i, 1, j - 1)] = substr($i, j + 1)}
         c += f["closed"] == "yes"
-        if (f["nodes"] != "-") {g++; split(f["nodes"] "," f["edges"], a, ","); for (i = 1; i <= 6; i++) t[i] += a[i]}}
+        if (f["nodes"] != "-") {g++; split(f["nodes"] "," f["edges"], a, ","); for (i = 1; i <= 6; i++) t[i] += a[i]}
+        if (f["twall"] != "-") {w++; pw += f["wall"]; nw += f["twall"]}}
     END {printf "closed %d/%d; over the %d both answer, nodes ours=%d npm=%d agree=%d, edges ours=%d npm=%d agree=%d\n",
-           c, NR, g, t[1], t[2], t[3], t[4], t[5], t[6]}' "$run/results.txt"
+           c, NR, g, t[1], t[2], t[3], t[4], t[5], t[6]
+         if (w) printf "wall time over the %d goals npm was asked: pac %.1fs, npm %.1fs\n", w, pw, nw}' "$run/results.txt"
   find "$run/out" -name '*.verdict' -exec cut -f1 {} + | sort | uniq -c |
     sed 's/^ */npm-only edges: /'
 }

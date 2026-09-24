@@ -48,7 +48,8 @@ checked, rather than npm's hoisting heuristic being guessed at:
           declarer, among its requirer's edges.  Hoisted any higher, the
           declarer would look its peer up from a directory that may hold
           another version, which `npm ci` then rejects although the answer
-          is one npm accepts.
+          is one npm accepts.  For the same reason, a name the requirer
+          itself peers on goes beside the requirer rather than inside it.
 
           npm's arborist decides the same question with a third move we
           deliberately do not make: an occupied slot may be taken over,
@@ -145,7 +146,7 @@ def ancestors(path):
     return out
 
 
-def place(root, edges, declarers=frozenset()):
+def place(root, edges, declarers=frozenset(), peers={}):
     out_edges = {}
     for r, key, c in edges:
         out_edges.setdefault(r, []).append((key, c))
@@ -189,12 +190,15 @@ def place(root, edges, declarers=frozenset()):
             for i, anc in enumerate(ancs):
                 if slot(anc, key) in at:
                     lo = i if at[slot(anc, key)] == child else i + 1
+            # npm refuses a peer found in its declarer's own node_modules
+            # (PEER LOCAL), so a name the requirer peers on goes beside it
+            hi = len(ancs) - 1 if path and key in peers.get(node, ()) else len(ancs)
             # a declarer already on the requirer's own path is a cycle, and
             # nesting it again would not end
             if child in declarers and all(at[anc] != child for anc in ancs):
-                lo = max(lo, len(ancs) - 1)
+                lo = max(lo, hi - 1)
             target = None
-            for anc in ancs[lo:]:
+            for anc in ancs[lo:hi] + ancs[max(lo, hi):]:
                 if slot(anc, key) in at:
                     target = anc          # shared: already holds our provider
                     break
@@ -271,15 +275,17 @@ def main():
     with open(oursp) as f:
         root, nodes, edges = parse_ours(f.read())
 
-    declarers = set()
+    declarers, peers = set(), {}
     for n in nodes:
         m = manifest(cache, n[0], n[1])
         meta = m.get("peerDependenciesMeta")
         meta = meta if isinstance(meta, dict) else {}
-        if any(not (meta.get(p) or {}).get("optional")
-               for p in (m.get("peerDependencies") or {})):
+        # a dependency of the same name replaces the peer
+        deps = set(m.get("dependencies") or {}) | set(m.get("optionalDependencies") or {})
+        peers[n] = set(m.get("peerDependencies") or {}) - deps
+        if any(not (meta.get(p) or {}).get("optional") for p in peers[n]):
             declarers.add(n)
-    at = place(root, edges, declarers)
+    at = place(root, edges, declarers, peers)
     placed = {n for n in at.values()}
     orphans = sorted(nodes - placed)
 

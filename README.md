@@ -103,7 +103,7 @@ node eval/npm/goals.js repos/npm targeted > /tmp/ranges.txt && eval/npm/scale.sh
 ```
 
 At either level the run directory gets one line per goal and mode in `results.txt`, `goal= mode= pac= tool= corr= valid= oo= to= wall=`, and each goal's raw answers under `out/`.
-Some ecosystems add fields: opam's `pin` and `mccs`, npm's `closed`, `nodes` and `edges`, and cargo's `kept` and `identical`.
+Some ecosystems add fields: opam's `pin` and `mccs`, npm's `twall` (npm's own wall time, `-` under `--regress`), `closed`, `nodes` and `edges`, and cargo's `kept` and `identical`.
 `eval/<eco>/triage.py <run-dir>` sorts the goals into classes, per mode and per pool, and clusters the divergences:
 
 | class | meaning |

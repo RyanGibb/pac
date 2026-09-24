@@ -75,12 +75,14 @@ def lock_sets(lock, peer_parent):
     plain, peer, unresolved = [], [], set()
     for path, e in pkgs.items():
         meta = e.get("peerDependenciesMeta", {})
-        for d in sorted(set(e.get("dependencies", {})) | set(e.get("optionalDependencies", {}))):
+        deps = set(e.get("dependencies", {})) | set(e.get("optionalDependencies", {}))
+        for d in sorted(deps):
             q = resolve(path, d)
             (plain.append((path, d, q)) if q else unresolved.add((path, d)))
-        # npm >=7 installs a peer unless the declarer marks it optional
+        # npm >=7 installs a peer unless the declarer marks it optional, and
+        # a dependency of the same name replaces the peer's edge
         for d in sorted(e.get("peerDependencies", {})):
-            if meta.get(d, {}).get("optional", False):
+            if meta.get(d, {}).get("optional", False) or d in deps:
                 continue
             q = resolve(path, d)
             (peer.append((path, d, q)) if q else unresolved.add((path, d)))
