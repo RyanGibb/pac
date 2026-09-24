@@ -1,0 +1,4 @@
+{"name":"outer","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"outer","version":"1.0.0",
+    "dependencies":{"mark":"^3.0.0 || ^4.0.0"}}}}

@@ -1,0 +1,4 @@
+{"name":"hoist-app","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"hoist-app","version":"1.0.0",
+    "dependencies":{"alpha":"^1","zeta":"^1"}}}}

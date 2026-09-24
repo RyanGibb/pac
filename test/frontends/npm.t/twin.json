@@ -1,0 +1,5 @@
+{"name":"twin","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"twin","version":"1.0.0",
+    "dependencies":{"tok":"^3.0.0"},
+    "peerDependencies":{"tok":"^4.0.0","theme":"^1"}}}}

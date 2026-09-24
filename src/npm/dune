@@ -12,7 +12,7 @@
  ; them off wholesale.
  (flags
   (:standard -warn-error -a))
- (libraries npm_frontend pac pubgrub))
+ (libraries npm_frontend pac pubgrub unix))
 
 (test
  (name test_npm_version)

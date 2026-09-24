@@ -142,7 +142,10 @@ let fetch ar (n : string) : string option =
   else if ar.offline then None
   else begin
     mkdir_p ar.cache;
-    let tmp = f ^ ".tmp" in
+    (* one scratch file per process: processes sharing a cache fetch the
+       same name at once, and a shared one is renamed away under the
+       other; the rename stays within the directory, so it is atomic *)
+    let tmp = Printf.sprintf "%s.%d.tmp" f (Unix.getpid ()) in
     let url = "https://registry.npmjs.org/" ^ escape n in
     let cmd =
       (* a name with no packument is normal here: the registry is full of
@@ -303,9 +306,9 @@ type state = {
   vcache : (Np.Nm.name, Np.Vs.version list) Hashtbl.t;
   (* the optional-dependency verdict, keyed by what decides it *)
   opt_keep : (string * string, bool) Hashtbl.t;
-  (* each copy's requirers, (key, version) to the package whose directory
-     key holds it, as far as the solver has looked *)
-  holders : ((string * string) * string, (string * string) * string) Hashtbl.t;
+  (* each package's directories, as far as the solver has looked: the
+     intermediates its granular node and its directories point to *)
+  dirs : ((string * string) * string, Np.Nm.name list) Hashtbl.t;
   mutable n_lookups : int;
 }
 
@@ -325,7 +328,7 @@ let mk_state ar root =
     repo_of = Hashtbl.create 4096;
     vcache = Hashtbl.create 65536;
     opt_keep = Hashtbl.create 1024;
-    holders = Hashtbl.create 4096;
+    dirs = Hashtbl.create 4096;
     n_lookups = 0;
   }
 
@@ -438,14 +441,6 @@ let dependencies st p =
       Hashtbl.replace st.dep_tbl p l;
       l
 
-(* the dependencies introducing key k, for granSubInst; the same filter
-   as dependencies, so the two views of a package's dependencies cannot
-   disagree about keysOf *)
-let dependencies_by_key st (k : string * string) =
-  List.filter_map
-    (fun (p, d) -> if dep_keep st d then Some (p, xdep st.ar d) else None)
-    (Hashtbl.find_all st.ar.dep_by_key k)
-
 (* dependenciesOf I p: what depActive keeps, i.e. dev dependencies only
    at the root *)
 let active_dependencies st p =
@@ -481,11 +476,15 @@ let peer_dependencies_named st (n : string) =
 
 (* versions_lookupGran: granSubInst I k cuts the repository to the key's
    registry name.  Two narrowings below are the driver's own.  keysOf is
-   a union of one key per dependency plus the root's, and the granular
-   lookup asks it only whether it contains k, so dependencies that
-   cannot introduce k are dropped.  The lookup asks the repository only
-   whether the looked-up version is published, so it is cut to that one
-   package. *)
+   a union of one key per dependency and per peer dependency plus the
+   root's, and the granular lookup asks it only whether it contains k, so
+   one dependency introducing k answers it, or failing that one peer:
+   google-closure-compiler's releases pin each platform binary at a range
+   of their own, and testing every such dependency costs a pass over the
+   binary's versions per range.  The filter is the one dependencies
+   applies, so the two views of a package's dependencies cannot disagree
+   about keysOf.  The lookup asks the repository only whether the
+   looked-up version is published, so it is cut to that one package. *)
 let gran_sub_inst st (k : string * string) (w : string) =
   let p = (snd k, w) in
   let repo =
@@ -493,9 +492,19 @@ let gran_sub_inst st (k : string * string) (w : string) =
       Np.RepoSet.add p Np.RepoSet.empty
     else Np.RepoSet.empty
   in
-  let deps = dependencies_by_key st k in
+  let deps =
+    Option.to_list
+      (List.find_map
+         (fun (q, d) -> if dep_keep st d then Some (q, xdep st.ar d) else None)
+         (Hashtbl.find_all st.ar.dep_by_key k))
+  in
   let peers =
-    if fst k = snd k then peer_dependencies_named st (fst k) else []
+    if deps = [] && fst k = snd k then
+      Option.to_list
+        (Option.map
+           (fun (q, r) -> (q, xpeer st.ar r))
+           (Hashtbl.find_opt st.ar.peer_by_name (fst k)))
+    else []
   in
   mk_inst st ~repo ~deps ~peers
 
@@ -553,11 +562,20 @@ let dependees st (s : T.Pkg.t) : T.Dependees.t list =
     | Np.Nm.Granular (k, _), Np.Vs.Orig v ->
         R.dependees (pkg_sub_inst st (snd k, v)) s
     | Np.Nm.Intermediate (k, v, m), Np.Vs.Orig u ->
-        Hashtbl.add st.holders (m, u) (k, v);
         R.dependees (peer_sub_inst st (snd k, v) m u) s
     | _ -> T.DependeesSet.empty
   in
-  T.DependeesSet.elements hs
+  let hs = T.DependeesSet.elements hs in
+  List.iter
+    (fun ((m, _) : T.Dependees.t) ->
+      match m with
+      | Np.Nm.Intermediate (k, v, _) ->
+          let l = Option.value ~default:[] (Hashtbl.find_opt st.dirs (k, v)) in
+          if not (List.exists (fun x -> Np.Nm.compare x m = E.Eq) l) then
+            Hashtbl.replace st.dirs (k, v) (m :: l)
+      | Np.Nm.Granular _ -> ())
+    hs;
+  hs
 
 (* ---- PubGrub ---- *)
 
@@ -828,83 +846,309 @@ let replace st ~assigned k v (m : string * string) cands c =
   snd
     (List.fold_left step ([], c) (peer_ranges_into st ~assigned k v (fst m)))
 
-let selected ~assigned n (u : string) =
-  let c = Np.Vs.Orig u in
-  match assigned n with
-  | PG.Unselected -> false
-  | PG.Decided w -> PVersion.compare w c = 0
-  | PG.Entailed r -> PG.Ranges.contains c r
+(* Intl.Collator("en"), which arborist orders its queue and a package's
+   dependencies by (@isaacs/string-locale-compare): punctuation counts, and
+   sorts before digits and letters in the root collation's order, so "_"
+   sorts before "-" where byte order has it after; case decides only
+   between strings that are otherwise equal. *)
+let collation =
+  "_-,;:!?.'\"()[]{}@*/\\&#%`^+<=>|~$0123456789abcdefghijklmnopqrstuvwxyz"
 
-(* how far below the root the partial solution holds p, npm reaching the
-   packages of its tree breadth first *)
-let depth st ~assigned =
-  let memo = Hashtbl.create 16 in
-  let rec go ((k, v) as p) =
-    if (snd k, v) = st.root then 0
-    else
-      match Hashtbl.find_opt memo p with
-      | Some d -> d
-      | None ->
-          (* a cycle counts as no way up, until the walk returns *)
-          Hashtbl.replace memo p (max_int / 2);
-          let d =
-            List.fold_left
-              (fun d ((k', v') as q) ->
-                if selected ~assigned (Np.Nm.Intermediate (k', v', k)) v then
-                  min d (1 + go q)
-                else d)
-              (max_int / 2)
-              (Hashtbl.find_all st.holders (k, v))
-          in
-          Hashtbl.replace memo p d;
-          d
+let primary =
+  let t = Array.init 256 (fun i -> 1000 + i) in
+  t.(Char.code ' ') <- -1;
+  String.iteri
+    (fun i c ->
+      t.(Char.code c) <- i;
+      t.(Char.code (Char.uppercase_ascii c)) <- i)
+    collation;
+  t
+
+let collate (a : string) (b : string) : int =
+  let la = String.length a and lb = String.length b in
+  let rec level w i =
+    if i = la || i = lb then compare la lb
+    else match compare (w a.[i]) (w b.[i]) with 0 -> level w (i + 1) | c -> c
   in
-  go
+  let upper c = c >= 'A' && c <= 'Z' in
+  match level (fun c -> primary.(Char.code c)) 0 with
+  | 0 -> ( match level upper 0 with 0 -> compare a b | c -> c)
+  | c -> c
 
-(* npm reaches its tree's packages breadth first, and by name within a
-   depth (DepsQueue, build-ideal-tree.js), and a copy is in the tree only
-   once the package requiring it has been reached; a copy some later
-   package requires is not there yet to be reused *)
-let placed_before st ~assigned (k, v) (m : string * string) (c : PVersion.t) =
-  match c with
-  | Np.Vs.Gran _ -> false
-  | Np.Vs.Orig u ->
-      let depth = depth st ~assigned in
-      let at = (depth (k, v), fst k) in
-      List.exists
-        (fun ((k', v') as q) ->
-          selected ~assigned (Np.Nm.Intermediate (k', v', m)) u
-          && compare (depth q, fst k') at < 0)
-        (Hashtbl.find_all st.holders (m, u))
+(* npm's own tree as the replay has built it: where each copy sits in
+   node_modules, which is what npm's queue is ordered by and what a
+   package's lookup of a name finds *)
+type copy = {
+  id : int;
+  key : string * string;
+  ver : string;
+  up : copy option;
+  depth : int;
+  path : string;
+  kids : (string, copy) Hashtbl.t;
+  (* the directories whose edge npm has resolved at this copy *)
+  seen : (string, unit) Hashtbl.t;
+}
+
+module DepsQueue = Set.Make (struct
+  type t = copy
+
+  let compare x y =
+    match compare x.depth y.depth with
+    | 0 -> ( match collate x.path y.path with 0 -> compare x.id y.id | c -> c)
+    | c -> c
+end)
+
+type order = {
+  mutable queue : DepsQueue.t;
+  mutable current : copy option;
+  mutable ids : int;
+  (* each package's first copy, where choose resolves a directory the
+     replay did not hand out *)
+  first : ((string * string) * string, copy) Hashtbl.t;
+  (* the decisions the tree was built from, which a backtrack can undo *)
+  made : (PName.t, PVersion.t) Hashtbl.t;
+  (* every decision choose returned, latest first, so that the ones a
+     backtrack undid are the ones on top that no longer hold *)
+  mutable decided : (PName.t * PVersion.t) list;
+  (* the directory next handed the solver, and the copy it is resolved at *)
+  mutable pending : (PName.t * copy) option;
+}
+
+let restart st o =
+  let top =
+    {
+      id = 0;
+      key = (fst st.root, fst st.root);
+      ver = snd st.root;
+      up = None;
+      depth = 0;
+      path = "";
+      kids = Hashtbl.create 64;
+      seen = Hashtbl.create 64;
+    }
+  in
+  o.queue <- DepsQueue.singleton top;
+  o.current <- None;
+  o.ids <- 1;
+  Hashtbl.reset o.first;
+  Hashtbl.replace o.first (top.key, top.ver) top;
+  Hashtbl.reset o.made;
+  o.pending <- None
+
+let new_order st =
+  let o =
+    {
+      queue = DepsQueue.empty;
+      current = None;
+      ids = 0;
+      first = Hashtbl.create 1024;
+      made = Hashtbl.create 1024;
+      decided = [];
+      pending = None;
+    }
+  in
+  restart st o;
+  o
+
+(* node's module lookup: the copy's own node_modules, then each one above *)
+let rec resolve (x : copy) (a : string) : copy option =
+  match Hashtbl.find_opt x.kids a with
+  | Some c -> Some c
+  | None -> Option.bind x.up (fun u -> resolve u a)
+
+(* the edge a copy's package has on directory a, as npm reads it: the
+   target and the range, under the root's flat override *)
+let edge_at st (x : copy) (a : string) =
+  List.find_map
+    (fun (d : Np.coq_Dependency) ->
+      if d.Np.d_dir = a then
+        Some
+          ( d.Np.d_target,
+            match List.assoc_opt d.Np.d_target st.ovr with
+            | Some o -> o
+            | None -> d.Np.d_range )
+      else None)
+    (active_dependencies st (snd x.key, x.ver))
+
+let fits (t, rg) (m : string * string) (u : string) =
+  snd m = t && Np.rgHolds rg u
+
+(* PlaceDep: from the requirer up, the shallowest node_modules npm can put
+   the copy in, stopping at the first that holds another version of the
+   name (can-place-dep.js checkCanPlaceCurrent, CONFLICT, as npm neither
+   replaces nor keeps there when the lookup below already failed).  A
+   level is refused if its own package wants a version the copy is not,
+   or if a package below it that already reaches a copy further up would
+   no longer be satisfied (checkCanPlaceNoCurrent); a level whose package
+   peers on the name is passed over.  Replacing an older copy, which npm
+   does when every edge into it accepts the newer, is not modelled. *)
+let place st o (x : copy) (m : string * string) (u : string) =
+  let a = fst m in
+  let breaks t (above : copy) =
+    let rec walk (d : copy) =
+      (not (Hashtbl.mem d.kids a))
+      && ((match edge_at st d a with
+            | Some e -> fits e above.key above.ver && not (fits e m u)
+            | None -> false)
+         || Hashtbl.fold (fun _ k acc -> acc || walk k) d.kids false)
+    in
+    walk t
+  in
+  let peers_on (t : copy) =
+    List.exists
+      (fun (r : Np.coq_PeerDependency) -> r.Np.p_name = a)
+      (peer_dependencies st (snd t.key, t.ver))
+  in
+  let fine (t : copy) =
+    t == x
+    || (match edge_at st t a with Some e -> fits e m u | None -> true)
+       &&
+       match Option.bind t.up (fun p -> resolve p a) with
+       | Some above -> not (breaks t above)
+       | None -> true
+  in
+  let rec climb (t : copy) best =
+    let onward b = match t.up with Some p -> climb p b | None -> b in
+    if t.up <> None && peers_on t then onward best
+    else if Hashtbl.mem t.kids a || not (fine t) then best
+    else onward (Some t)
+  in
+  let at = match climb x None with Some t -> t | None -> x in
+  let c =
+    {
+      id = o.ids;
+      key = m;
+      ver = u;
+      up = Some at;
+      depth = at.depth + 1;
+      path = at.path ^ "/node_modules/" ^ a;
+      kids = Hashtbl.create 8;
+      seen = Hashtbl.create 8;
+    }
+  in
+  o.ids <- o.ids + 1;
+  Hashtbl.replace at.kids a c;
+  if not (Hashtbl.mem o.first (m, u)) then Hashtbl.replace o.first (m, u) c;
+  o.queue <- DepsQueue.add c o.queue
+
+(* npm resolving x's edge on directory m, which the solver has decided at
+   u: nothing happens if x's lookup already finds that copy *)
+let settle st o (x : copy) (m : string * string) (u : string) =
+  match resolve x (fst m) with
+  | Some c when c.key = m && c.ver = u -> ()
+  | _ -> place st o x m u
+
+let dir_of (n : PName.t) =
+  match n with
+  | Np.Nm.Intermediate (_, _, m) -> fst m
+  | Np.Nm.Granular (k, _) -> fst k
+
+(* build-ideal-tree.js: #buildDepStep pops the copy that is shallowest in
+   node_modules, then first by path (DepsQueue), and places what each of
+   its problem edges fetches in the order of the edges' names; each copy
+   placed joins the queue.  The replay runs that loop over the solver's
+   decisions until it reaches a directory not yet decided, which is the
+   one to decide next. *)
+let rec advance st ~assigned o =
+  match o.current with
+  | None -> (
+      match DepsQueue.min_elt_opt o.queue with
+      | None -> None
+      | Some x ->
+          o.queue <- DepsQueue.remove x o.queue;
+          o.current <- Some x;
+          advance st ~assigned o)
+  | Some x -> (
+      let open_dirs =
+        List.filter
+          (fun n ->
+            (not (Hashtbl.mem x.seen (dir_of n)))
+            && match assigned n with PG.Unselected -> false | _ -> true)
+          (Option.value ~default:[] (Hashtbl.find_opt st.dirs (x.key, x.ver)))
+      in
+      match List.sort (fun a b -> collate (dir_of a) (dir_of b)) open_dirs with
+      | [] ->
+          o.current <- None;
+          advance st ~assigned o
+      | n :: _ -> (
+          match (n, assigned n) with
+          | Np.Nm.Intermediate (_, _, m), PG.Decided (Np.Vs.Orig u) ->
+              settle st o x m u;
+              Hashtbl.replace x.seen (fst m) ();
+              Hashtbl.replace o.made n (Np.Vs.Orig u);
+              advance st ~assigned o
+          | _, PG.Decided _ ->
+              Hashtbl.replace x.seen (dir_of n) ();
+              advance st ~assigned o
+          | _ -> Some (n, x)))
+
+(* The solver's `next`: a granular name first, since it has one version and
+   only opens its package's directories, then the directory npm resolves
+   next.  A backtrack that undid a decision the tree was built from starts
+   the replay again from the root, over the decisions that stand. *)
+let next st o ~assigned (open_names : (PName.t * int) list) : PName.t =
+  let holds (n, v) =
+    match assigned n with
+    | PG.Decided w -> PVersion.compare v w = 0
+    | _ -> false
+  in
+  let rec undo = function
+    | d :: rest when not (holds d) ->
+        if Hashtbl.mem o.made (fst d) then restart st o;
+        undo rest
+    | l -> l
+  in
+  o.decided <- undo o.decided;
+  match
+    List.find_opt
+      (fun (n, _) -> match n with Np.Nm.Granular _ -> true | _ -> false)
+      open_names
+  with
+  | Some (n, _) -> n
+  | None -> (
+      match advance st ~assigned o with
+      | Some (n, x) ->
+          o.pending <- Some (n, x);
+          n
+      | None -> fst (List.hd open_names))
 
 (* npm leaves a slot on a version its tree already holds when the range
    admits it: an edge whose node_modules lookup finds a satisfying copy is
-   valid, so #problemEdges fetches nothing for it, and a peer slot is filled
-   from the tree the same way.  So a version the partial solution already
-   carries outranks both the dist-tag and the newest; resolving afresh is
-   what brings in a second copy of a package the answer already holds.  For
-   a dependency, only a copy placed before npm reaches the requirer counts;
-   a peer slot keeps any copy, npm placing peers "trying a bit harder to be
-   singletons" (can-place-dep.js, preferDedupe).
-   Carried is anywhere in the answer, where npm's lookup sees only the
-   requirer's chain of node_modules.  Preference only, as in deb_solve's
+   valid, so #problemEdges fetches nothing for it.  So the copy the
+   requirer's lookup finds in the replayed tree outranks both the dist-tag
+   and the newest; resolving afresh is what brings in a second copy of a
+   package npm's tree already holds.  A peer slot is filled from anywhere in
+   the answer, npm placing peers "trying a bit harder to be singletons"
+   (can-place-dep.js, preferDedupe).  Preference only, as in deb_solve's
    alt_carried: the filter falls back to the whole candidate list, so
    nothing that was satisfiable stops being so. *)
-let choose st ~assigned (n : PName.t) (cands : PVersion.t list) : PVersion.t =
+let choose st o ~assigned (n : PName.t) (cands : PVersion.t list) : PVersion.t =
   match n with
   | Np.Nm.Granular _ -> greatest cands
   | Np.Nm.Intermediate (k, v, m) ->
+      let peer = peer_only st (snd k, v) (fst m) in
+      let at =
+        match o.pending with
+        | Some (n', x) when PName.compare n n' = 0 -> Some x
+        | _ -> Hashtbl.find_opt o.first (k, v)
+      in
       let reuse c =
-        carried ~assigned m c
-        && (peer_only st (snd k, v) (fst m)
-           || placed_before st ~assigned (k, v) m c)
+        match (at, c) with
+        | _ when peer -> carried ~assigned m c
+        | Some x, Np.Vs.Orig u -> (
+            match resolve x (fst m) with
+            | Some y -> y.key = m && y.ver = u
+            | None -> false)
+        | _ -> false
       in
       let reused =
         match List.filter reuse cands with [] -> cands | reused -> reused
       in
       let c = pick st (snd m) reused in
-      if peer_only st (snd k, v) (fst m) then replace st ~assigned k v m cands c
-      else c
+      let c = if peer then replace st ~assigned k v m cands c else c in
+      o.decided <- (n, c) :: o.decided;
+      c
 
 (* A dependee's versions as runs of the name's own sorted versions rather
    than as one point per version.  The solver tests every version of a name
@@ -947,6 +1191,7 @@ type result = {
 let solve ?(debug = false) ar (root : string * string) =
   Pubgrub.set_debug debug;
   let st = mk_state ar root in
+  let order = new_order st in
   let root_key = (fst root, fst root) in
   let root_n = Np.Nm.Granular (root_key, snd root) in
   let versions n = versions st n in
@@ -967,7 +1212,8 @@ let solve ?(debug = false) ar (root : string * string) =
         r
   in
   match
-    PG.solve ~choose:(choose st) ~vers:versions ~deps:dependencies
+    PG.solve ~next:(next st order) ~choose:(choose st order) ~vers:versions
+      ~deps:dependencies
       [ (root_n, PG.Ranges.of_list [ Np.Vs.Orig (snd root) ]) ]
   with
   | Error inc ->

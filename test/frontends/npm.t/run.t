@@ -34,25 +34,24 @@ polyfill is in the cache.
   cone: 9 packages, 15 versions, 0 packuments fetched
   encoded solution: 13 core nodes (31 lookups)
 
-A root peer edge is an ordinary peer edge, so a name the root both depends
-on and declares a peer for is narrowed by both ranges at once.  dual-app
-depends on dual >=1.1.0 and declares a peer on dual <=1.2.0, so 1.2.0 is
-the only newest version satisfying both -- 1.3.0 would win on the
-dependency alone.  shim is the same pair with the peer optional: the root
-fills the directory itself, so the peer range still binds and shim ^1
-lands on 1.0.0 rather than 1.1.0.
+A name the root both depends on and declares a peer for is a dependency
+only, as it is for any package: npm keeps one edge per name and a
+dependency replaces the peer.  dual-app depends on dual >=1.1.0 and
+declares a peer on dual <=1.2.0, and 1.3.0 installs, as the dependency
+alone picks it.  shim is the same pair with the peer optional, and shim ^1
+lands on 1.1.0.
 
   $ ../../../src/main.exe npm --offline --cache . --tree dual-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root dual-app 1.0.0
   packages (3):
-    dual 1.2.0
+    dual 1.3.0
     dual-app 1.0.0
-    shim 1.0.0
+    shim 1.1.0
   node_modules (2 edges):
-    dual-app 1.0.0 <- dual 1.2.0
-    dual-app 1.0.0 <- shim 1.0.0
+    dual-app 1.0.0 <- dual 1.3.0
+    dual-app 1.0.0 <- shim 1.1.0
   cone: 3 packages, 7 versions, 0 packuments fetched
-  encoded solution: 5 core nodes (13 lookups)
+  encoded solution: 5 core nodes (12 lookups)
 
 Prerelease admission is scoped to a single comparator set rather than to
 the range that holds it.  codec publishes 1.0.0 and the newer 1.0.1-alpha,
@@ -242,6 +241,36 @@ peer dependency's range exactly as it replaces a dependency's.
   cone: 3 packages, 4 versions, 0 packuments fetched
   encoded solution: 5 core nodes (11 lookups)
 
+An override to * is no override at all: npm reads an edge's range from an
+override only when its value is not * (arborist edge.js, spec), and it
+reads an empty value as *.  ovr-star-app overrides tok to * and ovr-empty-app
+to "", and in both holder's ^3.0.0 still binds: tok 3.0.2, not the latest
+4.0.0.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree ovr-star-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root ovr-star-app 1.0.0
+  packages (3):
+    holder 1.0.0
+    ovr-star-app 1.0.0
+    tok 3.0.2
+  node_modules (2 edges):
+    ovr-star-app 1.0.0 <- holder 1.0.0
+    holder 1.0.0 <- tok 3.0.2
+  cone: 3 packages, 4 versions, 0 packuments fetched
+  encoded solution: 5 core nodes (10 lookups)
+
+  $ ../../../src/main.exe npm --offline --cache . --tree ovr-empty-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root ovr-empty-app 1.0.0
+  packages (3):
+    holder 1.0.0
+    ovr-empty-app 1.0.0
+    tok 3.0.2
+  node_modules (2 edges):
+    ovr-empty-app 1.0.0 <- holder 1.0.0
+    holder 1.0.0 <- tok 3.0.2
+  cone: 3 packages, 4 versions, 0 packuments fetched
+  encoded solution: 5 core nodes (10 lookups)
+
 npm leaves an edge on a version its tree already holds when the range
 admits it: a slot whose node_modules lookup finds a satisfying copy is not a
 problem edge, and nothing is fetched for it.  reuse-app depends on holder,
@@ -264,12 +293,11 @@ then finds that copy: one tok, 3.0.2, although latest is 4.0.0.
   cone: 4 packages, 5 versions, 0 packuments fetched
   encoded solution: 8 core nodes (17 lookups)
 
-Only a copy already placed is reused, and npm reaches a tree's packages
-breadth first, a package only after the one requiring it.  reach-app
-depends on early, which depends on tok at * and on late, whose tok is
-^3.0.0.  npm places early's tok 4.0.0 before it reaches late, which gets a
-3.0.2 of its own: a copy that only a later package requires is not there to
-be reused.
+Only a copy already placed is reused, and npm reaches a package only after
+the one requiring it has placed it.  reach-app depends on early, which
+depends on tok at * and on late, whose tok is ^3.0.0.  npm places early's
+tok 4.0.0 before it reaches late, which gets a 3.0.2 of its own: a copy
+that only a later package requires is not there to be reused.
 
   $ ../../../src/main.exe npm --offline --cache . --tree reach-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root reach-app 1.0.0
@@ -286,6 +314,53 @@ be reused.
     early 1.0.0 <- tok 4.0.0
   cone: 4 packages, 5 versions, 0 packuments fetched
   encoded solution: 9 core nodes (19 lookups)
+
+npm's queue is ordered by where a copy sits in node_modules, not by how
+far it is from the root, and npm hoists: every package in hoist-app's tree
+sits at the top, so npm reaches them by name.  alpha brings mid, mid brings
+stream, and stream's tok ~3.0.0 is placed before npm reaches zeta, whose
+^3.0.0 || ^4.0.0 then finds it: one tok, 3.0.2.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree hoist-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root hoist-app 1.0.0
+  packages (6):
+    alpha 1.0.0
+    hoist-app 1.0.0
+    mid 1.0.0
+    stream 1.0.0
+    tok 3.0.2
+    zeta 1.0.0
+  node_modules (6 edges):
+    hoist-app 1.0.0 <- alpha 1.0.0
+    alpha 1.0.0 <- mid 1.0.0
+    mid 1.0.0 <- stream 1.0.0
+    stream 1.0.0 <- tok 3.0.2
+    zeta 1.0.0 <- tok 3.0.2
+    hoist-app 1.0.0 <- zeta 1.0.0
+  cone: 6 packages, 7 versions, 0 packuments fetched
+  encoded solution: 12 core nodes (25 lookups)
+
+A copy nested in one package's node_modules is not there for another.
+nest-app depends on mark ^4 and on inner, whose mark ~3.0.0 is nested
+under it since 4.0.0 holds the top; outer's ^3.0.0 || ^4.0.0 looks up the
+top and keeps 4.0.0, although 3.0.2 is tagged latest.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree nest-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root nest-app 1.0.0
+  packages (5):
+    inner 1.0.0
+    mark 3.0.2
+    mark 4.0.0
+    nest-app 1.0.0
+    outer 1.0.0
+  node_modules (5 edges):
+    nest-app 1.0.0 <- inner 1.0.0
+    inner 1.0.0 <- mark 3.0.2
+    nest-app 1.0.0 <- mark 4.0.0
+    outer 1.0.0 <- mark 4.0.0
+    nest-app 1.0.0 <- outer 1.0.0
+  cone: 4 packages, 5 versions, 0 packuments fetched
+  encoded solution: 10 core nodes (21 lookups)
 
 An optional peer that is never installed still narrows its declarer's peer
 set.  resolver peers on linter at * and optionally on linter-plugin, whose
@@ -331,6 +406,27 @@ preset's.
     preset 1.0.0 <- syntax-b 1.2.0
   cone: 5 packages, 10 versions, 0 packuments fetched
   encoded solution: 10 core nodes (26 lookups)
+
+A name a package both depends on and peers on is a dependency only: npm
+keeps one edge per name and loads dependencies after peers, each
+replacing the edge before it (arborist node.js, _loadDeps).  twin depends
+on tok ^3.0.0 and peers on tok ^4.0.0 and on theme ^1; theme is installed
+beside it as its peer, while tok is its own 3.0.2 and nothing asks for a
+4.0.0.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree twin-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root twin-app 1.0.0
+  packages (4):
+    theme 1.0.0
+    tok 3.0.2
+    twin 1.0.0
+    twin-app 1.0.0
+  node_modules (3 edges):
+    twin-app 1.0.0 <- theme 1.0.0
+    twin 1.0.0 <- tok 3.0.2
+    twin-app 1.0.0 <- twin 1.0.0
+  cone: 4 packages, 5 versions, 0 packuments fetched
+  encoded solution: 7 core nodes (14 lookups)
 
 deprecated is a resolution preference, not a warning printed over a pick
 already made: npm-pick-manifest ranks a non-deprecated version above a
@@ -415,6 +511,38 @@ package in a lockfile and complains at install time.
   node_modules edges: 0
   cone: 1 packages, 2 versions, 0 packuments fetched
   encoded solution: 1 core nodes (2 lookups)
+
+Processes sharing a cache fetch into it concurrently, each into a scratch
+file of its own that it renames into place.  This curl writes the
+packument and then waits for the other process's curl to have written its
+own, so the two fetches of theme overlap and the first rename lands while
+the second is still open.
+
+  $ mkdir fetched bin
+  $ cat > bin/curl <<'EOF'
+  > #!/bin/sh
+  > while [ $# -gt 0 ]; do case $1 in -o) o=$2; shift;; esac; shift; done
+  > cp theme.json "$o"; touch "started.$$"; n=0
+  > while [ "$(ls started.* | wc -l)" -lt 2 ] && [ $n -lt 100 ]; do sleep 0.1; n=$((n + 1)); done
+  > EOF
+  $ chmod +x bin/curl
+  $ PATH=$PWD/bin:$PATH ../../../src/main.exe npm --cache fetched theme > a.out 2>&1 &
+  $ PATH=$PWD/bin:$PATH ../../../src/main.exe npm --cache fetched theme > b.out 2>&1; wait
+  $ cat a.out b.out | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root theme 1.0.0
+  packages (1):
+    theme 1.0.0
+  node_modules edges: 0
+  cone: 1 packages, 1 versions, 1 packuments fetched
+  encoded solution: 1 core nodes (2 lookups)
+  root theme 1.0.0
+  packages (1):
+    theme 1.0.0
+  node_modules edges: 0
+  cone: 1 packages, 1 versions, 1 packuments fetched
+  encoded solution: 1 core nodes (2 lookups)
+  $ ls fetched
+  theme.json
 
 A package with no packument in the cache cannot be fetched when offline.
 

@@ -203,11 +203,15 @@ let peer_of (meta : (string * Yojson.Safe.t) list) (key, spec) : peer option =
 
 (* npm reads overrides from the root project's package.json; only the
    flat "name": "range" form is a static override, so a nested object -- which
-   is indexed by the parent chain -- is counted and dropped. *)
+   is indexed by the parent chain -- is counted and dropped.  A value of *
+   overrides nothing: an edge takes its range from an override only when
+   the value is not * (arborist edge.js, spec), and OverrideSet reads an
+   empty value as *. *)
 let overrides_of (j : Yojson.Safe.t) : (string * Npm_version.range) list =
   List.filter_map
     (fun (k, v) ->
       match v with
+      | `String ("*" | "") -> None
       | `String rg when not (unresolvable rg) ->
           Some (k, Npm_version.parse_range rg)
       | _ ->
@@ -235,8 +239,20 @@ let ver_of ~(root : bool) (vers : string) (j : Yojson.Safe.t) : ver option =
         List.filter_map (dep_of ~dev ~optional) (assoc_of (member field j))
       in
       let meta = assoc_of (member "peerDependenciesMeta" j) in
+      (* arborist keeps one edge per name and loads peers first, so a
+         dependency of the same name replaces the peer (node.js,
+         _loadDeps), whether or not this parser can read its spec *)
+      let dep_keys =
+        List.concat_map
+          (fun f -> List.map fst (assoc_of (member f j)))
+          ([ "dependencies"; "optionalDependencies" ]
+          @ if root then [ "devDependencies" ] else [])
+      in
       let peers =
-        List.filter_map (peer_of meta) (assoc_of (member "peerDependencies" j))
+        List.filter_map (peer_of meta)
+          (List.filter
+             (fun (k, _) -> not (List.mem k dep_keys))
+             (assoc_of (member "peerDependencies" j)))
       in
       let opts = deps_of ~dev:false ~optional:true "optionalDependencies" in
       optional_count := !optional_count + List.length opts;

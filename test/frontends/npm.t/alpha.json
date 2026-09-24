@@ -1,0 +1,4 @@
+{"name":"alpha","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"alpha","version":"1.0.0",
+    "dependencies":{"mid":"^1"}}}}
