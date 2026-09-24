@@ -14,9 +14,10 @@
 # opam-test / opam-check-npm-deps version is available.
 #
 # usage: setup.sh [opamroot-dir]   (default /tmp/claude-1000/opam-cmp-root)
+#        REPO=<dir> builds it over another repository
 set -eu
 S="$(cd "$(dirname "$0")" && pwd)"
-REPO="$(cd "$S/../../repos/opam-repository" && pwd)"
+REPO="$(cd "${REPO:-$S/../../repos/opam-repository}" && pwd)"
 export OPAMROOT="${1:-/tmp/claude-1000/opam-cmp-root}"
 
 v=$(opam --version 2>/dev/null || true)

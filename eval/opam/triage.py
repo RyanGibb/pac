@@ -33,15 +33,19 @@ def divergence(r, rows):
 
 
 def invalid(r):
-    """what valid.sh's install, fixup and autoremove had to do; a mode that
+    """what valid.sh's install, fixup and prune had to do; a mode that
     answered as another did shares that one's check"""
     k = unkey(r["goal"]).replace("--", "").replace(" ", "+")
     d = sorted(glob.glob(os.path.join(run, "valid", "*", k + ".fixup")), key=lambda p: "/%s/" % r["mode"] not in p)
-    t = "\n".join(l for ext in (".install", ".fixup", ".autoremove") for l in lines(d[0][:-6] + ext)) if d else ""
+    t = "\n".join(l for ext in (".install", ".fixup") for l in lines(d[0][:-6] + ext)) if d else ""
     verbs = set(re.findall(r"^\s*- (\w+) ", t, re.M))
+    # prune pins every package, so opam words each removal as a conflict
+    # with the pin whatever the reason
+    pruned = d and re.search(r"^\s*- remove ", "\n".join(lines(d[0][:-6] + ".prune")), re.M)
     return ("removes a conflicting package" if "[conflicts with" in t else
             "changes versions" if verbs & {"remove", "downgrade", "upgrade"} else
-            "adds packages" if "install" in verbs else " ".join(sorted(verbs)) or "?")
+            "adds packages" if "install" in verbs else " ".join(sorted(verbs)) or
+            ("holds unneeded packages" if pruned else "?"))
 
 
 def refused(r):

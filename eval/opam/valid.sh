@@ -12,19 +12,17 @@
 # upgrade --fixup`, which resolves for the roots at their installed
 # versions with the fewest changes, so it acts only on an inconsistent
 # state -- a dependency missing, a conflicts, a package no longer
-# available -- and any action at all is that inconsistency.  `opam remove
-# --auto-remove`: the roots need everything installed.  Asking instead
+# available -- and any action at all is that inconsistency.  The same
+# fixup again, every package pinned at its version and the solver told to
+# remove what it can: the roots need everything installed.  Asking instead
 # for the whole selection at exact versions makes every package
 # requested, so none could be found unneeded, and --with-test, --with-doc
 # and --with-dev-setup, which enable dependencies of requested packages
 # only, would be enabled for every package: a different query.
 #
-# Those flags reach fixup through its roots, but autoremove decides what
-# is needed with them off, and would remove a --with-test answer's test
-# dependencies -- as it does from opam's own answer.  Its roots therefore
-# also take the query's direct dependencies under the flags, as `opam list
-# --required-by` evaluates them, which is how `opam install --deps-only`
-# keeps them too.
+# `opam remove --auto-remove` would ask a weaker "needed": it keeps the
+# depopts of whatever it keeps and every arm of an `|`, and decides with
+# --with-test and the like off.  fixup takes those flags through its roots.
 #
 # The solver is opam's own default (builtin-mccs), not the
 # builtin-0install scale.sh takes its baseline from: the question here is
@@ -104,17 +102,16 @@ irc=$?
 opam upgrade --fixup --dry-run "${o[@]}" ${flags[@]+"${flags[@]}"} \
   > "$out/$key.fixup" 2>&1
 frc=$?
-keep=(); lrc=0
-if [ ${#flags[@]} -gt 0 ] && [ ${#roots[@]} -gt 0 ]; then
-  opam list "${o[@]}" -s --columns=package --installed \
-    --required-by="$(IFS=,; echo "${roots[*]}")" "${flags[@]}" \
-    > "$out/$key.keep" 2>&1
-  lrc=$?
-  mapfile -t keep < "$out/$key.keep"
-fi
-state ${roots[@]+"${roots[@]}"} ${keep[@]+"${keep[@]}"}
-opam remove --auto-remove --dry-run "${o[@]}" > "$out/$key.autoremove" 2>&1
+# every version pinned leaves the solver nothing to change but whether a
+# package stays, and with new packages minimised first it removes what it
+# can: any removal is a set the roots do not need, jointly unneeded
+# cycles included
+state ${roots[@]+"${roots[@]}"}
+printf "pinned: %s\n" "$(list "${req[@]}")" >> "$r/cmp/.opam-switch/switch-state"
+OPAMFIXUPCRITERIA=-new,+removed opam upgrade --fixup --dry-run "${o[@]}" \
+  ${flags[@]+"${flags[@]}"} > "$out/$key.prune" 2>&1
 arc=$?
+state ${roots[@]+"${roots[@]}"}
 # opam orders actions, and refuses a cyclic order, only once it has actions
 # to take, and on the installed state the questions above have none.
 # Marking every package for reinstall and reinstalling the roots hands it
@@ -131,16 +128,16 @@ rm -rf "$r"
 acts() { grep -c '^  - [a-z]* ' "$@" | awk -F: '{s+=$NF} END {print s+0}'; }
 n=${#req[@]}
 ch=$(acts "$out/$key.install" "$out/$key.fixup")
-un=$(acts "$out/$key.autoremove")
+un=$(acts "$out/$key.prune")
 re=$(grep -c '^  - recompile ' "$out/$key.reinstall")
-rc=$((irc ? irc : frc ? frc : lrc ? lrc : arc))
+rc=$((irc ? irc : frc ? frc : arc))
 
-# fixup and autoremove print this only for an empty solution, and install
+# both fixups print this only for an empty solution, and install
 # of atoms already satisfied never reaches the solver.  The reinstall must
 # reach all n packages, or a cycle among the rest would go unseen.
 if [ "$rc" -eq 0 ] && [ "$ch" -eq 0 ] && [ "$un" -eq 0 ] &&
    grep -qx 'Nothing to do.' "$out/$key.fixup" &&
-   grep -qx 'Nothing to do.' "$out/$key.autoremove" &&
+   grep -qx 'Nothing to do.' "$out/$key.prune" &&
    ! grep -q 'actions will be simulated' "$out/$key.install"; then
   if grep -q '^The actions to process have cyclic dependencies:' "$out/$key.reinstall"; then
     v=CYCLIC
