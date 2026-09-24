@@ -15,7 +15,8 @@ and node) are pinned by nix/flake.lock; run the harnesses inside `nix develop ./
 which provides them.
 
 Fetched 2026-09-10/11 with scripts/fetch-repos.sh at its defaults
-(DEBIAN_SUITE=stable, DEBIAN_ARCH=amd64, ALPINE_VER=v3.21, ALPINE_ARCH=x86_64).
+(DEBIAN_SUITE=stable, DEBIAN_ARCH=amd64, ALPINE_VER=v3.21, ALPINE_ARCH=x86_64),
+except repos/npm, below.
 
 git checkouts (commit, committer date):
 
@@ -33,28 +34,31 @@ files (sha256):
 
 directory (sha256 of the sorted list of per-file sha256s):
 
-  repos/npm               9e6e134cc8ec0705f56a84eb9a07a811c5271f8d3fc5937a0c97da331fda5dba   3992 packuments, 765M
+  repos/npm               907b43b853e608d1bdb381928c6e8d34d8ad12f80943ec866b4d66fd8924a5b2   5228 packuments and 3 tarballs, 1.1G
 
   cd repos/npm && find . -type f -printf '%P\n' | LC_ALL=C sort | tr '\n' '\0' \
     | xargs -0 sha256sum | awk '{print $1}' | LC_ALL=C sort | sha256sum
 
   repos/npm is an on-demand cache rather than a bulk index, so it grows when a
-  run asks for a name it lacks; eval/npm/seed.sh deliberately fills a symlink
-  farm under the run directory instead, leaving this tree untouched, and the
-  measured sweeps then run against a frozen shim.  A changed hash here means
-  something wrote into the checkout.
+  run asks for a name it lacks; eval/npm/seed.sh and a FILL=1 scale.sh run
+  deliberately fill a symlink farm under the run directory instead, leaving
+  this tree untouched, and the measured sweeps then run against a frozen
+  shim.  A changed hash here means something wrote into the checkout.
 
-  What --fill fetches lands in that farm, not here, so it has to be copied
-  back to be pinned.  3829 packuments were fetched 2026-09-10/11; the other
-  163 are what seed.sh's --fill fetched on 2026-09-20 for names npm asked for
-  and the snapshot lacked, copied here from the farm unchanged -- pac reads
-  them as well, through --cache, so without them the sweep reproduces only
-  from one machine's /tmp.  A farm built from this tree by setup.sh alone
-  reproduces every recorded npm score.  Tarballs, should a goal ever need
-  one, land in tarballs/ beside the farm and must be pinned the same way; no
-  goal fetches one today, since npm asks for a tarball only for a version
-  that bundles or carries a shrinkwrap, and eval/npm/check-misses.sh fails a
-  frozen run that asks for anything the farm lacks.
+  All of it was fetched from registry.npmjs.org on 2026-09-24 between 12:46
+  and 12:53 UTC, not by scripts/fetch-repos.sh.  The 3992 names
+  eval/npm/names.txt lists, which are the goals of a scale run, were fetched
+  first.  The other 1236 packuments are what closing the snapshot over both
+  sides' cones fetched: 50 by seed.sh's --fill, which also chose
+  baseline/roots.txt, and 1186 by a FILL=1 scale.sh pass over every goal,
+  copied here from the farms unchanged -- pac reads them as well, through
+  --cache, so without them the sweep reproduces only from one machine's
+  scratch directory.  tarballs/ holds the three tarballs npm opens because the
+  version bundles its dependencies (npm 11.20.0 and 12.1.0, request 2.11.4);
+  setup.sh links them beside the farm, where the shim serves them.  A frozen
+  scale.sh run over every goal then asked for nothing this tree lacks except
+  one git repository (esprima#harmony, which recast 0.5.27 names), which no
+  snapshot of the registry holds.
 
 The cargo sweeps need nothing pinned beyond repos/crates.io-index above: both
 of them ask cargo only for a lockfile, which it resolves from index rows alone

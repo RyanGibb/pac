@@ -187,6 +187,10 @@ def main():
             rm, vm = snap.manifest(rn, rv), snap.manifest(vn, vv)
             rg = declared(rm, d) if rm else None
             eng = (vm or {}).get("engines", {})
+            # the old array form, ["node >= 0.4"], is no requirement to
+            # checkEngine, which reads engines.node and engines.npm alone
+            if not isinstance(eng, dict):
+                eng = {}
             eng = {k: v for k, v in eng.items()
                    if k in ("node", "npm") and isinstance(v, str) and HOST[k]}
             rows.append((rn, rv, d, vn, vv, rg, vm, eng))

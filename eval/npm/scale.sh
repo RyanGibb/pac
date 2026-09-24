@@ -7,9 +7,13 @@
 # each goal pinned to the version seed.sh chose for it.
 # A goal is closed when neither side asked for a name the snapshot lacks,
 # tolerated-misses aside: only then are both answering about the snapshot.
+# FILL=1 is the pass that closes a snapshot: the shim fetches each miss once
+# into the run's farm, pac's fetches go through it, and what the farm gains
+# is copied into repos/npm afterwards; a miss is then only a name the
+# registry itself refuses.
 # NORM is edges.py's normalisation of npm's edges; NORM= scores them raw.
 # usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [goals-file]
-#        P=<jobs> TIMEOUT=<s> PORT=<shim> NORM=<edges.py flag>
+#        P=<jobs> TIMEOUT=<s> PORT=<shim> NORM=<edges.py flag> FILL=1
 S="$(cd "$(dirname "$0")" && pwd)"
 . "$S/../scale-lib.sh"
 export PORT=${PORT:-8899} NORM=${NORM---peer-parent}
@@ -20,14 +24,26 @@ all_goals() { node "$S/goals.js" "$TOP/repos/npm"; }
 regress_goals() { awk '{print $1 "@" $2}' "$S/baseline/roots.txt"; }
 
 prepare() {
-  snapshot npm
+  [ -n "${FILL:-}" ] || snapshot npm
   bash "$S/setup.sh" "$run" > "$run/setup.log" 2>&1 || { cat "$run/setup.log" >&2; return 1; }
-  # pac fetches a missing packument with curl; this one records the name and fails
+  # pac fetches a missing packument with curl; this one records the name and
+  # fails, or under FILL fetches it through the shim and records only a refusal
   mkdir -p "$run/bin" "$run/work"
-  printf '#!/bin/sh\nfor a; do case $a in https://*) echo "${a##*/}" >> "$PAC_MISS";; esac; done\nexit 22\n' \
-    > "$run/bin/curl"
-  chmod +x "$run/bin/curl"
-  python3 "$S/shim.py" "$PORT" "$run/cache" --frozen &
+  if [ -n "${FILL:-}" ]; then
+    printf '#!/bin/sh\nu=; o=\nwhile [ $# -gt 0 ]; do case $1 in -o) o=$2; shift;; https://*) u=$1;; esac; shift; done\n%s -fsS "http://127.0.0.1:%s/${u##*/}" -o "$o" && exit 0\necho "${u##*/}" >> "$PAC_MISS"; exit 22\n' \
+      "$(command -v curl)" "$PORT" > "$run/bin/curl"
+  else
+    printf '#!/bin/sh\nfor a; do case $a in https://*) echo "${a##*/}" >> "$PAC_MISS";; esac; done\nexit 22\n' \
+      > "$run/bin/curl"
+  fi
+  # the shim fences the registry and nothing else, and npm clones a git
+  # dependency itself, so npm's git records the repository and fails
+  printf '#!/bin/sh\nfor a; do case $a in *://*) echo "$a" >> "$GIT_MISS";; esac; done\nexit 128\n' \
+    > "$run/bin/git"
+  chmod +x "$run/bin/curl" "$run/bin/git"
+  local mode=--frozen
+  [ -z "${FILL:-}" ] || mode=--fill
+  python3 "$S/shim.py" "$PORT" "$run/cache" $mode &
   trap "kill $!" EXIT
   sleep 1
   # another run's shim on PORT would answer from its own farm
@@ -35,7 +51,8 @@ prepare() {
 }
 
 npm_run() {  # <dir> <npm args...>
-  (cd "$1" && shift && HOME=$run/home timeout "$TIMEOUT" npm "$@" --loglevel=http \
+  (cd "$1" && shift && HOME=$run/home npm_config_git=$run/bin/git GIT_MISS=$o.gitmiss \
+     timeout "$TIMEOUT" npm "$@" --loglevel=http \
      --registry "http://127.0.0.1:$PORT" --cache "$run/home/npmcache" \
      --userconfig "$run/home/.npmrc" --globalconfig "$run/home/npmrc-global" \
      --no-audit --no-fund --no-update-notifier)
@@ -58,7 +75,7 @@ one() {
   if [ -n "$BASELINE" ]; then root=${name//@/}; root=pac-root-${root//\//-}
   else root=pac-root-$(printf %s "$1" | md5sum | cut -c1-16); fi
   mkdir -p "$w/lock" "$w/ci"
-  rm -f "$o.pacmiss" "$o.ci" "$run/cache/$root.json"
+  rm -f "$o.pacmiss" "$o.gitmiss" "$o.ci" "$run/cache/$root.json"
   jq -n --arg r "$root" --arg n "$name" --arg s "${2##*@}" \
     '{name: $r, version: "1.0.0", private: true, dependencies: {($n): $s}}' > "$w/lock/package.json"
   cp "$w/lock/package.json" "$w/ci/package.json"
@@ -83,10 +100,11 @@ one() {
       npm_run "$w/ci" ci --dry-run > "$o.ci" 2>&1 && valid=VALID || valid=INVALID
     else valid=ERR; fi
   fi
-  # npm reaches a git dependency past the shim, so that counts as a miss too
-  { cat "$o.pacmiss" 2>/dev/null
+  # a package npm resolved from anywhere but the registry came from outside
+  # the snapshot, however it got past the fence, so it is a miss too
+  { cat "$o.pacmiss" "$o.gitmiss" 2>/dev/null
     sed -n 's|^npm http fetch GET 404 http://[^/]*/\([^ ]*\) .*|\1|p' "$o.npm" "$o.ci" 2>/dev/null
-    grep -o '"resolved": "git[^"]*' "$o.theirs" 2>/dev/null
+    jq -r '.packages[]?.resolved // empty' "$o.theirs" 2>/dev/null | grep -v '^https://registry\.npmjs\.org/'
   } | sed 's/%2[Ff]/\//g' | sort -u |
     grep -vxF -f <(sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^$/d' "$S/tolerated-misses") > "$o.miss"
   [ -s "$o.miss" ] && closed=no || closed=yes

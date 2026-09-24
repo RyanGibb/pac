@@ -87,7 +87,8 @@ if ! python3 "$S/mklock.py" "$RUN/cache" "$out/$slug.ours" "$W/package-lock.json
   exit 1
 fi
 
-( cd "$W" && HOME="$RUN/home" npm ci --dry-run \
+# the shim fences the registry alone, and npm clones a git dependency itself
+( cd "$W" && HOME="$RUN/home" npm_config_git=false npm ci --dry-run \
     --registry "http://127.0.0.1:$PORT" --cache "$RUN/home/npmcache" \
     --userconfig "$RUN/home/.npmrc" --globalconfig "$RUN/home/npmrc-global" \
     --no-audit --no-fund --no-update-notifier ) > "$out/$slug.npmlog" 2>&1

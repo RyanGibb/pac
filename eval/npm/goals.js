@@ -1,5 +1,8 @@
 #!/usr/bin/env node
-// Goals for scale.sh, as name@spec, from every packument in a snapshot.
+// Goals for scale.sh, as name@spec, one per name in names.txt that the
+// snapshot holds a packument for.  The names are listed rather than read off
+// the snapshot directory because closing the snapshot adds packuments, and a
+// name fetched only because some goal's cone reaches it is not a goal.
 // By default spec is the version a bare `npm install <name>` installs, which
 // npm-package-arg reads as the range "*": npm's own npm-pick-manifest asked
 // for "*" at the host npm-version records.  A packument with no such version
@@ -31,8 +34,9 @@ const engineOk = m => {
   try { checkEngine(m, npmVersion, nodeVersion); return true } catch (e) { return false }
 }
 
-for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.json')).sort()) {
-  const name = f.slice(0, -5).replace(/%2F/g, '/')
+const names = fs.readFileSync(path.join(__dirname, 'names.txt'), 'utf8').split('\n').filter(Boolean)
+for (const name of names) {
+  const f = name.replace(/\//g, '%2F') + '.json'
   let pk
   try { pk = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) } catch (e) { continue }
   if (mode !== 'targeted') {

@@ -30,7 +30,8 @@ for f in "$run"/out/*.edges.npmonly; do
   root=$(python3 "$S/pinroot.py" "$run/cache" "$W" $(cut -f4,5 "$f" | sort -u | awk '{printf "%s@%s ", $1, $2}'))
   "$run/pac.exe" npm --offline --cache "$run/cache" --tree --node-version "$nodev" \
     --npm-version "$npmv" "$root" > "$o.out" 2>&1
-  ( cd "$W" && rm -f package-lock.json && HOME="$run/home" npm install --package-lock-only \
+  # the shim fences the registry alone, and npm clones a git dependency itself
+  ( cd "$W" && rm -f package-lock.json && HOME="$run/home" npm_config_git=false npm install --package-lock-only \
       --registry "http://127.0.0.1:$PORT" --cache "$run/home/npmcache" \
       --userconfig "$run/home/.npmrc" --globalconfig "$run/home/npmrc-global" \
       --no-audit --no-fund --no-update-notifier --loglevel=error ) > "$o.npm" 2>&1
@@ -38,6 +39,9 @@ for f in "$run"/out/*.edges.npmonly; do
     printf '%-24s NO ANSWER (see %s.npm, %s.out)\n' "$g" "$o" "$o"
     bad=$((bad+1)); continue
   fi
+  # a package resolved from anywhere but the registry is outside the snapshot
+  jq -r '.packages[]?.resolved // empty' "$W/package-lock.json" |
+    grep -v '^https://registry\.npmjs\.org/' >> "$run/pin-miss.log"
   line=$(python3 "$S/edges.py" "${g%@*}" "$W/package-lock.json" "$o.out" "$o" $NORM)
   echo "$line"
   case $line in

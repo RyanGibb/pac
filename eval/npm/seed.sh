@@ -54,8 +54,10 @@ while read -r g; do
     echo "$g DROP no root our side can resolve in $BACK releases"
     continue
   fi
+  # the shim fills from the registry alone, and npm clones a git dependency
+  # itself, into no snapshot
   ( cd "$W" && rm -f package-lock.json && \
-    HOME="$RUN/home" npm install --package-lock-only \
+    HOME="$RUN/home" npm_config_git=false npm install --package-lock-only \
       --registry "http://127.0.0.1:$PORT" --cache "$RUN/home/npmcache" \
       --userconfig "$RUN/home/.npmrc" --globalconfig "$RUN/home/npmrc-global" \
       --no-audit --no-fund --no-update-notifier --loglevel=error \

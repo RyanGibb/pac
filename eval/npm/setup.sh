@@ -15,8 +15,11 @@ S="$(cd "$(dirname "$0")" && pwd)"
 RUN="${1:-/tmp/npm-cmp}"
 SNAP="$S/../../repos/npm"
 
-mkdir -p "$RUN/cache" "$RUN/home" "$RUN/work"
+mkdir -p "$RUN/cache" "$RUN/home" "$RUN/work" "$RUN/tarballs"
 ln -sfn "$SNAP"/*.json "$RUN/cache/"
+# the tarballs npm opens for a bundling or shrinkwrapped version, which the
+# shim serves from beside the farm
+for t in "$SNAP"/tarballs/*.tgz; do [ -e "$t" ] && ln -sfn "$t" "$RUN/tarballs/"; done
 : > "$RUN/home/.npmrc"
 : > "$RUN/home/npmrc-global"
 

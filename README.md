@@ -121,6 +121,7 @@ Some ecosystems add fields: opam's `pin` and `mccs`, npm's `closed`, `nodes` and
 | `unrecorded` | `--regress` found no recorded answer to the goal |
 
 npm's goals are split further by whether they are closed: whether neither side asked for a name the snapshot lacks.
+npm's index is the names `eval/npm/names.txt` lists, not every packument in `repos/npm`, which also holds what closing the snapshot fetched; `FILL=1` runs `eval/npm/scale.sh` as that closing pass, fetching each miss once into the run's farm.
 npm's edges are scored after `edges.py --peer-parent`, which attributes a peer's edge as pac does; `NORM=` scores them as npm's lock records them.
 `eval/alpine/pin.sh <run-dir>` and `eval/npm/pin.sh <run-dir>` re-ask a run's divergent goals with the tool's picks forced, which tells a preference gap from an instance gap.
 `eval/cargo/features.py` also compares the feature set of each crate in pac's answer with `cargo metadata`'s.

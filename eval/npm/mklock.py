@@ -40,6 +40,16 @@ checked, rather than npm's hoisting heuristic being guessed at:
           node_modules is reached only once, at which point nothing
           below the requirer has been asked anything yet.
 
+          A package with a mandatory peer is the exception to
+          shallowest: it goes in its requirer's own node_modules.  npm
+          resolves a peer from the declarer's parent -- a copy in the
+          declarer's own node_modules is PEER LOCAL, an invalid edge
+          (arborist edge.js) -- and our answer puts the peer beside the
+          declarer, among its requirer's edges.  Hoisted any higher, the
+          declarer would look its peer up from a directory that may hold
+          another version, which `npm ci` then rejects although the answer
+          is one npm accepts.
+
           npm's arborist decides the same question with a third move we
           deliberately do not make: an occupied slot may be taken over,
           evicting an incumbent that could still be pushed deeper
@@ -135,7 +145,7 @@ def ancestors(path):
     return out
 
 
-def place(root, edges):
+def place(root, edges, declarers=frozenset()):
     out_edges = {}
     for r, key, c in edges:
         out_edges.setdefault(r, []).append((key, c))
@@ -179,6 +189,10 @@ def place(root, edges):
             for i, anc in enumerate(ancs):
                 if slot(anc, key) in at:
                     lo = i if at[slot(anc, key)] == child else i + 1
+            # a declarer already on the requirer's own path is a cycle, and
+            # nesting it again would not end
+            if child in declarers and all(at[anc] != child for anc in ancs):
+                lo = max(lo, len(ancs) - 1)
             target = None
             for anc in ancs[lo:]:
                 if slot(anc, key) in at:
@@ -257,7 +271,15 @@ def main():
     with open(oursp) as f:
         root, nodes, edges = parse_ours(f.read())
 
-    at = place(root, edges)
+    declarers = set()
+    for n in nodes:
+        m = manifest(cache, n[0], n[1])
+        meta = m.get("peerDependenciesMeta")
+        meta = meta if isinstance(meta, dict) else {}
+        if any(not (meta.get(p) or {}).get("optional")
+               for p in (m.get("peerDependencies") or {})):
+            declarers.add(n)
+    at = place(root, edges, declarers)
     placed = {n for n in at.values()}
     orphans = sorted(nodes - placed)
 

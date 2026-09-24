@@ -93,6 +93,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass
 
 
+class Server(http.server.ThreadingHTTPServer):
+    # a sweep's parallel npm processes at a dozen sockets each overrun the
+    # default backlog of 5, and a dropped SYN costs npm a retry second
+    request_queue_size = 1024
+    daemon_threads = True
+
+
 if __name__ == "__main__":
     port = int(sys.argv[1])
     SNAP = os.path.abspath(sys.argv[2])
@@ -101,4 +108,4 @@ if __name__ == "__main__":
     FILL = "--fill" in args
     if "--log" in args:
         LOG = args[args.index("--log") + 1]
-    http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
+    Server(("127.0.0.1", port), Handler).serve_forever()
