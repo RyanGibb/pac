@@ -38,7 +38,7 @@ pac npm --tree use-sync-external-store
 
 ## Evaluation
 
-The evaluation has three levels: the unit tests in `test/`, a regression set of a few dozen goals per ecosystem whose answers from the real tool are recorded, and runs at scale that ask the tool afresh over thousands of goals.
+The evaluation has three levels: the unit tests in `test/`, a regression set of a few dozen queries per ecosystem whose answers from the real tool are recorded, and runs at scale that ask the tool afresh over thousands of queries.
 
 ### Unit tests
 
@@ -60,14 +60,14 @@ nix develop ./nix
 
 The flake sits in `nix/` so that entering the shell copies only that directory into the Nix store, not `repos/` with it.
 pac itself is still built with opam, as above.
-Each `eval/*/setup.sh`, and `eval/cargo/run_goal.py`, refuses a tool at any other version.
+Each `eval/*/setup.sh`, and `eval/cargo/run_query.py`, refuses a tool at any other version.
 The Alpine harness builds its apk root with `apk --usermode --initdb`, which apk refuses as root, so run it as an ordinary user.
 
-`scale.sh [--regress | --record] <pac-exe> <run-dir> [goals-file]` checks each goal twice: whether pac answers as the tool does, and whether the tool accepts pac's answer as a resolution of its own, the question `eval/<eco>/valid.sh` asks.
-It runs `P` goals at a time (default: every core), gives each tool call `TIMEOUT` seconds (default 900), and resumes a killed run where it stopped.
+`scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]` checks each query twice: whether pac answers as the tool does, and whether the tool accepts pac's answer as a resolution of its own, the question `eval/<eco>/valid.sh` asks.
+It runs `P` queries at a time (default: every core), gives each tool call `TIMEOUT` seconds (default 900), and resumes a killed run where it stopped.
 Where pac has more than one search mode, `MODES` names those to run by flag: Debian's `apt-heap` and opam's `0install-order` each run beside `default` unless it says otherwise.
 Keep the run directory outside the source tree, which dune scans.
-The run ends with a line per mode, such as `default: 62 goals, exact 46/60, valid 60/60`: pac's answers that are exactly the tool's, of the goals the tool answers, and pac's answers the tool accepts, of those it checked.
+The run ends with a line per mode, such as `default: 62 queries, exact 46/60, valid 60/60`: pac's answers that are exactly the tool's, of the queries the tool answers, and pac's answers the tool accepts, of those it checked.
 
 ### The validity check
 
@@ -95,9 +95,9 @@ eval/debian/controls.sh /tmp/controls/debian
 
 ### The regression set
 
-`eval/<eco>/goals.txt` lists a few dozen hand-picked goals, and `eval/<eco>/baseline/` holds the tool's answer to each, or, for a goal the tool refuses, an empty `.absent` file in its place.
+`eval/<eco>/queries.txt` lists a few dozen hand-picked queries, each line a whole one as the tool's command line takes it, flags included, such as opam's `--with-test uri`, and `eval/<eco>/baseline/` holds the tool's answer to each, or, for a query the tool refuses, an empty `.absent` file in its place.
 `--regress` compares pac against those answers rather than asking the tool, whose check of pac's answers still runs.
-npm's goals are pinned to the versions in `baseline/roots.txt`, which `eval/npm/seed.sh` chose.
+npm's queries are pinned to the versions in `baseline/roots.txt`, which `eval/npm/seed.sh` chose.
 Cargo records no answers: cargo is run for validity anyway, against the snapshot `sparse_proxy.py` serves, and the question it is asked depends on pac's answer, so its `--regress` asks cargo afresh.
 
 ```sh
@@ -116,19 +116,19 @@ eval/debian/scale.sh --record _build/default/src/main.exe /tmp/record/debian
 
 ### At scale
 
-With neither flag, `scale.sh` asks the tool afresh over every package in the index, or for cargo a seeded sample of 3000 crates, or over the goals a file lists one per line, optionally after a pool name and a tab.
+With neither flag, `scale.sh` asks the tool afresh over every package in the index, or for cargo a seeded sample of 3000 crates, or over the queries a file lists one per line, optionally after a pool name and a tab.
 
 ```sh
 eval/alpine/scale.sh _build/default/src/main.exe /tmp/scale/alpine
 MODES=apt-heap P=32 eval/debian/scale.sh _build/default/src/main.exe /tmp/scale/debian
 eval/opam/scale.sh _build/default/src/main.exe /tmp/scale/opam-test <(ls repos/opam-repository/packages | sed 's/^/--with-test /')
 python3 eval/cargo/scale.py targets 20260923 150 > /tmp/pools.txt && eval/cargo/scale.sh _build/default/src/main.exe /tmp/scale/cargo /tmp/pools.txt
-node eval/npm/goals.js repos/npm targeted > /tmp/ranges.txt && eval/npm/scale.sh _build/default/src/main.exe /tmp/scale/npm /tmp/ranges.txt
+node eval/npm/queries.js repos/npm targeted > /tmp/ranges.txt && eval/npm/scale.sh _build/default/src/main.exe /tmp/scale/npm /tmp/ranges.txt
 ```
 
-At either level the run directory gets one line per goal and mode in `results.txt`, `goal= mode= pac= tool= corr= valid= oo= to= wall=`, and each goal's raw answers under `out/`.
+At either level the run directory gets one line per query and mode in `results.txt`, `query= mode= pac= tool= corr= valid= oo= to= wall=`, and each query's raw answers under `out/`.
 Some ecosystems add fields: opam's `pin` and `mccs`, npm's `twall` (npm's own wall time, `-` under `--regress`), `closed`, `nodes` and `edges`, and cargo's `kept` and `identical`.
-`eval/<eco>/triage.py <run-dir>` sorts the goals into classes, per mode and per pool, and clusters the divergences:
+`eval/<eco>/triage.py <run-dir>` sorts the queries into classes, per mode and per pool, and clusters the divergences:
 
 | class | meaning |
 |---|---|
@@ -142,12 +142,12 @@ Some ecosystems add fields: opam's `pin` and `mccs`, npm's `twall` (npm's own wa
 | `both-refuse` | neither answers |
 | `pac-timeout`, `pac-crash`, `tool-timeout` | a side gave no verdict |
 | `unchecked` | we answer, but the validity check could not run |
-| `unrecorded` | `--regress` found no recorded answer to the goal |
+| `unrecorded` | `--regress` found no recorded answer to the query |
 
-npm's goals are split further by whether they are closed: whether neither side asked for a name the snapshot lacks.
+npm's queries are split further by whether they are closed: whether neither side asked for a name the snapshot lacks.
 npm's index is the names `eval/npm/names.txt` lists, not every packument in `repos/npm`, which also holds what closing the snapshot fetched; `FILL=1` runs `eval/npm/scale.sh` as that closing pass, fetching each miss once into the run's farm.
 npm's edges are scored after `edges.py --peer-parent`, which attributes a peer's edge as pac does; `NORM=` scores them as npm's lock records them.
-`eval/alpine/pin.sh <run-dir>` and `eval/npm/pin.sh <run-dir>` re-ask a run's divergent goals with the tool's picks forced, which tells a preference gap from an instance gap.
+`eval/alpine/pin.sh <run-dir>` and `eval/npm/pin.sh <run-dir>` re-ask a run's divergent queries with the tool's picks forced, which tells a preference gap from an instance gap.
 `eval/cargo/features.py` also compares the feature set of each crate in pac's answer with `cargo metadata`'s.
 It is not part of the scale run because it downloads crate sources.
 

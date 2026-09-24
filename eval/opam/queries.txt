@@ -30,3 +30,5 @@ irmin
 coq
 rocq-core
 dream
+--with-test uri
+--with-test yojson

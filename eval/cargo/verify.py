@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Ask cargo whether OUR Cargo resolution is a resolution by cargo's own
 rules, rather than whether it is the one cargo would have picked.
-scale.py asks the second question over run_goal.py's dumps; this asks
-the first, and a goal can fail that and pass this.
+scale.py asks the second question over run_query.py's dumps; this asks
+the first, and a query can fail that and pass this.
 
-The check writes our answer out as the goal's Cargo.lock (mklock.py) and
+The check writes our answer out as the query's Cargo.lock (mklock.py) and
 runs `cargo update --workspace --locked`: cargo re-resolves with our lock
 as the previous resolve and, naming no package, avoids none, so it keeps
 every locked version a requirement still admits and changes only what its
@@ -45,7 +45,7 @@ writes is diffed against ours.  That names the packages and edges it
 changed, which is the diagnostic worth printing; it is never the verdict.
 
 The root's own version and any --rust-version are settled exactly as
-run_goal.py settles them, by importing it, so the pac invocation being
+run_query.py settles them, by importing it, so the pac invocation being
 verified is the one the correspondence sweep measured.
 
 usage: verify.py <crate> [--out <json>]
@@ -62,7 +62,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import run_goal  # noqa: E402
+import run_query  # noqa: E402
 
 KEEP = ["update", "--workspace"]
 FRESH = ["generate-lockfile"]
@@ -72,7 +72,7 @@ def cargo_lock(workdir, sub, locked):
     cmd = ["cargo"] + sub + ["--manifest-path", workdir + "/Cargo.toml"]
     if locked:
         cmd += ["--locked"]
-    env = run_goal.write_cargo_config()
+    env = run_query.write_cargo_config()
     t0 = time.time()
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=600, env=env)
@@ -86,31 +86,31 @@ def main():
     ap.add_argument("crate")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
-    run_goal.check_toolchain()
+    run_query.check_toolchain()
 
-    probe = run_goal.run_pac(args.crate)
+    probe = run_query.run_pac(args.crate)
     if not probe["ok"]:
         print("%-24s PAC FAILED" % args.crate)
         return 1
     root_name, root_version = probe["root"]
-    entry = run_goal.index_line(root_name, root_version)
+    entry = run_query.index_line(root_name, root_version)
     rustv = entry.get("rust_version") if entry else None
-    # The same fallback run_goal.py reproduces: with no member declaring a
+    # The same fallback run_query.py reproduces: with no member declaring a
     # rust-version, resolver v3 ranks against the installed rustc rather
     # than against nothing, so the lock being verified has to be the one
     # pac writes for that toolchain.  Verified red-then-green on
     # rustradio-ui, whose rustradio dependency moves under it.
     if rustv is None:
-        rustv = run_goal.installed_rustc()
-    pac = run_goal.run_pac(args.crate, rustv=rustv)
+        rustv = run_query.installed_rustc()
+    pac = run_query.run_pac(args.crate, rustv=rustv)
     if not pac["ok"]:
         print("%-24s PAC FAILED (msrv pass)" % args.crate)
         return 1
 
     root = (root_name, root_version)
-    workdir = f"{run_goal.WORK}/{args.crate}"
-    run_goal.build_manifest(root_name, root_version, workdir,
-                            run_goal.self_depended(pac, root))
+    workdir = f"{run_query.WORK}/{args.crate}"
+    run_query.build_manifest(root_name, root_version, workdir,
+                            run_query.self_depended(pac, root))
     lock = workdir + "/Cargo.lock"
     raw = workdir + "/pac.out"
     with open(raw, "w") as f:
@@ -138,8 +138,8 @@ def main():
         shutil.copy(ours, lock)
         rrc, _rmsg, _rwall = cargo_lock(workdir, KEEP, locked=False)
         if rrc == 0:
-            op, oe = run_goal.read_lock(ours)
-            tp, te = run_goal.read_lock(lock)
+            op, oe = run_query.read_lock(ours)
+            tp, te = run_query.read_lock(lock)
             op, tp, oe, te = set(op), set(tp), set(oe), set(te)
             lost, added = sorted(op - tp), sorted(tp - op)
             lost_edges, added_edges = sorted(oe - te), sorted(te - oe)

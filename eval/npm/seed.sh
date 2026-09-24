@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # One online pass that fixes what the measured sweep then answers offline:
-# which root version each goal is asked about, and a snapshot closed over
+# which root version each query is asked about, and a snapshot closed over
 # both sides' cones.
 #
 # Root choice.  The obvious pin is dist-tags.latest, and where both sides
 # can answer it that is what this writes.  Where they cannot it walks back
-# to the next-newest release, because a goal whose root no one can resolve
+# to the next-newest release, because a query whose root no one can resolve
 # yields no edges to score.  Two things make latest unanswerable, and both
 # are findings rather than accidents: our engines-as-availability gate cuts
 # a root whose engines exclude the host node our frontend hardcodes, and a
@@ -65,9 +65,9 @@ while read -r g; do
   latest=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["dist-tags"]["latest"])' \
              "$RUN/cache/${g//\//%2F}.json")
   echo "$g $pin (walked back $back from $latest)"
-  # goal, pin, releases walked back, dist-tags.latest
+  # query, pin, releases walked back, dist-tags.latest
   printf '%s %s %s %s\n' "$g" "$pin" "$back" "$latest" >> "$S/baseline/roots.txt"
-done < "$S/goals.txt"
+done < "$S/queries.txt"
 
 echo "filled $(sort -u "$RUN/miss.log" | wc -l) names npm asked for and the farm lacked"
 # npm's own http cache would otherwise answer a frozen run from what the

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ask npm whether OUR resolution for a goal is a resolution by npm's own
+# Ask npm whether OUR resolution for a query is a resolution by npm's own
 # rules, rather than whether it is the one npm would have picked.
 # scale.sh asks the second question against npm's lock; this one can
 # pass where that fails, because npm ranking another tree first is
@@ -26,9 +26,9 @@
 # under node_modules lookup, and control 5 above is what says npm judges
 # the placement we chose rather than demanding its own.
 #
-# usage: valid.sh <exe> <tag> [goal]
-# With no goal it starts the frozen shim, sweeps goals.txt and totals;
-# with one it checks that goal and expects a shim already listening.
+# usage: valid.sh <exe> <tag> [query]
+# With no query it starts the frozen shim, sweeps queries.txt and totals;
+# with one it checks that query and expects a shim already listening.
 set -u
 # byte order, so the output is the same whatever the host's locale
 export LC_ALL=C
@@ -45,7 +45,7 @@ if [ $# -lt 3 ]; then
   trap 'kill $shim 2>/dev/null' EXIT
   sleep 1
   export RUN PORT
-  xargs -P 4 -I{} bash "$0" "$exe" "$tag" {} < "$S/goals.txt" \
+  xargs -P 4 -I{} bash "$0" "$exe" "$tag" {} < "$S/queries.txt" \
     > "$S/out/$tag.valid" 2>&1
   sort "$S/out/$tag.valid" -o "$S/out/$tag.valid"
   awk '/ NO (SOLUTION|ROOT|LOCK)/ {bad++; next}
@@ -55,19 +55,19 @@ if [ $# -lt 3 ]; then
   bash "$S/check-misses.sh" "$RUN/valid-miss.log"
   exit $?
 fi
-goal=$3
-slug=${goal//\//__}
+query=$3
+slug=${query//\//__}
 out="$S/out/$tag"
 mkdir -p "$out"
 
-pin=$(awk -v g="$goal" '$1==g{print $2}' "$S/baseline/roots.txt")
-[ -n "$pin" ] || { printf '%-24s NO ROOT (dropped by seed.sh)\n' "$goal"; exit 1; }
+pin=$(awk -v g="$query" '$1==g{print $2}' "$S/baseline/roots.txt")
+[ -n "$pin" ] || { printf '%-24s NO ROOT (dropped by seed.sh)\n' "$query"; exit 1; }
 
 # the wrapper root scale.sh --regress measures, so validity and
 # correspondence are answering about one question
 W="$RUN/work/$slug.valid"
 mkdir -p "$W"
-root=$(python3 "$S/mkroot.py" "$RUN/cache" "$goal" "$W" "$pin" | cut -d' ' -f1)
+root=$(python3 "$S/mkroot.py" "$RUN/cache" "$query" "$W" "$pin" | cut -d' ' -f1)
 
 cd "$S/../.."
 # the host scale.sh gives, so the answer validated here is the answer
@@ -79,13 +79,13 @@ nodev=$(sed -n 2p "$S/npm-version")
   ${nodev:+--node-version "$nodev"} ${npmv:+--npm-version "$npmv"} \
   "$root" > "$out/$slug.ours" 2>&1
 if ! grep -q '^node_modules' "$out/$slug.ours"; then
-  printf '%-24s NO SOLUTION (see %s)\n' "$goal" "$out/$slug.ours"
+  printf '%-24s NO SOLUTION (see %s)\n' "$query" "$out/$slug.ours"
   exit 1
 fi
 
 if ! python3 "$S/mklock.py" "$RUN/cache" "$out/$slug.ours" "$W/package-lock.json" \
      --root-manifest "$W/package.json" > "$out/$slug.mklock" 2>&1; then
-  printf '%-24s NO LOCK (see %s)\n' "$goal" "$out/$slug.mklock"
+  printf '%-24s NO LOCK (see %s)\n' "$query" "$out/$slug.mklock"
   exit 1
 fi
 
@@ -104,4 +104,4 @@ plc=$(sed -n 's/.*: \([0-9]*\) placements.*/\1/p' "$out/$slug.mklock")
 dep=$(sed -n 's/.*max nesting \([0-9]*\).*/\1/p' "$out/$slug.mklock")
 bad=$(grep -cE 'npm error (Invalid|Missing):' "$out/$slug.ci")
 printf '%-24s %-7s n=%-5s placed=%-5s depth=%-3s rc=%-3s bad=%-4s relock=%-3s moved=%-4s %s\n' \
-  "$goal" "$tag" "$n" "$plc" "$dep" "$ci_rc" "$bad" "$relock_rc" "$moved" "$v"
+  "$query" "$tag" "$n" "$plc" "$dep" "$ci_rc" "$bad" "$relock_rc" "$moved" "$v"

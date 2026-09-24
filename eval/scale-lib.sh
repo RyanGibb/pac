@@ -1,6 +1,7 @@
-# Sourced by each eval/<eco>/scale.sh, which defines one -- a goal's result
-# lines, one per mode, from its key and goal -- all_goals and prepare, may
-# redefine regress_goals and define totals, and then calls main.
+# Sourced by each eval/<eco>/scale.sh, which defines one -- a query's result
+# lines, one per mode, from its key and the query, a whole one in the tool's
+# own syntax, flags included -- all_queries and prepare, may redefine
+# regress_queries and define totals, and then calls main.
 set -u
 export LC_ALL=C
 E="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,7 +30,7 @@ tool_status() {  # <rc> <answer>
   else echo refuse; fi
 }
 
-regress_goals() { cat "$S/goals.txt"; }
+regress_queries() { cat "$S/queries.txt"; }
 
 # The tool's answer into $o.theirs, its status into tool and its wall time
 # into twall: asked afresh, or under --regress read back from the
@@ -61,7 +62,7 @@ compare() {  # <ours> <theirs>, both sorted
 
 # valid.sh writes under its own out/<tag>; a tag relative to that puts its
 # files in the run directory instead
-valid() {  # <recorded answer> <mode> <goal>
+valid() {  # <recorded answer> <mode> <query>
   local tag
   tag=$(realpath -m --relative-to="$S/out" "$run/valid/$2")
   valid=$(REPLAY=$1 EXTRA=$(flag "$2") timeout "$TIMEOUT" \
@@ -92,7 +93,7 @@ main() {
   fi
   case ${1:-} in --regress|--record) BASELINE=${1#--}; shift ;; *) BASELINE= ;; esac
   export BASELINE
-  [ $# -ge 2 ] || { echo "usage: $0 [--regress | --record] <pac-exe> <run-dir> [goals-file]" >&2; exit 2; }
+  [ $# -ge 2 ] || { echo "usage: $0 [--regress | --record] <pac-exe> <run-dir> [queries-file]" >&2; exit 2; }
   mkdir -p "$2/res" "$2/out" || exit 1
   run=$(cd "$2" && pwd); export run
   # one binary and one source of answers per run, so a resumed run never mixes two
@@ -101,14 +102,14 @@ main() {
     [ "$(cat "$run/baseline" 2> /dev/null)" = "$BASELINE" ] || { echo "$0: $run was started in another mode" >&2; exit 1; }
   else cp "$1" "$run/pac.exe"; echo "$BASELINE" > "$run/baseline"; fi
   prepare || exit 1
-  if [ -n "${3:-}" ]; then cp "$3" "$run/goals.txt" || exit 1
-  elif [ ! -s "$run/goals.txt" ]; then
-    if [ -n "$BASELINE" ]; then regress_goals; else all_goals; fi > "$run/goals.txt"
+  if [ -n "${3:-}" ]; then cp "$3" "$run/queries.txt" || exit 1
+  elif [ ! -s "$run/queries.txt" ]; then
+    if [ -n "$BASELINE" ]; then regress_queries; else all_queries; fi > "$run/queries.txt"
   fi
   ls "$run/res" | awk -F'\t' 'FILENAME == "-" {done[$0]; next}
     NF {k = $NF; gsub(/%/, "%25", k); gsub(/\+/, "%2B", k); gsub(/\//, "%2F", k); gsub(/ /, "+", k)
-        if (!(k in done)) {done[k]; print k "\t" $NF}}' - "$run/goals.txt" > "$run/todo"
-  echo "$0: $(wc -l < "$run/todo") of $(wc -l < "$run/goals.txt") goals to run" >&2
+        if (!(k in done)) {done[k]; print k "\t" $NF}}' - "$run/queries.txt" > "$run/todo"
+  echo "$0: $(wc -l < "$run/todo") of $(wc -l < "$run/queries.txt") queries to run" >&2
   xargs -r -P "$P" -d '\n' -n 1 bash "$0" --one < "$run/todo"
   find "$run/res" -type f ! -name '.*' -exec cat {} + | sort > "$run/results.txt"
   awk -v modes="$MODES" '
@@ -118,7 +119,7 @@ main() {
      if (f["valid"] != "-") {chk[m]++; ok[m] += f["valid"] == "VALID"}}
     END {k = split(modes, ms, " ")
       for (i = 1; i <= k; i++) if (ms[i] in n)
-        printf "%s: %d goals, exact %d/%d, valid %d/%d%s\n", ms[i], n[ms[i]], ex[ms[i]], ans[ms[i]],
+        printf "%s: %d queries, exact %d/%d, valid %d/%d%s\n", ms[i], n[ms[i]], ex[ms[i]], ans[ms[i]],
           ok[ms[i]], chk[ms[i]], un[ms[i]] ? ", unrecorded " un[ms[i]] : ""}' "$run/results.txt"
   if declare -F totals > /dev/null; then totals; fi
 }

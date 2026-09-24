@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Mint the per-goal root both sides are asked about.
+"""Mint the per-query root both sides are asked about.
 
-The root is a wrapper package depending on nothing but the goal, pinned
+The root is a wrapper package depending on nothing but the queried package, pinned
 to one exact version.  Pinning is what makes the two sides answer the
 same question at the root: a range would hand npm's pickManifest its
 dist-tag preference and hand our solver its newest-satisfying rule, and
@@ -10,7 +10,7 @@ something the sweep is measuring.
 
 Two files come out of one manifest so they cannot drift:
 
-  <cache>/pac-root-<goal>.json   a one-version packument, which is what
+  <cache>/pac-root-<package>.json   a one-version packument, which is what
                                  `pac npm` reads as its root package
   <work>/package.json            the same manifest, which is what npm
                                  reads as the project being installed
@@ -19,8 +19,8 @@ With no version given the pin is the snapshot's dist-tags.latest;
 --nth k pins the k'th newest published release instead, which is how
 seed.sh walks back from a latest neither side can answer.
 
-usage: mkroot.py <cache-dir> <goal> <work-dir> [version | --nth K]
-prints: <root-name> <root-version> <goal-version>
+usage: mkroot.py <cache-dir> <package> <work-dir> [version | --nth K]
+prints: <root-name> <root-version> <package-version>
 """
 import json
 import os
@@ -38,9 +38,9 @@ def key(v):
 
 
 def main():
-    cache, goal, work = sys.argv[1], sys.argv[2], sys.argv[3]
+    cache, pkg, work = sys.argv[1], sys.argv[2], sys.argv[3]
     arg = sys.argv[4] if len(sys.argv) > 4 else None
-    with open(os.path.join(cache, escape(goal) + ".json")) as f:
+    with open(os.path.join(cache, escape(pkg) + ".json")) as f:
         pk = json.load(f)
 
     if arg == "--nth":
@@ -52,22 +52,22 @@ def main():
         )
         n = int(sys.argv[5])
         if n >= len(rel):
-            sys.exit(f"{goal}: only {len(rel)} releases")
+            sys.exit(f"{pkg}: only {len(rel)} releases")
         pin = rel[n]
     elif arg:
         pin = arg
     else:
         pin = pk["dist-tags"]["latest"]
     if pin not in pk["versions"]:
-        sys.exit(f"{goal}: {pin} is not published")
+        sys.exit(f"{pkg}: {pin} is not published")
 
     name = "pac-root-" + re.sub(r"[@/]", lambda m: "-" if m.group() == "/" else "",
-                                goal)
+                                pkg)
     manifest = {
         "name": name,
         "version": "1.0.0",
         "private": True,
-        "dependencies": {goal: pin},
+        "dependencies": {pkg: pin},
     }
     packument = {
         "name": name,

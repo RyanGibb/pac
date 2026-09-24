@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Correspondence harness: run one Cargo goal through pac and through real
+"""Correspondence harness: run one Cargo query through pac and through real
 cargo (against the same crates.io-index checkout) and dump both sides'
 raw facts as JSON for later comparison.  Does not itself judge anything --
 scale.py does.
 
 Both sides are asked the lockfile question, and asked it the same way.
-Pac's rootFeats defaults to every feature the goal crate declares;
+Pac's rootFeats defaults to every feature the queried crate declares;
 `cargo generate-lockfile` resolves the one workspace member under
 CliFeatures::new_all(true) with HasDevUnits::Yes, which is that same
 instantiation.  Neither side is given a feature selection, because a
@@ -20,7 +20,7 @@ the artifact being compared and downloads nothing.
 import argparse, json, os, re, shutil, subprocess, sys, time, tomllib
 
 # The toolchain the recorded results were taken with, pinned by nix/flake.lock.
-# A goal declaring no rust-version resolves for the installed rustc, so
+# A query declaring no rust-version resolves for the installed rustc, so
 # under any other the sweep measures a different question.
 RUSTC_VERSION = "1.97.1"
 CARGO_VERSION = "1.97.0"
@@ -161,8 +161,8 @@ def run_pac(crate, rustv=None):
 
 
 def self_depended(pac, root):
-    """Whether our answer has the goal crate as a dependency of something
-    other than itself, at the root's own version.  Four goals do:
+    """Whether our answer has the queried crate as a dependency of something
+    other than itself, at the root's own version.  Four queries do:
     serde_json, tokio, actix-web and itoa each dev-depend on a crate that
     depends on them.  Cargo identifies a package by source as well as by
     name and version, so for it the path root and the registry copy are
@@ -185,14 +185,14 @@ def build_manifest(crate, version, workdir, patch_self=False):
     with open(workdir + "/Cargo.toml", "w") as f:
         f.write(p.stdout)
         if patch_self:
-            # The goal crate reached as a dependency is the same package
+            # The queried crate reached as a dependency is the same package
             # as the root, which is what our node identity says and what
             # cargo would otherwise deny: a [patch] is exactly how cargo
             # is told that a registry name resolves to a path package it
             # already has.  Nothing is relaxed by it -- every requirement
             # on that name is still checked against this package, and its
             # own dependency rows are still resolved -- and it is written
-            # only for the goals where our answer actually merges the
+            # only for the queries where our answer actually merges the
             # two, because an unused patch would land in the lock as a
             # [[patch.unused]] section of its own.
             f.write(f'\n[patch.crates-io]\n{crate} = {{ path = "." }}\n')

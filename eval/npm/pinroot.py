@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Re-ask a goal with npm's own picks forced, on both sides at once.
+"""Re-ask a query with npm's own picks forced, on both sides at once.
 
 This is the preference-vs-instance test.  The forcing is a root
 `overrides` block naming each version npm chose and we did not, which is

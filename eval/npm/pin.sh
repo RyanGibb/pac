@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Re-ask every goal of a scale.sh run whose edges diverged from npm's, with
+# Re-ask every query of a scale.sh run whose edges diverged from npm's, with
 # the versions npm chose and we did not forced on both sides as root
-# overrides.  A goal that then agrees exactly was a preference gap: npm's
+# overrides.  A query that then agrees exactly was a preference gap: npm's
 # answer was already a resolution of our instance and only our ordering
 # ranked it second.
 # usage: pin.sh <run-dir> [port]      NORM as the run was given it

@@ -40,7 +40,7 @@ constant: both sides have to be given the same node and npm versions, or
 they rank by different rules and every such edge diverges.  The host
 here is npm-version, which is what scale.sh passes our side.
 
-usage: verdict.py <run-dir> <goal> <out-prefix>
+usage: verdict.py <run-dir> <package> <out-prefix>
 """
 import json
 import os
@@ -172,7 +172,7 @@ def satisfies(pairs):
 
 
 def main():
-    run, goal, prefix = sys.argv[1], sys.argv[2], sys.argv[3]
+    run, pkg, prefix = sys.argv[1], sys.argv[2], sys.argv[3]
     snap = Snapshot(os.path.join(run, "cache"))
     try:
         with open(prefix + ".edges.bundled") as f:
@@ -221,7 +221,7 @@ def main():
 
     with open(prefix + ".verdict", "w") as f:
         f.write("\n".join(sorted(lines)) + ("\n" if lines else ""))
-    print("%-24s %s" % (goal, json.dumps(counts, sort_keys=True)))
+    print("%-24s %s" % (pkg, json.dumps(counts, sort_keys=True)))
 
 
 if __name__ == "__main__":

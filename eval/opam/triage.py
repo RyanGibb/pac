@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Classify a scale.sh run, per mode, and cluster its divergences by how the
-other search mode fares on the goal (0install-order agreeing exactly marks
+other search mode fares on the query (0install-order agreeing exactly marks
 a gap of decision order alone), which compiler each side took, and which
 versions flagged avoid-version or deprecated only 0install took.  Errors
 are grouped by what valid.sh's opam runs had to change, refusals by each
@@ -12,7 +12,7 @@ from triage_lib import first_incompatibility, lines, report, show, unkey
 
 run = sys.argv[1]
 REPO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../repos/opam-repository")
-out = lambda r, ext: os.path.join(run, "out", r["goal"] + ext)
+out = lambda r, ext: os.path.join(run, "out", r["query"] + ext)
 
 
 def flagged(nv):
@@ -26,7 +26,7 @@ def divergence(r, rows):
     ours = dict(x.partition(".")[::2] for x in lines(out(r, "." + r["mode"] + ".ours")))
     theirs = dict(x.partition(".")[::2] for x in lines(out(r, ".theirs")))
     others = ", ".join("%s %s" % (o["mode"], o["corr"]) for o in rows
-                       if o["goal"] == r["goal"] and o["mode"] != r["mode"])
+                       if o["query"] == r["query"] and o["mode"] != r["mode"])
     flags = [n for n, v in theirs.items() if ours.get(n) != v and flagged(n + "." + v)]
     return "%s; ocaml %s -> %s; 0install alone takes flagged: %s" % (
         others or "-", ours.get("ocaml", "-"), theirs.get("ocaml", "-"), " ".join(sorted(flags)) or "-")
@@ -35,7 +35,7 @@ def divergence(r, rows):
 def invalid(r):
     """what valid.sh's install, fixup and prune had to do; a mode that
     answered as another did shares that one's check"""
-    k = unkey(r["goal"]).replace("--", "").replace(" ", "+")
+    k = unkey(r["query"]).replace("--", "").replace(" ", "+")
     d = sorted(glob.glob(os.path.join(run, "valid", "*", k + ".fixup")), key=lambda p: "/%s/" % r["mode"] not in p)
     t = "\n".join(l for ext in (".install", ".fixup") for l in lines(d[0][:-6] + ext)) if d else ""
     verbs = set(re.findall(r"^\s*- (\w+) ", t, re.M))
@@ -68,5 +68,5 @@ for m in dict.fromkeys(r["mode"] for r in rows):
         g = collections.defaultdict(list)
         for r in rows:
             if r["class"] == c and r["mode"] == m:
-                g[label(r)].append(r["goal"])
+                g[label(r)].append(r["query"])
         show("%s, mode %s" % (c, m), g)

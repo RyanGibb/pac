@@ -49,23 +49,23 @@ pkgs = load()
 for c in ("preference-gap", "error", "exact-invalid"):
     cl = {}
     for r in (r for r in rows if r["class"] == c):
-        o = os.path.join(run, "out", r["goal"])
-        world = [NAME.match(t)[1] for t in unkey(r["goal"]).split() if t[0] != "!"]
+        o = os.path.join(run, "out", r["query"])
+        world = [NAME.match(t)[1] for t in unkey(r["query"]).split() if t[0] != "!"]
         oo, ao = (sorted(set(lines(o + a)) - set(lines(o + b))) for a, b in
                   ((".ours", ".theirs"), (".theirs", ".ours")))
         to, ta = contested(pkgs, oo, lines(o + ".ours"), world), contested(pkgs, ao, lines(o + ".theirs"), world)
         few = lambda xs: "+".join(sorted(xs)[:3]) + ("+%d more" % (len(xs) - 3) if len(xs) > 3 else "") or "-"
-        cl[r["goal"]] = "; ".join("%s: ours %s, apk %s" % (n, few(to.get(n, ())), few(ta.get(n, ())))
+        cl[r["query"]] = "; ".join("%s: ours %s, apk %s" % (n, few(to.get(n, ())), few(ta.get(n, ())))
                                   for n in sorted(set(to) | set(ta)))
-    show(c + ", by contested name", group([r for r in rows if r["goal"] in cl], lambda r: cl[r["goal"]]))
+    show(c + ", by contested name", group([r for r in rows if r["query"] in cl], lambda r: cl[r["query"]]))
 for c in ("instance-gap", "both-refuse"):
     show(c + ", by pac's first incompatibility", group(
-        [r for r in rows if r["class"] == c], lambda r: first_incompatibility(os.path.join(run, "out", r["goal"] + ".out"))))
+        [r for r in rows if r["class"] == c], lambda r: first_incompatibility(os.path.join(run, "out", r["query"] + ".out"))))
 
 
 def apk_reason(r):
     """the first problem apk names, reduced to its kind"""
-    body = [l.strip() for l in lines(os.path.join(run, "out", r["goal"] + ".apk")) if not l.startswith("ERROR")]
+    body = [l.strip() for l in lines(os.path.join(run, "out", r["query"] + ".apk")) if not l.startswith("ERROR")]
     for s in body:
         if s.startswith(("conflicts:", "breaks:", "satisfies:")):
             return s.split(":")[0]

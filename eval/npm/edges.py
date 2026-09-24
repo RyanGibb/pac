@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Score one goal: our resolution against npm's, on nodes and on edges.
+"""Score one query: our resolution against npm's, on nodes and on edges.
 
 Both sides are reduced to the same two sets.
 
@@ -38,7 +38,7 @@ the delta it accounts for can be read off:
                   hands the declarer's peer rows to the package that
                   selected the declarer, so npmParents leaves that one.
 
-usage: edges.py <goal> <lockfile> <our --tree output> <out-prefix>
+usage: edges.py <package> <lockfile> <our --tree output> <out-prefix>
                 [--peer-parent]
 """
 import json
@@ -180,7 +180,7 @@ def dump(path, s):
 
 
 def main():
-    goal, lockp, oursp, prefix = sys.argv[1:5]
+    pkg, lockp, oursp, prefix = sys.argv[1:5]
     flags = sys.argv[5:]
     with open(lockp) as f:
         lock = json.load(f)
@@ -205,7 +205,7 @@ def main():
         "| edges ours=%-4d npm=%-4d agree=%-4d ours-only=%-3d npm-only=%-3d "
         "#%d,%d,%d,%d,%d,%d"
         % (
-            goal,
+            pkg,
             len(on),
             len(nn),
             len(on & nn),

@@ -10,7 +10,7 @@ import collections, json, os, re, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.join(HERE, "..")]
 from triage_lib import first_incompatibility, report, show
-from run_goal import crate_path
+from run_query import crate_path
 from scale import compat_class, msrv_ok, read_rows, vkey
 
 run = sys.argv[1]
@@ -70,7 +70,7 @@ def cargo_reason(res):
 
 
 rows = report(run)
-out = lambda r, ext: os.path.join(run, "out", r["goal"] + ext)
+out = lambda r, ext: os.path.join(run, "out", r["query"] + ext)
 for c, label in (("preference-gap", lambda r: divergence(json.load(open(out(r, ".json"))))),
                  ("error", lambda r: repaired(json.load(open(out(r, ".valid.json"))))),
                  ("tool-declines", lambda r: "ours %s | cargo: %s" % (r["valid"], cargo_reason(json.load(open(out(r, ".json")))))),
@@ -80,5 +80,5 @@ for c, label in (("preference-gap", lambda r: divergence(json.load(open(out(r, "
     g = collections.defaultdict(list)
     for r in rows:
         if r["class"] == c:
-            g[label(r)].append(r["goal"])
+            g[label(r)].append(r["query"])
     show(c, g)

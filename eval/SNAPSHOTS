@@ -1,6 +1,6 @@
 The repos/ snapshot the recorded baselines were taken against.
 
-Every baseline here (eval/<eco>/baseline/, and cargo's per-goal results) is
+Every baseline here (eval/<eco>/baseline/, and cargo's per-query results) is
 an answer about one fixed universe, so it is only comparable against the same
 snapshot.  scripts/fetch-repos.sh fetches the
 current head of each source and pins nothing -- it takes today's Debian
@@ -47,16 +47,16 @@ directory (sha256 of the sorted list of per-file sha256s):
 
   All of it was fetched from registry.npmjs.org on 2026-09-24 between 12:46
   and 12:53 UTC, not by scripts/fetch-repos.sh.  The 3992 names
-  eval/npm/names.txt lists, which are the goals of a scale run, were fetched
+  eval/npm/names.txt lists, which are the queries of a scale run, were fetched
   first.  The other 1236 packuments are what closing the snapshot over both
   sides' cones fetched: 50 by seed.sh's --fill, which also chose
-  baseline/roots.txt, and 1186 by a FILL=1 scale.sh pass over every goal,
+  baseline/roots.txt, and 1186 by a FILL=1 scale.sh pass over every query,
   copied here from the farms unchanged -- pac reads them as well, through
   --cache, so without them the sweep reproduces only from one machine's
   scratch directory.  tarballs/ holds the three tarballs npm opens because the
   version bundles its dependencies (npm 11.20.0 and 12.1.0, request 2.11.4);
   setup.sh links them beside the farm, where the shim serves them.  A frozen
-  scale.sh run over every goal then asked for nothing this tree lacks except
+  scale.sh run over every query then asked for nothing this tree lacks except
   one git repository (esprima#harmony, which recast 0.5.27 names), which no
   snapshot of the registry holds.
 

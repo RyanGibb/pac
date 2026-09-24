@@ -5,7 +5,7 @@ byte-for-byte.
 It exists to pin cargo to the same snapshot pac reads, not to change what
 either side sees: the [source] replacement in CARGO_HOME/config.toml
 points at this server so a measured run cannot drift onto the live
-crates.io index between one goal and the next.  Nothing is filtered --
+crates.io index between one query and the next.  Nothing is filtered --
 cargo's version resolver never sees a target (resolve_with_previous takes
 no RustcTargetData), so a [target.'cfg(...)'] row constrains a linux
 resolve exactly as an unconditional one does, and pac's cfg_active says

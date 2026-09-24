@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scale.sh's goals and its per-goal worker.
+"""scale.sh's queries and its per-query worker.
 
   scale.py sample SEED N          N index files drawn uniformly, as crate
                                   names; one with no release left unyanked
@@ -7,7 +7,7 @@
   scale.py targets SEED K [EXCL]  K crates per pool, as pool<TAB>crate, each
                                   pool exercising one modelling decision in
                                   the crate's newest release
-  scale.py one CRATE PREFIX       the goal's result line; run_goal.py's and
+  scale.py one CRATE PREFIX       the query's result line; run_query.py's and
                                   verify.py's files at PREFIX.*
 """
 import contextlib, functools, json, multiprocessing, operator, os, random, re
@@ -188,26 +188,26 @@ def targets(seed, k, exclude=None):
 
 
 def one(crate, o):
-    """run_goal.py's and verify.py's answers, in-process so that every
+    """run_query.py's and verify.py's answers, in-process so that every
     timeout they set is TIMEOUT, and pac, which verify.py runs again exactly
-    as run_goal.py did, runs once."""
-    import run_goal, verify
+    as run_query.py did, runs once."""
+    import run_query, verify
     timeout = float(os.environ["TIMEOUT"])
     sub = types.ModuleType("subprocess")
     sub.__dict__.update(vars(subprocess))
     sub.run = lambda *a, **kw: subprocess.run(*a, **(dict(kw, timeout=timeout) if "timeout" in kw else kw))
-    run_goal.subprocess = verify.subprocess = sub
-    run_goal.run_pac = functools.lru_cache(maxsize=None)(run_goal.run_pac)
+    run_query.subprocess = verify.subprocess = sub
+    run_query.run_pac = functools.lru_cache(maxsize=None)(run_query.run_pac)
     with open(o + ".log", "w") as log, contextlib.redirect_stdout(log):
-        sys.argv = ["run_goal.py", crate, "--out", o + ".json"]
-        run_goal.main()
+        sys.argv = ["run_query.py", crate, "--out", o + ".json"]
+        run_query.main()
         res = json.load(open(o + ".json"))
         pac, cargo = res["pac"], res["cargo"]
-        # run_goal.py asks cargo only once pac has answered its first run
+        # run_query.py asks cargo only once pac has answered its first run
         root = re.search(r"^root (\S+) (\S+)", pac.get("stdout") or "", re.M)
         if cargo is None and root:
             try:
-                cargo = run_goal.run_cargo(root[1], root[2], False)
+                cargo = run_query.run_cargo(root[1], root[2], False)
             except Exception as e:
                 cargo = {"ok": False, "error": str(e)}
             res["cargo"] = cargo
@@ -215,7 +215,7 @@ def one(crate, o):
         if pac["ok"]:
             sys.argv = ["verify.py", crate, "--out", o + ".valid.json"]
             verify.main()
-    shutil.rmtree(run_goal.CARGO_HOME, ignore_errors=True)
+    shutil.rmtree(run_query.CARGO_HOME, ignore_errors=True)
     open(o + ".out", "w").write(pac.get("stdout") or "")
     st = lambda r, fail: "-" if r is None else "ok" if r["ok"] else "timeout" if r.get("timeout") else fail
     f = {"pac": st(pac, "unsat" if "unsatisfiable:" in (pac.get("stdout") or "") else "crash"),
@@ -232,7 +232,7 @@ def one(crate, o):
         f["valid"] = v.get("verdict", "ERR")
         yn = {True: "yes", False: "no"}
         f["kept"], f["identical"] = yn.get(v.get("kept"), "-"), yn.get(v.get("identical"), "-")
-    print(f"goal={os.path.basename(o)} mode=default " + " ".join(f"{k}={v}" for k, v in f.items()))
+    print(f"query={os.path.basename(o)} mode=default " + " ".join(f"{k}={v}" for k, v in f.items()))
 
 
 if __name__ == "__main__":

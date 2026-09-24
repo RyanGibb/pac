@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Ask cargo whether OUR answers are resolutions by cargo's own rules,
 # rather than whether they are the ones cargo would have picked.  The
-# per-goal work is verify.py; this runs it over the goals, with the sparse
+# per-query work is verify.py; this runs it over the queries, with the sparse
 # index both sides must read.
 #
 # The index proxy is not optional and not a speed trick: it serves the
@@ -14,7 +14,7 @@
 # and nothing more, so no crate body is ever fetched and there is no
 # cache to warm before a sweep.
 #
-# usage: valid.sh [goals-file | goal ...]      (default goals.txt)
+# usage: valid.sh [queries-file | query ...]      (default queries.txt)
 # env: PAC, CARGO_CMP_OUT (run dir), PORT
 set -uo pipefail
 S="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,13 +23,13 @@ export CARGO_CMP_OUT="${CARGO_CMP_OUT:-/tmp/cargo-valid}"
 export PORT="${PORT:-8991}"
 
 if [ $# -eq 0 ]; then
-  GOALS="$S/goals.txt"
+  QUERIES="$S/queries.txt"
 elif [ $# -eq 1 ] && [ -f "$1" ]; then
-  GOALS="$1"
+  QUERIES="$1"
 else
-  GOALS="$CARGO_CMP_OUT/goals.ad-hoc"
+  QUERIES="$CARGO_CMP_OUT/queries.ad-hoc"
   mkdir -p "$CARGO_CMP_OUT"
-  printf '%s\n' "$@" > "$GOALS"
+  printf '%s\n' "$@" > "$QUERIES"
 fi
 
 mkdir -p "$CARGO_CMP_OUT"
@@ -55,5 +55,5 @@ while IFS= read -r crate; do
     *INVALID*) ;;
     *VALID*) ok=$((ok+1)) ;;
   esac
-done < "$GOALS"
+done < "$QUERIES"
 printf 'TOTAL valid=%d/%d\n' "$ok" "$n"

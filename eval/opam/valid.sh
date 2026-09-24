@@ -26,13 +26,13 @@
 #
 # The solver is opam's own default (builtin-mccs), not the
 # builtin-0install scale.sh takes its baseline from: the question here is
-# whether opam as shipped accepts the selection.  Each goal gets its own
+# whether opam as shipped accepts the selection.  Each query gets its own
 # copy of the OPAMROOT setup.sh built, whose pinned global variables are
 # load-bearing -- without them opam reads a different universe from our
 # loader and the two are no longer answering about one instance.
-# usage: valid.sh <exe> <tag> [goal]        EXTRA=<flags> passes flags to <exe>
-# A goal is a query as opam's command line takes it, flags included, e.g.
-# "--with-test uri yojson".  With no goal it sweeps goals.txt and totals;
+# usage: valid.sh <exe> <tag> [query]        EXTRA=<flags> passes flags to <exe>
+# A query is a query as opam's command line takes it, flags included, e.g.
+# "--with-test uri yojson".  With no query it sweeps queries.txt and totals;
 # with one it checks that one.
 set -u
 # byte order, so the output is the same whatever the host's locale
@@ -43,7 +43,7 @@ exe=$1; tag=$2
 
 if [ $# -lt 3 ]; then
   mkdir -p "$S/out"
-  xargs -P 4 -I{} bash "$0" "$exe" "$tag" {} < "$S/goals.txt" \
+  xargs -P 4 -I{} bash "$0" "$exe" "$tag" {} < "$S/queries.txt" \
     > "$S/out/$tag.valid" 2>&1
   sort "$S/out/$tag.valid" -o "$S/out/$tag.valid"
   awk '/ NO SOLUTION/ {bad++; next}
@@ -51,14 +51,14 @@ if [ $# -lt 3 ]; then
        END {printf "TOTAL valid=%d/%d nosol=%d\n", ok, n, bad}' "$S/out/$tag.valid"
   exit 0
 fi
-goal=$3
-key=${goal//--/}; key=${key// /+}
+query=$3
+key=${query//--/}; key=${key// /+}
 out="$S/out/$tag"
 mkdir -p "$out"
 cd "$S/../.."
 
 read -r -a extra <<< "${EXTRA:-}"
-read -r -a query <<< "$goal"
+read -r -a query <<< "$query"
 # opam-version is the one global setup.sh cannot pin opam to, so our side
 # is pinned to opam's
 "$exe" opam --opam-version "$(opam --version)" ${extra[@]+"${extra[@]}"} \
@@ -66,7 +66,7 @@ read -r -a query <<< "$goal"
 sed -n '/^opam packages (/,/^\(system packages\|loaded\)/p' "$out/$key.vout" \
   | sed -n 's/^  \([^ ]*\)$/\1/p' | sort -u > "$out/$key.req"
 if [ ! -s "$out/$key.req" ]; then
-  printf '%-26s %-7s NO SOLUTION (see %s)\n' "$goal" "$tag" "$out/$key.vout"
+  printf '%-26s %-7s NO SOLUTION (see %s)\n' "$query" "$tag" "$out/$key.vout"
   exit 1
 fi
 mapfile -t req < "$out/$key.req"
@@ -150,4 +150,4 @@ else
   v=INVALID
 fi
 printf '%-26s %-7s n=%-5s changes=%-4s unneeded=%-4s rc=%-3s %s\n' \
-  "$goal" "$tag" "$n" "$ch" "$un" "$rc" "$v"
+  "$query" "$tag" "$n" "$ch" "$un" "$rc" "$v"

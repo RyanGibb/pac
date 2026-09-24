@@ -2,26 +2,26 @@
 # Whether pac resolves as npm install --package-lock-only does, on nodes and
 # on edges, and whether npm accepts pac's answer, over what a bare `npm
 # install` of each packument in the snapshot installs, or over the
-# name@spec goals a file lists (goals.js makes both), answered into the run
+# name@spec queries a file lists (queries.js makes both), answered into the run
 # directory against a frozen shim.  The regression set is baseline/roots.txt,
-# each goal pinned to the version seed.sh chose for it.
-# A goal is closed when neither side asked for a name the snapshot lacks,
+# each query pinned to the version seed.sh chose for it.
+# A query is closed when neither side asked for a name the snapshot lacks,
 # tolerated-misses aside: only then are both answering about the snapshot.
 # FILL=1 is the pass that closes a snapshot: the shim fetches each miss once
 # into the run's farm, pac's fetches go through it, and what the farm gains
 # is copied into repos/npm afterwards; a miss is then only a name the
 # registry itself refuses.
 # NORM is edges.py's normalisation of npm's edges; NORM= scores them raw.
-# usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [goals-file]
+# usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]
 #        P=<jobs> TIMEOUT=<s> PORT=<shim> NORM=<edges.py flag> FILL=1
 S="$(cd "$(dirname "$0")" && pwd)"
 . "$S/../scale-lib.sh"
 export PORT=${PORT:-8899} NORM=${NORM---peer-parent}
 NPMV=$(sed -n 1p "$S/npm-version") NODEV=$(sed -n 2p "$S/npm-version")
 
-all_goals() { node "$S/goals.js" "$TOP/repos/npm"; }
+all_queries() { node "$S/queries.js" "$TOP/repos/npm"; }
 
-regress_goals() { awk '{print $1 "@" $2}' "$S/baseline/roots.txt"; }
+regress_queries() { awk '{print $1 "@" $2}' "$S/baseline/roots.txt"; }
 
 prepare() {
   [ -n "${FILL:-}" ] || snapshot npm
@@ -111,7 +111,7 @@ one() {
   } | sed 's/%2[Ff]/\//g' | sort -u |
     grep -vxF -f <(sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^$/d' "$S/tolerated-misses") > "$o.miss"
   [ -s "$o.miss" ] && closed=no || closed=yes
-  echo "goal=$1 mode=default pac=$pac tool=$tool corr=$corr valid=$valid oo=$oo to=$to wall=$wall twall=$twall closed=$closed nodes=$nodes edges=$edges"
+  echo "query=$1 mode=default pac=$pac tool=$tool corr=$corr valid=$valid oo=$oo to=$to wall=$wall twall=$twall closed=$closed nodes=$nodes edges=$edges"
 }
 
 totals() {
@@ -121,7 +121,7 @@ totals() {
         if (f["twall"] != "-") {w++; pw += f["wall"]; nw += f["twall"]}}
     END {printf "closed %d/%d; over the %d both answer, nodes ours=%d npm=%d agree=%d, edges ours=%d npm=%d agree=%d\n",
            c, NR, g, t[1], t[2], t[3], t[4], t[5], t[6]
-         if (w) printf "wall time over the %d goals npm was asked: pac %.1fs, npm %.1fs\n", w, pw, nw}' "$run/results.txt"
+         if (w) printf "wall time over the %d queries npm was asked: pac %.1fs, npm %.1fs\n", w, pw, nw}' "$run/results.txt"
   find "$run/out" -name '*.verdict' -exec cut -f1 {} + | sort | uniq -c |
     sed 's/^ */npm-only edges: /'
 }

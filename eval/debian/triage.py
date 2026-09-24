@@ -40,9 +40,9 @@ def sat(ans, cl):
     return {x for a in cl for x in ({a[0]} | prov[a[0]]) & ans}
 
 
-def decisions(ours, apt, goal):
+def decisions(ours, apt, query):
     shared = ours & apt
-    for p in sorted(shared | {goal}):
+    for p in sorted(shared | {query}):
         for kind in ("dep", "rec"):
             for cl in idx.get(p, {}).get(kind, []):
                 so, sa = sat(ours, cl), sat(apt, cl)
@@ -53,7 +53,7 @@ def decisions(ours, apt, goal):
 
 
 def apt_reason(r):
-    ls = lines(os.path.join(run, "out", r["goal"] + ".apt"))
+    ls = lines(os.path.join(run, "out", r["query"] + ".apt"))
     for l in ls:
         m = re.match(r"\s*\S+ : (\S+): \S+(.*)", l)
         if m:
@@ -67,18 +67,18 @@ for c in ("preference-gap", "error", "exact-invalid"):
         groups = collections.defaultdict(list)
         for r in rows:
             if r["class"] == c and r["mode"] == m:
-                o = os.path.join(run, "out", r["goal"])
-                ds = set(decisions(set(lines(o + "." + m + ".ours")), set(lines(o + ".theirs")), r["goal"]))
+                o = os.path.join(run, "out", r["query"])
+                ds = set(decisions(set(lines(o + "." + m + ".ours")), set(lines(o + ".theirs")), r["query"]))
                 for d in ds or ["?"]:
-                    groups[d].append(r["goal"])
+                    groups[d].append(r["query"])
         if groups:
-            show("%s, mode %s, by contested clause (a goal counts once per clause)" % (c, m), groups)
+            show("%s, mode %s, by contested clause (a query counts once per clause)" % (c, m), groups)
 for c in ("instance-gap", "both-refuse", "tool-declines"):
     for m in dict.fromkeys(r["mode"] for r in rows):
         rs = [r for r in rows if r["class"] == c and r["mode"] == m]
         if rs:
             g = collections.defaultdict(list)
             for r in rs:
-                why = first_incompatibility(os.path.join(run, "out", r["goal"] + "." + m + ".out"))
-                g["pac: %s | apt: %s" % (why, apt_reason(r))].append(r["goal"])
+                why = first_incompatibility(os.path.join(run, "out", r["query"] + "." + m + ".out"))
+                g["pac: %s | apt: %s" % (why, apt_reason(r))].append(r["query"])
             show("%s, mode %s, by each side's reason" % (c, m), g)

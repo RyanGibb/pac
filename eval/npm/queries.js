@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// Goals for scale.sh, as name@spec, one per name in names.txt that the
+// Queries for scale.sh, as name@spec, one per name in names.txt that the
 // snapshot holds a packument for.  The names are listed rather than read off
 // the snapshot directory because closing the snapshot adds packuments, and a
-// name fetched only because some goal's cone reaches it is not a goal.
+// name fetched only because some query's cone reaches it is not a query.
 // By default spec is the version a bare `npm install <name>` installs, which
 // npm-package-arg reads as the range "*": npm's own npm-pick-manifest asked
 // for "*" at the host npm-version records.  A packument with no such version
 // is left out.  With `targeted`, spec is a range, one pool per line prefix,
-// for the root edges a pinned goal never exercises:
+// for the root edges a pinned query never exercises:
 //   star-deprecated   "*" where dist-tags.latest is deprecated
 //   star-engines      "*" where dist-tags.latest fails the host's engines
 //   star-prerelease   "*" where dist-tags.latest is a prerelease, which
@@ -16,7 +16,7 @@
 //                     older release in M is not
 //   major-engines     "M.x" where M's newest release fails the host's engines
 //                     and an older release in M passes
-// usage: goals.js <snapshot-dir> [targeted]
+// usage: queries.js <snapshot-dir> [targeted]
 'use strict'
 const fs = require('fs')
 const path = require('path')

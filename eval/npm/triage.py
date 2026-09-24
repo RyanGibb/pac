@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Classify a scale.sh run, closed and not-closed goals apart, and cluster
+"""Classify a scale.sh run, closed and not-closed queries apart, and cluster
 its divergences by primary divergence: a requirer both answers install at
 the same version, and a directory of it the two resolve differently.  Most
 of a divergence's edges lie below a handful of these.  Each is described by
@@ -74,14 +74,14 @@ for closed in ("yes", "no"):
         g = collections.defaultdict(list)
         for r in rs:
             if r["class"] == c:
-                for p in set(primaries(os.path.join(run, "out", r["goal"]))) or ["?"]:
-                    g[p].append(r["goal"])
-        show("%s, closed %s, by primary divergence (a goal counts once per kind)" % (c, closed), g)
+                for p in set(primaries(os.path.join(run, "out", r["query"]))) or ["?"]:
+                    g[p].append(r["query"])
+        show("%s, closed %s, by primary divergence (a query counts once per kind)" % (c, closed), g)
     for c in ("tool-declines", "both-refuse", "instance-gap"):
         g = collections.defaultdict(list)
         for r in rs:
             if r["class"] == c:
-                o = os.path.join(run, "out", r["goal"])
+                o = os.path.join(run, "out", r["query"])
                 pac = first_incompatibility(o + ".out") if r["pac"] == "unsat" else "ours " + r["valid"]
-                g["npm %s | %s" % (npm_code(o + ".npm"), pac)].append(r["goal"])
+                g["npm %s | %s" % (npm_code(o + ".npm"), pac)].append(r["query"])
         show("%s, closed %s, by each side's reason" % (c, closed), g)

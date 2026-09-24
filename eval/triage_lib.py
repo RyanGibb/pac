@@ -1,5 +1,5 @@
 """Shared by each eval/<eco>/triage.py: a scale.sh run's result lines, the
-class each goal falls in, and the tables every ecosystem prints."""
+class each query falls in, and the tables every ecosystem prints."""
 import collections
 import os
 import re
@@ -48,7 +48,7 @@ def classify(r):
 def group(rows, label):
     g = collections.defaultdict(list)
     for r in rows:
-        g[label(r)].append(r["goal"])
+        g[label(r)].append(r["query"])
     return g
 
 
@@ -72,7 +72,7 @@ def first_incompatibility(out):
 
 def report(run, by="mode"):
     """Print the class counts per mode (or per value of another field), per
-    pool of the goals file, and between modes, and return the rows, each
+    pool of the queries file, and between modes, and return the rows, each
     with its class."""
     rows = [dict(f.split("=", 1) for f in l.split()) for l in lines(os.path.join(run, "results.txt"))]
     for r in rows:
@@ -80,8 +80,8 @@ def report(run, by="mode"):
     parts = sorted(dict.fromkeys(r[by] for r in rows), key=lambda m: m != "default")
     for m in parts:
         show("classes, %s %s" % (by, m), group([r for r in rows if r[by] == m], lambda r: r["class"]))
-    cls = {(r["goal"], r[by]): r["class"] for r in rows}
-    pools = [l.split("\t", 1) for l in lines(os.path.join(run, "goals.txt")) if "\t" in l]
+    cls = {(r["query"], r[by]): r["class"] for r in rows}
+    pools = [l.split("\t", 1) for l in lines(os.path.join(run, "queries.txt")) if "\t" in l]
     for m in parts if pools else []:
         print("\n== classes by pool, %s %s" % (by, m))
         t = collections.defaultdict(collections.Counter)

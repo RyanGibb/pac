@@ -8,7 +8,7 @@ steps in particular want a big machine:
   is liable to be OOM-killed -- silently, since the killer takes the
   shell with it and leaves an empty log.
 - the archive-scale sweeps, where a frontend is run across an entire
-  index rather than the curated goal list.
+  index rather than the curated query list.
 
 Nothing here is required to build `pac` or to run the cram tests; a
 laptop is fine for those.

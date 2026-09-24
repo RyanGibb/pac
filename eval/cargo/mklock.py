@@ -2,7 +2,7 @@
 """Write OUR Cargo resolution out as a Cargo.lock, so cargo can be asked
 to verify it.
 
-The inverse of the reading run_goal.py does: `pac cargo --print-parents`
+The inverse of the reading run_query.py does: `pac cargo --print-parents`
 prints the resolved crate set and the parent relation over it, which is
 exactly the two things a lockfile records -- one [[package]] per node,
 and each node's `dependencies` list naming its children.  Nothing else
@@ -11,10 +11,10 @@ node came from, and `checksum` is the index's own cksum for that exact
 version, copied rather than computed, because the body played no part in
 picking the version and cargo only checks it on download.
 
-The root is the goal crate itself, built as a path package by
-run_goal.py's build_manifest, so its [[package]] carries neither source
+The root is the queried crate itself, built as a path package by
+run_query.py's build_manifest, so its [[package]] carries neither source
 nor checksum -- that absence is what tells cargo which node is the
-workspace member.  Where the goal crate is also reached as a dependency
+workspace member.  Where the queried crate is also reached as a dependency
 of something, that too is this one node, and build_manifest has told
 cargo so with a [patch].
 
@@ -32,7 +32,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from run_goal import crate_path  # noqa: E402
+from run_query import crate_path  # noqa: E402
 
 REGISTRY = "registry+https://github.com/rust-lang/crates.io-index"
 

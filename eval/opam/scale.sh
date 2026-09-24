@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 # Whether pac's selection is builtin-0install's, and valid.sh's question,
-# over every package name in the repository, or over the queries a goals
+# over every package name in the repository, or over the queries a
 # file lists (flags included, as in "--with-test fmt"), in each of pac's
 # search modes, answered into the run directory.  Not builtin-mccs, opam's
 # default: that one optimises over whole resolutions and is out of reach by
-# construction.  Two more per goal: pin, whether 0install's answer is a
+# construction.  Two more per query: pin, whether 0install's answer is a
 # resolution of our instance at all, which is what separates a preference
 # gap from an instance gap; and where 0install refuses, mccs, since 0install
 # gives up where a solution may still exist.
-# usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [goals-file]
+# usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]
 #        MODES="default 0install-order" P=<jobs> TIMEOUT=<s>
 S="$(cd "$(dirname "$0")" && pwd)"
 MODES=${MODES:-default 0install-order}
 . "$S/../scale-lib.sh"
 REPO=$TOP/repos/opam-repository
 
-all_goals() { ls "$REPO/packages"; }
+all_queries() { ls "$REPO/packages"; }
 
 prepare() {
   # opam runs ocamlc to set sys-ocaml-version, which would make ocaml-system
@@ -29,7 +29,7 @@ prepare() {
 }
 
 ask() {
-  # opam holds the switch's lock for a whole dry run, so each goal asks its own copy
+  # opam holds the switch's lock for a whole dry run, so each query asks its own copy
   rm -rf "$o.root"; cp -r "$OPAMROOT" "$o.root"
   OPAMROOT=$o.root timeout "$TIMEOUT" opam install $1 --dry-run --solver=builtin-0install \
     --switch cmp --no-depexts -y > "$o.0i" 2>&1
@@ -75,7 +75,7 @@ one() {
       else valid "$p" "$m" "$2"; fi
       last=$p lastvalid=$valid
     fi
-    echo "goal=$1 mode=$m pac=$pac tool=$tool corr=$corr valid=$valid oo=$oo to=$to wall=$wall pin=$pin mccs=$mccs"
+    echo "query=$1 mode=$m pac=$pac tool=$tool corr=$corr valid=$valid oo=$oo to=$to wall=$wall pin=$pin mccs=$mccs"
   done
 }
 
