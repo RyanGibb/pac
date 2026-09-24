@@ -34,14 +34,6 @@ def load():
 
 
 idx, prov = load()
-# deb_solve.ml keeps one leftmost-first order per alternative set, the first
-# it records, so a set the index lists in several orders can be decided
-# against a clause's own order
-orders = collections.defaultdict(set)
-for st in idx.values():
-    for cl in st["dep"] + st["rec"]:
-        if len(cl) > 1:
-            orders[frozenset(cl)].add(tuple(dict.fromkeys(cl)))
 
 
 def sat(ans, cl):
@@ -55,11 +47,9 @@ def decisions(ours, apt, goal):
             for cl in idx.get(p, {}).get(kind, []):
                 so, sa = sat(ours, cl), sat(apt, cl)
                 if (so | sa) - shared:
-                    other = [o[0] for o in orders.get(frozenset(cl), ()) if o[0] != cl[0]]
-                    reordered = not sat(ours, cl[:1]) and any(sat(ours, [a]) for a in other)
-                    yield "%s ours=%s apt=%s%s  [%s: %s]" % (
+                    yield "%s ours=%s apt=%s  [%s: %s]" % (
                         kind, "+".join(sorted(so)) or "-", "+".join(sorted(sa)) or "-",
-                        " REORDERED" if reordered else "", p, " | ".join(a[0] for a in cl))
+                        p, " | ".join(a[0] for a in cl))
 
 
 def apt_reason(r):

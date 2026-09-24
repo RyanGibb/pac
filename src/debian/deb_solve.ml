@@ -66,7 +66,6 @@ struct
     (a.name, (qual_of a.aqual, formula_of_constr a.constr))
 
   let dtop_of = function Some v -> DMA.Deb.DTVal v | None -> DMA.Deb.DTTop
-  let maset_of = DMA.AtomSet.ofList
 
   (* Normalized stanza: apt rewrites arch:all packages to the native arch
      and downgrades all+same to no (arch:all content is arch-invariant).
@@ -125,12 +124,6 @@ struct
     stanza_of : (DMA.Pkg.t, nstanza) Hashtbl.t;
     group_of : (string, (string * string) list) Hashtbl.t;
     providers_of : (string, (DMA.Pkg.t * DMA.Deb.coq_DTop) list) Hashtbl.t;
-    (* Debian prefers the leftmost alternative of a clause, and a mangled
-       clause is an atom *set*, so the field's left-to-right order has to be
-       carried beside it.  Keyed by the mangled clause, and shared between
-       Depends and Recommends because Disjunct A and Soft A range over the
-       same A. *)
-    clause_order : (DMA.Deb.AtomSet.t, DMA.Deb.Atom.t array) Hashtbl.t;
     class_of : (DMA.Pkg.t, DMA.coq_MAClass) Hashtbl.t;
     (* stanzas whose clauses a sub-instance has asked for, reported under
        PACPROF:
@@ -145,43 +138,15 @@ struct
   let mangle fields =
     List.map (List.map matom_of) (DF.parse_depends_fields fields)
 
-  let index_clauses idx (p : DMA.Pkg.t) alts_list =
-    let b = snd (fst p) in
-    List.iter
-      (fun alts ->
-        let ma_set = DMA.reduceClause b (maset_of alts) in
-        (* Two clauses may list the same alternatives in different orders;
-           whichever is recorded first wins.  Both packages already reduce to
-           one synthetic name, hence to one PubGrub decision, so there was
-           never
-           room for the two to be ordered apart.  The order is a preference
-           and nothing more, but not because every alternative is a live
-           candidate -- a good few of the clause sets written both ways
-           round list an
-           alternative no version satisfies, such as fuse (<< 3) against
-           fuse3, or makedev against udev.  Recording such an order first puts
-           a dead alternative at the head and costs a backtrack; it cannot
-           change the answer, because an alternative nothing satisfies is one
-           PubGrub can never decide the disjunct to. *)
-        if not (Hashtbl.mem idx.clause_order ma_set) then
-          Hashtbl.replace idx.clause_order ma_set
-            (Array.of_list (List.map (DMA.reduceAtom b) alts)))
-      alts_list
-
   (* the alternative's position in the clause being decided, which is what
      PVersion.compare ranks on; max_int for an atom the clause does not list,
      which cannot arise for a name introduced from that clause *)
-  let atom_pos idx aset a =
-    match Hashtbl.find_opt idx.clause_order aset with
-    | None -> max_int
-    | Some alts ->
-        let n = Array.length alts in
-        let rec go i =
-          if i >= n then max_int
-          else if DMA.Deb.Atom.eq_dec alts.(i) a then i
-          else go (i + 1)
-        in
-        go 0
+  let atom_pos (alts : DMA.Deb.Clause.t) a =
+    let rec go i = function
+      | [] -> max_int
+      | b :: bs -> if DMA.Deb.Atom.eq_dec b a then i else go (i + 1) bs
+    in
+    go 0 alts
 
   let build_index ?(recommends = true) (stanzas : DF.stanza list) : index =
     let idx =
@@ -190,7 +155,6 @@ struct
         stanza_of = Hashtbl.create 65536;
         group_of = Hashtbl.create 65536;
         providers_of = Hashtbl.create 4096;
-        clause_order = Hashtbl.create 65536;
         class_of = Hashtbl.create 65536;
         n_clauses_parsed = 0;
       }
@@ -209,14 +173,10 @@ struct
       stanzas;
     idx
 
-  (* A Disjunct, Soft or Selector name is introduced only by reducing a
-     stanza
-     that carries the clause, so clause_order can be filled as stanzas are
-     read: nothing can ask about a mangled clause, or an atom of one, before
-     the owner it came from has been through here.  That is not true of
-     providers_of, which is a preimage -- who provides the name I want --
-     that no clause of the asking package can reach, so Provides stays
-     eager. *)
+  (* Only a lookup at a stanza's own package reads its clauses, so they can
+     wait until one does.  providers_of cannot: it is a preimage -- who
+     provides the name I want -- that no clause of the asking package can
+     reach, so Provides stays eager. *)
   let clauses_of idx (stz : nstanza) =
     match stz.nclauses with
     | Some c -> c
@@ -224,8 +184,6 @@ struct
         let c = (mangle stz.raw_deps, mangle stz.raw_recs) in
         stz.nclauses <- Some c;
         idx.n_clauses_parsed <- idx.n_clauses_parsed + 1;
-        index_clauses idx stz.npkg (fst c);
-        index_clauses idx stz.npkg (snd c);
         c
 
   let deps_of idx stz = fst (clauses_of idx stz)
@@ -247,7 +205,7 @@ struct
     | Some stz ->
         let b = snd (fst p) in
         let mk opt synth alts =
-          let ma = DMA.reduceClause b (maset_of alts) in
+          let ma = DMA.reduceClause b alts in
           let eatoms =
             List.sort_uniq Stdlib.compare (List.map (DMA.reduceAtom b) alts)
           in
@@ -315,14 +273,14 @@ struct
     | None -> DMA.Deps.empty
     | Some stz ->
         DMA.Deps.ofList
-          (List.map (fun alts -> (p, maset_of alts)) (deps_of idx stz))
+          (List.map (fun alts -> (p, alts)) (deps_of idx stz))
 
   let ma_recs_of_pkg idx p =
     match Hashtbl.find_opt idx.stanza_of p with
     | None -> DMA.Deps.empty
     | Some stz ->
         DMA.Deps.ofList
-          (List.map (fun alts -> (p, maset_of alts)) (recs_of idx stz))
+          (List.map (fun alts -> (p, alts)) (recs_of idx stz))
 
   let ma_conf_of_pkg idx p =
     match Hashtbl.find_opt idx.stanza_of p with
@@ -638,7 +596,7 @@ struct
       match (n', v) with
       | ( (DMA.Deb.Name.Disjunct aset | DMA.Deb.Name.Soft aset),
           DMA.Deb.Version.Atom a ) ->
-          { PVersion.pos = atom_pos I.idx aset a; v }
+          { PVersion.pos = atom_pos aset a; v }
       | _ -> { PVersion.pos = 0; v }
 
     module PG = Pubgrub.Make (PName) (PVersion)
@@ -650,12 +608,22 @@ struct
             (fun a b -> if PVersion.compare b a > 0 then b else a)
             c cs
 
-    (* Does the partial solution already carry [tn] at one of [tvs]? *)
+    (* Does the partial solution already carry [tn] at one of [tvs]?  An
+       entailed selector does not: it says only that some provider will be
+       chosen, and apt, whose item for it is still pending, installs a
+       clause's leftmost alternative rather than wait for it.  Nor does a
+       range that still admits ⊥, which is what a conflict leaves a name,
+       not a need for it. *)
     let carried_at ~assigned tn tvs =
       match assigned tn with
       | PG.Unselected -> false
       | PG.Decided u -> List.exists (fun v -> PVersion.compare u v = 0) tvs
-      | PG.Entailed r -> List.exists (fun v -> PG.Ranges.contains v r) tvs
+      | PG.Entailed r -> (
+          match tn with
+          | DMA.Deb.Name.Selector _ -> false
+          | _ ->
+              (not (PG.Ranges.contains (tag tn DMA.Deb.Version.Bot) r))
+              && List.exists (fun v -> PG.Ranges.contains v r) tvs)
 
     (* The back edge a selector candidate would add: dependees sends Ref m w
        to (Orig m, Orig w) and RefReal w to (Orig (aname a), Orig w). *)
@@ -775,9 +743,7 @@ struct
           | DMA.Deb.Name.Selector _ -> Apt_heap.Alternative
 
         let clause_atoms = function
-          | DMA.Deb.Name.Disjunct aset | DMA.Deb.Name.Soft aset ->
-              Option.map Array.to_list
-                (Hashtbl.find_opt I.idx.clause_order aset)
+          | DMA.Deb.Name.Disjunct aset | DMA.Deb.Name.Soft aset -> Some aset
           | DMA.Deb.Name.Selector a ->
               (* a one-alternative Depends has no disjunct package: the
                  selector itself is the work item *)

@@ -141,3 +141,73 @@ Package: cfld
 Version: 1
 Architecture: amd64
 Depends: cflb (= 1), cflc
+
+Package: ordapp
+Version: 1
+Architecture: amd64
+Depends: orddep
+Recommends: ordx | ordy
+
+Package: orddep
+Version: 1
+Architecture: amd64
+Depends: ordy | ordx
+
+Package: ordx
+Version: 1
+Architecture: amd64
+
+Package: ordy
+Version: 1
+Architecture: amd64
+
+Package: selapp
+Version: 1
+Architecture: amd64
+Depends: seldep, selcommon
+
+Package: selcommon
+Version: 1
+Architecture: amd64
+Depends: selbase
+
+Package: selbase
+Version: 1
+Architecture: amd64
+
+Package: selutils
+Version: 1
+Architecture: amd64
+Provides: selbase
+
+Package: seldep
+Version: 1
+Architecture: amd64
+Depends: selutils | selbase
+
+Package: botapp
+Version: 1
+Architecture: amd64
+Depends: botcfl, botdep
+
+Package: botcfl
+Version: 1
+Architecture: amd64
+Conflicts: botx (<< 2)
+
+Package: botdep
+Version: 1
+Architecture: amd64
+Depends: boty | botx
+
+Package: botx
+Version: 1
+Architecture: amd64
+
+Package: botx
+Version: 2
+Architecture: amd64
+
+Package: boty
+Version: 1
+Architecture: amd64

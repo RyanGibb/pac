@@ -174,12 +174,12 @@ Definition debR : Deb.PkgSet.t :=
   Deb.PkgSet.add (1, 10) (Deb.PkgSet.add (1, 11) Deb.PkgSet.empty).
 
 Definition debD : Deb.Deps.t :=
-  Deb.Deps.add ((1, 10), Deb.AtomSet.singleton (1, Deb.Ver.FTop))
+  Deb.Deps.add ((1, 10), ((1, Deb.Ver.FTop) :: nil))
     Deb.Deps.empty.
 
 (* one recommends clause on (1, 10), naming a package that does not exist *)
 Definition debRec : Deb.Deps.t :=
-  Deb.Deps.add ((1, 10), Deb.AtomSet.singleton (2, Deb.Ver.FTop))
+  Deb.Deps.add ((1, 10), ((2, Deb.Ver.FTop) :: nil))
     Deb.Deps.empty.
 
 Example debian_vers_computes :
@@ -198,13 +198,13 @@ Proof. reflexivity. Qed.
 Example debian_soft_vers_computes :
   Deb.T.VSet.cardinal
     (Deb.versions debR debD debRec Deb.Prov.empty Deb.Conf.empty
-       (Deb.Name.Soft (Deb.AtomSet.singleton (2, Deb.Ver.FTop)))) = 2.
+       (Deb.Name.Soft ((2, Deb.Ver.FTop) :: nil))) = 2.
 Proof. reflexivity. Qed.
 
 Example debian_soft_escape_computes :
   Deb.T.DependeesSet.cardinal
     (Deb.dependees debR debD debRec Deb.Prov.empty Deb.Conf.empty
-       (Deb.Name.Soft (Deb.AtomSet.singleton (2, Deb.Ver.FTop)),
+       (Deb.Name.Soft ((2, Deb.Ver.FTop) :: nil),
         Deb.Version.Zero)) = 0.
 Proof. reflexivity. Qed.
 

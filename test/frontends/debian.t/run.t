@@ -91,3 +91,51 @@ decides cflb to ⊥, and the answer lists what is present.
   $ ../../../src/main.exe debian --native amd64 cflc Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
   cfla:amd64 1
   cflc:amd64 1
+
+A clause's alternatives are tried in its own order, whichever clause listing
+the same alternatives the solver read first.  ordapp recommends ordx | ordy
+and depends on orddep, which depends on ordy | ordx; apt takes ordy for
+orddep, and the recommendation is then already met:
+
+  $ ../../../src/main.exe debian --native amd64 ordapp Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  ordapp:amd64 1
+  orddep:amd64 1
+  ordy:amd64 1
+
+  $ ../../../src/main.exe debian --apt-heap --native amd64 ordapp Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  ordapp:amd64 1
+  orddep:amd64 1
+  ordy:amd64 1
+
+A selector the solution is committed to is not yet a package it carries.
+selcommon depends on selbase, which selutils provides, so its selector is
+entailed before seldep's selutils | selbase is decided; apt reaches seldep's
+clause first, takes selutils, and selutils then provides selbase:
+
+  $ ../../../src/main.exe debian --native amd64 selapp Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  selapp:amd64 1
+  selcommon:amd64 1
+  seldep:amd64 1
+  selutils:amd64 1
+
+  $ ../../../src/main.exe debian --apt-heap --native amd64 selapp Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  selapp:amd64 1
+  selcommon:amd64 1
+  seldep:amd64 1
+  selutils:amd64 1
+
+Nor is a name a conflict has reached: its range still admits ⊥.  botcfl
+conflicts with botx (<< 2), which leaves botx at 2 or ⊥, and botdep's
+boty | botx takes its leftmost:
+
+  $ ../../../src/main.exe debian --native amd64 botapp Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  botapp:amd64 1
+  botcfl:amd64 1
+  botdep:amd64 1
+  boty:amd64 1
+
+  $ ../../../src/main.exe debian --apt-heap --native amd64 botapp Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  botapp:amd64 1
+  botcfl:amd64 1
+  botdep:amd64 1
+  boty:amd64 1

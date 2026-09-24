@@ -188,7 +188,16 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Definition aform (a : Atom.t) : Deb.Ver.Formula := snd (snd a).
 
   Module AtomSet := FSetUOT Atom.
-  Module ClauseElt := PairUOT Pkg AtomSet.AsUOT.
+  (* in the field's order, which the translation carries into the key of
+     Debian.v's disjunct *)
+  Module Clause := ListUOT Atom.
+  Definition clauseAtoms (Al : Clause.t) : AtomSet.t := AtomSet.ofList Al.
+
+  Lemma mem_clauseAtoms : forall Al a,
+      AtomSet.In a (clauseAtoms Al) <-> List.In a Al.
+  Proof. intros Al a; apply AtomSet.mem_ofList. Qed.
+
+  Module ClauseElt := PairUOT Pkg Clause.
   Module Deps := FSetUOT ClauseElt.
 
   Module Provided := PairUOT N Deb.DTOT.
@@ -245,7 +254,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     ; res_clause_closure :
         forall p, PkgSet.In p S ->
         forall Al, Deps.In (p, Al) D ->
-        exists a, AtomSet.In a Al /\
+        exists a, List.In a Al /\
           exists q, PkgSet.In q S /\ MAMatch Pi M (parch p) a q
     ; res_conflict_avoidance :
         forall p, PkgSet.In p S ->
@@ -274,9 +283,16 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       | QAny => QAAny
       end), aform a).
 
-  Module SOcl := SetOps Atom Deb.Atom AtomSet Deb.AtomSet.
-  Definition reduceClause (da : A.t) (Al : AtomSet.t) : Deb.AtomSet.t :=
-    SOcl.map (reduceAtom da) Al.
+  Definition reduceClause (da : A.t) (Al : Clause.t) : Deb.Clause.t :=
+    List.map (reduceAtom da) Al.
+
+  Lemma mem_reduceClause : forall da Al a',
+      Deb.AtomSet.In a' (Deb.clauseAtoms (reduceClause da Al)) <->
+      exists a, List.In a Al /\ a' = reduceAtom da a.
+  Proof.
+    intros da Al a'; rewrite Deb.mem_clauseAtoms; unfold reduceClause.
+    rewrite List.in_map_iff; split; intros [a [Ha He]]; exists a; auto.
+  Qed.
 
   Module SOdp := SetOps ClauseElt Deb.ClauseElt Deps Deb.Deps.
   Definition reduceDeps (D : Deps.t) : Deb.Deps.t :=
@@ -776,7 +792,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       { rewrite mem_reduceDeps; exists p, Al; split;
           [exact HAl | reflexivity]. }
       destruct (Hcc (embedPkg p) HpT _ Hd) as [ea [Ha [qh [HqhS HqhM]]]].
-      unfold reduceClause in *; rewrite SOcl.mem_map in Ha; destruct Ha as [a [Hat Hae]]; subst ea.
+      unfold reduceClause in Ha; apply List.in_map_iff in Ha;
+        destruct Ha as [a [Hae Hat]]; subst ea.
       pose proof (Hsub _ HqhS) as HqhR.
       unfold reduceReal in *; rewrite SOmr.mem_map in HqhR; destruct HqhR as [q [HqR Hqe]]; subst qh.
       exists a; split; [exact Hat |].
@@ -888,7 +905,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       apply embedPkg_injective in Hp2; subst p0 A.
       destruct (HScc p HpS Al HD) as [a [Hat [q [HqS HqM]]]].
       exists (reduceAtom (parch p) a); split.
-      { unfold reduceClause; rewrite SOcl.mem_map; exists a; split; [exact Hat | reflexivity]. }
+      { apply List.in_map; exact Hat. }
       exists (embedPkg q); split.
       { unfold reduceReal; rewrite SOmr.mem_map; exists q; split; [exact HqS | reflexivity]. }
       exact (proj1 (match_transfer R Pi M (parch p) a q (HSsub q HqS)) HqM).
@@ -1032,7 +1049,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Module PkgPreimage := PreimageOfKeys N Pkg NSet PkgSet.
     Module ProvFibred := FibredLabelledRel Pkg N Deb.DTOT ProvElt Prov.
     Module ProvPreimage := PreimageOfKeys N ProvElt NSet Prov.
-    Module DepsFibred := FibredRel Pkg AtomSet.AsUOT ClauseElt Deps.
+    Module DepsFibred := FibredRel Pkg Clause ClauseElt Deps.
     Module ConfFibred := FibredRel Pkg Atom ConfElt Conf.
     Module ConfPreimage := PreimageOfKeys N ConfElt NSet Conf.
     Module ClsPreimage := PreimageOfKeys Pkg ClsElt PkgSet Cls.
@@ -1510,15 +1527,16 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     Module SOan := SetOps Atom N AtomSet NSet.
-    Definition clauseNames (Al : AtomSet.t) : NSet.t := SOan.map aname Al.
+    Definition clauseNames (Al : Clause.t) : NSet.t :=
+      SOan.map aname (clauseAtoms Al).
 
     Lemma mem_clauseNames : forall Al (m : N.t),
         NSet.In m (clauseNames Al) <->
-        exists a, AtomSet.In a Al /\ aname a = m.
+        exists a, List.In a Al /\ aname a = m.
     Proof.
       intros Al m; unfold clauseNames; rewrite SOan.mem_map.
-      split; intros [a [Ha Hm]]; exists a; split;
-        solve [exact Ha | symmetry; exact Hm].
+      split; intros [a [Ha Hm]]; exists a; rewrite mem_clauseAtoms in *;
+        split; solve [exact Ha | symmetry; exact Hm].
     Qed.
 
     Module SOcn := SetOps ClauseElt N Deps NSet.
@@ -1757,14 +1775,13 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     Lemma occursAtomb_reduceDeps : forall D (p : Pkg.t) Al a,
-        Deps.In (p, Al) D -> AtomSet.In a Al ->
+        Deps.In (p, Al) D -> List.In a Al ->
         Deb.occursAtomb (reduceDeps D) (reduceAtom (parch p) a) = true.
     Proof.
       intros D p Al a HD Ha; apply Deb.occursAtomb_iff.
       exists (embedPkg p), (reduceClause (parch p) Al); split.
       - rewrite mem_reduceDeps; exists p, Al; split; [exact HD | reflexivity].
-      - unfold reduceClause; rewrite SOcl.mem_map;
-          exists a; split; [exact Ha | reflexivity].
+      - apply mem_reduceClause; exists a; split; [exact Ha | reflexivity].
     Qed.
 
     Lemma reduceDeps_fibre : forall D (p : Pkg.t) A,
@@ -1784,7 +1801,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
     Lemma reduceDeps_atomNames : forall D (p : Pkg.t) A (a' : Deb.Atom.t),
         Deb.Deps.In (embedPkg p, A) (reduceDeps D) ->
-        Deb.AtomSet.In a' A ->
+        Deb.AtomSet.In a' (Deb.clauseAtoms A) ->
         NSet.In (fst (fst a')) (atomNames D p).
     Proof.
       intros D p A a' HA Ha.
@@ -1792,7 +1809,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       pose proof (f_equal fst Heq) as Hf; cbn [fst] in Hf.
       apply embedPkg_injective in Hf; subst p0.
       pose proof (f_equal snd Heq) as Hs; cbn [snd] in Hs; subst A.
-      unfold reduceClause in Ha; rewrite SOcl.mem_map in Ha.
+      rewrite mem_reduceClause in Ha.
       destruct Ha as [a0 [Ha0 ->]].
       apply mem_atomNames; exists Al; split; [exact HD |].
       apply mem_clauseNames; exists a0; split; [exact Ha0 | reflexivity].
@@ -2184,7 +2201,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
     Theorem versions_lookupSelectorMA :
       forall R D Rec Pi G M (p : Pkg.t) Al (a : Atom.t),
-        Deps.In (p, Al) D -> AtomSet.In a Al ->
+        Deps.In (p, Al) D -> List.In a Al ->
         Deb.versions (reduceReal R) (reduceDeps D) (reduceRec Rec)
           (reduceProv R Pi M)
           (reduceConf R G M) (Deb.Name.Selector (reduceAtom (parch p) a)) =
@@ -2208,7 +2225,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
     Theorem dependees_lookupSelectorMA :
       forall R D Rec Pi G M (p : Pkg.t) Al (a : Atom.t) (y : Deb.Version.t),
-        Deps.In (p, Al) D -> AtomSet.In a Al ->
+        Deps.In (p, Al) D -> List.In a Al ->
         Deb.dependees (reduceReal R) (reduceDeps D) (reduceRec Rec)
           (reduceProv R Pi M)
           (reduceConf R G M)
@@ -2238,7 +2255,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
        every provided recommend would take the escape. *)
     Theorem versions_lookupSelectorRecMA :
       forall R D Rec Pi G M (p : Pkg.t) Al (a : Atom.t),
-        Deps.In (p, Al) Rec -> AtomSet.In a Al ->
+        Deps.In (p, Al) Rec -> List.In a Al ->
         Deb.versions (reduceReal R) (reduceDeps D) (reduceRec Rec)
           (reduceProv R Pi M)
           (reduceConf R G M) (Deb.Name.Selector (reduceAtom (parch p) a)) =
@@ -2265,7 +2282,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
        with the recommends clause in the Rec position. *)
     Theorem dependees_lookupSelectorRecMA :
       forall R D Rec Pi G M (p : Pkg.t) Al (a : Atom.t) (y : Deb.Version.t),
-        Deps.In (p, Al) Rec -> AtomSet.In a Al ->
+        Deps.In (p, Al) Rec -> List.In a Al ->
         Deb.dependees (reduceReal R) (reduceDeps D) (reduceRec Rec)
           (reduceProv R Pi M)
           (reduceConf R G M)

@@ -250,6 +250,21 @@ Module ListComp (A : ComparableType) <: ComparableType.
   Qed.
 End ListComp.
 
+(* ListComp over an element that is already a UOT, whose laws are stated
+   through compare_spec and so have to be restated for ComparableType. *)
+Module ListUOT (X : UsualOrderedType) <: UsualOrderedType.
+  Module XF := UOTCompareFacts X.
+  Module XComp <: ComparableType.
+    Definition t := X.t.
+    Definition compare := X.compare.
+    Definition compare_eq_iff := XF.compare_eq_iff.
+    Definition compare_antisym := XF.compare_antisym.
+    Definition compare_lt_trans := XF.compare_lt_trans.
+  End XComp.
+  Module LComp := ListComp XComp.
+  Include UOTFromCompare LComp.
+End ListUOT.
+
 (* Stdlib's pair-ordered-type functors build setoid eq; none preserves
    UsualOrderedType. *)
 Module PairUOT (A B : UsualOrderedType) <: UsualOrderedType.

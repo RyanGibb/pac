@@ -104,7 +104,19 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Definition aform (a : Atom.t) : Ver.Formula := snd a.
 
   Module AtomSet := FSetUOT Atom.
-  Module ClauseElt := PairUOT Pkg AtomSet.AsUOT.
+  (* A clause keeps its alternatives in the field's order, because the
+     disjunct it names is keyed by the clause: two clauses listing the same
+     alternatives in two orders are then two packages, each with its own
+     leftmost for a solver that prefers it.  What a resolution reads of a
+     clause is only which alternatives it has. *)
+  Module Clause := ListUOT Atom.
+  Definition clauseAtoms (A : Clause.t) : AtomSet.t := AtomSet.ofList A.
+
+  Lemma mem_clauseAtoms : forall A a,
+      AtomSet.In a (clauseAtoms A) <-> List.In a A.
+  Proof. intros A a; apply AtomSet.mem_ofList. Qed.
+
+  Module ClauseElt := PairUOT Pkg Clause.
   Module Deps := FSetUOT ClauseElt.
 
   Module DTOT := UOTFromCompare DTComp.
@@ -163,7 +175,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     ; res_clause_closure :
         forall p, PkgSet.In p S ->
         forall A, Deps.In (p, A) D ->
-        exists a, AtomSet.In a A /\
+        exists a, List.In a A /\
           exists q, PkgSet.In q S /\ Match Pi q a
     ; res_conflict_avoidance :
         forall p, PkgSet.In p S ->
@@ -176,29 +188,29 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Module AtomF := UOTCompareFacts Atom.
 
   Module NF := UOTCompareFacts N.
-  Module ASF := UOTCompareFacts AtomSet.AsUOT.
+  Module ClauseF := UOTCompareFacts Clause.
   Module ConfEltF := UOTCompareFacts ConfElt.
   #[local] Hint Rewrite AtomF.compare_eq_iff NF.compare_eq_iff
-    ASF.compare_eq_iff ConfEltF.compare_eq_iff : cmp_deb.
+    ClauseF.compare_eq_iff ConfEltF.compare_eq_iff : cmp_deb.
   #[local] Hint Extern 1 => cmp_by AtomF.compare_antisym : cmp_deb.
   #[local] Hint Extern 1 => cmp_by NF.compare_antisym : cmp_deb.
-  #[local] Hint Extern 1 => cmp_by ASF.compare_antisym : cmp_deb.
+  #[local] Hint Extern 1 => cmp_by ClauseF.compare_antisym : cmp_deb.
   #[local] Hint Extern 1 => cmp_by ConfEltF.compare_antisym : cmp_deb.
   #[local] Hint Extern 1 => cmp_by AtomF.compare_lt_trans : cmp_deb.
   #[local] Hint Extern 1 => cmp_by NF.compare_lt_trans : cmp_deb.
-  #[local] Hint Extern 1 => cmp_by ASF.compare_lt_trans : cmp_deb.
+  #[local] Hint Extern 1 => cmp_by ClauseF.compare_lt_trans : cmp_deb.
   #[local] Hint Extern 1 => cmp_by ConfEltF.compare_lt_trans : cmp_deb.
 
   Module Name.
     Inductive name : Type :=
     | Orig (n : N.t)
-    | Disjunct (A : AtomSet.t)
+    | Disjunct (A : Clause.t)
     (* a recommends clause: its alternatives as for Disjunct, and an escape
        version besides, so that the clause is discharged either way and
        constrains nothing.  Kept apart from Disjunct because the two are
-       content-keyed by the same atom set, and one clause may be a Depends
+       content-keyed by the same clause, and one clause may be a Depends
        of one package and a Recommends of another. *)
-    | Soft (A : AtomSet.t)
+    | Soft (A : Clause.t)
     | Selector (a : Atom.t).
     Definition t := name.
 
@@ -207,11 +219,11 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       | Orig n1, Orig n2 => N.compare n1 n2
       | Orig _, _ => Lt
       | Disjunct _, Orig _ => Gt
-      | Disjunct A1, Disjunct A2 => AtomSet.AsUOT.compare A1 A2
+      | Disjunct A1, Disjunct A2 => Clause.compare A1 A2
       | Disjunct _, _ => Lt
       | Soft _, Orig _ => Gt
       | Soft _, Disjunct _ => Gt
-      | Soft A1, Soft A2 => AtomSet.AsUOT.compare A1 A2
+      | Soft A1, Soft A2 => Clause.compare A1 A2
       | Soft _, _ => Lt
       | Selector a1, Selector a2 => Atom.compare a1 a2
       | Selector _, _ => Gt
@@ -313,8 +325,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
 
   Module NSet := FSetUOT N.
   Module SOan := SetOps Atom N AtomSet NSet.
-  Definition clauseNames (A : AtomSet.t) : NSet.t :=
-    SOan.map (fun '(n, _) => n) A.
+  Definition clauseNames (A : Clause.t) : NSet.t :=
+    SOan.map (fun '(n, _) => n) (clauseAtoms A).
 
   Module SOcnn := SetOps ClauseElt N Deps NSet.
   Definition depNames (D : Deps.t) : NSet.t :=
@@ -340,20 +352,20 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
             (NSet.union (confTargets G) (provOwners Pi)))).
 
   Module SOaw := SetOps Atom VersionOT AtomSet T.VSet.
-  Definition versionsDisj (A : AtomSet.t) : T.VSet.t :=
-    SOaw.map (fun a => Version.Atom a) A.
+  Definition versionsDisj (A : Clause.t) : T.VSet.t :=
+    SOaw.map (fun a => Version.Atom a) (clauseAtoms A).
 
   (* the escape: a candidate of the soft disjunct that discharges nothing,
      so the clause is always satisfiable and constrains nothing *)
-  Definition versionsSoft (A : AtomSet.t) : T.VSet.t :=
+  Definition versionsSoft (A : Clause.t) : T.VSet.t :=
     T.VSet.add Version.Zero (versionsDisj A).
 
-  Module ASEqb := UOTEqb AtomSet.AsUOT.
-  Definition hasClauseb (D : Deps.t) (A : AtomSet.t) : bool :=
-    Deps.exists_ (fun '(_, Al) => ASEqb.eqb Al A) D.
+  Module ClauseEqb := UOTEqb Clause.
+  Definition hasClauseb (D : Deps.t) (A : Clause.t) : bool :=
+    Deps.exists_ (fun '(_, Al) => ClauseEqb.eqb Al A) D.
 
   Definition occursAtomb (D : Deps.t) (a : Atom.t) : bool :=
-    Deps.exists_ (fun '(_, A) => AtomSet.mem a A) D.
+    Deps.exists_ (fun '(_, A) => AtomSet.mem a (clauseAtoms A)) D.
 
   (* An atom's selector is introduced from its Depends and its Recommends
      occurrences alike: a recommended alternative needs the same provider
@@ -399,7 +411,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         then T.VSet.add Version.Bot (embedVS (Ver.realVersions R n))
         else T.VSet.empty
     | Name.Disjunct A =>
-        if andb (hasClauseb D A) (2 <=? AtomSet.cardinal A)
+        if andb (hasClauseb D A) (2 <=? AtomSet.cardinal (clauseAtoms A))
         then versionsDisj A else T.VSet.empty
     (* no cardinality test, unlike Disjunct: a one-alternative Recommends
        still needs its escape, which is the whole of the soft disjunct *)
@@ -419,8 +431,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         T.DependeesSet.union
           (SOde.filterMap (fun c =>
                if Pkg.eq_dec (fst c) (n, v)
-               then if AtomSet.cardinal (snd c) =? 1
-                    then match AtomSet.min_elt (snd c) with
+               then if AtomSet.cardinal (clauseAtoms (snd c)) =? 1
+                    then match AtomSet.min_elt (clauseAtoms (snd c)) with
                          | Some a => Some (tgt R Pi a)
                          | None => None
                          end
@@ -442,14 +454,15 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
                 G))
     | (Name.Disjunct A, Version.Atom a) =>
         if andb (hasClauseb D A)
-             (andb (2 <=? AtomSet.cardinal A) (AtomSet.mem a A))
+             (andb (2 <=? AtomSet.cardinal (clauseAtoms A))
+                (AtomSet.mem a (clauseAtoms A)))
         then T.DependeesSet.singleton (tgt R Pi a)
         else T.DependeesSet.empty
     (* the escape (Name.Soft A, Version.Zero) falls through to the empty
        catch-all: picking it discharges nothing, which is what makes the
        clause free *)
     | (Name.Soft A, Version.Atom a) =>
-        if andb (hasClauseb Rec A) (AtomSet.mem a A)
+        if andb (hasClauseb Rec A) (AtomSet.mem a (clauseAtoms A))
         then T.DependeesSet.singleton (tgt R Pi a)
         else T.DependeesSet.empty
     | (Name.Selector a, Version.Ref m w) =>
@@ -478,19 +491,19 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     SOrp.map embedPkg R.
 
   Module SOap := SetOps Atom T.Pkg AtomSet T.PkgSet.
-  Definition disjunctAtoms (A : AtomSet.t) : T.PkgSet.t :=
-    SOap.map (fun a => (Name.Disjunct A, Version.Atom a)) A.
+  Definition disjunctAtoms (A : Clause.t) : T.PkgSet.t :=
+    SOap.map (fun a => (Name.Disjunct A, Version.Atom a)) (clauseAtoms A).
 
   Module SOcp := SetOps ClauseElt T.Pkg Deps T.PkgSet.
   Definition realDisjunct (D : Deps.t) : T.PkgSet.t :=
     SOcp.unionMap (fun '(_, A) =>
-        if 2 <=? AtomSet.cardinal A
+        if 2 <=? AtomSet.cardinal (clauseAtoms A)
         then disjunctAtoms A
         else T.PkgSet.empty)
       D.
 
-  Definition softAtoms (A : AtomSet.t) : T.PkgSet.t :=
-    SOap.map (fun a => (Name.Soft A, Version.Atom a)) A.
+  Definition softAtoms (A : Clause.t) : T.PkgSet.t :=
+    SOap.map (fun a => (Name.Soft A, Version.Atom a)) (clauseAtoms A).
 
   Definition realSoft (Rec : Deps.t) : T.PkgSet.t :=
     SOcp.unionMap (fun '(_, A) =>
@@ -501,13 +514,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Definition selectorVers (a : Atom.t) (ws : T.VSet.t) : T.PkgSet.t :=
     SOwp.map (fun w => (Name.Selector a, w)) ws.
 
-  Definition selectorAtoms (R : PkgSet.t) (Pi : Prov.t) (A : AtomSet.t) :
+  Definition selectorAtoms (R : PkgSet.t) (Pi : Prov.t) (A : Clause.t) :
       T.PkgSet.t :=
     SOap.unionMap (fun a =>
         if provb Pi a
         then selectorVers a (us R Pi a)
         else T.PkgSet.empty)
-      A.
+      (clauseAtoms A).
 
   Definition realSelector (R : PkgSet.t) (D : Deps.t) (Pi : Prov.t) :
       T.PkgSet.t :=
@@ -584,14 +597,14 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     rewrite Deps.exists_spec'.
     unfold Deps.Exists; split.
     - intros [c [Hc Hb]]; destruct c as [p Al]; cbn beta iota in Hb.
-      apply ASEqb.eqb_true_iff in Hb as ->; exists p; exact Hc.
+      apply ClauseEqb.eqb_true_iff in Hb as ->; exists p; exact Hc.
     - intros [p Hc].
-      exists (p, A); split; [exact Hc | apply ASEqb.eqb_refl].
+      exists (p, A); split; [exact Hc | apply ClauseEqb.eqb_refl].
   Qed.
 
   Lemma occursAtomb_iff : forall D a,
       occursAtomb D a = true <->
-      exists p Al, Deps.In (p, Al) D /\ AtomSet.In a Al.
+      exists p Al, Deps.In (p, Al) D /\ AtomSet.In a (clauseAtoms Al).
   Proof.
     intros D a; unfold occursAtomb.
     rewrite Deps.exists_spec'.
@@ -648,7 +661,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Qed.
 
   Lemma mem_clauseNames : forall A (n : N.t),
-      NSet.In n (clauseNames A) <-> exists f, AtomSet.In (n, f) A.
+      NSet.In n (clauseNames A) <-> exists f, AtomSet.In (n, f) (clauseAtoms A).
   Proof.
     intros A n; unfold clauseNames; rewrite SOan.mem_map.
     split.
@@ -786,7 +799,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
 
   Lemma mem_disjunctAtoms : forall A y,
       T.PkgSet.In y (disjunctAtoms A) <->
-      exists a, AtomSet.In a A /\ y = (Name.Disjunct A, Version.Atom a).
+      exists a, AtomSet.In a (clauseAtoms A) /\
+        y = (Name.Disjunct A, Version.Atom a).
   Proof.
     intros A y; unfold disjunctAtoms; rewrite SOap.mem_map; tauto.
   Qed.
@@ -794,13 +808,14 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Lemma mem_realDisjunct : forall D y,
       T.PkgSet.In y (realDisjunct D) <->
       exists p Al, Deps.In (p, Al) D /\
-        (2 <=? AtomSet.cardinal Al) = true /\
-        exists a, AtomSet.In a Al /\ y = (Name.Disjunct Al, Version.Atom a).
+        (2 <=? AtomSet.cardinal (clauseAtoms Al)) = true /\
+        exists a, AtomSet.In a (clauseAtoms Al) /\
+          y = (Name.Disjunct Al, Version.Atom a).
   Proof.
     intros D y; unfold realDisjunct; rewrite SOcp.mem_unionMap.
     split.
     - intros [[p Al] [Hc Hy]]; cbn beta iota in Hy.
-      destruct (2 <=? AtomSet.cardinal Al) eqn:Hcard;
+      destruct (2 <=? AtomSet.cardinal (clauseAtoms Al)) eqn:Hcard;
         [| exfalso; exact (SOcp.empty_in _ Hy)].
       apply mem_disjunctAtoms in Hy.
       destruct Hy as [a [Ha Hy]].
@@ -816,7 +831,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
 
   Lemma mem_versionsSoft : forall A w,
       T.VSet.In w (versionsSoft A) <->
-      w = Version.Zero \/ exists a, AtomSet.In a A /\ w = Version.Atom a.
+      w = Version.Zero \/
+      exists a, AtomSet.In a (clauseAtoms A) /\ w = Version.Atom a.
   Proof.
     intros A w; unfold versionsSoft, versionsDisj.
     rewrite SOvw.add_in, SOaw.mem_map; reflexivity.
@@ -824,7 +840,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
 
   Lemma mem_softAtoms : forall A y,
       T.PkgSet.In y (softAtoms A) <->
-      exists a, AtomSet.In a A /\ y = (Name.Soft A, Version.Atom a).
+      exists a, AtomSet.In a (clauseAtoms A) /\
+        y = (Name.Soft A, Version.Atom a).
   Proof.
     intros A y; unfold softAtoms; rewrite SOap.mem_map; tauto.
   Qed.
@@ -833,7 +850,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       T.PkgSet.In y (realSoft Rec) <->
       exists p Al, Deps.In (p, Al) Rec /\
         (y = (Name.Soft Al, Version.Zero) \/
-         exists a, AtomSet.In a Al /\ y = (Name.Soft Al, Version.Atom a)).
+         exists a, AtomSet.In a (clauseAtoms Al) /\
+           y = (Name.Soft Al, Version.Atom a)).
   Proof.
     intros Rec y; unfold realSoft; rewrite SOcp.mem_unionMap.
     split.
@@ -858,7 +876,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
 
   Lemma mem_selectorAtoms : forall R Pi A y,
       T.PkgSet.In y (selectorAtoms R Pi A) <->
-      exists a, AtomSet.In a A /\ provb Pi a = true /\
+      exists a, AtomSet.In a (clauseAtoms A) /\ provb Pi a = true /\
         exists w, T.VSet.In w (us R Pi a) /\ y = (Name.Selector a, w).
   Proof.
     intros R Pi A y; unfold selectorAtoms.
@@ -881,7 +899,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Lemma mem_realSelector : forall R D Pi y,
       T.PkgSet.In y (realSelector R D Pi) <->
       exists p Al, Deps.In (p, Al) D /\
-        exists a, AtomSet.In a Al /\ provb Pi a = true /\
+        exists a, AtomSet.In a (clauseAtoms Al) /\ provb Pi a = true /\
           exists w, T.VSet.In w (us R Pi a) /\ y = (Name.Selector a, w).
   Proof.
     intros R D Pi y; unfold realSelector; rewrite SOcp.mem_unionMap.
@@ -917,12 +935,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
 
   Lemma versions_disjunct_spec : forall R D Rec Pi G A w,
       T.VSet.In w (versions R D Rec Pi G (Name.Disjunct A)) <->
-      hasClauseb D A = true /\ (2 <=? AtomSet.cardinal A) = true /\
+      hasClauseb D A = true /\
+      (2 <=? AtomSet.cardinal (clauseAtoms A)) = true /\
       T.VSet.In w (versionsDisj A).
   Proof.
     intros R D Rec Pi G A w; cbn [versions].
     destruct (hasClauseb D A) eqn:H1; cbn [andb].
-    - destruct (2 <=? AtomSet.cardinal A) eqn:H2.
+    - destruct (2 <=? AtomSet.cardinal (clauseAtoms A)) eqn:H2.
       + split.
         * intro H; split; [reflexivity | split; [reflexivity | exact H]].
         * intros (_ & _ & H); exact H.
@@ -1094,9 +1113,10 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       T.DependeesSet.In y
         (dependees R D Rec Pi G (Name.Orig n, Version.Orig v)) <->
       (exists A, Deps.In ((n, v), A) D /\
-         (((AtomSet.cardinal A =? 1) = true /\
-           exists a, AtomSet.min_elt A = Some a /\ y = tgt R Pi a) \/
-          ((AtomSet.cardinal A =? 1) = false /\
+         (((AtomSet.cardinal (clauseAtoms A) =? 1) = true /\
+           exists a, AtomSet.min_elt (clauseAtoms A) = Some a /\
+             y = tgt R Pi a) \/
+          ((AtomSet.cardinal (clauseAtoms A) =? 1) = false /\
            y = (Name.Disjunct A, versionsDisj A)))) \/
       (exists A, Deps.In ((n, v), A) Rec /\
          y = (Name.Soft A, versionsSoft A)) \/
@@ -1114,8 +1134,9 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
                [[ep [ea ex]] [He Hy]]]];
         cbn [fst snd] in Hy.
       + destruct (Pkg.eq_dec cp (n, v)) as [-> | NE]; [| discriminate].
-        destruct (AtomSet.cardinal cA =? 1) eqn:Hcard.
-        * destruct (AtomSet.min_elt cA) as [a0 |] eqn:Hmin; [| discriminate].
+        destruct (AtomSet.cardinal (clauseAtoms cA) =? 1) eqn:Hcard.
+        * destruct (AtomSet.min_elt (clauseAtoms cA)) as [a0 |] eqn:Hmin;
+            [| discriminate].
           injection Hy as <-.
           left; exists cA; split; [exact Hc |].
           left; split; [exact Hcard |].
@@ -1156,13 +1177,14 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Lemma dependees_disjunct_spec : forall R D Rec Pi G A a y,
       T.DependeesSet.In y
         (dependees R D Rec Pi G (Name.Disjunct A, Version.Atom a)) <->
-      hasClauseb D A = true /\ (2 <=? AtomSet.cardinal A) = true /\
-      AtomSet.mem a A = true /\ y = tgt R Pi a.
+      hasClauseb D A = true /\
+      (2 <=? AtomSet.cardinal (clauseAtoms A)) = true /\
+      AtomSet.mem a (clauseAtoms A) = true /\ y = tgt R Pi a.
   Proof.
     intros R D Rec Pi G A a y; cbn [dependees].
     destruct (hasClauseb D A) eqn:H1; cbn [andb].
-    - destruct (2 <=? AtomSet.cardinal A) eqn:H2; cbn [andb].
-      + destruct (AtomSet.mem a A) eqn:H3; cbn [andb].
+    - destruct (2 <=? AtomSet.cardinal (clauseAtoms A)) eqn:H2; cbn [andb].
+      + destruct (AtomSet.mem a (clauseAtoms A)) eqn:H3; cbn [andb].
         * rewrite SOde.singleton_in.
           split.
           { intro H; split; [reflexivity |].
@@ -1180,11 +1202,12 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Lemma dependees_soft_spec : forall R D Rec Pi G A a y,
       T.DependeesSet.In y
         (dependees R D Rec Pi G (Name.Soft A, Version.Atom a)) <->
-      hasClauseb Rec A = true /\ AtomSet.mem a A = true /\ y = tgt R Pi a.
+      hasClauseb Rec A = true /\ AtomSet.mem a (clauseAtoms A) = true /\
+      y = tgt R Pi a.
   Proof.
     intros R D Rec Pi G A a y; cbn [dependees].
     destruct (hasClauseb Rec A) eqn:H1; cbn [andb].
-    - destruct (AtomSet.mem a A) eqn:H2; cbn [andb].
+    - destruct (AtomSet.mem a (clauseAtoms A)) eqn:H2; cbn [andb].
       + rewrite SOde.singleton_in.
         split.
         { intro H; split; [reflexivity |].
@@ -1269,12 +1292,12 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Qed.
 
   Lemma cardinal_in : forall A (a : Atom.t),
-      AtomSet.In a A -> 1 <= AtomSet.cardinal A.
+      AtomSet.In a (clauseAtoms A) -> 1 <= AtomSet.cardinal (clauseAtoms A).
   Proof.
     intros A a Ha.
     rewrite AtomSet.cardinal_spec.
     apply SOap.elements_in in Ha.
-    destruct (AtomSet.elements A); [destruct Ha | cbn; lia].
+    destruct (AtomSet.elements (clauseAtoms A)); [destruct Ha | cbn; lia].
   Qed.
 
   Theorem debian_soundness :
@@ -1375,9 +1398,9 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     - apply mem_debianResolution; exact Hroot.
     - intros p Hp A HA.
       apply mem_debianResolution in Hp.
-      destruct (AtomSet.cardinal A =? 1) eqn:Hcard.
-      + destruct (AtomSet.min_elt A) as [a |] eqn:Hmin.
-        * assert (HaA : AtomSet.In a A)
+      destruct (AtomSet.cardinal (clauseAtoms A) =? 1) eqn:Hcard.
+      + destruct (AtomSet.min_elt (clauseAtoms A)) as [a |] eqn:Hmin.
+        * assert (HaA : AtomSet.In a (clauseAtoms A))
             by (apply AtomSet.min_elt_spec1; exact Hmin).
           assert (Hocc : occursAtomb (allClauses D Rec) a = true)
             by (apply occursAtomb_allClausesL, occursAtomb_iff;
@@ -1390,13 +1413,14 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
             - left; split; [exact Hcard |].
               exists a; split; [exact Hmin | reflexivity]. }
           destruct (Htgt (embedPkg p) a Hp Hedge Hocc) as [q [HqS HqM]].
-          exists a; split; [exact HaA |].
+          exists a; split; [apply mem_clauseAtoms; exact HaA |].
           exists q; split; assumption.
         * exfalso.
           apply AtomSet.min_elt_spec3 in Hmin.
           apply Nat.eqb_eq in Hcard.
           rewrite AtomSet.cardinal_spec in Hcard.
-          destruct (AtomSet.elements A) as [| z l] eqn:He; [discriminate |].
+          destruct (AtomSet.elements (clauseAtoms A)) as [| z l] eqn:He;
+            [discriminate |].
           apply (Hmin z).
           apply SOap.elements_in.
           rewrite He; left; reflexivity.
@@ -1416,7 +1440,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         assert (Hocc : occursAtomb (allClauses D Rec) a = true)
           by (apply occursAtomb_allClausesL, occursAtomb_iff;
               exists p, A; split; [exact HA | exact HaA]).
-        assert (Hcard2 : (2 <=? AtomSet.cardinal A) = true).
+        assert (Hcard2 : (2 <=? AtomSet.cardinal (clauseAtoms A)) = true).
         { apply Nat.leb_le.
           apply Nat.eqb_neq in Hcard.
           assert (H1 := cardinal_in A a HaA).
@@ -1430,7 +1454,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           split; [apply AtomSet.mem_spec; exact HaA | reflexivity]. }
         destruct (Htgt (Name.Disjunct A, Version.Atom a) a HdvS Hedge2 Hocc)
           as [q [HqS HqM]].
-        exists a; split; [exact HaA |].
+        exists a; split; [apply mem_clauseAtoms; exact HaA |].
         exists q; split; assumption.
     - intros [pn pv] Hp a x HaG [[qn qv] [HqS [Hqp [Hxq HqM]]]].
       apply mem_debianResolution in Hp.
@@ -1476,11 +1500,11 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       injection H as H; exact H.
   Qed.
 
-  Definition satAtoms (Pi : Prov.t) (S : PkgSet.t) (A : AtomSet.t) :
+  Definition satAtoms (Pi : Prov.t) (S : PkgSet.t) (A : Clause.t) :
       AtomSet.t :=
     AtomSet.filter (fun a =>
         PkgSet.exists_ (fun q => matchb Pi q a) S)
-      A.
+      (clauseAtoms A).
 
   (* q satisfies a under its own name rather than through a Provides entry,
      which is what puts it in the real branch of us. *)
@@ -1499,7 +1523,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     | None => None
     end.
 
-  Definition cwSelector (Pi : Prov.t) (S : PkgSet.t) (A : AtomSet.t) :
+  Definition cwSelector (Pi : Prov.t) (S : PkgSet.t) (A : Clause.t) :
       T.PkgSet.t :=
     SOap.filterMap (fun a =>
         if provb Pi a
@@ -1508,12 +1532,12 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
              | None => None
              end
         else None)
-      A.
+      (clauseAtoms A).
 
   (* the soft disjunct reaches for a satisfied alternative when S has one
      and takes the escape otherwise: the escape is always there, so no
      recommends clause can make the witness fail *)
-  Definition cwSoft (Pi : Prov.t) (S : PkgSet.t) (A : AtomSet.t) : Version.t :=
+  Definition cwSoft (Pi : Prov.t) (S : PkgSet.t) (A : Clause.t) : Version.t :=
     match AtomSet.min_elt (satAtoms Pi S A) with
     | Some a => Version.Atom a
     | None => Version.Zero
@@ -1566,7 +1590,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       (T.PkgSet.union
          (SOcp.filterMap (fun c =>
               if andb (PkgSet.mem (fst c) S)
-                   (2 <=? AtomSet.cardinal (snd c))
+                   (2 <=? AtomSet.cardinal (clauseAtoms (snd c)))
               then match AtomSet.min_elt (satAtoms Pi S (snd c)) with
                    | Some a => Some (Name.Disjunct (snd c), Version.Atom a)
                    | None => None
@@ -1588,20 +1612,21 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
                (absentPkgs (absentIn S (instNames R D Rec Pi G)))))).
 
   Lemma cardinal1_eq : forall A (a b : Atom.t),
-      AtomSet.cardinal A = 1 ->
-      AtomSet.In a A -> AtomSet.In b A -> a = b.
+      AtomSet.cardinal (clauseAtoms A) = 1 ->
+      AtomSet.In a (clauseAtoms A) -> AtomSet.In b (clauseAtoms A) -> a = b.
   Proof.
     intros A a b Hcard Ha Hb.
     rewrite AtomSet.cardinal_spec in Hcard.
     apply SOap.elements_in in Ha; apply SOap.elements_in in Hb.
-    destruct (AtomSet.elements A) as [| c l]; [discriminate |].
+    destruct (AtomSet.elements (clauseAtoms A)) as [| c l]; [discriminate |].
     destruct l; [| discriminate].
     destruct Ha as [Ha | []]; destruct Hb as [Hb | []]; subst; reflexivity.
   Qed.
 
   Lemma mem_satAtoms : forall Pi S A a,
       AtomSet.In a (satAtoms Pi S A) <->
-      AtomSet.In a A /\ exists q, PkgSet.In q S /\ matchb Pi q a = true.
+      AtomSet.In a (clauseAtoms A) /\
+      exists q, PkgSet.In q S /\ matchb Pi q a = true.
   Proof.
     intros Pi S A a; unfold satAtoms.
     rewrite AtomSet.filter_spec'.
@@ -1642,7 +1667,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
 
   Lemma mem_cwSelector : forall Pi S A y,
       T.PkgSet.In y (cwSelector Pi S A) <->
-      exists a, AtomSet.In a A /\ provb Pi a = true /\
+      exists a, AtomSet.In a (clauseAtoms A) /\ provb Pi a = true /\
         exists w, chooseSatisfier Pi S a = Some w /\ y = (Name.Selector a, w).
   Proof.
     intros Pi S A y; unfold cwSelector.
@@ -1676,14 +1701,14 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       T.PkgSet.In y (coreResolution R D Rec Pi G S) <->
       (exists p, PkgSet.In p S /\ y = embedPkg p) \/
       (exists p Al, Deps.In (p, Al) D /\ PkgSet.mem p S = true /\
-         (2 <=? AtomSet.cardinal Al) = true /\
+         (2 <=? AtomSet.cardinal (clauseAtoms Al)) = true /\
          exists a, AtomSet.min_elt (satAtoms Pi S Al) = Some a /\
            y = (Name.Disjunct Al, Version.Atom a)) \/
       (exists p Al, Deps.In (p, Al) Rec /\ PkgSet.mem p S = true /\
          y = (Name.Soft Al, cwSoft Pi S Al)) \/
       (exists p Al, Deps.In (p, Al) (allClauses D Rec) /\
          PkgSet.mem p S = true /\
-         exists a, AtomSet.In a Al /\ provb Pi a = true /\
+         exists a, AtomSet.In a (clauseAtoms Al) /\ provb Pi a = true /\
            exists w, chooseSatisfier Pi S a = Some w /\
              y = (Name.Selector a, w)) \/
       (exists n, NSet.In n (instNames R D Rec Pi G) /\
@@ -1697,7 +1722,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     - intros [H1 | [H2 | [H3 | [H4 | H5]]]].
       + left; exact H1.
       + destruct H2 as [[cp cA] [Hc Hy]]; cbn [fst snd] in Hy.
-        destruct (andb (PkgSet.mem cp S) (2 <=? AtomSet.cardinal cA))
+        destruct (andb (PkgSet.mem cp S)
+                    (2 <=? AtomSet.cardinal (clauseAtoms cA)))
           eqn:Hg; [| discriminate].
         destruct (AtomSet.min_elt (satAtoms Pi S cA)) as [a0 |] eqn:Hmin;
           [| discriminate].
@@ -1775,7 +1801,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     assert (Hfwd : forall (a : Atom.t) (q : Pkg.t) n vs,
         PkgSet.In q S -> Match Pi q a ->
         (exists p A, Deps.In (p, A) (allClauses D Rec) /\ PkgSet.In p S /\
-           AtomSet.In a A) ->
+           AtomSet.In a (clauseAtoms A)) ->
         (n, vs) = tgt R Pi a ->
         exists dv, T.VSet.In dv vs /\
           T.PkgSet.In (n, dv) (coreResolution R D Rec Pi G S)).
@@ -1866,8 +1892,9 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
                            [a0 [x0 [qn [Ha0 [Hqn [Hne [Hx Heq]]]]]]]]].
         * assert (HpA : Deps.In ((pn, pv), A) D) by exact HA.
           destruct (Hclo (pn, pv) HpS A HpA) as [aw [HawA [q [HqS HqM]]]].
+          apply mem_clauseAtoms in HawA.
           destruct Hcase as [[Hcard [am [Hmin Heq]]] | [Hcard Heq]].
-          { assert (HamA : AtomSet.In am A)
+          { assert (HamA : AtomSet.In am (clauseAtoms A))
               by (apply AtomSet.min_elt_spec1; exact Hmin).
             assert (Haw : aw = am)
               by (apply Nat.eqb_eq in Hcard;
@@ -2094,7 +2121,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       match n' with
       | Name.Orig _ => True
       | Name.Disjunct A =>
-          hasClauseb D A = true /\ (AtomSet.cardinal A =? 1) = false
+          hasClauseb D A = true /\
+          (AtomSet.cardinal (clauseAtoms A) =? 1) = false
       | Name.Soft A => hasClauseb Rec A = true
       | Name.Selector a =>
           occursAtomb (allClauses D Rec) a = true /\ provb Pi a = true
@@ -2159,7 +2187,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
 
     Lemma mem_atomNames : forall D (p : Pkg.t) (n : N.t),
         NSet.In n (atomNames D p) <->
-        exists A, Deps.In (p, A) D /\ exists f, AtomSet.In (n, f) A.
+        exists A, Deps.In (p, A) D /\
+          exists f, AtomSet.In (n, f) (clauseAtoms A).
     Proof.
       intros D p n; unfold atomNames; rewrite SOcn.mem_unionMap.
       split.
@@ -2280,7 +2309,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       apply ProvFibred.mem_tailFibre; split; [exact Hin | reflexivity].
     Qed.
 
-    Module DepsFibred := FibredRel Pkg AtomSet.AsUOT ClauseElt Deps.
+    Module DepsFibred := FibredRel Pkg Clause ClauseElt Deps.
     Module ConfFibred := FibredRel Pkg Conflictees ConfElt Conf.
     (* A reachable name is a name of the instance: an edge targets a clause
        atom's name, a conflict target with a real version, or a provider. *)
@@ -2292,14 +2321,14 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       intros R D Rec Pi G n [[sn sv] [h Hd]].
       apply mem_reduceDeps in Hd; destruct Hd as [_ Hout].
       assert (Hclause : forall (E : Deps.t) (p : Pkg.t) A (a : Atom.t),
-                 Deps.In (p, A) E -> AtomSet.In a A ->
+                 Deps.In (p, A) E -> AtomSet.In a (clauseAtoms A) ->
                  NSet.In (aname a) (depNames E)).
       { intros E p A [an af] HE Ha; apply mem_depNames; exists p, A.
         split; [exact HE | apply mem_clauseNames; exists af; exact Ha]. }
       assert (Htgt : forall (a : Atom.t),
                  tgt R Pi a = (Name.Orig n, h) ->
                  (exists p A, Deps.In (p, A) (allClauses D Rec) /\
-                              AtomSet.In a A) ->
+                              AtomSet.In a (clauseAtoms A)) ->
                  NSet.In n (instNames R D Rec Pi G)).
       { intros a Ht [p [A [HE Ha]]]; unfold tgt in Ht.
         destruct (provb Pi a); [discriminate Ht |].
@@ -2590,7 +2619,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           rewrite (Hadm a x qn Hg Hqn) in Hy; exact Hy.
     Qed.
 
-    Theorem versions_lookupDisjunct : forall R D Rec Pi G (A : AtomSet.t),
+    Theorem versions_lookupDisjunct : forall R D Rec Pi G (A : Clause.t),
         (exists s h,
             T.DepRel.In (s, (Name.Disjunct A, h))
               (reduceDeps R D Rec Pi G)) ->
@@ -2609,7 +2638,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Qed.
 
     Theorem dependees_lookupDisjunct :
-      forall R D Rec Pi G (A : AtomSet.t) (n : N.t) (f : Ver.Formula),
+      forall R D Rec Pi G (A : Clause.t) (n : N.t) (f : Ver.Formula),
         T.PkgSet.In (Name.Disjunct A, Version.Atom (n, f))
           (reduceReal R D Rec Pi G) ->
         dependees R D Rec Pi G (Name.Disjunct A, Version.Atom (n, f)) =
@@ -2629,7 +2658,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       split; [apply AtomSet.mem_spec; exact Ha | exact Hy].
     Qed.
 
-    Theorem versions_lookupSoft : forall R D Rec Pi G (A : AtomSet.t),
+    Theorem versions_lookupSoft : forall R D Rec Pi G (A : Clause.t),
         (exists s h,
             T.DepRel.In (s, (Name.Soft A, h)) (reduceDeps R D Rec Pi G)) ->
         versions R D Rec Pi G (Name.Soft A) = versionsSoft A.
@@ -2641,7 +2670,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Qed.
 
     Theorem dependees_lookupSoft :
-      forall R D Rec Pi G (A : AtomSet.t) (n : N.t) (f : Ver.Formula),
+      forall R D Rec Pi G (A : Clause.t) (n : N.t) (f : Ver.Formula),
         T.PkgSet.In (Name.Soft A, Version.Atom (n, f))
           (reduceReal R D Rec Pi G) ->
         dependees R D Rec Pi G (Name.Soft A, Version.Atom (n, f)) =
