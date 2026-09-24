@@ -31,16 +31,35 @@ let int_of_digits s =
 
 let split_on c s = String.split_on_char c s
 
+(* npm parses versions and ranges with semver's loose flag, whose grammar
+   makes the hyphen before a prerelease optional: 2.0.14rc1 is 2.0.14-rc1.
+   Only after a full major.minor.patch, and only when a letter follows the
+   patch digits, so 1.2.x and 1.2.3.4 keep their readings. *)
+let split_pre (s : string) : string * string =
+  match String.index_opt s '-' with
+  | Some i -> (String.sub s 0 i, String.sub s (i + 1) (String.length s - i - 1))
+  | None ->
+      let n = String.length s in
+      let digits i =
+        let j = ref i in
+        while !j < n && is_digit s.[!j] do
+          incr j
+        done;
+        if !j > i then Some !j else None
+      in
+      let dot i = if i < n && s.[i] = '.' then Some (i + 1) else None in
+      let ( >>= ) = Option.bind in
+      let letter c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') in
+      (match digits 0 >>= dot >>= digits >>= dot >>= digits with
+      | Some i when i < n && letter s.[i] ->
+          (String.sub s 0 i, String.sub s i (n - i))
+      | _ -> (s, ""))
+
 let parse (s : string) : t =
   let s =
     match String.index_opt s '+' with Some i -> String.sub s 0 i | None -> s
   in
-  let core, pre =
-    match String.index_opt s '-' with
-    | Some i ->
-        (String.sub s 0 i, String.sub s (i + 1) (String.length s - i - 1))
-    | None -> (s, "")
-  in
+  let core, pre = split_pre s in
   let num s =
     let n = String.length s in
     let j = ref 0 in
@@ -148,12 +167,7 @@ let parse_spec (s : string) =
   let s =
     match String.index_opt s '+' with Some i -> String.sub s 0 i | None -> s
   in
-  let core, pre =
-    match String.index_opt s '-' with
-    | Some i ->
-        (String.sub s 0 i, String.sub s (i + 1) (String.length s - i - 1))
-    | None -> (s, "")
-  in
+  let core, pre = split_pre s in
   let parts = split_on '.' core in
   let get i =
     match List.nth_opt parts i with Some x -> comp_of x | None -> Absent

@@ -1,0 +1,4 @@
+{"name":"linter-plugin","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"linter-plugin","version":"1.0.0",
+    "peerDependencies":{"linter":"^8.0.0 || ^9.0.0"}}}}

@@ -1,0 +1,4 @@
+{"name":"star-app","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"star-app","version":"1.0.0",
+    "dependencies":{"pre-only":"*","pre-ahead":"","pre-depr":"*","pre-engine":"*"}}}}

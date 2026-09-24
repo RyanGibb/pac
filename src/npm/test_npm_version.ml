@@ -49,6 +49,10 @@ let () =
   (* missing components read as zero *)
   check "1" "1.0.0" 0;
   check "1.2" "1.2.0" 0;
+  (* loose semver: a prerelease may follow the patch without its hyphen *)
+  check "2.0.14rc1" "2.0.14-rc1" 0;
+  check "2.0.14rc1" "2.0.14" (-1);
+  check "1.0.0beta.2" "1.0.0-beta.2" 0;
 
   (* prerelease detection and release cores *)
   if Npm_version.is_prerelease "1.2.3" then (
@@ -138,6 +142,10 @@ let () =
   sat ">=1.2.3-rc.1 <2.0.0" "1.2.3" true;
   sat "1.2.3-rc.1" "1.2.3-rc.1" true;
   sat "*" "1.0.0-rc.1" false;
+  sat "^2.0.0" "2.0.14rc1" false;
+  sat ">=2.0.14rc1" "2.0.14-rc2" true;
+  rng ">=2.0.14rc1" ">=2.0.14-rc1";
+  rng "1.2.x" ">=1.2.0 <1.3.0";
   (* the rule is per comparator set, not per range *)
   sat "^1.2.3 || >=2.0.0-rc.1" "2.0.0-rc.1" true;
   sat "^1.2.3 || >=2.0.0-rc.1" "2.1.0-rc.1" false;

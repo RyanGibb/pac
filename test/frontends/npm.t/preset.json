@@ -1,0 +1,5 @@
+{"name":"preset","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"preset","version":"1.0.0",
+    "dependencies":{"syntax-a":"^1","syntax-b":"^1"},
+    "peerDependencies":{"compiler":"^7.0.0 || ^8.0.0"}}}}

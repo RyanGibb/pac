@@ -1,0 +1,4 @@
+{"name":"pre-depr","dist-tags":{"latest":"1.0.0-alpha.0"},
+ "versions":{
+  "0.1.0":{"name":"pre-depr","version":"0.1.0"},
+  "1.0.0-alpha.0":{"name":"pre-depr","version":"1.0.0-alpha.0","deprecated":"use 0.1"}}}

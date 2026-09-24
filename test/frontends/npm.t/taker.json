@@ -1,0 +1,4 @@
+{"name":"taker","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"taker","version":"1.0.0",
+    "dependencies":{"tok":"^3.0.0 || ^4.0.0"}}}}

@@ -48,9 +48,17 @@ type dep = {
   (* not carried into the calculus: it only tells the solver that this
      dependency may be abandoned when the registry cannot satisfy it *)
   d_optional : bool;
+  (* the range was written as the literal "*" or left empty, which npm
+     reads apart from every other range that means the same *)
+  d_star : bool;
 }
 
-type peer = { p_name : string; p_range : Npm_version.range; p_optional : bool }
+type peer = {
+  p_name : string;
+  p_range : Npm_version.range;
+  p_optional : bool;
+  p_star : bool;
+}
 
 type ver = {
   v_name : string;
@@ -127,6 +135,10 @@ let split_alias (s : string) : (string * string) option =
     | -1 -> Some (body, "*")
     | i -> Some (String.sub body 0 i, String.sub body (i + 1) (n - i - 1))
 
+let is_star rg =
+  let rg = String.trim rg in
+  rg = "*" || rg = ""
+
 let dep_of ~dev ~optional (key, spec) : dep option =
   match spec with
   | `String spec -> (
@@ -143,6 +155,7 @@ let dep_of ~dev ~optional (key, spec) : dep option =
                 d_range = Npm_version.parse_range rg;
                 d_dev = dev;
                 d_optional = optional;
+                d_star = is_star rg;
               }
       | None ->
           if unresolvable spec then (
@@ -156,6 +169,7 @@ let dep_of ~dev ~optional (key, spec) : dep option =
                 d_range = Npm_version.parse_range spec;
                 d_dev = dev;
                 d_optional = optional;
+                d_star = is_star spec;
               })
   | _ ->
       reject ();
@@ -179,6 +193,7 @@ let peer_of (meta : (string * Yojson.Safe.t) list) (key, spec) : peer option =
             p_name = key;
             p_range = Npm_version.parse_range spec;
             p_optional = optional;
+            p_star = is_star spec;
           }
   | _ ->
       reject ();
@@ -200,7 +215,11 @@ let overrides_of (j : Yojson.Safe.t) : (string * Npm_version.range) list =
           None)
     (assoc_of (member "overrides" j))
 
-let is_deprecated = function `Null -> false | `Bool b -> b | _ -> true
+(* npm-pick-manifest tests !mani.deprecated, so the field deprecates only
+   when JavaScript reads it as true: an empty message deprecates nothing *)
+let is_deprecated = function
+  | `Null | `Bool false | `String "" | `Int 0 -> false
+  | _ -> true
 
 (* checkEngine reads eng.node and eng.npm and ignores everything else in
    the object, so a sub-key such as "yarn" is not a requirement at all *)

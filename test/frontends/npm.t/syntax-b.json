@@ -1,0 +1,8 @@
+{"name":"syntax-b","dist-tags":{"latest":"1.2.0"},
+ "versions":{
+  "1.0.0":{"name":"syntax-b","version":"1.0.0",
+    "peerDependencies":{"compiler":"^7.0.0"}},
+  "1.1.0":{"name":"syntax-b","version":"1.1.0",
+    "peerDependencies":{"compiler":"^7.0.0"}},
+  "1.2.0":{"name":"syntax-b","version":"1.2.0",
+    "peerDependencies":{"compiler":"^7.0.0"}}}}

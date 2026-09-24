@@ -1,0 +1,4 @@
+{"name":"compiler","dist-tags":{"latest":"8.0.0"},
+ "versions":{
+  "7.0.0":{"name":"compiler","version":"7.0.0"},
+  "8.0.0":{"name":"compiler","version":"8.0.0"}}}

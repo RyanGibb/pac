@@ -72,6 +72,40 @@ prerelease and the set that does is the other alternative.
   cone: 3 packages, 5 versions, 0 packuments fetched
   encoded solution: 5 core nodes (10 lookups)
 
+The literal range * is the exception, and so is an empty range, which npm
+reads as *: npm-pick-manifest takes dist-tags.latest for it even when that
+is a prerelease, provided it is not deprecated and the host can run it.
+pre-only publishes nothing but prereleases, and its latest 1.0.0-beta.2 is
+installed rather than nothing; pre-ahead's latest 1.0.0-alpha.0 wins over
+the release 0.1.0.  pre-depr's latest prerelease is deprecated and
+pre-engine's wants node >=99, so both fall back to 0.1.0, the release *
+admits without the exception.
+
+  $ ../../../src/main.exe npm --offline --cache . --node-version v24.19.0 --npm-version 11.17.0 star-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root star-app 1.0.0
+  packages (5):
+    pre-ahead 1.0.0-alpha.0
+    pre-depr 0.1.0
+    pre-engine 0.1.0
+    pre-only 1.0.0-beta.2
+    star-app 1.0.0
+  node_modules edges: 4
+  cone: 5 packages, 9 versions, 0 packuments fetched
+  encoded solution: 9 core nodes (19 lookups)
+
+npm's semver reads versions loosely, and a prerelease may drop its hyphen:
+1.0.1rc1 is 1.0.1-rc1.  loose tags it latest, but ^1.0.0 names no
+prerelease, so 1.0.0 is installed.
+
+  $ ../../../src/main.exe npm --offline --cache . loose-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root loose-app 1.0.0
+  packages (2):
+    loose 1.0.0
+    loose-app 1.0.0
+  node_modules edges: 1
+  cone: 2 packages, 3 versions, 0 packuments fetched
+  encoded solution: 3 core nodes (6 lookups)
+
 An optionalDependencies entry is an ordinary dependency, abandoned
 only where npm abandons it: when its manifest cannot be fetched.  opt-app
 lists three.  gadget ^1 resolves and is installed exactly as a plain
@@ -208,6 +242,96 @@ peer dependency's range exactly as it replaces a dependency's.
   cone: 3 packages, 4 versions, 0 packuments fetched
   encoded solution: 5 core nodes (11 lookups)
 
+npm leaves an edge on a version its tree already holds when the range
+admits it: a slot whose node_modules lookup finds a satisfying copy is not a
+problem edge, and nothing is fetched for it.  reuse-app depends on holder,
+whose tok is ^3.0.0, and on taker, whose tok is ^3.0.0 || ^4.0.0.  holder
+sorts first, so npm places its tok 3.0.2 before it reaches taker, whose slot
+then finds that copy: one tok, 3.0.2, although latest is 4.0.0.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree reuse-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root reuse-app 1.0.0
+  packages (4):
+    holder 1.0.0
+    reuse-app 1.0.0
+    taker 1.0.0
+    tok 3.0.2
+  node_modules (4 edges):
+    reuse-app 1.0.0 <- holder 1.0.0
+    reuse-app 1.0.0 <- taker 1.0.0
+    holder 1.0.0 <- tok 3.0.2
+    taker 1.0.0 <- tok 3.0.2
+  cone: 4 packages, 5 versions, 0 packuments fetched
+  encoded solution: 8 core nodes (17 lookups)
+
+Only a copy already placed is reused, and npm reaches a tree's packages
+breadth first, a package only after the one requiring it.  reach-app
+depends on early, which depends on tok at * and on late, whose tok is
+^3.0.0.  npm places early's tok 4.0.0 before it reaches late, which gets a
+3.0.2 of its own: a copy that only a later package requires is not there to
+be reused.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree reach-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root reach-app 1.0.0
+  packages (5):
+    early 1.0.0
+    late 1.0.0
+    reach-app 1.0.0
+    tok 3.0.2
+    tok 4.0.0
+  node_modules (4 edges):
+    reach-app 1.0.0 <- early 1.0.0
+    early 1.0.0 <- late 1.0.0
+    late 1.0.0 <- tok 3.0.2
+    early 1.0.0 <- tok 4.0.0
+  cone: 4 packages, 5 versions, 0 packuments fetched
+  encoded solution: 9 core nodes (19 lookups)
+
+An optional peer that is never installed still narrows its declarer's peer
+set.  resolver peers on linter at * and optionally on linter-plugin, whose
+own peer on linter is ^8.0.0 || ^9.0.0.  npm loads the optional peer into
+resolver's peer set, to catch a conflict before placing it, and there
+replaces linter 10.0.0 with 9.0.0, the pick for linter-plugin's range, since
+resolver's * accepts it too; linter-plugin itself is not installed.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree resolver-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root resolver-app 1.0.0
+  packages (3):
+    linter 9.0.0
+    resolver 1.0.0
+    resolver-app 1.0.0
+  node_modules (2 edges):
+    resolver-app 1.0.0 <- linter 9.0.0
+    resolver-app 1.0.0 <- resolver 1.0.0
+  cone: 4 packages, 5 versions, 0 packuments fetched
+  encoded solution: 5 core nodes (11 lookups)
+
+npm never places a peer inside the package that declares it, so when a
+package peers on a name, the peers its own dependencies declare on that
+name land in the directory its own peer does.  preset peers on compiler
+^7.0.0 || ^8.0.0 and depends on syntax-a and syntax-b, which peer on
+compiler ^7.0.0.  npm places compiler 8.0.0 for preset, then replaces it
+with 7.0.0, the pick for the syntax packages' range, since preset's range
+accepts it too: one compiler, 7.0.0, in both preset-app's directory and
+preset's.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree preset-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root preset-app 1.0.0
+  packages (5):
+    compiler 7.0.0
+    preset 1.0.0
+    preset-app 1.0.0
+    syntax-a 1.2.0
+    syntax-b 1.2.0
+  node_modules (5 edges):
+    preset 1.0.0 <- compiler 7.0.0
+    preset-app 1.0.0 <- compiler 7.0.0
+    preset-app 1.0.0 <- preset 1.0.0
+    preset 1.0.0 <- syntax-a 1.2.0
+    preset 1.0.0 <- syntax-b 1.2.0
+  cone: 5 packages, 10 versions, 0 packuments fetched
+  encoded solution: 10 core nodes (26 lookups)
+
 deprecated is a resolution preference, not a warning printed over a pick
 already made: npm-pick-manifest ranks a non-deprecated version above a
 deprecated one and above semver order, and the dist-tags.latest fast path
@@ -218,20 +342,24 @@ down, where the tag never enters into it: latest is 3.0.0, which ^1
 refuses, and the sort alone demotes the deprecated 1.1.0 to leave 1.0.0.
 depr-all is the guard that this is a preference: every version in range
 is deprecated, the key ties, and the newest is picked exactly as before.
+npm tests the field for truth, so an empty message deprecates nothing:
+depr-empty's latest 2.0.0, deprecated with "", is picked as any latest is.
 
   $ ../../../src/main.exe npm --offline --cache . --tree depr-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root depr-app 1.0.0
-  packages (4):
+  packages (5):
     depr 1.0.0
     depr-all 2.0.0
     depr-app 1.0.0
+    depr-empty 2.0.0
     depr-old 1.0.0
-  node_modules (3 edges):
+  node_modules (4 edges):
     depr-app 1.0.0 <- depr 1.0.0
     depr-app 1.0.0 <- depr-all 2.0.0
+    depr-app 1.0.0 <- depr-empty 2.0.0
     depr-app 1.0.0 <- depr-old 1.0.0
-  cone: 4 packages, 8 versions, 0 packuments fetched
-  encoded solution: 7 core nodes (17 lookups)
+  cone: 5 packages, 10 versions, 0 packuments fetched
+  encoded solution: 9 core nodes (22 lookups)
 
 engines is the other half of the same sort, so it needs a host to rank
 against and there is none unless one is given.  Unset, every candidate
