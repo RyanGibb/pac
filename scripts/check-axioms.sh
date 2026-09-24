@@ -29,6 +29,20 @@ C.Merge.mergedVS
 C.dependees
 C.versions
 
+# complexity: the SAT encoding and the reduction from 3-SAT
+Cx.Encoding.satEncoding
+Cx.Encoding.sat_encoding_completeness
+Cx.Encoding.sat_encoding_soundness
+Cx.Reduction.coreResolution
+Cx.Reduction.extractAssignment
+Cx.Reduction.reduceDeps
+Cx.Reduction.reduceDeps_functionalInName
+Cx.Reduction.reduceReal
+Cx.Reduction.reduceReal_root
+Cx.Reduction.three_sat_completeness
+Cx.Reduction.three_sat_correct
+Cx.Reduction.three_sat_soundness
+
 # versions: the version-formula reduction and its glue
 Ver.Reduction.Lookup.dependees_lookup
 Ver.Reduction.Lookup.reduce_glue

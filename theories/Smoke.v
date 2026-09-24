@@ -4,12 +4,13 @@
    terms in the computational path), which extraction depends on. *)
 
 From Stdlib Require Import MSets.
-From PackageCalculus Require Import Prelude Core Versions Semver Conflict
-  ConflictClass Concurrent PeerDependency Visibility Feature
+From PackageCalculus Require Import Prelude Core Complexity Versions Semver
+  Conflict ConflictClass Concurrent PeerDependency Visibility Feature
   Virtual PackageFormula VariableFormula FeatureConcurrent Debian DebianMA
   Opam Cargo Alpine.
 
 Module C := Core Nat_as_OT Nat_as_OT.
+Module Cx := Complexity Nat_as_OT Nat_as_OT Nat_as_OT.
 Module Cfl := Conflict Nat_as_OT Nat_as_OT.
 Module Cls := ConflictClass Nat_as_OT Nat_as_OT.
 Module Ver := Versions Nat_as_OT Nat_as_OT.
@@ -53,6 +54,31 @@ Example core_merge_computes :
     (C.Merge.merge (C.DepRel.add ((1, 2), (3, C.VSet.singleton 4))
                 (C.DepRel.add ((1, 2), (3, C.VSet.singleton 5))
                    C.DepRel.empty))) = 1.
+Proof. reflexivity. Qed.
+
+Definition cxPhi : list Cx.ClauseOT.t :=
+  ((0, true), ((1, false), (2, true))) :: nil.
+
+(* the root, both versions of each of three variables, and one version per
+   literal *)
+Example complexity_reduceReal_computes :
+  Cx.Reduction.T.PkgSet.cardinal (Cx.Reduction.reduceReal cxPhi) = 10.
+Proof. reflexivity. Qed.
+
+Example complexity_reduceDeps_computes :
+  Cx.Reduction.T.DepRel.cardinal (Cx.Reduction.reduceDeps cxPhi) = 4.
+Proof. reflexivity. Qed.
+
+Definition cxR : Cx.PkgSet.t :=
+  Cx.PkgSet.add (1, 1)
+    (Cx.PkgSet.add (1, 2) (Cx.PkgSet.add (2, 1) Cx.PkgSet.empty)).
+
+Definition cxD : Cx.C.DepRel.t :=
+  Cx.C.DepRel.add ((1, 1), (2, Cx.VSet.singleton 1)) Cx.C.DepRel.empty.
+
+(* the root's clause, one dependency's, and one for the two versions of 1 *)
+Example complexity_satEncoding_computes :
+  List.length (Cx.Encoding.satEncoding cxR cxD (1, 1)) = 3.
 Proof. reflexivity. Qed.
 
 Definition verR : Ver.PkgSet.t := Ver.PkgSet.add (1, 2) Ver.PkgSet.empty.
