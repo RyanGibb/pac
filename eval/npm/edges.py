@@ -30,7 +30,8 @@ the delta it accounts for can be read off:
 
   --peer-parent   re-attribute an auto-installed peer's edge from the
                   package that declared the peer to each package that
-                  depends on the declarer.  Both sides put the peer in
+                  selected the declarer, by a dependency or by a peer
+                  edge itself re-attributed.  Both sides put the peer in
                   the same place; they disagree only about which node
                   the edge leaves.  npm's lockfile resolves a peer the
                   way require() would, from the declarer; our peerSlice
@@ -92,14 +93,27 @@ def lock_sets(lock, peer_parent):
     peer = [(r, d, q) for (r, d, q) in peer if r in live and q in live]
 
     if peer_parent:
-        requirers = {}
+        # a declarer installed only as another declarer's peer was selected
+        # by wherever that peer edge was moved, so selection is closed over
+        # the moved edges too; otherwise the declarer's own peer edge has
+        # nowhere to go and drops out
+        requirers = {"": {""}}
         for r, _, q in plain:
             requirers.setdefault(q, set()).add(r)
-        peer = [
-            (r2, d, q)
-            for (r, d, q) in peer
-            for r2 in requirers.get(r, {""} if r == "" else set())
-        ]
+        while True:
+            moved = {
+                (r2, d, q)
+                for (r, d, q) in peer
+                for r2 in requirers.get(r, ())
+            }
+            grown = False
+            for r2, _, q in moved:
+                if r2 not in requirers.setdefault(q, set()):
+                    requirers[q].add(r2)
+                    grown = True
+            if not grown:
+                break
+        peer = sorted(moved)
 
     ident = {p: (node_name(p, pkgs[p]), pkgs[p].get("version", "")) for p in live}
     nodes = set(ident.values())

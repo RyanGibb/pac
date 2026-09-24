@@ -1,0 +1,2 @@
+(cram
+ (deps %{exe:../../src/main.exe} ../../eval/npm/edges.py))

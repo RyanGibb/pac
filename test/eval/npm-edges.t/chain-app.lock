@@ -1,0 +1,32 @@
+{
+  "name": "chain-app",
+  "version": "1.0.0",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {
+    "": {
+      "name": "chain-app",
+      "version": "1.0.0",
+      "dependencies": {
+        "relay": "^1"
+      }
+    },
+    "node_modules/base": {
+      "version": "1.0.0",
+      "peer": true
+    },
+    "node_modules/hub": {
+      "version": "1.0.0",
+      "peer": true,
+      "peerDependencies": {
+        "base": "^1"
+      }
+    },
+    "node_modules/relay": {
+      "version": "1.0.0",
+      "peerDependencies": {
+        "hub": "^1"
+      }
+    }
+  }
+}
