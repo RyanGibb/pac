@@ -20,9 +20,12 @@
 # installs: Recommends exactly when they were installed -- apt's default,
 # which --no-install-recommends turns off -- and Suggests never.  apt's
 # own default for autoremove follows Suggests too, which would pass a
-# package only a Suggests reaches.  apt never counts an Essential,
-# Protected or Priority: required package as unneeded, so an unneeded one
-# of those passes, with whatever only it needs.
+# package only a Suggests reaches.
+#
+# A dpkg status holds one version of a package, and apt reads the last
+# stanza of a name as installed, silently; the status holds amd64 rows
+# only.  So a name at two versions, or a row at any other architecture,
+# fails before apt is asked.
 #
 # The recs= column reports, and never fails on, the Recommends the answer
 # leaves out: the whole answer asked for fresh at apt's default.  Naming
@@ -30,7 +33,8 @@
 # follows the Recommends of every package it installs, requested or not.
 #
 # APT names the binary when apt-get is not on PATH.  Each goal gets its
-# own status beside the lists of the root setup.sh builds.
+# own status beside the lists of the root setup.sh builds.  INDEX
+# overrides the index, for a fixture, and must be the one that root holds.
 # usage: valid.sh <exe> <tag> [goal]       EXTRA=<flags> passes flags to <exe>
 # With no goal it sweeps goals.txt and totals; with one it checks that one.
 set -u
@@ -57,7 +61,7 @@ read -r -a extra <<< "${EXTRA:-}"
 out="$S/out/$tag"
 mkdir -p "$out"
 cd "$S/../.."
-INDEX=repos/debian/Packages
+INDEX="${INDEX:-repos/debian/Packages}"
 
 "$exe" debian ${extra[@]+"${extra[@]}"} --native amd64 "$goal" "$INDEX" \
   > "$out/$goal.vout" 2>&1
@@ -76,6 +80,8 @@ if [ ! -s "$out/$goal.req" ]; then
 fi
 mapfile -t req < "$out/$goal.req"
 n=${#req[@]}
+dups=$(cut -d= -f1 "$out/$goal.req" | sort | uniq -d | wc -l)
+foreign=$(awk 'NF == 2 && $1 ~ /:/ && $1 !~ /:amd64$/' "$out/$goal.vout" | wc -l)
 
 recs=true
 for a in ${extra[@]+"${extra[@]}"}; do
@@ -127,7 +133,19 @@ export APT_CONFIG="$r/etc/apt.conf"
 crc=$?
 "$APT" -s install "$goal" > "$out/$goal.install" 2>&1
 irc=$?
-"$APT" -s autoremove > "$out/$goal.autoremove" 2>&1
+# autoremove roots every Essential, Protected and Priority: required
+# package, and apt itself whatever its stanza says, so it is asked over
+# the status alone, those fields removed and apt's forced Essential
+# turned off: then the goal is the only root
+mkdir -p "$r/bare/lists/partial" "$r/bare/etc/apt.conf.d" "$r/bare/etc/preferences.d"
+: > "$r/bare/etc/sources.list"
+awk -v RS= '{gsub(/(^|\n)(Essential|Protected|Important|Priority):[^\n]*/, ""); print $0 "\n"}' \
+  "$r/status" > "$r/bare/status"
+sed -e "s|^Dir::State::status .*|Dir::State::status \"$r/bare/status\";|" \
+    -e "s|^Dir::Etc .*|Dir::Etc \"$r/bare/etc\";|" "$r/etc/apt.conf" > "$r/bare/apt.conf"
+printf 'Dir::State::Lists "%s";\npkgCacheGen::ForceEssential "pac-none";\n' \
+  "$r/bare/lists" >> "$r/bare/apt.conf"
+APT_CONFIG="$r/bare/apt.conf" "$APT" -s autoremove > "$out/$goal.autoremove" 2>&1
 arc=$?
 rm -rf "$r"
 
@@ -141,14 +159,29 @@ export APT_CONFIG="$ROOT/etc/apt/apt.conf"
 sed -n 's/^Inst \([^ :]*\)\(:[^ ]*\)\{0,1\} (\([^ ]*\) .*/\1=\3/p' "$out/$goal.aptrecs" \
   | sort -u > "$out/$goal.instrecs"
 re=$(comm -13 "$out/$goal.req" "$out/$goal.instrecs" | wc -l)
+# the installed state skips the one question installing asks: whether
+# dpkg can be walked through the set in some order.  A Pre-Depends cycle
+# is consistent installed and cannot be installed, and apt says so only
+# while ordering an install, so the whole answer is installed fresh, as
+# asked, with nothing added
+"$APT" -s -o APT::Install-Recommends=false install "${req[@]}" \
+  > "$out/$goal.order" 2>&1
+orc=$?
 
 rc=$((crc ? crc : irc ? irc : arc))
 if [ "$rc" -eq 0 ] && [ "$stanzas" -eq 0 ] && [ "$ch" -eq 0 ] && [ "$un" -eq 0 ] &&
+   [ "$dups" -eq 0 ] && [ "$foreign" -eq 0 ] &&
    grep -qxF "$none" "$out/$goal.install" &&
    grep -qxF "$none" "$out/$goal.autoremove"; then
-  v=VALID
+  if grep -q 'probably a dependency cycle' "$out/$goal.order"; then
+    v=CYCLIC
+  elif [ "$orc" -eq 0 ]; then
+    v=VALID
+  else
+    v=INVALID
+  fi
 else
   v=INVALID
 fi
-printf '%-18s %-7s n=%-5s changes=%-4s unneeded=%-4s rc=%-3s recs=%-4s %s\n' \
-  "$goal" "$tag" "$n" "$ch" "$un" "$rc" "$re" "$v"
+printf '%-18s %-7s n=%-5s changes=%-4s unneeded=%-4s dups=%-3s foreign=%-3s rc=%-3s order=%-3s recs=%-4s %s\n' \
+  "$goal" "$tag" "$n" "$ch" "$un" "$dups" "$foreign" "$rc" "$orc" "$re" "$v"

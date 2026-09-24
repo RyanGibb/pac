@@ -2,11 +2,12 @@
 # Build the apt root scale.sh solves against: a local flat repo holding
 # repos/debian/Packages, an empty dpkg status, and apt's own lists cache.
 # usage: setup.sh [aptroot-dir]   (default /tmp/apt-cmp-root; ~200M)
+#        INDEX=<Packages> builds it from another index
 set -eu
 S="$(cd "$(dirname "$0")" && pwd)"
 ROOT="${1:-/tmp/apt-cmp-root}"
 APT="${APT:-apt-get}"
-PACKAGES="$S/../../repos/debian/Packages"
+PACKAGES="${INDEX:-$S/../../repos/debian/Packages}"
 
 v=$("$APT" --version 2>/dev/null | head -n 1)
 case $v in

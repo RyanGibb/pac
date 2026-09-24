@@ -8,6 +8,8 @@ S="$(cd "$(dirname "$0")" && pwd)"
 MODES=${MODES:-default apt-heap}
 . "$S/../scale-lib.sh"
 
+rows() { awk 'NF == 2 && $1 ~ /:/' "$1"; }
+
 all_goals() { sed -n 's/^Package: //p' "$TOP/repos/debian/Packages" | sort -u; }
 
 prepare() {
@@ -36,9 +38,9 @@ one() {
     grep ':amd64 ' "$p.out" | sed 's/:amd64 .*//' | sort -u > "$p.ours"
     [ "$pac" = ok ] && [ "$tool" = ok ] && compare "$p.ours" "$o.theirs"
     if [ "$pac" = ok ]; then
-      # valid.sh reads nothing of pac's output but its :amd64 rows, so a
-      # mode answering the same rows gets the same verdict
-      if [ -n "$last" ] && cmp -s <(grep ':amd64 ' "$p.out") <(grep ':amd64 ' "$last.out"); then
+      # valid.sh reads nothing of pac's output but its name:arch rows, so
+      # a mode answering the same rows gets the same verdict
+      if [ -n "$last" ] && cmp -s <(rows "$p.out") <(rows "$last.out"); then
         valid=$lastvalid
       else valid "$p" "$m" "$2"; fi
       last=$p lastvalid=$valid
