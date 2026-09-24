@@ -153,9 +153,10 @@ Module Opam (N V X Y E : UsualOrderedType).
   (* The opam instance.  Formula-valued relations are lists: they feed
      only the spec and the translation, and sets would demand formula
      comparators used nowhere.  inst_pins is switch-level
-     (unconditional); pin-depends entries are conditional on their owner
-     and carry the URL as an opaque value (fetch-time data, not
-     resolution data).
+     (unconditional); pin-depends entries bind only when their owner is
+     itself pinned and selected -- opam reads the field when it pins the
+     owner and never for a repository package -- and carry the URL as an
+     opaque value (fetch-time data, not resolution data).
      inst_dpo (depopts) carries no resolution force at all: the manual is
      explicit that a version-constrained depopt does not exclude other
      versions -- that is what conflicts are for -- so depopts are carried
@@ -209,7 +210,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         forall n v, PkgSet.In (n, v) (inst_pins I) ->
         forall v', PkgSet.In (n, v') S -> v' = v
     ; ores_pin_depends :
-        forall p, PkgSet.In p S ->
+        forall p, PkgSet.In p S -> PkgSet.In p (inst_pins I) ->
         forall n v u, In (p, ((n, v), u)) (inst_pind I) ->
         forall v', PkgSet.In (n, v') S -> v' = v }.
 
@@ -518,7 +519,9 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Definition pindForms (Vq : N.t -> VSet.t) (I : Inst) (p : Pkg.t)
       : list PF.Formula :=
-      List.map (pindForm Vq) (ownedBy p (inst_pind I)).
+      if PkgSet.mem p (inst_pins I)
+      then List.map (pindForm Vq) (ownedBy p (inst_pind I))
+      else nil.
 
     Definition rootForm (rho : Valuation) (Vq : N.t -> VSet.t) (I : Inst)
       : PF.Formula :=
@@ -867,6 +870,24 @@ Module Opam (N V X Y E : UsualOrderedType).
           [reflexivity | contradiction NE; reflexivity].
     Qed.
 
+    Lemma in_pindForms : forall Vq I p f,
+        In f (pindForms Vq I p) <->
+        PkgSet.In p (inst_pins I) /\
+        exists nvu, In (p, nvu) (inst_pind I) /\ f = pindForm Vq nvu.
+    Proof.
+      intros Vq I p f; unfold pindForms.
+      destruct (PkgSet.mem p (inst_pins I)) eqn:Hm.
+      - apply PkgSet.mem_spec in Hm.
+        rewrite List.in_map_iff; split.
+        + intros [nvu [<- Hin]]; split; [exact Hm |].
+          exists nvu; split; [apply ownedBy_in; exact Hin | reflexivity].
+        + intros [_ [nvu [Hin ->]]]; exists nvu; split;
+            [reflexivity | apply ownedBy_in; exact Hin].
+      - split; [intros [] |].
+        intros [Hp _]; apply PkgSet.mem_spec in Hp; rewrite Hp in Hm;
+          discriminate.
+    Qed.
+
     Lemma mem_dependees_real : forall rho Vq I n v f,
         FSet.In f (dependeesBy rho Vq I (TName.Real n, TVer.RV v)) <->
         (exists f0, In ((n, v), f0) (inst_dep I) /\
@@ -876,12 +897,13 @@ Module Opam (N V X Y E : UsualOrderedType).
         (exists k, ClsRel.In ((n, v), k) (inst_cls I) /\
                    f = PF.FDep (TName.Cls k)
                          (PF.VSet.singleton (TVer.NV n))) \/
-        (exists nvu, In ((n, v), nvu) (inst_pind I) /\
+        (PkgSet.In (n, v) (inst_pins I) /\
+         exists nvu, In ((n, v), nvu) (inst_pind I) /\
                      f = pindForm Vq nvu).
     Proof.
       intros rho Vq I n v f; simpl.
-      rewrite !FSet.union_spec, !SOlf.mem_ofList.
-      unfold depForms, cflForms, pindForms.
+      rewrite !FSet.union_spec, !SOlf.mem_ofList, in_pindForms.
+      unfold depForms, cflForms.
       rewrite !List.in_map_iff.
       unfold clsForms; rewrite SOcf.mem_filterMap.
       split.
@@ -897,8 +919,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           end; intro He; cbn iota in He; [| discriminate He].
           injection He as <-; intro Hq.
           right; right; left; exists k; auto.
-        + destruct H as [nvu [He Hnvu]]; apply ownedBy_in in Hnvu.
-          right; right; right; exists nvu; auto.
+        + right; right; right; exact H.
       - intros [H | [H | [H | H]]].
         + destruct H as [f0 [Hin ->]].
           left; exists f0; split;
@@ -912,9 +933,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           match goal with
           | |- (if ?d then _ else _) = _ => destruct d as [_ | NE]
           end; [reflexivity | contradiction NE; reflexivity].
-        + destruct H as [nvu [Hin ->]].
-          right; right; right; exists nvu; split;
-            [reflexivity | apply ownedBy_in; exact Hin].
+        + right; right; right; exact H.
     Qed.
 
     Lemma mem_transD : forall rho I q f,
@@ -1048,12 +1067,12 @@ Module Opam (N V X Y E : UsualOrderedType).
         assert (H := Hsub _ _ Hv'); apply mem_effRepo in H.
         destruct H as [_ [Hp _]]; symmetry.
         exact (Hp _ _ Hpin eq_refl).
-      - intros [pn pv] Hp n v u Hpind v' Hv'.
+      - intros [pn pv] Hp Hpin n v u Hpind v' Hv'.
         assert (Hs : PF.Satisfies S'
                        (pindForm (srcVersions rho I) ((n, v), u))).
         { apply (Hdeps _ _ _ Hp); unfold dependees.
           apply mem_dependees_real; right; right; right.
-          exists ((n, v), u); auto. }
+          split; [exact Hpin | exists ((n, v), u); auto]. }
         unfold pindForm in Hs; simpl in Hs.
         destruct (V.eq_dec v' v) as [E | NE]; [exact E |].
         exfalso; apply Hs.
@@ -1093,7 +1112,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           apply mem_dependees_real in Hf'.
           destruct Hf'
             as [[f0 [Hin ->]] | [[nc [Hin ->]]
-               | [[k [Hpk ->]] | [nvu [Hin ->]]]]].
+               | [[k [Hpk ->]] | [Hpin [nvu [Hin ->]]]]]].
           * apply (encodeOF_correct rho _ _ HV Hr).
             rewrite decode_transS.
             exact (ores_dep_closure _ _ _ HR _ Hp0 _ Hin).
@@ -1120,7 +1139,7 @@ Module Opam (N V X Y E : UsualOrderedType).
             apply SOvv.mem_map in Htv; destruct Htv as [v' [Hv' ->]].
             apply VSet.remove_spec in Hv'; destruct Hv' as [_ NE].
             apply mem_transS_real in Hm.
-            exact (NE (ores_pin_depends _ _ _ HR _ Hp0 _ _ _ Hin
+            exact (NE (ores_pin_depends _ _ _ HR _ Hp0 Hpin _ _ _ Hin
                          _ Hm)).
         + unfold dependees, dependeesBy, rootPkg in Hf'.
           apply FSet.singleton_spec in Hf'; subst f'.
@@ -1425,7 +1444,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       apply FSet.ext; intro f.
       unfold embedPkg; cbn [fst snd].
       rewrite !mem_dependees_real.
-      cbn [pkgSubInst inst_dep inst_cfl inst_cls inst_pind].
+      cbn [pkgSubInst inst_dep inst_cfl inst_cls inst_pins inst_pind].
       split.
       - intros [H | [H | [H | H]]].
         + destruct H as [f0 [Hin ->]].
@@ -1448,10 +1467,10 @@ Module Opam (N V X Y E : UsualOrderedType).
           unfold clsFibre in Hpk.
           apply ClsRel.filter_spec' in Hpk; destruct Hpk as [Hpk _].
           right; right; left; exists k; auto.
-        + destruct H as [nvu [Hin ->]].
+        + destruct H as [Hpin [nvu [Hin ->]]].
           apply (proj1 (own_filter_in _ _ _ _)) in Hin.
-          right; right; right; exists nvu; split;
-            [exact Hin |].
+          right; right; right; split; [exact Hpin |].
+          exists nvu; split; [exact Hin |].
           apply pindForm_agree; apply HVq.
           unfold declaredNames; apply NSet.union_spec; right.
           apply NSet.union_spec; right.
@@ -1481,8 +1500,9 @@ Module Opam (N V X Y E : UsualOrderedType).
             [exact Hpk | cbn [fst]].
           destruct (Pkg.eq_dec (n, v) (n, v)) as [_ | NE];
             [reflexivity | contradiction NE; reflexivity].
-        + destruct H as [nvu [Hin ->]].
-          right; right; right; exists nvu; split;
+        + destruct H as [Hpin [nvu [Hin ->]]].
+          right; right; right; split; [exact Hpin |].
+          exists nvu; split;
             [apply (proj2 (own_filter_in _ _ _ _)); exact Hin |].
           apply pindForm_agree; symmetry; apply HVq.
           unfold declaredNames; apply NSet.union_spec; right.
@@ -1568,7 +1588,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         destruct Hx as [Hx | Hx]; destruct (Henc _ Hx).
       - apply mem_dependees_real in Hf.
         destruct Hf as [[f0 [_ ->]] | [[[nc [g c]] [_ ->]]
-                         | [[k [_ ->]] | [[[m u] y] [_ ->]]]]].
+                         | [[k [_ ->]] | [_ [[[m u] y] [_ ->]]]]]].
         + destruct (Henc f0 Hx).
         + unfold cflForm in Hx; cbn [fst snd] in Hx.
           destruct (defTrue rho g); [| destruct (HT Hx)].

@@ -22,6 +22,41 @@ does, so both ends of (>= "2" < "4") bind and dep.9 is out of range:
     grp.1
   loaded: 2 names, 3 package versions
 
+A version disjunction inside one brace is one set of versions, as opam reads
+it, so dep takes the newest version in either range, not the lower range's
+dep.3 for being written first:
+
+  $ ../../../src/main.exe opam . bdisj | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (2, core solution 3 nodes):
+    bdisj.1
+    dep.9
+  loaded: 2 names, 3 package versions
+
+A brace mixing a filter into the disjunction stays two atoms under a
+disjunction, each with its own filter.  Without --with-test only < "5" is
+left, and with it the unconstrained alternative, written first, is taken:
+
+  $ ../../../src/main.exe opam . bmix | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (2, core solution 3 nodes):
+    bmix.1
+    dep.3
+  loaded: 2 names, 3 package versions
+
+  $ ../../../src/main.exe opam --with-test . bmix | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (2, core solution 4 nodes):
+    bmix.1
+    dep.9
+  loaded: 2 names, 3 package versions
+
+pin-depends is read only when its owner is pinned, and nothing is pinned
+here, so pind.1's entry for dep.dev constrains nothing:
+
+  $ ../../../src/main.exe opam . pind | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (2, core solution 3 nodes):
+    dep.9
+    pind.1
+  loaded: 2 names, 3 package versions
+
 Depexts constrain nothing: they are read off the finished resolution, so
 what is reported is the union over the selected packages of the depext
 entries whose
@@ -222,6 +257,19 @@ mlib is reached, not asked for.
     tlib.1
     tst.1
   loaded: 7 names, 7 package versions
+
+A conflict's filter sees only switch and global variables and the package's
+own name and version, which is all opam evaluates conflicts with.  So
+with-test is undefined there even for a queried name, and cflt.1's conflict
+on dep >= "5" under with-test is void, while its conflict on lib >= "3" on
+linux holds:
+
+  $ ../../../src/main.exe opam --with-test . cflt | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (3, core solution 4 nodes):
+    cflt.1
+    dep.9
+    lib.2
+  loaded: 3 names, 5 package versions
 
 opam-version is the one global variable opam reports as its own and lets no
 switch override, so the valuation carries the version of the opam whose

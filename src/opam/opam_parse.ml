@@ -56,7 +56,15 @@ let local_vars =
     "version";
   ]
 
-let qualify ~owner x = if List.mem x local_vars then owner ^ ":" ^ x else x
+(* opam reads a conflict's filter in the switch's environment
+   (get_conflicts, through OpamPackageVar.resolve_switch), where only name
+   and version are the package's own and any other variable is looked up as
+   a switch or global one.  No such variable is called with-test or build,
+   so in a conflict they are undefined, as the manual has it: with-test is
+   limited to depends, depopts and the commands, build and post to depends
+   and depopts. *)
+let switch_local_vars = [ "name"; "version" ]
+let qualify ~locals ~owner x = if List.mem x locals then owner ^ ":" ^ x else x
 
 (* The atom syntax opam's command line takes, one element of a query:
    [OpamFormula.atom_of_string] (opamFormula.ml) matches a name -- the run
@@ -120,8 +128,9 @@ type brace =
   | BOr of brace * brace
   | BNot of brace
 
-let rec brace_of ~owner ~selfv (v : value) : brace =
-  let brace_of = brace_of ~owner ~selfv in
+let rec brace_of ?(locals = local_vars) ~owner ~selfv (v : value) : brace =
+  let brace_of = brace_of ~locals ~owner ~selfv in
+  let qualify = qualify ~locals in
   match v.pelem with
   | Bool true -> BF FT
   | Bool false -> BF FF
@@ -198,7 +207,16 @@ let conj_c = function
   | [] -> VTop
   | c :: cs -> List.fold_left (fun a b -> VAnd (a, b)) c cs
 
-(* an atom with a brace formula distributes over the DNF branches *)
+let disj_c = function
+  | [] -> VTop
+  | c :: cs -> List.fold_left (fun a b -> VOr (a, b)) c cs
+
+(* An atom with a brace formula distributes over the DNF branches, but only
+   as far as their filters differ: opam evaluates a brace's filters and
+   keeps one version formula for the atom, so the branches sharing a filter
+   are one atom at the union of their versions.  Distributing those too
+   would make {(>= "4.12" & < "5.0") | >= "5.3"} alternatives, the range
+   written first preferred over the newest version. *)
 let atom_of ~owner ~selfv (n : string) (braces : value list) : off =
   match braces with
   | [] -> OAtom (n, FT, VTop)
@@ -208,9 +226,20 @@ let atom_of ~owner ~selfv (n : string) (braces : value list) : off =
           (fun acc v -> BAnd (acc, brace_of ~owner ~selfv v))
           (BF FT) braces
       in
-      let branches = dnf false b in
+      let by_filter =
+        List.fold_left
+          (fun acc (fs, cs) ->
+            if List.mem_assoc fs acc then
+              List.map
+                (fun (g, css) -> if g = fs then (g, css @ [ cs ]) else (g, css))
+                acc
+            else acc @ [ (fs, [ cs ]) ])
+          [] (dnf false b)
+      in
       let atoms =
-        List.map (fun (fs, cs) -> OAtom (n, conj_f fs, conj_c cs)) branches
+        List.map
+          (fun (fs, css) -> OAtom (n, conj_f fs, disj_c (List.map conj_c css)))
+          by_filter
       in
       match atoms with
       | [] -> OAtom (n, FF, VTop)
@@ -252,7 +281,8 @@ let rec conflict_atoms ~owner ~selfv (v : value) : (string * (filt * vc)) list =
   | Option ({ pelem = String n; _ }, braces) ->
       let b =
         List.fold_left
-          (fun acc v -> BAnd (acc, brace_of ~owner ~selfv v))
+          (fun acc v ->
+            BAnd (acc, brace_of ~locals:switch_local_vars ~owner ~selfv v))
           (BF FT) braces.pelem
       in
       List.map (fun (fs, cs) -> (n, (conj_f fs, conj_c cs))) (dnf false b)
