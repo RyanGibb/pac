@@ -530,3 +530,48 @@ Package: gw
 Version: 1
 Architecture: amd64
 Provides: gv
+
+Package: pinapp
+Version: 1
+Architecture: amd64
+Depends: pinv
+
+Package: pinv
+Version: 1
+Architecture: amd64
+
+Package: pinv
+Version: 2
+Architecture: amd64
+Depends: pinnone
+
+Package: pinrange
+Version: 1
+Architecture: amd64
+Depends: pinok (<< 2)
+
+Package: pinok
+Version: 1
+Architecture: amd64
+
+Package: pinok
+Version: 2
+Architecture: amd64
+
+Package: pinmix
+Version: 1
+Architecture: amd64
+
+Package: pinmix
+Version: 2
+Architecture: all
+Depends: pinnone
+
+Package: pindup
+Version: 1
+Architecture: amd64
+
+Package: pindup
+Version: 1
+Architecture: amd64
+Depends: pinnone

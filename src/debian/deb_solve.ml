@@ -873,31 +873,6 @@ struct
             vs <> [] && List.for_all (sat (snd a)) vs
         | _ -> false
       in
-      (* Strict-Pinning (the default) rejects every version but the
-         candidate at level 0 before the solve, so a solution at an older
-         version of a package is out of the live count from the start, and
-         only in the clause's static solution count *)
-      let cand_tbl = Hashtbl.create 64 in
-      let is_candidate (n, b) w =
-        match Hashtbl.find_opt I.idx.versions_of (n, b) with
-        | Some (_ :: _ :: _ as vs) ->
-            let c =
-              match Hashtbl.find_opt cand_tbl (n, b) with
-              | Some c -> c
-              | None ->
-                  let c =
-                    List.fold_left
-                      (fun a v ->
-                        if Debian_frontend.Deb_version.compare v a > 0 then v
-                        else a)
-                      (List.hd vs) vs
-                  in
-                  Hashtbl.add cand_tbl (n, b) c;
-                  c
-            in
-            Debian_frontend.Deb_version.compare c w = 0
-        | _ -> true
-      in
       (* PubGrub's partial solution excludes a version the moment a standing
          decision's conflict or range does, which is when apt assigns the
          version var false; the package var lags until that rejection
@@ -911,8 +886,7 @@ struct
           match x with
           | DMA.QAArch b ->
               if pkgvar then not (Hashtbl.mem pdead (n, b))
-              else
-                (not (Hashtbl.mem vdead ((n, b), w))) && is_candidate (n, b) w
+              else not (Hashtbl.mem vdead ((n, b), w))
           | _ -> true
         in
         let allowed_of ~pkgvar ~assigned n =
@@ -1364,17 +1338,15 @@ struct
             match h with
             | DMA.Deb.Name.Orig ((m, DMA.QAArch b) as mn) when not (deferred a)
               -> (
-                (* the candidate version, the one solution Strict-Pinning
-                   leaves live *)
+                (* the newest live version, which apt's sort of one
+                   package's versions puts first (CompareProviders3) *)
                 let on = DMA.Deb.Name.Orig mn in
                 let live =
                   List.filter
                     (fun (pv : PVersion.t) ->
                       match pv.PVersion.v with
                       | DMA.Deb.Version.Orig w ->
-                          sat (snd a) w
-                          && is_candidate (m, b) w
-                          && not (Hashtbl.mem vdead ((m, b), w))
+                          sat (snd a) w && not (Hashtbl.mem vdead ((m, b), w))
                       | _ -> false)
                     (cands_of on)
                 in
@@ -1627,16 +1599,52 @@ struct
     r
 end
 
+(* apt's solver rejects every version but the candidate before it starts
+   (APT::Solver::Strict-Pinning, on by default: FromDepCache, solver3.cc),
+   so the instance it answers over holds one version per package.  The cut
+   is made on the stanzas, before any table is built, so that the lookups
+   answer over the instance their theorems are stated over.  The candidate
+   is the version of highest pin priority, the newest among equals
+   (pkgPolicy::GetCandidateVer), and an arch:all stanza belongs to the
+   native architecture's package (pkgCacheGenerator::NewPackage).  What
+   sets one version's priority apart is a pin (a preferences file,
+   APT::Default-Release) or a Release file's NotAutomatic or
+   ButAutomaticUpgrades; pac reads Packages files alone, which carry none
+   of them, so they are out of scope and every version ties.
+   A query naming a version (apt-get install pkg=ver) makes it pkg's
+   candidate, and the goal here names none.  Of two stanzas at one version
+   the first read is kept: apt files the later one behind it in the
+   package's version list, and the candidate is the first to reach the top
+   priority. *)
+let candidates ~native (stanzas : DF.stanza list) =
+  let key (st : DF.stanza) =
+    (st.package, if st.architecture = "all" then native else st.architecture)
+  in
+  let best = Hashtbl.create 65536 in
+  List.iter
+    (fun (st : DF.stanza) ->
+      match Hashtbl.find_opt best (key st) with
+      | Some (b : DF.stanza)
+        when Debian_frontend.Deb_version.compare st.version b.version <= 0 ->
+          ()
+      | _ -> Hashtbl.replace best (key st) st)
+    stanzas;
+  List.filter (fun st -> Hashtbl.find best (key st) == st) stanzas
+
 (* Parsing and index construction are reported apart from solving because
    they scale differently: the archive is read whole, while the solve
    touches only the sub-instances the lookup theorems bound.  Which of the
    two
    dominates is the frontend's headline number, so it is printed rather
    than inferred. *)
-let solve_files ?debug ?apt_heap ?(recommends = true) ~native ~paths ~goal :
+let solve_files ?debug ?apt_heap ?(recommends = true) ?(strict_pinning = true)
+    ~native ~paths ~goal :
     ((string * string * string) list * float * float) option =
   let t0 = Unix.gettimeofday () in
   let stanzas = List.concat_map DF.parse_file paths in
+  let stanzas =
+    if strict_pinning then candidates ~native stanzas else stanzas
+  in
   let arches =
     List.sort_uniq String.compare
       (native

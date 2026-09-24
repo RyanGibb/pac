@@ -77,9 +77,11 @@ the same conflict, so softb is installed rather than nothing:
 A Conflicts is an edge of the package that declares it, admitting the
 target's non-matching versions and its absence ⊥.  cfla conflicts with cflb
 (every version), so cfla 1 admits cflb only at ⊥; cflc depends on cfla, and
-cfld depends on cflb (= 1) and cflc, whichever order the solver reaches them:
+cfld depends on cflb (= 1) and cflc, whichever order the solver reaches them.
+cflb 1 is not the candidate, so both versions are offered, as with apt's
+Strict-Pinning off (below):
 
-  $ ../../../src/main.exe debian --native amd64 cfld Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../src/main.exe debian --native amd64 --no-strict-pinning cfld Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
   unsatisfiable:
   Because cflc:amd64 1 -> cfla:amd64 1 and cfla:amd64 1 -> cflb:amd64 ⊥, cflc:amd64 (-∞, ⊥) requires cflb:amd64 ⊥.
   And because cfld:amd64 1 -> cflb:amd64 1, cfld:amd64 (-∞, ⊥) or cflc:amd64 (-∞, ⊥) is forbidden.
@@ -263,3 +265,49 @@ backjump, which the shadow heap's counters count:
   gb:amd64 1
   ggoal:amd64 1
   gw:amd64 1
+
+apt's solver never leaves the candidate version (APT::Solver::Strict-Pinning,
+on by default), which with no pins is the newest.  pinv 2 needs pinnone,
+which nothing provides, and apt refuses pinapp rather than fall back to
+pinv 1; with Strict-Pinning off it takes pinv 1:
+
+  $ ../../../src/main.exe debian --native amd64 pinapp Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  Because pinapp:amd64 1 -> pinv:amd64 2 and pinv:amd64 2 -> pinnone:amd64 ∅, pinapp:amd64 (-∞, ⊥) is forbidden..
+  And because root -> pinapp:amd64 1, version solving failed.
+
+  $ ../../../src/main.exe debian --native amd64 --no-strict-pinning pinapp Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  pinapp:amd64 1
+  pinv:amd64 1
+
+  $ ../../../src/main.exe debian --apt-heap --native amd64 pinapp Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  Because pinapp:amd64 1 -> pinv:amd64 2 and pinv:amd64 2 -> pinnone:amd64 ∅, pinapp:amd64 (-∞, ⊥) is forbidden..
+  And because root -> pinapp:amd64 1, version solving failed.
+
+  $ ../../../src/main.exe debian --apt-heap --native amd64 --no-strict-pinning pinapp Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  pinapp:amd64 1
+  pinv:amd64 1
+
+apt refuses too where a dependency's range misses the candidate, however
+installable an older version is: pinok 2 installs, and pinrange asks for
+pinok (<< 2):
+
+  $ ../../../src/main.exe debian --native amd64 pinrange Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  Because pinrange:amd64 1 -> pinok:amd64 ∅ and root -> pinrange:amd64 1, version solving failed..
+
+  $ ../../../src/main.exe debian --native amd64 --no-strict-pinning pinrange Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  pinok:amd64 1
+  pinrange:amd64 1
+
+apt holds an arch:all stanza under the native architecture's package, so
+pinmix 2 (all), which needs pinnone, is the candidate over pinmix 1 (amd64);
+and of two stanzas at one version, apt keeps the first read:
+
+  $ ../../../src/main.exe debian --native amd64 pinmix Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  Because pinmix:amd64 2 -> pinnone:amd64 ∅ and root -> pinmix:amd64 2, version solving failed..
+
+  $ ../../../src/main.exe debian --native amd64 pindup Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  pindup:amd64 1

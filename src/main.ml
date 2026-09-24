@@ -3,11 +3,11 @@ open Cmdliner
 let debug_arg =
   Arg.(value & flag & info [ "debug" ] ~doc:"Trace the PubGrub search.")
 
-let debian_run debug apt_heap no_recs native goal paths =
+let debian_run debug apt_heap no_recs no_strict native goal paths =
   Pubgrub.set_debug debug;
   match
-    Deb_solve.solve_files ~debug ~apt_heap ~recommends:(not no_recs) ~native
-      ~paths ~goal
+    Deb_solve.solve_files ~debug ~apt_heap ~recommends:(not no_recs)
+      ~strict_pinning:(not no_strict) ~native ~paths ~goal
   with
   | None -> 1
   | Some (pkgs, t_parse, t_solve) ->
@@ -30,6 +30,15 @@ let debian_cmd =
       & info [ "apt-heap" ]
           ~doc:"Replay apt's work-heap scheduling for exact correspondence.")
   in
+  (* the same opt-out apt-get spells for APT::Solver::Strict-Pinning *)
+  let no_strict =
+    Arg.(
+      value & flag
+      & info [ "no-strict-pinning" ]
+          ~doc:
+            "Offer every version in the Packages files, not only apt's \
+             candidate (the newest).")
+  in
   let native =
     Arg.(
       value & opt string "amd64"
@@ -49,7 +58,8 @@ let debian_cmd =
   Cmd.v
     (Cmd.info "debian" ~doc:"Solve against Debian Packages indices.")
     Term.(
-      const debian_run $ debug_arg $ apt_heap $ no_recs $ native $ goal $ paths)
+      const debian_run $ debug_arg $ apt_heap $ no_recs $ no_strict $ native
+      $ goal $ paths)
 
 let opam_run debug zi_order with_test with_doc with_dev_setup opam_version
     repo atoms =
