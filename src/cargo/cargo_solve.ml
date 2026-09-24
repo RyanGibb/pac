@@ -188,9 +188,7 @@ let meta ar n v : P.ver option =
 
 module Make () = struct
   module Cg =
-    E.Cargo (StringOT) (CVerOT) (StringOT) (StringOT) (CVerOT) (StringOT)
-      (StringOT)
-      (PM)
+    E.Cargo (StringOT) (CVerOT) (StringOT) (CVerOT) (StringOT) (StringOT) (PM)
 
   module T = Cg.T
 
@@ -549,7 +547,7 @@ module Make () = struct
       | Cg.VPlus.WUnit -> Format.fprintf fmt "()"
       | Cg.VPlus.WOrig x -> Format.fprintf fmt "%s" x
       | Cg.VPlus.WClass gr -> Format.fprintf fmt "class:%s" gr
-      | Cg.VPlus.WMember (n, x) -> Format.fprintf fmt "member:%s-%s" n x
+      | Cg.VPlus.WName n -> PName.pp fmt n
   end
 
   module PG = Pubgrub.Make (PName) (PVersion)

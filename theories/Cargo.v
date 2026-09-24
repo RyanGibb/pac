@@ -1,5 +1,5 @@
 From Stdlib Require Import MSets Bool.
-From PackageCalculus Require Import Prelude Core Semver.
+From PackageCalculus Require Import Prelude Core Semver ConflictClass.
 
 Create HintDb cmp_cargo.
 Create Rewrite HintDb cmp_cargo.
@@ -20,7 +20,7 @@ Create Rewrite HintDb cmp_cargo.
    selection, and the build resolve takes the features actually named.
    Both are IsResolution over the same manifest data at different
    rootFeats, so neither needs its own record. *)
-Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
+Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Module C := Core N V.
   Module Pkg := C.Pkg.
   Module PkgSet := C.PkgSet.
@@ -184,7 +184,9 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Lemma kAlias_sKey : forall d, kAlias (sKey d) = sAlias d.
   Proof. reflexivity. Qed.
 
-  Module LinkElt := PairUOT Pkg L.
+  (* A library is keyed by a name, as a conflict class is, so that its
+     synthetic package is that calculus' class package. *)
+  Module LinkElt := PairUOT Pkg N.
   Module LinkRel := FSetUOT LinkElt.
 
   (* The concurrent calculus' parent relation, keyed by declaration site
@@ -305,33 +307,25 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         forall p q l, PkgSet.In p S -> PkgSet.In q S ->
         LinkRel.In (p, l) Links -> LinkRel.In (q, l) Links -> p = q }.
 
-  Module LF := UOTCompareFacts L.
   Module GF := UOTCompareFacts G.
   Module VF := UOTCompareFacts V.
-  Module PkgFct := UOTCompareFacts Pkg.
   Module SlotName := TripleUOT N V SlotKey.
   Module SlotNameF := UOTCompareFacts SlotName.
   Module FDTail := TripleUOT F SlotKey F.
   Module DecName := TripleUOT N V FDTail.
   Module DecNameF := UOTCompareFacts DecName.
-  #[local] Hint Rewrite LF.compare_eq_iff GF.compare_eq_iff
-    VF.compare_eq_iff PkgFct.compare_eq_iff SlotNameF.compare_eq_iff
-    DecNameF.compare_eq_iff : cmp_cargo.
-  #[local] Hint Extern 1 => cmp_by LF.compare_antisym : cmp_cargo.
+  #[local] Hint Rewrite GF.compare_eq_iff VF.compare_eq_iff
+    SlotNameF.compare_eq_iff DecNameF.compare_eq_iff : cmp_cargo.
   #[local] Hint Extern 1 => cmp_by GF.compare_antisym : cmp_cargo.
   #[local] Hint Extern 1 => cmp_by VF.compare_antisym : cmp_cargo.
-  #[local] Hint Extern 1 => cmp_by PkgFct.compare_antisym : cmp_cargo.
   #[local] Hint Extern 1 => cmp_by SlotNameF.compare_antisym : cmp_cargo.
   #[local] Hint Extern 1 => cmp_by DecNameF.compare_antisym : cmp_cargo.
-  #[local] Hint Extern 1 => cmp_by LF.compare_lt_trans : cmp_cargo.
   #[local] Hint Extern 1 => cmp_by GF.compare_lt_trans : cmp_cargo.
   #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_cargo.
-  #[local] Hint Extern 1 => cmp_by PkgFct.compare_lt_trans : cmp_cargo.
   #[local] Hint Extern 1 => cmp_by SlotNameF.compare_lt_trans : cmp_cargo.
   #[local] Hint Extern 1 => cmp_by DecNameF.compare_lt_trans : cmp_cargo.
 
   Module NEqb := UOTEqb N.
-  Module LEqb := UOTEqb L.
   Module PkgEqb := UOTEqb Pkg.
   Module SKEqb := UOTEqb SlotKey.
 
@@ -649,7 +643,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     | CFeatP (m : N.t) (f : F.t) (gr : G.t)
     | CSlot (m : N.t) (v : V.t) (k : SlotKey.t)
     | CDec (m : N.t) (v : V.t) (f : F.t) (k : SlotKey.t) (feat : F.t)
-    | CLink (l : L.t).
+    | CLink (l : N.t).
     Definition t := name.
 
     Definition rank (x : t) : nat :=
@@ -670,7 +664,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           | CDec n1 v1 f1 a1 t1, CDec n2 v2 f2 a2 t2 =>
               DecName.compare (n1, (v1, (f1, (a1, t1))))
                 (n2, (v2, (f2, (a2, t2))))
-          | CLink l1, CLink l2 => L.compare l1 l2
+          | CLink l1, CLink l2 => N.compare l1 l2
           | _, _ => Eq
           end
       | c => c
@@ -687,18 +681,24 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Proof. cmp_lt_trans cmp_cargo. Qed.
   End NPlus.
   Module NPOT := UOTFromCompare NPlus.
+  Module NPOTF := UOTCompareFacts NPOT.
+  #[local] Hint Rewrite NPOTF.compare_eq_iff : cmp_cargo.
+  #[local] Hint Extern 1 => cmp_by NPOTF.compare_antisym : cmp_cargo.
+  #[local] Hint Extern 1 => cmp_by NPOTF.compare_lt_trans : cmp_cargo.
 
+  (* A library's versions are names, as a class package's are: the core
+     names of the crates linking it. *)
   Module VPlus.
     Inductive version : Type :=
     | WUnit
     | WOrig (v : V.t)
     | WClass (gr : G.t)
-    | WMember (p : Pkg.t).
+    | WName (n : NPlus.t).
     Definition t := version.
 
     Definition rank (x : t) : nat :=
       match x with
-      | WUnit => 0 | WOrig _ => 1 | WClass _ => 2 | WMember _ => 3
+      | WUnit => 0 | WOrig _ => 1 | WClass _ => 2 | WName _ => 3
       end.
 
     Definition compare (x y : t) : comparison :=
@@ -707,7 +707,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           match x, y with
           | WOrig v1, WOrig v2 => V.compare v1 v2
           | WClass g1, WClass g2 => G.compare g1 g2
-          | WMember p1, WMember p2 => Pkg.compare p1 p2
+          | WName n1, WName n2 => NPOT.compare n1 n2
           | _, _ => Eq
           end
       | c => c
@@ -725,7 +725,10 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   End VPlus.
   Module VPOT := UOTFromCompare VPlus.
 
-  Module T := Core NPOT VPOT.
+  (* Its core shared, so that the conflict-class calculus at the core's own
+     sorts states its lookups over this T. *)
+  Module ClsT := ConflictClass NPOT VPOT.
+  Module T := ClsT.C.
 
   Module SOvp := SetOps V T.Pkg VSet T.PkgSet.
   Module SOpp := SetOps Pkg T.Pkg PkgSet T.PkgSet.
@@ -785,9 +788,15 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         end)
       FDefs.
 
-  Definition linkReal (R : PkgSet.t) (Links : LinkRel.t) : T.PkgSet.t :=
-    SOlp.filterMap (fun '(q, l) =>
-        if PkgSet.mem q R then Some (NPlus.CLink l, VPlus.WMember q) else None)
+  (* A linking crate's version of its library is its granular name, not its
+     crate name: two versions of one crate in different compatibility
+     classes are two core names, and must still exclude each other. *)
+  Definition linkReal (g : V.t -> G.t) (R : PkgSet.t) (Links : LinkRel.t)
+    : T.PkgSet.t :=
+    SOlp.filterMap (fun '((m, v), l) =>
+        if PkgSet.mem (m, v) R
+        then Some (NPlus.CLink l, VPlus.WName (NPlus.CCrate m (g v)))
+        else None)
       Links.
 
   Definition transReal (g : V.t -> G.t) (R : PkgSet.t)
@@ -799,7 +808,16 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
          (T.PkgSet.union (featReal g support)
             (T.PkgSet.union (slotReal g R Slots rc)
                (T.PkgSet.union (decReal g R FDefs Slots rc)
-                  (linkReal R Links))))).
+                  (linkReal g R Links))))).
+
+  (* The class relation those names come from: the link relation carried
+     onto the crates' granular packages, with CLink l the class. *)
+  Module SOlc := SetOps LinkElt ClsT.InClassElt LinkRel ClsT.InClassRel.
+  Definition linkRel (g : V.t -> G.t) (Links : LinkRel.t)
+    : ClsT.InClassRel.t :=
+    SOlc.map (fun '((m, v), l) =>
+        ((NPlus.CCrate m (g v), VPlus.WOrig v), NPlus.CLink l))
+      Links.
 
   (* The lookups below say what one name or one package answers, without
      the instance existing.  That is what the driver needs, since a crate
@@ -848,9 +866,9 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
              (slotsAtKey Slots rc (m, v) k)
         else T.VSet.empty
     | NPlus.CLink l =>
-        SOlv.filterMap (fun '(q, l') =>
-            if andb (LEqb.eqb l' l) (PkgSet.mem q R)
-            then Some (VPlus.WMember q) else None)
+        SOlv.filterMap (fun '((m, v), l') =>
+            if andb (NEqb.eqb l' l) (PkgSet.mem (m, v) R)
+            then Some (VPlus.WName (NPlus.CCrate m (g v))) else None)
           Links
     end.
 
@@ -885,7 +903,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           (SOlh.filterMap (fun '(q, l) =>
                if PkgEqb.eqb q (m, v)
                then Some (NPlus.CLink l,
-                          T.VSet.singleton (VPlus.WMember (m, v)))
+                          T.VSet.singleton (VPlus.WName (NPlus.CCrate m gr)))
                else None)
              Links)
     | (NPlus.CFeatP m f gr, VPlus.WOrig v) =>
@@ -1075,19 +1093,31 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         [exact Hu | reflexivity].
   Qed.
 
-  Lemma mem_linkReal : forall R Links x,
-      T.PkgSet.In x (linkReal R Links) <->
-      exists q l, LinkRel.In (q, l) Links /\ PkgSet.In q R /\
-        x = (NPlus.CLink l, VPlus.WMember q).
+  Lemma mem_linkReal : forall g R Links x,
+      T.PkgSet.In x (linkReal g R Links) <->
+      exists m v l, LinkRel.In ((m, v), l) Links /\ PkgSet.In (m, v) R /\
+        x = (NPlus.CLink l, VPlus.WName (NPlus.CCrate m (g v))).
   Proof.
-    intros R Links x; unfold linkReal; rewrite SOlp.mem_filterMap; split.
-    - intros [[q l] [Hl He]]; cbn beta iota in He.
-      destruct (PkgSet.mem q R) eqn:Em; [| discriminate].
+    intros g R Links x; unfold linkReal; rewrite SOlp.mem_filterMap; split.
+    - intros [[[m v] l] [Hl He]]; cbn beta iota in He.
+      destruct (PkgSet.mem (m, v) R) eqn:Em; [| discriminate].
       apply PkgSet.mem_spec in Em.
-      injection He as <-; exists q, l; repeat split; assumption.
-    - intros [q [l [Hl [HR ->]]]]; exists (q, l); split;
+      injection He as <-; exists m, v, l; repeat split; assumption.
+    - intros [m [v [l [Hl [HR ->]]]]]; exists ((m, v), l); split;
         [exact Hl | cbn beta iota].
       rewrite (proj2 (PkgSet.mem_spec _ _) HR); reflexivity.
+  Qed.
+
+  Lemma mem_linkRel : forall g Links q k,
+      ClsT.InClassRel.In (q, k) (linkRel g Links) <->
+      exists m v l, LinkRel.In ((m, v), l) Links /\
+        q = (NPlus.CCrate m (g v), VPlus.WOrig v) /\ k = NPlus.CLink l.
+  Proof.
+    intros g Links q k; unfold linkRel; rewrite SOlc.mem_map; split.
+    - intros [[[m v] l] [Hl He]]; cbn beta iota in He.
+      injection He as -> ->; exists m, v, l; repeat split; exact Hl.
+    - intros [m [v [l [Hl [-> ->]]]]]; exists ((m, v), l); split;
+        [exact Hl | reflexivity].
   Qed.
 
   Lemma mem_transReal :
@@ -1098,10 +1128,48 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       T.PkgSet.In x (featReal g support) \/
       T.PkgSet.In x (slotReal g R Slots rc) \/
       T.PkgSet.In x (decReal g R FDefs Slots rc) \/
-      T.PkgSet.In x (linkReal R Links).
+      T.PkgSet.In x (linkReal g R Links).
   Proof.
     intros; unfold transReal; rewrite !T.PkgSet.union_spec.
     rewrite T.PkgSet.singleton_spec; reflexivity.
+  Qed.
+
+  (* A library is the conflict-class calculus' class package at CLink l,
+     over the granular packages crateReal draws R into. *)
+  Lemma versions_link_reduceReal :
+    forall g R support FDefs Slots Links rc l w,
+      T.VSet.In w
+        (versions g R support FDefs Slots Links rc (NPlus.CLink l)) <->
+      exists n, w = VPlus.WName n /\
+        ClsT.Reduction.T.VSet.In (ClsT.Reduction.Version.Name n)
+          (ClsT.Reduction.T.versions
+             (ClsT.Reduction.reduceReal (crateReal g R) (linkRel g Links))
+             (ClsT.Reduction.Name.Cls (NPlus.CLink l))).
+  Proof.
+    intros; cbn [versions].
+    rewrite ClsT.Reduction.Lookup.versions_cls, SOlv.mem_filterMap.
+    split.
+    - intros [[[m v] l'] [Hl He]]; cbn beta iota in He.
+      destruct (andb (NEqb.eqb l' l) (PkgSet.mem (m, v) R)) eqn:Eb;
+        [| discriminate].
+      apply andb_true_iff in Eb; destruct Eb as [El Em].
+      apply NEqb.eqb_true_iff in El; subst l'; apply PkgSet.mem_spec in Em.
+      injection He as <-.
+      exists (NPlus.CCrate m (g v)); split; [reflexivity |].
+      apply ClsT.Reduction.Lookup.SOpv.mem_map.
+      exists (NPlus.CCrate m (g v), VPlus.WOrig v); split; [| reflexivity].
+      apply ClsT.Reduction.Lookup.mem_inClass; split.
+      + apply mem_crateReal; exists m, v; split; [exact Em | reflexivity].
+      + apply mem_linkRel; exists m, v, l; repeat split; exact Hl.
+    - intros [n [-> Hn]]; apply ClsT.Reduction.Lookup.SOpv.mem_map in Hn.
+      destruct Hn as [q [Hq E]]; injection E as ->.
+      apply ClsT.Reduction.Lookup.mem_inClass in Hq; destruct Hq as [Hq Hc].
+      apply mem_linkRel in Hc; destruct Hc as [m [v [l' [Hl [-> Ek]]]]].
+      injection Ek as <-.
+      apply mem_crateReal in Hq; destruct Hq as [m' [v' [HR E]]].
+      injection E as E1 _ E3; subst m' v'.
+      exists ((m, v), l); split; [exact Hl | cbn beta iota].
+      rewrite NEqb.eqb_refl, (proj2 (PkgSet.mem_spec _ _) HR); reflexivity.
   Qed.
 
   Lemma mem_transDeps :
@@ -1183,7 +1251,8 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           h = (NPlus.CSlot m v (sKey d),
                classesOf g (evalReq R (sTarget d) (sReq d)))) \/
        (exists l, LinkRel.In ((m, v), l) Links /\
-          h = (NPlus.CLink l, T.VSet.singleton (VPlus.WMember (m, v))))).
+          h = (NPlus.CLink l,
+               T.VSet.singleton (VPlus.WName (NPlus.CCrate m gr))))).
   Proof.
     intros; cbn [dependees].
     destruct (andb (GEqb.eqb (g v) gr) (PkgSet.mem (m, v) R)) eqn:Eb;
@@ -1607,7 +1676,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             destruct He as [? [? [? [? [? [? [? [?
               [_ [_ [_ [_ [_ [_ He]]]]]]]]]]]]]]; discriminate He.
         + apply mem_linkReal in He;
-            destruct He as [? [? [_ [_ He]]]]; discriminate He.
+            destruct He as [? [? [? [_ [_ He]]]]]; discriminate He.
       - intros ->; left; reflexivity.
     Qed.
 
@@ -1637,7 +1706,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             destruct He as [? [? [? [? [? [? [? [?
               [_ [_ [_ [_ [_ [_ He]]]]]]]]]]]]]]; discriminate He.
         + apply mem_linkReal in He;
-            destruct He as [? [? [_ [_ He]]]]; discriminate He.
+            destruct He as [? [? [? [_ [_ He]]]]]; discriminate He.
       - intros [[n' v] [HR He]]; cbn beta iota in He.
         destruct (andb (NEqb.eqb n' m) (GEqb.eqb (g v) gr)) eqn:Eb;
           [| discriminate].
@@ -1674,7 +1743,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             destruct He as [? [? [? [? [? [? [? [?
               [_ [_ [_ [_ [_ [_ He]]]]]]]]]]]]]]; discriminate He.
         + apply mem_linkReal in He;
-            destruct He as [? [? [_ [_ He]]]]; discriminate He.
+            destruct He as [? [? [? [_ [_ He]]]]]; discriminate He.
       - intros [[[n' v] f'] [Hsp He]]; cbn beta iota in He.
         destruct (andb (andb (NEqb.eqb n' m) (FEqb.eqb f' f))
                     (GEqb.eqb (g v) gr)) eqn:Eb; [| discriminate].
@@ -1714,7 +1783,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             destruct He as [? [? [? [? [? [? [? [?
               [_ [_ [_ [_ [_ [_ He]]]]]]]]]]]]]]; discriminate He.
         + apply mem_linkReal in He;
-            destruct He as [? [? [_ [_ He]]]]; discriminate He.
+            destruct He as [? [? [? [_ [_ He]]]]]; discriminate He.
       - intros [[q d] [Hq Hw]]; cbn beta iota in Hw.
         apply mem_slotsAtKey in Hq; destruct Hq as [Hs [-> [Ha Hact]]].
         apply mem_classesOf in Hw; destruct Hw as [u [Hu ->]].
@@ -1756,7 +1825,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           cbn beta iota; apply mem_classesOf; exists u; split;
             [exact Hu | reflexivity].
         + apply mem_linkReal in He;
-            destruct He as [? [? [_ [_ He]]]]; discriminate He.
+            destruct He as [? [? [? [_ [_ He]]]]]; discriminate He.
       - destruct (fdEntryb FDefs (m, v) f (kAlias k) feat) eqn:Eb;
           [| intro Hw; exfalso; exact (T.VSet.empty_spec Hw)].
         apply fdEntryb_iff in Eb; destruct Eb as [e0 [Hf Ee]].
@@ -1794,19 +1863,19 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             destruct He as [? [? [? [? [? [? [? [?
               [_ [_ [_ [_ [_ [_ He]]]]]]]]]]]]]]; discriminate He.
         + apply mem_linkReal in He;
-            destruct He as [q [l' [Hl [HR He]]]].
+            destruct He as [m [v [l' [Hl [HR He]]]]].
           injection He as E1 E2; subst l' w.
-          exists (q, l); split; [exact Hl | cbn beta iota].
-          rewrite LEqb.eqb_refl, (proj2 (PkgSet.mem_spec _ _) HR);
+          exists ((m, v), l); split; [exact Hl | cbn beta iota].
+          rewrite NEqb.eqb_refl, (proj2 (PkgSet.mem_spec _ _) HR);
             reflexivity.
-      - intros [[q l'] [Hl He]]; cbn beta iota in He.
-        destruct (andb (LEqb.eqb l' l) (PkgSet.mem q R)) eqn:Eb;
+      - intros [[[m v] l'] [Hl He]]; cbn beta iota in He.
+        destruct (andb (NEqb.eqb l' l) (PkgSet.mem (m, v) R)) eqn:Eb;
           [| discriminate].
         apply andb_true_iff in Eb; destruct Eb as [El Em].
-        apply LEqb.eqb_true_iff in El; apply PkgSet.mem_spec in Em.
+        apply NEqb.eqb_true_iff in El; apply PkgSet.mem_spec in Em.
         subst l'; injection He as <-.
         right; right; right; right; right; apply mem_linkReal.
-        exists q, l; repeat split; assumption.
+        exists m, v, l; repeat split; assumption.
     Qed.
 
     (* The instance is built from the lookup, so the lookup is exactly
@@ -1896,7 +1965,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Module SupportPre := PreimageOfKeys N PkgF NSet SupportSet.
     Module FDefPre := Preimage FDefElt FDefRel.
     Module SlotFibred := FibredRel Pkg SlotData SlotElt SlotRel.
-    Module LinkFibred := FibredRel Pkg L LinkElt LinkRel.
+    Module LinkFibred := FibredRel Pkg N LinkElt LinkRel.
     Module SupportFibred := FibredRel Pkg F PkgF SupportSet.
     Module SOsn := SetOps SlotElt N SlotRel NSet.
 
@@ -1919,7 +1988,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       NSet.add (fst p)
         (SOsn.map (fun x => sTarget (snd x)) (SlotFibred.tailFibre Slots p)).
 
-    Definition claimants (R : PkgSet.t) (Links : LinkRel.t) (l : L.t)
+    Definition claimants (R : PkgSet.t) (Links : LinkRel.t) (l : N.t)
       : PkgSet.t :=
       PkgSet.filter (fun q => LinkRel.mem (q, l) Links) R.
 
@@ -2123,6 +2192,40 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       apply classesAtKey_agree; intros d Hd; apply evalReq_reads; exact Hd.
     Qed.
 
+    Lemma crateReal_claimants : forall g R Links l,
+        crateReal g (claimants R Links l) =
+        ClsT.Reduction.Lookup.inClass (crateReal g R) (linkRel g Links)
+          (NPlus.CLink l).
+    Proof.
+      intros; apply T.PkgSet.ext; intro x.
+      rewrite ClsT.Reduction.Lookup.mem_inClass, !mem_crateReal.
+      split.
+      - intros [m [v [Hc ->]]]; apply mem_claimants in Hc.
+        destruct Hc as [HR Hl]; split.
+        + exists m, v; split; [exact HR | reflexivity].
+        + apply mem_linkRel; exists m, v, l; repeat split; exact Hl.
+      - intros [[m [v [HR ->]]] Hc].
+        apply mem_linkRel in Hc; destruct Hc as [m' [v' [l' [Hl [E Ek]]]]].
+        injection E as E1 _ E3; subst m' v'; injection Ek as <-.
+        exists m, v; split; [apply mem_claimants; split; assumption
+                            | reflexivity].
+    Qed.
+
+    Lemma linkRel_headFibre : forall g Links l,
+        linkRel g (LinkFibred.headFibre Links l) =
+        ClsT.Reduction.Lookup.classRelAt (linkRel g Links) (NPlus.CLink l).
+    Proof.
+      intros; apply ClsT.InClassRel.ext; intros [q k].
+      rewrite ClsT.Reduction.Lookup.mem_classRelAt, !mem_linkRel.
+      split.
+      - intros [m [v [l' [Hl [-> ->]]]]].
+        apply LinkFibred.mem_headFibre in Hl; destruct Hl as [Hl ->].
+        split; [exists m, v, l; repeat split; exact Hl | reflexivity].
+      - intros [[m [v [l' [Hl [-> ->]]]]] Ek]; injection Ek as ->.
+        exists m, v, l; repeat split.
+        apply LinkFibred.mem_headFibre; split; [exact Hl | reflexivity].
+    Qed.
+
     (* The one lookup whose sub-instance is a preimage: the claimants of l
        are named by no declaration of any one of them, so a driver that
        reads its repository lazily holds only the claimants loaded so far
@@ -2133,28 +2236,10 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         versions g (claimants R Links l) SupportSet.empty FDefRel.empty
           SlotRel.empty (LinkFibred.headFibre Links l) rc (NPlus.CLink l).
     Proof.
-      intros; cbn [versions]; apply T.VSet.ext; intro w.
-      rewrite !SOlv.mem_filterMap; split.
-      - intros [[q l'] [Hl He]]; cbn beta iota in He.
-        destruct (andb (LEqb.eqb l' l) (PkgSet.mem q R)) eqn:Eb;
-          [| discriminate].
-        apply andb_true_iff in Eb; destruct Eb as [El Em].
-        apply LEqb.eqb_true_iff in El; subst l'; apply PkgSet.mem_spec in Em.
-        exists (q, l); split.
-        + apply LinkFibred.mem_headFibre; split; [exact Hl | reflexivity].
-        + cbn beta iota; rewrite LEqb.eqb_refl; cbn [andb].
-          rewrite (proj2 (PkgSet.mem_spec _ _)); [exact He |].
-          apply mem_claimants; split; assumption.
-      - intros [[q l'] [Hl He]]; cbn beta iota in He.
-        destruct (andb (LEqb.eqb l' l) (PkgSet.mem q (claimants R Links l)))
-          eqn:Eb; [| discriminate].
-        apply andb_true_iff in Eb; destruct Eb as [El Em].
-        apply LEqb.eqb_true_iff in El; subst l'; apply PkgSet.mem_spec in Em.
-        apply mem_claimants in Em; destruct Em as [HR _].
-        apply LinkFibred.mem_headFibre in Hl; destruct Hl as [Hl _].
-        exists (q, l); split; [exact Hl | cbn beta iota].
-        rewrite LEqb.eqb_refl; cbn [andb].
-        rewrite (proj2 (PkgSet.mem_spec _ _) HR); exact He.
+      intros; apply T.VSet.ext; intro w.
+      rewrite !versions_link_reduceReal, crateReal_claimants,
+        linkRel_headFibre, <- ClsT.Reduction.Lookup.versions_lookupClass.
+      reflexivity.
     Qed.
 
     (* The dependee lookups, stated first as agreement between any two
@@ -2498,7 +2583,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           destruct He as [? [? [? [? [? [? [? [?
             [_ [_ [_ [_ [_ [_ He]]]]]]]]]]]]]]; discriminate He.
       - apply mem_linkReal in He;
-          destruct He as [? [? [_ [_ He]]]]; discriminate He. }
+          destruct He as [? [? [? [_ [_ He]]]]]; discriminate He. }
     assert (A2 : forall m f gr v,
         T.PkgSet.In (NPlus.CFeatP m f gr, VPlus.WOrig v) S ->
         SupportSet.In ((m, v), f) support /\ gr = g v).
@@ -2517,7 +2602,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           destruct He as [? [? [? [? [? [? [? [?
             [_ [_ [_ [_ [_ [_ He]]]]]]]]]]]]]]; discriminate He.
       - apply mem_linkReal in He;
-          destruct He as [? [? [_ [_ He]]]]; discriminate He. }
+          destruct He as [? [? [? [_ [_ He]]]]]; discriminate He. }
     assert (A3 : forall m v k gr,
         T.PkgSet.In (NPlus.CSlot m v k, VPlus.WClass gr) S ->
         exists d u, SlotRel.In ((m, v), d) Slots /\ sKey d = k /\
@@ -2540,7 +2625,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           destruct He as [? [? [? [? [? [? [? [?
             [_ [_ [_ [_ [_ [_ He]]]]]]]]]]]]]]; discriminate He.
       - apply mem_linkReal in He;
-          destruct He as [? [? [_ [_ He]]]]; discriminate He. }
+          destruct He as [? [? [? [_ [_ He]]]]]; discriminate He. }
     (* a feature name commits its own crate version, so the member of a
        class a feature node carries is the one the crate name carries *)
     assert (A5 : forall m f gr u u',
@@ -2797,7 +2882,8 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       destruct (A1 _ _ _ Hq) as [HqR Egq]; subst grq.
       assert (Hep : T.DepRel.In
           ((NPlus.CCrate pn (g pv), VPlus.WOrig pv),
-           (NPlus.CLink l, T.VSet.singleton (VPlus.WMember (pn, pv))))
+           (NPlus.CLink l,
+            T.VSet.singleton (VPlus.WName (NPlus.CCrate pn (g pv)))))
           (transDeps g R support FDefs Slots Links dflt
              (rn, rv) rootFeats)).
       { apply mem_transDeps; split; [exact (Hsub _ Hp) |].
@@ -2806,7 +2892,8 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                             [exact Hlp | reflexivity]]. }
       assert (Heq : T.DepRel.In
           ((NPlus.CCrate qn (g qv), VPlus.WOrig qv),
-           (NPlus.CLink l, T.VSet.singleton (VPlus.WMember (qn, qv))))
+           (NPlus.CLink l,
+            T.VSet.singleton (VPlus.WName (NPlus.CCrate qn (g qv)))))
           (transDeps g R support FDefs Slots Links dflt
              (rn, rv) rootFeats)).
       { apply mem_transDeps; split; [exact (Hsub _ Hq) |].
@@ -2817,8 +2904,11 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       destruct (Hdep _ Hq _ _ Heq) as [y [Hy HyS]].
       apply T.VSet.singleton_spec in Hx; subst x.
       apply T.VSet.singleton_spec in Hy; subst y.
+      (* the library admits one name, and that name one version *)
       assert (E := Huniq _ _ _ HxS HyS); injection E as E1 E2.
-      rewrite E1, E2; reflexivity.
+      subst qn; rewrite <- E2 in Hq.
+      assert (E' := Huniq _ _ _ Hp Hq); injection E' as E'.
+      rewrite E'; reflexivity.
   Qed.
 
   Module SOfw2 := SetOps Featured T.Pkg FeaturedSet T.PkgSet.
@@ -2939,7 +3029,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                (wSlots g FDefs Slots rc S FS pi)
                (T.PkgSet.union
                   (wDecs g FDefs Slots rc S FS pi)
-                  (linkReal S Links))))).
+                  (linkReal g S Links))))).
 
   Lemma mem_coreRes :
     forall g FDefs Slots Links rc S FS pi x,
@@ -2949,7 +3039,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       T.PkgSet.In x (wFeats g FS) \/
       T.PkgSet.In x (wSlots g FDefs Slots rc S FS pi) \/
       T.PkgSet.In x (wDecs g FDefs Slots rc S FS pi) \/
-      T.PkgSet.In x (linkReal S Links).
+      T.PkgSet.In x (linkReal g S Links).
   Proof.
     intros; unfold coreRes.
     rewrite T.PkgSet.add_spec, !T.PkgSet.union_spec; reflexivity.
@@ -2978,8 +3068,8 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             entryFeatD e = Some (kAlias k, feat) /\
             FSet.In f (fsAt FS (m, v))
       | NPlus.CLink l =>
-          exists q, w = VPlus.WMember q /\ LinkRel.In (q, l) Links /\
-            PkgSet.In q S
+          exists m v, w = VPlus.WName (NPlus.CCrate m (g v)) /\
+            LinkRel.In ((m, v), l) Links /\ PkgSet.In (m, v) S
       end.
   Proof.
     intros g FDefs Slots Links rc S FS pi n w Hin.
@@ -3001,9 +3091,9 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           [Hpi [Eb [Hf [Ee [Em He]]]]]]]]]]]].
       injection He as E1 E2; subst n w; cbn beta iota.
       exists u, e; repeat split; assumption.
-    - apply mem_linkReal in He; destruct He as [q [l [Hl [HS He]]]].
+    - apply mem_linkReal in He; destruct He as [m [v [l [Hl [HS He]]]]].
       injection He as E1 E2; subst n w; cbn beta iota.
-      exists q; repeat split; assumption.
+      exists m, v; repeat split; assumption.
   Qed.
 
   Lemma fsAt_mem :
@@ -3134,8 +3224,8 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         * rewrite <- Ha; reflexivity.
         * rewrite Ha; reflexivity.
       + right; right; right; right; right; apply mem_linkReal in Hx.
-        destruct Hx as [q [l [Hl [HS ->]]]].
-        apply mem_linkReal; exists q, l; repeat split;
+        destruct Hx as [m [v [l [Hl [HS ->]]]]].
+        apply mem_linkReal; exists m, v, l; repeat split;
           [exact Hl | exact (Hsub _ HS)].
     - (* res_root_mem *)
       apply mem_coreRes; left; reflexivity.
@@ -3163,7 +3253,7 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         apply core_shape in Hp; cbn beta iota in Hp.
         destruct Hp as [v1 [Ev [HS _]]]; injection Ev as Ev; subst v1.
         destruct Hh
-          as [_ [_ [[d [Hd [Hact [Hopt He]]]] | [l [Hl He]]]]];
+          as [Hg [_ [[d [Hd [Hact [Hopt He]]]] | [l [Hl He]]]]];
           injection He as E1 E2; subst n vs.
         * destruct (Hpick _ _ _ HS Hd Hact (or_introl Hopt))
             as [u [Hpi [Eb [Hu [Htgt Hss]]]]].
@@ -3173,11 +3263,11 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           apply mem_coreRes; right; right; right; left;
             apply mem_wSlots.
           exists m, v0, (sKey d), u; repeat split; assumption.
-        * exists (VPlus.WMember (m, v0)); split;
+        * exists (VPlus.WName (NPlus.CCrate m gr)); split;
             [apply T.VSet.singleton_spec; reflexivity |].
           apply mem_coreRes; right; right; right; right; right;
             apply mem_linkReal.
-          exists (m, v0), l; repeat split; assumption.
+          exists m, v0, l; rewrite Hg; repeat split; assumption.
       + apply mem_dep_featP in Hh.
         apply core_shape in Hp; cbn beta iota in Hp.
         destruct Hp as [v1 [fs [Ev [Hfs [Hf _]]]]].
@@ -3323,9 +3413,10 @@ Module Cargo (N V L F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       + destruct Hw as [u [e [-> [Hpi _]]]];
           destruct Hw' as [u' [e' [-> [Hpi' _]]]].
         rewrite (Hpifun (m, v) k u u' Hpi Hpi'); reflexivity.
-      + destruct Hw as [q [-> [Hl HS]]];
-          destruct Hw' as [q' [-> [Hl' HS']]].
-        rewrite (Hlinks q q' l HS HS' Hl Hl'); reflexivity.
+      + destruct Hw as [m [v [-> [Hl HS]]]];
+          destruct Hw' as [m' [v' [-> [Hl' HS']]]].
+        assert (E := Hlinks (m, v) (m', v') l HS HS' Hl Hl').
+        injection E as <- <-; reflexivity.
   Qed.
 
   Theorem decodeS_coreRes : forall g FDefs Slots Links rc S FS pi,

@@ -316,12 +316,14 @@ Cgo.decodeS
 Cgo.decodeS_coreRes
 Cgo.dependees
 Cgo.evalReq
+Cgo.linkRel
 Cgo.rangeEval
 Cgo.rgHolds
 Cgo.srcVersions
 Cgo.transDeps
 Cgo.transReal
 Cgo.versions
+Cgo.versions_link_reduceReal
 
 # alpine
 Alp.Reduction.Lookup.dependees_lookupDisjunctCore

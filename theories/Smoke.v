@@ -303,7 +303,7 @@ Module CgoVM <: SemverMatch Nat_as_OT.
     Nat.eqb (Nat.div a 2) (Nat.div b 2).
 End CgoVM.
 
-Module Cgo := Cargo Nat_as_OT Nat_as_OT Nat_as_OT BoolFin
+Module Cgo := Cargo Nat_as_OT Nat_as_OT BoolFin
   Nat_as_OT Nat_as_OT Nat_as_OT CgoVM.
 
 Definition cgoAny : Cgo.Range := (Cgo.CAny :: nil) :: nil.
