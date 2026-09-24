@@ -209,16 +209,24 @@ def write_cargo_config():
     """Pin cargo to the snapshot pac reads.  Without this replacement
     cargo resolves against the live crates.io index and answers about a
     universe that has moved on since; sparse_proxy.py serves the
-    checkout, and valid.sh starts it."""
+    checkout on PORT, and valid.sh and scale.sh start it there.  The file
+    is rewritten whenever it differs, as a CARGO_HOME kept from a run on
+    another port would otherwise point cargo at that one."""
+    port = os.environ.get("PORT", "8991")
+    url = f"sparse+http://127.0.0.1:{port}/"
+    want = ('[source.crates-io]\nreplace-with = "pinned-index"\n\n'
+            f'[source.pinned-index]\nregistry = "{url}"\n\n'
+            f'[registries.pinned-index]\nindex = "{url}"\n')
     os.makedirs(CARGO_HOME, exist_ok=True)
     cfg = CARGO_HOME + "/config.toml"
-    if not os.path.exists(cfg):
+    try:
+        with open(cfg) as f:
+            have = f.read()
+    except FileNotFoundError:
+        have = None
+    if have != want:
         with open(cfg, "w") as f:
-            f.write('[source.crates-io]\nreplace-with = "pinned-index"\n\n'
-                    '[source.pinned-index]\n'
-                    'registry = "sparse+http://127.0.0.1:8991/"\n\n'
-                    '[registries.pinned-index]\n'
-                    'index = "sparse+http://127.0.0.1:8991/"\n')
+            f.write(want)
     env = dict(os.environ)
     env["CARGO_HOME"] = CARGO_HOME
     env["RUSTC"] = RUSTC

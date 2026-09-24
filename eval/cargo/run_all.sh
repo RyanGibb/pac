@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
+# env: PAC, CARGO_CMP_OUT (run dir), PORT (where sparse_proxy.py was
+# started by hand)
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export CARGO_CMP_OUT="${CARGO_CMP_OUT:-/tmp/cargo-cmp}"
+export PORT="${PORT:-8991}"
 GOALS="${1:-$HERE/goals.txt}"
 
 while IFS= read -r crate; do

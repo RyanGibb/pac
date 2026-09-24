@@ -49,7 +49,8 @@ run_goal.py settles them, by importing it, so the pac invocation being
 verified is the one the correspondence sweep measured.
 
 usage: verify.py <crate> [--out <json>]
-env: PAC, CARGO_CMP_OUT, and a sparse_proxy.py listening on 8991
+env: PAC, CARGO_CMP_OUT, and PORT (default 8991), where a sparse_proxy.py
+listens
 """
 import argparse
 import json

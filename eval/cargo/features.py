@@ -12,7 +12,7 @@ manifest, so unlike the rest of the harness it downloads crate sources into
 CARGO_HOME: gigabytes over a few hundred goals, once.
 
 usage: features.py <crate>...    in run_goal.py's environment, with
-       sparse_proxy.py serving on 8991
+       sparse_proxy.py serving on PORT (default 8991)
 """
 import json, os, subprocess, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
