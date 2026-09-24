@@ -4,10 +4,11 @@
 # world, and an empty installed db, so apk answers from the same rows our
 # loader reads and from no others.
 # usage: setup.sh [apkroot-dir]   (default /tmp/apk-cmp-root; ~3M)
+#        INDEX=<dir>/APKINDEX builds it from another index
 set -eu
 S="$(cd "$(dirname "$0")" && pwd)"
 ROOT="${1:-/tmp/apk-cmp-root}"
-INDEX="$S/../../repos/alpine/APKINDEX"
+INDEX="${INDEX:-$S/../../repos/alpine/APKINDEX}"
 
 if [ "$(id -u)" -eq 0 ]; then
   echo "setup.sh: apk refuses --usermode --initdb as root, so the root scale.sh" \

@@ -15,12 +15,15 @@
 # apk keeps an installed package only while it still resolves from the
 # world, so any Installing, Purging, Upgrading, Downgrading, Replacing or
 # Re-installing line means the set was not a resolution as it stood, and
-# a non-zero exit is an inconsistency.  The one soft rule is install_if:
-# apk installs such a package on its own once its triggers are present,
-# the way apt pulls a Recommends, so an Installing line for a package
-# carrying i: is reported in its own column and does not fail the set.
-# The closing "OK: ... in K packages" must count exactly our set plus
-# those, so no change can pass unprinted.
+# a non-zero exit is an inconsistency.  install_if is no exception: apk
+# installs such a package as soon as its triggers are present, and our
+# model makes the rule hard too; nor can an Installing line be excused by
+# what the index says of the name, since the same name may be one a
+# dependency needs.  The closing "OK: ... in K packages" must count
+# exactly our set, so no change can pass unprinted.
+#
+# apk's changeset tracks one installed package per name, so two versions
+# of one name both installed go unreported by fix; that is checked here.
 #
 # `fix` rejects --usermode, so each goal gets its own copy of the root
 # setup.sh built; the repository is shared.  APK names the binary when
@@ -63,6 +66,7 @@ if [ ! -s "$out/$key.req" ]; then
   exit 1
 fi
 n=$(wc -l < "$out/$key.req")
+dup=$(sed 's/=.*//' "$out/$key.req" | sort | uniq -d | wc -l)
 
 r="$out/$key.root"
 rm -rf "$r"
@@ -84,26 +88,14 @@ printf '%s\n' $goal > "$r/etc/apk/world"
 arc=$?
 rm -rf "$r"
 
-# an Installing line apk brought in on its own initiative rather than to
-# close a dependency: i: in the index is the install_if trigger list
-ii=0; hard=0
-while read -r verb pkg; do
-  if [ "$verb" = Installing ] &&
-     awk -F: -v p="$pkg" '$1=="P"&&$2==p{f=1;next} $1=="P"{f=0}
-       f&&$1=="i"{found=1} END{exit !found}' "$INDEX"; then
-    ii=$((ii+1))
-  else
-    hard=$((hard+1))
-  fi
-done < <(sed -n 's/^( *[0-9]*\/[0-9]*) \([A-Za-z-]*\) \([^ ]*\) .*/\1 \2/p' \
-           "$out/$key.apk")
+ch=$(grep -c '^( *[0-9]*/[0-9]*) ' "$out/$key.apk")
 kept=$(sed -n 's/^OK: .* in \([0-9]*\) packages$/\1/p' "$out/$key.apk")
 
-if [ "$arc" -eq 0 ] && [ "$stanzas" -eq 0 ] && [ "$hard" -eq 0 ] &&
-   [ "${kept:-x}" = $((n + ii)) ]; then
+if [ "$arc" -eq 0 ] && [ "$stanzas" -eq 0 ] && [ "$ch" -eq 0 ] &&
+   [ "$dup" -eq 0 ] && [ "${kept:-x}" = "$n" ]; then
   v=VALID
 else
   v=INVALID
 fi
-printf '%-18s %-7s n=%-5s changes=%-4s kept=%-5s rc=%-3s install-if=%-4s %s\n' \
-  "$goal" "$tag" "$n" "$hard" "${kept:-?}" "$arc" "$ii" "$v"
+printf '%-18s %-7s n=%-5s changes=%-4s kept=%-5s rc=%-3s dup=%-3s %s\n' \
+  "$goal" "$tag" "$n" "$ch" "${kept:-?}" "$arc" "$dup" "$v"
