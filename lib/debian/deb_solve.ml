@@ -1,7 +1,7 @@
+(* The reduction's lookups over the tables, the candidate order PubGrub
+   decides by, and the search that answers a query in either order. *)
 
-(* Nothing is an element whose named version apt finds no match for; it
-   refuses the whole request, which an empty range says. *)
-type accepts = Any | Only of string | Nothing
+type accepts = Debian_frontend.Apt_args.accepts = Any | Only of string | Nothing
 
 (* whose order the search decides in: apt's, replayed, or PubGrub's own *)
 type order = Order.t
@@ -13,88 +13,80 @@ module Make (AP : Tables.ARCH) = struct
   module T = Tables.Make (AP)
   include T
 
-  let ma_real_at idx (n, b) =
+  let ma_real_at tables (n, b) =
     DMA.PkgSet.ofList
-      (List.map (fun v -> ((n, b), v)) (find_list idx.versions_of (n, b)))
+      (List.map (fun v -> ((n, b), v)) (find_list tables.versions_table (n, b)))
 
   (* Every group member at any arch: foreign provides and group provides
      come from any member, so name preimages must span the whole group. *)
-  let ma_group_of_names idx ns =
+  let ma_group_of_names tables ns =
     DMA.PkgSet.ofList
       (List.concat_map
          (fun n ->
-           List.map (fun (b, v) -> ((n, b), v)) (find_list idx.group_of n))
+           List.map (fun (b, v) -> ((n, b), v)) (find_list tables.group_table n))
          ns)
 
-  let ma_prov_of_names idx ns =
+  let ma_prov_of_names tables ns =
     DMA.Prov.ofList
       (List.concat_map
          (fun n ->
-           List.map (fun (q, vt) -> (q, (n, vt))) (find_list idx.providers_of n))
+           List.map (fun (q, vt) -> (q, (n, vt))) (find_list tables.providers_table n))
          ns)
 
-  let ma_prov_of_pkg idx p =
-    match Hashtbl.find_opt idx.stanza_of p with
-    | None -> DMA.Prov.empty
-    | Some stz ->
-        DMA.Prov.ofList (List.map (fun (m, vt) -> (p, (m, vt))) stz.nprovs)
+  (* p's own fibre of a component; a package with no stanza has none *)
+  let fibre tables p ~none f = Option.fold ~none ~some:f (stanza tables p)
 
-  let ma_deps_of_pkg idx p =
-    match Hashtbl.find_opt idx.stanza_of p with
-    | None -> DMA.Deps.empty
-    | Some stz ->
-        DMA.Deps.ofList (List.map (fun alts -> (p, alts)) (deps_of idx stz))
+  let ma_prov_of_pkg tables p =
+    fibre tables p ~none:DMA.Prov.empty (fun stz ->
+        DMA.Prov.ofList (List.map (fun (m, vt) -> (p, (m, vt))) stz.nprovs))
 
-  let ma_recs_of_pkg idx p =
-    match Hashtbl.find_opt idx.stanza_of p with
-    | None -> DMA.Deps.empty
-    | Some stz ->
-        DMA.Deps.ofList (List.map (fun alts -> (p, alts)) (recs_of idx stz))
+  let ma_deps_of_pkg tables p =
+    fibre tables p ~none:DMA.Deps.empty (fun stz ->
+        DMA.Deps.ofList (List.map (fun alts -> (p, alts)) (deps_of tables stz)))
 
-  let ma_conf_of_pkg idx p =
-    match Hashtbl.find_opt idx.stanza_of p with
-    | None -> DMA.Conf.empty
-    | Some stz -> DMA.Conf.ofList (List.map (fun ma -> (p, ma)) stz.nconfs)
+  let ma_recs_of_pkg tables p =
+    fibre tables p ~none:DMA.Deps.empty (fun stz ->
+        DMA.Deps.ofList (List.map (fun alts -> (p, alts)) (recs_of tables stz)))
 
-  (* classOf defaults to MANo, so unindexed packages need no entry. *)
-  let classes_of idx pkgs =
+  let ma_conf_of_pkg tables p =
+    fibre tables p ~none:DMA.Conf.empty (fun stz ->
+        DMA.Conf.ofList (List.map (fun ma -> (p, ma)) stz.nconfs))
+
+  (* classOf defaults to MANo, so a package with no stanza needs no entry. *)
+  let classes_of tables pkgs =
     DMA.Cls.ofList
       (List.filter_map
          (fun p ->
-           Option.map (fun c -> (p, c)) (Hashtbl.find_opt idx.class_of p))
+           Option.map (fun (stz : nstanza) -> (p, stz.ncls)) (stanza tables p))
          pkgs)
 
-  let atom_names_of idx p =
-    match Hashtbl.find_opt idx.stanza_of p with
-    | None -> []
-    | Some stz -> List.concat_map (List.map DMA.aname) (deps_of idx stz)
+  let atom_names_of tables p =
+    fibre tables p ~none:[] (fun stz ->
+        List.concat_map (List.map DMA.aname) (deps_of tables stz))
 
   (* The base names p's conflicts can land on: its own, carrying the implicit
      group exclusion, each negative's, and the names of their declared
      providers. *)
-  let conf_read idx p =
+  let conf_read tables p =
     let names =
       fst (fst p)
-      ::
-      (match Hashtbl.find_opt idx.stanza_of p with
-      | None -> []
-      | Some stz -> List.map DMA.aname stz.nconfs)
+      :: fibre tables p ~none:[] (fun stz -> List.map DMA.aname stz.nconfs)
     in
     List.concat_map
       (fun m ->
-        m :: List.map (fun (q, _) -> fst (fst q)) (find_list idx.providers_of m))
+        m :: List.map (fun (q, _) -> fst (fst q)) (find_list tables.providers_table m))
       names
 
   (* R/Pi preimages for a mangled name (m, x): whichever x is, every
      provider of (m, x) is either a group member of m (reals, implicit group
      / explicit-qualifier / foreign / :any provides) or a declared provider
      of m. *)
-  let sel_preimages idx (mn : string * DMA.coq_NameArch) =
+  let sel_preimages tables (mn : string * DMA.coq_NameArch) =
     let m = fst mn in
-    let r_ma = ma_group_of_names idx [ m ] in
-    let pi_decl = ma_prov_of_names idx [ m ] in
+    let r_ma = ma_group_of_names tables [ m ] in
+    let pi_decl = ma_prov_of_names tables [ m ] in
     let cls =
-      classes_of idx
+      classes_of tables
         (DMA.PkgSet.elements r_ma @ List.map fst (DMA.Prov.elements pi_decl))
     in
     (DMA.reduceReal r_ma, DMA.reduceProv r_ma pi_decl cls)
@@ -102,21 +94,21 @@ module Make (AP : Tables.ARCH) = struct
   (* the preimages depend on the name alone, and every atom on a name --
      each version constraint a depender writes is another selector -- asks
      for the same pair *)
-  let sel_preimages idx mn =
-    match Hashtbl.find_opt idx.sel_cache mn with
+  let sel_preimages tables mn =
+    match Hashtbl.find_opt tables.sel_cache mn with
     | Some r -> r
     | None ->
-        let r = sel_preimages idx mn in
-        Hashtbl.add idx.sel_cache mn r;
+        let r = sel_preimages tables mn in
+        Hashtbl.add tables.sel_cache mn r;
         r
 
-  let vers_sparse idx (n' : DMA.Deb.Name.t) =
+  let vers_sparse tables (n' : DMA.Deb.Name.t) =
     match n' with
     | DMA.Deb.Name.Orig (n, DMA.QAArch b) ->
         DMA.Deb.T.VSet.add DMA.Deb.Version.Bot
           (DMA.Deb.embedVS
              (DMA.Deb.Ver.realVersions
-                (DMA.reduceReal (ma_real_at idx (n, b)))
+                (DMA.reduceReal (ma_real_at tables (n, b)))
                 (n, DMA.QAArch b)))
     | DMA.Deb.Name.Orig _ ->
         (* embedPkg introduces only QAArch names, so an explicit-qualifier,
@@ -125,36 +117,33 @@ module Make (AP : Tables.ARCH) = struct
     | DMA.Deb.Name.Disjunct aset -> DMA.Deb.versionsDisj aset
     | DMA.Deb.Name.Soft aset -> DMA.Deb.versionsSoft aset
     | DMA.Deb.Name.Selector a ->
-        let r, pi = sel_preimages idx (fst a) in
+        let r, pi = sel_preimages tables (fst a) in
         DMA.Deb.us r pi a
 
-  let dependees_sparse idx (s : DMA.Deb.T.Pkg.t) =
+  let dependees_sparse tables (s : DMA.Deb.T.Pkg.t) =
     match s with
     | DMA.Deb.Name.Orig (n, DMA.QAArch b), DMA.Deb.Version.Orig v ->
         let p = ((n, b), v) in
-        let m = atom_names_of idx p @ conf_read idx p in
-        let r_ma = ma_group_of_names idx m in
+        let m = atom_names_of tables p @ conf_read tables p in
+        let r_ma = ma_group_of_names tables m in
         (* p itself joins the reduceProv carrier so its implicit provides
            (group pseudo-name, foreign/:any names) are visible to matchb *)
         let r_pi = DMA.PkgSet.add p r_ma in
         let pi_decl =
-          DMA.Prov.union (ma_prov_of_names idx m) (ma_prov_of_pkg idx p)
+          DMA.Prov.union (ma_prov_of_names tables m) (ma_prov_of_pkg tables p)
         in
         let pi_cls =
-          classes_of idx
+          classes_of tables
             (DMA.PkgSet.elements r_pi @ List.map fst (DMA.Prov.elements pi_decl))
         in
         DMA.Deb.dependees (DMA.reduceReal r_ma)
-          (DMA.reduceDeps (ma_deps_of_pkg idx p))
-          (DMA.reduceRec (ma_recs_of_pkg idx p))
+          (DMA.reduceDeps (ma_deps_of_pkg tables p))
+          (DMA.reduceRec (ma_recs_of_pkg tables p))
           (DMA.reduceProv r_pi pi_decl pi_cls)
-          (DMA.reduceConf (DMA.PkgSet.singleton p) (ma_conf_of_pkg idx p) pi_cls)
+          (DMA.reduceConf (DMA.PkgSet.singleton p) (ma_conf_of_pkg tables p) pi_cls)
           s
-    | DMA.Deb.Name.Disjunct _, DMA.Deb.Version.Atom a ->
-        let r, pi = sel_preimages idx (fst a) in
-        DMA.Deb.T.DependeesSet.singleton (DMA.Deb.tgt r pi a)
-    | DMA.Deb.Name.Soft _, DMA.Deb.Version.Atom a ->
-        let r, pi = sel_preimages idx (fst a) in
+    | (DMA.Deb.Name.Disjunct _ | DMA.Deb.Name.Soft _), DMA.Deb.Version.Atom a ->
+        let r, pi = sel_preimages tables (fst a) in
         DMA.Deb.T.DependeesSet.singleton (DMA.Deb.tgt r pi a)
     | DMA.Deb.Name.Selector _, DMA.Deb.Version.Ref (m, w) ->
         DMA.Deb.T.DependeesSet.singleton
@@ -207,10 +196,10 @@ module Make (AP : Tables.ARCH) = struct
           let c = Int.compare b.pprio a.pprio in
           if c <> 0 then c else String.compare b.pname a.pname
 
-  let pref_of_pkg idx (p : DMA.Pkg.t) =
+  let pref_of_pkg tables (p : DMA.Pkg.t) =
     let (n, b), _ = p in
     let nat = String.equal b AP.native in
-    match Hashtbl.find_opt idx.stanza_of p with
+    match stanza tables p with
     | Some stz ->
         {
           pess = stz.ness;
@@ -230,10 +219,10 @@ module Make (AP : Tables.ARCH) = struct
 
   (* A Ref names the provider package it came from, so its keys are that
      package's own.  embedPkg introduces only QAArch names, so the other
-     cases are unreachable and rank as an unindexed package would. *)
-  let ref_pref idx ((n, x) : string * DMA.coq_NameArch) w =
+     cases are unreachable and rank as a package with no stanza would. *)
+  let ref_pref tables ((n, x) : string * DMA.coq_NameArch) w =
     match x with
-    | DMA.QAArch b -> pref_of_pkg idx ((n, b), w)
+    | DMA.QAArch b -> pref_of_pkg tables ((n, b), w)
     | _ ->
         {
           pess = false;
@@ -243,11 +232,11 @@ module Make (AP : Tables.ARCH) = struct
           pname = n;
         }
 
-  (* The candidate order reads the index the candidates were introduced
+  (* The candidate order reads the tables the candidates were introduced
      from, so the comparator and the PubGrub instance over it are built per
      solve. *)
   module Search (I : sig
-    val idx : index
+    val tables : tables
     val versions : DMA.Deb.Name.t -> DMA.Deb.T.VSet.t
     val dependencies : DMA.Deb.T.Pkg.t -> DMA.Deb.T.DependeesSet.t
   end) =
@@ -300,7 +289,7 @@ module Make (AP : Tables.ARCH) = struct
         | DMA.Deb.Version.RefReal _, DMA.Deb.Version.Ref (_, _) -> 1
         | DMA.Deb.Version.Ref (_, _), DMA.Deb.Version.RefReal _ -> -1
         | DMA.Deb.Version.Ref (m, w), DMA.Deb.Version.Ref (m', w') ->
-            let c = pref_compare (ref_pref I.idx m w) (ref_pref I.idx m' w') in
+            let c = pref_compare (ref_pref I.tables m w) (ref_pref I.tables m' w') in
             if c <> 0 then c
             else
               (* two versions of one provider are apt's same-package case,
@@ -415,7 +404,7 @@ module Make (AP : Tables.ARCH) = struct
       module PVersion = PVersion
       module PG = PG
 
-      let idx = I.idx
+      let tables = I.tables
       let tag = tag
       let cands_of = cands_of
       let targets = targets
@@ -519,7 +508,7 @@ module Make (AP : Tables.ARCH) = struct
           Some (decode sol)
   end
 
-  let solve ~debug ~order (idx : index) (query : ((string * string) * accepts) list)
+  let solve ~debug ~order (tables : tables) (query : ((string * string) * accepts) list)
       =
     (* PACPROF's lookup buckets: calls and CPU time per name kind *)
     let buckets : (string, int ref * float ref) Hashtbl.t = Hashtbl.create 8 in
@@ -545,9 +534,9 @@ module Make (AP : Tables.ARCH) = struct
       | DMA.Deb.Name.Selector _ -> "versions/sel"
     in
     let module S = Search (struct
-      let idx = idx
-      let versions n' = timed (vname n') (vers_sparse idx) n'
-      let dependencies = timed "dependees" (dependees_sparse idx)
+      let tables = tables
+      let versions n' = timed (vname n') (vers_sparse tables) n'
+      let dependencies = timed "dependees" (dependees_sparse tables)
     end) in
     let r =
       S.run ~debug ~order
@@ -559,229 +548,41 @@ module Make (AP : Tables.ARCH) = struct
           Printf.eprintf "PACPROF %s: %d calls %.2fs\n%!" name !c !t)
         buckets;
       Printf.eprintf "PACPROF clauses parsed: %d of %d stanzas\n%!"
-        idx.n_clauses_parsed
-        (Hashtbl.length idx.stanza_of));
+        tables.n_clauses_parsed
+        (Hashtbl.length tables.stanza_table));
     r
 end
 
-(* apt's solver rejects every version but the candidate before it starts
-   (APT::Solver::Strict-Pinning, on by default: FromDepCache, solver3.cc),
-   so its answer holds only candidates, though its cache still lists the
-   rest, rejected.  The cut is made on the stanzas, before any table is built, so that the lookups
-   answer over the instance their theorems are stated over.  The candidate
-   is the version of highest pin priority, the newest among equals
-   (pkgPolicy::GetCandidateVer), and an arch:all stanza belongs to the
-   native architecture's package (pkgCacheGenerator::NewPackage).  What
-   sets one version's priority apart is a pin (a preferences file,
-   APT::Default-Release) or a Release file's NotAutomatic or
-   ButAutomaticUpgrades; pac reads Packages files alone, which carry none
-   of them, so they are out of scope and every version ties.
-   A query naming a version (apt-get install pkg=ver) makes it pkg's
-   candidate (TryToInstall, apt-private/private-install.cc), so [named]
-   overrides the newest.  Of two stanzas at one version the first read is
-   kept: apt files the later one behind it in the package's version list,
-   and the candidate is the first to reach the top priority. *)
-let stanza_key ~native (st : DF.stanza) =
-  (st.package, if st.architecture = "all" then native else st.architecture)
+module Args = Debian_frontend.Apt_args
 
-let candidates ~native ~named (stanzas : DF.stanza list) =
-  let key = stanza_key ~native in
-  let best = Hashtbl.create 65536 in
-  let better (st : DF.stanza) (b : DF.stanza) =
-    match Hashtbl.find_opt named (key st) with
-    | Some v ->
-        Debian_frontend.Deb_version.compare st.version v = 0
-        && Debian_frontend.Deb_version.compare b.version v <> 0
-    | None -> Debian_frontend.Deb_version.compare st.version b.version > 0
-  in
-  List.iter
-    (fun (st : DF.stanza) ->
-      match Hashtbl.find_opt best (key st) with
-      | Some b when not (better st b) -> ()
-      | _ -> Hashtbl.replace best (key st) st)
-    stanzas;
-  List.filter (fun st -> Hashtbl.find best (key st) == st) stanzas
-
-(* fnmatch(3) with FNM_CASEFOLD, which pkgVersionMatch::ExpressionMatches
-   calls on a version pattern *)
-let fnmatch p s =
-  let p = String.lowercase_ascii p and s = String.lowercase_ascii s in
-  let np = String.length p and ns = String.length s in
-  let bracket i =
-    let neg, i =
-      if i < np && (p.[i] = '!' || p.[i] = '^') then (true, i + 1)
-      else (false, i)
-    in
-    let rec scan k acc first =
-      if k >= np then None
-      else if p.[k] = ']' && not first then Some (k + 1, acc)
-      else if k + 2 < np && p.[k + 1] = '-' && p.[k + 2] <> ']' then
-        scan (k + 3) ((p.[k], p.[k + 2]) :: acc) false
-      else scan (k + 1) ((p.[k], p.[k]) :: acc) false
-    in
-    Option.map
-      (fun (e, rs) ->
-        (e, fun c -> neg <> List.exists (fun (a, b) -> a <= c && c <= b) rs))
-      (scan i [] true)
-  in
-  let rec go i j =
-    if i = np then j = ns
-    else
-      match p.[i] with
-      | '*' -> go (i + 1) j || (j < ns && go i (j + 1))
-      | '?' -> j < ns && go (i + 1) (j + 1)
-      | '\\' when i + 1 < np -> j < ns && p.[i + 1] = s.[j] && go (i + 2) (j + 1)
-      | '[' -> (
-          match bracket (i + 1) with
-          | Some (e, test) -> j < ns && test s.[j] && go e (j + 1)
-          | None -> j < ns && s.[j] = '[' && go (i + 1) (j + 1))
-      | c -> j < ns && c = s.[j] && go (i + 1) (j + 1)
-  in
-  go 0 0
-
-(* pkgVersionMatch::VersionMatches for a Version matcher
-   (apt-pkg/versionmatch.cc): the whole string, case-insensitively, or a
-   prefix of it where the pattern ends in '*', or a glob of the pattern less
-   that '*', so 1.*2* matches 1.2 and not 1.23.  apt would read /regex/ as a
-   regex, but its argument splits at the last '/', so no argument reaches
-   that branch. *)
-let version_matches pat v =
-  let n = String.length pat in
-  let pre = n > 0 && pat.[n - 1] = '*' in
-  let b = if pre then String.sub pat 0 (n - 1) else pat in
-  let lb = String.length b and lv = String.length v in
-  (lv = lb || (pre && lv > lb))
-  && String.lowercase_ascii (String.sub v 0 lb) = String.lowercase_ascii b
-  || fnmatch b v
-
-(* One argument of apt-get install, as VersionContainerInterface::FromString
-   (apt-pkg/cacheset.cc) reads it: whatever follows the last '/' or '='
-   selects a version, by release or by version string, and what precedes it
-   names the package, NAME[:ARCH] (PackageFromPackageName). *)
-let query_element ~native ~arches (stanzas : DF.stanza list) arg =
-  let tag =
-    match (String.rindex_opt arg '=', String.rindex_opt arg '/') with
-    | Some i, Some j -> Some (max i j)
-    | t, None | None, t -> t
-  in
-  let pkg, sel =
-    match tag with
-    | Some i ->
-        ( String.sub arg 0 i,
-          Some (arg.[i], String.sub arg (i + 1) (String.length arg - i - 1)) )
-    | None -> (arg, None)
-  in
-  let has (n, b) =
-    List.exists (fun st -> stanza_key ~native st = (n, b)) stanzas
-  in
-  (* an unqualified name is apt's preferred package of the group
-     (GrpIterator::FindPreferredPkg): the native one if it has a version,
-     else the first architecture that does.  apt tries them in
-     APT::Architectures order, which pac cannot read, and takes the
-     index's architectures in sorted order instead. *)
-  let key =
-    match String.rindex_opt pkg ':' with
-    | Some i ->
-        let b = String.sub pkg (i + 1) (String.length pkg - i - 1) in
-        ( String.sub pkg 0 i,
-          if b = "all" || b = "native" then native else b )
-    | None -> (
-        match
-          List.find_opt
-            (fun b -> has (pkg, b))
-            (native :: List.filter (( <> ) native) arches)
-        with
-        | Some b -> (pkg, b)
-        | None -> (pkg, native))
-  in
-  (* the package's version list, newest first and the first read ahead of
-     a later stanza at the same version *)
-  let vlist =
-    List.stable_sort
-      (fun (a : DF.stanza) (b : DF.stanza) ->
-        Debian_frontend.Deb_version.compare b.version a.version)
-      (List.filter (fun st -> stanza_key ~native st = key) stanzas)
-  in
-  let first p =
-    match List.find_opt (fun (st : DF.stanza) -> p st.version) vlist with
-    | Some st -> Only st.version
-    | None -> Nothing
-  in
-  (* failing every version, pkgVersionMatch::Find takes a version whose
-     package provides itself at a matching version *)
-  let self_provided v =
-    List.find_map
-      (fun (st : DF.stanza) ->
-        if
-          List.exists
-            (fun (p : DF.provide) ->
-              p.pname = fst key
-              && Option.fold ~none:false ~some:(version_matches v) p.pversion)
-            st.provides
-        then Some (Only st.version)
-        else None)
-      vlist
-  in
-  let acc =
-    match sel with
-    | None -> Any
-    (* apt tests these keywords before the tag, so they read the same after
-       '/'; nothing is installed, as pac reads no dpkg status *)
-    | Some (_, "installed") -> Nothing
-    (* without pins the candidate is the newest, which heads the list *)
-    | Some (_, ("candidate" | "newest")) -> first (fun _ -> true)
-    | Some ('=', v) -> (
-        match first (version_matches v) with
-        | Nothing -> Option.value (self_provided v) ~default:Nothing
-        | a -> a)
-    (* a release is matched against Release files, which pac does not
-       read; "*" matches every file (pkgVersionMatch::FileMatch) *)
-    | Some (_, "*") -> first (fun _ -> true)
-    | Some _ -> Nothing
-  in
-  (key, acc)
-
-(* Parsing and index construction are reported apart from solving because
+(* Parsing and table construction are reported apart from solving because
    they scale differently: the archive is read whole, while the solve
    touches only the sub-instances the lookup theorems bound.  Which of the
    two dominates is the frontend's headline number, so it is printed rather
    than inferred. *)
 let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~paths ~query
-    :
-    ((string * string * string) list * float * float) option =
+    : ((string * string * string) list * float * float) option =
   let t0 = Unix.gettimeofday () in
-  let stanzas = List.concat_map DF.parse_file paths in
+  let index = List.concat_map DF.parse_file paths in
   let arches =
     List.sort_uniq String.compare
       (native
       :: List.filter_map
            (fun (st : DF.stanza) ->
              if st.architecture = "all" then None else Some st.architecture)
-           stanzas)
+           index)
   in
-  (* apt installs each element's version in argument order, setting it as
-     the candidate, so of two naming one package the later wins *)
-  let query =
-    List.fold_left
-      (fun acc arg ->
-        let k, a = query_element ~native ~arches stanzas arg in
-        List.remove_assoc k acc @ [ (k, a) ])
-      [] query
-  in
-  let named = Hashtbl.create 8 in
-  List.iter
-    (function k, Only v -> Hashtbl.replace named k v | _ -> ())
-    query;
-  let stanzas =
-    if strict_pinning then candidates ~native ~named stanzas else stanzas
+  let query, named = Args.parse_query ~native ~arches index query in
+  let index =
+    if strict_pinning then Args.pin_candidates ~native ~named index else index
   in
   let module AP = struct
     let arches = arches
     let native = native
   end in
   let module M = Make (AP) in
-  let idx = M.build_index ~recommends stanzas in
+  let tables = M.build_tables ~recommends index in
   let t1 = Unix.gettimeofday () in
-  match M.solve ~debug ~order idx query with
+  match M.solve ~debug ~order tables query with
   | None -> None
   | Some pkgs -> Some (pkgs, t1 -. t0, Unix.gettimeofday () -. t1)

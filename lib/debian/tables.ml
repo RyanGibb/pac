@@ -1,6 +1,5 @@
-(* The parsed Packages file's derived tables, and what reads them without
-   deciding anything: the stanza normal form, the clauses in field order,
-   apt's obsolescence test, the printers. *)
+(* The index -- the parsed Packages file -- normalised, and the tables
+   derived from it: what reads the instance without deciding anything. *)
 
 module E = Pac
 module DF = Debian_frontend.Deb_packages
@@ -86,7 +85,7 @@ module Make (AP : ARCH) = struct
   (* ~recommends false is the --no-install-recommends reading: the Rec
      instance is empty, so every soft disjunct is empty and unreachable. *)
   let normalize ~recommends (st : DF.stanza) : nstanza =
-    let arch = if st.architecture = "all" then AP.native else st.architecture in
+    let _, arch = Debian_frontend.Apt_args.stanza_key ~native:AP.native st in
     let ncls =
       match st.multi_arch with
       | Some "same" when st.architecture = "all" -> DMA.MANo
@@ -117,28 +116,26 @@ module Make (AP : ARCH) = struct
       nall = st.architecture = "all";
     }
 
-  (* Untrusted whole-archive index: its faithfulness to the parsed instance
-     is trusted, as are the parser, Deb_version, the Strict-Pinning cut and
-     PubGrub. *)
-  type index = {
-    versions_of : (string * string, string list) Hashtbl.t;
-    stanza_of : (DMA.Pkg.t, nstanza) Hashtbl.t;
-    group_of : (string, (string * string) list) Hashtbl.t;
-    providers_of : (string, (DMA.Pkg.t * DMA.Deb.coq_DTop) list) Hashtbl.t;
-    class_of : (DMA.Pkg.t, DMA.coq_MAClass) Hashtbl.t;
+  (* The tables derived from the index, untrusted: their faithfulness to the
+     parsed instance is trusted, as are the parser, Deb_version, the
+     Strict-Pinning cut and PubGrub. *)
+  type tables = {
+    versions_table : (string * string, string list) Hashtbl.t;
+    stanza_table : (DMA.Pkg.t, nstanza) Hashtbl.t;
+    group_table : (string, (string * string) list) Hashtbl.t;
+    providers_table : (string, (DMA.Pkg.t * DMA.Deb.coq_DTop) list) Hashtbl.t;
     (* stanzas whose clauses a sub-instance has asked for, reported under
        PACPROF: the whole point of deferring them is that this stays small *)
     mutable n_clauses_parsed : int;
     (* who names a package in a Depends or Pre-Depends, and who in a
        Conflicts or Breaks, by the bare name as written: the watch lists
-       apt's Reject propagation walks, built on first use from the field
-       text alone, so no clause is parsed for them; only the --apt-heap
-       search asks *)
-    mutable rev_dep : (string, DMA.Pkg.t list) Hashtbl.t option;
-    mutable rev_conf : (string, DMA.Pkg.t list) Hashtbl.t option;
-    (* the binaries each source name builds, for apt's obsolescence test;
-       likewise built on first use, and only by --apt-heap *)
-    mutable by_src : (string, nstanza list) Hashtbl.t option;
+       apt's Reject propagation walks, built from the field text alone, so
+       no clause is parsed for them; only the tool order asks *)
+    rev_dep_table : (string, DMA.Pkg.t list) Hashtbl.t Lazy.t;
+    rev_conf_table : (string, DMA.Pkg.t list) Hashtbl.t Lazy.t;
+    (* the binaries each source name builds, for apt's obsolescence test,
+       likewise asked for by the tool order alone *)
+    source_table : (string, nstanza list) Hashtbl.t Lazy.t;
     (* selector preimages by name, and a package's clauses in field order,
        both asked for again by every depender and by the rejection cascade *)
     sel_cache :
@@ -150,6 +147,11 @@ module Make (AP : ARCH) = struct
   let push tbl k v =
     Hashtbl.replace tbl k
       (v :: (match Hashtbl.find_opt tbl k with Some l -> l | None -> []))
+
+  let find_list tbl k =
+    match Hashtbl.find_opt tbl k with Some l -> l | None -> []
+
+  let stanza tables p = Hashtbl.find_opt tables.stanza_table p
 
   let mangle fields =
     List.map (List.map matom_of) (DF.parse_depends_fields fields)
@@ -198,28 +200,38 @@ module Make (AP : ARCH) = struct
         !acc)
       fields
 
-  let build_index ?(recommends = true) (stanzas : DF.stanza list) : index =
-    let idx =
-      {
-        versions_of = Hashtbl.create 65536;
-        stanza_of = Hashtbl.create 65536;
-        group_of = Hashtbl.create 65536;
-        providers_of = Hashtbl.create 4096;
-        class_of = Hashtbl.create 65536;
-        n_clauses_parsed = 0;
-        rev_dep = None;
-        rev_conf = None;
-        by_src = None;
-        sel_cache = Hashtbl.create 4096;
-        oc_cache = Hashtbl.create 4096;
-      }
-    in
-    (* Of two stanzas at one version apt keeps the first read, Provides and
-       all.  An arch:all stanza is a version of its own to apt
-       (Version::All), which the package's one version here cannot be, so
-       that pair is still read as one version with both stanzas' Provides. *)
+  let rev_dep stanza_table =
+    let d = Hashtbl.create 65536 in
+    Hashtbl.iter
+      (fun p (stz : nstanza) ->
+        List.iter (fun n -> push d n p) (field_names stz.raw_deps))
+      stanza_table;
+    d
+
+  let rev_conf stanza_table =
+    let c = Hashtbl.create 4096 in
+    Hashtbl.iter
+      (fun p (stz : nstanza) ->
+        List.iter (fun a -> push c (DMA.aname a) p) stz.nconfs)
+      stanza_table;
+    c
+
+  let by_source stanza_table =
+    let t = Hashtbl.create 65536 in
+    Hashtbl.iter (fun _ (s : nstanza) -> push t (fst s.nsrc) s) stanza_table;
+    t
+
+  (* Of two stanzas at one version apt keeps the first read, Provides and
+     all.  An arch:all stanza is a version of its own to apt (Version::All),
+     which the package's one version here cannot be, so that pair is still
+     read as one version with both stanzas' Provides. *)
+  let build_tables ~recommends (index : DF.stanza list) : tables =
+    let versions_table = Hashtbl.create 65536
+    and stanza_table = Hashtbl.create 65536
+    and group_table = Hashtbl.create 65536
+    and providers_table = Hashtbl.create 4096 in
     let first_read (stz : nstanza) =
-      match Hashtbl.find_opt idx.stanza_of stz.npkg with
+      match Hashtbl.find_opt stanza_table stz.npkg with
       | Some old -> old.nall <> stz.nall
       | None -> true
     in
@@ -228,45 +240,32 @@ module Make (AP : ARCH) = struct
         let stz = normalize ~recommends st in
         if first_read stz then (
           let (n, b), v = stz.npkg in
-          if not (Hashtbl.mem idx.stanza_of stz.npkg) then (
-            push idx.versions_of (n, b) v;
-            push idx.group_of n (b, v));
-          Hashtbl.replace idx.stanza_of stz.npkg stz;
-          Hashtbl.replace idx.class_of stz.npkg stz.ncls;
+          if not (Hashtbl.mem stanza_table stz.npkg) then (
+            push versions_table (n, b) v;
+            push group_table n (b, v));
+          Hashtbl.replace stanza_table stz.npkg stz;
           List.iter
-            (fun (m, vt) -> push idx.providers_of m (stz.npkg, vt))
+            (fun (m, vt) -> push providers_table m (stz.npkg, vt))
             stz.nprovs))
-      stanzas;
-    idx
-
-  let reverse_index idx =
-    match (idx.rev_dep, idx.rev_conf) with
-    | Some d, Some c -> (d, c)
-    | _ ->
-        let d = Hashtbl.create 65536 and c = Hashtbl.create 4096 in
-        Hashtbl.iter
-          (fun p (stz : nstanza) ->
-            List.iter (fun n -> push d n p) (field_names stz.raw_deps);
-            List.iter (fun a -> push c (DMA.aname a) p) stz.nconfs)
-          idx.stanza_of;
-        idx.rev_dep <- Some d;
-        idx.rev_conf <- Some c;
-        (d, c)
+      index;
+    {
+      versions_table;
+      stanza_table;
+      group_table;
+      providers_table;
+      n_clauses_parsed = 0;
+      rev_dep_table = lazy (rev_dep stanza_table);
+      rev_conf_table = lazy (rev_conf stanza_table);
+      source_table = lazy (by_source stanza_table);
+      sel_cache = Hashtbl.create 4096;
+      oc_cache = Hashtbl.create 4096;
+    }
 
   (* apt's ObsoletedByNewerSourceVersion (solver3.cc:863-888): another
      binary of the same source, on the same architecture and equally arch:all
      or not, comes from a newer source version.  apt also asks that binary's
      pin priority to be no lower, which with no pins every version meets. *)
-  let obsolete idx (stz : nstanza) =
-    let by_src =
-      match idx.by_src with
-      | Some t -> t
-      | None ->
-          let t = Hashtbl.create 65536 in
-          Hashtbl.iter (fun _ (s : nstanza) -> push t (fst s.nsrc) s) idx.stanza_of;
-          idx.by_src <- Some t;
-          t
-    in
+  let obsolete tables (stz : nstanza) =
     let (_, b), _ = stz.npkg in
     List.exists
       (fun (s : nstanza) ->
@@ -274,25 +273,23 @@ module Make (AP : ARCH) = struct
         fst s.npkg <> fst stz.npkg
         && String.equal b b' && s.nall = stz.nall
         && Debian_frontend.Deb_version.compare (snd s.nsrc) (snd stz.nsrc) > 0)
-      (match Hashtbl.find_opt by_src (fst stz.nsrc) with
-      | Some l -> l
-      | None -> [])
+      (find_list (Lazy.force tables.source_table) (fst stz.nsrc))
 
   (* Only a lookup at a stanza's own package reads its clauses, so they can
-     wait until one does.  providers_of cannot: it is a preimage -- who
+     wait until one does.  providers_table cannot: it is a preimage -- who
      provides the name I want -- that no clause of the asking package can
      reach, so Provides stays eager. *)
-  let clauses_of idx (stz : nstanza) =
+  let clauses_of tables (stz : nstanza) =
     match stz.nclauses with
     | Some c -> c
     | None ->
         let c = (mangle stz.raw_deps, mangle stz.raw_recs) in
         stz.nclauses <- Some c;
-        idx.n_clauses_parsed <- idx.n_clauses_parsed + 1;
+        tables.n_clauses_parsed <- tables.n_clauses_parsed + 1;
         c
 
-  let deps_of idx stz = fst (clauses_of idx stz)
-  let recs_of idx stz = snd (clauses_of idx stz)
+  let deps_of tables stz = fst (clauses_of tables stz)
+  let recs_of tables stz = snd (clauses_of tables stz)
 
   (* One package's clauses in control-file order, Depends before Recommends,
      each with its mangled alternatives and the synthetic name a multi-way
@@ -302,13 +299,13 @@ module Make (AP : ARCH) = struct
      item, when it has one, is the alternative's selector, which the caller
      resolves because a selector in turn exists only where a Provides
      matches the atom. *)
-  let ordered_clauses idx (p : DMA.Pkg.t) :
+  let ordered_clauses tables (p : DMA.Pkg.t) :
       (bool * DMA.Deb.Name.t * DMA.Deb.Atom.t list) list =
-    match Hashtbl.find_opt idx.oc_cache p with
+    match Hashtbl.find_opt tables.oc_cache p with
     | Some r -> r
     | None ->
         let r =
-          match Hashtbl.find_opt idx.stanza_of p with
+          match stanza tables p with
           | None -> []
           | Some stz ->
               let b = snd (fst p) in
@@ -322,12 +319,12 @@ module Make (AP : ARCH) = struct
               in
               List.map
                 (fun alts -> mk false (fun s -> DMA.Deb.Name.Disjunct s) alts)
-                (deps_of idx stz)
+                (deps_of tables stz)
               @ List.map
                   (fun alts -> mk true (fun s -> DMA.Deb.Name.Soft s) alts)
-                  (recs_of idx stz)
+                  (recs_of tables stz)
         in
-        Hashtbl.add idx.oc_cache p r;
+        Hashtbl.add tables.oc_cache p r;
         r
 
   (* Does version [w] satisfy the atom's formula?  Mangled formulas compare
@@ -347,9 +344,6 @@ module Make (AP : ARCH) = struct
         | E.OpLt -> c < 0
         | E.OpEq -> c = 0
         | E.OpNe -> c <> 0)
-
-  let find_list tbl k =
-    match Hashtbl.find_opt tbl k with Some l -> l | None -> []
 
 
   let pp_formula fmt (f : DMA.Deb.Ver.coq_Formula) =

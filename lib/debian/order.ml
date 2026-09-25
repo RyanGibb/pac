@@ -1008,7 +1008,7 @@ module type SEARCH = sig
     type selection = Unselected | Entailed of Ranges.t | Decided of PVersion.t
   end
 
-  val idx : T.index
+  val tables : T.tables
   val tag : T.DMA.Deb.Name.t -> T.DMA.Deb.Version.t -> PVersion.t
   val cands_of : T.DMA.Deb.Name.t -> PVersion.t list
 
@@ -1076,7 +1076,7 @@ module Make (S : SEARCH) = struct
       provided = Hashtbl.create 64;
     }
 
-  let stanza p = Hashtbl.find_opt idx.stanza_of p
+  let stanza p = T.stanza tables p
 
   (* the declared Provides of [n] that meet the formula *)
   let provides_matching (stz : nstanza) n f =
@@ -1160,7 +1160,7 @@ module Make (S : SEARCH) = struct
         let b =
           List.exists
             (fun (q, vt) -> not (self_dropped q n vt))
-            (find_list idx.providers_of n)
+            (find_list tables.providers_table n)
         in
         Hashtbl.add st.provided n b;
         b
@@ -1175,7 +1175,7 @@ module Make (S : SEARCH) = struct
     | n, DMA.QAArch b ->
         (not (apt_provided st n))
         &&
-        let vs = find_list idx.versions_of (n, b) in
+        let vs = find_list tables.versions_table (n, b) in
         vs <> [] && List.for_all (sat (snd a)) vs
     | _ -> false
 
@@ -1276,7 +1276,7 @@ module Make (S : SEARCH) = struct
       && not
            (List.exists
               (fun w -> installed_at ~assigned ((n, b), w))
-              (find_list idx.versions_of k))
+              (find_list tables.versions_table k))
     then (
       Hashtbl.replace st.pdead k ();
       out := `Pkg k :: !out)
@@ -1338,7 +1338,7 @@ module Make (S : SEARCH) = struct
      already conflicts with its whole group implicitly (AddImplicitDepends,
      pkgcachegen.cc), so skipping every member changes no answer. *)
   let conflicted_by st ~assigned (((pname, _), _) as p : DMA.Pkg.t) =
-    let _, rev_conf = reverse_index idx in
+    let rev_conf = Lazy.force tables.rev_conf_table in
     let seen = Hashtbl.create 16 in
     let out = ref [] in
     let names = pkg_names p in
@@ -1377,7 +1377,7 @@ module Make (S : SEARCH) = struct
      provided atoms, a package var the deferred ones; a clause with no
      solution at all never fires, having nothing to watch. *)
   let cascade st ~assigned ~pkgvar names out units =
-    let rev_dep, _ = reverse_index idx in
+    let rev_dep = Lazy.force tables.rev_dep_table in
     let seen = Hashtbl.create 16 in
     let watched (opt, _, atoms) =
       (not opt)
@@ -1406,7 +1406,7 @@ module Make (S : SEARCH) = struct
             then (
               Hashtbl.replace seen rk ();
               let inst = installed_at ~assigned r in
-              List.iter (fire rk inst) (ordered_clauses idx r)))
+              List.iter (fire rk inst) (ordered_clauses tables r)))
           (find_list rev_dep nm))
       names
 
@@ -1418,14 +1418,14 @@ module Make (S : SEARCH) = struct
         if
           List.for_all
             (fun w -> Hashtbl.mem st.vdead ((n, b), w))
-            (find_list idx.versions_of (n, b))
+            (find_list tables.versions_table (n, b))
         then reject_pkg st ~assigned out (n, b);
         cascade st ~assigned ~pkgvar:false (pkg_names x) out units
     | `Pkg (n, b) ->
         (* each version's own clause, version -> package *)
         List.iter
           (fun w -> reject_ver st ~assigned out ((n, b), w))
-          (find_list idx.versions_of (n, b));
+          (find_list tables.versions_table (n, b));
         cascade st ~assigned ~pkgvar:true [ n ] out units);
     (List.rev !out, List.rev !units)
 
@@ -1482,7 +1482,7 @@ module Make (S : SEARCH) = struct
           match atoms with
           | [ a ] -> fold opt g a
           | _ -> (opt, Some g, fun () -> atoms))
-        (ordered_clauses idx p)
+        (ordered_clauses tables p)
     in
     (* a later fold has narrowed the earlier's atom in place *)
     let live l =
@@ -1600,7 +1600,7 @@ module Make (S : SEARCH) = struct
         match x with
         | DMA.QAArch b -> (
             match stanza ((n, b), w) with
-            | Some stz -> T.obsolete idx stz
+            | Some stz -> T.obsolete tables stz
             | None -> false)
         | _ -> false
       in

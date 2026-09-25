@@ -86,6 +86,11 @@ let strip s =
 
 let split_on c s = String.split_on_char c s |> List.map strip
 
+(* the two-character operators first, so that ">" is not read off ">=";
+   the deprecated one-character ">" and "<" mean ">=" and "<=" (Policy 7.1) *)
+let operators =
+  [ (">=", Ge); (">>", Gt); ("<=", Le); ("<<", Lt); ("=", Eq); (">", Ge); ("<", Le) ]
+
 let parse_atom s =
   let s = strip s in
   let cut mark s =
@@ -118,22 +123,15 @@ let parse_atom s =
       in
       let rest = strip rest in
       let op, v =
-        if String.length rest >= 2 && String.sub rest 0 2 = ">=" then
-          (Ge, String.sub rest 2 (String.length rest - 2))
-        else if String.length rest >= 2 && String.sub rest 0 2 = ">>" then
-          (Gt, String.sub rest 2 (String.length rest - 2))
-        else if String.length rest >= 2 && String.sub rest 0 2 = "<=" then
-          (Le, String.sub rest 2 (String.length rest - 2))
-        else if String.length rest >= 2 && String.sub rest 0 2 = "<<" then
-          (Lt, String.sub rest 2 (String.length rest - 2))
-        else if String.length rest >= 1 && rest.[0] = '=' then
-          (Eq, String.sub rest 1 (String.length rest - 1))
-        else if String.length rest >= 1 && rest.[0] = '>' then
-          (* deprecated ">" means ">=" (Policy 7.1) *)
-          (Ge, String.sub rest 1 (String.length rest - 1))
-        else if String.length rest >= 1 && rest.[0] = '<' then
-          (Le, String.sub rest 1 (String.length rest - 1))
-        else (Eq, rest)
+        match
+          List.find_opt
+            (fun (p, _) -> String.starts_with ~prefix:p rest)
+            operators
+        with
+        | Some (p, op) ->
+            let n = String.length p in
+            (op, String.sub rest n (String.length rest - n))
+        | None -> (Eq, rest)
       in
       if name = "" then None
       else Some { name; aqual; constr = Some (op, strip v) }
