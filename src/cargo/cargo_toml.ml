@@ -1,8 +1,9 @@
 (* Trusted (TCB) reading of the TOML 1.0 a Cargo.toml is written in.  The
    switch pac builds in has no TOML library, and a query's manifest is one
-   small file, so this is a direct reader of the whole grammar rather than
-   of the fields cargo reads: a field the query module does not model has
-   to be seen to be refused, not skipped by a parser that stopped short.
+   small file, so this reads the whole grammar, and some non-TOML besides,
+   rather than only the fields cargo reads: a field the query module does
+   not model has to be seen to be refused, not skipped by a parser that
+   stopped short.
    Date-times are kept as their text; nothing cargo resolves reads one. *)
 
 type t =
@@ -17,7 +18,8 @@ type t =
 
 (* explicit: defined by its own [header] or as a value, so a second
    definition is the duplicate TOML forbids; an implicit table, made as
-   the parent of a dotted key or header, may still be defined once *)
+   the parent of a header, may still be defined once.  TOML forbids that
+   for a dotted key's parent, which this reader also allows. *)
 and tbl = { mutable fields : (string * t) list; mutable explicit : bool }
 
 exception Error of string

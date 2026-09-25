@@ -8,8 +8,8 @@ exactly the two things a lockfile records -- one [[package]] per node,
 and each node's `dependencies` list naming its children.  Nothing else
 in the file is a choice: `source` is the one registry every non-root
 node came from, and `checksum` is the index's own cksum for that exact
-version, copied rather than computed, because the body played no part in
-picking the version and cargo only checks it on download.
+version, copied rather than computed, since cargo compares a locked
+checksum against the index's on every re-resolve (Resolve::merge_from).
 
 The root is the queried crate itself, built as a path package by
 run_query.py's build_manifest, so its [[package]] carries neither source

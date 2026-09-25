@@ -1,5 +1,5 @@
 (* SemVer 2.0.0 precedence and npm's range grammar, implemented from the
-   specifications: numeric major.minor.patch, then pre-release compared
+   specifications, plus == and != operators that node-semver lacks: numeric major.minor.patch, then pre-release compared
    identifier-wise (numeric identifiers below alphanumeric ones, a shorter
    identifier list below its extensions, and a version carrying a
    pre-release below the same core release), with build metadata ignored.
@@ -8,15 +8,17 @@
    of comparator sets and never decides which versions match.  Evaluation
    against the real version set is the extracted calculus's job, and the
    prerelease admission rule is Npm.csAdmits there.  The [holds] mirror
-   at the bottom exists so the grammar can be tested from OCaml; the
-   solver does not use it.  Untrusted (TCB). *)
+   at the bottom exists so the grammar can be tested from OCaml; its
+   [holds_pre] also decides engines in npm_solve, and that use is
+   trusted.  Trusted (TCB). *)
 
 let is_digit c = c >= '0' && c <= '9'
 
 type t = { major : int; minor : int; patch : int; pre : string list }
 
-(* leading zeros carry no value, and an absurdly long run is saturated
-   rather than overflowing int_of_string *)
+(* leading zeros carry no value; a component over nine digits saturates
+   to max_int rather than overflowing int_of_string, so two such
+   components compare equal *)
 let strip0 s =
   let n = String.length s in
   let i = ref 0 in
@@ -77,8 +79,8 @@ let parse (s : string) : t =
     pre = (if pre = "" then [] else split_on '.' pre);
   }
 
-(* the comparator is called a few million times per solve -- once per
-   candidate per gate -- so parses are shared *)
+(* the comparator runs on every candidate at every gate, so parses are
+   shared *)
 let memo : (string, t) Hashtbl.t = Hashtbl.create 4096
 
 let parse_memo (s : string) : t =
@@ -365,7 +367,10 @@ let holds (v : string) (rg : range) : bool =
    ordered by an ordinary comparator rather than refused by one that
    names no prerelease.  It matters only for a prerelease host -- an
    engines range is matched against the running node or npm, not against
-   a published version. *)
+   a published version.  semver writes the bounds it derives with -0 (<20
+   is <20.0.0-0, ^1.2.3 is <2.0.0-0, and under includePrerelease >=20 is
+   >=20.0.0-0), which parse_range does not, so a prerelease host at such a bound can be
+   judged differently from checkEngine. *)
 let holds_pre (v : string) (rg : range) : bool =
   List.exists (fun cs -> List.for_all (fun ct -> comp_match ct v) cs) rg
 

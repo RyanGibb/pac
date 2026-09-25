@@ -9,7 +9,7 @@
    queues as a work item, seen through the synthetic names of the
    encoding. *)
 type kind =
-  (* a guard: apt never queues one *)
+  (* no name of the Debian driver has this kind *)
   | Forced
   (* a real package name: apt enqueues the package var *)
   | Package
@@ -38,7 +38,8 @@ module type DRIVER = sig
 
   (* apt's solution count for one alternative: the target packages it can
      still be discharged by, live under the partial solution and over the
-     whole instance respectively *)
+     candidates-only instance respectively (apt's static count also takes
+     in the versions Strict-Pinning rejected) *)
   val atom_count : assigned -> atom -> int
   val atom_static : atom -> int
 

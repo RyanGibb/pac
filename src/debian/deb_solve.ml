@@ -6,8 +6,8 @@
    sets.  Lookups then go through per-name sub-instances — the Debian.v
    lookup lemmas
    applied at mangled names (N * NameArch) — and
-   solutions come back through the two verified decoders (Deb.multiarchResolution,
-   then DebianMA.multiarchResolution). *)
+   solutions come back through the two verified decoders
+   (Debian.debianResolution, then DebianMA.multiarchResolution). *)
 
 module E = Pac
 module DF = Debian_frontend.Deb_packages
@@ -127,8 +127,9 @@ struct
       nall = st.architecture = "all";
     }
 
-  (* Untrusted whole-archive index; faithfulness to the parsed instance is
-     this module's only trusted-computing-base beyond the parser itself. *)
+  (* Untrusted whole-archive index: its faithfulness to the parsed instance
+     is trusted, as are the parser, Deb_version, the Strict-Pinning cut and
+     PubGrub. *)
   type index = {
     versions_of : (string * string, string list) Hashtbl.t;
     stanza_of : (DMA.Pkg.t, nstanza) Hashtbl.t;
@@ -298,7 +299,8 @@ struct
      introduces one only at cardinality >= 2): its work item, when it has
      one, is
      the alternative's selector, which the caller resolves because a
-     selector in turn exists only for a provided name (tgt, Debian.v). *)
+     selector in turn exists only where a Provides matches the atom (provb,
+     tgt, Debian.v). *)
   let ordered_clauses idx (p : DMA.Pkg.t) :
       (bool * DMA.Deb.Name.t * DMA.Deb.Atom.t list) list =
     match Hashtbl.find_opt idx.oc_cache p with
@@ -514,8 +516,9 @@ struct
           ( DMA.Deb.Name.Orig (DMA.Deb.aname a),
             DMA.Deb.T.VSet.singleton (DMA.Deb.Version.Orig w) )
     | _ ->
-        (* Lookup.dependees_lookupAbsent; other shape mismatches are empty
-           by definition of dependees *)
+        (* Lookup.dependees_lookupAbsent; every other shape is empty by
+           dependees' catch-all, or, at a pseudo-name, because no reduced
+           clause hangs there *)
         DMA.Deb.T.DependeesSet.empty
 
   (* PubGrub instantiation over the encoded mangled names/versions. *)
@@ -761,7 +764,8 @@ struct
     (* ~apt_heap replays apt's work-heap scheduling through Apt_heap: the
        hooks below then stand in for apt's propagation queue (which name is
        first sighted when) and its Solver::Work pushes.  Off, none of them
-       fires and the search is the plain PubGrub one. *)
+       fires, but [next] still decides a name admitting absence last and
+       [choose] still prefers an alternative the solution already carries. *)
     let run_pubgrub ?(debug = false) ?(apt_heap = false) ~versions ~dependencies
         query =
       let cands_tbl = Hashtbl.create 4096 in
@@ -878,7 +882,8 @@ struct
       (* Defer-Version-Selection (TranslateOrGroup): an atom whose target
          has no Provides entry and every version of which satisfies it is
          one solution, the target's package var; any other atom's solutions
-         are version vars *)
+         are version vars.  apt tests every version in its cache, those
+         Strict-Pinning rejected included; this tests the candidates only. *)
       let deferred (a : DMA.Deb.Atom.t) =
         match fst a with
         | n, DMA.QAArch b ->
@@ -1045,8 +1050,11 @@ struct
          package, one apt's cache holds as an empty pseudo-package -- and its
          version formula holds of p's version, or of the version p provides
          the name at (IsSatisfied over a PrvIterator: an unversioned Provides
-         never meets a versioned negative).  A conflict never reaches the
-         declarer's own group (IsIgnorable). *)
+         never meets a versioned negative).  A declarer in p's own group is
+         skipped: apt ignores a conflict on the declarer itself, on a
+         provider in its group, and on its group from an MA:same declarer
+         (IsIgnorable), and no other package of the group can be installed
+         beside the declarer anyway. *)
       let conflicted_by ~assigned (((pname, pb), v) as p : DMA.Pkg.t) =
         let _, rev_conf = reverse_index I.idx in
         let seen = Hashtbl.create 16 in
@@ -1657,7 +1665,8 @@ end
 
 (* apt's solver rejects every version but the candidate before it starts
    (APT::Solver::Strict-Pinning, on by default: FromDepCache, solver3.cc),
-   so the instance it answers over holds one version per package.  The cut
+   so its answer holds only candidates, though its cache still lists the
+   rest, rejected.  The cut
    is made on the stanzas, before any table is built, so that the lookups
    answer over the instance their theorems are stated over.  The candidate
    is the version of highest pin priority, the newest among equals
@@ -1732,7 +1741,9 @@ let fnmatch p s =
 
 (* pkgVersionMatch::VersionMatches for a Version matcher
    (apt-pkg/versionmatch.cc): the whole string, case-insensitively, or a
-   prefix of it where the pattern ends in '*', or the pattern as a glob *)
+   prefix of it where the pattern ends in '*', or a glob.  apt globs the
+   pattern less that trailing '*' and reads /regex/ as a regex; this globs
+   the whole pattern. *)
 let version_matches pat v =
   let n = String.length pat in
   let pre = n > 0 && pat.[n - 1] = '*' in
@@ -1804,7 +1815,8 @@ let query_element ~native ~arches (stanzas : DF.stanza list) arg =
     | Some ('=', ("candidate" | "newest")) -> first (fun _ -> true)
     | Some ('=', v) -> first (version_matches v)
     (* a release is matched against Release files, which pac does not
-       read; "*" matches every file (pkgVersionMatch::FileMatch) *)
+       read; "*" matches every file (pkgVersionMatch::FileMatch).  apt
+       reads candidate and newest as keywords after '/' too; this does not *)
     | Some (_, "*") -> first (fun _ -> true)
     | Some _ -> Nothing
   in

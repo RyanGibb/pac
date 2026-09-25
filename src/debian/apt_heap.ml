@@ -415,9 +415,9 @@ module Make (D : DRIVER) = struct
                   D.pp_name h)
           | _ -> enqueue t (Some e) g)
 
-  (* a decided package's version var pops, and its watchers fire in the
-     order their clauses were registered: the declarers of a conflict it
-     matches, discovered alongside it as alternatives of the same clauses,
+  (* a decided package's version var pops, and its watchers fire in an
+     approximation of apt's registration order: the declarers of a conflict
+     it matches, discovered alongside it as alternatives of the same clauses,
      lose their package var; the version's own clause queues the package
      var, unless that popped first; then the clauses registered on the
      version are walked *)
@@ -680,15 +680,15 @@ module Make (D : DRIVER) = struct
         };
       n
     in
-    (* tier 0: apt's Enqueues -- forced names, hard clauses down to one live
+    (* tier 0: apt's Enqueues -- hard clauses down to one live
        solution, and an optional clause with none left, which only its escape
        can settle -- drained in queue order, the rejections queued among them
        propagated as their slots come up, each queueing what it rejects and
        the last solution of any clause it leaves unit behind everything
        already there.  A name with a slot was queued by a wave that found it
        unit, and stays so: nothing rejected comes back short of a backjump,
-       which forgets the slot.  A name found forced without a slot became
-       unit outside any wave (the provider a selector just resolved to, which
+       which forgets the slot.  A name found unit without a slot became so
+       outside any wave (the provider a selector just resolved to, which
        apt reaches through the version's own SelectVersion clause) and is
        queued now, at the back. *)
     let redo =
@@ -714,14 +714,14 @@ module Make (D : DRIVER) = struct
           | Soft -> live_of_name t ~assigned n <= 0
           | Hard -> static_nsol t n <= 1 || live_of_name t ~assigned n <= 1
           | Alternative ->
-              (* one live target package is apt's Enqueue whatever the version
-             count -- the choice left is only which version, which apt defers
-             but resolves identically *)
+              (* one live target package is apt's Enqueue: Strict-Pinning
+             leaves each package one live version, so apt's count of version
+             vars is this count of packages *)
               c < 2 || live_of_name t ~assigned n <= 1
           | Package ->
-              (* a package brought in is apt's Enqueue of its var; the version
-             pick apt defers to a SelectVersion item lands on the same newest
-             candidate either way *)
+              (* a package brought in is apt's Enqueue of its var; under
+             Strict-Pinning the SelectVersion item apt defers the version
+             pick to has only the candidate left *)
               true
         in
         let slot_units () =

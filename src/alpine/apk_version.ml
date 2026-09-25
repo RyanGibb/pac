@@ -1,5 +1,5 @@
-(* apk's version ordering, transcribed from apk-tools src/version.c on
-   master (v3.0.0_rc4-23-g652a136): the token state machine of
+(* apk's version ordering, transcribed from apk-tools 3.0.5
+   src/version.c: the token state machine of
    digit{.digit}...{letter}{_suffix{number}}...{~hash}{-r#}, the suffix
    table, and apk_version_compare_fuzzy.  apk 2.14 differs in three ways
    that this file does not implement -- its fuzzy match is symmetric, it
@@ -189,13 +189,14 @@ let prefix_match v c = compare_fuzzy v c true = 0
 
 (* CHash: apk resolves >< against the candidate's C: identity digest,
    which its version string does not determine, so the calculus's
-   version-only matcher can never witness one. *)
+   version-only matcher can never match one. *)
 let hash_match (_v : string) (_digest : string) = false
 
 type op = Eq | Lt | Gt | Le | Ge | Fuzzy | Gt_fuzzy | Lt_fuzzy | Hash
 
 (* apk_version_result_mask_blob bit-ORs the operator characters, so <>
-   and >< are one operator, and =~ is ~. *)
+   and >< are one operator, and =~ is ~.  apk also accepts runs such as
+   == or << that this table rejects. *)
 let op_of_string = function
   | "=" -> Some Eq
   | "<" -> Some Lt

@@ -9,7 +9,7 @@ This compares against metadata's lists.
 
 It is kept out of scale.sh because metadata needs every resolved package's
 manifest, so unlike the rest of the harness it downloads crate sources into
-CARGO_HOME: gigabytes over a few hundred queries, once.
+CARGO_HOME: about 6 GB over 329 queries, once.
 
 usage: features.py <crate>...    in run_query.py's environment, with
        sparse_proxy.py serving on PORT (default 8991)

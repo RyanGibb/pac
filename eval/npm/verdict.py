@@ -6,15 +6,17 @@ instance already admitted -- in which case only our preference ordering
 ranked it second -- or one our instance forbids outright.  For an npm-only
 edge (R wants directory d, npm resolved it to V) that is two tests:
 
-  range   does V satisfy the range R's manifest declares for d?  npm chose
-          V so it satisfies under npm's semver, and the check runs against
-          npm's own bundled semver, so a failure here means our reading of
-          the requirer's row differs from npm's -- an alias or an override
-          read differently, or the edge attributed to the wrong requirer --
-          and is not a preference at all.
-  gate    does V's manifest pass the gates our frontend applies at the
-          run host (linux/x64/glibc)?  A failure here would be our
-          instance being strictly smaller than npm's.
+  range   does V satisfy the range R's manifest declares for d?  The check
+          runs against npm's own bundled semver, and npm usually chose V so
+          it satisfies; it does not when npm keeps an invalid optional peer
+          or when a root override, which this test does not read, forces V.
+          Otherwise a failure means our reading of the requirer's
+          declaration differs from npm's -- an alias or an override read
+          differently, or the edge attributed to the wrong requirer -- and
+          is not a preference at all.
+  gate    is V in the snapshot, and does its os/cpu/libc admit the run
+          host (linux/x64/glibc)?  A failure here would be our instance
+          being strictly smaller than npm's.
 
 range and gate both pass  ->  preference gap
 gate fails                ->  instance gap (gate)
@@ -27,7 +29,7 @@ tarball verbatim, so the version there is whatever the publisher packed,
 published or not, and neither test says anything about it.
 
 The gate test is a tripwire rather than a classification: our frontend
-applies no os/cpu/libc gate, npm's resolution being platform-independent,
+applies no os/cpu/libc gate, since npm-pick-manifest reads none of them,
 so it reads the manifests and not our instance.  A "gate" verdict means
 either a regression or a version the snapshot simply lacks.
 

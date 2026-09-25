@@ -266,8 +266,8 @@ backjump, which the shadow heap's counters count:
   ggoal:amd64 1
   gw:amd64 1
 
-A clause with an obsolete solution is worked on after every clause without
-one (Work::operator<, the SatisfyObsolete group): obsp's source obssrc also
+A clause with an obsolete solution is worked on after every other clause of
+its eagerness that is not unit (Work::operator<, the SatisfyObsolete group): obsp's source obssrc also
 builds obsnew at the newer source version 2, so obsgoal's obsp | obsq waits
 behind its obsq | obsr, which takes obsq, and obsp | obsq then finds obsq
 carried.  obsgoal2 is the same with obsx, which nothing makes obsolete, and

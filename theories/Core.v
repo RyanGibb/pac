@@ -43,8 +43,8 @@ Module Core (N V : UsualOrderedType).
         | contradiction NE; reflexivity].
   Qed.
 
-  (* The lookup theorems all compare two dependees computations at one
-     package, and the empty-dependees ones deny every edge out of it. *)
+  (* The dependees lookup theorems compare two dependees computations at
+     one package, and the empty-dependees ones deny every edge out of it. *)
   Lemma dependees_ext : forall D D' (p : Pkg.t),
       (forall h, DepRel.In (p, h) D <-> DepRel.In (p, h) D') ->
       dependees D p = dependees D' p.

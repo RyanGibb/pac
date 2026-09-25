@@ -11,7 +11,8 @@
 //   star-deprecated   "*" where dist-tags.latest is deprecated
 //   star-engines      "*" where dist-tags.latest fails the host's engines
 //   star-prerelease   "*" where dist-tags.latest is a prerelease, which
-//                     npm-pick-manifest takes for "*" and for no other range
+//                     npm-pick-manifest takes for "*" although "*" admits
+//                     no prerelease
 //   major-deprecated  "M.x" where M's newest release is deprecated and an
 //                     older release in M is not
 //   major-engines     "M.x" where M's newest release fails the host's engines

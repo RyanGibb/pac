@@ -14,9 +14,9 @@
  (name pac)
  (synopsis "Rocq formalization of the package calculus")
  (description
-  "Definitions and theorem statements for a core dependency-resolution
-calculus and its extensions with reductions to the core with OCaml
-extraction.")
+  "A core dependency-resolution calculus and its extensions, each
+reduction to the core proved sound and complete in Rocq and extracted to
+OCaml, with PubGrub frontends for five package managers.")
  (depends
   (ocaml (>= 4.14))
   (rocq-stdlib (>= 9.2))

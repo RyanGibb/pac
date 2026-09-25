@@ -7,7 +7,7 @@
    comparator set of the calculus's shared semver range language; caret
    is the default and uses the leftmost-nonzero compatibility rule, and a
    pre-release candidate is admitted only by a requirement naming one at
-   the same release core.  Untrusted (TCB). *)
+   the same release core.  Trusted (TCB). *)
 
 let is_digit c = c >= '0' && c <= '9'
 

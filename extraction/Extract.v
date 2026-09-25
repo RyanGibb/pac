@@ -10,8 +10,8 @@ Set Extraction Output Directory ".".
 
 (* The nat-instantiated smoke modules reach stdlib Type-valued parity
    constants (Nat.EvenT/OddT) that are Qed-opaque; extraction opens them,
-   which is sound here because every extracted definition is audited
-   Closed under the global context (notes/validate.sh). *)
+   which is sound here because the reduction products are audited Closed
+   under the global context (scripts/check-axioms.sh). *)
 Set Warnings "-extraction-opaque-accessed".
 
 (* lex is a function, so OCaml's strictness evaluates both legs of every

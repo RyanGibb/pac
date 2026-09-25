@@ -2656,8 +2656,8 @@ Module PackageFormula (N V : UsualOrderedType).
       Qed.
 
       (* A disjunct's dependees are read off the spine its name carries:
-         version i carries alternative i's own encoding, under the repository
-         at the names that alternative mentions. *)
+         version i carries alternative i's own encoding under the repository's
+         versions. *)
       Theorem dependees_lookupDisjunct : forall R D fs (i : Version.t),
           T.PkgSet.In (Name.Disjunct fs, i) (reduceReal R D) ->
           T.dependees (reduceDeps R D) (Name.Disjunct fs, i) =

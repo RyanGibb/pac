@@ -2,7 +2,7 @@
 
 Unified package manager dependency resolution.
 We mechanise the Package Calculus -- a minimal core semantics of dependency resolution -- extend it with the dependency features of real package managers, and verify each extension's reduction to the core sound and complete in Rocq.
-The reductions and their per-package lookup theorems extract to OCaml; an unmodified PubGrub solves the reduced instances, and the verified soundness witnesses decode its answers back into the extended calculi.
+The reductions extract to OCaml as the per-package lookups their lookup theorems prove equal to them; a PubGrub whose only additions are hooks choosing the next name and its version solves the reduced instances, and the verified soundness witnesses decode its answers back into the extended calculi.
 
 ## Build
 
@@ -38,11 +38,11 @@ pac npm --tree use-sync-external-store
 
 ## Evaluation
 
-The evaluation has three levels: the unit tests in `test/`, a regression set of a few dozen queries per ecosystem whose answers from the real tool are recorded, and runs at scale that ask the tool afresh over thousands of queries.
+The evaluation has three levels: the unit tests in `test/`, a regression set of a few dozen queries per ecosystem whose answers from the real tool are recorded (except cargo's), and runs at scale that ask the tool afresh over thousands of queries.
 
 ### Unit tests
 
-`test/` holds cram tests: the reductions on small instances in `test/reductions/`, and each frontend on fixtures in `test/frontends/<eco>.t`.
+`test/` holds cram tests: the reductions on small instances in `test/reductions/`, each frontend on fixtures in `test/frontends/<eco>.t`, and `eval/npm/edges.py` in `test/eval/`; `dune test` also runs each frontend's version-order tests, `src/<eco>/test_*.ml`.
 
 ```sh
 dune test
@@ -58,7 +58,6 @@ dune test test/frontends/debian.t
 nix develop ./nix
 ```
 
-The flake sits in `nix/` so that entering the shell copies only that directory into the Nix store, not `repos/` with it.
 pac itself is still built with opam, as above.
 Each `eval/*/setup.sh`, and `eval/cargo/run_query.py`, refuses a tool at any other version.
 The Alpine harness builds its apk root with `apk --usermode --initdb`, which apk refuses as root, so run it as an ordinary user.
@@ -67,7 +66,7 @@ The Alpine harness builds its apk root with `apk --usermode --initdb`, which apk
 It runs `P` queries at a time (default: every core), gives each tool call `TIMEOUT` seconds (default 900), and resumes a killed run where it stopped.
 Where pac has more than one search mode, `MODES` names those to run by flag: Debian's `apt-heap` and opam's `0install-order` each run beside `default` unless it says otherwise.
 Keep the run directory outside the source tree, which dune scans.
-The run ends with a line per mode, such as `default: 62 queries, exact 46/60, valid 60/60`: pac's answers that are exactly the tool's, of the queries the tool answers, and pac's answers the tool accepts, of those it checked.
+The run ends with a line per mode, such as `default: 62 queries, exact 46/60, valid 60/60`: pac's answers that are exactly the tool's (by name alone for Debian and Alpine, edges included for cargo and npm), of the queries the tool answers, and pac's answers the tool accepts, of those it checked.
 
 ### The validity check
 
@@ -83,11 +82,11 @@ Asking the tool to install the whole answer at exact versions would make every p
 - opam: a switch state, then `install <goal>`, and `upgrade --fixup` twice: once as it is, and once with every package pinned and the solver told to remove what it can.
   The pinned fixup stands in for `remove --auto-remove`, which keeps every depopt and both arms of an `|`.
   A reinstall of the whole selection finds install cycles.
-- npm: the answer written as `package-lock.json`, which `npm ci --dry-run` must accept, and which `npm install --package-lock-only`, run on a copy, must leave with the same version at every path.
+- npm: the answer written as `package-lock.json`, which `npm ci --dry-run` must accept, and which `npm install --package-lock-only`, run on a copy, must leave with the same version at every path, and in which `eval/npm/lockname.py` must find every edge landing on the package its manifest names.
   ci on its own lets through an invalid optional peer, and a peer resolved inside its requirer where npm's repair keeps that copy.
 
 A set that is a resolution but that the tool cannot install, because its install order has a cycle, gets the verdict `CYCLIC` (opam and Debian).
-`eval/<eco>/controls.sh <scratch-dir>` runs the check on small hand-written answers, each of which must get the verdict it names: invalid ones that must fail, and valid ones, some not the tool's own pick, that must pass.
+`eval/<eco>/controls.sh <scratch-dir>`, for every ecosystem but cargo, runs the check on small hand-written answers, each of which must get the verdict it names: invalid ones that must fail, and valid ones, some not the tool's own pick, that must pass.
 
 ```sh
 eval/debian/controls.sh /tmp/controls/debian
@@ -95,7 +94,7 @@ eval/debian/controls.sh /tmp/controls/debian
 
 ### The regression set
 
-`eval/<eco>/queries.txt` lists a few dozen hand-picked queries, each line a whole one as the tool's command line takes it, flags included, such as opam's `--with-test uri`, and `eval/<eco>/baseline/` holds the tool's answer to each, or, for a query the tool refuses, an empty `.absent` file in its place.
+`eval/<eco>/queries.txt` lists a few dozen hand-picked queries, each line a whole one as the tool's command line takes it, flags included, such as opam's `--with-test uri` (cargo's name a crate, whose newest release's manifest becomes the root `Cargo.toml`), and `eval/<eco>/baseline/` holds the tool's answer to each, or, for a query the tool refuses, an empty `.absent` file in its place.
 `--regress` compares pac against those answers rather than asking the tool, whose check of pac's answers still runs.
 npm's queries are pinned to the versions in `baseline/roots.txt`, which `eval/npm/seed.sh` chose.
 Cargo records no answers: cargo is run for validity anyway, against the snapshot `sparse_proxy.py` serves, and the question it is asked depends on pac's answer, so its `--regress` asks cargo afresh.

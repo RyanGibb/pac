@@ -3,7 +3,8 @@ on plugin and widget but on neither core nor theme.  plugin's peer on core
 is not optional, so core arrives as app's own sibling of plugin; widget's
 peer on theme is optional, so theme is not installed at all.  core 2.1.0
 declares os win32 and is still the newest ^2 -- resolution does not read
-os -- so it is the one installed.  lodash is an alias
+os -- so it is the one installed, although npm then refuses this tree
+off win32 (EBADPLATFORM).  lodash is an alias
 directory holding the util-lib package, and tester is a devDependency, so
 it participates only from the root.
 
@@ -148,14 +149,13 @@ loaded at all.
   optionalDependencies: 3 entries, 0 dropped
   encoded solution: 3 core nodes (6 lookups)
 
-os, cpu and libc are not read at all: npm resolves for every platform at
-once and filters at install time, and a package-lock.json records every
-variant whatever host wrote it.  nativefs publishes only 1.0.0 and only
-for darwin, and the host here is linux, yet opt-plat-app's optional
-dependency on it stands -- and brings native-core, which nativefs
-depends on and nothing else does.  This is fsevents, the commonest
-optional dependency there is, and npm puts it in the lockfile on linux
-too; dropping it here would make our answer smaller than npm's on every
+os, cpu and libc are not read at all: npm-pick-manifest reads none of
+them, and an optional package the host cannot run stays in the lock.
+nativefs publishes only 1.0.0 and only for darwin, and the host here is
+linux, yet opt-plat-app's optional dependency on it stands -- and brings
+native-core, which nativefs depends on and nothing else does.  This is
+fsevents, the best-known optional dependency, and npm puts it in the
+lockfile on linux too; dropping it here would make our answer smaller than npm's on every
 platform but macOS.
 
   $ ../../../src/main.exe npm --offline --cache . --tree ./opt-plat-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
@@ -175,7 +175,9 @@ platform but macOS.
 
 A non-optional dependency on the same package resolves alike, which is
 what plat-app shows: the same dependency against the same cache, and
-nothing about the host enters into it.
+nothing about the host enters ours.  npm refuses this tree off darwin
+(EBADPLATFORM), even with --package-lock-only, so this pins our reading,
+not npm's answer.
 
   $ ../../../src/main.exe npm --offline --cache . --tree ./plat-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root plat-app 1.0.0
@@ -381,8 +383,8 @@ driver keeps 10.0.0, the pick for resolver's *:
   cone: 4 packages, 5 versions, 0 packuments fetched
   encoded solution: 5 core nodes (11 lookups)
 
-npm never places a peer inside the package that declares it, so when a
-package peers on a name, the peers its own dependencies declare on that
+npm never places a peer inside a non-root package that declares it, so
+when a package peers on a name, the peers its own dependencies declare on that
 name land in the directory its own peer does.  preset peers on compiler
 ^7.0.0 || ^8.0.0 and depends on syntax-a and syntax-b, which peer on
 compiler ^7.0.0.  npm places compiler 8.0.0 for preset, then replaces it

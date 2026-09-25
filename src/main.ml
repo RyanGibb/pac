@@ -107,7 +107,7 @@ let opam_run debug zi_order with_test with_doc with_dev_setup opam_version
 let opam_cmd =
   (* opam's builtin-0install backend decides a name as soon as its decider
      walks onto it, which is not the order PubGrub's own heuristic picks;
-     the flag replays that walk for exact correspondence. *)
+     the flag replays that walk for closer correspondence. *)
   let zi_order =
     Arg.(
       value & flag
@@ -141,8 +141,9 @@ let opam_cmd =
           ~doc:"Enable the queried packages' developer-only dependencies.")
   in
   (* the one global variable that is a fact about opam itself rather than
-     about the host, which opam answers with its own version and refuses to
-     have set; whoever compares against an opam says which one here *)
+     about the host: opam answers it with its own version unless
+     OPAMVAR_opam_version or a variable overrides it, so whoever compares
+     against an opam says which one here *)
   let opam_version =
     Arg.(
       value
@@ -291,8 +292,8 @@ let cargo_cmd =
       & info [] ~docv:"CARGO_TOML" ~doc:"The root package's Cargo.toml.")
   in
   (* unset, the root gets every feature it declares, which is the
-     resolution cargo writes to Cargo.lock; naming features asks instead
-     for the filtered view cargo builds from that lock *)
+     resolution cargo writes to Cargo.lock; named features are resolved
+     afresh, not filtered out of that lock as cargo does *)
   let features =
     Arg.(
       value & opt_all string []
@@ -412,8 +413,8 @@ let npm_root ar (query : string list) : (Npm_parse.ver, string) result =
       (Ok ([], [])) specs
   in
   let specs = List.rev plain @ List.rev tagged in
-  (* npm's #add fetches each argument's manifest, and E404s on a name the
-     registry lacks rather than resolving without it *)
+  (* npm fetches each spec's packument while building the tree, and E404s
+     on a name the registry lacks rather than resolving without it *)
   let* () =
     match
       List.find_opt

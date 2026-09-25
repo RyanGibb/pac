@@ -808,7 +808,8 @@ Module Virtual (N V : UsualOrderedType).
           let cand2 := VSet.filter (fun u => PkgSet.mem (n, u) S_Pi) vs in
           match VSet.min_elt cand2 with
           | Some u => Version.Provider n u
-          | None => Version.Orig (snd p) (* unreachable under HasProvider *)
+          | None => Version.Orig (snd p) (* unreachable under
+                                            chooseSelector_spec's premise *)
           end
       end.
 

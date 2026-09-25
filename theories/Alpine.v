@@ -39,8 +39,9 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
   (* apk gives a bare provides the empty version, which its comparator
      orders below every version, so a bare provides meets exactly the
-     constraints a version below all others meets.  >< is never met, as
-     for any version (ApkVerMatch). *)
+     constraints a version below all others meets.  apk tests >< against
+     the providing package's digest (package.c:276), which the model does
+     not carry, so a bare provides never meets it. *)
   Definition bareMatch (ct : Constr) : bool :=
     match ct with
     | CAny => true
@@ -192,7 +193,8 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
   (* apk-package(5): a provides without a version is selected
      automatically only for a provider_priority, "otherwise user is
      expected to manually select one of the concrete package names in
-     world". *)
+     world".  apk 3.0.5 also takes one whose own name has any requirer
+     (solver.c:381); this keeps only the world case. *)
   Definition AutoSelectable (I : Inst) (q : Pkg.t) : Prop :=
     HasPriority I q \/ exists ct, WSet.In (DPos (fst q, ct)) (inst_world I).
 

@@ -1,12 +1,11 @@
 # Running the evaluation on a remote machine
 
-The solves in `eval/` are larger than a laptop comfortably holds.  Two
-steps in particular want a big machine:
+Two steps want a big machine:
 
-- `dune build @axioms`, which runs `Print Assumptions` over the whole
-  development.  This is the memory-hungry step, and on a 16 G machine it
-  is liable to be OOM-killed -- silently, since the killer takes the
-  shell with it and leaves an empty log.
+- `dune build @axioms`, which runs `Print Assumptions` over every
+  name `scripts/check-axioms.sh` lists.  This is the memory-hungry step,
+  and on a 16 G machine it is liable to be OOM-killed -- silently, since
+  the killer takes the shell with it and leaves an empty log.
 - the archive-scale sweeps, where a frontend is run across an entire
   index rather than the curated query list.
 
@@ -87,4 +86,4 @@ repository (which `pac.opam.template` does) avoids the question.
 
 Detach it and poll the log rather than holding a session open:
 
-    nohup bash -c 'source env.sh; dune build @axioms' > axioms.log 2>&1 &
+    nohup bash -c 'eval $(opam env); dune build @axioms' > axioms.log 2>&1 &

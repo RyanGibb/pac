@@ -1,6 +1,7 @@
 (* Precedence vectors are the ladder from semver.org 2.0.0 section 11;
-   the range vectors are the worked examples in npm's semver README, plus
-   the prerelease admission rule, which is the one place the OCaml mirror
+   the range vectors follow npm's semver README with its -0 upper bounds
+   dropped, plus loose and v-prefix cases and the prerelease admission
+   rule, which is the one place the OCaml mirror
    has to agree with Npm.csAdmits in the calculus. *)
 
 let fail = ref 0

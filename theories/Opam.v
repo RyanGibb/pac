@@ -121,9 +121,9 @@ Module Opam (N V X Y E : UsualOrderedType).
   (* An atom whose filter is not definitely true is a context-dependent
      neutral element (opam's Empty): dropped from conjunctions and
      disjunctions alike, and a formula reducing entirely to Empty imposes
-     nothing.  The manual only specifies the conjunction case; the
-     disjunction behaviour follows the implementation's
-     OpamFormula.Empty. *)
+     nothing.  The manual says only that such a dependency is removed
+     from the formula; the treatment inside a disjunction follows the
+     implementation's OpamFormula.Empty. *)
   Definition rMerge (mk : RFormula -> RFormula -> RFormula)
       (a b : option RFormula) : option RFormula :=
     match a, b with
@@ -187,9 +187,10 @@ Module Opam (N V X Y E : UsualOrderedType).
   Definition availOK (rho : Valuation) (I : Inst) (p : Pkg.t) : Prop :=
     forall g, In (p, g) (inst_avl I) -> defTrue rho g = true.
 
-  (* Conflicts and classes exempt the declarer's own name: opam encodes
-     both into CUDF, whose conflicts never apply to the declaring package
-     -- conflict-class is literally CUDF provides-plus-conflicts. *)
+  (* Conflicts and classes exempt the declarer's own name: opam's
+     conflicts go into CUDF, whose conflicts never apply to the declaring
+     package, and opam expands a class into conflicts on every other
+     member's name (opamSwitchState.ml, get_conflicts_t). *)
   Record IsResolution (rho : Valuation) (I : Inst) (S : PkgSet.t)
     : Prop := MkRes
     { ores_subset : PkgSet.Subset S (inst_repo I)
@@ -427,9 +428,9 @@ Module Opam (N V X Y E : UsualOrderedType).
       match g with
       | RAtom n c => PF.FDep (TName.Real n) (versSetBy Vq n c)
       | RAnd a b => PF.FConj (encR Vq a) (encR Vq b)
-      (* Reversed: the target prefers a disjunction's right branch (Zero
-         selects the left and One the right, and One is the larger), while
-         opam prefers the alternative written first.  The swap is only
+      (* Reversed: a disjunct's version Idx i selects alternative i and the
+         target prefers the larger index, while opam prefers the
+         alternative written first.  The swap is only
          ever preference -- disjunction is commutative. *)
       | ROr a b => PF.FDisj (encR Vq b) (encR Vq a)
       end.

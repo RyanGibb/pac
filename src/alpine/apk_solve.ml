@@ -5,8 +5,8 @@
    then through its proved reduction to Core; PubGrub solves the
    accumulated core graph lazily, and the solution comes back through
    packageFormulaResolution and alpineResolution.  Trusted here (TCB):
-   the parser, the version comparator, the policy constants below, and
-   the plumbing. *)
+   PubGrub, whose answer is decoded without a check, the parser, the
+   version comparator, the policy constants below, and the plumbing. *)
 
 module E = Pac
 module P = Apk_parse
@@ -42,9 +42,9 @@ module Alp = E.Alpine (StringOT) (AVerOT) (PM)
 
 (* Which condition a rule designates is free, and is a performance
    choice: the rule is materialised only once that condition is selected.
-   Alpine writes the switch name (docs, openrc) first and nothing depends
-   on those, where the least positive condition lands on a name most of
-   the archive carries -- so the first-listed positive condition is
+   Alpine writes the switch name (docs, openrc) first and almost nothing
+   depends on those, where the least positive condition lands on a name
+   most of the archive carries -- so the first-listed positive condition is
    recorded as the set is built, keyed by the element list, which is
    canonical where the set's own representation need not be.  The
    fallback keeps designation total on sets with a positive condition,
@@ -393,14 +393,14 @@ module PName = struct
 end
 
 (* The rank an unversioned-provider disjunction's branches are compared
-   on: the k: line where a provider carries one, [rank_unranked] below
-   all of them where it does not, since apk-package(5) says a provides
-   without a provider-priority is not selected automatically at all and
-   the nearest a preference can come to that is last place; [rank_pkg]
-   for the branch holding the name's own versions, above every
-   unversioned provider because those offer no version at the name and
-   apk's first key is the offered version; and [rank_none] for a branch
-   that offers nothing. *)
+   on: the k: line where a provider carries one; [rank_unranked] below
+   all of them where it does not, since apk-package(5) says such a
+   provider is not selected automatically and encReq admits it only when
+   the world names its owner; [rank_pkg] for the branch holding the
+   name's own versions, above every unversioned provider because those
+   offer no version at the name and apk's first key between providers it
+   has not disqualified is the offered version; and [rank_none] for a
+   branch that offers nothing. *)
 let rank_pkg = max_int
 let rank_unranked = -1
 let rank_none = min_int
@@ -414,11 +414,12 @@ let prov_rank ar (q : string * string) : int =
 let prio_of ar (q : string * string) : int =
   match Hashtbl.find_opt ar.prio q with Some k -> k | None -> 0
 
-(* encPos lists the unversioned providers of a name as a disjunction whose
-   last alternative is the name's own versions, so every alternative but
-   the last is a lone provider.  An install-if disjunction and a negated
-   dependency both list FNeg alternatives, so an alternative naming a
-   single package identifies a provider list. *)
+(* encReq and encPos list the unversioned providers of a name as a
+   disjunction whose last alternative is the name's own versions, so every
+   alternative but the last is a lone provider.  An install-if disjunction
+   opens on an FNeg alternative and a negated dependency makes no
+   disjunction at all, so an alternative naming a single package
+   identifies a provider list. *)
 let chain_head (f : PF.coq_Formula) : (string * string) option =
   match f with
   | PF.FDep (Red.Name.Orig m, vs) -> (
@@ -440,7 +441,8 @@ let rec alt_at (fs : PF.coq_Formula list) (i : E.nat) :
 (* The rank of one alternative: an unversioned provider by its k: line,
    the last alternative -- the name's own versions -- above every one of
    them, because an unversioned provides offers no version at the name
-   and apk's first key is the offered version. *)
+   and apk's first key between providers it has not disqualified is the
+   offered version. *)
 let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
   if last then
     match f with
@@ -451,10 +453,13 @@ let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
 
 (* PubGrub decides the compare-maximum candidate, so preference lives
    here, and what it has to reproduce is apk's compare_providers over
-   the providers of the name being decided.  Most of that comparator's
-   keys read the partial solution or the installed db and are dead
-   against a fresh root; of the rest, two are kept, in order, the version
-   the provider offers *at the requested name* and then
+   the providers of the name being decided.  Against a fresh root and one
+   repository its installed-db and pinning keys are dead, and its
+   solver-state keys (solver.c:578-595) only rank a provider apk has not
+   disqualified -- for an applied constraint it misses, or a dependency
+   it can no longer meet -- above one it has, which is left to PubGrub's
+   ranges and backtracking.  Of the rest, two are kept, in order, the
+   version the provider offers *at the requested name* and then
    provider_priority, with the repository order below both and a single
    repository here.  The one live key between them, the newer version by
    the provider's own name (solver.c:651-661), is omitted: it separates
@@ -470,8 +475,9 @@ let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
    nothing at all where the provides carries no version.  So a package
    of a name is not privileged over an alias of it: the two are compared
    on the versions they offer, and an alias offering the newer one wins.
-   An unversioned provides is the one case where a real package always
-   wins, and not by privilege either -- it offers no version, and no
+   An unversioned provides is the one case where this order puts a real
+   package first, and not by privilege either -- it offers no version, and
+   no
    version loses to every version.  provider_priority is read off
    whichever package offers the name, alias or not, and so decides only
    once the offered versions tie.
@@ -486,7 +492,7 @@ let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
    into the name's own version set, where the comparison above settles
    them, and lists only the unversioned providers as separate
    alternatives ahead of it -- so that disjunction is exactly the case
-   where the name's own versions win outright, with k: ordering the
+   where the name's own versions rank highest, with k: ordering the
    unversioned providers among themselves.
 
    The offered version and the k: are carried on the version rather than

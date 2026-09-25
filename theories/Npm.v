@@ -11,12 +11,12 @@ From PackageCalculus Require Import Prelude Core Versions Semver Concurrent.
    legacy guard and only constrains a directory the depender fills itself.
    Nothing installs the root, so the root's own peers are the same pair of
    rules anchored at its granular node instead of at a parent.
-   Ranges stay formulas evaluated by the translation, and resolution is
-   platform-independent: npm consults neither engines nor os/cpu/libc
-   while resolving, and a package-lock.json records every optional
-   variant whatever host wrote it, filtering at install time instead, so
-   there is no environment to resolve against and nothing cuts the
-   repository.  Source names
+   Ranges stay formulas evaluated by the translation, and there is no
+   environment to resolve against: npm's engines only rank candidates
+   (npm-pick-manifest index.js:165-179), and os/cpu/libc are checked once
+   the tree is built (build-ideal-tree.js, #checkEngineAndPlatform),
+   failing a required package and making an optional one inert.  The
+   model drops both, so nothing cuts the repository.  Source names
    are pairs (directory key, registry name): an npm node is a directory,
    and the parent relation is over source packages, so two aliases of one
    registry package under one depender are only distinguishable if the key
@@ -91,10 +91,10 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
 
   (* The relation fields are lists: they feed only the spec and the
      translation, and sets would demand a comparator for Range used
-     nowhere.  optionalDependencies are absent rather than inert --
-     use-if-present is a post-resolution decision, not a constraint --
-     and bundledDependencies are out of scope: npm takes those versions
-     from the tarball, which is not an input here. *)
+     nowhere.  optionalDependencies enter as ordinary dependencies;
+     npm's dropping of a failed one (#pruneFailedOptional) is not
+     modelled, and bundledDependencies are out of scope: npm takes those
+     versions from the tarball, which is not an input here. *)
   Record Inst : Type := MkInst
     { inst_repo : RepoSet.t
     ; inst_dep : list (RPkg.t * Dependency)
@@ -217,9 +217,10 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     | d :: l' => if NEqb.eqb (d_dir d) a then Some d else findDepL l' a
     end.
 
-  (* A slot is a directory a package declares a dependency for; duplicate
-     manifest keys cannot occur, so the first dependency wins and the lookup is
-     a total function of the key. *)
+  (* A slot is a directory a package declares a dependency for; the first
+     dependency for a key wins, so the lookup is a total function of the
+     key.  arborist instead keeps the last one it loads (node.js,
+     _loadDeps: dev over optional over prod). *)
   Definition slotOf (I : Inst) (p : RPkg.t) (a : N.t) : option Dependency :=
     findDepL (dependenciesOf I p) a.
 
@@ -427,8 +428,9 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         exists v, VSet.In v (peerCandsAt I (base p) r) /\
           Installs S pi p (peerKeyAt I (base p) r) v
       (* An optional peer forces nothing; it constrains only a directory
-         p fills itself -- npm's legacy rule, which is what
-         peerDependenciesMeta.optional means. *)
+         p fills itself -- npm's legacy rule, narrower than arborist,
+         which checks whatever copy the declarer resolves to
+         (edge.js:266-277). *)
     ; nres_peer_match :
         forall p, PkgSet.In p S ->
         forall m u, Installs S pi p m u ->
@@ -494,7 +496,9 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
        one.  The filter is the same peerActive, so a mandatory root peer
        is installed and an optional one only narrows a directory the root
        fills itself; the key is the same peerKeyAt, so a name the root
-       also depends on gets one edge kind, narrowed by both ranges. *)
+       also depends on would get one edge kind, narrowed by both ranges;
+       arborist instead lets the dependency replace the peer (node.js,
+       _loadDeps), and the frontend drops such a peer. *)
     Definition rootPeerEdges (I : Inst) (q : Pkg.t)
       : T.DependeesSet.t :=
       if PkgEqb.eqb q (rootPkg I)
@@ -1663,7 +1667,8 @@ Definition npmInstAuto : NpmS.Inst :=
 (* The root's own peers, which npm 7+ installs into the root's own
    node_modules: A names C both as a dependency in [2,4) and as a peer in
    [1,3), so its granular node carries both edges to the same directory
-   and only 2 satisfies the two ranges at once. *)
+   and only 2 satisfies the two ranges at once (calculus only: npm lets
+   A's dependency replace its peer, so 3 would also do). *)
 Definition npmInstRootPeer : NpmS.Inst :=
   NpmS.MkInst npmRepo (((npmA, 1), npmDepC) :: nil)
     (((npmA, 1), npmPeerC) :: nil) nil (npmA, 1).

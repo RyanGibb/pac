@@ -177,8 +177,8 @@ Module Visibility (N V : UsualOrderedType).
       destruct c' as [m u]; exact (Hstep p m u (Hacc p Hp) He Hm).
   Qed.
 
-  (* The saturation never leaves the tails of pi, so that set's cardinal
-     bounds how many rounds can each add an element. *)
+  (* The saturation never leaves q and the tails of pi, so that set's
+     cardinal bounds how many rounds can each add an element. *)
   Definition subUniverse (pi : ParentRel.t) (q : Pkg.t) : PkgSet.t :=
     PkgSet.add q (SOpp.map fst pi).
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the apk root scale.sh solves against: a local repo holding nothing
 # but repos/alpine/APKINDEX repacked as x86_64/APKINDEX.tar.gz, an empty
-# world, and an empty installed db, so apk answers from the same rows our
+# world, and an empty installed db, so apk answers from the same stanzas our
 # loader reads and from no others.
 # usage: setup.sh [apkroot-dir]   (default /tmp/apk-cmp-root; ~3M)
 #        INDEX=<dir>/APKINDEX builds it from another index

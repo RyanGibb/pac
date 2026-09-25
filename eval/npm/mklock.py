@@ -42,14 +42,15 @@ checked, rather than npm's hoisting heuristic being guessed at:
 
           A package with a mandatory peer is the exception to
           shallowest: it goes in its requirer's own node_modules.  npm
-          resolves a peer from the declarer's parent -- a copy in the
-          declarer's own node_modules is PEER LOCAL, an invalid edge
-          (arborist edge.js) -- and our answer puts the peer beside the
+          resolves a peer from the declarer, and a copy in the declarer's
+          own node_modules is PEER LOCAL, an invalid edge (arborist
+          edge.js); our answer puts the peer beside the
           declarer, among its requirer's edges.  Hoisted any higher, the
           declarer would look its peer up from a directory that may hold
           another version, which `npm ci` then rejects although the answer
           is one npm accepts.  For the same reason, a name the requirer
-          itself peers on goes beside the requirer rather than inside it.
+          itself peers on goes beside the requirer where it can; inside
+          is the last resort, and verify does not catch it there.
 
           npm's arborist decides the same question with a third move we
           deliberately do not make: an occupied slot may be taken over,
@@ -65,7 +66,9 @@ checked, rather than npm's hoisting heuristic being guessed at:
           construction, so this is an assertion rather than a repair:
           the one thing that must never happen is a lockfile that
           quietly describes a different answer from ours, and stopping
-          is the only response to that which does not.
+          is the only response to that which does not.  It re-resolves
+          our edges only: a peer edge as npm reads it, from the
+          declarer, is left to accepts.sh.
 
 Every other field is copied, not decided: version, resolved and
 integrity come from the snapshot packument's own dist block, and the
@@ -192,7 +195,8 @@ def place(root, edges, declarers=frozenset(), peers={}):
                 if slot(anc, key) in at:
                     lo = i if at[slot(anc, key)] == child else i + 1
             # npm refuses a peer found in its declarer's own node_modules
-            # (PEER LOCAL), so a name the requirer peers on goes beside it
+            # (PEER LOCAL), so for a name the requirer peers on that slot is
+            # only the last resort
             hi = len(ancs) - 1 if path and key in peers.get(node, ()) else len(ancs)
             # a declarer already on the requirer's own path is a cycle, and
             # nesting it again would not end

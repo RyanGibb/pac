@@ -1,12 +1,13 @@
 (* npm solving over the verified pipeline, cargo_solve/apk_solve-style:
    packuments live in hashtables; every lookup is answered from a small
    Inst sub-instance in the shape one of Npm.v's four lookup theorems
-   justifies,
+   justifies (the granular one narrowed further, at gran_sub_inst),
    pushed through the extracted Npm reduction into Core; PubGrub solves
    the accumulated core graph lazily, and the solution comes back through
    npmResolution and npmParents.  Trusted here (TCB): the parser, the
-   version comparator, the registry fetch, the policy constants below,
-   and the plumbing. *)
+   version comparator, the engines evaluation (Npm_version.holds_pre),
+   the registry fetch, the policy constants below, PubGrub, whose
+   solution is decoded unchecked, and the plumbing. *)
 
 module E = Pac
 module P = Npm_parse
@@ -28,8 +29,8 @@ module NVerOT = struct
   let eq_dec a b = Npm_version.compare a b = 0
 end
 
-(* SemverMatch: the two tests V.compare cannot express.  Both take the
-   candidate version first and the comparator's constant second. *)
+(* SemverMatch: the two tests V.compare cannot express.  sameCore takes
+   the candidate version first and the comparator's constant second. *)
 module PM = struct
   let isPre = Npm_version.is_prerelease
   let sameCore = Npm_version.same_core
@@ -45,10 +46,12 @@ module T = Np.T
    by the theory, and each is a place where this driver may disagree with
    npm. *)
 
-(* No platform valuation: resolution here is platform-independent, as
-   npm's is.  os, cpu and libc are install-time tests alone -- they
-   appear nowhere in npm-pick-manifest -- so the parser reads none of
-   them and nothing cuts the repository. *)
+(* No platform valuation.  npm chooses versions without os, cpu or libc
+   -- they appear nowhere in npm-pick-manifest -- and tests them only
+   once the tree is built (#checkEngineAndPlatform): EBADPLATFORM for a
+   required package, inert for an optional one, which the lockfile still
+   records.  So the parser reads none of them and nothing cuts the
+   repository. *)
 
 (* The host npm-pick-manifest ranks engines against.  npm always has one,
    arborist passing process.version as nodeVersion and the CLI its own
@@ -189,8 +192,8 @@ let load_name ar ~(root : bool) (n : string) : P.ver list =
                 | Some l -> Hashtbl.replace ar.latest n l
                 | None -> ());
                 Hashtbl.replace ar.tags n pk.P.pk_tags;
-                (* the packument's "name" is authoritative; a manifest
-                   with a different one is not this package's *)
+                (* the name fetched under is authoritative: a manifest's
+                   own "name" is overwritten, not checked *)
                 List.map (fun v -> { v with P.v_name = n }) pk.P.pk_vers)
       in
       Hashtbl.replace ar.pkgs n vs;
@@ -318,10 +321,8 @@ type state = {
   dep_tbl : (string * string, Np.coq_Dependency list) Hashtbl.t;
   peer_tbl : (string * string, Np.coq_PeerDependency list) Hashtbl.t;
   repo_at : (string, Np.RepoSet.t) Hashtbl.t;
-  (* the sets a sub-instance hands the calculus are sorted lists, so
-     building one is quadratic; they are keyed by the names read rather than
-     by the package reading them, because consecutive versions read the
-     same *)
+  (* keyed by the names read rather than by the package reading them, so
+     packages that read the same names share one set *)
   repo_of : (string list, Np.RepoSet.t) Hashtbl.t;
   vcache : (Np.Nm.name, Np.Vs.version list) Hashtbl.t;
   (* the optional-dependency verdict, keyed by what decides it *)
@@ -395,36 +396,33 @@ let mk_inst st ~repo ~deps ~peers : Np.coq_Inst =
 
 (* ---- optionalDependencies ----------------------------------------------
 
-   An optional entry is an ordinary dependency that npm abandons in
-   exactly one situation: the target cannot be resolved.
-   #pruneFailedOptional then makes the whole optionalSet inert, and
-   nothing else drops the dependency
-   -- a peer conflict over an optional dependency is an ordinary
-   ERESOLVE.  So the test is whether any version of the target is
-   available to satisfy the range, and it lives here rather than in the
-   parser, which sees one manifest at a time and has no registry.
+   An optional entry is an ordinary dependency that this driver abandons
+   in one situation only: no published version of the target matches the
+   range (ENOTARGET).  npm abandons more.  #pruneFailedOptional makes the
+   dependency's whole optional set inert when anything in it fails to
+   load, a transitive ENOTARGET, a network failure or an allow-* gate
+   included, and #checkEngineAndPlatform does the same when anything in
+   it fails engines or platform; none of these is modelled.  A peer
+   conflict over an optional dependency is an ordinary ERESOLVE.  The
+   test lives here rather than in the parser, which sees one manifest at
+   a time and has no registry.
 
-   Published is the whole test, because resolution is
-   platform-independent: the only route to abandonment at resolution
-   time is ENOTARGET, no published version matching the range.  A
-   platform mismatch is EBADPLATFORM at reify, after the lockfile is
-   written, so a darwin-only binary such as fsevents stays in the answer
-   on linux exactly as it stays in npm's lockfile.
+   An optional package the host cannot run is only marked inert, and the
+   lockfile still records it, so a darwin-only binary such as fsevents
+   stays in the answer on linux exactly as it stays in npm's lockfile.
 
-   The repository read is granSubInst's narrowing to a single name --
-   repoAt at the target -- and it is memoized per name, so the check
-   reuses whatever the sub-instances built.
+   The repository read is repoPreimage at the target alone, memoized per
+   name in repo_at, so the check reuses whatever the sub-instances built.
 
    It is applied where a dependency is read rather than where a packument is
    loaded, because deciding at load time would have to resolve every
    optional target of every version eagerly -- the cone pass the driver
-   deliberately does not do, and it would not even terminate on a cycle.
-   Read lazily it costs nothing: the target of a dependency that survives is a
-   slot target the sub-instance was going to load anyway.
+   deliberately does not do.  Read lazily, the target of a dependency that
+   survives is a slot target the sub-instance was going to load anyway.
 
-   Evaluation is the calculus's throughout, via the extracted rgHolds
-   and under the same flat override the calculus would apply; the mirror
-   in npm_version.ml is not used. *)
+   The range is evaluated by the calculus, via the extracted rgHolds and
+   under the same flat override the calculus would apply; only the "*"
+   rewrite's engines test (star_range) evaluates in OCaml. *)
 let dep_keep st (d : P.dep) : bool =
   (not d.P.d_optional)
   || st.ar.optional
@@ -751,9 +749,10 @@ let collate (a : string) (b : string) : int =
    encoding sends to another directory, in the order npm meets them: on
    behalf of a package q that p holds and that peers on a, so that q's own
    peer is what fills the directory, the peers on a of q's dependencies,
-   and of theirs while each peers on a too.  npm never places a peer inside
-   a package that peers on the same name (can-place-dep.js: "cannot place
-   peers inside their dependents"), so these land beside q's own peer; the
+   and of theirs while each peers on a too.  npm places a peer inside a
+   package that peers on the same name only at the root (can-place-dep.js:
+   "cannot place peers inside their dependents, except for tops"), so
+   these land beside q's own peer; the
    encoding puts them in q's directory.  npm meets a package's edges by
    name in its collation (build-ideal-tree.js:997, 1428).
 
@@ -1177,8 +1176,9 @@ let solve ?(debug = false) ar (root : string * string) =
   let root_key = (fst root, fst root) in
   let root_n = Np.Nm.Granular (root_key, snd root) in
   let versions n = versions st n in
-  (* the decisive memoization: PubGrub asks for the same node's
-     dependencies over and over during propagation *)
+  (* PubGrub widens each dependency's depender range by asking for the
+     dependencies of the depender's neighbouring versions, once per
+     dependency, so the same node is asked for over and over *)
   let cache = Hashtbl.create 65536 in
   let dependencies n (u : Np.Vs.version) =
     match Hashtbl.find_opt cache (n, u) with

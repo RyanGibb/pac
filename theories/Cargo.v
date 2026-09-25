@@ -58,7 +58,9 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
      weak form is kept as its own constructor because the manifest
      distinguishes it and a later narrowing pass over a fixed resolution
      would need to; version resolution here reduces it exactly as the
-     strong form, which is what cargo's resolver does. *)
+     strong form, which is what cargo's resolver does once the strong
+     form's implicit-feature request (dep_cache.rs:483-495) is an entry of
+     its own. *)
   Module FEntry.
     Inductive fentry : Type :=
     | EFeat (f : F.t)
@@ -169,8 +171,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
      key is the alias -- cargo's name_in_toml is the table key whether or
      not a rename moved the crate name into "package".  Nothing collapses
      two sites naming one alias: a summary carries a plain list of
-     dependencies, the manifest reader's only cross-table check is that
-     they agree on a registry, and the resolver walks the list, so a
+     dependencies, the manifest reader checks that they agree on a source
+     without merging them, and the resolver walks the list, so a
      crate may ask for libc ^0.2 in [dependencies] and libc ^0.1 in
      [target.'cfg(windows)'.dependencies] and get both versions.  The
      alias alone still governs features -- dep:a and a/feat name a table
@@ -208,12 +210,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
      A slot's cfg does not appear, because cargo's version resolver never
      sees a target: resolve_with_previous takes no RustcTargetData, and
-     the one pass that matches a cfg against real cfgs filters an
-     already-finished Resolve on its way to the unit graph, never the
-     lockfile.  A [target.'cfg(...)'] row is therefore a dependency row
-     like any other -- an unsatisfiable windows-only requirement fails a
-     linux resolve -- and sCfg says only which row this is, never whether
-     the row applies. *)
+     every pass that matches a cfg against real cfgs filters an
+     already-finished Resolve, never the lockfile.  A [target.'cfg(...)']
+     row is therefore a dependency row like any other -- an unsatisfiable
+     windows-only requirement fails a linux resolve -- and sCfg says only
+     which row this is, never whether the row applies. *)
   Definition slotActive (rc p : Pkg.t) (d : SlotData.t) : bool :=
     match sKind d with
     | Kind.KDev => if Pkg.eq_dec p rc then true else false
@@ -237,7 +238,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     if sDefault d then FSet.add dflt (sReqFeats d) else sReqFeats d.
 
   (* The record quantifies feature sets through FeaturedSet membership;
-     fs_functional makes the projection well defined.
+     res_fs_functional makes the projection well defined.
 
      rootFeats is a parameter and not a constant because it is the only
      place cargo's two resolves of one project differ.  Instantiated at
@@ -512,7 +513,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Qed.
 
   (* The unique feature set FS assigns to p; total via a default so the
-     witness stays computable, pinned by fs_functional in proofs. *)
+     result stays computable, pinned by res_fs_functional in proofs. *)
   Definition fsAt (FS : FeaturedSet.t) (p : Pkg.t) : FSet.t :=
     match FeaturedSet.choose
             (FeaturedSet.filter (fun '(q, _) => PkgEqb.eqb q p) FS)

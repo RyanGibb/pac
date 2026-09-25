@@ -6,18 +6,20 @@
 
    - The registry itself.  A packument is taken at face value; nothing is
      checked against the tarball it describes.
-   - Range *parsing* (npm_version.ml).  Evaluation is not trusted: a
-     dependency carries the parsed comparator sets into the calculus,
-     which decides which real versions they admit.
-   - The dependency-spec classification below.  npm accepts git, file,
-     link, workspace and tag specs that no registry lookup can resolve;
-     those dependencies are dropped and counted rather than guessed at.
+   - Range *parsing* (npm_version.ml).  A dependency carries the parsed
+     comparator sets into the calculus, which decides which real
+     versions they admit; only engines ranges are evaluated in OCaml
+     (Npm_version.holds_pre, in npm_solve).
+   - The dependency-spec classification below.  git, file, URL and
+     dist-tag specs, and the link:, workspace:, portal: and patch: specs
+     npa refuses, are dropped and counted rather than guessed at, though
+     npm would resolve a dist-tag from the packument.
    Deliberately *not* read: "os", "cpu" and "libc".  npm consults none
    of them when choosing a version -- npm-pick-manifest has no platform
-   key at all -- so a package-lock.json records every platform's variant
-   of an optional dependency whatever host wrote it, and the filtering
-   happens at install time (EBADPLATFORM).  Reading them here would make
-   our instance strictly smaller than npm's.
+   key at all -- and tests them only once the tree is built
+   (#checkEngineAndPlatform): EBADPLATFORM for a required package, inert
+   for an optional one, which package-lock.json still records.  Reading
+   them here would make our instance strictly smaller than npm's.
 
    "engines" is a different case and is read, because npm-pick-manifest
    sorts on it.  It is not a gate: a version the host cannot run is
@@ -26,19 +28,22 @@
    install-time warning to an error.  Only the "node" and "npm" sub-keys
    are live, because checkEngine tests those two and nothing else.
 
-   - The optionalDependencies reading.  Such an entry is an ordinary
-     dependency that npm abandons in exactly one situation: its manifest
-     cannot be fetched, i.e. no published version matches the range.
-     Nothing else drops it -- a peer conflict against an optional
-     dependency is an ordinary ERESOLVE -- so it is parsed here as an
-     ordinary dependency that merely remembers it was optional.  Whether
-     the range is satisfiable is a question about the registry, not about this
-     manifest, so the drop itself is in npm_solve.  npm documents an
+   - The optionalDependencies reading.  Such an entry is parsed as an
+     ordinary dependency that remembers it was optional.  npm makes an
+     optional dependency's whole optional set inert when anything in it
+     fails to load (#pruneFailedOptional) or fails engines or platform
+     (#checkEngineAndPlatform).  npm_solve models only the dependency
+     itself failing to load because no published version matches its
+     range, a question about the registry rather than this manifest, so
+     the drop is made there.  A peer conflict against an optional
+     dependency is an ordinary ERESOLVE.  npm documents an
      optionalDependencies entry as overriding a dependencies entry of
      the same name, which is what the dependency assembly below does.
 
-   Not read: bundledDependencies.  npm takes those versions verbatim from
-   the tarball, which this frontend neither fetches nor trusts. *)
+   Not read: bundleDependencies.  Those entries stay ordinary
+   dependencies resolved from the registry, although npm takes their
+   versions from the tarball, which this frontend neither fetches nor
+   trusts. *)
 
 type dep = {
   d_dir : string; (* the directory key, i.e. the manifest key *)
@@ -121,8 +126,9 @@ let unresolvable s =
   || (has_sub s "/" && not (starts "npm:" s))
   || looks_like_tag s
 
-(* "npm:bar@^1" and "npm:@scope/bar@^1": the separator is the last @ that
-   is not the scope's leading one *)
+(* "npm:bar@^1" and "npm:@scope/bar@^1": npa splits at the first @ past
+   the scope's; this takes the last, which differs only when the range
+   itself holds an @ *)
 let split_alias (s : string) : (string * string) option =
   if not (starts "npm:" s) then None
   else
@@ -313,7 +319,7 @@ let load ~(root : bool) (path : string) : packument option =
 
 (* ---- the query ----
 
-   The query is the root package r_N: a project's package.json with the
+   The query is a root package: a project's package.json with the
    arguments of `npm install` added to it.  An argument is read as
    npm-package-arg 13.0.2 (npm 11.17.0) reads it, lib/npa.js, and only its
    registry forms are accepted: name, name@version, name@range, name@tag
@@ -369,8 +375,10 @@ let uri_safe =
       || (c >= '0' && c <= '9')
       || String.contains "-_.!~*'()" c)
 
-(* validate-npm-package-name's validForOldPackages, less its blocklist of
-   core-module names *)
+(* close to validate-npm-package-name's validForOldPackages, but it
+   refuses a name over 214 characters, which that only warns about, and
+   accepts a leading -, node_modules, favicon.ico and a scoped name whose
+   package part starts with a period, which that refuses *)
 let name_ok n =
   n <> ""
   && String.length n <= 214

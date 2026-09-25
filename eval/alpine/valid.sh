@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Ask apk whether OUR Alpine answer is a resolution by apk's own rules,
 # rather than whether it is the one apk would have picked.  scale.sh asks
-# the second question; this one can pass where that fails, because apk
-# preferring a different provider is preference, not error.
+# the second question; this one can pass where that fails, since apk
+# keeps an installed provider it would not have picked -- except between
+# unversioned providers, where k: still swaps it (controls.sh f5-prio).
 #
 # Our answer becomes the installed database, each package's stanza taken
 # from the same APKINDEX the loader reads, and the world is the original
@@ -14,8 +15,9 @@
 #
 # apk keeps an installed package only while it still resolves from the
 # world, so any Installing, Purging, Upgrading, Downgrading, Replacing or
-# Re-installing line means the set was not a resolution as it stood, and
-# a non-zero exit is an inconsistency.  install_if is no exception: apk
+# Re-installing line means apk would not keep the set as it stood (which
+# a resolution can still fail: controls.sh f5-prio), and a non-zero exit
+# is an inconsistency.  install_if is no exception: apk
 # installs such a package as soon as its triggers are present, and our
 # model makes the rule hard too; nor can an Installing line be excused by
 # what the index says of the name, since the same name may be one a

@@ -12,8 +12,8 @@ DEBIAN_ARCH=${DEBIAN_ARCH:-amd64}
 ALPINE_VER=${ALPINE_VER:-v3.21}
 ALPINE_ARCH=${ALPINE_ARCH:-x86_64}
 # npm has no bulk index, so the cache is seeded per package; pac npm fetches
-# anything else it needs on demand.  This is the cone of a react library with
-# a genuine mandatory peer dependency.
+# anything else it needs on demand.  This is a library with a genuine
+# mandatory peer dependency, react, and what react 18 needs.
 NPM_DEMO=${NPM_DEMO:-"use-sync-external-store react loose-envify js-tokens"}
 
 fetch() {

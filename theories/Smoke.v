@@ -1,7 +1,8 @@
 (* Smoke tests. Functor bodies are checked abstractly, so some errors
    surface only at application time; and the reflexivity examples fail if
-   any definition stops computing to a normal form (opaque or classical
-   terms in the computational path), which extraction depends on. *)
+   any definition they exercise stops computing to a normal form (opaque
+   or classical terms in the computational path), which extraction
+   depends on. *)
 
 From Stdlib Require Import MSets.
 From PackageCalculus Require Import Prelude Core Complexity Versions Semver
@@ -344,8 +345,7 @@ Example cargo_evalReq_computes :
        Cgo.PkgSet.empty)) 0 cgoAny) = 2.
 Proof. reflexivity. Qed.
 
-(* A requirement that names no prerelease admits none, while the whole
-   repository of a crate name is still every version of it. *)
+(* A requirement that names no prerelease admits none. *)
 Example cargo_prerelease_excluded :
   Cgo.VSet.elements
     (Cgo.evalReq (Cgo.PkgSet.add (0, 4) (Cgo.PkgSet.add (0, 5)
@@ -358,6 +358,8 @@ Example cargo_prerelease_admitted :
        Cgo.PkgSet.empty)) 0 ((Cgo.COp OpGe 5 :: nil) :: nil)) = 5 :: nil.
 Proof. reflexivity. Qed.
 
+(* The whole repository of a crate name is still every version of it,
+   prereleases included. *)
 Example cargo_srcVersions_computes :
   Cgo.VSet.cardinal
     (Cgo.srcVersions (Cgo.PkgSet.add (0, 4) (Cgo.PkgSet.add (0, 5)

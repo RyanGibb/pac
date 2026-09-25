@@ -5,9 +5,10 @@ Create HintDb cmp_deb.
 Create Rewrite HintDb cmp_deb.
 
 (* Name grouping: a decidable equivalence coarser than name equality,
-   exempting a conflict owner's whole group from provider matching (dpkg
-   treats all instances of a package name as one conflict scope). The
-   trivial instance groups nothing beyond equality. *)
+   exempting a conflict owner's whole group from its conflicts, real and
+   provided matches alike (apt's IsIgnorable, pkgcache.cc:757-790, exempts
+   real ones only for M-A: same). The trivial instance groups nothing
+   beyond equality. *)
 Module Type NameGroup (N : UsualOrderedType).
   Parameter groupEq : N.t -> N.t -> bool.
   Axiom groupEq_refl : forall n, groupEq n n = true.
@@ -125,8 +126,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Module Prov := FSetUOT ProvElt.
 
   (* Conflict entries carry an exemption flag: true exempts the owner's
-     whole name group from provider matching (dpkg's conflict scope is the
-     package name across instances); implicit entries use false. *)
+     whole name group from the conflict; implicit entries use false. *)
   Module Conflictees := PairUOT Atom BoolOT.
   Module ConfElt := PairUOT Pkg Conflictees.
   Module Conf := FSetUOT ConfElt.
@@ -393,8 +393,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   (* A conflict declared by p on a: one edge per name that can match a,
      admitting the non-matching versions and absence.  The declarer's own
      name is exempt, version uniqueness excluding its other versions
-     anyway, and so is its name group when the entry says so (dpkg's
-     conflict scope is the package name across instances). *)
+     anyway, and so is its name group when the entry says so. *)
   Definition confEdges (R : PkgSet.t) (Pi : Prov.t) (p : Pkg.t) (a : Atom.t)
       (x : bool) : T.DependeesSet.t :=
     SOnd.filterMap

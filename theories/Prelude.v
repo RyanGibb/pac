@@ -40,7 +40,8 @@ Proof. destruct c; reflexivity. Qed.
 (* Transitivity for a lexicographic pair needs the left comparator's eq law to
    transport the tie, but only needs transitivity at the three points actually
    reached -- which is the shape an induction hypothesis comes in. Everything
-   but the two premises is implicit so recursive uses stay one appeal. *)
+   but the laws and the two premises is implicit so recursive uses stay one
+   appeal. *)
 Lemma lex_lt_trans {A B : Type} {ca : A -> A -> comparison}
     {cb : B -> B -> comparison} {a a' a'' : A} {b b' b'' : B} :
   (forall x y, ca x y = Eq <-> x = y) ->
@@ -109,7 +110,7 @@ Module UOTFromCompare (X : ComparableType) <: UsualOrderedType.
   Defined.
 End UOTFromCompare.
 
-(* Same facts as OrderedTypeFacts but stated with plain Logic.eq, so that
+(* Three of OrderedTypeFacts' facts, restated with plain Logic.eq so that
    subst works on the results. *)
 Module UOTCompareFacts (X : UsualOrderedType).
   Module F := OrderedTypeFacts X.
@@ -210,8 +211,8 @@ Module BoolOT := UOTFromCompare BoolComp.
 
 (* Syntax whose shape is a list -- a conjunction, a disjunction of those --
    needs an order as soon as it is carried inside a set element. Ordering
-   head-first with nil least keeps the three laws one appeal to the
-   element's own, exactly as PairUOT does for products. *)
+   head-first with nil least keeps each of the three laws one appeal to
+   the element's own. *)
 Module ListComp (A : ComparableType) <: ComparableType.
   Definition t : Type := list A.t.
 

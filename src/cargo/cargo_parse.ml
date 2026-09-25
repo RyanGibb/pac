@@ -5,7 +5,8 @@
    merged into features, feature entry strings are classified into the
    four FEntry shapes, and an optional dependency gains the implicit
    feature that activates it unless some entry names it with dep:.
-   Unhandled shapes are counted and the enclosing record dropped. *)
+   Unhandled shapes are counted: a malformed line or dependency is
+   dropped, and any other malformed field is read as its default. *)
 
 type kind = Normal | Build | Dev
 
@@ -118,7 +119,8 @@ let entry_of (s : string) : fentry =
     match String.index_opt rest '/' with
     | None -> FDep rest
     | Some i ->
-        (* "dep:a/feat" is accepted by cargo as the strong form *)
+        (* cargo rejects "dep:a/feat" (build_feature_map); it is read here
+           as the strong form *)
         let a = String.sub rest 0 i in
         let f = String.sub rest (i + 1) (String.length rest - i - 1) in
         FDepFeat (a, f)

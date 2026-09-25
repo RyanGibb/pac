@@ -238,11 +238,11 @@ Module VariableFormula (N V : UsualOrderedType)
     #[local] Hint Extern 1 => cmp_by YF.compare_lt_trans : cmp_varf.
     #[local] Hint Extern 1 => cmp_by NatF.compare_lt_trans : cmp_varf.
 
-    (* A synthetic version is the position of the alternative it selects, so
-       a disjunction of any width is one node.  Bot is absence: every original
-       name has it, and it is the greatest version so that a solver preferring
-       the greatest leaves a name nobody needs positively out of the
-       resolution. *)
+    (* A synthetic version is the position of the alternative it selects --
+       so a disjunction of any width is one node -- or a variable's value.
+       Bot is absence: every original name has it, and it is the greatest
+       version so that a solver preferring the greatest leaves a name nobody
+       needs positively out of the resolution. *)
     Module Version.
       Inductive version : Type :=
       | Orig (v : V.t)
@@ -322,12 +322,12 @@ Module VariableFormula (N V : UsualOrderedType)
     Definition negVS (Vq : N.t -> VSet.t) (m : N.t) (vs : VSet.t) : T.VSet.t :=
       T.VSet.add Version.Bot (embedVS (VSet.diff (Vq m) vs)).
 
-    (* Mutual structural pairs avoid well-founded recursion on a measure; the
-       De Morgan, double-negation, and complemented-comparison cases are
-       inlined.  The spine walkers carry the position of the alternative
-       they are encoding, and repeat their sibling's non-spine cases for
-       the same reason: calling the sibling on the matched term itself
-       would leave the guard condition. *)
+    (* A four-way mutual structural family avoids well-founded recursion on
+       a measure; the De Morgan, double-negation, and complemented-comparison
+       cases are inlined.  The spine walkers carry the position of the
+       alternative they are encoding, and repeat their sibling's non-spine
+       cases for the same reason: calling the sibling on the matched term
+       itself would leave the guard condition. *)
     Fixpoint encodeNNF (Y_x : X.t -> YSet.t) (Vq : N.t -> VSet.t)
         (p : T.Pkg.t) (f : Formula) : T.DepRel.t :=
       match f with
@@ -683,9 +683,6 @@ Module VariableFormula (N V : UsualOrderedType)
     Qed.
 
     Module SOty := SetOps T.Pkg Y T.PkgSet YSet.
-    (* min_elt of the assigned-value candidates keeps the selector
-       deterministic and computable; the domain's min is the fallback and y0
-       the (unreachable under a nonempty domain) final case. *)
     Definition assignCand (S : T.PkgSet.t) (x : X.t) : YSet.t :=
       SOty.filterMap (fun p' =>
           match p' with
@@ -695,6 +692,9 @@ Module VariableFormula (N V : UsualOrderedType)
           end)
         S.
 
+    (* min_elt of the assigned-value candidates keeps the selector
+       deterministic and computable; the domain's min is the fallback and y0
+       the (unreachable under a nonempty domain) final case. *)
     Definition extractAssignment (y0 : Y.t) (Y_x : X.t -> YSet.t)
         (S : T.PkgSet.t) (x : X.t) : Y.t :=
       match YSet.min_elt (assignCand S x) with
@@ -3111,8 +3111,8 @@ Module VariableFormula (N V : UsualOrderedType)
       Qed.
 
       (* A disjunct's dependees are read off the spine its name carries:
-         version i carries alternative i's own encoding, under the domains
-         and the repository at the names that alternative mentions. *)
+         version i carries alternative i's own encoding under the domains and
+         the repository's versions. *)
       Theorem dependees_lookupDisjunct : forall Y_x R D fs (i : Version.t),
           T.PkgSet.In (Name.Disjunct fs, i) (reduceReal Y_x R D) ->
           T.dependees (reduceDeps Y_x R D) (Name.Disjunct fs, i) =

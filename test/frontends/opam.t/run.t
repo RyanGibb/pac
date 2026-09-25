@@ -97,8 +97,9 @@ selected:
     needav.1
   loaded: 2 names, 3 package versions
 
-opam takes a disjunction's first satisfiable alternative, so a dependency
-on three installable packages selects the one written first.  The encoding
+opam's builtin-0install takes a disjunction's first satisfiable alternative
+(unless opam's CNF rewrite has reshaped it), so a dependency on three
+installable packages selects the one written first.  The encoding
 reverses the alternatives -- PubGrub decides the larger version and the
 disjunct package's largest index selects the last alternative -- so that
 this is what falls out:
@@ -258,8 +259,8 @@ mlib is reached, not asked for.
     tst.1
   loaded: 7 names, 7 package versions
 
-A conflict's filter sees only switch and global variables and the package's
-own name and version, which is all opam evaluates conflicts with.  So
+In opam a conflict's filter sees only switch and global variables and the
+package's own name and version; here it sees the name but not the version.  So
 with-test is undefined there even for a queried name, and cflt.1's conflict
 on dep >= "5" under with-test is void, while its conflict on lib >= "3" on
 linux holds:
@@ -271,9 +272,10 @@ linux holds:
     lib.2
   loaded: 3 names, 5 package versions
 
-opam-version is the one global variable opam reports as its own and lets no
-switch override, so the valuation carries the version of the opam whose
-answers are being matched, 2.5.2 unless told otherwise.  ov.1 is available
+opam-version is the one global variable opam answers with its own version
+(unless OPAMVAR_opam_version or a variable overrides it), so the valuation
+carries the version of the opam whose answers are being matched, 2.5.2
+unless told otherwise.  ov.1 is available
 below 2.3 and ov.2 from 2.3 on:
 
   $ ../../../src/main.exe opam . ov | sed -E '/^(parse|solve) [0-9.]+s$/d'

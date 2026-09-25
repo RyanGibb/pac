@@ -3,8 +3,8 @@ From PackageCalculus Require Import Prelude Versions.
 
 (* The semver range language, shared by every ecosystem that resolves by
    node-semver's rules.  npm writes || alternatives and cargo writes one
-   comma-separated conjunction, but both desugar to the same comparator
-   sets under the same prerelease admission rule, so the syntax and its
+   comma-separated conjunction, but both desugar to comparator sets of
+   one shape under the same prerelease admission rule, so the syntax and its
    evaluation are stated once rather than once per ecosystem. *)
 
 (* The prerelease admission rule is not expressible through V.compare:

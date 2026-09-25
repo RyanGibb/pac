@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Build the run root both sides answer from: a snapshot directory that is
 # repos/npm as a symlink farm, plus a scratch HOME and npm cache so no
-# global config, no ~/.npmrc and no global cache can leak into a run, and
-# plus one wrapper root package per query.
+# global config, no ~/.npmrc and no global cache can leak into a run.
 #
 # The farm rather than repos/npm itself is what lets seed.sh close the
 # snapshot over whatever either side asks for without writing into the

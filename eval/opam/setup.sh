@@ -5,13 +5,12 @@
 # (src/opam/opam_solve.ml, [globals]) pinned through `opam var --global`,
 # so opam answers the same question our loader does rather than the host's.
 # Without the pinning opam infers os-distribution=nixos here and picks a
-# different host-system-* gadget, which is a different instance, not a
+# different host-system-* package, which is a different instance, not a
 # different preference.
 #
-# opam-version is the one global that cannot be set here: opam reports its
-# own.  scale.sh and valid.sh therefore hand it to our driver instead, as
-# --opam-version.  In this snapshot it decides only which opam-build /
-# opam-test / opam-check-npm-deps version is available.
+# opam-version is left as opam's own (OPAMVAR_opam_version or a variable
+# would override it); scale.sh and valid.sh hand that to our driver
+# instead, as --opam-version.
 #
 # usage: setup.sh [opamroot-dir]   (default /tmp/claude-1000/opam-cmp-root)
 #        REPO=<dir> builds it over another repository

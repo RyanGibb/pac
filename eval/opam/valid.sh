@@ -59,8 +59,7 @@ cd "$S/../.."
 
 read -r -a extra <<< "${EXTRA:-}"
 read -r -a query <<< "$query"
-# opam-version is the one global setup.sh cannot pin opam to, so our side
-# is pinned to opam's
+# setup.sh leaves opam-version as opam's own, so our side is pinned to it
 "$exe" opam --opam-version "$(opam --version)" ${extra[@]+"${extra[@]}"} \
   repos/opam-repository "${query[@]}" > "$out/$key.vout" 2>&1
 sed -n '/^opam packages (/,/^\(system packages\|loaded\)/p' "$out/$key.vout" \

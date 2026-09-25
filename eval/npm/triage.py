@@ -36,7 +36,7 @@ def kind(rn, rv, d):
             return k
     if d in (m.get("peerDependencies") or {}):
         return "optional peer" if ((m.get("peerDependenciesMeta") or {}).get(d) or {}).get("optional") else "peer"
-    # our peer slices and --peer-parent both hang a child's peer on the
+    # our Npm.peerEdgesAt and --peer-parent both hang a child's peer on the
     # package that selected the child
     return "peer of a child"
 

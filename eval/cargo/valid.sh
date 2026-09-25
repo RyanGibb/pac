@@ -19,7 +19,8 @@
 set -uo pipefail
 S="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export CARGO_CMP_OUT="${CARGO_CMP_OUT:-/tmp/cargo-valid}"
-# exported, since run_goal.py writes it into cargo's config
+# exported, since run_query.py's write_cargo_config writes it into
+# cargo's config
 export PORT="${PORT:-8991}"
 
 if [ $# -eq 0 ]; then

@@ -6,7 +6,9 @@
    read, or to a link's declarers), pushed through the Cargo encoder straight to
    Core; PubGrub solves the accumulated core graph lazily and the solution
    comes back through the proved decoders.  Trusted here (TCB): the parser,
-   the version comparator, the policy defaults below, and the plumbing. *)
+   the version comparator, the policy defaults below, the plumbing, and
+   PubGrub, whose answer is decoded unchecked although the decoders'
+   theorems assume it is a core resolution. *)
 
 module E = Pac
 module P = Cargo_parse
@@ -28,8 +30,8 @@ module CVerOT = struct
   let eq_dec a b = Cargo_version.compare a b = 0
 end
 
-(* SemverMatch: the two tests V.compare cannot express.  Both take the
-   candidate version first and the comparator's constant second. *)
+(* SemverMatch: the two tests V.compare cannot express.  sameCore takes
+   the candidate first and the comparator's constant second. *)
 module PM = struct
   let isPre = Cargo_version.is_prerelease
   let sameCore = Cargo_version.same_core
@@ -52,9 +54,11 @@ let default_feature = "default"
    build_requirements turns all_features into require_feature for each key
    of the root summary's feature map; with_implicit_features has already
    put an optional dependency's implicit feature into that table, so every
-   optional row the root declares is reachable.  The build is a second
-   resolve handed the lock, so it is the same versions filtered by the
-   features actually asked for -- which is what --features selects here.
+   optional dependency the root declares is reachable.  The build is a
+   second resolve handed the lock, so it keeps the lock's versions.
+   --features here is not that: it resolves afresh with exactly the
+   features named, adding no implicit default, so its versions can differ
+   from the lock's.
 
    The flag reaches workspace members only: ws.members_with_features
    hands CliFeatures to the root alone, and every other summary arrives as
@@ -216,8 +220,8 @@ module Make () = struct
   (* ---- granularity: at most one version per semver compatibility class,
      the leftmost-nonzero component ----
 
-     The label is the class's least version rather than a tag like "^1",
-     and G is ordered as versions are, because the encoding hands PubGrub
+     The label is the class's least release version rather than a tag like
+     "^1", and G is ordered as versions are, because the encoding hands PubGrub
      a class where the version would otherwise go: what the solver
      maximises is the label, so an order on labels that disagrees with the
      order on versions silently reverses the preference.  Lexical order on
@@ -401,8 +405,8 @@ module Make () = struct
         s
 
   (* every version of every name the crate's fibres read, and nothing else *)
-  (* keyed by the read names rather than by the crate version, because
-     consecutive versions of a crate almost always read the same names *)
+  (* keyed by the read names rather than by the crate version, so that
+     versions reading the same names share one entry *)
   let repo_preimage_cache : (string list, Cg.PkgSet.t) Hashtbl.t =
     Hashtbl.create 4096
 
@@ -706,12 +710,13 @@ module Make () = struct
     let st = mk_state ar rc rfeats rustv in
     (* the preference must land on both names whose candidates are crate
        versions: CFeatP carries WOrig as CCrate does, and whichever of the
-       two is decided first entails the other, so a family left untagged
-       decides by bare semver and the demotion never acts.  A class, which
-       CSlot and CDec carry, has no standing: cargo ranks the versions a
-       dependency admits and not their classes, and which class the ranked
-       walk lands on depends on what is already activated, which only
-       choose below can see. *)
+       two is decided first fixes the version (a decided CFeatP entails
+       its CCrate; choose gives a later CFeatP its CCrate's version), so a
+       family left untagged decides by bare semver and the demotion never
+       acts.  A class, which CSlot and CDec carry, has no standing: cargo
+       ranks the versions a dependency admits and not their classes, and
+       which class the ranked walk lands on depends on what is already
+       activated, which only choose below can see. *)
     let tag (tn : Cg.NPlus.t) (w : Cg.VPlus.t) : PVersion.t =
       match (st.rustv, tn, w) with
       | ( Some rustc,
@@ -741,8 +746,9 @@ module Make () = struct
           | _ -> Hashtbl.replace vcache tn vs);
           vs
     in
-    (* the decisive memoization: PubGrub asks for the same node's
-       dependencies over and over during propagation *)
+    (* at each decision PubGrub's dependency_incomps asks for the
+       dependencies of the decided version's neighbours, once per
+       dependency, to widen each incompatibility's range *)
     let dcache = Hashtbl.create 65536 in
     let dependencies tn ({ PVersion.v = w; _ } : PVersion.t) =
       match Hashtbl.find_opt dcache (tn, w) with
@@ -858,13 +864,13 @@ module Make () = struct
          (find_candidate), and the next time the same dependency comes up
          its conflict cache skips the candidate outright
          (past_conflicting_activations, keyed by the dependency and not by
-         who declares it).  PubGrub learns the same thing one version at a
-         time, since a slot is named by its owner's version, and each
-         lesson can cost a backjump past every decision since the clashing
-         activation.  What it has learned against the forced candidate is
-         out of sight here, assigned reporting only what a name is
-         entailed to, so the chain of forced candidates is followed a few
-         steps instead. *)
+         who declares it).  PubGrub learns the same thing one slot at a
+         time, a slot being named by its owner's class and the dependency
+         as that owner declares it, and each lesson can cost a backjump
+         past every decision since the clashing activation.  What it has
+         learned against the forced candidate is out of sight here,
+         assigned reporting only what a name is entailed to, so the chain
+         of forced candidates is followed a few steps instead. *)
       let rec first_two t acc = function
         | [] -> acc
         | _ when List.length acc = 2 -> acc

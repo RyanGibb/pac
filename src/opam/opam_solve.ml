@@ -42,7 +42,7 @@ type archive = {
      see the comment above [Make]. *)
   class_idx : (string, (string * string) list) Hashtbl.t;
   (* the versions a name flags avoid-version or deprecated; indexed
-     because the comparator asks this of every version it is handed, and
+     because every version handed to PubGrub is tagged with it, and
      because all but a hundred or so names answer no *)
   avoid_idx : (string, string list) Hashtbl.t;
   mutable n_names : int;
@@ -146,18 +146,19 @@ let avoided ar n v =
 let class_members ar k =
   match Hashtbl.find_opt ar.class_idx k with Some x -> x | None -> []
 
-(* opam reports its own version and lets no switch override it, so of the
-   global variables it is the one the harness cannot pin opam to and has
-   to pin us to instead; unasked, the value is the opam nix/flake.lock
-   fixes, so that a run outside the harness answers about the same opam
-   the recorded baselines did *)
+(* opam answers opam-version with its own version unless
+   OPAMVAR_opam_version or a global or switch variable overrides it
+   (opamPackageVar.ml resolve_switch_raw); the harness leaves opam's own
+   and pins us to it instead.  Unasked, the value is the opam
+   nix/flake.lock fixes, so that a run outside the harness answers about
+   the same opam the recorded baselines did *)
 let default_opam_version = "2.5.2"
 
 (* There is no cone pass: the repository is uncovered as the solver asks
    for it, so each lookup theorem's sub-instance must be complete at the
    moment it answers.  That holds by construction for all but one
-   lookup: versions and root_inst read the repository at one name, which
-   load_name takes whole; inst_for reads (n, v)'s own dependency, conflict, depext and
+   lookup: versions reads the repository at one name and root_inst at the
+   query's names, each of which load_name takes whole; inst_for reads (n, v)'s own dependency, conflict, depext and
    pin-depends declarations and the repository at declaredNames, the
    names those declarations mention, and loads every one of them;
    available filters ride along with the name they belong to; depexts_of
@@ -170,15 +171,15 @@ let default_opam_version = "2.5.2"
    package names.  A conflict or pin-depends is no exception: the
    package-formula reduction turns a negated atom into the declarer's own
    edge on the target's name, admitting every version the atom does not
-   name and the absent version every name has
-   (PF.Reduction.Lookup.dependees_lookupOrigBy), so nothing of who
-   conflicts with a name is read when the name answers.
+   name and the absent version every name has (PF.Reduction.negVS), so
+   nothing of who conflicts with a name is read when the name answers
+   (PF.Reduction.Lookup.versions_lookupOrig).
    class_idx therefore holds the declarers among the names loaded so far
    and may grow at any point in the run.  Not memoising is enough here,
    where it would not have been under a pairwise encoding: the growing
    answer is a versions answer, and PubGrub re-asks a name for its
-   versions at every propagation step, whereas it consumes a node's
-   dependency list once.  So cls_inst rebuilds the sub-instance from
+   versions at every assignment, whereas a node's dependency list is
+   memoised in deps_cache and so fixed at its first ask.  So cls_inst rebuilds the sub-instance from
    class_idx at every ask and a declarer parsed later is simply there.  A
    class version is also never asked for before its claimant's name has
    loaded, since the claim is that package's own edge. *)
@@ -222,13 +223,13 @@ module Make () = struct
      flag for, and they are query-scoped rather than global: the variable
      is on for every name the synthetic root depends on and off
      everywhere else, which is why each package's with-test is its own
-     variable here.  [OpamSwitchState.universe] (opamSwitchState.ml:1011-1013)
+     variable here.  [OpamSwitchState.universe] (opamSwitchState.ml:971-974)
      takes the request's names and expands them back to every version of
-     each, and [package_env_t] (opamSwitchState.ml:955-960) then reads
+     each, and [package_env_t] (opamSwitchState.ml:908-921) then reads
      with-test as [test && OpamPackage.Set.mem nv requested_allpkgs] -- so
      the scope is a set of names, not of versions and not a dependency
      cone.  [--with-test]'s own help text says the same: "This only
-     affects packages listed on the command-line" (opamArg.ml:1493-1494). *)
+     affects packages listed on the command-line" (opamArg.ml:1476-1477). *)
   let rho (rq : request) : string -> string option =
     let globals = ("opam-version", rq.opam_version) :: globals in
     fun x ->

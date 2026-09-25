@@ -1,5 +1,5 @@
 (* The direct semantics (IsResolution) follows the
-   MultiarchSpec where it speaks and apt 3.1 where it is silent, and a
+   MultiarchSpec where it speaks and apt 3.3 where it is silent, and a
    translation compiles instances into the single-arch Debian calculus at
    names N * NameArch. Implicit cross-arch exclusion targets a group
    pseudo-name (QAGroup) that only real group members provide, so ordinary
@@ -63,7 +63,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Module QN := PairUOT N NameArchOT.
   Module NF := UOTCompareFacts N.
   (* Mangled names group by base name: an owner's conflicts exempt every
-     arch instance of its own package, per dpkg's name-scoped conflicts. *)
+     arch instance of its own package, per apt's group exemption
+     (pkgcache.cc:757-790). *)
   Module MG <: NameGroup QN.
     Definition groupEq (m n : QN.t) : bool :=
       match N.compare (fst m) (fst n) with Eq => true | _ => false end.

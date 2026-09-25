@@ -28,9 +28,10 @@ with every feature of the workspace member enabled, so that one lock
 serves every later --features selection.  That is what pac's default
 rootFeats now is, so the two artifacts are the same artifact and can be
 compared as one.  (While pac modelled the feature-filtered build view
-instead, --locked scored 5/28 and every failure was cargo's lock being a
-strict superset of ours -- unactivated optionals, down to single nodes
-like rustc-std-workspace-core under cfg-if.  The gap was the model's,
+instead, the old check, `cargo metadata --frozen`, scored 5/28, and every
+failure was an unactivated optional that cargo's lock carries and ours did
+not -- as a single node like rustc-std-workspace-core under cfg-if, or,
+in three queries, as an edge only.  The gap was the model's,
 not the check's.)
 
 Nothing is downloaded: both commands want index rows, which

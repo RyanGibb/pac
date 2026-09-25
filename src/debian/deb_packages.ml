@@ -1,7 +1,7 @@
 (* Packages-index parser, from Debian Policy 5.3 (stanza syntax) and 7.1
-   (relationship fields).  Untrusted; architecture qualifiers, build
-   profiles, and architecture restriction lists are stripped (single-arch
-   assumption). *)
+   (relationship fields).  Untrusted; build profiles and architecture
+   restriction lists are stripped, and a Provides' architecture qualifier is
+   ignored. *)
 
 type cmp = Ge | Gt | Le | Lt | Eq
 type arch_qual = Unqual | AnyArch | NativeArch | ExplicitArch of string
@@ -13,9 +13,9 @@ type provide = { pname : string; pversion : string option }
    relationship atoms while a lookup reduces a few dozen of its ~69k stanzas.
    Keeping 340k atom records and list cells live in the major heap cost more
    than reading the whole file did; whoever needs a stanza's clauses calls
-   parse_depends_fields on them and keeps only those.  Provides and Conflicts
-   are parsed here because their reverse indices are preimages that no single
-   stanza's clauses can reach (see deb_solve.ml). *)
+   parse_depends_fields on them and keeps only those.  Provides are parsed
+   here because their reverse index is a preimage that no single stanza's
+   clauses can reach. *)
 type stanza = {
   package : string;
   version : string;
@@ -51,7 +51,9 @@ let priority_rank = function
 
 let priority_lowest = 5
 
-(* apt's pkgTagSection::FindFlag spelling of a boolean field *)
+(* part of what apt's pkgTagSection::FindFlag (StringToBool) reads as yes:
+   it also takes "enable", any case, and strtol spellings of 1; the Debian
+   snapshot writes only "yes" *)
 let flag_yes = function
   | "yes" | "true" | "with" | "on" | "1" -> true
   | _ -> false
@@ -161,7 +163,7 @@ let parse_provides field =
       | None -> None)
 
 (* One pass over a stanza's fields, rather than an assoc lookup per field:
-   the fourteen fields below were each a linear scan of the stanza, and an
+   the fifteen fields below were each a linear scan of the stanza, and an
    archive is ~69k stanzas.  First occurrence wins, as List.assoc_opt did. *)
 let stanza_of_fields (fs : (string * string) list) : stanza option =
   let package = ref None

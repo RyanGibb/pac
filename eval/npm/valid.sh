@@ -11,20 +11,20 @@
 # `npm install --package-lock-only` on a copy, which must leave the same
 # version at every path of the lock.
 #
-# npm ci verifies rather than re-resolves by design: it never consults
-# the registry for a version, it builds the tree the lockfile describes
-# and then checks that tree against every manifest in it, failing with
-# EUSAGE if anything is missing or out of range.  Measured on express,
+# npm ci rebuilds the ideal tree from the lock, repairing any edge the
+# lock leaves invalid, and fails with EUSAGE only when the repair changes
+# a version in the inventory; accepts.sh says what that lets through.
+# Measured on express,
 # not assumed: it rejects a lock with a transitive package deleted and
 # one whose version violates a requirer's range, and accepts both a
 # valid-but-older version npm would not have picked and a package nested
-# where npm would have hoisted it.  See notes/validity.md.
+# where npm would have hoisted it.
 #
 # What our answer does not carry is a directory layout -- it is the
 # resolution relation, one provider per (requirer, key) -- so mklock.py
 # has to synthesise a placement that reproduces exactly that relation
-# under node_modules lookup, and control 5 above is what says npm judges
-# the placement we chose rather than demanding its own.
+# under node_modules lookup, and controls.sh's nest-valid is what says npm
+# judges the placement we chose rather than demanding its own.
 #
 # usage: valid.sh <exe> <tag> [query]
 # With no query it starts the frozen shim, sweeps queries.txt and totals;

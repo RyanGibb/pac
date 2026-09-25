@@ -8,16 +8,16 @@
   encoded solution: 5 core nodes (4 Alpine packages encoded)
 
 apk picks among the providers of a name with compare_providers, whose first
-live key on a fresh root is the version the provider offers *at the
-requested name* -- a package's own version where it claims the name itself,
-the p: operand where it is an alias, and the empty version where the
-provides carries no version at all.  provider_priority (k:) is only the
+key between providers it has not disqualified is the version the provider
+offers *at the requested name* -- a package's own version where it claims
+the name itself, the p: operand where it is an alias, and the empty version
+where the provides carries no version at all.  provider_priority (k:) is only the
 key after that.
 
 An unversioned provides offers the empty version, which loses to every real
-one, so k: decides only between unversioned providers.  nano and vim both
-provide editor, nano sorts first and so heads the encoded disjunction, but
-vim carries the higher k: and is what apk installs:
+one, so k: ranks it only against other unversioned providers.  nano and
+vim both provide editor, nano sorts first and so heads the encoded
+disjunction, but vim carries the higher k: and is what apk installs:
 
   $ ../../../src/main.exe alpine PROVIDERS editor | sed -E '/^(parse|solve) [0-9.]+s$/d'
   index PROVIDERS
@@ -51,9 +51,9 @@ the dependency has nothing to satisfy it:
   Because @root () -> nokey ∅ and root -> @root (), version solving failed..
 
 A *versioned* provides offers a real version, and a package claiming a name
-itself gets no privilege over one: the two are compared on the versions
-they offer and nothing else.  vers-alt provides vers=9.9 where the real
-vers is 1.0, and apk installs vers-alt:
+itself gets no privilege over one: the two are compared first on the
+versions they offer.  vers-alt provides vers=9.9 where the real vers is
+1.0, and apk installs vers-alt:
 
   $ ../../../src/main.exe alpine PROVIDERS vers-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
   index PROVIDERS

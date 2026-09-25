@@ -3,8 +3,9 @@
 package from the one its depender's manifest names.
 
 npm checks an edge against the entry its node_modules lookup finds by
-version alone (arborist dep-valid.js), never by name, since that is what
-lets an alias sit at a key that is not its package's name.  So neither
+version alone (arborist dep-valid.js); the only name it compares is the
+directory key (edge.js satisfiedBy), since that is what lets an alias sit
+at a key that is not its package's name.  So neither
 `npm ci` nor a relock notices baz@1.0.0 at node_modules/bar answering
 "bar": "^1".  An entry's registry package is its "name" when it has one
 and its key otherwise, which is how npm records an alias and how
@@ -65,7 +66,8 @@ def main():
                 want = target(key, spec)
                 if want is None:
                     continue
-                # npm resolves a peer from its declarer's parent
+                # a copy inside the declarer is PEER LOCAL (arborist
+                # edge.js), which accepts.sh judges
                 frm = path
                 if field == "peerDependencies" and path:
                     frm = ancestors(path)[-2]

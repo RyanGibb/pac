@@ -3,7 +3,9 @@
    distributed into (filter, version-constraint) atoms, bare boolean
    variables become =-"true" comparisons, package-local variables are
    qualified by their package.  Unhandled constructs are counted and the
-   enclosing atom conservatively dropped. *)
+   enclosing atom dropped, which can admit a selection opam rejects (an
+   unhandled available: makes the package unavailable instead); a file that
+   fails to parse is skipped, uncounted, by the loader. *)
 
 open OpamParserTypes.FullPos
 
@@ -167,9 +169,10 @@ let rec brace_of ?(locals = local_vars) ~owner ~selfv (v : value) : brace =
   | Pfxop ({ pelem = `Not; _ }, a) -> BNot (brace_of a)
   | Pfxop ({ pelem = `Defined; _ }, { pelem = Ident x; _ }) ->
       BF (FDef (qualify ~owner x))
-  (* a group's or list's elements are implicitly conjoined, as they are at the
-     top level of a brace: (a b) is a & b, not a parse failure; the list form
-     is how `available:` is usually written *)
+  (* a group's or list's elements are conjoined, as opam does in a
+     dependency brace (opamFormat.ml:411,420); opam's filter parser, which
+     reads available:, rejects more than one element (opamFormat.ml:315-319),
+     so this accepts more there *)
   | Group { pelem = a :: rest; _ } | List { pelem = a :: rest; _ } ->
       List.fold_left (fun acc v -> BAnd (acc, brace_of v)) (brace_of a) rest
   | _ ->
@@ -353,7 +356,8 @@ let class_names (v : value) : string list =
       reject ();
       []
 
-(* a flag is an ident (opam also accepts the string form) *)
+(* opam takes only the ident form (opamFormat.ml:90-93, via opamFile.ml's
+   flags field) *)
 let flag_names (v : value) : string list =
   let one (x : value) =
     match x.pelem with

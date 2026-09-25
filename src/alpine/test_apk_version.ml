@@ -1,6 +1,5 @@
-(* Vectors are the ones confirmed against apk-tools master's own
-   test/unit/version.data plus the worked examples in apk-package(5) and
-   apk-world(5). *)
+(* Vectors partly from apk-tools 3.0.5 test/unit/version.data and
+   apk-world(5); the rest worked out from version.c. *)
 
 let fail = ref 0
 
@@ -144,7 +143,7 @@ let () =
   op "3.6.0" "<~" "3.6" true;
   op "3.6.0" "<=" "3.6" false;
   op "3.7" "<~" "3.6" false;
-  (* >< pins the C: identity digest, which a version cannot witness *)
+  (* >< pins the C: identity digest, which a version cannot match *)
   op "1.0" "><" "Q1Io65EOU4TZIqoCav8tqwhqq2RPM=" false;
 
   if !fail > 0 then exit 1;

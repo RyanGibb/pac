@@ -31,12 +31,13 @@ the delta it accounts for can be read off:
   --peer-parent   re-attribute an auto-installed peer's edge from the
                   package that declared the peer to each package that
                   selected the declarer, by a dependency or by a peer
-                  edge itself re-attributed.  Both sides put the peer in
-                  the same place; they disagree only about which node
-                  the edge leaves.  npm's lockfile resolves a peer the
-                  way require() would, from the declarer; our peerSlice
-                  hands the declarer's peer rows to the package that
-                  selected the declarer, so npmParents leaves that one.
+                  edge itself re-attributed.  Where both sides put the
+                  peer in the same place, they disagree only about which
+                  node the edge leaves.  npm's lockfile resolves a peer
+                  the way require() would, from the declarer; our
+                  Npm.peerEdgesAt hangs the declarer's peer edges on the
+                  intermediate that selected it, so npmParents leaves
+                  the selector.
 
 usage: edges.py <package> <lockfile> <our --tree output> <out-prefix>
                 [--peer-parent]

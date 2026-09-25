@@ -162,13 +162,18 @@ let parse_file (path : string) : pkg list =
          | 'A' -> a.a_arch <- v
          | 'C' -> a.a_digest <- v
          | 'o' -> a.a_origin <- v
+         (* apk makes a package with a bad D: atom uninstallable and
+            drops an i: rule with a bad atom whole; here only the atom
+            goes *)
          | 'D' -> a.a_deps <- List.rev_append (parse_deps v) a.a_deps
          | 'p' -> a.a_provs <- List.rev_append (parse_provs v) a.a_provs
          | 'i' -> a.a_iif <- List.rev_append (parse_deps v) a.a_iif
          | 'k' -> a.a_prio <- int_of_string_opt v
-         (* S I T U L m t c carry no instance data; an unknown upper-case
-            letter makes the package uninstallable, a lower-case one is
-            reserved for forward compatibility and ignored *)
+         (* S I T U L m t c carry no instance data.  apk makes a package
+            with an unknown upper-case field uninstallable, and skips the
+            installed-db fields F M R Z in an index; this drops the
+            stanza for either.  A lower-case field is reserved for forward
+            compatibility and ignored. *)
          | 'S' | 'I' | 'T' | 'U' | 'L' | 'm' | 't' | 'c' -> ()
          | ch when ch >= 'a' && ch <= 'z' -> ()
          | _ -> a.a_broken <- true

@@ -13,8 +13,7 @@ Module ConflictClass (N V : UsualOrderedType).
   Module InClassElt := PairUOT Pkg N.
   Module InClassRel := FSetUOT InClassElt.
 
-  (* Apart from the record so that a frontend's resolution can carry it as
-     one field.  Cargo's links is this as it stands; opam's rule, stated
+  (* Cargo's links is this as it stands; opam's rule, stated
      over names, exempts two versions of one package, an exemption version
      uniqueness never lets apply. *)
   Definition ClassExclusion (Om : InClassRel.t) (S : PkgSet.t) : Prop :=
@@ -449,10 +448,7 @@ Module ConflictClass (N V : UsualOrderedType).
             right; exists q, k; split; [exact Hc | exact Hy].
       Qed.
 
-      (* A preimage: the declarations of a package in k name no other.  It
-         is on the versions side, which a solver re-asks at every decision,
-         so a lazy driver can recompute it per ask; on the dependees side,
-         read once, it could not be. *)
+      (* A preimage: the declarations of a package in k name no other. *)
       Theorem versions_lookupClass : forall R Om (k : N.t),
           T.versions (reduceReal R Om) (Name.Cls k) =
           T.versions (reduceReal (inClass R Om k) (classRelAt Om k))

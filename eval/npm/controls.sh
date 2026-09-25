@@ -2,7 +2,7 @@
 # accepts.sh's verdict on hand-written locks over a hand-written registry,
 # beside the verdict each must get.  A check that passes every real answer
 # says nothing until it is seen to fail these; the ones expected VALID keep
-# it from failing everything, and two of them are valid layouts npm would
+# it from failing everything, and four of them are valid layouts npm would
 # not have chosen.  Exits non-zero if any verdict differs.
 # usage: controls.sh <scratch-dir>        PORT=<free port for the shim>
 set -u
@@ -60,7 +60,8 @@ CASES = {
     # reached by nothing
     "extra":      ("INVALID", {"b": "^1.0.0"}, {"b": "b@1.0.0", "z": "z@1.0.0"}),
 }
-# npm takes two versions with one integrity for the same package
+# arborist's Node.matches takes two nodes of one name and one integrity for
+# the same package, whatever their versions
 def dist(n, v):
     return {"tarball": f"https://registry.npmjs.org/{n}/-/{n}-{v}.tgz",
             "integrity": "sha512-" + base64.b64encode(hashlib.sha512(f"{n}@{v}".encode()).digest()).decode()}

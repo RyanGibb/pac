@@ -1,6 +1,6 @@
 The repos/ snapshot the recorded baselines were taken against.
 
-Every baseline here (eval/<eco>/baseline/, and cargo's per-query results) is
+Every baseline here (eval/<eco>/baseline/), like every cargo run's results, is
 an answer about one fixed universe, so it is only comparable against the same
 snapshot.  scripts/fetch-repos.sh fetches the
 current head of each source and pins nothing -- it takes today's Debian

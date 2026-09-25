@@ -3,8 +3,8 @@
    upstream and revision by the dpkg algorithm: alternate maximal non-digit
    and digit parts; non-digit parts compare with '~' before everything
    (including the end of a part) and letters before non-letters; digit parts
-   compare numerically.  Untrusted: differential-test against
-   `dpkg --compare-versions`. *)
+   compare numerically.  Untrusted, and tested only on the cases in
+   test_version.ml. *)
 
 type t = { epoch : int; upstream : string; revision : string }
 
@@ -92,9 +92,8 @@ let compare_part s s' =
   in
   go 0 0
 
-(* Version strings are compared millions of times during set operations
-   (every formula comparison in sorted-list inserts lands here), so cache
-   the parse per distinct string. *)
+(* Every formula comparison in the set operations' sorted-list inserts
+   compares version strings, so cache the parse per distinct string. *)
 let parse_memo : (string, t) Hashtbl.t = Hashtbl.create 65536
 
 let parse_cached s =

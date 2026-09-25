@@ -1,7 +1,7 @@
 ; Print Assumptions over the audited names, which is a claim about the
 ; built theories rather than about any one file, so it hangs off an alias
-; and is never part of @default.  The .vo files are named as deps because
-; the action is sandboxed and coqtop loads them at run time.
+; and is never part of @default.  The .vo files are named as deps so that
+; dune builds them first and reruns the audit when they change.
 (rule
  (alias axioms)
  (deps
@@ -12,3 +12,16 @@
    PAC_THEORIES
    %{workspace_root}/theories
    (run bash %{dep:check-axioms.sh}))))
+
+; Sandboxed so that the script walks only the sources, not the build
+; artefacts dune leaves beside them.
+(rule
+ (alias runtest)
+ (deps
+  (glob_files %{workspace_root}/theories/*.v)
+  (source_tree %{workspace_root}/src)
+  (source_tree %{workspace_root}/eval)
+  (source_tree %{workspace_root}/test)
+  (sandbox always))
+ (action
+  (run python3 %{dep:check-citations.py} %{workspace_root})))

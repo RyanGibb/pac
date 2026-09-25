@@ -8,12 +8,14 @@ points at this server so a measured run cannot drift onto the live
 crates.io index between one query and the next.  Nothing is filtered --
 cargo's version resolver never sees a target (resolve_with_previous takes
 no RustcTargetData), so a [target.'cfg(...)'] row constrains a linux
-resolve exactly as an unconditional one does, and pac's cfg_active says
-the same.  Both sides answer about crates.io as it actually is.
+resolve exactly as an unconditional one does, and pac's slotActive
+(Cargo.v) ignores the cfg the same way.  Both sides answer about
+crates.io as it actually is.
 
 The served config.json still names the real static.crates.io under "dl",
-but neither sweep ever reaches it: both ask cargo only for a lockfile,
-which it resolves from these rows and writes without downloading a body.
+but neither scale.sh nor valid.sh reaches it: both ask cargo only for a
+lockfile, which it resolves from these rows and writes without downloading
+a body.  features.py does reach it, for cargo metadata.
 """
 import http.server, json, os, sys
 
