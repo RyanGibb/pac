@@ -136,9 +136,6 @@ let concurrent () =
     | R.Name.Granular (n, w) -> Printf.sprintf "<%s,%d>" (nm (n2i n)) (n2i w)
     | R.Name.Intermediate (n, v, m) ->
         Printf.sprintf "<%s,%s,%s>" (nm (n2i n)) (vshow (n2i v)) (nm (n2i m))
-    | R.Name.GranIntermediate (n, w, m, vs) ->
-        Printf.sprintf "<%s,%d,%s,%s>" (nm (n2i n)) (n2i w) (nm (n2i m))
-          (pp_vs vs)
   in
   let pp_tv = function
     | R.Version.Orig v -> vshow (n2i v)
@@ -205,9 +202,6 @@ let peer () =
     | R.Name.Granular (n, w) -> Printf.sprintf "<%s,%d>" (nm (n2i n)) (n2i w)
     | R.Name.Intermediate (n, v, m) ->
         Printf.sprintf "<%s,%d,%s>" (nm (n2i n)) (n2i v) (nm (n2i m))
-    | R.Name.GranIntermediate (n, w, m, vs) ->
-        Printf.sprintf "<%s,%d,%s,%s>" (nm (n2i n)) (n2i w) (nm (n2i m))
-          (pp_vs vs)
   in
   let pp_tv = function
     | R.Version.Orig v -> string_of_int (n2i v)

@@ -571,7 +571,6 @@ let versions st (n : Np.Nm.name) : Np.Vs.version list =
             T.VSet.elements (R.versions (gran_sub_inst st k w) n)
         | Np.Nm.Intermediate (k, v, m) ->
             T.VSet.elements (R.versions (int_sub_inst st (snd k, v) m) n)
-        | Np.Nm.GranIntermediate _ -> []
       in
       Hashtbl.replace st.vcache n l;
       l
@@ -594,7 +593,7 @@ let dependees st (s : T.Pkg.t) : T.Dependees.t list =
           let l = Option.value ~default:[] (Hashtbl.find_opt st.dirs (k, v)) in
           if not (List.exists (fun x -> Np.Nm.compare x m = E.Eq) l) then
             Hashtbl.replace st.dirs (k, v) (m :: l)
-      | Np.Nm.Granular _ | Np.Nm.GranIntermediate _ -> ())
+      | Np.Nm.Granular _ -> ())
     hs;
   hs
 
@@ -614,8 +613,6 @@ module PName = struct
     | Np.Nm.Granular (k, w) -> Format.fprintf fmt "%a@%s" pp_key k w
     | Np.Nm.Intermediate (k, v, m) ->
         Format.fprintf fmt "<%a@%s=>%a>" pp_key k v pp_key m
-    | Np.Nm.GranIntermediate (k, w, m, _) ->
-        Format.fprintf fmt "<%a@%s=>%a>" pp_key k w pp_key m
 end
 
 module PVersion = struct
@@ -1027,7 +1024,7 @@ let settle st o (x : copy) (m : string * string) (u : string) =
 
 let dir_of (n : PName.t) =
   match n with
-  | Np.Nm.Intermediate (_, _, m) | Np.Nm.GranIntermediate (_, _, m, _) -> fst m
+  | Np.Nm.Intermediate (_, _, m) -> fst m
   | Np.Nm.Granular (k, _) -> fst k
 
 (* build-ideal-tree.js: #buildDepStep pops the copy that is shallowest in
@@ -1111,7 +1108,7 @@ let next st o ~assigned (open_names : (PName.t * int) list) : PName.t =
    list, so nothing that was satisfiable stops being so. *)
 let choose st o ~assigned (n : PName.t) (cands : PVersion.t list) : PVersion.t =
   match n with
-  | Np.Nm.Granular _ | Np.Nm.GranIntermediate _ -> greatest cands
+  | Np.Nm.Granular _ -> greatest cands
   | Np.Nm.Intermediate (k, v, m) ->
       let peer = peer_only st (snd k, v) (fst m) in
       let at =

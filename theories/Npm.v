@@ -480,7 +480,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           else T.VSet.empty
       | Nm.Intermediate k v m =>
           Conc.Reduction.embedVS (childCands I (snd k, v) m)
-      | Nm.GranIntermediate _ _ _ _ => T.VSet.empty
       end.
 
     Definition entryEdges (I : Inst) (q : Pkg.t)
@@ -678,7 +677,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Proof.
       intros S [m u] [k v]; cbn [fst snd].
       unfold npmParents; rewrite SOtp.mem_filterMap; split.
-      - intros [[n x] [Hs He]]; destruct n as [k' w | k' v' m' | k' w m' vs];
+      - intros [[n x] [Hs He]]; destruct n as [k' w | k' v' m'];
           destruct x as [u' | w']; try discriminate He.
         destruct (T.PkgSet.mem (Conc.Reduction.embedPkg idg (k', v')) S) eqn:Hm;
           [| discriminate He].
