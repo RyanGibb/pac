@@ -67,11 +67,9 @@ Module Visibility (N V : UsualOrderedType).
     intros pi p c; unfold children; rewrite SOpp.mem_filterMap.
     split.
     - intros [[c' d] [He Hc]]; cbn beta iota in Hc.
-      destruct (Pkg.eq_dec d p) as [-> | NE]; [| discriminate].
-      injection Hc as <-; exact He.
+      destruct (Pkg.eq_dec d p); [mem_destruct; exact He | discriminate].
     - intro H; exists (c, p); split; [exact H | cbn beta iota].
-      destruct (Pkg.eq_dec p p) as [_ | NE];
-        [reflexivity | contradiction NE; reflexivity].
+      apply dec_refl.
   Qed.
 
   Definition pubChildren (pub : PubRel.t) (pi : ParentRel.t) (p : Pkg.t)
@@ -89,15 +87,11 @@ Module Visibility (N V : UsualOrderedType).
     intros pub pi p c; unfold pubChildren; rewrite SOpp.mem_filterMap.
     split.
     - intros [[c' d] [He Hc]]; cbn beta iota in Hc.
-      destruct (Pkg.eq_dec d p) as [-> | NE]; [| discriminate].
+      destruct (Pkg.eq_dec d p) as [-> |]; [| discriminate].
       destruct (PubRel.mem (p, fst c') pub) eqn:Hm; [| discriminate].
-      injection Hc as <-.
-      split; [exact He | apply PubRel.mem_spec; exact Hm].
+      mem_destruct; split; [exact He | apply PubRel.mem_spec; exact Hm].
     - intros [He Hm]; exists (c, p); split; [exact He | cbn beta iota].
-      destruct (Pkg.eq_dec p p) as [_ | NE]; [| contradiction NE; reflexivity].
-      assert (PubRel.mem (p, fst c) pub = true) as ->
-        by (apply PubRel.mem_spec; exact Hm).
-      reflexivity.
+      apply PubRel.mem_spec in Hm; rewrite dec_refl, Hm; reflexivity.
   Qed.
 
   Definition subBase (pi : ParentRel.t) (q : Pkg.t) : PkgSet.t :=
@@ -520,10 +514,10 @@ Module Visibility (N V : UsualOrderedType).
       split.
       - intros [[n v] [HR Hh]]; cbn beta iota in Hh.
         apply SOptp.mem_map in Hh; destruct Hh as [q [Hq ->]].
-        exists n, v, q; split; [exact HR | split; [exact Hq | reflexivity]].
-      - intros [n [v [q [HR [Hq ->]]]]].
+        exists n, v, q; auto.
+      - intros (n & v & q & HR & Hq & ->).
         exists (n, v); split; [exact HR | cbn beta iota].
-        apply SOptp.mem_map; exists q; split; [exact Hq | reflexivity].
+        apply SOptp.mem_map; exists q; auto.
     Qed.
 
     Lemma mem_reduceRealIntermediate : forall D origins y,
@@ -538,11 +532,11 @@ Module Visibility (N V : UsualOrderedType).
       - intros [[[n v] [m vs]] [HD Hh]]; cbn beta iota in Hh.
         apply SOptp.mem_unionMap in Hh; destruct Hh as [q [Hq Hh]].
         apply SOvtp.mem_map in Hh; destruct Hh as [u [Hu ->]].
-        exists n, v, m, vs, q, u; repeat split; assumption.
-      - intros [n [v [m [vs [q [u [HD [Hq [Hu ->]]]]]]]]].
+        exists n, v, m, vs, q, u; auto.
+      - intros (n & v & m & vs & q & u & HD & Hq & Hu & ->).
         exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
         apply SOptp.mem_unionMap; exists q; split; [exact Hq |].
-        apply SOvtp.mem_map; exists u; split; [exact Hu | reflexivity].
+        apply SOvtp.mem_map; exists u; auto.
     Qed.
 
     Lemma mem_reduceRealAgreement : forall D y,
@@ -555,28 +549,39 @@ Module Visibility (N V : UsualOrderedType).
       split.
       - intros [[[n v] [m vs]] [HD Hh]]; cbn beta iota in Hh.
         apply SOvtp.mem_map in Hh; destruct Hh as [u [Hu ->]].
-        exists n, v, m, vs, u; repeat split; assumption.
-      - intros [n [v [m [vs [u [HD [Hu ->]]]]]]].
+        exists n, v, m, vs, u; auto.
+      - intros (n & v & m & vs & u & HD & Hu & ->).
         exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
-        apply SOvtp.mem_map; exists u; split; [exact Hu | reflexivity].
+        apply SOvtp.mem_map; exists u; auto.
     Qed.
 
+    (* The name of an element fixes which of the three parts it is from, so
+       inversion discards the other two. *)
+    Inductive RealSpec (R : PkgSet.t) (D : C.DepRel.t) (pub : PubRel.t)
+        (r : Pkg.t) : T.Pkg.t -> Prop :=
+    | RealOccurrence : forall n v q,
+        PkgSet.In (n, v) R -> PkgSet.In q (potentialOrigins R D pub r) ->
+        RealSpec R D pub r (Name.Occurrence n q, v)
+    | RealIntermediate : forall n v m vs q u,
+        C.DepRel.In ((n, v), (m, vs)) D ->
+        PkgSet.In q (potentialOrigins R D pub r) -> VSet.In u vs ->
+        RealSpec R D pub r (Name.Intermediate n v m q, u)
+    | RealAgreement : forall n v m vs u,
+        C.DepRel.In ((n, v), (m, vs)) D -> VSet.In u vs ->
+        RealSpec R D pub r (Name.Agreement n v m, u).
+
     Lemma mem_reduceReal : forall R D pub r y,
-        T.PkgSet.In y (reduceReal R D pub r) <->
-        (exists n v q, PkgSet.In (n, v) R /\
-           PkgSet.In q (potentialOrigins R D pub r) /\
-           y = (Name.Occurrence n q, v)) \/
-        ((exists n v m vs q u,
-             C.DepRel.In ((n, v), (m, vs)) D /\
-             PkgSet.In q (potentialOrigins R D pub r) /\ VSet.In u vs /\
-             y = (Name.Intermediate n v m q, u)) \/
-         (exists n v m vs u,
-             C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs /\
-             y = (Name.Agreement n v m, u))).
+        T.PkgSet.In y (reduceReal R D pub r) <-> RealSpec R D pub r y.
     Proof.
       intros R D pub r y; unfold reduceReal.
       rewrite !T.PkgSet.union_spec, mem_reduceRealOccurrence,
-        mem_reduceRealIntermediate, mem_reduceRealAgreement; reflexivity.
+        mem_reduceRealIntermediate, mem_reduceRealAgreement.
+      split.
+      - intros [H | [H | H]]; mem_destruct; econstructor; eassumption.
+      - destruct 1 as [n v q | n v m vs q u | n v m vs u].
+        + left; exists n, v, q; auto.
+        + right; left; exists n, v, m, vs, q, u; auto.
+        + right; right; exists n, v, m, vs, u; auto.
     Qed.
 
     Lemma mem_reduceDepsSelf : forall R D pub origins y,
@@ -590,25 +595,15 @@ Module Visibility (N V : UsualOrderedType).
       rewrite SOptd.mem_unionMap.
       split.
       - intros [[n v] [HR Hh]]; cbn beta iota in Hh.
-        apply SOptd.mem_filterMap in Hh; destruct Hh as [q [Hq Hc]];
-          cbn beta iota in Hc.
-        destruct (andb (privb D pub (n, v)) (negb (PkgEqb.eqb q (n, v))))
-          eqn:Hb; [| discriminate].
-        injection Hc as <-.
-        apply Bool.andb_true_iff in Hb; destruct Hb as [H1 H2].
-        apply Bool.negb_true_iff, PkgEqb.eqb_false_iff in H2.
-        exists n, v, q; repeat split;
-          [exact HR | exact Hq | apply privb_iff; exact H1 | exact H2].
-      - intros [n [v [q [HR [Hq [Hpriv [Hne ->]]]]]]].
+        apply SOptd.mem_filterMap_if in Hh; destruct Hh as [q [Hq [Hb ->]]].
+        cbn beta in Hb; rewrite Bool.andb_true_iff, Bool.negb_true_iff,
+          PkgEqb.eqb_false_iff, privb_iff in Hb.
+        destruct Hb; exists n, v, q; auto.
+      - intros (n & v & q & HR & Hq & Hpriv & Hne & ->).
         exists (n, v); split; [exact HR | cbn beta iota].
-        apply SOptd.mem_filterMap; exists q; split; [exact Hq |].
-        cbn beta iota.
-        assert (andb (privb D pub (n, v)) (negb (PkgEqb.eqb q (n, v))) = true)
-          as -> by (apply Bool.andb_true_iff; split;
-                    [apply privb_iff; exact Hpriv
-                    | apply Bool.negb_true_iff, PkgEqb.eqb_false_iff;
-                      exact Hne]).
-        reflexivity.
+        apply SOptd.mem_filterMap_if; exists q; cbn beta.
+        rewrite Bool.andb_true_iff, Bool.negb_true_iff, PkgEqb.eqb_false_iff,
+          privb_iff; auto.
     Qed.
 
     Lemma mem_reduceDepsOccToInt : forall D pub origins y,
@@ -623,19 +618,12 @@ Module Visibility (N V : UsualOrderedType).
       rewrite SOdtd.mem_unionMap.
       split.
       - intros [[[n v] [m vs]] [HD Hh]]; cbn beta iota in Hh.
-        apply SOptd.mem_filterMap in Hh; destruct Hh as [q [Hq Hc]];
-          cbn beta iota in Hc.
-        destruct (carriedb pub (n, v) m q) eqn:Hb; [| discriminate].
-        injection Hc as <-.
-        exists n, v, m, vs, q; repeat split;
-          [exact HD | exact Hq | apply carriedb_iff; exact Hb].
-      - intros [n [v [m [vs [q [HD [Hq [Hc ->]]]]]]]].
+        apply SOptd.mem_filterMap_if in Hh; destruct Hh as [q [Hq [Hb ->]]].
+        apply carriedb_iff in Hb; exists n, v, m, vs, q; auto.
+      - intros (n & v & m & vs & q & HD & Hq & Hc & ->).
         exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
-        apply SOptd.mem_filterMap; exists q; split; [exact Hq |].
-        cbn beta iota.
-        assert (carriedb pub (n, v) m q = true) as ->
-          by (apply carriedb_iff; exact Hc).
-        reflexivity.
+        apply SOptd.mem_filterMap_if; exists q; cbn beta.
+        rewrite carriedb_iff; auto.
     Qed.
 
     Lemma mem_reduceDepsIntToOcc : forall D pub origins y,
@@ -650,18 +638,13 @@ Module Visibility (N V : UsualOrderedType).
       rewrite SOdtd.mem_unionMap.
       split.
       - intros [[[n v] [m vs]] [HD Hh]]; cbn beta iota in Hh.
-        apply SOptd.mem_unionMap in Hh; destruct Hh as [q [Hq Hh]].
-        destruct (carriedb pub (n, v) m q) eqn:Hb;
-          [| destruct (SOptd.empty_in _ Hh)].
+        apply SOptd.mem_unionMap_if in Hh; destruct Hh as [q [Hq [Hb Hh]]].
         apply SOvtd.mem_map in Hh; destruct Hh as [u [Hu ->]].
-        exists n, v, m, vs, q, u; repeat split;
-          [exact HD | exact Hq | apply carriedb_iff; exact Hb | exact Hu].
-      - intros [n [v [m [vs [q [u [HD [Hq [Hc [Hu ->]]]]]]]]]].
+        apply carriedb_iff in Hb; exists n, v, m, vs, q, u; auto.
+      - intros (n & v & m & vs & q & u & HD & Hq & Hc & Hu & ->).
         exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
-        apply SOptd.mem_unionMap; exists q; split; [exact Hq |].
-        assert (carriedb pub (n, v) m q = true) as ->
-          by (apply carriedb_iff; exact Hc).
-        apply SOvtd.mem_map; exists u; split; [exact Hu | reflexivity].
+        apply SOptd.mem_unionMap_if; exists q; cbn beta.
+        rewrite carriedb_iff, SOvtd.mem_map; eauto.
     Qed.
 
     Lemma mem_reduceDepsIntToAgr : forall D pub origins y,
@@ -676,74 +659,58 @@ Module Visibility (N V : UsualOrderedType).
       rewrite SOdtd.mem_unionMap.
       split.
       - intros [[[n v] [m vs]] [HD Hh]]; cbn beta iota in Hh.
-        apply SOptd.mem_unionMap in Hh; destruct Hh as [q [Hq Hh]].
-        destruct (carriedb pub (n, v) m q) eqn:Hb;
-          [| destruct (SOptd.empty_in _ Hh)].
+        apply SOptd.mem_unionMap_if in Hh; destruct Hh as [q [Hq [Hb Hh]]].
         apply SOvtd.mem_map in Hh; destruct Hh as [u [Hu ->]].
-        exists n, v, m, vs, q, u; repeat split;
-          [exact HD | exact Hq | apply carriedb_iff; exact Hb | exact Hu].
-      - intros [n [v [m [vs [q [u [HD [Hq [Hc [Hu ->]]]]]]]]]].
+        apply carriedb_iff in Hb; exists n, v, m, vs, q, u; auto.
+      - intros (n & v & m & vs & q & u & HD & Hq & Hc & Hu & ->).
         exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
-        apply SOptd.mem_unionMap; exists q; split; [exact Hq |].
-        assert (carriedb pub (n, v) m q = true) as ->
-          by (apply carriedb_iff; exact Hc).
-        apply SOvtd.mem_map; exists u; split; [exact Hu | reflexivity].
+        apply SOptd.mem_unionMap_if; exists q; cbn beta.
+        rewrite carriedb_iff, SOvtd.mem_map; eauto.
     Qed.
 
+    (* Source and target name together fix which of the four parts an edge
+       is from, so inversion discards the others. *)
+    Inductive DepsSpec (R : PkgSet.t) (D : C.DepRel.t) (pub : PubRel.t)
+        (r : Pkg.t) : T.DepElt.t -> Prop :=
+    | DepsSelf : forall n v q,
+        PkgSet.In (n, v) R -> PkgSet.In q (potentialOrigins R D pub r) ->
+        Priv D pub (n, v) -> q <> (n, v) ->
+        DepsSpec R D pub r
+          ((Name.Occurrence n q, v),
+           (Name.Occurrence n (n, v), T.VSet.singleton v))
+    | DepsOccToInt : forall n v m vs q,
+        C.DepRel.In ((n, v), (m, vs)) D ->
+        PkgSet.In q (potentialOrigins R D pub r) -> Carried pub (n, v) m q ->
+        DepsSpec R D pub r
+          ((Name.Occurrence n q, v), (Name.Intermediate n v m q, embedVS vs))
+    | DepsIntToOcc : forall n v m vs q u,
+        C.DepRel.In ((n, v), (m, vs)) D ->
+        PkgSet.In q (potentialOrigins R D pub r) -> Carried pub (n, v) m q ->
+        VSet.In u vs ->
+        DepsSpec R D pub r
+          ((Name.Intermediate n v m q, u),
+           (Name.Occurrence m q, T.VSet.singleton u))
+    | DepsIntToAgr : forall n v m vs q u,
+        C.DepRel.In ((n, v), (m, vs)) D ->
+        PkgSet.In q (potentialOrigins R D pub r) -> Carried pub (n, v) m q ->
+        VSet.In u vs ->
+        DepsSpec R D pub r
+          ((Name.Intermediate n v m q, u),
+           (Name.Agreement n v m, T.VSet.singleton u)).
+
     Lemma mem_reduceDeps : forall R D pub r y,
-        T.DepRel.In y (reduceDeps R D pub r) <->
-        (exists n v q, PkgSet.In (n, v) R /\
-           PkgSet.In q (potentialOrigins R D pub r) /\
-           Priv D pub (n, v) /\ q <> (n, v) /\
-           y = ((Name.Occurrence n q, v),
-                (Name.Occurrence n (n, v), T.VSet.singleton v))) \/
-        ((exists n v m vs q,
-             C.DepRel.In ((n, v), (m, vs)) D /\
-             PkgSet.In q (potentialOrigins R D pub r) /\
-             Carried pub (n, v) m q /\
-             y = ((Name.Occurrence n q, v),
-                  (Name.Intermediate n v m q, embedVS vs))) \/
-         ((exists n v m vs q u,
-              C.DepRel.In ((n, v), (m, vs)) D /\
-              PkgSet.In q (potentialOrigins R D pub r) /\
-              Carried pub (n, v) m q /\ VSet.In u vs /\
-              y = ((Name.Intermediate n v m q, u),
-                   (Name.Occurrence m q, T.VSet.singleton u))) \/
-          (exists n v m vs q u,
-              C.DepRel.In ((n, v), (m, vs)) D /\
-              PkgSet.In q (potentialOrigins R D pub r) /\
-              Carried pub (n, v) m q /\ VSet.In u vs /\
-              y = ((Name.Intermediate n v m q, u),
-                   (Name.Agreement n v m, T.VSet.singleton u))))).
+        T.DepRel.In y (reduceDeps R D pub r) <-> DepsSpec R D pub r y.
     Proof.
       intros R D pub r y; unfold reduceDeps.
       rewrite !T.DepRel.union_spec, mem_reduceDepsSelf, mem_reduceDepsOccToInt,
-        mem_reduceDepsIntToOcc, mem_reduceDepsIntToAgr; reflexivity.
-    Qed.
-
-    Lemma mem_reduceReal_occurrence : forall R D pub r n v q,
-        PkgSet.In (n, v) R -> PkgSet.In q (potentialOrigins R D pub r) ->
-        T.PkgSet.In (Name.Occurrence n q, v) (reduceReal R D pub r).
-    Proof.
-      intros; apply mem_reduceReal.
-      left; exists n, v, q; repeat split; assumption.
-    Qed.
-
-    Lemma mem_reduceReal_intermediate : forall R D pub r n v m vs q u,
-        C.DepRel.In ((n, v), (m, vs)) D ->
-        PkgSet.In q (potentialOrigins R D pub r) -> VSet.In u vs ->
-        T.PkgSet.In (Name.Intermediate n v m q, u) (reduceReal R D pub r).
-    Proof.
-      intros; apply mem_reduceReal.
-      right; left; exists n, v, m, vs, q, u; repeat split; assumption.
-    Qed.
-
-    Lemma mem_reduceReal_agreement : forall R D pub r n v m vs u,
-        C.DepRel.In ((n, v), (m, vs)) D -> VSet.In u vs ->
-        T.PkgSet.In (Name.Agreement n v m, u) (reduceReal R D pub r).
-    Proof.
-      intros; apply mem_reduceReal.
-      right; right; exists n, v, m, vs, u; repeat split; assumption.
+        mem_reduceDepsIntToOcc, mem_reduceDepsIntToAgr.
+      split.
+      - intros [H | [H | [H | H]]]; mem_destruct; econstructor; eassumption.
+      - destruct 1 as [n v q | n v m vs q | n v m vs q u | n v m vs q u].
+        + left; exists n, v, q; auto.
+        + right; left; exists n, v, m, vs, q; auto.
+        + right; right; left; exists n, v, m, vs, q, u; auto.
+        + right; right; right; exists n, v, m, vs, q, u; auto.
     Qed.
 
     Lemma occurrence_mem_reduceReal : forall R D pub r n v q,
@@ -751,11 +718,7 @@ Module Visibility (N V : UsualOrderedType).
         PkgSet.In (n, v) R /\ PkgSet.In q (potentialOrigins R D pub r).
     Proof.
       intros R D pub r n v q H; apply mem_reduceReal in H.
-      destruct H as [[n' [v' [q' [HR [Hq Heq]]]]] | [H | H]].
-      - injection Heq as <- <- <-; split; [exact HR | exact Hq].
-      - destruct H as [n' [v' [m' [vs' [q' [u' [_ [_ [_ Heq]]]]]]]]];
-          discriminate Heq.
-      - destruct H as [n' [v' [m' [vs' [u' [_ [_ Heq]]]]]]]; discriminate Heq.
+      inversion H; subst; auto.
     Qed.
 
     Lemma mem_reduceDeps_self : forall R D pub r n v q,
@@ -764,10 +727,7 @@ Module Visibility (N V : UsualOrderedType).
         T.DepRel.In ((Name.Occurrence n q, v),
                      (Name.Occurrence n (n, v), T.VSet.singleton v))
           (reduceDeps R D pub r).
-    Proof.
-      intros; apply mem_reduceDeps.
-      left; exists n, v, q; repeat split; assumption.
-    Qed.
+    Proof. intros; apply mem_reduceDeps; constructor; assumption. Qed.
 
     Lemma mem_reduceDeps_occ2int : forall R D pub r n v m vs q,
         C.DepRel.In ((n, v), (m, vs)) D ->
@@ -775,10 +735,7 @@ Module Visibility (N V : UsualOrderedType).
         T.DepRel.In ((Name.Occurrence n q, v),
                      (Name.Intermediate n v m q, embedVS vs))
           (reduceDeps R D pub r).
-    Proof.
-      intros; apply mem_reduceDeps.
-      right; left; exists n, v, m, vs, q; repeat split; assumption.
-    Qed.
+    Proof. intros; apply mem_reduceDeps; constructor; assumption. Qed.
 
     Lemma mem_reduceDeps_int2occ : forall R D pub r n v m vs q u,
         C.DepRel.In ((n, v), (m, vs)) D ->
@@ -787,10 +744,7 @@ Module Visibility (N V : UsualOrderedType).
         T.DepRel.In ((Name.Intermediate n v m q, u),
                      (Name.Occurrence m q, T.VSet.singleton u))
           (reduceDeps R D pub r).
-    Proof.
-      intros; apply mem_reduceDeps.
-      right; right; left; exists n, v, m, vs, q, u; repeat split; assumption.
-    Qed.
+    Proof. intros; apply mem_reduceDeps; econstructor; eassumption. Qed.
 
     Lemma mem_reduceDeps_int2agr : forall R D pub r n v m vs q u,
         C.DepRel.In ((n, v), (m, vs)) D ->
@@ -799,10 +753,7 @@ Module Visibility (N V : UsualOrderedType).
         T.DepRel.In ((Name.Intermediate n v m q, u),
                      (Name.Agreement n v m, T.VSet.singleton u))
           (reduceDeps R D pub r).
-    Proof.
-      intros; apply mem_reduceDeps.
-      right; right; right; exists n, v, m, vs, q, u; repeat split; assumption.
-    Qed.
+    Proof. intros; apply mem_reduceDeps; econstructor; eassumption. Qed.
 
     Definition visibilityResolution (R : PkgSet.t) (D : C.DepRel.t)
         (pub : PubRel.t) (r : Pkg.t) (S : T.PkgSet.t) : PkgSet.t :=
@@ -874,18 +825,13 @@ Module Visibility (N V : UsualOrderedType).
       intros R D pub r S pair; unfold parents; rewrite SOdpp.mem_unionMap.
       split.
       - intros [[[n v] [m vs]] [HD Hh]]; cbn beta iota in Hh.
-        apply SOvpp.mem_filterMap in Hh; destruct Hh as [u [Hu Hc]];
-          cbn beta iota in Hc.
-        destruct (parentGuardb R D pub r S n v m u) eqn:Hb; [| discriminate].
-        injection Hc as <-.
-        apply parentGuardb_iff in Hb; destruct Hb as [H1 H2].
-        exists n, v, m, vs, u; repeat split; assumption.
-      - intros [n [v [m [vs [u [HD [Hu [Hagr [Hnv ->]]]]]]]]].
+        apply SOvpp.mem_filterMap_if in Hh; destruct Hh as [u [Hu [Hb ->]]].
+        apply parentGuardb_iff in Hb; destruct Hb.
+        exists n, v, m, vs, u; auto.
+      - intros (n & v & m & vs & u & HD & Hu & Hagr & Hnv & ->).
         exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
-        apply SOvpp.mem_filterMap; exists u; split; [exact Hu | cbn beta iota].
-        assert (parentGuardb R D pub r S n v m u = true) as ->
-          by (apply parentGuardb_iff; split; assumption).
-        reflexivity.
+        apply SOvpp.mem_filterMap_if; exists u; cbn beta.
+        rewrite parentGuardb_iff; auto.
     Qed.
 
     Lemma occurrence_step : forall R D pub r S (n : N.t) (v : V.t) (m : N.t)
@@ -1136,25 +1082,15 @@ Module Visibility (N V : UsualOrderedType).
       rewrite SOptp.mem_unionMap.
       split.
       - intros [[n v] [HS Hh]]; cbn beta iota in Hh.
-        apply SOptp.mem_filterMap in Hh; destruct Hh as [q [Hq Hc]];
-          cbn beta iota in Hc.
-        destruct (andb (isOriginb D pub r S q)
-                    (PkgSet.mem (n, v) (sub pub pi q))) eqn:Hb;
-          [| discriminate].
-        injection Hc as <-.
-        apply Bool.andb_true_iff in Hb; destruct Hb as [H1 H2].
-        apply isOriginb_iff in H1.
-        apply PkgSet.mem_spec in H2; apply mem_sub in H2.
-        exists n, v, q; repeat split; assumption.
-      - intros [n [v [q [HS [Hq [Ho [Hins ->]]]]]]].
+        apply SOptp.mem_filterMap_if in Hh; destruct Hh as [q [Hq [Hb ->]]].
+        cbn beta in Hb; rewrite Bool.andb_true_iff, isOriginb_iff,
+          PkgSet.mem_spec, mem_sub in Hb.
+        destruct Hb; exists n, v, q; auto.
+      - intros (n & v & q & HS & Hq & Ho & Hins & ->).
         exists (n, v); split; [exact HS | cbn beta iota].
-        apply SOptp.mem_filterMap; exists q; split; [exact Hq | cbn beta iota].
-        assert (andb (isOriginb D pub r S q)
-                  (PkgSet.mem (n, v) (sub pub pi q)) = true) as ->
-          by (apply Bool.andb_true_iff; split;
-              [apply isOriginb_iff; exact Ho
-              | apply PkgSet.mem_spec, mem_sub; exact Hins]).
-        reflexivity.
+        apply SOptp.mem_filterMap_if; exists q; cbn beta.
+        rewrite Bool.andb_true_iff, isOriginb_iff, PkgSet.mem_spec, mem_sub;
+          auto.
     Qed.
 
     Lemma mem_coreResolutionIntermediate : forall D pub r S pi origins y,
@@ -1169,36 +1105,21 @@ Module Visibility (N V : UsualOrderedType).
       rewrite SOdtp.mem_unionMap.
       split.
       - intros [[[n v] [m vs]] [HD Hh]]; cbn beta iota in Hh.
-        apply SOptp.mem_unionMap in Hh; destruct Hh as [q [Hq Hh]].
-        destruct (andb (isOriginb D pub r S q)
-                    (andb (PkgSet.mem (n, v) (sub pub pi q))
-                       (carriedb pub (n, v) m q))) eqn:Hb;
-          [| destruct (SOptp.empty_in _ Hh)].
-        apply SOvtp.mem_filterMap in Hh; destruct Hh as [u [Hu Hc]];
-          cbn beta iota in Hc.
-        destruct (edgeb pi n v m u) eqn:Hp; [| discriminate].
-        injection Hc as <-.
-        apply Bool.andb_true_iff in Hb; destruct Hb as [H1 Hb].
-        apply Bool.andb_true_iff in Hb; destruct Hb as [H2 H3].
-        apply isOriginb_iff in H1.
-        apply PkgSet.mem_spec in H2; apply mem_sub in H2.
-        apply carriedb_iff in H3; apply edgeb_iff in Hp.
-        exists n, v, m, vs, q, u; repeat split; assumption.
-      - intros [n [v [m [vs [q [u
-            [HD [Hq [Hu [Ho [Hins [Hc [Hpi ->]]]]]]]]]]]]].
+        apply SOptp.mem_unionMap_if in Hh; destruct Hh as [q [Hq [Hb Hh]]].
+        apply SOvtp.mem_filterMap_if in Hh; destruct Hh as [u [Hu [Hp ->]]].
+        cbn beta in Hb, Hp; rewrite edgeb_iff in Hp.
+        rewrite !Bool.andb_true_iff, isOriginb_iff, PkgSet.mem_spec, mem_sub,
+          carriedb_iff in Hb.
+        destruct Hb as (Ho & Hins & Hc); exists n, v, m, vs, q, u; auto 10.
+      - intros (n & v & m & vs & q & u & HD & Hq & Hu & Ho & Hins & Hc & Hpi
+                & ->).
         exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
-        apply SOptp.mem_unionMap; exists q; split; [exact Hq |].
-        assert (andb (isOriginb D pub r S q)
-                  (andb (PkgSet.mem (n, v) (sub pub pi q))
-                     (carriedb pub (n, v) m q)) = true) as ->.
-        { apply Bool.andb_true_iff; split; [apply isOriginb_iff; exact Ho |].
-          apply Bool.andb_true_iff; split;
-            [apply PkgSet.mem_spec, mem_sub; exact Hins
-            | apply carriedb_iff; exact Hc]. }
-        apply SOvtp.mem_filterMap; exists u; split; [exact Hu | cbn beta iota].
-        assert (edgeb pi n v m u = true) as ->
-          by (apply edgeb_iff; exact Hpi).
-        reflexivity.
+        apply SOptp.mem_unionMap_if; exists q; cbn beta.
+        rewrite !Bool.andb_true_iff, isOriginb_iff, PkgSet.mem_spec, mem_sub,
+          carriedb_iff.
+        split; [exact Hq | split; [auto |]].
+        apply SOvtp.mem_filterMap_if; exists u; cbn beta.
+        rewrite edgeb_iff; auto.
     Qed.
 
     Lemma mem_coreResolutionAgreement : forall D S pi y,
@@ -1212,76 +1133,47 @@ Module Visibility (N V : UsualOrderedType).
       rewrite SOdtp.mem_unionMap.
       split.
       - intros [[[n v] [m vs]] [HD Hh]]; cbn beta iota in Hh.
-        destruct (PkgSet.mem (n, v) S) eqn:Hs;
-          [| destruct (SOptp.empty_in _ Hh)].
-        apply SOvtp.mem_filterMap in Hh; destruct Hh as [u [Hu Hc]];
-          cbn beta iota in Hc.
-        destruct (edgeb pi n v m u) eqn:Hp; [| discriminate].
-        injection Hc as <-.
+        apply SOptp.in_if_empty in Hh; destruct Hh as [Hs Hh].
+        apply SOvtp.mem_filterMap_if in Hh; destruct Hh as [u [Hu [Hp ->]]].
         apply PkgSet.mem_spec in Hs; apply edgeb_iff in Hp.
-        exists n, v, m, vs, u; repeat split; assumption.
-      - intros [n [v [m [vs [u [HD [Hu [HS [Hpi ->]]]]]]]]].
+        exists n, v, m, vs, u; auto.
+      - intros (n & v & m & vs & u & HD & Hu & HS & Hpi & ->).
         exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
-        assert (PkgSet.mem (n, v) S = true) as ->
-          by (apply PkgSet.mem_spec; exact HS).
-        apply SOvtp.mem_filterMap; exists u; split; [exact Hu | cbn beta iota].
-        assert (edgeb pi n v m u = true) as ->
-          by (apply edgeb_iff; exact Hpi).
-        reflexivity.
+        apply SOptp.in_if_empty; rewrite PkgSet.mem_spec; split; [exact HS |].
+        apply SOvtp.mem_filterMap_if; exists u; cbn beta.
+        rewrite edgeb_iff; auto.
     Qed.
 
-    Lemma mem_coreResolution : forall R D pub r S pi y,
-        T.PkgSet.In y (coreResolution R D pub r S pi) <->
-        (exists n v q, PkgSet.In (n, v) S /\
-           PkgSet.In q (potentialOrigins R D pub r) /\
-           IsOrigin D pub r S q /\ InSub pub pi q (n, v) /\
-           y = (Name.Occurrence n q, v)) \/
-        ((exists n v m vs q u,
-             C.DepRel.In ((n, v), (m, vs)) D /\
-             PkgSet.In q (potentialOrigins R D pub r) /\ VSet.In u vs /\
-             IsOrigin D pub r S q /\ InSub pub pi q (n, v) /\
-             Carried pub (n, v) m q /\ ParentRel.In ((m, u), (n, v)) pi /\
-             y = (Name.Intermediate n v m q, u)) \/
-         (exists n v m vs u,
-             C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs /\
-             PkgSet.In (n, v) S /\ ParentRel.In ((m, u), (n, v)) pi /\
-             y = (Name.Agreement n v m, u))).
-    Proof.
-      intros R D pub r S pi y; unfold coreResolution.
-      rewrite !T.PkgSet.union_spec, mem_coreResolutionOccurrence,
-        mem_coreResolutionIntermediate, mem_coreResolutionAgreement;
-        reflexivity.
-    Qed.
-
-    Lemma mem_coreResolution_occurrence : forall R D pub r S pi n v q,
+    Inductive CoreSpec (R : PkgSet.t) (D : C.DepRel.t) (pub : PubRel.t)
+        (r : Pkg.t) (S : PkgSet.t) (pi : ParentRel.t) : T.Pkg.t -> Prop :=
+    | CoreOccurrence : forall n v q,
         PkgSet.In (n, v) S -> PkgSet.In q (potentialOrigins R D pub r) ->
         IsOrigin D pub r S q -> InSub pub pi q (n, v) ->
-        T.PkgSet.In (Name.Occurrence n q, v) (coreResolution R D pub r S pi).
-    Proof.
-      intros; apply mem_coreResolution.
-      left; exists n, v, q; repeat split; assumption.
-    Qed.
-
-    Lemma mem_coreResolution_intermediate :
-      forall R D pub r S pi n v m vs q u,
+        CoreSpec R D pub r S pi (Name.Occurrence n q, v)
+    | CoreIntermediate : forall n v m vs q u,
         C.DepRel.In ((n, v), (m, vs)) D ->
         PkgSet.In q (potentialOrigins R D pub r) -> VSet.In u vs ->
         IsOrigin D pub r S q -> InSub pub pi q (n, v) ->
         Carried pub (n, v) m q -> ParentRel.In ((m, u), (n, v)) pi ->
-        T.PkgSet.In (Name.Intermediate n v m q, u)
-          (coreResolution R D pub r S pi).
-    Proof.
-      intros; apply mem_coreResolution.
-      right; left; exists n, v, m, vs, q, u; repeat split; assumption.
-    Qed.
-
-    Lemma mem_coreResolution_agreement : forall R D pub r S pi n v m vs u,
+        CoreSpec R D pub r S pi (Name.Intermediate n v m q, u)
+    | CoreAgreement : forall n v m vs u,
         C.DepRel.In ((n, v), (m, vs)) D -> VSet.In u vs ->
         PkgSet.In (n, v) S -> ParentRel.In ((m, u), (n, v)) pi ->
-        T.PkgSet.In (Name.Agreement n v m, u) (coreResolution R D pub r S pi).
+        CoreSpec R D pub r S pi (Name.Agreement n v m, u).
+
+    Lemma mem_coreResolution : forall R D pub r S pi y,
+        T.PkgSet.In y (coreResolution R D pub r S pi) <->
+        CoreSpec R D pub r S pi y.
     Proof.
-      intros; apply mem_coreResolution.
-      right; right; exists n, v, m, vs, u; repeat split; assumption.
+      intros R D pub r S pi y; unfold coreResolution.
+      rewrite !T.PkgSet.union_spec, mem_coreResolutionOccurrence,
+        mem_coreResolutionIntermediate, mem_coreResolutionAgreement.
+      split.
+      - intros [H | [H | H]]; mem_destruct; econstructor; eassumption.
+      - destruct 1 as [n v q | n v m vs q u | n v m vs u].
+        + left; exists n, v, q; auto.
+        + right; left; exists n, v, m, vs, q, u; auto 10.
+        + right; right; exists n, v, m, vs, u; auto.
     Qed.
 
     Theorem visibility_completeness :
@@ -1296,137 +1188,52 @@ Module Visibility (N V : UsualOrderedType).
       destruct Hres as [Hconc Hvv].
       destruct Hconc as [Hsub Hroot Hpc Hvg Hps].
       constructor.
-      - intros y Hy; apply mem_coreResolution in Hy.
-        destruct Hy as [Hy | [Hy | Hy]].
-        + destruct Hy as [n [v [q [HS [Hq [_ [_ ->]]]]]]].
-          exact (mem_reduceReal_occurrence R D pub r n v q (Hsub _ HS) Hq).
-        + destruct Hy
-            as [n [v [m [vs [q [u [HD [Hq [Hu [_ [_ [_ [_ ->]]]]]]]]]]]]].
-          exact (mem_reduceReal_intermediate R D pub r n v m vs q u HD Hq Hu).
-        + destruct Hy as [n [v [m [vs [u [HD [Hu [_ [_ ->]]]]]]]]].
-          exact (mem_reduceReal_agreement R D pub r n v m vs u HD Hu).
+      - intros y Hy; apply mem_coreResolution in Hy; apply mem_reduceReal.
+        destruct Hy; econstructor; try apply Hsub; eassumption.
       - destruct r as [rn rv].
-        exact (mem_coreResolution_occurrence R D pub (rn, rv) S pi rn rv
-                 (rn, rv) Hroot
-                 (proj2 (mem_potentialOrigins R D pub (rn, rv) (rn, rv))
-                    (or_introl eq_refl))
-                 (or_introl eq_refl) (InSubSelf pub pi (rn, rv))).
-      - intros y Hy tn tvs Hd.
-        apply mem_coreResolution in Hy; apply mem_reduceDeps in Hd.
-        destruct Hy as [Hy | [Hy | Hy]].
-        + destruct Hy as [n [v [q [HS [Hq [Ho [Hins ->]]]]]]].
-          destruct Hd as [Hd | [Hd | [Hd | Hd]]].
-          * destruct Hd as [n1 [v1 [q1 [HR1 [Hq1 [Hpriv1 [Hne1 Heq]]]]]]].
-            injection Heq as <- <- <- -> ->.
-            exists v; split; [apply SOvv.singleton_in; reflexivity |].
-            apply (mem_coreResolution_occurrence R D pub r S pi n v (n, v));
-              [exact HS
-              | apply mem_potentialOrigins; right; split; assumption
-              | right; split; assumption
-              | apply InSubSelf].
-          * destruct Hd as [n1 [v1 [m1 [vs1 [q1 [HD1 [Hq1 [Hc1 Heq]]]]]]]].
-            injection Heq as <- <- <- -> ->.
-            destruct (Hpc (n, v) HS m1 vs1 HD1) as [u [[Hu [HmS Hpi]] _]].
+        apply mem_coreResolution; constructor;
+          [exact Hroot | apply mem_potentialOrigins; left; reflexivity
+          | left; reflexivity | apply InSubSelf].
+      - intros y Hy; apply mem_coreResolution in Hy.
+        destruct Hy as [n v q HS Hq Ho Hins
+                       | n v m vs q u HD Hq Hu Ho Hins Hc Hpi
+                       | n v m vs u HD Hu HS Hpi];
+          intros tn tvs Hd; apply mem_reduceDeps in Hd.
+        + inversion Hd as [n1 v1 q1 HR1 Hq1 Hpriv1 Hne1
+                          | n1 v1 m1 vs1 q1 HD1 Hq1 Hc1 | |]; subst.
+          * eexists; split; [apply SOvv.singleton_in; reflexivity |].
+            apply mem_coreResolution; constructor;
+              [exact HS | apply mem_potentialOrigins; right; split; assumption
+              | right; split; assumption | apply InSubSelf].
+          * destruct (Hpc _ HS _ _ HD1) as [u [[Hu [HmS Hpi]] _]].
             exists u; split; [apply mem_embedVS; exact Hu |].
-            exact (mem_coreResolution_intermediate R D pub r S pi n v m1 vs1
-                     q u HD1 Hq Hu Ho Hins Hc1 Hpi).
-          * destruct Hd
-              as [n1 [v1 [m1 [vs1 [q1 [u1 [_ [_ [_ [_ Heq]]]]]]]]]];
-              discriminate Heq.
-          * destruct Hd
-              as [n1 [v1 [m1 [vs1 [q1 [u1 [_ [_ [_ [_ Heq]]]]]]]]]];
-              discriminate Heq.
-        + destruct Hy
-            as [n [v [m [vs [q [u
-                [HD [Hq [Hu [Ho [Hins [Hc [Hpi ->]]]]]]]]]]]]].
-          destruct Hd as [Hd | [Hd | [Hd | Hd]]].
-          * destruct Hd as [n1 [v1 [q1 [_ [_ [_ [_ Heq]]]]]]];
-              discriminate Heq.
-          * destruct Hd as [n1 [v1 [m1 [vs1 [q1 [_ [_ [_ Heq]]]]]]]];
-              discriminate Heq.
-          * destruct Hd
-              as [n1 [v1 [m1 [vs1 [q1 [u1 [HD1 [Hq1 [Hc1 [Hu1 Heq]]]]]]]]]].
-            injection Heq as <- <- <- <- <- -> ->.
-            exists u; split; [apply SOvv.singleton_in; reflexivity |].
-            apply (mem_coreResolution_occurrence R D pub r S pi m u q);
-              [exact (proj1 (Hps _ _ Hpi)) | exact Hq | exact Ho |].
-            destruct Hc as [Hpub | Heq0];
-              [exact (InSubPubStep pub pi q (n, v) m u Hins Hpi Hpub) |].
-            rewrite Heq0 in Hpi; exact (InSubChild pub pi q (m, u) Hpi).
-          * destruct Hd
-              as [n1 [v1 [m1 [vs1 [q1 [u1 [HD1 [Hq1 [Hc1 [Hu1 Heq]]]]]]]]]].
-            injection Heq as <- <- <- <- <- -> ->.
-            exists u; split; [apply SOvv.singleton_in; reflexivity |].
-            exact (mem_coreResolution_agreement R D pub r S pi n v m vs1 u
-                     HD1 Hu1 (proj2 (Hps _ _ Hpi)) Hpi).
-        + destruct Hy as [n [v [m [vs [u [HD [Hu [HS [Hpi ->]]]]]]]]].
-          destruct Hd as [Hd | [Hd | [Hd | Hd]]].
-          * destruct Hd as [n1 [v1 [q1 [_ [_ [_ [_ Heq]]]]]]];
-              discriminate Heq.
-          * destruct Hd as [n1 [v1 [m1 [vs1 [q1 [_ [_ [_ Heq]]]]]]]];
-              discriminate Heq.
-          * destruct Hd
-              as [n1 [v1 [m1 [vs1 [q1 [u1 [_ [_ [_ [_ Heq]]]]]]]]]];
-              discriminate Heq.
-          * destruct Hd
-              as [n1 [v1 [m1 [vs1 [q1 [u1 [_ [_ [_ [_ Heq]]]]]]]]]];
-              discriminate Heq.
+            apply mem_coreResolution; econstructor; eassumption.
+        + inversion Hd as [| | n1 v1 m1 vs1 q1 u1 HD1 Hq1 Hc1 Hu1
+                          | n1 v1 m1 vs1 q1 u1 HD1 Hq1 Hc1 Hu1]; subst;
+            (eexists; split; [apply SOvv.singleton_in; reflexivity |]);
+            apply mem_coreResolution.
+          * constructor; [exact (proj1 (Hps _ _ Hpi)) | exact Hq | exact Ho |].
+            destruct Hc as [Hpub | <-];
+              [eapply InSubPubStep; eassumption | apply InSubChild; exact Hpi].
+          * econstructor;
+              [exact HD1 | exact Hu1 | exact (proj2 (Hps _ _ Hpi)) | exact Hpi].
+        + inversion Hd.
       - intros n w1 w2 H1 H2.
         apply mem_coreResolution in H1; apply mem_coreResolution in H2.
-        destruct H1 as [H1 | [H1 | H1]]; destruct H2 as [H2 | [H2 | H2]].
-        + destruct H1 as [n1 [v1 [q1 [HS1 [Hq1 [Ho1 [Hins1 Heq1]]]]]]].
-          destruct H2 as [n2 [v2 [q2 [HS2 [Hq2 [Ho2 [Hins2 Heq2]]]]]]].
-          injection Heq1 as -> <-; injection Heq2 as <- <- <-.
-          exact (Hvv q1 (isOrigin_mem D pub r S q1 Ho1 Hroot) n1 w1 w2
-                   Hins1 Hins2).
-        + destruct H1 as [n1 [v1 [q1 [_ [_ [_ [_ Heq1]]]]]]].
-          destruct H2
-            as [n2 [v2 [m2 [vs2 [q2 [u2 [_ [_ [_ [_ [_ [_ [_ Heq2]]]]]]]]]]]]].
-          injection Heq1 as -> <-; discriminate Heq2.
-        + destruct H1 as [n1 [v1 [q1 [_ [_ [_ [_ Heq1]]]]]]].
-          destruct H2 as [n2 [v2 [m2 [vs2 [u2 [_ [_ [_ [_ Heq2]]]]]]]]].
-          injection Heq1 as -> <-; discriminate Heq2.
-        + destruct H1
-            as [n1 [v1 [m1 [vs1 [q1 [u1 [_ [_ [_ [_ [_ [_ [_ Heq1]]]]]]]]]]]]].
-          destruct H2 as [n2 [v2 [q2 [_ [_ [_ [_ Heq2]]]]]]].
-          injection Heq1 as -> <-; discriminate Heq2.
-        + destruct H1
-            as [n1 [v1 [m1 [vs1 [q1 [u1
-                [HD1 [_ [Hu1 [_ [_ [_ [Hpi1 Heq1]]]]]]]]]]]]].
-          destruct H2
-            as [n2 [v2 [m2 [vs2 [q2 [u2
-                [HD2 [_ [Hu2 [_ [_ [_ [Hpi2 Heq2]]]]]]]]]]]]].
-          injection Heq1 as -> <-; injection Heq2 as <- <- <- <- <-.
-          assert (vs2 = vs1) as -> by exact (Hfunc _ _ _ _ HD2 HD1).
-          destruct (Hpc (n1, v1) (proj2 (Hps _ _ Hpi1)) m1 vs1 HD1)
-            as [u0 [_ Huniq0]].
-          pose proof (Huniq0 w1 (conj Hu1 (conj (proj1 (Hps _ _ Hpi1)) Hpi1)))
-            as E1.
-          pose proof (Huniq0 w2 (conj Hu2 (conj (proj1 (Hps _ _ Hpi2)) Hpi2)))
-            as E2.
-          congruence.
-        + destruct H1
-            as [n1 [v1 [m1 [vs1 [q1 [u1 [_ [_ [_ [_ [_ [_ [_ Heq1]]]]]]]]]]]]].
-          destruct H2 as [n2 [v2 [m2 [vs2 [u2 [_ [_ [_ [_ Heq2]]]]]]]]].
-          injection Heq1 as -> <-; discriminate Heq2.
-        + destruct H1 as [n1 [v1 [m1 [vs1 [u1 [_ [_ [_ [_ Heq1]]]]]]]]].
-          destruct H2 as [n2 [v2 [q2 [_ [_ [_ [_ Heq2]]]]]]].
-          injection Heq1 as -> <-; discriminate Heq2.
-        + destruct H1 as [n1 [v1 [m1 [vs1 [u1 [_ [_ [_ [_ Heq1]]]]]]]]].
-          destruct H2
-            as [n2 [v2 [m2 [vs2 [q2 [u2 [_ [_ [_ [_ [_ [_ [_ Heq2]]]]]]]]]]]]].
-          injection Heq1 as -> <-; discriminate Heq2.
-        + destruct H1
-            as [n1 [v1 [m1 [vs1 [u1 [HD1 [Hu1 [HS1 [Hpi1 Heq1]]]]]]]]].
-          destruct H2
-            as [n2 [v2 [m2 [vs2 [u2 [HD2 [Hu2 [_ [Hpi2 Heq2]]]]]]]]].
-          injection Heq1 as -> <-; injection Heq2 as <- <- <- <-.
-          assert (vs2 = vs1) as -> by exact (Hfunc _ _ _ _ HD2 HD1).
-          destruct (Hpc (n1, v1) HS1 m1 vs1 HD1) as [u0 [_ Huniq0]].
-          pose proof (Huniq0 w1 (conj Hu1 (conj (proj1 (Hps _ _ Hpi1)) Hpi1)))
-            as E1.
-          pose proof (Huniq0 w2 (conj Hu2 (conj (proj1 (Hps _ _ Hpi2)) Hpi2)))
-            as E2.
+        inversion H1 as [n1 v1 q1 HS1 _ Ho1 Hins1
+                        | n1 v1 m1 vs1 q1 u1 HD1 _ Hu1 _ _ _ Hpi1
+                        | n1 v1 m1 vs1 u1 HD1 Hu1 _ Hpi1]; subst;
+          inversion H2 as [n2 v2 q2 HS2 _ Ho2 Hins2
+                          | n2 v2 m2 vs2 q2 u2 HD2 _ Hu2 _ _ _ Hpi2
+                          | n2 v2 m2 vs2 u2 HD2 Hu2 _ Hpi2]; subst;
+          [exact (Hvv _ (isOrigin_mem D pub r S _ Ho1 Hroot) _ _ _
+                    Hins1 Hins2) | |].
+        all: assert (vs2 = vs1) as -> by exact (Hfunc _ _ _ _ HD2 HD1);
+          destruct (Hpc _ (proj2 (Hps _ _ Hpi1)) _ _ HD1) as [u0 [_ Huniq0]];
+          pose proof (Huniq0 _ (conj Hu1 (conj (proj1 (Hps _ _ Hpi1)) Hpi1)))
+            as E1;
+          pose proof (Huniq0 _ (conj Hu2 (conj (proj1 (Hps _ _ Hpi2)) Hpi2)))
+            as E2;
           congruence.
     Qed.
 
@@ -1500,30 +1307,11 @@ Module Visibility (N V : UsualOrderedType).
           PkgSet.In q (potentialOrigins R D pub r).
       Proof.
         intros R D pub r p n h q Hin Hname; apply mem_reduceDeps in Hin.
-        destruct Hin as [H | [H | [H | H]]].
-        - destruct H as [n1 [v1 [q1 [HR [_ [Hpriv [_ Heq]]]]]]].
-          apply (f_equal (fun e => fst (snd e))) in Heq;
-            cbn [fst snd] in Heq; subst n.
+        inversion Hin; subst;
           destruct Hname as [[n2 Hn] | [n2 [v2 [m2 Hn]]]];
-            [| discriminate Hn].
-          injection Hn as _ <-.
-          apply mem_potentialOrigins; right; split; [exact HR | exact Hpriv].
-        - destruct H as [n1 [v1 [m1 [vs [q1 [_ [Hq1 [_ Heq]]]]]]]].
-          apply (f_equal (fun e => fst (snd e))) in Heq;
-            cbn [fst snd] in Heq; subst n.
-          destruct Hname as [[n2 Hn] | [n2 [v2 [m2 Hn]]]];
-            [discriminate Hn |].
-          injection Hn as _ _ _ <-; exact Hq1.
-        - destruct H as [n1 [v1 [m1 [vs [q1 [u1 [_ [Hq1 [_ [_ Heq]]]]]]]]]].
-          apply (f_equal (fun e => fst (snd e))) in Heq;
-            cbn [fst snd] in Heq; subst n.
-          destruct Hname as [[n2 Hn] | [n2 [v2 [m2 Hn]]]];
-            [| discriminate Hn].
-          injection Hn as _ <-; exact Hq1.
-        - destruct H as [n1 [v1 [m1 [vs [q1 [u1 [_ [_ [_ [_ Heq]]]]]]]]]].
-          apply (f_equal (fun e => fst (snd e))) in Heq;
-            cbn [fst snd] in Heq; subst n.
-          destruct Hname as [[n2 Hn] | [n2 [v2 [m2 Hn]]]]; discriminate Hn.
+          try discriminate Hn; injection Hn; intros; subst;
+          first [assumption
+                | apply mem_potentialOrigins; right; split; assumption].
       Qed.
 
       (* Unreached, q need not be a potential origin and the name is empty. *)
@@ -1548,7 +1336,7 @@ Module Visibility (N V : UsualOrderedType).
         split.
         - intro Hin;
             exact (proj1 (occurrence_mem_reduceReal R D pub r n v q Hin)).
-        - intro HR; exact (mem_reduceReal_occurrence R D pub r n v q HR Hq).
+        - intro HR; apply mem_reduceReal; constructor; assumption.
       Qed.
 
       (* Membership gives R (n, v) and q's origin status for the fibre. *)
@@ -1566,43 +1354,24 @@ Module Visibility (N V : UsualOrderedType).
         destruct (occurrence_mem_reduceReal R D pub r n v q Hmem) as [HR Hq].
         apply T.dependees_ext; intros [tn tvs].
         rewrite !mem_reduceDeps.
-        split.
-        - intros [H | [H | [H | H]]].
-          + destruct H as [n1 [v1 [q1 [_ [_ [Hpriv [Hne Heq]]]]]]].
-            injection Heq as <- <- <- -> ->.
-            left; exists n, v, q; repeat split.
-            * apply SOppp.singleton_in; reflexivity.
-            * apply mem_potentialOrigins; left; reflexivity.
-            * apply priv_tailFibre; exact Hpriv.
-            * exact Hne.
-          + destruct H as [n1 [v1 [m [vs [q1 [HD1 [_ [Hc Heq]]]]]]]].
-            injection Heq as <- <- <- -> ->.
-            right; left; exists n, v, m, vs, q; repeat split.
-            * apply DepFibred.mem_tailFibre; split; [exact HD1 | reflexivity].
-            * apply mem_potentialOrigins; left; reflexivity.
-            * apply carried_tailFibre; exact Hc.
-          + destruct H as [n1 [v1 [m [vs [q1 [u [_ [_ [_ [_ Heq]]]]]]]]]];
-              discriminate Heq.
-          + destruct H as [n1 [v1 [m [vs [q1 [u [_ [_ [_ [_ Heq]]]]]]]]]];
-              discriminate Heq.
-        - intros [H | [H | [H | H]]].
-          + destruct H as [n1 [v1 [q1 [_ [_ [Hpriv [Hne Heq]]]]]]].
-            injection Heq as <- <- <- -> ->.
-            left; exists n, v, q; repeat split.
-            * exact HR.
-            * exact Hq.
-            * apply priv_tailFibre; exact Hpriv.
-            * exact Hne.
-          + destruct H as [n1 [v1 [m [vs [q1 [HD1 [_ [Hc Heq]]]]]]]].
-            injection Heq as <- <- <- -> ->.
-            right; left; exists n, v, m, vs, q; repeat split.
-            * exact (DepFibred.tailFibre_subset D (n, v) _ HD1).
-            * exact Hq.
-            * apply carried_tailFibre; exact Hc.
-          + destruct H as [n1 [v1 [m [vs [q1 [u [_ [_ [_ [_ Heq]]]]]]]]]];
-              discriminate Heq.
-          + destruct H as [n1 [v1 [m [vs [q1 [u [_ [_ [_ [_ Heq]]]]]]]]]];
-              discriminate Heq.
+        split; intro H;
+          inversion H as [n1 v1 q1 HR1 Hq1 Hpriv Hne
+                         | n1 v1 m vs q1 HD1 Hq1 Hc | |]; subst.
+        - constructor.
+          + apply SOppp.singleton_in; reflexivity.
+          + apply mem_potentialOrigins; left; reflexivity.
+          + apply priv_tailFibre; exact Hpriv.
+          + exact Hne.
+        - constructor.
+          + apply DepFibred.mem_tailFibre; split; [exact HD1 | reflexivity].
+          + apply mem_potentialOrigins; left; reflexivity.
+          + apply carried_tailFibre; exact Hc.
+        - constructor;
+            [exact HR | exact Hq | apply priv_tailFibre; exact Hpriv
+            | exact Hne].
+        - constructor;
+            [exact (DepFibred.tailFibre_subset D _ _ HD1) | exact Hq
+            | apply carried_tailFibre; exact Hc].
       Qed.
 
       (* Unreached, q need not be a potential origin and the name is empty. *)
@@ -1622,17 +1391,9 @@ Module Visibility (N V : UsualOrderedType).
         apply T.VSet.ext; intro u.
         rewrite T.mem_versions, mem_embedVS, mem_depRange, mem_reduceReal.
         split.
-        - intros [H | [H | H]].
-          + destruct H as [n1 [v1 [q1 [_ [_ Heq]]]]]; discriminate Heq.
-          + destruct H as [n1 [v1 [m1 [vs [q1 [u1 [HD [_ [Hu Heq]]]]]]]]].
-            injection Heq as -> -> -> -> ->.
-            exists vs; split; [exact HD | exact Hu].
-          + destruct H as [n1 [v1 [m1 [vs [u1 [_ [_ Heq]]]]]]];
-              discriminate Heq.
-        - intros [vs [HD Hu]].
-          right; left; exists n, v, m, vs, q, u.
-          split; [exact HD |].
-          split; [exact Hq | split; [exact Hu | reflexivity]].
+        - intro H; inversion H as [| n1 v1 m1 vs q1 u1 HD _ Hu |]; subst.
+          exists vs; split; [exact HD | exact Hu].
+        - intros [vs [HD Hu]]; econstructor; eassumption.
       Qed.
 
       (* Membership is what makes q a potential origin for the fibre. *)
@@ -1647,57 +1408,20 @@ Module Visibility (N V : UsualOrderedType).
             (Name.Intermediate n v m q, u).
       Proof.
         intros R D pub r n v m q u Hmem.
-        assert (Hq : PkgSet.In q (potentialOrigins R D pub r)).
-        { apply mem_reduceReal in Hmem.
-          destruct Hmem as [[n' [v' [q' [_ [_ Heq]]]]] | [H | H]];
-            [discriminate Heq | | ].
-          - destruct H as [n' [v' [m' [vs' [q' [u' [_ [Hq' [_ Heq]]]]]]]]].
-            injection Heq as <- <- <- <- <-; exact Hq'.
-          - destruct H as [n' [v' [m' [vs' [u' [_ [_ Heq]]]]]]];
-              discriminate Heq. }
+        assert (Hq : PkgSet.In q (potentialOrigins R D pub r))
+          by (apply mem_reduceReal in Hmem; inversion Hmem; assumption).
         apply T.dependees_ext; intros [tn tvs].
         rewrite !mem_reduceDeps.
-        split.
-        - intros [H | [H | [H | H]]].
-          + destruct H as [n1 [v1 [q1 [_ [_ [_ [_ Heq]]]]]]]; discriminate Heq.
-          + destruct H as [n1 [v1 [m1 [vs [q1 [_ [_ [_ Heq]]]]]]]];
-              discriminate Heq.
-          + destruct H
-              as [n1 [v1 [m1 [vs [q1 [u1 [HD1 [_ [Hc [Hu1 Heq]]]]]]]]]].
-            injection Heq as <- <- <- <- <- -> ->.
-            right; right; left; exists n, v, m, vs, q, u; repeat split.
-            * apply DepFibred.mem_tailFibre; split; [exact HD1 | reflexivity].
-            * apply mem_potentialOrigins; left; reflexivity.
-            * apply carried_tailFibre; exact Hc.
-            * exact Hu1.
-          + destruct H
-              as [n1 [v1 [m1 [vs [q1 [u1 [HD1 [_ [Hc [Hu1 Heq]]]]]]]]]].
-            injection Heq as <- <- <- <- <- -> ->.
-            right; right; right; exists n, v, m, vs, q, u; repeat split.
-            * apply DepFibred.mem_tailFibre; split; [exact HD1 | reflexivity].
-            * apply mem_potentialOrigins; left; reflexivity.
-            * apply carried_tailFibre; exact Hc.
-            * exact Hu1.
-        - intros [H | [H | [H | H]]].
-          + destruct H as [n1 [v1 [q1 [_ [_ [_ [_ Heq]]]]]]]; discriminate Heq.
-          + destruct H as [n1 [v1 [m1 [vs [q1 [_ [_ [_ Heq]]]]]]]];
-              discriminate Heq.
-          + destruct H
-              as [n1 [v1 [m1 [vs [q1 [u1 [HD1 [_ [Hc [Hu1 Heq]]]]]]]]]].
-            injection Heq as <- <- <- <- <- -> ->.
-            right; right; left; exists n, v, m, vs, q, u; repeat split.
-            * exact (DepFibred.tailFibre_subset D (n, v) _ HD1).
-            * exact Hq.
-            * apply carried_tailFibre; exact Hc.
-            * exact Hu1.
-          + destruct H
-              as [n1 [v1 [m1 [vs [q1 [u1 [HD1 [_ [Hc [Hu1 Heq]]]]]]]]]].
-            injection Heq as <- <- <- <- <- -> ->.
-            right; right; right; exists n, v, m, vs, q, u; repeat split.
-            * exact (DepFibred.tailFibre_subset D (n, v) _ HD1).
-            * exact Hq.
-            * apply carried_tailFibre; exact Hc.
-            * exact Hu1.
+        split; intro H;
+          inversion H as [| | n1 v1 m1 vs q1 u1 HD1 Hq1 Hc Hu1
+                         | n1 v1 m1 vs q1 u1 HD1 Hq1 Hc Hu1]; subst.
+        1-2: econstructor;
+          [apply DepFibred.mem_tailFibre; split; [exact HD1 | reflexivity]
+          | apply mem_potentialOrigins; left; reflexivity
+          | apply carried_tailFibre; exact Hc | exact Hu1].
+        all: econstructor;
+          [exact (DepFibred.tailFibre_subset D _ _ HD1) | exact Hq
+          | apply carried_tailFibre; exact Hc | exact Hu1].
       Qed.
 
       Theorem versions_lookupAgreement :
@@ -1710,25 +1434,11 @@ Module Visibility (N V : UsualOrderedType).
       Proof.
         intros R D pub r n v m; apply T.versions_ext; intro u.
         rewrite !mem_reduceReal.
-        split.
-        - intros [H | [H | H]].
-          + destruct H as [n1 [v1 [q1 [_ [_ Heq]]]]]; discriminate Heq.
-          + destruct H as [n1 [v1 [m1 [vs [q1 [u1 [_ [_ [_ Heq]]]]]]]]];
-              discriminate Heq.
-          + destruct H as [n1 [v1 [m1 [vs [u1 [HD [Hu Heq]]]]]]].
-            injection Heq as -> -> -> ->.
-            right; right; exists n1, v1, m1, vs, u1.
-            split; [apply DepFibred.mem_endsFibre;
-                    split; [exact HD | split; reflexivity] |].
-            split; [exact Hu | reflexivity].
-        - intros [H | [H | H]].
-          + destruct H as [n1 [v1 [q1 [_ [_ Heq]]]]]; discriminate Heq.
-          + destruct H as [n1 [v1 [m1 [vs [q1 [u1 [_ [_ [_ Heq]]]]]]]]];
-              discriminate Heq.
-          + destruct H as [n1 [v1 [m1 [vs [u1 [HD [Hu Heq]]]]]]].
-            apply DepFibred.mem_endsFibre in HD; destruct HD as [HD _].
-            right; right; exists n1, v1, m1, vs, u1.
-            split; [exact HD | split; [exact Hu | exact Heq]].
+        split; intro H; inversion H as [| | n1 v1 m1 vs u1 HD Hu]; subst.
+        - econstructor; [| exact Hu].
+          apply DepFibred.mem_endsFibre; split; [exact HD | split; reflexivity].
+        - apply DepFibred.mem_endsFibre in HD; destruct HD as [HD _].
+          econstructor; eassumption.
       Qed.
 
       Theorem dependees_lookupAgreement :
@@ -1737,15 +1447,7 @@ Module Visibility (N V : UsualOrderedType).
           T.DependeesSet.empty.
       Proof.
         intros R D pub r n v m u; apply T.dependees_empty_iff.
-        intros [tn tvs] H; apply mem_reduceDeps in H.
-        destruct H as [H | [H | [H | H]]].
-        - destruct H as [n1 [v1 [q1 [_ [_ [_ [_ Heq]]]]]]]; discriminate Heq.
-        - destruct H as [n1 [v1 [m1 [vs [q1 [_ [_ [_ Heq]]]]]]]];
-            discriminate Heq.
-        - destruct H as [n1 [v1 [m1 [vs [q1 [u1 [_ [_ [_ [_ Heq]]]]]]]]]];
-            discriminate Heq.
-        - destruct H as [n1 [v1 [m1 [vs [q1 [u1 [_ [_ [_ [_ Heq]]]]]]]]]];
-            discriminate Heq.
+        intros [tn tvs] H; apply mem_reduceDeps in H; inversion H.
       Qed.
 
     End Lookup.

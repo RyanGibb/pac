@@ -71,8 +71,7 @@ Module Versions (N V : UsualOrderedType).
       destruct (N.eq_dec pn m) as [-> | NE]; [| discriminate].
       injection Hp as <-; exact HpR.
     - intro H; exists (m, v); split; [exact H | cbn beta iota].
-      destruct (N.eq_dec m m) as [_ | NE];
-        [reflexivity | contradiction NE; reflexivity].
+      rewrite dec_refl; reflexivity.
   Qed.
 
   Inductive Formula : Type :=
@@ -135,18 +134,10 @@ Module Versions (N V : UsualOrderedType).
     Proof.
       intros x; induction x as [ | | a IHa b IHb | a IHa b IHb | o c ];
         intros y; destruct y; simpl; try (split; intro H; congruence).
-      - rewrite lex_eq_iff, IHa, IHb.
-        split;
-          [intros [-> ->]; reflexivity
-          | intro H; injection H as -> ->; auto].
-      - rewrite lex_eq_iff, IHa, IHb.
-        split;
-          [intros [-> ->]; reflexivity
-          | intro H; injection H as -> ->; auto].
-      - rewrite lex_eq_iff, OpComp.compare_eq_iff, VF.compare_eq_iff.
-        split;
-          [intros [-> ->]; reflexivity
-          | intro H; injection H as -> ->; auto].
+      1,2: rewrite lex_eq_iff, IHa, IHb.
+      3: rewrite lex_eq_iff, OpComp.compare_eq_iff, VF.compare_eq_iff.
+      all: split;
+        [intros [-> ->]; reflexivity | intro H; injection H as -> ->; auto].
     Qed.
 
     Lemma compare_antisym : forall x y,

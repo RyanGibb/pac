@@ -158,6 +158,16 @@ Tactic Notation "cmp_lt_trans" ident(db) :=
   intros x y z; destruct x, y, z; cbn; intros H1 H2;
   first [ solve [congruence] | solve [auto with db] | cmp_stuck ].
 
+(* A test of a value against itself: eq_dec is Defined, so the branch it
+   takes is computable, but only once the reflexive case is ruled in. *)
+Lemma dec_refl : forall (T : Type) (d : forall a b : T, {a = b} + {a <> b})
+    (a : T) (A : Type) (x y : A),
+    (if d a a then x else y) = x.
+Proof.
+  intros T d a A x y; destruct (d a a) as [_ | NE];
+    [reflexivity | contradiction NE; reflexivity].
+Qed.
+
 (* Deciding equality inside a set-comprehension guard means an if-then-else on
    eq_dec, whose two branches then have to be re-derived at every proof that
    reads the guard back; this packages the test with its three laws. *)
@@ -937,6 +947,62 @@ Module SetOps (A B : UsualOrderedType) (SA : SetsOn A) (SB : SetsOn B).
     - intros [x [Hx Hf]]; exists x; split; [exact (Hkeep _ Hx Hf) | exact Hf].
   Qed.
 
+  (* The guarded comprehensions: a filterMap or unionMap whose body is an
+     if on a boolean test or a decision.  Each reads back as the witness,
+     the test holding, and the body. *)
+  Lemma mem_filterMap_if : forall (b : A.t -> bool) (f : A.t -> B.t) s y,
+      SB.In y (filterMap (fun x => if b x then Some (f x) else None) s) <->
+      exists x : A.t, SA.In x s /\ b x = true /\ y = f x.
+  Proof.
+    intros b f s y; rewrite mem_filterMap; split.
+    - intros [x [Hx Hf]]; exists x; cbn beta in Hf.
+      destruct (b x); [injection Hf as <-; auto | discriminate Hf].
+    - intros [x [Hx [Hb ->]]]; exists x; split; [exact Hx |].
+      rewrite Hb; reflexivity.
+  Qed.
+
+  Lemma mem_filterMap_dec : forall (P : A.t -> Prop)
+      (d : forall x, {P x} + {~ P x}) (f : A.t -> B.t) s y,
+      SB.In y (filterMap (fun x => if d x then Some (f x) else None) s) <->
+      exists x : A.t, SA.In x s /\ P x /\ y = f x.
+  Proof.
+    intros P d f s y; rewrite mem_filterMap; split.
+    - intros [x [Hx Hf]]; exists x; cbn beta in Hf.
+      destruct (d x) as [Hp | _]; [injection Hf as <-; auto | discriminate Hf].
+    - intros [x [Hx [Hp ->]]]; exists x; split; [exact Hx |].
+      destruct (d x) as [_ | Hn]; [reflexivity | contradiction].
+  Qed.
+
+  Lemma in_if_empty : forall (b : bool) (s : SB.t) y,
+      SB.In y (if b then s else SB.empty) <-> b = true /\ SB.In y s.
+  Proof.
+    intros [|] s y; split;
+      [intro H; split; [reflexivity | exact H] | intros [_ H]; exact H
+      | intro H; destruct (empty_in _ H) | intros [E _]; discriminate E].
+  Qed.
+
+  Lemma mem_unionMap_if : forall (b : A.t -> bool) (f : A.t -> SB.t) s y,
+      SB.In y (unionMap (fun x => if b x then f x else SB.empty) s) <->
+      exists x : A.t, SA.In x s /\ b x = true /\ SB.In y (f x).
+  Proof.
+    intros b f s y; rewrite mem_unionMap; split.
+    - intros [x [Hx Hy]]; apply in_if_empty in Hy; exists x; tauto.
+    - intros [x [Hx [Hb Hy]]]; exists x; split; [exact Hx |].
+      apply in_if_empty; auto.
+  Qed.
+
+  Lemma mem_unionMap_dec : forall (P : A.t -> Prop)
+      (d : forall x, {P x} + {~ P x}) (f : A.t -> SB.t) s y,
+      SB.In y (unionMap (fun x => if d x then f x else SB.empty) s) <->
+      exists x : A.t, SA.In x s /\ P x /\ SB.In y (f x).
+  Proof.
+    intros P d f s y; rewrite mem_unionMap; split.
+    - intros [x [Hx Hy]]; exists x; cbn beta in Hy.
+      destruct (d x) as [Hp | _]; [auto | destruct (empty_in _ Hy)].
+    - intros [x [Hx [Hp Hy]]]; exists x; split; [exact Hx |].
+      destruct (d x) as [_ | Hn]; [exact Hy | contradiction].
+  Qed.
+
   Section PartialInverse.
     Variables (inv : A.t -> option B.t) (emb : B.t -> A.t).
     Hypothesis inv_emb : forall b, inv (emb b) = Some b.
@@ -967,3 +1033,15 @@ Module SetOps (A B : UsualOrderedType) (SA : SetsOn A) (SB : SetsOn B).
     - intro H; exists x; split; [exact H | reflexivity].
   Qed.
 End SetOps.
+
+(* Takes apart what the membership specs produce: the witnesses of their
+   existentials, their conjunctions, and the equations between pairs and
+   options, substituting as it goes. *)
+Ltac mem_destruct :=
+  repeat match goal with
+         | H : exists _, _ |- _ => destruct H
+         | H : _ /\ _ |- _ => destruct H
+         | H : Some _ = Some _ |- _ => injection H; clear H; intros
+         | H : (_, _) = (_, _) |- _ => injection H; clear H; intros
+         end;
+  subst.

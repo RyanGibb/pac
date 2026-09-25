@@ -186,14 +186,12 @@ Module Feature (N V F : UsualOrderedType).
     Proof.
       intros R support q; unfold featPkgReal; rewrite SOst.mem_filterMap.
       split.
-      - intros [[[pn pv] f0] [Hs Hq]]; cbn beta iota in Hq.
-        destruct (PkgSet.mem (pn, pv) R) eqn:Em; [| discriminate].
-        injection Hq as <-.
-        exists pn, pv, f0; repeat split;
-          [exact Hs | apply PkgSet.mem_spec; exact Em].
-      - intros [n [v [f0 [Hs [HR ->]]]]].
-        exists ((n, v), f0); split; [exact Hs | cbn beta iota].
-        rewrite <- PkgSet.mem_spec in HR; rewrite HR; reflexivity.
+      - intros [[[n v] f] [Hs Hq]]; cbn beta iota in Hq.
+        destruct (PkgSet.mem (n, v) R) eqn:Em; [| discriminate].
+        injection Hq as <-; apply PkgSet.mem_spec in Em; exists n, v, f; auto.
+      - intros [n [v [f [Hs [HR ->]]]]]; exists ((n, v), f).
+        split; [exact Hs | cbn beta iota].
+        apply PkgSet.mem_spec in HR; rewrite HR; reflexivity.
     Qed.
 
     Lemma mem_reduceReal : forall R support q,
@@ -207,133 +205,94 @@ Module Feature (N V F : UsualOrderedType).
       rewrite T.PkgSet.union_spec, SOpt.mem_map, mem_featPkgReal; reflexivity.
     Qed.
 
-    Lemma mem_supportEdges :
-      forall R support (q : T.Pkg.t) (m : NameOT.t) (ws : T.VSet.t),
-        T.DepRel.In (q, (m, ws)) (supportEdges R support) <->
-        exists n v f, SupportSet.In ((n, v), f) support /\ PkgSet.In (n, v) R /\
-          q = (Name.FeatPkg n f, v) /\ m = Name.Orig n /\
-          ws = T.VSet.singleton v.
+    Lemma mem_reduceReal_orig : forall R support n v,
+        T.PkgSet.In (Name.Orig n, v) (reduceReal R support) <->
+        PkgSet.In (n, v) R.
     Proof.
-      intros R support q m ws; unfold supportEdges; rewrite SOsd.mem_filterMap.
-      split.
-      - intros [[[pn pv] f0] [Hs Hy]]; cbn beta iota in Hy.
-        destruct (PkgSet.mem (pn, pv) R) eqn:Em; [| discriminate].
-        injection Hy as <- <- <-.
-        exists pn, pv, f0; repeat split;
-          [exact Hs | apply PkgSet.mem_spec; exact Em].
-      - intros [n [v [f0 [Hs [HR [Hsrc [Htn Htvs]]]]]]]; subst q m ws.
-        exists ((n, v), f0); split; [exact Hs | cbn beta iota].
-        rewrite <- PkgSet.mem_spec in HR; rewrite HR; reflexivity.
+      intros R support n v; rewrite mem_reduceReal; split.
+      - intros [[[pn pv] [HR E]] | [n' [v' [f' [_ [_ E]]]]]]; cbn in E;
+          [injection E as -> ->; exact HR | discriminate E].
+      - intro HR; left; exists (n, v); split; [exact HR | reflexivity].
     Qed.
 
-    Lemma mem_featDepOrigEdges :
-      forall Df (q : T.Pkg.t) (m : NameOT.t) (ws : T.VSet.t),
-        T.DepRel.In (q, (m, ws)) (featDepOrigEdges Df) <->
-        exists p n vs, FeatDepRel.In (p, (n, (vs, FSet.empty))) Df /\
-          q = embedPkg p /\ m = Name.Orig n /\ ws = embedVS vs.
+    Lemma mem_reduceReal_featPkg : forall R support n f v,
+        T.PkgSet.In (Name.FeatPkg n f, v) (reduceReal R support) <->
+        SupportSet.In ((n, v), f) support /\ PkgSet.In (n, v) R.
     Proof.
-      intros Df q m ws; unfold featDepOrigEdges; rewrite SOfd.mem_filterMap.
-      split.
-      - intros [[p [m0 [vs0 fs0]]] [He2 Hy]]; cbn beta iota in Hy.
-        destruct (FSet.is_empty fs0) eqn:E0; [| discriminate].
-        injection Hy as <- <- <-.
-        apply FSet.is_empty_iff in E0; subst fs0.
-        exists p, m0, vs0; repeat split; exact He2.
-      - intros [p [m0 [vs0 [He2 [Hsrc [Htn Htvs]]]]]]; subst q m ws.
-        exists (p, (m0, (vs0, FSet.empty))); split; [exact He2 | simpl];
-          reflexivity.
+      intros R support n f v; rewrite mem_reduceReal; split.
+      - intros [[[pn pv] [_ E]] | [n' [v' [f' [Hs [HR E]]]]]]; cbn in E;
+          [discriminate E | injection E as -> -> ->; auto].
+      - intros [Hs HR]; right; exists n, v, f; auto.
     Qed.
 
-    Lemma mem_featDepFeatPkgEdges :
-      forall Df (q : T.Pkg.t) (m : NameOT.t) (ws : T.VSet.t),
-        T.DepRel.In (q, (m, ws)) (featDepFeatPkgEdges Df) <->
-        exists p n vs fs f, FeatDepRel.In (p, (n, (vs, fs))) Df /\
-          FSet.is_empty fs = false /\ FSet.In f fs /\
-          q = embedPkg p /\ m = Name.FeatPkg n f /\ ws = embedVS vs.
-    Proof.
-      intros Df q m ws; unfold featDepFeatPkgEdges; rewrite SOfd.mem_unionMap.
-      split.
-      - intros [[p [m0 [vs0 fs0]]] [He3 Hy]]; cbn beta iota in Hy.
-        destruct (FSet.is_empty fs0) eqn:E0; [destruct (SOfd.empty_in _ Hy) |].
-        apply SOfsd.mem_map in Hy; destruct Hy as [f [Hf Hy]].
-        injection Hy as -> -> ->.
-        exists p, m0, vs0, fs0, f; repeat split; assumption.
-      - intros [p [m0 [vs0 [fs0 [f [He3 [E0 [Hf [Hsrc [Htn Htvs]]]]]]]]]];
-          subst q m ws.
-        exists (p, (m0, (vs0, fs0))); split; [exact He3 | cbn beta iota].
-        rewrite E0.
-        apply SOfsd.mem_map; exists f; split; [exact Hf | reflexivity].
-    Qed.
+    Inductive EncodedEdge (R : PkgSet.t) (support : SupportSet.t)
+        (Df : FeatDepRel.t) (Da : AddlDepRel.t) : T.DepElt.t -> Prop :=
+    | EdgeSupport : forall n v f,
+        SupportSet.In ((n, v), f) support -> PkgSet.In (n, v) R ->
+        EncodedEdge R support Df Da
+          ((Name.FeatPkg n f, v), (Name.Orig n, T.VSet.singleton v))
+    | EdgeDepOrig : forall n v m vs,
+        FeatDepRel.In ((n, v), (m, (vs, FSet.empty))) Df ->
+        EncodedEdge R support Df Da
+          ((Name.Orig n, v), (Name.Orig m, embedVS vs))
+    | EdgeDepFeatPkg : forall n v m vs fs f,
+        FeatDepRel.In ((n, v), (m, (vs, fs))) Df ->
+        FSet.is_empty fs = false -> FSet.In f fs ->
+        EncodedEdge R support Df Da
+          ((Name.Orig n, v), (Name.FeatPkg m f, embedVS vs))
+    | EdgeAddlOrig : forall n v f m vs,
+        AddlDepRel.In (((n, v), f), (m, (vs, FSet.empty))) Da ->
+        EncodedEdge R support Df Da
+          ((Name.FeatPkg n f, v), (Name.Orig m, embedVS vs))
+    | EdgeAddlFeatPkg : forall n v f m vs fs f',
+        AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da ->
+        FSet.is_empty fs = false -> FSet.In f' fs ->
+        EncodedEdge R support Df Da
+          ((Name.FeatPkg n f, v), (Name.FeatPkg m f', embedVS vs)).
 
-    Lemma mem_addlDepOrigEdges :
-      forall Da (q : T.Pkg.t) (m : NameOT.t) (ws : T.VSet.t),
-        T.DepRel.In (q, (m, ws)) (addlDepOrigEdges Da) <->
-        exists n v f m' vs,
-          AddlDepRel.In (((n, v), f), (m', (vs, FSet.empty))) Da /\
-          q = (Name.FeatPkg n f, v) /\ m = Name.Orig m' /\ ws = embedVS vs.
+    Lemma mem_reduceDeps : forall R support Df Da (y : T.DepElt.t),
+        T.DepRel.In y (reduceDeps R support Df Da) <->
+        EncodedEdge R support Df Da y.
     Proof.
-      intros Da q m ws; unfold addlDepOrigEdges; rewrite SOad.mem_filterMap.
+      intros R support Df Da y; unfold reduceDeps, supportEdges,
+        featDepOrigEdges, featDepFeatPkgEdges, addlDepOrigEdges,
+        addlDepFeatPkgEdges.
+      rewrite !T.DepRel.union_spec, SOsd.mem_filterMap, SOfd.mem_filterMap,
+        SOfd.mem_unionMap, SOad.mem_filterMap, SOad.mem_unionMap.
       split.
-      - intros [[[[pn pv] f0] [m0 [vs0 fs0]]] [He4 Hy]]; cbn beta iota in Hy.
-        destruct (FSet.is_empty fs0) eqn:E0; [| discriminate].
-        injection Hy as <- <- <-.
-        apply FSet.is_empty_iff in E0; subst fs0.
-        exists pn, pv, f0, m0, vs0; repeat split; exact He4.
-      - intros [n [v [f0 [m0 [vs0 [He4 [Hsrc [Htn Htvs]]]]]]]]; subst q m ws.
-        exists (((n, v), f0), (m0, (vs0, FSet.empty)));
-          split; [exact He4 | simpl]; reflexivity.
-    Qed.
-
-    Lemma mem_addlDepFeatPkgEdges :
-      forall Da (q : T.Pkg.t) (m : NameOT.t) (ws : T.VSet.t),
-        T.DepRel.In (q, (m, ws)) (addlDepFeatPkgEdges Da) <->
-        exists n v f m' vs fs f',
-          AddlDepRel.In (((n, v), f), (m', (vs, fs))) Da /\
-          FSet.is_empty fs = false /\ FSet.In f' fs /\
-          q = (Name.FeatPkg n f, v) /\ m = Name.FeatPkg m' f' /\
-          ws = embedVS vs.
-    Proof.
-      intros Da q m ws; unfold addlDepFeatPkgEdges; rewrite SOad.mem_unionMap.
-      split.
-      - intros [[[[pn pv] f0] [m0 [vs0 fs0]]] [He5 Hy]]; cbn beta iota in Hy.
-        destruct (FSet.is_empty fs0) eqn:E0; [destruct (SOad.empty_in _ Hy) |].
-        apply SOfsd.mem_map in Hy; destruct Hy as [f' [Hf' Hy]].
-        injection Hy as -> -> ->.
-        exists pn, pv, f0, m0, vs0, fs0, f'; repeat split; assumption.
-      - intros [n [v [f0 [m0 [vs0 [fs0 [f'
-                  [He5 [E0 [Hf' [Hsrc [Htn Htvs]]]]]]]]]]]]; subst q m ws.
-        exists (((n, v), f0), (m0, (vs0, fs0)));
-          split; [exact He5 | cbn beta iota].
-        rewrite E0.
-        apply SOfsd.mem_map; exists f'; split; [exact Hf' | reflexivity].
-    Qed.
-
-    Lemma mem_reduceDeps :
-      forall R support Df Da (q : T.Pkg.t) (m : NameOT.t) (ws : T.VSet.t),
-        T.DepRel.In (q, (m, ws)) (reduceDeps R support Df Da) <->
-        (exists n v f, SupportSet.In ((n, v), f) support /\
-           PkgSet.In (n, v) R /\
-           q = (Name.FeatPkg n f, v) /\ m = Name.Orig n /\
-           ws = T.VSet.singleton v) \/
-        (exists p n vs, FeatDepRel.In (p, (n, (vs, FSet.empty))) Df /\
-           q = embedPkg p /\ m = Name.Orig n /\ ws = embedVS vs) \/
-        (exists p n vs fs f, FeatDepRel.In (p, (n, (vs, fs))) Df /\
-           FSet.is_empty fs = false /\ FSet.In f fs /\
-           q = embedPkg p /\ m = Name.FeatPkg n f /\ ws = embedVS vs) \/
-        (exists n v f m' vs,
-           AddlDepRel.In (((n, v), f), (m', (vs, FSet.empty))) Da /\
-           q = (Name.FeatPkg n f, v) /\ m = Name.Orig m' /\ ws = embedVS vs) \/
-        (exists n v f m' vs fs f',
-           AddlDepRel.In (((n, v), f), (m', (vs, fs))) Da /\
-           FSet.is_empty fs = false /\ FSet.In f' fs /\
-           q = (Name.FeatPkg n f, v) /\ m = Name.FeatPkg m' f' /\
-           ws = embedVS vs).
-    Proof.
-      intros R support Df Da q m ws; unfold reduceDeps.
-      rewrite !T.DepRel.union_spec, mem_supportEdges, mem_featDepOrigEdges,
-        mem_featDepFeatPkgEdges, mem_addlDepOrigEdges,
-        mem_addlDepFeatPkgEdges.
-      tauto.
+      - intros [[[[n v] f] [Hs Hy]] | [[[[n v] [m [vs fs]]] [Hd Hy]]
+          | [[[[n v] [m [vs fs]]] [Hd Hy]] | [[[[[n v] f] [m [vs fs]]] [Hd Hy]]
+          | [[[[n v] f] [m [vs fs]]] [Hd Hy]]]]]];
+          cbn beta iota delta [embedPkg] in Hy.
+        + destruct (PkgSet.mem (n, v) R) eqn:E; [| discriminate].
+          injection Hy as <-; apply PkgSet.mem_spec in E.
+          apply EdgeSupport; assumption.
+        + destruct (FSet.is_empty fs) eqn:E; [| discriminate].
+          injection Hy as <-; apply FSet.is_empty_iff in E; subst fs.
+          apply EdgeDepOrig; exact Hd.
+        + destruct (FSet.is_empty fs) eqn:E; [destruct (SOfd.empty_in _ Hy) |].
+          apply SOfsd.mem_map in Hy as [f [Hf ->]].
+          eapply EdgeDepFeatPkg; eassumption.
+        + destruct (FSet.is_empty fs) eqn:E; [| discriminate].
+          injection Hy as <-; apply FSet.is_empty_iff in E; subst fs.
+          apply EdgeAddlOrig; exact Hd.
+        + destruct (FSet.is_empty fs) eqn:E; [destruct (SOad.empty_in _ Hy) |].
+          apply SOfsd.mem_map in Hy as [f' [Hf' ->]].
+          eapply EdgeAddlFeatPkg; eassumption.
+      - intros [n v f Hs HR | n v m vs Hd | n v m vs fs f Hd E Hf
+          | n v f m vs Hd | n v f m vs fs f' Hd E Hf'].
+        + left; exists ((n, v), f); split; [exact Hs | cbn beta iota].
+          apply PkgSet.mem_spec in HR; rewrite HR; reflexivity.
+        + right; left; exists ((n, v), (m, (vs, FSet.empty))).
+          split; [exact Hd | reflexivity].
+        + do 2 right; left; exists ((n, v), (m, (vs, fs))).
+          split; [exact Hd | cbn beta iota; rewrite E].
+          apply SOfsd.mem_map; exists f; split; [exact Hf | reflexivity].
+        + do 3 right; left; exists (((n, v), f), (m, (vs, FSet.empty))).
+          split; [exact Hd | reflexivity].
+        + do 4 right; exists (((n, v), f), (m, (vs, fs))).
+          split; [exact Hd | cbn beta iota; rewrite E].
+          apply SOfsd.mem_map; exists f'; split; [exact Hf' | reflexivity].
     Qed.
 
     Module SOtf := SetOps T.Pkg F T.PkgSet FSet.
@@ -363,9 +322,7 @@ Module Feature (N V F : UsualOrderedType).
           as [E | NE]; [| discriminate].
         injection He as <-; rewrite <- E; exact HS.
       - intro HS; exists (Name.FeatPkg n f, v);
-          split; [exact HS | cbn beta iota].
-        destruct (T.Pkg.eq_dec (Name.FeatPkg n f, v) (Name.FeatPkg n f, v))
-          as [_ | NE]; [reflexivity | exfalso; exact (NE eq_refl)].
+          split; [exact HS | cbn beta iota; apply dec_refl].
     Qed.
 
     Module SOts := SetOps T.Pkg Featured T.PkgSet FeaturedSet.
@@ -390,6 +347,41 @@ Module Feature (N V F : UsualOrderedType).
         exists (Name.Orig n, v); split; [exact HS | reflexivity].
     Qed.
 
+    (* A dependency and an additional dependency are closed over by the same
+       argument; only the node their edges leave from differs. *)
+    Lemma dep_closure_step : forall RR D r S q n vs fs,
+        T.IsResolution RR D r S ->
+        (forall m f v, T.PkgSet.In (Name.FeatPkg m f, v) S ->
+           T.PkgSet.In (Name.Orig m, v) S) ->
+        T.PkgSet.In q S ->
+        (fs = FSet.empty -> T.DepRel.In (q, (Name.Orig n, embedVS vs)) D) ->
+        (forall f, FSet.is_empty fs = false -> FSet.In f fs ->
+           T.DepRel.In (q, (Name.FeatPkg n f, embedVS vs)) D) ->
+        exists v, VSet.In v vs /\
+          exists fs', FSet.Subset fs fs' /\
+            FeaturedSet.In ((n, v), fs') (featureResolution S).
+    Proof.
+      intros RR D r S q n vs fs [_ _ Hdep Huniq] HfeatOrig HqS Horig Hfeat.
+      destruct (FSet.is_empty fs) eqn:E.
+      - apply FSet.is_empty_iff in E.
+        destruct (Hdep _ HqS _ _ (Horig E)) as [v [Hv HvS]].
+        exists v; split; [apply mem_embedVS; exact Hv |].
+        exists (featsOf n v S); split.
+        + subst fs; intros x Hx; destruct (FSet.empty_spec Hx).
+        + apply mem_featureResolution; exists n, v;
+            split; [exact HvS | reflexivity].
+      - destruct (FSet.choose_nonempty _ E) as [f0 Hf0].
+        destruct (Hdep _ HqS _ _ (Hfeat f0 eq_refl Hf0)) as [v [Hv HvS]].
+        apply mem_embedVS in Hv; apply HfeatOrig in HvS.
+        exists v; split; [exact Hv |].
+        exists (featsOf n v S); split.
+        + intros f Hf; apply featsOf_spec.
+          destruct (Hdep _ HqS _ _ (Hfeat f eq_refl Hf)) as [v' [_ Hv'S]].
+          rewrite (Huniq _ _ _ HvS (HfeatOrig _ _ _ Hv'S)); exact Hv'S.
+        + apply mem_featureResolution; exists n, v;
+            split; [exact HvS | reflexivity].
+    Qed.
+
     Theorem feature_soundness :
       forall (R : PkgSet.t) (support : SupportSet.t)
              (Df : FeatDepRel.t) (Da : AddlDepRel.t)
@@ -400,45 +392,30 @@ Module Feature (N V F : UsualOrderedType).
         IsResolution R support Df Da r (featureResolution S).
     Proof.
       intros R support Df Da r S Hres Hnosupp.
-      destruct Hres as [Hsub Hroot Hdep Huniq].
+      pose proof Hres as [Hsub Hroot Hdep Huniq].
       destruct r as [rn rv].
       unfold embedPkg in Hroot; simpl in Hroot.
       assert (HorigR : forall n v,
-                 T.PkgSet.In (Name.Orig n, v) S -> PkgSet.In (n, v) R).
-      { intros n v HS.
-        pose proof (Hsub _ HS) as HF; rewrite mem_reduceReal in HF.
-        destruct HF as [[p [HpR Hq]] | [n' [v' [f' [Hsupp [HR Hq]]]]]].
-        - destruct p as [pn pv]; unfold embedPkg in Hq; simpl in Hq.
-          injection Hq as E1 E2; subst pn pv; exact HpR.
-        - discriminate Hq. }
-      assert (HnorootF : forall f, ~ T.PkgSet.In (Name.FeatPkg rn f, rv) S).
-      { intros f HS.
-        pose proof (Hsub _ HS) as HF; rewrite mem_reduceReal in HF.
-        destruct HF as [[p [HpR Hq]] | [n' [v' [f' [Hsupp [HR Hq]]]]]].
-        - destruct p as [pn pv]; unfold embedPkg in Hq; simpl in Hq;
-            discriminate Hq.
-        - injection Hq as E1 E2 E3; subst n' f' v'.
-          exact (Hnosupp _ Hsupp). }
+                 T.PkgSet.In (Name.Orig n, v) S -> PkgSet.In (n, v) R)
+        by (intros n v HS; exact (proj1 (mem_reduceReal_orig _ _ _ _)
+                                    (Hsub _ HS))).
+      assert (HfeatR : forall n f v,
+                 T.PkgSet.In (Name.FeatPkg n f, v) S ->
+                 SupportSet.In ((n, v), f) support /\ PkgSet.In (n, v) R)
+        by (intros n f v HS; exact (proj1 (mem_reduceReal_featPkg _ _ _ _ _)
+                                      (Hsub _ HS))).
       assert (HfeatOrig : forall n f v,
                  T.PkgSet.In (Name.FeatPkg n f, v) S ->
                  T.PkgSet.In (Name.Orig n, v) S).
-      { intros n f v HS.
-        pose proof (Hsub _ HS) as HF; rewrite mem_reduceReal in HF.
-        destruct HF as [[p [HpR Hq]] | [n' [v' [f' [Hsupp [HR Hq]]]]]].
-        - destruct p as [pn pv]; unfold embedPkg in Hq; simpl in Hq;
-            discriminate Hq.
-        - injection Hq as E1 E2 E3; subst n' f' v'.
-          assert (Hd : T.DepRel.In
-                         ((Name.FeatPkg n f, v),
-                          (Name.Orig n, T.VSet.singleton v))
-                         (reduceDeps R support Df Da)).
-          { rewrite mem_reduceDeps.
-            left; exists n, v, f.
-            split; [exact Hsupp | split; [exact HR |]].
-            split; [reflexivity | split; reflexivity]. }
-          destruct (Hdep _ HS _ _ Hd) as [v0 [Hv0 Hv0S]].
-          rewrite SOvt.singleton_in in Hv0; subst v0.
-          exact Hv0S. }
+      { intros n f v HS; destruct (HfeatR _ _ _ HS) as [Hs HR].
+        assert (Hd : T.DepRel.In
+                       ((Name.FeatPkg n f, v),
+                        (Name.Orig n, T.VSet.singleton v))
+                       (reduceDeps R support Df Da))
+          by (apply mem_reduceDeps, EdgeSupport; assumption).
+        destruct (Hdep _ HS _ _ Hd) as [v0 [Hv0 Hv0S]].
+        rewrite SOvt.singleton_in in Hv0; subst v0.
+        exact Hv0S. }
       constructor.
       - exact Hnosupp.
       - intros p fs Hmem.
@@ -448,7 +425,7 @@ Module Feature (N V F : UsualOrderedType).
         exact (HorigR n v HS).
       - assert (Hfe : featsOf rn rv S = FSet.empty).
         { apply FSet.ext; intro f; rewrite featsOf_spec; split; intro H.
-          + exfalso; exact (HnorootF f H).
+          + exfalso; exact (Hnosupp f (proj1 (HfeatR _ _ _ H))).
           + exfalso; exact (FSet.empty_spec H). }
         rewrite <- Hfe.
         apply mem_featureResolution; exists rn, rv;
@@ -457,98 +434,17 @@ Module Feature (N V F : UsualOrderedType).
         apply mem_featureResolution in Hmem;
           destruct Hmem as [pn [pv [HpS Heq]]].
         injection Heq as E1 E2; subst p fs_p.
-        destruct (FSet.is_empty fs) eqn:E.
-        + apply FSet.is_empty_iff in E; subst fs.
-          assert (Hd : T.DepRel.In
-                         ((Name.Orig pn, pv), (Name.Orig n, embedVS vs))
-                         (reduceDeps R support Df Da)).
-          { rewrite mem_reduceDeps.
-            right; left; exists (pn, pv), n, vs.
-            split; [exact Hdf | split; [reflexivity | split; reflexivity]]. }
-          destruct (Hdep _ HpS _ _ Hd) as [v [Hv HvS]].
-          rewrite mem_embedVS in Hv.
-          exists v; split; [exact Hv |].
-          exists (featsOf n v S); split.
-          * intros x Hx; exfalso; exact (FSet.empty_spec Hx).
-          * apply mem_featureResolution; exists n, v;
-              split; [exact HvS | reflexivity].
-        + destruct (FSet.choose_nonempty _ E) as [f0 Hf0].
-          assert (Hd0 : T.DepRel.In
-                          ((Name.Orig pn, pv), (Name.FeatPkg n f0, embedVS vs))
-                          (reduceDeps R support Df Da)).
-          { rewrite mem_reduceDeps.
-            right; right; left; exists (pn, pv), n, vs, fs, f0.
-            split; [exact Hdf | split; [exact E | split; [exact Hf0 |]]].
-            split; [reflexivity | split; reflexivity]. }
-          destruct (Hdep _ HpS _ _ Hd0) as [v [Hv HvS]].
-          rewrite mem_embedVS in Hv.
-          pose proof (HfeatOrig _ _ _ HvS) as HvO.
-          exists v; split; [exact Hv |].
-          exists (featsOf n v S); split.
-          * intros f' Hf'; rewrite featsOf_spec.
-            assert (Hd' : T.DepRel.In
-                            ((Name.Orig pn, pv),
-                             (Name.FeatPkg n f', embedVS vs))
-                            (reduceDeps R support Df Da)).
-            { rewrite mem_reduceDeps.
-              right; right; left; exists (pn, pv), n, vs, fs, f'.
-              split; [exact Hdf | split; [exact E | split; [exact Hf' |]]].
-              split; [reflexivity | split; reflexivity]. }
-            destruct (Hdep _ HpS _ _ Hd') as [v' [Hv' Hv'S]].
-            pose proof (HfeatOrig _ _ _ Hv'S) as Hv'O.
-            assert (Ev : v = v') by exact (Huniq (Name.Orig n) v v' HvO Hv'O).
-            rewrite Ev; exact Hv'S.
-          * apply mem_featureResolution; exists n, v;
-              split; [exact HvO | reflexivity].
+        apply (dep_closure_step _ _ _ S _ n vs fs Hres HfeatOrig HpS);
+          [intro; subst fs | intros f E Hf]; apply mem_reduceDeps;
+          [apply EdgeDepOrig | eapply EdgeDepFeatPkg]; eassumption.
       - intros p fs_p Hmem f Hf n vs fs Hda.
         apply mem_featureResolution in Hmem;
           destruct Hmem as [pn [pv [HpS Heq]]].
         injection Heq as E1 E2; subst p fs_p.
         rewrite featsOf_spec in Hf.
-        destruct (FSet.is_empty fs) eqn:E.
-        + apply FSet.is_empty_iff in E; subst fs.
-          assert (Hd : T.DepRel.In
-                         ((Name.FeatPkg pn f, pv), (Name.Orig n, embedVS vs))
-                         (reduceDeps R support Df Da)).
-          { rewrite mem_reduceDeps.
-            right; right; right; left; exists pn, pv, f, n, vs.
-            split; [exact Hda | split; [reflexivity | split; reflexivity]]. }
-          destruct (Hdep _ Hf _ _ Hd) as [v0 [Hv0 Hv0S]].
-          rewrite mem_embedVS in Hv0.
-          exists v0; split; [exact Hv0 |].
-          exists (featsOf n v0 S); split.
-          * intros x Hx; exfalso; exact (FSet.empty_spec Hx).
-          * apply mem_featureResolution; exists n, v0;
-              split; [exact Hv0S | reflexivity].
-        + destruct (FSet.choose_nonempty _ E) as [f0 Hf0].
-          assert (Hd0 : T.DepRel.In
-                          ((Name.FeatPkg pn f, pv),
-                           (Name.FeatPkg n f0, embedVS vs))
-                          (reduceDeps R support Df Da)).
-          { rewrite mem_reduceDeps.
-            right; right; right; right; exists pn, pv, f, n, vs, fs, f0.
-            split; [exact Hda | split; [exact E | split; [exact Hf0 |]]].
-            split; [reflexivity | split; reflexivity]. }
-          destruct (Hdep _ Hf _ _ Hd0) as [v0 [Hv0 Hv0S]].
-          rewrite mem_embedVS in Hv0.
-          pose proof (HfeatOrig _ _ _ Hv0S) as HvO.
-          exists v0; split; [exact Hv0 |].
-          exists (featsOf n v0 S); split.
-          * intros f' Hf'; rewrite featsOf_spec.
-            assert (Hd' : T.DepRel.In
-                            ((Name.FeatPkg pn f, pv),
-                             (Name.FeatPkg n f', embedVS vs))
-                            (reduceDeps R support Df Da)).
-            { rewrite mem_reduceDeps.
-              right; right; right; right; exists pn, pv, f, n, vs, fs, f'.
-              split; [exact Hda | split; [exact E | split; [exact Hf' |]]].
-              split; [reflexivity | split; reflexivity]. }
-            destruct (Hdep _ Hf _ _ Hd') as [v' [Hv' Hv'S]].
-            pose proof (HfeatOrig _ _ _ Hv'S) as Hv'O.
-            assert (Ev : v0 = v') by exact (Huniq (Name.Orig n) v0 v' HvO Hv'O).
-            rewrite Ev; exact Hv'S.
-          * apply mem_featureResolution; exists n, v0;
-              split; [exact HvO | reflexivity].
+        apply (dep_closure_step _ _ _ S _ n vs fs Hres HfeatOrig Hf);
+          [intro; subst fs | intros f' E Hf']; apply mem_reduceDeps;
+          [apply EdgeAddlOrig | eapply EdgeAddlFeatPkg]; eassumption.
       - intros n v v' fs fs' H1 H2.
         apply mem_featureResolution in H1; destruct H1 as [n1 [v1 [HS1 Heq1]]].
         apply mem_featureResolution in H2; destruct H2 as [n2 [v2 [HS2 Heq2]]].
@@ -567,12 +463,7 @@ Module Feature (N V F : UsualOrderedType).
           destruct Hmem as [n1 [v1 [HS Heq]]].
         injection Heq as E1 E2 E3; subst n1 v1 fs.
         rewrite featsOf_spec in Hf.
-        pose proof (Hsub _ Hf) as HF; rewrite mem_reduceReal in HF.
-        destruct HF as [[p [HpR Hq]] | [n' [v' [f' [Hsupp [HR Hq]]]]]].
-        + destruct p as [pn pv]; unfold embedPkg in Hq; simpl in Hq;
-            discriminate Hq.
-        + injection Hq as E4 E5 E6; subst n' f' v'.
-          exact Hsupp.
+        exact (proj1 (HfeatR _ _ _ Hf)).
     Qed.
 
     Module SOsw := SetOps Featured T.Pkg FeaturedSet T.PkgSet.
@@ -618,76 +509,43 @@ Module Feature (N V F : UsualOrderedType).
       destruct Hres as [Hnrs Hsubset Hrootm Hdepc Haddlc Hfu Hvu Hsm].
       destruct r as [rn rv].
       constructor.
-      - intros q Hq.
-        rewrite mem_coreResolution in Hq.
-        rewrite mem_reduceReal.
+      - intros q Hq; rewrite mem_coreResolution in Hq.
         destruct Hq as [[n [v [fs [HS ->]]]] | [n [v [fs [f [HS [Hf ->]]]]]]].
-        + left; exists (n, v); split; [exact (Hsubset _ _ HS) | reflexivity].
-        + right; exists n, v, f.
-          split; [exact (Hsm n v fs f HS Hf) |].
-          split; [exact (Hsubset _ _ HS) | reflexivity].
+        + apply mem_reduceReal_orig; exact (Hsubset _ _ HS).
+        + apply mem_reduceReal_featPkg;
+            exact (conj (Hsm n v fs f HS Hf) (Hsubset _ _ HS)).
       - rewrite mem_coreResolution.
         left; exists rn, rv, FSet.empty; split; [exact Hrootm | reflexivity].
       - intros q Hq m vs Hd.
-        rewrite mem_coreResolution in Hq.
-        rewrite mem_reduceDeps in Hd.
-        destruct Hq as [[pn [pv [fs [HS Hq]]]] |
-                        [pn [pv [fs [f0 [HS [Hf0 Hq]]]]]]]; subst q.
-        + destruct Hd as [D1 | [D2 | [D3 | [D4 | D5]]]].
-          * destruct D1 as [n [v [f [_ [_ [Hsrc _]]]]]]; discriminate Hsrc.
-          * destruct D2 as [q' [m' [vs' [Hdf [Hsrc [Htn Htvs]]]]]]; subst m vs.
-            destruct q' as [qn qv]; unfold embedPkg in Hsrc; simpl in Hsrc.
-            injection Hsrc as E1 E2; subst qn qv.
-            destruct (Hdepc _ _ HS _ _ _ Hdf) as [v' [Hv' [fs' [_ Hfs']]]].
-            exists v'; split; [rewrite mem_embedVS; exact Hv' |].
-            rewrite mem_coreResolution.
-            left; exists m', v', fs'; split; [exact Hfs' | reflexivity].
-          * destruct D3
-              as [q' [m' [vs' [fs0 [f [Hdf [E0 [Hf [Hsrc [Htn Htvs]]]]]]]]]];
-              subst m vs.
-            destruct q' as [qn qv]; unfold embedPkg in Hsrc; simpl in Hsrc.
-            injection Hsrc as E1 E2; subst qn qv.
-            destruct (Hdepc _ _ HS _ _ _ Hdf) as [v' [Hv' [fs' [Hsub' Hfs']]]].
-            exists v'; split; [rewrite mem_embedVS; exact Hv' |].
-            rewrite mem_coreResolution.
-            right; exists m', v', fs', f.
-            split; [exact Hfs' | split; [exact (Hsub' _ Hf) | reflexivity]].
-          * destruct D4 as [n [v [f [m' [vs' [_ [Hsrc _]]]]]]];
-              discriminate Hsrc.
-          * destruct D5 as
-              [n [v [f [m' [vs' [fs0 [f' [_ [_ [_ [Hsrc _]]]]]]]]]]];
-              discriminate Hsrc.
-        + destruct Hd as [D1 | [D2 | [D3 | [D4 | D5]]]].
-          * destruct D1 as [n [v [f [Hsupp [HR [Hsrc [Htn Htvs]]]]]]];
-              subst m vs.
-            injection Hsrc as E1 E2 E3; subst n f v.
-            exists pv; split; [rewrite SOvt.singleton_in; reflexivity |].
-            rewrite mem_coreResolution.
-            left; exists pn, pv, fs; split; [exact HS | reflexivity].
-          * destruct D2 as [q' [m' [vs' [_ [Hsrc _]]]]].
-            destruct q' as [qn qv]; unfold embedPkg in Hsrc; simpl in Hsrc;
-              discriminate Hsrc.
-          * destruct D3 as [q' [m' [vs' [fs0 [f [_ [_ [_ [Hsrc _]]]]]]]]].
-            destruct q' as [qn qv]; unfold embedPkg in Hsrc; simpl in Hsrc;
-              discriminate Hsrc.
-          * destruct D4 as [n [v [f [m' [vs' [Hda [Hsrc [Htn Htvs]]]]]]]];
-              subst m vs.
-            injection Hsrc as E1 E2 E3; subst n f v.
-            destruct (Haddlc _ _ HS f0 Hf0 _ _ _ Hda)
-              as [v' [Hv' [fs' [_ Hfs']]]].
-            exists v'; split; [rewrite mem_embedVS; exact Hv' |].
-            rewrite mem_coreResolution.
-            left; exists m', v', fs'; split; [exact Hfs' | reflexivity].
-          * destruct D5 as [n [v [f [m' [vs' [fs0 [f'
-                            [Hda [E0 [Hf' [Hsrc [Htn Htvs]]]]]]]]]]]];
-              subst m vs.
-            injection Hsrc as E1 E2 E3; subst n f v.
-            destruct (Haddlc _ _ HS f0 Hf0 _ _ _ Hda)
-              as [v' [Hv' [fs' [Hsub' Hfs']]]].
-            exists v'; split; [rewrite mem_embedVS; exact Hv' |].
-            rewrite mem_coreResolution.
-            right; exists m', v', fs', f'.
-            split; [exact Hfs' | split; [exact (Hsub' _ Hf') | reflexivity]].
+        rewrite mem_coreResolution in Hq; rewrite mem_reduceDeps in Hd.
+        destruct Hq as [[pn [pv [fs [HS ->]]]] |
+                        [pn [pv [fs [f0 [HS [Hf0 ->]]]]]]];
+          inversion Hd; subst.
+        + destruct (Hdepc _ _ HS _ _ _ ltac:(eassumption))
+            as [v' [Hv' [fs' [_ Hfs']]]].
+          exists v'; split; [apply mem_embedVS; exact Hv' |].
+          rewrite mem_coreResolution; left.
+          do 3 eexists; split; [exact Hfs' | reflexivity].
+        + destruct (Hdepc _ _ HS _ _ _ ltac:(eassumption))
+            as [v' [Hv' [fs' [Hsub' Hfs']]]].
+          exists v'; split; [apply mem_embedVS; exact Hv' |].
+          rewrite mem_coreResolution; right.
+          do 4 eexists; split; [exact Hfs' |].
+          split; [apply Hsub'; eassumption | reflexivity].
+        + eexists; split; [apply SOvt.singleton_in; reflexivity |].
+          rewrite mem_coreResolution; left.
+          do 3 eexists; split; [exact HS | reflexivity].
+        + destruct (Haddlc _ _ HS _ Hf0 _ _ _ ltac:(eassumption))
+            as [v' [Hv' [fs' [_ Hfs']]]].
+          exists v'; split; [apply mem_embedVS; exact Hv' |].
+          rewrite mem_coreResolution; left.
+          do 3 eexists; split; [exact Hfs' | reflexivity].
+        + destruct (Haddlc _ _ HS _ Hf0 _ _ _ ltac:(eassumption))
+            as [v' [Hv' [fs' [Hsub' Hfs']]]].
+          exists v'; split; [apply mem_embedVS; exact Hv' |].
+          rewrite mem_coreResolution; right.
+          do 4 eexists; split; [exact Hfs' |].
+          split; [apply Hsub'; eassumption | reflexivity].
       - intros n v1 v2 H1 H2.
         rewrite mem_coreResolution in H1, H2.
         destruct H1 as [[n1 [w1 [fs1 [HS1 Hq1]]]] |
@@ -764,19 +622,7 @@ Module Feature (N V F : UsualOrderedType).
             (Name.Orig n).
       Proof.
         intros R support n; apply T.versions_ext; intro v.
-        rewrite !mem_reduceReal.
-        split.
-        - intros [[[qn qv] [HR Hq]] | [n1 [v1 [f1 [_ [_ Hq]]]]]].
-          + unfold embedPkg in Hq; injection Hq as <- <-.
-            left; exists (n, v).
-            split; [apply PkgFibred.mem_tailFibre;
-                    split; [exact HR | reflexivity]
-                   | reflexivity].
-          + discriminate Hq.
-        - intros [[[qn qv] [HR Hq]] | [n1 [v1 [f1 [Hs _]]]]].
-          + apply PkgFibred.mem_tailFibre in HR; destruct HR as [HR _].
-            left; exists (qn, qv); split; [exact HR | exact Hq].
-          + destruct (SupportSet.empty_spec Hs).
+        rewrite !mem_reduceReal_orig, PkgFibred.mem_tailFibre; intuition.
       Qed.
 
       Theorem dependees_lookupOrig :
@@ -795,29 +641,13 @@ Module Feature (N V F : UsualOrderedType).
                   | apply FeatDepRelFibred.tailFibre_subset
                   | apply AddlDepRel.empty_subset]].
         intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
-        destruct H as [D1 | [D2 | [D3 | [D4 | D5]]]].
-        - destruct D1 as [n1 [v1 [f1 [_ [_ [Hsrc _]]]]]]; discriminate Hsrc.
-        - destruct D2 as [p [m0 [vs0 [HD [Hsrc [Htn Htvs]]]]]].
-          destruct p as [qn qv]; unfold embedPkg in Hsrc; simpl in Hsrc.
-          injection Hsrc as E1 E2; subst qn qv.
-          right; left; exists (n, v), m0, vs0.
-          split; [rewrite FeatDepRelFibred.mem_tailFibre;
-                  split; [exact HD | reflexivity] |].
-          split; [reflexivity | split; [exact Htn | exact Htvs]].
-        - destruct D3
-            as [p [m0 [vs0 [fs0 [f [HD [E0 [Hf [Hsrc [Htn Htvs]]]]]]]]]].
-          destruct p as [qn qv]; unfold embedPkg in Hsrc; simpl in Hsrc.
-          injection Hsrc as E1 E2; subst qn qv.
-          right; right; left; exists (n, v), m0, vs0, fs0, f.
-          split; [rewrite FeatDepRelFibred.mem_tailFibre;
-                  split; [exact HD | reflexivity] |].
-          split; [exact E0 | split; [exact Hf |]].
-          split; [reflexivity | split; [exact Htn | exact Htvs]].
-        - destruct D4 as [n1 [v1 [f1 [m0 [vs0 [_ [Hsrc _]]]]]]];
-            discriminate Hsrc.
-        - destruct D5
-            as [n1 [v1 [f1 [m0 [vs0 [fs0 [f' [_ [_ [_ [Hsrc _]]]]]]]]]]];
-            discriminate Hsrc.
+        inversion H; subst.
+        - apply EdgeDepOrig, FeatDepRelFibred.mem_tailFibre;
+            split; [eassumption | reflexivity].
+        - eapply EdgeDepFeatPkg;
+            [apply FeatDepRelFibred.mem_tailFibre;
+               split; [eassumption | reflexivity]
+            | eassumption | eassumption].
       Qed.
 
       Theorem versions_lookupFeatPkg : forall R support n f,
@@ -827,23 +657,8 @@ Module Feature (N V F : UsualOrderedType).
             (Name.FeatPkg n f).
       Proof.
         intros R support n f; apply T.versions_ext; intro v.
-        rewrite !mem_reduceReal.
-        split.
-        - intros [[[qn qv] [_ Hq]] | [n1 [v1 [f1 [Hs [HR Hq]]]]]].
-          + unfold embedPkg in Hq; discriminate Hq.
-          + injection Hq as <- <- <-.
-            right; exists n, v, f.
-            split; [apply mem_supportFibre;
-                    split; [exact Hs | split; reflexivity] |].
-            split; [apply PkgFibred.mem_tailFibre;
-                    split; [exact HR | reflexivity]
-                   | reflexivity].
-        - intros [[[qn qv] [_ Hq]] | [n1 [v1 [f1 [Hs [HR Hq]]]]]].
-          + unfold embedPkg in Hq; discriminate Hq.
-          + apply mem_supportFibre in Hs; destruct Hs as [Hs _].
-            apply PkgFibred.mem_tailFibre in HR; destruct HR as [HR _].
-            right; exists n1, v1, f1;
-              split; [exact Hs | split; [exact HR | exact Hq]].
+        rewrite !mem_reduceReal_featPkg, mem_supportFibre,
+          PkgFibred.mem_tailFibre; intuition.
       Qed.
 
       Lemma dependees_lookupFeatPkg_any : forall R support Df Da n v f,
@@ -861,36 +676,16 @@ Module Feature (N V F : UsualOrderedType).
                   | apply FeatDepRel.empty_subset
                   | apply AddlDepRelFibred.tailFibre_subset]].
         intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
-        destruct H as [D1 | [D2 | [D3 | [D4 | D5]]]].
-        - destruct D1 as [n1 [v1 [f1 [Hsupp [HR [Hsrc [Htn Htvs]]]]]]].
-          injection Hsrc as E1 E2 E3; subst n1 f1 v1.
-          left; exists n, v, f.
-          split; [rewrite SupportFibred.mem_idFibre;
-                  split; [exact Hsupp | reflexivity] |].
-          split; [rewrite PkgFibred.mem_idFibre;
-                  split; [exact HR | reflexivity] |].
-          split; [reflexivity | split; [exact Htn | exact Htvs]].
-        - destruct D2 as [p [m0 [vs0 [_ [Hsrc _]]]]].
-          destruct p as [qn qv]; unfold embedPkg in Hsrc; simpl in Hsrc;
-            discriminate Hsrc.
-        - destruct D3 as [p [m0 [vs0 [fs0 [f1 [_ [_ [_ [Hsrc _]]]]]]]]].
-          destruct p as [qn qv]; unfold embedPkg in Hsrc; simpl in Hsrc;
-            discriminate Hsrc.
-        - destruct D4 as [n1 [v1 [f1 [m0 [vs0 [Hda [Hsrc [Htn Htvs]]]]]]]].
-          injection Hsrc as E1 E2 E3; subst n1 f1 v1.
-          right; right; right; left; exists n, v, f, m0, vs0.
-          split; [rewrite AddlDepRelFibred.mem_tailFibre;
-                  split; [exact Hda | reflexivity] |].
-          split; [reflexivity | split; [exact Htn | exact Htvs]].
-        - destruct D5 as
-            [n1 [v1 [f1 [m0 [vs0 [fs0 [f'
-              [Hda [E0 [Hf' [Hsrc [Htn Htvs]]]]]]]]]]]].
-          injection Hsrc as E1 E2 E3; subst n1 f1 v1.
-          right; right; right; right; exists n, v, f, m0, vs0, fs0, f'.
-          split; [rewrite AddlDepRelFibred.mem_tailFibre;
-                  split; [exact Hda | reflexivity] |].
-          split; [exact E0 | split; [exact Hf' |]].
-          split; [reflexivity | split; [exact Htn | exact Htvs]].
+        inversion H; subst.
+        - apply EdgeSupport;
+            [apply SupportFibred.mem_idFibre | apply PkgFibred.mem_idFibre];
+            (split; [eassumption | reflexivity]).
+        - apply EdgeAddlOrig, AddlDepRelFibred.mem_tailFibre;
+            split; [eassumption | reflexivity].
+        - eapply EdgeAddlFeatPkg;
+            [apply AddlDepRelFibred.mem_tailFibre;
+               split; [eassumption | reflexivity]
+            | eassumption | eassumption].
       Qed.
 
       (* The membership premise is what collapses the fibres to singletons. *)
@@ -904,10 +699,7 @@ Module Feature (N V F : UsualOrderedType).
             (Name.FeatPkg n f, v).
       Proof.
         intros R support Df Da n v f Hin.
-        apply mem_reduceReal in Hin.
-        destruct Hin as [[[qn qv] [_ Hq]] | [n1 [v1 [f1 [Hs [HR Hq]]]]]];
-          [unfold embedPkg in Hq; discriminate Hq |].
-        injection Hq as <- <- <-.
+        apply mem_reduceReal_featPkg in Hin; destruct Hin as [Hs HR].
         assert (PkgFibred.idFibre R (n, v) = PkgSet.singleton (n, v)) as ER.
         { apply PkgSet.ext; intro x.
           rewrite PkgFibred.mem_idFibre, PkgSet.singleton_spec.

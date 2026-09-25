@@ -254,130 +254,83 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       rewrite VSet.filter_spec'.
       rewrite granEqb_iff; reflexivity.
     Qed.
+    Inductive ReducedPkg (R : PkgSet.t) (D : C.DepRel.t) (g : V.t -> G.t) :
+        T.Pkg.t -> Prop :=
+    | PkgEmbed : forall n v, PkgSet.In (n, v) R ->
+        ReducedPkg R D g (Name.Granular n (g v), Version.Orig v)
+    | PkgIntermediate : forall n v m vs u,
+        C.DepRel.In ((n, v), (m, vs)) D -> IsSplit g vs -> VSet.In u vs ->
+        ReducedPkg R D g (Name.Intermediate n v m, Version.Gran (g u)).
 
     Lemma mem_reduceReal : forall R D g q,
-        T.PkgSet.In q (reduceReal R D g) <->
-        (exists p, PkgSet.In p R /\ q = embedPkg g p) \/
-        (exists n v m vs u,
-            C.DepRel.In ((n, v), (m, vs)) D /\ IsSplit g vs /\ VSet.In u vs /\
-            q = (Name.Intermediate n v m, Version.Gran (g u))).
+        T.PkgSet.In q (reduceReal R D g) <-> ReducedPkg R D g q.
     Proof.
       intros R D g q; unfold reduceReal, embedSet.
       rewrite T.PkgSet.union_spec, SOptp.mem_map, SOdtp.mem_unionMap.
-      apply or_iff_compat_l; split.
-      - intros [[[n v] [m vs]] [HeD Hh]]; cbn beta iota in Hh.
-        destruct (isSplitb g vs) eqn:Hs; [| destruct (SOdtp.empty_in _ Hh)].
-        apply SOvtp.mem_map in Hh; destruct Hh as [u [Hu ->]].
-        exists n, v, m, vs, u; repeat split; try assumption.
-        apply isSplitb_iff; exact Hs.
-      - intros [n [v [m [vs [u [HD [Hspl [Hu ->]]]]]]]].
+      split.
+      - intros [[[n v] [Hp ->]] | [[[n v] [m vs]] [HD Hh]]];
+          [apply PkgEmbed; exact Hp |].
+        cbn beta iota in Hh; apply SOdtp.in_if_empty in Hh as [Hs Hm].
+        apply SOvtp.mem_map in Hm; destruct Hm as [u [Hu ->]].
+        apply isSplitb_iff in Hs; eapply PkgIntermediate; eassumption.
+      - destruct 1 as [n v Hp | n v m vs u HD Hs Hu];
+          [left; exists (n, v); auto | right].
         exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
-        apply isSplitb_iff in Hspl; rewrite Hspl.
-        apply SOvtp.mem_map; exists u; split; [exact Hu | reflexivity].
+        apply SOdtp.in_if_empty; rewrite isSplitb_iff, SOvtp.mem_map; eauto.
     Qed.
 
-    Lemma mem_reduceDepsDirect : forall D g y,
-        T.DepRel.In y (reduceDepsDirect D g) <->
-        exists n v m vs u,
-          C.DepRel.In ((n, v), (m, vs)) D /\ IsDirect g vs /\ VSet.In u vs /\
-          y = ((Name.Granular n (g v), Version.Orig v),
-               (Name.Granular m (g u), embedVS vs)).
-    Proof.
-      intros D g y; unfold reduceDepsDirect; rewrite SOdtd.mem_unionMap.
-      split.
-      - intros [[[n v] [m vs]] [HeD Hh]]; cbn beta iota in Hh.
-        destruct (isDirectb g vs) eqn:Hd; [| destruct (SOdtd.empty_in _ Hh)].
-        apply SOvtd.mem_map in Hh; destruct Hh as [u [Hu ->]].
-        exists n, v, m, vs, u; repeat split; try assumption.
-        apply isDirectb_iff; exact Hd.
-      - intros [n [v [m [vs [u [HD [Hdir [Hu ->]]]]]]]].
-        exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
-        apply isDirectb_iff in Hdir; rewrite Hdir.
-        apply SOvtd.mem_map; exists u; split; [exact Hu | reflexivity].
-    Qed.
-
-    Lemma mem_reduceDepsSplitEntry : forall D g y,
-        T.DepRel.In y (reduceDepsSplitEntry D g) <->
-        exists n v m vs,
-          C.DepRel.In ((n, v), (m, vs)) D /\ IsSplit g vs /\
-          y = ((Name.Granular n (g v), Version.Orig v),
-               (Name.Intermediate n v m, gransOfVS g vs)).
-    Proof.
-      intros D g y; unfold reduceDepsSplitEntry; rewrite SOdtd.mem_filterMap.
-      split.
-      - intros [[[n v] [m vs]] [HeD Hh]]; cbn beta iota in Hh.
-        destruct (isSplitb g vs) eqn:Hs; [| discriminate].
-        injection Hh as <-.
-        exists n, v, m, vs; repeat split; try assumption.
-        apply isSplitb_iff; exact Hs.
-      - intros [n [v [m [vs [HD [Hspl ->]]]]]].
-        exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
-        apply isSplitb_iff in Hspl; rewrite Hspl; reflexivity.
-    Qed.
-
-    Lemma mem_reduceDepsSplitFanout : forall D g y,
-        T.DepRel.In y (reduceDepsSplitFanout D g) <->
-        exists n v m vs u,
-          C.DepRel.In ((n, v), (m, vs)) D /\ IsSplit g vs /\ VSet.In u vs /\
-          y = ((Name.Intermediate n v m, Version.Gran (g u)),
-               (Name.Granular m (g u), embedVS (filterGran g u vs))).
-    Proof.
-      intros D g y; unfold reduceDepsSplitFanout; rewrite SOdtd.mem_unionMap.
-      split.
-      - intros [[[n v] [m vs]] [HeD Hh]]; cbn beta iota in Hh.
-        destruct (isSplitb g vs) eqn:Hs; [| destruct (SOdtd.empty_in _ Hh)].
-        apply SOvtd.mem_map in Hh; destruct Hh as [u [Hu ->]].
-        exists n, v, m, vs, u; repeat split; try assumption.
-        apply isSplitb_iff; exact Hs.
-      - intros [n [v [m [vs [u [HD [Hspl [Hu ->]]]]]]]].
-        exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
-        apply isSplitb_iff in Hspl; rewrite Hspl.
-        apply SOvtd.mem_map; exists u; split; [exact Hu | reflexivity].
-    Qed.
-
-    Lemma mem_reduceDepsEmpty : forall D g y,
-        T.DepRel.In y (reduceDepsEmpty D g) <->
-        exists n v m,
-          C.DepRel.In ((n, v), (m, VSet.empty)) D /\
-          y = ((Name.Granular n (g v), Version.Orig v),
-               (Name.Intermediate n v m, T.VSet.empty)).
-    Proof.
-      intros D g y; unfold reduceDepsEmpty; rewrite SOdtd.mem_filterMap.
-      split.
-      - intros [[[n v] [m vs]] [HeD Hh]]; cbn beta iota in Hh.
-        destruct (VSet.is_empty vs) eqn:He; [| discriminate].
-        injection Hh as <-.
-        apply VSet.is_empty_iff in He; subst vs.
-        exists n, v, m; split; [assumption | reflexivity].
-      - intros [n [v [m [HD ->]]]].
-        exists ((n, v), (m, VSet.empty)); split; [exact HD | simpl];
-          reflexivity.
-    Qed.
+    Inductive ReducedEdge (D : C.DepRel.t) (g : V.t -> G.t) :
+        T.DepElt.t -> Prop :=
+    | EdgeDirect : forall n v m vs u,
+        C.DepRel.In ((n, v), (m, vs)) D -> IsDirect g vs -> VSet.In u vs ->
+        ReducedEdge D g ((Name.Granular n (g v), Version.Orig v),
+                         (Name.Granular m (g u), embedVS vs))
+    | EdgeSplitEntry : forall n v m vs,
+        C.DepRel.In ((n, v), (m, vs)) D -> IsSplit g vs ->
+        ReducedEdge D g ((Name.Granular n (g v), Version.Orig v),
+                         (Name.Intermediate n v m, gransOfVS g vs))
+    | EdgeSplitFanout : forall n v m vs u,
+        C.DepRel.In ((n, v), (m, vs)) D -> IsSplit g vs -> VSet.In u vs ->
+        ReducedEdge D g ((Name.Intermediate n v m, Version.Gran (g u)),
+                         (Name.Granular m (g u),
+                          embedVS (filterGran g u vs)))
+    | EdgeEmpty : forall n v m,
+        C.DepRel.In ((n, v), (m, VSet.empty)) D ->
+        ReducedEdge D g ((Name.Granular n (g v), Version.Orig v),
+                         (Name.Intermediate n v m, T.VSet.empty)).
 
     Lemma mem_reduceDeps : forall D g y,
-        T.DepRel.In y (reduceDeps D g) <->
-        (exists n v m vs u,
-            C.DepRel.In ((n, v), (m, vs)) D /\ IsDirect g vs /\ VSet.In u vs /\
-            y = ((Name.Granular n (g v), Version.Orig v),
-                 (Name.Granular m (g u), embedVS vs))) \/
-        ((exists n v m vs,
-             C.DepRel.In ((n, v), (m, vs)) D /\ IsSplit g vs /\
-             y = ((Name.Granular n (g v), Version.Orig v),
-                  (Name.Intermediate n v m, gransOfVS g vs))) \/
-         ((exists n v m vs u,
-              C.DepRel.In ((n, v), (m, vs)) D /\ IsSplit g vs /\ VSet.In u vs /\
-              y = ((Name.Intermediate n v m, Version.Gran (g u)),
-                   (Name.Granular m (g u), embedVS (filterGran g u vs)))) \/
-          (exists n v m,
-              C.DepRel.In ((n, v), (m, VSet.empty)) D /\
-              y = ((Name.Granular n (g v), Version.Orig v),
-                   (Name.Intermediate n v m, T.VSet.empty))))).
+        T.DepRel.In y (reduceDeps D g) <-> ReducedEdge D g y.
     Proof.
-      intros D g y; unfold reduceDeps.
-      rewrite !T.DepRel.union_spec.
-      rewrite mem_reduceDepsDirect, mem_reduceDepsSplitEntry,
-        mem_reduceDepsSplitFanout, mem_reduceDepsEmpty.
-      reflexivity.
+      intros D g y; unfold reduceDeps, reduceDepsDirect, reduceDepsSplitEntry,
+        reduceDepsSplitFanout, reduceDepsEmpty.
+      rewrite !T.DepRel.union_spec, !SOdtd.mem_unionMap, !SOdtd.mem_filterMap.
+      split.
+      - intros [H | [H | [H | H]]]; destruct H as [[[n v] [m vs]] [HD H]];
+          cbn beta iota in H.
+        + apply SOdtd.in_if_empty in H as [Hd Hm].
+          apply SOvtd.mem_map in Hm; destruct Hm as [u [Hu ->]].
+          apply isDirectb_iff in Hd; apply EdgeDirect; assumption.
+        + destruct (isSplitb g vs) eqn:Hs; [| discriminate].
+          injection H as <-; apply isSplitb_iff in Hs.
+          apply EdgeSplitEntry; assumption.
+        + apply SOdtd.in_if_empty in H as [Hs Hm].
+          apply SOvtd.mem_map in Hm; destruct Hm as [u [Hu ->]].
+          apply isSplitb_iff in Hs; apply EdgeSplitFanout; assumption.
+        + destruct (VSet.is_empty vs) eqn:He; [| discriminate].
+          injection H as <-; apply VSet.is_empty_iff in He; subst vs.
+          apply EdgeEmpty; assumption.
+      - destruct 1 as [n v m vs u HD Hd Hu | n v m vs HD Hs
+                      | n v m vs u HD Hs Hu | n v m HD];
+          [left | right; left | right; right; left | right; right; right].
+        + exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
+          apply SOdtd.in_if_empty; rewrite isDirectb_iff, SOvtd.mem_map; eauto.
+        + exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
+          apply isSplitb_iff in Hs; rewrite Hs; reflexivity.
+        + exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
+          apply SOdtd.in_if_empty; rewrite isSplitb_iff, SOvtd.mem_map; eauto.
+        + exists ((n, v), (m, VSet.empty)); split; [exact HD | simpl];
+            reflexivity.
     Qed.
 
     Definition tryInvPkg (g : V.t -> G.t) (p' : T.Pkg.t) : option Pkg.t :=
@@ -390,8 +343,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Lemma tryInvPkg_embed : forall g p, tryInvPkg g (embedPkg g p) = Some p.
     Proof.
       intros g [n v]; unfold tryInvPkg, embedPkg; cbn [fst snd].
-      destruct (G.eq_dec (g v) (g v)) as [_ | NE];
-        [reflexivity | contradiction NE; reflexivity].
+      apply dec_refl.
     Qed.
 
     Lemma tryInvPkg_some : forall g (p' : T.Pkg.t) (p : Pkg.t),
@@ -489,28 +441,20 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       intros D g S pair; unfold parents; rewrite SOdpp.mem_unionMap.
       split.
       - intros [[[n v] [m vs]] [HeD Hh]]; cbn beta iota in Hh.
-        apply SOvpp.mem_filterMap in Hh; destruct Hh as [u [Hu Hc]];
-          cbn beta iota in Hc.
-        destruct (piGuardb g S n v m vs u) eqn:Hg; [| discriminate].
-        injection Hc as <-.
-        apply piGuardb_iff in Hg; destruct Hg as [H1 [H2 H3]].
-        exists n, v, m, vs, u; repeat split; assumption.
+        apply SOvpp.mem_filterMap_if in Hh; destruct Hh as [u [Hu [Hg ->]]].
+        apply piGuardb_iff in Hg; exists n, v, m, vs, u; intuition.
       - intros [n [v [m [vs [u [HD [HvS [Hu [HuS [Hsc ->]]]]]]]]]].
         exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
-        apply SOvpp.mem_filterMap; exists u; split; [exact Hu | cbn beta iota].
-        assert (Hg : piGuardb g S n v m vs u = true)
-          by (apply piGuardb_iff; repeat split; assumption).
-        rewrite Hg; reflexivity.
+        apply SOvpp.mem_filterMap_if; exists u; rewrite piGuardb_iff.
+        intuition.
     Qed.
 
     Lemma embedPkg_mem_reduceReal : forall g (p : Pkg.t) R D,
         T.PkgSet.In (embedPkg g p) (reduceReal R D g) -> PkgSet.In p R.
     Proof.
-      intros g p R D H; apply mem_reduceReal in H.
-      destruct H as [[q [HqR Hq]] | [n [v [m [vs [u [_ [_ [_ Hq]]]]]]]]].
-      - apply embedPkg_injective in Hq; subst q; exact HqR.
-      - destruct p as [pn pv]; unfold embedPkg in Hq; simpl in Hq.
-        injection Hq as Hq _; discriminate.
+      intros g [n v] R D H; apply mem_reduceReal in H.
+      unfold embedPkg in H; cbn [fst snd] in H.
+      inversion H; subst; assumption.
     Qed.
 
     Lemma mem_reduceDeps_direct : forall D g n v m vs u0,
@@ -518,40 +462,28 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         T.DepRel.In ((Name.Granular n (g v), Version.Orig v),
                      (Name.Granular m (g u0), embedVS vs))
           (reduceDeps D g).
-    Proof.
-      intros; apply mem_reduceDeps.
-      left; exists n, v, m, vs, u0; repeat split; assumption.
-    Qed.
+    Proof. intros; apply mem_reduceDeps, EdgeDirect; assumption. Qed.
 
     Lemma mem_reduceDeps_split1 : forall D g n v m vs,
         C.DepRel.In ((n, v), (m, vs)) D -> IsSplit g vs ->
         T.DepRel.In ((Name.Granular n (g v), Version.Orig v),
                      (Name.Intermediate n v m, gransOfVS g vs))
           (reduceDeps D g).
-    Proof.
-      intros; apply mem_reduceDeps.
-      right; left; exists n, v, m, vs; repeat split; assumption.
-    Qed.
+    Proof. intros; apply mem_reduceDeps, EdgeSplitEntry; assumption. Qed.
 
     Lemma mem_reduceDeps_split2 : forall D g n v m vs u0,
         C.DepRel.In ((n, v), (m, vs)) D -> IsSplit g vs -> VSet.In u0 vs ->
         T.DepRel.In ((Name.Intermediate n v m, Version.Gran (g u0)),
                      (Name.Granular m (g u0), embedVS (filterGran g u0 vs)))
           (reduceDeps D g).
-    Proof.
-      intros; apply mem_reduceDeps.
-      right; right; left; exists n, v, m, vs, u0; repeat split; assumption.
-    Qed.
+    Proof. intros; apply mem_reduceDeps, EdgeSplitFanout; assumption. Qed.
 
     Lemma mem_reduceDeps_empty : forall D g n v m,
         C.DepRel.In ((n, v), (m, VSet.empty)) D ->
         T.DepRel.In ((Name.Granular n (g v), Version.Orig v),
                      (Name.Intermediate n v m, T.VSet.empty))
           (reduceDeps D g).
-    Proof.
-      intros; apply mem_reduceDeps.
-      right; right; right; exists n, v, m; split; [assumption | reflexivity].
-    Qed.
+    Proof. intros; apply mem_reduceDeps, EdgeEmpty; assumption. Qed.
 
     Theorem concurrent_soundness :
       forall (R : PkgSet.t) (D : C.DepRel.t) (g : V.t -> G.t) (r : Pkg.t)
@@ -672,64 +604,44 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
              else T.PkgSet.empty)
            D).
 
+    Inductive CorePkg (S : PkgSet.t) (pi : ParentRel.t) (D : C.DepRel.t)
+        (g : V.t -> G.t) : T.Pkg.t -> Prop :=
+    | CoreGranular : forall n v, PkgSet.In (n, v) S ->
+        CorePkg S pi D g (Name.Granular n (g v), Version.Orig v)
+    | CoreIntermediate : forall n v m vs u,
+        C.DepRel.In ((n, v), (m, vs)) D -> PkgSet.In (n, v) S ->
+        IsSplit g vs -> PkgSet.In (m, u) S -> VSet.In u vs ->
+        ParentRel.In ((m, u), (n, v)) pi ->
+        CorePkg S pi D g (Name.Intermediate n v m, Version.Gran (g u)).
+
     Lemma mem_coreResolution : forall S pi D g (q : T.Pkg.t),
-        T.PkgSet.In q (coreResolution S pi D g) <->
-        (exists n v, PkgSet.In (n, v) S /\
-           q = (Name.Granular n (g v), Version.Orig v)) \/
-        (exists n v m vs u,
-           C.DepRel.In ((n, v), (m, vs)) D /\ PkgSet.In (n, v) S /\
-           IsSplit g vs /\ PkgSet.In (m, u) S /\ VSet.In u vs /\
-           ParentRel.In ((m, u), (n, v)) pi /\
-           q = (Name.Intermediate n v m, Version.Gran (g u))).
+        T.PkgSet.In q (coreResolution S pi D g) <-> CorePkg S pi D g q.
     Proof.
       intros S pi D g q; unfold coreResolution.
       rewrite T.PkgSet.union_spec, SOptp.mem_map, SOdtp.mem_unionMap.
-      assert (Hfst :
-        (exists p, PkgSet.In p S /\ q = embedPkg g p) <->
-        (exists n v, PkgSet.In (n, v) S /\
-           q = (Name.Granular n (g v), Version.Orig v))).
-      { split.
-        - intros [[n v] [HpS ->]];
-            exists n, v; split; [exact HpS | reflexivity].
-        - intros [n [v [HnS ->]]]; exists (n, v); auto. }
-      rewrite Hfst; apply or_iff_compat_l.
       split.
-      - intros [[[n v] [m vs]] [HeD Hh]]; cbn beta iota in Hh.
-        destruct (andb (isSplitb g vs) (PkgSet.mem (n, v) S)) eqn:Hg;
-          [| destruct (SOdtp.empty_in _ Hh)].
-        apply Bool.andb_true_iff in Hg; destruct Hg as [Hs Hnv].
-        apply isSplitb_iff in Hs; apply PkgSet.mem_spec in Hnv.
-        apply SOvtp.mem_filterMap in Hh; destruct Hh as [u [Hu Hc]];
-          cbn beta iota in Hc.
-        destruct (andb (PkgSet.mem (m, u) S)
-                    (ParentRel.mem ((m, u), (n, v)) pi)) eqn:Hb;
-          [| discriminate].
-        injection Hc as <-.
-        apply Bool.andb_true_iff in Hb; destruct Hb as [Hmu Hpi].
-        apply PkgSet.mem_spec in Hmu; apply ParentRel.mem_spec in Hpi.
-        exists n, v, m, vs, u; repeat split; assumption.
-      - intros [n [v [m [vs [u [HD [Hnv [Hs [Hmu [Hu [Hpi ->]]]]]]]]]]].
+      - intros [[[n v] [HpS ->]] | [[[n v] [m vs]] [HD Hh]]];
+          [apply CoreGranular; exact HpS |].
+        cbn beta iota in Hh; apply SOdtp.in_if_empty in Hh as [Hg Hm].
+        apply SOvtp.mem_filterMap_if in Hm; destruct Hm as [u [Hu [Hb ->]]].
+        rewrite Bool.andb_true_iff, isSplitb_iff, PkgSet.mem_spec in Hg.
+        rewrite Bool.andb_true_iff, PkgSet.mem_spec, ParentRel.mem_spec in Hb.
+        eapply CoreIntermediate; try eassumption; tauto.
+      - destruct 1 as [n v HpS | n v m vs u HD Hnv Hs Hmu Hu Hpi];
+          [left; exists (n, v); auto | right].
         exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
-        assert (andb (isSplitb g vs) (PkgSet.mem (n, v) S) = true) as ->.
-        { apply Bool.andb_true_iff; split;
-            [apply isSplitb_iff; exact Hs | apply PkgSet.mem_spec; exact Hnv]. }
-        apply SOvtp.mem_filterMap; exists u; split; [exact Hu | cbn beta iota].
-        assert (andb (PkgSet.mem (m, u) S)
-                  (ParentRel.mem ((m, u), (n, v)) pi) = true) as ->.
-        { apply Bool.andb_true_iff; split;
-            [apply PkgSet.mem_spec; exact Hmu
-            | apply ParentRel.mem_spec; exact Hpi]. }
-        reflexivity.
+        apply SOdtp.in_if_empty; rewrite SOvtp.mem_filterMap_if.
+        rewrite Bool.andb_true_iff, isSplitb_iff, PkgSet.mem_spec.
+        split; [tauto |]; exists u.
+        rewrite Bool.andb_true_iff, PkgSet.mem_spec, ParentRel.mem_spec.
+        repeat split; auto.
     Qed.
 
     Lemma mem_coreResolution_granular : forall S pi D g n v,
         PkgSet.In (n, v) S ->
         T.PkgSet.In (Name.Granular n (g v), Version.Orig v)
           (coreResolution S pi D g).
-    Proof.
-      intros; apply mem_coreResolution.
-      left; exists n, v; split; [assumption | reflexivity].
-    Qed.
+    Proof. intros; apply mem_coreResolution, CoreGranular; assumption. Qed.
 
     Lemma mem_coreResolution_intermediate : forall S pi D g n v m vs u,
         C.DepRel.In ((n, v), (m, vs)) D -> PkgSet.In (n, v) S ->
@@ -737,10 +649,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         ParentRel.In ((m, u), (n, v)) pi ->
         T.PkgSet.In (Name.Intermediate n v m, Version.Gran (g u))
           (coreResolution S pi D g).
-    Proof.
-      intros; apply mem_coreResolution.
-      right; exists n, v, m, vs, u; repeat split; assumption.
-    Qed.
+    Proof. intros; apply mem_coreResolution; econstructor; eassumption. Qed.
 
     Theorem concurrent_completeness :
       forall (R : PkgSet.t) (D : C.DepRel.t) (g : V.t -> G.t) (r : Pkg.t)
@@ -753,77 +662,48 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       intros R D g r S pi Hfunc Hres.
       destruct Hres as [Hsub Hroot Hpc Hvg Hps].
       constructor.
-      - intros q Hq; apply mem_coreResolution in Hq.
-        apply mem_reduceReal.
-        destruct Hq as
-          [[n [v [Hnv ->]]]
-          | [n [v [m [vs [u [HD [Hnv [Hs [Hmu [Hu [Hpi ->]]]]]]]]]]]].
-        + left; exists (n, v); split; [apply Hsub; exact Hnv | reflexivity].
-        + right; exists n, v, m, vs, u; repeat split; try assumption.
+      - intros q Hq; apply mem_reduceReal; apply mem_coreResolution in Hq.
+        destruct Hq as [n v Hnv | n v m vs u HD Hnv Hs Hmu Hu Hpi];
+          [apply PkgEmbed, Hsub, Hnv | eapply PkgIntermediate; eassumption].
       - destruct r as [rn rv].
         exact (mem_coreResolution_granular S pi D g rn rv Hroot).
       - intros q Hq md vsd Hd.
-        apply mem_coreResolution in Hq.
-        apply mem_reduceDeps in Hd.
-        destruct Hq as
-          [[n [v [Hnv ->]]]
-          | [n [v [m [vs [u [HD [Hnv [Hs [Hmu [Hu [Hpi ->]]]]]]]]]]]].
-        + destruct Hd as [Hd | [Hd | [Hd | Hd]]].
-          * destruct Hd as [n' [v' [m' [vs' [u' [HD' [Hdir' [Hu' Heq]]]]]]]].
-            injection Heq as <- Hgv <- -> ->.
-            destruct (Hpc _ Hnv _ _ HD') as [u [[Huv [HmuS Hpiu]] _]].
+        apply mem_coreResolution in Hq; apply mem_reduceDeps in Hd.
+        destruct Hq as [n v Hnv | n v m vs u HD Hnv Hs Hmu Hu Hpi].
+        + inversion Hd as [n' v' m' vs' u' HD' Hdir' Hu' | n' v' m' vs' HD' Hs'
+                          | | n' v' m' HD']; subst.
+          * destruct (Hpc _ Hnv _ _ HD') as [u [[Huv [HmuS Hpiu]] _]].
             exists (Version.Orig u); split.
             { unfold embedVS; apply SOvcv.mem_map;
                 exists u; split; [exact Huv | reflexivity]. }
             { rewrite <- (Hdir' u u' Huv Hu').
               exact (mem_coreResolution_granular S pi D g m' u HmuS). }
-          * destruct Hd as [n' [v' [m' [vs' [HD' [Hs' Heq]]]]]].
-            injection Heq as <- Hgv <- -> ->.
-            destruct (Hpc _ Hnv _ _ HD') as [u [[Huv [HmuS Hpiu]] _]].
+          * destruct (Hpc _ Hnv _ _ HD') as [u [[Huv [HmuS Hpiu]] _]].
             exists (Version.Gran (g u)); split.
             { unfold gransOfVS; apply SOvcv.mem_map;
                 exists u; split; [exact Huv | reflexivity]. }
             { exact (mem_coreResolution_intermediate S pi D g n v m' vs' u
                        HD' Hnv Hs' HmuS Huv Hpiu). }
-          * destruct Hd as [n' [v' [m' [vs' [u' [HD' [Hs' [Hu' Heq]]]]]]]].
-            discriminate Heq.
-          * destruct Hd as [n' [v' [m' [HD' Heq]]]].
-            injection Heq as <- Hgv <- -> ->.
-            destruct (Hpc _ Hnv _ _ HD') as [u [[Huv _] _]].
+          * destruct (Hpc _ Hnv _ _ HD') as [u [[Huv _] _]].
             destruct (VSet.empty_spec Huv).
-        + destruct Hd as [Hd | [Hd | [Hd | Hd]]].
-          * destruct Hd as [n' [v' [m' [vs' [u' [HD' [Hdir' [Hu' Heq]]]]]]]].
-            discriminate Heq.
-          * destruct Hd as [n' [v' [m' [vs' [HD' [Hs' Heq]]]]]].
-            discriminate Heq.
-          * destruct Hd as [n' [v' [m' [vs' [u'' [HD' [Hs' [Hu'' Heq]]]]]]]].
-            injection Heq as <- <- <- Hgu -> ->.
-            assert (vs' = vs) as -> by (exact (Hfunc _ _ _ _ HD' HD)).
-            exists (Version.Orig u); split.
-            { unfold embedVS; apply SOvcv.mem_map; exists u; split;
-                [| reflexivity].
-              apply mem_filterGran; split; [exact Hu | exact Hgu]. }
-            { rewrite <- Hgu.
-              exact (mem_coreResolution_granular S pi D g m u Hmu). }
-          * destruct Hd as [n' [v' [m' [HD' Heq]]]].
-            discriminate Heq.
+        + inversion Hd as [| | n' v' m' vs' u' HD' Hs' Hu' |]; subst.
+          match goal with Hg : g u' = g u |- _ => rename Hg into Hgu end.
+          assert (vs' = vs) as -> by (exact (Hfunc _ _ _ _ HD' HD)).
+          exists (Version.Orig u); split.
+          { unfold embedVS; apply SOvcv.mem_map; exists u; split;
+              [| reflexivity].
+            apply mem_filterGran; split; [exact Hu | symmetry; exact Hgu]. }
+          { rewrite Hgu.
+            exact (mem_coreResolution_granular S pi D g m u Hmu). }
       - intros n cv1 cv2 H1 H2.
         apply mem_coreResolution in H1, H2.
-        destruct H1 as
-          [[n1 [v1 [Hm1 He1]]]
-          | [n1 [v1 [m1 [vs1 [u1
-              [Hd1 [Hnv1 [Hs1 [Hmu1 [Hu1 [Hpi1 He1]]]]]]]]]]]];
-        destruct H2 as
-          [[n2 [v2 [Hm2 He2]]]
-          | [n2 [v2 [m2 [vs2 [u2
-              [Hd2 [Hnv2 [Hs2 [Hmu2 [Hu2 [Hpi2 He2]]]]]]]]]]]].
-        + injection He1 as -> ->; injection He2 as <- Hg ->.
-          destruct (V.eq_dec v1 v2) as [-> | NE]; [reflexivity |].
-          exfalso; exact (Hvg n1 v1 v2 Hm1 Hm2 NE Hg).
-        + injection He1 as -> ->; discriminate He2.
-        + injection He1 as -> ->; discriminate He2.
-        + injection He1 as -> ->; injection He2 as <- <- <- ->.
-          assert (vs2 = vs1) as -> by (exact (Hfunc _ _ _ _ Hd2 Hd1)).
+        inversion H1
+          as [n1 v1 Hm1 | n1 v1 m1 vs1 u1 Hd1 Hnv1 Hs1 Hmu1 Hu1 Hpi1]; subst;
+          inversion H2
+          as [n2 v2 Hm2 | n2 v2 m2 vs2 u2 Hd2 Hnv2 Hs2 Hmu2 Hu2 Hpi2]; subst.
+        + destruct (V.eq_dec v1 v2) as [-> | NE]; [reflexivity | exfalso].
+          apply (Hvg n1 v1 v2 Hm1 Hm2 NE); congruence.
+        + assert (vs2 = vs1) as -> by (exact (Hfunc _ _ _ _ Hd2 Hd1)).
           destruct (Hpc _ Hnv1 _ _ Hd1) as [w [_ Huniq]].
           pose proof (Huniq u1 (conj Hu1 (conj Hmu1 Hpi1))) as E1.
           pose proof (Huniq u2 (conj Hu2 (conj Hmu2 Hpi2))) as E2.
@@ -872,20 +752,9 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       Proof.
         intros R D g n w; apply T.versions_ext; intro y.
         rewrite !mem_reduceReal.
-        split.
-        - intros [[[qn qv] [HR Hq]]
-                 | [n' [v' [m' [vs [u [_ [_ [_ Heq]]]]]]]]];
-            [| discriminate Heq].
-          unfold embedPkg in Hq; cbn [fst snd] in Hq.
-          injection Hq as -> -> ->.
-          left; exists (qn, qv); split;
-            [apply mem_granFibre; split;
-               [exact HR | split; reflexivity]
-            | reflexivity].
-        - intros [[[qn qv] [HR Hq]] | [n' [v' [m' [vs [u [HD _]]]]]]].
-          + apply mem_granFibre in HR; destruct HR as [HR _].
-            left; exists (qn, qv); split; [exact HR | exact Hq].
-          + destruct (C.DepRel.empty_spec HD).
+        split; intro H; inversion H as [qn qv HR |]; subst; apply PkgEmbed.
+        - apply mem_granFibre; auto.
+        - apply mem_granFibre in HR; tauto.
       Qed.
 
       Theorem dependees_lookupGranular : forall D g n v,
@@ -896,27 +765,10 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         intros D g n v; apply T.dependees_ext; intros [m ws].
         split; [| apply reduceDeps_mono, DepRelFibred.tailFibre_subset].
         intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
-        destruct H as [H | [H | [H | H]]].
-        - destruct H as [n' [v' [m' [vs [u [HD [Hdir [Hu Heq]]]]]]]].
-          injection Heq as <- Hgv <- -> ->.
-          left; exists n, v, m', vs, u.
-          split; [apply DepRelFibred.mem_tailFibre;
-                  split; [exact HD | reflexivity] |].
-          split; [exact Hdir | split; [exact Hu | reflexivity]].
-        - destruct H as [n' [v' [m' [vs [HD [Hs Heq]]]]]].
-          injection Heq as <- Hgv <- -> ->.
-          right; left; exists n, v, m', vs.
-          split; [apply DepRelFibred.mem_tailFibre;
-                  split; [exact HD | reflexivity] |].
-          split; [exact Hs | reflexivity].
-        - destruct H as [n' [v' [m' [vs [u [HD [Hs [Hu Heq]]]]]]]];
-            discriminate Heq.
-        - destruct H as [n' [v' [m' [HD Heq]]]].
-          injection Heq as <- Hgv <- -> ->.
-          right; right; right; exists n, v, m'.
-          split;
-            [apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity]
-            | reflexivity].
+        inversion H; subst;
+          [apply EdgeDirect | apply EdgeSplitEntry | apply EdgeEmpty];
+          try assumption;
+          apply DepRelFibred.mem_tailFibre; (split; [assumption | reflexivity]).
       Qed.
 
       Theorem dependees_lookupGranularGran : forall D g n (w w' : G.t),
@@ -924,14 +776,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           T.DependeesSet.empty.
       Proof.
         intros D g n w w'; apply T.dependees_empty_iff; intros [m ws] H.
-        apply mem_reduceDeps in H.
-        destruct H as [H | [H | [H | H]]].
-        - destruct H as [n' [v' [m' [vs [u [_ [_ [_ Heq]]]]]]]];
-            discriminate Heq.
-        - destruct H as [n' [v' [m' [vs [_ [_ Heq]]]]]]; discriminate Heq.
-        - destruct H as [n' [v' [m' [vs [u [_ [_ [_ Heq]]]]]]]];
-            discriminate Heq.
-        - destruct H as [n' [v' [m' [_ Heq]]]]; discriminate Heq.
+        apply mem_reduceDeps in H; inversion H.
       Qed.
 
       Theorem versions_lookupIntermediate : forall R D g n v m,
@@ -942,19 +787,11 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       Proof.
         intros R D g n v m; apply T.versions_ext; intro y.
         rewrite !mem_reduceReal.
-        split.
-        - intros [[[qn qv] [_ Hq]]
-                 | [n' [v' [m' [vs [u [HD [Hs [Hu Heq]]]]]]]]].
-          + unfold embedPkg in Hq; cbn [fst snd] in Hq; discriminate Hq.
-          + injection Heq as -> -> -> ->.
-            right; exists n', v', m', vs, u.
-            split; [apply DepRelFibred.mem_endsFibre;
-                    split; [exact HD | split; reflexivity] |].
-            split; [exact Hs | split; [exact Hu | reflexivity]].
-        - intros [[[qn qv] [HR _]] | [n' [v' [m' [vs [u [HD Hrest]]]]]]].
-          + destruct (PkgSet.empty_spec HR).
-          + apply DepRelFibred.mem_endsFibre in HD; destruct HD as [HD _].
-            right; exists n', v', m', vs, u; split; [exact HD | exact Hrest].
+        split; intro H; inversion H as [| n' v' m' vs u HD Hs Hu]; subst;
+          apply (PkgIntermediate _ _ _ n v m vs u); try assumption.
+        - apply DepRelFibred.mem_endsFibre.
+          split; [exact HD | split; reflexivity].
+        - apply DepRelFibred.mem_endsFibre in HD; tauto.
       Qed.
 
       Theorem dependees_lookupIntermediate : forall D g n v m w,
@@ -966,18 +803,10 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         intros D g n v m w; apply T.dependees_ext; intros [m0 ws].
         split; [| apply reduceDeps_mono, DepRelFibred.endsFibre_subset].
         intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
-        destruct H as [H | [H | [H | H]]].
-        - destruct H as [n' [v' [m' [vs [u [HD [Hdir [Hu Heq]]]]]]]];
-            discriminate Heq.
-        - destruct H as [n' [v' [m' [vs [HD [Hs Heq]]]]]]; discriminate Heq.
-        - destruct H as [n' [v' [m' [vs [u [HD [Hs [Hu Heq]]]]]]]].
-          injection Heq as <- <- <- Hw -> ->.
-          subst w.
-          right; right; left; exists n, v, m, vs, u.
-          split; [apply DepRelFibred.mem_endsFibre;
-                  split; [exact HD | split; reflexivity] |].
-          split; [exact Hs | split; [exact Hu | reflexivity]].
-        - destruct H as [n' [v' [m' [HD Heq]]]]; discriminate Heq.
+        inversion H as [| | n' v' m' vs u HD Hs Hu |]; subst.
+        apply EdgeSplitFanout; try assumption.
+        apply DepRelFibred.mem_endsFibre.
+        split; [exact HD | split; reflexivity].
       Qed.
 
       Theorem dependees_lookupIntermediateOrig : forall D g n v m u,
@@ -986,14 +815,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           T.DependeesSet.empty.
       Proof.
         intros D g n v m u; apply T.dependees_empty_iff; intros [m0 ws] H.
-        apply mem_reduceDeps in H.
-        destruct H as [H | [H | [H | H]]].
-        - destruct H as [n' [v' [m' [vs [u' [_ [_ [_ Heq]]]]]]]];
-            discriminate Heq.
-        - destruct H as [n' [v' [m' [vs [_ [_ Heq]]]]]]; discriminate Heq.
-        - destruct H as [n' [v' [m' [vs [u' [_ [_ [_ Heq]]]]]]]];
-            discriminate Heq.
-        - destruct H as [n' [v' [m' [_ Heq]]]]; discriminate Heq.
+        apply mem_reduceDeps in H; inversion H.
       Qed.
 
     End Lookup.

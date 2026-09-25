@@ -25,22 +25,15 @@ Module Core (N V : UsualOrderedType).
     rewrite (SOdh.in_fold _
       (fun e => if Pkg.eq_dec (fst e) p
                 then DependeesSet.singleton (snd e) else DependeesSet.empty)).
-    2:{ intros [q d] a y; simpl.
-        destruct (Pkg.eq_dec q p).
-        - rewrite SOdh.add_in, SOdh.singleton_in; tauto.
-        - split; [tauto | intros [H | H];
-            [exfalso; exact (SOdh.empty_in _ H) | exact H]]. }
-    split.
-    - intros [H | [e [HeD He]]].
-      + exfalso; exact (SOdh.empty_in _ H).
-      + destruct e as [q d]; simpl in He.
-        destruct (Pkg.eq_dec q p) as [-> | NE].
-        * rewrite SOdh.singleton_in in He; subst d; exact HeD.
-        * exfalso; exact (SOdh.empty_in _ He).
-    - intro H; right; exists (p, h); split; [exact H | simpl].
-      destruct (Pkg.eq_dec p p) as [_ | NE];
-        [rewrite SOdh.singleton_in; reflexivity
-        | contradiction NE; reflexivity].
+    2:{ intros [q d] a y; simpl; pose proof (SOdh.empty_in y).
+        destruct (Pkg.eq_dec q p); rewrite ?SOdh.add_in, ?SOdh.singleton_in;
+          tauto. }
+    pose proof (SOdh.empty_in h) as E0; split.
+    - intros [H | [[q d] [HeD He]]]; [tauto | simpl in He].
+      destruct (Pkg.eq_dec q p) as [-> | _]; [| tauto].
+      apply SOdh.singleton_in in He; subst d; exact HeD.
+    - intro H; right; exists (p, h); simpl.
+      rewrite dec_refl, SOdh.singleton_in; auto.
   Qed.
 
   Lemma dependees_ext : forall D D' (p : Pkg.t),
@@ -77,22 +70,15 @@ Module Core (N V : UsualOrderedType).
     rewrite (SOpv.in_fold _
       (fun e => if N.eq_dec (fst e) n
                 then VSet.singleton (snd e) else VSet.empty)).
-    2:{ intros [m u] a y; simpl.
-        destruct (N.eq_dec m n).
-        - rewrite SOpv.add_in, SOpv.singleton_in; tauto.
-        - split; [tauto | intros [H | H];
-            [exfalso; exact (SOpv.empty_in _ H) | exact H]]. }
-    split.
-    - intros [H | [e [HeR He]]].
-      + exfalso; exact (SOpv.empty_in _ H).
-      + destruct e as [m u]; simpl in He.
-        destruct (N.eq_dec m n) as [-> | NE].
-        * rewrite SOpv.singleton_in in He; subst u; exact HeR.
-        * exfalso; exact (SOpv.empty_in _ He).
-    - intro H; right; exists (n, v); split; [exact H | simpl].
-      destruct (N.eq_dec n n) as [_ | NE];
-        [rewrite SOpv.singleton_in; reflexivity
-        | contradiction NE; reflexivity].
+    2:{ intros [m u] a y; simpl; pose proof (SOpv.empty_in y).
+        destruct (N.eq_dec m n); rewrite ?SOpv.add_in, ?SOpv.singleton_in;
+          tauto. }
+    pose proof (SOpv.empty_in v) as E0; split.
+    - intros [H | [[m u] [HeR He]]]; [tauto | simpl in He].
+      destruct (N.eq_dec m n) as [-> | _]; [| tauto].
+      apply SOpv.singleton_in in He; subst u; exact HeR.
+    - intro H; right; exists (n, v); simpl.
+      rewrite dec_refl, SOpv.singleton_in; auto.
   Qed.
 
   Lemma versions_ext : forall R R' (n : N.t),
@@ -153,27 +139,16 @@ Module Core (N V : UsualOrderedType).
                   then if N.eq_dec (fst (snd e)) n
                        then snd (snd e) else VSet.empty
                   else VSet.empty)).
-      2:{ intros [q [m vs]] a y; simpl.
-          destruct (Pkg.eq_dec q p); [destruct (N.eq_dec m n) |].
-          - rewrite VSet.union_spec; tauto.
-          - split; [tauto | intros [H | H];
-              [exfalso; exact (SOdv.empty_in _ H) | exact H]].
-          - split; [tauto | intros [H | H];
-              [exfalso; exact (SOdv.empty_in _ H) | exact H]]. }
-      split.
-      - intros [H | [e [HeD He]]].
-        + exfalso; exact (SOdv.empty_in _ H).
-        + destruct e as [q [m vs]]; simpl in He.
-          destruct (Pkg.eq_dec q p) as [-> | NE];
-            [destruct (N.eq_dec m n) as [-> | NE] |];
-            try (exfalso; exact (SOdv.empty_in _ He)).
-          exists vs; split; assumption.
+      2:{ intros [q [m vs]] a y; simpl; pose proof (SOdv.empty_in y).
+          destruct (Pkg.eq_dec q p); [destruct (N.eq_dec m n) |];
+            rewrite ?VSet.union_spec; tauto. }
+      pose proof (SOdv.empty_in v) as E0; split.
+      - intros [H | [[q [m vs]] [HeD He]]]; [tauto | simpl in He].
+        destruct (Pkg.eq_dec q p) as [-> | _];
+          [destruct (N.eq_dec m n) as [-> | _] |]; [| tauto | tauto].
+        exists vs; split; assumption.
       - intros [vs [HD Hv]].
-        right; exists (p, (n, vs)); split; [exact HD | simpl].
-        destruct (Pkg.eq_dec p p) as [_ | NE];
-          [| contradiction NE; reflexivity].
-        destruct (N.eq_dec n n) as [_ | NE];
-          [exact Hv | contradiction NE; reflexivity].
+        right; exists (p, (n, vs)); simpl; rewrite !dec_refl; auto.
     Qed.
 
     Lemma mem_mergedVS : forall D p n v,
@@ -189,11 +164,7 @@ Module Core (N V : UsualOrderedType).
       - intros [[vs [HD Hv]] Hall].
         split; [exists vs; exact HD |].
         intros vs' HD'.
-        specialize (Hall _ HD'); simpl in Hall.
-        destruct (Pkg.eq_dec p p) as [_ | NE];
-          [| contradiction NE; reflexivity].
-        destruct (N.eq_dec n n) as [_ | NE];
-          [| contradiction NE; reflexivity].
+        specialize (Hall _ HD'); simpl in Hall; rewrite !dec_refl in Hall.
         apply VSet.mem_spec; exact Hall.
       - intros [[vs0 H0] Hall].
         split.

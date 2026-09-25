@@ -699,20 +699,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       intro H; apply CondSet.remove_spec in H; exact (proj1 H).
     Qed.
 
-    Lemma mem_transR : forall I y,
-        PF.PkgSet.In y (transR I) <->
-        y = rootPkg \/
-        (exists p, PkgSet.In p (inst_repo I) /\ y = embedPkg p) \/
-        (exists q m pv, Prov.In (q, (m, PVer pv)) (inst_prov I) /\
-           PkgSet.In q (inst_repo I) /\
-           y = (Name.Orig m, Version.Prov q pv)).
-    Proof.
-      intros I y; unfold transR.
-      rewrite PF.PkgSet.add_spec, PF.PkgSet.union_spec, SOpp.mem_map,
-        mem_provPkgs.
-      firstorder.
-    Qed.
-
     Lemma mem_transS : forall I S y,
         PF.PkgSet.In y (transS I S) <->
         y = rootPkg \/
@@ -723,7 +709,62 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       intros I S y; unfold transS.
       rewrite PF.PkgSet.add_spec, PF.PkgSet.union_spec, SOpp.mem_map,
         mem_provPkgs.
-      firstorder.
+      reflexivity.
+    Qed.
+
+    Lemma transR_transS : forall I, transR I = transS I (inst_repo I).
+    Proof. reflexivity. Qed.
+
+    Lemma mem_transR : forall I y,
+        PF.PkgSet.In y (transR I) <->
+        y = rootPkg \/
+        (exists p, PkgSet.In p (inst_repo I) /\ y = embedPkg p) \/
+        (exists q m pv, Prov.In (q, (m, PVer pv)) (inst_prov I) /\
+           PkgSet.In q (inst_repo I) /\
+           y = (Name.Orig m, Version.Prov q pv)).
+    Proof. intros I y; rewrite transR_transS; apply mem_transS. Qed.
+
+    (* Each target name draws its versions from one branch of transS, so
+       the callers name the branch they mean rather than its position. *)
+    Lemma transS_at_root : forall I S w,
+        PF.PkgSet.In (Name.Root, w) (transS I S) -> w = Version.RootV.
+    Proof.
+      intros I S w H; apply mem_transS in H; unfold embedPkg, rootPkg in H.
+      destruct H as [E | [[p [_ E]] | [q [m [pv [_ [_ E]]]]]]];
+        [injection E as ->; reflexivity | discriminate E | discriminate E].
+    Qed.
+
+    Lemma transS_at_orig : forall I S n w,
+        PF.PkgSet.In (Name.Orig n, w) (transS I S) ->
+        (exists v, PkgSet.In (n, v) S /\ w = Version.Orig v) \/
+        (exists q pv, Prov.In (q, (n, PVer pv)) (inst_prov I) /\
+           PkgSet.In q S /\ w = Version.Prov q pv).
+    Proof.
+      intros I S n w H; apply mem_transS in H; unfold embedPkg, rootPkg in H.
+      destruct H as [E | [[[n' v] [Hp E]] | [q [m [pv [Hr [Hq E]]]]]]];
+        [discriminate E | left; exists v | right; exists q, pv];
+        cbn [fst snd] in E; injection E as <- ->; auto.
+    Qed.
+
+    Lemma transS_embed : forall I S p,
+        PF.PkgSet.In (embedPkg p) (transS I S) <-> PkgSet.In p S.
+    Proof.
+      intros I S [n v]; split.
+      - intro H; apply transS_at_orig in H.
+        destruct H as [[v' [Hp E]] | [q [pv [_ [_ E]]]]];
+          [injection E as <-; exact Hp | discriminate E].
+      - intro Hp; apply mem_transS; right; left; exists (n, v); auto.
+    Qed.
+
+    Lemma transS_prov : forall I S m q pv,
+        PF.PkgSet.In (Name.Orig m, Version.Prov q pv) (transS I S) <->
+        Prov.In (q, (m, PVer pv)) (inst_prov I) /\ PkgSet.In q S.
+    Proof.
+      intros I S m q pv; split.
+      - intro H; apply transS_at_orig in H.
+        destruct H as [[v [_ E]] | [q' [pv' [Hr [Hq E]]]]];
+          [discriminate E | injection E as <- <-; auto].
+      - intros [Hr Hq]; apply mem_transS; right; right; exists q, m, pv; auto.
     Qed.
 
     Lemma mem_transD : forall I y f,
@@ -740,19 +781,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           [exact Hf | reflexivity].
     Qed.
 
-    Lemma in_elements_pkg : forall s q,
-        List.In q (PkgSet.elements s) <-> PkgSet.In q s.
-    Proof.
-      intros s q; rewrite <- (PkgSet.elements_spec1 s q).
-      rewrite InA_alt; split.
-      - intro H; exists q; split; reflexivity + assumption.
-      - intros [y [-> Hy]]; exact Hy.
-    Qed.
-
-    Lemma in_elements_cond : forall s c,
-        List.In c (CondSet.elements s) <-> CondSet.In c s.
-    Proof. exact LeastDesignation.in_elements. Qed.
-
     Lemma satisfies_disjFold : forall S' l (base : PF.Formula),
         PF.Satisfies S'
           (fold_right
@@ -765,7 +793,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         (exists q, List.In q l /\ PF.PkgSet.In (embedPkg q) S').
     Proof.
       intros S' l base; induction l as [| q l IH]; cbn.
-      - firstorder.
+      - split; [intro H; left; exact H | intros [H | [q [[] _]]]; exact H].
       - rewrite IH; split.
         + intros [[w [Hw Hm]] | H].
           * apply PF.VSet.singleton_spec in Hw; subst w.
@@ -792,11 +820,11 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       - rewrite satisfies_disjFold; cbn.
         unfold uprovL; split.
         + intros [[w [Hw Hm]] | [q [Hq Hm]]]; [left; eauto |].
-          apply in_elements_pkg in Hq; right; split; [reflexivity |].
+          apply SOpp.elements_in in Hq; right; split; [reflexivity |].
           eauto.
         + intros [[w [Hw Hm]] | [_ [q [Hq Hm]]]]; [left; eauto |].
           right; exists q; split; [| exact Hm].
-          apply in_elements_pkg; exact Hq.
+          apply SOpp.elements_in; exact Hq.
       - cbn; split.
         + intros [w [Hw Hm]]; left; eauto.
         + intros [[w [Hw Hm]] | [Hany _]]; [eauto | congruence].
@@ -816,9 +844,9 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         apply or_iff_compat_l; split.
         + intros [q [Hq Hm]]; apply filter_In in Hq; destruct Hq as [Hq Hs].
           split; [reflexivity |]; exists q.
-          split; [apply in_elements_pkg; exact Hq | split; assumption].
+          split; [apply SOpp.elements_in; exact Hq | split; assumption].
         + intros [_ [q [Hq [Hs Hm]]]]; exists q; split; [| exact Hm].
-          apply filter_In; split; [apply in_elements_pkg; exact Hq | exact Hs].
+          apply filter_In; split; [apply SOpp.elements_in; exact Hq | exact Hs].
       - cbn [PF.Satisfies]; split; [intro H; left; exact H |].
         intros [H | [Hany _]]; [exact H | discriminate Hany].
     Qed.
@@ -860,7 +888,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         PF.Satisfies S' base.
     Proof.
       intros I S' l base; induction l as [| a l IH]; cbn.
-      - firstorder.
+      - split; [intro H; right; exact H | intros [[c [[] _]] | H]; exact H].
       - rewrite IH; split.
         + intros [Hn | [[a0 [Ha0 Hn]] | Hb]].
           * left; exists a; auto.
@@ -882,19 +910,14 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       rewrite satisfies_negFold.
       split; intros [[a [Ha Hn]] | Hb];
         try (right; exact Hb); left; exists a;
-        (split; [| exact Hn]); apply in_elements_cond; exact Ha.
+        (split; [| exact Hn]); apply LeastDesignation.in_elements; exact Ha.
     Qed.
 
     Lemma embed_transR : forall I p,
         PF.PkgSet.In (embedPkg p) (transR I) ->
         PkgSet.In p (inst_repo I).
     Proof.
-      intros I p H; apply mem_transR in H.
-      destruct p as [n v].
-      destruct H as [H | [[p0 [Hp0 He]] | [q [m [pv [_ [_ He]]]]]]].
-      - discriminate H.
-      - apply embedPkg_injective in He; subst p0; exact Hp0.
-      - injection He as _ He; discriminate He.
+      intros I p H; rewrite transR_transS, transS_embed in H; exact H.
     Qed.
 
     Lemma root_transR : forall I, PF.PkgSet.In rootPkg (transR I).
@@ -909,27 +932,23 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         PF.PkgSet.In (embedPkg q) S'.
     Proof.
       intros I S' m q pv [Hsub Hroot Hclo Huniq] Hm.
-      assert (Ht := Hsub _ Hm); apply mem_transR in Ht.
-      destruct Ht as [Ht | [[p0 [_ He]] | [q0 [m0 [pv0 [Hprov [_ He]]]]]]].
-      - discriminate Ht.
-      - destruct p0; discriminate He.
-      - injection He as He1 He2 He3; subst m0 q0 pv0.
-        split; [exact Hprov |].
-        assert (Hf : FSet.In
-                       (PF.FDep (Name.Orig (fst q))
-                          (PF.VSet.singleton (Version.Orig (snd q))))
-                       (dependees I (Name.Orig m, Version.Prov q pv))).
-        { cbn [dependees]; apply FSet.singleton_spec; reflexivity. }
-        assert (Hd : PF.DepRel.In
-                       ((Name.Orig m, Version.Prov q pv),
-                        PF.FDep (Name.Orig (fst q))
-                          (PF.VSet.singleton (Version.Orig (snd q))))
-                       (transD I)).
-        { apply mem_transD; split; [apply Hsub; exact Hm | exact Hf]. }
-        assert (Hs := Hclo _ Hm _ Hd).
-        destruct Hs as [w [Hw HwS]].
-        apply PF.VSet.singleton_spec in Hw; subst w.
-        destruct q as [nq vq]; exact HwS.
+      assert (Ht := Hsub _ Hm); rewrite transR_transS, transS_prov in Ht.
+      split; [exact (proj1 Ht) |].
+      assert (Hf : FSet.In
+                     (PF.FDep (Name.Orig (fst q))
+                        (PF.VSet.singleton (Version.Orig (snd q))))
+                     (dependees I (Name.Orig m, Version.Prov q pv))).
+      { cbn [dependees]; apply FSet.singleton_spec; reflexivity. }
+      assert (Hd : PF.DepRel.In
+                     ((Name.Orig m, Version.Prov q pv),
+                      PF.FDep (Name.Orig (fst q))
+                        (PF.VSet.singleton (Version.Orig (snd q))))
+                     (transD I)).
+      { apply mem_transD; split; [apply Hsub; exact Hm | exact Hf]. }
+      assert (Hs := Hclo _ Hm _ Hd).
+      destruct Hs as [w [Hw HwS]].
+      apply PF.VSet.singleton_spec in Hw; subst w.
+      destruct q as [nq vq]; exact HwS.
     Qed.
 
     Lemma reg_edge : forall I S' p m pv,
@@ -957,48 +976,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       assert (Hs := Hclo _ HpS _ Hd).
       destruct Hs as [w [Hw HwS]].
       apply PF.VSet.singleton_spec in Hw; subst w; exact HwS.
-    Qed.
-
-    Lemma match_decode : forall I S' n ct,
-        PF.IsResolution (transR I) (transD I) rootPkg S' ->
-        (PF.Satisfies S' (encPos I n ct) <->
-         MatchPos I (alpineResolution S') n ct).
-    Proof.
-      intros I S' n ct Hres.
-      assert (Hsub := PF.res_subset _ _ _ _ Hres).
-      rewrite satisfies_encPos; split.
-      - intros [[w [Hw Hm]] | [Hany [q [Hq Hm]]]].
-        + apply mem_constrVers in Hw.
-          destruct Hw as
-            [[v [Hrep [Hc ->]]] | [q [pv [Hprov [Hrep [Hc ->]]]]]].
-          * left; exists v; split; [| exact Hc].
-            apply mem_alpineResolution; exact Hm.
-          * right; left; exists q, pv.
-            destruct (prov_selected _ _ _ _ _ Hres Hm) as [_ HqS'].
-            repeat split; try assumption.
-            apply mem_alpineResolution; exact HqS'.
-        + right; right; split; [exact Hany |].
-          apply mem_uprovSet in Hq; destruct Hq as [Hprov _].
-          exists q; split; [exact Hprov |].
-          apply mem_alpineResolution; exact Hm.
-      - intros [[v [HvS Hc]] |
-                [[q [pv [Hprov [HqS Hc]]]] | [Hany [q [Hprov HqS]]]]].
-        + apply mem_alpineResolution in HvS.
-          left; exists (Version.Orig v); split; [| exact HvS].
-          apply mem_constrVers; left; exists v.
-          repeat split; try assumption.
-          exact (embed_transR _ _ (Hsub _ HvS)).
-        + apply mem_alpineResolution in HqS.
-          left; exists (Version.Prov q pv); split.
-          * apply mem_constrVers; right; exists q, pv.
-            repeat split; try assumption.
-            exact (embed_transR _ _ (Hsub _ HqS)).
-          * exact (reg_edge _ _ _ _ _ Hres HqS Hprov).
-        + apply mem_alpineResolution in HqS.
-          right; split; [exact Hany |].
-          exists q; split; [| exact HqS].
-          apply mem_uprovSet; split; [exact Hprov |].
-          exact (embed_transR _ _ (Hsub _ HqS)).
     Qed.
 
     Lemma base_decode : forall I S' n ct,
@@ -1035,6 +1012,25 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             repeat split; try assumption.
             exact (embed_transR _ _ (Hsub _ HqS)).
           * exact (reg_edge _ _ _ _ _ Hres HqS Hprov).
+    Qed.
+
+    Lemma match_decode : forall I S' n ct,
+        PF.IsResolution (transR I) (transD I) rootPkg S' ->
+        (PF.Satisfies S' (encPos I n ct) <->
+         MatchPos I (alpineResolution S') n ct).
+    Proof.
+      intros I S' n ct Hres.
+      assert (Hsub := PF.res_subset _ _ _ _ Hres).
+      rewrite satisfies_encPos, (base_decode I S' n ct Hres).
+      unfold MatchPos; rewrite or_assoc.
+      apply or_iff_compat_l, or_iff_compat_l, and_iff_compat_l; split.
+      - intros [q [Hq Hm]]; apply mem_uprovSet in Hq.
+        exists q; split; [exact (proj1 Hq) |].
+        apply mem_alpineResolution; exact Hm.
+      - intros [q [Hp HqS]]; exists q.
+        apply mem_alpineResolution in HqS; split; [| exact HqS].
+        apply mem_uprovSet; split;
+          [exact Hp | exact (embed_transR _ _ (Hsub _ HqS))].
     Qed.
 
     Lemma match_req_decode : forall I S' n ct,
@@ -1180,59 +1176,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           Prov.In (q, (n, PVer pv')) (inst_prov I) -> pv = pv') /\
       (forall n v pv, ~ Prov.In ((n, v), (n, PVer pv)) (inst_prov I)).
 
-    Lemma match_transS : forall I S n ct,
-        PkgSet.Subset S (inst_repo I) ->
-        (PF.Satisfies (transS I S) (encPos I n ct) <->
-         MatchPos I S n ct).
-    Proof.
-      intros I S n ct Hsub.
-      rewrite satisfies_encPos; split.
-      - intros [[w [Hw Hm]] | [Hany [q [Hq Hm]]]].
-        + apply mem_constrVers in Hw.
-          destruct Hw as
-            [[v [_ [Hc ->]]] | [q [pv [Hprov [_ [Hc ->]]]]]].
-          * apply mem_transS in Hm.
-            destruct Hm as
-              [Hm | [[p0 [Hp0 He]] | [q0 [m0 [pv0 [_ [_ He]]]]]]].
-            -- discriminate Hm.
-            -- destruct p0 as [n0 v0]; injection He as <- <-.
-               left; exists v; split; assumption.
-            -- injection He as _ He; discriminate He.
-          * apply mem_transS in Hm.
-            destruct Hm as
-              [Hm | [[p0 [_ He]] | [q0 [m0 [pv0 [Hprov0 [Hq0 He]]]]]]].
-            -- discriminate Hm.
-            -- destruct p0; discriminate He.
-            -- injection He as He1 He2 He3; subst m0 q0 pv0.
-               right; left; exists q, pv; repeat split; assumption.
-        + apply mem_uprovSet in Hq; destruct Hq as [Hprov _].
-          apply mem_transS in Hm.
-          destruct Hm as
-            [Hm | [[p0 [Hp0 He]] | [q0 [m0 [pv0 [_ [_ He]]]]]]].
-          * destruct q; discriminate Hm.
-          * apply embedPkg_injective in He; subst p0.
-            right; right; split; [exact Hany | eauto].
-          * destruct q; injection He as _ He; discriminate He.
-      - intros [[v [HvS Hc]] |
-                [[q [pv [Hprov [HqS Hc]]]] | [Hany [q [Hprov HqS]]]]].
-        + left; exists (Version.Orig v); split.
-          * apply mem_constrVers; left; exists v.
-            repeat split; try assumption.
-            exact (Hsub _ HvS).
-          * apply mem_transS; right; left; exists (n, v); split;
-              [exact HvS | reflexivity].
-        + left; exists (Version.Prov q pv); split.
-          * apply mem_constrVers; right; exists q, pv.
-            repeat split; try assumption.
-            exact (Hsub _ HqS).
-          * apply mem_transS; right; right; eauto 7.
-        + right; split; [exact Hany |].
-          exists q; split.
-          * apply mem_uprovSet; split; [exact Hprov | exact (Hsub _ HqS)].
-          * apply mem_transS; right; left; exists q; split;
-              [exact HqS | reflexivity].
-    Qed.
-
     Lemma base_transS : forall I S n ct,
         PkgSet.Subset S (inst_repo I) ->
         ((exists w, PF.VSet.In w (constrVers I n ct) /\
@@ -1242,36 +1185,39 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             PkgSet.In q S /\ constrMatch ct pv = true)).
     Proof.
       intros I S n ct Hsub; split.
-      - intros [w [Hw Hm]].
-        apply mem_constrVers in Hw.
-        destruct Hw as
-          [[v [_ [Hc ->]]] | [q [pv [Hprov [_ [Hc ->]]]]]].
-        + apply mem_transS in Hm.
-          destruct Hm as
-            [Hm | [[p0 [Hp0 He]] | [q0 [m0 [pv0 [_ [_ He]]]]]]].
-          * discriminate Hm.
-          * destruct p0 as [n0 v0]; injection He as <- <-.
-            left; exists v; split; assumption.
-          * injection He as _ He; discriminate He.
-        + apply mem_transS in Hm.
-          destruct Hm as
-            [Hm | [[p0 [_ He]] | [q0 [m0 [pv0 [Hprov0 [Hq0 He]]]]]]].
-          * discriminate Hm.
-          * destruct p0; discriminate He.
-          * injection He as He1 He2 He3; subst m0 q0 pv0.
-            right; exists q, pv; repeat split; assumption.
+      - intros [w [Hw Hm]]; apply mem_constrVers in Hw.
+        destruct Hw as [[v [_ [Hc ->]]] | [q [pv [_ [_ [Hc ->]]]]]].
+        + apply (transS_embed I S (n, v)) in Hm; left; eauto.
+        + apply transS_prov in Hm; destruct Hm as [Hprov Hq].
+          right; exists q, pv; auto.
       - intros [[v [HvS Hc]] | [q [pv [Hprov [HqS Hc]]]]].
         + exists (Version.Orig v); split.
           * apply mem_constrVers; left; exists v.
             repeat split; try assumption.
             exact (Hsub _ HvS).
-          * apply mem_transS; right; left; exists (n, v); split;
-              [exact HvS | reflexivity].
+          * exact (proj2 (transS_embed I S (n, v)) HvS).
         + exists (Version.Prov q pv); split.
           * apply mem_constrVers; right; exists q, pv.
             repeat split; try assumption.
             exact (Hsub _ HqS).
-          * apply mem_transS; right; right; eauto 7.
+          * apply transS_prov; split; assumption.
+    Qed.
+
+    Lemma match_transS : forall I S n ct,
+        PkgSet.Subset S (inst_repo I) ->
+        (PF.Satisfies (transS I S) (encPos I n ct) <->
+         MatchPos I S n ct).
+    Proof.
+      intros I S n ct Hsub.
+      rewrite satisfies_encPos, (base_transS I S n ct Hsub).
+      unfold MatchPos; rewrite or_assoc.
+      apply or_iff_compat_l, or_iff_compat_l, and_iff_compat_l; split.
+      - intros [q [Hq Hm]]; apply mem_uprovSet in Hq.
+        apply transS_embed in Hm; exists q; split; [exact (proj1 Hq) |].
+        exact Hm.
+      - intros [q [Hp HqS]]; exists q; split;
+          [apply mem_uprovSet; split; [exact Hp | exact (Hsub _ HqS)]
+          | apply transS_embed; exact HqS].
     Qed.
 
     Lemma match_req_transS : forall I S n ct,
@@ -1284,18 +1230,12 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       unfold MatchReq; rewrite or_assoc.
       apply or_iff_compat_l, or_iff_compat_l, and_iff_compat_l; split.
       - intros [q [Hq [Hs Hm]]]; apply mem_uprovSet in Hq.
-        exists q; split; [exact (proj1 Hq) |].
-        split; [| apply selectableb_spec; exact Hs].
-        apply mem_transS in Hm.
-        destruct Hm as [Hm | [[p0 [Hp0 He]] | [q0 [m0 [pv0 [_ [_ He]]]]]]].
-        + destruct q; discriminate Hm.
-        + apply embedPkg_injective in He; subst p0; exact Hp0.
-        + destruct q; injection He as _ He; discriminate He.
+        apply transS_embed in Hm; exists q; split; [exact (proj1 Hq) |].
+        split; [exact Hm | apply selectableb_spec; exact Hs].
       - intros [q [Hp [HqS Ha]]]; exists q.
         split; [apply mem_uprovSet; split; [exact Hp | exact (Hsub _ HqS)] |].
         split; [apply selectableb_spec; exact Ha |].
-        apply mem_transS; right; left; exists q; split;
-          [exact HqS | reflexivity].
+        apply transS_embed; exact HqS.
     Qed.
 
     Theorem alpine_completeness : forall I S,
@@ -1311,13 +1251,12 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       { intros [[n ct] | [n ct]]; cbn [encCond MatchCond PF.Satisfies];
           rewrite (Hiff n ct); reflexivity. }
       constructor.
-      - intros y Hy; apply mem_transS in Hy; apply mem_transR.
-        destruct Hy as [-> | [[p [Hp ->]] | [q [m [pv [Hr [Hq ->]]]]]]].
-        + left; reflexivity.
-        + right; left; exists p; split; [exact (Hsub _ Hp) | reflexivity].
-        + right; right; exists q, m, pv.
-          repeat split; try assumption.
-          exact (Hsub _ Hq).
+      - intros [[| n] w] Hy.
+        + apply transS_at_root in Hy; subst w; apply root_transR.
+        + rewrite transR_transS; apply transS_at_orig in Hy.
+          destruct Hy as [[v [Hv ->]] | [q [pv [Hr [Hq ->]]]]].
+          * exact (proj2 (transS_embed I _ (n, v)) (Hsub _ Hv)).
+          * apply transS_prov; split; [exact Hr | exact (Hsub _ Hq)].
       - apply mem_transS; left; reflexivity.
       - intros y Hy f Hdep.
         apply mem_transD in Hdep; destruct Hdep as [HyR Hf].
@@ -1353,8 +1292,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             cbn [PF.Satisfies].
             exists (Version.Prov (n0, v0) pv); split.
             -- apply PF.VSet.singleton_spec; reflexivity.
-            -- apply mem_transS; right; right.
-               exists (n0, v0), m, pv; repeat split; assumption.
+            -- apply transS_prov; split; assumption.
           * apply SOtf.mem_map in Hf; destruct Hf as [[z conds] [Hfib ->]].
             apply mem_installIfFibre in Hfib.
             destruct Hfib as [Ht0 Hatt]; unfold attachDesignation in Hatt.
@@ -1398,45 +1336,13 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           cbn [PF.Satisfies].
           exists (Version.Orig (snd q)); split.
           * apply PF.VSet.singleton_spec; reflexivity.
-          * apply mem_transS; right; left; exists q.
-            split; [exact Hq |].
-            destruct q; reflexivity.
+          * exact (proj2 (transS_embed I S q) Hq).
       - intros m w w' H1 H2.
-        apply mem_transS in H1, H2.
         destruct m as [| n].
-        + destruct H1 as
-            [H1 | [[p1 [_ He1]] | [q1 [m1 [pv1 [_ [_ He1]]]]]]];
-            [| destruct p1; discriminate He1 | discriminate He1].
-          destruct H2 as
-            [H2 | [[p2 [_ He2]] | [q2 [m2 [pv2 [_ [_ He2]]]]]]];
-            [| destruct p2; discriminate He2 | discriminate He2].
-          injection H1 as ->; injection H2 as ->; reflexivity.
-        + assert (Hs1 : (exists v, PkgSet.In (n, v) S /\
-                           w = Version.Orig v) \/
-                        (exists q pv,
-                            Prov.In (q, (n, PVer pv)) (inst_prov I) /\
-                            PkgSet.In q S /\ w = Version.Prov q pv)).
-          { destruct H1 as
-              [H1 | [[p1 [Hp1 He1]] | [q1 [m1 [pv1 [Hr1 [Hq1 He1]]]]]]].
-            - discriminate H1.
-            - destruct p1 as [n1 v1]; injection He1 as <- ->.
-              left; exists v1; split; [exact Hp1 | reflexivity].
-            - injection He1 as <- ->.
-              right; exists q1, pv1; repeat split; assumption. }
-          assert (Hs2 : (exists v, PkgSet.In (n, v) S /\
-                           w' = Version.Orig v) \/
-                        (exists q pv,
-                            Prov.In (q, (n, PVer pv)) (inst_prov I) /\
-                            PkgSet.In q S /\ w' = Version.Prov q pv)).
-          { destruct H2 as
-              [H2 | [[p2 [Hp2 He2]] | [q2 [m2 [pv2 [Hr2 [Hq2 He2]]]]]]].
-            - discriminate H2.
-            - destruct p2 as [n2 v2]; injection He2 as <- ->.
-              left; exists v2; split; [exact Hp2 | reflexivity].
-            - injection He2 as <- ->.
-              right; exists q2, pv2; repeat split; assumption. }
-          destruct Hs1 as [[v1 [Hv1 ->]] | [q1 [pv1 [Hr1 [Hq1 ->]]]]],
-              Hs2 as [[v2 [Hv2 ->]] | [q2 [pv2 [Hr2 [Hq2 ->]]]]].
+        + apply transS_at_root in H1, H2; congruence.
+        + apply transS_at_orig in H1, H2.
+          destruct H1 as [[v1 [Hv1 ->]] | [q1 [pv1 [Hr1 [Hq1 ->]]]]],
+              H2 as [[v2 [Hv2 ->]] | [q2 [pv2 [Hr2 [Hq2 ->]]]]].
           * f_equal.
             assert (He : (n, v1) = (n, v2)).
             { apply (Hcu n (n, v1) (n, v2) Hv1 Hv2);
@@ -1464,13 +1370,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         alpineResolution (transS I S) = S.
     Proof.
       intros I S; apply PkgSet.ext; intros [n v].
-      rewrite mem_alpineResolution, mem_transS; unfold embedPkg, rootPkg;
-        cbn [fst snd].
-      split.
-      - intros [E | [[q [Hq E]] | [q [m [pv [_ [_ E]]]]]]];
-          try discriminate E.
-        destruct q as [qn qv]; injection E as -> ->; exact Hq.
-      - intro Hp; right; left; exists (n, v); split; [exact Hp | reflexivity].
+      rewrite mem_alpineResolution, transS_embed; reflexivity.
     Qed.
 
     Theorem alpineResolution_coreResolution : forall I S,
@@ -1594,7 +1494,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             { destruct Hprov as [Hprov | Hprov]; [exact (Hown _ Hprov) |].
               apply mem_provPreimage in Hprov; exact (proj1 Hprov). }
             apply mem_repoPreimage in Hrep; destruct Hrep as [Hrep _].
-            right; eauto 8.
+            right; exists q, pv; auto.
         - intros [[v [Hrep [Hc ->]]] | [q [pv [Hprov [Hrep [Hc ->]]]]]].
           + left; exists v; repeat split; try assumption.
             apply mem_repoPreimage; split; [exact Hrep |].
@@ -1702,7 +1602,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         destruct (bareMatch ct); [| reflexivity].
         f_equal; apply filter_ext_in; intros q Hq.
         apply selectableb_subInst.
-        apply in_elements_pkg, mem_uprovSet in Hq; destruct Hq as [Hp Hr].
+        apply SOpp.elements_in, mem_uprovSet in Hq; destruct Hq as [Hp Hr].
         apply mem_repoPreimage; split; [exact Hr |].
         right; exists n, PVirt; split; assumption.
       Qed.
@@ -1757,7 +1657,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         rewrite (encPos_subInst I ns deps ownProv installIf world (fst z) CAny
                    Hz Hown).
         apply negFold_agree; intros c Hcl.
-        apply in_elements_cond in Hcl.
+        apply LeastDesignation.in_elements in Hcl.
         apply encCond_subInst; [exact (Hc _ Hcl) | exact Hown].
       Qed.
 
@@ -1983,32 +1883,22 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           PF.C.versions (transR I) (Name.Orig m) = versions I m.
       Proof.
         intros I m; apply PF.VSet.ext; intro w.
-        rewrite PF.C.mem_versions, mem_transR; unfold versions.
-        rewrite mem_constrVers; unfold rootPkg.
-        split.
-        - intros [E | [[[n v] [Hp E]] | [q [m' [pv [Hprov [Hq E]]]]]]].
-          + discriminate E.
-          + unfold embedPkg in E; cbn [fst snd] in E; injection E as -> ->.
-            left; exists v; split; [exact Hp | split; reflexivity].
-          + injection E as -> ->.
-            right; exists q, pv; split; [exact Hprov |].
-            split; [exact Hq | split; reflexivity].
+        rewrite PF.C.mem_versions, transR_transS; unfold versions.
+        rewrite mem_constrVers; split.
+        - intro H; apply transS_at_orig in H.
+          destruct H as [[v [Hv ->]] | [q [pv [Hprov [Hq ->]]]]];
+            [left; exists v | right; exists q, pv]; auto.
         - intros [[v [Hv [_ ->]]] | [q [pv [Hprov [Hq [_ ->]]]]]].
-          + right; left; exists (m, v); split; [exact Hv | reflexivity].
-          + right; right; exists q, m, pv; split; [exact Hprov |].
-            split; [exact Hq | reflexivity].
+          + exact (proj2 (transS_embed I _ (m, v)) Hv).
+          + apply transS_prov; split; assumption.
       Qed.
 
       Lemma versions_transR_root : forall I,
           PF.C.versions (transR I) Name.Root = PF.VSet.singleton Version.RootV.
       Proof.
         intro I; apply PF.VSet.ext; intro w.
-        rewrite PF.C.mem_versions, mem_transR, PF.VSet.singleton_spec.
-        unfold rootPkg; split.
-        - intros [E | [[[n v] [_ E]] | [q [m [pv [_ [_ E]]]]]]];
-            unfold embedPkg in E; try discriminate E.
-          injection E as ->; reflexivity.
-        - intros ->; left; reflexivity.
+        rewrite PF.C.mem_versions, PF.VSet.singleton_spec.
+        split; [apply transS_at_root | intros ->; apply root_transR].
       Qed.
 
       Lemma transD_tailFibre : forall I q,
@@ -2071,8 +1961,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Proof.
         intros I Vq n v Hnv HR HO; rewrite dependees_lookupOrig.
         apply (dependees_core I Vq (embedPkg (n, v))); [| exact HR | exact HO].
-        apply mem_transR; right; left; exists (n, v); split;
-          [exact Hnv | reflexivity].
+        rewrite transR_transS, transS_embed; exact Hnv.
       Qed.
 
       Theorem dependees_lookupRootCore : forall I Vq,
@@ -2109,8 +1998,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           <- (dependees_lookupProv I m q pv).
         apply (dependees_core I Vq (Name.Orig m, Version.Prov q pv));
           [| exact HR | exact HO].
-        apply mem_transR; right; right; exists q, m, pv.
-        split; [exact Hprov | split; [exact Hq | reflexivity]].
+        rewrite transR_transS, transS_prov; split; assumption.
       Qed.
 
       Theorem dependees_lookupDisjunctCore : forall I I' Vq q fs i,
@@ -2177,8 +2065,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         apply versions_core.
         destruct H as [[v Hv] | H];
           [left; exists (Version.Orig v) | right; exact H].
-        apply mem_transR; right; left; exists (n, v); split;
-          [exact Hv | reflexivity].
+        rewrite transR_transS; exact (proj2 (transS_embed I _ (n, v)) Hv).
       Qed.
 
       Theorem versions_lookupRootCore : forall I,

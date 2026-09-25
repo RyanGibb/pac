@@ -479,8 +479,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           [injection Hf as -> | discriminate].
         exact Hm.
       - intro H; exists (n, v); split; [exact H |].
-        destruct (N.eq_dec n n) as [_ | NE];
-          [reflexivity | contradiction NE; reflexivity].
+        cbn beta iota; rewrite dec_refl; reflexivity.
     Qed.
 
     Lemma mem_versSetBy : forall Vq n c tv,
@@ -555,8 +554,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         destruct (N.eq_dec k' k) as [-> |]; [| discriminate].
         injection Hf as <-; exists p; split; [exact Hm | reflexivity].
       - intros [p [Hm ->]]; exists (p, k); split; [exact Hm |].
-        cbn beta iota; destruct (N.eq_dec k k) as [_ | NE];
-          [reflexivity | contradiction NE; reflexivity].
+        cbn beta iota; rewrite dec_refl; reflexivity.
     Qed.
 
     Definition PinOK (Pins : PkgSet.t) (p : Pkg.t) : Prop :=
@@ -580,9 +578,8 @@ Module Opam (N V X Y E : UsualOrderedType).
             [exact E | discriminate].
         + intros g Hg.
           rewrite List.forallb_forall in Hav.
-          specialize (Hav _ Hg); simpl in Hav.
-          destruct (Pkg.eq_dec p p) as [_ | NE];
-            [exact Hav | contradiction NE; reflexivity].
+          specialize (Hav _ Hg); simpl in Hav; rewrite dec_refl in Hav.
+          exact Hav.
       - intros [Hr [Hpin Hav]]; split; [exact Hr |]; split.
         + intros [m w] Hm; simpl.
           destruct (N.eq_dec m (fst p)) as [E | _]; [| reflexivity].
@@ -724,9 +721,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           simpl in Ht.
         destruct (Pkg.eq_dec q p) as [-> |]; [exact Hin | discriminate].
       - intro H; exists (p, a); split; [reflexivity |].
-        apply List.filter_In; split; [exact H | simpl].
-        destruct (Pkg.eq_dec p p) as [_ | NE];
-          [reflexivity | contradiction NE; reflexivity].
+        apply List.filter_In; split; [exact H | simpl; apply dec_refl].
     Qed.
 
     Lemma in_pindForms : forall Vq I p f,
@@ -788,10 +783,7 @@ Module Opam (N V X Y E : UsualOrderedType).
             [reflexivity | apply ownedBy_in; exact Hin].
         + destruct H as [k [Hp ->]].
           right; right; left; exists ((n, v), k); split; [exact Hp |].
-          cbn beta iota.
-          match goal with
-          | |- (if ?d then _ else _) = _ => destruct d as [_ | NE]
-          end; [reflexivity | contradiction NE; reflexivity].
+          cbn beta iota; rewrite dec_refl; reflexivity.
         + right; right; right; exact H.
     Qed.
 
@@ -1125,34 +1117,18 @@ Module Opam (N V X Y E : UsualOrderedType).
       intros rho Vq Vq'.
       induction f as [n g0 c | a IHa b IHb | a IHa b IHb];
         intros H g Hred; simpl in Hred.
-      - destruct (defTrue rho g0); [| discriminate].
-        injection Hred as <-; simpl.
-        rewrite (versSetBy_agree Vq Vq' n c); [reflexivity |].
-        apply H; simpl; apply NSet.singleton_spec; reflexivity.
-      - assert (Ha : forall m, NSet.In m (ofNames a) -> Vq m = Vq' m).
-        { intros m Hm; apply H; simpl; apply NSet.union_spec;
-            left; exact Hm. }
-        assert (Hb : forall m, NSet.In m (ofNames b) -> Vq m = Vq' m).
-        { intros m Hm; apply H; simpl; apply NSet.union_spec;
-            right; exact Hm. }
+      2,3: assert (Ha : forall m, NSet.In m (ofNames a) -> Vq m = Vq' m)
+             by (intros m Hm; apply H; simpl; apply NSet.union_spec; auto);
+        assert (Hb : forall m, NSet.In m (ofNames b) -> Vq m = Vq' m)
+          by (intros m Hm; apply H; simpl; apply NSet.union_spec; auto);
         destruct (redOF rho a) eqn:Ea; destruct (redOF rho b) eqn:Eb;
-          simpl in Hred; try discriminate; injection Hred as <-;
-          simpl.
-        + rewrite (IHa Ha _ eq_refl), (IHb Hb _ eq_refl); reflexivity.
-        + exact (IHa Ha _ eq_refl).
-        + exact (IHb Hb _ eq_refl).
-      - assert (Ha : forall m, NSet.In m (ofNames a) -> Vq m = Vq' m).
-        { intros m Hm; apply H; simpl; apply NSet.union_spec;
-            left; exact Hm. }
-        assert (Hb : forall m, NSet.In m (ofNames b) -> Vq m = Vq' m).
-        { intros m Hm; apply H; simpl; apply NSet.union_spec;
-            right; exact Hm. }
-        destruct (redOF rho a) eqn:Ea; destruct (redOF rho b) eqn:Eb;
-          simpl in Hred; try discriminate; injection Hred as <-;
-          simpl.
-        + rewrite (IHa Ha _ eq_refl), (IHb Hb _ eq_refl); reflexivity.
-        + exact (IHa Ha _ eq_refl).
-        + exact (IHb Hb _ eq_refl).
+          simpl in Hred; try discriminate; injection Hred as <-; simpl;
+          [rewrite (IHa Ha _ eq_refl), (IHb Hb _ eq_refl); reflexivity
+          | exact (IHa Ha _ eq_refl) | exact (IHb Hb _ eq_refl)].
+      destruct (defTrue rho g0); [| discriminate].
+      injection Hred as <-; simpl.
+      rewrite (versSetBy_agree Vq Vq' n c); [reflexivity |].
+      apply H; simpl; apply NSet.singleton_spec; reflexivity.
     Qed.
 
     Lemma encodeOF_agree : forall rho Vq Vq' f,
@@ -1193,12 +1169,12 @@ Module Opam (N V X Y E : UsualOrderedType).
         [left; exact Hn | right; exact (IH Hin Hn)].
     Qed.
 
-    Lemma own_filter_in : forall (A : Type) p (a : A) l,
-        In (p, a) (List.filter (ownb p) l) <-> In (p, a) l.
+    Lemma ownedBy_filter : forall (A : Type) p (l : list (Pkg.t * A)),
+        ownedBy p (List.filter (ownb p) l) = ownedBy p l.
     Proof.
-      intros A p a l; rewrite List.filter_In; unfold ownb; simpl.
-      destruct (Pkg.eq_dec p p) as [_ | NE];
-        [intuition | contradiction NE; reflexivity].
+      intros A p l; unfold ownedBy; f_equal.
+      induction l as [| a l IH]; simpl; [reflexivity |].
+      destruct (ownb p a) eqn:E; simpl; rewrite ?E, IH; reflexivity.
     Qed.
 
     Theorem versions_lookupReal : forall rho I n,
@@ -1266,27 +1242,20 @@ Module Opam (N V X Y E : UsualOrderedType).
     Theorem dependees_lookupRoot : forall rho I,
         dependees rho (rootSubInst I) rootPkg = dependees rho I rootPkg.
     Proof.
-      intros rho I; unfold dependees, dependeesBy, rootPkg.
-      unfold rootForm.
-      assert (Hg : forall n,
-                 NSet.In n (ofNames (inst_goal I)) ->
-                 srcVersions rho (rootSubInst I) n = srcVersions rho I n).
-      { intros n Hn.
-        apply (srcVersions_subInst_agree rho I (rootSubInst I)
-                 (NSet.union (ofNames (inst_goal I))
-                    (ofNames (inst_inv I))) n); try reflexivity.
-        apply NSet.union_spec; left; exact Hn. }
-      assert (Hi : forall n,
-                 NSet.In n (ofNames (inst_inv I)) ->
-                 srcVersions rho (rootSubInst I) n = srcVersions rho I n).
-      { intros n Hn.
-        apply (srcVersions_subInst_agree rho I (rootSubInst I)
-                 (NSet.union (ofNames (inst_goal I))
-                    (ofNames (inst_inv I))) n); try reflexivity.
-        apply NSet.union_spec; right; exact Hn. }
+      intros rho I; unfold dependees, dependeesBy, rootPkg, rootForm.
+      assert (H : forall n,
+                 NSet.In n (NSet.union (ofNames (inst_goal I))
+                              (ofNames (inst_inv I))) ->
+                 srcVersions rho (rootSubInst I) n = srcVersions rho I n)
+        by (intros n Hn;
+            apply (srcVersions_subInst_agree rho I (rootSubInst I)
+                     (NSet.union (ofNames (inst_goal I))
+                        (ofNames (inst_inv I))) n);
+            reflexivity || exact Hn).
       cbn [rootSubInst inst_goal inst_inv].
-      rewrite (encodeOF_agree rho _ _ _ Hg).
-      rewrite (encodeOF_agree rho _ _ _ Hi).
+      rewrite !(encodeOF_agree rho (srcVersions rho (rootSubInst I))
+                  (srcVersions rho I))
+        by (intros n Hn; apply H, NSet.union_spec; auto).
       reflexivity.
     Qed.
 
@@ -1301,75 +1270,26 @@ Module Opam (N V X Y E : UsualOrderedType).
       { intros m Hm.
         apply (srcVersions_subInst_agree rho I (pkgSubInst I (n, v))
                  (declaredNames I (n, v)) m); reflexivity || exact Hm. }
-      apply FSet.ext; intro f.
-      unfold embedPkg; cbn [fst snd].
-      rewrite !mem_dependees_real.
+      unfold embedPkg, declaredNames in *; cbn [fst snd dependeesBy].
+      unfold depForms, cflForms, pindForms.
       cbn [pkgSubInst inst_dep inst_cfl inst_cls inst_pins inst_pind].
-      split.
-      - intros [H | [H | [H | H]]].
-        + destruct H as [f0 [Hin ->]].
-          apply (proj1 (own_filter_in _ _ _ _)) in Hin.
-          left; exists f0; split; [exact Hin |].
-          apply encodeOF_agree; intros m Hm; apply HVq.
-          unfold declaredNames; apply NSet.union_spec; left.
-          apply (listNames_in _ _ _ _ f0);
-            [apply ownedBy_in; exact Hin | exact Hm].
-        + destruct H as [nc [Hin ->]].
-          apply (proj1 (own_filter_in _ _ _ _)) in Hin.
-          right; left; exists nc; split; [exact Hin |].
-          apply cflForm_agree; apply HVq.
-          unfold declaredNames; apply NSet.union_spec; right.
-          apply NSet.union_spec; left.
-          apply (listNames_in _ _ _ _ nc);
-            [apply ownedBy_in; exact Hin
-            | apply NSet.singleton_spec; reflexivity].
-        + destruct H as [k [Hpk ->]].
-          unfold clsFibre in Hpk.
-          apply ClsRel.filter_spec' in Hpk; destruct Hpk as [Hpk _].
-          right; right; left; exists k; auto.
-        + destruct H as [Hpin [nvu [Hin ->]]].
-          apply (proj1 (own_filter_in _ _ _ _)) in Hin.
-          right; right; right; split; [exact Hpin |].
-          exists nvu; split; [exact Hin |].
-          apply pindForm_agree; apply HVq.
-          unfold declaredNames; apply NSet.union_spec; right.
-          apply NSet.union_spec; right.
-          apply (listNames_in _ _ _ _ nvu);
-            [apply ownedBy_in; exact Hin
-            | apply NSet.singleton_spec; reflexivity].
-      - intros [H | [H | [H | H]]].
-        + destruct H as [f0 [Hin ->]].
-          left; exists f0; split;
-            [apply (proj2 (own_filter_in _ _ _ _)); exact Hin |].
-          apply encodeOF_agree; intros m Hm; symmetry; apply HVq.
-          unfold declaredNames; apply NSet.union_spec; left.
-          apply (listNames_in _ _ _ _ f0);
-            [apply ownedBy_in; exact Hin | exact Hm].
-        + destruct H as [nc [Hin ->]].
-          right; left; exists nc; split;
-            [apply (proj2 (own_filter_in _ _ _ _)); exact Hin |].
-          apply cflForm_agree; symmetry; apply HVq.
-          unfold declaredNames; apply NSet.union_spec; right.
-          apply NSet.union_spec; left.
-          apply (listNames_in _ _ _ _ nc);
-            [apply ownedBy_in; exact Hin
-            | apply NSet.singleton_spec; reflexivity].
-        + destruct H as [k [Hpk ->]].
-          right; right; left; exists k; split; [| reflexivity].
-          unfold clsFibre; apply ClsRel.filter_spec'; split;
-            [exact Hpk | cbn [fst]].
-          destruct (Pkg.eq_dec (n, v) (n, v)) as [_ | NE];
-            [reflexivity | contradiction NE; reflexivity].
-        + destruct H as [Hpin [nvu [Hin ->]]].
-          right; right; right; split; [exact Hpin |].
-          exists nvu; split;
-            [apply (proj2 (own_filter_in _ _ _ _)); exact Hin |].
-          apply pindForm_agree; symmetry; apply HVq.
-          unfold declaredNames; apply NSet.union_spec; right.
-          apply NSet.union_spec; right.
-          apply (listNames_in _ _ _ _ nvu);
-            [apply ownedBy_in; exact Hin
-            | apply NSet.singleton_spec; reflexivity].
+      rewrite !ownedBy_filter.
+      f_equal; [| f_equal; [| f_equal]].
+      - f_equal; apply List.map_ext_in; intros f0 Hin.
+        apply encodeOF_agree; intros m Hm; apply HVq.
+        apply NSet.union_spec; left; exact (listNames_in _ _ _ _ _ Hin Hm).
+      - f_equal; apply List.map_ext_in; intros [m nc] Hin.
+        apply cflForm_agree, HVq; rewrite !NSet.union_spec; right; left.
+        apply (listNames_in _ _ _ _ _ Hin), NSet.singleton_spec; reflexivity.
+      - apply FSet.ext; intro f; apply SOcf.filterMap_restrict.
+        + intros qk Hqk; apply ClsRel.filter_spec' in Hqk; apply Hqk.
+        + intros [q k] Hqk Hf; apply ClsRel.filter_spec'; split; [exact Hqk |].
+          cbn beta iota in Hf; cbn [fst].
+          destruct (Pkg.eq_dec q (n, v)); [reflexivity | discriminate Hf].
+      - destruct (PkgSet.mem (n, v) (inst_pins I)); [| reflexivity].
+        f_equal; apply List.map_ext_in; intros nvu Hin.
+        apply pindForm_agree, HVq; rewrite !NSet.union_spec; right; right.
+        apply (listNames_in _ _ _ _ _ Hin), NSet.singleton_spec; reflexivity.
     Qed.
 
     Lemma versions_transR : forall rho I tn,

@@ -285,30 +285,24 @@ Module Conflict (N V : UsualOrderedType).
                           S))
         ns.
 
+    Lemma exists_name_iff : forall S n,
+        PkgSet.exists_ (fun p => if N.eq_dec (fst p) n then true else false) S
+          = true <-> exists v, PkgSet.In (n, v) S.
+    Proof.
+      intros S n; rewrite PkgSet.exists_spec'; split.
+      - intros [[m v] [Hm Ht]]; cbn [fst] in Ht.
+        destruct (N.eq_dec m n) as [-> | ]; [eauto | discriminate].
+      - intros [v Hv]; exists (n, v); cbn [fst]; rewrite dec_refl; auto.
+    Qed.
+
     Lemma mem_absentIn : forall S ns n,
         NSet.In n (absentIn S ns) <->
         NSet.In n ns /\ forall v, ~ PkgSet.In (n, v) S.
     Proof.
-      intros S ns n; unfold absentIn; rewrite NSet.filter_spec'.
-      rewrite Bool.negb_true_iff.
-      split.
-      - intros [Hn He]; split; [exact Hn |].
-        intros v Hv.
-        assert (Ht : PkgSet.exists_
-                       (fun p => if N.eq_dec (fst p) n then true else false)
-                       S = true).
-        { apply PkgSet.exists_spec'; exists (n, v); split; [exact Hv |].
-          cbn [fst]; destruct (N.eq_dec n n) as [_ | NE];
-            [reflexivity | contradiction NE; reflexivity]. }
-        congruence.
-      - intros [Hn Hnone]; split; [exact Hn |].
-        destruct (PkgSet.exists_
-                    (fun p => if N.eq_dec (fst p) n then true else false) S)
-          eqn:E; [| reflexivity].
-        exfalso; apply PkgSet.exists_spec' in E.
-        destruct E as [[m v] [Hm Ht]]; cbn [fst] in Ht.
-        destruct (N.eq_dec m n) as [-> | ]; [| discriminate].
-        exact (Hnone v Hm).
+      intros S ns n; unfold absentIn.
+      rewrite NSet.filter_spec', Bool.negb_true_iff,
+        <- Bool.not_true_iff_false, exists_name_iff.
+      firstorder.
     Qed.
 
     Definition coreResolution (S : PkgSet.t) R D (G : ConflictRel.t) :
@@ -371,26 +365,19 @@ Module Conflict (N V : UsualOrderedType).
           destruct (PkgSet.exists_
                       (fun q => if N.eq_dec (fst q) n then true else false) S)
             eqn:E.
-          * apply PkgSet.exists_spec' in E.
-            destruct E as [[m' u] [Hu Ht]]; cbn [fst] in Ht.
-            destruct (N.eq_dec m' n) as [-> | ]; [| discriminate].
+          * apply exists_name_iff in E; destruct E as [u Hu].
             exists (Version.Orig u); split.
             -- apply mem_complementVS; right; exists u.
                split; [apply Hsub; exact Hu | split; [| reflexivity]].
                intro Huv; apply (Havoid p HpS n vs HG); exists u; auto.
             -- apply mem_coreResolution; left; exists (n, u); auto.
-          * exists Version.Bot; split; [apply mem_complementVS; left; reflexivity |].
+          * rewrite <- Bool.not_true_iff_false, exists_name_iff in E.
+            exists Version.Bot;
+              split; [apply mem_complementVS; left; reflexivity |].
             apply mem_coreResolution; right; exists n.
             split; [| split; [| reflexivity]].
             -- apply mem_instNames; right; right; exists p, vs; exact HG.
-            -- intros v Hv.
-               assert (Ht : PkgSet.exists_
-                              (fun q => if N.eq_dec (fst q) n then true else false)
-                              S = true).
-               { apply PkgSet.exists_spec'; exists (n, v); split; [exact Hv |].
-                 cbn [fst]; destruct (N.eq_dec n n) as [_ | NE];
-                   [reflexivity | contradiction NE; reflexivity]. }
-               congruence.
+            -- intros v Hv; apply E; exists v; exact Hv.
       - intros n w w' Hw Hw'.
         apply mem_coreResolution in Hw, Hw'.
         destruct Hw as [[[pn pv] [HpS Hp]] | [m [_ [Hnone Hp]]]];
@@ -490,35 +477,25 @@ Module Conflict (N V : UsualOrderedType).
             (embedPkg (n, v)).
       Proof.
         intros R D G n v; apply T.dependees_ext; intros [m ws].
+        assert (Hc : forall n' vs, ConflictRel.In ((n, v), (n', vs)) G ->
+                  complementVS (realPreimage R (conflictNames
+                    (ConflictRelFibred.tailFibre G (n, v)))) n' vs =
+                  complementVS R n' vs).
+        { intros n' vs HG; unfold complementVS.
+          rewrite versions_realPreimage; [reflexivity |].
+          apply mem_conflictNames; exists (n, v), vs.
+          apply ConflictRelFibred.mem_tailFibre; auto. }
         rewrite !mem_reduceDeps.
-        split.
-        - intros [[q [n' [vs [HD Hy]]]] | [q [n' [vs [HG Hy]]]]];
-            destruct q as [qn qv]; unfold embedPkg in Hy; simpl in Hy;
-            injection Hy as <- <- -> ->.
-          + left; exists (n, v), n', vs; split; [| reflexivity].
-            apply DepRelFibred.mem_tailFibre; auto.
-          + right; exists (n, v), n', vs.
-            assert (HG' : ConflictRel.In ((n, v), (n', vs))
-                            (ConflictRelFibred.tailFibre G (n, v)))
-              by (apply ConflictRelFibred.mem_tailFibre; auto).
-            split; [exact HG' |].
-            unfold complementVS.
-            rewrite (versions_realPreimage R _ n')
-              by (apply mem_conflictNames; exists (n, v), vs; exact HG').
-            reflexivity.
-        - intros [[q [n' [vs [HD Hy]]]] | [q [n' [vs [HG Hy]]]]];
-            destruct q as [qn qv]; unfold embedPkg in Hy; simpl in Hy;
-            injection Hy as <- <- -> ->.
-          + apply DepRelFibred.mem_tailFibre in HD; destruct HD as [HD _].
-            left; exists (n, v), n', vs; auto.
-          + right; exists (n, v), n', vs.
-            assert (HGf := HG).
-            apply ConflictRelFibred.mem_tailFibre in HG; destruct HG as [HG _].
-            split; [exact HG |].
-            unfold complementVS.
-            rewrite (versions_realPreimage R _ n')
-              by (apply mem_conflictNames; exists (n, v), vs; exact HGf).
-            reflexivity.
+        split; intros [[q [n' [vs [HD Hy]]]] | [q [n' [vs [HG Hy]]]]];
+          destruct q as [qn qv]; unfold embedPkg in Hy; simpl in Hy;
+          injection Hy as <- <- -> ->; [left | right | left | right];
+          exists (n, v), n', vs.
+        - split; [apply DepRelFibred.mem_tailFibre; auto | reflexivity].
+        - split; [apply ConflictRelFibred.mem_tailFibre; auto |].
+          rewrite Hc; [reflexivity | exact HG].
+        - apply DepRelFibred.mem_tailFibre in HD; destruct HD as [HD _]; auto.
+        - apply ConflictRelFibred.mem_tailFibre in HG; destruct HG as [HG _].
+          rewrite Hc by exact HG; auto.
       Qed.
 
       Theorem dependees_lookupAbsent : forall R D G (n : N.t),

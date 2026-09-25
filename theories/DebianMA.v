@@ -1388,14 +1388,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Proof.
       intros R Pi M p m x f HpR HM.
       apply (debMatch_char R Pi M p m x f HpR) in HM.
-      destruct x as [b | b | |].
-      - destruct HM as [[[Hn _] | [vt [Hin _]]] _];
-          [left; symmetry; exact Hn | right; exists vt; exact Hin].
-      - destruct HM as [[[Hn _] | [vt [Hin _]]] _];
-          [left; symmetry; exact Hn | right; exists vt; exact Hin].
-      - destruct HM as [[[Hn _] | [vt [Hin _]]] _];
-          [left; symmetry; exact Hn | right; exists vt; exact Hin].
-      - destruct HM as [Hn _]; left; symmetry; exact Hn.
+      destruct x as [b | b | |];
+        try (destruct HM as [[[Hn _] | [vt [Hin _]]] _];
+             [left; symmetry; exact Hn | right; exists vt; exact Hin]).
+      destruct HM as [Hn _]; left; symmetry; exact Hn.
     Qed.
 
     Lemma realPreimage_sub : forall R ns, PkgSet.Subset (realPreimage R ns) R.
@@ -1447,15 +1443,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         NSet.In m (atomNames D p) <->
         exists Al, Deps.In (p, Al) D /\ NSet.In m (clauseNames Al).
     Proof.
-      intros D p m; unfold atomNames; rewrite SOcn.mem_unionMap.
-      split.
-      - intros [[q Al] [Hc Hm]]; cbn [fst snd] in Hm.
-        destruct (Pkg.eq_dec q p) as [-> | NE];
-          [| exfalso; exact (SOcn.empty_in _ Hm)].
-        exists Al; split; assumption.
-      - intros [Al [Hc Hm]]; exists (p, Al); split; [exact Hc | cbn [fst snd]].
-        destruct (Pkg.eq_dec p p) as [_ | NE];
-          [exact Hm | contradiction NE; reflexivity].
+      intros D p m; unfold atomNames; rewrite SOcn.mem_unionMap_dec.
+      split; [intros [[q Al] [Hc [Hq Hm]]]; cbn in Hq; subst q; eauto |].
+      intros [Al [Hc Hm]]; exists (p, Al); auto.
     Qed.
 
     Module SOpn := SetOps ProvElt N Prov NSet.
@@ -1467,14 +1457,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         NSet.In qn (providerNames Pi m) <->
         exists q vt, Prov.In (q, (m, vt)) Pi /\ pname q = qn.
     Proof.
-      intros Pi m qn; unfold providerNames; rewrite SOpn.mem_filterMap.
-      split.
-      - intros [[q [m0 vt]] [He Hf]]; cbn [fst snd] in Hf.
-        destruct (N.eq_dec m0 m) as [-> | ]; [| discriminate].
-        injection Hf as <-; exists q, vt; split; [exact He | reflexivity].
-      - intros [q [vt [He Hq]]]; exists (q, (m, vt)); split; [exact He |].
-        cbn [fst snd]; destruct (N.eq_dec m m) as [_ | NE];
-          [rewrite Hq; reflexivity | contradiction NE; reflexivity].
+      intros Pi m qn; unfold providerNames; rewrite SOpn.mem_filterMap_dec.
+      split; [intros [[q [m0 vt]] [He [Hm ->]]]; cbn in Hm; subst m0; eauto |].
+      intros [q [vt [He <-]]]; exists (q, (m, vt)); auto.
     Qed.
 
     Module SOgn := SetOps ConfElt N Conf NSet.
@@ -1490,16 +1475,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         m = pname p \/ exists a, Conf.In (p, a) G /\ m = aname a.
     Proof.
       intros G p m; unfold confAtomNames.
-      rewrite NSet.add_spec, SOgn.mem_unionMap.
-      apply or_iff_compat_l.
-      split.
-      - intros [[q a] [Hg Hm]]; cbn [fst snd] in Hm.
-        destruct (Pkg.eq_dec q p) as [-> | ];
-          [| exfalso; exact (SOgn.empty_in _ Hm)].
-        apply NSet.singleton_spec in Hm; exists a; split; [exact Hg | exact Hm].
-      - intros [a [Hg Hm]]; exists (p, a); split; [exact Hg |].
-        cbn [fst snd]; destruct (Pkg.eq_dec p p) as [_ | NE];
-          [apply NSet.singleton_spec; exact Hm | contradiction NE; reflexivity].
+      rewrite NSet.add_spec, SOgn.mem_unionMap_dec.
+      apply or_iff_compat_l; setoid_rewrite NSet.singleton_spec.
+      split; [intros [[q a] [Hg [Hq Hm]]]; cbn in Hq; subst q; eauto |].
+      intros [a [Hg Hm]]; exists (p, a); auto.
     Qed.
 
     Module SOnn := SetOps N N NSet NSet.

@@ -3,6 +3,7 @@ From PackageCalculus Require Import Prelude Core Feature.
 
 Create HintDb cmp_fconc.
 Create Rewrite HintDb cmp_fconc.
+Create HintDb fc_mem.
 
 Module FeatureConcurrent (N V F G : UsualOrderedType).
   Module Feat := Feature N V F.
@@ -317,294 +318,96 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
       exact (SOvv.mem_map_inj (fun v => v) vs w (fun x y H => H)).
     Qed.
 
-    Lemma mem_fInterReal : forall Df (y : T.Pkg.t),
-        T.PkgSet.In y (fInterReal Df) <->
-        exists n v m vs fs u, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df /\
-          VSet.In u vs /\ y = (Name.Intermediate n v m, u).
-    Proof.
-      intros Df y; unfold fInterReal; rewrite SOfp.mem_unionMap.
-      split.
-      - intros [[[n v] [m [vs fs]]] [HD Hy]]; cbn beta iota in Hy.
-        apply SOvp.mem_map in Hy; destruct Hy as [u [Hu Hy]].
-        exists n, v, m, vs, fs, u; auto.
-      - intros [n [v [m [vs [fs [u [HD [Hu ->]]]]]]]].
-        exists ((n, v), (m, (vs, fs))); split; [exact HD | cbn beta iota].
-        apply SOvp.mem_map; exists u; split; [exact Hu | reflexivity].
-    Qed.
+    Lemma mem_singVS : forall u w, T.VSet.In w (singVS u) <-> w = u.
+    Proof. intros u w; exact (SOvv.singleton_in u w). Qed.
 
-    Lemma mem_fInterFeatReal : forall Df (y : T.Pkg.t),
-        T.PkgSet.In y (fInterFeatReal Df) <->
-        exists n v m vs fs u f, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df /\
-          VSet.In u vs /\ Feat.FSet.In f fs /\
-          y = (Name.IntermediateF n v m f, u).
-    Proof.
-      intros Df y; unfold fInterFeatReal; rewrite SOfp.mem_unionMap.
-      split.
-      - intros [[[n v] [m [vs fs]]] [HD Hy]]; cbn beta iota in Hy.
-        apply SOvp.mem_unionMap in Hy; destruct Hy as [u [Hu Hy]].
-        apply SOfsp.mem_map in Hy; destruct Hy as [f [Hf Hy]].
-        exists n, v, m, vs, fs, u, f; auto.
-      - intros [n [v [m [vs [fs [u [f [HD [Hu [Hf ->]]]]]]]]]].
-        exists ((n, v), (m, (vs, fs))); split; [exact HD | cbn beta iota].
-        apply SOvp.mem_unionMap; exists u; split; [exact Hu |].
-        apply SOfsp.mem_map; exists f; split; [exact Hf | reflexivity].
-    Qed.
+    (* The encodings are unions of map, unionMap and guarded filterMap over
+       tuples.  mem_open takes a membership apart into its witnesses;
+       mem_close rebuilds one disjunct of a union from the hypotheses and
+       fails on any other, so pick_close finds the component by what it
+       contains rather than by its position in the union. *)
+    Ltac split_pairs :=
+      repeat match goal with
+      | x : ?T |- _ =>
+          lazymatch eval hnf in T with
+          | prod _ _ => destruct x
+          | Feat.Reduction.Name.name => destruct x
+          end
+      end.
 
-    Lemma mem_aInterReal : forall Da (y : T.Pkg.t),
-        T.PkgSet.In y (aInterReal Da) <->
-        exists n v f m vs fs u,
-          Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da /\
-          VSet.In u vs /\ y = (Name.Intermediate n v m, u).
-    Proof.
-      intros Da y; unfold aInterReal; rewrite SOap.mem_unionMap.
-      split.
-      - intros [[[[n v] f] [m [vs fs]]] [HD Hy]]; cbn beta iota in Hy.
-        apply SOvp.mem_map in Hy; destruct Hy as [u [Hu Hy]].
-        exists n, v, f, m, vs, fs, u; auto.
-      - intros [n [v [f [m [vs [fs [u [HD [Hu ->]]]]]]]]].
-        exists (((n, v), f), (m, (vs, fs))); split; [exact HD | cbn beta iota].
-        apply SOvp.mem_map; exists u; split; [exact Hu | reflexivity].
-    Qed.
+    Ltac mem_open :=
+      repeat progress (
+        mem_destruct; split_pairs; cbn beta iota delta [granularOf] in *;
+        rewrite ?SOvp.mem_map, ?SOvp.mem_unionMap, ?SOvp.mem_filterMap,
+          ?SOfsp.mem_map, ?SOfsp.mem_unionMap, ?SOvd.mem_map,
+          ?SOvd.mem_unionMap, ?SOfsd.mem_map, ?SOfsd.mem_unionMap in *;
+        try match goal with
+            | H : (if ?b then _ else _) = Some _ |- _ =>
+                destruct b eqn:?; [| discriminate H]
+            | H : PkgSet.mem _ _ = true |- _ => apply PkgSet.mem_spec in H
+            end).
 
-    Lemma mem_aInterFeatReal : forall Da (y : T.Pkg.t),
-        T.PkgSet.In y (aInterFeatReal Da) <->
-        exists n v f m vs fs u f',
-          Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da /\
-          VSet.In u vs /\ Feat.FSet.In f' fs /\
-          y = (Name.IntermediateA n v f m f', u).
-    Proof.
-      intros Da y; unfold aInterFeatReal; rewrite SOap.mem_unionMap.
-      split.
-      - intros [[[[n v] f] [m [vs fs]]] [HD Hy]]; cbn beta iota in Hy.
-        apply SOvp.mem_unionMap in Hy; destruct Hy as [u [Hu Hy]].
-        apply SOfsp.mem_map in Hy; destruct Hy as [f' [Hf' Hy]].
-        exists n, v, f, m, vs, fs, u, f'; auto.
-      - intros [n [v [f [m [vs [fs [u [f' [HD [Hu [Hf' ->]]]]]]]]]]].
-        exists (((n, v), f), (m, (vs, fs))); split; [exact HD | cbn beta iota].
-        apply SOvp.mem_unionMap; exists u; split; [exact Hu |].
-        apply SOfsp.mem_map; exists f'; split; [exact Hf' | reflexivity].
-    Qed.
+    Ltac mem_close :=
+      repeat first
+        [ reflexivity
+        | progress cbn beta iota delta [granularOf]
+        | rewrite SOvp.mem_map | rewrite SOvp.mem_unionMap
+        | rewrite SOvp.mem_filterMap | rewrite SOfsp.mem_map
+        | rewrite SOfsp.mem_unionMap | rewrite SOvd.mem_map
+        | rewrite SOvd.mem_unionMap | rewrite SOfsd.mem_map
+        | rewrite SOfsd.mem_unionMap
+        | match goal with
+          | H : ?b = true |- context [if ?b then _ else _] => rewrite H
+          | |- context [PkgSet.mem ?x ?s] =>
+              replace (PkgSet.mem x s) with true
+                by (symmetry; apply PkgSet.mem_spec; assumption)
+          end
+        | eexists; split; [eassumption |] ].
+
+    Ltac pick_close :=
+      first [ solve [mem_close] | left; solve [mem_close]
+            | right; pick_close ].
+
+    Inductive RealMember (R : PkgSet.t) (support : Feat.SupportSet.t)
+        (Df : Feat.FeatDepRel.t) (Da : Feat.AddlDepRel.t) (g : V.t -> G.t) :
+        T.Pkg.t -> Prop :=
+    | RealOrig : forall n v,
+        Feat.Reduction.T.PkgSet.In (Feat.Reduction.Name.Orig n, v)
+          (Feat.Reduction.reduceReal R support) ->
+        RealMember R support Df Da g (Name.GranularOrig n (g v), v)
+    | RealFeatPkg : forall n f v,
+        Feat.Reduction.T.PkgSet.In (Feat.Reduction.Name.FeatPkg n f, v)
+          (Feat.Reduction.reduceReal R support) ->
+        RealMember R support Df Da g (Name.GranularFeatPkg n f (g v), v)
+    | RealFInter : forall n v m vs fs u,
+        Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df -> VSet.In u vs ->
+        RealMember R support Df Da g (Name.Intermediate n v m, u)
+    | RealFInterF : forall n v m vs fs u f,
+        Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df -> VSet.In u vs ->
+        Feat.FSet.In f fs ->
+        RealMember R support Df Da g (Name.IntermediateF n v m f, u)
+    | RealAInter : forall n v f m vs fs u,
+        Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da -> VSet.In u vs ->
+        RealMember R support Df Da g (Name.Intermediate n v m, u)
+    | RealAInterA : forall n v f m vs fs u f',
+        Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da -> VSet.In u vs ->
+        Feat.FSet.In f' fs ->
+        RealMember R support Df Da g (Name.IntermediateA n v f m f', u).
+    #[local] Hint Constructors RealMember : fc_mem.
 
     Lemma mem_reduceReal : forall R support Df Da g (y : T.Pkg.t),
         T.PkgSet.In y (reduceReal R support Df Da g) <->
-        (exists q,
-           Feat.Reduction.T.PkgSet.In q
-             (Feat.Reduction.reduceReal R support) /\
-           y = granularOf g q) \/
-        (exists n v m vs fs u, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df /\
-           VSet.In u vs /\ y = (Name.Intermediate n v m, u)) \/
-        (exists n v m vs fs u f,
-           Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df /\
-           VSet.In u vs /\ Feat.FSet.In f fs /\
-           y = (Name.IntermediateF n v m f, u)) \/
-        (exists n v f m vs fs u,
-           Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da /\
-           VSet.In u vs /\ y = (Name.Intermediate n v m, u)) \/
-        (exists n v f m vs fs u f',
-           Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da /\
-           VSet.In u vs /\ Feat.FSet.In f' fs /\
-           y = (Name.IntermediateA n v f m f', u)).
+        RealMember R support Df Da g y.
     Proof.
-      intros R support Df Da g y; unfold reduceReal, granularReal.
-      rewrite !T.PkgSet.union_spec, SOqp.mem_map, mem_fInterReal,
-        mem_fInterFeatReal, mem_aInterReal, mem_aInterFeatReal.
-      tauto.
-    Qed.
-
-    Lemma mem_supportEdges : forall R support g (y : T.DepElt.t),
-        T.DepRel.In y (supportEdges R support g) <->
-        exists n v f, Feat.SupportSet.In ((n, v), f) support /\
-          PkgSet.In (n, v) R /\
-          y = ((Name.GranularFeatPkg n f (g v), v),
-               (Name.GranularOrig n (g v), singVS v)).
-    Proof.
-      intros R support g y; unfold supportEdges; rewrite SOsd.mem_filterMap.
+      intros R support Df Da g y; unfold reduceReal, granularReal,
+        fInterReal, fInterFeatReal, aInterReal, aInterFeatReal.
+      rewrite !T.PkgSet.union_spec, SOqp.mem_map, !SOfp.mem_unionMap,
+        !SOap.mem_unionMap.
       split.
-      - intros [[[n v] f] [Hs Hy]]; cbn beta iota in Hy.
-        destruct (PkgSet.mem (n, v) R) eqn:Em; [| discriminate].
-        injection Hy as <-.
-        exists n, v, f; repeat split;
-          [exact Hs | apply PkgSet.mem_spec; exact Em].
-      - intros [n [v [f [Hs [HR ->]]]]].
-        exists ((n, v), f); split; [exact Hs | cbn beta iota].
-        rewrite <- PkgSet.mem_spec in HR; rewrite HR; reflexivity.
-    Qed.
-
-    Lemma mem_fDepToInterEdges : forall Df g (y : T.DepElt.t),
-        T.DepRel.In y (fDepToInterEdges Df g) <->
-        exists n v m vs fs, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df /\
-          y = ((Name.GranularOrig n (g v), v),
-               (Name.Intermediate n v m, embedVS vs)).
-    Proof.
-      intros Df g y; unfold fDepToInterEdges; rewrite SOfd.mem_map.
-      split.
-      - intros [[[n v] [m [vs fs]]] [HD Hy]]; cbn beta iota in Hy.
-        exists n, v, m, vs, fs; auto.
-      - intros [n [v [m [vs [fs [HD ->]]]]]].
-        exists ((n, v), (m, (vs, fs))); split; [exact HD | reflexivity].
-    Qed.
-
-    Lemma mem_fInterToOrigEdges : forall Df g (y : T.DepElt.t),
-        T.DepRel.In y (fInterToOrigEdges Df g) <->
-        exists n v m vs fs u, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df /\
-          VSet.In u vs /\
-          y = ((Name.Intermediate n v m, u),
-               (Name.GranularOrig m (g u), singVS u)).
-    Proof.
-      intros Df g y; unfold fInterToOrigEdges; rewrite SOfd.mem_unionMap.
-      split.
-      - intros [[[n v] [m [vs fs]]] [HD Hy]]; cbn beta iota in Hy.
-        apply SOvd.mem_map in Hy; destruct Hy as [u [Hu Hy]].
-        exists n, v, m, vs, fs, u; auto.
-      - intros [n [v [m [vs [fs [u [HD [Hu ->]]]]]]]].
-        exists ((n, v), (m, (vs, fs))); split; [exact HD | cbn beta iota].
-        apply SOvd.mem_map; exists u; split; [exact Hu | reflexivity].
-    Qed.
-
-    Lemma mem_fDepToInterFeatEdges : forall Df g (y : T.DepElt.t),
-        T.DepRel.In y (fDepToInterFeatEdges Df g) <->
-        exists n v m vs fs f, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df /\
-          Feat.FSet.In f fs /\
-          y = ((Name.GranularOrig n (g v), v),
-               (Name.IntermediateF n v m f, embedVS vs)).
-    Proof.
-      intros Df g y; unfold fDepToInterFeatEdges; rewrite SOfd.mem_unionMap.
-      split.
-      - intros [[[n v] [m [vs fs]]] [HD Hy]]; cbn beta iota in Hy.
-        apply SOfsd.mem_map in Hy; destruct Hy as [f [Hf Hy]].
-        exists n, v, m, vs, fs, f; auto.
-      - intros [n [v [m [vs [fs [f [HD [Hf ->]]]]]]]].
-        exists ((n, v), (m, (vs, fs))); split; [exact HD | cbn beta iota].
-        apply SOfsd.mem_map; exists f; split; [exact Hf | reflexivity].
-    Qed.
-
-    Lemma mem_fInterToFeatEdges : forall Df g (y : T.DepElt.t),
-        T.DepRel.In y (fInterToFeatEdges Df g) <->
-        exists n v m vs fs u f, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df /\
-          VSet.In u vs /\ Feat.FSet.In f fs /\
-          y = ((Name.IntermediateF n v m f, u),
-               (Name.GranularFeatPkg m f (g u), singVS u)).
-    Proof.
-      intros Df g y; unfold fInterToFeatEdges; rewrite SOfd.mem_unionMap.
-      split.
-      - intros [[[n v] [m [vs fs]]] [HD Hy]]; cbn beta iota in Hy.
-        apply SOvd.mem_unionMap in Hy; destruct Hy as [u [Hu Hy]].
-        apply SOfsd.mem_map in Hy; destruct Hy as [f [Hf Hy]].
-        exists n, v, m, vs, fs, u, f; auto.
-      - intros [n [v [m [vs [fs [u [f [HD [Hu [Hf ->]]]]]]]]]].
-        exists ((n, v), (m, (vs, fs))); split; [exact HD | cbn beta iota].
-        apply SOvd.mem_unionMap; exists u; split; [exact Hu |].
-        apply SOfsd.mem_map; exists f; split; [exact Hf | reflexivity].
-    Qed.
-
-    Lemma mem_fInterFeatToInterEdges : forall Df (y : T.DepElt.t),
-        T.DepRel.In y (fInterFeatToInterEdges Df) <->
-        exists n v m vs fs f u, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df /\
-          Feat.FSet.In f fs /\ VSet.In u vs /\
-          y = ((Name.IntermediateF n v m f, u),
-               (Name.Intermediate n v m, singVS u)).
-    Proof.
-      intros Df y; unfold fInterFeatToInterEdges; rewrite SOfd.mem_unionMap.
-      split.
-      - intros [[[n v] [m [vs fs]]] [HD Hy]]; cbn beta iota in Hy.
-        apply SOfsd.mem_unionMap in Hy; destruct Hy as [f [Hf Hy]].
-        apply SOvd.mem_map in Hy; destruct Hy as [u [Hu Hy]].
-        exists n, v, m, vs, fs, f, u; auto.
-      - intros [n [v [m [vs [fs [f [u [HD [Hf [Hu ->]]]]]]]]]].
-        exists ((n, v), (m, (vs, fs))); split; [exact HD | cbn beta iota].
-        apply SOfsd.mem_unionMap; exists f; split; [exact Hf |].
-        apply SOvd.mem_map; exists u; split; [exact Hu | reflexivity].
-    Qed.
-
-    Lemma mem_aDepToInterEdges : forall Da g (y : T.DepElt.t),
-        T.DepRel.In y (aDepToInterEdges Da g) <->
-        exists n v f m vs fs,
-          Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da /\
-          y = ((Name.GranularFeatPkg n f (g v), v),
-               (Name.Intermediate n v m, embedVS vs)).
-    Proof.
-      intros Da g y; unfold aDepToInterEdges; rewrite SOad.mem_map.
-      split.
-      - intros [[[[n v] f] [m [vs fs]]] [HD Hy]]; cbn beta iota in Hy.
-        exists n, v, f, m, vs, fs; auto.
-      - intros [n [v [f [m [vs [fs [HD ->]]]]]]].
-        exists (((n, v), f), (m, (vs, fs))); split; [exact HD | reflexivity].
-    Qed.
-
-    Lemma mem_aInterToOrigEdges : forall Da g (y : T.DepElt.t),
-        T.DepRel.In y (aInterToOrigEdges Da g) <->
-        exists n v f m vs fs u,
-          Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da /\
-          VSet.In u vs /\
-          y = ((Name.Intermediate n v m, u),
-               (Name.GranularOrig m (g u), singVS u)).
-    Proof.
-      intros Da g y; unfold aInterToOrigEdges; rewrite SOad.mem_unionMap.
-      split.
-      - intros [[[[n v] f] [m [vs fs]]] [HD Hy]]; cbn beta iota in Hy.
-        apply SOvd.mem_map in Hy; destruct Hy as [u [Hu Hy]].
-        exists n, v, f, m, vs, fs, u; auto.
-      - intros [n [v [f [m [vs [fs [u [HD [Hu ->]]]]]]]]].
-        exists (((n, v), f), (m, (vs, fs))); split; [exact HD | cbn beta iota].
-        apply SOvd.mem_map; exists u; split; [exact Hu | reflexivity].
-    Qed.
-
-    Lemma mem_aDepToInterFeatEdges : forall Da g (y : T.DepElt.t),
-        T.DepRel.In y (aDepToInterFeatEdges Da g) <->
-        exists n v f m vs fs f',
-          Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da /\
-          Feat.FSet.In f' fs /\
-          y = ((Name.GranularFeatPkg n f (g v), v),
-               (Name.IntermediateA n v f m f', embedVS vs)).
-    Proof.
-      intros Da g y; unfold aDepToInterFeatEdges; rewrite SOad.mem_unionMap.
-      split.
-      - intros [[[[n v] f] [m [vs fs]]] [HD Hy]]; cbn beta iota in Hy.
-        apply SOfsd.mem_map in Hy; destruct Hy as [f' [Hf' Hy]].
-        exists n, v, f, m, vs, fs, f'; auto.
-      - intros [n [v [f [m [vs [fs [f' [HD [Hf' ->]]]]]]]]].
-        exists (((n, v), f), (m, (vs, fs))); split; [exact HD | cbn beta iota].
-        apply SOfsd.mem_map; exists f'; split; [exact Hf' | reflexivity].
-    Qed.
-
-    Lemma mem_aInterToFeatEdges : forall Da g (y : T.DepElt.t),
-        T.DepRel.In y (aInterToFeatEdges Da g) <->
-        exists n v f m vs fs u f',
-          Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da /\
-          VSet.In u vs /\ Feat.FSet.In f' fs /\
-          y = ((Name.IntermediateA n v f m f', u),
-               (Name.GranularFeatPkg m f' (g u), singVS u)).
-    Proof.
-      intros Da g y; unfold aInterToFeatEdges; rewrite SOad.mem_unionMap.
-      split.
-      - intros [[[[n v] f] [m [vs fs]]] [HD Hy]]; cbn beta iota in Hy.
-        apply SOvd.mem_unionMap in Hy; destruct Hy as [u [Hu Hy]].
-        apply SOfsd.mem_map in Hy; destruct Hy as [f' [Hf' Hy]].
-        exists n, v, f, m, vs, fs, u, f'; auto.
-      - intros [n [v [f [m [vs [fs [u [f' [HD [Hu [Hf' ->]]]]]]]]]]].
-        exists (((n, v), f), (m, (vs, fs))); split; [exact HD | cbn beta iota].
-        apply SOvd.mem_unionMap; exists u; split; [exact Hu |].
-        apply SOfsd.mem_map; exists f'; split; [exact Hf' | reflexivity].
-    Qed.
-
-    Lemma mem_aInterFeatToInterEdges : forall Da (y : T.DepElt.t),
-        T.DepRel.In y (aInterFeatToInterEdges Da) <->
-        exists n v f m vs fs f' u,
-          Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da /\
-          Feat.FSet.In f' fs /\ VSet.In u vs /\
-          y = ((Name.IntermediateA n v f m f', u),
-               (Name.Intermediate n v m, singVS u)).
-    Proof.
-      intros Da y; unfold aInterFeatToInterEdges; rewrite SOad.mem_unionMap.
-      split.
-      - intros [[[[n v] f] [m [vs fs]]] [HD Hy]]; cbn beta iota in Hy.
-        apply SOfsd.mem_unionMap in Hy; destruct Hy as [f' [Hf' Hy]].
-        apply SOvd.mem_map in Hy; destruct Hy as [u [Hu Hy]].
-        exists n, v, f, m, vs, fs, f', u; auto.
-      - intros [n [v [f [m [vs [fs [f' [u [HD [Hf' [Hu ->]]]]]]]]]]].
-        exists (((n, v), f), (m, (vs, fs))); split; [exact HD | cbn beta iota].
-        apply SOfsd.mem_unionMap; exists f'; split; [exact Hf' |].
-        apply SOvd.mem_map; exists u; split; [exact Hu | reflexivity].
+      - intro H;
+          repeat match goal with H : _ \/ _ |- _ => destruct H as [H | H] end;
+          mem_open; eauto with fc_mem.
+      - destruct 1; pick_close.
     Qed.
 
     (* One constructor per edge family emitted by reduceDeps: the tailFibre
@@ -673,175 +476,24 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         EncodedEdge R support Df Da g
           ((Name.IntermediateA n v f m f', u),
            (Name.Intermediate n v m, singVS u)).
+    #[local] Hint Constructors EncodedEdge : fc_mem.
 
     Lemma mem_reduceDeps : forall R support Df Da g (y : T.DepElt.t),
         T.DepRel.In y (reduceDeps R support Df Da g) <->
         EncodedEdge R support Df Da g y.
     Proof.
-      intros R support Df Da g y; unfold reduceDeps.
-      rewrite !T.DepRel.union_spec, mem_supportEdges, mem_fDepToInterEdges,
-        mem_fInterToOrigEdges, mem_fDepToInterFeatEdges, mem_fInterToFeatEdges,
-        mem_fInterFeatToInterEdges, mem_aDepToInterEdges, mem_aInterToOrigEdges,
-        mem_aDepToInterFeatEdges, mem_aInterToFeatEdges,
-        mem_aInterFeatToInterEdges.
+      intros R support Df Da g y; unfold reduceDeps, supportEdges,
+        fDepToInterEdges, fInterToOrigEdges, fDepToInterFeatEdges,
+        fInterToFeatEdges, fInterFeatToInterEdges, aDepToInterEdges,
+        aInterToOrigEdges, aDepToInterFeatEdges, aInterToFeatEdges,
+        aInterFeatToInterEdges.
+      rewrite !T.DepRel.union_spec, SOsd.mem_filterMap, SOfd.mem_map,
+        !SOfd.mem_unionMap, SOad.mem_map, !SOad.mem_unionMap.
       split.
-      - intros [H1 | [H2 | [H3 | [H4 | [H5 | [H6 | [H7 | [H8 | [H9 |
-                [H10 | H11]]]]]]]]]].
-        + destruct H1 as [n [v [f [Hs [HR ->]]]]].
-          apply EdgeSupport; assumption.
-        + destruct H2 as [n [v [m [vs [fs [HD ->]]]]]].
-          eapply EdgeFDepToInter; exact HD.
-        + destruct H3 as [n [v [m [vs [fs [u [HD [Hu ->]]]]]]]].
-          eapply EdgeFInterToOrig; [exact HD | exact Hu].
-        + destruct H4 as [n [v [m [vs [fs [f [HD [Hf ->]]]]]]]].
-          eapply EdgeFDepToInterFeat; [exact HD | exact Hf].
-        + destruct H5 as [n [v [m [vs [fs [u [f [HD [Hu [Hf ->]]]]]]]]]].
-          eapply EdgeFInterToFeat; [exact HD | exact Hu | exact Hf].
-        + destruct H6 as [n [v [m [vs [fs [f [u [HD [Hf [Hu ->]]]]]]]]]].
-          eapply EdgeFInterFeatToInter; [exact HD | exact Hf | exact Hu].
-        + destruct H7 as [n [v [f [m [vs [fs [HD ->]]]]]]].
-          eapply EdgeADepToInter; exact HD.
-        + destruct H8 as [n [v [f [m [vs [fs [u [HD [Hu ->]]]]]]]]].
-          eapply EdgeAInterToOrig; [exact HD | exact Hu].
-        + destruct H9 as [n [v [f [m [vs [fs [f' [HD [Hf' ->]]]]]]]]].
-          eapply EdgeADepToInterFeat; [exact HD | exact Hf'].
-        + destruct H10 as [n [v [f [m [vs [fs [u [f' [HD [Hu [Hf' ->]]]]]]]]]]].
-          eapply EdgeAInterToFeat; [exact HD | exact Hu | exact Hf'].
-        + destruct H11 as [n [v [f [m [vs [fs [f' [u [HD [Hf' [Hu ->]]]]]]]]]]].
-          eapply EdgeAInterFeatToInter; [exact HD | exact Hf' | exact Hu].
-      - intro Hy; destruct Hy as
-          [n v f0 Hs HR | n v m vs fs HD | n v m vs fs u HD Hu
-          | n v m vs fs f HD Hf | n v m vs fs u f HD Hu Hf
-          | n v m vs fs f u HD Hf Hu | n v f0 m vs fs HD
-          | n v f0 m vs fs u HD Hu | n v f0 m vs fs f' HD Hf'
-          | n v f0 m vs fs u f' HD Hu Hf' | n v f0 m vs fs f' u HD Hf' Hu].
-        + left; exists n, v, f0; auto.
-        + right; left; exists n, v, m, vs, fs; auto.
-        + do 2 right; left; exists n, v, m, vs, fs, u; auto.
-        + do 3 right; left; exists n, v, m, vs, fs, f; auto.
-        + do 4 right; left; exists n, v, m, vs, fs, u, f; auto.
-        + do 5 right; left; exists n, v, m, vs, fs, f, u; auto.
-        + do 6 right; left; exists n, v, f0, m, vs, fs; auto.
-        + do 7 right; left; exists n, v, f0, m, vs, fs, u; auto.
-        + do 8 right; left; exists n, v, f0, m, vs, fs, f'; auto.
-        + do 9 right; left; exists n, v, f0, m, vs, fs, u, f'; auto.
-        + do 10 right; exists n, v, f0, m, vs, fs, f', u; auto.
-    Qed.
-
-    Lemma mem_reduceDeps_f_depToInter : forall R support Df Da g n v m vs fs,
-        Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df ->
-        T.DepRel.In ((Name.GranularOrig n (g v), v),
-                     (Name.Intermediate n v m, embedVS vs))
-          (reduceDeps R support Df Da g).
-    Proof.
-      intros R support Df Da g n v m vs fs H.
-      rewrite mem_reduceDeps; eapply EdgeFDepToInter; exact H.
-    Qed.
-
-    Lemma mem_reduceDeps_f_interToOrig : forall R support Df Da g n v m vs fs u,
-        Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df -> VSet.In u vs ->
-        T.DepRel.In ((Name.Intermediate n v m, u),
-                     (Name.GranularOrig m (g u), singVS u))
-          (reduceDeps R support Df Da g).
-    Proof.
-      intros R support Df Da g n v m vs fs u H Hu.
-      rewrite mem_reduceDeps; eapply EdgeFInterToOrig; [exact H | exact Hu].
-    Qed.
-
-    Lemma mem_reduceDeps_f_depToInterFeat :
-        forall R support Df Da g n v m vs fs f,
-        Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df -> Feat.FSet.In f fs ->
-        T.DepRel.In ((Name.GranularOrig n (g v), v),
-                     (Name.IntermediateF n v m f, embedVS vs))
-          (reduceDeps R support Df Da g).
-    Proof.
-      intros R support Df Da g n v m vs fs f H Hf.
-      rewrite mem_reduceDeps; eapply EdgeFDepToInterFeat; [exact H | exact Hf].
-    Qed.
-
-    Lemma mem_reduceDeps_f_interToFeat :
-      forall R support Df Da g n v m vs fs u f,
-        Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df ->
-        VSet.In u vs -> Feat.FSet.In f fs ->
-        T.DepRel.In ((Name.IntermediateF n v m f, u),
-                     (Name.GranularFeatPkg m f (g u), singVS u))
-          (reduceDeps R support Df Da g).
-    Proof.
-      intros R support Df Da g n v m vs fs u f H Hu Hf.
-      rewrite mem_reduceDeps;
-        eapply EdgeFInterToFeat; [exact H | exact Hu | exact Hf].
-    Qed.
-
-    Lemma mem_reduceDeps_f_interFeatToInter :
-        forall R support Df Da g n v m vs fs u f,
-        Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df ->
-        VSet.In u vs -> Feat.FSet.In f fs ->
-        T.DepRel.In ((Name.IntermediateF n v m f, u),
-                     (Name.Intermediate n v m, singVS u))
-          (reduceDeps R support Df Da g).
-    Proof.
-      intros R support Df Da g n v m vs fs u f H Hu Hf.
-      rewrite mem_reduceDeps;
-        eapply EdgeFInterFeatToInter; [exact H | exact Hf | exact Hu].
-    Qed.
-
-    Lemma mem_reduceDeps_a_depToInter : forall R support Df Da g n v f m vs fs,
-        Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da ->
-        T.DepRel.In ((Name.GranularFeatPkg n f (g v), v),
-                     (Name.Intermediate n v m, embedVS vs))
-          (reduceDeps R support Df Da g).
-    Proof.
-      intros R support Df Da g n v f m vs fs H.
-      rewrite mem_reduceDeps; eapply EdgeADepToInter; exact H.
-    Qed.
-
-    Lemma mem_reduceDeps_a_interToOrig :
-      forall R support Df Da g n v f m vs fs u,
-        Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da -> VSet.In u vs ->
-        T.DepRel.In ((Name.Intermediate n v m, u),
-                     (Name.GranularOrig m (g u), singVS u))
-          (reduceDeps R support Df Da g).
-    Proof.
-      intros R support Df Da g n v f m vs fs u H Hu.
-      rewrite mem_reduceDeps; eapply EdgeAInterToOrig; [exact H | exact Hu].
-    Qed.
-
-    Lemma mem_reduceDeps_a_depToInterFeat :
-        forall R support Df Da g n v f m vs fs f',
-        Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da ->
-        Feat.FSet.In f' fs ->
-        T.DepRel.In ((Name.GranularFeatPkg n f (g v), v),
-                     (Name.IntermediateA n v f m f', embedVS vs))
-          (reduceDeps R support Df Da g).
-    Proof.
-      intros R support Df Da g n v f m vs fs f' H Hf'.
-      rewrite mem_reduceDeps; eapply EdgeADepToInterFeat; [exact H | exact Hf'].
-    Qed.
-
-    Lemma mem_reduceDeps_a_interToFeat :
-        forall R support Df Da g n v f m vs fs u f',
-        Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da -> VSet.In u vs ->
-        Feat.FSet.In f' fs ->
-        T.DepRel.In ((Name.IntermediateA n v f m f', u),
-                     (Name.GranularFeatPkg m f' (g u), singVS u))
-          (reduceDeps R support Df Da g).
-    Proof.
-      intros R support Df Da g n v f m vs fs u f' H Hu Hf'.
-      rewrite mem_reduceDeps;
-        eapply EdgeAInterToFeat; [exact H | exact Hu | exact Hf'].
-    Qed.
-
-    Lemma mem_reduceDeps_a_interFeatToInter :
-        forall R support Df Da g n v f m vs fs u f',
-        Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da -> VSet.In u vs ->
-        Feat.FSet.In f' fs ->
-        T.DepRel.In ((Name.IntermediateA n v f m f', u),
-                     (Name.Intermediate n v m, singVS u))
-          (reduceDeps R support Df Da g).
-    Proof.
-      intros R support Df Da g n v f m vs fs u f' H Hu Hf'.
-      rewrite mem_reduceDeps;
-        eapply EdgeAInterFeatToInter; [exact H | exact Hf' | exact Hu].
+      - intro H;
+          repeat match goal with H : _ \/ _ |- _ => destruct H as [H | H] end;
+          mem_open; eauto with fc_mem.
+      - destruct 1; pick_close.
     Qed.
 
     Module SOtf := SetOps T.Pkg F T.PkgSet Feat.FSet.
@@ -893,10 +545,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           [| discriminate].
         injection He as <-; rewrite <- E; exact HS.
       - intro HS; exists (Name.GranularFeatPkg n f (g v), v);
-          split; [exact HS | cbn beta iota].
-        destruct (T.Pkg.eq_dec (Name.GranularFeatPkg n f (g v), v)
-                    (Name.GranularFeatPkg n f (g v), v)) as [_ | NE];
-          [reflexivity | exfalso; exact (NE eq_refl)].
+          split; [exact HS | cbn beta iota; apply dec_refl].
     Qed.
 
     Lemma mem_featureConcurrentResolution :
@@ -914,9 +563,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         injection Hy as <-; exists n, v0; split; [exact HeS | reflexivity].
       - intros [n [v [HS ->]]].
         exists (Name.GranularOrig n (g v), v);
-          split; [exact HS | cbn beta iota].
-        destruct (G.eq_dec (g v) (g v)) as [_ | NE];
-          [reflexivity | contradiction NE; reflexivity].
+          split; [exact HS | cbn beta iota; apply dec_refl].
     Qed.
 
     Lemma mem_parents : forall (S : T.PkgSet.t) m u n v,
@@ -932,6 +579,51 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         exists (Name.Intermediate n v m, u); split; [exact HS | reflexivity].
     Qed.
 
+    (* A dependency and an additional dependency are closed over by the same
+       argument; they differ only in the node their edges leave from and in
+       how its intermediate feature nodes are named. *)
+    Lemma parent_closure_step :
+      forall RR D r g S (q : T.Pkg.t) n v m vs fs (iF : F.t -> Name.t),
+        T.IsResolution RR D r S -> T.PkgSet.In q S ->
+        T.DepRel.In (q, (Name.Intermediate n v m, embedVS vs)) D ->
+        (forall u, VSet.In u vs ->
+           T.DepRel.In ((Name.Intermediate n v m, u),
+                        (Name.GranularOrig m (g u), singVS u)) D) ->
+        (forall f, Feat.FSet.In f fs ->
+           T.DepRel.In (q, (iF f, embedVS vs)) D) ->
+        (forall f u, Feat.FSet.In f fs -> VSet.In u vs ->
+           T.DepRel.In ((iF f, u), (Name.Intermediate n v m, singVS u)) D) ->
+        (forall f u, Feat.FSet.In f fs -> VSet.In u vs ->
+           T.DepRel.In ((iF f, u),
+                        (Name.GranularFeatPkg m f (g u), singVS u)) D) ->
+        exists! u, VSet.In u vs /\
+          (exists fs', Feat.FSet.Subset fs fs' /\
+             Feat.FeaturedSet.In ((m, u), fs')
+               (featureConcurrentResolution g S)) /\
+          ParentRel.In ((m, u), (n, v)) (parents S).
+    Proof.
+      intros RR D r g S q n v m vs fs iF [_ _ Hdep Huniq] HqS Hd Hto Hfd
+        Hback Hfwd.
+      destruct (Hdep _ HqS _ _ Hd) as [u [Hu HiS]]; rewrite mem_embedVS in Hu.
+      destruct (Hdep _ HiS _ _ (Hto u Hu)) as [w [Hw HoS]].
+      apply mem_singVS in Hw; subst w.
+      exists u; split; [split; [exact Hu | split] |].
+      - exists (featsOf g m u S); split.
+        + intros f Hf; apply featsOf_spec.
+          destruct (Hdep _ HqS _ _ (Hfd f Hf)) as [u1 [Hu1 HfS]].
+          rewrite mem_embedVS in Hu1.
+          destruct (Hdep _ HfS _ _ (Hback f u1 Hf Hu1)) as [w [Hw Hi1S]].
+          apply mem_singVS in Hw; subst w.
+          assert (u1 = u) as -> by exact (Huniq _ _ _ Hi1S HiS).
+          destruct (Hdep _ HfS _ _ (Hfwd f u Hf Hu)) as [w [Hw HgS]].
+          apply mem_singVS in Hw; subst w; exact HgS.
+        + apply mem_featureConcurrentResolution; exists m, u;
+            split; [exact HoS | reflexivity].
+      - apply mem_parents; exact HiS.
+      - intros u' [_ [_ Hpi]]; apply mem_parents in Hpi.
+        exact (Huniq _ _ _ HiS Hpi).
+    Qed.
+
     Theorem feature_concurrent_soundness :
       forall (R : PkgSet.t) (support : Feat.SupportSet.t)
              (Df : Feat.FeatDepRel.t) (Da : Feat.AddlDepRel.t)
@@ -944,58 +636,22 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           (featureConcurrentResolution g S) (parents S).
     Proof.
       intros R support Df Da g r S Hres Hnosupp.
-      destruct Hres as [Hsub Hroot Hdep Huniq].
+      pose proof Hres as [Hsub Hroot Hdep Huniq].
       destruct r as [rn rv].
       unfold embedOrigPkg in Hroot; simpl in Hroot.
       assert (HorigR : forall n v,
                  T.PkgSet.In (Name.GranularOrig n (g v), v) S ->
                  PkgSet.In (n, v) R).
-      { intros n v HS.
-        pose proof (Hsub _ HS) as HF; rewrite mem_reduceReal in HF.
-        destruct HF as [[q [Hq Hy]] | [H2 | [H3 | [H4 | H5]]]].
-        - destruct q as [fn qv]; destruct fn as [qn | qn qf];
-            unfold granularOf in Hy; simpl in Hy.
-          + injection Hy as E1 E2 E3; subst qn qv.
-            rewrite Feat.Reduction.mem_reduceReal in Hq.
-            destruct Hq as [[p0 [HpR Hq]] | [n' [v' [f' [_ [_ Hq]]]]]].
-            * destruct p0 as [p0n p0v];
-                unfold Feat.Reduction.embedPkg in Hq; simpl in Hq.
-              injection Hq as E4 E5; subst p0n p0v; exact HpR.
-            * discriminate Hq.
-          + discriminate Hy.
-        - destruct H2 as [n0 [v0 [m [vs [fs [u [_ [_ Hy]]]]]]]];
-            discriminate Hy.
-        - destruct H3 as [n0 [v0 [m [vs [fs [u [f [_ [_ [_ Hy]]]]]]]]]];
-            discriminate Hy.
-        - destruct H4 as [n0 [v0 [f [m [vs [fs [u [_ [_ Hy]]]]]]]]];
-            discriminate Hy.
-        - destruct H5 as [n0 [v0 [f [m [vs [fs [u [f' [_ [_ [_ Hy]]]]]]]]]]];
-            discriminate Hy. }
+      { intros n v HS; pose proof (Hsub _ HS) as HF.
+        apply mem_reduceReal in HF; inversion HF; subst.
+        eapply Feat.Reduction.mem_reduceReal_orig; eassumption. }
       assert (HfeatSup : forall n f v,
                  T.PkgSet.In
                    (Name.GranularFeatPkg n f (g v), v) S ->
                  Feat.SupportSet.In ((n, v), f) support /\ PkgSet.In (n, v) R).
-      { intros n f v HS.
-        pose proof (Hsub _ HS) as HF; rewrite mem_reduceReal in HF.
-        destruct HF as [[q [Hq Hy]] | [H2 | [H3 | [H4 | H5]]]].
-        - destruct q as [fn qv]; destruct fn as [qn | qn qf];
-            unfold granularOf in Hy; simpl in Hy.
-          + discriminate Hy.
-          + injection Hy as E1 E2 E3 E4; subst qn qf qv.
-            rewrite Feat.Reduction.mem_reduceReal in Hq.
-            destruct Hq as [[p0 [HpR Hq]] | [n' [v' [f' [Hsupp [HR Hq]]]]]].
-            * destruct p0 as [p0n p0v];
-                unfold Feat.Reduction.embedPkg in Hq; simpl in Hq;
-                discriminate Hq.
-            * injection Hq as E5 E6 E7; subst n' f' v'; split; assumption.
-        - destruct H2 as [n0 [v0 [m [vs [fs [u [_ [_ Hy]]]]]]]];
-            discriminate Hy.
-        - destruct H3 as [n0 [v0 [m [vs [fs [u [f0 [_ [_ [_ Hy]]]]]]]]]];
-            discriminate Hy.
-        - destruct H4 as [n0 [v0 [f0 [m [vs [fs [u [_ [_ Hy]]]]]]]]];
-            discriminate Hy.
-        - destruct H5 as [n0 [v0 [f0 [m [vs [fs [u [f' [_ [_ [_ Hy]]]]]]]]]]];
-            discriminate Hy. }
+      { intros n f v HS; pose proof (Hsub _ HS) as HF.
+        apply mem_reduceReal in HF; inversion HF; subst.
+        eapply Feat.Reduction.mem_reduceReal_featPkg; eassumption. }
       constructor.
       - exact Hnosupp.
       - intros p fs Hmem.
@@ -1021,87 +677,23 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         rewrite mem_featureConcurrentResolution in Hmem.
         destruct Hmem as [n [v [HpS Heq]]].
         injection Heq as E1 E2; subst p fs_p.
-        pose proof (Hdep _ HpS _ _
-          (mem_reduceDeps_f_depToInter R support Df Da g n v m vs fs Hdf))
-          as [u0 [Hu0 HwS]].
-        rewrite mem_embedVS in Hu0.
-        pose proof (Hdep _ HwS _ _
-          (mem_reduceDeps_f_interToOrig R support Df Da g n v m vs fs u0
-             Hdf Hu0))
-          as [w' [Hw' Hw'S]].
-        unfold singVS in Hw'; rewrite SOvv.singleton_in in Hw'; subst w'.
-        assert (Hsubfs : Feat.FSet.Subset fs (featsOf g m u0 S)).
-        { intros f Hf; rewrite featsOf_spec.
-          pose proof (Hdep _ HpS _ _
-            (mem_reduceDeps_f_depToInterFeat R support Df Da g n v m vs fs f
-               Hdf Hf)) as [u1 [Hu1 Hw1S]].
-          rewrite mem_embedVS in Hu1.
-          pose proof (Hdep _ Hw1S _ _
-            (mem_reduceDeps_f_interFeatToInter
-               R support Df Da g n v m vs fs u1 f
-               Hdf Hu1 Hf)) as [w2 [Hw2 Hw2S]].
-          unfold singVS in Hw2; rewrite SOvv.singleton_in in Hw2; subst w2.
-          assert (Eu : u1 = u0)
-            by exact (Huniq (Name.Intermediate n v m) _ _ Hw2S HwS).
-          subst u1.
-          pose proof (Hdep _ Hw1S _ _
-            (mem_reduceDeps_f_interToFeat R support Df Da g n v m vs fs u0 f
-               Hdf Hu0 Hf)) as [w3 [Hw3 Hw3S]].
-          unfold singVS in Hw3; rewrite SOvv.singleton_in in Hw3; subst w3.
-          exact Hw3S. }
-        exists u0; split.
-        + split; [exact Hu0 | split].
-          * exists (featsOf g m u0 S); split; [exact Hsubfs |].
-            rewrite mem_featureConcurrentResolution; exists m, u0; split;
-              [exact Hw'S | reflexivity].
-          * exact (proj2 (mem_parents S m u0 n v) HwS).
-        + intros u' [Hu' [_ Hpi']].
-          pose proof (proj1 (mem_parents S m u' n v) Hpi') as HS'.
-          assert (E : u0 = u')
-            by exact (Huniq (Name.Intermediate n v m) _ _ HwS HS').
-          exact E.
+        apply (parent_closure_step _ _ _ g S _ n v m vs fs
+                 (Name.IntermediateF n v m) Hres HpS);
+          intros; apply mem_reduceDeps;
+          [eapply EdgeFDepToInter | eapply EdgeFInterToOrig
+          | eapply EdgeFDepToInterFeat | eapply EdgeFInterFeatToInter
+          | eapply EdgeFInterToFeat]; eassumption.
       - intros p fs_p Hmem f Hf m vs fs Hda.
         rewrite mem_featureConcurrentResolution in Hmem.
         destruct Hmem as [n [v [HpS Heq]]].
         injection Heq as E1 E2; subst p fs_p.
         rewrite featsOf_spec in Hf.
-        pose proof (Hdep _ Hf _ _
-          (mem_reduceDeps_a_depToInter R support Df Da g n v f m vs fs Hda))
-          as [u0 [Hu0 HwS]].
-        rewrite mem_embedVS in Hu0.
-        pose proof (Hdep _ HwS _ _
-          (mem_reduceDeps_a_interToOrig R support Df Da g n v f m vs fs u0
-             Hda Hu0)) as [w' [Hw' Hw'S]].
-        unfold singVS in Hw'; rewrite SOvv.singleton_in in Hw'; subst w'.
-        assert (Hsubfs : Feat.FSet.Subset fs (featsOf g m u0 S)).
-        { intros f' Hf'; rewrite featsOf_spec.
-          pose proof (Hdep _ Hf _ _
-            (mem_reduceDeps_a_depToInterFeat R support Df Da g n v f m vs fs f'
-               Hda Hf')) as [u1 [Hu1 Hw1S]].
-          rewrite mem_embedVS in Hu1.
-          pose proof (Hdep _ Hw1S _ _
-            (mem_reduceDeps_a_interFeatToInter R support Df Da g n v f m vs fs
-               u1 f' Hda Hu1 Hf')) as [w2 [Hw2 Hw2S]].
-          unfold singVS in Hw2; rewrite SOvv.singleton_in in Hw2; subst w2.
-          assert (Eu : u1 = u0)
-            by exact (Huniq (Name.Intermediate n v m) _ _ Hw2S HwS).
-          subst u1.
-          pose proof (Hdep _ Hw1S _ _
-            (mem_reduceDeps_a_interToFeat R support Df Da g n v f m vs fs u0 f'
-               Hda Hu0 Hf')) as [w3 [Hw3 Hw3S]].
-          unfold singVS in Hw3; rewrite SOvv.singleton_in in Hw3; subst w3.
-          exact Hw3S. }
-        exists u0; split.
-        + split; [exact Hu0 | split].
-          * exists (featsOf g m u0 S); split; [exact Hsubfs |].
-            rewrite mem_featureConcurrentResolution; exists m, u0; split;
-              [exact Hw'S | reflexivity].
-          * exact (proj2 (mem_parents S m u0 n v) HwS).
-        + intros u' [Hu' [_ Hpi']].
-          pose proof (proj1 (mem_parents S m u' n v) Hpi') as HS'.
-          assert (E : u0 = u')
-            by exact (Huniq (Name.Intermediate n v m) _ _ HwS HS').
-          exact E.
+        apply (parent_closure_step _ _ _ g S _ n v m vs fs
+                 (Name.IntermediateA n v f m) Hres Hf);
+          intros; apply mem_reduceDeps;
+          [eapply EdgeADepToInter | eapply EdgeAInterToOrig
+          | eapply EdgeADepToInterFeat | eapply EdgeAInterFeatToInter
+          | eapply EdgeAInterToFeat]; eassumption.
       - intros m u u' p H1 H2.
         destruct p as [pn pv].
         pose proof (proj1 (mem_parents S m u pn pv) H1) as HS1.
@@ -1233,204 +825,46 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
       tauto.
     Qed.
 
+    Inductive CoreMember (S_CF : Feat.FeaturedSet.t) (pi : ParentRel.t)
+        (Df : Feat.FeatDepRel.t) (Da : Feat.AddlDepRel.t) (g : V.t -> G.t) :
+        T.Pkg.t -> Prop :=
+    | CoreOrig : forall n v fs,
+        Feat.FeaturedSet.In ((n, v), fs) S_CF ->
+        CoreMember S_CF pi Df Da g (Name.GranularOrig n (g v), v)
+    | CoreFeatPkg : forall n v fs f,
+        Feat.FeaturedSet.In ((n, v), fs) S_CF -> Feat.FSet.In f fs ->
+        CoreMember S_CF pi Df Da g (Name.GranularFeatPkg n f (g v), v)
+    | CoreFInter : forall n v m vs fs u,
+        Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df -> VSet.In u vs ->
+        witnessCondb S_CF pi (n, v) fs m u = true ->
+        CoreMember S_CF pi Df Da g (Name.Intermediate n v m, u)
+    | CoreAInter : forall n v f m vs fs u,
+        Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da -> VSet.In u vs ->
+        witnessCondb S_CF pi (n, v) fs m u = true ->
+        CoreMember S_CF pi Df Da g (Name.Intermediate n v m, u)
+    | CoreFInterF : forall n v m vs fs f u,
+        Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df -> Feat.FSet.In f fs ->
+        VSet.In u vs -> witnessCondb S_CF pi (n, v) fs m u = true ->
+        CoreMember S_CF pi Df Da g (Name.IntermediateF n v m f, u)
+    | CoreAInterA : forall n v f m vs fs f' u,
+        Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da ->
+        Feat.FSet.In f' fs -> VSet.In u vs ->
+        witnessCondb S_CF pi (n, v) fs m u = true ->
+        CoreMember S_CF pi Df Da g (Name.IntermediateA n v f m f', u).
+    #[local] Hint Constructors CoreMember : fc_mem.
+
     Lemma mem_coreResolution : forall S_CF pi Df Da g (q : T.Pkg.t),
         T.PkgSet.In q (coreResolution S_CF pi Df Da g) <->
-        (exists n v fs, Feat.FeaturedSet.In ((n, v), fs) S_CF /\
-           q = (Name.GranularOrig n (g v), v)) \/
-        (exists n v fs f, Feat.FeaturedSet.In ((n, v), fs) S_CF /\
-           Feat.FSet.In f fs /\
-           q = (Name.GranularFeatPkg n f (g v), v)) \/
-        (exists n v m vs fs u, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df /\
-           VSet.In u vs /\ witnessCondb S_CF pi (n, v) fs m u = true /\
-           q = (Name.Intermediate n v m, u)) \/
-        (exists n v f m vs fs u,
-           Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da /\
-           VSet.In u vs /\ witnessCondb S_CF pi (n, v) fs m u = true /\
-           q = (Name.Intermediate n v m, u)) \/
-        (exists n v m vs fs f u,
-           Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df /\
-           Feat.FSet.In f fs /\ VSet.In u vs /\
-           witnessCondb S_CF pi (n, v) fs m u = true /\
-           q = (Name.IntermediateF n v m f, u)) \/
-        (exists n v f m vs fs f' u,
-           Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da /\
-           Feat.FSet.In f' fs /\ VSet.In u vs /\
-           witnessCondb S_CF pi (n, v) fs m u = true /\
-           q = (Name.IntermediateA n v f m f', u)).
+        CoreMember S_CF pi Df Da g q.
     Proof.
       intros S_CF pi Df Da g q; unfold coreResolution.
       rewrite !T.PkgSet.union_spec, SOsw.mem_map, SOsw.mem_unionMap,
         !SOfp.mem_unionMap, !SOap.mem_unionMap.
       split.
-      - intros [H1 | [H2 | [H3 | [H4 | [H5 | H6]]]]].
-        + destruct H1 as [[[n v] fs0] [HxS Hy]]; cbn beta iota in Hy.
-          left; exists n, v, fs0; auto.
-        + destruct H2 as [[[n v] fs0] [HxS Hy]]; cbn beta iota in Hy.
-          apply SOfsp.mem_map in Hy; destruct Hy as [f [Hf Hy]].
-          right; left; exists n, v, fs0, f; auto.
-        + destruct H3 as [[[n v] [m [vs fs]]] [HeD Hy]]; cbn beta iota in Hy.
-          apply SOvp.mem_filterMap in Hy; destruct Hy as [u [Hu Hc]];
-            cbn beta iota in Hc.
-          destruct (witnessCondb S_CF pi (n, v) fs m u) eqn:Hw;
-            [| discriminate].
-          injection Hc as <-.
-          right; right; left; exists n, v, m, vs, fs, u; auto 7.
-        + destruct H4 as [[[[n v] f] [m [vs fs]]] [HeD Hy]];
-            cbn beta iota in Hy.
-          apply SOvp.mem_filterMap in Hy; destruct Hy as [u [Hu Hc]];
-            cbn beta iota in Hc.
-          destruct (witnessCondb S_CF pi (n, v) fs m u) eqn:Hw;
-            [| discriminate].
-          injection Hc as <-.
-          do 3 right; left; exists n, v, f, m, vs, fs, u; auto 7.
-        + destruct H5 as [[[n v] [m [vs fs]]] [HeD Hy]]; cbn beta iota in Hy.
-          apply SOfsp.mem_unionMap in Hy; destruct Hy as [f [Hf Hy]].
-          apply SOvp.mem_filterMap in Hy; destruct Hy as [u [Hu Hc]];
-            cbn beta iota in Hc.
-          destruct (witnessCondb S_CF pi (n, v) fs m u) eqn:Hw;
-            [| discriminate].
-          injection Hc as <-.
-          do 4 right; left; exists n, v, m, vs, fs, f, u; auto 8.
-        + destruct H6 as [[[[n v] f] [m [vs fs]]] [HeD Hy]];
-            cbn beta iota in Hy.
-          apply SOfsp.mem_unionMap in Hy; destruct Hy as [f' [Hf' Hy]].
-          apply SOvp.mem_filterMap in Hy; destruct Hy as [u [Hu Hc]];
-            cbn beta iota in Hc.
-          destruct (witnessCondb S_CF pi (n, v) fs m u) eqn:Hw;
-            [| discriminate].
-          injection Hc as <-.
-          do 5 right; exists n, v, f, m, vs, fs, f', u; auto 8.
-      - intros [W1 | [W2 | [W3 | [W4 | [W5 | W6]]]]].
-        + destruct W1 as [n [v [fs [HS ->]]]].
-          left; exists ((n, v), fs); split; [exact HS | reflexivity].
-        + destruct W2 as [n [v [fs [f [HS [Hf ->]]]]]].
-          right; left; exists ((n, v), fs); split; [exact HS | cbn beta iota].
-          apply SOfsp.mem_map; exists f; split; [exact Hf | reflexivity].
-        + destruct W3 as [n [v [m [vs [fs [u [HD [Hu [Hc ->]]]]]]]]].
-          right; right; left; exists ((n, v), (m, (vs, fs)));
-            split; [exact HD | cbn beta iota].
-          apply SOvp.mem_filterMap; exists u;
-            split; [exact Hu | cbn beta iota].
-          rewrite Hc; reflexivity.
-        + destruct W4 as [n [v [f [m [vs [fs [u [HD [Hu [Hc ->]]]]]]]]]].
-          do 3 right; left; exists (((n, v), f), (m, (vs, fs)));
-            split; [exact HD | cbn beta iota].
-          apply SOvp.mem_filterMap; exists u;
-            split; [exact Hu | cbn beta iota].
-          rewrite Hc; reflexivity.
-        + destruct W5 as [n [v [m [vs [fs [f [u [HD [Hf [Hu [Hc ->]]]]]]]]]]].
-          do 4 right; left; exists ((n, v), (m, (vs, fs)));
-            split; [exact HD | cbn beta iota].
-          apply SOfsp.mem_unionMap; exists f; split; [exact Hf |].
-          apply SOvp.mem_filterMap; exists u;
-            split; [exact Hu | cbn beta iota].
-          rewrite Hc; reflexivity.
-        + destruct W6 as
-            [n [v [f [m [vs [fs [f' [u [HD [Hf' [Hu [Hc ->]]]]]]]]]]]].
-          do 5 right; exists (((n, v), f), (m, (vs, fs)));
-            split; [exact HD | cbn beta iota].
-          apply SOfsp.mem_unionMap; exists f'; split; [exact Hf' |].
-          apply SOvp.mem_filterMap; exists u;
-            split; [exact Hu | cbn beta iota].
-          rewrite Hc; reflexivity.
-    Qed.
-
-    Lemma witnessCondb_intro : forall S_CF pi (p : Pkg.t) fs m u,
-        (exists fs_p, Feat.FeaturedSet.In (p, fs_p) S_CF) ->
-        (exists fs', Feat.FSet.Subset fs fs' /\
-           Feat.FeaturedSet.In ((m, u), fs') S_CF) ->
-        ParentRel.In ((m, u), p) pi ->
-        witnessCondb S_CF pi p fs m u = true.
-    Proof.
-      intros S_CF pi p fs m u H1 H2 H3.
-      rewrite witnessCondb_iff; auto.
-    Qed.
-
-    Lemma mem_coreResolution_orig : forall S_CF pi Df Da g n v fs,
-        Feat.FeaturedSet.In ((n, v), fs) S_CF ->
-        T.PkgSet.In (Name.GranularOrig n (g v), v)
-          (coreResolution S_CF pi Df Da g).
-    Proof.
-      intros S_CF pi Df Da g n v fs H.
-      rewrite mem_coreResolution; left; exists n, v, fs; auto.
-    Qed.
-
-    Lemma mem_coreResolution_featured : forall S_CF pi Df Da g n v fs f,
-        Feat.FeaturedSet.In ((n, v), fs) S_CF -> Feat.FSet.In f fs ->
-        T.PkgSet.In (Name.GranularFeatPkg n f (g v), v)
-          (coreResolution S_CF pi Df Da g).
-    Proof.
-      intros S_CF pi Df Da g n v fs f H Hf.
-      rewrite mem_coreResolution; right; left; exists n, v, fs, f; auto.
-    Qed.
-
-    Lemma mem_coreResolution_f_inter : forall S_CF pi Df Da g n v m vs fs u,
-        Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df -> VSet.In u vs ->
-        (exists fs_p, Feat.FeaturedSet.In ((n, v), fs_p) S_CF) ->
-        (exists fs', Feat.FSet.Subset fs fs' /\
-           Feat.FeaturedSet.In ((m, u), fs') S_CF) ->
-        ParentRel.In ((m, u), (n, v)) pi ->
-        T.PkgSet.In (Name.Intermediate n v m, u)
-          (coreResolution S_CF pi Df Da g).
-    Proof.
-      intros S_CF pi Df Da g n v m vs fs u HD Hu H1 H2 H3.
-      rewrite mem_coreResolution; right; right; left;
-        exists n, v, m, vs, fs, u.
-      repeat split; try assumption.
-      apply witnessCondb_intro; assumption.
-    Qed.
-
-    Lemma mem_coreResolution_a_inter :
-        forall S_CF pi Df Da g n v f m vs fs u,
-        Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da -> VSet.In u vs ->
-        (exists fs_p, Feat.FeaturedSet.In ((n, v), fs_p) S_CF) ->
-        (exists fs', Feat.FSet.Subset fs fs' /\
-           Feat.FeaturedSet.In ((m, u), fs') S_CF) ->
-        ParentRel.In ((m, u), (n, v)) pi ->
-        T.PkgSet.In (Name.Intermediate n v m, u)
-          (coreResolution S_CF pi Df Da g).
-    Proof.
-      intros S_CF pi Df Da g n v f m vs fs u HD Hu H1 H2 H3.
-      rewrite mem_coreResolution; do 3 right; left;
-        exists n, v, f, m, vs, fs, u.
-      repeat split; try assumption.
-      apply witnessCondb_intro; assumption.
-    Qed.
-
-    Lemma mem_coreResolution_f_interF :
-        forall S_CF pi Df Da g n v m vs fs f u,
-        Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df ->
-        Feat.FSet.In f fs -> VSet.In u vs ->
-        (exists fs_p, Feat.FeaturedSet.In ((n, v), fs_p) S_CF) ->
-        (exists fs', Feat.FSet.Subset fs fs' /\
-           Feat.FeaturedSet.In ((m, u), fs') S_CF) ->
-        ParentRel.In ((m, u), (n, v)) pi ->
-        T.PkgSet.In (Name.IntermediateF n v m f, u)
-          (coreResolution S_CF pi Df Da g).
-    Proof.
-      intros S_CF pi Df Da g n v m vs fs f u HD Hf Hu H1 H2 H3.
-      rewrite mem_coreResolution; do 4 right; left;
-        exists n, v, m, vs, fs, f, u.
-      repeat split; try assumption.
-      apply witnessCondb_intro; assumption.
-    Qed.
-
-    Lemma mem_coreResolution_a_interA :
-        forall S_CF pi Df Da g n v f m vs fs f' u,
-        Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da ->
-        Feat.FSet.In f' fs -> VSet.In u vs ->
-        (exists fs_p, Feat.FeaturedSet.In ((n, v), fs_p) S_CF) ->
-        (exists fs', Feat.FSet.Subset fs fs' /\
-           Feat.FeaturedSet.In ((m, u), fs') S_CF) ->
-        ParentRel.In ((m, u), (n, v)) pi ->
-        T.PkgSet.In (Name.IntermediateA n v f m f', u)
-          (coreResolution S_CF pi Df Da g).
-    Proof.
-      intros S_CF pi Df Da g n v f m vs fs f' u HD Hf' Hu H1 H2 H3.
-      rewrite mem_coreResolution; do 5 right;
-        exists n, v, f, m, vs, fs, f', u.
-      repeat split; try assumption.
-      apply witnessCondb_intro; assumption.
+      - intro H;
+          repeat match goal with H : _ \/ _ |- _ => destruct H as [H | H] end;
+          mem_open; eauto with fc_mem.
+      - destruct 1; pick_close.
     Qed.
 
     Theorem feature_concurrent_completeness :
@@ -1447,318 +881,84 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
       destruct Hres as [Hnrs Hsubset Hrootm Hfu Hpc Hpca Hpif Hvg Hsm].
       destruct r as [rn rv].
       constructor.
-      - intros q Hq.
-        rewrite mem_coreResolution in Hq; rewrite mem_reduceReal.
-        destruct Hq as [W1 | [W2 | [W3 | [W4 | [W5 | W6]]]]].
-        + destruct W1 as [n [v [fs [HS ->]]]].
-          left; exists (Feat.Reduction.Name.Orig n, v); split; [| reflexivity].
-          rewrite Feat.Reduction.mem_reduceReal; left; exists (n, v); split;
-            [exact (Hsubset _ _ HS) | reflexivity].
-        + destruct W2 as [n [v [fs [f [HS [Hf ->]]]]]].
-          left; exists (Feat.Reduction.Name.FeatPkg n f, v);
-            split; [| reflexivity].
-          rewrite Feat.Reduction.mem_reduceReal; right; exists n, v, f.
-          split; [exact (Hsm n v fs f HS Hf) |].
-          split; [exact (Hsubset _ _ HS) | reflexivity].
-        + destruct W3 as [n [v [m [vs [fs [u [HD [Hu [Hc ->]]]]]]]]].
-          right; left; exists n, v, m, vs, fs, u; auto.
-        + destruct W4 as [n [v [f0 [m [vs [fs [u [HD [Hu [Hc ->]]]]]]]]]].
-          do 3 right; left; exists n, v, f0, m, vs, fs, u; auto.
-        + destruct W5 as [n [v [m [vs [fs [f [u [HD [Hf [Hu [Hc ->]]]]]]]]]]].
-          right; right; left; exists n, v, m, vs, fs, u, f; auto.
-        + destruct W6
-            as [n [v [f0 [m [vs [fs [f' [u [HD [Hf' [Hu [Hc ->]]]]]]]]]]]].
-          do 4 right; exists n, v, f0, m, vs, fs, u, f'; auto.
-      - unfold embedOrigPkg; simpl.
-        exact (mem_coreResolution_orig S_CF pi Df Da g rn rv
-                 Feat.FSet.empty Hrootm).
+      - intros q Hq; apply mem_coreResolution in Hq; apply mem_reduceReal.
+        destruct Hq as [n v fs HS | n v fs f HS Hf | n v m vs fs u HD Hu _
+          | n v f m vs fs u HD Hu _ | n v m vs fs f u HD Hf Hu _
+          | n v f m vs fs f' u HD Hf' Hu _].
+        + apply RealOrig, Feat.Reduction.mem_reduceReal_orig.
+          exact (Hsubset _ _ HS).
+        + apply RealFeatPkg, Feat.Reduction.mem_reduceReal_featPkg.
+          exact (conj (Hsm n v fs f HS Hf) (Hsubset _ _ HS)).
+        + eapply RealFInter; eassumption.
+        + eapply RealAInter; eassumption.
+        + eapply RealFInterF; eassumption.
+        + eapply RealAInterA; eassumption.
+      - apply mem_coreResolution; unfold embedOrigPkg.
+        eapply CoreOrig; exact Hrootm.
       - intros q Hq m' ws Hd.
-        apply mem_reduceDeps in Hd; remember (q, (m', ws)) as y eqn:Hy.
-        destruct Hd as
-          [n v f Hsupp HR | n v m vs fs Hdf | n v m vs fs u Hdf Hu
-          | n v m vs fs f Hdf Hf | n v m vs fs u f Hdf Hu Hf
-          | n v m vs fs f u Hdf Hf Hu | n v f m vs fs Hda
-          | n v f m vs fs u Hda Hu | n v f m vs fs f' Hda Hf'
-          | n v f m vs fs u f' Hda Hu Hf' | n v f m vs fs f' u Hda Hf' Hu].
-        + injection Hy as Eq Em Ews; subst q m' ws.
-          rewrite mem_coreResolution in Hq.
-          destruct Hq as
-            [[n1 [v1 [fs1 [HS1 Hqe]]]] |
-            [[n1 [v1 [fs1 [f1 [HS1 [Hf1 Hqe]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]] |
-            [[n1 [v1 [f1 [m1 [vs1 [fs1
-               [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [f1
-               [u1 [HD1 [Hf1 [Hu1 [Hc1 Hqe]]]]]]]]]]] |
-             [n1 [v1 [f1 [m1 [vs1 [fs1
-                [f1' [u1 [HD1 [Hf1' [Hu1 [Hc1 Hqe]]]]]]]]]]]]]]]]];
-            try discriminate Hqe.
-          injection Hqe as E1 E2 E3 E4; subst n1 f1 v1.
-          exists v; split;
-            [unfold singVS; rewrite SOvv.singleton_in; reflexivity |].
-          exact (mem_coreResolution_orig S_CF pi Df Da g n v fs1 HS1).
-        + injection Hy as Eq Em Ews; subst q m' ws.
-          rewrite mem_coreResolution in Hq.
-          destruct Hq as
-            [[n1 [v1 [fs1 [HS1 Hqe]]]] |
-            [[n1 [v1 [fs1 [f1 [HS1 [Hf1 Hqe]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]] |
-            [[n1 [v1 [f1 [m1 [vs1 [fs1
-               [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [f1
-               [u1 [HD1 [Hf1 [Hu1 [Hc1 Hqe]]]]]]]]]]] |
-             [n1 [v1 [f1 [m1 [vs1 [fs1
-                [f1' [u1 [HD1 [Hf1' [Hu1 [Hc1 Hqe]]]]]]]]]]]]]]]]];
-            try discriminate Hqe.
-          injection Hqe as E1 E2 E3; subst n1 v1.
-          destruct (Hpc (n, v) fs1 HS1 m vs fs Hdf) as [u [[Hu [Htk Hpi]] _]].
-          exists u; split;
-            [rewrite mem_embedVS; exact Hu |].
-          apply (mem_coreResolution_f_inter S_CF pi Df Da g n v m vs fs u
-                   Hdf Hu); [exists fs1; exact HS1 | exact Htk | exact Hpi].
-        + injection Hy as Eq Em Ews; subst q m' ws.
-          rewrite mem_coreResolution in Hq.
-          destruct Hq as
-            [[n1 [v1 [fs1 [HS1 Hqe]]]] |
-            [[n1 [v1 [fs1 [f1 [HS1 [Hf1 Hqe]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]] |
-            [[n1 [v1 [f1 [m1 [vs1 [fs1
-               [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [f1
-               [u1 [HD1 [Hf1 [Hu1 [Hc1 Hqe]]]]]]]]]]] |
-             [n1 [v1 [f1 [m1 [vs1 [fs1
-                [f1' [u1 [HD1 [Hf1' [Hu1 [Hc1 Hqe]]]]]]]]]]]]]]]]];
-            try discriminate Hqe.
-          * injection Hqe as E1 E2 E3 E4; subst n1 v1 m1 u1.
-            apply witnessCondb_iff in Hc1.
-            destruct Hc1 as [_ [[fs' [Hsub' HS']] _]].
-            exists u; split;
-              [unfold singVS; rewrite SOvv.singleton_in; reflexivity |].
-            exact (mem_coreResolution_orig S_CF pi Df Da g m u fs' HS').
-          * injection Hqe as E1 E2 E3 E4; subst n1 v1 m1 u1.
-            apply witnessCondb_iff in Hc1.
-            destruct Hc1 as [_ [[fs' [Hsub' HS']] _]].
-            exists u; split;
-              [unfold singVS; rewrite SOvv.singleton_in; reflexivity |].
-            exact (mem_coreResolution_orig S_CF pi Df Da g m u fs' HS').
-        + injection Hy as Eq Em Ews; subst q m' ws.
-          rewrite mem_coreResolution in Hq.
-          destruct Hq as
-            [[n1 [v1 [fs1 [HS1 Hqe]]]] |
-            [[n1 [v1 [fs1 [f1 [HS1 [Hf1 Hqe]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]] |
-            [[n1 [v1 [f1 [m1 [vs1 [fs1
-               [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [f1
-               [u1 [HD1 [Hf1 [Hu1 [Hc1 Hqe]]]]]]]]]]] |
-             [n1 [v1 [f1 [m1 [vs1 [fs1
-                [f1' [u1 [HD1 [Hf1' [Hu1 [Hc1 Hqe]]]]]]]]]]]]]]]]];
-            try discriminate Hqe.
-          injection Hqe as E1 E2 E3; subst n1 v1.
-          destruct (Hpc (n, v) fs1 HS1 m vs fs Hdf) as [u [[Hu [Htk Hpi]] _]].
-          exists u; split;
-            [rewrite mem_embedVS; exact Hu |].
-          apply (mem_coreResolution_f_interF S_CF pi Df Da g n v m vs fs f u
-                   Hdf Hf Hu); [exists fs1; exact HS1 | exact Htk | exact Hpi].
-        + injection Hy as Eq Em Ews; subst q m' ws.
-          rewrite mem_coreResolution in Hq.
-          destruct Hq as
-            [[n1 [v1 [fs1 [HS1 Hqe]]]] |
-            [[n1 [v1 [fs1 [f1 [HS1 [Hf1 Hqe]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]] |
-            [[n1 [v1 [f1 [m1 [vs1 [fs1
-               [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [f1
-               [u1 [HD1 [Hf1 [Hu1 [Hc1 Hqe]]]]]]]]]]] |
-             [n1 [v1 [f1 [m1 [vs1 [fs1
-                [f1' [u1 [HD1 [Hf1' [Hu1 [Hc1 Hqe]]]]]]]]]]]]]]]]];
-            try discriminate Hqe.
-          injection Hqe as E1 E2 E3 E4 E5; subst n1 v1 m1 f1 u1.
-          apply witnessCondb_iff in Hc1.
-          destruct Hc1 as [_ [[fs' [Hsub' HS']] _]].
-          exists u; split;
-            [unfold singVS; rewrite SOvv.singleton_in; reflexivity |].
-          exact (mem_coreResolution_featured S_CF pi Df Da g m u fs' f HS'
-                   (Hsub' f Hf1)).
-        + injection Hy as Eq Em Ews; subst q m' ws.
-          rewrite mem_coreResolution in Hq.
-          destruct Hq as
-            [[n1 [v1 [fs1 [HS1 Hqe]]]] |
-            [[n1 [v1 [fs1 [f1 [HS1 [Hf1 Hqe]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]] |
-            [[n1 [v1 [f1 [m1 [vs1 [fs1
-               [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [f1
-               [u1 [HD1 [Hf1 [Hu1 [Hc1 Hqe]]]]]]]]]]] |
-             [n1 [v1 [f1 [m1 [vs1 [fs1
-                [f1' [u1 [HD1 [Hf1' [Hu1 [Hc1 Hqe]]]]]]]]]]]]]]]]];
-            try discriminate Hqe.
-          injection Hqe as E1 E2 E3 E4 E5; subst n1 v1 m1 f1 u1.
-          apply witnessCondb_iff in Hc1.
-          destruct Hc1 as [HinS [Htk Hpi]].
-          exists u; split;
-            [unfold singVS; rewrite SOvv.singleton_in; reflexivity |].
-          exact (mem_coreResolution_f_inter S_CF pi Df Da g n v m vs1 fs1 u
-                   HD1 Hu1 HinS Htk Hpi).
-        + injection Hy as Eq Em Ews; subst q m' ws.
-          rewrite mem_coreResolution in Hq.
-          destruct Hq as
-            [[n1 [v1 [fs1 [HS1 Hqe]]]] |
-            [[n1 [v1 [fs1 [f1 [HS1 [Hf1 Hqe]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]] |
-            [[n1 [v1 [f1 [m1 [vs1 [fs1
-               [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [f1
-               [u1 [HD1 [Hf1 [Hu1 [Hc1 Hqe]]]]]]]]]]] |
-             [n1 [v1 [f1 [m1 [vs1 [fs1
-                [f1' [u1 [HD1 [Hf1' [Hu1 [Hc1 Hqe]]]]]]]]]]]]]]]]];
-            try discriminate Hqe.
-          injection Hqe as E1 E2 E3 E4; subst n1 f1 v1.
-          destruct (Hpca (n, v) fs1 HS1 f Hf1 m vs fs Hda)
-            as [u [[Hu [Htk Hpi]] _]].
-          exists u; split;
-            [rewrite mem_embedVS; exact Hu |].
-          apply (mem_coreResolution_a_inter S_CF pi Df Da g n v f m vs fs u
-                   Hda Hu); [exists fs1; exact HS1 | exact Htk | exact Hpi].
-        + injection Hy as Eq Em Ews; subst q m' ws.
-          rewrite mem_coreResolution in Hq.
-          destruct Hq as
-            [[n1 [v1 [fs1 [HS1 Hqe]]]] |
-            [[n1 [v1 [fs1 [f1 [HS1 [Hf1 Hqe]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]] |
-            [[n1 [v1 [f1 [m1 [vs1 [fs1
-               [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [f1
-               [u1 [HD1 [Hf1 [Hu1 [Hc1 Hqe]]]]]]]]]]] |
-             [n1 [v1 [f1 [m1 [vs1 [fs1
-                [f1' [u1 [HD1 [Hf1' [Hu1 [Hc1 Hqe]]]]]]]]]]]]]]]]];
-            try discriminate Hqe.
-          * injection Hqe as E1 E2 E3 E4; subst n1 v1 m1 u1.
-            apply witnessCondb_iff in Hc1.
-            destruct Hc1 as [_ [[fs' [Hsub' HS']] _]].
-            exists u; split;
-              [unfold singVS; rewrite SOvv.singleton_in; reflexivity |].
-            exact (mem_coreResolution_orig S_CF pi Df Da g m u fs' HS').
-          * injection Hqe as E1 E2 E3 E4; subst n1 v1 m1 u1.
-            apply witnessCondb_iff in Hc1.
-            destruct Hc1 as [_ [[fs' [Hsub' HS']] _]].
-            exists u; split;
-              [unfold singVS; rewrite SOvv.singleton_in; reflexivity |].
-            exact (mem_coreResolution_orig S_CF pi Df Da g m u fs' HS').
-        + injection Hy as Eq Em Ews; subst q m' ws.
-          rewrite mem_coreResolution in Hq.
-          destruct Hq as
-            [[n1 [v1 [fs1 [HS1 Hqe]]]] |
-            [[n1 [v1 [fs1 [f1 [HS1 [Hf1 Hqe]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]] |
-            [[n1 [v1 [f1 [m1 [vs1 [fs1
-               [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [f1
-               [u1 [HD1 [Hf1 [Hu1 [Hc1 Hqe]]]]]]]]]]] |
-             [n1 [v1 [f1 [m1 [vs1 [fs1
-                [f1' [u1 [HD1 [Hf1' [Hu1 [Hc1 Hqe]]]]]]]]]]]]]]]]];
-            try discriminate Hqe.
-          injection Hqe as E1 E2 E3 E4; subst n1 f1 v1.
-          destruct (Hpca (n, v) fs1 HS1 f Hf1 m vs fs Hda)
-            as [u [[Hu [Htk Hpi]] _]].
-          exists u; split;
-            [rewrite mem_embedVS; exact Hu |].
-          apply (mem_coreResolution_a_interA S_CF pi Df Da g n v f m vs fs
-                   f' u Hda Hf' Hu);
-            [exists fs1; exact HS1 | exact Htk | exact Hpi].
-        + injection Hy as Eq Em Ews; subst q m' ws.
-          rewrite mem_coreResolution in Hq.
-          destruct Hq as
-            [[n1 [v1 [fs1 [HS1 Hqe]]]] |
-            [[n1 [v1 [fs1 [f1 [HS1 [Hf1 Hqe]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]] |
-            [[n1 [v1 [f1 [m1 [vs1 [fs1
-               [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [f1
-               [u1 [HD1 [Hf1 [Hu1 [Hc1 Hqe]]]]]]]]]]] |
-             [n1 [v1 [f1 [m1 [vs1 [fs1
-                [f1' [u1 [HD1 [Hf1' [Hu1 [Hc1 Hqe]]]]]]]]]]]]]]]]];
-            try discriminate Hqe.
-          injection Hqe as E1 E2 E3 E4 E5 E6; subst n1 v1 f1 m1 f1' u1.
-          apply witnessCondb_iff in Hc1.
-          destruct Hc1 as [_ [[fs'' [Hsub'' HS'']] _]].
-          exists u; split;
-            [unfold singVS; rewrite SOvv.singleton_in; reflexivity |].
-          exact (mem_coreResolution_featured S_CF pi Df Da g m u fs'' f'
-                   HS'' (Hsub'' f' Hf1')).
-        + injection Hy as Eq Em Ews; subst q m' ws.
-          rewrite mem_coreResolution in Hq.
-          destruct Hq as
-            [[n1 [v1 [fs1 [HS1 Hqe]]]] |
-            [[n1 [v1 [fs1 [f1 [HS1 [Hf1 Hqe]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]] |
-            [[n1 [v1 [f1 [m1 [vs1 [fs1
-               [u1 [HD1 [Hu1 [Hc1 Hqe]]]]]]]]]] |
-            [[n1 [v1 [m1 [vs1 [fs1 [f1
-               [u1 [HD1 [Hf1 [Hu1 [Hc1 Hqe]]]]]]]]]]] |
-             [n1 [v1 [f1 [m1 [vs1 [fs1
-                [f1' [u1 [HD1 [Hf1' [Hu1 [Hc1 Hqe]]]]]]]]]]]]]]]]];
-            try discriminate Hqe.
-          injection Hqe as E1 E2 E3 E4 E5 E6; subst n1 v1 f1 m1 f1' u1.
-          apply witnessCondb_iff in Hc1.
-          destruct Hc1 as [HinS [Htk Hpi]].
-          exists u; split;
-            [unfold singVS; rewrite SOvv.singleton_in; reflexivity |].
-          exact (mem_coreResolution_a_inter S_CF pi Df Da g n v f m vs1 fs1
-                   u HD1 Hu1 HinS Htk Hpi).
+        apply mem_coreResolution in Hq; apply mem_reduceDeps in Hd.
+        destruct Hq as [n v fs HS | n v fs f HS Hf
+          | n v m vs fs u HD Hu Hc | n v f m vs fs u HD Hu Hc
+          | n v m vs fs f u HD Hf Hu Hc | n v f m vs fs f' u HD Hf' Hu Hc].
+        + inversion Hd; subst.
+          * destruct (Hpc _ _ HS _ _ _ ltac:(eassumption))
+              as [u [[Hu [Htk Hpi]] _]].
+            exists u; split; [apply mem_embedVS; exact Hu |].
+            apply mem_coreResolution; eapply CoreFInter;
+              [eassumption | exact Hu | apply witnessCondb_iff; eauto].
+          * destruct (Hpc _ _ HS _ _ _ ltac:(eassumption))
+              as [u [[Hu [Htk Hpi]] _]].
+            exists u; split; [apply mem_embedVS; exact Hu |].
+            apply mem_coreResolution; eapply CoreFInterF;
+              [eassumption | eassumption | exact Hu
+              | apply witnessCondb_iff; eauto].
+        + inversion Hd; subst.
+          * eexists; split; [apply mem_singVS; reflexivity |].
+            apply mem_coreResolution; eapply CoreOrig; exact HS.
+          * destruct (Hpca _ _ HS _ Hf _ _ _ ltac:(eassumption))
+              as [u [[Hu [Htk Hpi]] _]].
+            exists u; split; [apply mem_embedVS; exact Hu |].
+            apply mem_coreResolution; eapply CoreAInter;
+              [eassumption | exact Hu | apply witnessCondb_iff; eauto].
+          * destruct (Hpca _ _ HS _ Hf _ _ _ ltac:(eassumption))
+              as [u [[Hu [Htk Hpi]] _]].
+            exists u; split; [apply mem_embedVS; exact Hu |].
+            apply mem_coreResolution; eapply CoreAInterA;
+              [eassumption | eassumption | exact Hu
+              | apply witnessCondb_iff; eauto].
+        + inversion Hd; subst;
+            apply witnessCondb_iff in Hc as [_ [[fs' [_ HS']] _]];
+            eexists; (split; [apply mem_singVS; reflexivity |]);
+            apply mem_coreResolution; eapply CoreOrig; exact HS'.
+        + inversion Hd; subst;
+            apply witnessCondb_iff in Hc as [_ [[fs' [_ HS']] _]];
+            eexists; (split; [apply mem_singVS; reflexivity |]);
+            apply mem_coreResolution; eapply CoreOrig; exact HS'.
+        + inversion Hd; subst;
+            eexists; (split; [apply mem_singVS; reflexivity |]);
+            apply mem_coreResolution.
+          * apply witnessCondb_iff in Hc as [_ [[fs' [Hsub' HS']] _]].
+            eapply CoreFeatPkg; [exact HS' | exact (Hsub' _ Hf)].
+          * eapply CoreFInter; [exact HD | exact Hu | exact Hc].
+        + inversion Hd; subst;
+            eexists; (split; [apply mem_singVS; reflexivity |]);
+            apply mem_coreResolution.
+          * apply witnessCondb_iff in Hc as [_ [[fs' [Hsub' HS']] _]].
+            eapply CoreFeatPkg; [exact HS' | exact (Hsub' _ Hf')].
+          * eapply CoreAInter; [exact HD | exact Hu | exact Hc].
       - intros n cv1 cv2 H1 H2.
-        rewrite mem_coreResolution in H1, H2.
-        destruct H1 as [[n1 [v1 [fs1 [HS1 Hq1]]]] |
-                        [[n1 [v1 [fs1 [f1 [HS1 [Hf1 Hq1]]]]]] |
-                        [[n1 [v1 [m1 [vs1 [fs1 [u1 [HD1 [Hu1 [Hc1 Hq1]]]]]]]]] |
-                        [[n1 [v1 [f1 [m1 [vs1 [fs1
-                           [u1 [HD1 [Hu1 [Hc1 Hq1]]]]]]]]]] |
-                        [[n1 [v1 [m1 [vs1 [fs1 [f1
-                           [u1 [HD1 [Hf1 [Hu1 [Hc1 Hq1]]]]]]]]]]] |
-                         [n1 [v1 [f1 [m1 [vs1 [fs1
-                            [f1' [u1 [HD1 [Hf1' [Hu1 [Hc1 Hq1]]]]]]]]]]]]]]]]];
-          injection Hq1 as E1 E2; subst n cv1;
-          (destruct H2 as
-            [[n2 [v2 [fs2 [HS2 Hq2]]]] |
-            [[n2 [v2 [fs2 [f2 [HS2 [Hf2 Hq2]]]]]] |
-            [[n2 [v2 [m2 [vs2 [fs2 [u2 [HD2 [Hu2 [Hc2 Hq2]]]]]]]]] |
-            [[n2 [v2 [f2 [m2 [vs2 [fs2
-               [u2 [HD2 [Hu2 [Hc2 Hq2]]]]]]]]]] |
-            [[n2 [v2 [m2 [vs2 [fs2 [f2
-               [u2 [HD2 [Hf2 [Hu2 [Hc2 Hq2]]]]]]]]]]] |
-             [n2 [v2 [f2 [m2 [vs2 [fs2
-                [f2' [u2 [HD2 [Hf2' [Hu2 [Hc2 Hq2]]]]]]]]]]]]]]]]];
-           try discriminate Hq2).
-        + injection Hq2 as E3 E4 E5; subst n2 cv2.
-          destruct (V.eq_dec v1 v2) as [-> | NE]; [reflexivity |].
-          exfalso; exact (Hvg n1 v1 v2 fs1 fs2 HS1 HS2 NE E4).
-        + injection Hq2 as E3 E4 E5 E6; subst n2 f2 cv2.
-          destruct (V.eq_dec v1 v2) as [-> | NE]; [reflexivity |].
-          exfalso; exact (Hvg n1 v1 v2 fs1 fs2 HS1 HS2 NE E5).
-        + injection Hq2 as E3 E4 E5 E6; subst n2 v2 m2 cv2.
-          apply witnessCondb_iff in Hc1; destruct Hc1 as [_ [_ Hpi1]].
-          apply witnessCondb_iff in Hc2; destruct Hc2 as [_ [_ Hpi2]].
-          rewrite (Hpif m1 u1 u2 (n1, v1) Hpi1 Hpi2); reflexivity.
-        + injection Hq2 as E3 E4 E5 E6; subst n2 v2 m2 cv2.
-          apply witnessCondb_iff in Hc1; destruct Hc1 as [_ [_ Hpi1]].
-          apply witnessCondb_iff in Hc2; destruct Hc2 as [_ [_ Hpi2]].
-          rewrite (Hpif m1 u1 u2 (n1, v1) Hpi1 Hpi2); reflexivity.
-        + injection Hq2 as E3 E4 E5 E6; subst n2 v2 m2 cv2.
-          apply witnessCondb_iff in Hc1; destruct Hc1 as [_ [_ Hpi1]].
-          apply witnessCondb_iff in Hc2; destruct Hc2 as [_ [_ Hpi2]].
-          rewrite (Hpif m1 u1 u2 (n1, v1) Hpi1 Hpi2); reflexivity.
-        + injection Hq2 as E3 E4 E5 E6; subst n2 v2 m2 cv2.
-          apply witnessCondb_iff in Hc1; destruct Hc1 as [_ [_ Hpi1]].
-          apply witnessCondb_iff in Hc2; destruct Hc2 as [_ [_ Hpi2]].
-          rewrite (Hpif m1 u1 u2 (n1, v1) Hpi1 Hpi2); reflexivity.
-        + injection Hq2 as E3 E4 E5 E6 E7; subst n2 v2 m2 f2 cv2.
-          apply witnessCondb_iff in Hc1; destruct Hc1 as [_ [_ Hpi1]].
-          apply witnessCondb_iff in Hc2; destruct Hc2 as [_ [_ Hpi2]].
-          rewrite (Hpif m1 u1 u2 (n1, v1) Hpi1 Hpi2); reflexivity.
-        + injection Hq2 as E3 E4 E5 E6 E7 E8; subst n2 v2 f2 m2 f2' cv2.
-          apply witnessCondb_iff in Hc1; destruct Hc1 as [_ [_ Hpi1]].
-          apply witnessCondb_iff in Hc2; destruct Hc2 as [_ [_ Hpi2]].
-          rewrite (Hpif m1 u1 u2 (n1, v1) Hpi1 Hpi2); reflexivity.
+        apply mem_coreResolution in H1, H2.
+        inversion H1; subst; inversion H2; subst;
+          repeat match goal with
+                 | H : witnessCondb _ _ _ _ _ _ = true |- _ =>
+                     apply witnessCondb_iff in H; destruct H as [_ [_ ?]]
+                 end;
+          try (eapply Hpif; eassumption).
+        all: match goal with |- ?a = ?b =>
+               destruct (V.eq_dec a b) as [| NE]; [assumption | exfalso];
+               eapply (Hvg _ a b);
+                 [eassumption | eassumption | exact NE | congruence]
+             end.
     Qed.
 
     Module Lookup.
@@ -1885,27 +1085,10 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
             (Name.GranularFeatPkg n f (g v), v).
       Proof.
         intros R support Df Da g n v f Hin.
-        apply mem_reduceReal in Hin.
-        assert (Hfeat : Feat.Reduction.T.PkgSet.In
-                          (Feat.Reduction.Name.FeatPkg n f, v)
-                          (Feat.Reduction.reduceReal R support)).
-        { destruct Hin as [[[q1 q2] [Hq Hy]] | [H | [H | [H | H]]]].
-          - destruct q1 as [qn | qn qf]; unfold granularOf in Hy;
-              cbn beta iota in Hy; [discriminate Hy |].
-            injection Hy; intros; subst; exact Hq.
-          - destruct H as [n1 [v1 [m1 [vs [fs [u [_ [_ Hy]]]]]]]];
-              discriminate Hy.
-          - destruct H as [n1 [v1 [m1 [vs [fs [u [f1 [_ [_ [_ Hy]]]]]]]]]];
-              discriminate Hy.
-          - destruct H as [n1 [v1 [f1 [m1 [vs [fs [u [_ [_ Hy]]]]]]]]];
-              discriminate Hy.
-          - destruct H
-              as [n1 [v1 [f1 [m1 [vs [fs [u [f2 [_ [_ [_ Hy]]]]]]]]]]];
-              discriminate Hy. }
-        apply Feat.Reduction.mem_reduceReal in Hfeat.
-        destruct Hfeat as [[[pn pv] [_ Hp]] | [n1 [v1 [f1 [Hs [HR Hp]]]]]];
-          [unfold Feat.Reduction.embedPkg in Hp; discriminate Hp |].
-        injection Hp as <- <- <-.
+        assert (Feat.SupportSet.In ((n, v), f) support /\ PkgSet.In (n, v) R)
+          as [Hs HR].
+        { apply mem_reduceReal in Hin; inversion Hin; subst.
+          eapply Feat.Reduction.mem_reduceReal_featPkg; eassumption. }
         assert (PkgFibred.idFibre R (n, v) = PkgSet.singleton (n, v)) as ER.
         { apply PkgSet.ext; intro x.
           rewrite PkgFibred.mem_idFibre, PkgSet.singleton_spec.

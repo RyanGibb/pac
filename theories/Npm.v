@@ -151,14 +151,11 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Lemma mem_realVersions : forall R n v,
       VSet.In v (realVersions R n) <-> RepoSet.In (n, v) R.
   Proof.
-    intros R n v; unfold realVersions; rewrite SOrv.mem_filterMap.
+    intros R n v; unfold realVersions; rewrite SOrv.mem_filterMap_if.
     split.
-    - intros [[m u] [HR He]]; simpl in He.
-      destruct (NEqb.eqb m n) eqn:Hm; [| discriminate].
-      apply NEqb.eqb_true_iff in Hm; subst m.
-      injection He as <-; exact HR.
-    - intro H; exists (n, v); split; [exact H | simpl].
-      rewrite NEqb.eqb_refl; reflexivity.
+    - intros [[m u] [HR [Hm ->]]]; cbn [fst snd] in *.
+      apply NEqb.eqb_true_iff in Hm; subst m; exact HR.
+    - intro H; exists (n, v); cbn [fst snd]; rewrite NEqb.eqb_refl; auto.
   Qed.
 
   Fixpoint lookupOvr (l : list (N.t * Range)) (n : N.t) : option Range :=
@@ -430,38 +427,18 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         [symmetry; exact He | symmetry; exact He].
     Qed.
 
-    Lemma mem_rootPeerEdges : forall I q h,
-        T.DependeesSet.In h (rootPeerEdges I q) <->
-        q = rootPkg I /\
-        exists r, In (base q, r) (inst_peer I) /\
+    Lemma mem_peerDeps : forall I q p h,
+        T.DependeesSet.In h
+          (depsOfL (fun r =>
+               (Nm.Intermediate (fst q) (snd q) (peerKeyAt I (base q) r),
+                Conc.Reduction.embedVS (peerCandsAt I (base q) r)))
+             (activePeers I (base q) p)) <->
+        exists r, In (p, r) (inst_peer I) /\
           peerActive I (base q) r = true /\
           h = (Nm.Intermediate (fst q) (snd q) (peerKeyAt I (base q) r),
                Conc.Reduction.embedVS (peerCandsAt I (base q) r)).
     Proof.
-      intros I q h; unfold rootPeerEdges.
-      destruct (PkgEqb.eqb q (rootPkg I)) eqn:Hq.
-      - apply PkgEqb.eqb_true_iff in Hq.
-        rewrite mem_depsOfL; unfold activePeers, peerDependenciesAt; split.
-        + intros [r [Hr He]]; apply List.filter_In in Hr.
-          destruct Hr as [Hr Hact]; split; [exact Hq |].
-          exists r; split; [apply in_ownedBy; exact Hr |].
-          split; [exact Hact | symmetry; exact He].
-        + intros [_ [r [Hr [Hact He]]]]; exists r; split;
-            [| symmetry; exact He].
-          apply List.filter_In; split;
-            [apply in_ownedBy; exact Hr | exact Hact].
-      - split; [intro H; destruct (SOhh.empty_in _ H) |].
-        intros [He _]; subst q; rewrite PkgEqb.eqb_refl in Hq; discriminate.
-    Qed.
-
-    Lemma mem_peerEdgesAt : forall I q m u h,
-        T.DependeesSet.In h (peerEdgesAt I q m u) <->
-        exists r, In ((snd m, u), r) (inst_peer I) /\
-          peerActive I (base q) r = true /\
-          h = (Nm.Intermediate (fst q) (snd q) (peerKeyAt I (base q) r),
-               Conc.Reduction.embedVS (peerCandsAt I (base q) r)).
-    Proof.
-      intros I q m u h; unfold peerEdgesAt; rewrite mem_depsOfL.
+      intros I q p h; rewrite mem_depsOfL.
       unfold activePeers, peerDependenciesAt; split.
       - intros [r [Hr He]]; apply List.filter_In in Hr.
         destruct Hr as [Hr Hact]; exists r.
@@ -471,6 +448,26 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         apply List.filter_In; split;
           [apply in_ownedBy; exact Hr | exact Hact].
     Qed.
+
+    Lemma mem_rootPeerEdges : forall I q h,
+        T.DependeesSet.In h (rootPeerEdges I q) <->
+        q = rootPkg I /\
+        exists r, In (base q, r) (inst_peer I) /\
+          peerActive I (base q) r = true /\
+          h = (Nm.Intermediate (fst q) (snd q) (peerKeyAt I (base q) r),
+               Conc.Reduction.embedVS (peerCandsAt I (base q) r)).
+    Proof.
+      intros I q h; unfold rootPeerEdges.
+      rewrite SOhh.in_if_empty, PkgEqb.eqb_true_iff, mem_peerDeps; reflexivity.
+    Qed.
+
+    Lemma mem_peerEdgesAt : forall I q m u h,
+        T.DependeesSet.In h (peerEdgesAt I q m u) <->
+        exists r, In ((snd m, u), r) (inst_peer I) /\
+          peerActive I (base q) r = true /\
+          h = (Nm.Intermediate (fst q) (snd q) (peerKeyAt I (base q) r),
+               Conc.Reduction.embedVS (peerCandsAt I (base q) r)).
+    Proof. intros; apply mem_peerDeps. Qed.
 
     Definition targetNames (I : Inst) : NmSet.t :=
       NmSet.union
@@ -748,21 +745,20 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         VSet.In v (childCands I (base p) m).
     Proof.
       intros I S pi p m v Hres Hp Hm Hi.
-      destruct Hres as [Hsub Hroot Huniq Hslot Hpin Hpm Hrp Hrpm Hpar].
       unfold childKeys in Hm; apply SOnk.mem_map in Hm.
       destruct Hm as [a [Ha ->]].
       unfold childCands; rewrite slotKey_fst, KeyEqb.eqb_refl.
       destruct (NSet.mem a (dirs I (base p))) eqn:Hsa.
       - apply NSet.mem_spec in Hsa.
-        destruct (Hslot p Hp a Hsa) as [v' [Hv' Hi']].
-        rewrite (Huniq p (slotKey I (base p) a) v v' Hi Hi'); exact Hv'.
+        destruct (nres_slot _ _ _ Hres p Hp a Hsa) as [v' [Hv' Hi']].
+        rewrite (nres_unique _ _ _ Hres p _ v v' Hi Hi'); exact Hv'.
       - unfold childDirs in Ha; apply NSet.union_spec in Ha.
         destruct Ha as [Ha | Ha];
           [apply NSet.mem_spec in Ha; rewrite Ha in Hsa; discriminate |].
         assert (Hpa : NSet.mem a (peerDirs I) = true)
           by (apply NSet.mem_spec; exact Ha).
         rewrite Hpa; destruct Hi as [HinS _].
-        destruct (Hsub _ HinS) as [_ Hb]; unfold base in Hb.
+        destruct (nres_subset _ _ _ Hres _ HinS) as [_ Hb]; unfold base in Hb.
         cbn [fst snd] in Hb; apply mem_realVersions; exact Hb.
     Qed.
 
@@ -774,16 +770,18 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           Installs S pi (rootPkg I) (peerKeyAt I (inst_root I) r) w.
     Proof.
       intros I S pi r Hres Hr Hact.
-      destruct Hres as [_ Hroot _ Hslot _ _ Hrp Hrpm _].
-      destruct (p_optional r) eqn:Hopt; [| exact (Hrp r Hr Hopt)].
+      destruct (p_optional r) eqn:Hopt;
+        [| exact (nres_root_peer _ _ _ Hres r Hr Hopt)].
       unfold peerActive in Hact; rewrite Hopt in Hact;
         cbn [negb orb] in Hact; apply NSet.mem_spec in Hact.
       assert (Hdir : NSet.In (p_name r) (dirs I (base (rootPkg I))))
         by (rewrite base_rootPkg; exact Hact).
-      destruct (Hslot (rootPkg I) Hroot (p_name r) Hdir) as [w [_ Hi]].
+      destruct (nres_slot _ _ _ Hres (rootPkg I) (nres_root _ _ _ Hres)
+                  (p_name r) Hdir) as [w [_ Hi]].
       rewrite base_rootPkg in Hi.
-      exists w; unfold peerKeyAt;
-        split; [exact (Hrpm r Hr Hopt Hact w Hi) | exact Hi].
+      exists w; unfold peerKeyAt; split;
+        [exact (nres_root_peer_match _ _ _ Hres r Hr Hopt Hact w Hi)
+        | exact Hi].
     Qed.
 
     Definition instNode (S : PkgSet.t) (pi : Conc.ParentRel.t)
@@ -889,8 +887,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           (coreResolution I S pi).
     Proof.
       intros I S pi Hres.
-      assert (Hres' := Hres).
-      destruct Hres' as [Hsub Hroot Huniq Hslot Hpin Hpm Hrp Hrpm Hpar].
+      pose proof (nres_subset _ _ _ Hres) as Hsub.
+      pose proof (nres_slot _ _ _ Hres) as Hslot.
       assert (Hreal : forall q, PkgSet.In q S -> PkgSet.In q (realPkgs I))
         by (intros q Hq; apply mem_realPkgs; exact (Hsub _ Hq)).
       assert (Hgran : forall k v, PkgSet.In (k, v) S ->
@@ -915,7 +913,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
                    (conj HS Hpi)).
       - apply mem_coreResolution; left.
         exists (rootKey I), (snd (inst_root I)); split;
-          [exact Hroot |].
+          [exact (nres_root _ _ _ Hres) |].
         unfold transRoot, rootPkg, Conc.Reduction.embedPkg, idg; reflexivity.
       - intros s Hs n vs Hd.
         apply mem_transD in Hd; destruct Hd as [_ Hd].
@@ -980,8 +978,10 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
                 apply NSet.mem_spec in Hact.
                 destruct (Hslot (pk, pv) Hp (p_name r) Hact) as [w [_ Hi]].
                 exists w; split; [| exact Hi].
-                exact (Hpm (pk, pv) Hp m u HI r Hr Hopt Hact w Hi).
-              - exact (Hpin (pk, pv) Hp m u HI r Hr Hopt). }
+                exact (nres_peer_match _ _ _ Hres (pk, pv) Hp m u HI r Hr
+                         Hopt Hact w Hi).
+              - exact (nres_peer_install _ _ _ Hres (pk, pv) Hp m u HI r Hr
+                         Hopt). }
             destruct Hgot as [w [Hw [HwS Hwpi]]].
             exists (Vs.Orig w); split.
             { apply SOvcv.mem_map; exists w; split;
@@ -1013,8 +1013,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           assert (k1 = k2) by congruence; assert (v1 = v2) by congruence;
             assert (m1 = m2) by congruence; subst.
           assert (u1 = u2) as Hu
-            by exact (Huniq (k2, v2) m2 u1 u2 (conj HS1 Hpi1)
-                        (conj HS2 Hpi2)).
+            by exact (nres_unique _ _ _ Hres (k2, v2) m2 u1 u2
+                        (conj HS1 Hpi1) (conj HS2 Hpi2)).
           congruence.
     Qed.
 
@@ -1027,7 +1027,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       unfold Conc.Reduction.embedPkg, idg; cbn [fst snd]; split.
       - intros [[k' [v' [Hp He]]] | [p [m [u [_ [_ [_ [_ [_ He]]]]]]]]];
           [| discriminate He].
-        injection He; intros; subst; exact Hp.
+        injection He as E1 E2 E3; subst; exact Hp.
       - intro Hp; left; exists k, v; split; [exact Hp | reflexivity].
     Qed.
 
@@ -1038,19 +1038,19 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         npmParents (coreResolution I S pi) = pi.
     Proof.
       intros I S pi Hres.
-      destruct Hres as [Hsub _ _ _ _ _ _ _ Hpar].
       apply Conc.ParentRel.ext; intros [[m u] [k v]].
       rewrite mem_npmParents, !mem_coreResolution; cbn [fst snd]; split.
       - intros [[[k' [v' [_ He]]] | [p [m' [u' [_ [_ [_ [_ [Hpi He]]]]]]]]] _];
           [discriminate He |].
         destruct p as [pk pv]; cbn [fst snd] in He.
-        injection He; intros; subst; exact Hpi.
-      - intro Hcq; destruct (Hpar _ _ Hcq) as [Hc [Hq Hk]].
+        injection He as E1 E2 E3 E4; subst; exact Hpi.
+      - intro Hcq; destruct (nres_parents _ _ _ Hres _ _ Hcq)
+          as [Hc [Hq Hk]].
         split.
         + right; exists (k, v), m, u.
           split; [exact Hq |]; split; [exact Hk |].
           split; [| split; [exact Hc | split; [exact Hcq | reflexivity]]].
-          apply mem_realVersions; exact (proj2 (Hsub _ Hc)).
+          apply mem_realVersions; exact (proj2 (nres_subset _ _ _ Hres _ Hc)).
         + left; exists k, v; split;
             [exact Hq | unfold Conc.Reduction.embedPkg, idg; reflexivity].
     Qed.
@@ -1077,8 +1077,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         - apply Conc.Reduction.mem_concurrentResolution.
           exact (exit_selected I S k v m u Hres Hi).
         - apply mem_npmParents; cbn [fst snd]; split; assumption. }
-      destruct Hsrc as [_ _ _ _ Hpin _ _ _ _].
-      destruct (Hpin (k, v) Hp m u HI r Hr Hopt) as [w [Hw [HwS Hwpi]]].
+      destruct (nres_peer_install _ _ _ Hsrc (k, v) Hp m u HI r Hr Hopt)
+        as [w [Hw [HwS Hwpi]]].
       exists w; split; [exact HwS | split; [exact Hwpi | exact Hw]].
     Qed.
 
@@ -1326,29 +1326,13 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
             (peerDirs (subInst I ns deps (peerDependenciesNamed I n))) =
           NSet.mem n (peerDirs I).
       Proof.
-        intros I ns deps n.
-        destruct (NSet.mem n
-                    (peerDirs (subInst I ns deps (peerDependenciesNamed I n))))
-          eqn:H1; destruct (NSet.mem n (peerDirs I)) eqn:H2;
-          try reflexivity.
-        - apply NSet.mem_spec in H1; unfold peerDirs in H1.
-          cbn [inst_peer subInst] in H1; apply mem_namesOfL in H1.
-          destruct H1 as [q [Hq Hn]]; unfold peerDependenciesNamed in Hq.
-          apply List.filter_In in Hq; destruct Hq as [Hq _].
-          assert (NSet.In n (peerDirs I)) as Hc
-            by (unfold peerDirs; apply mem_namesOfL; exists q;
-                split; assumption).
-          apply NSet.mem_spec in Hc; congruence.
-        - apply NSet.mem_spec in H2; unfold peerDirs in H2.
-          apply mem_namesOfL in H2; destruct H2 as [q [Hq Hn]].
-          assert (NSet.In n
-                    (peerDirs (subInst I ns deps (peerDependenciesNamed I n))))
-            as Hc.
-          { unfold peerDirs; cbn [inst_peer subInst].
-            apply mem_namesOfL; exists q; split; [| exact Hn].
-            unfold peerDependenciesNamed; apply List.filter_In; split;
-              [exact Hq | apply NEqb.eqb_true_iff; exact Hn]. }
-          apply NSet.mem_spec in Hc; congruence.
+        intros I ns deps n; apply Bool.eq_iff_eq_true.
+        rewrite !NSet.mem_spec; unfold peerDirs; cbn [inst_peer subInst].
+        rewrite !mem_namesOfL; unfold peerDependenciesNamed.
+        split; intros [q [Hq Hn]]; exists q; split; try exact Hn.
+        - apply List.filter_In in Hq; exact (proj1 Hq).
+        - apply List.filter_In; split;
+            [exact Hq | apply NEqb.eqb_true_iff; exact Hn].
       Qed.
 
       Lemma dependenciesOf_agree : forall I ns deps prs p,
@@ -1406,12 +1390,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           (PkgSet.In x s <-> PkgSet.In x s') ->
           PkgSet.mem x s = PkgSet.mem x s'.
       Proof.
-        intros s s' x H; destruct (PkgSet.mem x s) eqn:H1;
-          destruct (PkgSet.mem x s') eqn:H2; try reflexivity.
-        - apply PkgSet.mem_spec in H1; apply H in H1;
-            apply PkgSet.mem_spec in H1; congruence.
-        - apply PkgSet.mem_spec in H2; apply H in H2;
-            apply PkgSet.mem_spec in H2; congruence.
+        intros s s' x H; apply Bool.eq_iff_eq_true.
+        rewrite !PkgSet.mem_spec; exact H.
       Qed.
 
       Lemma slotTargets_spec : forall I p d,
@@ -1549,6 +1529,46 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         subInst I (NSet.union (slotTargets I p) (peerNamesAt I p))
           (ownDependencies I p) (ownPeerDependencies I p).
 
+      Lemma slotKey_peerTargets : forall I p p' r,
+          In r (peerDependenciesAt I p') ->
+          NSet.In (snd (slotKey I p (p_name r)))
+            (NSet.union (slotTargets I p) (peerNamesAt I p')).
+      Proof.
+        intros I p p' r Hr; unfold slotKey; apply NSet.union_spec.
+        destruct (slotOf I p (p_name r)) as [d |] eqn:Hd; cbn [snd].
+        - left; apply slotTargets_spec; exact (proj1 (findDepL_some _ _ _ Hd)).
+        - right; unfold peerNamesAt; apply mem_namesOfL.
+          exists r; split; [exact Hr | reflexivity].
+      Qed.
+
+      Lemma peerDeps_agree : forall I k v p p',
+          let I' := subInst I
+                      (NSet.union (slotTargets I p) (peerNamesAt I p'))
+                      (ownDependencies I p) (ownPeerDependencies I p') in
+          depsOfL (fun r =>
+              (Nm.Intermediate k v (peerKeyAt I' p r),
+               Conc.Reduction.embedVS (peerCandsAt I' p r)))
+            (activePeers I' p p') =
+          depsOfL (fun r =>
+              (Nm.Intermediate k v (peerKeyAt I p r),
+               Conc.Reduction.embedVS (peerCandsAt I p r)))
+            (activePeers I p p').
+      Proof.
+        intros I k v p p' I'.
+        pose proof (ownDependencies_id I p) as Hd.
+        assert (Hpr : peerDependenciesAt I' p' = peerDependenciesAt I p')
+          by (unfold peerDependenciesAt; cbn [inst_peer subInst];
+              apply ownPeerDependencies_id).
+        unfold activePeers, peerActive; rewrite Hpr.
+        unfold I'; rewrite (dirs_agree I _ _ _ p Hd).
+        unfold depsOfL; f_equal; apply map_ext_in; intros r Hr.
+        apply List.filter_In in Hr; destruct Hr as [Hr _].
+        unfold peerKeyAt, peerCandsAt, peerKeyAt.
+        rewrite (slotKey_agree I _ _ _ p (p_name r) Hd).
+        rewrite realVersions_subInst;
+          [reflexivity | apply slotKey_peerTargets; exact Hr].
+      Qed.
+
       Theorem dependees_lookupGran : forall I k v,
           dependees (pkgSubInst I (snd k, v))
             (Nm.Granular k v, Vs.Orig v) =
@@ -1562,16 +1582,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
                         (peerNamesAt I (snd k, v)))).
         { intros d Hdr; apply NSet.union_spec; left;
             apply slotTargets_spec; exact Hdr. }
-        assert (Hn : forall r, In r (peerDependenciesAt I (snd k, v)) ->
-                   NSet.In (snd (slotKey I (snd k, v) (p_name r)))
-                     (NSet.union (slotTargets I (snd k, v))
-                        (peerNamesAt I (snd k, v)))).
-        { intros r Hr; unfold slotKey.
-          destruct (slotOf I (snd k, v) (p_name r)) as [d |] eqn:Hd2.
-          - cbn [snd]; apply NSet.union_spec; left.
-            apply slotTargets_spec; exact (proj1 (findDepL_some _ _ _ Hd2)).
-          - cbn [snd]; apply NSet.union_spec; right; unfold peerNamesAt.
-            apply mem_namesOfL; exists r; split; [exact Hr | reflexivity]. }
         unfold pkgSubInst; f_equal.
         - unfold entryEdges, base; cbn [fst snd].
           rewrite (dirs_agree I _ _ _ (snd k, v) Hd).
@@ -1579,30 +1589,10 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           rewrite (slotKey_agree I _ _ _ (snd k, v) a Hd).
           rewrite (slotCands_agree I _ _ _ (snd k, v) Hd Htgt a).
           reflexivity.
-        - assert (Hrt : rootPkg (subInst I
-                            (NSet.union (slotTargets I (snd k, v))
-                               (peerNamesAt I (snd k, v)))
-                            (ownDependencies I (snd k, v))
-                            (ownPeerDependencies I (snd k, v))) = rootPkg I)
-            by reflexivity.
-          unfold rootPeerEdges; rewrite Hrt.
+        - unfold rootPeerEdges.
+          change (rootPkg (subInst I _ _ _)) with (rootPkg I).
           destruct (PkgEqb.eqb (k, v) (rootPkg I)); [| reflexivity].
-          unfold base; cbn [fst snd].
-          assert (Hpr : peerDependenciesAt (subInst I
-                            (NSet.union (slotTargets I (snd k, v))
-                               (peerNamesAt I (snd k, v)))
-                            (ownDependencies I (snd k, v))
-                            (ownPeerDependencies I (snd k, v))) (snd k, v) =
-                        peerDependenciesAt I (snd k, v))
-            by (unfold peerDependenciesAt; cbn [inst_peer subInst];
-                apply ownPeerDependencies_id).
-          unfold activePeers, peerActive; rewrite Hpr.
-          rewrite (dirs_agree I _ _ _ (snd k, v) Hd).
-          unfold depsOfL; f_equal; apply map_ext_in; intros r Hr.
-          apply List.filter_In in Hr; destruct Hr as [Hr _].
-          unfold peerKeyAt, peerCandsAt, peerKeyAt.
-          rewrite (slotKey_agree I _ _ _ (snd k, v) (p_name r) Hd).
-          rewrite realVersions_subInst; [reflexivity | apply Hn; exact Hr].
+          unfold base; cbn [fst snd]; apply peerDeps_agree.
       Qed.
 
       Definition peerSubInst (I : Inst) (p : RPkg.t) (m : NKey.t) (u : V.t)
@@ -1616,41 +1606,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           dependees I (Nm.Intermediate k v m, Vs.Orig u).
       Proof.
         intros I k v m u; cbn [dependees]; f_equal.
-        unfold peerEdgesAt, base; cbn [fst snd].
-        pose proof (ownDependencies_id I (snd k, v)) as Hd.
-        assert (Hpr :
-                  peerDependenciesAt (peerSubInst I (snd k, v) m u)
-                    (snd m, u) = peerDependenciesAt I (snd m, u)).
-        { unfold peerSubInst, peerDependenciesAt; cbn [inst_peer subInst].
-          apply ownPeerDependencies_id. }
-        assert (Hn : forall r, In r (peerDependenciesAt I (snd m, u)) ->
-                   NSet.In (snd (slotKey I (snd k, v) (p_name r)))
-                     (NSet.union (slotTargets I (snd k, v))
-                        (peerNamesAt I (snd m, u)))).
-        { intros r Hr; unfold slotKey.
-          destruct (slotOf I (snd k, v) (p_name r)) as [d |] eqn:Hd2.
-          - cbn [snd]; apply NSet.union_spec; left.
-            apply slotTargets_spec; exact (proj1 (findDepL_some _ _ _ Hd2)).
-          - cbn [snd]; apply NSet.union_spec; right; unfold peerNamesAt.
-            apply mem_namesOfL; exists r; split; [exact Hr | reflexivity]. }
-        unfold peerSubInst in Hpr |- *; unfold activePeers, peerActive.
-        rewrite Hpr.
-        rewrite (dirs_agree I
-                   (NSet.union (slotTargets I (snd k, v))
-                      (peerNamesAt I (snd m, u)))
-                   (ownDependencies I (snd k, v))
-                   (ownPeerDependencies I (snd m, u))
-                   (snd k, v) Hd).
-        unfold depsOfL; f_equal; apply map_ext_in; intros r Hr.
-        apply List.filter_In in Hr; destruct Hr as [Hr _].
-        unfold peerKeyAt, peerCandsAt, peerKeyAt.
-        rewrite (slotKey_agree I
-                   (NSet.union (slotTargets I (snd k, v))
-                      (peerNamesAt I (snd m, u)))
-                   (ownDependencies I (snd k, v))
-                   (ownPeerDependencies I (snd m, u))
-                   (snd k, v) (p_name r) Hd).
-        rewrite realVersions_subInst; [reflexivity | apply Hn; exact Hr].
+        unfold peerEdgesAt, base, peerSubInst; cbn [fst snd].
+        apply peerDeps_agree.
       Qed.
 
     End Lookup.
