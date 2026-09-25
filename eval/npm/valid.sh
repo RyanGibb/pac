@@ -1,10 +1,4 @@
 #!/usr/bin/env bash
-# Ask npm whether OUR resolution for a query is a resolution by npm's own
-# rules, rather than whether it is the one npm would have picked.
-# scale.sh asks the second question against npm's lock; this one can
-# pass where that fails, because npm ranking another tree first is
-# preference, not error.
-#
 # The check writes our answer out as the project's package-lock.json
 # (mklock.py) beside the query's package.json (root.js), and asks
 # npm against a frozen shim, as accepts.sh does: `npm ci --dry-run`, then

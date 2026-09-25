@@ -1,10 +1,4 @@
 #!/usr/bin/env bash
-# Ask apt whether OUR Debian answer is a resolution by apt's own rules,
-# rather than whether it is the one apt would have picked.  scale.sh asks
-# the second question; a query can fail that and still pass this, which is
-# the whole point: apt prefers one resolution among many, and preferring
-# another is not an error.
-#
 # Our answer becomes the dpkg status, each package's stanza taken from the
 # same Packages file the loader reads and marked installed, and
 # extended_states marks every package but the query automatically
@@ -12,9 +6,7 @@
 # check`, that no installed package has a Depends, Pre-Depends, Conflicts
 # or Breaks unmet; `apt-get install <query>`, that the query as asked is
 # satisfied; and `apt-get autoremove`, that the query needs everything
-# installed.  Asking instead for the whole answer at exact versions makes
-# every package one the user asked for, so none of them could ever be
-# found unneeded.
+# installed.
 #
 # What autoremove counts as needed has to be what installing the query
 # installs: Recommends exactly when they were installed -- apt's default,
@@ -157,7 +149,6 @@ ch=$(grep -c '^\(Inst\|Remv\|Conf\|Purg\) ' "$out/$query.install")
 un=$(grep -c '^Remv ' "$out/$query.autoremove")
 none='0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.'
 
-# the whole answer asked for fresh from the empty root, at apt's default
 export APT_CONFIG="$ROOT/etc/apt/apt.conf"
 "$APT" -s install "${req[@]}" > "$out/$query.aptrecs" 2>&1
 sed -n 's/^Inst \([^ :]*\)\(:[^ ]*\)\{0,1\} (\([^ ]*\) .*/\1=\3/p' "$out/$query.aptrecs" \

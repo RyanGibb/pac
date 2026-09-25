@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# Whether pac's selection is builtin-0install's, and valid.sh's question,
-# over every package name in the repository, or over the queries a
-# file lists (flags included, as in "--with-test fmt"), in each of pac's
-# search modes, answered into the run directory.  Not builtin-mccs, opam's
-# default: that one optimises over whole resolutions and is out of reach by
+# The baseline is builtin-0install, not builtin-mccs, opam's default: that
+# one optimises over whole resolutions and is out of reach by
 # construction.  Two more per query: pin, whether 0install's answer is a
 # resolution of our instance at all, which is what separates a preference
 # gap from an instance gap; and where 0install refuses, mccs, since 0install

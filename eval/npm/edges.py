@@ -17,9 +17,7 @@ Both sides are reduced to the same two sets.
           reconstruct resolution independently of placement -- each
           node's own dependency ranges, resolved by walking the
           node_modules chain upwards from that node's path, which is
-          exactly what require() would do.  npmParents gives the same
-          relation directly: an intermediate (k,v)=>m selected at u is
-          the edge "k@v's slot m holds u".
+          exactly what require() would do.
 
   The directory component is the manifest key rather than the registry
   name so that an alias (npm:pkg@range) is compared as the alias it is.
@@ -34,10 +32,9 @@ the delta it accounts for can be read off:
                   edge itself re-attributed.  Where both sides put the
                   peer in the same place, they disagree only about which
                   node the edge leaves.  npm's lockfile resolves a peer
-                  the way require() would, from the declarer; our
-                  Npm.peerEdgesAt hangs the declarer's peer edges on the
-                  intermediate that selected it, so npmParents leaves
-                  the selector.
+                  the way require() would, from the declarer; pac hangs
+                  the declarer's peer edges on the package that selected
+                  it.
 
 usage: edges.py <package> <lockfile> <our --tree output> <out-prefix>
                 [--peer-parent]
@@ -45,9 +42,6 @@ usage: edges.py <package> <lockfile> <our --tree output> <out-prefix>
 import json
 import re
 import sys
-
-# ---- npm's side: reconstruct resolution from the v3 packages map ----
-
 
 def node_name(path, entry):
     # an aliased node carries the registry name in "name"; a plain one is
@@ -141,8 +135,6 @@ def lock_sets(lock, peer_parent):
 # root, the way npm's lock keys it.
 ROOT = ("", "")
 
-
-# ---- our side: parse the --tree listing ----
 
 # "name 1.2.3" or "name 1.2.3 at dir", and the root may have no version
 SIDE = re.compile(r"^(\S+)(?: (\S+?))?(?: at (\S+))?$")

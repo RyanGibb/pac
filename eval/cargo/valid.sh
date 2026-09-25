@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# Ask cargo whether OUR answers are resolutions by cargo's own rules,
-# rather than whether they are the ones cargo would have picked.  The
-# per-query work is verify.py; this runs it over the queries, with the sparse
-# index both sides must read.
-#
 # The index proxy is not optional and not a speed trick: it serves the
 # repos/crates.io-index snapshot pac reads, so the universe cargo answers
 # about is the one pac answered about.  Against the live index cargo sees

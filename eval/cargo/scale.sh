@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# run_query.py's and verify.py's questions over a seeded sample of crates.io
-# (scale.py sample 20260923 3000), or over the crates a queries file lists
-# (scale.py targets makes pools of them), answered into the run directory.
 # usage: scale.sh [--regress] <pac-exe> <run-dir> [queries-file]    P=<jobs> TIMEOUT=<s> PORT=<proxy>
 S="$(cd "$(dirname "$0")" && pwd)"
 . "$S/../scale-lib.sh"

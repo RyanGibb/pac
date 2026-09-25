@@ -1,10 +1,4 @@
 #!/usr/bin/env bash
-# Ask opam whether OUR opam selection is a resolution by opam's own
-# rules, rather than whether it is the one opam would have picked.
-# scale.sh asks the second question against builtin-0install; this one can
-# pass where that fails, because 0install ranking another selection first
-# is preference, not error.
-#
 # Our selection becomes the switch's installed state, written straight
 # into switch-state with only the packages the query names as roots, and
 # three questions must then have nothing to do.  `opam install` of the

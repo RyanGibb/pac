@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Correspondence harness: run one Cargo query through pac and through real
-cargo (against the same crates.io-index checkout) and dump both sides'
-raw facts as JSON for later comparison.  Does not itself judge anything --
-scale.py does.
-
-A query names a crate, and the question is the lock of its newest
+"""A query names a crate, and the question is the lock of its newest
 release's own published manifest as the one workspace member.  That
 manifest is written out from the index entry (manifest.jq), and both sides
 are handed the same file: pac as its root Cargo.toml, cargo as the
@@ -150,9 +145,6 @@ def run_pac(manifest):
                 dn, dv, alias, tgt, tv = mm.groups()
                 edges.append([dn, dv, alias, tgt, tv])
 
-    mparse = re.search(r"^parse ([\d.]+)s", out, re.M)
-    msolve = re.search(r"^solve ([\d.]+)s", out, re.M)
-
     return {
         "ok": True,
         "root": [root_name, root_version],
@@ -160,8 +152,6 @@ def run_pac(manifest):
         "feats": feat_map,
         "edges": edges,
         "wall": dt,
-        "parse_s": float(mparse.group(1)) if mparse else None,
-        "solve_s": float(msolve.group(1)) if msolve else None,
         "stdout": out,
         "stderr": err,
     }

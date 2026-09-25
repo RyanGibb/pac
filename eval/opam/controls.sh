@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# valid.sh's verdict on hand-written selections over a hand-written
-# repository, beside the verdict each must get.  A check that passes every
-# real answer says nothing until it is seen to fail these; the ones
-# expected VALID keep it from failing everything.  Exits non-zero if any
-# verdict differs.
 # usage: controls.sh <scratch-dir>
 set -u
 export LC_ALL=C

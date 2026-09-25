@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# valid.sh's verdict on hand-written answers over hand-written indices,
-# and on apk's own answers over the snapshot with one package taken out,
-# beside the verdict each must get.  A check that passes every real answer
-# says nothing until it is seen to fail these; the ones expected VALID keep
-# it from failing everything.  Exits non-zero if any verdict differs.
 # usage: controls.sh <scratch-dir>        APK as valid.sh takes it
 set -u
 export LC_ALL=C
@@ -69,7 +64,6 @@ ctl() {  # <name> <expected> <row>...
 { st a 1-r0; st a 2-r0; } | ctl f4-dupver INVALID 'a 1-r0' 'a 2-r0'
 { st a 1-r0; st z 1-r0; } | ctl f10-junkrow INVALID 'a 1-r0' 'z 1-r0 extra'
 
-# apk's own answer over the snapshot, whole and with one package out
 INDEX=$S/../../repos/alpine/APKINDEX
 if APK=$APK bash "$S/setup.sh" "$T/snap" > "$T/snap.log" 2>&1; then
   while read -r goal drop want; do

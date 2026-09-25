@@ -64,7 +64,6 @@ for c in ("instance-gap", "both-refuse"):
 
 
 def apk_reason(r):
-    """the first problem apk names, reduced to its kind"""
     body = [l.strip() for l in lines(os.path.join(run, "out", r["query"] + ".apk")) if not l.startswith("ERROR")]
     for s in body:
         if s.startswith(("conflicts:", "breaks:", "satisfies:")):

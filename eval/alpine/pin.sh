@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Re-ask pac every query of a scale.sh run that diverged from apk, with the
-# provider apk chose named in our world as well.  A query that then agrees
-# exactly was a preference gap: apk's answer was already a resolution of
-# our instance and only our ordering ranked it second.
 # usage: pin.sh <run-dir>
 set -u
 export LC_ALL=C

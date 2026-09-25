@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# Re-ask pac every query of a scale.sh run whose edges diverged from npm's,
-# with every edge npm resolved pinned to the version npm put there (see
-# pinroot.py).  A query whose pinned answer then agrees exactly with npm's
-# original lock was a preference gap: npm's answer was already a
-# resolution of our instance and only our ordering ranked it second.
 # usage: pin.sh <run-dir>      NORM as the run was given it
 set -u
 # byte order, so the output is the same whatever the host's locale

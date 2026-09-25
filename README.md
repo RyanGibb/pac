@@ -39,6 +39,8 @@ pac npm --tree use-sync-external-store
 ## Evaluation
 
 The evaluation has three levels: the unit tests in `test/`, a regression set of a few dozen queries per ecosystem whose answers from the real tool are recorded (except cargo's), and runs at scale that ask the tool afresh over thousands of queries.
+`dune build @axioms`, the `Print Assumptions` audit over the names `scripts/check-axioms.sh` lists, peaks at about 8 GB of memory, and `rocq-stdlib` 9.2 comes from the `coq-released` opam repository (`opam repo add coq-released https://coq.inria.fr/opam/released`).
+The recorded answers hold only against the index snapshots `eval/SNAPSHOTS` identifies, which `scripts/fetch-repos.sh` does not pin, so copy `repos/` or check out those commits rather than fetching afresh.
 
 ### Unit tests
 

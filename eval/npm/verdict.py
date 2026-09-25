@@ -52,15 +52,8 @@ import sys
 
 
 def resolve_semver():
-    """npm's *bundled* semver, wherever this machine keeps it.
-
-    It has to be npm's own copy rather than any semver on the module path:
-    the whole point of the range test is to ask npm's reading of the range,
-    so a differently versioned semver would answer a question we are not
-    asking.  $SEMVER overrides for a layout none of the probes find; the
-    bare name is the last resort, correct when npm's copy is reachable by
-    node's ordinary resolution (NODE_PATH) and wrong-but-visible otherwise.
-    """
+    """npm's *bundled* semver, not any semver on the module path: the range
+    test asks npm's reading of the range."""
     env = os.environ.get("SEMVER")
     if env:
         return env

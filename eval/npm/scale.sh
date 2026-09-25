@@ -1,18 +1,10 @@
 #!/usr/bin/env bash
-# Whether pac resolves as npm install --package-lock-only does, on nodes and
-# on edges, and whether npm accepts pac's answer, over what a bare `npm
-# install` of each name in names.txt the snapshot holds installs, or over
-# the queries a file lists, each line the arguments of an `npm install` in
-# an empty project (queries.js makes both), answered into the run directory against
-# a frozen shim.  The regression set is baseline/roots.txt,
-# each query pinned to the version seed.sh chose for it.
 # A query is closed when neither side asked for a name the snapshot lacks,
 # tolerated-misses aside: only then are both answering about the snapshot.
 # FILL=1 is the pass that closes a snapshot: the shim fetches each miss once
 # into the run's farm, pac's fetches go through it, and what the farm gains
 # is then copied into repos/npm by hand; a miss is then only a name the
 # registry itself refuses.
-# NORM is edges.py's normalisation of npm's edges; NORM= scores them raw.
 # usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]
 #        P=<jobs> TIMEOUT=<s> PORT=<shim> NORM=<edges.py flag> FILL=1
 S="$(cd "$(dirname "$0")" && pwd)"

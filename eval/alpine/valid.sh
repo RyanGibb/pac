@@ -1,10 +1,4 @@
 #!/usr/bin/env bash
-# Ask apk whether OUR Alpine answer is a resolution by apk's own rules,
-# rather than whether it is the one apk would have picked.  scale.sh asks
-# the second question; this one can pass where that fails, since apk
-# keeps an installed provider it would not have picked -- except between
-# unversioned providers, where k: still swaps it (controls.sh f5-prio).
-#
 # Our answer becomes the installed database, each package's stanza taken
 # from the same APKINDEX the loader reads, and the world is the original
 # query; `apk fix --simulate` must then succeed with nothing to do.  Making

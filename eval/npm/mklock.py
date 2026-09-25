@@ -22,9 +22,7 @@ checked, rather than npm's hoisting heuristic being guessed at:
           sits in is itself a package, and every package already placed
           at or below that directory sees the new slot; if one of them
           requires the same key at a different provider it is now
-          shadowed.  This is what makes the old rule's monotonicity
-          argument false -- a lookup does stop at the first hit walking
-          upward, but a new slot can *be* that first hit.  So a free
+          shadowed.  So a free
           slot is rejected when some lookup for this key that is
           already answered comes from a package at or below that
           directory and is answered from higher up.
@@ -64,11 +62,9 @@ checked, rather than npm's hoisting heuristic being guessed at:
           node_modules, which npm rejects.
 
   verify  re-resolve every edge against the finished tree and fail if
-          any of them does not come out right.  Placement is correct by
-          construction, so this is an assertion rather than a repair:
-          the one thing that must never happen is a lockfile that
-          quietly describes a different answer from ours, and stopping
-          is the only response to that which does not.  It re-resolves
+          any of them does not come out right: an assertion, not a
+          repair, since a lockfile must never quietly describe a
+          different answer from ours.  It re-resolves
           our edges only: a peer edge as npm reads it, from the
           declarer, is left to accepts.sh.
 

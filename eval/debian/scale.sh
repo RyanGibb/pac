@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Whether pac answers as apt-get -s install does, and valid.sh's question,
-# over every package in the Packages index, or over the queries a file lists,
-# each as apt-get install's arguments, in each of pac's search modes,
-# answered into the run directory.
 # usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]
 #        MODES="default apt-heap" P=<jobs> TIMEOUT=<s>
 S="$(cd "$(dirname "$0")" && pwd)"

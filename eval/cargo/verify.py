@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Ask cargo whether OUR Cargo resolution is a resolution by cargo's own
-rules, rather than whether it is the one cargo would have picked.
-scale.py asks the second question over run_query.py's dumps; this asks
-the first, and a query can fail that and pass this.
-
-The check writes our answer out as the query's Cargo.lock (mklock.py) and
+"""The check writes our answer out as the query's Cargo.lock (mklock.py) and
 runs `cargo update --workspace --locked`: cargo re-resolves with our lock
 as the previous resolve and, naming no package, avoids none, so it keeps
 every locked version a requirement still admits and changes only what its
@@ -25,20 +20,8 @@ identical to cargo's fresh one is valid whatever the keep check says.
 --locked is the right question only because our answer is meant to BE a
 Cargo.lock.  A lock is the feature-independent resolve: cargo writes it
 with every feature of the workspace member enabled, so that one lock
-serves every later --features selection.  That is what pac's default
-rootFeats now is, so the two artifacts are the same artifact and can be
-compared as one.  (While pac modelled the feature-filtered build view
-instead, the old check, `cargo metadata --frozen`, scored 5/28, and every
-failure was an unactivated optional that cargo's lock carries and ours did
-not -- as a single node like rustc-std-workspace-core under cfg-if, or,
-in three queries, as an edge only.  The gap was the model's,
-not the check's.)
-
-Nothing is downloaded: both commands want index rows, which
-sparse_proxy.py serves byte-for-byte from the snapshot pac read, and no
-crate bodies at all.  So there is no cache to warm and no offline pass
-to distinguish from an online one -- a non-zero exit is cargo's verdict
-and nothing else.
+serves every later --features selection, and pac resolves the root the
+same way by default.
 
 When cargo refuses, `cargo update --workspace` is run once more without
 --locked over a pristine copy of our lock -- the repair -- and the lock it

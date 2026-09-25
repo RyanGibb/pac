@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Whether pac answers as apk add --simulate does, and valid.sh's question,
-# over every package in the APKINDEX, or over the worlds a queries file lists,
-# each answered into the run directory.
 # usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]
 #        P=<jobs> TIMEOUT=<s>
 S="$(cd "$(dirname "$0")" && pwd)"

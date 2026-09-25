@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# accepts.sh's verdict on hand-written locks over a hand-written registry,
-# beside the verdict each must get.  A check that passes every real answer
-# says nothing until it is seen to fail these; the ones expected VALID keep
-# it from failing everything, and four of them are valid layouts npm would
-# not have chosen.  Exits non-zero if any verdict differs.
 # usage: controls.sh <scratch-dir>        PORT=<free port for the shim>
 set -u
 export LC_ALL=C

@@ -2,8 +2,7 @@ def line:
   "  " + (.name)
   + " = { version = \"" + (.req) + "\""
   + (if .optional then ", optional = true" else "" end)
-  # NOT `// true`: jq's // treats explicit false as missing, which ate
-  # every default-features = false in the sweeps of 2026-09-14 to 09-16
+  # NOT `// true`: jq's // treats explicit false as missing
   + (if .default_features == false then ", default-features = false" else "" end)
   + (if ((.features // []) | length) > 0
      then ", features = [" + ((.features | map("\"" + . + "\"")) | join(", ")) + "]"
@@ -37,11 +36,8 @@ def sections:
 # cargo refuses a links key without a build script; build_manifest writes one
 | (if .links then "links = \"" + .links + "\"\nbuild = \"build.rs\"\n" else "" end) as $links
 | "[package]\nname = \"" + .name + "\"\nversion = \"" + .vers
-# edition 2015 imposes no rustc floor of its own (the index carries no
-# "edition" field to reproduce faithfully) -- resolver = "3" is set
-# explicitly regardless, and the crate's declared rust-version, when
-# present, is the only rustc-compatibility constraint pac's msrv_ok
-# models, so this is the edition that adds nothing beyond it.
+# the index carries no edition, and 2015 imposes no rustc floor of its
+# own, so the declared rust-version stays the only rustc constraint
 + "\"\nedition = \"2015\"\nresolver = \"3\"\n" + $rv + $links + "\n"
 + "[lib]\npath = \"src/lib.rs\"\n\n[features]\n"
 + (mergedFeatures | to_entries
