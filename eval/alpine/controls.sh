@@ -67,6 +67,7 @@ ctl() {  # <name> <expected> <row>...
 { st a 1-r0 D:x; st x 1-r0 i:t; st t 1-r0; } | ctl f1-iifdep INVALID 'a 1-r0'
 { st a 1-r0; st y 1-r0 i:a; } | ctl f2-iifsoft INVALID 'a 1-r0'
 { st a 1-r0; st a 2-r0; } | ctl f4-dupver INVALID 'a 1-r0' 'a 2-r0'
+{ st a 1-r0; st z 1-r0; } | ctl f10-junkrow INVALID 'a 1-r0' 'z 1-r0 extra'
 
 # apk's own answer over the snapshot, whole and with one package out
 INDEX=$S/../../repos/alpine/APKINDEX

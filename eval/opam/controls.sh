@@ -42,10 +42,11 @@ if ! REPO=$R bash "$S/setup.sh" "$T/opamroot" > "$T/setup.log" 2>&1; then
 fi
 
 n=0
+# an _ in a row stands for a space, so a row can carry a stray field
 ctl() {  # <query> <selection> <expected>
   local d=$T/c$((n += 1)) got
   mkdir -p "$d"
-  { echo "opam packages (n)"; printf '  %s\n' $2; echo loaded; } > "$d/ans.out"
+  { echo "opam packages (n)"; printf '  %s\n' $2 | tr _ ' '; echo loaded; } > "$d/ans.out"
   echo 0 > "$d/ans.rc"
   got=$(OPAMROOT=$T/opamroot REPLAY=$d/ans \
     bash "$S/valid.sh" "$S/scale.sh" "$(realpath -m --relative-to="$S/out" "$d/out")" "$1" |
@@ -82,6 +83,7 @@ ctl rt 'rt.1 a.1' INVALID
 ctl rt2 'rt2.1 x.1 a.1' INVALID
 ctl r 'r.1 a.1 m1.1 m2.1' INVALID
 ctl p2 'p2.1 q2.1' CYCLIC
+ctl r 'r.1 a.1 y.1_extra' INVALID
 
 # kept by `opam remove --auto-remove`, but nothing the roots need
 ctl ro 'ro.1 d.1' INVALID

@@ -70,6 +70,10 @@ if [ ! -s "$out/$key.req" ]; then
   exit 1
 fi
 mapfile -t req < "$out/$key.req"
+# the extraction above skips any line that is not a row, so such a line
+# would leave opam judging fewer packages than the answer names
+malformed=$(awk '/^(system packages|loaded)/ {exit} s && !/^  [^[:space:].]+\.[^[:space:]]+$/
+                 /^opam packages \(/ {s=1}' "$out/$key.vout" | wc -l)
 
 flags=(); atoms=()
 for a in ${extra[@]+"${extra[@]}"} "${query[@]}"; do
@@ -135,7 +139,7 @@ rc=$((irc ? irc : frc ? frc : arc))
 # both fixups print this only for an empty solution, and install
 # of atoms already satisfied never reaches the solver.  The reinstall must
 # reach all n packages, or a cycle among the rest would go unseen.
-if [ "$rc" -eq 0 ] && [ "$ch" -eq 0 ] && [ "$un" -eq 0 ] &&
+if [ "$rc" -eq 0 ] && [ "$ch" -eq 0 ] && [ "$un" -eq 0 ] && [ "$malformed" -eq 0 ] &&
    grep -qx 'Nothing to do.' "$out/$key.fixup" &&
    grep -qx 'Nothing to do.' "$out/$key.prune" &&
    ! grep -q 'actions will be simulated' "$out/$key.install"; then
@@ -149,5 +153,5 @@ if [ "$rc" -eq 0 ] && [ "$ch" -eq 0 ] && [ "$un" -eq 0 ] &&
 else
   v=INVALID
 fi
-printf '%-26s %-7s n=%-5s changes=%-4s unneeded=%-4s rc=%-3s %s\n' \
-  "$query" "$tag" "$n" "$ch" "$un" "$rc" "$v"
+printf '%-26s %-7s n=%-5s changes=%-4s unneeded=%-4s malformed=%-3s rc=%-3s %s\n' \
+  "$query" "$tag" "$n" "$ch" "$un" "$malformed" "$rc" "$v"

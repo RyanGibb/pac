@@ -82,6 +82,10 @@ mapfile -t req < "$out/$query.req"
 n=${#req[@]}
 dups=$(cut -d= -f1 "$out/$query.req" | sort | uniq -d | wc -l)
 foreign=$(awk 'NF == 2 && $1 ~ /:/ && $1 !~ /:amd64$/' "$out/$query.vout" | wc -l)
+# the extraction above skips any line that is not a row, so such a line
+# would leave apt judging fewer packages than the answer names
+malformed=$(awk '/^parse / {exit}
+                 !/^[^[:space:]:]+:[^[:space:]:]+ [^[:space:]]+$/' "$out/$query.vout" | wc -l)
 
 recs=true
 for a in ${extra[@]+"${extra[@]}"}; do
@@ -170,7 +174,7 @@ orc=$?
 
 rc=$((crc ? crc : irc ? irc : arc))
 if [ "$rc" -eq 0 ] && [ "$stanzas" -eq 0 ] && [ "$ch" -eq 0 ] && [ "$un" -eq 0 ] &&
-   [ "$dups" -eq 0 ] && [ "$foreign" -eq 0 ] &&
+   [ "$dups" -eq 0 ] && [ "$foreign" -eq 0 ] && [ "$malformed" -eq 0 ] &&
    grep -qxF "$none" "$out/$query.install" &&
    grep -qxF "$none" "$out/$query.autoremove"; then
   if grep -q 'probably a dependency cycle' "$out/$query.order"; then
@@ -183,5 +187,5 @@ if [ "$rc" -eq 0 ] && [ "$stanzas" -eq 0 ] && [ "$ch" -eq 0 ] && [ "$un" -eq 0 ]
 else
   v=INVALID
 fi
-printf '%-18s %-7s n=%-5s changes=%-4s unneeded=%-4s dups=%-3s foreign=%-3s rc=%-3s order=%-3s recs=%-4s %s\n' \
-  "$query" "$tag" "$n" "$ch" "$un" "$dups" "$foreign" "$rc" "$orc" "$re" "$v"
+printf '%-18s %-7s n=%-5s changes=%-4s unneeded=%-4s dups=%-3s foreign=%-3s malformed=%-3s rc=%-3s order=%-3s recs=%-4s %s\n' \
+  "$query" "$tag" "$n" "$ch" "$un" "$dups" "$foreign" "$malformed" "$rc" "$orc" "$re" "$v"

@@ -66,6 +66,10 @@ if [ ! -s "$out/$key.req" ]; then
   exit 1
 fi
 n=$(wc -l < "$out/$key.req")
+# the extraction above skips any line that is not a row, so such a line
+# would leave apk judging fewer packages than the answer names
+malformed=$(awk '/^encoded solution/ {exit} s && !/^  [^[:space:]]+ [^[:space:]]+$/
+                 /^packages \(/ {s=1}' "$out/$key.vout" | wc -l)
 dup=$(sed 's/=.*//' "$out/$key.req" | sort | uniq -d | wc -l)
 
 r="$out/$key.root"
@@ -92,10 +96,10 @@ ch=$(grep -c '^( *[0-9]*/[0-9]*) ' "$out/$key.apk")
 kept=$(sed -n 's/^OK: .* in \([0-9]*\) packages$/\1/p' "$out/$key.apk")
 
 if [ "$arc" -eq 0 ] && [ "$stanzas" -eq 0 ] && [ "$ch" -eq 0 ] &&
-   [ "$dup" -eq 0 ] && [ "${kept:-x}" = "$n" ]; then
+   [ "$dup" -eq 0 ] && [ "$malformed" -eq 0 ] && [ "${kept:-x}" = "$n" ]; then
   v=VALID
 else
   v=INVALID
 fi
-printf '%-18s %-7s n=%-5s changes=%-4s kept=%-5s rc=%-3s dup=%-3s %s\n' \
-  "$query" "$tag" "$n" "$ch" "${kept:-?}" "$arc" "$dup" "$v"
+printf '%-18s %-7s n=%-5s changes=%-4s kept=%-5s rc=%-3s dup=%-3s malformed=%-3s %s\n' \
+  "$query" "$tag" "$n" "$ch" "${kept:-?}" "$arc" "$dup" "$malformed" "$v"

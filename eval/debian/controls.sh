@@ -57,6 +57,7 @@ ctl() {  # <name> <expected> <row>...
 { st goal 1 'Depends: foo'; st foo 1; st foo 2; } |
   ctl dup INVALID 'goal:amd64 1' 'foo:amd64 1' 'foo:amd64 2'
 { st goal 1; } | ctl foreign INVALID 'goal:amd64 1' 'bogus:i386 9'
+{ st goal 1; st z 1; } | ctl noarch INVALID 'goal:amd64 1' 'z 1'
 { st goal 1 'Pre-Depends: a'; st a 1 'Pre-Depends: goal'; } |
   ctl prcycle CYCLIC 'goal:amd64 1' 'a:amd64 1'
 { st goal 1; st r 1 'Priority: required' 'Depends: s'; st s 1; } |
