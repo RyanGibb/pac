@@ -1800,11 +1800,11 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         (forall q, PkgSet.In q R -> NSet.In (pname q) ns -> PkgSet.In q Rr) ->
         ProvSubInst R Pi ns Rp Pis -> NSet.In (fst (fst a')) ns ->
         NSet.In (fst qn) ns ->
-        Deb.admit (reduceReal Rr) (reduceProv Rp Pis M) a' qn =
-        Deb.admit (reduceReal R) (reduceProv R Pi M) a' qn.
+        Deb.admitVS (reduceReal Rr) (reduceProv Rp Pis M) a' qn =
+        Deb.admitVS (reduceReal R) (reduceProv R Pi M) a' qn.
     Proof.
       intros R Pi M ns Rr Rp Pis a' qn Hrr Hcr Hsl Hm Hqn.
-      apply Deb.T.VSet.ext; intro w; rewrite !Deb.mem_admit.
+      apply Deb.T.VSet.ext; intro w; rewrite !Deb.mem_admitVS.
       apply or_iff_compat_l.
       split; intros [u [HR [Hmb Hw]]]; exists u;
         rewrite mem_reduceReal in HR |- *; destruct HR as [q [Hq Hqe]].
