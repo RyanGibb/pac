@@ -1,0 +1,5 @@
+[1,2]
+"not an object"
+{"name":"nb","vers":"1.0.0","deps":[],"cksum":"0000000000000000000000000000000000000000000000000000000000000000","features":{},"yanked":false}
+{"name":"nb","vers":"1.1.0","deps":[3],"cksum":"0000000000000000000000000000000000000000000000000000000000000000","features":{},"yanked":false}
+{"name":"nb","vers":"1.2.0","deps":[{"req":"1","features":[],"optional":false,"default_features":true,"target":null,"kind":"normal"}],"cksum":"0000000000000000000000000000000000000000000000000000000000000000","features":{},"yanked":false}

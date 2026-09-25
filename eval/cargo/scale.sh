@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # usage: scale.sh [--regress] <pac-exe> <run-dir> [queries-file]    P=<jobs> TIMEOUT=<s> PORT=<proxy>
+#        MODES="default order=pubgrub"
 S="$(cd "$(dirname "$0")" && pwd)"
 . "$S/../scale-lib.sh"
 export PORT=${PORT:-8991}
@@ -24,6 +25,12 @@ prepare() {
 }
 
 # each query its own CARGO_HOME, since cargo locks it for a whole generate-lockfile
-one() { CARGO_CMP_OUT=$run/w/$1 PAC=$run/pac.exe python3 "$S/scale.py" one "$2" "$run/out/$1"; }
+one() {
+  local m
+  for m in $MODES; do
+    CARGO_CMP_OUT=$run/w/$1 PAC=$run/pac.exe EXTRA=$(flag "$m") \
+      python3 "$S/scale.py" one "$2" "$run/out/$1" "$m"
+  done
+}
 
 main "$@"

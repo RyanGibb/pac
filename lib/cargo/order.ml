@@ -97,9 +97,7 @@ module type DRIVER = sig
   val version_equal : version -> version -> bool
   val root : crate
 
-  (* None when the lock is resolved: every feature and the defaults, as
-     CliFeatures::new_all(true) asks *)
-  val root_features : string list option
+  val root_features : Cargo_query.features
   val meta : crate -> P.ver option
   val candidates : P.dep -> int
   val root_step : assigned -> name option
@@ -185,14 +183,13 @@ module Make (D : DRIVER) = struct
           match D.meta D.root with
           | None -> (st, None)
           | Some m ->
-              (* named features are the root's featured names exactly, as
-                 the encoding's request has them *)
               let st =
                 match D.root_features with
-                | None -> frame st D.root m ~root:true ~all:true SS.empty true
-                | Some fs ->
-                    frame st D.root m ~root:true ~all:false (SS.of_list fs)
-                      false
+                | Cargo_query.All ->
+                    frame st D.root m ~root:true ~all:true SS.empty true
+                | Cargo_query.Named { feats; default } ->
+                    frame st D.root m ~root:true ~all:false (SS.of_list feats)
+                      default
               in
               advance ~assigned st)
     else

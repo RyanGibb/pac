@@ -97,7 +97,7 @@ def run_pac(manifest):
     # no rust-version and which pac cannot read off the toolchain; a
     # declared one pac reads off the manifest, as cargo does
     cmd = [PAC, "cargo", INDEX, manifest, "--rust-version", installed_rustc(),
-           "--print-parents"]
+           "--print-parents"] + os.environ.get("EXTRA", "").split()
     t0 = time.time()
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=240)

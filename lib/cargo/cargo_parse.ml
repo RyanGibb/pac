@@ -1,7 +1,8 @@
 (* Trusted (TCB) ingestion of a crates.io-index checkout, applying the
    frontend desugarings the calculus expects.  Unhandled shapes are
-   counted: a malformed line or dependency is
-   dropped, as is a version whose feature table cargo refuses, and any
+   counted: a malformed line is dropped, and so is a version with a
+   malformed dependency, since cargo skips an index line it cannot
+   deserialize; so is a version whose feature table cargo refuses, and any
    other malformed field is read as its default. *)
 
 type kind = Normal | Build | Dev
@@ -67,7 +68,7 @@ let string_list j =
       reject ();
       []
 
-let bool_def d j = match j with `Bool b -> b | `Null -> d | _ -> d
+let bool_def d j = match j with `Bool b -> b | _ -> d
 
 let kind_of j =
   match j with
@@ -79,6 +80,8 @@ let kind_of j =
       Normal
 
 let dep_of (j : Yojson.Safe.t) : dep option =
+  match j with
+  | `Assoc _ -> (
   match member "name" j with
   | `String alias ->
       let target =
@@ -98,9 +101,8 @@ let dep_of (j : Yojson.Safe.t) : dep option =
           d_kind = kind_of (member "kind" j);
           d_cfg = (match member "target" j with `String t -> t | _ -> "");
         }
-  | _ ->
-      reject ();
-      None
+  | _ -> None)
+  | _ -> None
 
 (* "dep:a" activates an optional slot, "a/feat" is the strong dependency
    feature and "a?/feat" the weak one, and a bare name is another feature
@@ -160,6 +162,19 @@ let mentions_dep (tbl : (string * fentry list) list) (a : string) : bool =
     (fun (_, es) -> List.exists (function FDep b -> b = a | _ -> false) es)
     tbl
 
+(* an optional dependency's implicit feature, suppressed by any dep: entry
+   naming it and by an explicit feature of the same name *)
+let implicit_features (deps : dep list) (tbl : (string * fentry list) list) =
+  List.filter_map
+    (fun d ->
+      if
+        d.d_optional
+        && (not (List.mem_assoc d.d_alias tbl))
+        && not (mentions_dep tbl d.d_alias)
+      then Some (d.d_alias, [ FDep d.d_alias ])
+      else None)
+    deps
+
 (* build_feature_map's checks (summary.rs), under which a failing index
    entry is IndexSummary::Invalid and never a candidate.  Past ASCII,
    every character is taken for the XID one validate_feature_name wants. *)
@@ -167,18 +182,7 @@ let feature_map_ok (deps : dep list) (tbl : (string * fentry list) list) :
     bool =
   let dep a = List.exists (fun d -> d.d_alias = a) deps in
   let optional a = List.exists (fun d -> d.d_optional && d.d_alias = a) deps in
-  let implicit =
-    List.filter_map
-      (fun d ->
-        if
-          d.d_optional
-          && (not (List.mem_assoc d.d_alias tbl))
-          && not (mentions_dep tbl d.d_alias)
-        then Some (d.d_alias, [ FDep d.d_alias ])
-        else None)
-      deps
-  in
-  let map = tbl @ implicit in
+  let map = tbl @ implicit_features deps tbl in
   let name_ok f =
     let alnum c =
       (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
@@ -214,9 +218,7 @@ let feature_map_ok (deps : dep list) (tbl : (string * fentry list) list) :
    the request as a no-op rather than an error *)
 let default_feature = "default"
 
-(* an optional dependency's implicit feature, suppressed by any dep: entry
-   naming it and by an explicit feature of the same name; and, the table
-   complete, a strong a/feat entry over an optional a also enables the
+(* the implicit features; and, the table complete, a strong a/feat entry over an optional a also enables the
    feature named a where the table has one, because cargo's resolver does
    (dep_cache.rs, require_dep_feature) and the calculus states only what
    the entry asks of a *)
@@ -226,18 +228,7 @@ let with_implicit_features (deps : dep list) (tbl : (string * fentry list) list)
     if List.mem_assoc default_feature tbl then tbl
     else tbl @ [ (default_feature, []) ]
   in
-  let extra =
-    List.filter_map
-      (fun d ->
-        if
-          d.d_optional
-          && (not (List.mem_assoc d.d_alias tbl))
-          && not (mentions_dep tbl d.d_alias)
-        then Some (d.d_alias, [ FDep d.d_alias ])
-        else None)
-      deps
-  in
-  let tbl = tbl @ extra in
+  let tbl = tbl @ implicit_features deps tbl in
   let optional a = List.exists (fun d -> d.d_optional && d.d_alias = a) deps in
   List.map
     (fun (f, es) ->
@@ -259,19 +250,21 @@ let parse_line (line : string) : ver option =
   | exception _ ->
       reject ();
       None
-  | j -> (
-      match (member "name" j, member "vers" j) with
-      | `String name, `String vers ->
+  | `Assoc _ as j -> (
+      let deps =
+        match member "deps" j with
+        | `List l ->
+            let ds = List.map dep_of l in
+            if List.mem None ds then None else Some (List.filter_map Fun.id ds)
+        | `Null -> Some []
+        | _ ->
+            reject ();
+            Some []
+      in
+      match (member "name" j, member "vers" j, deps) with
+      | `String name, `String vers, Some deps ->
           if bool_def false (member "yanked" j) then None
           else
-            let deps =
-              match member "deps" j with
-              | `List l -> List.filter_map dep_of l
-              | `Null -> []
-              | _ ->
-                  reject ();
-                  []
-            in
             let declared = feature_table j in
             let tbl = with_implicit_features deps declared in
             if not (feature_map_ok deps declared) then (
@@ -291,6 +284,9 @@ let parse_line (line : string) : ver option =
       | _ ->
           reject ();
           None)
+  | _ ->
+      reject ();
+      None
 
 let load_crate ~index (name : string) : ver list =
   let path = crate_path ~index name in

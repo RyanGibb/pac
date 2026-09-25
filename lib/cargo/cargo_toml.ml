@@ -108,9 +108,19 @@ let escape st buf =
       let n = if c = 'u' then 4 else 8 in
       if st.i + n > String.length st.s then fail st.line "short \\%c escape" c;
       let hex = String.sub st.s st.i n in
+      let is_hex = function
+        | '0' .. '9' | 'a' .. 'f' | 'A' .. 'F' -> true
+        | _ -> false
+      in
+      (* TOML allows a Unicode scalar value only: no surrogate, nothing
+         past U+10FFFF *)
       (match int_of_string_opt ("0x" ^ hex) with
-      | Some code -> utf8 buf code
-      | None -> fail st.line "bad \\%c escape" c);
+      | Some code
+        when String.for_all is_hex hex
+             && code <= 0x10FFFF
+             && not (code >= 0xD800 && code <= 0xDFFF) ->
+          utf8 buf code
+      | _ -> fail st.line "bad \\%c escape" c);
       for _ = 1 to n do adv st done
   | _ -> fail st.line "bad escape"
 

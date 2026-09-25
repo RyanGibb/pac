@@ -22,9 +22,9 @@ TOOLCHAIN = "1.97.1"
 
 
 def num(s):
-    # more than 9 digits saturates, as in Cargo_version
+    # more than 18 digits saturates, as in Cargo_version
     x = int(re.match(r"[0-9]*", s).group() or 0)
-    return x if x < 10 ** 9 else (1 << 62) - 1
+    return x if x < 10 ** 18 else (1 << 62) - 1
 
 
 @functools.lru_cache(maxsize=1 << 20)
@@ -190,11 +190,14 @@ def targets(seed, k, exclude=None):
             print(f"{name}\t{c}")
 
 
-def one(crate, o):
+def one(crate, o, mode="default"):
     """run_query.py's and verify.py's answers, in-process so that every
     timeout they set is TIMEOUT, and pac, which verify.py runs again exactly
     as run_query.py did, runs once."""
     import run_query, verify
+    key = os.path.basename(o)
+    if mode != "default":
+        o = f"{o}.{mode}"
     timeout = float(os.environ["TIMEOUT"])
     sub = types.ModuleType("subprocess")
     sub.__dict__.update(vars(subprocess))
@@ -226,7 +229,7 @@ def one(crate, o):
         f["valid"] = v.get("verdict", "ERR")
         yn = {True: "yes", False: "no"}
         f["kept"], f["identical"] = yn.get(v.get("kept"), "-"), yn.get(v.get("identical"), "-")
-    print(f"query={os.path.basename(o)} mode=default " + " ".join(f"{k}={v}" for k, v in f.items()))
+    print(f"query={key} mode={mode} " + " ".join(f"{k}={v}" for k, v in f.items()))
 
 
 if __name__ == "__main__":

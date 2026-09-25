@@ -42,6 +42,14 @@ let () =
   check "1.0.0-11" "1.0.0-2" 1;
   (* a shorter identifier list ranks below its extension *)
   check "1.0.0-alpha" "1.0.0-alpha.0" (-1);
+  (* the semver crate reads a component as a u64, so a timestamp-style
+     component stays apart from its neighbour *)
+  check "1.0.1234567890" "1.0.1234567891" (-1);
+  check "12345678901.0.0" "12345678902.0.0" (-1);
+  check "1.0.999999999999999998" "1.0.999999999999999999" (-1);
+  check "1.0.9999999999" "1.0.999999999" 1;
+  req "=1.0.1234567890" "1.0.1234567891" false;
+  req "^1.0.1234567890" "1.0.1234567891" true;
 
   (* caret is the default, with leftmost-nonzero compatibility *)
   req "^1.2.3" "1.2.3" true;
@@ -133,12 +141,35 @@ let () =
   req ">=1.0.0, <2.0.0-rc.1" "2.0.0-rc.0" true;
   req ">=1.0.0, <2.0.0-rc.1" "2.0.0-rc.1" false;
 
+  (* the root manifest's requirements, each verdict cargo 1.97's own *)
+  List.iter
+    (fun (r, exp) ->
+      if Cargo_query.req_ok r <> exp then (
+        Printf.eprintf "FAIL: req_ok %S, expected %b\n" r exp;
+        incr fail))
+    [ ("abc", false); ("1.x.y.z;", false); ("", false); ("*", true);
+      ("x", true); ("X", true); ("1", true); ("1.2", true); ("1.2.3", true);
+      ("^1.2.3", true); ("~1.2", true); ("~>1.2", false); ("=1.2.3", true);
+      ("==1.2.3", false); (">=1.2, <2", true); (">= 1.2 , < 2", true);
+      (">=1.2 <2", false); ("1.*", true); ("1.x", true); ("1.2.*", true);
+      ("1.*.3", false); ("^1.*", true); (">=1.*", true); ("=1.*", true);
+      ("~1.*", true); ("*, 1", false); ("1, *", false); ("01.0", false);
+      ("1.02", false); ("1.0.0-alpha.1", true); ("1.0.0-", false);
+      ("1.0.0-01", false); ("1.0.0-a..b", false); ("1.0-alpha", false);
+      ("1.0.0+build", true); ("1.0.0-a+b", true); ("1.2.3.4", false);
+      (" 1.2", true); ("1.2.3 - 2", false); ("x.1", false); ("^*", false);
+      ("1.2.3,", false); (",1.2.3", false); ("1,,2", false);
+      ("1.2.3-alpha,<2", true); (">1", true); ("1a", false); ("1.2a", false);
+      ("-1", false); ("1.0.0-a_b", false); ("1.0.0-a-b", true) ];
+
   (* the string-scanning comparison agrees with parsing, odd spellings
      included *)
   let corpus =
     [ ""; "0"; "1"; "1.0"; "1.0.0"; "01.2.3"; "1.02.3"; "1..2"; "1.2."; "1.";
       "1.2.3.4"; "1a.2b.3c"; "a.b.c"; "0000000001.0.0"; "1234567890.0.0";
-      "123456789.0.0"; "12345678901.0.0"; "999999999.0.0"; "1.0.0+b";
+      "123456789.0.0"; "12345678901.0.0"; "999999999.0.0";
+      "999999999999999999.0.0"; "1000000000000000000.0.0"; "1.0.1234567891";
+      "1.0.00000000001234567890"; "1.0.0+b";
       "1.0.0+b-1"; "1.0.0+"; "1.0.0-alpha"; "1.0.0-"; "1.0.0-+x"; "1.0.0-0";
       "2.0.0-rc.1+x"; "0.14.7"; "0.14.10"; "0.0.3"; "10.0.0"; "9.99.999";
       "1-2.3.4"; "1.2-3.4"; "1.2.3-4.5"; "1+2.3"; "1.0.0-alpha.1";

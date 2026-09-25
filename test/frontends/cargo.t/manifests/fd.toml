@@ -1,0 +1,12 @@
+[package]
+name = "fd"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+i = { version = "1", optional = true }
+
+[features]
+default = ["net"]
+net = ["i/net"]
+plain = []

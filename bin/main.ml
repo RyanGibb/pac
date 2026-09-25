@@ -175,100 +175,77 @@ let opam_cmd =
       const opam_run $ debug_arg $ zi_order $ with_test $ with_doc
       $ with_dev_setup $ opam_version $ repo $ query)
 
-let cargo_run debug print_parents index manifest features rustv =
+let cargo_run debug order print_parents index manifest features no_default
+    installed =
   let t0 = Unix.gettimeofday () in
-  let ar = Cargo_solve.empty_archive index in
   match Cargo_query.of_manifest manifest with
   | exception Cargo_query.Refused e ->
       Printf.eprintf "error: %s\n" e;
       2
   | root -> (
-      let rfeats =
-        match
-          List.concat_map
-            (fun f ->
-              List.filter (( <> ) "")
-                (String.split_on_char ','
-                   (String.map (function ' ' | '\t' -> ',' | c -> c) f)))
-            features
-        with
-        | [] -> None
-        | fs -> Some fs
-      in
-      let v = root.Cargo_query.ver in
-      Cargo_solve.install_root ar v;
-      let rc = (v.Cargo_parse.v_name, v.Cargo_parse.v_vers) in
-      (* resolve.rs ranks against the root's rust-version, and only when it
-         declares none against the installed rustc, which --rust-version
-         names; resolvers 1 and 2 rank against nothing *)
-      let rustv =
-        if not root.Cargo_query.msrv_pref then None
-        else
-          match v.Cargo_parse.v_msrv with Some m -> Some m | None -> rustv
-      in
-      Printf.printf "root %s %s%s%s\n%!" (fst rc) (snd rc)
-        (match rfeats with
-        | None -> ""
-        | Some fs -> " with features " ^ String.concat "," fs)
+      let features = Cargo_query.features_of_flags features ~no_default in
+      let rustv = Cargo_query.toolchain root ~installed in
+      let n, v = Cargo_query.crate root in
+      Printf.printf "root %s %s%s%s\n%!" n v
+        (match features with
+        | Cargo_query.All -> ""
+        | Cargo_query.Named { feats = []; default = true } ->
+            " with default features"
+        | Cargo_query.Named { feats = []; default = false } -> " with no features"
+        | Cargo_query.Named { feats; default } ->
+            " with features " ^ String.concat "," feats
+            ^ if default then "" else " and no default feature")
         (match rustv with None -> "" | Some t -> " for rust " ^ t);
-      let module S = Cargo_solve.Make () in
-      let r = S.solve ~debug ?rfeats ~rustv ar rc in
+      let r = Cargo_solve.solve ~debug ~order ~index ~features ~rustv root in
       (* the crates the run parsed, known only once it is over: there is no
          cone, so this is what the solver asked for and nothing more *)
       let loaded () =
         let t2 = Unix.gettimeofday () in
-        Printf.printf "loaded: %d crates, %d versions\n" ar.Cargo_solve.n_names
-          ar.Cargo_solve.n_vers;
+        Printf.printf "loaded: %d crates, %d versions\n" r.Cargo_solve.n_names
+          r.Cargo_solve.n_vers;
         if !Cargo_parse.rejected > 0 then
           Printf.printf "parser dropped %d declarations\n"
             !Cargo_parse.rejected;
-        Printf.printf "parse %.2fs\nsolve %.2fs\n" ar.Cargo_solve.t_parse
-          (t2 -. t0 -. ar.Cargo_solve.t_parse)
+        Printf.printf "parse %.2fs\nsolve %.2fs\n" r.Cargo_solve.t_parse
+          (t2 -. t0 -. r.Cargo_solve.t_parse)
       in
-      match r with
+      match r.Cargo_solve.answer with
       | None ->
           loaded ();
           1
-      | Some r
-        when (not root.Cargo_query.self_patch)
-             && List.exists
-                  (fun (n, u, _, t, w) -> (t, w) = rc && (n, u) <> rc)
-                  r.S.parents ->
-          (* cargo tells packages apart by source as well, so without the
-             self-patch the registry's crate at the root's name and version
-             is a second package, which one node per (name, version) cannot
-             be *)
+      | Some a when Cargo_solve.reaches_registry_root root a ->
           loaded ();
           Printf.eprintf
             "error: the answer reaches %s %s through the registry, which \
              cargo keeps apart from the root unless [patch.crates-io] maps \
              %s to it with { path = \".\" }\n"
-            (fst rc) (snd rc) (fst rc);
+            n v n;
           2
-      | Some r ->
-          Printf.printf "crates (%d):\n" (List.length r.S.crates);
+      | Some a ->
+          Printf.printf "crates (%d):\n" (List.length a.Cargo_solve.crates);
           List.iter
             (fun (n, v) ->
               let fs =
                 match
-                  List.find_opt (fun (m, u, _) -> m = n && u = v) r.S.feats
+                  List.find_opt (fun (m, u, _) -> m = n && u = v)
+                    a.Cargo_solve.feats
                 with
                 | Some (_, _, fs) -> fs
                 | None -> []
               in
               Printf.printf "  %s %s%s\n" n v
                 (if fs = [] then "" else " [" ^ String.concat "," fs ^ "]"))
-            r.S.crates;
+            a.Cargo_solve.crates;
           Printf.printf
             "encoded solution: %d core nodes (%d crate versions encoded)\n"
-            r.S.nodes r.S.processed;
-          Printf.printf "parent edges: %d\n" (List.length r.S.parents);
+            a.Cargo_solve.nodes a.Cargo_solve.processed;
+          Printf.printf "parent edges: %d\n" (List.length a.Cargo_solve.parents);
           if print_parents then begin
             Printf.printf "parent-edges:\n";
             List.iter
               (fun (n, v, a, t, u) ->
                 Printf.printf "  %s %s -> %s(%s) %s\n" n v a t u)
-              r.S.parents
+              a.Cargo_solve.parents
           end;
           loaded ();
           0)
@@ -296,9 +273,28 @@ let cargo_cmd =
       value & opt_all string []
       & info [ "F"; "features" ] ~docv:"FEATURES"
           ~doc:
-            "Space or comma separated features to enable on the root; unset, \
-             every feature the root declares is enabled, as when cargo \
-             writes a lockfile.")
+            "Space or comma separated features to enable on the root, \
+             beside its default feature, resolved afresh rather than \
+             filtered out of the lock.  With neither this nor \
+             $(b,--no-default-features), every feature the root declares \
+             is enabled, as when cargo writes a lockfile.")
+  in
+  let no_default =
+    Arg.(
+      value & flag
+      & info [ "no-default-features" ]
+          ~doc:"Do not enable the root's default feature.")
+  in
+  (* cargo's own order is the default, the one whose answers are compared
+     with cargo's; PubGrub's is the one the benchmarks state *)
+  let order =
+    Arg.(
+      value
+      & opt (enum [ ("tool", `Tool); ("pubgrub", `Pubgrub) ]) `Tool
+      & info [ "order" ] ~docv:"ORDER"
+          ~doc:
+            "Decision order: $(b,tool) replays cargo's activation order, \
+             $(b,pubgrub) leaves PubGrub's own.")
   in
   (* the toolchain resolver v3 falls back to when the root declares no
      rust-version; cargo reads it off rustc, this asks for it *)
@@ -324,8 +320,8 @@ let cargo_cmd =
   Cmd.v
     (Cmd.info "cargo" ~doc:"Solve a root Cargo.toml against a crates.io index.")
     Term.(
-      const cargo_run $ debug_arg $ print_parents $ index $ manifest $ features
-      $ rustv)
+      const cargo_run $ debug_arg $ order $ print_parents $ index $ manifest
+      $ features $ no_default $ rustv)
 
 let alpine_run debug path goals =
   let t0 = Unix.gettimeofday () in

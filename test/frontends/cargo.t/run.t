@@ -60,7 +60,8 @@ slot, two parent edges onto the one installed crate.
   parent edges: 2
   loaded: 2 crates, 2 versions
 
-Naming features instead resolves afresh with exactly those features, and
+Naming features instead resolves afresh with those features and, as in
+cargo, the root's default, and
 under default alone nothing activates the optional normal record: the
 mandatory dev record installs m by itself.  The two stay
 separate slots -- conjoined, the dev record's non-optionality would bind
@@ -124,7 +125,7 @@ its place in the lock as --features varies, and w is installed with extra.
 
 Resolver v3's one effect on version selection: a candidate whose declared
 MSRV the configured toolchain does not satisfy ranks below every candidate
-it does, and newest-first still decides within each class.  d1 publishes
+it does, and newest-first still decides within each of the two.  d1 publishes
 1.0.0 with rust-version 1.60 and 1.1.0 with 1.80; under a 1.70 toolchain
 m1 takes the older 1.0.0.
 
@@ -300,8 +301,9 @@ keys by name, so oc's zp-then-ga reaches the resolver as ga-then-zp.
   loaded: 3 crates, 5 versions
 
 Resolver v3 ranks the candidate versions of a dependency, not their
-classes (version_prefs.rs, sort_summaries), and skips a candidate whose
-class is already activated at another version (RemainingCandidates::next).
+granularity classes (version_prefs.rs, sort_summaries), and skips a
+candidate whose granularity class is already activated at another version
+(RemainingCandidates::next).
 ms activates sk 0.5.10 through its pin; mq's >=0.5, <0.7 then meets the
 compatible 0.5.9, which that activation rules out, and takes the newest of
 the rest, 0.6.5, although it needs a newer Rust than 1.70.
@@ -318,7 +320,8 @@ the rest, 0.6.5, although it needs a newer Rust than 1.70.
   loaded: 3 crates, 5 versions
 
 mu pins sl to 0.6.5, which needs 1.80, so mt's range skips the compatible
-0.6.4 of that class and takes the compatible 0.5.9 of the older one.
+0.6.4 of that granularity class and takes the compatible 0.5.9 of the
+older one.
 
   $ ../../../bin/main.exe cargo index manifests/mu.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root mu 1.0.0 for rust 1.70
@@ -387,8 +390,8 @@ behind everything queued ahead of it.  dv takes sb 2.6.1 before t1, t2 and
 t3, and only then zj, whose versions both need ae 0.10.3 and so sb below
 2.5.  Refuting it costs whole replays of the queue, not the answer: cargo,
 backtracking into its saved frame, lands on sb 2.4.1 too.
-zj 1.1.0 and 1.2.0 are one class declaring ae alike, so they share one
-slot, and the conflict learned against it refutes both at once.
+zj 1.1.0 and 1.2.0 are one granularity class declaring ae alike, so they
+share one slot, and the conflict learned against it refutes both at once.
 
   $ ../../../bin/main.exe cargo index manifests/dv.toml | grep -E '^  (ae|sb|zj) '
     ae 0.10.3
@@ -486,13 +489,17 @@ never a candidate, so cargo takes 1.0.0 of each of fa (dep:o/extra), fb
   parser dropped 3 declarations
 
 The manifest is TOML, which cargo refuses where a header defines a table
-dotted keys already made, or an integer has a leading zero:
+dotted keys already made, an integer has a leading zero, or an escape
+names a surrogate rather than a Unicode scalar value:
 
   $ ../../../bin/main.exe cargo index manifests/tomldot.toml
   error: manifests/tomldot.toml: line 13: table "dependencies.b" defined twice
   [2]
   $ ../../../bin/main.exe cargo index manifests/tomlint.toml
   error: manifests/tomlint.toml: line 7: bad value "0_1"
+  [2]
+  $ ../../../bin/main.exe cargo index manifests/tomlesc.toml
+  error: manifests/tomlesc.toml: line 5: bad \u escape
   [2]
 
 while dotted keys over one table, a sub-table header under them, and
@@ -508,3 +515,90 @@ numbers TOML allows all read:
   encoded solution: 16 core nodes (5 crate versions encoded)
   parent edges: 3
   loaded: 4 crates, 4 versions
+
+A version component is a u64 in cargo's semver, so tv's timestamp-style
+1.0.1234567890 and 1.0.1234567891 are two versions, and ^1 takes the
+newer, as cargo does.
+
+  $ ../../../bin/main.exe cargo index manifests/vt.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root vt 1.0.0
+  crates (2):
+    tv 1.0.1234567891
+    vt 1.0.0
+  encoded solution: 6 core nodes (3 crate versions encoded)
+  parent edges: 1
+  loaded: 2 crates, 2 versions
+
+cargo skips an index line it cannot deserialize, so a line that is JSON
+but not an object is dropped and counted, and so is a version one of
+whose dependencies is not an object, or has no name: nb's 1.1.0 and 1.2.0
+are out, and cargo, like pac, locks 1.0.0.
+
+  $ ../../../bin/main.exe cargo index manifests/nbr.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root nbr 1.0.0
+  crates (2):
+    nb 1.0.0
+    nbr 1.0.0
+  encoded solution: 6 core nodes (2 crate versions encoded)
+  parent edges: 1
+  loaded: 2 crates, 1 versions
+  parser dropped 4 declarations
+
+--features keeps the root's default unless --no-default-features drops
+it, as cargo's CliFeatures does, and an empty --features names nothing
+rather than everything.  fd's default enables net, which asks the
+optional i for net.
+
+  $ ../../../bin/main.exe cargo index manifests/fd.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root fd 1.0.0
+  crates (3):
+    fd 1.0.0 [default,i,net,plain]
+    i 1.0.0 [net,o]
+    o 1.0.0 [extra]
+  encoded solution: 17 core nodes (3 crate versions encoded)
+  parent edges: 2
+  loaded: 3 crates, 2 versions
+  $ ../../../bin/main.exe cargo index manifests/fd.toml -F "" | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root fd 1.0.0 with default features
+  crates (3):
+    fd 1.0.0 [default,i,net]
+    i 1.0.0 [net,o]
+    o 1.0.0 [extra]
+  encoded solution: 16 core nodes (3 crate versions encoded)
+  parent edges: 2
+  loaded: 3 crates, 2 versions
+  $ ../../../bin/main.exe cargo index manifests/fd.toml --no-default-features | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root fd 1.0.0 with no features
+  crates (1):
+    fd 1.0.0
+  encoded solution: 2 core nodes (1 crate versions encoded)
+  parent edges: 0
+  loaded: 2 crates, 1 versions
+  $ ../../../bin/main.exe cargo index manifests/fd.toml --no-default-features -F plain | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root fd 1.0.0 with features plain and no default feature
+  crates (1):
+    fd 1.0.0 [plain]
+  encoded solution: 3 core nodes (1 crate versions encoded)
+  parent edges: 0
+  loaded: 2 crates, 1 versions
+
+A requirement cargo cannot parse is refused, not read as "*":
+
+  $ ../../../bin/main.exe cargo index manifests/badreq.toml
+  error: failed to parse the version requirement `abc` for dependency `i`
+  [2]
+
+The order is cargo's unless --order=pubgrub leaves it to PubGrub, whose
+answer is a resolution too, though not always the one cargo locks: under
+PubGrub's own order oa keeps cp's newest, 0.1.7, and ga at its pin.
+
+  $ ../../../bin/main.exe cargo index manifests/oa.toml --order=pubgrub | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root oa 1.0.0
+  crates (4):
+    cp 0.1.7
+    ga 0.14.7
+    oa 1.0.0
+    pa 1.0.0
+  encoded solution: 13 core nodes (6 crate versions encoded)
+  parent edges: 4
+  loaded: 4 crates, 6 versions

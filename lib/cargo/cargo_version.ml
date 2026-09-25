@@ -5,8 +5,8 @@ let is_digit c = c >= '0' && c <= '9'
 
 type t = { major : int; minor : int; patch : int; pre : string list }
 
-(* leading zeros carry no value, and an absurdly long run is saturated
-   rather than overflowing int_of_string *)
+(* leading zeros carry no value, and a run past 18 digits, which a 63-bit
+   int cannot hold, is saturated rather than overflowing int_of_string *)
 let strip0 s =
   let n = String.length s in
   let i = ref 0 in
@@ -17,7 +17,7 @@ let strip0 s =
 
 let int_of_digits s =
   let s = strip0 s in
-  if s = "" then 0 else if String.length s > 9 then max_int else int_of_string s
+  if s = "" then 0 else if String.length s > 18 then max_int else int_of_string s
 
 let split_on c s = String.split_on_char c s
 
@@ -115,7 +115,7 @@ let field s n i =
   done;
   let v = ref 0 and d = ref 0 in
   while !j < n && is_digit s.[!j] do
-    if !d < 9 then v := (!v * 10) + (Char.code s.[!j] - 48);
+    if !d < 18 then v := (!v * 10) + (Char.code s.[!j] - 48);
     incr d;
     incr j
   done;
@@ -123,7 +123,7 @@ let field s n i =
     incr j
   done;
   i := if !j < n && s.[!j] = '.' then !j + 1 else n;
-  if !d > 9 then max_int else !v
+  if !d > 18 then max_int else !v
 
 (* no '-' ahead of the build metadata, so no pre-release *)
 let plain s =
