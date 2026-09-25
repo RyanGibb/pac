@@ -24,4 +24,21 @@ let () =
   (* dev suffixes *)
   check "4.14.0" "4.14.0+options" (-1);
   check "8.5" "8.5~rc1" 1;
+  (* the revision is split off at the last '-' and compared only on a tie *)
+  check "1.0-1" "1.0a" (-1);
+  check "1.0-1" "1.0+1" (-1);
+  check "1.0-1" "1.0" 1;
+  check "1.0-2" "1.0-10" (-1);
+  check "1.0-~" "1.0" (-1);
+  check "1.0-" "1.0" 0;
+  check "1.0-0" "1.0" 0;
+  check "1-2-3" "1-2.3" 1;
+  check "2.0-rc1" "2.0~rc1" 1;
+  check "1.0-beta" "1.0.1" (-1);
+  (* an exhausted side is equal to a run of zeros, whatever surrounds it *)
+  check "1." "1.0" 0;
+  check "a" "a0" 0;
+  check "1." "1.0~" 1;
+  check "1." "1.0a" (-1);
+  check "1.00" "1.0" 0;
   print_endline "opam_version: all tests pass"

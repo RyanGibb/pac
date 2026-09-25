@@ -1,9 +1,11 @@
-(* opam version comparison, implemented from the opam manual's version
-   ordering: Debian's algorithm over the whole string, with no epoch or
-   revision treatment.  Alternate maximal non-digit and digit parts;
-   non-digit parts compare with '~' before everything (including the end
-   of a part) and letters before non-letters; digit parts compare
-   numerically.  Untrusted (TCB). *)
+(* opam version comparison, matching opam 2.5.2's OpamVersionCompare: a
+   revision is split off at the last '-', and the two halves compare in
+   turn with Debian's algorithm (no epoch).  Within a half, maximal
+   non-digit and digit parts alternate; non-digit parts compare with '~'
+   before everything (including the end of a part) and letters before
+   non-letters; digit parts compare numerically.  A half that runs out
+   equals the other's remainder if that is all '0's, wherever they fall.
+   Untrusted (TCB). *)
 
 let is_digit c = c >= '0' && c <= '9'
 let is_alpha c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
@@ -12,64 +14,58 @@ let is_alpha c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 let char_key c =
   if c = '~' then -1 else if is_alpha c then Char.code c else Char.code c + 256
 
-(* compare non-digit prefixes; a part that ends is smaller than any
-   character except '~', which sorts below end-of-part *)
-let rec cmp_nondigit s1 i1 s2 i2 =
-  let e1 = i1 >= String.length s1 || is_digit s1.[i1] in
-  let e2 = i2 >= String.length s2 || is_digit s2.[i2] in
-  match (e1, e2) with
-  | true, true -> (0, i1, i2)
-  | true, false -> if s2.[i2] = '~' then (1, i1, i2) else (-1, i1, i2)
-  | false, true -> if s1.[i1] = '~' then (-1, i1, i2) else (1, i1, i2)
-  | false, false ->
-      let c = compare (char_key s1.[i1]) (char_key s2.[i2]) in
-      if c <> 0 then (c, i1, i2) else cmp_nondigit s1 (i1 + 1) s2 (i2 + 1)
+let rec skip_while f s i e = if i < e && f s.[i] then skip_while f s (i + 1) e else i
+let skip_zeros = skip_while (fun c -> c = '0')
 
-(* end of the digit run starting at i *)
-let digit_end s i =
-  let n = String.length s in
-  let j = ref i in
-  while !j < n && is_digit s.[!j] do
-    incr j
-  done;
-  !j
-
-(* first significant digit of the run [i, j): leading zeros dropped, but
-   an all-zero run keeps its last digit so it still counts as a number *)
-let skip_zeros s i j =
-  let k = ref i in
-  while !k < j - 1 && s.[!k] = '0' do
-    incr k
-  done;
-  !k
-
-(* numeric comparison of two digit runs, in place: PubGrub compares
+(* compare s1.[i1, e1) with s2.[i2, e2) in place: PubGrub compares
    versions millions of times per solve, so this must not allocate *)
-let cmp_digit s1 i1 s2 i2 =
-  let j1 = digit_end s1 i1 and j2 = digit_end s2 i2 in
-  let k1 = skip_zeros s1 i1 j1 and k2 = skip_zeros s2 i2 j2 in
-  let l1 = j1 - k1 and l2 = j2 - k2 in
-  let c = compare l1 l2 in
-  let rec lex d =
-    if d >= l1 then 0
-    else
-      let c = Char.compare s1.[k1 + d] s2.[k2 + d] in
-      if c <> 0 then compare c 0 else lex (d + 1)
-  in
-  let c = if c <> 0 then c else lex 0 in
-  (c, j1, j2)
+let rec lexical s1 i1 e1 s2 i2 e2 =
+  match (i1 = e1, i2 = e2) with
+  | true, true -> 0
+  | true, false ->
+      let k = skip_zeros s2 i2 e2 in
+      if k = e2 then 0 else if s2.[k] = '~' then 1 else -1
+  | false, true ->
+      let k = skip_zeros s1 i1 e1 in
+      if k = e1 then 0 else if s1.[k] = '~' then -1 else 1
+  | false, false -> (
+      match (is_digit s1.[i1], is_digit s2.[i2]) with
+      | true, true ->
+          numeric s1 (skip_zeros s1 i1 e1) e1 s2 (skip_zeros s2 i2 e2) e2
+      | true, false -> if s2.[i2] = '~' then 1 else -1
+      | false, true -> if s1.[i1] = '~' then -1 else 1
+      | false, false ->
+          let c = compare (char_key s1.[i1]) (char_key s2.[i2]) in
+          if c <> 0 then c else lexical s1 (i1 + 1) e1 s2 (i2 + 1) e2)
+
+(* leading zeros already skipped, so the longer run is the larger number *)
+and numeric s1 i1 e1 s2 i2 e2 =
+  let j1 = skip_while is_digit s1 i1 e1 and j2 = skip_while is_digit s2 i2 e2 in
+  let c = compare (j1 - i1) (j2 - i2) in
+  if c <> 0 then c
+  else
+    let rec digits d =
+      if i1 + d = j1 then lexical s1 j1 e1 s2 j2 e2
+      else
+        let c = Char.compare s1.[i1 + d] s2.[i2 + d] in
+        if c <> 0 then c else digits (d + 1)
+    in
+    digits 0
+
+(* the revision's '-', or the length when there is none *)
+let last_dash s =
+  let rec go i = if i < 0 then String.length s else if s.[i] = '-' then i else go (i - 1) in
+  go (String.length s - 1)
+
+let sign c = if c < 0 then -1 else if c > 0 then 1 else 0
 
 let compare v1 v2 =
-  let rec go i1 i2 =
-    if i1 >= String.length v1 && i2 >= String.length v2 then 0
-    else
-      let c, i1, i2 = cmp_nondigit v1 i1 v2 i2 in
-      if c <> 0 then c
-      else if i1 >= String.length v1 && i2 >= String.length v2 then 0
-      else
-        let c, i1, i2 = cmp_digit v1 i1 v2 i2 in
-        if c <> 0 then c else go i1 i2
-  in
-  go 0 0
+  if String.equal v1 v2 then 0
+  else
+    let n1 = String.length v1 and n2 = String.length v2 in
+    let r1 = last_dash v1 and r2 = last_dash v2 in
+    let c = lexical v1 0 r1 v2 0 r2 in
+    if c <> 0 then sign c
+    else sign (lexical v1 (min n1 (r1 + 1)) n1 v2 (min n2 (r2 + 1)) n2)
 
 let equal a b = compare a b = 0
