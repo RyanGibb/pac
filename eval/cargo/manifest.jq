@@ -34,13 +34,15 @@ def sections:
   | join("\n\n");
 
 (if .rust_version then "rust-version = \"" + .rust_version + "\"\n" else "" end) as $rv
+# cargo refuses a links key without a build script; build_manifest writes one
+| (if .links then "links = \"" + .links + "\"\nbuild = \"build.rs\"\n" else "" end) as $links
 | "[package]\nname = \"" + .name + "\"\nversion = \"" + .vers
 # edition 2015 imposes no rustc floor of its own (the index carries no
 # "edition" field to reproduce faithfully) -- resolver = "3" is set
 # explicitly regardless, and the crate's declared rust-version, when
 # present, is the only rustc-compatibility constraint pac's msrv_ok
 # models, so this is the edition that adds nothing beyond it.
-+ "\"\nedition = \"2015\"\nresolver = \"3\"\n" + $rv + "\n"
++ "\"\nedition = \"2015\"\nresolver = \"3\"\n" + $rv + $links + "\n"
 + "[lib]\npath = \"src/lib.rs\"\n\n[features]\n"
 + (mergedFeatures | to_entries
    | map(.key + " = [" + ((.value | map("\"" + . + "\"")) | join(", ")) + "]")

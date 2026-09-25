@@ -60,9 +60,9 @@ slot, two parent edges onto the one installed crate.
   parent edges: 2
   loaded: 2 crates, 2 versions
 
-Naming features asks for the build cargo would run against that lock
-instead, and under default alone nothing activates the optional normal
-record: the mandatory dev record installs m by itself.  The two stay
+Naming features instead resolves afresh with exactly those features, and
+under default alone nothing activates the optional normal record: the
+mandatory dev record installs m by itself.  The two stay
 separate slots -- conjoined, the dev record's non-optionality would bind
 on every depender, which is the h case above.
 
@@ -93,6 +93,18 @@ without it.
   encoded solution: 13 core nodes (7 crate versions encoded)
   parent edges: 3
   loaded: 4 crates, 7 versions
+
+The root's own links key excludes as a dependency's does.  rl claims
+links=foo, so x 1.0.0, which claims it too, is out and x 0.9.0 is taken.
+
+  $ ../../../src/main.exe cargo index manifests/rl.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root rl 1.0.0
+  crates (2):
+    rl 1.0.0
+    x 0.9.0
+  encoded solution: 7 core nodes (3 crate versions encoded)
+  parent edges: 1
+  loaded: 2 crates, 3 versions
 
 A weak feature entry resolves as the strong one.  u's default feature
 enables cap, whose only entry is "w?/extra", and w is optional and named
@@ -208,7 +220,7 @@ source registry.  rn's x is e under [dependencies] and w under
   loaded: 3 crates, 4 versions
 
 A crate's feature set is the one cargo's version resolver records for it
-(Resolve::features, what `cargo metadata` prints), and two of that
+(Resolve::features, what `cargo metadata --all-features` prints), and two of that
 resolver's rules are about names it adds on its own.  A crate declaring no
 default feature gets none -- cargo's handle_default requires the key -- so
 a depender's default-features request lands on nothing, and every crate in

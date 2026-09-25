@@ -236,6 +236,9 @@ def build_manifest(crate, version, workdir, patch_self=False):
     if not os.path.exists(libpath):
         with open(libpath, "w") as f:
             f.write("")
+    if j.get("links") and not os.path.exists(workdir + "/build.rs"):
+        with open(workdir + "/build.rs", "w") as f:
+            f.write("fn main() {}\n")
     for stale in (workdir + "/Cargo.lock",):
         if os.path.exists(stale):
             os.remove(stale)

@@ -1,0 +1,17 @@
+[package]
+name = "rl"
+version = "1.0.0"
+edition = "2015"
+resolver = "3"
+links = "foo"
+build = "build.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+
+
+[dependencies]
+  x = { version = ">=0.9" }
+

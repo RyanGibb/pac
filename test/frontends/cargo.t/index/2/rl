@@ -1,0 +1,1 @@
+{"name":"rl","vers":"1.0.0","deps":[{"name":"x","req":">=0.9","features":[],"optional":false,"default_features":true,"kind":"normal"}],"features":{},"links":"foo","yanked":false}
