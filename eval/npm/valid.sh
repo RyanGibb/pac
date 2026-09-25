@@ -20,7 +20,7 @@
 # under node_modules lookup, and controls.sh's nest-valid is what says npm
 # judges the placement we chose rather than demanding its own.
 #
-# usage: valid.sh <exe> <tag> [query]
+# usage: valid.sh <exe> <tag> [query]        EXTRA=<flags> passes flags to <exe>
 # With no query it starts the frozen shim, sweeps queries.txt and totals;
 # with one it checks that query and expects a shim already listening.
 set -u
@@ -50,6 +50,7 @@ if [ $# -lt 3 ]; then
   exit $?
 fi
 query=$3
+read -r -a extra <<< "${EXTRA:-}"
 slug=${query//\//__}
 out="$S/out/$tag"
 mkdir -p "$out"
@@ -69,7 +70,7 @@ cd "$S/../.."
 npmv=$(sed -n 1p "$S/npm-version")
 nodev=$(sed -n 2p "$S/npm-version")
 
-"$exe" npm --offline --cache "$RUN/cache" --tree \
+"$exe" npm "${extra[@]}" --offline --cache "$RUN/cache" --tree \
   ${nodev:+--node-version "$nodev"} ${npmv:+--npm-version "$npmv"} \
   "$query@$pin" > "$out/$slug.ours" 2>&1
 if ! grep -q '^node_modules' "$out/$slug.ours"; then

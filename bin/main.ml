@@ -369,120 +369,44 @@ let alpine_cmd =
     (Cmd.info "alpine" ~doc:"Solve against an Alpine APKINDEX.")
     Term.(const alpine_run $ debug_arg $ path $ goals)
 
-(* arborist's
-   #add resolves a tag to its version only after an await, so the other
-   specs are all added first, in order. *)
-let npm_root ar (query : string list) : (Npm_parse.ver, string) result =
-  let paths, specs = List.partition Npm_parse.is_manifest_arg query in
-  let ( let* ) = Result.bind in
-  let* pkg =
-    match paths with
-    | [] -> Ok (`Assoc [])
-    | [ p ] -> (
-        match Yojson.Safe.from_file p with
-        | `Assoc _ as j -> Ok j
-        | _ | (exception _) -> Error (p ^ ": not a package.json"))
-    | _ -> Error "more than one package.json"
-  in
-  let* plain, tagged =
-    List.fold_left
-      (fun acc s ->
-        let* plain, tagged = acc in
-        match Npm_parse.spec_of s with
-        | None ->
-            Error
-              (s
-             ^ ": not a registry spec (name, name@range, name@tag, \
-                key@npm:name@range)")
-        | Some (k, r) when Npm_parse.split_alias r <> None || r = "*" ->
-            Ok ((k, r) :: plain, tagged)
-        | Some (k, r) -> (
-            (* npm refuses a dist-tag that is a range, so a spec the
-               packument tags is a tag, and one it does not is a range
-               unless it can only be a tag *)
-            match Npm_solve.dist_tag ar k (String.trim r) with
-            | Some v -> Ok (plain, (k, v) :: tagged)
-            | None when Npm_parse.looks_like_tag (String.trim r) ->
-                Error (s ^ ": no such dist-tag")
-            | None -> Ok ((k, r) :: plain, tagged)))
-      (Ok ([], [])) specs
-  in
-  let specs = List.rev plain @ List.rev tagged in
-  (* npm fetches each spec's packument while building the tree, and E404s
-     on a name the registry lacks rather than resolving without it *)
-  let* () =
-    match
-      List.find_opt
-        (fun (k, r) ->
-          let t = match Npm_parse.split_alias r with Some (t, _) -> t | None -> k in
-          Npm_solve.versions_of ar t = [])
-        specs
-    with
-    | Some (k, r) ->
-        let t = match Npm_parse.split_alias r with Some (t, _) -> t | None -> k in
-        Error
-          (Printf.sprintf "no packument for %s under %s%s" t ar.Npm_solve.cache
-             (if ar.Npm_solve.offline then " (offline)" else ""))
-    | None -> Ok ()
-  in
-  let pkg = List.fold_left Npm_parse.add_to pkg specs in
-  (* arborist names a root with no name by its directory, which is no
-     part of the query; "." is a name no registry package can have *)
-  let str k = match Npm_parse.member k pkg with `String s -> s | _ -> "" in
-  let name = match str "name" with "" -> "." | n -> n in
-  match Npm_parse.ver_of ~root:true (str "version") pkg with
-  | Some v -> Ok { v with Npm_parse.v_name = name }
-  | None -> Error "not a package.json"
+module Npm = Npm_solve
 
-let npm_run debug cache offline tree omit nodev npmv query =
-  let t0 = Unix.gettimeofday () in
-  let ar =
-    Npm_solve.empty_archive
-      ~optional:(not (List.mem "optional" omit))
-      ~node:nodev ~npm:npmv ~cache ~offline ()
-  in
-  match npm_root ar query with
-  | Error e ->
-      prerr_endline e;
+let npm_exits =
+  Cmd.Exit.
+    [
+      info 0 ~doc:"on a solution.";
+      info 1 ~doc:"when no solution exists.";
+      info 2 ~doc:"when the query is refused.";
+      info 3 ~doc:"when the registry cannot be read.";
+    ]
+  @ List.filter (fun i -> Cmd.Exit.info_code i <> 0) Cmd.Exit.defaults
+
+let npm_answer debug order omit tree t0 ar root =
+  let rc = Npm.Archive.add_root ar root in
+  Npm.Print.root rc;
+  match
+    Npm.Solve.solve ~debug ~order ~omit_dev:(List.mem `Dev omit)
+      ~omit_optional:(List.mem `Optional omit) ar rc
+  with
+  | Error inc ->
+      Npm.Print.unsat inc;
       1
-  | Ok root -> begin
-    let node n v = if v = "" then n else Printf.sprintf "%s %s" n v in
-    let rc = Npm_solve.add_root ar root in
-    Printf.printf "root %s\n%!" (node (fst rc) (snd rc));
-    match Npm_solve.solve ~debug ar rc with
-    | None -> 1
-    | Some r ->
-        let t2 = Unix.gettimeofday () in
-        let show (a, t) v =
-          if a = t then node t v else Printf.sprintf "%s at %s" (node t v) a
-        in
-        Printf.printf "packages (%d):\n" (List.length r.Npm_solve.installs);
-        List.iter
-          (fun (k, v) -> Printf.printf "  %s\n" (show k v))
-          r.Npm_solve.installs;
-        if tree then begin
-          Printf.printf "node_modules (%d edges):\n"
-            (List.length r.Npm_solve.tree);
-          List.iter
-            (fun ((ck, cv), (pk, pv)) ->
-              Printf.printf "  %s <- %s\n" (show pk pv) (show ck cv))
-            r.Npm_solve.tree
-        end
-        else
-          Printf.printf "node_modules edges: %d\n"
-            (List.length r.Npm_solve.tree);
-        Printf.printf "cone: %d packages, %d versions, %d packuments fetched\n"
-          ar.Npm_solve.n_names ar.Npm_solve.n_vers ar.Npm_solve.n_fetched;
-        if !Npm_parse.rejected > 0 then
-          Printf.printf "parser dropped %d declarations\n" !Npm_parse.rejected;
-        if !Npm_parse.optional_count > 0 then
-          Printf.printf "optionalDependencies: %d entries, %d dropped\n"
-            !Npm_parse.optional_count ar.Npm_solve.n_opt_dropped;
-        Printf.printf "encoded solution: %d core nodes (%d lookups)\n"
-          r.Npm_solve.nodes r.Npm_solve.lookups;
-        Printf.printf "solve %.2fs\n" (t2 -. t0);
-        0
-  end
+  | Ok r ->
+      Npm.Print.answer ~full:tree ~elapsed:(Unix.gettimeofday () -. t0) ar r;
+      0
+
+let npm_run debug order cache offline tree omit nodev npmv query =
+  let t0 = Unix.gettimeofday () in
+  let ar = Npm.Archive.create ?node:nodev ?npm:npmv ~cache ~offline () in
+  try
+    match Npm.Query.root ar query with
+    | Error e ->
+        prerr_endline e;
+        2
+    | Ok root -> npm_answer debug order omit tree t0 ar root
+  with Npm.Archive.Fetch_failed e ->
+    Printf.eprintf "error: %s\n" e;
+    3
 
 let npm_cmd =
   let cache =
@@ -498,16 +422,28 @@ let npm_cmd =
   let tree =
     Arg.(value & flag & info [ "tree" ] ~doc:"Print the node_modules nesting.")
   in
-  (* optionalDependencies are installed by default, as npm does; the flag
-     spells the same opt-out npm does, and only the class this frontend
-     distinguishes is recognised. *)
+  let order =
+    Arg.(
+      value
+      & opt (enum [ ("tool", Npm.Solve.Tool); ("pubgrub", Npm.Solve.Pubgrub) ])
+          Npm.Solve.Tool
+      & info [ "order" ] ~docv:"ORDER"
+          ~doc:
+            "Which order decides: $(b,tool) replays npm's, $(b,pubgrub) \
+             leaves PubGrub's own.")
+  in
+  (* npm's flag also takes peer, which is refused rather than ignored:
+     nothing here leaves peers out of an answer *)
   let omit =
     Arg.(
-      value & opt_all string []
+      value
+      & opt_all (enum [ ("dev", `Dev); ("optional", `Optional) ]) []
       & info [ "omit" ] ~docv:"TYPE"
           ~doc:
-            "Omit a dependency class; $(b,optional) is the class \
-             distinguished here.")
+            "Omit a dependency class, $(b,dev) or $(b,optional). dev \
+             dependencies are still resolved, as npm resolves them, and \
+             only what they alone reach is left out; optional ones are \
+             dropped before solving.")
   in
   (* npm-pick-manifest's engines preference, which needs a host to rank
      against -- npm reads its own and node's, this asks for them *)
@@ -540,10 +476,10 @@ let npm_cmd =
              key@npm:name@range); with no path, the project is empty.")
   in
   Cmd.v
-    (Cmd.info "npm" ~doc:"Solve against the npm registry.")
+    (Cmd.info "npm" ~exits:npm_exits ~doc:"Solve against the npm registry.")
     Term.(
-      const npm_run $ debug_arg $ cache $ offline $ tree $ omit $ nodev $ npmv
-      $ query)
+      const npm_run $ debug_arg $ order $ cache $ offline $ tree $ omit $ nodev
+      $ npmv $ query)
 
 let () =
   let doc = "Solve dependencies through the verified package calculus." in

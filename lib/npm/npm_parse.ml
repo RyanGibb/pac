@@ -58,7 +58,6 @@ type packument = {
 }
 
 let rejected = ref 0
-let optional_count = ref 0
 let reject () = incr rejected
 
 (* Yojson's [member] raises on a non-object; a registry manifest may omit
@@ -119,39 +118,26 @@ let is_star rg =
   rg = "*" || rg = ""
 
 let dep_of ~dev ~optional (key, spec) : dep option =
-  match spec with
-  | `String spec -> (
-      match split_alias spec with
-      | Some (target, rg) ->
-          if unresolvable rg then (
-            reject ();
-            None)
-          else
-            Some
-              {
-                d_dir = key;
-                d_target = target;
-                d_range = Npm_version.parse_range rg;
-                d_dev = dev;
-                d_optional = optional;
-                d_star = is_star rg;
-                d_tag = tag_of rg;
-              }
-      | None ->
-          if unresolvable spec then (
-            reject ();
-            None)
-          else
-            Some
-              {
-                d_dir = key;
-                d_target = key;
-                d_range = Npm_version.parse_range spec;
-                d_dev = dev;
-                d_optional = optional;
-                d_star = is_star spec;
-                d_tag = tag_of spec;
-              })
+  let target, rg =
+    match spec with
+    | `String spec -> (
+        match split_alias spec with
+        | Some (target, rg) -> (target, Some rg)
+        | None -> (key, Some spec))
+    | _ -> (key, None)
+  in
+  match rg with
+  | Some rg when not (unresolvable rg) ->
+      Some
+        {
+          d_dir = key;
+          d_target = target;
+          d_range = Npm_version.parse_range rg;
+          d_dev = dev;
+          d_optional = optional;
+          d_star = is_star rg;
+          d_tag = tag_of rg;
+        }
   | _ ->
       reject ();
       None
@@ -183,7 +169,7 @@ let peer_of (meta : (string * Yojson.Safe.t) list) (key, spec) : peer option =
 
 (* npm reads overrides from the root project's package.json; only the
    flat "name": "range" form is a static override, so a nested object -- which
-   is indexed by the parent chain -- is counted and dropped.  A value of *
+   is keyed by the parent chain -- is counted and dropped.  A value of *
    overrides nothing: an edge takes its range from an override only when
    the value is not * (arborist edge.js, spec), and OverrideSet reads an
    empty value as *. *)
@@ -235,7 +221,6 @@ let ver_of ~(root : bool) (vers : string) (j : Yojson.Safe.t) : ver option =
              (assoc_of (member "peerDependencies" j)))
       in
       let opts = deps_of ~dev:false ~optional:true "optionalDependencies" in
-      optional_count := !optional_count + List.length opts;
       let optKeys = List.map (fun d -> d.d_dir) opts in
       let dep = is_deprecated (member "deprecated" j) in
       Some
@@ -268,7 +253,7 @@ let ver_of ~(root : bool) (vers : string) (j : Yojson.Safe.t) : ver option =
       reject ();
       None
 
-let of_json ~(root : bool) (j : Yojson.Safe.t) : packument =
+let of_json (j : Yojson.Safe.t) : packument =
   let latest =
     match member "latest" (member "dist-tags" j) with
     | `String v -> Some v
@@ -281,17 +266,17 @@ let of_json ~(root : bool) (j : Yojson.Safe.t) : packument =
   in
   let vers =
     List.filter_map
-      (fun (v, m) -> ver_of ~root v m)
+      (fun (v, m) -> ver_of ~root:false v m)
       (assoc_of (member "versions" j))
   in
   { pk_latest = latest; pk_tags = tags; pk_vers = vers }
 
-let load ~(root : bool) (path : string) : packument option =
+let load (path : string) : packument option =
   match Yojson.Safe.from_file path with
-  | exception _ ->
+  | exception (Yojson.Json_error _ | Sys_error _) ->
       reject ();
       None
-  | j -> Some (of_json ~root j)
+  | j -> Some (of_json j)
 
 (* The query is a root package: a project's package.json with the
    arguments of `npm install` added to it.  An argument is read as

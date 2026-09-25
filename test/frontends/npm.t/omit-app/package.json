@@ -1,0 +1,11 @@
+{
+  "name": "omit-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "taker": "^1"
+  },
+  "devDependencies": {
+    "holder": "^1",
+    "host": "^1"
+  }
+}

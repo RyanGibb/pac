@@ -6,13 +6,13 @@
 
 (library
  (name npm_solve)
- (modules npm_solve)
+ (modules encoding archive query lookup pick order solve print npm_solve)
  ; dune's warnings, reporting rather than failing: a warning here is a
  ; note to the author, and only the extraction this links against needs
  ; them off wholesale.
  (flags
   (:standard -warn-error -a))
- (libraries npm_frontend pac pubgrub unix))
+ (libraries npm_frontend pac pubgrub unix yojson))
 
 (test
  (name test_npm_version)

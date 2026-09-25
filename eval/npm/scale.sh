@@ -6,7 +6,8 @@
 # is then copied into repos/npm by hand; a miss is then only a name the
 # registry itself refuses.
 # usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]
-#        P=<jobs> TIMEOUT=<s> PORT=<shim> NORM=<edges.py flag> FILL=1
+#        MODES="default order=pubgrub" P=<jobs> TIMEOUT=<s> PORT=<shim>
+#        NORM=<edges.py flag> FILL=1
 S="$(cd "$(dirname "$0")" && pwd)"
 . "$S/../scale-lib.sh"
 export PORT=${PORT:-8899} NORM=${NORM---peer-parent}
@@ -20,13 +21,14 @@ prepare() {
   [ -n "${FILL:-}" ] || snapshot npm
   bash "$S/setup.sh" "$run" > "$run/setup.log" 2>&1 || { cat "$run/setup.log" >&2; return 1; }
   # pac fetches a missing packument with curl; this one records the name and
-  # fails, or under FILL fetches it through the shim and records only a refusal
+  # answers 404, or under FILL fetches it through the shim and records only
+  # a refusal
   mkdir -p "$run/bin" "$run/work"
   if [ -n "${FILL:-}" ]; then
-    printf '#!/bin/sh\nu=; o=\nwhile [ $# -gt 0 ]; do case $1 in -o) o=$2; shift;; https://*) u=$1;; esac; shift; done\n%s -fsS "http://127.0.0.1:%s/${u##*/}" -o "$o" && exit 0\necho "${u##*/}" >> "$PAC_MISS"; exit 22\n' \
+    printf '#!/bin/sh\nu=; o=\nwhile [ $# -gt 0 ]; do case $1 in -o) o=$2; shift;; https://*) u=$1;; esac; shift; done\n%s -fsS "http://127.0.0.1:%s/${u##*/}" -o "$o" && exit 0\necho "${u##*/}" >> "$PAC_MISS"; printf 404; exit 22\n' \
       "$(command -v curl)" "$PORT" > "$run/bin/curl"
   else
-    printf '#!/bin/sh\nfor a; do case $a in https://*) echo "${a##*/}" >> "$PAC_MISS";; esac; done\nexit 22\n' \
+    printf '#!/bin/sh\nfor a; do case $a in https://*) echo "${a##*/}" >> "$PAC_MISS";; esac; done\nprintf 404; exit 22\n' \
       > "$run/bin/curl"
   fi
   # the shim fences the registry and nothing else, and npm clones a git
@@ -62,9 +64,34 @@ ask() {  # <project dir>
 npmc() { npm_run "$@"; }
 . "$S/accepts.sh"
 
+# pac's answer in one mode, under the stem <p>; the default mode keeps the
+# query's own stem, where pin.sh and triage.py look
+ask_pac() {  # <key> <mode> <p> <query words...>
+  local k=$1 m=$2 p=$3 pac corr=- valid=- oo=- to=- t0 wall nodes=- edges=- n
+  shift 3
+  t0=$EPOCHREALTIME
+  PATH=$run/bin:$PATH PAC_MISS=$o.pacmiss timeout "$TIMEOUT" "$run/pac.exe" npm $(flag "$m") \
+    --cache "$run/cache" --tree --node-version "$NODEV" --npm-version "$NPMV" "$@" > "$p.out" 2>&1
+  pac=$(pac_status $? "$p.out" '^node_modules (')
+  wall=$(since "$t0")
+  if [ "$pac" = ok ] && [ "$tool" = ok ]; then
+    n=$(python3 "$S/edges.py" "$name" "$o.theirs" "$p.out" "$p" $NORM | sed 's/.*#//')
+    oo=$(wc -l < "$p.nodes.oursonly") to=$(wc -l < "$p.nodes.npmonly")
+    nodes=${n%,*,*,*} edges=${n#*,*,*,}
+    echo "$n" | awk -F, '{exit !($1 == $2 && $2 == $3 && $4 == $5 && $5 == $6)}' && corr=exact || corr=diff
+    [ -s "$p.edges.npmonly" ] && python3 "$S/verdict.py" "$run" "$name" "$p" "$w/lock/package.json" > /dev/null
+  fi
+  if [ "$pac" = ok ]; then
+    if python3 "$S/mklock.py" "$run/cache" "$p.out" "$w/ci/package-lock.json" \
+         --root-manifest "$w/ci/package.json" > "$p.mklock" 2>&1; then
+      accepts "$w/ci" "$p" && valid=VALID || valid=INVALID
+    else valid=ERR; fi
+  fi
+  echo "query=$k mode=$m pac=$pac tool=$tool corr=$corr valid=$valid oo=$oo to=$to wall=$wall twall=$twall closed=@closed@ nodes=$nodes edges=$edges"
+}
+
 one() {
-  local o=$run/out/$1 w=$run/work/$1 name pac tool corr=- valid=- oo=- to=- t0 wall
-  local nodes=- edges=- closed n q
+  local o=$run/out/$1 w=$run/work/$1 name closed q m p lines=
   set -f; q=($2); set +f
   # roots.txt pins one version per name, so a one-spec query's recorded
   # lock is named for the name alone
@@ -73,25 +100,11 @@ one() {
   rm -f "$o.pacmiss" "$o.gitmiss" "$o.ci" "$o.plo"
   node "$S/root.js" "$run/cache" "${q[@]}" > "$w/lock/package.json" 2> "$o.root" || : > "$w/lock/package.json"
   cp "$w/lock/package.json" "$w/ci/package.json"
-  t0=$EPOCHREALTIME
-  PATH=$run/bin:$PATH PAC_MISS=$o.pacmiss timeout "$TIMEOUT" "$run/pac.exe" npm --cache "$run/cache" \
-    --tree --node-version "$NODEV" --npm-version "$NPMV" "${q[@]}" > "$o.out" 2>&1
-  pac=$(pac_status $? "$o.out" '^node_modules (')
-  wall=$(since "$t0")
   answer "$S/baseline/lock-${name//\//__}" json ask "$w/lock"
-  if [ "$pac" = ok ] && [ "$tool" = ok ]; then
-    n=$(python3 "$S/edges.py" "$name" "$o.theirs" "$o.out" "$o" $NORM | sed 's/.*#//')
-    oo=$(wc -l < "$o.nodes.oursonly") to=$(wc -l < "$o.nodes.npmonly")
-    nodes=${n%,*,*,*} edges=${n#*,*,*,}
-    echo "$n" | awk -F, '{exit !($1 == $2 && $2 == $3 && $4 == $5 && $5 == $6)}' && corr=exact || corr=diff
-    [ -s "$o.edges.npmonly" ] && python3 "$S/verdict.py" "$run" "$name" "$o" "$w/lock/package.json" > /dev/null
-  fi
-  if [ "$pac" = ok ]; then
-    if python3 "$S/mklock.py" "$run/cache" "$o.out" "$w/ci/package-lock.json" \
-         --root-manifest "$w/ci/package.json" > "$o.mklock" 2>&1; then
-      accepts "$w/ci" "$o" && valid=VALID || valid=INVALID
-    else valid=ERR; fi
-  fi
+  for m in $MODES; do
+    p=$o; [ "$m" = default ] || p=$o.${m//=/-}
+    lines+=$(ask_pac "$1" "$m" "$p" "${q[@]}")$'\n'
+  done
   # a package npm resolved from anywhere but the registry came from outside
   # the snapshot, however it got past the fence, so it is a miss too
   { cat "$o.pacmiss" "$o.gitmiss" 2>/dev/null
@@ -100,7 +113,7 @@ one() {
   } | sed 's/%2[Ff]/\//g' | sort -u |
     grep -vxF -f <(sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^$/d' "$S/tolerated-misses") > "$o.miss"
   [ -s "$o.miss" ] && closed=no || closed=yes
-  echo "query=$1 mode=default pac=$pac tool=$tool corr=$corr valid=$valid oo=$oo to=$to wall=$wall twall=$twall closed=$closed nodes=$nodes edges=$edges"
+  printf '%s' "${lines//@closed@/$closed}"
 }
 
 totals() {
