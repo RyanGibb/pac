@@ -2,7 +2,7 @@
  (name opam_frontend)
  (wrapped false)
  (modules opam_version opam_parse)
- (libraries opam-file-format))
+ (libraries opam-file-format version))
 
 (library
  (name opam_solve)

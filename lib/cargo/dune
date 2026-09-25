@@ -2,7 +2,7 @@
  (name cargo_frontend)
  (wrapped false)
  (modules cargo_version cargo_parse cargo_toml cargo_query)
- (libraries yojson))
+ (libraries version yojson))
 
 ; wrapped, so that Order is Cargo_solve's own and not the other drivers'
 (library

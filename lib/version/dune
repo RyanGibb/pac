@@ -1,0 +1,13 @@
+(library
+ (name version)
+ (modules semver debian))
+
+(test
+ (name test_semver)
+ (modules test_semver)
+ (libraries cargo_frontend npm_frontend))
+
+(test
+ (name test_debian)
+ (modules test_debian)
+ (libraries version))

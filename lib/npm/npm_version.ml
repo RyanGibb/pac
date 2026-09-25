@@ -1,172 +1,25 @@
-(* SemVer 2.0.0 precedence and npm's range grammar, implemented from the
-   specifications.  parse_range only *parses*: evaluation against the real
-   version set is the extracted calculus's job.  The [holds] mirror
-   at the bottom exists so the grammar can be tested from OCaml; its
-   [holds_pre] also decides engines in npm_solve, and that use is
-   trusted.  Trusted (TCB). *)
+(* npm's range grammar over node-semver's loose reading of a version
+   (lib/version/semver.ml), implemented from the specifications.
+   parse_range only *parses*: evaluation against the real version set is
+   the extracted calculus's job.  The [holds] mirror at the bottom exists
+   so the grammar can be tested from OCaml; its [holds_pre] also decides
+   engines in npm_solve, and that use is trusted.  Trusted (TCB). *)
 
-let is_digit c = c >= '0' && c <= '9'
+module V = Version.Semver
 
-type t = { major : int; minor : int; patch : int; pre : string list }
-
-(* leading zeros carry no value; a component over eighteen digits, past
-   the MAX_SAFE_INTEGER semver refuses, saturates to max_int rather than
-   overflowing int_of_string *)
-let strip0 s =
-  let n = String.length s in
-  let i = ref 0 in
-  while !i < n - 1 && s.[!i] = '0' do
-    incr i
-  done;
-  String.sub s !i (n - !i)
-
-let int_of_digits s =
-  let s = strip0 s in
-  if s = "" then 0
-  else if String.length s > 18 then max_int
-  else int_of_string s
-
-let split_on c s = String.split_on_char c s
-
-(* npm parses versions and ranges with semver's loose flag, whose grammar
-   makes the hyphen before a prerelease optional: 2.0.14rc1 is 2.0.14-rc1.
-   Only after a full major.minor.patch, and only when a letter follows the
-   patch digits, so 1.2.x and 1.2.3.4 keep their readings. *)
-let split_pre (s : string) : string * string =
-  match String.index_opt s '-' with
-  | Some i -> (String.sub s 0 i, String.sub s (i + 1) (String.length s - i - 1))
-  | None ->
-      let n = String.length s in
-      let digits i =
-        let j = ref i in
-        while !j < n && is_digit s.[!j] do
-          incr j
-        done;
-        if !j > i then Some !j else None
-      in
-      let dot i = if i < n && s.[i] = '.' then Some (i + 1) else None in
-      let ( >>= ) = Option.bind in
-      let letter c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') in
-      (match digits 0 >>= dot >>= digits >>= dot >>= digits with
-      | Some i when i < n && letter s.[i] ->
-          (String.sub s 0 i, String.sub s i (n - i))
-      | _ -> (s, ""))
-
-let parse (s : string) : t =
-  let s =
-    match String.index_opt s '+' with Some i -> String.sub s 0 i | None -> s
-  in
-  let core, pre = split_pre s in
-  let num s =
-    let n = String.length s in
-    let j = ref 0 in
-    while !j < n && is_digit s.[!j] do
-      incr j
-    done;
-    int_of_digits (String.sub s 0 !j)
-  in
-  let parts = split_on '.' core in
-  let get i = match List.nth_opt parts i with Some x -> num x | None -> 0 in
-  {
-    major = get 0;
-    minor = get 1;
-    patch = get 2;
-    pre = (if pre = "" then [] else split_on '.' pre);
-  }
-
-(* the comparator runs on every candidate at every gate, so parses are
-   shared *)
-let memo : (string, t) Hashtbl.t = Hashtbl.create 4096
-
-let parse_memo (s : string) : t =
-  match Hashtbl.find_opt memo s with
-  | Some p -> p
-  | None ->
-      let p = parse s in
-      Hashtbl.replace memo s p;
-      p
-
-let is_num s = s <> "" && String.for_all is_digit s
-
-let cmp_id a b =
-  match (is_num a, is_num b) with
-  | true, true ->
-      let a = strip0 a and b = strip0 b in
-      let c = compare (String.length a) (String.length b) in
-      if c <> 0 then c else String.compare a b
-  | true, false -> -1
-  | false, true -> 1
-  | false, false -> String.compare a b
-
-let rec cmp_ids a b =
-  match (a, b) with
-  | [], [] -> 0
-  | [], _ -> -1
-  | _, [] -> 1
-  | x :: xs, y :: ys ->
-      let c = cmp_id x y in
-      if c <> 0 then c else cmp_ids xs ys
-
-let compare (a : string) (b : string) : int =
-  if a == b || String.equal a b then 0
-  else
-    let x = parse_memo a and y = parse_memo b in
-    let c = compare x.major y.major in
-    if c <> 0 then c
-    else
-      let c = compare x.minor y.minor in
-      if c <> 0 then c
-      else
-        let c = compare x.patch y.patch in
-        if c <> 0 then c
-        else
-          match (x.pre, y.pre) with
-          | [], [] -> 0
-          | [], _ -> 1
-          | _, [] -> -1
-          | p, q -> cmp_ids p q
-
-let is_prerelease v = (parse_memo v).pre <> []
-
-(* the release core a prerelease belongs to: node-semver admits a
-   prerelease candidate only inside a comparator set that names one at
-   the same core *)
-let same_core a b =
-  let x = parse_memo a and y = parse_memo b in
-  x.major = y.major && x.minor = y.minor && x.patch = y.patch
+let compare = V.Loose.compare
+let is_prerelease = V.Loose.is_prerelease
+let same_core = V.Loose.same_core
 
 type op = Ge | Gt | Le | Lt | Eq | Ne
 type comparator = Any | Cmp of op * string
 type comp_set = comparator list (* whitespace is conjunction *)
 type range = comp_set list (* || is disjunction *)
-type comp = Num of int | Star | Absent
+type comp = V.comp = Num of int | Star | Absent
 
-let comp_of = function
-  | "" -> Absent
-  | "*" | "x" | "X" -> Star
-  | s ->
-      let n = String.length s in
-      let j = ref 0 in
-      while !j < n && is_digit s.[!j] do
-        incr j
-      done;
-      if !j = 0 then Star else Num (int_of_digits (String.sub s 0 !j))
-
-let vstr ?(pre = "") maj min pat =
-  Printf.sprintf "%d.%d.%d%s" maj min pat (if pre = "" then "" else "-" ^ pre)
-
-let parse_spec (s : string) =
-  let s =
-    match String.index_opt s '+' with Some i -> String.sub s 0 i | None -> s
-  in
-  let core, pre = split_pre s in
-  let parts = split_on '.' core in
-  let get i =
-    match List.nth_opt parts i with Some x -> comp_of x | None -> Absent
-  in
-  (get 0, get 1, get 2, pre)
-
-let num_or d = function Num n -> n | Star | Absent -> d
+let vstr = V.vstr
+let parse_spec = V.Loose.parse_partial
+let num_or = V.num_or
 
 (* [z] and [u] are the prerelease semver gives a bound it derives, lower
    and upper: "0" under includePrerelease, where a prerelease is ordered
@@ -358,11 +211,8 @@ let comp_match ct v =
       | Ne -> s <> 0)
 
 let cs_admits cs v =
-  (not (is_prerelease v))
-  || List.exists
-       (function
-         | Any -> false | Cmp (_, c) -> is_prerelease c && same_core v c)
-       cs
+  V.Loose.admits v
+    (List.filter_map (function Any -> None | Cmp (_, c) -> Some c) cs)
 
 let cs_holds cs v =
   List.for_all (fun ct -> comp_match ct v) cs && cs_admits cs v

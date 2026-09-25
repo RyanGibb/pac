@@ -1,197 +1,30 @@
-(* SemVer 2.0.0 precedence and Cargo's requirement syntax, implemented
-   from the specifications.  Trusted (TCB). *)
+(* Cargo's requirement syntax over the semver crate's strict reading of
+   a version (lib/version/semver.ml), implemented from the
+   specifications.  Trusted (TCB). *)
 
-let is_digit c = c >= '0' && c <= '9'
+module V = Version.Semver
 
-type t = { major : int; minor : int; patch : int; pre : string list }
+type t = V.t = {
+  major : int;
+  minor : int;
+  patch : int;
+  pre : string list;
+  build : string list;
+}
 
-(* leading zeros carry no value, and a run past 18 digits, which a 63-bit
-   int cannot hold, is saturated rather than overflowing int_of_string *)
-let strip0 s =
-  let n = String.length s in
-  let i = ref 0 in
-  while !i < n - 1 && s.[!i] = '0' do
-    incr i
-  done;
-  String.sub s !i (n - !i)
-
-let int_of_digits s =
-  let s = strip0 s in
-  if s = "" then 0 else if String.length s > 18 then max_int else int_of_string s
-
-let split_on c s = String.split_on_char c s
-
-let parse_fresh (s : string) : t =
-  let s =
-    match String.index_opt s '+' with Some i -> String.sub s 0 i | None -> s
-  in
-  let core, pre =
-    match String.index_opt s '-' with
-    | Some i ->
-        (String.sub s 0 i, String.sub s (i + 1) (String.length s - i - 1))
-    | None -> (s, "")
-  in
-  let num s =
-    let n = String.length s in
-    let j = ref 0 in
-    while !j < n && is_digit s.[!j] do
-      incr j
-    done;
-    int_of_digits (String.sub s 0 !j)
-  in
-  let parts = split_on '.' core in
-  let get i = match List.nth_opt parts i with Some x -> num x | None -> 0 in
-  {
-    major = get 0;
-    minor = get 1;
-    patch = get 2;
-    pre = (if pre = "" then [] else split_on '.' pre);
-  }
-
-(* compare sits under every range operation the solver makes, and parsing
-   afresh there was most of a large solve's time; a run meets a few
-   thousand distinct version strings (about 3,400 at most), though a large
-   query loads tens of thousands of versions *)
-let parsed : (string, t) Hashtbl.t = Hashtbl.create 65536
-
-let parse (s : string) : t =
-  match Hashtbl.find_opt parsed s with
-  | Some p -> p
-  | None ->
-      let p = parse_fresh s in
-      Hashtbl.add parsed s p;
-      p
-
-let is_num s = s <> "" && String.for_all is_digit s
-
-let cmp_id a b =
-  match (is_num a, is_num b) with
-  | true, true ->
-      let a = strip0 a and b = strip0 b in
-      let c = compare (String.length a) (String.length b) in
-      if c <> 0 then c else String.compare a b
-  | true, false -> -1
-  | false, true -> 1
-  | false, false -> String.compare a b
-
-let rec cmp_ids a b =
-  match (a, b) with
-  | [], [] -> 0
-  | [], _ -> -1
-  | _, [] -> 1
-  | x :: xs, y :: ys ->
-      let c = cmp_id x y in
-      if c <> 0 then c else cmp_ids xs ys
-
-let compare_parsed (a : string) (b : string) : int =
-  let x = parse a and y = parse b in
-  let c = compare x.major y.major in
-  if c <> 0 then c
-  else
-    let c = compare x.minor y.minor in
-    if c <> 0 then c
-    else
-      let c = compare x.patch y.patch in
-      if c <> 0 then c
-      else
-        match (x.pre, y.pre) with
-        | [], [] -> 0
-        | [], _ -> 1
-        | _, [] -> -1
-        | p, q -> cmp_ids p q
-
-(* The release cores are compared off the strings themselves, a field at a
-   time as parse reads them and no further than the first that differs:
-   compare runs under every range operation the solver makes, and even a
-   table of parsed versions costs a hash of the string there.  Only equal
-   cores leave the pre-release to decide. *)
-
-(* parse's num of the part at !i, leaving !i at the next part, or at the
-   end once the core has ended *)
-let field s n i =
-  let j = ref !i in
-  while !j < n && s.[!j] = '0' do
-    incr j
-  done;
-  let v = ref 0 and d = ref 0 in
-  while !j < n && is_digit s.[!j] do
-    if !d < 18 then v := (!v * 10) + (Char.code s.[!j] - 48);
-    incr d;
-    incr j
-  done;
-  while !j < n && s.[!j] <> '.' && s.[!j] <> '-' && s.[!j] <> '+' do
-    incr j
-  done;
-  i := if !j < n && s.[!j] = '.' then !j + 1 else n;
-  if !d > 18 then max_int else !v
-
-(* no '-' ahead of the build metadata, so no pre-release *)
-let plain s =
-  let n = String.length s in
-  let rec go i =
-    i = n || match s.[i] with '+' -> true | '-' -> false | _ -> go (i + 1)
-  in
-  go 0
-
-let compare (a : string) (b : string) : int =
-  let na = String.length a and nb = String.length b in
-  let ia = ref 0 and ib = ref 0 in
-  let c = Int.compare (field a na ia) (field b nb ib) in
-  if c <> 0 then c
-  else
-    let c = Int.compare (field a na ia) (field b nb ib) in
-    if c <> 0 then c
-    else
-      let c = Int.compare (field a na ia) (field b nb ib) in
-      if c <> 0 then c
-      else if plain a && plain b then 0
-      else compare_parsed a b
-
-let is_prerelease v = (parse v).pre <> []
-
-(* the release core a pre-release belongs to: a requirement admits a
-   pre-release candidate only when one of its own comparators names a
-   pre-release at the same core, which is Semver.csAdmits in the
-   calculus and pre_is_compatible in the semver crate *)
-let same_core a b =
-  let x = parse a and y = parse b in
-  x.major = y.major && x.minor = y.minor && x.patch = y.patch
+let parse = V.Strict.parse
+let compare = V.Strict.compare
+let compare_parsed = V.Strict.compare_parsed
+let is_prerelease = V.Strict.is_prerelease
+let same_core = V.Strict.same_core
 
 type op = Ge | Gt | Le | Lt | Eq
 type req = (op * string) list (* a conjunction; [] is any version *)
-type comp = Num of int | Star | Absent
+type comp = V.comp = Num of int | Star | Absent
 
-let comp_of = function
-  | "" -> Absent
-  | "*" | "x" | "X" -> Star
-  | s ->
-      let n = String.length s in
-      let j = ref 0 in
-      while !j < n && is_digit s.[!j] do
-        incr j
-      done;
-      if !j = 0 then Star else Num (int_of_digits (String.sub s 0 !j))
-
-let vstr ?(pre = "") maj min pat =
-  Printf.sprintf "%d.%d.%d%s" maj min pat (if pre = "" then "" else "-" ^ pre)
-
-let parse_spec (s : string) =
-  let s =
-    match String.index_opt s '+' with Some i -> String.sub s 0 i | None -> s
-  in
-  let core, pre =
-    match String.index_opt s '-' with
-    | Some i ->
-        (String.sub s 0 i, String.sub s (i + 1) (String.length s - i - 1))
-    | None -> (s, "")
-  in
-  let parts = split_on '.' core in
-  let get i =
-    match List.nth_opt parts i with Some x -> comp_of x | None -> Absent
-  in
-  (get 0, get 1, get 2, pre)
-
-let num_or d = function Num n -> n | Star | Absent -> d
+let vstr = V.vstr
+let parse_spec = V.Strict.parse_partial
+let num_or = V.num_or
 
 let caret (ma, mi, pa, pre) =
   match ma with
@@ -261,6 +94,7 @@ let ineq op (ma, mi, pa, pre) =
       | Eq -> exact (ma, mi, pa, pre))
 
 let trim s = String.trim s
+let split_on c s = String.split_on_char c s
 
 let comparator (s : string) : req =
   let s = trim s in
@@ -282,9 +116,7 @@ let comparator (s : string) : req =
 
 let parse_req (s : string) : req = List.concat_map comparator (split_on ',' s)
 
-let admits (v : string) (r : req) : bool =
-  (not (is_prerelease v))
-  || List.exists (fun (_, c) -> is_prerelease c && same_core v c) r
+let admits (v : string) (r : req) : bool = V.Strict.admits v (List.map snd r)
 
 let holds (v : string) (r : req) : bool =
   List.for_all

@@ -1,6 +1,7 @@
 (library
  (name debian_frontend)
- (modules deb_version deb_packages apt_args))
+ (modules deb_version deb_packages apt_args)
+ (libraries version))
 
 (library
  (name deb_solve)

@@ -2,7 +2,7 @@
  (name npm_frontend)
  (wrapped false)
  (modules npm_version npm_parse)
- (libraries yojson))
+ (libraries version yojson))
 
 (library
  (name npm_solve)
