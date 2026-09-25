@@ -1,0 +1,13 @@
+[package]
+name = "b"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+d = { version = "1", features = ["a"] }
+
+[dev-dependencies]
+a = "1"
+
+[patch.crates-io]
+b = { path = "." }

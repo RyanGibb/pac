@@ -4,8 +4,14 @@ cargo (against the same crates.io-index checkout) and dump both sides'
 raw facts as JSON for later comparison.  Does not itself judge anything --
 scale.py does.
 
+A query names a crate, and the question is the lock of its newest
+release's own published manifest as the one workspace member.  That
+manifest is written out from the index entry (manifest.jq), and both sides
+are handed the same file: pac as its root Cargo.toml, cargo as the
+workspace it is run in.
+
 Both sides are asked the lockfile question, and asked it the same way.
-Pac's rootFeats defaults to every feature the queried crate declares;
+Pac's rootFeats defaults to every feature the root declares;
 `cargo generate-lockfile` resolves the one workspace member under
 CliFeatures::new_all(true) with HasDevUnits::Yes, which is that same
 instantiation.  Neither side is given a feature selection, because a
@@ -91,11 +97,12 @@ def check_toolchain():
                  f" nix/flake.lock pins them")
 
 
-def run_pac(crate, rustv=None):
-    cmd = [PAC, "cargo", INDEX, crate]
-    if rustv:
-        cmd += ["--rust-version", rustv]
-    cmd += ["--print-parents"]
+def run_pac(manifest):
+    # the installed rustc, which cargo falls back to when the root declares
+    # no rust-version and which pac cannot read off the toolchain; a
+    # declared one pac reads off the manifest, as cargo does
+    cmd = [PAC, "cargo", INDEX, manifest, "--rust-version", installed_rustc(),
+           "--print-parents"]
     t0 = time.time()
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=240)
@@ -160,17 +167,47 @@ def run_pac(crate, rustv=None):
     }
 
 
-def self_depended(pac, root):
-    """Whether our answer has the queried crate as a dependency of something
-    other than itself, at the root's own version.  Four queries do:
-    serde_json, tokio, actix-web and itoa each dev-depend on a crate that
-    depends on them.  Cargo identifies a package by source as well as by
-    name and version, so for it the path root and the registry copy are
-    two packages; our model has one node per (name, version) and says
-    they are one.  build_manifest passes that difference to cargo as a
-    [patch], below."""
-    return any((tn, tv) == root and (dn, dv) != root
-               for dn, dv, _alias, tn, tv in pac["edges"])
+def newest(crate):
+    """The release the query names: the greatest version not yanked, first
+    of equals, under cargo's order."""
+    from scale import vkey
+    path = crate_path(crate)
+    rows = []
+    if os.path.exists(path):
+        for l in open(path, encoding="utf-8"):
+            try:
+                j = json.loads(l)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(j.get("vers"), str) and not j.get("yanked"):
+                rows.append(j)
+    return max(rows, key=lambda j: vkey(j["vers"]), default=None)
+
+
+def ask_pac(crate):
+    """pac's answer for the crate's published manifest, with the root it
+    names and whether the manifest needed the self-patch.  Four regression
+    queries (serde_json, tokio, actix-web and itoa) dev-depend on a crate
+    that depends on them.  Cargo identifies a package by source as well as
+    by name and version, so for it the path root and the registry copy are
+    two packages; our model has one node per (name, version), and pac
+    refuses such a manifest unless a [patch] says the two are one.  So the
+    manifest is patched exactly when pac's answer merges them, and cargo is
+    handed the same manifest."""
+    top = newest(crate)
+    if top is None:
+        return {"ok": False, "returncode": None, "stdout": "",
+                "stderr": "no release left unyanked", "wall": 0}, None, None, False
+    root = (top["name"], top["vers"])
+    manifest = f"{WORK}/{crate}/Cargo.toml"
+    patched = False
+    build_manifest(*root, os.path.dirname(manifest), patched)
+    pac = run_pac(manifest)
+    if pac.get("returncode") == 2 and "through the registry" in pac["stderr"]:
+        patched = True
+        build_manifest(*root, os.path.dirname(manifest), patched)
+        pac = run_pac(manifest)
+    return pac, root, top.get("rust_version") or installed_rustc(), patched
 
 
 def build_manifest(crate, version, workdir, patch_self=False):
@@ -186,15 +223,14 @@ def build_manifest(crate, version, workdir, patch_self=False):
         f.write(p.stdout)
         if patch_self:
             # The queried crate reached as a dependency is the same package
-            # as the root, which is what our node identity says and what
-            # cargo would otherwise deny: a [patch] is exactly how cargo
-            # is told that a registry name resolves to a path package it
-            # already has.  Nothing is relaxed by it -- every requirement
-            # on that name is still checked against this package, and its
-            # own dependency rows are still resolved -- and it is written
-            # only for the queries where our answer actually merges the
-            # two, because an unused patch would land in the lock as a
-            # [[patch.unused]] section of its own.
+            # as the root, which is what our node identity says: a [patch]
+            # is exactly how cargo is told that a registry name resolves to
+            # a path package it already has.  Nothing is relaxed by it --
+            # every requirement on that name is still checked against this
+            # package, and its own dependency rows are still resolved --
+            # and it is written only for the queries where our answer
+            # actually merges the two, because an unused patch would land
+            # in the lock as a [[patch.unused]] section of its own.
             f.write(f'\n[patch.crates-io]\n{crate} = {{ path = "." }}\n')
     libpath = workdir + "/src/lib.rs"
     if not os.path.exists(libpath):
@@ -294,32 +330,13 @@ def main():
     args = ap.parse_args()
     check_toolchain()
 
-    # Pass 1: let pac pick the root version (max, independent of any MSRV
-    # setting -- main.ml's default-version fold does not consult msrv_ok).
-    probe = run_pac(args.crate)
-    if not probe["ok"]:
-        result = {"crate": args.crate, "pac": probe,
-                  "cargo": None, "dropped": "pac failed on the probe run"}
-        pac_res = probe
+    pac_res, root, rustv, patched = ask_pac(args.crate)
+    if root is None:
+        result = {"crate": args.crate, "pac": pac_res,
+                  "cargo": None, "dropped": "no release left unyanked"}
     else:
-        root_name, root_version = probe["root"]
-        root_entry = index_line(root_name, root_version)
-        rustv = root_entry.get("rust_version") if root_entry else None
-
-        # Pass 2: the toolchain cargo resolves for.  Resolver v3 reads
-        # rust-version off the manifest, and when no workspace member
-        # declares one it falls back to the rustc it finds installed
-        # (ops/resolve.rs, `if rust_versions.is_empty()`).  Leaving pac's
-        # preference off in that case would hand the two sides different
-        # settings and show up as a divergence that is the harness's, so
-        # the fallback is reproduced here rather than assumed away.
-        if rustv is None:
-            rustv = installed_rustc()
-        pac_res = run_pac(args.crate, rustv=rustv)
-
         try:
-            cargo_res = run_cargo(root_name, root_version,
-                                  self_depended(pac_res, (root_name, root_version)))
+            cargo_res = run_cargo(*root, patched)
         except Exception as e:
             cargo_res = {"ok": False, "error": str(e)}
         result = {"crate": args.crate, "root_rust_version": rustv,

@@ -177,73 +177,103 @@ let opam_cmd =
       const opam_run $ debug_arg $ zi_order $ with_test $ with_doc
       $ with_dev_setup $ opam_version $ repo $ query)
 
-let cargo_run debug print_parents index goal wanted rfeats rustv =
+let cargo_run debug print_parents index manifest features rustv =
   let t0 = Unix.gettimeofday () in
   let ar = Cargo_solve.empty_archive index in
-  let vs = Cargo_solve.versions_of ar goal in
-  if vs = [] then (
-    Printf.eprintf "no resolvable versions of %s under %s\n" goal index;
-    1)
-  else begin
-    let rv =
-      match wanted with
-      | Some v -> v
+  match Cargo_query.of_manifest manifest with
+  | exception Cargo_query.Refused e ->
+      Printf.eprintf "error: %s\n" e;
+      2
+  | root -> (
+      let rfeats =
+        match
+          List.concat_map
+            (fun f ->
+              List.filter (( <> ) "")
+                (String.split_on_char ','
+                   (String.map (function ' ' | '\t' -> ',' | c -> c) f)))
+            features
+        with
+        | [] -> None
+        | fs -> Some fs
+      in
+      let v = root.Cargo_query.ver in
+      Cargo_solve.install_root ar v;
+      let rc = (v.Cargo_parse.v_name, v.Cargo_parse.v_vers) in
+      (* resolve.rs ranks against the root's rust-version, and only when it
+         declares none against the installed rustc, which --rust-version
+         names; resolvers 1 and 2 rank against nothing *)
+      let rustv =
+        if not root.Cargo_query.msrv_pref then None
+        else
+          match v.Cargo_parse.v_msrv with Some m -> Some m | None -> rustv
+      in
+      Printf.printf "root %s %s%s%s\n%!" (fst rc) (snd rc)
+        (match rfeats with
+        | None -> ""
+        | Some fs -> " with features " ^ String.concat "," fs)
+        (match rustv with None -> "" | Some t -> " for rust " ^ t);
+      let module S = Cargo_solve.Make () in
+      let r = S.solve ~debug ?rfeats ~rustv ar rc in
+      (* the crates the run parsed, known only once it is over: there is no
+         cone, so this is what the solver asked for and nothing more *)
+      let loaded () =
+        let t2 = Unix.gettimeofday () in
+        Printf.printf "loaded: %d crates, %d versions\n" ar.Cargo_solve.n_names
+          ar.Cargo_solve.n_vers;
+        if !Cargo_parse.rejected > 0 then
+          Printf.printf "parser dropped %d declarations\n"
+            !Cargo_parse.rejected;
+        Printf.printf "parse %.2fs\nsolve %.2fs\n" ar.Cargo_solve.t_parse
+          (t2 -. t0 -. ar.Cargo_solve.t_parse)
+      in
+      match r with
       | None ->
-          List.fold_left
-            (fun a b -> if Cargo_version.compare b a > 0 then b else a)
-            (List.hd vs) vs
-    in
-    let rc = (goal, rv) in
-    Printf.printf "root %s %s%s%s\n%!" goal rv
-      (match rfeats with
-      | None -> ""
-      | Some fs -> " with features " ^ String.concat "," fs)
-      (match rustv with None -> "" | Some t -> " for rust " ^ t);
-    let module S = Cargo_solve.Make () in
-    let r = S.solve ~debug ?rfeats ~rustv ar rc in
-    (* the crates the run parsed, known only once it is over: there is no
-       cone, so this is what the solver asked for and nothing more *)
-    let loaded () =
-      let t2 = Unix.gettimeofday () in
-      Printf.printf "loaded: %d crates, %d versions\n" ar.Cargo_solve.n_names
-        ar.Cargo_solve.n_vers;
-      if !Cargo_parse.rejected > 0 then
-        Printf.printf "parser dropped %d declarations\n" !Cargo_parse.rejected;
-      Printf.printf "parse %.2fs\nsolve %.2fs\n" ar.Cargo_solve.t_parse
-        (t2 -. t0 -. ar.Cargo_solve.t_parse)
-    in
-    match r with
-    | None ->
-        loaded ();
-        1
-    | Some r ->
-        Printf.printf "crates (%d):\n" (List.length r.S.crates);
-        List.iter
-          (fun (n, v) ->
-            let fs =
-              match
-                List.find_opt (fun (m, u, _) -> m = n && u = v) r.S.feats
-              with
-              | Some (_, _, fs) -> fs
-              | None -> []
-            in
-            Printf.printf "  %s %s%s\n" n v
-              (if fs = [] then "" else " [" ^ String.concat "," fs ^ "]"))
-          r.S.crates;
-        Printf.printf
-          "encoded solution: %d core nodes (%d crate versions encoded)\n"
-          r.S.nodes r.S.processed;
-        Printf.printf "parent edges: %d\n" (List.length r.S.parents);
-        if print_parents then begin
-          Printf.printf "parent-edges:\n";
+          loaded ();
+          1
+      | Some r
+        when (not root.Cargo_query.self_patch)
+             && List.exists
+                  (fun (n, u, _, t, w) -> (t, w) = rc && (n, u) <> rc)
+                  r.S.parents ->
+          (* cargo tells packages apart by source as well, so without the
+             self-patch the registry's crate at the root's name and version
+             is a second package, which one node per (name, version) cannot
+             be *)
+          loaded ();
+          Printf.eprintf
+            "error: the answer reaches %s %s through the registry, which \
+             cargo keeps apart from the root unless [patch.crates-io] maps \
+             %s to it with { path = \".\" }\n"
+            (fst rc) (snd rc) (fst rc);
+          2
+      | Some r ->
+          Printf.printf "crates (%d):\n" (List.length r.S.crates);
           List.iter
-            (fun (n, v, a, t, u) ->
-              Printf.printf "  %s %s -> %s(%s) %s\n" n v a t u)
-            r.S.parents
-        end;
-        loaded ();
-        0
-  end
+            (fun (n, v) ->
+              let fs =
+                match
+                  List.find_opt (fun (m, u, _) -> m = n && u = v) r.S.feats
+                with
+                | Some (_, _, fs) -> fs
+                | None -> []
+              in
+              Printf.printf "  %s %s%s\n" n v
+                (if fs = [] then "" else " [" ^ String.concat "," fs ^ "]"))
+            r.S.crates;
+          Printf.printf
+            "encoded solution: %d core nodes (%d crate versions encoded)\n"
+            r.S.nodes r.S.processed;
+          Printf.printf "parent edges: %d\n" (List.length r.S.parents);
+          if print_parents then begin
+            Printf.printf "parent-edges:\n";
+            List.iter
+              (fun (n, v, a, t, u) ->
+                Printf.printf "  %s %s -> %s(%s) %s\n" n v a t u)
+              r.S.parents
+          end;
+          loaded ();
+          0)
 
 let cargo_cmd =
   let index =
@@ -252,42 +282,37 @@ let cargo_cmd =
       & pos 0 (some dir) None
       & info [] ~docv:"INDEX" ~doc:"crates.io-index checkout.")
   in
-  let goal =
+  (* what cargo resolves: it has no command-line query, only the root
+     manifest of the workspace it is run in *)
+  let manifest =
     Arg.(
       required
-      & pos 1 (some string) None
-      & info [] ~docv:"CRATE" ~doc:"Crate to build.")
-  in
-  let wanted =
-    Arg.(
-      value
-      & pos 2 (some string) None
-      & info [] ~docv:"VERSION" ~doc:"Root version; defaults to the newest.")
+      & pos 1 (some file) None
+      & info [] ~docv:"CARGO_TOML" ~doc:"The root package's Cargo.toml.")
   in
   (* unset, the root gets every feature it declares, which is the
      resolution cargo writes to Cargo.lock; naming features asks instead
      for the filtered view cargo builds from that lock *)
-  let rfeats =
+  let features =
     Arg.(
-      value
-      & opt (some (list string)) None
-      & info [ "features" ] ~docv:"FEATS"
+      value & opt_all string []
+      & info [ "F"; "features" ] ~docv:"FEATURES"
           ~doc:
-            "Comma-separated features to enable on the root crate; unset, \
+            "Space or comma separated features to enable on the root; unset, \
              every feature the root declares is enabled, as when cargo \
              writes a lockfile.")
   in
-  (* resolver v3's MSRV-aware preference, which is off unless a toolchain
-     is configured -- cargo reads one from rust-version or rustc, this
-     asks for it *)
+  (* the toolchain resolver v3 falls back to when the root declares no
+     rust-version; cargo reads it off rustc, this asks for it *)
   let rustv =
     Arg.(
       value
       & opt (some string) None
       & info [ "rust-version" ] ~docv:"VERSION"
           ~doc:
-            "Toolchain version to prefer MSRV-compatible crate versions \
-             for, as resolver v3 does; unset leaves the preference off.")
+            "The installed toolchain, which resolver v3 prefers \
+             MSRV-compatible crate versions for when the root declares no \
+             rust-version; unset leaves the preference off.")
   in
   (* the decoded parent relation, one line per edge, for a correspondence
      harness to diff against cargo's own (depender, dependee) edges; off by
@@ -299,10 +324,10 @@ let cargo_cmd =
           ~doc:"Print the decoded parent relation, one edge per line.")
   in
   Cmd.v
-    (Cmd.info "cargo" ~doc:"Solve against a crates.io index.")
+    (Cmd.info "cargo" ~doc:"Solve a root Cargo.toml against a crates.io index.")
     Term.(
-      const cargo_run $ debug_arg $ print_parents $ index $ goal $ wanted
-      $ rfeats $ rustv)
+      const cargo_run $ debug_arg $ print_parents $ index $ manifest $ features
+      $ rustv)
 
 let alpine_run debug path goals =
   let t0 = Unix.gettimeofday () in

@@ -1,0 +1,15 @@
+[package]
+name = "m3"
+version = "1.0.0"
+edition = "2015"
+resolver = "3"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+
+
+[dependencies]
+  d3 = { version = "^2" }
+

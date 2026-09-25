@@ -1,0 +1,9 @@
+[package]
+name = "pp"
+version = "0.1.0"
+
+[dependencies]
+m = "1"
+
+[patch.crates-io]
+m = { path = "../m" }

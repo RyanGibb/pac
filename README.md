@@ -26,8 +26,8 @@ pac debian --native amd64 nano repos/debian/Packages
 # opam: lwt
 pac opam repos/opam-repository lwt
 
-# Cargo: serde with a feature enabled
-pac cargo repos/crates.io-index serde --features derive
+# Cargo: a root Cargo.toml, as cargo resolves one
+pac cargo repos/crates.io-index path/to/Cargo.toml
 
 # Alpine: nginx
 pac alpine repos/alpine/APKINDEX nginx

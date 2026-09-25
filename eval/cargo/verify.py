@@ -44,7 +44,7 @@ When cargo refuses, `cargo update --workspace` is run once more without
 writes is diffed against ours.  That names the packages and edges it
 changed, which is the diagnostic worth printing; it is never the verdict.
 
-The root's own version and any --rust-version are settled exactly as
+The root's manifest and pac's run over it are settled exactly as
 run_query.py settles them, by importing it, so the pac invocation being
 verified is the one the correspondence sweep measured.
 
@@ -88,29 +88,13 @@ def main():
     args = ap.parse_args()
     run_query.check_toolchain()
 
-    probe = run_query.run_pac(args.crate)
-    if not probe["ok"]:
+    pac, root, rustv, patched = run_query.ask_pac(args.crate)
+    if not pac["ok"]:
         print("%-24s PAC FAILED" % args.crate)
         return 1
-    root_name, root_version = probe["root"]
-    entry = run_query.index_line(root_name, root_version)
-    rustv = entry.get("rust_version") if entry else None
-    # The same fallback run_query.py reproduces: with no member declaring a
-    # rust-version, resolver v3 ranks against the installed rustc rather
-    # than against nothing, so the lock being verified has to be the one
-    # pac writes for that toolchain.  Verified red-then-green on
-    # rustradio-ui, whose rustradio dependency moves under it.
-    if rustv is None:
-        rustv = run_query.installed_rustc()
-    pac = run_query.run_pac(args.crate, rustv=rustv)
-    if not pac["ok"]:
-        print("%-24s PAC FAILED (msrv pass)" % args.crate)
-        return 1
 
-    root = (root_name, root_version)
     workdir = f"{run_query.WORK}/{args.crate}"
-    run_query.build_manifest(root_name, root_version, workdir,
-                            run_query.self_depended(pac, root))
+    run_query.build_manifest(*root, workdir, patched)
     lock = workdir + "/Cargo.lock"
     raw = workdir + "/pac.out"
     with open(raw, "w") as f:

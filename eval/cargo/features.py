@@ -20,15 +20,10 @@ import run_query
 
 
 def compare(crate):
-    probe = run_query.run_pac(crate)
-    if not probe["ok"]:
-        return "pac failed"
-    root = tuple(probe["root"])
-    rustv = (run_query.index_line(*root) or {}).get("rust_version") or run_query.installed_rustc()
-    pac = run_query.run_pac(crate, rustv=rustv)
+    pac, root, _rustv, patched = run_query.ask_pac(crate)
     if not pac["ok"]:
-        return "pac failed with --rust-version"
-    cargo = run_query.run_cargo(*root, run_query.self_depended(pac, root))
+        return "pac failed"
+    cargo = run_query.run_cargo(*root, patched)
     if not cargo["ok"]:
         return "cargo failed"
     # every feature, as generate-lockfile resolves, so metadata's resolve is

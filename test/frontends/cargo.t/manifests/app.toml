@@ -1,0 +1,19 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+s = "1"
+x = { version = "0.1", package = "e" }
+i = { version = "1", default-features = false, optional = true }
+
+[dev-dependencies]
+m = "1"
+
+[target.'cfg(windows)'.dependencies]
+e = "0.2"
+
+[features]
+default = []
+net = ["i/net"]

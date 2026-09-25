@@ -1,0 +1,18 @@
+[package]
+name = "t"
+version = "1.0.0"
+edition = "2015"
+resolver = "3"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+
+
+[dependencies]
+  e = { version = "0.2" }
+
+[target.'cfg(windows)'.dependencies]
+  e = { version = "0.1" }
+

@@ -1,0 +1,16 @@
+[package]
+name = "dy"
+version = "1.0.0"
+edition = "2015"
+resolver = "3"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+
+
+[dependencies]
+  sb = { version = "=2.6.1" }
+  zj = { version = "^1" }
+

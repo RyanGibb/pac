@@ -1,0 +1,15 @@
+[package]
+name = "ir"
+version = "1.0.0"
+edition = "2015"
+resolver = "3"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+
+
+[dependencies]
+  i = { version = "1", default-features = false, features = ["net"] }
+

@@ -1,0 +1,16 @@
+[package]
+name = "r"
+version = "1.0.0"
+edition = "2015"
+resolver = "3"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+
+
+[dependencies]
+  x = { version = ">=0.9" }
+  y = { version = "1" }
+

@@ -99,7 +99,8 @@ def read_rows(path):
 
 
 def newest(rows):
-    """The root pac picks: the greatest version not yanked, first of equals."""
+    """The root a query names: the greatest version not yanked, first of
+    equals."""
     return max((j for j in rows if not j.get("yanked")), key=lambda j: vkey(j["vers"]), default=None)
 
 
@@ -197,21 +198,12 @@ def one(crate, o):
     sub.__dict__.update(vars(subprocess))
     sub.run = lambda *a, **kw: subprocess.run(*a, **(dict(kw, timeout=timeout) if "timeout" in kw else kw))
     run_query.subprocess = verify.subprocess = sub
-    run_query.run_pac = functools.lru_cache(maxsize=None)(run_query.run_pac)
+    run_query.ask_pac = functools.lru_cache(maxsize=None)(run_query.ask_pac)
     with open(o + ".log", "w") as log, contextlib.redirect_stdout(log):
         sys.argv = ["run_query.py", crate, "--out", o + ".json"]
         run_query.main()
         res = json.load(open(o + ".json"))
         pac, cargo = res["pac"], res["cargo"]
-        # run_query.py asks cargo only once pac has answered its first run
-        root = re.search(r"^root (\S+) (\S+)", pac.get("stdout") or "", re.M)
-        if cargo is None and root:
-            try:
-                cargo = run_query.run_cargo(root[1], root[2], False)
-            except Exception as e:
-                cargo = {"ok": False, "error": str(e)}
-            res["cargo"] = cargo
-            json.dump(res, open(o + ".json", "w"), indent=1)
         if pac["ok"]:
             sys.argv = ["verify.py", crate, "--out", o + ".valid.json"]
             verify.main()

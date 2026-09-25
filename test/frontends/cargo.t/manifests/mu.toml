@@ -1,0 +1,17 @@
+[package]
+name = "mu"
+version = "1.0.0"
+edition = "2015"
+resolver = "3"
+rust-version = "1.70"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+
+
+[dependencies]
+  sl = { version = "=0.6.5" }
+  mt = { version = "^1" }
+

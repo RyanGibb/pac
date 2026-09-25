@@ -1,0 +1,19 @@
+[package]
+name = "dv"
+version = "1.0.0"
+edition = "2015"
+resolver = "3"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+
+
+[dependencies]
+  sb = { version = "^2" }
+  t1 = { version = "^1" }
+  t2 = { version = "^1" }
+  t3 = { version = "^1" }
+  zj = { version = ">=1.1" }
+

@@ -1,0 +1,6 @@
+[package]
+name = "pathy"
+version = "0.1.0"
+
+[dependencies]
+m = { path = "../m" }

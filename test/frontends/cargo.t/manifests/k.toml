@@ -1,0 +1,18 @@
+[package]
+name = "k"
+version = "1.0.0"
+edition = "2015"
+resolver = "3"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+
+
+[dev-dependencies]
+  m = { version = "1" }
+
+[dependencies]
+  m = { version = "1", optional = true }
+

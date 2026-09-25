@@ -1,7 +1,7 @@
 (library
  (name cargo_frontend)
  (wrapped false)
- (modules cargo_version cargo_parse)
+ (modules cargo_version cargo_parse cargo_toml cargo_query)
  (libraries yojson))
 
 (library

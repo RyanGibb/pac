@@ -166,6 +166,23 @@ let meta ar n v : P.ver option =
   ignore (load_name ar n);
   Hashtbl.find_opt ar.entry (n, v)
 
+(* the query's root package, a crate version like any other once its name
+   has been read: it takes the place of a registry version at its own
+   (name, version), which is the one node the model has there *)
+let install_root ar (v : P.ver) =
+  let n = v.P.v_name and u = v.P.v_vers in
+  let vs = List.filter (fun (w : P.ver) -> w.P.v_vers <> u) (load_name ar n) in
+  Hashtbl.replace ar.crates n (vs @ [ v ]);
+  Hashtbl.replace ar.entry (n, u) v;
+  Hashtbl.filter_map_inplace
+    (fun _ ps -> match List.filter (( <> ) (n, u)) ps with [] -> None | ps -> Some ps)
+    ar.links_idx;
+  Option.iter
+    (fun l ->
+      Hashtbl.replace ar.links_idx l
+        ((n, u) :: Option.value (Hashtbl.find_opt ar.links_idx l) ~default:[]))
+    v.P.v_links
+
 (* There is no cone pass: a crate is parsed the first time a sub-instance
    reads its name, as cargo's sparse protocol fetches it, so a run touches
    the crates the solver asks about and no others.  Because the instance is

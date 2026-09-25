@@ -1,0 +1,16 @@
+[package]
+name = "oc"
+version = "1.0.0"
+edition = "2015"
+resolver = "3"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+
+
+[dependencies]
+  zp = { version = "^0.1" }
+  ga = { version = "^0.14" }
+
