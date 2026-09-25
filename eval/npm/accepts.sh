@@ -8,12 +8,14 @@
 # install --package-lock-only runs the same repair and writes it back, so
 # the lock it leaves must name the same version at every path; that also
 # rejects a package nothing reaches.  ci stays, since nothing shows install
-# rejecting everything ci does.
+# rejecting everything ci does.  Neither asks whether an edge landed on
+# the package its manifest names, so lockname.py does.
 
 paths() { jq -r '.packages | to_entries[] | select(.key != "") | "\(.key) \(.value.version)"' "$1" | sort; }
 
 # accepts <dir> <log stem>: whether npm takes the lock in <dir> as it
-# stands; sets ci_rc, relock_rc and moved, and logs to <stem>.ci, .plo
+# stands; sets ci_rc, relock_rc, moved and named, and logs to <stem>.ci,
+# .plo, .names
 accepts() {
   npmc "$1" ci --dry-run > "$2.ci" 2>&1
   ci_rc=$?
@@ -21,5 +23,7 @@ accepts() {
   npmc "$1.plo" install --package-lock-only --ignore-scripts > "$2.plo" 2>&1
   relock_rc=$?
   moved=$(diff <(paths "$1/package-lock.json") <(paths "$1.plo/package-lock.json") | grep -c '^[<>]')
-  [ "$ci_rc" -eq 0 ] && [ "$relock_rc" -eq 0 ] && [ "$moved" -eq 0 ]
+  python3 "$(dirname "${BASH_SOURCE[0]}")/lockname.py" "$1/package-lock.json" > "$2.names" 2>&1
+  named=$?
+  [ "$ci_rc" -eq 0 ] && [ "$relock_rc" -eq 0 ] && [ "$moved" -eq 0 ] && [ "$named" -eq 0 ]
 }

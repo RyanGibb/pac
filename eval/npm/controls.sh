@@ -29,6 +29,8 @@ PKGS = {
     "z": {"1.0.0": {}},
     "q": {"1.0.0": {"peerDependencies": {"r": "^1.0.0"}}},
     "r": {"1.0.0": {}},
+    "baz": {"1.0.0": {}},
+    "d": {"1.0.0": {"dependencies": {"b": "npm:baz@^1.0.0"}}},
 }
 CASES = {
     "po-valid":   ("VALID", {"a": "^1.0.0", "c": "^1.0.0"},
@@ -52,6 +54,9 @@ CASES = {
                    {"q": "q@1.0.0", "r": "r@1.0.0", "q/node_modules/r": "r@1.0.0"}),
     "pl-noroot":  ("INVALID", {"p": "^1.0.0"},
                    {"p": "p@1.0.0", "p/node_modules/b": "b@1.0.0"}),
+    "alias-valid": ("VALID", {"d": "^1.0.0"}, {"d": "d@1.0.0", "b": "baz@1.0.0"}),
+    # the wrong package at the right version, which npm checks by version only
+    "swap":       ("INVALID", {"c": "^1.0.0"}, {"c": "c@1.0.0", "b": "baz@1.0.0"}),
     # reached by nothing
     "extra":      ("INVALID", {"b": "^1.0.0"}, {"b": "b@1.0.0", "z": "z@1.0.0"}),
 }
@@ -73,6 +78,8 @@ with open(f"{T}/cases", "w") as out:
         for path, nv in layout.items():
             n, v = nv.split("@")
             e = {"version": v, "resolved": dist(n, v)["tarball"], "integrity": dist(n, v)["integrity"]}
+            if n != path.rsplit("node_modules/", 1)[-1]:
+                e["name"] = n
             e.update(PKGS[n][v])
             pk["node_modules/" + path] = e
         json.dump({"name": "root", "version": "1.0.0", "lockfileVersion": 3,
@@ -96,8 +103,8 @@ npmc() {  # <dir> <npm args...>
 
 while read -r case want; do
   accepts "$T/work/$case" "$T/work/$case.log" && got=VALID || got=INVALID
-  printf '%-11s expect %-7s got %-7s ci=%s relock=%s moved=%s\n' \
-    "$case" "$want" "$got" "$ci_rc" "$relock_rc" "$moved"
+  printf '%-11s expect %-7s got %-7s ci=%s relock=%s moved=%s named=%s\n' \
+    "$case" "$want" "$got" "$ci_rc" "$relock_rc" "$moved" "$named"
   [ "$got" = "$want" ] || bad=1
 done < "$T/cases"
 
