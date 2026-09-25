@@ -82,26 +82,26 @@ let kind_of j =
 let dep_of (j : Yojson.Safe.t) : dep option =
   match j with
   | `Assoc _ -> (
-  match member "name" j with
-  | `String alias ->
-      let target =
-        match member "package" j with `String p -> p | _ -> alias
-      in
-      let req = match member "req" j with `String r -> r | _ -> "*" in
-      Some
-        {
-          d_alias = alias;
-          d_target = target;
-          d_req = Cargo_version.parse_req req;
-          d_feats = string_list (member "features" j);
-          d_optional = bool_def false (member "optional" j);
-          (* the index omits the key only on very old entries, where cargo's
+      match member "name" j with
+      | `String alias ->
+          let target =
+            match member "package" j with `String p -> p | _ -> alias
+          in
+          let req = match member "req" j with `String r -> r | _ -> "*" in
+          Some
+            {
+              d_alias = alias;
+              d_target = target;
+              d_req = Cargo_version.parse_req req;
+              d_feats = string_list (member "features" j);
+              d_optional = bool_def false (member "optional" j);
+              (* the index omits the key only on very old entries, where cargo's
              own default (default features on) applies *)
-          d_default = bool_def true (member "default_features" j);
-          d_kind = kind_of (member "kind" j);
-          d_cfg = (match member "target" j with `String t -> t | _ -> "");
-        }
-  | _ -> None)
+              d_default = bool_def true (member "default_features" j);
+              d_kind = kind_of (member "kind" j);
+              d_cfg = (match member "target" j with `String t -> t | _ -> "");
+            }
+      | _ -> None)
   | _ -> None
 
 (* "dep:a" activates an optional slot, "a/feat" is the strong dependency
@@ -178,15 +178,18 @@ let implicit_features (deps : dep list) (tbl : (string * fentry list) list) =
 (* build_feature_map's checks (summary.rs), under which a failing index
    entry is IndexSummary::Invalid and never a candidate.  Past ASCII,
    every character is taken for the XID one validate_feature_name wants. *)
-let feature_map_ok (deps : dep list) (tbl : (string * fentry list) list) :
-    bool =
+let feature_map_ok (deps : dep list) (tbl : (string * fentry list) list) : bool
+    =
   let dep a = List.exists (fun d -> d.d_alias = a) deps in
   let optional a = List.exists (fun d -> d.d_optional && d.d_alias = a) deps in
   let map = tbl @ implicit_features deps tbl in
   let name_ok f =
     let alnum c =
-      (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
-      || c = '_' || Char.code c >= 128
+      (c >= 'a' && c <= 'z')
+      || (c >= 'A' && c <= 'Z')
+      || (c >= '0' && c <= '9')
+      || c = '_'
+      || Char.code c >= 128
     in
     f <> ""
     && (not (String.starts_with ~prefix:"dep:" f))
@@ -194,8 +197,7 @@ let feature_map_ok (deps : dep list) (tbl : (string * fentry list) list) :
     && String.for_all (fun c -> alnum c || c = '-' || c = '+' || c = '.') f
   in
   let entry_ok = function
-    | FFeat f ->
-        List.mem_assoc f tbl || (optional f && List.mem_assoc f map)
+    | FFeat f -> List.mem_assoc f tbl || (optional f && List.mem_assoc f map)
     | FDep a -> optional a
     | FDepFeat (a, f) -> dep a && not (String.contains f '/')
     | FWeakFeat (a, f) -> optional a && not (String.contains f '/')
@@ -271,16 +273,16 @@ let parse_line (line : string) : ver option =
               reject ();
               None)
             else
-            Some
-              {
-                v_name = name;
-                v_vers = vers;
-                v_deps = deps;
-                v_feats = tbl;
-                v_links = str_opt (member "links" j);
-                v_default_declared = List.mem_assoc default_feature declared;
-                v_msrv = str_opt (member "rust_version" j);
-              }
+              Some
+                {
+                  v_name = name;
+                  v_vers = vers;
+                  v_deps = deps;
+                  v_feats = tbl;
+                  v_links = str_opt (member "links" j);
+                  v_default_declared = List.mem_assoc default_feature declared;
+                  v_msrv = str_opt (member "rust_version" j);
+                }
       | _ ->
           reject ();
           None)

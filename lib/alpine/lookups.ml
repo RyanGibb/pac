@@ -559,8 +559,9 @@ let oracle ar (tn : Red.Name.name) : PF.VSet.t =
   | Red.Name.Root -> PF.VSet.singleton Red.Version.RootV
 
 let lookups ar : L.t =
-  L.create ~root:(Red.Name.Root, Red.Version.RootV) ~tag:(tag ar)
-    ~oracle:(oracle ar) ()
+  L.create
+    ~root:(Red.Name.Root, Red.Version.RootV)
+    ~tag:(tag ar) ~oracle:(oracle ar) ()
 
 let dependees inst q = Red.FSet.elements (Red.dependees inst q)
 
@@ -580,4 +581,3 @@ let touch ar world st ((tn, tv) : T.Pkg.t) =
       let q = (Red.Name.Orig m, Red.Version.Prov (q0, pv)) in
       L.process st q (fun () -> dependees empty_inst q)
   | _ -> ()
-

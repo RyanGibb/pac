@@ -9,20 +9,21 @@
 module Make
     (N : Pac.UsualOrderedType)
     (V : Pac.UsualOrderedType)
-    (PF : module type of Pac.PackageFormula (N) (V))
-    (P : sig
-      type t
+    (PF :
+      module type of Pac.PackageFormula (N) (V))
+        (P : sig
+          type t
 
-      val v : t -> PF.Reduction.Version.t
+          val v : t -> PF.Reduction.Version.t
 
-      (* the absent version, tagged: [tag] must give it at every name *)
-      val bot : t
-      val compare : t -> t -> int
-      val pp : Format.formatter -> t -> unit
-    end)
-    (Pp : sig
-      val pp_name : Format.formatter -> PF.Reduction.Name.t -> unit
-    end) =
+          (* the absent version, tagged: [tag] must give it at every name *)
+          val bot : t
+          val compare : t -> t -> int
+          val pp : Format.formatter -> t -> unit
+        end)
+        (Pp : sig
+          val pp_name : Format.formatter -> PF.Reduction.Name.t -> unit
+        end) =
 struct
   module PFR = PF.Reduction
   module T = PFR.T
@@ -239,8 +240,7 @@ struct
   let solve st ~touch ?next ?choose () : (PF.PkgSet.t * int) option =
     let root = PFR.Name.Orig (fst st.root) in
     match
-      PG.solve ?next ?choose ~vers:(versions st)
-        ~deps:(dependencies st ~touch)
+      PG.solve ?next ?choose ~vers:(versions st) ~deps:(dependencies st ~touch)
         [ (root, PG.Ranges.of_list (versions st root)) ]
     with
     | Error inc ->

@@ -59,7 +59,9 @@ let sign c = if c < 0 then -1 else if c > 0 then 1 else 0
 (* the revision is everything after the last '-' (deb-version(7)), which
    opam splits the same way (OpamVersionCompare.extract_revision) *)
 let last_dash s i =
-  let rec go j = if j < i then String.length s else if s.[j] = '-' then j else go (j - 1) in
+  let rec go j =
+    if j < i then String.length s else if s.[j] = '-' then j else go (j - 1)
+  in
   go (String.length s - 1)
 
 (* s.[i ..] as upstream-revision, the upstream first and the revision only
@@ -73,7 +75,8 @@ let compare_from v1 i1 v2 i2 =
 
 (* opam's ordering: opam versions have no epoch, so a ':' is an ordinary
    character *)
-let compare_no_epoch v1 v2 = if String.equal v1 v2 then 0 else compare_from v1 0 v2 0
+let compare_no_epoch v1 v2 =
+  if String.equal v1 v2 then 0 else compare_from v1 0 v2 0
 
 (* The epoch is the digits before the first ':', when they are all digits
    and there are some; otherwise the version has none, and the ':' is part

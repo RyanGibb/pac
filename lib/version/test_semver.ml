@@ -14,11 +14,32 @@ let () =
   (* versions both specs read the same way: the section 11 ladder, build
      metadata, numeric identifiers, components past 32 bits *)
   let corpus =
-    [ "0.0.0"; "0.0.1"; "0.1.0"; "1.0.0-alpha"; "1.0.0-alpha.1";
-      "1.0.0-alpha.beta"; "1.0.0-beta"; "1.0.0-beta.2"; "1.0.0-beta.11";
-      "1.0.0-rc.1"; "1.0.0"; "1.0.0+build.1"; "1.0.0-alpha+x"; "1.0.0-1";
-      "1.0.0-2"; "1.0.0-11"; "1.0.0-alpha.0"; "1.0.0-x-y"; "1.9.0"; "1.10.0";
-      "2.0.0"; "2.0.0-rc.1+x"; "1.0.1234567890"; "12345678901.0.0" ]
+    [
+      "0.0.0";
+      "0.0.1";
+      "0.1.0";
+      "1.0.0-alpha";
+      "1.0.0-alpha.1";
+      "1.0.0-alpha.beta";
+      "1.0.0-beta";
+      "1.0.0-beta.2";
+      "1.0.0-beta.11";
+      "1.0.0-rc.1";
+      "1.0.0";
+      "1.0.0+build.1";
+      "1.0.0-alpha+x";
+      "1.0.0-1";
+      "1.0.0-2";
+      "1.0.0-11";
+      "1.0.0-alpha.0";
+      "1.0.0-x-y";
+      "1.9.0";
+      "1.10.0";
+      "2.0.0";
+      "2.0.0-rc.1+x";
+      "1.0.1234567890";
+      "12345678901.0.0";
+    ]
   in
   List.iter
     (fun a ->
@@ -66,11 +87,14 @@ let () =
     (fun (r, v, want) ->
       expect (Printf.sprintf "cargo %S admits %S" r v) (cargo r v) want;
       expect (Printf.sprintf "npm %S admits %S" r v) (npm r v) want)
-    [ ("^1.0.0", "1.0.1-alpha", false); ("*", "1.0.0-alpha", false);
+    [
+      ("^1.0.0", "1.0.1-alpha", false);
+      ("*", "1.0.0-alpha", false);
       (">=1.2.3-rc.1", "1.2.3-rc.2", true);
       (">=1.2.3-rc.1", "1.3.0-rc.1", false);
       ("^1.0.0-alpha", "1.0.0-alpha.1", true);
-      ("^1.0.0-alpha", "1.0.1-alpha", false) ];
+      ("^1.0.0-alpha", "1.0.1-alpha", false);
+    ];
 
   if !fail > 0 then exit 1;
   print_endline "semver: all tests pass"

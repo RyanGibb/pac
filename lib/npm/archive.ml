@@ -130,9 +130,7 @@ let fetch ar (n : string) : string option =
 let tabulate ar (v : P.ver) =
   let p = (v.P.v_name, v.P.v_vers) in
   Hashtbl.replace ar.entry p v;
-  List.iter
-    (fun r -> Hashtbl.add ar.peer_by_name r.P.p_name (p, r))
-    v.P.v_peers;
+  List.iter (fun r -> Hashtbl.add ar.peer_by_name r.P.p_name (p, r)) v.P.v_peers;
   List.iter
     (fun d -> Hashtbl.add ar.dep_by_key (d.P.d_dir, d.P.d_target) (p, d))
     v.P.v_deps
@@ -172,8 +170,7 @@ let load_name ar (n : string) : P.ver list =
 
 (* Prerelease versions stay in: the calculus admits one only inside a
    comparator set that names a prerelease at the same release core. *)
-let versions_of ar n =
-  List.map (fun (v : P.ver) -> v.P.v_vers) (load_name ar n)
+let versions_of ar n = List.map (fun (v : P.ver) -> v.P.v_vers) (load_name ar n)
 
 (* the version a dist-tag names, which arborist's #add reads through
    npm-pick-manifest (index.js, `wanted && type === 'tag'`): the tagged

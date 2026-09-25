@@ -159,7 +159,8 @@ let install_root ar (v : P.ver) =
   Hashtbl.replace ar.crates n (vs @ [ v ]);
   Hashtbl.replace ar.entry (n, u) v;
   Hashtbl.filter_map_inplace
-    (fun _ ps -> match List.filter (( <> ) (n, u)) ps with [] -> None | ps -> Some ps)
+    (fun _ ps ->
+      match List.filter (( <> ) (n, u)) ps with [] -> None | ps -> Some ps)
     ar.links_table;
   Option.iter
     (fun l ->
@@ -182,7 +183,9 @@ let install_root ar (v : P.ver) =
    grow after CLink l has answered.  pg_versions answers it afresh each
    time rather than memoizing it. *)
 
-module Cg = E.Cargo (StringOT) (CVerOT) (StringOT) (CVerOT) (StringOT) (StringOT) (PM)
+module Cg =
+  E.Cargo (StringOT) (CVerOT) (StringOT) (CVerOT) (StringOT) (StringOT) (PM)
+
 module T = Cg.T
 
 (* At most one version per semver granularity class.  The label is the
@@ -194,7 +197,8 @@ module T = Cg.T
    "0.9" against "0.10" is exactly that disagreement. *)
 let granularity_of (v : string) : string =
   let p = Cargo_version.parse v in
-  if p.Cargo_version.major > 0 then Printf.sprintf "%d.0.0" p.Cargo_version.major
+  if p.Cargo_version.major > 0 then
+    Printf.sprintf "%d.0.0" p.Cargo_version.major
   else if p.Cargo_version.minor > 0 then
     Printf.sprintf "0.%d.0" p.Cargo_version.minor
   else Printf.sprintf "0.0.%d" p.Cargo_version.patch
@@ -284,8 +288,8 @@ let slot_data (d : P.dep) : Cg.SlotData.t =
       ( xreq d.P.d_req,
         ( xkind d.P.d_kind,
           ( d.P.d_optional,
-            (d.P.d_default, (fset_of d.P.d_feats, (d.P.d_cfg, "registry"))) )
-        ) ) ) )
+            (d.P.d_default, (fset_of d.P.d_feats, (d.P.d_cfg, "registry"))) ) )
+      ) ) )
 
 let site_key (d : P.dep) : Cg.SlotKey.t =
   (d.P.d_alias, (xkind d.P.d_kind, d.P.d_cfg))
@@ -414,16 +418,19 @@ type state = {
   msrv : (string * string * string, bool) Hashtbl.t;
   supports : (string, Cg.SupportSet.t) Hashtbl.t;
   witnesses : (witness_key, Cg.SlotRel.t * Cg.FDefRel.t) Hashtbl.t;
-  site_datas : ((string * string) * Cg.SlotKey.t, Cg.SlotData.t option) Hashtbl.t;
+  site_datas :
+    ((string * string) * Cg.SlotKey.t, Cg.SlotData.t option) Hashtbl.t;
   (* the tagged list, not just the untagged one, has to be memoized:
      PubGrub asks a name for its versions at every propagation step *)
   pg_vers : (Cg.NPlus.t, PVersion.t list) Hashtbl.t;
   (* at each decision PubGrub's dependency_incomps asks for the
      dependencies of the decided version's neighbours, once per
      dependency, to widen each incompatibility's range *)
-  pg_deps : (Cg.NPlus.t * Cg.VPlus.t, (Cg.NPlus.t * PG.Ranges.t) list) Hashtbl.t;
+  pg_deps :
+    (Cg.NPlus.t * Cg.VPlus.t, (Cg.NPlus.t * PG.Ranges.t) list) Hashtbl.t;
   cands : (string * Cargo_version.req, string list) Hashtbl.t;
-  enabled : (string * string * string list * bool, (P.dep * Order.SS.t) list) Hashtbl.t;
+  enabled :
+    (string * string * string list * bool, (P.dep * Order.SS.t) list) Hashtbl.t;
 }
 
 let memo tbl k f =
@@ -513,7 +520,9 @@ let link_preimage st (l : string) =
 
 let crate_msrv_ok st (rustc : string) ((n, v) : string * string) : bool =
   memo st.msrv (rustc, n, v) (fun () ->
-      match meta st.ar n v with None -> true | Some m -> msrv_ok rustc m.P.v_msrv)
+      match meta st.ar n v with
+      | None -> true
+      | Some m -> msrv_ok rustc m.P.v_msrv)
 
 (* the support relation at a name -- Lookup.supportPreimage at {n},
    which versions_lookupFeatPSub reads -- as the union of its versions'
@@ -632,8 +641,14 @@ let dependees st (p : T.Pkg.t) : T.Dependees.t list =
   | Cg.NPlus.CFeatP (n, _, _), Cg.VPlus.WOrig v ->
       let rw = fibres_of st (n, v) in
       let repo = repo_preimage st (n, v) in
-      call { repo; supp = rw.r_supp; fdefs = rw.r_fdefs; slots = rw.r_slots;
-             links = Cg.LinkRel.empty }
+      call
+        {
+          repo;
+          supp = rw.r_supp;
+          fdefs = rw.r_fdefs;
+          slots = rw.r_slots;
+          links = Cg.LinkRel.empty;
+        }
   | Cg.NPlus.CSlot (n, gr, d), Cg.VPlus.WClass _ ->
       let slots = slot_witness st n gr d in
       call { empty_sub with repo = name_set st (Cg.sTarget d); slots }
@@ -648,7 +663,8 @@ let dependees st (p : T.Pkg.t) : T.Dependees.t list =
 let site_data st (p : string * string) (k : Cg.SlotKey.t) =
   memo st.site_datas (p, k) (fun () ->
       List.find_map
-        (fun ((_, sd) : Cg.SlotElt.t) -> if Cg.sKey sd = k then Some sd else None)
+        (fun ((_, sd) : Cg.SlotElt.t) ->
+          if Cg.sKey sd = k then Some sd else None)
         (Cg.SlotRel.elements (fibres_of st p).r_slots))
 
 (* the preference must land on both names whose candidates are crate
@@ -683,7 +699,8 @@ let pg_dependencies st tn ({ PVersion.v = w; _ } : PVersion.t) =
           (m, PG.Ranges.of_list (List.map (tag st m) (T.VSet.elements vs))))
         (dependees st (tn, w)))
 
-let decided assigned x = match assigned x with PG.Decided v -> Some v | _ -> None
+let decided assigned x =
+  match assigned x with PG.Decided v -> Some v | _ -> None
 
 let decided_v assigned x =
   Option.map (fun (pv : PVersion.t) -> pv.PVersion.v) (decided assigned x)
@@ -715,7 +732,9 @@ let candidates st (d : P.dep) =
            (versions_of st.ar d.P.d_target)))
 
 let enabled_deps st t u feats default =
-  memo st.enabled (t, u, Order.SS.elements feats, default) (fun () ->
+  memo st.enabled
+    (t, u, Order.SS.elements feats, default)
+    (fun () ->
       match meta st.ar t u with
       | None -> []
       | Some m ->
@@ -739,7 +758,8 @@ let lookahead st ~assigned =
     match meta st.ar t u with
     | Some { P.v_links = Some l; _ } -> (
         match decided_v assigned (Cg.NPlus.CLink l) with
-        | Some (Cg.VPlus.WName (Cg.NPlus.CCrate (t', gr'))) -> t' = t && gr' = gr
+        | Some (Cg.VPlus.WName (Cg.NPlus.CCrate (t', gr'))) ->
+            t' = t && gr' = gr
         | _ -> true)
     | _ -> true
   in
@@ -749,10 +769,10 @@ let lookahead st ~assigned =
         let gr = granularity st u in
         let g = Cg.NPlus.CCrate (t, gr) in
         (match assigned g with
-        | PG.Decided { PVersion.v = Cg.VPlus.WOrig w; _ } ->
-            Cargo_version.compare w u = 0
-        | PG.Entailed r -> PG.Ranges.contains (tag st g (Cg.VPlus.WOrig u)) r
-        | _ -> true)
+          | PG.Decided { PVersion.v = Cg.VPlus.WOrig w; _ } ->
+              Cargo_version.compare w u = 0
+          | PG.Entailed r -> PG.Ranges.contains (tag st g (Cg.VPlus.WOrig u)) r
+          | _ -> true)
         && links_free t u gr)
   in
   (* a candidate one of whose mandatory dependencies has no valid
@@ -779,7 +799,8 @@ let lookahead st ~assigned =
      them do, which is looked into a level at most *)
   let dead_memo = Hashtbl.create 64 in
   let rec dead depth chain t u feats default =
-    memo dead_memo (depth, chain, t, u, Order.SS.elements feats, default)
+    memo dead_memo
+      (depth, chain, t, u, Order.SS.elements feats, default)
       (fun () ->
         List.exists
           (fun ((d : P.dep), fs) ->
@@ -808,8 +829,8 @@ let asked st ~assigned m gr u =
         (fun acc (f, _) ->
           let x = Cg.NPlus.CFeatP (m, f, gr) in
           match assigned x with
-          | PG.Entailed r when PG.Ranges.contains (tag st x (Cg.VPlus.WOrig u)) r
-            ->
+          | PG.Entailed r
+            when PG.Ranges.contains (tag st x (Cg.VPlus.WOrig u)) r ->
               Order.SS.add f acc
           | PG.Decided { PVersion.v = Cg.VPlus.WOrig w; _ }
             when Cargo_version.compare w u = 0 ->
@@ -834,7 +855,8 @@ let choose st ~assigned tn (cands : PVersion.t list) =
   in
   let pick =
     match tn with
-    | Cg.NPlus.CSlot (_, _, d) -> Option.bind (Hashtbl.find_opt st.dep_of_data d) walk
+    | Cg.NPlus.CSlot (_, _, d) ->
+        Option.bind (Hashtbl.find_opt st.dep_of_data d) walk
     | Cg.NPlus.CDec (n, gr, _, d, _) -> (
         match decided_v assigned (Cg.NPlus.CSlot (n, gr, d)) with
         | Some w -> offered w
@@ -844,7 +866,8 @@ let choose st ~assigned tn (cands : PVersion.t list) =
           (fun (c : PVersion.t) ->
             match c.PVersion.v with
             | Cg.VPlus.WOrig u ->
-                la.links_free m u gr && la.live m u (asked st ~assigned m gr u) false
+                la.links_free m u gr
+                && la.live m u (asked st ~assigned m gr u) false
             | _ -> true)
           (List.sort (fun a b -> PVersion.compare b a) cands)
     | Cg.NPlus.CFeatP (m, _, gr) ->
@@ -885,9 +908,9 @@ struct
   let owned (t, u) gr =
     match meta (t, u) with
     | None -> []
-    | Some m ->
+    | Some m -> (
         List.map (fun (f, _) -> Cg.NPlus.CFeatP (t, f, gr)) m.P.v_feats
-        @ (match m.P.v_links with Some l -> [ Cg.NPlus.CLink l ] | None -> [])
+        @ match m.P.v_links with Some l -> [ Cg.NPlus.CLink l ] | None -> [])
 
   let root_step assigned =
     let n, v = st.rc in
@@ -905,7 +928,8 @@ struct
           (fun (f, es) ->
             List.filter_map
               (function
-                | P.FDepFeat (a, f') | P.FWeakFeat (a, f') when a = d.P.d_alias ->
+                | (P.FDepFeat (a, f') | P.FWeakFeat (a, f'))
+                  when a = d.P.d_alias ->
                     Some (Cg.NPlus.CDec (n, gr0, f, sd, f'))
                 | _ -> None)
               es)
@@ -922,13 +946,17 @@ struct
         | PG.Decided { PVersion.v = Cg.VPlus.WClass gr; _ } -> (
             let t = d.P.d_target in
             let g = Cg.NPlus.CCrate (t, gr) in
-            match List.find_opt (is_open assigned) (delivered (n, v) gr0 sd d) with
+            match
+              List.find_opt (is_open assigned) (delivered (n, v) gr0 sd d)
+            with
             | Some x -> Order.Decide x
             | None -> (
                 match assigned g with
                 | PG.Entailed _ -> Order.Decide g
                 | PG.Decided { PVersion.v = Cg.VPlus.WOrig u; _ } -> (
-                    match List.find_opt (is_open assigned) (owned (t, u) gr) with
+                    match
+                      List.find_opt (is_open assigned) (owned (t, u) gr)
+                    with
                     | Some x -> Order.Decide x
                     | None -> Order.Activated (t, u))
                 | _ -> Order.Skip))
@@ -937,7 +965,9 @@ end
 
 let decode st (sol : (Cg.NPlus.t * PVersion.t) list) : result =
   let sol =
-    List.map (fun ((tn, { PVersion.v; _ }) : Cg.NPlus.t * PVersion.t) -> (tn, v)) sol
+    List.map
+      (fun ((tn, { PVersion.v; _ }) : Cg.NPlus.t * PVersion.t) -> (tn, v))
+      sol
   in
   let s = T.PkgSet.ofList sol in
   let crates = Cg.PkgSet.elements (Cg.decodeS s) in
@@ -977,7 +1007,8 @@ let decode st (sol : (Cg.NPlus.t * PVersion.t) list) : result =
       | None -> ()
       | Some m ->
           List.iter
-            (fun (d : P.dep) -> Hashtbl.replace target_of (p, site_of d) d.P.d_target)
+            (fun (d : P.dep) ->
+              Hashtbl.replace target_of (p, site_of d) d.P.d_target)
             (slots_of m))
     (st.rc :: crates);
   let parents =
@@ -1016,7 +1047,10 @@ let solve ?(debug = false) ?(order = `Tool) ~index ~features ~rustv
   install_root ar root.Q.ver;
   let st = create ar root ~features ~rustv in
   let query =
-    [ (Cg.NPlus.CRoot, PG.Ranges.of_list [ tag st Cg.NPlus.CRoot Cg.VPlus.WUnit ]) ]
+    [
+      ( Cg.NPlus.CRoot,
+        PG.Ranges.of_list [ tag st Cg.NPlus.CRoot Cg.VPlus.WUnit ] );
+    ]
   in
   let vers = pg_versions st and deps = pg_dependencies st in
   let outcome =
@@ -1024,7 +1058,8 @@ let solve ?(debug = false) ?(order = `Tool) ~index ~features ~rustv
     | `Tool ->
         let module O = Order.Make (Driver (struct
           let st = st
-        end)) in
+        end))
+        in
         let o = O.create () in
         PG.solve ~next:(O.next o) ~choose:(choose st) ~vers ~deps query
     | `Pubgrub -> PG.solve ~vers ~deps query

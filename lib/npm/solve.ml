@@ -137,8 +137,7 @@ let solve ?(debug = false) ?(order = Tool) ?(omit_dev = false)
   let next, choose = hooks order st in
   let root_n = Np.Nm.Granular ((fst root, fst root), snd root) in
   match
-    PG.solve ?next ?choose ~vers:(Lookup.versions st)
-      ~deps:(dependencies st)
+    PG.solve ?next ?choose ~vers:(Lookup.versions st) ~deps:(dependencies st)
       [ (root_n, PG.Ranges.of_list [ Np.Vs.Orig (snd root) ]) ]
   with
   | Error inc -> Error inc

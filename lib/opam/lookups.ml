@@ -99,9 +99,8 @@ let load_name ar (name : string) : (string * Opam_parse.pkg_meta) list =
           if m.avoid_version || m.deprecated then
             Hashtbl.replace ar.avoid_table name
               (version
-              :: Option.value
-                   (Hashtbl.find_opt ar.avoid_table name)
-                   ~default:[]))
+              :: Option.value (Hashtbl.find_opt ar.avoid_table name) ~default:[]
+              ))
         vs;
       ar.t_parse <- ar.t_parse +. (Unix.gettimeofday () -. t);
       vs
@@ -195,27 +194,27 @@ type request = {
 let rho (rq : request) : string -> string option =
   let globals = ("opam-version", rq.opam_version) :: globals in
   fun x ->
-  match List.assoc_opt x globals with
-  | Some v -> Some v
-  | None -> (
-      match String.index_opt x ':' with
-      | None -> None
-      | Some i -> (
-          let local = String.sub x (i + 1) (String.length x - i - 1) in
-          let owner = String.sub x 0 i in
-          let requested b =
-            Some
-              (if b && List.exists (String.equal owner) rq.names then "true"
-               else "false")
-          in
-          match local with
-          | "build" | "post" -> Some "true"
-          | "with-test" -> requested rq.with_test
-          | "with-doc" -> requested rq.with_doc
-          | "with-dev-setup" -> requested rq.with_dev_setup
-          | "dev" | "pinned" -> Some "false"
-          | "name" -> Some owner
-          | _ -> None))
+    match List.assoc_opt x globals with
+    | Some v -> Some v
+    | None -> (
+        match String.index_opt x ':' with
+        | None -> None
+        | Some i -> (
+            let local = String.sub x (i + 1) (String.length x - i - 1) in
+            let owner = String.sub x 0 i in
+            let requested b =
+              Some
+                (if b && List.exists (String.equal owner) rq.names then "true"
+                 else "false")
+            in
+            match local with
+            | "build" | "post" -> Some "true"
+            | "with-test" -> requested rq.with_test
+            | "with-doc" -> requested rq.with_doc
+            | "with-dev-setup" -> requested rq.with_dev_setup
+            | "dev" | "pinned" -> Some "false"
+            | "name" -> Some owner
+            | _ -> None))
 
 let xop : Opam_parse.op -> E.cmpOp = function
   | Opam_parse.Ge -> E.OpGe
@@ -440,8 +439,9 @@ let oracle rho ar (tn : Red.TName.t) : PF.VSet.t =
   | Red.TName.Cls k -> Red.versions rho (cls_inst ar k) tn
 
 let lookups rho ar : L.t =
-  L.create ~root:(Red.TName.Root, Red.TVer.UnitV) ~tag:(tag ar)
-    ~oracle:(oracle rho ar)
+  L.create
+    ~root:(Red.TName.Root, Red.TVer.UnitV)
+    ~tag:(tag ar) ~oracle:(oracle rho ar)
     ~volatile:(function Red.TName.Cls _ -> true | _ -> false)
     ()
 
@@ -455,4 +455,3 @@ let touch rho ar query st ((tn, tv) : T.Pkg.t) =
   | PFR.Name.Orig (Red.TName.Real n), PFR.Version.Orig (Red.TVer.RV v) ->
       process (Red.TName.Real n, Red.TVer.RV v) (fun () -> inst_for ar (n, v))
   | _ -> ()
-

@@ -22,11 +22,11 @@ let queries =
   ]
 
 let solve (m, features, installed) =
-  let root = Cargo_query.of_manifest (Printf.sprintf "%s/manifests/%s.toml" dir m) in
-  let rustv = Cargo_query.toolchain root ~installed in
-  let r =
-    Cargo_solve.solve ~index:(dir ^ "/index") ~features ~rustv root
+  let root =
+    Cargo_query.of_manifest (Printf.sprintf "%s/manifests/%s.toml" dir m)
   in
+  let rustv = Cargo_query.toolchain root ~installed in
+  let r = Cargo_solve.solve ~index:(dir ^ "/index") ~features ~rustv root in
   match r.Cargo_solve.answer with
   | None -> None
   | Some a ->

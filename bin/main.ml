@@ -12,8 +12,8 @@ let order_arg ~tool ~pubgrub =
     & info [ "order" ] ~docv:"ORDER"
         ~doc:
           (Printf.sprintf
-             "Which name to decide next and which version to try: \
-              $(b,tool) as %s, $(b,pubgrub) as %s."
+             "Which name to decide next and which version to try: $(b,tool) as \
+              %s, $(b,pubgrub) as %s."
              tool pubgrub))
 
 let debian_run debug order no_recs no_strict native query path =
@@ -44,7 +44,8 @@ let debian_cmd =
   let no_recs =
     Arg.(
       value & flag
-      & info [ "no-install-recommends" ]
+      & info
+          [ "no-install-recommends" ]
           ~doc:"Ignore Recommends fields rather than satisfying them.")
   in
   let order =
@@ -74,9 +75,8 @@ let debian_cmd =
       & info [] ~docv:"QUERY"
           ~doc:
             "Packages to install, as $(b,apt-get install) takes them: \
-             $(b,NAME[:ARCH]), optionally with $(b,=VERSION) or \
-             $(b,/RELEASE); no Release file is read, so of releases only \
-             $(b,*) matches.")
+             $(b,NAME[:ARCH]), optionally with $(b,=VERSION) or $(b,/RELEASE); \
+             no Release file is read, so of releases only $(b,*) matches.")
   in
   let path =
     Arg.(
@@ -165,8 +165,8 @@ let opam_cmd =
       & opt string Opam_solve.default_opam_version
       & info [ "opam-version" ] ~docv:"VERSION"
           ~doc:
-            "Value of the opam-version variable, the version of the opam \
-             whose answer is being matched.")
+            "Value of the opam-version variable, the version of the opam whose \
+             answer is being matched.")
   in
   let repo =
     Arg.(
@@ -187,8 +187,8 @@ let opam_cmd =
   Cmd.v
     (Cmd.info "opam" ~doc:"Solve against an opam repository.")
     Term.(
-      const opam_run $ debug_arg $ order $ with_test $ with_doc
-      $ with_dev_setup $ opam_version $ repo $ query)
+      const opam_run $ debug_arg $ order $ with_test $ with_doc $ with_dev_setup
+      $ opam_version $ repo $ query)
 
 let cargo_run debug order print_parents index manifest features no_default
     installed =
@@ -206,7 +206,8 @@ let cargo_run debug order print_parents index manifest features no_default
         | Cargo_query.All -> ""
         | Cargo_query.Named { feats = []; default = true } ->
             " with default features"
-        | Cargo_query.Named { feats = []; default = false } -> " with no features"
+        | Cargo_query.Named { feats = []; default = false } ->
+            " with no features"
         | Cargo_query.Named { feats; default } ->
             " with features " ^ String.concat "," feats
             ^ if default then "" else " and no default feature")
@@ -219,8 +220,7 @@ let cargo_run debug order print_parents index manifest features no_default
         Printf.printf "loaded: %d crates, %d versions\n" r.Cargo_solve.n_names
           r.Cargo_solve.n_vers;
         if !Cargo_parse.rejected > 0 then
-          Printf.printf "parser dropped %d declarations\n"
-            !Cargo_parse.rejected;
+          Printf.printf "parser dropped %d declarations\n" !Cargo_parse.rejected;
         Printf.printf "parse %.2fs\nsolve %.2fs\n" r.Cargo_solve.t_parse
           (t2 -. t0 -. r.Cargo_solve.t_parse)
       in
@@ -231,9 +231,9 @@ let cargo_run debug order print_parents index manifest features no_default
       | Some a when Cargo_solve.reaches_registry_root root a ->
           loaded ();
           Printf.eprintf
-            "error: the answer reaches %s %s through the registry, which \
-             cargo keeps apart from the root unless [patch.crates-io] maps \
-             %s to it with { path = \".\" }\n"
+            "error: the answer reaches %s %s through the registry, which cargo \
+             keeps apart from the root unless [patch.crates-io] maps %s to it \
+             with { path = \".\" }\n"
             n v n;
           2
       | Some a ->
@@ -242,7 +242,8 @@ let cargo_run debug order print_parents index manifest features no_default
             (fun (n, v) ->
               let fs =
                 match
-                  List.find_opt (fun (m, u, _) -> m = n && u = v)
+                  List.find_opt
+                    (fun (m, u, _) -> m = n && u = v)
                     a.Cargo_solve.feats
                 with
                 | Some (_, _, fs) -> fs
@@ -288,11 +289,11 @@ let cargo_cmd =
       value & opt_all string []
       & info [ "F"; "features" ] ~docv:"FEATURES"
           ~doc:
-            "Space or comma separated features to enable on the root, \
-             beside its default feature, resolved afresh rather than \
-             filtered out of the lock.  With neither this nor \
-             $(b,--no-default-features), every feature the root declares \
-             is enabled, as when cargo writes a lockfile.")
+            "Space or comma separated features to enable on the root, beside \
+             its default feature, resolved afresh rather than filtered out of \
+             the lock.  With neither this nor $(b,--no-default-features), \
+             every feature the root declares is enabled, as when cargo writes \
+             a lockfile.")
   in
   let no_default =
     Arg.(
@@ -386,8 +387,7 @@ let alpine_cmd =
   let order =
     order_arg ~tool:"apk does"
       ~pubgrub:
-        "PubGrub does, but for the rules apk's acceptance of an answer \
-         rests on"
+        "PubGrub does, but for the rules apk's acceptance of an answer rests on"
   in
   Cmd.v
     (Cmd.info "alpine" ~doc:"Solve against an Alpine APKINDEX.")
@@ -449,12 +449,13 @@ let npm_cmd =
   let order =
     Arg.(
       value
-      & opt (enum [ ("tool", Npm.Solve.Tool); ("pubgrub", Npm.Solve.Pubgrub) ])
+      & opt
+          (enum [ ("tool", Npm.Solve.Tool); ("pubgrub", Npm.Solve.Pubgrub) ])
           Npm.Solve.Tool
       & info [ "order" ] ~docv:"ORDER"
           ~doc:
-            "Which order decides: $(b,tool) replays npm's, $(b,pubgrub) \
-             leaves PubGrub's own.")
+            "Which order decides: $(b,tool) replays npm's, $(b,pubgrub) leaves \
+             PubGrub's own.")
   in
   (* npm's flag also takes peer, which is refused rather than ignored:
      nothing here leaves peers out of an answer *)
@@ -465,9 +466,9 @@ let npm_cmd =
       & info [ "omit" ] ~docv:"TYPE"
           ~doc:
             "Omit a dependency class, $(b,dev) or $(b,optional). dev \
-             dependencies are still resolved, as npm resolves them, and \
-             only what they alone reach is left out; optional ones are \
-             dropped before solving.")
+             dependencies are still resolved, as npm resolves them, and only \
+             what they alone reach is left out; optional ones are dropped \
+             before solving.")
   in
   (* npm-pick-manifest's engines preference, which needs a host to rank
      against -- npm reads its own and node's, this asks for them *)
@@ -477,8 +478,8 @@ let npm_cmd =
       & opt (some string) None
       & info [ "node-version" ] ~docv:"VERSION"
           ~doc:
-            "Host node version to prefer engines-compatible package \
-             versions for; unset leaves engines.node untested.")
+            "Host node version to prefer engines-compatible package versions \
+             for; unset leaves engines.node untested.")
   in
   let npmv =
     Arg.(
@@ -495,9 +496,9 @@ let npm_cmd =
       & info [] ~docv:"QUERY"
           ~doc:
             "What $(b,npm install) takes, though a project is named by the \
-             path of its package.json, not its directory: that path, and \
-             specs to add to it (name, name@range, name@tag, \
-             key@npm:name@range); with no path, the project is empty.")
+             path of its package.json, not its directory: that path, and specs \
+             to add to it (name, name@range, name@tag, key@npm:name@range); \
+             with no path, the project is empty.")
   in
   Cmd.v
     (Cmd.info "npm" ~exits:npm_exits ~doc:"Solve against the npm registry.")

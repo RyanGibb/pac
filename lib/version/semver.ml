@@ -28,7 +28,9 @@ let strip0 s =
 
 let int_of_digits s =
   let s = strip0 s in
-  if s = "" then 0 else if String.length s > 18 then max_int else int_of_string s
+  if s = "" then 0
+  else if String.length s > 18 then max_int
+  else int_of_string s
 
 let split_on c s = String.split_on_char c s
 
@@ -81,7 +83,13 @@ let of_parts split (s : string) : t =
   in
   let parts = split_on '.' core in
   let get i = match List.nth_opt parts i with Some x -> num x | None -> 0 in
-  { major = get 0; minor = get 1; patch = get 2; pre = ids pre; build = ids build }
+  {
+    major = get 0;
+    minor = get 1;
+    patch = get 2;
+    pre = ids pre;
+    build = ids build;
+  }
 
 let is_num s = s <> "" && String.for_all is_digit s
 
@@ -245,6 +253,7 @@ module Strict = struct
   let admits v bounds =
     (not (is_prerelease v))
     || List.exists (fun c -> is_prerelease c && same_core v c) bounds
+
   let parse_partial = partial_of split_hyphen
 end
 
@@ -266,5 +275,6 @@ module Loose = struct
   let admits v bounds =
     (not (is_prerelease v))
     || List.exists (fun c -> is_prerelease c && same_core v c) bounds
+
   let parse_partial = partial_of split_hyphen_loose
 end

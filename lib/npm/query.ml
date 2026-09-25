@@ -15,8 +15,7 @@ let manifest (paths : string list) : (Yojson.Safe.t, string) result =
 let not_registry s =
   Error
     (s
-    ^ ": not a registry spec (name, name@range, name@tag, \
-       key@npm:name@range)")
+   ^ ": not a registry spec (name, name@range, name@tag, key@npm:name@range)")
 
 (* npm refuses a dist-tag that is a range, so a spec the packument tags is
    a tag, and one it does not is a range unless it can only be a tag *)

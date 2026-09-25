@@ -96,7 +96,6 @@ module type DRIVER = sig
   val decided : assigned -> name -> version option
   val version_equal : version -> version -> bool
   val root : crate
-
   val root_features : Cargo_query.features
   val meta : crate -> P.ver option
   val candidates : P.dep -> int
@@ -117,8 +116,7 @@ module Make (D : DRIVER) = struct
   module Q = Set.Make (struct
     type t = item
 
-    let compare a b =
-      compare (a.count, a.time, a.idx) (b.count, b.time, b.idx)
+    let compare a b = compare (a.count, a.time, a.idx) (b.count, b.time, b.idx)
   end)
 
   module CM = Map.Make (struct
@@ -131,7 +129,6 @@ module Make (D : DRIVER) = struct
      decided from *)
   type state = { rooted : bool; queue : Q.t; act : SS.t CM.t; clock : int }
   type entry = { name : D.name; mutable value : D.version option; pre : state }
-
   type t = { mutable state : state; mutable trail : entry list }
 
   let create () =
@@ -145,7 +142,9 @@ module Make (D : DRIVER) = struct
     let ds =
       List.stable_sort
         (fun (a, _) (b, _) -> compare a b)
-        (List.map (fun ((d, _) as e) -> (D.candidates d, e)) (enabled ~root m deps))
+        (List.map
+           (fun ((d, _) as e) -> (D.candidates d, e))
+           (enabled ~root m deps))
     in
     let time = st.clock + 1 in
     let queue, _ =

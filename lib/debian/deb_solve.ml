@@ -1,7 +1,10 @@
 (* The reduction's lookups over the tables, the candidate order PubGrub
    decides by, and the search that answers a query in either order. *)
 
-type accepts = Debian_frontend.Apt_args.accepts = Any | Only of string | Nothing
+type accepts = Debian_frontend.Apt_args.accepts =
+  | Any
+  | Only of string
+  | Nothing
 
 (* whose order the search decides in: apt's, replayed, or PubGrub's own *)
 type order = Order.t
@@ -30,7 +33,9 @@ module Make (AP : Tables.ARCH) = struct
     DMA.Prov.ofList
       (List.concat_map
          (fun n ->
-           List.map (fun (q, vt) -> (q, (n, vt))) (find_list tables.providers_table n))
+           List.map
+             (fun (q, vt) -> (q, (n, vt)))
+             (find_list tables.providers_table n))
          ns)
 
   (* p's own fibre of a component; a package with no stanza has none *)
@@ -74,7 +79,10 @@ module Make (AP : Tables.ARCH) = struct
     in
     List.concat_map
       (fun m ->
-        m :: List.map (fun (q, _) -> fst (fst q)) (find_list tables.providers_table m))
+        m
+        :: List.map
+             (fun (q, _) -> fst (fst q))
+             (find_list tables.providers_table m))
       names
 
   (* R/Pi preimages for a mangled name (m, x): whichever x is, every
@@ -140,7 +148,8 @@ module Make (AP : Tables.ARCH) = struct
           (DMA.reduceDeps (ma_deps_of_pkg tables p))
           (DMA.reduceRec (ma_recs_of_pkg tables p))
           (DMA.reduceProv r_pi pi_decl pi_cls)
-          (DMA.reduceConf (DMA.PkgSet.singleton p) (ma_conf_of_pkg tables p) pi_cls)
+          (DMA.reduceConf (DMA.PkgSet.singleton p) (ma_conf_of_pkg tables p)
+             pi_cls)
           s
     | (DMA.Deb.Name.Disjunct _ | DMA.Deb.Name.Soft _), DMA.Deb.Version.Atom a ->
         let r, pi = sel_preimages tables (fst a) in
@@ -157,7 +166,6 @@ module Make (AP : Tables.ARCH) = struct
         (* every other shape is empty by dependees' catch-all, or, at a
            pseudo-name, because no reduced clause hangs there *)
         DMA.Deb.T.DependeesSet.empty
-
 
   let is_native = function
     | DMA.QAArch a -> String.equal a AP.native
@@ -289,7 +297,9 @@ module Make (AP : Tables.ARCH) = struct
         | DMA.Deb.Version.RefReal _, DMA.Deb.Version.Ref (_, _) -> 1
         | DMA.Deb.Version.Ref (_, _), DMA.Deb.Version.RefReal _ -> -1
         | DMA.Deb.Version.Ref (m, w), DMA.Deb.Version.Ref (m', w') ->
-            let c = pref_compare (ref_pref I.tables m w) (ref_pref I.tables m' w') in
+            let c =
+              pref_compare (ref_pref I.tables m w) (ref_pref I.tables m' w')
+            in
             if c <> 0 then c
             else
               (* two versions of one provider are apt's same-package case,
@@ -390,7 +400,8 @@ module Make (AP : Tables.ARCH) = struct
             assigned_among ~assigned tn tvs
             ||
             match tn with
-            | DMA.Deb.Name.Selector a -> List.exists (sel_assigned ~assigned a) tvs
+            | DMA.Deb.Name.Selector a ->
+                List.exists (sel_assigned ~assigned a) tvs
             | _ -> false)
           (dependees_of n pv.PVersion.v)
       in
@@ -504,13 +515,14 @@ module Make (AP : Tables.ARCH) = struct
           if debug then (
             Format.printf "raw solution (%d):@." (List.length sol);
             List.iter
-              (fun (n, v) -> Format.printf "  %a = %a@." PName.pp n PVersion.pp v)
+              (fun (n, v) ->
+                Format.printf "  %a = %a@." PName.pp n PVersion.pp v)
               sol);
           Some (decode sol)
   end
 
-  let solve ~debug ~order (tables : tables) (query : ((string * string) * accepts) list)
-      =
+  let solve ~debug ~order (tables : tables)
+      (query : ((string * string) * accepts) list) =
     (* PACPROF's lookup buckets: calls and CPU time per name kind *)
     let buckets : (string, int ref * float ref) Hashtbl.t = Hashtbl.create 8 in
     let timed name f x =

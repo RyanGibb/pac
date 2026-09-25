@@ -2,6 +2,7 @@
 ; built theories rather than about any one file, so it hangs off an alias
 ; and is never part of @default.  The .vo files are named as deps so that
 ; dune builds them first and reruns the audit when they change.
+
 (rule
  (alias axioms)
  (deps
@@ -15,6 +16,7 @@
 
 ; Sandboxed so that the script walks only the sources, not the build
 ; artefacts dune leaves beside them.
+
 (rule
  (alias runtest)
  (deps

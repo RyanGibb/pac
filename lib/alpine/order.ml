@@ -59,8 +59,8 @@ let rec leaves ar (f : PF.coq_Formula) : (PFR.Name.t * PVersion.t list) list =
    it does -- free, constraining nothing, and to take the augmented
    package only when it falsifies none.  A negated condition's
    alternative is doubly negated (encCond). *)
-let choose ar ~install_if ~assigned (tn : PFR.Name.t)
-    (cands : PVersion.t list) =
+let choose ar ~install_if ~assigned (tn : PFR.Name.t) (cands : PVersion.t list)
+    =
   let carried f =
     List.exists (fun (m, tvs) -> carried_at ~assigned m tvs) (leaves ar f)
   in
@@ -103,7 +103,9 @@ let choose ar ~install_if ~assigned (tn : PFR.Name.t)
           (fun (pv : PVersion.t) ->
             match pv.PVersion.v with
             | PFR.Version.Idx i -> (
-                match alt_at fs i with Some (f, _) -> carried f | None -> false)
+                match alt_at fs i with
+                | Some (f, _) -> carried f
+                | None -> false)
             | _ -> false)
           cands
       in

@@ -127,8 +127,7 @@ let query_element ~native ~arches (index : DF.stanza list) arg =
     match String.rindex_opt pkg ':' with
     | Some i ->
         let b = String.sub pkg (i + 1) (String.length pkg - i - 1) in
-        ( String.sub pkg 0 i,
-          if b = "all" || b = "native" then native else b )
+        (String.sub pkg 0 i, if b = "all" || b = "native" then native else b)
     | None -> (
         match
           List.find_opt

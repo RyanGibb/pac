@@ -89,10 +89,9 @@ let looks_like_tag s =
 (* no range semver reads, loose or not, holds a '!', so npa takes one for a
    tag name and refuses it (EINVALIDTAGNAME) *)
 let unresolvable s =
-  String.contains s '!'
-  || has_sub s "://" || starts "$" s || starts "git+" s || starts "git:" s
-  || starts "file:" s || starts "link:" s || starts "workspace:" s
-  || starts "portal:" s || starts "patch:" s
+  String.contains s '!' || has_sub s "://" || starts "$" s || starts "git+" s
+  || starts "git:" s || starts "file:" s || starts "link:" s
+  || starts "workspace:" s || starts "portal:" s || starts "patch:" s
   || (has_sub s "/" && not (starts "npm:" s))
 
 let tag_of s = if looks_like_tag s then Some s else None
@@ -292,7 +291,8 @@ let is_url s =
   let s = if starts "git+" s then String.sub s 4 (String.length s - 4) else s in
   let n = String.length s in
   let rec go i =
-    i < n && if s.[i] = ':' then i > 0 else s.[i] >= 'a' && s.[i] <= 'z' && go (i + 1)
+    i < n
+    && if s.[i] = ':' then i > 0 else s.[i] >= 'a' && s.[i] <= 'z' && go (i + 1)
   in
   go 0
 
@@ -315,10 +315,13 @@ let is_git s =
   | Some i when i > 0 -> (
       let rest = String.sub s (i + 1) (String.length s - i - 1) in
       match String.index_opt rest ':' with
-      | Some j ->
+      | Some j -> (
           let host = String.sub rest 0 j in
           j + 1 < String.length rest
-          && (match String.index_opt host '.' with Some k -> k > 0 && k + 1 < j | None -> false)
+          &&
+          match String.index_opt host '.' with
+          | Some k -> k > 0 && k + 1 < j
+          | None -> false)
       | None -> false)
   | _ -> false
 
@@ -367,10 +370,12 @@ let spec_of (arg : string) : (string * string) option =
   let name_part = match at with Some i -> String.sub arg 0 i | None -> arg in
   let raw =
     match at with
-    | Some i -> ( match String.sub arg (i + 1) (n - i - 1) with "" -> "*" | s -> s)
+    | Some i -> (
+        match String.sub arg (i + 1) (n - i - 1) with "" -> "*" | s -> s)
     | None -> "*"
   in
-  if is_url arg || is_git arg || is_path name_part || not (name_ok name_part) then None
+  if is_url arg || is_git arg || is_path name_part || not (name_ok name_part)
+  then None
   else if starts "npm:" (String.lowercase_ascii raw) then
     (* fromAlias: the target is read again, and must be a named registry
        spec and not itself an alias *)
@@ -389,11 +394,17 @@ let spec_of (arg : string) : (string * string) option =
    it, in inferSaveType's order, else to dependencies, and replaces what is
    there unless it is *.  The fields a save type cannot coexist with lose
    the name, and an optional entry is mirrored into dependencies. *)
-let add_to (pkg : Yojson.Safe.t) ((name, raw) : string * string) : Yojson.Safe.t =
+let add_to (pkg : Yojson.Safe.t) ((name, raw) : string * string) : Yojson.Safe.t
+    =
   let has f = List.mem_assoc name (assoc_of (member f pkg)) in
   let target =
     List.find_opt has
-      [ "devDependencies"; "optionalDependencies"; "dependencies"; "peerDependencies" ]
+      [
+        "devDependencies";
+        "optionalDependencies";
+        "dependencies";
+        "peerDependencies";
+      ]
     |> Option.value ~default:"dependencies"
   in
   let drop =
@@ -404,17 +415,20 @@ let add_to (pkg : Yojson.Safe.t) ((name, raw) : string * string) : Yojson.Safe.t
     | _ -> [ "dependencies"; "optionalDependencies" ]
   in
   let drop =
-    if List.mem "peerDependencies" drop then "peerDependenciesMeta" :: drop else drop
+    if List.mem "peerDependencies" drop then "peerDependenciesMeta" :: drop
+    else drop
   in
   (* a JavaScript object keeps a new key last *)
   let set k v l =
-    if List.mem_assoc k l then List.map (fun (k', x) -> if k' = k then (k, v) else (k', x)) l
+    if List.mem_assoc k l then
+      List.map (fun (k', x) -> if k' = k then (k, v) else (k', x)) l
     else l @ [ (k, v) ]
   in
   let fields =
     List.map
       (fun (k, v) ->
-        if List.mem k drop then (k, `Assoc (List.remove_assoc name (assoc_of v))) else (k, v))
+        if List.mem k drop then (k, `Assoc (List.remove_assoc name (assoc_of v)))
+        else (k, v))
       (assoc_of pkg)
   in
   let cur = assoc_of (member target (`Assoc fields)) in

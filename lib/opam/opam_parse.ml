@@ -175,11 +175,11 @@ let rec brace_of ?(locals = local_vars) ~owner ~selfv (v : value) : brace =
          removed by the filter semantics *)
       reject ();
       BF (FCmp (rel_of r.pelem, qualify ~owner x, "%v%"))
-  | Relop (r, { pelem = Ident x; _ }, { pelem = String s; _ })
-    when selfv_var x ->
+  | Relop (r, { pelem = Ident x; _ }, { pelem = String s; _ }) when selfv_var x
+    ->
       static r.pelem selfv s
-  | Relop (r, { pelem = String s; _ }, { pelem = Ident x; _ })
-    when selfv_var x ->
+  | Relop (r, { pelem = String s; _ }, { pelem = Ident x; _ }) when selfv_var x
+    ->
       static r.pelem s selfv
   | Relop (r, { pelem = Ident x; _ }, { pelem = String s; _ }) ->
       BF (FCmp (rel_of r.pelem, qualify ~owner x, s))

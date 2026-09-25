@@ -10,7 +10,10 @@ let expect what got want =
     incr fail)
 
 let deb a b want =
-  expect (Printf.sprintf "debian %S %S" a b) (sgn (Version.Debian.compare a b)) want
+  expect
+    (Printf.sprintf "debian %S %S" a b)
+    (sgn (Version.Debian.compare a b))
+    want
 
 let opam a b want =
   expect
@@ -41,10 +44,38 @@ let () =
 
   (* no epoch, one ordering *)
   let corpus =
-    [ ""; "0"; "1"; "1."; "1.0"; "1.00"; "1.0~"; "1.0~~"; "1.0~rc1"; "1.0a";
-      "1.0+"; "1.0-"; "1.0-0"; "1.0-1"; "1.0-~"; "1.0-10"; "1-2-3"; "1-2.3";
-      "2.0-rc1"; "2.0~rc1"; "4.14.0"; "4.14.0+options"; "a"; "a0"; "0099";
-      "99"; "1.2.3-4.5"; "1.0-1~bpo1"; "2.4.dfsg"; "2.4.dfsg.2" ]
+    [
+      "";
+      "0";
+      "1";
+      "1.";
+      "1.0";
+      "1.00";
+      "1.0~";
+      "1.0~~";
+      "1.0~rc1";
+      "1.0a";
+      "1.0+";
+      "1.0-";
+      "1.0-0";
+      "1.0-1";
+      "1.0-~";
+      "1.0-10";
+      "1-2-3";
+      "1-2.3";
+      "2.0-rc1";
+      "2.0~rc1";
+      "4.14.0";
+      "4.14.0+options";
+      "a";
+      "a0";
+      "0099";
+      "99";
+      "1.2.3-4.5";
+      "1.0-1~bpo1";
+      "2.4.dfsg";
+      "2.4.dfsg.2";
+    ]
   in
   List.iter
     (fun a ->

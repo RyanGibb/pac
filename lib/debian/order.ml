@@ -106,7 +106,10 @@ module type DRIVER = sig
      the package var, walked as the package pops, then those it registers
      on the version var, walked one queue entry later as the version pops *)
   val wave :
-    state -> name -> version -> (name, atom) clause list * (name, atom) clause list
+    state ->
+    name ->
+    version ->
+    (name, atom) clause list * (name, atom) clause list
 
   (* what apt's Assume of the alternative a clause was decided to enqueues:
      its selector, or its package where the alternative is deferred *)
@@ -472,9 +475,7 @@ module Work_heap (D : DRIVER) = struct
     match D.decided assigned e.tname with
     | None -> e.tredo
     | Some pv -> (
-        match e.tval with
-        | Some pv' -> D.version_equal pv pv'
-        | None -> true)
+        match e.tval with Some pv' -> D.version_equal pv pv' | None -> true)
 
   (* what the topmost standing entry learns from PubGrub: its value when
      first decided, and that a redo has been made again *)
@@ -512,8 +513,7 @@ module Work_heap (D : DRIVER) = struct
   let enqueue_unit t ~assigned (e : tentry) atoms g =
     match D.head t.d assigned atoms with
     | Some { solution = h; version_var = Some (orig, pv) }
-      when (not (Hashtbl.mem t.pos orig)) && not (Hashtbl.mem t.pending orig)
-      ->
+      when (not (Hashtbl.mem t.pos orig)) && not (Hashtbl.mem t.pending orig) ->
         if not (D.same_name h g) then enqueue t (Some e) g;
         Hashtbl.replace t.pending orig ();
         t.clock <- t.clock + 1;
@@ -540,8 +540,7 @@ module Work_heap (D : DRIVER) = struct
         Hashtbl.replace t.nsol_tbl g nsol;
         Hashtbl.replace t.atoms_tbl g c.atoms;
         let sz = live_size t ~assigned c.atoms in
-        if (c.optional && sz >= 1) || sz >= 2 then
-          push_item t e c g nsol sz
+        if (c.optional && sz >= 1) || sz >= 2 then push_item t e c g nsol sz
         else if not c.optional then enqueue_unit t ~assigned e c.atoms g
 
   (* a decided package's version var pops, and its watchers fire in an
@@ -780,7 +779,8 @@ module Work_heap (D : DRIVER) = struct
      already; any other is queued now, behind the package's own wave *)
   let queue_version t ~assigned (e : tentry) pv ver_clauses =
     if e.tidx = 0 then version_pops t ~assigned e e.tname pv ver_clauses
-    else if Hashtbl.mem t.ver_done e.tname then Hashtbl.remove t.ver_done e.tname
+    else if Hashtbl.mem t.ver_done e.tname then
+      Hashtbl.remove t.ver_done e.tname
     else (
       t.clock <- t.clock + 1;
       dbg "VQ #%d %a@." t.clock D.pp_name e.tname;
@@ -980,11 +980,10 @@ module Work_heap (D : DRIVER) = struct
     let s = t.stats in
     if Sys.getenv_opt "PACSHADOW" <> None then
       Printf.eprintf
-        "PACSHADOW tier0=%d pop=%d elide=%d drop=%d desync=%d push=%d \
-         readd=%d unwind=%d backjump=%d prop=%d\n\
+        "PACSHADOW tier0=%d pop=%d elide=%d drop=%d desync=%d push=%d readd=%d \
+         unwind=%d backjump=%d prop=%d\n\
          %!"
-        s.t0 s.pop s.elide s.drop s.desync s.push s.readd s.unwind s.fall
-        s.prop
+        s.t0 s.pop s.elide s.drop s.desync s.push s.readd s.unwind s.fall s.prop
 end
 
 (* What the replay reads of a solve: the tables, the candidate order PubGrub
@@ -1246,7 +1245,8 @@ module Make (S : SEARCH) = struct
   let clause_name opt g = function [ a ] when not opt -> alt_name a | _ -> g
 
   let pkg_names (((n, _), _) as p : DMA.Pkg.t) =
-    n :: (match stanza p with Some stz -> List.map fst stz.nprovs | None -> [])
+    n
+    :: (match stanza p with Some stz -> List.map fst stz.nprovs | None -> [])
 
   let orig_of (((n, b), _) : DMA.Pkg.t) = DMA.Deb.Name.Orig (n, DMA.QAArch b)
 
@@ -1299,8 +1299,8 @@ module Make (S : SEARCH) = struct
       (fun (tn, tvs) ->
         if List.exists is_bot tvs then
           match tn with
-          | DMA.Deb.Name.Orig (m, DMA.QAArch mb) when not (String.equal m pkgname)
-            ->
+          | DMA.Deb.Name.Orig (m, DMA.QAArch mb)
+            when not (String.equal m pkgname) ->
               List.iter
                 (fun ((c : PVersion.t), w) ->
                   if not (List.exists (fun t -> PVersion.compare c t = 0) tvs)
@@ -1402,8 +1402,7 @@ module Make (S : SEARCH) = struct
         List.iter
           (fun (r : DMA.Pkg.t) ->
             let rk = fst r in
-            if (not (Hashtbl.mem seen rk)) && not (Hashtbl.mem st.pdead rk)
-            then (
+            if (not (Hashtbl.mem seen rk)) && not (Hashtbl.mem st.pdead rk) then (
               Hashtbl.replace seen rk ();
               let inst = installed_at ~assigned r in
               List.iter (fire rk inst) (ordered_clauses tables r)))
@@ -1541,10 +1540,8 @@ module Make (S : SEARCH) = struct
     let of_atom a =
       match head st ~assigned [ a ] with
       | Some
-          {
-            solution = DMA.Deb.Name.Orig (m, DMA.QAArch b);
-            version_var = None;
-          } ->
+          { solution = DMA.Deb.Name.Orig (m, DMA.QAArch b); version_var = None }
+        ->
           [ `Pkg (m, b) ]
       | Some { version_var = Some (_, (ov : PVersion.t)); _ } -> (
           match ov.PVersion.v with
@@ -1559,8 +1556,7 @@ module Make (S : SEARCH) = struct
           match fst a with m, DMA.QAArch b -> [ `Pkg (m, b) ] | _ -> []
         else ver (fst a) w
     | DMA.Deb.Name.Selector _, DMA.Deb.Version.Ref (m, w) -> ver m w
-    | (DMA.Deb.Name.Disjunct _ | DMA.Deb.Name.Soft _), DMA.Deb.Version.Atom a
-      ->
+    | (DMA.Deb.Name.Disjunct _ | DMA.Deb.Name.Soft _), DMA.Deb.Version.Atom a ->
         of_atom a
     | _ -> []
 
@@ -1744,12 +1740,14 @@ module Make (S : SEARCH) = struct
             | DMA.Deb.Version.Ref ((m, DMA.QAArch _), w)
               when String.equal m (fst (fst na))
                    &&
-                   match snd (fst na) with DMA.QAExact _ -> true | _ -> false
-              ->
+                   match snd (fst na) with
+                   | DMA.QAExact _ -> true
+                   | _ -> false ->
                 sat (snd na) w
             | DMA.Deb.Version.Ref ((m, DMA.QAArch b), w) -> (
                 match stanza ((m, b), w) with
-                | Some stz -> provides_matching stz (fst (fst na)) (snd na) <> []
+                | Some stz ->
+                    provides_matching stz (fst (fst na)) (snd na) <> []
                 | None -> false)
             | _ -> true)
           cands

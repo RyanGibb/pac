@@ -26,7 +26,9 @@ and tbl = { mutable fields : (string * t) list; mutable origin : origin }
 exception Error of string
 
 let fail line fmt =
-  Printf.ksprintf (fun s -> raise (Error (Printf.sprintf "line %d: %s" line s))) fmt
+  Printf.ksprintf
+    (fun s -> raise (Error (Printf.sprintf "line %d: %s" line s)))
+    fmt
 
 type st = { s : string; mutable i : int; mutable line : int }
 
@@ -96,13 +98,27 @@ let utf8 buf code =
 let escape st buf =
   adv st;
   match peek st with
-  | Some 'b' -> adv st; Buffer.add_char buf '\b'
-  | Some 't' -> adv st; Buffer.add_char buf '\t'
-  | Some 'n' -> adv st; Buffer.add_char buf '\n'
-  | Some 'f' -> adv st; Buffer.add_char buf '\012'
-  | Some 'r' -> adv st; Buffer.add_char buf '\r'
-  | Some '"' -> adv st; Buffer.add_char buf '"'
-  | Some '\\' -> adv st; Buffer.add_char buf '\\'
+  | Some 'b' ->
+      adv st;
+      Buffer.add_char buf '\b'
+  | Some 't' ->
+      adv st;
+      Buffer.add_char buf '\t'
+  | Some 'n' ->
+      adv st;
+      Buffer.add_char buf '\n'
+  | Some 'f' ->
+      adv st;
+      Buffer.add_char buf '\012'
+  | Some 'r' ->
+      adv st;
+      Buffer.add_char buf '\r'
+  | Some '"' ->
+      adv st;
+      Buffer.add_char buf '"'
+  | Some '\\' ->
+      adv st;
+      Buffer.add_char buf '\\'
   | Some (('u' | 'U') as c) ->
       adv st;
       let n = if c = 'u' then 4 else 8 in
@@ -116,12 +132,13 @@ let escape st buf =
          past U+10FFFF *)
       (match int_of_string_opt ("0x" ^ hex) with
       | Some code
-        when String.for_all is_hex hex
-             && code <= 0x10FFFF
+        when String.for_all is_hex hex && code <= 0x10FFFF
              && not (code >= 0xD800 && code <= 0xDFFF) ->
           utf8 buf code
       | _ -> fail st.line "bad \\%c escape" c);
-      for _ = 1 to n do adv st done
+      for _ = 1 to n do
+        adv st
+      done
   | _ -> fail st.line "bad escape"
 
 let basic_string st =
@@ -130,9 +147,14 @@ let basic_string st =
   let rec go () =
     match peek st with
     | Some '"' -> adv st
-    | Some '\\' -> escape st buf; go ()
+    | Some '\\' ->
+        escape st buf;
+        go ()
     | Some '\n' | None -> fail st.line "unterminated string"
-    | Some c -> adv st; Buffer.add_char buf c; go ()
+    | Some c ->
+        adv st;
+        Buffer.add_char buf c;
+        go ()
   in
   go ();
   Buffer.contents buf
@@ -140,7 +162,9 @@ let basic_string st =
 let literal_string st =
   adv st;
   let b = st.i in
-  while match peek st with Some '\'' | Some '\n' | None -> false | _ -> true do
+  while
+    match peek st with Some '\'' | Some '\n' | None -> false | _ -> true
+  do
     adv st
   done;
   if peek st <> Some '\'' then fail st.line "unterminated string";
@@ -152,13 +176,19 @@ let literal_string st =
    quotes may end the body just before the closing three *)
 let multiline st ~basic =
   let q = if basic then "\"\"\"" else "'''" in
-  for _ = 1 to 3 do adv st done;
+  for _ = 1 to 3 do
+    adv st
+  done;
   if peek st = Some '\n' then adv st
-  else if peek st = Some '\r' && peek_at st 1 = Some '\n' then (adv st; adv st);
+  else if peek st = Some '\r' && peek_at st 1 = Some '\n' then (
+    adv st;
+    adv st);
   let buf = Buffer.create 64 in
   let rec go () =
     if starts st q then (
-      for _ = 1 to 3 do adv st done;
+      for _ = 1 to 3 do
+        adv st
+      done;
       let extra = ref 0 in
       while !extra < 2 && peek st = Some q.[0] do
         Buffer.add_char buf q.[0];
@@ -186,8 +216,13 @@ let multiline st ~basic =
               adv st
             done;
             go ())
-          else (escape st buf; go ())
-      | Some c -> adv st; Buffer.add_char buf c; go ()
+          else (
+            escape st buf;
+            go ())
+      | Some c ->
+          adv st;
+          Buffer.add_char buf c;
+          go ()
   in
   go ();
   Buffer.contents buf
@@ -214,7 +249,10 @@ let key st =
     skip_ws st;
     let k = simple_key st in
     skip_ws st;
-    if peek st = Some '.' then (adv st; go (k :: acc)) else List.rev (k :: acc)
+    if peek st = Some '.' then (
+      adv st;
+      go (k :: acc))
+    else List.rev (k :: acc)
   in
   go []
 
@@ -246,8 +284,9 @@ let scalar st =
   | "inf" | "+inf" -> Float infinity
   | "-inf" -> Float neg_infinity
   | "nan" | "+nan" | "-nan" -> Float nan
-  | _ when (String.length w >= 10 && w.[4] = '-')
-           || (String.length w >= 8 && w.[2] = ':') ->
+  | _
+    when (String.length w >= 10 && w.[4] = '-')
+         || (String.length w >= 8 && w.[2] = ':') ->
       Date w
   | _ -> (
       (* OCaml's readers also take leading zeros, stray underscores, a sign
@@ -258,8 +297,11 @@ let scalar st =
         let rec go i =
           i = n
           || (ok s.[i]
-             || s.[i] = '_' && i > 0 && i < n - 1
-                && ok s.[i - 1] && ok s.[i + 1])
+             || s.[i] = '_'
+                && i > 0
+                && i < n - 1
+                && ok s.[i - 1]
+                && ok s.[i + 1])
              && go (i + 1)
         in
         n > 0 && go 0
@@ -329,13 +371,19 @@ let rec value st =
       let rec go acc =
         skip_blank st;
         match peek st with
-        | Some ']' -> adv st; Arr (List.rev acc)
+        | Some ']' ->
+            adv st;
+            Arr (List.rev acc)
         | _ -> (
             let v = value st in
             skip_blank st;
             match peek st with
-            | Some ',' -> adv st; go (v :: acc)
-            | Some ']' -> adv st; Arr (List.rev (v :: acc))
+            | Some ',' ->
+                adv st;
+                go (v :: acc)
+            | Some ']' ->
+                adv st;
+                Arr (List.rev (v :: acc))
             | _ -> fail st.line "expected , or ] in an array")
       in
       go []
@@ -355,7 +403,9 @@ let rec value st =
           assign st t k (value st);
           skip_blank st;
           match peek st with
-          | Some ',' -> adv st; go ()
+          | Some ',' ->
+              adv st;
+              go ()
           | Some '}' -> adv st
           | _ -> fail st.line "expected , or } in an inline table"
         end
@@ -412,12 +462,16 @@ let parse (s : string) : tbl =
         in
         let last = List.nth ks (List.length ks - 1) in
         let p = parent root ks in
-        (if aot then (
+        (if aot then
            let n = new_tbl Header in
            match List.assoc_opt last p.fields with
-           | None -> p.fields <- p.fields @ [ (last, ATbl (ref [ n ])) ]; cur := n
-           | Some (ATbl l) -> l := !l @ [ n ]; cur := n
-           | Some _ -> fail st.line "%S is not an array of tables" last)
+           | None ->
+               p.fields <- p.fields @ [ (last, ATbl (ref [ n ])) ];
+               cur := n
+           | Some (ATbl l) ->
+               l := !l @ [ n ];
+               cur := n
+           | Some _ -> fail st.line "%S is not an array of tables" last
          else
            match List.assoc_opt last p.fields with
            | None ->
@@ -427,7 +481,8 @@ let parse (s : string) : tbl =
            | Some (Tbl n) when n.origin = Implicit ->
                n.origin <- Header;
                cur := n
-           | Some _ -> fail st.line "table %S defined twice" (String.concat "." ks));
+           | Some _ ->
+               fail st.line "table %S defined twice" (String.concat "." ks));
         loop ()
     | Some _ ->
         let ks = key st in

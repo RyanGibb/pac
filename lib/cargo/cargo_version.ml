@@ -115,7 +115,6 @@ let comparator (s : string) : req =
     else wildcard (parse_spec s)
 
 let parse_req (s : string) : req = List.concat_map comparator (split_on ',' s)
-
 let admits (v : string) (r : req) : bool = V.Strict.admits v (List.map snd r)
 
 let holds (v : string) (r : req) : bool =

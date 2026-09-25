@@ -194,8 +194,7 @@ let split_alts (s : string) : string list =
 let parse_range ?(include_prerelease = false) (s : string) : range =
   let z = if include_prerelease then "0" else "" in
   let s = String.trim s in
-  if s = "" then [ [ Any ] ]
-  else List.map (parse_set ~z ~u:z) (split_alts s)
+  if s = "" then [ [ Any ] ] else List.map (parse_set ~z ~u:z) (split_alts s)
 
 let comp_match ct v =
   match ct with

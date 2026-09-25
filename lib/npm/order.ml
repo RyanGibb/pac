@@ -167,8 +167,7 @@ let replace st ~assigned k v (m : string * string) cands c =
     in
     (rg :: into, c)
   in
-  snd
-    (List.fold_left step ([], c) (peer_ranges_into st ~assigned k v (fst m)))
+  snd (List.fold_left step ([], c) (peer_ranges_into st ~assigned k v (fst m)))
 
 (* npm's own tree as the replay has built it: where each copy sits in
    node_modules, which is what npm's queue is ordered by and what a
@@ -275,8 +274,8 @@ let breaks st (m : string * string) u (t : copy) (above : copy) =
   let rec walk (d : copy) =
     (not (Hashtbl.mem d.kids a))
     && ((match edge_at st d a with
-        | Some e -> fits e above.key above.ver && not (fits e m u)
-        | None -> false)
+          | Some e -> fits e above.key above.ver && not (fits e m u)
+          | None -> false)
        || Hashtbl.fold (fun _ k acc -> acc || walk k) d.kids false)
   in
   walk t

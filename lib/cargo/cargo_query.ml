@@ -86,16 +86,30 @@ let get k fields = List.assoc_opt k fields
 let req_ok (s : string) : bool =
   let n = String.length s and i = ref 0 in
   let at c = !i < n && s.[!i] = c in
-  let skip c = at c && (incr i; true) in
-  let spaces () = while at ' ' do incr i done in
+  let skip c =
+    at c
+    &&
+    (incr i;
+     true)
+  in
+  let spaces () =
+    while at ' ' do
+      incr i
+    done
+  in
   let digit c = c >= '0' && c <= '9' in
   let wild () =
-    !i < n && (match s.[!i] with '*' | 'x' | 'X' -> true | _ -> false)
-    && (incr i; true)
+    !i < n
+    && (match s.[!i] with '*' | 'x' | 'X' -> true | _ -> false)
+    &&
+    (incr i;
+     true)
   in
   let span ok =
     let j = !i in
-    while !i < n && ok s.[!i] do incr i done;
+    while !i < n && ok s.[!i] do
+      incr i
+    done;
     String.sub s j (!i - j)
   in
   let num () =
@@ -117,7 +131,9 @@ let req_ok (s : string) : bool =
          (fun o ->
            String.length o <= n - !i
            && String.sub s !i (String.length o) = o
-           && (i := !i + String.length o; true))
+           &&
+           (i := !i + String.length o;
+            true))
          [ ">="; "<="; ">"; "<"; "="; "~"; "^" ])
   in
   let comparator () =
@@ -137,11 +153,19 @@ let req_ok (s : string) : bool =
   in
   let rec comparators () =
     comparator ()
-    && (spaces ();
-        !i = n || (skip ',' && (spaces (); comparators ())))
+    &&
+    (spaces ();
+     !i = n
+     || skip ','
+        &&
+        (spaces ();
+         comparators ()))
   in
   spaces ();
-  if wild () then (spaces (); !i = n) else comparators ()
+  if wild () then (
+    spaces ();
+    !i = n)
+  else comparators ()
 
 (* dep_to_dependency, for the one source the index form has *)
 let dep_of ~kind ~cfg ~where (alias, v) : P.dep =
@@ -153,30 +177,37 @@ let dep_of ~kind ~cfg ~where (alias, v) : P.dep =
     (fun (k, _) ->
       match k with
       | "path" | "git" | "branch" | "tag" | "rev" | "base" ->
-          refuse "%s: a %s source is not a registry crate, and only the \
-                  registry is modelled" where k
+          refuse
+            "%s: a %s source is not a registry crate, and only the registry is \
+             modelled"
+            where k
       | "registry-index" ->
           refuse "%s: only the crates.io registry is modelled" where
       | "registry" ->
           if str where (List.assoc k fields) <> "crates-io" then
             refuse "%s: only the crates.io registry is modelled" where
       | "workspace" ->
-          refuse "%s inherits from a workspace, which a lone manifest has \
-                  not got" where
+          refuse
+            "%s inherits from a workspace, which a lone manifest has not got"
+            where
       | "public" ->
-          refuse "%s: public dependencies are unstable in cargo and not \
-                  modelled" where
+          refuse
+            "%s: public dependencies are unstable in cargo and not modelled"
+            where
       | "artifact" | "lib" | "target" ->
-          refuse "%s: artifact dependencies are unstable in cargo and not \
-                  modelled" where
+          refuse
+            "%s: artifact dependencies are unstable in cargo and not modelled"
+            where
       | _ -> ())
     fields;
   let req =
     match get "version" fields with
     | Some r -> str (where ^ ".version") r
     | None ->
-        refuse "dependency (%s) specified without providing a local path, \
-                Git repository, version, or workspace dependency to use" alias
+        refuse
+          "dependency (%s) specified without providing a local path, Git \
+           repository, version, or workspace dependency to use"
+          alias
   in
   if not (req_ok req) then
     refuse "failed to parse the version requirement `%s` for dependency `%s`"
@@ -189,8 +220,10 @@ let dep_of ~kind ~cfg ~where (alias, v) : P.dep =
   List.iter
     (fun f ->
       if String.contains f '/' || String.starts_with ~prefix:"dep:" f then
-        refuse "feature `%s` in dependency `%s` is not allowed to contain \
-                slashes or use explicit `dep:` syntax" f alias)
+        refuse
+          "feature `%s` in dependency `%s` is not allowed to contain slashes \
+           or use explicit `dep:` syntax"
+          f alias)
     feats;
   let default =
     match (get "default-features" fields, get "default_features" fields) with
@@ -260,14 +293,17 @@ let of_manifest (path : string) : root =
       match k with
       | "cargo-features" ->
           refuse "cargo-features enables unstable cargo, which is not modelled"
-      | "project" -> refuse "[project] is the old spelling of [package]; use that"
-      | "replace" -> refuse "[replace] is not modelled; the registry is taken as it is"
+      | "project" ->
+          refuse "[project] is the old spelling of [package]; use that"
+      | "replace" ->
+          refuse "[replace] is not modelled; the registry is taken as it is"
       | _ -> ())
     doc;
   let pkg =
     match get "package" doc with
     | Some p -> table "package" p
-    | None -> refuse "%s has no [package]: a virtual workspace is not a root" path
+    | None ->
+        refuse "%s has no [package]: a virtual workspace is not a root" path
   in
   let name =
     match get "name" pkg with
@@ -287,18 +323,26 @@ let of_manifest (path : string) : root =
         List.iter
           (fun (k, _) ->
             if k <> "resolver" then
-              refuse "workspace.%s: a workspace beyond its resolver is not \
-                      modelled; the root is one package" k)
+              refuse
+                "workspace.%s: a workspace beyond its resolver is not \
+                 modelled; the root is one package"
+                k)
           w;
-        Option.map (fun r -> resolver_of (str "workspace.resolver" r)) (get "resolver" w)
+        Option.map
+          (fun r -> resolver_of (str "workspace.resolver" r))
+          (get "resolver" w)
   in
   let resolver =
     match
-      (Option.map (fun r -> resolver_of (str "package.resolver" r)) (get "resolver" pkg),
-       ws_resolver)
+      ( Option.map
+          (fun r -> resolver_of (str "package.resolver" r))
+          (get "resolver" pkg),
+        ws_resolver )
     with
     | Some _, Some _ ->
-        refuse "cannot specify `resolver` field in both `[workspace]` and `[package]`"
+        refuse
+          "cannot specify `resolver` field in both `[workspace]` and \
+           `[package]`"
     | Some r, None | None, Some r -> r
     | None, None ->
         resolver_of_edition
@@ -308,21 +352,23 @@ let of_manifest (path : string) : root =
   in
   let deps =
     deps_of ~cfg:"" ~prefix:"" doc
-    @ (match get "target" doc with
-      | None -> []
-      | Some t ->
-          List.concat_map
-            (fun (cfg, p) ->
-              let prefix = Printf.sprintf "target.'%s'." cfg in
-              deps_of ~cfg ~prefix (table ("target." ^ cfg) p))
-            (table "target" t))
+    @
+    match get "target" doc with
+    | None -> []
+    | Some t ->
+        List.concat_map
+          (fun (cfg, p) ->
+            let prefix = Printf.sprintf "target.'%s'." cfg in
+            deps_of ~cfg ~prefix (table ("target." ^ cfg) p))
+          (table "target" t)
   in
   let declared =
     match get "features" doc with
     | None -> []
     | Some f ->
         List.map
-          (fun (k, es) -> (k, List.map P.entry_of (strings ("features." ^ k) es)))
+          (fun (k, es) ->
+            (k, List.map P.entry_of (strings ("features." ^ k) es)))
           (table "features" f)
   in
   let self_patch =
@@ -339,8 +385,10 @@ let of_manifest (path : string) : root =
                 match e with
                 | [ ("path", T.Str ("." | "./")) ] when k = name -> ()
                 | _ ->
-                    refuse "[patch.%s] %s: the only patch modelled maps the \
-                            root's own name to the root, { path = \".\" }" reg k)
+                    refuse
+                      "[patch.%s] %s: the only patch modelled maps the root's \
+                       own name to the root, { path = \".\" }"
+                      reg k)
               (table ("patch." ^ reg) entries))
           (table "patch" p);
         true
@@ -352,10 +400,10 @@ let of_manifest (path : string) : root =
         v_vers = vers;
         v_deps = deps;
         v_feats = P.with_implicit_features deps declared;
-        v_links =
-          Option.map (str "package.links") (get "links" pkg);
+        v_links = Option.map (str "package.links") (get "links" pkg);
         v_default_declared = List.mem_assoc P.default_feature declared;
-        v_msrv = Option.map (str "package.rust-version") (get "rust-version" pkg);
+        v_msrv =
+          Option.map (str "package.rust-version") (get "rust-version" pkg);
       };
     self_patch;
     msrv_pref = resolver >= 3;

@@ -42,8 +42,13 @@ let index =
     st ~provides:[ ("dupvirt", None) ] "dup" "1";
   ]
 
-let elem arg = A.query_element ~native:"amd64" ~arches:[ "amd64"; "i386" ] index arg
-let accepts = function A.Any -> "any" | A.Only v -> "=" ^ v | A.Nothing -> "none"
+let elem arg =
+  A.query_element ~native:"amd64" ~arches:[ "amd64"; "i386" ] index arg
+
+let accepts = function
+  | A.Any -> "any"
+  | A.Only v -> "=" ^ v
+  | A.Nothing -> "none"
 
 let expect arg key acc =
   let k, a = elem arg in
@@ -56,7 +61,8 @@ let () =
   (* fnmatch(3) with FNM_CASEFOLD *)
   check "fnmatch *" (A.fnmatch "1.*" "1.2");
   check "fnmatch ?" (A.fnmatch "1.?" "1.2" && not (A.fnmatch "1.?" "1.23"));
-  check "fnmatch range" (A.fnmatch "[a-c]x" "bx" && not (A.fnmatch "[a-c]x" "dx"));
+  check "fnmatch range"
+    (A.fnmatch "[a-c]x" "bx" && not (A.fnmatch "[a-c]x" "dx"));
   check "fnmatch negated" (A.fnmatch "[!a]" "b" && not (A.fnmatch "[^a]" "a"));
   check "fnmatch casefold" (A.fnmatch "ABC" "abc");
   check "fnmatch escape" (A.fnmatch "a\\*" "a*" && not (A.fnmatch "a\\*" "ab"));

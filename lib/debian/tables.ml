@@ -345,7 +345,6 @@ module Make (AP : ARCH) = struct
         | E.OpEq -> c = 0
         | E.OpNe -> c <> 0)
 
-
   let pp_formula fmt (f : DMA.Deb.Ver.coq_Formula) =
     let rec go fmt = function
       | DMA.Deb.Ver.FTop -> Format.fprintf fmt "T"

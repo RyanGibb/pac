@@ -89,7 +89,15 @@ let split_on c s = String.split_on_char c s |> List.map strip
 (* the two-character operators first, so that ">" is not read off ">=";
    the deprecated one-character ">" and "<" mean ">=" and "<=" (Policy 7.1) *)
 let operators =
-  [ (">=", Ge); (">>", Gt); ("<=", Le); ("<<", Lt); ("=", Eq); (">", Ge); ("<", Le) ]
+  [
+    (">=", Ge);
+    (">>", Gt);
+    ("<=", Le);
+    ("<<", Lt);
+    ("=", Eq);
+    (">", Ge);
+    ("<", Le);
+  ]
 
 let parse_atom s =
   let s = strip s in

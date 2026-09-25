@@ -150,7 +150,9 @@ let mk_inst st ~repo ~deps ~peers : Np.coq_Inst =
    sub-instances built. *)
 let matches_published st (d : P.dep) : bool =
   let n = d.P.d_target and own = own_range st.ar d in
-  memo st.opt_keep (n, Npm_version.string_of_range own) (fun () ->
+  memo st.opt_keep
+    (n, Npm_version.string_of_range own)
+    (fun () ->
       Np.VSet.exists_
         (Np.rgHolds (effective st n (xrange own)))
         (Np.realVersions (repo_at st n) n))
@@ -190,8 +192,7 @@ let dependencies st p =
   memo st.dep_tbl p (fun () ->
       match A.meta st.ar p with
       | None -> []
-      | Some v ->
-          List.map (xdep st.ar) (List.filter (dep_keep st) v.P.v_deps))
+      | Some v -> List.map (xdep st.ar) (List.filter (dep_keep st) v.P.v_deps))
 
 (* dependenciesOf I p: what depActive keeps, i.e. dev dependencies only
    at the root *)
@@ -263,8 +264,7 @@ let gran_sub_inst st (k : string * string) (w : string) =
    key's registry name together with p's slot targets. *)
 let int_sub_inst st (p : string * string) (m : string * string) =
   let ns = snd m :: slot_targets st p in
-  mk_inst st ~repo:(repo_of st ns)
-    ~deps:(own_dependencies st p)
+  mk_inst st ~repo:(repo_of st ns) ~deps:(own_dependencies st p)
     ~peers:(peer_dependencies_named st (fst m))
 
 (* dependees_lookupGran: pkgSubInst I p is p's own dependencies, its own
@@ -274,8 +274,8 @@ let int_sub_inst st (p : string * string) (m : string * string) =
    tests the whole package and emits nothing, so they are inert. *)
 let pkg_sub_inst st (p : string * string) =
   let ns = slot_targets st p @ peer_names_at st p in
-  mk_inst st ~repo:(repo_of st ns)
-    ~deps:(own_dependencies st p) ~peers:(own_peer_dependencies st p)
+  mk_inst st ~repo:(repo_of st ns) ~deps:(own_dependencies st p)
+    ~peers:(own_peer_dependencies st p)
 
 (* dependees_lookupInt: peerSubInst I p m u is p's own dependencies, the
    peer dependencies of the dependee that was selected, and the
@@ -284,8 +284,8 @@ let pkg_sub_inst st (p : string * string) =
 let peer_sub_inst st (p : string * string) (m : string * string) (u : string) =
   let q = (snd m, u) in
   let ns = slot_targets st p @ peer_names_at st q in
-  mk_inst st ~repo:(repo_of st ns)
-    ~deps:(own_dependencies st p) ~peers:(own_peer_dependencies st q)
+  mk_inst st ~repo:(repo_of st ns) ~deps:(own_dependencies st p)
+    ~peers:(own_peer_dependencies st q)
 
 let versions st (n : Np.Nm.name) : Np.Vs.version list =
   memo st.vcache n (fun () ->
