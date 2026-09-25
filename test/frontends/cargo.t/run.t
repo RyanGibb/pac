@@ -370,10 +370,12 @@ behind everything queued ahead of it.  dv takes sb 2.6.1 before t1, t2 and
 t3, and only then zj, whose versions both need ae 0.10.3 and so sb below
 2.5.  Refuting it costs whole replays of the queue, not the answer: cargo,
 backtracking into its saved frame, lands on sb 2.4.1 too.
+zj 1.1.0 and 1.2.0 are one class declaring ae alike, so they share one
+slot, and the conflict learned against it refutes both at once.
 
   $ ../../../src/main.exe cargo index dv | grep -E '^  (ae|sb|zj) '
     ae 0.10.3
     sb 2.4.1
     zj 1.2.0
   $ ../../../src/main.exe cargo index dv --debug | grep -c '^deciding on'
-  124
+  72

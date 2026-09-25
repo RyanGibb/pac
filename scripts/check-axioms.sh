@@ -300,10 +300,12 @@ Cgo.Lookup.dependees_lookupRootSub
 Cgo.Lookup.dependees_lookupSlot
 Cgo.Lookup.dependees_lookupSlotSub
 Cgo.Lookup.dependees_lookupSub
+Cgo.Lookup.decision_declines
 Cgo.Lookup.fdefFibre
 Cgo.Lookup.owner
 Cgo.Lookup.reads
 Cgo.Lookup.realPreimage
+Cgo.Lookup.slot_declines
 Cgo.Lookup.supportPreimage
 Cgo.Lookup.versions_lookupCrate
 Cgo.Lookup.versions_lookupCrateSub

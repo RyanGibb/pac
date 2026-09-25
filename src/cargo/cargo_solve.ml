@@ -173,12 +173,16 @@ let meta ar n v : P.ver option =
    complete at the moment the lookup answers.  Cargo.v's Lookup module has
    one theorem per shape asked below, in the components passed here.
    versions_lookup{Crate,FeatP}Sub read the repository, and the support
-   relation, at the name alone; versions_lookup{Slot,Decision}Sub and
-   dependees_lookup{Crate,FeatP,Slot,Decision}Sub read the owner's fibres
-   and the repository at Lookup.reads, the owner's name and its slots'
-   targets.  Each of those is complete by construction: name_set,
+   relation, at the name alone; dependees_lookup{Crate,FeatP}Sub read the
+   owner's fibres and the repository at Lookup.reads, the owner's name and
+   its slots' targets; and a slot or decision name carries the dependency
+   it stands for, so {versions,dependees}_lookup{Slot,Decision}Sub read the
+   repository at that dependency's target and the fibres of one version of
+   the owner's class declaring it, found by scanning the owner's index
+   entry.  Each of those is complete by construction: name_set,
    support_of_name and repo_preimage load every name they read whole, and
-   meta loads the owner.  versions_lookupLinkSub is the exception.  Its
+   meta and the witness scan load the owner.
+   versions_lookupLinkSub is the exception.  Its
    sub-instance is the preimage of the link relation at l -- every crate
    version declaring l -- and no declaration of any one crate names the
    other declarers, so nothing a loaded crate carries can bring them in:
@@ -313,6 +317,11 @@ module Make () = struct
 
   let fibres_cache : (string * string, fibres) Hashtbl.t = Hashtbl.create 4096
 
+  (* the manifest record a slot name's dependency came from, for choose's
+     walk over its candidates: the name carries the dependency but not the
+     parsed requirement the comparator reads *)
+  let dep_of_data : (Cg.SlotData.t, P.dep) Hashtbl.t = Hashtbl.create 4096
+
   let fibres_of ar (p : string * string) : fibres =
     match Hashtbl.find_opt fibres_cache p with
     | Some r -> r
@@ -324,7 +333,13 @@ module Make () = struct
           | Some m ->
               let ds = slots_of m in
               let slots =
-                Cg.SlotRel.ofList (List.map (fun d -> (p, slot_data d)) ds)
+                Cg.SlotRel.ofList
+                  (List.map
+                     (fun d ->
+                       let sd = slot_data d in
+                       Hashtbl.replace dep_of_data sd d;
+                       (p, sd))
+                     ds)
               in
               let fdefs =
                 Cg.FDefRel.ofList
@@ -434,6 +449,56 @@ module Make () = struct
         Hashtbl.replace support_cache n s;
         s
 
+  (* the witness versions_lookup{Slot,Decision}Sub name: a version of n in
+     class gr whose own declarations make the name, found by scanning n's
+     index entry, which holds every version of n and is loaded whole.  With
+     none, the empty fibres stand for slot_declines and decision_declines:
+     nothing in the instance makes the name, and the lookup declines. *)
+  let witness_cache :
+      ( [ `Slot of string * string * Cg.SlotData.t
+        | `Dec of string * string * string * Cg.SlotData.t * string ],
+        Cg.SlotRel.t * Cg.FDefRel.t )
+      Hashtbl.t =
+    Hashtbl.create 4096
+
+  let witness st key (ok : string * string -> fibres -> bool) n gr =
+    match Hashtbl.find_opt witness_cache key with
+    | Some r -> r
+    | None ->
+        let r =
+          match
+            List.find_map
+              (fun v ->
+                if compat_class v = gr then
+                  let rw = fibres_of st.ar (n, v) in
+                  if ok (n, v) rw then Some rw else None
+                else None)
+              (versions_of st.ar n)
+          with
+          | Some rw -> (rw.r_slots, rw.r_fdefs)
+          | None -> (Cg.SlotRel.empty, Cg.FDefRel.empty)
+        in
+        Hashtbl.replace witness_cache key r;
+        r
+
+  let slot_witness st n gr d =
+    fst
+      (witness st (`Slot (n, gr, d))
+         (fun p rw ->
+           Cg.SlotRel.mem (p, d) rw.r_slots && Cg.slotActive st.rc p d)
+         n gr)
+
+  let dec_witness st n gr f d feat =
+    witness st (`Dec (n, gr, f, d, feat))
+      (fun p rw ->
+        Cg.SlotRel.mem (p, d) rw.r_slots
+        && Cg.slotActive st.rc p d
+        && List.exists
+             (fun (((_, f'), e) : Cg.FDefElt.t) ->
+               f' = f && Cg.entryFeatD e = Some (Cg.sAlias d, feat))
+             (Cg.FDefRel.elements rw.r_fdefs))
+      n gr
+
   (* one branch per versions_lookup{Root,Crate,FeatP,Slot,Decision,Link}Sub,
      each passing the components its theorem names and nothing else *)
   let versions st (tn : Cg.NPlus.t) : Cg.VPlus.t list =
@@ -451,12 +516,12 @@ module Make () = struct
     | Cg.NPlus.CCrate (n, _) -> call (name_set st.ar n) nosupp nofd nosl nolk
     | Cg.NPlus.CFeatP (n, _, _) ->
         call (name_set st.ar n) (support_of_name st n) nofd nosl nolk
-    | Cg.NPlus.CSlot (n, v, _) ->
-        let rw = fibres_of st.ar (n, v) in
-        call (repo_preimage st.ar (n, v)) nosupp nofd rw.r_slots nolk
-    | Cg.NPlus.CDec (n, v, _, _, _) ->
-        let rw = fibres_of st.ar (n, v) in
-        call (repo_preimage st.ar (n, v)) nosupp rw.r_fdefs rw.r_slots nolk
+    | Cg.NPlus.CSlot (n, gr, d) ->
+        call (name_set st.ar (Cg.sTarget d)) nosupp nofd
+          (slot_witness st n gr d) nolk
+    | Cg.NPlus.CDec (n, gr, f, d, feat) ->
+        let sl, fd = dec_witness st n gr f d feat in
+        call (name_set st.ar (Cg.sTarget d)) nosupp fd sl nolk
     | Cg.NPlus.CLink l ->
         (* Lookup.claimants and LinkFibred.headFibre at l, over the
            declarers loaded so far; see the note above Make *)
@@ -491,14 +556,34 @@ module Make () = struct
         owner n v (fun r rw -> call r nosupp nofd rw.r_slots rw.r_links)
     | Cg.NPlus.CFeatP (n, _, _), Cg.VPlus.WOrig v ->
         owner n v (fun r rw -> call r rw.r_supp rw.r_fdefs rw.r_slots nolk)
-    | Cg.NPlus.CSlot (n, v, _), Cg.VPlus.WClass _ ->
-        owner n v (fun r rw -> call r nosupp nofd rw.r_slots nolk)
-    | Cg.NPlus.CDec (n, v, _, _, _), Cg.VPlus.WClass _ ->
-        owner n v (fun r rw -> call r nosupp rw.r_fdefs rw.r_slots nolk)
+    | Cg.NPlus.CSlot (n, gr, d), Cg.VPlus.WClass _ ->
+        call (name_set st.ar (Cg.sTarget d)) nosupp nofd
+          (slot_witness st n gr d) nolk
+    | Cg.NPlus.CDec (n, gr, f, d, feat), Cg.VPlus.WClass _ ->
+        let sl, fd = dec_witness st n gr f d feat in
+        call (name_set st.ar (Cg.sTarget d)) nosupp fd sl nolk
     | _, _ -> []
 
   let site_key (d : P.dep) : Cg.SlotKey.t =
     (d.P.d_alias, (xkind d.P.d_kind, d.P.d_cfg))
+
+  (* the dependency the owner's fibre holds at a site, which is what a slot
+     name carries: the order replay reads raw manifest rows, which
+     unify_site has not merged, so the name is taken from the fibre *)
+  let site_data_cache = Hashtbl.create 4096
+
+  let site_data ar (p : string * string) (k : Cg.SlotKey.t) =
+    match Hashtbl.find_opt site_data_cache (p, k) with
+    | Some sd -> sd
+    | None ->
+        let sd =
+          List.find_map
+            (fun ((_, sd) : Cg.SlotElt.t) ->
+              if Cg.sKey sd = k then Some sd else None)
+            (Cg.SlotRel.elements (fibres_of ar p).r_slots)
+        in
+        Hashtbl.replace site_data_cache (p, k) sd;
+        sd
 
   (* a slot node is one manifest site, so its name has to spell the site
      out: bare alias for the plain [dependencies] row, and the kind or cfg
@@ -511,6 +596,27 @@ module Make () = struct
       | Cg.Kind.KDev -> "[dev]")
       (if cfg = "" then "" else "[" ^ cfg ^ "]")
 
+  (* the requirement a slot name carries, since versions of one class may
+     declare one site differently and so have distinct slots *)
+  let pp_req fmt (d : Cg.SlotData.t) =
+    let op = function
+      | E.OpGe -> ">="
+      | E.OpGt -> ">"
+      | E.OpLe -> "<="
+      | E.OpLt -> "<"
+      | E.OpEq -> "="
+      | E.OpNe -> "!="
+    in
+    Format.fprintf fmt "(%s)"
+      (String.concat "||"
+         (List.map
+            (fun cs ->
+              String.concat ","
+                (List.map
+                   (function Cg.CAny -> "*" | Cg.COp (o, v) -> op o ^ v)
+                   cs))
+            (Cg.sReq d)))
+
   module PName = struct
     type t = Cg.NPlus.t
 
@@ -521,10 +627,11 @@ module Make () = struct
       | Cg.NPlus.CRoot -> Format.fprintf fmt "root"
       | Cg.NPlus.CCrate (n, gr) -> Format.fprintf fmt "%s@%s" n gr
       | Cg.NPlus.CFeatP (n, f, gr) -> Format.fprintf fmt "%s/%s@%s" n f gr
-      | Cg.NPlus.CSlot (n, v, k) ->
-          Format.fprintf fmt "%s@%s->%a" n v pp_site k
-      | Cg.NPlus.CDec (n, v, f, k, feat) ->
-          Format.fprintf fmt "<%s@%s/%s=>%a/%s>" n v f pp_site k feat
+      | Cg.NPlus.CSlot (n, gr, d) ->
+          Format.fprintf fmt "%s@%s->%a%a" n gr pp_site (Cg.sKey d) pp_req d
+      | Cg.NPlus.CDec (n, gr, f, d, feat) ->
+          Format.fprintf fmt "<%s@%s/%s=>%a%a/%s>" n gr f pp_site (Cg.sKey d)
+            pp_req d feat
       | Cg.NPlus.CLink l -> Format.fprintf fmt "links:%s" l
   end
 
@@ -692,11 +799,6 @@ module Make () = struct
           Hashtbl.replace enabled_cache key ds;
           ds
     in
-    let record (n, v) (k : Cg.SlotKey.t) =
-      match meta ar n v with
-      | None -> None
-      | Some m -> List.find_opt (fun d -> site_key d = k) (slots_of m)
-    in
     (* RemainingCandidates::next (core/resolver/mod.rs): a candidate is
        valid unless its class is activated at another version or another
        crate holds its links key.  That is a rule over the partial
@@ -820,11 +922,12 @@ module Make () = struct
       in
       let pick =
         match tn with
-        | Cg.NPlus.CSlot (n, v, k) -> Option.bind (record (n, v) k) walk
-        | Cg.NPlus.CDec (n, v, _, k, _) -> (
-            match decided_v assigned (Cg.NPlus.CSlot (n, v, k)) with
+        | Cg.NPlus.CSlot (_, _, d) ->
+            Option.bind (Hashtbl.find_opt dep_of_data d) walk
+        | Cg.NPlus.CDec (n, gr, _, d, _) -> (
+            match decided_v assigned (Cg.NPlus.CSlot (n, gr, d)) with
             | Some w -> offered w
-            | None -> Option.bind (record (n, v) k) walk)
+            | None -> Option.bind (Hashtbl.find_opt dep_of_data d) walk)
         | Cg.NPlus.CCrate (m, gr) ->
             List.find_opt
               (fun (c : PVersion.t) ->
@@ -880,38 +983,42 @@ module Make () = struct
           (Cg.NPlus.CRoot :: Cg.NPlus.CCrate (n, gr) :: owned (n, v) gr)
 
       let dep_step assigned (n, v) (d : P.dep) =
-        let sigma = Cg.NPlus.CSlot (n, v, site_key d) in
-        match assigned sigma with
-        | PG.Entailed _ -> Cargo_order.Decide sigma
-        | PG.Decided { PVersion.v = Cg.VPlus.WClass gr; _ } -> (
-            let delivered =
-              match meta (n, v) with
-              | None -> []
-              | Some m ->
-                  List.concat_map
-                    (fun (f, es) ->
-                      List.filter_map
-                        (function
-                          | P.FDepFeat (a, f') | P.FWeakFeat (a, f')
-                            when a = d.P.d_alias ->
-                              Some (Cg.NPlus.CDec (n, v, f, site_key d, f'))
-                          | _ -> None)
-                        es)
-                    m.P.v_feats
-            in
-            let t = d.P.d_target in
-            let g = Cg.NPlus.CCrate (t, gr) in
-            match List.find_opt (is_open assigned) delivered with
-            | Some x -> Cargo_order.Decide x
-            | None -> (
-                match assigned g with
-                | PG.Entailed _ -> Cargo_order.Decide g
-                | PG.Decided { PVersion.v = Cg.VPlus.WOrig u; _ } -> (
-                    match List.find_opt (is_open assigned) (owned (t, u) gr) with
-                    | Some x -> Cargo_order.Decide x
-                    | None -> Cargo_order.Activated (t, u))
-                | _ -> Cargo_order.Skip))
-        | _ -> Cargo_order.Skip
+        match site_data ar (n, v) (site_key d) with
+        | None -> Cargo_order.Skip
+        | Some sd -> (
+            let gr0 = compat_class v in
+            let sigma = Cg.NPlus.CSlot (n, gr0, sd) in
+            match assigned sigma with
+            | PG.Entailed _ -> Cargo_order.Decide sigma
+            | PG.Decided { PVersion.v = Cg.VPlus.WClass gr; _ } -> (
+                let delivered =
+                  match meta (n, v) with
+                  | None -> []
+                  | Some m ->
+                      List.concat_map
+                        (fun (f, es) ->
+                          List.filter_map
+                            (function
+                              | P.FDepFeat (a, f') | P.FWeakFeat (a, f')
+                                when a = d.P.d_alias ->
+                                  Some (Cg.NPlus.CDec (n, gr0, f, sd, f'))
+                              | _ -> None)
+                            es)
+                        m.P.v_feats
+                in
+                let t = d.P.d_target in
+                let g = Cg.NPlus.CCrate (t, gr) in
+                match List.find_opt (is_open assigned) delivered with
+                | Some x -> Cargo_order.Decide x
+                | None -> (
+                    match assigned g with
+                    | PG.Entailed _ -> Cargo_order.Decide g
+                    | PG.Decided { PVersion.v = Cg.VPlus.WOrig u; _ } -> (
+                        match List.find_opt (is_open assigned) (owned (t, u) gr) with
+                        | Some x -> Cargo_order.Decide x
+                        | None -> Cargo_order.Activated (t, u))
+                    | _ -> Cargo_order.Skip))
+            | _ -> Cargo_order.Skip)
     end) in
     let o = O.create () in
     let r =

@@ -101,27 +101,54 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
 
     Module NG := PairUOT N G.
     Module NVN := TripleUOT N V N.
+    Module NVS := PairUOT N VSet.AsUOT.
+    Module NGNVS := TripleUOT N G NVS.
     Module NGF := UOTCompareFacts NG.
     Module NVNF := UOTCompareFacts NVN.
-    #[local] Hint Rewrite NGF.compare_eq_iff NVNF.compare_eq_iff : cmp_conc.
+    Module NGNVSF := UOTCompareFacts NGNVS.
+    #[local] Hint Rewrite NGF.compare_eq_iff NVNF.compare_eq_iff
+      NGNVSF.compare_eq_iff : cmp_conc.
     #[local] Hint Extern 1 => cmp_by NGF.compare_antisym : cmp_conc.
     #[local] Hint Extern 1 => cmp_by NVNF.compare_antisym : cmp_conc.
+    #[local] Hint Extern 1 => cmp_by NGNVSF.compare_antisym : cmp_conc.
     #[local] Hint Extern 1 => cmp_by NGF.compare_lt_trans : cmp_conc.
     #[local] Hint Extern 1 => cmp_by NVNF.compare_lt_trans : cmp_conc.
+    #[local] Hint Extern 1 => cmp_by NGNVSF.compare_lt_trans : cmp_conc.
 
     Module Name.
+      (* The reduction's intermediate is GranIntermediate, keyed by the
+         depender's granularity: versions of one granularity never coexist,
+         so they can share it, and a conflict learned against it then holds
+         for all of them.  The declared range stays in the key because two
+         of them may declare m differently, and the intermediate's edges
+         must be a function of its name.  Intermediate, keyed by the
+         depender's version, is the peer and npm reductions' own: a peer
+         constraint reads the depender's other dependencies, which versions
+         of one granularity need not share. *)
       Inductive name : Type :=
       | Granular (n : N.t) (w : G.t)
-      | Intermediate (n : N.t) (v : V.t) (m : N.t).
+      | Intermediate (n : N.t) (v : V.t) (m : N.t)
+      | GranIntermediate (n : N.t) (w : G.t) (m : N.t) (vs : VSet.t).
       Definition t := name.
 
+      Definition rank (x : t) : nat :=
+        match x with
+        | Granular _ _ => 0 | Intermediate _ _ _ => 1
+        | GranIntermediate _ _ _ _ => 2
+        end.
+
       Definition compare (x y : t) : comparison :=
-        match x, y with
-        | Granular n1 w1, Granular n2 w2 => NG.compare (n1, w1) (n2, w2)
-        | Granular _ _, Intermediate _ _ _ => Lt
-        | Intermediate _ _ _, Granular _ _ => Gt
-        | Intermediate n1 v1 m1, Intermediate n2 v2 m2 =>
-            NVN.compare (n1, (v1, m1)) (n2, (v2, m2))
+        match Nat.compare (rank x) (rank y) with
+        | Eq =>
+            match x, y with
+            | Granular n1 w1, Granular n2 w2 => NG.compare (n1, w1) (n2, w2)
+            | Intermediate n1 v1 m1, Intermediate n2 v2 m2 =>
+                NVN.compare (n1, (v1, m1)) (n2, (v2, m2))
+            | GranIntermediate n1 w1 m1 vs1, GranIntermediate n2 w2 m2 vs2 =>
+                NGNVS.compare (n1, (w1, (m1, vs1))) (n2, (w2, (m2, vs2)))
+            | _, _ => Eq
+            end
+        | c => c
         end.
 
       Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
@@ -186,8 +213,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Definition gransOfVS (g : V.t -> G.t) (vs : VSet.t) : T.VSet.t :=
       SOvcv.map (fun u => Version.Gran (g u)) vs.
 
-    Definition filterGran (g : V.t -> G.t) (u : V.t) (vs : VSet.t) : VSet.t :=
-      VSet.filter (fun w => granEqb (g w) (g u)) vs.
+    Definition filterGran (g : V.t -> G.t) (w : G.t) (vs : VSet.t) : VSet.t :=
+      VSet.filter (fun u => granEqb (g u) w) vs.
 
     Module SOvtp := SetOps V T.Pkg VSet T.PkgSet.
     Module SOdtp := SetOps C.DepElt T.Pkg C.DepRel T.PkgSet.
@@ -197,7 +224,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         (SOdtp.unionMap (fun '((n, v), (m, vs)) =>
              if isSplitb g vs
              then SOvtp.map (fun u =>
-                      (Name.Intermediate n v m, Version.Gran (g u)))
+                      (Name.GranIntermediate n (g v) m vs, Version.Gran (g u)))
                     vs
              else T.PkgSet.empty)
            D).
@@ -220,7 +247,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       SOdtd.filterMap (fun '((n, v), (m, vs)) =>
           if isSplitb g vs
           then Some ((Name.Granular n (g v), Version.Orig v),
-                     (Name.Intermediate n v m, gransOfVS g vs))
+                     (Name.GranIntermediate n (g v) m vs, gransOfVS g vs))
           else None)
         D.
 
@@ -229,8 +256,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       SOdtd.unionMap (fun '((n, v), (m, vs)) =>
           if isSplitb g vs
           then SOvtd.map (fun u =>
-                   ((Name.Intermediate n v m, Version.Gran (g u)),
-                    (Name.Granular m (g u), embedVS (filterGran g u vs))))
+                   ((Name.GranIntermediate n (g v) m vs, Version.Gran (g u)),
+                    (Name.Granular m (g u), embedVS (filterGran g (g u) vs))))
                  vs
           else T.DepRel.empty)
         D.
@@ -239,7 +266,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       SOdtd.filterMap (fun '((n, v), (m, vs)) =>
           if VSet.is_empty vs
           then Some ((Name.Granular n (g v), Version.Orig v),
-                     (Name.Intermediate n v m, T.VSet.empty))
+                     (Name.GranIntermediate n (g v) m vs, T.VSet.empty))
           else None)
         D.
 
@@ -248,10 +275,10 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         (T.DepRel.union (reduceDepsSplitEntry D g)
            (T.DepRel.union (reduceDepsSplitFanout D g) (reduceDepsEmpty D g))).
 
-    Lemma mem_filterGran : forall g u0 vs u,
-        VSet.In u (filterGran g u0 vs) <-> VSet.In u vs /\ g u = g u0.
+    Lemma mem_filterGran : forall g w vs u,
+        VSet.In u (filterGran g w vs) <-> VSet.In u vs /\ g u = w.
     Proof.
-      intros g u0 vs u; unfold filterGran.
+      intros g w vs u; unfold filterGran.
       rewrite VSet.filter_spec'.
       rewrite granEqb_iff; reflexivity.
     Qed.
@@ -261,7 +288,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         (exists p, PkgSet.In p R /\ q = embedPkg g p) \/
         (exists n v m vs u,
             C.DepRel.In ((n, v), (m, vs)) D /\ IsSplit g vs /\ VSet.In u vs /\
-            q = (Name.Intermediate n v m, Version.Gran (g u))).
+            q = (Name.GranIntermediate n (g v) m vs, Version.Gran (g u))).
     Proof.
       intros R D g q; unfold reduceReal, embedSet.
       rewrite T.PkgSet.union_spec, SOptp.mem_map, SOdtp.mem_unionMap.
@@ -302,7 +329,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         exists n v m vs,
           C.DepRel.In ((n, v), (m, vs)) D /\ IsSplit g vs /\
           y = ((Name.Granular n (g v), Version.Orig v),
-               (Name.Intermediate n v m, gransOfVS g vs)).
+               (Name.GranIntermediate n (g v) m vs, gransOfVS g vs)).
     Proof.
       intros D g y; unfold reduceDepsSplitEntry; rewrite SOdtd.mem_filterMap.
       split.
@@ -320,8 +347,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         T.DepRel.In y (reduceDepsSplitFanout D g) <->
         exists n v m vs u,
           C.DepRel.In ((n, v), (m, vs)) D /\ IsSplit g vs /\ VSet.In u vs /\
-          y = ((Name.Intermediate n v m, Version.Gran (g u)),
-               (Name.Granular m (g u), embedVS (filterGran g u vs))).
+          y = ((Name.GranIntermediate n (g v) m vs, Version.Gran (g u)),
+               (Name.Granular m (g u), embedVS (filterGran g (g u) vs))).
     Proof.
       intros D g y; unfold reduceDepsSplitFanout; rewrite SOdtd.mem_unionMap.
       split.
@@ -341,7 +368,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         exists n v m,
           C.DepRel.In ((n, v), (m, VSet.empty)) D /\
           y = ((Name.Granular n (g v), Version.Orig v),
-               (Name.Intermediate n v m, T.VSet.empty)).
+               (Name.GranIntermediate n (g v) m VSet.empty, T.VSet.empty)).
     Proof.
       intros D g y; unfold reduceDepsEmpty; rewrite SOdtd.mem_filterMap.
       split.
@@ -364,15 +391,15 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         ((exists n v m vs,
              C.DepRel.In ((n, v), (m, vs)) D /\ IsSplit g vs /\
              y = ((Name.Granular n (g v), Version.Orig v),
-                  (Name.Intermediate n v m, gransOfVS g vs))) \/
+                  (Name.GranIntermediate n (g v) m vs, gransOfVS g vs))) \/
          ((exists n v m vs u,
               C.DepRel.In ((n, v), (m, vs)) D /\ IsSplit g vs /\ VSet.In u vs /\
-              y = ((Name.Intermediate n v m, Version.Gran (g u)),
-                   (Name.Granular m (g u), embedVS (filterGran g u vs)))) \/
+              y = ((Name.GranIntermediate n (g v) m vs, Version.Gran (g u)),
+                   (Name.Granular m (g u), embedVS (filterGran g (g u) vs)))) \/
           (exists n v m,
               C.DepRel.In ((n, v), (m, VSet.empty)) D /\
               y = ((Name.Granular n (g v), Version.Orig v),
-                   (Name.Intermediate n v m, T.VSet.empty))))).
+                   (Name.GranIntermediate n (g v) m VSet.empty, T.VSet.empty))))).
     Proof.
       intros D g y; unfold reduceDeps.
       rewrite !T.DepRel.union_spec.
@@ -398,7 +425,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Lemma tryInvPkg_some : forall g (p' : T.Pkg.t) (p : Pkg.t),
         tryInvPkg g p' = Some p -> embedPkg g p = p'.
     Proof.
-      intros g [[n w | n v m] [v' | w']] p H; cbn [tryInvPkg] in H;
+      intros g [[n w | n v m | n w m vs] [v' | w']] p H; cbn [tryInvPkg] in H;
         try discriminate.
       destruct (G.eq_dec w (g v')) as [-> | NE]; [| discriminate].
       injection H as <-; reflexivity.
@@ -432,7 +459,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
            (implb (isSplitb g vs)
               (VSet.exists_ (fun u0 =>
                    andb (T.PkgSet.mem
-                           (Name.Intermediate n v m, Version.Gran (g u0)) S)
+                           (Name.GranIntermediate n (g v) m vs, Version.Gran (g u0)) S)
                      (granEqb (g u) (g u0)))
                  vs))).
 
@@ -442,7 +469,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         T.PkgSet.In (Name.Granular n (g v), Version.Orig v) S /\
         (IsSplit g vs ->
            exists u0, VSet.In u0 vs /\
-             T.PkgSet.In (Name.Intermediate n v m, Version.Gran (g u0)) S /\
+             T.PkgSet.In (Name.GranIntermediate n (g v) m vs, Version.Gran (g u0)) S /\
              g u = g u0).
     Proof.
       intros g S n v m vs u; unfold piGuardb.
@@ -483,7 +510,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           T.PkgSet.In (Name.Granular m (g u), Version.Orig u) S /\
           (IsSplit g vs ->
              exists u0, VSet.In u0 vs /\
-               T.PkgSet.In (Name.Intermediate n v m, Version.Gran (g u0)) S /\
+               T.PkgSet.In (Name.GranIntermediate n (g v) m vs, Version.Gran (g u0)) S /\
                g u = g u0) /\
           pair = ((m, u), (n, v)).
     Proof.
@@ -527,7 +554,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Lemma mem_reduceDeps_split1 : forall D g n v m vs,
         C.DepRel.In ((n, v), (m, vs)) D -> IsSplit g vs ->
         T.DepRel.In ((Name.Granular n (g v), Version.Orig v),
-                     (Name.Intermediate n v m, gransOfVS g vs))
+                     (Name.GranIntermediate n (g v) m vs, gransOfVS g vs))
           (reduceDeps D g).
     Proof.
       intros; apply mem_reduceDeps.
@@ -536,8 +563,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
 
     Lemma mem_reduceDeps_split2 : forall D g n v m vs u0,
         C.DepRel.In ((n, v), (m, vs)) D -> IsSplit g vs -> VSet.In u0 vs ->
-        T.DepRel.In ((Name.Intermediate n v m, Version.Gran (g u0)),
-                     (Name.Granular m (g u0), embedVS (filterGran g u0 vs)))
+        T.DepRel.In ((Name.GranIntermediate n (g v) m vs, Version.Gran (g u0)),
+                     (Name.Granular m (g u0), embedVS (filterGran g (g u0) vs)))
           (reduceDeps D g).
     Proof.
       intros; apply mem_reduceDeps.
@@ -547,7 +574,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Lemma mem_reduceDeps_empty : forall D g n v m,
         C.DepRel.In ((n, v), (m, VSet.empty)) D ->
         T.DepRel.In ((Name.Granular n (g v), Version.Orig v),
-                     (Name.Intermediate n v m, T.VSet.empty))
+                     (Name.GranIntermediate n (g v) m VSet.empty, T.VSet.empty))
           (reduceDeps D g).
     Proof.
       intros; apply mem_reduceDeps.
@@ -667,7 +694,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
              then SOvtp.filterMap (fun u =>
                       if andb (PkgSet.mem (m, u) S)
                            (ParentRel.mem ((m, u), (n, v)) pi)
-                      then Some (Name.Intermediate n v m, Version.Gran (g u))
+                      then Some (Name.GranIntermediate n (g v) m vs, Version.Gran (g u))
                       else None)
                     vs
              else T.PkgSet.empty)
@@ -681,7 +708,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
            C.DepRel.In ((n, v), (m, vs)) D /\ PkgSet.In (n, v) S /\
            IsSplit g vs /\ PkgSet.In (m, u) S /\ VSet.In u vs /\
            ParentRel.In ((m, u), (n, v)) pi /\
-           q = (Name.Intermediate n v m, Version.Gran (g u))).
+           q = (Name.GranIntermediate n (g v) m vs, Version.Gran (g u))).
     Proof.
       intros S pi D g q; unfold coreResolution.
       rewrite T.PkgSet.union_spec, SOptp.mem_map, SOdtp.mem_unionMap.
@@ -736,7 +763,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         C.DepRel.In ((n, v), (m, vs)) D -> PkgSet.In (n, v) S ->
         IsSplit g vs -> PkgSet.In (m, u) S -> VSet.In u vs ->
         ParentRel.In ((m, u), (n, v)) pi ->
-        T.PkgSet.In (Name.Intermediate n v m, Version.Gran (g u))
+        T.PkgSet.In (Name.GranIntermediate n (g v) m vs, Version.Gran (g u))
           (coreResolution S pi D g).
     Proof.
       intros; apply mem_coreResolution.
@@ -798,8 +825,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           * destruct Hd as [n' [v' [m' [vs' [HD' [Hs' Heq]]]]]].
             discriminate Heq.
           * destruct Hd as [n' [v' [m' [vs' [u'' [HD' [Hs' [Hu'' Heq]]]]]]]].
-            injection Heq as <- <- <- Hgu -> ->.
-            assert (vs' = vs) as -> by (exact (Hfunc _ _ _ _ HD' HD)).
+            injection Heq as <- Hgv <- <- Hgu -> ->.
             exists (Version.Orig u); split.
             { unfold embedVS; apply SOvcv.mem_map; exists u; split;
                 [| reflexivity].
@@ -823,8 +849,9 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           exfalso; exact (Hvg n1 v1 v2 Hm1 Hm2 NE Hg).
         + injection He1 as -> ->; discriminate He2.
         + injection He1 as -> ->; discriminate He2.
-        + injection He1 as -> ->; injection He2 as <- <- <- ->.
-          assert (vs2 = vs1) as -> by (exact (Hfunc _ _ _ _ Hd2 Hd1)).
+        + injection He1 as -> ->; injection He2 as <- Hg12 <- <- ->.
+          destruct (V.eq_dec v1 v2) as [<- | NE];
+            [| exfalso; exact (Hvg n1 v1 v2 Hnv1 Hnv2 NE Hg12)].
           destruct (Hpc _ Hnv1 _ _ Hd1) as [w [_ Huniq]].
           pose proof (Huniq u1 (conj Hu1 (conj Hmu1 Hpi1))) as E1.
           pose proof (Huniq u2 (conj Hu2 (conj Hmu2 Hpi2))) as E2.
@@ -940,69 +967,95 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         - destruct H as [n' [v' [m' [_ Heq]]]]; discriminate Heq.
       Qed.
 
-      Theorem versions_lookupIntermediate : forall R D g n v m,
+      (* The name carries the depender's granularity and the declared
+         range, so the answer reads nothing of the instance; reachability
+         only rules out a name no declaration introduces. *)
+      Theorem versions_lookupIntermediate : forall R D g n w m vs,
           (exists p h,
-              T.DepRel.In (p, (Name.Intermediate n v m, h))
+              T.DepRel.In (p, (Name.GranIntermediate n w m vs, h))
                 (reduceDeps D g)) ->
-          T.versions (reduceReal R D g) (Name.Intermediate n v m) =
-          T.versions
-            (reduceReal PkgSet.empty (DepRelFibred.endsFibre D (n, v) m) g)
-            (Name.Intermediate n v m).
+          T.versions (reduceReal R D g) (Name.GranIntermediate n w m vs) =
+          (if isSplitb g vs then gransOfVS g vs else T.VSet.empty).
       Proof.
-        intros R D g n v m _; apply T.versions_ext; intro y.
-        rewrite !mem_reduceReal.
-        split.
-        - intros [[[qn qv] [_ Hq]]
-                 | [n' [v' [m' [vs [u [HD [Hs [Hu Heq]]]]]]]]].
+        intros R D g n w m vs [p [h Hreach]].
+        assert (Hw : exists v, C.DepRel.In ((n, v), (m, vs)) D /\ g v = w).
+        { apply mem_reduceDeps in Hreach.
+          destruct Hreach as [H | [H | [H | H]]].
+          - destruct H as [n' [v' [m' [vs' [u [_ [_ [_ Heq]]]]]]]];
+              discriminate Heq.
+          - destruct H as [n' [v' [m' [vs' [HD [_ Heq]]]]]].
+            injection Heq as _ <- Ew <- <- _.
+            exists v'; split; [exact HD | symmetry; exact Ew].
+          - destruct H as [n' [v' [m' [vs' [u [_ [_ [_ Heq]]]]]]]];
+              discriminate Heq.
+          - destruct H as [n' [v' [m' [HD Heq]]]].
+            injection Heq as _ <- Ew <- -> _.
+            exists v'; split; [exact HD | symmetry; exact Ew]. }
+        destruct Hw as [v [HD <-]].
+        apply T.VSet.ext; intro y.
+        rewrite T.mem_versions, mem_reduceReal.
+        destruct (isSplitb g vs) eqn:Hs.
+        - unfold gransOfVS; rewrite SOvcv.mem_map; split.
+          + intros [[[qn qv] [_ Hq]]
+                   | [n' [v' [m' [vs' [u [_ [_ [Hu Heq]]]]]]]]].
+            * unfold embedPkg in Hq; cbn [fst snd] in Hq; discriminate Hq.
+            * injection Heq as _ _ _ <- ->.
+              exists u; split; [exact Hu | reflexivity].
+          + intros [u [Hu ->]].
+            right; exists n, v, m, vs, u; repeat split; try assumption.
+            apply isSplitb_iff; exact Hs.
+        - split; [| intro Hy; destruct (T.VSet.empty_spec Hy)].
+          intros [[[qn qv] [_ Hq]]
+                 | [n' [v' [m' [vs' [u [_ [Hs' [_ Heq]]]]]]]]].
           + unfold embedPkg in Hq; cbn [fst snd] in Hq; discriminate Hq.
-          + injection Heq as -> -> -> ->.
-            right; exists n', v', m', vs, u.
-            split; [apply DepRelFibred.mem_endsFibre;
-                    split; [exact HD | split; reflexivity] |].
-            split; [exact Hs | split; [exact Hu | reflexivity]].
-        - intros [[[qn qv] [HR _]] | [n' [v' [m' [vs [u [HD Hrest]]]]]]].
-          + destruct (PkgSet.empty_spec HR).
-          + apply DepRelFibred.mem_endsFibre in HD; destruct HD as [HD _].
-            right; exists n', v', m', vs, u; split; [exact HD | exact Hrest].
+          + injection Heq as _ _ _ <- _.
+            apply isSplitb_iff in Hs'; congruence.
       Qed.
 
-      Theorem dependees_lookupIntermediate : forall R D g n v m w,
-          T.PkgSet.In (Name.Intermediate n v m, Version.Gran w)
+      Theorem dependees_lookupIntermediate : forall R D g n w m vs w',
+          T.PkgSet.In (Name.GranIntermediate n w m vs, Version.Gran w')
             (reduceReal R D g) ->
           T.dependees (reduceDeps D g)
-            (Name.Intermediate n v m, Version.Gran w) =
-          T.dependees (reduceDeps (DepRelFibred.endsFibre D (n, v) m) g)
-            (Name.Intermediate n v m, Version.Gran w).
+            (Name.GranIntermediate n w m vs, Version.Gran w') =
+          T.DependeesSet.singleton
+            (Name.Granular m w', embedVS (filterGran g w' vs)).
       Proof.
-        intros R D g n v m w _; apply T.dependees_ext; intros [m0 ws].
-        split; [| apply reduceDeps_mono, DepRelFibred.endsFibre_subset].
-        intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
-        destruct H as [H | [H | [H | H]]].
-        - destruct H as [n' [v' [m' [vs [u [HD [Hdir [Hu Heq]]]]]]]];
-            discriminate Heq.
-        - destruct H as [n' [v' [m' [vs [HD [Hs Heq]]]]]]; discriminate Heq.
-        - destruct H as [n' [v' [m' [vs [u [HD [Hs [Hu Heq]]]]]]]].
-          injection Heq as <- <- <- Hw -> ->.
-          subst w.
+        intros R D g n w m vs w' Hin.
+        apply mem_reduceReal in Hin.
+        destruct Hin as [[[qn qv] [_ Hq]]
+                        | [n' [v [m' [vs' [u [HD [Hs [Hu Heq]]]]]]]]].
+        { unfold embedPkg in Hq; cbn [fst snd] in Hq; discriminate Hq. }
+        injection Heq as <- -> <- <- ->.
+        apply T.DependeesSet.ext; intros [m0 ws].
+        rewrite T.mem_dependees, T.DependeesSet.singleton_spec,
+          mem_reduceDeps.
+        split.
+        - intros [H | [H | [H | H]]].
+          + destruct H as [n2 [v2 [m2 [vs2 [u2 [_ [_ [_ Heq2]]]]]]]];
+              discriminate Heq2.
+          + destruct H as [n2 [v2 [m2 [vs2 [_ [_ Heq2]]]]]];
+              discriminate Heq2.
+          + destruct H as [n2 [v2 [m2 [vs2 [u2 [_ [_ [_ Heq2]]]]]]]].
+            injection Heq2 as _ _ <- <- Egu -> ->.
+            rewrite Egu; reflexivity.
+          + destruct H as [n2 [v2 [m2 [_ Heq2]]]]; discriminate Heq2.
+        - intro E; injection E as -> ->.
           right; right; left; exists n, v, m, vs, u.
-          split; [apply DepRelFibred.mem_endsFibre;
-                  split; [exact HD | split; reflexivity] |].
-          split; [exact Hs | split; [exact Hu | reflexivity]].
-        - destruct H as [n' [v' [m' [HD Heq]]]]; discriminate Heq.
+          repeat split; assumption.
       Qed.
 
-      Theorem dependees_lookupIntermediateOrig : forall D g n v m u,
+      Theorem dependees_lookupIntermediateOrig : forall D g n w m vs u,
           T.dependees (reduceDeps D g)
-            (Name.Intermediate n v m, Version.Orig u) =
+            (Name.GranIntermediate n w m vs, Version.Orig u) =
           T.DependeesSet.empty.
       Proof.
-        intros D g n v m u; apply T.dependees_empty_iff; intros [m0 ws] H.
+        intros D g n w m vs u; apply T.dependees_empty_iff; intros [m0 ws] H.
         apply mem_reduceDeps in H.
         destruct H as [H | [H | [H | H]]].
-        - destruct H as [n' [v' [m' [vs [u' [_ [_ [_ Heq]]]]]]]];
+        - destruct H as [n' [v' [m' [vs' [u' [_ [_ [_ Heq]]]]]]]];
             discriminate Heq.
-        - destruct H as [n' [v' [m' [vs [_ [_ Heq]]]]]]; discriminate Heq.
-        - destruct H as [n' [v' [m' [vs [u' [_ [_ [_ Heq]]]]]]]];
+        - destruct H as [n' [v' [m' [vs' [_ [_ Heq]]]]]]; discriminate Heq.
+        - destruct H as [n' [v' [m' [vs' [u' [_ [_ [_ Heq]]]]]]]];
             discriminate Heq.
         - destruct H as [n' [v' [m' [_ Heq]]]]; discriminate Heq.
       Qed.
