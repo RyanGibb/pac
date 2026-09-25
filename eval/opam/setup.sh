@@ -12,12 +12,12 @@
 # would override it); scale.sh and valid.sh hand that to our driver
 # instead, as --opam-version.
 #
-# usage: setup.sh [opamroot-dir]   (default /tmp/claude-1000/opam-cmp-root)
+# usage: setup.sh [opamroot-dir]   (default $TMPDIR/pac-opam-root)
 #        REPO=<dir> builds it over another repository
 set -eu
 S="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "${REPO:-$S/../../repos/opam-repository}" && pwd)"
-export OPAMROOT="${1:-/tmp/claude-1000/opam-cmp-root}"
+export OPAMROOT="${1:-${TMPDIR:-/tmp}/pac-opam-root}"
 
 v=$(opam --version 2>/dev/null || true)
 if [ "$v" != 2.5.2 ]; then

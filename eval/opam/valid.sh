@@ -32,7 +32,7 @@ set -u
 # byte order, so the output is the same whatever the host's locale
 export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
-BASE="${OPAMROOT:-/tmp/claude-1000/opam-cmp-root}"
+BASE="${OPAMROOT:-${TMPDIR:-/tmp}/pac-opam-root}"
 exe=$1; tag=$2
 
 if [ $# -lt 3 ]; then
