@@ -37,7 +37,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Module SOhh := SetOps T.Dependees T.Dependees T.DependeesSet
     T.DependeesSet.
   Module SOrv := SetOps RPkg V RepoSet VSet.
-  Module SOrr := SetOps RPkg RPkg RepoSet RepoSet.
   Module SOnk := SetOps N NKey NSet KeySet.
   Module SOkp := SetOps NKey Pkg KeySet PkgSet.
   Module SOvp := SetOps V Pkg VSet PkgSet.
@@ -193,16 +192,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     - intro H; injection H as <-.
       split; [left; reflexivity | apply NEqb.eqb_true_iff; exact He].
     - intro H; destruct (IH H) as [H1 H2]; split; [right; exact H1 | exact H2].
-  Qed.
-
-  Lemma findDepL_none : forall l a,
-      findDepL l a = None -> forall d, In d l -> d_dir d <> a.
-  Proof.
-    intros l a; induction l as [| e l IH]; simpl; [intros _ d [] |].
-    destruct (NEqb.eqb (d_dir e) a) eqn:He; [discriminate |].
-    intros H d [-> | Hd].
-    - intro Hc; rewrite Hc, NEqb.eqb_refl in He; discriminate.
-    - exact (IH H d Hd).
   Qed.
 
   Definition slotKey (I : Inst) (p : RPkg.t) (a : N.t) : NKey.t :=

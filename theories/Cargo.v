@@ -248,9 +248,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       rewrite NEqb.eqb_refl, Hv; reflexivity.
   Qed.
 
-  Definition srcVersions (R : PkgSet.t) (m : N.t) : VSet.t :=
-    SOpv.filterMap (fun '(o, u) => if NEqb.eqb o m then Some u else None) R.
-
   Definition slotsAt (Slots : SlotRel.t)
       (rc : Pkg.t) (p : Pkg.t) (a : N.t) : SlotRel.t :=
     SlotRel.filter (fun '(q, d) =>
@@ -720,7 +717,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
      built on.  The edge relation is then built out of the per-package
      lookup rather than beside it, so the two cannot disagree. *)
 
-  Module SOsv := SetOps SlotElt VPOT SlotRel T.VSet.
   Module SOlv := SetOps LinkElt VPOT LinkRel T.VSet.
   Module SOpv2 := SetOps Pkg VPOT PkgSet T.VSet.
   Module SOspv := SetOps PkgF VPOT SupportSet T.VSet.

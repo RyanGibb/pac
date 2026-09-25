@@ -93,7 +93,6 @@ Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (PM : SemverMatch V).
                H1 H2).
     Qed.
   End CtComp.
-  Module CtOT := UOTFromCompare CtComp.
   Module CsComp := ListComp CtComp.
   Module RgComp := ListComp CsComp.
   Module RangeOT := UOTFromCompare RgComp.

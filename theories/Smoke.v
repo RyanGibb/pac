@@ -258,11 +258,6 @@ Example visibility_sub_computes :
        (Vis.ParentRel.add ((2, 1), (1, 1)) Vis.ParentRel.empty) (1, 1)) = 2.
 Proof. reflexivity. Qed.
 
-Example visibility_depBlocks_computes :
-  Vis.C.DepRel.cardinal (Vis.Reduction.Lookup.depBlocks visD (1, 1) (1, 1))
-  = 1.
-Proof. reflexivity. Qed.
-
 Module Op := Opam Nat_as_OT Nat_as_OT BoolFin Nat_as_OT Nat_as_OT.
 
 Definition opRho : Op.Valuation := fun _ => Some 1.
@@ -334,12 +329,6 @@ Example cargo_prerelease_admitted :
   Cgo.VSet.elements
     (Cgo.evalReq (Cgo.PkgSet.add (0, 4) (Cgo.PkgSet.add (0, 5)
        Cgo.PkgSet.empty)) 0 ((Cgo.COp OpGe 5 :: nil) :: nil)) = 5 :: nil.
-Proof. reflexivity. Qed.
-
-Example cargo_srcVersions_computes :
-  Cgo.VSet.cardinal
-    (Cgo.srcVersions (Cgo.PkgSet.add (0, 4) (Cgo.PkgSet.add (0, 5)
-       Cgo.PkgSet.empty)) 0) = 2.
 Proof. reflexivity. Qed.
 
 Module NatPM <: ApkVerMatch Nat_as_OT.

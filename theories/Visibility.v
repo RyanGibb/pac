@@ -1434,8 +1434,6 @@ Module Visibility (N V : UsualOrderedType).
       Module DepFibred :=
         FibredLabelledRel Pkg N VSet.AsUOT C.DepElt C.DepRel.
       Module PubFibred := FibredRel Pkg N PubElt PubRel.
-      Definition depBlocks (D : C.DepRel.t) (p q : Pkg.t) : C.DepRel.t :=
-        C.DepRel.union (DepFibred.tailFibre D p) (DepFibred.tailFibre D q).
 
       Lemma Priv_block : forall D D' pub pub' (p : Pkg.t),
           C.DepRel.Subset (DepFibred.tailFibre D p) D' ->
@@ -1472,27 +1470,6 @@ Module Visibility (N V : UsualOrderedType).
         split; [intros [[Hin _] | ->] | intros [Hin | ->]];
           [left; exact Hin | right; reflexivity
            | left; split; [exact Hin | reflexivity] | right; reflexivity].
-      Qed.
-
-      Lemma carriedb_mono : forall pub pub' (p : Pkg.t) (m : N.t) (q : Pkg.t),
-          PubRel.Subset pub' pub -> carriedb pub' p m q = true ->
-          carriedb pub p m q = true.
-      Proof.
-        intros pub pub' p m q Hs Hb.
-        apply carriedb_iff in Hb; apply carriedb_iff.
-        destruct Hb as [Hb | ->]; [left; exact (Hs _ Hb) | right; reflexivity].
-      Qed.
-
-      Lemma potentialOrigins_mono : forall R R' D D' pub pub' r,
-          PkgSet.Subset R' R ->
-          (forall p, Priv D' pub' p -> Priv D pub p) ->
-          PkgSet.Subset (potentialOrigins R' D' pub' r)
-            (potentialOrigins R D pub r).
-      Proof.
-        intros R R' D D' pub pub' r HR Hpriv q Hq.
-        apply mem_potentialOrigins in Hq; apply mem_potentialOrigins.
-        destruct Hq as [-> | [HqR Hqp]]; [left; reflexivity |].
-        right; split; [exact (HR _ HqR) | exact (Hpriv _ Hqp)].
       Qed.
 
       Definition depRange (D : C.DepRel.t) (p : Pkg.t) (m : N.t) : VSet.t :=

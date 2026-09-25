@@ -318,7 +318,6 @@ Module Opam (N V X Y E : UsualOrderedType).
         (fun p => andb (pinOKb (inst_pins I) p) (availb rho (inst_avl I) p))
         (inst_repo I).
 
-    Definition PFalse : PF.Formula := PF.FDep TName.Root PF.VSet.empty.
     Definition PTrue : PF.Formula :=
       PF.FDep TName.Root (PF.VSet.singleton TVer.UnitV).
 

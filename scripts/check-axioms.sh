@@ -105,7 +105,6 @@ Peer.Reduction.reduceReal
 Peer.Reduction.reduceRealIntermediate
 Peer.Reduction.reduceRealPeer
 
-Vis.Reduction.Lookup.depBlocks
 Vis.Reduction.Lookup.dependees_lookupAgreement
 Vis.Reduction.Lookup.dependees_lookupIntermediate
 Vis.Reduction.Lookup.dependees_lookupOccurrence
@@ -318,7 +317,6 @@ Cgo.evalReq
 Cgo.linkRel
 Cgo.rangeEval
 Cgo.rgHolds
-Cgo.srcVersions
 Cgo.transDeps
 Cgo.transReal
 Cgo.versions
