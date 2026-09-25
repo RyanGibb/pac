@@ -5,7 +5,7 @@ There are three levels: the unit tests, a regression set of a few dozen queries 
 ## Unit tests
 
 ```sh
-dune test                            # everything in test/, plus src/<eco>/test_*.ml
+dune test                            # everything in test/, plus lib/<eco>/test_*.ml
 dune test test/frontends/debian.t    # one frontend
 dune build @axioms                   # Print Assumptions over scripts/check-axioms.sh; peaks near 8 GB
 ```
@@ -60,18 +60,18 @@ npm's queries are pinned to the versions in `baseline/roots.txt`.
 `--regress` compares against the recorded answers instead of asking the tool; the validity check still runs.
 
 ```sh
-eval/debian/scale.sh --regress _build/default/src/main.exe /tmp/regress/debian
-eval/opam/scale.sh --regress _build/default/src/main.exe /tmp/regress/opam
-eval/alpine/scale.sh --regress _build/default/src/main.exe /tmp/regress/alpine
-eval/cargo/scale.sh --regress _build/default/src/main.exe /tmp/regress/cargo
-eval/npm/scale.sh --regress _build/default/src/main.exe /tmp/regress/npm
+eval/debian/scale.sh --regress _build/default/bin/main.exe /tmp/regress/debian
+eval/opam/scale.sh --regress _build/default/bin/main.exe /tmp/regress/opam
+eval/alpine/scale.sh --regress _build/default/bin/main.exe /tmp/regress/alpine
+eval/cargo/scale.sh --regress _build/default/bin/main.exe /tmp/regress/cargo
+eval/npm/scale.sh --regress _build/default/bin/main.exe /tmp/regress/npm
 ```
 
 `--record` asks the tool and writes its answers into `baseline/`. Record all ecosystems or none.
 Cargo records nothing and refuses `--record`; its `--regress` asks cargo afresh.
 
 ```sh
-eval/debian/scale.sh --record _build/default/src/main.exe /tmp/record/debian
+eval/debian/scale.sh --record _build/default/bin/main.exe /tmp/record/debian
 ```
 
 ## At scale
@@ -79,11 +79,11 @@ eval/debian/scale.sh --record _build/default/src/main.exe /tmp/record/debian
 With neither flag, `scale.sh` asks the tool over every package in the index (cargo: a seeded sample of 3000 crates), or over a queries file, one per line, optionally prefixed by a pool name and a tab.
 
 ```sh
-eval/alpine/scale.sh _build/default/src/main.exe /tmp/scale/alpine
-MODES=apt-heap P=32 eval/debian/scale.sh _build/default/src/main.exe /tmp/scale/debian
-eval/opam/scale.sh _build/default/src/main.exe /tmp/scale/opam-test <(ls repos/opam-repository/packages | sed 's/^/--with-test /')
-python3 eval/cargo/scale.py targets 20260923 150 > /tmp/pools.txt && eval/cargo/scale.sh _build/default/src/main.exe /tmp/scale/cargo /tmp/pools.txt
-node eval/npm/queries.js repos/npm targeted > /tmp/ranges.txt && eval/npm/scale.sh _build/default/src/main.exe /tmp/scale/npm /tmp/ranges.txt
+eval/alpine/scale.sh _build/default/bin/main.exe /tmp/scale/alpine
+MODES=apt-heap P=32 eval/debian/scale.sh _build/default/bin/main.exe /tmp/scale/debian
+eval/opam/scale.sh _build/default/bin/main.exe /tmp/scale/opam-test <(ls repos/opam-repository/packages | sed 's/^/--with-test /')
+python3 eval/cargo/scale.py targets 20260923 150 > /tmp/pools.txt && eval/cargo/scale.sh _build/default/bin/main.exe /tmp/scale/cargo /tmp/pools.txt
+node eval/npm/queries.js repos/npm targeted > /tmp/ranges.txt && eval/npm/scale.sh _build/default/bin/main.exe /tmp/scale/npm /tmp/ranges.txt
 ```
 
 ## Results

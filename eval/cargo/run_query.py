@@ -31,7 +31,7 @@ RUSTC = os.environ.get("RUSTC") or shutil.which("rustc") or "rustc"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(HERE + "/../..")
-PAC = os.environ.get("PAC", ROOT + "/_build/default/src/main.exe")
+PAC = os.environ.get("PAC", ROOT + "/_build/default/bin/main.exe")
 INDEX = ROOT + "/repos/crates.io-index"
 OUT = os.environ.get("CARGO_CMP_OUT", "/tmp/cargo-cmp")
 CARGO_HOME = OUT + "/cargo-home"

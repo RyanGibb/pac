@@ -2,7 +2,7 @@
 # Build the throwaway OPAMROOT scale.sh solves against: repos/opam-repository
 # as the only repository, an empty switch with an empty invariant and
 # nothing installed, and the environment variables our driver assumes
-# (src/opam/opam_solve.ml, [globals]) pinned through `opam var --global`,
+# (lib/opam/opam_solve.ml, [globals]) pinned through `opam var --global`,
 # so opam answers the same question our loader does rather than the host's.
 # Without the pinning opam infers os-distribution=nixos here, which changes
 # what is available (srt's conf-srt-openssl, for one): a different instance,

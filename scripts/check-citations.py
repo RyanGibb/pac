@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail when a comment in src/, eval/ or test/ cites a Rocq name that
+"""Fail when a comment in lib/, bin/, eval/ or test/ cites a Rocq name that
 theories/ does not define.
 
 A comment cites a Rocq name when it writes a qualified path whose head is a
@@ -19,7 +19,7 @@ import sys
 ROOT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1
                        else os.path.join(os.path.dirname(__file__), ".."))
 THEORIES = os.path.join(ROOT, "theories")
-SCAN = ["src", "eval", "test"]
+SCAN = ["lib", "bin", "eval", "test"]
 # Harness data, not prose.
 SKIP_DIRS = {"baseline", "_build", "node_modules"}
 
@@ -217,8 +217,9 @@ def aliases(prefixes, files):
     pat = re.compile(r"\bmodule\s+([A-Z]\w*)\s*=\s*([A-Z][\w.]*)")
     changed = True
     srcs = []
-    for d, _, fs in os.walk(os.path.join(ROOT, "src")):
-        srcs += [os.path.join(d, f) for f in fs if f.endswith(".ml")]
+    for top in ("lib", "bin"):
+        for d, _, fs in os.walk(os.path.join(ROOT, top)):
+            srcs += [os.path.join(d, f) for f in fs if f.endswith(".ml")]
     pairs = []
     for f in srcs:
         pairs += pat.findall(open(f).read())

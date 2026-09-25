@@ -1,2 +1,2 @@
 (cram
- (deps %{exe:../../src/main.exe}))
+ (deps %{exe:../../bin/main.exe}))

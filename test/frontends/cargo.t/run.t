@@ -3,7 +3,7 @@ root a crate of the index through the manifest it was published with,
 manifests/<crate>.toml, so the root's own dev-dependencies and features
 are in play.
 
-  $ ../../../src/main.exe cargo index manifests/a.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/a.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root a 1.0.0
   crates (6):
     a 1.0.0
@@ -21,7 +21,7 @@ names a prerelease at the same release core.  p publishes 1.0.0 and the
 newer 1.0.1-alpha, and ^1.0.0 names no prerelease, so it takes 1.0.0;
 q publishes 1.0.0-alpha.1 alone, which ^1.0.0-alpha reaches.
 
-  $ ../../../src/main.exe cargo index manifests/g.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/g.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root g 1.0.0
   crates (3):
     g 1.0.0
@@ -36,7 +36,7 @@ as an optional normal dependency and as a dev-dependency; from root h, k is
 not the root, so neither record installs m -- the optional one is never
 activated and the dev one does not participate.
 
-  $ ../../../src/main.exe cargo index manifests/h.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/h.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root h 1.0.0
   crates (2):
     h 1.0.0
@@ -51,7 +51,7 @@ resolve: the implicit feature of the optional m is among them, so that
 record activates as well and each of the two binds m through its own
 slot, two parent edges onto the one installed crate.
 
-  $ ../../../src/main.exe cargo index manifests/k.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/k.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root k 1.0.0
   crates (2):
     k 1.0.0 [m]
@@ -66,7 +66,7 @@ mandatory dev record installs m by itself.  The two stay
 separate slots -- conjoined, the dev record's non-optionality would bind
 on every depender, which is the h case above.
 
-  $ ../../../src/main.exe cargo index manifests/k.toml --features default | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/k.toml --features default | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root k 1.0.0 with features default
   crates (2):
     k 1.0.0
@@ -83,7 +83,7 @@ known.  z must still be admitted once it arrives -- the answer is the older,
 link-free x beside z, not a rejection of z against a version set fixed
 without it.
 
-  $ ../../../src/main.exe cargo index manifests/r.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/r.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root r 1.0.0
   crates (4):
     r 1.0.0
@@ -97,7 +97,7 @@ without it.
 The root's own links key excludes as a dependency's does.  rl claims
 links=foo, so x 1.0.0, which claims it too, is out and x 0.9.0 is taken.
 
-  $ ../../../src/main.exe cargo index manifests/rl.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/rl.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root rl 1.0.0
   crates (2):
     rl 1.0.0
@@ -112,7 +112,7 @@ nowhere else; cargo's resolver activates such an entry unconditionally and
 narrows it only in a later pass over the fixed resolution, so that w keeps
 its place in the lock as --features varies, and w is installed with extra.
 
-  $ ../../../src/main.exe cargo index manifests/s.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/s.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root s 1.0.0
   crates (3):
     s 1.0.0
@@ -128,7 +128,7 @@ it does, and newest-first still decides within each class.  d1 publishes
 1.0.0 with rust-version 1.60 and 1.1.0 with 1.80; under a 1.70 toolchain
 m1 takes the older 1.0.0.
 
-  $ ../../../src/main.exe cargo index manifests/m1.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/m1.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root m1 1.0.0 for rust 1.70
   crates (2):
     d1 1.0.0
@@ -140,7 +140,7 @@ m1 takes the older 1.0.0.
 With no toolchain configured the preference is off, as it is in cargo when
 the rust-versions list is empty, and the same index takes the newest.
 
-  $ ../../../src/main.exe cargo index manifests/m1.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/m1.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root m1 1.0.0
   crates (2):
     d1 1.1.0
@@ -156,7 +156,7 @@ and 1.2.0 needing 1.95, so under 1.70 the field-less 1.1.0 wins -- neither
 the newest nor the oldest, which no other reading of the missing field
 would give.
 
-  $ ../../../src/main.exe cargo index manifests/m2.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/m2.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root m2 1.0.0 for rust 1.70
   crates (2):
     d2 1.1.0
@@ -165,7 +165,7 @@ would give.
   parent edges: 1
   loaded: 2 crates, 4 versions
 
-  $ ../../../src/main.exe cargo index manifests/m2.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/m2.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root m2 1.0.0
   crates (2):
     d2 1.2.0
@@ -178,7 +178,7 @@ This is a preference and not a constraint.  m3 requires ^2 of d3, whose
 only version in range is 2.0.0 needing 1.90; the MSRV-compatible 1.0.0 is
 out of range, so 2.0.0 is taken rather than the solve failing.
 
-  $ ../../../src/main.exe cargo index manifests/m3.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/m3.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root m3 1.0.0 for rust 1.70
   crates (2):
     d3 2.0.0
@@ -194,7 +194,7 @@ declared it -- the target section, the kind table, and the key inside it --
 so the two are separate rows of the summary and both resolve, giving a
 lockfile with e 0.1.0 beside e 0.2.0.
 
-  $ ../../../src/main.exe cargo index manifests/t.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/t.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root t 1.0.0
   crates (3):
     e 0.1.0
@@ -209,7 +209,7 @@ package = renames the target and the cross-table check constrains only the
 source registry.  rn's x is e under [dependencies] and w under
 [target.'cfg(windows)'.dependencies], and both are installed.
 
-  $ ../../../src/main.exe cargo index manifests/rn.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/rn.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root rn 1.0.0
   crates (3):
     e 0.2.0
@@ -230,7 +230,7 @@ has one (dep_cache.rs, require_dep_feature): ir asks i for net alone, net
 is "o/extra" over the optional o, whose implicit feature o exists, so i is
 resolved with o on:
 
-  $ ../../../src/main.exe cargo index manifests/ir.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/ir.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root ir 1.0.0
   crates (3):
     i 1.0.0 [net,o]
@@ -243,7 +243,7 @@ resolved with o on:
 Where dep:o names the dependency there is no implicit feature o to enable,
 and i3 is resolved with net alone:
 
-  $ ../../../src/main.exe cargo index manifests/ir3.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/ir3.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root ir3 1.0.0
   crates (3):
     i3 1.0.0 [net]
@@ -261,7 +261,7 @@ crate's dependencies fewest candidates first and in declaration order
 between equals: ga is activated at 0.14.9, cp 0.1.7 then fails on its pin,
 and cp falls back to 0.1.6.
 
-  $ ../../../src/main.exe cargo index manifests/oa.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/oa.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root oa 1.0.0
   crates (4):
     cp 0.1.6
@@ -275,7 +275,7 @@ and cp falls back to 0.1.6.
 pb declares zp, a copy of cp, first, so zp 0.1.7 is activated first and its
 pin, with one candidate, is taken before pb's own ^0.14 of ga.
 
-  $ ../../../src/main.exe cargo index manifests/ob.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/ob.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root ob 1.0.0
   crates (4):
     ga 0.14.7
@@ -289,7 +289,7 @@ pin, with one candidate, is taken before pb's own ^0.14 of ga.
 The root's own dependencies are read from its manifest, whose tables cargo
 keys by name, so oc's zp-then-ga reaches the resolver as ga-then-zp.
 
-  $ ../../../src/main.exe cargo index manifests/oc.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/oc.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root oc 1.0.0
   crates (3):
     ga 0.14.9
@@ -306,7 +306,7 @@ ms activates sk 0.5.10 through its pin; mq's >=0.5, <0.7 then meets the
 compatible 0.5.9, which that activation rules out, and takes the newest of
 the rest, 0.6.5, although it needs a newer Rust than 1.70.
 
-  $ ../../../src/main.exe cargo index manifests/ms.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/ms.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root ms 1.0.0 for rust 1.70
   crates (4):
     mq 1.0.0
@@ -320,7 +320,7 @@ the rest, 0.6.5, although it needs a newer Rust than 1.70.
 mu pins sl to 0.6.5, which needs 1.80, so mt's range skips the compatible
 0.6.4 of that class and takes the compatible 0.5.9 of the older one.
 
-  $ ../../../src/main.exe cargo index manifests/mu.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/mu.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root mu 1.0.0 for rust 1.70
   crates (4):
     mt 1.0.0
@@ -338,10 +338,10 @@ sp to its own version, so zk's newest two are dead on arrival: the solve
 takes zk 1.0.0 without a single conflict, where learning it would cost
 one per version, since each version's slot is its own name.
 
-  $ ../../../src/main.exe cargo index manifests/dz.toml | grep -E '^  (sp|zk) '
+  $ ../../../bin/main.exe cargo index manifests/dz.toml | grep -E '^  (sp|zk) '
     sp 1.0.0
     zk 1.0.0
-  $ ../../../src/main.exe cargo index manifests/dz.toml --debug | grep -c '^conflict resolution'
+  $ ../../../bin/main.exe cargo index manifests/dz.toml --debug | grep -c '^conflict resolution'
   0
   [1]
 
@@ -351,10 +351,10 @@ ae has one candidate for it and that candidate is dead: the chain of
 forced candidates is followed, and zj 1.0.0 is again reached without a
 conflict.
 
-  $ ../../../src/main.exe cargo index manifests/dy.toml | grep -E '^  (ae|sb|zj) '
+  $ ../../../bin/main.exe cargo index manifests/dy.toml | grep -E '^  (ae|sb|zj) '
     sb 2.6.1
     zj 1.0.0
-  $ ../../../src/main.exe cargo index manifests/dy.toml --debug | grep -c '^conflict resolution'
+  $ ../../../bin/main.exe cargo index manifests/dy.toml --debug | grep -c '^conflict resolution'
   0
   [1]
 
@@ -363,10 +363,10 @@ the candidate turn on.  dx asks tr for url, which in tr 1.1.0 enables sb
 at a range the pinned 2.6.1 misses, so tr 1.0.0 is taken, again without a
 conflict.
 
-  $ ../../../src/main.exe cargo index manifests/dx.toml | grep -E '^  (sb|tr) '
+  $ ../../../bin/main.exe cargo index manifests/dx.toml | grep -E '^  (sb|tr) '
     sb 2.6.1
     tr 1.0.0 [url]
-  $ ../../../src/main.exe cargo index manifests/dx.toml --debug | grep -c '^conflict resolution'
+  $ ../../../bin/main.exe cargo index manifests/dx.toml --debug | grep -c '^conflict resolution'
   0
   [1]
 
@@ -374,10 +374,10 @@ A dependency with several valid candidates dies when every one of them
 does.  xw 1.1.0 needs zv, and each zv needs sb at a range the pinned 2.6.1
 misses, so xw 1.1.0 is passed over for 1.0.0, again without a conflict.
 
-  $ ../../../src/main.exe cargo index manifests/dw.toml | grep -E '^  (sb|xw|zv) '
+  $ ../../../bin/main.exe cargo index manifests/dw.toml | grep -E '^  (sb|xw|zv) '
     sb 2.6.1
     xw 1.0.0
-  $ ../../../src/main.exe cargo index manifests/dw.toml --debug | grep -c '^conflict resolution'
+  $ ../../../bin/main.exe cargo index manifests/dw.toml --debug | grep -c '^conflict resolution'
   0
   [1]
 
@@ -390,11 +390,11 @@ backtracking into its saved frame, lands on sb 2.4.1 too.
 zj 1.1.0 and 1.2.0 are one class declaring ae alike, so they share one
 slot, and the conflict learned against it refutes both at once.
 
-  $ ../../../src/main.exe cargo index manifests/dv.toml | grep -E '^  (ae|sb|zj) '
+  $ ../../../bin/main.exe cargo index manifests/dv.toml | grep -E '^  (ae|sb|zj) '
     ae 0.10.3
     sb 2.4.1
     zj 1.2.0
-  $ ../../../src/main.exe cargo index manifests/dv.toml --debug | grep -c '^deciding on'
+  $ ../../../bin/main.exe cargo index manifests/dv.toml --debug | grep -c '^deciding on'
   72
 
 A root Cargo.toml of its own.  app takes s under [dependencies], e under
@@ -404,7 +404,7 @@ feature net asks i for net.  The lock enables every root feature, so i
 comes in through net, with o behind i's own net, and e is locked at both
 0.1.0 (for x) and 0.2.0.
 
-  $ ../../../src/main.exe cargo index manifests/app.toml --print-parents | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/app.toml --print-parents | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root app 0.1.0
   crates (9):
     app 0.1.0 [default,i,net]
@@ -435,10 +435,10 @@ cargo keeps two packages, the path root and the registry's b, unless a
 [patch] maps the name to the root, so pac refuses the first manifest and
 answers the second.
 
-  $ ../../../src/main.exe cargo index manifests/selfdep.toml > /dev/null
+  $ ../../../bin/main.exe cargo index manifests/selfdep.toml > /dev/null
   error: the answer reaches b 1.0.0 through the registry, which cargo keeps apart from the root unless [patch.crates-io] maps b to it with { path = "." }
   [2]
-  $ ../../../src/main.exe cargo index manifests/selfpatch.toml --print-parents | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/selfpatch.toml --print-parents | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root b 1.0.0
   crates (6):
     a 1.0.0
@@ -462,10 +462,10 @@ answers the second.
 Sources and patches the model does not cover are refused rather than
 dropped:
 
-  $ ../../../src/main.exe cargo index manifests/pathdep.toml
+  $ ../../../bin/main.exe cargo index manifests/pathdep.toml
   error: dependencies.m: a path source is not a registry crate, and only the registry is modelled
   [2]
-  $ ../../../src/main.exe cargo index manifests/otherpatch.toml
+  $ ../../../bin/main.exe cargo index manifests/otherpatch.toml
   error: [patch.crates-io] m: the only patch modelled maps the root's own name to the root, { path = "." }
   [2]
 
@@ -473,7 +473,7 @@ An index entry whose feature table cargo's build_feature_map refuses is
 never a candidate, so cargo takes 1.0.0 of each of fa (dep:o/extra), fb
 (o/extra/z) and fc (a feature naming neither a feature nor a dependency):
 
-  $ ../../../src/main.exe cargo index manifests/fm.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/fm.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root fm 1.0.0
   crates (4):
     fa 1.0.0
@@ -488,17 +488,17 @@ never a candidate, so cargo takes 1.0.0 of each of fa (dep:o/extra), fb
 The manifest is TOML, which cargo refuses where a header defines a table
 dotted keys already made, or an integer has a leading zero:
 
-  $ ../../../src/main.exe cargo index manifests/tomldot.toml
+  $ ../../../bin/main.exe cargo index manifests/tomldot.toml
   error: manifests/tomldot.toml: line 13: table "dependencies.b" defined twice
   [2]
-  $ ../../../src/main.exe cargo index manifests/tomlint.toml
+  $ ../../../bin/main.exe cargo index manifests/tomlint.toml
   error: manifests/tomlint.toml: line 7: bad value "0_1"
   [2]
 
 while dotted keys over one table, a sub-table header under them, and
 numbers TOML allows all read:
 
-  $ ../../../src/main.exe cargo index manifests/tomlok.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe cargo index manifests/tomlok.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root tomlok 1.0.0
   crates (4):
     b 1.0.0

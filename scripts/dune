@@ -19,7 +19,8 @@
  (alias runtest)
  (deps
   (glob_files %{workspace_root}/theories/*.v)
-  (source_tree %{workspace_root}/src)
+  (source_tree %{workspace_root}/lib)
+  (source_tree %{workspace_root}/bin)
   (source_tree %{workspace_root}/eval)
   (source_tree %{workspace_root}/test)
   (sandbox always))
