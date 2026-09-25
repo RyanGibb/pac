@@ -18,7 +18,7 @@ builds from the lock, and to report it at all it must download each
 resolved package's body for the full manifest.  generate-lockfile writes
 the artifact being compared and downloads nothing.
 """
-import argparse, json, os, re, shutil, subprocess, sys, time, tomllib
+import json, os, re, shutil, subprocess, time, tomllib
 
 # The toolchain the recorded results were taken with, pinned by nix/flake.lock.
 # A query declaring no rust-version resolves for the installed rustc, so
@@ -32,23 +32,24 @@ RUSTC = os.environ.get("RUSTC") or shutil.which("rustc") or "rustc"
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(HERE + "/../..")
 PAC = os.environ.get("PAC", ROOT + "/_build/default/bin/main.exe")
-INDEX = ROOT + "/repos/crates.io-index"
+INDEX = os.environ.get("CARGO_INDEX") or ROOT + "/repos/crates.io-index"
 OUT = os.environ.get("CARGO_CMP_OUT", "/tmp/cargo-cmp")
+TIMEOUT = float(os.environ.get("TIMEOUT", 900))
 CARGO_HOME = OUT + "/cargo-home"
 WORK = OUT + "/work"
 MANIFEST_JQ = HERE + "/manifest.jq"
 
 
-def crate_path(name):
+def crate_path(name, index=INDEX):
     n = name.lower()
     l = len(n)
     if l == 1:
-        return f"{INDEX}/1/{n}"
+        return f"{index}/1/{n}"
     if l == 2:
-        return f"{INDEX}/2/{n}"
+        return f"{index}/2/{n}"
     if l == 3:
-        return f"{INDEX}/3/{n[0]}/{n}"
-    return f"{INDEX}/{n[0:2]}/{n[2:4]}/{n}"
+        return f"{index}/3/{n[0]}/{n}"
+    return f"{index}/{n[0:2]}/{n[2:4]}/{n}"
 
 
 def index_line(name, version):
@@ -100,7 +101,7 @@ def run_pac(manifest):
            "--print-parents"] + os.environ.get("EXTRA", "").split()
     t0 = time.time()
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=240)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT)
     except subprocess.TimeoutExpired:
         return {"ok": False, "returncode": None, "stdout": "", "stderr": "timed out",
                 "wall": time.time() - t0, "timeout": True}
@@ -233,20 +234,21 @@ def build_manifest(crate, version, workdir, patch_self=False):
             os.remove(stale)
 
 
-def write_cargo_config():
+def write_cargo_config(home=None):
     """Pin cargo to the snapshot pac reads.  Without this replacement
     cargo resolves against the live crates.io index and answers about a
     universe that has moved on since; sparse_proxy.py serves the
-    checkout on PORT, and valid.sh and scale.sh start it there.  The file
-    is rewritten whenever it differs, as a CARGO_HOME kept from a run on
-    another port would otherwise point cargo at that one."""
+    checkout on PORT, where scale.sh starts it.  The file is rewritten
+    whenever it differs, as a CARGO_HOME kept from a run on another port
+    would otherwise point cargo at that one."""
+    home = home or CARGO_HOME
     port = os.environ.get("PORT", "8991")
     url = f"sparse+http://127.0.0.1:{port}/"
     want = ('[source.crates-io]\nreplace-with = "pinned-index"\n\n'
             f'[source.pinned-index]\nregistry = "{url}"\n\n'
             f'[registries.pinned-index]\nindex = "{url}"\n')
-    os.makedirs(CARGO_HOME, exist_ok=True)
-    cfg = CARGO_HOME + "/config.toml"
+    os.makedirs(home, exist_ok=True)
+    cfg = home + "/config.toml"
     try:
         with open(cfg) as f:
             have = f.read()
@@ -256,7 +258,7 @@ def write_cargo_config():
         with open(cfg, "w") as f:
             f.write(want)
     env = dict(os.environ)
-    env["CARGO_HOME"] = CARGO_HOME
+    env["CARGO_HOME"] = home
     env["RUSTC"] = RUSTC
     return env
 
@@ -297,7 +299,7 @@ def run_cargo(crate, version, patch_self):
     env = write_cargo_config()
     t0 = time.time()
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=240, env=env)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT, env=env)
     except subprocess.TimeoutExpired:
         return {"ok": False, "returncode": None, "stdout": "", "stderr": "timed out",
                 "wall": time.time() - t0, "timeout": True}
@@ -313,38 +315,3 @@ def run_cargo(crate, version, patch_self):
         "edges": [[dn, dv, tn, tv] for (dn, dv), (tn, tv) in edges],
         "wall": dt,
     }
-
-
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("crate")
-    ap.add_argument("--out", default=None)
-    args = ap.parse_args()
-    check_toolchain()
-
-    pac_res, root, rustv, patched = ask_pac(args.crate)
-    if root is None:
-        result = {"crate": args.crate, "pac": pac_res,
-                  "cargo": None, "dropped": "no release left unyanked"}
-    else:
-        try:
-            cargo_res = run_cargo(*root, patched)
-        except Exception as e:
-            cargo_res = {"ok": False, "error": str(e)}
-        result = {"crate": args.crate, "root_rust_version": rustv,
-                  "pac": pac_res, "cargo": cargo_res}
-
-    out_path = args.out or f"{OUT}/results/{args.crate}.json"
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    with open(out_path, "w") as f:
-        json.dump(result, f, indent=1)
-    print(f"wrote {out_path}")
-    print(f"  pac ok={pac_res.get('ok')} wall={pac_res.get('wall'):.2f}s"
-          if pac_res.get("wall") is not None else f"  pac ok={pac_res.get('ok')}")
-    if result["cargo"]:
-        c = result["cargo"]
-        print(f"  cargo ok={c.get('ok')} wall={c.get('wall', 0):.2f}s")
-
-
-if __name__ == "__main__":
-    main()

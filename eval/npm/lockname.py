@@ -12,6 +12,7 @@ and its key otherwise, which is how npm records an alias and how
 mklock.py writes our answer.
 
 usage: lockname.py <package-lock.json>
+Exits 3 on a mismatch, so that a crash, which exits 1, is not read as one.
 """
 import json
 import sys
@@ -67,7 +68,7 @@ def main():
                 if want is None:
                     continue
                 # a copy inside the declarer is PEER LOCAL (arborist
-                # edge.js), which accepts.sh judges
+                # edge.js), which check.sh judges
                 frm = path
                 if field == "peerDependencies" and path:
                     frm = ancestors(path)[-2]
@@ -78,7 +79,7 @@ def main():
                 if got != want:
                     print(f"{path or '(root)'} {field} {key}: {spec} "
                           f"names {want}, {q} is {got}")
-                    bad = 1
+                    bad = 3
     return bad
 
 

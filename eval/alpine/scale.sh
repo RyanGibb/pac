@@ -1,21 +1,20 @@
 #!/usr/bin/env bash
 # usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]
-#        MODES=tool|pubgrub P=<jobs> TIMEOUT=<s>
+#        MODES="tool pubgrub" P=<jobs> TIMEOUT=<s>
 S="$(cd "$(dirname "$0")" && pwd)"
-MODES=${MODES:-tool}
+ECO=alpine ANSWER='^packages ('
 . "$S/../scale-lib.sh"
-flag() { printf -- '--order=%s' "$1"; }
 INDEX=$TOP/repos/alpine/APKINDEX
 
 all_queries() { sed -n 's/^P://p' "$INDEX" | sort -u; }
 
 prepare() {
-  # triage.py and pin.sh read one answer per query
-  case $MODES in *' '*) echo "$0: one order per run" >&2; return 1 ;; esac
   snapshot alpine/APKINDEX
   bash "$S/setup.sh" "$run/apkroot" > "$run/setup.log" 2>&1 || { cat "$run/setup.log" >&2; return 1; }
   export APKROOT=$run/apkroot APK=${APK:-apk}
 }
+
+refused() { grep -q '^ERROR: unable to select packages' "$2"; }
 
 ask() {
   timeout "$TIMEOUT" "$APK" add --root "$APKROOT/root" --usermode --allow-untrusted \
@@ -25,18 +24,21 @@ ask() {
   return $rc
 }
 
-one() {
-  local o=$run/out/$1 pac tool corr=- valid=- oo=- to=- t0=$EPOCHREALTIME
-  set -f
-  timeout "$TIMEOUT" "$run/pac.exe" alpine $(flag "$MODES") "$INDEX" $2 > "$o.out" 2>&1
-  echo $? > "$o.rc"
-  local wall; wall=$(since "$t0")
-  pac=$(pac_status "$(cat "$o.rc")" "$o.out" '^packages (')
-  sed -n '/^packages (/,/^encoded solution/s/^  \([^ ]*\) .*/\1/p' "$o.out" | sort -u > "$o.ours"
-  answer "$S/baseline/apk-$1" names ask "$2"
-  [ "$pac" = ok ] && [ "$tool" = ok ] && compare "$o.ours" "$o.theirs"
-  [ "$pac" = ok ] && valid "$o" "$MODES" "$2"
-  echo "query=$1 mode=$MODES pac=$pac tool=$tool corr=$corr valid=$valid oo=$oo to=$to wall=$wall"
+ask_tool() { answer "$S/baseline/apk-$1" names "$o.apk" ask "$2"; }
+
+# the query with every package of apk's answer added to the world: unsat
+# says apk's answer is no resolution of our instance.  A baseline records
+# names only, and a name has one version in an APKINDEX
+pin_tool() {
+  timeout "$TIMEOUT" "$run/pac.exe" alpine "$INDEX" $2 $(cat "$o.theirs") > "$o.pin.out" 2>&1
+  pin=$(pac_status $? "$o.pin.out" "$ANSWER")
+  sed -n '/^packages (/,/^encoded solution/s/^  \([^ ]*\) .*/\1/p' "$o.pin.out" | sort -u > "$o.pin"
 }
+
+run_pac() { timeout "$TIMEOUT" "$run/pac.exe" alpine $(flag "$1") "$INDEX" $3 > "$2.out" 2>&1; }
+
+extract() { sed -n '/^packages (/,/^encoded solution/s/^  \([^ ]*\) .*/\1/p' "$1.out" | sort -u > "$1.ours"; }
+
+canon() { sed -n '/^packages (/,/^encoded solution/p' "$1.out"; }
 
 main "$@"

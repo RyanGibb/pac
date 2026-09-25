@@ -9,15 +9,14 @@
                                   the crate's newest release; except links,
                                   since manifest.jq writes no links key into
                                   the root manifest
-  scale.py one CRATE PREFIX       the query's result line; run_query.py's and
-                                  verify.py's files at PREFIX.*
+  scale.py one CRATE STEM         pac's and cargo's answers, at STEM.*
+  scale.py corr STEM              how the two compare
 """
-import contextlib, functools, json, multiprocessing, operator, os, random, re
-import shutil, subprocess, sys, types
+import functools, json, multiprocessing, operator, os, random, re, shutil, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-INDEX = os.path.normpath(HERE + "/../../repos/crates.io-index")
+INDEX = os.environ.get("CARGO_INDEX") or os.path.normpath(HERE + "/../../repos/crates.io-index")
 TOOLCHAIN = "1.97.1"
 
 
@@ -190,47 +189,61 @@ def targets(seed, k, exclude=None):
             print(f"{name}\t{c}")
 
 
-def one(crate, o, mode="default"):
-    """run_query.py's and verify.py's answers, in-process so that every
-    timeout they set is TIMEOUT, and pac, which verify.py runs again exactly
-    as run_query.py did, runs once."""
-    import run_query, verify
-    key = os.path.basename(o)
-    if mode != "default":
-        o = f"{o}.{mode}"
-    timeout = float(os.environ["TIMEOUT"])
-    sub = types.ModuleType("subprocess")
-    sub.__dict__.update(vars(subprocess))
-    sub.run = lambda *a, **kw: subprocess.run(*a, **(dict(kw, timeout=timeout) if "timeout" in kw else kw))
-    run_query.subprocess = verify.subprocess = sub
-    run_query.ask_pac = functools.lru_cache(maxsize=None)(run_query.ask_pac)
-    with open(o + ".log", "w") as log, contextlib.redirect_stdout(log):
-        sys.argv = ["run_query.py", crate, "--out", o + ".json"]
-        run_query.main()
-        res = json.load(open(o + ".json"))
-        pac, cargo = res["pac"], res["cargo"]
-        if pac["ok"]:
-            sys.argv = ["verify.py", crate, "--out", o + ".valid.json"]
-            verify.main()
+REFUSED = ("failed to select a version", "cyclic package dependency", "no matching package named",
+           "does not have these features", "does not have that feature")
+
+
+def one(crate, p):
+    """pac's answer to the crate's manifest at p.out, with its exit status
+    as run_query.py reads it, and cargo's lock of the same manifest,
+    whose status goes to p.tool: cargo is asked per mode, since the
+    manifest is patched as pac's answer needs.  The manifest pac was given
+    is kept at p.manifest for the check.  A stage that raises is that
+    side's failure, never the query's loss."""
+    import run_query
+    pac = cargo = root = rustv = None
+    patched = False
+    try:
+        pac, root, rustv, patched = run_query.ask_pac(crate)
+    except Exception as e:
+        pac = {"ok": False, "returncode": 2, "stdout": "", "stderr": "harness: %r" % e}
+    if root is not None:
+        shutil.rmtree(p + ".manifest", ignore_errors=True)
+        shutil.copytree(os.path.join(run_query.WORK, crate), p + ".manifest",
+                        ignore=shutil.ignore_patterns("Cargo.lock", "target"))
+        try:
+            cargo = run_query.run_cargo(*root, patched)
+        except Exception as e:
+            cargo = {"ok": False, "error": "harness: %r" % e}
+    if cargo is None:
+        tool = "-"
+    elif cargo["ok"]:
+        tool = "ok"
+    elif cargo.get("timeout"):
+        tool = "timeout"
+    elif cargo.get("returncode") == 101 and any(r in cargo.get("stderr", "") for r in REFUSED):
+        tool = "refuse"
+    else:
+        tool = "error"
+    json.dump({"crate": crate, "root_rust_version": rustv, "pac": pac, "cargo": cargo},
+              open(p + ".json", "w"), indent=1)
+    open(p + ".out", "w").write(pac.get("stdout") or "")
+    open(p + ".err", "w").write(pac.get("stderr") or "")
+    open(p + ".tool", "w").write(tool + "\n")
     shutil.rmtree(run_query.CARGO_HOME, ignore_errors=True)
-    open(o + ".out", "w").write(pac.get("stdout") or "")
-    st = lambda r, fail: "-" if r is None else "ok" if r["ok"] else "timeout" if r.get("timeout") else fail
-    f = {"pac": st(pac, "unsat" if "unsatisfiable:" in (pac.get("stdout") or "") else "crash"),
-         "tool": st(cargo, "refuse"), "corr": "-", "valid": "-", "oo": "-", "to": "-",
-         "wall": "%.2f" % pac["wall"] if pac.get("wall") is not None else "-", "kept": "-", "identical": "-"}
-    if f["pac"] == "ok" == f["tool"]:
-        pn, cn = ({tuple(x) for x in s["crates"]} for s in (pac, cargo))
-        pe = {(dn, dv, tn, tv) for dn, dv, _alias, tn, tv in pac["edges"]}
-        ce = {tuple(e) for e in cargo["edges"]}
-        f["oo"], f["to"] = len(pn - cn), len(cn - pn)
-        f["corr"] = "exact" if pn == cn and pe == ce else "diff"
-    if f["pac"] == "ok":
-        v = json.load(open(o + ".valid.json")) if os.path.exists(o + ".valid.json") else {}
-        f["valid"] = v.get("verdict", "ERR")
-        yn = {True: "yes", False: "no"}
-        f["kept"], f["identical"] = yn.get(v.get("kept"), "-"), yn.get(v.get("identical"), "-")
-    print(f"query={key} mode={mode} " + " ".join(f"{k}={v}" for k, v in f.items()))
+    sys.exit(124 if pac.get("timeout") else 0 if pac["ok"] else pac.get("returncode") or 1)
+
+
+def corr(p):
+    """corr, oo and to: the crates only in ours and only in cargo's, and
+    whether crates and edges both agree"""
+    res = json.load(open(p + ".json"))
+    pac, cargo = res["pac"], res["cargo"]
+    pn, cn = ({tuple(x) for x in s["crates"]} for s in (pac, cargo))
+    pe = {(dn, dv, tn, tv) for dn, dv, _alias, tn, tv in pac["edges"]}
+    ce = {tuple(e) for e in cargo["edges"]}
+    print("exact" if pn == cn and pe == ce else "diff", len(pn - cn), len(cn - pn))
 
 
 if __name__ == "__main__":
-    {"sample": sample, "targets": targets, "one": one}[sys.argv[1]](*sys.argv[2:])
+    {"sample": sample, "targets": targets, "one": one, "corr": corr}[sys.argv[1]](*sys.argv[2:])

@@ -46,21 +46,26 @@ def contested(pkgs, side, answer, world):
 
 rows = report(run)
 pkgs = load()
+out = lambda r, ext: os.path.join(run, "out", r["query"] + ext)
+modes = list(dict.fromkeys(r["mode"] for r in rows))
 for c in ("preference-gap", "error", "exact-invalid"):
-    cl = {}
-    for r in (r for r in rows if r["class"] == c):
-        o = os.path.join(run, "out", r["query"])
-        world = [NAME.match(t)[1] for t in unkey(r["query"]).split() if t[0] != "!"]
-        oo, ao = (sorted(set(lines(o + a)) - set(lines(o + b))) for a, b in
-                  ((".ours", ".theirs"), (".theirs", ".ours")))
-        to, ta = contested(pkgs, oo, lines(o + ".ours"), world), contested(pkgs, ao, lines(o + ".theirs"), world)
-        few = lambda xs: "+".join(sorted(xs)[:3]) + ("+%d more" % (len(xs) - 3) if len(xs) > 3 else "") or "-"
-        cl[r["query"]] = "; ".join("%s: ours %s, apk %s" % (n, few(to.get(n, ())), few(ta.get(n, ())))
-                                  for n in sorted(set(to) | set(ta)))
-    show(c + ", by contested name", group([r for r in rows if r["query"] in cl], lambda r: cl[r["query"]]))
-for c in ("instance-gap", "both-refuse"):
-    show(c + ", by pac's first incompatibility", group(
-        [r for r in rows if r["class"] == c], lambda r: first_incompatibility(os.path.join(run, "out", r["query"] + ".out"))))
+    for m in modes:
+        cl = {}
+        for r in (r for r in rows if r["class"] == c and r["mode"] == m):
+            ours, theirs = lines(out(r, "." + m + ".ours")), lines(out(r, ".theirs"))
+            world = [NAME.match(t)[1] for t in unkey(r["query"]).split() if t[0] != "!"]
+            oo, ao = sorted(set(ours) - set(theirs)), sorted(set(theirs) - set(ours))
+            to, ta = contested(pkgs, oo, ours, world), contested(pkgs, ao, theirs, world)
+            few = lambda xs: "+".join(sorted(xs)[:3]) + ("+%d more" % (len(xs) - 3) if len(xs) > 3 else "") or "-"
+            cl[r["query"]] = "; ".join("%s: ours %s, apk %s" % (n, few(to.get(n, ())), few(ta.get(n, ())))
+                                      for n in sorted(set(to) | set(ta)))
+        show("%s, mode %s, by contested name" % (c, m),
+             group([r for r in rows if r["mode"] == m and r["query"] in cl], lambda r: cl[r["query"]]))
+for c in ("instance-gap", "unconfirmed", "both-refuse"):
+    for m in modes:
+        show("%s, mode %s, by pac's first incompatibility" % (c, m), group(
+            [r for r in rows if r["class"] == c and r["mode"] == m],
+            lambda r: first_incompatibility(out(r, "." + r["mode"] + ".out"))))
 
 
 def apk_reason(r):
@@ -75,4 +80,6 @@ def apk_reason(r):
 
 
 for c in ("tool-declines", "both-refuse"):
-    show(c + ", by apk's reason", group([r for r in rows if r["class"] == c], apk_reason))
+    for m in modes:
+        show("%s, mode %s, by apk's reason" % (c, m),
+             group([r for r in rows if r["class"] == c and r["mode"] == m], apk_reason))

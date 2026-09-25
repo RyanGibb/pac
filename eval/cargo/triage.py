@@ -70,15 +70,19 @@ def cargo_reason(res):
 
 
 rows = report(run)
-out = lambda r, ext: os.path.join(run, "out", r["query"] + ext)
-for c, label in (("preference-gap", lambda r: divergence(json.load(open(out(r, ".json"))))),
-                 ("error", lambda r: repaired(json.load(open(out(r, ".valid.json"))))),
-                 ("tool-declines", lambda r: "ours %s | cargo: %s" % (r["valid"], cargo_reason(json.load(open(out(r, ".json")))))),
+out = lambda r, ext: os.path.join(run, "out", "%s.%s%s" % (r["query"], r["mode"], ext))
+res = lambda r: json.load(open(out(r, ".json")))
+for c, label in (("preference-gap", lambda r: divergence(res(r))),
+                 ("error", lambda r: repaired(json.load(open(out(r, ".check/valid.json"))))),
+                 ("tool-declines", lambda r: "cargo: " + cargo_reason(res(r))),
+                 ("tool-error", lambda r: "cargo: " + cargo_reason(res(r))),
                  ("instance-gap", lambda r: first_incompatibility(out(r, ".out"))),
+                 ("unconfirmed", lambda r: first_incompatibility(out(r, ".out"))),
                  ("both-refuse", lambda r: "cargo: %s | pac: %s" % (
-                     cargo_reason(json.load(open(out(r, ".json")))), first_incompatibility(out(r, ".out"))))):
-    g = collections.defaultdict(list)
-    for r in rows:
-        if r["class"] == c:
-            g[label(r)].append(r["query"])
-    show(c, g)
+                     cargo_reason(res(r)), first_incompatibility(out(r, ".out"))))):
+    for m in dict.fromkeys(r["mode"] for r in rows):
+        g = collections.defaultdict(list)
+        for r in rows:
+            if r["class"] == c and r["mode"] == m:
+                g[label(r)].append(r["query"])
+        show("%s, mode %s" % (c, m), g)

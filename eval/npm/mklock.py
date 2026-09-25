@@ -66,7 +66,7 @@ checked, rather than npm's hoisting heuristic being guessed at:
           repair, since a lockfile must never quietly describe a
           different answer from ours.  It re-resolves
           our edges only: a peer edge as npm reads it, from the
-          declarer, is left to accepts.sh.
+          declarer, is left to check.sh.
 
 Every other field is copied, not decided: version, resolved and
 integrity come from the snapshot packument's own dist block, and the

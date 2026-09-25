@@ -1,24 +1,20 @@
 #!/usr/bin/env bash
+# Of a run's divergent queries, those pac answers exactly as apk does once
+# every package of apk's answer is in the world: scale.sh's pin_tool asked
+# that of each query apk answered, into out/<key>.pin.  A query still
+# divergent is a gap of the instance or of pac, not of preference.
 # usage: pin.sh <run-dir>
 set -u
 export LC_ALL=C
-S="$(cd "$(dirname "$0")" && pwd)"
 run=$1
 ok=0; bad=0
-set -f
-for k in $(sed -n 's/^query=\([^ ]*\) .* corr=diff .*/\1/p' "$run/results.txt"); do
-  g=${k//+/ }; g=${g//%2F//}; g=${g//%2B/+}; g=${g//%25/%}
+for k in $(sed -n 's/^query=\([^ ]*\) .* corr=diff .*/\1/p' "$run/results.txt" | sort -u); do
   o=$run/out/$k
-  ex=""
-  for p in busybox-binsh icu-data-en openssh-client-default; do
-    grep -qx "$p" "$o.theirs" && ex="$ex $p"
-  done
-  "$run/pac.exe" alpine "$S/../../repos/alpine/APKINDEX" $g $ex > "$o.pin.out" 2>&1
-  sed -n '/^packages (/,/^encoded solution/s/^  \([^ ]*\) .*/\1/p' "$o.pin.out" | sort -u > "$o.pin"
-  if cmp -s "$o.pin" "$o.theirs"; then
+  if [ -e "$o.pin" ] && cmp -s "$o.pin" "$o.theirs"; then
     ok=$((ok+1))
   else
-    bad=$((bad+1)); echo "still divergent: $g"; diff "$o.pin" "$o.theirs"
+    bad=$((bad+1)); echo "still divergent: $k"
+    diff "$o.pin" "$o.theirs" 2>&1
   fi
 done
 printf 'PINNED now-exact=%d still-divergent=%d\n' "$ok" "$bad"

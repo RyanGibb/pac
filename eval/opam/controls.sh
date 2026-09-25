@@ -37,53 +37,60 @@ if ! REPO=$R bash "$S/setup.sh" "$T/opamroot" > "$T/setup.log" 2>&1; then
 fi
 
 n=0
-# an _ in a row stands for a space, so a row can carry a stray field
-ctl() {  # <query> <selection> <expected>
+# an _ in a row stands for a space, so a row can carry a stray field; the
+# expected verdicts as valid/minimal
+ctl() {  # <query> <selection> <expected> [opamroot]
   local d=$T/c$((n += 1)) got
   mkdir -p "$d"
   { echo "opam packages (n)"; printf '  %s\n' $2 | tr _ ' '; echo loaded; } > "$d/ans.out"
-  echo 0 > "$d/ans.rc"
-  got=$(OPAMROOT=$T/opamroot REPLAY=$d/ans \
-    bash "$S/valid.sh" "$S/scale.sh" "$(realpath -m --relative-to="$S/out" "$d/out")" "$1" |
-    awk '{print $NF}')
-  printf '%-34s expect %-7s got %s\n' "[$1 | $2]" "$3" "$got"
+  got=$(OPAMROOT=${4:-$T/opamroot} REPO=$R bash "$S/../check.sh" opam "$d/ans.out" "$d/check" $1 |
+    tail -n 1 | sed -n 's/.* valid=\([A-Z]*\) minimal=\(.*\)$/\1\/\2/p')
+  printf '%-34s expect %-11s got %s\n' "[$1 | $2]" "$3" "$got"
   [ "$got" = "$3" ] || bad=1
 }
 
-ctl r 'r.1 a.1' VALID
-ctl ror 'ror.1 x.1' VALID
-ctl ror 'ror.1 y.1' VALID
-ctl p 'p.1 q.1' VALID
-ctl rb 'rb.1 a.1' VALID
-ctl pp 'pp.1 a.1' VALID
-ctl '--with-test rt' 'rt.1 a.1' VALID
-ctl '--with-test rt2' 'rt2.1 x.1 a.1' VALID
-ctl 'r ror' 'r.1 a.1 ror.1 x.1' VALID
+ctl r 'r.1 a.1' VALID/yes
+ctl ror 'ror.1 x.1' VALID/yes
+ctl ror 'ror.1 y.1' VALID/yes
+ctl p 'p.1 q.1' VALID/yes
+ctl rb 'rb.1 a.1' VALID/yes
+ctl pp 'pp.1 a.1' VALID/yes
+ctl '--with-test rt' 'rt.1 a.1' VALID/yes
+ctl '--with-test rt2' 'rt2.1 x.1 a.1' VALID/yes
+ctl 'r ror' 'r.1 a.1 ror.1 x.1' VALID/yes
 
-ctl r 'r.1' INVALID
-ctl r 'r.1 a.1 d.1' INVALID
-ctl u 'u.1' INVALID
-ctl uos 'uos.1' INVALID
-ctl ru 'ru.1 u.1' INVALID
-ctl ruo 'ruo.1 uos.1' INVALID
-ctl rcc 'rcc.1 cc1.1 cc2.1' INVALID
-ctl ra 'ra.1 a.2' INVALID
-ctl rb 'rb.1 a.2' INVALID
-ctl pp 'pp.1 a.2' INVALID
-ctl rx 'rx.1 a.1' INVALID
-ctl a 'a.9' INVALID
-ctl a 'a.1 a.2' INVALID
-ctl '--with-test rt' 'rt.1' INVALID
-ctl rt 'rt.1 a.1' INVALID
-ctl rt2 'rt2.1 x.1 a.1' INVALID
-ctl r 'r.1 a.1 m1.1 m2.1' INVALID
-ctl p2 'p2.1 q2.1' CYCLIC
-ctl r 'r.1 a.1 y.1_extra' INVALID
+ctl r 'r.1' INVALID/-
+ctl u 'u.1' INVALID/-
+ctl uos 'uos.1' INVALID/-
+ctl ru 'ru.1 u.1' INVALID/-
+ctl ruo 'ruo.1 uos.1' INVALID/-
+ctl rcc 'rcc.1 cc1.1 cc2.1' INVALID/-
+ctl ra 'ra.1 a.2' INVALID/-
+ctl rb 'rb.1 a.2' INVALID/-
+ctl pp 'pp.1 a.2' INVALID/-
+ctl rx 'rx.1 a.1' INVALID/-
+ctl a 'a.9' INVALID/-
+ctl a 'a.1 a.2' INVALID/-
+ctl '--with-test rt' 'rt.1' INVALID/-
+ctl p2 'p2.1 q2.1' CYCLIC/-
+ctl r 'r.1 a.1 y.1_extra' INVALID/-
+# nothing needs m1, but its own dependency is still unmet
+ctl r 'r.1 a.1 m1.1' INVALID/-
 
+# consistent, holding what the roots do not need
+ctl r 'r.1 a.1 d.1' VALID/no
+ctl rt 'rt.1 a.1' VALID/no
+ctl rt2 'rt2.1 x.1 a.1' VALID/no
+ctl r 'r.1 a.1 p.1 q.1' VALID/no
+# unneeded, and still a cycle opam cannot order
+ctl r 'r.1 a.1 m1.1 m2.1' CYCLIC/-
 # kept by `opam remove --auto-remove`, but nothing the roots need
-ctl ro 'ro.1 d.1' INVALID
-ctl ro2 'ro2.1 d2.1 e.1' INVALID
-ctl dv 'dv.1 a.1' INVALID
-ctl ror 'ror.1 x.1 y.1' INVALID
+ctl ro 'ro.1 d.1' VALID/no
+ctl ro2 'ro2.1 d2.1 e.1' VALID/no
+ctl dv 'dv.1 a.1' VALID/no
+ctl ror 'ror.1 x.1 y.1' VALID/no
+
+# opam failing for want of a root says nothing of the answer
+ctl r 'r.1 a.1' ERR/- "$T/no-opamroot"
 
 exit $bad

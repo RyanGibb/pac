@@ -67,21 +67,22 @@ def npm_code(p):
     return next((l.split()[-1] for l in lines(p) if l.startswith("npm error code ")), "?")
 
 
-rows = report(run, by="closed")
-for closed in ("yes", "no"):
-    rs = [r for r in rows if r["closed"] == closed]
+rows = report(run)
+report(run, by="closed")
+for m, closed in ((m, c) for m in dict.fromkeys(r["mode"] for r in rows) for c in ("yes", "no")):
+    rs = [r for r in rows if r["closed"] == closed and r["mode"] == m]
     for c in ("preference-gap", "error"):
         g = collections.defaultdict(list)
         for r in rs:
             if r["class"] == c:
-                for p in set(primaries(os.path.join(run, "out", r["query"]))) or ["?"]:
+                for p in set(primaries(os.path.join(run, "out", r["query"] + "." + m))) or ["?"]:
                     g[p].append(r["query"])
-        show("%s, closed %s, by primary divergence (a query counts once per kind)" % (c, closed), g)
-    for c in ("tool-declines", "both-refuse", "instance-gap"):
+        show("%s, mode %s, closed %s, by primary divergence (a query counts once per kind)" % (c, m, closed), g)
+    for c in ("tool-declines", "tool-error", "both-refuse", "instance-gap", "unconfirmed"):
         g = collections.defaultdict(list)
         for r in rs:
             if r["class"] == c:
                 o = os.path.join(run, "out", r["query"])
-                pac = first_incompatibility(o + ".out") if r["pac"] == "unsat" else "ours " + r["valid"]
+                pac = first_incompatibility(o + "." + m + ".out") if r["pac"] == "unsat" else "ours " + r["valid"]
                 g["npm %s | %s" % (npm_code(o + ".npm"), pac)].append(r["query"])
-        show("%s, closed %s, by each side's reason" % (c, closed), g)
+        show("%s, mode %s, closed %s, by each side's reason" % (c, m, closed), g)

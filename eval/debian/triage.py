@@ -73,7 +73,7 @@ for c in ("preference-gap", "error", "exact-invalid"):
                     groups[d].append(r["query"])
         if groups:
             show("%s, mode %s, by contested clause (a query counts once per clause)" % (c, m), groups)
-for c in ("instance-gap", "both-refuse", "tool-declines"):
+for c in ("instance-gap", "unconfirmed", "both-refuse", "tool-declines", "tool-error"):
     for m in dict.fromkeys(r["mode"] for r in rows):
         rs = [r for r in rows if r["class"] == c and r["mode"] == m]
         if rs:

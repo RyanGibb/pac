@@ -9,8 +9,8 @@
 # not a different preference.
 #
 # opam-version is left as opam's own (OPAMVAR_opam_version or a variable
-# would override it); scale.sh and valid.sh hand that to our driver
-# instead, as --opam-version.
+# would override it); scale.sh hands that to our driver instead, as
+# --opam-version.
 #
 # usage: setup.sh [opamroot-dir]   (default $TMPDIR/pac-opam-root)
 #        REPO=<dir> builds it over another repository

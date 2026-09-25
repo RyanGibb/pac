@@ -1,8 +1,15 @@
 """Shared by each eval/<eco>/triage.py: a scale.sh run's result lines, the
-class each query falls in, and the tables every ecosystem prints."""
+class each query falls in, and the tables every ecosystem prints.  Also the
+one spelling of a query as a file name, which scale-lib.sh asks for:
+
+  triage_lib.py keys < queries-file    key<TAB>query per line, a query being
+                                       a line's last tab-separated field
+  triage_lib.py unkey <key>            the query
+"""
 import collections
 import os
 import re
+import sys
 
 
 def lines(p):
@@ -21,28 +28,38 @@ def unkey(k):
 
 
 def classify(r):
-    pac, tool, valid = r["pac"], r["tool"], r["valid"]
+    pac, tool, valid, pin = r["pac"], r["tool"], r["valid"], r.get("pin", "-")
     if pac in ("timeout", "crash"):
         return "pac-" + pac
     if tool == "unrecorded":
         return tool
-    if tool == "timeout":
-        return "tool-timeout"
+    if tool in ("timeout", "error"):
+        return "tool-" + tool
     # a resolution the tool cannot then install, for a cycle in its install
     # order, is not an error of the resolution
     if pac == "ok" and valid == "CYCLIC":
         return "post-resolution"
     if pac == "ok" and valid not in ("VALID", "INVALID"):
         return "unchecked"
+    # an answer the tool rejects is pac's error whether or not the tool had
+    # one of its own
+    if pac == "ok" and valid == "INVALID":
+        return "exact-invalid" if tool == "ok" and r["corr"] == "exact" else "error"
     if pac == "ok" and tool == "ok":
         if r["corr"] == "exact":
-            return "exact" if valid == "VALID" else "exact-invalid"
-        if valid == "INVALID":
-            return "error"
-        return "instance-gap" if r.get("pin") == "unsat" else "preference-gap"
+            return "exact"
+        # only a pin that ran says which gap this is; an ecosystem with no
+        # pin check has none to say it
+        if pin == "unsat":
+            return "instance-gap"
+        return "preference-gap" if pin in ("ok", "-") else "unchecked"
     if pac == "ok":
         return "tool-declines"
-    return "instance-gap" if tool == "ok" else "both-refuse"
+    # pac's refusal is a gap of the instance only once pac also refuses the
+    # tool's own answer
+    if tool == "ok":
+        return "instance-gap" if pin == "unsat" else "unconfirmed"
+    return "both-refuse"
 
 
 def group(rows, label):
@@ -77,9 +94,13 @@ def report(run, by="mode"):
     rows = [dict(f.split("=", 1) for f in l.split()) for l in lines(os.path.join(run, "results.txt"))]
     for r in rows:
         r["class"] = classify(r)
-    parts = sorted(dict.fromkeys(r[by] for r in rows), key=lambda m: m != "default")
+    parts = sorted(dict.fromkeys(r[by] for r in rows), key=lambda m: m != "tool")
     for m in parts:
         show("classes, %s %s" % (by, m), group([r for r in rows if r[by] == m], lambda r: r["class"]))
+        # the tool's own fixed point is no part of validity, so it is shown apart
+        show("minimal, of the valid answers, %s %s" % (by, m), group(
+            [r for r in rows if r[by] == m and r["valid"] == "VALID"],
+            lambda r: "minimal=" + r.get("minimal", "-")))
     cls = {(r["query"], r[by]): r["class"] for r in rows}
     pools = [l.split("\t", 1) for l in lines(os.path.join(run, "queries.txt")) if "\t" in l]
     for m in parts if pools else []:
@@ -98,3 +119,13 @@ def report(run, by="mode"):
         for (a, b), c in n.most_common():
             print("  %-16s -> %-16s %6d" % (a, b, c))
     return rows
+
+
+if __name__ == "__main__":
+    if sys.argv[1] == "keys":
+        for l in sys.stdin.read().split("\n"):
+            if l.strip():
+                q = l.split("\t")[-1]
+                print(key(q) + "\t" + q)
+    elif sys.argv[1] == "unkey":
+        print(unkey(sys.argv[2]))

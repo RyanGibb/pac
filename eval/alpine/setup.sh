@@ -12,7 +12,7 @@ INDEX="${INDEX:-$S/../../repos/alpine/APKINDEX}"
 
 if [ "$(id -u)" -eq 0 ]; then
   echo "setup.sh: apk refuses --usermode --initdb as root, so the root scale.sh" \
-       "and valid.sh answer from cannot be built; run as an ordinary user" >&2
+       "and check.sh answer from cannot be built; run as an ordinary user" >&2
   exit 1
 fi
 
