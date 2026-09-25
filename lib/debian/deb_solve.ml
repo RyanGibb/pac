@@ -1,354 +1,17 @@
-module E = Pac
-module DF = Debian_frontend.Deb_packages
-
-let c2r c = if c < 0 then E.Lt else if c > 0 then E.Gt else E.Eq
-let r2c = function E.Lt -> -1 | E.Eq -> 0 | E.Gt -> 1
 
 (* Nothing is an element whose named version apt finds no match for; it
    refuses the whole request, which an empty range says. *)
 type accepts = Any | Only of string | Nothing
 
-module StringOT = struct
-  type t = string
+(* whose order the search decides in: apt's, replayed, or PubGrub's own *)
+type order = Order.t
 
-  let compare a b = c2r (String.compare a b)
-  let eq_dec (a : string) b = String.equal a b
-end
+module E = Pac
+module DF = Debian_frontend.Deb_packages
 
-module DebVersionOT = struct
-  type t = string
-
-  let compare a b = c2r (Debian_frontend.Deb_version.compare a b)
-  let eq_dec a b = Debian_frontend.Deb_version.compare a b = 0
-end
-
-module Make (AP : sig
-  val arches : string list
-  val native : string
-end) =
-struct
-  module APx = struct
-    module A = struct
-      type t = string
-
-      let compare a b = c2r (String.compare a b)
-      let eq_dec (a : string) b = String.equal a b
-      let enum = AP.arches
-    end
-
-    let native = AP.native
-  end
-
-  module DMA = E.DebianMA (StringOT) (DebVersionOT) (APx)
-
-  let formula_of_constr = function
-    | None -> DMA.Deb.Ver.FTop
-    | Some (DF.Ge, v) -> DMA.Deb.Ver.FCmp (E.OpGe, v)
-    | Some (DF.Gt, v) -> DMA.Deb.Ver.FCmp (E.OpGt, v)
-    | Some (DF.Le, v) -> DMA.Deb.Ver.FCmp (E.OpLe, v)
-    | Some (DF.Lt, v) -> DMA.Deb.Ver.FCmp (E.OpLt, v)
-    | Some (DF.Eq, v) -> DMA.Deb.Ver.FCmp (E.OpEq, v)
-
-  let qual_of = function
-    | DF.Unqual -> DMA.QUnq
-    | DF.AnyArch -> DMA.QAny
-    | DF.NativeArch -> DMA.QNative
-    | DF.ExplicitArch a -> DMA.QArch a
-
-  let matom_of (a : DF.atom) : DMA.Atom.t =
-    (a.name, (qual_of a.aqual, formula_of_constr a.constr))
-
-  let dtop_of = function Some v -> DMA.Deb.DTVal v | None -> DMA.Deb.DTTop
-
-  (* Normalized stanza: apt rewrites arch:all packages to the native arch
-     and downgrades all+same to no (arch:all content is arch-invariant).
-     Its Depends and Recommends clauses are still the raw field text, and
-     are mangled once, on the first sub-instance that reads them. *)
-  type nstanza = {
-    npkg : DMA.Pkg.t;
-    ncls : DMA.coq_MAClass;
-    raw_deps : string list;
-    raw_recs : string list;
-    mutable nclauses : (DMA.Atom.t list list * DMA.Atom.t list list) option;
-    nprovs : (string * DMA.Deb.coq_DTop) list;
-    nconfs : DMA.Atom.t list;
-    (* apt ranks the providers claiming a name by these; see pref below *)
-    ness : bool;
-    nimp : bool;
-    nprio : int;
-    nsrc : string * string;
-    (* apt keys an arch:all version apart from its native twin
-       (Version::All), whatever package arch it was filed under *)
-    nall : bool;
-  }
-
-  (* ~recommends false is the --no-install-recommends reading: the Rec
-     instance is empty, so every soft disjunct is empty and unreachable. *)
-  let normalize ~recommends (st : DF.stanza) : nstanza =
-    let arch = if st.architecture = "all" then AP.native else st.architecture in
-    let ncls =
-      match st.multi_arch with
-      | Some "same" when st.architecture = "all" -> DMA.MANo
-      | Some "same" -> DMA.MASame
-      | Some "foreign" -> DMA.MAForeign
-      | Some "allowed" -> DMA.MAAllowed
-      | _ -> DMA.MANo
-    in
-    {
-      npkg = ((st.package, arch), st.version);
-      ncls;
-      raw_deps = st.depends_raw;
-      raw_recs = (if recommends then st.recommends_raw else []);
-      nclauses = None;
-      nprovs =
-        List.map
-          (fun (pr : DF.provide) -> (pr.pname, dtop_of pr.pversion))
-          st.provides;
-      nconfs = List.map matom_of st.conflicts;
-      (* apt's cache generator marks the package named apt Essential and
-         Important whatever its stanza says (deblistparser.cc, UsePackage:
-         pkgCacheGen::ForceEssential defaults to "apt"), and the solver
-         ranks providers on the flags in the cache, not in the stanza *)
-      ness = st.essential || st.package = "apt";
-      nimp = st.important || st.package = "apt";
-      nprio = st.priority;
-      nsrc = st.source;
-      nall = st.architecture = "all";
-    }
-
-  (* Untrusted whole-archive index: its faithfulness to the parsed instance
-     is trusted, as are the parser, Deb_version, the Strict-Pinning cut and
-     PubGrub. *)
-  type index = {
-    versions_of : (string * string, string list) Hashtbl.t;
-    stanza_of : (DMA.Pkg.t, nstanza) Hashtbl.t;
-    group_of : (string, (string * string) list) Hashtbl.t;
-    providers_of : (string, (DMA.Pkg.t * DMA.Deb.coq_DTop) list) Hashtbl.t;
-    class_of : (DMA.Pkg.t, DMA.coq_MAClass) Hashtbl.t;
-    (* stanzas whose clauses a sub-instance has asked for, reported under
-       PACPROF: the whole point of deferring them is that this stays small *)
-    mutable n_clauses_parsed : int;
-    (* who names a package in a Depends or Pre-Depends, and who in a
-       Conflicts or Breaks, by the bare name as written: the watch lists
-       apt's Reject propagation walks, built on first use from the field
-       text alone, so no clause is parsed for them; only the --apt-heap
-       search asks *)
-    mutable rev_dep : (string, DMA.Pkg.t list) Hashtbl.t option;
-    mutable rev_conf : (string, DMA.Pkg.t list) Hashtbl.t option;
-    (* the binaries each source name builds, for apt's obsolescence test;
-       likewise built on first use, and only by --apt-heap *)
-    mutable by_src : (string, nstanza list) Hashtbl.t option;
-    (* selector preimages by name, and a package's clauses in field order,
-       both asked for again by every depender and by the rejection cascade *)
-    sel_cache :
-      (string * DMA.coq_NameArch, DMA.Deb.PkgSet.t * DMA.Deb.Prov.t) Hashtbl.t;
-    oc_cache :
-      (DMA.Pkg.t, (bool * DMA.Deb.Name.t * DMA.Deb.Atom.t list) list) Hashtbl.t;
-  }
-
-  let push tbl k v =
-    Hashtbl.replace tbl k
-      (v :: (match Hashtbl.find_opt tbl k with Some l -> l | None -> []))
-
-  let mangle fields =
-    List.map (List.map matom_of) (DF.parse_depends_fields fields)
-
-  (* the alternative's position in the clause being decided, which is what
-     PVersion.compare ranks on; max_int for an atom the clause does not list,
-     which cannot arise for a name introduced from that clause *)
-  let atom_pos (alts : DMA.Deb.Clause.t) a =
-    let rec go i = function
-      | [] -> max_int
-      | b :: bs -> if DMA.Deb.Atom.eq_dec b a then i else go (i + 1) bs
-    in
-    go 0 alts
-
-  (* the bare names a relationship field mentions, one per alternative: the
-     token before any version or architecture qualifier, in one pass.  A
-     folded field's continuation lines are joined with "\n", so a name can
-     follow one. *)
-  let field_names fields =
-    let blank c = c = ' ' || c = '\t' || c = '\n' in
-    List.concat_map
-      (fun f ->
-        let n = String.length f in
-        let acc = ref [] in
-        let i = ref 0 in
-        while !i < n do
-          while !i < n && blank f.[!i] do
-            incr i
-          done;
-          let s = !i in
-          while
-            !i < n
-            &&
-            match f.[!i] with
-            | ' ' | '\t' | '\n' | '(' | ':' | ',' | '|' -> false
-            | _ -> true
-          do
-            incr i
-          done;
-          if !i > s then acc := String.sub f s (!i - s) :: !acc;
-          while !i < n && f.[!i] <> ',' && f.[!i] <> '|' do
-            incr i
-          done;
-          if !i < n then incr i
-        done;
-        !acc)
-      fields
-
-  let build_index ?(recommends = true) (stanzas : DF.stanza list) : index =
-    let idx =
-      {
-        versions_of = Hashtbl.create 65536;
-        stanza_of = Hashtbl.create 65536;
-        group_of = Hashtbl.create 65536;
-        providers_of = Hashtbl.create 4096;
-        class_of = Hashtbl.create 65536;
-        n_clauses_parsed = 0;
-        rev_dep = None;
-        rev_conf = None;
-        by_src = None;
-        sel_cache = Hashtbl.create 4096;
-        oc_cache = Hashtbl.create 4096;
-      }
-    in
-    (* Of two stanzas at one version apt keeps the first read, Provides and
-       all.  An arch:all stanza is a version of its own to apt
-       (Version::All), which the package's one version here cannot be, so
-       that pair is still read as one version with both stanzas' Provides. *)
-    let first_read (stz : nstanza) =
-      match Hashtbl.find_opt idx.stanza_of stz.npkg with
-      | Some old -> old.nall <> stz.nall
-      | None -> true
-    in
-    List.iter
-      (fun st ->
-        let stz = normalize ~recommends st in
-        if first_read stz then (
-          let (n, b), v = stz.npkg in
-          if not (Hashtbl.mem idx.stanza_of stz.npkg) then (
-            push idx.versions_of (n, b) v;
-            push idx.group_of n (b, v));
-          Hashtbl.replace idx.stanza_of stz.npkg stz;
-          Hashtbl.replace idx.class_of stz.npkg stz.ncls;
-          List.iter
-            (fun (m, vt) -> push idx.providers_of m (stz.npkg, vt))
-            stz.nprovs))
-      stanzas;
-    idx
-
-  let reverse_index idx =
-    match (idx.rev_dep, idx.rev_conf) with
-    | Some d, Some c -> (d, c)
-    | _ ->
-        let d = Hashtbl.create 65536 and c = Hashtbl.create 4096 in
-        Hashtbl.iter
-          (fun p (stz : nstanza) ->
-            List.iter (fun n -> push d n p) (field_names stz.raw_deps);
-            List.iter (fun a -> push c (DMA.aname a) p) stz.nconfs)
-          idx.stanza_of;
-        idx.rev_dep <- Some d;
-        idx.rev_conf <- Some c;
-        (d, c)
-
-  (* apt's ObsoletedByNewerSourceVersion (solver3.cc:863-888): another
-     binary of the same source, on the same architecture and equally arch:all
-     or not, comes from a newer source version.  apt also asks that binary's
-     pin priority to be no lower, which with no pins every version meets. *)
-  let obsolete idx (stz : nstanza) =
-    let by_src =
-      match idx.by_src with
-      | Some t -> t
-      | None ->
-          let t = Hashtbl.create 65536 in
-          Hashtbl.iter (fun _ (s : nstanza) -> push t (fst s.nsrc) s) idx.stanza_of;
-          idx.by_src <- Some t;
-          t
-    in
-    let (_, b), _ = stz.npkg in
-    List.exists
-      (fun (s : nstanza) ->
-        let (_, b'), _ = s.npkg in
-        fst s.npkg <> fst stz.npkg
-        && String.equal b b' && s.nall = stz.nall
-        && Debian_frontend.Deb_version.compare (snd s.nsrc) (snd stz.nsrc) > 0)
-      (match Hashtbl.find_opt by_src (fst stz.nsrc) with
-      | Some l -> l
-      | None -> [])
-
-  (* Only a lookup at a stanza's own package reads its clauses, so they can
-     wait until one does.  providers_of cannot: it is a preimage -- who
-     provides the name I want -- that no clause of the asking package can
-     reach, so Provides stays eager. *)
-  let clauses_of idx (stz : nstanza) =
-    match stz.nclauses with
-    | Some c -> c
-    | None ->
-        let c = (mangle stz.raw_deps, mangle stz.raw_recs) in
-        stz.nclauses <- Some c;
-        idx.n_clauses_parsed <- idx.n_clauses_parsed + 1;
-        c
-
-  let deps_of idx stz = fst (clauses_of idx stz)
-  let recs_of idx stz = snd (clauses_of idx stz)
-
-  (* One package's clauses in control-file order, Depends before Recommends,
-     each with its mangled alternatives and the synthetic name a multi-way
-     clause would carry: the order apt's Propagate walks the watches of a
-     package that just became true, which is the order its work items enter
-     the heap.  A one-alternative Depends has no disjunct package: its work
-     item, when it has one, is the alternative's selector, which the caller
-     resolves because a selector in turn exists only where a Provides
-     matches the atom. *)
-  let ordered_clauses idx (p : DMA.Pkg.t) :
-      (bool * DMA.Deb.Name.t * DMA.Deb.Atom.t list) list =
-    match Hashtbl.find_opt idx.oc_cache p with
-    | Some r -> r
-    | None ->
-        let r =
-          match Hashtbl.find_opt idx.stanza_of p with
-          | None -> []
-          | Some stz ->
-              let b = snd (fst p) in
-              let mk opt synth alts =
-                let ma = DMA.reduceClause b alts in
-                let eatoms =
-                  List.sort_uniq Stdlib.compare
-                    (List.map (DMA.reduceAtom b) alts)
-                in
-                (opt, synth ma, eatoms)
-              in
-              List.map
-                (fun alts -> mk false (fun s -> DMA.Deb.Name.Disjunct s) alts)
-                (deps_of idx stz)
-              @ List.map
-                  (fun alts -> mk true (fun s -> DMA.Deb.Name.Soft s) alts)
-                  (recs_of idx stz)
-        in
-        Hashtbl.add idx.oc_cache p r;
-        r
-
-  (* Does version [w] satisfy the atom's formula?  Mangled formulas compare
-     raw Debian versions, so dpkg's comparison decides. *)
-  let rec sat f w =
-    match f with
-    | DMA.Deb.Ver.FTop -> true
-    | DMA.Deb.Ver.FBot -> false
-    | DMA.Deb.Ver.FConj (p, q) -> sat p w && sat q w
-    | DMA.Deb.Ver.FDisj (p, q) -> sat p w || sat q w
-    | DMA.Deb.Ver.FCmp (op, u) -> (
-        let c = Debian_frontend.Deb_version.compare w u in
-        match op with
-        | E.OpGe -> c >= 0
-        | E.OpGt -> c > 0
-        | E.OpLe -> c <= 0
-        | E.OpLt -> c < 0
-        | E.OpEq -> c = 0
-        | E.OpNe -> c <> 0)
-
-  let find_list tbl k =
-    match Hashtbl.find_opt tbl k with Some l -> l | None -> []
+module Make (AP : Tables.ARCH) = struct
+  module T = Tables.Make (AP)
+  include T
 
   let ma_real_at idx (n, b) =
     DMA.PkgSet.ofList
@@ -506,46 +169,6 @@ struct
            pseudo-name, because no reduced clause hangs there *)
         DMA.Deb.T.DependeesSet.empty
 
-  let pp_formula fmt (f : DMA.Deb.Ver.coq_Formula) =
-    let rec go fmt = function
-      | DMA.Deb.Ver.FTop -> Format.fprintf fmt "T"
-      | DMA.Deb.Ver.FBot -> Format.fprintf fmt "F"
-      | DMA.Deb.Ver.FConj (a, b) -> Format.fprintf fmt "(%a & %a)" go a go b
-      | DMA.Deb.Ver.FDisj (a, b) -> Format.fprintf fmt "(%a | %a)" go a go b
-      | DMA.Deb.Ver.FCmp (op, v) ->
-          let ops =
-            match op with
-            | E.OpGe -> ">="
-            | E.OpGt -> ">>"
-            | E.OpLe -> "<="
-            | E.OpLt -> "<<"
-            | E.OpEq -> "="
-            | E.OpNe -> "!="
-          in
-          Format.fprintf fmt "%s %s" ops v
-    in
-    go fmt f
-
-  let pp_qarch fmt = function
-    | DMA.QAArch a -> Format.fprintf fmt "%s" a
-    | DMA.QAExact a -> Format.fprintf fmt "<%s>" a
-    | DMA.QAAny -> Format.fprintf fmt "any"
-    | DMA.QAGroup -> Format.fprintf fmt "<group>"
-
-  let pp_mname fmt (n, x) = Format.fprintf fmt "%s:%a" n pp_qarch x
-  let pp_atom fmt (m, f) = Format.fprintf fmt "%a (%a)" pp_mname m pp_formula f
-
-  module PName = struct
-    type t = DMA.Deb.Name.t
-
-    let compare a b = r2c (DMA.Deb.NameOT.compare a b)
-
-    let pp fmt = function
-      | DMA.Deb.Name.Orig m -> pp_mname fmt m
-      | DMA.Deb.Name.Disjunct _ -> Format.fprintf fmt "<alts>"
-      | DMA.Deb.Name.Soft _ -> Format.fprintf fmt "<rec>"
-      | DMA.Deb.Name.Selector a -> Format.fprintf fmt "<sel %a>" pp_atom a
-  end
 
   let is_native = function
     | DMA.QAArch a -> String.equal a AP.native
@@ -625,6 +248,8 @@ struct
      solve. *)
   module Search (I : sig
     val idx : index
+    val versions : DMA.Deb.Name.t -> DMA.Deb.T.VSet.t
+    val dependencies : DMA.Deb.T.Pkg.t -> DMA.Deb.T.DependeesSet.t
   end) =
   struct
     module PVersion = struct
@@ -657,7 +282,7 @@ struct
          of a real name (VersionOT.compare), so a name nothing comes to
          require is decided absent. *)
       let compare (a : t) (b : t) =
-        let fallback () = r2c (DMA.Deb.VersionOT.compare a.v b.v) in
+        let fallback () = Tables.r2c (DMA.Deb.VersionOT.compare a.v b.v) in
         match (a.v, b.v) with
         | DMA.Deb.Version.Orig x, DMA.Deb.Version.Orig y ->
             Debian_frontend.Deb_version.compare x y
@@ -743,850 +368,144 @@ struct
       | DMA.Deb.Version.RefReal w -> at (fst a) w
       | _ -> false
 
-    (* ~apt_heap replays apt's work-heap scheduling through Apt_heap: the
-       hooks below then stand in for apt's propagation queue (which name is
-       first sighted when) and its Solver::Work pushes.  Off, none of them
-       fires, but [next] still decides a name admitting absence last and
-       [choose] still prefers an alternative the solution already carries. *)
-    let run_pubgrub ?(debug = false) ?(apt_heap = false) ~versions ~dependencies
-        query =
-      let cands_tbl = Hashtbl.create 4096 in
-      let cands_of n =
-        match Hashtbl.find_opt cands_tbl n with
-        | Some l -> l
-        | None ->
-            let l = List.map (tag n) (DMA.Deb.T.VSet.elements (versions n)) in
-            Hashtbl.add cands_tbl n l;
-            l
-      in
-      (* apt's solution counts: an alternative's solutions are its target's
-         versions that satisfy it and, one per entry, the target's
-         ProvidesList entries that do (AllTargets, pkgcache.cc), so a
-         package providing its own name is two solutions.  A provided name
-         resolves through its selector, whose Ref candidates are keyed by
-         provider package; the entries apt holds for one are its declared
-         Provides of the name, plus the foo:any of a Multi-Arch: allowed
-         package and the foo:b pseudo-package's entry for each version of
-         b's own foo (ParseProvides, deblistparser.cc), and none of the
-         calculus's other implicit provides, which apt's cache has only
-         with a second architecture configured.  An unprovided name has no
-         selector: apt defers its
-         version selection to one package var when every version satisfies
-         the atom, and lists the satisfying versions otherwise. *)
-      (* the cache generator keeps no Provides of a package's own name at its
-         own version (ListParser::NewProvides, pkgcachegen.cc), except
-         through the every-architecture path a Multi-Arch: foreign package's
-         Provides take, which has no such check: luit provides luit *)
-      let self_dropped (((m, _), w) as q : DMA.Pkg.t) n vt =
-        String.equal m n
-        && (match Hashtbl.find_opt I.idx.stanza_of q with
-          | Some stz -> stz.ncls <> DMA.MAForeign
-          | None -> true)
-        &&
-        match vt with
-        | DMA.Deb.DTTop -> true
-        | DMA.Deb.DTVal u -> Debian_frontend.Deb_version.compare u w = 0
-      in
-      let provides_count ((m, x) : string * DMA.coq_NameArch) w
-          (a : DMA.Deb.Atom.t) =
-        let n = fst (fst a) in
-        match x with
-        | DMA.QAArch b -> (
-            match Hashtbl.find_opt I.idx.stanza_of ((m, b), w) with
-            | None -> 0
-            | Some stz ->
-                let declared =
-                  List.length
-                    (List.filter
-                       (fun (pn, vt) ->
-                         String.equal pn n
-                         && DMA.Deb.vtMatchb vt (snd a)
-                         && not (self_dropped ((m, b), w) n vt))
-                       stz.nprovs)
-                in
-                let implicit =
-                  match snd (fst a) with
-                  | (DMA.QAAny | DMA.QAExact _) when String.equal m n -> 1
-                  | _ -> 0
-                in
-                declared + implicit)
-        | _ -> 1
-      in
-      let targets n (v : DMA.Deb.Version.t) =
-        DMA.Deb.T.DependeesSet.elements (dependencies (n, v))
-        |> List.map (fun (tn, tvs) ->
-            (tn, List.map (tag tn) (DMA.Deb.T.VSet.elements tvs)))
-      in
-      let allowed_of ~assigned n =
-        match assigned n with
-        | PG.Unselected -> fun _ -> true
-        | PG.Decided u -> fun (pv : PVersion.t) -> PVersion.compare u pv = 0
-        | PG.Entailed r -> fun pv -> PG.Ranges.contains pv r
-      in
-      (* the static count asks about the whole instance, where nothing is
-         rejected yet: one closure, so it can be told apart *)
-      let unselected _ = PG.Unselected in
-      let is_bot (pv : PVersion.t) = pv.PVersion.v = DMA.Deb.Version.Bot in
-      (* apt's Reject propagation (Solver::Propagate, solver3.cc): a package
-         is rejected the moment a hard clause of its loses its last solution,
-         or a package it conflicts with is installed, and the rejection
-         cascades through the discovered closure along the watch lists.
-         PubGrub learns the same only when it decides the package, so without
-         this the live solution counts and the choice among alternatives
-         would see alternatives apt has already crossed off.  apt assigns a
-         rejection the moment it is derived and propagates it only when the
-         queue reaches it, so each step of the cascade is one queue entry,
-         which the shadow heap holds; and a package is two literals, whose
-         order the cascade alternates: the installed package's own Conflicts
-         reject the other's version var (its solutions are versions) and its
-         package var follows through the SelectVersion clause, while a
-         conflict declared against something installed rejects the
-         declarer's package var, the reason of its clauses, and its version
-         var follows through the version's own clause.  A solution reads the
-         literal apt made it: the package var for an unversioned atom on a
-         name nothing provides (Defer-Version-Selection), a version var
-         otherwise. *)
-      let vdead : (DMA.Pkg.t, unit) Hashtbl.t = Hashtbl.create 256 in
-      let pdead : (string * string, unit) Hashtbl.t = Hashtbl.create 256 in
-      let apt_provided_tbl = Hashtbl.create 64 in
-      let apt_provided n =
-        match Hashtbl.find_opt apt_provided_tbl n with
-        | Some b -> b
-        | None ->
-            let b =
-              List.exists
-                (fun (q, vt) -> not (self_dropped q n vt))
-                (find_list I.idx.providers_of n)
-            in
-            Hashtbl.add apt_provided_tbl n b;
-            b
-      in
-      (* Defer-Version-Selection (TranslateOrGroup): an atom whose target
-         has no Provides entry and every version of which satisfies it is
-         one solution, the target's package var; any other atom's solutions
-         are version vars.  apt tests every version in its cache, those
-         Strict-Pinning rejected included; this tests the candidates only. *)
-      let deferred (a : DMA.Deb.Atom.t) =
-        match fst a with
-        | n, DMA.QAArch b ->
-            (not (apt_provided n))
-            &&
-            let vs = find_list I.idx.versions_of (n, b) in
-            vs <> [] && List.for_all (sat (snd a)) vs
-        | _ -> false
-      in
-      (* PubGrub's partial solution excludes a version the moment a standing
-         decision's conflict or range does, which is when apt assigns the
-         version var false; the package var lags until that rejection
-         propagates, so a solution reading it stays live until then whatever
-         the partial solution says of the versions *)
-      let rec atom_pkgs ~assigned a =
-        let pkgvar = deferred a in
-        let live_at ~pkgvar ((n, x) : string * DMA.coq_NameArch) w =
-          assigned == unselected
-          ||
-          match x with
-          | DMA.QAArch b ->
-              if pkgvar then not (Hashtbl.mem pdead (n, b))
-              else not (Hashtbl.mem vdead ((n, b), w))
-          | _ -> true
-        in
-        let allowed_of ~pkgvar ~assigned n =
-          if pkgvar then fun _ -> true else allowed_of ~assigned n
-        in
-        match cands_of (DMA.Deb.Name.Selector a) with
-        | [] ->
-            let tn = DMA.Deb.Name.Orig (fst a) in
-            let allowed = allowed_of ~pkgvar ~assigned tn in
-            let vs =
-              List.filter_map
-                (fun (pv : PVersion.t) ->
-                  match pv.PVersion.v with
-                  | DMA.Deb.Version.Orig w -> Some (pv, w)
-                  | _ -> None)
-                (cands_of tn)
-            in
-            let live =
-              List.filter
-                (fun (pv, w) ->
-                  sat (snd a) w && allowed pv && live_at ~pkgvar (fst a) w)
-                vs
-            in
-            if live = [] then 0 else if pkgvar then 1 else List.length live
-        | cs ->
-            (* apt's solutions are packages, and a solution is out only when
-               its package is false: the selector's own state says nothing
-               about that, since deciding it to one provider leaves the
-               others installable *)
-            let ok ~pkgvar m w =
-              let on = DMA.Deb.Name.Orig m in
-              allowed_of ~pkgvar ~assigned on (tag on (DMA.Deb.Version.Orig w))
-              && live_at ~pkgvar m w
-            in
-            let reals, provs =
-              List.fold_left
-                (fun (r, p) (pv : PVersion.t) ->
-                  match pv.PVersion.v with
-                  | DMA.Deb.Version.RefReal w ->
-                      ((if ok ~pkgvar (fst a) w then r + 1 else r), p)
-                  | DMA.Deb.Version.Ref (m, w) ->
-                      ( r,
-                        if ok ~pkgvar:false m w then p + provides_count m w a
-                        else p )
-                  | _ -> (r, p))
-                (0, 0) cs
-            in
-            (* a deferred atom's real versions are one solution, the package
-               var, whatever the version count *)
-            (if pkgvar then min reals 1 else reals) + provs
-      and atom_static a = atom_pkgs ~assigned:unselected a in
-      let has_ref n =
+    let cands_tbl = Hashtbl.create 4096
+
+    let cands_of n =
+      match Hashtbl.find_opt cands_tbl n with
+      | Some l -> l
+      | None ->
+          let l = List.map (tag n) (DMA.Deb.T.VSet.elements (I.versions n)) in
+          Hashtbl.add cands_tbl n l;
+          l
+
+    let targets n (v : DMA.Deb.Version.t) =
+      DMA.Deb.T.DependeesSet.elements (I.dependencies (n, v))
+      |> List.map (fun (tn, tvs) ->
+          (tn, List.map (tag tn) (DMA.Deb.T.VSet.elements tvs)))
+
+    let has_ref n =
+      List.exists
+        (fun (pv : PVersion.t) ->
+          match pv.PVersion.v with DMA.Deb.Version.Ref _ -> true | _ -> false)
+        (cands_of n)
+
+    (* the candidates of a clause name the partial solution already
+       discharges: an alternative whose target is carried, or which resolves
+       through a selector one of whose providers is.  Non-empty is apt's
+       ELIDED, a popped clause some solution of which is true. *)
+    let free_of ~assigned n cands =
+      let alt_carried (pv : PVersion.t) =
         List.exists
-          (fun (pv : PVersion.t) ->
-            match pv.PVersion.v with
-            | DMA.Deb.Version.Ref _ -> true
-            | _ -> false)
-          (cands_of n)
-      in
-      (* the clause's name in this encoding: its synthetic name, or for a
-         one-alternative Depends the alternative's selector where a provider
-         matches it, and the target itself otherwise *)
-      let clause_name opt g = function
-        | [ a ] when not opt ->
-            if has_ref (DMA.Deb.Name.Selector a) then DMA.Deb.Name.Selector a
-            else DMA.Deb.Name.Orig (fst a)
-        | _ -> g
-      in
-      let pkg_names (((n, _), _) as p : DMA.Pkg.t) =
-        n
-        ::
-        (match Hashtbl.find_opt I.idx.stanza_of p with
-        | Some stz -> List.map fst stz.nprovs
-        | None -> [])
-      in
-      let orig_of (((n, b), _) : DMA.Pkg.t) =
-        DMA.Deb.Name.Orig (n, DMA.QAArch b)
-      in
-      let installed_at ~assigned (((_, _), v) as p : DMA.Pkg.t) =
-        match assigned (orig_of p) with
-        | PG.Decided u -> u.PVersion.v = DMA.Deb.Version.Orig v
-        | _ -> false
-      in
-      let pp_pkg fmt (((n, b), v) : DMA.Pkg.t) =
-        Format.fprintf fmt "%s:%s=%s" n b v
-      in
-      (* one queue entry of the cascade: a version var or a package var
-         assigned false, whose propagation waits for its turn *)
-      let pp_rejection fmt = function
-        | `Ver x -> Format.fprintf fmt "ver %a" pp_pkg x
-        | `Pkg (n, b) -> Format.fprintf fmt "pkg %s:%s" n b
-      in
-      let reject_ver ~assigned out (x : DMA.Pkg.t) =
-        if (not (Hashtbl.mem vdead x)) && not (installed_at ~assigned x) then (
-          Hashtbl.replace vdead x ();
-          out := `Ver x :: !out)
-      in
-      let reject_pkg ~assigned out ((n, b) as k) =
-        if
-          (not (Hashtbl.mem pdead k))
-          && not
-               (List.exists
-                  (fun w -> installed_at ~assigned ((n, b), w))
-                  (find_list I.idx.versions_of k))
-        then (
-          Hashtbl.replace pdead k ();
-          out := `Pkg k :: !out)
-      in
-      (* what installing p assigns at once through its own Conflicts and
-         Breaks: the versions its negatives exclude (the negative clause's
-         solutions, rejected as its reason comes true) *)
-      let conflicts ~assigned (((pname, _), v) as p : DMA.Pkg.t) =
-        let out = ref [] in
-        List.iter
           (fun (tn, tvs) ->
-            if List.exists is_bot tvs then
-              match tn with
-              | DMA.Deb.Name.Orig (m, DMA.QAArch mb)
-                when not (String.equal m pname) ->
-                  List.iter
-                    (fun (c : PVersion.t) ->
-                      match c.PVersion.v with
-                      | DMA.Deb.Version.Orig w
-                        when not
-                               (List.exists
-                                  (fun t -> PVersion.compare c t = 0)
-                                  tvs) ->
-                          reject_ver ~assigned out ((m, mb), w)
-                      | _ -> ())
-                    (cands_of tn)
-              | _ -> ())
-          (targets (orig_of p) (DMA.Deb.Version.Orig v));
-        List.rev !out
-      in
-      (* what p's version var assigns as it propagates: the declarers of a
-         conflict it matches lose their package var, the reason of their
-         negative clause.  The declarer's atom names p, or a name p provides,
-         at p's architecture -- an explicit :arch elsewhere is another
-         package, one apt's cache holds as an empty pseudo-package -- and its
-         version formula holds of p's version, or of the version p provides
-         the name at (IsSatisfied over a PrvIterator: an unversioned Provides
-         never meets a versioned negative).  A declarer in p's own group is
-         skipped: apt ignores a conflict on the declarer itself, on a
-         provider in its group, and on its group from an MA:same declarer
-         (IsIgnorable, apt-pkg/pkgcache.cc:757-790), and a declarer that is
-         not MA:same already conflicts with its whole group implicitly
-         (AddImplicitDepends, pkgcachegen.cc), so skipping every member
-         changes no answer. *)
-      let conflicted_by ~assigned (((pname, pb), v) as p : DMA.Pkg.t) =
-        let _, rev_conf = reverse_index I.idx in
-        let seen = Hashtbl.create 16 in
-        let out = ref [] in
-        let reaches (a : DMA.Atom.t) n =
-          String.equal (DMA.aname a) n
-          && (match DMA.aqual a with
-            | DMA.QUnq | DMA.QAny -> true
-            | DMA.QNative -> String.equal AP.native pb
-            | DMA.QArch c -> String.equal c pb)
-          &&
-          if String.equal n pname then sat (DMA.aform a) v
-          else
-            match Hashtbl.find_opt I.idx.stanza_of p with
-            | Some stz ->
-                List.exists
-                  (fun (pn, vt) ->
-                    String.equal pn n && DMA.Deb.vtMatchb vt (DMA.aform a))
-                  stz.nprovs
-            | None -> false
-        in
-        let names = pkg_names p in
-        List.iter
-          (fun n ->
-            List.iter
-              (fun (q : DMA.Pkg.t) ->
-                let qk = fst q in
-                if
-                  (not (Hashtbl.mem seen qk))
-                  && (not (String.equal (fst qk) pname))
-                  && not (Hashtbl.mem pdead qk)
-                then (
-                  Hashtbl.replace seen qk ();
-                  match Hashtbl.find_opt I.idx.stanza_of q with
-                  | None -> ()
-                  | Some stz ->
-                      (* a declarer met under one of p's names is judged on
-                         all of them: a conflict on the real name that
-                         misses p's version says nothing of one on a name p
-                         provides *)
-                      if
-                        List.exists
-                          (fun a -> List.exists (reaches a) names)
-                          stz.nconfs
-                      then reject_pkg ~assigned out qk))
-              (find_list rev_conf n))
-          names;
-        List.rev !out
-      in
-      (* the clauses a rejected literal is watched by, and what they assign:
-         a hard clause of an undecided depender that has lost its last
-         solution rejects the depender's package var, the reason of every
-         clause of a single-version package, and a hard clause of an
-         installed depender down to one is unit, its solution apt's next
-         Enqueue.  A clause reads the literal apt made its solution, so a
-         version var reaches versioned and provided atoms, a package var the
-         deferred ones; a clause with no solution at all never fires, having
-         nothing to watch. *)
-      let cascade ~assigned ~pkgvar names out units =
-        let rev_dep, _ = reverse_index I.idx in
-        let seen = Hashtbl.create 16 in
-        List.iter
-          (fun nm ->
-            List.iter
-              (fun (r : DMA.Pkg.t) ->
-                let rk = fst r in
-                if (not (Hashtbl.mem seen rk)) && not (Hashtbl.mem pdead rk)
-                then (
-                  Hashtbl.replace seen rk ();
-                  let inst = installed_at ~assigned r in
-                  List.iter
-                    (fun (opt, g, atoms) ->
-                      if
-                        (not opt)
-                        && List.exists
-                             (fun (a : DMA.Deb.Atom.t) ->
-                               List.mem (fst (fst a)) names
-                               && deferred a = pkgvar)
-                             atoms
-                        && List.exists (fun a -> atom_static a > 0) atoms
-                      then
-                        let live =
-                          List.fold_left
-                            (fun acc a -> acc + atom_pkgs ~assigned a)
-                            0 atoms
-                        in
-                        if live = 0 then (
-                          if not inst then reject_pkg ~assigned out rk)
-                        else if live = 1 && inst then
-                          units := clause_name opt g atoms :: !units)
-                    (ordered_clauses I.idx r)))
-              (find_list rev_dep nm))
-          names
-      in
-      let propagate ~assigned r =
-        let out = ref [] and units = ref [] in
-        (match r with
-        | `Ver (((n, b), _) as x) ->
-            (* the package's SelectVersion clause: every version false *)
-            if
-              List.for_all
-                (fun w -> Hashtbl.mem vdead ((n, b), w))
-                (find_list I.idx.versions_of (n, b))
-            then reject_pkg ~assigned out (n, b);
-            cascade ~assigned ~pkgvar:false (pkg_names x) out units
-        | `Pkg (n, b) ->
-            (* each version's own clause, version -> package *)
-            List.iter
-              (fun w -> reject_ver ~assigned out ((n, b), w))
-              (find_list I.idx.versions_of (n, b));
-            cascade ~assigned ~pkgvar:true [ n ] out units);
-        (List.rev !out, List.rev !units)
-      in
-      (* the candidates of a clause name the partial solution already
-         discharges: an alternative whose target is carried, or which
-         resolves through a selector one of whose providers is.  Non-empty is
-         apt's ELIDED, a popped clause some solution of which is true. *)
-      let free_of ~assigned n cands =
-        let alt_carried (pv : PVersion.t) =
-          List.exists
-            (fun (tn, tvs) ->
-              carried_at ~assigned tn tvs
-              ||
-              match tn with
-              | DMA.Deb.Name.Selector a ->
-                  List.exists (sel_carried ~assigned a) tvs
-              | _ -> false)
-            (targets n pv.PVersion.v)
-        in
-        match n with
-        | DMA.Deb.Name.Selector a -> List.filter (sel_carried ~assigned a) cands
-        | DMA.Deb.Name.Disjunct _ | DMA.Deb.Name.Soft _ ->
-            List.filter alt_carried cands
-        | _ -> []
-      in
-      (* the solutions of a clause apt folded a later one into are the
-         intersection, and Solve takes the first undecided of those: the
-         narrower atom, for the choice among the name's own candidates.  The
-         fold is of the depender's own clause, so it holds only while the
-         depender is installed; the name, which another depender may share,
-         is keyed by that depender too. *)
-      let narrowed : (DMA.Deb.Name.t, DMA.Pkg.t * DMA.Deb.Atom.t) Hashtbl.t =
-        Hashtbl.create 64
-      in
-      let module D = struct
-        type name = DMA.Deb.Name.t
-        type version = PVersion.t
-        type atom = DMA.Deb.Atom.t
-        type assigned = name -> PG.selection
-
-        let pp_name = PName.pp
-        let pp_atom = pp_atom
-
-        let kind = function
-          | DMA.Deb.Name.Orig _ -> Apt_heap.Package
-          | DMA.Deb.Name.Disjunct _ -> Apt_heap.Hard
-          | DMA.Deb.Name.Soft _ -> Apt_heap.Soft
-          | DMA.Deb.Name.Selector _ -> Apt_heap.Alternative
-
-        let clause_atoms = function
-          | DMA.Deb.Name.Disjunct aset | DMA.Deb.Name.Soft aset -> Some aset
-          | DMA.Deb.Name.Selector a ->
-              (* a one-alternative Depends has no disjunct package: the
-                 selector itself is the work item *)
-              Some [ a ]
-          | _ -> None
-
-        let atom_count assigned a = atom_pkgs ~assigned a
-        let atom_static = atom_static
-
-        (* apt tests each solution's package, not the version the solution
-           names; under Strict-Pinning the one is the other's only version *)
-        let obsolete (a : atom) =
-          let at (n, x) w =
-            match x with
-            | DMA.QAArch b -> (
-                match Hashtbl.find_opt I.idx.stanza_of ((n, b), w) with
-                | Some stz -> obsolete I.idx stz
-                | None -> false)
-            | _ -> false
-          in
-          match cands_of (DMA.Deb.Name.Selector a) with
-          | [] ->
-              List.exists
-                (fun (pv : PVersion.t) ->
-                  match pv.PVersion.v with
-                  | DMA.Deb.Version.Orig w -> sat (snd a) w && at (fst a) w
-                  | _ -> false)
-                (cands_of (DMA.Deb.Name.Orig (fst a)))
-          | cs ->
-              List.exists
-                (fun (pv : PVersion.t) ->
-                  match pv.PVersion.v with
-                  | DMA.Deb.Version.RefReal w -> at (fst a) w
-                  | DMA.Deb.Version.Ref (m, w) -> at m w
-                  | _ -> false)
-                cs
-
-        let decided assigned n =
-          match assigned n with PG.Decided pv -> Some pv | _ -> None
-
-        let satisfied assigned n = free_of ~assigned n (cands_of n) <> []
-
-        type rejection = [ `Ver of DMA.Pkg.t | `Pkg of string * string ]
-
-        let pp_rejection = pp_rejection
-
-        let at_pkg f n (pv : PVersion.t) =
-          match (n, pv.PVersion.v) with
-          | DMA.Deb.Name.Orig (m, DMA.QAArch b), DMA.Deb.Version.Orig v ->
-              f ((m, b), v)
-          | _ -> []
-
-        let conflicts assigned n pv = at_pkg (conflicts ~assigned) n pv
-        let conflicted_by assigned n pv = at_pkg (conflicted_by ~assigned) n pv
-
-        let propagate assigned r : rejection list * name list =
-          propagate ~assigned r
-
-        let reset () =
-          Hashtbl.reset vdead;
-          Hashtbl.reset pdead
-
-        let version_equal a b = PVersion.compare a b = 0
-
-        (* RegisterClause's merge (solver3.cc): a single-atom clause on a
-           target an earlier single-atom clause of the same optionality
-           already names, with a solution in common, is folded into the
-           earlier one, whose solutions become the intersection -- the
-           `(>= v), (<< v')` pairs of 2076 stanzas -- and a Recommends on a
-           Depends' target keeps the Depends' solutions only.  Solutions are
-           apt's vars, so two deferred atoms share their one package var and
-           a deferred atom shares nothing with a versioned one.  The folded
-           clause is not gone: Discover registers a version's dependencies
-           afresh unless a clause of the package carries the same one, and
-           the folded clause carries the earlier's, so the second half comes
-           back on the version var with its own solutions, propagated as the
-           version pops, right after the package's own wave. *)
-        let conj ((n, f) : DMA.Deb.Atom.t) ((_, f') : DMA.Deb.Atom.t) :
-            DMA.Deb.Atom.t =
-          (n, DMA.Deb.Ver.FConj (f, f'))
-
-        let overlap a a' =
-          match (deferred a, deferred a') with
-          | true, true -> true
-          | false, false -> atom_static (conj a a') > 0
-          | _ -> false
-
-        let wave n (pv : PVersion.t) =
-          match (n, pv.PVersion.v) with
-          | DMA.Deb.Name.Orig (m, DMA.QAArch b), DMA.Deb.Version.Orig v ->
-              let earlier = Hashtbl.create 8 in
-              let again = ref [] in
-              let out =
-                List.map
-                  (fun (opt, g, atoms) ->
-                    let g = clause_name opt g atoms in
-                    match atoms with
-                    | [ a ] -> (
-                        let a =
-                          if not opt then a
-                          else
-                            match Hashtbl.find_opt earlier (false, fst a) with
-                            | Some (_, ea) when overlap !ea a -> conj a !ea
-                            | _ -> a
-                        in
-                        match Hashtbl.find_opt earlier (opt, fst a) with
-                        | Some (eg, ea) when overlap !ea a ->
-                            if not (DMA.Deb.Atom.eq_dec !ea a) then (
-                              ea := conj !ea a;
-                              Hashtbl.add narrowed eg (((m, b), v), !ea));
-                            again := (opt, Some g, fun () -> [ a ]) :: !again;
-                            (opt, None, fun () -> [])
-                        | _ ->
-                            let r = ref a in
-                            Hashtbl.replace earlier (opt, fst a) (g, r);
-                            (opt, Some g, fun () -> [ !r ]))
-                    | _ -> (opt, Some g, fun () -> atoms))
-                  (ordered_clauses I.idx ((m, b), v))
-              in
-              (* a later fold has narrowed the earlier's atom in place *)
-              let live l =
-                List.filter_map
-                  (fun (opt, g, atoms) ->
-                    match g with
-                    | None -> None
-                    | Some _ -> Some (opt, g, atoms ()))
-                  l
-              in
-              (live out, live (List.rev !again))
-          | _ -> ([], [])
-
-        (* apt's Assume of the alternative's solution: a version var, or the
-           package var of a deferred alternative *)
-        let continuation n (pv : PVersion.t) =
-          match (n, pv.PVersion.v) with
-          | ( (DMA.Deb.Name.Disjunct _ | DMA.Deb.Name.Soft _),
-              DMA.Deb.Version.Atom a ) ->
-              [
-                (if has_ref (DMA.Deb.Name.Selector a) then
-                   DMA.Deb.Name.Selector a
-                 else DMA.Deb.Name.Orig (fst a));
-              ]
-          | _ -> []
-
-        (* A clause found unit is one Enqueue for apt: the alternative left,
-           and where that alternative is deferred -- unversioned, unprovided
-           in apt's cache, which sees none of the calculus's implicit
-           provides with one architecture configured -- the package var
-           itself, processed at the clause's own queue slot.  Any other
-           solution is a version var, and the package var then joins the
-           queue at the back as the version pops. *)
-        let forced_to n (pv : PVersion.t) =
-          match (n, pv.PVersion.v) with
-          | DMA.Deb.Name.Disjunct _, DMA.Deb.Version.Atom a ->
-              Some
-                (if has_ref (DMA.Deb.Name.Selector a) then
-                   DMA.Deb.Name.Selector a
-                 else DMA.Deb.Name.Orig (fst a))
-          | DMA.Deb.Name.Selector a, DMA.Deb.Version.RefReal _
-          | DMA.Deb.Name.Selector a, DMA.Deb.Version.Ref _ ->
-              if deferred a then
-                Some
-                  (match pv.PVersion.v with
-                  | DMA.Deb.Version.Ref (m, _) -> DMA.Deb.Name.Orig m
-                  | _ -> DMA.Deb.Name.Orig (fst a))
-              else None
-          | _ -> None
-
-        let same_name a b = PName.compare a b = 0
-
-        let head assigned atoms =
-          let one a =
-            let h = clause_name false (DMA.Deb.Name.Disjunct atoms) [ a ] in
-            match h with
-            | DMA.Deb.Name.Orig ((m, DMA.QAArch b) as mn) when not (deferred a)
-              -> (
-                (* the newest live version, which apt's sort of one
-                   package's versions puts first (CompareProviders3) *)
-                let on = DMA.Deb.Name.Orig mn in
-                let live =
-                  List.filter
-                    (fun (pv : PVersion.t) ->
-                      match pv.PVersion.v with
-                      | DMA.Deb.Version.Orig w ->
-                          sat (snd a) w && not (Hashtbl.mem vdead ((m, b), w))
-                      | _ -> false)
-                    (cands_of on)
-                in
-                (h, match live with [] -> None | _ -> Some (on, greatest live)))
-            | _ -> (h, None)
-          in
-          match atoms with
-          | [] -> None
-          | [ a ] -> Some (one a)
-          | _ -> (
-              match List.filter (fun a -> atom_pkgs ~assigned a > 0) atoms with
-              | [ a ] -> Some (one a)
-              | _ -> None)
-
-        let negation assigned n (pv : PVersion.t) : rejection list =
-          let ver ((m, x) : string * DMA.coq_NameArch) w =
-            match x with DMA.QAArch b -> [ `Ver ((m, b), w) ] | _ -> []
-          in
-          let of_atom a =
-            match head assigned [ a ] with
-            | Some (DMA.Deb.Name.Orig (m, DMA.QAArch b), None) ->
-                [ `Pkg (m, b) ]
-            | Some (_, Some (_, (ov : PVersion.t))) -> (
-                match ov.PVersion.v with
-                | DMA.Deb.Version.Orig w -> ver (fst a) w
-                | _ -> [])
-            | _ -> []
-          in
-          match (n, pv.PVersion.v) with
-          | DMA.Deb.Name.Orig m, DMA.Deb.Version.Orig w -> ver m w
-          | DMA.Deb.Name.Selector a, DMA.Deb.Version.RefReal w ->
-              if deferred a then
-                match fst a with m, DMA.QAArch b -> [ `Pkg (m, b) ] | _ -> []
-              else ver (fst a) w
-          | DMA.Deb.Name.Selector _, DMA.Deb.Version.Ref (m, w) -> ver m w
-          | ( (DMA.Deb.Name.Disjunct _ | DMA.Deb.Name.Soft _),
-              DMA.Deb.Version.Atom a ) ->
-              of_atom a
-          | _ -> []
-
-        let assign assigned rs =
-          let out = ref [] in
-          List.iter
-            (function
-              | `Ver x -> reject_ver ~assigned out x
-              | `Pkg k -> reject_pkg ~assigned out k)
-            rs;
-          List.rev !out
-
-        (* a selector decided to a provider or real version is apt's version
-           var popping, unless the atom is deferred and the var was the
-           package's all along *)
-        let version_of n (pv : PVersion.t) =
-          match (n, pv.PVersion.v) with
-          | DMA.Deb.Name.Selector a, DMA.Deb.Version.RefReal w
-            when not (deferred a) ->
-              let on = DMA.Deb.Name.Orig (fst a) in
-              Some (on, tag on (DMA.Deb.Version.Orig w))
-          | DMA.Deb.Name.Selector a, DMA.Deb.Version.Ref (m, w)
-            when not (deferred a) ->
-              let on = DMA.Deb.Name.Orig m in
-              Some (on, tag on (DMA.Deb.Version.Orig w))
-          | _ -> None
-      end in
-      let module Shadow = Apt_heap.Make (D) in
-      let sh = Shadow.create () in
-      let dependencies n (pv : PVersion.t) =
-        List.map
-          (fun (tn, tvs) -> (tn, PG.Ranges.of_list tvs))
+            carried_at ~assigned tn tvs
+            ||
+            match tn with
+            | DMA.Deb.Name.Selector a -> List.exists (sel_carried ~assigned a) tvs
+            | _ -> false)
           (targets n pv.PVersion.v)
       in
-      (* apt never resolves a clause one of whose alternatives is already
-         satisfied: it leaves the clause alone and installs nothing for it.
-         PubGrub has to decide the disjunct either way, so the nearest thing
-         is to decide it at no cost -- an alternative, or a provider of one, the
-         solution already carries.  Where nothing is carried, and for every
-         other name, PVersion.compare's answer stands unchanged. *)
-      let choose ~assigned n cands =
-        (* an alternative nothing satisfies is not among apt's solutions
-           (AllTargets skips it) or is one it has rejected (Solve takes the
-           first undecided), and so is a rejected provider or version of a
-           selector's name: trying either would burn a backtrack and permute
-           the shadow heap where apt's never moves, so rank it out whenever
-           a live alternative, or the escape, remains *)
-        let keep f cands =
-          match List.filter f cands with [] -> cands | live -> live
-        in
-        let cands =
-          if not apt_heap then cands
-          else
-            let live_pkg ((m, x) : string * DMA.coq_NameArch) w =
-              match x with
-              | DMA.QAArch b ->
-                  (not (Hashtbl.mem pdead (m, b)))
-                  && not (Hashtbl.mem vdead ((m, b), w))
-              | _ -> true
-            in
-            keep
-              (fun (pv : PVersion.t) ->
-                match (n, pv.PVersion.v) with
-                | _, DMA.Deb.Version.Atom a -> atom_pkgs ~assigned a > 0
-                | DMA.Deb.Name.Selector a, DMA.Deb.Version.RefReal w ->
-                    live_pkg (fst a) w
-                | _, DMA.Deb.Version.Ref (m, w) -> live_pkg m w
-                | _ -> true)
-              cands
-        in
-        let cands =
-          (* a decision apt kept across a Pop that PubGrub undid is made
-             again, to the same version *)
-          match Shadow.kept sh n with
-          | Some v when List.exists (fun c -> PVersion.compare c v = 0) cands ->
-              [ v ]
-          | _ -> cands
-        in
-        let cands =
-          match
-            List.find_opt
-              (fun (p, _) -> installed_at ~assigned p)
-              (Hashtbl.find_all narrowed n)
-          with
-          | None -> cands
-          | Some (_, na) ->
-              keep
-                (fun (pv : PVersion.t) ->
-                  match pv.PVersion.v with
-                  | DMA.Deb.Version.RefReal w -> sat (snd na) w
-                  (* an explicit :b has no real candidate: b's own package
-                     is a Ref, providing the name at its version *)
-                  | DMA.Deb.Version.Ref ((m, DMA.QAArch _), w)
-                    when String.equal m (fst (fst na))
-                         &&
-                         match snd (fst na) with
-                         | DMA.QAExact _ -> true
-                         | _ -> false ->
-                      sat (snd na) w
-                  | DMA.Deb.Version.Ref ((m, DMA.QAArch b), w) -> (
-                      match Hashtbl.find_opt I.idx.stanza_of ((m, b), w) with
-                      | Some stz ->
-                          List.exists
-                            (fun (pn, vt) ->
-                              String.equal pn (fst (fst na))
-                              && DMA.Deb.vtMatchb vt (snd na))
-                            stz.nprovs
-                      | None -> false)
-                  | _ -> true)
-                cands
-        in
-        match free_of ~assigned n cands with
-        | [] -> greatest cands
-        | free -> greatest free
-      in
-      let versions n =
-        if apt_heap then cands_of n
-        else List.map (tag n) (DMA.Deb.T.VSet.elements (versions n))
-      in
-      (* A name only conflicts have reached admits absence, its greatest
-         version, and is decided last: deciding it earlier would forbid a
-         dependency that later comes to require it.  apt has no work item
-         for such a name, so the shadow heap never sees it. *)
-      let admits_bot ~assigned tn =
-        match tn with
-        | DMA.Deb.Name.Orig _ -> (
-            match assigned tn with
-            | PG.Entailed r -> PG.Ranges.contains (tag tn DMA.Deb.Version.Bot) r
-            | _ -> false)
-        (* only a real name has the absent version; asking the partial
-           solution about a clause name would compare its atom set *)
+      match n with
+      | DMA.Deb.Name.Selector a -> List.filter (sel_carried ~assigned a) cands
+      | DMA.Deb.Name.Disjunct _ | DMA.Deb.Name.Soft _ ->
+          List.filter alt_carried cands
+      | _ -> []
+
+    module Replay = Order.Make (struct
+      module T = T
+      module PVersion = PVersion
+      module PG = PG
+
+      let idx = I.idx
+      let tag = tag
+      let cands_of = cands_of
+      let targets = targets
+      let has_ref = has_ref
+      let free_of = free_of
+      let greatest = greatest
+    end)
+
+    let dependencies n (pv : PVersion.t) =
+      List.map
+        (fun (tn, tvs) -> (tn, PG.Ranges.of_list tvs))
+        (targets n pv.PVersion.v)
+
+    (* apt never resolves a clause one of whose alternatives is already
+       satisfied: it leaves the clause alone and installs nothing for it.
+       PubGrub has to decide the disjunct either way, so the nearest thing is
+       to decide it at no cost -- an alternative, or a provider of one, the
+       solution already carries.  Where nothing is carried, and for every
+       other name, PVersion.compare's answer stands unchanged; the tool order
+       first narrows the candidates to those apt would consider. *)
+    let choose ~filter ~assigned n cands =
+      let cands = filter ~assigned n cands in
+      match free_of ~assigned n cands with
+      | [] -> greatest cands
+      | free -> greatest free
+
+    (* A name only conflicts have reached admits absence, its greatest
+       version, and is decided last: deciding it earlier would forbid a
+       dependency that later comes to require it.  apt has no work item for
+       such a name, so the shadow heap never sees it. *)
+    let admits_bot ~assigned tn =
+      match tn with
+      | DMA.Deb.Name.Orig _ -> (
+          match assigned tn with
+          | PG.Entailed r -> PG.Ranges.contains (tag tn DMA.Deb.Version.Bot) r
+          | _ -> false)
+      (* only a real name has the absent version; asking the partial solution
+         about a clause name would compare its atom set *)
+      | _ -> false
+
+    let required ~assigned open_names =
+      List.filter (fun (tn, _) -> not (admits_bot ~assigned tn)) open_names
+
+    let next ~order ~assigned open_names =
+      match (required ~assigned open_names, order) with
+      | [], _ -> fst (List.hd open_names)
+      | (tn, _) :: _, `Pubgrub -> tn
+      | req, `Tool t -> Replay.next t ~assigned req
+
+    (* Ranges.full would admit ⊥, which PubGrub then picks, so a bare query
+       would answer nothing; the query asks for the name, so it excludes
+       absence. *)
+    let root (n, acc) =
+      let accepted (pv : PVersion.t) =
+        match (pv.PVersion.v, acc) with
+        | DMA.Deb.Version.Orig _, Any -> true
+        | DMA.Deb.Version.Orig w, Only x ->
+            Debian_frontend.Deb_version.compare w x = 0
         | _ -> false
       in
-      let required ~assigned open_names =
-        List.filter (fun (tn, _) -> not (admits_bot ~assigned tn)) open_names
+      ( DMA.Deb.Name.Orig n,
+        PG.Ranges.of_list
+          (List.filter accepted (cands_of (DMA.Deb.Name.Orig n))) )
+
+    let decode sol =
+      let s' =
+        DMA.Deb.T.PkgSet.ofList
+          (List.map (fun (n, (pv : PVersion.t)) -> (n, pv.PVersion.v)) sol)
       in
-      let defer_bot ~assigned open_names =
-        match required ~assigned open_names with
-        | (tn, _) :: _ -> tn
-        | [] -> fst (List.hd open_names)
+      List.map
+        (fun ((n, b), v) -> (n, b, v))
+        (DMA.PkgSet.elements
+           (DMA.multiarchResolution (DMA.Deb.debianResolution s')))
+
+    let run ~debug ~order query =
+      let order =
+        match order with
+        | `Tool -> `Tool (Replay.create ())
+        | `Pubgrub -> `Pubgrub
       in
-      let heap_next ~assigned open_names =
-        match required ~assigned open_names with
-        | [] -> fst (List.hd open_names)
-        | req -> Shadow.next sh ~assigned req
-      in
-      let next = Some (if apt_heap then heap_next else defer_bot) in
-      (* Ranges.full would admit ⊥, which PubGrub then picks, so a bare
-         query would answer nothing; the query asks for the name, so it
-         excludes absence. *)
-      let root (n, acc) =
-        let accepted (pv : PVersion.t) =
-          match (pv.PVersion.v, acc) with
-          | DMA.Deb.Version.Orig _, Any -> true
-          | DMA.Deb.Version.Orig w, Only x ->
-              Debian_frontend.Deb_version.compare w x = 0
-          | _ -> false
-        in
-        ( DMA.Deb.Name.Orig n,
-          PG.Ranges.of_list
-            (List.filter accepted (versions (DMA.Deb.Name.Orig n))) )
+      let filter =
+        match order with
+        | `Tool t -> Replay.filter t
+        | `Pubgrub -> fun ~assigned:_ _ cands -> cands
       in
       let r =
-        PG.solve ?next ~choose ~vers:versions ~deps:dependencies
-          (List.map root query)
+        PG.solve ~next:(next ~order) ~choose:(choose ~filter) ~vers:cands_of
+          ~deps:dependencies (List.map root query)
       in
-      if apt_heap then Shadow.report sh;
+      (match order with `Tool t -> Replay.report t | `Pubgrub -> ());
       match r with
       | Error inc ->
           Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
@@ -1595,34 +514,16 @@ struct
           if debug then (
             Format.printf "raw solution (%d):@." (List.length sol);
             List.iter
-              (fun (n, v) ->
-                Format.printf "  %a = %a@." PName.pp n PVersion.pp v)
+              (fun (n, v) -> Format.printf "  %a = %a@." PName.pp n PVersion.pp v)
               sol);
-          let s' =
-            DMA.Deb.T.PkgSet.ofList
-              (List.map (fun (n, (pv : PVersion.t)) -> (n, pv.PVersion.v)) sol)
-          in
-          Some
-            (List.map
-               (fun ((n, b), v) -> (n, b, v))
-               (DMA.PkgSet.elements
-                  (DMA.multiarchResolution (DMA.Deb.debianResolution s'))))
+          Some (decode sol)
   end
 
-  let prof_oc = ref 0
-  let prof_ot = ref 0.
-
-  let timed c t f x =
-    incr c;
-    let t0 = Sys.time () in
-    let r = f x in
-    t := !t +. (Sys.time () -. t0);
-    r
-
-  let solve ?debug ?apt_heap (idx : index)
-      (query : ((string * string) * accepts) list) =
+  let solve ~debug ~order (idx : index) (query : ((string * string) * accepts) list)
+      =
+    (* PACPROF's lookup buckets: calls and CPU time per name kind *)
     let buckets : (string, int ref * float ref) Hashtbl.t = Hashtbl.create 8 in
-    let bucket name f x =
+    let timed name f x =
       let c, t =
         match Hashtbl.find_opt buckets name with
         | Some ct -> ct
@@ -1631,29 +532,32 @@ struct
             Hashtbl.replace buckets name ct;
             ct
       in
-      timed c t f x
+      incr c;
+      let t0 = Sys.time () in
+      let r = f x in
+      t := !t +. (Sys.time () -. t0);
+      r
     in
     let vname : DMA.Deb.Name.t -> string = function
-      | DMA.Deb.Name.Orig _ -> "orig"
-      | DMA.Deb.Name.Disjunct _ -> "disj"
-      | DMA.Deb.Name.Soft _ -> "soft"
-      | DMA.Deb.Name.Selector _ -> "sel"
+      | DMA.Deb.Name.Orig _ -> "versions/orig"
+      | DMA.Deb.Name.Disjunct _ -> "versions/disj"
+      | DMA.Deb.Name.Soft _ -> "versions/soft"
+      | DMA.Deb.Name.Selector _ -> "versions/sel"
     in
     let module S = Search (struct
       let idx = idx
+      let versions n' = timed (vname n') (vers_sparse idx) n'
+      let dependencies = timed "dependees" (dependees_sparse idx)
     end) in
     let r =
-      S.run_pubgrub ?debug ?apt_heap
-        ~versions:(fun n' -> bucket (vname n') (vers_sparse idx) n')
-        ~dependencies:(timed prof_oc prof_ot (dependees_sparse idx))
+      S.run ~debug ~order
         (List.map (fun ((n, b), acc) -> ((n, DMA.QAArch b), acc)) query)
     in
     if Sys.getenv_opt "PACPROF" <> None then (
       Hashtbl.iter
         (fun name (c, t) ->
-          Printf.eprintf "PACPROF versions/%s: %d calls %.2fs\n%!" name !c !t)
+          Printf.eprintf "PACPROF %s: %d calls %.2fs\n%!" name !c !t)
         buckets;
-      Printf.eprintf "PACPROF dependees: %d calls %.2fs\n%!" !prof_oc !prof_ot;
       Printf.eprintf "PACPROF clauses parsed: %d of %d stanzas\n%!"
         idx.n_clauses_parsed
         (Hashtbl.length idx.stanza_of));
@@ -1842,8 +746,8 @@ let query_element ~native ~arches (stanzas : DF.stanza list) arg =
    touches only the sub-instances the lookup theorems bound.  Which of the
    two dominates is the frontend's headline number, so it is printed rather
    than inferred. *)
-let solve_files ?debug ?apt_heap ?(recommends = true) ?(strict_pinning = true)
-    ~native ~paths ~query :
+let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~paths ~query
+    :
     ((string * string * string) list * float * float) option =
   let t0 = Unix.gettimeofday () in
   let stanzas = List.concat_map DF.parse_file paths in
@@ -1871,12 +775,13 @@ let solve_files ?debug ?apt_heap ?(recommends = true) ?(strict_pinning = true)
   let stanzas =
     if strict_pinning then candidates ~native ~named stanzas else stanzas
   in
-  let module M = Make (struct
+  let module AP = struct
     let arches = arches
     let native = native
-  end) in
+  end in
+  let module M = Make (AP) in
   let idx = M.build_index ~recommends stanzas in
   let t1 = Unix.gettimeofday () in
-  match M.solve ?debug ?apt_heap idx query with
+  match M.solve ~debug ~order idx query with
   | None -> None
   | Some pkgs -> Some (pkgs, t1 -. t0, Unix.gettimeofday () -. t1)

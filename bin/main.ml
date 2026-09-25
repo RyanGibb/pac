@@ -16,10 +16,10 @@ let order_arg ~tool ~pubgrub =
               $(b,tool) as %s, $(b,pubgrub) as %s."
              tool pubgrub))
 
-let debian_run debug apt_heap no_recs no_strict native query path =
+let debian_run debug order no_recs no_strict native query path =
   Pubgrub.set_debug debug;
   let r =
-    Deb_solve.solve_files ~debug ~apt_heap ~recommends:(not no_recs)
+    Deb_solve.solve_files ~debug ~order ~recommends:(not no_recs)
       ~strict_pinning:(not no_strict) ~native ~paths:[ path ] ~query
   in
   let dropped = !Debian_frontend.Deb_packages.rejected in
@@ -32,8 +32,10 @@ let debian_run debug apt_heap no_recs no_strict native query path =
       1
   | Some (pkgs, t_parse, t_solve) ->
       List.iter (fun (n, b, v) -> Printf.printf "%s:%s %s\n" n b v) pkgs;
-      report_dropped ();
       Printf.printf "parse %.2fs\nsolve %.2fs\n" t_parse t_solve;
+      (* after the timings: eval/debian/valid.sh reads every line above them
+         as a row of the answer *)
+      report_dropped ();
       0
 
 let debian_cmd =
@@ -45,11 +47,9 @@ let debian_cmd =
       & info [ "no-install-recommends" ]
           ~doc:"Ignore Recommends fields rather than satisfying them.")
   in
-  let apt_heap =
-    Arg.(
-      value & flag
-      & info [ "apt-heap" ]
-          ~doc:"Replay apt's work-heap scheduling for closer correspondence.")
+  let order =
+    order_arg ~tool:"apt's work heap and propagation queue, replayed, do"
+      ~pubgrub:"PubGrub's own order does, absence last"
   in
   (* the same opt-out apt-get spells for APT::Solver::Strict-Pinning *)
   let no_strict =
@@ -87,7 +87,7 @@ let debian_cmd =
   Cmd.v
     (Cmd.info "debian" ~doc:"Solve against a Debian Packages index.")
     Term.(
-      const debian_run $ debug_arg $ apt_heap $ no_recs $ no_strict $ native
+      const debian_run $ debug_arg $ order $ no_recs $ no_strict $ native
       $ query $ path)
 
 let opam_run debug order with_test with_doc with_dev_setup opam_version repo

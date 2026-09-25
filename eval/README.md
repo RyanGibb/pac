@@ -35,7 +35,7 @@ Keep the run directory outside the source tree. A killed run resumes where it st
 
 - `P`: queries at a time (default: every core).
 - `TIMEOUT`: seconds per call (default 900).
-- `MODES`: pac search modes to run. Default `default apt-heap` for Debian, `tool pubgrub` for opam (each `--order`), `tool` for Alpine (one order per run), `default` elsewhere.
+- `MODES`: pac search modes to run. Default `tool pubgrub` for Debian and opam (each `--order`), `tool` for Alpine (one order per run), `default` elsewhere.
 
 The run ends with a line per mode, such as `default: 62 queries, exact 46/60, valid 60/60`: exact answers of those the tool answered, valid answers of those checked.
 Exact compares names for Debian and Alpine, name and version for opam, and edges too for cargo and npm.
@@ -80,7 +80,7 @@ With neither flag, `scale.sh` asks the tool over every package in the index (car
 
 ```sh
 eval/alpine/scale.sh _build/default/bin/main.exe /tmp/scale/alpine
-MODES=apt-heap P=32 eval/debian/scale.sh _build/default/bin/main.exe /tmp/scale/debian
+MODES=tool P=32 eval/debian/scale.sh _build/default/bin/main.exe /tmp/scale/debian
 eval/opam/scale.sh _build/default/bin/main.exe /tmp/scale/opam-test <(ls repos/opam-repository/packages | sed 's/^/--with-test /')
 python3 eval/cargo/scale.py targets 20260923 150 > /tmp/pools.txt && eval/cargo/scale.sh _build/default/bin/main.exe /tmp/scale/cargo /tmp/pools.txt
 node eval/npm/queries.js repos/npm targeted > /tmp/ranges.txt && eval/npm/scale.sh _build/default/bin/main.exe /tmp/scale/npm /tmp/ranges.txt

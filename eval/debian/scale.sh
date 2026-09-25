@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]
-#        MODES="default apt-heap" P=<jobs> TIMEOUT=<s>
+#        MODES="tool pubgrub" P=<jobs> TIMEOUT=<s>
 S="$(cd "$(dirname "$0")" && pwd)"
-MODES=${MODES:-default apt-heap}
+MODES=${MODES:-tool pubgrub}
 . "$S/../scale-lib.sh"
+
+# a mode is a search order
+flag() { printf -- '--order=%s' "$1"; }
 
 rows() { awk 'NF == 2 && $1 ~ /:/' "$1"; }
 
