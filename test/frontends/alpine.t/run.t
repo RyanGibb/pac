@@ -4,7 +4,7 @@
     app 1.0
     app-doc 1.0
     docs 1.0
-  encoded solution: 5 core nodes (4 Alpine packages encoded)
+  encoded solution: 5 core nodes (4 dependees lookups)
 
 apk picks among the providers of a name with compare_providers, whose first
 key between providers it has not disqualified is the version the provider
@@ -22,7 +22,7 @@ disjunction, but vim carries the higher k: and is what apk installs:
   index PROVIDERS: 14 packages, 7 provides entries, 0 install_if rules
   packages (1):
     vim 1.0
-  encoded solution: 3 core nodes (2 Alpine packages encoded)
+  encoded solution: 3 core nodes (2 dependees lookups)
 
 The same empty version is why a package of the name itself beats an
 unversioned provider of it however high that provider's k:.  tool-extra
@@ -33,7 +33,7 @@ against tool-extra's empty version:
   index PROVIDERS: 14 packages, 7 provides entries, 0 install_if rules
   packages (1):
     tool 2.0
-  encoded solution: 3 core nodes (2 Alpine packages encoded)
+  encoded solution: 3 core nodes (2 dependees lookups)
 
 An unversioned provides without k: is not a low-ranked candidate but no
 candidate at all: apk-package(5) says such a provides "will not be
@@ -56,7 +56,7 @@ versions they offer.  vers-alt provides vers=9.9 where the real vers is
   packages (2):
     vers-alt 9.9
     vers-user 1.0
-  encoded solution: 4 core nodes (5 Alpine packages encoded)
+  encoded solution: 4 core nodes (5 dependees lookups)
 
 k: is the key below the offered version, and it is read off whichever
 package offers it, provider or not.  prio-alt provides prio=1.0, tying the
@@ -67,7 +67,7 @@ real prio 1.0 on version, and prio's own k:100 beats prio-alt's k:1:
   packages (2):
     prio 1.0
     prio-user 1.0
-  encoded solution: 3 core nodes (3 Alpine packages encoded)
+  encoded solution: 3 core nodes (3 dependees lookups)
 
 and the same tie goes the other way when the provider is the one carrying the
 k:.  prio-lo-alt provides prio-lo=1.0 with k:5 against a real prio-lo 1.0
@@ -78,7 +78,7 @@ with none, so the provider wins:
   packages (2):
     prio-lo-alt 2.0
     prio-lo-user 1.0
-  encoded solution: 4 core nodes (5 Alpine packages encoded)
+  encoded solution: 4 core nodes (5 dependees lookups)
 
 An unversioned provides without k: still satisfies a dependency when the
 world names its owner: apk-package(5) says that without a provider-priority
@@ -90,7 +90,7 @@ world".  pv-prov provides pv-virt with no k:, and here the world names it:
   packages (2):
     pv-prov 1.0
     pv-user 1.0
-  encoded solution: 4 core nodes (3 Alpine packages encoded)
+  encoded solution: 4 core nodes (3 dependees lookups)
 
 while without it pv-user has nothing to satisfy pv-virt, as in apk:
 
@@ -139,7 +139,7 @@ apk keeps ru-lo for ru-virt and never adds ru-hi despite its higher k:
     ru-app 1.0
     ru-lo 1.0
     ru-user 1.0
-  encoded solution: 5 core nodes (4 Alpine packages encoded)
+  encoded solution: 5 core nodes (4 dependees lookups)
 
 and the same when the owner arrives only several steps below the
 dependency on the virtual name:
@@ -150,7 +150,7 @@ dependency on the virtual name:
     ru-deep 1.0
     ru-lo 1.0
     ru-mid 1.0
-  encoded solution: 5 core nodes (4 Alpine packages encoded)
+  encoded solution: 5 core nodes (4 dependees lookups)
 
   $ ../../../bin/main.exe alpine REUSE ru-user ru-deep | sed -E '/^(parse|solve) [0-9.]+s$/d'
   index REUSE: 10 packages, 6 provides entries, 0 install_if rules
@@ -159,7 +159,7 @@ dependency on the virtual name:
     ru-lo 1.0
     ru-mid 1.0
     ru-user 1.0
-  encoded solution: 6 core nodes (5 Alpine packages encoded)
+  encoded solution: 6 core nodes (5 dependees lookups)
 
 With no owner already there, k: still decides:
 
@@ -168,7 +168,7 @@ With no owner already there, k: still decides:
   packages (2):
     ru-hi 1.0
     ru-user 1.0
-  encoded solution: 4 core nodes (3 Alpine packages encoded)
+  encoded solution: 4 core nodes (3 dependees lookups)
 
 Two providers that offer the same version at a name and tie on k: are
 separated by the order apk read them in: select_package replaces its pick
@@ -180,13 +180,13 @@ first, beats tie2-a:
   index REUSE: 10 packages, 6 provides entries, 0 install_if rules
   packages (1):
     tie-a 1.0
-  encoded solution: 3 core nodes (4 Alpine packages encoded)
+  encoded solution: 3 core nodes (4 dependees lookups)
 
   $ ../../../bin/main.exe alpine REUSE tie2-cmd | sed -E '/^(parse|solve) [0-9.]+s$/d'
   index REUSE: 10 packages, 6 provides entries, 0 install_if rules
   packages (1):
     tie2-b 1.0
-  encoded solution: 3 core nodes (4 Alpine packages encoded)
+  encoded solution: 3 core nodes (4 dependees lookups)
 
 LUA is the part of the snapshot's APKINDEX that lua5.1-lyaml and dmvpn can
 reach.  lua-stdlib-debug depends on the bare name lua, which lua5.1 to
@@ -204,7 +204,7 @@ lua:
     lua5.1-lyaml 6.2.8-r1
     musl 1.2.5-r11
     yaml 0.2.5-r2
-  encoded solution: 24 core nodes (23 Alpine packages encoded)
+  encoded solution: 24 core nodes (23 dependees lookups)
 
   $ ../../../bin/main.exe alpine LUA dmvpn | grep -E '^  lua5\.[0-9] '
     lua5.2 5.2.4-r13
@@ -232,7 +232,7 @@ installed: ⊥ is the greatest version, and PubGrub decides the greatest:
   packages (2):
     nega 1.0
     negc 1.0
-  encoded solution: 4 core nodes (3 Alpine packages encoded)
+  encoded solution: 4 core nodes (3 dependees lookups)
 
 An install-if condition may be negated, i:ni-a !ni-b, and apk then fires
 the rule only while no package holds ni-b.  ni-z carries exactly that
@@ -249,7 +249,7 @@ provides one of its conditions' names:
     ni-lt 1.0
     ni-self 1.0
     ni-z 1.0
-  encoded solution: 8 core nodes (5 Alpine packages encoded)
+  encoded solution: 8 core nodes (5 dependees lookups)
 
 Requiring ni-b falsifies !ni-b.  apk takes ni-alias, which provides it at
 3.0, which !ni-b<2 does not exclude, so ni-lt still fires:
@@ -261,7 +261,7 @@ Requiring ni-b falsifies !ni-b.  apk takes ni-alias, which provides it at
     ni-alias 1.0
     ni-lt 1.0
     ni-self 1.0
-  encoded solution: 10 core nodes (7 Alpine packages encoded)
+  encoded solution: 10 core nodes (7 dependees lookups)
 
 and ni-b 1.0 falsifies both:
 
@@ -271,7 +271,7 @@ and ni-b 1.0 falsifies both:
     ni-a 1.0
     ni-b 1.0
     ni-self 1.0
-  encoded solution: 9 core nodes (4 Alpine packages encoded)
+  encoded solution: 9 core nodes (4 dependees lookups)
 
 apk gives a bare provides the empty version, which it orders below every
 version, so a bare provides meets a constrained atom exactly when the
@@ -284,7 +284,7 @@ bare, with k:, and so meets bv-lt's requirement:
   packages (2):
     bv-lt 1.0
     bv-prov 1.0
-  encoded solution: 4 core nodes (3 Alpine packages encoded)
+  encoded solution: 4 core nodes (3 dependees lookups)
 
 and not bv-ge's:
 
@@ -311,7 +311,7 @@ on !bv-virt<2 nor the one on bv-virt>=1:
     bv-anc 1.0
     bv-iif 1.0
     bv-prov 1.0
-  encoded solution: 9 core nodes (4 Alpine packages encoded)
+  encoded solution: 9 core nodes (4 dependees lookups)
 
 It answers a constrained world entry:
 
@@ -319,7 +319,7 @@ It answers a constrained world entry:
   index BAREVER: 8 packages, 1 provides entries, 3 install_if rules
   packages (1):
     bv-prov 1.0
-  encoded solution: 3 core nodes (2 Alpine packages encoded)
+  encoded solution: 3 core nodes (2 dependees lookups)
 
 And in NEGIIF the bare provider ni-virt falsifies ni-lt's !ni-b<2:
 
@@ -329,7 +329,7 @@ And in NEGIIF the bare provider ni-virt falsifies ni-lt's !ni-b<2:
     ni-a 1.0
     ni-self 1.0
     ni-virt 1.0
-  encoded solution: 9 core nodes (4 Alpine packages encoded)
+  encoded solution: 9 core nodes (4 dependees lookups)
 
 A >< atom names a package digest, which pac cannot match, so bh-user's
 bh-virt><Q1... has nothing to satisfy it.  apk tests it against the
@@ -366,7 +366,7 @@ Any run of < > = ~ is an operator, the bit-OR of its characters, so == is =:
   packages (2):
     pr-eq 1.0
     pr-lib 1.0
-  encoded solution: 3 core nodes (3 Alpine packages encoded)
+  encoded solution: 3 core nodes (3 dependees lookups)
 
 An i: atom apk cannot parse drops the whole rule, so pr-iif never
 fires:
@@ -376,7 +376,7 @@ fires:
   parser dropped 4 declarations
   packages (1):
     pr-trig 1.0
-  encoded solution: 2 core nodes (2 Alpine packages encoded)
+  encoded solution: 2 core nodes (2 dependees lookups)
 
 An index skips the installed-db fields F M R Z:
 
@@ -385,7 +385,7 @@ An index skips the installed-db fields F M R Z:
   parser dropped 4 declarations
   packages (1):
     pr-files 1.0
-  encoded solution: 2 core nodes (2 Alpine packages encoded)
+  encoded solution: 2 core nodes (2 dependees lookups)
 
 And a p: atom apk cannot parse ends the provides, so pr-provs provides
 pr-pa and not pr-pc:
@@ -395,10 +395,46 @@ pr-pa and not pr-pc:
   parser dropped 4 declarations
   packages (1):
     pr-provs 1.0
-  encoded solution: 3 core nodes (3 Alpine packages encoded)
+  encoded solution: 3 core nodes (3 dependees lookups)
 
   $ ../../../bin/main.exe alpine PARSE pr-pc | sed -E '/^(parse|solve) [0-9.]+s$/d'
   index PARSE: 7 packages, 1 provides entries, 0 install_if rules
   parser dropped 4 declarations
   unsatisfiable:
   Because @root () -> pr-pc ∅ and root -> @root (), version solving failed..
+
+A world atom apk cannot read makes it refuse the whole world, and pac
+refuses it too, exiting 2 rather than solving the other atoms: one tagged
+with a repository, as none here is; one whose version is not a version;
+and one with no version after its operator:
+
+  $ ../../../bin/main.exe alpine APKINDEX app docs@edge
+  error: "docs@edge": no repository has that tag
+  [2]
+  $ ../../../bin/main.exe alpine APKINDEX app 'docs=1.x!'
+  error: "docs=1.x!": not a valid version
+  [2]
+  $ ../../../bin/main.exe alpine APKINDEX app 'docs='
+  error: "docs=": not a dependency atom
+  [2]
+
+An empty argument is no atom at all, and apk skips it:
+
+  $ ../../../bin/main.exe alpine APKINDEX app '' | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index APKINDEX: 3 packages, 0 provides entries, 1 install_if rules
+  packages (1):
+    app 1.0
+  encoded solution: 4 core nodes (2 dependees lookups)
+
+PubGrub's own order keeps the rules apk's acceptance rests on, since apk
+keeps an installed set only where its own solver would: a name a selected
+package provides stays that package's, so ru-hi's higher k: does not bring
+it in beside ru-lo:
+
+  $ ../../../bin/main.exe alpine --order=pubgrub REUSE ru-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index REUSE: 10 packages, 6 provides entries, 0 install_if rules
+  packages (3):
+    ru-app 1.0
+    ru-lo 1.0
+    ru-user 1.0
+  encoded solution: 5 core nodes (4 dependees lookups)

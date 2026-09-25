@@ -5,13 +5,13 @@
 
 (library
  (name apk_solve)
- (modules apk_solve)
+ (modules lookups order apk_solve)
  ; dune's warnings, reporting rather than failing: a warning here is a
  ; note to the author, and only the extraction this links against needs
  ; them off wholesale.
  (flags
   (:standard -warn-error -a))
- (libraries apk_frontend pac pubgrub))
+ (libraries apk_frontend pac package_formula pubgrub))
 
 (test
  (name test_apk_version)

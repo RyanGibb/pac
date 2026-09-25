@@ -34,6 +34,22 @@ type pkg_meta = {
   deprecated : bool;
 }
 
+let empty_meta =
+  {
+    depends = None;
+    conflicts = [];
+    classes = [];
+    available = FT;
+    depexts = [];
+    pindeps = [];
+    avoid_version = false;
+    deprecated = false;
+  }
+
+let rec off_names acc : off -> string list = function
+  | OAtom (m, _, _) -> m :: acc
+  | OAnd (a, b) | OOr (a, b) -> off_names (off_names acc a) b
+
 let rejected = ref 0
 let reject () = incr rejected
 
@@ -433,19 +449,7 @@ let parse_file ~name ~version path : pkg_meta =
   let owner = name in
   let selfv = version in
   let flags = ref [] in
-  let meta =
-    ref
-      {
-        depends = None;
-        conflicts = [];
-        classes = [];
-        available = FT;
-        depexts = [];
-        pindeps = [];
-        avoid_version = false;
-        deprecated = false;
-      }
-  in
+  let meta = ref empty_meta in
   List.iter
     (fun (it : opamfile_item) ->
       match it.pelem with

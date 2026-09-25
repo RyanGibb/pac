@@ -6,10 +6,11 @@
 # gap from an instance gap; and where 0install refuses, mccs, since 0install
 # gives up where a solution may still exist.
 # usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]
-#        MODES="default 0install-order" P=<jobs> TIMEOUT=<s>
+#        MODES="tool pubgrub" P=<jobs> TIMEOUT=<s>
 S="$(cd "$(dirname "$0")" && pwd)"
-MODES=${MODES:-default 0install-order}
+MODES=${MODES:-tool pubgrub}
 . "$S/../scale-lib.sh"
+flag() { printf -- '--order=%s' "$1"; }
 REPO=$TOP/repos/opam-repository
 
 all_queries() { ls "$REPO/packages"; }

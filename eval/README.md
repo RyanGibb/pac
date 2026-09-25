@@ -35,7 +35,7 @@ Keep the run directory outside the source tree. A killed run resumes where it st
 
 - `P`: queries at a time (default: every core).
 - `TIMEOUT`: seconds per call (default 900).
-- `MODES`: pac search modes to run. Default `default apt-heap` for Debian, `default 0install-order` for opam, `default` elsewhere.
+- `MODES`: pac search modes to run. Default `default apt-heap` for Debian, `tool pubgrub` for opam (each `--order`), `tool` for Alpine (one order per run), `default` elsewhere.
 
 The run ends with a line per mode, such as `default: 62 queries, exact 46/60, valid 60/60`: exact answers of those the tool answered, valid answers of those checked.
 Exact compares names for Debian and Alpine, name and version for opam, and edges too for cargo and npm.

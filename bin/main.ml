@@ -3,6 +3,19 @@ open Cmdliner
 let debug_arg =
   Arg.(value & flag & info [ "debug" ] ~doc:"Trace the PubGrub search.")
 
+(* the tool's own order is the default because the evaluation's first
+   question is whether pac answers as the tool does *)
+let order_arg ~tool ~pubgrub =
+  Arg.(
+    value
+    & opt (enum [ ("tool", `Tool); ("pubgrub", `Pubgrub) ]) `Tool
+    & info [ "order" ] ~docv:"ORDER"
+        ~doc:
+          (Printf.sprintf
+             "Which name to decide next and which version to try: \
+              $(b,tool) as %s, $(b,pubgrub) as %s."
+             tool pubgrub))
+
 let debian_run debug apt_heap no_recs no_strict native query path =
   Pubgrub.set_debug debug;
   match
@@ -69,14 +82,13 @@ let debian_cmd =
       const debian_run $ debug_arg $ apt_heap $ no_recs $ no_strict $ native
       $ query $ path)
 
-let opam_run debug zi_order with_test with_doc with_dev_setup opam_version
-    repo atoms =
+let opam_run debug order with_test with_doc with_dev_setup opam_version repo
+    atoms =
   let t0 = Unix.gettimeofday () in
   let ar = Opam_solve.empty_archive repo in
-  let module S = Opam_solve.Make () in
   let query = List.map Opam_parse.atom_of_string atoms in
   let r =
-    S.solve ~debug ~zi_order ~with_test ~with_doc ~with_dev_setup
+    Opam_solve.solve ~debug ~order ~with_test ~with_doc ~with_dev_setup
       ~opam_version ar query
   in
   (* the names the run parsed, known only once it is over: there is no
@@ -94,9 +106,9 @@ let opam_run debug zi_order with_test with_doc with_dev_setup opam_version
   | None ->
       loaded ();
       1
-  | Some (reals, total, depexts) ->
+  | Some { Opam_solve.reals; nodes; depexts } ->
       Printf.printf "opam packages (%d, core solution %d nodes):\n"
-        (List.length reals) total;
+        (List.length reals) nodes;
       List.iter (fun (n, v) -> Printf.printf "  %s.%s\n" n v) reals;
       if depexts <> [] then begin
         Printf.printf "system packages (%d):\n" (List.length depexts);
@@ -107,15 +119,10 @@ let opam_run debug zi_order with_test with_doc with_dev_setup opam_version
 
 let opam_cmd =
   (* opam's builtin-0install backend decides a name as soon as its decider
-     walks onto it, which is not the order PubGrub's own heuristic picks;
-     the flag replays that walk for closer correspondence. *)
-  let zi_order =
-    Arg.(
-      value & flag
-      & info [ "0install-order" ]
-          ~doc:
-            "Replay builtin-0install's decision order for closer \
-             correspondence.")
+     walks onto it, which is not the order PubGrub's own heuristic picks *)
+  let order =
+    order_arg ~tool:"builtin-0install's walk does"
+      ~pubgrub:"PubGrub's own order does, absence last"
   in
   (* the flags opam install itself has for enabling dependencies, and only
      those: build is true whenever opam solves, since nothing is installed
@@ -172,7 +179,7 @@ let opam_cmd =
   Cmd.v
     (Cmd.info "opam" ~doc:"Solve against an opam repository.")
     Term.(
-      const opam_run $ debug_arg $ zi_order $ with_test $ with_doc
+      const opam_run $ debug_arg $ order $ with_test $ with_doc
       $ with_dev_setup $ opam_version $ repo $ query)
 
 let cargo_run debug order print_parents index manifest features no_default
@@ -323,31 +330,36 @@ let cargo_cmd =
       const cargo_run $ debug_arg $ order $ print_parents $ index $ manifest
       $ features $ no_default $ rustv)
 
-let alpine_run debug path goals =
-  let t0 = Unix.gettimeofday () in
-  let ar = Apk_solve.load_index path in
-  let t1 = Unix.gettimeofday () in
-  Printf.printf
-    "index %s: %d packages, %d provides entries, %d install_if rules\n\
-     parse %.2fs\n\
-     %!"
-    path ar.Apk_solve.n_pkgs ar.Apk_solve.n_provs ar.Apk_solve.n_iif (t1 -. t0);
-  if !Apk_parse.rejected > 0 then
-    Printf.printf "parser dropped %d declarations\n%!" !Apk_parse.rejected;
-  let world = Apk_solve.world_of_args goals in
-  if world = [] then 2
-  else
-    match Apk_solve.solve ~debug ar world with
-    | None -> 1
-    | Some r ->
-        let t2 = Unix.gettimeofday () in
-        Printf.printf "packages (%d):\n" (List.length r.Apk_solve.pkgs);
-        List.iter (fun (n, v) -> Printf.printf "  %s %s\n" n v) r.Apk_solve.pkgs;
-        Printf.printf
-          "encoded solution: %d core nodes (%d Alpine packages encoded)\n"
-          r.Apk_solve.nodes r.Apk_solve.processed;
-        Printf.printf "solve %.2fs\n" (t2 -. t1);
-        0
+let alpine_run debug order path goals =
+  match Apk_solve.world_of_args goals with
+  | Error e ->
+      Printf.eprintf "error: %s\n" e;
+      2
+  | Ok world -> (
+      let t0 = Unix.gettimeofday () in
+      let ar = Apk_solve.load_index path in
+      let t1 = Unix.gettimeofday () in
+      Printf.printf
+        "index %s: %d packages, %d provides entries, %d install_if rules\n\
+         parse %.2fs\n\
+         %!"
+        path ar.Apk_solve.n_pkgs ar.Apk_solve.n_provs ar.Apk_solve.n_iif
+        (t1 -. t0);
+      if !Apk_parse.rejected > 0 then
+        Printf.printf "parser dropped %d declarations\n%!" !Apk_parse.rejected;
+      match Apk_solve.solve ~debug ~order ar world with
+      | None -> 1
+      | Some r ->
+          let t2 = Unix.gettimeofday () in
+          Printf.printf "packages (%d):\n" (List.length r.Apk_solve.pkgs);
+          List.iter
+            (fun (n, v) -> Printf.printf "  %s %s\n" n v)
+            r.Apk_solve.pkgs;
+          Printf.printf
+            "encoded solution: %d core nodes (%d dependees lookups)\n"
+            r.Apk_solve.nodes r.Apk_solve.processed;
+          Printf.printf "solve %.2fs\n" (t2 -. t1);
+          0)
 
 let alpine_cmd =
   let path =
@@ -361,9 +373,17 @@ let alpine_cmd =
       non_empty & pos_right 0 string []
       & info [] ~docv:"PKG" ~doc:"Packages forming the world.")
   in
+  (* apk accepts only what its own solver would keep, so the rules an
+     answer's validity rests on hold in both orders *)
+  let order =
+    order_arg ~tool:"apk does"
+      ~pubgrub:
+        "PubGrub does, but for the rules apk's acceptance of an answer \
+         rests on"
+  in
   Cmd.v
     (Cmd.info "alpine" ~doc:"Solve against an Alpine APKINDEX.")
-    Term.(const alpine_run $ debug_arg $ path $ goals)
+    Term.(const alpine_run $ debug_arg $ order $ path $ goals)
 
 module Npm = Npm_solve
 

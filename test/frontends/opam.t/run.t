@@ -2,7 +2,7 @@
   opam packages (2, core solution 4 nodes):
     app.1
     c.1
-  loaded: 3 names, 2 package versions
+  loaded: 2 names, 2 package versions
 
 A dependency constrained to the depender's own version takes that version,
 not the newest one available:
@@ -175,7 +175,7 @@ repository:
     c.1
     lib.2
     tool.2
-  loaded: 5 names, 5 package versions
+  loaded: 4 names, 5 package versions
 
 An atom's version constraint is the set of versions its name is accepted
 at.  Unconstrained, dep takes its newest version:
@@ -206,7 +206,7 @@ Constraints and several names compose, the query being one per name:
     app.1
     c.1
     dep.3
-  loaded: 4 names, 4 package versions
+  loaded: 3 names, 4 package versions
 
 with-test, with-doc and with-dev-setup are query-scoped: each flag turns
 its variable on for the names the query asks for and leaves every package
@@ -290,17 +290,27 @@ below 2.3 and ov.2 from 2.3 on:
     ov.1
   loaded: 1 names, 2 package versions
 
-Under --0install-order the query's atoms are walked last first, as opam
-hands them to 0install (create_spec conses each onto the list it builds).
-ord-p.2 and ord-q.2 each need ord-r on the other side of 2, so whichever
-name is decided first keeps its newest: asked for ord-p then ord-q, opam
-installs ord-q.2, ord-p.1 and ord-r.1:
+In builtin-0install's order, the default, the query's atoms are walked
+last first, as opam hands them to 0install (create_spec conses each onto
+the list it builds).  ord-p.2 and ord-q.2 each need ord-r on the other side
+of 2, so whichever name is decided first keeps its newest: asked for ord-p
+then ord-q, opam installs ord-q.2, ord-p.1 and ord-r.1:
 
-  $ ../../../bin/main.exe opam --0install-order . ord-p ord-q | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ ../../../bin/main.exe opam . ord-p ord-q | sed -E '/^(parse|solve) [0-9.]+s$/d'
   opam packages (3, core solution 4 nodes):
     ord-p.1
     ord-q.2
     ord-r.1
+  loaded: 3 names, 6 package versions
+
+In PubGrub's own order the answer is as valid, but which name keeps its
+newest is PubGrub's choice:
+
+  $ ../../../bin/main.exe opam --order=pubgrub . ord-p ord-q | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (3, core solution 4 nodes):
+    ord-p.2
+    ord-q.1
+    ord-r.2
   loaded: 3 names, 6 package versions
 
 Every filter reads the package's own version as version, _:version or
