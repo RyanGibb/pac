@@ -21,7 +21,6 @@ command -v coqtop >/dev/null 2>&1 || {
 
 
 names=$(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' <<'LIST'
-# core: merge and its resolution characterisation
 C.Merge.merge
 C.Merge.merge_functionalInName
 C.Merge.merge_resolution_iff
@@ -29,7 +28,6 @@ C.Merge.mergedVS
 C.dependees
 C.versions
 
-# complexity: the SAT encoding and the reduction from 3-SAT
 Cx.Encoding.satEncoding
 Cx.Encoding.sat_encoding_completeness
 Cx.Encoding.sat_encoding_soundness
@@ -43,14 +41,12 @@ Cx.Reduction.three_sat_completeness
 Cx.Reduction.three_sat_correct
 Cx.Reduction.three_sat_soundness
 
-# versions: the version-formula reduction and its glue
 Ver.Reduction.Lookup.dependees_lookup
 Ver.Reduction.Lookup.reduce_glue
 Ver.Reduction.Lookup.versions_lookup
 Ver.Reduction.reduce
 Ver.Reduction.version_formula_correct
 
-# conflicts
 Cfl.Reduction.Lookup.dependees_lookupAbsent
 Cfl.Reduction.Lookup.dependees_lookupOrig
 Cfl.Reduction.Lookup.versions_lookupOrig
@@ -61,7 +57,6 @@ Cfl.Reduction.reduce
 Cfl.Reduction.reduceDeps
 Cfl.Reduction.reduceReal
 
-# conflict classes
 Cls.Reduction.Lookup.classRelAt
 Cls.Reduction.Lookup.dependees_lookupClass
 Cls.Reduction.Lookup.dependees_lookupOrig
@@ -79,7 +74,6 @@ Cls.Reduction.reduceDeps
 Cls.Reduction.reduceDeps_functionalInName
 Cls.Reduction.reduceReal
 
-# concurrent versions
 Conc.Reduction.Lookup.dependees_lookupGranular
 Conc.Reduction.Lookup.dependees_lookupGranularGran
 Conc.Reduction.Lookup.dependees_lookupIntermediate
@@ -96,7 +90,6 @@ Conc.Reduction.reduceDepsSplitEntry
 Conc.Reduction.reduceDepsSplitFanout
 Conc.Reduction.reduceReal
 
-# peer dependencies
 Peer.Reduction.Lookup.dependees_lookupGranular
 Peer.Reduction.Lookup.dependees_lookupIntermediate
 Peer.Reduction.Lookup.dependees_lookupIntermediateGran
@@ -112,7 +105,6 @@ Peer.Reduction.reduceReal
 Peer.Reduction.reduceRealIntermediate
 Peer.Reduction.reduceRealPeer
 
-# dependency visibility
 Vis.Reduction.Lookup.depBlocks
 Vis.Reduction.Lookup.dependees_lookupAgreement
 Vis.Reduction.Lookup.dependees_lookupIntermediate
@@ -132,7 +124,6 @@ Vis.Reduction.reduceRealOccurrence
 Vis.Reduction.visibility_completeness
 Vis.Reduction.visibility_soundness
 
-# features
 Feat.Reduction.Lookup.dependees_lookupFeatPkg
 Feat.Reduction.Lookup.dependees_lookupOrig
 Feat.Reduction.Lookup.versions_lookupFeatPkg
@@ -142,7 +133,6 @@ Feat.Reduction.feature_soundness
 Feat.Reduction.reduceDeps
 Feat.Reduction.reduceReal
 
-# virtual packages
 Virt.Reduction.Lookup.dependees_lookupOrig
 Virt.Reduction.Lookup.dependees_lookupSelector
 Virt.Reduction.Lookup.versions_lookupOrig
@@ -153,7 +143,6 @@ Virt.Reduction.selectorVersions
 Virt.Reduction.virtual_completeness
 Virt.Reduction.virtual_soundness
 
-# package formulas
 PkgF.Reduction.Lookup.dependees_lookupAbsent
 PkgF.Reduction.Lookup.dependees_lookupDisjunct
 PkgF.Reduction.Lookup.dependees_lookupDisjunctBy
@@ -169,7 +158,6 @@ PkgF.Reduction.reduceDeps
 PkgF.Reduction.reduceDepsBy
 PkgF.Reduction.reduceReal
 
-# variable formulas
 VarF.Reduction.Lookup.dependees_lookupAbsent
 VarF.Reduction.Lookup.dependees_lookupDisjunct
 VarF.Reduction.Lookup.dependees_lookupOrig
@@ -185,7 +173,6 @@ VarF.Reduction.reduceReal
 VarF.Reduction.variable_formula_completeness
 VarF.Reduction.variable_formula_soundness
 
-# features composed with concurrency
 FC.Reduction.Lookup.dependees_lookupGranularFeatPkg
 FC.Reduction.Lookup.dependees_lookupGranularOrig
 FC.Reduction.Lookup.dependees_lookupIntermediate
@@ -196,7 +183,6 @@ FC.Reduction.feature_concurrent_soundness
 FC.Reduction.reduceDeps
 FC.Reduction.reduceReal
 
-# debian
 Deb.Lookup.dependees_lookupAbsent
 Deb.Lookup.dependees_lookupDisjunct
 Deb.Lookup.dependees_lookupOrig
@@ -220,7 +206,6 @@ Deb.versions
 Deb.versionsDisj
 Deb.versionsSoft
 
-# debian multiarch
 DMA.Lookup.dependees_lookupDisjunctMA
 DMA.Lookup.dependees_lookupOrigMA
 DMA.Lookup.dependees_lookupSelectorAgreeMA
@@ -250,7 +235,6 @@ DMA.reduceProvEntry
 DMA.reduceRec
 DMA.reduceReal
 
-# opam
 Op.depextsOf
 Op.mem_depextsOf
 Op.Reduction.clsForms
@@ -285,7 +269,6 @@ Op.Reduction.versions_lookupReal
 Op.Reduction.versions_lookupRealCore
 Op.Reduction.versions_lookupRootCore
 
-# cargo, and the semver range language it Includes
 Cgo.Lookup.claimants
 Cgo.Lookup.dependees_lookup
 Cgo.Lookup.dependees_lookupCrate
@@ -341,7 +324,6 @@ Cgo.transReal
 Cgo.versions
 Cgo.versions_link_reduceReal
 
-# alpine
 Alp.Reduction.Lookup.dependees_lookupDisjunctCore
 Alp.Reduction.Lookup.dependees_lookupOrig
 Alp.Reduction.Lookup.dependees_lookupOrigCore
@@ -369,7 +351,6 @@ Alp.Reduction.transD
 Alp.Reduction.transR
 Alp.Reduction.versions
 
-# npm
 NpmS.Reduction.Lookup.dependees_lookupGran
 NpmS.Reduction.Lookup.dependees_lookupInt
 NpmS.Reduction.Lookup.versions_lookupGran

@@ -1,7 +1,6 @@
 (* Trusted (TCB) reading of a Cargo query, a root Cargo.toml, into the root
-   package the calculus takes (paper §Cargo), as cargo 1.97's
-   util/toml/mod.rs reads one.  The root becomes one more crate version, so every
-   field it has is one the index form already carries; a field with no
+   package the calculus takes, as cargo 1.97's util/toml/mod.rs reads one.
+   The root becomes one more crate version, so every field it has is one the index form already carries; a field with no
    place there -- a path or git source, another registry, a [patch] other
    than the root's own, workspace inheritance -- would change the question
    cargo is asked without changing ours, and is refused. *)

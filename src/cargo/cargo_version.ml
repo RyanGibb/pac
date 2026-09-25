@@ -1,13 +1,5 @@
 (* SemVer 2.0.0 precedence and Cargo's requirement syntax, implemented
-   from the specifications: numeric major.minor.patch, then pre-release
-   compared identifier-wise (numeric identifiers below alphanumeric ones,
-   a shorter identifier list below its extensions, and a version carrying
-   a pre-release below the same core release), with build metadata
-   ignored.  Requirements are conjunctions of comparators -- one
-   comparator set of the calculus's shared semver range language; caret
-   is the default and uses the leftmost-nonzero compatibility rule, and a
-   pre-release candidate is admitted only by a requirement naming one at
-   the same release core.  Trusted (TCB). *)
+   from the specifications.  Trusted (TCB). *)
 
 let is_digit c = c >= '0' && c <= '9'
 
@@ -155,7 +147,6 @@ let compare (a : string) (b : string) : int =
       else if plain a && plain b then 0
       else compare_parsed a b
 
-let equal a b = compare a b = 0
 let is_prerelease v = (parse v).pre <> []
 
 (* the release core a pre-release belongs to: a requirement admits a
@@ -165,8 +156,6 @@ let is_prerelease v = (parse v).pre <> []
 let same_core a b =
   let x = parse a and y = parse b in
   x.major = y.major && x.minor = y.minor && x.patch = y.patch
-
-(* ---- requirements ---- *)
 
 type op = Ge | Gt | Le | Lt | Eq
 type req = (op * string) list (* a conjunction; [] is any version *)
@@ -186,8 +175,6 @@ let comp_of = function
 let vstr ?(pre = "") maj min pat =
   Printf.sprintf "%d.%d.%d%s" maj min pat (if pre = "" then "" else "-" ^ pre)
 
-(* a comparator's version part: up to three components, any of which may
-   be absent or an explicit wildcard, plus an optional pre-release *)
 let parse_spec (s : string) =
   let s =
     match String.index_opt s '+' with Some i -> String.sub s 0 i | None -> s

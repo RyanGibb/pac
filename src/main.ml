@@ -121,8 +121,7 @@ let opam_cmd =
      those: build is true whenever opam solves, since nothing is installed
      without being built, so there is no --with-build to match.  Each is
      query-scoped rather than global -- it holds of the names the query
-     asks for and of nothing they pull in -- which is what the instance's
-     namespaced variables express; see [rho] in opam_solve.ml. *)
+     asks for and of nothing they pull in. *)
   let with_test =
     Arg.(
       value & flag
@@ -160,11 +159,8 @@ let opam_cmd =
       & pos 0 (some dir) None
       & info [] ~docv:"REPO" ~doc:"opam repository root.")
   in
-  (* an installation request is a query: a set of names each with a set of
-     acceptable versions, which the frontend realises as the synthetic
-     root's dependencies.  The syntax of one element is opam's own
-     (OpamFormula.atom_of_string), and many of them make one request, as
-     [atom_list] in opamArg.ml does. *)
+  (* the syntax of one element is opam's own (OpamFormula.atom_of_string),
+     and many of them make one request, as [atom_list] in opamArg.ml does *)
   let query =
     Arg.(
       non_empty & pos_right 0 string []
@@ -373,8 +369,7 @@ let alpine_cmd =
     (Cmd.info "alpine" ~doc:"Solve against an Alpine APKINDEX.")
     Term.(const alpine_run $ debug_arg $ path $ goals)
 
-(* The root package r_N: the manifest a path argument names, or an empty
-   project's, with each spec added as `npm install` adds it.  arborist's
+(* arborist's
    #add resolves a tag to its version only after an await, so the other
    specs are all added first, in order. *)
 let npm_root ar (query : string list) : (Npm_parse.ver, string) result =

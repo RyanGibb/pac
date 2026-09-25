@@ -1,11 +1,6 @@
-(* Trusted (TCB) ingestion of a crates.io-index checkout: one file per
-   crate under a two-level prefix directory, one JSON object per line per
-   published version.  The frontend desugarings the calculus expects are
-   applied here: features2 (the v2 schema's dep:/dep?/ carrying table) is
-   merged into features, feature entry strings are classified into the
-   four FEntry shapes, and an optional dependency gains the implicit
-   feature that activates it unless some entry names it with dep:.
-   Unhandled shapes are counted: a malformed line or dependency is
+(* Trusted (TCB) ingestion of a crates.io-index checkout, applying the
+   frontend desugarings the calculus expects.  Unhandled shapes are
+   counted: a malformed line or dependency is
    dropped, as is a version whose feature table cargo refuses, and any
    other malformed field is read as its default. *)
 
@@ -41,8 +36,7 @@ type ver = {
   (* the declared MSRV, kept as written: the index spells it as a partial
      version ("1.71", not "1.71.0"), and the comparison it feeds is a
      caret requirement, which reads a partial spec directly.  None is the
-     field absent, which is not the same as an MSRV of 0 -- see
-     cargo_solve's msrv_ok. *)
+     field absent, which is not the same as an MSRV of 0. *)
   v_msrv : string option;
 }
 

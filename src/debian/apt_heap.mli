@@ -1,16 +1,7 @@
-(* A shadow of apt's Solver::Work heap (apt-pkg/solver3.cc), driven by a
-   PubGrub search rather than by apt: work items are the driver's clause
-   packages, pushed in the propagation waves of the decisions that stand,
-   popped to answer PubGrub's [next] hook, and re-added level by level when
-   PubGrub backjumps, which is apt's Solver::Pop.  What the shadow knows of
-   the instance it schedules is the [DRIVER] below and nothing else. *)
-
 (* The split apt makes between what it unit-propagates (Enqueue) and what it
    queues as a work item, seen through the synthetic names of the
    encoding. *)
 type kind =
-  (* no name of the Debian driver has this kind *)
-  | Forced
   (* a real package name: apt enqueues the package var *)
   | Package
   (* a clause package whose Clause carries eager = true *)

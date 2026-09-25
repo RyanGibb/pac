@@ -1,49 +1,18 @@
-(* Trusted (TCB) ingestion of a registry packument: the JSON document at
-   https://registry.npmjs.org/<name>, whose "versions" object maps each
-   published version to its package.json manifest.
+(* Trusted (TCB) ingestion of a registry packument, the JSON document at
+   https://registry.npmjs.org/<name>.  Trusted beyond the plumbing: the
+   registry itself, taken at face value with nothing checked against the
+   tarball; range *parsing* (npm_version.ml), since the calculus decides
+   which versions a parsed range admits and only engines ranges are
+   evaluated in OCaml; and the dependency-spec classification below, where
+   git, file and URL specs, and the link:, workspace:, portal: and patch:
+   specs npa refuses, are dropped and counted rather than guessed at.
 
-   What is trusted here, beyond the plumbing:
-
-   - The registry itself.  A packument is taken at face value; nothing is
-     checked against the tarball it describes.
-   - Range *parsing* (npm_version.ml).  A dependency carries the parsed
-     comparator sets into the calculus, which decides which real
-     versions they admit; only engines ranges are evaluated in OCaml
-     (Npm_version.holds_pre, in npm_solve).
-   - The dependency-spec classification below.  git, file and URL
-     specs, and the link:, workspace:, portal: and patch: specs npa
-     refuses, are dropped and counted rather than guessed at.  A dist-tag
-     is kept as one, for the driver to resolve from the packument.
-   Deliberately *not* read: "os", "cpu" and "libc".  npm consults none
-   of them when choosing a version -- npm-pick-manifest has no platform
-   key at all -- and tests them only once the tree is built
-   (#checkEngineAndPlatform): EBADPLATFORM for a required package, inert
-   for an optional one, which package-lock.json still records.  Reading
-   them here would make our instance strictly smaller than npm's.
-
-   "engines" is a different case and is read, because npm-pick-manifest
-   sorts on it.  It is not a gate: a version the host cannot run is
-   ranked below one it can and is still installable when nothing else
-   matches, which is why --engine-strict exists to promote the
-   install-time warning to an error.  Only the "node" and "npm" sub-keys
-   are live, because checkEngine tests those two and nothing else.
-
-   - The optionalDependencies reading.  Such an entry is parsed as an
-     ordinary dependency that remembers it was optional.  npm makes an
-     optional dependency's whole optional set inert when anything in it
-     fails to load (#pruneFailedOptional) or fails engines or platform
-     (#checkEngineAndPlatform).  npm_solve models only the dependency
-     itself failing to load because no published version matches its
-     range, a question about the registry rather than this manifest, so
-     the drop is made there.  A peer conflict against an optional
-     dependency is an ordinary ERESOLVE.  npm documents an
-     optionalDependencies entry as overriding a dependencies entry of
-     the same name, which is what the dependency assembly below does.
-
-   Not read: bundleDependencies.  Those entries stay ordinary
-   dependencies resolved from the registry, although npm takes their
-   versions from the tarball, which this frontend neither fetches nor
-   trusts. *)
+   Deliberately not read: "os", "cpu" and "libc", which npm-pick-manifest
+   never consults and npm tests only once the tree is built
+   (#checkEngineAndPlatform), so reading them would make our instance
+   strictly smaller than npm's; and bundleDependencies, whose entries stay
+   ordinary registry dependencies although npm takes their versions from
+   the tarball, which this frontend neither fetches nor trusts. *)
 
 type dep = {
   d_dir : string; (* the directory key, i.e. the manifest key *)
@@ -83,7 +52,6 @@ type ver = {
 }
 
 type packument = {
-  pk_name : string;
   pk_latest : string option;
   pk_tags : (string * string) list;
   pk_vers : ver list;
@@ -91,7 +59,6 @@ type packument = {
 
 let rejected = ref 0
 let optional_count = ref 0
-let deprecated_count = ref 0
 let reject () = incr rejected
 
 (* Yojson's [member] raises on a non-object; a registry manifest may omit
@@ -102,8 +69,6 @@ let member (k : string) (j : Yojson.Safe.t) : Yojson.Safe.t =
   | _ -> `Null
 
 let assoc_of j = match j with `Assoc l -> l | _ -> []
-
-(* ---- dependency specifiers ---- *)
 
 let has_sub s sub =
   let n = String.length s and m = String.length sub in
@@ -216,8 +181,6 @@ let peer_of (meta : (string * Yojson.Safe.t) list) (key, spec) : peer option =
       reject ();
       None
 
-(* ---- manifests ---- *)
-
 (* npm reads overrides from the root project's package.json; only the
    flat "name": "range" form is a static override, so a nested object -- which
    is indexed by the parent chain -- is counted and dropped.  A value of *
@@ -275,7 +238,6 @@ let ver_of ~(root : bool) (vers : string) (j : Yojson.Safe.t) : ver option =
       optional_count := !optional_count + List.length opts;
       let optKeys = List.map (fun d -> d.d_dir) opts in
       let dep = is_deprecated (member "deprecated" j) in
-      if dep then incr deprecated_count;
       Some
         {
           v_name = (match member "name" j with `String n -> n | _ -> "");
@@ -307,7 +269,6 @@ let ver_of ~(root : bool) (vers : string) (j : Yojson.Safe.t) : ver option =
       None
 
 let of_json ~(root : bool) (j : Yojson.Safe.t) : packument =
-  let name = match member "name" j with `String n -> n | _ -> "" in
   let latest =
     match member "latest" (member "dist-tags" j) with
     | `String v -> Some v
@@ -323,7 +284,7 @@ let of_json ~(root : bool) (j : Yojson.Safe.t) : packument =
       (fun (v, m) -> ver_of ~root v m)
       (assoc_of (member "versions" j))
   in
-  { pk_name = name; pk_latest = latest; pk_tags = tags; pk_vers = vers }
+  { pk_latest = latest; pk_tags = tags; pk_vers = vers }
 
 let load ~(root : bool) (path : string) : packument option =
   match Yojson.Safe.from_file path with
@@ -332,9 +293,7 @@ let load ~(root : bool) (path : string) : packument option =
       None
   | j -> Some (of_json ~root j)
 
-(* ---- the query ----
-
-   The query is a root package: a project's package.json with the
+(* The query is a root package: a project's package.json with the
    arguments of `npm install` added to it.  An argument is read as
    npm-package-arg 13.0.2 (npm 11.17.0) reads it, lib/npa.js, and only its
    registry forms are accepted: name, name@version, name@range, name@tag

@@ -15,13 +15,10 @@ let () =
   check "0.2" "0.10" (-1);
   check "1.0" "1.0" 0;
   check "0099" "99" 0;
-  (* letters before non-letters *)
   check "1.0a" "1.0+" (-1);
   check "1.0alpha" "1.0+" (-1);
-  (* digit runs vs empty *)
   check "1" "1.0" (-1);
   check "2.1" "2.0.1" 1;
-  (* dev suffixes *)
   check "4.14.0" "4.14.0+options" (-1);
   check "8.5" "8.5~rc1" 1;
   (* the revision is split off at the last '-' and compared only on a tie *)

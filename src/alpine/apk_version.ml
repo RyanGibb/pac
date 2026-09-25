@@ -189,8 +189,9 @@ let validate v =
    the FUZZY bit, so it reduces to fuzzy equality. *)
 let prefix_match v c = compare_fuzzy v c true = 0
 
-(* CHash: apk resolves >< against the candidate's C: identity digest,
-   which its version string does not determine, so the calculus's
+(* CHash: apk resolves >< against the providing package's C: identity
+   digest (package.c:276), a bare provides included, which no version
+   string determines, so the calculus's
    version-only matcher can never match one. *)
 let hash_match (_v : string) (_digest : string) = false
 

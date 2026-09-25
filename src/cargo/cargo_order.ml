@@ -134,21 +134,12 @@ module Make (D : DRIVER) = struct
   type state = { rooted : bool; queue : Q.t; act : SS.t CM.t; clock : int }
   type entry = { name : D.name; mutable value : D.version option; pre : state }
 
-  type t = {
-    mutable state : state;
-    mutable trail : entry list;
-    mutable n_next : int;
-    mutable n_fallback : int;
-    mutable n_undo : int;
-  }
+  type t = { mutable state : state; mutable trail : entry list }
 
   let create () =
     {
       state = { rooted = false; queue = Q.empty; act = CM.empty; clock = 0 };
       trail = [];
-      n_next = 0;
-      n_fallback = 0;
-      n_undo = 0;
     }
 
   let frame st p (m : P.ver) ~root ~all feats default =
@@ -232,27 +223,19 @@ module Make (D : DRIVER) = struct
         if not stands then (
           t.state <- e.pre;
           t.trail <- rest;
-          t.n_undo <- t.n_undo + 1;
           sync t ~assigned)
 
   let next t ~assigned open_names =
     sync t ~assigned;
     let st, n = advance ~assigned t.state in
     t.state <- st;
-    t.n_next <- t.n_next + 1;
     let n =
       match n with
       | Some n when List.exists (fun (m, _) -> D.equal m n) open_names -> n
       | _ ->
           (* a name nothing cargo activates reached: PubGrub's own order *)
-          t.n_fallback <- t.n_fallback + 1;
           fst (List.hd open_names)
     in
     t.trail <- { name = n; value = None; pre = st } :: t.trail;
     n
-
-  let report t =
-    if Sys.getenv_opt "PACORDER" <> None then
-      Printf.eprintf "PACORDER next=%d fallback=%d undone=%d\n%!" t.n_next
-        t.n_fallback t.n_undo
 end

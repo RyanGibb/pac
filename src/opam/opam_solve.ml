@@ -1,14 +1,5 @@
-(* opam solving over the verified pipeline, deb_solve-style: the archive
-   lives in hashtables; the extracted per-package/per-name lookups are
-   called on sub-instances justified by Opam.dependees_lookup* /
-   Opam.versions_lookup*, which evaluate every filter against [rho] as
-   they run; each package's package-formula dependencies are then reduced
-   to core edges by the extracted PackageFormula reduction on its own
-   sub-instance -- a conflict included, which is the declarer's own edge
-   on the conflicting name admitting absence;
-   PubGrub solves the accumulated core graph lazily.  Trusted here (TCB):
-   the parser, the version comparator, the valuation defaults, and the
-   plumbing. *)
+(* Trusted here (TCB): the parser, the version comparator, the valuation
+   defaults, and the plumbing. *)
 
 module E = Pac
 
@@ -31,8 +22,6 @@ module OVerOT = struct
   let compare a b = c2r (compare (Opam_version.compare a b) 0)
   let eq_dec a b = Opam_version.compare a b = 0
 end
-
-(* ---- the archive ---- *)
 
 type archive = {
   root : string;
@@ -122,9 +111,7 @@ let meta_of ar n v =
   try List.assoc v (load_name ar n)
   with Not_found ->
     {
-      Opam_parse.name = n;
-      version = v;
-      depends = None;
+      Opam_parse.depends = None;
       conflicts = [];
       classes = [];
       available = Opam_parse.FT;
@@ -155,34 +142,25 @@ let class_members ar k =
 let default_opam_version = "2.5.2"
 
 (* There is no cone pass: the repository is uncovered as the solver asks
-   for it, so each lookup theorem's sub-instance must be complete at the
-   moment it answers.  That holds by construction for all but one
-   lookup: versions reads the repository at one name and root_inst at the
-   query's names, each of which load_name takes whole; inst_for reads (n, v)'s own dependency, conflict, depext and
-   pin-depends declarations and the repository at declaredNames, the
-   names those declarations mention, and loads every one of them;
-   available filters ride along with the name they belong to; depexts_of
-   reads the selected packages' own declarations.
+   for it, so each lookup's sub-instance must be complete at the moment it
+   answers.  That holds by construction for all but one lookup: versions
+   and root_inst read names that load_name takes whole; inst_for reads
+   (n, v)'s own declarations and the repository at the names they
+   mention, and loads every one of them; depexts_of reads the selected
+   packages' own declarations.
 
-   Conflict classes are the exception, and only on one side.  A package's
-   class formulas are read off its own declarations, so inst_for stays
-   local; what is a preimage is the class package's version list, which is
-   every declarer of the class and which no declaration of any one
+   Conflict classes are the exception: the class package's version list
+   is every declarer of the class, which no declaration of any one
    package names.  A conflict or pin-depends is no exception: the
-   package-formula reduction turns a negated atom into the declarer's own
-   edge on the target's name, admitting every version the atom does not
-   name and the absent version every name has (PF.Reduction.negVS), so
-   nothing of who conflicts with a name is read when the name answers
-   (PF.Reduction.Lookup.versions_lookupOrig).
-   class_idx therefore holds the declarers among the names loaded so far
-   and may grow at any point in the run.  Not memoising is enough here,
-   where it would not have been under a pairwise encoding: the growing
-   answer is a versions answer, and PubGrub re-asks a name for its
-   versions at every assignment, whereas a node's dependency list is
-   memoised in deps_cache and so fixed at its first ask.  So cls_inst rebuilds the sub-instance from
-   class_idx at every ask and a declarer parsed later is simply there.  A
-   class version is also never asked for before its claimant's name has
-   loaded, since the claim is that package's own edge. *)
+   reduction turns a negated atom into the declarer's own edge on the
+   target's name, so nothing of who conflicts with a name is read when
+   the name answers.  class_idx therefore holds the declarers among the
+   names loaded so far and may grow at any point in the run.  Not
+   memoising is enough: the growing answer is a versions answer, which
+   PubGrub re-asks at every assignment, whereas a node's dependency list
+   is memoised in deps_cache and so fixed at its first ask.  A class
+   version is also never asked for before its claimant's name has loaded,
+   since the claim is that package's own edge. *)
 
 module Make () = struct
   module Op = E.Opam (SName) (OVerOT) (SName) (OVerOT) (SName)
@@ -190,8 +168,6 @@ module Make () = struct
   module PF = Red.PF
   module PFR = PF.Reduction
   module T = PFR.T
-
-  (* ---- valuation: the fixed environment ---- *)
 
   let globals =
     [
@@ -202,12 +178,8 @@ module Make () = struct
       ("arch", "x86_64");
     ]
 
-  (* what the caller asked for, which is all the valuation below needs
-     beyond the fixed environment *)
   type request = {
-    (* the query's names, which are the names the synthetic root depends
-       on: a query is a set of names each with a set of acceptable
-       versions, and the valuation reads only the names *)
+    (* the valuation reads only the query's names, not their versions *)
     names : string list;
     with_test : bool;
     with_doc : bool;
@@ -255,8 +227,6 @@ module Make () = struct
             | "name" -> Some owner
             | _ -> None))
 
-  (* ---- parse-AST -> extracted terms ---- *)
-
   let xop : Opam_parse.op -> E.cmpOp = function
     | Opam_parse.Ge -> E.OpGe
     | Gt -> E.OpGt
@@ -284,8 +254,6 @@ module Make () = struct
     | OAtom (n, g, c) -> Op.OFAtom (n, xfilt g, xvc c)
     | OAnd (a, b) -> Op.OFAnd (xoff a, xoff b)
     | OOr (a, b) -> Op.OFOr (xoff a, xoff b)
-
-  (* ---- sub-instances (the shapes the lookup lemmas justify) ---- *)
 
   let pkgset_of = Op.PkgSet.ofList
   let clsrel_of = Op.ClsRel.ofList
@@ -380,9 +348,9 @@ module Make () = struct
       inst_inv = dummy;
     }
 
-  (* Op.Reduction.classSubInst: the class relation restricted to k, which is
-     all the class package's version lookup reads.  Built from class_idx at
-     every ask and never held -- see the note above [Make]. *)
+  (* the class relation restricted to k, which is all the class package's
+     version lookup reads.  Built from class_idx at every ask and never
+     held -- see the note above [Make]. *)
   let cls_inst ar (k : string) : Op.coq_Inst =
     {
       Op.inst_repo = Op.PkgSet.empty;
@@ -444,8 +412,6 @@ module Make () = struct
       }
     in
     Op.ESet.elements (Op.depextsOf rho inst (pkgset_of reals))
-
-  (* ---- PubGrub interface ---- *)
 
   module PName = struct
     type t = PFR.Name.t
@@ -515,8 +481,6 @@ module Make () = struct
   (* every original name's absent version *)
   let bot : PVersion.t = { PVersion.avoid = false; v = PFR.Version.Bot }
 
-  (* ---- lazy core graph from per-package reductions ---- *)
-
   module NameMap = Map.Make (struct
     type t = PFR.Name.t
 
@@ -528,8 +492,6 @@ module Make () = struct
 
     let compare = PName.compare
   end)
-
-  (* ---- 0install's decision order ---- *)
 
   (* The reduction hands a package's dependees back as a set, so the order
      its dependencies were written in is gone by the time the core graph holds
@@ -650,14 +612,8 @@ module Make () = struct
               Hashtbl.replace st.synthetic_vers tn (tv :: prev))
       (T.PkgSet.elements r)
 
-  let verbose = Sys.getenv_opt "PACPROG" <> None
-  let nproc = ref 0
-
-  (* Op.versions_lookupReal / versions_lookupCls: what the versions
-     callback answers, before the tagging PubGrub sees.  The encoder reads
-     this at the names a formula negates
-     (PF.Reduction.Lookup.dependees_lookupOrigBy), all of which inst_for
-     has loaded. *)
+  (* the encoder reads this at the names a formula negates, all of which
+     inst_for has loaded *)
   let oracle rho st (tn : Red.TName.t) : PF.VSet.t =
     match tn with
     | Red.TName.Real m -> (
@@ -670,17 +626,9 @@ module Make () = struct
     | Red.TName.Root -> PF.VSet.singleton Red.TVer.UnitV
     | Red.TName.Cls k -> Red.versions rho (cls_inst st.ar k) tn
 
-  (* reduce one package-formula package's dependencies to core, via the
-     extracted lookups *)
   let process rho st (q : PF.Pkg.t) (inst : Op.coq_Inst) =
     if not (Hashtbl.mem st.processed q) then begin
       Hashtbl.replace st.processed q ();
-      incr nproc;
-      (if verbose then
-         match q with
-         | Red.TName.Real n, Red.TVer.RV v ->
-             Printf.eprintf "[%d] %s.%s %.1fs\n%!" !nproc n v (Sys.time ())
-         | _ -> Printf.eprintf "[%d] root %.1fs\n%!" !nproc (Sys.time ()));
       let forms = Red.dependees rho inst q in
       let d_q =
         PF.DepRel.ofList (List.map (fun f -> (q, f)) (Red.FSet.elements forms))
@@ -709,28 +657,12 @@ module Make () = struct
       (PFR.Name.Orig Red.TName.Root, PFR.Version.Orig Red.TVer.UnitV)
     in
     let st = mk_state ar in
-    nproc := 0;
-    (* Wall time inside the two callbacks; the rest of PG.solve is
-       PubGrub's own search.  Only accumulated when verbose, and with
-       gettimeofday, the clock of the PG.solve total it is subtracted
-       from; the callbacks run 10^3-10^5 times per solve. *)
-    let t_callbacks = ref 0. in
-    let timed f =
-      if verbose then begin
-        let t0 = Unix.gettimeofday () in
-        let r = f () in
-        t_callbacks := !t_callbacks +. (Unix.gettimeofday () -. t0);
-        r
-      end
-      else f ()
-    in
-    (* every original name answers its real versions and the absent one
-       (PF.Reduction.Lookup.versions_lookupOrig), except the root, whose
+    (* every original name answers its real versions and the absent one,
+       except the root, whose
        absent version the query rules out before the solve starts and
        whose presence in the list would only widen the ranges PubGrub
        prints for it *)
     let versions (tn : PFR.Name.t) : PVersion.t list =
-      timed @@ fun () ->
       match tn with
       | PFR.Name.Orig (Red.TName.Real n) -> (
           try Hashtbl.find st.real_vers n
@@ -742,11 +674,6 @@ module Make () = struct
             vs)
       | PFR.Name.Orig Red.TName.Root ->
           [ { PVersion.avoid = false; v = PFR.Version.Orig Red.TVer.UnitV } ]
-      (* The one name that cannot be held: its versions are the whole
-         preimage of the class relation at k, so class_idx knows only the
-         declarers among the names loaded so far.  Recomputing the handful
-         of declarers at every ask lets a declarer parsed later simply be
-         there, where a cache would freeze the answer mid-run. *)
       | PFR.Name.Orig (Red.TName.Cls k) ->
           List.map
             (fun tv -> tag ar tn (PFR.Version.Orig tv))
@@ -756,12 +683,7 @@ module Make () = struct
       | _ -> ( try Hashtbl.find st.synthetic_vers tn with Not_found -> [])
     in
     let deps_cache = Hashtbl.create 65536 in
-    let nq = ref 0 in
     let dependencies (tn : PFR.Name.t) ({ PVersion.v = tv; _ } : PVersion.t) =
-      incr nq;
-      if verbose && !nq mod 10000 = 0 then
-        Printf.eprintf "[q%d] %.1fs\n%!" !nq (Sys.time ());
-      timed @@ fun () ->
       try Hashtbl.find deps_cache (tn, tv)
       with Not_found ->
         let r =
@@ -896,20 +818,10 @@ module Make () = struct
     in
     let next = Some (if zi_order then zi_next else defer_bot) in
     let goal_range = PG.Ranges.of_list (versions (fst root_q)) in
-    let t0 = Unix.gettimeofday () in
-    let result =
+    match
       PG.solve ?next ~vers:versions ~deps:dependencies
         [ (fst root_q, goal_range) ]
-    in
-    if verbose then begin
-      let total = Unix.gettimeofday () -. t0 in
-      Printf.eprintf
-        "PG.solve %.2fs: %.2fs in callbacks (%d dependency lookups, %d \
-         packages reduced), %.2fs PubGrub\n\
-         %!"
-        total !t_callbacks !nq !nproc (total -. !t_callbacks)
-    end;
-    match result with
+    with
     | Error inc ->
         Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
         None

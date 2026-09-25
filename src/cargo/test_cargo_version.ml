@@ -72,7 +72,6 @@ let () =
   req "~1.2" "1.3.0" false;
   req "~1" "1.9.9" true;
   req "~1" "2.0.0" false;
-  (* explicit relations *)
   req "=1.2.3" "1.2.3" true;
   req "=1.2.3" "1.2.4" false;
   req "=1.2" "1.2.7" true;
@@ -85,7 +84,6 @@ let () =
   req "<1.2.0" "1.2.0" false;
   req "<=1.2.0" "1.2.0" true;
   req "<=1.2.0" "1.2.1" false;
-  (* wildcards *)
   req "*" "0.0.1" true;
   req "*" "99.0.0" true;
   req "1.*" "1.9.9" true;
@@ -98,8 +96,7 @@ let () =
   req ">=1.2, <1.5" "1.1.0" false;
   req ">= 1.2.0, < 1.5.0" "1.3.0" true;
 
-  (* pre-release detection and release cores, the two tests the ordering
-     cannot express and that Semver.SemverMatch takes as parameters *)
+  (* the two tests the ordering cannot express *)
   if Cargo_version.is_prerelease "1.2.3" then (
     Printf.eprintf "FAIL: is_prerelease 1.2.3\n";
     incr fail);

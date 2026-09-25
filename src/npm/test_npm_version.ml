@@ -1,8 +1,7 @@
 (* Precedence vectors are the ladder from semver.org 2.0.0 section 11;
    the range vectors follow npm's semver README with its -0 upper bounds
    dropped, plus loose and v-prefix cases and the prerelease admission
-   rule, which is the one place the OCaml mirror
-   has to agree with Npm.csAdmits in the calculus. *)
+   rule. *)
 
 let fail = ref 0
 
@@ -26,7 +25,6 @@ let sat s v exp =
     incr fail)
 
 let () =
-  (* the canonical precedence ladder *)
   check "1.0.0" "2.0.0" (-1);
   check "2.0.0" "2.1.0" (-1);
   check "2.1.0" "2.1.1" (-1);
@@ -55,7 +53,6 @@ let () =
   check "2.0.14rc1" "2.0.14" (-1);
   check "1.0.0beta.2" "1.0.0-beta.2" 0;
 
-  (* prerelease detection and release cores *)
   if Npm_version.is_prerelease "1.2.3" then (
     Printf.printf "FAIL is_prerelease 1.2.3\n";
     incr fail);
@@ -88,13 +85,11 @@ let () =
   rng "^0.0" ">=0.0.0 <0.1.0";
   rng "^1.x" ">=1.0.0 <2.0.0";
   rng "^0.x" ">=0.0.0 <1.0.0";
-  (* tilde *)
   rng "~1.2.3" ">=1.2.3 <1.3.0";
   rng "~1.2" ">=1.2.0 <1.3.0";
   rng "~1" ">=1.0.0 <2.0.0";
   rng "~0.2.3" ">=0.2.3 <0.3.0";
   rng "~1.2.x" ">=1.2.0 <1.3.0";
-  (* bare, exact and wildcards *)
   rng "1.2.3" "=1.2.3";
   rng "=1.2.3" "=1.2.3";
   rng "1.2" ">=1.2.0 <1.3.0";

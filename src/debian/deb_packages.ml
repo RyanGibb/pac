@@ -86,7 +86,6 @@ let strip s =
 
 let split_on c s = String.split_on_char c s |> List.map strip
 
-(* name[:arch] [(op ver)] [\[...\]] [<...>] *)
 let parse_atom s =
   let s = strip s in
   let cut mark s =
@@ -174,8 +173,7 @@ let parse_provides field =
       | None -> None)
 
 (* One pass over a stanza's fields, rather than an assoc lookup per field:
-   the fifteen fields below were each a linear scan of the stanza, and an
-   archive is ~69k stanzas.  First occurrence wins, as List.assoc_opt did. *)
+   an archive is ~69k stanzas.  First occurrence wins. *)
 let stanza_of_fields (fs : (string * string) list) : stanza option =
   let package = ref None
   and version = ref None

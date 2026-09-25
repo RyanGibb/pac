@@ -1,4 +1,4 @@
-type kind = Forced | Package | Hard | Soft | Alternative
+type kind = Package | Hard | Soft | Alternative
 
 module type DRIVER = sig
   type name
@@ -710,7 +710,6 @@ module Make (D : DRIVER) = struct
         let top = if t.tlen > 0 then Some t.tarr.(t.tlen - 1) else None in
         let unit_now (n, c) =
           match D.kind n with
-          | Forced -> true
           | Soft -> live_of_name t ~assigned n <= 0
           | Hard -> static_nsol t n <= 1 || live_of_name t ~assigned n <= 1
           | Alternative ->

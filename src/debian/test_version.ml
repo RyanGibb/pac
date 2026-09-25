@@ -12,7 +12,6 @@ let () =
   check "1.0~" "<" "1.0";
   check "1.0" "<" "1.0a";
   check "1.0a" "<" "1.0+";
-  (* letters before non-letters *)
   check "09" "=" "9";
   check "1.2" "<" "1.10";
   check "1.0-1" "<" "1.0-2";

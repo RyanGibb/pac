@@ -9,16 +9,12 @@ type dep = { d_neg : bool; d_name : string; d_constr : constr }
 
 (* A versioned provide is an alias apk treats as a real package of the
    provided name; a bare one offers the empty version, below every
-   version, and claims no name, which is the PVirt/PVer split in the
-   calculus. *)
+   version, and claims no name. *)
 type prov = { p_name : string; p_ver : string option }
 
 type pkg = {
   name : string;
   version : string;
-  arch : string;
-  digest : string;
-  origin : string;
   depends : dep list;
   provides : prov list;
   install_if : dep list;
@@ -101,9 +97,6 @@ let parse_provs (v : string) : prov list =
 type acc = {
   mutable a_name : string option;
   mutable a_ver : string;
-  mutable a_arch : string;
-  mutable a_digest : string;
-  mutable a_origin : string;
   mutable a_deps : dep list;
   mutable a_provs : prov list;
   mutable a_iif : dep list;
@@ -115,9 +108,6 @@ let fresh () =
   {
     a_name = None;
     a_ver = "";
-    a_arch = "";
-    a_digest = "";
-    a_origin = "";
     a_deps = [];
     a_provs = [];
     a_iif = [];
@@ -132,9 +122,6 @@ let flush a out =
         {
           name = n;
           version = a.a_ver;
-          arch = a.a_arch;
-          digest = a.a_digest;
-          origin = a.a_origin;
           depends = List.rev a.a_deps;
           provides = List.rev a.a_provs;
           install_if = List.rev a.a_iif;
@@ -145,9 +132,6 @@ let flush a out =
   | None -> ());
   a.a_name <- None;
   a.a_ver <- "";
-  a.a_arch <- "";
-  a.a_digest <- "";
-  a.a_origin <- "";
   a.a_deps <- [];
   a.a_provs <- [];
   a.a_iif <- [];
@@ -169,9 +153,6 @@ let parse_file (path : string) : pkg list =
          match line.[0] with
          | 'P' -> a.a_name <- Some v
          | 'V' -> a.a_ver <- v
-         | 'A' -> a.a_arch <- v
-         | 'C' -> a.a_digest <- v
-         | 'o' -> a.a_origin <- v
          | 'D' -> (
              match parse_deps v with
              | Some ds -> a.a_deps <- List.rev_append ds a.a_deps
@@ -184,13 +165,13 @@ let parse_file (path : string) : pkg list =
                  reject ();
                  a.a_iif <- [])
          | 'k' -> a.a_prio <- int_of_string_opt v
-         (* S I T U L m t c carry no instance data, and apk skips the
+         (* A C o S I T U L m t c carry no instance data, and apk skips the
             installed-db fields F M R Z in an index.  apk makes a package
             with an unknown upper-case field uninstallable, which dropping
             the stanza reproduces.  A lower-case field is reserved for
             forward compatibility and ignored. *)
-         | 'S' | 'I' | 'T' | 'U' | 'L' | 'm' | 't' | 'c' | 'F' | 'M' | 'R' | 'Z'
-           ->
+         | 'A' | 'C' | 'o' | 'S' | 'I' | 'T' | 'U' | 'L' | 'm' | 't' | 'c' | 'F'
+         | 'M' | 'R' | 'Z' ->
              ()
          | ch when ch >= 'a' && ch <= 'z' -> ()
          | _ -> a.a_broken <- true

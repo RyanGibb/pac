@@ -1,16 +1,10 @@
-(* opam version comparison, matching opam 2.5.2's OpamVersionCompare: a
-   revision is split off at the last '-', and the two halves compare in
-   turn with Debian's algorithm (no epoch).  Within a half, maximal
-   non-digit and digit parts alternate; non-digit parts compare with '~'
-   before everything (including the end of a part) and letters before
-   non-letters; digit parts compare numerically.  A half that runs out
-   equals the other's remainder if that is all '0's, wherever they fall.
-   Untrusted (TCB). *)
+(* opam 2.5.2's OpamVersionCompare.  A half that runs out equals the
+   other's remainder if that is all '0's, wherever they fall.  Untrusted
+   (TCB). *)
 
 let is_digit c = c >= '0' && c <= '9'
 let is_alpha c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 
-(* character order within non-digit parts *)
 let char_key c =
   if c = '~' then -1 else if is_alpha c then Char.code c else Char.code c + 256
 
@@ -53,7 +47,6 @@ and numeric s1 i1 e1 s2 i2 e2 =
     in
     digits 0
 
-(* the revision's '-', or the length when there is none *)
 let last_dash s =
   let rec go i = if i < 0 then String.length s else if s.[i] = '-' then i else go (i - 1) in
   go (String.length s - 1)

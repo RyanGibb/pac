@@ -1,12 +1,7 @@
-(* Alpine solving over the verified pipeline, opam_solve/deb_solve-style:
-   the APKINDEX lives in hashtables; every lookup is answered from a small
-   Inst sub-instance in the shape one of Alpine.v's four lookup theorems
-   justifies, pushed through the Alpine encoder into PackageFormula and
-   then through its proved reduction to Core; PubGrub solves the
-   accumulated core graph lazily, and the solution comes back through
-   packageFormulaResolution and alpineResolution.  Trusted here (TCB):
-   PubGrub, whose answer is decoded without a check, the parser, the
-   version comparator, the policy constants below, and the plumbing. *)
+(* Every lookup is answered from a small sub-instance in the shape one of
+   Alpine.v's lookup theorems justifies.  Trusted here (TCB): PubGrub,
+   whose answer is decoded without a check, the parser, the version
+   comparator, the policy choices below, and the plumbing. *)
 
 module E = Pac
 module P = Apk_parse
@@ -69,11 +64,6 @@ module PF = Red.PF
 module PFR = PF.Reduction
 module T = PFR.T
 
-(* ---- policy ------------------------------------------------------------
-
-   Each is a decision the calculus leaves to the frontend; none is forced
-   by the theory. *)
-
 (* The world is the demo's goal arguments and nothing else: this resolves
    from an empty root rather than from an existing /etc/apk/world. *)
 
@@ -91,8 +81,6 @@ module T = PFR.T
 
 (* replaces (r:/q:) never appears in a repository index -- it is an
    installed-db field -- so inst_repl is empty. *)
-
-(* ---- encoding into the calculus ---------------------------------------- *)
 
 let xconstr (c : P.constr) : Alp.coq_Constr =
   match c with
@@ -130,8 +118,6 @@ let condset_of ds =
   | None -> ());
   cs
 
-(* ---- archive ---------------------------------------------------------- *)
-
 type iif_rule = {
   t_pkg : string * string;
   t_conds : Alp.CondSet.t;
@@ -141,7 +127,6 @@ type iif_rule = {
 type archive = {
   by_name : (string, P.pkg list) Hashtbl.t;
   meta : (string * string, P.pkg) Hashtbl.t;
-  (* provided name -> the provides entries claiming it *)
   providers : (string, ((string * string) * string option) list) Hashtbl.t;
   (* install-if rules by their designated condition's name: only a package
      bearing that name, or providing it, can carry the rule *)
@@ -191,8 +176,8 @@ let load_index (path : string) : archive =
       | None -> ());
       if p.P.install_if <> [] then (
         ar.n_iif <- ar.n_iif + 1;
-        (* WfInstallIf: a rule with no positive condition is left out, and
-           nothing is lost -- apk reaches a rule only from an installed
+        (* a rule with no positive condition is left out, and nothing is
+           lost -- apk reaches a rule only from an installed
            package bearing or providing a condition's name, which falsifies
            a negated condition unless it is the rule's own package *)
         if List.exists (fun (d : P.dep) -> not d.P.d_neg) p.P.install_if then
@@ -216,14 +201,6 @@ let versions_of ar n =
 let providers_of ar n =
   match Hashtbl.find_opt ar.providers n with Some l -> l | None -> []
 
-(* ---- sub-instances -----------------------------------------------------
-
-   repoPreimage I ns keeps the repository's packages at a name in ns
-   together with the packages providing one of them; provPreimage I ns
-   keeps the provides entries landing on a name in ns.  Both are built
-   from the indexes rather than by filtering a whole-archive instance,
-   which is the only reason a per-lookup sub-instance is cheap. *)
-
 let empty_inst =
   {
     Alp.inst_repo = Alp.PkgSet.empty;
@@ -238,7 +215,10 @@ let empty_inst =
 let rec nat_of_int (k : int) : E.nat =
   if k <= 0 then E.O else E.S (nat_of_int (k - 1))
 
-(* Lookup.subInst's inst_prio is the k: lines of its repository *)
+(* repoPreimage and provPreimage, built from the indexes rather than by
+   filtering a whole-archive instance, which is the only reason a
+   per-lookup sub-instance is cheap.  Lookup.subInst's inst_prio is the k:
+   lines of its repository. *)
 let preimages_at ar (ns : string list) =
   let repo = ref [] and prov = ref [] in
   List.iter
@@ -326,6 +306,7 @@ let pkg_inst ar (world : P.dep list) ((n, v) : string * string) : Alp.coq_Inst =
         inst_prov = Alp.Prov.union prov own;
         inst_installIf =
           Alp.InstallIf.ofList (List.map (fun r -> (r.t_pkg, r.t_conds)) rules);
+        (* apk also takes a k:-less one whose owner has a requirer (solver.c:381) *)
         inst_world = Alp.WSet.ofList (List.map xdep world);
         inst_prio = prio;
       }
@@ -344,8 +325,6 @@ let root_inst ar (world : P.dep list) : Alp.coq_Inst =
     inst_world = Alp.WSet.ofList (List.map xdep world);
     inst_prio = prio;
   }
-
-(* ---- PubGrub ----------------------------------------------------------- *)
 
 let rec pp_formula depth fmt (f : PF.coq_Formula) =
   if depth <= 0 then Format.fprintf fmt "..."
@@ -438,11 +417,6 @@ let rec alt_at (fs : PF.coq_Formula list) (i : E.nat) :
   | _ :: fs', E.S k -> alt_at fs' k
   | [], _ -> None
 
-(* The rank of one alternative: an unversioned provider by its k: line,
-   the last alternative -- the name's own versions -- above every one of
-   them, because an unversioned provides offers no version at the name
-   and apk's first key between providers it has not disqualified is the
-   offered version. *)
 let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
   if last then
     match f with
@@ -464,8 +438,8 @@ let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
    repository here.  The one live key between them, the newer version by
    the provider's own name (solver.c:651-661), is omitted: it separates
    only two versions of one package, and an index that lists each
-   package once has no such pair.  Past its last key select_package keeps the provider
-   it met first, since it takes a later one only when compare_providers
+   package once has no such pair.  Past its last key select_package keeps
+   the provider it met first, since it takes a later one only when compare_providers
    says strictly better, and it meets them in index order -- so [ord],
    the provider's place in the index, is the final key, and the encoded
    order only keeps the comparison total.
@@ -477,8 +451,7 @@ let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
    on the versions they offer, and an alias offering the newer one wins.
    An unversioned provides is the one case where this order puts a real
    package first, and not by privilege either -- it offers no version, and
-   no
-   version loses to every version.  provider_priority is read off
+   no version loses to every version.  provider_priority is read off
    whichever package offers the name, alias or not, and so decides only
    once the offered versions tie.
 
@@ -573,7 +546,6 @@ let tag ar (tn : PFR.Name.t) (tv : PFR.Version.t) : PVersion.t =
       }
   | _ -> { PVersion.pv = None; rank = 0; ord = max_int; v = tv }
 
-(* every original name's absent version *)
 let bot : PVersion.t =
   { PVersion.pv = None; rank = 0; ord = max_int; v = PFR.Version.Bot }
 
@@ -719,8 +691,6 @@ let next ~assigned (opens : (PFR.Name.t * int) list) =
   | Some (tn, _) -> tn
   | None -> fst (List.hd opens)
 
-(* ---- the lazy core graph ----------------------------------------------- *)
-
 module NameMap = Map.Make (struct
   type t = PFR.Name.t
 
@@ -768,8 +738,6 @@ let intern st (m : PFR.Name.t) : PFR.Name.t =
       st.canon <- NameMap.add m m st.canon;
       m
 
-let verbose = Sys.getenv_opt "PACPROG" <> None
-
 (* A package designated by many install-if rules carries one dependee per
    rule -- 1023 of them for docs -- so inserting them one at a time into
    a sorted-list set is quadratic: group by source first and build each
@@ -806,10 +774,9 @@ let record_real st (r : T.PkgSet.t) =
 
 (* Lookup.versions_lookupName: what the versions callback answers, before
    the tagging PubGrub sees -- the name's own versions and its alias
-   versions.  The encoder reads this at the names a formula negates
-   (PF.Reduction.Lookup.dependees_lookupOrigBy): a negated requirement's
-   complement ranges over the versions offered at the name, alias versions
-   included. *)
+   versions.  The encoder reads this at the names a formula negates: a
+   negated requirement's complement ranges over the versions offered at
+   the name, alias versions included. *)
 let oracle st (tn : Red.Name.name) : PF.VSet.t =
   match tn with
   | Red.Name.Orig n -> (
@@ -821,13 +788,10 @@ let oracle st (tn : Red.Name.name) : PF.VSet.t =
           vs)
   | Red.Name.Root -> PF.VSet.singleton Red.Version.RootV
 
-(* one Alpine package's dependee formulas, reduced to core edges *)
 let process st (q : PF.Pkg.t) (inst : unit -> Alp.coq_Inst) =
   if not (Hashtbl.mem st.processed q) then begin
     Hashtbl.replace st.processed q ();
     st.n_proc <- st.n_proc + 1;
-    if verbose && st.n_proc mod 500 = 0 then
-      Printf.eprintf "[%d] %.1fs\n%!" st.n_proc (Sys.time ());
     let fs = Red.FSet.elements (Red.dependees (inst ()) q) in
     let d_q = PF.DepRel.ofList (List.map (fun f -> (q, f)) fs) in
     let r_q = PF.PkgSet.singleton q in
@@ -923,7 +887,6 @@ let solve ?(debug = false) (ar : archive) (world : P.dep list) : result option =
       let s =
         T.PkgSet.ofList (List.map (fun (m, { PVersion.v; _ }) -> (m, v)) sol)
       in
-      (* back through the two proved decoders *)
       let s_pf = PFR.packageFormulaResolution s in
       let pkgs = Alp.PkgSet.elements (Red.alpineResolution s_pf) in
       Some

@@ -1,13 +1,6 @@
 (* SemVer 2.0.0 precedence and npm's range grammar, implemented from the
-   specifications: numeric major.minor.patch, then pre-release compared
-   identifier-wise (numeric identifiers below alphanumeric ones, a shorter
-   identifier list below its extensions, and a version carrying a
-   pre-release below the same core release), with build metadata ignored.
-
-   parse_range only *parses*: it turns a range string into a disjunction
-   of comparator sets and never decides which versions match.  Evaluation
-   against the real version set is the extracted calculus's job, and the
-   prerelease admission rule is Npm.csAdmits there.  The [holds] mirror
+   specifications.  parse_range only *parses*: evaluation against the real
+   version set is the extracted calculus's job.  The [holds] mirror
    at the bottom exists so the grammar can be tested from OCaml; its
    [holds_pre] also decides engines in npm_solve, and that use is
    trusted.  Trusted (TCB). *)
@@ -133,7 +126,6 @@ let compare (a : string) (b : string) : int =
           | _, [] -> -1
           | p, q -> cmp_ids p q
 
-let equal a b = compare a b = 0
 let is_prerelease v = (parse_memo v).pre <> []
 
 (* the release core a prerelease belongs to: node-semver admits a
@@ -142,8 +134,6 @@ let is_prerelease v = (parse_memo v).pre <> []
 let same_core a b =
   let x = parse_memo a and y = parse_memo b in
   x.major = y.major && x.minor = y.minor && x.patch = y.patch
-
-(* ---- ranges ---- *)
 
 type op = Ge | Gt | Le | Lt | Eq | Ne
 type comparator = Any | Cmp of op * string
@@ -165,8 +155,6 @@ let comp_of = function
 let vstr ?(pre = "") maj min pat =
   Printf.sprintf "%d.%d.%d%s" maj min pat (if pre = "" then "" else "-" ^ pre)
 
-(* a comparator's version part: up to three components, any of which may
-   be absent or an explicit wildcard, plus an optional pre-release *)
 let parse_spec (s : string) =
   let s =
     match String.index_opt s '+' with Some i -> String.sub s 0 i | None -> s
@@ -355,8 +343,6 @@ let parse_range ?(include_prerelease = false) (s : string) : range =
   let s = String.trim s in
   if s = "" then [ [ Any ] ]
   else List.map (parse_set ~z ~u:z) (split_alts s)
-
-(* ---- the OCaml mirror of the calculus's evaluation, for the tests ---- *)
 
 let comp_match ct v =
   match ct with

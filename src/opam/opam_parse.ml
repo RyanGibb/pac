@@ -1,8 +1,4 @@
-(* Trusted (TCB) ingestion: opam files to instance declarations, applying the
-   documented instance-level desugarings -- mixed brace formulas are
-   distributed into (filter, version-constraint) atoms, bare boolean
-   variables become =-"true" comparisons, package-local variables are
-   qualified by their package.  Unhandled constructs are counted and the
+(* Trusted (TCB).  Unhandled constructs are counted and the
    enclosing atom dropped, which can admit a selection opam rejects (an
    unhandled available: makes the package unavailable instead); a file that
    fails to parse is skipped by the loader, and counted. *)
@@ -24,8 +20,6 @@ type vc = VTop | VCmp of op * string | VAnd of vc * vc | VOr of vc * vc
 type off = OAtom of string * filt * vc | OAnd of off * off | OOr of off * off
 
 type pkg_meta = {
-  name : string;
-  version : string;
   depends : off option;
   conflicts : (string * (filt * vc)) list;
   classes : string list;
@@ -122,7 +116,6 @@ let rel_flip = function
   | Gt -> Lt
   | Lt -> Gt
 
-(* brace formulas: a tree over filter and constraint leaves *)
 type brace =
   | BF of filt
   | BC of op * string
@@ -195,7 +188,6 @@ let rec brace_of ?(locals = local_vars) ~owner ~selfv (v : value) : brace =
       reject ();
       BF FF
 
-(* negation-pushing DNF: branches of (filter, constraint) conjunctions *)
 let rec dnf (neg : bool) (b : brace) : (filt list * vc list) list =
   match (b, neg) with
   | BF f, false -> [ ([ f ], []) ]
@@ -292,8 +284,6 @@ and merge ~owner ~selfv mk a b =
   | Some x, None | None, Some x -> Some x
   | None, None -> None
 
-(* conflicts are a disjunction of atoms; each DNF branch of each atom's
-   braces becomes one prohibition *)
 let rec conflict_atoms ~owner ~selfv (v : value) : (string * (filt * vc)) list =
   match v.pelem with
   | String n -> [ (n, (FT, VTop)) ]
@@ -446,8 +436,6 @@ let parse_file ~name ~version path : pkg_meta =
   let meta =
     ref
       {
-        name;
-        version;
         depends = None;
         conflicts = [];
         classes = [];

@@ -1,10 +1,6 @@
-(* npm solving over the verified pipeline, cargo_solve/apk_solve-style:
-   packuments live in hashtables; every lookup is answered from a small
-   Inst sub-instance in the shape one of Npm.v's four lookup theorems
-   justifies (the granular one narrowed further, at gran_sub_inst),
-   pushed through the extracted Npm reduction into Core; PubGrub solves
-   the accumulated core graph lazily, and the solution comes back through
-   npmResolution and npmParents.  Trusted here (TCB): the parser, the
+(* Every lookup is answered from a small sub-instance in the shape one of
+   Npm.v's four lookup theorems justifies (the granular one narrowed
+   further, at gran_sub_inst).  Trusted here (TCB): the parser, the
    version comparator, the engines evaluation (Npm_version.holds_pre),
    the registry fetch, the policy constants below, PubGrub, whose
    solution is decoded unchecked, and the plumbing. *)
@@ -40,12 +36,6 @@ module Np = E.Npm (StringOT) (NVerOT) (PM)
 module R = Np.Reduction
 module T = Np.T
 
-(* ---- policy ------------------------------------------------------------
-
-   Each is a decision the calculus leaves to the frontend; none is forced
-   by the theory, and each is a place where this driver may disagree with
-   npm. *)
-
 (* No platform valuation.  npm chooses versions without os, cpu or libc
    -- they appear nowhere in npm-pick-manifest -- and tests them only
    once the tree is built (#checkEngineAndPlatform): EBADPLATFORM for a
@@ -59,8 +49,8 @@ module T = Np.T
    be installed, so an unset half leaves that sub-key untested exactly as
    checkEngine does for a null version: every candidate then passes and
    the engine keys tie, leaving deprecated and semver to decide.  A
-   correspondence harness has to supply both, as eval/cargo does for
-   --rust-version, or the two sides rank by different rules. *)
+   correspondence harness has to supply both, or the two sides rank by
+   different rules. *)
 let node_version : string option = None
 let npm_version : string option = None
 
@@ -78,8 +68,6 @@ let host_version (s : string) : string =
 (* Prerelease versions stay in the repository.  The calculus admits one
    only inside a comparator set that names a prerelease at the same
    release core, so no filtering is needed here. *)
-
-(* ---- the archive ---- *)
 
 type archive = {
   cache : string;
@@ -124,8 +112,6 @@ let empty_archive ?(optional = true) ?(node = node_version)
     n_fetched = 0;
     n_opt_dropped = 0;
   }
-
-(* ---- registry access ---- *)
 
 (* npm has no bulk index, so a packument is fetched per name and cached;
    a cached file is reused, which is what makes runs repeatable and lets
@@ -251,8 +237,6 @@ let deprecated ar (p : string * string) : bool =
    intermediate carries, and a peer edge names a directory its own
    declarer asked for. *)
 
-(* ---- parse-AST -> extracted terms ---- *)
-
 let xop : Npm_version.op -> E.cmpOp = function
   | Npm_version.Ge -> E.OpGe
   | Npm_version.Gt -> E.OpGt
@@ -323,10 +307,9 @@ let xpeer ar (r : P.peer) : Np.coq_PeerDependency =
     Np.p_range =
       xrange
         (tag_range ar ~tag:r.P.p_tag ~star:r.P.p_star r.P.p_name r.P.p_range);
+    (* binds only a copy the declarer's depender holds itself, npm's legacy rule; arborist checks whatever copy the declarer resolves to (edge.js:266-277) *)
     Np.p_optional = r.P.p_optional;
   }
-
-(* ---- the solver state ---- *)
 
 type state = {
   ar : archive;
@@ -408,9 +391,7 @@ let mk_inst st ~repo ~deps ~peers : Np.coq_Inst =
     Np.inst_root = st.root;
   }
 
-(* ---- optionalDependencies ----------------------------------------------
-
-   An optional entry is an ordinary dependency that this driver abandons
+(* An optional entry is an ordinary dependency that this driver abandons
    in one situation only: no published version of the target matches the
    range (ENOTARGET).  npm abandons more.  #pruneFailedOptional makes the
    dependency's whole optional set inert when anything in it fails to
@@ -504,8 +485,6 @@ let peer_dependencies_named st (n : string) =
     (fun (p, r) -> (p, xpeer st.ar r))
     (Hashtbl.find_all st.ar.peer_by_name n)
 
-(* ---- the four sub-instances, one per lookup theorem ---- *)
-
 (* versions_lookupGran: granSubInst I k cuts the repository to the key's
    registry name.  Two narrowings below are the driver's own.  keysOf is
    a union of one key per dependency and per peer dependency plus the
@@ -552,8 +531,7 @@ let int_sub_inst st (p : string * string) (m : string * string) =
 (* dependees_lookupGran: pkgSubInst I p is p's own dependencies, its own
    peer dependencies, and the repository at their targets.  The peer
    dependencies are there for the root, whose granular node carries the
-   edges
-   that install its own peers; for any other package rootPeerEdges tests
+   edges that install its own peers; for any other package rootPeerEdges tests
    the whole package and emits nothing, so they are inert. *)
 let pkg_sub_inst st (p : string * string) =
   let ns = slot_targets st p @ peer_names_at st p in
@@ -569,8 +547,6 @@ let peer_sub_inst st (p : string * string) (m : string * string) (u : string) =
   let ns = slot_targets st p @ peer_names_at st q in
   mk_inst st ~repo:(repo_of st ns)
     ~deps:(own_dependencies st p) ~peers:(own_peer_dependencies st q)
-
-(* ---- the lookups, answered by the extracted calculus ---- *)
 
 let versions st (n : Np.Nm.name) : Np.Vs.version list =
   match Hashtbl.find_opt st.vcache n with
@@ -608,8 +584,6 @@ let dependees st (s : T.Pkg.t) : T.Dependees.t list =
       | Np.Nm.Granular _ -> ())
     hs;
   hs
-
-(* ---- PubGrub ---- *)
 
 module PName = struct
   type t = Np.Nm.name
@@ -766,8 +740,8 @@ let collate (a : string) (b : string) : int =
    and of theirs while each peers on a too.  npm places a peer inside a
    package that peers on the same name only at the root (can-place-dep.js:
    "cannot place peers inside their dependents, except for tops"), so
-   these land beside q's own peer; the
-   encoding puts them in q's directory.  npm meets a package's edges by
+   these land beside q's own peer; the encoding puts them in q's
+   directory.  npm meets a package's edges by
    name in its collation (build-ideal-tree.js:997, 1428).
 
    A dependency not decided yet is taken at npm's pick for its range, as
@@ -1116,8 +1090,8 @@ let next st o ~assigned (open_names : (PName.t * int) list) : PName.t =
    and the newest; resolving afresh is what brings in a second copy of a
    package npm's tree already holds.  A peer edge is no different: one the
    lookup already satisfies is skipped (build-ideal-tree.js:1427, 1438), and
-   a copy out of the lookup's sight is not reused.  Preference only, as in
-   deb_solve's alt_carried: the filter falls back to the whole candidate
+   a copy out of the lookup's sight is not reused.  Preference only: the
+   filter falls back to the whole candidate
    list, so nothing that was satisfiable stops being so. *)
 let choose st o ~assigned (n : PName.t) (cands : PVersion.t list) : PVersion.t =
   match n with
@@ -1217,7 +1191,6 @@ let solve ?(debug = false) ar (root : string * string) =
       None
   | Ok sol ->
       let s = T.PkgSet.ofList sol in
-      (* back through the proved decoders *)
       let installs = Np.PkgSet.elements (R.npmResolution s) in
       let tree = Np.Conc.ParentRel.elements (R.npmParents s) in
       Some

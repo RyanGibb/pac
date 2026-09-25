@@ -1,14 +1,3 @@
-(* PubGrub over the extracted multiarch reduction: stanzas are normalized
-   to (name, arch, version) packages with Multi-Arch classes, and every
-   lookup's sub-instance is a small MA-side restriction pushed through the
-   verified translation (reduceReal/reduceDeps/reduceProv/reduceConf in
-   DebianMA.v), so the translation itself computes the mangled Debian-side
-   sets.  Lookups then go through per-name sub-instances — the Debian.v
-   lookup lemmas
-   applied at mangled names (N * NameArch) — and
-   solutions come back through the two verified decoders
-   (Debian.debianResolution, then DebianMA.multiarchResolution). *)
-
 module E = Pac
 module DF = Debian_frontend.Deb_packages
 
@@ -137,8 +126,7 @@ struct
     providers_of : (string, (DMA.Pkg.t * DMA.Deb.coq_DTop) list) Hashtbl.t;
     class_of : (DMA.Pkg.t, DMA.coq_MAClass) Hashtbl.t;
     (* stanzas whose clauses a sub-instance has asked for, reported under
-       PACPROF:
-       the whole point of deferring them is that this stays small *)
+       PACPROF: the whole point of deferring them is that this stays small *)
     mutable n_clauses_parsed : int;
     (* who names a package in a Depends or Pre-Depends, and who in a
        Conflicts or Breaks, by the bare name as written: the watch lists
@@ -295,12 +283,10 @@ struct
      each with its mangled alternatives and the synthetic name a multi-way
      clause would carry: the order apt's Propagate walks the watches of a
      package that just became true, which is the order its work items enter
-     the heap.  A one-alternative Depends has no disjunct package (Debian.v
-     introduces one only at cardinality >= 2): its work item, when it has
-     one, is
-     the alternative's selector, which the caller resolves because a
-     selector in turn exists only where a Provides matches the atom (provb,
-     tgt, Debian.v). *)
+     the heap.  A one-alternative Depends has no disjunct package: its work
+     item, when it has one, is the alternative's selector, which the caller
+     resolves because a selector in turn exists only where a Provides
+     matches the atom. *)
   let ordered_clauses idx (p : DMA.Pkg.t) :
       (bool * DMA.Deb.Name.t * DMA.Deb.Atom.t list) list =
     match Hashtbl.find_opt idx.oc_cache p with
@@ -346,9 +332,6 @@ struct
         | E.OpLt -> c < 0
         | E.OpEq -> c = 0
         | E.OpNe -> c <> 0)
-
-  (* MA-side sub-instance builders, in the shapes DebianMA.Lookup proves
-     sufficient (versions_lookup*MA / dependees_lookup*MA). *)
 
   let find_list tbl k =
     match Hashtbl.find_opt tbl k with Some l -> l | None -> []
@@ -453,32 +436,24 @@ struct
   let vers_sparse idx (n' : DMA.Deb.Name.t) =
     match n' with
     | DMA.Deb.Name.Orig (n, DMA.QAArch b) ->
-        (* Lookup.versions_lookupOrigMA *)
         DMA.Deb.T.VSet.add DMA.Deb.Version.Bot
           (DMA.Deb.embedVS
              (DMA.Deb.Ver.realVersions
                 (DMA.reduceReal (ma_real_at idx (n, b)))
                 (n, DMA.QAArch b)))
     | DMA.Deb.Name.Orig _ ->
-        (* Lookup.versions_lookupOrigMA_pseudo: embedPkg introduces only
-           QAArch names, so an explicit-qualifier, :any or group
-           pseudo-name carries absence alone *)
+        (* embedPkg introduces only QAArch names, so an explicit-qualifier,
+           :any or group pseudo-name carries absence alone *)
         DMA.Deb.T.VSet.singleton DMA.Deb.Version.Bot
-    | DMA.Deb.Name.Disjunct aset ->
-        (* Lookup.versions_lookupDisjunct *)
-        DMA.Deb.versionsDisj aset
-    | DMA.Deb.Name.Soft aset ->
-        (* Lookup.versions_lookupSoft *)
-        DMA.Deb.versionsSoft aset
+    | DMA.Deb.Name.Disjunct aset -> DMA.Deb.versionsDisj aset
+    | DMA.Deb.Name.Soft aset -> DMA.Deb.versionsSoft aset
     | DMA.Deb.Name.Selector a ->
-        (* Lookup.versions_lookupSelector *)
         let r, pi = sel_preimages idx (fst a) in
         DMA.Deb.us r pi a
 
   let dependees_sparse idx (s : DMA.Deb.T.Pkg.t) =
     match s with
     | DMA.Deb.Name.Orig (n, DMA.QAArch b), DMA.Deb.Version.Orig v ->
-        (* Lookup.dependees_lookupOrigMA *)
         let p = ((n, b), v) in
         let m = atom_names_of idx p @ conf_read idx p in
         let r_ma = ma_group_of_names idx m in
@@ -499,15 +474,12 @@ struct
           (DMA.reduceConf (DMA.PkgSet.singleton p) (ma_conf_of_pkg idx p) pi_cls)
           s
     | DMA.Deb.Name.Disjunct _, DMA.Deb.Version.Atom a ->
-        (* Lookup.dependees_lookupDisjunct *)
         let r, pi = sel_preimages idx (fst a) in
         DMA.Deb.T.DependeesSet.singleton (DMA.Deb.tgt r pi a)
     | DMA.Deb.Name.Soft _, DMA.Deb.Version.Atom a ->
-        (* Lookup.dependees_lookupSoft *)
         let r, pi = sel_preimages idx (fst a) in
         DMA.Deb.T.DependeesSet.singleton (DMA.Deb.tgt r pi a)
     | DMA.Deb.Name.Selector _, DMA.Deb.Version.Ref (m, w) ->
-        (* Lookup.dependees_lookupSelector *)
         DMA.Deb.T.DependeesSet.singleton
           ( DMA.Deb.Name.Orig m,
             DMA.Deb.T.VSet.singleton (DMA.Deb.Version.Orig w) )
@@ -516,12 +488,9 @@ struct
           ( DMA.Deb.Name.Orig (DMA.Deb.aname a),
             DMA.Deb.T.VSet.singleton (DMA.Deb.Version.Orig w) )
     | _ ->
-        (* Lookup.dependees_lookupAbsent; every other shape is empty by
-           dependees' catch-all, or, at a pseudo-name, because no reduced
-           clause hangs there *)
+        (* every other shape is empty by dependees' catch-all, or, at a
+           pseudo-name, because no reduced clause hangs there *)
         DMA.Deb.T.DependeesSet.empty
-
-  (* PubGrub instantiation over the encoded mangled names/versions. *)
 
   let pp_formula fmt (f : DMA.Deb.Ver.coq_Formula) =
     let rec go fmt = function
@@ -624,8 +593,7 @@ struct
 
   (* A Ref names the provider package it came from, so its keys are that
      package's own.  embedPkg introduces only QAArch names, so the other
-     cases are
-     unreachable and rank as an unindexed package would. *)
+     cases are unreachable and rank as an unindexed package would. *)
   let ref_pref idx ((n, x) : string * DMA.coq_NameArch) w =
     match x with
     | DMA.QAArch b -> pref_of_pkg idx ((n, b), w)
@@ -639,8 +607,8 @@ struct
         }
 
   (* The candidate order reads the index the candidates were introduced
-     from, so
-     the comparator and the PubGrub instance over it are built per solve. *)
+     from, so the comparator and the PubGrub instance over it are built per
+     solve. *)
   module Search (I : sig
     val idx : index
   end) =
@@ -787,8 +755,8 @@ struct
          package and the foo:b pseudo-package's entry for each version of
          b's own foo (ParseProvides, deblistparser.cc), and none of the
          calculus's other implicit provides, which apt's cache has only
-         with a second architecture configured.  An
-         unprovided name has no selector (tgt, Debian.v): apt defers its
+         with a second architecture configured.  An unprovided name has no
+         selector: apt defers its
          version selection to one package var when every version satisfies
          the atom, and lists the satisfying versions otherwise. *)
       (* the cache generator keeps no Provides of a package's own name at its
@@ -967,10 +935,8 @@ struct
           (cands_of n)
       in
       (* the clause's name in this encoding: its synthetic name, or for a
-         one-alternative Depends what tgt (Debian.v) sends it to -- the
-         alternative's selector where a provider matches it (provb, which is
-         where us gives the selector a Ref candidate), and the target itself
-         otherwise *)
+         one-alternative Depends the alternative's selector where a provider
+         matches it, and the target itself otherwise *)
       let clause_name opt g = function
         | [ a ] when not opt ->
             if has_ref (DMA.Deb.Name.Selector a) then DMA.Deb.Name.Selector a
@@ -1053,8 +1019,10 @@ struct
          never meets a versioned negative).  A declarer in p's own group is
          skipped: apt ignores a conflict on the declarer itself, on a
          provider in its group, and on its group from an MA:same declarer
-         (IsIgnorable), and no other package of the group can be installed
-         beside the declarer anyway. *)
+         (IsIgnorable, apt-pkg/pkgcache.cc:757-790), and a declarer that is
+         not MA:same already conflicts with its whole group implicitly
+         (AddImplicitDepends, pkgcachegen.cc), so skipping every member
+         changes no answer. *)
       let conflicted_by ~assigned (((pname, pb), v) as p : DMA.Pkg.t) =
         let _, rev_conf = reverse_index I.idx in
         let seen = Hashtbl.create 16 in
@@ -1463,8 +1431,7 @@ struct
       (* apt never resolves a clause one of whose alternatives is already
          satisfied: it leaves the clause alone and installs nothing for it.
          PubGrub has to decide the disjunct either way, so the nearest thing
-         is
-         to decide it at no cost -- an alternative, or a provider of one, the
+         is to decide it at no cost -- an alternative, or a provider of one, the
          solution already carries.  Where nothing is carried, and for every
          other name, PVersion.compare's answer stands unchanged. *)
       let choose ~assigned n cands =
@@ -1666,8 +1633,7 @@ end
 (* apt's solver rejects every version but the candidate before it starts
    (APT::Solver::Strict-Pinning, on by default: FromDepCache, solver3.cc),
    so its answer holds only candidates, though its cache still lists the
-   rest, rejected.  The cut
-   is made on the stanzas, before any table is built, so that the lookups
+   rest, rejected.  The cut is made on the stanzas, before any table is built, so that the lookups
    answer over the instance their theorems are stated over.  The candidate
    is the version of highest pin priority, the newest among equals
    (pkgPolicy::GetCandidateVer), and an arch:all stanza belongs to the
@@ -1844,8 +1810,7 @@ let query_element ~native ~arches (stanzas : DF.stanza list) arg =
 (* Parsing and index construction are reported apart from solving because
    they scale differently: the archive is read whole, while the solve
    touches only the sub-instances the lookup theorems bound.  Which of the
-   two
-   dominates is the frontend's headline number, so it is printed rather
+   two dominates is the frontend's headline number, so it is printed rather
    than inferred. *)
 let solve_files ?debug ?apt_heap ?(recommends = true) ?(strict_pinning = true)
     ~native ~paths ~query :

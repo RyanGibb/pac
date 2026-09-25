@@ -1,11 +1,5 @@
-(* Cargo solving over the verified pipeline, deb_solve/opam_solve-style:
-   the index is parsed into hashtables a crate at a time, as the solver
-   first asks for each; every lookup is answered from a small
-   sub-instance in the shape one of Cargo.v's lookup theorems justifies
-   (own fibres, and the repository restricted to the names those fibres
-   read, or to a link's declarers), pushed through the Cargo encoder straight to
-   Core; PubGrub solves the accumulated core graph lazily and the solution
-   comes back through the proved decoders.  Trusted here (TCB): the parser,
+(* Every lookup is answered from a small sub-instance in the shape one of
+   Cargo.v's lookup theorems justifies.  Trusted here (TCB): the parser,
    the version comparator, the policy defaults below, the plumbing, and
    PubGrub, whose answer is decoded unchecked although the decoders'
    theorems assume it is a core resolution. *)
@@ -36,12 +30,6 @@ module PM = struct
   let isPre = Cargo_version.is_prerelease
   let sameCore = Cargo_version.same_core
 end
-
-(* ---- policy defaults ---------------------------------------------------
-
-   Each is a decision the calculus leaves to the frontend; none is forced
-   by the theory, and each is a place where this driver may disagree with
-   cargo. *)
 
 (* the feature every dependency requests unless it opts out with
    default-features = false *)
@@ -112,8 +100,6 @@ let msrv_ok (rustc : string) (msrv : string option) : bool =
    inside a comparator set that names a pre-release at the same release
    core, so no filtering is needed here; yanked versions are dropped by
    the parser instead, which is a repository fact rather than a policy. *)
-
-(* ---- the archive ---- *)
 
 type archive = {
   index : string;
@@ -191,19 +177,10 @@ let install_root ar (v : P.ver) =
    reads its name, as cargo's sparse protocol fetches it, so a run touches
    the crates the solver asks about and no others.  Because the instance is
    still being uncovered, the sub-instance a lookup theorem names must be
-   complete at the moment the lookup answers.  Cargo.v's Lookup module has
-   one theorem per shape asked below, in the components passed here.
-   versions_lookup{Crate,FeatP}Sub read the repository, and the support
-   relation, at the name alone; dependees_lookup{Crate,FeatP}Sub read the
-   owner's fibres and the repository at Lookup.reads, the owner's name and
-   its slots' targets; and a slot or decision name carries the dependency
-   it stands for, so {versions,dependees}_lookup{Slot,Decision}Sub read the
-   repository at that dependency's target and the fibres of one version of
-   the owner's class declaring it, found by scanning the owner's index
-   entry.  Each of those is complete by construction: name_set,
-   support_of_name and repo_preimage load every name they read whole, and
-   meta and the witness scan load the owner.
-   versions_lookupLinkSub is the exception.  Its
+   complete at the moment the lookup answers.  Each is complete by
+   construction -- name_set, support_of_name and repo_preimage load every
+   name they read whole, and meta and the witness scan load the owner --
+   except the one versions_lookupLinkSub names.  Its
    sub-instance is the preimage of the link relation at l -- every crate
    version declaring l -- and no declaration of any one crate names the
    other declarers, so nothing a loaded crate carries can bring them in:
@@ -217,10 +194,7 @@ module Make () = struct
 
   module T = Cg.T
 
-  (* ---- granularity: at most one version per semver compatibility class,
-     the leftmost-nonzero component ----
-
-     The label is the class's least release version rather than a tag like
+  (* At most one version per semver compatibility class.  The label is the class's least release version rather than a tag like
      "^1", and G is ordered as versions are, because the encoding hands PubGrub
      a class where the version would otherwise go: what the solver
      maximises is the label, so an order on labels that disagrees with the
@@ -242,8 +216,6 @@ module Make () = struct
         in
         Hashtbl.add class_of v c;
         c
-
-  (* ---- parse-AST -> extracted terms ---- *)
 
   let xop : Cargo_version.op -> E.cmpOp = function
     | Cargo_version.Ge -> E.OpGe
@@ -306,9 +278,6 @@ module Make () = struct
     List.map
       (fun k -> unify_site (List.rev (Hashtbl.find tbl k)))
       (List.rev !order)
-
-  (* -- per-crate fibres: Lookup's SlotFibred/LinkFibred/SupportFibred
-     .tailFibre and fdefFibre at (n, v), and Lookup.reads -- *)
 
   type fibres = {
     r_slots : Cg.SlotRel.t;
@@ -390,8 +359,6 @@ module Make () = struct
         Hashtbl.replace fibres_cache p r;
         r
 
-  (* ---- repository preimages ---- *)
-
   let name_set_cache : (string, Cg.PkgSet.t) Hashtbl.t = Hashtbl.create 4096
 
   let name_set ar (n : string) : Cg.PkgSet.t =
@@ -404,7 +371,6 @@ module Make () = struct
         Hashtbl.replace name_set_cache n s;
         s
 
-  (* every version of every name the crate's fibres read, and nothing else *)
   (* keyed by the read names rather than by the crate version, so that
      versions reading the same names share one entry *)
   let repo_preimage_cache : (string list, Cg.PkgSet.t) Hashtbl.t =
@@ -419,8 +385,6 @@ module Make () = struct
         Hashtbl.replace repo_preimage_cache reads s;
         s
 
-  (* ---- the lazy core graph ---- *)
-
   type state = {
     ar : archive;
     rc : string * string;
@@ -430,8 +394,6 @@ module Make () = struct
 
   let mk_state ar rc rfeats rustv =
     { ar; rc; rfeats = fset_of rfeats; rustv }
-
-  (* ---- the per-name version lookups ---- *)
 
   let link_preimage st (l : string) =
     match Hashtbl.find_opt st.ar.links_idx l with Some x -> x | None -> []
@@ -727,14 +689,9 @@ module Make () = struct
     in
     (* the tagged list, not just the untagged one, has to be memoized:
        PubGrub asks a name for its versions at every propagation step.
-       CLink l is the one name that cannot be held: its versions are the
-       whole preimage of the link relation at l (versions_lookupLinkSub),
-       and no declaration of any one declarer names the others, so
-       links_idx holds only the declarers among the names loaded so far
-       and may grow after CLink l has answered.  Recomputing the filter --
-       a handful of entries -- lets a declarer loaded later simply be
-       there, where a cache would freeze the answer mid-run and refuse it
-       against a set fixed without it. *)
+       CLink l is the one name that cannot be held (see the note above
+       Make); a cache would freeze its answer mid-run and refuse a declarer
+       loaded later against a set fixed without it. *)
     let vcache = Hashtbl.create 65536 in
     let versions tn =
       match Hashtbl.find_opt vcache tn with
@@ -1044,14 +1001,12 @@ module Make () = struct
             | _ -> Cargo_order.Skip)
     end) in
     let o = O.create () in
-    let r =
+    match
       PG.solve ~next:(O.next o) ~choose ~vers:versions ~deps:dependencies
         [ ( Cg.NPlus.CRoot,
             PG.Ranges.of_list [ tag Cg.NPlus.CRoot Cg.VPlus.WUnit ] )
         ]
-    in
-    O.report o;
-    match r with
+    with
     | Error inc ->
         Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
         None
@@ -1062,7 +1017,6 @@ module Make () = struct
             sol
         in
         let s = T.PkgSet.ofList sol in
-        (* back through the proved decoders *)
         let crates = Cg.PkgSet.elements (Cg.decodeS s) in
         (* the placeholder default the parser gives a crate declaring none
            keeps a depender's default-features request satisfiable; cargo

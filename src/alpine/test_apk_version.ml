@@ -31,7 +31,6 @@ let op v o c exp =
     incr fail)
 
 let () =
-  (* numeric components *)
   check "1.0" "1.0" 0;
   check "1.0" "1.1" (-1);
   check "1.10" "1.9" 1;
@@ -47,13 +46,10 @@ let () =
   check "1.0.1" "1.0.01" 1;
   check "1.0.00" "1.0.0" 1;
 
-  (* letter suffix *)
   check "1.0" "1.0a" (-1);
   check "1.0a" "1.0b" (-1);
   check "1.0b" "1.0" 1;
 
-  (* suffix classes: alpha < beta < pre < rc < none < cvs < svn < git <
-     hg < p *)
   check "1.0_alpha" "1.0_beta" (-1);
   check "1.0_beta" "1.0_pre" (-1);
   check "1.0_pre" "1.0_rc" (-1);
@@ -67,13 +63,11 @@ let () =
   check "6.0_pre1" "6.0" (-1);
   check "6.0_p1" "6.0" 1;
 
-  (* numeric suffix parts *)
   check "1.0_pre1" "1.0_pre2" (-1);
   check "1.0_pre" "1.0_pre1" (-1);
   check "1.0_p10" "1.0_p9" 1;
   check "1.0_alpha2" "1.0_beta1" (-1);
 
-  (* commit hash, then revision *)
   check "1.0~1234" "1.0~2345" (-1);
   check "1.0~abc" "1.0~abd" (-1);
   check "1.0" "1.0~abc" (-1);
@@ -88,7 +82,6 @@ let () =
   (* a version that goes invalid keeps going, so it sorts greater *)
   check "1.0" "1.0bc" (-1);
 
-  (* validation *)
   valid "1.0" true;
   valid "24.08-r0" true;
   valid "1.0a" true;
@@ -126,7 +119,6 @@ let () =
   fuzzy "1.0_pre1" "1.0" true;
   check "1.0_pre1" "1.0" (-1);
 
-  (* operators, including the bit-OR spellings *)
   op "1.0" "=" "1.0" true;
   op "1.0" "=" "1.1" false;
   op "1.2" ">" "1.1" true;

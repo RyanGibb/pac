@@ -1,10 +1,5 @@
 (* dpkg version comparison, implemented from Debian Policy 5.6.12.
-   [epoch:]upstream_version[-debian_revision]; epoch compared numerically,
-   upstream and revision by the dpkg algorithm: alternate maximal non-digit
-   and digit parts; non-digit parts compare with '~' before everything
-   (including the end of a part) and letters before non-letters; digit parts
-   compare numerically.  Untrusted, and tested only on the cases in
-   test_version.ml. *)
+   Untrusted, and tested only on the cases in test_version.ml. *)
 
 type t = { epoch : int; upstream : string; revision : string }
 
@@ -30,15 +25,12 @@ let parse s =
 
 let is_digit c = c >= '0' && c <= '9'
 
-(* '~' sorts before the end of a part; letters before non-letters. *)
 let char_weight c =
   if c = '~' then -1
   else if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') then Char.code c
   else Char.code c + 256
 
 let compare_nondigit s i s' i' =
-  (* Compare the maximal non-digit prefixes starting at i / i'; return
-     (cmp, next_i, next_i'). *)
   let len = String.length s and len' = String.length s' in
   let rec go i i' =
     let ended = i >= len || is_digit s.[i] in
@@ -52,8 +44,6 @@ let compare_nondigit s i s' i' =
   go i i'
 
 let compare_digit s i s' i' =
-  (* Compare the maximal digit prefixes numerically (arbitrary length:
-     strip leading zeros, then longer wins, then lexicographic). *)
   let take s i =
     let len = String.length s in
     let j = ref i in
@@ -113,5 +103,3 @@ let compare a b =
     else
       let c = compare_part a.upstream b.upstream in
       if c <> 0 then c else compare_part a.revision b.revision
-
-let pp fmt s = Format.pp_print_string fmt s
