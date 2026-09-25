@@ -287,3 +287,16 @@ below 2.3 and ov.2 from 2.3 on:
   opam packages (1, core solution 2 nodes):
     ov.1
   loaded: 1 names, 2 package versions
+
+Under --0install-order the query's atoms are walked last first, as opam
+hands them to 0install (create_spec conses each onto the list it builds).
+ord-p.2 and ord-q.2 each need ord-r on the other side of 2, so whichever
+name is decided first keeps its newest: asked for ord-p then ord-q, opam
+installs ord-q.2, ord-p.1 and ord-r.1:
+
+  $ ../../../src/main.exe opam --0install-order . ord-p ord-q | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (3, core solution 4 nodes):
+    ord-p.1
+    ord-q.2
+    ord-r.1
+  loaded: 3 names, 6 package versions

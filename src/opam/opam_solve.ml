@@ -473,8 +473,9 @@ module Make () = struct
      version flagged avoid-version or deprecated is a last resort rather
      than an impossibility, so it sits in a class below every unflagged
      version of its name and newest-first decides within each class --
-     what opam does when it numbers a name's versions for the CUDF
-     version-lag, avoid-versions after the rest.
+     the order builtin-0install sorts a name's candidates in
+     (opam_0install_cudf.ml:15-23), opam having marked a deprecated
+     version avoid-version too (opamSwitchState.ml:886-895).
 
      The class is carried on the version rather than read off it: which
      package a version belongs to is what decides, and a comparator sees
@@ -567,8 +568,9 @@ module Make () = struct
      dependees 0install's decider never reaches: a conflict is a
      `Restricts dependency it skips outright -- here an edge on a name the
      depends formula does not mention, so unranked -- and a conflict class
-     is an at_most_one clause over implementations rather than a role at
-     all (solver_core.ml, [Conflict_classes] and [check_dep]). *)
+     is no role either: opam compiles it into CUDF conflicts
+     (opamSwitchState.ml:835-878), which 0install skips as it does any
+     other. *)
   let zi_rank tbl (m : PFR.Name.t) : int option =
     let best acc s =
       match (Hashtbl.find_opt tbl s, acc) with
@@ -787,11 +789,13 @@ module Make () = struct
     (* the dependees of a decided package, in source order and without the
        synthetic packages 0install has no role for *)
     let order_cache = Hashtbl.create 4096 in
+    (* opam's create_spec conses each atom onto the list 0install walks
+       (opamBuiltin0install.ml:47-53, 65-67), so the query goes last first *)
     let query_index =
       let tbl = Hashtbl.create 16 in
       List.iteri
         (fun i (n, _) -> if not (Hashtbl.mem tbl n) then Hashtbl.add tbl n i)
-        query;
+        (List.rev query);
       tbl
     in
     let zi_deps (tn : PFR.Name.t) (pv : PVersion.t) : PFR.Name.t list =
@@ -823,8 +827,8 @@ module Make () = struct
             ds
           |> List.stable_sort (fun (i, _) (j, _) -> compare (i : int) j)
           |> List.map snd
-      (* the root's dependencies are the query, whose atoms were written
-         in an order of their own *)
+      (* the root's dependencies are the query, in the order opam hands
+         it on *)
       | PFR.Name.Orig Red.TName.Root, _ ->
           let rank m =
             match zi_rank query_index m with Some i -> i | None -> max_int
