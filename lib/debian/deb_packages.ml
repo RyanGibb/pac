@@ -154,6 +154,13 @@ let parse_conflicts field =
   (* Policy 7.1 allows alternatives only in the Depends family. *)
   split_on ',' field |> List.filter_map parse_atom
 
+(* declarations the parser read and dropped, which main reports *)
+let rejected = ref 0
+
+let reject () =
+  incr rejected;
+  None
+
 let parse_provides field =
   split_on ',' field
   |> List.filter_map (fun s ->
@@ -164,13 +171,17 @@ let parse_provides field =
           Some { pname = name; pversion = Some v }
       | Some { name; constr = None; _ } ->
           Some { pname = name; pversion = None }
-      (* only "=" provides exist (Policy 7.5); apt warns-and-ignores,
-            dose3 errors — silently reading these as unversioned would be
-            strictly more permissive than either *)
-      | Some { constr = Some _; _ } ->
-          failwith
-            (Printf.sprintf "non-'=' version constraint in Provides: %S" s)
+      (* only "=" provides exist (Policy 7.5); apt drops the one entry with
+            a warning and keeps the rest of the stanza (ParseProvides,
+            deblistparser.cc) -- reading it as unversioned would be
+            strictly more permissive *)
+      | Some { constr = Some _; _ } -> reject ()
       | None -> None)
+
+(* apt warns on any other value and reads it as no *)
+let multi_arch_known = function
+  | "no" | "same" | "foreign" | "allowed" -> true
+  | _ -> false
 
 (* One pass over a stanza's fields, rather than an assoc lookup per field:
    an archive is ~69k stanzas.  First occurrence wins. *)
@@ -225,7 +236,10 @@ let stanza_of_fields (fs : (string * string) list) : stanza option =
           version;
           architecture =
             (match !architecture with Some a -> a | None -> "all");
-          multi_arch = !multi_arch;
+          multi_arch =
+            (match !multi_arch with
+            | Some m when not (multi_arch_known m) -> reject ()
+            | m -> m);
           depends_raw = raw [ !predepends; !depends ];
           recommends_raw = raw [ !recommends ];
           provides = opt parse_provides !provides;
@@ -252,13 +266,14 @@ let stanza_of_fields (fs : (string * string) list) : stanza option =
                     in
                     (strip (String.sub s 0 i), strip v)));
         }
-  | _ -> None
+  | _ -> reject ()
 
 (* Stanzas are built as the file is read.  Accumulating every physical line
    first cost 1.27M live strings and conses on a Debian archive before any
    stanza was looked at; nothing needs a line once its stanza is closed. *)
 let parse_file path =
   let ic = open_in path in
+  Fun.protect ~finally:(fun () -> close_in_noerr ic) @@ fun () ->
   let acc = ref [] and fields = ref [] in
   let flush () =
     (match !fields with
@@ -287,6 +302,6 @@ let parse_file path =
              fields := (k, v) :: !fields
          | None -> ()
      done
-   with End_of_file -> close_in ic);
+   with End_of_file -> ());
   flush ();
   List.rev !acc

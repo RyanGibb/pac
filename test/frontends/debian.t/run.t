@@ -200,6 +200,28 @@ carried:
   krq:amd64 1
   ksysd:amd64 1
 
+The watch lists are read from the field text, folded or not: jgoal is kgoal
+with jquick-gles's Depends folded, its first name on a continuation line,
+and the rejection still reaches jquick-gles:
+
+  $ ../../../bin/main.exe debian --apt-heap --native amd64 jgoal Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  jc1:amd64 1
+  jc2:amd64 1
+  jc3:amd64 1
+  jc4:amd64 1
+  jc5:amd64 1
+  jcomp:amd64 1
+  jcore:amd64 1
+  jgoal:amd64 1
+  jgui:amd64 1
+  jmid:amd64 1
+  jmid2:amd64 1
+  jmid3:amd64 1
+  jquick:amd64 1
+  jrc:amd64 1
+  jrq:amd64 1
+  jsysd:amd64 1
+
 apt counts a clause's solutions as the entries of its target's provides
 list and versions (AllTargets, pkgcache.cc).  Its cache drops a Provides of
 the package's own name, except through the every-architecture path a
@@ -248,6 +270,15 @@ alone would have let a leftmost-first choice install, is never installed:
   dbar:amd64 1
   dgoal:amd64 1
 
+The fold narrows the depender's own clause, and only while the depender is
+installed: rpa folds rfoo (<< 3) and rfoo (>= 2) down to rbar, then fails,
+and rqa's rfoo (<< 3), unfolded, takes the real rfoo:
+
+  $ ../../../bin/main.exe debian --apt-heap --native amd64 rgoal Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  rfoo:amd64 1
+  rgoal:amd64 1
+  rqa:amd64 1
+
 apt assigns a rejection the moment it is derived but propagates it only when
 its turn in the queue comes, and a package is two literals: fp's Conflicts
 rejects fx's version var during fp's wave, and fx's package var -- what an
@@ -276,6 +307,23 @@ backjump, which the shadow heap's counters count:
   gb:amd64 1
   ggoal:amd64 1
   gw:amd64 1
+
+apt's Pop rejects the choice it undoes, and the rejection stands as long as
+the level below does, through any later Pop above it (Solver::Pop,
+solver3.cc).  vgoal tries wa, which fails, then vb's vp, which fails too; by
+the time vq's Recommends are counted, wa | wxc has one solution left, so it
+pops ahead of wyd | wxc and wxc meets both:
+
+  $ ../../../bin/main.exe debian --apt-heap --native amd64 wgoal Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  wb:amd64 1
+  wgoal:amd64 1
+  wxc:amd64 1
+
+  $ ../../../bin/main.exe debian --apt-heap --native amd64 vgoal Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  vb:amd64 1
+  vgoal:amd64 1
+  vq:amd64 1
+  wxc:amd64 1
 
 A clause with an obsolete solution is worked on after every other clause of
 its eagerness that is not unit (Work::operator<, the SatisfyObsolete group): obsp's source obssrc also
@@ -434,6 +482,24 @@ and of two stanzas at one version, apt keeps the first read:
   $ ../../../bin/main.exe debian --native amd64 pindup Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
   pindup:amd64 1
 
+The first stanza is kept with Strict-Pinning off too, Provides and all: the
+dupp that provides dupvirt is the second read, so apt refuses dupgoal, and
+the dupr that does is the first, so dupgoal3 installs it.  An arch:all
+stanza is a version of its own to apt (Version::All), so the arch:all dupq
+still provides dupvirt2 beside its amd64 twin:
+
+  $ ../../../bin/main.exe debian --native amd64 --no-strict-pinning dupgoal Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  Because dupgoal:amd64 1 -> dupvirt:amd64 ∅ and root -> dupgoal:amd64 1, version solving failed..
+
+  $ ../../../bin/main.exe debian --native amd64 --no-strict-pinning dupgoal3 Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  dupgoal3:amd64 1
+  dupr:amd64 1
+
+  $ ../../../bin/main.exe debian --native amd64 --no-strict-pinning dupgoal2 Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  dupgoal2:amd64 1
+  dupq:amd64 1
+
 With a second architecture configured, apt satisfies an atom qualified
 with an explicit architecture b only with b's own package, or with a
 Provides one of b's packages declares: a Multi-Arch: foreign package of
@@ -514,3 +580,17 @@ xfor:amd64.  The query here names a real package, and there is none:
   $ ../../../bin/main.exe debian --native amd64 xfor:i386 Packages.multiarch | sed -E '/^(parse|solve) [0-9.]+s$/d'
   unsatisfiable:
   root -> xfor:i386 ∅
+
+Provides admits only "=" (Policy 7.5).  apt ignores any other Provides with a
+warning and keeps the rest of the stanza; so does pac, counting what it
+dropped:
+
+  $ ../../../bin/main.exe debian --native amd64 bvgoal2 Packages.provides | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  bvgoal2:amd64 1
+  bvprov2:amd64 1
+  parser dropped 2 declarations
+
+  $ ../../../bin/main.exe debian --native amd64 bvgoal Packages.provides | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  Because bvgoal:amd64 1 -> bvirt:amd64 ∅ and root -> bvgoal:amd64 1, version solving failed..
+  parser dropped 2 declarations

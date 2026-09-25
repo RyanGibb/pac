@@ -18,13 +18,21 @@ let order_arg ~tool ~pubgrub =
 
 let debian_run debug apt_heap no_recs no_strict native query path =
   Pubgrub.set_debug debug;
-  match
+  let r =
     Deb_solve.solve_files ~debug ~apt_heap ~recommends:(not no_recs)
       ~strict_pinning:(not no_strict) ~native ~paths:[ path ] ~query
-  with
-  | None -> 1
+  in
+  let dropped = !Debian_frontend.Deb_packages.rejected in
+  let report_dropped () =
+    if dropped > 0 then Printf.printf "parser dropped %d declarations\n" dropped
+  in
+  match r with
+  | None ->
+      report_dropped ();
+      1
   | Some (pkgs, t_parse, t_solve) ->
       List.iter (fun (n, b, v) -> Printf.printf "%s:%s %s\n" n b v) pkgs;
+      report_dropped ();
       Printf.printf "parse %.2fs\nsolve %.2fs\n" t_parse t_solve;
       0
 

@@ -1,0 +1,24 @@
+Package: bvgoal
+Version: 1
+Architecture: amd64
+Depends: bvirt
+
+Package: bvprov
+Version: 1
+Architecture: amd64
+Provides: bvirt (>= 1)
+
+Package: bvgoal2
+Version: 1
+Architecture: amd64
+Depends: bvirt2
+
+Package: bvprov2
+Version: 1
+Architecture: amd64
+Provides: bvirt (>= 1), bvirt2
+
+Package: bvok
+Version: 1
+Architecture: amd64
+

@@ -164,15 +164,18 @@ struct
     go 0 alts
 
   (* the bare names a relationship field mentions, one per alternative: the
-     token before any version or architecture qualifier, in one pass *)
+     token before any version or architecture qualifier, in one pass.  A
+     folded field's continuation lines are joined with "\n", so a name can
+     follow one. *)
   let field_names fields =
+    let blank c = c = ' ' || c = '\t' || c = '\n' in
     List.concat_map
       (fun f ->
         let n = String.length f in
         let acc = ref [] in
         let i = ref 0 in
         while !i < n do
-          while !i < n && f.[!i] = ' ' do
+          while !i < n && blank f.[!i] do
             incr i
           done;
           let s = !i in
@@ -180,7 +183,7 @@ struct
             !i < n
             &&
             match f.[!i] with
-            | ' ' | '(' | ':' | ',' | '|' | '\n' -> false
+            | ' ' | '\t' | '\n' | '(' | ':' | ',' | '|' -> false
             | _ -> true
           do
             incr i
@@ -210,17 +213,28 @@ struct
         oc_cache = Hashtbl.create 4096;
       }
     in
+    (* Of two stanzas at one version apt keeps the first read, Provides and
+       all.  An arch:all stanza is a version of its own to apt
+       (Version::All), which the package's one version here cannot be, so
+       that pair is still read as one version with both stanzas' Provides. *)
+    let first_read (stz : nstanza) =
+      match Hashtbl.find_opt idx.stanza_of stz.npkg with
+      | Some old -> old.nall <> stz.nall
+      | None -> true
+    in
     List.iter
       (fun st ->
         let stz = normalize ~recommends st in
-        let (n, b), v = stz.npkg in
-        push idx.versions_of (n, b) v;
-        Hashtbl.replace idx.stanza_of stz.npkg stz;
-        push idx.group_of n (b, v);
-        Hashtbl.replace idx.class_of stz.npkg stz.ncls;
-        List.iter
-          (fun (m, vt) -> push idx.providers_of m (stz.npkg, vt))
-          stz.nprovs)
+        if first_read stz then (
+          let (n, b), v = stz.npkg in
+          if not (Hashtbl.mem idx.stanza_of stz.npkg) then (
+            push idx.versions_of (n, b) v;
+            push idx.group_of n (b, v));
+          Hashtbl.replace idx.stanza_of stz.npkg stz;
+          Hashtbl.replace idx.class_of stz.npkg stz.ncls;
+          List.iter
+            (fun (m, vt) -> push idx.providers_of m (stz.npkg, vt))
+            stz.nprovs))
       stanzas;
     idx
 
@@ -1160,8 +1174,11 @@ struct
       in
       (* the solutions of a clause apt folded a later one into are the
          intersection, and Solve takes the first undecided of those: the
-         narrower atom, for the choice among the name's own candidates *)
-      let narrowed : (DMA.Deb.Name.t, DMA.Deb.Atom.t) Hashtbl.t =
+         narrower atom, for the choice among the name's own candidates.  The
+         fold is of the depender's own clause, so it holds only while the
+         depender is installed; the name, which another depender may share,
+         is keyed by that depender too. *)
+      let narrowed : (DMA.Deb.Name.t, DMA.Pkg.t * DMA.Deb.Atom.t) Hashtbl.t =
         Hashtbl.create 64
       in
       let module D = struct
@@ -1290,7 +1307,7 @@ struct
                         | Some (eg, ea) when overlap !ea a ->
                             if not (DMA.Deb.Atom.eq_dec !ea a) then (
                               ea := conj !ea a;
-                              Hashtbl.replace narrowed eg !ea);
+                              Hashtbl.add narrowed eg (((m, b), v), !ea));
                             again := (opt, Some g, fun () -> [ a ]) :: !again;
                             (opt, None, fun () -> [])
                         | _ ->
@@ -1406,6 +1423,15 @@ struct
               of_atom a
           | _ -> []
 
+        let assign assigned rs =
+          let out = ref [] in
+          List.iter
+            (function
+              | `Ver x -> reject_ver ~assigned out x
+              | `Pkg k -> reject_pkg ~assigned out k)
+            rs;
+          List.rev !out
+
         (* a selector decided to a provider or real version is apt's version
            var popping, unless the atom is deferred and the var was the
            package's all along *)
@@ -1473,9 +1499,13 @@ struct
           | _ -> cands
         in
         let cands =
-          match Hashtbl.find_opt narrowed n with
+          match
+            List.find_opt
+              (fun (p, _) -> installed_at ~assigned p)
+              (Hashtbl.find_all narrowed n)
+          with
           | None -> cands
-          | Some na ->
+          | Some (_, na) ->
               keep
                 (fun (pv : PVersion.t) ->
                   match pv.PVersion.v with

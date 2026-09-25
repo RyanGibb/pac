@@ -37,6 +37,7 @@ module type DRIVER = sig
   val head : assigned -> atom list -> (name * (name * version) option) option
   val same_name : name -> name -> bool
   val negation : assigned -> name -> version -> rejection list
+  val assign : assigned -> rejection list -> rejection list
 end
 
 module Make (D : DRIVER) = struct
@@ -122,6 +123,11 @@ module Make (D : DRIVER) = struct
     nonunit : (D.name, int * int) Hashtbl.t;
     mutable epoch : int;
     mutable nredo : int;
+    (* the negations Pop asserted, each at the level it was asserted at,
+       newest first: apt keeps one while that level stands, through any
+       later Pop above it, while a replay derives rejections afresh from the
+       standing decisions alone *)
+    mutable negations : (int * D.rejection list) list;
     nsol_tbl : (D.name, int) Hashtbl.t;
     (* the alternatives the last wave to queue or push a name counted it
        over, for the unit test the queue drain makes of it *)
@@ -162,6 +168,7 @@ module Make (D : DRIVER) = struct
       nonunit = Hashtbl.create 4096;
       epoch = 0;
       nredo = 0;
+      negations = [];
       nsol_tbl = Hashtbl.create 1024;
       atoms_tbl = Hashtbl.create 1024;
       rq = Queue.create ();
@@ -455,8 +462,12 @@ module Make (D : DRIVER) = struct
      newest first (recounting size; a statically-unit hard clause is
      enqueued, i.e. left to tier 0), then items above the level are erased
      and the heap rebuilt. *)
+  let forget_negations t lvl =
+    t.negations <- List.filter (fun (l, _) -> l < lvl) t.negations
+
   let unwind_level t ~assigned lvl =
     t.c_unwind <- t.c_unwind + 1;
+    forget_negations t lvl;
     (match Hashtbl.find_opt t.popped_at lvl with
     | Some r ->
         List.iter
@@ -505,6 +516,9 @@ module Make (D : DRIVER) = struct
           queue_rejections t (D.conflicted_by assigned e.tname pv)
       | None -> ()
     done;
+    List.iter
+      (fun (_, rs) -> queue_rejections t (D.assign assigned rs))
+      (List.rev t.negations);
     let top = if t.tlen > 0 then Some t.tarr.(t.tlen - 1) else None in
     while not (Queue.is_empty t.rq) do
       propagate_one t ~assigned top
@@ -553,7 +567,7 @@ module Make (D : DRIVER) = struct
         match e.tval with Some v -> Some (e, v) | None -> None
       in
       match
-        if (not !fallen_redo) && !top_wide > !cut then value !top_wide else None
+        if (not !fallen_redo) && !top_wide >= !cut then value !top_wide else None
       with
       | Some (m, mv) ->
           (* apt's choice is the alternative's own solution, decided as the
@@ -581,11 +595,14 @@ module Make (D : DRIVER) = struct
             | _ -> ()
           done;
           drop_entries t !top_wide;
+          forget_negations t m.tlevel;
           replay t ~assigned;
           unwind_level t ~assigned m.tlevel;
           t.wide_count <- t.wide_count - 1;
           dbg "POPLEVEL %d %a@." m.tlevel D.pp_name (fst choice);
-          queue_rejections t (D.negation assigned (fst choice) (snd choice))
+          let rs = D.negation assigned (fst choice) (snd choice) in
+          t.negations <- (t.wide_count, rs) :: t.negations;
+          queue_rejections t (D.assign assigned rs)
       | None ->
           for i = t.tlen - 1 downto !cut do
             let e = t.tarr.(i) in

@@ -656,3 +656,247 @@ Architecture: amd64
 Priority: optional
 Essential: 0x1
 Provides: hexvirt
+
+Package: jgoal
+Version: 1
+Architecture: amd64
+Depends: jgui, jmid, jc1
+
+Package: jgui
+Version: 1
+Architecture: amd64
+Conflicts: jgui-gles
+
+Package: jgui-gles
+Version: 1
+Architecture: amd64
+
+Package: jmid
+Version: 1
+Architecture: amd64
+Depends: jmid2
+
+Package: jmid2
+Version: 1
+Architecture: amd64
+Depends: jmid3
+
+Package: jmid3
+Version: 1
+Architecture: amd64
+Depends: jcomp
+
+Package: jcomp
+Version: 1
+Architecture: amd64
+Depends: jquick | jquick-gles
+
+Package: jquick
+Version: 1
+Architecture: amd64
+Recommends: jrq
+
+Package: jquick-gles
+Version: 1
+Architecture: amd64
+Depends:
+ jpad,
+ jgui-gles
+
+Package: jpad
+Version: 1
+Architecture: amd64
+
+Package: jc1
+Version: 1
+Architecture: amd64
+Depends: jc2
+
+Package: jc2
+Version: 1
+Architecture: amd64
+Depends: jc3
+
+Package: jc3
+Version: 1
+Architecture: amd64
+Depends: jc4
+
+Package: jc4
+Version: 1
+Architecture: amd64
+Depends: jc5
+
+Package: jc5
+Version: 1
+Architecture: amd64
+Depends: jcore
+
+Package: jcore
+Version: 1
+Architecture: amd64
+Recommends: jrc
+
+Package: jrq
+Version: 1
+Architecture: amd64
+Depends: jsysd
+
+Package: jsysd
+Version: 1
+Architecture: amd64
+Provides: jsysusers
+
+Package: jrc
+Version: 1
+Architecture: amd64
+Depends: jadduser | jsysusers
+
+Package: jadduser
+Version: 1
+Architecture: amd64
+
+Package: dupgoal
+Version: 1
+Architecture: amd64
+Depends: dupvirt
+
+Package: dupp
+Version: 1
+Architecture: amd64
+
+Package: dupp
+Version: 1
+Architecture: amd64
+Provides: dupvirt
+
+Package: dupgoal2
+Version: 1
+Architecture: amd64
+Depends: dupvirt2
+
+Package: dupq
+Version: 1
+Architecture: amd64
+
+Package: dupq
+Version: 1
+Architecture: all
+Provides: dupvirt2
+
+Package: dupgoal3
+Version: 1
+Architecture: amd64
+Depends: dupvirt3
+
+Package: dupr
+Version: 1
+Architecture: amd64
+Provides: dupvirt3
+
+Package: dupr
+Version: 1
+Architecture: amd64
+
+Package: rgoal
+Version: 1
+Architecture: amd64
+Depends: rpa | rqa
+
+Package: rpa
+Version: 1
+Architecture: amd64
+Depends: rfoo (<< 3), rfoo (>= 2), rc1 | rc2
+
+Package: rc1
+Version: 1
+Architecture: amd64
+Conflicts: rpa
+
+Package: rc2
+Version: 1
+Architecture: amd64
+Conflicts: rpa
+
+Package: rqa
+Version: 1
+Architecture: amd64
+Depends: rfoo (<< 3)
+
+Package: rfoo
+Version: 1
+Architecture: amd64
+
+Package: rbar
+Version: 1
+Architecture: amd64
+Provides: rfoo (= 2)
+
+Package: rbaz
+Version: 1
+Architecture: amd64
+Provides: rfoo (= 3)
+
+Package: wgoal
+Version: 1
+Architecture: amd64
+Depends: wa | wb
+
+Package: wa
+Version: 1
+Architecture: amd64
+Depends: wc1 | wc2
+
+Package: wc1
+Version: 1
+Architecture: amd64
+Conflicts: wa
+
+Package: wc2
+Version: 1
+Architecture: amd64
+Conflicts: wa
+
+Package: wb
+Version: 1
+Architecture: amd64
+Recommends: wyd | wxc, wa | wxc
+
+Package: wyd
+Version: 1
+Architecture: amd64
+
+Package: wxc
+Version: 1
+Architecture: amd64
+
+Package: vgoal
+Version: 1
+Architecture: amd64
+Depends: wa | vb
+
+Package: vb
+Version: 1
+Architecture: amd64
+Depends: vp | vq
+
+Package: vp
+Version: 1
+Architecture: amd64
+Depends: vz1 | vz2
+
+Package: vz1
+Version: 1
+Architecture: amd64
+Conflicts: vp
+
+Package: vz2
+Version: 1
+Architecture: amd64
+Conflicts: vp
+
+Package: vq
+Version: 1
+Architecture: amd64
+Recommends: wyd | wxc, wa | wxc
+

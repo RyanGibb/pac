@@ -105,6 +105,11 @@ module type DRIVER = sig
   (* the literal apt's Pop asserts against a decision it undoes: the
      solution the decision installed, rejected *)
   val negation : assigned -> name -> version -> rejection list
+
+  (* assign rejections derived outside the driver's own propagation, as
+     [conflicts] assigns its own: those not already assigned, and not of a
+     package the partial solution installs *)
+  val assign : assigned -> rejection list -> rejection list
 end
 
 module Make (D : DRIVER) : sig
