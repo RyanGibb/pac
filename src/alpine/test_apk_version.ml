@@ -21,14 +21,14 @@ let fuzzy v c exp =
     incr fail)
 
 let op v o c exp =
-  match Apk_version.op_of_string o with
-  | None ->
-      Printf.printf "FAIL unknown operator %S\n" o;
-      incr fail
-  | Some o' ->
-      if Apk_version.matches v o' c <> exp then (
-        Printf.printf "FAIL %S %s %S = %b, want %b\n" v o c (not exp) exp;
-        incr fail)
+  let got =
+    match Apk_version.op_of_string o with
+    | None -> true
+    | Some o' -> Apk_version.matches v o' c
+  in
+  if got <> exp then (
+    Printf.printf "FAIL %S %s %S = %b, want %b\n" v o c (not exp) exp;
+    incr fail)
 
 let () =
   (* numeric components *)
@@ -145,6 +145,14 @@ let () =
   op "3.7" "<~" "3.6" false;
   (* >< pins the C: identity digest, which a version cannot match *)
   op "1.0" "><" "Q1Io65EOU4TZIqoCav8tqwhqq2RPM=" false;
+  (* any run is an operator, and one holding < and > and = admits all *)
+  op "1.0" "==" "1.0" true;
+  op "1.0" "<<" "1.1" true;
+  op "1.1" "<<" "1.1" false;
+  op "1.2" ">>=" "1.1" true;
+  op "3.12.8" "~~" "3.12" true;
+  op "1.0" "<=>" "2.0" true;
+  op "3.0" "<>~" "2.0" true;
 
   if !fail > 0 then exit 1;
   print_endline "apk_version: all tests pass"

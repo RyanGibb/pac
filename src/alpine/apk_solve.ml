@@ -938,7 +938,7 @@ let world_of_args (args : string list) : P.dep list =
   List.filter_map
     (fun a ->
       match P.parse_atom a with
-      | Some d -> Some d
+      | Some (d, _) -> Some d
       | None ->
           Printf.eprintf "cannot parse goal %S\n%!" a;
           None)

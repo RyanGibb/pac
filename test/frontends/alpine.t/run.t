@@ -1,6 +1,5 @@
   $ ../../../src/main.exe alpine APKINDEX app docs | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index APKINDEX
-  cone: 3 packages, 0 provides entries, 1 install_if rules
+  index APKINDEX: 3 packages, 0 provides entries, 1 install_if rules
   packages (3):
     app 1.0
     app-doc 1.0
@@ -20,8 +19,7 @@ vim both provide editor, nano sorts first and so heads the encoded
 disjunction, but vim carries the higher k: and is what apk installs:
 
   $ ../../../src/main.exe alpine PROVIDERS editor | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index PROVIDERS
-  cone: 14 packages, 7 provides entries, 0 install_if rules
+  index PROVIDERS: 14 packages, 7 provides entries, 0 install_if rules
   packages (1):
     vim 1.0
   encoded solution: 3 core nodes (2 Alpine packages encoded)
@@ -32,8 +30,7 @@ provides tool with k:50 and heads the disjunction, but tool 2.0 offers 2.0
 against tool-extra's empty version:
 
   $ ../../../src/main.exe alpine PROVIDERS tool | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index PROVIDERS
-  cone: 14 packages, 7 provides entries, 0 install_if rules
+  index PROVIDERS: 14 packages, 7 provides entries, 0 install_if rules
   packages (1):
     tool 2.0
   encoded solution: 3 core nodes (2 Alpine packages encoded)
@@ -45,8 +42,7 @@ enables that selection.  orphan provides nokey and nothing else does, so
 the dependency has nothing to satisfy it:
 
   $ ../../../src/main.exe alpine PROVIDERS nokey | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index PROVIDERS
-  cone: 14 packages, 7 provides entries, 0 install_if rules
+  index PROVIDERS: 14 packages, 7 provides entries, 0 install_if rules
   unsatisfiable:
   Because @root () -> nokey ∅ and root -> @root (), version solving failed..
 
@@ -56,8 +52,7 @@ versions they offer.  vers-alt provides vers=9.9 where the real vers is
 1.0, and apk installs vers-alt:
 
   $ ../../../src/main.exe alpine PROVIDERS vers-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index PROVIDERS
-  cone: 14 packages, 7 provides entries, 0 install_if rules
+  index PROVIDERS: 14 packages, 7 provides entries, 0 install_if rules
   packages (2):
     vers-alt 9.9
     vers-user 1.0
@@ -68,8 +63,7 @@ package offers it, alias or not.  prio-alt provides prio=1.0, tying the
 real prio 1.0 on version, and prio's own k:100 beats prio-alt's k:1:
 
   $ ../../../src/main.exe alpine PROVIDERS prio-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index PROVIDERS
-  cone: 14 packages, 7 provides entries, 0 install_if rules
+  index PROVIDERS: 14 packages, 7 provides entries, 0 install_if rules
   packages (2):
     prio 1.0
     prio-user 1.0
@@ -80,8 +74,7 @@ k:.  prio-lo-alt provides prio-lo=1.0 with k:5 against a real prio-lo 1.0
 with none, so the alias wins:
 
   $ ../../../src/main.exe alpine PROVIDERS prio-lo-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index PROVIDERS
-  cone: 14 packages, 7 provides entries, 0 install_if rules
+  index PROVIDERS: 14 packages, 7 provides entries, 0 install_if rules
   packages (2):
     prio-lo-alt 2.0
     prio-lo-user 1.0
@@ -93,8 +86,7 @@ world names its owner: apk-package(5) says that without a provider-priority
 world".  pv-prov provides pv-virt with no k:, and here the world names it:
 
   $ ../../../src/main.exe alpine BARE pv-prov pv-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index BARE
-  cone: 9 packages, 4 provides entries, 1 install_if rules
+  index BARE: 9 packages, 4 provides entries, 1 install_if rules
   packages (2):
     pv-prov 1.0
     pv-user 1.0
@@ -103,8 +95,7 @@ world".  pv-prov provides pv-virt with no k:, and here the world names it:
 while without it pv-user has nothing to satisfy pv-virt, as in apk:
 
   $ ../../../src/main.exe alpine BARE pv-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index BARE
-  cone: 9 packages, 4 provides entries, 1 install_if rules
+  index BARE: 9 packages, 4 provides entries, 1 install_if rules
   unsatisfiable:
   Because @root () -> pv-user 1.0 and pv-user 1.0 -> pv-virt ∅, @root * is forbidden..
   And because root -> @root (), version solving failed.
@@ -113,29 +104,25 @@ apk installs each of the next four by behaviour beyond its documentation,
 out of scope here because it depends on why a package is present:
 
   $ ../../../src/main.exe alpine BARE pv-both | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index BARE
-  cone: 9 packages, 4 provides entries, 1 install_if rules
+  index BARE: 9 packages, 4 provides entries, 1 install_if rules
   unsatisfiable:
   Because @root () -> pv-both 1.0 and pv-both 1.0 -> pv-virt ∅, @root * is forbidden..
   And because root -> @root (), version solving failed.
 
   $ ../../../src/main.exe alpine BARE pv-user pv-mid | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index BARE
-  cone: 9 packages, 4 provides entries, 1 install_if rules
+  index BARE: 9 packages, 4 provides entries, 1 install_if rules
   unsatisfiable:
   Because @root () -> pv-user 1.0 and pv-user 1.0 -> pv-virt ∅, @root * is forbidden..
   And because root -> @root (), version solving failed.
 
   $ ../../../src/main.exe alpine BARE al-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index BARE
-  cone: 9 packages, 4 provides entries, 1 install_if rules
+  index BARE: 9 packages, 4 provides entries, 1 install_if rules
   unsatisfiable:
   Because @root () -> al-user 1.0 and al-user 1.0 -> al-virt ∅, @root * is forbidden..
   And because root -> @root (), version solving failed.
 
   $ ../../../src/main.exe alpine BARE ii-anchor ii-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index BARE
-  cone: 9 packages, 4 provides entries, 1 install_if rules
+  index BARE: 9 packages, 4 provides entries, 1 install_if rules
   unsatisfiable:
   Because @root () -> ii-user 1.0 and ii-user 1.0 -> ii-virt ∅, @root * is forbidden..
   And because root -> @root (), version solving failed.
@@ -147,8 +134,7 @@ ru-virt, and ru-app needs ru-lo directly and ru-virt through ru-user, so
 apk keeps ru-lo for ru-virt and never adds ru-hi despite its higher k:
 
   $ ../../../src/main.exe alpine REUSE ru-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index REUSE
-  cone: 10 packages, 6 provides entries, 0 install_if rules
+  index REUSE: 10 packages, 6 provides entries, 0 install_if rules
   packages (3):
     ru-app 1.0
     ru-lo 1.0
@@ -159,8 +145,7 @@ and the same when the owner arrives only several steps below the
 dependency on the virtual name:
 
   $ ../../../src/main.exe alpine REUSE ru-virt ru-deep | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index REUSE
-  cone: 10 packages, 6 provides entries, 0 install_if rules
+  index REUSE: 10 packages, 6 provides entries, 0 install_if rules
   packages (3):
     ru-deep 1.0
     ru-lo 1.0
@@ -168,8 +153,7 @@ dependency on the virtual name:
   encoded solution: 5 core nodes (4 Alpine packages encoded)
 
   $ ../../../src/main.exe alpine REUSE ru-user ru-deep | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index REUSE
-  cone: 10 packages, 6 provides entries, 0 install_if rules
+  index REUSE: 10 packages, 6 provides entries, 0 install_if rules
   packages (4):
     ru-deep 1.0
     ru-lo 1.0
@@ -180,8 +164,7 @@ dependency on the virtual name:
 With no owner already there, k: still decides:
 
   $ ../../../src/main.exe alpine REUSE ru-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index REUSE
-  cone: 10 packages, 6 provides entries, 0 install_if rules
+  index REUSE: 10 packages, 6 provides entries, 0 install_if rules
   packages (2):
     ru-hi 1.0
     ru-user 1.0
@@ -194,15 +177,13 @@ provider list gets its order.  So tie-a beats tie-b, and tie2-b, listed
 first, beats tie2-a:
 
   $ ../../../src/main.exe alpine REUSE tie-cmd | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index REUSE
-  cone: 10 packages, 6 provides entries, 0 install_if rules
+  index REUSE: 10 packages, 6 provides entries, 0 install_if rules
   packages (1):
     tie-a 1.0
   encoded solution: 3 core nodes (4 Alpine packages encoded)
 
   $ ../../../src/main.exe alpine REUSE tie2-cmd | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index REUSE
-  cone: 10 packages, 6 provides entries, 0 install_if rules
+  index REUSE: 10 packages, 6 provides entries, 0 install_if rules
   packages (1):
     tie2-b 1.0
   encoded solution: 3 core nodes (4 Alpine packages encoded)
@@ -214,8 +195,7 @@ lua5.1-lyaml needs lua5.1, and dmvpn needs lua5.2.  apk installs no other
 lua:
 
   $ ../../../src/main.exe alpine LUA lua5.1-lyaml | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index LUA
-  cone: 81 packages, 219 provides entries, 11 install_if rules
+  index LUA: 81 packages, 219 provides entries, 11 install_if rules
   packages (7):
     lua-stdlib-debug 1.0.1-r1
     lua-stdlib-normalize 2.0.3-r1
@@ -238,8 +218,7 @@ does not exclude, or absent -- here ⊥ alone.  Nothing hangs on negb's side,
 so the order in which the two are decided cannot lose it:
 
   $ ../../../src/main.exe alpine NEGDEP negc negb=1.0 | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index NEGDEP
-  cone: 4 packages, 0 provides entries, 0 install_if rules
+  index NEGDEP: 4 packages, 0 provides entries, 0 install_if rules
   unsatisfiable:
   Because negc 1.0 -> nega 1.0 and nega 1.0 -> negb ⊥, negc (-∞, ⊥) requires negb ⊥.
   And because @root () -> negb 1.0, negc (-∞, ⊥) or @root * is forbidden.
@@ -249,8 +228,7 @@ A name only a negated requirement reaches is left absent rather than
 installed: ⊥ is the greatest version, and PubGrub decides the greatest:
 
   $ ../../../src/main.exe alpine NEGDEP negc | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index NEGDEP
-  cone: 4 packages, 0 provides entries, 0 install_if rules
+  index NEGDEP: 4 packages, 0 provides entries, 0 install_if rules
   packages (2):
     nega 1.0
     negc 1.0
@@ -265,8 +243,7 @@ since apk reaches a rule only from an installed package that bears or
 provides one of its conditions' names:
 
   $ ../../../src/main.exe alpine NEGIIF ni-a | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index NEGIIF
-  cone: 9 packages, 3 provides entries, 4 install_if rules
+  index NEGIIF: 9 packages, 3 provides entries, 4 install_if rules
   packages (4):
     ni-a 1.0
     ni-lt 1.0
@@ -278,8 +255,7 @@ Requiring ni-b falsifies !ni-b.  apk takes the alias ni-alias for it, at
 3.0, which !ni-b<2 does not exclude, so ni-lt still fires:
 
   $ ../../../src/main.exe alpine NEGIIF ni-a ni-b | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index NEGIIF
-  cone: 9 packages, 3 provides entries, 4 install_if rules
+  index NEGIIF: 9 packages, 3 provides entries, 4 install_if rules
   packages (4):
     ni-a 1.0
     ni-alias 1.0
@@ -290,8 +266,7 @@ Requiring ni-b falsifies !ni-b.  apk takes the alias ni-alias for it, at
 and ni-b 1.0 falsifies both:
 
   $ ../../../src/main.exe alpine NEGIIF ni-a 'ni-b<2' | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index NEGIIF
-  cone: 9 packages, 3 provides entries, 4 install_if rules
+  index NEGIIF: 9 packages, 3 provides entries, 4 install_if rules
   packages (3):
     ni-a 1.0
     ni-b 1.0
@@ -305,8 +280,7 @@ bv-virt>=1, in every place an atom is read.  bv-prov provides bv-virt
 bare, with k:, and so meets bv-lt's requirement:
 
   $ ../../../src/main.exe alpine BAREVER bv-lt | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index BAREVER
-  cone: 8 packages, 1 provides entries, 3 install_if rules
+  index BAREVER: 8 packages, 1 provides entries, 3 install_if rules
   packages (2):
     bv-lt 1.0
     bv-prov 1.0
@@ -315,8 +289,7 @@ bare, with k:, and so meets bv-lt's requirement:
 and not bv-ge's:
 
   $ ../../../src/main.exe alpine BAREVER bv-ge | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index BAREVER
-  cone: 8 packages, 1 provides entries, 3 install_if rules
+  index BAREVER: 8 packages, 1 provides entries, 3 install_if rules
   unsatisfiable:
   Because @root () -> bv-ge 1.0 and bv-ge 1.0 -> bv-virt ∅, @root * is forbidden..
   And because root -> @root (), version solving failed.
@@ -324,8 +297,7 @@ and not bv-ge's:
 It falsifies the conflict !bv-virt<2:
 
   $ ../../../src/main.exe alpine BAREVER bv-no bv-prov | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index BAREVER
-  cone: 8 packages, 1 provides entries, 3 install_if rules
+  index BAREVER: 8 packages, 1 provides entries, 3 install_if rules
   unsatisfiable:
   Because bv-no 1.0 -> bv-prov ⊥ and @root () -> bv-no 1.0, @root * requires bv-prov ⊥.
   And because @root () -> bv-prov 1.0 and root -> @root (), version solving failed.
@@ -334,8 +306,7 @@ With bv-anc it fires the install-if rule on bv-virt<2, and neither the one
 on !bv-virt<2 nor the one on bv-virt>=1:
 
   $ ../../../src/main.exe alpine BAREVER bv-anc bv-prov | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index BAREVER
-  cone: 8 packages, 1 provides entries, 3 install_if rules
+  index BAREVER: 8 packages, 1 provides entries, 3 install_if rules
   packages (3):
     bv-anc 1.0
     bv-iif 1.0
@@ -345,8 +316,7 @@ on !bv-virt<2 nor the one on bv-virt>=1:
 It answers a constrained world entry:
 
   $ ../../../src/main.exe alpine BAREVER 'bv-virt<2' | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index BAREVER
-  cone: 8 packages, 1 provides entries, 3 install_if rules
+  index BAREVER: 8 packages, 1 provides entries, 3 install_if rules
   packages (1):
     bv-prov 1.0
   encoded solution: 3 core nodes (2 Alpine packages encoded)
@@ -354,10 +324,70 @@ It answers a constrained world entry:
 And in NEGIIF the bare provider ni-virt falsifies ni-lt's !ni-b<2:
 
   $ ../../../src/main.exe alpine NEGIIF ni-a ni-virt | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  index NEGIIF
-  cone: 9 packages, 3 provides entries, 4 install_if rules
+  index NEGIIF: 9 packages, 3 provides entries, 4 install_if rules
   packages (3):
     ni-a 1.0
     ni-self 1.0
     ni-virt 1.0
   encoded solution: 9 core nodes (4 Alpine packages encoded)
+
+The index is read as apk_pkgtmpl_add_info reads it.  A D: atom apk cannot
+parse, here one with a tag, or one whose version is not a version, makes
+the package uninstallable:
+
+  $ ../../../src/main.exe alpine PARSE pr-bad | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index PARSE: 7 packages, 1 provides entries, 0 install_if rules
+  parser dropped 4 declarations
+  unsatisfiable:
+  Because @root () -> pr-bad ∅ and root -> @root (), version solving failed..
+
+  $ ../../../src/main.exe alpine PARSE pr-badver | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index PARSE: 7 packages, 1 provides entries, 0 install_if rules
+  parser dropped 4 declarations
+  unsatisfiable:
+  Because @root () -> pr-badver ∅ and root -> @root (), version solving failed..
+
+Any run of < > = ~ is an operator, the bit-OR of its characters, so == is =:
+
+  $ ../../../src/main.exe alpine PARSE pr-eq | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index PARSE: 7 packages, 1 provides entries, 0 install_if rules
+  parser dropped 4 declarations
+  packages (2):
+    pr-eq 1.0
+    pr-lib 1.0
+  encoded solution: 3 core nodes (3 Alpine packages encoded)
+
+An i: atom apk cannot parse drops the whole rule, so pr-iif is never
+triggered:
+
+  $ ../../../src/main.exe alpine PARSE pr-trig | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index PARSE: 7 packages, 1 provides entries, 0 install_if rules
+  parser dropped 4 declarations
+  packages (1):
+    pr-trig 1.0
+  encoded solution: 2 core nodes (2 Alpine packages encoded)
+
+An index skips the installed-db fields F M R Z:
+
+  $ ../../../src/main.exe alpine PARSE pr-files | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index PARSE: 7 packages, 1 provides entries, 0 install_if rules
+  parser dropped 4 declarations
+  packages (1):
+    pr-files 1.0
+  encoded solution: 2 core nodes (2 Alpine packages encoded)
+
+And a p: atom apk cannot parse ends the provides, so pr-provs provides
+pr-pa and not pr-pc:
+
+  $ ../../../src/main.exe alpine PARSE pr-pa | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index PARSE: 7 packages, 1 provides entries, 0 install_if rules
+  parser dropped 4 declarations
+  packages (1):
+    pr-provs 1.0
+  encoded solution: 3 core nodes (3 Alpine packages encoded)
+
+  $ ../../../src/main.exe alpine PARSE pr-pc | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index PARSE: 7 packages, 1 provides entries, 0 install_if rules
+  parser dropped 4 declarations
+  unsatisfiable:
+  Because @root () -> pr-pc ∅ and root -> @root (), version solving failed..

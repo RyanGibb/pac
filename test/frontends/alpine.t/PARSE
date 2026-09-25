@@ -1,0 +1,44 @@
+P:pr-lib
+V:1.0
+A:x86_64
+
+P:pr-lib
+V:2.0
+A:x86_64
+
+P:pr-bad
+V:1.0
+A:x86_64
+D:pr-lib pr-x@tag
+
+P:pr-badver
+V:1.0
+A:x86_64
+D:pr-lib>=1.0bc
+
+P:pr-eq
+V:1.0
+A:x86_64
+D:pr-lib==1.0
+
+P:pr-trig
+V:1.0
+A:x86_64
+
+P:pr-iif
+V:1.0
+A:x86_64
+i:pr-trig pr-y@tag
+
+P:pr-files
+V:1.0
+A:x86_64
+F:usr/bin
+R:pr-files
+Z:Q1Io65EOU4TZIqoCav8tqwhqq2RPM=
+
+P:pr-provs
+V:1.0
+A:x86_64
+p:pr-pa=1.0 pr-pb>= pr-pc=1.0
+

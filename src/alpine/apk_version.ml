@@ -194,20 +194,20 @@ let hash_match (_v : string) (_digest : string) = false
 
 type op = Eq | Lt | Gt | Le | Ge | Fuzzy | Gt_fuzzy | Lt_fuzzy | Hash
 
-(* apk_version_result_mask_blob bit-ORs the operator characters, so <>
-   and >< are one operator, and =~ is ~.  apk also accepts runs such as
-   == or << that this table rejects. *)
-let op_of_string = function
-  | "=" -> Some Eq
-  | "<" -> Some Lt
-  | ">" -> Some Gt
-  | "<=" | "=<" -> Some Le
-  | ">=" | "=>" -> Some Ge
-  | "~" | "=~" | "~=" -> Some Fuzzy
-  | ">~" | ">=~" | "~>=" | "=>~" | "~>" -> Some Gt_fuzzy
-  | "<~" | "<=~" | "~<=" | "=<~" | "~<" -> Some Lt_fuzzy
-  | "><" | "<>" -> Some Hash
-  | _ -> None
+(* apk_version_result_mask_blob bit-ORs the operator characters, so any
+   run of them is an operator: <> and >< are one, =~ and == are ~ and =.
+   None is a run holding both < and > and = (or ~), a mask apk_version_match
+   takes as every version. *)
+let op_of_string s =
+  let has c = String.contains s c in
+  let lt = has '<' and gt = has '>' and fz = has '~' in
+  let eq = has '=' || fz in
+  match (lt, gt, eq) with
+  | true, true, true -> None
+  | true, true, false -> Some Hash
+  | true, false, _ -> Some (if fz then Lt_fuzzy else if eq then Le else Lt)
+  | false, true, _ -> Some (if fz then Gt_fuzzy else if eq then Ge else Gt)
+  | false, false, _ -> Some (if fz then Fuzzy else Eq)
 
 let matches v o c =
   match o with

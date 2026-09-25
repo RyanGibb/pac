@@ -28,7 +28,7 @@ let debian_cmd =
     Arg.(
       value & flag
       & info [ "apt-heap" ]
-          ~doc:"Replay apt's work-heap scheduling for exact correspondence.")
+          ~doc:"Replay apt's work-heap scheduling for closer correspondence.")
   in
   (* the same opt-out apt-get spells for APT::Solver::Strict-Pinning *)
   let no_strict =
@@ -54,7 +54,8 @@ let debian_cmd =
           ~doc:
             "Packages to install, as $(b,apt-get install) takes them: \
              $(b,NAME[:ARCH]), optionally with $(b,=VERSION) or \
-             $(b,/RELEASE).")
+             $(b,/RELEASE); no Release file is read, so of releases only \
+             $(b,*) matches.")
   in
   let path =
     Arg.(
@@ -113,7 +114,7 @@ let opam_cmd =
       value & flag
       & info [ "0install-order" ]
           ~doc:
-            "Replay builtin-0install's decision order for exact \
+            "Replay builtin-0install's decision order for closer \
              correspondence.")
   in
   (* the flags opam install itself has for enabling dependencies, and only
@@ -335,8 +336,7 @@ let alpine_run debug path goals =
   let ar = Apk_solve.load_index path in
   let t1 = Unix.gettimeofday () in
   Printf.printf
-    "index %s\n\
-     cone: %d packages, %d provides entries, %d install_if rules\n\
+    "index %s: %d packages, %d provides entries, %d install_if rules\n\
      parse %.2fs\n\
      %!"
     path ar.Apk_solve.n_pkgs ar.Apk_solve.n_provs ar.Apk_solve.n_iif (t1 -. t0);
@@ -539,10 +539,10 @@ let npm_cmd =
       non_empty & pos_all string []
       & info [] ~docv:"QUERY"
           ~doc:
-            "What $(b,npm install) takes: the path of a project's \
-             package.json, and specs to add to it (name, name@range, \
-             name@tag, key@npm:name@range); with no path, the project is \
-             empty.")
+            "What $(b,npm install) takes, though a project is named by the \
+             path of its package.json, not its directory: that path, and \
+             specs to add to it (name, name@range, name@tag, \
+             key@npm:name@range); with no path, the project is empty.")
   in
   Cmd.v
     (Cmd.info "npm" ~doc:"Solve against the npm registry.")

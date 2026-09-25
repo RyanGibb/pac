@@ -29,10 +29,12 @@ let rejected = ref 0
 let reject () = incr rejected
 
 (* apk_dep_parse: [!]name[op ver], where the operator run is any of
-   < > = ~ and the name is everything before it. *)
+   < > = ~ and the name is everything before it.  None is an atom
+   apk_blob_pull_dep fails on; the flag is false where it marks the atom
+   broken instead, its version not one apk_version_validate accepts. *)
 let comparer c = c = '<' || c = '>' || c = '=' || c = '~'
 
-let parse_atom (tok : string) : dep option =
+let parse_atom (tok : string) : (dep * bool) option =
   let neg = String.length tok > 0 && tok.[0] = '!' in
   let s = if neg then String.sub tok 1 (String.length tok - 1) else tok in
   let len = String.length s in
@@ -44,7 +46,7 @@ let parse_atom (tok : string) : dep option =
     while !i < len && not (comparer s.[!i]) do
       incr i
     done;
-    if !i = len then Some { d_neg = neg; d_name = s; d_constr = Any }
+    if !i = len then Some ({ d_neg = neg; d_name = s; d_constr = Any }, true)
     else
       let j = ref !i in
       while !j < len && comparer s.[!j] do
@@ -53,40 +55,48 @@ let parse_atom (tok : string) : dep option =
       let n = String.sub s 0 !i in
       let opstr = String.sub s !i (!j - !i) in
       let ver = String.sub s !j (len - !j) in
-      if n = "" then None
+      if n = "" || ver = "" then None
       else
+        let d c = { d_neg = neg; d_name = n; d_constr = c } in
+        (* a mask holding both < and > is exempt from the version check *)
         match Apk_version.op_of_string opstr with
-        | None -> None
-        | Some o -> Some { d_neg = neg; d_name = n; d_constr = Op (o, ver) }
+        | None -> Some (d Any, true)
+        | Some Apk_version.Hash -> Some (d (Op (Apk_version.Hash, ver)), true)
+        | Some o -> Some (d (Op (o, ver)), Apk_version.validate ver)
 
 (* Only space and newline separate dependency atoms; a tab does not. *)
 let split_deps (v : string) : string list =
   String.split_on_char ' ' v |> List.filter (fun s -> s <> "")
 
-let parse_deps (v : string) : dep list =
-  List.filter_map
-    (fun tok ->
-      match parse_atom tok with
-      | Some d -> Some d
-      | None ->
-          reject ();
-          None)
-    (split_deps v)
+(* None where apk_blob_pull_deps fails, which for D: makes the package
+   uninstallable and for i: drops the whole rule *)
+let parse_deps (v : string) : dep list option =
+  let ds = List.map parse_atom (split_deps v) in
+  if List.for_all (function Some (_, ok) -> ok | None -> false) ds then
+    Some (List.map (fun a -> fst (Option.get a)) ds)
+  else None
 
+(* apk keeps the provides before an atom it fails on and drops the rest *)
 let parse_provs (v : string) : prov list =
-  List.filter_map
-    (fun tok ->
-      match parse_atom tok with
-      | Some { d_name; d_constr = Any; _ } ->
-          Some { p_name = d_name; p_ver = None }
-      | Some { d_name; d_constr = Op (Apk_version.Eq, ver); _ } ->
-          Some { p_name = d_name; p_ver = Some ver }
-      | _ ->
-          (* apk only ever emits = in p:, and the calculus has no room
-             for an inequality-constrained alias *)
-          reject ();
-          None)
-    (split_deps v)
+  let rec go = function
+    | [] -> []
+    | tok :: rest -> (
+        match parse_atom tok with
+        | None ->
+            reject ();
+            []
+        | Some ({ d_name; d_constr = Any; _ }, _)
+          when not (String.exists comparer tok) ->
+            { p_name = d_name; p_ver = None } :: go rest
+        | Some ({ d_name; d_constr = Op (Apk_version.Eq, ver); _ }, _) ->
+            { p_name = d_name; p_ver = Some ver } :: go rest
+        | Some _ ->
+            (* apk only ever emits = in p:, and the calculus has no room
+               for an inequality-constrained alias *)
+            reject ();
+            go rest)
+  in
+  go (split_deps v)
 
 type acc = {
   mutable a_name : string option;
@@ -162,19 +172,26 @@ let parse_file (path : string) : pkg list =
          | 'A' -> a.a_arch <- v
          | 'C' -> a.a_digest <- v
          | 'o' -> a.a_origin <- v
-         (* apk makes a package with a bad D: atom uninstallable and
-            drops an i: rule with a bad atom whole; here only the atom
-            goes *)
-         | 'D' -> a.a_deps <- List.rev_append (parse_deps v) a.a_deps
+         | 'D' -> (
+             match parse_deps v with
+             | Some ds -> a.a_deps <- List.rev_append ds a.a_deps
+             | None -> a.a_broken <- true)
          | 'p' -> a.a_provs <- List.rev_append (parse_provs v) a.a_provs
-         | 'i' -> a.a_iif <- List.rev_append (parse_deps v) a.a_iif
+         | 'i' -> (
+             match parse_deps v with
+             | Some ds -> a.a_iif <- List.rev_append ds a.a_iif
+             | None ->
+                 reject ();
+                 a.a_iif <- [])
          | 'k' -> a.a_prio <- int_of_string_opt v
-         (* S I T U L m t c carry no instance data.  apk makes a package
-            with an unknown upper-case field uninstallable, and skips the
-            installed-db fields F M R Z in an index; this drops the
-            stanza for either.  A lower-case field is reserved for forward
-            compatibility and ignored. *)
-         | 'S' | 'I' | 'T' | 'U' | 'L' | 'm' | 't' | 'c' -> ()
+         (* S I T U L m t c carry no instance data, and apk skips the
+            installed-db fields F M R Z in an index.  apk makes a package
+            with an unknown upper-case field uninstallable, which dropping
+            the stanza reproduces.  A lower-case field is reserved for
+            forward compatibility and ignored. *)
+         | 'S' | 'I' | 'T' | 'U' | 'L' | 'm' | 't' | 'c' | 'F' | 'M' | 'R' | 'Z'
+           ->
+             ()
          | ch when ch >= 'a' && ch <= 'z' -> ()
          | _ -> a.a_broken <- true
      done
