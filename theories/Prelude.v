@@ -6,16 +6,6 @@ From Stdlib Require Import MSetList Lia.
    equivalences, and no Proper (respectfulness) side-conditions arise
    anywhere. The cost is that "sorted" needs a total order on every element
    type, including tuples, synthetic names, formulas, and sets themselves.
-
-   This file makes them cheap. There are two entrances into UsualOrderedType
-   (the stdlib's Leibniz-equality ordered interface, "UOT"): UOTFromCompare, for
-   hand-defined inductives -- supply a compare and three laws (ComparableType),
-   the functor derives the rest; and PairUOT/TripleUOT, lexicographic products
-   of existing UOTs -- which also order constructor payloads, so new inductives'
-   law proofs are one-line appeals to product facts. FSetUOT closes the loop: it
-   builds the canonical set type over any UOT and re-exports it as a UOT
-   (AsUOT), which is how sets nest inside elements of other sets.
-
    The stdlib's own compare-first path (OrderedTypeAlt) and product functors are
    unergonomic because they land in setoid equality; this file contains the
    small Leibniz-preserving replacement for that ecosystem gap. *)
@@ -349,21 +339,6 @@ Module SetSpecs (E : UsualOrderedType) (S : SetsOn E).
       S.for_all f s = true <-> forall x : E.t, S.In x s -> f x = true.
   Proof. intros f s; apply S.for_all_spec, compat. Qed.
 
-  (* Cutting a set down to s' is invisible to a test that only ever looks at
-     elements s' keeps -- the shape every lookup theorem's restriction lemma
-     has. The combinator forms live in SetOps, which knows the target set. *)
-  Lemma mem_restrict : forall (s s' : S.t) (x : E.t),
-      S.Subset s' s -> (S.In x s -> S.In x s') -> S.mem x s' = S.mem x s.
-  Proof.
-    intros s s' x Hsub Hin.
-    destruct (S.mem x s') eqn:H'; destruct (S.mem x s) eqn:H;
-      try reflexivity; exfalso.
-    - rewrite S.mem_spec in H'; apply Hsub in H'.
-      rewrite <- S.mem_spec in H'; rewrite H' in H; discriminate.
-    - rewrite S.mem_spec in H; apply Hin in H.
-      rewrite <- S.mem_spec in H; rewrite H in H'; discriminate.
-  Qed.
-
   Lemma exists_restrict : forall (f : E.t -> bool) (s s' : S.t),
       S.Subset s' s -> (forall x, S.In x s -> f x = true -> S.In x s') ->
       S.exists_ f s' = S.exists_ f s.
@@ -561,10 +536,6 @@ Module FSetUOT (X : UsualOrderedType).
   End AsUOT.
 End FSetUOT.
 
-(* A relation read as a set of directed edges from tail T to head H: the
-   functor equips it with the fibres of its tail projection -- one tail's
-   edges as a sub-relation -- which is what the lookup theorems compute
-   over. *)
 Module FibredRel (T H : UsualOrderedType)
     (* the with-constraint exposes E's pair structure, so edges of an existing
        relation can be destructured here *)
@@ -574,7 +545,6 @@ Module FibredRel (T H : UsualOrderedType)
 
   Definition tail '((q, _) : E.t) : T.t := q.
 
-  (* The fibre of p under the tail projection. *)
   Definition tailFibre (D : S.t) (p : T.t) : S.t :=
     S.filter (fun e => if T.eq_dec (tail e) p then true else false) D.
 
@@ -595,7 +565,6 @@ Module FibredRel (T H : UsualOrderedType)
 
   Definition head '((_, h) : E.t) : H.t := h.
 
-  (* The fibre of h under the head projection. *)
   Definition headFibre (D : S.t) (h : H.t) : S.t :=
     S.filter (fun e => if H.eq_dec (head e) h then true else false) D.
 
@@ -608,13 +577,6 @@ Module FibredRel (T H : UsualOrderedType)
     destruct (H.eq_dec g h); intuition congruence.
   Qed.
 
-  Lemma headFibre_subset : forall D (h : H.t), S.Subset (headFibre D h) D.
-  Proof.
-    intros D h [q g] Hin; apply mem_headFibre in Hin; destruct Hin as [Hin _];
-      exact Hin.
-  Qed.
-
-  (* The fibre of x under the identity projection. *)
   Definition idFibre (D : S.t) (x : E.t) : S.t :=
     S.filter (fun e => if E.eq_dec e x then true else false) D.
 
@@ -633,12 +595,6 @@ Module FibredRel (T H : UsualOrderedType)
   Qed.
 End FibredRel.
 
-(* The labelled reading: the head factors into a node N and a label L, so an
-   edge runs from tail T to node N with L riding along. The factoring makes
-   ends = (tail, node) coarser than the whole edge, so a second fibre exists:
-   endsFibre, the parallel edges between two endpoints differing only in
-   label, which is what the lookup theorems keyed by both endpoints compute
-   over. *)
 Module FibredLabelledRel (T N L : UsualOrderedType)
     (E : UsualOrderedType with Definition t := (T.t * (N.t * L.t))%type)
     (S : SetsOn E).
@@ -647,7 +603,6 @@ Module FibredLabelledRel (T N L : UsualOrderedType)
 
   Definition ends '((q, (m, _)) : E.t) : (T.t * N.t)%type := (q, m).
 
-  (* The fibre of (p, n) under the ends projection. *)
   Definition endsFibre (D : S.t) (p : T.t) (n : N.t) : S.t :=
     S.filter (fun e => let '(q, m) := ends e in
         if T.eq_dec q p
@@ -675,7 +630,6 @@ Module FibredLabelledRel (T N L : UsualOrderedType)
 
   Definition node '((_, (n, _)) : E.t) : N.t := n.
 
-  (* The fibre of n under the head-node projection. *)
   Definition nodeFibre (D : S.t) (n : N.t) : S.t :=
     S.filter (fun e => if N.eq_dec (node e) n then true else false) D.
 
@@ -840,44 +794,6 @@ Module SetOps (A B : UsualOrderedType) (SA : SetsOn A) (SB : SetsOn B).
       right; exists e; split; [apply elements_in; exact He | exact Hh].
   Qed.
 
-  Lemma in_fold_add :
-    forall (mk : A.t -> B.t) (s : SA.t) (i : SB.t) (y : B.t),
-      SB.In y (SA.fold (fun x acc => SB.add (mk x) acc) s i) <->
-      SB.In y i \/ exists x, SA.In x s /\ y = mk x.
-  Proof.
-    intros mk s i y.
-    rewrite (in_fold _ (fun x => SB.singleton (mk x)))
-      by (intros ? ? ?; rewrite add_in, singleton_in; tauto).
-    setoid_rewrite singleton_in; reflexivity.
-  Qed.
-
-  (* Tactic-level matching on fold guards is brittle when pair components
-     elaborate at definitionally-equal but distinct types; abstracting the
-     guard and payload keeps every match on [g x] instead. *)
-  Lemma in_guarded_fold :
-    forall (g : A.t -> bool) (mk : A.t -> B.t) (s : SA.t) (i : SB.t) (y : B.t),
-      SB.In y
-        (SA.fold (fun x acc => if g x then SB.add (mk x) acc else acc) s i)
-      <->
-      SB.In y i \/ exists x, SA.In x s /\ g x = true /\ y = mk x.
-  Proof.
-    intros g mk s i y.
-    rewrite (in_fold _
-      (fun x => if g x then SB.singleton (mk x) else SB.empty)).
-    2:{ intros x a y0; destruct (g x).
-        - rewrite add_in, singleton_in; tauto.
-        - split; [tauto | intros [H | H];
-            [exfalso; exact (empty_in _ H) | exact H]]. }
-    split.
-    - intros [H | [x [Hx Hy]]]; [left; exact H | right].
-      destruct (g x) eqn:Hg; [| exfalso; exact (empty_in _ Hy)].
-      apply singleton_in in Hy.
-      exists x; repeat split; assumption.
-    - intros [H | [x [Hx [Hg ->]]]]; [left; exact H | right].
-      exists x; rewrite Hg.
-      split; [exact Hx | exact (proj2 (singleton_in _ _) eq_refl)].
-  Qed.
-
   (* The comprehensions go through ofList/unions rather than a fold of add or
      union, so that each builds its result with one merge sort instead of n
      quadratic insertions; the specs are extensional, so nothing downstream
@@ -974,18 +890,6 @@ Module SetOps (A B : UsualOrderedType) (SA : SetsOn A) (SB : SetsOn B).
     rewrite SSA.filter_spec', SSB.exists_spec'; reflexivity.
   Qed.
 
-  (* The combinator half of the restriction kit (SetSpecs holds the mem and
-     exists_ halves): dropping source elements that contribute nothing to y
-     leaves y's membership alone. *)
-  Lemma map_restrict : forall (f : A.t -> B.t) (s s' : SA.t) (y : B.t),
-      SA.Subset s' s -> (forall x, SA.In x s -> y = f x -> SA.In x s') ->
-      (SB.In y (map f s') <-> SB.In y (map f s)).
-  Proof.
-    intros f s s' y Hsub Hkeep; rewrite !mem_map; split.
-    - intros [x [Hx ->]]; exists x; split; [exact (Hsub _ Hx) | reflexivity].
-    - intros [x [Hx Hy]]; exists x; split; [exact (Hkeep _ Hx Hy) | exact Hy].
-  Qed.
-
   Lemma filterMap_restrict : forall (f : A.t -> option B.t) (s s' : SA.t) y,
       SA.Subset s' s -> (forall x, SA.In x s -> f x = Some y -> SA.In x s') ->
       (SB.In y (filterMap f s') <-> SB.In y (filterMap f s)).
@@ -995,9 +899,6 @@ Module SetOps (A B : UsualOrderedType) (SA : SetsOn A) (SB : SetsOn B).
     - intros [x [Hx Hf]]; exists x; split; [exact (Hkeep _ Hx Hf) | exact Hf].
   Qed.
 
-  (* Decoders read a set of encoded elements back: an inverse that is defined
-     exactly on the image of an embedding turns filterMap into a membership
-     test against the embedding, and makes the embedding injective for free. *)
   Section PartialInverse.
     Variables (inv : A.t -> option B.t) (emb : B.t -> A.t).
     Hypothesis inv_emb : forall b, inv (emb b) = Some b.
@@ -1026,15 +927,5 @@ Module SetOps (A B : UsualOrderedType) (SA : SetsOn A) (SB : SetsOn B).
     intros f s x Hinj; rewrite mem_map; split.
     - intros [z [Hz Hf]]; rewrite (Hinj _ _ Hf); exact Hz.
     - intro H; exists x; split; [exact H | reflexivity].
-  Qed.
-
-  Lemma unionMap_restrict : forall (f : A.t -> SB.t) (s s' : SA.t) y,
-      SA.Subset s' s ->
-      (forall x, SA.In x s -> SB.In y (f x) -> SA.In x s') ->
-      (SB.In y (unionMap f s') <-> SB.In y (unionMap f s)).
-  Proof.
-    intros f s s' y Hsub Hkeep; rewrite !mem_unionMap; split.
-    - intros [x [Hx Hf]]; exists x; split; [exact (Hsub _ Hx) | exact Hf].
-    - intros [x [Hx Hf]]; exists x; split; [exact (Hkeep _ Hx Hf) | exact Hf].
   Qed.
 End SetOps.

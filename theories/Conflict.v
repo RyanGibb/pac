@@ -29,9 +29,6 @@ Module Conflict (N V : UsualOrderedType).
     #[local] Hint Extern 1 => cmp_by VF.compare_antisym : cmp_conf.
     #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_conf.
 
-    (* Every name gains the version Bot, "absent", ordered above every real
-       version so that a solver preferring the greatest version leaves a
-       name nobody needs positively out of the resolution. *)
     Module Version.
       Inductive version : Type :=
       | Orig (v : V.t)
@@ -62,7 +59,6 @@ Module Conflict (N V : UsualOrderedType).
     End Version.
 
     Module VersionOT := UOTFromCompare Version.
-    (* The target core: names are the source's own; only the versions grow. *)
     Module T := Core N VersionOT.
     Module NSet := FSetUOT N.
 
@@ -130,8 +126,6 @@ Module Conflict (N V : UsualOrderedType).
     Definition origEdges (D : C.DepRel.t) : T.DepRel.t :=
       SOdtd.map (fun '(p, (n, vs)) => (embedPkg p, (n, embedVS vs))) D.
 
-    (* The versions a conflict admits at its target: every real version the
-       conflict does not name, and absence. *)
     Definition admitVS (R : PkgSet.t) (n : N.t) (vs : VSet.t) : T.VSet.t :=
       T.VSet.add Version.Bot (embedVS (VSet.diff (C.versions R n) vs)).
 
@@ -284,8 +278,6 @@ Module Conflict (N V : UsualOrderedType).
         injection E as <-; exact (Hnv Hu).
     Qed.
 
-    (* The names of the instance with no version in S, which is where the
-       completeness construction places absence. *)
     Definition absentIn (S : PkgSet.t) (ns : NSet.t) : NSet.t :=
       NSet.filter
         (fun n => negb (PkgSet.exists_
@@ -420,11 +412,9 @@ Module Conflict (N V : UsualOrderedType).
         FibredLabelledRel Pkg N VSet.AsUOT ConfElt ConflictRel.
       Module RKeys := PreimageOfKeys N Pkg NSet PkgSet.
 
-      (* The repository at a set of names. *)
       Definition nameRestrict (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
         RKeys.ofKeys fst ns R.
 
-      (* The names a set of conflicts targets. *)
       Definition conflictNames (G : ConflictRel.t) : NSet.t :=
         SOcn.map (fun '(_, (n, _)) => n) G.
 
@@ -458,8 +448,6 @@ Module Conflict (N V : UsualOrderedType).
         - right; right; exists q, vs; exact HG.
       Qed.
 
-      (* A reachable name's versions are its real versions and absence:
-         the repository at the name, and nothing of who conflicts with it. *)
       Theorem versions_lookupOrig : forall R D G (r : Pkg.t) (n : N.t),
           PkgSet.In r R ->
           (exists p h, T.DepRel.In (p, (n, h)) (reduceDeps R D G)) \/
@@ -491,8 +479,6 @@ Module Conflict (N V : UsualOrderedType).
             left; exists (n, v); split; [exact Hv | reflexivity].
       Qed.
 
-      (* A package's dependees read its own dependencies and conflicts and
-         the repository at the names its conflicts target. *)
       Theorem dependees_lookupOrig : forall R D G (n : N.t) (v : V.t),
           T.dependees (reduceDeps R D G) (embedPkg (n, v)) =
           T.dependees
@@ -535,7 +521,6 @@ Module Conflict (N V : UsualOrderedType).
             reflexivity.
       Qed.
 
-      (* Absence depends on nothing. *)
       Theorem dependees_lookupAbsent : forall R D G (n : N.t),
           T.dependees (reduceDeps R D G) (n, Version.Bot) =
           T.DependeesSet.empty.

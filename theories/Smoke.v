@@ -60,8 +60,6 @@ Proof. reflexivity. Qed.
 Definition cxPhi : list Cx.ClauseOT.t :=
   ((0, true), ((1, false), (2, true))) :: nil.
 
-(* the root, both versions of each of three variables, and one version per
-   literal *)
 Example complexity_reduceReal_computes :
   Cx.Reduction.T.PkgSet.cardinal (Cx.Reduction.reduceReal cxPhi) = 10.
 Proof. reflexivity. Qed.
@@ -77,7 +75,6 @@ Definition cxR : Cx.PkgSet.t :=
 Definition cxD : Cx.C.DepRel.t :=
   Cx.C.DepRel.add ((1, 1), (2, Cx.VSet.singleton 1)) Cx.C.DepRel.empty.
 
-(* the root's clause, one dependency's, and one for the two versions of 1 *)
 Example complexity_satEncoding_computes :
   List.length (Cx.Encoding.satEncoding cxR cxD (1, 1)) = 3.
 Proof. reflexivity. Qed.
@@ -131,7 +128,6 @@ Example conflict_conflictResolution_roundtrip_computes :
     conflictR = true.
 Proof. reflexivity. Qed.
 
-(* three real packages and the absent version of each of the two names *)
 Example conflict_reduceReal_computes :
   Cfl.Reduction.T.PkgSet.cardinal
     (Cfl.Reduction.reduceReal conflictR Cfl.C.DepRel.empty
@@ -139,7 +135,6 @@ Example conflict_reduceReal_computes :
           Cfl.ConflictRel.empty)) = 5.
 Proof. reflexivity. Qed.
 
-(* Three packages in class 0, two of them versions of name 1. *)
 Definition clsR : Cls.PkgSet.t :=
   Cls.PkgSet.add (1, 10)
     (Cls.PkgSet.add (1, 11) (Cls.PkgSet.add (2, 20) Cls.PkgSet.empty)).
@@ -149,8 +144,6 @@ Definition clsOm : Cls.InClassRel.t :=
     (Cls.InClassRel.add ((1, 11), 0)
        (Cls.InClassRel.add ((2, 20), 0) Cls.InClassRel.empty)).
 
-(* Different names, so it is class exclusion and not version uniqueness
-   that refuses the two together. *)
 Example conflictClass_excludes :
   ~ Cls.ClassExclusion clsOm
       (Cls.PkgSet.add (1, 10) (Cls.PkgSet.add (2, 20) Cls.PkgSet.empty)).
@@ -163,8 +156,6 @@ Proof.
   discriminate E.
 Qed.
 
-(* In the reduction the same two are refused by version uniqueness on <0>,
-   which each depends on at its own name. *)
 Example conflictClass_reduction_excludes :
   forall S,
     Cls.Reduction.T.IsResolution (Cls.Reduction.reduceReal clsR clsOm)
@@ -183,7 +174,6 @@ Proof.
   discriminate (Huniq _ _ _ Hwr Hwq).
 Qed.
 
-(* Two names, though three packages. *)
 Example conflictClass_reduceReal_computes :
   Cls.Reduction.T.VSet.cardinal
     (Cls.Reduction.T.versions (Cls.Reduction.reduceReal clsR clsOm)
@@ -204,7 +194,6 @@ Definition debD : Deb.Deps.t :=
   Deb.Deps.add ((1, 10), ((1, Deb.Ver.FTop) :: nil))
     Deb.Deps.empty.
 
-(* one recommends clause on (1, 10), naming a package that does not exist *)
 Definition debRec : Deb.Deps.t :=
   Deb.Deps.add ((1, 10), ((2, Deb.Ver.FTop) :: nil))
     Deb.Deps.empty.
@@ -221,7 +210,6 @@ Example debian_dependees_computes :
        (Deb.Name.Orig 1, Deb.Version.Orig 10)) = 1.
 Proof. reflexivity. Qed.
 
-(* the alternative plus the escape, even though nothing can satisfy it *)
 Example debian_soft_vers_computes :
   Deb.T.VSet.cardinal
     (Deb.versions debR debD debRec Deb.Prov.empty Deb.Conf.empty
@@ -248,8 +236,6 @@ Example debianMA_reduceConf_computes :
     (DMA.reduceConf maR DMA.Conf.empty DMA.Cls.empty) = 2.
 Proof. reflexivity. Qed.
 
-(* One private dependency, so (1, 1) introduces its own subgraph: two
-   occurrences, one intermediate and one agreement. *)
 Definition visR : Vis.PkgSet.t :=
   Vis.PkgSet.add (1, 1) (Vis.PkgSet.add (2, 1) Vis.PkgSet.empty).
 
@@ -283,9 +269,6 @@ Definition opRho : Op.Valuation := fun _ => Some 1.
 Definition opRepo : Op.PkgSet.t :=
   Op.PkgSet.add (1, 10) (Op.PkgSet.add (2, 20) Op.PkgSet.empty).
 
-(* (1,10) depends on name 2 at >= 15 gated on a variable comparison that
-   holds under opRho; (2,20) carries a depext on system package 7; the
-   goal wants name 1 and the invariant is gated away entirely. *)
 Definition opInst : Op.Inst :=
   Op.MkInst opRepo
     (((1, 10),
@@ -309,8 +292,6 @@ Example opam_transD_computes :
     (Op.Reduction.transD opRho opInst) = 2.
 Proof. reflexivity. Qed.
 
-(* The depext entry of (2,20) reaches no formula; it is read off the
-   resolution instead. *)
 Example opam_depexts_computes :
   Op.ESet.elements
     (Op.depextsOf opRho opInst (Op.PkgSet.add (2, 20) Op.PkgSet.empty))
@@ -322,8 +303,6 @@ Example opam_depexts_unselected :
   = Op.ESet.empty.
 Proof. reflexivity. Qed.
 
-(* Odd versions code prereleases of the release v / 2, so that the
-   admission rule is exercised and not just the ordering. *)
 Module CgoVM <: SemverMatch Nat_as_OT.
   Definition isPre (v : nat) : bool := Nat.odd v.
   Definition sameCore (a b : nat) : bool :=
@@ -345,7 +324,6 @@ Example cargo_evalReq_computes :
        Cgo.PkgSet.empty)) 0 cgoAny) = 2.
 Proof. reflexivity. Qed.
 
-(* A requirement that names no prerelease admits none. *)
 Example cargo_prerelease_excluded :
   Cgo.VSet.elements
     (Cgo.evalReq (Cgo.PkgSet.add (0, 4) (Cgo.PkgSet.add (0, 5)
@@ -358,8 +336,6 @@ Example cargo_prerelease_admitted :
        Cgo.PkgSet.empty)) 0 ((Cgo.COp OpGe 5 :: nil) :: nil)) = 5 :: nil.
 Proof. reflexivity. Qed.
 
-(* The whole repository of a crate name is still every version of it,
-   prereleases included. *)
 Example cargo_srcVersions_computes :
   Cgo.VSet.cardinal
     (Cgo.srcVersions (Cgo.PkgSet.add (0, 4) (Cgo.PkgSet.add (0, 5)

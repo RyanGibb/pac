@@ -4,11 +4,6 @@ From PackageCalculus Require Import Prelude Core Versions.
 Create HintDb cmp_deb.
 Create Rewrite HintDb cmp_deb.
 
-(* Name grouping: a decidable equivalence coarser than name equality,
-   exempting a conflict owner's whole group from its conflicts, real and
-   provided matches alike (apt's IsIgnorable, pkgcache.cc:757-790, exempts
-   real ones only for M-A: same). The trivial instance groups nothing
-   beyond equality. *)
 Module Type NameGroup (N : UsualOrderedType).
   Parameter groupEq : N.t -> N.t -> bool.
   Axiom groupEq_refl : forall n, groupEq n n = true.
@@ -53,8 +48,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Module PkgSet := C.PkgSet.
   Module VSet := C.VSet.
 
-  (* Pointwise Formula satisfaction v |= phi; Ver.eval is its edge-wise
-     form over Ver.realVersions. *)
   Fixpoint vfHolds (f : Ver.Formula) (v : V.t) : bool :=
     match f with
     | Ver.FTop => true
@@ -92,7 +85,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   End DTComp.
 
   Module FEqb := UOTEqb Ver.FOT.
-  (* A provider's top version satisfies only the unconstrained Formula. *)
   Definition vtMatchb (vt : DTop) (f : Ver.Formula) : bool :=
     match vt with
     | DTVal v => vfHolds f v
@@ -105,11 +97,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Definition aform (a : Atom.t) : Ver.Formula := snd a.
 
   Module AtomSet := FSetUOT Atom.
-  (* A clause keeps its alternatives in the field's order, because the
-     disjunct it names is keyed by the clause: two clauses listing the same
-     alternatives in two orders are then two packages, each with its own
-     leftmost for a solver that prefers it.  What a resolution reads of a
-     clause is only which alternatives it has. *)
   Module Clause := ListUOT Atom.
   Definition clauseAtoms (A : Clause.t) : AtomSet.t := AtomSet.ofList A.
 
@@ -125,8 +112,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Module ProvElt := PairUOT Pkg Provided.
   Module Prov := FSetUOT ProvElt.
 
-  (* Conflict entries carry an exemption flag: true exempts the owner's
-     whole name group from the conflict; implicit entries use false. *)
   Module Conflictees := PairUOT Atom BoolOT.
   Module ConfElt := PairUOT Pkg Conflictees.
   Module Conf := FSetUOT ConfElt.
@@ -205,11 +190,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Inductive name : Type :=
     | Orig (n : N.t)
     | Disjunct (A : Clause.t)
-    (* a recommends clause: its alternatives as for Disjunct, and an escape
-       version besides, so that the clause is discharged either way and
-       constrains nothing.  Kept apart from Disjunct because the two are
-       content-keyed by the same clause, and one clause may be a Depends
-       of one package and a Recommends of another. *)
     | Soft (A : Clause.t)
     | Selector (a : Atom.t).
     Definition t := name.
@@ -248,15 +228,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     | Orig (v : V.t)
     | Atom (a : Atom.t)
     | Ref (m : N.t) (w : V.t)
-    (* a candidate whose name is necessarily the selector's own: carrying no
-       name is what makes "this one is the real package, not an alias
-       claiming its name" unforgeable, and so visible to a comparator that
-       sees versions and never the name they hang under *)
     | RefReal (w : V.t)
     | Zero
-    (* absence: every original name has it, and it is the greatest version,
-       so a solver preferring the greatest leaves a name nobody needs
-       positively out of the resolution *)
     | Bot.
     Definition t := version.
 
@@ -341,9 +314,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     SOpin.map (fun '(q, _) => fst q) Pi.
 
   Module SOrn := SetOps Pkg N PkgSet NSet.
-  (* Every name of the instance -- with a version, mentioned by a clause,
-     providing something, or named by a conflict -- has the absent
-     version. *)
   Definition instNames (R : PkgSet.t) (D Rec : Deps.t) (Pi : Prov.t)
       (G : Conf.t) : NSet.t :=
     NSet.union (SOrn.map fst R)
@@ -355,8 +325,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Definition versionsDisj (A : Clause.t) : T.VSet.t :=
     SOaw.map (fun a => Version.Atom a) (clauseAtoms A).
 
-  (* the escape: a candidate of the soft disjunct that discharges nothing,
-     so the clause is always satisfiable and constrains nothing *)
   Definition versionsSoft (A : Clause.t) : T.VSet.t :=
     T.VSet.add Version.Zero (versionsDisj A).
 
@@ -367,33 +335,21 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Definition occursAtomb (D : Deps.t) (a : Atom.t) : bool :=
     Deps.exists_ (fun '(_, A) => AtomSet.mem a (clauseAtoms A)) D.
 
-  (* An atom's selector is introduced from its Depends and its Recommends
-     occurrences alike: a recommended alternative needs the same provider
-     fan-out to reach, and a candidate nothing is forced to pick constrains
-     nothing. *)
   Definition allClauses (D Rec : Deps.t) : Deps.t := Deps.union D Rec.
 
   Definition exemptb (x : bool) (m n : N.t) : bool :=
     andb x (NG.groupEq m n).
 
-  (* The versions a conflict on a admits at a name that can match it: every
-     real version that does not match, and absence. *)
   Definition admitVS (R : PkgSet.t) (Pi : Prov.t) (a : Atom.t) (qn : N.t)
     : T.VSet.t :=
     T.VSet.add Version.Bot
       (embedVS (VSet.filter (fun u => negb (matchb Pi (qn, u) a))
                   (Ver.realVersions R qn))).
 
-  (* The names some real package matching a bears: the atom's own name, and
-     the names of its providers. *)
   Definition confNames (R : PkgSet.t) (Pi : Prov.t) (a : Atom.t) : NSet.t :=
     SOrn.filterMap (fun q => if matchb Pi q a then Some (fst q) else None) R.
 
   Module SOnd := SetOps N T.Dependees NSet T.DependeesSet.
-  (* A conflict declared by p on a: one edge per name that can match a,
-     admitting the non-matching versions and absence.  The declarer's own
-     name is exempt, version uniqueness excluding its other versions
-     anyway, and so is its name group when the entry says so. *)
   Definition confEdges (R : PkgSet.t) (Pi : Prov.t) (p : Pkg.t) (a : Atom.t)
       (x : bool) : T.DependeesSet.t :=
     SOnd.filterMap
@@ -412,8 +368,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     | Name.Disjunct A =>
         if andb (hasClauseb D A) (2 <=? AtomSet.cardinal (clauseAtoms A))
         then versionsDisj A else T.VSet.empty
-    (* no cardinality test, unlike Disjunct: a one-alternative Recommends
-       still needs its escape, which is the whole of the soft disjunct *)
     | Name.Soft A =>
         if hasClauseb Rec A then versionsSoft A else T.VSet.empty
     | Name.Selector a =>
@@ -439,8 +393,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
                else None)
              D)
           (T.DependeesSet.union
-             (* the edge offers the escape alongside the alternatives, so the
-                clause is dischargeable whatever else is installed *)
              (SOde.filterMap (fun c =>
                   if Pkg.eq_dec (fst c) (n, v)
                   then Some (Name.Soft (snd c), versionsSoft (snd c))
@@ -457,9 +409,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
                 (AtomSet.mem a (clauseAtoms A)))
         then T.DependeesSet.singleton (tgt R Pi a)
         else T.DependeesSet.empty
-    (* the escape (Name.Soft A, Version.Zero) falls through to the empty
-       catch-all: picking it discharges nothing, which is what makes the
-       clause free *)
     | (Name.Soft A, Version.Atom a) =>
         if andb (hasClauseb Rec A) (AtomSet.mem a (clauseAtoms A))
         then T.DependeesSet.singleton (tgt R Pi a)
@@ -470,9 +419,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         then T.DependeesSet.singleton
                (Name.Orig m, T.VSet.singleton (Version.Orig w))
         else T.DependeesSet.empty
-    (* the back edge to a real candidate needs its name, and the constructor
-       does not carry one -- it does not have to, since the selector it hangs
-       under is the only name it could have had *)
     | (Name.Selector a, Version.RefReal w) =>
         if andb (occursAtomb (allClauses D Rec) a)
              (andb (provb Pi a) (T.VSet.mem (Version.RefReal w) (us R Pi a)))
@@ -651,14 +597,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       reflexivity.
   Qed.
 
-  Lemma exemptb_iff : forall x (m n : N.t),
-      exemptb x m n = false <-> (x = true -> NG.groupEq m n = false).
-  Proof.
-    intros x m n; unfold exemptb; destruct x; cbn [andb].
-    - split; [intros H _; exact H | intro H; exact (H eq_refl)].
-    - split; [intros _ H; discriminate H | intros _; reflexivity].
-  Qed.
-
   Lemma mem_clauseNames : forall A (n : N.t),
       NSet.In n (clauseNames A) <-> exists f, AtomSet.In (n, f) (clauseAtoms A).
   Proof.
@@ -678,18 +616,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     split.
     - intros [[q A] [Hc Hn]]; exists q, A; split; assumption.
     - intros [q [A [Hc Hn]]]; exists (q, A); split; assumption.
-  Qed.
-
-  Lemma mem_confTargets : forall G (n : N.t),
-      NSet.In n (confTargets G) <->
-      exists p a x, Conf.In (p, (a, x)) G /\ aname a = n.
-  Proof.
-    intros G n; unfold confTargets; rewrite SOgn.mem_map.
-    split.
-    - intros [[q [a x]] [Hg Hn]]; cbn beta iota in Hn; subst n.
-      exists q, a, x; split; [exact Hg | reflexivity].
-    - intros [q [a [x [Hg <-]]]]; exists (q, (a, x)); split;
-        [exact Hg | reflexivity].
   Qed.
 
   Lemma mem_provOwners : forall Pi (n : N.t),
@@ -1459,8 +1385,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       apply mem_debianResolution in Hp.
       apply mem_debianResolution in HqS.
       cbn [fst] in Hxq.
-      (* a conflicting package of the declarer's own name is another
-         version of it, which version uniqueness already excludes *)
       destruct (N.eq_dec qn pn) as [-> | Hne].
       { assert (E := Huniq (Name.Orig pn) (Version.Orig qv) (Version.Orig pv)
                        HqS Hp).
@@ -1505,8 +1429,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         PkgSet.exists_ (fun q => matchb Pi q a) S)
       (clauseAtoms A).
 
-  (* q satisfies a under its own name rather than through a Provides entry,
-     which is what puts it in the real branch of us. *)
   Definition rmatchb (q : Pkg.t) (a : Atom.t) : bool :=
     andb (NEqb.eqb (fst q) (aname a)) (vfHolds (aform a) (snd q)).
 
@@ -1533,17 +1455,12 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         else None)
       (clauseAtoms A).
 
-  (* the soft disjunct reaches for a satisfied alternative when S has one
-     and takes the escape otherwise: the escape is always there, so no
-     recommends clause can make the witness fail *)
   Definition cwSoft (Pi : Prov.t) (S : PkgSet.t) (A : Clause.t) : Version.t :=
     match AtomSet.min_elt (satAtoms Pi S A) with
     | Some a => Version.Atom a
     | None => Version.Zero
     end.
 
-  (* Whether a name has a version in S; the names that do not carry
-     absence in the completeness construction. *)
   Definition hasNameb (S : PkgSet.t) (n : N.t) : bool :=
     PkgSet.exists_ (fun p => if N.eq_dec (fst p) n then true else false) S.
 
@@ -1684,8 +1601,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       rewrite Hp, Hcs; reflexivity.
   Qed.
 
-  (* whatever S looks like, the soft disjunct has a version to take: that is
-     the whole conservativity claim in one line *)
   Lemma cwSoft_versionsSoft : forall Pi S A,
       T.VSet.In (cwSoft Pi S A) (versionsSoft A).
   Proof.
@@ -1926,16 +1841,12 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
                 assert (Hle := cardinal_in A aw HawA).
                 lia. }
               exists am; split; [exact Hmin | reflexivity]. }
-        (* the recommends edge: the escape is in the target set, so this
-           obligation is discharged without consulting S at all *)
         * injection Heq as -> ->.
           exists (cwSoft Pi S A); split; [apply cwSoft_versionsSoft |].
           apply mem_coreResolution.
           right; right; left.
           exists (pn, pv), A; split; [exact HA |].
           split; [apply PkgSet.mem_spec; exact HpS | reflexivity].
-        (* the conflict's edge: the target name's version in S, which
-           conflict avoidance says does not match, or absence *)
         * injection Heq as -> ->.
           destruct (hasNameb S qn) eqn:Hh.
           { apply hasNameb_true in Hh; destruct Hh as [u Hu].
@@ -1976,7 +1887,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
             [apply matchb_iff; exact Hqm | | exact Heq].
           exists cp, cA; split; [apply allClauses_inR; exact Hc |].
           split; [apply PkgSet.mem_spec; exact Hmem | exact Ha0A].
-        (* the escape has no dependees, so there is nothing to discharge *)
         * rewrite dependees_soft_escape in Hout.
           exfalso; exact (SOde.empty_in _ Hout).
       + destruct H4 as [cp [cA [Hc [Hmem [a0 [Ha0 [Hpv [w0 [Hcs ->]]]]]]]]].
@@ -2034,10 +1944,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       + injection E2 as <- ->; reflexivity.
   Qed.
 
-  (* The completeness witness puts S in the Orig block, and every other
-     package it adds carries a Disjunct/Soft/Selector name or the absent
-     version, so the decoder -- which inverts embedPkg exactly on an Orig
-     name at an Orig version -- recovers S. *)
   Corollary debianResolution_coreResolution : forall R D Rec Pi G S,
       debianResolution (coreResolution R D Rec Pi G S) = S.
   Proof.
@@ -2231,7 +2137,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       rewrite realVersions_realPreimage by exact Hm; reflexivity.
     Qed.
 
-    (* The three restriction lemmas below all read one restriction of Pi. *)
     Lemma provRestrict_sub : forall Pi ns (p : Pkg.t),
         Prov.Subset
           (Prov.union (provPreimage Pi ns) (ProvFibred.tailFibre Pi p)) Pi.
@@ -2291,27 +2196,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       reflexivity.
     Qed.
 
-    (* At package p itself, matchb only reads Pi entries whose package
-       component is p, and those survive intact in the ProvFibred.tailFibre
-       component of the union. *)
-    Lemma matchb_union_restrict : forall Pi ns (p : Pkg.t) a,
-        matchb (Prov.union (provPreimage Pi ns) (ProvFibred.tailFibre Pi p))
-          p a
-        = matchb Pi p a.
-    Proof.
-      intros Pi ns p a; unfold matchb; f_equal.
-      apply Prov.exists_restrict; [apply provRestrict_sub |].
-      intros [q [m vt]] Hin Hb; cbn [fst snd aname aform] in Hb.
-      apply andb_prop in Hb; destruct Hb as [Hq _].
-      apply PkgEqb.eqb_true_iff in Hq as ->.
-      apply Prov.union_spec; right.
-      apply ProvFibred.mem_tailFibre; split; [exact Hin | reflexivity].
-    Qed.
-
     Module DepsFibred := FibredRel Pkg Clause ClauseElt Deps.
     Module ConfFibred := FibredRel Pkg Conflictees ConfElt Conf.
-    (* A reachable name is a name of the instance: an edge targets a clause
-       atom's name, a conflict target with a real version, or a provider. *)
     Lemma reachable_instNames : forall R D Rec Pi G (n : N.t),
         (exists s h,
             T.DepRel.In (s, (Name.Orig n, h)) (reduceDeps R D Rec Pi G)) ->
@@ -2377,8 +2263,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           [right; left | right; right; left]; exact (Hclause _ _ _ _ HE Ha).
     Qed.
 
-    (* A reachable name's versions are its real versions and absence: the
-       repository at the name, and nothing of who conflicts with it. *)
     Theorem versions_lookupOrig : forall R D Rec Pi G (r : Pkg.t) (n : N.t),
         PkgSet.In r R ->
         (exists s h,
@@ -2399,13 +2283,10 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         [reflexivity | symmetry; apply NSet.mem_spec; exact Hn].
     Qed.
 
-    (* Absence depends on nothing. *)
     Theorem dependees_lookupAbsent : forall R D Rec Pi G (n : N.t),
         dependees R D Rec Pi G (Name.Orig n, Version.Bot) = T.DependeesSet.empty.
     Proof. reflexivity. Qed.
 
-    (* The names a package's conflicts can land on: each atom's own name and
-       the names of its providers, which is what confNames ranges over. *)
     Definition providerNames (Pi : Prov.t) (m : N.t) : NSet.t :=
       SOpin.filterMap
         (fun e => if N.eq_dec (fst (snd e)) m then Some (fst (fst e)) else None)
@@ -2451,8 +2332,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           [apply NSet.add_spec; exact Hx | contradiction NE; reflexivity].
     Qed.
 
-    (* matchb at any package reads the Pi entries landing at the atom's
-       name, which the preimage at that name keeps. *)
     Lemma matchb_provPreimage : forall Pi ns (p q : Pkg.t) a,
         NSet.In (aname a) ns ->
         matchb (Prov.union (provPreimage Pi ns) (ProvFibred.tailFibre Pi p))
@@ -2469,12 +2348,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       apply ProvPreimage.mem_ofKeys; split; [exact Hin | exact Hm].
     Qed.
 
-
-
-    (* A package's dependees read its own clauses and conflicts, the
-       repository and provides at the names its clauses mention, and the
-       repository and provides at the names its conflicts can land on: each
-       conflict atom's name and its providers' names. *)
     Theorem dependees_lookupOrig : forall R D Rec Pi G (n : N.t) (v : V.t),
         T.PkgSet.In (embedPkg (n, v)) (reduceReal R D Rec Pi G) ->
         dependees R D Rec Pi G (Name.Orig n, Version.Orig v) =
@@ -2688,12 +2561,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       split; [apply AtomSet.mem_spec; exact Ha | exact Hy].
     Qed.
 
-    (* A selector consults D and Rec through one test and no other, so the
-       sub-instance is free to redistribute the atom's occurrences between
-       the two positions -- or to drop every clause that does not mention it
-       -- as long as the test still answers the same.  Stated for every
-       candidate shape at once: the real and the provided branch of us read
-       the same sub-instance, and the rest are empty. *)
     Theorem versions_lookupSelectorAgree :
       forall R D Rec D' Rec' Pi G (n : N.t) (f : Ver.Formula),
         occursAtomb (allClauses D Rec) (n, f) =

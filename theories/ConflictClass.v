@@ -13,9 +13,6 @@ Module ConflictClass (N V : UsualOrderedType).
   Module InClassElt := PairUOT Pkg N.
   Module InClassRel := FSetUOT InClassElt.
 
-  (* Cargo's links is this as it stands; opam's rule, stated
-     over names, exempts two versions of one package, an exemption version
-     uniqueness never lets apply. *)
   Definition ClassExclusion (Om : InClassRel.t) (S : PkgSet.t) : Prop :=
     forall (k : N.t) (p q : Pkg.t), PkgSet.In p S -> PkgSet.In q S ->
       InClassRel.In (p, k) Om -> InClassRel.In (q, k) Om -> p = q.
@@ -98,10 +95,6 @@ Module ConflictClass (N V : UsualOrderedType).
     Module SOvt := SetOps V VersionOT VSet T.VSet.
     Definition embedVS (vs : VSet.t) : T.VSet.t := SOvt.map Version.Orig vs.
 
-    (* Keyed by name rather than by package, since version uniqueness on the
-       name already admits one of its packages, and a class can have far
-       fewer names than packages.  At R these are the class packages, at a
-       class resolution the ones it selects. *)
     Module SOit := SetOps InClassElt T.Pkg InClassRel T.PkgSet.
     Definition classPkgs (X : PkgSet.t) (Om : InClassRel.t) : T.PkgSet.t :=
       SOit.filterMap (fun '(q, k) =>
@@ -145,10 +138,6 @@ Module ConflictClass (N V : UsualOrderedType).
       SOdtd.map (fun '(p, (n, vs)) => (embedPkg p, (Name.Orig n, embedVS vs)))
         D.
 
-    (* Each package in a class depends on the class at its own name: version
-       uniqueness there admits packages of one name, and on that name one of
-       them.  One edge per package and class it is in, where pairwise
-       conflicts would need one per pair of packages in the class. *)
     Module SOitd := SetOps InClassElt T.DepElt InClassRel T.DepRel.
     Definition classEdges (Om : InClassRel.t) : T.DepRel.t :=
       SOitd.map (fun '(q, k) =>
@@ -305,8 +294,6 @@ Module ConflictClass (N V : UsualOrderedType).
         rewrite (Hvu pn pv qv Hp Hq); reflexivity.
     Qed.
 
-    (* The reduction's own package set, taken at the class resolution: <k>
-       is selected at n exactly when a package of name n in k is. *)
     Definition coreResolution (S : PkgSet.t) (Om : InClassRel.t) :
         T.PkgSet.t :=
       reduceReal S Om.
@@ -448,7 +435,6 @@ Module ConflictClass (N V : UsualOrderedType).
             right; exists q, k; split; [exact Hc | exact Hy].
       Qed.
 
-      (* A preimage: the declarations of a package in k name no other. *)
       Theorem versions_lookupClass : forall R Om (k : N.t),
           T.versions (reduceReal R Om) (Name.Cls k) =
           T.versions (reduceReal (inClass R Om k) (classRelAt Om k))

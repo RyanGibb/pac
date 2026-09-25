@@ -5,15 +5,6 @@ From PackageCalculus Require Import Prelude Core Versions PackageFormula
 Create HintDb cmp_opam.
 Create Rewrite HintDb cmp_opam.
 
-(* opam's dependency semantics at a fixed environment, translated into the
-   package-formula calculus.  The source language has filters, so the
-   calculus below does; the reduction evaluates every one of them against
-   the given valuation as it runs, which is what opam's own pre-pass does
-   before its solver ever sees a formula, and so emits plain package
-   formulas.  Variable names X are opam's qualified names (a package-local
-   variable like with-test is the instance's p:with-test element of X);
-   values live in one totally ordered sort Y, as opam itself compares
-   them. *)
 Module Opam (N V X Y E : UsualOrderedType).
   (* Its core shared, so that a class relation here is the conflict-class
      calculus' own and its class lookups apply as they stand. *)
@@ -26,11 +17,6 @@ Module Opam (N V X Y E : UsualOrderedType).
 
   Definition Valuation : Type := X.t -> option Y.t.
 
-  (* Filters: variable-against-constant comparisons, definedness tests,
-     literals, and connectives.  Variable-against-variable comparisons and
-     version-valued variable constraints ({= ocaml:version}) are
-     instance-level desugarings under a fixed environment, like string
-     interpolation. *)
   Inductive Filter : Type :=
   | FlTrue
   | FlFalse
@@ -40,8 +26,6 @@ Module Opam (N V X Y E : UsualOrderedType).
   | FlOr (f g : Filter)
   | FlNot (f : Filter).
 
-  (* Kleene logic with absorption: undef & false = false, undef | true =
-     true (the manual's stated rule). *)
   Definition andK (a b : option bool) : option bool :=
     match a, b with
     | Some false, _ => Some false
@@ -80,14 +64,9 @@ Module Opam (N V X Y E : UsualOrderedType).
     | FlNot f => notK (evalF rho f)
     end.
 
-  (* A filter is "definitely true" when it evaluates to true; undefined
-     defaults to false where a truth value is demanded (the manual's
-     context-dependent default for dependency conditions). *)
   Definition defTrue (rho : Valuation) (f : Filter) : bool :=
     match evalF rho f with Some true => true | _ => false end.
 
-  (* Version constraints: pure, variable-free (see the desugaring note on
-     Filter). *)
   Inductive VConstraint : Type :=
   | VCTop
   | VCCmp (op : CmpOp) (c : V.t)
@@ -104,10 +83,6 @@ Module Opam (N V X Y E : UsualOrderedType).
     | VCNot a => negb (vcHolds a v)
     end.
 
-  (* Filtered package formulas: an atom is a name with a filter and a
-     version constraint; mixed brace formulas separate into this shape by
-     distributing the atom (the same Empty-neutrality rules make the
-     desugaring semantics-preserving). *)
   Inductive OFormula : Type :=
   | OFAtom (n : N.t) (g : Filter) (c : VConstraint)
   | OFAnd (a b : OFormula)
@@ -118,12 +93,6 @@ Module Opam (N V X Y E : UsualOrderedType).
   | RAnd (a b : RFormula)
   | ROr (a b : RFormula).
 
-  (* An atom whose filter is not definitely true is a context-dependent
-     neutral element (opam's Empty): dropped from conjunctions and
-     disjunctions alike, and a formula reducing entirely to Empty imposes
-     nothing.  The manual says only that such a dependency is removed
-     from the formula; the treatment inside a disjunction follows the
-     implementation's OpamFormula.Empty. *)
   Definition rMerge (mk : RFormula -> RFormula -> RFormula)
       (a b : option RFormula) : option RFormula :=
     match a, b with
@@ -156,21 +125,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
   (* The opam instance.  Formula-valued relations are lists: they feed
      only the spec and the translation, and sets would demand formula
-     comparators used nowhere.  inst_pins is switch-level
-     (unconditional); pin-depends entries bind only when their owner is
-     itself pinned and selected -- opam reads the field when it pins the
-     owner and never for a repository package -- and carry the URL as an
-     opaque value (fetch-time data, not resolution data).
-     inst_dpo (depopts) carries no resolution force at all: the manual is
-     explicit that a version-constrained depopt does not exclude other
-     versions -- that is what conflicts are for -- so depopts are carried
-     data gating build behaviour, represented but imposing nothing.
-     inst_dxt (depexts) is likewise inert here: opam's solver never sees
-     external dependencies, because an external name is a leaf that
-     depends on nothing and so cannot decide between opam packages.  The
-     entries are read off a finished resolution by depextsOf below,
-     which is what the system package manager is then asked to
-     install. *)
+     comparators used nowhere. *)
   Record Inst : Type := MkInst
     { inst_repo : PkgSet.t
     ; inst_dep : list (Pkg.t * OFormula)
@@ -187,10 +142,6 @@ Module Opam (N V X Y E : UsualOrderedType).
   Definition availOK (rho : Valuation) (I : Inst) (p : Pkg.t) : Prop :=
     forall g, In (p, g) (inst_avl I) -> defTrue rho g = true.
 
-  (* Conflicts and classes exempt the declarer's own name: opam's
-     conflicts go into CUDF, whose conflicts never apply to the declaring
-     package, and opam expands a class into conflicts on every other
-     member's name (opamSwitchState.ml, get_conflicts_t). *)
   Record IsResolution (rho : Valuation) (I : Inst) (S : PkgSet.t)
     : Prop := MkRes
     { ores_subset : PkgSet.Subset S (inst_repo I)
@@ -219,9 +170,6 @@ Module Opam (N V X Y E : UsualOrderedType).
         forall n v u, In (p, ((n, v), u)) (inst_pind I) ->
         forall v', PkgSet.In (n, v') S -> v' = v }.
 
-  (* The system packages a resolution asks for: an output read off S, not
-     a constraint on it.  Every depext entry owned by a selected package
-     whose filter is definitely true contributes its external name. *)
   Definition depextsOf (rho : Valuation) (I : Inst) (S : PkgSet.t)
     : ESet.t :=
     List.fold_right
@@ -273,21 +221,6 @@ Module Opam (N V X Y E : UsualOrderedType).
     #[local] Hint Extern 1 => cmp_by NF.compare_lt_trans : cmp_opam.
     #[local] Hint Extern 1 => cmp_by VF'.compare_lt_trans : cmp_opam.
 
-    (* Target names: a synthetic root carrying the request (opam has no
-       root package -- the goal and switch invariant are formulas), the
-       real opam packages, and one shared class package per conflict class.
-       There is no name for a filter variable: the reduction evaluates
-       filters under rho as opam's own pre-pass does, so no variable
-       survives into the target.  There is no name for a system package
-       either: a depext cannot decide between opam packages, so nothing
-       external reaches the target.
-
-       Cls is a separate constructor rather than Real applied to the class
-       name because the two namespaces overlap: opam's ocaml-system is
-       both a conflict class (declared by system-mingw and system-msvc)
-       and a package, and that package declares the unrelated class
-       ocaml-core-compiler.  Conflating them would fuse one name's
-       versions with another class's claimants. *)
     Module TName.
       Inductive name : Type :=
       | Root
@@ -319,15 +252,6 @@ Module Opam (N V X Y E : UsualOrderedType).
     End TName.
     Module TNOT := UOTFromCompare TName.
 
-    (* The root carries a unit version; a class package's versions are the
-       names of the class's declarers.  Keying them by name and not by
-       package is what reproduces opam's rule, which is stated over names
-       ("any two packages having a common conflict class") and implemented
-       by removing the declarer's own name from the member map: every
-       version of a member claims the same class version, so two versions
-       of one package never exclude each other through a class, while two
-       different names claiming one class version are ruled out by the
-       target's version uniqueness. *)
     Module TVer.
       Inductive version : Type :=
       | RV (v : V.t)
@@ -375,10 +299,6 @@ Module Opam (N V X Y E : UsualOrderedType).
       SOpv.filterMap
         (fun '(m, v) => if N.eq_dec m n then Some v else None) R.
 
-    (* The effective repository: switch pins and availability filters are
-       unconditional cuts of R, applied before anything else -- pins and
-       availability cut repository membership, not formulas.  availb is
-       where an available: field meets rho. *)
     Definition pinOKb (Pins : PkgSet.t) (p : Pkg.t) : bool :=
       PkgSet.for_all
         (fun '(m, w) =>
@@ -398,45 +318,25 @@ Module Opam (N V X Y E : UsualOrderedType).
         (fun p => andb (pinOKb (inst_pins I) p) (availb rho (inst_avl I) p))
         (inst_repo I).
 
-    (* PF.Formula has no truth constant; an unsatisfiable dependency on
-       the root name provides one, and a dependency on the root itself,
-       which every resolution holds, the other. *)
     Definition PFalse : PF.Formula := PF.FDep TName.Root PF.VSet.empty.
     Definition PTrue : PF.Formula :=
       PF.FDep TName.Root (PF.VSet.singleton TVer.UnitV).
 
-    (* -- lookup-primary layer: the per-name and per-package lookups are
-       the definitions; the global translation is their aggregation,
-       defined after them. -- *)
-
-    (* The versions of a source name available under rho: repository
-       versions with availability and switch pins folded in. *)
     Definition srcVersions (rho : Valuation) (I : Inst) (n : N.t)
       : VSet.t :=
       realVersions (effRepo rho I) n.
 
-    (* Encoders consult versions only through an oracle Vq, so sub-instance
-       reuse is oracle agreement (the lookup lemmas below). *)
     Definition versSetBy (Vq : N.t -> VSet.t) (n : N.t) (c : VConstraint)
       : PF.VSet.t :=
       SOvv.map TVer.RV (VSet.filter (fun v => vcHolds c v) (Vq n)).
 
-    (* redOF has already evaluated every filter under rho and deleted the
-       atoms opam's Empty absorbs, so what is left is an unguarded
-       formula and encodes one constructor at a time. *)
     Fixpoint encR (Vq : N.t -> VSet.t) (g : RFormula) : PF.Formula :=
       match g with
       | RAtom n c => PF.FDep (TName.Real n) (versSetBy Vq n c)
       | RAnd a b => PF.FConj (encR Vq a) (encR Vq b)
-      (* Reversed: a disjunct's version Idx i selects alternative i and the
-         target prefers the larger index, while opam prefers the
-         alternative written first.  The swap is only
-         ever preference -- disjunction is commutative. *)
       | ROr a b => PF.FDisj (encR Vq b) (encR Vq a)
       end.
 
-    (* A formula every one of whose atoms rho gated away is opam's Empty,
-       and imposes nothing. *)
     Definition encodeOF (rho : Valuation) (Vq : N.t -> VSet.t)
         (f : OFormula) : PF.Formula :=
       match redOF rho f with
@@ -444,8 +344,6 @@ Module Opam (N V X Y E : UsualOrderedType).
       | None => PTrue
       end.
 
-    (* The versions a conflict atom forbids; the declarer's own name is
-       exempt (CUDF conflicts never apply to their declarer). *)
     Definition confVS (Vq : N.t -> VSet.t) (p : Pkg.t) (n : N.t)
         (c : VConstraint) : PF.VSet.t :=
       if N.eq_dec (fst p) n then PF.VSet.empty else versSetBy Vq n c.
@@ -464,7 +362,6 @@ Module Opam (N V X Y E : UsualOrderedType).
         (p : Pkg.t) : list PF.Formula :=
       List.map (encodeOF rho Vq) (ownedBy p (inst_dep I)).
 
-    (* A conflict whose filter rho makes false is not a conflict. *)
     Definition cflForm (rho : Valuation) (Vq : N.t -> VSet.t) (p : Pkg.t)
         (nc : N.t * (Filter * VConstraint)) : PF.Formula :=
       if defTrue rho (fst (snd nc))
@@ -478,15 +375,6 @@ Module Opam (N V X Y E : UsualOrderedType).
         (p : Pkg.t) : list PF.Formula :=
       List.map (cflForm rho Vq p) (ownedBy p (inst_cfl I)).
 
-    (* Conflict classes through a shared class package, one per class,
-       whose versions are the declaring names.  A declarer depends on its
-       class package at its own name, so two declarers of different names
-       demand two versions of one class name and version uniqueness
-       refuses them -- the same exclusion opam writes as a quadratic web
-       of pairwise conflicts, by a linear mechanism: a class of n
-       declarers costs n edges here and n^2 there, which on opam's own
-       largest class is a couple of hundred terms against tens of
-       thousands. *)
     Module SOcf := SetOps ClsElt PF.Dependees ClsRel FSet.
     Definition clsForms (cls : ClsRel.t) (p : Pkg.t) : FSet.t :=
       SOcf.filterMap
@@ -497,9 +385,6 @@ Module Opam (N V X Y E : UsualOrderedType).
            else None)
         cls.
 
-    (* The class packages themselves: one version per declaring name of
-       each class.  They carry no outgoing formula (dependeesBy answers
-       FSet.empty at them), so they constrain only by being claimed. *)
     Module SOcp := SetOps ClsElt PF.Pkg ClsRel PF.PkgSet.
     Definition clsPkg (qk : ClsElt.t) : PF.Pkg.t :=
       (TName.Cls (snd qk), TVer.NV (fst (fst qk))).
@@ -507,7 +392,6 @@ Module Opam (N V X Y E : UsualOrderedType).
     Definition clsPkgs (cls : ClsRel.t) : PF.PkgSet.t :=
       SOcp.map clsPkg cls.
 
-    (* The class versions a class has: the names that declare it. *)
     Module SOcv := SetOps ClsElt TVOT ClsRel PF.VSet.
     Definition clsVersions (cls : ClsRel.t) (k : N.t) : PF.VSet.t :=
       SOcv.filterMap
@@ -535,8 +419,6 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Module SOlf := SetOps Pkg PF.Dependees PkgSet FSet.
 
-    (* THE per-package lookup: a target package's formulas, from its own
-       declarations under the valuation. *)
     Definition dependeesBy (rho : Valuation) (Vq : N.t -> VSet.t)
         (I : Inst) (q : PF.Pkg.t) : FSet.t :=
       match q with
@@ -553,7 +435,6 @@ Module Opam (N V X Y E : UsualOrderedType).
       : FSet.t :=
       dependeesBy rho (srcVersions rho I) I q.
 
-    (* The per-target-name version lookup. *)
     Definition versions (rho : Valuation) (I : Inst) (tn : TName.t)
       : PF.VSet.t :=
       match tn with
@@ -561,8 +442,6 @@ Module Opam (N V X Y E : UsualOrderedType).
       | TName.Real n => SOvv.map TVer.RV (srcVersions rho I n)
       | TName.Cls k => clsVersions (inst_cls I) k
       end.
-
-    (* -- derived aggregation: the global translation -- *)
 
     Definition transR (rho : Valuation) (I : Inst) : PF.PkgSet.t :=
       PF.PkgSet.union (embedSet (effRepo rho I))
@@ -578,8 +457,6 @@ Module Opam (N V X Y E : UsualOrderedType).
       SOqd.unionMap (fun q => depEdges q (dependees rho I q))
         (transR rho I).
 
-    (* The class versions a selection claims: one per class a selected
-       package declares, at that package's name. *)
     Definition clsSel (cls : ClsRel.t) (S : PkgSet.t) : PF.PkgSet.t :=
       SOcp.map clsPkg (ClsRel.filter (fun qk => PkgSet.mem (fst qk) S) cls).
 
@@ -596,12 +473,6 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Definition decodeS (S' : PF.PkgSet.t) : PkgSet.t :=
       SOtp.filterMap tryInvPkg S'.
-
-    Lemma embedPkg_inj : forall p q, embedPkg p = embedPkg q -> p = q.
-    Proof.
-      intros [n v] [m w] H; unfold embedPkg in H; simpl in H.
-      injection H as -> ->; reflexivity.
-    Qed.
 
     Lemma mem_realVersions : forall R n v,
         VSet.In v (realVersions R n) <-> PkgSet.In (n, v) R.
@@ -811,19 +682,6 @@ Module Opam (N V X Y E : UsualOrderedType).
         [apply PF.VSet.singleton_spec; reflexivity | exact Hr].
     Qed.
 
-    Lemma PFalse_unsat : forall S', ~ PF.Satisfies S' PFalse.
-    Proof.
-      intros S' [tv [Htv _]].
-      destruct (PF.VSet.empty_spec Htv).
-    Qed.
-
-    Lemma defTrue_iff : forall rho g,
-        defTrue rho g = true <-> evalF rho g = Some true.
-    Proof.
-      intros rho g; unfold defTrue.
-      destruct (evalF rho g) as [[|]|]; intuition congruence.
-    Qed.
-
     Lemma encR_correct : forall Vq S',
         (forall n v, PkgSet.In (n, v) (decodeS S') -> VSet.In v (Vq n)) ->
         forall g, PF.Satisfies S' (encR Vq g) <-> rSat (decodeS S') g.
@@ -956,8 +814,6 @@ Module Opam (N V X Y E : UsualOrderedType).
           [exact Hf | reflexivity].
     Qed.
 
-    (* Selected packages live in the effective repository: the source
-       fields for subset, pins and availability say exactly that. *)
     Lemma res_sub_eff : forall rho I S,
         IsResolution rho I S -> PkgSet.Subset S (effRepo rho I).
     Proof.
@@ -1047,9 +903,6 @@ Module Opam (N V X Y E : UsualOrderedType).
         apply mem_versSetBy; exists v; split;
           [reflexivity
           | split; [exact (HV _ _ Hv) | exact Hh]].
-      (* Both declarers claim the class package, each at its own name; two
-         versions of the one class name is what version uniqueness
-         refuses. *)
       - intros k [pn pv] [qn qv] Hp Hq Hpk Hqk Hne.
         assert (Hcl : forall m w,
                    PkgSet.In (m, w) (decodeS S') ->
@@ -1152,7 +1005,6 @@ Module Opam (N V X Y E : UsualOrderedType).
           split; apply (encodeOF_correct rho _ _ HV Hr);
             rewrite decode_transS;
             [exact (ores_goal _ _ _ HR) | exact (ores_invariant _ _ _ HR)].
-        (* a class package carries no outgoing formula *)
         + unfold dependees, dependeesBy in Hf'; cbn beta iota in Hf'.
           destruct (FSet.empty_spec Hf').
       - intros tn tv tv' Hv Hv'; destruct tn as [| n | k].
@@ -1169,12 +1021,6 @@ Module Opam (N V X Y E : UsualOrderedType).
           destruct (ores_class_exclusion _ _ _ HR _ _ _ Hp Hq
                       Hpk Hqk NE).
     Qed.
-
-    (* -- sub-instance reuse: the lookup lemmas.  A package's lookups
-       read the instance only at its own declarations and at the versions
-       of the names they mention, so a name-restricted repository and
-       owner-filtered declarations answer the same lookups -- what lets a
-       driver hold the archive in per-name tables. -- *)
 
     Module PkgPre := PreimageOfKeys N Pkg NSet PkgSet.
     Definition nameRestrict (ns : NSet.t) (R : PkgSet.t) : PkgSet.t :=
@@ -1199,12 +1045,6 @@ Module Opam (N V X Y E : UsualOrderedType).
            (listNames (fun nvu => NSet.singleton (fst (fst nvu)))
               (ownedBy p (inst_pind I)))).
 
-    (* A package's class formulas read only its own declarations: the
-       class package carries the partners, so no declaration of a partner
-       is consulted here.  A class name's versions are the other way
-       round -- the whole preimage of the relation at that class -- and
-       that is the one lookup whose sub-instance no single package's
-       declarations determine. *)
     Definition clsFibre (cls : ClsRel.t) (p : Pkg.t) : ClsRel.t :=
       ClsRel.filter
         (fun qk => if Pkg.eq_dec (fst qk) p then true else false) cls.
@@ -1282,8 +1122,6 @@ Module Opam (N V X Y E : UsualOrderedType).
     Proof. intros Vq Vq' n c H; unfold versSetBy; rewrite H;
       reflexivity. Qed.
 
-    (* redOF only ever keeps atoms of f, so agreeing on f's names is
-       enough to fix the encoding of whatever f reduces to. *)
     Lemma encR_agree : forall rho Vq Vq' f,
         (forall n, NSet.In n (ofNames f) -> Vq n = Vq' n) ->
         forall g, redOF rho f = Some g -> encR Vq g = encR Vq' g.
@@ -1359,14 +1197,6 @@ Module Opam (N V X Y E : UsualOrderedType).
         [left; exact Hn | right; exact (IH Hin Hn)].
     Qed.
 
-    Lemma filter_idem : forall (A : Type) (f : A -> bool) l,
-        List.filter f (List.filter f l) = List.filter f l.
-    Proof.
-      intros A f; induction l as [| a l IH]; simpl; [reflexivity |].
-      destruct (f a) eqn:Hf; simpl; [rewrite Hf, IH | rewrite IH];
-        reflexivity.
-    Qed.
-
     Lemma own_filter_in : forall (A : Type) p (a : A) l,
         In (p, a) (List.filter (ownb p) l) <-> In (p, a) l.
     Proof.
@@ -1385,7 +1215,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       apply NSet.singleton_spec; reflexivity.
     Qed.
 
-    (* A class package is the conflict-class calculus' at any R holding
+    (* A class package is the conflict class package calculus' at any R holding
        every declarer, not at the effective repository: opam reads a
        class's versions off every declaration, and the extra ones are
        claimed by no package that can be selected. *)
@@ -1598,8 +1428,6 @@ Module Opam (N V X Y E : UsualOrderedType).
       - rewrite PF.Reduction.NSet.union_spec; tauto.
     Qed.
 
-    (* Only a conflict and a pin-depends entry are negated, and both at a
-       real name: a class package is only ever claimed. *)
     Lemma dependees_negNames : forall rho Vq I q f x,
         FSet.In f (dependeesBy rho Vq I q) ->
         PF.Reduction.NSet.In x (PF.Reduction.Lookup.negNames f) ->
@@ -1713,10 +1541,6 @@ Module Opam (N V X Y E : UsualOrderedType).
       destruct w; destruct (FSet.empty_spec Hf).
     Qed.
 
-    (* A disjunct's edges are recorded when its owner is reduced: the
-       owner's formulas from any instance answering the owner's dependees
-       lookup alike -- its sub-instance, by dependees_lookupReal or
-       dependees_lookupRoot. *)
     Theorem dependees_lookupDisjunctCore : forall rho I I' Vq q fs i,
         PF.PkgSet.In q (transR rho I) ->
         dependees rho I' q = dependees rho I q ->
@@ -1788,8 +1612,6 @@ Module Opam (N V X Y E : UsualOrderedType).
         [exact Hv | reflexivity].
     Qed.
 
-    (* The core has the root's ⊥ as every original name's, and a driver may
-       answer without it: PF.Reduction.Lookup.root_not_absent. *)
     Theorem versions_lookupRootCore : forall rho I,
         PF.Reduction.T.versions
           (PF.Reduction.reduceReal (transR rho I) (transD rho I))

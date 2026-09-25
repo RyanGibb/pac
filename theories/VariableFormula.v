@@ -193,10 +193,6 @@ Module VariableFormula (N V : UsualOrderedType)
     #[local] Hint Extern 1 => cmp_by FListF.compare_lt_trans : cmp_varf.
     #[local] Hint Extern 1 => cmp_by XF.compare_lt_trans : cmp_varf.
 
-
-    (* One disjunct package per disjunction, named by all of its
-       alternatives: a chain of two-alternative disjuncts would introduce an
-       inner name for every proper suffix of the same disjunction. *)
     Module Name.
       Inductive name : Type :=
       | Orig (m : N.t)
@@ -238,11 +234,6 @@ Module VariableFormula (N V : UsualOrderedType)
     #[local] Hint Extern 1 => cmp_by YF.compare_lt_trans : cmp_varf.
     #[local] Hint Extern 1 => cmp_by NatF.compare_lt_trans : cmp_varf.
 
-    (* A synthetic version is the position of the alternative it selects --
-       so a disjunction of any width is one node -- or a variable's value.
-       Bot is absence: every original name has it, and it is the greatest
-       version so that a solver preferring the greatest leaves a name nobody
-       needs positively out of the resolution. *)
     Module Version.
       Inductive version : Type :=
       | Orig (v : V.t)
@@ -295,9 +286,6 @@ Module VariableFormula (N V : UsualOrderedType)
           if opEvalY op y' y then Some (Version.VarVal y') else None)
         Y_x.
 
-    (* The alternatives a disjunction offers, and the alternatives De
-       Morgan reads off a negated conjunction: the disjunct package's own
-       name, and the list its versions index. *)
     Fixpoint disjSpine (f : Formula) : list Formula :=
       match f with
       | FDisj a b => a :: disjSpine b
@@ -316,9 +304,6 @@ Module VariableFormula (N V : UsualOrderedType)
     Definition idxPkgs (n : Name.t) (k : nat) : T.PkgSet.t :=
       T.PkgSet.ofList (List.map (fun i => (n, Version.Idx i)) (List.seq 0 k)).
 
-    (* The versions a negated atom admits at its name: every real version
-       the atom does not name, and absence.  The encoder reads real versions
-       through the oracle Vq, as it reads variable domains through Y_x. *)
     Definition negVS (Vq : N.t -> VSet.t) (m : N.t) (vs : VSet.t) : T.VSet.t :=
       T.VSet.add Version.Bot (embedVS (VSet.diff (Vq m) vs)).
 
@@ -394,8 +379,6 @@ Module VariableFormula (N V : UsualOrderedType)
              (Name.Var x, cmpVersionSet (Y_x x) (cmpComplement op) y))
       end.
 
-    (* The synthetic packages a formula's encoding introduces: the disjunct
-       packages, and nothing for a negated atom or a comparison. *)
     Fixpoint witnessSet (p : T.Pkg.t) (f : Formula) : T.PkgSet.t :=
       match f with
       | FDep _ _ => T.PkgSet.empty
@@ -446,7 +429,6 @@ Module VariableFormula (N V : UsualOrderedType)
       | FVarCmp _ _ _ => T.PkgSet.empty
       end.
 
-    (* The package names a formula mentions; a comparison mentions none. *)
     Fixpoint fnames (f : Formula) : NSet.t :=
       match f with
       | FDep m _ => NSet.singleton m
@@ -880,7 +862,6 @@ Module VariableFormula (N V : UsualOrderedType)
             ~ Satisfies (variableFormulaResolution S)
                 (extractAssignment y0 Y_x S) f)).
       { intros H q f; exact (proj1 (H f) q). }
-      (* the FDep dependency edge, read back through the resolution *)
       assert (Hpos : forall (q : T.Pkg.t) m vs,
                  T.DepRel.In (q, (Name.Orig m, embedVS vs)) D ->
                  T.PkgSet.In q S ->
@@ -892,8 +873,6 @@ Module VariableFormula (N V : UsualOrderedType)
           destruct Hw as [v [Hv ->]].
         exists v; split; [exact Hv |].
         apply mem_variableFormulaResolution; exact HwS. }
-      (* the negated atom's edge: closure picks a version the atom does not
-         name, or absence, and version uniqueness leaves room for no other *)
       assert (Hneg : forall (q : T.Pkg.t) m vs,
                  T.DepRel.In (q, (Name.Orig m, negVS Vq m vs)) D ->
                  T.PkgSet.In q S ->
@@ -907,8 +886,6 @@ Module VariableFormula (N V : UsualOrderedType)
         apply mem_negVS in Hw.
         destruct Hw as [Hw | [u [_ [Hnv E]]]]; [discriminate Hw |].
         injection E as <-; exact (Hnv Hv). }
-      (* the comparison edge: the variable block pins one value per
-         variable, and the resolution's choice of it is the assignment *)
       assert (Hvar : forall (q : T.Pkg.t) x op y,
                  T.DepRel.In (q, (Name.Var x, cmpVersionSet (Y_x x) op y)) D ->
                  T.PkgSet.In q S ->
@@ -1080,9 +1057,6 @@ Module VariableFormula (N V : UsualOrderedType)
       - exact (extractAssignment_mem y0 Y_x R D S Hne Hsub).
     Qed.
 
-    (* The alternative a disjunct package takes: the first satisfied one,
-       and the last one when none is -- which is what the two-alternative
-       chain this replaces settled on, and keeps the index inside idxSet. *)
     Fixpoint firstSatIdx (Sv : PkgSet.t) (sigma : X.t -> Y.t)
         (fs : list Formula) : nat :=
       match fs with
@@ -1093,10 +1067,6 @@ Module VariableFormula (N V : UsualOrderedType)
           else Datatypes.S (firstSatIdx Sv sigma fs')
       end.
 
-    (* The synthetic packages a selected package's satisfied formula puts in
-       the resolution: each disjunct at the alternative it takes, and that
-       alternative's own witnesses.  A negated atom contributes nothing; its
-       edge is met by the target's version, or by absence. *)
     Fixpoint witnessSetTaken (S : PkgSet.t) (sigma : X.t -> Y.t) (f : Formula) :
         T.PkgSet.t :=
       match f with
@@ -1154,8 +1124,6 @@ Module VariableFormula (N V : UsualOrderedType)
       | FVarCmp _ _ _ => T.PkgSet.empty
       end.
 
-    (* The walkers and their hosts agree everywhere but the spine, so the
-       host's own case is the walker's plus the synthetic version it takes. *)
     Lemma witnessSetTaken_disj_eq : forall S sigma a b,
         witnessSetTaken S sigma (FDisj a b) =
         T.PkgSet.add
@@ -1214,9 +1182,6 @@ Module VariableFormula (N V : UsualOrderedType)
         [contradiction Hne; reflexivity | reflexivity].
     Qed.
 
-    (* Which alternative a disjunct package's taken version stands for: the
-       witness of that alternative is the one the walker actually laid
-       down. *)
     Lemma takenDisj_firstSat : forall S sigma f,
         Satisfies S sigma f ->
         exists g,
@@ -1278,8 +1243,6 @@ Module VariableFormula (N V : UsualOrderedType)
         intros y' Hy'; simpl; rewrite Ea; exact Hy'.
     Qed.
 
-    (* Whether a name has a version in S; the names that do not carry
-       absence in the completeness construction. *)
     Definition hasNameb (S : PkgSet.t) (n : N.t) : bool :=
       PkgSet.exists_ (fun p => if N.eq_dec (fst p) n then true else false) S.
 
@@ -1611,9 +1574,6 @@ Module VariableFormula (N V : UsualOrderedType)
       exists p, f; auto.
     Qed.
 
-    (* Passing an alternative up through one set constructor: nav is the
-       step from the inner witness set to the outer one, which is all that
-       differs between the places this conclusion is rebuilt. *)
     Ltac pick_alt H nav :=
       let g0 := fresh "g0" in let Hg0 := fresh "Hg0" in
       let Hs0 := fresh "Hs0" in let Hu0 := fresh "Hu0" in
@@ -1622,9 +1582,6 @@ Module VariableFormula (N V : UsualOrderedType)
       let y0 := fresh "y0" in let Hy0 := fresh "Hy0" in
       intros y0 Hy0; nav; exact (Hu0 y0 Hy0).
 
-    (* Reading a synthetic version out of a taken witness: it names an
-       alternative that holds, and that alternative's own taken witness is
-       already part of the same set. *)
     Lemma witnessSetTaken_disj_mono_aux : forall S sigma f,
         (Satisfies S sigma f ->
          forall fs i,
@@ -1758,12 +1715,6 @@ Module VariableFormula (N V : UsualOrderedType)
       - discriminate Hn.
     Qed.
 
-    (* Dependency closure over one formula's encoding.  Every source is
-       either the owner q0 (then the formula holds and its taken witness is
-       in w) or a disjunct node already in w, whose alternative Hdisj says
-       holds; a negated atom's edge is met by the version its target has in
-       S, or by absence when it has none; a comparison's by the variable
-       block at sigma. *)
     Lemma encodeNNF_dep_closure_aux :
       forall (S : PkgSet.t) (sigma : X.t -> Y.t) (Y_x : X.t -> YSet.t)
              (Vq : N.t -> VSet.t) (Ns : NSet.t) (w : T.PkgSet.t),
@@ -1814,7 +1765,6 @@ Module VariableFormula (N V : UsualOrderedType)
                 exists v, T.VSet.In v ws /\ T.PkgSet.In (o, v) w).
     Proof.
       intros S sigma Y_x Vq Ns w Hins Hemb HVq Hbot Hdisj Hvar f.
-      (* the negated atom's edge, from any source in w *)
       assert (Hneg : forall m vs,
                  NSet.In m Ns ->
                  ~ Satisfies S sigma (FDep m vs) ->
@@ -1830,7 +1780,6 @@ Module VariableFormula (N V : UsualOrderedType)
         - assert (Hnone := proj1 (hasNameb_false S m) E).
           exists Version.Bot; split; [apply mem_negVS; left; reflexivity |].
           exact (Hbot m Hm Hnone). }
-      (* the comparison edge, from any source in w *)
       assert (Hcmp : forall x op y,
                  Satisfies S sigma (FVarCmp x op y) ->
                  exists v, T.VSet.In v (cmpVersionSet (Y_x x) op y) /\
@@ -2196,9 +2145,6 @@ Module VariableFormula (N V : UsualOrderedType)
         | _ => None
         end.
 
-      (* An edge out of an original package is the owner's own: the only
-         other sources an encoding has are the disjunct nodes it introduces,
-         whose versions are indices. *)
       Definition notIdx (w : Version.t) : Prop :=
         forall i, w <> Version.Idx i.
 
@@ -2211,8 +2157,6 @@ Module VariableFormula (N V : UsualOrderedType)
       Lemma notIdx_varval : forall y, notIdx (Version.VarVal y).
       Proof. intros y i E; discriminate E. Qed.
 
-      (* Every edge of an encoding leaves its owner q or a disjunct node at
-         an index; so a source at a non-index version is q itself. *)
       Lemma encodeNNF_src_aux : forall Y_x Vq f,
           (forall (q q' : T.Pkg.t) (d : T.Dependees.t),
               notIdx (snd q') ->
@@ -2288,7 +2232,6 @@ Module VariableFormula (N V : UsualOrderedType)
               injection H as E _; subst q'; exact (Hw i0 eq_refl).
       Qed.
 
-      (* An edge's original target is a name the formula mentions. *)
       Lemma encodeNNF_tgt_aux : forall Y_x Vq f,
           (forall (q q' : T.Pkg.t) m (ws : T.VSet.t),
               T.DepRel.In (q', (Name.Orig m, ws)) (encodeNNF Y_x Vq q f) ->
@@ -2353,8 +2296,6 @@ Module VariableFormula (N V : UsualOrderedType)
         - split4v; intros; apply SOed.singleton_in in H; discriminate H.
       Qed.
 
-      (* The encoder reads the version oracle at the names the formula
-         mentions and nowhere else. *)
       Lemma encodeNNF_agree_aux : forall Y_x Vq Vq' f,
           (forall m, NSet.In m (fnames f) -> Vq m = Vq' m) ->
           (forall p, encodeNNF Y_x Vq p f = encodeNNF Y_x Vq' p f) /\
@@ -2416,7 +2357,6 @@ Module VariableFormula (N V : UsualOrderedType)
       Module DepRelFibred := FibredRel Pkg Dependees DepElt DepRel.
       Module RKeys := PreimageOfKeys N Pkg NSet PkgSet.
 
-      (* The repository at a set of names. *)
       Definition nameRestrict (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
         RKeys.ofKeys fst ns R.
 
@@ -2578,8 +2518,6 @@ Module VariableFormula (N V : UsualOrderedType)
         exact (proj1 (encodeNNF_tgt_aux Y_x (C.versions R) f) _ _ _ _ He).
       Qed.
 
-      (* A reachable name's versions are its real versions and absence: the
-         repository at the name, and nothing of who negates it. *)
       Theorem versions_lookupOrig : forall Y_x R D (r : Pkg.t) (m : N.t),
           PkgSet.In r R ->
           (exists p h,
@@ -2613,8 +2551,6 @@ Module VariableFormula (N V : UsualOrderedType)
             left; exists (m, v); split; [exact Hv | reflexivity].
       Qed.
 
-      (* A package's dependees read its own formulas, the variable domains,
-         and the repository at the names those formulas mention. *)
       Theorem dependees_lookupOrig : forall Y_x R D m v,
           T.dependees (reduceDeps Y_x R D) (Name.Orig m, Version.Orig v) =
           T.dependees
@@ -2656,9 +2592,6 @@ Module VariableFormula (N V : UsualOrderedType)
           rewrite (Hag f Hd); exact He.
       Qed.
 
-      (* The shape a driver computes: the package's own formulas reduced
-         under any oracle that agrees with the repository at the names they
-         mention. *)
       Theorem dependees_lookupOrigBy : forall Y_x R D Vq m v,
           (forall n, NSet.In n (depNames (DepRelFibred.tailFibre D (m, v))) ->
                      Vq n = C.versions R n) ->
@@ -2671,7 +2604,6 @@ Module VariableFormula (N V : UsualOrderedType)
         rewrite versions_nameRestrict by exact Hn; symmetry; apply HVq; exact Hn.
       Qed.
 
-      (* Absence depends on nothing. *)
       Theorem dependees_lookupAbsent : forall Y_x R D m,
           T.dependees (reduceDeps Y_x R D) (Name.Orig m, Version.Bot) =
           T.DependeesSet.empty.
@@ -2721,8 +2653,6 @@ Module VariableFormula (N V : UsualOrderedType)
         intros Y_x R D x y Hin; apply T.dependees_empty_iff; intros h H.
         apply mem_reduceDeps in H.
         destruct H as [[pn pv] [f [_ He]]].
-        (* a variable package's version is a value: reduceReal has no other
-           kind at a Var name *)
         assert (Hw : notIdx y).
         { apply mem_reduceReal in Hin.
           destruct Hin as [[[qn qv] [_ Hq]] | [[p [g [_ Hw]]] | [[x' [y' [_ Hq]]] | [n [_ Hq]]]]];
@@ -3110,9 +3040,6 @@ Module VariableFormula (N V : UsualOrderedType)
             simpl; apply SOed.singleton_in; subst d; reflexivity.
       Qed.
 
-      (* A disjunct's dependees are read off the spine its name carries:
-         version i carries alternative i's own encoding under the domains and
-         the repository's versions. *)
       Theorem dependees_lookupDisjunct : forall Y_x R D fs (i : Version.t),
           T.PkgSet.In (Name.Disjunct fs, i) (reduceReal Y_x R D) ->
           T.dependees (reduceDeps Y_x R D) (Name.Disjunct fs, i) =

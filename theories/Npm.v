@@ -1,27 +1,6 @@
 From Stdlib Require Import MSets List Bool.
 From PackageCalculus Require Import Prelude Core Versions Semver Concurrent.
 
-(* npm's dependency semantics over the concurrent calculus at per-version
-   granularity: nested node_modules is concurrency with g = id, and this
-   file owns its peer encoding rather than reusing PeerDependency, whose
-   guard is npm's --legacy-peer-deps rule.  Both npm flavours are here: a
-   mandatory peer is installed beside its declarer by an edge leaving the
-   declarer's own intermediate node, so the install is conditioned on that
-   dependee version actually being selected; an optional peer keeps the
-   legacy guard and only constrains a directory the depender fills itself.
-   Nothing installs the root, so the root's own peers are the same pair of
-   rules anchored at its granular node instead of at a parent.
-   Ranges stay formulas evaluated by the translation, and there is no
-   environment to resolve against: npm's engines only rank candidates
-   (npm-pick-manifest index.js:165-179), and os/cpu/libc are checked once
-   the tree is built (build-ideal-tree.js, #checkEngineAndPlatform),
-   failing a required package and making an optional one inert.  The
-   model drops both, so nothing cuts the repository.  Source names
-   are pairs (directory key, registry name): an npm node is a directory,
-   and the parent relation is over source packages, so two aliases of one
-   registry package under one depender are only distinguishable if the key
-   is part of the name. *)
-
 Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   (* Module application is generative, so the concurrent instance is the
      only one: every set keyed by source names goes through C. *)
@@ -73,8 +52,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Module SOkt := SetOps NKey T.Pkg KeySet T.PkgSet.
   Module SOvt := SetOps V T.Pkg VSet T.PkgSet.
 
-  (* npm's ranges are the shared semver language with nothing added, so
-     they are included under their own names rather than qualified. *)
   Module Sv := Semver V VSet PM.
   Include Sv.
 
@@ -91,10 +68,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
 
   (* The relation fields are lists: they feed only the spec and the
      translation, and sets would demand a comparator for Range used
-     nowhere.  optionalDependencies enter as ordinary dependencies;
-     npm's dropping of a failed one (#pruneFailedOptional) is not
-     modelled, and bundledDependencies are out of scope: npm takes those
-     versions from the tarball, which is not an input here. *)
+     nowhere. *)
   Record Inst : Type := MkInst
     { inst_repo : RepoSet.t
     ; inst_dep : list (RPkg.t * Dependency)
@@ -143,13 +117,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Definition keysOfL {A : Type} (f : A -> NKey.t) (l : list A) : KeySet.t :=
     SOkk.ofList (List.map f l).
 
-  Lemma mem_keysOfL : forall (A : Type) (f : A -> NKey.t) l k,
-      KeySet.In k (keysOfL f l) <-> exists a, In a l /\ f a = k.
-  Proof.
-    intros A f l k; unfold keysOfL; rewrite SOkk.mem_ofList, in_map_iff.
-    split; intros [a [H1 H2]]; exists a; split; assumption.
-  Qed.
-
   Definition namesOfL {A : Type} (f : A -> N.t) (l : list A) : NSet.t :=
     SOnn.ofList (List.map f l).
 
@@ -194,17 +161,12 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     | (m, rg) :: l' => if NEqb.eqb m n then Some rg else lookupOvr l' n
     end.
 
-  (* A flat override replaces the declared range wherever the name is
-     depended on.  Path-scoped overrides are indexed by the parent chain,
-     which is an output of resolution, so they cannot be a static
-     component of an instance. *)
   Definition override (I : Inst) (n : N.t) (rg : Range) : Range :=
     match lookupOvr (inst_ovr I) n with
     | Some rg' => rg'
     | None => rg
     end.
 
-  (* devDependencies participate only from the root package. *)
   Definition depActive (I : Inst) (p : RPkg.t) (d : Dependency) : bool :=
     orb (negb (d_dev d)) (RPkgEqb.eqb p (inst_root I)).
 
@@ -217,10 +179,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     | d :: l' => if NEqb.eqb (d_dir d) a then Some d else findDepL l' a
     end.
 
-  (* A slot is a directory a package declares a dependency for; the first
-     dependency for a key wins, so the lookup is a total function of the
-     key.  arborist instead keeps the last one it loads (node.js,
-     _loadDeps: dev over optional over prod). *)
   Definition slotOf (I : Inst) (p : RPkg.t) (a : N.t) : option Dependency :=
     findDepL (dependenciesOf I p) a.
 
@@ -247,27 +205,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     - exact (IH H d Hd).
   Qed.
 
-  Lemma dirs_slotOf : forall I p a,
-      NSet.In a (dirs I p) -> exists d, slotOf I p a = Some d.
-  Proof.
-    intros I p a Ha; unfold dirs in Ha; apply mem_namesOfL in Ha.
-    destruct Ha as [d [Hd Hal]]; unfold slotOf.
-    destruct (findDepL (dependenciesOf I p) a) as [e |] eqn:He;
-      [exists e; reflexivity |].
-    exfalso; exact (findDepL_none _ _ He d Hd Hal).
-  Qed.
-
-  Lemma slotOf_dirs : forall I p a d,
-      slotOf I p a = Some d -> NSet.In a (dirs I p).
-  Proof.
-    intros I p a d Hd; unfold slotOf in Hd.
-    destruct (findDepL_some _ _ _ Hd) as [H1 H2].
-    unfold dirs; apply mem_namesOfL; exists d; split; assumption.
-  Qed.
-
-  (* The source name a package installs under one of its directory keys:
-     the key together with the registry package it points at, which the
-     key alone does not determine under "npm:" aliasing. *)
   Definition slotKey (I : Inst) (p : RPkg.t) (a : N.t) : NKey.t :=
     match slotOf I p a with
     | Some d => (a, d_target d)
@@ -299,22 +236,14 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Definition peerDependenciesAt (I : Inst) (p : RPkg.t) : list PeerDependency :=
     ownedBy (inst_peer I) p.
 
-  (* A peer names a directory, so it lands on whatever key the depender
-     already uses for that directory, aliased or not. *)
   Definition peerKeyAt (I : Inst) (p : RPkg.t) (r : PeerDependency) : NKey.t :=
     slotKey I p (p_name r).
 
-  (* An override names a registry package, so it replaces a peer's declared
-     range exactly as it replaces a dependency's -- npm lets it win over
-     the peer range rather than intersecting the two. *)
   Definition peerCandsAt (I : Inst) (p : RPkg.t)
       (r : PeerDependency) : VSet.t :=
     rangeEval (override I (snd (peerKeyAt I p r)) (p_range r))
       (realVersions (inst_repo I) (snd (peerKeyAt I p r))).
 
-  (* A mandatory peer is installed beside its declarer whatever the
-     depender declares; an optional one keeps npm's legacy rule and only
-     constrains a directory the depender fills itself. *)
   Definition peerActive (I : Inst) (p : RPkg.t) (r : PeerDependency) : bool :=
     orb (negb (p_optional r)) (NSet.mem (p_name r) (dirs I p)).
 
@@ -322,12 +251,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     : list PeerDependency :=
     List.filter (peerActive I p) (peerDependenciesAt I q).
 
-  (* Every directory a peer could ask for.  Taking the real set from the
-     whole instance rather than from a package's own candidates is what
-     makes peers transitive -- an auto-installed peer declares peers of
-     its own -- and over-approximating is harmless: only an edge forces an
-     install, and those edges leave the declaring dependee's own
-     intermediate node. *)
   Definition peerDirs (I : Inst) : NSet.t :=
     namesOfL (fun q => p_name (snd q)) (inst_peer I).
 
@@ -337,10 +260,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Definition childKeys (I : Inst) (p : RPkg.t) : KeySet.t :=
     SOnk.map (slotKey I p) (childDirs I p).
 
-  (* The versions a package may install under a child key: its own
-     dependency range when it declares one, else -- for a key only a peer
-     asks for -- every version of that package, which the peer edges then
-     narrow. *)
   Definition childCands (I : Inst) (p : RPkg.t)
       (m : NKey.t) : VSet.t :=
     if KeyEqb.eqb m (slotKey I p (fst m))
@@ -365,8 +284,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       reflexivity.
   Qed.
 
-  (* The directory keys the instance can introduce: the root's own, every
-     dependency's, and every peer dependency's. *)
   Definition keysOf (I : Inst) : KeySet.t :=
     KeySet.add (rootKey I)
       (KeySet.union
@@ -397,16 +314,10 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         [apply mem_realVersions; exact Hb | reflexivity].
   Qed.
 
-  (* p installs version v under its directory key m.  The key carries the
-     registry name, so two aliases of one package stay apart. *)
   Definition Installs (S : PkgSet.t) (pi : Conc.ParentRel.t)
       (p : Pkg.t) (m : NKey.t) (v : V.t) : Prop :=
     PkgSet.In (m, v) S /\ Conc.ParentRel.In ((m, v), p) pi.
 
-  (* S is the set of installed copies and pi is npm's node_modules
-     nesting.  There is no version-uniqueness field: g is the identity,
-     so any number of versions of a package may coexist; what is unique
-     is the version a given depender installs under a given key. *)
   Record IsResolution (I : Inst)
       (S : PkgSet.t) (pi : Conc.ParentRel.t) : Prop :=
     { nres_subset : forall q, PkgSet.In q S -> Available I q
@@ -418,8 +329,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         forall a, NSet.In a (dirs I (base p)) ->
         exists v, VSet.In v (slotCands I (base p) a) /\
           Installs S pi p (slotKey I (base p) a) v
-      (* A mandatory peer of anything p installs is installed by p too,
-         beside its declarer, at a version the peer range admits. *)
     ; nres_peer_install :
         forall p, PkgSet.In p S ->
         forall m u, Installs S pi p m u ->
@@ -427,10 +336,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           p_optional r = false ->
         exists v, VSet.In v (peerCandsAt I (base p) r) /\
           Installs S pi p (peerKeyAt I (base p) r) v
-      (* An optional peer forces nothing; it constrains only a directory
-         p fills itself -- npm's legacy rule, narrower than arborist,
-         which checks whatever copy the declarer resolves to
-         (edge.js:266-277). *)
     ; nres_peer_match :
         forall p, PkgSet.In p S ->
         forall m u, Installs S pi p m u ->
@@ -439,12 +344,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           NSet.In (p_name r) (dirs I (base p)) ->
         forall v, Installs S pi p (peerKeyAt I (base p) r) v ->
           VSet.In v (peerCandsAt I (base p) r)
-      (* Nothing installs the root, so the two clauses above never range
-         over it; npm 7+ nevertheless installs the root project's own
-         mandatory peers into the root's node_modules, and these two say
-         so.  They are the same pair anchored at the root: the mandatory
-         one forces the install, the optional one only narrows a
-         directory the root fills itself. *)
     ; nres_root_peer :
         forall r, In (inst_root I, r) (inst_peer I) ->
           p_optional r = false ->
@@ -456,9 +355,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           NSet.In (p_name r) (dirs I (inst_root I)) ->
         forall v, Installs S pi (rootPkg I) (peerKeyAt I (inst_root I) r) v ->
           VSet.In v (peerCandsAt I (inst_root I) r)
-      (* A copy nests only in a directory its parent can have -- one it
-         declares, or one some peer dependency names -- since nothing
-         else creates a directory, and no core resolution records one. *)
     ; nres_parents :
         forall c q, Conc.ParentRel.In (c, q) pi ->
           PkgSet.In c S /\ PkgSet.In q S /\
@@ -466,14 +362,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
 
   Module Reduction.
 
-    (* npm duplicates freely, so the granularity is the identity and every
-       installed copy is its own core name. *)
     Definition idg (v : V.t) : V.t := v.
 
-    (* -- the per-name and per-package lookups: these are the definitions,
-       and the global translation below is their aggregation -- *)
-
-    (* THE per-name version lookup. *)
     Definition versions (I : Inst) (n : Nm.t) : T.VSet.t :=
       match n with
       | Nm.Granular k w =>
@@ -491,14 +381,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
            Conc.Reduction.embedVS (slotCands I (base q) a)))
         (NSet.elements (dirs I (base q))).
 
-    (* The root's own peers have no parent to hang off, so their edges
-       leave the root's granular node instead of a parent's intermediate
-       one.  The filter is the same peerActive, so a mandatory root peer
-       is installed and an optional one only narrows a directory the root
-       fills itself; the key is the same peerKeyAt, so a name the root
-       also depends on would get one edge kind, narrowed by both ranges;
-       arborist instead lets the dependency replace the peer (node.js,
-       _loadDeps), and the frontend drops such a peer. *)
     Definition rootPeerEdges (I : Inst) (q : Pkg.t)
       : T.DependeesSet.t :=
       if PkgEqb.eqb q (rootPkg I)
@@ -508,9 +390,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
              (activePeers I (base q) (base q))
       else T.DependeesSet.empty.
 
-    (* The peer edges leave the dependee's own intermediate node, so a
-       mandatory peer is forced only for the dependee version actually
-       selected -- npm 7+ auto-installation, conditioned on the choice. *)
     Definition peerEdgesAt (I : Inst) (q : Pkg.t)
         (m : NKey.t) (u : V.t) : T.DependeesSet.t :=
       depsOfL (fun r =>
@@ -518,7 +397,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
            Conc.Reduction.embedVS (peerCandsAt I (base q) r)))
         (activePeers I (base q) (snd m, u)).
 
-    (* THE per-package dependency lookup. *)
     Definition dependees (I : Inst) (s : T.Pkg.t)
       : T.DependeesSet.t :=
       match s with
@@ -588,11 +466,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           [apply in_ownedBy; exact Hr | exact Hact].
     Qed.
 
-    (* -- the global translation: an aggregation of the lookups -- *)
-
-    (* Over-approximating is harmless: a name no edge reaches contributes an
-       inert package, and the per-name versions above are empty for a key
-       nothing asks for. *)
     Definition targetNames (I : Inst) : NmSet.t :=
       NmSet.union
         (SOpn.map (fun q => Nm.Granular (fst q) (snd q)) (realPkgs I))
@@ -655,13 +528,9 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Definition transRoot (I : Inst) : T.Pkg.t :=
       Conc.Reduction.embedPkg idg (rootPkg I).
 
-    (* -- soundness -- *)
-
     Definition npmResolution (S : T.PkgSet.t) : PkgSet.t :=
       Conc.Reduction.concurrentResolution idg S.
 
-    (* The nesting is read straight off the selected intermediates: each
-       one is a directory of its owner holding one chosen version. *)
     Definition npmParents (S : T.PkgSet.t) : Conc.ParentRel.t :=
       SOtp.filterMap
         (fun s => match s with
@@ -703,8 +572,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       cbn [dependees]; rewrite VEqb.eqb_refl; reflexivity.
     Qed.
 
-    (* Every selected intermediate drags its chosen version in: the exit
-       edge is the only edge a directory node carries unconditionally. *)
     Lemma exit_selected : forall I S k v m u,
         T.IsResolution (transR I) (transD I) (transRoot I) S ->
         T.PkgSet.In (Nm.Intermediate k v m, Vs.Orig u) S ->
@@ -741,8 +608,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       exists v; split; assumption.
     Qed.
 
-    (* The root's peer edge leaves the root's own granular node, which is
-       in every resolution, so a mandatory root peer is always forced. *)
     Lemma root_peer_selected : forall I S r,
         T.IsResolution (transR I) (transD I) (transRoot I) S ->
         In (inst_root I, r) (inst_peer I) ->
@@ -797,7 +662,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Proof.
       intros I S Hres.
       assert (Hres' := Hres); destruct Hres' as [Hsub Hroot Hdep Huniq].
-      (* the parent edges a selected intermediate contributes *)
       assert (Hpi : forall q m v,
                  T.PkgSet.In (Conc.Reduction.embedPkg idg q) S ->
                  T.PkgSet.In
@@ -871,12 +735,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           exact (targetNames_int I k w m Hn).
     Qed.
 
-    (* -- completeness -- *)
-
-    (* The version a depender installs under one of its keys is one the
-       encoding introduced there: a slot's own range when it declares one --
-       pinned by the slot obligation and by uniqueness -- and otherwise
-       any published version, which the peer edges narrow. *)
     Lemma installs_childCands : forall I S pi p m v,
         IsResolution I S pi -> PkgSet.In p S ->
         KeySet.In m (childKeys I (base p)) ->
@@ -902,9 +760,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         cbn [fst snd] in Hb; apply mem_realVersions; exact Hb.
     Qed.
 
-    (* The two root-peer clauses read as one obligation: whichever flavour
-       a root peer dependency has, an active one names a directory the
-       root fills at a version its range admits. *)
     Lemma root_peer_installs : forall I S pi r,
         IsResolution I S pi ->
         In (inst_root I, r) (inst_peer I) ->
@@ -1194,11 +1049,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
             [exact Hq | unfold Conc.Reduction.embedPkg, idg; reflexivity].
     Qed.
 
-    (* What the encoding buys over the guarded form: the mandatory peer of
-       a dependee version that was actually selected is installed as its
-       sibling, under the same depender, at a version its range admits.
-       The edge that forces this leaves the dependee's own intermediate
-       node, so nothing is forced for a candidate that lost. *)
     Corollary peer_installed : forall I S,
         T.IsResolution (transR I) (transD I) (transRoot I) S ->
         forall k v m u,
@@ -1231,9 +1081,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       Definition repoPreimage (I : Inst) (ns : NSet.t) : RepoSet.t :=
         RepoSet.filter (fun p => NSet.mem (fst p) ns) (inst_repo I).
 
-      (* Any instance whose repository agrees with I at the names in ns
-         and whose dependencies and peer dependencies are the looked-up
-         package's own answers that lookup alike. *)
       Definition subInst (I : Inst) (ns : NSet.t)
           (deps : list (RPkg.t * Dependency))
           (prs : list (RPkg.t * PeerDependency))
@@ -1262,17 +1109,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       Definition peerNamesAt (I : Inst) (q : RPkg.t) : NSet.t :=
         namesOfL p_name (peerDependenciesAt I q).
 
-      Lemma mem_eq_of_iff : forall (s s' : RepoSet.t) x,
-          (RepoSet.In x s <-> RepoSet.In x s') ->
-          RepoSet.mem x s = RepoSet.mem x s'.
-      Proof.
-        intros s s' x H; destruct (RepoSet.mem x s) eqn:H1;
-          destruct (RepoSet.mem x s') eqn:H2; try reflexivity.
-        - apply RepoSet.mem_spec, H, RepoSet.mem_spec in H1; congruence.
-        - apply RepoSet.mem_spec in H2; apply H in H2;
-            apply RepoSet.mem_spec in H2; congruence.
-      Qed.
-
       Lemma mem_repoPreimage : forall I ns p,
           RepoSet.In p (repoPreimage I ns) <->
           RepoSet.In p (inst_repo I) /\ NSet.In (fst p) ns.
@@ -1298,16 +1134,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       Proof.
         intros I ns deps prs n Hn; apply VSet.ext; intro w.
         rewrite !mem_realVersions; apply repo_subInst; exact Hn.
-      Qed.
-
-      (* -- the declarations a lookup reads -- *)
-
-      Lemma dependenciesOf_subInst : forall I ns deps prs p,
-          ownedBy deps p = ownedBy (inst_dep I) p ->
-          dependenciesOf (subInst I ns deps prs) p = dependenciesOf I p.
-      Proof.
-        intros I ns deps prs p Ho; unfold dependenciesOf, depActive.
-        cbn [inst_dep inst_root subInst]; rewrite Ho; reflexivity.
       Qed.
 
       Lemma ownDependencies_id : forall I p,
@@ -1353,8 +1179,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
               [exact Hq | apply NEqb.eqb_true_iff; exact Hn]. }
           apply NSet.mem_spec in Hc; congruence.
       Qed.
-
-      (* -- agreement of the per-lookup reads under a sub-instance -- *)
 
       Lemma dependenciesOf_agree : forall I ns deps prs p,
           ownedBy deps p = ownedBy (inst_dep I) p ->
@@ -1449,8 +1273,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         - apply realVersions_subInst; exact Hm.
       Qed.
 
-      (* -- the four lookups -- *)
-
       Definition granSubInst (I : Inst) (k : NKey.t) : Inst :=
         subInst I (NSet.singleton (snd k)) (inst_dep I) (inst_peer I).
 
@@ -1488,10 +1310,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         - apply mem_peerDirs_named.
       Qed.
 
-      (* A package's own peer dependencies come along because the
-         granular node of the root now carries the root's peer edges; for
-         any other package they are inert, since rootPeerEdges tests the
-         whole package. *)
       Definition pkgSubInst (I : Inst) (p : RPkg.t) : Inst :=
         subInst I (NSet.union (slotTargets I p) (peerNamesAt I p))
           (ownDependencies I p) (ownPeerDependencies I p).
@@ -1608,8 +1426,7 @@ End Npm.
 
 (* Smoke instances.  Functor bodies are checked abstractly, so some errors
    surface only at application time, and the reflexivity examples fail if
-   any definition stops computing to a normal form.  They live here rather
-   than in Smoke.v so that no existing theory file is touched. *)
+   any definition stops computing to a normal form. *)
 
 Module NatVM <: SemverMatch Nat_as_OT.
   Definition isPre (_ : nat) : bool := false.
@@ -1653,45 +1470,31 @@ Definition npmDeps (I : NpmS.Inst) (s : NpmS.T.Pkg.t) :=
   List.map npmShow
     (NpmS.T.DependeesSet.elements (NpmS.Reduction.dependees I s)).
 
-(* A depends on B and on C in [2,4); B declares C in [1,3) as a peer. *)
 Definition npmInst : NpmS.Inst :=
   NpmS.MkInst npmRepo
     (((npmA, 1), npmDepB) :: ((npmA, 1), npmDepC) :: nil)
     (((npmB, 1), npmPeerC) :: nil) nil (npmA, 1).
 
-(* The same, with A's own dependency on C dropped. *)
 Definition npmInstAuto : NpmS.Inst :=
   NpmS.MkInst npmRepo (((npmA, 1), npmDepB) :: nil)
     (((npmB, 1), npmPeerC) :: nil) nil (npmA, 1).
 
-(* The root's own peers, which npm 7+ installs into the root's own
-   node_modules: A names C both as a dependency in [2,4) and as a peer in
-   [1,3), so its granular node carries both edges to the same directory
-   and only 2 satisfies the two ranges at once (calculus only: npm lets
-   A's dependency replace its peer, so 3 would also do). *)
 Definition npmInstRootPeer : NpmS.Inst :=
   NpmS.MkInst npmRepo (((npmA, 1), npmDepC) :: nil)
     (((npmA, 1), npmPeerC) :: nil) nil (npmA, 1).
 
-(* The same with the root peer optional; A still fills the directory, so
-   the range still binds -- the legacy guard, read at the root. *)
 Definition npmInstRootPeerOpt : NpmS.Inst :=
   NpmS.MkInst npmRepo (((npmA, 1), npmDepC) :: nil)
     (((npmA, 1), npmPeerCOpt) :: nil) nil (npmA, 1).
 
-(* An optional root peer naming a directory A does not fill forces
-   nothing, which is the legacy guard again. *)
 Definition npmInstRootPeerOptBare : NpmS.Inst :=
   NpmS.MkInst npmRepo (((npmA, 1), npmDepB) :: nil)
     (((npmA, 1), npmPeerCOpt) :: nil) nil (npmA, 1).
 
-(* The same again, with the peer marked optional. *)
 Definition npmInstOpt : NpmS.Inst :=
   NpmS.MkInst npmRepo (((npmA, 1), npmDepB) :: nil)
     (((npmB, 1), npmPeerCOpt) :: nil) nil (npmA, 1).
 
-(* An alias installs the registry package under another directory, so one
-   depender can hold two copies of one package. *)
 Definition npmDepAlias : NpmS.Dependency :=
   NpmS.MkDep npmX npmC (npmEq 1) false.
 
@@ -1723,8 +1526,6 @@ Example npm_slot_versions_computes :
   = NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: nil.
 Proof. reflexivity. Qed.
 
-(* The mandatory peer edge leaves B's own directory node, so it fires only
-   for the B version that was selected, and it narrows A's copy of C. *)
 Example npm_peer_edge_computes :
   npmDeps npmInst (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1)
   = (NpmS.Nm.Granular kB 1, NpmS.Vs.Orig 1 :: nil)
@@ -1732,8 +1533,6 @@ Example npm_peer_edge_computes :
         NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
-(* With A declaring no dependency on C, the peer directory is introduced at
-   every published version and the same edge auto-installs it. *)
 Example npm_auto_versions_computes :
   NpmS.T.VSet.elements
     (NpmS.Reduction.versions npmInstAuto
@@ -1748,8 +1547,6 @@ Example npm_auto_edge_computes :
         NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
-(* The optional peer keeps npm's legacy guard: A declares no directory for
-   C, so no edge is emitted and nothing is forced. *)
 Example npm_optional_edge_computes :
   npmDeps npmInstOpt (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1)
   = (NpmS.Nm.Granular kB 1, NpmS.Vs.Orig 1 :: nil) :: nil.
@@ -1784,9 +1581,6 @@ Example npm_override_computes :
   = (NpmS.Nm.Intermediate kA 1 kC, NpmS.Vs.Orig 3 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
-(* The prerelease rule, with odd versions coding prereleases of v / 2:
-   a comparator set admits one only when it names a prerelease sharing
-   the release core. *)
 Module NatVMPre <: SemverMatch Nat_as_OT.
   Definition isPre (v : nat) : bool := Nat.odd v.
   Definition sameCore (a b : nat) : bool :=

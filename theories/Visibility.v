@@ -5,8 +5,6 @@ Create HintDb cmp_vis.
 Create Rewrite HintDb cmp_vis.
 
 Module Visibility (N V : UsualOrderedType).
-  (* Visibility resolutions are concurrent resolutions at the identity
-     granularity, under which version granularity is vacuous. *)
   Module Conc := Concurrent N V V.
   Module C := Conc.C.
   Module Pkg := C.Pkg.
@@ -1495,59 +1493,6 @@ Module Visibility (N V : UsualOrderedType).
         apply mem_potentialOrigins in Hq; apply mem_potentialOrigins.
         destruct Hq as [-> | [HqR Hqp]]; [left; reflexivity |].
         right; split; [exact (HR _ HqR) | exact (Hpriv _ Hqp)].
-      Qed.
-
-      (* Privacy is antitone in pub, so containment of the restricted pub does
-         not by itself transfer the guards that read it; the premise carries
-         what the restrictions in use establish instead. *)
-      Lemma reduceDeps_mono : forall R R' D D' pub pub' r (y : T.DepElt.t),
-          PkgSet.Subset R' R -> C.DepRel.Subset D' D ->
-          PubRel.Subset pub' pub ->
-          (forall p, Priv D' pub' p -> Priv D pub p) ->
-          T.DepRel.In y (reduceDeps R' D' pub' r) ->
-          T.DepRel.In y (reduceDeps R D pub r).
-      Proof.
-        intros R R' D D' pub pub' r y HR HD Hpub Hpriv; revert y.
-        pose proof (potentialOrigins_mono R R' D D' pub pub' r HR Hpriv) as Ho.
-        unfold reduceDeps, reduceDepsSelf, reduceDepsOccToInt,
-          reduceDepsIntToOcc, reduceDepsIntToAgr.
-        repeat apply SOdtd.union_subset.
-        - apply SOptd.unionMap_mono; [exact HR |].
-          intros [n v]; cbn beta iota.
-          apply SOptd.filterMap_mono; [exact Ho |].
-          intros q z Hz; cbn beta iota in Hz |- *.
-          destruct (andb (privb D' pub' (n, v)) (negb (PkgEqb.eqb q (n, v))))
-            eqn:Hb; [| discriminate Hz].
-          apply Bool.andb_true_iff in Hb; destruct Hb as [H1 H2].
-          assert (privb D pub (n, v) = true) as H1'
-            by (apply privb_iff; apply Hpriv; apply privb_iff; exact H1).
-          rewrite H1', H2; exact Hz.
-        - apply SOdtd.unionMap_mono; [exact HD |].
-          intros [[n v] [m vs]]; cbn beta iota.
-          apply SOptd.filterMap_mono; [exact Ho |].
-          intros q z Hz; cbn beta iota in Hz |- *.
-          destruct (carriedb pub' (n, v) m q) eqn:Hb; [| discriminate Hz].
-          assert (carriedb pub (n, v) m q = true) as ->
-            by exact (carriedb_mono pub pub' (n, v) m q Hpub Hb).
-          exact Hz.
-        - apply SOdtd.unionMap_mono; [exact HD |].
-          intros [[n v] [m vs]]; cbn beta iota.
-          apply SOptd.unionMap_mono; [exact Ho |].
-          intro q; cbn beta iota.
-          destruct (carriedb pub' (n, v) m q) eqn:Hb;
-            [| apply T.DepRel.empty_subset].
-          assert (carriedb pub (n, v) m q = true) as ->
-            by exact (carriedb_mono pub pub' (n, v) m q Hpub Hb).
-          apply SOvtd.map_mono; [intros z Hz; exact Hz | intro; reflexivity].
-        - apply SOdtd.unionMap_mono; [exact HD |].
-          intros [[n v] [m vs]]; cbn beta iota.
-          apply SOptd.unionMap_mono; [exact Ho |].
-          intro q; cbn beta iota.
-          destruct (carriedb pub' (n, v) m q) eqn:Hb;
-            [| apply T.DepRel.empty_subset].
-          assert (carriedb pub (n, v) m q = true) as ->
-            by exact (carriedb_mono pub pub' (n, v) m q Hpub Hb).
-          apply SOvtd.map_mono; [intros z Hz; exact Hz | intro; reflexivity].
       Qed.
 
       Definition depRange (D : C.DepRel.t) (p : Pkg.t) (m : N.t) : VSet.t :=

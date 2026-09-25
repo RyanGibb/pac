@@ -161,9 +161,6 @@ Module PackageFormula (N V : UsualOrderedType).
     #[local] Hint Extern 1 => cmp_by DepF.compare_lt_trans : cmp_pkgf.
     #[local] Hint Extern 1 => cmp_by FListF.compare_lt_trans : cmp_pkgf.
 
-    (* One disjunct package per disjunction, named by all of its
-       alternatives: a chain of two-alternative disjuncts would introduce an
-       inner name for every proper suffix of the same disjunction. *)
     Module Name.
       Inductive name : Type :=
       | Orig (m : N.t)
@@ -197,11 +194,6 @@ Module PackageFormula (N V : UsualOrderedType).
     #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_pkgf.
     #[local] Hint Extern 1 => cmp_by NatF.compare_lt_trans : cmp_pkgf.
 
-    (* A synthetic version is the position of the alternative it selects, so
-       a disjunction of any width is one node.  Bot is absence: every original
-       name has it, and it is the greatest version so that a solver preferring
-       the greatest leaves a name nobody needs positively out of the
-       resolution. *)
     Module Version.
       Inductive version : Type :=
       | Orig (v : V.t)
@@ -243,9 +235,6 @@ Module PackageFormula (N V : UsualOrderedType).
     Definition embedVS (vs : VSet.t) : T.VSet.t :=
       SOvv.map Version.Orig vs.
 
-    (* The alternatives a disjunction offers, and the alternatives De
-       Morgan reads off a negated conjunction: the disjunct package's own
-       name, and the list its versions index. *)
     Fixpoint disjSpine (f : Formula) : list Formula :=
       match f with
       | FDisj a b => a :: disjSpine b
@@ -264,10 +253,6 @@ Module PackageFormula (N V : UsualOrderedType).
     Definition idxPkgs (n : Name.t) (k : nat) : T.PkgSet.t :=
       T.PkgSet.ofList (List.map (fun i => (n, Version.Idx i)) (List.seq 0 k)).
 
-    (* The versions a negated atom admits at its name: every real version
-       the atom does not name, and absence.  The encoder reads real versions
-       through the oracle Vq, so a sub-instance agreeing there gives the same
-       edges. *)
     Definition negVS (Vq : N.t -> VSet.t) (m : N.t) (vs : VSet.t) : T.VSet.t :=
       T.VSet.add Version.Bot (embedVS (VSet.diff (Vq m) vs)).
 
@@ -334,8 +319,6 @@ Module PackageFormula (N V : UsualOrderedType).
       | FNeg a => encodeNNF Vq (n, Version.Idx i) a
       end.
 
-    (* The synthetic packages a formula's encoding introduces: the disjunct
-       packages, and nothing for a negated atom. *)
     Fixpoint witnessSet (p : T.Pkg.t) (f : Formula) : T.PkgSet.t :=
       match f with
       | FDep _ _ => T.PkgSet.empty
@@ -382,7 +365,6 @@ Module PackageFormula (N V : UsualOrderedType).
       | FNeg a => witnessSet (n, Version.Idx i) a
       end.
 
-    (* The names a formula mentions. *)
     Fixpoint fnames (f : Formula) : NSet.t :=
       match f with
       | FDep m _ => NSet.singleton m
@@ -395,8 +377,6 @@ Module PackageFormula (N V : UsualOrderedType).
     Definition depNames (D : DepRel.t) : NSet.t :=
       SOen.unionMap (fun '(_, f) => fnames f) D.
 
-    (* Every name of the instance -- those with a version and those some
-       formula mentions -- has the absent version. *)
     Module SOpn := SetOps Pkg N PkgSet NSet.
     Definition instNames (R : PkgSet.t) (D : DepRel.t) : NSet.t :=
       NSet.union (SOpn.map fst R) (depNames D).
@@ -658,7 +638,6 @@ Module PackageFormula (N V : UsualOrderedType).
             i0 <= i -> i < i0 + List.length (negConjSpine f) ->
             ~ Satisfies (packageFormulaResolution S) f)).
       { intros H q f; exact (proj1 (H f) q). }
-      (* the FDep dependency edge, read back through the resolution *)
       assert (Hpos : forall (q : T.Pkg.t) m vs,
                  T.DepRel.In (q, (Name.Orig m, embedVS vs)) D ->
                  T.PkgSet.In q S ->
@@ -669,8 +648,6 @@ Module PackageFormula (N V : UsualOrderedType).
           destruct Hw as [v [Hv ->]].
         exists v; split; [exact Hv |].
         apply mem_packageFormulaResolution; exact HwS. }
-      (* the negated atom's edge: closure picks a version the atom does not
-         name, or absence, and version uniqueness leaves room for no other *)
       assert (Hneg : forall (q : T.Pkg.t) m vs,
                  T.DepRel.In (q, (Name.Orig m, negVS Vq m vs)) D ->
                  T.PkgSet.In q S ->
@@ -813,9 +790,6 @@ Module PackageFormula (N V : UsualOrderedType).
         injection E as E; exact E.
     Qed.
 
-    (* The alternative a disjunct package takes: the first satisfied one,
-       and the last one when none is -- which is what the two-alternative
-       chain this replaces settled on, and keeps the index inside idxSet. *)
     Fixpoint firstSatIdx (Sv : PkgSet.t) (fs : list Formula) : nat :=
       match fs with
       | nil => 0
@@ -824,10 +798,6 @@ Module PackageFormula (N V : UsualOrderedType).
           if satisfiesb Sv g then 0 else Datatypes.S (firstSatIdx Sv fs')
       end.
 
-    (* The synthetic packages a selected package's satisfied formula puts in
-       the resolution: each disjunct at the alternative it takes, and that
-       alternative's own witnesses.  A negated atom contributes nothing; its
-       edge is met by the target's version, or by absence. *)
     Fixpoint witnessSetTaken (S : PkgSet.t) (f : Formula) : T.PkgSet.t :=
       match f with
       | FDep _ _ => T.PkgSet.empty
@@ -872,8 +842,6 @@ Module PackageFormula (N V : UsualOrderedType).
       | FNeg a => witnessSetTaken S a
       end.
 
-    (* The walkers and their hosts agree everywhere but the spine, so the
-       host's own case is the walker's plus the synthetic version it takes. *)
     Lemma witnessSetTaken_disj_eq : forall S a b,
         witnessSetTaken S (FDisj a b) =
         T.PkgSet.add
@@ -929,9 +897,6 @@ Module PackageFormula (N V : UsualOrderedType).
         [contradiction Hne; reflexivity | reflexivity].
     Qed.
 
-    (* Which alternative a disjunct package's taken version stands for: the
-       witness of that alternative is the one the walker actually laid
-       down. *)
     Lemma takenDisj_firstSat : forall S f,
         Satisfies S f ->
         exists g,
@@ -988,8 +953,6 @@ Module PackageFormula (N V : UsualOrderedType).
         intros y Hy; simpl; rewrite Ea; exact Hy.
     Qed.
 
-    (* Whether a name has a version in S; the names that do not carry
-       absence in the completeness construction. *)
     Definition hasNameb (S : PkgSet.t) (n : N.t) : bool :=
       PkgSet.exists_ (fun p => if N.eq_dec (fst p) n then true else false) S.
 
@@ -1280,9 +1243,6 @@ Module PackageFormula (N V : UsualOrderedType).
       exists p, f; auto.
     Qed.
 
-    (* Passing an alternative up through one set constructor: nav is the
-       step from the inner witness set to the outer one, which is all that
-       differs between the places this conclusion is rebuilt. *)
     Ltac pick_alt H nav :=
       let g0 := fresh "g0" in let Hg0 := fresh "Hg0" in
       let Hs0 := fresh "Hs0" in let Hu0 := fresh "Hu0" in
@@ -1291,9 +1251,6 @@ Module PackageFormula (N V : UsualOrderedType).
       let y0 := fresh "y0" in let Hy0 := fresh "Hy0" in
       intros y0 Hy0; nav; exact (Hu0 y0 Hy0).
 
-    (* Reading a synthetic version out of a taken witness: it names an
-       alternative that holds, and that alternative's own taken witness is
-       already part of the same set. *)
     Lemma witnessSetTaken_disj_mono_aux : forall S f,
         (Satisfies S f ->
          forall fs i,
@@ -1417,11 +1374,6 @@ Module PackageFormula (N V : UsualOrderedType).
       - discriminate Hn.
     Qed.
 
-    (* Dependency closure over one formula's encoding.  Every source is
-       either the owner q0 (then the formula holds and its taken witness is
-       in w) or a disjunct node already in w, whose alternative Hdisj says
-       holds; a negated atom's edge is met by the version its target has in
-       S, or by absence when it has none. *)
     Lemma encodeNNF_dep_closure_aux :
       forall (S : PkgSet.t) (Vq : N.t -> VSet.t) (Ns : NSet.t) (w : T.PkgSet.t),
         (forall p, PkgSet.In p S -> T.PkgSet.In (embedPkg p) w) ->
@@ -1468,7 +1420,6 @@ Module PackageFormula (N V : UsualOrderedType).
                 exists v, T.VSet.In v ws /\ T.PkgSet.In (o, v) w).
     Proof.
       intros S Vq Ns w Hemb HVq Hbot Hdisj f.
-      (* the negated atom's edge, from any source in w *)
       assert (Hneg : forall m vs,
                  NSet.In m Ns ->
                  ~ Satisfies S (FDep m vs) ->
@@ -1779,9 +1730,6 @@ Module PackageFormula (N V : UsualOrderedType).
         | _ => None
         end.
 
-      (* An edge out of an original package is the owner's own: the only
-         other sources an encoding has are the disjunct nodes it introduces,
-         whose versions are indices. *)
       Definition notIdx (w : Version.t) : Prop :=
         forall i, w <> Version.Idx i.
 
@@ -1866,7 +1814,6 @@ Module PackageFormula (N V : UsualOrderedType).
       Lemma notIdx_bot : notIdx Version.Bot.
       Proof. intros i E; discriminate E. Qed.
 
-      (* An edge's original target is a name the formula mentions. *)
       Lemma encodeNNF_tgt_aux : forall Vq f,
           (forall (q q' : T.Pkg.t) m (ws : T.VSet.t),
               T.DepRel.In (q', (Name.Orig m, ws)) (encodeNNF Vq q f) ->
@@ -1929,8 +1876,6 @@ Module PackageFormula (N V : UsualOrderedType).
           + intros n i0 q' m ws H; exact (IHa1 _ _ _ _ H).
       Qed.
 
-      (* The encoder reads the oracle at the names the formula mentions and
-         nowhere else. *)
       Lemma encodeNNF_agree_aux : forall Vq Vq' f,
           (forall m, NSet.In m (fnames f) -> Vq m = Vq' m) ->
           (forall p, encodeNNF Vq p f = encodeNNF Vq' p f) /\
@@ -2041,7 +1986,6 @@ Module PackageFormula (N V : UsualOrderedType).
       Module DepRelFibred := FibredRel Pkg Dependees DepElt DepRel.
       Module RKeys := PreimageOfKeys N Pkg NSet PkgSet.
 
-      (* The repository at a set of names. *)
       Definition nameRestrict (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
         RKeys.ofKeys fst ns R.
 
@@ -2193,8 +2137,6 @@ Module PackageFormula (N V : UsualOrderedType).
         exact (proj1 (encodeNNF_tgt_aux (C.versions R) f) _ _ _ _ He).
       Qed.
 
-      (* A reachable name's versions are its real versions and absence: the
-         repository at the name, and nothing of who negates it. *)
       Theorem versions_lookupOrig : forall R D (r : Pkg.t) (m : N.t),
           PkgSet.In r R ->
           (exists p h, T.DepRel.In (p, (Name.Orig m, h)) (reduceDeps R D)) \/
@@ -2226,8 +2168,6 @@ Module PackageFormula (N V : UsualOrderedType).
             left; exists (m, v); split; [exact Hv | reflexivity].
       Qed.
 
-      (* A package's dependees read its own formulas and the repository at
-         the names those formulas mention. *)
       Theorem dependees_lookupOrig : forall R D m v,
           T.dependees (reduceDeps R D) (Name.Orig m, Version.Orig v) =
           T.dependees
@@ -2268,9 +2208,6 @@ Module PackageFormula (N V : UsualOrderedType).
           rewrite (Hag f Hd); exact He.
       Qed.
 
-      (* The shape a driver computes: the package's own formulas reduced
-         under any oracle that agrees with the repository at the names they
-         mention. *)
       Theorem dependees_lookupOrigBy : forall R D Vq m v,
           (forall n, NSet.In n (depNames (DepRelFibred.tailFibre D (m, v))) ->
                      Vq n = C.versions R n) ->
@@ -2283,9 +2220,6 @@ Module PackageFormula (N V : UsualOrderedType).
         rewrite versions_nameRestrict by exact Hn; symmetry; apply HVq; exact Hn.
       Qed.
 
-      (* The root is in every resolution, so version uniqueness already
-         refuses its absence, and a driver may leave the root's ⊥ out of
-         the versions it answers. *)
       Theorem root_not_absent : forall R D r S,
           T.IsResolution (reduceReal R D) (reduceDeps R D) (embedPkg r) S ->
           ~ T.PkgSet.In (Name.Orig (fst r), Version.Bot) S.
@@ -2296,7 +2230,6 @@ Module PackageFormula (N V : UsualOrderedType).
         discriminate E.
       Qed.
 
-      (* Absence depends on nothing. *)
       Theorem dependees_lookupAbsent : forall R D m,
           T.dependees (reduceDeps R D) (Name.Orig m, Version.Bot) =
           T.DependeesSet.empty.
@@ -2655,9 +2588,6 @@ Module PackageFormula (N V : UsualOrderedType).
             exact H.
       Qed.
 
-      (* A disjunct's dependees are read off the spine its name carries:
-         version i carries alternative i's own encoding under the repository's
-         versions. *)
       Theorem dependees_lookupDisjunct : forall R D fs (i : Version.t),
           T.PkgSet.In (Name.Disjunct fs, i) (reduceReal R D) ->
           T.dependees (reduceDeps R D) (Name.Disjunct fs, i) =
@@ -2727,8 +2657,6 @@ Module PackageFormula (N V : UsualOrderedType).
           [left; exact Hx | right; exact (IHb _ _ Hg Hx)].
       Qed.
 
-      (* An alternative's negated names are negated in the formula it came
-         from -- or, under a negation, mentioned there at all. *)
       Lemma witnessSet_negNames_aux : forall f : Formula,
           (forall (p : T.Pkg.t) gs w g x,
               T.PkgSet.In (Name.Disjunct gs, w) (witnessSet p f) ->
@@ -2845,9 +2773,6 @@ Module PackageFormula (N V : UsualOrderedType).
           exact (proj1 (witnessSet_alt_aux Vq f) _ _ _ _ _ Hw E Hin).
       Qed.
 
-      (* The shape a driver computes: a disjunct's dependees are those the
-         reduction of any formulas it arises in gives it, under an oracle
-         agreeing with the repository at the names those formulas negate. *)
       Theorem dependees_lookupDisjunctBy : forall R D R' D' Vq fs i,
           DepRel.Subset D' D ->
           T.PkgSet.In (Name.Disjunct fs, i) (reduceReal R' D') ->

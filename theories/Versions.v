@@ -167,12 +167,9 @@ Module Versions (N V : UsualOrderedType).
         intros y z; destruct y as [ | | a2 b2 | a2 b2 | o2 c2 ],
           z as [ | | a3 b3 | a3 b3 | o3 c3 ]; simpl; intros H1 H2;
         try congruence.
-      - (* Conj / Conj / Conj *)
-        exact (lex_lt_trans compare_eq_iff (IHa _ _) (IHb _ _) H1 H2).
-      - (* Disj / Disj / Disj *)
-        exact (lex_lt_trans compare_eq_iff (IHa _ _) (IHb _ _) H1 H2).
-      - (* Cmp / Cmp / Cmp *)
-        exact (lex_lt_trans OpComp.compare_eq_iff
+      - exact (lex_lt_trans compare_eq_iff (IHa _ _) (IHb _ _) H1 H2).
+      - exact (lex_lt_trans compare_eq_iff (IHa _ _) (IHb _ _) H1 H2).
+      - exact (lex_lt_trans OpComp.compare_eq_iff
                  (OpComp.compare_lt_trans _ _ _) (VF.compare_lt_trans _ _ _)
                  H1 H2).
     Qed.

@@ -37,11 +37,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     | CHash c => PM.hash v c
     end.
 
-  (* apk gives a bare provides the empty version, which its comparator
-     orders below every version, so a bare provides meets exactly the
-     constraints a version below all others meets.  apk tests >< against
-     the providing package's digest (package.c:276), which the model does
-     not carry, so a bare provides never meets it. *)
   Definition bareMatch (ct : Constr) : bool :=
     match ct with
     | CAny => true
@@ -163,10 +158,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
   Module ReplElt := PairUOT Pkg N.
   Module Repl := FSetUOT ReplElt.
 
-  (* replaces steers file ownership and constrains nothing here.
-     provider_priority steers apk's preference among providers by its
-     value, and constrains resolutions only by whether it is non-zero:
-     see AutoSelectable. *)
   Record Inst : Type :=
     { inst_repo : PkgSet.t
     ; inst_deps : Deps.t
@@ -176,9 +167,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     ; inst_prio : Prio.t
     ; inst_repl : Repl.t }.
 
-  (* A versioned provide is an alias: it satisfies constrained atoms at
-     the provided version and claims the name.  A bare provide satisfies
-     the atoms bareMatch admits and claims nothing. *)
   Definition MatchPos (I : Inst) (S : PkgSet.t)
       (n : N.t) (ct : Constr) : Prop :=
     (exists v, PkgSet.In (n, v) S /\ constrMatch ct v = true) \/
@@ -190,11 +178,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
   Definition HasPriority (I : Inst) (q : Pkg.t) : Prop :=
     exists k, Prio.In (q, k) (inst_prio I) /\ k <> 0.
 
-  (* apk-package(5): a provides without a version is selected
-     automatically only for a provider_priority, "otherwise user is
-     expected to manually select one of the concrete package names in
-     world".  apk 3.0.5 also takes one whose own name has any requirer
-     (solver.c:381); this keeps only the world case. *)
   Definition AutoSelectable (I : Inst) (q : Pkg.t) : Prop :=
     HasPriority I q \/ exists ct, WSet.In (DPos (fst q, ct)) (inst_world I).
 
@@ -213,16 +196,12 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     | DNeg (n, ct) => ~ MatchPos I S n ct
     end.
 
-  (* apk tests an install_if condition against whichever package holds
-     its name, selectable or not, so both signs read MatchPos. *)
   Definition MatchCond (I : Inst) (S : PkgSet.t) (c : Dep) : Prop :=
     match c with
     | DPos (n, ct) => MatchPos I S n ct
     | DNeg (n, ct) => ~ MatchPos I S n ct
     end.
 
-  (* Real packages and versioned providers both claim their name; claim
-     uniqueness subsumes per-name version uniqueness. *)
   Definition Claims (I : Inst) (n : N.t) (p : Pkg.t) : Prop :=
     fst p = n \/ exists pv, Prov.In (p, (n, PVer pv)) (inst_prov I).
 
@@ -235,16 +214,11 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     ; res_claim_unique :
         forall n p q, PkgSet.In p S -> PkgSet.In q S ->
         Claims I n p -> Claims I n q -> p = q
-    (* install_if obliges the name, not the declaring version: apk is
-       satisfied by any installed claimant of the package's name. *)
     ; res_installIf :
         forall p conds, InstallIf.In (p, conds) (inst_installIf I) ->
         (forall c, CondSet.In c conds -> MatchCond I S c) ->
         MatchPos I S (fst p) CAny }.
 
-  (* Only a positive condition can be designated: a rule is carried by a
-     package satisfying its designated condition, and absence is
-     satisfied by no package. *)
   Module Type Designation.
     Parameter designation : CondSet.t -> option Atom.t.
     Parameter designation_spec : forall conds : CondSet.t,
@@ -330,9 +304,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     End Name.
     Module NameOT := UOTFromCompare Name.
 
-    (* An alias version's identity is its provider, so two providers
-       aliasing the same name at the same version stay distinct target
-       versions and claim conflicts surface as core version uniqueness. *)
     Module Version.
       Inductive version : Type :=
       | RootV
@@ -482,9 +453,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       InstallIf.filter (fun '(_, conds) => attachDesignation I p conds)
         (inst_installIf I).
 
-    (* installIfForm negates every condition, so a negated one is
-       negated twice; the package-formula encoder cancels the pair, and
-       the alternative it leaves is the atom being present. *)
     Definition encCond (I : Inst) (c : Dep) : PF.Formula :=
       match c with
       | DPos (n, ct) => encPos I n ct
@@ -1102,9 +1070,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     (* A rule with no positive condition has nothing to designate, so the
        obligation res_installIf states of it would have nothing to carry
-       it.  apk never fires such a rule: its changeset reaches a rule only
-       from an installed package bearing or providing a condition's name,
-       and for a negated condition that package falsifies it. *)
+       it. *)
     Definition WfInstallIf (I : Inst) : Prop :=
       forall z conds, InstallIf.In (z, conds) (inst_installIf I) ->
       exists a, CondSet.In (DPos a) conds.
@@ -1494,8 +1460,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             rewrite (Wf1 _ _ _ _ Hr1 Hr2); reflexivity.
     Qed.
 
-    (* A resolution is S alone, and the witness adds only the root and the
-       alias versions S's members provide, both functions of S. *)
     Theorem alpineResolution_transS : forall I S,
         alpineResolution (transS I S) = S.
     Proof.
@@ -1539,8 +1503,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           (inst_prov I).
 
       Module PkgPre := Preimage Pkg PkgSet.
-      (* A dependee lookup reads the repository at the mentioned names and
-         at their providers, which need not bear those names. *)
       Definition repoPreimage (I : Inst) (ns : NSet.t) : PkgSet.t :=
         PkgPre.preimage (fun p => p)
           (fun q => orb (NSet.mem (fst q) ns) (provTouchb I ns q))
@@ -1603,8 +1565,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         cbn; rewrite PkgSet.mem_spec; reflexivity.
       Qed.
 
-      (* Any instance whose repository and provides agree with I at the
-         names in ns answers every constraint at those names alike. *)
       Definition subInst (I : Inst) (ns : NSet.t) (deps : Deps.t)
           (ownProv : Prov.t) (installIf : InstallIf.t) (world : WSet.t)
         : Inst :=
@@ -1670,7 +1630,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             right; exists n, PVirt; split; assumption.
       Qed.
 
-      (* Alias link dependencies read nothing from the instance. *)
       Theorem dependees_lookupProv : forall I m q pv,
           dependees I (Name.Orig m, Version.Prov q pv) =
           FSet.singleton
@@ -1771,8 +1730,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           apply encPos_subInst; assumption.
       Qed.
 
-      (* The condition fold is a congruence in encCond: only the atoms the
-         set lists are read, so agreement there transports the formula. *)
       Lemma negFold_agree : forall I I' l base,
           (forall c, List.In c l -> encCond I' c = encCond I c) ->
           fold_right
@@ -1809,9 +1766,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           installIf.
       Proof. reflexivity. Qed.
 
-      (* Attachment reads the package itself and the provides entries it
-         is the tail of, so a sub-instance keeping that fibre answers
-         alike. *)
       Lemma attachAt_subInst : forall I ns deps ownProv installIf world p a,
           Prov.Subset ownProv (inst_prov I) ->
           (forall m tg, Prov.In (p, (m, tg)) (inst_prov I) ->
@@ -1866,9 +1820,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         tauto.
       Qed.
 
-      (* A package's dependee lookup reads its own dependency names and,
-         per install-if rule it carries, the rule's declaring name and the
-         names of the conditions it did not designate. *)
       Definition pkgNames (I : Inst) (p : Pkg.t) : NSet.t :=
         NSet.union (atomNames I p)
           (SOtn.unionMap
@@ -1995,8 +1946,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
               | exact Hown ].
       Qed.
 
-      (* The root's dependees read the world set at its dependency names
-         alone: every install-if rule is carried by a package. *)
       Definition rootNames (I : Inst) : NSet.t :=
         SOwn.map depName (inst_world I).
 
@@ -2164,10 +2113,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         split; [exact Hprov | split; [exact Hq | reflexivity]].
       Qed.
 
-      (* A disjunct's edges are recorded when its owner is reduced.  An
-         install-if rule's conditions are negated as alternatives of its
-         disjunct, so this is where the bare providers' complements of its
-         positive ones are taken. *)
       Theorem dependees_lookupDisjunctCore : forall I I' Vq q fs i,
           PF.PkgSet.In q (transR I) ->
           dependees I' q = dependees I q ->
@@ -2236,8 +2181,6 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           [exact Hv | reflexivity].
       Qed.
 
-      (* As every original name, the root has ⊥ in the core, which a driver
-         may leave out: PF.Reduction.Lookup.root_not_absent. *)
       Theorem versions_lookupRootCore : forall I,
           PF.Reduction.T.versions
             (PF.Reduction.reduceReal (transR I) (transD I))

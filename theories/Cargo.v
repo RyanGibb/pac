@@ -4,32 +4,12 @@ From PackageCalculus Require Import Prelude Core Semver ConflictClass.
 Create HintDb cmp_cargo.
 Create Rewrite HintDb cmp_cargo.
 
-(* Cargo: crates resolve with at most one version per semver-compatibility
-   class (the granularity g), feature unification per crate version,
-   optional dependencies activated by features, and native-library mutual
-   exclusion via the links key.  The calculus is a source record over
-   honest manifest data plus a verified translation into Core.
-   Caret/tilde/wildcard
-   requirements, implicit features of optional dependencies, and the
-   dep: suppression rule are frontend desugarings into the carried
-   range/feature-table data.
-
-   Cargo resolves a project twice, and the difference between the two is
-   only which features the root is asked for: the lockfile resolve takes
-   every feature the root declares, so that one lock serves every later
-   selection, and the build resolve takes the features actually named.
-   Both are IsResolution over the same manifest data at different
-   rootFeats, so neither needs its own record. *)
 Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Module C := Core N V.
   Module Pkg := C.Pkg.
   Module PkgSet := C.PkgSet.
   Module VSet := C.VSet.
 
-  (* cargo requirements are the shared semver language: a comma-separated
-     conjunction is one comparator set, and the prerelease rule the
-     semver crate applies over a whole VersionReq is that set's csAdmits.
-     Included under their own names rather than qualified. *)
   Module Sv := Semver V VSet PM.
   Include Sv.
 
@@ -52,15 +32,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   #[local] Hint Extern 1 => cmp_by NF.compare_lt_trans : cmp_cargo.
   #[local] Hint Extern 1 => cmp_by FF.compare_lt_trans : cmp_cargo.
 
-  (* One entry of a crate feature's enable list: another feature of the
-     same crate, activation of an optional dependency slot (dep:a), a
-     strong dependency feature (a/feat), or a weak one (a?/feat).  The
-     weak form is kept as its own constructor because the manifest
-     distinguishes it and a later narrowing pass over a fixed resolution
-     would need to; version resolution here reduces it exactly as the
-     strong form, which is what cargo's resolver does once the strong
-     form's implicit-feature request (dep_cache.rs:483-495) is an entry of
-     its own. *)
   Module FEntry.
     Inductive fentry : Type :=
     | EFeat (f : F.t)
@@ -104,7 +75,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Module FDefElt := PairUOT PkgF FEntryOT.
   Module FDefRel := FSetUOT FDefElt.
 
-  (* Dependency kinds; dev dependencies participate only at the root. *)
   Module Kind.
     Inductive kind : Type := KNormal | KBuild | KDev.
     Definition t := kind.
@@ -127,18 +97,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   End Kind.
   Module KindOT := UOTFromCompare Kind.
 
-  (* A dependency slot: manifest alias (the identity dep:/a/feat entries
-     reference, and the rename key), real target crate, requirement
-     formula, kind, optionality, default-features opt-out, requested
-     features, and carried cfg predicate and source identity.
-
-     The cfg predicate is never evaluated and the source identity is
-     never read at all: cargo's resolver does not match a
-     [target.'cfg(...)'] against real cfgs, and a dependency's registry
-     only has to agree across the declarations sharing one alias, which
-     the manifest reader checks before resolution begins.  The cfg does
-     decide identity -- see sKey -- but that is where a declaration was
-     written, not what it means. *)
   Module SDCfg := PairUOT CfgS Src.
   Module SDReq := PairUOT FSet.AsUOT SDCfg.
   Module SDDflt := PairUOT BoolOT SDReq.
@@ -162,71 +120,26 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     fst (snd (snd (snd (snd (snd (snd d)))))).
   Definition sCfg (d : SlotData.t) : CfgS.t :=
     fst (snd (snd (snd (snd (snd (snd (snd d))))))).
-  Definition sSrc (d : SlotData.t) : Src.t :=
-    snd (snd (snd (snd (snd (snd (snd (snd d))))))).
 
-  (* What cargo takes one dependency to be: the manifest site that
-     declared it.  A manifest offers one table per (cfg target, kind) and
-     each is a map, so the site is the triple (cfg, kind, key), and the
-     key is the alias -- cargo's name_in_toml is the table key whether or
-     not a rename moved the crate name into "package".  Nothing collapses
-     two sites naming one alias: a summary carries a plain list of
-     dependencies, the manifest reader checks that they agree on a source
-     without merging them, and the resolver walks the list, so a
-     crate may ask for libc ^0.2 in [dependencies] and libc ^0.1 in
-     [target.'cfg(windows)'.dependencies] and get both versions.  The
-     alias alone still governs features -- dep:a and a/feat name a table
-     key, and reach every declaration under it. *)
   Module SKTail := PairUOT KindOT CfgS.
   Module SlotKey := PairUOT N SKTail.
   Definition sKey (d : SlotData.t) : SlotKey.t :=
     (sAlias d, (sKind d, sCfg d)).
   Definition kAlias (k : SlotKey.t) : N.t := fst k.
 
-  Lemma kAlias_sKey : forall d, kAlias (sKey d) = sAlias d.
-  Proof. reflexivity. Qed.
-
-  (* A library is keyed by a name, as a conflict class is, so that its
-     synthetic package is that calculus' class package. *)
   Module LinkElt := PairUOT Pkg N.
   Module LinkRel := FSetUOT LinkElt.
 
-  (* The concurrent calculus' parent relation, keyed by declaration site
-     rather than by the (child, parent) pair alone.  A cargo rename lets
-     one crate depend on a single crate name twice -- foo = { package =
-     "bar" } beside baz = { package = "bar" } -- and a repeated alias lets
-     it depend on one name twice again; either way the two may land on
-     different compatibility classes, so the parent edge has to say which
-     declaration received which version, and the requested feature set is
-     per declaration too. *)
   Module NAPair := PairUOT Pkg SlotKey.
   Module ParentElt := PairUOT NAPair V.
   Module ParentRel := FSetUOT ParentElt.
 
-  (* Whether a slot participates in resolution: dev dependencies only
-     from the root crate.  Build dependencies resolve in the shared graph
-     (the resolver-v1 reading; the v2 build/normal feature split is
-     carried by sKind but not separated here).
-
-     A slot's cfg does not appear, because cargo's version resolver never
-     sees a target: resolve_with_previous takes no RustcTargetData, and
-     every pass that matches a cfg against real cfgs filters an
-     already-finished Resolve, never the lockfile.  A [target.'cfg(...)']
-     row is therefore a dependency row like any other -- an unsatisfiable
-     windows-only requirement fails a linux resolve -- and sCfg says only
-     which row this is, never whether the row applies. *)
   Definition slotActive (rc p : Pkg.t) (d : SlotData.t) : bool :=
     match sKind d with
     | Kind.KDev => if Pkg.eq_dec p rc then true else false
     | _ => true
     end.
 
-  (* An optional slot is activated when some enabled feature of its
-     owner names it, by dep:a or by either a/feat or a?/feat.  A weak
-     entry activating is cargo's resolver behaviour: it activates weak
-     entries unconditionally and narrows them only in a later pass over
-     an already-fixed resolution, which is what keeps a lockfile
-     complete as --features varies. *)
   Definition Activated (FDefs : FDefRel.t) (fs : FSet.t) (p : Pkg.t)
       (a : N.t) : Prop :=
     exists f, FSet.In f fs /\
@@ -237,20 +150,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Definition slotRequests (d : SlotData.t) (dflt : F.t) : FSet.t :=
     if sDefault d then FSet.add dflt (sReqFeats d) else sReqFeats d.
 
-  (* The record quantifies feature sets through FeaturedSet membership;
-     res_fs_functional makes the projection well defined.
-
-     rootFeats is a parameter and not a constant because it is the only
-     place cargo's two resolves of one project differ.  Instantiated at
-     every feature the root's table defines -- the implicit feature of
-     each of its optional dependencies included -- res_root_feats forces
-     all of them on and the resolutions are the ones cargo writes as
-     Cargo.lock.  Instantiated at the features actually asked for, they
-     are the builds cargo runs against that lock.  Either way the choice
-     reaches the root alone: every other crate's features are whatever
-     its declarers requested, which is what keeps an unactivated optional
-     of a *dependency* out under sOptional and Activated, in both
-     instantiations alike. *)
   Record IsResolution
       (R : PkgSet.t) (support : SupportSet.t) (FDefs : FDefRel.t)
       (Slots : SlotRel.t) (Links : LinkRel.t)
@@ -276,9 +175,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     ; res_pi_functional :
         forall p k u u', ParentRel.In ((p, k), u) pi ->
         ParentRel.In ((p, k), u') pi -> u = u'
-      (* with res_slot_closure, pi is keyed by exactly the slots a
-         resolution enters: a declaration nothing enters receives no
-         version *)
     ; res_pi_dom :
         forall p k u, ParentRel.In ((p, k), u) pi ->
         exists fs d, FeaturedSet.In (p, fs) FS /\ SlotRel.In (p, d) Slots /\
@@ -352,28 +248,9 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       rewrite NEqb.eqb_refl, Hv; reflexivity.
   Qed.
 
-  (* The versions of a crate name in the repository; encoders consult R
-     only through an oracle Vq of this shape, so sub-instance reuse below is
-     oracle agreement (the lookup lemmas).  This is not evalReq at some
-     top range: no range admits a prerelease it does not name, so none
-     denotes the whole repository. *)
   Definition srcVersions (R : PkgSet.t) (m : N.t) : VSet.t :=
     SOpv.filterMap (fun '(o, u) => if NEqb.eqb o m then Some u else None) R.
 
-  Lemma mem_srcVersions : forall R m v,
-      VSet.In v (srcVersions R m) <-> PkgSet.In (m, v) R.
-  Proof.
-    intros R m v; unfold srcVersions; rewrite SOpv.mem_filterMap.
-    split.
-    - intros [[o w] [HR He]]; cbn beta iota in He.
-      destruct (NEqb.eqb o m) eqn:En; [| discriminate].
-      apply NEqb.eqb_true_iff in En; subst o.
-      injection He as ->; exact HR.
-    - intro HR; exists (m, v); split; [exact HR | cbn beta iota].
-      rewrite NEqb.eqb_refl; reflexivity.
-  Qed.
-
-  (* Slots of p under alias a that participate in resolution. *)
   Definition slotsAt (Slots : SlotRel.t)
       (rc : Pkg.t) (p : Pkg.t) (a : N.t) : SlotRel.t :=
     SlotRel.filter (fun '(q, d) =>
@@ -401,9 +278,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       subst a; rewrite NEqb.eqb_refl, Hact; reflexivity.
   Qed.
 
-  (* and the same cut by declaration site rather than by alias: what one
-     slot node stands for, where slotsAt is what one feature entry
-     reaches *)
   Definition slotsAtKey (Slots : SlotRel.t)
       (rc : Pkg.t) (p : Pkg.t) (k : SlotKey.t) : SlotRel.t :=
     SlotRel.filter (fun '(q, d) =>
@@ -431,8 +305,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       subst k; rewrite SKEqb.eqb_refl, Hact; reflexivity.
   Qed.
 
-  (* Feature-table entries that create a decision name, with the feat
-     they deliver. *)
   Definition entryFeatD (e : FEntry.t) : option (N.t * F.t) :=
     match e with
     | FEntry.EDepFeat a feat => Some (a, feat)
@@ -440,8 +312,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     | _ => None
     end.
 
-  (* Entries that activate an optional slot: dep:a, and both a/feat and
-     a?/feat -- the weak form is reduced as the strong one. *)
   Definition entryActivates (e : FEntry.t) : option N.t :=
     match e with
     | FEntry.EDep a => Some a
@@ -450,10 +320,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     | _ => None
     end.
 
-  (* One manifest site declares one dependency: the tables a manifest
-     offers are maps, so a crate has at most one slot per (cfg, kind,
-     alias).  The products assume that well-formedness because the parent
-     relation is keyed by the site. *)
   Definition SiteFunctional (Slots : SlotRel.t) : Prop :=
     forall p d d', SlotRel.In (p, d) Slots -> SlotRel.In (p, d') Slots ->
     sKey d = sKey d' -> d = d'.
@@ -541,9 +407,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         [exact Hin | apply PkgEqb.eqb_refl].
   Qed.
 
-  (* Whether the choice node at (q, a) carries a parent edge: q resolved
-     and some active slot under alias a is required (non-optional or
-     activated). *)
   Definition parentsb (FDefs : FDefRel.t) (Slots : SlotRel.t)
       (rc : Pkg.t)
       (S : PkgSet.t) (FS : FeaturedSet.t) (q : Pkg.t) (k : SlotKey.t)
@@ -585,21 +448,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       apply requiredb_iff in Hreq; rewrite Hreq; reflexivity.
   Qed.
 
-  (* ---- Reduction to Core ----------------------------------------------
-
-     Concurrency and features are inlined rather than inherited from the
-     functors that supply them on their own: the granularity class sits in
-     the name, and a crate feature is its own granular name.
-
-     A per-site node ranges over granularity classes rather than over
-     versions, and its edge carries the requirement onto the granular crate
-     name, where every depender's range already meets and where version
-     uniqueness picks the version.  That is one node per dependency edge
-     rather than one keyed by each version the requirement admits, which is
-     what a preference over versions would otherwise have to walk.  The
-     parent relation is still recoverable -- one version per class is all
-     a resolution admits -- so nothing the Cargo resolution asks for is
-     lost. *)
   Module NGPair := PairUOT N G.
   Module NFGTrip := TripleUOT N F G.
   Module NGF := UOTCompareFacts NGPair.
@@ -617,15 +465,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   #[local] Hint Extern 1 => cmp_by GFacts.compare_lt_trans : cmp_cargo.
 
   Module NPlus.
-    (* A slot and a decision name are keyed by the owner's granularity class
-       and the whole declared dependency, not by the owner's version: two
-       versions of one class never coexist, so they may share the node, and
-       a conflict the solver learns against it then holds for every version
-       of the class declaring that dependency, where keyed by version it
-       would be relearned once per version.  The dependency and not only
-       its site is in the key because versions of one class may declare
-       the same site differently, and the node's edges must be a function
-       of its name. *)
     Inductive name : Type :=
     | CRoot
     | CCrate (m : N.t) (gr : G.t)
@@ -675,8 +514,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   #[local] Hint Extern 1 => cmp_by NPOTF.compare_antisym : cmp_cargo.
   #[local] Hint Extern 1 => cmp_by NPOTF.compare_lt_trans : cmp_cargo.
 
-  (* A library's versions are names, as a class package's are: the core
-     names of the crates linking it. *)
   Module VPlus.
     Inductive version : Type :=
     | WUnit
@@ -714,7 +551,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   End VPlus.
   Module VPOT := UOTFromCompare VPlus.
 
-  (* Its core shared, so that the conflict-class calculus at the core's own
+  (* Its core shared, so that the conflict class package calculus at the core's own
      sorts states its lookups over this T. *)
   Module ClsT := ConflictClass NPOT VPOT.
   Module T := ClsT.C.
@@ -727,27 +564,16 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Module SOlp := SetOps LinkElt T.Pkg LinkRel T.PkgSet.
   Module SOvv := SetOps V VPOT VSet T.VSet.
 
-  (* the versions of a name are classes, not versions: one candidate per
-     granularity class the requirement meets *)
   Definition classesOf (g : V.t -> G.t) (vs : VSet.t) : T.VSet.t :=
     SOvv.map (fun u => VPlus.WClass (g u)) vs.
 
-  (* and the class's own members, which is what travels to the crate
-     name, where version uniqueness then picks exactly one *)
   Definition inClass (g : V.t -> G.t) (gr : G.t) (vs : VSet.t) : T.VSet.t :=
     SOvv.filterMap
       (fun u => if GEqb.eqb (g u) gr then Some (VPlus.WOrig u) else None) vs.
 
-  (* whether a class is one the requirement meets, which is what makes a
-     per-site node exist: the guard the lookups test so that they answer
-     nowhere else *)
   Definition classMet (g : V.t -> G.t) (gr : G.t) (vs : VSet.t) : bool :=
     VSet.exists_ (fun u => GEqb.eqb (g u) gr) vs.
 
-  (* A slot or decision name exists only where some version of its owner's
-     class declares its dependency.  The lookups test it, reading the
-     owner's class, so that they decline to answer wherever the instance
-     creates nothing, and so agree with the relation everywhere. *)
   Definition SlotOwned (g : V.t -> G.t) (Slots : SlotRel.t) (rc : Pkg.t)
       (m : N.t) (gr : G.t) (d : SlotData.t) : Prop :=
     exists v, g v = gr /\ SlotRel.In ((m, v), d) Slots /\
@@ -861,9 +687,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         end)
       FDefs.
 
-  (* A linking crate's version of its library is its granular name, not its
-     crate name: two versions of one crate in different compatibility
-     classes are two core names, and must still exclude each other. *)
   Definition linkReal (g : V.t -> G.t) (R : PkgSet.t) (Links : LinkRel.t)
     : T.PkgSet.t :=
     SOlp.filterMap (fun '((m, v), l) =>
@@ -883,8 +706,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                (T.PkgSet.union (decReal g R FDefs Slots rc)
                   (linkReal g R Links))))).
 
-  (* The class relation those names come from: the link relation carried
-     onto the crates' granular packages, with CLink l the class. *)
   Module SOlc := SetOps LinkElt ClsT.InClassElt LinkRel ClsT.InClassRel.
   Definition linkRel (g : V.t -> G.t) (Links : LinkRel.t)
     : ClsT.InClassRel.t :=
@@ -908,11 +729,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Module SOlh := SetOps LinkElt T.Dependees LinkRel T.DependeesSet.
   Module SOfsh := SetOps F T.Dependees FSet T.DependeesSet.
 
-  (* the versions of one name: a crate's are its repository versions in
-     that class, a feature name's are the versions supporting it, and a
-     slot's or decision's are the classes its requirement meets, read off
-     the dependency its name carries, where some version of the owner's
-     class declares it *)
   Definition versions (g : V.t -> G.t) (R : PkgSet.t)
       (support : SupportSet.t) (FDefs : FDefRel.t) (Slots : SlotRel.t)
       (Links : LinkRel.t) (rc : Pkg.t)
@@ -945,9 +761,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           Links
     end.
 
-  (* and the edges out of one package, by the shape of its name.  Every
-     branch is empty where the package is not real, so the relation built
-     from it below and the lookup answer the same thing at every p. *)
   Definition dependees (g : V.t -> G.t) (R : PkgSet.t)
       (support : SupportSet.t) (FDefs : FDefRel.t) (Slots : SlotRel.t)
       (Links : LinkRel.t) (dflt : F.t)
@@ -1045,9 +858,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     SOhe.map (fun h => (p, h)) hs.
 
   Module SOpe := SetOps T.Pkg T.DepElt T.PkgSet T.DepRel.
-  (* the instance is the lookup iterated over the real packages: the
-     edges out of a package are what that package answers, and a package
-     that is not real has none *)
   Definition transDeps (g : V.t -> G.t) (R : PkgSet.t)
       (support : SupportSet.t) (FDefs : FDefRel.t) (Slots : SlotRel.t)
       (Links : LinkRel.t) (dflt : F.t)
@@ -1203,8 +1013,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     rewrite T.PkgSet.singleton_spec; reflexivity.
   Qed.
 
-  (* A library is the conflict-class calculus' class package at CLink l,
-     over the granular packages crateReal draws R into. *)
   Lemma versions_link_reduceReal :
     forall g R support FDefs Slots Links rc l w,
       T.VSet.In w
@@ -1268,8 +1076,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       exists (n, vs); split; [exact Hh | reflexivity].
   Qed.
 
-  (* Link edges run only into CLink, never out, and every other name
-     answers at one version shape; the catch-all is those packages. *)
   Definition Inert (p : T.Pkg.t) : Prop :=
     match p with
     | (NPlus.CRoot, VPlus.WUnit) => False
@@ -1595,9 +1401,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         discriminate He.
   Qed.
 
-  (* Every answer has a real package to come out of: this is what makes
-     the relation built from the lookup agree with the lookup at every
-     package, real or not. *)
   Lemma dep_real :
     forall g R support FDefs Slots Links dflt rc rootFeats p h,
       T.DependeesSet.In h
@@ -1646,8 +1449,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Qed.
 
   Module SOtf := SetOps T.Pkg F T.PkgSet FSet.
-  (* the class the feature node carries is the crate version's own, so
-     the decode reads the version off the node and ignores the class *)
   Definition featsAt (S : T.PkgSet.t) (p : Pkg.t) : FSet.t :=
     SOtf.filterMap (fun '(n, w) =>
         match n, w with
@@ -1687,10 +1488,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Qed.
 
   Module SOtv2 := SetOps T.Pkg V T.PkgSet VSet.
-  (* a slot node holds a class, not a version, so the parent edge's
-     version is not readable off the node: it is the member of that class
-     the target crate name carries, which Core's version uniqueness makes
-     unique *)
   Definition targets (S : T.PkgSet.t) (m : N.t) (gr : G.t) : VSet.t :=
     SOtv2.filterMap (fun '(n, w) =>
         match n, w with
@@ -1719,12 +1516,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
   Module SOtpar := SetOps T.Pkg ParentElt T.PkgSet ParentRel.
   Module SOvpar := SetOps V ParentElt VSet ParentRel.
-  (* A core resolution may select a slot node nothing demands, so an edge
-     is read only where res_pi_dom allows one: the owner decoded, and the
-     slot required by the owner's decoded features.  The requirement is
-     requiredb spelled out, so the owner's features are gathered only for
-     an optional slot.  A slot names its owner's class and not its version,
-     so the owner is the version of that class the resolution selects. *)
   Definition decodeParents (FDefs : FDefRel.t) (Slots : SlotRel.t)
       (rc : Pkg.t) (S : T.PkgSet.t) : ParentRel.t :=
     SOtpar.unionMap (fun '(n, w) =>
@@ -1972,9 +1763,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         exists m, v, l; repeat split; assumption.
     Qed.
 
-    (* The instance is built from the lookup, so the lookup is exactly
-       what it answers -- at a package that is not real both sides are
-       empty, since no branch answers off a real package. *)
     Theorem dependees_lookup :
       forall g R support FDefs Slots Links dflt rc rootFeats p,
         dependees g R support FDefs Slots Links dflt rc
@@ -2048,12 +1836,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
              rootFeats) p.
     Proof. intros; apply dependees_lookup. Qed.
 
-    (* The other half of the lookup theorem: what each lookup reads.  The
-       driver parses a crate the first time a lookup asks for its name, so
-       an answer is trustworthy only if it is a function of the part of
-       the instance loaded when it is given; each theorem below names that
-       part, one per shape the driver asks about, in the components the
-       driver actually passes. *)
     Module NSet := FSetUOT N.
     Module PkgPre := PreimageOfKeys N Pkg NSet PkgSet.
     Module SupportPre := PreimageOfKeys N PkgF NSet SupportSet.
@@ -2070,14 +1852,9 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       : SupportSet.t :=
       SupportPre.ofKeys (fun x => fst (fst x)) ns support.
 
-    (* a crate version's feature table is indexed by (crate, feature), and
-       the featured and decision lookups read all of its features at once *)
     Definition fdefFibre (FDefs : FDefRel.t) (p : Pkg.t) : FDefRel.t :=
       FDefPre.preimage (fun x => fst (fst x)) (fun q => PkgEqb.eqb q p) FDefs.
 
-    (* the names a crate version's declarations consult: its slots'
-       targets, and its own so that the granular name can decline to
-       answer at a version the repository does not carry *)
     Definition reads (Slots : SlotRel.t) (p : Pkg.t) : NSet.t :=
       NSet.add (fst p)
         (SOsn.map (fun x => sTarget (snd x)) (SlotFibred.tailFibre Slots p)).
@@ -2134,8 +1911,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       apply SlotFibred.mem_tailFibre; split; [exact Hs | reflexivity].
     Qed.
 
-    (* the restrictions seen from the lookups: each is invisible to a test
-       that reads only the owner's fibre, or only names the owner reads *)
     Lemma in_realPreimage_own : forall R Slots p,
         PkgSet.In p R <-> PkgSet.In p (realPreimage R (reads Slots p)).
     Proof.
@@ -2227,10 +2002,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         [exact Hs | apply NSet.singleton_spec; reflexivity].
     Qed.
 
-    (* A slot or decision name carries its dependency, so it reads the
-       repository at that dependency's target, and of its owner's class
-       only one version declaring it, whose own fibres witness the name.
-       Where no version does, it declines outright. *)
     Lemma slotOwnedb_witness :
       forall g Slots rc m gr d u,
         SlotRel.In ((m, u), d) Slots -> g u = gr ->
@@ -2301,7 +2072,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         [reflexivity | apply NSet.singleton_spec; reflexivity].
     Qed.
 
-    (* and with no witness at all there is nothing to read *)
     Theorem slot_declines :
       forall g R support FDefs Slots Links dflt rc rootFeats m gr d,
         ~ SlotOwned g Slots rc m gr d ->
@@ -2576,10 +2346,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         [reflexivity | apply NSet.singleton_spec; reflexivity].
     Qed.
 
-    (* the crate version a package's declarations belong to; the root and
-       the libraries have none, and answer from the request alone or not
-       at all, and a slot or decision is owned by whichever version of its
-       class witnesses it, so its lookups are stated on their own above *)
     Definition owner (p : T.Pkg.t) : option Pkg.t :=
       match p with
       | (NPlus.CCrate m _, VPlus.WOrig v) => Some (m, v)
@@ -2669,8 +2435,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     { intros m gr d gr' Hin; specialize (Hsub _ Hin).
       apply slot_real_owned in Hsub; destruct Hsub as [_ [u [Hu E]]].
       injection E as E; exists u; split; [exact Hu | symmetry; exact E]. }
-    (* a feature name commits its own crate version, so the member of a
-       class a feature node carries is the one the crate name carries *)
     assert (A5 : forall m f gr u u',
         T.PkgSet.In (NPlus.CFeatP m f gr, VPlus.WOrig u') S ->
         T.PkgSet.In (NPlus.CCrate m gr, VPlus.WOrig u) S -> u' = u).
@@ -2961,7 +2725,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       destruct (Hdep _ Hq _ _ Heq) as [y [Hy HyS]].
       apply T.VSet.singleton_spec in Hx; subst x.
       apply T.VSet.singleton_spec in Hy; subst y.
-      (* the library admits one name, and that name one version *)
       assert (E := Huniq _ _ _ HxS HyS); injection E as E1 E2.
       subst qn; rewrite <- E2 in Hq.
       assert (E' := Huniq _ _ _ Hp Hq); injection E' as E'.
@@ -3024,9 +2787,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         [apply mem_slotsAtKey; repeat split; assumption | reflexivity].
   Qed.
 
-  (* A decision name is introduced only for an enabled feature, so its edge
-     into the target feature name is unconditional rather than gated on a
-     witness the owner has to enable. *)
   Definition wDecs (g : V.t -> G.t) (FDefs : FDefRel.t)
       (Slots : SlotRel.t) (rc : Pkg.t)
       (S : PkgSet.t) (FS : FeaturedSet.t) (pi : ParentRel.t) : T.PkgSet.t :=
@@ -3188,8 +2948,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     exact Hfs.
   Qed.
 
-  (* From a required active slot of a resolved crate: the parent edge, its
-     gate, and everything the core instance asks of it. *)
   Lemma parent_pick :
     forall R support FDefs Slots Links g dflt rc rootFeats
            S FS pi,
@@ -3270,8 +3028,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     destruct Hres as [Hsub Hroot Hrootf Hdom Htot Hfun Hclass Hsupp
       Hpifun _ Hslotc Hfsame Hfdep Hlinks].
     constructor.
-    - (* res_subset *)
-      intros x Hx; apply mem_coreRes in Hx.
+    - intros x Hx; apply mem_coreRes in Hx.
       apply mem_transReal.
       destruct Hx as [-> | [Hx | [Hx | [Hx | [Hx | Hx]]]]].
       + left; reflexivity.
@@ -3302,10 +3059,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         destruct Hx as [m [v [l [Hl [HS ->]]]]].
         apply mem_linkReal; exists m, v, l; repeat split;
           [exact Hl | exact (Hsub _ HS)].
-    - (* res_root_mem *)
-      apply mem_coreRes; left; reflexivity.
-    - (* res_dep_closure *)
-      intros p Hp n vs Hed.
+    - apply mem_coreRes; left; reflexivity.
+    - intros p Hp n vs Hed.
       apply mem_transDeps in Hed; destruct Hed as [_ Hh].
       destruct p as [[| m gr | m f gr | m gr1 d | m gr1 f d feat | l]
                      [| v0 | gr0 | q]];
@@ -3464,8 +3219,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           exact (Hfdep (m, v) (fsAt FS (m, v)) f (sAlias d) feat
                    (HfsAt _ HSnv) Hf Hor d u Hd eq_refl Hpi
                    (fsAt FS (sTarget d, u)) (HfsAt _ Htgt)).
-    - (* res_version_unique *)
-      intros n w w' Hw Hw'.
+    - intros n w w' Hw Hw'.
       apply core_shape in Hw; apply core_shape in Hw'.
       destruct n as [ | m gr | m f gr | m gr d | m gr f d feat | l ];
         cbn beta iota in Hw, Hw'.

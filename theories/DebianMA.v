@@ -1,10 +1,3 @@
-(* The direct semantics (IsResolution) follows the
-   MultiarchSpec where it speaks and apt 3.3 where it is silent, and a
-   translation compiles instances into the single-arch Debian calculus at
-   names N * NameArch. Implicit cross-arch exclusion targets a group
-   pseudo-name (QAGroup) that only real group members provide, so ordinary
-   providers can never be hit by implicit conflicts. *)
-
 From Stdlib Require Import MSets.
 From PackageCalculus Require Import Prelude Core Versions Debian.
 
@@ -19,11 +12,6 @@ End ArchParam.
 Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Module A := AP.A.
 
-  (* QAExact b is the target of an explicit :b.  It cannot share QAArch b,
-     where M-A: foreign replicates its provides, because an explicit
-     qualifier is answered by b's own packages alone; like apt's pkg:b
-     pseudo-package, it is provided by the real packages of b and by the
-     Provides that b's packages declare. *)
   Inductive NameArch : Type :=
   | QAArch (a : A.t)
   | QAExact (a : A.t)
@@ -62,9 +50,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
   Module QN := PairUOT N NameArchOT.
   Module NF := UOTCompareFacts N.
-  (* Mangled names group by base name: an owner's conflicts exempt every
-     arch instance of its own package, per apt's group exemption
-     (pkgcache.cc:757-790). *)
   Module MG <: NameGroup QN.
     Definition groupEq (m n : QN.t) : bool :=
       match N.compare (fst m) (fst n) with Eq => true | _ => false end.
@@ -118,9 +103,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Definition parch (p : Pkg.t) : A.t := snd (fst p).
   Definition pver (p : Pkg.t) : V.t := snd p.
 
-  (* Multi-Arch classes; arch:all packages are rewritten to the native
-     arch by the frontend (apt does the same), and all+same is downgraded
-     to no before instances are built. *)
   Inductive MAClass : Type :=
   | MANo
   | MASame
@@ -158,9 +140,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     | None => MANo
     end.
 
-  (* Dependency-atom architecture qualifiers (deb-control(5)): unqualified,
-     :any, or an explicit :arch; and :native, which dpkg allows only in
-     Build-Depends but apt also accepts here. *)
   Inductive Qual : Type :=
   | QUnq
   | QAny
@@ -199,8 +178,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Definition aform (a : Atom.t) : Deb.Ver.Formula := snd (snd a).
 
   Module AtomSet := FSetUOT Atom.
-  (* in the field's order, which the translation carries into the key of
-     Debian.v's disjunct *)
   Module Clause := ListUOT Atom.
   Definition clauseAtoms (Al : Clause.t) : AtomSet.t := AtomSet.ofList Al.
 
@@ -218,18 +195,11 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Module ConfElt := PairUOT Pkg Atom.
   Module Conf := FSetUOT ConfElt.
 
-  (* Name/Formula satisfaction ignoring architecture: q is named n and its
-     version satisfies f, or q provides n at a matching version. *)
   Definition BaseMatch (Pi : Prov.t) (n : N.t) (f : Deb.Ver.Formula)
       (q : Pkg.t) : Prop :=
     (pname q = n /\ Deb.vfHolds f (pver q) = true) \/
     (exists vt, Prov.In (q, (n, vt)) Pi /\ Deb.vtMatchb vt f = true).
 
-  (* Arch reach: a same-arch candidate always reaches; M-A: foreign reaches
-     an unqualified atom from any arch but never an explicit one, :native
-     included ("if a dependency has an explicit arch-qualifier then the
-     value foreign is ignored", deb-control(5)); :any atoms reach any arch
-     but only M-A: allowed candidates. *)
   Definition MAMatch (Pi : Prov.t) (M : Cls.t) (da : A.t)
       (a : Atom.t) (q : Pkg.t) : Prop :=
     BaseMatch Pi (aname a) (aform a) q /\
@@ -240,10 +210,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     | QAny => classOf M q = MAAllowed
     end.
 
-  (* Conflict-side match: an unqualified negative applies to every
-     architecture (apt replicates it across the group), and a qualified one
-     reaches what the same atom would satisfy as a dependency, apt's
-     negative on pkg:b being a dependency on the same pseudo-package. *)
   Definition MAConfMatch (Pi : Prov.t) (M : Cls.t)
       (a : Atom.t) (q : Pkg.t) : Prop :=
     BaseMatch Pi (aname a) (aform a) q /\
@@ -254,13 +220,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     | QAny => classOf M q = MAAllowed
     end.
 
-  (* Direct multiarch semantics. The declarer's base-name group is exempt from
-     its own negatives, which is apt's first ignorable rule (a negative never
-     applies to a provider whose owner shares the declarer's group); apt's
-     second -- an implicit cross-arch negative never reaches a provider of
-     another group -- holds here by construction rather than as a side
-     condition, since implicit negatives land on the group pseudo-name and
-     only real group members provide it. *)
   Record IsResolution
       (R : PkgSet.t) (D : Deps.t) (Pi : Prov.t) (G : Conf.t)
       (M : Cls.t) (r : Pkg.t) (S : PkgSet.t) : Prop :=
@@ -315,16 +274,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         (embedPkg (fst c), reduceClause (parch (fst c)) (snd c)))
       D.
 
-  (* A Recommends clause mangles exactly as a Depends clause does: the
-     architecture qualifiers on its atoms mean the same thing either way, and
-     it is the target's soft disjunct, not the mangling, that makes it
-     optional. *)
   Definition reduceRec (Rec : Deps.t) : Deb.Deps.t := reduceDeps Rec.
 
-  (* Declared Provides, replicated by the provider's class: no/same reach
-     the provider's own arch, foreign every arch, allowed additionally the
-     :any pseudo-name; every class reaches the explicit qualifier of its
-     own arch alone. *)
   Definition reduceProvEntry (M : Cls.t) (e : ProvElt.t) :
       list Deb.ProvElt.t :=
     let p := fst e in
@@ -340,11 +291,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
          | _ => (embedPkg p, ((m, QAArch (parch p)), vt)) :: nil
          end.
 
-  (* Implicit provides: every real package provides its group pseudo-name
-     at its own version (carrier of the implicit cross-arch exclusion), and
-     the explicit qualifier of its own arch (real packages live only at
-     QAArch names); M-A: foreign packages provide their own name at every
-     arch; M-A: allowed packages provide their own :any pseudo-name. *)
   Definition implProvOf (M : Cls.t) (p : Pkg.t) : list Deb.ProvElt.t :=
     (embedPkg p, ((pname p, QAGroup), Deb.DTVal (pver p)))
       :: (embedPkg p, ((pname p, QAExact (parch p)), Deb.DTVal (pver p)))
@@ -368,9 +314,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       (SOpv2.unionMap (fun e => SOppv.ofList (reduceProvEntry M e)) Pi)
       (SOrpv.unionMap (fun p => SOppv.ofList (implProvOf M p)) R).
 
-  (* Hand-written negatives: unqualified negatives target the group
-     pseudo-name so they reach every architecture's real packages, plus
-     the per-arch and :any provider names. *)
   Definition reduceConfEntry (e : ConfElt.t) : list Deb.ConfElt.t :=
     let p := fst e in
     let a := snd e in
@@ -386,9 +329,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     | QAny => (embedPkg p, (((n, QAAny), f), true)) :: nil
     end.
 
-  (* Implicit sibling exclusion via the group pseudo-name: non-same
-     packages exclude every other group member; M-A: same packages exclude
-     only version-skewed members (the lockstep Breaks (!= v)). *)
   Definition implConfOf (M : Cls.t) (p : Pkg.t) : Deb.ConfElt.t :=
     match classOf M p with
     | MASame =>
@@ -487,7 +427,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     exact (conj (embedPkg_injective _ _ Hp) (conj Hm (conj Hx Hv))).
   Qed.
 
-  (* Where one declared provide lands, per target-name shape. *)
   Lemma in_reduceProvEntry : forall M (p : Pkg.t) (m : N.t) vt y,
       List.In y (reduceProvEntry M (p, (m, vt))) <->
       exists x, y = (embedPkg p, ((m, x), vt)) /\
@@ -527,8 +466,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       + contradiction.
   Qed.
 
-  (* Where a real package's implicit provides land, per target-name
-     shape. *)
   Lemma in_implProvOf : forall M (p : Pkg.t) y,
       List.In y (implProvOf M p) <->
       exists x, y = (embedPkg p, ((pname p, x), Deb.DTVal (pver p))) /\
@@ -559,8 +496,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       + left; reflexivity.
   Qed.
 
-  (* Which mangled atoms a real package matches, per target-name
-     shape: the shared engine behind the three transfer lemmas. *)
   Lemma debMatch_char : forall R Pi M q n x f,
       PkgSet.In q R ->
       (Deb.Match (reduceProv R Pi M) (embedPkg q) ((n, x), f) <->
@@ -725,9 +660,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                         (aform a) HqR) H).
   Qed.
 
-  (* The implicit group conflict of p is matched by (mangled) q iff q is a
-     same-name group member that p excludes: everyone for non-same classes,
-     version-skewed members under the M-A: same lockstep. *)
   Lemma impl_conf_transfer : forall R Pi M (p q : Pkg.t),
       PkgSet.In q R ->
       (Deb.Match (reduceProv R Pi M) (embedPkg q)
@@ -1043,8 +975,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       exact (HSvu (pn, pa) pv pv' HpS Hp'S).
   Qed.
 
-  (* reduceReal is the completeness witness and multiarchResolution the
-     decoder; embedPkg is injective, so the round trip is the identity. *)
   Corollary multiarchResolution_reduceReal : forall S,
       multiarchResolution (reduceReal S) = S.
   Proof.
@@ -1055,8 +985,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     - intro H; exists q; split; [exact H | reflexivity].
   Qed.
 
-  (* The two reductions compose into one Core instance; a Core resolution of
-     it decodes, through both decoders in turn, to a multiarch resolution. *)
   Corollary debian_ma_core_soundness : forall R D Rec Pi G M r S,
       Deb.T.IsResolution
         (Deb.reduceReal (reduceReal R) (reduceDeps D) (reduceRec Rec)
@@ -1099,15 +1027,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     apply multiarchResolution_reduceReal.
   Qed.
 
-  (* Sub-instance justification for the multiarch solving path: a Core
-     lookup at a mangled name is answered by translating a small MA-side
-     sub-instance, and each theorem below pins a sub-instance whose
-     translation the Debian lookup theorems cannot tell apart from the whole
-     instance's. Provider and conflict sub-instances span a base name's whole
-     group across architectures, because
-     every real package implicitly provides its group pseudo-name -- and, at
-     M-A: foreign, its own name at every architecture -- so a mangled name's
-     providers are not confined to one arch's fibre. *)
   Module Lookup.
     Module NSet := FSetUOT N.
     Module PkgFibred := FibredRel NA V Pkg PkgSet.
@@ -1169,31 +1088,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         Conf.In (q, a) (confBy G p) <-> Conf.In (q, a) G /\ q = p.
     Proof. intros G p q a; unfold confBy; apply ConfFibred.mem_tailFibre. Qed.
 
-    Lemma mem_confOn : forall G ns e,
-        Conf.In e (confOn G ns) <->
-        Conf.In e G /\ NSet.In (aname (snd e)) ns.
-    Proof. intros G ns e; unfold confOn; apply ConfPreimage.mem_ofKeys. Qed.
-
     Lemma mem_clsOf : forall M P e,
         Cls.In e (clsOf M P) <-> Cls.In e M /\ PkgSet.In (fst e) P.
     Proof. intros M P e; unfold clsOf; apply ClsPreimage.mem_ofKeys. Qed.
-
-    (* classOf reads only the fibre at its argument, so a class table cut
-       down to a package set answers unchanged inside that set. *)
-    Lemma classOf_clsOf : forall M P p,
-        PkgSet.In p P -> classOf (clsOf M P) p = classOf M p.
-    Proof.
-      intros M P p Hp; unfold classOf.
-      assert (E : ClsFibred.tailFibre (clsOf M P) p
-                  = ClsFibred.tailFibre M p).
-      { apply Cls.ext; intros [q c].
-        rewrite !ClsFibred.mem_tailFibre, mem_clsOf; cbn [fst].
-        split.
-        - intros [[Hm _] Hq]; split; assumption.
-        - intros [Hm Hq]; split; [split; [exact Hm |] | exact Hq].
-          rewrite Hq; exact Hp. }
-      rewrite E; reflexivity.
-    Qed.
 
     Lemma reduceProv_class_sub : forall R Pi M M',
         (forall p, PkgSet.In p R -> classOf M' p = classOf M p) ->
@@ -1212,22 +1109,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         rewrite <- (H1 p0 Hp0); exact Hl.
     Qed.
 
-    (* The class table is read only at packages of R and at the packages
-       declaring the Provides, so the driver's per-lookup class preimage is
-       invisible to the translation. *)
-    Lemma reduceProv_class : forall R Pi M M',
-        (forall p, PkgSet.In p R -> classOf M' p = classOf M p) ->
-        (forall (q : Pkg.t) (m : N.t) vt,
-            Prov.In (q, (m, vt)) Pi -> classOf M' q = classOf M q) ->
-        reduceProv R Pi M' = reduceProv R Pi M.
-    Proof.
-      intros R Pi M M' H1 H2; apply Deb.Prov.ext; intro y; split; intro Hy.
-      - exact (reduceProv_class_sub R Pi M M' H1 H2 y Hy).
-      - refine (reduceProv_class_sub R Pi M' M _ _ y Hy);
-          [intros p Hp; symmetry; exact (H1 p Hp)
-          | intros q m vt He; symmetry; exact (H2 q m vt He)].
-    Qed.
-
     Lemma reduceConf_class_sub : forall R G M M',
         (forall p, PkgSet.In p R -> classOf M' p = classOf M p) ->
         Deb.Conf.Subset (reduceConf R G M') (reduceConf R G M).
@@ -1240,23 +1121,11 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         rewrite <- (H1 p0 Hp0); exact Hl.
     Qed.
 
-    Lemma reduceConf_class : forall R G M M',
-        (forall p, PkgSet.In p R -> classOf M' p = classOf M p) ->
-        reduceConf R G M' = reduceConf R G M.
-    Proof.
-      intros R G M M' H1; apply Deb.Conf.ext; intro y; split; intro Hy.
-      - exact (reduceConf_class_sub R G M M' H1 y Hy).
-      - refine (reduceConf_class_sub R G M' M _ y Hy).
-        intros p Hp; symmetry; exact (H1 p Hp).
-    Qed.
-
     Lemma mem_reduceReal : forall R y,
         Deb.PkgSet.In y (reduceReal R) <->
         exists q : Pkg.t, PkgSet.In q R /\ y = embedPkg q.
     Proof. intros R y; unfold reduceReal; apply SOmr.mem_map. Qed.
 
-    (* embedPkg introduces only QAArch names, so the explicit-qualifier, :any
-       and group pseudo-names carry no real packages at all. *)
     Lemma reduceReal_arch : forall R (nx : QN.t) (v : V.t),
         Deb.PkgSet.In (nx, v) (reduceReal R) -> exists b, snd nx = QAArch b.
     Proof.
@@ -1280,9 +1149,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       - apply Hcov; [exact HqR | exact (f_equal fst (eq_sym Hq))].
     Qed.
 
-    (* A sub-instance that keeps every real package and every declared Provides
-       reaching a base name in ns; reduceProv agrees with the whole
-       instance's at every mangled name over ns. *)
     Definition ProvSubInst (R : PkgSet.t) (Pi : Prov.t) (ns : NSet.t)
         (Rp : PkgSet.t) (Pis : Prov.t) : Prop :=
       PkgSet.Subset Rp R /\ Prov.Subset Pis Pi /\
@@ -1290,16 +1156,12 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       (forall (q : Pkg.t) (m : N.t) vt,
           Prov.In (q, (m, vt)) Pi -> NSet.In m ns -> Prov.In (q, (m, vt)) Pis).
 
-    (* A sub-instance that keeps p itself and p's own Provides; matchb at the
-       mangled p agrees with the whole instance's. *)
     Definition PkgProvSubInst (R : PkgSet.t) (Pi : Prov.t) (p : Pkg.t)
         (Rp : PkgSet.t) (Pis : Prov.t) : Prop :=
       PkgSet.Subset Rp R /\ Prov.Subset Pis Pi /\ PkgSet.In p Rp /\
       (forall (m : N.t) vt,
           Prov.In (p, (m, vt)) Pi -> Prov.In (p, (m, vt)) Pis).
 
-    (* A sub-instance that keeps p's own group, p's own negatives, and every
-       negative naming something p answers to. *)
     Definition ConfSubInst (R : PkgSet.t) (G : Conf.t) (ns : NSet.t)
         (p : Pkg.t) (Rc : PkgSet.t) (Gs : Conf.t) : Prop :=
       PkgSet.Subset Rc R /\ Conf.Subset Gs G /\ PkgSet.In p Rc /\
@@ -1437,22 +1299,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       apply (Hcr q HqR); rewrite Hq2; exact Hm.
     Qed.
 
-    Lemma matchb_restrict : forall R Pi M (p : Pkg.t) Rp Pis (a' : Deb.Atom.t),
-        PkgProvSubInst R Pi p Rp Pis ->
-        Deb.matchb (reduceProv Rp Pis M) (embedPkg p) a' =
-        Deb.matchb (reduceProv R Pi M) (embedPkg p) a'.
-    Proof.
-      intros R Pi M p Rp Pis a' Hsl.
-      assert (Hsub := Hsl); destruct Hsub as [Hr [Hp _]].
-      unfold Deb.matchb; f_equal.
-      apply Deb.Prov.exists_restrict.
-      - exact (reduceProv_mono R Rp Pi Pis M Hr Hp).
-      - intros [q [mx vt]] Hin Hb; cbn [fst snd Deb.aname Deb.aform] in Hb.
-        apply andb_prop in Hb; destruct Hb as [Hq _].
-        apply Deb.PkgEqb.eqb_true_iff in Hq as ->.
-        apply (reduceProv_pkg R Pi M p Rp Pis mx vt Hsl); exact Hin.
-    Qed.
-
     Lemma reduceConf_mono : forall R Rc G Gs M,
         PkgSet.Subset Rc R -> Conf.Subset Gs G ->
         Deb.Conf.Subset (reduceConf Rc Gs M) (reduceConf R G M).
@@ -1462,17 +1308,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       destruct Hy as [[e [He Hl]] | [p0 [Hp0 Hl]]];
         [left; exists e; split; [exact (Hg _ He) | exact Hl]
         | right; exists p0; split; [exact (Hr _ Hp0) | exact Hl]].
-    Qed.
-
-    Lemma reduceConf_owner : forall R G M (q : Deb.Pkg.t) ea z,
-        Deb.Conf.In (q, (ea, z)) (reduceConf R G M) ->
-        exists p : Pkg.t, q = embedPkg p.
-    Proof.
-      intros R G M q ea z H; rewrite mem_reduceConf in H.
-      destruct H as [[[p0 a0] [_ Hl]] | [p0 [_ He]]].
-      - exists p0; exact (reduceConfEntry_pkg p0 a0 q ea z Hl).
-      - exists p0; rewrite (implConfOf_pkg M p0) in He.
-        exact (f_equal fst He).
     Qed.
 
     Lemma reduceConf_pkg : forall R G M (p : Pkg.t) Rc Gs ea z,
@@ -1496,8 +1331,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         rewrite (implConfOf_pkg M p); exact He.
     Qed.
 
-    (* A mangled atom that p answers to names p's own base name or one of
-       p's declared Provides: nothing else reaches p. *)
     Lemma match_name : forall R Pi M (p : Pkg.t) (m : N.t) (x : NameArch) f,
         PkgSet.In p R ->
         Deb.Match (reduceProv R Pi M) (embedPkg p) ((m, x), f) ->
@@ -1513,51 +1346,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       - destruct HM as [[[Hn _] | [vt [Hin _]]] _];
           [left; symmetry; exact Hn | right; exists vt; exact Hin].
       - destruct HM as [Hn _]; left; symmetry; exact Hn.
-    Qed.
-
-    Lemma reduceConf_target : forall R Pi G M ns (p : Pkg.t) Rc Gs
-        (q : Deb.Pkg.t) (ea : Deb.Atom.t) z,
-        PkgSet.In p R -> ConfSubInst R G ns p Rc Gs ->
-        NSet.In (pname p) ns ->
-        (forall (m : N.t) vt, Prov.In (p, (m, vt)) Pi -> NSet.In m ns) ->
-        Deb.Match (reduceProv R Pi M) (embedPkg p) ea ->
-        (Deb.Conf.In (q, (ea, z)) (reduceConf R G M) <->
-         Deb.Conf.In (q, (ea, z)) (reduceConf Rc Gs M)).
-    Proof.
-      intros R Pi G M ns p Rc Gs q [[m x] f] z HpR
-        [Hr [Hg [_ [Hgrp [_ Hname]]]]] Hpn Hprov HM.
-      split; [| exact (reduceConf_mono R Rc G Gs M Hr Hg _)].
-      rewrite !mem_reduceConf.
-      intros [[[p0 a0] [He Hl]] | [p0 [Hp0 He]]].
-      - pose proof (reduceConfEntry_name p0 a0 q ((m, x), f) z Hl) as Hn.
-        cbn [fst] in Hn.
-        left; exists (p0, a0); split; [| exact Hl].
-        apply (Hname (p0, a0) He); cbn [snd]; rewrite <- Hn.
-        destruct (match_name R Pi M p m x f HpR HM) as [Hm | [vt Hvt]].
-        + rewrite Hm; exact Hpn.
-        + exact (Hprov m vt Hvt).
-      - right; exists p0; split; [| exact He].
-        pose proof (f_equal (fun e => fst (fst (snd e))) He) as Hn.
-        cbn [fst snd] in Hn.
-        rewrite (implConfOf_atomName M p0) in Hn; cbn [fst] in Hn.
-        pose proof (f_equal snd Hn) as Hx; cbn [snd] in Hx.
-        pose proof (f_equal fst Hn) as Hm; cbn [fst] in Hm.
-        subst x.
-        destruct (proj1 (debMatch_char R Pi M p m QAGroup f HpR) HM)
-          as [Hpm _].
-        apply (Hgrp p0 Hp0); rewrite <- Hm; symmetry; exact Hpm.
-    Qed.
-
-    Lemma embedPkg_eq : forall (q : Pkg.t) (n : N.t) (x : NameArch) (v : V.t),
-        ((n, x), v) = embedPkg q ->
-        x = QAArch (parch q) /\ n = pname q /\ v = pver q.
-    Proof.
-      intros q n x v H.
-      pose proof (f_equal fst H) as Hf; pose proof (f_equal snd H) as Hs.
-      cbn [fst snd] in Hf, Hs.
-      pose proof (f_equal fst Hf) as Hn; pose proof (f_equal snd Hf) as Hx.
-      cbn [fst snd] in Hn, Hx.
-      split; [exact Hx | split; [exact Hn | exact Hs]].
     Qed.
 
     Lemma groupOf_sub : forall R ns, PkgSet.Subset (groupOf R ns) R.
@@ -1599,8 +1387,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     Module SOcn := SetOps ClauseElt N Deps NSet.
-    (* The base names p's own clauses mention: a dependency atom's mangled
-       name only ever qualifies one of these. *)
     Definition atomNames (D : Deps.t) (p : Pkg.t) : NSet.t :=
       SOcn.unionMap (fun c =>
           if Pkg.eq_dec (fst c) p then clauseNames (snd c) else NSet.empty)
@@ -1626,21 +1412,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       SOpn.filterMap (fun e =>
           if Pkg.eq_dec (fst e) p then Some (fst (snd e)) else None) Pi.
 
-    Lemma mem_provNames : forall Pi (p : Pkg.t) (m : N.t),
-        NSet.In m (provNames Pi p) <-> exists vt, Prov.In (p, (m, vt)) Pi.
-    Proof.
-      intros Pi p m; unfold provNames; rewrite SOpn.mem_filterMap.
-      split.
-      - intros [[q [m0 vt]] [He Hf]]; cbn [fst snd] in Hf.
-        destruct (Pkg.eq_dec q p) as [-> | NE]; [| discriminate].
-        injection Hf as <-; exists vt; exact He.
-      - intros [vt He]; exists (p, (m, vt)); split; [exact He | cbn [fst snd]].
-        destruct (Pkg.eq_dec p p) as [_ | NE];
-          [reflexivity | contradiction NE; reflexivity].
-    Qed.
-
-    (* The names of the packages declaring Provides m: where a conflict on m
-       can land besides m's own group. *)
     Definition providerNames (Pi : Prov.t) (m : N.t) : NSet.t :=
       SOpn.filterMap (fun e =>
           if N.eq_dec (fst (snd e)) m then Some (pname (fst e)) else None) Pi.
@@ -1660,8 +1431,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     Module SOgn := SetOps ConfElt N Conf NSet.
-    (* The base names of p's conflicts: its own, carrying the implicit group
-       exclusion, and each negative's. *)
     Definition confAtomNames (G : Conf.t) (p : Pkg.t) : NSet.t :=
       NSet.add (pname p)
         (SOgn.unionMap (fun e =>
@@ -1687,8 +1456,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     Module SOnn := SetOps N N NSet NSet.
-    (* The base names p's conflicts can land on: each conflict name and the
-       names of its declared providers. *)
     Definition confRead (Pi : Prov.t) (G : Conf.t) (p : Pkg.t) : NSet.t :=
       SOnn.unionMap (fun m => NSet.add m (providerNames Pi m))
         (confAtomNames G p).
@@ -1723,8 +1490,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         exact (f_equal fst Hn).
     Qed.
 
-    (* matchb at any real package, for an atom whose base name is in ns,
-       reads only reduceProv entries at that name. *)
     Lemma matchb_node_restrict : forall R Pi M ns Rp Pis (q : Deb.Pkg.t)
         (a' : Deb.Atom.t),
         ProvSubInst R Pi ns Rp Pis -> NSet.In (fst (fst a')) ns ->
@@ -1744,8 +1509,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         apply (reduceProv_node R Pi M ns Rp Pis q m x vt Hsl Hm); exact Hin.
     Qed.
 
-    (* Where a conflict lands: the real packages matching a', all in the
-       groups of a's base name and of that name's declared providers. *)
     Lemma confNames_restrict : forall R Pi M ns Rr Rp Pis (a' : Deb.Atom.t),
         PkgSet.Subset Rr R ->
         (forall q, PkgSet.In q R -> NSet.In (pname q) ns -> PkgSet.In q Rr) ->
@@ -1874,8 +1637,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       apply mem_clauseNames; exists a0; split; [exact Ha0 | reflexivity].
     Qed.
 
-    (* Real packages live only at QAArch names, so the arch fibre of one
-       mangled name is the whole sub-instance a versions lookup can read. *)
     Theorem versions_lookupOrigMA : forall R D Rec Pi G M (r : Pkg.t)
                                            (n : N.t) (b : A.t),
         PkgSet.In r R ->
@@ -1905,8 +1666,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         injection Hq as -> ->; reflexivity.
     Qed.
 
-    (* embedPkg introduces only QAArch names, so a reachable explicit-qualifier,
-       :any or group pseudo-name carries absence alone. *)
     Theorem versions_lookupOrigMA_pseudo :
       forall R D Rec Pi G M (n : N.t) (x : NameArch),
         (forall b, x <> QAArch b) ->
@@ -1935,12 +1694,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       exact (Hx b Hb).
     Qed.
 
-    (* The crux: p's own fibre pulls the whole group of every base name p's
-       clauses mention (implicit group, foreign and :any provides come from
-       any architecture's member) and of every base name p's conflicts can
-       land on (a conflict name, or the name of one of its declared
-       providers); matchb at p needs p itself and p's own Provides in the
-       reduceProv carrier; and the conflicts p carries are p's own. *)
     Theorem dependees_lookupOrigMA : forall R D Rec Pi G M (p : Pkg.t),
         PkgSet.In p R ->
         Deb.dependees (reduceReal R) (reduceDeps D) (reduceRec Rec)
@@ -2131,9 +1884,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                Hm).
     Qed.
 
-    (* The soft disjunct reads only the clause it is keyed by, exactly
-       as the disjunct package does; the escape it adds is a constant of
-       the clause, so no wider sub-instance can change it. *)
     Theorem versions_lookupSoftMA : forall R D Rec Pi G M (p : Pkg.t) Al,
         Deps.In (p, Al) Rec ->
         Deb.versions (reduceReal R) (reduceDeps D) (reduceRec Rec)
@@ -2176,12 +1926,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                Hm).
     Qed.
 
-    (* An atom's providers are its base name's whole group across
-       architectures, plus that name's declared providers.  The clause sets
-       reach the selector through one test and no other -- whether the atom
-       occurs at all -- so a sub-instance may carry the atom's depends
-       clause, its recommends clause, or both, and the name's group is
-       what fixes the rest. *)
     Theorem versions_lookupSelectorAgreeMA :
       forall R D Rec (D' Rec' : Deb.Deps.t) Pi G M (p : Pkg.t) (a : Atom.t),
         Deb.occursAtomb (Deb.allClauses (reduceDeps D) (reduceRec Rec))
@@ -2215,10 +1959,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       reflexivity.
     Qed.
 
-    (* every candidate shape at once: a provided and a real candidate under
-       the same selector read the same sub-instance, and the rest are empty.  As
-       for versions, the two clause sets are read only through the
-       occurrence test, so any pair answering it alike serves. *)
     Theorem dependees_lookupSelectorAgreeMA :
       forall R D Rec (D' Rec' : Deb.Deps.t) Pi G M (p : Pkg.t) (a : Atom.t)
              (y : Deb.Version.t),
@@ -2308,10 +2048,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       reflexivity.
     Qed.
 
-    (* An atom occurring only in a recommends clause still introduces a
-       selector, so its sub-instance has to carry the recommends clause
-       rather than a depends one; otherwise the selector would see no versions and
-       every provided recommend would take the escape. *)
     Theorem versions_lookupSelectorRecMA :
       forall R D Rec Pi G M (p : Pkg.t) Al (a : Atom.t),
         Deps.In (p, Al) Rec -> List.In a Al ->
@@ -2336,9 +2072,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       reflexivity.
     Qed.
 
-    (* The recommends counterpart: the selector introduced by an atom that
-       only a recommends clause mentions reads the same group sub-instance,
-       with the recommends clause in the Rec position. *)
     Theorem dependees_lookupSelectorRecMA :
       forall R D Rec Pi G M (p : Pkg.t) Al (a : Atom.t) (y : Deb.Version.t),
         Deps.In (p, Al) Rec -> List.In a Al ->

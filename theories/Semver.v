@@ -1,17 +1,6 @@
 From Stdlib Require Import MSets List Bool.
 From PackageCalculus Require Import Prelude Versions.
 
-(* The semver range language, shared by every ecosystem that resolves by
-   node-semver's rules.  npm writes || alternatives and cargo writes one
-   comma-separated conjunction, but both desugar to comparator sets of
-   one shape under the same prerelease admission rule, so the syntax and its
-   evaluation are stated once rather than once per ecosystem. *)
-
-(* The prerelease admission rule is not expressible through V.compare:
-   whether a prerelease candidate is admitted depends on the release core
-   it shares with a comparator's constant.  Both tests arrive as opaque
-   predicates and only ever build version sets, so no laws are demanded
-   of them. *)
 Module Type SemverMatch (V : UsualOrderedType).
   Parameter isPre : V.t -> bool.
   Parameter sameCore : V.t -> V.t -> bool.
@@ -24,11 +13,6 @@ Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (PM : SemverMatch V).
   Module VSS := SetSpecs V VSet.
   Module VCF := UOTCompareFacts V.
 
-  (* A range is a disjunction of comparator sets -- npm's || alternatives,
-     each an implicit conjunction, of which cargo only ever writes one.
-     The nesting is kept rather than flattened into Versions.Formula
-     because the prerelease rule below is scoped to one comparator set,
-     which a free formula tree cannot say. *)
   Inductive Comparator : Type :=
   | CAny
   | COp (op : CmpOp) (c : V.t).
@@ -42,8 +26,6 @@ Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (PM : SemverMatch V).
     | COp op c => cmpOpEvalBy V.compare op v c
     end.
 
-  (* node-semver admits a prerelease candidate only when some comparator
-     of the same set names a prerelease at the same release core. *)
   Definition csAdmits (cs : CompSet) (v : V.t) : bool :=
     orb (negb (PM.isPre v))
       (existsb (fun ct =>
