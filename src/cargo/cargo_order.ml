@@ -104,13 +104,6 @@ module type DRIVER = sig
   val candidates : P.dep -> int
   val root_step : assigned -> name option
   val dep_step : assigned -> crate -> P.dep -> name step
-
-  (* the names whose decisions left the choice just made without a live
-     candidate, reported once *)
-  val doomed : unit -> name list option
-
-  (* whether no candidate of the dependency is live *)
-  val hopeless : assigned -> crate -> P.dep -> bool
 end
 
 module Make (D : DRIVER) = struct
@@ -141,40 +134,21 @@ module Make (D : DRIVER) = struct
   type state = { rooted : bool; queue : Q.t; act : SS.t CM.t; clock : int }
   type entry = { name : D.name; mutable value : D.version option; pre : state }
 
-  (* A dependency processed with no live candidate left can only be
-     refuted, one version at a time, and PubGrub's backjump past the
-     decisions that doomed it means a replay to reach it again, in cargo's
-     order, behind every dependency queued ahead of it.  Once those
-     decisions stand again, and it is still hopeless, it goes first: every
-     decision it leads to is refuted and undone, so the answer the replay
-     reaches is the same, and only the replays are shorter.  checked is the
-     trail depth of a check that found it live, not repeated before a
-     backjump goes below it. *)
-  type hint = { h_item : item; culprits : D.name list; mutable checked : int }
-
   type t = {
     mutable state : state;
     mutable trail : entry list;
-    mutable depth : int;
-    mutable current : item option;
-    mutable hints : hint list;
     mutable n_next : int;
     mutable n_fallback : int;
     mutable n_undo : int;
-    mutable n_promote : int;
   }
 
   let create () =
     {
       state = { rooted = false; queue = Q.empty; act = CM.empty; clock = 0 };
       trail = [];
-      depth = 0;
-      current = None;
-      hints = [];
       n_next = 0;
       n_fallback = 0;
       n_undo = 0;
-      n_promote = 0;
     }
 
   let frame st p (m : P.ver) ~root ~all feats default =
@@ -211,30 +185,7 @@ module Make (D : DRIVER) = struct
             st
         | _ -> frame st c m ~root:false ~all:false it.feats default)
 
-  (* the queue's key can recur on another item once a replay diverges *)
-  let same a b = a.dep == b.dep && a.parent = b.parent
-
-  let queued st it =
-    match Q.find_opt it st.queue with Some x -> same x it | None -> false
-
-  let promoted t ~assigned st =
-    List.find_map
-      (fun h ->
-        if
-          t.depth < h.checked
-          && queued st h.h_item
-          && List.for_all (fun c -> D.decided assigned c <> None) h.culprits
-        then
-          if D.hopeless assigned h.h_item.parent h.h_item.dep then (
-            t.n_promote <- t.n_promote + 1;
-            Some h.h_item)
-          else (
-            h.checked <- t.depth;
-            None)
-        else None)
-      t.hints
-
-  let rec advance t ~assigned st =
+  let rec advance ~assigned st =
     if not st.rooted then
       match D.root_step assigned with
       | Some n -> (st, Some n)
@@ -252,23 +203,16 @@ module Make (D : DRIVER) = struct
                     frame st D.root m ~root:true ~all:false (SS.of_list fs)
                       false
               in
-              advance t ~assigned st)
+              advance ~assigned st)
     else
-      let head =
-        match promoted t ~assigned st with
-        | Some it -> Some it
-        | None -> Q.min_elt_opt st.queue
-      in
-      match head with
+      match Q.min_elt_opt st.queue with
       | None -> (st, None)
       | Some it -> (
           let rest = { st with queue = Q.remove it st.queue } in
           match D.dep_step assigned it.parent it.dep with
-          | Decide n ->
-              t.current <- Some it;
-              (st, Some n)
-          | Skip -> advance t ~assigned rest
-          | Activated c -> advance t ~assigned (activate rest it c))
+          | Decide n -> (st, Some n)
+          | Skip -> advance ~assigned rest
+          | Activated c -> advance ~assigned (activate rest it c))
 
   (* PubGrub drops a suffix of its decisions, and a decision it refused on
      the spot as conflicting never lands: either way the entry's name is no
@@ -288,19 +232,12 @@ module Make (D : DRIVER) = struct
         if not stands then (
           t.state <- e.pre;
           t.trail <- rest;
-          t.depth <- t.depth - 1;
           t.n_undo <- t.n_undo + 1;
           sync t ~assigned)
 
   let next t ~assigned open_names =
-    (match (D.doomed (), t.current) with
-    | Some culprits, Some it
-      when not (List.exists (fun h -> same h.h_item it) t.hints) ->
-        t.hints <- { h_item = it; culprits; checked = max_int } :: t.hints
-    | _ -> ());
     sync t ~assigned;
-    t.current <- None;
-    let st, n = advance t ~assigned t.state in
+    let st, n = advance ~assigned t.state in
     t.state <- st;
     t.n_next <- t.n_next + 1;
     let n =
@@ -312,11 +249,10 @@ module Make (D : DRIVER) = struct
           fst (List.hd open_names)
     in
     t.trail <- { name = n; value = None; pre = st } :: t.trail;
-    t.depth <- t.depth + 1;
     n
 
   let report t =
     if Sys.getenv_opt "PACORDER" <> None then
-      Printf.eprintf "PACORDER next=%d fallback=%d undone=%d promoted=%d\n%!"
-        t.n_next t.n_fallback t.n_undo t.n_promote
+      Printf.eprintf "PACORDER next=%d fallback=%d undone=%d\n%!" t.n_next
+        t.n_fallback t.n_undo
 end

@@ -702,17 +702,14 @@ module Make () = struct
        crate holds its links key.  That is a rule over the partial
        solution, and it is where resolver v3's ranking of versions meets
        the classes a slot decides between.  The partial solution stands
-       still for the length of one lookahead, and the names that made a
-       candidate invalid are kept, as what doomed it. *)
+       still for the length of one lookahead. *)
     let lookahead ~assigned =
-      let culprits = ref [] in
-      let blame x = if not (List.mem x !culprits) then culprits := x :: !culprits in
       let links_free t u gr =
         match meta ar t u with
         | Some { P.v_links = Some l; _ } -> (
             match decided_v assigned (Cg.NPlus.CLink l) with
             | Some (Cg.VPlus.WName (Cg.NPlus.CCrate (t', gr'))) ->
-                (t' = t && gr' = gr) || (blame (Cg.NPlus.CLink l); false)
+                t' = t && gr' = gr
             | _ -> true)
         | _ -> true
       in
@@ -726,10 +723,9 @@ module Make () = struct
             let b =
               (match assigned g with
                 | PG.Decided { PVersion.v = Cg.VPlus.WOrig w; _ } ->
-                    Cargo_version.compare w u = 0 || (blame g; false)
+                    Cargo_version.compare w u = 0
                 | PG.Entailed r ->
                     PG.Ranges.contains (tag g (Cg.VPlus.WOrig u)) r
-                    || (blame g; false)
                 | _ -> true)
               && links_free t u gr
             in
@@ -784,16 +780,13 @@ module Make () = struct
             b
       in
       let live t u feats default = valid t u && not (dead 1 3 t u feats default) in
-      (links_free, live, culprits)
+      (links_free, live)
     in
     let live_by (d : P.dep) live u =
       live d.P.d_target u (Cargo_order.SS.of_list d.P.d_feats) d.P.d_default
     in
-    (* the names that left the last choice with no live candidate, for the
-       replay of cargo's order to come back to it sooner *)
-    let doomed = ref None in
     let choose ~assigned tn (cands : PVersion.t list) =
-      let links_free, live, culprits = lookahead ~assigned in
+      let links_free, live = lookahead ~assigned in
       let offered w =
         List.find_opt
           (fun (c : PVersion.t) -> Cg.VPlus.compare c.PVersion.v w = E.Eq)
@@ -833,17 +826,13 @@ module Make () = struct
             | Some w -> offered w
             | None -> Option.bind (record (n, v) k) walk)
         | Cg.NPlus.CCrate (m, gr) ->
-            let p =
-              List.find_opt
-                (fun (c : PVersion.t) ->
-                  match c.PVersion.v with
-                  | Cg.VPlus.WOrig u ->
-                      links_free m u gr && live m u (asked m gr u) false
-                  | _ -> true)
-                (List.sort (fun a b -> PVersion.compare b a) cands)
-            in
-            if Option.is_none p && !culprits <> [] then doomed := Some !culprits;
-            p
+            List.find_opt
+              (fun (c : PVersion.t) ->
+                match c.PVersion.v with
+                | Cg.VPlus.WOrig u ->
+                    links_free m u gr && live m u (asked m gr u) false
+                | _ -> true)
+              (List.sort (fun a b -> PVersion.compare b a) cands)
         | Cg.NPlus.CFeatP (m, _, gr) ->
             Option.bind (decided_v assigned (Cg.NPlus.CCrate (m, gr))) offered
         | _ -> None
@@ -872,15 +861,6 @@ module Make () = struct
       let root = st.rc
       let root_features = named
       let meta (n, v) = meta ar n v
-
-      let doomed () =
-        let d = !doomed in
-        doomed := None;
-        d
-
-      let hopeless assigned _ (d : P.dep) =
-        let _, live, _ = lookahead ~assigned in
-        not (List.exists (live_by d live) (candidates d))
 
       let candidates d = List.length (candidates d)
 

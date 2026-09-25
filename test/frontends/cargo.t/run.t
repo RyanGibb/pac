@@ -365,16 +365,15 @@ misses, so xw 1.1.0 is passed over for 1.0.0, again without a conflict.
   [1]
 
 Where every candidate is dead the versions can only be refuted, one per
-backjump, and cargo's order would reach the dependency again after each
-only behind everything queued ahead of it.  dv takes sb 2.6.1 before t1,
-t2 and t3, and only then zj, whose versions both need ae 0.10.3 and so sb
-below 2.5.  Once sb 2.6.1 stands again after a backjump, zj is taken up
-first, and refuting it costs a handful of decisions instead of the whole
-queue; cargo, backtracking into its saved frame, lands on sb 2.4.1 too.
+backjump, and cargo's order reaches the dependency again after each only
+behind everything queued ahead of it.  dv takes sb 2.6.1 before t1, t2 and
+t3, and only then zj, whose versions both need ae 0.10.3 and so sb below
+2.5.  Refuting it costs whole replays of the queue, not the answer: cargo,
+backtracking into its saved frame, lands on sb 2.4.1 too.
 
   $ ../../../src/main.exe cargo index dv | grep -E '^  (ae|sb|zj) '
     ae 0.10.3
     sb 2.4.1
     zj 1.2.0
   $ ../../../src/main.exe cargo index dv --debug | grep -c '^deciding on'
-  60
+  124
