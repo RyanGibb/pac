@@ -1,0 +1,4 @@
+{"name":"sight-host","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"sight-host","version":"1.0.0",
+    "peerDependencies":{"dial":"^1.0.0"}}}}

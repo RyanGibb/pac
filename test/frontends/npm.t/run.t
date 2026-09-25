@@ -362,21 +362,21 @@ top and keeps 4.0.0, although 3.0.2 is tagged latest.
   cone: 4 packages, 5 versions, 0 packuments fetched
   encoded solution: 10 core nodes (21 lookups)
 
-An optional peer that is never installed still narrows its declarer's peer
-set.  resolver peers on linter at * and optionally on linter-plugin, whose
-own peer on linter is ^8.0.0 || ^9.0.0.  npm loads the optional peer into
-resolver's peer set, to catch a conflict before placing it, and there
-replaces linter 10.0.0 with 9.0.0, the pick for linter-plugin's range, since
-resolver's * accepts it too; linter-plugin itself is not installed.
+An optional peer that is never installed is no constraint, and the replay
+does not model arborist's #loadPeerSet, which loads it into its declarer's
+peer set anyway.  resolver peers on linter at * and optionally on
+linter-plugin, whose own peer on linter is ^8.0.0 || ^9.0.0.  npm replaces
+linter 10.0.0 with 9.0.0 there, the pick for linter-plugin's range; the
+driver keeps 10.0.0, the pick for resolver's *:
 
   $ ../../../src/main.exe npm --offline --cache . --tree resolver-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root resolver-app 1.0.0
   packages (3):
-    linter 9.0.0
+    linter 10.0.0
     resolver 1.0.0
     resolver-app 1.0.0
   node_modules (2 edges):
-    resolver-app 1.0.0 <- linter 9.0.0
+    resolver-app 1.0.0 <- linter 10.0.0
     resolver-app 1.0.0 <- resolver 1.0.0
   cone: 4 packages, 5 versions, 0 packuments fetched
   encoded solution: 5 core nodes (11 lookups)
@@ -406,6 +406,62 @@ preset's.
     preset 1.0.0 <- syntax-b 1.2.0
   cone: 5 packages, 10 versions, 0 packuments fetched
   encoded solution: 10 core nodes (26 lookups)
+
+However deep the chain of dependencies that each peer on the name, the
+last one's range is met too.  deep-preset peers on compiler ^7.0.0 ||
+^8.0.0 and so does each of deep-1 to deep-4, each depending on the next;
+only deep-5, five dependencies down, peers on ^7.0.0.  npm installs one
+compiler, 7.0.0:
+
+  $ ../../../src/main.exe npm --offline --cache . --tree deep-app | sed -E '/^(parse|solve) [0-9.]+s$/d' | sed -n '/^node_modules/,$p' | grep compiler
+    deep-1 1.0.0 <- compiler 7.0.0
+    deep-2 1.0.0 <- compiler 7.0.0
+    deep-3 1.0.0 <- compiler 7.0.0
+    deep-4 1.0.0 <- compiler 7.0.0
+    deep-app 1.0.0 <- compiler 7.0.0
+    deep-preset 1.0.0 <- compiler 7.0.0
+
+npm meets a package's edges in the collation it sorts names by
+(build-ideal-tree.js, localeCompare), where "_" comes before "-".
+coll-preset peers on gauge at * and depends on coll_a, which peers on
+^6.0.0 || ^7.0.0, and on coll-a, which peers on ^6.0.0 || ^8.0.0.  Met
+first, coll_a's range replaces gauge 9.0.0 with 7.0.0 in coll-app's
+directory, and coll-a's pick, 8.0.0, is then refused, since coll_a's range
+does not accept it.  npm's answer has the same gauge at the top; below it,
+the calculus puts the one version both ranges accept, 6.0.0, where npm
+leaves coll-a's peer unmet:
+
+  $ ../../../src/main.exe npm --offline --cache . --tree coll-app | sed -E '/^(parse|solve) [0-9.]+s$/d' | grep 'gauge'
+    gauge 6.0.0
+    gauge 7.0.0
+    coll-preset 1.0.0 <- gauge 6.0.0
+    coll-app 1.0.0 <- gauge 7.0.0
+
+A peer slot reuses the copy its declarer's node_modules lookup finds, not
+one the tree holds out of its sight.  sight-left's dial 1.0.0 is nested
+under it, below sight-app's dial 2.0.0, and sight-right's sight-host peers
+on dial ^1.0.0; npm places sight-host and its peer under sight-right, where
+the lookup finds only 2.0.0, and fetches ^1.0.0's newest, 1.1.0:
+
+  $ ../../../src/main.exe npm --offline --cache . --tree sight-app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root sight-app 1.0.0
+  packages (7):
+    dial 1.0.0
+    dial 1.1.0
+    dial 2.0.0
+    sight-app 1.0.0
+    sight-host 1.0.0
+    sight-left 1.0.0
+    sight-right 1.0.0
+  node_modules (6 edges):
+    sight-left 1.0.0 <- dial 1.0.0
+    sight-right 1.0.0 <- dial 1.1.0
+    sight-app 1.0.0 <- dial 2.0.0
+    sight-right 1.0.0 <- sight-host 1.0.0
+    sight-app 1.0.0 <- sight-left 1.0.0
+    sight-app 1.0.0 <- sight-right 1.0.0
+  cone: 5 packages, 7 versions, 0 packuments fetched
+  encoded solution: 13 core nodes (28 lookups)
 
 A name a package both depends on and peers on is a dependency only: npm
 keeps one edge per name and loads dependencies after peers, each

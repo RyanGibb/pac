@@ -681,17 +681,6 @@ let peer_only st p (a : string) =
        (fun (d : Np.coq_Dependency) -> d.Np.d_dir = a)
        (active_dependencies st p))
 
-(* Is the candidate's own granular node already carried?  It holds
-   exactly one version, so any assignment to it is that version. *)
-let carried ~assigned (m : string * string) (c : PVersion.t) =
-  match c with
-  | Np.Vs.Gran _ -> false
-  | Np.Vs.Orig u -> (
-      match assigned (Np.Nm.Granular (m, u)) with
-      | PG.Unselected -> false
-      | PG.Decided w -> PVersion.compare w c = 0
-      | PG.Entailed r -> PG.Ranges.contains c r)
-
 (* what npm-pick-manifest returns from these candidates *)
 let pick st (t : string) (cands : PVersion.t list) : PVersion.t =
   match tagged st t cands with Some c -> c | None -> best st t cands
@@ -709,24 +698,47 @@ let pick_in st (t : string) (rg : Np.coq_Range) : string option =
   | pool -> (
       match pick st t pool with Np.Vs.Orig u -> Some u | Np.Vs.Gran _ -> None)
 
+(* Intl.Collator("en"), which arborist orders its queue and a package's
+   dependencies by (@isaacs/string-locale-compare): punctuation counts, and
+   sorts before digits and letters in the root collation's order, so "_"
+   sorts before "-" where byte order has it after; case decides only
+   between strings that are otherwise equal. *)
+let collation =
+  "_-,;:!?.'\"()[]{}@*/\\&#%`^+<=>|~$0123456789abcdefghijklmnopqrstuvwxyz"
+
+let primary =
+  let t = Array.init 256 (fun i -> 1000 + i) in
+  t.(Char.code ' ') <- -1;
+  String.iteri
+    (fun i c ->
+      t.(Char.code c) <- i;
+      t.(Char.code (Char.uppercase_ascii c)) <- i)
+    collation;
+  t
+
+let collate (a : string) (b : string) : int =
+  let la = String.length a and lb = String.length b in
+  let rec level w i =
+    if i = la || i = lb then compare la lb
+    else match compare (w a.[i]) (w b.[i]) with 0 -> level w (i + 1) | c -> c
+  in
+  let upper c = c >= 'A' && c <= 'Z' in
+  match level (fun c -> primary.(Char.code c)) 0 with
+  | 0 -> ( match level upper 0 with 0 -> compare a b | c -> c)
+  | c -> c
+
 (* The peer ranges npm resolves into p's peer-only directory a that the
-   encoding sends to another directory or to none, in the order npm meets
-   them.  Both kinds are met on behalf of a package q that p holds and
-   that peers on a, so that q's own peer is what fills the directory:
+   encoding sends to another directory, in the order npm meets them: on
+   behalf of a package q that p holds and that peers on a, so that q's own
+   peer is what fills the directory, the peers on a of q's dependencies,
+   and of theirs while each peers on a too.  npm never places a peer inside
+   a package that peers on the same name (can-place-dep.js: "cannot place
+   peers inside their dependents"), so these land beside q's own peer; the
+   encoding puts them in q's directory.  npm meets a package's edges by
+   name in its collation (build-ideal-tree.js:997, 1428).
 
-   - the peers on a of q's optional peers that p holds nowhere.
-     #loadPeerSet factors optional peers into q's peer set "so that we can
-     avoid conflicts" (build-ideal-tree.js, npm/arborist#209) and resolves
-     their peers there, and only then declines to place them; the calculus
-     reads such an optional peer as no constraint at all.
-   - the peers on a of q's dependencies, and of theirs while each peers on
-     a too.  npm never places a peer inside a package that peers on the
-     same name (can-place-dep.js: "cannot place peers inside their
-     dependents"), so these land beside q's own peer; the encoding puts
-     them in q's directory.
-
-   A dependency or optional peer not decided yet is taken at npm's pick
-   for its range, as npm fetches it. *)
+   A dependency not decided yet is taken at npm's pick for its range, as
+   npm fetches it. *)
 let peer_ranges_into st ~assigned (k : string * string) (v : string)
     (a : string) : Np.coq_Range list =
   let p = (snd k, v) in
@@ -736,14 +748,8 @@ let peer_ranges_into st ~assigned (k : string * string) (v : string)
   let deps q =
     List.sort
       (fun (x : Np.coq_Dependency) (y : Np.coq_Dependency) ->
-        compare x.Np.d_dir y.Np.d_dir)
+        collate x.Np.d_dir y.Np.d_dir)
       (active_dependencies st q)
-  in
-  let peers q =
-    List.sort
-      (fun (x : Np.coq_PeerDependency) (y : Np.coq_PeerDependency) ->
-        compare x.Np.p_name y.Np.p_name)
-      (peer_dependencies st q)
   in
   let peers_on q =
     List.filter_map
@@ -765,29 +771,15 @@ let peer_ranges_into st ~assigned (k : string * string) (v : string)
             (fun (r : Np.coq_PeerDependency) ->
               if (not r.Np.p_optional) && not (List.mem r.Np.p_name dirs) then
                 hold (r.Np.p_name, r.Np.p_name))
-            (peers (snd key, u)))
+            (peer_dependencies st (snd key, u)))
         u)
   in
   List.iter
     (fun (d : Np.coq_Dependency) -> hold (d.Np.d_dir, d.Np.d_target))
     (deps p);
-  let holds o =
-    List.mem o dirs || Option.join (Hashtbl.find_opt held (o, o)) <> None
-  in
-  let optional (key, u) =
-    List.concat_map
-      (fun (r : Np.coq_PeerDependency) ->
-        let o = r.Np.p_name in
-        if (not r.Np.p_optional) || o = a || holds o then []
-        else
-          match pick_in st o r.Np.p_range with
-          | Some w -> peers_on (o, w)
-          | None -> [])
-      (peers (snd key, u))
-  in
   let seen = Hashtbl.create 16 in
-  let rec below depth (key, u) =
-    if depth = 0 || Hashtbl.mem seen (key, u) then []
+  let rec below (key, u) =
+    if Hashtbl.mem seen (key, u) then []
     else (
       Hashtbl.replace seen (key, u) ();
       List.concat_map
@@ -803,7 +795,7 @@ let peer_ranges_into st ~assigned (k : string * string) (v : string)
           | Some w -> (
               match peers_on (d.Np.d_target, w) with
               | [] -> []
-              | rs -> rs @ below (depth - 1) (okey, w)))
+              | rs -> rs @ below (okey, w)))
         (deps (snd key, u)))
   in
   Hashtbl.fold
@@ -812,8 +804,8 @@ let peer_ranges_into st ~assigned (k : string * string) (v : string)
       | Some u when peers_on (snd key, u) <> [] -> (key, u) :: acc
       | _ -> acc)
     held []
-  |> List.sort compare
-  |> List.concat_map (fun q -> optional q @ below 4 q)
+  |> List.sort (fun ((d, _), _) ((d', _), _) -> collate d d')
+  |> List.concat_map below
 
 (* npm's Node.canReplace: a peer range the version in the directory fails
    brings in npm's pick for that range, which takes the directory over when
@@ -845,35 +837,6 @@ let replace st ~assigned k v (m : string * string) cands c =
   in
   snd
     (List.fold_left step ([], c) (peer_ranges_into st ~assigned k v (fst m)))
-
-(* Intl.Collator("en"), which arborist orders its queue and a package's
-   dependencies by (@isaacs/string-locale-compare): punctuation counts, and
-   sorts before digits and letters in the root collation's order, so "_"
-   sorts before "-" where byte order has it after; case decides only
-   between strings that are otherwise equal. *)
-let collation =
-  "_-,;:!?.'\"()[]{}@*/\\&#%`^+<=>|~$0123456789abcdefghijklmnopqrstuvwxyz"
-
-let primary =
-  let t = Array.init 256 (fun i -> 1000 + i) in
-  t.(Char.code ' ') <- -1;
-  String.iteri
-    (fun i c ->
-      t.(Char.code c) <- i;
-      t.(Char.code (Char.uppercase_ascii c)) <- i)
-    collation;
-  t
-
-let collate (a : string) (b : string) : int =
-  let la = String.length a and lb = String.length b in
-  let rec level w i =
-    if i = la || i = lb then compare la lb
-    else match compare (w a.[i]) (w b.[i]) with 0 -> level w (i + 1) | c -> c
-  in
-  let upper c = c >= 'A' && c <= 'Z' in
-  match level (fun c -> primary.(Char.code c)) 0 with
-  | 0 -> ( match level upper 0 with 0 -> compare a b | c -> c)
-  | c -> c
 
 (* npm's own tree as the replay has built it: where each copy sits in
    node_modules, which is what npm's queue is ordered by and what a
@@ -1118,11 +1081,11 @@ let next st o ~assigned (open_names : (PName.t * int) list) : PName.t =
    valid, so #problemEdges fetches nothing for it.  So the copy the
    requirer's lookup finds in the replayed tree outranks both the dist-tag
    and the newest; resolving afresh is what brings in a second copy of a
-   package npm's tree already holds.  A peer slot is filled from anywhere in
-   the answer, npm placing peers "trying a bit harder to be singletons"
-   (can-place-dep.js, preferDedupe).  Preference only, as in deb_solve's
-   alt_carried: the filter falls back to the whole candidate list, so
-   nothing that was satisfiable stops being so. *)
+   package npm's tree already holds.  A peer edge is no different: one the
+   lookup already satisfies is skipped (build-ideal-tree.js:1427, 1438), and
+   a copy out of the lookup's sight is not reused.  Preference only, as in
+   deb_solve's alt_carried: the filter falls back to the whole candidate
+   list, so nothing that was satisfiable stops being so. *)
 let choose st o ~assigned (n : PName.t) (cands : PVersion.t list) : PVersion.t =
   match n with
   | Np.Nm.Granular _ -> greatest cands
@@ -1135,7 +1098,6 @@ let choose st o ~assigned (n : PName.t) (cands : PVersion.t list) : PVersion.t =
       in
       let reuse c =
         match (at, c) with
-        | _ when peer -> carried ~assigned m c
         | Some x, Np.Vs.Orig u -> (
             match resolve x (fst m) with
             | Some y -> y.key = m && y.ver = u

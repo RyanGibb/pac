@@ -1,0 +1,4 @@
+{"name":"coll-app","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"coll-app","version":"1.0.0",
+    "dependencies":{"coll-preset":"^1"}}}}

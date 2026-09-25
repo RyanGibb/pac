@@ -1,0 +1,4 @@
+{"name":"deep-5","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"deep-5","version":"1.0.0",
+    "peerDependencies":{"compiler":"^7.0.0"}}}}
