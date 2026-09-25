@@ -1116,17 +1116,14 @@ Module Virtual (N V : UsualOrderedType).
       Qed.
 
       Module PkgFibred := FibredRel N V Pkg PkgSet.
-      Theorem versions_lookupOrig : forall R D Pi (r : Pkg.t) (n : N.t),
-          (exists q h,
-              T.DepRel.In (q, (Name.Orig n, h)) (reduceDeps R D Pi)) \/
-          Name.Orig n = Name.Orig (fst r) ->
+      Theorem versions_lookupOrig : forall R D Pi (n : N.t),
           T.versions (reduceReal R D Pi) (Name.Orig n) =
           T.versions
             (reduceReal (PkgFibred.tailFibre R n) C.DepRel.empty
                ProvidesRel.empty)
             (Name.Orig n).
       Proof.
-        intros R D Pi r n _; apply T.versions_ext; intro y.
+        intros R D Pi n; apply T.versions_ext; intro y.
         rewrite !mem_reduceReal.
         split.
         - intros [[n1 [v1 [HR [Hn Hv]]]] | [C2 | C3]].
@@ -1150,13 +1147,12 @@ Module Virtual (N V : UsualOrderedType).
       Qed.
 
       Theorem dependees_lookupOrig : forall D R Pi (p : Pkg.t),
-          T.PkgSet.In (embedPkg p) (reduceReal R D Pi) ->
           let Dp := DepRelFibred.tailFibre D p in
           T.dependees (reduceDeps R D Pi) (embedPkg p) =
           T.dependees (reduceDeps (realPreimage R Dp) Dp (provPreimage Pi Dp))
             (embedPkg p).
       Proof.
-        intros D R Pi p _; cbv zeta; apply T.dependees_ext; intros [m ws];
+        intros D R Pi p; cbv zeta; apply T.dependees_ext; intros [m ws];
           rewrite !mem_reduceDeps.
         split.
         - intros [C1 | [C2 | [C3 | C4]]].
@@ -1219,15 +1215,13 @@ Module Virtual (N V : UsualOrderedType).
       Qed.
 
       Theorem versions_lookupSelector : forall R D Pi (p : Pkg.t) (n : N.t),
-          (exists q h,
-              T.DepRel.In (q, (Name.Selector p n, h)) (reduceDeps R D Pi)) ->
           T.versions (reduceReal R D Pi) (Name.Selector p n) =
           T.versions
             (reduceReal (PkgFibred.tailFibre R n)
                (DepRelFibred.endsFibre D p n) (ProvFibred.nodeFibre Pi n))
             (Name.Selector p n).
       Proof.
-        intros R D Pi p n _; apply T.versions_ext; intro y.
+        intros R D Pi p n; apply T.versions_ext; intro y.
         rewrite !mem_reduceReal.
         split.
         - intros [C1 | [C2 | C3]].
@@ -1270,8 +1264,6 @@ Module Virtual (N V : UsualOrderedType).
       Qed.
 
       Theorem dependees_lookupSelector : forall D R Pi (p : Pkg.t) n m w,
-          T.PkgSet.In (Name.Selector p n, Version.Provider m w)
-            (reduceReal R D Pi) ->
           T.dependees (reduceDeps R D Pi)
             (Name.Selector p n, Version.Provider m w) =
           T.dependees
@@ -1279,7 +1271,7 @@ Module Virtual (N V : UsualOrderedType).
                         (ProvFibred.nodeFibre Pi n))
             (Name.Selector p n, Version.Provider m w).
       Proof.
-        intros D R Pi p n m w _; apply T.dependees_ext; intros [m0 ws];
+        intros D R Pi p n m w; apply T.dependees_ext; intros [m0 ws];
           rewrite !mem_reduceDeps.
         split.
         - intros [C1 | [C2 | [C3 | C4]]].

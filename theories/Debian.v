@@ -2349,7 +2349,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Qed.
 
     Theorem dependees_lookupOrig : forall R D Rec Pi G (n : N.t) (v : V.t),
-        T.PkgSet.In (embedPkg (n, v)) (reduceReal R D Rec Pi G) ->
         dependees R D Rec Pi G (Name.Orig n, Version.Orig v) =
         dependees
           (realPreimage R
@@ -2363,7 +2362,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           (ConfFibred.tailFibre G (n, v))
           (Name.Orig n, Version.Orig v).
     Proof.
-      intros R D Rec Pi G n v _; apply T.DependeesSet.ext; intro y.
+      intros R D Rec Pi G n v; apply T.DependeesSet.ext; intro y.
       set (ns := NSet.union (atomNames D (n, v)) (confRead Pi G (n, v))).
       rewrite !dependees_orig_spec.
       assert (Hfib : forall (E : Deps.t) A,

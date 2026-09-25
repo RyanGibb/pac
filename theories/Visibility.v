@@ -1526,6 +1526,7 @@ Module Visibility (N V : UsualOrderedType).
           destruct Hname as [[n2 Hn] | [n2 [v2 [m2 Hn]]]]; discriminate Hn.
       Qed.
 
+      (* Unreached, q need not be a potential origin and the name is empty. *)
       Theorem versions_lookupOccurrence :
         forall R D pub r (n : N.t) (q : Pkg.t),
           (exists p h, T.DepRel.In (p, (Name.Occurrence n q, h))
@@ -1550,6 +1551,7 @@ Module Visibility (N V : UsualOrderedType).
         - intro HR; exact (mem_reduceReal_occurrence R D pub r n v q HR Hq).
       Qed.
 
+      (* Membership gives R (n, v) and q's origin status for the fibre. *)
       Theorem dependees_lookupOccurrence :
         forall R D pub r (n : N.t) (v : V.t) (q : Pkg.t),
           T.PkgSet.In (Name.Occurrence n q, v) (reduceReal R D pub r) ->
@@ -1603,6 +1605,7 @@ Module Visibility (N V : UsualOrderedType).
               discriminate Heq.
       Qed.
 
+      (* Unreached, q need not be a potential origin and the name is empty. *)
       Theorem versions_lookupIntermediate :
         forall R D pub r (n : N.t) (v : V.t) (m : N.t) (q : Pkg.t),
           (exists p h, T.DepRel.In (p, (Name.Intermediate n v m q, h))
@@ -1632,6 +1635,7 @@ Module Visibility (N V : UsualOrderedType).
           split; [exact Hq | split; [exact Hu | reflexivity]].
       Qed.
 
+      (* Membership is what makes q a potential origin for the fibre. *)
       Theorem dependees_lookupIntermediate :
         forall R D pub r (n : N.t) (v : V.t) (m : N.t) (q : Pkg.t) (u : V.t),
           T.PkgSet.In (Name.Intermediate n v m q, u) (reduceReal R D pub r) ->
@@ -1698,15 +1702,13 @@ Module Visibility (N V : UsualOrderedType).
 
       Theorem versions_lookupAgreement :
         forall R D pub r (n : N.t) (v : V.t) (m : N.t),
-          (exists p h, T.DepRel.In (p, (Name.Agreement n v m, h))
-                         (reduceDeps R D pub r)) ->
           T.versions (reduceReal R D pub r) (Name.Agreement n v m) =
           T.versions
             (reduceReal PkgSet.empty (DepFibred.endsFibre D (n, v) m)
                PubRel.empty r)
             (Name.Agreement n v m).
       Proof.
-        intros R D pub r n v m _; apply T.versions_ext; intro u.
+        intros R D pub r n v m; apply T.versions_ext; intro u.
         rewrite !mem_reduceReal.
         split.
         - intros [H | [H | H]].
@@ -1731,11 +1733,10 @@ Module Visibility (N V : UsualOrderedType).
 
       Theorem dependees_lookupAgreement :
         forall R D pub r (n : N.t) (v : V.t) (m : N.t) (u : V.t),
-          T.PkgSet.In (Name.Agreement n v m, u) (reduceReal R D pub r) ->
           T.dependees (reduceDeps R D pub r) (Name.Agreement n v m, u) =
           T.DependeesSet.empty.
       Proof.
-        intros R D pub r n v m u _; apply T.dependees_empty_iff.
+        intros R D pub r n v m u; apply T.dependees_empty_iff.
         intros [tn tvs] H; apply mem_reduceDeps in H.
         destruct H as [H | [H | [H | H]]].
         - destruct H as [n1 [v1 [q1 [_ [_ [_ [_ Heq]]]]]]]; discriminate Heq.

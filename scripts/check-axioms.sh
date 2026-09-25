@@ -354,11 +354,14 @@ NpmS.Reduction.Lookup.dependees_lookupInt
 NpmS.Reduction.Lookup.versions_lookupGran
 NpmS.Reduction.Lookup.versions_lookupInt
 NpmS.Reduction.dependees
+NpmS.Reduction.dependees_targetNames
+NpmS.Reduction.lookup_resolution
 NpmS.Reduction.npmParents_coreResolution
 NpmS.Reduction.npmResolution_coreResolution
 NpmS.Reduction.npm_completeness
 NpmS.Reduction.npm_soundness
 NpmS.Reduction.peer_installed
+NpmS.Reduction.reached_transR
 NpmS.Reduction.transD
 NpmS.Reduction.transR
 NpmS.Reduction.transRoot

@@ -758,15 +758,12 @@ Module Feature (N V F : UsualOrderedType).
       Qed.
 
       Theorem versions_lookupOrig :
-        forall R support Df Da (r : Pkg.t) n,
-          (exists p h, T.DepRel.In (p, (Name.Orig n, h))
-                         (reduceDeps R support Df Da)) \/
-          Name.Orig n = Name.Orig (fst r) ->
+        forall R support n,
           T.versions (reduceReal R support) (Name.Orig n) =
           T.versions (reduceReal (PkgFibred.tailFibre R n) SupportSet.empty)
             (Name.Orig n).
       Proof.
-        intros R support Df Da r n _; apply T.versions_ext; intro v.
+        intros R support n; apply T.versions_ext; intro v.
         rewrite !mem_reduceReal.
         split.
         - intros [[[qn qv] [HR Hq]] | [n1 [v1 [f1 [_ [_ Hq]]]]]].
@@ -784,7 +781,6 @@ Module Feature (N V F : UsualOrderedType).
 
       Theorem dependees_lookupOrig :
         forall R support Df Da (n : N.t) (v : V.t),
-          T.PkgSet.In (Name.Orig n, v) (reduceReal R support) ->
           T.dependees (reduceDeps R support Df Da) (Name.Orig n, v) =
           T.dependees
             (reduceDeps PkgSet.empty SupportSet.empty
@@ -792,7 +788,7 @@ Module Feature (N V F : UsualOrderedType).
                AddlDepRel.empty)
             (Name.Orig n, v).
       Proof.
-        intros R support Df Da n v _; apply T.dependees_ext; intros [m ws].
+        intros R support Df Da n v; apply T.dependees_ext; intros [m ws].
         split; [| apply reduceDeps_mono;
                   [apply PkgSet.empty_subset
                   | apply SupportSet.empty_subset
@@ -824,15 +820,13 @@ Module Feature (N V F : UsualOrderedType).
             discriminate Hsrc.
       Qed.
 
-      Theorem versions_lookupFeatPkg : forall R support Df Da n f,
-          (exists p h, T.DepRel.In (p, (Name.FeatPkg n f, h))
-                         (reduceDeps R support Df Da)) ->
+      Theorem versions_lookupFeatPkg : forall R support n f,
           T.versions (reduceReal R support) (Name.FeatPkg n f) =
           T.versions
             (reduceReal (PkgFibred.tailFibre R n) (supportFibre support n f))
             (Name.FeatPkg n f).
       Proof.
-        intros R support Df Da n f _; apply T.versions_ext; intro v.
+        intros R support n f; apply T.versions_ext; intro v.
         rewrite !mem_reduceReal.
         split.
         - intros [[[qn qv] [_ Hq]] | [n1 [v1 [f1 [Hs [HR Hq]]]]]].
@@ -899,6 +893,7 @@ Module Feature (N V F : UsualOrderedType).
           split; [reflexivity | split; [exact Htn | exact Htvs]].
       Qed.
 
+      (* The membership premise is what collapses the fibres to singletons. *)
       Theorem dependees_lookupFeatPkg : forall R support Df Da n v f,
           T.PkgSet.In (Name.FeatPkg n f, v) (reduceReal R support) ->
           T.dependees (reduceDeps R support Df Da) (Name.FeatPkg n f, v) =

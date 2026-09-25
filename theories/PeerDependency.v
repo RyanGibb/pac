@@ -755,17 +755,14 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
       Qed.
 
       Theorem versions_lookupGranular :
-        forall R D Th g (r : Pkg.t) (n : N.t) (w : G.t),
-          (exists p h,
-              T.DepRel.In (p, (Name.Granular n w, h)) (reduceDeps D Th g)) \/
-          Name.Granular n w = Name.Granular (fst r) (g (snd r)) ->
+        forall R D Th g (n : N.t) (w : G.t),
           T.versions (reduceReal R D Th g) (Name.Granular n w) =
           T.versions
             (reduceReal (Conc.Reduction.Lookup.granFibre g R n w)
                C.DepRel.empty PeerRel.empty g)
             (Name.Granular n w).
       Proof.
-        intros R D Th g r n w _; apply T.versions_ext; intro y.
+        intros R D Th g n w; apply T.versions_ext; intro y.
         rewrite !mem_reduceReal.
         split.
         - intros [[[qn qv] [HR Hq]] | [H | H]].
@@ -790,16 +787,14 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
             destruct (C.DepRel.empty_spec HD).
       Qed.
 
-      Theorem dependees_lookupGranular : forall R D Th g n v,
-          T.PkgSet.In (Name.Granular n (g v), Version.Orig v)
-            (reduceReal R D Th g) ->
+      Theorem dependees_lookupGranular : forall D Th g n v,
           T.dependees (reduceDeps D Th g)
             (Name.Granular n (g v), Version.Orig v) =
           T.dependees
             (reduceDeps (DepRelFibred.tailFibre D (n, v)) PeerRel.empty g)
             (Name.Granular n (g v), Version.Orig v).
       Proof.
-        intros R D Th g n v _; apply T.dependees_ext; intros [m ws].
+        intros D Th g n v; apply T.dependees_ext; intros [m ws].
         split; [| intro H; exact (reduceDeps_mono _ _ _ _ _ _
                     (DepRelFibred.tailFibre_subset _ _)
                     (PeerRel.empty_subset _) H)].
@@ -816,16 +811,13 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
       Qed.
 
       Theorem versions_lookupIntermediate : forall R D Th g n v m,
-          (exists p h,
-              T.DepRel.In (p, (Name.Intermediate n v m, h))
-                (reduceDeps D Th g)) ->
           T.versions (reduceReal R D Th g) (Name.Intermediate n v m) =
           T.versions
             (reduceReal PkgSet.empty (DepRelFibred.tailFibre D (n, v))
                (peersOfDeps D Th (n, v) m) g)
             (Name.Intermediate n v m).
       Proof.
-        intros R D Th g n v m _; apply T.versions_ext; intro y.
+        intros R D Th g n v m; apply T.versions_ext; intro y.
         rewrite !mem_reduceReal.
         split.
         - intros [[[qn qv] [_ Hq]] | [H | H]].
@@ -872,9 +864,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
             exact (DepRelFibred.tailFibre_subset _ _ _ HD2).
       Qed.
 
-      Theorem dependees_lookupIntermediate : forall R D Th g n v o u,
-          T.PkgSet.In (Name.Intermediate n v o, Version.Orig u)
-            (reduceReal R D Th g) ->
+      Theorem dependees_lookupIntermediate : forall D Th g n v o u,
           T.dependees (reduceDeps D Th g)
             (Name.Intermediate n v o, Version.Orig u) =
           T.dependees
@@ -882,7 +872,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
                         (PeerRelFibred.tailFibre Th (o, u)) g)
             (Name.Intermediate n v o, Version.Orig u).
       Proof.
-        intros R D Th g n v o u _; apply T.dependees_ext; intros [m ws].
+        intros D Th g n v o u; apply T.dependees_ext; intros [m ws].
         split; [| intro H; exact (reduceDeps_mono _ _ _ _ _ _
                     (DepRelFibred.tailFibre_subset _ _)
                     (PeerRelFibred.tailFibre_subset _ _) H)].

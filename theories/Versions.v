@@ -266,22 +266,21 @@ Module Versions (N V : UsualOrderedType).
       Qed.
 
       Module PkgFibred := FibredRel N V Pkg PkgSet.
-      Theorem versions_lookup : forall R D (r : Pkg.t) (n : N.t),
-          (exists p ws, C.DepRel.In (p, (n, ws)) (reduce R D)) \/
-          n = fst r ->
+      (* reduce leaves the real packages as they are, so the reduced
+         instance's versions at n are C.versions R n, whatever D is. *)
+      Theorem versions_lookup : forall R (n : N.t),
           C.versions R n = C.versions (PkgFibred.tailFibre R n) n.
       Proof.
-        intros R D r n _; apply C.versions_ext; intro v.
+        intros R n; apply C.versions_ext; intro v.
         rewrite PkgFibred.mem_tailFibre; tauto.
       Qed.
 
       Theorem dependees_lookup : forall R D (p : Pkg.t),
-        PkgSet.In p R ->
         let Dp := DepRelFibred.tailFibre D p in
         C.dependees (reduce R D) p =
         C.dependees (reduce (realPreimage R Dp) Dp) p.
       Proof.
-        intros R D p _; cbv zeta;
+        intros R D p; cbv zeta;
           rewrite reduce_realPreimage; apply dependees_fibre.
       Qed.
 

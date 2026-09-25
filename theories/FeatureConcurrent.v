@@ -1813,8 +1813,6 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
 
       Module FeatDepRelFibred := Feat.Reduction.Lookup.FeatDepRelFibred.
       Theorem dependees_lookupGranularOrig : forall R support Df Da g n v,
-          T.PkgSet.In (Name.GranularOrig n (g v), v)
-            (reduceReal R support Df Da g) ->
           T.dependees (reduceDeps R support Df Da g)
             (Name.GranularOrig n (g v), v) =
           T.dependees
@@ -1823,7 +1821,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
                Feat.AddlDepRel.empty g)
             (Name.GranularOrig n (g v), v).
       Proof.
-        intros R support Df Da g n v _; apply T.dependees_ext; intros [m ws].
+        intros R support Df Da g n v; apply T.dependees_ext; intros [m ws].
         split; [| apply reduceDeps_mono;
                   [apply PkgSet.empty_subset
                   | apply Feat.SupportSet.empty_subset
@@ -1873,6 +1871,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
             | eassumption].
       Qed.
 
+      (* The membership premise is what collapses the fibres to singletons. *)
       Theorem dependees_lookupGranularFeatPkg : forall R support Df Da g n v f,
           T.PkgSet.In (Name.GranularFeatPkg n f (g v), v)
             (reduceReal R support Df Da g) ->
@@ -1922,8 +1921,6 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
       Qed.
 
       Theorem dependees_lookupIntermediate : forall R support Df Da g n v m u,
-          T.PkgSet.In (Name.Intermediate n v m, u)
-            (reduceReal R support Df Da g) ->
           T.dependees (reduceDeps R support Df Da g)
             (Name.Intermediate n v m, u) =
           T.dependees
@@ -1932,7 +1929,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
                (pkgNodeFibre Da (n, v) m) g)
             (Name.Intermediate n v m, u).
       Proof.
-        intros R support Df Da g n v m u _.
+        intros R support Df Da g n v m u.
         apply T.dependees_ext; intros [m' ws].
         split; [| apply reduceDeps_mono;
                   [apply PkgSet.empty_subset
@@ -1953,8 +1950,6 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
 
       Theorem dependees_lookupIntermediateF :
         forall R support Df Da g n v m f u,
-          T.PkgSet.In (Name.IntermediateF n v m f, u)
-            (reduceReal R support Df Da g) ->
           T.dependees (reduceDeps R support Df Da g)
             (Name.IntermediateF n v m f, u) =
           T.dependees
@@ -1963,7 +1958,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
                Feat.AddlDepRel.empty g)
             (Name.IntermediateF n v m f, u).
       Proof.
-        intros R support Df Da g n v m f u _.
+        intros R support Df Da g n v m f u.
         apply T.dependees_ext; intros [m' ws].
         split; [| apply reduceDeps_mono;
                   [apply PkgSet.empty_subset
@@ -1984,8 +1979,6 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
 
       Theorem dependees_lookupIntermediateA :
         forall R support Df Da g n v f m f' u,
-          T.PkgSet.In (Name.IntermediateA n v f m f', u)
-            (reduceReal R support Df Da g) ->
           T.dependees (reduceDeps R support Df Da g)
             (Name.IntermediateA n v f m f', u) =
           T.dependees
@@ -1993,7 +1986,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
                (AddlDepRelFibred.endsFibre Da ((n, v), f) m) g)
             (Name.IntermediateA n v f m f', u).
       Proof.
-        intros R support Df Da g n v f m f' u _.
+        intros R support Df Da g n v f m f' u.
         apply T.dependees_ext; intros [m' ws].
         split; [| apply reduceDeps_mono;
                   [apply PkgSet.empty_subset

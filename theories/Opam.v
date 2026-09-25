@@ -158,10 +158,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           defTrue rho g = true ->
         forall v, PkgSet.In (n, v) S -> fst p <> n ->
           vcHolds c v = true -> False
-    ; ores_class_exclusion :
-        forall k p q, PkgSet.In p S -> PkgSet.In q S ->
-          ClsRel.In (p, k) (inst_cls I) -> ClsRel.In (q, k) (inst_cls I) ->
-          fst p <> fst q -> False
+    ; ores_class_exclusion : Cls.ClassExclusion (inst_cls I) S
     ; ores_pins :
         forall n v, PkgSet.In (n, v) (inst_pins I) ->
         forall v', PkgSet.In (n, v') S -> v' = v
@@ -902,7 +899,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         apply mem_versSetBy; exists v; split;
           [reflexivity
           | split; [exact (HV _ _ Hv) | exact Hh]].
-      - intros k [pn pv] [qn qv] Hp Hq Hpk Hqk Hne.
+      - intros k [pn pv] [qn qv] Hp Hq Hpk Hqk.
         assert (Hcl : forall m w,
                    PkgSet.In (m, w) (decodeS S') ->
                    ClsRel.In ((m, w), k) (inst_cls I) ->
@@ -918,8 +915,11 @@ Module Opam (N V X Y E : UsualOrderedType).
           apply PF.VSet.singleton_spec in Htv; subst tv; exact Hin. }
         assert (E := PF.res_version_unique _ _ _ _ HR (TName.Cls k)
                        _ _ (Hcl _ _ Hp Hpk) (Hcl _ _ Hq Hqk)).
-        injection E as ->; simpl in Hne; contradiction Hne;
-          reflexivity.
+        injection E as ->.
+        apply mem_decodeS in Hp, Hq.
+        assert (E := PF.res_version_unique _ _ _ _ HR
+                       (TName.Real qn) _ _ Hp Hq).
+        injection E as ->; reflexivity.
       - intros n v Hpin v' Hv'.
         assert (H := Hsub _ _ Hv'); apply mem_effRepo in H.
         destruct H as [_ [Hp _]]; symmetry.
@@ -1014,11 +1014,8 @@ Module Opam (N V X Y E : UsualOrderedType).
           f_equal; exact (ores_version_unique _ _ _ HR _ _ _ Hp Hq).
         + destruct (transS_at_cls _ _ _ _ Hv) as [p [-> [Hp Hpk]]].
           destruct (transS_at_cls _ _ _ _ Hv') as [q [-> [Hq Hqk]]].
-          f_equal.
-          destruct (N.eq_dec (fst p) (fst q)) as [E | NE];
-            [exact E |].
-          destruct (ores_class_exclusion _ _ _ HR _ _ _ Hp Hq
-                      Hpk Hqk NE).
+          rewrite (ores_class_exclusion _ _ _ HR _ _ _ Hp Hq Hpk Hqk);
+            reflexivity.
     Qed.
 
     Module PkgPre := PreimageOfKeys N Pkg NSet PkgSet.
