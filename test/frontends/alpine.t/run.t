@@ -331,6 +331,17 @@ And in NEGIIF the bare provider ni-virt falsifies ni-lt's !ni-b<2:
     ni-virt 1.0
   encoded solution: 9 core nodes (4 Alpine packages encoded)
 
+A >< atom names a package digest, which pac cannot match, so bh-user's
+bh-virt><Q1... has nothing to satisfy it.  apk tests it against the
+providing package's C: digest, bare provides included, and installs
+bh-prov and bh-user:
+
+  $ ../../../src/main.exe alpine BAREHASH bh-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index BAREHASH: 2 packages, 1 provides entries, 0 install_if rules
+  unsatisfiable:
+  Because @root () -> bh-user 1.0 and bh-user 1.0 -> bh-virt ∅, @root * is forbidden..
+  And because root -> @root (), version solving failed.
+
 The index is read as apk_pkgtmpl_add_info reads it.  A D: atom apk cannot
 parse, here one with a tag, or one whose version is not a version, makes
 the package uninstallable:

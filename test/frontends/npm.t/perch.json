@@ -1,0 +1,4 @@
+{"name":"perch","dist-tags":{"latest":"1.0.0"},
+ "versions":{
+  "1.0.0":{"name":"perch","version":"1.0.0",
+    "dependencies":{"lurker":"^1"}}}}

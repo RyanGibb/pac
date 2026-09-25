@@ -1,22 +1,12 @@
-(* Per-extension reduction case studies.  Each one encodes a small concrete
-   calculus instance into the corresponding nat-instantiated Smoke module,
-   then prints the source instance and the core reduction (reduceReal
-   packages, reduceDeps edges).  Symbolic names/versions are mapped to nat
-   per the header comment of each case study. *)
-
 module E = Pac
 
 let rec i2n i = if i <= 0 then E.O else E.S (i2n (i - 1))
 let rec n2i = function E.O -> 0 | E.S n -> 1 + n2i n
 
-(* Package names are nat codes 1,2,3,...; render them as A,B,C,... *)
 let nm n =
   if n >= 1 && n <= 26 then String.make 1 (Char.chr (Char.code 'A' + n - 1))
   else string_of_int n
 
-(* ------------------------------------------------------------------ *)
-(* Conflict: (A,1) conflicts B (<< 3), i.e. B at versions {1,2}.       *)
-(* ------------------------------------------------------------------ *)
 let conflict () =
   let module M = E.Cfl in
   let module R = M.Reduction in
@@ -34,7 +24,6 @@ let conflict () =
     ^ "}"
   in
   let pp_src (n, v) = Printf.sprintf "(%s,%d)" (nm (n2i n)) (n2i v) in
-  (* source *)
   let r = pset [ pkg 1 1; pkg 2 1; pkg 2 2 ] in
   let g =
     M.ConflictRel.add (pkg 1 1, (i2n 2, vset [ 1; 2 ])) M.ConflictRel.empty
@@ -50,7 +39,6 @@ let conflict () =
         (nm (n2i n))
         (pp_vs vs))
     (M.ConflictRel.elements g);
-  (* target pretty-printers: the names are the source's own *)
   let pp_tn n = nm (n2i n) in
   let pp_tv = function
     | R.Version.Orig v -> string_of_int (n2i v)
@@ -70,10 +58,7 @@ let conflict () =
       Printf.printf "    %s -> (%s,%s)\n" (pp_tp s) (pp_tn n) (pp_tvs vs))
     (R.T.DepRel.elements (R.reduceDeps r d g))
 
-(* ------------------------------------------------------------------ *)
-(* Concurrent, g(x.y.z)=x.  Versions map x.y.z -> xyz                   *)
-(* as x*100+y*10+z; g v = v/100.                                        *)
-(* ------------------------------------------------------------------ *)
+(* versions are nat, so x.y.z is written x*100+y*10+z *)
 let concurrent () =
   let module M = E.Conc in
   let module R = M.Reduction in
@@ -155,9 +140,6 @@ let concurrent () =
       Printf.printf "    %s -> (%s,%s)\n" (pp_tp s) (pp_tn n) (pp_tvs vs))
     (R.T.DepRel.elements (R.reduceDeps d g))
 
-(* ------------------------------------------------------------------ *)
-(* Peer dependency, g(v)=v.                                            *)
-(* ------------------------------------------------------------------ *)
 let peer () =
   let module M = E.Peer in
   let module R = M.Reduction in
@@ -221,10 +203,6 @@ let peer () =
       Printf.printf "    %s -> (%s,%s)\n" (pp_tp s) (pp_tn n) (pp_tvs vs))
     (R.T.DepRel.elements (R.reduceDeps d th g))
 
-(* ------------------------------------------------------------------ *)
-(* Package formula:                                                    *)
-(*   (A,1) :- ((B,{2}) /\ (C,{1})) \/ ((B,{1}) /\ ~(C,{1}))            *)
-(* ------------------------------------------------------------------ *)
 let package_formula () =
   let module M = E.PkgF in
   let module R = M.Reduction in
@@ -285,10 +263,6 @@ let package_formula () =
       Printf.printf "    %s -> (%s,%s)\n" (pp_tp s) (pp_tn n) (pp_tvs vs))
     (R.T.DepRel.elements (R.reduceDeps r d))
 
-(* ------------------------------------------------------------------ *)
-(* Virtual: D virtual, provided by B and C; E real but also provided   *)
-(* by F.                                                               *)
-(* ------------------------------------------------------------------ *)
 let virtual_ () =
   let module M = E.Virt in
   let module R = M.Reduction in
@@ -303,14 +277,12 @@ let virtual_ () =
         M.C.DepRel.add ((i2n sn, i2n sv), (i2n dn, vset dvs)) s)
       M.C.DepRel.empty l
   in
-  (* Provides Pi: element (provider-pkg, (provided-name, version-value)). *)
   let prov l =
     List.fold_left
       (fun s ((pn, pv), (nm', ver)) ->
         M.ProvidesRel.add ((i2n pn, i2n pv), (i2n nm', M.VTVal (i2n ver))) s)
       M.ProvidesRel.empty l
   in
-  (* D (name 4) is virtual: no real (D,1). *)
   let r = pset [ pkg 1 1; pkg 2 1; pkg 3 1; pkg 5 1; pkg 6 1 ] in
   let d = drel [ ((1, 1), (4, [ 1 ])); ((1, 1), (5, [ 1 ])) ] in
   let pi = prov [ ((2, 1), (4, 1)); ((3, 1), (4, 1)); ((6, 1), (5, 1)) ] in
@@ -359,10 +331,6 @@ let virtual_ () =
       Printf.printf "    %s -> (%s,%s)\n" (pp_tp s) (pp_tn n) (pp_tvs vs))
     (R.T.DepRel.elements (R.reduceDeps r d pi))
 
-(* ------------------------------------------------------------------ *)
-(* Visibility: public deps Upsilon; write a=(A,1), d=(D,1).  D's       *)
-(* dependency on C is private.                                          *)
-(* ------------------------------------------------------------------ *)
 let visibility () =
   let module M = E.Vis in
   let module R = M.Reduction in
@@ -377,7 +345,6 @@ let visibility () =
         M.C.DepRel.add ((i2n sn, i2n sv), (i2n dn, vset dvs)) s)
       M.C.DepRel.empty l
   in
-  (* Upsilon: element (package, public-dependency-name). *)
   let pubr l =
     List.fold_left
       (fun s ((pn, pv), dn) -> M.PubRel.add ((i2n pn, i2n pv), i2n dn) s)
@@ -418,7 +385,6 @@ let visibility () =
   List.iter
     (fun (p, n) -> Printf.printf "    %s public %s\n" (pp_src p) (nm (n2i n)))
     (M.PubRel.elements pub);
-  (* target version type is plain nat *)
   let pp_tn = function
     | R.Name.Occurrence (n, q) ->
         Printf.sprintf "<%s,%s>" (nm (n2i n)) (pp_src q)

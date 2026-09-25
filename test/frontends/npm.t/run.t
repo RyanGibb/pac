@@ -703,9 +703,8 @@ The cases from here to the fetch race pin where we deliberately differ
 from npm; each states npm's answer, taken from npm 11.17.0 over the same
 fixtures.
 
-An override applies to a dependency by the package it targets, as the
-paper's override of the target name does; npm applies it by the key the
-dependency is written under (arborist override-set.js:87, edge.js:206).
+An override applies to a dependency by the package it targets; npm
+applies it by the key the dependency is written under (arborist override-set.js:87, edge.js:206).
 The two differ only on an alias, and there npm's override replaces the
 alias spec wholesale.  carrier depends on kit as an alias of util-lib ^1.
 ovr-key-app overrides kit to 1.0.0: npm installs the registry's own kit
@@ -826,6 +825,56 @@ never published; npm takes that copy, nested in bundler, while here tok
     bundler 1.0.0 <- tok 3.0.2
   cone: 3 packages, 4 versions, 0 packuments fetched
   encoded solution: 5 core nodes (10 lookups)
+
+An optional dependency is abandoned only when its own range matches
+nothing, not when something below it fails.  opt-deep-app optionally
+depends on frail, whose tok ^9.0.0 matches nothing.  Here frail stands,
+its dependency cannot be met, and nothing resolves; npm records frail,
+optional, and no tok.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree ./opt-deep-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root opt-deep-app 1.0.0
+  unsatisfiable:
+  Because opt-deep-app@1.0.0 1.0.0 -> <opt-deep-app@1.0.0=>frail> 1.0.0 and <opt-deep-app@1.0.0=>frail> 1.0.0 -> frail@1.0.0 1.0.0, opt-deep-app@1.0.0 * requires frail@1.0.0 1.0.0.
+  And because frail@1.0.0 1.0.0 -> <frail@1.0.0=>tok> ∅ and root -> opt-deep-app@1.0.0 1.0.0, version solving failed.
+
+A path-scoped override is dropped and counted: which chain of parents
+reaches a package is an output of resolution, not an input.  ovr-path-app
+overrides tok to 4.0.0 under holder only; npm installs holder's tok at
+4.0.0, while here holder's ^3.0.0 picks 3.0.2.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree ./ovr-path-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root ovr-path-app 1.0.0
+  packages (3):
+    holder 1.0.0
+    ovr-path-app 1.0.0
+    tok 3.0.2
+  node_modules (2 edges):
+    ovr-path-app 1.0.0 <- holder 1.0.0
+    holder 1.0.0 <- tok 3.0.2
+  cone: 3 packages, 4 versions, 0 packuments fetched
+  parser dropped 1 declarations
+  encoded solution: 5 core nodes (10 lookups)
+
+An optional peer binds only a copy its declarer's depender holds itself.
+perch-app depends on tok ^3.0.0 and on perch, whose lurker optionally
+peers on tok ^4.0.0.  perch holds no tok, so here the peer forces nothing
+and the only tok is the top's 3.0.2.  npm checks whatever copy lurker's
+lookup finds, refuses 3.0.2, and nests lurker and a tok 4.0.0 under perch.
+
+  $ ../../../src/main.exe npm --offline --cache . --tree ./perch-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root perch-app 1.0.0
+  packages (4):
+    lurker 1.0.0
+    perch 1.0.0
+    perch-app 1.0.0
+    tok 3.0.2
+  node_modules (3 edges):
+    perch 1.0.0 <- lurker 1.0.0
+    perch-app 1.0.0 <- perch 1.0.0
+    perch-app 1.0.0 <- tok 3.0.2
+  cone: 4 packages, 5 versions, 0 packuments fetched
+  encoded solution: 7 core nodes (14 lookups)
 
 Processes sharing a cache fetch into it concurrently, each into a scratch
 file of its own that it renames into place.  This curl writes the

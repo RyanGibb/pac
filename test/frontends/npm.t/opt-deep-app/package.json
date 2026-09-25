@@ -1,0 +1,10 @@
+{
+  "name": "opt-deep-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "theme": "^1"
+  },
+  "optionalDependencies": {
+    "frail": "^1"
+  }
+}

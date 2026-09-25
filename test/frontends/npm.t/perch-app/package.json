@@ -1,0 +1,8 @@
+{
+  "name": "perch-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "perch": "^1",
+    "tok": "^3.0.0"
+  }
+}

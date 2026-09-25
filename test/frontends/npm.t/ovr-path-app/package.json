@@ -1,0 +1,12 @@
+{
+  "name": "ovr-path-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "holder": "^1"
+  },
+  "overrides": {
+    "holder": {
+      "tok": "4.0.0"
+    }
+  }
+}
