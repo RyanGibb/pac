@@ -87,6 +87,10 @@ struct
     ness : bool;
     nimp : bool;
     nprio : int;
+    nsrc : string * string;
+    (* apt keys an arch:all version apart from its native twin
+       (Version::All), whatever package arch it was filed under *)
+    nall : bool;
   }
 
   (* ~recommends false is the --no-install-recommends reading: the Rec
@@ -119,6 +123,8 @@ struct
       ness = st.essential || st.package = "apt";
       nimp = st.important || st.package = "apt";
       nprio = st.priority;
+      nsrc = st.source;
+      nall = st.architecture = "all";
     }
 
   (* Untrusted whole-archive index; faithfulness to the parsed instance is
@@ -140,6 +146,9 @@ struct
        search asks *)
     mutable rev_dep : (string, DMA.Pkg.t list) Hashtbl.t option;
     mutable rev_conf : (string, DMA.Pkg.t list) Hashtbl.t option;
+    (* the binaries each source name builds, for apt's obsolescence test;
+       likewise built on first use, and only by --apt-heap *)
+    mutable by_src : (string, nstanza list) Hashtbl.t option;
     (* selector preimages by name, and a package's clauses in field order,
        both asked for again by every depender and by the rejection cascade *)
     sel_cache :
@@ -207,6 +216,7 @@ struct
         n_clauses_parsed = 0;
         rev_dep = None;
         rev_conf = None;
+        by_src = None;
         sel_cache = Hashtbl.create 4096;
         oc_cache = Hashtbl.create 4096;
       }
@@ -238,6 +248,31 @@ struct
         idx.rev_dep <- Some d;
         idx.rev_conf <- Some c;
         (d, c)
+
+  (* apt's ObsoletedByNewerSourceVersion (solver3.cc:863-888): another
+     binary of the same source, on the same architecture and equally arch:all
+     or not, comes from a newer source version.  apt also asks that binary's
+     pin priority to be no lower, which with no pins every version meets. *)
+  let obsolete idx (stz : nstanza) =
+    let by_src =
+      match idx.by_src with
+      | Some t -> t
+      | None ->
+          let t = Hashtbl.create 65536 in
+          Hashtbl.iter (fun _ (s : nstanza) -> push t (fst s.nsrc) s) idx.stanza_of;
+          idx.by_src <- Some t;
+          t
+    in
+    let (_, b), _ = stz.npkg in
+    List.exists
+      (fun (s : nstanza) ->
+        let (_, b'), _ = s.npkg in
+        fst s.npkg <> fst stz.npkg
+        && String.equal b b' && s.nall = stz.nall
+        && Debian_frontend.Deb_version.compare (snd s.nsrc) (snd stz.nsrc) > 0)
+      (match Hashtbl.find_opt by_src (fst stz.nsrc) with
+      | Some l -> l
+      | None -> [])
 
   (* Only a lookup at a stanza's own package reads its clauses, so they can
      wait until one does.  providers_of cannot: it is a preimage -- who
@@ -738,39 +773,6 @@ struct
             Hashtbl.add cands_tbl n l;
             l
       in
-      let reals = Hashtbl.create 4096 in
-      let has_real n =
-        match Hashtbl.find_opt reals n with
-        | Some b -> b
-        | None ->
-            let b =
-              List.exists
-                (fun (pv : PVersion.t) ->
-                  match (n, pv.PVersion.v) with
-                  | _, DMA.Deb.Version.RefReal _ -> true
-                  (* an explicit :b reaches b's own package only as a
-                     provider, there being no real package at its name *)
-                  | ( DMA.Deb.Name.Selector ((m, DMA.QAExact b), _),
-                      DMA.Deb.Version.Ref ((m', DMA.QAArch b'), _) ) ->
-                      String.equal m m' && String.equal b b'
-                  | _ -> false)
-                (cands_of n)
-            in
-            Hashtbl.add reals n b;
-            b
-      in
-      (* A clause every alternative of which is a provider is a role to be
-         discharged rather than a choice to be made, so it goes last of all,
-         behind the Recommends that are what usually discharge it: a
-         selector candidate is RefReal where the selector's own name is
-         satisfiable by a real package, and Ref where only a provider can. *)
-      let group n =
-        match n with
-        | DMA.Deb.Name.Disjunct _ -> 1
-        | DMA.Deb.Name.Selector _ -> if has_real n then 1 else 4
-        | DMA.Deb.Name.Orig _ -> 2
-        | DMA.Deb.Name.Soft _ -> 3
-      in
       (* apt's solution counts: an alternative's solutions are its target's
          versions that satisfy it and, one per entry, the target's
          ProvidesList entries that do (AllTargets, pkgcache.cc), so a
@@ -1212,6 +1214,34 @@ struct
         let atom_count assigned a = atom_pkgs ~assigned a
         let atom_static = atom_static
 
+        (* apt tests each solution's package, not the version the solution
+           names; under Strict-Pinning the one is the other's only version *)
+        let obsolete (a : atom) =
+          let at (n, x) w =
+            match x with
+            | DMA.QAArch b -> (
+                match Hashtbl.find_opt I.idx.stanza_of ((n, b), w) with
+                | Some stz -> obsolete I.idx stz
+                | None -> false)
+            | _ -> false
+          in
+          match cands_of (DMA.Deb.Name.Selector a) with
+          | [] ->
+              List.exists
+                (fun (pv : PVersion.t) ->
+                  match pv.PVersion.v with
+                  | DMA.Deb.Version.Orig w -> sat (snd a) w && at (fst a) w
+                  | _ -> false)
+                (cands_of (DMA.Deb.Name.Orig (fst a)))
+          | cs ->
+              List.exists
+                (fun (pv : PVersion.t) ->
+                  match pv.PVersion.v with
+                  | DMA.Deb.Version.RefReal w -> at (fst a) w
+                  | DMA.Deb.Version.Ref (m, w) -> at m w
+                  | _ -> false)
+                cs
+
         let decided assigned n =
           match assigned n with PG.Decided pv -> Some pv | _ -> None
 
@@ -1414,8 +1444,6 @@ struct
               let on = DMA.Deb.Name.Orig m in
               Some (on, tag on (DMA.Deb.Version.Orig w))
           | _ -> None
-
-        let fallback_key n = (group n, List.length (cands_of n))
       end in
       let module Shadow = Apt_heap.Make (D) in
       let sh = Shadow.create () in

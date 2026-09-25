@@ -266,6 +266,22 @@ backjump, which the shadow heap's counters count:
   ggoal:amd64 1
   gw:amd64 1
 
+A clause with an obsolete solution is worked on after every clause without
+one (Work::operator<, the SatisfyObsolete group): obsp's source obssrc also
+builds obsnew at the newer source version 2, so obsgoal's obsp | obsq waits
+behind its obsq | obsr, which takes obsq, and obsp | obsq then finds obsq
+carried.  obsgoal2 is the same with obsx, which nothing makes obsolete, and
+its first clause goes first:
+
+  $ ../../../src/main.exe debian --apt-heap --native amd64 obsgoal Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  obsgoal:amd64 1
+  obsq:amd64 1
+
+  $ ../../../src/main.exe debian --apt-heap --native amd64 obsgoal2 Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  obsgoal2:amd64 1
+  obsq:amd64 1
+  obsx:amd64 1
+
 apt's solver never leaves the candidate version (APT::Solver::Strict-Pinning,
 on by default), which with no pins is the newest.  pinv 2 needs pinnone,
 which nothing provides, and apt refuses pinapp rather than fall back to

@@ -575,3 +575,35 @@ Package: pindup
 Version: 1
 Architecture: amd64
 Depends: pinnone
+
+Package: obsgoal
+Version: 1
+Architecture: amd64
+Depends: obsp | obsq, obsq | obsr
+
+Package: obsp
+Version: 1
+Architecture: amd64
+Source: obssrc
+
+Package: obsnew
+Version: 2
+Architecture: amd64
+Source: obssrc
+
+Package: obsq
+Version: 1
+Architecture: amd64
+
+Package: obsr
+Version: 1
+Architecture: amd64
+
+Package: obsgoal2
+Version: 1
+Architecture: amd64
+Depends: obsx | obsq, obsq | obsr
+
+Package: obsx
+Version: 1
+Architecture: amd64

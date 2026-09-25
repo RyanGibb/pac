@@ -12,6 +12,7 @@ module type DRIVER = sig
   val clause_atoms : name -> atom list option
   val atom_count : assigned -> atom -> int
   val atom_static : atom -> int
+  val obsolete : atom -> bool
   val decided : assigned -> name -> version option
   val satisfied : assigned -> name -> bool
 
@@ -36,7 +37,6 @@ module type DRIVER = sig
   val head : assigned -> atom list -> (name * (name * version) option) option
   val same_name : name -> name -> bool
   val negation : assigned -> name -> version -> rejection list
-  val fallback_key : name -> int * int
 end
 
 module Make (D : DRIVER) = struct
@@ -51,6 +51,9 @@ module Make (D : DRIVER) = struct
     wsize : int;
     wnsol : int;
     wlevel : int;
+    (* the clause's group is SatisfyObsolete rather than SatisfyNew, as from
+       an empty system every other clause's is (solver3.cc:1103-1107) *)
+    wobs : bool;
     (* the alternatives the item's solutions are counted over, as the wave
        that pushed it read them: narrower than the name's own where apt
        folded a second clause on the same target into this one *)
@@ -135,7 +138,6 @@ module Make (D : DRIVER) = struct
     mutable c_elide : int;
     mutable c_drop : int;
     mutable c_desync : int;
-    mutable c_fb : int;
     mutable c_push : int;
     mutable c_readd : int;
     mutable c_unwind : int;
@@ -169,7 +171,6 @@ module Make (D : DRIVER) = struct
       c_elide = 0;
       c_drop = 0;
       c_desync = 0;
-      c_fb = 0;
       c_push = 0;
       c_readd = 0;
       c_unwind = 0;
@@ -202,8 +203,6 @@ module Make (D : DRIVER) = struct
       dbg "ENQ #%d %a -> %a [%a]@." t.clock pp_reason e D.pp_name n watoms n;
       match e with Some e -> e.tenq <- n :: e.tenq | None -> ())
 
-  let position t n = try Hashtbl.find t.pos n with Not_found -> max_int
-
   let queue_rejections t rs =
     List.iter
       (fun r ->
@@ -217,6 +216,7 @@ module Make (D : DRIVER) = struct
     let ua = (not a.wopt) && a.wsize < 2 and ub = (not b.wopt) && b.wsize < 2 in
     if ua <> ub then ub
     else if a.wopt <> b.wopt then a.wopt (* eager = not optional *)
+    else if a.wobs <> b.wobs then a.wobs
     else if a.wsize < 2 <> (b.wsize < 2) then b.wsize < 2
     else if a.wsize = 1 && b.wsize = 1 then a.wnsol < b.wnsol
     else false
@@ -388,6 +388,7 @@ module Make (D : DRIVER) = struct
               wsize = sz;
               wnsol = nsol;
               wlevel = e.tlevel;
+              wobs = List.exists D.obsolete atoms;
               watoms = atoms;
             })
         else if not opt then
@@ -654,26 +655,6 @@ module Make (D : DRIVER) = struct
     done;
     t.waved_upto <- t.tlen
 
-  (* the key the traversal used before the heap, kept as the fallback for
-     when the heap has no item to offer (the goal itself, and any desync) *)
-  let oldpick t open_names =
-    let key (n, count) =
-      let optional = D.kind n = Soft in
-      let group, total = D.fallback_key n in
-      ( (if (not optional) && count < 2 then 0 else 1),
-        group,
-        (if count < 2 then 0 else 1),
-        total,
-        position t n )
-    in
-    match open_names with
-    | [] -> invalid_arg "next"
-    | e :: es ->
-        fst
-          (List.fold_left
-             (fun acc e -> if compare (key e) (key acc) < 0 then e else acc)
-             e es)
-
   let next t ~assigned open_names =
     sync t ~assigned;
     wave t ~assigned;
@@ -826,18 +807,20 @@ module Make (D : DRIVER) = struct
             match pop () with
             | Some n -> n
             | None ->
-                t.c_fb <- t.c_fb + 1;
-                let n = oldpick t open_names in
-                dbg "FALLBACK %a (open %d)@." D.pp_name n
+                (* apt would have nothing left to do while PubGrub has a
+                   name open, so the two have parted: PubGrub's own pick *)
+                t.c_desync <- t.c_desync + 1;
+                let n = fst (List.hd open_names) in
+                dbg "DESYNC-EMPTY %a (open %d)@." D.pp_name n
                   (List.length open_names);
                 ret ~wide:true n))
 
   let report t =
     if Sys.getenv_opt "PACSHADOW" <> None then
       Printf.eprintf
-        "PACSHADOW tier0=%d pop=%d elide=%d drop=%d desync=%d fallback=%d \
+        "PACSHADOW tier0=%d pop=%d elide=%d drop=%d desync=%d \
          push=%d readd=%d unwind=%d backjump=%d prop=%d\n\
          %!"
-        t.c_t0 t.c_pop t.c_elide t.c_drop t.c_desync t.c_fb t.c_push t.c_readd
+        t.c_t0 t.c_pop t.c_elide t.c_drop t.c_desync t.c_push t.c_readd
         t.c_unwind t.c_fall t.c_prop
 end

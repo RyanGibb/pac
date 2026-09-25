@@ -42,6 +42,11 @@ module type DRIVER = sig
   val atom_count : assigned -> atom -> int
   val atom_static : atom -> int
 
+  (* some package the alternative can be discharged by is obsolete to apt
+     (Obsolete, solver3.cc:890-925): a binary of its source comes from a
+     newer source version *)
+  val obsolete : atom -> bool
+
   (* the value the partial solution has decided [name] at, if any *)
   val decided : assigned -> name -> version option
 
@@ -108,10 +113,6 @@ module type DRIVER = sig
   (* the literal apt's Pop asserts against a decision it undoes: the
      solution the decision installed, rejected *)
   val negation : assigned -> name -> version -> rejection list
-
-  (* the ingredients of the fallback key, used only where the heap has
-     nothing to offer: apt's rank group, and the name's candidate count *)
-  val fallback_key : name -> int * int
 end
 
 module Make (D : DRIVER) : sig

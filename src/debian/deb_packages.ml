@@ -32,6 +32,9 @@ type stanza = {
      UsePackage), so the two fields are read as one here *)
   important : bool;
   priority : int;
+  (* apt's SourcePkgName and SourceVerStr: a Source field naming no version
+     leaves the binary's own, and a stanza with none its own name too *)
+  source : string * string;
 }
 
 (* apt's pkgCache::State::VerPriority, which is an enum ordered
@@ -174,7 +177,8 @@ let stanza_of_fields (fs : (string * string) list) : stanza option =
   and essential = ref None
   and important = ref None
   and protected_ = ref None
-  and priority = ref None in
+  and priority = ref None
+  and source = ref None in
   let set r v = if !r = None then r := Some v in
   List.iter
     (fun (k, v) ->
@@ -193,6 +197,7 @@ let stanza_of_fields (fs : (string * string) list) : stanza option =
       | "Important" -> set important v
       | "Protected" -> set protected_ v
       | "Priority" -> set priority v
+      | "Source" -> set source v
       | _ -> ())
     fs;
   match (!package, !version) with
@@ -221,6 +226,20 @@ let stanza_of_fields (fs : (string * string) list) : stanza option =
             (match !priority with
             | Some p -> priority_rank (String.lowercase_ascii p)
             | None -> priority_lowest);
+          source =
+            (match !source with
+            | None -> (package, version)
+            | Some s -> (
+                match String.index_opt s '(' with
+                | None -> (strip s, version)
+                | Some i ->
+                    let v = String.sub s (i + 1) (String.length s - i - 1) in
+                    let v =
+                      match String.index_opt v ')' with
+                      | Some j -> String.sub v 0 j
+                      | None -> v
+                    in
+                    (strip (String.sub s 0 i), strip v)));
         }
   | _ -> None
 
