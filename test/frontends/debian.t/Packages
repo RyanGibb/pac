@@ -607,3 +607,52 @@ Depends: obsx | obsq, obsq | obsr
 Package: obsx
 Version: 1
 Architecture: amd64
+
+Package: pinglob
+Version: 1.2
+Architecture: amd64
+
+Package: pinglob
+Version: 1.23
+Architecture: amd64
+
+Package: pinself
+Version: 1
+Architecture: amd64
+Provides: pinself (= 5)
+
+Package: enapp
+Version: 1
+Architecture: amd64
+Depends: envirt
+
+Package: aaen
+Version: 1
+Architecture: amd64
+Priority: optional
+Provides: envirt
+
+Package: zzen
+Version: 1
+Architecture: amd64
+Priority: optional
+Essential: enable
+Provides: envirt
+
+Package: hexapp
+Version: 1
+Architecture: amd64
+Depends: hexvirt
+
+Package: aahex
+Version: 1
+Architecture: amd64
+Priority: optional
+Provides: hexvirt
+
+Package: zzhex
+Version: 1
+Architecture: amd64
+Priority: optional
+Essential: 0x1
+Provides: hexvirt

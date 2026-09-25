@@ -1741,9 +1741,10 @@ let fnmatch p s =
 
 (* pkgVersionMatch::VersionMatches for a Version matcher
    (apt-pkg/versionmatch.cc): the whole string, case-insensitively, or a
-   prefix of it where the pattern ends in '*', or a glob.  apt globs the
-   pattern less that trailing '*' and reads /regex/ as a regex; this globs
-   the whole pattern. *)
+   prefix of it where the pattern ends in '*', or a glob of the pattern less
+   that '*', so 1.*2* matches 1.2 and not 1.23.  apt would read /regex/ as a
+   regex, but its argument splits at the last '/', so no argument reaches
+   that branch. *)
 let version_matches pat v =
   let n = String.length pat in
   let pre = n > 0 && pat.[n - 1] = '*' in
@@ -1751,7 +1752,7 @@ let version_matches pat v =
   let lb = String.length b and lv = String.length v in
   (lv = lb || (pre && lv > lb))
   && String.lowercase_ascii (String.sub v 0 lb) = String.lowercase_ascii b
-  || fnmatch pat v
+  || fnmatch b v
 
 (* One argument of apt-get install, as VersionContainerInterface::FromString
    (apt-pkg/cacheset.cc) reads it: whatever follows the last '/' or '='
@@ -1806,17 +1807,35 @@ let query_element ~native ~arches (stanzas : DF.stanza list) arg =
     | Some st -> Only st.version
     | None -> Nothing
   in
+  (* failing every version, pkgVersionMatch::Find takes a version whose
+     package provides itself at a matching version *)
+  let self_provided v =
+    List.find_map
+      (fun (st : DF.stanza) ->
+        if
+          List.exists
+            (fun (p : DF.provide) ->
+              p.pname = fst key
+              && Option.fold ~none:false ~some:(version_matches v) p.pversion)
+            st.provides
+        then Some (Only st.version)
+        else None)
+      vlist
+  in
   let acc =
     match sel with
     | None -> Any
-    (* nothing is installed: pac reads no dpkg status *)
-    | Some ('=', "installed") -> Nothing
+    (* apt tests these keywords before the tag, so they read the same after
+       '/'; nothing is installed, as pac reads no dpkg status *)
+    | Some (_, "installed") -> Nothing
     (* without pins the candidate is the newest, which heads the list *)
-    | Some ('=', ("candidate" | "newest")) -> first (fun _ -> true)
-    | Some ('=', v) -> first (version_matches v)
+    | Some (_, ("candidate" | "newest")) -> first (fun _ -> true)
+    | Some ('=', v) -> (
+        match first (version_matches v) with
+        | Nothing -> Option.value (self_provided v) ~default:Nothing
+        | a -> a)
     (* a release is matched against Release files, which pac does not
-       read; "*" matches every file (pkgVersionMatch::FileMatch).  apt
-       reads candidate and newest as keywords after '/' too; this does not *)
+       read; "*" matches every file (pkgVersionMatch::FileMatch) *)
     | Some (_, "*") -> first (fun _ -> true)
     | Some _ -> Nothing
   in

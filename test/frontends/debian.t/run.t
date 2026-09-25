@@ -22,6 +22,17 @@ where the name would have gone the other way:
   apt:amd64 1
   essapp:amd64 1
 
+apt reads the flag's value as StringToBool does, so enable, and 0x1 as
+strtol reads it, are yes:
+
+  $ ../../../src/main.exe debian --native amd64 enapp Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  enapp:amd64 1
+  zzen:amd64 1
+
+  $ ../../../src/main.exe debian --native amd64 hexapp Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  hexapp:amd64 1
+  zzhex:amd64 1
+
 A relationship field may be folded over several lines (Policy 5.1); the
 newline is not part of the atom that follows it:
 
@@ -370,6 +381,27 @@ native package's version, so pinmix=1 reaches the amd64 stanza:
 
   $ ../../../src/main.exe debian --native amd64 pinmix:amd64=1 Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
   pinmix:amd64 1
+
+The glob is the pattern less its trailing '*', so 1.*2* reaches 1.2 and
+not the newer 1.23; failing every version, a version whose package provides
+itself at a matching version is taken; and candidate and newest read the
+same after '/':
+
+  $ ../../../src/main.exe debian --native amd64 'pinglob=1.*2*' Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  pinglob:amd64 1.2
+
+  $ ../../../src/main.exe debian --native amd64 'pinglob=1.2*' Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  pinglob:amd64 1.23
+
+  $ ../../../src/main.exe debian --native amd64 pinself=5 Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  pinself:amd64 1
+
+  $ ../../../src/main.exe debian --native amd64 pinok/newest Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  pinok:amd64 2
+
+  $ ../../../src/main.exe debian --native amd64 pinv/candidate Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  Because pinv:amd64 2 -> pinnone:amd64 ∅ and root -> pinv:amd64 2, version solving failed..
 
 A version no stanza matches refuses the query, as does installed, there
 being no installed version, and a release: NAME/RELEASE is matched against

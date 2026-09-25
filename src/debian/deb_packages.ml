@@ -51,12 +51,23 @@ let priority_rank = function
 
 let priority_lowest = 5
 
-(* part of what apt's pkgTagSection::FindFlag (StringToBool) reads as yes:
-   it also takes "enable", any case, and strtol spellings of 1; the Debian
-   snapshot writes only "yes" *)
+(* what apt's pkgTagSection::FindFlag (StringToBool) reads as yes, given
+   lower-cased: a word, or the whole string as strtol reads 1 in base 0 *)
 let flag_yes = function
-  | "yes" | "true" | "with" | "on" | "1" -> true
-  | _ -> false
+  | "yes" | "true" | "with" | "on" | "enable" -> true
+  | s ->
+      let s =
+        if String.starts_with ~prefix:"+" s then
+          String.sub s 1 (String.length s - 1)
+        else s
+      in
+      let s =
+        if String.starts_with ~prefix:"0x" s then
+          String.sub s 2 (String.length s - 2)
+        else s
+      in
+      String.ends_with ~suffix:"1" s
+      && String.for_all (( = ) '0') (String.sub s 0 (String.length s - 1))
 
 (* newlines count as whitespace: a relationship field may be folded over
    several lines (Policy 5.1), and its continuations are joined with "\n",
