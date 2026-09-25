@@ -412,7 +412,7 @@ Module Conflict (N V : UsualOrderedType).
         FibredLabelledRel Pkg N VSet.AsUOT ConfElt ConflictRel.
       Module RKeys := PreimageOfKeys N Pkg NSet PkgSet.
 
-      Definition nameRestrict (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
+      Definition realPreimage (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
         RKeys.ofKeys fst ns R.
 
       Definition conflictNames (G : ConflictRel.t) : NSet.t :=
@@ -429,11 +429,11 @@ Module Conflict (N V : UsualOrderedType).
             [exact HG | reflexivity].
       Qed.
 
-      Lemma versions_nameRestrict : forall R ns n,
-          NSet.In n ns -> C.versions (nameRestrict R ns) n = C.versions R n.
+      Lemma versions_realPreimage : forall R ns n,
+          NSet.In n ns -> C.versions (realPreimage R ns) n = C.versions R n.
       Proof.
         intros R ns n Hn; apply C.versions_ext; intro v.
-        unfold nameRestrict; rewrite RKeys.mem_ofKeys; cbn [fst]; tauto.
+        unfold realPreimage; rewrite RKeys.mem_ofKeys; cbn [fst]; tauto.
       Qed.
 
       Lemma reachable_instNames : forall R D G (n : N.t),
@@ -483,7 +483,7 @@ Module Conflict (N V : UsualOrderedType).
           T.dependees (reduceDeps R D G) (embedPkg (n, v)) =
           T.dependees
             (reduceDeps
-               (nameRestrict R
+               (realPreimage R
                   (conflictNames (ConflictRelFibred.tailFibre G (n, v))))
                (DepRelFibred.tailFibre D (n, v))
                (ConflictRelFibred.tailFibre G (n, v)))
@@ -503,7 +503,7 @@ Module Conflict (N V : UsualOrderedType).
               by (apply ConflictRelFibred.mem_tailFibre; auto).
             split; [exact HG' |].
             unfold complementVS.
-            rewrite (versions_nameRestrict R _ n')
+            rewrite (versions_realPreimage R _ n')
               by (apply mem_conflictNames; exists (n, v), vs; exact HG').
             reflexivity.
         - intros [[q [n' [vs [HD Hy]]]] | [q [n' [vs [HG Hy]]]]];
@@ -516,7 +516,7 @@ Module Conflict (N V : UsualOrderedType).
             apply ConflictRelFibred.mem_tailFibre in HG; destruct HG as [HG _].
             split; [exact HG |].
             unfold complementVS.
-            rewrite (versions_nameRestrict R _ n')
+            rewrite (versions_realPreimage R _ n')
               by (apply mem_conflictNames; exists (n, v), vs; exact HGf).
             reflexivity.
       Qed.

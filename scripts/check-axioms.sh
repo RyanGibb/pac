@@ -150,15 +150,18 @@ PkgF.Reduction.Lookup.dependees_lookupOrigBy
 PkgF.Reduction.Lookup.root_not_absent
 PkgF.Reduction.Lookup.versions_lookupDisjunct
 PkgF.Reduction.Lookup.versions_lookupOrig
+PkgF.Reduction.Lookup.versions_lookupOrigPresent
 PkgF.Reduction.packageFormulaResolution_coreResolution
 PkgF.Reduction.package_formula_completeness
 PkgF.Reduction.package_formula_soundness
+PkgF.Reduction.package_formula_soundness_agree
 PkgF.Reduction.reduceDeps
 PkgF.Reduction.reduceDepsBy
 PkgF.Reduction.reduceReal
 
 VarF.Reduction.Lookup.dependees_lookupAbsent
 VarF.Reduction.Lookup.dependees_lookupDisjunct
+VarF.Reduction.Lookup.dependees_lookupDisjunctBy
 VarF.Reduction.Lookup.dependees_lookupOrig
 VarF.Reduction.Lookup.dependees_lookupOrigBy
 VarF.Reduction.Lookup.dependees_lookupVar

@@ -166,7 +166,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     ; res_fs_functional :
         forall p fs fs', FeaturedSet.In (p, fs) FS ->
         FeaturedSet.In (p, fs') FS -> fs = fs'
-    ; res_class_unique :
+    ; res_gran_unique :
         forall m v v', PkgSet.In (m, v) S -> PkgSet.In (m, v') S ->
         v <> v' -> g v <> g v'
     ; res_support_mem :
@@ -561,14 +561,14 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Module SOlp := SetOps LinkElt T.Pkg LinkRel T.PkgSet.
   Module SOvv := SetOps V VPOT VSet T.VSet.
 
-  Definition classesOf (g : V.t -> G.t) (vs : VSet.t) : T.VSet.t :=
+  Definition gransOf (g : V.t -> G.t) (vs : VSet.t) : T.VSet.t :=
     SOvv.map (fun u => VPlus.WClass (g u)) vs.
 
-  Definition inClass (g : V.t -> G.t) (gr : G.t) (vs : VSet.t) : T.VSet.t :=
+  Definition inGran (g : V.t -> G.t) (gr : G.t) (vs : VSet.t) : T.VSet.t :=
     SOvv.filterMap
       (fun u => if GEqb.eqb (g u) gr then Some (VPlus.WOrig u) else None) vs.
 
-  Definition classMet (g : V.t -> G.t) (gr : G.t) (vs : VSet.t) : bool :=
+  Definition granMet (g : V.t -> G.t) (gr : G.t) (vs : VSet.t) : bool :=
     VSet.exists_ (fun u => GEqb.eqb (g u) gr) vs.
 
   Definition SlotOwned (g : V.t -> G.t) (Slots : SlotRel.t) (rc : Pkg.t)
@@ -744,11 +744,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           support
     | NPlus.CSlot m gr d =>
         if slotOwnedb g Slots rc m gr d
-        then classesOf g (evalReq R (sTarget d) (sReq d))
+        then gransOf g (evalReq R (sTarget d) (sReq d))
         else T.VSet.empty
     | NPlus.CDec m gr f d feat =>
         if decOwnedb g FDefs Slots rc m gr f d feat
-        then classesOf g (evalReq R (sTarget d) (sReq d))
+        then gransOf g (evalReq R (sTarget d) (sReq d))
         else T.VSet.empty
     | NPlus.CLink l =>
         SOlv.filterMap (fun '((m, v), l') =>
@@ -779,7 +779,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                     (andb (slotActive rc (m, v) d)
                        (negb (sOptional d)))
                then Some (NPlus.CSlot m (g v) d,
-                          classesOf g (evalReq R (sTarget d) (sReq d)))
+                          gransOf g (evalReq R (sTarget d) (sReq d)))
                else None)
              Slots)
           (SOlh.filterMap (fun '(q, l) =>
@@ -811,7 +811,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                        | Some a =>
                            SOsh.map (fun '(_, d) =>
                                (NPlus.CSlot m (g v) d,
-                                classesOf g
+                                gransOf g
                                   (evalReq R (sTarget d) (sReq d))))
                              (slotsAt Slots rc (m, v) a)
                        | None => T.DependeesSet.empty
@@ -820,7 +820,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                        | Some (a, feat) =>
                            SOsh.map (fun '(_, d) =>
                                (NPlus.CDec m (g v) f d feat,
-                                classesOf g
+                                gransOf g
                                   (evalReq R (sTarget d) (sReq d))))
                              (slotsAt Slots rc (m, v) a)
                        | None => T.DependeesSet.empty
@@ -828,24 +828,24 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
              FDefs)
     | (NPlus.CSlot m gr0 d, VPlus.WClass gr) =>
         if negb (andb (slotOwnedb g Slots rc m gr0 d)
-                   (classMet g gr (evalReq R (sTarget d) (sReq d))))
+                   (granMet g gr (evalReq R (sTarget d) (sReq d))))
         then T.DependeesSet.empty else
         T.DependeesSet.add
           (NPlus.CCrate (sTarget d) gr,
-           inClass g gr (evalReq R (sTarget d) (sReq d)))
+           inGran g gr (evalReq R (sTarget d) (sReq d)))
           (SOfsh.map (fun f =>
                (NPlus.CFeatP (sTarget d) f gr,
-                inClass g gr (evalReq R (sTarget d) (sReq d))))
+                inGran g gr (evalReq R (sTarget d) (sReq d))))
              (slotRequests d dflt))
     | (NPlus.CDec m gr0 f d feat, VPlus.WClass gr) =>
         if negb (andb (decOwnedb g FDefs Slots rc m gr0 f d feat)
-                   (classMet g gr (evalReq R (sTarget d) (sReq d))))
+                   (granMet g gr (evalReq R (sTarget d) (sReq d))))
         then T.DependeesSet.empty else
         T.DependeesSet.add
           (NPlus.CSlot m gr0 d, T.VSet.singleton (VPlus.WClass gr))
           (T.DependeesSet.singleton
              (NPlus.CFeatP (sTarget d) feat gr,
-              inClass g gr (evalReq R (sTarget d) (sReq d))))
+              inGran g gr (evalReq R (sTarget d) (sReq d))))
     | _ => T.DependeesSet.empty
     end.
 
@@ -864,18 +864,18 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
              rootFeats p))
       (transReal g R support FDefs Slots Links rc).
 
-  Lemma mem_classesOf : forall g vs w,
-      T.VSet.In w (classesOf g vs) <->
+  Lemma mem_gransOf : forall g vs w,
+      T.VSet.In w (gransOf g vs) <->
       exists u, VSet.In u vs /\ w = VPlus.WClass (g u).
   Proof.
-    intros g vs w; unfold classesOf; rewrite SOvv.mem_map; reflexivity.
+    intros g vs w; unfold gransOf; rewrite SOvv.mem_map; reflexivity.
   Qed.
 
-  Lemma mem_inClass : forall g gr vs w,
-      T.VSet.In w (inClass g gr vs) <->
+  Lemma mem_inGran : forall g gr vs w,
+      T.VSet.In w (inGran g gr vs) <->
       exists u, VSet.In u vs /\ g u = gr /\ w = VPlus.WOrig u.
   Proof.
-    intros g gr vs w; unfold inClass; rewrite SOvv.mem_filterMap.
+    intros g gr vs w; unfold inGran; rewrite SOvv.mem_filterMap.
     split.
     - intros [u [Hu He]].
       destruct (GEqb.eqb (g u) gr) eqn:Eg; [| discriminate].
@@ -885,10 +885,10 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       rewrite (proj2 (GEqb.eqb_true_iff _ _) Hg); reflexivity.
   Qed.
 
-  Lemma classMet_iff : forall g gr vs,
-      classMet g gr vs = true <-> exists u, VSet.In u vs /\ g u = gr.
+  Lemma granMet_iff : forall g gr vs,
+      granMet g gr vs = true <-> exists u, VSet.In u vs /\ g u = gr.
   Proof.
-    intros g gr vs; unfold classMet; rewrite VSet.exists_spec'; split.
+    intros g gr vs; unfold granMet; rewrite VSet.exists_spec'; split.
     - intros [u [Hu Hb]]; exists u; split;
         [exact Hu | exact (proj1 (GEqb.eqb_true_iff _ _) Hb)].
     - intros [u [Hu Hg]]; exists u; split;
@@ -1120,7 +1120,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           slotActive rc (m, v) d = true /\
           sOptional d = false /\
           h = (NPlus.CSlot m (g v) d,
-               classesOf g (evalReq R (sTarget d) (sReq d)))) \/
+               gransOf g (evalReq R (sTarget d) (sReq d)))) \/
        (exists l, LinkRel.In ((m, v), l) Links /\
           h = (NPlus.CLink l,
                T.VSet.singleton (VPlus.WName (NPlus.CCrate m gr))))).
@@ -1176,12 +1176,12 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
              SlotRel.In ((m, v), d) Slots /\ sAlias d = a /\
              slotActive rc (m, v) d = true /\
              h = (NPlus.CSlot m (g v) d,
-                  classesOf g (evalReq R (sTarget d) (sReq d)))) \/
+                  gransOf g (evalReq R (sTarget d) (sReq d)))) \/
           (exists a feat d, entryFeatD e0 = Some (a, feat) /\
              SlotRel.In ((m, v), d) Slots /\ sAlias d = a /\
              slotActive rc (m, v) d = true /\
              h = (NPlus.CDec m (g v) f d feat,
-                  classesOf g (evalReq R (sTarget d) (sReq d)))))).
+                  gransOf g (evalReq R (sTarget d) (sReq d)))))).
   Proof.
     intros; cbn [dependees].
     destruct (GEqb.eqb (g v) gr) eqn:Eg; cbn [negb].
@@ -1251,10 +1251,10 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       SlotOwned g Slots rc m gr0 d /\
       exists u, VSet.In u (evalReq R (sTarget d) (sReq d)) /\ g u = gr /\
         (h = (NPlus.CCrate (sTarget d) gr,
-              inClass g gr (evalReq R (sTarget d) (sReq d))) \/
+              inGran g gr (evalReq R (sTarget d) (sReq d))) \/
          exists f, FSet.In f (slotRequests d dflt) /\
            h = (NPlus.CFeatP (sTarget d) f gr,
-                inClass g gr (evalReq R (sTarget d) (sReq d)))).
+                inGran g gr (evalReq R (sTarget d) (sReq d)))).
   Proof.
     intros; cbn [dependees].
     destruct (slotOwnedb g Slots rc m gr0 d) eqn:Eo; cbn [andb].
@@ -1264,16 +1264,16 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     apply slotOwnedb_iff in Eo.
     split.
     - intro Hh; split; [exact Eo |].
-      destruct (classMet g gr (evalReq R (sTarget d) (sReq d))) eqn:Ec;
+      destruct (granMet g gr (evalReq R (sTarget d) (sReq d))) eqn:Ec;
         cbn [negb] in Hh;
         [| exfalso; exact (T.DependeesSet.empty_spec Hh)].
-      apply classMet_iff in Ec; destruct Ec as [u [Hu Hgu]].
+      apply granMet_iff in Ec; destruct Ec as [u [Hu Hgu]].
       exists u; split; [exact Hu | split; [exact Hgu |]].
       rewrite T.DependeesSet.add_spec, SOfsh.mem_map in Hh.
       destruct Hh as [Hh | [f [Hf Hh]]];
         [left; exact Hh | right; exists f; split; [exact Hf | exact Hh]].
     - intros [_ [u [Hu [Hgu Hh]]]].
-      rewrite (proj2 (classMet_iff _ _ _) (ex_intro _ u (conj Hu Hgu)));
+      rewrite (proj2 (granMet_iff _ _ _) (ex_intro _ u (conj Hu Hgu)));
         cbn [negb].
       rewrite T.DependeesSet.add_spec, SOfsh.mem_map.
       destruct Hh as [Hh | [f [Hf Hh]]];
@@ -1290,7 +1290,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       exists u, VSet.In u (evalReq R (sTarget d) (sReq d)) /\ g u = gr /\
         (h = (NPlus.CSlot m gr0 d, T.VSet.singleton (VPlus.WClass gr)) \/
          h = (NPlus.CFeatP (sTarget d) feat gr,
-              inClass g gr (evalReq R (sTarget d) (sReq d)))).
+              inGran g gr (evalReq R (sTarget d) (sReq d)))).
   Proof.
     intros; cbn [dependees].
     destruct (decOwnedb g FDefs Slots rc m gr0 f d feat) eqn:Eo; cbn [andb].
@@ -1300,15 +1300,15 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     apply decOwnedb_iff in Eo.
     split.
     - intro Hh; split; [exact Eo |].
-      destruct (classMet g gr (evalReq R (sTarget d) (sReq d))) eqn:Ec;
+      destruct (granMet g gr (evalReq R (sTarget d) (sReq d))) eqn:Ec;
         cbn [negb] in Hh;
         [| exfalso; exact (T.DependeesSet.empty_spec Hh)].
-      apply classMet_iff in Ec; destruct Ec as [u [Hu Hgu]].
+      apply granMet_iff in Ec; destruct Ec as [u [Hu Hgu]].
       exists u; split; [exact Hu | split; [exact Hgu |]].
       rewrite T.DependeesSet.add_spec, T.DependeesSet.singleton_spec
         in Hh; exact Hh.
     - intros [_ [u [Hu [Hgu Hh]]]].
-      rewrite (proj2 (classMet_iff _ _ _) (ex_intro _ u (conj Hu Hgu)));
+      rewrite (proj2 (granMet_iff _ _ _) (ex_intro _ u (conj Hu Hgu)));
         cbn [negb].
       rewrite T.DependeesSet.add_spec, T.DependeesSet.singleton_spec.
       exact Hh.
@@ -1692,11 +1692,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       - intro He; apply slot_real_owned in He.
         destruct He as [Ho [u [Hu ->]]].
         rewrite (proj2 (slotOwnedb_iff _ _ _ _ _ _) Ho).
-        apply mem_classesOf; exists u; split; [exact Hu | reflexivity].
+        apply mem_gransOf; exists u; split; [exact Hu | reflexivity].
       - destruct (slotOwnedb g Slots rc m gr d) eqn:Eo;
           [| intro Hw; destruct (T.VSet.empty_spec Hw)].
         apply slotOwnedb_iff in Eo.
-        rewrite mem_classesOf; intros [u [Hu ->]].
+        rewrite mem_gransOf; intros [u [Hu ->]].
         eapply slotOwned_real; eassumption.
     Qed.
 
@@ -1713,11 +1713,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       - intro He; apply dec_real_owned in He.
         destruct He as [Ho [u [Hu ->]]].
         rewrite (proj2 (decOwnedb_iff _ _ _ _ _ _ _ _ _) Ho).
-        apply mem_classesOf; exists u; split; [exact Hu | reflexivity].
+        apply mem_gransOf; exists u; split; [exact Hu | reflexivity].
       - destruct (decOwnedb g FDefs Slots rc m gr f d feat) eqn:Eo;
           [| intro Hw; destruct (T.VSet.empty_spec Hw)].
         apply decOwnedb_iff in Eo.
-        rewrite mem_classesOf; intros [u [Hu ->]].
+        rewrite mem_gransOf; intros [u [Hu ->]].
         eapply decOwned_real; eassumption.
     Qed.
 
@@ -2530,7 +2530,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         assert (Hed : T.DepRel.In
             ((NPlus.CSlot m (g v) d, VPlus.WClass (g u0)),
              (NPlus.CCrate (sTarget d) (g u0),
-              inClass g (g u0) (evalReq R (sTarget d) (sReq d))))
+              inGran g (g u0) (evalReq R (sTarget d) (sReq d))))
             (transDeps g R support FDefs Slots Links dflt
                (rn, rv) rootFeats)).
         { apply mem_transDeps; split; [exact (Hsub _ Hslot) |].
@@ -2538,7 +2538,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           exists u0; split; [exact Hu0 |].
           split; [reflexivity | left; reflexivity]. }
         destruct (Hdep _ Hslot _ _ Hed) as [w [Hw HwS]].
-        apply mem_inClass in Hw; destruct Hw as [u [Hu [Hgu ->]]].
+        apply mem_inGran in Hw; destruct Hw as [u [Hu [Hgu ->]]].
         exists u; repeat split.
         - apply mem_decodeParents; exists (g v), (g u0), d.
           split; [exact Hslot |].
@@ -2554,7 +2554,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           assert (Hef : T.DepRel.In
               ((NPlus.CSlot m (g v) d, VPlus.WClass (g u0)),
                (NPlus.CFeatP (sTarget d) f (g u0),
-                inClass g (g u0) (evalReq R (sTarget d) (sReq d))))
+                inGran g (g u0) (evalReq R (sTarget d) (sReq d))))
               (transDeps g R support FDefs Slots Links dflt
                  (rn, rv) rootFeats)).
           { apply mem_transDeps; split; [exact (Hsub _ Hslot) |].
@@ -2563,7 +2563,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             split; [reflexivity |].
             right; exists f; split; [exact Hf | reflexivity]. }
           destruct (Hdep _ Hslot _ _ Hef) as [w' [Hw' Hw'S]].
-          apply mem_inClass in Hw'; destruct Hw' as [u' [Hu' [Hgu' ->]]].
+          apply mem_inGran in Hw'; destruct Hw' as [u' [Hu' [Hgu' ->]]].
           assert (u' = u) by (apply (A5 (sTarget d) f (g u0));
                               assumption).
           subst u'.
@@ -2572,7 +2572,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       + assert (Hed : T.DepRel.In
             ((NPlus.CCrate m (g v), VPlus.WOrig v),
              (NPlus.CSlot m (g v) d,
-              classesOf g (evalReq R (sTarget d) (sReq d))))
+              gransOf g (evalReq R (sTarget d) (sReq d))))
             (transDeps g R support FDefs Slots Links dflt
                (rn, rv) rootFeats)).
         { apply mem_transDeps; split; [exact (Hsub _ Hp) |].
@@ -2580,7 +2580,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           split; [exact (proj1 (A1 _ _ _ Hp)) |].
           left; exists d; repeat split; assumption. }
         destruct (Hdep _ Hp _ _ Hed) as [w [Hw HwS]].
-        apply mem_classesOf in Hw; destruct Hw as [u1 [Hu1 ->]].
+        apply mem_gransOf in Hw; destruct Hw as [u1 [Hu1 ->]].
         exact (Achain _ HwS).
       + destruct Hacted as [f [Hffs Hent]].
         apply mem_featsAt in Hffs; destruct Hffs as [gr1 Hffs].
@@ -2598,7 +2598,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         assert (Hed : T.DepRel.In
             ((NPlus.CFeatP m f (g v), VPlus.WOrig v),
              (NPlus.CSlot m (g v) d,
-              classesOf g (evalReq R (sTarget d) (sReq d))))
+              gransOf g (evalReq R (sTarget d) (sReq d))))
             (transDeps g R support FDefs Slots Links dflt
                (rn, rv) rootFeats)).
         { apply mem_transDeps; split; [exact (Hsub _ Hffs) |].
@@ -2607,7 +2607,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           right; exists e'; split; [exact He' |].
           right; left; exists (sAlias d), d; repeat split; assumption. }
         destruct (Hdep _ Hffs _ _ Hed) as [w [Hw HwS]].
-        apply mem_classesOf in Hw; destruct Hw as [u1 [Hu1 ->]].
+        apply mem_gransOf in Hw; destruct Hw as [u1 [Hu1 ->]].
         exact (Achain _ HwS).
     - intros [m v] fs f f' Hfs Hf He.
       apply mem_decodeFS in Hfs; destruct Hfs as [_ ->].
@@ -2647,7 +2647,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       assert (Hed : T.DepRel.In
           ((NPlus.CFeatP m f (g v), VPlus.WOrig v),
            (NPlus.CDec m (g v) f d feat,
-            classesOf g (evalReq R (sTarget d) (sReq d))))
+            gransOf g (evalReq R (sTarget d) (sReq d))))
           (transDeps g R support FDefs Slots Links dflt
              (rn, rv) rootFeats)).
       { apply mem_transDeps; split; [exact (Hsub _ Hf) |].
@@ -2657,7 +2657,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         right; right; exists (sAlias d), feat, d; repeat split;
           assumption. }
       destruct (Hdep _ Hf _ _ Hed) as [w [Hw HwS]].
-      apply mem_classesOf in Hw; destruct Hw as [u1 [Hu1 ->]].
+      apply mem_gransOf in Hw; destruct Hw as [u1 [Hu1 ->]].
       assert (Hdo := proj1 (dec_real_owned _ _ _ _ _ _ _ _ _ _ _ _ _
                               (Hsub _ HwS))).
       assert (Hpin : T.DepRel.In
@@ -2675,7 +2675,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       assert (Hdel : T.DepRel.In
           ((NPlus.CDec m (g v) f d feat, VPlus.WClass (g u1)),
            (NPlus.CFeatP (sTarget d) feat (g u1),
-            inClass g (g u1) (evalReq R (sTarget d) (sReq d))))
+            inGran g (g u1) (evalReq R (sTarget d) (sReq d))))
           (transDeps g R support FDefs Slots Links dflt
              (rn, rv) rootFeats)).
       { apply mem_transDeps; split; [exact (Hsub _ HwS) |].
@@ -2683,7 +2683,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         exists u1; split; [exact Hu1 |].
         split; [reflexivity | right; reflexivity]. }
       destruct (Hdep _ HwS _ _ Hdel) as [y [Hy HyS]].
-      apply mem_inClass in Hy; destruct Hy as [u2 [Hu2 [Hgu2 ->]]].
+      apply mem_inGran in Hy; destruct Hy as [u2 [Hu2 [Hgu2 ->]]].
       assert (Egr : VPlus.WClass gr2' = VPlus.WClass (g u1))
         by exact (Huniq _ _ _ Hslot2 HxS).
       injection Egr as Egr; subst gr2'.
@@ -3084,7 +3084,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         * destruct (Hpick _ _ _ HS Hd Hact (or_introl Hopt))
             as [u [Hpi [Eb [Hu [Htgt Hss]]]]].
           exists (VPlus.WClass (g u)); split.
-          { apply mem_classesOf; exists u; split;
+          { apply mem_gransOf; exists u; split;
               [exact Hu | reflexivity]. }
           apply mem_coreRes; right; right; right; left;
             apply mem_wSlots.
@@ -3128,7 +3128,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
              destruct (Hpick _ _ _ HS Hd Hact (or_intror Hactd))
                as [u [Hpi [Eb [Hu [Htgt Hss]]]]].
              exists (VPlus.WClass (g u)); split.
-             { apply mem_classesOf; exists u; split;
+             { apply mem_gransOf; exists u; split;
                  [exact Hu | reflexivity]. }
              apply mem_coreRes; right; right; right; left;
                apply mem_wSlots.
@@ -3146,7 +3146,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
              destruct (Hpick _ _ _ HS Hd Hact (or_intror Hactd))
                as [u [Hpi [Eb [Hu [Htgt Hss]]]]].
              exists (VPlus.WClass (g u)); split.
-             { apply mem_classesOf; exists u; split;
+             { apply mem_gransOf; exists u; split;
                  [exact Hu | reflexivity]. }
              apply mem_coreRes; right; right; right; right; left;
                apply mem_wDecs.
@@ -3165,13 +3165,13 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         destruct Hcase as [He | [f0 [Hf0 He]]]; injection He as E1 E2;
           subst n vs.
         * exists (VPlus.WOrig u); split.
-          { apply mem_inClass; exists u; repeat split;
+          { apply mem_inGran; exists u; repeat split;
               [exact Hu' | exact (eq_sym Eu)]. }
           apply mem_coreRes; right; left; apply mem_crateReal.
           exists (sTarget d), u; split;
             [exact Htgt | rewrite Eu; reflexivity].
         * exists (VPlus.WOrig u); split.
-          { apply mem_inClass; exists u; repeat split;
+          { apply mem_inGran; exists u; repeat split;
               [exact Hu' | exact (eq_sym Eu)]. }
           apply mem_coreRes; right; right; left; apply mem_wFeats.
           exists (sTarget d), u, (fsAt FS (sTarget d, u)), f0.
@@ -3197,7 +3197,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           exists m, v, (sKey d), u, d; repeat split; try assumption.
           rewrite Eu; reflexivity.
         * exists (VPlus.WOrig u); split.
-          { apply mem_inClass; exists u; repeat split;
+          { apply mem_inGran; exists u; repeat split;
               [exact Hu' | exact (eq_sym Eu)]. }
           apply mem_coreRes; right; right; left; apply mem_wFeats.
           exists (sTarget d), u, (fsAt FS (sTarget d, u)), feat.
@@ -3328,7 +3328,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         by (apply parentsb_iff in Eb; exact (proj1 Eb)).
       assert (v0 = v).
       { destruct (V.eq_dec v0 v) as [E | NE]; [exact E |].
-        exfalso; apply (res_class_unique _ _ _ _ _ _ _ _ _ _ _ _ Hres
+        exfalso; apply (res_gran_unique _ _ _ _ _ _ _ _ _ _ _ _ Hres
                           m v0 v Hv0 HSv NE).
         congruence. }
       subst v0.
@@ -3339,7 +3339,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       apply core_shape in Hcr; cbn beta iota in Hcr.
       destruct Hcr as [u'' [Eu'' [Htgt Eg]]]; injection Eu'' as <-.
       destruct (V.eq_dec u u') as [-> | NE]; [exact Hpi |].
-      exfalso; apply (res_class_unique _ _ _ _ _ _ _ _ _ _ _ _ Hres
+      exfalso; apply (res_gran_unique _ _ _ _ _ _ _ _ _ _ _ _ Hres
                         (sTarget d) u u' Htgt Htgt' NE).
       congruence.
     - intro Hpi.

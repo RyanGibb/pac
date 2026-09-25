@@ -320,6 +320,44 @@ Module TripleUOT (A B C : UsualOrderedType) <: UsualOrderedType.
   Include PairUOT A BC.
 End TripleUOT.
 
+Module SumUOT (A B : UsualOrderedType) <: UsualOrderedType.
+  Module AF := UOTCompareFacts A.
+  Module BF := UOTCompareFacts B.
+  Module Comp <: ComparableType.
+    Definition t : Type := (A.t + B.t)%type.
+    Definition compare (x y : t) : comparison :=
+      match x, y with
+      | inl a, inl a' => A.compare a a'
+      | inl _, inr _ => Lt
+      | inr _, inl _ => Gt
+      | inr b, inr b' => B.compare b b'
+      end.
+
+    Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
+    Proof.
+      intros [a | b] [a' | b']; cbn; try (split; intro H; congruence).
+      - rewrite AF.compare_eq_iff; split; congruence.
+      - rewrite BF.compare_eq_iff; split; congruence.
+    Qed.
+
+    Lemma compare_antisym : forall x y, compare y x = CompOpp (compare x y).
+    Proof.
+      intros [a | b] [a' | b']; cbn; try reflexivity;
+        [apply AF.compare_antisym | apply BF.compare_antisym].
+    Qed.
+
+    Lemma compare_lt_trans : forall x y z,
+        compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
+    Proof.
+      intros [a | b] [a' | b'] [a'' | b'']; cbn; intros H1 H2;
+        try congruence;
+        [exact (AF.compare_lt_trans _ _ _ H1 H2)
+        | exact (BF.compare_lt_trans _ _ _ H1 H2)].
+    Qed.
+  End Comp.
+  Include UOTFromCompare Comp.
+End SumUOT.
+
 (* MSets makes the filter/exists_/for_all specs conditional on the
    predicate respecting E.eq; with eq Leibniz that condition is vacuous, so it is
    discharged once here rather than re-proved inline at every call site. *)

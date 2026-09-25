@@ -2154,9 +2154,9 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         intros I tn Hreach.
         destruct Hreach as [[w Hw] | Hreach];
           [rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ (tn, w) tn Hw
-                      (or_intror eq_refl))
+                      (or_intror eq_refl) eq_refl)
           | rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ rootPkg tn
-                       (root_transR I) (or_introl Hreach))];
+                       (root_transR I) (or_introl Hreach) eq_refl)];
           do 2 f_equal; apply PF.C.versions_ext; intro v;
           rewrite PF.Reduction.Lookup.PkgFibred.mem_tailFibre; tauto.
       Qed.

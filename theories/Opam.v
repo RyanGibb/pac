@@ -1019,7 +1019,7 @@ Module Opam (N V X Y E : UsualOrderedType).
     Qed.
 
     Module PkgPre := PreimageOfKeys N Pkg NSet PkgSet.
-    Definition nameRestrict (ns : NSet.t) (R : PkgSet.t) : PkgSet.t :=
+    Definition realPreimage (ns : NSet.t) (R : PkgSet.t) : PkgSet.t :=
       PkgPre.ofKeys fst ns R.
 
     Fixpoint ofNames (f : OFormula) : NSet.t :=
@@ -1046,7 +1046,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         (fun qk => if Pkg.eq_dec (fst qk) p then true else false) cls.
 
     Definition pkgSubInst (I : Inst) (p : Pkg.t) : Inst :=
-      MkInst (nameRestrict (declaredNames I p) (inst_repo I))
+      MkInst (realPreimage (declaredNames I p) (inst_repo I))
         (List.filter (ownb p) (inst_dep I))
         (List.filter (ownb p) (inst_dpo I))
         (List.filter (ownb p) (inst_cfl I))
@@ -1058,7 +1058,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         (inst_goal I) (inst_inv I).
 
     Definition nameSubInst (I : Inst) (n : N.t) : Inst :=
-      MkInst (nameRestrict (NSet.singleton n) (inst_repo I))
+      MkInst (realPreimage (NSet.singleton n) (inst_repo I))
         (inst_dep I) (inst_dpo I) (inst_cfl I) (inst_cls I)
         (inst_avl I) (inst_dxt I) (inst_pins I)
         (inst_pind I) (inst_goal I) (inst_inv I).
@@ -1070,7 +1070,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Definition rootSubInst (I : Inst) : Inst :=
       MkInst
-        (nameRestrict
+        (realPreimage
            (NSet.union (ofNames (inst_goal I)) (ofNames (inst_inv I)))
            (inst_repo I))
         nil nil nil ClsRel.empty (inst_avl I) nil
@@ -1080,7 +1080,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         NSet.In n ns ->
         realVersions
           (effRepo rho
-             (MkInst (nameRestrict ns (inst_repo I)) (inst_dep I)
+             (MkInst (realPreimage ns (inst_repo I)) (inst_dep I)
                 (inst_dpo I) (inst_cfl I) (inst_cls I) (inst_avl I)
                 (inst_dxt I) (inst_pins I) (inst_pind I)
                 (inst_goal I) (inst_inv I))) n =
@@ -1090,12 +1090,12 @@ Module Opam (N V X Y E : UsualOrderedType).
       rewrite mem_realVersions.
       unfold srcVersions; rewrite mem_realVersions.
       rewrite !mem_effRepo; simpl.
-      unfold nameRestrict; rewrite PkgPre.mem_ofKeys; simpl.
+      unfold realPreimage; rewrite PkgPre.mem_ofKeys; simpl.
       unfold PinOK, availOK; simpl; intuition.
     Qed.
 
     Lemma srcVersions_subInst_agree : forall rho I sl ns n,
-        inst_repo sl = nameRestrict ns (inst_repo I) ->
+        inst_repo sl = realPreimage ns (inst_repo I) ->
         inst_avl sl = inst_avl I -> inst_pins sl = inst_pins I ->
         NSet.In n ns ->
         srcVersions rho sl n = srcVersions rho I n.
@@ -1104,7 +1104,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       unfold srcVersions at 1.
       assert (E : effRepo rho sl =
                   effRepo rho
-                    (MkInst (nameRestrict ns (inst_repo I)) (inst_dep I)
+                    (MkInst (realPreimage ns (inst_repo I)) (inst_dep I)
                        (inst_dpo I) (inst_cfl I) (inst_cls I)
                        (inst_avl I) (inst_dxt I)
                        (inst_pins I) (inst_pind I) (inst_goal I)
@@ -1530,7 +1530,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       apply PF.Reduction.mem_reduceDeps in H.
       destruct H as [[pn pv] [f [Hd He]]].
       assert (E := proj1 (PF.Reduction.Lookup.encodeNNF_src_orig_aux _ f)
-                     _ _ _ _ (PF.Reduction.Lookup.notIdx_orig w) He).
+                     _ _ _ _ He).
       unfold PF.Reduction.embedPkg in E; injection E as -> ->.
       apply mem_transD in Hd; destruct Hd as [_ Hf].
       unfold dependees, dependeesBy in Hf.
@@ -1581,9 +1581,9 @@ Module Opam (N V X Y E : UsualOrderedType).
         by (apply mem_transR; right; left; reflexivity).
       destruct Hreach as [[tv Htv] | Hreach];
         [rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ (tn, tv) tn Htv
-                    (or_intror eq_refl))
+                    (or_intror eq_refl) eq_refl)
         | rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ rootPkg tn Hr
-                     (or_introl Hreach))];
+                     (or_introl Hreach) eq_refl)];
         do 2 f_equal; rewrite <- versions_transR;
         apply PF.C.versions_ext; intro v;
         rewrite PF.Reduction.Lookup.PkgFibred.mem_tailFibre; tauto.
