@@ -1,0 +1,13 @@
+[package]
+name = "tomlint"
+version = "1.0.0"
+edition = "2015"
+
+[package.metadata]
+n = 0_1
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+b = "1"

@@ -1,9 +1,8 @@
 (* Trusted (TCB) reading of the TOML 1.0 a Cargo.toml is written in.  The
    switch pac builds in has no TOML library, and a query's manifest is one
-   small file, so this reads the whole grammar, and some non-TOML besides,
-   rather than only the fields cargo reads: a field the query module does
-   not model has to be seen to be refused, not skipped by a parser that
-   stopped short.
+   small file, so this reads the whole grammar rather than only the fields
+   cargo reads: a field the query module does not model has to be seen to
+   be refused, not skipped by a parser that stopped short.
    Date-times are kept as their text; nothing cargo resolves reads one. *)
 
 type t =
@@ -16,11 +15,13 @@ type t =
   | Tbl of tbl
   | ATbl of tbl list ref
 
-(* explicit: defined by its own [header] or as a value, so a second
-   definition is the duplicate TOML forbids; an implicit table, made as
-   the parent of a header, may still be defined once.  TOML forbids that
-   for a dotted key's parent, which this reader also allows. *)
-and tbl = { mutable fields : (string * t) list; mutable explicit : bool }
+(* how a table came to be, which is what TOML lets define or extend it
+   later: a header's parent may be defined by a header of its own once, a
+   dotted key's parent may take further dotted keys and sub-table headers
+   but no header of its own, and a header's table or an inline one no
+   dotted key from outside, the inline one no sub-table header either *)
+and origin = Implicit | Dotted | Header | Inline
+and tbl = { mutable fields : (string * t) list; mutable origin : origin }
 
 exception Error of string
 
@@ -227,6 +228,7 @@ let scalar st =
   done;
   let w = String.sub st.s b (st.i - b) in
   let digits = String.concat "" (String.split_on_char '_' w) in
+  let bad () = fail st.line "bad value %S" w in
   match w with
   | "" -> fail st.line "expected a value"
   | "true" -> Bool true
@@ -238,14 +240,71 @@ let scalar st =
            || (String.length w >= 8 && w.[2] = ':') ->
       Date w
   | _ -> (
-      match int_of_string_opt digits with
-      | Some n -> Int n
-      | None -> (
+      (* OCaml's readers also take leading zeros, stray underscores, a sign
+         on 0x and more that TOML's number grammar refuses *)
+      let dec c = c >= '0' && c <= '9' in
+      let run ok s =
+        let n = String.length s in
+        let rec go i =
+          i = n
+          || (ok s.[i]
+             || s.[i] = '_' && i > 0 && i < n - 1
+                && ok s.[i - 1] && ok s.[i + 1])
+             && go (i + 1)
+        in
+        n > 0 && go 0
+      in
+      let from s i = String.sub s i (String.length s - i) in
+      let cut s cs =
+        let n = String.length s in
+        let rec go i =
+          if i = n || String.contains cs s.[i] then i else go (i + 1)
+        in
+        go 0
+      in
+      let pre p = String.starts_with ~prefix:p w in
+      if pre "0x" || pre "0o" || pre "0b" then
+        let ok =
+          match w.[1] with
+          | 'x' ->
+              fun c -> dec c || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+          | 'o' -> fun c -> c >= '0' && c <= '7'
+          | _ -> fun c -> c = '0' || c = '1'
+        in
+        match int_of_string_opt digits with
+        | Some n when run ok (from w 2) -> Int n
+        | _ -> bad ()
+      else
+        let u = if w.[0] = '+' || w.[0] = '-' then from w 1 else w in
+        let e = cut u ".eE" in
+        let ip = String.sub u 0 e and rest = from u e in
+        let int_ok = run dec ip && (ip = "0" || ip.[0] <> '0') in
+        if rest = "" then
+          match int_of_string_opt digits with
+          | Some n when int_ok -> Int n
+          | _ -> bad ()
+        else
+          let frac, exp =
+            if rest.[0] = '.' then
+              let r = from rest 1 in
+              let x = cut r "eE" in
+              ( run dec (String.sub r 0 x),
+                if x = String.length r then None else Some (from r (x + 1)) )
+            else (true, Some (from rest 1))
+          in
+          let exp_ok =
+            match exp with
+            | None -> true
+            | Some x ->
+                run dec
+                  (if x <> "" && (x.[0] = '+' || x.[0] = '-') then from x 1
+                   else x)
+          in
           match float_of_string_opt digits with
-          | Some f -> Float f
-          | None -> fail st.line "bad value %S" w))
+          | Some f when int_ok && frac && exp_ok -> Float f
+          | _ -> bad ())
 
-let new_tbl explicit = { fields = []; explicit }
+let new_tbl origin = { fields = []; origin }
 
 let rec value st =
   match peek st with
@@ -272,7 +331,7 @@ let rec value st =
       go []
   | Some '{' ->
       adv st;
-      let t = new_tbl true in
+      let t = new_tbl Inline in
       (* newlines, comments and a trailing comma are TOML 1.1's; taking
          them reads no TOML 1.0 table differently *)
       let rec go () =
@@ -295,14 +354,18 @@ let rec value st =
       Tbl t
   | _ -> scalar st
 
-(* a dotted key's leading parts are tables, made on the way if absent *)
-and descend st (t : tbl) (k : string) : tbl =
+(* the leading parts of a dotted key, or of a header's, are tables, made
+   on the way if absent *)
+and descend ?(dotted = true) st (t : tbl) (k : string) : tbl =
   match List.assoc_opt k t.fields with
   | None ->
-      let n = new_tbl false in
+      let n = new_tbl (if dotted then Dotted else Implicit) in
       t.fields <- t.fields @ [ (k, Tbl n) ];
       n
-  | Some (Tbl n) -> n
+  | Some (Tbl n) -> (
+      match (n.origin, dotted) with
+      | Inline, _ | Header, true -> fail st.line "table %S is already defined" k
+      | _ -> n)
   | Some (ATbl l) -> (
       match List.rev !l with n :: _ -> n | [] -> fail st.line "empty array")
   | Some _ -> fail st.line "key %S is not a table" k
@@ -317,7 +380,7 @@ and assign st (t : tbl) (ks : string list) (v : t) =
 
 let parse (s : string) : tbl =
   let st = { s; i = 0; line = 1 } in
-  let root = new_tbl true in
+  let root = new_tbl Header in
   let cur = ref root in
   let rec loop () =
     skip_blank st;
@@ -335,12 +398,12 @@ let parse (s : string) : tbl =
         end_of_line st;
         let rec parent t = function
           | [] | [ _ ] -> t
-          | k :: rest -> parent (descend st t k) rest
+          | k :: rest -> parent (descend ~dotted:false st t k) rest
         in
         let last = List.nth ks (List.length ks - 1) in
         let p = parent root ks in
         (if aot then (
-           let n = new_tbl true in
+           let n = new_tbl Header in
            match List.assoc_opt last p.fields with
            | None -> p.fields <- p.fields @ [ (last, ATbl (ref [ n ])) ]; cur := n
            | Some (ATbl l) -> l := !l @ [ n ]; cur := n
@@ -348,11 +411,11 @@ let parse (s : string) : tbl =
          else
            match List.assoc_opt last p.fields with
            | None ->
-               let n = new_tbl true in
+               let n = new_tbl Header in
                p.fields <- p.fields @ [ (last, Tbl n) ];
                cur := n
-           | Some (Tbl n) when not n.explicit ->
-               n.explicit <- true;
+           | Some (Tbl n) when n.origin = Implicit ->
+               n.origin <- Header;
                cur := n
            | Some _ -> fail st.line "table %S defined twice" (String.concat "." ks));
         loop ()

@@ -1,0 +1,16 @@
+[package]
+name = "tomlok"
+version = "1.0.0"
+edition = "2015"
+
+[package.metadata]
+n = [0, -1, +1_000, 0xf_f, 0o7_7, 0b1_0, 1.5, -0.0, 1e1_0, 1E-02, 6.02e+23]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+b.version = "1"
+b.default-features = true
+
+[dependencies.b.metadata]

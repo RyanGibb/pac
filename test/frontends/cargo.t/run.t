@@ -468,3 +468,43 @@ dropped:
   $ ../../../src/main.exe cargo index manifests/otherpatch.toml
   error: [patch.crates-io] m: the only patch modelled maps the root's own name to the root, { path = "." }
   [2]
+
+An index entry whose feature table cargo's build_feature_map refuses is
+never a candidate, so cargo takes 1.0.0 of each of fa (dep:o/extra), fb
+(o/extra/z) and fc (a feature naming neither a feature nor a dependency):
+
+  $ ../../../src/main.exe cargo index manifests/fm.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root fm 1.0.0
+  crates (4):
+    fa 1.0.0
+    fb 1.0.0
+    fc 1.0.0
+    fm 1.0.0
+  encoded solution: 12 core nodes (4 crate versions encoded)
+  parent edges: 3
+  loaded: 4 crates, 3 versions
+  parser dropped 3 declarations
+
+The manifest is TOML, which cargo refuses where a header defines a table
+dotted keys already made, or an integer has a leading zero:
+
+  $ ../../../src/main.exe cargo index manifests/tomldot.toml
+  error: manifests/tomldot.toml: line 13: table "dependencies.b" defined twice
+  [2]
+  $ ../../../src/main.exe cargo index manifests/tomlint.toml
+  error: manifests/tomlint.toml: line 7: bad value "0_1"
+  [2]
+
+while dotted keys over one table, a sub-table header under them, and
+numbers TOML allows all read:
+
+  $ ../../../src/main.exe cargo index manifests/tomlok.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root tomlok 1.0.0
+  crates (4):
+    b 1.0.0
+    d 1.0.0 [a,f]
+    f 1.0.0 [c]
+    tomlok 1.0.0
+  encoded solution: 16 core nodes (5 crate versions encoded)
+  parent edges: 3
+  loaded: 4 crates, 4 versions

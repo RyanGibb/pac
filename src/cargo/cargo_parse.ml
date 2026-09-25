@@ -6,7 +6,8 @@
    four FEntry shapes, and an optional dependency gains the implicit
    feature that activates it unless some entry names it with dep:.
    Unhandled shapes are counted: a malformed line or dependency is
-   dropped, and any other malformed field is read as its default. *)
+   dropped, as is a version whose feature table cargo refuses, and any
+   other malformed field is read as its default. *)
 
 type kind = Normal | Build | Dev
 
@@ -119,11 +120,10 @@ let entry_of (s : string) : fentry =
     match String.index_opt rest '/' with
     | None -> FDep rest
     | Some i ->
-        (* cargo rejects "dep:a/feat" (build_feature_map); it is read here
-           as the strong form *)
-        let a = String.sub rest 0 i in
-        let f = String.sub rest (i + 1) (String.length rest - i - 1) in
-        FDepFeat (a, f)
+        (* cargo's own reading, which [feature_map_ok] refuses *)
+        FDepFeat
+          ( dep_prefix ^ String.sub rest 0 i,
+            String.sub rest (i + 1) (String.length rest - i - 1) )
   else
     match String.index_opt s '/' with
     | None -> FFeat s
@@ -165,6 +165,55 @@ let mentions_dep (tbl : (string * fentry list) list) (a : string) : bool =
   List.exists
     (fun (_, es) -> List.exists (function FDep b -> b = a | _ -> false) es)
     tbl
+
+(* build_feature_map's checks (summary.rs), under which a failing index
+   entry is IndexSummary::Invalid and never a candidate.  Past ASCII,
+   every character is taken for the XID one validate_feature_name wants. *)
+let feature_map_ok (deps : dep list) (tbl : (string * fentry list) list) :
+    bool =
+  let dep a = List.exists (fun d -> d.d_alias = a) deps in
+  let optional a = List.exists (fun d -> d.d_optional && d.d_alias = a) deps in
+  let implicit =
+    List.filter_map
+      (fun d ->
+        if
+          d.d_optional
+          && (not (List.mem_assoc d.d_alias tbl))
+          && not (mentions_dep tbl d.d_alias)
+        then Some (d.d_alias, [ FDep d.d_alias ])
+        else None)
+      deps
+  in
+  let map = tbl @ implicit in
+  let name_ok f =
+    let alnum c =
+      (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+      || c = '_' || Char.code c >= 128
+    in
+    f <> ""
+    && (not (String.starts_with ~prefix:"dep:" f))
+    && alnum f.[0]
+    && String.for_all (fun c -> alnum c || c = '-' || c = '+' || c = '.') f
+  in
+  let entry_ok = function
+    | FFeat f ->
+        List.mem_assoc f tbl || (optional f && List.mem_assoc f map)
+    | FDep a -> optional a
+    | FDepFeat (a, f) -> dep a && not (String.contains f '/')
+    | FWeakFeat (a, f) -> optional a && not (String.contains f '/')
+  in
+  let used a =
+    List.exists
+      (fun (_, es) ->
+        List.exists
+          (function
+            | FDep b | FDepFeat (b, _) | FWeakFeat (b, _) -> b = a
+            | FFeat _ -> false)
+          es)
+      map
+  in
+  List.for_all (fun (f, es) -> name_ok f && List.for_all entry_ok es) map
+  && List.for_all (fun d -> (not d.d_optional) || used d.d_alias) deps
 
 (* "default" always exists, empty when the manifest does not define it:
    every dependency that has not opted out requests it, and cargo treats
@@ -231,6 +280,10 @@ let parse_line (line : string) : ver option =
             in
             let declared = feature_table j in
             let tbl = with_implicit_features deps declared in
+            if not (feature_map_ok deps declared) then (
+              reject ();
+              None)
+            else
             Some
               {
                 v_name = name;
