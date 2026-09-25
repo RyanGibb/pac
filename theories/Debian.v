@@ -340,7 +340,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Definition exemptb (x : bool) (m n : N.t) : bool :=
     andb x (NG.groupEq m n).
 
-  Definition admitVS (R : PkgSet.t) (Pi : Prov.t) (a : Atom.t) (qn : N.t)
+  Definition complementVS (R : PkgSet.t) (Pi : Prov.t) (a : Atom.t) (qn : N.t)
     : T.VSet.t :=
     T.VSet.add Version.Bot
       (embedVS (VSet.filter (fun u => negb (matchb Pi (qn, u) a))
@@ -355,7 +355,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     SOnd.filterMap
       (fun qn =>
          if orb (NEqb.eqb qn (fst p)) (exemptb x qn (fst p)) then None
-         else Some (Name.Orig qn, admitVS R Pi a qn))
+         else Some (Name.Orig qn, complementVS R Pi a qn))
       (confNames R Pi a).
 
   Definition versions (R : PkgSet.t) (D Rec : Deps.t) (Pi : Prov.t)
@@ -656,13 +656,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       exists n, NSet.In n ns /\ y = (Name.Orig n, Version.Bot).
   Proof. intros ns y; unfold absentPkgs; apply SOnt.mem_map. Qed.
 
-  Lemma mem_admitVS : forall R Pi a qn (w : Version.t),
-      T.VSet.In w (admitVS R Pi a qn) <->
+  Lemma mem_complementVS : forall R Pi a qn (w : Version.t),
+      T.VSet.In w (complementVS R Pi a qn) <->
       w = Version.Bot \/
       exists u, PkgSet.In (qn, u) R /\ matchb Pi (qn, u) a = false /\
                 w = Version.Orig u.
   Proof.
-    intros R Pi a qn w; unfold admitVS.
+    intros R Pi a qn w; unfold complementVS.
     rewrite SOvw.add_in; unfold embedVS; rewrite SOvw.mem_map.
     split.
     - intros [-> | [u [Hu ->]]]; [left; reflexivity | right].
@@ -693,7 +693,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       T.DependeesSet.In y (confEdges R Pi p a x) <->
       exists qn, NSet.In qn (confNames R Pi a) /\ qn <> fst p /\
                  exemptb x qn (fst p) = false /\
-                 y = (Name.Orig qn, admitVS R Pi a qn).
+                 y = (Name.Orig qn, complementVS R Pi a qn).
   Proof.
     intros R Pi p a x y; unfold confEdges; rewrite SOnd.mem_filterMap.
     split.
@@ -1048,7 +1048,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       (exists a x qn, Conf.In ((n, v), (a, x)) G /\
          NSet.In qn (confNames R Pi a) /\ qn <> n /\
          exemptb x qn n = false /\
-         y = (Name.Orig qn, admitVS R Pi a qn)).
+         y = (Name.Orig qn, complementVS R Pi a qn)).
   Proof.
     intros R D Rec Pi G n v y; cbn [dependees].
     rewrite !T.DependeesSet.union_spec, !SOde.mem_filterMap,
@@ -1401,19 +1401,19 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       assert (Hx : exemptb x qn pn = false).
       { unfold exemptb; destruct x; [| reflexivity].
         cbn [andb]; apply Hxq; reflexivity. }
-      assert (Hedge : T.DependeesSet.In (Name.Orig qn, admitVS R Pi a qn)
+      assert (Hedge : T.DependeesSet.In (Name.Orig qn, complementVS R Pi a qn)
                         (dependees R D Rec Pi G (embedPkg (pn, pv)))).
       { apply (dependees_orig_spec R D Rec Pi G pn pv).
         right; right; exists a, x, qn; auto. }
       assert (Hd : T.DepRel.In
-                     (embedPkg (pn, pv), (Name.Orig qn, admitVS R Pi a qn))
+                     (embedPkg (pn, pv), (Name.Orig qn, complementVS R Pi a qn))
                      (reduceDeps R D Rec Pi G))
         by (apply mem_reduceDeps; split;
             [apply Hsub; exact Hp | exact Hedge]).
       destruct (Hdep _ Hp _ _ Hd) as [dv [Hdv HdvS]].
       assert (E := Huniq (Name.Orig qn) dv (Version.Orig qv) HdvS HqS);
         subst dv.
-      apply mem_admitVS in Hdv.
+      apply mem_complementVS in Hdv.
       destruct Hdv as [Hdv | [u [_ [Hmu E]]]]; [discriminate Hdv |].
       injection E as <-; congruence.
     - intros n v v' Hv Hv'.
@@ -1851,7 +1851,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           destruct (hasNameb S qn) eqn:Hh.
           { apply hasNameb_true in Hh; destruct Hh as [u Hu].
             exists (Version.Orig u); split.
-            - apply mem_admitVS; right; exists u.
+            - apply mem_complementVS; right; exists u.
               split; [apply Hsub; exact Hu |]; split; [| reflexivity].
               destruct (matchb Pi (qn, u) a0) eqn:Hm; [| exact Hm].
               exfalso; apply (Hconf (pn, pv) HpS a0 x0 Ha0).
@@ -1862,7 +1862,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
               exact Hx.
             - apply mem_coreResolution; left; exists (qn, u); auto. }
           { assert (Hnone := proj1 (hasNameb_false S qn) Hh).
-            exists Version.Bot; split; [apply mem_admitVS; left; reflexivity |].
+            exists Version.Bot; split; [apply mem_complementVS; left; reflexivity |].
             apply mem_coreResolution; right; right; right; right.
             exists qn; split; [| split; [exact Hnone | reflexivity]].
             apply mem_confNames in Hqn; destruct Hqn as [u [HuR _]].
@@ -2422,15 +2422,15 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
             [exact HR | cbn [fst]; exact (Hmatch a x qn u Hg Hm)]. }
       assert (Hadm : forall a x (qn : N.t),
                  Conf.In ((n, v), (a, x)) G -> NSet.In qn (confNames R Pi a) ->
-                 admitVS (realPreimage R ns)
+                 complementVS (realPreimage R ns)
                    (Prov.union (provPreimage Pi ns)
                       (ProvFibred.tailFibre Pi (n, v))) a qn
-                 = admitVS R Pi a qn).
+                 = complementVS R Pi a qn).
       { intros a x qn Hg Hqn.
         assert (Hqn' : NSet.In qn ns).
         { apply mem_confNames in Hqn; destruct Hqn as [u [_ Hm]].
           exact (Hmatch a x qn u Hg Hm). }
-        apply T.VSet.ext; intro w; rewrite !mem_admitVS.
+        apply T.VSet.ext; intro w; rewrite !mem_complementVS.
         apply or_iff_compat_l.
         split; intros [u [HR [Hm Hw]]]; exists u.
         - unfold realPreimage in HR; apply PkgPreimage.mem_ofKeys in HR.

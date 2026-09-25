@@ -52,13 +52,13 @@ let () =
   req "1.2" "1.9.0" true;
   req "1" "1.9.0" true;
   req "1" "2.0.0" false;
-  (* 0.x: the minor is the compatibility class *)
+  (* 0.x: the minor is the granularity class *)
   req "^0.3.1" "0.3.9" true;
   req "^0.3.1" "0.4.0" false;
   req "^0.3.1" "0.3.0" false;
   req "0.3" "0.3.9" true;
   req "0.3" "0.4.0" false;
-  (* 0.0.x: the patch is the compatibility class *)
+  (* 0.0.x: the patch is the granularity class *)
   req "^0.0.3" "0.0.3" true;
   req "^0.0.3" "0.0.4" false;
   req "^0.0" "0.0.9" true;

@@ -9,7 +9,7 @@
 apk picks among the providers of a name with compare_providers, whose first
 key between providers it has not disqualified is the version the provider
 offers *at the requested name* -- a package's own version where it claims
-the name itself, the p: operand where it is an alias, and the empty version
+the name itself, the p: operand where it is a versioned provides, and the empty version
 where the provides carries no version at all.  provider_priority (k:) is only the
 key after that.
 
@@ -59,7 +59,7 @@ versions they offer.  vers-alt provides vers=9.9 where the real vers is
   encoded solution: 4 core nodes (5 Alpine packages encoded)
 
 k: is the key below the offered version, and it is read off whichever
-package offers it, alias or not.  prio-alt provides prio=1.0, tying the
+package offers it, provider or not.  prio-alt provides prio=1.0, tying the
 real prio 1.0 on version, and prio's own k:100 beats prio-alt's k:1:
 
   $ ../../../src/main.exe alpine PROVIDERS prio-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
@@ -69,9 +69,9 @@ real prio 1.0 on version, and prio's own k:100 beats prio-alt's k:1:
     prio-user 1.0
   encoded solution: 3 core nodes (3 Alpine packages encoded)
 
-and the same tie goes the other way when the alias is the one carrying the
+and the same tie goes the other way when the provider is the one carrying the
 k:.  prio-lo-alt provides prio-lo=1.0 with k:5 against a real prio-lo 1.0
-with none, so the alias wins:
+with none, so the provider wins:
 
   $ ../../../src/main.exe alpine PROVIDERS prio-lo-user | sed -E '/^(parse|solve) [0-9.]+s$/d'
   index PROVIDERS: 14 packages, 7 provides entries, 0 install_if rules
@@ -251,7 +251,7 @@ provides one of its conditions' names:
     ni-z 1.0
   encoded solution: 8 core nodes (5 Alpine packages encoded)
 
-Requiring ni-b falsifies !ni-b.  apk takes the alias ni-alias for it, at
+Requiring ni-b falsifies !ni-b.  apk takes ni-alias, which provides it at
 3.0, which !ni-b<2 does not exclude, so ni-lt still fires:
 
   $ ../../../src/main.exe alpine NEGIIF ni-a ni-b | sed -E '/^(parse|solve) [0-9.]+s$/d'
@@ -368,8 +368,8 @@ Any run of < > = ~ is an operator, the bit-OR of its characters, so == is =:
     pr-lib 1.0
   encoded solution: 3 core nodes (3 Alpine packages encoded)
 
-An i: atom apk cannot parse drops the whole rule, so pr-iif is never
-triggered:
+An i: atom apk cannot parse drops the whole rule, so pr-iif never
+fires:
 
   $ ../../../src/main.exe alpine PARSE pr-trig | sed -E '/^(parse|solve) [0-9.]+s$/d'
   index PARSE: 7 packages, 1 provides entries, 0 install_if rules

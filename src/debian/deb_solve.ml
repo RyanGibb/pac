@@ -621,10 +621,10 @@ struct
 
       (* PubGrub decides the V.compare-maximum candidate, so preference lives
          here: dpkg-newest for real versions, leftmost alternative by clause
-         position, a real package above any alias claiming its name, and apt's
-         candidate order among the aliases.  The calculus only makes the
+         position, a real package above any provider claiming its name, and apt's
+         candidate order among the providers.  The calculus only makes the
          real/provided split legible -- RefReal carries no name, so it is the
-         one candidate that cannot be an alias -- and says nothing about which
+         one candidate that cannot be a provider -- and says nothing about which
          to try first.
 
          Position is the whole of the alternative order because apt's sort is

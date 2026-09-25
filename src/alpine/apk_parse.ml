@@ -7,7 +7,7 @@
 type constr = Any | Op of Apk_version.op * string
 type dep = { d_neg : bool; d_name : string; d_constr : constr }
 
-(* A versioned provide is an alias apk treats as a real package of the
+(* A versioned provides is one apk treats as a real package of the
    provided name; a bare one offers the empty version, below every
    version, and claims no name. *)
 type prov = { p_name : string; p_ver : string option }
@@ -88,7 +88,7 @@ let parse_provs (v : string) : prov list =
             { p_name = d_name; p_ver = Some ver } :: go rest
         | Some _ ->
             (* apk only ever emits = in p:, and the calculus has no room
-               for an inequality-constrained alias *)
+               for an inequality-constrained provides *)
             reject ();
             go rest)
   in

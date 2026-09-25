@@ -304,7 +304,7 @@ Module VariableFormula (N V : UsualOrderedType)
     Definition idxPkgs (n : Name.t) (k : nat) : T.PkgSet.t :=
       T.PkgSet.ofList (List.map (fun i => (n, Version.Idx i)) (List.seq 0 k)).
 
-    Definition negVS (Vq : N.t -> VSet.t) (m : N.t) (vs : VSet.t) : T.VSet.t :=
+    Definition complementVS (Vq : N.t -> VSet.t) (m : N.t) (vs : VSet.t) : T.VSet.t :=
       T.VSet.add Version.Bot (embedVS (VSet.diff (Vq m) vs)).
 
     (* A four-way mutual structural family avoids well-founded recursion on
@@ -347,7 +347,7 @@ Module VariableFormula (N V : UsualOrderedType)
     with encodeNNFneg (Y_x : X.t -> YSet.t) (Vq : N.t -> VSet.t)
         (p : T.Pkg.t) (f : Formula) : T.DepRel.t :=
       match f with
-      | FDep m vs => T.DepRel.singleton (p, (Name.Orig m, negVS Vq m vs))
+      | FDep m vs => T.DepRel.singleton (p, (Name.Orig m, complementVS Vq m vs))
       | FConj a b =>
           let n := Name.Disjunct (FNeg a :: negConjSpine b) in
           T.DepRel.add
@@ -365,7 +365,7 @@ Module VariableFormula (N V : UsualOrderedType)
         (n : Name.t) (i : nat) (f : Formula) : T.DepRel.t :=
       match f with
       | FDep m vs =>
-          T.DepRel.singleton ((n, Version.Idx i), (Name.Orig m, negVS Vq m vs))
+          T.DepRel.singleton ((n, Version.Idx i), (Name.Orig m, complementVS Vq m vs))
       | FConj a b =>
           T.DepRel.union (encodeNNFneg Y_x Vq (n, Version.Idx i) a)
             (encodeConjNeg Y_x Vq n (S i) b)
@@ -516,12 +516,12 @@ Module VariableFormula (N V : UsualOrderedType)
         rewrite HE; reflexivity.
     Qed.
 
-    Lemma mem_negVS : forall Vq m vs (w : Version.t),
-        T.VSet.In w (negVS Vq m vs) <->
+    Lemma mem_complementVS : forall Vq m vs (w : Version.t),
+        T.VSet.In w (complementVS Vq m vs) <->
         w = Version.Bot \/
         exists u, VSet.In u (Vq m) /\ ~ VSet.In u vs /\ w = Version.Orig u.
     Proof.
-      intros Vq m vs w; unfold negVS.
+      intros Vq m vs w; unfold complementVS.
       rewrite SOvv.add_in; unfold embedVS; rewrite SOvv.mem_map.
       split.
       - intros [-> | [u [Hu ->]]]; [left; reflexivity | right].
@@ -874,7 +874,7 @@ Module VariableFormula (N V : UsualOrderedType)
         exists v; split; [exact Hv |].
         apply mem_variableFormulaResolution; exact HwS. }
       assert (Hneg : forall (q : T.Pkg.t) m vs,
-                 T.DepRel.In (q, (Name.Orig m, negVS Vq m vs)) D ->
+                 T.DepRel.In (q, (Name.Orig m, complementVS Vq m vs)) D ->
                  T.PkgSet.In q S ->
                  ~ Satisfies (variableFormulaResolution S)
                      (extractAssignment y0 Y_x S) (FDep m vs)).
@@ -883,7 +883,7 @@ Module VariableFormula (N V : UsualOrderedType)
         intros [v [Hv HvS]].
         apply mem_variableFormulaResolution in HvS.
         assert (E := Huniq _ _ _ HwS HvS); subst w.
-        apply mem_negVS in Hw.
+        apply mem_complementVS in Hw.
         destruct Hw as [Hw | [u [_ [Hnv E]]]]; [discriminate Hw |].
         injection E as <-; exact (Hnv Hv). }
       assert (Hvar : forall (q : T.Pkg.t) x op y,
@@ -1768,17 +1768,17 @@ Module VariableFormula (N V : UsualOrderedType)
       assert (Hneg : forall m vs,
                  NSet.In m Ns ->
                  ~ Satisfies S sigma (FDep m vs) ->
-                 exists v, T.VSet.In v (negVS Vq m vs) /\
+                 exists v, T.VSet.In v (complementVS Vq m vs) /\
                            T.PkgSet.In (Name.Orig m, v) w).
       { intros m vs Hm Hns.
         destruct (hasNameb S m) eqn:E.
         - apply hasNameb_true in E; destruct E as [u Hu].
           exists (Version.Orig u); split; [| exact (Hemb (m, u) Hu)].
-          apply mem_negVS; right; exists u.
+          apply mem_complementVS; right; exists u.
           split; [exact (HVq m u Hu) | split; [| reflexivity]].
           intro Huv; apply Hns; exists u; auto.
         - assert (Hnone := proj1 (hasNameb_false S m) E).
-          exists Version.Bot; split; [apply mem_negVS; left; reflexivity |].
+          exists Version.Bot; split; [apply mem_complementVS; left; reflexivity |].
           exact (Hbot m Hm Hnone). }
       assert (Hcmp : forall x op y,
                  Satisfies S sigma (FVarCmp x op y) ->
@@ -2308,7 +2308,7 @@ Module VariableFormula (N V : UsualOrderedType)
           intro Hag.
         - assert (E : Vq m = Vq' m)
             by (apply Hag; simpl; apply NSet.singleton_spec; reflexivity).
-          split4v; intros; simpl; unfold negVS; try rewrite E; reflexivity.
+          split4v; intros; simpl; unfold complementVS; try rewrite E; reflexivity.
         - assert (Ha : forall m, NSet.In m (fnames a) -> Vq m = Vq' m)
             by (intros m Hm; apply Hag; simpl; apply NSet.union_spec; left;
                 exact Hm).

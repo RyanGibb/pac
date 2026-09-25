@@ -126,23 +126,23 @@ Module Conflict (N V : UsualOrderedType).
     Definition origEdges (D : C.DepRel.t) : T.DepRel.t :=
       SOdtd.map (fun '(p, (n, vs)) => (embedPkg p, (n, embedVS vs))) D.
 
-    Definition admitVS (R : PkgSet.t) (n : N.t) (vs : VSet.t) : T.VSet.t :=
+    Definition complementVS (R : PkgSet.t) (n : N.t) (vs : VSet.t) : T.VSet.t :=
       T.VSet.add Version.Bot (embedVS (VSet.diff (C.versions R n) vs)).
 
     Module SOctd := SetOps ConfElt T.DepElt ConflictRel T.DepRel.
     Definition conflictEdges (R : PkgSet.t) (G : ConflictRel.t) : T.DepRel.t :=
-      SOctd.map (fun '(p, (n, vs)) => (embedPkg p, (n, admitVS R n vs))) G.
+      SOctd.map (fun '(p, (n, vs)) => (embedPkg p, (n, complementVS R n vs))) G.
 
     Definition reduceDeps (R : PkgSet.t) (D : C.DepRel.t) (G : ConflictRel.t)
       : T.DepRel.t :=
       T.DepRel.union (origEdges D) (conflictEdges R G).
 
-    Lemma mem_admitVS : forall R n vs (w : Version.t),
-        T.VSet.In w (admitVS R n vs) <->
+    Lemma mem_complementVS : forall R n vs (w : Version.t),
+        T.VSet.In w (complementVS R n vs) <->
         w = Version.Bot \/
         exists u, PkgSet.In (n, u) R /\ ~ VSet.In u vs /\ w = Version.Orig u.
     Proof.
-      intros R n vs w; unfold admitVS.
+      intros R n vs w; unfold complementVS.
       rewrite SOvt.add_in; unfold embedVS; rewrite SOvt.mem_map.
       split.
       - intros [-> | [u [Hu ->]]]; [left; reflexivity | right].
@@ -170,7 +170,7 @@ Module Conflict (N V : UsualOrderedType).
     Lemma mem_conflictEdges : forall R (G : ConflictRel.t) (y : T.DepElt.t),
         T.DepRel.In y (conflictEdges R G) <->
         exists p n vs, ConflictRel.In (p, (n, vs)) G /\
-          y = (embedPkg p, (n, admitVS R n vs)).
+          y = (embedPkg p, (n, complementVS R n vs)).
     Proof.
       intros R G y; unfold conflictEdges; rewrite SOctd.mem_map.
       split.
@@ -186,7 +186,7 @@ Module Conflict (N V : UsualOrderedType).
         (exists p n vs, C.DepRel.In (p, (n, vs)) D /\
            y = (embedPkg p, (n, embedVS vs))) \/
         (exists p n vs, ConflictRel.In (p, (n, vs)) G /\
-           y = (embedPkg p, (n, admitVS R n vs))).
+           y = (embedPkg p, (n, complementVS R n vs))).
     Proof.
       intros R D G y; unfold reduceDeps.
       rewrite T.DepRel.union_spec, mem_origEdges, mem_conflictEdges.
@@ -267,13 +267,13 @@ Module Conflict (N V : UsualOrderedType).
           injection E as E; exact E.
       - intros p Hp n vs Hg [u [Hu HuS]].
         apply mem_conflictResolution in Hp, HuS.
-        assert (Hd : T.DepRel.In (embedPkg p, (n, admitVS R n vs))
+        assert (Hd : T.DepRel.In (embedPkg p, (n, complementVS R n vs))
                        (reduceDeps R D G))
           by (apply mem_reduceDeps; right; exists p, n, vs;
               split; [exact Hg | reflexivity]).
         destruct (Hdep _ Hp _ _ Hd) as [w [Hw HwS]].
         assert (E : w = Version.Orig u) by (apply (Huniq n); assumption).
-        subst w; apply mem_admitVS in Hw.
+        subst w; apply mem_complementVS in Hw.
         destruct Hw as [Hw | [u' [_ [Hnv E]]]]; [discriminate Hw |].
         injection E as <-; exact (Hnv Hu).
     Qed.
@@ -375,11 +375,11 @@ Module Conflict (N V : UsualOrderedType).
             destruct E as [[m' u] [Hu Ht]]; cbn [fst] in Ht.
             destruct (N.eq_dec m' n) as [-> | ]; [| discriminate].
             exists (Version.Orig u); split.
-            -- apply mem_admitVS; right; exists u.
+            -- apply mem_complementVS; right; exists u.
                split; [apply Hsub; exact Hu | split; [| reflexivity]].
                intro Huv; apply (Havoid p HpS n vs HG); exists u; auto.
             -- apply mem_coreResolution; left; exists (n, u); auto.
-          * exists Version.Bot; split; [apply mem_admitVS; left; reflexivity |].
+          * exists Version.Bot; split; [apply mem_complementVS; left; reflexivity |].
             apply mem_coreResolution; right; exists n.
             split; [| split; [| reflexivity]].
             -- apply mem_instNames; right; right; exists p, vs; exact HG.
@@ -502,7 +502,7 @@ Module Conflict (N V : UsualOrderedType).
                             (ConflictRelFibred.tailFibre G (n, v)))
               by (apply ConflictRelFibred.mem_tailFibre; auto).
             split; [exact HG' |].
-            unfold admitVS.
+            unfold complementVS.
             rewrite (versions_nameRestrict R _ n')
               by (apply mem_conflictNames; exists (n, v), vs; exact HG').
             reflexivity.
@@ -515,7 +515,7 @@ Module Conflict (N V : UsualOrderedType).
             assert (HGf := HG).
             apply ConflictRelFibred.mem_tailFibre in HG; destruct HG as [HG _].
             split; [exact HG |].
-            unfold admitVS.
+            unfold complementVS.
             rewrite (versions_nameRestrict R _ n')
               by (apply mem_conflictNames; exists (n, v), vs; exact HGf).
             reflexivity.

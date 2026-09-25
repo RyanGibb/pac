@@ -253,7 +253,7 @@ Module PackageFormula (N V : UsualOrderedType).
     Definition idxPkgs (n : Name.t) (k : nat) : T.PkgSet.t :=
       T.PkgSet.ofList (List.map (fun i => (n, Version.Idx i)) (List.seq 0 k)).
 
-    Definition negVS (Vq : N.t -> VSet.t) (m : N.t) (vs : VSet.t) : T.VSet.t :=
+    Definition complementVS (Vq : N.t -> VSet.t) (m : N.t) (vs : VSet.t) : T.VSet.t :=
       T.VSet.add Version.Bot (embedVS (VSet.diff (Vq m) vs)).
 
     (* A De Morgan case would recurse on a rewritten term, demanding
@@ -294,7 +294,7 @@ Module PackageFormula (N V : UsualOrderedType).
       : T.DepRel.t :=
       match f with
       | FDep m vs =>
-          T.DepRel.singleton (p, (Name.Orig m, negVS Vq m vs))
+          T.DepRel.singleton (p, (Name.Orig m, complementVS Vq m vs))
       | FConj a b =>
           let n := Name.Disjunct (FNeg a :: negConjSpine b) in
           T.DepRel.add
@@ -309,7 +309,7 @@ Module PackageFormula (N V : UsualOrderedType).
         (f : Formula) : T.DepRel.t :=
       match f with
       | FDep m vs =>
-          T.DepRel.singleton ((n, Version.Idx i), (Name.Orig m, negVS Vq m vs))
+          T.DepRel.singleton ((n, Version.Idx i), (Name.Orig m, complementVS Vq m vs))
       | FConj a b =>
           T.DepRel.union (encodeNNFneg Vq (n, Version.Idx i) a)
             (encodeConjNeg Vq n (S i) b)
@@ -425,12 +425,12 @@ Module PackageFormula (N V : UsualOrderedType).
         apply in_seq; lia.
     Qed.
 
-    Lemma mem_negVS : forall Vq m vs (w : Version.t),
-        T.VSet.In w (negVS Vq m vs) <->
+    Lemma mem_complementVS : forall Vq m vs (w : Version.t),
+        T.VSet.In w (complementVS Vq m vs) <->
         w = Version.Bot \/
         exists u, VSet.In u (Vq m) /\ ~ VSet.In u vs /\ w = Version.Orig u.
     Proof.
-      intros Vq m vs w; unfold negVS.
+      intros Vq m vs w; unfold complementVS.
       rewrite SOvv.add_in; unfold embedVS; rewrite SOvv.mem_map.
       split.
       - intros [-> | [u [Hu ->]]]; [left; reflexivity | right].
@@ -649,7 +649,7 @@ Module PackageFormula (N V : UsualOrderedType).
         exists v; split; [exact Hv |].
         apply mem_packageFormulaResolution; exact HwS. }
       assert (Hneg : forall (q : T.Pkg.t) m vs,
-                 T.DepRel.In (q, (Name.Orig m, negVS Vq m vs)) D ->
+                 T.DepRel.In (q, (Name.Orig m, complementVS Vq m vs)) D ->
                  T.PkgSet.In q S ->
                  ~ Satisfies (packageFormulaResolution S) (FDep m vs)).
       { intros q m vs Hd HqS.
@@ -657,7 +657,7 @@ Module PackageFormula (N V : UsualOrderedType).
         intros [v [Hv HvS]].
         apply mem_packageFormulaResolution in HvS.
         assert (E := Huniq _ _ _ HwS HvS); subst w.
-        apply mem_negVS in Hw.
+        apply mem_complementVS in Hw.
         destruct Hw as [Hw | [u [_ [Hnv E]]]]; [discriminate Hw |].
         injection E as <-; exact (Hnv Hv). }
       induction f as [m vs | a IHa b IHb | a IHa b IHb | a IHa].
@@ -1423,17 +1423,17 @@ Module PackageFormula (N V : UsualOrderedType).
       assert (Hneg : forall m vs,
                  NSet.In m Ns ->
                  ~ Satisfies S (FDep m vs) ->
-                 exists v, T.VSet.In v (negVS Vq m vs) /\
+                 exists v, T.VSet.In v (complementVS Vq m vs) /\
                            T.PkgSet.In (Name.Orig m, v) w).
       { intros m vs Hm Hns.
         destruct (hasNameb S m) eqn:E.
         - apply hasNameb_true in E; destruct E as [u Hu].
           exists (Version.Orig u); split; [| exact (Hemb (m, u) Hu)].
-          apply mem_negVS; right; exists u.
+          apply mem_complementVS; right; exists u.
           split; [exact (HVq m u Hu) | split; [| reflexivity]].
           intro Huv; apply Hns; exists u; auto.
         - assert (Hnone := proj1 (hasNameb_false S m) E).
-          exists Version.Bot; split; [apply mem_negVS; left; reflexivity |].
+          exists Version.Bot; split; [apply mem_complementVS; left; reflexivity |].
           exact (Hbot m Hm Hnone). }
       induction f as [m vs | a IHa b IHb | a IHa b IHb | a IHa]; intro Hsub.
       - assert (Hm : NSet.In m Ns)
@@ -1887,7 +1887,7 @@ Module PackageFormula (N V : UsualOrderedType).
           induction f as [m vs | a IHa b IHb | a IHa b IHb | a IHa]; intro Hag.
         - assert (E : Vq m = Vq' m)
             by (apply Hag; simpl; apply NSet.singleton_spec; reflexivity).
-          split4; intros; simpl; unfold negVS; try rewrite E; reflexivity.
+          split4; intros; simpl; unfold complementVS; try rewrite E; reflexivity.
         - assert (Ha : forall m, NSet.In m (fnames a) -> Vq m = Vq' m)
             by (intros m Hm; apply Hag; simpl; apply NSet.union_spec; left;
                 exact Hm).

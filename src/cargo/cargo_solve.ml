@@ -50,7 +50,7 @@ let default_feature = "default"
 
    The flag reaches workspace members only: ws.members_with_features
    hands CliFeatures to the root alone, and every other summary arrives as
-   RequestedFeatures::DepFeatures carrying whatever its declaring row
+   RequestedFeatures::DepFeatures carrying whatever its declaring record
    asked for, past resolve_features' [if dep.is_optional() && !reqs.deps
    .contains_key(..) { continue }].  So a *transitive* crate's unactivated
    optionals stay out of the lock, which is sOptional's guard, and nothing
@@ -194,7 +194,7 @@ module Make () = struct
 
   module T = Cg.T
 
-  (* At most one version per semver compatibility class.  The label is the class's least release version rather than a tag like
+  (* At most one version per semver granularity class.  The label is the class's least release version rather than a tag like
      "^1", and G is ordered as versions are, because the encoding hands PubGrub
      a class where the version would otherwise go: what the solver
      maximises is the label, so an order on labels that disagrees with the
@@ -551,7 +551,7 @@ module Make () = struct
     (d.P.d_alias, (xkind d.P.d_kind, d.P.d_cfg))
 
   (* the dependency the owner's fibre holds at a site, which is what a slot
-     name carries: the order replay reads raw manifest rows, which
+     name carries: the order replay reads raw manifest records, which
      unify_site has not merged, so the name is taken from the fibre *)
   let site_data_cache = Hashtbl.create 4096
 
@@ -569,8 +569,8 @@ module Make () = struct
         sd
 
   (* a slot node is one manifest site, so its name has to spell the site
-     out: bare alias for the plain [dependencies] row, and the kind or cfg
-     that told the row apart otherwise *)
+     out: bare alias for the plain [dependencies] record, and the kind or cfg
+     that told the record apart otherwise *)
   let pp_site fmt ((a, (k, cfg)) : Cg.SlotKey.t) =
     Format.fprintf fmt "%s%s%s" a
       (match k with
@@ -643,7 +643,7 @@ module Make () = struct
     (* the parent relation, keyed in the theory by manifest site: one
        crate may depend on a single crate name twice -- under two aliases
        through a rename, or under one alias from two sites -- and the
-       copies may land on different compatibility classes, so the edge has
+       copies may land on different granularity classes, so the edge has
        to record which declaration received which version.  ParentElt
        carries only the target's version, since the site already
        determines the slot it came through; the target name is read back

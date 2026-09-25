@@ -389,7 +389,7 @@ let prov_rank ar (q : string * string) : int =
 
 (* apk's provider_priority defaults to 0 for a package with no k: line,
    and the field is the package's own, read off whichever package offers
-   the name -- an alias and a package claiming the name itself alike. *)
+   the name -- a provider and a package claiming the name itself alike. *)
 let prio_of ar (q : string * string) : int =
   match Hashtbl.find_opt ar.prio q with Some k -> k | None -> 0
 
@@ -445,14 +445,14 @@ let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
    order only keeps the comparison total.
 
    What a provider offers at a name is its own version where it claims
-   the name itself, the p: operand where it is a versioned alias, and
+   the name itself, the p: operand where it is a versioned provides, and
    nothing at all where the provides carries no version.  So a package
-   of a name is not privileged over an alias of it: the two are compared
-   on the versions they offer, and an alias offering the newer one wins.
+   of a name is not privileged over a provider of it: the two are compared
+   on the versions they offer, and a provider offering the newer one wins.
    An unversioned provides is the one case where this order puts a real
    package first, and not by privilege either -- it offers no version, and
    no version loses to every version.  provider_priority is read off
-   whichever package offers the name, alias or not, and so decides only
+   whichever package offers the name, provider or not, and so decides only
    once the offered versions tie.
 
    A synthetic version selects one alternative of its disjunction by
@@ -461,7 +461,7 @@ let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
    and the augmented package last, so preferring the earliest alternative is
    apk's rule that an install-if fires only when its conditions already hold
    -- without it every install_if rule in the index is discharged by
-   installing its target.  encPos folds the versioned aliases of a name
+   installing its target.  encPos folds the versioned provides of a name
    into the name's own version set, where the comparison above settles
    them, and lists only the unversioned providers as separate
    alternatives ahead of it -- so that disjunction is exactly the case
@@ -773,10 +773,10 @@ let record_real st (r : T.PkgSet.t) =
     (T.PkgSet.elements r)
 
 (* Lookup.versions_lookupName: what the versions callback answers, before
-   the tagging PubGrub sees -- the name's own versions and its alias
-   versions.  The encoder reads this at the names a formula negates: a
+   the tagging PubGrub sees -- the name's own versions and its
+   provides.  The encoder reads this at the names a formula negates: a
    negated requirement's complement ranges over the versions offered at
-   the name, alias versions included. *)
+   the name, provides included. *)
 let oracle st (tn : Red.Name.name) : PF.VSet.t =
   match tn with
   | Red.Name.Orig n -> (
@@ -810,7 +810,7 @@ let touch st ((tn, tv) : T.Pkg.t) =
           pkg_inst st.ar st.world (n, v))
   | ( PFR.Name.Orig (Red.Name.Orig m),
       PFR.Version.Orig (Red.Version.Prov (q0, pv)) ) ->
-      (* Lookup.dependees_lookupProv: an alias reads no instance *)
+      (* Lookup.dependees_lookupProv: a provides reads no instance *)
       process st
         (Red.Name.Orig m, Red.Version.Prov (q0, pv))
         (fun () -> empty_inst)

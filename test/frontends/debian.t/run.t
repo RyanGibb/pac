@@ -41,7 +41,7 @@ newline is not part of the atom that follows it:
   lib:amd64 1
   zzz:amd64 1
 
-Provides makes an alias for a name, not the name itself: a real package is
+Provides makes a package a provider of a name, not a package of it: a real package is
 preferred over anything claiming its name.  altlib alone would not
 discriminate -- it sorts before lib, so the referent ordering hides the
 question; zzlib sorts after it and does not:

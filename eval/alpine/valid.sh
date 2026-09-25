@@ -12,7 +12,7 @@
 # Re-installing line means apk would not keep the set as it stood (which
 # a resolution can still fail: controls.sh f5-prio), and a non-zero exit
 # is an inconsistency.  install_if is no exception: apk
-# installs such a package as soon as its triggers are present, and our
+# installs such a package as soon as its install-if conditions hold, and our
 # model makes the rule hard too; nor can an Installing line be excused by
 # what the index says of the name, since the same name may be one a
 # dependency needs.  The closing "OK: ... in K packages" must count

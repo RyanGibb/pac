@@ -1171,10 +1171,10 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         + exact (proj1 (match_decode _ _ _ _ Hres) Hb).
     Qed.
 
-    (* A package aliasing one name at two versions, or aliasing its own
+    (* A package providing one name at two versions, or providing its own
        name, would put two target versions of that name in the witness
        from a single source claimant; apk metadata declares neither. *)
-    Definition WfAlias (I : Inst) : Prop :=
+    Definition WfProvides (I : Inst) : Prop :=
       (forall q n pv pv',
           Prov.In (q, (n, PVer pv)) (inst_prov I) ->
           Prov.In (q, (n, PVer pv')) (inst_prov I) -> pv = pv') /\
@@ -1299,7 +1299,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Qed.
 
     Theorem alpine_completeness : forall I S,
-        WfAlias I -> IsResolution I S ->
+        WfProvides I -> IsResolution I S ->
         PF.IsResolution (transR I) (transD I) rootPkg (transS I S).
     Proof.
       intros I S [Wf1 Wf2] Hres.
@@ -2031,7 +2031,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
          serve as the oracle: a negated requirement or positive install-if
          condition whose constraint bareMatch admits negates each bare
          provider q at q's own name, whose complement ranges over every
-         version at that name, alias versions included, while repoPreimage
+         version at that name, its provides included, while repoPreimage
          keeps only the packages at or providing the names the package
          mentions -- q itself, and not the rest of q's name.  The versions
          lookup at q's name does hold them. *)

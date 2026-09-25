@@ -2,7 +2,7 @@
 """Classify a scale.sh run and cluster its divergences by the shallowest
 names whose versions differ, in either side's graph, since the rest usually
 follow from them.  Each carries which side took the newer version, whether
-the two lie in different compatibility classes, and, where the MSRV
+the two lie in different granularity classes, and, where the MSRV
 preference could have decided it, which versions fit the root's toolchain.
 Errors are grouped by what cargo changed in our lock.
 usage: triage.py <run-dir>"""
