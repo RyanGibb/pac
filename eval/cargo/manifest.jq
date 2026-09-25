@@ -3,7 +3,7 @@ def line:
   + " = { version = \"" + (.req) + "\""
   + (if .optional then ", optional = true" else "" end)
   # NOT `// true`: jq's // treats explicit false as missing, which ate
-  # every default-features = false in the sweep of 2026-09-13
+  # every default-features = false in the sweeps of 2026-09-14 to 09-16
   + (if .default_features == false then ", default-features = false" else "" end)
   + (if ((.features // []) | length) > 0
      then ", features = [" + ((.features | map("\"" + . + "\"")) | join(", ")) + "]"

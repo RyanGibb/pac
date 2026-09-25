@@ -81,9 +81,6 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
     #[local] Hint Extern 1 => cmp_by InterFNameF.compare_lt_trans : cmp_fconc.
     #[local] Hint Extern 1 => cmp_by InterANameF.compare_lt_trans : cmp_fconc.
 
-    (* A fully abstract name interface would demand four more intermediate*
-       constructor families; the encoding never emits them, so Name omits
-       them. *)
     Module Name.
       Inductive name : Type :=
       | GranularOrig (n : N.t) (w : G.t)

@@ -4,9 +4,9 @@
 # nothing installed, and the environment variables our driver assumes
 # (src/opam/opam_solve.ml, [globals]) pinned through `opam var --global`,
 # so opam answers the same question our loader does rather than the host's.
-# Without the pinning opam infers os-distribution=nixos here and picks a
-# different host-system-* package, which is a different instance, not a
-# different preference.
+# Without the pinning opam infers os-distribution=nixos here, which changes
+# what is available (srt's conf-srt-openssl, for one): a different instance,
+# not a different preference.
 #
 # opam-version is left as opam's own (OPAMVAR_opam_version or a variable
 # would override it); scale.sh and valid.sh hand that to our driver

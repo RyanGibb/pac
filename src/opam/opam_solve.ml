@@ -712,8 +712,8 @@ module Make () = struct
     nproc := 0;
     (* Wall time inside the two callbacks; the rest of PG.solve is
        PubGrub's own search.  Only accumulated when verbose, and with
-       gettimeofday rather than Sys.time: the callbacks run ~10^6 times
-       per solve and a getrusage syscall each would be seconds. *)
+       gettimeofday, the clock of the PG.solve total it is subtracted
+       from; the callbacks run 10^3-10^5 times per solve. *)
     let t_callbacks = ref 0. in
     let timed f =
       if verbose then begin

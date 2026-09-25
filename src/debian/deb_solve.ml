@@ -1570,9 +1570,9 @@ struct
         | req -> Shadow.next sh ~assigned req
       in
       let next = Some (if apt_heap then heap_next else defer_bot) in
-      (* Ranges.full here trips an upstream pubgrub edge case (initial
-         Neg-term status); real versions are what we mean anyway: the query
-         asks for the name, so it excludes absence. *)
+      (* Ranges.full would admit ⊥, which PubGrub then picks, so a bare
+         query would answer nothing; the query asks for the name, so it
+         excludes absence. *)
       let root (n, acc) =
         let accepted (pv : PVersion.t) =
           match (pv.PVersion.v, acc) with

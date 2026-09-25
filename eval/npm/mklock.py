@@ -58,8 +58,10 @@ checked, rather than npm's hoisting heuristic being guessed at:
           (can-place-dep.js REPLACE).  Adding that would make this
           writer a small reimplementation of arborist, and `npm ci`
           accepting the result would then be testing the clone rather
-          than our solver.  Refusing to evict costs some nesting and
-          nothing else, and is a rule that stands on its own.
+          than our solver.  Refusing to evict costs nesting, and where a
+          peer's only slot beside its declarer is held by an incumbent
+          that could move deeper, it puts the peer in the declarer's own
+          node_modules, which npm rejects.
 
   verify  re-resolve every edge against the finished tree and fail if
           any of them does not come out right.  Placement is correct by

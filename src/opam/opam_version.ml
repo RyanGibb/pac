@@ -17,8 +17,9 @@ let char_key c =
 let rec skip_while f s i e = if i < e && f s.[i] then skip_while f s (i + 1) e else i
 let skip_zeros = skip_while (fun c -> c = '0')
 
-(* compare s1.[i1, e1) with s2.[i2, e2) in place: PubGrub compares
-   versions millions of times per solve, so this must not allocate *)
+(* compare s1.[i1, e1) with s2.[i2, e2) in place: a solve compares
+   versions millions of times, most of them while the callbacks load and
+   encode, so this must not allocate *)
 let rec lexical s1 i1 e1 s2 i2 e2 =
   match (i1 = e1, i2 = e2) with
   | true, true -> 0

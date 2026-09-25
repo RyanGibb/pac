@@ -2387,7 +2387,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     (* The dependee lookups, stated first as agreement between any two
        instances that coincide on what a shape reads -- the owner's fibres
        and the repository at the owner's slot targets -- so that the
-       driver's shape and the paper's follow from one proof each. *)
+       per-name lemmas the driver uses and the owner-uniform
+       dependees_lookupSub follow from one proof each. *)
     Lemma dep_crate_mono :
       forall g R R' support support' FDefs FDefs' Slots Slots' Links Links'
              dflt rc rootFeats rootFeats' m gr v,
@@ -2586,8 +2587,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       | _ => None
       end.
 
-    (* the paper's statement: every owned package answers from its owner's
-       four fibres and the repository at the names the owner reads *)
     Theorem dependees_lookupSub :
       forall g R support FDefs Slots Links dflt rc rootFeats p q,
         owner p = Some q ->

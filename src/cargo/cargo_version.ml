@@ -57,8 +57,9 @@ let parse_fresh (s : string) : t =
   }
 
 (* compare sits under every range operation the solver makes, and parsing
-   afresh there was most of a large solve's time; a run meets a few tens
-   of thousands of distinct version strings *)
+   afresh there was most of a large solve's time; a run meets a few
+   thousand distinct version strings (about 3,400 at most), though a large
+   query loads tens of thousands of versions *)
 let parsed : (string, t) Hashtbl.t = Hashtbl.create 65536
 
 let parse (s : string) : t =

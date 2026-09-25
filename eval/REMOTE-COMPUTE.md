@@ -3,9 +3,9 @@
 Two steps want a big machine:
 
 - `dune build @axioms`, which runs `Print Assumptions` over every
-  name `scripts/check-axioms.sh` lists.  This is the memory-hungry step,
-  and on a 16 G machine it is liable to be OOM-killed -- silently, since
-  the killer takes the shell with it and leaves an empty log.
+  name `scripts/check-axioms.sh` lists.  This is the memory-hungry step:
+  `Print Assumptions` peaks at about 7 G, and a from-scratch build to it
+  at `-j 8` peaks at about 8 G, so leave room on a 16 G machine.
 - the archive-scale sweeps, where a frontend is run across an entire
   index rather than the curated query list.
 
@@ -32,8 +32,9 @@ On a machine without a C toolchain on `PATH` (`cc`, `ld`, `as`,
 rather than the user's, and export `CPATH`, `LIBRARY_PATH` and
 `PKG_CONFIG_PATH` at it -- that is how `zarith` finds `gmp`.  `opam
 option depext=false` stops opam trying to install system packages it
-cannot see are already present; left interactive it silently picks
-"abort" and exits 0, so the failure is invisible unless the log is read.
+cannot see are already present; left without a terminal it answers its
+own depext prompt with 4 (abort), printed but easy to miss, and exits 10;
+on a terminal it waits.
 
 ## Getting the repository snapshots there
 
@@ -55,7 +56,8 @@ construction, where a file copy is only as good as the copy:
 
 The npm packument snapshot has no upstream of its own and must be copied.
 Compress in transit (`rsync -az`): it is JSON, and the link rather than
-the CPU is the bottleneck -- roughly 17x here.
+the CPU is the bottleneck -- roughly 6x here (1.13 GB goes over the
+wire as 180 MB).
 
 ## Verifying a snapshot
 
@@ -78,8 +80,9 @@ A quick sweep for the same class of damage:
 ## A vendored checkout must live outside the tree
 
 If `pubgrub` is pinned to a local checkout, keep that checkout outside
-the `pac` directory.  Inside it, dune scans it, finds a `pubgrub` package
-with no stanzas attached, and refuses to build.  Pinning the published
+the `pac` directory.  Inside it, dune builds the checkout's bench and
+tests along with `pac`, so `dune build` and `@runtest` fail unless
+`memtrace` and `ppx_expect` are installed.  Pinning the published
 repository (which `pac.opam.template` does) avoids the question.
 
 ## Running a long job

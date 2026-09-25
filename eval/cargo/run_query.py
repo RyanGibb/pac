@@ -229,8 +229,7 @@ def build_manifest(crate, version, workdir, patch_self=False):
             # every requirement on that name is still checked against this
             # package, and its own dependency rows are still resolved --
             # and it is written only for the queries where our answer
-            # actually merges the two, because an unused patch would land
-            # in the lock as a [[patch.unused]] section of its own.
+            # actually merges the two.
             f.write(f'\n[patch.crates-io]\n{crate} = {{ path = "." }}\n')
     libpath = workdir + "/src/lib.rs"
     if not os.path.exists(libpath):

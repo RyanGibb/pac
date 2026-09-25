@@ -152,7 +152,7 @@ let parse_depends field =
 let parse_depends_fields fields = List.concat_map parse_depends fields
 
 let parse_conflicts field =
-  (* Alternatives are not permitted in Conflicts/Breaks (Policy 7.4). *)
+  (* Policy 7.1 allows alternatives only in the Depends family. *)
   split_on ',' field |> List.filter_map parse_atom
 
 let parse_provides field =

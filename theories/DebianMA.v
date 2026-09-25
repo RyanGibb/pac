@@ -158,8 +158,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     | None => MANo
     end.
 
-  (* Dependency-Atom architecture qualifiers (Policy 7.1 + MultiarchSpec):
-     unqualified, :any, :native, or an explicit :arch. *)
+  (* Dependency-atom architecture qualifiers (deb-control(5)): unqualified,
+     :any, or an explicit :arch; and :native, which dpkg allows only in
+     Build-Depends but apt also accepts here. *)
   Inductive Qual : Type :=
   | QUnq
   | QAny

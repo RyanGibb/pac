@@ -685,9 +685,8 @@ let choose ar ~assigned (tn : PFR.Name.t) (cands : PVersion.t list) =
 (* An install-if disjunct exists only once its designated condition has
    been selected, so the conditions it discharges on have largely settled
    by the time [choose] sees it.  Deferring it behind every other open
-   name settles the rest of them; measured on this index the deferral no
-   longer changes the answer, but it is the invariant [choose] wants and
-   it costs nothing.
+   name settles the rest of them; measured on this index, dropping the
+   deferral changes 6 of 5542 single-name answers, each away from apk's.
 
    Absence is the greatest version but the last decision: a name a
    negated requirement reaches is entailed to a range admitting ⊥ as soon
@@ -887,8 +886,9 @@ let solve ?(debug = false) (ar : archive) (world : P.dep list) : result option =
   Pubgrub.set_debug debug;
   let st = mk_state ar world in
   let versions n = versions st n in
-  (* the decisive memoization: PubGrub asks for the same node's
-     dependencies over and over during propagation *)
+  (* memoized because PubGrub's dependency_incomps asks, at each decision,
+     for the dependencies of every version of the node; on this snapshot it
+     saves about 5% *)
   let cache = Hashtbl.create 65536 in
   let dependencies n ({ PVersion.v = u; _ } : PVersion.t) =
     match Hashtbl.find_opt cache (n, u) with

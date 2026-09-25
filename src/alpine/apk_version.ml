@@ -1,11 +1,13 @@
 (* apk's version ordering, transcribed from apk-tools 3.0.5
    src/version.c: the token state machine of
    digit{.digit}...{letter}{_suffix{number}}...{~hash}{-r#}, the suffix
-   table, and apk_version_compare_fuzzy.  apk 2.14 differs in three ways
-   that this file does not implement -- its fuzzy match is symmetric, it
-   orders leading-zero components by zero count rather than by string,
-   and it has no ~hash token -- so a comparison here can disagree with
-   the apk shipped in Alpine 3.21.  Trusted: this file is TCB. *)
+   table, and apk_version_compare_fuzzy.  apk 2.14 differs in at least
+   four ways that this file does not implement -- its fuzzy match is
+   symmetric, it orders leading-zero components by zero count rather than
+   by string, it has no ~hash token, and it accepts versions 3.0.5 rejects
+   (digits after a letter, as in 1.2a3; an empty component, as in 1..2)
+   -- so a comparison here can disagree with the apk shipped in Alpine
+   3.21.  Trusted: this file is TCB. *)
 
 type token =
   | Initial_digit
