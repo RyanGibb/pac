@@ -453,10 +453,13 @@ let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
    here, and what it has to reproduce is apk's compare_providers over
    the providers of the name being decided.  Most of that comparator's
    keys read the partial solution or the installed db and are dead
-   against a fresh root; the two that survive are, in order, the version
+   against a fresh root; of the rest, two are kept, in order, the version
    the provider offers *at the requested name* and then
    provider_priority, with the repository order below both and a single
-   repository here.  Past its last key select_package keeps the provider
+   repository here.  The one live key between them, the newer version by
+   the provider's own name (solver.c:651-661), is omitted: it separates
+   only two versions of one package, and an index that lists each
+   package once has no such pair.  Past its last key select_package keeps the provider
    it met first, since it takes a later one only when compare_providers
    says strictly better, and it meets them in index order -- so [ord],
    the provider's place in the index, is the final key, and the encoded
