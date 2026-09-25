@@ -150,6 +150,33 @@ let () =
   (* the rule is per comparator set, not per range *)
   sat "^1.2.3 || >=2.0.0-rc.1" "2.0.0-rc.1" true;
   sat "^1.2.3 || >=2.0.0-rc.1" "2.1.0-rc.1" false;
+  (* a component of ten or more digits is still a number *)
+  check "1.0.10000000000" "1.0.10000000001" (-1);
+  check "20230101120000.0.0" "20230101120001.0.0" (-1);
+  (* semver 7.8.4 under includePrerelease, as checkEngine calls it *)
+  let incl r v exp =
+    let got =
+      Npm_version.holds_pre v
+        (Npm_version.parse_range ~include_prerelease:true r)
+    in
+    if got <> exp then (
+      Printf.printf "FAIL %S includes %S = %b, want %b\n" r v got exp;
+      incr fail)
+  in
+  incl "<20" "20.0.0-rc.1" false;
+  incl ">=20" "20.0.0-rc.1" true;
+  incl "^1.2.3" "2.0.0-rc.1" false;
+  incl "~1.2.3" "1.2.3-rc.1" false;
+  incl "1.2.3 - 1.2.x" "1.3.0-rc.1" false;
+  incl "1.2.0 - 1.2.3" "1.2.4-rc.1" false;
+  incl "1.2.0 - 1.2.3" "1.2.3-rc.1" true;
+  incl ">=18" "24.0.0-pre" true;
+  incl ">20" "21.0.0-rc.1" true;
+  incl "<=20" "21.0.0-rc.1" false;
+  incl "20" "20.1.0-rc.1" true;
+  incl "^1" "1.0.0-rc.1" true;
+  incl "~1" "1.0.0-rc.1" false;
+  incl "<0" "0.0.0-0" false;
 
   if !fail = 0 then print_endline "ok"
   else (

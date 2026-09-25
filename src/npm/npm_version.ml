@@ -1,5 +1,5 @@
 (* SemVer 2.0.0 precedence and npm's range grammar, implemented from the
-   specifications, plus == and != operators that node-semver lacks: numeric major.minor.patch, then pre-release compared
+   specifications: numeric major.minor.patch, then pre-release compared
    identifier-wise (numeric identifiers below alphanumeric ones, a shorter
    identifier list below its extensions, and a version carrying a
    pre-release below the same core release), with build metadata ignored.
@@ -16,9 +16,9 @@ let is_digit c = c >= '0' && c <= '9'
 
 type t = { major : int; minor : int; patch : int; pre : string list }
 
-(* leading zeros carry no value; a component over nine digits saturates
-   to max_int rather than overflowing int_of_string, so two such
-   components compare equal *)
+(* leading zeros carry no value; a component over eighteen digits, past
+   the MAX_SAFE_INTEGER semver refuses, saturates to max_int rather than
+   overflowing int_of_string *)
 let strip0 s =
   let n = String.length s in
   let i = ref 0 in
@@ -29,7 +29,9 @@ let strip0 s =
 
 let int_of_digits s =
   let s = strip0 s in
-  if s = "" then 0 else if String.length s > 9 then max_int else int_of_string s
+  if s = "" then 0
+  else if String.length s > 18 then max_int
+  else int_of_string s
 
 let split_on c s = String.split_on_char c s
 
@@ -178,77 +180,90 @@ let parse_spec (s : string) =
 
 let num_or d = function Num n -> n | Star | Absent -> d
 
+(* [z] and [u] are the prerelease semver gives a bound it derives, lower
+   and upper: "0" under includePrerelease, where a prerelease is ordered
+   rather than refused and -0 then decides it at the bound, and ""
+   otherwise, which admits the same versions as semver's -0 would *)
+
 (* caret keeps the leftmost non-zero component: ^0.2.3 is <0.3.0 and
    ^0.0.3 is <0.0.4, which is why it cannot be written as a tilde *)
-let caret (ma, mi, pa, pre) =
+let caret ~z ~u (ma, mi, pa, pre) =
   match ma with
   | Star | Absent -> [ Any ]
   | Num m ->
       let hi =
         match (mi, pa) with
-        | (Star | Absent), _ -> vstr (m + 1) 0 0
+        | (Star | Absent), _ -> vstr ~pre:u (m + 1) 0 0
         | Num n, (Star | Absent) ->
-            if m > 0 then vstr (m + 1) 0 0 else vstr 0 (n + 1) 0
+            if m > 0 then vstr ~pre:u (m + 1) 0 0 else vstr ~pre:u 0 (n + 1) 0
         | Num n, Num p ->
-            if m > 0 then vstr (m + 1) 0 0
-            else if n > 0 then vstr 0 (n + 1) 0
-            else vstr 0 0 (p + 1)
+            if m > 0 then vstr ~pre:u (m + 1) 0 0
+            else if n > 0 then vstr ~pre:u 0 (n + 1) 0
+            else vstr ~pre:u 0 0 (p + 1)
       in
+      let pre = match pa with Num _ -> pre | Star | Absent -> z in
       [ Cmp (Ge, vstr ~pre m (num_or 0 mi) (num_or 0 pa)); Cmp (Lt, hi) ]
 
-let tilde (ma, mi, pa, pre) =
+let tilde ~u (ma, mi, pa, pre) =
   match ma with
   | Star | Absent -> [ Any ]
   | Num m -> (
       match mi with
-      | Star | Absent -> [ Cmp (Ge, vstr m 0 0); Cmp (Lt, vstr (m + 1) 0 0) ]
+      | Star | Absent ->
+          [ Cmp (Ge, vstr m 0 0); Cmp (Lt, vstr ~pre:u (m + 1) 0 0) ]
       | Num n ->
-          [ Cmp (Ge, vstr ~pre m n (num_or 0 pa)); Cmp (Lt, vstr m (n + 1) 0) ])
+          [
+            Cmp (Ge, vstr ~pre m n (num_or 0 pa));
+            Cmp (Lt, vstr ~pre:u m (n + 1) 0);
+          ])
 
 (* a bare or =-prefixed spec: fully given it is an equality, and each
    component left off widens it by one place *)
-let bare (ma, mi, pa, pre) =
+let bare ~z ~u (ma, mi, pa, pre) =
   match (ma, mi, pa) with
   | (Star | Absent), _, _ -> [ Any ]
   | Num m, (Star | Absent), _ ->
-      [ Cmp (Ge, vstr m 0 0); Cmp (Lt, vstr (m + 1) 0 0) ]
+      [ Cmp (Ge, vstr ~pre:z m 0 0); Cmp (Lt, vstr ~pre:u (m + 1) 0 0) ]
   | Num m, Num n, (Star | Absent) ->
-      [ Cmp (Ge, vstr m n 0); Cmp (Lt, vstr m (n + 1) 0) ]
+      [ Cmp (Ge, vstr ~pre:z m n 0); Cmp (Lt, vstr ~pre:u m (n + 1) 0) ]
   | Num m, Num n, Num p -> [ Cmp (Eq, vstr ~pre m n p) ]
 
-let ineq op (ma, mi, pa, pre) =
+let ineq ~z ~u op (ma, mi, pa, pre) =
   match ma with
   | Star | Absent -> (
       (* >x and <x admit nothing; >=x and <=x admit everything *)
       match op with
       | Ge | Le -> [ Any ]
-      | _ -> [ Cmp (Lt, "0.0.0") ])
+      | _ -> [ Cmp (Lt, vstr ~pre:u 0 0 0) ])
   | Num m -> (
       let n = num_or 0 mi and p = num_or 0 pa in
       let has_mi = match mi with Num _ -> true | _ -> false in
       let has_pa = match pa with Num _ -> true | _ -> false in
+      let lo = if has_pa then pre else z and up = if has_pa then pre else u in
       match op with
-      | Ge -> [ Cmp (Ge, vstr ~pre m n p) ]
-      | Lt -> [ Cmp (Lt, vstr ~pre m n p) ]
+      | Ge -> [ Cmp (Ge, vstr ~pre:lo m n p) ]
+      | Lt -> [ Cmp (Lt, vstr ~pre:up m n p) ]
       | Ne -> [ Cmp (Ne, vstr ~pre m n p) ]
       | Gt ->
           if has_pa then [ Cmp (Gt, vstr ~pre m n p) ]
-          else if has_mi then [ Cmp (Ge, vstr m (n + 1) 0) ]
-          else [ Cmp (Ge, vstr (m + 1) 0 0) ]
+          else if has_mi then [ Cmp (Ge, vstr ~pre:z m (n + 1) 0) ]
+          else [ Cmp (Ge, vstr ~pre:z (m + 1) 0 0) ]
       | Le ->
           if has_pa then [ Cmp (Le, vstr ~pre m n p) ]
-          else if has_mi then [ Cmp (Lt, vstr m (n + 1) 0) ]
-          else [ Cmp (Lt, vstr (m + 1) 0 0) ]
-      | Eq -> bare (ma, mi, pa, pre))
+          else if has_mi then [ Cmp (Lt, vstr ~pre:u m (n + 1) 0) ]
+          else [ Cmp (Lt, vstr ~pre:u (m + 1) 0 0) ]
+      | Eq -> bare ~z ~u (ma, mi, pa, pre))
 
 (* a hyphen range's ends widen in opposite directions: the lower end
    zero-fills and the upper end becomes an exclusive bound one place up *)
-let hyphen a b =
+let hyphen ~z ~u a b =
   let ma, mi, pa, pre = parse_spec a in
   let lo =
     match ma with
     | Star | Absent -> []
-    | Num m -> [ Cmp (Ge, vstr ~pre m (num_or 0 mi) (num_or 0 pa)) ]
+    | Num m ->
+        let pre = if pre = "" then z else pre in
+        [ Cmp (Ge, vstr ~pre m (num_or 0 mi) (num_or 0 pa)) ]
   in
   let mb, mib, pab, preb = parse_spec b in
   let hi =
@@ -256,8 +271,10 @@ let hyphen a b =
     | Star | Absent -> []
     | Num m -> (
         match (mib, pab) with
-        | (Star | Absent), _ -> [ Cmp (Lt, vstr (m + 1) 0 0) ]
-        | Num n, (Star | Absent) -> [ Cmp (Lt, vstr m (n + 1) 0) ]
+        | (Star | Absent), _ -> [ Cmp (Lt, vstr ~pre:u (m + 1) 0 0) ]
+        | Num n, (Star | Absent) -> [ Cmp (Lt, vstr ~pre:u m (n + 1) 0) ]
+        | Num n, Num p when preb = "" && u <> "" ->
+            [ Cmp (Lt, vstr ~pre:u m n (p + 1)) ]
         | Num n, Num p -> [ Cmp (Le, vstr ~pre:preb m n p) ])
   in
   match lo @ hi with [] -> [ Any ] | l -> l
@@ -265,7 +282,7 @@ let hyphen a b =
 let starts p s =
   String.length s >= String.length p && String.sub s 0 (String.length p) = p
 
-let comparators_of (tok : string) : comparator list =
+let comparators_of ~z ~u (tok : string) : comparator list =
   let drop k = String.sub tok k (String.length tok - k) in
   (* the "v" prefix is allowed on the version part after an operator too,
      so "^v1.2.3" is "^1.2.3"; without this the leading v makes the first
@@ -277,21 +294,20 @@ let comparators_of (tok : string) : comparator list =
        else s)
   in
   if tok = "" then []
-  else if starts "^" tok then caret (spec 1)
-  else if starts "~>" tok then tilde (spec 2)
-  else if starts "~" tok then tilde (spec 1)
-  else if starts ">=" tok then ineq Ge (spec 2)
-  else if starts "<=" tok then ineq Le (spec 2)
-  else if starts "!=" tok then ineq Ne (spec 2)
-  else if starts ">" tok then ineq Gt (spec 1)
-  else if starts "<" tok then ineq Lt (spec 1)
-  else if starts "==" tok then bare (spec 2)
-  else if starts "=" tok then bare (spec 1)
-  else if starts "v" tok then bare (spec 1)
-  else bare (spec 0)
+  else if starts "^" tok then caret ~z ~u (spec 1)
+  else if starts "~>" tok then tilde ~u (spec 2)
+  else if starts "~" tok then tilde ~u (spec 1)
+  else if starts ">=" tok then ineq ~z ~u Ge (spec 2)
+  else if starts "<=" tok then ineq ~z ~u Le (spec 2)
+  else if starts ">" tok then ineq ~z ~u Gt (spec 1)
+  else if starts "<" tok then ineq ~z ~u Lt (spec 1)
+  else if starts "==" tok then bare ~z ~u (spec 2)
+  else if starts "=" tok then bare ~z ~u (spec 1)
+  else if starts "v" tok then bare ~z ~u (spec 1)
+  else bare ~z ~u (spec 0)
 
 let is_op_only s =
-  List.mem s [ "^"; "~"; "~>"; ">"; ">="; "<"; "<="; "="; "=="; "!=" ]
+  List.mem s [ "^"; "~"; "~>"; ">"; ">="; "<"; "<="; "="; "==" ]
 
 let split_ws s =
   List.filter
@@ -305,12 +321,14 @@ let rec glue = function
   | a :: rest -> a :: glue rest
   | [] -> []
 
-let parse_set (s : string) : comp_set =
+let parse_set ~z ~u (s : string) : comp_set =
   match glue (split_ws s) with
   | [] -> [ Any ]
-  | [ a; "-"; b ] -> hyphen a b
+  | [ a; "-"; b ] -> hyphen ~z ~u a b
   | toks -> (
-      match List.concat_map comparators_of toks with [] -> [ Any ] | l -> l)
+      match List.concat_map (comparators_of ~z ~u) toks with
+      | [] -> [ Any ]
+      | l -> l)
 
 (* the || alternatives are the unit the prerelease rule is scoped to, so
    they stay separate all the way into the calculus *)
@@ -330,9 +348,13 @@ let split_alts (s : string) : string list =
   out := Buffer.contents buf :: !out;
   List.rev !out
 
-let parse_range (s : string) : range =
+(* include_prerelease reads the range as semver's includePrerelease does,
+   for [holds_pre] *)
+let parse_range ?(include_prerelease = false) (s : string) : range =
+  let z = if include_prerelease then "0" else "" in
   let s = String.trim s in
-  if s = "" then [ [ Any ] ] else List.map parse_set (split_alts s)
+  if s = "" then [ [ Any ] ]
+  else List.map (parse_set ~z ~u:z) (split_alts s)
 
 (* ---- the OCaml mirror of the calculus's evaluation, for the tests ---- *)
 
@@ -367,10 +389,8 @@ let holds (v : string) (rg : range) : bool =
    ordered by an ordinary comparator rather than refused by one that
    names no prerelease.  It matters only for a prerelease host -- an
    engines range is matched against the running node or npm, not against
-   a published version.  semver writes the bounds it derives with -0 (<20
-   is <20.0.0-0, ^1.2.3 is <2.0.0-0, and under includePrerelease >=20 is
-   >=20.0.0-0), which parse_range does not, so a prerelease host at such a bound can be
-   judged differently from checkEngine. *)
+   a published version -- and the range must be parsed with
+   ~include_prerelease for its -0 bounds. *)
 let holds_pre (v : string) (rg : range) : bool =
   List.exists (fun cs -> List.for_all (fun ct -> comp_match ct v) cs) rg
 

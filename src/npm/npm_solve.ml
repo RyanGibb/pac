@@ -291,8 +291,21 @@ let star_range ar ~star (t : string) (rg : Npm_version.range) :
         rg @ [ [ Npm_version.Cmp (Npm_version.Eq, l) ] ]
     | _ -> rg)
 
-let dep_range ar (d : P.dep) : Np.coq_Range =
-  xrange (star_range ar ~star:d.P.d_star d.P.d_target d.P.d_range)
+(* npm-pick-manifest takes a dist-tag's version exactly, and a tag the
+   packument lacks matches nothing (ETARGET) *)
+let tag_range ar ~tag ~star (t : string) (rg : Npm_version.range) :
+    Npm_version.range =
+  match tag with
+  | None -> star_range ar ~star t rg
+  | Some g -> (
+      match dist_tag ar t g with
+      | Some v -> [ [ Npm_version.Cmp (Npm_version.Eq, v) ] ]
+      | None -> [ [ Npm_version.Cmp (Npm_version.Lt, "0.0.0") ] ])
+
+let own_range ar (d : P.dep) =
+  tag_range ar ~tag:d.P.d_tag ~star:d.P.d_star d.P.d_target d.P.d_range
+
+let dep_range ar (d : P.dep) : Np.coq_Range = xrange (own_range ar d)
 
 let xdep ar (d : P.dep) : Np.coq_Dependency =
   {
@@ -308,7 +321,8 @@ let xpeer ar (r : P.peer) : Np.coq_PeerDependency =
   {
     Np.p_name = r.P.p_name;
     Np.p_range =
-      xrange (star_range ar ~star:r.P.p_star r.P.p_name r.P.p_range);
+      xrange
+        (tag_range ar ~tag:r.P.p_tag ~star:r.P.p_star r.P.p_name r.P.p_range);
     Np.p_optional = r.P.p_optional;
   }
 
@@ -428,7 +442,7 @@ let dep_keep st (d : P.dep) : bool =
   || st.ar.optional
      &&
      let n = d.P.d_target in
-     let own = star_range st.ar ~star:d.P.d_star n d.P.d_range in
+     let own = own_range st.ar d in
      let key = (n, Npm_version.string_of_range own) in
      match Hashtbl.find_opt st.opt_keep key with
      | Some b -> b

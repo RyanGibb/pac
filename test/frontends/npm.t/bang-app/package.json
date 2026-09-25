@@ -1,0 +1,7 @@
+{
+  "name": "bang-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "devprod": "!=1.0.0"
+  }
+}

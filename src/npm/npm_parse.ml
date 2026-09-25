@@ -10,10 +10,10 @@
      comparator sets into the calculus, which decides which real
      versions they admit; only engines ranges are evaluated in OCaml
      (Npm_version.holds_pre, in npm_solve).
-   - The dependency-spec classification below.  git, file, URL and
-     dist-tag specs, and the link:, workspace:, portal: and patch: specs
-     npa refuses, are dropped and counted rather than guessed at, though
-     npm would resolve a dist-tag from the packument.
+   - The dependency-spec classification below.  git, file and URL
+     specs, and the link:, workspace:, portal: and patch: specs npa
+     refuses, are dropped and counted rather than guessed at.  A dist-tag
+     is kept as one, for the driver to resolve from the packument.
    Deliberately *not* read: "os", "cpu" and "libc".  npm consults none
    of them when choosing a version -- npm-pick-manifest has no platform
    key at all -- and tests them only once the tree is built
@@ -56,6 +56,8 @@ type dep = {
   (* the range was written as the literal "*" or left empty, which npm
      reads apart from every other range that means the same *)
   d_star : bool;
+  (* a dist-tag, which the target's packument turns into a version *)
+  d_tag : string option;
 }
 
 type peer = {
@@ -63,6 +65,7 @@ type peer = {
   p_range : Npm_version.range;
   p_optional : bool;
   p_star : bool;
+  p_tag : string option;
 }
 
 type ver = {
@@ -119,12 +122,16 @@ let looks_like_tag s =
        (fun c -> (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c = '-')
        s
 
+(* no range semver reads, loose or not, holds a '!', so npa takes one for a
+   tag name and refuses it (EINVALIDTAGNAME) *)
 let unresolvable s =
-  has_sub s "://" || starts "$" s || starts "git+" s || starts "git:" s
+  String.contains s '!'
+  || has_sub s "://" || starts "$" s || starts "git+" s || starts "git:" s
   || starts "file:" s || starts "link:" s || starts "workspace:" s
   || starts "portal:" s || starts "patch:" s
   || (has_sub s "/" && not (starts "npm:" s))
-  || looks_like_tag s
+
+let tag_of s = if looks_like_tag s then Some s else None
 
 (* "npm:bar@^1" and "npm:@scope/bar@^1": npa splits at the first @ past
    the scope's; this takes the last, which differs only when the range
@@ -163,6 +170,7 @@ let dep_of ~dev ~optional (key, spec) : dep option =
                 d_dev = dev;
                 d_optional = optional;
                 d_star = is_star rg;
+                d_tag = tag_of rg;
               }
       | None ->
           if unresolvable spec then (
@@ -177,6 +185,7 @@ let dep_of ~dev ~optional (key, spec) : dep option =
                 d_dev = dev;
                 d_optional = optional;
                 d_star = is_star spec;
+                d_tag = tag_of spec;
               })
   | _ ->
       reject ();
@@ -201,6 +210,7 @@ let peer_of (meta : (string * Yojson.Safe.t) list) (key, spec) : peer option =
             p_range = Npm_version.parse_range spec;
             p_optional = optional;
             p_star = is_star spec;
+            p_tag = tag_of spec;
           }
   | _ ->
       reject ();
@@ -219,7 +229,7 @@ let overrides_of (j : Yojson.Safe.t) : (string * Npm_version.range) list =
     (fun (k, v) ->
       match v with
       | `String ("*" | "") -> None
-      | `String rg when not (unresolvable rg) ->
+      | `String rg when not (unresolvable rg || looks_like_tag rg) ->
           Some (k, Npm_version.parse_range rg)
       | _ ->
           reject ();
@@ -236,7 +246,7 @@ let is_deprecated = function
    the object, so a sub-key such as "yarn" is not a requirement at all *)
 let engine_of (j : Yojson.Safe.t) (k : string) : Npm_version.range option =
   match member k (member "engines" j) with
-  | `String rg -> Some (Npm_version.parse_range rg)
+  | `String rg -> Some (Npm_version.parse_range ~include_prerelease:true rg)
   | _ -> None
 
 let ver_of ~(root : bool) (vers : string) (j : Yojson.Safe.t) : ver option =
@@ -271,16 +281,21 @@ let ver_of ~(root : bool) (vers : string) (j : Yojson.Safe.t) : ver option =
           v_name = (match member "name" j with `String n -> n | _ -> "");
           v_vers = vers;
           v_deps =
-            (* an optionalDependencies entry overrides a dependencies
-               entry of the same name, so the plain dependency goes and the
-               optional one stands *)
-            opts
-            @ List.filter
-                (fun d -> not (List.mem d.d_dir optKeys))
-                (deps_of ~dev:false ~optional:false "dependencies"
-                @
-                if root then deps_of ~dev:true ~optional:false "devDependencies"
-                else []);
+            (* arborist loads dependencies, then optionalDependencies,
+               then a root's devDependencies, and a later entry of a name
+               replaces the earlier (Node _loadDeps) *)
+            (let devs =
+               if root then deps_of ~dev:true ~optional:false "devDependencies"
+               else []
+             in
+             let devKeys = List.map (fun d -> d.d_dir) devs in
+             devs
+             @ List.filter
+                 (fun d -> not (List.mem d.d_dir devKeys))
+                 (opts
+                 @ List.filter
+                     (fun d -> not (List.mem d.d_dir optKeys))
+                     (deps_of ~dev:false ~optional:false "dependencies")));
           v_peers = peers;
           v_ovr = (if root then overrides_of j else []);
           v_deprecated = dep;
@@ -375,22 +390,27 @@ let uri_safe =
       || (c >= '0' && c <= '9')
       || String.contains "-_.!~*'()" c)
 
-(* close to validate-npm-package-name's validForOldPackages, but it
-   refuses a name over 214 characters, which that only warns about, and
-   accepts a leading -, node_modules, favicon.ico and a scoped name whose
-   package part starts with a period, which that refuses *)
+(* validate-npm-package-name 7.0.2's validForOldPackages, which npa
+   tests: its errors, and none of its warnings *)
 let name_ok n =
   n <> ""
-  && String.length n <= 214
   && (not (starts "." n))
+  && (not (starts "-" n))
   && (not (starts "_" n))
+  && String.trim n = n
+  && (not
+        (List.mem (String.lowercase_ascii n) [ "node_modules"; "favicon.ico" ]))
   && (uri_safe n
      ||
      match String.index_opt n '/' with
      | Some i when starts "@" n ->
+         let pkg = String.sub n (i + 1) (String.length n - i - 1) in
          i > 1
+         && (not (String.contains pkg '/'))
+         && pkg <> ""
+         && (not (starts "." pkg))
          && uri_safe (String.sub n 1 (i - 1))
-         && uri_safe (String.sub n (i + 1) (String.length n - i - 1))
+         && uri_safe pkg
      | _ -> false)
 
 (* The key and the raw spec: the name ends at the first @ past a scope's
@@ -414,7 +434,7 @@ let spec_of (arg : string) : (string * string) option =
     | Some (t, rg)
       when name_ok t
            && (not (starts "npm:" (String.lowercase_ascii rg)))
-           && not (unresolvable rg) ->
+           && not (unresolvable rg || looks_like_tag rg) ->
         Some (name_part, raw)
     | _ -> None
   else if is_url raw || is_path raw || has_sub raw "/" then None

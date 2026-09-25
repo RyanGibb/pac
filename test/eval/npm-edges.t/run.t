@@ -34,3 +34,20 @@ selected by the peer edge moved before it, not by a dependency.
 
   $ python3 ../../../eval/npm/edges.py chain-app chain-app.lock ours norm --peer-parent | sed 's/  */ /g'
   chain-app nodes ours=4 npm=4 agree=4 ours-only=0 npm-only=0 | edges ours=3 npm=3 agree=3 ours-only=0 npm-only=0 #4,4,4,3,3,3
+
+verdict.py tests npm's edge against the range npm resolved it from: the
+root's flat override for the name where there is one, and otherwise the
+requirer's entry, a root's devDependencies entry over its dependencies one,
+as arborist loads the later over the earlier.
+
+  $ cat > m.json <<'EOF'
+  > {"dependencies": {"d": "^1", "o": "^1"}, "devDependencies": {"d": "^2"},
+  >  "overrides": {"o": "3.0.0", "s": "*"}}
+  > EOF
+  $ SEMVER=unused python3 -c '
+  > import json, sys; sys.path.insert(0, "../../../eval/npm"); import verdict as v
+  > m = json.load(open("m.json"))
+  > print(v.wanted(m, "d", m, True), v.wanted(m, "o", m, True), v.wanted(m, "d", m, False))
+  > print(v.wanted({"dependencies": {"s": "^2"}}, "s", m, False))'
+  ^2 3.0.0 ^1
+  ^2

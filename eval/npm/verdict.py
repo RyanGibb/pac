@@ -7,9 +7,9 @@ ranked it second -- or one our instance forbids outright.  For an npm-only
 edge (R wants directory d, npm resolved it to V) that is two tests:
 
   range   does V satisfy the range R's manifest declares for d?  The check
-          runs against npm's own bundled semver, and npm usually chose V so
-          it satisfies; it does not when npm keeps an invalid optional peer
-          or when a root override, which this test does not read, forces V.
+          runs against npm's own bundled semver, against the root's flat
+          override for d where there is one, and npm usually chose V so
+          it satisfies; it does not when npm keeps an invalid optional peer.
           Otherwise a failure means our reading of the requirer's
           declaration differs from npm's -- an alias or an override read
           differently, or the edge attributed to the wrong requirer -- and
@@ -142,10 +142,12 @@ def listed(m, field, host):
     return not pos or host in pos
 
 
-def declared(m, d):
-    """the range the manifest declares for directory d"""
-    for field in ("optionalDependencies", "dependencies", "peerDependencies",
-                  "devDependencies"):
+def declared(m, d, root=False):
+    """the range the manifest declares for directory d.  arborist loads
+    peers, then dependencies, then optionalDependencies, then a root's
+    devDependencies, and a later entry of a name replaces the earlier"""
+    fields = ("optionalDependencies", "dependencies", "peerDependencies")
+    for field in (("devDependencies",) if root else ()) + fields:
         spec = m.get(field, {}).get(d)
         if isinstance(spec, str):
             if spec.startswith("npm:"):
@@ -155,6 +157,15 @@ def declared(m, d):
                 return body[i + 1:] if i >= 0 else "*"
             return spec
     return None
+
+
+def wanted(m, d, root, is_root):
+    """the range npm resolves d's edge from m against: a flat override in
+    the root's package.json, keyed by the edge's name, else m's own"""
+    o = (root or {}).get("overrides", {}).get(d)
+    if isinstance(o, str) and o not in ("", "*"):
+        return o
+    return declared(m, d, is_root)
 
 
 def satisfies(pairs):
@@ -192,9 +203,10 @@ def main():
     with open(prefix + ".edges.npmonly") as f:
         for line in f:
             rn, rv, d, vn, vv = line.rstrip("\n").split("\t")
-            rm = root if (rn, rv) == ("", "") else snap.manifest(rn, rv)
+            is_root = (rn, rv) == ("", "")
+            rm = root if is_root else snap.manifest(rn, rv)
             vm = snap.manifest(vn, vv)
-            rg = declared(rm, d) if rm else None
+            rg = wanted(rm, d, root, is_root) if rm else None
             eng = (vm or {}).get("engines", {})
             # the old array form, ["node >= 0.4"], is no requirement to
             # checkEngine, which reads engines.node and engines.npm alone

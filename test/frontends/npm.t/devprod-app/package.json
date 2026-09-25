@@ -1,0 +1,10 @@
+{
+  "name": "devprod-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "devprod": "^1"
+  },
+  "devDependencies": {
+    "devprod": "^2"
+  }
+}

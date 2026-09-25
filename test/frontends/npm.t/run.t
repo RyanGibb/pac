@@ -649,6 +649,56 @@ refused rather than dropped.
   plugin@next: no such dist-tag
   [1]
 
+A name validate-npm-package-name refuses is not a registry spec either,
+and npm, which reads it as a nameless spec, fails too:
+
+  $ ../../../src/main.exe npm --offline --cache . node_modules
+  node_modules: not a registry spec (name, name@range, name@tag, key@npm:name@range)
+  [1]
+  $ ../../../src/main.exe npm --offline --cache . @scope/.x
+  @scope/.x: not a registry spec (name, name@range, name@tag, key@npm:name@range)
+  [1]
+
+arborist loads a root's devDependencies after its dependencies, and the
+later entry of a name replaces the earlier, so devprod-app, which asks for
+devprod ^1 in dependencies and ^2 in devDependencies, gets 2.0.0:
+
+  $ ../../../src/main.exe npm --offline --cache . ./devprod-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root devprod-app 1.0.0
+  packages (2):
+    devprod 2.0.0
+    devprod-app 1.0.0
+  node_modules edges: 1
+  cone: 2 packages, 3 versions, 0 packuments fetched
+  encoded solution: 3 core nodes (6 lookups)
+
+No range semver reads holds a '!', so npa takes !=1.0.0 for a tag name and
+refuses it (EINVALIDTAGNAME); the dependency is dropped and counted, as
+other specs no registry lookup resolves are:
+
+  $ ../../../src/main.exe npm --offline --cache . ./bang-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root bang-app 1.0.0
+  packages (1):
+    bang-app 1.0.0
+  node_modules edges: 0
+  cone: 1 packages, 1 versions, 0 packuments fetched
+  parser dropped 1 declarations
+  encoded solution: 1 core nodes (2 lookups)
+
+A dist-tag is resolved from the target's packument, to the tagged version
+exactly: devprod's old is 1.0.0.  A tag the packument lacks matches
+nothing, so alpha, whose optional entry asks for nosuch, is abandoned:
+
+  $ ../../../src/main.exe npm --offline --cache . ./tag-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root tag-app 1.0.0
+  packages (2):
+    devprod 1.0.0
+    tag-app 1.0.0
+  node_modules edges: 1
+  cone: 3 packages, 4 versions, 0 packuments fetched
+  optionalDependencies: 1 entries, 1 dropped
+  encoded solution: 3 core nodes (6 lookups)
+
 The cases from here to the fetch race pin where we deliberately differ
 from npm; each states npm's answer, taken from npm 11.17.0 over the same
 fixtures.

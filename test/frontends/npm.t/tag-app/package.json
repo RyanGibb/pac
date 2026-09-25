@@ -1,0 +1,10 @@
+{
+  "name": "tag-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "devprod": "old"
+  },
+  "optionalDependencies": {
+    "alpha": "nosuch"
+  }
+}
