@@ -34,7 +34,7 @@ let debian_run debug order no_recs no_strict native query path =
       List.iter (fun (n, b, v) -> Printf.printf "%s:%s %s\n" n b v) pkgs;
       Printf.printf "parse %.2fs\nsolve %.2fs\n" t_parse t_solve;
       (* after the timings: eval/debian/valid.sh reads every line above them
-         as a row of the answer *)
+         as part of the answer *)
       report_dropped ();
       0
 

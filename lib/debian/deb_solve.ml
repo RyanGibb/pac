@@ -64,10 +64,10 @@ module Make (AP : Tables.ARCH) = struct
     fibre tables p ~none:[] (fun stz ->
         List.concat_map (List.map DMA.aname) (deps_of tables stz))
 
-  (* The base names p's conflicts can land on: its own, carrying the implicit
+  (* The base names p's conflicts can land on: its own, bearing the implicit
      group exclusion, each negative's, and the names of their declared
      providers. *)
-  let conf_read tables p =
+  let conflict_names tables p =
     let names =
       fst (fst p)
       :: fibre tables p ~none:[] (fun stz -> List.map DMA.aname stz.nconfs)
@@ -81,7 +81,7 @@ module Make (AP : Tables.ARCH) = struct
      provider of (m, x) is either a group member of m (reals, implicit group
      / explicit-qualifier / foreign / :any provides) or a declared provider
      of m. *)
-  let sel_preimages tables (mn : string * DMA.coq_NameArch) =
+  let sel_preimages_uncached tables (mn : string * DMA.coq_NameArch) =
     let m = fst mn in
     let r_ma = ma_group_of_names tables [ m ] in
     let pi_decl = ma_prov_of_names tables [ m ] in
@@ -98,11 +98,11 @@ module Make (AP : Tables.ARCH) = struct
     match Hashtbl.find_opt tables.sel_cache mn with
     | Some r -> r
     | None ->
-        let r = sel_preimages tables mn in
+        let r = sel_preimages_uncached tables mn in
         Hashtbl.add tables.sel_cache mn r;
         r
 
-  let vers_sparse tables (n' : DMA.Deb.Name.t) =
+  let versions tables (n' : DMA.Deb.Name.t) =
     match n' with
     | DMA.Deb.Name.Orig (n, DMA.QAArch b) ->
         DMA.Deb.T.VSet.add DMA.Deb.Version.Bot
@@ -112,7 +112,7 @@ module Make (AP : Tables.ARCH) = struct
                 (n, DMA.QAArch b)))
     | DMA.Deb.Name.Orig _ ->
         (* embedPkg introduces only QAArch names, so an explicit-qualifier,
-           :any or group pseudo-name carries absence alone *)
+           :any or group pseudo-name has absence alone *)
         DMA.Deb.T.VSet.singleton DMA.Deb.Version.Bot
     | DMA.Deb.Name.Disjunct aset -> DMA.Deb.versionsDisj aset
     | DMA.Deb.Name.Soft aset -> DMA.Deb.versionsSoft aset
@@ -120,11 +120,11 @@ module Make (AP : Tables.ARCH) = struct
         let r, pi = sel_preimages tables (fst a) in
         DMA.Deb.us r pi a
 
-  let dependees_sparse tables (s : DMA.Deb.T.Pkg.t) =
+  let dependees tables (s : DMA.Deb.T.Pkg.t) =
     match s with
     | DMA.Deb.Name.Orig (n, DMA.QAArch b), DMA.Deb.Version.Orig v ->
         let p = ((n, b), v) in
-        let m = atom_names_of tables p @ conf_read tables p in
+        let m = atom_names_of tables p @ conflict_names tables p in
         let r_ma = ma_group_of_names tables m in
         (* p itself joins the reduceProv carrier so its implicit provides
            (group pseudo-name, foreign/:any names) are visible to matchb *)
@@ -178,7 +178,7 @@ module Make (AP : Tables.ARCH) = struct
     pimp : bool;
     pnat : bool;
     pprio : int; (* apt's VerPriority enum: the smaller rank is preferred *)
-    pname : string;
+    pkgname : string;
   }
 
   (* apt sorts the preferred candidate first and PubGrub decides the greatest,
@@ -194,7 +194,7 @@ module Make (AP : Tables.ARCH) = struct
         if c <> 0 then c
         else
           let c = Int.compare b.pprio a.pprio in
-          if c <> 0 then c else String.compare b.pname a.pname
+          if c <> 0 then c else String.compare b.pkgname a.pkgname
 
   let pref_of_pkg tables (p : DMA.Pkg.t) =
     let (n, b), _ = p in
@@ -206,7 +206,7 @@ module Make (AP : Tables.ARCH) = struct
           pimp = stz.nimp;
           pnat = nat;
           pprio = stz.nprio;
-          pname = n;
+          pkgname = n;
         }
     | None ->
         {
@@ -214,7 +214,7 @@ module Make (AP : Tables.ARCH) = struct
           pimp = false;
           pnat = nat;
           pprio = DF.priority_lowest;
-          pname = n;
+          pkgname = n;
         }
 
   (* A Ref names the provider package it came from, so its keys are that
@@ -229,7 +229,7 @@ module Make (AP : Tables.ARCH) = struct
           pimp = false;
           pnat = is_native x;
           pprio = DF.priority_lowest;
-          pname = n;
+          pkgname = n;
         }
 
   (* The candidate order reads the tables the candidates were introduced
@@ -251,13 +251,13 @@ module Make (AP : Tables.ARCH) = struct
          here: dpkg-newest for real versions, leftmost alternative by clause
          position, a real package above any provider claiming its name, and apt's
          candidate order among the providers.  The calculus only makes the
-         real/provided split legible -- RefReal carries no name, so it is the
+         real/provided split legible -- RefReal has no name, so it is the
          one candidate that cannot be a provider -- and says nothing about which
          to try first.
 
          Position is the whole of the alternative order because apt's sort is
          per alternative: TranslateOrGroup (apt-pkg/solver3.cc) sorts each
-         alternative's targets among themselves and leaves the alternatives in
+         alternative's solutions among themselves and leaves the alternatives in
          the field's order, and Solve takes the first solution not already
          decided.  So pref only ever separates the providers of one atom.
 
@@ -310,7 +310,7 @@ module Make (AP : Tables.ARCH) = struct
     end
 
     (* The clause position is known only where the name is: a Disjunct or Soft
-       name carries the clause its candidates are alternatives of, and no other
+       name holds the clause its candidates are alternatives of, and no other
        name has Version.Atom candidates at all. *)
     let tag (n' : DMA.Deb.Name.t) (v : DMA.Deb.Version.t) : PVersion.t =
       match (n', v) with
@@ -328,13 +328,13 @@ module Make (AP : Tables.ARCH) = struct
             (fun a b -> if PVersion.compare b a > 0 then b else a)
             c cs
 
-    (* Does the partial solution already carry [tn] at one of [tvs]?  An
+    (* Has the partial solution already assigned [tn] one of [tvs]?  An
        entailed selector does not: it says only that some provider will be
        chosen, and apt, whose item for it is still pending, installs a
        clause's leftmost alternative rather than wait for it.  Nor does a
        range that still admits ⊥, which is what a conflict leaves a name,
        not a need for it. *)
-    let carried_at ~assigned tn tvs =
+    let assigned_among ~assigned tn tvs =
       match assigned tn with
       | PG.Unselected -> false
       | PG.Decided u -> List.exists (fun v -> PVersion.compare u v = 0) tvs
@@ -345,11 +345,12 @@ module Make (AP : Tables.ARCH) = struct
               (not (PG.Ranges.contains (tag tn DMA.Deb.Version.Bot) r))
               && List.exists (fun v -> PG.Ranges.contains v r) tvs)
 
-    (* The back edge a selector candidate would add: dependees sends Ref m w
-       to (Orig m, Orig w) and RefReal w to (Orig (aname a), Orig w). *)
-    let sel_carried ~assigned a (pv : PVersion.t) =
+    (* The back edge a selector candidate would add, already assigned:
+       dependees sends Ref m w to (Orig m, Orig w) and RefReal w to
+       (Orig (aname a), Orig w). *)
+    let sel_assigned ~assigned a (pv : PVersion.t) =
       let at m w =
-        carried_at ~assigned (DMA.Deb.Name.Orig m)
+        assigned_among ~assigned (DMA.Deb.Name.Orig m)
           [ tag (DMA.Deb.Name.Orig m) (DMA.Deb.Version.Orig w) ]
       in
       match pv.PVersion.v with
@@ -367,7 +368,7 @@ module Make (AP : Tables.ARCH) = struct
           Hashtbl.add cands_tbl n l;
           l
 
-    let targets n (v : DMA.Deb.Version.t) =
+    let dependees_of n (v : DMA.Deb.Version.t) =
       DMA.Deb.T.DependeesSet.elements (I.dependencies (n, v))
       |> List.map (fun (tn, tvs) ->
           (tn, List.map (tag tn) (DMA.Deb.T.VSet.elements tvs)))
@@ -379,24 +380,24 @@ module Make (AP : Tables.ARCH) = struct
         (cands_of n)
 
     (* the candidates of a clause name the partial solution already
-       discharges: an alternative whose target is carried, or which resolves
-       through a selector one of whose providers is.  Non-empty is apt's
+       discharges: an alternative whose target it holds, or which resolves
+       through a selector one of whose providers it holds.  Non-empty is apt's
        ELIDED, a popped clause some solution of which is true. *)
     let free_of ~assigned n cands =
-      let alt_carried (pv : PVersion.t) =
+      let alt_assigned (pv : PVersion.t) =
         List.exists
           (fun (tn, tvs) ->
-            carried_at ~assigned tn tvs
+            assigned_among ~assigned tn tvs
             ||
             match tn with
-            | DMA.Deb.Name.Selector a -> List.exists (sel_carried ~assigned a) tvs
+            | DMA.Deb.Name.Selector a -> List.exists (sel_assigned ~assigned a) tvs
             | _ -> false)
-          (targets n pv.PVersion.v)
+          (dependees_of n pv.PVersion.v)
       in
       match n with
-      | DMA.Deb.Name.Selector a -> List.filter (sel_carried ~assigned a) cands
+      | DMA.Deb.Name.Selector a -> List.filter (sel_assigned ~assigned a) cands
       | DMA.Deb.Name.Disjunct _ | DMA.Deb.Name.Soft _ ->
-          List.filter alt_carried cands
+          List.filter alt_assigned cands
       | _ -> []
 
     module Replay = Order.Make (struct
@@ -407,7 +408,7 @@ module Make (AP : Tables.ARCH) = struct
       let tables = I.tables
       let tag = tag
       let cands_of = cands_of
-      let targets = targets
+      let dependees_of = dependees_of
       let has_ref = has_ref
       let free_of = free_of
       let greatest = greatest
@@ -416,13 +417,13 @@ module Make (AP : Tables.ARCH) = struct
     let dependencies n (pv : PVersion.t) =
       List.map
         (fun (tn, tvs) -> (tn, PG.Ranges.of_list tvs))
-        (targets n pv.PVersion.v)
+        (dependees_of n pv.PVersion.v)
 
     (* apt never resolves a clause one of whose alternatives is already
        satisfied: it leaves the clause alone and installs nothing for it.
        PubGrub has to decide the disjunct either way, so the nearest thing is
        to decide it at no cost -- an alternative, or a provider of one, the
-       solution already carries.  Where nothing is carried, and for every
+       solution already holds.  Where it holds none, and for every
        other name, PVersion.compare's answer stands unchanged; the tool order
        first narrows the candidates to those apt would consider. *)
     let choose ~filter ~assigned n cands =
@@ -535,8 +536,8 @@ module Make (AP : Tables.ARCH) = struct
     in
     let module S = Search (struct
       let tables = tables
-      let versions n' = timed (vname n') (vers_sparse tables) n'
-      let dependencies = timed "dependees" (dependees_sparse tables)
+      let versions n' = timed (vname n') (versions tables) n'
+      let dependencies = timed "dependees" (dependees tables)
     end) in
     let r =
       S.run ~debug ~order

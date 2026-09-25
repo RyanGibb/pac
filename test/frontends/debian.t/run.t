@@ -120,7 +120,7 @@ orddep, and the recommendation is then already met:
   orddep:amd64 1
   ordy:amd64 1
 
-A selector the solution is committed to is not yet a package it carries.
+A selector the solution is committed to is not yet a package it installs.
 selcommon depends on selbase, which selutils provides, so its selector is
 entailed before seldep's selutils | selbase is decided; apt reaches seldep's
 clause first, takes selutils, and selutils then provides selbase:
@@ -180,7 +180,7 @@ its kquick | kquick-gles is unit, so kquick is enqueued behind kcomp rather
 than left as a work item for after the queue.  kquick's Recommends (krq ->
 ksysd, providing ksysusers) is then pushed before that of kcore, five
 dependencies deep (krc: kadduser | ksysusers), and krc finds ksysusers
-carried:
+installed:
 
   $ ../../../bin/main.exe debian --order=tool --native amd64 kgoal Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
   kc1:amd64 1
@@ -228,7 +228,7 @@ the package's own name, except through the every-architecture path a
 Multi-Arch: foreign package's Provides take, so mself, foreign, is two
 solutions of ma's Recommends mself | mnone, and nself, not foreign, one.
 A two-solution item ranks behind mb's one-solution mc, which pops first and
-brings in my, and mself's mx | my then finds my carried; the one-solution
+brings in my, and mself's mx | my then finds my installed; the one-solution
 items tie, and na's, pushed first, pops first:
 
   $ ../../../bin/main.exe debian --order=tool --native amd64 mgoal Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
@@ -329,7 +329,7 @@ A clause with an obsolete solution is worked on after every other clause of
 its eagerness that is not unit (Work::operator<, the SatisfyObsolete group): obsp's source obssrc also
 builds obsnew at the newer source version 2, so obsgoal's obsp | obsq waits
 behind its obsq | obsr, which takes obsq, and obsp | obsq then finds obsq
-carried.  obsgoal2 is the same with obsx, which nothing makes obsolete, and
+installed.  obsgoal2 is the same with obsx, which nothing makes obsolete, and
 its first clause goes first:
 
   $ ../../../bin/main.exe debian --order=tool --native amd64 obsgoal Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'

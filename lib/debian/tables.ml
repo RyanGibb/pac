@@ -63,7 +63,7 @@ module Make (AP : ARCH) = struct
   (* Normalized stanza: apt rewrites arch:all packages to the native arch
      and downgrades all+same to no (arch:all content is arch-invariant).
      Its Depends and Recommends clauses are still the raw field text, and
-     are mangled once, on the first sub-instance that reads them. *)
+     are parsed once, on the first sub-instance that reads them. *)
   type nstanza = {
     npkg : DMA.Pkg.t;
     ncls : DMA.coq_MAClass;
@@ -153,7 +153,7 @@ module Make (AP : ARCH) = struct
 
   let stanza tables p = Hashtbl.find_opt tables.stanza_table p
 
-  let mangle fields =
+  let parse_relations fields =
     List.map (List.map matom_of) (DF.parse_depends_fields fields)
 
   (* the alternative's position in the clause being decided, which is what
@@ -283,7 +283,7 @@ module Make (AP : ARCH) = struct
     match stz.nclauses with
     | Some c -> c
     | None ->
-        let c = (mangle stz.raw_deps, mangle stz.raw_recs) in
+        let c = (parse_relations stz.raw_deps, parse_relations stz.raw_recs) in
         stz.nclauses <- Some c;
         tables.n_clauses_parsed <- tables.n_clauses_parsed + 1;
         c
@@ -293,7 +293,7 @@ module Make (AP : ARCH) = struct
 
   (* One package's clauses in control-file order, Depends before Recommends,
      each with its mangled alternatives and the synthetic name a multi-way
-     clause would carry: the order apt's Propagate walks the watches of a
+     clause would have: the order apt's Propagate walks the watches of a
      package that just became true, which is the order its work items enter
      the heap.  A one-alternative Depends has no disjunct package: its work
      item, when it has one, is the alternative's selector, which the caller
@@ -327,8 +327,8 @@ module Make (AP : ARCH) = struct
         Hashtbl.add tables.oc_cache p r;
         r
 
-  (* Does version [w] satisfy the atom's formula?  Mangled formulas compare
-     raw Debian versions, so dpkg's comparison decides. *)
+  (* Does version [w] satisfy the atom's formula?  Formulas compare raw
+     Debian versions, so dpkg's comparison decides. *)
   let rec sat f w =
     match f with
     | DMA.Deb.Ver.FTop -> true

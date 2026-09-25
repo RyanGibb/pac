@@ -13,7 +13,7 @@ type t = [ `Tool | `Pubgrub ]
 type kind =
   (* a real package name: apt enqueues the package var *)
   | Package
-  (* a clause package whose Clause carries eager = true *)
+  (* a clause package whose Clause has eager = true *)
   | Hard
   (* an optional (Recommends) clause package *)
   | Soft
@@ -61,8 +61,8 @@ module type DRIVER = sig
      still be discharged by, live under the partial solution and over the
      candidates-only instance respectively (apt's static count also takes
      in the versions Strict-Pinning rejected) *)
-  val atom_count : state -> assigned -> atom -> int
-  val atom_static : state -> atom -> int
+  val solutions : state -> assigned -> atom -> int
+  val static_solutions : state -> atom -> int
 
   (* some package the alternative can be discharged by is obsolete to apt
      (Obsolete, solver3.cc:890-925): a binary of its source comes from a
@@ -136,7 +136,7 @@ end
 module Work_heap (D : DRIVER) = struct
   (* A work item of apt's Solver::Work (solver3.cc): size is the live
      solution count frozen at push, nsol the clause's static solution count,
-     level the wide-decision depth at push.  eager is not carried because it
+     level the wide-decision depth at push.  eager is not stored because it
      is [not wopt]: the Clause constructor (solver3.h) sets eager(not
      optional), so every hard clause outranks every Recommends. *)
   type witem = {
@@ -417,7 +417,7 @@ module Work_heap (D : DRIVER) = struct
     hmake t
 
   let static_nsol_atoms t atoms =
-    List.fold_left (fun acc a -> acc + D.atom_static t.d a) 0 atoms
+    List.fold_left (fun acc a -> acc + D.static_solutions t.d a) 0 atoms
 
   let static_nsol t n =
     match Hashtbl.find_opt t.nsol_tbl n with
@@ -436,7 +436,7 @@ module Work_heap (D : DRIVER) = struct
     let rec go acc = function
       | [] -> acc
       | _ when acc >= 2 -> acc
-      | a :: rest -> go (acc + D.atom_count t.d assigned a) rest
+      | a :: rest -> go (acc + D.solutions t.d assigned a) rest
     in
     go 0 atoms
 
@@ -895,7 +895,7 @@ module Work_heap (D : DRIVER) = struct
     | _ -> Option.map fst cand
 
   (* apt's ELIDED and a dead optional item open no level; PubGrub still has
-     to decide the name, to the carried alternative or to its escape *)
+     to decide the name, to the alternative it holds or to its escape *)
   let take_item t ~assigned w =
     let note what =
       dbg "%s (%d/%d@%d) %a [%a]@." what w.wsize w.wnsol w.wlevel D.pp_name
@@ -940,7 +940,7 @@ module Work_heap (D : DRIVER) = struct
 
   (* PubGrub's [next] hook: sync the trail against the partial solution
      (replaying any backjump as Solver::Pop), push the waves of the newly
-     standing decisions -- their unit clauses' targets into apt's
+     standing decisions -- their unit clauses' solutions into apt's
      propagation queue, the rest onto the heap -- then drain the queue
      before answering from the heap.  Tier 0 is apt's Enqueues -- hard
      clauses down to one live solution, and an optional clause with none
@@ -1012,7 +1012,7 @@ module type SEARCH = sig
   val tag : T.DMA.Deb.Name.t -> T.DMA.Deb.Version.t -> PVersion.t
   val cands_of : T.DMA.Deb.Name.t -> PVersion.t list
 
-  val targets :
+  val dependees_of :
     T.DMA.Deb.Name.t ->
     T.DMA.Deb.Version.t ->
     (T.DMA.Deb.Name.t * PVersion.t list) list
@@ -1193,7 +1193,7 @@ module Make (S : SEARCH) = struct
      propagates, so a solution reading it stays live until then whatever
      the partial solution says of the versions.  With no partial solution,
      the count is over the whole instance, where nothing is rejected yet. *)
-  let atom_pkgs st (assigned : assigned option) a =
+  let solutions st (assigned : assigned option) a =
     let pkgvar = deferred st a in
     let live ~pkgvar m w =
       match assigned with None -> true | Some _ -> live_at st ~pkgvar m w
@@ -1293,13 +1293,13 @@ module Make (S : SEARCH) = struct
   (* what installing p assigns at once through its own Conflicts and Breaks:
      the versions its negatives exclude (the negative clause's solutions,
      rejected as its reason comes true) *)
-  let conflicts st ~assigned (((pname, _), v) as p : DMA.Pkg.t) =
+  let conflicts st ~assigned (((pkgname, _), v) as p : DMA.Pkg.t) =
     let out = ref [] in
     List.iter
       (fun (tn, tvs) ->
         if List.exists is_bot tvs then
           match tn with
-          | DMA.Deb.Name.Orig (m, DMA.QAArch mb) when not (String.equal m pname)
+          | DMA.Deb.Name.Orig (m, DMA.QAArch mb) when not (String.equal m pkgname)
             ->
               List.iter
                 (fun ((c : PVersion.t), w) ->
@@ -1307,7 +1307,7 @@ module Make (S : SEARCH) = struct
                   then reject_ver st ~assigned out ((m, mb), w))
                 (orig_versions tn)
           | _ -> ())
-      (targets (orig_of p) (DMA.Deb.Version.Orig v));
+      (dependees_of (orig_of p) (DMA.Deb.Version.Orig v));
     List.rev !out
 
   (* The declarer's atom names p, or a name p provides, at p's architecture
@@ -1316,14 +1316,14 @@ module Make (S : SEARCH) = struct
      version, or of the version p provides the name at (IsSatisfied over a
      PrvIterator: an unversioned Provides never meets a versioned
      negative). *)
-  let reaches (((pname, pb), v) as p : DMA.Pkg.t) (a : DMA.Atom.t) n =
+  let reaches (((pkgname, pb), v) as p : DMA.Pkg.t) (a : DMA.Atom.t) n =
     String.equal (DMA.aname a) n
     && (match DMA.aqual a with
       | DMA.QUnq | DMA.QAny -> true
       | DMA.QNative -> String.equal APx.native pb
       | DMA.QArch c -> String.equal c pb)
     &&
-    if String.equal n pname then sat (DMA.aform a) v
+    if String.equal n pkgname then sat (DMA.aform a) v
     else
       match stanza p with
       | Some stz -> provides_matching stz n (DMA.aform a) <> []
@@ -1337,7 +1337,7 @@ module Make (S : SEARCH) = struct
      apt-pkg/pkgcache.cc:757-790), and a declarer that is not MA:same
      already conflicts with its whole group implicitly (AddImplicitDepends,
      pkgcachegen.cc), so skipping every member changes no answer. *)
-  let conflicted_by st ~assigned (((pname, _), _) as p : DMA.Pkg.t) =
+  let conflicted_by st ~assigned (((pkgname, _), _) as p : DMA.Pkg.t) =
     let rev_conf = Lazy.force tables.rev_conf_table in
     let seen = Hashtbl.create 16 in
     let out = ref [] in
@@ -1349,7 +1349,7 @@ module Make (S : SEARCH) = struct
             let qk = fst q in
             if
               (not (Hashtbl.mem seen qk))
-              && (not (String.equal (fst qk) pname))
+              && (not (String.equal (fst qk) pkgname))
               && not (Hashtbl.mem st.pdead qk)
             then (
               Hashtbl.replace seen qk ();
@@ -1385,13 +1385,13 @@ module Make (S : SEARCH) = struct
            (fun (a : DMA.Deb.Atom.t) ->
              List.mem (fst (fst a)) names && deferred st a = pkgvar)
            atoms
-      && List.exists (fun a -> atom_pkgs st None a > 0) atoms
+      && List.exists (fun a -> solutions st None a > 0) atoms
     in
     let fire rk inst ((opt, g, atoms) as c) =
       if watched c then
         let live =
           List.fold_left
-            (fun acc a -> acc + atom_pkgs st (Some assigned) a)
+            (fun acc a -> acc + solutions st (Some assigned) a)
             0 atoms
         in
         if live = 0 then (if not inst then reject_pkg st ~assigned out rk)
@@ -1438,7 +1438,7 @@ module Make (S : SEARCH) = struct
      atoms share their one package var and a deferred atom shares nothing
      with a versioned one.  The folded clause is not gone: Discover
      registers a version's dependencies afresh unless a clause of the
-     package carries the same one, and the folded clause carries the
+     package has the same one, and the folded clause has the
      earlier's, so the second half comes back on the version var with its
      own solutions, propagated as the version pops, right after the
      package's own wave. *)
@@ -1449,7 +1449,7 @@ module Make (S : SEARCH) = struct
   let overlap st a a' =
     match (deferred st a, deferred st a') with
     | true, true -> true
-    | false, false -> atom_pkgs st None (conj a a') > 0
+    | false, false -> solutions st None (conj a a') > 0
     | _ -> false
 
   let wave st p =
@@ -1529,7 +1529,7 @@ module Make (S : SEARCH) = struct
     | [ a ] -> Some (one a)
     | _ -> (
         match
-          List.filter (fun a -> atom_pkgs st (Some assigned) a > 0) atoms
+          List.filter (fun a -> solutions st (Some assigned) a > 0) atoms
         with
         | [ a ] -> Some (one a)
         | _ -> None)
@@ -1590,8 +1590,8 @@ module Make (S : SEARCH) = struct
           Some [ a ]
       | _ -> None
 
-    let atom_count st assigned a = atom_pkgs st (Some assigned) a
-    let atom_static st a = atom_pkgs st None a
+    let static_solutions st a = solutions st None a
+    let solutions st assigned a = solutions st (Some assigned) a
 
     (* apt tests each solution's package, not the version the solution
        names; under Strict-Pinning the one is the other's only version *)
@@ -1715,7 +1715,7 @@ module Make (S : SEARCH) = struct
     keep
       (fun (pv : PVersion.t) ->
         match (n, pv.PVersion.v) with
-        | _, DMA.Deb.Version.Atom a -> atom_pkgs st (Some assigned) a > 0
+        | _, DMA.Deb.Version.Atom a -> solutions st (Some assigned) a > 0
         | DMA.Deb.Name.Selector a, DMA.Deb.Version.RefReal w ->
             live_pkg (fst a) w
         | _, DMA.Deb.Version.Ref (m, w) -> live_pkg m w

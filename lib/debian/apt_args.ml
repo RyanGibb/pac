@@ -18,7 +18,7 @@ type accepts = Any | Only of string | Nothing
    native architecture's package (pkgCacheGenerator::NewPackage).  What
    sets one version's priority apart is a pin (a preferences file,
    APT::Default-Release) or a Release file's NotAutomatic or
-   ButAutomaticUpgrades; pac reads Packages files alone, which carry none
+   ButAutomaticUpgrades; pac reads Packages files alone, which hold none
    of them, so they are out of scope and every version ties.
    A query naming a version (apt-get install pkg=ver) makes it pkg's
    candidate (TryToInstall, apt-private/private-install.cc), so [named]
