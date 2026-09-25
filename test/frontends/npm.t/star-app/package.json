@@ -1,0 +1,10 @@
+{
+  "name": "star-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "pre-only": "*",
+    "pre-ahead": "",
+    "pre-depr": "*",
+    "pre-engine": "*"
+  }
+}

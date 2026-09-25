@@ -1,0 +1,7 @@
+{
+  "name": "deep-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "deep-preset": "^1"
+  }
+}

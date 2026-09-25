@@ -6,7 +6,7 @@ declarer's peer to the package that selected the declarer, and chain-app
 selected hub, through relay's peer, so base's edge leaves chain-app as
 well.
 
-  $ ../../../src/main.exe npm --offline --cache . --tree chain-app | sed -E '/^(parse|solve) [0-9.]+s$/d' > ours
+  $ ../../../src/main.exe npm --offline --cache . --tree ./chain-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d' > ours
   $ cat ours
   root chain-app 1.0.0
   packages (4):

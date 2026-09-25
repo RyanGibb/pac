@@ -27,9 +27,9 @@ for f in "$run"/out/*.edges.npmonly; do
   mkdir -p "$W"
   cp "$run/work/$k/lock/package.json" "$W/package.json"
   # one pin per (name, version) npm resolved to and we did not
-  root=$(python3 "$S/pinroot.py" "$run/cache" "$W" $(cut -f4,5 "$f" | sort -u | awk '{printf "%s@%s ", $1, $2}'))
+  python3 "$S/pinroot.py" "$W/package.json" $(cut -f4,5 "$f" | sort -u | awk '{printf "%s@%s ", $1, $2}')
   "$run/pac.exe" npm --offline --cache "$run/cache" --tree --node-version "$nodev" \
-    --npm-version "$npmv" "$root" > "$o.out" 2>&1
+    --npm-version "$npmv" "$(realpath "$W/package.json")" > "$o.out" 2>&1
   # the shim fences the registry alone, and npm clones a git dependency itself
   ( cd "$W" && rm -f package-lock.json && HOME="$run/home" npm_config_git=false npm install --package-lock-only \
       --registry "http://127.0.0.1:$PORT" --cache "$run/home/npmcache" \

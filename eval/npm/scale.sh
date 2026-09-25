@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Whether pac resolves as npm install --package-lock-only does, on nodes and
 # on edges, and whether npm accepts pac's answer, over what a bare `npm
-# install` of each packument in the snapshot installs, or over the
-# name@spec queries a file lists (queries.js makes both), answered into the run
-# directory against a frozen shim.  The regression set is baseline/roots.txt,
+# install` of each packument in the snapshot installs, or over the queries a
+# file lists, each line the arguments of an `npm install` in an empty
+# project (queries.js makes both), answered into the run directory against
+# a frozen shim.  The regression set is baseline/roots.txt,
 # each query pinned to the version seed.sh chose for it.
 # A query is closed when neither side asked for a name the snapshot lacks,
 # tolerated-misses aside: only then are both answering about the snapshot.
@@ -70,23 +71,19 @@ npmc() { npm_run "$@"; }
 . "$S/accepts.sh"
 
 one() {
-  local o=$run/out/$1 w=$run/work/$1 name=${2%@*} root pac tool corr=- valid=- oo=- to=- t0 wall
-  local nodes=- edges=- closed n
-  # a recorded lock names its root, and roots.txt pins one version per
-  # name, so a baseline's root is named for the name alone, as mkroot.py
-  # names valid.sh's
-  if [ -n "$BASELINE" ]; then root=${name//@/}; root=pac-root-${root//\//-}
-  else root=pac-root-$(printf %s "$1" | md5sum | cut -c1-16); fi
+  local o=$run/out/$1 w=$run/work/$1 name pac tool corr=- valid=- oo=- to=- t0 wall
+  local nodes=- edges=- closed n q
+  set -f; q=($2); set +f
+  # roots.txt pins one version per name, so a one-spec query's recorded
+  # lock is named for the name alone
+  if [ ${#q[@]} -eq 1 ]; then name=${2:1}; name=${2:0:1}${name%%@*}; else name=$1; fi
   mkdir -p "$w/lock" "$w/ci"
-  rm -f "$o.pacmiss" "$o.gitmiss" "$o.ci" "$o.plo" "$run/cache/$root.json"
-  jq -n --arg r "$root" --arg n "$name" --arg s "${2##*@}" \
-    '{name: $r, version: "1.0.0", private: true, dependencies: {($n): $s}}' > "$w/lock/package.json"
+  rm -f "$o.pacmiss" "$o.gitmiss" "$o.ci" "$o.plo"
+  node "$S/root.js" "$run/cache" "${q[@]}" > "$w/lock/package.json" 2> "$o.root" || : > "$w/lock/package.json"
   cp "$w/lock/package.json" "$w/ci/package.json"
-  jq '{name, "dist-tags": {latest: "1.0.0"}, versions: {"1.0.0": .}}' "$w/lock/package.json" \
-    > "$run/cache/$root.json"
   t0=$EPOCHREALTIME
   PATH=$run/bin:$PATH PAC_MISS=$o.pacmiss timeout "$TIMEOUT" "$run/pac.exe" npm --cache "$run/cache" \
-    --tree --node-version "$NODEV" --npm-version "$NPMV" "$root" > "$o.out" 2>&1
+    --tree --node-version "$NODEV" --npm-version "$NPMV" "${q[@]}" > "$o.out" 2>&1
   pac=$(pac_status $? "$o.out" '^node_modules (')
   wall=$(since "$t0")
   answer "$S/baseline/lock-${name//\//__}" json ask "$w/lock"
@@ -95,7 +92,7 @@ one() {
     oo=$(wc -l < "$o.nodes.oursonly") to=$(wc -l < "$o.nodes.npmonly")
     nodes=${n%,*,*,*} edges=${n#*,*,*,}
     echo "$n" | awk -F, '{exit !($1 == $2 && $2 == $3 && $4 == $5 && $5 == $6)}' && corr=exact || corr=diff
-    [ -s "$o.edges.npmonly" ] && python3 "$S/verdict.py" "$run" "$name" "$o" > /dev/null
+    [ -s "$o.edges.npmonly" ] && python3 "$S/verdict.py" "$run" "$name" "$o" "$w/lock/package.json" > /dev/null
   fi
   if [ "$pac" = ok ]; then
     if python3 "$S/mklock.py" "$run/cache" "$o.out" "$w/ci/package-lock.json" \

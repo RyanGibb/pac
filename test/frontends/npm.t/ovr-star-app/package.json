@@ -1,0 +1,10 @@
+{
+  "name": "ovr-star-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "holder": "^1"
+  },
+  "overrides": {
+    "tok": "*"
+  }
+}

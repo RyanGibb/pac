@@ -1,0 +1,7 @@
+{
+  "name": "loose-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "loose": "^1.0.0"
+  }
+}

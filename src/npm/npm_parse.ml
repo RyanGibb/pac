@@ -77,6 +77,7 @@ type ver = {
 type packument = {
   pk_name : string;
   pk_latest : string option;
+  pk_tags : (string * string) list;
   pk_vers : ver list;
 }
 
@@ -291,12 +292,17 @@ let of_json ~(root : bool) (j : Yojson.Safe.t) : packument =
     | `String v -> Some v
     | _ -> None
   in
+  let tags =
+    List.filter_map
+      (function t, `String v -> Some (t, v) | _ -> None)
+      (assoc_of (member "dist-tags" j))
+  in
   let vers =
     List.filter_map
       (fun (v, m) -> ver_of ~root v m)
       (assoc_of (member "versions" j))
   in
-  { pk_name = name; pk_latest = latest; pk_vers = vers }
+  { pk_name = name; pk_latest = latest; pk_tags = tags; pk_vers = vers }
 
 let load ~(root : bool) (path : string) : packument option =
   match Yojson.Safe.from_file path with
@@ -304,3 +310,151 @@ let load ~(root : bool) (path : string) : packument option =
       reject ();
       None
   | j -> Some (of_json ~root j)
+
+(* ---- the query ----
+
+   The query is the root package r_N: a project's package.json with the
+   arguments of `npm install` added to it.  An argument is read as
+   npm-package-arg 13.0.2 (npm 11.17.0) reads it, lib/npa.js, and only its
+   registry forms are accepted: name, name@version, name@range, name@tag
+   and key@npm:name@range.  Anything npa reads as a file, directory, URL or
+   git spec is refused rather than dropped, because a query missing one of
+   its arguments asks a different question. *)
+
+(* /^(?:git[+])?[a-z]+:/i *)
+let is_url s =
+  let s = String.lowercase_ascii s in
+  let s = if starts "git+" s then String.sub s 4 (String.length s - 4) else s in
+  let n = String.length s in
+  let rec go i =
+    i < n && if s.[i] = ':' then i > 0 else s.[i] >= 'a' && s.[i] <= 'z' && go (i + 1)
+  in
+  go 0
+
+(* isPosixFile, /^(?:[.]|~[/]|[/]|[a-zA-Z]:)/, or what npa takes for a file
+   before it looks for a name: an unscoped name part with a slash or a
+   tarball's extension *)
+let is_path s =
+  starts "." s || starts "~/" s || starts "/" s
+  || String.length s >= 2
+     && s.[1] = ':'
+     && Char.lowercase_ascii s.[0] >= 'a'
+     && Char.lowercase_ascii s.[0] <= 'z'
+  || (not (starts "@" s))
+     && (String.contains s '/'
+        || List.exists (Filename.check_suffix s) [ ".tgz"; ".tar.gz"; ".tar" ])
+
+(* /^[^@]+@[^:.]+\.[^:]+:.+$/, an scp-style git remote *)
+let is_git s =
+  match String.index_opt s '@' with
+  | Some i when i > 0 -> (
+      let rest = String.sub s (i + 1) (String.length s - i - 1) in
+      match String.index_opt rest ':' with
+      | Some j ->
+          let host = String.sub rest 0 j in
+          j + 1 < String.length rest
+          && (match String.index_opt host '.' with Some k -> k > 0 && k + 1 < j | None -> false)
+      | None -> false)
+  | _ -> false
+
+(* an argument npa would read as a local path, which the query takes for
+   the project's package.json *)
+let is_manifest_arg s = (not (is_url s)) && (not (is_git s)) && is_path s
+
+(* encodeURIComponent(s) === s *)
+let uri_safe =
+  String.for_all (fun c ->
+      (c >= 'a' && c <= 'z')
+      || (c >= 'A' && c <= 'Z')
+      || (c >= '0' && c <= '9')
+      || String.contains "-_.!~*'()" c)
+
+(* validate-npm-package-name's validForOldPackages, less its blocklist of
+   core-module names *)
+let name_ok n =
+  n <> ""
+  && String.length n <= 214
+  && (not (starts "." n))
+  && (not (starts "_" n))
+  && (uri_safe n
+     ||
+     match String.index_opt n '/' with
+     | Some i when starts "@" n ->
+         i > 1
+         && uri_safe (String.sub n 1 (i - 1))
+         && uri_safe (String.sub n (i + 1) (String.length n - i - 1))
+     | _ -> false)
+
+(* The key and the raw spec: the name ends at the first @ past a scope's
+   own, and a bare name or a trailing @ asks for *.  Whether a registry
+   spec is a range or a tag is left to the driver, which has the
+   packument's dist-tags. *)
+let spec_of (arg : string) : (string * string) option =
+  let n = String.length arg in
+  let at = if n > 1 then String.index_from_opt arg 1 '@' else None in
+  let name_part = match at with Some i -> String.sub arg 0 i | None -> arg in
+  let raw =
+    match at with
+    | Some i -> ( match String.sub arg (i + 1) (n - i - 1) with "" -> "*" | s -> s)
+    | None -> "*"
+  in
+  if is_url arg || is_git arg || is_path name_part || not (name_ok name_part) then None
+  else if starts "npm:" (String.lowercase_ascii raw) then
+    (* fromAlias: the target is read again, and must be a named registry
+       spec and not itself an alias *)
+    match split_alias ("npm:" ^ String.sub raw 4 (String.length raw - 4)) with
+    | Some (t, rg)
+      when name_ok t
+           && (not (starts "npm:" (String.lowercase_ascii rg)))
+           && not (unresolvable rg) ->
+        Some (name_part, raw)
+    | _ -> None
+  else if is_url raw || is_path raw || has_sub raw "/" then None
+  else Some (name_part, raw)
+
+(* arborist's addRmPkgDeps.add, lib/add-rm-pkg-deps.js, for a request with
+   no --save-* flag: the entry goes to the first field that already names
+   it, in inferSaveType's order, else to dependencies, and replaces what is
+   there unless it is *.  The fields a save type cannot coexist with lose
+   the name, and an optional entry is mirrored into dependencies. *)
+let add_to (pkg : Yojson.Safe.t) ((name, raw) : string * string) : Yojson.Safe.t =
+  let has f = List.mem_assoc name (assoc_of (member f pkg)) in
+  let target =
+    List.find_opt has
+      [ "devDependencies"; "optionalDependencies"; "dependencies"; "peerDependencies" ]
+    |> Option.value ~default:"dependencies"
+  in
+  let drop =
+    match target with
+    | "dependencies" -> [ "devDependencies"; "peerDependencies" ]
+    | "devDependencies" -> [ "dependencies" ]
+    | "optionalDependencies" -> [ "peerDependencies" ]
+    | _ -> [ "dependencies"; "optionalDependencies" ]
+  in
+  let drop =
+    if List.mem "peerDependencies" drop then "peerDependenciesMeta" :: drop else drop
+  in
+  (* a JavaScript object keeps a new key last *)
+  let set k v l =
+    if List.mem_assoc k l then List.map (fun (k', x) -> if k' = k then (k, v) else (k', x)) l
+    else l @ [ (k, v) ]
+  in
+  let fields =
+    List.map
+      (fun (k, v) ->
+        if List.mem k drop then (k, `Assoc (List.remove_assoc name (assoc_of v))) else (k, v))
+      (assoc_of pkg)
+  in
+  let cur = assoc_of (member target (`Assoc fields)) in
+  let fields =
+    if raw <> "*" || not (List.mem_assoc name cur) then
+      set target (`Assoc (set name (`String raw) cur)) fields
+    else fields
+  in
+  if target = "optionalDependencies" then
+    let spec = member name (member target (`Assoc fields)) in
+    set "dependencies"
+      (`Assoc (set name spec (assoc_of (member "dependencies" (`Assoc fields)))))
+      fields
+    |> fun l -> `Assoc l
+  else `Assoc fields

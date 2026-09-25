@@ -347,43 +347,93 @@ let alpine_cmd =
     (Cmd.info "alpine" ~doc:"Solve against an Alpine APKINDEX.")
     Term.(const alpine_run $ debug_arg $ path $ goals)
 
-let npm_run debug cache offline tree omit nodev npmv goal wanted =
+(* The root package r_N: the manifest a path argument names, or an empty
+   project's, with each spec added as `npm install` adds it.  arborist's
+   #add resolves a tag to its version only after an await, so the other
+   specs are all added first, in order. *)
+let npm_root ar (query : string list) : (Npm_parse.ver, string) result =
+  let paths, specs = List.partition Npm_parse.is_manifest_arg query in
+  let ( let* ) = Result.bind in
+  let* pkg =
+    match paths with
+    | [] -> Ok (`Assoc [])
+    | [ p ] -> (
+        match Yojson.Safe.from_file p with
+        | `Assoc _ as j -> Ok j
+        | _ | (exception _) -> Error (p ^ ": not a package.json"))
+    | _ -> Error "more than one package.json"
+  in
+  let* plain, tagged =
+    List.fold_left
+      (fun acc s ->
+        let* plain, tagged = acc in
+        match Npm_parse.spec_of s with
+        | None ->
+            Error
+              (s
+             ^ ": not a registry spec (name, name@range, name@tag, \
+                key@npm:name@range)")
+        | Some (k, r) when Npm_parse.split_alias r <> None || r = "*" ->
+            Ok ((k, r) :: plain, tagged)
+        | Some (k, r) -> (
+            (* npm refuses a dist-tag that is a range, so a spec the
+               packument tags is a tag, and one it does not is a range
+               unless it can only be a tag *)
+            match Npm_solve.dist_tag ar k (String.trim r) with
+            | Some v -> Ok (plain, (k, v) :: tagged)
+            | None when Npm_parse.looks_like_tag (String.trim r) ->
+                Error (s ^ ": no such dist-tag")
+            | None -> Ok ((k, r) :: plain, tagged)))
+      (Ok ([], [])) specs
+  in
+  let specs = List.rev plain @ List.rev tagged in
+  (* npm's #add fetches each argument's manifest, and E404s on a name the
+     registry lacks rather than resolving without it *)
+  let* () =
+    match
+      List.find_opt
+        (fun (k, r) ->
+          let t = match Npm_parse.split_alias r with Some (t, _) -> t | None -> k in
+          Npm_solve.versions_of ar t = [])
+        specs
+    with
+    | Some (k, r) ->
+        let t = match Npm_parse.split_alias r with Some (t, _) -> t | None -> k in
+        Error
+          (Printf.sprintf "no packument for %s under %s%s" t ar.Npm_solve.cache
+             (if ar.Npm_solve.offline then " (offline)" else ""))
+    | None -> Ok ()
+  in
+  let pkg = List.fold_left Npm_parse.add_to pkg specs in
+  (* arborist names a root with no name by its directory, which is no
+     part of the query; "." is a name no registry package can have *)
+  let str k = match Npm_parse.member k pkg with `String s -> s | _ -> "" in
+  let name = match str "name" with "" -> "." | n -> n in
+  match Npm_parse.ver_of ~root:true (str "version") pkg with
+  | Some v -> Ok { v with Npm_parse.v_name = name }
+  | None -> Error "not a package.json"
+
+let npm_run debug cache offline tree omit nodev npmv query =
   let t0 = Unix.gettimeofday () in
   let ar =
     Npm_solve.empty_archive
       ~optional:(not (List.mem "optional" omit))
       ~node:nodev ~npm:npmv ~cache ~offline ()
   in
-  let vs =
-    List.map
-      (fun (v : Npm_parse.ver) -> v.Npm_parse.v_vers)
-      (Npm_solve.load_name ar ~root:true goal)
-  in
-  if vs = [] then (
-    Printf.eprintf "no packument for %s under %s%s\n" goal cache
-      (if offline then " (offline)" else "");
-    1)
-  else begin
-    let rv =
-      match wanted with
-      | Some v -> v
-      | None -> (
-          match Hashtbl.find_opt ar.Npm_solve.latest goal with
-          | Some l when List.mem l vs -> l
-          | _ ->
-              List.fold_left
-                (fun a b -> if Npm_version.compare b a > 0 then b else a)
-                (List.hd vs) vs)
-    in
-    let rc = (goal, rv) in
-    Printf.printf "root %s %s\n%!" goal rv;
+  match npm_root ar query with
+  | Error e ->
+      prerr_endline e;
+      1
+  | Ok root -> begin
+    let node n v = if v = "" then n else Printf.sprintf "%s %s" n v in
+    let rc = Npm_solve.add_root ar root in
+    Printf.printf "root %s\n%!" (node (fst rc) (snd rc));
     match Npm_solve.solve ~debug ar rc with
     | None -> 1
     | Some r ->
         let t2 = Unix.gettimeofday () in
         let show (a, t) v =
-          if a = t then Printf.sprintf "%s %s" t v
-          else Printf.sprintf "%s %s at %s" t v a
+          if a = t then node t v else Printf.sprintf "%s at %s" (node t v) a
         in
         Printf.printf "packages (%d):\n" (List.length r.Npm_solve.installs);
         List.iter
@@ -458,24 +508,21 @@ let npm_cmd =
             "Host npm version, the other sub-key checkEngine reads; unset \
              leaves engines.npm untested.")
   in
-  let goal =
+  let query =
     Arg.(
-      required
-      & pos 0 (some string) None
-      & info [] ~docv:"PACKAGE" ~doc:"Package to install.")
-  in
-  let wanted =
-    Arg.(
-      value
-      & pos 1 (some string) None
-      & info [] ~docv:"VERSION"
-          ~doc:"Root version; defaults to dist-tags.latest.")
+      non_empty & pos_all string []
+      & info [] ~docv:"QUERY"
+          ~doc:
+            "What $(b,npm install) takes: the path of a project's \
+             package.json, and specs to add to it (name, name@range, \
+             name@tag, key@npm:name@range); with no path, the project is \
+             empty.")
   in
   Cmd.v
     (Cmd.info "npm" ~doc:"Solve against the npm registry.")
     Term.(
       const npm_run $ debug_arg $ cache $ offline $ tree $ omit $ nodev $ npmv
-      $ goal $ wanted)
+      $ query)
 
 let () =
   let doc = "Solve dependencies through the verified package calculus." in

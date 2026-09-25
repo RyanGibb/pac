@@ -1,0 +1,10 @@
+{
+  "name": "opt-peer-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "host": "^1"
+  },
+  "optionalDependencies": {
+    "gadget": "^1"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "hoist-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "alpha": "^1",
+    "zeta": "^1"
+  }
+}

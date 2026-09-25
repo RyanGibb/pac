@@ -1,0 +1,8 @@
+{
+  "name": "reuse-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "holder": "^1",
+    "taker": "^1"
+  }
+}

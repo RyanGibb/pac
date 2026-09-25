@@ -1,0 +1,10 @@
+{
+  "name": "ovr-key-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "carrier": "^1"
+  },
+  "overrides": {
+    "kit": "1.0.0"
+  }
+}

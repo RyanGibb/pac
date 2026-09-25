@@ -6,7 +6,7 @@
 # preference, not error.
 #
 # The check writes our answer out as the project's package-lock.json
-# (mklock.py) beside the wrapper package.json mkroot.py mints, and asks
+# (mklock.py) beside the query's package.json (root.js), and asks
 # npm against a frozen shim, as accepts.sh does: `npm ci --dry-run`, then
 # `npm install --package-lock-only` on a copy, which must leave the same
 # version at every path of the lock.
@@ -63,11 +63,11 @@ mkdir -p "$out"
 pin=$(awk -v g="$query" '$1==g{print $2}' "$S/baseline/roots.txt")
 [ -n "$pin" ] || { printf '%-24s NO ROOT (dropped by seed.sh)\n' "$query"; exit 1; }
 
-# the wrapper root scale.sh --regress measures, so validity and
-# correspondence are answering about one question
+# the query scale.sh --regress measures, so validity and correspondence
+# are answering about one question
 W="$RUN/work/$slug.valid"
 mkdir -p "$W"
-root=$(python3 "$S/mkroot.py" "$RUN/cache" "$query" "$W" "$pin" | cut -d' ' -f1)
+node "$S/root.js" "$RUN/cache" "$query@$pin" > "$W/package.json"
 
 cd "$S/../.."
 # the host scale.sh gives, so the answer validated here is the answer
@@ -77,7 +77,7 @@ nodev=$(sed -n 2p "$S/npm-version")
 
 "$exe" npm --offline --cache "$RUN/cache" --tree \
   ${nodev:+--node-version "$nodev"} ${npmv:+--npm-version "$npmv"} \
-  "$root" > "$out/$slug.ours" 2>&1
+  "$query@$pin" > "$out/$slug.ours" 2>&1
 if ! grep -q '^node_modules' "$out/$slug.ours"; then
   printf '%-24s NO SOLUTION (see %s)\n' "$query" "$out/$slug.ours"
   exit 1

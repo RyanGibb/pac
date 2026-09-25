@@ -1,5 +1,0 @@
-{"name":"ovr-star-app","dist-tags":{"latest":"1.0.0"},
- "versions":{
-  "1.0.0":{"name":"ovr-star-app","version":"1.0.0",
-    "dependencies":{"holder":"^1"},
-    "overrides":{"tok":"*"}}}}

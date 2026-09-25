@@ -1,4 +1,0 @@
-{"name":"chain-app","dist-tags":{"latest":"1.0.0"},
- "versions":{
-  "1.0.0":{"name":"chain-app","version":"1.0.0",
-    "dependencies":{"relay":"^1"}}}}

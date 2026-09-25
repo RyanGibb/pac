@@ -1,4 +1,0 @@
-{"name":"alias-sat-app","dist-tags":{"latest":"1.0.0"},
- "versions":{
-  "1.0.0":{"name":"alias-sat-app","version":"1.0.0",
-    "dependencies":{"tok":"npm:mark@^3","needer":"^1"}}}}

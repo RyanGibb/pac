@@ -1,4 +1,0 @@
-{"name":"loose-app","dist-tags":{"latest":"1.0.0"},
- "versions":{
-  "1.0.0":{"name":"loose-app","version":"1.0.0",
-    "dependencies":{"loose":"^1.0.0"}}}}

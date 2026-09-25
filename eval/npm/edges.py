@@ -116,6 +116,7 @@ def lock_sets(lock, peer_parent):
         peer = sorted(moved)
 
     ident = {p: (node_name(p, pkgs[p]), pkgs[p].get("version", "")) for p in live}
+    ident[""] = ROOT
     nodes = set(ident.values())
     edges = {
         (ident[r][0], ident[r][1], d, ident[q][0], ident[q][1])
@@ -134,21 +135,30 @@ def lock_sets(lock, peer_parent):
     return nodes, edges, unres, bundled
 
 
+# The root is the query, which both sides name as they please -- npm by its
+# directory, pac as the manifest does or "." -- so it is compared as the
+# root, the way npm's lock keys it.
+ROOT = ("", "")
+
+
 # ---- our side: parse the --tree listing ----
 
-# "name 1.2.3" or "name 1.2.3 at dir"
-SIDE = re.compile(r"^(\S+) (\S+?)(?: at (\S+))?$")
+# "name 1.2.3" or "name 1.2.3 at dir", and the root may have no version
+SIDE = re.compile(r"^(\S+)(?: (\S+?))?(?: at (\S+))?$")
 
 
 def parse_side(s):
     m = SIDE.match(s)
     if not m:
         raise ValueError(s)
-    name, ver, at = m.group(1), m.group(2), m.group(3)
+    name, ver, at = m.group(1), m.group(2) or "", m.group(3)
     return name, ver, (at if at else name)
 
 
 def our_sets(text):
+    m = re.search(r"^root (.*)$", text, re.M)
+    root = parse_side(m.group(1))[:2] if m else None
+    ident = lambda n, v: ROOT if (n, v) == root else (n, v)
     nodes, edges = set(), set()
     section = None
     for line in text.splitlines():
@@ -164,12 +174,12 @@ def our_sets(text):
         body = line[2:]
         if section == "p":
             n, v, _ = parse_side(body)
-            nodes.add((n, v))
+            nodes.add(ident(n, v))
         elif section == "e":
             p, c = body.split(" <- ", 1)
             pn, pv, _ = parse_side(p)
             cn, cv, cd = parse_side(c)
-            edges.add((pn, pv, cd, cn, cv))
+            edges.add(ident(pn, pv) + (cd,) + ident(cn, cv))
     return nodes, edges
 
 

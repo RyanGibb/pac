@@ -1,0 +1,13 @@
+{
+  "name": "opt-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "theme": "^1",
+    "gadget": "^9"
+  },
+  "optionalDependencies": {
+    "gadget": "^1",
+    "native": "^9",
+    "absent": "^1"
+  }
+}

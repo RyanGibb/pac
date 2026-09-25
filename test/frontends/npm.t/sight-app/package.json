@@ -1,0 +1,9 @@
+{
+  "name": "sight-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "dial": "^2",
+    "sight-left": "^1",
+    "sight-right": "^1"
+  }
+}

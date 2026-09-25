@@ -43,10 +43,22 @@ while read -r g; do
   slug=${g//\//__}
   W="$RUN/work/$slug"
   pin=""; back=""
+  mkdir -p "$W"
   for n in $(seq 0 "$BACK"); do
-    line=$(python3 "$S/mkroot.py" "$RUN/cache" "$g" "$W" --nth "$n") || break
-    root=${line%% *}; v=${line##* }
-    if "$exe" npm --cache "$RUN/cache" "$root" > "$W/seed.ours" 2>&1; then
+    # newest first, prereleases left out: a prerelease root would ask both
+    # sides a question about prerelease admission rather than resolution
+    v=$(python3 - "$RUN/cache/${g//\//%2F}.json" "$n" <<'EOF'
+import json, re, sys
+def key(v):
+    m = re.match(r"^(\d+)\.(\d+)\.(\d+)", v)
+    return tuple(int(x) for x in m.groups()) if m else (-1, -1, -1)
+rel = sorted((v for v in json.load(open(sys.argv[1]))["versions"] if "-" not in v),
+             key=key, reverse=True)
+n = int(sys.argv[2])
+sys.exit(1) if n >= len(rel) else print(rel[n])
+EOF
+    ) || break
+    if "$exe" npm --cache "$RUN/cache" "$g@$v" > "$W/seed.ours" 2>&1; then
       pin=$v; back=$n; break
     fi
   done
@@ -54,6 +66,7 @@ while read -r g; do
     echo "$g DROP no root our side can resolve in $BACK releases"
     continue
   fi
+  node "$S/root.js" "$RUN/cache" "$g@$pin" > "$W/package.json"
   # the shim fills from the registry alone, and npm clones a git dependency
   # itself, into no snapshot
   ( cd "$W" && rm -f package-lock.json && \

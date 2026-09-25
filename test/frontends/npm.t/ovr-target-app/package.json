@@ -1,0 +1,10 @@
+{
+  "name": "ovr-target-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "carrier": "^1"
+  },
+  "overrides": {
+    "util-lib": "1.0.0"
+  }
+}

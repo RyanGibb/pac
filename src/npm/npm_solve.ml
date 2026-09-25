@@ -88,6 +88,7 @@ type archive = {
   npm : string option;
   pkgs : (string, P.ver list) Hashtbl.t;
   latest : (string, string) Hashtbl.t;
+  tags : (string, (string * string) list) Hashtbl.t;
   entry : (string * string, P.ver) Hashtbl.t;
   (* peer dependencies indexed by the directory they name, for
      peerDependenciesNamed *)
@@ -111,6 +112,7 @@ let empty_archive ?(optional = true) ?(node = node_version)
     npm = Option.map host_version npm;
     pkgs = Hashtbl.create 1024;
     latest = Hashtbl.create 1024;
+    tags = Hashtbl.create 1024;
     entry = Hashtbl.create 16384;
     peer_by_name = Hashtbl.create 4096;
     dep_by_key = Hashtbl.create 16384;
@@ -186,6 +188,7 @@ let load_name ar ~(root : bool) (n : string) : P.ver list =
                 (match pk.P.pk_latest with
                 | Some l -> Hashtbl.replace ar.latest n l
                 | None -> ());
+                Hashtbl.replace ar.tags n pk.P.pk_tags;
                 (* the packument's "name" is authoritative; a manifest
                    with a different one is not this package's *)
                 List.map (fun v -> { v with P.v_name = n }) pk.P.pk_vers)
@@ -198,6 +201,23 @@ let load_name ar ~(root : bool) (n : string) : P.ver list =
 
 let versions_of ar n =
   List.map (fun (v : P.ver) -> v.P.v_vers) (load_name ar ~root:false n)
+
+(* the version a dist-tag names, which arborist's #add reads through
+   npm-pick-manifest (index.js, `wanted && type === 'tag'`): the tagged
+   version exactly, whatever its engines or deprecation *)
+let dist_tag ar (n : string) (tag : string) : string option =
+  ignore (load_name ar ~root:false n);
+  Option.bind (Hashtbl.find_opt ar.tags n) (List.assoc_opt tag)
+
+(* The query is published nowhere, so it enters the archive as the only
+   version of its name; a registry package of that name is then out of
+   reach, as it would be had it been the root. *)
+let add_root ar (v : P.ver) : string * string =
+  Hashtbl.replace ar.pkgs v.P.v_name [ v ];
+  ar.n_names <- ar.n_names + 1;
+  ar.n_vers <- ar.n_vers + 1;
+  index_ver ar v;
+  (v.P.v_name, v.P.v_vers)
 
 let meta ar p : P.ver option = Hashtbl.find_opt ar.entry p
 

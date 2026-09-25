@@ -1,0 +1,9 @@
+{
+  "name": "nest-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "mark": "^4",
+    "inner": "^1",
+    "outer": "^1"
+  }
+}

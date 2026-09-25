@@ -81,7 +81,8 @@ import os
 import re
 import sys
 
-SIDE = re.compile(r"^(\S+) (\S+?)(?: at (\S+))?$")
+# the root may have no version
+SIDE = re.compile(r"^(\S+)(?: (\S+?))?(?: at (\S+))?$")
 
 
 def escape(name):
@@ -92,15 +93,15 @@ def parse_side(s):
     m = SIDE.match(s)
     if not m:
         raise ValueError(s)
-    name, ver, at = m.group(1), m.group(2), m.group(3)
+    name, ver, at = m.group(1), m.group(2) or "", m.group(3)
     return name, ver, (at if at else name)
 
 
 def parse_ours(text):
-    m = re.search(r"^root (\S+) (\S+)", text, re.M)
+    m = re.search(r"^root (.*)$", text, re.M)
     if not m:
         raise RuntimeError("no root line")
-    root = (m.group(1), m.group(2))
+    root = parse_side(m.group(1))[:2]
     nodes, edges = set(), []
     section = None
     for line in text.splitlines():
@@ -277,7 +278,8 @@ def main():
 
     declarers, peers = set(), {}
     for n in nodes:
-        m = manifest(cache, n[0], n[1])
+        # the query is published nowhere; its manifest is the project's
+        m = (rootman or {}) if n == root else manifest(cache, n[0], n[1])
         meta = m.get("peerDependenciesMeta")
         meta = meta if isinstance(meta, dict) else {}
         # a dependency of the same name replaces the peer
@@ -292,7 +294,7 @@ def main():
     packages = {}
     rm = rootman or {}
     packages[""] = {k: v for k, v in (
-        ("name", rm.get("name", root[0])),
+        ("name", rm.get("name", None if root[0] == "." else root[0])),
         ("version", rm.get("version", root[1])),
         ("license", rm.get("license")),
         ("dependencies", rm.get("dependencies")),
@@ -307,7 +309,9 @@ def main():
         packages[path] = entry(cache, name, version, key)
 
     lock = {
-        "name": packages[""]["name"],
+        # npm names a nameless project by its directory
+        "name": packages[""].get(
+            "name", os.path.basename(os.path.dirname(os.path.abspath(dst)))),
         "version": packages[""].get("version", "1.0.0"),
         "lockfileVersion": 3,
         "requires": True,

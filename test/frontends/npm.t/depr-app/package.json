@@ -1,0 +1,10 @@
+{
+  "name": "depr-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "depr": "*",
+    "depr-old": "^1",
+    "depr-all": "*",
+    "depr-empty": "*"
+  }
+}

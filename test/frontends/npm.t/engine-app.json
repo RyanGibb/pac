@@ -1,4 +1,0 @@
-{"name":"engine-app","dist-tags":{"latest":"1.0.0"},
- "versions":{
-  "1.0.0":{"name":"engine-app","version":"1.0.0",
-    "dependencies":{"engine":"*","engine-npm":"*","engine-depr":"*"}}}}

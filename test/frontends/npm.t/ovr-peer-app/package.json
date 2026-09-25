@@ -1,0 +1,10 @@
+{
+  "name": "ovr-peer-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "host": "^1"
+  },
+  "overrides": {
+    "gadget": "1.0.0"
+  }
+}

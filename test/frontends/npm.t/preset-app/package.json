@@ -1,0 +1,7 @@
+{
+  "name": "preset-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "preset": "^1"
+  }
+}

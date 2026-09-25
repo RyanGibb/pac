@@ -40,7 +40,7 @@ constant: both sides have to be given the same node and npm versions, or
 they rank by different rules and every such edge diverges.  The host
 here is npm-version, which is what scale.sh passes our side.
 
-usage: verdict.py <run-dir> <package> <out-prefix>
+usage: verdict.py <run-dir> <query> <out-prefix> [root package.json]
 """
 import json
 import os
@@ -142,7 +142,8 @@ def listed(m, field, host):
 
 def declared(m, d):
     """the range the manifest declares for directory d"""
-    for field in ("optionalDependencies", "dependencies", "peerDependencies"):
+    for field in ("optionalDependencies", "dependencies", "peerDependencies",
+                  "devDependencies"):
         spec = m.get(field, {}).get(d)
         if isinstance(spec, str):
             if spec.startswith("npm:"):
@@ -174,6 +175,11 @@ def satisfies(pairs):
 def main():
     run, pkg, prefix = sys.argv[1], sys.argv[2], sys.argv[3]
     snap = Snapshot(os.path.join(run, "cache"))
+    # the query is published nowhere, so its manifest is the project's
+    root = None
+    if len(sys.argv) > 4:
+        with open(sys.argv[4]) as f:
+            root = json.load(f)
     try:
         with open(prefix + ".edges.bundled") as f:
             bundled = {tuple(l.rstrip("\n").split("\t")) for l in f}
@@ -184,7 +190,8 @@ def main():
     with open(prefix + ".edges.npmonly") as f:
         for line in f:
             rn, rv, d, vn, vv = line.rstrip("\n").split("\t")
-            rm, vm = snap.manifest(rn, rv), snap.manifest(vn, vv)
+            rm = root if (rn, rv) == ("", "") else snap.manifest(rn, rv)
+            vm = snap.manifest(vn, vv)
             rg = declared(rm, d) if rm else None
             eng = (vm or {}).get("engines", {})
             # the old array form, ["node >= 0.4"], is no requirement to

@@ -1,5 +1,0 @@
-{"name":"opt-plat-app","dist-tags":{"latest":"1.0.0"},
- "versions":{
-  "1.0.0":{"name":"opt-plat-app","version":"1.0.0",
-    "dependencies":{"theme":"^1"},
-    "optionalDependencies":{"nativefs":"^1"}}}}

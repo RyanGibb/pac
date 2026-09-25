@@ -1,0 +1,7 @@
+{
+  "name": "vp-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "vplus": "^1"
+  }
+}

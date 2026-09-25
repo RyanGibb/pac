@@ -1,5 +1,0 @@
-{"name":"ovr-key-app","dist-tags":{"latest":"1.0.0"},
- "versions":{
-  "1.0.0":{"name":"ovr-key-app","version":"1.0.0",
-    "dependencies":{"carrier":"^1"},
-    "overrides":{"kit":"1.0.0"}}}}

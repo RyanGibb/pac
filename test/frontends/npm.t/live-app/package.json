@@ -1,0 +1,9 @@
+{
+  "name": "live-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "buf": "^5",
+    "listy": "^1",
+    "rstream": "^3"
+  }
+}

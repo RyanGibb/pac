@@ -1,0 +1,7 @@
+{
+  "name": "twin-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "twin": "^1"
+  }
+}
