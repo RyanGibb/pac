@@ -37,8 +37,17 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     | CHash c => PM.hash v c
     end.
 
-  Definition isAny (ct : Constr) : bool :=
-    match ct with CAny => true | _ => false end.
+  (* apk gives a bare provides the empty version, which its comparator
+     orders below every version, so a bare provides meets exactly the
+     constraints a version below all others meets.  >< is never met, as
+     for any version (ApkVerMatch). *)
+  Definition bareMatch (ct : Constr) : bool :=
+    match ct with
+    | CAny => true
+    | COp op _ => match op with OpLt | OpLe | OpNe => true | _ => false end
+    | CLtPrefix _ => true
+    | CPrefix _ | CGtPrefix _ | CHash _ => false
+    end.
 
   Module VF := UOTCompareFacts V.
   Module OV := PairUOT OpOT V.
@@ -167,14 +176,14 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     ; inst_repl : Repl.t }.
 
   (* A versioned provide is an alias: it satisfies constrained atoms at
-     the provided version and claims the name.  An unversioned provide
-     satisfies only bare atoms and claims nothing. *)
+     the provided version and claims the name.  A bare provide satisfies
+     the atoms bareMatch admits and claims nothing. *)
   Definition MatchPos (I : Inst) (S : PkgSet.t)
       (n : N.t) (ct : Constr) : Prop :=
     (exists v, PkgSet.In (n, v) S /\ constrMatch ct v = true) \/
     (exists q pv, Prov.In (q, (n, PVer pv)) (inst_prov I) /\
        PkgSet.In q S /\ constrMatch ct pv = true) \/
-    (isAny ct = true /\
+    (bareMatch ct = true /\
      exists q, Prov.In (q, (n, PVirt)) (inst_prov I) /\ PkgSet.In q S).
 
   Definition HasPriority (I : Inst) (q : Pkg.t) : Prop :=
@@ -192,7 +201,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     (exists v, PkgSet.In (n, v) S /\ constrMatch ct v = true) \/
     (exists q pv, Prov.In (q, (n, PVer pv)) (inst_prov I) /\
        PkgSet.In q S /\ constrMatch ct pv = true) \/
-    (isAny ct = true /\
+    (bareMatch ct = true /\
      exists q, Prov.In (q, (n, PVirt)) (inst_prov I) /\ PkgSet.In q S /\
        AutoSelectable I q).
 
@@ -398,7 +407,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     Definition encPos (I : Inst) (n : N.t) (ct : Constr) : PF.Formula :=
       let base := PF.FDep (Name.Orig n) (constrVers I n ct) in
-      if isAny ct
+      if bareMatch ct
       then
         fold_right
           (fun q f =>
@@ -426,7 +435,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     Definition encReq (I : Inst) (n : N.t) (ct : Constr) : PF.Formula :=
       let base := PF.FDep (Name.Orig n) (constrVers I n ct) in
-      if isAny ct
+      if bareMatch ct
       then
         fold_right
           (fun q f =>
@@ -450,7 +459,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                 (andb (NEqb.eqb m (fst a))
                    (match tg with
                     | PVer pv => constrMatch (snd a) pv
-                    | PVirt => isAny (snd a)
+                    | PVirt => bareMatch (snd a)
                     end)))
            (inst_prov I)).
 
@@ -657,7 +666,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         (fst p = fst a /\ constrMatch (snd a) (snd p) = true) \/
         (exists pv, Prov.In (p, (fst a, PVer pv)) (inst_prov I) /\
            constrMatch (snd a) pv = true) \/
-        (isAny (snd a) = true /\
+        (bareMatch (snd a) = true /\
          Prov.In (p, (fst a, PVirt)) (inst_prov I)).
     Proof.
       intros I p a; unfold attachAt.
@@ -804,12 +813,12 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         PF.Satisfies S' (encPos I n ct) <->
         (exists w, PF.VSet.In w (constrVers I n ct) /\
            PF.PkgSet.In (Name.Orig n, w) S') \/
-        (isAny ct = true /\
+        (bareMatch ct = true /\
          exists q, PkgSet.In q (uprovSet I n) /\
            PF.PkgSet.In (embedPkg q) S').
     Proof.
       intros I S' n ct; unfold encPos.
-      destruct (isAny ct) eqn:Ea.
+      destruct (bareMatch ct) eqn:Ea.
       - rewrite satisfies_disjFold; cbn.
         unfold uprovL; split.
         + intros [[w [Hw Hm]] | [q [Hq Hm]]]; [left; eauto |].
@@ -827,12 +836,12 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         PF.Satisfies S' (encReq I n ct) <->
         (exists w, PF.VSet.In w (constrVers I n ct) /\
            PF.PkgSet.In (Name.Orig n, w) S') \/
-        (isAny ct = true /\
+        (bareMatch ct = true /\
          exists q, PkgSet.In q (uprovSet I n) /\ selectableb I q = true /\
            PF.PkgSet.In (embedPkg q) S').
     Proof.
       intros I S' n ct; unfold encReq; cbv zeta.
-      destruct (isAny ct) eqn:Ea.
+      destruct (bareMatch ct) eqn:Ea.
       - rewrite satisfies_disjFold; cbn [PF.Satisfies].
         apply or_iff_compat_l; split.
         + intros [q [Hq Hm]]; apply filter_In in Hq; destruct Hq as [Hq Hs].
@@ -1729,7 +1738,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                    (inst_world I) n ct Hn Hown).
         rewrite (uprovSet_subInst I ns deps ownProv installIf
                    (inst_world I) n Hn Hown).
-        destruct (isAny ct); [| reflexivity].
+        destruct (bareMatch ct); [| reflexivity].
         f_equal; apply filter_ext_in; intros q Hq.
         apply selectableb_subInst.
         apply in_elements_pkg, mem_uprovSet in Hq; destruct Hq as [Hp Hr].
@@ -2069,12 +2078,12 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
          own sub-instance, pushed through the package-formula reduction
          under an oracle agreeing with versions.  That sub-instance cannot
          serve as the oracle: a negated requirement or positive install-if
-         condition with no constraint negates each bare provider q at q's
-         own name, whose complement ranges over every version at that
-         name, alias versions included, while repoPreimage keeps only the
-         packages at or providing the names the package mentions -- q
-         itself, and not the rest of q's name.  The versions lookup at q's
-         name does hold them. *)
+         condition whose constraint bareMatch admits negates each bare
+         provider q at q's own name, whose complement ranges over every
+         version at that name, alias versions included, while repoPreimage
+         keeps only the packages at or providing the names the package
+         mentions -- q itself, and not the rest of q's name.  The versions
+         lookup at q's name does hold them. *)
       Lemma dependees_core : forall I Vq q,
           PF.PkgSet.In q (transR I) ->
           Vq Name.Root = PF.VSet.singleton Version.RootV ->

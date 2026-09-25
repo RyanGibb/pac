@@ -10,10 +10,11 @@
 apk picks among the providers of a name with compare_providers, whose first
 live key on a fresh root is the version the provider offers *at the
 requested name* -- a package's own version where it claims the name itself,
-the p: operand where it is an alias, and null where the provides carries no
-version at all.  provider_priority (k:) is only the key after that.
+the p: operand where it is an alias, and the empty version where the
+provides carries no version at all.  provider_priority (k:) is only the
+key after that.
 
-An unversioned provides offers a null version, which loses to every real
+An unversioned provides offers the empty version, which loses to every real
 one, so k: decides only between unversioned providers.  nano and vim both
 provide editor, nano sorts first and so heads the encoded disjunction, but
 vim carries the higher k: and is what apk installs:
@@ -25,10 +26,10 @@ vim carries the higher k: and is what apk installs:
     vim 1.0
   encoded solution: 3 core nodes (2 Alpine packages encoded)
 
-The same null is why a package of the name itself beats an unversioned
-provider of it however high that provider's k:.  tool-extra provides tool
-with k:50 and heads the disjunction, but tool 2.0 offers 2.0 against
-tool-extra's null:
+The same empty version is why a package of the name itself beats an
+unversioned provider of it however high that provider's k:.  tool-extra
+provides tool with k:50 and heads the disjunction, but tool 2.0 offers 2.0
+against tool-extra's empty version:
 
   $ ../../../src/main.exe alpine PROVIDERS tool | sed -E '/^(parse|solve) [0-9.]+s$/d'
   index PROVIDERS
@@ -295,4 +296,68 @@ and ni-b 1.0 falsifies both:
     ni-a 1.0
     ni-b 1.0
     ni-self 1.0
-  encoded solution: 8 core nodes (4 Alpine packages encoded)
+  encoded solution: 9 core nodes (4 Alpine packages encoded)
+
+apk gives a bare provides the empty version, which it orders below every
+version, so a bare provides meets a constrained atom exactly when the
+constraint admits a version below all others: bv-virt<2 but not
+bv-virt>=1, in every place an atom is read.  bv-prov provides bv-virt
+bare, with k:, and so meets bv-lt's requirement:
+
+  $ ../../../src/main.exe alpine BAREVER bv-lt | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index BAREVER
+  cone: 8 packages, 1 provides entries, 3 install_if rules
+  packages (2):
+    bv-lt 1.0
+    bv-prov 1.0
+  encoded solution: 4 core nodes (3 Alpine packages encoded)
+
+and not bv-ge's:
+
+  $ ../../../src/main.exe alpine BAREVER bv-ge | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index BAREVER
+  cone: 8 packages, 1 provides entries, 3 install_if rules
+  unsatisfiable:
+  Because @root () -> bv-ge 1.0 and bv-ge 1.0 -> bv-virt ∅, @root * is forbidden..
+  And because root -> @root (), version solving failed.
+
+It falsifies the conflict !bv-virt<2:
+
+  $ ../../../src/main.exe alpine BAREVER bv-no bv-prov | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index BAREVER
+  cone: 8 packages, 1 provides entries, 3 install_if rules
+  unsatisfiable:
+  Because bv-no 1.0 -> bv-prov ⊥ and @root () -> bv-no 1.0, @root * requires bv-prov ⊥.
+  And because @root () -> bv-prov 1.0 and root -> @root (), version solving failed.
+
+With bv-anc it fires the install-if rule on bv-virt<2, and neither the one
+on !bv-virt<2 nor the one on bv-virt>=1:
+
+  $ ../../../src/main.exe alpine BAREVER bv-anc bv-prov | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index BAREVER
+  cone: 8 packages, 1 provides entries, 3 install_if rules
+  packages (3):
+    bv-anc 1.0
+    bv-iif 1.0
+    bv-prov 1.0
+  encoded solution: 9 core nodes (4 Alpine packages encoded)
+
+It answers a constrained world entry:
+
+  $ ../../../src/main.exe alpine BAREVER 'bv-virt<2' | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index BAREVER
+  cone: 8 packages, 1 provides entries, 3 install_if rules
+  packages (1):
+    bv-prov 1.0
+  encoded solution: 3 core nodes (2 Alpine packages encoded)
+
+And in NEGIIF the bare provider ni-virt falsifies ni-lt's !ni-b<2:
+
+  $ ../../../src/main.exe alpine NEGIIF ni-a ni-virt | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  index NEGIIF
+  cone: 9 packages, 3 provides entries, 4 install_if rules
+  packages (3):
+    ni-a 1.0
+    ni-self 1.0
+    ni-virt 1.0
+  encoded solution: 9 core nodes (4 Alpine packages encoded)

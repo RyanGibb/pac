@@ -8,8 +8,9 @@ type constr = Any | Op of Apk_version.op * string
 type dep = { d_neg : bool; d_name : string; d_constr : constr }
 
 (* A versioned provide is an alias apk treats as a real package of the
-   provided name; an unversioned one only answers bare dependencies and
-   claims no name, which is the PVirt/PVer split in the calculus. *)
+   provided name; a bare one offers the empty version, below every
+   version, and claims no name, which is the PVirt/PVer split in the
+   calculus. *)
 type prov = { p_name : string; p_ver : string option }
 
 type pkg = {

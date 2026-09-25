@@ -1,0 +1,39 @@
+P:bv-anc
+V:1.0
+A:x86_64
+
+P:bv-prov
+V:1.0
+A:x86_64
+p:bv-virt
+k:10
+
+P:bv-lt
+V:1.0
+A:x86_64
+D:bv-virt<2
+
+P:bv-ge
+V:1.0
+A:x86_64
+D:bv-virt>=1
+
+P:bv-no
+V:1.0
+A:x86_64
+D:!bv-virt<2
+
+P:bv-iif
+V:1.0
+A:x86_64
+i:bv-anc bv-virt<2
+
+P:bv-niif
+V:1.0
+A:x86_64
+i:bv-anc !bv-virt<2
+
+P:bv-iifge
+V:1.0
+A:x86_64
+i:bv-anc bv-virt>=1
