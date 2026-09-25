@@ -5,7 +5,7 @@
    qualified by their package.  Unhandled constructs are counted and the
    enclosing atom dropped, which can admit a selection opam rejects (an
    unhandled available: makes the package unavailable instead); a file that
-   fails to parse is skipped, uncounted, by the loader. *)
+   fails to parse is skipped by the loader, and counted. *)
 
 open OpamParserTypes.FullPos
 
@@ -133,12 +133,30 @@ type brace =
 let rec brace_of ?(locals = local_vars) ~owner ~selfv (v : value) : brace =
   let brace_of = brace_of ~locals ~owner ~selfv in
   let qualify = qualify ~locals in
+  (* the package's own version, which every filter environment of opam's
+     defines, and which is known here while the file is read *)
+  let selfv_var x =
+    x = "version" || x = "_:version" || x = owner ^ ":version"
+  in
+  let static r a b =
+    let c = Opam_version.compare a b in
+    let holds =
+      match rel_of r with
+      | Eq -> c = 0
+      | Ne -> c <> 0
+      | Ge -> c >= 0
+      | Gt -> c > 0
+      | Le -> c <= 0
+      | Lt -> c < 0
+    in
+    BF (if holds then FT else FF)
+  in
   match v.pelem with
   | Bool true -> BF FT
   | Bool false -> BF FF
   | Ident x -> BF (FCmp (Eq, qualify ~owner x, "true"))
   | Prefix_relop (r, { pelem = String s; _ }) -> BC (rel_of r.pelem, s)
-  | Prefix_relop (r, { pelem = Ident "version"; _ }) ->
+  | Prefix_relop (r, { pelem = Ident x; _ }) when selfv_var x ->
       (* {= version}: the owner's own version, which we are parsing and so
          know -- a genuine version constraint on the dependency, not a filter *)
       BC (rel_of r.pelem, selfv)
@@ -148,31 +166,29 @@ let rec brace_of ?(locals = local_vars) ~owner ~selfv (v : value) : brace =
          removed by the filter semantics *)
       reject ();
       BF (FCmp (rel_of r.pelem, qualify ~owner x, "%v%"))
+  | Relop (r, { pelem = Ident x; _ }, { pelem = String s; _ })
+    when selfv_var x ->
+      static r.pelem selfv s
+  | Relop (r, { pelem = String s; _ }, { pelem = Ident x; _ })
+    when selfv_var x ->
+      static r.pelem s selfv
   | Relop (r, { pelem = Ident x; _ }, { pelem = String s; _ }) ->
       BF (FCmp (rel_of r.pelem, qualify ~owner x, s))
   | Relop (r, { pelem = String s; _ }, { pelem = Ident x; _ }) ->
       BF (FCmp (rel_flip (rel_of r.pelem), qualify ~owner x, s))
   | Relop (r, { pelem = String a; _ }, { pelem = String b; _ }) ->
-      let c = Opam_version.compare a b in
-      let holds =
-        match rel_of r.pelem with
-        | Eq -> c = 0
-        | Ne -> c <> 0
-        | Ge -> c >= 0
-        | Gt -> c > 0
-        | Le -> c <= 0
-        | Lt -> c < 0
-      in
-      BF (if holds then FT else FF)
+      static r.pelem a b
+  | Pfxop ({ pelem = `Defined; _ }, { pelem = Ident x; _ }) when selfv_var x ->
+      BF FT
   | Logop ({ pelem = `And; _ }, a, b) -> BAnd (brace_of a, brace_of b)
   | Logop ({ pelem = `Or; _ }, a, b) -> BOr (brace_of a, brace_of b)
   | Pfxop ({ pelem = `Not; _ }, a) -> BNot (brace_of a)
   | Pfxop ({ pelem = `Defined; _ }, { pelem = Ident x; _ }) ->
       BF (FDef (qualify ~owner x))
   (* a group's or list's elements are conjoined, as opam does in a
-     dependency brace (opamFormat.ml:411,420); opam's filter parser, which
-     reads available:, rejects more than one element (opamFormat.ml:315-319),
-     so this accepts more there *)
+     dependency brace (opamFormat.ml:411,420); available: is read by opam's
+     filter parser, which refuses more than one, and [single_filter] checks
+     it first *)
   | Group { pelem = a :: rest; _ } | List { pelem = a :: rest; _ } ->
       List.fold_left (fun acc v -> BAnd (acc, brace_of v)) (brace_of a) rest
   | _ ->
@@ -356,19 +372,48 @@ let class_names (v : value) : string list =
       reject ();
       []
 
-(* opam takes only the ident form (opamFormat.ml:90-93, via opamFile.ml's
-   flags field) *)
+(* opam takes only the ident form, and ignores whole a field it cannot
+   read (OpamFormat.I.show_errors) *)
 let flag_names (v : value) : string list =
-  let one (x : value) =
-    match x.pelem with
-    | Ident f | String f -> Some f
-    | _ ->
-        reject ();
-        None
+  let l = match v.pelem with List { pelem = l; _ } -> l | _ -> [ v ] in
+  let idents =
+    List.filter_map
+      (fun x -> match x.pelem with Ident f -> Some f | _ -> None)
+      l
+  in
+  if List.length idents = List.length l then idents
+  else (
+    reject ();
+    [])
+
+(* a tags: entry flags:<f> is flag <f> too (opamFile.ml flag_of_tag) *)
+let tag_flags (v : value) : string list =
+  let l = match v.pelem with List { pelem = l; _ } -> l | _ -> [ v ] in
+  List.filter_map
+    (fun x ->
+      match x.pelem with
+      | String t when String.starts_with ~prefix:"flags:" t ->
+          Some (String.sub t 6 (String.length t - 6))
+      | _ -> None)
+    l
+
+(* what OpamFormat.V.filter parses: one expression, with no group of other
+   than one element anywhere in it.  A field it refuses is ignored, which
+   for available: leaves the package available *)
+let single_filter (v : value) : bool =
+  let rec ok (v : value) =
+    match v.pelem with
+    | Bool _ | String _ | Int _ | Ident _ -> true
+    | Group { pelem = [ f ]; _ } -> ok f
+    | Relop (_, e, f) | Logop (_, e, f) -> ok e && ok f
+    | Pfxop (_, e) -> ok e
+    | _ -> false
   in
   match v.pelem with
-  | List { pelem = l; _ } | Group { pelem = l; _ } -> List.filter_map one l
-  | _ -> ( match one v with Some f -> [ f ] | None -> [])
+  | List { pelem = []; _ } -> true
+  | List { pelem = [ f ]; _ } -> ok f
+  | List _ -> false
+  | _ -> ok v
 
 let pindep_entries (v : value) : ((string * string) * string) list =
   let entry (v : value) =
@@ -397,6 +442,7 @@ let parse_file ~name ~version path : pkg_meta =
   let file = OpamParser.FullPos.file path in
   let owner = name in
   let selfv = version in
+  let flags = ref [] in
   let meta =
     ref
       {
@@ -421,6 +467,8 @@ let parse_file ~name ~version path : pkg_meta =
           meta := { !meta with conflicts = conflict_atoms ~owner ~selfv v }
       | Variable ({ pelem = "conflict-class"; _ }, v) ->
           meta := { !meta with classes = class_names v }
+      | Variable ({ pelem = "available"; _ }, v) when not (single_filter v) ->
+          reject ()
       | Variable ({ pelem = "available"; _ }, v) ->
           meta :=
             {
@@ -442,14 +490,12 @@ let parse_file ~name ~version path : pkg_meta =
           meta := { !meta with depexts = depext_entries ~owner ~selfv v }
       | Variable ({ pelem = "pin-depends"; _ }, v) ->
           meta := { !meta with pindeps = pindep_entries v }
-      | Variable ({ pelem = "flags"; _ }, v) ->
-          let fl = flag_names v in
-          meta :=
-            {
-              !meta with
-              avoid_version = List.mem "avoid-version" fl;
-              deprecated = List.mem "deprecated" fl;
-            }
+      | Variable ({ pelem = "flags"; _ }, v) -> flags := flag_names v @ !flags
+      | Variable ({ pelem = "tags"; _ }, v) -> flags := tag_flags v @ !flags
       | _ -> ())
     file.file_contents;
-  !meta
+  {
+    !meta with
+    avoid_version = List.mem "avoid-version" !flags;
+    deprecated = List.mem "deprecated" !flags;
+  }

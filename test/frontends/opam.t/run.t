@@ -260,8 +260,8 @@ mlib is reached, not asked for.
   loaded: 7 names, 7 package versions
 
 In opam a conflict's filter sees only switch and global variables and the
-package's own name and version; here it sees the name but not the version.  So
-with-test is undefined there even for a queried name, and cflt.1's conflict
+package's own name and version.  So with-test is undefined there even for
+a queried name, and cflt.1's conflict
 on dep >= "5" under with-test is void, while its conflict on lib >= "3" on
 linux holds:
 
@@ -302,3 +302,42 @@ installs ord-q.2, ord-p.1 and ord-r.1:
     ord-q.2
     ord-r.1
   loaded: 3 names, 6 package versions
+
+Every filter reads the package's own version as version, _:version or
+<name>:version: svd.2 is available from 2 on, its dependency on svl holds
+at 2, and its conflict with svl >= "2" too, so opam installs svd.2 beside
+svl.1:
+
+  $ ../../../src/main.exe opam . svd | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (2, core solution 3 nodes):
+    svd.2
+    svl.1
+  loaded: 2 names, 4 package versions
+
+opam ignores a field it cannot read.  available: is one filter
+expression, so two leave avm.1 available; flags: are idents, so a string
+leaves flg.2 unflagged, while a tags: entry flags:avoid-version flags tg.2;
+and brk.2, which does not parse, is skipped:
+
+  $ ../../../src/main.exe opam . avm | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (1, core solution 2 nodes):
+    avm.1
+  loaded: 1 names, 1 package versions
+  parser dropped 1 declarations
+
+  $ ../../../src/main.exe opam . flg | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (1, core solution 2 nodes):
+    flg.2
+  loaded: 1 names, 2 package versions
+  parser dropped 1 declarations
+
+  $ ../../../src/main.exe opam . tg | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (1, core solution 2 nodes):
+    tg.1
+  loaded: 1 names, 2 package versions
+
+  $ ../../../src/main.exe opam . brk | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  opam packages (1, core solution 2 nodes):
+    brk.1
+  loaded: 1 names, 1 package versions
+  parser dropped 1 declarations

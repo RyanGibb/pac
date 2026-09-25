@@ -1,0 +1,4 @@
+opam-version: "2.0"
+available: version >= "2"
+depends: [ "svl" {"2" = _:version} ]
+conflicts: [ "svl" {svd:version = "2" & >= "2"} ]

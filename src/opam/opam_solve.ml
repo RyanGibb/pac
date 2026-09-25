@@ -85,7 +85,7 @@ let load_name ar (name : string) : (string * Opam_parse.pkg_meta) list =
                   try
                     let m = Opam_parse.parse_file ~name ~version opam in
                     acc := (version, m) :: !acc
-                  with _ -> ())
+                  with _ -> Opam_parse.reject ())
             | _ -> ())
           (Sys.readdir ndir);
       let vs = !acc in
