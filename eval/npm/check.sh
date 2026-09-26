@@ -13,6 +13,11 @@
 # minimal verdict, not the valid one.  npm asks nothing of such a package,
 # so reach.py asks that its own dependencies be met.  Neither asks whether
 # an edge landed on the package its manifest names, so lockname.py does.
+# Where a peer is out of range npm may keep the copy anyway, with only an
+# "ERESOLVE overriding peer dependency" warning and exit 0, and where the
+# peer is optional neither command need change anything, so the warning is
+# read as a refusal, and `npm ls --package-lock-only` is asked too: an
+# edge it calls invalid or missing is one npm's tree would break.
 # Measured on express, not assumed: ci rejects a lock with a transitive
 # package deleted and one whose version violates a requirer's range, and
 # accepts both a valid-but-older version npm would not have picked and a
@@ -72,9 +77,9 @@ else
     --root-manifest "$W/package.json" > "$out/mklock" 2>&1
   case $? in
     0) ;;
-    # no node_modules tree npm could be handed holds the answer
+    # the answer gives a declarer's peer two
     4) verdict INVALID - "$(tail -n 1 "$out/mklock")" ;;
-    *) verdict ERR - "mklock failed" ;;
+    *) verdict ERR - "mklock failed: $(tail -n 1 "$out/mklock" | cut -c 1-300)" ;;
   esac
 fi
 
@@ -83,6 +88,12 @@ ci_rc=$?; ran $ci_rc "$out/ci.log"
 cp -r "$W" "$W.plo"
 npmc "$W.plo" install --package-lock-only --ignore-scripts > "$out/plo.log" 2>&1
 relock_rc=$?; ran $relock_rc "$out/plo.log"
+npmc "$W" ls --all --package-lock-only --json > "$out/ls.json" 2> "$out/ls.log" ||
+  grep -q ELSPROBLEMS "$out/ls.log" || err=1
+jq -r '.problems[]? | select(startswith("invalid:") or startswith("missing:"))' \
+  "$out/ls.json" > "$out/ls.problems" 2>&1 || err=1
+broken=$(wc -l < "$out/ls.problems")
+override=$(cat "$out/ci.log" "$out/plo.log" | grep -c 'ERESOLVE overriding peer dependency')
 shim || err=1
 diff <(paths "$W/package-lock.json") <(paths "$W.plo/package-lock.json") > "$out/moved"
 moved=$(grep -c '^[<>]' "$out/moved")
@@ -95,9 +106,10 @@ repaired=$(awk 'FILENAME == ARGV[1] {if ($1 == "unreached") u[$2]; next}
                 /^>/ || /^</ && !($2 in u)' "$out/reach" "$out/moved" | wc -l)
 
 why="ci=$ci_rc relock=$relock_rc moved=$moved repaired=$repaired unmet=$unmet named=$named"
+why="$why override=$override ls=$broken"
 [ "$err" -eq 0 ] || verdict ERR - "$why"
 case $named in 0|3) ;; *) verdict ERR - "$why" ;; esac
 [ "$ci_rc" -eq 0 ] && [ "$relock_rc" -eq 0 ] && [ "$named" -eq 0 ] && [ "$repaired" -eq 0 ] &&
-  [ "$unmet" -eq 0 ] || verdict INVALID - "$why"
+  [ "$unmet" -eq 0 ] && [ "$override" -eq 0 ] && [ "$broken" -eq 0 ] || verdict INVALID - "$why"
 [ "$moved" -eq 0 ] && verdict VALID yes "$why"
 verdict VALID no "$why"

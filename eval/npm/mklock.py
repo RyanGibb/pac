@@ -44,17 +44,18 @@ checked, rather than npm's hoisting heuristic being guessed at:
           copy again would repeat the chain forever.  So placement always
           ends, and every answer has a tree.
 
-          A package with a mandatory peer is the exception to
+          A package whose peers our answer gives is the exception to
           shallowest: it goes in its requirer's own node_modules.  npm
           resolves a peer from the declarer, and a copy in the declarer's
           own node_modules is PEER LOCAL, an invalid edge (arborist
-          edge.js); our answer puts the peer beside the
-          declarer, among its requirer's edges.  Hoisted any higher, the
-          declarer would look its peer up from a directory that may hold
-          another version, which `npm ci` then rejects although the answer
-          is one npm accepts.  For the same reason, a name the requirer
-          itself peers on goes beside the requirer where it can; inside
-          is the last resort, and verify does not catch it there.
+          edge.js); our answer puts the peer beside the declarer, among
+          its requirer's edges.  Hoisted any higher, the declarer would
+          look its peer up from a directory that may hold another
+          version.  So a copy is the package and the providers its
+          requirer gives its peers, and two requirers giving different
+          ones get two copies.  For the same reason, a name some package
+          on the requirer's chain peers on goes in that package's own
+          node_modules only as the last resort.
 
           npm's arborist decides the same question with a third move we
           deliberately do not make: an occupied slot may be taken over,
@@ -68,12 +69,16 @@ checked, rather than npm's hoisting heuristic being guessed at:
           node_modules, which npm rejects.
 
   verify  re-resolve every edge against the finished tree, following
-          links, and fail if
-          any of them does not come out right: an assertion, not a
-          repair, since a lockfile must never quietly describe a
-          different answer from ours.  It re-resolves
-          our edges only: a peer edge as npm reads it, from the
-          declarer, is left to check.sh.
+          links, and every peer as npm does, from its declarer, and fail
+          if any of them does not come out as our answer says: an
+          assertion, not a repair, since a lockfile must never quietly
+          describe a different answer from ours.  Whether npm takes what
+          comes out, PEER LOCAL included, is check.sh's question.
+
+Before any of this, an answer that gives a declarer's peer, from the root,
+one provider and the declarer's own edge of that name another is refused,
+since no tree holds it; given from below the root, the answer is left
+unchecked.
 
 Every other field is copied, not decided: version, resolved and
 integrity come from the snapshot packument's own dist block, and the
@@ -83,6 +88,8 @@ differs from the registry name) carries "name", the way npm records one.
 
 usage: mklock.py <cache-dir> <our --tree output> <out package-lock.json>
        [--root-manifest <package.json>]
+Exits 4 when the answer resolves a peer two ways from the root, so that a
+crash, which exits 1, is not read as one.
 """
 import json
 import os
@@ -91,14 +98,17 @@ import sys
 from tree import ancestors, escape, lookup, parse_tree, slot
 
 
-def place(root, nodes, edges, declarers=frozenset(), peers={}):
+def place(root, nodes, edges, claims, peers):
     out_edges = {}
     for r, key, c in edges:
         out_edges.setdefault(r, []).append((key, c))
 
     # a node is (name, version, key): one version under two keys, an alias
-    # beside its own name, is two copies, and each resolves its own edges
+    # beside its own name, is two copies, and each resolves its own edges.
+    # A copy of a package with peers is told apart by the providers its
+    # requirer gives those peers too, since npm resolves them from the copy.
     at = {"": root}                 # path -> node, a link's included
+    ident = {"": (root, ())}        # path -> (node, claims)
     links = {}                      # path -> the ancestor copy it links to
     paths = {root: [""]}            # node -> the paths of its copies
     answered = {}                   # key -> [(requirer path, answering dir)]
@@ -117,44 +127,50 @@ def place(root, nodes, edges, declarers=frozenset(), peers={}):
                 return True
         return False
 
-    def put(dst, node):
+    def put(dst, cid):
         """a copy at dst, or a link where a directory above dst already is
         this copy: arborist's own way out of a nesting loop (place-dep.js),
         and the reason placement ends, since no chain of copies repeats"""
-        at[dst] = node
+        at[dst] = cid[0]
+        ident[dst] = cid
         for anc in reversed(ancestors(dst)[1:-1]):
-            if at[anc] == node:
+            if ident[anc] == cid:
                 links[dst] = anc
                 return False
-        paths.setdefault(node, []).append(dst)
+        paths.setdefault(cid[0], []).append(dst)
         # a guard, not a verdict: no chain is longer than the copies there are
         # to tell apart, so a placement past this is a bug here
-        if dst.count("node_modules/") > len(nodes) + 8:
-            raise RuntimeError(f"no placement within {len(nodes) + 8} levels ({dst!r})")
+        if dst.count("node_modules/") > len(edges) + 8:
+            raise RuntimeError(f"no placement within {len(edges) + 8} levels ({dst!r})")
         return True
+
+    def peer_local(anc, key, node, path):
+        """whether the package at anc peers on key, so that a copy in its own
+        node_modules is PEER LOCAL to it, an invalid edge (arborist edge.js)"""
+        return anc != "" and key in peers.get(node if anc == path else at[anc], ())
 
     def grow(frontier):
         while frontier:
             path, node = frontier.pop(0)
             for key, child in out_edges.get(node, ()):
+                cid = (child, claims(node, child))
                 ancs = ancestors(path)
                 # a slot deeper on this chain is what the requirer would find,
                 # so the search starts there rather than at the root
                 lo = 0
                 for i, anc in enumerate(ancs):
                     if slot(anc, key) in at:
-                        lo = i if at[slot(anc, key)] == child else i + 1
-                # npm refuses a peer found in its declarer's own node_modules
-                # (PEER LOCAL), so for a name the requirer peers on that slot is
-                # only the last resort
-                hi = len(ancs) - 1 if path and key in peers.get(node, ()) else len(ancs)
+                        lo = i if ident[slot(anc, key)] == cid else i + 1
                 # into the requirer's own node_modules, unless a directory on
                 # its path is this copy already, which the lookup finds or a
                 # link reaches
-                if child in declarers and all(at[anc] != child for anc in ancs):
-                    lo = max(lo, hi - 1)
+                if cid[1] and all(ident[anc] != cid for anc in ancs):
+                    lo = max(lo, len(ancs) - 1 - (path != "" and key in peers.get(node, ())))
+                cands = ancs[lo:]
+                cands = ([a for a in cands if not peer_local(a, key, node, path)]
+                         + [a for a in cands if peer_local(a, key, node, path)])
                 target = None
-                for anc in ancs[lo:hi] + ancs[max(lo, hi):]:
+                for anc in cands:
                     if slot(anc, key) in at:
                         target = anc          # shared: already holds our provider
                         break
@@ -164,7 +180,7 @@ def place(root, nodes, edges, declarers=frozenset(), peers={}):
                 if target is None:
                     raise RuntimeError(f"no slot for {key} under {path!r}")
                 dst = slot(target, key)
-                if dst not in at and put(dst, child):
+                if dst not in at and put(dst, cid):
                     frontier.append((dst, child))
                 answered.setdefault(key, []).append((path, target))
 
@@ -181,7 +197,7 @@ def place(root, nodes, edges, declarers=frozenset(), peers={}):
                        and not shadows(d, node[2])), None)
         if target is None:
             raise RuntimeError(f"no slot for {node[2]}, which nothing reaches")
-        put(slot(target, node[2]), node)
+        put(slot(target, node[2]), (node, ()))
         grow([(slot(target, node[2]), node)])
 
     def found(path, key):
@@ -192,11 +208,17 @@ def place(root, nodes, edges, declarers=frozenset(), peers={}):
         for path in ps:
             for key, child in out_edges.get(node, ()):
                 q = found(path, key)
-                if q is None or at[q] != child:
-                    got = at[q] if q else None
+                if q is None or ident[q] != (child, claims(node, child)):
                     raise RuntimeError(
-                        f"placement is not our answer: {node} at {path!r} "
-                        f"requires {key}, we chose {child}, the tree says {got}")
+                        f"placement is not our answer: {node} at {path!r} requires "
+                        f"{key}, we chose {child}, the tree says {ident[q] if q else None}")
+            # npm resolves a peer from its declarer, its own node_modules first
+            for p, prov in ident[path][1]:
+                q = found(path, p)
+                if q is None or at[q] != prov:
+                    raise RuntimeError(
+                        f"placement is not our answer: {node} at {path!r} peers on "
+                        f"{p}, we chose {prov}, the tree says {at[q] if q else None}")
     return at, links
 
 
@@ -249,8 +271,11 @@ def main():
     if root is None:
         raise RuntimeError("no root line")
 
-    declarers, peers = set(), {}
-    for n in nodes:
+    out = {}
+    for r, key, c in edges:
+        out.setdefault(r, {})[key] = c
+    peers, needed = {}, {}
+    for n in sorted(nodes):
         # the query is published nowhere; its manifest is the project's
         m = (rootman or {}) if n == root else manifest(cache, n[0], n[1])
         meta = m.get("peerDependenciesMeta")
@@ -258,9 +283,37 @@ def main():
         # a dependency of the same name replaces the peer
         deps = set(m.get("dependencies") or {}) | set(m.get("optionalDependencies") or {})
         peers[n] = set(m.get("peerDependencies") or {}) - deps
-        if any(not (meta.get(p) or {}).get("optional") for p in peers[n]):
-            declarers.add(n)
-    at, links = place(root, nodes, edges, declarers, peers)
+        needed[n] = {p for p in peers[n] if not (meta.get(p) or {}).get("optional")}
+    torn = {True: [], False: []}
+    for r, key, c in edges:
+        # a declarer c whose own declarers need another provider of a name c
+        # peers on: they cannot sit in c's node_modules, which would hold
+        # c's peer too (PEER LOCAL), so they sit above the provider c sees.
+        # Where the root gives c its peer, that provider is in the root's
+        # own node_modules and nothing is above it, nor does a link as npm
+        # writes one lead anywhere else; below the root they could be, but
+        # that is a tree this placement does not build
+        torn[r == root] += [
+            f"{c[0]} {c[1]} peers on {p}, {out[r][p][1]} from "
+            f"{'the root' if r == root else r[0] + ' ' + r[1]}, "
+            f"and gives its own {p} {out[c][p][1]}"
+            for p in sorted(needed.get(c, set()) & set(out.get(r, {})) & set(out.get(c, {})))
+            if out[r][p] != out[c][p]]
+    if torn[True]:
+        print("peers no tree holds: " + "; ".join(sorted(set(torn[True]))[:5]))
+        return 4
+    if torn[False]:
+        raise RuntimeError("peers this placement does not hold: "
+                           + "; ".join(sorted(set(torn[False]))[:5]))
+
+    def claims(r, c):
+        """the providers our answer gives c's peers where r requires it.  An
+        optional peer c requires the name of itself resolves by c's own
+        lookup, whatever r gives, and npm judges that it is in range."""
+        return tuple(sorted((p, out[r][p]) for p in peers.get(c, ()) if p in out.get(r, {})
+                            and (p in needed.get(c, ()) or p not in out.get(c, {}))))
+
+    at, links = place(root, nodes, edges, claims, peers)
 
     packages = {}
     rm = rootman or {}

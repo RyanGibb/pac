@@ -10,8 +10,11 @@ An edge is followed where node_modules lookup takes it from its
 requirer, a peer's included: npm resolves a peer from its declarer too,
 and a copy the declarer holds in its own node_modules is PEER LOCAL, an
 invalid edge (arborist edge.js), so such a copy counts as reached and
-its removal as a repair.  A link is reached with the package it points
-at.  Ranges are read by ranges.js, with npm's own
+its removal as a repair.  An optional peer's edge is not followed: npm
+prunes a copy nothing else needs even where an optional peer resolves to
+it (so its relock of its own lock can leave that peer invalid), and
+whether the peer is met is `npm ls`'s question.  A link is reached with
+the package it points at.  Ranges are read by ranges.js, with npm's own
 npm-package-arg and semver.
 
 usage: reach.py <package-lock.json>
@@ -32,8 +35,8 @@ def edges(pk, p):
     if p == "":
         fields.append("devDependencies")
     meta = e.get("peerDependenciesMeta") or {}
-    return [(key, spec, f == "optionalDependencies" or
-             (f == "peerDependencies" and bool((meta.get(key) or {}).get("optional"))))
+    return [(key, spec, "peer" if f == "peerDependencies" and (meta.get(key) or {}).get("optional")
+             else f == "optionalDependencies")
             for f in fields for key, spec in (e.get(f) or {}).items()]
 
 
@@ -42,7 +45,10 @@ def main():
     seen, done, todo = {""}, {""}, [""]
     while todo:
         p = todo.pop()
-        for key, _, _ in edges(pk, p):
+        for key, _, optional in edges(pk, p):
+            # npm keeps nothing for an optional peer's sake alone
+            if optional == "peer":
+                continue
             s = lookup(pk, p, key)
             if s is None:
                 continue

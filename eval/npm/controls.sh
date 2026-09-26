@@ -40,6 +40,22 @@ PKGS = {
     "d1": {"1.0.0": {"peerDependencies": {"k1": "^2.0.0"}}},
     "yc": {"1.0.0": {"dependencies": {"yc": "npm:xc@^1.0.0"}}},
     "xc": {"1.0.0": {"dependencies": {"yc": "^1.0.0"}}},
+    "dx": {"1.0.0": {"dependencies": {"rx": "^1.0.0"}, "peerDependencies": {"px": "^1.0.0"}}},
+    "rx": {"1.0.0": {"dependencies": {"dx": "^1.0.0"}}, "2.0.0": {}},
+    "px": {"1.0.0": {}, "2.0.0": {}},
+    "de": {"1.0.0": {"dependencies": {"re": "^1.0.0", "qe": "^1.0.0"},
+                     "peerDependencies": {"pe": "^1.0.0"}}},
+    "re": {"1.0.0": {"dependencies": {"de": "^1.0.0"}}, "2.0.0": {}},
+    "qe": {"1.0.0": {"dependencies": {"pe": "^1.0.0"}}, "2.0.0": {}},
+    "pe": {"1.0.0": {}, "2.0.0": {}},
+    "op": {"1.0.0": {"peerDependencies": {"oq": "^1.0.0"},
+                     "peerDependenciesMeta": {"oq": {"optional": True}}}},
+    "oq": {"1.0.0": {}, "1.1.0": {}, "2.0.0": {}},
+    "or": {"1.0.0": {"dependencies": {"op": "^1.0.0"}}},
+    "ut": {"1.0.0": {"dependencies": {"bu": "^1.0.0"}, "peerDependencies": {"tl": "^2.0.0"}}},
+    "bu": {"1.0.0": {"peerDependencies": {"tl": "^2.0.0"}}},
+    "tl": {"2.5.0": {}, "2.6.0": {}},
+    "hx": {"1.0.0": {"dependencies": {"ut": "^1.0.0", "tl": "^2.0.0"}}},
 }
 CASES = {
     "po-valid":   ("VALID/yes", {"a": "^1.0.0", "c": "^1.0.0"},
@@ -74,6 +90,23 @@ CASES = {
     "link-valid": ("VALID/yes", {"sx": "^2.0.0"},
                    {"sx": "sx@2.0.0", "sx/node_modules/sx": "sx@1.0.0",
                     "sx/node_modules/sx/node_modules/sx": {"link": "node_modules/sx"}}),
+    # dx's peer px@^1 answered by a 2.0.0 in dx's own node_modules, which
+    # npm keeps with only a warning
+    "peer-override": ("INVALID/-", {"dx": "^1.0.0", "rx": "^2.0.0", "px": "^1.0.0"},
+                      {"dx": "dx@1.0.0", "rx": "rx@2.0.0", "px": "px@1.0.0",
+                       "dx/node_modules/rx": "rx@1.0.0", "dx/node_modules/px": "px@2.0.0"}),
+    # npm's own lock: op's optional peer oq@^1 is the 1.1.0 beside it, which
+    # npm's relock prunes, leaving op's peer invalid
+    "opt-peer-lock": ("VALID/no", {"or": "^1.0.0", "oq": "^2.0.0"},
+                      {"or": "or@1.0.0", "oq": "oq@2.0.0", "or/node_modules/op": "op@1.0.0",
+                       "or/node_modules/oq": "oq@1.1.0"}),
+    # op's optional peer sees the root's oq 2.0.0
+    "opt-peer-range": ("INVALID/-", {"or": "^1.0.0", "oq": "^2.0.0"},
+                       {"or": "or@1.0.0", "oq": "oq@2.0.0", "op": "op@1.0.0"}),
+    # ut sees hx's tl 2.6.0, and its bu, above hx, the root's 2.5.0
+    "torn-lock":   ("VALID/yes", {"hx": "^1.0.0"},
+                    {"hx": "hx@1.0.0", "hx/node_modules/ut": "ut@1.0.0",
+                     "hx/node_modules/tl": "tl@2.6.0", "bu": "bu@1.0.0", "tl": "tl@2.5.0"}),
 }
 # answers as pac prints them, which mklock.py has to place: the root's
 # dependencies, then the node_modules rows
@@ -108,6 +141,34 @@ OURS = {
                       "k1 1.0.0 <- k1 2.0.0"]),
     "alias-cycle":  ("VALID/yes", {"yc": "^1.0.0"},
                      [". <- yc 1.0.0", "yc 1.0.0 <- xc 1.0.0 at yc", "xc 1.0.0 at yc <- yc 1.0.0"]),
+    # the dx rx 1.0.0 selects has px 2.0.0 for its peer px@^1
+    "peer-wrong":   ("INVALID/-", {"dx": "^1.0.0", "rx": "^2.0.0", "px": "^1.0.0"},
+                     [". <- dx 1.0.0", ". <- rx 2.0.0", ". <- px 1.0.0",
+                      "dx 1.0.0 <- rx 1.0.0", "rx 1.0.0 <- dx 1.0.0", "rx 1.0.0 <- px 2.0.0"]),
+    # the same where de's own node_modules holds qe
+    "peer-wrong-deep": ("INVALID/-", {"de": "^1.0.0", "re": "^2.0.0", "qe": "^2.0.0", "pe": "^1.0.0"},
+                        [". <- de 1.0.0", ". <- re 2.0.0", ". <- qe 2.0.0", ". <- pe 1.0.0",
+                         "de 1.0.0 <- qe 1.0.0", "de 1.0.0 <- re 1.0.0", "qe 1.0.0 <- pe 1.0.0",
+                         "re 1.0.0 <- de 1.0.0", "re 1.0.0 <- pe 2.0.0"]),
+    # ut and its bu both peer on tl, so ut's own lookup of tl, which is its
+    # peer, is the one bu's peer needs too
+    "peer-shared":  ("VALID/yes", {"ut": "^1.0.0", "tl": "^2.0.0"},
+                     [". <- ut 1.0.0", ". <- tl 2.6.0", "ut 1.0.0 <- bu 1.0.0", "ut 1.0.0 <- tl 2.6.0"]),
+    "peer-torn":    ("INVALID/-", {"ut": "^1.0.0", "tl": "^2.0.0"},
+                     [". <- ut 1.0.0", ". <- tl 2.6.0", "ut 1.0.0 <- bu 1.0.0", "ut 1.0.0 <- tl 2.5.0"]),
+    # the same below the root, which a tree holds (torn-lock) and mklock.py
+    # does not build: unchecked
+    "peer-torn-deep": ("ERR/-", {"hx": "^1.0.0"},
+                       [". <- hx 1.0.0", "hx 1.0.0 <- ut 1.0.0", "hx 1.0.0 <- tl 2.6.0",
+                        "ut 1.0.0 <- bu 1.0.0", "ut 1.0.0 <- tl 2.5.0"]),
+    # op's optional peer, hung on or: 1.1.0 in range, 2.0.0 not, and with no
+    # edge op sees the root's 2.0.0
+    "opt-peer":     ("VALID/no", {"or": "^1.0.0", "oq": "^2.0.0"},
+                     [". <- or 1.0.0", ". <- oq 2.0.0", "or 1.0.0 <- op 1.0.0", "or 1.0.0 <- oq 1.1.0"]),
+    "opt-peer-bad": ("INVALID/-", {"or": "^1.0.0", "oq": "^2.0.0"},
+                     [". <- or 1.0.0", ". <- oq 2.0.0", "or 1.0.0 <- op 1.0.0", "or 1.0.0 <- oq 2.0.0"]),
+    "opt-peer-seen": ("INVALID/-", {"or": "^1.0.0", "oq": "^2.0.0"},
+                      [". <- or 1.0.0", ". <- oq 2.0.0", "or 1.0.0 <- op 1.0.0"]),
     # cy 1 -> oz 1 -> cy 2 -> cy 1, which closes: the cy 1 inside cy 2 sees
     # the top oz 1
     "cycle-three":  ("VALID/yes", {"cy": "^1.0.0"},
