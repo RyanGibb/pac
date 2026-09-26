@@ -2232,56 +2232,148 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           left; exists (m, v); split; [exact Hv | reflexivity].
       Qed.
 
-      Theorem dependees_lookupOrig : forall R D m v,
-          T.dependees (reduceDeps R D) (Name.Orig m, Version.Orig v) =
-          T.dependees
-            (reduceDeps
-               (realPreimage R (depNames (DepRelFibred.tailFibre D (m, v))))
-               (DepRelFibred.tailFibre D (m, v)))
+      (* An original package's own edges are the encoding's top level: the
+         alternatives of a disjunction, and by De Morgan those of a negated
+         conjunction, hang off their disjunct package, and of the atoms left
+         only a negated one reads its name's versions, for its complement.
+         ownNegNamesNeg is the same walk under a negation. *)
+      Fixpoint ownNegNames (f : Formula) : NSet.t :=
+        match f with
+        | FDep _ _ => NSet.empty
+        | FConj a b => NSet.union (ownNegNames a) (ownNegNames b)
+        | FDisj _ _ => NSet.empty
+        | FNeg a => ownNegNamesNeg a
+        end
+      with ownNegNamesNeg (f : Formula) : NSet.t :=
+        match f with
+        | FDep m _ => NSet.singleton m
+        | FConj _ _ => NSet.empty
+        | FDisj a b => NSet.union (ownNegNamesNeg a) (ownNegNamesNeg b)
+        | FNeg a => ownNegNames a
+        end.
+
+      Definition ownNegDepNames (D : DepRel.t) : NSet.t :=
+        SOen.unionMap (fun '(_, f) => ownNegNames f) D.
+
+      Lemma mem_ownNegDepNames : forall D (n : N.t),
+          NSet.In n (ownNegDepNames D) <->
+          exists p f, DepRel.In (p, f) D /\ NSet.In n (ownNegNames f).
+      Proof.
+        intros D n; unfold ownNegDepNames; rewrite SOen.mem_unionMap.
+        split.
+        - intros [[q g] [He Hn]]; exists q, g; split; [exact He | exact Hn].
+        - intros [q [g [Hq Hn]]]; exists (q, g); split; [exact Hq | exact Hn].
+      Qed.
+
+      Lemma encodeNNF_agreeOwn_aux : forall Vq Vq' f,
+          ((forall x, NSet.In x (ownNegNames f) -> Vq x = Vq' x) ->
+           forall (q : T.Pkg.t) m (w : Version.t) (d : T.Dependees.t),
+             T.DepRel.In ((Name.Orig m, w), d) (encodeNNF Vq q f) ->
+             T.DepRel.In ((Name.Orig m, w), d) (encodeNNF Vq' q f)) /\
+          ((forall x, NSet.In x (ownNegNamesNeg f) -> Vq x = Vq' x) ->
+           forall (q : T.Pkg.t) m (w : Version.t) (d : T.Dependees.t),
+             T.DepRel.In ((Name.Orig m, w), d) (encodeNNFneg Vq q f) ->
+             T.DepRel.In ((Name.Orig m, w), d) (encodeNNFneg Vq' q f)).
+      Proof.
+        intros Vq Vq' f;
+          induction f as [o vs | a IHa b IHb | a IHa b IHb | a IHa].
+        - split; intros Hag q m w d H; simpl in H |- *; [exact H |].
+          assert (E : Vq o = Vq' o)
+            by (apply Hag; simpl; apply NSet.singleton_spec; reflexivity).
+          unfold complementVS in H |- *; rewrite <- E; exact H.
+        - destruct IHa as [IHa1 IHa2]; destruct IHb as [IHb1 IHb2]; split;
+            intros Hag q m w d H; simpl in H |- *.
+          + apply T.DepRel.union_spec in H; apply T.DepRel.union_spec.
+            destruct H as [H | H]; [left | right];
+              [refine (IHa1 _ _ _ _ _ H) | refine (IHb1 _ _ _ _ _ H)];
+              intros x Hx; apply Hag; simpl; apply NSet.union_spec; tauto.
+          + apply SOed.add_in in H; apply SOed.add_in.
+            destruct H as [H | H]; [left; exact H | exfalso].
+            apply T.DepRel.union_spec in H; destruct H as [H | H];
+              [assert (E := proj1 (proj2 (encodeNNF_src_orig_aux Vq a))
+                              _ _ _ _ H)
+              | assert (E := proj2 (proj2 (proj2
+                                (encodeNNF_src_orig_aux Vq b))) _ _ _ _ _ H)];
+              discriminate E.
+        - destruct IHa as [IHa1 IHa2]; destruct IHb as [IHb1 IHb2]; split;
+            intros Hag q m w d H; simpl in H |- *.
+          + apply SOed.add_in in H; apply SOed.add_in.
+            destruct H as [H | H]; [left; exact H | exfalso].
+            apply T.DepRel.union_spec in H; destruct H as [H | H];
+              [assert (E := proj1 (encodeNNF_src_orig_aux Vq a) _ _ _ _ H)
+              | assert (E := proj1 (proj2 (proj2
+                                (encodeNNF_src_orig_aux Vq b))) _ _ _ _ _ H)];
+              discriminate E.
+          + apply T.DepRel.union_spec in H; apply T.DepRel.union_spec.
+            destruct H as [H | H]; [left | right];
+              [refine (IHa2 _ _ _ _ _ H) | refine (IHb2 _ _ _ _ _ H)];
+              intros x Hx; apply Hag; simpl; apply NSet.union_spec; tauto.
+        - destruct IHa as [IHa1 IHa2]; split; intros Hag q m w d H;
+            simpl in H |- *;
+            [exact (IHa2 Hag _ _ _ _ H) | exact (IHa1 Hag _ _ _ _ H)].
+      Qed.
+
+      Lemma dependees_origAgree : forall Vq Vq' D m (w : Version.t),
+          (forall p f x, DepRel.In (p, f) D -> NSet.In x (ownNegNames f) ->
+                         Vq x = Vq' x) ->
+          T.dependees (reduceDepsBy Vq D) (Name.Orig m, w) =
+          T.dependees (reduceDepsBy Vq' D) (Name.Orig m, w).
+      Proof.
+        intros Vq Vq' D m w Hag; apply T.dependees_ext; intro h.
+        rewrite !mem_reduceDepsBy.
+        split; intros [p [f [Hd He]]]; exists p, f; split; try exact Hd.
+        - exact (proj1 (encodeNNF_agreeOwn_aux Vq Vq' f)
+                   (fun x Hx => Hag p f x Hd Hx) _ _ _ _ He).
+        - exact (proj1 (encodeNNF_agreeOwn_aux Vq' Vq f)
+                   (fun x Hx => eq_sym (Hag p f x Hd Hx)) _ _ _ _ He).
+      Qed.
+
+      Lemma dependees_tailFibreBy : forall Vq D m v,
+          T.dependees (reduceDepsBy Vq D) (Name.Orig m, Version.Orig v) =
+          T.dependees (reduceDepsBy Vq (DepRelFibred.tailFibre D (m, v)))
             (Name.Orig m, Version.Orig v).
       Proof.
-        intros R D m v; apply T.dependees_ext; intro h.
-        rewrite !mem_reduceDeps.
-        assert (Hag : forall f,
-                   DepRel.In ((m, v), f) (DepRelFibred.tailFibre D (m, v)) ->
-                   encodeNNF (C.versions R) (embedPkg (m, v)) f =
-                   encodeNNF (C.versions (realPreimage R
-                                (depNames (DepRelFibred.tailFibre D (m, v)))))
-                     (embedPkg (m, v)) f).
-        { intros f Hf.
-          assert (Hag' : forall x, NSet.In x (fnames f) ->
-                     C.versions R x =
-                     C.versions (realPreimage R
-                                   (depNames (DepRelFibred.tailFibre D (m, v)))) x).
-          { intros x Hx; symmetry; apply versions_realPreimage.
-            apply mem_depNames; exists (m, v), f; auto. }
-          exact (proj1 (encodeNNF_agree_aux _ _ f Hag') (embedPkg (m, v))). }
+        intros Vq D m v; apply T.dependees_ext; intro h.
+        rewrite !mem_reduceDepsBy.
         split.
         - intros [p [f [Hd He]]].
-          assert (E := proj1 (encodeNNF_src_orig_aux (C.versions R) f)
-                         _ _ _ _ He).
+          assert (E := proj1 (encodeNNF_src_orig_aux Vq f) _ _ _ _ He).
           destruct p as [pn pv]; unfold embedPkg in E; injection E as -> ->.
-          assert (Hf : DepRel.In ((m, v), f) (DepRelFibred.tailFibre D (m, v)))
-            by (apply DepRelFibred.mem_tailFibre; auto).
-          exists (m, v), f; split; [exact Hf |].
-          rewrite <- (Hag f Hf); exact He.
+          exists (m, v), f; split; [| exact He].
+          apply DepRelFibred.mem_tailFibre; auto.
         - intros [p [f [Hd He]]].
-          assert (Hd' := Hd); apply DepRelFibred.mem_tailFibre in Hd';
-            destruct Hd' as [HD ->].
-          exists (m, v), f; split; [exact HD |].
-          rewrite (Hag f Hd); exact He.
+          apply DepRelFibred.mem_tailFibre in Hd; destruct Hd as [HD ->].
+          exists (m, v), f; split; [exact HD | exact He].
       Qed.
 
       Theorem dependees_lookupOrigBy : forall R D Vq m v,
-          (forall n, NSet.In n (depNames (DepRelFibred.tailFibre D (m, v))) ->
-                     Vq n = C.versions R n) ->
+          (forall n,
+             NSet.In n (ownNegDepNames (DepRelFibred.tailFibre D (m, v))) ->
+             Vq n = C.versions R n) ->
           T.dependees (reduceDeps R D) (Name.Orig m, Version.Orig v) =
           T.dependees (reduceDepsBy Vq (DepRelFibred.tailFibre D (m, v)))
             (Name.Orig m, Version.Orig v).
       Proof.
-        intros R D Vq m v HVq; rewrite dependees_lookupOrig; unfold reduceDeps.
-        f_equal; apply reduceDepsBy_agree; intros n Hn.
-        rewrite versions_realPreimage by exact Hn; symmetry; apply HVq; exact Hn.
+        intros R D Vq m v HVq; unfold reduceDeps.
+        rewrite dependees_tailFibreBy; apply dependees_origAgree.
+        intros p f x Hpf Hx; symmetry; apply HVq.
+        apply mem_ownNegDepNames; exists p, f; auto.
+      Qed.
+
+      Theorem dependees_lookupOrig : forall R D m v,
+          T.dependees (reduceDeps R D) (Name.Orig m, Version.Orig v) =
+          T.dependees
+            (reduceDeps
+               (realPreimage R
+                  (ownNegDepNames (DepRelFibred.tailFibre D (m, v))))
+               (DepRelFibred.tailFibre D (m, v)))
+            (Name.Orig m, Version.Orig v).
+      Proof.
+        intros R D m v; rewrite (dependees_lookupOrigBy R D
+          (C.versions (realPreimage R
+             (ownNegDepNames (DepRelFibred.tailFibre D (m, v)))))).
+        - reflexivity.
+        - intros n Hn; apply versions_realPreimage; exact Hn.
       Qed.
 
       Theorem dependees_lookupAbsent : forall R D m,

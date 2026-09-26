@@ -621,18 +621,28 @@ Module VariableFormula (N V : UsualOrderedType)
       Module DepRelFibred := FibredRel Pkg Dependees DepElt DepRel.
       Module RKeys := PreimageOfKeys N Pkg NSet PkgSet.
 
-      Fixpoint fnames (f : Formula) : NSet.t :=
+      (* A negated comparison complements against Y_x, which the
+         sub-instance carries whole, so only atoms count. *)
+      Fixpoint ownNegNames (f : Formula) : NSet.t :=
+        match f with
+        | FDep _ _ => NSet.empty
+        | FConj a b => NSet.union (ownNegNames a) (ownNegNames b)
+        | FDisj _ _ => NSet.empty
+        | FNeg a => ownNegNamesNeg a
+        | FVarCmp _ _ _ => NSet.empty
+        end
+      with ownNegNamesNeg (f : Formula) : NSet.t :=
         match f with
         | FDep m _ => NSet.singleton m
-        | FConj a b => NSet.union (fnames a) (fnames b)
-        | FDisj a b => NSet.union (fnames a) (fnames b)
-        | FNeg a => fnames a
+        | FConj _ _ => NSet.empty
+        | FDisj a b => NSet.union (ownNegNamesNeg a) (ownNegNamesNeg b)
+        | FNeg a => ownNegNames a
         | FVarCmp _ _ _ => NSet.empty
         end.
 
       Module SOen := SetOps DepElt N DepRel NSet.
-      Definition depNames (D : DepRel.t) : NSet.t :=
-        SOen.unionMap (fun e => fnames (snd e)) D.
+      Definition ownNegDepNames (D : DepRel.t) : NSet.t :=
+        SOen.unionMap (fun e => ownNegNames (snd e)) D.
 
       Definition realPreimage (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
         RKeys.ofKeys fst ns R.
@@ -640,21 +650,44 @@ Module VariableFormula (N V : UsualOrderedType)
       Definition valuesAt (Y_x : X.t -> YSet.t) (x : X.t) : X.t -> YSet.t :=
         fun x' => if X.eq_dec x x' then Y_x x else YSet.empty.
 
-      Lemma fnames_liftFormula : forall Y_x f m,
-          PF.Reduction.NSet.In (inl m) (PF.Reduction.fnames (liftFormula Y_x f))
-          -> NSet.In m (fnames f).
+      Lemma ownNegNames_liftFormula : forall Y_x f m,
+          (PF.Reduction.NSet.In (inl m)
+             (PF.Reduction.Lookup.ownNegNames (liftFormula Y_x f)) ->
+           NSet.In m (ownNegNames f)) /\
+          (PF.Reduction.NSet.In (inl m)
+             (PF.Reduction.Lookup.ownNegNamesNeg (liftFormula Y_x f)) ->
+           NSet.In m (ownNegNamesNeg f)).
       Proof.
         intros Y_x f m;
           induction f as [o vs | a IHa b IHb | a IHa b IHb | a IHa | x op y];
-          cbn [liftFormula PF.Reduction.fnames fnames]; intro H.
+          cbn [liftFormula PF.Reduction.Lookup.ownNegNames
+               PF.Reduction.Lookup.ownNegNamesNeg ownNegNames ownNegNamesNeg];
+          split; intro H;
+          try (destruct (PF.Reduction.NSet.empty_spec H)).
         - apply PF.Reduction.NSet.singleton_spec in H; injection H as ->.
           apply NSet.singleton_spec; reflexivity.
         - apply PF.Reduction.NSet.union_spec in H; apply NSet.union_spec.
-          destruct H as [H | H]; [left; exact (IHa H) | right; exact (IHb H)].
+          destruct H as [H | H];
+            [left; exact (proj1 IHa H) | right; exact (proj1 IHb H)].
         - apply PF.Reduction.NSet.union_spec in H; apply NSet.union_spec.
-          destruct H as [H | H]; [left; exact (IHa H) | right; exact (IHb H)].
-        - exact (IHa H).
+          destruct H as [H | H];
+            [left; exact (proj2 IHa H) | right; exact (proj2 IHb H)].
+        - exact (proj2 IHa H).
+        - exact (proj1 IHa H).
         - apply PF.Reduction.NSet.singleton_spec in H; discriminate H.
+      Qed.
+
+      Lemma ownNegDepNames_liftDeps : forall Y_x D m,
+          PF.Reduction.NSet.In (inl m)
+            (PF.Reduction.Lookup.ownNegDepNames (liftDeps Y_x D)) ->
+          NSet.In m (ownNegDepNames D).
+      Proof.
+        intros Y_x D m Hn.
+        apply PF.Reduction.Lookup.mem_ownNegDepNames in Hn.
+        destruct Hn as [p [g [Hg Hm]]]; apply mem_liftDeps in Hg.
+        destruct Hg as [p' [f [Hf E]]]; injection E as _ ->.
+        apply SOen.mem_unionMap; exists (p', f); split; [exact Hf |].
+        exact (proj1 (ownNegNames_liftFormula Y_x f m) Hm).
       Qed.
 
       Lemma liftDeps_tailFibre : forall Y_x D (m : N.t) (v : V.t),
@@ -732,55 +765,43 @@ Module VariableFormula (N V : UsualOrderedType)
             [intro Hy; exact Hy | contradiction NE; reflexivity].
       Qed.
 
-      Theorem dependees_lookupOrig : forall Y_x R D m v,
-          T.dependees (reduceDeps Y_x R D)
-            (Name.Orig (inl m), Version.Orig (inl v)) =
-          T.dependees
-            (reduceDeps Y_x
-               (realPreimage R (depNames (DepRelFibred.tailFibre D (m, v))))
-               (DepRelFibred.tailFibre D (m, v)))
-            (Name.Orig (inl m), Version.Orig (inl v)).
-      Proof.
-        intros Y_x R D m v.
-        set (Dp := DepRelFibred.tailFibre D (m, v)).
-        unfold reduceDeps at 1.
-        rewrite (PF.Reduction.Lookup.dependees_lookupOrigBy _ _
-                   (liftOracle Y_x
-                      (C.versions (realPreimage R (depNames Dp))))).
-        - rewrite reduceDeps_by, liftDeps_tailFibre; reflexivity.
-        - rewrite liftDeps_tailFibre; intros [m' | x] Hn;
-            rewrite versions_liftReal; [| reflexivity].
-          cbn [liftOracle]; f_equal; apply C.versions_ext; intro w.
-          unfold realPreimage; rewrite RKeys.mem_ofKeys; cbn [fst].
-          split; [intros [H _]; exact H | intro H; split; [exact H |]].
-          apply PF.Reduction.mem_depNames in Hn.
-          destruct Hn as [p [g [Hg Hm]]]; apply mem_liftDeps in Hg.
-          destruct Hg as [p' [f [Hf E]]]; injection E as _ ->.
-          apply SOen.mem_unionMap; exists (p', f); split; [exact Hf |].
-          exact (fnames_liftFormula Y_x f m' Hm).
-      Qed.
-
       Theorem dependees_lookupOrigBy : forall Y_x R D Vq m v,
-          (forall n, NSet.In n (depNames (DepRelFibred.tailFibre D (m, v))) ->
-                     Vq n = C.versions R n) ->
+          (forall n,
+             NSet.In n (ownNegDepNames (DepRelFibred.tailFibre D (m, v))) ->
+             Vq n = C.versions R n) ->
           T.dependees (reduceDeps Y_x R D)
             (Name.Orig (inl m), Version.Orig (inl v)) =
           T.dependees (reduceDepsBy Y_x Vq (DepRelFibred.tailFibre D (m, v)))
             (Name.Orig (inl m), Version.Orig (inl v)).
       Proof.
-        intros Y_x R D Vq m v HVq; rewrite dependees_lookupOrig, reduceDeps_by.
-        unfold reduceDepsBy; f_equal.
-        apply PF.Reduction.Lookup.reduceDepsBy_agree; intros [m' | x] Hn;
-          [| reflexivity].
-        cbn [liftOracle]; f_equal.
-        apply PF.Reduction.mem_depNames in Hn.
-        destruct Hn as [p [g [Hg Hm]]]; apply mem_liftDeps in Hg.
-        destruct Hg as [p' [f [Hf E]]]; injection E as _ ->.
-        assert (Hin : NSet.In m' (depNames (DepRelFibred.tailFibre D (m, v))))
-          by (apply SOen.mem_unionMap; exists (p', f);
-              exact (conj Hf (fnames_liftFormula Y_x f m' Hm))).
-        rewrite (HVq m' Hin); apply C.versions_ext; intro w.
-        unfold realPreimage; rewrite RKeys.mem_ofKeys; cbn [fst]; tauto.
+        intros Y_x R D Vq m v HVq; unfold reduceDeps, reduceDepsBy.
+        rewrite (PF.Reduction.Lookup.dependees_lookupOrigBy _ _
+                   (liftOracle Y_x Vq)).
+        - rewrite liftDeps_tailFibre; reflexivity.
+        - rewrite liftDeps_tailFibre; intros [m' | x] Hn;
+            rewrite versions_liftReal; [| reflexivity].
+          cbn [liftOracle]; f_equal; apply HVq.
+          exact (ownNegDepNames_liftDeps Y_x _ m' Hn).
+      Qed.
+
+      Theorem dependees_lookupOrig : forall Y_x R D m v,
+          T.dependees (reduceDeps Y_x R D)
+            (Name.Orig (inl m), Version.Orig (inl v)) =
+          T.dependees
+            (reduceDeps Y_x
+               (realPreimage R
+                  (ownNegDepNames (DepRelFibred.tailFibre D (m, v))))
+               (DepRelFibred.tailFibre D (m, v)))
+            (Name.Orig (inl m), Version.Orig (inl v)).
+      Proof.
+        intros Y_x R D m v.
+        rewrite (dependees_lookupOrigBy Y_x R D
+                   (C.versions (realPreimage R
+                      (ownNegDepNames (DepRelFibred.tailFibre D (m, v)))))),
+          reduceDeps_by by
+          (intros n Hn; apply C.versions_ext; intro w;
+           unfold realPreimage; rewrite RKeys.mem_ofKeys; cbn [fst]; tauto).
+        reflexivity.
       Qed.
 
       Theorem dependees_lookupAbsent : forall Y_x R D m,

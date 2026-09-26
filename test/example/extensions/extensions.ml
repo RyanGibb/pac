@@ -588,7 +588,9 @@ module Package_formula = struct
       (match p with
       | R.Name.Orig m, R.Version.Orig v ->
           let dp = L.DepRelFibred.tailFibre d (m, v) in
-          R.T.dependees (R.reduceDeps (L.realPreimage r (R.depNames dp)) dp) p
+          R.T.dependees
+            (R.reduceDeps (L.realPreimage r (L.ownNegDepNames dp)) dp)
+            p
       | R.Name.Orig _, R.Version.Bot -> R.T.DependeesSet.empty
       | R.Name.Disjunct fs, i -> (
           match L.disjAlt fs i with
@@ -673,7 +675,7 @@ module Variable_formula = struct
       | R.Name.Orig (E.Inl m), R.Version.Orig (E.Inl v) ->
           let dp = L.DepRelFibred.tailFibre d (m, v) in
           R.T.dependees
-            (R.reduceDeps yx (L.realPreimage r (L.depNames dp)) dp)
+            (R.reduceDeps yx (L.realPreimage r (L.ownNegDepNames dp)) dp)
             p
       | R.Name.Orig (E.Inl _), R.Version.Bot | R.Name.Orig (E.Inr _), _ ->
           R.T.DependeesSet.empty
