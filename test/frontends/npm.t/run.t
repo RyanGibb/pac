@@ -1065,3 +1065,17 @@ not cached, or already in the cache:
   root .
   error: reading corrupt/core.json: not a packument
   [3]
+
+So is a package.json that cannot be read, while one that is not a
+package.json is refused:
+
+  $ ../../../bin/main.exe npm --offline --cache . ./nope/package.json
+  error: ./nope/package.json: No such file or directory
+  [3]
+  $ ../../../bin/main.exe npm --offline --cache . ./app
+  error: ./app: Is a directory
+  [3]
+  $ printf '[]' > list.json
+  $ ../../../bin/main.exe npm --offline --cache . ./list.json
+  error: ./list.json: not a package.json
+  [2]

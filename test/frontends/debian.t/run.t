@@ -897,3 +897,9 @@ provided by twin and takes it, as PubGrub's own order does:
     twin:amd64 1
   encoded solution: 4 core nodes (8 lookups)
   loaded: 4 names, 4 versions
+
+An index that cannot be read is a read error, not a refused query:
+
+  $ ../../../bin/main.exe debian app nope/Packages
+  error: nope/Packages: No such file or directory
+  [3]

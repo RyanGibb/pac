@@ -74,6 +74,7 @@ let report ~t0 (loaded : Report.loaded) answer print =
 
 let debian_run debug order no_recs no_strict native query path =
   guard @@ fun () ->
+  Pac_common.Input.file path;
   let t0 = Unix.gettimeofday () in
   match
     Deb_solve.solve_files ~debug ~order ~recommends:(not no_recs)
@@ -140,7 +141,7 @@ let debian_cmd =
   let path =
     Arg.(
       required
-      & pos ~rev:true 0 (some file) None
+      & pos ~rev:true 0 (some string) None
       & info [] ~docv:"PACKAGES" ~doc:"Debian Packages index file.")
   in
   Cmd.v
@@ -152,6 +153,7 @@ let debian_cmd =
 let opam_run debug order with_test with_doc with_dev_setup opam_version repo
     atoms =
   guard @@ fun () ->
+  Pac_common.Input.dir repo;
   match Opam_parse.query_of_args atoms with
   | Error e -> error 2 "%s" e
   | Ok query ->
@@ -221,7 +223,7 @@ let opam_cmd =
   let repo =
     Arg.(
       required
-      & pos 0 (some dir) None
+      & pos 0 (some string) None
       & info [] ~docv:"REPO" ~doc:"opam repository root.")
   in
   (* the syntax of one element is opam's own (OpamFormula.atom_of_string),
@@ -243,6 +245,8 @@ let opam_cmd =
 let cargo_run debug order print_parents index manifest features no_default
     installed =
   guard @@ fun () ->
+  Pac_common.Input.dir index;
+  Pac_common.Input.file manifest;
   let t0 = Unix.gettimeofday () in
   try
     let root = Cargo_query.of_manifest manifest in
@@ -298,7 +302,7 @@ let cargo_cmd =
   let index =
     Arg.(
       required
-      & pos 0 (some dir) None
+      & pos 0 (some string) None
       & info [] ~docv:"INDEX" ~doc:"crates.io-index checkout.")
   in
   (* what cargo resolves: it has no command-line query, only the root
@@ -306,7 +310,7 @@ let cargo_cmd =
   let manifest =
     Arg.(
       required
-      & pos 1 (some file) None
+      & pos 1 (some string) None
       & info [] ~docv:"CARGO_TOML" ~doc:"The root package's Cargo.toml.")
   in
   (* unset, the root gets every feature it declares, which is the
@@ -363,6 +367,7 @@ let cargo_cmd =
 
 let alpine_run debug order path goals =
   guard @@ fun () ->
+  Pac_common.Input.file path;
   match Apk_parse.world_of_args goals with
   | Error e -> error 2 "%s" e
   | Ok world ->
@@ -392,7 +397,7 @@ let alpine_cmd =
   let path =
     Arg.(
       required
-      & pos 0 (some file) None
+      & pos 0 (some string) None
       & info [] ~docv:"APKINDEX" ~doc:"Uncompressed APKINDEX file.")
   in
   let goals =

@@ -717,3 +717,19 @@ non-ASCII name, which no crates.io crate has, is refused unread:
   $ ../../../bin/main.exe cargo index d.toml
   error: invalid character `1` in package name: `1a`, the name cannot start with a digit
   [2]
+
+An index or a manifest that cannot be read is a read error, not a refused
+query:
+
+  $ ../../../bin/main.exe cargo nope manifests/a.toml
+  error: nope: No such file or directory
+  [3]
+  $ ../../../bin/main.exe cargo manifests/a.toml manifests/a.toml
+  error: manifests/a.toml: Not a directory
+  [3]
+  $ ../../../bin/main.exe cargo index manifests/nope.toml
+  error: manifests/nope.toml: No such file or directory
+  [3]
+  $ ../../../bin/main.exe cargo index manifests
+  error: manifests: Is a directory
+  [3]

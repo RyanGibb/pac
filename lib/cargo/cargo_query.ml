@@ -295,9 +295,7 @@ let rust_version r =
    without changing ours, and is refused. *)
 let of_manifest (path : string) : root =
   let doc =
-    try (T.of_file path).T.fields with
-    | T.Error e -> refuse "%s: %s" path e
-    | Sys_error e -> refuse "%s" e
+    try (T.of_file path).T.fields with T.Error e -> refuse "%s: %s" path e
   in
   List.iter
     (fun (k, _) ->

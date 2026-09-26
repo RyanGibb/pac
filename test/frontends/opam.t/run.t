@@ -442,3 +442,12 @@ version installs eqv.1.00 with dep.3:
     eqv 1.00
   encoded solution: 3 core nodes (3 lookups)
   loaded: 2 names, 3 versions
+
+A repository that cannot be read is a read error, not a refused query:
+
+  $ ../../../bin/main.exe opam nope eqv
+  error: nope: No such file or directory
+  [3]
+  $ ../../../bin/main.exe opam packages/eqv/eqv.1.0/opam eqv
+  error: packages/eqv/eqv.1.0/opam: Not a directory
+  [3]

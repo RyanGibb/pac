@@ -453,3 +453,9 @@ it in beside ru-lo:
     ru-user 1.0
   encoded solution: 5 core nodes (4 lookups)
   loaded: 10 names, 10 versions, 6 provides entries, 0 install_if rules
+
+An index that cannot be read is a read error, not a refused query:
+
+  $ ../../../bin/main.exe alpine nope/APKINDEX ru-app
+  error: nope/APKINDEX: No such file or directory
+  [3]
