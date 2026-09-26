@@ -574,9 +574,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Proof.
       unfold SyntheticName;
         induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa].
-      - repeat split; intros; exfalso; eapply SOpt.empty_in; eassumption.
+      - split4; intros; exfalso; eapply SOpt.empty_in; eassumption.
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); repeat split.
+          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
         + intros p o v H; simpl in H;
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
             [exact (IHa1 _ _ _ H) | exact (IHb1 _ _ _ H)].
@@ -593,7 +593,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
             [exact (IHa2 _ _ _ H) | exact (IHb4 _ _ _ _ H)].
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); repeat split.
+          destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
         + intros p o v H; simpl in H;
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
             [apply mem_idxPkgs in H; destruct H as [j [_ E]];
@@ -609,7 +609,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         + intros n i o v H; simpl in H;
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
             [exact (IHa2 _ _ _ H) | exact (IHb2 _ _ _ H)].
-      - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); repeat split.
+      - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4.
         + intros p o v H; exact (IHa2 _ _ _ H).
         + intros p o v H; exact (IHa1 _ _ _ H).
         + intros n i o v H; exact (IHa2 _ _ _ H).
@@ -2059,9 +2059,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
               T.PkgSet.In q (syntheticPkgs (fst q))).
       Proof.
         induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa].
-        - repeat split; intros; exfalso; eapply SOpt.empty_in; eassumption.
+        - split4; intros; exfalso; eapply SOpt.empty_in; eassumption.
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); repeat split.
+            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
           + intros p q H; simpl in H; apply T.PkgSet.union_spec in H;
               destruct H as [H | H]; [exact (IHa1 _ _ H) | exact (IHb1 _ _ H)].
           + intros p q H; simpl in H; apply T.PkgSet.union_spec in H;
@@ -2077,7 +2077,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
               destruct H as [H | H];
               [exact (IHa2 _ _ H) | exact (IHb4 _ _ _ H)].
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); repeat split.
+            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
           + intros p q H; simpl in H; apply T.PkgSet.union_spec in H;
               destruct H as [H | H].
             * apply mem_idxPkgs in H; destruct H as [i [Hi ->]];
@@ -2092,7 +2092,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
               [exact (IHa1 _ _ H) | exact (IHb3 _ _ _ H)].
           + intros n i q H; simpl in H; apply T.PkgSet.union_spec in H;
               destruct H as [H | H]; [exact (IHa2 _ _ H) | exact (IHb2 _ _ H)].
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); repeat split.
+        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4.
           + intros p q H; simpl in H; exact (IHa2 _ _ H).
           + intros p q H; simpl in H; exact (IHa1 _ _ H).
           + intros n i q H; simpl in H; exact (IHa2 _ _ H).
@@ -2117,10 +2117,10 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                 (arisingConjNeg n i f)).
       Proof.
         intros Vq f; induction f as [m ws | a IHa b IHb | a IHa b IHb | a IHa].
-        - repeat split; intros; apply SOed.singleton_in in H; subst d;
+        - split4; intros; apply SOed.singleton_in in H; subst d;
             cbn [fst snd syntheticPkgs]; apply T.PkgSet.empty_subset.
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); repeat split.
+            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
           + intros p d H; simpl in H; apply T.DepRel.union_spec in H;
               intros z Hz; apply T.PkgSet.union_spec; destruct H as [H | H];
               [left; exact (IHa1 _ d H z Hz) | right; exact (IHb1 _ d H z Hz)].
@@ -2141,7 +2141,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
               [left; exact (IHa2 _ d H z Hz)
               | right; exact (IHb4 _ _ d H z Hz)].
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
-            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); repeat split.
+            destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
           + intros p d H; simpl in H; rewrite SOed.add_in in H;
               destruct H as [-> | H].
             * intros z Hz; cbn [fst snd syntheticPkgs] in Hz;
@@ -2161,7 +2161,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           + intros n i d H; simpl in H; apply T.DepRel.union_spec in H;
               intros z Hz; apply T.PkgSet.union_spec; destruct H as [H | H];
               [left; exact (IHa2 _ d H z Hz) | right; exact (IHb2 _ d H z Hz)].
-        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); repeat split.
+        - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4.
           + intros p d H; simpl in H; exact (IHa2 _ d H).
           + intros p d H; simpl in H; exact (IHa1 _ d H).
           + intros n i d H; simpl in H; exact (IHa2 _ d H).

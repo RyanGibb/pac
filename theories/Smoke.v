@@ -338,7 +338,7 @@ Definition alpI : Alp.Inst :=
        Alp.Deps.add ((1, 10), Alp.DPos (2, Alp.COp OpGe 20)) Alp.Deps.empty
    ; Alp.inst_prov :=
        Alp.Prov.add ((3, 30), (4, Alp.PVer 5))
-         (Alp.Prov.add ((2, 20), (6, Alp.PVirt)) Alp.Prov.empty)
+         (Alp.Prov.add ((2, 20), (6, Alp.PBare)) Alp.Prov.empty)
    ; Alp.inst_installIf :=
        Alp.InstallIf.add ((2, 20), Alp.CondSet.add (Alp.DPos (1, Alp.CAny))
                                 (Alp.CondSet.add (Alp.DNeg (5, Alp.CAny))

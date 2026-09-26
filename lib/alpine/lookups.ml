@@ -70,7 +70,7 @@ let xdep (d : P.dep) : Alp.coq_Dep =
   if d.P.d_neg then Alp.DNeg (xatom d) else Alp.DPos (xatom d)
 
 let ptag (v : string option) : Alp.coq_PTag =
-  match v with Some pv -> Alp.PVer pv | None -> Alp.PVirt
+  match v with Some pv -> Alp.PVer pv | None -> Alp.PBare
 
 (* building the set is also where the rule's first-listed positive
    condition is offered to [FirstDesignation]; an earlier rule keeps the

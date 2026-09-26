@@ -122,16 +122,16 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
   Inductive PTag : Type :=
   | PVer (pv : V.t)
-  | PVirt.
+  | PBare.
 
   Module PTagComp <: ComparableType.
     Definition t := PTag.
     Definition compare (x y : t) : comparison :=
       match x, y with
       | PVer v1, PVer v2 => V.compare v1 v2
-      | PVer _, PVirt => Lt
-      | PVirt, PVer _ => Gt
-      | PVirt, PVirt => Eq
+      | PVer _, PBare => Lt
+      | PBare, PVer _ => Gt
+      | PBare, PBare => Eq
       end.
     Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
     Proof. cmp_eq_iff cmp_alp. Qed.
@@ -170,7 +170,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     (exists q pv, Prov.In (q, (n, PVer pv)) (inst_prov I) /\
        PkgSet.In q S /\ constrMatch ct pv = true) \/
     (bareMatch ct = true /\
-     exists q, Prov.In (q, (n, PVirt)) (inst_prov I) /\ PkgSet.In q S).
+     exists q, Prov.In (q, (n, PBare)) (inst_prov I) /\ PkgSet.In q S).
 
   Definition HasPriority (I : Inst) (q : Pkg.t) : Prop :=
     exists k, Prio.In (q, k) (inst_prio I) /\ k <> 0.
@@ -184,7 +184,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     (exists q pv, Prov.In (q, (n, PVer pv)) (inst_prov I) /\
        PkgSet.In q S /\ constrMatch ct pv = true) \/
     (bareMatch ct = true /\
-     exists q, Prov.In (q, (n, PVirt)) (inst_prov I) /\ PkgSet.In q S /\
+     exists q, Prov.In (q, (n, PBare)) (inst_prov I) /\ PkgSet.In q S /\
        AutoSelectable I q).
 
   Definition MatchDep (I : Inst) (S : PkgSet.t) (d : Dep) : Prop :=
@@ -353,7 +353,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                        (andb (PkgSet.mem q (inst_repo I))
                           (constrMatch ct pv))
                   then Some (Version.Prov q pv) else None
-              | PVirt => None
+              | PBare => None
               end)
            (inst_prov I)).
 
@@ -361,19 +361,19 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       constrVers I n CAny.
 
     Module SOrp := SetOps ProvElt Pkg Prov PkgSet.
-    Definition uprovSet (I : Inst) (n : N.t) : PkgSet.t :=
+    Definition bareProvSet (I : Inst) (n : N.t) : PkgSet.t :=
       SOrp.filterMap
         (fun '(q, (m, tg)) =>
            match tg with
-           | PVirt =>
+           | PBare =>
                if andb (NEqb.eqb m n) (PkgSet.mem q (inst_repo I))
                then Some q else None
            | PVer _ => None
            end)
         (inst_prov I).
 
-    Definition uprovL (I : Inst) (n : N.t) : list Pkg.t :=
-      PkgSet.elements (uprovSet I n).
+    Definition bareProvL (I : Inst) (n : N.t) : list Pkg.t :=
+      PkgSet.elements (bareProvSet I n).
 
     Definition encPos (I : Inst) (n : N.t) (ct : Constr) : PF.Formula :=
       let base := PF.FDep (Name.Orig n) (constrVers I n ct) in
@@ -384,7 +384,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
              PF.FDisj
                (PF.FDep (Name.Orig (fst q))
                   (PF.VSet.singleton (Version.Orig (snd q)))) f)
-          base (uprovL I n)
+          base (bareProvL I n)
       else base.
 
     Definition hasPriorityb (I : Inst) (q : Pkg.t) : bool :=
@@ -412,7 +412,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
              PF.FDisj
                (PF.FDep (Name.Orig (fst q))
                   (PF.VSet.singleton (Version.Orig (snd q)))) f)
-          base (List.filter (selectableb I) (uprovL I n))
+          base (List.filter (selectableb I) (bareProvL I n))
       else base.
 
     Definition encDep (I : Inst) (d : Dep) : PF.Formula :=
@@ -429,7 +429,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                 (andb (NEqb.eqb m (fst a))
                    (match tg with
                     | PVer pv => constrMatch (snd a) pv
-                    | PVirt => bareMatch (snd a)
+                    | PBare => bareMatch (snd a)
                     end)))
            (inst_prov I)).
 
@@ -484,7 +484,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                          Some (PF.FDep (Name.Orig m)
                                  (PF.VSet.singleton
                                     (Version.Prov (n, v) pv)))
-                     | PVirt => None
+                     | PBare => None
                      end)
                   (ProvFibred.tailFibre (inst_prov I) (n, v)))
                (SOtf.map (fun '(z, conds) => installIfForm I z conds)
@@ -508,7 +508,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
            | PVer pv =>
                if PkgSet.mem q S
                then Some (Name.Orig m, Version.Prov q pv) else None
-           | PVirt => None
+           | PBare => None
            end)
         (inst_prov I).
 
@@ -582,19 +582,19 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             PkgSet.mem_spec; auto.
     Qed.
 
-    Lemma mem_uprovSet : forall I n q,
-        PkgSet.In q (uprovSet I n) <->
-        Prov.In (q, (n, PVirt)) (inst_prov I) /\
+    Lemma mem_bareProvSet : forall I n q,
+        PkgSet.In q (bareProvSet I n) <->
+        Prov.In (q, (n, PBare)) (inst_prov I) /\
         PkgSet.In q (inst_repo I).
     Proof.
-      intros I n q; unfold uprovSet; rewrite SOrp.mem_filterMap.
+      intros I n q; unfold bareProvSet; rewrite SOrp.mem_filterMap.
       split.
       - intros [[q0 [m tg]] [Hm Hf]]; cbn in Hf.
         destruct tg as [|]; [discriminate |].
         rewrite if_some_iff, Bool.andb_true_iff, NEqb.eqb_true_iff,
           PkgSet.mem_spec in Hf.
         destruct Hf as [[-> Hq] <-]; auto.
-      - intros [Hr Hq]; exists (q, (n, PVirt)); split; [exact Hr | cbn].
+      - intros [Hr Hq]; exists (q, (n, PBare)); split; [exact Hr | cbn].
         apply if_some_iff; rewrite Bool.andb_true_iff, NEqb.eqb_true_iff,
           PkgSet.mem_spec; auto.
     Qed.
@@ -621,7 +621,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         (exists pv, Prov.In (p, (fst a, PVer pv)) (inst_prov I) /\
            constrMatch (snd a) pv = true) \/
         (bareMatch (snd a) = true /\
-         Prov.In (p, (fst a, PVirt)) (inst_prov I)).
+         Prov.In (p, (fst a, PBare)) (inst_prov I)).
     Proof.
       intros I p a; unfold attachAt.
       rewrite Bool.orb_true_iff, Bool.andb_true_iff, NEqb.eqb_true_iff.
@@ -639,7 +639,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           rewrite (proj2 (PkgEqb.eqb_true_iff p p) eq_refl).
           rewrite (proj2 (NEqb.eqb_true_iff (fst a) (fst a)) eq_refl).
           rewrite Hc; reflexivity.
-        + exists (p, (fst a, PVirt)); split; [exact Hr | cbn].
+        + exists (p, (fst a, PBare)); split; [exact Hr | cbn].
           rewrite (proj2 (PkgEqb.eqb_true_iff p p) eq_refl).
           rewrite (proj2 (NEqb.eqb_true_iff (fst a) (fst a)) eq_refl).
           rewrite Hany; reflexivity.
@@ -801,13 +801,13 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         (exists w, PF.VSet.In w (constrVers I n ct) /\
            PF.PkgSet.In (Name.Orig n, w) S') \/
         (bareMatch ct = true /\
-         exists q, PkgSet.In q (uprovSet I n) /\
+         exists q, PkgSet.In q (bareProvSet I n) /\
            PF.PkgSet.In (embedPkg q) S').
     Proof.
       intros I S' n ct; unfold encPos.
       destruct (bareMatch ct) eqn:Ea.
       - rewrite satisfies_disjFold; cbn.
-        unfold uprovL; split.
+        unfold bareProvL; split.
         + intros [[w [Hw Hm]] | [q [Hq Hm]]]; [left; eauto |].
           apply SOpp.elements_in in Hq; right; split; [reflexivity |].
           eauto.
@@ -824,7 +824,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         (exists w, PF.VSet.In w (constrVers I n ct) /\
            PF.PkgSet.In (Name.Orig n, w) S') \/
         (bareMatch ct = true /\
-         exists q, PkgSet.In q (uprovSet I n) /\ selectableb I q = true /\
+         exists q, PkgSet.In q (bareProvSet I n) /\ selectableb I q = true /\
            PF.PkgSet.In (embedPkg q) S').
     Proof.
       intros I S' n ct; unfold encReq; cbv zeta.
@@ -1015,12 +1015,12 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       rewrite satisfies_encPos, (base_decode I S' n ct Hres).
       unfold MatchPos; rewrite or_assoc.
       apply or_iff_compat_l, or_iff_compat_l, and_iff_compat_l; split.
-      - intros [q [Hq Hm]]; apply mem_uprovSet in Hq.
+      - intros [q [Hq Hm]]; apply mem_bareProvSet in Hq.
         exists q; split; [exact (proj1 Hq) |].
         apply mem_alpineResolution; exact Hm.
       - intros [q [Hp HqS]]; exists q.
         apply mem_alpineResolution in HqS; split; [| exact HqS].
-        apply mem_uprovSet; split;
+        apply mem_bareProvSet; split;
           [exact Hp | exact (embed_reduceReal _ _ (Hsub _ HqS))].
     Qed.
 
@@ -1034,13 +1034,13 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       rewrite satisfies_encReq, (base_decode I S' n ct Hres).
       unfold MatchReq; rewrite or_assoc.
       apply or_iff_compat_l, or_iff_compat_l, and_iff_compat_l; split.
-      - intros [q [Hq [Hs Hm]]]; apply mem_uprovSet in Hq.
+      - intros [q [Hq [Hs Hm]]]; apply mem_bareProvSet in Hq.
         exists q; split; [exact (proj1 Hq) |].
         split; [apply mem_alpineResolution; exact Hm |].
         apply selectableb_spec; exact Hs.
       - intros [q [Hp [HqS Ha]]]; exists q.
         apply mem_alpineResolution in HqS.
-        split; [apply mem_uprovSet; split;
+        split; [apply mem_bareProvSet; split;
                 [exact Hp | exact (embed_reduceReal _ _ (Hsub _ HqS))] |].
         split; [apply selectableb_spec; exact Ha | exact HqS].
     Qed.
@@ -1197,11 +1197,11 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       rewrite satisfies_encPos, (base_coreResolution I S n ct Hsub).
       unfold MatchPos; rewrite or_assoc.
       apply or_iff_compat_l, or_iff_compat_l, and_iff_compat_l; split.
-      - intros [q [Hq Hm]]; apply mem_uprovSet in Hq.
+      - intros [q [Hq Hm]]; apply mem_bareProvSet in Hq.
         apply coreResolution_embed in Hm; exists q; split; [exact (proj1 Hq) |].
         exact Hm.
       - intros [q [Hp HqS]]; exists q; split;
-          [apply mem_uprovSet; split; [exact Hp | exact (Hsub _ HqS)]
+          [apply mem_bareProvSet; split; [exact Hp | exact (Hsub _ HqS)]
           | apply coreResolution_embed; exact HqS].
     Qed.
 
@@ -1214,11 +1214,12 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       rewrite satisfies_encReq, (base_coreResolution I S n ct Hsub).
       unfold MatchReq; rewrite or_assoc.
       apply or_iff_compat_l, or_iff_compat_l, and_iff_compat_l; split.
-      - intros [q [Hq [Hs Hm]]]; apply mem_uprovSet in Hq.
+      - intros [q [Hq [Hs Hm]]]; apply mem_bareProvSet in Hq.
         apply coreResolution_embed in Hm; exists q; split; [exact (proj1 Hq) |].
         split; [exact Hm | apply selectableb_spec; exact Hs].
       - intros [q [Hp [HqS Ha]]]; exists q.
-        split; [apply mem_uprovSet; split; [exact Hp | exact (Hsub _ HqS)] |].
+        split;
+          [apply mem_bareProvSet; split; [exact Hp | exact (Hsub _ HqS)] |].
         split; [apply selectableb_spec; exact Ha |].
         apply coreResolution_embed; exact HqS.
     Qed.
@@ -1417,10 +1418,10 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
       Lemma encPos_agree : forall I I' n ct,
           constrVers I' n ct = constrVers I n ct ->
-          uprovSet I' n = uprovSet I n ->
+          bareProvSet I' n = bareProvSet I n ->
           encPos I' n ct = encPos I n ct.
       Proof.
-        intros I I' n ct Hc Hu; unfold encPos, uprovL.
+        intros I I' n ct Hc Hu; unfold encPos, bareProvL.
         rewrite Hc, Hu; reflexivity.
       Qed.
 
@@ -1475,19 +1476,19 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
               right; exists n, (PVer pv); split; assumption.
       Qed.
 
-      Lemma uprovSet_subInst : forall I ns deps ownProv installIf world n,
+      Lemma bareProvSet_subInst : forall I ns deps ownProv installIf world n,
           NSet.In n ns ->
           Prov.Subset ownProv (inst_prov I) ->
-          uprovSet (subInst I ns deps ownProv installIf world) n =
-          uprovSet I n.
+          bareProvSet (subInst I ns deps ownProv installIf world) n =
+          bareProvSet I n.
       Proof.
         intros I ns deps ownProv installIf world n Hn Hown.
         apply PkgSet.ext; intro q.
-        rewrite !mem_uprovSet; cbn [subInst inst_repo inst_prov].
+        rewrite !mem_bareProvSet; cbn [subInst inst_repo inst_prov].
         split.
         - intros [Hprov Hrep].
           apply Prov.union_spec in Hprov.
-          assert (Hprov' : Prov.In (q, (n, PVirt)) (inst_prov I)).
+          assert (Hprov' : Prov.In (q, (n, PBare)) (inst_prov I)).
           { destruct Hprov as [Hprov | Hprov]; [exact (Hown _ Hprov) |].
             apply mem_provPreimage in Hprov; exact (proj1 Hprov). }
           apply mem_repoPreimage in Hrep; destruct Hrep as [Hrep _].
@@ -1496,7 +1497,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           + apply Prov.union_spec; right.
             apply mem_provPreimage; split; [exact Hprov | exact Hn].
           + apply mem_repoPreimage; split; [exact Hrep |].
-            right; exists n, PVirt; split; assumption.
+            right; exists n, PBare; split; assumption.
       Qed.
 
       Theorem dependees_lookupProv : forall I m q pv,
@@ -1536,7 +1537,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         intros I ns deps ownProv installIf world n ct Hn Hown.
         apply encPos_agree.
         - apply constrVers_subInst; assumption.
-        - apply uprovSet_subInst; assumption.
+        - apply bareProvSet_subInst; assumption.
       Qed.
 
       Lemma selectableb_subInst : forall I ns deps ownProv installIf q,
@@ -1563,17 +1564,18 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           encReq I n ct.
       Proof.
         intros I ns deps ownProv installIf n ct Hn Hown.
-        unfold encReq, uprovL; cbv zeta.
+        unfold encReq, bareProvL; cbv zeta.
         rewrite (constrVers_subInst I ns deps ownProv installIf
                    (inst_world I) n ct Hn Hown).
-        rewrite (uprovSet_subInst I ns deps ownProv installIf
+        rewrite (bareProvSet_subInst I ns deps ownProv installIf
                    (inst_world I) n Hn Hown).
         destruct (bareMatch ct); [| reflexivity].
         f_equal; apply filter_ext_in; intros q Hq.
         apply selectableb_subInst.
-        apply SOpp.elements_in, mem_uprovSet in Hq; destruct Hq as [Hp Hr].
+        apply SOpp.elements_in, mem_bareProvSet in Hq;
+          destruct Hq as [Hp Hr].
         apply mem_repoPreimage; split; [exact Hr |].
-        right; exists n, PVirt; split; assumption.
+        right; exists n, PBare; split; assumption.
       Qed.
 
       Lemma encDep_subInst : forall I ns deps ownProv installIf d,

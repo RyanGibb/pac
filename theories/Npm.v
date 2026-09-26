@@ -75,14 +75,14 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     ; inst_ovr : list (N.t * Range)
     ; inst_root : RPkg.t }.
 
-  Definition ownedBy {A : Type} (l : list (RPkg.t * A)) (p : RPkg.t)
+  Definition ownedBy {A : Type} (p : RPkg.t) (l : list (RPkg.t * A))
     : list A :=
     fold_right
       (fun q acc => if RPkgEqb.eqb (fst q) p then snd q :: acc else acc)
       nil l.
 
   Lemma in_ownedBy : forall (A : Type) (l : list (RPkg.t * A)) p a,
-      In a (ownedBy l p) <-> In (p, a) l.
+      In a (ownedBy p l) <-> In (p, a) l.
   Proof.
     intros A l p a; induction l as [| [q b] l IH]; simpl.
     - split; intros [].
@@ -100,7 +100,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
 
   Lemma ownedBy_filter : forall (A : Type) (l : list (RPkg.t * A)) f p,
       (forall a, In (p, a) l -> f (p, a) = true) ->
-      ownedBy (List.filter f l) p = ownedBy l p.
+      ownedBy p (List.filter f l) = ownedBy p l.
   Proof.
     intros A l f p; induction l as [| [q b] l IH]; simpl; [reflexivity |].
     intro H.
@@ -174,7 +174,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     orb (negb (d_dev d)) (RPkgEqb.eqb p (inst_root I)).
 
   Definition dependenciesOf (I : Inst) (p : RPkg.t) : list Dependency :=
-    List.filter (depActive I p) (ownedBy (inst_dep I) p).
+    List.filter (depActive I p) (ownedBy p (inst_dep I)).
 
   Fixpoint findDepL (l : list Dependency) (a : N.t) : option Dependency :=
     match l with
@@ -237,7 +237,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Qed.
 
   Definition peerDependenciesAt (I : Inst) (p : RPkg.t) : list PeerDependency :=
-    ownedBy (inst_peer I) p.
+    ownedBy p (inst_peer I).
 
   Definition peerKeyAt (I : Inst) (p : RPkg.t) (r : PeerDependency) : NKey.t :=
     slotKey I p (p_name r).
@@ -1244,14 +1244,14 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Lemma ownDependencies_id : forall I p,
-          ownedBy (ownDependencies I p) p = ownedBy (inst_dep I) p.
+          ownedBy p (ownDependencies I p) = ownedBy p (inst_dep I).
       Proof.
         intros I p; unfold ownDependencies; apply ownedBy_filter.
         intros d _; cbn [fst]; apply RPkgEqb.eqb_refl.
       Qed.
 
       Lemma ownPeerDependencies_id : forall I p,
-          ownedBy (ownPeerDependencies I p) p = ownedBy (inst_peer I) p.
+          ownedBy p (ownPeerDependencies I p) = ownedBy p (inst_peer I).
       Proof.
         intros I p; unfold ownPeerDependencies; apply ownedBy_filter.
         intros r _; cbn [fst]; apply RPkgEqb.eqb_refl.
@@ -1272,7 +1272,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Lemma dependenciesOf_agree : forall I ns deps prs p,
-          ownedBy deps p = ownedBy (inst_dep I) p ->
+          ownedBy p deps = ownedBy p (inst_dep I) ->
           dependenciesOf (subInst I ns deps prs) p = dependenciesOf I p.
       Proof.
         intros I ns deps prs p Hdeps; unfold dependenciesOf, depActive.
@@ -1280,7 +1280,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Lemma slotOf_agree : forall I ns deps prs p a,
-          ownedBy deps p = ownedBy (inst_dep I) p ->
+          ownedBy p deps = ownedBy p (inst_dep I) ->
           slotOf (subInst I ns deps prs) p a = slotOf I p a.
       Proof.
         intros I ns deps prs p a Hdeps; unfold slotOf.
@@ -1288,7 +1288,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Lemma dirs_agree : forall I ns deps prs p,
-          ownedBy deps p = ownedBy (inst_dep I) p ->
+          ownedBy p deps = ownedBy p (inst_dep I) ->
           dirs (subInst I ns deps prs) p = dirs I p.
       Proof.
         intros I ns deps prs p Hdeps; unfold dirs.
@@ -1296,7 +1296,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Lemma slotKey_agree : forall I ns deps prs p a,
-          ownedBy deps p = ownedBy (inst_dep I) p ->
+          ownedBy p deps = ownedBy p (inst_dep I) ->
           slotKey (subInst I ns deps prs) p a = slotKey I p a.
       Proof.
         intros I ns deps prs p a Hdeps; unfold slotKey.
@@ -1304,7 +1304,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Lemma slotCands_agree : forall I ns deps prs p,
-          ownedBy deps p = ownedBy (inst_dep I) p ->
+          ownedBy p deps = ownedBy p (inst_dep I) ->
           (forall d, In d (dependenciesOf I p) -> NSet.In (d_target d) ns) ->
           forall a,
             slotCands (subInst I ns deps prs) p a =
@@ -1339,7 +1339,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
 
       Lemma childCands_agree : forall I ns deps prs
           (p : RPkg.t) (m : NKey.t),
-          ownedBy deps p = ownedBy (inst_dep I) p ->
+          ownedBy p deps = ownedBy p (inst_dep I) ->
           (forall d, In d (dependenciesOf I p) -> NSet.In (d_target d) ns) ->
           NSet.In (snd m) ns ->
           NSet.mem (fst m) (peerDirs (subInst I ns deps prs)) =

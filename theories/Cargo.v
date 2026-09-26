@@ -413,15 +413,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Module NFGF := UOTCompareFacts NFGTrip.
   Module GEqb := UOTEqb G.
   Module FEqb := UOTEqb F.
-  Module GFacts := UOTCompareFacts G.
-  #[local] Hint Rewrite NGF.compare_eq_iff NFGF.compare_eq_iff
-    GFacts.compare_eq_iff : cmp_cargo.
+  #[local] Hint Rewrite NGF.compare_eq_iff NFGF.compare_eq_iff : cmp_cargo.
   #[local] Hint Extern 1 => cmp_by NGF.compare_antisym : cmp_cargo.
   #[local] Hint Extern 1 => cmp_by NFGF.compare_antisym : cmp_cargo.
-  #[local] Hint Extern 1 => cmp_by GFacts.compare_antisym : cmp_cargo.
   #[local] Hint Extern 1 => cmp_by NGF.compare_lt_trans : cmp_cargo.
   #[local] Hint Extern 1 => cmp_by NFGF.compare_lt_trans : cmp_cargo.
-  #[local] Hint Extern 1 => cmp_by GFacts.compare_lt_trans : cmp_cargo.
 
   Module NPlus.
     Inductive name : Type :=
