@@ -26,11 +26,15 @@ the old version is no part of the answer's validity.
 
 `cargo generate-lockfile --locked` cannot ask this: it resolves with no
 previous resolve (ops/cargo_update.rs), so it accepts only a lock equal to
-cargo's own fresh answer, which is correspondence again.  It is still run
-when the keep check refuses, because cargo's own lock can fail that
-check: a crate declaring one package at two sites has both rows re-locked
-to the first previous version matching either (kreuzberg's zip), so a lock
-identical to cargo's fresh one is valid whatever the keep check says.
+cargo's own fresh answer, which is correspondence again.  It is run when
+the keep check refuses, for `identical` alone.  cargo's own fresh lock can
+fail the keep check: a crate declaring one package at two sites with
+different ranges can get two versions, and a re-resolve re-locks both
+rows to the first previous version matching either (kreuzberg's zip).
+Such a lock is still invalid: cargo --locked, as any locked build runs
+it, refuses it whoever wrote it, and taking it where it happens to be
+cargo's own would make the verdict on the split turn on every unrelated
+choice elsewhere in the answer.
 
 --locked is the right question only because our answer is meant to BE a
 Cargo.lock.  A lock is the feature-independent resolve: cargo writes it
@@ -138,8 +142,6 @@ def check(ans, out, manifest):
     shutil.copy(ours, lock)
     irc, _ = cargo_lock(workdir, home, FRESH, locked=True)
     res["identical"] = irc == 0
-    if res["identical"]:
-        return "VALID", "yes", res
     # the repair: what cargo does to our lock when allowed to
     shutil.copy(ours, lock)
     rrc, rmsg = cargo_lock(workdir, home, KEEP, locked=False)

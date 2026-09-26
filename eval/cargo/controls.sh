@@ -9,7 +9,9 @@ bad=0
 
 # a fixture index: alpha 1.0.0, 1.1.0 and 2.0.0; zeta 1.0.0 needing beta,
 # and zeta 2.0.0 needing nothing; split declaring wsys twice, under two cfgs,
-# and hold needing wsys 2
+# and hold needing wsys 2; opt's beta optional behind feature fb, and devy's
+# a dev-dependency; kz declaring zed twice, with ranges that overlap; lsys
+# and lsysb both linking lx
 rm -rf "$T/index"
 python3 - "$T/index" <<'EOF'
 import hashlib, json, os, sys
@@ -20,16 +22,27 @@ ROWS = {"alpha": [("1.0.0", []), ("1.1.0", []), ("2.0.0", [])],
         "wsys": [("1.0.0", []), ("2.0.0", [])],
         "split": [("1.0.0", [{"name": "wsys", "req": ">=1, <3", "target": "cfg(windows)"},
                              {"name": "wsys", "req": ">=1, <3", "target": "cfg(unix)"}])],
-        "hold": [("1.0.0", [{"name": "wsys", "req": "^2"}])]}
+        "hold": [("1.0.0", [{"name": "wsys", "req": "^2"}])],
+        "opt": [("1.0.0", [{"name": "beta", "req": "^1", "optional": True}], {"fb": ["beta"]})],
+        "devy": [("1.0.0", [{"name": "beta", "req": "^1", "kind": "dev"}])],
+        "zed": [("1.0.0", []), ("1.9.0", []), ("2.5.0", [])],
+        "kz": [("1.0.0", [{"name": "zed", "req": "^1"},
+                          {"name": "zed", "req": ">=1, <3", "kind": "build"}])],
+        "lsys": [("1.0.0", [], {}, "lx")],
+        "lsysb": [("1.0.0", [], {}, "lx")]}
 for n, vs in ROWS.items():
-    d = os.path.join(T, n[:2], n[2:4])
+    d = (os.path.join(T, n[:2], n[2:4]) if len(n) > 3 else
+         os.path.join(T, "3", n[0]) if len(n) == 3 else os.path.join(T, str(len(n))))
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, n), "w") as f:
-        for v, deps in vs:
-            f.write(json.dumps({"name": n, "vers": v, "features": {}, "yanked": False,
-                                "cksum": hashlib.sha256(f"{n}{v}".encode()).hexdigest(),
-                                "deps": [dict(features=[], optional=False, default_features=True,
-                                              **{"target": None, "kind": "normal", **x}) for x in deps]}) + "\n")
+        for v, deps, *more in vs:
+            row = {"name": n, "vers": v, "features": more[0] if more else {}, "yanked": False,
+                   "cksum": hashlib.sha256(f"{n}{v}".encode()).hexdigest(),
+                   "deps": [{"features": [], "optional": False, "default_features": True,
+                             "target": None, "kind": "normal", **x} for x in deps]}
+            if len(more) > 1:
+                row["links"] = more[1]
+            f.write(json.dumps(row) + "\n")
 EOF
 root() {  # <dir> <dependency lines...>
   mkdir -p "$T/$1/src"
@@ -40,6 +53,10 @@ root() {  # <dir> <dependency lines...>
 root root 'alpha = "^1"'
 root root-split 'split = "=1.0.0"'
 root root-held 'split = "=1.0.0"' 'hold = "^1"'
+root root-opt 'opt = "=1.0.0"'
+root root-devy 'devy = "=1.0.0"'
+root root-kz 'kz = "=1.0.0"' 'alpha = "^1"'
+root root-lsys 'lsys = "=1.0.0"'
 
 . "$S/../serve.sh"
 serve "$PORT" "$T/index" "$T/proxy.log" python3 "$S/sparse_proxy.py" "$PORT" "$T/index" || exit 1
@@ -78,6 +95,14 @@ ctl split-two INVALID/- 'root_1.0.0 split_1.0.0 wsys_1.0.0 wsys_2.0.0' \
   'root_1.0.0_split_1.0.0 split_1.0.0_wsys_1.0.0 split_1.0.0_wsys_2.0.0' root-split
 ctl split-held INVALID/- 'root_1.0.0 split_1.0.0 hold_1.0.0 wsys_1.0.0 wsys_2.0.0' \
   'root_1.0.0_split_1.0.0 root_1.0.0_hold_1.0.0 split_1.0.0_wsys_1.0.0 split_1.0.0_wsys_2.0.0 hold_1.0.0_wsys_2.0.0' root-held
+# kz's two declarations of zed split as cargo's own fresh lock splits them,
+# which cargo's --locked refuses whatever else the lock holds
+ctl split-fresh INVALID/- 'root_1.0.0 kz_1.0.0 alpha_1.1.0 zed_1.9.0 zed_2.5.0' \
+  'root_1.0.0_kz_1.0.0 root_1.0.0_alpha_1.1.0 kz_1.0.0_zed_1.9.0 kz_1.0.0_zed_2.5.0' root-kz
+ctl split-fresh-old INVALID/- 'root_1.0.0 kz_1.0.0 alpha_1.0.0 zed_1.9.0 zed_2.5.0' \
+  'root_1.0.0_kz_1.0.0 root_1.0.0_alpha_1.0.0 kz_1.0.0_zed_1.9.0 kz_1.0.0_zed_2.5.0' root-kz
+ctl split-none VALID/yes 'root_1.0.0 kz_1.0.0 alpha_1.0.0 zed_1.9.0' \
+  'root_1.0.0_kz_1.0.0 root_1.0.0_alpha_1.0.0 kz_1.0.0_zed_1.9.0' root-kz
 
 # cargo failing for want of a registry says nothing of the answer
 kill $served; wait $served 2> /dev/null
