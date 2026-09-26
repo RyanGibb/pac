@@ -75,12 +75,13 @@ let compare_no_epoch v1 v2 =
 
 (* The epoch is the digits before the first ':', when they are all digits
    and there are some; otherwise the version has none, and the ':' is part
-   of the upstream version.  An epoch past max_int raises, as dpkg's
-   parseversion refuses one too big. *)
+   of the upstream version.  Its end and the upstream's start are returned
+   rather than its value: the digits are compared as a run, as apt's
+   DoCmpVersion compares them with CmpFragment, so an epoch of any length
+   is ordered and none overflows. *)
 let epoch s =
   match String.index_opt s ':' with
-  | Some i when i > 0 && String.for_all is_digit (String.sub s 0 i) ->
-      (int_of_string (String.sub s 0 i), i + 1)
+  | Some i when i > 0 && skip_while is_digit s 0 i = i -> (i, i + 1)
   | _ -> (0, 0)
 
 (* deb-version(7) and Policy 5.6.12: the epoch, then dpkg's verrevcmp
@@ -89,5 +90,5 @@ let compare v1 v2 =
   if String.equal v1 v2 then 0
   else
     let e1, i1 = epoch v1 and e2, i2 = epoch v2 in
-    let c = Int.compare e1 e2 in
-    if c <> 0 then c else compare_from v1 i1 v2 i2
+    let c = numeric v1 (skip_zeros v1 0 e1) e1 v2 (skip_zeros v2 0 e2) e2 in
+    if c <> 0 then sign c else compare_from v1 i1 v2 i2
