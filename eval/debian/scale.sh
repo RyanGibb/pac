@@ -28,7 +28,7 @@ ask_tool() { answer "$S/baseline/apt-$1" names "$o.apt" ask "$2"; }
 
 run_pac() {
   (cd "$TOP" && timeout "$TIMEOUT" "$run/pac.exe" debian $(flag "$1") --native amd64 \
-     $3 repos/debian/Packages) > "$2.out" 2>&1
+     repos/debian/Packages $3) > "$2.out" 2>&1
 }
 
 extract() { rows "$1.out" | sed -n 's/:amd64 .*//p' | sort -u > "$1.ours"; }

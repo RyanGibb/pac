@@ -72,7 +72,7 @@ let report ~t0 (loaded : Report.loaded) answer print =
   Report.loaded loaded ~solve:(t1 -. t0 -. loaded.Report.parse);
   code
 
-let debian_run debug order no_recs no_strict native query path =
+let debian_run debug order no_recs no_strict native path query =
   guard @@ fun () ->
   Pac_common.Input.file path;
   let t0 = Unix.gettimeofday () in
@@ -127,29 +127,26 @@ let debian_cmd =
       value & opt string "amd64"
       & info [ "native" ] ~docv:"ARCH" ~doc:"Native architecture.")
   in
-  (* the index goes last so that a query stays apt-get install's argument
-     list verbatim, however many elements it has *)
+  let path =
+    Arg.(
+      required
+      & pos 0 (some string) None
+      & info [] ~docv:"PACKAGES" ~doc:"Debian Packages index file.")
+  in
   let query =
     Arg.(
-      non_empty
-      & pos_left ~rev:true 0 string []
+      non_empty & pos_right 0 string []
       & info [] ~docv:"QUERY"
           ~doc:
             "Packages to install, as $(b,apt-get install) takes them: \
              $(b,NAME[:ARCH]), optionally with $(b,=VERSION) or $(b,/RELEASE); \
              no Release file is read, so of releases only $(b,*) matches.")
   in
-  let path =
-    Arg.(
-      required
-      & pos ~rev:true 0 (some string) None
-      & info [] ~docv:"PACKAGES" ~doc:"Debian Packages index file.")
-  in
   Cmd.v
     (Cmd.info "debian" ~exits ~doc:"Solve against a Debian Packages index.")
     Term.(
       const debian_run $ debug_arg $ order $ no_recs $ no_strict $ native
-      $ query $ path)
+      $ path $ query)
 
 let opam_run debug order with_test with_doc with_dev_setup opam_version repo
     atoms =

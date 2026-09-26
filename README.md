@@ -22,7 +22,7 @@ scripts/fetch-repos.sh
 ```
 
 ```sh
-pac debian --native amd64 nano repos/debian/Packages
+pac debian --native amd64 repos/debian/Packages nano
 pac alpine repos/alpine/APKINDEX nginx
 pac opam repos/opam-repository lwt
 pac cargo repos/crates.io-index path/to/Cargo.toml
