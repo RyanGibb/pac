@@ -763,6 +763,42 @@ nothing, so alpha, whose optional entry asks for nosuch, is abandoned:
   encoded solution: 3 core nodes (6 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched, 1 of 1 optionalDependencies (target, range) pairs dropped
 
+A spec is a range where semver, reading loosely, finds one, and a dist-tag
+otherwise, as npa reads it; nothing unread becomes *.  spec-app's
+devprod is a hyphen range between v-prefixed versions, 1.0.0 to 1.9.0;
+digtag's beta2 is no range, so it is the tag, and 1.0.0 rather than the
+latest 2.0.0; and kit is an alias however its prefix is cased, so it holds
+util-lib 1.0.0.  A peer or an override that is an alias puts another
+package under the name, which a peer's range and an override's cannot
+say, so both are dropped and counted:
+
+  $ ../../../bin/main.exe npm --offline --cache . ./spec-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root spec-app 1.0.0
+  packages (4):
+    devprod 1.0.0
+    digtag 1.0.0
+    util-lib 1.0.0 at kit
+    spec-app 1.0.0
+  encoded solution: 7 core nodes (14 lookups)
+  loaded: 4 names, 7 versions, 0 packuments fetched
+  parser dropped 2 declarations
+
+The same on the command line, where the alias prefix is cased as npa
+allows and a spec that is neither a range nor a name a tag may have is
+refused:
+
+  $ ../../../bin/main.exe npm --offline --cache . kit@NPM:util-lib@1.0.0 digtag@beta2 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root .
+  packages (3):
+    .
+    digtag 1.0.0
+    util-lib 1.0.0 at kit
+  encoded solution: 5 core nodes (10 lookups)
+  loaded: 3 names, 5 versions, 0 packuments fetched
+  $ ../../../bin/main.exe npm --offline --cache . 'digtag@^beta'
+  error: digtag@^beta: not a registry spec (name, name@range, name@tag, key@npm:name@range)
+  [2]
+
 The cases from here to the fetch race pin where we deliberately differ
 from npm; each states npm's answer, taken from npm 11.17.0 over the same
 fixtures.
@@ -1013,3 +1049,23 @@ and with it unreachable, or failing, there is no answer at all.
   [3]
   $ ls partial
   plugin.json
+
+A packument that does not parse says no more about the name's versions,
+so it stops the run with status 3 too, whether it is fetched, when it is
+not cached, or already in the cache:
+
+  $ mkdir junk corrupt
+  $ printf '#!/bin/sh\nwhile [ $# -gt 0 ]; do case $1 in -o) o=$2; shift;; esac; shift; done\nprintf "<html>" > "$o"; printf 200\n' > junk/curl
+  $ chmod +x junk/curl
+  $ PATH=$PWD/junk:$PATH ../../../bin/main.exe npm --cache partial plugin
+  root .
+  error: fetching https://registry.npmjs.org/core: not a packument
+  [3]
+  $ ls partial
+  plugin.json
+  $ cp plugin.json corrupt/
+  $ printf '<html>' > corrupt/core.json
+  $ ../../../bin/main.exe npm --offline --cache corrupt plugin
+  root .
+  error: reading corrupt/core.json: not a packument
+  [3]

@@ -4,7 +4,7 @@ let compare = V.Loose.compare
 let is_prerelease = V.Loose.is_prerelease
 let same_core = V.Loose.same_core
 
-type op = Ge | Gt | Le | Lt | Eq | Ne
+type op = Ge | Gt | Le | Lt | Eq
 type comparator = Any | Cmp of op * string
 type comp_set = comparator list (* whitespace is conjunction *)
 type range = comp_set list (* || is disjunction *)
@@ -77,7 +77,6 @@ let ineq ~z ~u op (ma, mi, pa, pre) =
       match op with
       | Ge -> [ Cmp (Ge, vstr ~pre:lo m n p) ]
       | Lt -> [ Cmp (Lt, vstr ~pre:up m n p) ]
-      | Ne -> [ Cmp (Ne, vstr ~pre m n p) ]
       | Gt ->
           if has_pa then [ Cmp (Gt, vstr ~pre m n p) ]
           else if has_mi then [ Cmp (Ge, vstr ~pre:z m (n + 1) 0) ]
@@ -113,31 +112,92 @@ let hyphen ~z ~u a b =
   in
   match lo @ hi with [] -> [ Any ] | l -> l
 
-let starts p s =
-  String.length s >= String.length p && String.sub s 0 (String.length p) = p
+let is_digit c = c >= '0' && c <= '9'
+
+let is_ident c =
+  (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || is_digit c || c = '-'
+
+let rec skip_while f s i =
+  if i < String.length s && f s.[i] then skip_while f s (i + 1) else i
+
+(* dot-separated runs of [is_ident] from i, as semver's prerelease and
+   build identifiers are: where they end, or None if there is none *)
+let idents s i =
+  let rec go i =
+    let j = skip_while is_ident s i in
+    if j = i then None
+    else if j < String.length s && s.[j] = '.' then
+      match go (j + 1) with Some k -> Some k | None -> Some j
+    else Some j
+  in
+  go i
+
+(* the [v=\s]* semver allows before a version, after any operator *)
+let strip_v s =
+  let i = skip_while (fun c -> c = 'v' || c = '=') s 0 in
+  String.sub s i (String.length s - i)
+
+(* XRANGEPLAINLOOSE at i (internal/re.js): one to three parts, each
+   digits, x, X or *, and after three a prerelease, its hyphen optional,
+   and a build *)
+let xrange_plain s i =
+  let n = String.length s in
+  let part i =
+    if i < n && (s.[i] = 'x' || s.[i] = 'X' || s.[i] = '*') then Some (i + 1)
+    else
+      let j = skip_while is_digit s i in
+      if j > i then Some j else None
+  in
+  let dotted k i =
+    match part i with
+    | None -> false
+    | Some j -> j = n || (s.[j] = '.' && k (j + 1))
+  in
+  let tail i =
+    let i = if i < n && s.[i] <> '+' then idents s i else Some i in
+    match i with
+    | None -> false
+    | Some i -> i = n || (s.[i] = '+' && idents s (i + 1) = Some n)
+  in
+  dotted
+    (dotted (fun i -> match part i with Some j -> tail j | None -> false))
+    (skip_while (fun c -> c = 'v' || c = '=') s i)
+
+(* A comparator node-semver keeps in a loose range: parseComparator strips
+   the first build it finds, and what then matches none of its caret,
+   tilde and x-range grammars is thrown out of the set. *)
+let comparator_ok (tok : string) =
+  let n = String.length tok in
+  let tok =
+    let rec plus i =
+      match String.index_from_opt tok i '+' with
+      | Some p when p + 1 < n && is_ident tok.[p + 1] -> (
+          match idents tok (p + 1) with
+          | Some e -> String.sub tok 0 p ^ String.sub tok e (n - e)
+          | None -> tok)
+      | Some p -> plus (p + 1)
+      | None -> tok
+    in
+    plus 0
+  in
+  let starts p = String.starts_with ~prefix:p tok in
+  if starts "^" then xrange_plain tok 1
+  else if starts "~>" then xrange_plain tok 2
+  else if starts "~" then xrange_plain tok 1
+  else xrange_plain tok (if starts "<" || starts ">" then 1 else 0)
 
 let comparators_of ~z ~u (tok : string) : comparator list =
-  let drop k = String.sub tok k (String.length tok - k) in
-  (* the "v" prefix is allowed on the version part after an operator too,
-     so "^v1.2.3" is "^1.2.3"; without this the leading v makes the first
-     component unparseable and the whole comparator widens to "*" *)
   let spec k =
-    let s = drop k in
-    parse_spec
-      (if starts "v" s || starts "V" s then String.sub s 1 (String.length s - 1)
-       else s)
+    parse_spec (strip_v (String.sub tok k (String.length tok - k)))
   in
-  if tok = "" then []
-  else if starts "^" tok then caret ~z ~u (spec 1)
-  else if starts "~>" tok then tilde ~u (spec 2)
-  else if starts "~" tok then tilde ~u (spec 1)
-  else if starts ">=" tok then ineq ~z ~u Ge (spec 2)
-  else if starts "<=" tok then ineq ~z ~u Le (spec 2)
-  else if starts ">" tok then ineq ~z ~u Gt (spec 1)
-  else if starts "<" tok then ineq ~z ~u Lt (spec 1)
-  else if starts "==" tok then bare ~z ~u (spec 2)
-  else if starts "=" tok then bare ~z ~u (spec 1)
-  else if starts "v" tok then bare ~z ~u (spec 1)
+  let starts p = String.starts_with ~prefix:p tok in
+  if starts "^" then caret ~z ~u (spec 1)
+  else if starts "~>" then tilde ~u (spec 2)
+  else if starts "~" then tilde ~u (spec 1)
+  else if starts ">=" then ineq ~z ~u Ge (spec 2)
+  else if starts "<=" then ineq ~z ~u Le (spec 2)
+  else if starts ">" then ineq ~z ~u Gt (spec 1)
+  else if starts "<" then ineq ~z ~u Lt (spec 1)
   else bare ~z ~u (spec 0)
 
 let is_op_only s =
@@ -155,39 +215,44 @@ let rec glue = function
   | a :: rest -> a :: glue rest
   | [] -> []
 
-let parse_set ~z ~u (s : string) : comp_set =
+(* A set whose every comparator is thrown out is thrown out itself; an
+   empty one is "*". *)
+let parse_set ~z ~u (s : string) : comp_set option =
   match glue (split_ws s) with
-  | [] -> [ Any ]
-  | [ a; "-"; b ] -> hyphen ~z ~u a b
+  | [] -> Some [ Any ]
+  | [ a; "-"; b ] when xrange_plain a 0 && xrange_plain b 0 ->
+      Some (hyphen ~z ~u (strip_v a) (strip_v b))
   | toks -> (
-      match List.concat_map (comparators_of ~z ~u) toks with
-      | [] -> [ Any ]
-      | l -> l)
+      match List.filter comparator_ok toks with
+      | [] -> None
+      | toks -> Some (List.concat_map (comparators_of ~z ~u) toks))
 
 (* the || alternatives are the unit the prerelease rule is scoped to, so
    they stay separate all the way into the calculus *)
 let split_alts (s : string) : string list =
   let n = String.length s in
-  let out = ref [] and buf = Buffer.create 16 in
-  let i = ref 0 in
-  while !i < n do
-    if !i + 1 < n && s.[!i] = '|' && s.[!i + 1] = '|' then (
-      out := Buffer.contents buf :: !out;
-      Buffer.clear buf;
-      i := !i + 2)
-    else (
-      Buffer.add_char buf s.[!i];
-      incr i)
-  done;
-  out := Buffer.contents buf :: !out;
-  List.rev !out
+  let rec go start i acc =
+    if i >= n then List.rev (String.sub s start (n - start) :: acc)
+    else if i + 1 < n && s.[i] = '|' && s.[i + 1] = '|' then
+      go (i + 2) (i + 2) (String.sub s start (i - start) :: acc)
+    else go start (i + 1) acc
+  in
+  go 0 0 []
 
-(* include_prerelease reads the range as semver's includePrerelease does,
-   for [holds_pre] *)
-let parse_range ?(include_prerelease = false) (s : string) : range =
+(* None where node-semver's Range refuses the string, every set having
+   been thrown out, and npa then reads the spec as a dist-tag.
+   include_prerelease reads the range as semver's includePrerelease does,
+   for [holds_pre]. *)
+let parse_range_opt ?(include_prerelease = false) (s : string) : range option =
   let z = if include_prerelease then "0" else "" in
-  let s = String.trim s in
-  if s = "" then [ [ Any ] ] else List.map (parse_set ~z ~u:z) (split_alts s)
+  match List.filter_map (parse_set ~z ~u:z) (split_alts s) with
+  | [] -> None
+  | rg -> Some rg
+
+(* satisfies catches the TypeError of a range semver refuses and answers
+   false, so such a range, with no set at all, matches nothing *)
+let parse_range ?include_prerelease s =
+  Option.value ~default:[] (parse_range_opt ?include_prerelease s)
 
 let comp_match ct v =
   match ct with
@@ -199,8 +264,7 @@ let comp_match ct v =
       | Gt -> s > 0
       | Le -> s <= 0
       | Lt -> s < 0
-      | Eq -> s = 0
-      | Ne -> s <> 0)
+      | Eq -> s = 0)
 
 let cs_admits cs v =
   V.Loose.admits v
@@ -230,7 +294,6 @@ let string_of_op = function
   | Le -> "<="
   | Lt -> "<"
   | Eq -> "="
-  | Ne -> "!="
 
 let string_of_comparator = function
   | Any -> "*"

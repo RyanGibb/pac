@@ -1,25 +1,20 @@
+(* How npa's fromRegistry reads a registry spec: a range where node-semver
+   reads one, loosely, and otherwise a dist-tag, which only the target's
+   packument resolves.  The literal "*", and the empty range npm reads as
+   it, is npm's own case apart from every range meaning the same. *)
+type spec = Range of Npm_version.range | Star | Tag of string
+
 type dep = {
   d_dir : string; (* the directory key, i.e. the manifest key *)
   d_target : string; (* the registry package, differing under npm: *)
-  d_range : Npm_version.range;
+  d_spec : spec;
   d_dev : bool;
   (* not carried into the calculus: it only tells the solver that this
      dependency may be abandoned when the registry cannot satisfy it *)
   d_optional : bool;
-  (* the range was written as the literal "*" or left empty, which npm
-     reads apart from every other range that means the same *)
-  d_star : bool;
-  (* a dist-tag, which the target's packument turns into a version *)
-  d_tag : string option;
 }
 
-type peer = {
-  p_name : string;
-  p_range : Npm_version.range;
-  p_optional : bool;
-  p_star : bool;
-  p_tag : string option;
-}
+type peer = { p_name : string; p_spec : spec; p_optional : bool }
 
 type ver = {
   v_name : string;
@@ -58,35 +53,47 @@ let has_sub s sub =
   let rec go i = i + m <= n && (String.sub s i m = sub || go (i + 1)) in
   m = 0 || go 0
 
-let starts p s =
-  String.length s >= String.length p && String.sub s 0 (String.length p) = p
+let starts p s = String.starts_with ~prefix:p s
 
-(* a bare identifier with no digit and no operator is a dist-tag, which
-   only the registry can resolve -- except "x"/"X", which are semver's
-   wildcards and mean the same as "*" *)
-let looks_like_tag s =
-  s <> "" && s <> "x" && s <> "X"
-  && String.for_all
-       (fun c -> (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c = '-')
-       s
+(* npa's isAliasSpec, which takes the prefix in any case *)
+let is_alias s = starts "npm:" (String.lowercase_ascii s)
 
 (* git, file and URL specs, and the link:, workspace:, portal: and patch:
-   specs npa refuses, are dropped and counted rather than guessed at.  No
-   range semver reads, loose or not, holds a '!', so npa takes one for a
-   tag name and refuses it (EINVALIDTAGNAME). *)
+   specs npa refuses, are dropped and counted rather than guessed at. *)
 let unresolvable s =
-  String.contains s '!' || has_sub s "://" || starts "$" s || starts "git+" s
-  || starts "git:" s || starts "file:" s || starts "link:" s
-  || starts "workspace:" s || starts "portal:" s || starts "patch:" s
-  || (has_sub s "/" && not (starts "npm:" s))
+  has_sub s "://" || starts "$" s || starts "git+" s || starts "git:" s
+  || starts "file:" s || starts "link:" s || starts "workspace:" s
+  || starts "portal:" s || starts "patch:" s
+  || (has_sub s "/" && not (is_alias s))
 
-let tag_of s = if looks_like_tag s then Some s else None
+(* encodeURIComponent(s) === s *)
+let uri_safe =
+  String.for_all (fun c ->
+      (c >= 'a' && c <= 'z')
+      || (c >= 'A' && c <= 'Z')
+      || (c >= '0' && c <= '9')
+      || String.contains "-_.!~*'()" c)
+
+let is_star rg =
+  let rg = String.trim rg in
+  rg = "*" || rg = ""
+
+(* a tag must be a name encodeURIComponent leaves alone, and npa refuses
+   any other (EINVALIDTAGNAME) *)
+let spec_of_string (s : string) : spec option =
+  if is_star s then Some Star
+  else
+    match Npm_version.parse_range_opt s with
+    | Some rg -> Some (Range rg)
+    | None ->
+        let t = String.trim s in
+        if uri_safe t then Some (Tag t) else None
 
 (* "npm:bar@^1" and "npm:@scope/bar@^1": npa splits at the first @ past
    the scope's; this takes the last, which differs only when the range
    itself holds an @ *)
 let split_alias (s : string) : (string * string) option =
-  if not (starts "npm:" s) then None
+  if not (is_alias s) then None
   else
     let body = String.sub s 4 (String.length s - 4) in
     let n = String.length body in
@@ -98,10 +105,6 @@ let split_alias (s : string) : (string * string) option =
     | -1 -> Some (body, "*")
     | i -> Some (String.sub body 0 i, String.sub body (i + 1) (n - i - 1))
 
-let is_star rg =
-  let rg = String.trim rg in
-  rg = "*" || rg = ""
-
 let dep_of ~dev ~optional (key, spec) : dep option =
   let target, rg =
     match spec with
@@ -111,60 +114,62 @@ let dep_of ~dev ~optional (key, spec) : dep option =
         | None -> (key, Some spec))
     | _ -> (key, None)
   in
-  match rg with
-  | Some rg when not (unresolvable rg) ->
+  match
+    Option.bind rg (fun rg ->
+        if unresolvable rg then None else spec_of_string rg)
+  with
+  | Some sp ->
       Some
         {
           d_dir = key;
           d_target = target;
-          d_range = Npm_version.parse_range rg;
+          d_spec = sp;
           d_dev = dev;
           d_optional = optional;
-          d_star = is_star rg;
-          d_tag = tag_of rg;
         }
-  | _ ->
+  | None ->
       reject ();
       None
 
+(* A peer names a directory and the calculus reads its range against the
+   package of that name, so an alias, which puts another package there, is
+   dropped and counted like a spec no registry lookup resolves. *)
 let peer_of (meta : (string * Yojson.Safe.t) list) (key, spec) : peer option =
+  let optional =
+    match List.assoc_opt key meta with
+    | Some m -> ( match member "optional" m with `Bool b -> b | _ -> false)
+    | None -> false
+  in
   match spec with
-  | `String spec ->
-      let optional =
-        match List.assoc_opt key meta with
-        | Some m -> (
-            match member "optional" m with `Bool b -> b | _ -> false)
-        | None -> false
-      in
-      if unresolvable spec then (
-        reject ();
-        None)
-      else
-        Some
-          {
-            p_name = key;
-            p_range = Npm_version.parse_range spec;
-            p_optional = optional;
-            p_star = is_star spec;
-            p_tag = tag_of spec;
-          }
+  | `String spec when not (unresolvable spec || is_alias spec) -> (
+      match spec_of_string spec with
+      | Some sp -> Some { p_name = key; p_spec = sp; p_optional = optional }
+      | None ->
+          reject ();
+          None)
   | _ ->
       reject ();
       None
 
 (* npm reads overrides from the root project's package.json; only the
-   flat "name": "range" form is a static override, so a nested object -- which
-   is keyed by the parent chain -- is counted and dropped.  A value of *
-   overrides nothing: an edge takes its range from an override only when
-   the value is not * (arborist edge.js, spec), and OverrideSet reads an
-   empty value as *. *)
+   flat "name": "range" form is a static override, so a nested object --
+   which is keyed by the parent chain -- is counted and dropped, and so is
+   a tag or an alias, which replaces the spec rather than the range.  A
+   value of * overrides nothing: an edge takes its range from an override
+   only when the value is not * (arborist edge.js, spec), and OverrideSet
+   reads an empty value as *. *)
 let overrides_of (j : Yojson.Safe.t) : (string * Npm_version.range) list =
   List.filter_map
     (fun (k, v) ->
       match v with
       | `String ("*" | "") -> None
-      | `String rg when not (unresolvable rg || looks_like_tag rg) ->
-          Some (k, Npm_version.parse_range rg)
+      | `String rg when not (unresolvable rg || is_alias rg) -> (
+          match spec_of_string rg with
+          | Some (Range r) -> Some (k, r)
+          | Some Star -> Some (k, [ [ Npm_version.Any ] ])
+          | Some (Tag _) | None ->
+              reject ();
+              None)
       | _ ->
           reject ();
           None)
@@ -262,177 +267,10 @@ let of_json (j : Yojson.Safe.t) : packument =
   in
   { pk_latest = latest; pk_tags = tags; pk_vers = vers }
 
-let load (path : string) : packument option =
+(* A packument that will not parse says nothing about the name's versions,
+   so it is an error rather than a name with none. *)
+let load (path : string) : (packument, string) result =
   match Yojson.Safe.from_file path with
-  | exception (Yojson.Json_error _ | Sys_error _) ->
-      reject ();
-      None
-  | j -> Some (of_json j)
-
-(* The query is a root package: a project's package.json with the
-   arguments of `npm install` added to it.  An argument is read as
-   npm-package-arg 13.0.2 (npm 11.17.0) reads it, lib/npa.js, and only its
-   registry forms are accepted: name, name@version, name@range, name@tag
-   and key@npm:name@range.  Anything npa reads as a file, directory, URL or
-   git spec is refused rather than dropped, because a query missing one of
-   its arguments asks a different question. *)
-
-(* /^(?:git[+])?[a-z]+:/i *)
-let is_url s =
-  let s = String.lowercase_ascii s in
-  let s = if starts "git+" s then String.sub s 4 (String.length s - 4) else s in
-  let n = String.length s in
-  let rec go i =
-    i < n
-    && if s.[i] = ':' then i > 0 else s.[i] >= 'a' && s.[i] <= 'z' && go (i + 1)
-  in
-  go 0
-
-(* isPosixFile, /^(?:[.]|~[/]|[/]|[a-zA-Z]:)/, or what npa takes for a file
-   before it looks for a name: an unscoped name part with a slash or a
-   tarball's extension *)
-let is_path s =
-  starts "." s || starts "~/" s || starts "/" s
-  || String.length s >= 2
-     && s.[1] = ':'
-     && Char.lowercase_ascii s.[0] >= 'a'
-     && Char.lowercase_ascii s.[0] <= 'z'
-  || (not (starts "@" s))
-     && (String.contains s '/'
-        || List.exists (Filename.check_suffix s) [ ".tgz"; ".tar.gz"; ".tar" ])
-
-(* /^[^@]+@[^:.]+\.[^:]+:.+$/, an scp-style git remote *)
-let is_git s =
-  match String.index_opt s '@' with
-  | Some i when i > 0 -> (
-      let rest = String.sub s (i + 1) (String.length s - i - 1) in
-      match String.index_opt rest ':' with
-      | Some j -> (
-          let host = String.sub rest 0 j in
-          j + 1 < String.length rest
-          &&
-          match String.index_opt host '.' with
-          | Some k -> k > 0 && k + 1 < j
-          | None -> false)
-      | None -> false)
-  | _ -> false
-
-(* an argument npa would read as a local path, which the query takes for
-   the project's package.json *)
-let is_manifest_arg s = (not (is_url s)) && (not (is_git s)) && is_path s
-
-(* encodeURIComponent(s) === s *)
-let uri_safe =
-  String.for_all (fun c ->
-      (c >= 'a' && c <= 'z')
-      || (c >= 'A' && c <= 'Z')
-      || (c >= '0' && c <= '9')
-      || String.contains "-_.!~*'()" c)
-
-(* validate-npm-package-name 7.0.2's validForOldPackages, which npa
-   tests: its errors, and none of its warnings *)
-let name_ok n =
-  n <> ""
-  && (not (starts "." n))
-  && (not (starts "-" n))
-  && (not (starts "_" n))
-  && String.trim n = n
-  && (not
-        (List.mem (String.lowercase_ascii n) [ "node_modules"; "favicon.ico" ]))
-  && (uri_safe n
-     ||
-     match String.index_opt n '/' with
-     | Some i when starts "@" n ->
-         let pkg = String.sub n (i + 1) (String.length n - i - 1) in
-         i > 1
-         && (not (String.contains pkg '/'))
-         && pkg <> ""
-         && (not (starts "." pkg))
-         && uri_safe (String.sub n 1 (i - 1))
-         && uri_safe pkg
-     | _ -> false)
-
-(* The key and the raw spec: the name ends at the first @ past a scope's
-   own, and a bare name or a trailing @ asks for *.  Whether a registry
-   spec is a range or a tag is left to the driver, which has the
-   packument's dist-tags. *)
-let spec_of (arg : string) : (string * string) option =
-  let n = String.length arg in
-  let at = if n > 1 then String.index_from_opt arg 1 '@' else None in
-  let name_part = match at with Some i -> String.sub arg 0 i | None -> arg in
-  let raw =
-    match at with
-    | Some i -> (
-        match String.sub arg (i + 1) (n - i - 1) with "" -> "*" | s -> s)
-    | None -> "*"
-  in
-  if is_url arg || is_git arg || is_path name_part || not (name_ok name_part)
-  then None
-  else if starts "npm:" (String.lowercase_ascii raw) then
-    (* fromAlias: the target is read again, and must be a named registry
-       spec and not itself an alias *)
-    match split_alias ("npm:" ^ String.sub raw 4 (String.length raw - 4)) with
-    | Some (t, rg)
-      when name_ok t
-           && (not (starts "npm:" (String.lowercase_ascii rg)))
-           && not (unresolvable rg || looks_like_tag rg) ->
-        Some (name_part, raw)
-    | _ -> None
-  else if is_url raw || is_path raw || has_sub raw "/" then None
-  else Some (name_part, raw)
-
-(* arborist's addRmPkgDeps.add, lib/add-rm-pkg-deps.js, for a request with
-   no --save-* flag: the entry goes to the first field that already names
-   it, in inferSaveType's order, else to dependencies, and replaces what is
-   there unless it is *.  The fields a save type cannot coexist with lose
-   the name, and an optional entry is mirrored into dependencies. *)
-let add_to (pkg : Yojson.Safe.t) ((name, raw) : string * string) : Yojson.Safe.t
-    =
-  let has f = List.mem_assoc name (assoc_of (member f pkg)) in
-  let target =
-    List.find_opt has
-      [
-        "devDependencies";
-        "optionalDependencies";
-        "dependencies";
-        "peerDependencies";
-      ]
-    |> Option.value ~default:"dependencies"
-  in
-  let drop =
-    match target with
-    | "dependencies" -> [ "devDependencies"; "peerDependencies" ]
-    | "devDependencies" -> [ "dependencies" ]
-    | "optionalDependencies" -> [ "peerDependencies" ]
-    | _ -> [ "dependencies"; "optionalDependencies" ]
-  in
-  let drop =
-    if List.mem "peerDependencies" drop then "peerDependenciesMeta" :: drop
-    else drop
-  in
-  (* a JavaScript object keeps a new key last *)
-  let set k v l =
-    if List.mem_assoc k l then
-      List.map (fun (k', x) -> if k' = k then (k, v) else (k', x)) l
-    else l @ [ (k, v) ]
-  in
-  let fields =
-    List.map
-      (fun (k, v) ->
-        if List.mem k drop then (k, `Assoc (List.remove_assoc name (assoc_of v)))
-        else (k, v))
-      (assoc_of pkg)
-  in
-  let cur = assoc_of (member target (`Assoc fields)) in
-  let fields =
-    if raw <> "*" || not (List.mem_assoc name cur) then
-      set target (`Assoc (set name (`String raw) cur)) fields
-    else fields
-  in
-  if target = "optionalDependencies" then
-    let spec = member name (member target (`Assoc fields)) in
-    set "dependencies"
-      (`Assoc (set name spec (assoc_of (member "dependencies" (`Assoc fields)))))
-      fields
-    |> fun l -> `Assoc l
-  else `Assoc fields
+  | exception Sys_error e -> Error e
+  | `Assoc _ as j -> Ok (of_json j)
+  | _ | (exception Yojson.Json_error _) -> Error "not a packument"

@@ -8,7 +8,11 @@ let check a b exp =
     incr fail)
 
 let rng s exp =
-  let got = Npm_version.string_of_range (Npm_version.parse_range s) in
+  let got =
+    match Npm_version.parse_range_opt s with
+    | Some rg -> Npm_version.string_of_range rg
+    | None -> "invalid"
+  in
   if got <> exp then (
     Printf.printf "FAIL parse_range %S = %S, want %S\n" s got exp;
     incr fail)
@@ -112,6 +116,28 @@ let () =
   rng "1.2 - 2.3.4" ">=1.2.0 <=2.3.4";
   rng "1.2.3 - 2.3" ">=1.2.3 <2.4.0";
   rng "1.2.3 - 2" ">=1.2.3 <3.0.0";
+  (* the [v=]* semver allows before a version, a hyphen range's ends
+     included; its v is lowercase only *)
+  rng "v1.2.3 - v2.3.4" ">=1.2.3 <=2.3.4";
+  rng "=1.2.3 - v2" ">=1.2.3 <3.0.0";
+  rng ">==v1.2.3" ">=1.2.3";
+  rng "V1.2.3" "invalid";
+  rng "^V1.2.3" "invalid";
+  (* a comparator no grammar reads is thrown out of its set, and a set left
+     empty out of the range; a range with none left is no range, which npa
+     reads as a dist-tag *)
+  rng "beta2" "invalid";
+  rng "next-11" "invalid";
+  rng "ts4.9" "invalid";
+  rng "latest" "invalid";
+  rng "1.2.3 beta2" "=1.2.3";
+  rng "beta2 || ^1" ">=1.0.0 <2.0.0";
+  rng "1.2.3 - beta" "=1.2.3";
+  rng "1.2+build.1" ">=1.2.0 <1.3.0";
+  rng "1.2.3.4" "invalid";
+  rng "1.2foo" "invalid";
+  rng ">" "invalid";
+  rng "|| 1.2.3" "* || =1.2.3";
 
   (* satisfaction, and the prerelease rule: a prerelease is admitted only
      by a comparator set that names one at the same release core *)

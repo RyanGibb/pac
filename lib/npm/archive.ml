@@ -114,9 +114,16 @@ let download ar n f =
   let url = "https://registry.npmjs.org/" ^ escape n in
   ar.n_fetched <- ar.n_fetched + 1;
   match curl ~url ~out:tmp with
-  | `Fetched ->
-      Sys.rename tmp f;
-      Some f
+  | `Fetched -> (
+      (* a body that is no packument would be read back from the cache on
+         every later run *)
+      match P.load tmp with
+      | Ok _ ->
+          Sys.rename tmp f;
+          Some f
+      | Error e ->
+          remove tmp;
+          raise (Fetch_failed (Printf.sprintf "fetching %s: %s" url e)))
   | `Absent ->
       remove tmp;
       None
@@ -146,8 +153,8 @@ let add_name ar n vs =
 
 let read_packument ar n f =
   match P.load f with
-  | None -> []
-  | Some pk ->
+  | Error e -> raise (Fetch_failed (Printf.sprintf "reading %s: %s" f e))
+  | Ok pk ->
       Option.iter (Hashtbl.replace ar.latest n) pk.P.pk_latest;
       Hashtbl.replace ar.tags n pk.P.pk_tags;
       (* the name fetched under is authoritative: a manifest's own "name"

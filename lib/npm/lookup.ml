@@ -23,18 +23,15 @@ let star_range ar (t : string) (rg : Npm_version.range) : Npm_version.range =
 
 (* npm-pick-manifest takes a dist-tag's version exactly, and a tag the
    packument lacks matches nothing (ETARGET) *)
-let tag_range ar ~tag ~star (t : string) (rg : Npm_version.range) :
-    Npm_version.range =
-  match tag with
-  | Some g -> (
+let spec_range ar (t : string) : P.spec -> Npm_version.range = function
+  | P.Tag g -> (
       match A.dist_tag ar t g with
       | Some v -> [ [ Npm_version.Cmp (Npm_version.Eq, v) ] ]
       | None -> [ [ Npm_version.Cmp (Npm_version.Lt, "0.0.0") ] ])
-  | None when star -> star_range ar t rg
-  | None -> rg
+  | P.Star -> star_range ar t [ [ Npm_version.Any ] ]
+  | P.Range rg -> rg
 
-let own_range ar (d : P.dep) =
-  tag_range ar ~tag:d.P.d_tag ~star:d.P.d_star d.P.d_target d.P.d_range
+let own_range ar (d : P.dep) = spec_range ar d.P.d_target d.P.d_spec
 
 let xdep ar (d : P.dep) : Np.coq_Dependency =
   {
@@ -49,9 +46,7 @@ let xdep ar (d : P.dep) : Np.coq_Dependency =
 let xpeer ar (r : P.peer) : Np.coq_PeerDependency =
   {
     Np.p_name = r.P.p_name;
-    Np.p_range =
-      xrange
-        (tag_range ar ~tag:r.P.p_tag ~star:r.P.p_star r.P.p_name r.P.p_range);
+    Np.p_range = xrange (spec_range ar r.P.p_name r.P.p_spec);
     (* binds only a copy the declarer's depender holds itself, npm's legacy
        rule; arborist checks whatever copy the declarer resolves to
        (edge.js:266-277) *)

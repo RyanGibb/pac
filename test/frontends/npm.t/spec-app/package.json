@@ -1,0 +1,15 @@
+{
+  "name": "spec-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "devprod": "v1.0.0 - v1.9.0",
+    "digtag": "beta2",
+    "kit": "NPM:util-lib@1.0.0"
+  },
+  "peerDependencies": {
+    "theme": "npm:theme@^1"
+  },
+  "overrides": {
+    "tok": "npm:mark@3.0.2"
+  }
+}
