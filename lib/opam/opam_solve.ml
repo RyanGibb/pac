@@ -33,6 +33,6 @@ let solve ?(debug = false) ?(order = `Tool) ?(with_test = false)
       {
         reals;
         nodes;
-        lookups = L.processed st;
+        lookups = L.lookups st;
         depexts = depexts_of rho ar reals;
       })

@@ -11,7 +11,7 @@ its last key, the package name:
     app:amd64 1
     lib:amd64 1
     prov1:amd64 1
-  encoded solution: 5 core nodes (9 lookups)
+  encoded solution: 5 core nodes (8 lookups)
   loaded: 176 names, 176 versions
 
 --order=random picks the next name and the version to try uniformly, from
@@ -23,14 +23,14 @@ another seed may give another, a resolution all the same:
     altlib:amd64 1
     app:amd64 1
     prov2:amd64 1
-  encoded solution: 5 core nodes (10 lookups)
+  encoded solution: 5 core nodes (9 lookups)
   loaded: 176 names, 176 versions
   $ untimed ../../../bin/main.exe debian --order=random --seed 1 --native amd64 app Packages
   packages (3):
     app:amd64 1
     lib:amd64 1
     prov2:amd64 1
-  encoded solution: 5 core nodes (9 lookups)
+  encoded solution: 5 core nodes (8 lookups)
   loaded: 176 names, 176 versions
 
 The Priority field outranks the name, and sorts the other way round -- this is
@@ -79,7 +79,7 @@ newline is not part of the atom that follows it:
     folded:amd64 1
     lib:amd64 1
     zzz:amd64 1
-  encoded solution: 4 core nodes (7 lookups)
+  encoded solution: 4 core nodes (6 lookups)
   loaded: 176 names, 176 versions
 
 Provides makes a package a provider of a name, not a package of it: a real package is
@@ -101,7 +101,7 @@ and the leftmost alternative is preferred as in a Depends clause:
   packages (2):
     softa:amd64 1
     softpair:amd64 1
-  encoded solution: 3 core nodes (8 lookups)
+  encoded solution: 3 core nodes (6 lookups)
   loaded: 176 names, 176 versions
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 --no-install-recommends softpair Packages
@@ -118,7 +118,7 @@ of the encoding and there is no cardinality test to skip it:
   packages (2):
     softlib:amd64 1
     softone:amd64 1
-  encoded solution: 3 core nodes (7 lookups)
+  encoded solution: 3 core nodes (5 lookups)
   loaded: 176 names, 176 versions
 
 An unsatisfiable Recommends is not an error.  softconf recommends softnope,
@@ -129,7 +129,7 @@ the escape, and softnope is absent:
   packages (2):
     softconf:amd64 1
     softkeep:amd64 1
-  encoded solution: 4 core nodes (12 lookups)
+  encoded solution: 4 core nodes (7 lookups)
   loaded: 176 names, 176 versions
 
 The escape sorts below every alternative, so it is reached only once they have
@@ -141,7 +141,7 @@ the same conflict, so softb is installed rather than nothing:
     softalt:amd64 1
     softb:amd64 1
     softkeep:amd64 1
-  encoded solution: 5 core nodes (17 lookups)
+  encoded solution: 5 core nodes (9 lookups)
   loaded: 176 names, 176 versions
 
 A Conflicts is an edge of the package that declares it, admitting the
@@ -179,7 +179,7 @@ orddep, and the recommendation is then already met:
     ordapp:amd64 1
     orddep:amd64 1
     ordy:amd64 1
-  encoded solution: 5 core nodes (16 lookups)
+  encoded solution: 5 core nodes (10 lookups)
   loaded: 176 names, 176 versions
 
   $ untimed ../../../bin/main.exe debian --order=tool --native amd64 ordapp Packages
@@ -187,7 +187,7 @@ orddep, and the recommendation is then already met:
     ordapp:amd64 1
     orddep:amd64 1
     ordy:amd64 1
-  encoded solution: 5 core nodes (24 lookups)
+  encoded solution: 5 core nodes (10 lookups)
   loaded: 176 names, 176 versions
 
 A selector the solution is committed to is not yet a package it installs.
@@ -201,7 +201,7 @@ clause first, takes selutils, and selutils then provides selbase:
     selcommon:amd64 1
     seldep:amd64 1
     selutils:amd64 1
-  encoded solution: 6 core nodes (14 lookups)
+  encoded solution: 6 core nodes (11 lookups)
   loaded: 176 names, 176 versions
 
   $ untimed ../../../bin/main.exe debian --order=tool --native amd64 selapp Packages
@@ -210,7 +210,7 @@ clause first, takes selutils, and selutils then provides selbase:
     selcommon:amd64 1
     seldep:amd64 1
     selutils:amd64 1
-  encoded solution: 6 core nodes (20 lookups)
+  encoded solution: 6 core nodes (11 lookups)
   loaded: 176 names, 176 versions
 
 Nor is a name a conflict has reached: its range still admits ⊥.  botcfl
@@ -223,7 +223,7 @@ boty | botx takes its leftmost:
     botcfl:amd64 1
     botdep:amd64 1
     boty:amd64 1
-  encoded solution: 5 core nodes (11 lookups)
+  encoded solution: 5 core nodes (8 lookups)
   loaded: 176 names, 176 versions
 
   $ untimed ../../../bin/main.exe debian --order=tool --native amd64 botapp Packages
@@ -232,7 +232,7 @@ boty | botx takes its leftmost:
     botcfl:amd64 1
     botdep:amd64 1
     boty:amd64 1
-  encoded solution: 5 core nodes (16 lookups)
+  encoded solution: 5 core nodes (8 lookups)
   loaded: 176 names, 176 versions
 
 In the tool order, the shadow of apt's work heap decides which Recommends is
@@ -255,7 +255,7 @@ taking hadduser before hsysd arrives, as apt does:
     hopengl:amd64 1
     hsysd:amd64 1
     htheme:amd64 1
-  encoded solution: 13 core nodes (50 lookups)
+  encoded solution: 13 core nodes (24 lookups)
   loaded: 176 names, 176 versions
 
 apt rejects a package the moment a hard clause of its loses its last
@@ -285,7 +285,7 @@ installed:
     krc:amd64 1
     krq:amd64 1
     ksysd:amd64 1
-  encoded solution: 22 core nodes (72 lookups)
+  encoded solution: 22 core nodes (41 lookups)
   loaded: 176 names, 176 versions
 
 The watch lists are read from the field text, folded or not: jgoal is kgoal
@@ -310,7 +310,7 @@ and the rejection still reaches jquick-gles:
     jrc:amd64 1
     jrq:amd64 1
     jsysd:amd64 1
-  encoded solution: 22 core nodes (72 lookups)
+  encoded solution: 22 core nodes (41 lookups)
   loaded: 176 names, 176 versions
 
 apt counts a clause's solutions as the entries of its target's provides
@@ -330,7 +330,7 @@ items tie, and na's, pushed first, pops first:
     mgoal:amd64 1
     mself:amd64 1
     my:amd64 1
-  encoded solution: 10 core nodes (39 lookups)
+  encoded solution: 10 core nodes (20 lookups)
   loaded: 176 names, 176 versions
 
   $ untimed ../../../bin/main.exe debian --order=tool --native amd64 ngoal Packages
@@ -342,7 +342,7 @@ items tie, and na's, pushed first, pops first:
     nself:amd64 1
     nx:amd64 1
     ny:amd64 1
-  encoded solution: 11 core nodes (40 lookups)
+  encoded solution: 11 core nodes (21 lookups)
   loaded: 176 names, 176 versions
 
 A conflict on an explicit :arch names another architecture's package, one
@@ -356,7 +356,7 @@ leftmost:
     cb:amd64 1
     cgoal:amd64 1
     cq:amd64 1
-  encoded solution: 5 core nodes (18 lookups)
+  encoded solution: 5 core nodes (9 lookups)
   loaded: 176 names, 176 versions
 
 apt folds a second single-target dependency into an earlier one on the
@@ -370,7 +370,7 @@ alone would have let a leftmost-first choice install, is never installed:
   packages (2):
     dbar:amd64 1
     dgoal:amd64 1
-  encoded solution: 4 core nodes (10 lookups)
+  encoded solution: 4 core nodes (7 lookups)
   loaded: 176 names, 176 versions
 
 The fold narrows the depender's own clause, and only while the depender is
@@ -382,7 +382,7 @@ and rqa's rfoo (<< 3), unfolded, takes the real rfoo:
     rfoo:amd64 1
     rgoal:amd64 1
     rqa:amd64 1
-  encoded solution: 5 core nodes (56 lookups)
+  encoded solution: 5 core nodes (18 lookups)
   loaded: 176 names, 176 versions
 
 apt assigns a rejection the moment it is derived but propagates it only when
@@ -400,7 +400,7 @@ its conflict with fw leaves fq's Recommends with nothing:
     fp:amd64 1
     fq:amd64 1
     fz:amd64 1
-  encoded solution: 9 core nodes (30 lookups)
+  encoded solution: 9 core nodes (17 lookups)
   loaded: 176 names, 176 versions
 
 apt takes the first solution of an item that is still undecided (Solve,
@@ -417,7 +417,7 @@ backjump, which the shadow heap's counters count:
     gb:amd64 1
     ggoal:amd64 1
     gw:amd64 1
-  encoded solution: 6 core nodes (14 lookups)
+  encoded solution: 6 core nodes (10 lookups)
   loaded: 176 names, 176 versions
 
 apt's Pop rejects the choice it undoes, and the rejection stands as long as
@@ -431,7 +431,7 @@ pops ahead of wyd | wxc and wxc meets both:
     wb:amd64 1
     wgoal:amd64 1
     wxc:amd64 1
-  encoded solution: 6 core nodes (61 lookups)
+  encoded solution: 6 core nodes (21 lookups)
   loaded: 176 names, 176 versions
 
   $ untimed ../../../bin/main.exe debian --order=tool --native amd64 vgoal Packages
@@ -440,7 +440,7 @@ pops ahead of wyd | wxc and wxc meets both:
     vgoal:amd64 1
     vq:amd64 1
     wxc:amd64 1
-  encoded solution: 8 core nodes (107 lookups)
+  encoded solution: 8 core nodes (33 lookups)
   loaded: 176 names, 176 versions
 
 A clause with an obsolete solution is worked on after every other clause of
@@ -454,7 +454,7 @@ its first clause goes first:
   packages (2):
     obsgoal:amd64 1
     obsq:amd64 1
-  encoded solution: 4 core nodes (18 lookups)
+  encoded solution: 4 core nodes (7 lookups)
   loaded: 176 names, 176 versions
 
   $ untimed ../../../bin/main.exe debian --order=tool --native amd64 obsgoal2 Packages
@@ -462,7 +462,7 @@ its first clause goes first:
     obsgoal2:amd64 1
     obsq:amd64 1
     obsx:amd64 1
-  encoded solution: 5 core nodes (19 lookups)
+  encoded solution: 5 core nodes (8 lookups)
   loaded: 176 names, 176 versions
 
 The tool order is the default.  PubGrub's own order decides obsgoal's
@@ -472,7 +472,7 @@ obsp | obsq first, and installs obsp too:
   packages (2):
     obsgoal:amd64 1
     obsq:amd64 1
-  encoded solution: 4 core nodes (18 lookups)
+  encoded solution: 4 core nodes (7 lookups)
   loaded: 176 names, 176 versions
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 obsgoal Packages
@@ -480,7 +480,7 @@ obsp | obsq first, and installs obsp too:
     obsgoal:amd64 1
     obsp:amd64 1
     obsq:amd64 1
-  encoded solution: 5 core nodes (13 lookups)
+  encoded solution: 5 core nodes (8 lookups)
   loaded: 176 names, 176 versions
 
 apt's solver never leaves the candidate version (APT::Solver::Strict-Pinning,
@@ -499,7 +499,7 @@ pinv 1; with Strict-Pinning off it takes pinv 1:
   packages (2):
     pinapp:amd64 1
     pinv:amd64 1
-  encoded solution: 2 core nodes (6 lookups)
+  encoded solution: 2 core nodes (5 lookups)
   loaded: 176 names, 182 versions
 
   $ untimed ../../../bin/main.exe debian --order=tool --native amd64 pinapp Packages
@@ -513,7 +513,7 @@ pinv 1; with Strict-Pinning off it takes pinv 1:
   packages (2):
     pinapp:amd64 1
     pinv:amd64 1
-  encoded solution: 2 core nodes (8 lookups)
+  encoded solution: 2 core nodes (5 lookups)
   loaded: 176 names, 182 versions
 
 apt refuses too where a dependency's range misses the candidate, however
@@ -549,7 +549,7 @@ pinapp installable, and so does pinok=1 pinrange:
   packages (2):
     pinapp:amd64 1
     pinv:amd64 1
-  encoded solution: 2 core nodes (4 lookups)
+  encoded solution: 2 core nodes (3 lookups)
   loaded: 176 names, 176 versions
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 pinrange pinok=1 Packages
@@ -566,7 +566,7 @@ pinapp installable, and so does pinok=1 pinrange:
     prioapp:amd64 1
     prov1:amd64 1
     zprio:amd64 1
-  encoded solution: 8 core nodes (14 lookups)
+  encoded solution: 8 core nodes (13 lookups)
   loaded: 176 names, 176 versions
 
 Of two elements naming one package the later wins, as apt sets the
@@ -784,7 +784,7 @@ is taken, as xfor2:i386 is for xboth:
   packages (2):
     xvok:amd64 1
     xvprov2:i386 1
-  encoded solution: 3 core nodes (5 lookups)
+  encoded solution: 3 core nodes (4 lookups)
   loaded: 17 names, 18 versions
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 xboth Packages.multiarch
@@ -811,7 +811,7 @@ xvc3:i386 excludes the xpc3:i386 it needs:
   packages (2):
     xcfl2:amd64 1
     xpc:amd64 1
-  encoded solution: 3 core nodes (6 lookups)
+  encoded solution: 3 core nodes (5 lookups)
   loaded: 17 names, 18 versions
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 xcfl3 Packages.multiarch
@@ -875,7 +875,7 @@ read into a machine integer:
   packages (2):
     epgoal:amd64 1
     epv:amd64 99999999999999999999:1
-  encoded solution: 2 core nodes (4 lookups)
+  encoded solution: 2 core nodes (3 lookups)
   loaded: 7 names, 7 versions
 
 Two alternatives the calculus identifies, eqa (>= 1.0) and eqa (>= 1.00),
@@ -890,7 +890,7 @@ eqy | eqz:
     eqa:amd64 1.0
     eqgoal:amd64 1
     eqy:amd64 1
-  encoded solution: 4 core nodes (13 lookups)
+  encoded solution: 4 core nodes (6 lookups)
   loaded: 7 names, 7 versions
 
 An arch:all stanza and its native twin at one version are one version here,
@@ -903,21 +903,21 @@ provided by twin and takes it, as PubGrub's own order does:
   packages (2):
     twgoal:amd64 1
     twin:amd64 1
-  encoded solution: 4 core nodes (11 lookups)
+  encoded solution: 4 core nodes (6 lookups)
   loaded: 4 names, 4 versions
 
   $ untimed ../../../bin/main.exe debian --order=tool --no-strict-pinning --native amd64 twgoal2 Packages.twin
   packages (2):
     twgoal2:amd64 1
     twin:amd64 1
-  encoded solution: 4 core nodes (11 lookups)
+  encoded solution: 4 core nodes (6 lookups)
   loaded: 4 names, 4 versions
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --no-strict-pinning --native amd64 twgoal Packages.twin
   packages (2):
     twgoal:amd64 1
     twin:amd64 1
-  encoded solution: 4 core nodes (8 lookups)
+  encoded solution: 4 core nodes (6 lookups)
   loaded: 4 names, 4 versions
 
 An index that cannot be read is a read error, not a refused query:

@@ -20,7 +20,7 @@ type result = {
      (owner, owner version, alias, target name, target version) *)
   parents : (string * string * string * string * string) list;
   nodes : int;
-  processed : int;
+  lookups : int;
 }
 
 (* what one solve read of the index, reported whether or not it found an
@@ -79,8 +79,7 @@ let decode st (sol : (Cg.NPlus.t * PVersion.t) list) : result =
         (List.sort compare crates);
     parents;
     nodes = List.length sol;
-    (* the crate versions whose manifests became encoded fibres *)
-    processed = Hashtbl.length st.L.fibres;
+    lookups = Hashtbl.length st.L.pg_deps;
   }
 
 let solve ?(debug = false) ?(order = `Tool) ~index ~features ~rustv

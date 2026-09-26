@@ -49,6 +49,7 @@ let dependencies st =
   let cache = Hashtbl.create 65536 in
   fun n (u : Np.Vs.version) ->
     Lookup.memo cache (n, u) (fun () ->
+        st.Lookup.n_lookups <- st.Lookup.n_lookups + 1;
         List.map
           (fun ((m, vs) : T.Dependees.t) ->
             (m, runs (lazy (Lookup.versions st m)) (T.VSet.elements vs)))

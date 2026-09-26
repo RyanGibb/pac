@@ -12,7 +12,7 @@ are in play.
     d 1.0.0 [a,f]
     d 2.0.0 [b,f]
     f 1.0.0 [c,d]
-  encoded solution: 27 core nodes (6 lookups)
+  encoded solution: 27 core nodes (27 lookups)
   loaded: 5 names, 6 versions
 
 A requirement admits a prerelease only when one of its own comparators
@@ -26,7 +26,7 @@ q publishes 1.0.0-alpha.1 alone, which ^1.0.0-alpha reaches.
     g 1.0.0
     p 1.0.0
     q 1.0.0-alpha.1
-  encoded solution: 9 core nodes (4 lookups)
+  encoded solution: 9 core nodes (10 lookups)
   loaded: 3 names, 4 versions
 
 A dev-dependency participates only from the root crate.  k declares m both
@@ -39,7 +39,7 @@ activated and the dev one does not participate.
   packages (2):
     h 1.0.0
     k 1.0.0
-  encoded solution: 6 core nodes (2 lookups)
+  encoded solution: 6 core nodes (6 lookups)
   loaded: 3 names, 3 versions
 
 From root k itself the same two records both matter.  With no features
@@ -53,7 +53,7 @@ slot, two parent edges onto the one installed crate.
   packages (2):
     k 1.0.0 [m]
     m 1.0.0
-  encoded solution: 8 core nodes (2 lookups)
+  encoded solution: 8 core nodes (8 lookups)
   loaded: 2 names, 2 versions
 
 Naming features instead resolves afresh with those features and, as in
@@ -68,7 +68,7 @@ on every depender, which is the h case above.
   packages (2):
     k 1.0.0
     m 1.0.0
-  encoded solution: 5 core nodes (2 lookups)
+  encoded solution: 5 core nodes (5 lookups)
   loaded: 2 names, 2 versions
 
 Crates are parsed as the solver first asks for them, so a link's declarers
@@ -86,7 +86,7 @@ without it.
     x 0.9.0
     y 1.0.2
     z 1.0.0
-  encoded solution: 13 core nodes (7 lookups)
+  encoded solution: 13 core nodes (20 lookups)
   loaded: 4 names, 7 versions
 
 The root's own links key excludes as a dependency's does.  rl claims
@@ -97,7 +97,7 @@ links=foo, so x 1.0.0, which claims it too, is out and x 0.9.0 is taken.
   packages (2):
     rl 1.0.0
     x 0.9.0
-  encoded solution: 7 core nodes (3 lookups)
+  encoded solution: 7 core nodes (8 lookups)
   loaded: 2 names, 3 versions
 
 A weak feature entry resolves as the strong one.  u's default feature
@@ -112,7 +112,7 @@ its place in the lock as --features varies, and w is installed with extra.
     s 1.0.0
     u 1.0.0 [cap,default]
     w 1.0.0 [extra]
-  encoded solution: 12 core nodes (3 lookups)
+  encoded solution: 12 core nodes (12 lookups)
   loaded: 3 names, 3 versions
 
 Resolver v3's one effect on version selection: a candidate whose declared
@@ -126,7 +126,7 @@ m1 takes the older 1.0.0.
   packages (2):
     d1 1.0.0
     m1 1.0.0
-  encoded solution: 6 core nodes (3 lookups)
+  encoded solution: 6 core nodes (7 lookups)
   loaded: 2 names, 3 versions
 
 With no toolchain configured the preference is off, as it is in cargo when
@@ -137,7 +137,7 @@ the rust-versions list is empty, and the same index takes the newest.
   packages (2):
     d1 1.1.0
     m1 1.0.0
-  encoded solution: 6 core nodes (3 lookups)
+  encoded solution: 6 core nodes (7 lookups)
   loaded: 2 names, 3 versions
 
 A crate declaring no MSRV is compatible with every toolchain rather than
@@ -152,7 +152,7 @@ would give.
   packages (2):
     d2 1.1.0
     m2 1.0.0
-  encoded solution: 6 core nodes (4 lookups)
+  encoded solution: 6 core nodes (7 lookups)
   loaded: 2 names, 4 versions
 
   $ ../../../bin/main.exe cargo index manifests/m2.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
@@ -160,7 +160,7 @@ would give.
   packages (2):
     d2 1.2.0
     m2 1.0.0
-  encoded solution: 6 core nodes (4 lookups)
+  encoded solution: 6 core nodes (7 lookups)
   loaded: 2 names, 4 versions
 
 This is a preference and not a constraint.  m3 requires ^2 of d3, whose
@@ -172,7 +172,7 @@ out of range, so 2.0.0 is taken rather than the solve failing.
   packages (2):
     d3 2.0.0
     m3 1.0.0
-  encoded solution: 6 core nodes (3 lookups)
+  encoded solution: 6 core nodes (6 lookups)
   loaded: 2 names, 3 versions
 
 One alias declared twice is two dependencies, not one.  t names e in
@@ -188,7 +188,7 @@ lockfile with e 0.1.0 beside e 0.2.0.
     e 0.1.0
     e 0.2.0
     t 1.0.0
-  encoded solution: 9 core nodes (3 lookups)
+  encoded solution: 9 core nodes (9 lookups)
   loaded: 2 names, 3 versions
 
 Two sites may also share an alias while naming different crates, since
@@ -202,7 +202,7 @@ source registry.  rn's x is e under [dependencies] and w under
     e 0.2.0
     rn 1.0.0
     w 1.0.0
-  encoded solution: 9 core nodes (4 lookups)
+  encoded solution: 9 core nodes (9 lookups)
   loaded: 3 names, 4 versions
 
 A crate's feature set is the one cargo's version resolver records for it
@@ -222,7 +222,7 @@ resolved with o on:
     i 1.0.0 [net,o]
     ir 1.0.0
     o 1.0.0 [extra]
-  encoded solution: 12 core nodes (3 lookups)
+  encoded solution: 12 core nodes (12 lookups)
   loaded: 3 names, 3 versions
 
 Where dep:o names the dependency there is no implicit feature o to enable,
@@ -234,7 +234,7 @@ and i3 is resolved with net alone:
     i3 1.0.0 [net]
     ir3 1.0.0
     o 1.0.0 [extra]
-  encoded solution: 11 core nodes (3 lookups)
+  encoded solution: 11 core nodes (11 lookups)
   loaded: 3 names, 3 versions
 
 Which of two crates keeps its newest version, when one pins the other, is
@@ -252,7 +252,7 @@ and cp falls back to 0.1.6.
     ga 0.14.9
     oa 1.0.0
     pa 1.0.0
-  encoded solution: 13 core nodes (6 lookups)
+  encoded solution: 13 core nodes (16 lookups)
   loaded: 4 names, 6 versions
 
 pb declares zp, a copy of cp, first, so zp 0.1.7 is activated first and its
@@ -265,7 +265,7 @@ pin, with one candidate, is taken before pb's own ^0.14 of ga.
     ob 1.0.0
     pb 1.0.0
     zp 0.1.7
-  encoded solution: 13 core nodes (6 lookups)
+  encoded solution: 13 core nodes (16 lookups)
   loaded: 4 names, 6 versions
 
 The root's own dependencies are read from its manifest, whose tables cargo
@@ -277,7 +277,7 @@ keys by name, so oc's zp-then-ga reaches the resolver as ga-then-zp.
     ga 0.14.9
     oc 1.0.0
     zp 0.1.6
-  encoded solution: 10 core nodes (5 lookups)
+  encoded solution: 10 core nodes (13 lookups)
   loaded: 3 names, 5 versions
 
 Resolver v3 ranks the candidate versions of a dependency, not their
@@ -295,7 +295,7 @@ the rest, 0.6.5, although it needs a newer Rust than 1.70.
     ms 1.0.0
     sk 0.5.10
     sk 0.6.5
-  encoded solution: 12 core nodes (5 lookups)
+  encoded solution: 12 core nodes (14 lookups)
   loaded: 3 names, 5 versions
 
 mu pins sl to 0.6.5, which needs 1.80, so mt's range skips the compatible
@@ -309,7 +309,7 @@ older one.
     mu 1.0.0
     sl 0.5.9
     sl 0.6.5
-  encoded solution: 12 core nodes (5 lookups)
+  encoded solution: 12 core nodes (14 lookups)
   loaded: 3 names, 5 versions
 
 A candidate one of whose mandatory dependencies has no valid candidate
@@ -406,7 +406,7 @@ comes in through net, with o behind i's own net, and e is locked at both
     i 1.0.0 -> o(o) 1.0.0
     s 1.0.0 -> u(u) 1.0.0
     u 1.0.0 -> w(w) 1.0.0
-  encoded solution: 36 core nodes (9 lookups)
+  encoded solution: 36 core nodes (36 lookups)
   loaded: 8 names, 8 versions
 
 A dev-dependency that depends back on the root reaches the root's own
@@ -435,7 +435,7 @@ answers the second.
     c 1.0.0 -> d(d) 2.0.0
     d 1.0.0 -> f(f) 1.0.0
     d 2.0.0 -> f(f) 1.0.0
-  encoded solution: 28 core nodes (6 lookups)
+  encoded solution: 28 core nodes (28 lookups)
   loaded: 5 names, 6 versions
 
 Sources and patches the model does not cover are refused rather than
@@ -459,7 +459,7 @@ never a candidate, so cargo takes 1.0.0 of each of fa (dep:o/extra), fb
     fb 1.0.0
     fc 1.0.0
     fm 1.0.0
-  encoded solution: 12 core nodes (4 lookups)
+  encoded solution: 12 core nodes (12 lookups)
   loaded: 4 names, 3 versions
   parser dropped 3 declarations
 
@@ -487,7 +487,7 @@ numbers TOML allows all read:
     d 1.0.0 [a,f]
     f 1.0.0 [c]
     tomlok 1.0.0
-  encoded solution: 16 core nodes (5 lookups)
+  encoded solution: 16 core nodes (16 lookups)
   loaded: 4 names, 4 versions
 
 A version component is a u64 in cargo's semver, so tv's timestamp-style
@@ -499,7 +499,7 @@ newer, as cargo does.
   packages (2):
     tv 1.0.1234567891
     vt 1.0.0
-  encoded solution: 6 core nodes (3 lookups)
+  encoded solution: 6 core nodes (7 lookups)
   loaded: 2 names, 2 versions
 
 cargo skips an index line it cannot deserialize, so a line that is JSON
@@ -512,7 +512,7 @@ are out, and cargo, like pac, locks 1.0.0.
   packages (2):
     nb 1.0.0
     nbr 1.0.0
-  encoded solution: 6 core nodes (2 lookups)
+  encoded solution: 6 core nodes (6 lookups)
   loaded: 2 names, 1 versions
   parser dropped 4 declarations
 
@@ -527,7 +527,7 @@ optional i for net.
     fd 1.0.0 [default,i,net,plain]
     i 1.0.0 [net,o]
     o 1.0.0 [extra]
-  encoded solution: 17 core nodes (3 lookups)
+  encoded solution: 17 core nodes (17 lookups)
   loaded: 3 names, 2 versions
   $ ../../../bin/main.exe cargo index manifests/fd.toml -F "" | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root fd 1.0.0 with default features
@@ -535,19 +535,19 @@ optional i for net.
     fd 1.0.0 [default,i,net]
     i 1.0.0 [net,o]
     o 1.0.0 [extra]
-  encoded solution: 16 core nodes (3 lookups)
+  encoded solution: 16 core nodes (16 lookups)
   loaded: 3 names, 2 versions
   $ ../../../bin/main.exe cargo index manifests/fd.toml --no-default-features | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root fd 1.0.0 with no features
   packages (1):
     fd 1.0.0
-  encoded solution: 2 core nodes (1 lookups)
+  encoded solution: 2 core nodes (2 lookups)
   loaded: 2 names, 1 versions
   $ ../../../bin/main.exe cargo index manifests/fd.toml --no-default-features -F plain | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root fd 1.0.0 with features plain and no default feature
   packages (1):
     fd 1.0.0 [plain]
-  encoded solution: 3 core nodes (1 lookups)
+  encoded solution: 3 core nodes (3 lookups)
   loaded: 2 names, 1 versions
 
 A requirement cargo cannot parse is refused, not read as "*":
@@ -567,7 +567,7 @@ PubGrub's own order oa keeps cp's newest, 0.1.7, and ga at its pin.
     ga 0.14.7
     oa 1.0.0
     pa 1.0.0
-  encoded solution: 13 core nodes (6 lookups)
+  encoded solution: 13 core nodes (16 lookups)
   loaded: 4 names, 6 versions
 
 --order=random picks the next name and the version to try uniformly, from
@@ -581,7 +581,7 @@ another seed may give another, a resolution all the same:
     ga 0.14.9
     oa 1.0.0
     pa 1.0.0
-  encoded solution: 13 core nodes (6 lookups)
+  encoded solution: 13 core nodes (16 lookups)
   loaded: 4 names, 6 versions
   $ ../../../bin/main.exe cargo index manifests/oa.toml --order=random --seed 4 | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root oa 1.0.0
@@ -590,7 +590,7 @@ another seed may give another, a resolution all the same:
     ga 0.14.7
     oa 1.0.0
     pa 1.0.0
-  encoded solution: 13 core nodes (6 lookups)
+  encoded solution: 13 core nodes (16 lookups)
   loaded: 4 names, 6 versions
 
 cargo's lock records a crate's dependencies as the versions they resolved
@@ -611,7 +611,7 @@ order, the two are one version, with both declarations' features:
   parent edges (2):
     st 1.0.0 -> stk(stk) 0.1.0
     stk 0.1.0 -> wsy(wsy) 0.61.0
-  encoded solution: 11 core nodes (4 lookups)
+  encoded solution: 11 core nodes (12 lookups)
   loaded: 3 names, 3 versions
 
 The root's dev-dependencies are active beside its normal ones, so a

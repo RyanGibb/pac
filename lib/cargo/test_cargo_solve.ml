@@ -31,7 +31,7 @@ let solve (m, features, installed) =
         ( a.Cargo_solve.crates,
           a.Cargo_solve.parents,
           a.Cargo_solve.nodes,
-          a.Cargo_solve.processed,
+          a.Cargo_solve.lookups,
           r.Cargo_solve.n_names,
           r.Cargo_solve.n_vers )
 

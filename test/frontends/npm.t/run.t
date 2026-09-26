@@ -32,7 +32,7 @@ polyfill is in the cache.
     app 1.0.0 <- runtime 1.1.0
     app 1.0.0 <- tester 1.0.0
     app 1.0.0 <- widget 1.0.0
-  encoded solution: 13 core nodes (31 lookups)
+  encoded solution: 13 core nodes (18 lookups)
   loaded: 9 names, 15 versions, 0 packuments fetched
 
 A name the root both depends on and declares a peer for is a dependency
@@ -51,7 +51,7 @@ lands on 1.1.0.
   node_modules (2):
     dual-app 1.0.0 <- dual 1.3.0
     dual-app 1.0.0 <- shim 1.1.0
-  encoded solution: 5 core nodes (12 lookups)
+  encoded solution: 5 core nodes (7 lookups)
   loaded: 3 names, 7 versions, 0 packuments fetched
 
 Prerelease admission is scoped to a single comparator set rather than to
@@ -68,7 +68,7 @@ prerelease and the set that does is the other alternative.
     beta-app 1.0.0
     codec 1.0.0
     parser 1.0.0-alpha.1
-  encoded solution: 5 core nodes (10 lookups)
+  encoded solution: 5 core nodes (5 lookups)
   loaded: 3 names, 5 versions, 0 packuments fetched
 
 The literal range * is the exception, and so is an empty range, which npm
@@ -88,7 +88,7 @@ admits without the exception.
     pre-engine 0.1.0
     pre-only 1.0.0-beta.2
     star-app 1.0.0
-  encoded solution: 9 core nodes (19 lookups)
+  encoded solution: 9 core nodes (10 lookups)
   loaded: 5 names, 9 versions, 0 packuments fetched
 
 npm's semver reads versions loosely, and a prerelease may drop its hyphen:
@@ -100,7 +100,7 @@ prerelease, so 1.0.0 is installed.
   packages (2):
     loose 1.0.0
     loose-app 1.0.0
-  encoded solution: 3 core nodes (6 lookups)
+  encoded solution: 3 core nodes (3 lookups)
   loaded: 2 names, 3 versions, 0 packuments fetched
 
 An optionalDependencies entry is an ordinary dependency, abandoned
@@ -126,7 +126,7 @@ takes it with it: transitivity needs no separate rule.
   node_modules (2):
     opt-app 1.0.0 <- gadget 1.0.0
     opt-app 1.0.0 <- theme 1.0.0
-  encoded solution: 5 core nodes (10 lookups)
+  encoded solution: 5 core nodes (5 lookups)
   loaded: 5 names, 5 versions, 0 packuments fetched, 2 of 3 optionalDependencies (target, range) pairs dropped
 
 --omit=optional drops the class outright, without asking the registry
@@ -141,7 +141,7 @@ native is loaded at all.
     theme 1.0.0
   node_modules (1):
     opt-app 1.0.0 <- theme 1.0.0
-  encoded solution: 3 core nodes (6 lookups)
+  encoded solution: 3 core nodes (3 lookups)
   loaded: 2 names, 2 versions, 0 packuments fetched
 
 --omit=dev is not the same kind of omission.  npm resolves the
@@ -161,7 +161,7 @@ though latest is 4.0.0, and host's peer gadget goes with host.  npm
     omit-app 1.0.0
     taker 1.0.0
     tok 3.0.2
-  encoded solution: 12 core nodes (26 lookups)
+  encoded solution: 12 core nodes (14 lookups)
   loaded: 6 names, 8 versions, 0 packuments fetched
   $ ../../../bin/main.exe npm --offline --cache . --tree --omit=dev ./omit-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root omit-app 1.0.0
@@ -172,7 +172,7 @@ though latest is 4.0.0, and host's peer gadget goes with host.  npm
   node_modules (2):
     omit-app 1.0.0 <- taker 1.0.0
     taker 1.0.0 <- tok 3.0.2
-  encoded solution: 12 core nodes (26 lookups)
+  encoded solution: 12 core nodes (14 lookups)
   loaded: 6 names, 8 versions, 0 packuments fetched
 
 npm's third class, peer, is refused rather than ignored:
@@ -202,7 +202,7 @@ platform but macOS.
     nativefs 1.0.0 <- native-core 1.0.0
     opt-plat-app 1.0.0 <- nativefs 1.0.0
     opt-plat-app 1.0.0 <- theme 1.0.0
-  encoded solution: 7 core nodes (14 lookups)
+  encoded solution: 7 core nodes (7 lookups)
   loaded: 4 names, 4 versions, 0 packuments fetched, 0 of 1 optionalDependencies (target, range) pairs dropped
 
 A non-optional dependency on the same package resolves alike, which is
@@ -222,7 +222,7 @@ not npm's answer.
     nativefs 1.0.0 <- native-core 1.0.0
     plat-app 1.0.0 <- nativefs 1.0.0
     plat-app 1.0.0 <- theme 1.0.0
-  encoded solution: 7 core nodes (14 lookups)
+  encoded solution: 7 core nodes (7 lookups)
   loaded: 4 names, 4 versions, 0 packuments fetched
 
 A satisfiable optional entry that conflicts is a conflict, not a drop.
@@ -255,7 +255,7 @@ installs gadget 2.0.0 by itself.
   node_modules (2):
     opt-peer-app 1.0.0 <- gadget 2.0.0
     opt-peer-app 1.0.0 <- host 1.0.0
-  encoded solution: 5 core nodes (11 lookups)
+  encoded solution: 5 core nodes (6 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
 
 A root override binds a peer slot too, and wins over the peer's own range
@@ -274,7 +274,7 @@ peer dependency's range exactly as it replaces a dependency's.
   node_modules (2):
     ovr-peer-app 1.0.0 <- gadget 1.0.0
     ovr-peer-app 1.0.0 <- host 1.0.0
-  encoded solution: 5 core nodes (11 lookups)
+  encoded solution: 5 core nodes (6 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
 
 An override to * is no override at all: npm reads an edge's range from an
@@ -292,7 +292,7 @@ to "", and in both holder's ^3.0.0 still binds: tok 3.0.2, not the latest
   node_modules (2):
     ovr-star-app 1.0.0 <- holder 1.0.0
     holder 1.0.0 <- tok 3.0.2
-  encoded solution: 5 core nodes (10 lookups)
+  encoded solution: 5 core nodes (5 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
 
   $ ../../../bin/main.exe npm --offline --cache . --tree ./ovr-empty-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
@@ -304,7 +304,7 @@ to "", and in both holder's ^3.0.0 still binds: tok 3.0.2, not the latest
   node_modules (2):
     ovr-empty-app 1.0.0 <- holder 1.0.0
     holder 1.0.0 <- tok 3.0.2
-  encoded solution: 5 core nodes (10 lookups)
+  encoded solution: 5 core nodes (5 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
 
 npm leaves an edge on a version its tree already holds when the range
@@ -326,7 +326,7 @@ then finds that copy: one tok, 3.0.2, although latest is 4.0.0.
     reuse-app 1.0.0 <- taker 1.0.0
     holder 1.0.0 <- tok 3.0.2
     taker 1.0.0 <- tok 3.0.2
-  encoded solution: 8 core nodes (17 lookups)
+  encoded solution: 8 core nodes (9 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
 
 That is npm's order at work, which --order=pubgrub gives up for PubGrub's
@@ -339,7 +339,7 @@ tok 4.0.0 of its own.
     reuse-app 1.0.0 <- taker 1.0.0
     holder 1.0.0 <- tok 3.0.2
     taker 1.0.0 <- tok 4.0.0
-  encoded solution: 9 core nodes (19 lookups)
+  encoded solution: 9 core nodes (10 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
 
 --order=random picks the next name and the version to try uniformly, from
@@ -352,7 +352,7 @@ another seed may give another, a resolution all the same:
     reuse-app 1.0.0 <- taker 1.0.0
     holder 1.0.0 <- tok 3.0.2
     taker 1.0.0 <- tok 4.0.0
-  encoded solution: 9 core nodes (19 lookups)
+  encoded solution: 9 core nodes (10 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
   $ ../../../bin/main.exe npm --offline --cache . --tree --order=random --seed 2 ./reuse-app/package.json | sed -n '/^node_modules/,/^loaded/p'
   node_modules (4):
@@ -360,7 +360,7 @@ another seed may give another, a resolution all the same:
     reuse-app 1.0.0 <- taker 1.0.0
     holder 1.0.0 <- tok 3.0.2
     taker 1.0.0 <- tok 3.0.2
-  encoded solution: 8 core nodes (17 lookups)
+  encoded solution: 8 core nodes (9 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
 
 Only a copy already placed is reused, and npm reaches a package only after
@@ -382,7 +382,7 @@ that only a later package requires is not there to be reused.
     early 1.0.0 <- late 1.0.0
     late 1.0.0 <- tok 3.0.2
     early 1.0.0 <- tok 4.0.0
-  encoded solution: 9 core nodes (19 lookups)
+  encoded solution: 9 core nodes (10 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
 
 npm's queue is ordered by where a copy sits in node_modules, not by how
@@ -407,7 +407,7 @@ stream, and stream's tok ~3.0.0 is placed before npm reaches zeta, whose
     stream 1.0.0 <- tok 3.0.2
     zeta 1.0.0 <- tok 3.0.2
     hoist-app 1.0.0 <- zeta 1.0.0
-  encoded solution: 12 core nodes (25 lookups)
+  encoded solution: 12 core nodes (13 lookups)
   loaded: 6 names, 7 versions, 0 packuments fetched
 
 A copy nested in one package's node_modules is not there for another.
@@ -429,7 +429,7 @@ top and keeps 4.0.0, although 3.0.2 is tagged latest.
     nest-app 1.0.0 <- mark 4.0.0
     outer 1.0.0 <- mark 4.0.0
     nest-app 1.0.0 <- outer 1.0.0
-  encoded solution: 10 core nodes (21 lookups)
+  encoded solution: 10 core nodes (11 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
 
 An optional peer that is never installed is no constraint, and the replay
@@ -448,7 +448,7 @@ driver keeps 10.0.0, the pick for resolver's *:
   node_modules (2):
     resolver-app 1.0.0 <- linter 10.0.0
     resolver-app 1.0.0 <- resolver 1.0.0
-  encoded solution: 5 core nodes (11 lookups)
+  encoded solution: 5 core nodes (6 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
 
 npm never places a peer inside a non-root package that declares it, so
@@ -474,7 +474,7 @@ preset's.
     preset-app 1.0.0 <- preset 1.0.0
     preset 1.0.0 <- syntax-a 1.2.0
     preset 1.0.0 <- syntax-b 1.2.0
-  encoded solution: 10 core nodes (26 lookups)
+  encoded solution: 10 core nodes (16 lookups)
   loaded: 5 names, 10 versions, 0 packuments fetched
 
 However deep the chain of dependencies that each peer on the name, the
@@ -530,7 +530,7 @@ the lookup finds only 2.0.0, and fetches ^1.0.0's newest, 1.1.0:
     sight-right 1.0.0 <- sight-host 1.0.0
     sight-app 1.0.0 <- sight-left 1.0.0
     sight-app 1.0.0 <- sight-right 1.0.0
-  encoded solution: 13 core nodes (28 lookups)
+  encoded solution: 13 core nodes (15 lookups)
   loaded: 5 names, 7 versions, 0 packuments fetched
 
 A name a package both depends on and peers on is a dependency only: npm
@@ -551,7 +551,7 @@ beside it as its peer, while tok is its own 3.0.2 and nothing asks for a
     twin-app 1.0.0 <- theme 1.0.0
     twin 1.0.0 <- tok 3.0.2
     twin-app 1.0.0 <- twin 1.0.0
-  encoded solution: 7 core nodes (14 lookups)
+  encoded solution: 7 core nodes (7 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
 
 deprecated is a resolution preference, not a warning printed over a pick
@@ -580,7 +580,7 @@ depr-empty's latest 2.0.0, deprecated with "", is picked as any latest is.
     depr-app 1.0.0 <- depr-all 2.0.0
     depr-app 1.0.0 <- depr-empty 2.0.0
     depr-app 1.0.0 <- depr-old 1.0.0
-  encoded solution: 9 core nodes (22 lookups)
+  encoded solution: 9 core nodes (13 lookups)
   loaded: 5 names, 10 versions, 0 packuments fetched
 
 engines is the other half of the same sort, so it needs a host to rank
@@ -600,7 +600,7 @@ the non-deprecated 2.0.0.
     engine-app 1.0.0 <- engine 2.0.0
     engine-app 1.0.0 <- engine-depr 2.0.0
     engine-app 1.0.0 <- engine-npm 2.0.0
-  encoded solution: 7 core nodes (17 lookups)
+  encoded solution: 7 core nodes (10 lookups)
   loaded: 4 names, 7 versions, 0 packuments fetched
 
 Given a host, the preference acts, and engines.npm is as live a sub-key as
@@ -622,7 +622,7 @@ so the engine key decides and the deprecated 1.0.0 wins.
     engine-app 1.0.0 <- engine 1.0.0
     engine-app 1.0.0 <- engine-depr 1.0.0
     engine-app 1.0.0 <- engine-npm 1.0.0
-  encoded solution: 7 core nodes (17 lookups)
+  encoded solution: 7 core nodes (10 lookups)
   loaded: 4 names, 7 versions, 0 packuments fetched
 
 Neither key is a gate, so pinning past the preference still resolves: the
@@ -635,7 +635,7 @@ package in a lockfile and complains at install time.
   packages (2):
     .
     engine 2.0.0
-  encoded solution: 3 core nodes (6 lookups)
+  encoded solution: 3 core nodes (3 lookups)
   loaded: 2 names, 3 versions, 0 packuments fetched
 
 The query is what npm install takes: a project's package.json, and specs
@@ -661,7 +661,7 @@ these fixtures, and refuses plugin@next (ETARGET).
     . <- plugin 1.0.0
     . <- runtime 1.1.0
     . <- tester 1.0.0
-  encoded solution: 11 core nodes (26 lookups)
+  encoded solution: 11 core nodes (15 lookups)
   loaded: 6 names, 12 versions, 0 packuments fetched
 
 A spec added to a project goes where the project already names it, so
@@ -688,7 +688,7 @@ one, and a tag is the version the packument tags.
     . <- plugin 1.0.0
     . <- runtime 1.0.0
     . <- util-lib 1.2.0
-  encoded solution: 9 core nodes (18 lookups)
+  encoded solution: 9 core nodes (9 lookups)
   loaded: 5 names, 11 versions, 0 packuments fetched
 
 An alias spec names the directory and the package apart, so one package
@@ -703,7 +703,7 @@ can be installed twice under two names.
   node_modules (2):
     . <- util-lib 1.0.0 at lodash
     . <- util-lib 1.2.0
-  encoded solution: 5 core nodes (11 lookups)
+  encoded solution: 5 core nodes (6 lookups)
   loaded: 2 names, 3 versions, 0 packuments fetched
 
 A spec that is not the registry's, and a tag the packument lacks, are
@@ -736,7 +736,7 @@ devprod ^1 in dependencies and ^2 in devDependencies, gets 2.0.0:
   packages (2):
     devprod 2.0.0
     devprod-app 1.0.0
-  encoded solution: 3 core nodes (6 lookups)
+  encoded solution: 3 core nodes (3 lookups)
   loaded: 2 names, 3 versions, 0 packuments fetched
 
 No range semver reads holds a '!', so npa takes !=1.0.0 for a tag name and
@@ -747,7 +747,7 @@ other specs no registry lookup resolves are:
   root bang-app 1.0.0
   packages (1):
     bang-app 1.0.0
-  encoded solution: 1 core nodes (2 lookups)
+  encoded solution: 1 core nodes (1 lookups)
   loaded: 1 names, 1 versions, 0 packuments fetched
   parser dropped 1 declarations
 
@@ -760,7 +760,7 @@ nothing, so alpha, whose optional entry asks for nosuch, is abandoned:
   packages (2):
     devprod 1.0.0
     tag-app 1.0.0
-  encoded solution: 3 core nodes (6 lookups)
+  encoded solution: 3 core nodes (3 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched, 1 of 1 optionalDependencies (target, range) pairs dropped
 
 A spec is a range where semver, reading loosely, finds one, and a dist-tag
@@ -779,7 +779,7 @@ say, so both are dropped and counted:
     digtag 1.0.0
     util-lib 1.0.0 at kit
     spec-app 1.0.0
-  encoded solution: 7 core nodes (14 lookups)
+  encoded solution: 7 core nodes (7 lookups)
   loaded: 4 names, 7 versions, 0 packuments fetched
   parser dropped 2 declarations
 
@@ -793,7 +793,7 @@ refused:
     .
     digtag 1.0.0
     util-lib 1.0.0 at kit
-  encoded solution: 5 core nodes (10 lookups)
+  encoded solution: 5 core nodes (5 lookups)
   loaded: 3 names, 5 versions, 0 packuments fetched
   $ ../../../bin/main.exe npm --offline --cache . 'digtag@^beta'
   error: digtag@^beta: not a registry spec (name, name@range, name@tag, key@npm:name@range)
@@ -822,7 +822,7 @@ here the override binds and 1.0.0 is installed.
   node_modules (2):
     ovr-key-app 1.0.0 <- carrier 1.0.0
     carrier 1.0.0 <- util-lib 1.2.0 at kit
-  encoded solution: 5 core nodes (11 lookups)
+  encoded solution: 5 core nodes (6 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
 
   $ ../../../bin/main.exe npm --offline --cache . --tree ./ovr-target-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
@@ -834,7 +834,7 @@ here the override binds and 1.0.0 is installed.
   node_modules (2):
     ovr-target-app 1.0.0 <- carrier 1.0.0
     carrier 1.0.0 <- util-lib 1.0.0 at kit
-  encoded solution: 5 core nodes (10 lookups)
+  encoded solution: 5 core nodes (5 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
 
 A dependency is met only by the package it names: a source name pairs
@@ -856,7 +856,7 @@ at all; here needer gets a tok 3.0.2 of its own.
     alias-sat-app 1.0.0 <- needer 1.0.0
     alias-sat-app 1.0.0 <- mark 3.0.2 at tok
     needer 1.0.0 <- tok 3.0.2
-  encoded solution: 7 core nodes (14 lookups)
+  encoded solution: 7 core nodes (7 lookups)
   loaded: 4 names, 6 versions, 0 packuments fetched
 
 A peer dependency resolves in its declarer's depender's directory,
@@ -905,7 +905,7 @@ range, so the difference is one of preference, not validity.
     live-app 1.0.0 <- listy 1.0.0
     listy 1.0.0 <- rstream 2.0.0
     live-app 1.0.0 <- rstream 3.0.0
-  encoded solution: 12 core nodes (26 lookups)
+  encoded solution: 12 core nodes (14 lookups)
   loaded: 4 names, 6 versions, 0 packuments fetched
 
 bundleDependencies are not read, so a bundled dependency resolves from
@@ -924,7 +924,7 @@ never published; npm takes that copy, nested in bundler, while here tok
   node_modules (2):
     bundle-app 1.0.0 <- bundler 1.0.0
     bundler 1.0.0 <- tok 3.0.2
-  encoded solution: 5 core nodes (10 lookups)
+  encoded solution: 5 core nodes (5 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
 
 An optional dependency is abandoned only when its own range matches
@@ -955,7 +955,7 @@ overrides tok to 4.0.0 under holder only; npm installs holder's tok at
   node_modules (2):
     ovr-path-app 1.0.0 <- holder 1.0.0
     holder 1.0.0 <- tok 3.0.2
-  encoded solution: 5 core nodes (10 lookups)
+  encoded solution: 5 core nodes (5 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
   parser dropped 1 declarations
 
@@ -976,7 +976,7 @@ lookup finds, refuses 3.0.2, and nests lurker and a tok 4.0.0 under perch.
     perch 1.0.0 <- lurker 1.0.0
     perch-app 1.0.0 <- perch 1.0.0
     perch-app 1.0.0 <- tok 3.0.2
-  encoded solution: 7 core nodes (14 lookups)
+  encoded solution: 7 core nodes (7 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
 
 Processes sharing a cache fetch into it concurrently, each into a scratch
@@ -1000,13 +1000,13 @@ the second is still open.
   packages (2):
     .
     theme 1.0.0
-  encoded solution: 3 core nodes (6 lookups)
+  encoded solution: 3 core nodes (3 lookups)
   loaded: 2 names, 2 versions, 1 packuments fetched
   root .
   packages (2):
     .
     theme 1.0.0
-  encoded solution: 3 core nodes (6 lookups)
+  encoded solution: 3 core nodes (3 lookups)
   loaded: 2 names, 2 versions, 1 packuments fetched
   $ ls fetched
   theme.json

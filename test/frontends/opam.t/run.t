@@ -6,7 +6,7 @@ untimed drops the timings from pac's output and keeps its exit status:
   packages (2):
     app 1
     c 1
-  encoded solution: 4 core nodes (3 lookups)
+  encoded solution: 4 core nodes (6 lookups)
   loaded: 2 names, 2 versions
 
 A dependency constrained to the depender's own version takes that version,
@@ -16,7 +16,7 @@ not the newest one available:
   packages (2):
     lib 2
     tool 2
-  encoded solution: 3 core nodes (3 lookups)
+  encoded solution: 3 core nodes (4 lookups)
   loaded: 2 names, 3 versions
 
 A parenthesised group conjoins its elements, as the top level of a brace
@@ -26,7 +26,7 @@ does, so both ends of (>= "2" < "4") bind and dep.9 is out of range:
   packages (2):
     dep 3
     grp 1
-  encoded solution: 3 core nodes (3 lookups)
+  encoded solution: 3 core nodes (4 lookups)
   loaded: 2 names, 3 versions
 
 A version disjunction inside one brace is one set of versions, as opam reads
@@ -37,7 +37,7 @@ dep.3 for being written first:
   packages (2):
     bdisj 1
     dep 9
-  encoded solution: 3 core nodes (3 lookups)
+  encoded solution: 3 core nodes (4 lookups)
   loaded: 2 names, 3 versions
 
 A brace mixing a filter into the disjunction stays two atoms under a
@@ -48,14 +48,14 @@ left, and with it the unconstrained alternative, written first, is taken:
   packages (2):
     bmix 1
     dep 3
-  encoded solution: 3 core nodes (3 lookups)
+  encoded solution: 3 core nodes (4 lookups)
   loaded: 2 names, 3 versions
 
   $ untimed ../../../bin/main.exe opam --with-test . bmix
   packages (2):
     bmix 1
     dep 9
-  encoded solution: 4 core nodes (3 lookups)
+  encoded solution: 4 core nodes (6 lookups)
   loaded: 2 names, 3 versions
 
 pin-depends is read only when its owner is pinned, and nothing is pinned
@@ -65,7 +65,7 @@ here, so pind.1's entry for dep.dev constrains nothing:
   packages (2):
     dep 9
     pind 1
-  encoded solution: 3 core nodes (3 lookups)
+  encoded solution: 3 core nodes (4 lookups)
   loaded: 2 names, 3 versions
 
 Depexts constrain nothing: they are read off the finished resolution, so
@@ -82,7 +82,7 @@ unconditionally for pkg-config, which is named once:
   system packages (2):
     libfoo-dev
     pkg-config
-  encoded solution: 3 core nodes (3 lookups)
+  encoded solution: 3 core nodes (4 lookups)
   loaded: 2 names, 2 versions
 
 The avoid-version and deprecated flags say "select this only if nothing
@@ -109,7 +109,7 @@ selected:
   packages (2):
     avoid 2
     needav 1
-  encoded solution: 3 core nodes (3 lookups)
+  encoded solution: 3 core nodes (4 lookups)
   loaded: 2 names, 3 versions
 
 opam's builtin-0install takes a disjunction's first satisfiable alternative
@@ -123,7 +123,7 @@ this is what falls out:
   packages (2):
     alt1 1
     pick 1
-  encoded solution: 4 core nodes (3 lookups)
+  encoded solution: 4 core nodes (6 lookups)
   loaded: 4 names, 4 versions
 
 A conflict class admits at most one name.  cc-a.1, cc-b.1 and cc-b.2 all
@@ -143,7 +143,7 @@ names, as opam's ocaml-system -- both a class and a package -- requires.
     cc-pick 1
     cc-plain 1
     ccls 1
-  encoded solution: 7 core nodes (7 lookups)
+  encoded solution: 7 core nodes (13 lookups)
   loaded: 5 names, 6 versions
 
 Asking for both names of the class outright has no resolution, and the
@@ -181,7 +181,7 @@ the greatest version, and PubGrub decides the greatest:
   packages (2):
     cfl-a 1
     cfl-c 1
-  encoded solution: 4 core nodes (3 lookups)
+  encoded solution: 4 core nodes (6 lookups)
   loaded: 3 names, 4 versions
 
 A request is a query -- a set of names, each with a set of acceptable
@@ -195,7 +195,7 @@ repository:
     c 1
     lib 2
     tool 2
-  encoded solution: 6 core nodes (5 lookups)
+  encoded solution: 6 core nodes (9 lookups)
   loaded: 4 names, 5 versions
 
 An atom's version constraint is the set of versions its name is accepted
@@ -230,7 +230,7 @@ Constraints and several names compose, the query being one per name:
     app 1
     c 1
     dep 3
-  encoded solution: 5 core nodes (4 lookups)
+  encoded solution: 5 core nodes (7 lookups)
   loaded: 3 names, 4 versions
 
 An element opam's command line cannot read is refused, with status 2, as
@@ -262,7 +262,7 @@ mlib under with-test.  Off, none of the four is in:
   packages (2):
     mid 1
     tst 1
-  encoded solution: 3 core nodes (3 lookups)
+  encoded solution: 3 core nodes (5 lookups)
   loaded: 6 names, 6 versions
 
 --with-test brings in tlib, the queried package's own test dependency, and
@@ -273,7 +273,7 @@ not mlib, which belongs to a package the query merely reaches:
     mid 1
     tlib 1
     tst 1
-  encoded solution: 4 core nodes (4 lookups)
+  encoded solution: 4 core nodes (6 lookups)
   loaded: 6 names, 6 versions
 
 The other two flags scope the same way, each over its own variable:
@@ -283,7 +283,7 @@ The other two flags scope the same way, each over its own variable:
     mid 1
     tdoc 1
     tst 1
-  encoded solution: 4 core nodes (4 lookups)
+  encoded solution: 4 core nodes (6 lookups)
   loaded: 6 names, 6 versions
 
   $ untimed ../../../bin/main.exe opam --with-dev-setup . tst
@@ -291,7 +291,7 @@ The other two flags scope the same way, each over its own variable:
     dsetup 1
     mid 1
     tst 1
-  encoded solution: 4 core nodes (4 lookups)
+  encoded solution: 4 core nodes (6 lookups)
   loaded: 6 names, 6 versions
 
 Naming mid too puts it in the query, so with-test holds of it as well and
@@ -304,7 +304,7 @@ mlib is reached, not asked for.
     mlib 1
     tlib 1
     tst 1
-  encoded solution: 5 core nodes (5 lookups)
+  encoded solution: 5 core nodes (8 lookups)
   loaded: 7 names, 7 versions
 
 In opam a conflict's filter sees only switch and global variables and the
@@ -318,7 +318,7 @@ linux holds:
     cflt 1
     dep 9
     lib 2
-  encoded solution: 4 core nodes (4 lookups)
+  encoded solution: 4 core nodes (5 lookups)
   loaded: 3 names, 5 versions
 
 opam-version is the one global variable opam answers with its own version
@@ -352,7 +352,7 @@ then ord-q, opam installs ord-q.2, ord-p.1 and ord-r.1:
     ord-p 1
     ord-q 2
     ord-r 1
-  encoded solution: 4 core nodes (6 lookups)
+  encoded solution: 4 core nodes (8 lookups)
   loaded: 3 names, 6 versions
 
 In PubGrub's own order the answer is as valid, but which name keeps its
@@ -363,7 +363,7 @@ newest is PubGrub's choice:
     ord-p 2
     ord-q 1
     ord-r 2
-  encoded solution: 4 core nodes (6 lookups)
+  encoded solution: 4 core nodes (8 lookups)
   loaded: 3 names, 6 versions
 
 --order=random picks the next name and the version to try uniformly, from
@@ -375,14 +375,14 @@ another seed may give another, a resolution all the same:
     ord-p 2
     ord-q 1
     ord-r 2
-  encoded solution: 4 core nodes (6 lookups)
+  encoded solution: 4 core nodes (7 lookups)
   loaded: 3 names, 6 versions
   $ untimed ../../../bin/main.exe opam --order=random --seed 2 . ord-p ord-q
   packages (3):
     ord-p 1
     ord-q 2
     ord-r 1
-  encoded solution: 4 core nodes (6 lookups)
+  encoded solution: 4 core nodes (7 lookups)
   loaded: 3 names, 6 versions
 
 Every filter reads the package's own version as version, _:version or
@@ -394,7 +394,7 @@ svl.1:
   packages (2):
     svd 2
     svl 1
-  encoded solution: 3 core nodes (4 lookups)
+  encoded solution: 3 core nodes (5 lookups)
   loaded: 2 names, 4 versions
 
 opam ignores a field it cannot read.  available: is one filter
@@ -439,14 +439,14 @@ version installs eqv.1.00 with dep.3:
   packages (2):
     dep 3
     eqv 1.00
-  encoded solution: 3 core nodes (3 lookups)
+  encoded solution: 3 core nodes (4 lookups)
   loaded: 2 names, 3 versions
 
   $ untimed ../../../bin/main.exe opam . eqv.1.00
   packages (2):
     dep 3
     eqv 1.00
-  encoded solution: 3 core nodes (3 lookups)
+  encoded solution: 3 core nodes (4 lookups)
   loaded: 2 names, 3 versions
 
 A repository that cannot be read is a read error, not a refused query:

@@ -55,7 +55,7 @@ Every frontend prints the same shape.
 A `root` line comes first where the query names a root package (cargo, npm).
 An answer is a `packages (N):` line and N rows under it, each `name version` indented two spaces (Debian's name carries its architecture, `name:arch`; cargo's row ends in its features, `[f,g]`).
 Sections a flag asks for follow in the same shape: opam's `system packages`, cargo's `parent edges` (`--print-parents`), npm's `node_modules` (`--tree`).
-Then `encoded solution: N core nodes (K lookups)`.
+Then `encoded solution: N core nodes (K lookups)`: the solution's N packages of the encoding, and the K packages of the encoding whose dependencies the solve looked up.
 Where no answer exists, an `unsatisfiable:` line and PubGrub's explanation take the place of all of these.
 Either way the output ends in `loaded: N names, M versions` (with a frontend's own counts after), `parser dropped N declarations` where the parser dropped any, and the `parse` and `solve` times.
 `eval/answer.sh` is the one reader of the rows.

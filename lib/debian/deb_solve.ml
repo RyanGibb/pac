@@ -491,20 +491,20 @@ module Make (AP : Tables.ARCH) = struct
       | DMA.Deb.Name.Soft _ -> "versions/soft"
       | DMA.Deb.Name.Selector _ -> "versions/sel"
     in
+    let looked_up = Hashtbl.create 4096 in
     let module S = Search (struct
       let tables = tables
       let versions n' = timed (vname n') (versions tables) n'
-      let dependencies = timed "dependees" (dependees tables)
+
+      let dependencies p =
+        Hashtbl.replace looked_up p ();
+        timed "dependees" (dependees tables) p
     end) in
     let r =
       S.run ~debug ~order
         (List.map (fun ((n, b), acc) -> ((n, DMA.QAArch b), acc)) query)
     in
-    let lookups =
-      match Hashtbl.find_opt buckets "dependees" with
-      | Some (c, _) -> !c
-      | None -> 0
-    in
+    let lookups = Hashtbl.length looked_up in
     if Sys.getenv_opt "PACPROF" <> None then (
       Hashtbl.iter
         (fun name (c, t) ->

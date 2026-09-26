@@ -73,7 +73,7 @@ struct
       canon = NameMap.empty;
     }
 
-  let processed st = Hashtbl.length st.seen
+  let lookups st = Hashtbl.length st.deps
 
   let unless_volatile st tbl (n : N.t) f =
     if st.volatile n then f ()

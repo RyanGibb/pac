@@ -274,7 +274,6 @@ let peer_sub_inst st (p : string * string) (m : string * string) (u : string) =
 
 let versions st (n : Np.Nm.name) : Np.Vs.version list =
   memo st.vcache n (fun () ->
-      st.n_lookups <- st.n_lookups + 1;
       match n with
       | Np.Nm.Granular (k, w) ->
           T.VSet.elements (R.versions (gran_sub_inst st k w) n)
@@ -290,7 +289,6 @@ let record_dir st (m : Np.Nm.name) =
   | Np.Nm.Granular _ -> ()
 
 let dependees st (s : T.Pkg.t) : T.Dependees.t list =
-  st.n_lookups <- st.n_lookups + 1;
   let hs =
     match s with
     | Np.Nm.Granular (k, _), Np.Vs.Orig v ->

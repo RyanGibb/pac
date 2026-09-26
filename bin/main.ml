@@ -298,7 +298,7 @@ let cargo_run debug order print_parents index manifest features no_default
                      Printf.sprintf "%s %s -> %s(%s) %s" n v a t u)
                    a.Cargo_solve.parents);
             Report.encoded ~nodes:a.Cargo_solve.nodes
-              ~lookups:a.Cargo_solve.processed)
+              ~lookups:a.Cargo_solve.lookups)
   with Cargo_query.Refused e -> error 2 "%s" e
 
 let cargo_cmd =
@@ -394,7 +394,7 @@ let alpine_run debug order path goals =
         (fun a ->
           Report.packages
             (List.map (fun (n, v) -> n ^ " " ^ v) a.Apk_solve.pkgs);
-          Report.encoded ~nodes:a.Apk_solve.nodes ~lookups:a.Apk_solve.processed)
+          Report.encoded ~nodes:a.Apk_solve.nodes ~lookups:a.Apk_solve.lookups)
 
 let alpine_cmd =
   let path =
