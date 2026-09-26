@@ -56,6 +56,8 @@ PKGS = {
     "bu": {"1.0.0": {"peerDependencies": {"tl": "^2.0.0"}}},
     "tl": {"2.5.0": {}, "2.6.0": {}},
     "hx": {"1.0.0": {"dependencies": {"ut": "^1.0.0", "tl": "^2.0.0"}}},
+    "ma": {"1.0.0": {"dependencies": {"mb": "^1.0.0"}}},
+    "mb": {"1.0.0": {}},
 }
 CASES = {
     "po-valid":   ("VALID/yes", {"a": "^1.0.0", "c": "^1.0.0"},
@@ -169,6 +171,8 @@ OURS = {
                      [". <- or 1.0.0", ". <- oq 2.0.0", "or 1.0.0 <- op 1.0.0", "or 1.0.0 <- oq 2.0.0"]),
     "opt-peer-seen": ("INVALID/-", {"or": "^1.0.0", "oq": "^2.0.0"},
                       [". <- or 1.0.0", ". <- oq 2.0.0", "or 1.0.0 <- op 1.0.0"]),
+    # ma's mb has no edge, though the lookup would land on the mb there is
+    "no-edge":      ("INVALID/-", {"ma": "^1.0.0"}, [". <- ma 1.0.0"], ["mb 1.0.0"]),
     # cy 1 -> oz 1 -> cy 2 -> cy 1, which closes: the cy 1 inside cy 2 sees
     # the top oz 1
     "cycle-three":  ("VALID/yes", {"cy": "^1.0.0"},

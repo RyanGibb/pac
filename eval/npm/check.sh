@@ -77,7 +77,7 @@ else
     --root-manifest "$W/package.json" > "$out/mklock" 2>&1
   case $? in
     0) ;;
-    # the answer gives a declarer's peer two
+    # the answer lacks a provider, or gives a declarer's peer two
     4) verdict INVALID - "$(tail -n 1 "$out/mklock")" ;;
     *) verdict ERR - "mklock failed: $(tail -n 1 "$out/mklock" | cut -c 1-300)" ;;
   esac

@@ -75,9 +75,12 @@ checked, rather than npm's hoisting heuristic being guessed at:
           describe a different answer from ours.  Whether npm takes what
           comes out, PEER LOCAL included, is check.sh's question.
 
-Before any of this, an answer that gives a declarer's peer, from the root,
-one provider and the declarer's own edge of that name another is refused,
-since no tree holds it; given from below the root, the answer is left
+Before any of this, an answer that gives some requirer no provider for a
+dependency its manifest names, or for a peer of a package it requires, is
+refused: npm might still find a package there by lookup, but our answer
+would not be the one that put it there.  So is one that gives a declarer's
+peer, from the root, one provider and the declarer's own edge of that name
+another, which no tree holds; given from below the root, the answer is left
 unchecked.
 
 Every other field is copied, not decided: version, resolved and
@@ -88,8 +91,8 @@ differs from the registry name) carries "name", the way npm records one.
 
 usage: mklock.py <cache-dir> <our --tree output> <out package-lock.json>
        [--root-manifest <package.json>]
-Exits 4 when the answer resolves a peer two ways from the root, so that a
-crash, which exits 1, is not read as one.
+Exits 4 when the answer lacks an edge, or resolves a peer two ways from the
+root, so that a crash, which exits 1, is not read as one.
 """
 import json
 import os
@@ -274,18 +277,28 @@ def main():
     out = {}
     for r, key, c in edges:
         out.setdefault(r, {})[key] = c
-    peers, needed = {}, {}
+    peers, needed, lacking = {}, {}, []
     for n in sorted(nodes):
         # the query is published nowhere; its manifest is the project's
         m = (rootman or {}) if n == root else manifest(cache, n[0], n[1])
         meta = m.get("peerDependenciesMeta")
         meta = meta if isinstance(meta, dict) else {}
+        opt = set(m.get("optionalDependencies") or {})
         # a dependency of the same name replaces the peer
-        deps = set(m.get("dependencies") or {}) | set(m.get("optionalDependencies") or {})
+        deps = set(m.get("dependencies") or {}) | opt
         peers[n] = set(m.get("peerDependencies") or {}) - deps
         needed[n] = {p for p in peers[n] if not (meta.get(p) or {}).get("optional")}
+        bundled = m.get("bundleDependencies") or m.get("bundledDependencies") or []
+        if bundled is True:
+            bundled = deps
+        lacking += [f"{n[0]} {n[1]} requires {k}" for k in sorted(
+            set(m.get("dependencies") or {}) - opt - set(bundled) - set(out.get(n, {})))]
+    # our answer hangs a declarer's peers on its requirer, so a requirer
+    # without one leaves the peer with no provider
     torn = {True: [], False: []}
     for r, key, c in edges:
+        lacking += [f"{r[0]} {r[1]} gives {c[0]} {c[1]} no {p} for its peer"
+                    for p in sorted(needed.get(c, set()) - set(out.get(r, {})))]
         # a declarer c whose own declarers need another provider of a name c
         # peers on: they cannot sit in c's node_modules, which would hold
         # c's peer too (PEER LOCAL), so they sit above the provider c sees.
@@ -299,6 +312,10 @@ def main():
             f"and gives its own {p} {out[c][p][1]}"
             for p in sorted(needed.get(c, set()) & set(out.get(r, {})) & set(out.get(c, {})))
             if out[r][p] != out[c][p]]
+    lacking = sorted(set(lacking))
+    if lacking:
+        print(f"the answer lacks {len(lacking)} edges: " + "; ".join(lacking[:5]))
+        return 4
     if torn[True]:
         print("peers no tree holds: " + "; ".join(sorted(set(torn[True]))[:5]))
         return 4
