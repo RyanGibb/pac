@@ -14,12 +14,15 @@ That fixed point is minimal and valid at once, and valid asks only the
 second.  So where cargo refuses, `cargo update --workspace` is run once
 more without --locked over a pristine copy of our lock, and the lock it
 writes is diffed against ours.  If all it did was drop packages, with the
-edges that touch them, and add nothing, the answer is valid and not
-minimal: cargo keeps nothing the root does not reach, and asks nothing of
-what it drops, so each dropped package's requirements are checked here
-against the answer, by the index's rows (normal and build, optional ones
-aside, as cargo resolves a lock whatever the target).  Anything else it
-changed makes the answer invalid.
+edges out of them, and add nothing, the answer is valid and not minimal:
+cargo keeps nothing the root does not reach, and asks nothing of what it
+drops, so each dropped package's requirements are checked here against
+the answer, by the index's rows (normal and build, optional ones aside, as
+cargo resolves a lock whatever the target).  Anything else it changed
+makes the answer invalid.  An edge lost out of a package cargo keeps is
+such a change, even where the package the edge reached is dropped with
+it: the dependency was re-pointed, and whether another crate still holds
+the old version is no part of the answer's validity.
 
 `cargo generate-lockfile --locked` cannot ask this: it resolves with no
 previous resolve (ops/cargo_update.rs), so it accepts only a lock equal to
@@ -149,7 +152,7 @@ def check(ans, out, manifest):
     res.update(lost=lost, added=sorted(tp - op), lost_edges=sorted(oe - te),
                added_edges=sorted(te - oe))
     dropped_only = not res["added"] and not res["added_edges"] and all(
-        s in lost or t in lost for s, t in res["lost_edges"])
+        s in lost for s, _ in res["lost_edges"])
     if not dropped_only:
         return "INVALID", "-", res
     res["unmet"] = unmet(lost, op)

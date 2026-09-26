@@ -27,12 +27,11 @@ usage: mklock.py <pac --print-parents output> <out Cargo.lock>
 """
 import json
 import os
-import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from run_query import crate_path  # noqa: E402
+from run_query import crate_path, parse_answer  # noqa: E402
 
 REGISTRY = "registry+https://github.com/rust-lang/crates.io-index"
 
@@ -53,37 +52,13 @@ def cksum(name, version):
 
 
 def parse(text):
-    m = re.search(r"^root (\S+) (\S+)", text, re.M)
-    if not m:
+    root, crates, _, edges = parse_answer(text)
+    if root == (None, None):
         raise RuntimeError("no root line in pac output")
-    root = (m.group(1), m.group(2))
-
-    crates, edges = [], []
-    section = None
-    for line in text.splitlines():
-        if line.startswith("packages ("):
-            section = "c"
-            continue
-        if line.startswith("parent edges ("):
-            section = "e"
-            continue
-        if not line.startswith("  "):
-            section = None
-            continue
-        if section == "c":
-            mm = re.match(r"^  (\S+) (\S+)(?: \[(.*)\])?$", line)
-            if mm:
-                crates.append((mm.group(1), mm.group(2)))
-        elif section == "e":
-            # "<parent> <pver> -> <alias>(<package>) <cver>"; the lock
-            # names the package, not the alias a rename gave it here
-            mm = re.match(r"^  (\S+) (\S+) -> (\S+)\((\S+)\) (\S+)$", line)
-            if mm:
-                pn, pv, _alias, cn, cv = mm.groups()
-                edges.append(((pn, pv), (cn, cv)))
     if not crates:
         raise RuntimeError("no packages section in pac output")
-    return root, crates, edges
+    # the lock names the package, not the alias a rename gave it here
+    return root, [tuple(c) for c in crates], [((pn, pv), (cn, cv)) for pn, pv, _, cn, cv in edges]
 
 
 def quote(s):

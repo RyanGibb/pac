@@ -110,10 +110,22 @@ def run_pac(manifest):
     err = p.stderr
     if p.returncode != 0:
         return {"ok": False, "returncode": p.returncode, "stdout": out, "stderr": err, "wall": dt}
+    root, crates, feat_map, edges = parse_answer(out)
+    return {
+        "ok": True,
+        "root": list(root),
+        "crates": crates,
+        "feats": feat_map,
+        "edges": edges,
+        "wall": dt,
+        "stdout": out,
+        "stderr": err,
+    }
 
+
+def parse_answer(out):
     m = re.search(r"^root (\S+) (\S+)", out, re.M)
-    root_name, root_version = (m.group(1), m.group(2)) if m else (None, None)
-
+    root = (m.group(1), m.group(2)) if m else (None, None)
     crates, edges = [], []
     feat_map = {}
     section = None
@@ -133,19 +145,8 @@ def run_pac(manifest):
         elif section == "e":
             mm = re.match(r"^  (\S+) (\S+) -> (\S+)\((\S+)\) (\S+)$", line)
             if mm:
-                dn, dv, alias, tgt, tv = mm.groups()
-                edges.append([dn, dv, alias, tgt, tv])
-
-    return {
-        "ok": True,
-        "root": [root_name, root_version],
-        "crates": crates,
-        "feats": feat_map,
-        "edges": edges,
-        "wall": dt,
-        "stdout": out,
-        "stderr": err,
-    }
+                edges.append(list(mm.groups()))
+    return root, crates, feat_map, edges
 
 
 def newest(crate):
