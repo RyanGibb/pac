@@ -219,6 +219,17 @@ struct
     | Some (n, _) -> n
     | None -> fst (List.hd open_names)
 
+  (* as [defer_bot], with the names [last] holds deferred behind even those
+     that admit ⊥ *)
+  let defer_bot_then ~last ~assigned (open_names : (PFR.Name.t * int) list) =
+    let rank (n, _) =
+      if last n then 2 else if admits_bot ~assigned n then 1 else 0
+    in
+    fst
+      (List.fold_left
+         (fun best c -> if rank c < rank best then c else best)
+         (List.hd open_names) (List.tl open_names))
+
   (* The core solution back through the proved decoder to the package
      formula's packages.  Reading the ecosystem's packages off the
      solution directly would be a further, unproved, decoder, and it is

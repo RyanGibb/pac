@@ -9,7 +9,7 @@ module AVerOT = Ot.Make (struct
   let compare = Apk_version.compare
 end)
 
-(* ApkVerMatch: the two constraints V.compare cannot express.  Both take
+(* ApkVerMatch: the two constraints a version order cannot express.  Both take
    the candidate version first and the constraint's operand second. *)
 module PM = struct
   let prefix v c = Apk_version.prefix_match v c
@@ -46,21 +46,6 @@ module Red = Alp.Reduct (FirstDesignation)
 module PF = Red.PF
 module PFR = PF.Reduction
 module T = PFR.T
-
-(* The world is the demo's goal arguments and nothing else: this resolves
-   from an empty root rather than from an existing /etc/apk/world. *)
-
-(* Architecture is fixed by the index that was loaded.  A repository's
-   APKINDEX is per-arch, so no A: filtering is applied and no
-   cross-arch reasoning is possible here. *)
-
-(* provider_priority is apk's preference among the providers of a name,
-   versioned ones included, and preference in this pipeline lives in
-   PVersion.compare, which is where its value is applied -- off the
-   archive, not off an instance.  Whether it is non-zero also decides
-   whether a provides without a version is selected automatically, which
-   the calculus reads off inst_prio, so every sub-instance carries the k:
-   lines of the packages in its repository. *)
 
 let xconstr (c : P.constr) : Alp.coq_Constr =
   match c with
@@ -99,9 +84,9 @@ let condset_of ds =
   cs
 
 type iif_rule = {
-  t_pkg : string * string;
-  t_conds : Alp.CondSet.t;
-  t_designation : Alp.Atom.t;
+  pkg : string * string;
+  conds : Alp.CondSet.t;
+  designation : Alp.Atom.t;
 }
 
 type archive = {
@@ -120,6 +105,9 @@ type archive = {
   mutable n_iif : int;
 }
 
+(* Architecture is fixed by the index that was loaded.  A repository's
+   APKINDEX is per-arch, so no A: filtering is applied and no cross-arch
+   reasoning is possible here. *)
 let load_index (path : string) : archive =
   let pkgs = P.parse_file path in
   let ar =
@@ -165,8 +153,7 @@ let load_index (path : string) : archive =
     (fun (z, conds) ->
       match FirstDesignation.designation conds with
       | Some a ->
-          Tbl.push ar.iif_by_cond (fst a)
-            { t_pkg = z; t_conds = conds; t_designation = a }
+          Tbl.push ar.iif_by_cond (fst a) { pkg = z; conds; designation = a }
       | None -> ())
     (List.rev !iifs);
   ar
@@ -187,10 +174,14 @@ let empty_inst =
 let rec nat_of_int (k : int) : E.nat =
   if k <= 0 then E.O else E.S (nat_of_int (k - 1))
 
-(* repoPreimage and provPreimage, built from the archive's tables rather than by
-   filtering a whole-archive instance, which is the only reason a
+(* repoPreimage and provPreimage, built from the archive's tables rather
+   than by filtering a whole-archive instance, which is the only reason a
    per-lookup sub-instance is cheap.  Lookup.subInst's inst_prio is the k:
-   lines of its repository. *)
+   lines of its repository: provider_priority is apk's preference among
+   the providers of a name, versioned ones included, and preference in
+   this pipeline lives in PVersion.compare, off the archive, but whether
+   it is non-zero also decides whether a provides without a version is
+   selected automatically, which the calculus reads off inst_prio. *)
 let preimages_at ar (ns : string list) =
   let repo = ref [] and prov = ref [] in
   List.iter
@@ -236,7 +227,7 @@ let install_if_at ar ((n, v) : string * string) (own : Alp.Prov.t) :
       (fun acc ((_, (m, _)) : Alp.ProvElt.t) -> List.rev_append (at m) acc)
       (at n) (Alp.Prov.elements own)
   in
-  List.filter (fun r -> Red.attachAt inst (n, v) r.t_designation) cands
+  List.filter (fun r -> Red.attachAt inst (n, v) r.designation) cands
 
 (* Lookup.pkgSubInst: the package's own dependencies, provides entries
    and install-if rules, and the repository at the names those
@@ -258,11 +249,11 @@ let pkg_inst ar (world : P.dep list) ((n, v) : string * string) : Alp.coq_Inst =
       let ns =
         List.fold_left
           (fun acc r ->
-            fst r.t_pkg
+            fst r.pkg
             :: List.rev_append
                  (List.map
                     (function Alp.DPos (m, _) | Alp.DNeg (m, _) -> m)
-                    (Alp.CondSet.elements (Red.condRest r.t_conds)))
+                    (Alp.CondSet.elements (Red.condRest r.conds)))
                  acc)
           (List.map (fun (d : P.dep) -> d.P.d_name) m.P.depends)
           rules
@@ -276,7 +267,7 @@ let pkg_inst ar (world : P.dep list) ((n, v) : string * string) : Alp.coq_Inst =
         inst_deps = deps;
         inst_prov = Alp.Prov.union prov own;
         inst_installIf =
-          Alp.InstallIf.ofList (List.map (fun r -> (r.t_pkg, r.t_conds)) rules);
+          Alp.InstallIf.ofList (List.map (fun r -> (r.pkg, r.conds)) rules);
         (* apk also takes a k:-less one whose owner has a requirer (solver.c:381) *)
         inst_world = Alp.WSet.ofList (List.map xdep world);
         inst_prio = prio;
@@ -284,7 +275,9 @@ let pkg_inst ar (world : P.dep list) ((n, v) : string * string) : Alp.coq_Inst =
 
 (* Lookup.rootSubInst: the world set and the repository at the names it
    mentions.  Every install-if rule is carried by a package, so the root
-   reads no part of the rule table. *)
+   reads no part of the rule table.  The world is the query's goal
+   arguments and nothing else: this resolves from an empty root rather
+   than from an existing /etc/apk/world. *)
 let root_inst ar (world : P.dep list) : Alp.coq_Inst =
   let repo, prov, prio =
     preimages_at ar (List.map (fun (d : P.dep) -> d.P.d_name) world)

@@ -363,7 +363,7 @@ let cargo_cmd =
 
 let alpine_run debug order path goals =
   guard @@ fun () ->
-  match Apk_solve.world_of_args goals with
+  match Apk_parse.world_of_args goals with
   | Error e -> error 2 "%s" e
   | Ok world ->
       let t0 = Unix.gettimeofday () in
@@ -400,12 +400,11 @@ let alpine_cmd =
       non_empty & pos_right 0 string []
       & info [] ~docv:"PKG" ~doc:"Packages forming the world.")
   in
-  (* apk accepts only what its own solver would keep, so the rules an
-     answer's validity rests on hold in both orders *)
+  (* apk would change an answer that departs from its own choices, so the
+     rules that keep an answer minimal hold in both orders *)
   let order =
     order_arg ~tool:"apk does"
-      ~pubgrub:
-        "PubGrub does, but for the rules apk's acceptance of an answer rests on"
+      ~pubgrub:"PubGrub does, but for the rules that keep apk's own choices"
   in
   Cmd.v
     (Cmd.info "alpine" ~exits ~doc:"Solve against an Alpine APKINDEX.")
