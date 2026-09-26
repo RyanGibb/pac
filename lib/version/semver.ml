@@ -196,12 +196,6 @@ module Strict = struct
 
   let compare_parsed a b = precedence (parse a) (parse b)
 
-  (* The release cores are compared off the strings themselves, a field at
-     a time as parse reads them and no further than the first that
-     differs: even a table of parsed versions costs a hash of the string
-     there.  Only equal cores leave the prerelease to decide.  Sound only
-     for the strict reading, where the core ends at the first '-' or '+'. *)
-
   (* parse's num of the part at !i, leaving !i at the next part, or at the
      end once the core has ended *)
   let field s n i =
@@ -229,6 +223,11 @@ module Strict = struct
     in
     go 0
 
+  (* The release cores are compared off the strings themselves, a field at
+     a time as parse reads them and no further than the first that
+     differs: even a table of parsed versions costs a hash of the string
+     there.  Only equal cores leave the prerelease to decide.  Sound only
+     for the strict reading, where the core ends at the first '-' or '+'. *)
   let compare (a : string) (b : string) : int =
     let na = String.length a and nb = String.length b in
     let ia = ref 0 and ib = ref 0 in

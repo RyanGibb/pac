@@ -14,13 +14,13 @@ let vstr = V.vstr
 let parse_spec = V.Loose.parse_partial
 let num_or = V.num_or
 
-(* [z] and [u] are the prerelease semver gives a bound it derives, lower
-   and upper: "0" under includePrerelease, where a prerelease is ordered
-   rather than refused and -0 then decides it at the bound, and ""
-   otherwise, which admits the same versions as semver's -0 would *)
-
 (* caret keeps the leftmost non-zero component: ^0.2.3 is <0.3.0 and
-   ^0.0.3 is <0.0.4, which is why it cannot be written as a tilde *)
+   ^0.0.3 is <0.0.4, which is why it cannot be written as a tilde.  [z]
+   and [u], here and in the bounds below, are the prerelease semver gives
+   a bound it derives, lower and upper: "0" under includePrerelease, where
+   a prerelease is ordered rather than refused and -0 then decides it at
+   the bound, and "" otherwise, which admits the same versions as semver's
+   -0 would *)
 let caret ~z ~u (ma, mi, pa, pre) =
   match ma with
   | Star | Absent -> [ Any ]

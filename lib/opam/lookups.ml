@@ -15,7 +15,7 @@ type archive = {
   pkgs : (string, (string * Opam_parse.pkg_meta) list) Hashtbl.t;
   (* class -> its members among the names loaded so far.  Unlike every
      other table here this one is a preimage and so grows as names load;
-     see the note above [Op]. *)
+     see [class_inst]. *)
   class_table : (string, (string * string) list) Hashtbl.t;
   (* the versions a name flags avoid-version or deprecated; a table
      because every version handed to PubGrub is tagged with it, and
@@ -24,7 +24,7 @@ type archive = {
   mutable n_names : int;
   mutable n_vers : int;
   mutable n_dropped : int;
-  (* wall time inside the parser, which the solve now interleaves with *)
+  (* wall time inside the parser, which the solve interleaves with *)
   mutable t_parse : float;
 }
 
@@ -65,7 +65,13 @@ let one_per_version (vs : (string * Opam_parse.pkg_meta) list) =
 
 (* A name's versions are one directory listing -- packages/<n>/<n>.<v>/opam
    -- so a name is parsed whole, the first time a sub-instance reads it,
-   and a run touches the names the solver asks about and no others. *)
+   and a run touches the names the solver asks about and no others.
+   There is no cone pass, so each lookup's sub-instance must be complete
+   at the moment it answers.  That holds by construction for all but one
+   lookup: versions and root_inst read names that load_name takes whole;
+   pkg_inst reads (n, v)'s own declarations and the repository at the
+   names they mention, and loads every one of them; depexts_of reads the
+   selected packages' own declarations.  class_inst is the exception. *)
 let load_name ar (name : string) : (string * Opam_parse.pkg_meta) list =
   match Hashtbl.find_opt ar.pkgs name with
   | Some vs -> vs
@@ -195,27 +201,6 @@ let avoided ar n v =
    nix/flake.lock fixes, so that a run outside the harness answers about
    the same opam the recorded baselines did *)
 let default_opam_version = "2.5.2"
-
-(* There is no cone pass: the repository is uncovered as the solver asks
-   for it, so each lookup's sub-instance must be complete at the moment it
-   answers.  That holds by construction for all but one lookup: versions
-   and root_inst read names that load_name takes whole; pkg_inst reads
-   (n, v)'s own declarations and the repository at the names they
-   mention, and loads every one of them; depexts_of reads the selected
-   packages' own declarations.
-
-   Conflict classes are the exception: the class package's version list
-   is every declarer of the class, which no declaration of any one
-   package names.  A conflict or pin-depends is no exception: the
-   reduction turns a negated atom into the declarer's own edge on the
-   target's name, so nothing of who conflicts with a name is read when
-   the name answers.  class_table therefore holds the declarers among the
-   names loaded so far and may grow at any point in the run.  Not
-   memoising is enough: the growing answer is a versions answer, which
-   PubGrub re-asks at every assignment, whereas a node's dependency list
-   is memoised and so fixed at its first ask.  A class
-   version is also never asked for before its claimant's name has loaded,
-   since the claim is that package's own edge. *)
 
 module Op = E.Opam (Ot.Str) (OVerOT) (Ot.Str) (OVerOT) (Ot.Str)
 module Red = Op.Reduction
@@ -404,8 +389,18 @@ let root_inst ar (query : (string * Opam_parse.vc) list) : Op.coq_Inst =
   { empty_inst with Op.inst_repo = repo; inst_avl = avl; inst_goal = goal }
 
 (* Lookup.classSubInst: the class relation restricted to k, which is all
-   the class package's version lookup reads.  Built from class_table at every ask and never
-   held -- see the note above [Op]. *)
+   the class package's version lookup reads.  That version list is every
+   declarer of the class, which no declaration of any one package names.
+   A conflict or pin-depends is no such exception: the reduction turns a
+   negated atom into the declarer's own edge on the target's name, so
+   nothing of who conflicts with a name is read when the name answers.
+   class_table therefore holds the declarers among the names loaded so far
+   and may grow at any point in the run, and this is built from it at
+   every ask and never held.  That is enough: the growing answer is a
+   versions answer, which PubGrub re-asks at every assignment, whereas a
+   node's dependency list is memoised and so fixed at its first ask.  A
+   class version is also never asked for before its claimant's name has
+   loaded, since the claim is that package's own edge. *)
 let class_inst ar (k : string) : Op.coq_Inst =
   {
     empty_inst with

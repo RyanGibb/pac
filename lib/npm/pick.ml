@@ -45,7 +45,7 @@ let best ar (n : string) (cands : PVersion.t list) : PVersion.t =
 (* npm-pick-manifest offers dist-tags.latest before the highest version
    the range admits, and takes it whenever the range admits it; only the
    ordering differs from ours, so a package published ahead of its own
-   latest tag no longer drags its newest release in.  Preference only:
+   latest tag keeps its newest release out.  Preference only:
    the tag is consulted inside the candidates, never outside them.
 
    The fast path is guarded by the same two criteria as the sort

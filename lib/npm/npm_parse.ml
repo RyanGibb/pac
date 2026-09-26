@@ -219,7 +219,7 @@ let ver_of ~reject ~(root : bool) (vers : string) (j : Yojson.Safe.t) :
              (assoc_of (member "peerDependencies" j)))
       in
       let opts = deps_of ~dev:false ~optional:true "optionalDependencies" in
-      let optKeys = List.map (fun d -> d.d_dir) opts in
+      let opt_keys = List.map (fun d -> d.d_dir) opts in
       let dep = is_deprecated (member "deprecated" j) in
       Some
         {
@@ -233,13 +233,13 @@ let ver_of ~reject ~(root : bool) (vers : string) (j : Yojson.Safe.t) :
                if root then deps_of ~dev:true ~optional:false "devDependencies"
                else []
              in
-             let devKeys = List.map (fun d -> d.d_dir) devs in
+             let dev_keys = List.map (fun d -> d.d_dir) devs in
              devs
              @ List.filter
-                 (fun d -> not (List.mem d.d_dir devKeys))
+                 (fun d -> not (List.mem d.d_dir dev_keys))
                  (opts
                  @ List.filter
-                     (fun d -> not (List.mem d.d_dir optKeys))
+                     (fun d -> not (List.mem d.d_dir opt_keys))
                      (deps_of ~dev:false ~optional:false "dependencies")));
           v_peers = peers;
           v_ovr = (if root then overrides_of ~reject j else []);
