@@ -404,3 +404,23 @@ and brk.2, which does not parse, is skipped:
   encoded solution: 2 core nodes (2 lookups)
   loaded: 1 names, 1 versions
   parser dropped 1 declarations
+
+opam keys a package by its version's order, so eqv.1.0 and eqv.1.00,
+whose versions compare equal, are one package to it: the directory it
+reads last, the later in byte order, and that directory's opam file.
+eqv.1.00 needs dep.3 where eqv.1.0 needs dep.9, and asking for either
+version installs eqv.1.00 with dep.3:
+
+  $ ../../../bin/main.exe opam . eqv.1.0 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  packages (2):
+    dep 3
+    eqv 1.00
+  encoded solution: 3 core nodes (3 lookups)
+  loaded: 2 names, 3 versions
+
+  $ ../../../bin/main.exe opam . eqv.1.00 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  packages (2):
+    dep 3
+    eqv 1.00
+  encoded solution: 3 core nodes (3 lookups)
+  loaded: 2 names, 3 versions

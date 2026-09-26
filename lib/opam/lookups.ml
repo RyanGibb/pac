@@ -41,6 +41,26 @@ let empty_archive root =
 let class_members ar k =
   Option.value (Hashtbl.find_opt ar.class_table k) ~default:[]
 
+(* opam keys its packages by name and version order, so two directories
+   whose versions compare equal (5.5.0+introcaml and 5.5.0+introcaml0) are
+   one package to it, name and opam file both the directory its loader
+   reads last (OpamRepositoryState.load_opams_from_dir, whose Map.add
+   replaces the key too).  opam 2.6 sorts the listing, so the later name in
+   byte order wins; 2.5 takes it unsorted, in whatever order the filesystem
+   lists it.  Of each class this keeps the one 2.6 keeps. *)
+let one_per_version (vs : (string * Opam_parse.pkg_meta) list) =
+  let rec last_of_each = function
+    | (v, _) :: ((w, _) :: _ as rest) when compare_version v w = 0 ->
+        last_of_each rest
+    | x :: rest -> x :: last_of_each rest
+    | [] -> []
+  in
+  last_of_each
+    (List.sort
+       (fun (v, _) (w, _) ->
+         match compare_version v w with 0 -> String.compare v w | c -> c)
+       vs)
+
 (* A name's versions are one directory listing -- packages/<n>/<n>.<v>/opam
    -- so a name is parsed whole, the first time a sub-instance reads it,
    and a run touches the names the solver asks about and no others. *)
@@ -72,7 +92,7 @@ let load_name ar (name : string) : (string * Opam_parse.pkg_meta) list =
                     Opam_parse.reject ())
             | _ -> ())
           (Sys.readdir ndir);
-      let vs = !acc in
+      let vs = one_per_version !acc in
       Hashtbl.replace ar.pkgs name vs;
       if listed then ar.n_names <- ar.n_names + 1;
       ar.n_vers <- ar.n_vers + List.length vs;
