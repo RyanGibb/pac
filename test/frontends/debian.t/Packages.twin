@@ -1,0 +1,23 @@
+Package: twgoal
+Version: 1
+Architecture: amd64
+Depends: twvirt | twother
+
+Package: twgoal2
+Version: 1
+Architecture: amd64
+Depends: twvirt2 | twother
+
+Package: twin
+Version: 1
+Architecture: amd64
+Provides: twvirt
+
+Package: twin
+Version: 1
+Architecture: all
+Provides: twvirt2
+
+Package: twother
+Version: 1
+Architecture: amd64

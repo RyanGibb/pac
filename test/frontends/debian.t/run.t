@@ -640,22 +640,25 @@ same after '/':
 A version no stanza matches refuses the query, as does installed, there
 being no installed version, and a release: NAME/RELEASE is matched against
 Release files, which pac does not read, except for the release *, which
-matches every version:
+matches every version.  apt refuses these before it solves, with the
+cacheset's own message (CacheSetHelper::canNotGetVersion), so they are
+refusals and not unsatisfiable queries:
 
-  $ ../../../bin/main.exe debian --order=pubgrub --native amd64 pinv=3 Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  unsatisfiable:
-  root -> pinv:amd64 ∅
-  loaded: 176 names, 176 versions
+  $ ../../../bin/main.exe debian --order=pubgrub --native amd64 pinv=3 Packages
+  error: Version '3' for 'pinv' was not found
+  [2]
 
-  $ ../../../bin/main.exe debian --order=pubgrub --native amd64 pinv=installed Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  unsatisfiable:
-  root -> pinv:amd64 ∅
-  loaded: 176 names, 176 versions
+  $ ../../../bin/main.exe debian --order=pubgrub --native amd64 pinv=installed Packages
+  error: Can't select installed version from package pinv as it is not installed
+  [2]
 
-  $ ../../../bin/main.exe debian --order=pubgrub --native amd64 pinv/stable Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  unsatisfiable:
-  root -> pinv:amd64 ∅
-  loaded: 176 names, 176 versions
+  $ ../../../bin/main.exe debian --order=pubgrub --native amd64 pinv/stable Packages
+  error: Release 'stable' for 'pinv' was not found
+  [2]
+
+  $ ../../../bin/main.exe debian --order=pubgrub --native amd64 xunq=2 Packages.multiarch
+  error: Version '2' for 'xunq:i386' was not found
+  [2]
 
   $ ../../../bin/main.exe debian --order=pubgrub --native amd64 'pinok/*' Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
   packages (1):
@@ -827,3 +830,70 @@ dropped:
   Because bvgoal:amd64 1 -> bvirt:amd64 ∅ and root -> bvgoal:amd64 1, version solving failed..
   loaded: 5 names, 5 versions
   parser dropped 2 declarations
+
+apt keeps 1.0 and 1.00 as two versions, which compare equal, and NAME=VERSION
+matches the string (pkgVersionMatch::MatchVer), so exv=1.00 is the stanza
+without exv 1.0's missing dependency, and exv=1.0 the one with it:
+
+  $ ../../../bin/main.exe debian --native amd64 exv=1.00 Packages.versions | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  packages (1):
+    exv:amd64 1.00
+  encoded solution: 1 core nodes (1 lookups)
+  loaded: 7 names, 7 versions
+
+  $ ../../../bin/main.exe debian --native amd64 exv=1.0 Packages.versions | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  unsatisfiable:
+  Because exv:amd64 1.0 -> exnone:amd64 ∅ and root -> exv:amd64 1.0, version solving failed..
+  loaded: 7 names, 7 versions
+
+An epoch is compared as dpkg's digit runs are, however long, and never
+read into a machine integer:
+
+  $ ../../../bin/main.exe debian --native amd64 epgoal Packages.versions | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  packages (2):
+    epgoal:amd64 1
+    epv:amd64 99999999999999999999:1
+  encoded solution: 2 core nodes (4 lookups)
+  loaded: 7 names, 7 versions
+
+Two alternatives the calculus identifies, eqa (>= 1.0) and eqa (>= 1.00),
+are one, so the clause is a single dependency on eqa: the shadow of apt's
+queue enqueues eqa at once rather than push a work item for a clause name
+PubGrub never offers, which would part the two when it popped ahead of
+eqy | eqz:
+
+  $ PACSHADOW=1 ../../../bin/main.exe debian --order=tool --native amd64 eqgoal Packages.versions 2>&1 | sed -E '/^(parse|solve) [0-9.]+s$/d; s/^PACSHADOW.* (desync=[0-9]+).*/\1/'
+  desync=0
+  packages (3):
+    eqa:amd64 1.0
+    eqgoal:amd64 1
+    eqy:amd64 1
+  encoded solution: 4 core nodes (13 lookups)
+  loaded: 7 names, 7 versions
+
+An arch:all stanza and its native twin at one version are one version here,
+with both stanzas' Provides in the per-package view too.  With
+Strict-Pinning on, the first read is the candidate and the twin is gone;
+off, the tool order's solution count finds each of twvirt and twvirt2
+provided by twin and takes it, as PubGrub's own order does:
+
+  $ ../../../bin/main.exe debian --order=tool --no-strict-pinning --native amd64 twgoal Packages.twin | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  packages (2):
+    twgoal:amd64 1
+    twin:amd64 1
+  encoded solution: 4 core nodes (11 lookups)
+  loaded: 4 names, 4 versions
+
+  $ ../../../bin/main.exe debian --order=tool --no-strict-pinning --native amd64 twgoal2 Packages.twin | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  packages (2):
+    twgoal2:amd64 1
+    twin:amd64 1
+  encoded solution: 4 core nodes (11 lookups)
+  loaded: 4 names, 4 versions
+
+  $ ../../../bin/main.exe debian --order=pubgrub --no-strict-pinning --native amd64 twgoal Packages.twin | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  packages (2):
+    twgoal:amd64 1
+    twin:amd64 1
+  encoded solution: 4 core nodes (8 lookups)
+  loaded: 4 names, 4 versions

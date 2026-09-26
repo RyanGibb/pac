@@ -1,10 +1,6 @@
-type accepts = Debian_frontend.Apt_args.accepts =
-  | Any
-  | Only of string
-  | Nothing
-
 module E = Pac
 module DF = Debian_frontend.Deb_packages
+module Args = Debian_frontend.Apt_args
 
 type answer = {
   pkgs : (string * string * string) list;
@@ -429,12 +425,12 @@ module Make (AP : Tables.ARCH) = struct
 
     (* Ranges.full would admit ⊥, which PubGrub then picks, so a bare query
        would answer nothing; the query asks for the name, so it excludes
-       absence. *)
+       absence.  A named version is the string apt matched. *)
     let root (n, acc) =
       let accepted (pv : PVersion.t) =
         match (pv.PVersion.v, acc) with
-        | DMA.Deb.Version.Orig _, Any -> true
-        | DMA.Deb.Version.Orig w, Only x -> Version.Debian.compare w x = 0
+        | DMA.Deb.Version.Orig _, Args.Any -> true
+        | DMA.Deb.Version.Orig w, Args.Only x -> String.equal w x
         | _ -> false
       in
       ( DMA.Deb.Name.Orig n,
@@ -471,7 +467,7 @@ module Make (AP : Tables.ARCH) = struct
   end
 
   let solve ~debug ~order (tables : tables)
-      (query : ((string * string) * accepts) list) =
+      (query : ((string * string) * Args.accepts) list) =
     (* PACPROF's lookup buckets: calls and CPU time per name kind *)
     let buckets : (string, int ref * float ref) Hashtbl.t = Hashtbl.create 8 in
     let timed name f x =
@@ -520,8 +516,6 @@ module Make (AP : Tables.ARCH) = struct
     Result.map (fun (pkgs, nodes) -> { pkgs; nodes; lookups }) r
 end
 
-module Args = Debian_frontend.Apt_args
-
 type result = {
   answer : (answer, Pac_common.Report.explanation) Stdlib.result;
   names : int;
@@ -533,7 +527,7 @@ type result = {
    they scale differently: the archive is read whole, while the solve
    touches only the sub-instances the lookup theorems bound. *)
 let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~paths ~query
-    : result =
+    : (result, string) Stdlib.result =
   Pubgrub.set_debug debug;
   let t0 = Unix.gettimeofday () in
   let index = List.concat_map DF.parse_file paths in
@@ -545,20 +539,23 @@ let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~paths ~query
              if st.architecture = "all" then None else Some st.architecture)
            index)
   in
-  let query, named = Args.parse_query ~native ~arches index query in
-  let index =
-    if strict_pinning then Args.pin_candidates ~native ~named index else index
-  in
-  let module AP = struct
-    let arches = arches
-    let native = native
-  end in
-  let module M = Make (AP) in
-  let tables = M.build_tables ~recommends index in
-  let t_parse = Unix.gettimeofday () -. t0 in
-  {
-    answer = M.solve ~debug ~order tables query;
-    names = Hashtbl.length tables.M.group_table;
-    versions = Hashtbl.length tables.M.stanza_table;
-    t_parse;
-  }
+  Result.map
+    (fun (query, named) ->
+      let index =
+        if strict_pinning then Args.pin_candidates ~native ~named index
+        else index
+      in
+      let module AP = struct
+        let arches = arches
+        let native = native
+      end in
+      let module M = Make (AP) in
+      let tables = M.build_tables ~recommends index in
+      let t_parse = Unix.gettimeofday () -. t0 in
+      {
+        answer = M.solve ~debug ~order tables query;
+        names = Hashtbl.length tables.M.group_table;
+        versions = Hashtbl.length tables.M.stanza_table;
+        t_parse;
+      })
+    (Args.parse_query ~native ~arches index query)

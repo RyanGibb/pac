@@ -1,8 +1,6 @@
 module DF = Deb_packages
 
-(* Nothing is an element whose named version apt finds no match for; it
-   refuses the whole request, which an empty range says. *)
-type accepts = Any | Only of string | Nothing
+type accepts = Any | Only of string
 
 (* apt's solver rejects every version but the candidate before it starts
    (APT::Solver::Strict-Pinning, on by default: FromDepCache, solver3.cc),
@@ -19,9 +17,12 @@ type accepts = Any | Only of string | Nothing
    of them, so they are out of scope and every version ties.
    A query naming a version (apt-get install pkg=ver) makes it pkg's
    candidate (TryToInstall, apt-private/private-install.cc), so [named]
-   overrides the newest.  Of two stanzas at one version the first read is
-   kept: apt files the later one behind it in the package's version list,
-   and the candidate is the first to reach the top priority. *)
+   overrides the newest.  That version is a string: apt keeps two versions
+   that compare equal apart (pkgCacheGenerator::MergeListVersion, when
+   their hashes differ), and the one named is the one whose string matched.
+   Of two stanzas at one version the first read is kept: apt files the
+   later one behind it in the package's version list, and the candidate is
+   the first to reach the top priority. *)
 let stanza_key ~native (st : DF.stanza) =
   (st.package, if st.architecture = "all" then native else st.architecture)
 
@@ -30,9 +31,7 @@ let pin_candidates ~native ~named (index : DF.stanza list) =
   let best = Hashtbl.create 65536 in
   let better (st : DF.stanza) (b : DF.stanza) =
     match Hashtbl.find_opt named (key st) with
-    | Some v ->
-        Version.Debian.compare st.version v = 0
-        && Version.Debian.compare b.version v <> 0
+    | Some v -> String.equal st.version v && not (String.equal b.version v)
     | None -> Version.Debian.compare st.version b.version > 0
   in
   List.iter
@@ -98,7 +97,10 @@ let version_matches pat v =
 (* One argument of apt-get install, as VersionContainerInterface::FromString
    (apt-pkg/cacheset.cc) reads it: whatever follows the last '/' or '='
    selects a version, by release or by version string, and what precedes it
-   names the package, NAME[:ARCH] (PackageFromPackageName). *)
+   names the package, NAME[:ARCH] (PackageFromPackageName).  A selector
+   nothing meets is apt's error before it solves, with the message
+   CacheSetHelper::canNotGetVersion prints; FullName(true) leaves the native
+   architecture out. *)
 let query_element ~native ~arches (index : DF.stanza list) arg =
   let tag =
     match (String.rindex_opt arg '=', String.rindex_opt arg '/') with
@@ -134,6 +136,7 @@ let query_element ~native ~arches (index : DF.stanza list) arg =
         | Some b -> (pkg, b)
         | None -> (pkg, native))
   in
+  let full = if snd key = native then fst key else fst key ^ ":" ^ snd key in
   (* the package's version list, newest first and the first read ahead of
      a later stanza at the same version *)
   let vlist =
@@ -143,9 +146,9 @@ let query_element ~native ~arches (index : DF.stanza list) arg =
       (List.filter (fun st -> stanza_key ~native st = key) index)
   in
   let first p =
-    match List.find_opt (fun (st : DF.stanza) -> p st.version) vlist with
-    | Some st -> Only st.version
-    | None -> Nothing
+    List.find_map
+      (fun (st : DF.stanza) -> if p st.version then Some st.version else None)
+      vlist
   in
   (* failing every version, pkgVersionMatch::Find takes a version whose
      package provides itself at a matching version *)
@@ -158,40 +161,65 @@ let query_element ~native ~arches (index : DF.stanza list) arg =
               p.pname = fst key
               && Option.fold ~none:false ~some:(version_matches v) p.pversion)
             st.provides
-        then Some (Only st.version)
+        then Some st.version
         else None)
       vlist
   in
-  let acc =
-    match sel with
-    | None -> Any
-    (* apt tests these keywords before the tag, so they read the same after
-       '/'; nothing is installed, as pac reads no dpkg status *)
-    | Some (_, "installed") -> Nothing
-    (* without pins the candidate is the newest, which heads the list *)
-    | Some (_, ("candidate" | "newest")) -> first (fun _ -> true)
-    | Some ('=', v) -> (
-        match first (version_matches v) with
-        | Nothing -> Option.value (self_provided v) ~default:Nothing
-        | a -> a)
-    (* a release is matched against Release files, which pac does not
-       read; "*" matches every file (pkgVersionMatch::FileMatch) *)
-    | Some (_, "*") -> first (fun _ -> true)
-    | Some _ -> Nothing
-  in
-  (key, acc)
+  let only why = function Some v -> Ok (key, Only v) | None -> Error why in
+  match sel with
+  | None -> Ok (key, Any)
+  (* apt tests these keywords before the tag, so they read the same after
+     '/'; nothing is installed, as pac reads no dpkg status *)
+  | Some (_, "installed") ->
+      Error
+        (Printf.sprintf
+           "Can't select installed version from package %s as it is not \
+            installed"
+           full)
+  (* without pins the candidate is the newest, which heads the list *)
+  | Some (_, "candidate") ->
+      only
+        (Printf.sprintf
+           "Can't select candidate version from package %s as it has no \
+            candidate"
+           full)
+        (first (fun _ -> true))
+  | Some (_, "newest") ->
+      only
+        (Printf.sprintf
+           "Can't select newest version from package '%s' as it is purely \
+            virtual"
+           full)
+        (first (fun _ -> true))
+  | Some ('=', v) ->
+      only
+        (Printf.sprintf "Version '%s' for '%s' was not found" v full)
+        (match first (version_matches v) with
+        | None -> self_provided v
+        | found -> found)
+  (* a release is matched against Release files, which pac does not
+     read; "*" matches every file (pkgVersionMatch::FileMatch) *)
+  | Some (_, r) ->
+      only
+        (Printf.sprintf "Release '%s' for '%s' was not found" r full)
+        (if r = "*" then first (fun _ -> true) else None)
 
 (* apt installs each element's version in argument order, setting it as the
    candidate, so of two naming one package the later wins; the versions the
    query names are what Strict-Pinning then keeps *)
 let parse_query ~native ~arches (index : DF.stanza list) args =
-  let query =
-    List.fold_left
-      (fun acc arg ->
-        let k, a = query_element ~native ~arches index arg in
-        List.remove_assoc k acc @ [ (k, a) ])
-      [] args
+  let rec go acc = function
+    | [] -> Ok acc
+    | arg :: rest -> (
+        match query_element ~native ~arches index arg with
+        | Error e -> Error e
+        | Ok (k, a) -> go (List.remove_assoc k acc @ [ (k, a) ]) rest)
   in
-  let named = Hashtbl.create 8 in
-  List.iter (function k, Only v -> Hashtbl.replace named k v | _ -> ()) query;
-  (query, named)
+  Result.map
+    (fun query ->
+      let named = Hashtbl.create 8 in
+      List.iter
+        (function k, Only v -> Hashtbl.replace named k v | _ -> ())
+        query;
+      (query, named))
+    (go [] args)

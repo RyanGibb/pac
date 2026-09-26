@@ -75,23 +75,25 @@ let report ~t0 (loaded : Report.loaded) answer print =
 let debian_run debug order no_recs no_strict native query path =
   guard @@ fun () ->
   let t0 = Unix.gettimeofday () in
-  let r =
+  match
     Deb_solve.solve_files ~debug ~order ~recommends:(not no_recs)
       ~strict_pinning:(not no_strict) ~native ~paths:[ path ] ~query
-  in
-  report ~t0
-    {
-      Report.names = r.Deb_solve.names;
-      versions = r.Deb_solve.versions;
-      extra = [];
-      dropped = !Debian_frontend.Deb_packages.rejected;
-      parse = r.Deb_solve.t_parse;
-    } r.Deb_solve.answer (fun a ->
-      Report.packages
-        (List.map
-           (fun (n, b, v) -> Printf.sprintf "%s:%s %s" n b v)
-           a.Deb_solve.pkgs);
-      Report.encoded ~nodes:a.Deb_solve.nodes ~lookups:a.Deb_solve.lookups)
+  with
+  | Error e -> error 2 "%s" e
+  | Ok r ->
+      report ~t0
+        {
+          Report.names = r.Deb_solve.names;
+          versions = r.Deb_solve.versions;
+          extra = [];
+          dropped = !Debian_frontend.Deb_packages.rejected;
+          parse = r.Deb_solve.t_parse;
+        } r.Deb_solve.answer (fun a ->
+          Report.packages
+            (List.map
+               (fun (n, b, v) -> Printf.sprintf "%s:%s %s" n b v)
+               a.Deb_solve.pkgs);
+          Report.encoded ~nodes:a.Deb_solve.nodes ~lookups:a.Deb_solve.lookups)
 
 let debian_cmd =
   (* Recommends are installed by default, as under apt's

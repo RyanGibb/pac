@@ -1,0 +1,34 @@
+Package: exv
+Version: 1.0
+Architecture: amd64
+Depends: exnone
+
+Package: exv
+Version: 1.00
+Architecture: amd64
+
+Package: epgoal
+Version: 1
+Architecture: amd64
+Depends: epv (>= 1:1)
+
+Package: epv
+Version: 99999999999999999999:1
+Architecture: amd64
+
+Package: eqgoal
+Version: 1
+Architecture: amd64
+Depends: eqa (>= 1.0) | eqa (>= 1.00), eqy | eqz
+
+Package: eqa
+Version: 1.0
+Architecture: amd64
+
+Package: eqy
+Version: 1
+Architecture: amd64
+
+Package: eqz
+Version: 1
+Architecture: amd64

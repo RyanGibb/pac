@@ -40,22 +40,33 @@ let index =
     st ~arch:"i386" "xunq" "1";
     st "dup" "1";
     st ~provides:[ ("dupvirt", None) ] "dup" "1";
+    st "exv" "1.0";
+    st "exv" "1.00";
   ]
 
 let elem arg =
   A.query_element ~native:"amd64" ~arches:[ "amd64"; "i386" ] index arg
 
-let accepts = function
-  | A.Any -> "any"
-  | A.Only v -> "=" ^ v
-  | A.Nothing -> "none"
+let accepts = function A.Any -> "any" | A.Only v -> "=" ^ v
 
 let expect arg key acc =
-  let k, a = elem arg in
-  check
-    (Printf.sprintf "%s -> %s:%s %s (got %s:%s %s)" arg (fst key) (snd key)
-       (accepts acc) (fst k) (snd k) (accepts a))
-    (k = key && a = acc)
+  match elem arg with
+  | Ok (k, a) ->
+      check
+        (Printf.sprintf "%s -> %s:%s %s (got %s:%s %s)" arg (fst key) (snd key)
+           (accepts acc) (fst k) (snd k) (accepts a))
+        (k = key && a = acc)
+  | Error e ->
+      check
+        (Printf.sprintf "%s -> %s:%s %s (got refused: %s)" arg (fst key)
+           (snd key) (accepts acc) e)
+        false
+
+let refused arg msg =
+  match elem arg with
+  | Error e ->
+      check (Printf.sprintf "%s refused as %S (got %S)" arg msg e) (e = msg)
+  | Ok _ -> check (Printf.sprintf "%s refused" arg) false
 
 let () =
   (* fnmatch(3) with FNM_CASEFOLD *)
@@ -77,12 +88,14 @@ let () =
   (* one element of apt-get install's arguments *)
   expect "pinv" ("pinv", "amd64") A.Any;
   expect "pinv=1" ("pinv", "amd64") (A.Only "1");
-  expect "pinv=3" ("pinv", "amd64") A.Nothing;
+  refused "pinv=3" "Version '3' for 'pinv' was not found";
   expect "pinv=*" ("pinv", "amd64") (A.Only "2");
   expect "pinv/candidate" ("pinv", "amd64") (A.Only "2");
   expect "pinv=newest" ("pinv", "amd64") (A.Only "2");
-  expect "pinv=installed" ("pinv", "amd64") A.Nothing;
-  expect "pinv/stable" ("pinv", "amd64") A.Nothing;
+  refused "pinv=installed"
+    "Can't select installed version from package pinv as it is not installed";
+  refused "pinv/stable" "Release 'stable' for 'pinv' was not found";
+  refused "xunq=2" "Version '2' for 'xunq:i386' was not found";
   expect "pinv/*" ("pinv", "amd64") (A.Only "2");
   expect "pinglob=1.*2*" ("pinglob", "amd64") (A.Only "1.2");
   expect "pinglob=1.2*" ("pinglob", "amd64") (A.Only "1.23");
@@ -91,16 +104,29 @@ let () =
   expect "pinself=5" ("pinself", "amd64") (A.Only "1");
   expect "xunq" ("xunq", "i386") A.Any;
   expect "nothere" ("nothere", "amd64") A.Any;
+  (* the string, not the order: 1.0 and 1.00 compare equal *)
+  expect "exv=1.00" ("exv", "amd64") (A.Only "1.00");
+  expect "exv=1.0" ("exv", "amd64") (A.Only "1.0");
   (* of two elements naming one package the later wins *)
   let q, named =
-    A.parse_query ~native:"amd64" ~arches:[ "amd64" ] index
-      [ "pinv=2"; "pinglob"; "pinv=1" ]
+    Result.get_ok
+      (A.parse_query ~native:"amd64" ~arches:[ "amd64" ] index
+         [ "pinv=2"; "pinglob"; "pinv=1"; "exv=1.00" ])
   in
   check "parse_query order"
-    (q = [ (("pinglob", "amd64"), A.Any); (("pinv", "amd64"), A.Only "1") ]);
+    (q
+    = [
+        (("pinglob", "amd64"), A.Any);
+        (("pinv", "amd64"), A.Only "1");
+        (("exv", "amd64"), A.Only "1.00");
+      ]);
   check "parse_query named"
     (Hashtbl.find_opt named ("pinv", "amd64") = Some "1"
-    && Hashtbl.length named = 1);
+    && Hashtbl.length named = 2);
+  check "parse_query refused"
+    (Result.is_error
+       (A.parse_query ~native:"amd64" ~arches:[ "amd64" ] index
+          [ "pinv"; "pinv=3" ]));
   (* the candidate: the newest, a named version, the first of two stanzas
      at one version *)
   let versions l =
@@ -116,6 +142,7 @@ let () =
         ("pinself", "1");
         ("xunq", "1");
         ("dup", "1");
+        ("exv", "1.00");
       ]);
   check "pin_candidates first read"
     ((List.find (fun (s : Deb_packages.stanza) -> s.package = "dup") kept)

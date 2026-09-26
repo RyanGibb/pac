@@ -200,29 +200,32 @@ module Make (AP : ARCH) = struct
   (* Of two stanzas at one version apt keeps the first read, Provides and
      all.  An arch:all stanza is a version of its own to apt (Version::All),
      which the package's one version here cannot be, so that pair is still
-     read as one version with both stanzas' Provides. *)
+     read as one version with both stanzas' Provides, in the stanza as in
+     providers_table; its Depends, Recommends and Conflicts are the later
+     stanza's. *)
   let build_tables ~recommends (index : DF.stanza list) : tables =
     let versions_table = Hashtbl.create 65536
     and stanza_table = Hashtbl.create 65536
     and group_table = Hashtbl.create 65536
     and providers_table = Hashtbl.create 4096 in
-    let first_read (stz : nstanza) =
-      match Hashtbl.find_opt stanza_table stz.npkg with
-      | Some old -> old.nall <> stz.nall
-      | None -> true
-    in
     List.iter
       (fun st ->
         let stz = normalize ~recommends st in
-        if first_read stz then (
-          let (n, b), v = stz.npkg in
-          if not (Hashtbl.mem stanza_table stz.npkg) then (
-            push versions_table (n, b) v;
-            push group_table n (b, v));
-          Hashtbl.replace stanza_table stz.npkg stz;
+        let (n, b), v = stz.npkg in
+        let add stored =
+          Hashtbl.replace stanza_table stz.npkg stored;
           List.iter
             (fun (m, vt) -> push providers_table m (stz.npkg, vt))
-            stz.nprovs))
+            stz.nprovs
+        in
+        match Hashtbl.find_opt stanza_table stz.npkg with
+        | None ->
+            push versions_table (n, b) v;
+            push group_table n (b, v);
+            add stz
+        | Some old when old.nall <> stz.nall ->
+            add { stz with nprovs = old.nprovs @ stz.nprovs }
+        | Some _ -> ())
       index;
     {
       versions_table;
@@ -285,13 +288,14 @@ module Make (AP : ARCH) = struct
           | None -> []
           | Some stz ->
               let b = snd (fst p) in
+              (* the alternatives as the calculus counts them, which names
+                 a clause by its atom set (Debian.dependees): a | a, or
+                 a (>= 1.0) | a (>= 1.00), is one atom, a direct edge *)
               let mk opt synth alts =
                 let ma = DMA.reduceClause b alts in
-                let eatoms =
-                  List.sort_uniq Stdlib.compare
-                    (List.map (DMA.reduceAtom b) alts)
-                in
-                (opt, synth ma, eatoms)
+                ( opt,
+                  synth ma,
+                  DMA.Deb.AtomSet.elements (DMA.Deb.clauseAtoms ma) )
               in
               List.map
                 (fun alts -> mk false (fun s -> DMA.Deb.Name.Disjunct s) alts)
@@ -303,23 +307,7 @@ module Make (AP : ARCH) = struct
         Hashtbl.add tables.oc_cache p r;
         r
 
-  (* Does version [w] satisfy the atom's formula?  Formulas compare raw
-     Debian versions, so dpkg's comparison decides. *)
-  let rec sat f w =
-    match f with
-    | DMA.Deb.Ver.FTop -> true
-    | DMA.Deb.Ver.FBot -> false
-    | DMA.Deb.Ver.FConj (p, q) -> sat p w && sat q w
-    | DMA.Deb.Ver.FDisj (p, q) -> sat p w || sat q w
-    | DMA.Deb.Ver.FCmp (op, u) -> (
-        let c = Version.Debian.compare w u in
-        match op with
-        | E.OpGe -> c >= 0
-        | E.OpGt -> c > 0
-        | E.OpLe -> c <= 0
-        | E.OpLt -> c < 0
-        | E.OpEq -> c = 0
-        | E.OpNe -> c <> 0)
+  let sat f w = DMA.Deb.vfHolds f w
 
   let pp_formula fmt (f : DMA.Deb.Ver.coq_Formula) =
     let rec go fmt = function

@@ -1570,7 +1570,9 @@ module Make (S : SEARCH) = struct
       | DMA.Deb.Name.Selector _ -> Alternative
 
     let clause_atoms = function
-      | DMA.Deb.Name.Disjunct aset | DMA.Deb.Name.Soft aset -> Some aset
+      | DMA.Deb.Name.Disjunct aset | DMA.Deb.Name.Soft aset ->
+          (* as ordered_clauses counts them *)
+          Some (DMA.Deb.AtomSet.elements (DMA.Deb.clauseAtoms aset))
       | DMA.Deb.Name.Selector a ->
           (* a one-alternative Depends has no disjunct package: the selector
              itself is the work item *)
