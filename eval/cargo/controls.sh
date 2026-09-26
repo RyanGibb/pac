@@ -31,14 +31,8 @@ mkdir -p "$T/root/src"
 printf '[package]\nname = "root"\nversion = "1.0.0"\nedition = "2015"\n\n[lib]\npath = "src/lib.rs"\n\n[dependencies]\nalpha = "^1"\n' \
   > "$T/root/Cargo.toml"
 
-python3 "$S/sparse_proxy.py" "$PORT" "$T/index" > "$T/proxy.log" 2>&1 &
-proxy=$!
-trap 'kill $proxy 2> /dev/null' EXIT
-for _ in $(seq 50); do
-  [ "$(curl -sf "http://127.0.0.1:$PORT/pac-index")" = "$(realpath "$T/index")" ] && break
-  sleep 0.2
-done
-kill -0 $proxy 2> /dev/null || { echo "no proxy on $PORT" >&2; exit 1; }
+. "$S/../serve.sh"
+serve "$PORT" "$T/index" "$T/proxy.log" python3 "$S/sparse_proxy.py" "$PORT" "$T/index" || exit 1
 
 # the answer as pac prints it: crates, then "parent child version" edges;
 # the expected verdicts as valid/minimal
@@ -68,7 +62,7 @@ ctl extra VALID/no 'root_1.0.0 alpha_1.1.0 zeta_2.0.0' 'root_1.0.0_alpha_1.1.0'
 ctl extra-broken INVALID/- 'root_1.0.0 alpha_1.1.0 zeta_1.0.0' 'root_1.0.0_alpha_1.1.0'
 
 # cargo failing for want of a registry says nothing of the answer
-kill $proxy; wait $proxy 2> /dev/null
+kill $served; wait $served 2> /dev/null
 ctl noproxy ERR/- 'root_1.0.0 alpha_1.1.0' 'root_1.0.0_alpha_1.1.0'
 
 exit $bad

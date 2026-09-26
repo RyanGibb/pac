@@ -13,6 +13,9 @@ into the snapshot directory, so the snapshot ends up closed over whatever
 npm asked for and a later --frozen run answers everything from disk.
 Misses are appended to the file named by --log either way.
 
+GET /-/pac-serves answers the snapshot directory, which serve.sh asks to
+tell this shim from one another run left on the port.
+
 `npm install --package-lock-only` asks for the tarball of exactly those
 versions whose manifest declares bundleDependencies or a shrinkwrap,
 because it takes that part of the tree from inside the tarball rather
@@ -60,6 +63,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         raw = self.path.split("?", 1)[0].lstrip("/")
         name = urllib.parse.unquote(raw)
+        if name == "-/pac-serves":
+            body = os.path.realpath(SNAP).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if not name or name.startswith("-") or ".." in name.split("/"):
             self.send_response(404)
             self.end_headers()

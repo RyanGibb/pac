@@ -86,11 +86,9 @@ with open(f"{T}/cases", "w") as out:
         out.write(f"{case} {want}\n")
 EOF
 
-python3 "$S/shim.py" "$PORT" "$T/cache" --frozen --log "$T/miss.log" &
-shim=$!
-trap 'kill $shim 2> /dev/null' EXIT
-sleep 1
-kill -0 $shim 2> /dev/null || { echo "no shim on $PORT" >&2; exit 1; }
+. "$S/../serve.sh"
+serve "$PORT" "$T/cache" "$T/shim.log" python3 "$S/shim.py" "$PORT" "$T/cache" --frozen \
+  --log "$T/miss.log" || exit 1
 
 check() {  # <case>
   NPM_RUN=$T bash "$S/../check.sh" npm "$T/work/$1/package-lock.json" "$T/work/$1.check" \
@@ -105,7 +103,7 @@ while read -r case want; do
 done < "$T/cases"
 
 # npm failing for want of a registry says nothing of the answer
-kill $shim; wait $shim 2> /dev/null
+kill $served; wait $served 2> /dev/null
 got=$(check po-valid | sed -n 's/.* valid=\([A-Z]*\) minimal=\(.*\)$/\1\/\2/p')
 printf '%-11s expect %-11s got %s\n' noshim ERR/- "$got"
 [ "$got" = ERR/- ] || bad=1

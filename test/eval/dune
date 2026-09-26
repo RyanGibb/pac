@@ -3,4 +3,5 @@
   %{exe:../../bin/main.exe}
   ../../eval/npm/edges.py
   ../../eval/npm/verdict.py
-  ../../eval/npm/npm-version))
+  ../../eval/npm/npm-version
+  ../../eval/serve.sh))

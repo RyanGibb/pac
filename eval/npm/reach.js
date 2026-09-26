@@ -15,15 +15,13 @@
 // usage: reach.js <package-lock.json>
 'use strict'
 const fs = require('fs')
-const path = require('path')
-const npm = require('child_process').execSync('command -v npm').toString().trim()
-const lib = m => require(path.join(path.dirname(path.dirname(fs.realpathSync(npm))), 'node_modules', m))
+const lib = require('./npmlib')
 const npa = lib('npm-package-arg')
 const semver = lib('semver')
 
 const pk = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')).packages
 
-// "" then each package directory on the way down to p, as lockname.py's
+// "" then each package directory on the way down to p, as tree.py's
 function ancestors (p) {
   const out = ['']
   const segs = p ? p.split('/') : []

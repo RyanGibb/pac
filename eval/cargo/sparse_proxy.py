@@ -17,8 +17,8 @@ but neither scale.sh nor check.py reaches it: both ask cargo only for a
 lockfile, which it resolves from these rows and writes without downloading
 a body.  features.py does reach it, for cargo metadata.
 
-/pac-index answers the index directory served, so that a run can tell its
-own proxy from one another checkout left on the port.
+/-/pac-serves answers the index directory served, which serve.sh asks to
+tell this proxy from one another run left on the port.
 
 usage: sparse_proxy.py [port] [index-dir]
 """
@@ -43,7 +43,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             ).encode()
             self._send(body, "application/json")
             return
-        if path == "pac-index":
+        if path == "-/pac-serves":
             self._send(os.path.realpath(self.server.index).encode())
             return
         name = path.split("/")[-1]

@@ -42,14 +42,8 @@ S="$(cd "$(dirname "$0")" && pwd)"
 RUN=${NPM_RUN:?} PORT=${PORT:-8899}
 ans=$1 out=$2; shift 2
 W=$out/ci
-
-npmc() {  # <dir> <npm args...>
-  (cd "$1" && shift && HOME="$RUN/home" npm_config_git=${NPM_GIT:-false} GIT_MISS=$out/gitmiss \
-    npm "$@" --loglevel=http \
-    --registry "http://127.0.0.1:$PORT" --cache "$RUN/home/npmcache" \
-    --userconfig "$RUN/home/.npmrc" --globalconfig "$RUN/home/npmrc-global" \
-    --no-audit --no-fund --no-update-notifier)
-}
+. "$S/npm.sh"
+npmc() { GIT_MISS=$out/gitmiss NPM_TIMEOUT= npm_in "$@" --loglevel=http; }  # <dir> <npm args...>
 shim() { curl -s -o /dev/null "http://127.0.0.1:$PORT/-/ping"; }
 paths() { jq -r '.packages | to_entries[] | select(.key != "") | "\(.key) \(.value.version)"' "$1" | sort; }
 verdict() {  # <valid> <minimal> <why>

@@ -11,6 +11,7 @@ export LC_ALL=C
 E="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOP="$(dirname "$E")"
 . "$E/answer.sh"
+. "$E/serve.sh"
 # FUZZ=K asks pac in K random orders, random-0 to random-(K-1), and the tool
 # not at all: whichever order picks it, an answer must be valid
 export FUZZ="${FUZZ:-}"

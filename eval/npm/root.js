@@ -10,8 +10,7 @@
 'use strict'
 const fs = require('fs')
 const path = require('path')
-const npm = require('child_process').execSync('command -v npm').toString().trim()
-const lib = m => require(path.join(path.dirname(path.dirname(fs.realpathSync(npm))), 'node_modules', m))
+const lib = require('./npmlib')
 const npa = lib('npm-package-arg')
 const { add } = lib('@npmcli/arborist/lib/add-rm-pkg-deps.js')
 

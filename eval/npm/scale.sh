@@ -11,6 +11,7 @@
 S="$(cd "$(dirname "$0")" && pwd)"
 ECO=npm
 . "$S/../scale-lib.sh"
+. "$S/npm.sh"
 export PORT=${PORT:-8899} NORM=${NORM---peer-parent}
 NPMV=$(sed -n 1p "$S/npm-version") NODEV=$(sed -n 2p "$S/npm-version")
 
@@ -42,27 +43,15 @@ prepare() {
   export NPM_RUN=$run NPM_GIT=$run/bin/git
   local mode=--frozen
   [ -z "${FILL:-}" ] || mode=--fill
-  python3 "$S/shim.py" "$PORT" "$run/cache" $mode &
-  local shim=$!
-  trap "kill $shim 2> /dev/null" EXIT
-  sleep 1
-  # another run's shim on PORT would answer from its own farm
-  kill -0 $shim 2> /dev/null || { echo "$0: no shim on $PORT" >&2; return 1; }
-}
-
-npm_run() {  # <dir> <npm args...>
-  (cd "$1" && shift && HOME=$run/home npm_config_git=$NPM_GIT GIT_MISS=$o.gitmiss \
-     timeout "$TIMEOUT" npm "$@" --loglevel=http \
-     --registry "http://127.0.0.1:$PORT" --cache "$run/home/npmcache" \
-     --userconfig "$run/home/.npmrc" --globalconfig "$run/home/npmrc-global" \
-     --no-audit --no-fund --no-update-notifier)
+  serve "$PORT" "$run/cache" "$run/shim.log" python3 "$S/shim.py" "$PORT" "$run/cache" $mode
 }
 
 refused() { grep -qE '^npm error code (ERESOLVE|ETARGET|E404|ENOVERSIONS|EBADPLATFORM)$' "$2"; }
 
 ask() {  # <project dir>
   rm -f "$1/package-lock.json"
-  npm_run "$1" install --package-lock-only > "$o.npm" 2>&1
+  GIT_MISS=$o.gitmiss NPM_TIMEOUT=$TIMEOUT npm_in "$1" install --package-lock-only --loglevel=http \
+    > "$o.npm" 2>&1
   local rc=$?
   cp "$1/package-lock.json" "$o.theirs" 2>/dev/null || : > "$o.theirs"
   return $rc

@@ -17,20 +17,10 @@ prepare() {
   fi
   snapshot crates.io-index
   python3 -c "import sys; sys.path[0] = '$S'; import run_query; run_query.check_toolchain()" || return 1
-  # run_query.py points cargo at this port.  A proxy some other run left
-  # there would serve its own index, so this run's must be the one that
-  # answers, serving the snapshot pac reads
-  python3 "$S/sparse_proxy.py" "$PORT" > "$run/proxy.log" 2>&1 &
-  local proxy=$! i want have=
-  trap "kill $proxy 2> /dev/null" EXIT
-  want=$(realpath "$TOP/repos/crates.io-index")
-  for i in $(seq 50); do
-    have=$(curl -sf "http://127.0.0.1:$PORT/pac-index") && break
-    sleep 0.2
-  done
-  if ! kill -0 "$proxy" 2> /dev/null || [ "$have" != "$want" ]; then
-    echo "$0: the proxy on $PORT is not this run's (serving '${have:-nothing}')" >&2; return 1
-  fi
+  # run_query.py points cargo at this port, which must serve the snapshot
+  # pac reads
+  serve "$PORT" "$TOP/repos/crates.io-index" "$run/proxy.log" \
+    python3 "$S/sparse_proxy.py" "$PORT" "$TOP/repos/crates.io-index"
 }
 
 # cargo is asked in run_pac, per mode

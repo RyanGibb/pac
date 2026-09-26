@@ -28,12 +28,13 @@ set -eu
 export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
 exe=$1; RUN="${2:-/tmp/npm-cmp}"; PORT="${3:-8899}"; BACK="${4:-40}"
+NPM_RUN=$RUN
+. "$S/npm.sh"
 
 : > "$RUN/miss.log"
-python3 "$S/shim.py" "$PORT" "$RUN/cache" --fill --log "$RUN/miss.log" &
-shim=$!
-trap 'kill $shim 2>/dev/null' EXIT
-sleep 1
+. "$S/../serve.sh"
+serve "$PORT" "$RUN/cache" "$RUN/shim.log" python3 "$S/shim.py" "$PORT" "$RUN/cache" --fill \
+  --log "$RUN/miss.log"
 
 : > "$S/baseline/roots.txt"
 while read -r g; do
@@ -67,12 +68,9 @@ EOF
   node "$S/root.js" "$RUN/cache" "$g@$pin" > "$W/package.json"
   # the shim fills from the registry alone, and npm clones a git dependency
   # itself, into no snapshot
-  ( cd "$W" && rm -f package-lock.json && \
-    HOME="$RUN/home" npm_config_git=false npm install --package-lock-only \
-      --registry "http://127.0.0.1:$PORT" --cache "$RUN/home/npmcache" \
-      --userconfig "$RUN/home/.npmrc" --globalconfig "$RUN/home/npmrc-global" \
-      --no-audit --no-fund --no-update-notifier --loglevel=error \
-      > seed.npm 2>&1 ) || { echo "$g DROP npm cannot resolve $pin"; tail -2 "$W/seed.npm"; continue; }
+  rm -f "$W/package-lock.json"
+  NPM_GIT= npm_in "$W" install --package-lock-only --loglevel=error > "$W/seed.npm" 2>&1 ||
+    { echo "$g DROP npm cannot resolve $pin"; tail -2 "$W/seed.npm"; continue; }
   latest=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["dist-tags"]["latest"])' \
              "$RUN/cache/${g//\//%2F}.json")
   echo "$g $pin (walked back $back from $latest)"
