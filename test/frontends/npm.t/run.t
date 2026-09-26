@@ -230,15 +230,15 @@ opt-peer-app depends on host, whose peer on gadget is ^2, and optionally
 on gadget ^1; gadget publishes both, so the dependency's manifest is
 fetchable and the dependency stands.  The two ranges fill the same directory and cannot
 agree, which is npm's ERESOLVE rather than a reason to abandon the entry.
+(untimed drops the timings but keeps the status.)
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./opt-peer-app/package.json
+  $ untimed() { "$@" > out 2>&1; s=$?; sed -E '/^(parse|solve) [0-9.]+s$/d' out; return $s; }
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./opt-peer-app/package.json
   root opt-peer-app 1.0.0
   unsatisfiable:
   Because <opt-peer-app@1.0.0=>host> 1.0.0 -> <opt-peer-app@1.0.0=>gadget> 2.0.0 and opt-peer-app@1.0.0 1.0.0 -> <opt-peer-app@1.0.0=>gadget> 1.0.0, <opt-peer-app@1.0.0=>host> * or opt-peer-app@1.0.0 * is forbidden..
   And because opt-peer-app@1.0.0 1.0.0 -> <opt-peer-app@1.0.0=>host> 1.0.0 and root -> opt-peer-app@1.0.0 1.0.0, version solving failed.
   loaded: 3 names, 4 versions, 0 packuments fetched
-  parse 0.00s
-  solve 0.00s
   [1]
 
 That the optional dependency is what fails the solve, rather than
@@ -870,15 +870,13 @@ installs: vite 6.0.0 at the top, vp-core 1.0.0 at vplus's vite.  Choosing
 where a declarer sits is placement, which the logical model does not
 decide.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./vp-app/package.json
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./vp-app/package.json
   root vp-app 1.0.0
   unsatisfiable:
   Because vp-app@1.0.0 1.0.0 -> <vp-app@1.0.0=>vplus> 1.0.0 and <vp-app@1.0.0=>vplus> 1.0.0 -> vplus@1.0.0 1.0.0, vp-app@1.0.0 * requires vplus@1.0.0 1.0.0.
   And because vplus@1.0.0 1.0.0 -> <vplus@1.0.0=>mocker> 1.0.0, vp-app@1.0.0 * requires <vplus@1.0.0=>mocker> 1.0.0
   And because <vplus@1.0.0=>mocker> 1.0.0 -> <vplus@1.0.0=>vite(npm:vp-core)> ∅ and root -> vp-app@1.0.0 1.0.0, version solving failed.
   loaded: 5 names, 5 versions, 0 packuments fetched
-  parse 0.00s
-  solve 0.00s
   [1]
 
 A dependency is decided once, when npm's order reaches it; npm's edges
@@ -1030,14 +1028,12 @@ and with it unreachable, or failing, there is no answer at all.
   $ printf '#!/bin/sh\necho "curl: (6) Could not resolve host: registry.npmjs.org" >&2; exit 6\n' > down/curl
   $ printf '#!/bin/sh\nprintf 503; exit 22\n' > broken/curl
   $ chmod +x gone/curl down/curl broken/curl
-  $ PATH=$PWD/gone:$PATH ../../../bin/main.exe npm --cache partial plugin
+  $ untimed env PATH=$PWD/gone:$PATH ../../../bin/main.exe npm --cache partial plugin
   root .
   unsatisfiable:
   Because .@  -> <.@=>plugin> 1.0.0 and <.@=>plugin> 1.0.0 -> <.@=>core> ∅, .@ * is forbidden..
   And because root -> .@ , version solving failed.
   loaded: 3 names, 2 versions, 1 packuments fetched
-  parse 0.00s
-  solve 0.00s
   [1]
   $ PATH=$PWD/down:$PATH ../../../bin/main.exe npm --cache partial plugin
   root .

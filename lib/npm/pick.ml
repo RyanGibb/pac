@@ -2,7 +2,7 @@ open Encoding
 module A = Archive
 module L = Lookup
 
-(* npm-pick-manifest's sort keys above semver, lib/index.js:167-181:
+(* npm-pick-manifest's sort criteria above semver, lib/index.js:167-181:
 
      ((notdeprb && engineb) - (notdepra && enginea)) ||
      (engineb - enginea) ||
@@ -10,20 +10,21 @@ module L = Lookup
      semver.rcompare(vera, verb, sortSemverOpt)
 
    deprecated and engines are one preference because they are one sort
-   function, and the middle key is what orders them against each other: a
-   deprecated version the host can run outranks a current one it cannot.
+   function, and the middle criterion is what orders them against each
+   other: a deprecated version the host can run outranks a current one it
+   cannot.
    Neither drops a candidate, so neither can make anything unsatisfiable
    -- a package whose every version is deprecated resolves to its newest,
    and a pinned version the host cannot run still installs, which is what
    --engine-strict exists to refuse at install time.
 
-   The three keys npm sorts above these have no counterpart here.  avoid
+   The three criteria npm sorts above these have no counterpart here.  avoid
    is npm audit fix's, passed by nothing that writes an ordinary
    lockfile; policyRestrictions and stagedVersions appear in no public
    packument, and the parser reads neither, so restricted and staged are
    uniformly false.  A Gran version stands for a granularity class rather
-   than a release, so it carries neither key. *)
-let keys ar (n : string) (c : PVersion.t) : bool * bool * bool =
+   than a release, so it carries neither criterion. *)
+let rank ar (n : string) (c : PVersion.t) : bool * bool * bool =
   match c with
   | Np.Vs.Gran _ -> (true, true, true)
   | Np.Vs.Orig v ->
@@ -37,7 +38,7 @@ let best ar (n : string) (cands : PVersion.t list) : PVersion.t =
   | c :: cs ->
       List.fold_left
         (fun a b ->
-          let d = compare (keys ar n b) (keys ar n a) in
+          let d = compare (rank ar n b) (rank ar n a) in
           if d > 0 || (d = 0 && PVersion.compare b a > 0) then b else a)
         c cs
 
@@ -47,7 +48,7 @@ let best ar (n : string) (cands : PVersion.t list) : PVersion.t =
    latest tag no longer drags its newest release in.  Preference only:
    the tag is consulted inside the candidates, never outside them.
 
-   The fast path is guarded by the same two keys as the sort
+   The fast path is guarded by the same two criteria as the sort
    (index.js:119-132, [engineOk(mani, ..) && !mani.deprecated]), so a
    deprecated or unrunnable latest is not a shortcut past them.  It is
    not merely redundant with the sort: the tag may name a version the
