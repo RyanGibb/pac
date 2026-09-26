@@ -1,2 +1,6 @@
 (cram
  (deps %{exe:../../bin/main.exe} ../frontends/untimed.sh))
+
+(cram
+ (applies_to extensions)
+ (deps extensions/extensions.exe))

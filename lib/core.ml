@@ -1,6 +1,11 @@
 let show pp x = Format.asprintf "%a" pp x
 
-let print ~pp_name ~pp_version ~versions ~dependees roots =
+type walk = {
+  names : string list;
+  pkgs : ((string * string) * (string * string list) list) list;
+}
+
+let walk ~pp_name ~pp_version ~versions ~dependees roots =
   let names = Hashtbl.create 64 in
   let edges = Hashtbl.create 256 in
   let rec reach n =
@@ -34,22 +39,32 @@ let print ~pp_name ~pp_version ~versions ~dependees roots =
     if Hashtbl.length edges > before then settle ()
   in
   settle ();
-  let pkgs = List.sort compare (Hashtbl.fold (fun p _ l -> p :: l) edges []) in
-  let n_edges = Hashtbl.fold (fun _ es n -> n + List.length es) edges 0 in
-  Printf.printf "core: %d packages, %d edges\n" (List.length pkgs) n_edges;
+  {
+    names =
+      List.sort String.compare (Hashtbl.fold (fun k _ l -> k :: l) names []);
+    pkgs =
+      List.sort compare (Hashtbl.fold (fun p es l -> (p, es) :: l) edges []);
+  }
+
+let output w =
+  let n_edges = List.fold_left (fun n (_, es) -> n + List.length es) 0 w.pkgs in
+  Printf.printf "core: %d packages, %d edges\n" (List.length w.pkgs) n_edges;
   let listed = Hashtbl.create 64 in
   List.iter
-    (fun ((n, v) as p) ->
+    (fun ((n, v), es) ->
       Hashtbl.replace listed n ();
       Printf.printf "%s %s\n" n v;
       List.iter
         (fun (m, vs) ->
           Printf.printf "  -> %s {%s}\n" m (String.concat ", " vs))
-        (Hashtbl.find edges p))
-    pkgs;
+        es)
+    w.pkgs;
   (* a name with no versions is still reached, and an edge to it can never
      be met, which is worth seeing *)
   List.iter
     (fun n -> if not (Hashtbl.mem listed n) then Printf.printf "%s (none)\n" n)
-    (List.sort String.compare (Hashtbl.fold (fun k _ l -> k :: l) names []));
+    w.names;
   flush stdout
+
+let print ~pp_name ~pp_version ~versions ~dependees roots =
+  output (walk ~pp_name ~pp_version ~versions ~dependees roots)
