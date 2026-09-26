@@ -1,4 +1,5 @@
-open Lookups
+module Make (Lk : Lookups.S) = struct
+open Lk
 
 let greatest = Pac_common.Order.greatest PVersion.compare
 
@@ -120,3 +121,4 @@ let hooks :
   | `Pubgrub ->
       Pac_common.Order.make ~next ~choose:(choose ar ~install_if:false) ()
   | `Random seed -> Pac_common.Order.random seed
+end

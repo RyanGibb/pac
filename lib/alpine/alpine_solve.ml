@@ -1,4 +1,8 @@
-include Lookups
+module Make (D : Lookups.Designations) = struct
+open Lookups
+module Lk = Make (D)
+include Lk
+module Order = Order.Make (Lk)
 
 type result = { pkgs : (string * string) list; nodes : int; lookups : int }
 
@@ -10,3 +14,4 @@ let solve ?(debug = false) ?(order = `Tool) (ar : archive) (world : P.dep list)
   |> Result.map (fun (s_pf, nodes) ->
       let pkgs = Alp.PkgSet.elements (Red.alpineResolution s_pf) in
       { pkgs = List.sort compare pkgs; nodes; lookups = L.lookups st })
+end

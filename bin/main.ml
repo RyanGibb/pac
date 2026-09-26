@@ -375,26 +375,29 @@ let alpine_run debug order path goals =
   | Error e -> error 2 "%s" e
   | Ok world ->
       let t0 = Unix.gettimeofday () in
-      let ar = Alpine_solve.load_index path in
+      let module A = Alpine_solve.Make (struct
+        let table = Hashtbl.create 4096
+      end) in
+      let ar = A.load_index path in
       let parse = Unix.gettimeofday () -. t0 in
-      let r = Alpine_solve.solve ~debug ~order ar world in
+      let r = A.solve ~debug ~order ar world in
       report ~t0
         {
-          Report.names = Hashtbl.length ar.Alpine_solve.by_name;
-          versions = ar.Alpine_solve.n_pkgs;
+          Report.names = Hashtbl.length ar.A.by_name;
+          versions = ar.A.n_pkgs;
           extra =
             [
-              Printf.sprintf "%d provides entries" ar.Alpine_solve.n_provs;
-              Printf.sprintf "%d install_if rules" ar.Alpine_solve.n_iif;
+              Printf.sprintf "%d provides entries" ar.A.n_provs;
+              Printf.sprintf "%d install_if rules" ar.A.n_iif;
             ];
-          dropped = ar.Alpine_solve.n_dropped;
+          dropped = ar.A.n_dropped;
           parse;
         }
         r
         (fun a ->
           Report.packages
-            (List.map (fun (n, v) -> n ^ " " ^ v) a.Alpine_solve.pkgs);
-          Report.encoded ~nodes:a.Alpine_solve.nodes ~lookups:a.Alpine_solve.lookups)
+            (List.map (fun (n, v) -> n ^ " " ^ v) a.A.pkgs);
+          Report.encoded ~nodes:a.A.nodes ~lookups:a.A.lookups)
 
 let alpine_cmd =
   let path =

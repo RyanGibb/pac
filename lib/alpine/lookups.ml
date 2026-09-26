@@ -18,6 +18,9 @@ end
 
 module Alp = E.Alpine (Ot.Str) (AVerOT) (PM)
 
+let first_pos (ds : Alp.coq_Dep list) : Alp.Atom.t option =
+  List.find_map (function Alp.DPos a -> Some a | Alp.DNeg _ -> None) ds
+
 (* Which condition a rule designates is free, and is a performance
    choice: the rule is materialised only once that condition is selected.
    Alpine writes the switch name (docs, openrc) first and almost nothing
@@ -25,19 +28,20 @@ module Alp = E.Alpine (Ot.Str) (AVerOT) (PM)
    most of the archive carries -- so the first-listed positive condition is
    recorded as the set is built, keyed by the element list, which is
    canonical where the set's own representation need not be.  The
-   fallback keeps designation total on sets with a positive condition,
+   reduction takes the designation as a module, so the table of the index
+   a run loads is one the driver is built over. *)
+module type Designations = sig
+  val table : (Alp.coq_Dep list, Alp.Atom.t) Hashtbl.t
+end
+
+module Make (D : Designations) = struct
+(* the fallback keeps designation total on sets with a positive condition,
    discharging designation_spec, which is trusted, as ApkVerMatch's
-   prefix/hash are. *)
-let designation_tbl : (Alp.coq_Dep list, Alp.Atom.t) Hashtbl.t =
-  Hashtbl.create 4096
-
-let first_pos (ds : Alp.coq_Dep list) : Alp.Atom.t option =
-  List.find_map (function Alp.DPos a -> Some a | Alp.DNeg _ -> None) ds
-
+   prefix/hash are *)
 module FirstDesignation = struct
   let designation (conds : Alp.CondSet.t) : Alp.Atom.t option =
     let key = Alp.CondSet.elements conds in
-    match Hashtbl.find_opt designation_tbl key with
+    match Hashtbl.find_opt D.table key with
     | Some _ as a -> a
     | None -> first_pos key
 end
@@ -78,8 +82,7 @@ let condset_of ds =
   (match first_pos conds with
   | Some a ->
       let key = Alp.CondSet.elements cs in
-      if not (Hashtbl.mem designation_tbl key) then
-        Hashtbl.add designation_tbl key a
+      if not (Hashtbl.mem D.table key) then Hashtbl.add D.table key a
   | None -> ());
   cs
 
@@ -548,3 +551,8 @@ let touch ar world st ((tn, tv) : T.Pkg.t) =
       let q = (Red.Name.Orig m, Red.Version.Prov (q0, pv)) in
       L.process st q (fun () -> dependees empty_inst q)
   | _ -> ()
+end
+
+module type S = module type of Make (struct
+  let table = Hashtbl.create 0
+end)
