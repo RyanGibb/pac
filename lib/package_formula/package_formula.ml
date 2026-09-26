@@ -49,7 +49,7 @@ struct
     synthetic_vers : (PFR.Name.t, P.t list) Hashtbl.t;
     original_vers : (N.t, P.t list) Hashtbl.t;
     oracle_memo : (N.t, PF.VSet.t) Hashtbl.t;
-    processed : (PF.Pkg.t, unit) Hashtbl.t;
+    seen : (PF.Pkg.t, unit) Hashtbl.t;
     deps : (T.Pkg.t, (PFR.Name.t * PG.Ranges.t) list) Hashtbl.t;
     mutable canon : PFR.Name.t NameMap.t;
   }
@@ -68,22 +68,25 @@ struct
       synthetic_vers = Hashtbl.create 65536;
       original_vers = Hashtbl.create 16384;
       oracle_memo = Hashtbl.create 16384;
-      processed = Hashtbl.create 16384;
+      seen = Hashtbl.create 16384;
       deps = Hashtbl.create 65536;
       canon = NameMap.empty;
     }
 
-  let processed st = Hashtbl.length st.processed
+  let processed st = Hashtbl.length st.seen
+
+  let unless_volatile st tbl (n : N.t) f =
+    if st.volatile n then f ()
+    else
+      match Hashtbl.find_opt tbl n with
+      | Some x -> x
+      | None ->
+          let x = f () in
+          Hashtbl.replace tbl n x;
+          x
 
   let oracle st (n : N.t) : PF.VSet.t =
-    if st.volatile n then st.oracle n
-    else
-      match Hashtbl.find_opt st.oracle_memo n with
-      | Some vs -> vs
-      | None ->
-          let vs = st.oracle n in
-          Hashtbl.replace st.oracle_memo n vs;
-          vs
+    unless_volatile st st.oracle_memo n (fun () -> st.oracle n)
 
   (* A Disjunct name carries its formulas, so comparing two equal names
      walks both in full, and PubGrub does that on every dependency-list scan
@@ -139,8 +142,8 @@ struct
      sub-instance the driver builds for it; a thunk, so a package asked
      about twice builds it once *)
   let process st (q : PF.Pkg.t) (dependees : unit -> PF.coq_Formula list) =
-    if not (Hashtbl.mem st.processed q) then begin
-      Hashtbl.replace st.processed q ();
+    if not (Hashtbl.mem st.seen q) then begin
+      Hashtbl.replace st.seen q ();
       let d_q = PF.DepRel.ofList (List.map (fun f -> (q, f)) (dependees ())) in
       record_deprel st (PFR.reduceDepsBy (oracle st) d_q);
       record_synthetic st (PFR.reduceReal (PF.PkgSet.singleton q) d_q)
@@ -160,21 +163,12 @@ struct
     match tn with
     | PFR.Name.Orig n when N.eq_dec n (fst st.root) ->
         [ st.tag tn (PFR.Version.Orig (snd st.root)) ]
-    | PFR.Name.Orig n -> (
-        let fresh () =
-          List.map
-            (fun w -> st.tag tn (PFR.Version.Orig w))
-            (PF.VSet.elements (oracle st n))
-          @ [ P.bot ]
-        in
-        if st.volatile n then fresh ()
-        else
-          match Hashtbl.find_opt st.original_vers n with
-          | Some vs -> vs
-          | None ->
-              let vs = fresh () in
-              Hashtbl.replace st.original_vers n vs;
-              vs)
+    | PFR.Name.Orig n ->
+        unless_volatile st st.original_vers n (fun () ->
+            List.map
+              (fun w -> st.tag tn (PFR.Version.Orig w))
+              (PF.VSet.elements (oracle st n))
+            @ [ P.bot ])
     | PFR.Name.Disjunct _ ->
         Option.value (Hashtbl.find_opt st.synthetic_vers tn) ~default:[]
 
