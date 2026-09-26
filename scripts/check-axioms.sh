@@ -348,14 +348,19 @@ Alp.Reduction.versions
 
 NpmS.Reduction.Lookup.dependees_lookupGranular
 NpmS.Reduction.Lookup.dependees_lookupIntermediate
+NpmS.Reduction.Lookup.dependees_lookupLink
+NpmS.Reduction.Lookup.dependees_lookupSight
 NpmS.Reduction.Lookup.versions_lookupGranular
 NpmS.Reduction.Lookup.versions_lookupIntermediate
+NpmS.Reduction.Lookup.versions_lookupLink
+NpmS.Reduction.Lookup.versions_lookupSight
 NpmS.Reduction.dependees
 NpmS.Reduction.dependees_targetNames
 NpmS.Reduction.embedRoot
 NpmS.Reduction.lookup_resolution
 NpmS.Reduction.npmParents_coreResolution
 NpmS.Reduction.npmResolution_coreResolution
+NpmS.Reduction.npmSight
 NpmS.Reduction.npm_completeness
 NpmS.Reduction.npm_soundness
 NpmS.Reduction.peer_installed

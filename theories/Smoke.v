@@ -470,7 +470,7 @@ Proof. reflexivity. Qed.
 Example npm_peer_edge_computes :
   npmDeps npmInst (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1)
   = (NpmS.Nm.Granular kB 1, NpmS.Vs.Orig 1 :: nil)
-    :: (NpmS.Nm.Intermediate kA 1 kC,
+    :: (NpmS.Nm.Link kA 1 kB 1 npmC,
         NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
@@ -484,13 +484,54 @@ Proof. reflexivity. Qed.
 Example npm_auto_edge_computes :
   npmDeps npmInstAuto (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1)
   = (NpmS.Nm.Granular kB 1, NpmS.Vs.Orig 1 :: nil)
-    :: (NpmS.Nm.Intermediate kA 1 kC,
+    :: (NpmS.Nm.Link kA 1 kB 1 npmC,
         NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: nil) :: nil.
+Proof. reflexivity. Qed.
+
+Example npm_link_holder_computes :
+  npmDeps npmInstAuto (NpmS.Nm.Link kA 1 kB 1 npmC, NpmS.Vs.Orig 2)
+  = (NpmS.Nm.Intermediate kA 1 kC, NpmS.Vs.Orig 2 :: nil)
+    :: (NpmS.Nm.Sight kB 1 npmC, NpmS.Vs.Orig 2 :: NpmS.Vs.Bot :: nil)
+    :: nil.
 Proof. reflexivity. Qed.
 
 Example npm_optional_edge_computes :
   npmDeps npmInstOpt (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1)
-  = (NpmS.Nm.Granular kB 1, NpmS.Vs.Orig 1 :: nil) :: nil.
+  = (NpmS.Nm.Granular kB 1, NpmS.Vs.Orig 1 :: nil)
+    :: (NpmS.Nm.Link kA 1 kB 1 npmC,
+        NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: NpmS.Vs.Bot :: nil) :: nil.
+Proof. reflexivity. Qed.
+
+Example npm_optional_bot_computes :
+  npmDeps npmInstOpt (NpmS.Nm.Link kA 1 kB 1 npmC, NpmS.Vs.Bot)
+  = (NpmS.Nm.Sight kB 1 npmC, NpmS.Vs.Bot :: nil) :: nil.
+Proof. reflexivity. Qed.
+
+(* B@1 peers on C and depends on D@1, which peers on C too: B's copy holds
+   no C (PEER LOCAL), and D's peer resolves to what B's own does. *)
+Definition npmD : nat := 5.
+Definition kD : NpmS.NKey.t := (npmD, npmD).
+
+Definition npmChainRepo : NpmS.RepoSet.t :=
+  NpmS.RepoSet.add (npmD, 1) npmRepo.
+
+Definition npmInstChain : NpmS.Inst :=
+  NpmS.MkInst npmChainRepo
+    (((npmA, 1), npmDepB) :: ((npmB, 1), NpmS.MkDep npmD npmD (npmEq 1) false)
+       :: nil)
+    (((npmB, 1), npmPeerC) :: ((npmD, 1), npmPeerC) :: nil) nil (npmA, 1).
+
+Example npm_peer_local_computes :
+  NpmS.T.VSet.elements
+    (NpmS.Reduction.versions npmInstChain (NpmS.Nm.Intermediate kB 1 kC))
+  = nil.
+Proof. reflexivity. Qed.
+
+Example npm_chain_computes :
+  npmDeps npmInstChain (NpmS.Nm.Link kB 1 kD 1 npmC, NpmS.Vs.Orig 2)
+  = (NpmS.Nm.Sight kB 1 npmC, NpmS.Vs.Orig 2 :: nil)
+    :: (NpmS.Nm.Sight kD 1 npmC, NpmS.Vs.Orig 2 :: NpmS.Vs.Bot :: nil)
+    :: nil.
 Proof. reflexivity. Qed.
 
 Example npm_root_peer_computes :
