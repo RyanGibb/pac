@@ -1,9 +1,14 @@
+untimed (../untimed.sh) drops the timings from pac's output and keeps its
+exit status:
+
+  $ . ../untimed.sh
+
 A query is a root Cargo.toml, as cargo has no other.  Most cases below
 root a crate of the index through the manifest it was published with,
 manifests/<crate>.toml, so the root's own dev-dependencies and features
 are in play.
 
-  $ ../../../bin/main.exe cargo index manifests/a.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/a.toml
   root a 1.0.0
   packages (6):
     a 1.0.0
@@ -20,7 +25,7 @@ names a prerelease at the same release core.  p publishes 1.0.0 and the
 newer 1.0.1-alpha, and ^1.0.0 names no prerelease, so it takes 1.0.0;
 q publishes 1.0.0-alpha.1 alone, which ^1.0.0-alpha reaches.
 
-  $ ../../../bin/main.exe cargo index manifests/g.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/g.toml
   root g 1.0.0
   packages (3):
     g 1.0.0
@@ -34,7 +39,7 @@ as an optional normal dependency and as a dev-dependency; from root h, k is
 not the root, so neither record installs m -- the optional one is never
 activated and the dev one does not participate.
 
-  $ ../../../bin/main.exe cargo index manifests/h.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/h.toml
   root h 1.0.0
   packages (2):
     h 1.0.0
@@ -48,7 +53,7 @@ resolve: the implicit feature of the optional m is among them, so that
 record activates as well and each of the two binds m through its own
 slot, two parent edges onto the one installed crate.
 
-  $ ../../../bin/main.exe cargo index manifests/k.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/k.toml
   root k 1.0.0
   packages (2):
     k 1.0.0 [m]
@@ -63,7 +68,7 @@ mandatory dev record installs m by itself.  The two stay
 separate slots -- conjoined, the dev record's non-optionality would bind
 on every depender, which is the h case above.
 
-  $ ../../../bin/main.exe cargo index manifests/k.toml --features "" | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/k.toml --features ""
   root k 1.0.0 with default features
   packages (2):
     k 1.0.0
@@ -79,7 +84,7 @@ known.  z must still be admitted once it arrives -- the answer is the older,
 link-free x beside z, not a rejection of z against a version set fixed
 without it.
 
-  $ ../../../bin/main.exe cargo index manifests/r.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/r.toml
   root r 1.0.0
   packages (4):
     r 1.0.0
@@ -92,7 +97,7 @@ without it.
 The root's own links key excludes as a dependency's does.  rl claims
 links=foo, so x 1.0.0, which claims it too, is out and x 0.9.0 is taken.
 
-  $ ../../../bin/main.exe cargo index manifests/rl.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/rl.toml
   root rl 1.0.0
   packages (2):
     rl 1.0.0
@@ -106,7 +111,7 @@ nowhere else; cargo's resolver activates such an entry unconditionally and
 narrows it only in a later pass over the fixed resolution, so that w keeps
 its place in the lock as --features varies, and w is installed with extra.
 
-  $ ../../../bin/main.exe cargo index manifests/s.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/s.toml
   root s 1.0.0
   packages (3):
     s 1.0.0
@@ -121,7 +126,7 @@ it does, and newest-first still decides within each of the two.  d1 publishes
 1.0.0 with rust-version 1.60 and 1.1.0 with 1.80; under a 1.70 toolchain
 m1 takes the older 1.0.0.
 
-  $ ../../../bin/main.exe cargo index manifests/m1.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/m1.toml --rust-version 1.70
   root m1 1.0.0 for rust 1.70
   packages (2):
     d1 1.0.0
@@ -132,7 +137,7 @@ m1 takes the older 1.0.0.
 With no toolchain configured the preference is off, as it is in cargo when
 the rust-versions list is empty, and the same index takes the newest.
 
-  $ ../../../bin/main.exe cargo index manifests/m1.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/m1.toml
   root m1 1.0.0
   packages (2):
     d1 1.1.0
@@ -147,7 +152,7 @@ and 1.2.0 needing 1.95, so under 1.70 the field-less 1.1.0 wins -- neither
 the newest nor the oldest, which no other reading of the missing field
 would give.
 
-  $ ../../../bin/main.exe cargo index manifests/m2.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/m2.toml --rust-version 1.70
   root m2 1.0.0 for rust 1.70
   packages (2):
     d2 1.1.0
@@ -155,7 +160,7 @@ would give.
   encoded solution: 6 core nodes (7 lookups)
   loaded: 2 names, 4 versions
 
-  $ ../../../bin/main.exe cargo index manifests/m2.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/m2.toml
   root m2 1.0.0
   packages (2):
     d2 1.2.0
@@ -167,7 +172,7 @@ This is a preference and not a constraint.  m3 requires ^2 of d3, whose
 only version in range is 2.0.0 needing 1.90; the MSRV-compatible 1.0.0 is
 out of range, so 2.0.0 is taken rather than the solve failing.
 
-  $ ../../../bin/main.exe cargo index manifests/m3.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/m3.toml --rust-version 1.70
   root m3 1.0.0 for rust 1.70
   packages (2):
     d3 2.0.0
@@ -182,7 +187,7 @@ declared it -- the target section, the kind table, and the key inside it --
 so the two are separate rows of the summary and both resolve, giving a
 lockfile with e 0.1.0 beside e 0.2.0.
 
-  $ ../../../bin/main.exe cargo index manifests/t.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/t.toml
   root t 1.0.0
   packages (3):
     e 0.1.0
@@ -196,7 +201,7 @@ package = renames the target and the cross-table check constrains only the
 source registry.  rn's x is e under [dependencies] and w under
 [target.'cfg(windows)'.dependencies], and both are installed.
 
-  $ ../../../bin/main.exe cargo index manifests/rn.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/rn.toml
   root rn 1.0.0
   packages (3):
     e 0.2.0
@@ -216,7 +221,7 @@ has one (dep_cache.rs, require_dep_feature): ir asks i for net alone, net
 is "o/extra" over the optional o, whose implicit feature o exists, so i is
 resolved with o on:
 
-  $ ../../../bin/main.exe cargo index manifests/ir.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/ir.toml
   root ir 1.0.0
   packages (3):
     i 1.0.0 [net,o]
@@ -228,7 +233,7 @@ resolved with o on:
 Where dep:o names the dependency there is no implicit feature o to enable,
 and i3 is resolved with net alone:
 
-  $ ../../../bin/main.exe cargo index manifests/ir3.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/ir3.toml
   root ir3 1.0.0
   packages (3):
     i3 1.0.0 [net]
@@ -245,7 +250,7 @@ crate's dependencies fewest candidates first and in declaration order
 between equals: ga is activated at 0.14.9, cp 0.1.7 then fails on its pin,
 and cp falls back to 0.1.6.
 
-  $ ../../../bin/main.exe cargo index manifests/oa.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/oa.toml
   root oa 1.0.0
   packages (4):
     cp 0.1.6
@@ -258,7 +263,7 @@ and cp falls back to 0.1.6.
 pb declares zp, a copy of cp, first, so zp 0.1.7 is activated first and its
 pin, with one candidate, is taken before pb's own ^0.14 of ga.
 
-  $ ../../../bin/main.exe cargo index manifests/ob.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/ob.toml
   root ob 1.0.0
   packages (4):
     ga 0.14.7
@@ -271,7 +276,7 @@ pin, with one candidate, is taken before pb's own ^0.14 of ga.
 The root's own dependencies are read from its manifest, whose tables cargo
 keys by name, so oc's zp-then-ga reaches the resolver as ga-then-zp.
 
-  $ ../../../bin/main.exe cargo index manifests/oc.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/oc.toml
   root oc 1.0.0
   packages (3):
     ga 0.14.9
@@ -288,7 +293,7 @@ ms activates sk 0.5.10 through its pin; mq's >=0.5, <0.7 then meets the
 compatible 0.5.9, which that activation rules out, and takes the newest of
 the rest, 0.6.5, although it needs a newer Rust than 1.70.
 
-  $ ../../../bin/main.exe cargo index manifests/ms.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/ms.toml --rust-version 1.70
   root ms 1.0.0 for rust 1.70
   packages (4):
     mq 1.0.0
@@ -302,7 +307,7 @@ mu pins sl to 0.6.5, which needs 1.80, so mt's range skips the compatible
 0.6.4 of that granularity class and takes the compatible 0.5.9 of the
 older one.
 
-  $ ../../../bin/main.exe cargo index manifests/mu.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/mu.toml --rust-version 1.70
   root mu 1.0.0 for rust 1.70
   packages (4):
     mt 1.0.0
@@ -385,7 +390,7 @@ feature net asks i for net.  The lock enables every root feature, so i
 comes in through net, with o behind i's own net, and e is locked at both
 0.1.0 (for x) and 0.2.0.
 
-  $ ../../../bin/main.exe cargo index manifests/app.toml --print-parents | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/app.toml --print-parents
   root app 0.1.0
   packages (9):
     app 0.1.0 [default,i,net]
@@ -418,7 +423,7 @@ answers the second.
   $ ../../../bin/main.exe cargo index manifests/selfdep.toml > /dev/null
   error: the answer reaches b 1.0.0 through the registry, which cargo keeps apart from the root unless [patch.crates-io] maps b to it with { path = "." }
   [2]
-  $ ../../../bin/main.exe cargo index manifests/selfpatch.toml --print-parents | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/selfpatch.toml --print-parents
   root b 1.0.0
   packages (6):
     a 1.0.0
@@ -452,7 +457,7 @@ An index entry whose feature table cargo's build_feature_map refuses is
 never a candidate, so cargo takes 1.0.0 of each of fa (dep:o/extra), fb
 (o/extra/z) and fc (a feature naming neither a feature nor a dependency):
 
-  $ ../../../bin/main.exe cargo index manifests/fm.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/fm.toml
   root fm 1.0.0
   packages (4):
     fa 1.0.0
@@ -480,7 +485,7 @@ names a surrogate rather than a Unicode scalar value:
 while dotted keys over one table, a sub-table header under them, and
 numbers TOML allows all read:
 
-  $ ../../../bin/main.exe cargo index manifests/tomlok.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/tomlok.toml
   root tomlok 1.0.0
   packages (4):
     b 1.0.0
@@ -494,7 +499,7 @@ A version component is a u64 in cargo's semver, so tv's timestamp-style
 1.0.1234567890 and 1.0.1234567891 are two versions, and ^1 takes the
 newer, as cargo does.
 
-  $ ../../../bin/main.exe cargo index manifests/vt.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/vt.toml
   root vt 1.0.0
   packages (2):
     tv 1.0.1234567891
@@ -511,7 +516,7 @@ of bm's and bp's, and each name takes the greater: 1.0.0+b over 1.0.0+a,
 1.0.0+9.  bf's 1.0.0+b needs a crate the index lacks, so bf falls back to
 1.0.0+a.  cargo 1.97 locks the same six:
 
-  $ ../../../bin/main.exe cargo index manifests/bmeta.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/bmeta.toml
   root bmeta 1.0.0
   packages (6):
     bf 1.0.0+a
@@ -523,12 +528,26 @@ of bm's and bp's, and each name takes the greater: 1.0.0+b over 1.0.0+a,
   encoded solution: 18 core nodes (23 lookups)
   loaded: 7 names, 10 versions
 
+Nor does a greater-than bound take a version of the same precedence, so
+bgt's >1.0.0 has nothing, as it has nothing in cargo, which fails with
+"failed to select a version for the requirement".  The explanation spells
+the bound as the greatest version of its precedence, 1.0.0+*, a build no
+version carries:
+
+  $ untimed ../../../bin/main.exe cargo index manifests/bgt.toml
+  root bgt 1.0.0
+  unsatisfiable:
+  Because root () -> bgt@1.0.0 1.0.0 and bgt@1.0.0 1.0.0 -> bgt@1.0.0->bm(>1.0.0+*) ∅, root * is forbidden..
+  And because root -> root (), version solving failed.
+  loaded: 2 names, 2 versions
+  [1]
+
 cargo skips an index line it cannot deserialize, so a line that is JSON
 but not an object is dropped and counted, and so is a version one of
 whose dependencies is not an object, or has no name: nb's 1.1.0 and 1.2.0
 are out, and cargo, like pac, locks 1.0.0.
 
-  $ ../../../bin/main.exe cargo index manifests/nbr.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/nbr.toml
   root nbr 1.0.0
   packages (2):
     nb 1.0.0
@@ -542,7 +561,7 @@ it, as cargo's CliFeatures does, and an empty --features names nothing
 rather than everything.  fd's default enables net, which asks the
 optional i for net.
 
-  $ ../../../bin/main.exe cargo index manifests/fd.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/fd.toml
   root fd 1.0.0
   packages (3):
     fd 1.0.0 [default,i,net,plain]
@@ -550,7 +569,7 @@ optional i for net.
     o 1.0.0 [extra]
   encoded solution: 17 core nodes (17 lookups)
   loaded: 3 names, 2 versions
-  $ ../../../bin/main.exe cargo index manifests/fd.toml -F "" | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/fd.toml -F ""
   root fd 1.0.0 with default features
   packages (3):
     fd 1.0.0 [default,i,net]
@@ -558,13 +577,13 @@ optional i for net.
     o 1.0.0 [extra]
   encoded solution: 16 core nodes (16 lookups)
   loaded: 3 names, 2 versions
-  $ ../../../bin/main.exe cargo index manifests/fd.toml --no-default-features | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/fd.toml --no-default-features
   root fd 1.0.0 with no features
   packages (1):
     fd 1.0.0
   encoded solution: 2 core nodes (2 lookups)
   loaded: 2 names, 1 versions
-  $ ../../../bin/main.exe cargo index manifests/fd.toml --no-default-features -F plain | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/fd.toml --no-default-features -F plain
   root fd 1.0.0 with features plain and no default feature
   packages (1):
     fd 1.0.0 [plain]
@@ -581,7 +600,7 @@ The order is cargo's unless --order=pubgrub leaves it to PubGrub, whose
 answer is a resolution too, though not always the one cargo locks: under
 PubGrub's own order oa keeps cp's newest, 0.1.7, and ga at its pin.
 
-  $ ../../../bin/main.exe cargo index manifests/oa.toml --order=pubgrub | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/oa.toml --order=pubgrub
   root oa 1.0.0
   packages (4):
     cp 0.1.7
@@ -595,7 +614,7 @@ PubGrub's own order oa keeps cp's newest, 0.1.7, and ga at its pin.
 a generator seeded by --seed: the same seed gives the same answer, and
 another seed may give another, a resolution all the same:
 
-  $ seed0() { ../../../bin/main.exe cargo index manifests/oa.toml --order=random --seed 0 | sed -E '/^(parse|solve) [0-9.]+s$/d'; }; [ "$(seed0)" = "$(seed0)" ] && seed0
+  $ seed0() { untimed ../../../bin/main.exe cargo index manifests/oa.toml --order=random --seed 0; }; [ "$(seed0)" = "$(seed0)" ] && seed0
   root oa 1.0.0
   packages (4):
     cp 0.1.6
@@ -604,7 +623,7 @@ another seed may give another, a resolution all the same:
     pa 1.0.0
   encoded solution: 13 core nodes (16 lookups)
   loaded: 4 names, 6 versions
-  $ ../../../bin/main.exe cargo index manifests/oa.toml --order=random --seed 4 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/oa.toml --order=random --seed 4
   root oa 1.0.0
   packages (4):
     cp 0.1.7
@@ -623,7 +642,7 @@ order, the two are one version, with both declarations' features:
   $ for s in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do ../../../bin/main.exe cargo index manifests/st.toml --order=random --seed $s | grep -c '^  wsy '; done | sort | uniq -c
        16 1
 
-  $ ../../../bin/main.exe cargo index manifests/st.toml --print-parents | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe cargo index manifests/st.toml --print-parents
   root st 1.0.0
   packages (3):
     st 1.0.0

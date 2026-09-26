@@ -1,6 +1,7 @@
-untimed drops the timings from pac's output and keeps its exit status:
+untimed (../untimed.sh) drops the timings from pac's output and keeps its
+exit status:
 
-  $ untimed() { "$@" > out 2>&1; s=$?; sed -E '/^(parse|solve) [0-9.]+s$/d' out; return $s; }
+  $ . ../untimed.sh
 
   $ untimed ../../../bin/main.exe alpine APKINDEX app docs
   packages (3):

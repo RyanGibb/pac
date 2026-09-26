@@ -1,2 +1,2 @@
 (cram
- (deps %{exe:../../bin/main.exe}))
+ (deps %{exe:../../bin/main.exe} untimed.sh))

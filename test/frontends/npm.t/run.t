@@ -1,3 +1,8 @@
+untimed (../untimed.sh) drops the timings from pac's output and keeps its
+exit status:
+
+  $ . ../untimed.sh
+
 A mandatory peer dependency is installed beside its declarer: app depends
 on plugin and widget but on neither core nor theme.  plugin's peer on core
 is not optional, so core arrives as app's own sibling of plugin; widget's
@@ -15,7 +20,7 @@ node.  app's mandatory peer on runtime is installed at 1.1.0, the newest
 ^1, while its optional peer on polyfill is not installed even though
 polyfill is in the cache.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./app/package.json
   root app 1.0.0
   packages (7):
     app 1.0.0
@@ -42,7 +47,7 @@ declares a peer on dual <=1.2.0, and 1.3.0 installs, as the dependency
 alone picks it.  shim is the same pair with the peer optional, and shim ^1
 lands on 1.1.0.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./dual-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./dual-app/package.json
   root dual-app 1.0.0
   packages (3):
     dual 1.3.0
@@ -62,7 +67,7 @@ and so admits 1.0.0-alpha.1, while 2.0.0-beta.1 is refused even though the
 alternative >=1.5.0 <3.0.0 orders it in range, because that set names no
 prerelease and the set that does is the other alternative.
 
-  $ ../../../bin/main.exe npm --offline --cache . ./beta-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . ./beta-app/package.json
   root beta-app 1.0.0
   packages (3):
     beta-app 1.0.0
@@ -80,7 +85,7 @@ the release 0.1.0.  pre-depr's latest prerelease is deprecated and
 pre-engine's wants node >=99, so both fall back to 0.1.0, the release *
 admits without the exception.
 
-  $ ../../../bin/main.exe npm --offline --cache . --node-version v24.19.0 --npm-version 11.17.0 ./star-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --node-version v24.19.0 --npm-version 11.17.0 ./star-app/package.json
   root star-app 1.0.0
   packages (5):
     pre-ahead 1.0.0-alpha.0
@@ -95,7 +100,7 @@ npm's semver reads versions loosely, and a prerelease may drop its hyphen:
 1.0.1rc1 is 1.0.1-rc1.  loose tags it latest, but ^1.0.0 names no
 prerelease, so 1.0.0 is installed.
 
-  $ ../../../bin/main.exe npm --offline --cache . ./loose-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . ./loose-app/package.json
   root loose-app 1.0.0
   packages (2):
     loose 1.0.0
@@ -117,7 +122,7 @@ native 1.0.0 depends on it, but nothing else does, so dropping the
 dependency
 takes it with it: transitivity needs no separate rule.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./opt-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./opt-app/package.json
   root opt-app 1.0.0
   packages (3):
     gadget 1.0.0
@@ -134,7 +139,7 @@ anything: gadget goes even though it resolves, and no availability check
 runs, so there is no optionalDependencies line and neither gadget nor
 native is loaded at all.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree --omit=optional ./opt-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree --omit=optional ./opt-app/package.json
   root opt-app 1.0.0
   packages (2):
     opt-app 1.0.0
@@ -152,7 +157,7 @@ tok 3.0.2 is placed before taker is reached, so taker's tok stays 3.0.2
 though latest is 4.0.0, and host's peer gadget goes with host.  npm
 11.17.0 flags holder, host and gadget dev in its lock, and nothing else.
 
-  $ ../../../bin/main.exe npm --offline --cache . ./omit-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . ./omit-app/package.json
   root omit-app 1.0.0
   packages (6):
     gadget 2.0.0
@@ -163,7 +168,7 @@ though latest is 4.0.0, and host's peer gadget goes with host.  npm
     tok 3.0.2
   encoded solution: 12 core nodes (14 lookups)
   loaded: 6 names, 8 versions, 0 packuments fetched
-  $ ../../../bin/main.exe npm --offline --cache . --tree --omit=dev ./omit-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree --omit=dev ./omit-app/package.json
   root omit-app 1.0.0
   packages (3):
     omit-app 1.0.0
@@ -191,7 +196,7 @@ fsevents, the best-known optional dependency, and npm puts it in the
 lockfile on linux too; dropping it here would make our answer smaller than npm's on every
 platform but macOS.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./opt-plat-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./opt-plat-app/package.json
   root opt-plat-app 1.0.0
   packages (4):
     native-core 1.0.0
@@ -211,7 +216,7 @@ nothing about the host enters ours.  npm refuses this tree off darwin
 (EBADPLATFORM), even with --package-lock-only, so this pins our reading,
 not npm's answer.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./plat-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./plat-app/package.json
   root plat-app 1.0.0
   packages (4):
     native-core 1.0.0
@@ -230,9 +235,7 @@ opt-peer-app depends on host, whose peer on gadget is ^2, and optionally
 on gadget ^1; gadget publishes both, so the dependency's manifest is
 fetchable and the dependency stands.  The two ranges fill the same directory and cannot
 agree, which is npm's ERESOLVE rather than a reason to abandon the entry.
-(untimed drops the timings but keeps the status.)
 
-  $ untimed() { "$@" > out 2>&1; s=$?; sed -E '/^(parse|solve) [0-9.]+s$/d' out; return $s; }
   $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./opt-peer-app/package.json
   root opt-peer-app 1.0.0
   unsatisfiable:
@@ -246,7 +249,7 @@ something else in the fixture, is what --omit=optional shows: with the
 dependency gone the peer
 installs gadget 2.0.0 by itself.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree --omit=optional ./opt-peer-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree --omit=optional ./opt-peer-app/package.json
   root opt-peer-app 1.0.0
   packages (3):
     gadget 2.0.0
@@ -265,7 +268,7 @@ directory only the peer asks for.  The root overrides gadget to 1.0.0,
 which ^2 refuses, and 1.0.0 is what installs -- the override replaces a
 peer dependency's range exactly as it replaces a dependency's.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./ovr-peer-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./ovr-peer-app/package.json
   root ovr-peer-app 1.0.0
   packages (3):
     gadget 1.0.0
@@ -283,7 +286,7 @@ reads an empty value as *.  ovr-star-app overrides tok to * and ovr-empty-app
 to "", and in both holder's ^3.0.0 still binds: tok 3.0.2, not the latest
 4.0.0.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./ovr-star-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./ovr-star-app/package.json
   root ovr-star-app 1.0.0
   packages (3):
     holder 1.0.0
@@ -295,7 +298,7 @@ to "", and in both holder's ^3.0.0 still binds: tok 3.0.2, not the latest
   encoded solution: 5 core nodes (5 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./ovr-empty-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./ovr-empty-app/package.json
   root ovr-empty-app 1.0.0
   packages (3):
     holder 1.0.0
@@ -314,7 +317,7 @@ whose tok is ^3.0.0, and on taker, whose tok is ^3.0.0 || ^4.0.0.  holder
 sorts first, so npm places its tok 3.0.2 before it reaches taker, whose slot
 then finds that copy: one tok, 3.0.2, although latest is 4.0.0.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./reuse-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./reuse-app/package.json
   root reuse-app 1.0.0
   packages (4):
     holder 1.0.0
@@ -369,7 +372,7 @@ depends on tok at * and on late, whose tok is ^3.0.0.  npm places early's
 tok 4.0.0 before it reaches late, which gets a 3.0.2 of its own: a copy
 that only a later package requires is not there to be reused.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./reach-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./reach-app/package.json
   root reach-app 1.0.0
   packages (5):
     early 1.0.0
@@ -391,7 +394,7 @@ sits at the top, so npm reaches them by name.  alpha brings mid, mid brings
 stream, and stream's tok ~3.0.0 is placed before npm reaches zeta, whose
 ^3.0.0 || ^4.0.0 then finds it: one tok, 3.0.2.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./hoist-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./hoist-app/package.json
   root hoist-app 1.0.0
   packages (6):
     alpha 1.0.0
@@ -415,7 +418,7 @@ nest-app depends on mark ^4 and on inner, whose mark ~3.0.0 is nested
 under it since 4.0.0 holds the top; outer's ^3.0.0 || ^4.0.0 looks up the
 top and keeps 4.0.0, although 3.0.2 is tagged latest.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./nest-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./nest-app/package.json
   root nest-app 1.0.0
   packages (5):
     inner 1.0.0
@@ -439,7 +442,7 @@ linter-plugin, whose own peer on linter is ^8.0.0 || ^9.0.0.  npm replaces
 linter 10.0.0 with 9.0.0 there, the pick for linter-plugin's range; the
 driver keeps 10.0.0, the pick for resolver's *:
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./resolver-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./resolver-app/package.json
   root resolver-app 1.0.0
   packages (3):
     linter 10.0.0
@@ -460,7 +463,7 @@ with 7.0.0, the pick for the syntax packages' range, since preset's range
 accepts it too: one compiler, 7.0.0, in both preset-app's directory and
 preset's.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./preset-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./preset-app/package.json
   root preset-app 1.0.0
   packages (5):
     compiler 7.0.0
@@ -513,7 +516,7 @@ under it, below sight-app's dial 2.0.0, and sight-right's sight-host peers
 on dial ^1.0.0; npm places sight-host and its peer under sight-right, where
 the lookup finds only 2.0.0, and fetches ^1.0.0's newest, 1.1.0:
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./sight-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./sight-app/package.json
   root sight-app 1.0.0
   packages (7):
     dial 1.0.0
@@ -540,7 +543,7 @@ on tok ^3.0.0 and peers on tok ^4.0.0 and on theme ^1; theme is installed
 beside it as its peer, while tok is its own 3.0.2 and nothing asks for a
 4.0.0.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./twin-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./twin-app/package.json
   root twin-app 1.0.0
   packages (4):
     theme 1.0.0
@@ -567,7 +570,7 @@ is deprecated, the key ties, and the newest is picked exactly as before.
 npm tests the field for truth, so an empty message deprecates nothing:
 depr-empty's latest 2.0.0, deprecated with "", is picked as any latest is.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./depr-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./depr-app/package.json
   root depr-app 1.0.0
   packages (5):
     depr 1.0.0
@@ -589,7 +592,7 @@ passes the engine test, the key ties, and only deprecated and semver
 decide: engine and engine-npm take their newest, and engine-depr takes
 the non-deprecated 2.0.0.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./engine-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./engine-app/package.json
   root engine-app 1.0.0
   packages (4):
     engine 2.0.0
@@ -611,7 +614,7 @@ the packument lists first.  bmo lists 1.0.0+b first; bmd's 1.0.0+a is
 deprecated; bml tags 1.0.0+b latest though it lists 1.0.0+a first; bmp
 lists 1.0.0+1 before 1.0.0.  npm 11.17 locks the same four:
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./bmeta-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./bmeta-app/package.json
   root bmeta-app 1.0.0
   packages (5):
     bmd 1.0.0+b
@@ -635,7 +638,7 @@ is current and unbuildable, and npm sorts on (not deprecated and engine
 ok) before engine ok before not deprecated -- the first key ties at false,
 so the engine key decides and the deprecated 1.0.0 wins.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree --node-version v24.19.0 --npm-version 11.17.0 ./engine-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree --node-version v24.19.0 --npm-version 11.17.0 ./engine-app/package.json
   root engine-app 1.0.0
   packages (4):
     engine 1.0.0
@@ -654,7 +657,7 @@ root asked for * and engine 2.0.0 is a version the host cannot run, yet
 naming it directly installs it, exactly as npm records an EBADENGINE
 package in a lockfile and complains at install time.
 
-  $ ../../../bin/main.exe npm --offline --cache . --node-version v24.19.0 engine@2.0.0 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --node-version v24.19.0 engine@2.0.0
   root .
   packages (2):
     .
@@ -670,7 +673,7 @@ take at 2.1.0.  A root with no name is called ".", which no registry
 package can be.  npm 11.17.0 answers the next four cases the same over
 these fixtures, and refuses plugin@next (ETARGET).
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./proj/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./proj/package.json
   root .
   packages (6):
     .
@@ -699,7 +702,7 @@ With no package.json the project is empty and the specs are all of it.  A
 bare name asks for *, a later spec for the same name replaces an earlier
 one, and a tag is the version the packument tags.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree plugin core@2.0.0 runtime runtime@1.0 util-lib@latest | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree plugin core@2.0.0 runtime runtime@1.0 util-lib@latest
   root .
   packages (5):
     .
@@ -718,7 +721,7 @@ one, and a tag is the version the packument tags.
 An alias spec names the directory and the package apart, so one package
 can be installed twice under two names.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree lodash@npm:util-lib@1.0.0 util-lib | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree lodash@npm:util-lib@1.0.0 util-lib
   root .
   packages (3):
     .
@@ -755,7 +758,7 @@ arborist loads a root's devDependencies after its dependencies, and the
 later entry of a name replaces the earlier, so devprod-app, which asks for
 devprod ^1 in dependencies and ^2 in devDependencies, gets 2.0.0:
 
-  $ ../../../bin/main.exe npm --offline --cache . ./devprod-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . ./devprod-app/package.json
   root devprod-app 1.0.0
   packages (2):
     devprod 2.0.0
@@ -767,7 +770,7 @@ No range semver reads holds a '!', so npa takes !=1.0.0 for a tag name and
 refuses it (EINVALIDTAGNAME); the dependency is dropped and counted, as
 other specs no registry lookup resolves are:
 
-  $ ../../../bin/main.exe npm --offline --cache . ./bang-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . ./bang-app/package.json
   root bang-app 1.0.0
   packages (1):
     bang-app 1.0.0
@@ -779,7 +782,7 @@ A dist-tag is resolved from the target's packument, to the tagged version
 exactly: devprod's old is 1.0.0.  A tag the packument lacks matches
 nothing, so alpha, whose optional entry asks for nosuch, is abandoned:
 
-  $ ../../../bin/main.exe npm --offline --cache . ./tag-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . ./tag-app/package.json
   root tag-app 1.0.0
   packages (2):
     devprod 1.0.0
@@ -796,7 +799,7 @@ util-lib 1.0.0.  A peer or an override that is an alias puts another
 package under the name, which a peer's range and an override's cannot
 say, so both are dropped and counted:
 
-  $ ../../../bin/main.exe npm --offline --cache . ./spec-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . ./spec-app/package.json
   root spec-app 1.0.0
   packages (4):
     devprod 1.0.0
@@ -811,7 +814,7 @@ The same on the command line, where the alias prefix is cased as npa
 allows and a spec that is neither a range nor a name a tag may have is
 refused:
 
-  $ ../../../bin/main.exe npm --offline --cache . kit@NPM:util-lib@1.0.0 digtag@beta2 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . kit@NPM:util-lib@1.0.0 digtag@beta2
   root .
   packages (3):
     .
@@ -837,7 +840,7 @@ util-lib 1.2.0 stands.  ovr-target-app overrides util-lib to 1.0.0: npm
 leaves the aliased dependency alone and installs util-lib 1.2.0, while
 here the override binds and 1.0.0 is installed.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./ovr-key-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./ovr-key-app/package.json
   root ovr-key-app 1.0.0
   packages (3):
     carrier 1.0.0
@@ -849,7 +852,7 @@ here the override binds and 1.0.0 is installed.
   encoded solution: 5 core nodes (6 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./ovr-target-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./ovr-target-app/package.json
   root ovr-target-app 1.0.0
   packages (3):
     carrier 1.0.0
@@ -869,7 +872,7 @@ alias-sat-app installs mark 3.0.2 at tok, as an alias, and depends on
 needer, whose tok is ^3.0.0.  npm finds 3.0.2 at tok and installs no tok
 at all; here needer gets a tok 3.0.2 of its own.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./alias-sat-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./alias-sat-app/package.json
   root alias-sat-app 1.0.0
   packages (4):
     alias-sat-app 1.0.0
@@ -913,7 +916,7 @@ and listy's edge now resolves there: npm has listy on buf 5.1.2.  Here
 listy keeps 5.2.1 and only rstream takes 5.1.2.  Both answers meet every
 range, so the difference is one of preference, not validity.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./live-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./live-app/package.json
   root live-app 1.0.0
   packages (6):
     buf 5.1.2
@@ -939,7 +942,7 @@ bundles tok, and its tarball carries tok 3.0.1, a version the registry
 never published; npm takes that copy, nested in bundler, while here tok
 3.0.2 is resolved.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./bundle-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./bundle-app/package.json
   root bundle-app 1.0.0
   packages (3):
     bundle-app 1.0.0
@@ -970,7 +973,7 @@ reaches a package is an output of resolution, not an input.  ovr-path-app
 overrides tok to 4.0.0 under holder only; npm installs holder's tok at
 4.0.0, while here holder's ^3.0.0 picks 3.0.2.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./ovr-path-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./ovr-path-app/package.json
   root ovr-path-app 1.0.0
   packages (3):
     holder 1.0.0
@@ -989,7 +992,7 @@ peers on tok ^4.0.0.  perch holds no tok, so here the peer forces nothing
 and the only tok is the top's 3.0.2.  npm checks whatever copy lurker's
 lookup finds, refuses 3.0.2, and nests lurker and a tok 4.0.0 under perch.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./perch-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./perch-app/package.json
   root perch-app 1.0.0
   packages (4):
     lurker 1.0.0
