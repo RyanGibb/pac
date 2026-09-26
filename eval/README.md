@@ -93,7 +93,7 @@ The check writes its files under the out directory and ends in two verdicts:
 | Alpine | `apk fix` with the whole answer and the query as the world, and apk's rule for a bare provides without `k:` (its owner must be named by the query or by a package of the answer) | `apk fix` with the query alone as the world |
 | opam | `opam install <query>` and `upgrade --fixup` on the answer as the switch state | the same fixup told to remove what it can |
 | cargo | `cargo update --locked` keeps our `Cargo.lock`, or its unlocked repair only drops packages the root does not reach, whose requirements the answer meets | `cargo update --locked` keeps it |
-| npm | `npm ci` accepts our lock, a relock changes nothing but pruning what nothing reaches, and every edge lands on the package its manifest names | the relock changes nothing |
+| npm | `npm ci` accepts our lock, a relock changes nothing but pruning what nothing reaches, and every edge lands on the package its manifest names; an answer no finite `node_modules` tree holds is `INVALID` | the relock changes nothing |
 
 `controls.sh` runs the check on small hand-written answers, each of which must get the verdicts it names; npm takes `PORT` for its shim, and cargo for its proxy:
 

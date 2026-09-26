@@ -40,8 +40,9 @@ usage: edges.py <package> <lockfile> <our --tree output> <out-prefix>
                 [--peer-parent]
 """
 import json
-import re
 import sys
+
+from tree import parse_tree, resolve
 
 def node_name(path, entry):
     # an aliased node carries the registry name in "name"; a plain one is
@@ -54,17 +55,6 @@ def node_name(path, entry):
 def lock_sets(lock, peer_parent):
     pkgs = lock["packages"]
 
-    def resolve(path, dep):
-        cur = path
-        while True:
-            cand = (cur + "/node_modules/" + dep) if cur else "node_modules/" + dep
-            if cand in pkgs:
-                return cand
-            if not cur:
-                return None
-            i = cur.rfind("/node_modules/")
-            cur = cur[:i] if i != -1 else ""
-
     # (requirer path, directory, provider path), kept as paths so the peer
     # re-attribution can ask who required the declarer before identities
     # collapse distinct placements of one version
@@ -73,14 +63,14 @@ def lock_sets(lock, peer_parent):
         meta = e.get("peerDependenciesMeta", {})
         deps = set(e.get("dependencies", {})) | set(e.get("optionalDependencies", {}))
         for d in sorted(deps):
-            q = resolve(path, d)
+            q = resolve(pkgs, path, d)
             (plain.append((path, d, q)) if q else unresolved.add((path, d)))
         # npm >=7 installs a peer unless the declarer marks it optional, and
         # a dependency of the same name replaces the peer's edge
         for d in sorted(e.get("peerDependencies", {})):
             if meta.get(d, {}).get("optional", False) or d in deps:
                 continue
-            q = resolve(path, d)
+            q = resolve(pkgs, path, d)
             (peer.append((path, d, q)) if q else unresolved.add((path, d)))
 
     live = set(pkgs)
@@ -136,44 +126,11 @@ def lock_sets(lock, peer_parent):
 ROOT = ("", "")
 
 
-# "name 1.2.3" or "name 1.2.3 at dir", and the root may have no version
-SIDE = re.compile(r"^(\S+)(?: (\S+?))?(?: at (\S+))?$")
-
-
-def parse_side(s):
-    m = SIDE.match(s)
-    if not m:
-        raise ValueError(s)
-    name, ver, at = m.group(1), m.group(2) or "", m.group(3)
-    return name, ver, (at if at else name)
-
-
 def our_sets(text):
-    m = re.search(r"^root (.*)$", text, re.M)
-    root = parse_side(m.group(1))[:2] if m else None
-    ident = lambda n, v: ROOT if (n, v) == root else (n, v)
-    nodes, edges = set(), set()
-    section = None
-    for line in text.splitlines():
-        if line.startswith("packages ("):
-            section = "p"
-            continue
-        if line.startswith("node_modules ("):
-            section = "e"
-            continue
-        if not line.startswith("  "):
-            section = None
-            continue
-        body = line[2:]
-        if section == "p":
-            n, v, _ = parse_side(body)
-            nodes.add(ident(n, v))
-        elif section == "e":
-            p, c = body.split(" <- ", 1)
-            pn, pv, _ = parse_side(p)
-            cn, cv, cd = parse_side(c)
-            edges.add(ident(pn, pv) + (cd,) + ident(cn, cv))
-    return nodes, edges
+    root, nodes, edges = parse_tree(text)
+    ident = lambda n: ROOT if root and n[:2] == root[:2] else n[:2]
+    return ({ident(n) for n in nodes},
+            {ident(p) + (key,) + ident(c) for p, key, c in edges})
 
 
 def dump(path, s):

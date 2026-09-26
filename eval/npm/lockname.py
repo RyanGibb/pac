@@ -17,6 +17,8 @@ Exits 3 on a mismatch, so that a crash, which exits 1, is not read as one.
 import json
 import sys
 
+from tree import ancestors, resolve
+
 FIELDS = ("dependencies", "optionalDependencies", "peerDependencies",
           "devDependencies")
 
@@ -33,26 +35,6 @@ def target(key, spec):
     if ":" in spec or "/" in spec:
         return None
     return key
-
-
-def ancestors(path):
-    """"" then each package directory on the way down to path"""
-    out = [""]
-    segs = path.split("/") if path else []
-    i = 0
-    while i < len(segs):
-        take = 3 if i + 1 < len(segs) and segs[i + 1].startswith("@") else 2
-        out.append("/".join(segs[:i + take]))
-        i += take
-    return out
-
-
-def resolve(pk, path, key):
-    for anc in reversed(ancestors(path)):
-        slot = (anc + "/node_modules/" if anc else "node_modules/") + key
-        if slot in pk:
-            return slot
-    return None
 
 
 def main():

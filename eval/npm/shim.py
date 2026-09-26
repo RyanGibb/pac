@@ -34,15 +34,13 @@ import sys
 import threading
 import urllib.parse
 
+from tree import escape
+
 SNAP = None
 TARBALLS = None
 FILL = False
 LOG = None
 TARBALL = re.compile(r"^(@[^/]+/)?[^/]+/-/[^/]+\.tgz$")
-
-
-def escape(name):
-    return name.replace("/", "%2F")
 
 
 def fetch(url, path):

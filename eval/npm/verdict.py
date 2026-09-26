@@ -50,6 +50,8 @@ import shutil
 import subprocess
 import sys
 
+from tree import escape
+
 
 def resolve_semver():
     """npm's *bundled* semver, not any semver on the module path: the range
@@ -103,10 +105,6 @@ def resolve_host():
 
 SEMVER = resolve_semver()
 HOST = resolve_host()
-
-
-def escape(name):
-    return name.replace("/", "%2F")
 
 
 class Snapshot:

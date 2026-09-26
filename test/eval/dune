@@ -5,6 +5,7 @@
   ../../eval/npm/verdict.py
   ../../eval/npm/npm-version
   ../../eval/npm/totals.awk
+  ../../eval/npm/tree.py
   ../../eval/serve.sh
   ../../eval/scale-lib.sh
   ../../eval/answer.sh

@@ -66,9 +66,15 @@ else
 fi
 if jq -e .packages "$ans" > /dev/null 2>&1; then
   cp "$ans" "$W/package-lock.json"
-elif ! python3 "$S/mklock.py" "$RUN/cache" "$ans" "$W/package-lock.json" \
-       --root-manifest "$W/package.json" > "$out/mklock" 2>&1; then
-  verdict ERR - "mklock failed"
+else
+  python3 "$S/mklock.py" "$RUN/cache" "$ans" "$W/package-lock.json" \
+    --root-manifest "$W/package.json" > "$out/mklock" 2>&1
+  case $? in
+    0) ;;
+    # no node_modules tree npm could be handed holds the answer
+    4) verdict INVALID - "$(tail -n 1 "$out/mklock")" ;;
+    *) verdict ERR - "mklock failed" ;;
+  esac
 fi
 
 npmc "$W" ci --dry-run > "$out/ci.log" 2>&1

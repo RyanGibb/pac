@@ -28,14 +28,11 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from edges import ROOT, lock_sets  # noqa: E402
+from tree import escape  # noqa: E402
 
 # every manifest field an edge can come from; devDependencies only at the
 # root, where npm installs them
 FIELDS = ["dependencies", "optionalDependencies", "peerDependencies"]
-
-
-def escape(name):
-    return name.replace("/", "%2F")
 
 
 def spec(dirname, name, versions):
