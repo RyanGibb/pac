@@ -1,5 +1,5 @@
 module E = Pac
-module DF = Debian_frontend.Deb_packages
+module DF = Deb_packages
 
 module DebVersionOT = Pac_common.Ot.Make (struct
   type t = string
@@ -69,7 +69,7 @@ module Make (AP : ARCH) = struct
   (* ~recommends false is the --no-install-recommends reading: the Rec
      instance is empty, so every soft disjunct is empty and unreachable. *)
   let normalize ~recommends (st : DF.stanza) : nstanza =
-    let _, arch = Debian_frontend.Apt_args.stanza_key ~native:AP.native st in
+    let _, arch = Apt_args.stanza_key ~native:AP.native st in
     let ncls =
       match st.multi_arch with
       | Some "same" when st.architecture = "all" -> DMA.MANo

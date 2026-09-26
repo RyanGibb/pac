@@ -7,11 +7,6 @@
 (library
  (name opam_solve)
  (modules lookups order opam_solve)
- ; dune's warnings, reporting rather than failing: a warning here is a
- ; note to the author, and only the extraction this links against needs
- ; them off wholesale.
- (flags
-  (:standard -warn-error -a))
  (libraries
   opam_frontend
   opam-file-format

@@ -15,9 +15,6 @@ type pkg = {
   priority : int option;
 }
 
-let rejected = ref 0
-let reject () = incr rejected
-
 (* apk_dep_parse: [!]name[op ver], where the operator run is any of
    < > = ~ and the name is everything before it.  None is an atom
    apk_blob_pull_dep fails on; the flag is false where it marks the atom
@@ -67,7 +64,7 @@ let parse_deps (v : string) : dep list option =
   else None
 
 (* apk keeps the provides before an atom it fails on and drops the rest *)
-let parse_provs (v : string) : prov list =
+let parse_provs ~reject (v : string) : prov list =
   let rec go = function
     | [] -> []
     | tok :: rest -> (
@@ -109,7 +106,7 @@ let fresh () =
     a_broken = false;
   }
 
-let flush a out =
+let flush ~reject a out =
   (match a.a_name with
   | Some n when not a.a_broken ->
       out :=
@@ -134,13 +131,13 @@ let flush a out =
 
 (* apk_db_fdb_read (apk-tools src/database.c): stanzas end at a line
    shorter than two bytes, with no continuations and no quoting *)
-let parse_file (path : string) : pkg list =
+let parse_file ~reject (path : string) : pkg list =
   let ic = open_in_bin path in
   let out = ref [] and a = fresh () in
   (try
      while true do
        let line = input_line ic in
-       if String.length line < 2 then flush a out
+       if String.length line < 2 then flush ~reject a out
        else if line.[1] <> ':' then
          (* a line that is not "X:..." cannot be part of a stanza *)
          a.a_broken <- true
@@ -153,7 +150,7 @@ let parse_file (path : string) : pkg list =
              match parse_deps v with
              | Some ds -> a.a_deps <- List.rev_append ds a.a_deps
              | None -> a.a_broken <- true)
-         | 'p' -> a.a_provs <- List.rev_append (parse_provs v) a.a_provs
+         | 'p' -> a.a_provs <- List.rev_append (parse_provs ~reject v) a.a_provs
          | 'i' -> (
              match parse_deps v with
              | Some ds -> a.a_iif <- List.rev_append ds a.a_iif
@@ -173,7 +170,7 @@ let parse_file (path : string) : pkg list =
          | _ -> a.a_broken <- true
      done
    with End_of_file -> ());
-  flush a out;
+  flush ~reject a out;
   close_in ic;
   List.rev !out
 

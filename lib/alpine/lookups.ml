@@ -103,13 +103,15 @@ type archive = {
   mutable n_pkgs : int;
   mutable n_provs : int;
   mutable n_iif : int;
+  n_dropped : int;
 }
 
 (* Architecture is fixed by the index that was loaded.  A repository's
    APKINDEX is per-arch, so no A: filtering is applied and no cross-arch
    reasoning is possible here. *)
 let load_index (path : string) : archive =
-  let pkgs = P.parse_file path in
+  let dropped = ref 0 in
+  let pkgs = P.parse_file ~reject:(fun () -> incr dropped) path in
   let ar =
     {
       by_name = Hashtbl.create 16384;
@@ -121,6 +123,7 @@ let load_index (path : string) : archive =
       n_pkgs = 0;
       n_provs = 0;
       n_iif = 0;
+      n_dropped = !dropped;
     }
   in
   let iifs = ref [] in

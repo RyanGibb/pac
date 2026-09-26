@@ -77,24 +77,24 @@ let debian_run debug order no_recs no_strict native query path =
   Pac_common.Input.file path;
   let t0 = Unix.gettimeofday () in
   match
-    Deb_solve.solve_files ~debug ~order ~recommends:(not no_recs)
+    Debian_solve.solve_files ~debug ~order ~recommends:(not no_recs)
       ~strict_pinning:(not no_strict) ~native ~paths:[ path ] ~query
   with
   | Error e -> error 2 "%s" e
   | Ok r ->
       report ~t0
         {
-          Report.names = r.Deb_solve.names;
-          versions = r.Deb_solve.versions;
+          Report.names = r.Debian_solve.names;
+          versions = r.Debian_solve.versions;
           extra = [];
-          dropped = !Debian_frontend.Deb_packages.rejected;
-          parse = r.Deb_solve.t_parse;
-        } r.Deb_solve.answer (fun a ->
+          dropped = r.Debian_solve.dropped;
+          parse = r.Debian_solve.t_parse;
+        } r.Debian_solve.answer (fun a ->
           Report.packages
             (List.map
                (fun (n, b, v) -> Printf.sprintf "%s:%s %s" n b v)
-               a.Deb_solve.pkgs);
-          Report.encoded ~nodes:a.Deb_solve.nodes ~lookups:a.Deb_solve.lookups)
+               a.Debian_solve.pkgs);
+          Report.encoded ~nodes:a.Debian_solve.nodes ~lookups:a.Debian_solve.lookups)
 
 let debian_cmd =
   (* Recommends are installed by default, as under apt's
@@ -171,7 +171,7 @@ let opam_run debug order with_test with_doc with_dev_setup opam_version repo
           Report.names = ar.Opam_solve.n_names;
           versions = ar.Opam_solve.n_vers;
           extra = [];
-          dropped = !Opam_parse.rejected;
+          dropped = ar.Opam_solve.n_dropped;
           parse = ar.Opam_solve.t_parse;
         } r (fun a ->
           Report.packages
@@ -282,7 +282,7 @@ let cargo_run debug order print_parents index manifest features no_default
             Report.names = r.Cargo_solve.n_names;
             versions = r.Cargo_solve.n_vers;
             extra = [];
-            dropped = !Cargo_parse.rejected;
+            dropped = r.Cargo_solve.dropped;
             parse = r.Cargo_solve.t_parse;
           } answer (fun a ->
             Report.packages
@@ -375,26 +375,26 @@ let alpine_run debug order path goals =
   | Error e -> error 2 "%s" e
   | Ok world ->
       let t0 = Unix.gettimeofday () in
-      let ar = Apk_solve.load_index path in
+      let ar = Alpine_solve.load_index path in
       let parse = Unix.gettimeofday () -. t0 in
-      let r = Apk_solve.solve ~debug ~order ar world in
+      let r = Alpine_solve.solve ~debug ~order ar world in
       report ~t0
         {
-          Report.names = Hashtbl.length ar.Apk_solve.by_name;
-          versions = ar.Apk_solve.n_pkgs;
+          Report.names = Hashtbl.length ar.Alpine_solve.by_name;
+          versions = ar.Alpine_solve.n_pkgs;
           extra =
             [
-              Printf.sprintf "%d provides entries" ar.Apk_solve.n_provs;
-              Printf.sprintf "%d install_if rules" ar.Apk_solve.n_iif;
+              Printf.sprintf "%d provides entries" ar.Alpine_solve.n_provs;
+              Printf.sprintf "%d install_if rules" ar.Alpine_solve.n_iif;
             ];
-          dropped = !Apk_parse.rejected;
+          dropped = ar.Alpine_solve.n_dropped;
           parse;
         }
         r
         (fun a ->
           Report.packages
-            (List.map (fun (n, v) -> n ^ " " ^ v) a.Apk_solve.pkgs);
-          Report.encoded ~nodes:a.Apk_solve.nodes ~lookups:a.Apk_solve.lookups)
+            (List.map (fun (n, v) -> n ^ " " ^ v) a.Alpine_solve.pkgs);
+          Report.encoded ~nodes:a.Alpine_solve.nodes ~lookups:a.Alpine_solve.lookups)
 
 let alpine_cmd =
   let path =
@@ -451,7 +451,7 @@ let npm_run debug order cache offline tree omit nodev npmv query =
             extra =
               Printf.sprintf "%d packuments fetched" ar.Npm.Archive.n_fetched
               :: optional;
-            dropped = !Npm_parse.rejected;
+            dropped = ar.Npm.Archive.n_dropped;
             parse = ar.Npm.Archive.t_parse;
           }
           r
@@ -462,10 +462,22 @@ let npm_run debug order cache offline tree omit nodev npmv query =
   with Npm.Archive.Fetch_failed e -> error 3 "%s" e
 
 let npm_cmd =
+  (* a user's cache, as npm keeps its own, so that where pac runs from
+     does not decide which packuments it reads *)
   let cache =
+    let default =
+      match Sys.getenv_opt "XDG_CACHE_HOME" with
+      | Some d when d <> "" -> Filename.concat d "pac/npm"
+      | _ ->
+          Filename.concat
+            (Option.value (Sys.getenv_opt "HOME") ~default:".")
+            ".cache/pac/npm"
+    in
     Arg.(
-      value & opt string "repos/npm"
-      & info [ "cache" ] ~docv:"DIR" ~doc:"Packument cache directory.")
+      value & opt string default
+      & info [ "cache" ] ~docv:"DIR"
+          ~absent:"$(b,\\$XDG_CACHE_HOME)/pac/npm, else ~/.cache/pac/npm"
+          ~doc:"Packument cache directory.")
   in
   let offline =
     Arg.(

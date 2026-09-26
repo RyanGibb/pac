@@ -37,6 +37,7 @@ type t = {
   mutable n_names : int;
   mutable n_vers : int;
   mutable n_fetched : int;
+  mutable n_dropped : int;
   (* wall time fetching and parsing packuments, which the solve
      interleaves with *)
   mutable t_parse : float;
@@ -57,6 +58,7 @@ let create ?node ?npm ~cache ~offline () =
     n_names = 0;
     n_vers = 0;
     n_fetched = 0;
+    n_dropped = 0;
     t_parse = 0.;
   }
 
@@ -117,7 +119,7 @@ let download ar n f =
   | `Fetched -> (
       (* a body that is no packument would be read back from the cache on
          every later run *)
-      match P.load tmp with
+      match P.load ~reject:ignore tmp with
       | Ok _ ->
           Sys.rename tmp f;
           Some f
@@ -130,6 +132,8 @@ let download ar n f =
   | `Failed e ->
       remove tmp;
       raise (Fetch_failed (Printf.sprintf "fetching %s: %s" url e))
+
+let reject ar () = ar.n_dropped <- ar.n_dropped + 1
 
 let fetch ar (n : string) : string option =
   let f = cache_file ar n in
@@ -152,7 +156,7 @@ let add_name ar n vs =
   List.iter (tabulate ar) vs
 
 let read_packument ar n f =
-  match P.load f with
+  match P.load ~reject:(reject ar) f with
   | Error e -> raise (Fetch_failed (Printf.sprintf "reading %s: %s" f e))
   | Ok pk ->
       Option.iter (Hashtbl.replace ar.latest n) pk.P.pk_latest;

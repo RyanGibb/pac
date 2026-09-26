@@ -8,11 +8,6 @@
  (name npm_solve)
  (modules encoding archive query lookup pick order solve print)
  (private_modules encoding lookup pick order)
- ; dune's warnings, reporting rather than failing: a warning here is a
- ; note to the author, and only the extraction this links against needs
- ; them off wholesale.
- (flags
-  (:standard -warn-error -a))
  (libraries npm_frontend pac pac_common pubgrub unix yojson))
 
 (test

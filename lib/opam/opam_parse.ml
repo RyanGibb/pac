@@ -45,9 +45,6 @@ let rec off_names acc : off -> string list = function
   | OAtom (m, _, _) -> m :: acc
   | OAnd (a, b) | OOr (a, b) -> off_names (off_names acc a) b
 
-let rejected = ref 0
-let reject () = incr rejected
-
 (* opam's package-local variables; everything else is global. *)
 let local_vars =
   [
@@ -174,8 +171,9 @@ type brace =
   | BOr of brace * brace
   | BNot of brace
 
-let rec brace_of ?(locals = local_vars) ~owner ~selfv (v : value) : brace =
-  let brace_of = brace_of ~locals ~owner ~selfv in
+let rec brace_of ?(locals = local_vars) ~reject ~owner ~selfv (v : value) :
+    brace =
+  let brace_of = brace_of ~locals ~reject ~owner ~selfv in
   let qualify = qualify ~locals in
   (* the package's own version, which every filter environment of opam's
      defines, and which is known here while the file is read *)
@@ -279,13 +277,13 @@ let disj_c c cs = List.fold_left (fun a b -> VOr (a, b)) c cs
    are one atom at the union of their versions.  Distributing those too
    would make {(>= "4.12" & < "5.0") | >= "5.3"} alternatives, the range
    written first preferred over the newest version. *)
-let atom_of ~owner ~selfv (n : string) (braces : value list) : off =
+let atom_of ~reject ~owner ~selfv (n : string) (braces : value list) : off =
   match braces with
   | [] -> OAtom (n, FT, VTop)
   | _ -> (
       let b =
         List.fold_left
-          (fun acc v -> BAnd (acc, brace_of ~owner ~selfv v))
+          (fun acc v -> BAnd (acc, brace_of ~reject ~owner ~selfv v))
           (BF FT) braces
       in
       let by_filter =
@@ -309,20 +307,20 @@ let atom_of ~owner ~selfv (n : string) (braces : value list) : off =
       | [] -> OAtom (n, FF, VTop)
       | a :: rest -> List.fold_left (fun x y -> OOr (x, y)) a rest)
 
-let rec formula_of ~owner ~selfv (v : value) : off option =
+let rec formula_of ~reject ~owner ~selfv (v : value) : off option =
   match v.pelem with
   | String n -> Some (OAtom (n, FT, VTop))
   | Option ({ pelem = String n; _ }, braces) ->
-      Some (atom_of ~owner ~selfv n braces.pelem)
+      Some (atom_of ~reject ~owner ~selfv n braces.pelem)
   | Logop ({ pelem = `And; _ }, a, b) ->
-      merge ~owner ~selfv (fun x y -> OAnd (x, y)) a b
+      merge ~reject ~owner ~selfv (fun x y -> OAnd (x, y)) a b
   | Logop ({ pelem = `Or; _ }, a, b) ->
-      merge ~owner ~selfv (fun x y -> OOr (x, y)) a b
-  | Group { pelem = [ a ]; _ } -> formula_of ~owner ~selfv a
+      merge ~reject ~owner ~selfv (fun x y -> OOr (x, y)) a b
+  | Group { pelem = [ a ]; _ } -> formula_of ~reject ~owner ~selfv a
   | Group { pelem = l; _ } | List { pelem = l; _ } ->
       List.fold_left
         (fun acc v ->
-          match (acc, formula_of ~owner ~selfv v) with
+          match (acc, formula_of ~reject ~owner ~selfv v) with
           | None, x -> x
           | x, None -> x
           | Some x, Some y -> Some (OAnd (x, y)))
@@ -331,39 +329,44 @@ let rec formula_of ~owner ~selfv (v : value) : off option =
       reject ();
       None
 
-and merge ~owner ~selfv mk a b =
-  match (formula_of ~owner ~selfv a, formula_of ~owner ~selfv b) with
+and merge ~reject ~owner ~selfv mk a b =
+  match
+    (formula_of ~reject ~owner ~selfv a, formula_of ~reject ~owner ~selfv b)
+  with
   | Some x, Some y -> Some (mk x y)
   | Some x, None | None, Some x -> Some x
   | None, None -> None
 
-let rec conflict_atoms ~owner ~selfv (v : value) : (string * (filt * vc)) list =
+let rec conflict_atoms ~reject ~owner ~selfv (v : value) :
+    (string * (filt * vc)) list =
   match v.pelem with
   | String n -> [ (n, (FT, VTop)) ]
   | Option ({ pelem = String n; _ }, braces) ->
       let b =
         List.fold_left
           (fun acc v ->
-            BAnd (acc, brace_of ~locals:switch_local_vars ~owner ~selfv v))
+            BAnd
+              (acc, brace_of ~locals:switch_local_vars ~reject ~owner ~selfv v))
           (BF FT) braces.pelem
       in
       List.map (fun (fs, cs) -> (n, (conj_f fs, conj_c cs))) (dnf false b)
   | Logop (_, a, b) ->
-      conflict_atoms ~owner ~selfv a @ conflict_atoms ~owner ~selfv b
+      conflict_atoms ~reject ~owner ~selfv a
+      @ conflict_atoms ~reject ~owner ~selfv b
   | Group { pelem = l; _ } | List { pelem = l; _ } ->
-      List.concat_map (conflict_atoms ~owner ~selfv) l
+      List.concat_map (conflict_atoms ~reject ~owner ~selfv) l
   | _ ->
       reject ();
       []
 
-let depext_entries ~owner ~selfv (v : value) : (string * filt) list =
+let depext_entries ~reject ~owner ~selfv (v : value) : (string * filt) list =
   let entry (v : value) =
     match v.pelem with
     | Option ({ pelem = Group { pelem = pkgs; _ }; _ }, braces)
     | Option ({ pelem = List { pelem = pkgs; _ }; _ }, braces) ->
         let g =
           List.fold_left
-            (fun acc v -> BAnd (acc, brace_of ~owner ~selfv v))
+            (fun acc v -> BAnd (acc, brace_of ~reject ~owner ~selfv v))
             (BF FT) braces.pelem
         in
         let gf =
@@ -399,7 +402,7 @@ let depext_entries ~owner ~selfv (v : value) : (string * filt) list =
   | List { pelem = l; _ } -> List.concat_map entry l
   | _ -> entry v
 
-let class_names (v : value) : string list =
+let class_names ~reject (v : value) : string list =
   match v.pelem with
   | String c -> [ c ]
   | List { pelem = l; _ } ->
@@ -417,7 +420,7 @@ let class_names (v : value) : string list =
 
 (* opam takes only the ident form, and ignores whole a field it cannot
    read (OpamFormat.I.show_errors) *)
-let flag_names (v : value) : string list =
+let flag_names ~reject (v : value) : string list =
   let l = match v.pelem with List { pelem = l; _ } -> l | _ -> [ v ] in
   let idents =
     List.filter_map
@@ -458,7 +461,7 @@ let single_filter (v : value) : bool =
   | List _ -> false
   | _ -> ok v
 
-let pindep_entries (v : value) : ((string * string) * string) list =
+let pindep_entries ~reject (v : value) : ((string * string) * string) list =
   let entry (v : value) =
     match v.pelem with
     | List { pelem = [ { pelem = String nv; _ }; { pelem = String u; _ } ]; _ }
@@ -484,7 +487,7 @@ let pindep_entries (v : value) : ((string * string) * string) list =
 (* An unhandled construct is counted and its enclosing atom dropped, which
    can admit a selection opam rejects; an unhandled available: makes the
    package unavailable instead. *)
-let parse_file ~name ~version path : pkg_meta =
+let parse_file ~reject ~name ~version path : pkg_meta =
   let file = OpamParser.FullPos.file path in
   let owner = name in
   let selfv = version in
@@ -494,11 +497,12 @@ let parse_file ~name ~version path : pkg_meta =
     (fun (it : opamfile_item) ->
       match it.pelem with
       | Variable ({ pelem = "depends"; _ }, v) ->
-          meta := { !meta with depends = formula_of ~owner ~selfv v }
+          meta := { !meta with depends = formula_of ~reject ~owner ~selfv v }
       | Variable ({ pelem = "conflicts"; _ }, v) ->
-          meta := { !meta with conflicts = conflict_atoms ~owner ~selfv v }
+          meta :=
+            { !meta with conflicts = conflict_atoms ~reject ~owner ~selfv v }
       | Variable ({ pelem = "conflict-class"; _ }, v) ->
-          meta := { !meta with classes = class_names v }
+          meta := { !meta with classes = class_names ~reject v }
       | Variable ({ pelem = "available"; _ }, v) when not (single_filter v) ->
           reject ()
       | Variable ({ pelem = "available"; _ }, v) ->
@@ -506,7 +510,7 @@ let parse_file ~name ~version path : pkg_meta =
             {
               !meta with
               available =
-                (match dnf false (brace_of ~owner ~selfv v) with
+                (match dnf false (brace_of ~reject ~owner ~selfv v) with
                 | [ (fs, []) ] -> conj_f fs
                 | branches -> (
                     match List.filter (fun (_, cs) -> cs = []) branches with
@@ -519,10 +523,12 @@ let parse_file ~name ~version path : pkg_meta =
                           FF l));
             }
       | Variable ({ pelem = "depexts"; _ }, v) ->
-          meta := { !meta with depexts = depext_entries ~owner ~selfv v }
+          meta :=
+            { !meta with depexts = depext_entries ~reject ~owner ~selfv v }
       | Variable ({ pelem = "pin-depends"; _ }, v) ->
-          meta := { !meta with pindeps = pindep_entries v }
-      | Variable ({ pelem = "flags"; _ }, v) -> flags := flag_names v @ !flags
+          meta := { !meta with pindeps = pindep_entries ~reject v }
+      | Variable ({ pelem = "flags"; _ }, v) ->
+          flags := flag_names ~reject v @ !flags
       | Variable ({ pelem = "tags"; _ }, v) -> flags := tag_flags v @ !flags
       | _ -> ())
     file.file_contents;

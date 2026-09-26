@@ -1,19 +1,14 @@
 (library
- (name apk_frontend)
+ (name alpine_frontend)
  (wrapped false)
  (modules apk_version apk_parse))
 
 (library
- (name apk_solve)
- (modules lookups order apk_solve)
- ; dune's warnings, reporting rather than failing: a warning here is a
- ; note to the author, and only the extraction this links against needs
- ; them off wholesale.
- (flags
-  (:standard -warn-error -a))
- (libraries apk_frontend pac pac_common package_formula pubgrub))
+ (name alpine_solve)
+ (modules lookups order alpine_solve)
+ (libraries alpine_frontend pac pac_common package_formula pubgrub))
 
 (test
  (name test_apk_version)
  (modules test_apk_version)
- (libraries apk_frontend))
+ (libraries alpine_frontend))

@@ -26,7 +26,7 @@ pac debian --native amd64 nano repos/debian/Packages
 pac alpine repos/alpine/APKINDEX nginx
 pac opam repos/opam-repository lwt
 pac cargo repos/crates.io-index path/to/Cargo.toml
-pac npm --tree use-sync-external-store
+pac npm --cache repos/npm --tree use-sync-external-store
 ```
 
 ## Trusted base

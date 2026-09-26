@@ -23,6 +23,7 @@ type archive = {
   avoid_table : (string, string list) Hashtbl.t;
   mutable n_names : int;
   mutable n_vers : int;
+  mutable n_dropped : int;
   (* wall time inside the parser, which the solve now interleaves with *)
   mutable t_parse : float;
 }
@@ -35,6 +36,7 @@ let empty_archive root =
     avoid_table = Hashtbl.create 64;
     n_names = 0;
     n_vers = 0;
+    n_dropped = 0;
     t_parse = 0.;
   }
 
@@ -71,6 +73,7 @@ let load_name ar (name : string) : (string * Opam_parse.pkg_meta) list =
       let t = Unix.gettimeofday () in
       let ndir = Filename.concat (Filename.concat ar.root "packages") name in
       let acc = ref [] in
+      let reject () = ar.n_dropped <- ar.n_dropped + 1 in
       let listed = Sys.file_exists ndir && Sys.is_directory ndir in
       if listed then
         Array.iter
@@ -83,13 +86,13 @@ let load_name ar (name : string) : (string * Opam_parse.pkg_meta) list =
                 let opam = Filename.concat (Filename.concat ndir nv) "opam" in
                 if Sys.file_exists opam then
                   try
-                    let m = Opam_parse.parse_file ~name ~version opam in
+                    let m = Opam_parse.parse_file ~reject ~name ~version opam in
                     acc := (version, m) :: !acc
                   with
                   | Parsing.Parse_error | OpamLexer.Error _ | Failure _
                   | Sys_error _
                   ->
-                    Opam_parse.reject ())
+                    reject ())
             | _ -> ())
           (Sys.readdir ndir);
       let vs = one_per_version !acc in

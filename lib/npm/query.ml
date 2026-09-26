@@ -232,10 +232,10 @@ let check_published ar specs =
 
 (* arborist names a root with no name by its directory, which is no part
    of the query; "." is a name no registry package can have *)
-let root_of pkg =
+let root_of ar pkg =
   let str k = match P.member k pkg with `String s -> s | _ -> "" in
   let name = match str "name" with "" -> "." | n -> n in
-  match P.ver_of ~root:true (str "version") pkg with
+  match P.ver_of ~reject:(Archive.reject ar) ~root:true (str "version") pkg with
   | Some v -> Ok { v with P.v_name = name }
   | None -> Error "not a package.json"
 
@@ -244,4 +244,4 @@ let root ar (args : string list) : (P.ver, string) result =
   let* pkg = manifest paths in
   let* specs = resolve_specs ar specs in
   let* () = check_published ar specs in
-  root_of (List.fold_left add_to pkg specs)
+  root_of ar (List.fold_left add_to pkg specs)

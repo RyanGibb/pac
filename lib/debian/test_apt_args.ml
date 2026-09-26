@@ -1,4 +1,3 @@
-open Debian_frontend
 module A = Apt_args
 
 let fails = ref 0

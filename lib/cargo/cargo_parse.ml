@@ -34,9 +34,6 @@ type ver = {
   v_msrv : string option;
 }
 
-let rejected = ref 0
-let reject () = incr rejected
-
 (* crate files live at <index>/1/<n>, /2/<n>, /3/<c>/<n> or /<c1c2>/<c3c4>/<n>,
    with the name lowercased *)
 let crate_path ~index (name : string) : string =
@@ -53,7 +50,7 @@ open Yojson.Safe.Util
 
 let str_opt j = match j with `String s -> Some s | _ -> None
 
-let string_list j =
+let string_list ~reject j =
   match j with
   | `List l -> List.filter_map str_opt l
   | `Null -> []
@@ -63,7 +60,7 @@ let string_list j =
 
 let bool_def d j = match j with `Bool b -> b | _ -> d
 
-let kind_of j =
+let kind_of ~reject j =
   match j with
   | `String "dev" -> Dev
   | `String "build" -> Build
@@ -72,7 +69,7 @@ let kind_of j =
       reject ();
       Normal
 
-let dep_of (j : Yojson.Safe.t) : dep option =
+let dep_of ~reject (j : Yojson.Safe.t) : dep option =
   match j with
   | `Assoc _ -> (
       match member "name" j with
@@ -86,12 +83,12 @@ let dep_of (j : Yojson.Safe.t) : dep option =
               d_alias = alias;
               d_target = target;
               d_req = Cargo_version.parse_req req;
-              d_feats = string_list (member "features" j);
+              d_feats = string_list ~reject (member "features" j);
               d_optional = bool_def false (member "optional" j);
               (* the index omits the key only on very old entries, where cargo's
              own default (default features on) applies *)
               d_default = bool_def true (member "default_features" j);
-              d_kind = kind_of (member "kind" j);
+              d_kind = kind_of ~reject (member "kind" j);
               d_cfg = (match member "target" j with `String t -> t | _ -> "");
             }
       | _ -> None)
@@ -123,11 +120,11 @@ let entry_of (s : string) : fentry =
           FWeakFeat (String.sub a 0 (String.length a - 1), f)
         else FDepFeat (a, f)
 
-let feature_table (j : Yojson.Safe.t) : (string * fentry list) list =
+let feature_table ~reject (j : Yojson.Safe.t) : (string * fentry list) list =
   let of_assoc j =
     match j with
     | `Assoc l ->
-        List.map (fun (k, v) -> (k, List.map entry_of (string_list v))) l
+        List.map (fun (k, v) -> (k, List.map entry_of (string_list ~reject v))) l
     | `Null -> []
     | _ ->
         reject ();
@@ -243,7 +240,7 @@ let with_implicit_features (deps : dep list) (tbl : (string * fentry list) list)
 (* A version with a malformed dependency is dropped with its line, as
    cargo skips an index line it cannot deserialize; any other malformed
    field is read as its default. *)
-let parse_line (line : string) : ver option =
+let parse_line ~reject (line : string) : ver option =
   match Yojson.Safe.from_string line with
   | exception Yojson.Json_error _ ->
       reject ();
@@ -252,7 +249,7 @@ let parse_line (line : string) : ver option =
       let deps =
         match member "deps" j with
         | `List l ->
-            let ds = List.map dep_of l in
+            let ds = List.map (dep_of ~reject) l in
             if List.mem None ds then None else Some (List.filter_map Fun.id ds)
         | `Null -> Some []
         | _ ->
@@ -263,7 +260,7 @@ let parse_line (line : string) : ver option =
       | `String name, `String vers, Some deps ->
           if bool_def false (member "yanked" j) then None
           else
-            let declared = feature_table j in
+            let declared = feature_table ~reject j in
             let tbl = with_implicit_features deps declared in
             if not (feature_map_ok deps declared) then (
               reject ();
@@ -286,7 +283,7 @@ let parse_line (line : string) : ver option =
       reject ();
       None
 
-let load_crate ~index (name : string) : ver list =
+let load_crate ~reject ~index (name : string) : ver list =
   let path = crate_path ~index name in
   if not (Sys.file_exists path) then []
   else
@@ -296,7 +293,9 @@ let load_crate ~index (name : string) : ver list =
        while true do
          let line = input_line ic in
          if String.trim line <> "" then
-           match parse_line line with Some v -> acc := v :: !acc | None -> ()
+           match parse_line ~reject line with
+           | Some v -> acc := v :: !acc
+           | None -> ()
        done
      with End_of_file -> ());
     close_in ic;

@@ -1,16 +1,12 @@
 (library
  (name debian_frontend)
+ (wrapped false)
  (modules deb_packages apt_args)
  (libraries version))
 
 (library
- (name deb_solve)
- (modules tables stl_heap work_heap apt_reject order deb_solve)
- ; dune's warnings, reporting rather than failing: a warning here is a
- ; note to the author, and only the extraction this links against needs
- ; them off wholesale.
- (flags
-  (:standard -warn-error -a))
+ (name debian_solve)
+ (modules tables stl_heap work_heap apt_reject order debian_solve)
  (libraries debian_frontend pac pac_common pubgrub unix version))
 
 (test

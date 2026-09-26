@@ -1,6 +1,6 @@
 module E = Pac
-module DF = Debian_frontend.Deb_packages
-module Args = Debian_frontend.Apt_args
+module DF = Deb_packages
+module Args = Apt_args
 
 type answer = {
   pkgs : (string * string * string) list;
@@ -520,6 +520,7 @@ type result = {
   answer : (answer, Pac_common.Report.explanation) Stdlib.result;
   names : int;
   versions : int;
+  dropped : int;
   t_parse : float;
 }
 
@@ -530,7 +531,8 @@ let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~paths ~query
     : (result, string) Stdlib.result =
   Pubgrub.set_debug debug;
   let t0 = Unix.gettimeofday () in
-  let index = List.concat_map DF.parse_file paths in
+  let dropped = ref 0 in
+  let index = List.concat_map (DF.parse_file ~reject:(fun () -> incr dropped)) paths in
   let arches =
     List.sort_uniq String.compare
       (native
@@ -556,6 +558,7 @@ let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~paths ~query
         answer = M.solve ~debug ~order tables query;
         names = Hashtbl.length tables.M.group_table;
         versions = Hashtbl.length tables.M.stanza_table;
+        dropped = !dropped;
         t_parse;
       })
     (Args.parse_query ~native ~arches index query)

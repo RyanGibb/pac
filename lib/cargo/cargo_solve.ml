@@ -29,6 +29,7 @@ type run = {
   answer : (result, Pac_common.Report.explanation) Stdlib.result;
   n_names : int;
   n_vers : int;
+  dropped : int;
   t_parse : float;
 }
 
@@ -113,6 +114,7 @@ let solve ?(debug = false) ?(order = `Tool) ~index ~features ~rustv
     answer;
     n_names = ar.Archive.n_names;
     n_vers = ar.Archive.n_vers;
+    dropped = ar.Archive.n_dropped;
     t_parse = ar.Archive.t_parse;
   }
 

@@ -36,9 +36,6 @@ type packument = {
   pk_vers : ver list;
 }
 
-let rejected = ref 0
-let reject () = incr rejected
-
 (* Yojson's [member] raises on a non-object; a registry manifest may omit
    any field or give it the wrong shape, so lookups go through this. *)
 let member (k : string) (j : Yojson.Safe.t) : Yojson.Safe.t =
@@ -105,7 +102,7 @@ let split_alias (s : string) : (string * string) option =
     | -1 -> Some (body, "*")
     | i -> Some (String.sub body 0 i, String.sub body (i + 1) (n - i - 1))
 
-let dep_of ~dev ~optional (key, spec) : dep option =
+let dep_of ~reject ~dev ~optional (key, spec) : dep option =
   let target, rg =
     match spec with
     | `String spec -> (
@@ -134,7 +131,8 @@ let dep_of ~dev ~optional (key, spec) : dep option =
 (* A peer names a directory and the calculus reads its range against the
    package of that name, so an alias, which puts another package there, is
    dropped and counted like a spec no registry lookup resolves. *)
-let peer_of (meta : (string * Yojson.Safe.t) list) (key, spec) : peer option =
+let peer_of ~reject (meta : (string * Yojson.Safe.t) list) (key, spec) :
+    peer option =
   let optional =
     match List.assoc_opt key meta with
     | Some m -> ( match member "optional" m with `Bool b -> b | _ -> false)
@@ -158,7 +156,8 @@ let peer_of (meta : (string * Yojson.Safe.t) list) (key, spec) : peer option =
    value of * overrides nothing: an edge takes its range from an override
    only when the value is not * (arborist edge.js, spec), and OverrideSet
    reads an empty value as *. *)
-let overrides_of (j : Yojson.Safe.t) : (string * Npm_version.range) list =
+let overrides_of ~reject (j : Yojson.Safe.t) : (string * Npm_version.range) list
+    =
   List.filter_map
     (fun (k, v) ->
       match v with
@@ -194,11 +193,14 @@ let engine_of (j : Yojson.Safe.t) (k : string) : Npm_version.range option =
    strictly smaller than npm's.  bundleDependencies entries stay ordinary
    registry dependencies although npm takes their versions from the
    tarball, which is neither fetched nor trusted here. *)
-let ver_of ~(root : bool) (vers : string) (j : Yojson.Safe.t) : ver option =
+let ver_of ~reject ~(root : bool) (vers : string) (j : Yojson.Safe.t) :
+    ver option =
   match j with
   | `Assoc _ ->
       let deps_of ~dev ~optional field =
-        List.filter_map (dep_of ~dev ~optional) (assoc_of (member field j))
+        List.filter_map
+          (dep_of ~reject ~dev ~optional)
+          (assoc_of (member field j))
       in
       let meta = assoc_of (member "peerDependenciesMeta" j) in
       (* arborist keeps one edge per name and loads peers first, so a
@@ -211,7 +213,7 @@ let ver_of ~(root : bool) (vers : string) (j : Yojson.Safe.t) : ver option =
           @ if root then [ "devDependencies" ] else [])
       in
       let peers =
-        List.filter_map (peer_of meta)
+        List.filter_map (peer_of ~reject meta)
           (List.filter
              (fun (k, _) -> not (List.mem k dep_keys))
              (assoc_of (member "peerDependencies" j)))
@@ -240,7 +242,7 @@ let ver_of ~(root : bool) (vers : string) (j : Yojson.Safe.t) : ver option =
                      (fun d -> not (List.mem d.d_dir optKeys))
                      (deps_of ~dev:false ~optional:false "dependencies")));
           v_peers = peers;
-          v_ovr = (if root then overrides_of j else []);
+          v_ovr = (if root then overrides_of ~reject j else []);
           v_deprecated = dep;
           v_eng_node = engine_of j "node";
           v_eng_npm = engine_of j "npm";
@@ -249,7 +251,7 @@ let ver_of ~(root : bool) (vers : string) (j : Yojson.Safe.t) : ver option =
       reject ();
       None
 
-let of_json (j : Yojson.Safe.t) : packument =
+let of_json ~reject (j : Yojson.Safe.t) : packument =
   let latest =
     match member "latest" (member "dist-tags" j) with
     | `String v -> Some v
@@ -262,15 +264,15 @@ let of_json (j : Yojson.Safe.t) : packument =
   in
   let vers =
     List.filter_map
-      (fun (v, m) -> ver_of ~root:false v m)
+      (fun (v, m) -> ver_of ~reject ~root:false v m)
       (assoc_of (member "versions" j))
   in
   { pk_latest = latest; pk_tags = tags; pk_vers = vers }
 
 (* A packument that will not parse says nothing about the name's versions,
    so it is an error rather than a name with none. *)
-let load (path : string) : (packument, string) result =
+let load ~reject (path : string) : (packument, string) result =
   match Yojson.Safe.from_file path with
   | exception Sys_error e -> Error e
-  | `Assoc _ as j -> Ok (of_json j)
+  | `Assoc _ as j -> Ok (of_json ~reject j)
   | _ | (exception Yojson.Json_error _) -> Error "not a packument"

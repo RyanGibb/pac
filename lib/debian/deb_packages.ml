@@ -155,14 +155,7 @@ let parse_conflicts field =
   (* Policy 7.1 allows alternatives only in the Depends family. *)
   split_on ',' field |> List.filter_map parse_atom
 
-(* declarations the parser read and dropped, counted to be reported *)
-let rejected = ref 0
-
-let reject () =
-  incr rejected;
-  None
-
-let parse_provides field =
+let parse_provides ~reject field =
   split_on ',' field
   |> List.filter_map (fun s ->
       (* declared arch-qualified Provides are out of scope: aqual is
@@ -176,7 +169,9 @@ let parse_provides field =
             a warning and keeps the rest of the stanza (ParseProvides,
             deblistparser.cc) -- reading it as unversioned would be
             strictly more permissive *)
-      | Some { constr = Some _; _ } -> reject ()
+      | Some { constr = Some _; _ } ->
+          reject ();
+          None
       | None -> None)
 
 (* apt warns on any other value and reads it as no *)
@@ -186,7 +181,7 @@ let multi_arch_known = function
 
 (* One pass over a stanza's fields, rather than an assoc lookup per field:
    an archive is ~69k stanzas.  First occurrence wins. *)
-let stanza_of_fields (fs : (string * string) list) : stanza option =
+let stanza_of_fields ~reject (fs : (string * string) list) : stanza option =
   let package = ref None
   and version = ref None
   and architecture = ref None
@@ -239,11 +234,13 @@ let stanza_of_fields (fs : (string * string) list) : stanza option =
             (match !architecture with Some a -> a | None -> "all");
           multi_arch =
             (match !multi_arch with
-            | Some m when not (multi_arch_known m) -> reject ()
+            | Some m when not (multi_arch_known m) ->
+                reject ();
+                None
             | m -> m);
           depends_raw = raw [ !predepends; !depends ];
           recommends_raw = raw [ !recommends ];
-          provides = opt parse_provides !provides;
+          provides = opt (parse_provides ~reject) !provides;
           conflicts =
             opt parse_conflicts !conflicts @ opt parse_conflicts !breaks;
           essential = yes !essential;
@@ -267,12 +264,14 @@ let stanza_of_fields (fs : (string * string) list) : stanza option =
                     in
                     (strip (String.sub s 0 i), strip v)));
         }
-  | _ -> reject ()
+  | _ ->
+      reject ();
+      None
 
 (* Stanzas are built as the file is read.  Accumulating every physical line
    first cost 1.27M live strings and conses on a Debian archive before any
    stanza was looked at; nothing needs a line once its stanza is closed. *)
-let parse_file path =
+let parse_file ~reject path =
   let ic = open_in path in
   Fun.protect ~finally:(fun () -> close_in_noerr ic) @@ fun () ->
   let acc = ref [] and fields = ref [] in
@@ -280,7 +279,7 @@ let parse_file path =
     (match !fields with
     | [] -> ()
     | fs -> (
-        match stanza_of_fields (List.rev fs) with
+        match stanza_of_fields ~reject (List.rev fs) with
         | Some st -> acc := st :: !acc
         | None -> ()));
     fields := []

@@ -6,12 +6,12 @@
   cmdliner
   unix
   pac_common
-  apk_frontend
-  apk_solve
+  alpine_frontend
+  alpine_solve
   cargo_frontend
   cargo_solve
   debian_frontend
-  deb_solve
+  debian_solve
   npm_frontend
   npm_solve
   opam_frontend

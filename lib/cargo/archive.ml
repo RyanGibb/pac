@@ -22,6 +22,7 @@ type t = {
   links_table : (string, (string * string) list) Hashtbl.t;
   mutable n_names : int;
   mutable n_vers : int;
+  mutable n_dropped : int;
   (* wall time inside the parser, which the solve interleaves with *)
   mutable t_parse : float;
 }
@@ -34,6 +35,7 @@ let empty index =
     links_table = Hashtbl.create 256;
     n_names = 0;
     n_vers = 0;
+    n_dropped = 0;
     t_parse = 0.;
   }
 
@@ -46,7 +48,11 @@ let load_name ar (n : string) : P.ver list =
   | Some vs -> vs
   | None ->
       let t = Unix.gettimeofday () in
-      let vs = P.load_crate ~index:ar.index n in
+      let vs =
+        P.load_crate
+          ~reject:(fun () -> ar.n_dropped <- ar.n_dropped + 1)
+          ~index:ar.index n
+      in
       ar.t_parse <- ar.t_parse +. (Unix.gettimeofday () -. t);
       Hashtbl.replace ar.crates n vs;
       ar.n_names <- ar.n_names + 1;
