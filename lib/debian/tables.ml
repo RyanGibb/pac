@@ -105,9 +105,6 @@ module Make (AP : ARCH) = struct
     stanza_table : (DMA.Pkg.t, nstanza) Hashtbl.t;
     group_table : (string, (string * string) list) Hashtbl.t;
     providers_table : (string, (DMA.Pkg.t * DMA.Deb.coq_DTop) list) Hashtbl.t;
-    (* stanzas whose clauses a sub-instance has asked for, reported under
-       PACPROF: the whole point of deferring them is that this stays small *)
-    mutable n_clauses_parsed : int;
     (* who names a package in a Depends or Pre-Depends, and who in a
        Conflicts or Breaks, by the bare name as written: the watch lists
        apt's Reject propagation walks, built from the field text alone, so
@@ -232,7 +229,6 @@ module Make (AP : ARCH) = struct
       stanza_table;
       group_table;
       providers_table;
-      n_clauses_parsed = 0;
       rev_dep_table = lazy (rev_dep stanza_table);
       rev_conf_table = lazy (rev_conf stanza_table);
       source_table = lazy (by_source stanza_table);
@@ -258,17 +254,16 @@ module Make (AP : ARCH) = struct
      wait until one does.  providers_table cannot: it is a preimage -- who
      provides the name I want -- that no clause of the asking package can
      reach, so Provides stays eager. *)
-  let clauses_of tables (stz : nstanza) =
+  let clauses_of (stz : nstanza) =
     match stz.nclauses with
     | Some c -> c
     | None ->
         let c = (parse_relations stz.raw_deps, parse_relations stz.raw_recs) in
         stz.nclauses <- Some c;
-        tables.n_clauses_parsed <- tables.n_clauses_parsed + 1;
         c
 
-  let deps_of tables stz = fst (clauses_of tables stz)
-  let recs_of tables stz = snd (clauses_of tables stz)
+  let deps_of _tables stz = fst (clauses_of stz)
+  let recs_of _tables stz = snd (clauses_of stz)
 
   (* One package's clauses in control-file order, Depends before Recommends,
      each with its mangled alternatives and the synthetic name a multi-way

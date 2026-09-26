@@ -267,15 +267,9 @@ module Make (S : SEARCH) = struct
     | PG.Decided u -> u.PVersion.v = DMA.Deb.Version.Orig v
     | _ -> false
 
-  let pp_pkg fmt (((n, b), v) : DMA.Pkg.t) = Format.fprintf fmt "%s:%s=%s" n b v
-
   (* one queue entry of the cascade: a version var or a package var
      assigned false, whose propagation waits for its turn *)
   type rejection = [ `Ver of DMA.Pkg.t | `Pkg of string * string ]
-
-  let pp_rejection fmt = function
-    | `Ver x -> Format.fprintf fmt "ver %a" pp_pkg x
-    | `Pkg (n, b) -> Format.fprintf fmt "pkg %s:%s" n b
 
   let reject_ver st ~assigned out (x : DMA.Pkg.t) =
     if (not (Hashtbl.mem st.vdead x)) && not (installed_at ~assigned x) then (

@@ -11,10 +11,6 @@ module Make (S : Apt_reject.SEARCH) = struct
     type nonrec assigned = assigned
     type nonrec rejection = rejection
 
-    let pp_name = PName.pp
-    let pp_atom = pp_atom
-    let pp_rejection = pp_rejection
-
     let kind : name -> Work_heap.kind = function
       | DMA.Deb.Name.Orig _ -> Package
       | DMA.Deb.Name.Disjunct _ -> Hard

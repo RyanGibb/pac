@@ -41,8 +41,6 @@ module type DRIVER = sig
      the [next] hook *)
   type assigned
 
-  val pp_name : Format.formatter -> name -> unit
-  val pp_atom : Format.formatter -> atom -> unit
   val kind : name -> kind
 
   (* the alternatives of the clause [name] stands for *)
@@ -71,8 +69,6 @@ module type DRIVER = sig
      assigned false the moment it was derived, and propagated to what
      watches it only when the queue reaches it *)
   type rejection
-
-  val pp_rejection : Format.formatter -> rejection -> unit
 
   (* a package decision now stands: the rejections its own Conflicts assign
      as its clauses are examined, and those assigned as its version var
@@ -183,7 +179,9 @@ module Make (D : DRIVER) = struct
        the package var and walks the version's clauses *)
     | VerFirst of tentry * D.name * D.version
 
-  (* scheduling counters, reported under PACSHADOW *)
+  (* scheduling counters, which PACSHADOW prints: a tool-order run whose
+     backjumps or desyncs are not 0 is one where the replay and apt's own
+     queue parted, which is what the debian cram cases check of theirs *)
   type stats = {
     mutable t0 : int;
     mutable prop : int;
@@ -297,37 +295,17 @@ module Make (D : DRIVER) = struct
         };
     }
 
-  let shadow_dbg = Sys.getenv_opt "PACSHADOWDBG" <> None
-
-  let dbg fmt =
-    if shadow_dbg then Format.eprintf fmt
-    else Format.ifprintf Format.err_formatter fmt
-
-  let watoms fmt n =
-    match D.clause_atoms n with
-    | Some atoms ->
-        Format.pp_print_list
-          ~pp_sep:(fun fmt () -> Format.fprintf fmt " | ")
-          D.pp_atom fmt atoms
-    | None -> D.pp_name fmt n
-
-  let pp_reason fmt = function
-    | Some (e : tentry) -> D.pp_name fmt e.tname
-    | None -> Format.pp_print_string fmt "-"
-
   (* apt's Enqueue, attributed to the decision whose wave made it *)
   let enqueue t (e : tentry option) n =
     if not (Hashtbl.mem t.pos n) then (
       t.clock <- t.clock + 1;
       Hashtbl.add t.pos n t.clock;
-      dbg "ENQ #%d %a -> %a [%a]@." t.clock pp_reason e D.pp_name n watoms n;
       match e with Some e -> e.tenq <- n :: e.tenq | None -> ())
 
   let queue_rejections t rs =
     List.iter
       (fun r ->
         t.clock <- t.clock + 1;
-        dbg "RQ #%d %a@." t.clock D.pp_rejection r;
         Queue.add (t.clock, Reject r) t.rq)
       rs
 
@@ -403,9 +381,6 @@ module Make (D : DRIVER) = struct
 
   let push_item t (e : tentry) (c : (D.name, D.atom) clause) g nsol sz =
     t.stats.push <- t.stats.push + 1;
-    dbg "PUSH (%d/%d@%d)%s %a -> %a [%a]@." sz nsol e.tlevel
-      (if c.optional then " opt" else "")
-      D.pp_name e.tname D.pp_name g watoms g;
     Stl_heap.push t.heap
       {
         wname = g;
@@ -429,15 +404,12 @@ module Make (D : DRIVER) = struct
         if not (D.same_name h g) then enqueue t (Some e) g;
         Hashtbl.replace t.pending orig ();
         t.clock <- t.clock + 1;
-        dbg "VQ1 #%d %a -> %a@." t.clock D.pp_name g D.pp_name orig;
         Queue.add (t.clock, VerFirst (e, orig, pv)) t.rq
     | Some { solution = h; version_var = None } when not (D.same_name h g) ->
         enqueue t (Some e) g;
         if not (Hashtbl.mem t.pos h) then (
           Hashtbl.add t.pos h (Hashtbl.find t.pos g);
-          e.tenq <- h :: e.tenq;
-          dbg "INHERIT #%d %a -> %a@." (Hashtbl.find t.pos h) D.pp_name g
-            D.pp_name h)
+          e.tenq <- h :: e.tenq)
     | _ -> enqueue t (Some e) g
 
   (* one clause of a decided package as Solver::Propagate meets it: a hard
@@ -469,20 +441,17 @@ module Make (D : DRIVER) = struct
   (* one entry reaches its turn in the queue: what it assigns joins the
      back, rejections and the solutions of clauses left unit alike *)
   let propagate_one t ~assigned =
-    let s, entry = Queue.pop t.rq in
+    let _, entry = Queue.pop t.rq in
     match entry with
     | Reject r ->
         t.stats.prop <- t.stats.prop + 1;
         t.epoch <- t.epoch + 1;
-        dbg "PROP #%d %a@." s D.pp_rejection r;
         let rs, units = D.propagate t.d ~assigned r in
         queue_rejections t rs;
         List.iter (enqueue t (top t)) units
     | VerOf (e, pv, clauses) ->
-        dbg "VER #%d %a@." s D.pp_name e.tname;
         version_pops t ~assigned e e.tname pv clauses
     | VerFirst (e, orig, pv) ->
-        dbg "VER1 #%d %a@." s D.pp_name orig;
         Hashtbl.remove t.pending orig;
         Hashtbl.replace t.ver_done orig ();
         e.tvd <- orig :: e.tvd;
@@ -599,8 +568,7 @@ module Make (D : DRIVER) = struct
       | Some (e, v) when not e.tredo ->
           e.tredo <- true;
           t.nredo <- t.nredo + 1;
-          Hashtbl.replace t.keep e.tname v;
-          dbg "REDO %a@." D.pp_name e.tname
+          Hashtbl.replace t.keep e.tname v
       | _ -> ()
     done;
     drop_entries t top_wide;
@@ -608,7 +576,6 @@ module Make (D : DRIVER) = struct
     replay t ~assigned;
     unwind_level t ~assigned m.tlevel;
     t.wide_count <- t.wide_count - 1;
-    dbg "POPLEVEL %d %a@." m.tlevel D.pp_name (fst choice);
     (* Solver::Pop enqueues the negation of its choice at the level below
        (solver3.cc:517-519) *)
     let rs = D.negation t.d ~assigned (fst choice) (snd choice) in
@@ -668,16 +635,13 @@ module Make (D : DRIVER) = struct
            && (not (Hashtbl.mem t.pos n))
            && not (Hashtbl.mem t.pending n) ->
         Hashtbl.add t.pos n (Hashtbl.find t.pos e.tname);
-        e.tenq <- n :: e.tenq;
-        dbg "INHERIT #%d %a -> %a@." (Hashtbl.find t.pos n) D.pp_name e.tname
-          D.pp_name n
+        e.tenq <- n :: e.tenq
     | _ -> ()
 
   (* the selector's slot was the version var's: it pops here *)
   let selector_version_pops t ~assigned (e : tentry) pv =
     match D.version_of t.d e.tname pv with
     | Some (orig, ov) ->
-        dbg "VER %a@." D.pp_name orig;
         version_pops t ~assigned e
           ~pkg_var:(fun () -> enqueue t (Some e) orig)
           orig ov
@@ -696,7 +660,6 @@ module Make (D : DRIVER) = struct
       Hashtbl.remove t.ver_done e.tname
     else (
       t.clock <- t.clock + 1;
-      dbg "VQ #%d %a@." t.clock D.pp_name e.tname;
       Queue.add (t.clock, VerOf (e, pv, ver_clauses)) t.rq)
 
   (* the propagation wave of each standing decision, the clauses of a decided
@@ -810,23 +773,16 @@ module Make (D : DRIVER) = struct
   (* apt's ELIDED and a dead optional item open no level; PubGrub still has
      to decide the name, to the alternative it holds or to its escape *)
   let take_item t ~assigned w =
-    let note what =
-      dbg "%s (%d/%d@%d) %a [%a]@." what w.wsize w.wnsol w.wlevel D.pp_name
-        w.wname watoms w.wname
-    in
     if D.satisfied assigned w.wname then (
       t.stats.elide <- t.stats.elide + 1;
-      note "ELIDE";
       record_popped t w;
       decide t ~wide:false w.wname)
     else if w.wopt && live_size t ~assigned w.watoms <= 0 then (
       t.stats.drop <- t.stats.drop + 1;
-      note "DROP";
       record_popped t w;
       decide t ~wide:false w.wname)
     else (
       t.stats.pop <- t.stats.pop + 1;
-      note "POP";
       let n = decide t ~wide:true w.wname in
       record_popped t w;
       n)
@@ -840,14 +796,8 @@ module Make (D : DRIVER) = struct
       if Hashtbl.mem offered w.wname then Some (take_item t ~assigned w)
       else (
         (match D.decided assigned w.wname with
-        | Some _ ->
-            t.stats.elide <- t.stats.elide + 1;
-            dbg "ELIDE (%d/%d@%d) %a@." w.wsize w.wnsol w.wlevel D.pp_name
-              w.wname
-        | None ->
-            t.stats.desync <- t.stats.desync + 1;
-            dbg "DESYNC (%d/%d@%d) %a@." w.wsize w.wnsol w.wlevel D.pp_name
-              w.wname);
+        | Some _ -> t.stats.elide <- t.stats.elide + 1
+        | None -> t.stats.desync <- t.stats.desync + 1);
         record_popped t w;
         pop_offered t ~assigned offered)
 
@@ -868,9 +818,7 @@ module Make (D : DRIVER) = struct
     let offered = Hashtbl.create 64 in
     List.iter (fun (n, c) -> Hashtbl.replace offered n c) open_names;
     match redo t offered with
-    | Some n ->
-        dbg "REDECIDE %a@." D.pp_name n;
-        n
+    | Some n -> n
     | None -> (
         slot_units t ~assigned open_names;
         match drain t ~assigned open_names with
@@ -884,10 +832,7 @@ module Make (D : DRIVER) = struct
                 (* apt would have nothing left to do while PubGrub has a
                    name open, so the two have parted: PubGrub's own pick *)
                 t.stats.desync <- t.stats.desync + 1;
-                let n = fst (List.hd open_names) in
-                dbg "DESYNC-EMPTY %a (open %d)@." D.pp_name n
-                  (List.length open_names);
-                decide t ~wide:true n))
+                decide t ~wide:true (fst (List.hd open_names))))
 
   let report t =
     let s = t.stats in

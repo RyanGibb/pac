@@ -468,51 +468,20 @@ module Make (AP : Tables.ARCH) = struct
 
   let solve ~debug ~order (tables : tables)
       (query : ((string * string) * Args.accepts) list) =
-    (* PACPROF's lookup buckets: calls and CPU time per name kind *)
-    let buckets : (string, int ref * float ref) Hashtbl.t = Hashtbl.create 8 in
-    let timed name f x =
-      let c, t =
-        match Hashtbl.find_opt buckets name with
-        | Some ct -> ct
-        | None ->
-            let ct = (ref 0, ref 0.) in
-            Hashtbl.replace buckets name ct;
-            ct
-      in
-      incr c;
-      let t0 = Sys.time () in
-      let r = f x in
-      t := !t +. (Sys.time () -. t0);
-      r
-    in
-    let vname : DMA.Deb.Name.t -> string = function
-      | DMA.Deb.Name.Orig _ -> "versions/orig"
-      | DMA.Deb.Name.Disjunct _ -> "versions/disj"
-      | DMA.Deb.Name.Soft _ -> "versions/soft"
-      | DMA.Deb.Name.Selector _ -> "versions/sel"
-    in
     let looked_up = Hashtbl.create 4096 in
     let module S = Search (struct
       let tables = tables
-      let versions n' = timed (vname n') (versions tables) n'
+      let versions = versions tables
 
       let dependencies p =
         Hashtbl.replace looked_up p ();
-        timed "dependees" (dependees tables) p
+        dependees tables p
     end) in
     let r =
       S.run ~debug ~order
         (List.map (fun ((n, b), acc) -> ((n, DMA.QAArch b), acc)) query)
     in
     let lookups = Hashtbl.length looked_up in
-    if Sys.getenv_opt "PACPROF" <> None then (
-      Hashtbl.iter
-        (fun name (c, t) ->
-          Printf.eprintf "PACPROF %s: %d calls %.2fs\n%!" name !c !t)
-        buckets;
-      Printf.eprintf "PACPROF clauses parsed: %d of %d stanzas\n%!"
-        tables.n_clauses_parsed
-        (Hashtbl.length tables.stanza_table));
     Result.map (fun (pkgs, nodes) -> { pkgs; nodes; lookups }) r
 end
 

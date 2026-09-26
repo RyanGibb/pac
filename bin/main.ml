@@ -142,8 +142,19 @@ let debian_cmd =
              $(b,NAME[:ARCH]), optionally with $(b,=VERSION) or $(b,/RELEASE); \
              no Release file is read, so of releases only $(b,*) matches.")
   in
+  let envs =
+    [
+      Cmd.Env.info "PACSHADOW"
+        ~doc:
+          "When set, a $(b,--order=tool) run prints to stderr the counters \
+           of its replay of apt's work heap and propagation queue: the items \
+           it took, elided and dropped, those it found PubGrub had decided \
+           otherwise ($(b,desync)), and PubGrub's backjumps.";
+    ]
+  in
   Cmd.v
-    (Cmd.info "debian" ~exits ~doc:"Solve against a Debian Packages index.")
+    (Cmd.info "debian" ~exits ~envs
+       ~doc:"Solve against a Debian Packages index.")
     Term.(
       const debian_run $ debug_arg $ order $ no_recs $ no_strict $ native
       $ path $ query)
