@@ -150,20 +150,10 @@ def parse_answer(out):
 
 
 def newest(crate):
-    """The release the query names: the greatest version not yanked, first
-    of equals, under cargo's order."""
-    from scale import vkey
+    """The release the query names, as scale.py's sample names it."""
+    import scale
     path = crate_path(crate)
-    rows = []
-    if os.path.exists(path):
-        for l in open(path, encoding="utf-8"):
-            try:
-                j = json.loads(l)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(j.get("vers"), str) and not j.get("yanked"):
-                rows.append(j)
-    return max(rows, key=lambda j: vkey(j["vers"]), default=None)
+    return scale.newest(scale.read_rows(path)) if os.path.exists(path) else None
 
 
 def ask_pac(crate):

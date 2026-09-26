@@ -304,7 +304,7 @@ def place(root, nodes, edges, declarers=frozenset(), peers={}):
     grow([("", root)])
     # a package nothing reaches is placed too, where it shadows no lookup
     # already answered, so that npm judges it as any unreached entry of a
-    # lock: prunes it, and asks nothing of it but what reach.js asks
+    # lock: prunes it, and asks nothing of it but what reach.py asks
     for node in sorted(nodes - set(paths)):
         if node in paths:
             continue

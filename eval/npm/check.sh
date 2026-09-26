@@ -11,7 +11,7 @@
 # writes it back, so the lock it leaves must name the same version at every
 # path -- but for a package nothing reaches, which it prunes: that is the
 # minimal verdict, not the valid one.  npm asks nothing of such a package,
-# so reach.js asks that its own dependencies be met.  Neither asks whether
+# so reach.py asks that its own dependencies be met.  Neither asks whether
 # an edge landed on the package its manifest names, so lockname.py does.
 # Measured on express, not assumed: ci rejects a lock with a transitive
 # package deleted and one whose version violates a requirer's range, and
@@ -87,7 +87,7 @@ diff <(paths "$W/package-lock.json") <(paths "$W.plo/package-lock.json") > "$out
 moved=$(grep -c '^[<>]' "$out/moved")
 python3 "$S/lockname.py" "$W/package-lock.json" > "$out/names" 2>&1
 named=$?
-node "$S/reach.js" "$W/package-lock.json" > "$out/reach" 2> "$out/reach.log" || err=1
+python3 "$S/reach.py" "$W/package-lock.json" > "$out/reach" 2> "$out/reach.log" || err=1
 unmet=$(grep -c '^unmet ' "$out/reach")
 # every change the relock made is the pruning of a package nothing reaches
 repaired=$(awk 'FILENAME == ARGV[1] {if ($1 == "unreached") u[$2]; next}

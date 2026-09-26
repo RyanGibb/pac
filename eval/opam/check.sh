@@ -36,6 +36,8 @@
 set -u
 # byte order, so the output is the same whatever the host's locale
 export LC_ALL=C
+S="$(cd "$(dirname "$0")" && pwd)"
+. "$S/refused.sh"
 BASE=${OPAMROOT:?}
 REPO="${REPO:-$(dirname "$0")/../../repos/opam-repository}"
 ans=$1 out=$2; shift 2
@@ -71,9 +73,7 @@ done
 
 err=0
 ran() {  # <rc> <log>: whether opam ran to an answer, a refusal included
-  [ "$1" -eq 0 ] || [ "$1" -eq 20 ] || { [ "$1" -eq 5 ] &&
-    grep -qE '^\[ERROR\] (Package .* has no version|No package named|.*: unmet availability conditions)' "$2"; } ||
-    err=1
+  [ "$1" -eq 0 ] || refused "$1" "$2" || err=1
 }
 list() { local s=; for x; do s+=" \"$x\""; done; printf '[%s ]' "$s"; }
 r="$out/root"

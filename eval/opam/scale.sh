@@ -25,12 +25,7 @@ prepare() {
   export OPAMROOT=$run/opamroot OV=$(opam --version)
 }
 
-# opam's exit 5, not found, is not the query's alone, so it counts only
-# beside an error saying the query names nothing opam could install
-refused() {
-  [ "$1" -eq 20 ] || { [ "$1" -eq 5 ] &&
-    grep -qE '^\[ERROR\] (Package .* has no version|No package named|.*: unmet availability conditions)' "$2"; }
-}
+. "$S/refused.sh"
 
 ask() {
   # opam holds the switch's lock for a whole dry run, so each query asks its own copy

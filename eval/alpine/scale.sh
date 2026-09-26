@@ -14,7 +14,7 @@ prepare() {
   export APKROOT=$run/apkroot APK=$(sed -n 's/^export APK=//p' "$run/setup.log")
 }
 
-refused() { grep -q '^ERROR: unable to select packages' "$2"; }
+refused() { grep -qE -f "$S/refusals" "$2"; }
 
 ask() {
   timeout "$TIMEOUT" "$APK" add --root "$APKROOT/root" --usermode --allow-untrusted \

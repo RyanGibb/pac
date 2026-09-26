@@ -72,7 +72,7 @@ fix() {  # <name> <world...>: sets ch, kept and fixrc
     --repository "$ROOT/repo" fix --simulate > "$out/$name" 2>&1
   fixrc=$?
   rm -rf "$r"
-  [ "$fixrc" -eq 0 ] || grep -q '^ERROR: unable to select packages' "$out/$name" || err=1
+  [ "$fixrc" -eq 0 ] || grep -qE -f "$S/refusals" "$out/$name" || err=1
   ch=$(grep -c '^( *[0-9]*/[0-9]*) ' "$out/$name")
   kept=$(sed -n 's/^OK: .* in \([0-9]*\) packages$/\1/p' "$out/$name")
 }

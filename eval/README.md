@@ -58,7 +58,7 @@ Sections a flag asks for follow in the same shape: opam's `system packages`, car
 Then `encoded solution: N core nodes (K lookups)`: the solution's N packages of the encoding, and the K packages of the encoding whose dependencies the solve looked up.
 Where no answer exists, an `unsatisfiable:` line and PubGrub's explanation take the place of all of these.
 Either way the output ends in `loaded: N names, M versions` (with a frontend's own counts after), `parser dropped N declarations` where the parser dropped any, and the `parse` and `solve` times.
-`eval/answer.sh` is the one reader of the rows.
+The shell scripts read the rows through `eval/answer.sh`; cargo's `run_query.py` and npm's `tree.py` read them, with the sections their flags add, for the Python ones.
 
 The exit status, as `pac --help` lists it:
 
