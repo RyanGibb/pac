@@ -94,180 +94,199 @@ let version_matches pat v =
   && String.lowercase_ascii (String.sub v 0 lb) = String.lowercase_ascii b
   || fnmatch b v
 
+(* The names apt's cache holds a package for: every name a stanza carries,
+   provides, or relates to (pkgCacheGenerator makes a package of each), read
+   off the whole index, since the cache lists every version and not only
+   the candidates Strict-Pinning later keeps.  The solve's own tables cannot
+   answer this: they are built after the query has chosen the candidates.
+   The relations are parsed only if some name is neither carried nor
+   provided.  apt-get would go on to read an unknown name with glob or
+   regex characters as a pattern over the cache's names, which pac does
+   not. *)
+let cache_names (index : DF.stanza list) : string -> bool =
+  let own = Hashtbl.create 65536 in
+  List.iter
+    (fun (st : DF.stanza) ->
+      Hashtbl.replace own st.package ();
+      List.iter (fun (p : DF.provide) -> Hashtbl.replace own p.pname ()) st.provides)
+    index;
+  let related =
+    lazy
+      (let t = Hashtbl.create 65536 in
+       let add (a : DF.atom) = Hashtbl.replace t a.name () in
+       List.iter
+         (fun (st : DF.stanza) ->
+           List.iter add st.conflicts;
+           List.iter
+             (fun raw -> List.iter (List.iter add) (DF.parse_depends raw))
+             (st.depends_raw @ st.recommends_raw))
+         index;
+       t)
+  in
+  fun n -> Hashtbl.mem own n || Hashtbl.mem (Lazy.force related) n
+
 (* One argument of apt-get install, as VersionContainerInterface::FromString
    (apt-pkg/cacheset.cc) reads it: whatever follows the last '/' or '='
    selects a version, by release or by version string, and what precedes it
-   names the package, NAME[:ARCH] (PackageFromPackageName).  A selector
-   nothing meets is apt's error before it solves, with the message
-   CacheSetHelper::canNotGetVersion prints; FullName(true) leaves the native
-   architecture out. *)
-let query_element ~native ~arches (index : DF.stanza list) arg =
+   names the package, NAME[:ARCH] (PackageFromPackageName). *)
+let split_arg arg =
   let tag =
     match (String.rindex_opt arg '=', String.rindex_opt arg '/') with
     | Some i, Some j -> Some (max i j)
     | t, None | None, t -> t
   in
-  let pkg, sel =
-    match tag with
-    | Some i ->
-        ( String.sub arg 0 i,
-          Some (arg.[i], String.sub arg (i + 1) (String.length arg - i - 1)) )
-    | None -> (arg, None)
+  match tag with
+  | Some i ->
+      ( String.sub arg 0 i,
+        Some (arg.[i], String.sub arg (i + 1) (String.length arg - i - 1)) )
+  | None -> (arg, None)
+
+(* an unqualified name is apt's preferred package of the group
+   (GrpIterator::FindPreferredPkg): the native one if it has a version,
+   else the first architecture that does.  apt tries them in
+   APT::Architectures order, which pac cannot read, and takes the index's
+   architectures in sorted order instead. *)
+let package_key ~native ~arches (index : DF.stanza list) pkg =
+  match String.rindex_opt pkg ':' with
+  | Some i ->
+      let b = String.sub pkg (i + 1) (String.length pkg - i - 1) in
+      (String.sub pkg 0 i, if b = "all" || b = "native" then native else b)
+  | None -> (
+      let has b =
+        List.exists (fun st -> stanza_key ~native st = (pkg, b)) index
+      in
+      match List.find_opt has (native :: List.filter (( <> ) native) arches) with
+      | Some b -> (pkg, b)
+      | None -> (pkg, native))
+
+(* FullName(true), which leaves the native architecture out *)
+let full_name ~native (n, b) = if b = native then n else n ^ ":" ^ b
+
+(* the package's version list, newest first and the first read ahead of
+   a later stanza at the same version *)
+let version_list ~native (index : DF.stanza list) key =
+  List.stable_sort
+    (fun (a : DF.stanza) (b : DF.stanza) ->
+      Version.Debian.compare b.version a.version)
+    (List.filter (fun st -> stanza_key ~native st = key) index)
+
+let provides name (st : DF.stanza) =
+  List.exists (fun (p : DF.provide) -> p.pname = name) st.provides
+
+(* failing every version, pkgVersionMatch::Find takes a version whose
+   package provides itself at a matching version *)
+let self_provided name (vlist : DF.stanza list) v =
+  List.find_map
+    (fun (st : DF.stanza) ->
+      if
+        List.exists
+          (fun (p : DF.provide) ->
+            p.pname = name
+            && Option.fold ~none:false ~some:(version_matches v) p.pversion)
+          st.provides
+      then Some st.version
+      else None)
+    vlist
+
+(* CacheSetHelperAPTGet::tryVirtualPackage for a candidate: the provider
+   versions that are their package's candidate, taken when one package
+   holds them all, and of its architectures the one asked for, else
+   arch:all, else the native one.  A Multi-Arch: foreign package provides
+   itself and its Provides to every architecture. *)
+let virtual_candidate ~native (index : DF.stanza list) ((n, b) as key) =
+  let providers =
+    List.filter
+      (fun (st : DF.stanza) ->
+        (provides n st && snd (stanza_key ~native st) = b)
+        || st.multi_arch = Some "foreign" && (provides n st || st.package = n))
+      (pin_candidates ~native ~named:(Hashtbl.create 1) index)
   in
-  let has (n, b) =
-    List.exists (fun st -> stanza_key ~native st = (n, b)) index
+  let rank (st : DF.stanza) =
+    if st.architecture = b then 0
+    else if st.architecture = "all" then 1
+    else if st.architecture = native then 2
+    else 3
   in
-  (* an unqualified name is apt's preferred package of the group
-     (GrpIterator::FindPreferredPkg): the native one if it has a version,
-     else the first architecture that does.  apt tries them in
-     APT::Architectures order, which pac cannot read, and takes the
-     index's architectures in sorted order instead. *)
-  let key =
-    match String.rindex_opt pkg ':' with
-    | Some i ->
-        let b = String.sub pkg (i + 1) (String.length pkg - i - 1) in
-        (String.sub pkg 0 i, if b = "all" || b = "native" then native else b)
-    | None -> (
-        match
-          List.find_opt
-            (fun b -> has (pkg, b))
-            (native :: List.filter (( <> ) native) arches)
-        with
-        | Some b -> (pkg, b)
-        | None -> (pkg, native))
-  in
-  let full = if snd key = native then fst key else fst key ^ ":" ^ snd key in
-  (* the package's version list, newest first and the first read ahead of
-     a later stanza at the same version *)
-  let vlist =
-    List.stable_sort
-      (fun (a : DF.stanza) (b : DF.stanza) ->
-        Version.Debian.compare b.version a.version)
-      (List.filter (fun st -> stanza_key ~native st = key) index)
-  in
+  match List.stable_sort (fun a b -> compare (rank a) (rank b)) providers with
+  | st :: rest
+    when List.for_all (fun (o : DF.stanza) -> o.package = st.package) rest ->
+      Ok (stanza_key ~native st, Only st.version)
+  | _ ->
+      Error
+        (Printf.sprintf "Package '%s' has no installation candidate"
+           (full_name ~native key))
+
+(* The version a selector picks from the version list.  One nothing meets
+   is apt's error before it solves, with the message
+   CacheSetHelper::canNotGetVersion prints. *)
+let select ~native key (vlist : DF.stanza list) (how, what) =
+  let full = full_name ~native key in
   let first p =
     List.find_map
       (fun (st : DF.stanza) -> if p st.version then Some st.version else None)
       vlist
   in
-  (* failing every version, pkgVersionMatch::Find takes a version whose
-     package provides itself at a matching version *)
-  let self_provided v =
-    List.find_map
-      (fun (st : DF.stanza) ->
-        if
-          List.exists
-            (fun (p : DF.provide) ->
-              p.pname = fst key
-              && Option.fold ~none:false ~some:(version_matches v) p.pversion)
-            st.provides
-        then Some st.version
-        else None)
-      vlist
-  in
   let only why = function Some v -> Ok (key, Only v) | None -> Error why in
-  let provides (st : DF.stanza) =
-    List.exists (fun (p : DF.provide) -> p.pname = fst key) st.provides
-  in
-  (* a name no stanza carries, provides or relates to is no package of
-     apt's cache.  apt-get would go on to read one with glob or regex
-     characters as a pattern over the cache's names, which pac does not *)
-  let located () =
-    let named (a : DF.atom) = a.name = fst key in
-    let mentions raw =
-      let n = String.length (fst key) in
-      let rec at i =
-        i + n <= String.length raw
-        && (String.sub raw i n = fst key || at (i + 1))
-      in
-      at 0 && List.exists (List.exists named) (DF.parse_depends raw)
-    in
-    List.exists
-      (fun (st : DF.stanza) -> st.package = fst key || provides st)
-      index
-    || List.exists
-         (fun (st : DF.stanza) ->
-           List.exists named st.conflicts
-           || List.exists mentions (st.depends_raw @ st.recommends_raw))
-         index
-  in
-  (* CacheSetHelperAPTGet::tryVirtualPackage for a candidate: the provider
-     versions that are their package's candidate, taken when one package
-     holds them all, and of its architectures the one asked for, else
-     arch:all, else the native one.  A Multi-Arch: foreign package provides
-     itself and its Provides to every architecture. *)
-  let virtual_candidate () =
-    let providers =
-      List.filter
-        (fun (st : DF.stanza) ->
-          (provides st && snd (stanza_key ~native st) = snd key)
-          || st.multi_arch = Some "foreign"
-             && (provides st || st.package = fst key))
-        (pin_candidates ~native ~named:(Hashtbl.create 1) index)
-    in
-    let rank (st : DF.stanza) =
-      if st.architecture = snd key then 0
-      else if st.architecture = "all" then 1
-      else if st.architecture = native then 2
-      else 3
-    in
-    match List.stable_sort (fun a b -> compare (rank a) (rank b)) providers with
-    | st :: rest
-      when List.for_all (fun (o : DF.stanza) -> o.package = st.package) rest ->
-        Ok (stanza_key ~native st, Only st.version)
-    | _ ->
-        Error (Printf.sprintf "Package '%s' has no installation candidate" full)
-  in
-  if not (located ()) then
+  match (how, what) with
+  (* apt tests these keywords before the tag, so they read the same after
+     '/'; nothing is installed, as pac reads no dpkg status *)
+  | _, "installed" ->
+      Error
+        (Printf.sprintf
+           "Can't select installed version from package %s as it is not \
+            installed"
+           full)
+  (* without pins the candidate is the newest, which heads the list *)
+  | _, "candidate" ->
+      only
+        (Printf.sprintf
+           "Can't select candidate version from package %s as it has no \
+            candidate"
+           full)
+        (first (fun _ -> true))
+  | _, "newest" ->
+      only
+        (Printf.sprintf
+           "Can't select newest version from package '%s' as it is purely \
+            virtual"
+           full)
+        (first (fun _ -> true))
+  | '=', v ->
+      only
+        (Printf.sprintf "Version '%s' for '%s' was not found" v full)
+        (match first (version_matches v) with
+        | None -> self_provided (fst key) vlist v
+        | found -> found)
+  (* a release is matched against Release files, which pac does not
+     read; "*" matches every file (pkgVersionMatch::FileMatch) *)
+  | _, r ->
+      only
+        (Printf.sprintf "Release '%s' for '%s' was not found" r full)
+        (if r = "*" then first (fun _ -> true) else None)
+
+(* A name apt's cache lacks is "Unable to locate package" whatever selects
+   its version. *)
+let query_element ~native ~arches ~located (index : DF.stanza list) arg =
+  let pkg, sel = split_arg arg in
+  let key = package_key ~native ~arches index pkg in
+  if not (located (fst key)) then
     Error (Printf.sprintf "Unable to locate package %s" pkg)
   else
+    let vlist = version_list ~native index key in
     match sel with
-    | None when vlist = [] -> virtual_candidate ()
+    | None when vlist = [] -> virtual_candidate ~native index key
     | None -> Ok (key, Any)
-    (* apt tests these keywords before the tag, so they read the same after
-     '/'; nothing is installed, as pac reads no dpkg status *)
-    | Some (_, "installed") ->
-        Error
-          (Printf.sprintf
-             "Can't select installed version from package %s as it is not \
-              installed"
-             full)
-    (* without pins the candidate is the newest, which heads the list *)
-    | Some (_, "candidate") ->
-        only
-          (Printf.sprintf
-             "Can't select candidate version from package %s as it has no \
-              candidate"
-             full)
-          (first (fun _ -> true))
-    | Some (_, "newest") ->
-        only
-          (Printf.sprintf
-             "Can't select newest version from package '%s' as it is purely \
-              virtual"
-             full)
-          (first (fun _ -> true))
-    | Some ('=', v) ->
-        only
-          (Printf.sprintf "Version '%s' for '%s' was not found" v full)
-          (match first (version_matches v) with
-          | None -> self_provided v
-          | found -> found)
-    (* a release is matched against Release files, which pac does not
-     read; "*" matches every file (pkgVersionMatch::FileMatch) *)
-    | Some (_, r) ->
-        only
-          (Printf.sprintf "Release '%s' for '%s' was not found" r full)
-          (if r = "*" then first (fun _ -> true) else None)
+    | Some sel -> select ~native key vlist sel
 
 (* apt installs each element's version in argument order, setting it as the
    candidate, so of two naming one package the later wins; the versions the
    query names are what Strict-Pinning then keeps *)
 let parse_query ~native ~arches (index : DF.stanza list) args =
+  let located = cache_names index in
   let rec go acc = function
     | [] -> Ok acc
     | arg :: rest -> (
-        match query_element ~native ~arches index arg with
+        match query_element ~native ~arches ~located index arg with
         | Error e -> Error e
         | Ok (k, a) -> go (List.remove_assoc k acc @ [ (k, a) ]) rest)
   in

@@ -44,7 +44,8 @@ let index =
   ]
 
 let elem arg =
-  A.query_element ~native:"amd64" ~arches:[ "amd64"; "i386" ] index arg
+  A.query_element ~native:"amd64" ~arches:[ "amd64"; "i386" ]
+    ~located:(A.cache_names index) index arg
 
 let accepts = function A.Any -> "any" | A.Only v -> "=" ^ v
 
