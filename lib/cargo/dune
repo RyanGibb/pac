@@ -4,11 +4,12 @@
  (modules cargo_version cargo_parse cargo_toml cargo_query)
  (libraries version yojson))
 
-; wrapped, so that Order is Cargo_solve's own and not the other drivers'
+; wrapped, so that its Order, Lookups and Archive are cargo's and not the
+; other drivers'
 
 (library
  (name cargo_solve)
- (modules order cargo_solve)
+ (modules archive encoding lookups order pick cargo_solve)
  ; dune's warnings, reporting rather than failing: a warning here is a
  ; note to the author, and only the extraction this links against needs
  ; them off wholesale.

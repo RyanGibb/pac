@@ -245,7 +245,7 @@ let with_implicit_features (deps : dep list) (tbl : (string * fentry list) list)
    field is read as its default. *)
 let parse_line (line : string) : ver option =
   match Yojson.Safe.from_string line with
-  | exception _ ->
+  | exception Yojson.Json_error _ ->
       reject ();
       None
   | `Assoc _ as j -> (

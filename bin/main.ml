@@ -280,16 +280,7 @@ let cargo_run debug order print_parents index manifest features no_default
           } answer (fun a ->
             Report.packages
               (List.map
-                 (fun (n, v) ->
-                   let fs =
-                     match
-                       List.find_opt
-                         (fun (m, u, _) -> m = n && u = v)
-                         a.Cargo_solve.feats
-                     with
-                     | Some (_, _, fs) -> fs
-                     | None -> []
-                   in
+                 (fun (n, v, fs) ->
                    Printf.sprintf "%s %s%s" n v
                      (if fs = [] then "" else " [" ^ String.concat "," fs ^ "]"))
                  a.Cargo_solve.crates);

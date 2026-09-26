@@ -29,7 +29,6 @@ let solve (m, features, installed) =
   | Ok a ->
       Some
         ( a.Cargo_solve.crates,
-          a.Cargo_solve.feats,
           a.Cargo_solve.parents,
           a.Cargo_solve.nodes,
           a.Cargo_solve.processed,

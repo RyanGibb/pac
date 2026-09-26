@@ -169,6 +169,84 @@ let resolver_of = function
 
 let crates_io = [ "crates-io"; "https://github.com/rust-lang/crates.io-index" ]
 
+(* the resolver [package] or [workspace] names, else the edition's *)
+let resolver_of_manifest doc pkg =
+  let ws_resolver =
+    match get "workspace" doc with
+    | None -> None
+    | Some w ->
+        let w = table "workspace" w in
+        List.iter
+          (fun (k, _) ->
+            if k <> "resolver" then
+              refuse
+                "workspace.%s: a workspace beyond its resolver is not \
+                 modelled; the root is one package"
+                k)
+          w;
+        Option.map
+          (fun r -> resolver_of (str "workspace.resolver" r))
+          (get "resolver" w)
+  in
+  match
+    ( Option.map
+        (fun r -> resolver_of (str "package.resolver" r))
+        (get "resolver" pkg),
+      ws_resolver )
+  with
+  | Some _, Some _ ->
+      refuse
+        "cannot specify `resolver` field in both `[workspace]` and `[package]`"
+  | Some r, None | None, Some r -> r
+  | None, None ->
+      resolver_of_edition
+        (match get "edition" pkg with
+        | Some e -> str "package.edition" e
+        | None -> "2015")
+
+(* the unconditional tables, then each [target.'cfg'] one *)
+let deps_of_manifest doc =
+  deps_of ~cfg:"" ~prefix:"" doc
+  @
+  match get "target" doc with
+  | None -> []
+  | Some t ->
+      List.concat_map
+        (fun (cfg, p) ->
+          let prefix = Printf.sprintf "target.'%s'." cfg in
+          deps_of ~cfg ~prefix (table ("target." ^ cfg) p))
+        (table "target" t)
+
+(* whether [patch.crates-io] maps the root's own name to the root, the one
+   patch modelled *)
+let self_patch_of doc name =
+  match get "patch" doc with
+  | None -> false
+  | Some p ->
+      List.iter
+        (fun (reg, entries) ->
+          if not (List.mem reg crates_io) then
+            refuse "[patch.%s]: only crates.io is modelled" reg;
+          List.iter
+            (fun (k, v) ->
+              let e = table (Printf.sprintf "patch.%s.%s" reg k) v in
+              match e with
+              | [ ("path", T.Str ("." | "./")) ] when k = name -> ()
+              | _ ->
+                  refuse
+                    "[patch.%s] %s: the only patch modelled maps the root's \
+                     own name to the root, { path = \".\" }"
+                    reg k)
+            (table ("patch." ^ reg) entries))
+        (table "patch" p);
+      true
+
+let rust_version r =
+  let r = str "package.rust-version" r in
+  if not (Cargo_version.partial_ok ~rust:true r) then
+    refuse "package.rust-version %S is not a version like \"1.32\"" r;
+  r
+
 (* as cargo 1.97's util/toml/mod.rs reads a manifest.  The root becomes
    one more crate version, so a field with no place in the index form -- a
    path or git source, another registry, a [patch] other than the root's
@@ -207,53 +285,8 @@ let of_manifest (path : string) : root =
     | Some v -> str "package.version" v
     | None -> "0.0.0"
   in
-  let ws_resolver =
-    match get "workspace" doc with
-    | None -> None
-    | Some w ->
-        let w = table "workspace" w in
-        List.iter
-          (fun (k, _) ->
-            if k <> "resolver" then
-              refuse
-                "workspace.%s: a workspace beyond its resolver is not \
-                 modelled; the root is one package"
-                k)
-          w;
-        Option.map
-          (fun r -> resolver_of (str "workspace.resolver" r))
-          (get "resolver" w)
-  in
-  let resolver =
-    match
-      ( Option.map
-          (fun r -> resolver_of (str "package.resolver" r))
-          (get "resolver" pkg),
-        ws_resolver )
-    with
-    | Some _, Some _ ->
-        refuse
-          "cannot specify `resolver` field in both `[workspace]` and \
-           `[package]`"
-    | Some r, None | None, Some r -> r
-    | None, None ->
-        resolver_of_edition
-          (match get "edition" pkg with
-          | Some e -> str "package.edition" e
-          | None -> "2015")
-  in
-  let deps =
-    deps_of ~cfg:"" ~prefix:"" doc
-    @
-    match get "target" doc with
-    | None -> []
-    | Some t ->
-        List.concat_map
-          (fun (cfg, p) ->
-            let prefix = Printf.sprintf "target.'%s'." cfg in
-            deps_of ~cfg ~prefix (table ("target." ^ cfg) p))
-          (table "target" t)
-  in
+  let resolver = resolver_of_manifest doc pkg in
+  let deps = deps_of_manifest doc in
   let declared =
     match get "features" doc with
     | None -> []
@@ -268,28 +301,7 @@ let of_manifest (path : string) : root =
       "%s: [features] is not a table cargo accepts: every entry names a \
        feature, an optional dependency (dep:), or a dependency's feature"
       path;
-  let self_patch =
-    match get "patch" doc with
-    | None -> false
-    | Some p ->
-        List.iter
-          (fun (reg, entries) ->
-            if not (List.mem reg crates_io) then
-              refuse "[patch.%s]: only crates.io is modelled" reg;
-            List.iter
-              (fun (k, v) ->
-                let e = table (Printf.sprintf "patch.%s.%s" reg k) v in
-                match e with
-                | [ ("path", T.Str ("." | "./")) ] when k = name -> ()
-                | _ ->
-                    refuse
-                      "[patch.%s] %s: the only patch modelled maps the root's \
-                       own name to the root, { path = \".\" }"
-                      reg k)
-              (table ("patch." ^ reg) entries))
-          (table "patch" p);
-        true
-  in
+  let self_patch = self_patch_of doc name in
   {
     ver =
       {
@@ -299,15 +311,7 @@ let of_manifest (path : string) : root =
         v_feats = P.with_implicit_features deps declared;
         v_links = Option.map (str "package.links") (get "links" pkg);
         v_default_declared = List.mem_assoc P.default_feature declared;
-        v_msrv =
-          Option.map
-            (fun r ->
-              let r = str "package.rust-version" r in
-              if not (Cargo_version.partial_ok ~rust:true r) then
-                refuse "package.rust-version %S is not a version like \"1.32\""
-                  r;
-              r)
-            (get "rust-version" pkg);
+        v_msrv = Option.map rust_version (get "rust-version" pkg);
       };
     self_patch;
     msrv_pref = resolver >= 3;
