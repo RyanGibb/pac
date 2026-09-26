@@ -10,8 +10,12 @@
 #   minimal=yes|no|-  whether the tool, left to settle the answer for the
 #     query alone, would keep it as it stands rather than remove or swap
 #     something; - where the answer is not VALID.
-# The core calculus asks a resolution for no minimality, so only valid
-# counts against pac.
+#   reproduced=yes|no|-  for cargo and npm, whose answer is a lockfile:
+#     whether the tool keeps it as its own lock, repairing nothing; - where
+#     the answer is not VALID, the question could not be asked, or the
+#     ecosystem has no lockfile to ask it of.
+# The core calculus asks a resolution for no minimality, and a tool's lock
+# repairs by its own preferences, so only valid counts against pac.
 set -u
 E="$(cd "$(dirname "$0")" && pwd)"
 [ $# -ge 3 ] && [ -f "$E/$1/check.sh" -o -f "$E/$1/check.py" ] ||

@@ -94,8 +94,9 @@ canon() { cat "$1.ours"; }  # <stem>
 
 check_query() { printf '%s\n' "$2"; }  # <stem> <query>
 
-# eval/check.sh's two verdicts on <stem>.out, its files under <stem>.check;
-# no verdict at all, a timeout among them, is ERR
+# eval/check.sh's verdicts on <stem>.out, its files under <stem>.check;
+# no verdict at all, a timeout among them, is ERR, and an ecosystem whose
+# check asks nothing of reproduction leaves it -
 check() {  # <stem> <query words...>
   local p=$1 v; shift
   mkdir -p "$p.check"
@@ -103,8 +104,10 @@ check() {  # <stem> <query words...>
   v=" $(tail -n 1 "$p.check/log")"
   valid=$(sed -n 's/.* valid=\([A-Z]*\)\( .*\)\{0,1\}$/\1/p' <<< "$v")
   minimal=$(sed -n 's/.* minimal=\([a-z-]*\)\( .*\)\{0,1\}$/\1/p' <<< "$v")
+  reproduced=$(sed -n 's/.* reproduced=\([a-z-]*\)\( .*\)\{0,1\}$/\1/p' <<< "$v")
   case $valid in VALID|INVALID|CYCLIC) ;; *) valid=ERR ;; esac
   [ "$valid" = VALID ] && [ -n "$minimal" ] || minimal=-
+  [ "$valid" = VALID ] && [ -n "$reproduced" ] || reproduced=-
 }
 
 fields() { :; }  # <stem>: extra fields of a mode's line, each " k=v"
@@ -127,15 +130,15 @@ snapshot() {  # <path under repos/>
 }
 
 one() {  # <key> <query>
-  local o=$run/out/$1 m p pac tool=- twall=- corr valid minimal oo to t0 wall pin=- k lines=
-  local -A seenv=() seenm=() seenp=()
+  local o=$run/out/$1 m p pac tool=- twall=- corr valid minimal reproduced oo to t0 wall pin=- k lines=
+  local -A seenv=() seenm=() seenr=() seenp=()
   set -f
   [ -n "$FUZZ" ] || ask_tool "$1" "$2"
   # pin_tool asks pac for the tool's own answer, into pin: ok, unsat, or no
   # verdict; only an unsat makes a divergence an instance gap
   if [ "$tool" = ok ] && declare -F pin_tool > /dev/null; then pin_tool "$1" "$2"; fi
   for m in $MODES; do
-    p=$o.$m corr=- valid=- minimal=- oo=- to=- t0=$EPOCHREALTIME
+    p=$o.$m corr=- valid=- minimal=- reproduced=- oo=- to=- t0=$EPOCHREALTIME
     rm -rf "$p.check"
     run_pac "$m" "$p" "$2"
     echo $? > "$p.rc"
@@ -147,14 +150,14 @@ one() {  # <key> <query>
     if [ "$pac" = ok ]; then
       k=$(canon "$p" | sha256sum | cut -c1-32; exit "${PIPESTATUS[0]}") || k=
       if [ -n "$k" ] && [ -n "${seenv[$k]+x}" ]; then
-        valid=${seenv[$k]} minimal=${seenm[$k]}
+        valid=${seenv[$k]} minimal=${seenm[$k]} reproduced=${seenr[$k]}
         ln -sfn -- "${seenp[$k]##*/}.check" "$p.check"
       else
         check "$p" $(check_query "$p" "$2")
-        if [ -n "$k" ]; then seenv[$k]=$valid seenm[$k]=$minimal seenp[$k]=$p; fi
+        if [ -n "$k" ]; then seenv[$k]=$valid seenm[$k]=$minimal seenr[$k]=$reproduced seenp[$k]=$p; fi
       fi
     fi
-    lines+="query=$1 mode=$m pac=$pac tool=$tool corr=$corr valid=$valid minimal=$minimal oo=$oo to=$to wall=$wall pin=$pin$(fields "$p")"$'\n'
+    lines+="query=$1 mode=$m pac=$pac tool=$tool corr=$corr valid=$valid minimal=$minimal reproduced=$reproduced oo=$oo to=$to wall=$wall pin=$pin$(fields "$p")"$'\n'
   done
   emit "$lines"
 }
@@ -172,14 +175,16 @@ fuzz_totals() {
   awk -v k="$(wc -w <<< "$MODES")" -v run="$run" '
     {delete f; for (i = 1; i <= NF; i++) {j = index($i, "="); f[substr($i, 1, j - 1)] = substr($i, j + 1)}
      q[f["query"]]; n++; pac[f["pac"]]++; v[f["valid"]]++; mi += f["minimal"] == "yes"
+     re += f["reproduced"] == "yes"; ra += f["reproduced"] ~ /^(yes|no)$/
      if (f["valid"] == "INVALID") iq[f["query"]]
      if (f["pac"] ~ /^(ok|unsat)$/) st[f["query"], f["pac"]]}
     END {for (x in q) if ((x, "ok") in st && (x, "unsat") in st) {split_n++; print x > (run "/split.txt")}
          printf "fuzz: %d queries x %d seeds = %d runs; pac ok %d, unsat %d, refuse %d, io-error %d, timeout %d, crash %d",
            length(q), k, n, pac["ok"], pac["unsat"], pac["refuse"], pac["io-error"], pac["timeout"], pac["crash"]
          print pac["harness"] ? sprintf(", harness %d", pac["harness"]) : ""
-         printf "fuzz: valid %d, INVALID %d (in %d queries), ERR %d, cyclic %d; minimal %d/%d\n",
-           v["VALID"], v["INVALID"], length(iq), v["ERR"], v["CYCLIC"], mi, v["VALID"]
+         printf "fuzz: valid %d, INVALID %d (in %d queries), ERR %d, cyclic %d; minimal %d/%d%s\n",
+           v["VALID"], v["INVALID"], length(iq), v["ERR"], v["CYCLIC"], mi, v["VALID"],
+           ra ? sprintf("; reproduced %d/%d", re, ra) : ""
          printf "fuzz: %d queries answered under some seeds and unsat under others (split.txt)\n", split_n}' \
     "$run/results.txt"
 }
@@ -247,11 +252,13 @@ main() {
      else if (f["tool"] == "ok") {ans[m]++; ex[m] += f["corr"] == "exact"}
      if (f["valid"] ~ /^(VALID|INVALID)$/) {chk[m]++; ok[m] += f["valid"] == "VALID"}
      if (f["valid"] == "VALID") mi[m] += f["minimal"] == "yes"
+     re[m] += f["reproduced"] == "yes"; ra[m] += f["reproduced"] ~ /^(yes|no)$/
      cy[m] += f["valid"] == "CYCLIC"; er[m] += f["valid"] == "ERR"}
     END {k = split(modes, ms, " "); np = split("unsat refuse io-error timeout crash harness", st, " ")
       for (i = 1; i <= k; i++) if (ms[i] in n) {
         m = ms[i]
         printf "%s: %d queries, exact %d/%d, valid %d/%d, minimal %d/%d", m, n[m], ex[m], ans[m], ok[m], chk[m], mi[m], ok[m]
+        if (ra[m]) printf ", reproduced %d/%d", re[m], ra[m]
         if (cy[m]) printf ", cyclic %d", cy[m]
         if (er[m]) printf ", unchecked %d", er[m]
         if (uc[m]) printf ", uncompared %d", uc[m]

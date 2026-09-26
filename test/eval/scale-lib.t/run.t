@@ -25,6 +25,6 @@ counts it apart, as it does every run pac gave no answer on.
   toy.sh: 3 of 3 queries to run
   tool: 3 queries, exact 1/2, valid 2/2, minimal 2/2, uncompared 1, pac unsat 1
   $ sed 's/ wall=[^ ]*//' run3/results.txt
-  query=a mode=tool pac=ok tool=ok corr=exact valid=VALID minimal=yes oo=0 to=0 pin=-
-  query=broken mode=tool pac=ok tool=ok corr=ERR valid=VALID minimal=yes oo=- to=- pin=-
-  query=u mode=tool pac=unsat tool=ok corr=- valid=- minimal=- oo=- to=- pin=-
+  query=a mode=tool pac=ok tool=ok corr=exact valid=VALID minimal=yes reproduced=- oo=0 to=0 pin=-
+  query=broken mode=tool pac=ok tool=ok corr=ERR valid=VALID minimal=yes reproduced=- oo=- to=- pin=-
+  query=u mode=tool pac=unsat tool=ok corr=- valid=- minimal=- reproduced=- oo=- to=- pin=-

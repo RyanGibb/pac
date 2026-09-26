@@ -105,6 +105,12 @@ def report(run, by="mode"):
         show("minimal, of the valid answers, %s %s" % (by, m), group(
             [r for r in rows if r[by] == m and r["valid"] == "VALID"],
             lambda r: "minimal=" + r.get("minimal", "-")))
+        # so is whether the tool keeps the answer as its own lock
+        show("reproduced, of the valid answers, %s %s" % (by, m), group(
+            [r for r in rows if r[by] == m and r["valid"] == "VALID"
+             and r.get("reproduced", "-") != "-"],
+            lambda r: "reproduced=" + r["reproduced"]
+            + (" (the tool's own answer)" if r["corr"] == "exact" else "")))
     cls = {(r["query"], r[by]): r["class"] for r in rows}
     pools = [l.split("\t", 1) for l in lines(os.path.join(run, "queries.txt")) if "\t" in l]
     for m in parts if pools else []:
