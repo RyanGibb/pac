@@ -1,9 +1,3 @@
-(* SemVer 2.0.0 versions, their precedence (semver.org section 11) and
-   the prerelease-admission rule, as cargo and npm both read them.  The
-   two differ only in how a string becomes a version: [Strict] is the
-   semver crate's reading and [Loose] is node-semver's loose one, so each
-   is a module of its own rather than a flag.  Trusted (TCB). *)
-
 let is_digit c = c >= '0' && c <= '9'
 
 type t = {
@@ -112,7 +106,7 @@ let rec cmp_ids a b =
       let c = cmp_id x y in
       if c <> 0 then c else cmp_ids xs ys
 
-(* build metadata takes no part *)
+(* semver.org 2.0.0 section 11; build metadata takes no part *)
 let precedence (x : t) (y : t) : int =
   let c = compare x.major y.major in
   if c <> 0 then c
@@ -161,23 +155,6 @@ let partial_of split (s : string) =
 let vstr ?(pre = "") maj min pat =
   Printf.sprintf "%d.%d.%d%s" maj min pat (if pre = "" then "" else "-" ^ pre)
 
-module type S = sig
-  val parse : string -> t
-  val compare : string -> string -> int
-  val is_prerelease : string -> bool
-  val same_core : string -> string -> bool
-
-  (* A requirement admits a prerelease candidate only when one of its own
-     comparators names a prerelease at the same release core: the semver
-     crate's pre_is_compatible (eval.rs) and node-semver's testSet
-     (classes/range.js), and Semver.csAdmits in the calculus.  The list is
-     the versions a comparator set names. *)
-  val admits : string -> string list -> bool
-
-  (* a range's operand: (major, minor, patch, prerelease) *)
-  val parse_partial : string -> comp * comp * comp * string
-end
-
 let memo size f =
   let tbl : (string, t) Hashtbl.t = Hashtbl.create size in
   fun s ->
@@ -189,7 +166,8 @@ let memo size f =
         p
 
 (* The semver crate's reading: a prerelease follows a hyphen and nothing
-   else. *)
+   else.  Cargo and npm differ only in how a string becomes a version, so
+   each reading is a module of its own rather than a flag. *)
 module Strict = struct
   let parse_fresh = of_parts split_hyphen
 
@@ -250,6 +228,11 @@ module Strict = struct
   let is_prerelease v = (parse v).pre <> []
   let same_core a b = same_core_parsed (parse a) (parse b)
 
+  (* A requirement admits a prerelease candidate only when one of its own
+     comparators names a prerelease at the same release core: the semver
+     crate's pre_is_compatible (eval.rs) and node-semver's testSet
+     (classes/range.js).  [bounds] are the versions a comparator set
+     names. *)
   let admits v bounds =
     (not (is_prerelease v))
     || List.exists (fun c -> is_prerelease c && same_core v c) bounds

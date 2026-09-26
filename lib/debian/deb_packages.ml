@@ -1,8 +1,3 @@
-(* Packages-index parser, from Debian Policy 5.3 (stanza syntax) and 7.1
-   (relationship fields).  Untrusted; build profiles and architecture
-   restriction lists are stripped, and a Provides' architecture qualifier is
-   ignored. *)
-
 type cmp = Ge | Gt | Le | Lt | Eq
 type arch_qual = Unqual | AnyArch | NativeArch | ExplicitArch of string
 type atom = { name : string; aqual : arch_qual; constr : (cmp * string) option }
@@ -160,7 +155,7 @@ let parse_conflicts field =
   (* Policy 7.1 allows alternatives only in the Depends family. *)
   split_on ',' field |> List.filter_map parse_atom
 
-(* declarations the parser read and dropped, which main reports *)
+(* declarations the parser read and dropped, counted to be reported *)
 let rejected = ref 0
 
 let reject () =

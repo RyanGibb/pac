@@ -39,13 +39,12 @@ INDEX="${INDEX:-$S/../../repos/alpine/APKINDEX}"
 ans=$1 out=$2; shift 2
 [ -r "$INDEX" ] || { echo "no index $INDEX valid=ERR minimal=-"; exit 0; }
 
-sed -n '/^packages (/,/^encoded solution/p' "$ans" \
-  | sed -n 's/^  \([^ ]*\) \([^ ]*\)$/\1=\2/p' | sort -u > "$out/req"
+rows "$ans" | sed -n 's/^\([^ ]*\) \([^ ]*\)$/\1=\2/p' | sort -u > "$out/req"
 n=$(wc -l < "$out/req")
 # the extraction above skips any line that is not a row, so such a line
 # would leave apk judging fewer packages than the answer names
-malformed=$(awk '/^encoded solution/ {exit} s && !/^  [^[:space:]]+ [^[:space:]]+$/
-                 /^packages \(/ {s=1}' "$ans" | wc -l)
+malformed=$(rows "$ans" | awk '!/^[^[:space:]]+ [^[:space:]]+$/' | wc -l)
+whole "$ans" || malformed=$((malformed + 1))
 dup=$(sed 's/=.*//' "$out/req" | sort | uniq -d | wc -l)
 python3 "$S/bare.py" "$INDEX" "$out/req" "$@" > "$out/bare" 2>&1
 brc=$?

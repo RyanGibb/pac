@@ -11,7 +11,7 @@
  ; them off wholesale.
  (flags
   (:standard -warn-error -a))
- (libraries apk_frontend pac package_formula pubgrub))
+ (libraries apk_frontend pac pac_common package_formula pubgrub))
 
 (test
  (name test_apk_version)

@@ -1,12 +1,3 @@
-(* Deciding in apt's order: the names PubGrub's next hook takes, and the
-   candidates its choose hook prefers, replayed from apt's solver
-   (apt-pkg/solver3.cc) through the encoding's synthetic names.  The
-   pubgrub order needs none of this; the tool order is a shadow of apt's
-   propagation queue and work heap (Work_heap), driven by a model of apt's
-   Reject propagation over the tables (Make). *)
-
-type t = [ `Tool | `Pubgrub ]
-
 (* The split apt makes between what it unit-propagates (Enqueue) and what it
    queues as a work item, seen through the synthetic names of the
    encoding. *)
@@ -1110,7 +1101,7 @@ module Make (S : SEARCH) = struct
     &&
     match vt with
     | DMA.Deb.DTTop -> true
-    | DMA.Deb.DTVal u -> Debian_frontend.Deb_version.compare u w = 0
+    | DMA.Deb.DTVal u -> Version.Debian.compare u w = 0
 
   (* apt's solution counts: an alternative's solutions are its target's
      versions that satisfy it and, one per entry, the target's ProvidesList
@@ -1758,6 +1749,54 @@ module Make (S : SEARCH) = struct
     |> kept_filter t n
     |> narrowed_filter st ~assigned n
 
-  let next = Heap.next
-  let report = Heap.report
+  (* A name only conflicts have reached admits absence, its greatest
+     version, and is decided last: deciding it earlier would forbid a
+     dependency that later comes to require it.  apt has no work item for
+     such a name, so the shadow heap never sees it.  Only a real name has
+     the absent version; asking the partial solution about a clause name
+     would compare its atom set. *)
+  let admits_bot ~assigned tn =
+    match tn with
+    | DMA.Deb.Name.Orig _ -> (
+        match assigned tn with
+        | PG.Entailed r -> PG.Ranges.contains (tag tn DMA.Deb.Version.Bot) r
+        | _ -> false)
+    | _ -> false
+
+  (* apt never resolves a clause one of whose alternatives is already
+     satisfied: it leaves the clause alone and installs nothing for it.
+     PubGrub has to decide the disjunct either way, so the nearest thing is
+     to decide it at no cost -- an alternative, or a provider of one, the
+     solution already holds.  Where it holds none, and for every other
+     name, PVersion.compare's answer stands unchanged; the tool order first
+     narrows the candidates to those apt would consider. *)
+  let hooks : (unit, name, PG.selection, PVersion.t) Pac_common.Order.driver =
+   fun order () ->
+    let next pick ~assigned open_names =
+      match
+        List.filter (fun (tn, _) -> not (admits_bot ~assigned tn)) open_names
+      with
+      | [] -> fst (List.hd open_names)
+      | req -> pick ~assigned req
+    in
+    let choose filter ~assigned n cands =
+      let cands = filter ~assigned n cands in
+      match free_of ~assigned n cands with
+      | [] -> greatest cands
+      | free -> greatest free
+    in
+    match order with
+    | `Tool ->
+        let t = create () in
+        Pac_common.Order.make
+          ~next:(next (Heap.next t))
+          ~choose:(choose (filter t))
+          ~finish:(fun () -> Heap.report t)
+          ()
+    | `Pubgrub ->
+        Pac_common.Order.make
+          ~next:(next (fun ~assigned:_ req -> fst (List.hd req)))
+          ~choose:(choose (fun ~assigned:_ _ cands -> cands))
+          ()
+    | `Random seed -> Pac_common.Order.random seed
 end

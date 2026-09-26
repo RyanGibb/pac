@@ -1,19 +1,3 @@
-(* Trusted (TCB) ingestion of a registry packument, the JSON document at
-   https://registry.npmjs.org/<name>.  Trusted beyond the plumbing: the
-   registry itself, taken at face value with nothing checked against the
-   tarball; range *parsing* (npm_version.ml), since the calculus decides
-   which versions a parsed range admits and only engines ranges are
-   evaluated in OCaml; and the dependency-spec classification below, where
-   git, file and URL specs, and the link:, workspace:, portal: and patch:
-   specs npa refuses, are dropped and counted rather than guessed at.
-
-   Deliberately not read: "os", "cpu" and "libc", which npm-pick-manifest
-   never consults and npm tests only once the tree is built
-   (#checkEngineAndPlatform), so reading them would make our instance
-   strictly smaller than npm's; and bundleDependencies, whose entries stay
-   ordinary registry dependencies although npm takes their versions from
-   the tarball, which this frontend neither fetches nor trusts. *)
-
 type dep = {
   d_dir : string; (* the directory key, i.e. the manifest key *)
   d_target : string; (* the registry package, differing under npm: *)
@@ -86,8 +70,10 @@ let looks_like_tag s =
        (fun c -> (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c = '-')
        s
 
-(* no range semver reads, loose or not, holds a '!', so npa takes one for a
-   tag name and refuses it (EINVALIDTAGNAME) *)
+(* git, file and URL specs, and the link:, workspace:, portal: and patch:
+   specs npa refuses, are dropped and counted rather than guessed at.  No
+   range semver reads, loose or not, holds a '!', so npa takes one for a
+   tag name and refuses it (EINVALIDTAGNAME). *)
 let unresolvable s =
   String.contains s '!' || has_sub s "://" || starts "$" s || starts "git+" s
   || starts "git:" s || starts "file:" s || starts "link:" s
@@ -197,6 +183,12 @@ let engine_of (j : Yojson.Safe.t) (k : string) : Npm_version.range option =
   | `String rg -> Some (Npm_version.parse_range ~include_prerelease:true rg)
   | _ -> None
 
+(* "os", "cpu" and "libc" are not read: npm-pick-manifest never consults
+   them and npm tests them only once the tree is built
+   (#checkEngineAndPlatform), so reading them would make our instance
+   strictly smaller than npm's.  bundleDependencies entries stay ordinary
+   registry dependencies although npm takes their versions from the
+   tarball, which is neither fetched nor trusted here. *)
 let ver_of ~(root : bool) (vers : string) (j : Yojson.Safe.t) : ver option =
   match j with
   | `Assoc _ ->

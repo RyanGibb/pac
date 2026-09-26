@@ -1,26 +1,6 @@
-(* Which name PubGrub decides next and which candidate it tries, as apk
-   would ([`Tool]), or as near PubGrub's own choices ([`Pubgrub]) as an
-   answer apk accepts allows.  apk accepts an installed set only when its
-   own solver, rerun on it, changes nothing, and that solver swaps a
-   provider for a higher-ranked one and drops a package nothing needs.
-   So an answer that departs from apk's choices is one apk rejects, and
-   three of the rules below are kept in both orders: apk's provider
-   ranking, which PVersion carries, a name already provided by a selected
-   package kept for it, and install-if rules decided last.  On 2222 goals
-   chosen to exercise providers and install-if rules, dropping the second
-   leaves 175 answers apk rejects, the third 200, and PubGrub's
-   own choose and next together 359; dropping the install-if rule of
-   [choose], which is all [`Pubgrub] drops, changes none.  Trusted here
-   (TCB): these policy choices. *)
-
 open Lookups
 
-type t = [ `Tool | `Pubgrub ]
-
-let greatest = function
-  | [] -> invalid_arg "greatest"
-  | c :: cs ->
-      List.fold_left (fun a b -> if PVersion.compare b a > 0 then b else a) c cs
+let greatest = Pac_common.Order.greatest PVersion.compare
 
 (* only installIfForm's disjuncts open on FNeg: encDep negates whole
    formulas *)
@@ -130,7 +110,22 @@ let next ~assigned (opens : (PFR.Name.t * int) list) =
        (fun best c -> if rank c < rank best then c else best)
        (List.hd opens) (List.tl opens))
 
-let hooks (order : t) ar =
+(* apk accepts an installed set only when its own solver, rerun on it,
+   changes nothing, and that solver swaps a provider for a higher-ranked
+   one and drops a package nothing needs.  So an answer that departs from
+   apk's choices is one apk rejects, and three rules are kept in both
+   orders: apk's provider ranking, which PVersion carries, a name already
+   provided by a selected package kept for it, and install-if rules
+   decided last.  On 2222 goals chosen to exercise providers and
+   install-if rules, dropping the second leaves 175 answers apk rejects,
+   the third 200, and PubGrub's own choose and next together 359;
+   dropping the install-if rule of [choose], which is all [`Pubgrub]
+   drops, changes none. *)
+let hooks :
+    (archive, PFR.Name.t, PG.selection, PVersion.t) Pac_common.Order.driver =
+ fun order ar ->
   match order with
-  | `Tool -> (Some next, Some (choose ar ~install_if:true))
-  | `Pubgrub -> (Some next, Some (choose ar ~install_if:false))
+  | `Tool -> Pac_common.Order.make ~next ~choose:(choose ar ~install_if:true) ()
+  | `Pubgrub ->
+      Pac_common.Order.make ~next ~choose:(choose ar ~install_if:false) ()
+  | `Random seed -> Pac_common.Order.random seed

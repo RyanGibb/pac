@@ -1,25 +1,11 @@
-(* The index -- the parsed Packages file -- normalised, and the tables
-   derived from it: what reads the instance without deciding anything. *)
-
 module E = Pac
 module DF = Debian_frontend.Deb_packages
 
-let c2r c = if c < 0 then E.Lt else if c > 0 then E.Gt else E.Eq
-let r2c = function E.Lt -> -1 | E.Eq -> 0 | E.Gt -> 1
-
-module StringOT = struct
+module DebVersionOT = Pac_common.Ot.Make (struct
   type t = string
 
-  let compare a b = c2r (String.compare a b)
-  let eq_dec (a : string) b = String.equal a b
-end
-
-module DebVersionOT = struct
-  type t = string
-
-  let compare a b = c2r (Debian_frontend.Deb_version.compare a b)
-  let eq_dec a b = Debian_frontend.Deb_version.compare a b = 0
-end
+  let compare = Version.Debian.compare
+end)
 
 module type ARCH = sig
   val arches : string list
@@ -29,17 +15,15 @@ end
 module Make (AP : ARCH) = struct
   module APx = struct
     module A = struct
-      type t = string
+      include Pac_common.Ot.Str
 
-      let compare a b = c2r (String.compare a b)
-      let eq_dec (a : string) b = String.equal a b
       let enum = AP.arches
     end
 
     let native = AP.native
   end
 
-  module DMA = E.DebianMA (StringOT) (DebVersionOT) (APx)
+  module DMA = E.DebianMA (Pac_common.Ot.Str) (DebVersionOT) (APx)
 
   let formula_of_constr = function
     | None -> DMA.Deb.Ver.FTop
@@ -72,7 +56,7 @@ module Make (AP : ARCH) = struct
     mutable nclauses : (DMA.Atom.t list list * DMA.Atom.t list list) option;
     nprovs : (string * DMA.Deb.coq_DTop) list;
     nconfs : DMA.Atom.t list;
-    (* apt ranks the providers claiming a name by these; see pref below *)
+    (* apt ranks the providers claiming a name by these *)
     ness : bool;
     nimp : bool;
     nprio : int;
@@ -116,9 +100,6 @@ module Make (AP : ARCH) = struct
       nall = st.architecture = "all";
     }
 
-  (* The tables derived from the index, untrusted: their faithfulness to the
-     parsed instance is trusted, as are the parser, Deb_version, the
-     Strict-Pinning cut and PubGrub. *)
   type tables = {
     versions_table : (string * string, string list) Hashtbl.t;
     stanza_table : (DMA.Pkg.t, nstanza) Hashtbl.t;
@@ -144,13 +125,8 @@ module Make (AP : ARCH) = struct
       (DMA.Pkg.t, (bool * DMA.Deb.Name.t * DMA.Deb.Atom.t list) list) Hashtbl.t;
   }
 
-  let push tbl k v =
-    Hashtbl.replace tbl k
-      (v :: (match Hashtbl.find_opt tbl k with Some l -> l | None -> []))
-
-  let find_list tbl k =
-    match Hashtbl.find_opt tbl k with Some l -> l | None -> []
-
+  let push = Pac_common.Tbl.push
+  let find_list = Pac_common.Tbl.find_list
   let stanza tables p = Hashtbl.find_opt tables.stanza_table p
 
   let parse_relations fields =
@@ -272,7 +248,7 @@ module Make (AP : ARCH) = struct
         let (_, b'), _ = s.npkg in
         fst s.npkg <> fst stz.npkg
         && String.equal b b' && s.nall = stz.nall
-        && Debian_frontend.Deb_version.compare (snd s.nsrc) (snd stz.nsrc) > 0)
+        && Version.Debian.compare (snd s.nsrc) (snd stz.nsrc) > 0)
       (find_list (Lazy.force tables.source_table) (fst stz.nsrc))
 
   (* Only a lookup at a stanza's own package reads its clauses, so they can
@@ -336,7 +312,7 @@ module Make (AP : ARCH) = struct
     | DMA.Deb.Ver.FConj (p, q) -> sat p w && sat q w
     | DMA.Deb.Ver.FDisj (p, q) -> sat p w || sat q w
     | DMA.Deb.Ver.FCmp (op, u) -> (
-        let c = Debian_frontend.Deb_version.compare w u in
+        let c = Version.Debian.compare w u in
         match op with
         | E.OpGe -> c >= 0
         | E.OpGt -> c > 0
@@ -377,7 +353,7 @@ module Make (AP : ARCH) = struct
   module PName = struct
     type t = DMA.Deb.Name.t
 
-    let compare a b = r2c (DMA.Deb.NameOT.compare a b)
+    let compare a b = Pac_common.Ot.r2c (DMA.Deb.NameOT.compare a b)
 
     let pp fmt = function
       | DMA.Deb.Name.Orig m -> pp_mname fmt m

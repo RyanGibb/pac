@@ -12,7 +12,7 @@
  ; them off wholesale.
  (flags
   (:standard -warn-error -a))
- (libraries npm_frontend pac pubgrub unix yojson))
+ (libraries npm_frontend pac pac_common pubgrub unix yojson))
 
 (test
  (name test_npm_version)

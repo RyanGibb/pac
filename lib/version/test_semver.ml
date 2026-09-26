@@ -1,7 +1,3 @@
-(* Cargo and npm share the semver core: they agree wherever the semver
-   crate and node-semver do, and part only where npm reads loosely and
-   where their range syntaxes differ. *)
-
 let fail = ref 0
 let sgn x = if x < 0 then -1 else if x > 0 then 1 else 0
 

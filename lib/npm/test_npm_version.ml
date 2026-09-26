@@ -1,8 +1,3 @@
-(* Precedence vectors are the ladder from semver.org 2.0.0 section 11;
-   the range vectors follow npm's semver README with its -0 upper bounds
-   dropped, plus loose and v-prefix cases and the prerelease admission
-   rule. *)
-
 let fail = ref 0
 
 let check a b exp =

@@ -1,6 +1,3 @@
-(* apt-get install's arguments, and the candidate versions they leave:
-   pure functions over the index (the parsed Packages file). *)
-
 module DF = Deb_packages
 
 (* Nothing is an element whose named version apt finds no match for; it
@@ -34,9 +31,9 @@ let pin_candidates ~native ~named (index : DF.stanza list) =
   let better (st : DF.stanza) (b : DF.stanza) =
     match Hashtbl.find_opt named (key st) with
     | Some v ->
-        Deb_version.compare st.version v = 0
-        && Deb_version.compare b.version v <> 0
-    | None -> Deb_version.compare st.version b.version > 0
+        Version.Debian.compare st.version v = 0
+        && Version.Debian.compare b.version v <> 0
+    | None -> Version.Debian.compare st.version b.version > 0
   in
   List.iter
     (fun (st : DF.stanza) ->
@@ -142,7 +139,7 @@ let query_element ~native ~arches (index : DF.stanza list) arg =
   let vlist =
     List.stable_sort
       (fun (a : DF.stanza) (b : DF.stanza) ->
-        Deb_version.compare b.version a.version)
+        Version.Debian.compare b.version a.version)
       (List.filter (fun st -> stanza_key ~native st = key) index)
   in
   let first p =

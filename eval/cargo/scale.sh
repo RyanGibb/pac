@@ -2,7 +2,7 @@
 # usage: scale.sh [--regress] <pac-exe> <run-dir> [queries-file]    P=<jobs> TIMEOUT=<s> PORT=<proxy>
 #        MODES="tool pubgrub"
 S="$(cd "$(dirname "$0")" && pwd)"
-ECO=cargo ANSWER='^crates ('
+ECO=cargo
 . "$S/../scale-lib.sh"
 export PORT=${PORT:-8991}
 

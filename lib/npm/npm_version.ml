@@ -1,10 +1,3 @@
-(* npm's range grammar over node-semver's loose reading of a version
-   (lib/version/semver.ml), implemented from the specifications.
-   parse_range only *parses*: evaluation against the real version set is
-   the extracted calculus's job.  The [holds] mirror at the bottom exists
-   so the grammar can be tested from OCaml; its [holds_pre] also decides
-   engines in npm_solve, and that use is trusted.  Trusted (TCB). *)
-
 module V = Version.Semver
 
 let compare = V.Loose.compare
@@ -216,6 +209,8 @@ let cs_admits cs v =
 let cs_holds cs v =
   List.for_all (fun ct -> comp_match ct v) cs && cs_admits cs v
 
+(* for testing the grammar from OCaml: a dependency range is evaluated
+   against the real version set by the calculus, not here *)
 let holds (v : string) (rg : range) : bool =
   List.exists (fun cs -> cs_holds cs v) rg
 

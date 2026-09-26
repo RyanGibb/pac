@@ -1,11 +1,3 @@
-(* Trusted (TCB) reading of a Cargo query, a root Cargo.toml, into the root
-   package the calculus takes, as cargo 1.97's util/toml/mod.rs reads one.
-   The root becomes one more crate version, so every field it has is one
-   the index form already carries; a field with no place there -- a path
-   or git source, another registry, a [patch] other than the root's own,
-   workspace inheritance -- would change the question cargo is asked
-   without changing ours, and is refused. *)
-
 module P = Cargo_parse
 module T = Cargo_toml
 
@@ -282,6 +274,11 @@ let resolver_of = function
 
 let crates_io = [ "crates-io"; "https://github.com/rust-lang/crates.io-index" ]
 
+(* as cargo 1.97's util/toml/mod.rs reads a manifest.  The root becomes
+   one more crate version, so a field with no place in the index form -- a
+   path or git source, another registry, a [patch] other than the root's
+   own, workspace inheritance -- would change the question cargo is asked
+   without changing ours, and is refused. *)
 let of_manifest (path : string) : root =
   let doc =
     try (T.of_file path).T.fields with

@@ -29,8 +29,7 @@ type t = {
   latest : (string, string) Hashtbl.t;
   tags : (string, (string * string) list) Hashtbl.t;
   entry : (string * string, P.ver) Hashtbl.t;
-  (* peer dependencies keyed by the directory they name, for
-     peerDependenciesNamed *)
+  (* peer dependencies keyed by the directory they name *)
   peer_by_name : (string, (string * string) * P.peer) Hashtbl.t;
   (* dependencies keyed by the key they introduce, for the granular
      version lookup's key test *)
@@ -38,6 +37,9 @@ type t = {
   mutable n_names : int;
   mutable n_vers : int;
   mutable n_fetched : int;
+  (* wall time fetching and parsing packuments, which the solve
+     interleaves with *)
+  mutable t_parse : float;
 }
 
 let create ?node ?npm ~cache ~offline () =
@@ -55,6 +57,7 @@ let create ?node ?npm ~cache ~offline () =
     n_names = 0;
     n_vers = 0;
     n_fetched = 0;
+    t_parse = 0.;
   }
 
 (* npm has no bulk index, so a packument is fetched per name and cached;
@@ -162,10 +165,12 @@ let load_name ar (n : string) : P.ver list =
   match Hashtbl.find_opt ar.pkgs n with
   | Some vs -> vs
   | None ->
+      let t = Unix.gettimeofday () in
       let vs =
         match fetch ar n with None -> [] | Some f -> read_packument ar n f
       in
       add_name ar n vs;
+      ar.t_parse <- ar.t_parse +. (Unix.gettimeofday () -. t);
       vs
 
 (* Prerelease versions stay in: the calculus admits one only inside a

@@ -1,27 +1,14 @@
-(* Trusted here (TCB): the parser, the version comparator, the valuation
-   defaults, and the plumbing. *)
-
 module E = Pac
+module Ot = Pac_common.Ot
 
-let c2r c = if c < 0 then E.Lt else if c > 0 then E.Gt else E.Eq
-let r2c = function E.Eq -> 0 | E.Lt -> -1 | E.Gt -> 1
+(* opam's OpamVersionCompare is Debian's ordering with no epoch *)
+let compare_version = Version.Debian.compare_no_epoch
 
-let rec nat_int (n : E.nat) : int =
-  match n with E.O -> 0 | E.S k -> 1 + nat_int k
-
-module SName = struct
+module OVerOT = Ot.Make (struct
   type t = string
 
-  let compare a b = c2r (String.compare a b)
-  let eq_dec (a : string) b = String.equal a b
-end
-
-module OVerOT = struct
-  type t = string
-
-  let compare a b = c2r (Opam_version.compare a b)
-  let eq_dec a b = Opam_version.compare a b = 0
-end
+  let compare = compare_version
+end)
 
 type archive = {
   root : string;
@@ -121,7 +108,7 @@ let avoided ar n v =
   ignore (load_name ar n);
   match Hashtbl.find_opt ar.avoid_table n with
   | None -> false
-  | Some vs -> List.exists (fun w -> Opam_version.equal w v) vs
+  | Some vs -> List.exists (fun w -> compare_version w v = 0) vs
 
 (* opam answers opam-version with its own version unless
    OPAMVAR_opam_version or a global or switch variable overrides it
@@ -152,7 +139,7 @@ let default_opam_version = "2.5.2"
    version is also never asked for before its claimant's name has loaded,
    since the claim is that package's own edge. *)
 
-module Op = E.Opam (SName) (OVerOT) (SName) (OVerOT) (SName)
+module Op = E.Opam (Ot.Str) (OVerOT) (Ot.Str) (OVerOT) (Ot.Str)
 module Red = Op.Reduction
 module PF = Red.PF
 module PFR = PF.Reduction
@@ -404,14 +391,14 @@ module PVersion = struct
     match (a.avoid, b.avoid) with
     | true, false -> -1
     | false, true -> 1
-    | _ -> if a.v == b.v then 0 else r2c (PFR.VersionOT.compare a.v b.v)
+    | _ -> if a.v == b.v then 0 else Ot.r2c (PFR.VersionOT.compare a.v b.v)
 
   let pp fmt (x : t) =
     match x.v with
     | PFR.Version.Orig (Red.TVer.RV v) -> Format.fprintf fmt "%s" v
     | PFR.Version.Orig Red.TVer.UnitV -> Format.fprintf fmt "()"
     | PFR.Version.Orig (Red.TVer.NV n) -> Format.fprintf fmt "%s" n
-    | PFR.Version.Idx i -> Format.fprintf fmt "z%d" (nat_int i)
+    | PFR.Version.Idx i -> Format.fprintf fmt "z%d" (Ot.nat_int i)
     | PFR.Version.Bot -> Format.fprintf fmt "⊥"
 end
 

@@ -8,7 +8,7 @@
 # usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]
 #        MODES="tool pubgrub" P=<jobs> TIMEOUT=<s>
 S="$(cd "$(dirname "$0")" && pwd)"
-ECO=opam ANSWER='^opam packages ('
+ECO=opam
 . "$S/../scale-lib.sh"
 REPO=$TOP/repos/opam-repository
 
@@ -70,7 +70,7 @@ pin_tool() {
   else mv -T "$t" "$run/ovl/packages/$pn"; fi
   rm -rf "$t"
   timeout "$TIMEOUT" "$run/pac.exe" opam --opam-version "$OV" "$run/ovl" $2 "$pn" > "$o.pin" 2>&1
-  pin=$(pac_status $? "$o.pin" "$ANSWER")
+  pin=$(pac_status $? "$o.pin")
 }
 
 run_pac() {
@@ -78,10 +78,7 @@ run_pac() {
      repos/opam-repository $3) > "$2.out" 2>&1
 }
 
-extract() {
-  sed -n '/^opam packages (/,/^\(system packages\|loaded\)/s/^  \([^ ]*\)$/\1/p' "$1.out" |
-    sort -u > "$1.ours"
-}
+extract() { rows "$1.out" | sed -n 's/^\([^ ]*\) \([^ ]*\)$/\1.\2/p' | sort -u > "$1.ours"; }
 
 fields() { printf ' mccs=%s' "$mccs"; }
 

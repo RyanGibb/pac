@@ -42,6 +42,30 @@ Answers the check could not run on (`unchecked`), install-order cycles (`cyclic`
 A query whose worker died is named as missing, and the run then exits non-zero.
 Exact compares names for Debian and Alpine, name and version for opam, and edges too for cargo and npm.
 
+## pac's output
+
+Every frontend prints the same shape.
+A `root` line comes first where the query names a root package (cargo, npm).
+An answer is a `packages (N):` line and N rows under it, each `name version` indented two spaces (Debian's name carries its architecture, `name:arch`; cargo's row ends in its features, `[f,g]`).
+Sections a flag asks for follow in the same shape: opam's `system packages`, cargo's `parent edges` (`--print-parents`), npm's `node_modules` (`--tree`).
+Then `encoded solution: N core nodes (K lookups)`.
+Where no answer exists, an `unsatisfiable:` line and PubGrub's explanation take the place of all of these.
+Either way the output ends in `loaded: N names, M versions` (with a frontend's own counts after), `parser dropped N declarations` where the parser dropped any, and the `parse` and `solve` times.
+`eval/answer.sh` is the one reader of the rows.
+
+The exit status, as `pac --help` lists it:
+
+| status | meaning | `pac=` |
+|---|---|---|
+| 0 | an answer | `ok` |
+| 1 | no answer exists | `unsat` |
+| 2 | the query or an input is refused, a command-line error included | `refuse` |
+| 3 | an index, a file or the registry cannot be read | `io-error` |
+| 124 | timeout(1) killed pac | `timeout` |
+| other | an internal error | `crash` |
+
+A refusal or a read error prints `error:` and its reason on stderr, and nothing on stdout but cargo's and npm's `root` line.
+
 ## Validity check
 
 ```sh
@@ -112,6 +136,7 @@ The run directory gets `results.txt`, one line per query and mode, and raw answe
 query= mode= pac= tool= corr= valid= minimal= oo= to= wall= pin=
 ```
 
+`pac` is pac's exit status, as the table above names it.
 `tool` is `ok`, `refuse` (the tool says the query has no answer), `error` (it failed otherwise), `timeout` or, under `--regress`, `unrecorded`.
 `oo` and `to` count packages only in ours and only in the tool's.
 `pin` is pac asked for the tool's own answer, where the tool answered (Alpine and opam; `-` elsewhere): `ok`, `unsat`, or no verdict.
@@ -130,7 +155,7 @@ Extra fields: opam `mccs`; npm `twall` (the tool's wall time, `-` under `--regre
 | `post-resolution` | ours is a resolution the tool cannot install (install-order cycle; opam, Debian) |
 | `tool-declines` | we answer, the tool refuses, and it accepts ours |
 | `both-refuse` | neither answers |
-| `pac-timeout`, `pac-crash`, `tool-timeout`, `tool-error` | a side gave no verdict |
+| `pac-timeout`, `pac-crash`, `pac-refuse`, `pac-io-error`, `tool-timeout`, `tool-error` | a side gave no verdict |
 | `unchecked` | we answer, but the check, or the pin that would say which gap, could not run |
 | `unrecorded` | `--regress` found no recorded answer |
 

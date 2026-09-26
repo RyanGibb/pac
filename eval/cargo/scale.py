@@ -206,7 +206,7 @@ def one(crate, p):
     try:
         pac, root, rustv, patched = run_query.ask_pac(crate)
     except Exception as e:
-        pac = {"ok": False, "returncode": 2, "stdout": "", "stderr": "harness: %r" % e}
+        pac = {"ok": False, "returncode": 125, "stdout": "", "stderr": "harness: %r" % e}
     if root is not None:
         shutil.rmtree(p + ".manifest", ignore_errors=True)
         shutil.copytree(os.path.join(run_query.WORK, crate), p + ".manifest",

@@ -114,33 +114,23 @@ def run_pac(manifest):
     m = re.search(r"^root (\S+) (\S+)", out, re.M)
     root_name, root_version = (m.group(1), m.group(2)) if m else (None, None)
 
-    crates = []
-    in_crates = False
+    crates, edges = [], []
     feat_map = {}
+    section = None
     for line in out.splitlines():
-        if line.startswith("crates ("):
-            in_crates = True
-            continue
-        if line.startswith("encoded solution:"):
-            in_crates = False
-            continue
-        if in_crates:
+        if line.startswith("packages ("):
+            section = "c"
+        elif line.startswith("parent edges ("):
+            section = "e"
+        elif not line.startswith("  "):
+            section = None
+        elif section == "c":
             mm = re.match(r"^  (\S+) (\S+)(?: \[(.*)\])?$", line)
             if mm:
                 name, ver, fs = mm.group(1), mm.group(2), mm.group(3)
                 crates.append([name, ver])
                 feat_map[f"{name}@{ver}"] = fs.split(",") if fs else []
-
-    edges = []
-    in_edges = False
-    for line in out.splitlines():
-        if line.strip() == "parent-edges:":
-            in_edges = True
-            continue
-        if line.startswith("loaded:"):
-            in_edges = False
-            continue
-        if in_edges:
+        elif section == "e":
             mm = re.match(r"^  (\S+) (\S+) -> (\S+)\((\S+)\) (\S+)$", line)
             if mm:
                 dn, dv, alias, tgt, tv = mm.groups()

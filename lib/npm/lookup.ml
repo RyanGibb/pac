@@ -1,7 +1,3 @@
-(* Every lookup is answered from a small sub-instance in the shape one of
-   Npm.v's four lookup theorems justifies (the granular one narrowed
-   further, at gran_sub_inst). *)
-
 open Encoding
 module P = Npm_parse
 module A = Archive
@@ -124,7 +120,6 @@ let peer_dependencies st p =
       | None -> []
       | Some v -> List.map (xpeer st.ar) v.P.v_peers)
 
-(* repoPreimage I ns at one name *)
 let repo_at st (n : string) : Np.RepoSet.t =
   memo st.repo_at n (fun () ->
       Np.RepoSet.ofList (List.map (fun v -> (n, v)) (A.versions_of st.ar n)))
@@ -145,8 +140,8 @@ let mk_inst st ~repo ~deps ~peers : Np.coq_Inst =
 (* Whether some published version of the target matches the range, as the
    calculus reads the range: via the extracted rgHolds and under the same
    flat override.  Only the "*" rewrite's engines test (star_range)
-   evaluates in OCaml.  The repository read is repoPreimage at the target
-   alone, memoized per name in repo_at, so the check reuses whatever the
+   evaluates in OCaml.  The repository read is the target's alone,
+   memoized per name in repo_at, so the check reuses whatever the
    sub-instances built. *)
 let matches_published st (d : P.dep) : bool =
   let n = d.P.d_target and own = own_range st.ar d in
@@ -194,8 +189,6 @@ let dependencies st p =
       | None -> []
       | Some v -> List.map (xdep st.ar) (List.filter (dep_keep st) v.P.v_deps))
 
-(* dependenciesOf I p: what depActive keeps, i.e. dev dependencies only
-   at the root *)
 let active_dependencies st p =
   List.filter
     (fun (d : Np.coq_Dependency) -> (not d.Np.d_dev) || p = st.root)
@@ -206,36 +199,33 @@ let own_dependencies st p = List.map (fun d -> (p, d)) (dependencies st p)
 let own_peer_dependencies st p =
   List.map (fun r -> (p, r)) (peer_dependencies st p)
 
-(* slotTargets I p *)
 let slot_targets st p =
   List.sort_uniq String.compare
     (List.map
        (fun (d : Np.coq_Dependency) -> d.Np.d_target)
        (active_dependencies st p))
 
-(* peerNamesAt I q *)
 let peer_names_at st q =
   List.sort_uniq String.compare
     (List.map
        (fun (r : Np.coq_PeerDependency) -> r.Np.p_name)
        (peer_dependencies st q))
 
-(* peerDependenciesNamed I n *)
 let peer_dependencies_named st (n : string) =
   List.map
     (fun (p, r) -> (p, xpeer st.ar r))
     (Hashtbl.find_all st.ar.A.peer_by_name n)
 
-(* versions_lookupGran: granSubInst I k cuts the repository to the key's
-   registry name.  Two narrowings below are the driver's own.  keysOf is
-   a union of one key per dependency and per peer dependency plus the
-   root's, and the granular lookup asks it only whether it contains k, so
+(* The granular versions lookup's sub-instance, which the calculus cuts
+   to the key's registry name, narrowed twice more here.  The instance's
+   keys are a union of one per dependency and per peer dependency plus the
+   root's, and the granular lookup asks only whether they contain k, so
    one dependency introducing k answers it, or failing that one peer:
    google-closure-compiler's releases pin each platform binary at a range
    of their own, and testing every such dependency costs a pass over the
    binary's versions per range.  The filter is the one dependencies
    applies, so the two views of a package's dependencies cannot disagree
-   about keysOf.  The lookup asks the repository only whether the
+   about the keys.  The lookup asks the repository only whether the
    looked-up version is published, so it is cut to that one package. *)
 let gran_sub_inst st (k : string * string) (w : string) =
   let repo =
@@ -259,26 +249,26 @@ let gran_sub_inst st (k : string * string) (w : string) =
   in
   mk_inst st ~repo ~deps ~peers
 
-(* versions_lookupInt: intSubInst I p m is p's own dependencies, the peer
-   dependencies naming the key's directory, and the repository at the
-   key's registry name together with p's slot targets. *)
+(* the intermediate versions lookup's sub-instance: p's own dependencies,
+   the peer dependencies naming the key's directory, and the repository at
+   the key's registry name together with p's slot targets. *)
 let int_sub_inst st (p : string * string) (m : string * string) =
   let ns = snd m :: slot_targets st p in
   mk_inst st ~repo:(repo_of st ns) ~deps:(own_dependencies st p)
     ~peers:(peer_dependencies_named st (fst m))
 
-(* dependees_lookupGran: pkgSubInst I p is p's own dependencies, its own
-   peer dependencies, and the repository at their targets.  The peer
+(* the granular dependees lookup's sub-instance: p's own dependencies, its
+   own peer dependencies, and the repository at their targets.  The peer
    dependencies are there for the root, whose granular node carries the
-   edges that install its own peers; for any other package rootPeerEdges
-   tests the whole package and emits nothing, so they are inert. *)
+   edges that install its own peers; for any other package they emit no
+   edge, so they are inert. *)
 let pkg_sub_inst st (p : string * string) =
   let ns = slot_targets st p @ peer_names_at st p in
   mk_inst st ~repo:(repo_of st ns) ~deps:(own_dependencies st p)
     ~peers:(own_peer_dependencies st p)
 
-(* dependees_lookupInt: peerSubInst I p m u is p's own dependencies, the
-   peer dependencies of the dependee that was selected, and the
+(* the intermediate dependees lookup's sub-instance: p's own dependencies,
+   the peer dependencies of the dependee that was selected, and the
    repository at p's slot targets and at the directories those peers
    name.  This is the second hop npm's peer auto-installation costs. *)
 let peer_sub_inst st (p : string * string) (m : string * string) (u : string) =

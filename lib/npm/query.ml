@@ -72,8 +72,6 @@ let root_of pkg =
   | Some v -> Ok { v with P.v_name = name }
   | None -> Error "not a package.json"
 
-(* What npm install takes: the path of a project's package.json, and specs
-   to add to it. *)
 let root ar (args : string list) : (P.ver, string) result =
   let paths, specs = List.partition P.is_manifest_arg args in
   let* pkg = manifest paths in

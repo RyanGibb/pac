@@ -18,5 +18,7 @@ E="$(cd "$(dirname "$0")" && pwd)"
   { echo "usage: $0 <eco> <answer> <out-dir> <query...>" >&2; exit 2; }
 eco=$1 ans=$(realpath "$2") out=$(realpath -m "$3"); shift 3
 mkdir -p "$out" || exit 1
+. "$E/answer.sh"
+export -f rows whole
 if [ -f "$E/$eco/check.py" ]; then exec python3 "$E/$eco/check.py" "$ans" "$out" "$@"; fi
 exec bash "$E/$eco/check.sh" "$ans" "$out" "$@"

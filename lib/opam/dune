@@ -1,7 +1,7 @@
 (library
  (name opam_frontend)
  (wrapped false)
- (modules opam_version opam_parse)
+ (modules opam_parse)
  (libraries opam-file-format version))
 
 (library
@@ -12,9 +12,12 @@
  ; them off wholesale.
  (flags
   (:standard -warn-error -a))
- (libraries opam_frontend opam-file-format pac package_formula pubgrub unix))
-
-(test
- (name test_opam_version)
- (modules test_opam_version)
- (libraries opam_frontend))
+ (libraries
+  opam_frontend
+  opam-file-format
+  pac
+  pac_common
+  package_formula
+  pubgrub
+  unix
+  version))

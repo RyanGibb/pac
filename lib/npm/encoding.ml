@@ -1,24 +1,11 @@
-(* The extracted npm reduction at registry names and npm versions, and
-   PubGrub over the core names it produces. *)
-
 module E = Pac
+module Ot = Pac_common.Ot
 
-let c2r c = if c < 0 then E.Lt else if c > 0 then E.Gt else E.Eq
-let r2c = function E.Lt -> -1 | E.Eq -> 0 | E.Gt -> 1
-
-module StringOT = struct
+module NVerOT = Ot.Make (struct
   type t = string
 
-  let compare a b = c2r (String.compare a b)
-  let eq_dec (a : string) b = String.equal a b
-end
-
-module NVerOT = struct
-  type t = string
-
-  let compare a b = c2r (Npm_version.compare a b)
-  let eq_dec a b = Npm_version.compare a b = 0
-end
+  let compare = Npm_version.compare
+end)
 
 (* SemverMatch: the two tests V.compare cannot express.  sameCore takes
    the candidate version first and the comparator's constant second. *)
@@ -27,7 +14,7 @@ module PM = struct
   let sameCore = Npm_version.same_core
 end
 
-module Np = E.Npm (StringOT) (NVerOT) (PM)
+module Np = E.Npm (Ot.Str) (NVerOT) (PM)
 module R = Np.Reduction
 module T = Np.T
 
@@ -49,7 +36,7 @@ let xrange (rg : Npm_version.range) : Np.coq_Range =
 module PName = struct
   type t = Np.Nm.name
 
-  let compare a b = r2c (Np.Nm.compare a b)
+  let compare a b = Ot.r2c (Np.Nm.compare a b)
 
   let pp_key fmt ((a, t) : string * string) =
     if a = t then Format.fprintf fmt "%s" a
@@ -65,7 +52,7 @@ end
 module PVersion = struct
   type t = Np.Vs.version
 
-  let compare a b = r2c (Np.Vs.compare a b)
+  let compare a b = Ot.r2c (Np.Vs.compare a b)
   let equal a b = compare a b = 0
 
   let pp fmt (v : t) =

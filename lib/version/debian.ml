@@ -1,8 +1,3 @@
-(* Debian's version ordering, deb-version(7) and Policy 5.6.12: dpkg's
-   verrevcmp (lib/dpkg/version.c) on the upstream version and then on the
-   revision, after the epoch.  opam's OpamVersionCompare is the same
-   comparison with no epoch.  Untrusted. *)
-
 let is_digit c = c >= '0' && c <= '9'
 let is_alpha c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 
@@ -73,8 +68,8 @@ let compare_from v1 i1 v2 i2 =
   if c <> 0 then sign c
   else sign (lexical v1 (min n1 (r1 + 1)) n1 v2 (min n2 (r2 + 1)) n2)
 
-(* opam's ordering: opam versions have no epoch, so a ':' is an ordinary
-   character *)
+(* opam's OpamVersionCompare: opam versions have no epoch, so a ':' is an
+   ordinary character *)
 let compare_no_epoch v1 v2 =
   if String.equal v1 v2 then 0 else compare_from v1 0 v2 0
 
@@ -88,6 +83,8 @@ let epoch s =
       (int_of_string (String.sub s 0 i), i + 1)
   | _ -> (0, 0)
 
+(* deb-version(7) and Policy 5.6.12: the epoch, then dpkg's verrevcmp
+   (lib/dpkg/version.c) on the upstream version and then on the revision *)
 let compare v1 v2 =
   if String.equal v1 v2 then 0
   else

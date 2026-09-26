@@ -61,16 +61,13 @@ def parse(text):
     crates, edges = [], []
     section = None
     for line in text.splitlines():
-        if line.startswith("crates ("):
+        if line.startswith("packages ("):
             section = "c"
             continue
-        if line.startswith("encoded solution:"):
-            section = None
-            continue
-        if line.strip() == "parent-edges:":
+        if line.startswith("parent edges ("):
             section = "e"
             continue
-        if line.startswith("loaded:"):
+        if not line.startswith("  "):
             section = None
             continue
         if section == "c":
@@ -85,7 +82,7 @@ def parse(text):
                 pn, pv, _alias, cn, cv = mm.groups()
                 edges.append(((pn, pv), (cn, cv)))
     if not crates:
-        raise RuntimeError("no crates section in pac output")
+        raise RuntimeError("no packages section in pac output")
     return root, crates, edges
 
 

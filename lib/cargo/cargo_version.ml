@@ -1,7 +1,3 @@
-(* Cargo's requirement syntax over the semver crate's strict reading of
-   a version (lib/version/semver.ml), implemented from the
-   specifications.  Trusted (TCB). *)
-
 module V = Version.Semver
 
 type t = V.t = {

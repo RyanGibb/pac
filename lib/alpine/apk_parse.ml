@@ -1,9 +1,3 @@
-(* The uncompressed APKINDEX: newline-delimited "X:value" lines, stanzas
-   separated by a line shorter than two bytes, no continuations and no
-   quoting (apk-tools src/database.c, apk_db_fdb_read).  There is no
-   header stanza -- APKINDEX.tar.gz carries DESCRIPTION as a sibling tar
-   member.  Trusted: this file is TCB. *)
-
 type constr = Any | Op of Apk_version.op * string
 type dep = { d_neg : bool; d_name : string; d_constr : constr }
 
@@ -138,6 +132,8 @@ let flush a out =
   a.a_prio <- None;
   a.a_broken <- false
 
+(* apk_db_fdb_read (apk-tools src/database.c): stanzas end at a line
+   shorter than two bytes, with no continuations and no quoting *)
 let parse_file (path : string) : pkg list =
   let ic = open_in_bin path in
   let out = ref [] and a = fresh () in

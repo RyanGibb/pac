@@ -3,15 +3,13 @@ include Lookups
 type result = { pkgs : (string * string) list; nodes : int; processed : int }
 
 let solve ?(debug = false) ?(order = `Tool) (ar : archive) (world : P.dep list)
-    : result option =
+    : (result, Pac_common.Report.explanation) Stdlib.result =
   Pubgrub.set_debug debug;
   let st = lookups ar in
-  let next, choose = Order.hooks order ar in
-  match L.solve st ~touch:(touch ar world st) ?next ?choose () with
-  | None -> None
-  | Some (s_pf, nodes) ->
+  L.solve st ~touch:(touch ar world st) (Order.hooks order ar)
+  |> Result.map (fun (s_pf, nodes) ->
       let pkgs = Alp.PkgSet.elements (Red.alpineResolution s_pf) in
-      Some { pkgs = List.sort compare pkgs; nodes; processed = L.processed st }
+      { pkgs = List.sort compare pkgs; nodes; processed = L.processed st })
 
 (* A goal argument is an /etc/apk/world line: a dependency atom.  apk
    refuses the whole world over an atom it cannot parse, one whose version

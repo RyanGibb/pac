@@ -1,30 +1,13 @@
-(* Every lookup is answered from a small sub-instance in the shape one of
-   Alpine.v's lookup theorems justifies.  Trusted here (TCB): PubGrub,
-   whose answer is decoded without a check, the parser, the version
-   comparator, the preference below, and the plumbing. *)
-
 module E = Pac
 module P = Apk_parse
+module Ot = Pac_common.Ot
+module Tbl = Pac_common.Tbl
 
-let c2r c = if c < 0 then E.Lt else if c > 0 then E.Gt else E.Eq
-let r2c = function E.Lt -> -1 | E.Eq -> 0 | E.Gt -> 1
-
-let rec nat_int (n : E.nat) : int =
-  match n with E.O -> 0 | E.S k -> 1 + nat_int k
-
-module StringOT = struct
+module AVerOT = Ot.Make (struct
   type t = string
 
-  let compare a b = c2r (String.compare a b)
-  let eq_dec (a : string) b = String.equal a b
-end
-
-module AVerOT = struct
-  type t = string
-
-  let compare a b = c2r (Apk_version.compare a b)
-  let eq_dec a b = Apk_version.compare a b = 0
-end
+  let compare = Apk_version.compare
+end)
 
 (* ApkVerMatch: the two constraints V.compare cannot express.  Both take
    the candidate version first and the constraint's operand second. *)
@@ -33,7 +16,7 @@ module PM = struct
   let hash v c = Apk_version.hash_match v c
 end
 
-module Alp = E.Alpine (StringOT) (AVerOT) (PM)
+module Alp = E.Alpine (Ot.Str) (AVerOT) (PM)
 
 (* Which condition a rule designates is free, and is a performance
    choice: the rule is materialised only once that condition is selected.
@@ -43,7 +26,7 @@ module Alp = E.Alpine (StringOT) (AVerOT) (PM)
    recorded as the set is built, keyed by the element list, which is
    canonical where the set's own representation need not be.  The
    fallback keeps designation total on sets with a positive condition,
-   discharging designation_spec: a TCB obligation here, as ApkVerMatch's
+   discharging designation_spec, which is trusted, as ApkVerMatch's
    prefix/hash are. *)
 let designation_tbl : (Alp.coq_Dep list, Alp.Atom.t) Hashtbl.t =
   Hashtbl.create 4096
@@ -140,10 +123,6 @@ type archive = {
   mutable n_iif : int;
 }
 
-let push tbl k v =
-  let prev = match Hashtbl.find_opt tbl k with Some l -> l | None -> [] in
-  Hashtbl.replace tbl k (v :: prev)
-
 let load_index (path : string) : archive =
   let pkgs = P.parse_file path in
   let ar =
@@ -162,13 +141,13 @@ let load_index (path : string) : archive =
   let iifs = ref [] in
   List.iter
     (fun (p : P.pkg) ->
-      push ar.by_name p.P.name p;
+      Tbl.push ar.by_name p.P.name p;
       Hashtbl.replace ar.meta (p.P.name, p.P.version) p;
       Hashtbl.replace ar.pos (p.P.name, p.P.version) ar.n_pkgs;
       ar.n_pkgs <- ar.n_pkgs + 1;
       List.iter
         (fun (pr : P.prov) ->
-          push ar.providers pr.P.p_name ((p.P.name, p.P.version), pr.P.p_ver);
+          Tbl.push ar.providers pr.P.p_name ((p.P.name, p.P.version), pr.P.p_ver);
           ar.n_provs <- ar.n_provs + 1)
         p.P.provides;
       (match p.P.priority with
@@ -189,17 +168,14 @@ let load_index (path : string) : archive =
     (fun (z, conds) ->
       match FirstDesignation.designation conds with
       | Some a ->
-          push ar.iif_by_cond (fst a)
+          Tbl.push ar.iif_by_cond (fst a)
             { t_pkg = z; t_conds = conds; t_designation = a }
       | None -> ())
     (List.rev !iifs);
   ar
 
-let versions_of ar n =
-  match Hashtbl.find_opt ar.by_name n with Some l -> l | None -> []
-
-let providers_of ar n =
-  match Hashtbl.find_opt ar.providers n with Some l -> l | None -> []
+let versions_of ar n = Tbl.find_list ar.by_name n
+let providers_of ar n = Tbl.find_list ar.providers n
 
 let empty_inst =
   {
@@ -477,7 +453,7 @@ module PVersion = struct
     | PFR.Version.Orig (Red.Version.Orig s) -> Format.fprintf fmt "%s" s
     | PFR.Version.Orig (Red.Version.Prov ((n, w), pv)) ->
         Format.fprintf fmt "%s=%s(%s-%s)" "provided" pv n w
-    | PFR.Version.Idx i -> Format.fprintf fmt "%d" (nat_int i)
+    | PFR.Version.Idx i -> Format.fprintf fmt "%d" (Ot.nat_int i)
     | PFR.Version.Bot -> Format.fprintf fmt "⊥"
 
   let compare a b =
@@ -487,7 +463,7 @@ module PVersion = struct
         if c <> 0 then c
         else
           let c = Stdlib.compare b.ord a.ord in
-          if c <> 0 then c else -r2c (PFR.VersionOT.compare a.v b.v)
+          if c <> 0 then c else -Ot.r2c (PFR.VersionOT.compare a.v b.v)
     | _ -> (
         match (a.pv, b.pv) with
         | Some x, Some y ->
@@ -498,9 +474,9 @@ module PVersion = struct
               if c <> 0 then c
               else
                 let c = Stdlib.compare b.ord a.ord in
-                if c <> 0 then c else r2c (PFR.VersionOT.compare a.v b.v)
+                if c <> 0 then c else Ot.r2c (PFR.VersionOT.compare a.v b.v)
         | _ ->
-            let c = r2c (PFR.VersionOT.compare a.v b.v) in
+            let c = Ot.r2c (PFR.VersionOT.compare a.v b.v) in
             if c <> 0 then c else Stdlib.compare a.rank b.rank)
 end
 

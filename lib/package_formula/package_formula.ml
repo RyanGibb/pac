@@ -1,11 +1,3 @@
-(* The lookups of an ecosystem that reduces into the Package Formula
-   Calculus, answered to PubGrub: each package's dependees are reduced by
-   PF.Reduction the first time PubGrub asks about it, from the sub-instance
-   the driver builds for it, and the core edges and synthetic versions that
-   reduction yields are kept for every later ask.  What a driver brings is
-   that sub-instance, its preference, carried on [P.t] and computed by
-   [tag], and its choose/next policy. *)
-
 module Make
     (N : Pac.UsualOrderedType)
     (V : Pac.UsualOrderedType)
@@ -28,7 +20,7 @@ struct
   module PFR = PF.Reduction
   module T = PFR.T
 
-  let r2c = function Pac.Lt -> -1 | Pac.Eq -> 0 | Pac.Gt -> 1
+  let r2c = Pac_common.Ot.r2c
 
   module Name = struct
     type t = PFR.Name.t
@@ -128,7 +120,7 @@ struct
       by_src
 
   (* Only the synthetic names the reduction introduces are harvested; an
-     original name's versions are its lookup's, [original_versions]. *)
+     original name's versions are its lookup's, [versions]. *)
   let record_synthetic st (r : T.PkgSet.t) =
     List.iter
       (fun ((tn, tv) : T.Pkg.t) ->
@@ -237,18 +229,20 @@ struct
      formula's packages.  Reading the ecosystem's packages off the
      solution directly would be a further, unproved, decoder, and it is
      the decoded one the soundness theorem is stated about. *)
-  let solve st ~touch ?next ?choose () : (PF.PkgSet.t * int) option =
+  let solve st ~touch (h : (Name.t, PG.selection, P.t) Pac_common.Order.hooks) :
+      (PF.PkgSet.t * int, Pac_common.Report.explanation) result =
     let root = PFR.Name.Orig (fst st.root) in
-    match
-      PG.solve ?next ?choose ~vers:(versions st) ~deps:(dependencies st ~touch)
+    let r =
+      PG.solve ?next:h.Pac_common.Order.next ?choose:h.Pac_common.Order.choose
+        ~vers:(versions st) ~deps:(dependencies st ~touch)
         [ (root, PG.Ranges.of_list (versions st root)) ]
-    with
-    | Error inc ->
-        Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
-        None
+    in
+    h.Pac_common.Order.finish ();
+    match r with
+    | Error inc -> Error (fun ppf -> PG.explain_incompatibility ppf inc)
     | Ok sol ->
         let core =
           T.PkgSet.ofList (List.map (fun (tn, pv) -> (tn, P.v pv)) sol)
         in
-        Some (PFR.packageFormulaResolution core, List.length sol)
+        Ok (PFR.packageFormulaResolution core, List.length sol)
 end

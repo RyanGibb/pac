@@ -37,12 +37,13 @@ if ! REPO=$R bash "$S/setup.sh" "$T/opamroot" > "$T/setup.log" 2>&1; then
 fi
 
 n=0
-# an _ in a row stands for a space, so a row can carry a stray field; the
-# expected verdicts as valid/minimal
+# a selection is name.version words, and an _ in one stands for a space,
+# so a row can carry a stray field; the expected verdicts as valid/minimal
 ctl() {  # <query> <selection> <expected> [opamroot]
   local d=$T/c$((n += 1)) got
   mkdir -p "$d"
-  { echo "opam packages (n)"; printf '  %s\n' $2 | tr _ ' '; echo loaded; } > "$d/ans.out"
+  printf '  %s\n' $2 | sed 's/\./ /' | tr _ ' ' > "$d/rows"
+  { echo "packages ($(wc -l < "$d/rows")):"; cat "$d/rows"; } > "$d/ans.out"
   got=$(OPAMROOT=${4:-$T/opamroot} REPO=$R bash "$S/../check.sh" opam "$d/ans.out" "$d/check" $1 |
     tail -n 1 | sed -n 's/.* valid=\([A-Z]*\) minimal=\(.*\)$/\1\/\2/p')
   printf '%-34s expect %-11s got %s\n' "[$1 | $2]" "$3" "$got"

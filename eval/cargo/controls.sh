@@ -43,15 +43,14 @@ kill -0 $proxy 2> /dev/null || { echo "no proxy on $PORT" >&2; exit 1; }
 # the answer as pac prints it: crates, then "parent child version" edges;
 # the expected verdicts as valid/minimal
 ctl() {  # <name> <expected> <crates> <edges>
-  local name=$1 want=$2 d=$T/$1 got e
+  local name=$1 want=$2 d=$T/$1 got e c=($3) es=($4)
   rm -rf "$d"; mkdir -p "$d"
-  { echo "root root 1.0.0"; echo "crates (n):"; printf '  %s\n' $3 | tr _ ' '
-    echo "encoded solution: -"; echo "parent-edges:"
-    for e in $4; do
+  { echo "root root 1.0.0"; echo "packages (${#c[@]}):"; printf '  %s\n' "${c[@]}" | tr _ ' '
+    echo "parent edges (${#es[@]}):"
+    for e in "${es[@]}"; do
       set -- ${e//_/ }
       echo "  $1 $2 -> $3($3) $4"
-    done
-    echo "loaded: -"; } > "$d/ans.out"
+    done; } > "$d/ans.out"
   got=$(bash "$S/../check.sh" cargo "$d/ans.out" "$d/check" "$T/root/Cargo.toml" |
     tail -n 1 | sed -n 's/.* valid=\([A-Z]*\) minimal=\(.*\)$/\1\/\2/p')
   printf '%-12s expect %-11s got %s\n' "$name" "$want" "$got"

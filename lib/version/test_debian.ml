@@ -1,6 +1,3 @@
-(* Debian's ordering, and opam's as that ordering with no epoch: the two
-   agree on every version with no epoch, and only there. *)
-
 let fail = ref 0
 let sgn x = if x < 0 then -1 else if x > 0 then 1 else 0
 
@@ -33,6 +30,10 @@ let () =
   deb "1.0-1~bpo1" "1.0-1" (-1);
   deb "1.0-1" "1.0.1-1" (-1);
   deb "1.0-2" "1.0-10" (-1);
+  deb "1.0~rc1" "1.0" (-1);
+  deb "1.0-1" "1.0-2" (-1);
+  deb "1.0" "1.0" 0;
+  deb "2.4.dfsg" "2.4.dfsg.2" (-1);
   (* the epoch decides first, and 0 is the same as none *)
   deb "1:0.5" "2.0" 1;
   deb "0:1.0" "1.0" 0;
@@ -41,6 +42,32 @@ let () =
   deb "a:1" "a:2" (-1);
   opam "1:0.5" "2.0" (-1);
   opam "0:1.0" "1.0" (-1);
+  opam "1.0~beta" "1.0" (-1);
+  opam "1.0~beta2" "1.0~beta10" (-1);
+  opam "1.0" "1.0.1" (-1);
+  opam "0.2" "0.10" (-1);
+  opam "0099" "99" 0;
+  opam "1.0alpha" "1.0+" (-1);
+  opam "1" "1.0" (-1);
+  opam "2.1" "2.0.1" 1;
+  opam "4.14.0" "4.14.0+options" (-1);
+  opam "8.5" "8.5~rc1" 1;
+  (* the revision is split off at the last '-' and compared only on a tie *)
+  opam "1.0-1" "1.0a" (-1);
+  opam "1.0-1" "1.0+1" (-1);
+  opam "1.0-1" "1.0" 1;
+  opam "1.0-~" "1.0" (-1);
+  opam "1.0-" "1.0" 0;
+  opam "1.0-0" "1.0" 0;
+  opam "1-2-3" "1-2.3" 1;
+  opam "2.0-rc1" "2.0~rc1" 1;
+  opam "1.0-beta" "1.0.1" (-1);
+  (* an exhausted side is equal to a run of zeros, whatever surrounds it *)
+  opam "1." "1.0" 0;
+  opam "a" "a0" 0;
+  opam "1." "1.0~" 1;
+  opam "1." "1.0a" (-1);
+  opam "1.00" "1.0" 0;
 
   (* no epoch, one ordering *)
   let corpus =

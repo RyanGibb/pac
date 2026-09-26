@@ -5,7 +5,7 @@
  (libraries
   cmdliner
   unix
-  pubgrub
+  pac_common
   apk_frontend
   apk_solve
   cargo_frontend

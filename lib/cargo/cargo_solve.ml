@@ -1,29 +1,13 @@
-(* Every lookup is answered from a small sub-instance in the shape one of
-   Cargo.v's lookup theorems justifies.  Trusted here (TCB): the parser,
-   the version comparator, the policy defaults below, the plumbing, and
-   PubGrub, whose answer is decoded unchecked although the decoders'
-   theorems assume it is a core resolution. *)
-
 module E = Pac
 module P = Cargo_parse
 module Q = Cargo_query
+module Ot = Pac_common.Ot
 
-let c2r c = if c < 0 then E.Lt else if c > 0 then E.Gt else E.Eq
-let r2c = function E.Lt -> -1 | E.Eq -> 0 | E.Gt -> 1
-
-module StringOT = struct
+module CVerOT = Ot.Make (struct
   type t = string
 
-  let compare a b = c2r (String.compare a b)
-  let eq_dec (a : string) b = String.equal a b
-end
-
-module CVerOT = struct
-  type t = string
-
-  let compare a b = c2r (Cargo_version.compare a b)
-  let eq_dec a b = Cargo_version.compare a b = 0
-end
+  let compare = Cargo_version.compare
+end)
 
 (* SemverMatch: the two tests V.compare cannot express.  sameCore takes
    the candidate first and the comparator's constant second. *)
@@ -183,9 +167,7 @@ let install_root ar (v : P.ver) =
    grow after CLink l has answered.  pg_versions answers it afresh each
    time rather than memoizing it. *)
 
-module Cg =
-  E.Cargo (StringOT) (CVerOT) (StringOT) (CVerOT) (StringOT) (StringOT) (PM)
-
+module Cg = E.Cargo (Ot.Str) (CVerOT) (Ot.Str) (CVerOT) (Ot.Str) (Ot.Str) (PM)
 module T = Cg.T
 
 (* At most one version per semver granularity class.  The label is the
@@ -329,7 +311,7 @@ let pp_req fmt (d : Cg.SlotData.t) =
 module PName = struct
   type t = Cg.NPlus.t
 
-  let compare a b = r2c (Cg.NPlus.compare a b)
+  let compare a b = Ot.r2c (Cg.NPlus.compare a b)
 
   let pp fmt (tn : t) =
     match tn with
@@ -351,7 +333,7 @@ module PVersion = struct
     match (a.msrv, b.msrv) with
     | false, true -> -1
     | true, false -> 1
-    | _ -> r2c (Cg.VPlus.compare a.v b.v)
+    | _ -> Ot.r2c (Cg.VPlus.compare a.v b.v)
 
   let pp fmt ({ v; _ } : t) =
     match v with
@@ -386,7 +368,7 @@ type result = {
 (* what one solve read of the index, reported whether or not it found an
    answer *)
 type run = {
-  answer : result option;
+  answer : (result, Pac_common.Report.explanation) Stdlib.result;
   n_names : int;
   n_vers : int;
   t_parse : float;
@@ -876,10 +858,7 @@ let choose st ~assigned tn (cands : PVersion.t list) =
   in
   match pick with
   | Some c -> c
-  | None ->
-      List.fold_left
-        (fun a b -> if PVersion.compare b a > 0 then b else a)
-        (List.hd cands) cands
+  | None -> Pac_common.Order.greatest PVersion.compare cands
 
 (* processing one of cargo's dependencies is, in the encoding, the slot,
    then what the parent delivers to it at that site, then the granularity
@@ -895,7 +874,8 @@ struct
 
   type name = Cg.NPlus.t
   type version = PVersion.t
-  type assigned = Cg.NPlus.t -> PG.selection
+  type selection = PG.selection
+  type assigned = name -> selection
 
   let equal a b = Cg.NPlus.compare a b = E.Eq
   let decided = decided
@@ -904,6 +884,7 @@ struct
   let root_features = st.features
   let meta (n, v) = meta st.ar n v
   let candidates d = List.length (candidates st d)
+  let choose ~assigned tn cands = choose st ~assigned tn cands
 
   let owned (t, u) gr =
     match meta (t, u) with
@@ -1037,9 +1018,6 @@ let decode st (sol : (Cg.NPlus.t * PVersion.t) list) : result =
     processed = Hashtbl.length st.fibres;
   }
 
-(* `Tool replays cargo's activation order through PubGrub's next and
-   choose hooks; `Pubgrub leaves both to PubGrub, which is still sound and
-   complete, only no longer cargo's answer where the two orders part *)
 let solve ?(debug = false) ?(order = `Tool) ~index ~features ~rustv
     (root : Q.root) : run =
   Pubgrub.set_debug debug;
@@ -1052,24 +1030,20 @@ let solve ?(debug = false) ?(order = `Tool) ~index ~features ~rustv
         PG.Ranges.of_list [ tag st Cg.NPlus.CRoot Cg.VPlus.WUnit ] );
     ]
   in
-  let vers = pg_versions st and deps = pg_dependencies st in
-  let outcome =
-    match order with
-    | `Tool ->
-        let module O = Order.Make (Driver (struct
-          let st = st
-        end))
-        in
-        let o = O.create () in
-        PG.solve ~next:(O.next o) ~choose:(choose st) ~vers ~deps query
-    | `Pubgrub -> PG.solve ~vers ~deps query
+  let module O = Order.Make (Driver (struct
+    let st = st
+  end))
   in
+  let h = O.hooks order () in
+  let outcome =
+    PG.solve ?next:h.Pac_common.Order.next ?choose:h.Pac_common.Order.choose
+      ~vers:(pg_versions st) ~deps:(pg_dependencies st) query
+  in
+  h.Pac_common.Order.finish ();
   let answer =
     match outcome with
-    | Error inc ->
-        Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
-        None
-    | Ok sol -> Some (decode st sol)
+    | Error inc -> Error (fun ppf -> PG.explain_incompatibility ppf inc)
+    | Ok sol -> Ok (decode st sol)
   in
   { answer; n_names = ar.n_names; n_vers = ar.n_vers; t_parse = ar.t_parse }
 

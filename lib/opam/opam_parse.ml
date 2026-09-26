@@ -1,8 +1,3 @@
-(* Trusted (TCB).  Unhandled constructs are counted and the
-   enclosing atom dropped, which can admit a selection opam rejects (an
-   unhandled available: makes the package unavailable instead); a file that
-   fails to parse is skipped by the loader, and counted. *)
-
 open OpamParserTypes.FullPos
 
 type op = Ge | Gt | Le | Lt | Eq | Ne
@@ -148,7 +143,7 @@ let rec brace_of ?(locals = local_vars) ~owner ~selfv (v : value) : brace =
     x = "version" || x = "_:version" || x = owner ^ ":version"
   in
   let static r a b =
-    let c = Opam_version.compare a b in
+    let c = Version.Debian.compare_no_epoch a b in
     let holds =
       match rel_of r with
       | Eq -> c = 0
@@ -444,6 +439,9 @@ let pindep_entries (v : value) : ((string * string) * string) list =
   | List { pelem = l; _ } -> List.concat_map entry l
   | _ -> entry v
 
+(* An unhandled construct is counted and its enclosing atom dropped, which
+   can admit a selection opam rejects; an unhandled available: makes the
+   package unavailable instead. *)
 let parse_file ~name ~version path : pkg_meta =
   let file = OpamParser.FullPos.file path in
   let owner = name in

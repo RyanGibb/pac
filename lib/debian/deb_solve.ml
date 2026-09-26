@@ -1,16 +1,16 @@
-(* The reduction's lookups over the tables, the candidate order PubGrub
-   decides by, and the search that answers a query in either order. *)
-
 type accepts = Debian_frontend.Apt_args.accepts =
   | Any
   | Only of string
   | Nothing
 
-(* whose order the search decides in: apt's, replayed, or PubGrub's own *)
-type order = Order.t
-
 module E = Pac
 module DF = Debian_frontend.Deb_packages
+
+type answer = {
+  pkgs : (string * string * string) list;
+  nodes : int;
+  lookups : int;
+}
 
 module Make (AP : Tables.ARCH) = struct
   module T = Tables.Make (AP)
@@ -279,10 +279,12 @@ module Make (AP : Tables.ARCH) = struct
          of a real name (VersionOT.compare), so a name nothing comes to
          require is decided absent. *)
       let compare (a : t) (b : t) =
-        let fallback () = Tables.r2c (DMA.Deb.VersionOT.compare a.v b.v) in
+        let fallback () =
+          Pac_common.Ot.r2c (DMA.Deb.VersionOT.compare a.v b.v)
+        in
         match (a.v, b.v) with
         | DMA.Deb.Version.Orig x, DMA.Deb.Version.Orig y ->
-            Debian_frontend.Deb_version.compare x y
+            Version.Debian.compare x y
         | DMA.Deb.Version.Atom _, DMA.Deb.Version.Atom _ ->
             (* leftmost alternative first: lower position = greater version *)
             let c = Stdlib.compare b.pos a.pos in
@@ -292,7 +294,7 @@ module Make (AP : Tables.ARCH) = struct
         | DMA.Deb.Version.RefReal w, DMA.Deb.Version.RefReal w' ->
             (* one selector's real candidates all share its name, hence its
                arch: only the version separates them *)
-            let c = Debian_frontend.Deb_version.compare w w' in
+            let c = Version.Debian.compare w w' in
             if c <> 0 then c else fallback ()
         | DMA.Deb.Version.RefReal _, DMA.Deb.Version.Ref (_, _) -> 1
         | DMA.Deb.Version.Ref (_, _), DMA.Deb.Version.RefReal _ -> -1
@@ -304,7 +306,7 @@ module Make (AP : Tables.ARCH) = struct
             else
               (* two versions of one provider are apt's same-package case,
                  which the version alone settles *)
-              let c = Debian_frontend.Deb_version.compare w w' in
+              let c = Version.Debian.compare w w' in
               if c <> 0 then c else fallback ()
         | _ -> fallback ()
 
@@ -331,12 +333,7 @@ module Make (AP : Tables.ARCH) = struct
 
     module PG = Pubgrub.Make (PName) (PVersion)
 
-    let greatest = function
-      | [] -> invalid_arg "greatest"
-      | c :: cs ->
-          List.fold_left
-            (fun a b -> if PVersion.compare b a > 0 then b else a)
-            c cs
+    let greatest = Pac_common.Order.greatest PVersion.compare
 
     (* Has the partial solution already assigned [tn] one of [tvs]?  An
        entailed selector does not: it says only that some provider will be
@@ -430,42 +427,6 @@ module Make (AP : Tables.ARCH) = struct
         (fun (tn, tvs) -> (tn, PG.Ranges.of_list tvs))
         (dependees_of n pv.PVersion.v)
 
-    (* apt never resolves a clause one of whose alternatives is already
-       satisfied: it leaves the clause alone and installs nothing for it.
-       PubGrub has to decide the disjunct either way, so the nearest thing is
-       to decide it at no cost -- an alternative, or a provider of one, the
-       solution already holds.  Where it holds none, and for every
-       other name, PVersion.compare's answer stands unchanged; the tool order
-       first narrows the candidates to those apt would consider. *)
-    let choose ~filter ~assigned n cands =
-      let cands = filter ~assigned n cands in
-      match free_of ~assigned n cands with
-      | [] -> greatest cands
-      | free -> greatest free
-
-    (* A name only conflicts have reached admits absence, its greatest
-       version, and is decided last: deciding it earlier would forbid a
-       dependency that later comes to require it.  apt has no work item for
-       such a name, so the shadow heap never sees it. *)
-    let admits_bot ~assigned tn =
-      match tn with
-      | DMA.Deb.Name.Orig _ -> (
-          match assigned tn with
-          | PG.Entailed r -> PG.Ranges.contains (tag tn DMA.Deb.Version.Bot) r
-          | _ -> false)
-      (* only a real name has the absent version; asking the partial solution
-         about a clause name would compare its atom set *)
-      | _ -> false
-
-    let required ~assigned open_names =
-      List.filter (fun (tn, _) -> not (admits_bot ~assigned tn)) open_names
-
-    let next ~order ~assigned open_names =
-      match (required ~assigned open_names, order) with
-      | [], _ -> fst (List.hd open_names)
-      | (tn, _) :: _, `Pubgrub -> tn
-      | req, `Tool t -> Replay.next t ~assigned req
-
     (* Ranges.full would admit ⊥, which PubGrub then picks, so a bare query
        would answer nothing; the query asks for the name, so it excludes
        absence. *)
@@ -473,8 +434,7 @@ module Make (AP : Tables.ARCH) = struct
       let accepted (pv : PVersion.t) =
         match (pv.PVersion.v, acc) with
         | DMA.Deb.Version.Orig _, Any -> true
-        | DMA.Deb.Version.Orig w, Only x ->
-            Debian_frontend.Deb_version.compare w x = 0
+        | DMA.Deb.Version.Orig w, Only x -> Version.Debian.compare w x = 0
         | _ -> false
       in
       ( DMA.Deb.Name.Orig n,
@@ -492,25 +452,14 @@ module Make (AP : Tables.ARCH) = struct
            (DMA.multiarchResolution (DMA.Deb.debianResolution s')))
 
     let run ~debug ~order query =
-      let order =
-        match order with
-        | `Tool -> `Tool (Replay.create ())
-        | `Pubgrub -> `Pubgrub
-      in
-      let filter =
-        match order with
-        | `Tool t -> Replay.filter t
-        | `Pubgrub -> fun ~assigned:_ _ cands -> cands
-      in
+      let h = Replay.hooks order () in
       let r =
-        PG.solve ~next:(next ~order) ~choose:(choose ~filter) ~vers:cands_of
-          ~deps:dependencies (List.map root query)
+        PG.solve ?next:h.Pac_common.Order.next ?choose:h.Pac_common.Order.choose
+          ~vers:cands_of ~deps:dependencies (List.map root query)
       in
-      (match order with `Tool t -> Replay.report t | `Pubgrub -> ());
+      h.Pac_common.Order.finish ();
       match r with
-      | Error inc ->
-          Format.printf "unsatisfiable:@.%a@." PG.explain_incompatibility inc;
-          None
+      | Error inc -> Error (fun ppf -> PG.explain_incompatibility ppf inc)
       | Ok sol ->
           if debug then (
             Format.printf "raw solution (%d):@." (List.length sol);
@@ -518,7 +467,7 @@ module Make (AP : Tables.ARCH) = struct
               (fun (n, v) ->
                 Format.printf "  %a = %a@." PName.pp n PVersion.pp v)
               sol);
-          Some (decode sol)
+          Ok (decode sol, List.length sol)
   end
 
   let solve ~debug ~order (tables : tables)
@@ -555,6 +504,11 @@ module Make (AP : Tables.ARCH) = struct
       S.run ~debug ~order
         (List.map (fun ((n, b), acc) -> ((n, DMA.QAArch b), acc)) query)
     in
+    let lookups =
+      match Hashtbl.find_opt buckets "dependees" with
+      | Some (c, _) -> !c
+      | None -> 0
+    in
     if Sys.getenv_opt "PACPROF" <> None then (
       Hashtbl.iter
         (fun name (c, t) ->
@@ -563,18 +517,24 @@ module Make (AP : Tables.ARCH) = struct
       Printf.eprintf "PACPROF clauses parsed: %d of %d stanzas\n%!"
         tables.n_clauses_parsed
         (Hashtbl.length tables.stanza_table));
-    r
+    Result.map (fun (pkgs, nodes) -> { pkgs; nodes; lookups }) r
 end
 
 module Args = Debian_frontend.Apt_args
 
+type result = {
+  answer : (answer, Pac_common.Report.explanation) Stdlib.result;
+  names : int;
+  versions : int;
+  t_parse : float;
+}
+
 (* Parsing and table construction are reported apart from solving because
    they scale differently: the archive is read whole, while the solve
-   touches only the sub-instances the lookup theorems bound.  Which of the
-   two dominates is the frontend's headline number, so it is printed rather
-   than inferred. *)
+   touches only the sub-instances the lookup theorems bound. *)
 let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~paths ~query
-    : ((string * string * string) list * float * float) option =
+    : result =
+  Pubgrub.set_debug debug;
   let t0 = Unix.gettimeofday () in
   let index = List.concat_map DF.parse_file paths in
   let arches =
@@ -595,7 +555,10 @@ let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~paths ~query
   end in
   let module M = Make (AP) in
   let tables = M.build_tables ~recommends index in
-  let t1 = Unix.gettimeofday () in
-  match M.solve ~debug ~order tables query with
-  | None -> None
-  | Some pkgs -> Some (pkgs, t1 -. t0, Unix.gettimeofday () -. t1)
+  let t_parse = Unix.gettimeofday () -. t0 in
+  {
+    answer = M.solve ~debug ~order tables query;
+    names = Hashtbl.length tables.M.group_table;
+    versions = Hashtbl.length tables.M.stanza_table;
+    t_parse;
+  }

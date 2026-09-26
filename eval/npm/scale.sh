@@ -9,7 +9,7 @@
 #        MODES="tool pubgrub" P=<jobs> TIMEOUT=<s> PORT=<shim>
 #        NORM=<edges.py flag> FILL=1
 S="$(cd "$(dirname "$0")" && pwd)"
-ECO=npm ANSWER='^node_modules ('
+ECO=npm
 . "$S/../scale-lib.sh"
 export PORT=${PORT:-8899} NORM=${NORM---peer-parent}
 NPMV=$(sed -n 1p "$S/npm-version") NODEV=$(sed -n 2p "$S/npm-version")

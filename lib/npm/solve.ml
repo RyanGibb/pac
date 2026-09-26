@@ -1,10 +1,6 @@
 open Encoding
 module P = Npm_parse
 
-(* Tool replays npm's own order (Order); Pubgrub leaves PubGrub's
-   heuristics, next and choose both, as they are. *)
-type order = Tool | Pubgrub
-
 type result = {
   installs : ((string * string) * string) list;
   tree : (((string * string) * string) * ((string * string) * string)) list;
@@ -57,13 +53,6 @@ let dependencies st =
           (fun ((m, vs) : T.Dependees.t) ->
             (m, runs (lazy (Lookup.versions st m)) (T.VSet.elements vs)))
           (Lookup.dependees st (n, u)))
-
-let hooks order st =
-  match order with
-  | Pubgrub -> (None, None)
-  | Tool ->
-      let o = Order.create st in
-      (Some (Order.next o), Some (Order.choose o))
 
 let decode st sol =
   let s = T.PkgSet.ofList sol in
@@ -130,17 +119,21 @@ let drop_dev ar root r =
     tree = List.filter (fun (c, p) -> k c && k p) r.tree;
   }
 
-let solve ?(debug = false) ?(order = Tool) ?(omit_dev = false)
-    ?(omit_optional = false) ar (root : string * string) =
+let solve ?(debug = false) ?(order = `Tool) ?(omit_dev = false)
+    ?(omit_optional = false) ar (root : string * string) :
+    (result, Pac_common.Report.explanation) Stdlib.result =
   Pubgrub.set_debug debug;
   let st = Lookup.create ~optional:(not omit_optional) ar root in
-  let next, choose = hooks order st in
+  let h = Order.hooks order st in
   let root_n = Np.Nm.Granular ((fst root, fst root), snd root) in
-  match
-    PG.solve ?next ?choose ~vers:(Lookup.versions st) ~deps:(dependencies st)
+  let r =
+    PG.solve ?next:h.Pac_common.Order.next ?choose:h.Pac_common.Order.choose
+      ~vers:(Lookup.versions st) ~deps:(dependencies st)
       [ (root_n, PG.Ranges.of_list [ Np.Vs.Orig (snd root) ]) ]
-  with
-  | Error inc -> Error inc
+  in
+  h.Pac_common.Order.finish ();
+  match r with
+  | Error inc -> Error (fun ppf -> PG.explain_incompatibility ppf inc)
   | Ok sol ->
       let r = decode st sol in
       Ok (if omit_dev then drop_dev ar root r else r)

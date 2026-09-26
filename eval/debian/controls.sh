@@ -14,13 +14,18 @@ st() {  # <name> <version> [field...]
   echo
 }
 
-# the index on stdin; the answer as pac prints it, one row per argument;
-# the expected verdicts as valid/minimal
+answer() {  # <row>...: the answer as pac prints it
+  echo "packages ($#):"
+  printf '  %s\n' "$@"
+}
+
+# the index on stdin; the answer one row per argument; the expected
+# verdicts as valid/minimal
 ctl() {  # <name> <expected> <row>...
   local d=$T/$1 want=$2 got; shift 2
   rm -rf "$d"; mkdir -p "$d"
   cat > "$d/Packages"
-  printf '%s\n' "$@" > "$d/ans.out"
+  answer "$@" > "$d/ans.out"
   if ! INDEX=$d/Packages bash "$S/setup.sh" "$d/aptroot" > "$d/setup.log" 2>&1; then
     got=SETUP
   else
@@ -75,7 +80,7 @@ ctl() {  # <name> <expected> <row>...
 for broken in noroot nolists; do
   d=$T/$broken
   rm -rf "$d"; mkdir -p "$d"
-  st goal 1 > "$d/Packages"; echo 'goal:amd64 1' > "$d/ans.out"
+  st goal 1 > "$d/Packages"; answer 'goal:amd64 1' > "$d/ans.out"
   INDEX=$d/Packages bash "$S/setup.sh" "$d/aptroot" > "$d/setup.log" 2>&1
   case $broken in
     noroot) rm -rf "$d/aptroot" ;;

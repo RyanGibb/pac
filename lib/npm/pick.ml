@@ -1,5 +1,3 @@
-(* npm-pick-manifest: which of a range's versions npm takes. *)
-
 open Encoding
 module A = Archive
 module L = Lookup

@@ -1,16 +1,9 @@
-(* Trusted (TCB) reading of the TOML 1.0 a Cargo.toml is written in.  The
-   switch pac builds in has no TOML library, and a query's manifest is one
-   small file, so this reads the whole grammar rather than only the fields
-   cargo reads: a field the query module does not model has to be seen to
-   be refused, not skipped by a parser that stopped short.
-   Date-times are kept as their text; nothing cargo resolves reads one. *)
-
 type t =
   | Str of string
   | Int of int
   | Float of float
   | Bool of bool
-  | Date of string
+  | Date of string (* kept as text: nothing cargo resolves reads one *)
   | Arr of t list
   | Tbl of tbl
   | ATbl of tbl list ref
@@ -438,6 +431,9 @@ and assign st (t : tbl) (ks : string list) (v : t) =
       t.fields <- t.fields @ [ (k, v) ]
   | k :: rest -> assign st (descend st t k) rest v
 
+(* The whole TOML 1.0 grammar rather than only the fields cargo reads: an
+   unmodelled field has to be seen to be refused, not skipped by a parser
+   that stopped short.  The switch pac builds in has no TOML library. *)
 let parse (s : string) : tbl =
   let st = { s; i = 0; line = 1 } in
   let root = new_tbl Header in

@@ -5,16 +5,15 @@ are in play.
 
   $ ../../../bin/main.exe cargo index manifests/a.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root a 1.0.0
-  crates (6):
+  packages (6):
     a 1.0.0
     b 1.0.0
     c 1.0.0
     d 1.0.0 [a,f]
     d 2.0.0 [b,f]
     f 1.0.0 [c,d]
-  encoded solution: 27 core nodes (6 crate versions encoded)
-  parent edges: 6
-  loaded: 5 crates, 6 versions
+  encoded solution: 27 core nodes (6 lookups)
+  loaded: 5 names, 6 versions
 
 A requirement admits a prerelease only when one of its own comparators
 names a prerelease at the same release core.  p publishes 1.0.0 and the
@@ -23,13 +22,12 @@ q publishes 1.0.0-alpha.1 alone, which ^1.0.0-alpha reaches.
 
   $ ../../../bin/main.exe cargo index manifests/g.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root g 1.0.0
-  crates (3):
+  packages (3):
     g 1.0.0
     p 1.0.0
     q 1.0.0-alpha.1
-  encoded solution: 9 core nodes (4 crate versions encoded)
-  parent edges: 2
-  loaded: 3 crates, 4 versions
+  encoded solution: 9 core nodes (4 lookups)
+  loaded: 3 names, 4 versions
 
 A dev-dependency participates only from the root crate.  k declares m both
 as an optional normal dependency and as a dev-dependency; from root h, k is
@@ -38,12 +36,11 @@ activated and the dev one does not participate.
 
   $ ../../../bin/main.exe cargo index manifests/h.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root h 1.0.0
-  crates (2):
+  packages (2):
     h 1.0.0
     k 1.0.0
-  encoded solution: 6 core nodes (2 crate versions encoded)
-  parent edges: 1
-  loaded: 3 crates, 3 versions
+  encoded solution: 6 core nodes (2 lookups)
+  loaded: 3 names, 3 versions
 
 From root k itself the same two records both matter.  With no features
 named the root gets every feature it declares, which is the lockfile
@@ -53,12 +50,11 @@ slot, two parent edges onto the one installed crate.
 
   $ ../../../bin/main.exe cargo index manifests/k.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root k 1.0.0
-  crates (2):
+  packages (2):
     k 1.0.0 [m]
     m 1.0.0
-  encoded solution: 8 core nodes (2 crate versions encoded)
-  parent edges: 2
-  loaded: 2 crates, 2 versions
+  encoded solution: 8 core nodes (2 lookups)
+  loaded: 2 names, 2 versions
 
 Naming features instead resolves afresh with those features and, as in
 cargo, the root's default, and
@@ -69,12 +65,11 @@ on every depender, which is the h case above.
 
   $ ../../../bin/main.exe cargo index manifests/k.toml --features default | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root k 1.0.0 with features default
-  crates (2):
+  packages (2):
     k 1.0.0
     m 1.0.0
-  encoded solution: 6 core nodes (2 crate versions encoded)
-  parent edges: 1
-  loaded: 2 crates, 2 versions
+  encoded solution: 6 core nodes (2 lookups)
+  loaded: 2 names, 2 versions
 
 Crates are parsed as the solver first asks for them, so a link's declarers
 can be discovered after the link has been asked about.  x 1.0.0 and z 1.0.0
@@ -86,26 +81,24 @@ without it.
 
   $ ../../../bin/main.exe cargo index manifests/r.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root r 1.0.0
-  crates (4):
+  packages (4):
     r 1.0.0
     x 0.9.0
     y 1.0.2
     z 1.0.0
-  encoded solution: 13 core nodes (7 crate versions encoded)
-  parent edges: 3
-  loaded: 4 crates, 7 versions
+  encoded solution: 13 core nodes (7 lookups)
+  loaded: 4 names, 7 versions
 
 The root's own links key excludes as a dependency's does.  rl claims
 links=foo, so x 1.0.0, which claims it too, is out and x 0.9.0 is taken.
 
   $ ../../../bin/main.exe cargo index manifests/rl.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root rl 1.0.0
-  crates (2):
+  packages (2):
     rl 1.0.0
     x 0.9.0
-  encoded solution: 7 core nodes (3 crate versions encoded)
-  parent edges: 1
-  loaded: 2 crates, 3 versions
+  encoded solution: 7 core nodes (3 lookups)
+  loaded: 2 names, 3 versions
 
 A weak feature entry resolves as the strong one.  u's default feature
 enables cap, whose only entry is "w?/extra", and w is optional and named
@@ -115,13 +108,12 @@ its place in the lock as --features varies, and w is installed with extra.
 
   $ ../../../bin/main.exe cargo index manifests/s.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root s 1.0.0
-  crates (3):
+  packages (3):
     s 1.0.0
     u 1.0.0 [cap,default]
     w 1.0.0 [extra]
-  encoded solution: 12 core nodes (3 crate versions encoded)
-  parent edges: 2
-  loaded: 3 crates, 3 versions
+  encoded solution: 12 core nodes (3 lookups)
+  loaded: 3 names, 3 versions
 
 Resolver v3's one effect on version selection: a candidate whose declared
 MSRV the configured toolchain does not satisfy ranks below every candidate
@@ -131,24 +123,22 @@ m1 takes the older 1.0.0.
 
   $ ../../../bin/main.exe cargo index manifests/m1.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root m1 1.0.0 for rust 1.70
-  crates (2):
+  packages (2):
     d1 1.0.0
     m1 1.0.0
-  encoded solution: 6 core nodes (3 crate versions encoded)
-  parent edges: 1
-  loaded: 2 crates, 3 versions
+  encoded solution: 6 core nodes (3 lookups)
+  loaded: 2 names, 3 versions
 
 With no toolchain configured the preference is off, as it is in cargo when
 the rust-versions list is empty, and the same index takes the newest.
 
   $ ../../../bin/main.exe cargo index manifests/m1.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root m1 1.0.0
-  crates (2):
+  packages (2):
     d1 1.1.0
     m1 1.0.0
-  encoded solution: 6 core nodes (3 crate versions encoded)
-  parent edges: 1
-  loaded: 2 crates, 3 versions
+  encoded solution: 6 core nodes (3 lookups)
+  loaded: 2 names, 3 versions
 
 A crate declaring no MSRV is compatible with every toolchain rather than
 with none: msrv_compat_count returns the full count when a summary carries
@@ -159,21 +149,19 @@ would give.
 
   $ ../../../bin/main.exe cargo index manifests/m2.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root m2 1.0.0 for rust 1.70
-  crates (2):
+  packages (2):
     d2 1.1.0
     m2 1.0.0
-  encoded solution: 6 core nodes (4 crate versions encoded)
-  parent edges: 1
-  loaded: 2 crates, 4 versions
+  encoded solution: 6 core nodes (4 lookups)
+  loaded: 2 names, 4 versions
 
   $ ../../../bin/main.exe cargo index manifests/m2.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root m2 1.0.0
-  crates (2):
+  packages (2):
     d2 1.2.0
     m2 1.0.0
-  encoded solution: 6 core nodes (4 crate versions encoded)
-  parent edges: 1
-  loaded: 2 crates, 4 versions
+  encoded solution: 6 core nodes (4 lookups)
+  loaded: 2 names, 4 versions
 
 This is a preference and not a constraint.  m3 requires ^2 of d3, whose
 only version in range is 2.0.0 needing 1.90; the MSRV-compatible 1.0.0 is
@@ -181,12 +169,11 @@ out of range, so 2.0.0 is taken rather than the solve failing.
 
   $ ../../../bin/main.exe cargo index manifests/m3.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root m3 1.0.0 for rust 1.70
-  crates (2):
+  packages (2):
     d3 2.0.0
     m3 1.0.0
-  encoded solution: 6 core nodes (3 crate versions encoded)
-  parent edges: 1
-  loaded: 2 crates, 3 versions
+  encoded solution: 6 core nodes (3 lookups)
+  loaded: 2 names, 3 versions
 
 One alias declared twice is two dependencies, not one.  t names e in
 [dependencies] at ^0.2 and again under [target.'cfg(windows)'.dependencies]
@@ -197,13 +184,12 @@ lockfile with e 0.1.0 beside e 0.2.0.
 
   $ ../../../bin/main.exe cargo index manifests/t.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root t 1.0.0
-  crates (3):
+  packages (3):
     e 0.1.0
     e 0.2.0
     t 1.0.0
-  encoded solution: 9 core nodes (3 crate versions encoded)
-  parent edges: 2
-  loaded: 2 crates, 3 versions
+  encoded solution: 9 core nodes (3 lookups)
+  loaded: 2 names, 3 versions
 
 Two sites may also share an alias while naming different crates, since
 package = renames the target and the cross-table check constrains only the
@@ -212,13 +198,12 @@ source registry.  rn's x is e under [dependencies] and w under
 
   $ ../../../bin/main.exe cargo index manifests/rn.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root rn 1.0.0
-  crates (3):
+  packages (3):
     e 0.2.0
     rn 1.0.0
     w 1.0.0
-  encoded solution: 9 core nodes (4 crate versions encoded)
-  parent edges: 2
-  loaded: 3 crates, 4 versions
+  encoded solution: 9 core nodes (4 lookups)
+  loaded: 3 names, 4 versions
 
 A crate's feature set is the one cargo's version resolver records for it
 (Resolve::features, what `cargo metadata --all-features` prints), and two of that
@@ -233,26 +218,24 @@ resolved with o on:
 
   $ ../../../bin/main.exe cargo index manifests/ir.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root ir 1.0.0
-  crates (3):
+  packages (3):
     i 1.0.0 [net,o]
     ir 1.0.0
     o 1.0.0 [extra]
-  encoded solution: 12 core nodes (3 crate versions encoded)
-  parent edges: 2
-  loaded: 3 crates, 3 versions
+  encoded solution: 12 core nodes (3 lookups)
+  loaded: 3 names, 3 versions
 
 Where dep:o names the dependency there is no implicit feature o to enable,
 and i3 is resolved with net alone:
 
   $ ../../../bin/main.exe cargo index manifests/ir3.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root ir3 1.0.0
-  crates (3):
+  packages (3):
     i3 1.0.0 [net]
     ir3 1.0.0
     o 1.0.0 [extra]
-  encoded solution: 11 core nodes (3 crate versions encoded)
-  parent edges: 2
-  loaded: 3 crates, 3 versions
+  encoded solution: 11 core nodes (3 lookups)
+  loaded: 3 names, 3 versions
 
 Which of two crates keeps its newest version, when one pins the other, is
 settled by the order cargo activates them in (core/resolver/mod.rs,
@@ -264,41 +247,38 @@ and cp falls back to 0.1.6.
 
   $ ../../../bin/main.exe cargo index manifests/oa.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root oa 1.0.0
-  crates (4):
+  packages (4):
     cp 0.1.6
     ga 0.14.9
     oa 1.0.0
     pa 1.0.0
-  encoded solution: 13 core nodes (6 crate versions encoded)
-  parent edges: 4
-  loaded: 4 crates, 6 versions
+  encoded solution: 13 core nodes (6 lookups)
+  loaded: 4 names, 6 versions
 
 pb declares zp, a copy of cp, first, so zp 0.1.7 is activated first and its
 pin, with one candidate, is taken before pb's own ^0.14 of ga.
 
   $ ../../../bin/main.exe cargo index manifests/ob.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root ob 1.0.0
-  crates (4):
+  packages (4):
     ga 0.14.7
     ob 1.0.0
     pb 1.0.0
     zp 0.1.7
-  encoded solution: 13 core nodes (6 crate versions encoded)
-  parent edges: 4
-  loaded: 4 crates, 6 versions
+  encoded solution: 13 core nodes (6 lookups)
+  loaded: 4 names, 6 versions
 
 The root's own dependencies are read from its manifest, whose tables cargo
 keys by name, so oc's zp-then-ga reaches the resolver as ga-then-zp.
 
   $ ../../../bin/main.exe cargo index manifests/oc.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root oc 1.0.0
-  crates (3):
+  packages (3):
     ga 0.14.9
     oc 1.0.0
     zp 0.1.6
-  encoded solution: 10 core nodes (5 crate versions encoded)
-  parent edges: 3
-  loaded: 3 crates, 5 versions
+  encoded solution: 10 core nodes (5 lookups)
+  loaded: 3 names, 5 versions
 
 Resolver v3 ranks the candidate versions of a dependency, not their
 granularity classes (version_prefs.rs, sort_summaries), and skips a
@@ -310,14 +290,13 @@ the rest, 0.6.5, although it needs a newer Rust than 1.70.
 
   $ ../../../bin/main.exe cargo index manifests/ms.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root ms 1.0.0 for rust 1.70
-  crates (4):
+  packages (4):
     mq 1.0.0
     ms 1.0.0
     sk 0.5.10
     sk 0.6.5
-  encoded solution: 12 core nodes (5 crate versions encoded)
-  parent edges: 3
-  loaded: 3 crates, 5 versions
+  encoded solution: 12 core nodes (5 lookups)
+  loaded: 3 names, 5 versions
 
 mu pins sl to 0.6.5, which needs 1.80, so mt's range skips the compatible
 0.6.4 of that granularity class and takes the compatible 0.5.9 of the
@@ -325,14 +304,13 @@ older one.
 
   $ ../../../bin/main.exe cargo index manifests/mu.toml --rust-version 1.70 | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root mu 1.0.0 for rust 1.70
-  crates (4):
+  packages (4):
     mt 1.0.0
     mu 1.0.0
     sl 0.5.9
     sl 0.6.5
-  encoded solution: 12 core nodes (5 crate versions encoded)
-  parent edges: 3
-  loaded: 3 crates, 5 versions
+  encoded solution: 12 core nodes (5 lookups)
+  loaded: 3 names, 5 versions
 
 A candidate one of whose mandatory dependencies has no valid candidate
 left is passed over, as cargo passes it over after activating it and
@@ -409,7 +387,7 @@ comes in through net, with o behind i's own net, and e is locked at both
 
   $ ../../../bin/main.exe cargo index manifests/app.toml --print-parents | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root app 0.1.0
-  crates (9):
+  packages (9):
     app 0.1.0 [default,i,net]
     e 0.1.0
     e 0.2.0
@@ -419,9 +397,7 @@ comes in through net, with o behind i's own net, and e is locked at both
     s 1.0.0
     u 1.0.0 [cap,default]
     w 1.0.0 [extra]
-  encoded solution: 36 core nodes (9 crate versions encoded)
-  parent edges: 8
-  parent-edges:
+  parent edges (8):
     app 0.1.0 -> e(e) 0.2.0
     app 0.1.0 -> i(i) 1.0.0
     app 0.1.0 -> m(m) 1.0.0
@@ -430,7 +406,8 @@ comes in through net, with o behind i's own net, and e is locked at both
     i 1.0.0 -> o(o) 1.0.0
     s 1.0.0 -> u(u) 1.0.0
     u 1.0.0 -> w(w) 1.0.0
-  loaded: 8 crates, 8 versions
+  encoded solution: 36 core nodes (9 lookups)
+  loaded: 8 names, 8 versions
 
 A dev-dependency that depends back on the root reaches the root's own
 name and version through the registry.  The model has one node there;
@@ -443,16 +420,14 @@ answers the second.
   [2]
   $ ../../../bin/main.exe cargo index manifests/selfpatch.toml --print-parents | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root b 1.0.0
-  crates (6):
+  packages (6):
     a 1.0.0
     b 1.0.0
     c 1.0.0
     d 1.0.0 [a,f]
     d 2.0.0 [b,f]
     f 1.0.0 [c,d]
-  encoded solution: 28 core nodes (6 crate versions encoded)
-  parent edges: 7
-  parent-edges:
+  parent edges (7):
     a 1.0.0 -> b(b) 1.0.0
     a 1.0.0 -> c(c) 1.0.0
     b 1.0.0 -> a(a) 1.0.0
@@ -460,7 +435,8 @@ answers the second.
     c 1.0.0 -> d(d) 2.0.0
     d 1.0.0 -> f(f) 1.0.0
     d 2.0.0 -> f(f) 1.0.0
-  loaded: 5 crates, 6 versions
+  encoded solution: 28 core nodes (6 lookups)
+  loaded: 5 names, 6 versions
 
 Sources and patches the model does not cover are refused rather than
 dropped:
@@ -478,14 +454,13 @@ never a candidate, so cargo takes 1.0.0 of each of fa (dep:o/extra), fb
 
   $ ../../../bin/main.exe cargo index manifests/fm.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root fm 1.0.0
-  crates (4):
+  packages (4):
     fa 1.0.0
     fb 1.0.0
     fc 1.0.0
     fm 1.0.0
-  encoded solution: 12 core nodes (4 crate versions encoded)
-  parent edges: 3
-  loaded: 4 crates, 3 versions
+  encoded solution: 12 core nodes (4 lookups)
+  loaded: 4 names, 3 versions
   parser dropped 3 declarations
 
 The manifest is TOML, which cargo refuses where a header defines a table
@@ -507,14 +482,13 @@ numbers TOML allows all read:
 
   $ ../../../bin/main.exe cargo index manifests/tomlok.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root tomlok 1.0.0
-  crates (4):
+  packages (4):
     b 1.0.0
     d 1.0.0 [a,f]
     f 1.0.0 [c]
     tomlok 1.0.0
-  encoded solution: 16 core nodes (5 crate versions encoded)
-  parent edges: 3
-  loaded: 4 crates, 4 versions
+  encoded solution: 16 core nodes (5 lookups)
+  loaded: 4 names, 4 versions
 
 A version component is a u64 in cargo's semver, so tv's timestamp-style
 1.0.1234567890 and 1.0.1234567891 are two versions, and ^1 takes the
@@ -522,12 +496,11 @@ newer, as cargo does.
 
   $ ../../../bin/main.exe cargo index manifests/vt.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root vt 1.0.0
-  crates (2):
+  packages (2):
     tv 1.0.1234567891
     vt 1.0.0
-  encoded solution: 6 core nodes (3 crate versions encoded)
-  parent edges: 1
-  loaded: 2 crates, 2 versions
+  encoded solution: 6 core nodes (3 lookups)
+  loaded: 2 names, 2 versions
 
 cargo skips an index line it cannot deserialize, so a line that is JSON
 but not an object is dropped and counted, and so is a version one of
@@ -536,12 +509,11 @@ are out, and cargo, like pac, locks 1.0.0.
 
   $ ../../../bin/main.exe cargo index manifests/nbr.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root nbr 1.0.0
-  crates (2):
+  packages (2):
     nb 1.0.0
     nbr 1.0.0
-  encoded solution: 6 core nodes (2 crate versions encoded)
-  parent edges: 1
-  loaded: 2 crates, 1 versions
+  encoded solution: 6 core nodes (2 lookups)
+  loaded: 2 names, 1 versions
   parser dropped 4 declarations
 
 --features keeps the root's default unless --no-default-features drops
@@ -551,36 +523,32 @@ optional i for net.
 
   $ ../../../bin/main.exe cargo index manifests/fd.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root fd 1.0.0
-  crates (3):
+  packages (3):
     fd 1.0.0 [default,i,net,plain]
     i 1.0.0 [net,o]
     o 1.0.0 [extra]
-  encoded solution: 17 core nodes (3 crate versions encoded)
-  parent edges: 2
-  loaded: 3 crates, 2 versions
+  encoded solution: 17 core nodes (3 lookups)
+  loaded: 3 names, 2 versions
   $ ../../../bin/main.exe cargo index manifests/fd.toml -F "" | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root fd 1.0.0 with default features
-  crates (3):
+  packages (3):
     fd 1.0.0 [default,i,net]
     i 1.0.0 [net,o]
     o 1.0.0 [extra]
-  encoded solution: 16 core nodes (3 crate versions encoded)
-  parent edges: 2
-  loaded: 3 crates, 2 versions
+  encoded solution: 16 core nodes (3 lookups)
+  loaded: 3 names, 2 versions
   $ ../../../bin/main.exe cargo index manifests/fd.toml --no-default-features | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root fd 1.0.0 with no features
-  crates (1):
+  packages (1):
     fd 1.0.0
-  encoded solution: 2 core nodes (1 crate versions encoded)
-  parent edges: 0
-  loaded: 2 crates, 1 versions
+  encoded solution: 2 core nodes (1 lookups)
+  loaded: 2 names, 1 versions
   $ ../../../bin/main.exe cargo index manifests/fd.toml --no-default-features -F plain | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root fd 1.0.0 with features plain and no default feature
-  crates (1):
+  packages (1):
     fd 1.0.0 [plain]
-  encoded solution: 3 core nodes (1 crate versions encoded)
-  parent edges: 0
-  loaded: 2 crates, 1 versions
+  encoded solution: 3 core nodes (1 lookups)
+  loaded: 2 names, 1 versions
 
 A requirement cargo cannot parse is refused, not read as "*":
 
@@ -594,11 +562,10 @@ PubGrub's own order oa keeps cp's newest, 0.1.7, and ga at its pin.
 
   $ ../../../bin/main.exe cargo index manifests/oa.toml --order=pubgrub | sed -E '/^(parse|solve) [0-9.]+s$/d'
   root oa 1.0.0
-  crates (4):
+  packages (4):
     cp 0.1.7
     ga 0.14.7
     oa 1.0.0
     pa 1.0.0
-  encoded solution: 13 core nodes (6 crate versions encoded)
-  parent edges: 4
-  loaded: 4 crates, 6 versions
+  encoded solution: 13 core nodes (6 lookups)
+  loaded: 4 names, 6 versions

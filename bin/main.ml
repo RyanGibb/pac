@@ -1,42 +1,97 @@
 open Cmdliner
+module Report = Pac_common.Report
 
 let debug_arg =
   Arg.(value & flag & info [ "debug" ] ~doc:"Trace the PubGrub search.")
 
 (* the tool's own order is the default because the evaluation's first
    question is whether pac answers as the tool does *)
-let order_arg ~tool ~pubgrub =
-  Arg.(
-    value
-    & opt (enum [ ("tool", `Tool); ("pubgrub", `Pubgrub) ]) `Tool
-    & info [ "order" ] ~docv:"ORDER"
+let order_arg ~tool ~pubgrub : Pac_common.Order.t Term.t =
+  let order =
+    Arg.(
+      value
+      & opt
+          (enum [ ("tool", `Tool); ("pubgrub", `Pubgrub); ("random", `Random) ])
+          `Tool
+      & info [ "order" ] ~docv:"ORDER"
+          ~doc:
+            (Printf.sprintf
+               "Which name to decide next and which version to try: $(b,tool) \
+                as %s, $(b,pubgrub) as %s, $(b,random) uniformly, from a \
+                generator seeded by $(b,--seed)."
+               tool pubgrub))
+  in
+  let seed =
+    Arg.(
+      value & opt int 0
+      & info [ "seed" ] ~docv:"N"
+          ~doc:"The seed $(b,--order=random) draws from.")
+  in
+  Term.(
+    const (fun order seed ->
+        match order with
+        | `Random -> `Random seed
+        | (`Tool | `Pubgrub) as o -> o)
+    $ order $ seed)
+
+let exits =
+  Cmd.Exit.
+    [
+      info 0 ~doc:"on an answer.";
+      info 1 ~doc:"when the query has no answer.";
+      info 2
         ~doc:
-          (Printf.sprintf
-             "Which name to decide next and which version to try: $(b,tool) as \
-              %s, $(b,pubgrub) as %s."
-             tool pubgrub))
+          "when the query or an input is refused, a command-line error \
+           included.";
+      info 3 ~doc:"when an index, a file or the registry cannot be read.";
+      info 125 ~doc:"on an internal error.";
+    ]
+
+let error code fmt =
+  Printf.ksprintf
+    (fun s ->
+      Printf.eprintf "error: %s\n%!" s;
+      code)
+    fmt
+
+let guard f = try f () with Sys_error e -> error 3 "%s" e
+
+(* solve time is the wall time since [t0] less what went on loading, which
+   the lazy loaders interleave with the solve *)
+let report ~t0 (loaded : Report.loaded) answer print =
+  let t1 = Unix.gettimeofday () in
+  let code =
+    match answer with
+    | Ok a ->
+        print a;
+        0
+    | Error why ->
+        Report.unsatisfiable why;
+        1
+  in
+  Report.loaded loaded ~solve:(t1 -. t0 -. loaded.Report.parse);
+  code
 
 let debian_run debug order no_recs no_strict native query path =
-  Pubgrub.set_debug debug;
+  guard @@ fun () ->
+  let t0 = Unix.gettimeofday () in
   let r =
     Deb_solve.solve_files ~debug ~order ~recommends:(not no_recs)
       ~strict_pinning:(not no_strict) ~native ~paths:[ path ] ~query
   in
-  let dropped = !Debian_frontend.Deb_packages.rejected in
-  let report_dropped () =
-    if dropped > 0 then Printf.printf "parser dropped %d declarations\n" dropped
-  in
-  match r with
-  | None ->
-      report_dropped ();
-      1
-  | Some (pkgs, t_parse, t_solve) ->
-      List.iter (fun (n, b, v) -> Printf.printf "%s:%s %s\n" n b v) pkgs;
-      Printf.printf "parse %.2fs\nsolve %.2fs\n" t_parse t_solve;
-      (* after the timings: eval/debian/check.sh reads every line above them
-         as part of the answer *)
-      report_dropped ();
-      0
+  report ~t0
+    {
+      Report.names = r.Deb_solve.names;
+      versions = r.Deb_solve.versions;
+      extra = [];
+      dropped = !Debian_frontend.Deb_packages.rejected;
+      parse = r.Deb_solve.t_parse;
+    } r.Deb_solve.answer (fun a ->
+      Report.packages
+        (List.map
+           (fun (n, b, v) -> Printf.sprintf "%s:%s %s" n b v)
+           a.Deb_solve.pkgs);
+      Report.encoded ~nodes:a.Deb_solve.nodes ~lookups:a.Deb_solve.lookups)
 
 let debian_cmd =
   (* Recommends are installed by default, as under apt's
@@ -85,13 +140,14 @@ let debian_cmd =
       & info [] ~docv:"PACKAGES" ~doc:"Debian Packages index file.")
   in
   Cmd.v
-    (Cmd.info "debian" ~doc:"Solve against a Debian Packages index.")
+    (Cmd.info "debian" ~exits ~doc:"Solve against a Debian Packages index.")
     Term.(
       const debian_run $ debug_arg $ order $ no_recs $ no_strict $ native
       $ query $ path)
 
 let opam_run debug order with_test with_doc with_dev_setup opam_version repo
     atoms =
+  guard @@ fun () ->
   let t0 = Unix.gettimeofday () in
   let ar = Opam_solve.empty_archive repo in
   let query = List.map Opam_parse.atom_of_string atoms in
@@ -99,31 +155,18 @@ let opam_run debug order with_test with_doc with_dev_setup opam_version repo
     Opam_solve.solve ~debug ~order ~with_test ~with_doc ~with_dev_setup
       ~opam_version ar query
   in
-  (* the names the run parsed, known only once it is over: there is no
-     cone, so this is what the solver asked for and nothing more *)
-  let loaded () =
-    let t1 = Unix.gettimeofday () in
-    Printf.printf "loaded: %d names, %d package versions\n"
-      ar.Opam_solve.n_names ar.Opam_solve.n_vers;
-    if !Opam_parse.rejected > 0 then
-      Printf.printf "parser dropped %d declarations\n" !Opam_parse.rejected;
-    Printf.printf "parse %.2fs\nsolve %.2fs\n" ar.Opam_solve.t_parse
-      (t1 -. t0 -. ar.Opam_solve.t_parse)
-  in
-  match r with
-  | None ->
-      loaded ();
-      1
-  | Some { Opam_solve.reals; nodes; depexts } ->
-      Printf.printf "opam packages (%d, core solution %d nodes):\n"
-        (List.length reals) nodes;
-      List.iter (fun (n, v) -> Printf.printf "  %s.%s\n" n v) reals;
-      if depexts <> [] then begin
-        Printf.printf "system packages (%d):\n" (List.length depexts);
-        List.iter (fun e -> Printf.printf "  %s\n" e) depexts
-      end;
-      loaded ();
-      0
+  report ~t0
+    {
+      Report.names = ar.Opam_solve.n_names;
+      versions = ar.Opam_solve.n_vers;
+      extra = [];
+      dropped = !Opam_parse.rejected;
+      parse = ar.Opam_solve.t_parse;
+    } r (fun a ->
+      Report.packages (List.map (fun (n, v) -> n ^ " " ^ v) a.Opam_solve.reals);
+      if a.Opam_solve.depexts <> [] then
+        Report.section "system packages" a.Opam_solve.depexts;
+      Report.encoded ~nodes:a.Opam_solve.nodes ~lookups:a.Opam_solve.lookups)
 
 let opam_cmd =
   (* opam's builtin-0install backend decides a name as soon as its decider
@@ -185,86 +228,73 @@ let opam_cmd =
              constraint, e.g. $(b,pkg), $(b,pkg.1.0) or $(b,pkg>=0.5).")
   in
   Cmd.v
-    (Cmd.info "opam" ~doc:"Solve against an opam repository.")
+    (Cmd.info "opam" ~exits ~doc:"Solve against an opam repository.")
     Term.(
       const opam_run $ debug_arg $ order $ with_test $ with_doc $ with_dev_setup
       $ opam_version $ repo $ query)
 
 let cargo_run debug order print_parents index manifest features no_default
     installed =
+  guard @@ fun () ->
   let t0 = Unix.gettimeofday () in
-  match Cargo_query.of_manifest manifest with
-  | exception Cargo_query.Refused e ->
-      Printf.eprintf "error: %s\n" e;
-      2
-  | root -> (
-      let features = Cargo_query.features_of_flags features ~no_default in
-      let rustv = Cargo_query.toolchain root ~installed in
-      let n, v = Cargo_query.crate root in
-      Printf.printf "root %s %s%s%s\n%!" n v
-        (match features with
-        | Cargo_query.All -> ""
-        | Cargo_query.Named { feats = []; default = true } ->
-            " with default features"
-        | Cargo_query.Named { feats = []; default = false } ->
-            " with no features"
-        | Cargo_query.Named { feats; default } ->
-            " with features " ^ String.concat "," feats
-            ^ if default then "" else " and no default feature")
-        (match rustv with None -> "" | Some t -> " for rust " ^ t);
-      let r = Cargo_solve.solve ~debug ~order ~index ~features ~rustv root in
-      (* the crates the run parsed, known only once it is over: there is no
-         cone, so this is what the solver asked for and nothing more *)
-      let loaded () =
-        let t2 = Unix.gettimeofday () in
-        Printf.printf "loaded: %d crates, %d versions\n" r.Cargo_solve.n_names
-          r.Cargo_solve.n_vers;
-        if !Cargo_parse.rejected > 0 then
-          Printf.printf "parser dropped %d declarations\n" !Cargo_parse.rejected;
-        Printf.printf "parse %.2fs\nsolve %.2fs\n" r.Cargo_solve.t_parse
-          (t2 -. t0 -. r.Cargo_solve.t_parse)
-      in
-      match r.Cargo_solve.answer with
-      | None ->
-          loaded ();
-          1
-      | Some a when Cargo_solve.reaches_registry_root root a ->
-          loaded ();
-          Printf.eprintf
-            "error: the answer reaches %s %s through the registry, which cargo \
-             keeps apart from the root unless [patch.crates-io] maps %s to it \
-             with { path = \".\" }\n"
-            n v n;
-          2
-      | Some a ->
-          Printf.printf "crates (%d):\n" (List.length a.Cargo_solve.crates);
-          List.iter
-            (fun (n, v) ->
-              let fs =
-                match
-                  List.find_opt
-                    (fun (m, u, _) -> m = n && u = v)
-                    a.Cargo_solve.feats
-                with
-                | Some (_, _, fs) -> fs
-                | None -> []
-              in
-              Printf.printf "  %s %s%s\n" n v
-                (if fs = [] then "" else " [" ^ String.concat "," fs ^ "]"))
-            a.Cargo_solve.crates;
-          Printf.printf
-            "encoded solution: %d core nodes (%d crate versions encoded)\n"
-            a.Cargo_solve.nodes a.Cargo_solve.processed;
-          Printf.printf "parent edges: %d\n" (List.length a.Cargo_solve.parents);
-          if print_parents then begin
-            Printf.printf "parent-edges:\n";
-            List.iter
-              (fun (n, v, a, t, u) ->
-                Printf.printf "  %s %s -> %s(%s) %s\n" n v a t u)
-              a.Cargo_solve.parents
-          end;
-          loaded ();
-          0)
+  try
+    let root = Cargo_query.of_manifest manifest in
+    let features = Cargo_query.features_of_flags features ~no_default in
+    let rustv = Cargo_query.toolchain root ~installed in
+    let n, v = Cargo_query.crate root in
+    Report.root
+      (Printf.sprintf "%s %s%s%s" n v
+         (match features with
+         | Cargo_query.All -> ""
+         | Cargo_query.Named { feats = []; default = true } ->
+             " with default features"
+         | Cargo_query.Named { feats = []; default = false } ->
+             " with no features"
+         | Cargo_query.Named { feats; default } ->
+             " with features " ^ String.concat "," feats
+             ^ if default then "" else " and no default feature")
+         (match rustv with None -> "" | Some t -> " for rust " ^ t));
+    let r = Cargo_solve.solve ~debug ~order ~index ~features ~rustv root in
+    match r.Cargo_solve.answer with
+    | Ok a when Cargo_solve.reaches_registry_root root a ->
+        error 2
+          "the answer reaches %s %s through the registry, which cargo keeps \
+           apart from the root unless [patch.crates-io] maps %s to it with { \
+           path = \".\" }"
+          n v n
+    | answer ->
+        report ~t0
+          {
+            Report.names = r.Cargo_solve.n_names;
+            versions = r.Cargo_solve.n_vers;
+            extra = [];
+            dropped = !Cargo_parse.rejected;
+            parse = r.Cargo_solve.t_parse;
+          } answer (fun a ->
+            Report.packages
+              (List.map
+                 (fun (n, v) ->
+                   let fs =
+                     match
+                       List.find_opt
+                         (fun (m, u, _) -> m = n && u = v)
+                         a.Cargo_solve.feats
+                     with
+                     | Some (_, _, fs) -> fs
+                     | None -> []
+                   in
+                   Printf.sprintf "%s %s%s" n v
+                     (if fs = [] then "" else " [" ^ String.concat "," fs ^ "]"))
+                 a.Cargo_solve.crates);
+            if print_parents then
+              Report.section "parent edges"
+                (List.map
+                   (fun (n, v, a, t, u) ->
+                     Printf.sprintf "%s %s -> %s(%s) %s" n v a t u)
+                   a.Cargo_solve.parents);
+            Report.encoded ~nodes:a.Cargo_solve.nodes
+              ~lookups:a.Cargo_solve.processed)
+  with Cargo_query.Refused e -> error 2 "%s" e
 
 let cargo_cmd =
   let index =
@@ -301,16 +331,9 @@ let cargo_cmd =
       & info [ "no-default-features" ]
           ~doc:"Do not enable the root's default feature.")
   in
-  (* cargo's own order is the default, the one whose answers are compared
-     with cargo's; PubGrub's is the one the benchmarks state *)
   let order =
-    Arg.(
-      value
-      & opt (enum [ ("tool", `Tool); ("pubgrub", `Pubgrub) ]) `Tool
-      & info [ "order" ] ~docv:"ORDER"
-          ~doc:
-            "Decision order: $(b,tool) replays cargo's activation order, \
-             $(b,pubgrub) leaves PubGrub's own.")
+    order_arg ~tool:"cargo's activation order, replayed, does"
+      ~pubgrub:"PubGrub's own order does"
   in
   (* the toolchain resolver v3 falls back to when the root declares no
      rust-version; cargo reads it off rustc, this asks for it *)
@@ -334,41 +357,38 @@ let cargo_cmd =
           ~doc:"Print the decoded parent relation, one edge per line.")
   in
   Cmd.v
-    (Cmd.info "cargo" ~doc:"Solve a root Cargo.toml against a crates.io index.")
+    (Cmd.info "cargo" ~exits
+       ~doc:"Solve a root Cargo.toml against a crates.io index.")
     Term.(
       const cargo_run $ debug_arg $ order $ print_parents $ index $ manifest
       $ features $ no_default $ rustv)
 
 let alpine_run debug order path goals =
+  guard @@ fun () ->
   match Apk_solve.world_of_args goals with
-  | Error e ->
-      Printf.eprintf "error: %s\n" e;
-      2
-  | Ok world -> (
+  | Error e -> error 2 "%s" e
+  | Ok world ->
       let t0 = Unix.gettimeofday () in
       let ar = Apk_solve.load_index path in
-      let t1 = Unix.gettimeofday () in
-      Printf.printf
-        "index %s: %d packages, %d provides entries, %d install_if rules\n\
-         parse %.2fs\n\
-         %!"
-        path ar.Apk_solve.n_pkgs ar.Apk_solve.n_provs ar.Apk_solve.n_iif
-        (t1 -. t0);
-      if !Apk_parse.rejected > 0 then
-        Printf.printf "parser dropped %d declarations\n%!" !Apk_parse.rejected;
-      match Apk_solve.solve ~debug ~order ar world with
-      | None -> 1
-      | Some r ->
-          let t2 = Unix.gettimeofday () in
-          Printf.printf "packages (%d):\n" (List.length r.Apk_solve.pkgs);
-          List.iter
-            (fun (n, v) -> Printf.printf "  %s %s\n" n v)
-            r.Apk_solve.pkgs;
-          Printf.printf
-            "encoded solution: %d core nodes (%d dependees lookups)\n"
-            r.Apk_solve.nodes r.Apk_solve.processed;
-          Printf.printf "solve %.2fs\n" (t2 -. t1);
-          0)
+      let parse = Unix.gettimeofday () -. t0 in
+      let r = Apk_solve.solve ~debug ~order ar world in
+      report ~t0
+        {
+          Report.names = Hashtbl.length ar.Apk_solve.by_name;
+          versions = ar.Apk_solve.n_pkgs;
+          extra =
+            [
+              Printf.sprintf "%d provides entries" ar.Apk_solve.n_provs;
+              Printf.sprintf "%d install_if rules" ar.Apk_solve.n_iif;
+            ];
+          dropped = !Apk_parse.rejected;
+          parse;
+        }
+        r
+        (fun a ->
+          Report.packages
+            (List.map (fun (n, v) -> n ^ " " ^ v) a.Apk_solve.pkgs);
+          Report.encoded ~nodes:a.Apk_solve.nodes ~lookups:a.Apk_solve.processed)
 
 let alpine_cmd =
   let path =
@@ -390,47 +410,51 @@ let alpine_cmd =
         "PubGrub does, but for the rules apk's acceptance of an answer rests on"
   in
   Cmd.v
-    (Cmd.info "alpine" ~doc:"Solve against an Alpine APKINDEX.")
+    (Cmd.info "alpine" ~exits ~doc:"Solve against an Alpine APKINDEX.")
     Term.(const alpine_run $ debug_arg $ order $ path $ goals)
 
 module Npm = Npm_solve
 
-let npm_exits =
-  Cmd.Exit.
-    [
-      info 0 ~doc:"on a solution.";
-      info 1 ~doc:"when no solution exists.";
-      info 2 ~doc:"when the query is refused.";
-      info 3 ~doc:"when the registry cannot be read.";
-    ]
-  @ List.filter (fun i -> Cmd.Exit.info_code i <> 0) Cmd.Exit.defaults
-
-let npm_answer debug order omit tree t0 ar root =
-  let rc = Npm.Archive.add_root ar root in
-  Npm.Print.root rc;
-  match
-    Npm.Solve.solve ~debug ~order ~omit_dev:(List.mem `Dev omit)
-      ~omit_optional:(List.mem `Optional omit) ar rc
-  with
-  | Error inc ->
-      Npm.Print.unsat inc;
-      1
-  | Ok r ->
-      Npm.Print.answer ~full:tree ~elapsed:(Unix.gettimeofday () -. t0) ar r;
-      0
-
 let npm_run debug order cache offline tree omit nodev npmv query =
+  guard @@ fun () ->
   let t0 = Unix.gettimeofday () in
   let ar = Npm.Archive.create ?node:nodev ?npm:npmv ~cache ~offline () in
   try
     match Npm.Query.root ar query with
-    | Error e ->
-        prerr_endline e;
-        2
-    | Ok root -> npm_answer debug order omit tree t0 ar root
-  with Npm.Archive.Fetch_failed e ->
-    Printf.eprintf "error: %s\n" e;
-    3
+    | Error e -> error 2 "%s" e
+    | Ok root ->
+        let rc = Npm.Archive.add_root ar root in
+        Report.root (Npm.Print.root rc);
+        let r =
+          Npm.Solve.solve ~debug ~order ~omit_dev:(List.mem `Dev omit)
+            ~omit_optional:(List.mem `Optional omit) ar rc
+        in
+        let optional =
+          match r with
+          | Ok a when a.Npm.Solve.optional_read > 0 ->
+              [
+                Printf.sprintf
+                  "%d of %d optionalDependencies (target, range) pairs dropped"
+                  a.Npm.Solve.optional_dropped a.Npm.Solve.optional_read;
+              ]
+          | _ -> []
+        in
+        report ~t0
+          {
+            Report.names = ar.Npm.Archive.n_names;
+            versions = ar.Npm.Archive.n_vers;
+            extra =
+              Printf.sprintf "%d packuments fetched" ar.Npm.Archive.n_fetched
+              :: optional;
+            dropped = !Npm_parse.rejected;
+            parse = ar.Npm.Archive.t_parse;
+          }
+          r
+          (fun a ->
+            Report.packages (Npm.Print.packages a);
+            if tree then Report.section "node_modules" (Npm.Print.tree a);
+            Report.encoded ~nodes:a.Npm.Solve.nodes ~lookups:a.Npm.Solve.lookups)
+  with Npm.Archive.Fetch_failed e -> error 3 "%s" e
 
 let npm_cmd =
   let cache =
@@ -447,15 +471,7 @@ let npm_cmd =
     Arg.(value & flag & info [ "tree" ] ~doc:"Print the node_modules nesting.")
   in
   let order =
-    Arg.(
-      value
-      & opt
-          (enum [ ("tool", Npm.Solve.Tool); ("pubgrub", Npm.Solve.Pubgrub) ])
-          Npm.Solve.Tool
-      & info [ "order" ] ~docv:"ORDER"
-          ~doc:
-            "Which order decides: $(b,tool) replays npm's, $(b,pubgrub) leaves \
-             PubGrub's own.")
+    order_arg ~tool:"npm's, replayed, does" ~pubgrub:"PubGrub's own order does"
   in
   (* npm's flag also takes peer, which is refused rather than ignored:
      nothing here leaves peers out of an answer *)
@@ -501,14 +517,19 @@ let npm_cmd =
              with no path, the project is empty.")
   in
   Cmd.v
-    (Cmd.info "npm" ~exits:npm_exits ~doc:"Solve against the npm registry.")
+    (Cmd.info "npm" ~exits ~doc:"Solve against the npm registry.")
     Term.(
       const npm_run $ debug_arg $ order $ cache $ offline $ tree $ omit $ nodev
       $ npmv $ query)
 
+(* a command-line error is a refused query like any other, and 124 is
+   left to timeout(1) *)
 let () =
   let doc = "Solve dependencies through the verified package calculus." in
-  exit
-    (Cmd.eval'
-       (Cmd.group (Cmd.info "pac" ~doc)
-          [ debian_cmd; opam_cmd; cargo_cmd; alpine_cmd; npm_cmd ]))
+  let code =
+    Cmd.eval'
+      (Cmd.group
+         (Cmd.info "pac" ~exits ~doc)
+         [ debian_cmd; opam_cmd; cargo_cmd; alpine_cmd; npm_cmd ])
+  in
+  exit (if code = Cmd.Exit.cli_error then 2 else code)

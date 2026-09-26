@@ -1,6 +1,3 @@
-(* Vectors partly from apk-tools 3.0.5 test/unit/version.data and
-   apk-world(5); the rest worked out from version.c. *)
-
 let fail = ref 0
 
 let check a b exp =

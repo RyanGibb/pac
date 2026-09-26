@@ -14,7 +14,7 @@
  ; them off wholesale.
  (flags
   (:standard -warn-error -a))
- (libraries cargo_frontend pac pubgrub unix))
+ (libraries cargo_frontend pac pac_common pubgrub unix))
 
 (test
  (name test_cargo_version)

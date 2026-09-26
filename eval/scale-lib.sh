@@ -1,5 +1,5 @@
-# Sourced by each eval/<eco>/scale.sh, which sets ECO and ANSWER (the line
-# pac's answer starts with) and defines all_queries, prepare, ask_tool <key>
+# Sourced by each eval/<eco>/scale.sh, which sets ECO and defines
+# all_queries, prepare, ask_tool <key>
 # <query> (the tool's answer into $o.theirs and its status into tool, as a
 # rule through answer), run_pac <mode> <stem> <query> (pac's output into
 # <stem>.out) and extract <stem> (<stem>.ours, sorted, what correspond
@@ -10,18 +10,23 @@ set -u
 export LC_ALL=C
 E="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOP="$(dirname "$E")"
+. "$E/answer.sh"
 export P="${P:-$(nproc)}" TIMEOUT="${TIMEOUT:-900}" MODES="${MODES:-tool pubgrub}"
 
 flag() { printf -- '--order=%s' "$1"; }
 
 since() { awk -v a="$1" -v b="$EPOCHREALTIME" 'BEGIN {printf "%.2f", b - a}'; }
 
-pac_status() {  # <rc> <output> <line the answer starts with>
-  # cmdliner exits 124 too, on a usage error
-  if [ "$1" -eq 124 ] && ! grep -q '^Usage: ' "$2"; then echo timeout
-  elif [ "$1" -eq 0 ] && grep -q "$3" "$2"; then echo ok
-  elif grep -q '^unsatisfiable' "$2"; then echo unsat
-  else echo crash; fi
+# pac's exit status, as `pac --help` lists it; 124 is timeout(1)'s
+pac_status() {  # <rc> <output>
+  case $1 in
+    0) if grep -q '^packages (' "$2"; then echo ok; else echo crash; fi ;;
+    1) echo unsat ;;
+    2) echo refuse ;;
+    3) echo io-error ;;
+    124) echo timeout ;;
+    *) echo crash ;;
+  esac
 }
 
 # whether a failed tool run is the tool saying the query has no answer; any
@@ -122,7 +127,7 @@ one() {  # <key> <query>
     run_pac "$m" "$p" "$2"
     echo $? > "$p.rc"
     wall=$(since "$t0")
-    pac=$(pac_status "$(cat "$p.rc")" "$p.out" "$ANSWER")
+    pac=$(pac_status "$(cat "$p.rc")" "$p.out")
     extract "$p"
     [ "$pac" = ok ] && [ "$tool" = ok ] && correspond "$p"
     if [ "$pac" = ok ]; then

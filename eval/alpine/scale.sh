@@ -2,7 +2,7 @@
 # usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]
 #        MODES="tool pubgrub" P=<jobs> TIMEOUT=<s>
 S="$(cd "$(dirname "$0")" && pwd)"
-ECO=alpine ANSWER='^packages ('
+ECO=alpine
 . "$S/../scale-lib.sh"
 INDEX=$TOP/repos/alpine/APKINDEX
 
@@ -31,14 +31,14 @@ ask_tool() { answer "$S/baseline/apk-$1" names "$o.apk" ask "$2"; }
 # names only, and a name has one version in an APKINDEX
 pin_tool() {
   timeout "$TIMEOUT" "$run/pac.exe" alpine "$INDEX" $2 $(cat "$o.theirs") > "$o.pin.out" 2>&1
-  pin=$(pac_status $? "$o.pin.out" "$ANSWER")
-  sed -n '/^packages (/,/^encoded solution/s/^  \([^ ]*\) .*/\1/p' "$o.pin.out" | sort -u > "$o.pin"
+  pin=$(pac_status $? "$o.pin.out")
+  rows "$o.pin.out" | sed 's/ .*//' | sort -u > "$o.pin"
 }
 
 run_pac() { timeout "$TIMEOUT" "$run/pac.exe" alpine $(flag "$1") "$INDEX" $3 > "$2.out" 2>&1; }
 
-extract() { sed -n '/^packages (/,/^encoded solution/s/^  \([^ ]*\) .*/\1/p' "$1.out" | sort -u > "$1.ours"; }
+extract() { rows "$1.out" | sed 's/ .*//' | sort -u > "$1.ours"; }
 
-canon() { sed -n '/^packages (/,/^encoded solution/p' "$1.out"; }
+canon() { rows "$1.out"; }
 
 main "$@"

@@ -1,25 +1,3 @@
-(* Cargo's activation order, replayed through PubGrub's next hook.
-
-   activate_deps_loop (core/resolver/mod.rs) keeps the dependencies still
-   to activate as frames, one per activation, each holding its crate's
-   enabled dependencies sorted by how many candidates the registry offers
-   (dep_cache.rs, build_deps: a stable sort, so declaration order breaks
-   ties).  pop_most_constrained (types.rs) takes the frame whose next
-   dependency has the fewest candidates, the oldest frame among equals, so
-   the order over every pending dependency is (candidates, frame age,
-   place in the frame).  Processing one picks its candidate and activates
-   it, and a crate activated with features it did not yet have gets a
-   fresh frame of every dependency those features enable, the mandatory
-   ones again among them (flag_activated, then build_deps).
-
-   PubGrub decides one encoded name at a time, so a dependency is
-   processed as the run of decisions the driver's step names, and a frame
-   is made when the step reports the crate it activated.  A backjump
-   undoes a suffix of PubGrub's decisions, and the shadow returns to the
-   state it had before the first of them: the order is a function of the
-   decisions that stand, as cargo's is of the activations in the context
-   it restores. *)
-
 module P = Cargo_parse
 module SS = Set.Make (String)
 
@@ -90,7 +68,8 @@ type 'name step = Decide of 'name | Activated of crate | Skip
 module type DRIVER = sig
   type name
   type version
-  type assigned
+  type selection
+  type assigned = name -> selection
 
   val equal : name -> name -> bool
   val decided : assigned -> name -> version option
@@ -101,8 +80,28 @@ module type DRIVER = sig
   val candidates : P.dep -> int
   val root_step : assigned -> name option
   val dep_step : assigned -> crate -> P.dep -> name step
+  val choose : assigned:assigned -> name -> version list -> version
 end
 
+(* activate_deps_loop (core/resolver/mod.rs) keeps the dependencies still
+   to activate as frames, one per activation, each holding its crate's
+   enabled dependencies sorted by how many candidates the registry offers
+   (dep_cache.rs, build_deps: a stable sort, so declaration order breaks
+   ties).  pop_most_constrained (types.rs) takes the frame whose next
+   dependency has the fewest candidates, the oldest frame among equals, so
+   the order over every pending dependency is (candidates, frame age,
+   place in the frame).  Processing one picks its candidate and activates
+   it, and a crate activated with features it did not yet have gets a
+   fresh frame of every dependency those features enable, the mandatory
+   ones again among them (flag_activated, then build_deps).
+
+   PubGrub decides one encoded name at a time, so a dependency is
+   processed as the run of decisions the driver's step names, and a frame
+   is made when the step reports the crate it activated.  A backjump
+   undoes a suffix of PubGrub's decisions, and the shadow returns to the
+   state it had before the first of them: the order is a function of the
+   decisions that stand, as cargo's is of the activations in the context
+   it restores. *)
 module Make (D : DRIVER) = struct
   type item = {
     count : int;
@@ -234,4 +233,15 @@ module Make (D : DRIVER) = struct
     in
     t.trail <- { name = n; value = None; pre = st } :: t.trail;
     n
+
+  (* [`Pubgrub] leaves both hooks to PubGrub, which is still sound and
+     complete, only no longer cargo's answer where the two orders part *)
+  let hooks : (unit, D.name, D.selection, D.version) Pac_common.Order.driver =
+   fun order () ->
+    match order with
+    | `Tool ->
+        let t = create () in
+        Pac_common.Order.make ~next:(next t) ~choose:D.choose ()
+    | `Pubgrub -> Pac_common.Order.make ()
+    | `Random seed -> Pac_common.Order.random seed
 end

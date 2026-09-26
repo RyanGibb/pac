@@ -17,9 +17,8 @@ for f in "$run"/out/*."$MODE".edges.npmonly; do
   rm -rf "$W"; mkdir -p "$W"
   cp "$run/work/$k/lock/package.json" "$W/package.json"
   python3 "$S/pinroot.py" "$run/out/$k.theirs" "$run/cache" "$W/cache" "$W/package.json" > "$o.pins"
-  timeout "$TIMEOUT" "$run/pac.exe" npm --offline --cache "$W/cache" --tree --node-version "$nodev" \
-    --npm-version "$npmv" "$(realpath "$W/package.json")" > "$o.out" 2>&1
-  if ! grep -q '^node_modules' "$o.out"; then
+  if ! timeout "$TIMEOUT" "$run/pac.exe" npm --offline --cache "$W/cache" --tree \
+       --node-version "$nodev" --npm-version "$npmv" "$(realpath "$W/package.json")" > "$o.out" 2>&1; then
     printf '%-24s NO ANSWER (see %s.out)\n' "$g" "$o"
     bad=$((bad+1)); continue
   fi

@@ -1,12 +1,4 @@
-(* Which name PubGrub decides next, as builtin-0install would ([`Tool]),
-   or as PubGrub itself would ([`Pubgrub]): its own fewest-candidates
-   order, with absence deferred as for every reduction through the package
-   formulas.  Both take PubGrub's greatest candidate under the same
-   preference, the one PVersion carries. *)
-
 open Lookups
-
-type t = [ `Tool | `Pubgrub ]
 
 module NameSet = Set.Make (struct
   type t = PFR.Name.t
@@ -144,7 +136,18 @@ let zero_install ar query st ~touch =
       L.defer_bot ~assigned open_names
     with Found n -> n
 
-let next (order : t) ar query st ~touch =
+(* Both orders take PubGrub's greatest candidate under the preference
+   PVersion carries; [`Pubgrub] is PubGrub's fewest-candidates order with
+   absence deferred, as for every reduction through the package
+   formulas. *)
+let hooks :
+    ( archive * (string * Opam_parse.vc) list * L.t * (T.Pkg.t -> unit),
+      PFR.Name.t,
+      PG.selection,
+      PVersion.t )
+    Pac_common.Order.driver =
+ fun order (ar, query, st, touch) ->
   match order with
-  | `Tool -> zero_install ar query st ~touch
-  | `Pubgrub -> L.defer_bot
+  | `Tool -> Pac_common.Order.make ~next:(zero_install ar query st ~touch) ()
+  | `Pubgrub -> Pac_common.Order.make ~next:L.defer_bot ()
+  | `Random seed -> Pac_common.Order.random seed

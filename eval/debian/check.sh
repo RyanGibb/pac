@@ -61,15 +61,15 @@ ran() {  # <rc> <log>: whether apt ran to an answer, a refusal included
 ls "$ROOT"/var/lib/apt/lists/*Packages > /dev/null 2>&1 || err=1
 
 # name=version, the form apt's install pins with, for every :amd64 row
-sed -n 's/^\([^ :]*\):amd64 \(.*\)$/\1=\2/p' "$ans" | sort -u > "$out/req"
+rows "$ans" | sed -n 's/^\([^ :]*\):amd64 \(.*\)$/\1=\2/p' | sort -u > "$out/req"
 mapfile -t req < "$out/req"
 n=${#req[@]}
 dups=$(cut -d= -f1 "$out/req" | sort | uniq -d | wc -l)
-foreign=$(awk 'NF == 2 && $1 ~ /:/ && $1 !~ /:amd64$/' "$ans" | wc -l)
+foreign=$(rows "$ans" | awk 'NF == 2 && $1 ~ /:/ && $1 !~ /:amd64$/' | wc -l)
 # the extraction above skips any line that is not a row, so such a line
 # would leave apt judging fewer packages than the answer names
-malformed=$(awk '/^parse / {exit}
-                 !/^[^[:space:]:]+:[^[:space:]:]+ [^[:space:]]+$/' "$ans" | wc -l)
+malformed=$(rows "$ans" | awk '!/^[^[:space:]:]+:[^[:space:]:]+ [^[:space:]]+$/' | wc -l)
+whole "$ans" || malformed=$((malformed + 1))
 
 r="$out/root"
 rm -rf "$r"

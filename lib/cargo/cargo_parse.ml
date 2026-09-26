@@ -1,10 +1,3 @@
-(* Trusted (TCB) ingestion of a crates.io-index checkout, applying the
-   frontend desugarings the calculus expects.  Unhandled shapes are
-   counted: a malformed line is dropped, and so is a version with a
-   malformed dependency, since cargo skips an index line it cannot
-   deserialize; so is a version whose feature table cargo refuses, and any
-   other malformed field is read as its default. *)
-
 type kind = Normal | Build | Dev
 
 type dep = {
@@ -247,6 +240,9 @@ let with_implicit_features (deps : dep list) (tbl : (string * fentry list) list)
       (f, es @ List.sort_uniq compare also))
     tbl
 
+(* A version with a malformed dependency is dropped with its line, as
+   cargo skips an index line it cannot deserialize; any other malformed
+   field is read as its default. *)
 let parse_line (line : string) : ver option =
   match Yojson.Safe.from_string line with
   | exception _ ->

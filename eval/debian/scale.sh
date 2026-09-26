@@ -2,7 +2,7 @@
 # usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]
 #        MODES="tool pubgrub" P=<jobs> TIMEOUT=<s>
 S="$(cd "$(dirname "$0")" && pwd)"
-ECO=debian ANSWER=':amd64 '
+ECO=debian
 . "$S/../scale-lib.sh"
 
 all_queries() { sed -n 's/^Package: //p' "$TOP/repos/debian/Packages" | sort -u; }
@@ -32,9 +32,8 @@ run_pac() {
      $3 repos/debian/Packages) > "$2.out" 2>&1
 }
 
-extract() { grep ':amd64 ' "$1.out" | sed 's/:amd64 .*//' | sort -u > "$1.ours"; }
+extract() { rows "$1.out" | sed -n 's/:amd64 .*//p' | sort -u > "$1.ours"; }
 
-# check.sh reads nothing of pac's output but its name:arch rows
-canon() { awk 'NF == 2 && $1 ~ /:/' "$1.out"; }
+canon() { rows "$1.out"; }
 
 main "$@"

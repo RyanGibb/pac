@@ -1,14 +1,3 @@
-(* apk's version ordering, transcribed from apk-tools 3.0.5
-   src/version.c: the token state machine of
-   digit{.digit}...{letter}{_suffix{number}}...{~hash}{-r#}, the suffix
-   table, and apk_version_compare_fuzzy.  apk 2.14 differs in at least
-   four ways that this file does not implement -- its fuzzy match is
-   symmetric, it orders leading-zero components by zero count rather than
-   by string, it has no ~hash token, and it accepts versions 3.0.5 rejects
-   (digits after a letter, as in 1.2a3; an empty component, as in 1..2)
-   -- so a comparison here can disagree with the apk shipped in Alpine
-   3.21.  Trusted: this file is TCB. *)
-
 type token =
   | Initial_digit
   | Digit
@@ -163,7 +152,11 @@ let token_cmp ta tb =
   | Suffix -> compare ta.suffix tb.suffix
   | _ -> blob_sort ta.value tb.value
 
-(* apk_version_compare_fuzzy.  With ~fuzzy, the right-hand side running
+(* apk_version_compare_fuzzy, transcribed from apk-tools 3.0.5
+   src/version.c.  apk 2.14, shipped in Alpine 3.21, differs: its fuzzy
+   match is symmetric, it orders leading-zero components by zero count
+   rather than by string, it has no ~hash token, and it accepts versions
+   3.0.5 rejects (1.2a3, 1..2).  With ~fuzzy, the right-hand side running
    out of tokens is equality, which is why ~ is asymmetric and is not a
    range: 1.0_pre1 ~ 1.0 holds even though 1.0_pre1 < 1.0. *)
 let compare_fuzzy a b fuzzy =
@@ -185,14 +178,13 @@ let validate v =
   let rec go st = if rank st.tok < rank End then go (token_next st v) else st in
   (go (token_first v)).tok = End
 
-(* CPrefix: apk's ~ is mask EQUAL|FUZZY, and the comparator never returns
+(* apk's ~ is mask EQUAL|FUZZY, and the comparator never returns
    the FUZZY bit, so it reduces to fuzzy equality. *)
 let prefix_match v c = compare_fuzzy v c true = 0
 
-(* CHash: apk resolves >< against the providing package's C: identity
-   digest (package.c:276), a bare provides included, which no version
-   string determines, so the calculus's
-   version-only matcher can never match one. *)
+(* apk resolves >< against the providing package's C: identity digest
+   (package.c:276), a bare provides included, which no version string
+   determines, so a version-only matcher can never match one. *)
 let hash_match (_v : string) (_digest : string) = false
 
 type op = Eq | Lt | Gt | Le | Ge | Fuzzy | Gt_fuzzy | Lt_fuzzy | Hash

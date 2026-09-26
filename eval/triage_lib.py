@@ -29,7 +29,7 @@ def unkey(k):
 
 def classify(r):
     pac, tool, valid, pin = r["pac"], r["tool"], r["valid"], r.get("pin", "-")
-    if pac in ("timeout", "crash"):
+    if pac in ("timeout", "crash", "refuse", "io-error"):
         return "pac-" + pac
     if tool == "unrecorded":
         return tool

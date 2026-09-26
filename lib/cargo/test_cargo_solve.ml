@@ -1,6 +1,3 @@
-(* Several solves in one process, in two orders: an answer that depended
-   on what an earlier solve left behind would differ between them. *)
-
 let dir = "../../test/frontends/cargo.t"
 
 let queries =
@@ -28,8 +25,8 @@ let solve (m, features, installed) =
   let rustv = Cargo_query.toolchain root ~installed in
   let r = Cargo_solve.solve ~index:(dir ^ "/index") ~features ~rustv root in
   match r.Cargo_solve.answer with
-  | None -> None
-  | Some a ->
+  | Error _ -> None
+  | Ok a ->
       Some
         ( a.Cargo_solve.crates,
           a.Cargo_solve.feats,
@@ -39,6 +36,8 @@ let solve (m, features, installed) =
           r.Cargo_solve.n_names,
           r.Cargo_solve.n_vers )
 
+(* two orders in one process: an answer that depended on what an earlier
+   solve left behind would differ between them *)
 let () =
   let forward = List.map solve queries in
   let backward = List.rev (List.map solve (List.rev queries)) in

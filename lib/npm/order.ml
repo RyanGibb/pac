@@ -1,14 +1,3 @@
-(* npm's order, replayed through PubGrub's next and choose hooks.
-
-   build-ideal-tree.js places what each copy's problem edges fetch, taking
-   copies from a queue ordered by where they sit in node_modules
-   (#buildDepStep), and takes for each edge the version npm-pick-manifest
-   picks, unless the copy's node_modules lookup already finds one the
-   range admits.  The replay rebuilds that tree from the solver's
-   decisions, so next names the directory npm resolves next and choose
-   picks what npm would put there.  Both are preference only: next names
-   an open name, and choose returns one of its candidates. *)
-
 open Encoding
 module L = Lookup
 
@@ -437,10 +426,7 @@ let reused at (m : string * string) cands =
   in
   match List.filter found cands with [] -> cands | l -> l
 
-let greatest = function
-  | [] -> invalid_arg "greatest"
-  | c :: cs ->
-      List.fold_left (fun a b -> if PVersion.compare b a > 0 then b else a) c cs
+let greatest = Pac_common.Order.greatest PVersion.compare
 
 let choose o ~assigned (n : PName.t) (cands : PVersion.t list) : PVersion.t =
   match n with
@@ -457,3 +443,19 @@ let choose o ~assigned (n : PName.t) (cands : PVersion.t list) : PVersion.t =
       in
       o.decided <- (n, c) :: o.decided;
       c
+
+(* build-ideal-tree.js places what each copy's problem edges fetch, taking
+   copies from a queue ordered by where they sit in node_modules
+   (#buildDepStep), and takes for each edge the version npm-pick-manifest
+   picks, unless the copy's node_modules lookup already finds one the
+   range admits.  The replay rebuilds that tree from the solver's
+   decisions, so next names the directory npm resolves next and choose
+   picks what npm would put there.  [`Pubgrub] leaves both to PubGrub. *)
+let hooks : (L.t, PName.t, PG.selection, PVersion.t) Pac_common.Order.driver =
+ fun order st ->
+  match order with
+  | `Tool ->
+      let o = create st in
+      Pac_common.Order.make ~next:(next o) ~choose:(choose o) ()
+  | `Pubgrub -> Pac_common.Order.make ()
+  | `Random seed -> Pac_common.Order.random seed

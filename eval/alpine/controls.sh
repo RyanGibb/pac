@@ -28,7 +28,8 @@ run() {  # <dir> <index> <apkroot> <goal> <expected>
 }
 
 answer() {  # <dir>, the "name version" rows on stdin
-  { echo "packages (n):"; sed 's/^/  /'; echo "encoded solution: -"; } > "$1/ans.out"
+  sed 's/^/  /' > "$1/rows"
+  { echo "packages ($(wc -l < "$1/rows")):"; cat "$1/rows"; } > "$1/ans.out"
 }
 
 # the index on stdin; the answer one "name version" per argument

@@ -41,13 +41,13 @@ REPO="${REPO:-$(dirname "$0")/../../repos/opam-repository}"
 ans=$1 out=$2; shift 2
 [ -d "$REPO/packages" ] || { echo "no repository $REPO valid=ERR minimal=-"; exit 0; }
 
-sed -n '/^opam packages (/,/^\(system packages\|loaded\)/p' "$ans" \
-  | sed -n 's/^  \([^ ]*\)$/\1/p' | sort -u > "$out/req"
+# name.version, the form opam names a package by
+rows "$ans" | sed -n 's/^\([^ ]*\) \([^ ]*\)$/\1.\2/p' | sort -u > "$out/req"
 mapfile -t req < "$out/req"
 # the extraction above skips any line that is not a row, so such a line
 # would leave opam judging fewer packages than the answer names
-malformed=$(awk '/^(system packages|loaded)/ {exit} s && !/^  [^[:space:].]+\.[^[:space:]]+$/
-                 /^opam packages \(/ {s=1}' "$ans" | wc -l)
+malformed=$(rows "$ans" | awk '!/^[^[:space:].]+ [^[:space:]]+$/' | wc -l)
+whole "$ans" || malformed=$((malformed + 1))
 dups=$(sed 's/\..*//' "$out/req" | sort | uniq -d | wc -l)
 # opam cannot even load a switch holding a version the repository lacks
 absent=0
