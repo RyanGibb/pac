@@ -4,7 +4,7 @@ names whose versions differ, in either side's graph, since the rest usually
 follow from them.  Each carries which side took the newer version, whether
 the two lie in different granularity classes, and, where the MSRV
 preference could have decided it, which versions fit the root's toolchain.
-Errors are grouped by what cargo changed in our lock.
+Invalid answers are grouped by what consistent.py first found wrong.
 usage: triage.py <run-dir>"""
 import collections, json, os, re, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -57,10 +57,10 @@ def divergence(res):
     return "; ".join(s for d, s in sorted(out) if d == min(out)[0]) if out else "edges only"
 
 
-def repaired(v):
-    names = lambda ps: " ".join("%s@%s" % tuple(p) for p in ps[:4]) or "-"
-    return "cargo adds %s, drops %s; edges +%d -%d" % (
-        names(v["added"]), names(v["lost"]), len(v["added_edges"]), len(v["lost_edges"]))
+def missed(v):
+    """the first of consistent.py's misses, versions blanked so that like
+    ones collect"""
+    return re.sub(r"\b\d+\.\d+\.\d+\S*", "_", (v.get("miss") or ["?"])[0])[:120]
 
 
 def cargo_reason(res):
@@ -73,7 +73,7 @@ rows = report(run)
 out = lambda r, ext: os.path.join(run, "out", "%s.%s%s" % (r["query"], r["mode"], ext))
 res = lambda r: json.load(open(out(r, ".json")))
 for c, label in (("preference-gap", lambda r: divergence(res(r))),
-                 ("invalid", lambda r: repaired(json.load(open(out(r, ".check/valid.json"))))),
+                 ("invalid", lambda r: missed(json.load(open(out(r, ".check/valid.json"))))),
                  ("tool-declines", lambda r: "cargo: " + cargo_reason(res(r))),
                  ("tool-error", lambda r: "cargo: " + cargo_reason(res(r))),
                  ("instance-gap", lambda r: first_incompatibility(out(r, ".out"))),

@@ -82,21 +82,23 @@ eval/check.sh <eco> <answer> <out-dir> <query...>
 ```
 
 The answer is pac's output; the query is what pac was asked, in the words pac took (cargo's is the `Cargo.toml` pac read; npm's may be a `package.json`).
-The check writes its files under the out directory and ends in two verdicts:
+The check writes its files under the out directory and ends in its verdicts:
 
-- `valid=`: `VALID` if the tool takes the answer as consistent, installed as it stands: every package's dependencies met (packages nothing needs included), no conflict, one version of a name where the tool allows one; `INVALID` if not; `CYCLIC` for a resolution with a cycle in its install order (Debian and opam); `ERR` if the check could not run to a verdict (a timeout, a dead shim or proxy, a broken tool root).
+- `valid=`: `VALID` if the answer is consistent, as the tool would install it: every package's dependencies met (packages nothing needs included), no conflict, one version of a name where the tool allows one; `INVALID` if not; `CYCLIC` for a resolution with a cycle in its install order (Debian and opam); `ERR` if the check could not run to a verdict (a timeout, a dead shim, a broken tool root).
 - `minimal=`: `yes` if the tool, left to settle the answer for the query alone, would keep it as it stands; `no` if it would remove or swap something. Only for `VALID` answers; the core calculus asks a resolution for no minimality, so a non-minimal answer is never an error.
+- `reproduced=`: for cargo and npm, whose answer is a lockfile, `yes` if the tool keeps it as its own lock, repairing nothing; `no` if it would repair it by its own rules. Only for `VALID` answers, and never an error, since a tool's lock repairs by its preferences: cargo does not even keep its own fresh lock where a crate declares one package twice with overlapping ranges. `-` elsewhere, or where the question could not be asked (a dead proxy).
 
-| ecosystem | valid | minimal |
-|---|---|---|
-| Debian | `apt-get check` and `install <query>` on the answer as the dpkg status | `apt-get autoremove`, the query the only root |
-| Alpine | `apk fix` with the whole answer and the query as the world, and apk's rule for a bare provides without `k:` (its owner must be named by the query or by a package of the answer) | `apk fix` with the query alone as the world |
-| opam | `opam install <query>` and `upgrade --fixup` on the answer as the switch state | the same fixup told to remove what it can |
-| cargo | `cargo update --locked` keeps our `Cargo.lock`, or its unlocked repair only drops packages the root does not reach and edges it leaves inactive, and the answer meets what those packages declare, with no second semver-compatible version or `links` owner among them | `cargo update --locked` keeps it |
-| npm | `npm ci` accepts our lock without overriding a peer, `npm ls` finds no edge invalid or missing, a relock changes nothing but pruning what nothing reaches, every edge lands on the package its manifest names, and the answer gives every dependency and peer a provider; a cycle of copies is closed with a link, as npm closes one | the relock changes nothing |
+| ecosystem | valid | minimal | reproduced |
+|---|---|---|---|
+| Debian | `apt-get check` and `install <query>` on the answer as the dpkg status | `apt-get autoremove`, the query the only root | - |
+| Alpine | `apk fix` with the whole answer and the query as the world, and apk's rule for a bare provides without `k:` (its owner must be named by the query or by a package of the answer) | `apk fix` with the query alone as the world | - |
+| opam | `opam install <query>` and `upgrade --fixup` on the answer as the switch state | the same fixup told to remove what it can | - |
+| cargo | `consistent.py`, from the index rows and the query's manifest alone, citing cargo 0.98's source: every active declaration of every package in the answer (dev ones only the root's) met by the version the answer gives it; features existing, and unified per package as cargo's resolver unifies them, the root's all enabled; one version per semver compatibility class; one package per `links` | every package and edge reached through an active declaration | `cargo update --locked` keeps our `Cargo.lock` |
+| npm | `npm ci` accepts our lock; `npm ls --all` finds no edge invalid or missing; no `ERESOLVE overriding peer dependency`; every edge lands on the package its manifest names, and a package nothing reaches has its dependencies met; and `relation.py`: every edge of the answer resolves, from where its requirer sits in the lock (a peer from where its declarer sits), to the copy the answer chose, and every dependency and peer has one. A cycle of copies is closed with a link, as npm closes one | npm's relock changes nothing | npm's relock changes nothing but pruning what nothing reaches |
 
-One npm answer is left `ERR` although a tree may hold it: a declarer given its peer from below the root, whose own declarers need another provider of that name.
-Such a tree puts those declarers above the declarer's peer, and `mklock.py` builds none; from the root, no tree holds it, and the answer is `INVALID`.
+npm's validity is judged on the lock `mklock.py` builds, and `relation.py` catches any edge of the answer that lock does not hold.
+A declarer whose own declarers need another provider of a name it peers on is the one case known to need care: they must sit above the directory holding its peer.
+Where that directory is the root's own, nothing is above it, no tree holds the answer, and it is `INVALID`; below the root, where `mklock.py` finds no directory above that takes them, another tree might, and the answer is `ERR`.
 
 `controls.sh` runs the check on small hand-written answers, each of which must get the verdicts it names; npm takes `PORT` for its shim, and cargo for its proxy:
 
@@ -145,7 +147,7 @@ node eval/npm/queries.js repos/npm targeted > /tmp/ranges.txt && eval/npm/scale.
 The run directory gets `results.txt`, one line per query and mode, and raw answers under `out/`, `<key>.<mode>.*` for pac's and the check's, `<key>.*` for the tool's:
 
 ```
-query= mode= pac= tool= corr= valid= minimal= oo= to= wall= pin=
+query= mode= pac= tool= corr= valid= minimal= reproduced= oo= to= wall= pin=
 ```
 
 `pac` is pac's exit status, as the table above names it.
@@ -155,7 +157,7 @@ query= mode= pac= tool= corr= valid= minimal= oo= to= wall= pin=
 `pin` is pac asked for the tool's own answer, where the tool answered (Alpine and opam; `-` elsewhere): `ok`, `unsat`, or no verdict.
 Extra fields: opam `mccs`; npm `twall` (the tool's wall time, `-` under `--regress`), `closed`, `nodes`, `edges`; cargo `kept`, `identical`.
 
-`eval/<eco>/triage.py <run-dir>` sorts queries into classes, per mode and per pool, and shows `minimal` apart:
+`eval/<eco>/triage.py <run-dir>` sorts queries into classes, per mode and per pool, and shows `minimal` and `reproduced` apart, the latter marking the answers that are the tool's own; npm's also groups invalid answers by the clauses they fail, and cargo's by what `consistent.py` found first:
 
 | class | meaning |
 |---|---|
@@ -163,8 +165,8 @@ Extra fields: opam `mccs`; npm `twall` (the tool's wall time, `-` under `--regre
 | `preference-gap` | sets differ, and the tool accepts ours; pac asked for the tool's answer gives one, where a pin ran |
 | `instance-gap` | the tool's answer is not a resolution of our instance: pac refuses it when pinned |
 | `unconfirmed` | we refuse, the tool answers, and no pin says whether its answer is a resolution of our instance |
-| `invalid` | the tool rejects ours, whatever the tool's own answer |
-| `exact-invalid` | the tool rejects an answer matching its own: suspect the check |
+| `invalid` | the check finds ours inconsistent, whatever the tool's own answer |
+| `exact-invalid` | the check finds inconsistent an answer matching the tool's own: suspect the check |
 | `post-resolution` | ours is a resolution the tool cannot install (install-order cycle; opam, Debian) |
 | `tool-declines` | we answer, the tool refuses, and it accepts ours |
 | `both-refuse` | neither answers |

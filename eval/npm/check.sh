@@ -1,23 +1,24 @@
 #!/usr/bin/env bash
 # The check writes our answer out as the project's package-lock.json
 # (mklock.py) beside the query's package.json (root.js), and asks npm
-# against a frozen shim.
+# against a frozen shim whether that tree is consistent.
 #
-# `npm ci --dry-run` builds the tree the lock describes and checks it
-# against every manifest, but it repairs as it builds and fails only when
-# the repair changes the inventory: an invalid peerOptional, or a peer
-# resolving inside its requirer where npm's repair keeps that copy, passes
-# it.  `npm install --package-lock-only` on a copy runs the same repair and
-# writes it back, so the lock it leaves must name the same version at every
-# path -- but for a package nothing reaches, which it prunes: that is the
-# minimal verdict, not the valid one.  npm asks nothing of such a package,
-# so reach.py asks that its own dependencies be met.  Neither asks whether
-# an edge landed on the package its manifest names, so lockname.py does.
-# Where a peer is out of range npm may keep the copy anyway, with only an
-# "ERESOLVE overriding peer dependency" warning and exit 0, and where the
-# peer is optional neither command need change anything, so the warning is
-# read as a refusal, and `npm ls --package-lock-only` is asked too: an
-# edge it calls invalid or missing is one npm's tree would break.
+# Valid: `npm ci --dry-run` builds the tree the lock describes and accepts
+# it; `npm ls --all --package-lock-only` finds no edge invalid or missing
+# (an extraneous package is minimality's business, not validity's); npm
+# overrides no peer, which it does with only an "ERESOLVE overriding peer
+# dependency" warning and exit 0; every edge lands on the package its
+# manifest names, which npm checks by version alone (lockname.py); a
+# package nothing reaches, which npm asks nothing of, has its own
+# dependencies met (reach.py); and the tree holds our answer, every edge of
+# it resolved from where its requirer sits, a peer from where its declarer
+# sits (relation.py).
+#
+# Reproduced: `npm install --package-lock-only` on a copy, npm's relock,
+# changes nothing but pruning packages nothing reaches.  Minimal: it
+# changes nothing at all.  Neither counts against validity: npm's relock
+# repairs by its own preferences, and is not even idempotent on its own
+# locks (an optional peer's copy it pruned leaves the peer invalid).
 # Measured on express, not assumed: ci rejects a lock with a transitive
 # package deleted and one whose version violates a requirer's range, and
 # accepts both a valid-but-older version npm would not have picked and a
@@ -28,8 +29,8 @@
 # has to synthesise a placement that reproduces exactly that relation
 # under node_modules lookup, and controls.sh's nest-valid is what says npm
 # judges the placement we chose rather than demanding its own.  An answer
-# that is already a lock is taken as it stands, which is how controls.sh
-# poses layouts pac would never write.
+# that is already a lock is taken as it stands, with no relation to hold,
+# which is how controls.sh poses layouts pac would never write.
 #
 # npm exits 1 for every error; one is read as a verdict only under a code
 # npm gives an answer it will not take (refusals, the codes scale.sh reads
@@ -53,34 +54,32 @@ W=$out/ci
 npmc() { GIT_MISS=$out/gitmiss NPM_TIMEOUT= npm_in "$@" --loglevel=http; }  # <dir> <npm args...>
 shim() { curl -s -o /dev/null "http://127.0.0.1:$PORT/-/ping"; }
 paths() { jq -r '.packages | to_entries[] | select(.key != "") | "\(.key) \(.value.version)"' "$1" | sort; }
-verdict() {  # <valid> <minimal> <why>
-  printf '%s valid=%s minimal=%s\n' "$3" "$1" "$2"
+verdict() {  # <valid> <minimal> <reproduced> <why>
+  printf '%s valid=%s minimal=%s reproduced=%s\n' "$4" "$1" "$2" "$3"
   exit 0
 }
+yn() { if [ "$1" -eq 0 ]; then echo yes; else echo no; fi; }
 err=0
 ran() {  # <rc> <log>: whether npm ran to an answer, a refusal included
   [ "$1" -eq 0 ] || refused "$1" "$2" || err=1
 }
 
 rm -rf "$W" "$W.plo"; mkdir -p "$W"
-shim || verdict ERR - "no shim on $PORT"
+shim || verdict ERR - - "no shim on $PORT"
 if [ $# -eq 1 ] && [ "${1##*/}" = package.json ] && [ -f "$1" ]; then
   cp "$1" "$W/package.json"
 else
   node "$S/root.js" "$RUN/cache" "$@" > "$W/package.json" 2> "$out/root.log" ||
-    verdict ERR - "root.js failed"
+    verdict ERR - - "root.js failed"
 fi
+ours=
 if jq -e .packages "$ans" > /dev/null 2>&1; then
   cp "$ans" "$W/package-lock.json"
 else
+  ours=$ans
   python3 "$S/mklock.py" "$RUN/cache" "$ans" "$W/package-lock.json" \
-    --root-manifest "$W/package.json" > "$out/mklock" 2>&1
-  case $? in
-    0) ;;
-    # the answer lacks a provider, or gives a declarer's peer two
-    4) verdict INVALID - "$(tail -n 1 "$out/mklock")" ;;
-    *) verdict ERR - "mklock failed: $(tail -n 1 "$out/mklock" | cut -c 1-300)" ;;
-  esac
+    --root-manifest "$W/package.json" > "$out/mklock" 2>&1 ||
+    verdict ERR - - "mklock failed: $(tail -n 1 "$out/mklock" | cut -c 1-300)"
 fi
 
 npmc "$W" ci --dry-run > "$out/ci.log" 2>&1
@@ -101,15 +100,21 @@ python3 "$S/lockname.py" "$W/package-lock.json" > "$out/names" 2>&1
 named=$?
 python3 "$S/reach.py" "$W/package-lock.json" > "$out/reach" 2> "$out/reach.log" || err=1
 unmet=$(grep -c '^unmet ' "$out/reach")
+related=0
+if [ -n "$ours" ]; then
+  python3 "$S/relation.py" "$W/package-lock.json" "$ours" > "$out/relation" 2>&1
+  related=$?
+fi
 # every change the relock made is the pruning of a package nothing reaches
 repaired=$(awk 'FILENAME == ARGV[1] {if ($1 == "unreached") u[$2]; next}
                 /^>/ || /^</ && !($2 in u)' "$out/reach" "$out/moved" | wc -l)
 
-why="ci=$ci_rc relock=$relock_rc moved=$moved repaired=$repaired unmet=$unmet named=$named"
-why="$why override=$override ls=$broken"
-[ "$err" -eq 0 ] || verdict ERR - "$why"
-case $named in 0|3) ;; *) verdict ERR - "$why" ;; esac
-[ "$ci_rc" -eq 0 ] && [ "$relock_rc" -eq 0 ] && [ "$named" -eq 0 ] && [ "$repaired" -eq 0 ] &&
-  [ "$unmet" -eq 0 ] && [ "$override" -eq 0 ] && [ "$broken" -eq 0 ] || verdict INVALID - "$why"
-[ "$moved" -eq 0 ] && verdict VALID yes "$why"
-verdict VALID no "$why"
+why="ci=$ci_rc ls=$broken override=$override named=$named unmet=$unmet relation=$related"
+why="$why relock=$relock_rc moved=$moved repaired=$repaired"
+[ "$err" -eq 0 ] || verdict ERR - - "$why"
+case $named$related in [03][03]) ;; *) verdict ERR - - "$why" ;; esac
+[ "$ci_rc" -eq 0 ] && [ "$broken" -eq 0 ] && [ "$override" -eq 0 ] && [ "$named" -eq 0 ] &&
+  [ "$unmet" -eq 0 ] && [ "$related" -eq 0 ] || verdict INVALID - - "$why"
+[ "$relock_rc" -eq 0 ] && [ "$repaired" -eq 0 ]; reproduced=$(yn $?)
+[ "$relock_rc" -eq 0 ] && [ "$moved" -eq 0 ]; minimal=$(yn $?)
+verdict VALID "$minimal" "$reproduced" "$why"

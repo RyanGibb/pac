@@ -54,6 +54,7 @@ root root 'alpha = "^1"'
 root root-split 'split = "=1.0.0"'
 root root-held 'split = "=1.0.0"' 'hold = "^1"'
 root root-opt 'opt = "=1.0.0"'
+root root-optf 'opt = { version = "=1.0.0", features = ["fb"] }'
 root root-devy 'devy = "=1.0.0"'
 root root-kz 'kz = "=1.0.0"' 'alpha = "^1"'
 root root-lsys 'lsys = "=1.0.0"'
@@ -61,10 +62,17 @@ root root-lsys 'lsys = "=1.0.0"'
 . "$S/../serve.sh"
 serve "$PORT" "$T/index" "$T/proxy.log" python3 "$S/sparse_proxy.py" "$PORT" "$T/index" || exit 1
 
-# the answer as pac prints it: crates, then "parent child version" edges;
-# the expected verdicts as valid/minimal
+verdicts() { tail -n 1 | sed -n 's/.* valid=\([A-Z]*\) minimal=\([a-z-]*\) reproduced=\([a-z-]*\)$/\1\/\2\/\3/p'; }
+report() {  # <name> <expected> <got>
+  printf '%-18s expect %-15s got %s\n' "$1" "$2" "$3"
+  [ "$3" = "$2" ] || bad=1
+}
+
+# the answer as pac prints it: crates, each name_version or
+# name_version_[features], then "parent child version" edges; the expected
+# verdicts as valid/minimal/reproduced
 ctl() {  # <name> <expected> <crates> <edges> [root]
-  local name=$1 want=$2 d=$T/$1 got e c=($3) es=($4) r=${5:-root}
+  local name=$1 want=$2 d=$T/$1 e c=($3) es=($4) r=${5:-root}
   rm -rf "$d"; mkdir -p "$d"
   { echo "root root 1.0.0"; echo "packages (${#c[@]}):"; printf '  %s\n' "${c[@]}" | tr _ ' '
     echo "parent edges (${#es[@]}):"
@@ -72,53 +80,84 @@ ctl() {  # <name> <expected> <crates> <edges> [root]
       set -- ${e//_/ }
       echo "  $1 $2 -> $3($3) $4"
     done; } > "$d/ans.out"
-  got=$(bash "$S/../check.sh" cargo "$d/ans.out" "$d/check" "$T/$r/Cargo.toml" |
-    tail -n 1 | sed -n 's/.* valid=\([A-Z]*\) minimal=\(.*\)$/\1\/\2/p')
-  printf '%-12s expect %-11s got %s\n' "$name" "$want" "$got"
-  [ "$got" = "$want" ] || bad=1
+  report "$name" "$want" "$(bash "$S/../check.sh" cargo "$d/ans.out" "$d/check" "$T/$r/Cargo.toml" | verdicts)"
 }
 
-ctl ok VALID/yes 'root_1.0.0 alpha_1.1.0' 'root_1.0.0_alpha_1.1.0'
+# cargo's own fresh lock for a root, as pac would print it
+fresh() {  # <name> <expected> <root>
+  local d=$T/$1
+  rm -rf "$d"; mkdir -p "$d/g"; cp -r "$T/$3/." "$d/g/"
+  python3 - "$S" "$d" <<'EOF' || { report "$1" "$2" "cargo failed"; return; }
+import os, subprocess, sys
+sys.path.insert(0, sys.argv[1])
+import run_query
+d = sys.argv[2]
+subprocess.run(["cargo", "generate-lockfile", "--manifest-path", d + "/g/Cargo.toml"], check=True,
+               capture_output=True, env=run_query.write_cargo_config(d + "/cargo-home"))
+pkgs, edges = run_query.read_lock(d + "/g/Cargo.lock")
+with open(d + "/ans.out", "w") as f:
+    f.write("root root 1.0.0\npackages (%d):\n" % len(pkgs))
+    f.writelines("  %s %s\n" % p for p in sorted(pkgs))
+    f.write("parent edges (%d):\n" % len(edges))
+    f.writelines("  %s %s -> %s(%s) %s\n" % (p + (c[0],) + c) for p, c in sorted(edges))
+EOF
+  report "$1" "$2" "$(bash "$S/../check.sh" cargo "$d/ans.out" "$d/check" "$T/$3/Cargo.toml" | verdicts)"
+}
+
+ctl ok VALID/yes/yes 'root_1.0.0 alpha_1.1.0' 'root_1.0.0_alpha_1.1.0'
 # older than cargo would pick, and still admitted: cargo keeps it
-ctl old VALID/yes 'root_1.0.0 alpha_1.0.0' 'root_1.0.0_alpha_1.0.0'
-ctl missing INVALID/- 'root_1.0.0' ''
-ctl range INVALID/- 'root_1.0.0 alpha_2.0.0' 'root_1.0.0_alpha_2.0.0'
+ctl old VALID/yes/yes 'root_1.0.0 alpha_1.0.0' 'root_1.0.0_alpha_1.0.0'
+ctl missing INVALID/-/- 'root_1.0.0' ''
+ctl range INVALID/-/- 'root_1.0.0 alpha_2.0.0' 'root_1.0.0_alpha_2.0.0'
 # nothing reaches zeta: cargo drops it
-ctl extra VALID/no 'root_1.0.0 alpha_1.1.0 zeta_2.0.0' 'root_1.0.0_alpha_1.1.0'
-# and does not ask what zeta 1.0.0 needs, which the answer lacks
-ctl extra-broken INVALID/- 'root_1.0.0 alpha_1.1.0 zeta_1.0.0' 'root_1.0.0_alpha_1.1.0'
-# cargo locks one version per dependency name of a package, whatever the
-# cfgs, so its repair re-points split's second edge, whether or not
-# something else keeps the version it leaves
-ctl split-one VALID/yes 'root_1.0.0 split_1.0.0 wsys_2.0.0' 'root_1.0.0_split_1.0.0 split_1.0.0_wsys_2.0.0' root-split
-ctl split-two INVALID/- 'root_1.0.0 split_1.0.0 wsys_1.0.0 wsys_2.0.0' \
+ctl extra VALID/no/no 'root_1.0.0 alpha_1.1.0 zeta_2.0.0' 'root_1.0.0_alpha_1.1.0'
+# and zeta 1.0.0 needs a beta the answer lacks
+ctl extra-broken INVALID/-/- 'root_1.0.0 alpha_1.1.0 zeta_1.0.0' 'root_1.0.0_alpha_1.1.0'
+# a package's two declarations of one name, each met by its own version:
+# consistent, and cargo, which locks one version per dependency name of a
+# package, re-points the second
+ctl split-one VALID/yes/yes 'root_1.0.0 split_1.0.0 wsys_2.0.0' 'root_1.0.0_split_1.0.0 split_1.0.0_wsys_2.0.0' root-split
+ctl split-two VALID/yes/no 'root_1.0.0 split_1.0.0 wsys_1.0.0 wsys_2.0.0' \
   'root_1.0.0_split_1.0.0 split_1.0.0_wsys_1.0.0 split_1.0.0_wsys_2.0.0' root-split
-ctl split-held INVALID/- 'root_1.0.0 split_1.0.0 hold_1.0.0 wsys_1.0.0 wsys_2.0.0' \
+ctl split-held VALID/yes/no 'root_1.0.0 split_1.0.0 hold_1.0.0 wsys_1.0.0 wsys_2.0.0' \
   'root_1.0.0_split_1.0.0 root_1.0.0_hold_1.0.0 split_1.0.0_wsys_1.0.0 split_1.0.0_wsys_2.0.0 hold_1.0.0_wsys_2.0.0' root-held
-# edges cargo leaves inactive: an optional dependency whose feature is off,
-# and a dependency's dev-dependency.  cargo drops them, re-pointing nothing
-ctl opt-off VALID/no 'root_1.0.0 opt_1.0.0 beta_1.0.0' 'root_1.0.0_opt_1.0.0 opt_1.0.0_beta_1.0.0' root-opt
-ctl dev-of-dep VALID/no 'root_1.0.0 devy_1.0.0 beta_1.0.0' 'root_1.0.0_devy_1.0.0 devy_1.0.0_beta_1.0.0' root-devy
 # kz's two declarations of zed split as cargo's own fresh lock splits them,
 # which cargo's --locked refuses whatever else the lock holds
-ctl split-fresh INVALID/- 'root_1.0.0 kz_1.0.0 alpha_1.1.0 zed_1.9.0 zed_2.5.0' \
+ctl split-fresh VALID/yes/no 'root_1.0.0 kz_1.0.0 alpha_1.1.0 zed_1.9.0 zed_2.5.0' \
   'root_1.0.0_kz_1.0.0 root_1.0.0_alpha_1.1.0 kz_1.0.0_zed_1.9.0 kz_1.0.0_zed_2.5.0' root-kz
-ctl split-fresh-old INVALID/- 'root_1.0.0 kz_1.0.0 alpha_1.0.0 zed_1.9.0 zed_2.5.0' \
+ctl split-fresh-old VALID/yes/no 'root_1.0.0 kz_1.0.0 alpha_1.0.0 zed_1.9.0 zed_2.5.0' \
   'root_1.0.0_kz_1.0.0 root_1.0.0_alpha_1.0.0 kz_1.0.0_zed_1.9.0 kz_1.0.0_zed_2.5.0' root-kz
-ctl split-none VALID/yes 'root_1.0.0 kz_1.0.0 alpha_1.0.0 zed_1.9.0' \
+ctl split-none VALID/yes/yes 'root_1.0.0 kz_1.0.0 alpha_1.0.0 zed_1.9.0' \
   'root_1.0.0_kz_1.0.0 root_1.0.0_alpha_1.0.0 kz_1.0.0_zed_1.9.0' root-kz
-# packages nothing reaches that conflict with the answer: a semver-compatible
-# second alpha, a second owner of links lx, an edge outside its range, an
-# edge nothing declares
-ctl extra-dup INVALID/- 'root_1.0.0 alpha_1.1.0 alpha_1.0.0' 'root_1.0.0_alpha_1.1.0'
-ctl extra-links INVALID/- 'root_1.0.0 lsys_1.0.0 lsysb_1.0.0' 'root_1.0.0_lsys_1.0.0' root-lsys
-ctl extra-range INVALID/- 'root_1.0.0 alpha_1.1.0 hold_1.0.0 wsys_1.0.0 wsys_2.0.0' \
+fresh kz-cargo VALID/yes/no root-kz
+# edges to declarations left inactive: an optional dependency whose feature
+# is off, and a dependency's dev-dependency
+ctl opt-off VALID/no/no 'root_1.0.0 opt_1.0.0 beta_1.0.0' 'root_1.0.0_opt_1.0.0 opt_1.0.0_beta_1.0.0' root-opt
+ctl dev-of-dep VALID/no/no 'root_1.0.0 devy_1.0.0 beta_1.0.0' 'root_1.0.0_devy_1.0.0 devy_1.0.0_beta_1.0.0' root-devy
+# the root asks opt for fb, which enables beta and its implicit feature
+ctl opt-on VALID/yes/yes 'root_1.0.0 opt_1.0.0_[beta,fb] beta_1.0.0' \
+  'root_1.0.0_opt_1.0.0 opt_1.0.0_beta_1.0.0' root-optf
+ctl opt-on-unmet INVALID/-/- 'root_1.0.0 opt_1.0.0_[beta,fb]' 'root_1.0.0_opt_1.0.0' root-optf
+# features cargo would not unify: fb nothing asks for, fz opt does not have
+ctl feat-extra INVALID/-/- 'root_1.0.0 opt_1.0.0_[beta,fb] beta_1.0.0' \
+  'root_1.0.0_opt_1.0.0 opt_1.0.0_beta_1.0.0' root-opt
+ctl feat-unknown INVALID/-/- 'root_1.0.0 opt_1.0.0_[fz]' 'root_1.0.0_opt_1.0.0' root-opt
+ctl feat-short INVALID/-/- 'root_1.0.0 opt_1.0.0_[fb] beta_1.0.0' \
+  'root_1.0.0_opt_1.0.0 opt_1.0.0_beta_1.0.0' root-optf
+# one version per semver compatibility class, and one owner of links lx
+ctl extra-dup INVALID/-/- 'root_1.0.0 alpha_1.1.0 alpha_1.0.0' 'root_1.0.0_alpha_1.1.0'
+ctl links-one VALID/yes/yes 'root_1.0.0 lsys_1.0.0' 'root_1.0.0_lsys_1.0.0' root-lsys
+ctl extra-links INVALID/-/- 'root_1.0.0 lsys_1.0.0 lsysb_1.0.0' 'root_1.0.0_lsys_1.0.0' root-lsys
+# packages nothing reaches judged all the same: an edge outside its range,
+# an edge nothing declares
+ctl extra-range INVALID/-/- 'root_1.0.0 alpha_1.1.0 hold_1.0.0 wsys_1.0.0 wsys_2.0.0' \
   'root_1.0.0_alpha_1.1.0 hold_1.0.0_wsys_1.0.0'
-ctl extra-undeclared INVALID/- 'root_1.0.0 alpha_1.1.0 zed_1.0.0 beta_1.0.0' \
+ctl extra-undeclared INVALID/-/- 'root_1.0.0 alpha_1.1.0 zed_1.0.0 beta_1.0.0' \
   'root_1.0.0_alpha_1.1.0 zed_1.0.0_beta_1.0.0'
 
-# cargo failing for want of a registry says nothing of the answer
+# cargo failing for want of a registry says nothing of the answer, and
+# leaves only reproduced unknown
 kill $served; wait $served 2> /dev/null
-ctl noproxy ERR/- 'root_1.0.0 alpha_1.1.0' 'root_1.0.0_alpha_1.1.0'
+ctl noproxy VALID/yes/- 'root_1.0.0 alpha_1.1.0' 'root_1.0.0_alpha_1.1.0'
 
 exit $bad

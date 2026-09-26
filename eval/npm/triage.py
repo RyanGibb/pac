@@ -67,6 +67,14 @@ def npm_code(p):
     return next((l.split()[-1] for l in lines(p) if l.startswith("npm error code ")), "?")
 
 
+def clauses(o):
+    """the clauses of check.sh an invalid answer fails, from its last line"""
+    last = (lines(o + ".check/log") or ["?"])[-1]
+    f = dict(w.split("=", 1) for w in last.split() if "=" in w)
+    bad = [k for k in ("ci", "ls", "override", "named", "unmet", "relation") if f.get(k, "0") != "0"]
+    return " ".join(bad) or last[:80]
+
+
 rows = report(run)
 report(run, by="closed")
 for m, closed in ((m, c) for m in dict.fromkeys(r["mode"] for r in rows) for c in ("yes", "no")):
@@ -78,6 +86,11 @@ for m, closed in ((m, c) for m in dict.fromkeys(r["mode"] for r in rows) for c i
                 for p in set(primaries(os.path.join(run, "out", r["query"] + "." + m))) or ["?"]:
                     g[p].append(r["query"])
         show("%s, mode %s, closed %s, by primary divergence (a query counts once per kind)" % (c, m, closed), g)
+    g = collections.defaultdict(list)
+    for r in rs:
+        if r["class"] in ("invalid", "exact-invalid"):
+            g[clauses(os.path.join(run, "out", r["query"] + "." + m))].append(r["query"])
+    show("invalid, mode %s, closed %s, by the clauses it fails" % (m, closed), g)
     for c in ("tool-declines", "tool-error", "both-refuse", "instance-gap", "unconfirmed"):
         g = collections.defaultdict(list)
         for r in rs:
