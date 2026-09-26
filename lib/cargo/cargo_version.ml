@@ -96,9 +96,7 @@ let comparator (s : string) : req =
   let s = trim s in
   if s = "" then []
   else
-    let starts p =
-      String.length s >= String.length p && String.sub s 0 (String.length p) = p
-    in
+    let starts p = String.starts_with ~prefix:p s in
     let drop k = trim (String.sub s k (String.length s - k)) in
     if starts "^" then caret (parse_spec (drop 1))
     else if starts "~" then tilde (parse_spec (drop 1))
@@ -136,3 +134,133 @@ let string_of_op = function
 let string_of_req r =
   if r = [] then "*"
   else String.concat ", " (List.map (fun (o, v) -> string_of_op o ^ v) r)
+
+(* VersionReq::from_str of the semver crate cargo 1.97 links.  The index
+   is cargo-validated, so this runs on the root alone; without it
+   parse_req would read a malformed requirement as "*".
+   Stricter than parse_req: no "==", a wildcard only in trailing
+   components or as the whole requirement, no leading zeros, and a comma
+   between comparators. *)
+let req_ok (s : string) : bool =
+  let n = String.length s and i = ref 0 in
+  let at c = !i < n && s.[!i] = c in
+  let skip c =
+    at c
+    &&
+    (incr i;
+     true)
+  in
+  let spaces () =
+    while at ' ' do
+      incr i
+    done
+  in
+  let digit c = c >= '0' && c <= '9' in
+  let wild () =
+    !i < n
+    && (match s.[!i] with '*' | 'x' | 'X' -> true | _ -> false)
+    &&
+    (incr i;
+     true)
+  in
+  let span ok =
+    let j = !i in
+    while !i < n && ok s.[!i] do
+      incr i
+    done;
+    String.sub s j (!i - j)
+  in
+  let num () =
+    let d = span digit in
+    d <> "" && (d = "0" || d.[0] <> '0')
+  in
+  let ident ~pre =
+    let d =
+      span (fun c ->
+          digit c || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c = '-')
+    in
+    d <> ""
+    && ((not pre) || (not (String.for_all digit d)) || d = "0" || d.[0] <> '0')
+  in
+  let rec dotted ~pre = ident ~pre && ((not (skip '.')) || dotted ~pre) in
+  let op () =
+    ignore
+      (List.exists
+         (fun o ->
+           String.length o <= n - !i
+           && String.sub s !i (String.length o) = o
+           &&
+           (i := !i + String.length o;
+            true))
+         [ ">="; "<="; ">"; "<"; "="; "~"; "^" ])
+  in
+  let comparator () =
+    op ();
+    spaces ();
+    num ()
+    && ((not (skip '.'))
+       ||
+       if wild () then (not (skip '.')) || wild ()
+       else
+         num ()
+         && ((not (skip '.'))
+            || wild ()
+            || num ()
+               && ((not (skip '-')) || dotted ~pre:true)
+               && ((not (skip '+')) || dotted ~pre:false)))
+  in
+  let rec comparators () =
+    comparator ()
+    &&
+    (spaces ();
+     !i = n
+     || skip ','
+        &&
+        (spaces ();
+         comparators ()))
+  in
+  spaces ();
+  if wild () then (
+    spaces ();
+    !i = n)
+  else comparators ()
+
+(* PartialVersion::from_str (cargo-util-schemas): a whole semver version,
+   or one to three numbers read as a caret requirement written without its
+   '^'.  A rust-version is one with neither prerelease nor build
+   (RustVersion::try_from); the toolchain rustc reports may carry either. *)
+let partial_ok ~(rust : bool) (s : string) : bool =
+  let num d =
+    d <> ""
+    && String.for_all (fun c -> c >= '0' && c <= '9') d
+    && (d = "0" || d.[0] <> '0')
+  in
+  let ident d =
+    d <> ""
+    && String.for_all
+         (fun c ->
+           (c >= '0' && c <= '9')
+           || (c >= 'a' && c <= 'z')
+           || (c >= 'A' && c <= 'Z')
+           || c = '-')
+         d
+  in
+  let dotted s = List.for_all ident (String.split_on_char '.' s) in
+  let cut c s =
+    match String.index_opt s c with
+    | Some i ->
+        (String.sub s 0 i, Some (String.sub s (i + 1) (String.length s - i - 1)))
+    | None -> (s, None)
+  in
+  let s, build = cut '+' s in
+  let core, pre = cut '-' s in
+  let parts = String.split_on_char '.' core in
+  List.for_all num parts
+  &&
+  match (pre, build) with
+  | None, None -> List.length parts <= 3
+  | _ ->
+      (not rust)
+      && List.length parts = 3
+      && Option.fold ~none:true ~some:dotted pre
+      && Option.fold ~none:true ~some:dotted build

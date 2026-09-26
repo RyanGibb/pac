@@ -144,7 +144,7 @@ let () =
   (* the root manifest's requirements, each verdict cargo 1.97's own *)
   List.iter
     (fun (r, exp) ->
-      if Cargo_query.req_ok r <> exp then (
+      if Cargo_version.req_ok r <> exp then (
         Printf.eprintf "FAIL: req_ok %S, expected %b\n" r exp;
         incr fail))
     [
@@ -261,6 +261,29 @@ let () =
             incr fail))
         corpus)
     corpus;
+
+  (* a rust-version, and the toolchain rustc reports *)
+  List.iter
+    (fun (s, rust, exp) ->
+      if Cargo_version.partial_ok ~rust s <> exp then (
+        Printf.eprintf "FAIL: partial_ok ~rust:%b %S, expected %b\n" rust s exp;
+        incr fail))
+    [
+      ("1", true, true);
+      ("1.70", true, true);
+      ("1.70.0", true, true);
+      ("1.70.0.1", true, false);
+      ("1.x", true, false);
+      ("01.70", true, false);
+      ("^1.70", true, false);
+      ("", true, false);
+      ("1.70-beta", true, false);
+      ("1.70.0-beta", true, false);
+      ("1.70.0-beta", false, true);
+      ("1.97.0-nightly+abc", false, true);
+      ("1.70-beta", false, false);
+      ("1.x", false, false);
+    ];
 
   if !fail > 0 then exit 1;
   print_endline "cargo_version: all tests pass"

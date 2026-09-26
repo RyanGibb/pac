@@ -244,7 +244,7 @@ let cargo_run debug order print_parents index manifest features no_default
   let t0 = Unix.gettimeofday () in
   try
     let root = Cargo_query.of_manifest manifest in
-    let features = Cargo_query.features_of_flags features ~no_default in
+    let features = Cargo_query.features_of_flags root features ~no_default in
     let rustv = Cargo_query.toolchain root ~installed in
     let n, v = Cargo_query.crate root in
     Report.root

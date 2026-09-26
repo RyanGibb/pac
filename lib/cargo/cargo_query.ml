@@ -23,21 +23,6 @@ type root = {
    flags; it resolves afresh rather than filtering the lock. *)
 type features = All | Named of { feats : string list; default : bool }
 
-(* cargo splits each --features value on spaces and commas, and an empty
-   value names nothing: [-F ""] still asks for default *)
-let features_of_flags (flags : string list) ~(no_default : bool) : features =
-  if flags = [] && not no_default then All
-  else
-    let feats =
-      List.concat_map
-        (fun f ->
-          List.filter (( <> ) "")
-            (String.split_on_char ','
-               (String.map (function ' ' | '\t' -> ',' | c -> c) f)))
-        flags
-    in
-    Named { feats; default = not no_default }
-
 let describe = function
   | T.Str _ -> "a string"
   | T.Int _ -> "an integer"
@@ -68,96 +53,6 @@ let table where = function
   | v -> refuse "%s is %s, not a table" where (describe v)
 
 let get k fields = List.assoc_opt k fields
-
-(* VersionReq::from_str of the semver crate cargo 1.97 links.  The index
-   is cargo-validated, so this runs on the root alone; without it
-   Cargo_version.parse_req would read a malformed requirement as "*".
-   Stricter than parse_req: no "==", a wildcard only in trailing
-   components or as the whole requirement, no leading zeros, and a comma
-   between comparators. *)
-let req_ok (s : string) : bool =
-  let n = String.length s and i = ref 0 in
-  let at c = !i < n && s.[!i] = c in
-  let skip c =
-    at c
-    &&
-    (incr i;
-     true)
-  in
-  let spaces () =
-    while at ' ' do
-      incr i
-    done
-  in
-  let digit c = c >= '0' && c <= '9' in
-  let wild () =
-    !i < n
-    && (match s.[!i] with '*' | 'x' | 'X' -> true | _ -> false)
-    &&
-    (incr i;
-     true)
-  in
-  let span ok =
-    let j = !i in
-    while !i < n && ok s.[!i] do
-      incr i
-    done;
-    String.sub s j (!i - j)
-  in
-  let num () =
-    let d = span digit in
-    d <> "" && (d = "0" || d.[0] <> '0')
-  in
-  let ident ~pre =
-    let d =
-      span (fun c ->
-          digit c || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c = '-')
-    in
-    d <> ""
-    && ((not pre) || (not (String.for_all digit d)) || d = "0" || d.[0] <> '0')
-  in
-  let rec dotted ~pre = ident ~pre && ((not (skip '.')) || dotted ~pre) in
-  let op () =
-    ignore
-      (List.exists
-         (fun o ->
-           String.length o <= n - !i
-           && String.sub s !i (String.length o) = o
-           &&
-           (i := !i + String.length o;
-            true))
-         [ ">="; "<="; ">"; "<"; "="; "~"; "^" ])
-  in
-  let comparator () =
-    op ();
-    spaces ();
-    num ()
-    && ((not (skip '.'))
-       ||
-       if wild () then (not (skip '.')) || wild ()
-       else
-         num ()
-         && ((not (skip '.'))
-            || wild ()
-            || num ()
-               && ((not (skip '-')) || dotted ~pre:true)
-               && ((not (skip '+')) || dotted ~pre:false)))
-  in
-  let rec comparators () =
-    comparator ()
-    &&
-    (spaces ();
-     !i = n
-     || skip ','
-        &&
-        (spaces ();
-         comparators ()))
-  in
-  spaces ();
-  if wild () then (
-    spaces ();
-    !i = n)
-  else comparators ()
 
 (* dep_to_dependency, for the one source the index form has *)
 let dep_of ~kind ~cfg ~where (alias, v) : P.dep =
@@ -201,7 +96,7 @@ let dep_of ~kind ~cfg ~where (alias, v) : P.dep =
            repository, version, or workspace dependency to use"
           alias
   in
-  if not (req_ok req) then
+  if not (Cargo_version.req_ok req) then
     refuse "failed to parse the version requirement `%s` for dependency `%s`"
       req alias;
   let feats =
@@ -368,6 +263,11 @@ let of_manifest (path : string) : root =
             (k, List.map P.entry_of (strings ("features." ^ k) es)))
           (table "features" f)
   in
+  if not (P.feature_map_ok deps declared) then
+    refuse
+      "%s: [features] is not a table cargo accepts: every entry names a \
+       feature, an optional dependency (dep:), or a dependency's feature"
+      path;
   let self_patch =
     match get "patch" doc with
     | None -> false
@@ -400,7 +300,14 @@ let of_manifest (path : string) : root =
         v_links = Option.map (str "package.links") (get "links" pkg);
         v_default_declared = List.mem_assoc P.default_feature declared;
         v_msrv =
-          Option.map (str "package.rust-version") (get "rust-version" pkg);
+          Option.map
+            (fun r ->
+              let r = str "package.rust-version" r in
+              if not (Cargo_version.partial_ok ~rust:true r) then
+                refuse "package.rust-version %S is not a version like \"1.32\""
+                  r;
+              r)
+            (get "rust-version" pkg);
       };
     self_patch;
     msrv_pref = resolver >= 3;
@@ -408,9 +315,47 @@ let of_manifest (path : string) : root =
 
 let crate (r : root) = (r.ver.P.v_name, r.ver.P.v_vers)
 
+(* cargo splits each --features value on spaces and commas, and an empty
+   value names nothing: [-F ""] still asks for default.  A name the root's
+   table lacks is cargo's MissingFeature; the placeholder default the parser
+   adds is not a key of cargo's. *)
+let features_of_flags (r : root) (flags : string list) ~(no_default : bool) :
+    features =
+  if flags = [] && not no_default then All
+  else
+    let feats =
+      List.concat_map
+        (fun f ->
+          List.filter (( <> ) "")
+            (String.split_on_char ','
+               (String.map (function ' ' | '\t' -> ',' | c -> c) f)))
+        flags
+    in
+    List.iter
+      (fun f ->
+        if String.contains f '/' then
+          refuse
+            "--features %s: a dependency's feature on the command line is not \
+             modelled"
+            f
+        else if
+          (not (List.mem_assoc f r.ver.P.v_feats))
+          || (f = P.default_feature && not r.ver.P.v_default_declared)
+        then
+          refuse "the package `%s v%s` does not have the feature `%s`"
+            r.ver.P.v_name r.ver.P.v_vers f)
+      feats;
+    Named { feats; default = not no_default }
+
 (* the toolchain resolve.rs ranks candidates against: the root's own
    rust-version, and only when it declares none the installed rustc; under
    resolvers 1 and 2, nothing *)
 let toolchain (r : root) ~(installed : string option) : string option =
+  Option.iter
+    (fun t ->
+      if not (Cargo_version.partial_ok ~rust:false t) then
+        refuse "--rust-version %s is not a version like \"1.32\" or \"1.32.0\""
+          t)
+    installed;
   if not r.msrv_pref then None
   else match r.ver.P.v_msrv with Some m -> Some m | None -> installed

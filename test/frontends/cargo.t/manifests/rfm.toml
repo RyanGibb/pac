@@ -1,0 +1,10 @@
+[package]
+name = "rfm"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+i = "1"
+
+[features]
+x = ["dep:i"]

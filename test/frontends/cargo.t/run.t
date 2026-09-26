@@ -63,12 +63,12 @@ mandatory dev record installs m by itself.  The two stay
 separate slots -- conjoined, the dev record's non-optionality would bind
 on every depender, which is the h case above.
 
-  $ ../../../bin/main.exe cargo index manifests/k.toml --features default | sed -E '/^(parse|solve) [0-9.]+s$/d'
-  root k 1.0.0 with features default
+  $ ../../../bin/main.exe cargo index manifests/k.toml --features "" | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root k 1.0.0 with default features
   packages (2):
     k 1.0.0
     m 1.0.0
-  encoded solution: 6 core nodes (2 lookups)
+  encoded solution: 5 core nodes (2 lookups)
   loaded: 2 names, 2 versions
 
 Crates are parsed as the solver first asks for them, so a link's declarers
@@ -620,3 +620,28 @@ declaration to the lock:
 
   $ for s in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do ../../../bin/main.exe cargo index manifests/st2.toml --order=random --seed $s | grep -c '^  wsy '; done | sort | uniq -c
        16 1
+
+The root's feature table passes the checks an index entry's does
+(build_feature_map), or cargo refuses the manifest:
+
+  $ ../../../bin/main.exe cargo index manifests/rfm.toml
+  error: manifests/rfm.toml: [features] is not a table cargo accepts: every entry names a feature, an optional dependency (dep:), or a dependency's feature
+  [2]
+  $ ../../../bin/main.exe cargo index manifests/rfm2.toml
+  error: manifests/rfm2.toml: [features] is not a table cargo accepts: every entry names a feature, an optional dependency (dep:), or a dependency's feature
+  [2]
+
+A feature --features names must be the root's, and a version must be one:
+
+  $ ../../../bin/main.exe cargo index manifests/fd.toml -F nope
+  error: the package `fd v1.0.0` does not have the feature `nope`
+  [2]
+  $ ../../../bin/main.exe cargo index manifests/fd.toml -F i/net
+  error: --features i/net: a dependency's feature on the command line is not modelled
+  [2]
+  $ ../../../bin/main.exe cargo index manifests/m1.toml --rust-version 1.x
+  error: --rust-version 1.x is not a version like "1.32" or "1.32.0"
+  [2]
+  $ ../../../bin/main.exe cargo index manifests/rv.toml
+  error: package.rust-version "1.70-beta" is not a version like "1.32"
+  [2]
