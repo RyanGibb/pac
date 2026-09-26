@@ -33,6 +33,7 @@ set -u
 # byte order, so the output is the same whatever the host's locale
 export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
+. "$S/refused.sh"
 ROOT=${APKROOT:?}
 APK="${APK:-apk}"
 INDEX="${INDEX:-$S/../../repos/alpine/APKINDEX}"
@@ -72,7 +73,7 @@ fix() {  # <name> <world...>: sets ch, kept and fixrc
     --repository "$ROOT/repo" fix --simulate > "$out/$name" 2>&1
   fixrc=$?
   rm -rf "$r"
-  [ "$fixrc" -eq 0 ] || grep -qE -f "$S/refusals" "$out/$name" || err=1
+  [ "$fixrc" -eq 0 ] || refused "$fixrc" "$out/$name" || err=1
   ch=$(grep -c '^( *[0-9]*/[0-9]*) ' "$out/$name")
   kept=$(sed -n 's/^OK: .* in \([0-9]*\) packages$/\1/p' "$out/$name")
 }

@@ -38,6 +38,7 @@ set -u
 # byte order, so the output is the same whatever the host's locale
 export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
+. "$S/refused.sh"
 ROOT=${APTROOT:?}
 APT="${APT:-apt-get}"
 INDEX="${INDEX:-$S/../../repos/debian/Packages}"
@@ -55,7 +56,7 @@ done
 
 err=0
 ran() {  # <rc> <log>: whether apt ran to an answer, a refusal included
-  [ "$1" -eq 0 ] || { [ "$1" -eq 100 ] && grep -qE -f "$S/refusals" "$2"; } || err=1
+  [ "$1" -eq 0 ] || refused "$1" "$2" || err=1
 }
 # a root with no lists has apt locate nothing, which reads as a refusal
 ls "$ROOT"/var/lib/apt/lists/*Packages > /dev/null 2>&1 || err=1

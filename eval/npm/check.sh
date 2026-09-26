@@ -44,6 +44,7 @@ RUN=${NPM_RUN:?} PORT=${PORT:-8899}
 ans=$1 out=$2; shift 2
 W=$out/ci
 . "$S/npm.sh"
+. "$S/refused.sh"
 npmc() { GIT_MISS=$out/gitmiss NPM_TIMEOUT= npm_in "$@" --loglevel=http; }  # <dir> <npm args...>
 shim() { curl -s -o /dev/null "http://127.0.0.1:$PORT/-/ping"; }
 paths() { jq -r '.packages | to_entries[] | select(.key != "") | "\(.key) \(.value.version)"' "$1" | sort; }
@@ -53,7 +54,7 @@ verdict() {  # <valid> <minimal> <why>
 }
 err=0
 ran() {  # <rc> <log>: whether npm ran to an answer, a refusal included
-  [ "$1" -eq 0 ] || { [ "$1" -eq 1 ] && grep -qE -f "$S/refusals" "$2"; } || err=1
+  [ "$1" -eq 0 ] || refused "$1" "$2" || err=1
 }
 
 rm -rf "$W" "$W.plo"; mkdir -p "$W"

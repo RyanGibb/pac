@@ -46,8 +46,7 @@ prepare() {
   serve "$PORT" "$run/cache" "$run/shim.log" python3 "$S/shim.py" "$PORT" "$run/cache" $mode
 }
 
-# the codes check.sh reads as a verdict
-refused() { grep -qE -f "$S/refusals" "$2"; }
+. "$S/refused.sh"
 
 ask() {  # <project dir>
   rm -f "$1/package-lock.json"

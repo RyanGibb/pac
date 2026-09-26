@@ -14,7 +14,7 @@ prepare() {
   export APKROOT=$run/apkroot APK=$(sed -n 's/^export APK=//p' "$run/setup.log")
 }
 
-refused() { grep -qE -f "$S/refusals" "$2"; }
+. "$S/refused.sh"
 
 ask() {
   timeout "$TIMEOUT" "$APK" add --root "$APKROOT/root" --usermode --allow-untrusted \
