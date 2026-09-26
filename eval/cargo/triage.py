@@ -73,7 +73,7 @@ rows = report(run)
 out = lambda r, ext: os.path.join(run, "out", "%s.%s%s" % (r["query"], r["mode"], ext))
 res = lambda r: json.load(open(out(r, ".json")))
 for c, label in (("preference-gap", lambda r: divergence(res(r))),
-                 ("error", lambda r: repaired(json.load(open(out(r, ".check/valid.json"))))),
+                 ("invalid", lambda r: repaired(json.load(open(out(r, ".check/valid.json"))))),
                  ("tool-declines", lambda r: "cargo: " + cargo_reason(res(r))),
                  ("tool-error", lambda r: "cargo: " + cargo_reason(res(r))),
                  ("instance-gap", lambda r: first_incompatibility(out(r, ".out"))),

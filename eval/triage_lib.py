@@ -29,6 +29,8 @@ def unkey(k):
 
 def classify(r):
     pac, tool, valid, pin = r["pac"], r["tool"], r["valid"], r.get("pin", "-")
+    if pac == "harness":
+        return "harness-error"
     if pac in ("timeout", "crash", "refuse", "io-error"):
         return "pac-" + pac
     if tool == "unrecorded":
@@ -44,10 +46,12 @@ def classify(r):
     # an answer the tool rejects is pac's error whether or not the tool had
     # one of its own
     if pac == "ok" and valid == "INVALID":
-        return "exact-invalid" if tool == "ok" and r["corr"] == "exact" else "error"
+        return "exact-invalid" if tool == "ok" and r["corr"] == "exact" else "invalid"
     if pac == "ok" and tool == "ok":
         if r["corr"] == "exact":
             return "exact"
+        if r["corr"] != "diff":
+            return "unchecked"
         # only a pin that ran says which gap this is; an ecosystem with no
         # pin check has none to say it
         if pin == "unsat":

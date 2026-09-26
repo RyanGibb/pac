@@ -32,6 +32,7 @@ eval/<eco>/scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]
 
 Each query is asked of pac in each mode, and of the tool once. Two questions follow: does pac answer as the tool does, and does the tool accept pac's answer (`eval/check.sh`)?
 Keep the run directory outside the source tree. A killed run resumes where it stopped, and refuses to resume with another pac, other parameters or another queries file.
+The queries file is read once, so it may be a pipe; a query it names twice, in two pools, runs once.
 
 - `P`: queries at a time (default: every core).
 - `TIMEOUT`: seconds per call (default 900).
@@ -43,7 +44,8 @@ It writes `findings.txt`, the lines of `results.txt` whose answer is `INVALID`, 
 To reproduce a finding, ask pac the query with `--order=random --seed=N`.
 
 The run ends with a line per mode, such as `tool: 62 queries, exact 60/60, valid 60/60, minimal 58/60`: exact answers of those the tool answered, valid answers of those checked, and minimal answers of the valid.
-Answers the check could not run on (`unchecked`), install-order cycles (`cyclic`), the tool's own errors and unrecorded baselines are counted apart, and excluded from those fractions.
+Answers the check could not run on (`unchecked`), install-order cycles (`cyclic`), answers the two sides could not be compared on (`uncompared`), the tool's own errors and timeouts and unrecorded baselines are counted apart, and excluded from those fractions.
+Each status of pac's other than an answer is counted too (`pac unsat 2`), and still counts against exact where the tool answered.
 A query whose worker died is named as missing, and the run then exits non-zero.
 Exact compares names for Debian and Alpine, name and version for opam, and edges too for cargo and npm.
 
@@ -68,6 +70,8 @@ The exit status, as `pac --help` lists it:
 | 3 | an index, a file or the registry cannot be read | `io-error` |
 | 124 | timeout(1) killed pac | `timeout` |
 | other | an internal error | `crash` |
+
+`pac=harness` is the harness failing before pac was asked (cargo's `scale.py`, which exits 126).
 
 A refusal or a read error prints `error:` and its reason on stderr, and nothing on stdout but cargo's and npm's `root` line.
 
@@ -142,6 +146,7 @@ query= mode= pac= tool= corr= valid= minimal= oo= to= wall= pin=
 ```
 
 `pac` is pac's exit status, as the table above names it.
+`corr` is `exact`, `diff`, `ERR` where the two answers could not be compared, or `-` where a side gave none.
 `tool` is `ok`, `refuse` (the tool says the query has no answer), `error` (it failed otherwise), `timeout` or, under `--regress`, `unrecorded`.
 `oo` and `to` count packages only in ours and only in the tool's.
 `pin` is pac asked for the tool's own answer, where the tool answered (Alpine and opam; `-` elsewhere): `ok`, `unsat`, or no verdict.
@@ -155,13 +160,14 @@ Extra fields: opam `mccs`; npm `twall` (the tool's wall time, `-` under `--regre
 | `preference-gap` | sets differ, and the tool accepts ours; pac asked for the tool's answer gives one, where a pin ran |
 | `instance-gap` | the tool's answer is not a resolution of our instance: pac refuses it when pinned |
 | `unconfirmed` | we refuse, the tool answers, and no pin says whether its answer is a resolution of our instance |
-| `error` | the tool rejects ours, whatever the tool's own answer |
+| `invalid` | the tool rejects ours, whatever the tool's own answer |
 | `exact-invalid` | the tool rejects an answer matching its own: suspect the check |
 | `post-resolution` | ours is a resolution the tool cannot install (install-order cycle; opam, Debian) |
 | `tool-declines` | we answer, the tool refuses, and it accepts ours |
 | `both-refuse` | neither answers |
 | `pac-timeout`, `pac-crash`, `pac-refuse`, `pac-io-error`, `tool-timeout`, `tool-error` | a side gave no verdict |
-| `unchecked` | we answer, but the check, or the pin that would say which gap, could not run |
+| `harness-error` | the harness could not ask pac |
+| `unchecked` | we answer, but the check, the comparison, or the pin that would say which gap, could not run |
 | `unrecorded` | `--regress` found no recorded answer |
 
 ## Ecosystem notes

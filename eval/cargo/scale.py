@@ -199,14 +199,16 @@ def one(crate, p):
     whose status goes to p.tool: cargo is asked per mode, since the
     manifest is patched as pac's answer needs.  The manifest pac was given
     is kept at p.manifest for the check.  A stage that raises is that
-    side's failure, never the query's loss."""
+    side's failure, never the query's loss; where pac was never asked, a
+    crate with no release to ask about included, the exit is 126, which
+    scale-lib.sh reads as the harness's failure, not pac's."""
     import run_query
     pac = cargo = root = rustv = None
     patched = False
     try:
         pac, root, rustv, patched = run_query.ask_pac(crate)
     except Exception as e:
-        pac = {"ok": False, "returncode": 125, "stdout": "", "stderr": "harness: %r" % e}
+        pac = {"ok": False, "returncode": 126, "stdout": "", "stderr": "harness: %r" % e}
     if root is not None:
         shutil.rmtree(p + ".manifest", ignore_errors=True)
         shutil.copytree(os.path.join(run_query.WORK, crate), p + ".manifest",
@@ -233,7 +235,7 @@ def one(crate, p):
     open(p + ".err", "w").write(pac.get("stderr") or "")
     open(p + ".tool", "w").write(tool + "\n")
     shutil.rmtree(run_query.CARGO_HOME, ignore_errors=True)
-    sys.exit(124 if pac.get("timeout") else 0 if pac["ok"] else pac.get("returncode") or 1)
+    sys.exit(124 if pac.get("timeout") else 0 if pac["ok"] else pac.get("returncode") or 126)
 
 
 def corr(p):

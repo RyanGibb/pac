@@ -62,7 +62,7 @@ def apt_reason(r):
 
 
 rows = report(run)
-for c in ("preference-gap", "error", "exact-invalid"):
+for c in ("preference-gap", "invalid", "exact-invalid"):
     for m in dict.fromkeys(r["mode"] for r in rows):
         groups = collections.defaultdict(list)
         for r in rows:

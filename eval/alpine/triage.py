@@ -48,7 +48,7 @@ rows = report(run)
 pkgs = load()
 out = lambda r, ext: os.path.join(run, "out", r["query"] + ext)
 modes = list(dict.fromkeys(r["mode"] for r in rows))
-for c in ("preference-gap", "error", "exact-invalid"):
+for c in ("preference-gap", "invalid", "exact-invalid"):
     for m in modes:
         cl = {}
         for r in (r for r in rows if r["class"] == c and r["mode"] == m):

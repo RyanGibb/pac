@@ -53,7 +53,7 @@ def refused(r):
 
 rows = report(run)
 for m in dict.fromkeys(r["mode"] for r in rows):
-    for c, label in (("error", lambda r: invalid(r) if r["tool"] == "ok" else
+    for c, label in (("invalid", lambda r: invalid(r) if r["tool"] == "ok" else
                       "%s; %s" % (invalid(r), refused(r))),
                      ("preference-gap", lambda r: divergence(r, rows)),
                      ("instance-gap", lambda r: divergence(r, rows) if r["pac"] == "ok" else

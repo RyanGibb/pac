@@ -4,4 +4,8 @@
   ../../eval/npm/edges.py
   ../../eval/npm/verdict.py
   ../../eval/npm/npm-version
-  ../../eval/serve.sh))
+  ../../eval/npm/totals.awk
+  ../../eval/serve.sh
+  ../../eval/scale-lib.sh
+  ../../eval/answer.sh
+  ../../eval/triage_lib.py))

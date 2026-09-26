@@ -71,7 +71,7 @@ rows = report(run)
 report(run, by="closed")
 for m, closed in ((m, c) for m in dict.fromkeys(r["mode"] for r in rows) for c in ("yes", "no")):
     rs = [r for r in rows if r["closed"] == closed and r["mode"] == m]
-    for c in ("preference-gap", "error"):
+    for c in ("preference-gap", "invalid"):
         g = collections.defaultdict(list)
         for r in rs:
             if r["class"] == c:

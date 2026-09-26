@@ -35,6 +35,8 @@ pac_status() {  # <rc> <output>
     2) echo refuse ;;
     3) echo io-error ;;
     124) echo timeout ;;
+    # the harness failed before pac could be asked (cargo's scale.py)
+    126) echo harness ;;
     *) echo crash ;;
   esac
 }
@@ -140,7 +142,8 @@ one() {  # <key> <query>
     wall=$(since "$t0")
     pac=$(pac_status "$(cat "$p.rc")" "$p.out")
     extract "$p"
-    [ "$pac" = ok ] && [ "$tool" = ok ] && correspond "$p"
+    # a comparison that could not be made is neither exact nor a divergence
+    [ "$pac" = ok ] && [ "$tool" = ok ] && { correspond "$p" || corr=ERR; }
     if [ "$pac" = ok ]; then
       k=$(canon "$p" | sha256sum | cut -c1-32; exit "${PIPESTATUS[0]}") || k=
       if [ -n "$k" ] && [ -n "${seenv[$k]+x}" ]; then
@@ -172,8 +175,9 @@ fuzz_totals() {
      if (f["valid"] == "INVALID") iq[f["query"]]
      if (f["pac"] ~ /^(ok|unsat)$/) st[f["query"], f["pac"]]}
     END {for (x in q) if ((x, "ok") in st && (x, "unsat") in st) {split_n++; print x > (run "/split.txt")}
-         printf "fuzz: %d queries x %d seeds = %d runs; pac ok %d, unsat %d, refuse %d, io-error %d, timeout %d, crash %d\n",
+         printf "fuzz: %d queries x %d seeds = %d runs; pac ok %d, unsat %d, refuse %d, io-error %d, timeout %d, crash %d",
            length(q), k, n, pac["ok"], pac["unsat"], pac["refuse"], pac["io-error"], pac["timeout"], pac["crash"]
+         print pac["harness"] ? sprintf(", harness %d", pac["harness"]) : ""
          printf "fuzz: valid %d, INVALID %d (in %d queries), ERR %d, cyclic %d; minimal %d/%d\n",
            v["VALID"], v["INVALID"], length(iq), v["ERR"], v["CYCLIC"], mi, v["VALID"]
          printf "fuzz: %d queries answered under some seeds and unsat under others (split.txt)\n", split_n}' \
@@ -203,7 +207,8 @@ main() {
   mkdir -p "$2/res" "$2/out" || exit 1
   run=$(cd "$2" && pwd); export run
   local q=$run/queries.txt
-  if [ -n "${3:-}" ]; then q=$(realpath "$3") || exit 1
+  # read once, so that the file may be a pipe
+  if [ -n "${3:-}" ]; then cat -- "$3" > "$run/queries.new" && q=$run/queries.new || exit 1
   elif [ ! -s "$q" ]; then
     if [ -n "$BASELINE" ]; then regress_queries; else all_queries; fi > "$run/queries.new" &&
       mv "$run/queries.new" "$q" || exit 1
@@ -216,12 +221,15 @@ main() {
     cmp -s "$1" "$run/pac.exe" || { echo "$0: $run was started with another pac" >&2; exit 1; }
     cmp -s "$run/params.new" "$run/params" ||
       { echo "$0: $run was started with other parameters:" >&2
-        diff "$run/params" "$run/params.new" >&2; exit 1; }
+        diff "$run/params" "$run/params.new" >&2; rm -f "$run/queries.new"; exit 1; }
   else cp "$1" "$run/pac.exe"; mv "$run/params.new" "$run/params"; fi
   rm -f "$run/params.new"
-  [ "$q" = "$run/queries.txt" ] || cp "$q" "$run/queries.txt" || exit 1
+  [ "$q" = "$run/queries.txt" ] || mv "$q" "$run/queries.txt" || exit 1
   prepare || exit 1
-  python3 "$E/triage_lib.py" keys < "$run/queries.txt" > "$run/keys" || exit 1
+  # a query named in two pools is one query, run by one worker, whose files
+  # two would share
+  python3 "$E/triage_lib.py" keys < "$run/queries.txt" | awk -F'\t' '!seen[$1]++' > "$run/keys" &&
+    [ "${PIPESTATUS[0]}" -eq 0 ] || exit 1
   ls "$run/res" | awk -F'\t' 'FILENAME == "-" {done[$1]; next} !($1 in done)' - "$run/keys" > "$run/todo"
   echo "$0: $(wc -l < "$run/todo") of $(wc -l < "$run/keys") queries to run" >&2
   xargs -r -P "$P" -d '\n' -n 1 bash "$0" --one < "$run/todo"
@@ -234,17 +242,22 @@ main() {
   if [ -n "$FUZZ" ]; then fuzz_totals; else awk -v modes="$MODES" '
     {delete f; for (i = 1; i <= NF; i++) {j = index($i, "="); f[substr($i, 1, j - 1)] = substr($i, j + 1)}
      m = f["mode"]; n[m]++; un[m] += f["tool"] == "unrecorded"; te[m] += f["tool"] == "error"
-     if (f["tool"] == "ok") {ans[m]++; ex[m] += f["corr"] == "exact"}
+     tt[m] += f["tool"] == "timeout"; ps[m, f["pac"]]++
+     if (f["tool"] == "ok" && f["corr"] == "ERR") uc[m]++
+     else if (f["tool"] == "ok") {ans[m]++; ex[m] += f["corr"] == "exact"}
      if (f["valid"] ~ /^(VALID|INVALID)$/) {chk[m]++; ok[m] += f["valid"] == "VALID"}
      if (f["valid"] == "VALID") mi[m] += f["minimal"] == "yes"
      cy[m] += f["valid"] == "CYCLIC"; er[m] += f["valid"] == "ERR"}
-    END {k = split(modes, ms, " ")
+    END {k = split(modes, ms, " "); np = split("unsat refuse io-error timeout crash harness", st, " ")
       for (i = 1; i <= k; i++) if (ms[i] in n) {
         m = ms[i]
         printf "%s: %d queries, exact %d/%d, valid %d/%d, minimal %d/%d", m, n[m], ex[m], ans[m], ok[m], chk[m], mi[m], ok[m]
         if (cy[m]) printf ", cyclic %d", cy[m]
         if (er[m]) printf ", unchecked %d", er[m]
+        if (uc[m]) printf ", uncompared %d", uc[m]
+        for (j = 1; j <= np; j++) if (ps[m, st[j]]) printf ", pac %s %d", st[j], ps[m, st[j]]
         if (te[m]) printf ", tool error %d", te[m]
+        if (tt[m]) printf ", tool timeout %d", tt[m]
         if (un[m]) printf ", unrecorded %d", un[m]
         print ""}}' "$run/results.txt"; fi
   if declare -F totals > /dev/null; then totals; fi

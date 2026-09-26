@@ -86,11 +86,13 @@ extract() { :; }
 
 correspond() {
   local n
-  n=$(python3 "$S/edges.py" "$name" "$o.theirs" "$1.out" "$1" $NORM | sed 's/.*#//')
+  n=$(python3 "$S/edges.py" "$name" "$o.theirs" "$1.out" "$1" $NORM) && n=${n##*#} && [ -n "$n" ] ||
+    return 1
   oo=$(wc -l < "$1.nodes.oursonly") to=$(wc -l < "$1.nodes.npmonly")
   echo "${n%,*,*,*} ${n#*,*,*,}" > "$1.counts"
   echo "$n" | awk -F, '{exit !($1 == $2 && $2 == $3 && $4 == $5 && $5 == $6)}' && corr=exact || corr=diff
   [ -s "$1.edges.npmonly" ] && python3 "$S/verdict.py" "$run" "$name" "$1" "$w/lock/package.json" > /dev/null
+  return 0
 }
 
 # answers are compared as trees, and every mode is checked
@@ -121,13 +123,7 @@ emit() {
 }
 
 totals() {
-  awk '{delete f; for (i = 1; i <= NF; i++) {j = index($i, "="); f[substr($i, 1, j - 1)] = substr($i, j + 1)}
-        c += f["closed"] == "yes"
-        if (f["nodes"] != "-") {g++; split(f["nodes"] "," f["edges"], a, ","); for (i = 1; i <= 6; i++) t[i] += a[i]}
-        if (f["twall"] != "-") {w++; pw += f["wall"]; nw += f["twall"]}}
-    END {printf "closed %d/%d; over the %d both answer, nodes ours=%d npm=%d agree=%d, edges ours=%d npm=%d agree=%d\n",
-           c, NR, g, t[1], t[2], t[3], t[4], t[5], t[6]
-         if (w) printf "wall time over the %d queries npm was asked: pac %.1fs, npm %.1fs\n", w, pw, nw}' "$run/results.txt"
+  awk -v modes="$MODES" -f "$S/totals.awk" "$run/results.txt"
   find "$run/out" -name '*.verdict' -exec cut -f1 {} + | sort | uniq -c |
     sed 's/^ */npm-only edges: /'
 }
