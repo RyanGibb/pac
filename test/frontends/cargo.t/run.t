@@ -645,3 +645,75 @@ A feature --features names must be the root's, and a version must be one:
   $ ../../../bin/main.exe cargo index manifests/rv.toml
   error: package.rust-version "1.70-beta" is not a version like "1.32"
   [2]
+
+The root's version is a whole semver version, as cargo reads it, less
+the whitespace around it:
+
+  $ for v in 1.x 1.0 01.0.0 1.0.0-01 1.0.0- 1.0.0+a..b 18446744073709551616.0.0 ' 1.0.0 ' 1.0.0+001 18446744073709551615.0.0; do
+  >   printf '[package]\nname = "vt"\nversion = "%s"\n' "$v" > v.toml
+  >   ../../../bin/main.exe cargo index v.toml > out; s=$?; grep '^root' out; echo "[$s]"
+  > done
+  error: package.version "1.x" is not a semver version like "1.2.3"
+  [2]
+  error: package.version "1.0" is not a semver version like "1.2.3"
+  [2]
+  error: package.version "01.0.0" is not a semver version like "1.2.3"
+  [2]
+  error: package.version "1.0.0-01" is not a semver version like "1.2.3"
+  [2]
+  error: package.version "1.0.0-" is not a semver version like "1.2.3"
+  [2]
+  error: package.version "1.0.0+a..b" is not a semver version like "1.2.3"
+  [2]
+  error: package.version "18446744073709551616.0.0" is not a semver version like "1.2.3"
+  [2]
+  root vt 1.0.0
+  [0]
+  root vt 1.0.0+001
+  [0]
+  root vt 18446744073709551615.0.0
+  [0]
+  $ printf '[package]\nname = "vt"\nversion = "1.x"\n' > v.toml
+  $ ../../../bin/main.exe cargo index v.toml
+  error: package.version "1.x" is not a semver version like "1.2.3"
+  [2]
+
+Its name is one cargo accepts, and a dependency's is too, though a
+non-ASCII name, which no crates.io crate has, is refused unread:
+
+  $ for n in 'a b' 1a -a a.b a:b a::b '' _a a-b café; do
+  >   printf '[package]\nname = "%s"\nversion = "1.0.0"\n' "$n" > n.toml
+  >   ../../../bin/main.exe cargo index n.toml > out; s=$?; grep '^root' out; echo "[$s]"
+  > done
+  error: invalid character ` ` in package name: `a b`, characters must be Unicode XID characters (numbers, `-`, `_`, or most letters)
+  [2]
+  error: invalid character `1` in package name: `1a`, the name cannot start with a digit
+  [2]
+  error: invalid character `-` in package name: `-a`, the first character must be a Unicode XID start character (most letters or `_`)
+  [2]
+  error: invalid character `.` in package name: `a.b`, characters must be Unicode XID characters (numbers, `-`, `_`, or most letters)
+  [2]
+  error: invalid character `:` in package name: `a:b`, characters must be Unicode XID characters (numbers, `-`, `_`, or most letters)
+  [2]
+  error: package name `a::b` needs the unstable open-namespaces feature, which is not modelled
+  [2]
+  error: package name cannot be empty
+  [2]
+  root _a 1.0.0
+  [0]
+  root a-b 1.0.0
+  [0]
+  error: package name `café`: a non-ASCII name is not modelled
+  [2]
+  $ printf '[package]\nname = "a b"\nversion = "1.0.0"\n' > n.toml
+  $ ../../../bin/main.exe cargo index n.toml
+  error: invalid character ` ` in package name: `a b`, characters must be Unicode XID characters (numbers, `-`, `_`, or most letters)
+  [2]
+  $ printf '[package]\nname = "vt"\nversion = "1.0.0"\n[dependencies]\n"a b" = "1"\n' > d.toml
+  $ ../../../bin/main.exe cargo index d.toml
+  error: invalid character ` ` in package name: `a b`, characters must be Unicode XID characters (numbers, `-`, `_`, or most letters)
+  [2]
+  $ printf '[package]\nname = "vt"\nversion = "1.0.0"\n[dependencies]\nx = { version = "1", package = "1a" }\n' > d.toml
+  $ ../../../bin/main.exe cargo index d.toml
+  error: invalid character `1` in package name: `1a`, the name cannot start with a digit
+  [2]

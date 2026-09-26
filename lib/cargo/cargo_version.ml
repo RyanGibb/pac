@@ -225,17 +225,17 @@ let req_ok (s : string) : bool =
     !i = n)
   else comparators ()
 
-(* PartialVersion::from_str (cargo-util-schemas): a whole semver version,
-   or one to three numbers read as a caret requirement written without its
-   '^'.  A rust-version is one with neither prerelease nor build
-   (RustVersion::try_from); the toolchain rustc reports may carry either. *)
-let partial_ok ~(rust : bool) (s : string) : bool =
-  let num d =
-    d <> ""
-    && String.for_all (fun c -> c >= '0' && c <= '9') d
-    && (d = "0" || d.[0] <> '0')
-  in
-  let ident d =
+(* a component, which the semver crate reads as a u64 *)
+let num_ok d =
+  d <> ""
+  && String.for_all (fun c -> c >= '0' && c <= '9') d
+  && (d = "0" || d.[0] <> '0')
+  && (String.length d < 20
+     || (String.length d = 20 && d <= "18446744073709551615"))
+
+(* Version::from_str of the semver crate *)
+let version_ok (s : string) : bool =
+  let ident ~pre d =
     d <> ""
     && String.for_all
          (fun c ->
@@ -244,8 +244,12 @@ let partial_ok ~(rust : bool) (s : string) : bool =
            || (c >= 'A' && c <= 'Z')
            || c = '-')
          d
+    && ((not pre)
+       || (not (String.for_all (fun c -> c >= '0' && c <= '9') d))
+       || d = "0"
+       || d.[0] <> '0')
   in
-  let dotted s = List.for_all ident (String.split_on_char '.' s) in
+  let dotted ~pre s = List.for_all (ident ~pre) (String.split_on_char '.' s) in
   let cut c s =
     match String.index_opt s c with
     | Some i ->
@@ -254,13 +258,19 @@ let partial_ok ~(rust : bool) (s : string) : bool =
   in
   let s, build = cut '+' s in
   let core, pre = cut '-' s in
-  let parts = String.split_on_char '.' core in
-  List.for_all num parts
-  &&
-  match (pre, build) with
-  | None, None -> List.length parts <= 3
-  | _ ->
-      (not rust)
-      && List.length parts = 3
-      && Option.fold ~none:true ~some:dotted pre
-      && Option.fold ~none:true ~some:dotted build
+  (match String.split_on_char '.' core with
+  | [ a; b; c ] -> num_ok a && num_ok b && num_ok c
+  | _ -> false)
+  && Option.fold ~none:true ~some:(dotted ~pre:true) pre
+  && Option.fold ~none:true ~some:(dotted ~pre:false) build
+
+(* PartialVersion::from_str (cargo-util-schemas): a whole semver version,
+   or one to three numbers read as a caret requirement written without its
+   '^'.  A rust-version is one with neither prerelease nor build
+   (RustVersion::try_from); the toolchain rustc reports may carry either. *)
+let partial_ok ~(rust : bool) (s : string) : bool =
+  if String.contains s '-' || String.contains s '+' then
+    (not rust) && version_ok s
+  else
+    let parts = String.split_on_char '.' s in
+    List.length parts <= 3 && List.for_all num_ok parts

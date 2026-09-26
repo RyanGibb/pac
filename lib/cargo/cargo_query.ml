@@ -54,8 +54,49 @@ let table where = function
 
 let get k fields = List.assoc_opt k fields
 
+let rec split_path s =
+  let n = String.length s in
+  let rec find i =
+    if i + 1 >= n then None
+    else if s.[i] = ':' && s.[i + 1] = ':' then Some i
+    else find (i + 1)
+  in
+  match find 0 with
+  | Some i -> String.sub s 0 i :: split_path (String.sub s (i + 2) (n - i - 2))
+  | None -> [ s ]
+
+(* restricted_names::validate_package_name, whose XID classes are read
+   only over ASCII: crates.io publishes no other name *)
+let package_name n =
+  if not (String.for_all (fun c -> Char.code c < 128) n) then
+    refuse "package name `%s`: a non-ASCII name is not modelled" n;
+  let letter c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') in
+  let digit c = c >= '0' && c <= '9' in
+  let bad ch reason =
+    refuse "invalid character `%c` in package name: `%s`, %s" ch n reason
+  in
+  List.iter
+    (fun part ->
+      if part = "" then refuse "package name cannot be empty";
+      let c = part.[0] in
+      if digit c then bad c "the name cannot start with a digit"
+      else if not (letter c || c = '_') then
+        bad c
+          "the first character must be a Unicode XID start character (most \
+           letters or `_`)";
+      String.iter
+        (fun c ->
+          if not (letter c || digit c || c = '_' || c = '-') then
+            bad c
+              "characters must be Unicode XID characters (numbers, `-`, `_`, \
+               or most letters)")
+        part)
+    (split_path n);
+  n
+
 (* dep_to_dependency, for the one source the index form has *)
 let dep_of ~kind ~cfg ~where (alias, v) : P.dep =
+  let alias = package_name alias in
   let where = Printf.sprintf "%s.%s" where alias in
   let fields =
     match v with T.Str r -> [ ("version", T.Str r) ] | v -> table where v
@@ -121,7 +162,7 @@ let dep_of ~kind ~cfg ~where (alias, v) : P.dep =
     P.d_alias = alias;
     d_target =
       (match get "package" fields with
-      | Some p -> str (where ^ ".package") p
+      | Some p -> package_name (str (where ^ ".package") p)
       | None -> alias);
     d_req = Cargo_version.parse_req req;
     d_feats = feats;
@@ -277,12 +318,21 @@ let of_manifest (path : string) : root =
   in
   let name =
     match get "name" pkg with
-    | Some n -> str "package.name" n
+    | Some n -> package_name (str "package.name" n)
     | None -> refuse "package.name is missing"
   in
+  if String.contains name ':' then
+    refuse
+      "package name `%s` needs the unstable open-namespaces feature, which is \
+       not modelled"
+      name;
   let vers =
     match get "version" pkg with
-    | Some v -> str "package.version" v
+    | Some v ->
+        let v = str "package.version" v in
+        if not (Cargo_version.version_ok (String.trim v)) then
+          refuse "package.version %S is not a semver version like \"1.2.3\"" v;
+        String.trim v
     | None -> "0.0.0"
   in
   let resolver = resolver_of_manifest doc pkg in
