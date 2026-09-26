@@ -933,12 +933,13 @@ depends on frail, whose tok ^9.0.0 matches nothing.  Here frail stands,
 its dependency cannot be met, and nothing resolves; npm records frail,
 optional, and no tok.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./opt-deep-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./opt-deep-app/package.json
   root opt-deep-app 1.0.0
   unsatisfiable:
   Because opt-deep-app@1.0.0 1.0.0 -> <opt-deep-app@1.0.0=>frail> 1.0.0 and <opt-deep-app@1.0.0=>frail> 1.0.0 -> frail@1.0.0 1.0.0, opt-deep-app@1.0.0 * requires frail@1.0.0 1.0.0.
   And because frail@1.0.0 1.0.0 -> <frail@1.0.0=>tok> ∅ and root -> opt-deep-app@1.0.0 1.0.0, version solving failed.
   loaded: 4 names, 5 versions, 0 packuments fetched
+  [1]
 
 A path-scoped override is dropped and counted: which chain of parents
 reaches a package is an output of resolution, not an input.  ovr-path-app

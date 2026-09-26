@@ -1,4 +1,8 @@
-  $ ../../../bin/main.exe opam . app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+untimed drops the timings from pac's output and keeps its exit status:
+
+  $ untimed() { "$@" > out 2>&1; s=$?; sed -E '/^(parse|solve) [0-9.]+s$/d' out; return $s; }
+
+  $ untimed ../../../bin/main.exe opam . app
   packages (2):
     app 1
     c 1
@@ -8,7 +12,7 @@
 A dependency constrained to the depender's own version takes that version,
 not the newest one available:
 
-  $ ../../../bin/main.exe opam . tool | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . tool
   packages (2):
     lib 2
     tool 2
@@ -18,7 +22,7 @@ not the newest one available:
 A parenthesised group conjoins its elements, as the top level of a brace
 does, so both ends of (>= "2" < "4") bind and dep.9 is out of range:
 
-  $ ../../../bin/main.exe opam . grp | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . grp
   packages (2):
     dep 3
     grp 1
@@ -29,7 +33,7 @@ A version disjunction inside one brace is one set of versions, as opam reads
 it, so dep takes the newest version in either range, not the lower range's
 dep.3 for being written first:
 
-  $ ../../../bin/main.exe opam . bdisj | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . bdisj
   packages (2):
     bdisj 1
     dep 9
@@ -40,14 +44,14 @@ A brace mixing a filter into the disjunction stays two atoms under a
 disjunction, each with its own filter.  Without --with-test only < "5" is
 left, and with it the unconstrained alternative, written first, is taken:
 
-  $ ../../../bin/main.exe opam . bmix | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . bmix
   packages (2):
     bmix 1
     dep 3
   encoded solution: 3 core nodes (3 lookups)
   loaded: 2 names, 3 versions
 
-  $ ../../../bin/main.exe opam --with-test . bmix | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam --with-test . bmix
   packages (2):
     bmix 1
     dep 9
@@ -57,7 +61,7 @@ left, and with it the unconstrained alternative, written first, is taken:
 pin-depends is read only when its owner is pinned, and nothing is pinned
 here, so pind.1's entry for dep.dev constrains nothing:
 
-  $ ../../../bin/main.exe opam . pind | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . pind
   packages (2):
     dep 9
     pind 1
@@ -71,7 +75,7 @@ filter holds under the environment.  sys.1 asks for libfoo-dev and
 pkg-config on a debian family and libbar-dev on alpine; helper.1 asks
 unconditionally for pkg-config, which is named once:
 
-  $ ../../../bin/main.exe opam . sys | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . sys
   packages (2):
     helper 1
     sys 1
@@ -86,13 +90,13 @@ else works", which is a preference and not a constraint.  A flagged
 version is ranked below every unflagged version of its name, so the older
 avoid.1 and depr.1 are taken over the newer flagged ones:
 
-  $ ../../../bin/main.exe opam . avoid | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . avoid
   packages (1):
     avoid 1
   encoded solution: 2 core nodes (2 lookups)
   loaded: 1 names, 2 versions
 
-  $ ../../../bin/main.exe opam . depr | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . depr
   packages (1):
     depr 1
   encoded solution: 2 core nodes (2 lookups)
@@ -101,7 +105,7 @@ avoid.1 and depr.1 are taken over the newer flagged ones:
 Nothing else works when a dependency pins the flagged version, and it is
 selected:
 
-  $ ../../../bin/main.exe opam . needav | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . needav
   packages (2):
     avoid 2
     needav 1
@@ -115,7 +119,7 @@ reverses the alternatives -- PubGrub decides the larger version and the
 disjunct package's largest index selects the last alternative -- so that
 this is what falls out:
 
-  $ ../../../bin/main.exe opam . pick | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . pick
   packages (2):
     alt1 1
     pick 1
@@ -133,7 +137,7 @@ The class name is also a package name here, and ccls.1 is installed
 regardless: a class and a real package of the same name are separate target
 names, as opam's ocaml-system -- both a class and a package -- requires.
 
-  $ ../../../bin/main.exe opam . cc-pick | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . cc-pick
   packages (4):
     cc-a 1
     cc-pick 1
@@ -145,12 +149,13 @@ names, as opam's ocaml-system -- both a class and a package -- requires.
 Asking for both names of the class outright has no resolution, and the
 class package is what the explanation names:
 
-  $ ../../../bin/main.exe opam . cc-both | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . cc-both
   unsatisfiable:
   Because cc-a 1 -> conflict-class:ccls cc-a and cc-b 2 -> conflict-class:ccls cc-b, cc-a (-∞, ⊥) or cc-b (-∞, ⊥) is forbidden..
   And because cc-both 1 -> cc-a 1 and cc-both 1 -> cc-b 1 ∪ 2, cc-both (-∞, ⊥) is forbidden.
   And because root () -> cc-both 1 and root -> root (), version solving failed.
   loaded: 3 names, 4 versions
+  [1]
 
 A conflict holds whichever side of it the solver decides first.  cfl-a.1
 conflicts with cfl-b and cfl-c.1 depends on cfl-a; asking for cfl-c and
@@ -161,17 +166,18 @@ the versions the conflict does not name, or absent -- here ⊥ alone, the
 conflict naming every version.  Nothing hangs on cfl-b's side, so the order
 in which the two are decided cannot lose it:
 
-  $ ../../../bin/main.exe opam . cfl-c cfl-b.1 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . cfl-c cfl-b.1
   unsatisfiable:
   Because cfl-c 1 -> cfl-a 1 and cfl-a 1 -> cfl-b ⊥, cfl-c (-∞, ⊥) requires cfl-b ⊥.
   And because root () -> cfl-b 1, cfl-c (-∞, ⊥) or root * is forbidden.
   And because root () -> cfl-c 1 and root -> root (), version solving failed.
   loaded: 3 names, 4 versions
+  [1]
 
 A name only a conflict reaches is left absent rather than installed: ⊥ is
 the greatest version, and PubGrub decides the greatest:
 
-  $ ../../../bin/main.exe opam . cfl-c | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . cfl-c
   packages (2):
     cfl-a 1
     cfl-c 1
@@ -183,7 +189,7 @@ versions -- realised as the dependencies of the synthetic root.  Naming
 two packages asks for both, and each is solved against the same
 repository:
 
-  $ ../../../bin/main.exe opam . app tool | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . app tool
   packages (4):
     app 1
     c 1
@@ -195,7 +201,7 @@ repository:
 An atom's version constraint is the set of versions its name is accepted
 at.  Unconstrained, dep takes its newest version:
 
-  $ ../../../bin/main.exe opam . dep | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . dep
   packages (1):
     dep 9
   encoded solution: 2 core nodes (2 lookups)
@@ -203,7 +209,7 @@ at.  Unconstrained, dep takes its newest version:
 
 An operator narrows that set, in opam's own command-line syntax:
 
-  $ ../../../bin/main.exe opam . 'dep<9' | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . 'dep<9'
   packages (1):
     dep 3
   encoded solution: 2 core nodes (2 lookups)
@@ -211,7 +217,7 @@ An operator narrows that set, in opam's own command-line syntax:
 
 and NAME.VERSION is opam's shorthand for the =-constraint:
 
-  $ ../../../bin/main.exe opam . dep.3 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . dep.3
   packages (1):
     dep 3
   encoded solution: 2 core nodes (2 lookups)
@@ -219,7 +225,7 @@ and NAME.VERSION is opam's shorthand for the =-constraint:
 
 Constraints and several names compose, the query being one per name:
 
-  $ ../../../bin/main.exe opam . 'dep<9' app | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . 'dep<9' app
   packages (3):
     app 1
     c 1
@@ -252,7 +258,7 @@ universe's [requested_allpkgs]).  tst.1 asks for tlib under with-test,
 tdoc under with-doc and dsetup under with-dev-setup, and mid.1 asks for
 mlib under with-test.  Off, none of the four is in:
 
-  $ ../../../bin/main.exe opam . tst | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . tst
   packages (2):
     mid 1
     tst 1
@@ -262,7 +268,7 @@ mlib under with-test.  Off, none of the four is in:
 --with-test brings in tlib, the queried package's own test dependency, and
 not mlib, which belongs to a package the query merely reaches:
 
-  $ ../../../bin/main.exe opam --with-test . tst | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam --with-test . tst
   packages (3):
     mid 1
     tlib 1
@@ -272,7 +278,7 @@ not mlib, which belongs to a package the query merely reaches:
 
 The other two flags scope the same way, each over its own variable:
 
-  $ ../../../bin/main.exe opam --with-doc . tst | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam --with-doc . tst
   packages (3):
     mid 1
     tdoc 1
@@ -280,7 +286,7 @@ The other two flags scope the same way, each over its own variable:
   encoded solution: 4 core nodes (4 lookups)
   loaded: 6 names, 6 versions
 
-  $ ../../../bin/main.exe opam --with-dev-setup . tst | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam --with-dev-setup . tst
   packages (3):
     dsetup 1
     mid 1
@@ -292,7 +298,7 @@ Naming mid too puts it in the query, so with-test holds of it as well and
 mlib comes in beside tlib.  mlib's own test dependency mleaf stays out:
 mlib is reached, not asked for.
 
-  $ ../../../bin/main.exe opam --with-test . tst mid | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam --with-test . tst mid
   packages (4):
     mid 1
     mlib 1
@@ -307,7 +313,7 @@ a queried name, and cflt.1's conflict
 on dep >= "5" under with-test is void, while its conflict on lib >= "3" on
 linux holds:
 
-  $ ../../../bin/main.exe opam --with-test . cflt | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam --with-test . cflt
   packages (3):
     cflt 1
     dep 9
@@ -321,7 +327,7 @@ carries the version of the opam whose answers are being matched, 2.5.2
 unless told otherwise.  ov.1 is available
 below 2.3 and ov.2 from 2.3 on:
 
-  $ ../../../bin/main.exe opam . ov | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . ov
   packages (1):
     ov 2
   encoded solution: 2 core nodes (2 lookups)
@@ -329,7 +335,7 @@ below 2.3 and ov.2 from 2.3 on:
 
 --opam-version asks the same question as another opam would:
 
-  $ ../../../bin/main.exe opam --opam-version 2.2.0 . ov | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam --opam-version 2.2.0 . ov
   packages (1):
     ov 1
   encoded solution: 2 core nodes (2 lookups)
@@ -341,7 +347,7 @@ the list it builds).  ord-p.2 and ord-q.2 each need ord-r on the other side
 of 2, so whichever name is decided first keeps its newest: asked for ord-p
 then ord-q, opam installs ord-q.2, ord-p.1 and ord-r.1:
 
-  $ ../../../bin/main.exe opam . ord-p ord-q | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . ord-p ord-q
   packages (3):
     ord-p 1
     ord-q 2
@@ -352,7 +358,7 @@ then ord-q, opam installs ord-q.2, ord-p.1 and ord-r.1:
 In PubGrub's own order the answer is as valid, but which name keeps its
 newest is PubGrub's choice:
 
-  $ ../../../bin/main.exe opam --order=pubgrub . ord-p ord-q | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam --order=pubgrub . ord-p ord-q
   packages (3):
     ord-p 2
     ord-q 1
@@ -364,14 +370,14 @@ newest is PubGrub's choice:
 a generator seeded by --seed: the same seed gives the same answer, and
 another seed may give another, a resolution all the same:
 
-  $ seed0() { ../../../bin/main.exe opam --order=random --seed 0 . ord-p ord-q | sed -E '/^(parse|solve) [0-9.]+s$/d'; }; [ "$(seed0)" = "$(seed0)" ] && seed0
+  $ seed0() { untimed ../../../bin/main.exe opam --order=random --seed 0 . ord-p ord-q; }; [ "$(seed0)" = "$(seed0)" ] && seed0
   packages (3):
     ord-p 2
     ord-q 1
     ord-r 2
   encoded solution: 4 core nodes (6 lookups)
   loaded: 3 names, 6 versions
-  $ ../../../bin/main.exe opam --order=random --seed 2 . ord-p ord-q | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam --order=random --seed 2 . ord-p ord-q
   packages (3):
     ord-p 1
     ord-q 2
@@ -384,7 +390,7 @@ Every filter reads the package's own version as version, _:version or
 at 2, and its conflict with svl >= "2" too, so opam installs svd.2 beside
 svl.1:
 
-  $ ../../../bin/main.exe opam . svd | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . svd
   packages (2):
     svd 2
     svl 1
@@ -396,27 +402,27 @@ expression, so two leave avm.1 available; flags: are idents, so a string
 leaves flg.2 unflagged, while a tags: entry flags:avoid-version flags tg.2;
 and brk.2, which does not parse, is skipped:
 
-  $ ../../../bin/main.exe opam . avm | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . avm
   packages (1):
     avm 1
   encoded solution: 2 core nodes (2 lookups)
   loaded: 1 names, 1 versions
   parser dropped 1 declarations
 
-  $ ../../../bin/main.exe opam . flg | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . flg
   packages (1):
     flg 2
   encoded solution: 2 core nodes (2 lookups)
   loaded: 1 names, 2 versions
   parser dropped 1 declarations
 
-  $ ../../../bin/main.exe opam . tg | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . tg
   packages (1):
     tg 1
   encoded solution: 2 core nodes (2 lookups)
   loaded: 1 names, 2 versions
 
-  $ ../../../bin/main.exe opam . brk | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . brk
   packages (1):
     brk 1
   encoded solution: 2 core nodes (2 lookups)
@@ -429,14 +435,14 @@ reads last, the later in byte order, and that directory's opam file.
 eqv.1.00 needs dep.3 where eqv.1.0 needs dep.9, and asking for either
 version installs eqv.1.00 with dep.3:
 
-  $ ../../../bin/main.exe opam . eqv.1.0 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . eqv.1.0
   packages (2):
     dep 3
     eqv 1.00
   encoded solution: 3 core nodes (3 lookups)
   loaded: 2 names, 3 versions
 
-  $ ../../../bin/main.exe opam . eqv.1.00 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  $ untimed ../../../bin/main.exe opam . eqv.1.00
   packages (2):
     dep 3
     eqv 1.00
