@@ -269,9 +269,9 @@ let conj_c = function
   | [] -> VTop
   | c :: cs -> List.fold_left (fun a b -> VAnd (a, b)) c cs
 
-let disj_c = function
-  | [] -> VTop
-  | c :: cs -> List.fold_left (fun a b -> VOr (a, b)) c cs
+(* no empty disjunction: VTop is the empty conjunction's, and nothing here
+   stands for the empty set of versions *)
+let disj_c c cs = List.fold_left (fun a b -> VOr (a, b)) c cs
 
 (* An atom with a brace formula distributes over the DNF branches, but only
    as far as their filters differ: opam evaluates a brace's filters and
@@ -293,14 +293,16 @@ let atom_of ~owner ~selfv (n : string) (braces : value list) : off =
           (fun acc (fs, cs) ->
             if List.mem_assoc fs acc then
               List.map
-                (fun (g, css) -> if g = fs then (g, css @ [ cs ]) else (g, css))
+                (fun (g, (c, css)) ->
+                  if g = fs then (g, (c, css @ [ cs ])) else (g, (c, css)))
                 acc
-            else acc @ [ (fs, [ cs ]) ])
+            else acc @ [ (fs, (cs, [])) ])
           [] (dnf false b)
       in
       let atoms =
         List.map
-          (fun (fs, css) -> OAtom (n, conj_f fs, disj_c (List.map conj_c css)))
+          (fun (fs, (c, css)) ->
+            OAtom (n, conj_f fs, disj_c (conj_c c) (List.map conj_c css)))
           by_filter
       in
       match atoms with

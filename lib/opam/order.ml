@@ -12,7 +12,7 @@ end)
    is the conjunctive spine in source order (opamSolver.ml,
    [preresolve_deps] then [ands_to_list]), and that is the order
    0install walks. *)
-let spine_index ar (n : string) (v : string) : (string, int) Hashtbl.t =
+let spine_positions ar (n : string) (v : string) : (string, int) Hashtbl.t =
   let tbl = Hashtbl.create 16 in
   let rec spine acc : Opam_parse.off -> Opam_parse.off list = function
     | OAnd (a, b) -> spine (spine acc a) b
@@ -70,7 +70,7 @@ let zero_install ar query st ~touch =
   let order_cache = Hashtbl.create 4096 in
   (* opam's create_spec conses each atom onto the list 0install walks
      (opamBuiltin0install.ml:47-53, 65-67), so the query goes last first *)
-  let query_index =
+  let query_positions =
     let tbl = Hashtbl.create 16 in
     List.iteri
       (fun i (n, _) -> if not (Hashtbl.mem tbl n) then Hashtbl.add tbl n i)
@@ -94,7 +94,7 @@ let zero_install ar query st ~touch =
           match Hashtbl.find_opt order_cache (n, v) with
           | Some t -> t
           | None ->
-              let t = spine_index ar n v in
+              let t = spine_positions ar n v in
               Hashtbl.add order_cache (n, v) t;
               t
         in
@@ -107,7 +107,9 @@ let zero_install ar query st ~touch =
        on *)
     | PFR.Name.Orig Red.TName.Root, _ ->
         let rank m =
-          match spine_rank query_index m with Some i -> i | None -> max_int
+          match spine_rank query_positions m with
+          | Some i -> i
+          | None -> max_int
         in
         List.filter walkable ds
         |> List.stable_sort (fun a b -> compare (rank a) (rank b))

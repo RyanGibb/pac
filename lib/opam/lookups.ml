@@ -141,7 +141,7 @@ let default_opam_version = "2.5.2"
 (* There is no cone pass: the repository is uncovered as the solver asks
    for it, so each lookup's sub-instance must be complete at the moment it
    answers.  That holds by construction for all but one lookup: versions
-   and root_inst read names that load_name takes whole; inst_for reads
+   and root_inst read names that load_name takes whole; pkg_inst reads
    (n, v)'s own declarations and the repository at the names they
    mention, and loads every one of them; depexts_of reads the selected
    packages' own declarations.
@@ -268,7 +268,9 @@ let repo_and_avail ar (ns : string list) =
     (List.sort_uniq String.compare ns);
   (pkgset_of !repo, !avl)
 
-let dummy = Op.OFAtom ("", Op.FlFalse, Op.VCTop)
+(* an atom under a false guard, since the calculus spells no empty formula
+   otherwise *)
+let empty_formula = Op.OFAtom ("", Op.FlFalse, Op.VCTop)
 
 let empty_inst =
   {
@@ -280,11 +282,13 @@ let empty_inst =
     inst_dxt = [];
     inst_pins = Op.PkgSet.empty;
     inst_pind = [];
-    inst_goal = dummy;
-    inst_inv = dummy;
+    inst_goal = empty_formula;
+    inst_inv = empty_formula;
   }
 
-let inst_for ar (p : string * string) : Op.coq_Inst =
+(* Lookup.pkgSubInst: (n, v)'s own declarations, and the repository at the
+   names they mention *)
+let pkg_inst ar (p : string * string) : Op.coq_Inst =
   let n, v = p in
   let m = meta_of ar n v in
   let dep_fibre =
@@ -327,29 +331,30 @@ let inst_for ar (p : string * string) : Op.coq_Inst =
     inst_pind = pind_fibre;
   }
 
-(* A query is realised as the synthetic root's dependencies: one atom per
-   requested name, admitting the versions that name's constraint admits.
-   The root's other conjunct is the switch invariant, which is empty here
-   -- nothing is installed and nothing is pinned -- and an atom under a
-   false guard is how an empty formula is spelled. *)
+(* Lookup.rootSubInst.  A query is realised as the synthetic root's
+   dependencies: one atom per requested name, admitting the versions that
+   name's constraint admits.  The root's other conjunct is the switch
+   invariant, which is empty here: nothing is installed and nothing is
+   pinned. *)
 let root_inst ar (query : (string * Opam_parse.vc) list) : Op.coq_Inst =
   let repo, avl = repo_and_avail ar (List.map fst query) in
   let goal =
     match List.map (fun (n, c) -> Op.OFAtom (n, Op.FlTrue, xvc c)) query with
-    | [] -> dummy
+    | [] -> empty_formula
     | a :: rest -> List.fold_left (fun f b -> Op.OFAnd (f, b)) a rest
   in
   { empty_inst with Op.inst_repo = repo; inst_avl = avl; inst_goal = goal }
 
-(* the class relation restricted to k, which is all the class package's
-   version lookup reads.  Built from class_table at every ask and never
+(* Lookup.classSubInst: the class relation restricted to k, which is all
+   the class package's version lookup reads.  Built from class_table at every ask and never
    held -- see the note above [Op]. *)
-let cls_inst ar (k : string) : Op.coq_Inst =
+let class_inst ar (k : string) : Op.coq_Inst =
   {
     empty_inst with
     Op.inst_cls = clsrel_of (List.map (fun q -> (q, k)) (class_members ar k));
   }
 
+(* Lookup.nameSubInst *)
 let name_inst ar (n : string) : Op.coq_Inst =
   let repo, avl = repo_and_avail ar [ n ] in
   { empty_inst with Op.inst_repo = repo; inst_avl = avl }
@@ -382,7 +387,7 @@ let pp_name fmt (n : PFR.Name.t) =
 
 (* PubGrub decides the compare-maximum candidate, so preference lives
    here.  Newest-first among a name's own versions falls out of the
-   encoded order, since V.compare is the opam order, and the absent
+   encoded order, since the version order is opam's, and the absent
    version is the encoded order's greatest, so a name only a conflict
    reaches is left out rather than installed.  On top of it, a
    version flagged avoid-version or deprecated is a last resort rather
@@ -436,13 +441,13 @@ let tag ar (tn : PFR.Name.t) (tv : PFR.Version.t) : PVersion.t =
   | _ -> { PVersion.avoid = false; v = tv }
 
 (* the encoder reads this at the names a formula negates, all of which
-   inst_for has loaded; a class package's versions are its declarers
+   pkg_inst has loaded; a class package's versions are its declarers
    among the names loaded so far, and so are never held *)
 let oracle rho ar (tn : Red.TName.t) : PF.VSet.t =
   match tn with
   | Red.TName.Real m -> Red.versions rho (name_inst ar m) tn
   | Red.TName.Root -> PF.VSet.singleton Red.TVer.UnitV
-  | Red.TName.Cls k -> Red.versions rho (cls_inst ar k) tn
+  | Red.TName.Cls k -> Red.versions rho (class_inst ar k) tn
 
 let lookups rho ar : L.t =
   L.create
@@ -459,5 +464,5 @@ let touch rho ar query st ((tn, tv) : T.Pkg.t) =
   | PFR.Name.Orig Red.TName.Root, _ ->
       process Red.rootPkg (fun () -> root_inst ar query)
   | PFR.Name.Orig (Red.TName.Real n), PFR.Version.Orig (Red.TVer.RV v) ->
-      process (Red.TName.Real n, Red.TVer.RV v) (fun () -> inst_for ar (n, v))
+      process (Red.TName.Real n, Red.TVer.RV v) (fun () -> pkg_inst ar (n, v))
   | _ -> ()
