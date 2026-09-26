@@ -353,9 +353,6 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
         right; apply List.in_map_iff; exists l; split; [reflexivity | exact Hl].
     Qed.
 
-    Theorem reduceReal_root : forall phi, T.PkgSet.In root (reduceReal phi).
-    Proof. intro phi; apply mem_reduceReal; left; reflexivity. Qed.
-
     Theorem reduceDeps_functionalInName : forall phi,
         T.FunctionalInName (reduceDeps phi).
     Proof.

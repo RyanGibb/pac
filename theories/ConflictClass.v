@@ -188,10 +188,6 @@ Module ConflictClass (N V : UsualOrderedType).
         reflexivity.
     Qed.
 
-    Definition reduce (R : PkgSet.t) (D : C.DepRel.t) (Om : InClassRel.t) :
-        T.PkgSet.t * T.DepRel.t :=
-      (reduceReal R Om, reduceDeps D Om).
-
     Definition tryInvPkg (p : T.Pkg.t) : option Pkg.t :=
       match p with
       | (Name.Orig n, Version.Orig v) => Some (n, v)

@@ -132,8 +132,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Module Cls := FSetUOT ClsElt.
 
   Module ClsFibred := FibredRel Pkg MCOT ClsElt Cls.
-  (* Total class lookup with default MANo; instances are expected to be
-     functional in the package. *)
   Definition classOf (M : Cls.t) (p : Pkg.t) : MAClass :=
     match Cls.min_elt (ClsFibred.tailFibre M p) with
     | Some e => snd e
@@ -775,10 +773,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                PkgSet.In q (multiarchResolution S) -> PkgSet.In q R).
     { intros q Hq.
       rewrite mem_multiarchResolution in Hq.
-      apply Hsub in Hq.
-      unfold reduceReal in *; rewrite SOmr.mem_map in Hq.
-      destruct Hq as [p [HpR Hpe]].
-      apply embedPkg_injective in Hpe; subst q; exact HpR. }
+      apply Hsub in Hq; unfold reduceReal in Hq.
+      exact (proj1 (SOmr.mem_map_inj _ _ _ embedPkg_injective) Hq). }
     constructor.
     - exact HinR.
     - rewrite mem_multiarchResolution; exact Hroot.
@@ -888,11 +884,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     intros R D Pi G M r S HS.
     destruct HS as [HSsub HSroot HScc HSca HSci HSvu].
     constructor.
-    - intros x Hx.
-      unfold reduceReal in *; rewrite SOmr.mem_map in Hx; unfold reduceReal; rewrite SOmr.mem_map.
-      destruct Hx as [p [HpS Hpe]]; exists p; split;
-        [exact (HSsub p HpS) | exact Hpe].
-    - unfold reduceReal; rewrite SOmr.mem_map; exists r; split; [exact HSroot | reflexivity].
+    - exact (SOmr.map_mono _ _ _ _ HSsub (fun _ => eq_refl)).
+    - unfold reduceReal; apply (SOmr.mem_map_inj _ _ _ embedPkg_injective).
+      exact HSroot.
     - intros ph HphT A HA.
       unfold reduceReal in *; rewrite SOmr.mem_map in HphT; destruct HphT as [p [HpS Hpe]]; subst ph.
       rewrite mem_reduceDeps in HA.
@@ -904,7 +898,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       exists (reduceAtom (parch p) a); split.
       { apply List.in_map; exact Hat. }
       exists (embedPkg q); split.
-      { unfold reduceReal; rewrite SOmr.mem_map; exists q; split; [exact HqS | reflexivity]. }
+      { unfold reduceReal; apply (SOmr.mem_map_inj _ _ _ embedPkg_injective).
+        exact HqS. }
       exact (proj1 (match_transfer R Pi M (parch p) a q (HSsub q HqS)) HqM).
     - intros ph HphT ea x HaG [qh [HqhT [Hne [Hex HM]]]].
       unfold reduceReal in *; rewrite SOmr.mem_map in HphT; destruct HphT as [p1 [Hp1S Hp1e]].
@@ -975,16 +970,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       exact (HSvu (pn, pa) pv pv' HpS Hp'S).
   Qed.
 
-  Corollary multiarchResolution_reduceReal : forall S,
-      multiarchResolution (reduceReal S) = S.
-  Proof.
-    intro S; apply PkgSet.ext; intro q.
-    rewrite mem_multiarchResolution; unfold reduceReal; rewrite SOmr.mem_map.
-    split.
-    - intros [p [HpS Hp]]; rewrite (embedPkg_injective _ _ Hp); exact HpS.
-    - intro H; exists q; split; [exact H | reflexivity].
-  Qed.
-
   Corollary debian_ma_core_soundness : forall R D Rec Pi G M r S,
       Deb.T.IsResolution
         (Deb.reduceReal (reduceReal R) (reduceDeps D) (reduceRec Rec)
@@ -1014,17 +999,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     intros R D Rec Pi G M r S H.
     exact (Deb.debian_completeness _ _ _ _ _ (embedPkg r) (reduceReal S)
              (debian_ma_completeness R D Pi G M r S H)).
-  Qed.
-
-  Corollary multiarchResolution_core : forall R D Rec Pi G M S,
-      multiarchResolution
-        (Deb.debianResolution
-           (Deb.coreResolution (reduceReal R) (reduceDeps D) (reduceRec Rec)
-              (reduceProv R Pi M) (reduceConf R G M) (reduceReal S))) = S.
-  Proof.
-    intros R D Rec Pi G M S.
-    rewrite Deb.debianResolution_coreResolution.
-    apply multiarchResolution_reduceReal.
   Qed.
 
   Module Lookup.
@@ -1176,7 +1150,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         split; [exact He | reflexivity].
     Qed.
 
-    (* The class table cut down to the packages reduceProv Rp Pis reads. *)
     Definition provClsPreimage (M : Cls.t) (Rp : PkgSet.t) (Pis : Prov.t) :
         Cls.t :=
       clsPreimage M (PkgSet.union Rp (provOwners Pis)).
@@ -1326,8 +1299,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       apply Deb.SOew.filterMap_restrict.
       - exact (reduceProv_mono R Rp Pi Pis M Hr Hp).
       - intros [q [mx vt]] Hin Hf; cbn [fst snd Deb.aname Deb.aform] in Hf.
-        destruct (Deb.NEqb.eqb mx (m, x)) eqn:Hn; [| discriminate Hf].
-        apply Deb.NEqb.eqb_true_iff in Hn as ->.
+        rewrite if_some_iff, Bool.andb_true_iff, Deb.NEqb.eqb_true_iff in Hf.
+        destruct Hf as [[-> _] _].
         apply (reduceProv_node R Pi M ns Rp Pis q m x vt Hsl Hm); exact Hin.
     Qed.
 
@@ -1663,7 +1636,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       apply mem_clauseNames; exists a0; split; [exact Ha0 | reflexivity].
     Qed.
 
-    Theorem versions_lookupOrigMA : forall R D Rec Pi G M (r : Pkg.t)
+    Theorem versions_lookupOrig : forall R D Rec Pi G M (r : Pkg.t)
                                            (n : N.t) (b : A.t),
         PkgSet.In r R ->
         (exists s h,
@@ -1692,7 +1665,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         injection Hq as -> ->; reflexivity.
     Qed.
 
-    Theorem versions_lookupOrigMA_pseudo :
+    Theorem versions_lookupOrig_pseudo :
       forall R D Rec Pi G M (n : N.t) (x : NameArch),
         (forall b, x <> QAArch b) ->
         (exists s h,
@@ -1720,7 +1693,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       exact (Hx b Hb).
     Qed.
 
-    Theorem dependees_lookupOrigMA : forall R D Rec Pi G M (p : Pkg.t),
+    Theorem dependees_lookupOrig : forall R D Rec Pi G M (p : Pkg.t),
         PkgSet.In p R ->
         Deb.dependees (reduceReal R) (reduceDeps D) (reduceRec Rec)
           (reduceProv R Pi M)
@@ -1855,23 +1828,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           split; [exact Hx | exact Hy].
     Qed.
 
-    Theorem versions_lookupDisjunctMA : forall R D Rec Pi G M (p : Pkg.t) Al,
-        (exists s h,
-            Deb.T.DepRel.In
-              (s, (Deb.Name.Disjunct (reduceClause (parch p) Al), h))
-              (Deb.reduceDeps (reduceReal R) (reduceDeps D) (reduceRec Rec)
-                 (reduceProv R Pi M) (reduceConf R G M))) ->
-        Deb.versions (reduceReal R) (reduceDeps D) (reduceRec Rec)
-          (reduceProv R Pi M)
-          (reduceConf R G M)
-          (Deb.Name.Disjunct (reduceClause (parch p) Al)) =
-        Deb.versionsDisj (reduceClause (parch p) Al).
-    Proof.
-      intros R D Rec Pi G M p Al H.
-      exact (Deb.Lookup.versions_lookupDisjunct _ _ _ _ _ _ H).
-    Qed.
-
-    Theorem dependees_lookupDisjunctMA :
+    Theorem dependees_lookupDisjunct :
       forall R D Rec Pi G M (p : Pkg.t) Al (a' : Deb.Atom.t),
         Deb.T.PkgSet.In
           (Deb.Name.Disjunct (reduceClause (parch p) Al),
@@ -1907,7 +1864,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                (preimageProvSubInst R Pi _) Hm).
     Qed.
 
-    Theorem versions_lookupSoftMA : forall R D Rec Pi G M (p : Pkg.t) Al,
+    Theorem versions_lookupSoft : forall R D Rec Pi G M (p : Pkg.t) Al,
         Deps.In (p, Al) Rec ->
         Deb.versions (reduceReal R) (reduceDeps D) (reduceRec Rec)
           (reduceProv R Pi M) (reduceConf R G M)
@@ -1918,7 +1875,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       rewrite (hasClauseb_reduceDeps Rec p Al HD); reflexivity.
     Qed.
 
-    Theorem dependees_lookupSoftMA :
+    Theorem dependees_lookupSoft :
       forall R D Rec Pi G M (p : Pkg.t) Al (a' : Deb.Atom.t),
         Deb.T.PkgSet.In
           (Deb.Name.Soft (reduceClause (parch p) Al), Deb.Version.Atom a')
@@ -1952,7 +1909,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                (preimageProvSubInst R Pi _) Hm).
     Qed.
 
-    Theorem versions_lookupSelectorAgreeMA :
+    Theorem versions_lookupSelectorAgree :
       forall R D Rec (D' Rec' : Deb.Deps.t) Pi G M (p : Pkg.t) (a : Atom.t),
         Deb.occursAtomb (Deb.allClauses (reduceDeps D) (reduceRec Rec))
           (reduceAtom (parch p) a) =
@@ -1986,7 +1943,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       reflexivity.
     Qed.
 
-    Theorem dependees_lookupSelectorAgreeMA :
+    Theorem dependees_lookupSelectorAgree :
       forall R D Rec (D' Rec' : Deb.Deps.t) Pi G M (p : Pkg.t) (a : Atom.t)
              (y : Deb.Version.t),
         Deb.occursAtomb (Deb.allClauses (reduceDeps D) (reduceRec Rec))
@@ -2027,7 +1984,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           reflexivity.
     Qed.
 
-    Theorem versions_lookupSelectorMA :
+    Theorem versions_lookupSelector :
       forall R D Rec Pi G M (p : Pkg.t) Al (a : Atom.t),
         Deps.In (p, Al) D -> List.In a Al ->
         Deb.versions (reduceReal R) (reduceDeps D) (reduceRec Rec)
@@ -2041,7 +1998,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           Deb.Conf.empty (Deb.Name.Selector (reduceAtom (parch p) a)).
     Proof.
       intros R D Rec Pi G M p Al a HD Ha.
-      apply versions_lookupSelectorAgreeMA.
+      apply versions_lookupSelectorAgree.
       rewrite (Deb.occursAtomb_allClausesL (reduceDeps D) (reduceRec Rec)
                  (reduceAtom (parch p) a)
                  (occursAtomb_reduceDeps D p Al a HD Ha)),
@@ -2052,7 +2009,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       reflexivity.
     Qed.
 
-    Theorem dependees_lookupSelectorMA :
+    Theorem dependees_lookupSelector :
       forall R D Rec Pi G M (p : Pkg.t) Al (a : Atom.t) (y : Deb.Version.t),
         Deps.In (p, Al) D -> List.In a Al ->
         Deb.dependees (reduceReal R) (reduceDeps D) (reduceRec Rec)
@@ -2068,7 +2025,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           (Deb.Name.Selector (reduceAtom (parch p) a), y).
     Proof.
       intros R D Rec Pi G M p Al a y HD Ha.
-      apply dependees_lookupSelectorAgreeMA.
+      apply dependees_lookupSelectorAgree.
       rewrite (Deb.occursAtomb_allClausesL (reduceDeps D) (reduceRec Rec)
                  (reduceAtom (parch p) a)
                  (occursAtomb_reduceDeps D p Al a HD Ha)),
@@ -2079,7 +2036,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       reflexivity.
     Qed.
 
-    Theorem versions_lookupSelectorRecMA :
+    Theorem versions_lookupSelectorRec :
       forall R D Rec Pi G M (p : Pkg.t) Al (a : Atom.t),
         Deps.In (p, Al) Rec -> List.In a Al ->
         Deb.versions (reduceReal R) (reduceDeps D) (reduceRec Rec)
@@ -2093,7 +2050,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           Deb.Conf.empty (Deb.Name.Selector (reduceAtom (parch p) a)).
     Proof.
       intros R D Rec Pi G M p Al a HRec Ha.
-      apply versions_lookupSelectorAgreeMA.
+      apply versions_lookupSelectorAgree.
       rewrite (Deb.occursAtomb_allClausesR (reduceDeps D) (reduceRec Rec)
                  (reduceAtom (parch p) a)
                  (occursAtomb_reduceDeps Rec p Al a HRec Ha)),
@@ -2104,7 +2061,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       reflexivity.
     Qed.
 
-    Theorem dependees_lookupSelectorRecMA :
+    Theorem dependees_lookupSelectorRec :
       forall R D Rec Pi G M (p : Pkg.t) Al (a : Atom.t) (y : Deb.Version.t),
         Deps.In (p, Al) Rec -> List.In a Al ->
         Deb.dependees (reduceReal R) (reduceDeps D) (reduceRec Rec)
@@ -2120,7 +2077,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           (Deb.Name.Selector (reduceAtom (parch p) a), y).
     Proof.
       intros R D Rec Pi G M p Al a y HRec Ha.
-      apply dependees_lookupSelectorAgreeMA.
+      apply dependees_lookupSelectorAgree.
       rewrite (Deb.occursAtomb_allClausesR (reduceDeps D) (reduceRec Rec)
                  (reduceAtom (parch p) a)
                  (occursAtomb_reduceDeps Rec p Al a HRec Ha)),
@@ -2132,4 +2089,23 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
   End Lookup.
+
+  Corollary multiarchResolution_reduceReal : forall S,
+      multiarchResolution (reduceReal S) = S.
+  Proof.
+    intro S; apply PkgSet.ext; intro q.
+    rewrite mem_multiarchResolution; unfold reduceReal.
+    exact (SOmr.mem_map_inj _ _ _ embedPkg_injective).
+  Qed.
+
+  Corollary multiarchResolution_core : forall R D Rec Pi G M S,
+      multiarchResolution
+        (Deb.debianResolution
+           (Deb.coreResolution (reduceReal R) (reduceDeps D) (reduceRec Rec)
+              (reduceProv R Pi M) (reduceConf R G M) (reduceReal S))) = S.
+  Proof.
+    intros R D Rec Pi G M S.
+    rewrite Deb.debianResolution_coreResolution.
+    apply multiarchResolution_reduceReal.
+  Qed.
 End DebianMA.

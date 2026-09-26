@@ -195,12 +195,6 @@ Module Virtual (N V : UsualOrderedType).
         rewrite NEqb.eqb_refl; cbn [andb]; apply memTopb_iff; exact Hm.
     Qed.
 
-    (* A guard inside a pattern-matching comprehension body is only exposed
-       once the element is destructed, too late for mem_filterMap_if. *)
-    Lemma if_some_iff : forall (A : Type) (b : bool) (x y : A),
-        (if b then Some x else None) = Some y <-> b = true /\ x = y.
-    Proof. intros A [|] x y; cbn; intuition congruence. Qed.
-
     Module SOpp := SetOps ProvElt T.Pkg ProvidesRel T.PkgSet.
     Definition realProviderBlock (Pi : ProvidesRel.t) (p : Pkg.t) (n : N.t)
         (vs : VSet.t) : T.PkgSet.t :=

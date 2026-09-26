@@ -593,10 +593,6 @@ Module Feature (N V F : UsualOrderedType).
       Module SupportFibred := FibredRel Pkg F PkgF SupportSet.
       Module AddlDepRelFibred :=
         FibredLabelledRel PkgF N VSFS AddlDepElt AddlDepRel.
-      (* support is a relation between packages and features, so neither of
-         its fibres alone cuts it down to the support pairs that introduce
-         one name: those are pinned by the base name and the feature at
-         once. *)
       Definition supportFibre (support : SupportSet.t) (n : N.t) (f : F.t)
           : SupportSet.t :=
         SupportSet.filter (fun '((m, _), g) =>

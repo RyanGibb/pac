@@ -159,7 +159,7 @@ let install_root ar (v : P.ver) =
    complete at the moment the lookup answers.  Each is complete by
    construction -- name_set, support_of_name and repo_preimage load every
    name they read whole, and meta and the witness scan load the owner --
-   except the one versions_lookupLinkSub names.  Its
+   except the one versions_lookupLink names.  Its
    sub-instance is the preimage of the link relation at l -- every crate
    version declaring l -- and no declaration of any one crate names the
    other declarers, so nothing a loaded crate carries can bring them in:
@@ -507,7 +507,7 @@ let crate_msrv_ok st (rustc : string) ((n, v) : string * string) : bool =
       | Some m -> msrv_ok rustc m.P.v_msrv)
 
 (* the support relation at a name -- Lookup.supportPreimage at {n},
-   which versions_lookupFeatPSub reads -- as the union of its versions'
+   which versions_lookupFeatP reads -- as the union of its versions'
    fibres.  Memoized for the same reason name_set is: load_name takes a
    name whole, so this cannot grow once it has been asked. *)
 let support_of_name st (n : string) : Cg.SupportSet.t =
@@ -517,7 +517,7 @@ let support_of_name st (n : string) : Cg.SupportSet.t =
            (fun (v : P.ver) -> (fibres_of st (n, v.P.v_vers)).r_supp)
            (load_name st.ar n)))
 
-(* the witness versions_lookup{Slot,Decision}Sub name: a version of n in
+(* the witness versions_lookup{Slot,Decision} name: a version of n in
    granularity class gr whose own declarations make the name, found by
    scanning n's index entry, which holds every version of n and is loaded
    whole.  With none, the empty fibres stand for slot_declines and
@@ -575,7 +575,7 @@ let empty_sub =
     links = Cg.LinkRel.empty;
   }
 
-(* one branch per versions_lookup{Root,Crate,FeatP,Slot,Decision,Link}Sub,
+(* one branch per versions_lookup{Root,Crate,FeatP,Slot,Decision,Link},
    each passing the components its theorem names and nothing else *)
 let versions st (tn : Cg.NPlus.t) : Cg.VPlus.t list =
   let call s =
@@ -605,9 +605,9 @@ let versions st (tn : Cg.NPlus.t) : Cg.VPlus.t list =
       in
       call { empty_sub with repo; links }
 
-(* one branch per dependees_lookup{Root,Crate,FeatP,Slot,Decision}Sub,
+(* one branch per dependees_lookup{Root,Crate,FeatP,Slot,Decision},
    with the request (rc, rootFeats, default) carried whole as the
-   theorems carry it; the fall-through is dependees_lookupInert, empty *)
+   theorems carry it; the fall-through is dependees_reduceDepsInert, empty *)
 let dependees st (p : T.Pkg.t) : T.Dependees.t list =
   let call s =
     T.DependeesSet.elements

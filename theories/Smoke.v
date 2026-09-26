@@ -1,14 +1,8 @@
-(* Smoke tests. Functor bodies are checked abstractly, so some errors
-   surface only at application time; and the reflexivity examples fail if
-   any definition they exercise stops computing to a normal form (opaque
-   or classical terms in the computational path), which extraction
-   depends on. *)
-
-From Stdlib Require Import MSets.
+From Stdlib Require Import MSets List.
 From PackageCalculus Require Import Prelude Core Complexity Versions Semver
   Conflict ConflictClass Concurrent PeerDependency Visibility Feature
   Virtual PackageFormula VariableFormula FeatureConcurrent Debian DebianMA
-  Opam Cargo Alpine.
+  Opam Cargo Alpine Npm.
 
 Module C := Core Nat_as_OT Nat_as_OT.
 Module Cx := Complexity Nat_as_OT Nat_as_OT Nat_as_OT.
@@ -269,7 +263,6 @@ Definition opInst : Op.Inst :=
     (((1, 10),
       Op.OFAtom 2 (Op.FlCmp OpEq false 1) (Op.VCCmp OpGe 15)) :: nil)
     nil
-    nil
     Op.ClsRel.empty
     nil
     (((2, 20), (7, Op.FlTrue)) :: nil)
@@ -278,13 +271,13 @@ Definition opInst : Op.Inst :=
     (Op.OFAtom 1 Op.FlTrue Op.VCTop)
     (Op.OFAtom 1 Op.FlFalse Op.VCTop).
 
-Example opam_transR_computes :
-  Op.Reduction.PF.PkgSet.cardinal (Op.Reduction.transR opRho opInst) = 3.
+Example opam_reduceReal_computes :
+  Op.Reduction.PF.PkgSet.cardinal (Op.Reduction.reduceReal opRho opInst) = 3.
 Proof. reflexivity. Qed.
 
-Example opam_transD_computes :
+Example opam_reduceDeps_computes :
   Op.Reduction.PF.DepRel.cardinal
-    (Op.Reduction.transD opRho opInst) = 2.
+    (Op.Reduction.reduceDeps opRho opInst) = 2.
 Proof. reflexivity. Qed.
 
 Example opam_depexts_computes :
@@ -351,11 +344,10 @@ Definition alpI : Alp.Inst :=
                                 (Alp.CondSet.add (Alp.DNeg (5, Alp.CAny))
                                    Alp.CondSet.empty)) Alp.InstallIf.empty
    ; Alp.inst_world := Alp.WSet.add (Alp.DPos (1, Alp.CAny)) Alp.WSet.empty
-   ; Alp.inst_prio := Alp.Prio.empty
-   ; Alp.inst_repl := Alp.Repl.empty |}.
+   ; Alp.inst_prio := Alp.Prio.empty |}.
 
-Example alpine_transR_computes :
-  Alp.Reduction.PF.PkgSet.cardinal (Alp.Reduction.transR alpI) = 5.
+Example alpine_reduceReal_computes :
+  Alp.Reduction.PF.PkgSet.cardinal (Alp.Reduction.reduceReal alpI) = 5.
 Proof. reflexivity. Qed.
 
 Example alpine_root_dependees_computes :
@@ -369,4 +361,181 @@ Proof. reflexivity. Qed.
 
 Example alpine_versions_computes :
   Alp.Reduction.PF.VSet.cardinal (Alp.Reduction.versions alpI 4) = 1.
+Proof. reflexivity. Qed.
+
+Module NpmVM <: SemverMatch Nat_as_OT.
+  Definition isPre (_ : nat) : bool := false.
+  Definition sameCore (a b : nat) : bool := Nat.eqb a b.
+End NpmVM.
+
+Module NpmS := Npm Nat_as_OT Nat_as_OT NpmVM.
+
+Definition npmA : nat := 1.
+Definition npmB : nat := 2.
+Definition npmC : nat := 3.
+Definition npmX : nat := 4.
+
+Definition npmEq (v : nat) : NpmS.Range := (NpmS.COp OpEq v :: nil) :: nil.
+
+Definition npmBetween (lo hi : nat) : NpmS.Range :=
+  (NpmS.COp OpGe lo :: NpmS.COp OpLt hi :: nil) :: nil.
+
+Definition npmRepo : NpmS.RepoSet.t :=
+  fold_right NpmS.RepoSet.add NpmS.RepoSet.empty
+    ((npmA, 1) :: (npmB, 1) :: (npmC, 1) :: (npmC, 2) :: (npmC, 3) :: nil).
+
+Definition npmDepB : NpmS.Dependency := NpmS.MkDep npmB npmB (npmEq 1) false.
+Definition npmDepC : NpmS.Dependency :=
+  NpmS.MkDep npmC npmC (npmBetween 2 4) false.
+Definition npmPeerC : NpmS.PeerDependency :=
+  NpmS.MkPeer npmC (npmBetween 1 3) false.
+Definition npmPeerCOpt : NpmS.PeerDependency :=
+  NpmS.MkPeer npmC (npmBetween 1 3) true.
+
+Definition kA : NpmS.NKey.t := (npmA, npmA).
+Definition kB : NpmS.NKey.t := (npmB, npmB).
+Definition kC : NpmS.NKey.t := (npmC, npmC).
+Definition kX : NpmS.NKey.t := (npmX, npmC).
+
+Definition npmShow (h : NpmS.T.Dependees.t)
+  : NpmS.Nm.t * list NpmS.Vs.t :=
+  (fst h, NpmS.T.VSet.elements (snd h)).
+
+Definition npmDeps (I : NpmS.Inst) (s : NpmS.T.Pkg.t) :=
+  List.map npmShow
+    (NpmS.T.DependeesSet.elements (NpmS.Reduction.dependees I s)).
+
+Definition npmInst : NpmS.Inst :=
+  NpmS.MkInst npmRepo
+    (((npmA, 1), npmDepB) :: ((npmA, 1), npmDepC) :: nil)
+    (((npmB, 1), npmPeerC) :: nil) nil (npmA, 1).
+
+Definition npmInstAuto : NpmS.Inst :=
+  NpmS.MkInst npmRepo (((npmA, 1), npmDepB) :: nil)
+    (((npmB, 1), npmPeerC) :: nil) nil (npmA, 1).
+
+Definition npmInstRootPeer : NpmS.Inst :=
+  NpmS.MkInst npmRepo (((npmA, 1), npmDepC) :: nil)
+    (((npmA, 1), npmPeerC) :: nil) nil (npmA, 1).
+
+Definition npmInstRootPeerOpt : NpmS.Inst :=
+  NpmS.MkInst npmRepo (((npmA, 1), npmDepC) :: nil)
+    (((npmA, 1), npmPeerCOpt) :: nil) nil (npmA, 1).
+
+Definition npmInstRootPeerOptBare : NpmS.Inst :=
+  NpmS.MkInst npmRepo (((npmA, 1), npmDepB) :: nil)
+    (((npmA, 1), npmPeerCOpt) :: nil) nil (npmA, 1).
+
+Definition npmInstOpt : NpmS.Inst :=
+  NpmS.MkInst npmRepo (((npmA, 1), npmDepB) :: nil)
+    (((npmB, 1), npmPeerCOpt) :: nil) nil (npmA, 1).
+
+Definition npmDepAlias : NpmS.Dependency :=
+  NpmS.MkDep npmX npmC (npmEq 1) false.
+
+Definition npmInstAlias : NpmS.Inst :=
+  NpmS.MkInst npmRepo
+    (((npmA, 1), npmDepC) :: ((npmA, 1), npmDepAlias) :: nil)
+    nil nil (npmA, 1).
+
+Definition npmInstOvr : NpmS.Inst :=
+  NpmS.MkInst npmRepo (((npmA, 1), npmDepC) :: nil) nil
+    ((npmC, npmEq 3) :: nil) (npmA, 1).
+
+Example npm_versions_computes :
+  NpmS.T.VSet.elements
+    (NpmS.Reduction.versions npmInst (NpmS.Nm.Granular kC 2))
+  = NpmS.Vs.Orig 2 :: nil.
+Proof. reflexivity. Qed.
+
+Example npm_entry_edges_computes :
+  npmDeps npmInst (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
+  = (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1 :: nil)
+    :: (NpmS.Nm.Intermediate kA 1 kC,
+        NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: nil) :: nil.
+Proof. reflexivity. Qed.
+
+Example npm_slot_versions_computes :
+  NpmS.T.VSet.elements
+    (NpmS.Reduction.versions npmInst (NpmS.Nm.Intermediate kA 1 kC))
+  = NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: nil.
+Proof. reflexivity. Qed.
+
+Example npm_peer_edge_computes :
+  npmDeps npmInst (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1)
+  = (NpmS.Nm.Granular kB 1, NpmS.Vs.Orig 1 :: nil)
+    :: (NpmS.Nm.Intermediate kA 1 kC,
+        NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: nil) :: nil.
+Proof. reflexivity. Qed.
+
+Example npm_auto_versions_computes :
+  NpmS.T.VSet.elements
+    (NpmS.Reduction.versions npmInstAuto
+       (NpmS.Nm.Intermediate kA 1 kC))
+  = NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: nil.
+Proof. reflexivity. Qed.
+
+Example npm_auto_edge_computes :
+  npmDeps npmInstAuto (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1)
+  = (NpmS.Nm.Granular kB 1, NpmS.Vs.Orig 1 :: nil)
+    :: (NpmS.Nm.Intermediate kA 1 kC,
+        NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: nil) :: nil.
+Proof. reflexivity. Qed.
+
+Example npm_optional_edge_computes :
+  npmDeps npmInstOpt (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1)
+  = (NpmS.Nm.Granular kB 1, NpmS.Vs.Orig 1 :: nil) :: nil.
+Proof. reflexivity. Qed.
+
+Example npm_root_peer_computes :
+  npmDeps npmInstRootPeer (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
+  = (NpmS.Nm.Intermediate kA 1 kC, NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: nil)
+    :: (NpmS.Nm.Intermediate kA 1 kC,
+        NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: nil) :: nil.
+Proof. reflexivity. Qed.
+
+Example npm_root_peer_optional_computes :
+  npmDeps npmInstRootPeerOpt (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
+  = npmDeps npmInstRootPeer (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1).
+Proof. reflexivity. Qed.
+
+Example npm_root_peer_optional_bare_computes :
+  npmDeps npmInstRootPeerOptBare (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
+  = (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1 :: nil) :: nil.
+Proof. reflexivity. Qed.
+
+Example npm_alias_computes :
+  npmDeps npmInstAlias (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
+  = (NpmS.Nm.Intermediate kA 1 kC,
+     NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: nil)
+    :: (NpmS.Nm.Intermediate kA 1 kX, NpmS.Vs.Orig 1 :: nil) :: nil.
+Proof. reflexivity. Qed.
+
+Example npm_override_computes :
+  npmDeps npmInstOvr (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
+  = (NpmS.Nm.Intermediate kA 1 kC, NpmS.Vs.Orig 3 :: nil) :: nil.
+Proof. reflexivity. Qed.
+
+Module NpmPreVM <: SemverMatch Nat_as_OT.
+  Definition isPre (v : nat) : bool := Nat.odd v.
+  Definition sameCore (a b : nat) : bool :=
+    Nat.eqb (Nat.div a 2) (Nat.div b 2).
+End NpmPreVM.
+
+Module NpmP := Npm Nat_as_OT Nat_as_OT NpmPreVM.
+
+Definition npmPreRepo : NpmP.RepoSet.t :=
+  fold_right NpmP.RepoSet.add NpmP.RepoSet.empty
+    ((npmC, 4) :: (npmC, 5) :: (npmC, 6) :: (npmC, 7) :: nil).
+
+Example npm_prerelease_excluded :
+  NpmP.VSet.elements
+    (NpmP.rangeEval ((NpmP.COp OpGe 4 :: NpmP.COp OpLt 8 :: nil) :: nil)
+       (NpmP.realVersions npmPreRepo npmC)) = 4 :: 6 :: nil.
+Proof. reflexivity. Qed.
+
+Example npm_prerelease_admitted :
+  NpmP.VSet.elements
+    (NpmP.rangeEval ((NpmP.COp OpGe 5 :: NpmP.COp OpLt 8 :: nil) :: nil)
+       (NpmP.realVersions npmPreRepo npmC)) = 5 :: 6 :: nil.
 Proof. reflexivity. Qed.

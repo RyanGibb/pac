@@ -5,7 +5,7 @@ theories/ does not define.
 A comment cites a Rocq name when it writes a qualified path whose head is a
 theories/ module or a driver's alias of one (Lookup.versions_lookupOrig,
 Red.versions, DMA.Deb.vtMatchb), a name the Rocq naming scheme alone produces
-(snake prefix, camel suffix: dependees_lookupInert), a name after
+(snake prefix, camel suffix: dependees_reduceDepsInert), a name after
 Lemma/Theorem/Definition, or a file X.v.  A trailing * is a prefix glob and
 must match at least one name.  Only comments are read, so the extracted code
 itself is checked by the compiler, not here.

@@ -1696,15 +1696,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       rewrite (Huniq n1 v1 v2 Hp1 Hp2); reflexivity.
   Qed.
 
-  Corollary debianResolution_coreResolution : forall R D Rec Pi G S,
-      debianResolution (coreResolution R D Rec Pi G S) = S.
-  Proof.
-    intros R D Rec Pi G S; apply PkgSet.ext; intros [n v].
-    rewrite mem_debianResolution, mem_coreResolution.
-    unfold embedPkg; cbn [fst snd].
-    split; [intro H; inversion H; assumption | apply CoreReal].
-  Qed.
-
   Module Lookup.
 
     Module SOcn := SetOps ClauseElt N Deps NSet.
@@ -2365,4 +2356,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Qed.
 
   End Lookup.
+
+  Corollary debianResolution_coreResolution : forall R D Rec Pi G S,
+      debianResolution (coreResolution R D Rec Pi G S) = S.
+  Proof.
+    intros R D Rec Pi G S; apply PkgSet.ext; intros [n v].
+    rewrite mem_debianResolution, mem_coreResolution.
+    unfold embedPkg; cbn [fst snd].
+    split; [intro H; inversion H; assumption | apply CoreReal].
+  Qed.
 End Debian.

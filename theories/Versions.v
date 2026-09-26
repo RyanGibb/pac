@@ -29,12 +29,6 @@ Module OpComp <: ComparableType.
 End OpComp.
 Module OpOT := UOTFromCompare OpComp.
 
-Definition cmpComplement (op : CmpOp) : CmpOp :=
-  match op with
-  | OpGe => OpLt | OpGt => OpLe | OpLe => OpGt
-  | OpLt => OpGe | OpEq => OpNe | OpNe => OpEq
-  end.
-
 Definition cmpOpEvalBy {A} (cmp : A -> A -> comparison)
     (op : CmpOp) (x c : A) : bool :=
   match op with
@@ -45,12 +39,6 @@ Definition cmpOpEvalBy {A} (cmp : A -> A -> comparison)
   | OpEq => match cmp x c with Eq => true | _ => false end
   | OpNe => match cmp x c with Eq => false | _ => true end
   end.
-
-Lemma cmpOpEvalBy_complement : forall A (cmp : A -> A -> comparison) op x c,
-    cmpOpEvalBy cmp (cmpComplement op) x c = negb (cmpOpEvalBy cmp op x c).
-Proof.
-  intros A cmp [ | | | | | ] x c; simpl; destruct (cmp x c); reflexivity.
-Qed.
 
 Module Versions (N V : UsualOrderedType).
   Module C := Core N V.
@@ -257,8 +245,6 @@ Module Versions (N V : UsualOrderedType).
       Qed.
 
       Module PkgFibred := FibredRel N V Pkg PkgSet.
-      (* reduce leaves the real packages as they are, so the reduced
-         instance's versions at n are C.versions R n, whatever D is. *)
       Theorem versions_lookup : forall R (n : N.t),
           C.versions R n = C.versions (PkgFibred.tailFibre R n) n.
       Proof.

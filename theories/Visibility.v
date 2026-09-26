@@ -1314,7 +1314,6 @@ Module Visibility (N V : UsualOrderedType).
                 | apply mem_potentialOrigins; right; split; assumption].
       Qed.
 
-      (* Unreached, q need not be a potential origin and the name is empty. *)
       Theorem versions_lookupOccurrence :
         forall R D pub r (n : N.t) (q : Pkg.t),
           (exists p h, T.DepRel.In (p, (Name.Occurrence n q, h))
@@ -1374,7 +1373,6 @@ Module Visibility (N V : UsualOrderedType).
             | apply carried_tailFibre; exact Hc].
       Qed.
 
-      (* Unreached, q need not be a potential origin and the name is empty. *)
       Theorem versions_lookupIntermediate :
         forall R D pub r (n : N.t) (v : V.t) (m : N.t) (q : Pkg.t),
           (exists p h, T.DepRel.In (p, (Name.Intermediate n v m q, h))

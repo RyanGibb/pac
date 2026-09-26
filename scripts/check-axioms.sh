@@ -5,16 +5,16 @@
 # list below is the only thing to edit when a theorem is added; the
 # expected count is derived from it.
 #
-# Names are qualified through the nat instantiations: Smoke.v supplies
-# one per functor, Npm.v supplies its own (NpmS) since Smoke.v has none,
-# and Semver has no instance of its own because Cargo Includes it, so its
-# range language is audited through Cgo.
+# Names are qualified through the nat instantiations Smoke.v supplies, one
+# per functor.  Semver has no instance of its own because Cargo Includes
+# it, so its range language is audited through Cgo.
 set -e
 # Resolved before the cd below, since dune passes it relative to the
 # directory the action runs in.
-theories=$(cd "${PAC_THEORIES:-.}" && pwd)
+theories=
+[ -z "${PAC_THEORIES:-}" ] || theories=$(cd "$PAC_THEORIES" && pwd)
 cd "${PAC_ROOT:-$(dirname "$0")/..}"
-[ -n "${PAC_THEORIES:-}" ] || theories="$PWD/_build/default/theories"
+[ -n "$theories" ] || theories="$PWD/_build/default/theories"
 
 command -v coqtop >/dev/null 2>&1 || {
   echo "FAIL: coqtop not on PATH (eval \$(opam env) first)"; exit 1; }
@@ -36,7 +36,6 @@ Cx.Reduction.extractAssignment
 Cx.Reduction.reduceDeps
 Cx.Reduction.reduceDeps_functionalInName
 Cx.Reduction.reduceReal
-Cx.Reduction.reduceReal_root
 Cx.Reduction.three_sat_completeness
 Cx.Reduction.three_sat_correct
 Cx.Reduction.three_sat_soundness
@@ -53,7 +52,6 @@ Cfl.Reduction.Lookup.versions_lookupOrig
 Cfl.Reduction.conflictResolution
 Cfl.Reduction.conflict_completeness
 Cfl.Reduction.conflict_soundness
-Cfl.Reduction.reduce
 Cfl.Reduction.reduceDeps
 Cfl.Reduction.reduceReal
 
@@ -69,7 +67,6 @@ Cls.Reduction.classResolution_coreResolution
 Cls.Reduction.conflict_class_completeness
 Cls.Reduction.conflict_class_soundness
 Cls.Reduction.coreResolution
-Cls.Reduction.reduce
 Cls.Reduction.reduceDeps
 Cls.Reduction.reduceDeps_functionalInName
 Cls.Reduction.reduceReal
@@ -147,7 +144,6 @@ PkgF.Reduction.Lookup.dependees_lookupDisjunct
 PkgF.Reduction.Lookup.dependees_lookupDisjunctBy
 PkgF.Reduction.Lookup.dependees_lookupOrig
 PkgF.Reduction.Lookup.dependees_lookupOrigBy
-PkgF.Reduction.Lookup.root_not_absent
 PkgF.Reduction.Lookup.versions_lookupDisjunct
 PkgF.Reduction.Lookup.versions_lookupOrig
 PkgF.Reduction.Lookup.versions_lookupOrigPresent
@@ -208,19 +204,18 @@ Deb.versions
 Deb.versionsDisj
 Deb.versionsSoft
 
-DMA.Lookup.dependees_lookupDisjunctMA
-DMA.Lookup.dependees_lookupOrigMA
-DMA.Lookup.dependees_lookupSelectorAgreeMA
-DMA.Lookup.dependees_lookupSelectorMA
-DMA.Lookup.dependees_lookupSelectorRecMA
-DMA.Lookup.dependees_lookupSoftMA
-DMA.Lookup.versions_lookupDisjunctMA
-DMA.Lookup.versions_lookupOrigMA
-DMA.Lookup.versions_lookupOrigMA_pseudo
-DMA.Lookup.versions_lookupSelectorAgreeMA
-DMA.Lookup.versions_lookupSelectorMA
-DMA.Lookup.versions_lookupSelectorRecMA
-DMA.Lookup.versions_lookupSoftMA
+DMA.Lookup.dependees_lookupDisjunct
+DMA.Lookup.dependees_lookupOrig
+DMA.Lookup.dependees_lookupSelector
+DMA.Lookup.dependees_lookupSelectorAgree
+DMA.Lookup.dependees_lookupSelectorRec
+DMA.Lookup.dependees_lookupSoft
+DMA.Lookup.versions_lookupOrig
+DMA.Lookup.versions_lookupOrig_pseudo
+DMA.Lookup.versions_lookupSelector
+DMA.Lookup.versions_lookupSelectorAgree
+DMA.Lookup.versions_lookupSelectorRec
+DMA.Lookup.versions_lookupSoft
 DMA.debian_ma_completeness
 DMA.debian_ma_core_completeness
 DMA.debian_ma_core_soundness
@@ -234,94 +229,87 @@ DMA.reduceConfEntry
 DMA.reduceDeps
 DMA.reduceProv
 DMA.reduceProvEntry
-DMA.reduceRec
 DMA.reduceReal
+DMA.reduceRec
 
-Op.depextsOf
-Op.mem_depextsOf
+Op.Reduction.Lookup.clsVersions_reduceReal
+Op.Reduction.Lookup.declarers
+Op.Reduction.Lookup.dependees_lookupClassCore
+Op.Reduction.Lookup.dependees_lookupDisjunctCore
+Op.Reduction.Lookup.dependees_lookupOrig
+Op.Reduction.Lookup.dependees_lookupOrigCore
+Op.Reduction.Lookup.dependees_lookupRoot
+Op.Reduction.Lookup.dependees_lookupRootCore
+Op.Reduction.Lookup.versions_lookupClass
+Op.Reduction.Lookup.versions_lookupClassCore
+Op.Reduction.Lookup.versions_lookupOrig
+Op.Reduction.Lookup.versions_lookupOrigCore
+Op.Reduction.Lookup.versions_lookupRootCore
 Op.Reduction.clsForms
 Op.Reduction.clsPkgs
 Op.Reduction.clsSel
 Op.Reduction.clsVersions
-Op.Reduction.clsVersions_reduceReal
-Op.Reduction.declarers
+Op.Reduction.coreResolution
 Op.Reduction.decodeS
 Op.Reduction.dependees
 Op.Reduction.dependeesBy
-Op.Reduction.dependees_lookupClsCore
-Op.Reduction.dependees_lookupDisjunctCore
-Op.Reduction.dependees_lookupReal
-Op.Reduction.dependees_lookupRealCore
-Op.Reduction.dependees_lookupRoot
-Op.Reduction.dependees_lookupRootCore
 Op.Reduction.encR
 Op.Reduction.encodeOF
 Op.Reduction.opam_completeness
 Op.Reduction.opam_soundness
+Op.Reduction.reduceDeps
+Op.Reduction.reduceReal
 Op.Reduction.rootPkg
 Op.Reduction.srcVersions
-Op.Reduction.transD
-Op.Reduction.transR
-Op.Reduction.transS
 Op.Reduction.versSetBy
 Op.Reduction.versions
-Op.Reduction.versions_lookupCls
-Op.Reduction.versions_lookupClsCore
-Op.Reduction.versions_lookupReal
-Op.Reduction.versions_lookupRealCore
-Op.Reduction.versions_lookupRootCore
+Op.depextsOf
+Op.mem_depextsOf
 
 Cgo.Lookup.claimants
-Cgo.Lookup.dependees_lookup
-Cgo.Lookup.dependees_lookupCrate
-Cgo.Lookup.dependees_lookupCrateSub
-Cgo.Lookup.dependees_lookupDecision
-Cgo.Lookup.dependees_lookupDecisionSub
-Cgo.Lookup.dependees_lookupFeatP
-Cgo.Lookup.dependees_lookupFeatPSub
-Cgo.Lookup.dependees_lookupInert
-Cgo.Lookup.dependees_lookupRoot
-Cgo.Lookup.dependees_lookupRootSub
-Cgo.Lookup.dependees_lookupSlot
-Cgo.Lookup.dependees_lookupSlotSub
-Cgo.Lookup.dependees_lookupSub
 Cgo.Lookup.decision_declines
+Cgo.Lookup.dependees_lookupCrate
+Cgo.Lookup.dependees_lookupDecision
+Cgo.Lookup.dependees_lookupFeatP
+Cgo.Lookup.dependees_lookupRoot
+Cgo.Lookup.dependees_lookupSlot
+Cgo.Lookup.dependees_reduceDeps
+Cgo.Lookup.dependees_reduceDepsInert
 Cgo.Lookup.fdefFibre
-Cgo.Lookup.owner
 Cgo.Lookup.reads
 Cgo.Lookup.realPreimage
 Cgo.Lookup.slot_declines
 Cgo.Lookup.supportPreimage
 Cgo.Lookup.versions_lookupCrate
-Cgo.Lookup.versions_lookupCrateSub
 Cgo.Lookup.versions_lookupDecision
-Cgo.Lookup.versions_lookupDecisionSub
 Cgo.Lookup.versions_lookupFeatP
-Cgo.Lookup.versions_lookupFeatPSub
 Cgo.Lookup.versions_lookupLink
-Cgo.Lookup.versions_lookupLinkSub
 Cgo.Lookup.versions_lookupRoot
-Cgo.Lookup.versions_lookupRootSub
 Cgo.Lookup.versions_lookupSlot
-Cgo.Lookup.versions_lookupSlotSub
+Cgo.Lookup.versions_reduceRealCrate
+Cgo.Lookup.versions_reduceRealDecision
+Cgo.Lookup.versions_reduceRealFeatP
+Cgo.Lookup.versions_reduceRealLink
+Cgo.Lookup.versions_reduceRealRoot
+Cgo.Lookup.versions_reduceRealSlot
 Cgo.cargo_completeness
 Cgo.cargo_soundness
-Cgo.coreRes
+Cgo.coreResolution
 Cgo.csAdmits
 Cgo.csHolds
 Cgo.decodeFS
-Cgo.decodeFS_coreRes
+Cgo.decodeFS_coreResolution
 Cgo.decodeParents
-Cgo.decodeParents_coreRes
+Cgo.decodeParents_coreResolution
 Cgo.decodeS
-Cgo.decodeS_coreRes
+Cgo.decodeS_coreResolution
 Cgo.dependees
 Cgo.evalReq
 Cgo.linkRel
 Cgo.rangeEval
+Cgo.reduceDeps
+Cgo.reduceReal
 Cgo.rgHolds
-Cgo.transDeps
-Cgo.transReal
 Cgo.versions
 Cgo.versions_link_reduceReal
 
@@ -332,11 +320,11 @@ Alp.Reduction.Lookup.dependees_lookupProv
 Alp.Reduction.Lookup.dependees_lookupProvCore
 Alp.Reduction.Lookup.dependees_lookupRoot
 Alp.Reduction.Lookup.dependees_lookupRootCore
-Alp.Reduction.Lookup.versions_lookupName
-Alp.Reduction.Lookup.versions_lookupNameCore
+Alp.Reduction.Lookup.versions_lookupOrig
+Alp.Reduction.Lookup.versions_lookupOrigCore
 Alp.Reduction.Lookup.versions_lookupRootCore
+Alp.Reduction.alpineResolution_core
 Alp.Reduction.alpineResolution_coreResolution
-Alp.Reduction.alpineResolution_transS
 Alp.Reduction.alpine_completeness
 Alp.Reduction.alpine_soundness
 Alp.Reduction.attachAt
@@ -345,29 +333,29 @@ Alp.Reduction.encReq
 Alp.Reduction.installIfFibre
 Alp.Reduction.installIfForm
 Alp.Reduction.matchPos_attachAt
+Alp.Reduction.match_req_coreResolution
 Alp.Reduction.match_req_decode
-Alp.Reduction.match_req_transS
+Alp.Reduction.reduceDeps
+Alp.Reduction.reduceReal
 Alp.Reduction.rootPkg
-Alp.Reduction.transD
-Alp.Reduction.transR
 Alp.Reduction.versions
 
-NpmS.Reduction.Lookup.dependees_lookupGran
-NpmS.Reduction.Lookup.dependees_lookupInt
-NpmS.Reduction.Lookup.versions_lookupGran
-NpmS.Reduction.Lookup.versions_lookupInt
+NpmS.Reduction.Lookup.dependees_lookupGranular
+NpmS.Reduction.Lookup.dependees_lookupIntermediate
+NpmS.Reduction.Lookup.versions_lookupGranular
+NpmS.Reduction.Lookup.versions_lookupIntermediate
 NpmS.Reduction.dependees
 NpmS.Reduction.dependees_targetNames
+NpmS.Reduction.embedRoot
 NpmS.Reduction.lookup_resolution
 NpmS.Reduction.npmParents_coreResolution
 NpmS.Reduction.npmResolution_coreResolution
 NpmS.Reduction.npm_completeness
 NpmS.Reduction.npm_soundness
 NpmS.Reduction.peer_installed
-NpmS.Reduction.reached_transR
-NpmS.Reduction.transD
-NpmS.Reduction.transR
-NpmS.Reduction.transRoot
+NpmS.Reduction.reached_reduceReal
+NpmS.Reduction.reduceDeps
+NpmS.Reduction.reduceReal
 NpmS.Reduction.versions
 NpmS.rootPkg
 LIST
@@ -377,7 +365,7 @@ expected=$(printf '%s\n' "$names" | grep -c .)
 
 # An installed copy under _opam is on coqtop's default load path and goes
 # stale; an absolute -R is what keeps this reading the build tree.
-out=$({ printf 'From PackageCalculus Require Import Smoke Npm.\n'
+out=$({ printf 'From PackageCalculus Require Import Smoke.\n'
         printf '%s\n' "$names" | sed -e 's/^/Print Assumptions /' \
                                       -e 's/$/./'; } \
       | coqtop -q -R "$theories" PackageCalculus 2>&1)

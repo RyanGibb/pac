@@ -62,9 +62,6 @@ module T = PFR.T
    the calculus reads off inst_prio, so every sub-instance carries the k:
    lines of the packages in its repository. *)
 
-(* replaces (r:/q:) never appears in a repository index -- it is an
-   installed-db field -- so inst_repl is empty. *)
-
 let xconstr (c : P.constr) : Alp.coq_Constr =
   match c with
   | P.Any -> Alp.CAny
@@ -185,7 +182,6 @@ let empty_inst =
     inst_installIf = Alp.InstallIf.empty;
     inst_world = Alp.WSet.empty;
     inst_prio = Alp.Prio.empty;
-    inst_repl = Alp.Repl.empty;
   }
 
 let rec nat_of_int (k : int) : E.nat =
@@ -276,7 +272,6 @@ let pkg_inst ar (world : P.dep list) ((n, v) : string * string) : Alp.coq_Inst =
         Alp.Deps.ofList (List.map (fun d -> ((n, v), xdep d)) m.P.depends)
       in
       {
-        empty_inst with
         Alp.inst_repo = repo;
         inst_deps = deps;
         inst_prov = Alp.Prov.union prov own;
@@ -524,7 +519,7 @@ module L =
 
 module PG = L.PG
 
-(* Lookup.versions_lookupName: what the versions callback answers, before
+(* Lookup.versions_lookupOrig: what the versions callback answers, before
    the tagging PubGrub sees -- the name's own versions and its provides.
    The encoder reads this at the names a formula negates: a negated
    requirement's complement ranges over the versions offered at the name,

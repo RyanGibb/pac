@@ -193,10 +193,6 @@ Module Conflict (N V : UsualOrderedType).
       tauto.
     Qed.
 
-    Definition reduce (R : PkgSet.t) (D : C.DepRel.t) (G : ConflictRel.t) :
-        T.PkgSet.t * T.DepRel.t :=
-      (reduceReal R D G, reduceDeps R D G).
-
     Definition tryInvPkg (p : T.Pkg.t) : option Pkg.t :=
       match p with
       | (n, Version.Orig v) => Some (n, v)

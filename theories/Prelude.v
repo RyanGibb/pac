@@ -1,15 +1,5 @@
 From Stdlib Require Import MSetList Lia.
 
-(* Sets are MSetList.MakeWithLeibniz -- sorted duplicate-free lists -- because
-   the representation is canonical: two sets with the same elements are the same
-   term, so set equality is Leibniz =, statements never mention setoid
-   equivalences, and no Proper (respectfulness) side-conditions arise
-   anywhere. The cost is that "sorted" needs a total order on every element
-   type, including tuples, synthetic names, formulas, and sets themselves.
-   The stdlib's own compare-first path (OrderedTypeAlt) and product functors are
-   unergonomic because they land in setoid equality; this file contains the
-   small Leibniz-preserving replacement for that ecosystem gap. *)
-
 (* enum is data, not an "exists a listing" fact (Stdlib's Finite): witnesses
    iterate it, so it must survive extraction. *)
 Module Type FiniteUsualOrderedType.
@@ -167,6 +157,12 @@ Proof.
   intros T d a A x y; destruct (d a a) as [_ | NE];
     [reflexivity | contradiction NE; reflexivity].
 Qed.
+
+(* A guard inside a pattern-matching comprehension body is only exposed
+   once the element is destructed, too late for mem_filterMap_if. *)
+Lemma if_some_iff : forall (A : Type) (b : bool) (x y : A),
+    (if b then Some x else None) = Some y <-> b = true /\ x = y.
+Proof. intros A [|] x y; cbn; intuition congruence. Qed.
 
 (* Deciding equality inside a set-comprehension guard means an if-then-else on
    eq_dec, whose two branches then have to be re-derived at every proof that
@@ -697,14 +693,6 @@ Module FibredLabelledRel (T N L : UsualOrderedType)
   Qed.
 End FibredLabelledRel.
 
-(* The other way a lookup theorem cuts a set down: its elements carry a key --
-   a package set read as a name-to-version relation projects to names -- and
-   the preimage of the wanted keys under that projection is all of the set a
-   computation that consults only those keys can see. Which keys are wanted
-   arrives as a test rather than as a set, so that the two entry points share
-   this one definition: keys already materialized (PreimageOfKeys.ofKeys), and
-   the keys a relation's edges point at (RelKeys.hasKey), which stays a
-   semijoin and never materializes them. *)
 Module Preimage (A : UsualOrderedType) (S : SetsOn A).
   Module SS := SetSpecs A S.
 
@@ -842,10 +830,6 @@ Module SetOps (A B : UsualOrderedType) (SA : SetsOn A) (SB : SetsOn B).
       right; exists e; split; [apply elements_in; exact He | exact Hh].
   Qed.
 
-  (* The comprehensions go through ofList/unions rather than a fold of add or
-     union, so that each builds its result with one merge sort instead of n
-     quadratic insertions; the specs are extensional, so nothing downstream
-     sees the change. *)
   Definition map (f : A.t -> B.t) (s : SA.t) : SB.t :=
     ofList (List.map f (SA.elements s)).
 
@@ -947,9 +931,6 @@ Module SetOps (A B : UsualOrderedType) (SA : SetsOn A) (SB : SetsOn B).
     - intros [x [Hx Hf]]; exists x; split; [exact (Hkeep _ Hx Hf) | exact Hf].
   Qed.
 
-  (* The guarded comprehensions: a filterMap or unionMap whose body is an
-     if on a boolean test or a decision.  Each reads back as the witness,
-     the test holding, and the body. *)
   Lemma mem_filterMap_if : forall (b : A.t -> bool) (f : A.t -> B.t) s y,
       SB.In y (filterMap (fun x => if b x then Some (f x) else None) s) <->
       exists x : A.t, SA.In x s /\ b x = true /\ y = f x.

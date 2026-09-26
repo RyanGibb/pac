@@ -21,10 +21,6 @@ Module VariableFormula (N V : UsualOrderedType)
   Definition opEvalY (op : CmpOp) (y' y : Y.t) : bool :=
     cmpOpEvalBy Y.compare op y' y.
 
-  Lemma opEvalY_complement : forall op y' y,
-      opEvalY (cmpComplement op) y' y = negb (opEvalY op y' y).
-  Proof. intros op y' y; apply cmpOpEvalBy_complement. Qed.
-
   Fixpoint Satisfies (S : PkgSet.t) (sigma : X.t -> Y.t) (f : Formula) : Prop :=
     match f with
     | FDep m vs => exists v, VSet.In v vs /\ PkgSet.In (m, v) S
@@ -175,7 +171,6 @@ Module VariableFormula (N V : UsualOrderedType)
   Module NX := SumUOT N X.
   Module VY := SumUOT V Y.
 
-  (* A variable always has a value, so its package never goes absent. *)
   Module Ab <: AbsentNames NX.
     Definition hasAbsent (n : NX.t) : bool :=
       match n with inl _ => true | inr _ => false end.
@@ -208,9 +203,6 @@ Module VariableFormula (N V : UsualOrderedType)
           if opEvalY op y' y then Some (inr y') else None)
         (Y_x x).
 
-    (* A comparison is an atom on its variable's package, admitting the
-       values that pass it; negation then takes the complement among the
-       values, with no absent version to fall back on. *)
     Fixpoint liftFormula (Y_x : X.t -> YSet.t) (f : Formula) : PF.Formula :=
       match f with
       | FDep m vs => PF.FDep (inl m) (liftVS vs)
@@ -453,8 +445,6 @@ Module VariableFormula (N V : UsualOrderedType)
       - intros [x ->]; exists x; split; [apply X.enum_complete | reflexivity].
     Qed.
 
-    (* The source model a variable-formula resolution stands for: its
-       packages, and each variable's package at the assigned value. *)
     Definition liftModel (S : PkgSet.t) (sigma : X.t -> Y.t) : PF.PkgSet.t :=
       PF.PkgSet.union (SOpl.map liftPkg S) (assignPkgs sigma).
 
@@ -647,7 +637,6 @@ Module VariableFormula (N V : UsualOrderedType)
       Definition realPreimage (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
         RKeys.ofKeys fst ns R.
 
-      (* The value sets cut down to x's own. *)
       Definition valuesAt (Y_x : X.t -> YSet.t) (x : X.t) : X.t -> YSet.t :=
         fun x' => if X.eq_dec x x' then Y_x x else YSet.empty.
 

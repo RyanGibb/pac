@@ -9,8 +9,6 @@ Create Rewrite HintDb cmp_pkgf.
    into the products and conjunctions of the conjuncts themselves. *)
 Ltac split4 := split; [| split; [| split]].
 
-(* Which names the reduction gives the absent version: a negated atom on a
-   name without it can be met only by one of that name's versions. *)
 Module Type AbsentNames (N : UsualOrderedType).
   Parameter hasAbsent : N.t -> bool.
 End AbsentNames.
@@ -636,9 +634,6 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       - discriminate Hy.
     Qed.
 
-    (* A source model agrees with a core one wherever the core decides:
-       at names with the absent version, and at names the core holds a
-       real version of. *)
     Definition AgreesOn (S : T.PkgSet.t) (M : PkgSet.t) : Prop :=
       forall m v,
         (Ab.hasAbsent m = true \/
@@ -1799,8 +1794,6 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         | _ => None
         end.
 
-      (* An original package's edges start only at the package the
-         encoding was asked about: every other source is a disjunct. *)
       Lemma encodeNNF_src_orig_aux : forall Vq f,
           (forall (q : T.Pkg.t) m (w : Version.t) (d : T.Dependees.t),
               T.DepRel.In ((Name.Orig m, w), d) (encodeNNF Vq q f) ->
@@ -1983,9 +1976,6 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           | rewrite (proj1 (encodeNNF_agree_aux Vq Vq' f Hf))]; exact He.
       Qed.
 
-      (* A negated atom's complement is the encoder's only read of its
-         oracle, so a name a formula mentions only positively is never
-         asked: a driver's oracle may be partial there. *)
       Fixpoint negNames (f : Formula) : NSet.t :=
         match f with
         | FDep _ _ => NSet.empty
@@ -2292,16 +2282,6 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         intros R D Vq m v HVq; rewrite dependees_lookupOrig; unfold reduceDeps.
         f_equal; apply reduceDepsBy_agree; intros n Hn.
         rewrite versions_realPreimage by exact Hn; symmetry; apply HVq; exact Hn.
-      Qed.
-
-      Theorem root_not_absent : forall R D r S,
-          T.IsResolution (reduceReal R D) (reduceDeps R D) (embedPkg r) S ->
-          ~ T.PkgSet.In (Name.Orig (fst r), Version.Bot) S.
-      Proof.
-        intros R D [rn rv] S Hres Hb.
-        assert (E := T.res_version_unique _ _ _ _ Hres _ _ _
-                       (T.res_root_mem _ _ _ _ Hres) Hb).
-        discriminate E.
       Qed.
 
       Theorem dependees_lookupAbsent : forall R D m,

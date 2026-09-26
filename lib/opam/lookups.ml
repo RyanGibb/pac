@@ -254,7 +254,6 @@ let empty_inst =
   {
     Op.inst_repo = Op.PkgSet.empty;
     inst_dep = [];
-    inst_dpo = [];
     inst_cfl = [];
     inst_cls = Op.ClsRel.empty;
     inst_avl = [];
