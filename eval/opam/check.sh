@@ -68,6 +68,8 @@ done
 roots=()
 for a in ${atoms[@]+"${atoms[@]}"}; do
   nv=$(awk -v n="${a%%[.<>=!]*}." 'index($0, n) == 1' "$out/req")
+  # opam takes a name regardless of case where it matches one name alone
+  [ -n "$nv" ] || nv=$(awk -v n="${a%%[.<>=!]*}." 'index(tolower($0), tolower(n)) == 1' "$out/req")
   [ -n "$nv" ] && roots+=("$nv")
 done
 

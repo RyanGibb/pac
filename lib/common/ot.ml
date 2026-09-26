@@ -17,3 +17,5 @@ module Str = Make (String)
 
 let rec nat_int (n : Pac.nat) : int =
   match n with Pac.O -> 0 | Pac.S k -> 1 + nat_int k
+
+let rec int_nat (k : int) : Pac.nat = if k <= 0 then Pac.O else Pac.S (int_nat (k - 1))

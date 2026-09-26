@@ -6,8 +6,8 @@ let same_core = V.Loose.same_core
 
 type op = Ge | Gt | Le | Lt | Eq
 type comparator = Any | Cmp of op * string
-type comp_set = comparator list (* whitespace is conjunction *)
-type range = comp_set list (* || is disjunction *)
+type comp_set = comparator list
+type range = comp_set list
 type comp = V.comp = Num of int | Star | Absent
 
 let vstr = V.vstr

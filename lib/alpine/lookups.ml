@@ -189,9 +189,6 @@ module Make () = struct
       inst_prio = Alp.Prio.empty;
     }
 
-  let rec nat_of_int (k : int) : E.nat =
-    if k <= 0 then E.O else E.S (nat_of_int (k - 1))
-
   (* repoPreimage and provPreimage, built from the archive's tables rather
      than by filtering a whole-archive instance, which is the only reason a
      per-lookup sub-instance is cheap.  Lookup.subInst's inst_prio is the k:
@@ -217,7 +214,7 @@ module Make () = struct
       List.filter_map
         (fun q ->
           match Hashtbl.find_opt ar.prio q with
-          | Some k -> Some (q, nat_of_int k)
+          | Some k -> Some (q, Ot.int_nat k)
           | None -> None)
         !repo
     in
@@ -476,7 +473,7 @@ module Make () = struct
       | PFR.Version.Orig Red.Version.RootV -> Format.fprintf fmt "()"
       | PFR.Version.Orig (Red.Version.Orig s) -> Format.fprintf fmt "%s" s
       | PFR.Version.Orig (Red.Version.Prov ((n, w), pv)) ->
-          Format.fprintf fmt "%s=%s(%s-%s)" "provided" pv n w
+          Format.fprintf fmt "provided=%s(%s-%s)" pv n w
       | PFR.Version.Idx i -> Format.fprintf fmt "%d" (Ot.nat_int i)
       | PFR.Version.Bot -> Format.fprintf fmt "⊥"
 

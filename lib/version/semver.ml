@@ -14,10 +14,7 @@ type t = {
   build : string list;
 }
 
-(* leading zeros carry no value, and a run past 18 digits, which a 63-bit
-   int cannot hold, is saturated rather than overflowing int_of_string:
-   the semver crate reads a component as a u64 and node-semver refuses
-   one past MAX_SAFE_INTEGER, so no real version comes near it *)
+(* leading zeros carry no value; one is kept of an all-zero run *)
 let strip0 s =
   let n = String.length s in
   let i = ref 0 in
@@ -26,6 +23,10 @@ let strip0 s =
   done;
   String.sub s !i (n - !i)
 
+(* a run past 18 digits, which a 63-bit int cannot hold, is saturated
+   rather than overflowing int_of_string: the semver crate reads a
+   component as a u64 and node-semver refuses one past MAX_SAFE_INTEGER,
+   so no real version comes near it *)
 let int_of_digits s =
   let s = strip0 s in
   if s = "" then 0

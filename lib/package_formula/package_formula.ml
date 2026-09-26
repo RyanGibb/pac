@@ -195,17 +195,10 @@ struct
      dune-configurators had it decided absent first, and lwt fell to
      4.2.1).  So a name whose open range still admits ⊥ waits until every
      name that must be present is decided; by then either something needs
-     it, and its range excludes ⊥, or nothing does, and ⊥ is right. *)
-  let defer_bot ~assigned (open_names : (PFR.Name.t * int) list) =
-    match
-      List.find_opt (fun (n, _) -> not (admits_bot ~assigned n)) open_names
-    with
-    | Some (n, _) -> n
-    | None -> fst (List.hd open_names)
-
-  (* as [defer_bot], with the names [last] holds deferred behind even those
-     that admit ⊥ *)
-  let defer_bot_then ~last ~assigned (open_names : (PFR.Name.t * int) list) =
+     it, and its range excludes ⊥, or nothing does, and ⊥ is right.  The
+     names [last] holds wait behind even those. *)
+  let defer_bot ?(last = fun _ -> false) ~assigned
+      (open_names : (PFR.Name.t * int) list) =
     let rank (n, _) =
       if last n then 2 else if admits_bot ~assigned n then 1 else 0
     in

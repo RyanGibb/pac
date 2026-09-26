@@ -3,14 +3,6 @@ module P = Npm_parse
 let ( let* ) = Result.bind
 let starts = P.starts
 
-(* The query is a root package: a project's package.json with the
-   arguments of `npm install` added to it.  An argument is read as
-   npm-package-arg 13.0.2 (npm 11.17.0) reads it, lib/npa.js, and only its
-   registry forms are accepted: name, name@version, name@range, name@tag
-   and key@npm:name@range.  Anything npa reads as a file, directory, URL or
-   git spec is refused rather than dropped, because a query missing one of
-   its arguments asks a different question. *)
-
 (* /^(?:git[+])?[a-z]+:/i *)
 let is_url s =
   let s = String.lowercase_ascii s in
@@ -240,6 +232,13 @@ let root_of ar pkg =
   | Some v -> Ok { v with P.v_name = name }
   | None -> Error "not a package.json"
 
+(* The query is a root package: a project's package.json with the
+   arguments of `npm install` added to it.  An argument is read as
+   npm-package-arg 13.0.2 (npm 11.17.0) reads it, lib/npa.js, and only its
+   registry forms are accepted: name, name@version, name@range, name@tag
+   and key@npm:name@range.  Anything npa reads as a file, directory, URL or
+   git spec is refused rather than dropped, because a query missing one of
+   its arguments asks a different question. *)
 let root ar (args : string list) : (P.ver, string) result =
   let paths, specs = List.partition is_manifest_arg args in
   let* pkg = manifest paths in

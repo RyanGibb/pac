@@ -103,7 +103,7 @@ module Make (Lk : Lookups.S) = struct
      Deferring it behind every other open name settles the rest of them;
      decided early, it asserts a condition false or installs its package
      before either is known to be needed. *)
-  let next = L.defer_bot_then ~last:is_install_if
+  let next = L.defer_bot ~last:is_install_if
 
   (* apk's solver, rerun on an installed set, swaps a provider for a
      higher-ranked one and drops a package nothing needs, so an answer that

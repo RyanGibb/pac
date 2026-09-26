@@ -5,9 +5,9 @@ There are three levels: the unit tests, a regression set of a few dozen queries 
 ## Unit tests
 
 ```sh
-dune test                            # everything in test/, plus lib/<eco>/test_*.ml
+dune test                            # everything in test/, plus lib/<eco>/test_*.ml and lib/version/test_*.ml
 dune test test/frontends/debian.t    # one frontend
-dune build @axioms                   # Print Assumptions over scripts/check-axioms.sh; peaks near 8 GB
+dune build @axioms                   # Print Assumptions over the names scripts/check-axioms.sh lists; peaks near 8 GB
 ```
 
 ## Setup
@@ -57,7 +57,7 @@ An answer is a `packages (N):` line and N rows under it, each `name version` ind
 Sections a flag asks for follow in the same shape: opam's `system packages`, cargo's `parent edges` (`--print-parents`), npm's `node_modules` (`--tree`).
 Then `encoded solution: N core nodes (K lookups)`: the solution's N packages of the encoding, and the K packages of the encoding whose dependencies the solve looked up.
 Where no answer exists, an `unsatisfiable:` line and PubGrub's explanation take the place of all of these.
-Either way the output ends in `loaded: N names, M versions` (with a frontend's own counts after), `parser dropped N declarations` where the parser dropped any, and the `parse` and `solve` times.
+Either way the output ends in `loaded: N names, M versions` (with a frontend's own counts after), `parser dropped N declarations` where the parser dropped any, and the `parse` and `solve` times; npm's `parse` includes fetching the packuments the cache lacks.
 The shell scripts read the rows through `eval/answer.sh`; cargo's `run_query.py` and npm's `tree.py` read them, with the sections their flags add, for the Python ones.
 
 The exit status, as `pac --help` lists it:

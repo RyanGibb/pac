@@ -151,5 +151,5 @@ let hooks :
  fun order (ar, query, st, touch) ->
   match order with
   | `Tool -> Pac_common.Order.make ~next:(zero_install ar query st ~touch) ()
-  | `Pubgrub -> Pac_common.Order.make ~next:L.defer_bot ()
+  | `Pubgrub -> Pac_common.Order.make ~next:(L.defer_bot ?last:None) ()
   | `Random seed -> Pac_common.Order.random seed
