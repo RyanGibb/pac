@@ -231,7 +231,7 @@ let versions st (tn : Cg.NPlus.t) : Cg.VPlus.t list =
           inst_slots = slots;
         }
   | Cg.NPlus.CLink l ->
-      (* Lookup.claimants and LinkFibred.headFibre at l, over the
+      (* Lookup.claimants and LinkFibred.withHead at l, over the
          declarers loaded so far; see Archive.t *)
       let rs = Archive.link_preimage st.ar l in
       let links = Cg.LinkRel.ofList (List.map (fun q -> (q, l)) rs) in
