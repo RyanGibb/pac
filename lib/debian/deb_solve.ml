@@ -251,8 +251,8 @@ module Make (AP : Tables.ARCH) = struct
          constant for every candidate that is not an alternative of one. *)
       type t = { pos : int; v : DMA.Deb.Version.t }
 
-      (* PubGrub decides the V.compare-maximum candidate, so preference lives
-         here: dpkg-newest for real versions, leftmost alternative by clause
+      (* PubGrub decides the greatest candidate under compare, so preference
+         lives here: dpkg-newest for real versions, leftmost alternative by clause
          position, a real package above any provider claiming its name, and apt's
          candidate order among the providers.  The calculus only makes the
          real/provided split legible -- RefReal has no name, so it is the

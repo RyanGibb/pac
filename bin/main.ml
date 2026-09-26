@@ -116,7 +116,9 @@ let debian_cmd =
       & info [ "no-strict-pinning" ]
           ~doc:
             "Offer every version in the Packages files, not only apt's \
-             candidate (the newest).")
+             candidate (the newest).  The $(b,tool) order's replay of apt \
+             assumes one version per package, so without Strict-Pinning it \
+             approximates apt's order; the answer is still a resolution.")
   in
   let native =
     Arg.(

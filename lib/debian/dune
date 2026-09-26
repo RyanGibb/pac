@@ -5,7 +5,7 @@
 
 (library
  (name deb_solve)
- (modules tables order deb_solve)
+ (modules tables stl_heap work_heap apt_reject order deb_solve)
  ; dune's warnings, reporting rather than failing: a warning here is a
  ; note to the author, and only the extraction this links against needs
  ; them off wholesale.
