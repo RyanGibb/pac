@@ -1,8 +1,0 @@
-; dune's warnings, reporting rather than failing: a warning here is a note
-; to the author, and only the extraction the drivers link against needs
-; them off wholesale.
-
-(env
- (_
-  (flags
-   (:standard -warn-error -a))))
