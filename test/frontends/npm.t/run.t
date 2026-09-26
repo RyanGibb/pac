@@ -630,6 +630,18 @@ lists 1.0.0+1 before 1.0.0.  npm 11.17 locks the same four:
   encoded solution: 9 core nodes (9 lookups)
   loaded: 5 names, 8 versions, 0 packuments fetched
 
+The latest tag is a shortcut only past its own version's test: bmx tags
+the deprecated 1.0.0+a, so npm sorts, and takes 2.0.0, not 1.0.0+a's twin
+1.0.0+b, as npm 11.17 does:
+
+  $ untimed ../../../bin/main.exe npm --offline --cache . ./bmx-app/package.json
+  root bmx-app 1.0.0
+  packages (2):
+    bmx 2.0.0
+    bmx-app 1.0.0
+  encoded solution: 3 core nodes (4 lookups)
+  loaded: 2 names, 3 versions, 0 packuments fetched
+
 Given a host, the preference acts, and engines.npm is as live a sub-key as
 engines.node: engine's 2.0.0 wants node >=99 and engine-npm's wants npm
 >=99, and both fall back to 1.0.0.  engine-depr fixes the order of the two

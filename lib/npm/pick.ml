@@ -52,12 +52,17 @@ let best ar (n : string) (cands : PVersion.t list) : PVersion.t =
    (index.js:119-132, [engineOk(mani, ..) && !mani.deprecated]), so a
    deprecated or unrunnable latest is not a shortcut past them.  It is
    not merely redundant with the sort: the tag may name a version the
-   sort would rank below a newer one. *)
+   sort would rank below a newer one.  A tag naming no version of the
+   archive is no shortcut either (index.js:123, [mani &&]): it may name
+   one this keeps only a twin of (Archive.one_per_precedence). *)
 let tagged ar (n : string) (cands : PVersion.t list) : PVersion.t option =
   match Hashtbl.find_opt ar.A.latest n with
-  | Some l when (not (A.deprecated ar (n, l))) && A.engine_ok ar (n, l) ->
-      List.find_opt (PVersion.equal (Np.Vs.Orig l)) cands
-  | _ -> None
+  | Some l -> (
+      match A.meta ar (n, l) with
+      | Some m when A.ver_rank ar m = (true, true, true) ->
+          List.find_opt (PVersion.equal (Np.Vs.Orig l)) cands
+      | _ -> None)
+  | None -> None
 
 let pick ar (t : string) (cands : PVersion.t list) : PVersion.t =
   match tagged ar t cands with Some c -> c | None -> best ar t cands
