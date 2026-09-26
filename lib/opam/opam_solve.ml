@@ -1,5 +1,38 @@
 include Lookups
 
+(* OpamSolution.sanitize_atom_list as opam install runs it, permissively: a
+   name matches regardless of case when it matches one name alone
+   (fuzzy_name), and an atom no version meets, available or not, is refused
+   with not_found_message's words *)
+let sanitize ar (query : (string * Opam_parse.vc) list) =
+  let names = lazy (Sys.readdir (Filename.concat ar.root "packages")) in
+  let fuzzy name =
+    let l = String.lowercase_ascii name in
+    match
+      List.filter
+        (fun n -> String.lowercase_ascii n = l && versions_of ar n <> [])
+        (Array.to_list (Lazy.force names))
+    with
+    | [ n ] -> n
+    | _ -> name
+  in
+  let rec go acc = function
+    | [] -> Ok (List.rev acc)
+    | (name, c) :: rest -> (
+        let name = fuzzy name in
+        let vs = versions_of ar name in
+        if List.exists (Op.vcHolds (xvc c)) vs then go ((name, c) :: acc) rest
+        else
+          match c with
+          | Opam_parse.VCmp (o, w) when vs <> [] ->
+              Error
+                (Printf.sprintf "Package %s has no version %s%s." name
+                   (if o = Opam_parse.Eq then "" else Opam_parse.string_of_op o)
+                   w)
+          | _ -> Error (Printf.sprintf "No package named %s found." name))
+  in
+  go [] query
+
 type result = {
   reals : (string * string) list;
   nodes : int;

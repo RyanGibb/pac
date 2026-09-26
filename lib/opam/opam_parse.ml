@@ -89,32 +89,36 @@ let version_ok s =
          | _ -> false)
        s
 
+(* The operators as opam's command line spells them, the one its printer
+   uses (relop_kind) first.  An atom also spells "=" as ".", and they are
+   tried longest first because a shorter one is what atom_of_string's
+   regexp backtracks to when the version would otherwise be empty. *)
+let spellings =
+  [
+    ("<=", Le);
+    (">=", Ge);
+    ("!=", Ne);
+    ("<", Lt);
+    (">", Gt);
+    ("=", Eq);
+    (".", Eq);
+  ]
+
+let string_of_op o = fst (List.find (fun (_, p) -> p = o) spellings)
+
 (* The atom syntax opam's command line takes, one element of a query:
    [OpamFormula.atom_of_string] (opamFormula.ml) matches a name -- the run
    before the first character an operator can begin with -- then an
    operator, then a non-empty version, and falls back to reading the whole
-   string as a bare name when that fails.  "." spells "=", and the
-   operators are tried longest first because a shorter one is what the
-   regexp backtracks to when the version would otherwise be empty.  opam
-   install reads an argument with a '/' or a leading '.' as a local
-   directory or file to pin, which is no query about the repository. *)
+   string as a bare name when that fails.  opam install reads an argument
+   with a '/' or a leading '.' as a local directory or file to pin, which
+   is no query about the repository. *)
 let atom_of_string (s : string) : (string * vc, string) result =
   let n = String.length s in
   let rec cut i =
     if i >= n then None
     else if String.contains ">=<.!" s.[i] then Some i
     else cut (i + 1)
-  in
-  let spellings =
-    [
-      ("<=", Le);
-      (">=", Ge);
-      ("!=", Ne);
-      ("<", Lt);
-      (">", Gt);
-      ("=", Eq);
-      (".", Eq);
-    ]
   in
   let bare () =
     if name_ok s then Ok (s, VTop)

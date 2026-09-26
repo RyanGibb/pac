@@ -474,6 +474,9 @@ from one other name:
   $ ../../../bin/main.exe opam . 'dep>=99'
   error: Package dep has no version >=99.
   [2]
+  $ ../../../bin/main.exe opam . 'dep<3'
+  error: Package dep has no version <3.
+  [2]
   $ untimed ../../../bin/main.exe opam . Dep
   packages (1):
     dep 9
