@@ -1,0 +1,10 @@
+[package]
+name = "st2"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+wsy = ">=0.60.0, <0.62.0"
+
+[dev-dependencies]
+wsy = { version = ">=0.60.0, <0.62.0", features = ["a"] }

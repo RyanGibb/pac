@@ -592,3 +592,31 @@ another seed may give another, a resolution all the same:
     pa 1.0.0
   encoded solution: 13 core nodes (6 lookups)
   loaded: 4 names, 6 versions
+
+cargo's lock records a crate's dependencies as the versions they resolved
+to, and reading it back locks each declaration to the first of those, in
+version order, that its requirement admits (core/registry.rs, lock).  stk
+declares wsy twice, under two cfgs, with one requirement, so whatever the
+order, the two are one version, with both declarations' features:
+
+  $ for s in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do ../../../bin/main.exe cargo index manifests/st.toml --order=random --seed $s | grep -c '^  wsy '; done | sort | uniq -c
+       16 1
+
+  $ ../../../bin/main.exe cargo index manifests/st.toml --print-parents | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root st 1.0.0
+  packages (3):
+    st 1.0.0
+    stk 0.1.0
+    wsy 0.61.0 [a,b]
+  parent edges (2):
+    st 1.0.0 -> stk(stk) 0.1.0
+    stk 0.1.0 -> wsy(wsy) 0.61.0
+  encoded solution: 11 core nodes (4 lookups)
+  loaded: 3 names, 3 versions
+
+The root's dev-dependencies are active beside its normal ones, so a
+dev-dependency with the requirement of a normal one is the same
+declaration to the lock:
+
+  $ for s in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do ../../../bin/main.exe cargo index manifests/st2.toml --order=random --seed $s | grep -c '^  wsy '; done | sort | uniq -c
+       16 1

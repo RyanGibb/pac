@@ -215,9 +215,7 @@ let xentry : P.fentry -> Cg.FEntry.t = function
    (cfg, kind, alias): the tables a manifest offers are maps, so two
    records can only collide here if an index entry repeats a site, which
    no manifest can spell.  Conjoining the requirements and unioning the
-   requested features is what that unreachable case gets; every real
-   repeat of an alias across kinds or cfgs stays its own slot, because
-   that is what cargo resolves. *)
+   requested features is what that unreachable case gets. *)
 let unify_site (ds : P.dep list) : P.dep =
   let d0 = List.hd ds in
   {
@@ -233,19 +231,45 @@ let unify_site (ds : P.dep list) : P.dep =
 let site_of (d : P.dep) : string * P.kind * string =
   (d.P.d_alias, d.P.d_kind, d.P.d_cfg)
 
-let slots_of (v : P.ver) : P.dep list =
+(* [ds] grouped by [key], in order of first appearance, each group merged *)
+let group key merge (ds : P.dep list) : P.dep list =
   let tbl = Hashtbl.create 16 in
   let order = ref [] in
   List.iter
     (fun (d : P.dep) ->
-      let k = site_of d in
+      let k = key d in
       if not (Hashtbl.mem tbl k) then order := k :: !order;
       Hashtbl.replace tbl k
-        (d :: (match Hashtbl.find_opt tbl k with Some l -> l | None -> [])))
-    v.P.v_deps;
-  List.map
-    (fun k -> unify_site (List.rev (Hashtbl.find tbl k)))
-    (List.rev !order)
+        (d :: Option.value (Hashtbl.find_opt tbl k) ~default:[]))
+    ds;
+  List.map (fun k -> merge (List.rev (Hashtbl.find tbl k))) (List.rev !order)
+
+(* cargo writes a crate's dependencies to the lock as the versions they
+   resolved to, and reading the lock back locks each declaration to the
+   first of those, in version order, that its requirement admits
+   (core/registry.rs, lock).  Two active declarations of one alias with one
+   requirement therefore get one version, whatever cfg or kind each sits
+   under, and are one slot here: the first's site, both sets of features.
+   A dev-dependency is active from the root alone.  Declarations whose
+   requirements differ but overlap are held to the same rule by cargo and
+   not here. *)
+let lock_merge (ds : P.dep list) : P.dep =
+  let d0 = List.hd ds in
+  {
+    d0 with
+    P.d_feats =
+      List.sort_uniq String.compare
+        (List.concat_map (fun (d : P.dep) -> d.P.d_feats) ds);
+    d_default = List.exists (fun (d : P.dep) -> d.P.d_default) ds;
+  }
+
+let slots_of ~root (v : P.ver) : P.dep list =
+  group
+    (fun (d : P.dep) ->
+      if d.P.d_kind = P.Dev && not root then `Site (site_of d)
+      else `Lock (d.P.d_alias, d.P.d_target, d.P.d_req, d.P.d_optional))
+    lock_merge
+    (group site_of unify_site v.P.v_deps)
 
 type fibres = {
   r_slots : Cg.SlotRel.t;
@@ -454,7 +478,7 @@ let fibres_of st (p : string * string) : fibres =
       match meta st.ar n v with
       | None -> empty_fibres n
       | Some m ->
-          let ds = slots_of m in
+          let ds = slots_of ~root:(p = st.rc) m in
           let slots =
             Cg.SlotRel.ofList
               (List.map
@@ -978,35 +1002,12 @@ let decode st (sol : (Cg.NPlus.t * PVersion.t) list) : result =
   let fibres = List.map (fibres_of st) (st.rc :: crates) in
   let slots = Cg.SlotRel.unions (List.map (fun r -> r.r_slots) fibres) in
   let fdefs = Cg.FDefRel.unions (List.map (fun r -> r.r_fdefs) fibres) in
-  (* site -> target name, over the same slots decodeParents reads.
-     The site and not the alias, because a rename may point two
-     sites sharing an alias at different crates *)
-  let target_of = Hashtbl.create 256 in
-  List.iter
-    (fun ((n, v) as p) ->
-      match meta st.ar n v with
-      | None -> ()
-      | Some m ->
-          List.iter
-            (fun (d : P.dep) ->
-              Hashtbl.replace target_of (p, site_of d) d.P.d_target)
-            (slots_of m))
-    (st.rc :: crates);
   let parents =
     List.map
-      (fun ((((n, v), (a, (k, cfg))), u) : Cg.ParentElt.t) ->
-        let k =
-          match k with
-          | Cg.Kind.KNormal -> P.Normal
-          | Cg.Kind.KBuild -> P.Build
-          | Cg.Kind.KDev -> P.Dev
-        in
-        let t =
-          match Hashtbl.find_opt target_of ((n, v), (a, k, cfg)) with
-          | Some t -> t
-          | None -> a
-        in
-        (n, v, a, t, u))
+      (fun ((((n, v), k), u) : Cg.ParentElt.t) ->
+        match site_data st (n, v) k with
+        | Some sd -> (n, v, Cg.kAlias k, Cg.sTarget sd, u)
+        | None -> (n, v, Cg.kAlias k, Cg.kAlias k, u))
       (Cg.ParentRel.elements (Cg.decodeParents fdefs slots st.rc s))
   in
   {
