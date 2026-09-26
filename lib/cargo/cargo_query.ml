@@ -5,6 +5,33 @@ exception Refused of string
 
 let refuse fmt = Printf.ksprintf (fun s -> raise (Refused s)) fmt
 
+(* Rust's str::trim, which cargo's reading of package.version applies
+   (InheritableSemverVersion's deserializer, cargo-util-schemas): it strips
+   Unicode's White_Space, not only the ASCII blanks String.trim does *)
+let rust_trim s =
+  let white u =
+    let c = Uchar.to_int u in
+    (c >= 0x9 && c <= 0xD)
+    || (c >= 0x2000 && c <= 0x200A)
+    || List.mem c [ 0x20; 0x85; 0xA0; 0x1680; 0x2028; 0x2029; 0x202F; 0x205F; 0x3000 ]
+  in
+  let n = String.length s in
+  (* the end of the character at i, and whether it is white *)
+  let at i =
+    let d = String.get_utf_8_uchar s i in
+    ( i + Uchar.utf_decode_length d,
+      Uchar.utf_decode_is_valid d && white (Uchar.utf_decode_uchar d) )
+  in
+  let rec left i =
+    if i < n then match at i with j, true -> left j | _ -> i else i
+  in
+  let rec right i last =
+    if i < n then match at i with j, true -> right j last | j, _ -> right j j
+    else last
+  in
+  let i = left 0 in
+  String.sub s i (right i i - i)
+
 type root = {
   ver : P.ver;
   (* [patch.crates-io] maps the root's own name to it, which is what the
@@ -328,9 +355,10 @@ let of_manifest (path : string) : root =
     match get "version" pkg with
     | Some v ->
         let v = str "package.version" v in
-        if not (Cargo_version.version_ok (String.trim v)) then
+        let t = rust_trim v in
+        if not (Cargo_version.version_ok t) then
           refuse "package.version %S is not a semver version like \"1.2.3\"" v;
-        String.trim v
+        t
     | None -> "0.0.0"
   in
   let resolver = resolver_of_manifest doc pkg in

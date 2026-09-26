@@ -694,6 +694,22 @@ the whitespace around it:
   [0]
   root vt 18446744073709551615.0.0
   [0]
+
+The whitespace cargo trims is Rust's (str::trim, which strips Unicode
+White_Space): a vertical tab, a no-break space and an ideographic space go
+with it, while a zero-width space, which is no White_Space, stays and makes
+the version one cargo refuses, as cargo 1.97 does:
+
+  $ for v in '\u000B1.0.0' ' 1.0.0　' '​1.0.0'; do
+  >   printf '[package]\nname = "vt"\nversion = "%s"\n' "$v" > v.toml
+  >   ../../../bin/main.exe cargo index v.toml > out; s=$?; grep '^root' out; echo "[$s]"
+  > done
+  root vt 1.0.0
+  [0]
+  root vt 1.0.0
+  [0]
+  error: package.version "\226\128\1391.0.0" is not a semver version like "1.2.3"
+  [2]
   $ printf '[package]\nname = "vt"\nversion = "1.x"\n' > v.toml
   $ ../../../bin/main.exe cargo index v.toml
   error: package.version "1.x" is not a semver version like "1.2.3"
