@@ -468,7 +468,11 @@ let npm_cmd =
   let offline =
     Arg.(
       value & flag
-      & info [ "offline" ] ~doc:"Fail rather than fetch a missing packument.")
+      & info [ "offline" ]
+          ~doc:
+            "Fetch nothing: a packument missing from the cache is read as the \
+             registry's 404, so a dependency on it cannot be met, and a \
+             command-line spec naming it is refused.")
   in
   let tree =
     Arg.(value & flag & info [ "tree" ] ~doc:"Print the node_modules nesting.")
