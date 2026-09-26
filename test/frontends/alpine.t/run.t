@@ -429,11 +429,8 @@ pr-pa and not pr-pc:
   parser dropped 4 declarations
 
   $ untimed ../../../bin/main.exe alpine PARSE pr-pc
-  unsatisfiable:
-  Because @root () -> pr-pc ∅ and root -> @root (), version solving failed..
-  loaded: 6 names, 7 versions, 1 provides entries, 0 install_if rules
-  parser dropped 4 declarations
-  [1]
+  error: unable to select packages: pr-pc (no such package)
+  [2]
 
 A world atom apk cannot read makes it refuse the whole world, and pac
 refuses it too, exiting 2 rather than solving the other atoms: one tagged
@@ -449,6 +446,21 @@ and one with no version after its operator:
   $ ../../../bin/main.exe alpine APKINDEX app 'docs='
   error: "docs=": not a dependency atom
   [2]
+
+So does a world naming a package no package of the index is or provides,
+with apk 3.0.5's words, whatever its version: apk has nothing to select
+for it.  A negated one asks for nothing, and apk takes it.  A package apk
+cannot read is still one it knows, so pr-bad above is unsatisfiable rather
+than refused, as apk has it "uninstallable":
+
+  $ ../../../bin/main.exe alpine APKINDEX app nosuch 'other>1'
+  error: unable to select packages: nosuch (no such package), other (no such package)
+  [2]
+  $ untimed ../../../bin/main.exe alpine APKINDEX app '!nosuch'
+  packages (1):
+    app 1.0
+  encoded solution: 5 core nodes (7 lookups)
+  loaded: 3 names, 3 versions, 0 provides entries, 1 install_if rules
 
 An empty argument is no atom at all, and apk skips it:
 

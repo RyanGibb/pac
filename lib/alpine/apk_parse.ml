@@ -106,7 +106,10 @@ let fresh () =
     a_broken = false;
   }
 
-let flush ~reject a out =
+(* A stanza apk cannot read is still a package of its database, one it
+   will not install, so [broken] is told the names it holds a provider of:
+   its own and those of its provides read so far. *)
+let flush ~reject ~broken a out =
   (match a.a_name with
   | Some n when not a.a_broken ->
       out :=
@@ -119,7 +122,9 @@ let flush ~reject a out =
           priority = a.a_prio;
         }
         :: !out
-  | Some _ -> reject ()
+  | Some n ->
+      broken (n :: List.map (fun (p : prov) -> p.p_name) a.a_provs);
+      reject ()
   | None -> ());
   a.a_name <- None;
   a.a_ver <- "";
@@ -131,13 +136,13 @@ let flush ~reject a out =
 
 (* apk_db_fdb_read (apk-tools src/database.c): stanzas end at a line
    shorter than two bytes, with no continuations and no quoting *)
-let parse_file ~reject (path : string) : pkg list =
+let parse_file ~reject ~broken (path : string) : pkg list =
   let ic = open_in_bin path in
   let out = ref [] and a = fresh () in
   (try
      while true do
        let line = input_line ic in
-       if String.length line < 2 then flush ~reject a out
+       if String.length line < 2 then flush ~reject ~broken a out
        else if line.[1] <> ':' then
          (* a line that is not "X:..." cannot be part of a stanza *)
          a.a_broken <- true
@@ -170,7 +175,7 @@ let parse_file ~reject (path : string) : pkg list =
          | _ -> a.a_broken <- true
      done
    with End_of_file -> ());
-  flush ~reject a out;
+  flush ~reject ~broken a out;
   close_in ic;
   List.rev !out
 

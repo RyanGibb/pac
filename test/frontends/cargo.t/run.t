@@ -755,6 +755,17 @@ non-ASCII name, which no crates.io crate has, is refused unread:
   error: invalid character `1` in package name: `1a`, the name cannot start with a digit
   [2]
 
+A dependency of the root on a crate the index does not have is cargo's
+error before any version is chosen, whatever its kind, so pac refuses it
+with cargo 1.97's words.  One further down the graph fails only the version
+declaring it, as bf's 1.0.0+b above does:
+
+  $ printf '[package]\nname = "vt"\nversion = "1.0.0"\n[dependencies]\na = "1"\n[dev-dependencies]\nnx = "1"\n' > d.toml
+  $ ../../../bin/main.exe cargo index d.toml
+  root vt 1.0.0
+  error: no matching package named `nx` found
+  [2]
+
 An index or a manifest that cannot be read is a read error, not a refused
 query:
 

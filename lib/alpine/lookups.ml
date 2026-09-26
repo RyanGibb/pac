@@ -109,14 +109,21 @@ module Make () = struct
     mutable n_provs : int;
     mutable n_iif : int;
     n_dropped : int;
+    (* the names only a stanza the parser dropped holds a provider of *)
+    uninstallable : (string, unit) Hashtbl.t;
   }
 
   (* Architecture is fixed by the index that was loaded.  A repository's
      APKINDEX is per-arch, so no A: filtering is applied and no cross-arch
      reasoning is possible here. *)
   let load_index (path : string) : archive =
-    let dropped = ref 0 in
-    let pkgs = P.parse_file ~reject:(fun () -> incr dropped) path in
+    let dropped = ref 0 and uninstallable = Hashtbl.create 16 in
+    let pkgs =
+      P.parse_file
+        ~reject:(fun () -> incr dropped)
+        ~broken:(List.iter (fun n -> Hashtbl.replace uninstallable n ()))
+        path
+    in
     let ar =
       {
         by_name = Hashtbl.create 16384;
@@ -129,6 +136,7 @@ module Make () = struct
         n_provs = 0;
         n_iif = 0;
         n_dropped = !dropped;
+        uninstallable;
       }
     in
     let iifs = ref [] in
@@ -301,6 +309,23 @@ module Make () = struct
       inst_world = Alp.WSet.ofList (List.map xdep world);
       inst_prio = prio;
     }
+
+  (* the world's names no package of the index is or provides, which apk
+     reports as "no such package" before it solves: it has nothing to select
+     for them.  A package it will not install still names one, and a
+     negated atom asks for nothing. *)
+  let no_such_package ar (world : P.dep list) : string list =
+    List.filter_map
+      (fun (d : P.dep) ->
+        let n = d.P.d_name in
+        if
+          (not d.P.d_neg)
+          && versions_of ar n = []
+          && providers_of ar n = []
+          && not (Hashtbl.mem ar.uninstallable n)
+        then Some n
+        else None)
+      world
 
   let rec pp_formula depth fmt (f : PF.coq_Formula) =
     if depth <= 0 then Format.fprintf fmt "..."

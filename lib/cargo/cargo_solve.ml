@@ -87,6 +87,14 @@ let solve ?(debug = false) ?(order = `Tool) ~index ~features ~rustv
     (root : Q.root) : run =
   Pubgrub.set_debug debug;
   let ar = Archive.empty index in
+  (* cargo's "no matching package named" is its own error, not a failed
+     resolve, where the dependency is the root's: nothing else could have
+     been chosen instead.  A crate further down is a version that fails. *)
+  List.iter
+    (fun (d : P.dep) ->
+      if not (Archive.listed ar d.P.d_target) then
+        Q.refuse "no matching package named `%s` found" d.P.d_target)
+    root.Q.ver.P.v_deps;
   Archive.install_root ar root.Q.ver;
   let st = L.create ar root ~features ~rustv in
   let query =

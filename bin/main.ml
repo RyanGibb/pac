@@ -388,6 +388,12 @@ let alpine_run debug order path goals =
       let module A = Alpine_solve.Make () in
       let ar = A.load_index path in
       let parse = Unix.gettimeofday () -. t0 in
+      match A.no_such_package ar world with
+      | _ :: _ as ns ->
+          error 2 "unable to select packages: %s"
+            (String.concat ", "
+               (List.map (fun n -> n ^ " (no such package)") ns))
+      | [] ->
       let r = A.solve ~debug ~order ar world in
       report ~t0
         {

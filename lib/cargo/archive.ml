@@ -72,6 +72,9 @@ let load_name ar (n : string) : P.ver list =
         vs;
       vs
 
+(* whether the index has a file for the name, yanked versions and all *)
+let listed ar n = Sys.file_exists (P.crate_path ~index:ar.index n)
+
 let versions_of ar n = List.map (fun (v : P.ver) -> v.P.v_vers) (load_name ar n)
 
 (* a manifest is read only through its name's load, so a crate version's
