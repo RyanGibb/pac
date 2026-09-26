@@ -1011,6 +1011,36 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         - apply SOad.unionMap_mono; [exact HDa | intros x z Hz; exact Hz].
       Qed.
 
+      Module GEqb := UOTEqb G.
+      Definition granFibre (g : V.t -> G.t) (R : PkgSet.t) (n : N.t) (w : G.t)
+          : PkgSet.t :=
+        PkgSet.filter
+          (fun '(m, v) => andb (NEqb.eqb m n) (GEqb.eqb (g v) w)) R.
+
+      Lemma mem_granFibre : forall g R (n m : N.t) (w : G.t) (v : V.t),
+          PkgSet.In (m, v) (granFibre g R n w) <->
+          PkgSet.In (m, v) R /\ m = n /\ g v = w.
+      Proof.
+        intros g R n m w v; unfold granFibre.
+        rewrite PkgSet.filter_spec'; cbn beta iota.
+        rewrite Bool.andb_true_iff, NEqb.eqb_true_iff, GEqb.eqb_true_iff.
+        tauto.
+      Qed.
+
+      Theorem versions_lookupGranularOrig : forall R support Df Da g n w,
+          T.versions (reduceReal R support Df Da g) (Name.GranularOrig n w) =
+          T.versions
+            (reduceReal (granFibre g R n w) Feat.SupportSet.empty
+               Feat.FeatDepRel.empty Feat.AddlDepRel.empty g)
+            (Name.GranularOrig n w).
+      Proof.
+        intros R support Df Da g n w; apply T.versions_ext; intro v.
+        rewrite !mem_reduceReal.
+        split; intro H; inversion H; subst; apply RealOrig;
+          rewrite Feat.Reduction.mem_reduceReal_orig in *;
+          rewrite mem_granFibre in *; intuition.
+      Qed.
+
       Module FeatDepRelFibred := Feat.Reduction.Lookup.FeatDepRelFibred.
       Theorem dependees_lookupGranularOrig : forall R support Df Da g n v,
           T.dependees (reduceDeps R support Df Da g)
@@ -1040,6 +1070,23 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
       Module PkgFibred := Feat.Reduction.Lookup.PkgFibred.
       Module SupportFibred := Feat.Reduction.Lookup.SupportFibred.
       Module AddlDepRelFibred := Feat.Reduction.Lookup.AddlDepRelFibred.
+      Theorem versions_lookupGranularFeatPkg : forall R support Df Da g n f w,
+          T.versions (reduceReal R support Df Da g)
+            (Name.GranularFeatPkg n f w) =
+          T.versions
+            (reduceReal (granFibre g R n w)
+               (Feat.Reduction.Lookup.supportFibre support n f)
+               Feat.FeatDepRel.empty Feat.AddlDepRel.empty g)
+            (Name.GranularFeatPkg n f w).
+      Proof.
+        intros R support Df Da g n f w; apply T.versions_ext; intro v.
+        rewrite !mem_reduceReal.
+        split; intro H; inversion H; subst; apply RealFeatPkg;
+          rewrite Feat.Reduction.mem_reduceReal_featPkg in *;
+          rewrite mem_granFibre, Feat.Reduction.Lookup.mem_supportFibre in *;
+          intuition.
+      Qed.
+
       Lemma dependees_lookupGranularFeatPkg_any :
         forall R support Df Da g n v f,
           T.dependees (reduceDeps R support Df Da g)
@@ -1103,6 +1150,34 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         rewrite dependees_lookupGranularFeatPkg_any, ER, ES; reflexivity.
       Qed.
 
+      Theorem versions_lookupIntermediate : forall R support Df Da g n v m,
+          T.versions (reduceReal R support Df Da g) (Name.Intermediate n v m) =
+          T.versions
+            (reduceReal PkgSet.empty Feat.SupportSet.empty
+               (FeatDepRelFibred.endsFibre Df (n, v) m)
+               (pkgNodeFibre Da (n, v) m) g)
+            (Name.Intermediate n v m).
+      Proof.
+        intros R support Df Da g n v m; apply T.versions_ext; intro u.
+        rewrite !mem_reduceReal.
+        split; intro H; inversion H; subst.
+        - eapply RealFInter; [| eassumption].
+          apply FeatDepRelFibred.mem_endsFibre;
+            split; [eassumption | split; reflexivity].
+        - eapply RealAInter; [| eassumption].
+          apply mem_pkgNodeFibre; split; [eassumption | split; reflexivity].
+        - match goal with
+          | Hx : Feat.FeatDepRel.In _ (FeatDepRelFibred.endsFibre _ _ _) |- _ =>
+              apply FeatDepRelFibred.mem_endsFibre in Hx; destruct Hx as [Hx _]
+          end.
+          eapply RealFInter; eassumption.
+        - match goal with
+          | Hx : Feat.AddlDepRel.In _ (pkgNodeFibre _ _ _) |- _ =>
+              apply mem_pkgNodeFibre in Hx; destruct Hx as [Hx _]
+          end.
+          eapply RealAInter; eassumption.
+      Qed.
+
       Theorem dependees_lookupIntermediate : forall R support Df Da g n v m u,
           T.dependees (reduceDeps R support Df Da g)
             (Name.Intermediate n v m, u) =
@@ -1129,6 +1204,28 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         - eapply EdgeAInterToOrig;
             [apply mem_pkgNodeFibre; split; [eassumption | split; reflexivity]
             | eassumption].
+      Qed.
+
+      Theorem versions_lookupIntermediateF : forall R support Df Da g n v m f,
+          T.versions (reduceReal R support Df Da g)
+            (Name.IntermediateF n v m f) =
+          T.versions
+            (reduceReal PkgSet.empty Feat.SupportSet.empty
+               (FeatDepRelFibred.endsFibre Df (n, v) m)
+               Feat.AddlDepRel.empty g)
+            (Name.IntermediateF n v m f).
+      Proof.
+        intros R support Df Da g n v m f; apply T.versions_ext; intro u.
+        rewrite !mem_reduceReal.
+        split; intro H; inversion H; subst.
+        - eapply RealFInterF; [| eassumption | eassumption].
+          apply FeatDepRelFibred.mem_endsFibre;
+            split; [eassumption | split; reflexivity].
+        - match goal with
+          | Hx : Feat.FeatDepRel.In _ (FeatDepRelFibred.endsFibre _ _ _) |- _ =>
+              apply FeatDepRelFibred.mem_endsFibre in Hx; destruct Hx as [Hx _]
+          end.
+          eapply RealFInterF; eassumption.
       Qed.
 
       Theorem dependees_lookupIntermediateF :
@@ -1158,6 +1255,28 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
             [apply FeatDepRelFibred.mem_endsFibre;
                split; [eassumption | split; reflexivity]
             | eassumption | eassumption].
+      Qed.
+
+      Theorem versions_lookupIntermediateA :
+        forall R support Df Da g n v f m f',
+          T.versions (reduceReal R support Df Da g)
+            (Name.IntermediateA n v f m f') =
+          T.versions
+            (reduceReal PkgSet.empty Feat.SupportSet.empty Feat.FeatDepRel.empty
+               (AddlDepRelFibred.endsFibre Da ((n, v), f) m) g)
+            (Name.IntermediateA n v f m f').
+      Proof.
+        intros R support Df Da g n v f m f'; apply T.versions_ext; intro u.
+        rewrite !mem_reduceReal.
+        split; intro H; inversion H; subst.
+        - eapply RealAInterA; [| eassumption | eassumption].
+          apply AddlDepRelFibred.mem_endsFibre;
+            split; [eassumption | split; reflexivity].
+        - match goal with
+          | Hx : Feat.AddlDepRel.In _ (AddlDepRelFibred.endsFibre _ _ _) |- _ =>
+              apply AddlDepRelFibred.mem_endsFibre in Hx; destruct Hx as [Hx _]
+          end.
+          eapply RealAInterA; eassumption.
       Qed.
 
       Theorem dependees_lookupIntermediateA :

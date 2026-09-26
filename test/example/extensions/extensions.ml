@@ -851,11 +851,39 @@ module Concurrent_features = struct
 
   let root = R.embedOrigPkg g ("A", "1")
 
-  (* the calculus proves no versions lookup, so these are the global
-     reduction's, and checking the walk against it checks only the
-     dependees below *)
   let versions n =
-    R.T.VSet.elements (R.T.versions (R.reduceReal r sup df da g) n)
+    R.T.VSet.elements
+      (match n with
+      | R.Name.GranularOrig (m, w) ->
+          R.T.versions
+            (R.reduceReal (L.granFibre g r m w) F.SupportSet.empty
+               F.FeatDepRel.empty F.AddlDepRel.empty g)
+            n
+      | R.Name.GranularFeatPkg (m, x, w) ->
+          R.T.versions
+            (R.reduceReal (L.granFibre g r m w)
+               (F.Reduction.Lookup.supportFibre sup m x)
+               F.FeatDepRel.empty F.AddlDepRel.empty g)
+            n
+      | R.Name.Intermediate (m, u, o) ->
+          R.T.versions
+            (R.reduceReal M.PkgSet.empty F.SupportSet.empty
+               (L.FeatDepRelFibred.endsFibre df (m, u) o)
+               (L.pkgNodeFibre da (m, u) o)
+               g)
+            n
+      | R.Name.IntermediateF (m, u, o, _) ->
+          R.T.versions
+            (R.reduceReal M.PkgSet.empty F.SupportSet.empty
+               (L.FeatDepRelFibred.endsFibre df (m, u) o)
+               F.AddlDepRel.empty g)
+            n
+      | R.Name.IntermediateA (m, u, x, o, _) ->
+          R.T.versions
+            (R.reduceReal M.PkgSet.empty F.SupportSet.empty F.FeatDepRel.empty
+               (L.AddlDepRelFibred.endsFibre da ((m, u), x) o)
+               g)
+            n)
 
   let dependees ((n, v) as p) =
     edges R.T.VSet.elements R.T.DependeesSet.elements

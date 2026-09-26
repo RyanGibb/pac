@@ -118,7 +118,8 @@ reaches, since (<A,1,C>,1) has no dependency, as its caption says.
 Fig. visibility: <n,(A,1)> and <n,(D,1)> are the figure's ⟨n,a⟩ and
 ⟨n,d⟩, and <n,v,m,(A,1)> is ⟨n,v,m,a⟩.  Every node and all 24 edges of
 the figure's reduction are here, and 9 nodes and 14 edges the figure
-does not draw.  ⟨A,d⟩ 1 and ⟨B,d⟩ 1, with their intermediates and all
+does not draw.  The figure draws only what ⟨A,a⟩ 1 reaches, on purpose,
+since the whole reduction is too large to draw.  ⟨A,d⟩ 1 and ⟨B,d⟩ 1, with their intermediates and all
 14 edges, and ⟨D,1,C,a⟩ 2, which has none, are unreachable from ⟨A,a⟩
 1.  <C,(D,1)> 1 is reached: an occurrence has every version of its
 name, though no edge admits this one.
@@ -324,10 +325,8 @@ nothing else.
 
 Fig. concurrent-feature, g(v) = v, reduced in Fig.
 concurrent-feature-reduction: <<D,α>,1> is ⟨⟨D,α⟩,1⟩.  Every node and
-all 36 edges of the figure's reduction, and nothing else.  The calculus
-proves dependees lookups but no versions lookup, so the walk's versions
-are the global reduction's, and the check covers the dependees alone.
-The walk from A 1 does not reach ⟨⟨D,β⟩,1⟩, ⟨D,1,β,F,δ⟩ or ⟨⟨F,δ⟩,1⟩,
+all 36 edges of the figure's reduction, and nothing else.  The walk
+from A 1 does not reach ⟨⟨D,β⟩,1⟩, ⟨D,1,β,F,δ⟩ or ⟨⟨F,δ⟩,1⟩,
 C 1 admitting D only at 2 and 3.
 
   $ ./extensions/extensions.exe concurrent-features

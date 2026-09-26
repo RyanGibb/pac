@@ -176,6 +176,11 @@ FC.Reduction.Lookup.dependees_lookupGranularOrig
 FC.Reduction.Lookup.dependees_lookupIntermediate
 FC.Reduction.Lookup.dependees_lookupIntermediateA
 FC.Reduction.Lookup.dependees_lookupIntermediateF
+FC.Reduction.Lookup.versions_lookupGranularFeatPkg
+FC.Reduction.Lookup.versions_lookupGranularOrig
+FC.Reduction.Lookup.versions_lookupIntermediate
+FC.Reduction.Lookup.versions_lookupIntermediateA
+FC.Reduction.Lookup.versions_lookupIntermediateF
 FC.Reduction.feature_concurrent_completeness
 FC.Reduction.feature_concurrent_soundness
 FC.Reduction.reduceDeps
