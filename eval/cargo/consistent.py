@@ -7,6 +7,19 @@ for the same graph is check.py's other question.
 
 The rules, each with the cargo 0.98 source it follows:
 
+  rows       A package of the answer other than the root must be on an
+             index row cargo can read.  cargo drops a row whose version
+             the semver crate does not parse (IndexPackageMinimum in
+             sources/registry/index/mod.rs), and reads one as
+             IndexSummary::Unsupported past schema v2 or
+             IndexSummary::Invalid where it cannot build the summary
+             (IndexSummary::parse): a requirement the semver crate refuses
+             (Dependency::parse in core/dependency.rs), a target
+             cargo-platform refuses (registry_dependency_into_dep), an
+             optional dev-dependency (Summary::new in core/summary.rs), or
+             a feature table build_feature_map refuses.  Neither is ever a
+             candidate, locked or not (sources/registry/mod.rs, query).
+
   features   The root has every feature it declares, and the default:
              generate-lockfile resolves with CliFeatures::new_all(true)
              (ops/resolve.rs, resolve_with_registry), and
@@ -14,19 +27,24 @@ The rules, each with the cargo 0.98 source it follows:
              (core/resolver/dep_cache.rs).  Any other package has the
              features every dependency on it asks for, with its default
              where one asks for default features, closed under its feature
-             table (Requirements::require_feature, require_value): `dep:x`
-             enables the optional dependency x, `x/f` enables x, x's
-             feature named x if there is one, and f on x, and `x?/f` asks
-             f of x, which the dependency resolver takes to enable x too
-             ("Weak features are always activated in the dependency
-             resolver", require_value).  An optional dependency not named
-             in `dep:` syntax anywhere has an implicit feature of its name
-             (core/summary.rs, build_feature_map), and features2 rows are
-             merged into features (sources/registry/index/mod.rs).  A
+             table (Requirements::require_feature, require_value).  A
+             dependency's features are asked for by name, so `x/f` and
+             `dep:x` there are names no table has (RequestedFeatures::
+             DepFeatures in build_requirements), and the empty name is
+             dropped from an index row (registry_dependency_into_dep).  In
+             a table, `dep:x` enables the optional dependency x, `x/f`
+             enables x, x's feature named x if there is one, and f on x,
+             and `x?/f` asks f of x, which the dependency resolver takes to
+             enable x too ("Weak features are always activated in the
+             dependency resolver", require_value).  An optional dependency
+             not named in `dep:` syntax anywhere has an implicit feature of
+             its name (core/summary.rs, build_feature_map), and features2
+             rows are merged into features (index_package_to_summary).  A
              package's features are the union over everything that asks,
              as the resolver unifies them per package id.  pac's answer
-             must list exactly these, and every feature asked for must
-             exist (RequirementError::MissingFeature).
+             must list exactly these, every feature asked for must exist
+             (RequirementError::MissingFeature), and none may include
+             itself (RequirementError::Cycle, fatal).
 
   active     A declaration is active when it is not optional or its name
              is enabled, and is a dev-dependency only of the root:
@@ -38,9 +56,16 @@ The rules, each with the cargo 0.98 source it follows:
              be met by an edge of the answer to a package of its name whose
              version the requirement matches, by the semver crate's rules
              (OptVersionReq::matches in util/semver_ext.rs calls
-             VersionReq::matches; semver 1.0.27, eval.rs and parse.rs).
-             An edge that no declaration names, active or not, is not the
-             answer's to give.
+             VersionReq::matches; semver 1.0.28, as cargo's Cargo.lock
+             pins it, eval.rs and parse.rs).  An edge that no declaration
+             names, active or not, is not the answer's to give.
+
+  cycles     No cycle through the edges of active declarations other than
+             dev-dependencies: resolve ends in check_cycles
+             (core/resolver/mod.rs), which walks transitive_deps_not_replaced
+             (core/resolver/resolve.rs).  It checks the graph built, so
+             cargo refuses a cycle even where other versions would avoid
+             it.
 
   semver     At most one version of a package in each semver compatibility
              class, the left-most non-zero component (core/resolver/
@@ -71,11 +96,51 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 INDEX = os.environ.get("CARGO_INDEX") or os.path.normpath(HERE + "/../../repos/crates.io-index")
 
 
+NUM = re.compile(r"[0-9]+")
+IDENT = re.compile(r"[0-9A-Za-z.-]*")
+
+
+def numeric(s):
+    """parse.rs, numeric_identifier: a u64 with no leading zero"""
+    m = NUM.match(s)
+    if not m or (len(m.group()) > 1 and s[0] == "0") or int(m.group()) >= 1 << 64:
+        raise ValueError(f"bad number at {s!r}")
+    return int(m.group()), s[m.end():]
+
+
+def identifiers(s, pre):
+    """parse.rs, identifier: dot-separated [0-9A-Za-z-] segments, none
+    empty, a numeric pre-release one with no leading zero; () where s starts
+    with none, which its callers refuse"""
+    run = IDENT.match(s).group()
+    if not run:
+        return (), s
+    parts = run.split(".")
+    if any(not p or (pre and len(p) > 1 and p.isdigit() and p[0] == "0") for p in parts):
+        raise ValueError(f"bad identifier {run!r}")
+    return tuple(parts), s[len(run):]
+
+
 def version(s):
-    """semver's Version, build metadata dropped: (major, minor, patch, pre)"""
-    core, _, pre = s.split("+", 1)[0].partition("-")
-    major, minor, patch = (int(x) for x in core.split("."))
-    return major, minor, patch, tuple(pre.split(".")) if pre else ()
+    """semver's Version::from_str, build metadata dropped: (major, minor,
+    patch, pre)"""
+    major, s = numeric(s)
+    nums = [major]
+    for _ in range(2):
+        if not s.startswith("."):
+            raise ValueError("expected a dot")
+        n, s = numeric(s[1:])
+        nums.append(n)
+    pre = ()
+    for sep, is_pre in (("-", True), ("+", False)):
+        if s.startswith(sep):
+            ids, s = identifiers(s[1:], is_pre)
+            if not ids:
+                raise ValueError("empty segment")
+            pre = ids if is_pre else pre
+    if s:
+        raise ValueError(f"unexpected {s!r}")
+    return nums[0], nums[1], nums[2], pre
 
 
 def pre_key(pre):
@@ -87,33 +152,118 @@ def pre_key(pre):
     return (0, tuple((0, int(i), "") if i.isdigit() else (1, 0, i) for i in pre))
 
 
-OP = re.compile(r"\s*(=|>=|>|<=|<|~|\^)?\s*")
+OPS = (">=", "<=", "=", ">", "<", "~", "^")
+WILD = ("*", "x", "X")
+
+
+def parse_comparator(s):
+    """parse.rs, comparator: (op, major, minor, patch, pre), a missing minor
+    or patch None, and what follows"""
+    given = next((o for o in OPS if s.startswith(o)), None)
+    s = s[len(given or ""):].lstrip(" ")
+    op = given or "^"
+    major, s = numeric(s)
+    parts, wild = [], False
+    for _ in range(2):
+        if not s.startswith("."):
+            break
+        s = s[1:]
+        if s[:1] and s[0] in WILD:
+            s = s[1:]
+            op = op if given else "wild"
+            wild = True
+            parts.append(None)
+        elif wild:
+            raise ValueError("unexpected after wildcard")
+        else:
+            n, s = numeric(s)
+            parts.append(n)
+    minor, patch = (parts + [None, None])[:2]
+    pre = ()
+    for sep, is_pre in (("-", True), ("+", False)):
+        if patch is not None and s.startswith(sep):
+            ids, s = identifiers(s[1:], is_pre)
+            if not ids:
+                raise ValueError("empty segment")
+            pre = ids if is_pre else pre
+    return (op, major, minor, patch, pre), s.lstrip(" ")
 
 
 def requirement(s):
-    """semver's VersionReq: comparators (op, major, minor, patch, pre), a
-    missing minor or patch None; [] for `*` (parse.rs)"""
-    s = s.strip()
-    if s in ("*", "x", "X"):
+    """semver's VersionReq::from_str: comparators, [] for `*`; a
+    requirement it refuses raises ValueError"""
+    s = s.lstrip(" ")
+    if s[:1] and s[0] in WILD:
+        if s[1:].lstrip(" "):
+            raise ValueError(f"unexpected after wildcard in {s!r}")
         return []
     out = []
-    for part in s.split(","):
-        m = OP.match(part)
-        op, rest = m.group(1), part[m.end():].strip()
-        wild = False
-        nums = []
-        body, _, pre = rest.split("+", 1)[0].partition("-")
-        for x in body.split("."):
-            if x in ("*", "x", "X"):
-                wild = True
-                break
-            nums.append(int(x))
-        if op is None:
-            op = "wild" if wild else "^"
-        nums += [None] * (3 - len(nums))
-        out.append((op, nums[0], nums[1], nums[2],
-                    tuple(pre.split(".")) if pre and nums[2] is not None else ()))
-    return out
+    while True:
+        c, s = parse_comparator(s)
+        out.append(c)
+        if not s:
+            return out
+        if not s.startswith(",") or len(out) == 32:
+            raise ValueError(f"expected a comma at {s!r}")
+        s = s[1:].lstrip(" ")
+
+
+TOKEN = re.compile(r' *(?:([(),=])|"([^"]*)"|(r#)?([A-Za-z_][A-Za-z_0-9]*))')
+
+
+def platform(s):
+    """cargo-platform's Platform::from_str: `cfg(...)` parsed as a CfgExpr
+    (cfg.rs, Parser::expr over Tokenizer), anything else a target name of
+    alphanumerics, `_`, `-` and `.` (validate_named_platform); one it
+    refuses raises ValueError"""
+    if not (s.startswith("cfg(") and s.endswith(")")):
+        if any(not (c.isalnum() or c in "_-.") for c in s):
+            raise ValueError(f"bad target name {s!r}")
+        return
+    s, toks = s[4:-1], []
+    while s.strip(" "):
+        m = TOKEN.match(s)
+        if not m:
+            raise ValueError(f"unexpected {s!r} in cfg")
+        # a raw identifier is never all, any or not
+        toks.append(m.group(1) or ("string" if m.group(2) is not None else
+                                   "ident" if m.group(3) or m.group(4) not in ("all", "any", "not")
+                                   else m.group(4)))
+        s = s[m.end():]
+    pos = 0
+
+    def eat(*ts):
+        nonlocal pos
+        if toks[pos:pos + 1] not in [[t] for t in ts]:
+            raise ValueError(f"expected {ts[0]} in cfg")
+        pos += 1
+
+    def expr():
+        nonlocal pos
+        t = toks[pos:pos + 1]
+        if t in (["all"], ["any"]):
+            pos += 1
+            eat("(")
+            while toks[pos:pos + 1] != [")"]:
+                expr()
+                if toks[pos:pos + 1] != [","]:
+                    break
+                pos += 1
+            eat(")")
+        elif t == ["not"]:
+            pos += 1
+            eat("(")
+            expr()
+            eat(")")
+        else:
+            eat("ident", "all", "any", "not")
+            if toks[pos:pos + 1] == ["="]:
+                pos += 1
+                eat("string")
+
+    expr()
+    if pos != len(toks):
+        raise ValueError("unterminated cfg")
 
 
 def comparator(c, v):
@@ -223,6 +373,52 @@ class Summary:
             if d[4] and d[0] not in features and d[0] not in explicit:
                 self.features[d[0]] = ["dep:" + d[0]]
         self.links = links
+        self.unreadable = None
+
+
+def feature_name(f):
+    """restricted_names.rs, validate_feature_name"""
+    return bool(f) and not f.startswith("dep:") and "/" not in f \
+        and (f[0].isidentifier() or f[0] in "0123456789") \
+        and all(("a" + c).isidentifier() or c in "-+." for c in f[1:])
+
+
+def unreadable(j, s, declared):
+    """why cargo reads index row j, summary s with feature table declared,
+    as Unsupported or Invalid, or None"""
+    if (j.get("v") or 1) > 2:
+        return f"schema v{j['v']}"
+    for d in j.get("deps") or []:
+        try:
+            requirement(d["req"])
+            if d.get("target") is not None:
+                platform(d["target"])
+        except ValueError as e:
+            return f"dependency {d['name']}: {e}"
+    optional = {}
+    for d in s.deps:
+        if d[4] and d[3] == "dev":
+            return f"dev-dependency {d[0]} is optional"
+        optional[d[0]] = optional.get(d[0], False) or d[4]
+    used = set()
+    for feature, vs in s.features.items():
+        if not feature_name(feature):
+            return f"feature name {feature!r}"
+        for v in vs:
+            if "/" in v:
+                dep, feat = v.split("/", 1)
+                used.add(dep.removesuffix("?"))
+                if "/" in feat or dep.startswith("dep:") or dep.removesuffix("?") not in optional \
+                        or dep.endswith("?") and not optional[dep[:-1]]:
+                    return f"feature {feature} includes {v}"
+            elif v.startswith("dep:"):
+                used.add(v[4:])
+                if not optional.get(v[4:]):
+                    return f"feature {feature} includes {v}"
+            elif v not in declared and not (optional.get(v) and v in s.features):
+                return f"feature {feature} includes {v}"
+    unused = sorted(d for d, o in optional.items() if o and d not in used)
+    return f"optional dependency {unused[0]} is in no feature" if unused else None
 
 
 def from_index(name, vers):
@@ -232,15 +428,25 @@ def from_index(name, vers):
     except FileNotFoundError:
         return None
     j = next((r for r in rows if r.get("vers") == vers), None)
-    if j is None:
-        return None
+    return None if j is None else from_row(j)
+
+
+def from_row(j):
     features = {k: list(v) for k, v in (j.get("features") or {}).items()}
     for k, v in (j.get("features2") or {}).items():
         features.setdefault(k, []).extend(v)
     deps = [(d["name"], d.get("package") or d["name"], d.get("req", "*"), d.get("kind") or "normal",
-             bool(d.get("optional")), d.get("default_features", True), tuple(d.get("features") or ()))
+             bool(d.get("optional")), d.get("default_features", True),
+             tuple(f for f in d.get("features") or () if f))
             for d in j.get("deps") or []]
-    return Summary(deps, features, j.get("links"))
+    s = Summary(deps, features, j.get("links"))
+    try:
+        version(j["vers"])
+    except ValueError:
+        s.unreadable = "the version does not parse, so cargo drops the row"
+    else:
+        s.unreadable = unreadable(j, s, features)
+    return s
 
 
 def from_manifest(path):
@@ -292,9 +498,6 @@ class Requirements:
         self.features, self.deps = set(), {}
 
     def feature(self, f):
-        if "/" in f or f.startswith("dep:"):
-            self.value(f)
-            return
         if f in self.features:
             return
         if f not in self.s.features:
@@ -302,6 +505,9 @@ class Requirements:
             return
         self.features.add(f)
         for v in self.s.features[f]:
+            if v == f:
+                self.miss.append(f"{self.who}'s feature {f} includes itself")
+                return
             self.value(v)
 
     def value(self, v):
@@ -318,6 +524,28 @@ class Requirements:
             self.feature(v)
 
 
+def cycles(graph):
+    """the cycles a depth-first walk of graph closes, each as a path"""
+    out, state = [], {}
+    for start in graph:
+        if start in state:
+            continue
+        state[start], path, stack = 1, [start], [iter(graph[start])]
+        while stack:
+            c = next(stack[-1], None)
+            if c is None:
+                state[path.pop()] = 2
+                stack.pop()
+            elif state.get(c) == 1:
+                cyc = path[path.index(c):] + [c]
+                out.append("cyclic package dependency: " + " -> ".join(f"{n} {v}" for n, v in cyc))
+            elif c not in state:
+                state[c] = 1
+                path.append(c)
+                stack.append(iter(graph[c]))
+    return out
+
+
 def check(answer, manifest):
     root, crates, edges = parse_answer(answer)
     mroot, rsum = from_manifest(manifest)
@@ -330,6 +558,10 @@ def check(answer, manifest):
         if s is None:
             return {"valid": None, "minimal": None, "miss": [f"{c[0]} {c[1]} is not in the index"]}
         summaries[c] = s
+    rows = [f"cargo cannot read the index row of {c[0]} {c[1]}: {s.unreadable}"
+            for c, s in sorted(summaries.items()) if s.unreadable]
+    if rows:
+        return {"valid": False, "minimal": None, "miss": rows}
     kids = {}
     for p, alias, c in edges:
         kids.setdefault(p, []).append((alias, c))
@@ -380,8 +612,12 @@ def check(answer, manifest):
             if c not in asked or new != old:
                 asked[c] = new
                 todo.append(c)
+    graph = {}
     for p in sorted(crates):
         reqs = require(p, *asked.get(p, (crates[p], False)), miss)
+        graph[p] = sorted({c for alias, c in kids.get(p, []) if c in crates and any(
+            d[3] != "dev" and d[0] == alias and d[1] == c[0] and matches(requirement(d[2]), c[1])
+            for d in active(p, reqs))})
         if p in asked and reqs.features != crates[p]:
             miss.append(f"{p[0]} {p[1]} has features [{','.join(sorted(crates[p]))}], cargo unifies "
                         f"[{','.join(sorted(reqs.features))}]")
@@ -393,6 +629,7 @@ def check(answer, manifest):
             if not any(d[0] == alias and d[1] == c[0] and matches(requirement(d[2]), c[1])
                        for d in summaries[p].deps):
                 miss.append(f"{p[0]} {p[1]} -> {c[0]} {c[1]} as {alias} is no declaration of it")
+    miss += cycles(graph)
     classes = {}
     for c in crates:
         if c != root:

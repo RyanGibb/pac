@@ -11,7 +11,13 @@ bad=0
 # and zeta 2.0.0 needing nothing; split declaring wsys twice, under two cfgs,
 # and hold needing wsys 2; opt's beta optional behind feature fb, and devy's
 # a dev-dependency; kz declaring zed twice, with ranges that overlap; lsys
-# and lsysb both linking lx
+# and lsysb both linking lx; cya and cyb needing each other, cyc and cyd
+# through a build-dependency, cye and cyf through a dev-dependency; fsp
+# asking fsq for fsr/f, fdp asking it for dep:fsr, and fep asking fsr for
+# the empty feature; fcy's feature a including itself; and rows cargo reads
+# as invalid: ivf's feature naming nothing, ivd's optional
+# dev-dependency, ivr's and ivq's requirements, ivt's target, and ivv's
+# version
 rm -rf "$T/index"
 python3 - "$T/index" <<'EOF'
 import hashlib, json, os, sys
@@ -29,7 +35,27 @@ ROWS = {"alpha": [("1.0.0", []), ("1.1.0", []), ("2.0.0", [])],
         "kz": [("1.0.0", [{"name": "zed", "req": "^1"},
                           {"name": "zed", "req": ">=1, <3", "kind": "build"}])],
         "lsys": [("1.0.0", [], {}, "lx")],
-        "lsysb": [("1.0.0", [], {}, "lx")]}
+        "lsysb": [("1.0.0", [], {}, "lx")],
+        "cya": [("1.0.0", [{"name": "cyb", "req": "^1"}])],
+        "cyb": [("1.0.0", [{"name": "cya", "req": "^1"}])],
+        "cyc": [("1.0.0", [{"name": "cyd", "req": "^1", "kind": "build"}])],
+        "cyd": [("1.0.0", [{"name": "cyc", "req": "^1"}])],
+        "cye": [("1.0.0", [{"name": "cyf", "req": "^1"}])],
+        "cyf": [("1.0.0", [{"name": "cye", "req": "^1", "kind": "dev"}])],
+        "fsr": [("1.0.0", [], {"f": []})],
+        "fsq": [("1.0.0", [{"name": "fsr", "req": "^1", "optional": True}])],
+        "fsp": [("1.0.0", [{"name": "fsq", "req": "^1", "features": ["fsr/f"]}])],
+        "fdp": [("1.0.0", [{"name": "fsq", "req": "^1", "features": ["dep:fsr"]}])],
+        "fep": [("1.0.0", [{"name": "fsr", "req": "^1", "features": [""]}])],
+        "fcy": [("1.0.0", [], {"a": ["a"]})],
+        "ivf": [("1.0.0", [], {"extra": ["nope"]})],
+        "ivd": [("1.0.0", [{"name": "beta", "req": "^1", "kind": "dev", "optional": True}],
+                 {"b": ["dep:beta"]})],
+        "ivr": [("1.0.0", [{"name": "beta", "req": "1.0.0.0"}])],
+        "ivq": [("1.0.0", [{"name": "beta", "req": "^^1", "kind": "dev"}])],
+        "ivt": [("1.0.0", [{"name": "beta", "req": "^1",
+                            "target": 'and(cfg(unix), not(target_os = "linux"))'}])],
+        "ivv": [("1.0.0-01", [])]}
 for n, vs in ROWS.items():
     d = (os.path.join(T, n[:2], n[2:4]) if len(n) > 3 else
          os.path.join(T, "3", n[0]) if len(n) == 3 else os.path.join(T, str(len(n))))
@@ -58,6 +84,19 @@ root root-optf 'opt = { version = "=1.0.0", features = ["fb"] }'
 root root-devy 'devy = "=1.0.0"'
 root root-kz 'kz = "=1.0.0"' 'alpha = "^1"'
 root root-lsys 'lsys = "=1.0.0"'
+root root-cya 'cya = "^1"'
+root root-cyc 'cyc = "^1"'
+root root-cye 'cye = "^1"'
+root root-fsp 'fsp = "^1"'
+root root-fdp 'fdp = "^1"'
+root root-fep 'fep = "^1"'
+root root-fcy 'fcy = { version = "=1.0.0", features = ["a"] }'
+root root-ivf 'ivf = "=1.0.0"'
+root root-ivd 'ivd = "=1.0.0"'
+root root-ivr 'ivr = "=1.0.0"'
+root root-ivq 'ivq = "=1.0.0"'
+root root-ivt 'ivt = "=1.0.0"'
+root root-ivv 'ivv = "^1.0.0-0"'
 
 . "$S/../serve.sh"
 serve "$PORT" "$T/index" "$T/proxy.log" python3 "$S/sparse_proxy.py" "$PORT" "$T/index" || exit 1
@@ -154,6 +193,32 @@ ctl extra-range INVALID/-/- 'root_1.0.0 alpha_1.1.0 hold_1.0.0 wsys_1.0.0 wsys_2
   'root_1.0.0_alpha_1.1.0 hold_1.0.0_wsys_1.0.0'
 ctl extra-undeclared INVALID/-/- 'root_1.0.0 alpha_1.1.0 zed_1.0.0 beta_1.0.0' \
   'root_1.0.0_alpha_1.1.0 zed_1.0.0_beta_1.0.0'
+# a cycle through normal or build edges, which cargo refuses whatever else
+# it could pick; a dev-dependency of a dependency is no edge
+ctl cycle INVALID/-/- 'root_1.0.0 cya_1.0.0 cyb_1.0.0' \
+  'root_1.0.0_cya_1.0.0 cya_1.0.0_cyb_1.0.0 cyb_1.0.0_cya_1.0.0' root-cya
+ctl cycle-build INVALID/-/- 'root_1.0.0 cyc_1.0.0 cyd_1.0.0' \
+  'root_1.0.0_cyc_1.0.0 cyc_1.0.0_cyd_1.0.0 cyd_1.0.0_cyc_1.0.0' root-cyc
+ctl cycle-dev VALID/no/no 'root_1.0.0 cye_1.0.0 cyf_1.0.0' \
+  'root_1.0.0_cye_1.0.0 cye_1.0.0_cyf_1.0.0 cyf_1.0.0_cye_1.0.0' root-cye
+# a dependency's features are names: fsq has no feature fsr/f or dep:fsr,
+# and the empty one is dropped
+ctl depfeat-slash INVALID/-/- 'root_1.0.0 fsp_1.0.0 fsq_1.0.0_[fsr] fsr_1.0.0_[f]' \
+  'root_1.0.0_fsp_1.0.0 fsp_1.0.0_fsq_1.0.0 fsq_1.0.0_fsr_1.0.0' root-fsp
+ctl depfeat-dep INVALID/-/- 'root_1.0.0 fdp_1.0.0 fsq_1.0.0 fsr_1.0.0' \
+  'root_1.0.0_fdp_1.0.0 fdp_1.0.0_fsq_1.0.0 fsq_1.0.0_fsr_1.0.0' root-fdp
+ctl depfeat-empty VALID/yes/yes 'root_1.0.0 fep_1.0.0 fsr_1.0.0' \
+  'root_1.0.0_fep_1.0.0 fep_1.0.0_fsr_1.0.0' root-fep
+ctl feat-selfcycle INVALID/-/- 'root_1.0.0 fcy_1.0.0_[a]' 'root_1.0.0_fcy_1.0.0' root-fcy
+# rows cargo reads as invalid, which it never selects
+ctl invalid-feature INVALID/-/- 'root_1.0.0 ivf_1.0.0' 'root_1.0.0_ivf_1.0.0' root-ivf
+ctl invalid-optdev INVALID/-/- 'root_1.0.0 ivd_1.0.0' 'root_1.0.0_ivd_1.0.0' root-ivd
+ctl invalid-req INVALID/-/- 'root_1.0.0 ivr_1.0.0 beta_1.0.0' \
+  'root_1.0.0_ivr_1.0.0 ivr_1.0.0_beta_1.0.0' root-ivr
+ctl invalid-req-dev INVALID/-/- 'root_1.0.0 ivq_1.0.0' 'root_1.0.0_ivq_1.0.0' root-ivq
+ctl invalid-target INVALID/-/- 'root_1.0.0 ivt_1.0.0 beta_1.0.0' \
+  'root_1.0.0_ivt_1.0.0 ivt_1.0.0_beta_1.0.0' root-ivt
+ctl invalid-vers INVALID/-/- 'root_1.0.0 ivv_1.0.0-01' 'root_1.0.0_ivv_1.0.0-01' root-ivv
 
 # cargo failing for want of a registry says nothing of the answer, and
 # leaves only reproduced unknown
