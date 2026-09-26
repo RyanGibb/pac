@@ -26,7 +26,8 @@
 #
 # apt exits 100 for an inconsistency and for a broken environment alike,
 # so an exit is read as an inconsistency only beside one of the errors apt
-# gives for one; any other failure leaves the answer unchecked (ERR).
+# gives for one (refusals, the errors scale.sh reads as apt refusing a
+# query); any other failure leaves the answer unchecked (ERR).
 #
 # APTROOT is the root setup.sh builds, whose lists each answer's own
 # status is read beside; APT names the binary when apt-get is not on PATH;
@@ -52,10 +53,9 @@ for a; do
   esac
 done
 
-inconsistent='^E: (Unmet dependencies|Unable to correct problems|Unable to satisfy dependencies|Unable to locate package|Package .* has no installation candidate|Version .* was not found|Couldn.t configure|This installation run will require|Could not perform immediate configuration)'
 err=0
 ran() {  # <rc> <log>: whether apt ran to an answer, a refusal included
-  [ "$1" -eq 0 ] || { [ "$1" -eq 100 ] && grep -qE "$inconsistent" "$2"; } || err=1
+  [ "$1" -eq 0 ] || { [ "$1" -eq 100 ] && grep -qE -f "$S/refusals" "$2"; } || err=1
 }
 # a root with no lists has apt locate nothing, which reads as a refusal
 ls "$ROOT"/var/lib/apt/lists/*Packages > /dev/null 2>&1 || err=1

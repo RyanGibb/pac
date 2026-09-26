@@ -46,7 +46,8 @@ prepare() {
   serve "$PORT" "$run/cache" "$run/shim.log" python3 "$S/shim.py" "$PORT" "$run/cache" $mode
 }
 
-refused() { grep -qE '^npm error code (ERESOLVE|ETARGET|E404|ENOVERSIONS|EBADPLATFORM)$' "$2"; }
+# the codes check.sh reads as a verdict
+refused() { grep -qE -f "$S/refusals" "$2"; }
 
 ask() {  # <project dir>
   rm -f "$1/package-lock.json"

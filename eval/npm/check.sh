@@ -27,8 +27,9 @@
 # poses layouts pac would never write.
 #
 # npm exits 1 for every error; one is read as a verdict only under a code
-# npm gives an answer it will not take, and anything else, like a shim
-# that stopped answering, leaves the answer unchecked.
+# npm gives an answer it will not take (refusals, the codes scale.sh reads
+# as npm refusing a query), and anything else, like a shim that stopped
+# answering, leaves the answer unchecked.
 #
 # NPM_RUN holds the snapshot farm (cache/) and a scratch home/, as
 # setup.sh builds them; PORT is where shim.py serves that farm; NPM_GIT
@@ -52,8 +53,7 @@ verdict() {  # <valid> <minimal> <why>
 }
 err=0
 ran() {  # <rc> <log>: whether npm ran to an answer, a refusal included
-  [ "$1" -eq 0 ] || { [ "$1" -eq 1 ] &&
-    grep -qE '^npm error code (EUSAGE|ERESOLVE|ETARGET|ENOVERSIONS|EBADPLATFORM)$' "$2"; } || err=1
+  [ "$1" -eq 0 ] || { [ "$1" -eq 1 ] && grep -qE -f "$S/refusals" "$2"; } || err=1
 }
 
 rm -rf "$W" "$W.plo"; mkdir -p "$W"

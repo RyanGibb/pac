@@ -55,13 +55,14 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import run_query  # noqa: E402
-from scale import bounds, holds  # noqa: E402
+from scale import REFUSED, bounds, holds  # noqa: E402
 
 KEEP = ["update", "--workspace"]
 FRESH = ["generate-lockfile"]
+# cargo changing the lock, or refusing the question as scale.py reads a
+# refusal
 VERDICTS = ("because --locked was passed to prevent this",
-            "needs to be updated but --locked was passed",
-            "failed to select a version", "cyclic package dependency")
+            "needs to be updated but --locked was passed") + REFUSED
 
 
 class Unchecked(Exception):

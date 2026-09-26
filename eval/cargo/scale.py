@@ -189,6 +189,8 @@ def targets(seed, k, exclude=None):
             print(f"{name}\t{c}")
 
 
+# cargo's errors for a question with no answer, which check.py also reads
+# as a verdict
 REFUSED = ("failed to select a version", "cyclic package dependency", "no matching package named",
            "does not have these features", "does not have that feature")
 

@@ -13,10 +13,9 @@ prepare() {
   export APTROOT=$run/aptroot APT=${APT:-apt-get}
 }
 
-# apt exits 100 for a broken root as for a query it cannot satisfy
-refused() {
-  [ "$1" -eq 100 ] && grep -qE '^E: (Unable to correct problems|Unmet dependencies|Unable to locate package|Package .* has no installation candidate|Version .* was not found)' "$2"
-}
+# apt exits 100 for a broken root as for a query it cannot satisfy; the
+# errors that say which are the ones check.sh reads as a verdict
+refused() { [ "$1" -eq 100 ] && grep -qE -f "$S/refusals" "$2"; }
 
 ask() {
   APT_CONFIG=$APTROOT/etc/apt/apt.conf timeout "$TIMEOUT" "$APT" -s install $1 > "$o.apt" 2>&1
