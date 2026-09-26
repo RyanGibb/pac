@@ -343,6 +343,19 @@ module Make (AP : ARCH) = struct
       | DMA.Deb.Name.Disjunct _ -> Format.fprintf fmt "<alts>"
       | DMA.Deb.Name.Soft _ -> Format.fprintf fmt "<rec>"
       | DMA.Deb.Name.Selector a -> Format.fprintf fmt "<sel %a>" pp_atom a
+
+    (* [pp] abbreviates a clause, which the explanations print; the core
+       block lists clauses side by side, so it spells each one out *)
+    let pp_core fmt n =
+      let alts =
+        Format.pp_print_list
+          ~pp_sep:(fun fmt () -> Format.fprintf fmt " | ")
+          pp_atom
+      in
+      match n with
+      | DMA.Deb.Name.Disjunct a -> Format.fprintf fmt "<alts %a>" alts a
+      | DMA.Deb.Name.Soft a -> Format.fprintf fmt "<rec %a>" alts a
+      | _ -> pp fmt n
   end
 end
 

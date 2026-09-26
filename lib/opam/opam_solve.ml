@@ -40,7 +40,7 @@ type result = {
   depexts : string list;
 }
 
-let solve ?(debug = false) ?(order = `Tool) ?(with_test = false)
+let solve ?(debug = false) ?(core = false) ?(order = `Tool) ?(with_test = false)
     ?(with_doc = false) ?(with_dev_setup = false)
     ?(opam_version = default_opam_version) ar
     (query : (string * Opam_parse.vc) list) :
@@ -58,16 +58,20 @@ let solve ?(debug = false) ?(order = `Tool) ?(with_test = false)
   in
   let st = lookups rho ar in
   let touch = touch rho ar query st in
-  L.solve st ~touch (Order.hooks order (ar, query, st, touch))
-  |> Result.map (fun (s_pf, nodes) ->
-      (* the package formula's packages decode to opam's through the
+  let r =
+    L.solve st ~touch (Order.hooks order (ar, query, st, touch))
+    |> Result.map (fun (s_pf, nodes) ->
+        (* the package formula's packages decode to opam's through the
             second of the two layers the reduction composes *)
-      let reals =
-        List.sort compare (Op.PkgSet.elements (Red.opamResolution s_pf))
-      in
-      {
-        reals;
-        nodes;
-        lookups = L.lookups st;
-        depexts = depexts_of rho ar reals;
-      })
+        let reals =
+          List.sort compare (Op.PkgSet.elements (Red.opamResolution s_pf))
+        in
+        {
+          reals;
+          nodes;
+          lookups = L.lookups st;
+          depexts = depexts_of rho ar reals;
+        })
+  in
+  if core then L.core st ~touch;
+  r

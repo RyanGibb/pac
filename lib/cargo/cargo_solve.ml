@@ -86,8 +86,8 @@ let decode st (sol : (Cg.NPlus.t * PVersion.t) list) : result =
     lookups = Hashtbl.length st.L.pg_deps;
   }
 
-let solve ?(debug = false) ?(order = `Tool) ~index ~features ~rustv
-    (root : Q.root) : run =
+let solve ?(debug = false) ?(core = false) ?(order = `Tool) ~index ~features
+    ~rustv (root : Q.root) : run =
   Pubgrub.set_debug debug;
   let ar = Archive.empty index in
   (* cargo's "no matching package named" is its own error, not a failed
@@ -121,13 +121,25 @@ let solve ?(debug = false) ?(order = `Tool) ~index ~features ~rustv
     | Error inc -> Error (fun ppf -> PG.explain_incompatibility ppf inc)
     | Ok sol -> Ok (decode st sol)
   in
-  {
-    answer;
-    n_names = ar.Archive.n_names;
-    n_vers = ar.Archive.n_vers;
-    dropped = ar.Archive.n_dropped;
-    t_parse = ar.Archive.t_parse;
-  }
+  let run =
+    {
+      answer;
+      n_names = ar.Archive.n_names;
+      n_vers = ar.Archive.n_vers;
+      dropped = ar.Archive.n_dropped;
+      t_parse = ar.Archive.t_parse;
+    }
+  in
+  if core then
+    Pac_common.Core.print ~pp_name:PName.pp ~pp_version:PVersion.pp
+      ~versions:(L.pg_versions st)
+      ~dependees:(fun (tn, { PVersion.v; _ }) ->
+        List.map
+          (fun ((m, vs) : T.Dependees.t) ->
+            (m, List.map (L.tag st m) (T.VSet.elements vs)))
+          (L.dependees st (tn, v)))
+      [ Cg.NPlus.CRoot ];
+  run
 
 (* cargo tells packages apart by source as well, so without the
    self-patch the registry's crate at the root's name and version is a

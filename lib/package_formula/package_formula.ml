@@ -206,6 +206,48 @@ struct
          (fun best c -> if rank c < rank best then c else best)
          (List.hd open_names) (List.tl open_names))
 
+  (* [Pp.pp_name] stands a disjunct for its formulas, which the explanations
+     print; the core block lists disjuncts side by side, so it spells each
+     one out, its versions tagged as PubGrub sees them *)
+  let rec pp_formula st fmt (f : PF.coq_Formula) =
+    match f with
+    | PF.FDep (n, vs) ->
+        let tn = PFR.Name.Orig n in
+        Format.fprintf fmt "%a{%a}" Pp.pp_name tn
+          (Format.pp_print_list
+             ~pp_sep:(fun fmt () -> Format.fprintf fmt ",")
+             P.pp)
+          (List.map
+             (fun w -> st.tag tn (PFR.Version.Orig w))
+             (PF.VSet.elements vs))
+    | PF.FConj (a, b) ->
+        Format.fprintf fmt "(%a & %a)" (pp_formula st) a (pp_formula st) b
+    | PF.FDisj (a, b) ->
+        Format.fprintf fmt "(%a | %a)" (pp_formula st) a (pp_formula st) b
+    | PF.FNeg a -> Format.fprintf fmt "!%a" (pp_formula st) a
+
+  let pp_core_name st fmt (tn : PFR.Name.t) =
+    match tn with
+    | PFR.Name.Disjunct fs ->
+        Format.fprintf fmt "<%a>"
+          (Format.pp_print_list
+             ~pp_sep:(fun fmt () -> Format.fprintf fmt " | ")
+             (pp_formula st))
+          fs
+    | PFR.Name.Orig _ -> Pp.pp_name fmt tn
+
+  let core st ~touch =
+    Pac_common.Core.print ~pp_name:(pp_core_name st) ~pp_version:P.pp
+      ~versions:(versions st)
+      ~dependees:(fun (tn, pv) ->
+        let p = (tn, P.v pv) in
+        touch p;
+        List.map
+          (fun ((m, vs) : T.Dependees.t) ->
+            (m, List.map (st.tag m) (T.VSet.elements vs)))
+          (dependees st p))
+      [ PFR.Name.Orig (fst st.root) ]
+
   (* The core solution back through the proved decoder to the package
      formula's packages.  Reading the ecosystem's packages off the
      solution directly would be a further, unproved, decoder, and it is

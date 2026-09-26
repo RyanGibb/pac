@@ -48,8 +48,7 @@ Any other order has no generator to seed, so a --seed beside it is a
 command-line error rather than a flag that changes nothing:
 
   $ ../../../bin/main.exe alpine --seed 1 PROVIDERS editor
-  Usage: pac alpine [--help] [--debug] [--order=ORDER] [--seed=N] [OPTION]…
-         APKINDEX PKG…
+  Usage: pac alpine [--help] [OPTION]… APKINDEX PKG…
   pac: --seed is read only under --order=random
   [2]
 

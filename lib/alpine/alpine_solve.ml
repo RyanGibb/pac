@@ -6,13 +6,18 @@ module Make () = struct
 
   type result = { pkgs : (string * string) list; nodes : int; lookups : int }
 
-  let solve ?(debug = false) ?(order = `Tool) (ar : archive)
+  let solve ?(debug = false) ?(core = false) ?(order = `Tool) (ar : archive)
       (world : P.dep list) :
       (result, Pac_common.Report.explanation) Stdlib.result =
     Pubgrub.set_debug debug;
     let st = lookups ar in
-    L.solve st ~touch:(touch ar world st) (Order.hooks order ar)
-    |> Result.map (fun (s_pf, nodes) ->
-        let pkgs = Alp.PkgSet.elements (Red.alpineResolution s_pf) in
-        { pkgs = List.sort compare pkgs; nodes; lookups = L.lookups st })
+    let touch = touch ar world st in
+    let r =
+      L.solve st ~touch (Order.hooks order ar)
+      |> Result.map (fun (s_pf, nodes) ->
+          let pkgs = Alp.PkgSet.elements (Red.alpineResolution s_pf) in
+          { pkgs = List.sort compare pkgs; nodes; lookups = L.lookups st })
+    in
+    if core then L.core st ~touch;
+    r
 end
