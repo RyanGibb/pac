@@ -21,7 +21,9 @@ type stanza = {
      recommends clause need not be satisfiable for the solve to succeed *)
   recommends_raw : string list;
   provides : provide list;
-  conflicts : atom list; (* Conflicts + Breaks atoms *)
+  (* and Breaks: to apt's solver both only exclude, and they differ in the
+     unpack order dpkg keeps, which is no part of a resolution *)
+  conflicts : atom list;
   essential : bool;
   (* apt folds Protected into the same flag as Important (deblistparser.cc
      UsePackage), so the two fields are read as one here *)
@@ -139,6 +141,47 @@ let parse_atom s =
       if name = "" then None
       else Some { name; aqual; constr = Some (op, strip v) }
 
+(* The alternatives parse_depends drops, those parse_atom finds no name in:
+   an empty one, or one opening on a qualifier or, with no version to cut
+   the name at, on a restriction.  apt reads any as an error in the index.
+   They are counted as the stanza is read, without the parse, which waits
+   until a lookup asks for the field; an empty clause parse_depends skips. *)
+let nameless_alternatives field =
+  let n = String.length field and count = ref 0 in
+  let ws c = c = ' ' || c = '\t' || c = '\n' || c = '\r' in
+  let skip_ws i e =
+    let i = ref i in
+    while !i < e && ws field.[!i] do
+      incr i
+    done;
+    !i
+  in
+  let upto c i e =
+    let i = ref i in
+    while !i < e && field.[!i] <> c do
+      incr i
+    done;
+    !i
+  in
+  let rec clauses i =
+    if i <= n then (
+      let e = upto ',' i n in
+      if skip_ws i e < e then alternatives i e;
+      clauses (e + 1))
+  and alternatives a e =
+    if a <= e then (
+      let b = upto '|' a e in
+      let s = skip_ws a b in
+      (if s = b then incr count
+       else
+         match (upto '(' s b < b, field.[s]) with
+         | true, ('(' | ':') | false, ('[' | '<' | ':') -> incr count
+         | _ -> ());
+      alternatives (b + 1) e)
+  in
+  clauses 0;
+  !count
+
 let parse_depends field =
   split_on ',' field
   |> List.filter_map (fun clause ->
@@ -151,28 +194,32 @@ let parse_depends field =
    straddles a field boundary, so the concatenation is the parse of each *)
 let parse_depends_fields fields = List.concat_map parse_depends fields
 
-let parse_conflicts field =
-  (* Policy 7.1 allows alternatives only in the Depends family. *)
-  split_on ',' field |> List.filter_map parse_atom
+(* Policy 7.1 allows alternatives only in the Depends family *)
+let parse_conflicts ~reject field =
+  split_on ',' field
+  |> List.filter_map (fun s ->
+      match parse_atom s with
+      | None ->
+          reject ();
+          None
+      | a -> a)
 
+(* Declared arch-qualified Provides are out of scope, so an atom's
+   qualifier is ignored: a single-arch reading of the provided name.  Only
+   "=" provides exist (Policy 7.5); apt drops any other entry with a warning
+   and keeps the rest of the stanza (ParseProvides, deblistparser.cc), and
+   reading it as unversioned would be strictly more permissive. *)
 let parse_provides ~reject field =
   split_on ',' field
   |> List.filter_map (fun s ->
-      (* declared arch-qualified Provides are out of scope: aqual is
-            ignored here (single-arch reading of the provided name) *)
       match parse_atom s with
       | Some { name; constr = Some (Eq, v); _ } ->
           Some { pname = name; pversion = Some v }
       | Some { name; constr = None; _ } ->
           Some { pname = name; pversion = None }
-      (* only "=" provides exist (Policy 7.5); apt drops the one entry with
-            a warning and keeps the rest of the stanza (ParseProvides,
-            deblistparser.cc) -- reading it as unversioned would be
-            strictly more permissive *)
-      | Some { constr = Some _; _ } ->
+      | Some { constr = Some _; _ } | None ->
           reject ();
-          None
-      | None -> None)
+          None)
 
 (* apt warns on any other value and reads it as no *)
 let multi_arch_known = function
@@ -226,6 +273,14 @@ let stanza_of_fields ~reject (fs : (string * string) list) : stanza option =
         | None -> false
       in
       let raw = List.filter_map Fun.id in
+      let depends_raw = raw [ !predepends; !depends ]
+      and recommends_raw = raw [ !recommends ] in
+      List.iter
+        (fun f ->
+          for _ = 1 to nameless_alternatives f do
+            reject ()
+          done)
+        (depends_raw @ recommends_raw);
       Some
         {
           package;
@@ -238,11 +293,12 @@ let stanza_of_fields ~reject (fs : (string * string) list) : stanza option =
                 reject ();
                 None
             | m -> m);
-          depends_raw = raw [ !predepends; !depends ];
-          recommends_raw = raw [ !recommends ];
+          depends_raw;
+          recommends_raw;
           provides = opt (parse_provides ~reject) !provides;
           conflicts =
-            opt parse_conflicts !conflicts @ opt parse_conflicts !breaks;
+            opt (parse_conflicts ~reject) !conflicts
+            @ opt (parse_conflicts ~reject) !breaks;
           essential = yes !essential;
           important = yes !important || yes !protected_;
           priority =
@@ -291,7 +347,7 @@ let parse_file ~reject path =
        else if line.[0] = ' ' || line.[0] = '\t' then
          match !fields with
          | (k, v) :: tl -> fields := (k, v ^ "\n" ^ strip line) :: tl
-         | [] -> ()
+         | [] -> reject ()
        else
          match String.index_opt line ':' with
          | Some i ->
@@ -300,7 +356,7 @@ let parse_file ~reject path =
                strip (String.sub line (i + 1) (String.length line - i - 1))
              in
              fields := (k, v) :: !fields
-         | None -> ()
+         | None -> reject ()
      done
    with End_of_file -> ());
   flush ();

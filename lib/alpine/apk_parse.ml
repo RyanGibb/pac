@@ -162,7 +162,10 @@ let parse_file ~reject ~broken (path : string) : pkg list =
              | None ->
                  reject ();
                  a.a_iif <- [])
-         | 'k' -> a.a_prio <- int_of_string_opt v
+         | 'k' -> (
+             match int_of_string_opt v with
+             | Some k -> a.a_prio <- Some k
+             | None -> reject ())
          (* A C o S I T U L m t c carry no instance data, and apk skips the
             installed-db fields F M R Z in an index.  apk makes a package
             with an unknown upper-case field uninstallable, which dropping

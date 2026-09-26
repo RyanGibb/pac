@@ -853,6 +853,24 @@ dropped:
   parser dropped 2 declarations
   [1]
 
+apt refuses an index with an alternative that names no package, or a line
+that is no field, where pac drops them, counting what it dropped: nl's
+Depends has five such alternatives (an empty one, and ones opening on a
+version, a qualifier and two restrictions), and the file a stray
+continuation and a line with no colon.  An empty clause is no alternative
+at all:
+
+  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.nameless nl
+  packages (5):
+    na:amd64 1
+    nb:amd64 1
+    nc:amd64 1
+    nl:amd64 1
+    nok:amd64 1
+  encoded solution: 6 core nodes (8 lookups)
+  loaded: 5 names, 5 versions
+  parser dropped 7 declarations
+
 apt keeps 1.0 and 1.00 as two versions, which compare equal, and NAME=VERSION
 matches the string (pkgVersionMatch::MatchVer), so exv=1.00 is the stanza
 without exv 1.0's missing dependency, and exv=1.0 the one with it:

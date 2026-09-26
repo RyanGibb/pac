@@ -93,10 +93,7 @@ let load_name ar (name : string) : (string * Opam_parse.pkg_meta) list =
                   try
                     let m = Opam_parse.parse_file ~reject ~name ~version opam in
                     acc := (version, m) :: !acc
-                  with
-                  | Parsing.Parse_error | OpamLexer.Error _ | Failure _
-                  | Sys_error _
-                  ->
+                  with Parsing.Parse_error | OpamLexer.Error _ | Failure _ ->
                     reject ())
             | _ -> ())
           (Sys.readdir ndir);

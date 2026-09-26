@@ -1,0 +1,23 @@
+ a continuation with no field before it
+Package: nl
+Version: 1
+Architecture: amd64
+a line with no colon
+Depends: na | , (>= 1), nb, :any, [amd64], nok (>= 1) | <!x>
+Recommends: , nc,
+
+Package: na
+Version: 1
+Architecture: amd64
+
+Package: nb
+Version: 1
+Architecture: amd64
+
+Package: nc
+Version: 1
+Architecture: amd64
+
+Package: nok
+Version: 1
+Architecture: amd64

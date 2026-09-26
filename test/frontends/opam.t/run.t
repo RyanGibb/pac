@@ -459,6 +459,15 @@ A repository that cannot be read is a read error, not a refused query:
   error: packages/eqv/eqv.1.0/opam: Not a directory
   [3]
 
+and so is an opam file of the repository that cannot be read, which would
+otherwise read as a version the name does not have:
+
+  $ mkdir -p unread/packages/u/u.1 && printf 'opam-version: "2.0"\n' > unread/packages/u/u.1/opam && chmod 000 unread/packages/u/u.1/opam
+  $ ../../../bin/main.exe opam unread u
+  error: unread/packages/u/u.1/opam: Permission denied
+  [3]
+  $ chmod 644 unread/packages/u/u.1/opam
+
 opam install refuses an atom no package of the repository meets, whether
 or not it is available, and first matches a name that differs only in case
 from one other name:
