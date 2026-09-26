@@ -21,27 +21,28 @@ module Alp = E.Alpine (Ot.Str) (AVerOT) (PM)
 let first_pos (ds : Alp.coq_Dep list) : Alp.Atom.t option =
   List.find_map (function Alp.DPos a -> Some a | Alp.DNeg _ -> None) ds
 
-(* Which condition a rule designates is free, and is a performance
-   choice: the rule is materialised only once that condition is selected.
-   Alpine writes the switch name (docs, openrc) first and almost nothing
-   depends on those, where the least positive condition lands on a name
-   most of the archive carries -- so the first-listed positive condition is
-   recorded as the set is built, keyed by the element list, which is
-   canonical where the set's own representation need not be.  The
-   reduction takes the designation as a module, so the table of the index
-   a run loads is one the driver is built over. *)
-module type Designations = sig
-  val table : (Alp.coq_Dep list, Alp.Atom.t) Hashtbl.t
-end
+(* generative, since each application holds the designations of the one
+   index it loads *)
+module Make () = struct
+  (* Which condition a rule designates is free, and is a performance
+     choice: the rule is materialised only once that condition is selected.
+     Alpine writes the switch name (docs, openrc) first and almost nothing
+     depends on those, where the least positive condition lands on a name
+     most of the archive carries -- so the first-listed positive condition
+     is recorded as the set is built, keyed by the element list, which is
+     canonical where the set's own representation need not be.  The
+     reduction takes the designation as a module, so the table is built
+     with it. *)
+  let designations : (Alp.coq_Dep list, Alp.Atom.t) Hashtbl.t =
+    Hashtbl.create 4096
 
-module Make (D : Designations) = struct
   (* the fallback keeps designation total on sets with a positive condition,
-   discharging designation_spec, which is trusted, as ApkVerMatch's
-   prefix/hash are *)
+     discharging designation_spec, which is trusted, as ApkVerMatch's
+     prefix/hash are *)
   module FirstDesignation = struct
     let designation (conds : Alp.CondSet.t) : Alp.Atom.t option =
       let key = Alp.CondSet.elements conds in
-      match Hashtbl.find_opt D.table key with
+      match Hashtbl.find_opt designations key with
       | Some _ as a -> a
       | None -> first_pos key
   end
@@ -73,16 +74,17 @@ module Make (D : Designations) = struct
     match v with Some pv -> Alp.PVer pv | None -> Alp.PBare
 
   (* building the set is also where the rule's first-listed positive
-   condition is offered to [FirstDesignation]; an earlier rule keeps the
-   designation when two rules share a set, so the table does not depend on
-   when it is read *)
+     condition is offered to [FirstDesignation]; an earlier rule keeps the
+     designation when two rules share a set, so the table does not depend on
+     when it is read *)
   let condset_of ds =
     let conds = List.map xdep ds in
     let cs = Alp.CondSet.ofList conds in
     (match first_pos conds with
     | Some a ->
         let key = Alp.CondSet.elements cs in
-        if not (Hashtbl.mem D.table key) then Hashtbl.add D.table key a
+        if not (Hashtbl.mem designations key) then
+          Hashtbl.add designations key a
     | None -> ());
     cs
 
@@ -97,11 +99,11 @@ module Make (D : Designations) = struct
     meta : (string * string, P.pkg) Hashtbl.t;
     providers : (string, ((string * string) * string option) list) Hashtbl.t;
     (* install-if rules by their designated condition's name: only a package
-     bearing that name, or providing it, can carry the rule *)
+       bearing that name, or providing it, can carry the rule *)
     iif_by_cond : (string, iif_rule list) Hashtbl.t;
     prio : (string * string, int) Hashtbl.t;
     (* where each package stands in the index: apk_db_pkg_add appends to a
-     name's provider list in the order the index is read *)
+       name's provider list in the order the index is read *)
     pos : (string * string, int) Hashtbl.t;
     mutable n_pkgs : int;
     mutable n_provs : int;
@@ -110,8 +112,8 @@ module Make (D : Designations) = struct
   }
 
   (* Architecture is fixed by the index that was loaded.  A repository's
-   APKINDEX is per-arch, so no A: filtering is applied and no cross-arch
-   reasoning is possible here. *)
+     APKINDEX is per-arch, so no A: filtering is applied and no cross-arch
+     reasoning is possible here. *)
   let load_index (path : string) : archive =
     let dropped = ref 0 in
     let pkgs = P.parse_file ~reject:(fun () -> incr dropped) path in
@@ -148,15 +150,15 @@ module Make (D : Designations) = struct
         if p.P.install_if <> [] then (
           ar.n_iif <- ar.n_iif + 1;
           (* a rule with no positive condition is left out, and nothing is
-           lost -- apk reaches a rule only from an installed
-           package bearing or providing a condition's name, which falsifies
-           a negated condition unless it is the rule's own package *)
+             lost -- apk reaches a rule only from an installed
+             package bearing or providing a condition's name, which falsifies
+             a negated condition unless it is the rule's own package *)
           if List.exists (fun (d : P.dep) -> not d.P.d_neg) p.P.install_if then
             iifs :=
               ((p.P.name, p.P.version), condset_of p.P.install_if) :: !iifs))
       pkgs;
     (* keyed only once every set has offered its designation, so the key a
-     rule is filed under is the one [attachDesignation] will ask about *)
+       rule is filed under is the one [attachDesignation] will ask about *)
     List.iter
       (fun (z, conds) ->
         match FirstDesignation.designation conds with
@@ -183,13 +185,13 @@ module Make (D : Designations) = struct
     if k <= 0 then E.O else E.S (nat_of_int (k - 1))
 
   (* repoPreimage and provPreimage, built from the archive's tables rather
-   than by filtering a whole-archive instance, which is the only reason a
-   per-lookup sub-instance is cheap.  Lookup.subInst's inst_prio is the k:
-   lines of its repository: provider_priority is apk's preference among
-   the providers of a name, versioned ones included, and preference in
-   this pipeline lives in PVersion.compare, off the archive, but whether
-   it is non-zero also decides whether a provides without a version is
-   selected automatically, which the calculus reads off inst_prio. *)
+     than by filtering a whole-archive instance, which is the only reason a
+     per-lookup sub-instance is cheap.  Lookup.subInst's inst_prio is the k:
+     lines of its repository: provider_priority is apk's preference among
+     the providers of a name, versioned ones included, and preference in
+     this pipeline lives in PVersion.compare, off the archive, but whether
+     it is non-zero also decides whether a provides without a version is
+     selected automatically, which the calculus reads off inst_prio. *)
   let preimages_at ar (ns : string list) =
     let repo = ref [] and prov = ref [] in
     List.iter
@@ -219,11 +221,11 @@ module Make (D : Designations) = struct
     { empty_inst with Alp.inst_repo = repo; inst_prov = prov; inst_prio = prio }
 
   (* Lookup.installIfFibre: of the rules designating a name this package
-   bears or provides, the ones whose designated condition it actually
-   satisfies.  attachAt reads the package itself and the provides entries
-   it heads and nothing else, so deciding it against an instance carrying
-   just those entries is the whole archive's answer
-   (attachAt_subInst). *)
+     bears or provides, the ones whose designated condition it actually
+     satisfies.  attachAt reads the package itself and the provides entries
+     it heads and nothing else, so deciding it against an instance carrying
+     just those entries is the whole archive's answer
+     (attachAt_subInst). *)
   let install_if_at ar ((n, v) : string * string) (own : Alp.Prov.t) :
       iif_rule list =
     let inst = { empty_inst with Alp.inst_prov = own } in
@@ -238,11 +240,11 @@ module Make (D : Designations) = struct
     List.filter (fun r -> Red.attachAt inst (n, v) r.designation) cands
 
   (* Lookup.pkgSubInst: the package's own dependencies, provides entries
-   and install-if rules, and the repository at the names those
-   dependencies mention --
-   together with, per install-if rule the package carries, the rule's
-   declaring name and the names of the conditions it did not designate,
-   and the world, which names the providers without k: it lets be selected *)
+     and install-if rules, and the repository at the names those
+     dependencies mention --
+     together with, per install-if rule the package carries, the rule's
+     declaring name and the names of the conditions it did not designate,
+     and the world, which names the providers without k: it lets be selected *)
   let pkg_inst ar (world : P.dep list) ((n, v) : string * string) : Alp.coq_Inst
       =
     match Hashtbl.find_opt ar.meta (n, v) with
@@ -284,10 +286,10 @@ module Make (D : Designations) = struct
         }
 
   (* Lookup.rootSubInst: the world set and the repository at the names it
-   mentions.  Every install-if rule is carried by a package, so the root
-   reads no part of the rule table.  The world is the query's goal
-   arguments and nothing else: this resolves from an empty root rather
-   than from an existing /etc/apk/world. *)
+     mentions.  Every install-if rule is carried by a package, so the root
+     reads no part of the rule table.  The world is the query's goal
+     arguments and nothing else: this resolves from an empty root rather
+     than from an existing /etc/apk/world. *)
   let root_inst ar (world : P.dep list) : Alp.coq_Inst =
     let repo, prov, prio =
       preimages_at ar (List.map (fun (d : P.dep) -> d.P.d_name) world)
@@ -327,14 +329,14 @@ module Make (D : Designations) = struct
     | Red.Name.Orig s -> Format.fprintf fmt "%s" s
 
   (* The rank an unversioned-provider disjunction's branches are compared
-   on: the k: line where a provider carries one; [rank_unranked] below
-   all of them where it does not, since apk-package(5) says such a
-   provider is not selected automatically and encReq admits it only when
-   the world names its owner; [rank_pkg] for the branch holding the
-   name's own versions, above every unversioned provider because those
-   offer no version at the name and apk's first key between providers it
-   has not disqualified is the offered version; and [rank_none] for a
-   branch that offers nothing. *)
+     on: the k: line where a provider carries one; [rank_unranked] below
+     all of them where it does not, since apk-package(5) says such a
+     provider is not selected automatically and encReq admits it only when
+     the world names its owner; [rank_pkg] for the branch holding the
+     name's own versions, above every unversioned provider because those
+     offer no version at the name and apk's first key between providers it
+     has not disqualified is the offered version; and [rank_none] for a
+     branch that offers nothing. *)
   let rank_pkg = max_int
   let rank_unranked = -1
   let rank_none = min_int
@@ -343,17 +345,17 @@ module Make (D : Designations) = struct
     match Hashtbl.find_opt ar.prio q with Some k -> k | None -> rank_unranked
 
   (* apk's provider_priority defaults to 0 for a package with no k: line,
-   and the field is the package's own, read off whichever package offers
-   the name -- a provider and a package claiming the name itself alike. *)
+     and the field is the package's own, read off whichever package offers
+     the name -- a provider and a package claiming the name itself alike. *)
   let prio_of ar (q : string * string) : int =
     match Hashtbl.find_opt ar.prio q with Some k -> k | None -> 0
 
   (* encReq and encPos list the unversioned providers of a name as a
-   disjunction whose last alternative is the name's own versions, so every
-   alternative but the last is a lone provider.  An install-if disjunction
-   opens on an FNeg alternative and a negated dependency makes no
-   disjunction at all, so an alternative naming a single package
-   identifies a provider list. *)
+     disjunction whose last alternative is the name's own versions, so every
+     alternative but the last is a lone provider.  An install-if disjunction
+     opens on an FNeg alternative and a negated dependency makes no
+     disjunction at all, so an alternative naming a single package
+     identifies a provider list. *)
   let lone_provider (f : PF.coq_Formula) : (string * string) option =
     match f with
     | PF.FDep (Red.Name.Orig m, vs) -> (
@@ -363,7 +365,7 @@ module Make (D : Designations) = struct
     | _ -> None
 
   (* The alternative a synthetic version selects, and whether it is the last
-   one -- the last alternative is the only one that is not a provider. *)
+     one -- the last alternative is the only one that is not a provider. *)
   let rec alt_at (fs : PF.coq_Formula list) (i : E.nat) :
       (PF.coq_Formula * bool) option =
     match (fs, i) with
@@ -382,65 +384,65 @@ module Make (D : Designations) = struct
       match lone_provider f with Some q -> prov_rank ar q | None -> rank_none
 
   (* PubGrub decides the compare-maximum candidate, so preference lives
-   here, and what it has to reproduce is apk's compare_providers over
-   the providers of the name being decided.  Against a fresh root and one
-   repository its installed-db and pinning keys are dead, and its
-   solver-state keys (solver.c:578-595) only rank a provider apk has not
-   disqualified -- for an applied constraint it misses, or a dependency
-   it can no longer meet -- above one it has, which is left to PubGrub's
-   ranges and backtracking.  Of the rest, two are kept, in order, the
-   version the provider offers *at the requested name* and then
-   provider_priority, with the repository order below both and a single
-   repository here.  The one live key between them, the newer version by
-   the provider's own name (solver.c:651-661), is omitted: it separates
-   only two versions of one package, and an index that lists each
-   package once has no such pair.  Past its last key select_package keeps
-   the provider it met first, since it takes a later one only when
-   compare_providers says strictly better, and it meets them in index
-   order -- so [ord], the provider's place in the index, is the final key,
-   and the encoded order only keeps the comparison total.
+     here, and what it has to reproduce is apk's compare_providers over
+     the providers of the name being decided.  Against a fresh root and one
+     repository its installed-db and pinning keys are dead, and its
+     solver-state keys (solver.c:578-595) only rank a provider apk has not
+     disqualified -- for an applied constraint it misses, or a dependency
+     it can no longer meet -- above one it has, which is left to PubGrub's
+     ranges and backtracking.  Of the rest, two are kept, in order, the
+     version the provider offers *at the requested name* and then
+     provider_priority, with the repository order below both and a single
+     repository here.  The one live key between them, the newer version by
+     the provider's own name (solver.c:651-661), is omitted: it separates
+     only two versions of one package, and an index that lists each
+     package once has no such pair.  Past its last key select_package keeps
+     the provider it met first, since it takes a later one only when
+     compare_providers says strictly better, and it meets them in index
+     order -- so [ord], the provider's place in the index, is the final key,
+     and the encoded order only keeps the comparison total.
 
-   What a provider offers at a name is its own version where it claims
-   the name itself, the p: operand where it is a versioned provides, and
-   nothing at all where the provides carries no version.  So a package
-   of a name is not privileged over a provider of it: the two are compared
-   on the versions they offer, and a provider offering the newer one wins.
-   An unversioned provides is the one case where this order puts a real
-   package first, and not by privilege either -- it offers no version, and
-   no version loses to every version.  provider_priority is read off
-   whichever package offers the name, provider or not, and so decides only
-   once the offered versions tie.
+     What a provider offers at a name is its own version where it claims
+     the name itself, the p: operand where it is a versioned provides, and
+     nothing at all where the provides carries no version.  So a package
+     of a name is not privileged over a provider of it: the two are compared
+     on the versions they offer, and a provider offering the newer one wins.
+     An unversioned provides is the one case where this order puts a real
+     package first, and not by privilege either -- it offers no version, and
+     no version loses to every version.  provider_priority is read off
+     whichever package offers the name, provider or not, and so decides only
+     once the offered versions tie.
 
-   A synthetic version selects one alternative of its disjunction by
-   position, and which alternative is wanted depends on the disjunction.
-   installIfForm lists the negations of the install_if conditions first
-   and the augmented package last, so preferring the earliest alternative is
-   apk's rule that an install-if fires only when its conditions already hold
-   -- without it every install_if rule in the index is discharged by
-   installing its target.  encPos folds the versioned provides of a name
-   into the name's own version set, where the comparison above settles
-   them, and lists only the unversioned providers as separate
-   alternatives ahead of it -- so that disjunction is exactly the case
-   where the name's own versions rank highest, with k: ordering the
-   unversioned providers among themselves.
+     A synthetic version selects one alternative of its disjunction by
+     position, and which alternative is wanted depends on the disjunction.
+     installIfForm lists the negations of the install_if conditions first
+     and the augmented package last, so preferring the earliest alternative is
+     apk's rule that an install-if fires only when its conditions already hold
+     -- without it every install_if rule in the index is discharged by
+     installing its target.  encPos folds the versioned provides of a name
+     into the name's own version set, where the comparison above settles
+     them, and lists only the unversioned providers as separate
+     alternatives ahead of it -- so that disjunction is exactly the case
+     where the name's own versions rank highest, with k: ordering the
+     unversioned providers among themselves.
 
-   The offered version and the k: are carried on the version rather than
-   read off it: which disjunction a position belongs to is what decides
-   an [Idx], and a comparator sees two versions and not their name.
-   Every version PubGrub holds is handed to it by [versions] or by a
-   dependency range, both of which know the name, so both tag as they go
-   and both fields are a function of the (name, version) pair -- keeping
-   this a total order, and one consistent with the tags on any range the
-   same name is compared against.
+     The offered version and the k: are carried on the version rather than
+     read off it: which disjunction a position belongs to is what decides
+     an [Idx], and a comparator sees two versions and not their name.
+     Every version PubGrub holds is handed to it by [versions] or by a
+     dependency range, both of which know the name, so both tag as they go
+     and both fields are a function of the (name, version) pair -- keeping
+     this a total order, and one consistent with the tags on any range the
+     same name is compared against.
 
-   The absent version every original name has offers nothing at the name
-   and is the encoded order's greatest, so it wins wherever it is
-   admitted: a name only a negated requirement reaches is left out rather
-   than installed. *)
+     The absent version every original name has offers nothing at the name
+     and is the encoded order's greatest, so it wins wherever it is
+     admitted: a name only a negated requirement reaches is left out rather
+     than installed. *)
   module PVersion = struct
     (* [pv] is the version offered at the name being decided, absent for a
-     version that is not a provider candidate at a name (the root, and a
-     disjunction's positional [Idx]). *)
+       version that is not a provider candidate at a name (the root, and a
+       disjunction's positional [Idx]). *)
     type t = { pv : string option; rank : int; ord : int; v : PFR.Version.t }
 
     let v (x : t) = x.v
@@ -531,10 +533,10 @@ module Make (D : Designations) = struct
   module PG = L.PG
 
   (* Lookup.versions_lookupOrig: what the versions callback answers, before
-   the tagging PubGrub sees -- the name's own versions and its provides.
-   The encoder reads this at the names a formula negates: a negated
-   requirement's complement ranges over the versions offered at the name,
-   provides included. *)
+     the tagging PubGrub sees -- the name's own versions and its provides.
+     The encoder reads this at the names a formula negates: a negated
+     requirement's complement ranges over the versions offered at the name,
+     provides included. *)
   let oracle ar (tn : Red.Name.name) : PF.VSet.t =
     match tn with
     | Red.Name.Orig n -> Red.versions (name_inst ar n) n
@@ -565,6 +567,4 @@ module Make (D : Designations) = struct
     | _ -> ()
 end
 
-module type S = module type of Make (struct
-  let table = Hashtbl.create 0
-end)
+module type S = module type of Make ()

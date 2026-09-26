@@ -385,9 +385,7 @@ let alpine_run debug order path goals =
   | Error e -> error 2 "%s" e
   | Ok world ->
       let t0 = Unix.gettimeofday () in
-      let module A = Alpine_solve.Make (struct
-        let table = Hashtbl.create 4096
-      end) in
+      let module A = Alpine_solve.Make () in
       let ar = A.load_index path in
       let parse = Unix.gettimeofday () -. t0 in
       let r = A.solve ~debug ~order ar world in

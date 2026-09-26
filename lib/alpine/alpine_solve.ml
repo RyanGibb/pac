@@ -1,6 +1,6 @@
-module Make (D : Lookups.Designations) = struct
+module Make () = struct
   open Lookups
-  module Lk = Make (D)
+  module Lk = Make ()
   include Lk
   module Order = Order.Make (Lk)
 
