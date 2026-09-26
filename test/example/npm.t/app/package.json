@@ -1,0 +1,9 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "dependencies": {
+    "preset": "^1",
+    "plugin": "^1",
+    "legacy": "npm:core@^6"
+  }
+}

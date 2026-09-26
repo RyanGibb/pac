@@ -1,0 +1,2 @@
+{"name":"serde_derive","vers":"1.0.209","deps":[{"name":"syn","req":"2","features":[],"optional":false,"default_features":false,"kind":"normal"}],"features":{},"yanked":false}
+{"name":"serde_derive","vers":"1.0.210","deps":[{"name":"syn","req":"2","features":[],"optional":false,"default_features":false,"kind":"normal"}],"features":{},"yanked":false}

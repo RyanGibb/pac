@@ -1,0 +1,21 @@
+Package: bsd-mailx
+Version: 8.1.2
+Architecture: amd64
+Depends: default-mta | mail-transport-agent, liblockfile1 (>= 1.0)
+
+Package: exim4-daemon-light
+Version: 4.98.2
+Architecture: amd64
+Provides: default-mta, mail-transport-agent
+Conflicts: mail-transport-agent
+
+Package: postfix
+Version: 3.10.11
+Architecture: amd64
+Provides: mail-transport-agent
+Conflicts: mail-transport-agent
+
+Package: liblockfile1
+Version: 1.17
+Architecture: amd64
+

@@ -1,0 +1,1 @@
+{"name":"serde","vers":"1.0.210","deps":[{"name":"serde_derive","req":"1","features":[],"optional":true,"default_features":false,"kind":"normal"}],"features":{"derive":["dep:serde_derive"]},"yanked":false}
