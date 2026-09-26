@@ -252,12 +252,12 @@ module Make (AP : Tables.ARCH) = struct
       type t = { pos : int; v : DMA.Deb.Version.t }
 
       (* PubGrub decides the greatest candidate under compare, so preference
-         lives here: dpkg-newest for real versions, leftmost alternative by clause
-         position, a real package above any provider claiming its name, and apt's
-         candidate order among the providers.  The calculus only makes the
-         real/provided split legible -- RefReal has no name, so it is the
-         one candidate that cannot be a provider -- and says nothing about which
-         to try first.
+         lives here: dpkg-newest for real versions, leftmost alternative by
+         clause position, a real package above any provider claiming its
+         name, and apt's candidate order among the providers.  The calculus
+         only makes the real/provided split legible -- RefReal has no name,
+         so it is the one candidate that cannot be a provider -- and says
+         nothing about which to try first.
 
          Position is the whole of the alternative order because apt's sort is
          per alternative: TranslateOrGroup (apt-pkg/solver3.cc) sorts each

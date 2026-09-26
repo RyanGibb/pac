@@ -212,10 +212,10 @@ let feature_map_ok (deps : dep list) (tbl : (string * fentry list) list) : bool
    the request as a no-op rather than an error *)
 let default_feature = "default"
 
-(* the implicit features; and, the table complete, a strong a/feat entry over an optional a also enables the
-   feature named a where the table has one, because cargo's resolver does
-   (dep_cache.rs, require_dep_feature) and the calculus states only what
-   the entry asks of a *)
+(* the implicit features; and, the table complete, a strong a/feat entry
+   over an optional a also enables the feature named a where the table has
+   one, because cargo's resolver does (dep_cache.rs, require_dep_feature)
+   and the calculus states only what the entry asks of a *)
 let with_implicit_features (deps : dep list) (tbl : (string * fentry list) list)
     : (string * fentry list) list =
   let tbl =

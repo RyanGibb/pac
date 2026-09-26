@@ -277,7 +277,8 @@ module Make (D : Designations) = struct
           inst_prov = Alp.Prov.union prov own;
           inst_installIf =
             Alp.InstallIf.ofList (List.map (fun r -> (r.pkg, r.conds)) rules);
-          (* apk also takes a k:-less one whose owner has a requirer (solver.c:381) *)
+          (* apk also takes a k:-less one whose owner has a requirer
+             (solver.c:381) *)
           inst_world = Alp.WSet.ofList (List.map xdep world);
           inst_prio = prio;
         }
@@ -394,10 +395,10 @@ module Make (D : Designations) = struct
    the provider's own name (solver.c:651-661), is omitted: it separates
    only two versions of one package, and an index that lists each
    package once has no such pair.  Past its last key select_package keeps
-   the provider it met first, since it takes a later one only when compare_providers
-   says strictly better, and it meets them in index order -- so [ord],
-   the provider's place in the index, is the final key, and the encoded
-   order only keeps the comparison total.
+   the provider it met first, since it takes a later one only when
+   compare_providers says strictly better, and it meets them in index
+   order -- so [ord], the provider's place in the index, is the final key,
+   and the encoded order only keeps the comparison total.
 
    What a provider offers at a name is its own version where it claims
    the name itself, the p: operand where it is a versioned provides, and
