@@ -1,0 +1,6 @@
+; cargo's and npm's range syntaxes side by side over the semver core they
+; share, which is why it sits above both frontends and not in lib/version
+
+(test
+ (name test_ranges)
+ (libraries cargo_frontend npm_frontend))

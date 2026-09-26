@@ -5,7 +5,7 @@
 (test
  (name test_semver)
  (modules test_semver)
- (libraries cargo_frontend npm_frontend))
+ (libraries version))
 
 (test
  (name test_debian)

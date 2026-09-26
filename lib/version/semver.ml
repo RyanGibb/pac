@@ -1,5 +1,11 @@
 let is_digit c = c >= '0' && c <= '9'
 
+(* the end of the digit run at i *)
+let digits_from s i =
+  let n = String.length s in
+  let rec go j = if j < n && is_digit s.[j] then go (j + 1) else j in
+  go i
+
 type t = {
   major : int;
   minor : int;
@@ -26,8 +32,6 @@ let int_of_digits s =
   else if String.length s > 18 then max_int
   else int_of_string s
 
-let split_on c s = String.split_on_char c s
-
 let strip_build s =
   match String.index_opt s '+' with
   | Some i -> (String.sub s 0 i, String.sub s (i + 1) (String.length s - i - 1))
@@ -48,11 +52,8 @@ let split_hyphen_loose (s : string) : string * string =
   | None -> (
       let n = String.length s in
       let digits i =
-        let j = ref i in
-        while !j < n && is_digit s.[!j] do
-          incr j
-        done;
-        if !j > i then Some !j else None
+        let j = digits_from s i in
+        if j > i then Some j else None
       in
       let dot i = if i < n && s.[i] = '.' then Some (i + 1) else None in
       let ( >>= ) = Option.bind in
@@ -62,20 +63,13 @@ let split_hyphen_loose (s : string) : string * string =
           (String.sub s 0 i, String.sub s i (n - i))
       | _ -> (s, ""))
 
-let ids s = if s = "" then [] else split_on '.' s
+let ids s = if s = "" then [] else String.split_on_char '.' s
 
 let of_parts split (s : string) : t =
   let s, build = strip_build s in
   let core, pre = split s in
-  let num s =
-    let n = String.length s in
-    let j = ref 0 in
-    while !j < n && is_digit s.[!j] do
-      incr j
-    done;
-    int_of_digits (String.sub s 0 !j)
-  in
-  let parts = split_on '.' core in
+  let num s = int_of_digits (String.sub s 0 (digits_from s 0)) in
+  let parts = String.split_on_char '.' core in
   let get i = match List.nth_opt parts i with Some x -> num x | None -> 0 in
   {
     major = get 0;
@@ -134,19 +128,15 @@ let comp_of = function
   | "" -> Absent
   | "*" | "x" | "X" -> Star
   | s ->
-      let n = String.length s in
-      let j = ref 0 in
-      while !j < n && is_digit s.[!j] do
-        incr j
-      done;
-      if !j = 0 then Star else Num (int_of_digits (String.sub s 0 !j))
+      let j = digits_from s 0 in
+      if j = 0 then Star else Num (int_of_digits (String.sub s 0 j))
 
 let num_or d = function Num n -> n | Star | Absent -> d
 
 let partial_of split (s : string) =
   let s, _ = strip_build s in
   let core, pre = split s in
-  let parts = split_on '.' core in
+  let parts = String.split_on_char '.' core in
   let get i =
     match List.nth_opt parts i with Some x -> comp_of x | None -> Absent
   in
@@ -165,17 +155,45 @@ let memo size f =
         Hashtbl.add tbl s p;
         p
 
+(* A reading of version strings: how one splits off its prerelease, and
+   how many distinct strings a run meets, which sizes the table of parses
+   the comparator shares. *)
+module Reading (R : sig
+  val split : string -> string * string
+  val size : int
+end) =
+struct
+  let parse_fresh = of_parts R.split
+  let parse = memo R.size parse_fresh
+  let is_prerelease v = (parse v).pre <> []
+  let same_core a b = same_core_parsed (parse a) (parse b)
+
+  (* A requirement admits a prerelease candidate only when one of its own
+     comparators names a prerelease at the same release core: the semver
+     crate's pre_is_compatible (eval.rs) and node-semver's testSet
+     (classes/range.js).  [bounds] are the versions a comparator set
+     names. *)
+  let admits v bounds =
+    (not (is_prerelease v))
+    || List.exists (fun c -> is_prerelease c && same_core v c) bounds
+
+  let parse_partial = partial_of R.split
+end
+
 (* The semver crate's reading: a prerelease follows a hyphen and nothing
    else.  Cargo and npm differ only in how a string becomes a version, so
    each reading is a module of its own rather than a flag. *)
 module Strict = struct
-  let parse_fresh = of_parts split_hyphen
+  include Reading (struct
+    let split = split_hyphen
 
-  (* compare sits under every range operation a solve makes, and parsing
-     afresh there was most of a large cargo solve's time; a run meets a few
-     thousand distinct version strings (about 3,400 at most), though a large
-     query loads tens of thousands of versions *)
-  let parse = memo 65536 parse_fresh
+    (* compare sits under every range operation a solve makes, and parsing
+       afresh there was most of a large cargo solve's time; a run meets a
+       few thousand distinct version strings (about 3,400 at most), though
+       a large query loads tens of thousands of versions *)
+    let size = 65536
+  end)
+
   let compare_parsed a b = precedence (parse a) (parse b)
 
   (* The release cores are compared off the strings themselves, a field at
@@ -224,40 +242,19 @@ module Strict = struct
         if c <> 0 then c
         else if plain a && plain b then 0
         else compare_parsed a b
-
-  let is_prerelease v = (parse v).pre <> []
-  let same_core a b = same_core_parsed (parse a) (parse b)
-
-  (* A requirement admits a prerelease candidate only when one of its own
-     comparators names a prerelease at the same release core: the semver
-     crate's pre_is_compatible (eval.rs) and node-semver's testSet
-     (classes/range.js).  [bounds] are the versions a comparator set
-     names. *)
-  let admits v bounds =
-    (not (is_prerelease v))
-    || List.exists (fun c -> is_prerelease c && same_core v c) bounds
-
-  let parse_partial = partial_of split_hyphen
 end
 
 (* node-semver's loose reading, which npm passes for every version and
    range it reads. *)
 module Loose = struct
-  let parse_fresh = of_parts split_hyphen_loose
+  include Reading (struct
+    let split = split_hyphen_loose
 
-  (* the comparator runs on every candidate at every gate, so parses are
-     shared *)
-  let parse = memo 4096 parse_fresh
+    (* the comparator runs on every candidate at every gate, so parses are
+       shared *)
+    let size = 4096
+  end)
 
   let compare (a : string) (b : string) : int =
     if a == b || String.equal a b then 0 else precedence (parse a) (parse b)
-
-  let is_prerelease v = (parse v).pre <> []
-  let same_core a b = same_core_parsed (parse a) (parse b)
-
-  let admits v bounds =
-    (not (is_prerelease v))
-    || List.exists (fun c -> is_prerelease c && same_core v c) bounds
-
-  let parse_partial = partial_of split_hyphen_loose
 end
