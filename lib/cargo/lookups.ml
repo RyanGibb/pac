@@ -191,45 +191,45 @@ let dec_owner st n gr f d feat =
            (Cg.FDefRel.elements rw.r_fdefs))
     n gr
 
-(* the five components a lookup theorem names, labelled so that the
-   extracted functions' like-typed positional arguments cannot be swapped *)
-type sub = {
-  repo : Cg.PkgSet.t;
-  supp : Cg.SupportSet.t;
-  fdefs : Cg.FDefRel.t;
-  slots : Cg.SlotRel.t;
-  links : Cg.LinkRel.t;
-}
-
-let empty_sub =
+(* every lookup theorem carries the request (granularity, default, rc,
+   rootFeats) whole, so its instance differs from this one only in the
+   relations it names *)
+let empty_inst st : Cg.coq_Inst =
   {
-    repo = Cg.PkgSet.empty;
-    supp = Cg.SupportSet.empty;
-    fdefs = Cg.FDefRel.empty;
-    slots = Cg.SlotRel.empty;
-    links = Cg.LinkRel.empty;
+    Cg.inst_repo = Cg.PkgSet.empty;
+    inst_support = Cg.SupportSet.empty;
+    inst_fdefs = Cg.FDefRel.empty;
+    inst_slots = Cg.SlotRel.empty;
+    inst_links = Cg.LinkRel.empty;
+    inst_gran = granularity st;
+    inst_dflt = P.default_feature;
+    inst_root = st.rc;
+    inst_rootFeats = st.rfeats;
   }
 
 (* one branch per versions_lookup{Root,Crate,FeatP,Slot,Decision,Link},
-   each passing the components its theorem names and nothing else *)
+   each filling in the components its theorem names and nothing else *)
 let versions st (tn : Cg.NPlus.t) : Cg.VPlus.t list =
-  let call s =
-    T.VSet.elements
-      (Cg.versions (granularity st) s.repo s.supp s.fdefs s.slots s.links st.rc
-         tn)
-  in
+  let call i = T.VSet.elements (Cg.versions i tn) in
+  let e = empty_inst st in
   match tn with
-  | Cg.NPlus.CRoot -> call empty_sub
-  | Cg.NPlus.CCrate (n, _) -> call { empty_sub with repo = name_set st n }
+  | Cg.NPlus.CRoot -> call e
+  | Cg.NPlus.CCrate (n, _) -> call { e with inst_repo = name_set st n }
   | Cg.NPlus.CFeatP (n, _, _) ->
       let supp = support_of_name st n in
-      call { empty_sub with repo = name_set st n; supp }
+      call { e with inst_repo = name_set st n; inst_support = supp }
   | Cg.NPlus.CSlot (n, gr, d) ->
       let slots = slot_owner st n gr d in
-      call { empty_sub with repo = name_set st (Cg.sTarget d); slots }
+      call { e with inst_repo = name_set st (Cg.sTarget d); inst_slots = slots }
   | Cg.NPlus.CDec (n, gr, f, d, feat) ->
       let slots, fdefs = dec_owner st n gr f d feat in
-      call { empty_sub with repo = name_set st (Cg.sTarget d); fdefs; slots }
+      call
+        {
+          e with
+          inst_repo = name_set st (Cg.sTarget d);
+          inst_fdefs = fdefs;
+          inst_slots = slots;
+        }
   | Cg.NPlus.CLink l ->
       (* Lookup.claimants and LinkFibred.headFibre at l, over the
          declarers loaded so far; see Archive.t *)
@@ -238,40 +238,48 @@ let versions st (tn : Cg.NPlus.t) : Cg.VPlus.t list =
       let repo =
         Cg.PkgSet.ofList (List.filter (fun (n, v) -> meta st n v <> None) rs)
       in
-      call { empty_sub with repo; links }
+      call { e with inst_repo = repo; inst_links = links }
 
-(* one branch per dependees_lookup{Root,Crate,FeatP,Slot,Decision},
-   with the request (rc, rootFeats, default) carried whole as the
-   theorems carry it; the fall-through is dependees_reduceDepsInert, empty *)
+(* one branch per dependees_lookup{Root,Crate,FeatP,Slot,Decision}; the
+   fall-through is dependees_reduceDepsInert, empty *)
 let dependees st (p : T.Pkg.t) : T.Dependees.t list =
-  let call s =
-    T.DependeesSet.elements
-      (Cg.dependees (granularity st) s.repo s.supp s.fdefs s.slots s.links
-         P.default_feature st.rc st.rfeats p)
-  in
+  let call i = T.DependeesSet.elements (Cg.dependees i p) in
+  let e = empty_inst st in
   match p with
-  | Cg.NPlus.CRoot, _ -> call empty_sub
+  | Cg.NPlus.CRoot, _ -> call e
   | Cg.NPlus.CCrate (n, _), Cg.VPlus.WOrig v ->
       let rw = fibres_of st (n, v) in
       let repo = repo_preimage st (n, v) in
-      call { empty_sub with repo; slots = rw.r_slots; links = rw.r_links }
+      call
+        {
+          e with
+          inst_repo = repo;
+          inst_slots = rw.r_slots;
+          inst_links = rw.r_links;
+        }
   | Cg.NPlus.CFeatP (n, _, _), Cg.VPlus.WOrig v ->
       let rw = fibres_of st (n, v) in
       let repo = repo_preimage st (n, v) in
       call
         {
-          repo;
-          supp = rw.r_supp;
-          fdefs = rw.r_fdefs;
-          slots = rw.r_slots;
-          links = Cg.LinkRel.empty;
+          e with
+          inst_repo = repo;
+          inst_support = rw.r_supp;
+          inst_fdefs = rw.r_fdefs;
+          inst_slots = rw.r_slots;
         }
   | Cg.NPlus.CSlot (n, gr, d), Cg.VPlus.WClass _ ->
       let slots = slot_owner st n gr d in
-      call { empty_sub with repo = name_set st (Cg.sTarget d); slots }
+      call { e with inst_repo = name_set st (Cg.sTarget d); inst_slots = slots }
   | Cg.NPlus.CDec (n, gr, f, d, feat), Cg.VPlus.WClass _ ->
       let slots, fdefs = dec_owner st n gr f d feat in
-      call { empty_sub with repo = name_set st (Cg.sTarget d); fdefs; slots }
+      call
+        {
+          e with
+          inst_repo = name_set st (Cg.sTarget d);
+          inst_fdefs = fdefs;
+          inst_slots = slots;
+        }
   | _, _ -> []
 
 (* the dependency the owner's fibre holds at a site, which is what a slot

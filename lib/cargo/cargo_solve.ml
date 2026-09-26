@@ -70,7 +70,10 @@ let decode st (sol : (Cg.NPlus.t * PVersion.t) list) : result =
         match L.site_data st (n, v) k with
         | Some sd -> (n, v, Cg.kAlias k, Cg.sTarget sd, u)
         | None -> (n, v, Cg.kAlias k, Cg.kAlias k, u))
-      (Cg.ParentRel.elements (Cg.decodeParents fdefs slots st.L.rc s))
+      (Cg.ParentRel.elements
+         (Cg.decodeParents
+            { (L.empty_inst st) with inst_fdefs = fdefs; inst_slots = slots }
+            s))
   in
   {
     crates =
