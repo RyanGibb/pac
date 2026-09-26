@@ -6,7 +6,7 @@ are handed the same file: pac as its root Cargo.toml, cargo as the
 workspace it is run in.
 
 Both sides are asked the lockfile question, and asked it the same way.
-Pac's rootFeats defaults to every feature the root declares;
+pac enables every feature the root declares by default;
 `cargo generate-lockfile` resolves the one workspace member under
 CliFeatures::new_all(true) with HasDevUnits::Yes, which is that same
 instantiation.  Neither side is given a feature selection, because a

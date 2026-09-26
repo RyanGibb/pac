@@ -22,7 +22,7 @@
 # After this the farm is closed over the seeded roots; a FILL=1 scale.sh
 # pass closes it over the rest.
 #
-# usage: seed.sh <exe> [run-dir] [port] [max-walkback]
+# usage: seed.sh <exe> [run-dir] [port] [max-walkback]      TIMEOUT=<s per pac call>
 set -eu
 # byte order, so the output is the same whatever the host's locale
 export LC_ALL=C
@@ -36,7 +36,8 @@ NPM_RUN=$RUN
 serve "$PORT" "$RUN/cache" "$RUN/shim.log" python3 "$S/shim.py" "$PORT" "$RUN/cache" --fill \
   --log "$RUN/miss.log"
 
-: > "$S/baseline/roots.txt"
+# the checked-in roots are replaced only by a pass that finished
+: > "$RUN/roots.new"
 while read -r g; do
   [ -n "$g" ] || continue
   slug=${g//\//__}
@@ -57,7 +58,7 @@ n = int(sys.argv[2])
 sys.exit(1) if n >= len(rel) else print(rel[n])
 EOF
     ) || break
-    if "$exe" npm --cache "$RUN/cache" "$g@$v" > "$W/seed.ours" 2>&1; then
+    if timeout "${TIMEOUT:-900}" "$exe" npm --cache "$RUN/cache" "$g@$v" > "$W/seed.ours" 2>&1; then
       pin=$v; back=$n; break
     fi
   done
@@ -75,8 +76,9 @@ EOF
              "$RUN/cache/${g//\//%2F}.json")
   echo "$g $pin (walked back $back from $latest)"
   # query, pin, releases walked back, dist-tags.latest
-  printf '%s %s %s %s\n' "$g" "$pin" "$back" "$latest" >> "$S/baseline/roots.txt"
+  printf '%s %s %s %s\n' "$g" "$pin" "$back" "$latest" >> "$RUN/roots.new"
 done < "$S/queries.txt"
+mv "$RUN/roots.new" "$S/baseline/roots.txt"
 
 echo "filled $(sort -u "$RUN/miss.log" | wc -l) names npm asked for and the farm lacked"
 # npm's own http cache would otherwise answer a frozen run from what the

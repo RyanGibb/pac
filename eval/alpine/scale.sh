@@ -11,7 +11,7 @@ all_queries() { sed -n 's/^P://p' "$INDEX" | sort -u; }
 prepare() {
   snapshot alpine/APKINDEX
   bash "$S/setup.sh" "$run/apkroot" > "$run/setup.log" 2>&1 || { cat "$run/setup.log" >&2; return 1; }
-  export APKROOT=$run/apkroot APK=${APK:-apk}
+  export APKROOT=$run/apkroot APK=$(sed -n 's/^export APK=//p' "$run/setup.log")
 }
 
 refused() { grep -q '^ERROR: unable to select packages' "$2"; }

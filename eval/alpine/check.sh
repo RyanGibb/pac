@@ -14,7 +14,7 @@
 # Minimal: the world is the query alone.  apk keeps an installed package
 # only while it still resolves from the world, and takes a name's provider
 # by its own preference, so it purges what nothing leads to and swaps a
-# provider it ranks lower (controls.sh min-prio); neither is an
+# provider it ranks lower (controls.sh f5-prio); neither is an
 # inconsistency.
 #
 # Any Installing, Purging, Upgrading, Downgrading, Replacing or

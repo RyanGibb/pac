@@ -17,8 +17,8 @@ if [ "$(id -u)" -eq 0 ]; then
 fi
 
 # apk is not packaged for every host; where it is absent the build nix/flake.lock
-# pins stands in.  Export the APK=<path> echoed below so scale.sh finds the
-# same binary without paying a flake evaluation per query.
+# pins stands in.  scale.sh reads the APK=<path> echoed below, so that it
+# runs the same binary without paying a flake evaluation per query.
 APK="${APK:-}"
 if [ -z "$APK" ]; then
   if command -v apk >/dev/null 2>&1; then APK=$(command -v apk)

@@ -6,9 +6,7 @@
                                   is dropped, since there is no root to ask
   scale.py targets SEED K [EXCL]  K crates per pool, as pool<TAB>crate, each
                                   pool exercising one modelling decision in
-                                  the crate's newest release; except links,
-                                  since manifest.jq writes no links key into
-                                  the root manifest
+                                  the crate's newest release
   scale.py one CRATE STEM         pac's and cargo's answers, at STEM.*
   scale.py corr STEM              how the two compare
 """
