@@ -48,7 +48,7 @@ let runs (all : PVersion.t list Lazy.t) (vs : PVersion.t list) : PG.Ranges.t =
 let dependencies st =
   let cache = Hashtbl.create 65536 in
   fun n (u : Np.Vs.version) ->
-    Lookup.memo cache (n, u) (fun () ->
+    Pac_common.Tbl.memo cache (n, u) (fun () ->
         st.Lookup.n_lookups <- st.Lookup.n_lookups + 1;
         List.map
           (fun ((m, vs) : T.Dependees.t) ->

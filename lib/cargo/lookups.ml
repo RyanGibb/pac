@@ -1,6 +1,7 @@
 open Encoding
 module P = Cargo_parse
 module Q = Cargo_query
+module Tbl = Pac_common.Tbl
 
 type fibres = {
   r_slots : Cg.SlotRel.t;
@@ -56,14 +57,6 @@ type state = {
   pg_deps : (Cg.NPlus.t * Cg.VPlus.t, (Cg.NPlus.t * PG.Ranges.t) list) Hashtbl.t;
 }
 
-let memo tbl k f =
-  match Hashtbl.find_opt tbl k with
-  | Some v -> v
-  | None ->
-      let v = f () in
-      Hashtbl.replace tbl k v;
-      v
-
 let create ar (root : Q.root) ~features ~rustv =
   {
     ar;
@@ -84,12 +77,12 @@ let create ar (root : Q.root) ~features ~rustv =
     pg_deps = Hashtbl.create 65536;
   }
 
-let granularity st v = memo st.granularities v (fun () -> granularity_of v)
+let granularity st v = Tbl.memo st.granularities v (fun () -> granularity_of v)
 let meta st n v = Archive.meta st.ar n v
 let versions_of st n = Archive.versions_of st.ar n
 
 let fibres_of st (p : string * string) : fibres =
-  memo st.fibres p (fun () ->
+  Tbl.memo st.fibres p (fun () ->
       let n, v = p in
       match meta st n v with
       | None -> empty_fibres n
@@ -129,12 +122,12 @@ let fibres_of st (p : string * string) : fibres =
           })
 
 let name_set st (n : string) : Cg.PkgSet.t =
-  memo st.name_sets n (fun () ->
+  Tbl.memo st.name_sets n (fun () ->
       Cg.PkgSet.ofList (List.map (fun v -> (n, v)) (versions_of st n)))
 
 let repo_preimage st (p : string * string) : Cg.PkgSet.t =
   let reads = (fibres_of st p).r_reads in
-  memo st.repo_preimages reads (fun () ->
+  Tbl.memo st.repo_preimages reads (fun () ->
       Cg.PkgSet.unions (List.map (name_set st) reads))
 
 (* whether (n, v) fits the toolchain resolver v3 ranks against; every
@@ -143,7 +136,7 @@ let msrv_fits st ((n, v) : string * string) : bool =
   match st.rustv with
   | None -> true
   | Some rustc ->
-      memo st.msrv (n, v) (fun () ->
+      Tbl.memo st.msrv (n, v) (fun () ->
           match meta st n v with
           | None -> true
           | Some m -> msrv_ok rustc m.P.v_msrv)
@@ -153,7 +146,7 @@ let msrv_fits st ((n, v) : string * string) : bool =
    fibres.  Memoized for the same reason name_set is: load_name takes a
    name whole, so this cannot grow once it has been asked. *)
 let support_of_name st (n : string) : Cg.SupportSet.t =
-  memo st.supports n (fun () ->
+  Tbl.memo st.supports n (fun () ->
       Cg.SupportSet.unions
         (List.map
            (fun (v : P.ver) -> (fibres_of st (n, v.P.v_vers)).r_supp)
@@ -166,7 +159,7 @@ let support_of_name st (n : string) : Cg.SupportSet.t =
    decision_declines: nothing in the instance makes the name, and the
    lookup declines.  The verdict reads st.rc through slotActive. *)
 let owner st key (ok : string * string -> fibres -> bool) n gr =
-  memo st.owners key (fun () ->
+  Tbl.memo st.owners key (fun () ->
       match
         List.find_map
           (fun v ->
@@ -285,7 +278,7 @@ let dependees st (p : T.Pkg.t) : T.Dependees.t list =
    name carries: the order replay reads raw manifest records, which
    slots_of has not merged, so the name is taken from the fibre *)
 let site_data st (p : string * string) (k : Cg.SlotKey.t) =
-  memo st.site_datas (p, k) (fun () ->
+  Tbl.memo st.site_datas (p, k) (fun () ->
       List.find_map
         (fun ((_, sd) : Cg.SlotElt.t) ->
           if Cg.sKey sd = k then Some sd else None)
@@ -312,10 +305,10 @@ let tag st (tn : Cg.NPlus.t) (w : Cg.VPlus.t) : PVersion.t =
 let pg_versions st tn =
   match tn with
   | Cg.NPlus.CLink _ -> List.map (tag st tn) (versions st tn)
-  | _ -> memo st.pg_vers tn (fun () -> List.map (tag st tn) (versions st tn))
+  | _ -> Tbl.memo st.pg_vers tn (fun () -> List.map (tag st tn) (versions st tn))
 
 let pg_dependencies st tn ({ PVersion.v = w; _ } : PVersion.t) =
-  memo st.pg_deps (tn, w) (fun () ->
+  Tbl.memo st.pg_deps (tn, w) (fun () ->
       List.map
         (fun ((m, vs) : T.Dependees.t) ->
           (m, PG.Ranges.of_list (List.map (tag st m) (T.VSet.elements vs))))

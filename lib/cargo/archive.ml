@@ -60,15 +60,9 @@ let load_name ar (n : string) : P.ver list =
       List.iter
         (fun (v : P.ver) ->
           Hashtbl.replace ar.entry (n, v.P.v_vers) v;
-          match v.P.v_links with
-          | None -> ()
-          | Some l ->
-              Hashtbl.replace ar.links_table l
-                ((n, v.P.v_vers)
-                ::
-                (match Hashtbl.find_opt ar.links_table l with
-                | Some x -> x
-                | None -> [])))
+          Option.iter
+            (fun l -> Pac_common.Tbl.push ar.links_table l (n, v.P.v_vers))
+            v.P.v_links)
         vs;
       vs
 
@@ -95,11 +89,6 @@ let install_root ar (v : P.ver) =
     (fun _ ps ->
       match List.filter (( <> ) (n, u)) ps with [] -> None | ps -> Some ps)
     ar.links_table;
-  Option.iter
-    (fun l ->
-      Hashtbl.replace ar.links_table l
-        ((n, u) :: Option.value (Hashtbl.find_opt ar.links_table l) ~default:[]))
-    v.P.v_links
+  Option.iter (fun l -> Pac_common.Tbl.push ar.links_table l (n, u)) v.P.v_links
 
-let link_preimage ar (l : string) =
-  match Hashtbl.find_opt ar.links_table l with Some x -> x | None -> []
+let link_preimage ar (l : string) = Pac_common.Tbl.find_list ar.links_table l

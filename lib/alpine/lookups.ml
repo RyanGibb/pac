@@ -237,9 +237,7 @@ module Make () = struct
   let install_if_at ar ((n, v) : string * string) (own : Alp.Prov.t) :
       iif_rule list =
     let inst = { empty_inst with Alp.inst_prov = own } in
-    let at m =
-      match Hashtbl.find_opt ar.iif_by_cond m with Some l -> l | None -> []
-    in
+    let at = Tbl.find_list ar.iif_by_cond in
     let cands =
       List.fold_left
         (fun acc ((_, (m, _)) : Alp.ProvElt.t) -> List.rev_append (at m) acc)

@@ -1,3 +1,5 @@
+module Tbl = Pac_common.Tbl
+
 module Make
     (N : Pac.UsualOrderedType)
     (V : Pac.UsualOrderedType)
@@ -76,14 +78,7 @@ struct
   let lookups st = Hashtbl.length st.deps
 
   let unless_volatile st tbl (n : N.t) f =
-    if st.volatile n then f ()
-    else
-      match Hashtbl.find_opt tbl n with
-      | Some x -> x
-      | None ->
-          let x = f () in
-          Hashtbl.replace tbl n x;
-          x
+    if st.volatile n then f () else Tbl.memo tbl n f
 
   let oracle st (n : N.t) : PF.VSet.t =
     unless_volatile st st.oracle_memo n (fun () -> st.oracle n)
@@ -110,8 +105,7 @@ struct
     let by_src = Hashtbl.create 64 in
     List.iter
       (fun ((s, h) : T.DepElt.t) ->
-        Hashtbl.replace by_src s
-          (h :: Option.value (Hashtbl.find_opt by_src s) ~default:[]))
+        Tbl.push by_src s h)
       (T.DepRel.elements d);
     Hashtbl.iter
       (fun s hs ->
@@ -131,11 +125,8 @@ struct
         | PFR.Name.Orig _ -> ()
         | _ ->
             let tv = st.tag tn tv in
-            let prev =
-              Option.value (Hashtbl.find_opt st.synthetic_vers tn) ~default:[]
-            in
-            if not (List.mem tv prev) then
-              Hashtbl.replace st.synthetic_vers tn (tv :: prev))
+            if not (List.mem tv (Tbl.find_list st.synthetic_vers tn))
+            then Tbl.push st.synthetic_vers tn tv)
       (T.PkgSet.elements r)
 
   (* [dependees] is PF.Reduction's dependees lookup at [q], read off the
@@ -169,8 +160,7 @@ struct
               (fun w -> st.tag tn (PFR.Version.Orig w))
               (PF.VSet.elements (oracle st n))
             @ [ P.bot ])
-    | PFR.Name.Disjunct _ ->
-        Option.value (Hashtbl.find_opt st.synthetic_vers tn) ~default:[]
+    | PFR.Name.Disjunct _ -> Tbl.find_list st.synthetic_vers tn
 
   (* [touch] processes the package, where it is one whose dependees are
      read off an instance; a synthetic package's edges were harvested when
@@ -178,19 +168,13 @@ struct
      the dependencies of every version of the node. *)
   let dependencies st ~touch (tn : PFR.Name.t) (pv : P.t) =
     let p = (tn, P.v pv) in
-    match Hashtbl.find_opt st.deps p with
-    | Some r -> r
-    | None ->
+    Tbl.memo st.deps p (fun () ->
         touch p;
-        let r =
-          List.map
-            (fun ((m, vs) : T.Dependees.t) ->
-              let m = intern st m in
-              (m, PG.Ranges.of_list (List.map (st.tag m) (T.VSet.elements vs))))
-            (dependees st p)
-        in
-        Hashtbl.replace st.deps p r;
-        r
+        List.map
+          (fun ((m, vs) : T.Dependees.t) ->
+            let m = intern st m in
+            (m, PG.Ranges.of_list (List.map (st.tag m) (T.VSet.elements vs))))
+          (dependees st p))
 
   (* only an original name has the absent version; asking the partial
      solution about a disjunct would compare its formulas *)

@@ -1,6 +1,7 @@
 open Encoding
 module P = Npm_parse
 module A = Archive
+module Tbl = Pac_common.Tbl
 
 (* This is what npm does for the literal range "*", and for an empty one,
    which it reads as "*": npm-pick-manifest's special case (lib/index.js,
@@ -96,32 +97,24 @@ let create ~optional ar root =
     n_lookups = 0;
   }
 
-let memo tbl k f =
-  match Hashtbl.find_opt tbl k with
-  | Some v -> v
-  | None ->
-      let v = f () in
-      Hashtbl.replace tbl k v;
-      v
-
 (* the range the calculus reads for a dependency on t: the root's flat
    override when there is one *)
 let effective st (t : string) (rg : Np.coq_Range) : Np.coq_Range =
   Option.value (List.assoc_opt t st.ovr) ~default:rg
 
 let peer_dependencies st p =
-  memo st.peer_tbl p (fun () ->
+  Tbl.memo st.peer_tbl p (fun () ->
       match A.meta st.ar p with
       | None -> []
       | Some v -> List.map (xpeer st.ar) v.P.v_peers)
 
 let repo_at st (n : string) : Np.RepoSet.t =
-  memo st.repo_at n (fun () ->
+  Tbl.memo st.repo_at n (fun () ->
       Np.RepoSet.ofList (List.map (fun v -> (n, v)) (A.versions_of st.ar n)))
 
 let repo_of st (ns : string list) : Np.RepoSet.t =
   let ns = List.sort_uniq String.compare ns in
-  memo st.repo_of ns (fun () -> Np.RepoSet.unions (List.map (repo_at st) ns))
+  Tbl.memo st.repo_of ns (fun () -> Np.RepoSet.unions (List.map (repo_at st) ns))
 
 let mk_inst st ~repo ~deps ~peers : Np.coq_Inst =
   {
@@ -140,7 +133,7 @@ let mk_inst st ~repo ~deps ~peers : Np.coq_Inst =
    sub-instances built. *)
 let matches_published st (d : P.dep) : bool =
   let n = d.P.d_target and own = own_range st.ar d in
-  memo st.opt_keep
+  Tbl.memo st.opt_keep
     (n, Npm_version.string_of_range own)
     (fun () ->
       Np.VSet.exists_
@@ -179,7 +172,7 @@ let optional_verdicts st =
   (Hashtbl.length st.opt_keep, dropped)
 
 let dependencies st p =
-  memo st.dep_tbl p (fun () ->
+  Tbl.memo st.dep_tbl p (fun () ->
       match A.meta st.ar p with
       | None -> []
       | Some v -> List.map (xdep st.ar) (List.filter (dep_keep st) v.P.v_deps))
@@ -273,7 +266,7 @@ let peer_sub_inst st (p : string * string) (m : string * string) (u : string) =
     ~peers:(own_peer_dependencies st q)
 
 let versions st (n : Np.Nm.name) : Np.Vs.version list =
-  memo st.vcache n (fun () ->
+  Tbl.memo st.vcache n (fun () ->
       match n with
       | Np.Nm.Granular (k, w) ->
           T.VSet.elements (R.versions (gran_sub_inst st k w) n)

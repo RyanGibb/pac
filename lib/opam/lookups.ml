@@ -40,8 +40,7 @@ let empty_archive root =
     t_parse = 0.;
   }
 
-let class_members ar k =
-  Option.value (Hashtbl.find_opt ar.class_table k) ~default:[]
+let class_members ar k = Pac_common.Tbl.find_list ar.class_table k
 
 (* opam keys its packages by name and version order, so two directories
    whose versions compare equal (5.5.0+introcaml and 5.5.0+introcaml0) are
@@ -108,15 +107,10 @@ let load_name ar (name : string) : (string * Opam_parse.pkg_meta) list =
       List.iter
         (fun (version, (m : Opam_parse.pkg_meta)) ->
           List.iter
-            (fun k ->
-              Hashtbl.replace ar.class_table k
-                ((name, version) :: class_members ar k))
+            (fun k -> Pac_common.Tbl.push ar.class_table k (name, version))
             m.classes;
           if m.avoid_version || m.deprecated then
-            Hashtbl.replace ar.avoid_table name
-              (version
-              :: Option.value (Hashtbl.find_opt ar.avoid_table name) ~default:[]
-              ))
+            Pac_common.Tbl.push ar.avoid_table name version)
         vs;
       ar.t_parse <- ar.t_parse +. (Unix.gettimeofday () -. t);
       vs

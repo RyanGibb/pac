@@ -99,12 +99,8 @@ module Make (AP : Tables.ARCH) = struct
      each version constraint a depender writes is another selector -- asks
      for the same pair *)
   let sel_preimages tables mn =
-    match Hashtbl.find_opt tables.sel_cache mn with
-    | Some r -> r
-    | None ->
-        let r = sel_preimages_uncached tables mn in
-        Hashtbl.add tables.sel_cache mn r;
-        r
+    Pac_common.Tbl.memo tables.sel_cache mn (fun () ->
+        sel_preimages_uncached tables mn)
 
   let versions tables (n' : DMA.Deb.Name.t) =
     match n' with
@@ -364,12 +360,8 @@ module Make (AP : Tables.ARCH) = struct
     let cands_tbl = Hashtbl.create 4096
 
     let cands_of n =
-      match Hashtbl.find_opt cands_tbl n with
-      | Some l -> l
-      | None ->
-          let l = List.map (tag n) (DMA.Deb.T.VSet.elements (I.versions n)) in
-          Hashtbl.add cands_tbl n l;
-          l
+      Pac_common.Tbl.memo cands_tbl n (fun () ->
+          List.map (tag n) (DMA.Deb.T.VSet.elements (I.versions n)))
 
     let dependees_of n (v : DMA.Deb.Version.t) =
       DMA.Deb.T.DependeesSet.elements (I.dependencies (n, v))

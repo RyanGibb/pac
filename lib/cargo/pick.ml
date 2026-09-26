@@ -29,7 +29,7 @@ let is_open assigned x =
    xreq, so these are the members of the granularity classes the slot
    offers. *)
 let candidates pk (d : P.dep) =
-  L.memo pk.cands (d.P.d_target, d.P.d_req) (fun () ->
+  Pac_common.Tbl.memo pk.cands (d.P.d_target, d.P.d_req) (fun () ->
       let fits u = L.msrv_fits pk.lk (d.P.d_target, u) in
       List.stable_sort
         (fun a b ->
@@ -42,7 +42,7 @@ let candidates pk (d : P.dep) =
            (L.versions_of pk.lk d.P.d_target)))
 
 let enabled_deps pk t u feats default =
-  L.memo pk.enabled
+  Pac_common.Tbl.memo pk.enabled
     (t, u, Order.SS.elements feats, default)
     (fun () ->
       match L.meta pk.lk t u with
@@ -81,7 +81,7 @@ let lookahead pk ~assigned =
   in
   let valid_memo = Hashtbl.create 64 in
   let valid t u =
-    L.memo valid_memo (t, u) (fun () ->
+    Pac_common.Tbl.memo valid_memo (t, u) (fun () ->
         let gr = L.granularity st u in
         let g = Cg.NPlus.CCrate (t, gr) in
         (match assigned g with
@@ -116,7 +116,7 @@ let lookahead pk ~assigned =
      them do, which is looked into a level at most *)
   let dead_memo = Hashtbl.create 64 in
   let rec dead depth chain t u feats default =
-    L.memo dead_memo
+    Pac_common.Tbl.memo dead_memo
       (depth, chain, t, u, Order.SS.elements feats, default)
       (fun () ->
         List.exists
