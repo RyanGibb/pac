@@ -268,9 +268,11 @@ module Strict = struct
     | true, true -> 0
     | true, false -> 1
     | false, true -> -1
-    | false, false -> go (String.split_on_char '.' a) (String.split_on_char '.' b)
+    | false, false ->
+        go (String.split_on_char '.' a) (String.split_on_char '.' b)
 
-  let tiebreak c a b = if c <> 0 then c else cmp_build (snd (strip_build a)) (snd (strip_build b))
+  let tiebreak c a b =
+    if c <> 0 then c else cmp_build (snd (strip_build a)) (snd (strip_build b))
 
   (* the order below, off the parsed versions *)
   let compare_parsed a b = tiebreak (precedence (parse a) (parse b)) a b

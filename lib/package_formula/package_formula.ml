@@ -104,8 +104,7 @@ struct
   let record_deprel st (d : T.DepRel.t) =
     let by_src = Hashtbl.create 64 in
     List.iter
-      (fun ((s, h) : T.DepElt.t) ->
-        Tbl.push by_src s h)
+      (fun ((s, h) : T.DepElt.t) -> Tbl.push by_src s h)
       (T.DepRel.elements d);
     Hashtbl.iter
       (fun s hs ->
@@ -125,8 +124,8 @@ struct
         | PFR.Name.Orig _ -> ()
         | _ ->
             let tv = st.tag tn tv in
-            if not (List.mem tv (Tbl.find_list st.synthetic_vers tn))
-            then Tbl.push st.synthetic_vers tn tv)
+            if not (List.mem tv (Tbl.find_list st.synthetic_vers tn)) then
+              Tbl.push st.synthetic_vers tn tv)
       (T.PkgSet.elements r)
 
   (* [dependees] is PF.Reduction's dependees lookup at [q], read off the

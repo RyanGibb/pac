@@ -114,7 +114,8 @@ let repo_at st (n : string) : Np.RepoSet.t =
 
 let repo_of st (ns : string list) : Np.RepoSet.t =
   let ns = List.sort_uniq String.compare ns in
-  Tbl.memo st.repo_of ns (fun () -> Np.RepoSet.unions (List.map (repo_at st) ns))
+  Tbl.memo st.repo_of ns (fun () ->
+      Np.RepoSet.unions (List.map (repo_at st) ns))
 
 let mk_inst st ~repo ~deps ~peers : Np.coq_Inst =
   {

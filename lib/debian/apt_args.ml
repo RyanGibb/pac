@@ -108,7 +108,9 @@ let cache_names (index : DF.stanza list) : string -> bool =
   List.iter
     (fun (st : DF.stanza) ->
       Hashtbl.replace own st.package ();
-      List.iter (fun (p : DF.provide) -> Hashtbl.replace own p.pname ()) st.provides)
+      List.iter
+        (fun (p : DF.provide) -> Hashtbl.replace own p.pname ())
+        st.provides)
     index;
   let related =
     lazy
@@ -155,7 +157,9 @@ let package_key ~native ~arches (index : DF.stanza list) pkg =
       let has b =
         List.exists (fun st -> stanza_key ~native st = (pkg, b)) index
       in
-      match List.find_opt has (native :: List.filter (( <> ) native) arches) with
+      match
+        List.find_opt has (native :: List.filter (( <> ) native) arches)
+      with
       | Some b -> (pkg, b)
       | None -> (pkg, native))
 
@@ -198,7 +202,7 @@ let virtual_candidate ~native (index : DF.stanza list) ((n, b) as key) =
     List.filter
       (fun (st : DF.stanza) ->
         (provides n st && snd (stanza_key ~native st) = b)
-        || st.multi_arch = Some "foreign" && (provides n st || st.package = n))
+        || (st.multi_arch = Some "foreign" && (provides n st || st.package = n)))
       (pin_candidates ~native ~named:(Hashtbl.create 1) index)
   in
   let rank (st : DF.stanza) =

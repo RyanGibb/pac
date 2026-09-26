@@ -305,7 +305,8 @@ let tag st (tn : Cg.NPlus.t) (w : Cg.VPlus.t) : PVersion.t =
 let pg_versions st tn =
   match tn with
   | Cg.NPlus.CLink _ -> List.map (tag st tn) (versions st tn)
-  | _ -> Tbl.memo st.pg_vers tn (fun () -> List.map (tag st tn) (versions st tn))
+  | _ ->
+      Tbl.memo st.pg_vers tn (fun () -> List.map (tag st tn) (versions st tn))
 
 let pg_dependencies st tn ({ PVersion.v = w; _ } : PVersion.t) =
   Tbl.memo st.pg_deps (tn, w) (fun () ->

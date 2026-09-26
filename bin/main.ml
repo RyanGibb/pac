@@ -152,9 +152,9 @@ let debian_cmd =
     [
       Cmd.Env.info "PACSHADOW"
         ~doc:
-          "When set, a $(b,--order=tool) run prints to stderr the counters \
-           of its replay of apt's work heap and propagation queue: the items \
-           it took, elided and dropped, those it found PubGrub had decided \
+          "When set, a $(b,--order=tool) run prints to stderr the counters of \
+           its replay of apt's work heap and propagation queue: the items it \
+           took, elided and dropped, those it found PubGrub had decided \
            otherwise ($(b,desync)), and PubGrub's backjumps.";
     ]
   in
@@ -162,8 +162,8 @@ let debian_cmd =
     (Cmd.info "debian" ~exits ~envs
        ~doc:"Solve against a Debian Packages index.")
     Term.(
-      const debian_run $ debug_arg $ order $ no_recs $ no_strict $ native
-      $ path $ query)
+      const debian_run $ debug_arg $ order $ no_recs $ no_strict $ native $ path
+      $ query)
 
 let opam_run debug order with_test with_doc with_dev_setup opam_version repo
     atoms =
@@ -389,7 +389,7 @@ let alpine_run debug order path goals =
   Pac_common.Input.file path;
   match Apk_parse.world_of_args goals with
   | Error e -> error 2 "%s" e
-  | Ok world ->
+  | Ok world -> (
       let t0 = Unix.gettimeofday () in
       let module A = Alpine_solve.Make () in
       let ar = A.load_index path in
@@ -400,23 +400,23 @@ let alpine_run debug order path goals =
             (String.concat ", "
                (List.map (fun n -> n ^ " (no such package)") ns))
       | [] ->
-      let r = A.solve ~debug ~order ar world in
-      report ~t0
-        {
-          Report.names = Hashtbl.length ar.A.by_name;
-          versions = ar.A.n_pkgs;
-          extra =
-            [
-              Printf.sprintf "%d provides entries" ar.A.n_provs;
-              Printf.sprintf "%d install_if rules" ar.A.n_iif;
-            ];
-          dropped = ar.A.n_dropped;
-          parse;
-        }
-        r
-        (fun a ->
-          Report.packages (List.map (fun (n, v) -> n ^ " " ^ v) a.A.pkgs);
-          Report.encoded ~nodes:a.A.nodes ~lookups:a.A.lookups)
+          let r = A.solve ~debug ~order ar world in
+          report ~t0
+            {
+              Report.names = Hashtbl.length ar.A.by_name;
+              versions = ar.A.n_pkgs;
+              extra =
+                [
+                  Printf.sprintf "%d provides entries" ar.A.n_provs;
+                  Printf.sprintf "%d install_if rules" ar.A.n_iif;
+                ];
+              dropped = ar.A.n_dropped;
+              parse;
+            }
+            r
+            (fun a ->
+              Report.packages (List.map (fun (n, v) -> n ^ " " ^ v) a.A.pkgs);
+              Report.encoded ~nodes:a.A.nodes ~lookups:a.A.lookups))
 
 let alpine_cmd =
   let path =
@@ -448,44 +448,47 @@ let npm_run debug order cache offline tree omit nodev npmv query =
   | None ->
       error 2 "no packument cache: pass --cache, or set XDG_CACHE_HOME or HOME"
   | Some cache -> (
-  let t0 = Unix.gettimeofday () in
-  let ar = Npm.Archive.create ?node:nodev ?npm:npmv ~cache ~offline () in
-  try
-    match Npm.Query.root ar query with
-    | Error e -> error 2 "%s" e
-    | Ok root ->
-        let rc = Npm.Archive.add_root ar root in
-        Report.root (Npm.Print.root rc);
-        let r =
-          Npm.Solve.solve ~debug ~order ~omit_dev:(List.mem `Dev omit)
-            ~omit_optional:(List.mem `Optional omit) ar rc
-        in
-        let optional =
-          match r with
-          | Ok a when a.Npm.Solve.optional_read > 0 ->
-              [
-                Printf.sprintf
-                  "%d of %d optionalDependencies (target, range) pairs dropped"
-                  a.Npm.Solve.optional_dropped a.Npm.Solve.optional_read;
-              ]
-          | _ -> []
-        in
-        report ~t0
-          {
-            Report.names = ar.Npm.Archive.n_names;
-            versions = ar.Npm.Archive.n_vers;
-            extra =
-              Printf.sprintf "%d packuments fetched" ar.Npm.Archive.n_fetched
-              :: optional;
-            dropped = ar.Npm.Archive.n_dropped;
-            parse = ar.Npm.Archive.t_parse;
-          }
-          r
-          (fun a ->
-            Report.packages (Npm.Print.packages a);
-            if tree then Report.section "node_modules" (Npm.Print.tree a);
-            Report.encoded ~nodes:a.Npm.Solve.nodes ~lookups:a.Npm.Solve.lookups)
-  with Npm.Archive.Fetch_failed e -> error 3 "%s" e)
+      let t0 = Unix.gettimeofday () in
+      let ar = Npm.Archive.create ?node:nodev ?npm:npmv ~cache ~offline () in
+      try
+        match Npm.Query.root ar query with
+        | Error e -> error 2 "%s" e
+        | Ok root ->
+            let rc = Npm.Archive.add_root ar root in
+            Report.root (Npm.Print.root rc);
+            let r =
+              Npm.Solve.solve ~debug ~order ~omit_dev:(List.mem `Dev omit)
+                ~omit_optional:(List.mem `Optional omit) ar rc
+            in
+            let optional =
+              match r with
+              | Ok a when a.Npm.Solve.optional_read > 0 ->
+                  [
+                    Printf.sprintf
+                      "%d of %d optionalDependencies (target, range) pairs \
+                       dropped"
+                      a.Npm.Solve.optional_dropped a.Npm.Solve.optional_read;
+                  ]
+              | _ -> []
+            in
+            report ~t0
+              {
+                Report.names = ar.Npm.Archive.n_names;
+                versions = ar.Npm.Archive.n_vers;
+                extra =
+                  Printf.sprintf "%d packuments fetched"
+                    ar.Npm.Archive.n_fetched
+                  :: optional;
+                dropped = ar.Npm.Archive.n_dropped;
+                parse = ar.Npm.Archive.t_parse;
+              }
+              r
+              (fun a ->
+                Report.packages (Npm.Print.packages a);
+                if tree then Report.section "node_modules" (Npm.Print.tree a);
+                Report.encoded ~nodes:a.Npm.Solve.nodes
+                  ~lookups:a.Npm.Solve.lookups)
+      with Npm.Archive.Fetch_failed e -> error 3 "%s" e)
 
 let npm_cmd =
   (* a user's cache, as npm keeps its own, so that where pac runs from

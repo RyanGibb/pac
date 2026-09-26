@@ -449,8 +449,7 @@ module Make (D : DRIVER) = struct
         let rs, units = D.propagate t.d ~assigned r in
         queue_rejections t rs;
         List.iter (enqueue t (top t)) units
-    | VerOf (e, pv, clauses) ->
-        version_pops t ~assigned e e.tname pv clauses
+    | VerOf (e, pv, clauses) -> version_pops t ~assigned e e.tname pv clauses
     | VerFirst (e, orig, pv) ->
         Hashtbl.remove t.pending orig;
         Hashtbl.replace t.ver_done orig ();

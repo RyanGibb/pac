@@ -122,6 +122,7 @@ let comparator (s : string) : req =
 
 let parse_req (s : string) : req =
   List.concat_map comparator (String.split_on_char ',' s)
+
 let admits (v : string) (r : req) : bool = V.Strict.admits v (List.map snd r)
 
 let holds (v : string) (r : req) : bool =
