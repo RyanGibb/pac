@@ -9,7 +9,7 @@ at a key that is not its package's name.  So neither
 `npm ci` nor a relock notices baz@1.0.0 at node_modules/bar answering
 "bar": "^1".  An entry's registry package is its "name" when it has one
 and its key otherwise, which is how npm records an alias and how
-mklock.py writes our answer.
+mklock.py writes our answer.  A link names the package it points at.
 
 usage: lockname.py <package-lock.json>
 Exits 3 on a mismatch, so that a crash, which exits 1, is not read as one.
@@ -55,7 +55,7 @@ def main():
                 if field == "peerDependencies" and path:
                     frm = ancestors(path)[-2]
                 q = resolve(pk, frm, key)
-                if q is None:
+                if q not in pk:
                     continue
                 got = pk[q].get("name") or q.rsplit("node_modules/", 1)[-1]
                 if got != want:

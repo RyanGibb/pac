@@ -65,8 +65,26 @@ def slot(anc, key):
     return (anc + "/node_modules/" if anc else "node_modules/") + key
 
 
-def resolve(pkgs, path, key):
+def lookup(pkgs, path, key):
+    """the slot a lookup of key from path stops at, which may be a link"""
     for anc in reversed(ancestors(path)):
         if slot(anc, key) in pkgs:
             return slot(anc, key)
     return None
+
+
+def is_link(e):
+    """npm closes a cycle of copies with an in-tree link to the ancestor copy,
+    {"resolved": <its path>, "link": true}, and the linked package resolves
+    its own dependencies from where it really sits, as require() does from
+    a realpath"""
+    return isinstance(e, dict) and bool(e.get("link"))
+
+
+def target(pkgs, s):
+    return pkgs[s].get("resolved") if is_link(pkgs[s]) else s
+
+
+def resolve(pkgs, path, key):
+    s = lookup(pkgs, path, key)
+    return None if s is None else target(pkgs, s)

@@ -10,7 +10,8 @@ An edge is followed where node_modules lookup takes it from its
 requirer, a peer's included: npm resolves a peer from its declarer too,
 and a copy the declarer holds in its own node_modules is PEER LOCAL, an
 invalid edge (arborist edge.js), so such a copy counts as reached and
-its removal as a repair.  Ranges are read by ranges.js, with npm's own
+its removal as a repair.  A link is reached with the package it points
+at.  Ranges are read by ranges.js, with npm's own
 npm-package-arg and semver.
 
 usage: reach.py <package-lock.json>
@@ -20,7 +21,7 @@ import os
 import subprocess
 import sys
 
-from tree import resolve
+from tree import lookup, resolve, target
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -38,12 +39,17 @@ def edges(pk, p):
 
 def main():
     pk = json.load(open(sys.argv[1], encoding="utf-8"))["packages"]
-    seen, todo = {""}, [""]
+    seen, done, todo = {""}, {""}, [""]
     while todo:
         p = todo.pop()
         for key, _, _ in edges(pk, p):
-            q = resolve(pk, p, key)
-            if q is not None and q not in seen:
+            s = lookup(pk, p, key)
+            if s is None:
+                continue
+            q = target(pk, s)
+            seen.add(s)
+            if q in pk and q not in done:
+                done.add(q)
                 seen.add(q)
                 todo.append(q)
     unreached = sorted(p for p in pk if p not in seen)

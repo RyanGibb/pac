@@ -42,7 +42,7 @@ usage: edges.py <package> <lockfile> <our --tree output> <out-prefix>
 import json
 import sys
 
-from tree import parse_tree, resolve
+from tree import is_link, parse_tree, resolve
 
 def node_name(path, entry):
     # an aliased node carries the registry name in "name"; a plain one is
@@ -60,6 +60,9 @@ def lock_sets(lock, peer_parent):
     # collapse distinct placements of one version
     plain, peer, unresolved = [], [], set()
     for path, e in pkgs.items():
+        # a link is the package it points at, which resolve() follows
+        if is_link(e):
+            continue
         meta = e.get("peerDependenciesMeta", {})
         deps = set(e.get("dependencies", {})) | set(e.get("optionalDependencies", {}))
         for d in sorted(deps):
@@ -73,7 +76,7 @@ def lock_sets(lock, peer_parent):
             q = resolve(pkgs, path, d)
             (peer.append((path, d, q)) if q else unresolved.add((path, d)))
 
-    live = set(pkgs)
+    live = {p for p, e in pkgs.items() if not is_link(e)}
     plain = [(r, d, q) for (r, d, q) in plain if r in live and q in live]
     peer = [(r, d, q) for (r, d, q) in peer if r in live and q in live]
 

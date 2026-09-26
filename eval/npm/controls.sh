@@ -35,6 +35,11 @@ PKGS = {
     "ot": {"1.0.0": {"dependencies": {"at": "^2.0.0"}}, "2.0.0": {"dependencies": {"at": "^1.0.0"}}},
     "cy": {"1.0.0": {"dependencies": {"oz": "^1.0.0"}}, "2.0.0": {"dependencies": {"cy": "^1.0.0"}}},
     "oz": {"1.0.0": {"dependencies": {"cy": "^2.0.0"}}},
+    "sx": {"1.0.0": {"dependencies": {"sx": "^2.0.0"}}, "2.0.0": {"dependencies": {"sx": "^1.0.0"}}},
+    "k1": {"1.0.0": {"dependencies": {"d1": "^1.0.0"}}, "2.0.0": {"dependencies": {"k1": "^1.0.0"}}},
+    "d1": {"1.0.0": {"peerDependencies": {"k1": "^2.0.0"}}},
+    "yc": {"1.0.0": {"dependencies": {"yc": "npm:xc@^1.0.0"}}},
+    "xc": {"1.0.0": {"dependencies": {"yc": "^1.0.0"}}},
 }
 CASES = {
     "po-valid":   ("VALID/yes", {"a": "^1.0.0", "c": "^1.0.0"},
@@ -65,6 +70,10 @@ CASES = {
     "extra":      ("VALID/no", {"b": "^1.0.0"}, {"b": "b@1.0.0", "z": "z@1.0.0"}),
     # reached by nothing, and its own dependency unmet
     "extra-broken": ("INVALID/-", {"b": "^1.0.0"}, {"b": "b@1.0.0", "y": "y@1.0.0"}),
+    # npm's own lock for sx 2 -> sx 1 -> sx 2, the cycle closed by a link
+    "link-valid": ("VALID/yes", {"sx": "^2.0.0"},
+                   {"sx": "sx@2.0.0", "sx/node_modules/sx": "sx@1.0.0",
+                    "sx/node_modules/sx/node_modules/sx": {"link": "node_modules/sx"}}),
 }
 # answers as pac prints them, which mklock.py has to place: the root's
 # dependencies, then the node_modules rows
@@ -81,16 +90,24 @@ OURS = {
     "self-chain":   ("VALID/yes", {"bl": "^1.0.0"},
                      [". <- bl 1.1.0", "bl 1.1.0 <- u 1.0.0", "bl 1.1.0 <- bl 1.0.0",
                       "bl 1.0.0 <- u 1.0.0", "bl 1.0.0 <- bl 1.0.0"]),
-    # each bl holds the other, and so on forever
-    "self-cycle":   ("INVALID/-", {"bl": "^1.0.0"},
+    # each bl holds the other, which nesting never closes and a link to the
+    # ancestor copy does
+    "self-cycle":   ("VALID/yes", {"bl": "^1.0.0"},
                      [". <- bl 1.0.0", "bl 1.0.0 <- u 1.0.0", "bl 1.0.0 <- bl 1.1.0",
                       "bl 1.1.0 <- u 1.0.0", "bl 1.1.0 <- bl 1.0.0"]),
     # at 1 -> ot 1 -> at 2 -> ot 2 -> at 1: below ot 1, at resolves to at 2
-    # at the latest, so the at 1 the cycle comes back to is always nested
-    # anew
-    "cycle-four":   ("INVALID/-", {"at": "^1.0.0"},
+    # at the latest, so the at 1 the cycle comes back to is a link
+    "cycle-four":   ("VALID/yes", {"at": "^1.0.0"},
                      [". <- at 1.0.0", "at 1.0.0 <- ot 1.0.0", "ot 1.0.0 <- at 2.0.0",
                       "at 2.0.0 <- ot 2.0.0", "ot 2.0.0 <- at 1.0.0"]),
+    "selfdep-cycle": ("VALID/yes", {"sx": "^2.0.0"},
+                      [". <- sx 2.0.0", "sx 2.0.0 <- sx 1.0.0", "sx 1.0.0 <- sx 2.0.0"]),
+    # d1's peer, hung on k1 1.0.0, is the k1 2.0.0 above it
+    "selfpeer":     ("VALID/yes", {"k1": "^2.0.0"},
+                     [". <- k1 2.0.0", "k1 2.0.0 <- k1 1.0.0", "k1 1.0.0 <- d1 1.0.0",
+                      "k1 1.0.0 <- k1 2.0.0"]),
+    "alias-cycle":  ("VALID/yes", {"yc": "^1.0.0"},
+                     [". <- yc 1.0.0", "yc 1.0.0 <- xc 1.0.0 at yc", "xc 1.0.0 at yc <- yc 1.0.0"]),
     # cy 1 -> oz 1 -> cy 2 -> cy 1, which closes: the cy 1 inside cy 2 sees
     # the top oz 1
     "cycle-three":  ("VALID/yes", {"cy": "^1.0.0"},
@@ -116,6 +133,9 @@ with open(f"{T}/cases", "w") as out:
         json.dump(root, open(f"{d}/package.json", "w"), indent=2)
         pk = {"": {"name": "root", "version": "1.0.0", "dependencies": deps}}
         for path, nv in layout.items():
+            if isinstance(nv, dict):
+                pk["node_modules/" + path] = {"resolved": nv["link"], "link": True}
+                continue
             n, v = nv.split("@")
             e = {"version": v, "resolved": dist(n, v)["tarball"], "integrity": dist(n, v)["integrity"]}
             if n != path.rsplit("node_modules/", 1)[-1]:
