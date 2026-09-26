@@ -177,7 +177,8 @@ let query_element ~native ~arches (index : DF.stanza list) arg =
     let mentions raw =
       let n = String.length (fst key) in
       let rec at i =
-        i + n <= String.length raw && (String.sub raw i n = fst key || at (i + 1))
+        i + n <= String.length raw
+        && (String.sub raw i n = fst key || at (i + 1))
       in
       at 0 && List.exists (List.exists named) (DF.parse_depends raw)
     in
@@ -218,47 +219,46 @@ let query_element ~native ~arches (index : DF.stanza list) arg =
         Error (Printf.sprintf "Package '%s' has no installation candidate" full)
   in
   if not (located ()) then
-    Error
-      (Printf.sprintf "Unable to locate package %s" pkg)
+    Error (Printf.sprintf "Unable to locate package %s" pkg)
   else
     match sel with
     | None when vlist = [] -> virtual_candidate ()
     | None -> Ok (key, Any)
-  (* apt tests these keywords before the tag, so they read the same after
+    (* apt tests these keywords before the tag, so they read the same after
      '/'; nothing is installed, as pac reads no dpkg status *)
-  | Some (_, "installed") ->
-      Error
-        (Printf.sprintf
-           "Can't select installed version from package %s as it is not \
-            installed"
-           full)
-  (* without pins the candidate is the newest, which heads the list *)
-  | Some (_, "candidate") ->
-      only
-        (Printf.sprintf
-           "Can't select candidate version from package %s as it has no \
-            candidate"
-           full)
-        (first (fun _ -> true))
-  | Some (_, "newest") ->
-      only
-        (Printf.sprintf
-           "Can't select newest version from package '%s' as it is purely \
-            virtual"
-           full)
-        (first (fun _ -> true))
-  | Some ('=', v) ->
-      only
-        (Printf.sprintf "Version '%s' for '%s' was not found" v full)
-        (match first (version_matches v) with
-        | None -> self_provided v
-        | found -> found)
-  (* a release is matched against Release files, which pac does not
+    | Some (_, "installed") ->
+        Error
+          (Printf.sprintf
+             "Can't select installed version from package %s as it is not \
+              installed"
+             full)
+    (* without pins the candidate is the newest, which heads the list *)
+    | Some (_, "candidate") ->
+        only
+          (Printf.sprintf
+             "Can't select candidate version from package %s as it has no \
+              candidate"
+             full)
+          (first (fun _ -> true))
+    | Some (_, "newest") ->
+        only
+          (Printf.sprintf
+             "Can't select newest version from package '%s' as it is purely \
+              virtual"
+             full)
+          (first (fun _ -> true))
+    | Some ('=', v) ->
+        only
+          (Printf.sprintf "Version '%s' for '%s' was not found" v full)
+          (match first (version_matches v) with
+          | None -> self_provided v
+          | found -> found)
+    (* a release is matched against Release files, which pac does not
      read; "*" matches every file (pkgVersionMatch::FileMatch) *)
-  | Some (_, r) ->
-      only
-        (Printf.sprintf "Release '%s' for '%s' was not found" r full)
-        (if r = "*" then first (fun _ -> true) else None)
+    | Some (_, r) ->
+        only
+          (Printf.sprintf "Release '%s' for '%s' was not found" r full)
+          (if r = "*" then first (fun _ -> true) else None)
 
 (* apt installs each element's version in argument order, setting it as the
    candidate, so of two naming one package the later wins; the versions the

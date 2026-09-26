@@ -173,7 +173,8 @@ let manifest (paths : string list) : (Yojson.Safe.t, string) result =
       Pac_common.Input.file p;
       match Yojson.Safe.from_file p with
       | `Assoc _ as j -> Ok j
-      | _ | (exception Yojson.Json_error _) -> Error (p ^ ": not a package.json"))
+      | _ | (exception Yojson.Json_error _) -> Error (p ^ ": not a package.json")
+      )
   | _ -> Error "more than one package.json"
 
 let not_registry s =

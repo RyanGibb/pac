@@ -532,7 +532,9 @@ let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~paths ~query
   Pubgrub.set_debug debug;
   let t0 = Unix.gettimeofday () in
   let dropped = ref 0 in
-  let index = List.concat_map (DF.parse_file ~reject:(fun () -> incr dropped)) paths in
+  let index =
+    List.concat_map (DF.parse_file ~reject:(fun () -> incr dropped)) paths
+  in
   let arches =
     List.sort_uniq String.compare
       (native

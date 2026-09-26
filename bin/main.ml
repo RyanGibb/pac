@@ -94,7 +94,8 @@ let debian_run debug order no_recs no_strict native query path =
             (List.map
                (fun (n, b, v) -> Printf.sprintf "%s:%s %s" n b v)
                a.Debian_solve.pkgs);
-          Report.encoded ~nodes:a.Debian_solve.nodes ~lookups:a.Debian_solve.lookups)
+          Report.encoded ~nodes:a.Debian_solve.nodes
+            ~lookups:a.Debian_solve.lookups)
 
 let debian_cmd =
   (* Recommends are installed by default, as under apt's
@@ -156,29 +157,30 @@ let opam_run debug order with_test with_doc with_dev_setup opam_version repo
   Pac_common.Input.dir repo;
   match Opam_parse.query_of_args atoms with
   | Error e -> error 2 "%s" e
-  | Ok query ->
+  | Ok query -> (
       let t0 = Unix.gettimeofday () in
       let ar = Opam_solve.empty_archive repo in
       match Opam_solve.sanitize ar query with
       | Error e -> error 2 "%s" e
       | Ok query ->
-      let r =
-        Opam_solve.solve ~debug ~order ~with_test ~with_doc ~with_dev_setup
-          ~opam_version ar query
-      in
-      report ~t0
-        {
-          Report.names = ar.Opam_solve.n_names;
-          versions = ar.Opam_solve.n_vers;
-          extra = [];
-          dropped = ar.Opam_solve.n_dropped;
-          parse = ar.Opam_solve.t_parse;
-        } r (fun a ->
-          Report.packages
-            (List.map (fun (n, v) -> n ^ " " ^ v) a.Opam_solve.reals);
-          if a.Opam_solve.depexts <> [] then
-            Report.section "system packages" a.Opam_solve.depexts;
-          Report.encoded ~nodes:a.Opam_solve.nodes ~lookups:a.Opam_solve.lookups)
+          let r =
+            Opam_solve.solve ~debug ~order ~with_test ~with_doc ~with_dev_setup
+              ~opam_version ar query
+          in
+          report ~t0
+            {
+              Report.names = ar.Opam_solve.n_names;
+              versions = ar.Opam_solve.n_vers;
+              extra = [];
+              dropped = ar.Opam_solve.n_dropped;
+              parse = ar.Opam_solve.t_parse;
+            } r (fun a ->
+              Report.packages
+                (List.map (fun (n, v) -> n ^ " " ^ v) a.Opam_solve.reals);
+              if a.Opam_solve.depexts <> [] then
+                Report.section "system packages" a.Opam_solve.depexts;
+              Report.encoded ~nodes:a.Opam_solve.nodes
+                ~lookups:a.Opam_solve.lookups))
 
 let opam_cmd =
   (* opam's builtin-0install backend decides a name as soon as its decider
@@ -395,8 +397,7 @@ let alpine_run debug order path goals =
         }
         r
         (fun a ->
-          Report.packages
-            (List.map (fun (n, v) -> n ^ " " ^ v) a.A.pkgs);
+          Report.packages (List.map (fun (n, v) -> n ^ " " ^ v) a.A.pkgs);
           Report.encoded ~nodes:a.A.nodes ~lookups:a.A.lookups)
 
 let alpine_cmd =

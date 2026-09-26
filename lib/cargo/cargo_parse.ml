@@ -124,7 +124,9 @@ let feature_table ~reject (j : Yojson.Safe.t) : (string * fentry list) list =
   let of_assoc j =
     match j with
     | `Assoc l ->
-        List.map (fun (k, v) -> (k, List.map entry_of (string_list ~reject v))) l
+        List.map
+          (fun (k, v) -> (k, List.map entry_of (string_list ~reject v)))
+          l
     | `Null -> []
     | _ ->
         reject ();

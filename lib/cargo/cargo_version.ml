@@ -259,8 +259,8 @@ let version_ok (s : string) : bool =
   let s, build = cut '+' s in
   let core, pre = cut '-' s in
   (match String.split_on_char '.' core with
-  | [ a; b; c ] -> num_ok a && num_ok b && num_ok c
-  | _ -> false)
+    | [ a; b; c ] -> num_ok a && num_ok b && num_ok c
+    | _ -> false)
   && Option.fold ~none:true ~some:(dotted ~pre:true) pre
   && Option.fold ~none:true ~some:(dotted ~pre:false) build
 
