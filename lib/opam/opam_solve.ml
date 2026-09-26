@@ -29,7 +29,9 @@ let solve ?(debug = false) ?(order = `Tool) ?(with_test = false)
   |> Result.map (fun (s_pf, nodes) ->
       (* the package formula's packages decode to opam's through the
             second of the two layers the reduction composes *)
-      let reals = List.sort compare (Op.PkgSet.elements (Red.decodeS s_pf)) in
+      let reals =
+        List.sort compare (Op.PkgSet.elements (Red.opamResolution s_pf))
+      in
       {
         reals;
         nodes;

@@ -1305,7 +1305,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       split; [exact Ho | exists u; auto].
   Qed.
   Module SOtp := SetOps T.Pkg Pkg T.PkgSet PkgSet.
-  Definition decodeS (S : T.PkgSet.t) : PkgSet.t :=
+  Definition cargoResolution (S : T.PkgSet.t) : PkgSet.t :=
     SOtp.filterMap (fun '(n, w) =>
         match n, w with
         | NPlus.CCrate m _, VPlus.WOrig v => Some (m, v)
@@ -1313,11 +1313,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         end)
       S.
 
-  Lemma mem_decodeS : forall S m v,
-      PkgSet.In (m, v) (decodeS S) <->
+  Lemma mem_cargoResolution : forall S m v,
+      PkgSet.In (m, v) (cargoResolution S) <->
       exists gr, T.PkgSet.In (NPlus.CCrate m gr, VPlus.WOrig v) S.
   Proof.
-    intros S m v; unfold decodeS; rewrite SOtp.mem_filterMap; split.
+    intros S m v; unfold cargoResolution; rewrite SOtp.mem_filterMap; split.
     - intros [[n w] [Hin He]]; cbn beta iota in He.
       destruct n; try discriminate; destruct w; try discriminate.
       injection He as -> ->; exists gr; exact Hin.
@@ -1351,11 +1351,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
   Module SOpf := SetOps Pkg Featured PkgSet FeaturedSet.
   Definition decodeFS (S : T.PkgSet.t) : FeaturedSet.t :=
-    SOpf.map (fun p => (p, featsAt S p)) (decodeS S).
+    SOpf.map (fun p => (p, featsAt S p)) (cargoResolution S).
 
   Lemma mem_decodeFS : forall S p fs,
       FeaturedSet.In (p, fs) (decodeFS S) <->
-      PkgSet.In p (decodeS S) /\ fs = featsAt S p.
+      PkgSet.In p (cargoResolution S) /\ fs = featsAt S p.
   Proof.
     intros S p fs; unfold decodeFS; rewrite SOpf.mem_map; split.
     - intros [q [Hq He]]; injection He as -> ->; split;
@@ -1457,7 +1457,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         (reduceDeps g R support FDefs Slots Links dflt rc
            rootFeats) rootPkg S ->
       IsResolution R support FDefs Slots Links g dflt rc
-        rootFeats (decodeS S) (decodeFS S)
+        rootFeats (cargoResolution S) (decodeFS S)
         (decodeParents FDefs Slots rc S).
   Proof.
     intros R support FDefs Slots Links g dflt rc rootFeats S
@@ -1496,7 +1496,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       apply T.VSet.singleton_spec in Hw; subst w.
       assert (E := Huniq _ _ _ HwS Hc); injection E as E; exact E. }
     constructor.
-    - intros [m v] Hp; apply mem_decodeS in Hp; destruct Hp as [gr Hp].
+    - intros [m v] Hp; apply mem_cargoResolution in Hp; destruct Hp as [gr Hp].
       exact (proj1 (A1 _ _ _ Hp)).
     - assert (Hed : T.DepRel.In
           (rootPkg, (NPlus.CCrate rn (g rv), T.VSet.singleton (VPlus.WOrig rv)))
@@ -1506,7 +1506,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         apply mem_dep_root; left; reflexivity. }
       destruct (Hdep _ Hroot _ _ Hed) as [w [Hw HwS]].
       apply T.VSet.singleton_spec in Hw; subst w.
-      apply mem_decodeS; exists (g rv); exact HwS.
+      apply mem_cargoResolution; exists (g rv); exact HwS.
     - intros fs Hfs; apply mem_decodeFS in Hfs;
         destruct Hfs as [_ ->]; intros f Hf.
       assert (Hed : T.DepRel.In
@@ -1527,8 +1527,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       apply mem_decodeFS in Hfs; destruct Hfs as [_ ->].
       apply mem_decodeFS in Hfs'; destruct Hfs' as [_ ->]; reflexivity.
     - intros m v v' Hv Hv' NE Hg.
-      apply mem_decodeS in Hv; destruct Hv as [gr Hv].
-      apply mem_decodeS in Hv'; destruct Hv' as [gr' Hv'].
+      apply mem_cargoResolution in Hv; destruct Hv as [gr Hv].
+      apply mem_cargoResolution in Hv'; destruct Hv' as [gr' Hv'].
       destruct (A1 _ _ _ Hv) as [_ Egr]; subst gr.
       destruct (A1 _ _ _ Hv') as [_ Egr']; subst gr'.
       rewrite <- Hg in Hv'.
@@ -1556,17 +1556,17 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         destruct Hu as [gr [gr1 [d [_ [Hown [Hs [Ha [Hact [Hreq _]]]]]]]]].
       exists (featsAt S (m, v)), d; repeat split; try assumption.
       apply mem_decodeFS; split; [| reflexivity].
-      apply mem_decodeS; exists gr; exact Hown.
+      apply mem_cargoResolution; exists gr; exact Hown.
     - intros [m v] fs Hp Hfs d Hd Hact Hopt.
       apply mem_decodeFS in Hfs; destruct Hfs as [_ ->].
-      apply mem_decodeS in Hp; destruct Hp as [gr0 Hp].
+      apply mem_cargoResolution in Hp; destruct Hp as [gr0 Hp].
       destruct (A1 _ _ _ Hp) as [_ Egr0]; subst gr0.
       assert (Achain : forall gr,
           T.PkgSet.In (NPlus.CSlot m (g v) d, VPlus.WClass gr) S ->
           exists u, ParentRel.In (((m, v), sKey d), u)
                       (decodeParents FDefs Slots (rn, rv) S) /\
             rgHolds (sReq d) u = true /\
-            PkgSet.In (sTarget d, u) (decodeS S) /\
+            PkgSet.In (sTarget d, u) (cargoResolution S) /\
             forall fs', FeaturedSet.In ((sTarget d, u), fs')
               (decodeFS S) ->
             FSet.Subset (slotRequests d dflt) fs').
@@ -1596,7 +1596,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           split; [exact Hact |].
           split; [exact Hopt | exact HwS].
         - apply mem_evalReq in Hu; exact (proj2 Hu).
-        - apply mem_decodeS; exists (g u0); exact HwS.
+        - apply mem_cargoResolution; exists (g u0); exact HwS.
         - intros fs' Hfs'; apply mem_decodeFS in Hfs';
             destruct Hfs' as [_ ->]; intros f Hf.
           assert (Hef : T.DepRel.In
@@ -1741,8 +1741,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       apply mem_featsAt; exists (g u1); exact HyS.
     - intros p q l Hp Hq Hlp Hlq.
       destruct p as [pn pv]; destruct q as [qn qv].
-      apply mem_decodeS in Hp; destruct Hp as [grp Hp].
-      apply mem_decodeS in Hq; destruct Hq as [grq Hq].
+      apply mem_cargoResolution in Hp; destruct Hp as [grp Hp].
+      apply mem_cargoResolution in Hq; destruct Hq as [grq Hq].
       destruct (A1 _ _ _ Hp) as [HpR Egp]; subst grp.
       destruct (A1 _ _ _ Hq) as [HqR Egq]; subst grq.
       assert (Hep : T.DepRel.In
@@ -2822,11 +2822,12 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
   End Lookup.
 
-  Theorem decodeS_coreResolution : forall g FDefs Slots Links rc S FS pi,
-      decodeS (coreResolution g FDefs Slots Links rc S FS pi) = S.
+  Theorem cargoResolution_coreResolution :
+    forall g FDefs Slots Links rc S FS pi,
+      cargoResolution (coreResolution g FDefs Slots Links rc S FS pi) = S.
   Proof.
     intros g FDefs Slots Links rc S FS pi; apply PkgSet.ext; intros [m v].
-    rewrite mem_decodeS; split.
+    rewrite mem_cargoResolution; split.
     - intros [gr Hin]; apply core_shape in Hin; cbn beta iota in Hin.
       destruct Hin as [v' [Ev [HS _]]]; injection Ev as <-; exact HS.
     - intro HS; exists (g v); apply core_shape; exists v.
@@ -2858,7 +2859,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     intros R support FDefs Slots Links g dflt rc rootFeats
       S FS pi Hres.
     apply FeaturedSet.ext; intros [p fs].
-    rewrite mem_decodeFS, decodeS_coreResolution; split.
+    rewrite mem_decodeFS, cargoResolution_coreResolution; split.
     - intros [Hp ->]; rewrite (featsAt_coreResolution Hres _ Hp).
       exact (fsAt_mem Hres _ Hp).
     - intro Hfs; assert (Hp := res_fs_dom Hres Hfs).

@@ -40,7 +40,7 @@ let decode st (sol : (Cg.NPlus.t * PVersion.t) list) : result =
       sol
   in
   let s = T.PkgSet.ofList sol in
-  let crates = Cg.PkgSet.elements (Cg.decodeS s) in
+  let crates = Cg.PkgSet.elements (Cg.cargoResolution s) in
   (* the placeholder default the parser gives a crate declaring none
      keeps a depender's default-features request satisfiable; cargo
      records no such feature (dep_cache.rs, handle_default requires

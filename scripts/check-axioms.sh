@@ -250,11 +250,11 @@ Op.Reduction.clsPkgs
 Op.Reduction.clsSel
 Op.Reduction.clsVersions
 Op.Reduction.coreResolution
-Op.Reduction.decodeS
 Op.Reduction.dependees
 Op.Reduction.dependeesBy
 Op.Reduction.encR
 Op.Reduction.encodeOF
+Op.Reduction.opamResolution
 Op.Reduction.opam_completeness
 Op.Reduction.opam_soundness
 Op.Reduction.reduceDeps
@@ -292,6 +292,8 @@ Cgo.Lookup.versions_reduceRealFeatP
 Cgo.Lookup.versions_reduceRealLink
 Cgo.Lookup.versions_reduceRealRoot
 Cgo.Lookup.versions_reduceRealSlot
+Cgo.cargoResolution
+Cgo.cargoResolution_coreResolution
 Cgo.cargo_completeness
 Cgo.cargo_soundness
 Cgo.coreResolution
@@ -301,8 +303,6 @@ Cgo.decodeFS
 Cgo.decodeFS_coreResolution
 Cgo.decodeParents
 Cgo.decodeParents_coreResolution
-Cgo.decodeS
-Cgo.decodeS_coreResolution
 Cgo.dependees
 Cgo.evalReq
 Cgo.linkRel

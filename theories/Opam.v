@@ -466,7 +466,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       | _ => None
       end.
 
-    Definition decodeS (S' : PF.PkgSet.t) : PkgSet.t :=
+    Definition opamResolution (S' : PF.PkgSet.t) : PkgSet.t :=
       SOtp.filterMap tryInvPkg S'.
 
     Lemma mem_realVersions : forall R n v,
@@ -500,11 +500,11 @@ Module Opam (N V X Y E : UsualOrderedType).
         PkgSet.In (n, v) (effRepo rho I).
     Proof. intros; unfold srcVersions; apply mem_realVersions. Qed.
 
-    Lemma mem_decodeS : forall S' n v,
-        PkgSet.In (n, v) (decodeS S') <->
+    Lemma mem_opamResolution : forall S' n v,
+        PkgSet.In (n, v) (opamResolution S') <->
         PF.PkgSet.In (TName.Real n, TVer.RV v) S'.
     Proof.
-      intros S' n v; unfold decodeS; rewrite SOtp.mem_filterMap.
+      intros S' n v; unfold opamResolution; rewrite SOtp.mem_filterMap.
       split.
       - intros [[tn tv] [Hm Hf]];
           destruct tn as [| m | k]; destruct tv as [w | | m'];
@@ -626,11 +626,11 @@ Module Opam (N V X Y E : UsualOrderedType).
       - intro H; left; exists (n, v); split; [exact H | reflexivity].
     Qed.
 
-    Lemma decodeS_coreResolution : forall cls S,
-        decodeS (coreResolution cls S) = S.
+    Lemma opamResolution_coreResolution : forall cls S,
+        opamResolution (coreResolution cls S) = S.
     Proof.
       intros cls S; apply PkgSet.ext; intros [n v].
-      rewrite mem_decodeS, mem_coreResolution_real; reflexivity.
+      rewrite mem_opamResolution, mem_coreResolution_real; reflexivity.
     Qed.
 
     (* Each target name draws its versions from one branch of coreResolution, so
@@ -676,18 +676,19 @@ Module Opam (N V X Y E : UsualOrderedType).
     Qed.
 
     Lemma encR_correct : forall Vq S',
-        (forall n v, PkgSet.In (n, v) (decodeS S') -> VSet.In v (Vq n)) ->
-        forall g, PF.Satisfies S' (encR Vq g) <-> rSat (decodeS S') g.
+        (forall n v,
+            PkgSet.In (n, v) (opamResolution S') -> VSet.In v (Vq n)) ->
+        forall g, PF.Satisfies S' (encR Vq g) <-> rSat (opamResolution S') g.
     Proof.
       intros Vq S' HV.
       induction g as [n c | a IHa b IHb | a IHa b IHb]; simpl.
       - split.
         + intros [tv [Htv Hm]].
           apply mem_versSetBy in Htv; destruct Htv as [v [-> [_ Hh]]].
-          exists v; split; [apply mem_decodeS; exact Hm | exact Hh].
+          exists v; split; [apply mem_opamResolution; exact Hm | exact Hh].
         + intros [v [Hv Hh]].
           assert (Hvq := HV _ _ Hv).
-          apply mem_decodeS in Hv.
+          apply mem_opamResolution in Hv.
           exists (TVer.RV v); split; [| exact Hv].
           apply mem_versSetBy; exists v; split;
             [reflexivity | split; [exact Hvq | exact Hh]].
@@ -696,10 +697,12 @@ Module Opam (N V X Y E : UsualOrderedType).
     Qed.
 
     Lemma encodeOF_correct : forall rho Vq S',
-        (forall n v, PkgSet.In (n, v) (decodeS S') -> VSet.In v (Vq n)) ->
+        (forall n v,
+            PkgSet.In (n, v) (opamResolution S') -> VSet.In v (Vq n)) ->
         PF.PkgSet.In rootPkg S' ->
         forall f,
-          PF.Satisfies S' (encodeOF rho Vq f) <-> oSat rho (decodeS S') f.
+          PF.Satisfies S' (encodeOF rho Vq f) <->
+          oSat rho (opamResolution S') f.
     Proof.
       intros rho Vq S' HV Hr f; unfold encodeOF, oSat.
       destruct (redOF rho f) as [g |] eqn:Hred.
@@ -810,13 +813,13 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Theorem opam_soundness : forall rho I S',
         PF.IsResolution (reduceReal rho I) (reduceDeps rho I) rootPkg S' ->
-        IsResolution rho I (decodeS S').
+        IsResolution rho I (opamResolution S').
     Proof.
       intros rho I S' HR.
       assert (Hsub : forall n v,
-                 PkgSet.In (n, v) (decodeS S') ->
+                 PkgSet.In (n, v) (opamResolution S') ->
                  PkgSet.In (n, v) (effRepo rho I)).
-      { intros n v Hnv; apply mem_decodeS in Hnv.
+      { intros n v Hnv; apply mem_opamResolution in Hnv.
         apply (PF.res_subset _ _ _ _ HR) in Hnv.
         apply mem_reduceReal in Hnv.
         destruct Hnv as [[p [Hp He]] | [He | [p [k [_ He]]]]];
@@ -824,13 +827,13 @@ Module Opam (N V X Y E : UsualOrderedType).
         destruct p as [m w]; unfold embedPkg in He; simpl in He.
         injection He as -> ->; exact Hp. }
       assert (HV : forall n v,
-                 PkgSet.In (n, v) (decodeS S') ->
+                 PkgSet.In (n, v) (opamResolution S') ->
                  VSet.In v (srcVersions rho I n)).
       { intros n v Hnv; apply mem_srcVersions, Hsub; exact Hnv. }
       assert (Hemb : forall n v,
-                 PkgSet.In (n, v) (decodeS S') ->
+                 PkgSet.In (n, v) (opamResolution S') ->
                  PF.PkgSet.In (embedPkg (n, v)) S').
-      { intros n v Hnv; apply mem_decodeS in Hnv; exact Hnv. }
+      { intros n v Hnv; apply mem_opamResolution in Hnv; exact Hnv. }
       assert (Hroot := PF.res_root_mem _ _ _ _ HR).
       assert (HrootR : PF.PkgSet.In rootPkg (reduceReal rho I)).
       { apply mem_reduceReal; right; left; reflexivity. }
@@ -844,7 +847,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       unfold rootForm in Hrootdep; cbn [PF.Satisfies] in Hrootdep.
       destruct Hrootdep as [Hgoal Hinv].
       assert (Hdeps : forall n v f,
-                 PkgSet.In (n, v) (decodeS S') ->
+                 PkgSet.In (n, v) (opamResolution S') ->
                  FSet.In f (dependees rho I (embedPkg (n, v))) ->
                  PF.Satisfies S' f).
       { intros n v f Hnv Hf.
@@ -856,7 +859,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       - intros [n v] Hp.
         assert (H := Hsub _ _ Hp); apply mem_effRepo in H; tauto.
       - intros n v v' Hv Hv'.
-        apply mem_decodeS in Hv, Hv'.
+        apply mem_opamResolution in Hv, Hv'.
         assert (E := PF.res_version_unique _ _ _ _ HR
                        (TName.Real n) _ _ Hv Hv').
         injection E as ->; reflexivity.
@@ -879,7 +882,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           exists (n, (g, c)); auto. }
         unfold cflForm in Hs; cbn [fst snd] in Hs; rewrite Hg in Hs.
         cbn [PF.Satisfies] in Hs; apply Hs; clear Hs.
-        exists (TVer.RV v); split; [| apply mem_decodeS; exact Hv].
+        exists (TVer.RV v); split; [| apply mem_opamResolution; exact Hv].
         unfold confVS.
         destruct (N.eq_dec (fst (pn, pv)) n) as [E | _];
           [contradiction Hne; exact E |].
@@ -888,7 +891,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           | split; [exact (HV _ _ Hv) | exact Hh]].
       - intros k [pn pv] [qn qv] Hp Hq Hpk Hqk.
         assert (Hcl : forall m w,
-                   PkgSet.In (m, w) (decodeS S') ->
+                   PkgSet.In (m, w) (opamResolution S') ->
                    ClsRel.In ((m, w), k) (inst_cls I) ->
                    PF.PkgSet.In (TName.Cls k, TVer.NV m) S').
         { intros m w Hm Hmk.
@@ -903,7 +906,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         assert (E := PF.res_version_unique _ _ _ _ HR (TName.Cls k)
                        _ _ (Hcl _ _ Hp Hpk) (Hcl _ _ Hq Hqk)).
         injection E as ->.
-        apply mem_decodeS in Hp, Hq.
+        apply mem_opamResolution in Hp, Hq.
         assert (E := PF.res_version_unique _ _ _ _ HR
                        (TName.Real qn) _ _ Hp Hq).
         injection E as ->; reflexivity.
@@ -921,7 +924,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         destruct (V.eq_dec v' v) as [E | NE]; [exact E |].
         exfalso; apply Hs.
         exists (TVer.RV v'); split;
-          [| apply mem_decodeS; exact Hv'].
+          [| apply mem_opamResolution; exact Hv'].
         apply SOvv.mem_map; exists v'; split; [| reflexivity].
         apply VSet.remove_spec; split;
           [exact (HV _ _ Hv') | exact NE].
@@ -935,9 +938,10 @@ Module Opam (N V X Y E : UsualOrderedType).
       intros rho I S HR.
       assert (Hse := res_sub_eff _ _ _ HR).
       assert (HV : forall n v,
-                 PkgSet.In (n, v) (decodeS (coreResolution (inst_cls I) S)) ->
+                 PkgSet.In (n, v)
+                   (opamResolution (coreResolution (inst_cls I) S)) ->
                  VSet.In v (srcVersions rho I n)).
-      { intros n v Hm; rewrite decodeS_coreResolution in Hm.
+      { intros n v Hm; rewrite opamResolution_coreResolution in Hm.
         apply mem_srcVersions; exact (Hse _ Hm). }
       assert (Hr : PF.PkgSet.In rootPkg (coreResolution (inst_cls I) S))
         by (apply mem_coreResolution; right; left; reflexivity).
@@ -958,7 +962,7 @@ Module Opam (N V X Y E : UsualOrderedType).
             as [[f0 [Hin ->]] | [[nc [Hin ->]]
                | [[k [Hpk ->]] | [Hpin [nvu [Hin ->]]]]]].
           * apply (encodeOF_correct rho _ _ HV Hr).
-            rewrite decodeS_coreResolution.
+            rewrite opamResolution_coreResolution.
             exact (res_dep_closure _ _ _ HR _ Hp0 _ Hin).
           * destruct nc as [n [g c]]; unfold cflForm; cbn [fst snd].
             destruct (defTrue rho g) eqn:Hg;
@@ -989,7 +993,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           apply FSet.singleton_spec in Hf'; subst f'.
           unfold rootForm; cbn [PF.Satisfies].
           split; apply (encodeOF_correct rho _ _ HV Hr);
-            rewrite decodeS_coreResolution;
+            rewrite opamResolution_coreResolution;
             [exact (res_goal _ _ _ HR) | exact (res_invariant _ _ _ HR)].
         + unfold dependees, dependeesBy in Hf'; cbn beta iota in Hf'.
           destruct (FSet.empty_spec Hf').
