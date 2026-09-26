@@ -502,6 +502,27 @@ newer, as cargo does.
   encoded solution: 6 core nodes (7 lookups)
   loaded: 2 names, 2 versions
 
+Two versions that differ only in build metadata are two packages to cargo,
+whose PackageId compares the whole semver::Version, and the semver crate's
+order breaks their precedence tie on the build identifiers, while a
+requirement matches on precedence alone.  So =1.0.0 and <=1.0.0 admit both
+of bm's and bp's, and each name takes the greater: 1.0.0+b over 1.0.0+a,
+1.0.0+1 over 1.0.0, 1.0.0+x over the numeric 1.0.0+10, and 1.0.0+10 over
+1.0.0+9.  bf's 1.0.0+b needs a crate the index lacks, so bf falls back to
+1.0.0+a.  cargo 1.97 locks the same six:
+
+  $ ../../../bin/main.exe cargo index manifests/bmeta.toml | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root bmeta 1.0.0
+  packages (6):
+    bf 1.0.0+a
+    bm 1.0.0+b
+    bmeta 1.0.0
+    bn 1.0.0+x
+    bo 1.0.0+10
+    bp 1.0.0+1
+  encoded solution: 18 core nodes (23 lookups)
+  loaded: 7 names, 10 versions
+
 cargo skips an index line it cannot deserialize, so a line that is JSON
 but not an object is dropped and counted, and so is a version one of
 whose dependencies is not an object, or has no name: nb's 1.1.0 and 1.2.0

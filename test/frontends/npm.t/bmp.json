@@ -1,0 +1,5 @@
+{"name":"bmp","dist-tags":{"latest":"0.1.0"},
+ "versions":{
+  "0.1.0":{"name":"bmp","version":"0.1.0"},
+  "1.0.0+1":{"name":"bmp","version":"1.0.0+1"},
+  "1.0.0":{"name":"bmp","version":"1.0.0"}}}

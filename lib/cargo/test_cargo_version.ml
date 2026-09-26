@@ -31,11 +31,25 @@ let () =
   check "1.9.0" "1.10.0" (-1);
   check "1.0.2" "1.0.10" (-1);
   check "1.0.0" "1.0.0" 0;
-  (* build metadata is ignored *)
-  check "1.0.0+build.1" "1.0.0" 0;
-  check "1.0.0+build.1" "1.0.0+build.2" 0;
-  check "1.0.0-alpha+x" "1.0.0-alpha+y" 0;
+  (* build metadata breaks a precedence tie, and only a tie *)
+  check "1.0.0+build.1" "1.0.0" 1;
+  check "1.0.0+build.1" "1.0.0+build.2" (-1);
+  check "1.0.0-alpha+x" "1.0.0-alpha+y" (-1);
   check "1.0.0-alpha+x" "1.0.0" (-1);
+  check "1.0.0+z" "1.0.1" (-1);
+  check "1.0.0+9" "1.0.0+10" (-1);
+  check "1.0.0+10" "1.0.0+x" (-1);
+  check "1.0.0+0" "1.0.0+00" (-1);
+  check "1.0.0+a" "1.0.0+a.0" (-1);
+  (* but a requirement matches on precedence *)
+  req "=1.0.0" "1.0.0+a" true;
+  req "<=1.0.0" "1.0.0+a" true;
+  req ">=1.0.0" "1.0.0+a" true;
+  req ">1.0.0" "1.0.0+a" false;
+  req "<1.0.0" "1.0.0+a" false;
+  req "^1.0.0" "1.0.0+a" true;
+  req "~1.0.0" "1.0.0+a" true;
+  req "=1.0.0+b" "1.0.0+a" true;
   (* numeric identifiers rank below alphanumeric ones *)
   check "1.0.0-1" "1.0.0-alpha" (-1);
   check "1.0.0-1" "1.0.0-2" (-1);

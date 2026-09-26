@@ -1,0 +1,2 @@
+{"name":"bf","vers":"1.0.0+a","deps":[],"cksum":"0000000000000000000000000000000000000000000000000000000000000000","features":{},"yanked":false}
+{"name":"bf","vers":"1.0.0+b","deps":[{"name":"bx","req":"1","features":[],"optional":false,"default_features":true,"kind":"normal"}],"cksum":"0000000000000000000000000000000000000000000000000000000000000000","features":{},"yanked":false}

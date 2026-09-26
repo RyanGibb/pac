@@ -194,8 +194,6 @@ module Strict = struct
     let size = 65536
   end)
 
-  let compare_parsed a b = precedence (parse a) (parse b)
-
   (* parse's num of the part at !i, leaving !i at the next part, or at the
      end once the core has ended *)
   let field s n i =
@@ -223,11 +221,67 @@ module Strict = struct
     in
     go 0
 
-  (* The release cores are compared off the strings themselves, a field at
-     a time as parse reads them and no further than the first that
-     differs: even a table of parsed versions costs a hash of the string
-     there.  Only equal cores leave the prerelease to decide.  Sound only
-     for the strict reading, where the core ends at the first '-' or '+'. *)
+  (* no build identifier holds a '*', so no version carries this one *)
+  let top_build = "*"
+  let top v = fst (strip_build v) ^ "+" ^ top_build
+
+  (* The semver crate's BuildMetadata order (impls.rs), which Version's
+     derived Ord reaches once the precedence ties: identifier by identifier,
+     a numeric one below an alphanumeric one, numeric ones by value and then
+     by length (0 < 00 < 1), and a list below its extensions.  No build
+     metadata splits into one empty identifier, which that order puts below
+     every other; [top_build] sits above every one. *)
+  let cmp_build a b =
+    let value x =
+      let n = String.length x in
+      let i = ref 0 in
+      while !i < n && x.[!i] = '0' do
+        incr i
+      done;
+      String.sub x !i (n - !i)
+    in
+    let cmp_ident x y =
+      match (String.for_all is_digit x, String.for_all is_digit y) with
+      | true, true ->
+          let vx = value x and vy = value y in
+          let c = Int.compare (String.length vx) (String.length vy) in
+          if c <> 0 then c
+          else
+            let c = String.compare vx vy in
+            if c <> 0 then c
+            else Int.compare (String.length x) (String.length y)
+      | true, false -> -1
+      | false, true -> 1
+      | false, false -> String.compare x y
+    in
+    let rec go xs ys =
+      match (xs, ys) with
+      | [], [] -> 0
+      | _ :: _, [] -> 1
+      | [], _ :: _ -> -1
+      | x :: xs, y :: ys ->
+          let c = cmp_ident x y in
+          if c <> 0 then c else go xs ys
+    in
+    match (a = top_build, b = top_build) with
+    | true, true -> 0
+    | true, false -> 1
+    | false, true -> -1
+    | false, false -> go (String.split_on_char '.' a) (String.split_on_char '.' b)
+
+  let tiebreak c a b = if c <> 0 then c else cmp_build (snd (strip_build a)) (snd (strip_build b))
+
+  (* the order below, off the parsed versions *)
+  let compare_parsed a b = tiebreak (precedence (parse a) (parse b)) a b
+
+  (* The semver crate's Version order, cargo's: precedence, and then the
+     build metadata, since cargo keeps two versions that differ only there
+     apart (PackageId's equality is Version's) and sorts its candidates by
+     this order (VersionPreferences::sort_summaries).  The release cores are
+     compared off the strings themselves, a field at a time as parse reads
+     them and no further than the first that differs: even a table of
+     parsed versions costs a hash of the string there.  Sound only for the
+     strict reading, where the core ends at the first '-' or '+'. *)
   let compare (a : string) (b : string) : int =
     let na = String.length a and nb = String.length b in
     let ia = ref 0 and ib = ref 0 in
@@ -239,8 +293,11 @@ module Strict = struct
       else
         let c = Int.compare (field a na ia) (field b nb ib) in
         if c <> 0 then c
-        else if plain a && plain b then 0
-        else compare_parsed a b
+        else if String.equal a b then 0
+        else
+          tiebreak
+            (if plain a && plain b then 0 else precedence (parse a) (parse b))
+            a b
 end
 
 (* node-semver's loose reading, which npm passes for every version and

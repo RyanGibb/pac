@@ -1,0 +1,5 @@
+{"name":"bmd","dist-tags":{"latest":"0.1.0"},
+ "versions":{
+  "0.1.0":{"name":"bmd","version":"0.1.0"},
+  "1.0.0+a":{"name":"bmd","version":"1.0.0+a","deprecated":"old"},
+  "1.0.0+b":{"name":"bmd","version":"1.0.0+b"}}}

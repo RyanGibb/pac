@@ -155,6 +155,67 @@ let add_name ar n vs =
   ar.n_vers <- ar.n_vers + List.length vs;
   List.iter (tabulate ar) vs
 
+(* checkEngine, npm-install-checks/lib/index.js: engines.node and
+   engines.npm are the two sub-keys it tests, and a null host version
+   passes its own sub-key rather than failing it, so a package declaring
+   a requirement we have no host for is ranked as though it declared
+   none. *)
+let ver_engine_ok ar (v : P.ver) : bool =
+  let ok host rg =
+    match (host, rg) with
+    | Some h, Some rg -> Npm_version.holds_pre h rg
+    | _ -> true
+  in
+  ok ar.node v.P.v_eng_node && ok ar.npm v.P.v_eng_npm
+
+(* npm-pick-manifest's sort keys above semver order (index.js:167-181),
+   greater for the version it prefers *)
+let ver_rank ar (v : P.ver) : bool * bool * bool =
+  let nd = not v.P.v_deprecated and eng = ver_engine_ok ar v in
+  (nd && eng, eng, nd)
+
+(* node-semver compares two versions that differ only in build metadata
+   equal, and satisfies ignores the metadata, so a range admits both or
+   neither and npm-pick-manifest never tells them apart but by the rest of
+   its choice: the latest tag's version, where it is one of them and passes
+   the fast path's test (index.js:119-132), else the one its sort ranks
+   first, which on a tie is the first the packument lists, the sort being
+   stable.  That one is what npm installs wherever either is admitted, and
+   so the only one kept.  The exception is a spec that is itself a version,
+   which npm looks up as the key semver.clean makes of it (index.js:108-111),
+   with the metadata stripped, and which is a range here. *)
+let one_per_precedence ar (latest : string option) (vs : P.ver list) =
+  let chosen (c : P.ver list) =
+    match
+      List.find_opt
+        (fun (v : P.ver) ->
+          Some v.P.v_vers = latest && ver_rank ar v = (true, true, true))
+        c
+    with
+    | Some v -> v
+    | None ->
+        List.fold_left
+          (fun a b ->
+            if compare (ver_rank ar b) (ver_rank ar a) > 0 then b else a)
+          (List.hd c) (List.tl c)
+  in
+  let cmp (a : P.ver) (b : P.ver) = Npm_version.compare a.P.v_vers b.P.v_vers in
+  (* a stable sort keeps each class in packument order *)
+  let rec dropped acc = function
+    | [] -> acc
+    | v :: rest ->
+        let rec split c = function
+          | w :: ws when cmp v w = 0 -> split (w :: c) ws
+          | ws -> (List.rev c, ws)
+        in
+        let c, rest = split [ v ] rest in
+        let k = chosen c in
+        dropped (List.filter (fun w -> w != k) c @ acc) rest
+  in
+  match dropped [] (List.stable_sort cmp vs) with
+  | [] -> vs
+  | d -> List.filter (fun v -> not (List.memq v d)) vs
+
 let read_packument ar n f =
   match P.load ~reject:(reject ar) f with
   | Error e -> raise (Fetch_failed (Printf.sprintf "reading %s: %s" f e))
@@ -163,7 +224,8 @@ let read_packument ar n f =
       Hashtbl.replace ar.tags n pk.P.pk_tags;
       (* the name fetched under is authoritative: a manifest's own "name"
          is overwritten, not checked *)
-      List.map (fun v -> { v with P.v_name = n }) pk.P.pk_vers
+      one_per_precedence ar pk.P.pk_latest
+        (List.map (fun v -> { v with P.v_name = n }) pk.P.pk_vers)
 
 (* There is no cone pass: the transitive closure over every version of
    every dependency is most of the registry, so a packument is fetched
@@ -208,21 +270,8 @@ let add_root ar (v : P.ver) : string * string =
 
 let meta ar p : P.ver option = Hashtbl.find_opt ar.entry p
 
-(* checkEngine, npm-install-checks/lib/index.js: engines.node and
-   engines.npm are the two sub-keys it tests, and a null host version
-   passes its own sub-key rather than failing it, so a package declaring
-   a requirement we have no host for is ranked as though it declared
-   none. *)
 let engine_ok ar (p : string * string) : bool =
-  match meta ar p with
-  | None -> true
-  | Some v ->
-      let ok host rg =
-        match (host, rg) with
-        | Some h, Some rg -> Npm_version.holds_pre h rg
-        | _ -> true
-      in
-      ok ar.node v.P.v_eng_node && ok ar.npm v.P.v_eng_npm
+  match meta ar p with None -> true | Some v -> ver_engine_ok ar v
 
 let deprecated ar (p : string * string) : bool =
   match meta ar p with None -> false | Some v -> v.P.v_deprecated

@@ -1,0 +1,10 @@
+{
+  "name": "bmeta-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "bmo": "^1",
+    "bmd": "^1",
+    "bml": "^1",
+    "bmp": "^1"
+  }
+}

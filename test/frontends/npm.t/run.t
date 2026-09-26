@@ -603,6 +603,30 @@ the non-deprecated 2.0.0.
   encoded solution: 7 core nodes (10 lookups)
   loaded: 4 names, 7 versions, 0 packuments fetched
 
+Versions that differ only in build metadata compare equal under
+node-semver, and satisfies ignores the metadata too, so npm-pick-manifest
+never tells them apart but by its sort's other keys and its stable order:
+the latest tag where it names one, then the non-deprecated, then whichever
+the packument lists first.  bmo lists 1.0.0+b first; bmd's 1.0.0+a is
+deprecated; bml tags 1.0.0+b latest though it lists 1.0.0+a first; bmp
+lists 1.0.0+1 before 1.0.0.  npm 11.17 locks the same four:
+
+  $ ../../../bin/main.exe npm --offline --cache . --tree ./bmeta-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root bmeta-app 1.0.0
+  packages (5):
+    bmd 1.0.0+b
+    bmeta-app 1.0.0
+    bml 1.0.0+b
+    bmo 1.0.0+b
+    bmp 1.0.0+1
+  node_modules (4):
+    bmeta-app 1.0.0 <- bmd 1.0.0+b
+    bmeta-app 1.0.0 <- bml 1.0.0+b
+    bmeta-app 1.0.0 <- bmo 1.0.0+b
+    bmeta-app 1.0.0 <- bmp 1.0.0+1
+  encoded solution: 9 core nodes (9 lookups)
+  loaded: 5 names, 8 versions, 0 packuments fetched
+
 Given a host, the preference acts, and engines.npm is as live a sub-key as
 engines.node: engine's 2.0.0 wants node >=99 and engine-npm's wants npm
 >=99, and both fall back to 1.0.0.  engine-depr fixes the order of the two

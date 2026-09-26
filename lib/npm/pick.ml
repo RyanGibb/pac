@@ -27,10 +27,10 @@ module L = Lookup
 let rank ar (n : string) (c : PVersion.t) : bool * bool * bool =
   match c with
   | Np.Vs.Gran _ -> (true, true, true)
-  | Np.Vs.Orig v ->
-      let p = (n, v) in
-      let nd = not (A.deprecated ar p) and eng = A.engine_ok ar p in
-      (nd && eng, eng, nd)
+  | Np.Vs.Orig v -> (
+      match A.meta ar (n, v) with
+      | Some m -> A.ver_rank ar m
+      | None -> (true, true, true))
 
 let best ar (n : string) (cands : PVersion.t list) : PVersion.t =
   match cands with

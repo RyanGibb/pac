@@ -89,26 +89,39 @@ let ineq op (ma, mi, pa, pre) =
           else [ (Lt, vstr (m + 1) 0 0) ]
       | Eq -> exact (ma, mi, pa, pre))
 
-let trim s = String.trim s
-let split_on c s = String.split_on_char c s
+(* A comparator names a precedence, which the semver crate matches on alone
+   (matches_exact and its siblings, eval.rs), while [compare] also orders
+   build metadata.  So each bound becomes the version of that precedence the
+   order puts at the right end: the build-less one, which is the least, for
+   >= and <, and the greatest, a build no version carries, for > and <=;
+   = is the two together. *)
+let bounds (r : req) : req =
+  List.concat_map
+    (function
+      | ((Ge | Lt), _) as c -> [ c ]
+      | ((Gt | Le) as o), v -> [ (o, V.Strict.top v) ]
+      | Eq, v -> [ (Ge, v); (Le, V.Strict.top v) ])
+    r
 
 let comparator (s : string) : req =
-  let s = trim s in
+  let s = String.trim s in
   if s = "" then []
   else
     let starts p = String.starts_with ~prefix:p s in
-    let drop k = trim (String.sub s k (String.length s - k)) in
-    if starts "^" then caret (parse_spec (drop 1))
-    else if starts "~" then tilde (parse_spec (drop 1))
-    else if starts ">=" then ineq Ge (parse_spec (drop 2))
-    else if starts "<=" then ineq Le (parse_spec (drop 2))
-    else if starts ">" then ineq Gt (parse_spec (drop 1))
-    else if starts "<" then ineq Lt (parse_spec (drop 1))
-    else if starts "==" then exact (parse_spec (drop 2))
-    else if starts "=" then exact (parse_spec (drop 1))
-    else wildcard (parse_spec s)
+    let drop k = String.trim (String.sub s k (String.length s - k)) in
+    bounds
+      (if starts "^" then caret (parse_spec (drop 1))
+       else if starts "~" then tilde (parse_spec (drop 1))
+       else if starts ">=" then ineq Ge (parse_spec (drop 2))
+       else if starts "<=" then ineq Le (parse_spec (drop 2))
+       else if starts ">" then ineq Gt (parse_spec (drop 1))
+       else if starts "<" then ineq Lt (parse_spec (drop 1))
+       else if starts "==" then exact (parse_spec (drop 2))
+       else if starts "=" then exact (parse_spec (drop 1))
+       else wildcard (parse_spec s))
 
-let parse_req (s : string) : req = List.concat_map comparator (split_on ',' s)
+let parse_req (s : string) : req =
+  List.concat_map comparator (String.split_on_char ',' s)
 let admits (v : string) (r : req) : bool = V.Strict.admits v (List.map snd r)
 
 let holds (v : string) (r : req) : bool =

@@ -1,0 +1,5 @@
+{"name":"bmo","dist-tags":{"latest":"0.1.0"},
+ "versions":{
+  "0.1.0":{"name":"bmo","version":"0.1.0"},
+  "1.0.0+b":{"name":"bmo","version":"1.0.0+b"},
+  "1.0.0+a":{"name":"bmo","version":"1.0.0+a"}}}

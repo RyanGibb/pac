@@ -37,15 +37,23 @@ let () =
       "12345678901.0.0";
     ]
   in
+  (* the two agree but where build metadata alone tells two apart, which
+     only cargo's order ranks *)
+  let core v = fst (Version.Semver.strip_build v) in
   List.iter
     (fun a ->
       List.iter
         (fun b ->
           let c = sgn (Version.Semver.Strict.compare a b)
           and n = sgn (Version.Semver.Loose.compare a b) in
-          expect (Printf.sprintf "strict %S %S = %d, loose %d" a b c n) c n)
+          if core a <> core b || a = b then
+            expect (Printf.sprintf "strict %S %S = %d, loose %d" a b c n) c n
+          else expect (Printf.sprintf "loose %S %S = %d" a b n) n 0)
         corpus)
     corpus;
+  expect "strict 1.0.0 < 1.0.0+build.1"
+    (sgn (Version.Semver.Strict.compare "1.0.0" "1.0.0+build.1"))
+    (-1);
   List.iter
     (fun v ->
       expect ("is_prerelease " ^ v)

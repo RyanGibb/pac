@@ -1,0 +1,11 @@
+[package]
+name = "bmeta"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+bm = "=1.0.0"
+bf = "1"
+bp = "<=1.0.0"
+bo = "1"
+bn = "1"
