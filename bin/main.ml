@@ -23,16 +23,22 @@ let order_arg ~tool ~pubgrub : Pac_common.Order.t Term.t =
   in
   let seed =
     Arg.(
-      value & opt int 0
-      & info [ "seed" ] ~docv:"N"
-          ~doc:"The seed $(b,--order=random) draws from.")
+      value
+      & opt (some int) None
+      & info [ "seed" ] ~docv:"N" ~absent:"0"
+          ~doc:"The seed $(b,--order=random) draws from, and only it.")
   in
+  (* a seed beside another order would change nothing, which is more likely
+     a caller's slip than a request *)
   Term.(
-    const (fun order seed ->
-        match order with
-        | `Random -> `Random seed
-        | (`Tool | `Pubgrub) as o -> o)
-    $ order $ seed)
+    ret
+      (const (fun order seed ->
+           match (order, seed) with
+           | `Random, s -> `Ok (`Random (Option.value s ~default:0))
+           | (`Tool | `Pubgrub), Some _ ->
+               `Error (true, "--seed is read only under --order=random")
+           | ((`Tool | `Pubgrub) as o), None -> `Ok o)
+      $ order $ seed))
 
 let exits =
   Cmd.Exit.
@@ -438,6 +444,10 @@ module Npm = Npm_solve
 
 let npm_run debug order cache offline tree omit nodev npmv query =
   guard @@ fun () ->
+  match cache with
+  | None ->
+      error 2 "no packument cache: pass --cache, or set XDG_CACHE_HOME or HOME"
+  | Some cache -> (
   let t0 = Unix.gettimeofday () in
   let ar = Npm.Archive.create ?node:nodev ?npm:npmv ~cache ~offline () in
   try
@@ -475,25 +485,30 @@ let npm_run debug order cache offline tree omit nodev npmv query =
             Report.packages (Npm.Print.packages a);
             if tree then Report.section "node_modules" (Npm.Print.tree a);
             Report.encoded ~nodes:a.Npm.Solve.nodes ~lookups:a.Npm.Solve.lookups)
-  with Npm.Archive.Fetch_failed e -> error 3 "%s" e
+  with Npm.Archive.Fetch_failed e -> error 3 "%s" e)
 
 let npm_cmd =
   (* a user's cache, as npm keeps its own, so that where pac runs from
-     does not decide which packuments it reads *)
+     does not decide which packuments it reads; with neither variable set
+     there is none, and the run is refused *)
   let cache =
+    let set v =
+      match Sys.getenv_opt v with Some d when d <> "" -> Some d | _ -> None
+    in
     let default =
-      match Sys.getenv_opt "XDG_CACHE_HOME" with
-      | Some d when d <> "" -> Filename.concat d "pac/npm"
-      | _ ->
-          Filename.concat
-            (Option.value (Sys.getenv_opt "HOME") ~default:".")
-            ".cache/pac/npm"
+      match (set "XDG_CACHE_HOME", set "HOME") with
+      | Some d, _ -> Some (Filename.concat d "pac/npm")
+      | None, Some h -> Some (Filename.concat h ".cache/pac/npm")
+      | None, None -> None
     in
     Arg.(
-      value & opt string default
+      value
+      & opt (some string) default
       & info [ "cache" ] ~docv:"DIR"
           ~absent:"$(b,\\$XDG_CACHE_HOME)/pac/npm, else ~/.cache/pac/npm"
-          ~doc:"Packument cache directory.")
+          ~doc:
+            "Packument cache directory; with neither variable set it must be \
+             given.")
   in
   let offline =
     Arg.(

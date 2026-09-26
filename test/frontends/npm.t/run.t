@@ -1107,3 +1107,12 @@ package.json is refused:
   $ ../../../bin/main.exe npm --offline --cache . ./list.json
   error: ./list.json: not a package.json
   [2]
+
+The packument cache defaults to $XDG_CACHE_HOME/pac/npm, else
+~/.cache/pac/npm, so that where pac runs from does not decide what it
+reads.  With neither variable set there is no such place, and pac refuses
+rather than fall back on the working directory:
+
+  $ env -u HOME -u XDG_CACHE_HOME ../../../bin/main.exe npm --offline ./app/package.json
+  error: no packument cache: pass --cache, or set XDG_CACHE_HOME or HOME
+  [2]

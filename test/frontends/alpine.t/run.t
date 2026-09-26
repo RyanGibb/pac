@@ -44,6 +44,15 @@ another seed may give another, a resolution all the same:
   encoded solution: 3 core nodes (5 lookups)
   loaded: 14 names, 14 versions, 7 provides entries, 0 install_if rules
 
+Any other order has no generator to seed, so a --seed beside it is a
+command-line error rather than a flag that changes nothing:
+
+  $ ../../../bin/main.exe alpine --seed 1 PROVIDERS editor
+  Usage: pac alpine [--help] [--debug] [--order=ORDER] [--seed=N] [OPTION]…
+         APKINDEX PKG…
+  pac: --seed is read only under --order=random
+  [2]
+
 The same empty version is why a package of the name itself beats an
 unversioned provider of it however high that provider's k:.  tool-extra
 provides tool with k:50 and heads the disjunction, but tool 2.0 offers 2.0
