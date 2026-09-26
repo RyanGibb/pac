@@ -73,14 +73,35 @@ let local_vars =
 let switch_local_vars = [ "name"; "version" ]
 let qualify ~locals ~owner x = if List.mem x locals then owner ^ ":" ^ x else x
 
+(* what opam's OpamPackage.Name.of_string and OpamPackage.Version.of_string
+   accept; a failure of either is an error opam's command line stops on *)
+let name_ok s =
+  String.exists (function 'a' .. 'z' | 'A' .. 'Z' -> true | _ -> false) s
+  && String.for_all
+       (function
+         | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '-' | '_' | '+' -> true
+         | _ -> false)
+       s
+
+let version_ok s =
+  s <> ""
+  && String.for_all
+       (function
+         | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '-' | '_' | '+' | '.' | '~' ->
+             true
+         | _ -> false)
+       s
+
 (* The atom syntax opam's command line takes, one element of a query:
    [OpamFormula.atom_of_string] (opamFormula.ml) matches a name -- the run
    before the first character an operator can begin with -- then an
    operator, then a non-empty version, and falls back to reading the whole
    string as a bare name when that fails.  "." spells "=", and the
    operators are tried longest first because a shorter one is what the
-   regexp backtracks to when the version would otherwise be empty. *)
-let atom_of_string (s : string) : string * vc =
+   regexp backtracks to when the version would otherwise be empty.  opam
+   install reads an argument with a '/' or a leading '.' as a local
+   directory or file to pin, which is no query about the repository. *)
+let atom_of_string (s : string) : (string * vc, string) result =
   let n = String.length s in
   let rec cut i =
     if i >= n then None
@@ -98,18 +119,37 @@ let atom_of_string (s : string) : string * vc =
       (".", Eq);
     ]
   in
-  match cut 0 with
-  | Some i when i > 0 -> (
-      let fits (sp, _) =
-        let l = String.length sp in
-        i + l < n && String.sub s i l = sp
-      in
-      match List.find_opt fits spellings with
-      | Some (sp, o) ->
+  let bare () =
+    if name_ok s then Ok (s, VTop)
+    else Error (Printf.sprintf "%S: not a package name or atom" s)
+  in
+  if String.contains s '/' || String.starts_with ~prefix:"." s then
+    Error (Printf.sprintf "%S: a local package, which is not a query" s)
+  else
+    match cut 0 with
+    | Some i when i > 0 -> (
+        let fits (sp, _) =
           let l = String.length sp in
-          (String.sub s 0 i, VCmp (o, String.sub s (i + l) (n - i - l)))
-      | None -> (s, VTop))
-  | _ -> (s, VTop)
+          i + l < n && String.sub s i l = sp
+        in
+        match List.find_opt fits spellings with
+        | Some (sp, o) ->
+            let l = String.length sp in
+            let name = String.sub s 0 i
+            and version = String.sub s (i + l) (n - i - l) in
+            if not (name_ok name) then
+              Error (Printf.sprintf "%S: %S is not a package name" s name)
+            else if not (version_ok version) then
+              Error (Printf.sprintf "%S: %S is not a version" s version)
+            else Ok (name, VCmp (o, version))
+        | None -> bare ())
+    | _ -> bare ()
+
+let rec query_of_args = function
+  | [] -> Ok []
+  | s :: rest ->
+      Result.bind (atom_of_string s) (fun a ->
+          Result.map (List.cons a) (query_of_args rest))
 
 let rel_of = function
   | `Eq -> Eq

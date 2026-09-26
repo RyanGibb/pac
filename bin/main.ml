@@ -148,25 +148,28 @@ let debian_cmd =
 let opam_run debug order with_test with_doc with_dev_setup opam_version repo
     atoms =
   guard @@ fun () ->
-  let t0 = Unix.gettimeofday () in
-  let ar = Opam_solve.empty_archive repo in
-  let query = List.map Opam_parse.atom_of_string atoms in
-  let r =
-    Opam_solve.solve ~debug ~order ~with_test ~with_doc ~with_dev_setup
-      ~opam_version ar query
-  in
-  report ~t0
-    {
-      Report.names = ar.Opam_solve.n_names;
-      versions = ar.Opam_solve.n_vers;
-      extra = [];
-      dropped = !Opam_parse.rejected;
-      parse = ar.Opam_solve.t_parse;
-    } r (fun a ->
-      Report.packages (List.map (fun (n, v) -> n ^ " " ^ v) a.Opam_solve.reals);
-      if a.Opam_solve.depexts <> [] then
-        Report.section "system packages" a.Opam_solve.depexts;
-      Report.encoded ~nodes:a.Opam_solve.nodes ~lookups:a.Opam_solve.lookups)
+  match Opam_parse.query_of_args atoms with
+  | Error e -> error 2 "%s" e
+  | Ok query ->
+      let t0 = Unix.gettimeofday () in
+      let ar = Opam_solve.empty_archive repo in
+      let r =
+        Opam_solve.solve ~debug ~order ~with_test ~with_doc ~with_dev_setup
+          ~opam_version ar query
+      in
+      report ~t0
+        {
+          Report.names = ar.Opam_solve.n_names;
+          versions = ar.Opam_solve.n_vers;
+          extra = [];
+          dropped = !Opam_parse.rejected;
+          parse = ar.Opam_solve.t_parse;
+        } r (fun a ->
+          Report.packages
+            (List.map (fun (n, v) -> n ^ " " ^ v) a.Opam_solve.reals);
+          if a.Opam_solve.depexts <> [] then
+            Report.section "system packages" a.Opam_solve.depexts;
+          Report.encoded ~nodes:a.Opam_solve.nodes ~lookups:a.Opam_solve.lookups)
 
 let opam_cmd =
   (* opam's builtin-0install backend decides a name as soon as its decider

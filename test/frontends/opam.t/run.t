@@ -227,6 +227,24 @@ Constraints and several names compose, the query being one per name:
   encoded solution: 5 core nodes (4 lookups)
   loaded: 3 names, 4 versions
 
+An element opam's command line cannot read is refused, with status 2, as
+opam refuses it, rather than solved as the name of nothing: an operator
+left without a version, an empty name, a character no name may hold, and
+a path, which opam install takes for a local package to pin:
+
+  $ ../../../bin/main.exe opam . 'dep>='
+  error: "dep>=": "=" is not a version
+  [2]
+  $ ../../../bin/main.exe opam . ''
+  error: "": not a package name or atom
+  [2]
+  $ ../../../bin/main.exe opam . 'dep!1'
+  error: "dep!1": not a package name or atom
+  [2]
+  $ ../../../bin/main.exe opam . ./packages/dep
+  error: "./packages/dep": a local package, which is not a query
+  [2]
+
 with-test, with-doc and with-dev-setup are query-scoped: each flag turns
 its variable on for the names the query asks for and leaves every package
 they pull in at false, which is what opam does (opamSwitchState.ml, the
