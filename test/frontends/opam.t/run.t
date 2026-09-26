@@ -457,3 +457,25 @@ A repository that cannot be read is a read error, not a refused query:
   $ ../../../bin/main.exe opam packages/eqv/eqv.1.0/opam eqv
   error: packages/eqv/eqv.1.0/opam: Not a directory
   [3]
+
+opam install refuses an atom no package of the repository meets, whether
+or not it is available, and first matches a name that differs only in case
+from one other name:
+
+  $ ../../../bin/main.exe opam . nosuch
+  error: No package named nosuch found.
+  [2]
+  $ ../../../bin/main.exe opam . dep nosuch.1
+  error: No package named nosuch found.
+  [2]
+  $ ../../../bin/main.exe opam . dep.99
+  error: Package dep has no version 99.
+  [2]
+  $ ../../../bin/main.exe opam . 'dep>=99'
+  error: Package dep has no version >=99.
+  [2]
+  $ untimed ../../../bin/main.exe opam . Dep
+  packages (1):
+    dep 9
+  encoded solution: 2 core nodes (2 lookups)
+  loaded: 1 names, 2 versions

@@ -159,6 +159,9 @@ let opam_run debug order with_test with_doc with_dev_setup opam_version repo
   | Ok query ->
       let t0 = Unix.gettimeofday () in
       let ar = Opam_solve.empty_archive repo in
+      match Opam_solve.sanitize ar query with
+      | Error e -> error 2 "%s" e
+      | Ok query ->
       let r =
         Opam_solve.solve ~debug ~order ~with_test ~with_doc ~with_dev_setup
           ~opam_version ar query

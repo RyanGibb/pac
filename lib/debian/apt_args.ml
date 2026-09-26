@@ -166,8 +166,64 @@ let query_element ~native ~arches (index : DF.stanza list) arg =
       vlist
   in
   let only why = function Some v -> Ok (key, Only v) | None -> Error why in
-  match sel with
-  | None -> Ok (key, Any)
+  let provides (st : DF.stanza) =
+    List.exists (fun (p : DF.provide) -> p.pname = fst key) st.provides
+  in
+  (* a name no stanza carries, provides or relates to is no package of
+     apt's cache.  apt-get would go on to read one with glob or regex
+     characters as a pattern over the cache's names, which pac does not *)
+  let located () =
+    let named (a : DF.atom) = a.name = fst key in
+    let mentions raw =
+      let n = String.length (fst key) in
+      let rec at i =
+        i + n <= String.length raw && (String.sub raw i n = fst key || at (i + 1))
+      in
+      at 0 && List.exists (List.exists named) (DF.parse_depends raw)
+    in
+    List.exists
+      (fun (st : DF.stanza) -> st.package = fst key || provides st)
+      index
+    || List.exists
+         (fun (st : DF.stanza) ->
+           List.exists named st.conflicts
+           || List.exists mentions (st.depends_raw @ st.recommends_raw))
+         index
+  in
+  (* CacheSetHelperAPTGet::tryVirtualPackage for a candidate: the provider
+     versions that are their package's candidate, taken when one package
+     holds them all, and of its architectures the one asked for, else
+     arch:all, else the native one.  A Multi-Arch: foreign package provides
+     itself and its Provides to every architecture. *)
+  let virtual_candidate () =
+    let providers =
+      List.filter
+        (fun (st : DF.stanza) ->
+          (provides st && snd (stanza_key ~native st) = snd key)
+          || st.multi_arch = Some "foreign"
+             && (provides st || st.package = fst key))
+        (pin_candidates ~native ~named:(Hashtbl.create 1) index)
+    in
+    let rank (st : DF.stanza) =
+      if st.architecture = snd key then 0
+      else if st.architecture = "all" then 1
+      else if st.architecture = native then 2
+      else 3
+    in
+    match List.stable_sort (fun a b -> compare (rank a) (rank b)) providers with
+    | st :: rest
+      when List.for_all (fun (o : DF.stanza) -> o.package = st.package) rest ->
+        Ok (stanza_key ~native st, Only st.version)
+    | _ ->
+        Error (Printf.sprintf "Package '%s' has no installation candidate" full)
+  in
+  if not (located ()) then
+    Error
+      (Printf.sprintf "Unable to locate package %s" pkg)
+  else
+    match sel with
+    | None when vlist = [] -> virtual_candidate ()
+    | None -> Ok (key, Any)
   (* apt tests these keywords before the tag, so they read the same after
      '/'; nothing is installed, as pac reads no dpkg status *)
   | Some (_, "installed") ->

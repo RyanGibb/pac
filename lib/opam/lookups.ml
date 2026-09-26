@@ -114,6 +114,61 @@ let load_name ar (name : string) : (string * Opam_parse.pkg_meta) list =
 
 let versions_of ar n = List.map fst (load_name ar n)
 
+(* OpamSolution.sanitize_atom_list as opam install runs it, permissively: a
+   name matches regardless of case when it matches one name alone
+   (fuzzy_name), and an atom no version meets, available or not, is refused
+   with not_found_message's words *)
+let sanitize ar (query : (string * Opam_parse.vc) list) =
+  let names = lazy (Sys.readdir (Filename.concat ar.root "packages")) in
+  let fuzzy name =
+    let l = String.lowercase_ascii name in
+    match
+      List.filter
+        (fun n -> String.lowercase_ascii n = l && versions_of ar n <> [])
+        (Array.to_list (Lazy.force names))
+    with
+    | [ n ] -> n
+    | _ -> name
+  in
+  let rec holds v : Opam_parse.vc -> bool =
+    Opam_parse.(
+      function
+      | VTop -> true
+      | VCmp (o, w) -> (
+          let c = compare_version v w in
+          match o with
+          | Eq -> c = 0
+          | Ne -> c <> 0
+          | Ge -> c >= 0
+          | Gt -> c > 0
+          | Le -> c <= 0
+          | Lt -> c < 0)
+      | VAnd (a, b) -> holds v a && holds v b
+      | VOr (a, b) -> holds v a || holds v b)
+  in
+  let rec go acc = function
+    | [] -> Ok (List.rev acc)
+    | (name, c) :: rest -> (
+        let name = fuzzy name in
+        let vs = versions_of ar name in
+        if List.exists (fun v -> holds v c) vs then go ((name, c) :: acc) rest
+        else
+          match c with
+          | Opam_parse.VCmp (o, w) when vs <> [] ->
+              Error
+                (Printf.sprintf "Package %s has no version %s%s." name
+                   (match o with
+                   | Opam_parse.Eq -> ""
+                   | Ne -> "!="
+                   | Ge -> ">="
+                   | Gt -> ">"
+                   | Le -> "<="
+                   | Lt -> "<")
+                   w)
+          | _ -> Error (Printf.sprintf "No package named %s found." name))
+  in
+  go [] query
+
 (* a package's declarations are read only through its name's load, so
    they are never taken from a name parsed in part *)
 let meta_of ar n v =

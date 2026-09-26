@@ -103,7 +103,9 @@ let () =
   expect "pinmix:native" ("pinmix", "amd64") A.Any;
   expect "pinself=5" ("pinself", "amd64") (A.Only "1");
   expect "xunq" ("xunq", "i386") A.Any;
-  expect "nothere" ("nothere", "amd64") A.Any;
+  refused "nothere" "Unable to locate package nothere";
+  refused "nothere=1" "Unable to locate package nothere";
+  refused "dupvirt" "Package 'dupvirt' has no installation candidate";
   (* the string, not the order: 1.0 and 1.00 compare equal *)
   expect "exv=1.00" ("exv", "amd64") (A.Only "1.00");
   expect "exv=1.0" ("exv", "amd64") (A.Only "1.0");

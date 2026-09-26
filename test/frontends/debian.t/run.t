@@ -823,14 +823,15 @@ xvc3:i386 excludes the xpc3:i386 it needs:
 
 A query is not a relationship: apt-get's command line takes a name with no
 version of its own to the one package providing it (tryVirtualPackage,
-apt-private/private-cacheset.cc), so apt-get install xfor:i386 installs
-xfor:amd64.  The query here names a real package, and there is none:
+apt-private/private-cacheset.cc), and a Multi-Arch: foreign package
+provides itself to every architecture, so apt-get install xfor:i386
+installs xfor:amd64:
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 xfor:i386 Packages.multiarch
-  unsatisfiable:
-  root -> xfor:i386 ∅
+  packages (1):
+    xfor:amd64 1
+  encoded solution: 1 core nodes (1 lookups)
   loaded: 17 names, 18 versions
-  [1]
 
 Provides admits only "=" (Policy 7.5).  apt ignores any other Provides with a
 warning and keeps the rest of the stanza; so does pac, counting what it
@@ -924,3 +925,35 @@ An index that cannot be read is a read error, not a refused query:
   $ ../../../bin/main.exe debian app nope/Packages
   error: nope/Packages: No such file or directory
   [3]
+
+A name apt cannot locate at all, one only referred to or provided by no
+candidate, and one several packages provide, are apt's errors before it
+solves:
+
+  $ ../../../bin/main.exe debian app nosuchpkg Packages
+  error: Unable to locate package nosuchpkg
+  [2]
+  $ ../../../bin/main.exe debian nosuchpkg:i386 Packages
+  error: Unable to locate package nosuchpkg:i386
+  [2]
+  $ ../../../bin/main.exe debian nosuchpkg=1 Packages
+  error: Unable to locate package nosuchpkg
+  [2]
+  $ ../../../bin/main.exe debian pinnone Packages
+  error: Package 'pinnone' has no installation candidate
+  [2]
+  $ ../../../bin/main.exe debian dupvirt Packages
+  error: Package 'dupvirt' has no installation candidate
+  [2]
+  $ ../../../bin/main.exe debian virt Packages
+  error: Package 'virt' has no installation candidate
+  [2]
+
+while a name one package alone provides selects that package, as apt's
+"Note, selecting 'hsysd' instead of 'hsysusers'" does:
+
+  $ untimed ../../../bin/main.exe debian --order=pubgrub hsysusers Packages
+  packages (1):
+    hsysd:amd64 1
+  encoded solution: 1 core nodes (1 lookups)
+  loaded: 176 names, 176 versions
