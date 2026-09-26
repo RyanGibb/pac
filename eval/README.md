@@ -92,7 +92,7 @@ The check writes its files under the out directory and ends in two verdicts:
 | Debian | `apt-get check` and `install <query>` on the answer as the dpkg status | `apt-get autoremove`, the query the only root |
 | Alpine | `apk fix` with the whole answer and the query as the world, and apk's rule for a bare provides without `k:` (its owner must be named by the query or by a package of the answer) | `apk fix` with the query alone as the world |
 | opam | `opam install <query>` and `upgrade --fixup` on the answer as the switch state | the same fixup told to remove what it can |
-| cargo | `cargo update --locked` keeps our `Cargo.lock`, or its unlocked repair only drops packages the root does not reach, with the edges out of them, whose requirements the answer meets | `cargo update --locked` keeps it |
+| cargo | `cargo update --locked` keeps our `Cargo.lock`, or its unlocked repair only drops packages the root does not reach and edges it leaves inactive, and the answer meets what those packages declare, with no second semver-compatible version or `links` owner among them | `cargo update --locked` keeps it |
 | npm | `npm ci` accepts our lock without overriding a peer, `npm ls` finds no edge invalid or missing, a relock changes nothing but pruning what nothing reaches, every edge lands on the package its manifest names, and the answer gives every dependency and peer a provider; a cycle of copies is closed with a link, as npm closes one | the relock changes nothing |
 
 One npm answer is left `ERR` although a tree may hold it: a declarer given its peer from below the root, whose own declarers need another provider of that name.

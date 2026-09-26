@@ -95,6 +95,10 @@ ctl split-two INVALID/- 'root_1.0.0 split_1.0.0 wsys_1.0.0 wsys_2.0.0' \
   'root_1.0.0_split_1.0.0 split_1.0.0_wsys_1.0.0 split_1.0.0_wsys_2.0.0' root-split
 ctl split-held INVALID/- 'root_1.0.0 split_1.0.0 hold_1.0.0 wsys_1.0.0 wsys_2.0.0' \
   'root_1.0.0_split_1.0.0 root_1.0.0_hold_1.0.0 split_1.0.0_wsys_1.0.0 split_1.0.0_wsys_2.0.0 hold_1.0.0_wsys_2.0.0' root-held
+# edges cargo leaves inactive: an optional dependency whose feature is off,
+# and a dependency's dev-dependency.  cargo drops them, re-pointing nothing
+ctl opt-off VALID/no 'root_1.0.0 opt_1.0.0 beta_1.0.0' 'root_1.0.0_opt_1.0.0 opt_1.0.0_beta_1.0.0' root-opt
+ctl dev-of-dep VALID/no 'root_1.0.0 devy_1.0.0 beta_1.0.0' 'root_1.0.0_devy_1.0.0 devy_1.0.0_beta_1.0.0' root-devy
 # kz's two declarations of zed split as cargo's own fresh lock splits them,
 # which cargo's --locked refuses whatever else the lock holds
 ctl split-fresh INVALID/- 'root_1.0.0 kz_1.0.0 alpha_1.1.0 zed_1.9.0 zed_2.5.0' \
@@ -103,6 +107,15 @@ ctl split-fresh-old INVALID/- 'root_1.0.0 kz_1.0.0 alpha_1.0.0 zed_1.9.0 zed_2.5
   'root_1.0.0_kz_1.0.0 root_1.0.0_alpha_1.0.0 kz_1.0.0_zed_1.9.0 kz_1.0.0_zed_2.5.0' root-kz
 ctl split-none VALID/yes 'root_1.0.0 kz_1.0.0 alpha_1.0.0 zed_1.9.0' \
   'root_1.0.0_kz_1.0.0 root_1.0.0_alpha_1.0.0 kz_1.0.0_zed_1.9.0' root-kz
+# packages nothing reaches that conflict with the answer: a semver-compatible
+# second alpha, a second owner of links lx, an edge outside its range, an
+# edge nothing declares
+ctl extra-dup INVALID/- 'root_1.0.0 alpha_1.1.0 alpha_1.0.0' 'root_1.0.0_alpha_1.1.0'
+ctl extra-links INVALID/- 'root_1.0.0 lsys_1.0.0 lsysb_1.0.0' 'root_1.0.0_lsys_1.0.0' root-lsys
+ctl extra-range INVALID/- 'root_1.0.0 alpha_1.1.0 hold_1.0.0 wsys_1.0.0 wsys_2.0.0' \
+  'root_1.0.0_alpha_1.1.0 hold_1.0.0_wsys_1.0.0'
+ctl extra-undeclared INVALID/- 'root_1.0.0 alpha_1.1.0 zed_1.0.0 beta_1.0.0' \
+  'root_1.0.0_alpha_1.1.0 zed_1.0.0_beta_1.0.0'
 
 # cargo failing for want of a registry says nothing of the answer
 kill $served; wait $served 2> /dev/null

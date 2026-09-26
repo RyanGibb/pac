@@ -16,13 +16,18 @@ more without --locked over a pristine copy of our lock, and the lock it
 writes is diffed against ours.  If all it did was drop packages, with the
 edges out of them, and add nothing, the answer is valid and not minimal:
 cargo keeps nothing the root does not reach, and asks nothing of what it
-drops, so each dropped package's requirements are checked here against
-the answer, by the index's rows (normal and build, optional ones aside, as
-cargo resolves a lock whatever the target).  Anything else it changed
-makes the answer invalid.  An edge lost out of a package cargo keeps is
-such a change, even where the package the edge reached is dropped with
-it: the dependency was re-pointed, and whether another crate still holds
-the old version is no part of the answer's validity.
+drops, so each dropped package is checked here against the answer, by the
+index's rows: every declaration cargo resolves whatever the features and
+the target (normal and build, optional ones aside) met by one of its
+edges, every edge a declaration it meets, and no second semver-compatible
+version or second `links` owner beside another package of the answer.
+Anything else cargo changed makes the answer invalid.  An edge lost out of
+a package cargo keeps is such a change where the package still has an
+edge of that name: the dependency was re-pointed, and whether another
+crate still holds the old version is no part of the answer's validity.
+Where it has none, cargo left the declaration inactive (an optional one
+whose feature is off, a dependency's dev one), and the edge goes as a
+dropped package does, asked only to be declared.
 
 `cargo generate-lockfile --locked` cannot ask this: it resolves with no
 previous resolve (ops/cargo_update.rs), so it accepts only a lock equal to
@@ -57,12 +62,13 @@ import os
 import shutil
 import subprocess
 import sys
+import tomllib
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import run_query  # noqa: E402
-from scale import REFUSED, bounds, holds  # noqa: E402
+from scale import REFUSED, bounds, compat_class, holds  # noqa: E402
 
 KEEP = ["update", "--workspace"]
 FRESH = ["generate-lockfile"]
@@ -97,24 +103,62 @@ def cargo_lock(workdir, home, sub, locked):
     return p.returncode, msg
 
 
-def unmet(dropped, crates):
-    """the requirements of each dropped package that nothing in crates meets"""
-    have = {}
-    for n, v in crates:
-        have.setdefault(n, []).append(v)
-    out = []
+def declared(crate, root, manifest):
+    """crate's declarations, every target's, as (package, req, needed):
+    needed where cargo resolves it for a lock whatever the features, which
+    is neither an optional one nor, below the root, a dev one.  The root's
+    are the manifest pac read rather than an index row."""
+    if crate == root:
+        with open(manifest, "rb") as f:
+            doc = tomllib.load(f)
+        out = []
+        for t in [doc] + list((doc.get("target") or {}).values()):
+            for kind in ("dependencies", "build-dependencies", "dev-dependencies"):
+                for name, d in (t.get(kind) or {}).items():
+                    d = {"version": d} if isinstance(d, str) else d
+                    out.append((d.get("package") or name, d.get("version", "*"),
+                                not d.get("optional")))
+        return out
+    j = run_query.index_line(*crate)
+    if j is None:
+        return None
+    return [(d.get("package") or d["name"], d.get("req", "*"),
+             not d.get("optional") and (d.get("kind") or "normal") != "dev")
+            for d in j.get("deps") or []]
+
+
+def undeclared(crate, children, ds):
+    return ["%s %s -> %s %s is not declared" % (crate + c) for c in children
+            if not any(t == c[0] and holds(c[1], bounds(req)) for t, req, _ in ds or [])]
+
+
+def unmet(dropped, crates, edges, root, manifest):
+    """what is wrong with the packages cargo drops, since cargo asks nothing
+    of them: each needs an edge of the answer meeting every declaration that
+    is not optional, each of its edges a declaration it meets, and none may
+    be a second semver-compatible version, or a second owner of a `links`,
+    beside another package of the answer"""
+    out, kids = [], {}
+    for p, c in edges:
+        kids.setdefault(p, []).append(c)
+    rows = {c: run_query.index_line(*c) for c in crates if c != root}
     for n, v in dropped:
-        j = run_query.index_line(n, v)
-        if j is None:
+        ds = declared((n, v), root, manifest)
+        if ds is None:
             out.append("%s %s: not in the index" % (n, v))
             continue
-        for d in j.get("deps") or []:
-            if d.get("optional") or (d.get("kind") or "normal") == "dev":
-                continue
-            target = d.get("package") or d["name"]
-            req = bounds(d.get("req", "*"))
-            if not any(holds(u, req) for u in have.get(target, [])):
-                out.append("%s %s needs %s %s" % (n, v, target, d.get("req", "*")))
+        for target, req, needed in ds:
+            if needed and not any(cn == target and holds(cv, bounds(req))
+                                  for cn, cv in kids.get((n, v), [])):
+                out.append("%s %s needs %s %s" % (n, v, target, req))
+        out += undeclared((n, v), kids.get((n, v), []), ds)
+        for m, w in crates:
+            if m == n and w != v and compat_class(w) == compat_class(v):
+                out.append("%s %s beside %s %s" % (n, v, m, w))
+        links = (rows.get((n, v)) or {}).get("links")
+        for c, j in rows.items():
+            if links and c != (n, v) and (j or {}).get("links") == links:
+                out.append("%s %s and %s %s both link %s" % (n, v, c[0], c[1], links))
     return out
 
 
@@ -153,11 +197,20 @@ def check(ans, out, manifest):
     lost = sorted(op - tp)
     res.update(lost=lost, added=sorted(tp - op), lost_edges=sorted(oe - te),
                added_edges=sorted(te - oe))
-    dropped_only = not res["added"] and not res["added_edges"] and all(
-        s in lost for s, _ in res["lost_edges"])
-    if not dropped_only:
+    with open(manifest, "rb") as f:
+        pkg = tomllib.load(f)["package"]
+    root = (pkg["name"], pkg["version"])
+    # an edge lost out of a package cargo keeps re-points a dependency where
+    # the package still has one of that name; where it has none, cargo left
+    # the declaration inactive, and the edge goes as a dropped package does
+    repointed = [(s, c) for s, c in res["lost_edges"]
+                 if s not in lost and any(p == s and d[0] == c[0] for p, d in te)]
+    if res["added"] or res["added_edges"] or repointed:
         return "INVALID", "-", res
-    res["unmet"] = unmet(lost, op)
+    res["unmet"] = unmet(lost, sorted(op), sorted(oe), root, manifest)
+    for s, c in res["lost_edges"]:
+        if s not in lost:
+            res["unmet"] += undeclared(s, [c], declared(s, root, manifest))
     return ("INVALID", "-", res) if res["unmet"] else ("VALID", "no", res)
 
 
