@@ -11,9 +11,18 @@ export LC_ALL=C
 E="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOP="$(dirname "$E")"
 . "$E/answer.sh"
+# FUZZ=K asks pac in K random orders, random-0 to random-(K-1), and the tool
+# not at all: whichever order picks it, an answer must be valid
+export FUZZ="${FUZZ:-}"
+if [ -n "$FUZZ" ]; then MODES="${MODES:-$(seq -f 'random-%g' 0 $((FUZZ - 1)) | tr '\n' ' ')}"; fi
 export P="${P:-$(nproc)}" TIMEOUT="${TIMEOUT:-900}" MODES="${MODES:-tool pubgrub}"
 
-flag() { printf -- '--order=%s' "$1"; }
+flag() {
+  case $1 in
+    random-*) printf -- '--order=random --seed=%s' "${1#random-}" ;;
+    *) printf -- '--order=%s' "$1" ;;
+  esac
+}
 
 since() { awk -v a="$1" -v b="$EPOCHREALTIME" 'BEGIN {printf "%.2f", b - a}'; }
 
@@ -115,9 +124,10 @@ snapshot() {  # <path under repos/>
 }
 
 one() {  # <key> <query>
-  local o=$run/out/$1 m p pac tool twall corr valid minimal oo to t0 wall pin=- last= lastv lastm a b lines=
+  local o=$run/out/$1 m p pac tool=- twall=- corr valid minimal oo to t0 wall pin=- k lines=
+  local -A seenv=() seenm=() seenp=()
   set -f
-  ask_tool "$1" "$2"
+  [ -n "$FUZZ" ] || ask_tool "$1" "$2"
   # pin_tool asks pac for the tool's own answer, into pin: ok, unsat, or no
   # verdict; only an unsat makes a divergence an instance gap
   if [ "$tool" = ok ] && declare -F pin_tool > /dev/null; then pin_tool "$1" "$2"; fi
@@ -131,17 +141,42 @@ one() {  # <key> <query>
     extract "$p"
     [ "$pac" = ok ] && [ "$tool" = ok ] && correspond "$p"
     if [ "$pac" = ok ]; then
-      if [ -n "$last" ] && a=$(canon "$p") && b=$(canon "$last") && [ "$a" = "$b" ]; then
-        valid=$lastv minimal=$lastm
-        ln -sfn -- "${last##*/}.check" "$p.check"
+      k=$(canon "$p" | sha256sum | cut -c1-32; exit "${PIPESTATUS[0]}") || k=
+      if [ -n "$k" ] && [ -n "${seenv[$k]+x}" ]; then
+        valid=${seenv[$k]} minimal=${seenm[$k]}
+        ln -sfn -- "${seenp[$k]##*/}.check" "$p.check"
       else
         check "$p" $(check_query "$p" "$2")
+        if [ -n "$k" ]; then seenv[$k]=$valid seenm[$k]=$minimal seenp[$k]=$p; fi
       fi
-      last=$p lastv=$valid lastm=$minimal
     fi
     lines+="query=$1 mode=$m pac=$pac tool=$tool corr=$corr valid=$valid minimal=$minimal oo=$oo to=$to wall=$wall pin=$pin$(fields "$p")"$'\n'
   done
   emit "$lines"
+}
+
+# A fuzz run's verdicts over every seed at once, and its findings, one line
+# per query and seed, in findings.txt: an answer the tool rejects, a check
+# that reached no verdict, and a crash; and in split.txt the queries some
+# seeds answer and others find unsat, which no order may do.  A pac timeout
+# is only counted, since a random order may search far longer than either
+# real one; so are a refusal and a read error, which are the query's or the
+# snapshot's, not the order's
+fuzz_totals() {
+  awk '/ valid=(INVALID|ERR) / || / pac=crash /' "$run/results.txt" > "$run/findings.txt"
+  : > "$run/split.txt"
+  awk -v k="$(wc -w <<< "$MODES")" -v run="$run" '
+    {delete f; for (i = 1; i <= NF; i++) {j = index($i, "="); f[substr($i, 1, j - 1)] = substr($i, j + 1)}
+     q[f["query"]]; n++; pac[f["pac"]]++; v[f["valid"]]++; mi += f["minimal"] == "yes"
+     if (f["valid"] == "INVALID") iq[f["query"]]
+     if (f["pac"] ~ /^(ok|unsat)$/) st[f["query"], f["pac"]]}
+    END {for (x in q) if ((x, "ok") in st && (x, "unsat") in st) {split_n++; print x > (run "/split.txt")}
+         printf "fuzz: %d queries x %d seeds = %d runs; pac ok %d, unsat %d, refuse %d, io-error %d, timeout %d, crash %d\n",
+           length(q), k, n, pac["ok"], pac["unsat"], pac["refuse"], pac["io-error"], pac["timeout"], pac["crash"]
+         printf "fuzz: valid %d, INVALID %d (in %d queries), ERR %d, cyclic %d; minimal %d/%d\n",
+           v["VALID"], v["INVALID"], length(iq), v["ERR"], v["CYCLIC"], mi, v["VALID"]
+         printf "fuzz: %d queries answered under some seeds and unsat under others (split.txt)\n", split_n}' \
+    "$run/results.txt"
 }
 
 params() { :; }  # what else a resumed run must share with the run it resumes
@@ -157,7 +192,12 @@ main() {
   [ $# -ge 2 ] || { echo "usage: $0 [--regress | --record] <pac-exe> <run-dir> [queries-file]" >&2; exit 2; }
   local m
   for m in $MODES; do
-    case $m in tool|pubgrub) ;; *) echo "$0: mode $m is neither tool nor pubgrub" >&2; exit 2 ;; esac
+    case $m in
+      tool|pubgrub) ;;
+      random-*[!0-9]*|random-) echo "$0: mode $m has no seed" >&2; exit 2 ;;
+      random-*) ;;
+      *) echo "$0: mode $m is neither tool, pubgrub nor random-<seed>" >&2; exit 2 ;;
+    esac
   done
   mkdir -p "$2/res" "$2/out" || exit 1
   run=$(cd "$2" && pwd); export run
@@ -190,7 +230,7 @@ main() {
   missing=$(comm -23 <(cut -f1 "$run/keys" | sort) <(ls "$run/res" | sort))
   comm -12 <(cut -f1 "$run/keys" | sort) <(ls "$run/res" | sort) |
     (cd "$run/res" && xargs -r -d '\n' cat --) | sort > "$run/results.txt"
-  awk -v modes="$MODES" '
+  if [ -n "$FUZZ" ]; then fuzz_totals; else awk -v modes="$MODES" '
     {delete f; for (i = 1; i <= NF; i++) {j = index($i, "="); f[substr($i, 1, j - 1)] = substr($i, j + 1)}
      m = f["mode"]; n[m]++; un[m] += f["tool"] == "unrecorded"; te[m] += f["tool"] == "error"
      if (f["tool"] == "ok") {ans[m]++; ex[m] += f["corr"] == "exact"}
@@ -205,7 +245,7 @@ main() {
         if (er[m]) printf ", unchecked %d", er[m]
         if (te[m]) printf ", tool error %d", te[m]
         if (un[m]) printf ", unrecorded %d", un[m]
-        print ""}}' "$run/results.txt"
+        print ""}}' "$run/results.txt"; fi
   if declare -F totals > /dev/null; then totals; fi
   if [ -n "$missing" ]; then
     echo "missing $(wc -l <<< "$missing") of $(wc -l < "$run/keys") queries, whose worker failed:" $missing

@@ -35,7 +35,12 @@ Keep the run directory outside the source tree. A killed run resumes where it st
 
 - `P`: queries at a time (default: every core).
 - `TIMEOUT`: seconds per call (default 900).
-- `MODES`: the orders pac decides in, each passed as `--order`: `tool`, the tool's own, and `pubgrub`, PubGrub's. Default `tool pubgrub`.
+- `MODES`: the orders pac decides in, each passed as `--order`: `tool`, the tool's own, and `pubgrub`, PubGrub's; `random-<N>` is `--order=random --seed=N`. Default `tool pubgrub`.
+- `FUZZ`: with `FUZZ=K`, the modes are `random-0` to `random-(K-1)` and the tool is not asked: the run asks only whether every answer, in whatever order it was reached, is valid.
+
+A fuzz run ends in its own summary: runs, pac's statuses, the verdicts and `minimal`, over every seed at once.
+It writes `findings.txt`, the lines of `results.txt` whose answer is `INVALID`, whose check reached no verdict (`ERR`), or whose pac crashed, each naming its seed in `mode=`; and `split.txt`, the queries some seeds answer and others find unsat, which no order may do.
+To reproduce a finding, ask pac the query with `--order=random --seed=N`.
 
 The run ends with a line per mode, such as `tool: 62 queries, exact 60/60, valid 60/60, minimal 58/60`: exact answers of those the tool answered, valid answers of those checked, and minimal answers of the valid.
 Answers the check could not run on (`unchecked`), install-order cycles (`cyclic`), the tool's own errors and unrecorded baselines are counted apart, and excluded from those fractions.

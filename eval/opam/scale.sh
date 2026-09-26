@@ -80,6 +80,7 @@ run_pac() {
 
 extract() { rows "$1.out" | sed -n 's/^\([^ ]*\) \([^ ]*\)$/\1.\2/p' | sort -u > "$1.ours"; }
 
-fields() { printf ' mccs=%s' "$mccs"; }
+# a fuzz run skips ask_tool, the one setter of mccs
+fields() { printf ' mccs=%s' "${mccs:--}"; }
 
 main "$@"

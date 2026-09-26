@@ -342,6 +342,27 @@ tok 4.0.0 of its own.
   encoded solution: 9 core nodes (19 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
 
+--order=random picks the next name and the version to try uniformly, from
+a generator seeded by --seed: the same seed gives the same answer, and
+another seed may give another, a resolution all the same:
+
+  $ seed0() { ../../../bin/main.exe npm --offline --cache . --tree --order=random --seed 0 ./reuse-app/package.json | sed -n '/^node_modules/,/^loaded/p'; }; [ "$(seed0)" = "$(seed0)" ] && seed0
+  node_modules (4):
+    reuse-app 1.0.0 <- holder 1.0.0
+    reuse-app 1.0.0 <- taker 1.0.0
+    holder 1.0.0 <- tok 3.0.2
+    taker 1.0.0 <- tok 4.0.0
+  encoded solution: 9 core nodes (19 lookups)
+  loaded: 4 names, 5 versions, 0 packuments fetched
+  $ ../../../bin/main.exe npm --offline --cache . --tree --order=random --seed 2 ./reuse-app/package.json | sed -n '/^node_modules/,/^loaded/p'
+  node_modules (4):
+    reuse-app 1.0.0 <- holder 1.0.0
+    reuse-app 1.0.0 <- taker 1.0.0
+    holder 1.0.0 <- tok 3.0.2
+    taker 1.0.0 <- tok 3.0.2
+  encoded solution: 8 core nodes (17 lookups)
+  loaded: 4 names, 5 versions, 0 packuments fetched
+
 Only a copy already placed is reused, and npm reaches a package only after
 the one requiring it has placed it.  reach-app depends on early, which
 depends on tok at * and on late, whose tok is ^3.0.0.  npm places early's

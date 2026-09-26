@@ -10,6 +10,25 @@ its last key, the package name:
   encoded solution: 5 core nodes (9 lookups)
   loaded: 176 names, 176 versions
 
+--order=random picks the next name and the version to try uniformly, from
+a generator seeded by --seed: the same seed gives the same answer, and
+another seed may give another, a resolution all the same:
+
+  $ seed0() { ../../../bin/main.exe debian --order=random --seed 0 --native amd64 app Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'; }; [ "$(seed0)" = "$(seed0)" ] && seed0
+  packages (3):
+    altlib:amd64 1
+    app:amd64 1
+    prov2:amd64 1
+  encoded solution: 5 core nodes (10 lookups)
+  loaded: 176 names, 176 versions
+  $ ../../../bin/main.exe debian --order=random --seed 1 --native amd64 app Packages | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  packages (3):
+    app:amd64 1
+    lib:amd64 1
+    prov2:amd64 1
+  encoded solution: 5 core nodes (9 lookups)
+  loaded: 176 names, 176 versions
+
 The Priority field outranks the name, and sorts the other way round -- this is
 apt taking mawk, which is Priority: required, for a bare Depends on awk:
 

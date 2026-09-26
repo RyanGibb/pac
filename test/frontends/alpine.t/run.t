@@ -24,6 +24,21 @@ disjunction, but vim carries the higher k: and is what apk installs:
   encoded solution: 3 core nodes (2 lookups)
   loaded: 14 names, 14 versions, 7 provides entries, 0 install_if rules
 
+--order=random picks the next name and the provider to try uniformly, from
+a generator seeded by --seed: the same seed gives the same answer, and
+another seed may give another, a resolution all the same:
+
+  $ seed0() { ../../../bin/main.exe alpine --order=random --seed 0 PROVIDERS editor | sed -E '/^(parse|solve) [0-9.]+s$/d'; }; [ "$(seed0)" = "$(seed0)" ] && seed0
+  packages (1):
+    vim 1.0
+  encoded solution: 3 core nodes (2 lookups)
+  loaded: 14 names, 14 versions, 7 provides entries, 0 install_if rules
+  $ ../../../bin/main.exe alpine --order=random --seed 1 PROVIDERS editor | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  packages (1):
+    nano 1.0
+  encoded solution: 3 core nodes (2 lookups)
+  loaded: 14 names, 14 versions, 7 provides entries, 0 install_if rules
+
 The same empty version is why a package of the name itself beats an
 unversioned provider of it however high that provider's k:.  tool-extra
 provides tool with k:50 and heads the disjunction, but tool 2.0 offers 2.0

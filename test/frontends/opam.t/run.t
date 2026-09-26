@@ -342,6 +342,25 @@ newest is PubGrub's choice:
   encoded solution: 4 core nodes (6 lookups)
   loaded: 3 names, 6 versions
 
+--order=random picks the next name and the version to try uniformly, from
+a generator seeded by --seed: the same seed gives the same answer, and
+another seed may give another, a resolution all the same:
+
+  $ seed0() { ../../../bin/main.exe opam --order=random --seed 0 . ord-p ord-q | sed -E '/^(parse|solve) [0-9.]+s$/d'; }; [ "$(seed0)" = "$(seed0)" ] && seed0
+  packages (3):
+    ord-p 2
+    ord-q 1
+    ord-r 2
+  encoded solution: 4 core nodes (6 lookups)
+  loaded: 3 names, 6 versions
+  $ ../../../bin/main.exe opam --order=random --seed 2 . ord-p ord-q | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  packages (3):
+    ord-p 1
+    ord-q 2
+    ord-r 1
+  encoded solution: 4 core nodes (6 lookups)
+  loaded: 3 names, 6 versions
+
 Every filter reads the package's own version as version, _:version or
 <name>:version: svd.2 is available from 2 on, its dependency on svl holds
 at 2, and its conflict with svl >= "2" too, so opam installs svd.2 beside

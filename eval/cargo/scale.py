@@ -211,6 +211,8 @@ def one(crate, p):
         shutil.rmtree(p + ".manifest", ignore_errors=True)
         shutil.copytree(os.path.join(run_query.WORK, crate), p + ".manifest",
                         ignore=shutil.ignore_patterns("Cargo.lock", "target"))
+    # a fuzz run asks only whether pac's answers are valid
+    if root is not None and not os.environ.get("FUZZ"):
         try:
             cargo = run_query.run_cargo(*root, patched)
         except Exception as e:

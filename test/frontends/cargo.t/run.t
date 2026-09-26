@@ -569,3 +569,26 @@ PubGrub's own order oa keeps cp's newest, 0.1.7, and ga at its pin.
     pa 1.0.0
   encoded solution: 13 core nodes (6 lookups)
   loaded: 4 names, 6 versions
+
+--order=random picks the next name and the version to try uniformly, from
+a generator seeded by --seed: the same seed gives the same answer, and
+another seed may give another, a resolution all the same:
+
+  $ seed0() { ../../../bin/main.exe cargo index manifests/oa.toml --order=random --seed 0 | sed -E '/^(parse|solve) [0-9.]+s$/d'; }; [ "$(seed0)" = "$(seed0)" ] && seed0
+  root oa 1.0.0
+  packages (4):
+    cp 0.1.6
+    ga 0.14.9
+    oa 1.0.0
+    pa 1.0.0
+  encoded solution: 13 core nodes (6 lookups)
+  loaded: 4 names, 6 versions
+  $ ../../../bin/main.exe cargo index manifests/oa.toml --order=random --seed 4 | sed -E '/^(parse|solve) [0-9.]+s$/d'
+  root oa 1.0.0
+  packages (4):
+    cp 0.1.7
+    ga 0.14.7
+    oa 1.0.0
+    pa 1.0.0
+  encoded solution: 13 core nodes (6 lookups)
+  loaded: 4 names, 6 versions
