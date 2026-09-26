@@ -58,6 +58,28 @@ PKGS = {
     "hx": {"1.0.0": {"dependencies": {"ut": "^1.0.0", "tl": "^2.0.0"}}},
     "ma": {"1.0.0": {"dependencies": {"mb": "^1.0.0"}}},
     "mb": {"1.0.0": {}},
+    "gc": {"1.0.0": {}, "2.0.0": {}},
+    "gp": {"1.0.0": {"peerDependencies": {"gc": "*"}}},
+    "gj": {"1.0.0": {"dependencies": {"gp": "^1.0.0"}, "peerDependencies": {"gc": "*"}}},
+    "gf": {"1.0.0": {"dependencies": {"gj": "^1.0.0", "gc": "^1.0.0"}}},
+    "gr": {"1.0.0": {"dependencies": {"gf": "^1.0.0"}}},
+    "tm": {"1.0.0": {}, "1.1.0": {}, "1.2.0": {}, "1.3.0": {}},
+    "wq": {"1.0.0": {"dependencies": {"wr": "^1.0.0", "ws": "^1.0.0", "tm": "^1.0.0"}}},
+    "wr": {"1.0.0": {"dependencies": {"wd": "^1.0.0"}, "peerDependencies": {"tm": "^1.0.0"}}},
+    "ws": {"1.0.0": {"dependencies": {"we": "^1.0.0"}, "peerDependencies": {"tm": "^1.0.0"}}},
+    "wd": {"1.0.0": {"peerDependencies": {"tm": "^1.0.0"}}},
+    "we": {"1.0.0": {"peerDependencies": {"tm": "^1.0.0"}}},
+    "dq": {"1.0.0": {"dependencies": {"dr": "^1.0.0", "tm": "^1.0.0"}}},
+    "dr": {"1.0.0": {"dependencies": {"ds": "^1.0.0"}, "peerDependencies": {"tm": "^1.0.0"}}},
+    "ds": {"1.0.0": {"dependencies": {"dt": "^1.0.0"}, "peerDependencies": {"tm": "^1.0.0"}}},
+    "dt": {"1.0.0": {"peerDependencies": {"tm": "^1.0.0"}}},
+    "up": {"1.0.0": {"dependencies": {"uq": "^1.0.0"}}},
+    "uq": {"1.0.0": {"dependencies": {"ur": "^1.0.0", "us": "^1.0.0", "tm": "^1.0.0"}}},
+    "ur": {"1.0.0": {"dependencies": {"ud": "^1.0.0"}, "peerDependencies": {"tm": "^1.0.0"}}},
+    "ud": {"1.0.0": {"dependencies": {"ue": "^1.0.0"}, "peerDependencies": {"tm": "^1.0.0"}}},
+    "ue": {"1.0.0": {"peerDependencies": {"tm": "^1.0.0"}}},
+    "us": {"1.0.0": {"dependencies": {"uf": "^1.0.0"}, "peerDependencies": {"tm": "^1.0.0"}}},
+    "uf": {"1.0.0": {"peerDependencies": {"tm": "^1.0.0"}}},
 }
 CASES = {
     "po-valid":   ("VALID/yes/yes", {"a": "^1.0.0", "c": "^1.0.0"},
@@ -181,6 +203,32 @@ OURS = {
                      [". <- cy 1.0.0", "cy 1.0.0 <- oz 1.0.0", "oz 1.0.0 <- cy 2.0.0",
                       "cy 2.0.0 <- cy 1.0.0"]),
     "unreached":    ("VALID/no/yes", {"b": "^1.0.0"}, [". <- b 1.0.0"], ["z 1.0.0"]),
+    # gj's gp needs gc 2 above gf's gc 1, where the root's gc 1 is: the
+    # search nests gf in gr, and gp and gc 2 go in gr's node_modules
+    "peer-torn-nest": ("VALID/yes/yes", {"gr": "^1.0.0", "gc": "^1.0.0"},
+                       [". <- gr 1.0.0", ". <- gc 1.0.0", "gr 1.0.0 <- gf 1.0.0",
+                        "gf 1.0.0 <- gj 1.0.0", "gf 1.0.0 <- gc 1.0.0", "gj 1.0.0 <- gp 1.0.0",
+                        "gj 1.0.0 <- gc 2.0.0"]),
+    # wd and we need tm 1.1 and 1.0 above wq's 1.2, and above wq, which the
+    # root requires, there is one node_modules
+    "peer-torn-wide": ("INVALID/-/-", {"wq": "^1.0.0"},
+                       [". <- wq 1.0.0", "wq 1.0.0 <- wr 1.0.0", "wq 1.0.0 <- ws 1.0.0",
+                        "wq 1.0.0 <- tm 1.2.0", "wr 1.0.0 <- wd 1.0.0", "wr 1.0.0 <- tm 1.1.0",
+                        "ws 1.0.0 <- we 1.0.0", "ws 1.0.0 <- tm 1.0.0"]),
+    # dt's tm above ds's, above dr's, above dq's own: two levels above dq,
+    # which sits in the root's node_modules
+    "peer-torn-depth": ("INVALID/-/-", {"dq": "^1.0.0", "tm": "^1.0.0"},
+                        [". <- dq 1.0.0", ". <- tm 1.3.0", "dq 1.0.0 <- dr 1.0.0",
+                         "dq 1.0.0 <- tm 1.2.0", "dr 1.0.0 <- ds 1.0.0", "dr 1.0.0 <- tm 1.1.0",
+                         "ds 1.0.0 <- dt 1.0.0", "ds 1.0.0 <- tm 1.0.0"]),
+    # no tree: ue, ud and ur need tm 1.1, 1.2 and 1.3 at the three levels
+    # down to uq's own, and uf another above us's; but neither count shows
+    # it, and the search gives up
+    "peer-torn-open": ("ERR/-/-", {"up": "^1.0.0"},
+                       [". <- up 1.0.0", "up 1.0.0 <- uq 1.0.0", "uq 1.0.0 <- ur 1.0.0",
+                        "uq 1.0.0 <- us 1.0.0", "uq 1.0.0 <- tm 1.3.0", "ur 1.0.0 <- ud 1.0.0",
+                        "ur 1.0.0 <- tm 1.2.0", "ud 1.0.0 <- ue 1.0.0", "ud 1.0.0 <- tm 1.1.0",
+                        "us 1.0.0 <- uf 1.0.0", "us 1.0.0 <- tm 1.0.0"]),
     "unreached-broken": ("INVALID/-/-", {"b": "^1.0.0"}, [". <- b 1.0.0"], ["y 1.0.0"]),
 }
 # arborist's Node.matches takes two nodes of one name and one integrity for

@@ -98,7 +98,10 @@ The check writes its files under the out directory and ends in its verdicts:
 
 npm's validity is judged on the lock `mklock.py` builds, and `relation.py` catches any edge of the answer that lock does not hold.
 A declarer whose own declarers need another provider of a name it peers on is the one case known to need care: they must sit above the directory holding its peer.
-Where that directory is the root's own, nothing is above it, no tree holds the answer, and it is `INVALID`; below the root, where `mklock.py` finds no directory above that takes them, another tree might, and the answer is `ERR`.
+Where that directory is the root's own, nothing is above it, no tree holds the answer, and it is `INVALID`.
+Below the root, where no directory above takes them, two counts may show that no tree holds the answer either, and it is `INVALID`: the root's dependencies sit in its own `node_modules`, but a chain of such declarers below one needs a level each; and a copy the root reaches along d dependencies has d levels above its own `node_modules` for the different providers its declarers need.
+Otherwise `mklock.py` searches for a tree, nesting copies deeper, and uses one only if `relation.py` holds it.
+What neither settles within `MKLOCK_TRIES` placements (default 64) or `MKLOCK_SECONDS` (default 300) is `ERR`.
 
 `controls.sh` runs the check on small hand-written answers, each of which must get the verdicts it names; npm takes `PORT` for its shim, and cargo for its proxy:
 

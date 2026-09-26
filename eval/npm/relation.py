@@ -47,11 +47,8 @@ def fields(e):
     return deps, peers, needed
 
 
-def main():
-    with open(sys.argv[1]) as f:
-        pk = json.load(f)["packages"]
-    with open(sys.argv[2]) as f:
-        root, nodes, edges = parse_tree(f.read())
+def misses(pk, root, nodes, edges):
+    """each miss as (the lock path it was asked from, or None, and why)"""
     out = {}
     for r, key, c in edges:
         out.setdefault(r, {})[key] = c
@@ -66,19 +63,19 @@ def main():
     def name(n):
         return f"{n[0]} {n[1]}" + (f" at {n[2]}" if n[2] != n[0] else "")
 
-    miss = [f"{name(n)} is nowhere in the tree" for n in nodes if n not in copies]
+    miss = [(None, f"{name(n)} is nowhere in the tree") for n in nodes if n not in copies]
     for r in sorted(copies):
         given = out.get(r, {})
         for rp in copies[r]:
             deps, _, needed = fields(pk[rp])
-            miss += [f"{name(r)} requires {k}, and the answer gives it nothing"
+            miss += [(rp, f"{name(r)} requires {k}, and the answer gives it nothing")
                      for k in sorted(needed - set(given))]
             found, todo, peered = set(), [], set()
             for k in sorted(set(given) & deps):
                 q = resolve(pk, rp, k)
                 if at(q) != given[k]:
-                    miss.append(f"{name(r)} at {rp or '(root)'} requires {k}: we chose "
-                                f"{name(given[k])}, the tree gives {at(q) and name(at(q))}")
+                    miss.append((rp, f"{name(r)} at {rp or '(root)'} requires {k}: we chose "
+                                     f"{name(given[k])}, the tree gives {at(q) and name(at(q))}"))
                 elif q not in found:
                     found.add(q)
                     todo.append(q)
@@ -87,20 +84,29 @@ def main():
                 for p, optional in sorted(fields(pk[q])[1].items()):
                     if p not in given:
                         if not optional:
-                            miss.append(f"{name(r)} gives {name(at(q))} no {p} for its peer")
+                            miss.append((rp, f"{name(r)} gives {name(at(q))} no {p} for its peer"))
                         continue
                     peered.add(p)
                     s = resolve(pk, q, p)
                     if at(s) != given[p]:
-                        miss.append(f"{name(at(q))} at {q}, as {name(r)} requires it, peers on "
-                                    f"{p}: we chose {name(given[p])}, the tree gives "
-                                    f"{at(s) and name(at(s))}")
+                        miss.append((q, f"{name(at(q))} at {q}, as {name(r)} requires it, peers on "
+                                        f"{p}: we chose {name(given[p])}, the tree gives "
+                                        f"{at(s) and name(at(s))}"))
                     elif s not in found:
                         found.add(s)
                         todo.append(s)
-            miss += [f"{name(r)} gives {k} to nothing that requires or peers on it"
+            miss += [(rp, f"{name(r)} gives {k} to nothing that requires or peers on it")
                      for k in sorted(set(given) - deps - peered)]
-    for line in sorted(set(miss)):
+    return miss
+
+
+def main():
+    with open(sys.argv[1]) as f:
+        pk = json.load(f)["packages"]
+    with open(sys.argv[2]) as f:
+        root, nodes, edges = parse_tree(f.read())
+    miss = misses(pk, root, nodes, edges)
+    for line in sorted({why for _, why in miss}):
         print(line)
     return 3 if miss else 0
 
