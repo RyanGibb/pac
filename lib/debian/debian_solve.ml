@@ -145,7 +145,7 @@ module Make (AP : Tables.ARCH) = struct
             inst_conf =
               DMA.reduceConf (DMA.PkgSet.singleton p) (ma_conf_of_pkg tables p)
                 pi_cls;
-            (* dependees never reads the root, and a query has several *)
+            (* dependees never reads the root, so any package fills it *)
             inst_root = DMA.embedPkg p;
           }
           s
