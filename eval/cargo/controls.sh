@@ -16,12 +16,19 @@ bad=0
 # asking fsq for fsr/f, fdp asking it for dep:fsr, and fep asking fsr for
 # the empty feature; fcy's feature a including itself; and rows cargo reads
 # as invalid: ivf's feature naming nothing, ivd's optional
-# dev-dependency, ivr's and ivq's requirements, ivt's target, and ivv's
-# version
+# dev-dependency, ivr's and ivq's requirements, ivt's target, ivv's
+# version, and rows off the index-row schema: mdeps without deps, mck
+# without cksum, onul's null optional, rvx's pre-release rust_version,
+# regx's registry, artx's artifact, fstr's feature a string, nreq's
+# dependency without req; rvok's rust_version and pubtime, which cargo
+# reads; and rows turning on a Unicode class Python and cargo may disagree
+# on: tg1's and tg2's targets, alphanumeric to Rust and not to Python, and
+# fo2's feature, U+1C89 being newer than Python's tables
 rm -rf "$T/index"
 python3 - "$T/index" <<'EOF'
 import hashlib, json, os, sys
 T = sys.argv[1]
+DROP = object()
 ROWS = {"alpha": [("1.0.0", []), ("1.1.0", []), ("2.0.0", [])],
         "beta": [("1.0.0", [])],
         "zeta": [("1.0.0", [{"name": "beta", "req": "^1"}]), ("2.0.0", [])],
@@ -55,7 +62,19 @@ ROWS = {"alpha": [("1.0.0", []), ("1.1.0", []), ("2.0.0", [])],
         "ivq": [("1.0.0", [{"name": "beta", "req": "^^1", "kind": "dev"}])],
         "ivt": [("1.0.0", [{"name": "beta", "req": "^1",
                             "target": 'and(cfg(unix), not(target_os = "linux"))'}])],
-        "ivv": [("1.0.0-01", [])]}
+        "ivv": [("1.0.0-01", [])],
+        "mdeps": [("1.0.0", [], {}, None, {"deps": DROP})],
+        "mck": [("1.0.0", [], {}, None, {"cksum": DROP})],
+        "onul": [("1.0.0", [{"name": "beta", "req": "^1", "optional": None}])],
+        "rvx": [("1.0.0", [], {}, None, {"rust_version": "1.70.0-nightly"})],
+        "regx": [("1.0.0", [{"name": "beta", "req": "^1", "registry": "not a url"}])],
+        "artx": [("1.0.0", [{"name": "beta", "req": "^1", "artifact": ["nonsense"]}])],
+        "fstr": [("1.0.0", [], {"a": ""})],
+        "nreq": [("1.0.0", [{"name": "beta"}])],
+        "rvok": [("1.0.0", [], {}, None, {"rust_version": "1.70", "pubtime": "2025-11-12T19:30:12Z"})],
+        "tg1": [("1.0.0", [{"name": "beta", "req": "^1", "target": "Ⓐ"}])],
+        "tg2": [("1.0.0", [{"name": "beta", "req": "^1", "target": "xः"}])],
+        "fo2": [("1.0.0", [], {"aᲉ": []})]}
 for n, vs in ROWS.items():
     d = (os.path.join(T, n[:2], n[2:4]) if len(n) > 3 else
          os.path.join(T, "3", n[0]) if len(n) == 3 else os.path.join(T, str(len(n))))
@@ -66,9 +85,11 @@ for n, vs in ROWS.items():
                    "cksum": hashlib.sha256(f"{n}{v}".encode()).hexdigest(),
                    "deps": [{"features": [], "optional": False, "default_features": True,
                              "target": None, "kind": "normal", **x} for x in deps]}
-            if len(more) > 1:
+            if len(more) > 1 and more[1]:
                 row["links"] = more[1]
-            f.write(json.dumps(row) + "\n")
+            if len(more) > 2:
+                row.update(more[2])
+            f.write(json.dumps({k: x for k, x in row.items() if x is not DROP}) + "\n")
 EOF
 root() {  # <dir> <dependency lines...>
   mkdir -p "$T/$1/src"
@@ -97,6 +118,7 @@ root root-ivr 'ivr = "=1.0.0"'
 root root-ivq 'ivq = "=1.0.0"'
 root root-ivt 'ivt = "=1.0.0"'
 root root-ivv 'ivv = "^1.0.0-0"'
+for n in mdeps mck onul rvx regx artx fstr nreq rvok tg1 tg2 fo2; do root root-$n "$n = \"^1\""; done
 
 . "$S/../serve.sh"
 serve "$PORT" "$T/index" "$T/proxy.log" python3 "$S/sparse_proxy.py" "$PORT" "$T/index" || exit 1
@@ -219,6 +241,20 @@ ctl invalid-req-dev INVALID/-/- 'root_1.0.0 ivq_1.0.0' 'root_1.0.0_ivq_1.0.0' ro
 ctl invalid-target INVALID/-/- 'root_1.0.0 ivt_1.0.0 beta_1.0.0' \
   'root_1.0.0_ivt_1.0.0 ivt_1.0.0_beta_1.0.0' root-ivt
 ctl invalid-vers INVALID/-/- 'root_1.0.0 ivv_1.0.0-01' 'root_1.0.0_ivv_1.0.0-01' root-ivv
+for n in mdeps mck rvx fstr; do
+  ctl schema-$n INVALID/-/- "root_1.0.0 ${n}_1.0.0" "root_1.0.0_${n}_1.0.0" root-$n
+done
+for n in onul regx artx nreq; do
+  ctl schema-$n INVALID/-/- "root_1.0.0 ${n}_1.0.0 beta_1.0.0" \
+    "root_1.0.0_${n}_1.0.0 ${n}_1.0.0_beta_1.0.0" root-$n
+done
+ctl schema-rvok VALID/yes/yes 'root_1.0.0 rvok_1.0.0' 'root_1.0.0_rvok_1.0.0' root-rvok
+# the check cannot tell what cargo makes of these, and says so
+for n in tg1 tg2; do
+  ctl unicode-$n ERR/-/- "root_1.0.0 ${n}_1.0.0 beta_1.0.0" \
+    "root_1.0.0_${n}_1.0.0 ${n}_1.0.0_beta_1.0.0" root-$n
+done
+ctl unicode-fo2 ERR/-/- 'root_1.0.0 fo2_1.0.0' 'root_1.0.0_fo2_1.0.0' root-fo2
 
 # cargo failing for want of a registry says nothing of the answer, and
 # leaves only reproduced unknown

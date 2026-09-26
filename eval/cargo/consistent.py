@@ -13,12 +13,19 @@ The rules, each with the cargo 0.98 source it follows:
              sources/registry/index/mod.rs), and reads one as
              IndexSummary::Unsupported past schema v2 or
              IndexSummary::Invalid where it cannot build the summary
-             (IndexSummary::parse): a requirement the semver crate refuses
-             (Dependency::parse in core/dependency.rs), a target
-             cargo-platform refuses (registry_dependency_into_dep), an
-             optional dev-dependency (Summary::new in core/summary.rs), or
-             a feature table build_feature_map refuses.  Neither is ever a
-             candidate, locked or not (sources/registry/mod.rs, query).
+             (IndexSummary::parse): a row serde_json cannot read as an
+             IndexPackage (cargo-util-schemas' index.rs), a requirement the
+             semver crate refuses (Dependency::parse in
+             core/dependency.rs), a target cargo-platform refuses, a
+             registry that is not a URL or an artifact Artifact::parse
+             refuses (registry_dependency_into_dep), an optional
+             dev-dependency (Summary::new in core/summary.rs), or a feature
+             table build_feature_map refuses.  Neither is ever a candidate,
+             locked or not (sources/registry/mod.rs, query).  A row whose
+             reading turns on a Unicode class Python and Rust may not
+             share, on a pubtime jiff alone can settle, on another
+             registry or on an artifact dependency leaves the answer
+             unchecked.
 
   features   The root has every feature it declares, and the default:
              generate-lockfile resolves with CliFeatures::new_all(true)
@@ -85,12 +92,14 @@ usage: consistent.py <pac's answer> <Cargo.toml pac was asked>
 env: CARGO_INDEX, the index when not repos/crates.io-index
 Prints the verdict as JSON: valid (a bool), minimal, and the misses.
 """
+import datetime
 import itertools
 import json
 import os
 import re
 import sys
 import tomllib
+import unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 INDEX = os.environ.get("CARGO_INDEX") or os.path.normpath(HERE + "/../../repos/crates.io-index")
@@ -211,14 +220,24 @@ def requirement(s):
 TOKEN = re.compile(r' *(?:([(),=])|"([^"]*)"|(r#)?([A-Za-z_][A-Za-z_0-9]*))')
 
 
+class Undecided(Exception):
+    """what cargo makes of a row turns on something Python cannot tell"""
+
+
 def platform(s):
     """cargo-platform's Platform::from_str: `cfg(...)` parsed as a CfgExpr
     (cfg.rs, Parser::expr over Tokenizer), anything else a target name of
     alphanumerics, `_`, `-` and `.` (validate_named_platform); one it
-    refuses raises ValueError"""
+    refuses raises ValueError.  Rust's char::is_alphanumeric is Unicode's
+    Alphabetic or Numeric, which takes in Other_Alphabetic marks and
+    symbols (U+0903, U+24B6) Python's isalnum refuses, and characters newer
+    than Python's tables, so outside ASCII only a letter or number category
+    settles it"""
     if not (s.startswith("cfg(") and s.endswith(")")):
-        if any(not (c.isalnum() or c in "_-.") for c in s):
+        if any(c.isascii() and not (c.isalnum() or c in "_-.") for c in s):
             raise ValueError(f"bad target name {s!r}")
+        if any(not c.isascii() and unicodedata.category(c)[0] not in "LN" for c in s):
+            raise Undecided(f"whether Rust takes target name {s!r} as alphanumeric")
         return
     s, toks = s[4:-1], []
     while s.strip(" "):
@@ -374,27 +393,155 @@ class Summary:
                 self.features[d[0]] = ["dep:" + d[0]]
         self.links = links
         self.unreadable = None
+        self.undecided = None
 
 
 def feature_name(f):
-    """restricted_names.rs, validate_feature_name"""
-    return bool(f) and not f.startswith("dep:") and "/" not in f \
-        and (f[0].isidentifier() or f[0] in "0123456789") \
-        and all(("a" + c).isidentifier() or c in "-+." for c in f[1:])
+    """restricted_names.rs, validate_feature_name; None where only a
+    character Python's Unicode tables lack (category Cn) stands in the way,
+    as cargo's unicode-ident 1.0.24 is Unicode 17 and Python's may be older"""
+    if not f or f.startswith("dep:") or "/" in f:
+        return False
+    ok = [None if unicodedata.category(c) == "Cn" else
+          (c.isidentifier() or c in "0123456789") if i == 0 else
+          (("a" + c).isidentifier() or c in "-+.")
+          for i, c in enumerate(f)]
+    return False if False in ok else None if None in ok else True
 
 
-def unreadable(j, s, declared):
+def rust_version(s):
+    """rust_version.rs, RustVersion::from_str through PartialVersion::
+    from_str: a version, or one caret comparator not written with `^`,
+    without pre-release or build"""
+    try:
+        version(s)
+        return "-" not in s and "+" not in s
+    except ValueError:
+        pass
+    try:
+        c = requirement(s)
+    except ValueError:
+        return False
+    return len(c) == 1 and c[0][0] == "^" and not s.startswith("^") and not c[0][4]
+
+
+PUBTIME = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})Z")
+
+
+def pubtime(s):
+    """index.rs, parse_pubtime: jiff's strptime of %Y-%m-%dT%H:%M:%SZ in 20
+    bytes; None where the reading turns on jiff: a 20-byte string off the
+    plain form, year 0, which Python's datetime lacks, or second 60"""
+    if len(s.encode()) != 20:
+        return False
+    m = PUBTIME.fullmatch(s)
+    if not m or m.group(1) == "0000" or m.group(6) == "60":
+        return None
+    try:
+        datetime.datetime(*map(int, m.groups()))
+    except ValueError:
+        return False
+    return True
+
+
+def registry_url(s):
+    """whether url's Url::parse (IntoUrl for &str) could take s: a URL
+    without a base needs a scheme, after the parser drops tabs and newlines
+    and trims C0 controls and spaces"""
+    s = re.sub("[\t\n\r]", "", s).strip("".join(map(chr, range(33))))
+    return re.match(r"[A-Za-z][A-Za-z0-9+.-]*:", s) is not None
+
+
+def artifact(kinds, target):
+    """dependency.rs, Artifact::parse: bin, cdylib, staticlib or bin:<name>,
+    not bin with bin:<name>, none twice, and a bindep target, where there is
+    one, `target` or a non-empty name not ending .json (CompileTarget::new
+    without -Zjson-target-spec)"""
+    named = target is None or target == "target" or target.strip() and not target.strip().endswith(".json")
+    return all(k in ("bin", "cdylib", "staticlib") or k.startswith("bin:") for k in kinds) \
+        and not ("bin" in kinds and any(k.startswith("bin:") for k in kinds)) \
+        and len(set(kinds)) == len(kinds) and bool(named)
+
+
+def is_str(x):
+    return isinstance(x, str)
+
+
+def is_bool(x):
+    return isinstance(x, bool)
+
+
+def list_of(t):
+    return lambda x: isinstance(x, list) and all(map(t, x))
+
+
+def map_of(t):
+    return lambda x: isinstance(x, dict) and all(map(t, x.values()))
+
+
+# cargo-util-schemas' index.rs, IndexPackage and RegistryDependency: the
+# fields serde requires, those it defaults only when missing (so null is a
+# mismatch), and the Options
+DEP = ({"name": is_str, "req": is_str},
+       {"features": list_of(is_str), "optional": is_bool, "default_features": is_bool, "lib": is_bool},
+       {"target": is_str, "kind": is_str, "registry": is_str, "package": is_str, "public": is_bool,
+        "artifact": list_of(is_str), "bindep_target": is_str})
+ROW = ({"name": is_str, "vers": is_str, "cksum": is_str,
+        "deps": list_of(lambda d: isinstance(d, dict) and misfit(d, DEP) is None)},
+       {"features": map_of(list_of(is_str))},
+       {"features2": map_of(list_of(is_str)), "yanked": is_bool, "links": is_str,
+        "rust_version": lambda x: is_str(x) and rust_version(x),
+        "pubtime": lambda x: is_str(x) and pubtime(x) is not False,
+        "v": lambda x: type(x) is int and 0 <= x < 1 << 32})
+
+
+def misfit(x, schema):
+    """the first field of object x off schema, or None"""
+    need, default, option = schema
+    return next((k for k, t in need.items() if k not in x or not t(x[k])), None) \
+        or next((k for k, t in default.items() if k in x and not t(x[k])), None) \
+        or next((k for k, t in option.items() if x.get(k) is not None and not t(x[k])), None)
+
+
+def mismatch(j):
+    """where serde_json cannot read row j as an IndexPackage, which
+    IndexSummary::parse then reads as Invalid, or None"""
+    k = misfit(j, ROW)
+    if k == "deps" and isinstance(j.get("deps"), list):
+        d = next(d for d in j["deps"] if not isinstance(d, dict) or misfit(d, DEP))
+        k = f"dependency {d.get('name')!r}'s {misfit(d, DEP)}" if isinstance(d, dict) else \
+            f"dependency {json.dumps(d)[:60]}"
+    return k and f"{k} is off the index-row schema"
+
+
+def unreadable(j, s, declared, doubts):
     """why cargo reads index row j, summary s with feature table declared,
-    as Unsupported or Invalid, or None"""
+    as Unsupported or Invalid, or None; what the check cannot tell goes to
+    doubts, and counts only where nothing else makes the row unreadable"""
     if (j.get("v") or 1) > 2:
         return f"schema v{j['v']}"
-    for d in j.get("deps") or []:
+    if j.get("pubtime") is not None and pubtime(j["pubtime"]) is None:
+        doubts.append(f"whether jiff reads pubtime {j['pubtime']!r}")
+    for d in j["deps"]:
         try:
             requirement(d["req"])
             if d.get("target") is not None:
                 platform(d["target"])
         except ValueError as e:
             return f"dependency {d['name']}: {e}"
+        except Undecided as e:
+            doubts.append(f"dependency {d['name']}: {e}")
+        # registry_dependency_into_dep: the harness serves crates.io alone,
+        # so another registry, or an artifact dependency, is outside what
+        # the check models
+        if d.get("registry") is not None:
+            if not registry_url(d["registry"]):
+                return f"dependency {d['name']}: registry {d['registry']!r} is not a URL"
+            doubts.append(f"dependency {d['name']} is from registry {d['registry']}")
+        if d.get("artifact") is not None:
+            if not artifact(d["artifact"], d.get("bindep_target")):
+                return f"dependency {d['name']}: artifact {d['artifact']} for {d.get('bindep_target')}"
+            doubts.append(f"dependency {d['name']} is an artifact dependency")
     optional = {}
     for d in s.deps:
         if d[4] and d[3] == "dev":
@@ -402,7 +549,10 @@ def unreadable(j, s, declared):
         optional[d[0]] = optional.get(d[0], False) or d[4]
     used = set()
     for feature, vs in s.features.items():
-        if not feature_name(feature):
+        ok = feature_name(feature)
+        if ok is None:
+            doubts.append(f"whether unicode-ident takes feature name {feature!r}")
+        elif not ok:
             return f"feature name {feature!r}"
         for v in vs:
             if "/" in v:
@@ -427,25 +577,35 @@ def from_index(name, vers):
             rows = [json.loads(l) for l in f if l.strip()]
     except FileNotFoundError:
         return None
-    j = next((r for r in rows if r.get("vers") == vers), None)
+    j = next((r for r in rows if isinstance(r, dict) and r.get("vers") == vers), None)
     return None if j is None else from_row(j)
 
 
 def from_row(j):
+    """row j's summary, with why cargo cannot select it, or what the check
+    cannot tell of that"""
+    s = Summary([], {}, None)
+    try:
+        if not isinstance(j.get("name"), str):
+            raise ValueError
+        version(j["vers"])
+    except (ValueError, TypeError, KeyError):
+        s.unreadable = "the name or version does not parse, so cargo drops the row"
+        return s
+    s.unreadable = mismatch(j)
+    if s.unreadable:
+        return s
     features = {k: list(v) for k, v in (j.get("features") or {}).items()}
     for k, v in (j.get("features2") or {}).items():
         features.setdefault(k, []).extend(v)
-    deps = [(d["name"], d.get("package") or d["name"], d.get("req", "*"), d.get("kind") or "normal",
+    deps = [(d["name"], d.get("package") or d["name"], d["req"], d.get("kind") or "normal",
              bool(d.get("optional")), d.get("default_features", True),
              tuple(f for f in d.get("features") or () if f))
-            for d in j.get("deps") or []]
+            for d in j["deps"]]
     s = Summary(deps, features, j.get("links"))
-    try:
-        version(j["vers"])
-    except ValueError:
-        s.unreadable = "the version does not parse, so cargo drops the row"
-    else:
-        s.unreadable = unreadable(j, s, features)
+    doubts = []
+    s.unreadable = unreadable(j, s, features, doubts)
+    s.undecided = None if s.unreadable else next(iter(doubts), None)
     return s
 
 
@@ -562,6 +722,9 @@ def check(answer, manifest):
             for c, s in sorted(summaries.items()) if s.unreadable]
     if rows:
         return {"valid": False, "minimal": None, "miss": rows}
+    doubts = [f"unchecked: {c[0]} {c[1]}: {s.undecided}" for c, s in sorted(summaries.items()) if s.undecided]
+    if doubts:
+        return {"valid": None, "minimal": None, "miss": doubts}
     kids = {}
     for p, alias, c in edges:
         kids.setdefault(p, []).append((alias, c))
