@@ -238,15 +238,15 @@ struct
 
   let core st ~touch =
     Pac_common.Core.print ~pp_name:(pp_core_name st) ~pp_version:P.pp
-      ~versions:(versions st)
-      ~dependees:(fun (tn, pv) ->
-        let p = (tn, P.v pv) in
-        touch p;
-        List.map
-          (fun ((m, vs) : T.Dependees.t) ->
-            (m, List.map (st.tag m) (T.VSet.elements vs)))
-          (dependees st p))
-      [ PFR.Name.Orig (fst st.root) ]
+      (Pac_common.Core.walk ~versions:(versions st)
+         ~dependees:(fun (tn, pv) ->
+           let p = (tn, P.v pv) in
+           touch p;
+           List.map
+             (fun ((m, vs) : T.Dependees.t) ->
+               (m, List.map (st.tag m) (T.VSet.elements vs)))
+             (dependees st p))
+         [ PFR.Name.Orig (fst st.root) ])
 
   (* The core solution back through the proved decoder to the package
      formula's packages.  Reading the ecosystem's packages off the

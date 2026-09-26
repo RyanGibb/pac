@@ -57,46 +57,42 @@ module Run (X : EXAMPLE) = struct
         let pp = X.pp_version
       end)
 
-  let lines (w : Core.walk) =
-    List.map (fun n -> "name " ^ n) w.names
-    @ List.concat_map
-        (fun ((n, v), es) ->
-          (n ^ " " ^ v)
-          :: List.map
-               (fun (m, vs) -> n ^ " " ^ v ^ " -> " ^ m ^ " " ^ set vs)
-               es)
-        w.pkgs
+  let pkg (n, v) = Format.asprintf "%a %a" X.pp_name n X.pp_version v
+
+  let edge (p, (m, vs)) =
+    Format.asprintf "%s -> %a %s" (pkg p) X.pp_name m
+      (set (List.map (Format.asprintf "%a" X.pp_version) vs))
+
+  let only title (a : _ Core.t) (b : _ Core.t) =
+    let show f l l' =
+      List.iter
+        (fun x ->
+          if not (List.mem x l') then Printf.printf "%s only: %s\n" title (f x))
+        l
+    in
+    show pkg a.packages b.packages;
+    show edge a.edges b.edges
 
   let run () =
-    let walk = Core.walk ~pp_name:X.pp_name ~pp_version:X.pp_version in
-    let lookups =
-      walk ~versions:X.versions ~dependees:X.dependees [ fst X.root ]
+    let whole = { Core.packages = X.real; edges = X.deps } in
+    Core.print ~pp_name:X.pp_name ~pp_version:X.pp_version whole;
+    let at k l =
+      List.filter_map (fun (j, x) -> if j = k then Some x else None) l
     in
-    Core.output lookups;
-    let at n (m, _) = X.compare_name m n = E.Eq in
-    let global =
-      walk
-        ~versions:(fun n -> List.map snd (List.filter (at n) X.real))
-        ~dependees:(fun (n, v) ->
-          List.filter_map
-            (fun ((p, u), h) ->
-              if at n (p, u) && X.compare_version u v = E.Eq then Some h
-              else None)
-            X.deps)
+    let reach =
+      Core.walk
+        ~versions:(fun n -> at n whole.packages)
+        ~dependees:(fun p -> at p whole.edges)
         [ fst X.root ]
     in
-    if lookups = global then
+    let lookups =
+      Core.walk ~versions:X.versions ~dependees:X.dependees [ fst X.root ]
+    in
+    if lookups = reach then
       print_endline "lookups agree with the global reduction from the root"
     else begin
-      let l = lines lookups and g = lines global in
-      List.iter
-        (fun s ->
-          if not (List.mem s g) then print_endline ("lookups only: " ^ s))
-        l;
-      List.iter
-        (fun s ->
-          if not (List.mem s l) then print_endline ("global only: " ^ s))
-        g;
+      only "lookups" lookups reach;
+      only "global" reach lookups;
       exit 1
     end;
     match
@@ -856,7 +852,8 @@ module Concurrent_features = struct
   let root = R.embedOrigPkg g ("A", "1")
 
   (* the calculus proves no versions lookup, so these are the global
-     reduction's; only the dependees below are lookups *)
+     reduction's, and checking the walk against it checks only the
+     dependees below *)
   let versions n =
     R.T.VSet.elements (R.T.versions (R.reduceReal r sup df da g) n)
 

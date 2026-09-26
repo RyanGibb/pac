@@ -132,13 +132,13 @@ let solve ?(debug = false) ?(core = false) ?(order = `Tool) ~index ~features
   in
   if core then
     Pac_common.Core.print ~pp_name:PName.pp ~pp_version:PVersion.pp
-      ~versions:(L.pg_versions st)
-      ~dependees:(fun (tn, { PVersion.v; _ }) ->
-        List.map
-          (fun ((m, vs) : T.Dependees.t) ->
-            (m, List.map (L.tag st m) (T.VSet.elements vs)))
-          (L.dependees st (tn, v)))
-      [ Cg.NPlus.CRoot ];
+      (Pac_common.Core.walk ~versions:(L.pg_versions st)
+         ~dependees:(fun (tn, { PVersion.v; _ }) ->
+           List.map
+             (fun ((m, vs) : T.Dependees.t) ->
+               (m, List.map (L.tag st m) (T.VSet.elements vs)))
+             (L.dependees st (tn, v)))
+         [ Cg.NPlus.CRoot ]);
   run
 
 (* cargo tells packages apart by source as well, so without the

@@ -1,70 +1,72 @@
-let show pp x = Format.asprintf "%a" pp x
-
-type walk = {
-  names : string list;
-  pkgs : ((string * string) * (string * string list) list) list;
+type ('name, 'version) t = {
+  packages : ('name * 'version) list;
+  edges : (('name * 'version) * ('name * 'version list)) list;
 }
 
-let walk ~pp_name ~pp_version ~versions ~dependees roots =
+let walk ~versions ~dependees roots =
   let names = Hashtbl.create 64 in
-  let edges = Hashtbl.create 256 in
+  let deps = Hashtbl.create 256 in
   let rec reach n =
-    let k = show pp_name n in
-    if not (Hashtbl.mem names k) then begin
-      Hashtbl.replace names k n;
+    if not (Hashtbl.mem names n) then begin
+      Hashtbl.replace names n ();
       expand n
     end
   and expand n =
     List.iter
       (fun v ->
-        let p = (show pp_name n, show pp_version v) in
-        if not (Hashtbl.mem edges p) then begin
+        if not (Hashtbl.mem deps (n, v)) then begin
           let ds = dependees (n, v) in
-          Hashtbl.replace edges p
-            (List.sort compare
-               (List.map
-                  (fun (m, vs) ->
-                    ( show pp_name m,
-                      List.sort_uniq String.compare
-                        (List.map (show pp_version) vs) ))
-                  ds));
+          Hashtbl.replace deps (n, v) ds;
           List.iter (fun (m, _) -> reach m) ds
         end)
       (versions n)
   in
   List.iter reach roots;
   let rec settle () =
-    let before = Hashtbl.length edges in
-    Hashtbl.iter (fun _ n -> expand n) (Hashtbl.copy names);
-    if Hashtbl.length edges > before then settle ()
+    let before = Hashtbl.length deps in
+    Hashtbl.iter (fun n () -> expand n) (Hashtbl.copy names);
+    if Hashtbl.length deps > before then settle ()
   in
   settle ();
   {
-    names =
-      List.sort String.compare (Hashtbl.fold (fun k _ l -> k :: l) names []);
-    pkgs =
-      List.sort compare (Hashtbl.fold (fun p es l -> (p, es) :: l) edges []);
+    packages = List.sort compare (Hashtbl.fold (fun p _ l -> p :: l) deps []);
+    edges =
+      List.sort_uniq compare
+        (Hashtbl.fold
+           (fun p ds l ->
+             List.map (fun (m, vs) -> (p, (m, List.sort_uniq compare vs))) ds
+             @ l)
+           deps []);
   }
 
-let output w =
-  let n_edges = List.fold_left (fun n (_, es) -> n + List.length es) 0 w.pkgs in
-  Printf.printf "core: %d packages, %d edges\n" (List.length w.pkgs) n_edges;
-  let listed = Hashtbl.create 64 in
+let print ~pp_name ~pp_version c =
+  let name = Format.asprintf "%a" pp_name in
+  let version = Format.asprintf "%a" pp_version in
+  let pkg (n, v) = (name n, version v) in
+  let packages = List.sort_uniq compare (List.map pkg c.packages) in
+  let edges =
+    List.sort_uniq compare
+      (List.map
+         (fun (p, (m, vs)) ->
+           (pkg p, (name m, List.sort_uniq String.compare (List.map version vs))))
+         c.edges)
+  in
+  Printf.printf "core: %d packages, %d edges\n" (List.length packages)
+    (List.length edges);
+  let from = Hashtbl.create 64 and listed = Hashtbl.create 64 in
+  List.iter (fun (p, e) -> Hashtbl.add from p e) edges;
   List.iter
-    (fun ((n, v), es) ->
+    (fun ((n, v) as p) ->
       Hashtbl.replace listed n ();
       Printf.printf "%s %s\n" n v;
       List.iter
         (fun (m, vs) ->
           Printf.printf "  -> %s {%s}\n" m (String.concat ", " vs))
-        es)
-    w.pkgs;
+        (List.sort compare (Hashtbl.find_all from p)))
+    packages;
   (* a name with no versions is still reached, and an edge to it can never
      be met, which is worth seeing *)
   List.iter
-    (fun n -> if not (Hashtbl.mem listed n) then Printf.printf "%s (none)\n" n)
-    w.names;
+    (fun m -> if not (Hashtbl.mem listed m) then Printf.printf "%s (none)\n" m)
+    (List.sort_uniq String.compare (List.map (fun (_, (m, _)) -> m) edges));
   flush stdout
-
-let print ~pp_name ~pp_version ~versions ~dependees roots =
-  output (walk ~pp_name ~pp_version ~versions ~dependees roots)

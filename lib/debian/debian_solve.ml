@@ -483,10 +483,10 @@ module Make (AP : Tables.ARCH) = struct
     let r = Result.map (fun (pkgs, nodes) -> { pkgs; nodes; lookups }) r in
     if core then
       Pac_common.Core.print ~pp_name:PName.pp_core ~pp_version:S.PVersion.pp
-        ~versions:S.cands_of
-        ~dependees:(fun (n, (pv : S.PVersion.t)) ->
-          S.dependees_of n pv.S.PVersion.v)
-        (List.map (fun (n, _) -> DMA.Deb.Name.Orig n) query);
+        (Pac_common.Core.walk ~versions:S.cands_of
+           ~dependees:(fun (n, (pv : S.PVersion.t)) ->
+             S.dependees_of n pv.S.PVersion.v)
+           (List.map (fun (n, _) -> DMA.Deb.Name.Orig n) query));
     r
 end
 

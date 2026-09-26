@@ -1,18 +1,19 @@
 The paper's §4 extension figures, each instance exactly the figure's.
-Each run prints the core walked from the root through the calculus's
-lookup theorems, checks that walk against the global reduction
-(reduceReal and reduceDeps) restricted to the root's reach, and solves
-with PubGrub, decoding the answer through the soundness decoder.  A
-reduced name is written as the paper writes it, <...> for ⟨...⟩, and a
+Each run prints the whole global reduction (reduceReal and reduceDeps),
+checks the core walked from the root through the calculus's lookup
+theorems against that reduction restricted to the root's reach, and
+solves with PubGrub, decoding the answer through the soundness decoder.
+A reduced name is written as the paper writes it, <...> for ⟨...⟩, and a
 package (n,v) inside a name as (n,v).
 
 Fig. conflict-class: the class <k> is the figure's ⟨k⟩, its versions
-the names B, C and D.  D 1 is in k but unreachable from A 1, so its edge
-(D,1) Δ (⟨k⟩,{D}) is not here, though ⟨k⟩'s version D is.  The answer
-takes B 2 beside C 1, as the caption says.
+the names B, C and D.  Every node and all 5 edges of the figure's
+reduction, and nothing else, among them D 1's edge (D,1) Δ (⟨k⟩,{D}),
+though D 1 is unreachable from A 1.  The answer takes B 2 beside C 1, as
+the caption says.
 
   $ ./extensions/extensions.exe conflict-class
-  core: 7 packages, 4 edges
+  core: 8 packages, 5 edges
   <k> B
   <k> C
   <k> D
@@ -24,6 +25,8 @@ takes B 2 beside C 1, as the caption says.
   B 2
   C 1
     -> <k> {C}
+  D 1
+    -> <k> {D}
   lookups agree with the global reduction from the root
   packages (3):
     A 1
@@ -82,12 +85,12 @@ figure's reduction, and nothing else.
     D 2.0.1 <- B 1.0.0
     D 3.0.0 <- C 1.0.0
 
-Fig. peer-dependency, g(v) = v: all 6 edges of the figure's reduction.
-The figure also draws ⟨C,1⟩ 1, which is real but which no edge reaches,
-since (<A,1,C>,1) has no dependency, as its caption says.
+Fig. peer-dependency, g(v) = v: every node and all 6 edges of the
+figure's reduction, and nothing else, among them ⟨C,1⟩ 1, which no edge
+reaches, since (<A,1,C>,1) has no dependency, as its caption says.
 
   $ ./extensions/extensions.exe peer
-  core: 8 packages, 6 edges
+  core: 9 packages, 6 edges
   <A,1,B> 1
     -> <A,1,C> {1, 2}
     -> <B,1> {1}
@@ -100,6 +103,7 @@ since (<A,1,C>,1) has no dependency, as its caption says.
     -> <A,1,B> {1}
     -> <A,1,C> {2, 3}
   <B,1> 1
+  <C,1> 1
   <C,2> 2
   <C,3> 3
   lookups agree with the global reduction from the root
@@ -113,18 +117,28 @@ since (<A,1,C>,1) has no dependency, as its caption says.
 
 Fig. visibility: <n,(A,1)> and <n,(D,1)> are the figure's ⟨n,a⟩ and
 ⟨n,d⟩, and <n,v,m,(A,1)> is ⟨n,v,m,a⟩.  Every node and all 24 edges of
-the figure's reduction are here.  <C,(D,1)> 1 is not drawn: an
-occurrence has every version of its name, and no edge admits this one.
+the figure's reduction are here, and 9 nodes and 14 edges the figure
+does not draw.  ⟨A,d⟩ 1 and ⟨B,d⟩ 1, with their intermediates and all
+14 edges, and ⟨D,1,C,a⟩ 2, which has none, are unreachable from ⟨A,a⟩
+1.  <C,(D,1)> 1 is reached: an occurrence has every version of its
+name, though no edge admits this one.
 
   $ ./extensions/extensions.exe visibility
-  core: 25 packages, 24 edges
+  core: 33 packages, 38 edges
   <A,(A,1)> 1
     -> <A,1,B,(A,1)> {1}
     -> <A,1,C,(A,1)> {1, 2}
     -> <A,1,D,(A,1)> {1}
+  <A,(D,1)> 1
+    -> <A,1,B,(D,1)> {1}
+    -> <A,1,C,(D,1)> {1, 2}
+    -> <A,1,D,(D,1)> {1}
   <A,1,B,(A,1)> 1
     -> <A,1,B> {1}
     -> <B,(A,1)> {1}
+  <A,1,B,(D,1)> 1
+    -> <A,1,B> {1}
+    -> <B,(D,1)> {1}
   <A,1,B> 1
   <A,1,C,(A,1)> 1
     -> <A,1,C> {1}
@@ -132,17 +146,31 @@ occurrence has every version of its name, and no edge admits this one.
   <A,1,C,(A,1)> 2
     -> <A,1,C> {2}
     -> <C,(A,1)> {2}
+  <A,1,C,(D,1)> 1
+    -> <A,1,C> {1}
+    -> <C,(D,1)> {1}
+  <A,1,C,(D,1)> 2
+    -> <A,1,C> {2}
+    -> <C,(D,1)> {2}
   <A,1,C> 1
   <A,1,C> 2
   <A,1,D,(A,1)> 1
     -> <A,1,D> {1}
     -> <D,(A,1)> {1}
+  <A,1,D,(D,1)> 1
+    -> <A,1,D> {1}
+    -> <D,(D,1)> {1}
   <A,1,D> 1
   <B,(A,1)> 1
     -> <B,1,C,(A,1)> {1}
+  <B,(D,1)> 1
+    -> <B,1,C,(D,1)> {1}
   <B,1,C,(A,1)> 1
     -> <B,1,C> {1}
     -> <C,(A,1)> {1}
+  <B,1,C,(D,1)> 1
+    -> <B,1,C> {1}
+    -> <C,(D,1)> {1}
   <B,1,C> 1
   <C,(A,1)> 1
   <C,(A,1)> 2
@@ -154,6 +182,7 @@ occurrence has every version of its name, and no edge admits this one.
   <D,(D,1)> 1
     -> <D,1,C,(D,1)> {2}
     -> <D,1,E,(D,1)> {1}
+  <D,1,C,(A,1)> 2
   <D,1,C,(D,1)> 2
     -> <C,(D,1)> {2}
     -> <D,1,C> {2}
@@ -294,26 +323,32 @@ nothing else.
     F 1 for E <- A 1
 
 Fig. concurrent-feature, g(v) = v, reduced in Fig.
-concurrent-feature-reduction: <<D,α>,1> is ⟨⟨D,α⟩,1⟩.  The calculus
-proves dependees lookups but no versions lookup, so versions here are the
-global reduction's, and the check covers the dependees alone.  30 of the
-figure's 36 edges are here and nothing else; the other 6 leave
-⟨⟨D,β⟩,1⟩, ⟨D,1,β,F,δ⟩ and ⟨⟨F,δ⟩,1⟩, which the figure lists but no edge
-from A 1 reaches, C 1 admitting D only at 2 and 3.
+concurrent-feature-reduction: <<D,α>,1> is ⟨⟨D,α⟩,1⟩.  Every node and
+all 36 edges of the figure's reduction, and nothing else.  The calculus
+proves dependees lookups but no versions lookup, so the walk's versions
+are the global reduction's, and the check covers the dependees alone.
+The walk from A 1 does not reach ⟨⟨D,β⟩,1⟩, ⟨D,1,β,F,δ⟩ or ⟨⟨F,δ⟩,1⟩,
+C 1 admitting D only at 2 and 3.
 
   $ ./extensions/extensions.exe concurrent-features
-  core: 24 packages, 30 edges
+  core: 27 packages, 36 edges
   <<D,α>,1> 1
     -> <D,1,F> {1}
     -> <D,1,α,F,γ> {1}
     -> <D,1> {1}
   <<D,α>,2> 2
     -> <D,2> {2}
+  <<D,β>,1> 1
+    -> <D,1,F> {1}
+    -> <D,1,β,F,δ> {1}
+    -> <D,1> {1}
   <<D,β>,2> 2
     -> <D,2> {2}
   <<D,β>,3> 3
     -> <D,3> {3}
   <<F,γ>,1> 1
+    -> <F,1> {1}
+  <<F,δ>,1> 1
     -> <F,1> {1}
   <A,1,B> 1
     -> <B,1> {1}
@@ -352,6 +387,9 @@ from A 1 reaches, C 1 admitting D only at 2 and 3.
     -> <F,1> {1}
   <D,1,α,F,γ> 1
     -> <<F,γ>,1> {1}
+    -> <D,1,F> {1}
+  <D,1,β,F,δ> 1
+    -> <<F,δ>,1> {1}
     -> <D,1,F> {1}
   <D,1> 1
   <D,2> 2

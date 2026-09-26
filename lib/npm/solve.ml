@@ -142,10 +142,10 @@ let solve ?(debug = false) ?(core = false) ?(order = `Tool) ?(omit_dev = false)
   in
   if core then
     Pac_common.Core.print ~pp_name:PName.pp ~pp_version:PVersion.pp
-      ~versions:(Lookup.versions st)
-      ~dependees:(fun p ->
-        List.map
-          (fun ((m, vs) : T.Dependees.t) -> (m, T.VSet.elements vs))
-          (Lookup.dependees st p))
-      [ root_n ];
+      (Pac_common.Core.walk ~versions:(Lookup.versions st)
+         ~dependees:(fun p ->
+           List.map
+             (fun ((m, vs) : T.Dependees.t) -> (m, T.VSet.elements vs))
+             (Lookup.dependees st p))
+         [ root_n ]);
   r
