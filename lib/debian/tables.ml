@@ -262,8 +262,8 @@ module Make (AP : ARCH) = struct
         stz.nclauses <- Some c;
         c
 
-  let deps_of _tables stz = fst (clauses_of stz)
-  let recs_of _tables stz = snd (clauses_of stz)
+  let deps_of stz = fst (clauses_of stz)
+  let recs_of stz = snd (clauses_of stz)
 
   (* One package's clauses in control-file order, Depends before Recommends,
      each with its mangled alternatives and the synthetic name a multi-way
@@ -294,10 +294,10 @@ module Make (AP : ARCH) = struct
               in
               List.map
                 (fun alts -> mk false (fun s -> DMA.Deb.Name.Disjunct s) alts)
-                (deps_of tables stz)
+                (deps_of stz)
               @ List.map
                   (fun alts -> mk true (fun s -> DMA.Deb.Name.Soft s) alts)
-                  (recs_of tables stz)
+                  (recs_of stz)
         in
         Hashtbl.add tables.oc_cache p r;
         r

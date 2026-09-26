@@ -143,8 +143,7 @@ let group key merge (ds : P.dep list) : P.dep list =
     (fun (d : P.dep) ->
       let k = key d in
       if not (Hashtbl.mem tbl k) then order := k :: !order;
-      Hashtbl.replace tbl k
-        (d :: Option.value (Hashtbl.find_opt tbl k) ~default:[]))
+      Pac_common.Tbl.push tbl k d)
     ds;
   List.map (fun k -> merge (List.rev (Hashtbl.find tbl k))) (List.rev !order)
 

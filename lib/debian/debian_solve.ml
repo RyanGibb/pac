@@ -43,11 +43,11 @@ module Make (AP : Tables.ARCH) = struct
 
   let ma_deps_of_pkg tables p =
     fibre tables p ~none:DMA.Deps.empty (fun stz ->
-        DMA.Deps.ofList (List.map (fun alts -> (p, alts)) (deps_of tables stz)))
+        DMA.Deps.ofList (List.map (fun alts -> (p, alts)) (deps_of stz)))
 
   let ma_recs_of_pkg tables p =
     fibre tables p ~none:DMA.Deps.empty (fun stz ->
-        DMA.Deps.ofList (List.map (fun alts -> (p, alts)) (recs_of tables stz)))
+        DMA.Deps.ofList (List.map (fun alts -> (p, alts)) (recs_of stz)))
 
   let ma_conf_of_pkg tables p =
     fibre tables p ~none:DMA.Conf.empty (fun stz ->
@@ -63,7 +63,7 @@ module Make (AP : Tables.ARCH) = struct
 
   let atom_names_of tables p =
     fibre tables p ~none:[] (fun stz ->
-        List.concat_map (List.map DMA.aname) (deps_of tables stz))
+        List.concat_map (List.map DMA.aname) (deps_of stz))
 
   (* The base names p's conflicts can land on: its own, bearing the implicit
      group exclusion, each negative's, and the names of their declared
