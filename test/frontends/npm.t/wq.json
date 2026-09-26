@@ -1,0 +1,17 @@
+{
+ "name": "wq",
+ "dist-tags": {
+  "latest": "1.0.0"
+ },
+ "versions": {
+  "1.0.0": {
+   "name": "wq",
+   "version": "1.0.0",
+   "dependencies": {
+    "wr": "^1.0.0",
+    "ws": "^1.0.0",
+    "tm": "1.2.0"
+   }
+  }
+ }
+}

@@ -1,0 +1,16 @@
+{
+ "name": "dq",
+ "dist-tags": {
+  "latest": "1.0.0"
+ },
+ "versions": {
+  "1.0.0": {
+   "name": "dq",
+   "version": "1.0.0",
+   "dependencies": {
+    "dr": "^1.0.0",
+    "tm": "1.2.0"
+   }
+  }
+ }
+}

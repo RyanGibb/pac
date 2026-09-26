@@ -47,6 +47,9 @@ module PName = struct
     | Np.Nm.Granular (k, w) -> Format.fprintf fmt "%a@%s" pp_key k w
     | Np.Nm.Intermediate (k, v, m) ->
         Format.fprintf fmt "<%a@%s=>%a>" pp_key k v pp_key m
+    | Np.Nm.Sight (k, v, a) -> Format.fprintf fmt "<%a@%s^%s>" pp_key k v a
+    | Np.Nm.Link (k, v, m, u, a) ->
+        Format.fprintf fmt "<%a@%s=>%a@%s^%s>" pp_key k v pp_key m u a
 end
 
 module PVersion = struct
@@ -58,7 +61,7 @@ module PVersion = struct
   let pp fmt (v : t) =
     match v with
     | Np.Vs.Orig v -> Format.fprintf fmt "%s" v
-    | Np.Vs.Gran w -> Format.fprintf fmt "gran:%s" w
+    | Np.Vs.Bot -> Format.fprintf fmt "⊥"
 end
 
 module PG = Pubgrub.Make (PName) (PVersion)

@@ -71,8 +71,11 @@ type t = {
   (* the optional-dependency verdict, keyed by what decides it *)
   opt_keep : (string * string, bool) Hashtbl.t;
   (* each package's directories, as far as the solver has looked: the
-     intermediates its granular node and its directories point to *)
+     intermediates its granular node and its directories point to, and the
+     directory each of its links resolves into *)
   dirs : ((string * string) * string, Np.Nm.name list) Hashtbl.t;
+  (* the links resolving into each directory *)
+  links_into : (Np.Nm.name, Np.Nm.name) Hashtbl.t;
   mutable n_lookups : int;
 }
 
@@ -94,6 +97,7 @@ let create ~optional ar root =
     vcache = Hashtbl.create 65536;
     opt_keep = Hashtbl.create 1024;
     dirs = Hashtbl.create 4096;
+    links_into = Hashtbl.create 4096;
     n_lookups = 0;
   }
 
@@ -239,7 +243,8 @@ let gran_sub_inst st (k : string * string) (w : string) =
   mk_inst st ~repo ~deps ~peers
 
 (* the intermediate versions lookup's sub-instance: p's own dependencies,
-   the peer dependencies naming the key's directory, and the repository at
+   the peer dependencies naming the key's directory (p's own among them,
+   which empty the directory when p peers on it), and the repository at
    the key's registry name together with p's slot targets. *)
 let int_sub_inst st (p : string * string) (m : string * string) =
   let ns = snd m :: slot_targets st p in
@@ -266,13 +271,39 @@ let peer_sub_inst st (p : string * string) (m : string * string) (u : string) =
   mk_inst st ~repo:(repo_of st ns) ~deps:(own_dependencies st p)
     ~peers:(own_peer_dependencies st q)
 
+(* the sight lookup's sub-instance: the repository at the name alone *)
+let sight_sub_inst st (a : string) =
+  mk_inst st ~repo:(repo_at st a) ~deps:[] ~peers:[]
+
+(* the link versions lookup's sub-instance: the holder's own dependencies,
+   and the repository at the peer's name and the holder's slot targets *)
+let link_sub_inst st (p : string * string) (a : string) =
+  mk_inst st
+    ~repo:(repo_of st (a :: slot_targets st p))
+    ~deps:(own_dependencies st p) ~peers:[]
+
+(* the link dependees lookup's sub-instance: the holder's own dependencies
+   and peer dependencies, which decide where it shows the name *)
+let holder_sub_inst st (p : string * string) =
+  mk_inst st ~repo:Np.RepoSet.empty ~deps:(own_dependencies st p)
+    ~peers:(own_peer_dependencies st p)
+
 let versions st (n : Np.Nm.name) : Np.Vs.version list =
   Tbl.memo st.vcache n (fun () ->
       match n with
       | Np.Nm.Granular (k, w) ->
           T.VSet.elements (R.versions (gran_sub_inst st k w) n)
       | Np.Nm.Intermediate (k, v, m) ->
-          T.VSet.elements (R.versions (int_sub_inst st (snd k, v) m) n))
+          T.VSet.elements (R.versions (int_sub_inst st (snd k, v) m) n)
+      | Np.Nm.Sight (_, _, a) ->
+          T.VSet.elements (R.versions (sight_sub_inst st a) n)
+      | Np.Nm.Link (k, v, _, _, a) ->
+          T.VSet.elements (R.versions (link_sub_inst st (snd k, v) a) n))
+
+(* where the copy k at v shows its name a: its own directory, or its sight
+   where it peers on a itself *)
+let holder st ((k, v) : (string * string) * string) (a : string) : Np.Nm.name =
+  fst (R.holderEdge (holder_sub_inst st (snd k, v)) (k, v) a "")
 
 let record_dir st (m : Np.Nm.name) =
   match m with
@@ -280,7 +311,20 @@ let record_dir st (m : Np.Nm.name) =
       let l = Option.value ~default:[] (Hashtbl.find_opt st.dirs (k, v)) in
       if not (List.exists (fun x -> Np.Nm.compare x m = E.Eq) l) then
         Hashtbl.replace st.dirs (k, v) (m :: l)
-  | Np.Nm.Granular _ -> ()
+  | _ -> ()
+
+let record_link st (l : Np.Nm.name) =
+  match l with
+  | Np.Nm.Link (k, v, _, _, a) ->
+      let h = holder st (k, v) a in
+      record_dir st h;
+      if
+        not
+          (List.exists
+             (fun x -> Np.Nm.compare x l = E.Eq)
+             (Hashtbl.find_all st.links_into h))
+      then Hashtbl.add st.links_into h l
+  | _ -> ()
 
 let dependees st (s : T.Pkg.t) : T.Dependees.t list =
   let hs =
@@ -289,11 +333,20 @@ let dependees st (s : T.Pkg.t) : T.Dependees.t list =
         R.dependees (pkg_sub_inst st (snd k, v)) s
     | Np.Nm.Intermediate (k, v, m), Np.Vs.Orig u ->
         R.dependees (peer_sub_inst st (snd k, v) m u) s
+    | Np.Nm.Link (k, v, _, _, _), _ ->
+        R.dependees (holder_sub_inst st (snd k, v)) s
     | _ -> T.DependeesSet.empty
   in
   let hs = T.DependeesSet.elements hs in
-  List.iter (fun ((m, _) : T.Dependees.t) -> record_dir st m) hs;
+  List.iter
+    (fun ((m, _) : T.Dependees.t) ->
+      record_dir st m;
+      record_link st m)
+    hs;
   hs
+
+(* the links, opened so far, whose holder shows the name in directory h *)
+let links_into st (h : Np.Nm.name) = Hashtbl.find_all st.links_into h
 
 (* the directories of p's copy the solver has opened so far *)
 let dirs st p = Option.value ~default:[] (Hashtbl.find_opt st.dirs p)

@@ -37,7 +37,7 @@ polyfill is in the cache.
     app 1.0.0 <- runtime 1.1.0
     app 1.0.0 <- tester 1.0.0
     app 1.0.0 <- widget 1.0.0
-  encoded solution: 13 core nodes (18 lookups)
+  encoded solution: 17 core nodes (25 lookups)
   loaded: 9 names, 15 versions, 0 packuments fetched
 
 A name the root both depends on and declares a peer for is a dependency
@@ -166,7 +166,7 @@ though latest is 4.0.0, and host's peer gadget goes with host.  npm
     omit-app 1.0.0
     taker 1.0.0
     tok 3.0.2
-  encoded solution: 12 core nodes (14 lookups)
+  encoded solution: 14 core nodes (18 lookups)
   loaded: 6 names, 8 versions, 0 packuments fetched
   $ untimed ../../../bin/main.exe npm --offline --cache . --tree --omit=dev ./omit-app/package.json
   root omit-app 1.0.0
@@ -177,7 +177,7 @@ though latest is 4.0.0, and host's peer gadget goes with host.  npm
   node_modules (2):
     omit-app 1.0.0 <- taker 1.0.0
     taker 1.0.0 <- tok 3.0.2
-  encoded solution: 12 core nodes (14 lookups)
+  encoded solution: 14 core nodes (18 lookups)
   loaded: 6 names, 8 versions, 0 packuments fetched
 
 npm's third class, peer, is refused rather than ignored:
@@ -239,7 +239,8 @@ agree, which is npm's ERESOLVE rather than a reason to abandon the entry.
   $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./opt-peer-app/package.json
   root opt-peer-app 1.0.0
   unsatisfiable:
-  Because <opt-peer-app@1.0.0=>host> 1.0.0 -> <opt-peer-app@1.0.0=>gadget> 2.0.0 and opt-peer-app@1.0.0 1.0.0 -> <opt-peer-app@1.0.0=>gadget> 1.0.0, <opt-peer-app@1.0.0=>host> * or opt-peer-app@1.0.0 * is forbidden..
+  Because <opt-peer-app@1.0.0=>host> 1.0.0 -> <opt-peer-app@1.0.0=>host@1.0.0^gadget> 2.0.0 and <opt-peer-app@1.0.0=>host@1.0.0^gadget> 2.0.0 -> <opt-peer-app@1.0.0=>gadget> 2.0.0, <opt-peer-app@1.0.0=>host> * requires <opt-peer-app@1.0.0=>gadget> 2.0.0.
+  And because opt-peer-app@1.0.0 1.0.0 -> <opt-peer-app@1.0.0=>gadget> 1.0.0, <opt-peer-app@1.0.0=>host> * or opt-peer-app@1.0.0 * is forbidden.
   And because opt-peer-app@1.0.0 1.0.0 -> <opt-peer-app@1.0.0=>host> 1.0.0 and root -> opt-peer-app@1.0.0 1.0.0, version solving failed.
   loaded: 3 names, 4 versions, 0 packuments fetched
   [1]
@@ -258,7 +259,7 @@ installs gadget 2.0.0 by itself.
   node_modules (2):
     opt-peer-app 1.0.0 <- gadget 2.0.0
     opt-peer-app 1.0.0 <- host 1.0.0
-  encoded solution: 5 core nodes (6 lookups)
+  encoded solution: 7 core nodes (10 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
 
 A root override binds a peer slot too, and wins over the peer's own range
@@ -277,7 +278,7 @@ peer dependency's range exactly as it replaces a dependency's.
   node_modules (2):
     ovr-peer-app 1.0.0 <- gadget 1.0.0
     ovr-peer-app 1.0.0 <- host 1.0.0
-  encoded solution: 5 core nodes (6 lookups)
+  encoded solution: 7 core nodes (9 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
 
 An override to * is no override at all: npm reads an edge's range from an
@@ -366,6 +367,38 @@ another seed may give another, a resolution all the same:
   encoded solution: 8 core nodes (9 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
 
+npm puts no copy of a name inside a package that peers on it, the root
+aside (arborist's PEER LOCAL), so a dependency's peer on that name looks
+past its depender and finds what the depender's own peer finds.
+@jsonjoy.com/util peers on tslib 2, and so do its dependencies buffers and
+codegen: their tslib is util's, the root's one copy, in any order.
+
+  $ ../../../bin/main.exe npm --offline --cache . --tree --order=random --seed 0 @jsonjoy.com/util@1.9.0 | sed -n '/^node_modules/,/^encoded/p'
+  node_modules (4):
+    @jsonjoy.com/util 1.9.0 <- @jsonjoy.com/buffers 1.1.0
+    @jsonjoy.com/util 1.9.0 <- @jsonjoy.com/codegen 1.0.0
+    . <- @jsonjoy.com/util 1.9.0
+    . <- tslib 2.8.1
+  encoded solution: 15 core nodes (23 lookups)
+
+So a depender that peers on a name cannot give a dependency's peer on it
+another version.  dq holds tm 1.2.0 and depends on dr, which peers on tm
+^1 and depends on ds, which peers on tm 1.1.0 and depends on dt, which
+peers on tm 1.0.0: ds's peer sees dq's 1.2.0 through dr, and nothing
+resolves.  npm has no tree for it either: it installs one only by
+overriding a peer.
+
+  $ ../../../bin/main.exe npm --offline --cache . --tree dq@1.0.0 | head -2
+  root .
+  unsatisfiable:
+
+Nor can siblings: wq holds tm 1.2.0 and depends on wr and ws, which peer on
+tm ^1 and hold wd and we, which peer on tm 1.1.0 and 1.0.0.
+
+  $ ../../../bin/main.exe npm --offline --cache . --tree wq@1.0.0 | head -2
+  root .
+  unsatisfiable:
+
 Only a copy already placed is reused, and npm reaches a package only after
 the one requiring it has placed it.  reach-app depends on early, which
 depends on tok at * and on late, whose tok is ^3.0.0.  npm places early's
@@ -451,7 +484,7 @@ driver keeps 10.0.0, the pick for resolver's *:
   node_modules (2):
     resolver-app 1.0.0 <- linter 10.0.0
     resolver-app 1.0.0 <- resolver 1.0.0
-  encoded solution: 5 core nodes (6 lookups)
+  encoded solution: 9 core nodes (13 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
 
 npm never places a peer inside a non-root package that declares it, so
@@ -460,8 +493,8 @@ name land in the directory its own peer does.  preset peers on compiler
 ^7.0.0 || ^8.0.0 and depends on syntax-a and syntax-b, which peer on
 compiler ^7.0.0.  npm places compiler 8.0.0 for preset, then replaces it
 with 7.0.0, the pick for the syntax packages' range, since preset's range
-accepts it too: one compiler, 7.0.0, in both preset-app's directory and
-preset's.
+accepts it too: one compiler, 7.0.0, in preset-app's directory, and none
+in preset's.
 
   $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./preset-app/package.json
   root preset-app 1.0.0
@@ -471,28 +504,22 @@ preset's.
     preset-app 1.0.0
     syntax-a 1.2.0
     syntax-b 1.2.0
-  node_modules (5):
-    preset 1.0.0 <- compiler 7.0.0
+  node_modules (4):
     preset-app 1.0.0 <- compiler 7.0.0
     preset-app 1.0.0 <- preset 1.0.0
     preset 1.0.0 <- syntax-a 1.2.0
     preset 1.0.0 <- syntax-b 1.2.0
-  encoded solution: 10 core nodes (16 lookups)
+  encoded solution: 15 core nodes (21 lookups)
   loaded: 5 names, 10 versions, 0 packuments fetched
 
 However deep the chain of dependencies that each peer on the name, the
 last one's range is met too.  deep-preset peers on compiler ^7.0.0 ||
 ^8.0.0 and so does each of deep-1 to deep-4, each depending on the next;
 only deep-5, five dependencies down, peers on ^7.0.0.  npm installs one
-compiler, 7.0.0:
+compiler, 7.0.0, at the top, which every peer in the chain sees:
 
   $ ../../../bin/main.exe npm --offline --cache . --tree ./deep-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d' | sed -n '/^node_modules/,$p' | grep compiler
-    deep-1 1.0.0 <- compiler 7.0.0
-    deep-2 1.0.0 <- compiler 7.0.0
-    deep-3 1.0.0 <- compiler 7.0.0
-    deep-4 1.0.0 <- compiler 7.0.0
     deep-app 1.0.0 <- compiler 7.0.0
-    deep-preset 1.0.0 <- compiler 7.0.0
 
 npm meets a package's edges in the collation it sorts names by
 (build-ideal-tree.js, localeCompare), where "_" comes before "-".
@@ -500,15 +527,14 @@ coll-preset peers on gauge at * and depends on coll_a, which peers on
 ^6.0.0 || ^7.0.0, and on coll-a, which peers on ^6.0.0 || ^8.0.0.  Met
 first, coll_a's range replaces gauge 9.0.0 with 7.0.0 in coll-app's
 directory, and coll-a's pick, 8.0.0, is then refused, since coll_a's range
-does not accept it.  npm's answer has the same gauge at the top; below it,
-the calculus puts the one version both ranges accept, 6.0.0, where npm
-leaves coll-a's peer unmet:
+does not accept it.  Both peers see coll-preset's own gauge, since
+coll-preset peers on gauge and so holds none, and so the calculus has one
+gauge to give all three ranges: 6.0.0, the one they all accept, where npm
+keeps 7.0.0 and leaves coll-a's peer unmet:
 
   $ ../../../bin/main.exe npm --offline --cache . --tree ./coll-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d' | grep 'gauge'
     gauge 6.0.0
-    gauge 7.0.0
-    coll-preset 1.0.0 <- gauge 6.0.0
-    coll-app 1.0.0 <- gauge 7.0.0
+    coll-app 1.0.0 <- gauge 6.0.0
 
 A peer slot reuses the copy its declarer's node_modules lookup finds, not
 one the tree holds out of its sight.  sight-left's dial 1.0.0 is nested
@@ -533,7 +559,7 @@ the lookup finds only 2.0.0, and fetches ^1.0.0's newest, 1.1.0:
     sight-right 1.0.0 <- sight-host 1.0.0
     sight-app 1.0.0 <- sight-left 1.0.0
     sight-app 1.0.0 <- sight-right 1.0.0
-  encoded solution: 13 core nodes (15 lookups)
+  encoded solution: 15 core nodes (19 lookups)
   loaded: 5 names, 7 versions, 0 packuments fetched
 
 A name a package both depends on and peers on is a dependency only: npm
@@ -554,7 +580,7 @@ beside it as its peer, while tok is its own 3.0.2 and nothing asks for a
     twin-app 1.0.0 <- theme 1.0.0
     twin 1.0.0 <- tok 3.0.2
     twin-app 1.0.0 <- twin 1.0.0
-  encoded solution: 7 core nodes (7 lookups)
+  encoded solution: 9 core nodes (10 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
 
 deprecated is a resolution preference, not a warning printed over a pick
@@ -700,7 +726,7 @@ these fixtures, and refuses plugin@next (ETARGET).
     . <- plugin 1.0.0
     . <- runtime 1.1.0
     . <- tester 1.0.0
-  encoded solution: 11 core nodes (15 lookups)
+  encoded solution: 13 core nodes (19 lookups)
   loaded: 6 names, 12 versions, 0 packuments fetched
 
 A spec added to a project goes where the project already names it, so
@@ -727,7 +753,7 @@ one, and a tag is the version the packument tags.
     . <- plugin 1.0.0
     . <- runtime 1.0.0
     . <- util-lib 1.2.0
-  encoded solution: 9 core nodes (9 lookups)
+  encoded solution: 11 core nodes (13 lookups)
   loaded: 5 names, 11 versions, 0 packuments fetched
 
 An alias spec names the directory and the package apart, so one package
@@ -914,7 +940,7 @@ decide.
   unsatisfiable:
   Because vp-app@1.0.0 1.0.0 -> <vp-app@1.0.0=>vplus> 1.0.0 and <vp-app@1.0.0=>vplus> 1.0.0 -> vplus@1.0.0 1.0.0, vp-app@1.0.0 * requires vplus@1.0.0 1.0.0.
   And because vplus@1.0.0 1.0.0 -> <vplus@1.0.0=>mocker> 1.0.0, vp-app@1.0.0 * requires <vplus@1.0.0=>mocker> 1.0.0
-  And because <vplus@1.0.0=>mocker> 1.0.0 -> <vplus@1.0.0=>vite(npm:vp-core)> ∅ and root -> vp-app@1.0.0 1.0.0, version solving failed.
+  And because <vplus@1.0.0=>mocker> 1.0.0 -> <vplus@1.0.0=>mocker@1.0.0^vite> ∅ and root -> vp-app@1.0.0 1.0.0, version solving failed.
   loaded: 5 names, 5 versions, 0 packuments fetched
   [1]
 
@@ -1015,7 +1041,7 @@ lookup finds, refuses 3.0.2, and nests lurker and a tok 4.0.0 under perch.
     perch 1.0.0 <- lurker 1.0.0
     perch-app 1.0.0 <- perch 1.0.0
     perch-app 1.0.0 <- tok 3.0.2
-  encoded solution: 7 core nodes (7 lookups)
+  encoded solution: 9 core nodes (10 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
 
 Processes sharing a cache fetch into it concurrently, each into a scratch
@@ -1071,7 +1097,7 @@ and with it unreachable, or failing, there is no answer at all.
   $ untimed env PATH=$PWD/gone:$PATH ../../../bin/main.exe npm --cache partial plugin
   root .
   unsatisfiable:
-  Because .@  -> <.@=>plugin> 1.0.0 and <.@=>plugin> 1.0.0 -> <.@=>core> ∅, .@ * is forbidden..
+  Because .@  -> <.@=>plugin> 1.0.0 and <.@=>plugin> 1.0.0 -> <.@=>plugin@1.0.0^core> ∅, .@ * is forbidden..
   And because root -> .@ , version solving failed.
   loaded: 3 names, 2 versions, 1 packuments fetched
   [1]

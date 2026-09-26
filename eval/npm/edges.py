@@ -34,7 +34,9 @@ the delta it accounts for can be read off:
                   node the edge leaves.  npm's lockfile resolves a peer
                   the way require() would, from the declarer; pac hangs
                   the declarer's peer edges on the package that selected
-                  it.
+                  it, or, where that package is not the root and peers on
+                  the name itself, on whichever package its own peer edge
+                  hangs on.
 
 usage: edges.py <package> <lockfile> <our --tree output> <out-prefix>
                 [--peer-parent]
@@ -88,11 +90,29 @@ def lock_sets(lock, peer_parent):
         requirers = {"": {""}}
         for r, _, q in plain:
             requirers.setdefault(q, set()).add(r)
+
+        def peers_on(path, d):
+            e = pkgs[path]
+            deps = set(e.get("dependencies", {})) | set(e.get("optionalDependencies", {}))
+            return d in e.get("peerDependencies", {}) and d not in deps
+
+        # a requirer other than the root that peers on d holds none of it
+        # (arborist's PEER LOCAL), so the edge goes on up to its requirers
+        def hangs(r, d, seen):
+            out = set()
+            for r2 in requirers.get(r, ()):
+                if r2 != "" and peers_on(r2, d):
+                    if r2 not in seen:
+                        out |= hangs(r2, d, seen | {r2})
+                else:
+                    out.add(r2)
+            return out
+
         while True:
             moved = {
                 (r2, d, q)
                 for (r, d, q) in peer
-                for r2 in requirers.get(r, ())
+                for r2 in hangs(r, d, {r})
             }
             grown = False
             for r2, _, q in moved:

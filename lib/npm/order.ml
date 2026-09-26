@@ -49,11 +49,16 @@ let peers_on st q (a : string) =
       if r.Np.p_name = a then Some r.Np.p_range else None)
     (L.peer_dependencies st q)
 
+let is_root st (k, v) =
+  let r = st.L.root in
+  k = (fst r, fst r) && v = snd r
+
 (* what p (key k at v) holds, by key: its dependencies, then the mandatory
-   peers those install beside them *)
+   peers those install beside them, except on a name p itself peers on *)
 let held st ~assigned k v =
   let deps = by_dir st (snd k, v) in
   let dirs = List.map (fun (d : Np.coq_Dependency) -> d.Np.d_dir) deps in
+  let chains a = (not (is_root st (k, v))) && peers_on st (snd k, v) a <> [] in
   let held = Hashtbl.create 16 in
   let rec hold key =
     if not (Hashtbl.mem held key) then (
@@ -63,8 +68,11 @@ let held st ~assigned k v =
         (fun u ->
           List.iter
             (fun (r : Np.coq_PeerDependency) ->
-              if (not r.Np.p_optional) && not (List.mem r.Np.p_name dirs) then
-                hold (r.Np.p_name, r.Np.p_name))
+              if
+                (not r.Np.p_optional)
+                && (not (List.mem r.Np.p_name dirs))
+                && not (chains r.Np.p_name)
+              then hold (r.Np.p_name, r.Np.p_name))
             (L.peer_dependencies st (snd key, u)))
         u)
   in
@@ -100,15 +108,13 @@ let below st ~assigned (a : string) seen start =
   in
   go start
 
-(* The peer ranges npm resolves into p's peer-only directory a that the
-   encoding sends to another directory, in the order npm meets them: on
-   behalf of a package q that p holds and that peers on a, so that q's own
-   peer is what fills the directory, the peers on a of q's dependencies,
-   and of theirs while each peers on a too.  npm places a peer inside a
-   package that peers on the same name only at the root (can-place-dep.js:
-   "cannot place peers inside their dependents, except for tops"), so
-   these land beside q's own peer; the encoding puts them in q's
-   directory. *)
+(* The peer ranges npm resolves into p's peer-only directory a from below
+   the copies p holds, in the order npm meets them: on behalf of a package
+   q that p holds and that peers on a, so that q's own peer is what fills
+   the directory, the peers on a of q's dependencies, and of theirs while
+   each peers on a too.  They reach the directory through q's sight, but
+   only once the copies below q are decided, so choosing a version all of
+   them accept here spares the solver a backtrack. *)
 let peer_ranges_into st ~assigned (k : string * string) (v : string)
     (a : string) : Np.coq_Range list =
   let seen = Hashtbl.create 16 in
@@ -139,7 +145,7 @@ let replace st ~assigned k v (m : string * string) cands c =
   let t = snd m in
   let holds rg = function
     | Np.Vs.Orig u -> Np.rgHolds rg u
-    | Np.Vs.Gran _ -> false
+    | Np.Vs.Bot -> false
   in
   let takes_over into x =
     List.exists (PVersion.equal x) cands
@@ -328,14 +334,24 @@ let dir_of (n : PName.t) =
   match n with
   | Np.Nm.Intermediate (_, _, m) -> fst m
   | Np.Nm.Granular (k, _) -> fst k
+  | Np.Nm.Sight (_, _, a) | Np.Nm.Link (_, _, _, _, a) -> a
+
+let is_open (assigned : assigned) n =
+  match assigned n with PG.Entailed _ -> true | _ -> false
+
+(* the first link not yet decided that resolves into directory h *)
+let open_link o ~(assigned : assigned) h =
+  List.find_opt (is_open assigned) (L.links_into o.st h)
 
 (* x's directories the solver has opened and npm has not yet resolved at
-   x, in the order npm meets them *)
+   x, in the order npm meets them; a directory only a peer asks for is
+   opened by the link that resolves into it *)
 let open_dirs o ~(assigned : assigned) (x : copy) =
   List.filter
     (fun n ->
       (not (Hashtbl.mem x.seen (dir_of n)))
-      && match assigned n with PG.Unselected -> false | _ -> true)
+      && ((match assigned n with PG.Unselected -> false | _ -> true)
+         || open_link o ~assigned n <> None))
     (L.dirs o.st (x.key, x.ver))
   |> List.sort (fun a b -> collate (dir_of a) (dir_of b))
 
@@ -360,13 +376,14 @@ let rec advance o ~assigned =
           o.current <- None;
           advance o ~assigned
       | n :: _ -> (
-          match (n, assigned n) with
-          | Np.Nm.Intermediate (_, _, m), PG.Decided (Np.Vs.Orig u) ->
+          match (n, assigned n, open_link o ~assigned n) with
+          | _, _, Some l -> Some (l, x)
+          | Np.Nm.Intermediate (_, _, m), PG.Decided (Np.Vs.Orig u), None ->
               settle o x m u;
               Hashtbl.replace x.seen (fst m) ();
               Hashtbl.replace o.made n (Np.Vs.Orig u);
               advance o ~assigned
-          | _, PG.Decided _ ->
+          | _, PG.Decided _, None ->
               Hashtbl.replace x.seen (dir_of n) ();
               advance o ~assigned
           | _ -> Some (n, x)))
@@ -385,19 +402,48 @@ let rec sync o ~(assigned : assigned) =
   | _ -> ()
 
 let is_granular (n, _) = match n with Np.Nm.Granular _ -> true | _ -> false
+let is_link (n, _) = match n with Np.Nm.Link _ -> true | _ -> false
+
+(* whether the link's peer may see nothing: only optional peers of the copy
+   name a, and its holder has no directory there *)
+let bot_ok st (k, v) (m : string * string) u a =
+  List.for_all
+    (fun (r : Np.coq_PeerDependency) ->
+      r.Np.p_name <> a || (r.Np.p_optional && peer_only st (snd k, v) a))
+    (L.peer_dependencies st (snd m, u))
+
+(* A link whose value is already settled, which the replay has no
+   directory for: its holder's copy is decided, or it shows its sight, or
+   its peer may see nothing where no directory is open. *)
+let eager o ~assigned (n, _) =
+  match n with
+  | Np.Nm.Link (k, v, m, u, a) -> (
+      let h = L.holder o.st (k, v) a in
+      match (h, assigned h) with
+      | Np.Nm.Sight _, _ | _, PG.Decided _ -> true
+      | _, PG.Unselected -> bot_ok o.st (k, v) m u a
+      | _ -> false)
+  | _ -> false
 
 (* A granular name first, since it has one version and only opens its
-   package's directories, then the directory npm resolves next. *)
+   package's directories, then a settled link, then the directory npm
+   resolves next; a sight last, once every link into it is decided. *)
 let next o ~assigned (open_names : (PName.t * int) list) : PName.t =
   sync o ~assigned;
   match List.find_opt is_granular open_names with
   | Some (n, _) -> n
   | None -> (
-      match advance o ~assigned with
-      | Some (n, x) ->
-          o.pending <- Some (n, x);
-          n
-      | None -> fst (List.hd open_names))
+      match List.find_opt (eager o ~assigned) open_names with
+      | Some (n, _) -> n
+      | None -> (
+          match advance o ~assigned with
+          | Some (n, x) ->
+              o.pending <- Some (n, x);
+              n
+          | None -> (
+              match List.find_opt is_link open_names with
+              | Some (n, _) -> n
+              | None -> fst (List.hd open_names))))
 
 (* the copy whose lookup resolves directory m of p (key k at v) *)
 let resolved_at o (n : PName.t) k v =
@@ -428,21 +474,113 @@ let reused at (m : string * string) cands =
 
 let greatest = Pac_common.Order.greatest PVersion.compare
 
+(* what npm puts in directory m of p (key k at v), resolved at the copy
+   the replay holds for the name n that decides it *)
+let fill o ~assigned n k v (m : string * string) cands =
+  let st = o.st in
+  let c = Pick.pick st.L.ar (snd m) (reused (resolved_at o n k v) m cands) in
+  if peer_only st (snd k, v) (fst m) then replace st ~assigned k v m cands c
+  else c
+
+let within (assigned : assigned) n x =
+  match assigned n with
+  | PG.Entailed r -> PG.Ranges.contains x r
+  | PG.Decided y -> PVersion.equal x y
+  | PG.Unselected -> true
+
+(* A link carries what its holder shows at a into the copy's sight, so its
+   value is the holder's: the copy there when there is one, else what npm
+   would place there for this peer and for every other link into the same
+   directory, whose ranges narrow the directory together as npm's peer set
+   does. *)
+let choose_link o ~assigned n (k, v) a cands =
+  let st = o.st in
+  let h = L.holder st (k, v) a in
+  let origs = List.filter (fun c -> c <> Np.Vs.Bot) cands in
+  let bot = List.mem Np.Vs.Bot cands in
+  let fallback () = if bot then Np.Vs.Bot else List.hd cands in
+  match (h, assigned h) with
+  | _, PG.Decided x -> if List.mem x cands then x else fallback ()
+  | Np.Nm.Sight _, PG.Entailed r -> (
+      match List.filter (fun x -> PG.Ranges.contains x r) origs with
+      | x :: _ -> x
+      | [] -> fallback ())
+  | Np.Nm.Sight _, PG.Unselected -> fallback ()
+  | Np.Nm.Intermediate (_, _, m), sel -> (
+      let inside = List.filter (within assigned h) origs in
+      let others =
+        List.filter (fun l -> PName.compare l n <> 0) (L.links_into st h)
+      in
+      let agreed =
+        List.filter
+          (fun x -> List.for_all (fun l -> within assigned l x) others)
+          inside
+      in
+      match (sel, inside) with
+      | PG.Unselected, _ when bot -> Np.Vs.Bot
+      | _, [] -> fallback ()
+      | _ -> fill o ~assigned n k v m (if agreed = [] then inside else agreed))
+  | _ -> fallback ()
+
+(* A sight can only agree with the links into it, so it keeps the value
+   they agree on, and Bot only when they agree on none. *)
 let choose o ~assigned (n : PName.t) (cands : PVersion.t list) : PVersion.t =
   match n with
   | Np.Nm.Granular _ -> greatest cands
   | Np.Nm.Intermediate (k, v, m) ->
-      let st = o.st in
-      let c =
-        Pick.pick st.L.ar (snd m) (reused (resolved_at o n k v) m cands)
-      in
-      let c =
-        if peer_only st (snd k, v) (fst m) then
-          replace st ~assigned k v m cands c
-        else c
-      in
+      let c = fill o ~assigned n k v m cands in
       o.decided <- (n, c) :: o.decided;
       c
+  | Np.Nm.Link (k, v, _, _, a) -> choose_link o ~assigned n (k, v) a cands
+  | Np.Nm.Sight _ -> (
+      match List.filter (fun c -> c <> Np.Vs.Bot) cands with
+      | [] -> Np.Vs.Bot
+      | l -> greatest l)
+
+let is_orig = function Np.Vs.Orig _ -> true | Np.Vs.Bot -> false
+
+(* A link, its holder's directory and the copy's sight are one version
+   wherever the sight is read, and each constraint between them is one
+   dependency per version, so a random pick that breaks it rules out only
+   itself: a peer like @types/node (2364 versions) then costs a conflict
+   per version.  A random order therefore picks among the versions the
+   others already leave open, and leaves a link that may be Bot at Bot
+   while nothing else opens its holder's directory, as npm installs no
+   optional peer by itself.  Preference only: an empty filter keeps
+   [cands]. *)
+let viable st ~assigned (n : PName.t) cands =
+  let keep ok = match List.filter ok cands with [] -> cands | l -> l in
+  (* what a link into a directory asks of it, when it cannot be Bot *)
+  let binds l =
+    match (l, assigned l) with
+    | _, PG.Decided (Np.Vs.Orig w) -> Some (PVersion.equal (Np.Vs.Orig w))
+    | Np.Nm.Link (_, _, m, u, a), PG.Entailed r
+      when not (PG.Ranges.contains Np.Vs.Bot r) -> (
+        match assigned (Np.Nm.Sight (m, u, a)) with
+        | PG.Decided (Np.Vs.Orig y) -> Some (PVersion.equal (Np.Vs.Orig y))
+        | _ -> Some (fun x -> PG.Ranges.contains x r))
+    | _ -> None
+  in
+  match n with
+  | Np.Nm.Link (k, v, m, u, a) ->
+      let h = L.holder st (k, v) a and s = Np.Nm.Sight (m, u, a) in
+      let ok x =
+        match x with
+        | Np.Vs.Bot -> within assigned s Np.Vs.Bot
+        | Np.Vs.Orig _ ->
+            within assigned h x
+            && (within assigned s x || within assigned s Np.Vs.Bot)
+      in
+      let unopened =
+        match assigned h with PG.Unselected -> true | _ -> false
+      in
+      if unopened && List.mem Np.Vs.Bot cands && ok Np.Vs.Bot then [ Np.Vs.Bot ]
+      else keep ok
+  | Np.Nm.Intermediate _ | Np.Nm.Sight _ -> (
+      match List.filter_map binds (L.links_into st n) with
+      | [] -> cands
+      | bs -> keep (fun x -> is_orig x && List.for_all (fun b -> b x) bs))
+  | Np.Nm.Granular _ -> cands
 
 (* build-ideal-tree.js places what each copy's problem edges fetch, taking
    copies from a queue ordered by where they sit in node_modules
@@ -458,4 +596,13 @@ let hooks : (L.t, PName.t, PG.selection, PVersion.t) Pac_common.Order.driver =
       let o = create st in
       Pac_common.Order.make ~next:(next o) ~choose:(choose o) ()
   | `Pubgrub -> Pac_common.Order.make ()
-  | `Random seed -> Pac_common.Order.random seed
+  | `Random seed ->
+      let r = Pac_common.Order.random seed in
+      let choose = Option.get r.Pac_common.Order.choose in
+      {
+        r with
+        choose =
+          Some
+            (fun ~assigned n cands ->
+              choose ~assigned n (viable st ~assigned n cands));
+      }

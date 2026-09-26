@@ -1,0 +1,19 @@
+{
+ "name": "@jsonjoy.com/util",
+ "dist-tags": {
+  "latest": "1.9.0"
+ },
+ "versions": {
+  "1.9.0": {
+   "name": "@jsonjoy.com/util",
+   "version": "1.9.0",
+   "dependencies": {
+    "@jsonjoy.com/buffers": "^1.0.0",
+    "@jsonjoy.com/codegen": "^1.0.0"
+   },
+   "peerDependencies": {
+    "tslib": "2"
+   }
+  }
+ }
+}

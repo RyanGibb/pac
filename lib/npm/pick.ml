@@ -22,11 +22,10 @@ module L = Lookup
    is npm audit fix's, passed by nothing that writes an ordinary
    lockfile; policyRestrictions and stagedVersions appear in no public
    packument, and the parser reads neither, so restricted and staged are
-   uniformly false.  A Gran version stands for a granularity class rather
-   than a release, so it carries neither criterion. *)
+   uniformly false.  Bot is no release, so it carries neither criterion. *)
 let rank ar (n : string) (c : PVersion.t) : bool * bool * bool =
   match c with
-  | Np.Vs.Gran _ -> (true, true, true)
+  | Np.Vs.Bot -> (true, true, true)
   | Np.Vs.Orig v -> (
       match A.meta ar (n, v) with
       | Some m -> A.ver_rank ar m
@@ -81,4 +80,4 @@ let pick_in st (t : string) (rg : Np.coq_Range) : string option =
   | pool -> (
       match pick st.L.ar t pool with
       | Np.Vs.Orig u -> Some u
-      | Np.Vs.Gran _ -> None)
+      | Np.Vs.Bot -> None)

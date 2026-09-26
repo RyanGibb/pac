@@ -1,0 +1,18 @@
+{
+ "name": "wr",
+ "dist-tags": {
+  "latest": "1.0.0"
+ },
+ "versions": {
+  "1.0.0": {
+   "name": "wr",
+   "version": "1.0.0",
+   "dependencies": {
+    "wd": "^1.0.0"
+   },
+   "peerDependencies": {
+    "tm": "^1.0.0"
+   }
+  }
+ }
+}

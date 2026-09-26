@@ -54,7 +54,11 @@ of the lock, apart from how it was placed:
           look its peer up from a directory that may hold another
           version.  So a copy is the package and the providers its
           requirer gives its peers, and two requirers giving different
-          ones get two copies.  For the same reason, a name some package
+          ones get two copies.  A requirer other than the root that peers
+          on a name gives its declarers none of it, which is PEER LOCAL
+          again, and their peer finds what the requirer's own does: they
+          too go in the requirer's own node_modules, and are told apart by
+          that provider.  For the same reason, a name some package
           on the requirer's chain peers on goes in that package's own
           node_modules only as the last resort.
 
@@ -253,12 +257,26 @@ def place(root, nodes, edges, claims, peers, deep, hints=frozenset(), floor=None
             path, node = frontier.pop(0)
             own = dict(ident[path][1])
             kids = out_edges.get(node, ())
+
+            def copy_of(child):
+                """the child, the providers its requirer gives its peers, and
+                those its peers find through a requirer that is not the root
+                and peers on the name itself: such a requirer holds none of
+                it (PEER LOCAL), so the child's peer must find what the
+                requirer's own finds, which it does from the requirer's own
+                node_modules"""
+                gives = {k for k, _ in kids}
+                through = tuple((p, at[found(path, p)]) for p in sorted(peers.get(child, ()))
+                                if path != "" and p in peers.get(node, ())
+                                and p not in gives and found(path, p) is not None)
+                return (child, tuple(sorted(claims(node, child) + through)))
+
             # a name this package peers on, which it gives its declarers
             # another provider of, is theirs to place
             placed = set()
             for key, child in kids:
                 if any(own.get(p, x) != x for p, x in claims(node, child)):
-                    done = above(path, node, key, (child, claims(node, child)), frontier)
+                    done = above(path, node, key, copy_of(child), frontier)
                     if done:
                         placed.add((key, child))
                     elif done is False:
@@ -267,7 +285,7 @@ def place(root, nodes, edges, claims, peers, deep, hints=frozenset(), floor=None
             for key, child in kids:
                 if (key, child) in placed or key in aside and own.get(key) != child:
                     continue
-                cid = (child, claims(node, child))
+                cid = copy_of(child)
                 ancs = ancestors(path)
                 # a slot deeper on this chain is what the requirer would find,
                 # so the search starts there rather than at the root

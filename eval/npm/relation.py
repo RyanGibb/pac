@@ -7,7 +7,10 @@ An edge the requirer's manifest names as a dependency is resolved from the
 requirer.  Our answer hangs a declarer's peers on the package that required
 the declarer, so an edge naming a peer of a declarer the requirer requires
 is resolved as npm resolves a peer: from where that declarer sits, its own
-node_modules first (arborist edge.js).  A provider the answer gives a peer
+node_modules first (arborist edge.js).  A requirer other than the root that
+peers on the name itself holds none of it (arborist's PEER LOCAL), so there
+the declarer's peer must find what the requirer's own peer finds.  A
+provider the answer gives a peer
 may declare peers of its own, which hang on the same requirer, and is asked
 from where it was found.  Every copy of a requirer in the lock is asked,
 since each resolves for itself.
@@ -67,7 +70,7 @@ def misses(pk, root, nodes, edges):
     for r in sorted(copies):
         given = out.get(r, {})
         for rp in copies[r]:
-            deps, _, needed = fields(pk[rp])
+            deps, own_peers, needed = fields(pk[rp])
             miss += [(rp, f"{name(r)} requires {k}, and the answer gives it nothing")
                      for k in sorted(needed - set(given))]
             found, todo, peered = set(), [], set()
@@ -82,6 +85,14 @@ def misses(pk, root, nodes, edges):
             while todo:
                 q = todo.pop()
                 for p, optional in sorted(fields(pk[q])[1].items()):
+                    if p not in given and r != root and p in own_peers:
+                        s, t = resolve(pk, q, p), resolve(pk, rp, p)
+                        if s != t or (s is None and not optional):
+                            miss.append((q, f"{name(at(q))} at {q}, as {name(r)} requires it, "
+                                            f"peers on {p}: {name(r)}'s own peer finds "
+                                            f"{at(t) and name(at(t))}, the tree gives "
+                                            f"{at(s) and name(at(s))}"))
+                        continue
                     if p not in given:
                         if not optional:
                             miss.append((rp, f"{name(r)} gives {name(at(q))} no {p} for its peer"))
