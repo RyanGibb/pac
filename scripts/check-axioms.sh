@@ -227,6 +227,7 @@ DMA.reduceClause
 DMA.reduceConf
 DMA.reduceConfEntry
 DMA.reduceDeps
+DMA.reduceInst
 DMA.reduceProv
 DMA.reduceProvEntry
 DMA.reduceReal

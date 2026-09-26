@@ -194,25 +194,31 @@ Definition debRec : Deb.Deps.t :=
 
 Example debian_vers_computes :
   Deb.T.VSet.cardinal
-    (Deb.versions debR debD Deb.Deps.empty Deb.Prov.empty Deb.Conf.empty
+    (Deb.versions
+       (Deb.MkInst debR debD Deb.Deps.empty Deb.Prov.empty Deb.Conf.empty
+          (1, 10))
        (Deb.Name.Orig 1)) = 3.
 Proof. reflexivity. Qed.
 
 Example debian_dependees_computes :
   Deb.T.DependeesSet.cardinal
-    (Deb.dependees debR debD Deb.Deps.empty Deb.Prov.empty Deb.Conf.empty
+    (Deb.dependees
+       (Deb.MkInst debR debD Deb.Deps.empty Deb.Prov.empty Deb.Conf.empty
+          (1, 10))
        (Deb.Name.Orig 1, Deb.Version.Orig 10)) = 1.
 Proof. reflexivity. Qed.
 
 Example debian_soft_vers_computes :
   Deb.T.VSet.cardinal
-    (Deb.versions debR debD debRec Deb.Prov.empty Deb.Conf.empty
+    (Deb.versions
+       (Deb.MkInst debR debD debRec Deb.Prov.empty Deb.Conf.empty (1, 10))
        (Deb.Name.Soft ((2, Deb.Ver.FTop) :: nil))) = 2.
 Proof. reflexivity. Qed.
 
 Example debian_soft_escape_computes :
   Deb.T.DependeesSet.cardinal
-    (Deb.dependees debR debD debRec Deb.Prov.empty Deb.Conf.empty
+    (Deb.dependees
+       (Deb.MkInst debR debD debRec Deb.Prov.empty Deb.Conf.empty (1, 10))
        (Deb.Name.Soft ((2, Deb.Ver.FTop) :: nil),
         Deb.Version.Zero)) = 0.
 Proof. reflexivity. Qed.

@@ -136,12 +136,18 @@ module Make (AP : Tables.ARCH) = struct
           classes_of tables
             (DMA.PkgSet.elements r_pi @ List.map fst (DMA.Prov.elements pi_decl))
         in
-        DMA.Deb.dependees (DMA.reduceReal r_ma)
-          (DMA.reduceDeps (ma_deps_of_pkg tables p))
-          (DMA.reduceRec (ma_recs_of_pkg tables p))
-          (DMA.reduceProv r_pi pi_decl pi_cls)
-          (DMA.reduceConf (DMA.PkgSet.singleton p) (ma_conf_of_pkg tables p)
-             pi_cls)
+        DMA.Deb.dependees
+          {
+            DMA.Deb.inst_repo = DMA.reduceReal r_ma;
+            inst_deps = DMA.reduceDeps (ma_deps_of_pkg tables p);
+            inst_rec = DMA.reduceRec (ma_recs_of_pkg tables p);
+            inst_prov = DMA.reduceProv r_pi pi_decl pi_cls;
+            inst_conf =
+              DMA.reduceConf (DMA.PkgSet.singleton p) (ma_conf_of_pkg tables p)
+                pi_cls;
+            (* dependees never reads the root, and a query has several *)
+            inst_root = DMA.embedPkg p;
+          }
           s
     | (DMA.Deb.Name.Disjunct _ | DMA.Deb.Name.Soft _), DMA.Deb.Version.Atom a ->
         let r, pi = sel_preimages tables (fst a) in
