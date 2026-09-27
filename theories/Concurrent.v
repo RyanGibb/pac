@@ -728,21 +728,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
 
       Module DepRelFibred :=
         FibredLabelledRel Pkg N VSet.AsUOT C.DepElt C.DepRel.
-      Definition granFibre (g : V.t -> G.t) (R : PkgSet.t) (n : N.t) (w : G.t)
-          : PkgSet.t :=
-        PkgSet.filter (fun '(m, v) =>
-            if N.eq_dec m n then granEqb (g v) w else false)
-          R.
-
-      Lemma mem_granFibre : forall g R (n m : N.t) (w : G.t) (v : V.t),
-          PkgSet.In (m, v) (granFibre g R n w) <->
-          PkgSet.In (m, v) R /\ m = n /\ g v = w.
-      Proof.
-        intros g R n m w v; unfold granFibre.
-        rewrite PkgSet.filter_spec'; cbn beta iota.
-        destruct (N.eq_dec m n) as [-> | NE];
-          [rewrite granEqb_iff | ]; intuition congruence.
-      Qed.
+      Include GranFibre N V G Pkg PkgSet.
 
       Theorem versions_lookupGranular :
         forall R D g (n : N.t) (w : G.t),

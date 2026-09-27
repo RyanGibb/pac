@@ -3239,17 +3239,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           [reflexivity | exact Hn].
       Qed.
 
-      Lemma if_scrutinee : forall (b1 b2 : bool) (x y : T.VSet.t),
-          b1 = b2 -> (if b1 then x else y) = (if b2 then x else y).
-      Proof. intros b1 b2 x y ->; reflexivity. Qed.
-
-      Lemma mem_eq_of_iffP : forall (s s' : PkgSet.t) x,
-          (PkgSet.In x s <-> PkgSet.In x s') ->
-          PkgSet.mem x s = PkgSet.mem x s'.
-      Proof.
-        intros s s' x H; apply Bool.eq_iff_eq_true.
-        rewrite !PkgSet.mem_spec; exact H.
-      Qed.
+      Module PSS := SetSpecs Pkg PkgSet.
 
       Lemma slotNames_spec : forall I p d,
           In d (dependenciesOf I p) -> NSet.In (d_name d) (slotNames I p).
@@ -3369,7 +3359,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         intros I k w I' Hsub; cbn [versions].
         pose proof (keysOf_granSubInst I k w I' Hsub) as Hk.
         destruct Hsub as [_ [Hr _]].
-        apply if_scrutinee, mem_eq_of_iffP; rewrite !mem_realPkgs.
+        apply if_scrutinee, PSS.mem_eq_of_iff; rewrite !mem_realPkgs.
         unfold Available, base; cbn [fst snd]; rewrite Hk, Hr; reflexivity.
       Qed.
 

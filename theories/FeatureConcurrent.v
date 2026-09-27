@@ -1011,21 +1011,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         - apply SOad.unionMap_mono; [exact HDa | intros x z Hz; exact Hz].
       Qed.
 
-      Module GEqb := UOTEqb G.
-      Definition granFibre (g : V.t -> G.t) (R : PkgSet.t) (n : N.t) (w : G.t)
-          : PkgSet.t :=
-        PkgSet.filter
-          (fun '(m, v) => andb (NEqb.eqb m n) (GEqb.eqb (g v) w)) R.
-
-      Lemma mem_granFibre : forall g R (n m : N.t) (w : G.t) (v : V.t),
-          PkgSet.In (m, v) (granFibre g R n w) <->
-          PkgSet.In (m, v) R /\ m = n /\ g v = w.
-      Proof.
-        intros g R n m w v; unfold granFibre.
-        rewrite PkgSet.filter_spec'; cbn beta iota.
-        rewrite Bool.andb_true_iff, NEqb.eqb_true_iff, GEqb.eqb_true_iff.
-        tauto.
-      Qed.
+      Include GranFibre N V G Pkg PkgSet.
 
       Theorem versions_lookupGranularOrig : forall R support Df Da g n w,
           T.versions (reduceReal R support Df Da g) (Name.GranularOrig n w) =
