@@ -43,7 +43,7 @@ A fuzz run ends in its own summary: runs, pac's statuses, the verdicts and `mini
 It writes `findings.txt`, the lines of `results.txt` whose answer is `INVALID`, whose check reached no verdict (`ERR`), or whose pac crashed, each naming its seed in `mode=`; and `split.txt`, the queries some seeds answer and others find unsat, which no order may do.
 To reproduce a finding, ask pac the query with `--order=random --seed=N`.
 
-The run ends with a line per mode, such as `tool: 62 queries, exact 60/60, valid 60/60, minimal 58/60`: exact answers of those the tool answered, valid answers of those checked, and minimal answers of the valid.
+The run ends with a line per mode, such as `tool: 62 queries, exact 60/60, valid 60/60, minimal 58/60, reproduced 59/60`: exact answers of those the tool answered, valid answers of those checked, minimal answers of the valid, and, where the check asks it (cargo, npm), reproduced answers of those it was asked of.
 Answers the check could not run on (`unchecked`), install-order cycles (`cyclic`), answers the two sides could not be compared on (`uncompared`), the tool's own errors and timeouts and unrecorded baselines are counted apart, and excluded from those fractions.
 Each status of pac's other than an answer is counted too (`pac unsat 2`), and still counts against exact where the tool answered.
 A query whose worker died is named as missing, and the run then exits non-zero.
@@ -86,7 +86,7 @@ The check writes its files under the out directory and ends in its verdicts:
 
 - `valid=`: `VALID` if the answer is consistent, as the tool would install it: every package's dependencies met (packages nothing needs included), no conflict, one version of a name where the tool allows one; `INVALID` if not; `CYCLIC` for a resolution with a cycle in its install order (Debian and opam); `ERR` if the check could not run to a verdict (a timeout, a dead shim, a broken tool root).
 - `minimal=`: `yes` if the tool, left to settle the answer for the query alone, would keep it as it stands; `no` if it would remove or swap something. Only for `VALID` answers; the core calculus asks a resolution for no minimality, so a non-minimal answer is never an error.
-- `reproduced=`: for cargo and npm, whose answer is a lockfile, `yes` if the tool keeps it as its own lock, repairing nothing; `no` if it would repair it by its own rules. Only for `VALID` answers, and never an error, since a tool's lock repairs by its preferences: cargo does not even keep its own fresh lock where a crate declares one package twice with overlapping ranges. `-` elsewhere, or where the question could not be asked (a dead proxy).
+- `reproduced=`: for cargo and npm, whose answer is a lockfile, `yes` if the tool keeps it as its own lock, as the table gives it per ecosystem; `no` if it would repair it by its own rules. Only for `VALID` answers, and never an error, since a tool's lock repairs by its preferences: cargo does not even keep its own fresh lock where a crate declares one package twice with overlapping ranges. `-` elsewhere, or where the question could not be asked (a dead proxy). npm's asks less than its `minimal=`, so there `minimal=yes` implies `reproduced=yes`.
 
 | ecosystem | valid | minimal | reproduced |
 |---|---|---|---|
@@ -103,11 +103,34 @@ Below the root, where no directory above takes them, two counts may show that no
 Otherwise `mklock.py` searches for a tree, nesting copies deeper, and uses one only if `relation.py` holds it.
 What neither settles within `MKLOCK_TRIES` placements (default 64) or `MKLOCK_SECONDS` (default 300) is `ERR`.
 
-`controls.sh` runs the check on small hand-written answers, each of which must get the verdicts it names; npm takes `PORT` for its shim, and cargo for its proxy:
+`controls.sh` runs the check on small hand-written answers, each of which must get the verdicts it names; npm takes `PORT` for its shim, and cargo for its proxy.
+npm's also poses answers under the shared reading, and answers to `berry.sh`, against `berryreg.py` on `BPORT` (default `PORT` + 100):
 
 ```sh
 eval/debian/controls.sh /tmp/controls/debian
 ```
+
+### npm's shared reading
+
+`READING=shared eval/npm/scale.sh ...` asks pac with `--reading=shared`, which reads manifests as npm and Yarn Berry both do, so that an answer is one both accept, and the npm check then reads them that way too (`shared.py`).
+Yarn Berry's built-in packageExtensions (`lib/npm/berry-extensions.json`, which pac reads too) add the dependencies and peers a manifest lacks, and a package that depends and peers on one name holds its own copy there only where its depender offers none, the name being a dependency where the answer gives the package a copy and a peer where it does not.
+`valid=` then says that npm takes the answer as that reading has it; `minimal=` and `reproduced=` ask npm's relock as before, which knows nothing of the extensions and prunes what only they add.
+
+Whether Yarn Berry takes the answers too is a second check, run over a finished run:
+
+```sh
+eval/npm/berryall.sh <run-dir> <port>
+eval/npm/berryownall.sh <run-dir> <port>
+```
+
+`berryall.sh` runs `berry.sh` on every answer, P at a time, against `berryreg.py`, a registry over the run's snapshot farm on the port given, and writes `berry.txt`, a line per answer ending in `berry=`:
+
+- `VALID`: `berrylock.py` writes the answer as a Berry project, whose first install, a pin per package of the answer, locks every version it uses; the lock patched so that each descriptor (a directory key and its spec as written) resolves as the answer resolves it, an install keeps it so; `yarn install --immutable --check-resolutions` accepts it; `yarn explain peer-requirements` marks no requirement unmet; no descriptor resolves two ways; no row puts a copy where no manifest asks for one; and under PnP every row loads the copy it names and every peer the copy it is offered (`berryprobe.cjs`), a peer the answer leaves open that PnP's fallback fills and a package disabled for another os or cpu counted apart.
+- `INVALID`: any of these fails.
+- `ERR`: an install failed, or a step reached no verdict.
+
+`berryownall.sh` asks Yarn Berry its own answer to each query (`berryown.py`) and writes `berryown.txt`, a line per answer: packages and dependency edges ours and Berry's hold, and `exact=yes` where they agree on all of them (peers aside, which Berry's lock does not record).
+Both refuse a run that was not made with `READING=shared`, and a Yarn other than the 4.14.1 `nix/flake.lock` pins, whose packageExtensions the list is.
 
 ## Regression set
 
