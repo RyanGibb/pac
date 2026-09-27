@@ -396,7 +396,7 @@ NplS.Lookup.dependees_lookupOcc
 NplS.Lookup.dependees_lookupRoot
 NplS.Lookup.dependees_lookupWalk
 NplS.Lookup.edgeAtom
-NplS.Lookup.occAtoms_agree
+NplS.Lookup.occAtoms_parts
 NplS.Lookup.treeAtom_agree
 NplS.Lookup.versions_lookupLoc
 NplS.Lookup.versions_lookupWalk

@@ -1,5 +1,9 @@
 open Encoding
 
+(* Intl.Collator("en"), the order arborist's queue and a package's edges
+   follow *)
+val collate : string -> string -> int
+
 (* build-ideal-tree.js places what each copy's problem edges fetch, taking
    copies from a queue ordered by where they sit in node_modules
    (#buildDepStep), and takes for each edge the version npm-pick-manifest

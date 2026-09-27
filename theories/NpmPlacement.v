@@ -232,13 +232,19 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     Pl.PkgSet.add (rootOcc I) (placeRepo I).
 
   Module SOvo := SetOps V OccOT VS Pl.VSet.
+  (* The occupants of package m a range admits among versions vs, apart so
+     that a driver evaluates a name's versions once for all its ranges. *)
+  Definition acceptsIn (m : N.t) (rg : Range) (vs : VS.t) : Pl.VSet.t :=
+    SOvo.map (Occ.Reg m) (rangeEval rg vs).
+
   Definition accepts (I : Inst) (e : Edge) : Pl.VSet.t :=
-    SOvo.map (Occ.Reg (e_name e)) (cands I (e_name e) (e_range e)).
+    acceptsIn (e_name e) (override I (e_name e) (e_range e))
+      (realVersions (inst_repo I) (e_name e)).
 
   Lemma mem_accepts : forall I e x,
       Pl.VSet.In x (accepts I e) <-> Sat I e x.
   Proof.
-    intros I e x; unfold accepts, Sat; rewrite SOvo.mem_map.
+    intros I e x; unfold accepts, acceptsIn, Sat, cands; rewrite SOvo.mem_map.
     split; intros [u [H1 H2]]; exists u; split; assumption.
   Qed.
 
@@ -522,42 +528,57 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         Pl.Reduction.T.DependeesSet.empty.
     Proof. intros; apply Pl.Reduction.Lookup.dependees_lookupAbsent. Qed.
 
+    (* Where two instances agree on the packages of one name. *)
+    Definition AgreesAtName (I' I : Inst) (m : N.t) : Prop :=
+      inst_ovr I' = inst_ovr I /\
+      forall u, RepoSet.In (m, u) (inst_repo I') <->
+                RepoSet.In (m, u) (inst_repo I).
+
     (* Where two instances agree on an occupant's own edges: its package's
-       manifest, the overrides, and the packages its edges name. *)
+       manifest, and whether its optional dependencies can be met. *)
     Definition AgreesAtOcc (I' I : Inst) (x : Occ.t) : Prop :=
       activeDeps I' x = activeDeps I x /\ declPeers I' x = declPeers I x /\
-      inst_ovr I' = inst_ovr I /\
-      forall e, In e (edgesOf I x) -> forall u,
-        RepoSet.In (e_name e, u) (inst_repo I') <->
-        RepoSet.In (e_name e, u) (inst_repo I).
+      forall d, In d (activeDeps I x) -> d_optional d = true ->
+        AgreesAtName I' I (d_name d).
 
-    Lemma cands_agree : forall I' I m rg,
-        inst_ovr I' = inst_ovr I ->
-        (forall u, RepoSet.In (m, u) (inst_repo I') <->
-                   RepoSet.In (m, u) (inst_repo I)) ->
+    Lemma cands_agree : forall I' I m rg, AgreesAtName I' I m ->
         cands I' m rg = cands I m rg.
     Proof.
-      intros I' I m rg Ho Hr; unfold cands, override; rewrite Ho; f_equal.
+      intros I' I m rg [Ho Hr]; unfold cands, override; rewrite Ho; f_equal.
       apply VS.ext; intro u; rewrite !mem_realVersions; exact (Hr u).
     Qed.
 
     Lemma edgesOf_agree : forall I' I x, AgreesAtOcc I' I x ->
         edgesOf I' x = edgesOf I x.
     Proof.
-      intros I' I x [Hd [Hp [Ho Hr]]]; unfold edgesOf; rewrite Hd, Hp.
+      intros I' I x [Hd [Hp Hr]]; unfold edgesOf; rewrite Hd, Hp.
       f_equal; apply map_ext_in; intros d Hin; unfold depEdge.
-      rewrite (cands_agree I' I); [reflexivity | exact Ho |].
-      intro u; apply (Hr (depEdge I d)); unfold edgesOf.
-      apply in_or_app; left; apply in_map; exact Hin.
+      destruct (d_optional d) eqn:Ho; [| reflexivity]; cbn [andb].
+      rewrite (cands_agree I' I _ _ (Hr d Hin Ho)); reflexivity.
     Qed.
 
-    Theorem occAtoms_agree : forall I' I lam x, AgreesAtOcc I' I x ->
-        occAtoms I' lam x = occAtoms I lam x.
+    Lemma edgeAtom_agree : forall I' I lam e, AgreesAtName I' I (e_name e) ->
+        edgeAtom I' lam e = edgeAtom I lam e.
     Proof.
-      intros I' I lam x H; unfold occAtoms; rewrite (edgesOf_agree _ _ _ H).
-      f_equal; apply map_ext_in; intros e He; unfold edgeAtom, accepts.
-      destruct H as [_ [_ [Ho Hr]]].
-      rewrite (cands_agree I' I _ _ Ho (Hr e He)); reflexivity.
+      intros I' I lam e [Ho Hr]; unfold edgeAtom, accepts, override.
+      rewrite Ho.
+      replace (realVersions (inst_repo I') (e_name e))
+        with (realVersions (inst_repo I) (e_name e)); [reflexivity |].
+      apply VS.ext; intro u; rewrite !mem_realVersions; symmetry; exact (Hr u).
+    Qed.
+
+    (* The driver's form: an occupant's edges read off one sub-instance,
+       and each edge's atom off another, at the package it names. *)
+    Theorem occAtoms_parts : forall I Ix (at_ : Edge -> Inst) lam x,
+        AgreesAtOcc Ix I x ->
+        (forall e, In e (edgesOf I x) -> AgreesAtName (at_ e) I (e_name e)) ->
+        occAtoms I lam x =
+        SOhh.ofList (List.map (fun e => edgeAtom (at_ e) lam e) (edgesOf Ix x)).
+    Proof.
+      intros I Ix at_ lam x Hx He; unfold occAtoms.
+      rewrite (edgesOf_agree _ _ _ Hx); f_equal.
+      apply map_ext_in; intros e Hin.
+      exact (eq_sym (edgeAtom_agree _ _ _ _ (He e Hin))).
     Qed.
 
     Theorem treeAtom_agree : forall I' I b l, AgreesAtKey I' I b ->

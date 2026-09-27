@@ -6,6 +6,10 @@ val create : optional:bool -> Archive.t -> string * string -> t
 val archive : t -> Archive.t
 val root : t -> string * string
 
+(* the range a spec names on package t: a dist-tag's version exactly, and
+   "*" as npm-pick-manifest reads it, its latest prerelease included *)
+val spec_range : Archive.t -> string -> Npm_parse.spec -> Npm_version.range
+
 (* the range the calculus reads for a dependency on t: the root's flat
    override when there is one *)
 val effective : t -> string -> Np.coq_Range -> Np.coq_Range

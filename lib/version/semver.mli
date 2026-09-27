@@ -10,6 +10,11 @@ val strip_build : string -> string * string
 val num_or : int -> comp -> int
 val vstr : ?pre:string -> int -> int -> int -> string
 
+(* the order and the release-core test on versions already parsed, for a
+   caller that keeps each version's parse beside it *)
+val precedence : t -> t -> int
+val same_core_parsed : t -> t -> bool
+
 (* The semver crate's reading: a prerelease follows a hyphen and nothing
    else.  Cargo and npm differ only in how a string becomes a version, so
    each reading is a module of its own rather than a flag. *)

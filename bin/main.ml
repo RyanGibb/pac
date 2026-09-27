@@ -462,7 +462,30 @@ let alpine_cmd =
 
 module Npm = Npm_solve
 
-let npm_run debug core order reading cache offline tree omit nodev npmv query =
+(* The placement reading reads manifests as npm does; its answer is the
+   node_modules layout, which is printed whatever --tree says. *)
+let npm_place ~t0 ~debug ~core ~order ~omit ~depth ar rc =
+  let r, walk =
+    Npm.Place_solve.solve ~debug ~order ~omit_dev:(List.mem `Dev omit)
+      ~omit_optional:(List.mem `Optional omit) ~depth ar rc
+  in
+  let s = Npm.Archive.stats ar in
+  report ~t0 ~core
+    {
+      Report.names = s.Npm.Archive.names;
+      versions = s.versions;
+      extra = [ Printf.sprintf "%d packuments fetched" s.fetched ];
+      dropped = s.dropped;
+      parse = s.parse;
+    }
+    ~walk r
+    (fun a ->
+      Report.packages (Npm.Place_solve.print_layout a);
+      Report.encoded ~nodes:a.Npm.Place_solve.nodes
+        ~lookups:a.Npm.Place_solve.lookups)
+
+let npm_run debug core order reading depth cache offline tree omit nodev npmv
+    query =
   guard @@ fun () ->
   match cache with
   | None ->
@@ -470,11 +493,20 @@ let npm_run debug core order reading cache offline tree omit nodev npmv query =
   | Some cache -> (
       let t0 = Unix.gettimeofday () in
       let ar =
-        Npm.Archive.create ?node:nodev ?npm:npmv ~reading ~cache ~offline ()
+        Npm.Archive.create ?node:nodev ?npm:npmv
+          ~reading:
+            (match reading with
+            | `Placement -> `Npm
+            | #Npm_parse.reading as r -> r)
+          ~cache ~offline ()
       in
       try
         match Npm.Query.root ar query with
         | Error e -> error 2 "%s" e
+        | Ok root when reading = `Placement ->
+            let rc = Npm.Archive.add_root ar root in
+            Report.root (Npm.Print.root rc);
+            npm_place ~t0 ~debug ~core ~order ~omit ~depth ar rc
         | Ok root ->
             let rc = Npm.Archive.add_root ar root in
             Report.root (Npm.Print.root rc);
@@ -549,7 +581,10 @@ let npm_cmd =
   let reading =
     Arg.(
       value
-      & opt (enum [ ("npm", `Npm); ("shared", `Shared) ]) `Npm
+      & opt
+          (enum
+             [ ("npm", `Npm); ("shared", `Shared); ("placement", `Placement) ])
+          `Npm
       & info [ "reading" ] ~docv:"READING"
           ~doc:
             "How manifests are read: $(b,npm) as npm reads them, and \
@@ -559,7 +594,20 @@ let npm_cmd =
              name is kept as Yarn Berry keeps it, each descriptor (a directory \
              key with its spec as written) resolves to one version wherever it \
              is written, and a root the two tools read apart (a mandatory \
-             peerDependency, overrides or resolutions) is refused.")
+             peerDependency, overrides or resolutions) is refused.  \
+             $(b,placement) reads them as $(b,npm) does but solves for npm's \
+             node_modules layout itself, each package loading what Node's \
+             lookup finds from its directory, and prints that layout as the \
+             answer.")
+  in
+  let depth =
+    Arg.(
+      value & opt int 8
+      & info [ "depth" ] ~docv:"D"
+          ~doc:
+            "Under $(b,--reading=placement), place nothing more than $(docv) \
+             node_modules deep; an answer is unsatisfiable only within this \
+             bound.")
   in
   let order =
     order_arg ~tool:"npm's, replayed, does" ~pubgrub:"PubGrub's own order does"
@@ -610,8 +658,8 @@ let npm_cmd =
   Cmd.v
     (Cmd.info "npm" ~exits ~doc:"Solve against the npm registry.")
     Term.(
-      const npm_run $ debug_arg $ core_arg $ order $ reading $ cache $ offline
-      $ tree $ omit $ nodev $ npmv $ query)
+      const npm_run $ debug_arg $ core_arg $ order $ reading $ depth $ cache
+      $ offline $ tree $ omit $ nodev $ npmv $ query)
 
 (* a command-line error is a refused query like any other, and 124 is
    left to timeout(1) *)

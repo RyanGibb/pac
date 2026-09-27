@@ -19,6 +19,7 @@ module Np : module type of Pac.Npm (Pac_common.Ot.Str) (NVerOT) (PM)
 module R = Np.Reduction
 module T = Np.T
 
+val xop : Npm_version.op -> E.cmpOp
 val xrange : Npm_version.range -> Np.coq_Range
 
 module PName : sig
