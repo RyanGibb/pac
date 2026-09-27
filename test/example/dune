@@ -4,3 +4,7 @@
 (cram
  (applies_to extensions)
  (deps extensions/extensions.exe))
+
+(cram
+ (applies_to calculus)
+ (deps calculus/calculus.exe))
