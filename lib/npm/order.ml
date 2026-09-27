@@ -74,9 +74,7 @@ let held st ~assigned k v =
       Hashtbl.replace held key u;
       if root then Option.iter (fun u -> peers_of (snd key, u)) u)
   in
-  List.iter
-    (fun (d : Np.coq_Dependency) -> hold (d.Np.d_dir, d.Np.d_target))
-    deps;
+  List.iter (fun (d : Np.coq_Dependency) -> hold (d.Np.d_dir, d.Np.d_name)) deps;
   if root then peers_of (snd k, v);
   held
 
@@ -91,16 +89,16 @@ let below st ~assigned (a : string) seen start =
       Hashtbl.replace seen (key, u) ();
       List.concat_map
         (fun (d : Np.coq_Dependency) ->
-          let okey = (d.Np.d_dir, d.Np.d_target) in
+          let okey = (d.Np.d_dir, d.Np.d_name) in
           let w =
             match decided assigned (Np.Nm.Intermediate (key, u, okey)) with
             | Some w -> Some w
-            | None -> Pick.pick_in st d.Np.d_target d.Np.d_range
+            | None -> Pick.pick_in st d.Np.d_name d.Np.d_range
           in
           match w with
           | None -> []
           | Some w -> (
-              match peers_on st (d.Np.d_target, w) a with
+              match peers_on st (d.Np.d_name, w) a with
               | [] -> []
               | rs -> rs @ go (okey, w)))
         (by_dir st (snd key, u)))
@@ -127,7 +125,7 @@ let peer_ranges_into st ~assigned (k : string * string) (v : string)
   |> List.concat_map (below st ~assigned a seen)
 
 (* A directory no dependency of p names: only a peer asks for it, so
-   childCands offers every published version of the target and nothing
+   childCands offers every published version of the dependee name and nothing
    narrows the slot but the peer ranges. *)
 let peer_only st p (a : string) =
   not
@@ -246,12 +244,12 @@ let rec resolve (x : copy) (a : string) : copy option =
   | None -> Option.bind x.up (fun u -> resolve u a)
 
 (* the edge a copy's package has on directory a, as npm reads it: the
-   target and the range, under the root's flat override *)
+   dependee name and the range, under the root's flat override *)
 let edge_at st (x : copy) (a : string) =
   List.find_map
     (fun (d : Np.coq_Dependency) ->
       if d.Np.d_dir = a then
-        Some (d.Np.d_target, L.effective st d.Np.d_target d.Np.d_range)
+        Some (d.Np.d_name, L.effective st d.Np.d_name d.Np.d_range)
       else None)
     (L.active_dependencies st (snd x.key, x.ver))
 

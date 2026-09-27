@@ -1,12 +1,12 @@
 (* How npa's fromRegistry reads a registry spec: a range where node-semver
-   reads one, loosely, and otherwise a dist-tag, which only the target's
-   packument resolves.  The literal "*", and the empty range npm reads as
+   reads one, loosely, and otherwise a dist-tag, which only the dependee
+   name's packument resolves.  The literal "*", and the empty range npm reads as
    it, is npm's own case apart from every range meaning the same. *)
 type spec = Range of Npm_version.range | Star | Tag of string
 
 type dep = {
   d_dir : string; (* the directory key, i.e. the manifest key *)
-  d_target : string; (* the registry package, differing under npm: *)
+  d_name : string; (* the registry package, differing under npm: *)
   d_spec : spec;
   d_dev : bool;
   (* not carried into the calculus: it only tells the solver that this
@@ -119,11 +119,11 @@ let split_alias (s : string) : (string * string) option =
 
 let dep_of ~reject ~dev ~optional (key, spec) : dep option =
   let raw = match spec with `String s -> s | _ -> "" in
-  let target, rg =
+  let name, rg =
     match spec with
     | `String spec -> (
         match split_alias spec with
-        | Some (target, rg) -> (target, Some rg)
+        | Some (name, rg) -> (name, Some rg)
         | None -> (key, Some spec))
     | _ -> (key, None)
   in
@@ -135,7 +135,7 @@ let dep_of ~reject ~dev ~optional (key, spec) : dep option =
       Some
         {
           d_dir = key;
-          d_target = target;
+          d_name = name;
           d_spec = sp;
           d_dev = dev;
           d_optional = optional;

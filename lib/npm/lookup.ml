@@ -10,7 +10,8 @@ module Tbl = Pac_common.Tbl
    where semver itself admits no prerelease under "*".  Our ranges admit a
    prerelease only beside a comparator naming one at its release core, so
    such a range is read as "* || =latest", which admits that one prerelease
-   and no other.  The target's packument decides it, so the rewrite is made
+   and no other.  The dependee name's packument decides it, so the rewrite
+   is made
    here rather than in the parser, which sees one manifest at a time. *)
 let star_range ar (t : string) (rg : Npm_version.range) : Npm_version.range =
   (* Berry reads * as semver does, so the shared reading admits no
@@ -36,7 +37,7 @@ let spec_range ar (t : string) : P.spec -> Npm_version.range = function
   | P.Star -> star_range ar t [ [ Npm_version.Any ] ]
   | P.Range rg -> rg
 
-let own_range ar (d : P.dep) = spec_range ar d.P.d_target d.P.d_spec
+let own_range ar (d : P.dep) = spec_range ar d.P.d_name d.P.d_spec
 
 (* The descriptor is the spec as written under the shared reading, where every
    dependency with it resolves to one version as in Yarn Berry's lockfile;
@@ -44,7 +45,7 @@ let own_range ar (d : P.dep) = spec_range ar d.P.d_target d.P.d_spec
 let xdep ar (d : P.dep) : Np.coq_Dependency =
   {
     Np.d_dir = d.P.d_dir;
-    Np.d_target = d.P.d_target;
+    Np.d_name = d.P.d_name;
     Np.d_range = xrange (own_range ar d);
     Np.d_dev = d.P.d_dev;
     Np.d_desc = (if A.shared ar then Some d.P.d_raw else None);
@@ -145,14 +146,15 @@ let mk_inst st ~repo ~deps ~peers : Np.coq_Inst =
     Np.inst_root = st.root;
   }
 
-(* Whether some published version of the target matches the range, as the
+(* Whether some published version of the dependee name matches the range,
+   as the
    calculus reads the range: via the extracted rgHolds and under the same
    flat override.  Only the "*" rewrite's engines test (star_range)
-   evaluates in OCaml.  The repository read is the target's alone,
+   evaluates in OCaml.  The repository read is the dependee name's alone,
    memoized per name in repo_at, so the check reuses whatever the
    sub-instances built. *)
 let matches_published st (d : P.dep) : bool =
-  let n = d.P.d_target and own = own_range st.ar d in
+  let n = d.P.d_name and own = own_range st.ar d in
   Tbl.memo st.opt_keep
     (n, Npm_version.string_of_range own)
     (fun () ->
@@ -161,7 +163,8 @@ let matches_published st (d : P.dep) : bool =
         (Np.realVersions (repo_at st n) n))
 
 (* An optional entry is an ordinary dependency that this driver abandons
-   in one situation only: no published version of the target matches the
+   in one situation only: no published version of the dependee name matches
+   the
    range (ENOTARGET).  npm abandons more.  #pruneFailedOptional makes the
    dependency's whole optional set inert when anything in it fails to
    load, a transitive ENOTARGET, a network failure or an allow-* gate
@@ -177,9 +180,10 @@ let matches_published st (d : P.dep) : bool =
 
    It is applied where a dependency is read rather than where a packument
    is loaded, because deciding at load time would have to resolve every
-   optional target of every version eagerly -- the cone pass the driver
-   deliberately does not do.  Read lazily, the target of a dependency that
-   survives is a slot target the sub-instance was going to load anyway.
+   optional dependee name of every version eagerly -- the cone pass the
+   driver deliberately does not do.  Read lazily, the dependee name of a
+   dependency that survives is a slot name the sub-instance was going to
+   load anyway.
 
    Under the shared reading an optional dependency is kept whatever the
    registry holds, as Yarn Berry fails to resolve one no version matches
@@ -189,7 +193,7 @@ let dep_keep st (d : P.dep) : bool =
   || (st.optional && (A.shared st.ar || matches_published st d))
 
 (* what the optional-dependency test read and what it abandoned, both in
-   distinct (target, range) pairs *)
+   distinct (dependee name, range) pairs *)
 let optional_verdicts st =
   let dropped =
     Hashtbl.fold (fun _ b n -> if b then n else n + 1) st.opt_keep 0
@@ -221,17 +225,17 @@ let desc_name st p (m : string * string) : Np.Nm.name option =
       (fun (d : Np.coq_Dependency) -> d.Np.d_dir = fst m)
       (active_dependencies st p)
   with
-  | Some { Np.d_target; Np.d_desc = Some s; _ } when d_target = snd m ->
-      Some (Np.Nm.Desc (fst m, d_target, s))
+  | Some { Np.d_name; Np.d_desc = Some s; _ } when d_name = snd m ->
+      Some (Np.Nm.Desc (fst m, d_name, s))
   | _ -> None
 
 let own_peer_dependencies st p =
   List.map (fun r -> (p, r)) (peer_dependencies st p)
 
-let slot_targets st p =
+let slot_names st p =
   List.sort_uniq String.compare
     (List.map
-       (fun (d : Np.coq_Dependency) -> d.Np.d_target)
+       (fun (d : Np.coq_Dependency) -> d.Np.d_name)
        (active_dependencies st p))
 
 let peer_names_at st q =
@@ -281,19 +285,20 @@ let gran_sub_inst st (k : string * string) (w : string) =
 (* the intermediate versions lookup's sub-instance: p's own dependencies,
    the peer dependencies naming the key's directory (p's own among them,
    which empty the directory when p peers on it), and the repository at
-   the key's registry name together with p's slot targets. *)
+   the key's registry name together with p's slot names. *)
 let int_sub_inst st (p : string * string) (m : string * string) =
-  let ns = snd m :: slot_targets st p in
+  let ns = snd m :: slot_names st p in
   mk_inst st ~repo:(repo_of st ns) ~deps:(own_dependencies st p)
     ~peers:(peer_dependencies_named st (fst m))
 
 (* the granular dependees lookup's sub-instance: p's own dependencies, its
-   own peer dependencies, and the repository at their targets.  The peer
+   own peer dependencies, and the repository at their dependee names.  The
+   peer
    dependencies are there for the root, whose granular node carries the
    edges that install its own peers; for any other package they emit no
    edge, so they are inert. *)
 let pkg_sub_inst st (p : string * string) =
-  let ns = slot_targets st p @ peer_names_at st p in
+  let ns = slot_names st p @ peer_names_at st p in
   mk_inst st ~repo:(repo_of st ns) ~deps:(own_dependencies st p)
     ~peers:(own_peer_dependencies st p)
 
@@ -302,7 +307,7 @@ let pkg_sub_inst st (p : string * string) =
 let two_peers st p q =
   own_peer_dependencies st p @ if q = p then [] else own_peer_dependencies st q
 
-(* A copy's own dependencies and slot targets, which only a peer with
+(* A copy's own dependencies and slot names, which only a peer with
    default reads: the copy's sight admits its own copy, and a link to it
    decides whether it holds one.  A peer with default is a peer beside a
    dependency of its name, which only the shared reading keeps, the parser
@@ -310,7 +315,7 @@ let two_peers st p q =
    left out: no lookup reads them, and reading them would load packuments
    npm does not. *)
 let dp_deps st q = if A.shared st.ar then own_dependencies st q else []
-let dp_targets st q = if A.shared st.ar then slot_targets st q else []
+let dp_names st q = if A.shared st.ar then slot_names st q else []
 
 (* the dependencies of a holder p and of its dependee q, whose peer with
    default reads its own *)
@@ -318,41 +323,42 @@ let two_deps st p q = own_dependencies st p @ if q = p then [] else dp_deps st q
 
 (* the intermediate dependees lookup's sub-instance: p's own dependencies
    and peer dependencies and those of the dependee that was selected, and
-   the repository at both slot targets and at the directories the
+   the repository at both slot names and at the directories the
    dependee's peers name *)
 let peer_sub_inst st (p : string * string) (m : string * string) (u : string) =
   let q = (snd m, u) in
-  let ns = slot_targets st p @ peer_names_at st q @ dp_targets st q in
+  let ns = slot_names st p @ peer_names_at st q @ dp_names st q in
   mk_inst st ~repo:(repo_of st ns) ~deps:(two_deps st p q)
     ~peers:(two_peers st p q)
 
 (* the sight lookup's sub-instance: the copy's own peer dependencies and
    dependencies, whose ranges bound the sight, and the repository at the
-   name and at its slot targets *)
+   name and at its slot names *)
 let sight_sub_inst st (c : string * string) (a : string) =
   mk_inst st
-    ~repo:(repo_of st (a :: dp_targets st c))
+    ~repo:(repo_of st (a :: dp_names st c))
     ~deps:(dp_deps st c)
     ~peers:(own_peer_dependencies st c)
 
 (* the link versions lookup's sub-instance: the holder's and the dependee's
    dependencies and peer dependencies, and the repository at the peer's
-   name and both slot targets *)
+   name and both slot names *)
 let link_sub_inst st (p : string * string) (q : string * string) (a : string) =
   mk_inst st
-    ~repo:(repo_of st ((a :: slot_targets st p) @ dp_targets st q))
+    ~repo:(repo_of st ((a :: slot_names st p) @ dp_names st q))
     ~deps:(two_deps st p q) ~peers:(two_peers st p q)
 
 (* the link dependees lookup's sub-instance: the holder's and the
    dependee's dependencies and peer dependencies, which decide where the
    holder shows the name and whether the dependee holds its own, and the
-   repository at the dependee's slot targets *)
+   repository at the dependee's slot names *)
 let holder_sub_inst st (p : string * string) (q : string * string) =
   mk_inst st
-    ~repo:(repo_of st (dp_targets st q))
+    ~repo:(repo_of st (dp_names st q))
     ~deps:(two_deps st p q) ~peers:(two_peers st p q)
 
-(* the descriptor lookup's sub-instance: the repository at its target *)
+(* the descriptor lookup's sub-instance: the repository at its dependee
+   name *)
 let desc_sub_inst st (t : string) =
   mk_inst st ~repo:(repo_at st t) ~deps:[] ~peers:[]
 

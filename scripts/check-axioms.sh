@@ -376,7 +376,7 @@ NpmS.Reduction.Lookup.versions_lookupIntermediate
 NpmS.Reduction.Lookup.versions_lookupLink
 NpmS.Reduction.Lookup.versions_lookupSight
 NpmS.Reduction.dependees
-NpmS.Reduction.dependees_targetNames
+NpmS.Reduction.dependees_reducedNames
 NpmS.Reduction.embedRoot
 NpmS.Reduction.lookup_resolution
 NpmS.Reduction.npmParents_coreResolution

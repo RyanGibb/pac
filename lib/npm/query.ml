@@ -87,7 +87,7 @@ let spec_of (arg : string) : (string * string) option =
   if is_url arg || is_git arg || is_path name_part || not (name_ok name_part)
   then None
   else if P.is_alias raw then
-    (* fromAlias: the target is read again, and must be a named registry
+    (* fromAlias: the aliased spec is read again, and must be a named registry
        spec and not itself an alias *)
     match P.split_alias raw with
     | Some (t, rg)
@@ -110,7 +110,7 @@ let add_to (pkg : Yojson.Safe.t) ((name, raw) : string * string) : Yojson.Safe.t
     =
   let member = P.member and assoc_of = P.assoc_of in
   let has f = List.mem_assoc name (assoc_of (member f pkg)) in
-  let target =
+  let field =
     List.find_opt has
       [
         "devDependencies";
@@ -121,7 +121,7 @@ let add_to (pkg : Yojson.Safe.t) ((name, raw) : string * string) : Yojson.Safe.t
     |> Option.value ~default:"dependencies"
   in
   let drop =
-    match target with
+    match field with
     | "dependencies" -> [ "devDependencies"; "peerDependencies" ]
     | "devDependencies" -> [ "dependencies" ]
     | "optionalDependencies" -> [ "peerDependencies" ]
@@ -139,14 +139,14 @@ let add_to (pkg : Yojson.Safe.t) ((name, raw) : string * string) : Yojson.Safe.t
         else (k, v))
       (assoc_of pkg)
   in
-  let cur = assoc_of (member target (`Assoc fields)) in
+  let cur = assoc_of (member field (`Assoc fields)) in
   let fields =
     if raw <> "*" || not (List.mem_assoc name cur) then
-      set target (`Assoc (set name (`String raw) cur)) fields
+      set field (`Assoc (set name (`String raw) cur)) fields
     else fields
   in
-  if target = "optionalDependencies" then
-    let spec = member name (member target (`Assoc fields)) in
+  if field = "optionalDependencies" then
+    let spec = member name (member field (`Assoc fields)) in
     set "dependencies"
       (`Assoc (set name spec (assoc_of (member "dependencies" (`Assoc fields)))))
       fields
@@ -204,17 +204,18 @@ let resolve_specs ar specs =
   in
   Ok (only `Plain @ only `Tagged)
 
-let target (k, r) = match P.split_alias r with Some (t, _) -> t | None -> k
+let dependee_name (k, r) =
+  match P.split_alias r with Some (t, _) -> t | None -> k
 
 (* npm fetches each spec's packument while building the tree, and E404s
    on a name the registry lacks rather than resolving without it *)
 let check_published ar specs =
-  let unpublished s = Archive.versions_of ar (target s) = [] in
+  let unpublished s = Archive.versions_of ar (dependee_name s) = [] in
   match List.find_opt unpublished specs with
   | None -> Ok ()
   | Some s ->
       Error
-        (Printf.sprintf "no packument for %s under %s%s" (target s)
+        (Printf.sprintf "no packument for %s under %s%s" (dependee_name s)
            ar.Archive.cache
            (if ar.Archive.offline then " (offline)" else ""))
 

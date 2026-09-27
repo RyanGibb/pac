@@ -149,7 +149,7 @@ let tabulate ar (v : P.ver) =
   Hashtbl.replace ar.entry p v;
   List.iter (fun r -> Hashtbl.add ar.peer_by_name r.P.p_name (p, r)) v.P.v_peers;
   List.iter
-    (fun d -> Hashtbl.add ar.dep_by_key (d.P.d_dir, d.P.d_target) (p, d))
+    (fun d -> Hashtbl.add ar.dep_by_key (d.P.d_dir, d.P.d_name) (p, d))
     v.P.v_deps
 
 let add_name ar n vs =
