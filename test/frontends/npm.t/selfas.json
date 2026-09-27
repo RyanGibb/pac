@@ -1,0 +1,15 @@
+{
+ "name": "selfas",
+ "dist-tags": {
+  "latest": "1.0.0"
+ },
+ "versions": {
+  "1.0.0": {
+   "name": "selfas",
+   "version": "1.0.0",
+   "dependencies": {
+    "sba": "npm:selfbl@1.0.0"
+   }
+  }
+ }
+}

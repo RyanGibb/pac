@@ -73,13 +73,16 @@ of the lock, apart from how it was placed:
           node_modules.  Where the root holds the declarer's peer, there
           is no room above it, and no tree holds the answer.
 
-  search  where no directory above the peer takes them, another tree
-          might, and search() looks for one: it nests the copies in the
-          way, and places each copy no shallower than the torn peers below
-          it need (levels()).  It returns only a tree relation.py holds,
-          and where impossible() shows that none does, the first placement
+  search  where no directory above the peer takes them, or relation.py
+          finds a miss in the placement, another tree might, and search()
+          looks for one: it nests the copies in the way, and places each
+          copy no shallower than the torn peers below it need (levels()).
+          It returns only a tree relation.py holds, and where impossible()
+          shows that none does, or none is found, the first placement
           instead, for relation.py to name what it misses.  What neither
-          settles is left unchecked.
+          settles is left unchecked.  A miss is typically a copy hoisted
+          into sight of an optional peer our answer leaves open, which
+          finds it out of range; nested in its requirer, it is not seen.
 
           npm's arborist decides the same question with a third move we
           deliberately do not make: an occupied slot may be taken over,
@@ -271,11 +274,11 @@ def place(root, nodes, edges, claims, peers, deep, hints=frozenset(), floor=None
                 through = tuple((p, at[found(path, p)]) for p in sorted(peers.get(child, ()))
                                 if path != "" and p in peers.get(node, ())
                                 and p not in gives and found(path, p) is not None)
-                # a requirer of the peer's name that neither gives nor
-                # peers on it offers itself, which the child's lookup
-                # reaches from the requirer's own node_modules
+                # a requirer at a directory of the peer's name that neither
+                # gives nor peers on it offers itself, which the child's
+                # lookup reaches from the requirer's own node_modules
                 itself = tuple((p, node) for p in sorted(peers.get(child, ()))
-                               if path != "" and p == node[0] and p not in gives
+                               if path != "" and p == node[2] and p not in gives
                                and p not in peers.get(node, ()))
                 return (child, tuple(sorted(claims(node, child) + through + itself)))
 
@@ -508,7 +511,8 @@ def search(root, nodes, edges, claims, peers, deep, deps, verify):
         return out
 
     first = place(root, nodes, edges, claims, peers, deep)
-    if not first[3] and first[4] is None:
+    whole = not first[3] and first[4] is None
+    if whole and not verify(first[0], first[2]):
         return first[0], first[2]
     why = impossible(root, edges, claims, peers, deps)
     if why is not None:
@@ -551,6 +555,9 @@ def search(root, nodes, edges, claims, peers, deep, deps, verify):
             stack.append((hints | more, others))
         elif others:
             stack.append((others[0], others[1:]))
+    if whole:
+        print(f"no tree in {rounds} placements; the first kept: " + "; ".join(whys[:5]))
+        return first[0], first[2]
     raise RuntimeError(f"no tree in {rounds} placements: " + "; ".join(whys[:5]))
 
 

@@ -418,6 +418,19 @@ and its depender selfbl is the one copy of it.
     selfbl 1.0.0 <- selfub 1.0.0
   encoded solution: 7 core nodes (7 lookups)
 
+Under an alias it offers nothing: selfas holds selfbl at sba, where
+selfub's lookup finds no selfbl, though Yarn Berry offers the parent by
+its package name; and selfar holds selfalt at selfbl, which npm's lookup
+finds and Yarn Berry does not offer.
+
+  $ ../../../bin/main.exe npm --offline --cache . --tree selfas@1.0.0 | head -2
+  root .
+  unsatisfiable:
+
+  $ ../../../bin/main.exe npm --offline --cache . --tree selfar@1.0.0 | head -2
+  root .
+  unsatisfiable:
+
 cycs 1.0.0 and 2.0.0 depend on each other and both peer on cycn, which
 cycz holds at 2.0.0 while the root holds 1.1.0.  npm closes the cycle with
 a link rather than unroll it, and so does the replay npm's order is read

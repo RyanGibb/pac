@@ -11,9 +11,11 @@ node_modules first (arborist edge.js).  A requirer other than the root that
 peers on the name itself holds none of it (arborist's PEER LOCAL), so there
 the declarer's peer must find what the requirer's own peer finds, and a
 requirer other than the root that neither gives nor peers on the name but
-is itself of that name offers itself, which the declarer's lookup reaches
-from inside the requirer's node_modules.  A peer read through a requirer
-whose own optional peer the answer leaves open is open too.  A
+sits at a directory of that name offers itself, which the declarer's
+lookup reaches from inside the requirer's node_modules.  A peer read
+through a requirer whose own optional peer the answer leaves open is open
+too.  An optional peer the answer leaves open that finds a copy anyway
+must find one in its range, as npm judges it (arborist dep-valid.js).  A
 provider the answer gives a peer
 may declare peers of its own, which hang on the same requirer, and is asked
 from where it was found.  Every copy of a requirer in the lock is asked,
@@ -32,9 +34,29 @@ Prints each miss and exits 3 when there is one, so that a crash, which
 exits 1, is not read as one.
 """
 import json
+import subprocess
 import sys
 
 from tree import is_link, parse_tree, resolve
+
+SATISFIES = {}
+
+
+def satisfies(pairs):
+    """{(version, range): whether npm's semver takes it}, as arborist's
+    dep-valid.js asks it (loose, "" and * taking anything); None for a
+    range semver cannot read, which is not ours to judge"""
+    todo = sorted({p for p in pairs if p not in SATISFIES and p[1].strip() not in ("", "*")})
+    if todo:
+        # npm's own semver, looked for only when some range needs it
+        from verdict import resolve_semver
+        js = ("const s=require(%s);console.log(JSON.stringify(JSON.parse(process.argv[1])"
+              ".map(([v,r])=>{try{return s.satisfies(v,r,true)}catch(e){return null}})))"
+              % json.dumps(resolve_semver()))
+        out = subprocess.run(["node", "-e", js, json.dumps(todo)],
+                             capture_output=True, text=True, check=True)
+        SATISFIES.update(zip(todo, json.loads(out.stdout)))
+    return {p: True if p[1].strip() in ("", "*") else SATISFIES[p] for p in pairs}
 
 
 def identity(pk, path):
@@ -99,7 +121,7 @@ def misses(pk, root, nodes, edges):
                                             f"{at(s) and name(at(s))}"))
                         through.append((q, rp, p, optional, r))
                         continue
-                    if p not in given and r != root and p == r[0]:
+                    if p not in given and r != root and p == r[2]:
                         s = resolve(pk, q, p)
                         if s != rp:
                             miss.append((q, f"{name(at(q))} at {q}, as {name(r)} requires it, "
@@ -135,6 +157,16 @@ def misses(pk, root, nodes, edges):
     miss += [(q, f"{name(at(q))} at {q}, as {name(r)} requires it, peers on {p}, which the "
                  f"answer leaves open for {name(r)}'s own optional peer")
              for q, rp, p, optional, r in through if not optional and (rp, p) in open_]
+    # the answer's word is open, so a copy found anyway is a miss only
+    # where npm finds it out of range; it is asked from that copy, which
+    # mklock.py's search then nests out of sight
+    hit = {(q, p): resolve(pk, q, p) for q, p in open_}
+    asks = {(q, p): (pk[s].get("version", ""), (pk[q].get("peerDependencies") or {}).get(p) or "")
+            for (q, p), s in hit.items() if s is not None and s in pk}
+    ok = satisfies(list(asks.values()))
+    miss += [(hit[q, p], f"{name(at(q))} at {q} peers on {p}, which the answer leaves open, yet it "
+                 f"finds {name(at(hit[q, p]))} outside {asks[q, p][1]}")
+             for (q, p) in sorted(asks) if ok[asks[q, p]] is False]
     return miss
 
 

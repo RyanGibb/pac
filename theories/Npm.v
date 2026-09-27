@@ -449,10 +449,13 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     andb (negb (PkgEqb.eqb q (rootPkg I))) (NSet.mem a (peerNames I (base q))).
 
   (* the copy is itself of the name, which is where a peer of its
-     dependency resolves when the copy neither holds nor peers on it:
-     node's lookup from inside the copy's node_modules reaches the copy's
-     own directory *)
-  Definition selfb (q : Pkg.t) (a : N.t) : bool := NEqb.eqb (snd (fst q)) a.
+     dependency resolves when the copy neither holds nor peers on it.
+     npm's lookup from inside the copy's node_modules reaches the copy's
+     own directory, so its directory must be the name; Yarn Berry offers
+     the parent by its package name, so its package must be too.  An
+     alias either way is a copy only one of them offers. *)
+  Definition selfb (q : Pkg.t) (a : N.t) : bool :=
+    andb (NEqb.eqb (fst (fst q)) a) (NEqb.eqb (snd (fst q)) a).
 
   Definition childCands (I : Inst) (q : Pkg.t)
       (m : NKey.t) : VSet.t :=
