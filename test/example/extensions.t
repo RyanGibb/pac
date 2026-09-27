@@ -1,16 +1,15 @@
-The paper's §4 extension figures, each instance exactly the figure's.
-Each run prints the whole global reduction (reduceReal and reduceDeps),
-checks the core walked from the root through the calculus's lookup
-theorems against that reduction restricted to the root's reach, and
-solves with PubGrub, decoding the answer through the soundness decoder.
-A reduced name is written as the paper writes it, <...> for ⟨...⟩, and a
-package (n,v) inside a name as (n,v).
+An instance of each extension.  Each run prints the whole global
+reduction (reduceReal and reduceDeps), checks the core walked from the
+root through the calculus's lookup theorems against that reduction
+restricted to the root's reach, and solves with PubGrub, decoding the
+answer through the soundness decoder.  A reduced name is written <...>,
+and a package (n,v) inside a name as (n,v).
 
-Fig. conflict-class: the class <k> is the figure's ⟨k⟩, its versions
-the names B, C and D.  Every node and all 5 edges of the figure's
-reduction, and nothing else, among them D 1's edge (D,1) Δ (⟨k⟩,{D}),
-though D 1 is unreachable from A 1.  The answer takes B 2 beside C 1, as
-the caption says.
+Conflict classes: A 1 depends on B 1 or 2 and on C 1, and B 1, C 1 and
+D 1 are in the class k.  The class is the name <k>, its versions the
+names B, C and D.  The reduction has 5 edges, among them D 1's edge to
+(<k>,{D}), though D 1 is unreachable from A 1.  The answer takes B 2
+beside C 1.
 
   $ ./extensions/extensions.exe conflict-class
   core: 8 packages, 5 edges
@@ -33,8 +32,8 @@ the caption says.
     B 2
     C 1
 
-Fig. conflict: (A,1) Γ (B,{2}) over A 1, B 1 and B 2.  Every node and
-the one edge of the figure's reduction, and nothing else.
+Conflicts: A 1 conflicts with B 2, over A 1, B 1 and B 2.  The reduction
+has one edge.
 
   $ ./extensions/extensions.exe conflict
   core: 5 packages, 1 edges
@@ -48,8 +47,9 @@ the one edge of the figure's reduction, and nothing else.
   packages (1):
     A 1
 
-Fig. concurrent, g(x.y.z) = x: every node and all 8 edges of the
-figure's reduction, and nothing else.
+Concurrent versions, g(x.y.z) = x: A 1.0.0 depends on B 1.0.0 and
+C 1.0.0, B on D 1.0.0, 2.0.0 or 2.0.1, and C on D 2.0.0, 2.0.1 or 3.0.0.
+The reduction has 8 edges.
 
   $ ./extensions/extensions.exe concurrent
   core: 11 packages, 8 edges
@@ -85,9 +85,9 @@ figure's reduction, and nothing else.
     D 2.0.1 <- B 1.0.0
     D 3.0.0 <- C 1.0.0
 
-Fig. peer-dependency, g(v) = v: every node and all 6 edges of the
-figure's reduction, and nothing else, among them ⟨C,1⟩ 1, which no edge
-reaches, since (<A,1,C>,1) has no dependency, as its caption says.
+Peer dependencies, g(v) = v: A 1 depends on B 1 and on C 2 or 3, and B 1
+peers on C 1 or 2.  The reduction has 6 edges, and <C,1> 1, which no edge
+reaches, since (<A,1,C>,1) has no dependency.
 
   $ ./extensions/extensions.exe peer
   core: 9 packages, 6 edges
@@ -115,14 +115,14 @@ reaches, since (<A,1,C>,1) has no dependency, as its caption says.
     B 1 <- A 1
     C 2 <- A 1
 
-Fig. visibility: <n,(A,1)> and <n,(D,1)> are the figure's ⟨n,a⟩ and
-⟨n,d⟩, and <n,v,m,(A,1)> is ⟨n,v,m,a⟩.  Every node and all 24 edges of
-the figure's reduction are here, and 9 nodes and 14 edges the figure
-does not draw.  The figure draws only what ⟨A,a⟩ 1 reaches, on purpose,
-since the whole reduction is too large to draw.  ⟨A,d⟩ 1 and ⟨B,d⟩ 1, with their intermediates and all
-14 edges, and ⟨D,1,C,a⟩ 2, which has none, are unreachable from ⟨A,a⟩
-1.  <C,(D,1)> 1 is reached: an occurrence has every version of its
-name, though no edge admits this one.
+Visibility: A 1 depends on B 1, on C 1 or 2 and on D 1, B 1 on C 1, and
+D 1 on C 2 and E 1; every dependency is public but D 1's on C.  <n,(A,1)>
+is n's occurrence under the origin A 1, and <n,(D,1)> under D 1.  The
+reduction has 38 edges, 24 of them reached from <A,(A,1)> 1.  <A,(D,1)> 1
+and <B,(D,1)> 1, with their intermediates and 14 edges, and
+<D,1,C,(A,1)> 2, which has none, are unreachable from it.  <C,(D,1)> 1 is
+reached: an occurrence has every version of its name, though no edge
+admits this one.
 
   $ ./extensions/extensions.exe visibility
   core: 33 packages, 38 edges
@@ -213,8 +213,9 @@ name, though no edge admits this one.
     D 1 <- A 1
     E 1 <- D 1
 
-Fig. features: every node and all 9 edges of the figure's reduction, and
-nothing else.
+Features: A 1 depends on B 1 and C 1, B 1 on D 1 with features α and β,
+and C 1 on D 1 with β; D 1's α adds a dependency on E 1 and its β one on
+F 1.  The reduction has 9 edges.
 
   $ ./extensions/extensions.exe features
   core: 8 packages, 9 edges
@@ -244,8 +245,8 @@ nothing else.
     E 1 {}
     F 1 {}
 
-Fig. package-formula: every node and all 5 edges of the figure's
-reduction, and nothing else; the disjunct's name is the figure's.
+Package formulas: A 1 depends on (B 2 ∧ C 1) ∨ (B 1 ∧ ¬C 1).  The
+reduction has 5 edges and one disjunct.
 
   $ ./extensions/extensions.exe package-formula
   core: 9 packages, 5 edges
@@ -268,12 +269,12 @@ reduction, and nothing else; the disjunct's name is the figure's.
     A 1
     B 1
 
-Fig. variable-formula, Y_os = {linux, macos}: <os> is ⟨os⟩, and the
-disjunct <¬(<os>,{linux}) ∨ (B,{1})> is the figure's
-⟨¬(os = linux) ∨ (B,{1})⟩, the comparison held as the atom it lifts to.
-All 3 edges are the figure's.  The figure omits A ⊥ and B ⊥, which no
-edge admits.  The answer takes alternative 1, so no version of <os> is
-selected and the assignment is the decoder's default.
+Variable formulas, Y_os = {linux, macos}: A 1 depends on
+¬(os = linux) ∨ B 1.  The variable is the name <os>, and the disjunct
+<¬(<os>,{linux}) ∨ (B,{1})> holds the comparison as the atom it lifts to.
+The reduction has 3 edges, and A ⊥ and B ⊥, which no edge admits.  The
+answer takes alternative 1, so no version of <os> is selected and the
+assignment is the decoder's default.
 
   $ ./extensions/extensions.exe variable-formula
   core: 8 packages, 3 edges
@@ -294,8 +295,8 @@ selected and the assignment is the decoder's default.
     B 1
   assignment: os = linux
 
-Fig. virtual: every node and all 6 edges of the figure's reduction, and
-nothing else.
+Virtual packages: A 1 depends on D 1 and E 1; B 1 and C 1 provide D 1,
+and F 1 provides E 1.  The reduction has 6 edges.
 
   $ ./extensions/extensions.exe virtual
   core: 9 packages, 6 edges
@@ -323,11 +324,12 @@ nothing else.
     C 1 for D <- A 1
     F 1 for E <- A 1
 
-Fig. concurrent-feature, g(v) = v, reduced in Fig.
-concurrent-feature-reduction: <<D,α>,1> is ⟨⟨D,α⟩,1⟩.  Every node and
-all 36 edges of the figure's reduction, and nothing else.  The walk
-from A 1 does not reach ⟨⟨D,β⟩,1⟩, ⟨D,1,β,F,δ⟩ or ⟨⟨F,δ⟩,1⟩,
-C 1 admitting D only at 2 and 3.
+Concurrent versions with features, g(v) = v: A 1 depends on B 1 and
+C 1, B 1 on D 1 or 2 with α, and C 1 on D 2 or 3 with β; D 1's α adds a
+dependency on F 1 with γ, and its β one on F 1 with δ.  <<D,α>,1> is D's
+feature α at granularity 1.  The reduction has 36 edges.  The walk from
+A 1 does not reach <<D,β>,1>, <D,1,β,F,δ> or <<F,δ>,1>, C 1 admitting D
+only at 2 and 3.
 
   $ ./extensions/extensions.exe concurrent-features
   core: 27 packages, 36 edges
@@ -407,16 +409,16 @@ C 1 admitting D only at 2 and 3.
     D 2 <- B 1
     D 3 <- C 1
 
-Placement, D = 2: R 1 depends on A 1 and B 1, A 1 on C 1, B 1 on A 1
-and C 2, and C 2 peers on A 1, which it resolves by walking up from its
-own location as a dependency would, except that the walk may not land in
-C 2's own directory.  A location <ℓ,a> holds a version of a or ⊥, and only ⊥ at
-depth 2; a walk <ℓ⇑a> holds where the first-match walk up from ℓ for a
-lands, (ℓ',v), or ⊥.  Every node and all 289 edges of the reduction at
-D = 2 over the keys A, B and C, and nothing else.  The answer hoists
-A 1, which serves R and B, and C 1, which serves A, and nests C 2 under
-B, where it shadows C 1 for B; C 2's peer walks from B/C through the
-absent B/C/A and B/A to the hoisted A 1.
+Placement, with depth bound 2: R 1 depends on A 1 and B 1, A 1 on C 1,
+B 1 on A 1 and C 2, and C 2 peers on A 1, which it resolves by walking up
+from its own location as a dependency would, except that the walk may not
+land in C 2's own directory.  A location <ℓ,a> holds a version of a or ⊥,
+and only ⊥ at depth 2; a walk <ℓ⇑a> holds where the first-match walk up
+from ℓ for a lands, (ℓ',v), or ⊥.  The reduction over the names A, B and
+C has 195 packages and 289 edges.  The answer hoists A 1, which serves R
+and B, and C 1, which serves A, and nests C 2 under B, where it shadows
+C 1 for B; C 2's peer walks from B/C through the absent B/C/A and B/A to
+the hoisted A 1.
 
   $ ./extensions/extensions.exe placement
   core: 195 packages, 289 edges

@@ -1,24 +1,18 @@
-The paper's Alpine worked example: the world lua-stdlib-debug lua-stringy
-vim gvim over seven packages, lua provided bare by lua5.2 and lua5.4, vim
-claimed by gvim's versioned provides, and lua5.4-stringy's install-if
-rule on lua-stringy=0.5.1-r3 and lua5.4.  APKINDEX is the figure's index
-with the A: field its cut drops.
+The world lua-stdlib-debug lua-stringy vim gvim over seven packages: lua
+is provided bare by lua5.2 and lua5.4, vim by gvim's versioned provides,
+and lua5.4-stringy has an install-if rule on lua-stringy=0.5.1-r3 and
+lua5.4.
 
   $ . ../../frontends/untimed.sh
 
-In the figure's notation, pac's names read:
-- @root () is r *;
-- <lua5.2{5.2.4-r13} | lua5.4{5.4.7-r0} | lua{}> is <psi_lua>, its
-versions 0, 1 and 2 the figure's;
-- <!lua5.4{5.4.7-r0} | lua5.4-stringy{0.5.1-r3}> is <psi_T>, whose
-version 0, the negated atom's alternative, depends on lua5.4 at the
-complement {⊥};
-- vim's version provided=9.1.1105-r0(gvim-9.1.1105-r0) is the provides
-<gvim, 9.1.1105-r0>.
-Every node and all 14 edges of the figure's reduction are here.  The
-figure draws ⊥ only where an edge admits it, so it omits on purpose the ⊥
-of gvim, lua-stdlib-debug, lua-stringy, lua5.2, lua5.4-stringy and vim,
-and lua ⊥, lua's only version, which is why its dashed lua has none.
+@root () carries the world.  <lua5.2{5.2.4-r13} | lua5.4{5.4.7-r0} | lua{}>
+chooses among lua's providers, one version per alternative;
+<!lua5.4{5.4.7-r0} | lua5.4-stringy{0.5.1-r3}> is the install-if rule's
+formula, whose version 0, the negated atom's alternative, depends on
+lua5.4 at the complement {⊥}; and vim's version
+provided=9.1.1105-r0(gvim-9.1.1105-r0) is gvim's provides.  The core is 22
+packages and 14 edges; lua, which no package of its own provides, has
+only ⊥.
 
   $ untimed ../../../bin/main.exe alpine --core APKINDEX lua-stdlib-debug lua-stringy vim gvim
   core: 22 packages, 14 edges

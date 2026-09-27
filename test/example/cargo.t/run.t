@@ -1,22 +1,18 @@
-The paper's Cargo worked example: app depends on serde with its derive
-feature and on derivative, every record opting out of the default
-feature; serde_derive, which derive activates, and derivative depend on
-syn at the semver-incompatible "2" and "1".  The example resolves the root
-with no features, which is --no-default-features: unset, the root would
-get the default feature the parser supplies to a crate declaring none,
-and with it a featured name the figure does not have.
+app depends on serde with its derive feature and on derivative, every
+record opting out of the default feature; serde_derive, which derive
+activates, and derivative depend on syn at the semver-incompatible "2" and
+"1".  The root is resolved with no features, which is
+--no-default-features: unset, the root would get the default feature the
+parser supplies to a crate declaring none, and with it a featured name of
+its own.
 
   $ . ../../frontends/untimed.sh
 
-In the figure's notation, pac's names read:
-- root () is r *;
-- a granular name n@c is <n, c>, the class c written in full (1.0.0 for
-the figure's 1, 0.1.0 for its 0.1);
-- a featured name n/f@c is <<n, f>, c>;
-- a slot name n@c->a(req) is <n, c, a>, and its version granularity:c is
-the class c.
-All 14 packages and 14 edges of the figure's reduction are here and
-nothing else; this encoding has no ⊥.
+root () carries the root; a granular name n@c is n in semver class c,
+the class written in full (1.0.0, 0.1.0); a featured name n/f@c is n's
+feature f in class c; and a slot name n@c->a(req) is n's dependency a,
+whose version granularity:c is the class it resolves in.  The core is 14
+packages and 14 edges, and this encoding has no ⊥.
 
   $ untimed ../../../bin/main.exe cargo --core --no-default-features --print-parents index app/Cargo.toml
   root app 0.1.0 with no features

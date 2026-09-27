@@ -1,29 +1,20 @@
-The paper's npm worked example: app depends on preset and plugin, and,
-under the directory key legacy, on core ^6 through an npm: alias; preset
-peers on core ^6 || ^7 and plugin on core ^7.
+app depends on preset and plugin, and, under the directory key legacy, on
+core ^6 through an npm: alias; preset peers on core ^6 || ^7 and plugin on
+core ^7.
 
   $ . ../../frontends/untimed.sh
 
-In the figure's notation, which writes a version x.0.0 as x, pac's names
-read:
-- app@1.0.0 is the granular name <app, 1>, and likewise for plugin@1.0.0,
-preset@1.0.0, core@6.0.0, core@7.0.0 and legacy(npm:core)@6.0.0, the last
-<(legacy, core), 6>;
-- <app@1.0.0=>plugin> is the intermediate <app, 1, plugin>, and likewise
-for preset and core, and <app@1.0.0=>legacy(npm:core)> is
-<app, 1, (legacy, core)>.
-The figure's 11 packages are here, and 11 more that carry each peer on
-core to where it resolves.  <app@1.0.0=>plugin@1.0.0^core> is the link
-from app's directory holding plugin 1.0.0 for plugin's peer on core, at a
-version of app's core that plugin's range admits, and <plugin@1.0.0^core>
-is plugin's sight of core, which the link sets to that version or leaves
-∗ where no copy below plugin reads it (⊥ would read that nothing is
-offered); the same two names serve preset.  app is the root, which may
-leave a core no peer asks for empty, so <app, 1, core> has ⊥ too.  The
-directory holding each declarer now reaches <app, 1, core> through its
-link rather than directly, so the figure's two peer edges become two
-edges into the links, and each version of a link adds 2 edges more.
-app's copies are nested as before.
+app@1.0.0 is the granular name of app 1.0.0, and legacy(npm:core)@6.0.0
+that of core 6.0.0 under the key legacy; <app@1.0.0=>plugin> is app's
+directory for plugin, and likewise for preset, core and
+legacy(npm:core).  Each peer on core reaches the copy it resolves to
+through two names: <app@1.0.0=>plugin@1.0.0^core>, the link from app's
+directory holding plugin 1.0.0, at a version of app's core that plugin's
+range admits, and <plugin@1.0.0^core>, plugin's sight of core, which the
+link sets to that version or leaves ∗ where no copy below plugin reads it
+(⊥ would read that nothing is offered); the same two names serve preset.
+app is the root, which may leave a core no peer asks for absent, so
+<app@1.0.0=>core> has ⊥ too.  The core is 22 packages and 16 edges.
 
   $ untimed ../../../bin/main.exe npm --core --offline --cache . --tree ./app/package.json
   root app 1.0.0

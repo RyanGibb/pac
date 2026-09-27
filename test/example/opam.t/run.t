@@ -1,22 +1,15 @@
-The paper's opam worked example: opam install saturn ocaml-system over
-seven packages, saturn's with-test atom on alcotest filtered away, ocaml
-5.2.0's disjunction between the two compilers, and their conflict class.
+opam install saturn ocaml-system over seven packages: saturn's with-test
+atom on alcotest is filtered away, ocaml 5.2.0 asks for either of two
+compilers, and the two share a conflict class.
 
   $ . ../../frontends/untimed.sh
 
-In the figure's notation, pac's names read:
-- root () is r *, the root carrying the query, whose edge to itself is the
-figure's loop;
-- <ocaml-system{5.2.0} | ocaml-base-compiler{5.2.0}> is <chi_0, chi_1>,
-emitted reversed so that chi_0 is sys, and its versions z0 and z1 are
-the figure's 0 and 1;
-- conflict-class:ocaml-core-compiler is <occ>, its versions
-ocaml-base-compiler and ocaml-system the figure's obc and sys;
-- ocaml-base-compiler and ocaml-system are obc and sys.
-Every node and all 9 edges of the figure's reduction are here.  The figure
-omits on purpose the absent versions, which no edge admits: the ⊥ of
-saturn, ocaml, ocaml-base-compiler, ocaml-system and <occ>, the 5 packages
-beyond its 11.
+root () carries the query and depends on itself.  The disjunction is
+<ocaml-system{5.2.0} | ocaml-base-compiler{5.2.0}>, emitted reversed so
+that its version z0 is ocaml-system, and conflict-class:ocaml-core-compiler
+is the class, its versions the two compilers.  The core is 16 packages and
+9 edges, among them the ⊥ of saturn, ocaml, both compilers and the class,
+which no edge admits.
 
   $ untimed ../../../bin/main.exe opam --core . saturn ocaml-system
   core: 16 packages, 9 edges

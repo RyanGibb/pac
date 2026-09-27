@@ -1,24 +1,17 @@
-The paper's Debian worked example: bsd-mailx asks for default-mta |
-mail-transport-agent and for liblockfile1 (>= 1.0); exim4-daemon-light
-provides both virtual names, postfix the second, and each conflicts with
-mail-transport-agent.  Packages is the figure's index with the
-Architecture field its cut drops.
+bsd-mailx asks for default-mta | mail-transport-agent and for
+liblockfile1 (>= 1.0); exim4-daemon-light provides both virtual names,
+postfix the second, and each conflicts with mail-transport-agent.
 
   $ . ../../frontends/untimed.sh
 
-In the figure's notation, pac's names read:
-- <alts default-mta:amd64 (T) | mail-transport-agent:amd64 (T)> is <A_1>,
-and its versions alt:default-mta:amd64 (T) and
-alt:mail-transport-agent:amd64 (T) are the alternatives <a_1> and <a_2>;
-- <sel default-mta:amd64 (T)> is the selector <a_1>, and
-<sel mail-transport-agent:amd64 (T)> is <a_2>;
-- ref:exim4-daemon-light:amd64=4.98.2 is <exim4-daemon-light, 4.98.2>, and
-ref:postfix:amd64=3.10.11 is <postfix, 3.10.11>;
-- a real name n:amd64 is n.
-All 13 packages and 9 edges of the figure's reduction are here and nothing
-else: the edge into <A_1> is one hyperedge to both its versions, and a
-conflict is the edge into the other provider at {⊥}.  The figure draws
-every ⊥, so none is omitted.  <a_2> is reached though the answer holds no
+The alternation is <alts default-mta:amd64 (T) | mail-transport-agent:amd64 (T)>,
+one version per alternative; each virtual name has a selector, <sel
+default-mta:amd64 (T)> and <sel mail-transport-agent:amd64 (T)>, whose
+versions ref:exim4-daemon-light:amd64=4.98.2 and ref:postfix:amd64=3.10.11
+are its providers.  The edge into the alternation is one hyperedge to both
+its versions, and a conflict is the edge into the other provider at {⊥}.
+The core is 13 packages and 9 edges, every ⊥ among them.  <sel
+mail-transport-agent:amd64 (T)> is reached though the answer holds no
 version of it.
 
   $ untimed ../../../bin/main.exe debian --core Packages bsd-mailx
@@ -52,9 +45,9 @@ version of it.
   encoded solution: 6 core nodes (9 lookups)
   loaded: 4 names, 4 versions
 
-Asked for postfix as well, postfix's conflict edge leaves <a_1> no
-provider, so <A_1> takes <a_2> and <a_2> takes postfix, as the example
-says:
+Asked for postfix as well, postfix's conflict edge leaves <sel
+default-mta:amd64 (T)> no provider, so the alternation takes
+mail-transport-agent and its selector takes postfix:
 
   $ untimed ../../../bin/main.exe debian Packages bsd-mailx postfix
   packages (3):
