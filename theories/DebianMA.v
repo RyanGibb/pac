@@ -1084,9 +1084,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       intros G p q a; unfold confFibre; apply ConfFibred.mem_tailFibre.
     Qed.
 
-    Lemma mem_clsPreimage : forall M P e,
-        Cls.In e (clsPreimage M P) <-> Cls.In e M /\ PkgSet.In (fst e) P.
-    Proof. intros M P e; unfold clsPreimage; apply ClsPreimage.mem_ofKeys. Qed.
+    Lemma mem_clsPreimage : forall M ps e,
+        Cls.In e (clsPreimage M ps) <-> Cls.In e M /\ PkgSet.In (fst e) ps.
+    Proof. intros M ps e; unfold clsPreimage; apply ClsPreimage.mem_ofKeys. Qed.
 
     Lemma reduceProv_class_sub : forall R Pi M M',
         (forall p, PkgSet.In p R -> classOf M' p = classOf M p) ->
@@ -1117,11 +1117,11 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         rewrite <- (H1 p0 Hp0); exact Hl.
     Qed.
 
-    Lemma classOf_clsPreimage : forall M P p,
-        PkgSet.In p P -> classOf (clsPreimage M P) p = classOf M p.
+    Lemma classOf_clsPreimage : forall M ps p,
+        PkgSet.In p ps -> classOf (clsPreimage M ps) p = classOf M p.
     Proof.
-      intros M P p Hp; unfold classOf.
-      assert (E : ClsFibred.tailFibre (clsPreimage M P) p
+      intros M ps p Hp; unfold classOf.
+      assert (E : ClsFibred.tailFibre (clsPreimage M ps) p
                   = ClsFibred.tailFibre M p).
       { apply Cls.ext; intros [q c].
         rewrite !ClsFibred.mem_tailFibre, mem_clsPreimage; cbn [fst].
