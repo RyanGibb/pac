@@ -13,18 +13,11 @@ end)
 type archive = {
   root : string;
   pkgs : (string, (string * Opam_parse.pkg_meta) list) Hashtbl.t;
-  (* class -> its members among the names loaded so far.  Unlike every
-     other table here this one is a preimage and so grows as names load;
-     see [class_inst]. *)
   class_table : (string, (string * string) list) Hashtbl.t;
-  (* the versions a name flags avoid-version or deprecated; a table
-     because every version handed to PubGrub is tagged with it, and
-     because all but a hundred or so names answer no *)
   avoid_table : (string, string list) Hashtbl.t;
   mutable n_names : int;
   mutable n_vers : int;
   mutable n_dropped : int;
-  (* wall time inside the parser, which the solve interleaves with *)
   mutable t_parse : float;
 }
 
@@ -130,12 +123,6 @@ let avoided ar n v =
   | None -> false
   | Some vs -> List.exists (fun w -> compare_version w v = 0) vs
 
-(* opam answers opam-version with its own version unless
-   OPAMVAR_opam_version or a global or switch variable overrides it
-   (opamPackageVar.ml resolve_switch_raw); the harness leaves opam's own
-   and pins us to it instead.  Unasked, the value is the opam
-   nix/flake.lock fixes, so that a run outside the harness answers about
-   the same opam the recorded baselines did *)
 let default_opam_version = "2.5.2"
 
 module Op = E.Opam (Ot.Str) (OVerOT) (Ot.Str) (OVerOT) (Ot.Str)
@@ -154,7 +141,6 @@ let globals =
   ]
 
 type request = {
-  (* the valuation reads only the query's names, not their versions *)
   names : string list;
   with_test : bool;
   with_doc : bool;

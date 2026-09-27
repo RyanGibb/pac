@@ -5,7 +5,7 @@ type op = Ge | Gt | Le | Lt | Eq | Ne
 type filt =
   | FT
   | FF
-  | FCmp of op * string * string (* op, variable, constant *)
+  | FCmp of op * string * string
   | FDef of string
   | FAnd of filt * filt
   | FOr of filt * filt
@@ -21,10 +21,6 @@ type pkg_meta = {
   available : filt;
   depexts : (string * filt) list;
   pindeps : ((string * string) * string) list;
-  (* opam 2.1's avoid-version and 2.2's deprecated: "select this version
-     only if nothing else works".  Not a constraint -- a flagged version
-     stays installable -- so they are recorded here and spent on solver
-     preference, never on the declarations. *)
   avoid_version : bool;
   deprecated : bool;
 }
