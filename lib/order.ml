@@ -13,12 +13,12 @@ type ('ctx, 'name, 'selection, 'version) driver =
 
 let make ?next ?choose ?(finish = ignore) () = { next; choose; finish }
 
-let random seed =
+let random ?(viable = fun ~assigned:_ _ cands -> cands) seed =
   let st = Random.State.make [| seed |] in
   let pick l = List.nth l (Random.State.int st (List.length l)) in
   make
     ~next:(fun ~assigned:_ open_names -> fst (pick open_names))
-    ~choose:(fun ~assigned:_ _ cands -> pick cands)
+    ~choose:(fun ~assigned n cands -> pick (viable ~assigned n cands))
     ()
 
 let greatest compare = function

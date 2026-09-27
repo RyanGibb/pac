@@ -21,8 +21,8 @@
 
 (library
  (name npm_solve)
- (modules encoding archive query lookup pick order solve print)
- (private_modules encoding lookup pick order)
+ (modules encoding archive query lookup pick viable order solve print)
+ (private_modules encoding lookup pick viable order)
  (libraries npm_frontend pac pac_common pubgrub unix yojson))
 
 (test

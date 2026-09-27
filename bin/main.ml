@@ -30,8 +30,10 @@ let order_arg ~tool ~pubgrub : Pac_common.Order.t Term.t =
           ~doc:
             (Printf.sprintf
                "Which name to decide next and which version to try: $(b,tool) \
-                as %s, $(b,pubgrub) as %s, $(b,random) uniformly, from a \
-                generator seeded by $(b,--seed)."
+                as %s, $(b,pubgrub) as %s, $(b,random) at random, from a \
+                generator seeded by $(b,--seed): uniformly, but that npm's \
+                picks a version only among those the rest of the solution \
+                leaves open."
                tool pubgrub))
   in
   let seed =
