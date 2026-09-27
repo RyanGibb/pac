@@ -73,11 +73,7 @@ module Make (S : Apt_reject.SEARCH) = struct
 
     let propagate = propagate
     let assign = assign
-
-    let reset st =
-      Hashtbl.reset st.vdead;
-      Hashtbl.reset st.pdead
-
+    let reset = forget_rejections
     let version_equal a b = PVersion.compare a b = 0
 
     let registered st n (pv : PVersion.t) =
@@ -166,9 +162,7 @@ module Make (S : Apt_reject.SEARCH) = struct
 
   let narrowed_filter st ~assigned n cands =
     match
-      List.find_opt
-        (fun (p, _) -> installed_at ~assigned p)
-        (Hashtbl.find_all st.narrowed n)
+      List.find_opt (fun (p, _) -> installed_at ~assigned p) (narrowings st n)
     with
     | None -> cands
     | Some (_, na) ->

@@ -45,9 +45,17 @@ module Make (S : SEARCH) = struct
   type assigned = name -> PG.selection
 
   type state = {
+    (* version vars and package vars assigned false *)
     vdead : (DMA.Pkg.t, unit) Hashtbl.t;
     pdead : (string * string, unit) Hashtbl.t;
+    (* the solutions of a clause apt folded a later one into are the
+       intersection, and Solve takes the first undecided of those: the
+       narrower atom, for the choice among the name's own candidates.  The
+       fold is of the depender's own clause, so it holds only while the
+       depender is installed; the name, which another depender may share,
+       is keyed by that depender too. *)
     narrowed : (name, DMA.Pkg.t * DMA.Deb.Atom.t) Hashtbl.t;
+    (* whether apt's cache has a Provides entry for a name *)
     provided : (string, bool) Hashtbl.t;
   }
 
@@ -59,6 +67,11 @@ module Make (S : SEARCH) = struct
       provided = Hashtbl.create 64;
     }
 
+  let forget_rejections st =
+    Hashtbl.reset st.vdead;
+    Hashtbl.reset st.pdead
+
+  let narrowings st n = Hashtbl.find_all st.narrowed n
   let stanza p = T.stanza tables p
 
   let provides_matching (stz : nstanza) n f =

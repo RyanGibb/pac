@@ -64,26 +64,18 @@ module Make (S : SEARCH) : sig
      clause.  A solution reads the literal apt made it: the package var for
      an unversioned atom on a name nothing provides (Defer-Version-Selection),
      a version var otherwise. *)
-  type state = {
-    (* version vars and package vars assigned false *)
-    vdead : (DMA.Pkg.t, unit) Hashtbl.t;
-    pdead : (string * string, unit) Hashtbl.t;
-    (* the solutions of a clause apt folded a later one into are the
-       intersection, and Solve takes the first undecided of those: the
-       narrower atom, for the choice among the name's own candidates.  The
-       fold is of the depender's own clause, so it holds only while the
-       depender is installed; the name, which another depender may share,
-       is keyed by that depender too. *)
-    narrowed : (name, DMA.Pkg.t * DMA.Deb.Atom.t) Hashtbl.t;
-    (* whether apt's cache has a Provides entry for a name *)
-    provided : (string, bool) Hashtbl.t;
-  }
+  type state
 
   (* one queue entry of the cascade: a version var or a package var
      assigned false, whose propagation waits for its turn *)
   type rejection = [ `Ver of DMA.Pkg.t | `Pkg of string * string ]
 
   val create_state : unit -> state
+  val forget_rejections : state -> unit
+
+  (* the atoms clauses on [name] were narrowed to by folding, each with the
+     depender whose clause it was, the latest first *)
+  val narrowings : state -> name -> (DMA.Pkg.t * DMA.Deb.Atom.t) list
   val stanza : DMA.Pkg.t -> nstanza option
 
   (* the declared Provides of [n] that meet the formula *)
