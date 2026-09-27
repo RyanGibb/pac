@@ -9,7 +9,11 @@ the declarer, so an edge naming a peer of a declarer the requirer requires
 is resolved as npm resolves a peer: from where that declarer sits, its own
 node_modules first (arborist edge.js).  A requirer other than the root that
 peers on the name itself holds none of it (arborist's PEER LOCAL), so there
-the declarer's peer must find what the requirer's own peer finds.  A
+the declarer's peer must find what the requirer's own peer finds, and a
+requirer other than the root that neither gives nor peers on the name but
+is itself of that name offers itself, which the declarer's lookup reaches
+from inside the requirer's node_modules.  A peer read through a requirer
+whose own optional peer the answer leaves open is open too.  A
 provider the answer gives a peer
 may declare peers of its own, which hang on the same requirer, and is asked
 from where it was found.  Every copy of a requirer in the lock is asked,
@@ -67,6 +71,7 @@ def misses(pk, root, nodes, edges):
         return f"{n[0]} {n[1]}" + (f" at {n[2]}" if n[2] != n[0] else "")
 
     miss = [(None, f"{name(n)} is nowhere in the tree") for n in nodes if n not in copies]
+    open_, through = set(), []
     for r in sorted(copies):
         given = out.get(r, {})
         for rp in copies[r]:
@@ -92,8 +97,18 @@ def misses(pk, root, nodes, edges):
                                             f"peers on {p}: {name(r)}'s own peer finds "
                                             f"{at(t) and name(at(t))}, the tree gives "
                                             f"{at(s) and name(at(s))}"))
+                        through.append((q, rp, p, optional, r))
+                        continue
+                    if p not in given and r != root and p == r[0]:
+                        s = resolve(pk, q, p)
+                        if s != rp:
+                            miss.append((q, f"{name(at(q))} at {q}, as {name(r)} requires it, "
+                                            f"peers on {p}: {name(r)} offers itself, the tree "
+                                            f"gives {at(s) and name(at(s))}"))
                         continue
                     if p not in given:
+                        # the answer leaves q's optional peer open here
+                        open_.add((q, p))
                         if not optional:
                             miss.append((rp, f"{name(r)} gives {name(at(q))} no {p} for its peer"))
                         continue
@@ -108,6 +123,18 @@ def misses(pk, root, nodes, edges):
                         todo.append(s)
             miss += [(rp, f"{name(r)} gives {k} to nothing that requires or peers on it")
                      for k in sorted(set(given) - deps - peered)]
+    # a peer read through a depender whose own optional peer the answer
+    # leaves open is open too, which a peer that is not optional may not be
+    grew = True
+    while grew:
+        grew = False
+        for q, rp, p, optional, r in through:
+            if (rp, p) in open_ and (q, p) not in open_:
+                open_.add((q, p))
+                grew = True
+    miss += [(q, f"{name(at(q))} at {q}, as {name(r)} requires it, peers on {p}, which the "
+                 f"answer leaves open for {name(r)}'s own optional peer")
+             for q, rp, p, optional, r in through if not optional and (rp, p) in open_]
     return miss
 
 

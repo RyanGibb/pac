@@ -36,7 +36,7 @@ the delta it accounts for can be read off:
                   the declarer's peer edges on the package that selected
                   it, or, where that package is not the root and peers on
                   the name itself, on whichever package its own peer edge
-                  hangs on.
+                  hangs on; and none where the peer is that package itself.
 
 usage: edges.py <package> <lockfile> <our --tree output> <out-prefix>
                 [--peer-parent]
@@ -90,6 +90,9 @@ def lock_sets(lock, peer_parent):
         requirers = {"": {""}}
         for r, _, q in plain:
             requirers.setdefault(q, set()).add(r)
+        # a peer resolving to the declarer's own requirer is that requirer
+        # offering itself, which pac's answer holds no edge for
+        peer = [(r, d, q) for (r, d, q) in peer if q not in requirers.get(r, ())]
 
         def peers_on(path, d):
             e = pkgs[path]

@@ -474,11 +474,13 @@ Example npm_peer_edge_computes :
         NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
+(* The root A has no directory for C, but installs one for B's peer, or
+   leaves it empty (Bot) where no peer asks. *)
 Example npm_auto_versions_computes :
   NpmS.T.VSet.elements
     (NpmS.Reduction.versions npmInstAuto
        (NpmS.Nm.Intermediate kA 1 kC))
-  = NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: nil.
+  = NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: NpmS.Vs.Bot :: nil.
 Proof. reflexivity. Qed.
 
 Example npm_auto_edge_computes :
@@ -489,12 +491,14 @@ Example npm_auto_edge_computes :
 Proof. reflexivity. Qed.
 
 Example npm_link_holder_computes :
-  npmDeps npmInstAuto (NpmS.Nm.Link kA 1 kB 1 npmC, NpmS.Vs.Orig 2)
+  npmDeps npmInst (NpmS.Nm.Link kA 1 kB 1 npmC, NpmS.Vs.Orig 2)
   = (NpmS.Nm.Intermediate kA 1 kC, NpmS.Vs.Orig 2 :: nil)
-    :: (NpmS.Nm.Sight kB 1 npmC, NpmS.Vs.Orig 2 :: NpmS.Vs.Bot :: nil)
+    :: (NpmS.Nm.Sight kB 1 npmC, NpmS.Vs.Orig 2 :: NpmS.Vs.Free :: nil)
     :: nil.
 Proof. reflexivity. Qed.
 
+(* the same peer, optional: the root's C may be left empty, and the link
+   at Bot reads it so *)
 Example npm_optional_edge_computes :
   npmDeps npmInstOpt (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1)
   = (NpmS.Nm.Granular kB 1, NpmS.Vs.Orig 1 :: nil)
@@ -504,7 +508,8 @@ Proof. reflexivity. Qed.
 
 Example npm_optional_bot_computes :
   npmDeps npmInstOpt (NpmS.Nm.Link kA 1 kB 1 npmC, NpmS.Vs.Bot)
-  = (NpmS.Nm.Sight kB 1 npmC, NpmS.Vs.Bot :: nil) :: nil.
+  = (NpmS.Nm.Intermediate kA 1 kC, NpmS.Vs.Bot :: nil)
+    :: (NpmS.Nm.Sight kB 1 npmC, NpmS.Vs.Bot :: NpmS.Vs.Free :: nil) :: nil.
 Proof. reflexivity. Qed.
 
 (* B@1 peers on C and depends on D@1, which peers on C too: B's copy holds
@@ -530,8 +535,47 @@ Proof. reflexivity. Qed.
 Example npm_chain_computes :
   npmDeps npmInstChain (NpmS.Nm.Link kB 1 kD 1 npmC, NpmS.Vs.Orig 2)
   = (NpmS.Nm.Sight kB 1 npmC, NpmS.Vs.Orig 2 :: nil)
-    :: (NpmS.Nm.Sight kD 1 npmC, NpmS.Vs.Orig 2 :: NpmS.Vs.Bot :: nil)
+    :: (NpmS.Nm.Sight kD 1 npmC, NpmS.Vs.Orig 2 :: NpmS.Vs.Free :: nil)
     :: nil.
+Proof. reflexivity. Qed.
+
+(* B@1 depends on D@1, which peers on B: B offers itself. *)
+Definition npmInstSelf : NpmS.Inst :=
+  NpmS.MkInst npmChainRepo
+    (((npmA, 1), npmDepB) :: ((npmB, 1), NpmS.MkDep npmD npmD (npmEq 1) false)
+       :: nil)
+    (((npmD, 1), NpmS.MkPeer npmB (npmBetween 1 3) false) :: nil) nil (npmA, 1).
+
+Example npm_self_versions_computes :
+  NpmS.T.VSet.elements
+    (NpmS.Reduction.versions npmInstSelf (NpmS.Nm.Link kB 1 kD 1 npmB))
+  = NpmS.Vs.Orig 1 :: nil.
+Proof. reflexivity. Qed.
+
+Example npm_self_computes :
+  npmDeps npmInstSelf (NpmS.Nm.Link kB 1 kD 1 npmB, NpmS.Vs.Orig 1)
+  = (NpmS.Nm.Sight kD 1 npmB, NpmS.Vs.Orig 1 :: NpmS.Vs.Free :: nil) :: nil.
+Proof. reflexivity. Qed.
+
+(* B@1 depends on D@1, which peers on C: B, not the root, neither holds
+   nor peers on C, so it offers D's peer nothing, and no copy of C is put
+   into B for it. *)
+Definition npmInstSkip : NpmS.Inst :=
+  NpmS.MkInst npmChainRepo
+    (((npmA, 1), npmDepB) :: ((npmB, 1), NpmS.MkDep npmD npmD (npmEq 1) false)
+       :: nil)
+    (((npmD, 1), npmPeerC) :: nil) nil (npmA, 1).
+
+Example npm_skip_computes :
+  NpmS.T.VSet.elements
+    (NpmS.Reduction.versions npmInstSkip (NpmS.Nm.Link kB 1 kD 1 npmC))
+  = nil.
+Proof. reflexivity. Qed.
+
+Example npm_skip_versions_computes :
+  NpmS.T.VSet.elements
+    (NpmS.Reduction.versions npmInstSkip (NpmS.Nm.Intermediate kB 1 kC))
+  = nil.
 Proof. reflexivity. Qed.
 
 Example npm_root_peer_computes :

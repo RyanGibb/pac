@@ -38,7 +38,9 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   (* The Concurrent Reduction's names and versions, widened: a peer's
      version has to reach the copies below its declarer, which one name per
      copy and peer name (its sight) and one per holder of that copy (a link)
-     carry, and Bot is a sight or link that answers for nothing. *)
+     carry.  Bot is a sight or link that offers nothing, and Free a sight no
+     copy below reads, which is what lets holders that offer different
+     versions share a copy. *)
   Module Nm.
     Inductive name : Type :=
     | Granular (k : NKey.t) (w : V.t)
@@ -84,11 +86,12 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Module Vs.
     Inductive version : Type :=
     | Orig (v : V.t)
-    | Bot.
+    | Bot
+    | Free.
     Definition t := version.
 
     Definition rank (x : t) : nat :=
-      match x with Orig _ => 0 | Bot => 1 end.
+      match x with Orig _ => 0 | Bot => 1 | Free => 2 end.
 
     Definition compare (x y : t) : comparison :=
       match Nat.compare (rank x) (rank y) with
@@ -370,28 +373,15 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     exact (proj1 Hw).
   Qed.
 
+  (* the root's own peer check, which npm's documented behaviours bound:
+     a mandatory peer is installed, an optional one read against a
+     directory the root declares *)
   Definition peerActive (I : Inst) (p : RPkg.t) (r : PeerDependency) : bool :=
     orb (negb (p_optional r)) (NSet.mem (p_name r) (dirs I p)).
 
   Definition activePeers (I : Inst) (p : RPkg.t) (q : RPkg.t)
     : list PeerDependency :=
     List.filter (peerActive I p) (peerDependenciesAt I q).
-
-  Definition peerDirs (I : Inst) : NSet.t :=
-    namesOfL (fun q => p_name (snd q)) (inst_peer I).
-
-  Lemma peerDirs_peer : forall I q r,
-      In (q, r) (inst_peer I) -> NSet.In (p_name r) (peerDirs I).
-  Proof.
-    intros I q r Hr; unfold peerDirs; apply mem_namesOfL.
-    exists (q, r); split; [exact Hr | reflexivity].
-  Qed.
-
-  Definition childDirs (I : Inst) (p : RPkg.t) : NSet.t :=
-    NSet.union (dirs I p) (peerDirs I).
-
-  Definition childKeys (I : Inst) (p : RPkg.t) : KeySet.t :=
-    SOnk.map (slotKey I p) (childDirs I p).
 
   Lemma slotKey_plain : forall I p a,
       ~ NSet.In a (dirs I p) -> slotKey I p a = (a, a).
@@ -417,6 +407,40 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       reflexivity.
   Qed.
 
+  Definition peerDirs (I : Inst) : NSet.t :=
+    namesOfL (fun q => p_name (snd q)) (inst_peer I).
+
+  Lemma peerDirs_peer : forall I q r,
+      In (q, r) (inst_peer I) -> NSet.In (p_name r) (peerDirs I).
+  Proof.
+    intros I q r Hr; unfold peerDirs; apply mem_namesOfL.
+    exists (q, r); split; [exact Hr | reflexivity].
+  Qed.
+
+  (* The names a copy holds a copy under: its directories, and for the
+     root's copy any name a peer asks for, which npm, pnpm, Bun and Deno
+     install at the top for a peer nothing else provides.  Only the root:
+     a copy deeper that neither holds nor peers on the name offers its
+     dependencies' peers nothing, which is Yarn Berry's rule and the one
+     every tool accepts. *)
+  Definition childDirs (I : Inst) (q : Pkg.t) : NSet.t :=
+    if PkgEqb.eqb q (rootPkg I)
+    then NSet.union (dirs I (base q)) (peerDirs I)
+    else dirs I (base q).
+
+  Definition childKeys (I : Inst) (q : Pkg.t) : KeySet.t :=
+    SOnk.map (slotKey I (base q)) (childDirs I q).
+
+  (* where q offers its dependencies' peers a copy of its own: at its
+     directories, and at the root under any name *)
+  Definition holds (I : Inst) (q : Pkg.t) (a : N.t) : bool :=
+    orb (PkgEqb.eqb q (rootPkg I)) (NSet.mem a (dirs I (base q))).
+
+  (* a name the root holds without a directory for it, whose copy is there
+     only when a peer asks for one *)
+  Definition loose (I : Inst) (q : Pkg.t) (a : N.t) : bool :=
+    andb (PkgEqb.eqb q (rootPkg I)) (negb (NSet.mem a (dirs I (base q)))).
+
   (* arborist's PEER LOCAL (edge.js): a peer may not resolve into its own
      declarer's node_modules unless the declarer is the root, so a copy that
      peers on a holds nothing there, and what it shows at a is what its own
@@ -424,13 +448,19 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Definition chains (I : Inst) (q : Pkg.t) (a : N.t) : bool :=
     andb (negb (PkgEqb.eqb q (rootPkg I))) (NSet.mem a (peerNames I (base q))).
 
+  (* the copy is itself of the name, which is where a peer of its
+     dependency resolves when the copy neither holds nor peers on it:
+     node's lookup from inside the copy's node_modules reaches the copy's
+     own directory *)
+  Definition selfb (q : Pkg.t) (a : N.t) : bool := NEqb.eqb (snd (fst q)) a.
+
   Definition childCands (I : Inst) (q : Pkg.t)
       (m : NKey.t) : VSet.t :=
     if KeyEqb.eqb m (slotKey I (base q) (fst m))
     then if chains I q (fst m) then VSet.empty
          else if NSet.mem (fst m) (dirs I (base q))
          then slotCands I (base q) (fst m)
-         else if NSet.mem (fst m) (peerDirs I)
+         else if andb (PkgEqb.eqb q (rootPkg I)) (NSet.mem (fst m) (peerDirs I))
               then realVersions (inst_repo I) (snd m)
               else VSet.empty
     else VSet.empty.
@@ -467,18 +497,84 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       (p : Pkg.t) (m : NKey.t) (v : V.t) : Prop :=
     PkgSet.In (m, v) S /\ Conc.ParentRel.In ((m, v), p) pi.
 
-  (* The version q shows a copy it holds at a: its own copy there, or,
-     where it chains, what its sight holds. *)
+  (* The version q offers a copy it holds at a (Yarn Berry's peer
+     provision): what its own peer sees where it chains, else its copy
+     there, else itself where it is of the name, else nothing. *)
   Definition Shows (I : Inst) (S : PkgSet.t) (pi : Conc.ParentRel.t)
       (sg : Pkg.t -> N.t -> option V.t) (q : Pkg.t) (a : N.t) (w : V.t)
     : Prop :=
     if chains I q a then sg q a = Some w
-    else Installs S pi q (slotKey I (base q) a) w.
+    else if holds I q a then Installs S pi q (slotKey I (base q) a) w
+    else if selfb q a then w = snd q
+    else False.
 
   Definition InPeerRanges (I : Inst) (q : Pkg.t) (c : RPkg.t) (a : N.t)
       (w : V.t) : Prop :=
     forall r, In (c, r) (inst_peer I) -> p_name r = a ->
       VSet.In w (peerCandsAt I (base q) r).
+
+  (* some copy c holds peers on a, so c's sight at a is read *)
+  Definition ReadBelow (I : Inst) (S : PkgSet.t) (pi : Conc.ParentRel.t)
+      (c : Pkg.t) (a : N.t) : Prop :=
+    exists m u, Installs S pi c m u /\ NSet.In a (peerNames I (snd m, u)).
+
+  Definition plainCands (I : Inst) (a : N.t) (rg : Range) : VSet.t :=
+    rangeEval (override I a rg) (realVersions (inst_repo I) a).
+
+  Lemma peerCandsAt_plain : forall I p r,
+      slotKey I p (p_name r) = (p_name r, p_name r) ->
+      peerCandsAt I p r = plainCands I (p_name r) (p_range r).
+  Proof.
+    intros I p r H; unfold peerCandsAt, peerKeyAt; rewrite H; reflexivity.
+  Qed.
+
+  Fixpoint sightCandsL (I : Inst) (a : N.t) (l : list PeerDependency)
+    : VSet.t :=
+    match l with
+    | nil => VSet.empty
+    | r :: l' =>
+        if NEqb.eqb (p_name r) a
+        then VSet.union (plainCands I a (p_range r)) (sightCandsL I a l')
+        else sightCandsL I a l'
+    end.
+
+  (* the versions c's own peers on a admit, which bounds what c's sight
+     can carry *)
+  Definition sightCands (I : Inst) (c : RPkg.t) (a : N.t) : VSet.t :=
+    sightCandsL I a (peerDependenciesAt I c).
+
+  Lemma mem_sightCandsL : forall I a l w,
+      VSet.In w (sightCandsL I a l) <->
+      exists r, In r l /\ p_name r = a /\
+        VSet.In w (plainCands I a (p_range r)).
+  Proof.
+    intros I a l w; induction l as [| r l IH]; cbn [sightCandsL].
+    - split; [intro H; destruct (SOrv.empty_in _ H) | intros [r [[] _]]].
+    - destruct (NEqb.eqb (p_name r) a) eqn:Hn.
+      + apply NEqb.eqb_true_iff in Hn.
+        rewrite VSet.union_spec, IH; split.
+        * intros [H | [r' [Hr' H]]].
+          -- exists r; split; [left; reflexivity | split; [exact Hn | exact H]].
+          -- exists r'; split; [right; exact Hr' | exact H].
+        * intros [r' [[E | Hr'] [Hn' H]]].
+          -- subst r'; left; exact H.
+          -- right; exists r'; split; [exact Hr' | split; assumption].
+      + rewrite IH; split.
+        * intros [r' [Hr' H]]; exists r'; split; [right; exact Hr' | exact H].
+        * intros [r' [[E | Hr'] [Hn' H]]].
+          -- subst r'; rewrite Hn', NEqb.eqb_refl in Hn; discriminate Hn.
+          -- exists r'; split; [exact Hr' | split; assumption].
+  Qed.
+
+  Lemma mem_sightCands : forall I c a w,
+      VSet.In w (sightCands I c a) <->
+      exists r, In (c, r) (inst_peer I) /\ p_name r = a /\
+        VSet.In w (plainCands I a (p_range r)).
+  Proof.
+    intros I c a w; unfold sightCands, peerDependenciesAt.
+    rewrite mem_sightCandsL; split; intros [r [Hr H]]; exists r;
+      (split; [apply in_ownedBy; exact Hr | exact H]).
+  Qed.
 
   Record IsResolution (I : Inst)
       (S : PkgSet.t) (pi : Conc.ParentRel.t)
@@ -496,20 +592,25 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         forall q, PkgSet.In q S ->
         forall a, chains I q a = true ->
         forall w, ~ Installs S pi q (slotKey I (base q) a) w
+    ; res_sight_range :
+        forall c a w, sg c a = Some w -> VSet.In w (sightCands I (base c) a)
     ; res_peer_sight :
         forall q, PkgSet.In q S ->
         forall m u, Installs S pi q m u ->
-        forall a w, NSet.In a (peerNames I (snd m, u)) ->
-          sg (m, u) a = Some w ->
-          Shows I S pi sg q a w /\ slotKey I (base q) a = (a, a) /\
-          InPeerRanges I q (snd m, u) a w
+        forall a, NSet.In a (peerNames I (snd m, u)) ->
+          chains I (m, u) a = true -> ReadBelow I S pi (m, u) a ->
+          (forall w, sg (m, u) a = Some w <-> Shows I S pi sg q a w) /\
+          (forall w, Shows I S pi sg q a w -> slotKey I (base q) a = (a, a))
     ; res_peer_reach :
         forall q, PkgSet.In q S ->
         forall m u, Installs S pi q m u ->
-        forall r, In ((snd m, u), r) (inst_peer I) ->
-          peerActive I (base q) r = true ->
-        exists w, Shows I S pi sg q (p_name r) w /\
-          InPeerRanges I q (snd m, u) (p_name r) w
+        forall a w, NSet.In a (peerNames I (snd m, u)) ->
+          Shows I S pi sg q a w -> InPeerRanges I q (snd m, u) a w
+    ; res_peer_need :
+        forall q, PkgSet.In q S ->
+        forall m u, Installs S pi q m u ->
+        forall r, In ((snd m, u), r) (inst_peer I) -> p_optional r = false ->
+        exists w, Shows I S pi sg q (p_name r) w
     ; res_root_peer :
         forall r, In (inst_root I, r) (inst_peer I) ->
           p_optional r = false ->
@@ -524,7 +625,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     ; res_parents :
         forall c q, Conc.ParentRel.In (c, q) pi ->
           PkgSet.In c S /\ PkgSet.In q S /\
-          KeySet.In (fst c) (childKeys I (base q)) }.
+          KeySet.In (fst c) (childKeys I q) }.
 
   Module Reduction.
 
@@ -547,20 +648,207 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       - intro Hw; exists w; split; [exact Hw | reflexivity].
     Qed.
 
+    (* what q may offer a copy's peer r: its sight's where it chains (Bot
+       only for an optional peer), its copy's where it holds the name, its
+       own version where it is of the name, and Bot, for an optional peer
+       alone, where it has none of them *)
+    Definition linkCands (I : Inst) (q : Pkg.t) (r : PeerDependency)
+      : T.VSet.t :=
+      if chains I q (p_name r)
+      then if p_optional r
+           then T.VSet.add Vs.Bot (embedVS (peerCandsAt I (base q) r))
+           else embedVS (peerCandsAt I (base q) r)
+      else if holds I q (p_name r)
+      then if andb (loose I q (p_name r)) (p_optional r)
+           then T.VSet.add Vs.Bot (embedVS (peerCandsAt I (base q) r))
+           else embedVS (peerCandsAt I (base q) r)
+      else if selfb q (p_name r)
+      then if VSet.mem (snd q) (peerCandsAt I (base q) r)
+           then T.VSet.singleton (Vs.Orig (snd q))
+           else T.VSet.empty
+      else if p_optional r then T.VSet.singleton Vs.Bot else T.VSet.empty.
+
+    Lemma mem_linkCands : forall I q r x,
+        T.VSet.In x (linkCands I q r) <->
+        (chains I q (p_name r) = true /\
+           ((x = Vs.Bot /\ p_optional r = true) \/
+            exists w, VSet.In w (peerCandsAt I (base q) r) /\ x = Vs.Orig w)) \/
+        (chains I q (p_name r) = false /\ holds I q (p_name r) = true /\
+           ((x = Vs.Bot /\ p_optional r = true /\ loose I q (p_name r) = true) \/
+            exists w, VSet.In w (peerCandsAt I (base q) r) /\ x = Vs.Orig w)) \/
+        (chains I q (p_name r) = false /\ holds I q (p_name r) = false /\
+           selfb q (p_name r) = true /\
+           VSet.In (snd q) (peerCandsAt I (base q) r) /\ x = Vs.Orig (snd q)) \/
+        (chains I q (p_name r) = false /\ holds I q (p_name r) = false /\
+           selfb q (p_name r) = false /\ p_optional r = true /\ x = Vs.Bot).
+    Proof.
+      intros I q r x; unfold linkCands.
+      assert (He : forall y, T.VSet.In y T.VSet.empty <-> False)
+        by (intro y; split; [apply SOvcv.empty_in | intros []]).
+      destruct (chains I q (p_name r)) eqn:Hc.
+      - destruct (p_optional r) eqn:Ho;
+          rewrite ?T.VSet.add_spec, mem_embedVS; split.
+        + intros [E | H]; left; split; try reflexivity;
+            [left; split; [exact E | reflexivity] | right; exact H].
+        + intros [[_ [[E _] | H]] | [[E _] | [[E _] | [E _]]]];
+            try discriminate E; [left; exact E | right; exact H].
+        + intro H; left; split; [reflexivity | right; exact H].
+        + intros [[_ [[_ E] | H]] | [[E _] | [[E _] | [E _]]]];
+            try discriminate E; exact H.
+      - destruct (holds I q (p_name r)) eqn:Hh.
+        + destruct (andb (loose I q (p_name r)) (p_optional r)) eqn:Hlo.
+          * apply Bool.andb_true_iff in Hlo; destruct Hlo as [Hl Ho].
+            rewrite T.VSet.add_spec, mem_embedVS; split.
+            -- intro H; right; left; split; [reflexivity | split; [reflexivity |]].
+               destruct H as [E | H]; [left; split; [exact E | split; assumption] |
+                                       right; exact H].
+            -- intros [[E _] | [[_ [_ H]] | [[_ [E _]] | [_ [E _]]]]];
+                 try discriminate E.
+               destruct H as [[E _] | H]; [left; exact E | right; exact H].
+          * rewrite mem_embedVS; split.
+            -- intro H; right; left.
+               split; [reflexivity | split; [reflexivity | right; exact H]].
+            -- intros [[E _] | [[_ [_ H]] | [[_ [E _]] | [_ [E _]]]]];
+                 try discriminate E.
+               destruct H as [[_ [Ho Hl]] | H]; [| exact H].
+               rewrite Hl, Ho in Hlo; discriminate Hlo.
+        + destruct (selfb q (p_name r)) eqn:Hs.
+          * destruct (VSet.mem (snd q) (peerCandsAt I (base q) r)) eqn:Hm.
+            -- apply VSet.mem_spec in Hm.
+               rewrite T.VSet.singleton_spec; split.
+               ++ intro E; right; right; left; repeat split; assumption.
+               ++ intros [[E _] | [[_ [E _]] | [[_ [_ [_ [_ E]]]] | [_ [_ [E _]]]]]];
+                    try discriminate E; exact E.
+            -- rewrite He; split; [intros [] |].
+               intros [[E _] | [[_ [E _]] | [[_ [_ [_ [Hin _]]]] | [_ [_ [E _]]]]]];
+                 try discriminate E.
+               apply VSet.mem_spec in Hin; rewrite Hin in Hm; discriminate Hm.
+          * destruct (p_optional r) eqn:Ho.
+            -- rewrite T.VSet.singleton_spec; split.
+               ++ intro E; right; right; right; repeat split; assumption.
+               ++ intros [[E _] | [[_ [E _]] | [[_ [_ [E _]]] | [_ [_ [_ [_ E]]]]]]];
+                    try discriminate E; exact E.
+            -- rewrite He; split; [intros [] |].
+               intros [[E _] | [[_ [E _]] | [[_ [_ [E _]]] | [_ [_ [_ [E _]]]]]]];
+                 discriminate E.
+    Qed.
+
+    Lemma linkCands_orig : forall I q r w,
+        T.VSet.In (Vs.Orig w) (linkCands I q r) ->
+        VSet.In w (peerCandsAt I (base q) r).
+    Proof.
+      intros I q r w H; apply mem_linkCands in H.
+      destruct H as [[_ [[E _] | [w' [Hw E]]]] |
+                     [[_ [_ [[E _] | [w' [Hw E]]]]] |
+                      [[_ [_ [_ [Hw E]]]] | [_ [_ [_ [_ E]]]]]]];
+        try discriminate E; injection E as ->; exact Hw.
+    Qed.
+
+    Lemma linkCands_bot : forall I q r,
+        T.VSet.In Vs.Bot (linkCands I q r) -> p_optional r = true.
+    Proof.
+      intros I q r H; apply mem_linkCands in H.
+      destruct H as [[_ [[_ Ho] | [w' [_ E]]]] |
+                     [[_ [_ [[_ [Ho _]] | [w' [_ E]]]]] |
+                      [[_ [_ [_ [_ E]]]] | [_ [_ [_ [Ho _]]]]]]];
+        try discriminate E; exact Ho.
+    Qed.
+
+    Lemma linkCands_free : forall I q r,
+        ~ T.VSet.In Vs.Free (linkCands I q r).
+    Proof.
+      intros I q r H; apply mem_linkCands in H.
+      destruct H as [[_ [[E _] | [w' [_ E]]]] |
+                     [[_ [_ [[E _] | [w' [_ E]]]]] |
+                      [[_ [_ [_ [_ E]]]] | [_ [_ [_ [_ E]]]]]]];
+        discriminate E.
+    Qed.
+
+    Fixpoint linkVersL (I : Inst) (q : Pkg.t) (a : N.t)
+        (l : list PeerDependency) : T.VSet.t :=
+      match l with
+      | nil => T.VSet.empty
+      | r :: l' =>
+          if NEqb.eqb (p_name r) a
+          then T.VSet.union (linkCands I q r) (linkVersL I q a l')
+          else linkVersL I q a l'
+      end.
+
+    (* what a link from q to a copy of c at a can carry: what q may offer
+       any of c's peers on a *)
+    Definition linkVers (I : Inst) (q : Pkg.t) (c : RPkg.t) (a : N.t)
+      : T.VSet.t :=
+      linkVersL I q a (peerDependenciesAt I c).
+
+    Lemma mem_linkVersL : forall I q a l x,
+        T.VSet.In x (linkVersL I q a l) <->
+        exists r, In r l /\ p_name r = a /\ T.VSet.In x (linkCands I q r).
+    Proof.
+      intros I q a l x; induction l as [| r l IH]; cbn [linkVersL].
+      - split; [intro H; destruct (SOvcv.empty_in _ H) | intros [r [[] _]]].
+      - destruct (NEqb.eqb (p_name r) a) eqn:Hn.
+        + apply NEqb.eqb_true_iff in Hn.
+          rewrite T.VSet.union_spec, IH; split.
+          * intros [H | [r' [Hr' H]]].
+            -- exists r; split; [left; reflexivity | split; [exact Hn | exact H]].
+            -- exists r'; split; [right; exact Hr' | exact H].
+          * intros [r' [[E | Hr'] [Hn' H]]].
+            -- subst r'; left; exact H.
+            -- right; exists r'; split; [exact Hr' | split; assumption].
+        + rewrite IH; split.
+          * intros [r' [Hr' H]]; exists r'; split; [right; exact Hr' | exact H].
+          * intros [r' [[E | Hr'] [Hn' H]]].
+            -- subst r'; rewrite Hn', NEqb.eqb_refl in Hn; discriminate Hn.
+            -- exists r'; split; [exact Hr' | split; assumption].
+    Qed.
+
+    Lemma mem_linkVers : forall I q c a x,
+        T.VSet.In x (linkVers I q c a) <->
+        exists r, In (c, r) (inst_peer I) /\ p_name r = a /\
+          T.VSet.In x (linkCands I q r).
+    Proof.
+      intros I q c a x; unfold linkVers, peerDependenciesAt.
+      rewrite mem_linkVersL; split; intros [r [Hr H]]; exists r;
+        (split; [apply in_ownedBy; exact Hr | exact H]).
+    Qed.
+
     Definition versions (I : Inst) (n : Nm.t) : T.VSet.t :=
       match n with
       | Nm.Granular k w =>
           if PkgSet.mem (k, w) (realPkgs I)
           then T.VSet.singleton (Vs.Orig w)
           else T.VSet.empty
-      | Nm.Intermediate k v m => embedVS (childCands I (k, v) m)
-      | Nm.Sight _ _ a =>
-          T.VSet.add Vs.Bot (embedVS (realVersions (inst_repo I) a))
-      | Nm.Link k v _ _ a =>
+      | Nm.Intermediate k v m =>
+          if loose I (k, v) (fst m)
+          then T.VSet.add Vs.Bot (embedVS (childCands I (k, v) m))
+          else embedVS (childCands I (k, v) m)
+      | Nm.Sight k v a =>
           T.VSet.add Vs.Bot
-            (embedVS (realVersions (inst_repo I)
-                        (snd (slotKey I (snd k, v) a))))
+            (T.VSet.add Vs.Free (embedVS (sightCands I (snd k, v) a)))
+      | Nm.Link k v m u a => linkVers I (k, v) (snd m, u) a
       end.
+
+    Lemma versions_int : forall I k v m x,
+        T.VSet.In x (versions I (Nm.Intermediate k v m)) <->
+        (x = Vs.Bot /\ loose I (k, v) (fst m) = true) \/
+        exists u, VSet.In u (childCands I (k, v) m) /\ x = Vs.Orig u.
+    Proof.
+      intros I k v m x; cbn [versions].
+      destruct (loose I (k, v) (fst m)); rewrite ?T.VSet.add_spec, mem_embedVS.
+      - split; [intros [E | H]; [left; split; [exact E | reflexivity] | right; exact H] |].
+        intros [[E _] | H]; [left; exact E | right; exact H].
+      - split; [intro H; right; exact H |].
+        intros [[_ E] | H]; [discriminate E | exact H].
+    Qed.
+
+    Lemma orig_versions_int : forall I k v m u,
+        T.VSet.In (Vs.Orig u) (versions I (Nm.Intermediate k v m)) <->
+        VSet.In u (childCands I (k, v) m).
+    Proof.
+      intros I k v m u; rewrite versions_int; split.
+      - intros [[E _] | [u' [Hu E]]]; [discriminate E | injection E as ->; exact Hu].
+      - intro Hu; right; exists u; split; [exact Hu | reflexivity].
+    Qed.
 
     Lemma childCands_chains : forall I q m,
         chains I q (fst m) = true -> childCands I q m = VSet.empty.
@@ -585,15 +873,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
              (activePeers I (base q) (base q))
       else T.DependeesSet.empty.
 
-    (* Bot only where the peer asks nothing of what q shows, which is
-       npm's legacy reading kept for an optional peer q has no directory
-       for. *)
-    Definition linkCands (I : Inst) (q : Pkg.t) (r : PeerDependency)
-      : T.VSet.t :=
-      if peerActive I (base q) r
-      then embedVS (peerCandsAt I (base q) r)
-      else T.VSet.add Vs.Bot (embedVS (peerCandsAt I (base q) r)).
-
     Definition linkEdges (I : Inst) (q : Pkg.t) (m : NKey.t) (u : V.t)
       : T.DependeesSet.t :=
       depsOfL (fun r =>
@@ -603,26 +882,39 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Definition plainKey (I : Inst) (p : RPkg.t) (a : N.t) : bool :=
       KeyEqb.eqb (slotKey I p a) (a, a).
 
-    (* A copy's sight is shared by all its holders, which may show different
-       versions, so a link only fixes the sight or leaves it Bot, and a
-       dependency of the copy that reads it is what forces it.  It is a
-       version of a itself, so a holder's aliased copy cannot fill it. *)
+    (* A copy's sight is shared by all its holders, which may offer
+       different versions, so a link leaves it Free or fixes it to what
+       the link carries, and a copy below that reads it forces one of the
+       two.  It is a version of a itself, so a holder's aliased copy
+       leaves it Free, and no copy below may read it. *)
     Definition sightSet (I : Inst) (q : Pkg.t) (a : N.t) (x : Vs.t)
       : T.VSet.t :=
       match x with
       | Vs.Orig w =>
           if plainKey I (base q) a
-          then T.VSet.add (Vs.Orig w) (T.VSet.singleton Vs.Bot)
-          else T.VSet.singleton Vs.Bot
-      | Vs.Bot => T.VSet.singleton Vs.Bot
+          then T.VSet.add (Vs.Orig w) (T.VSet.singleton Vs.Free)
+          else T.VSet.singleton Vs.Free
+      | Vs.Bot => T.VSet.add Vs.Bot (T.VSet.singleton Vs.Free)
+      | Vs.Free => T.VSet.singleton Vs.Free
       end.
 
-    Definition holderEdge (I : Inst) (q : Pkg.t) (a : N.t) (w : V.t)
-      : T.Dependees.t :=
-      (if chains I q a
-       then Nm.Sight (fst q) (snd q) a
-       else Nm.Intermediate (fst q) (snd q) (slotKey I (base q) a),
-       T.VSet.singleton (Vs.Orig w)).
+    (* where a link reads what q offers: q's sight where q chains, and q's
+       copy where q holds the name, both of which Bot reads too: the root
+       leaves a loose name empty at Bot *)
+    Definition holderEdges (I : Inst) (q : Pkg.t) (a : N.t) (x : Vs.t)
+      : T.DependeesSet.t :=
+      if chains I q a
+      then T.DependeesSet.singleton
+             (Nm.Sight (fst q) (snd q) a, T.VSet.singleton x)
+      else if holds I q a
+      then match x with
+           | Vs.Free => T.DependeesSet.empty
+           | _ =>
+               T.DependeesSet.singleton
+                 (Nm.Intermediate (fst q) (snd q) (slotKey I (base q) a),
+                  T.VSet.singleton x)
+           end
+      else T.DependeesSet.empty.
 
     Definition dependees (I : Inst) (s : T.Pkg.t)
       : T.DependeesSet.t :=
@@ -637,10 +929,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
             (linkEdges I (k, v) m u)
       | (Nm.Link k v m u a, x) =>
           T.DependeesSet.add (Nm.Sight m u a, sightSet I (k, v) a x)
-            (match x with
-             | Vs.Orig w => T.DependeesSet.singleton (holderEdge I (k, v) a w)
-             | Vs.Bot => T.DependeesSet.empty
-             end)
+            (holderEdges I (k, v) a x)
       | _ => T.DependeesSet.empty
       end.
 
@@ -688,55 +977,61 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         (split; [apply in_ownedBy; exact Hr | symmetry; exact He]).
     Qed.
 
-    Lemma mem_linkCands : forall I q r x,
-        T.VSet.In x (linkCands I q r) <->
-        (x = Vs.Bot /\ peerActive I (base q) r = false) \/
-        exists w, VSet.In w (peerCandsAt I (base q) r) /\ x = Vs.Orig w.
-    Proof.
-      intros I q r x; unfold linkCands.
-      destruct (peerActive I (base q) r);
-        rewrite ?T.VSet.add_spec, mem_embedVS; split.
-      - intro H; right; exact H.
-      - intros [[_ E] | H]; [discriminate E | exact H].
-      - intros [E | H]; [left; split; [exact E | reflexivity] | right; exact H].
-      - intros [[E _] | H]; [left; exact E | right; exact H].
-    Qed.
-
     Lemma mem_sightSet : forall I q a x y,
         T.VSet.In y (sightSet I q a x) <->
-        y = Vs.Bot \/
-        (y = x /\ x <> Vs.Bot /\ slotKey I (base q) a = (a, a)).
+        y = Vs.Free \/
+        (y = x /\ x <> Vs.Free /\
+         (forall w, x = Vs.Orig w -> slotKey I (base q) a = (a, a))).
     Proof.
       intros I q a x y; unfold sightSet, plainKey.
-      destruct x as [w |].
+      destruct x as [w | |].
       - destruct (KeyEqb.eqb (slotKey I (base q) a) (a, a)) eqn:Hp.
         + apply KeyEqb.eqb_true_iff in Hp.
           rewrite T.VSet.add_spec, T.VSet.singleton_spec; split.
-          * intros [E | E]; [right; split; [exact E | split; [discriminate | exact Hp]]
-                            | left; exact E].
+          * intros [E | E]; [right | left; exact E].
+            split; [exact E | split; [discriminate | intros _ _; exact Hp]].
           * intros [E | [E _]]; [right; exact E | left; exact E].
         + rewrite T.VSet.singleton_spec; split; [intro E; left; exact E |].
-          intros [E | [_ [_ E]]]; [exact E |].
-          rewrite E, KeyEqb.eqb_refl in Hp; discriminate Hp.
+          intros [E | [_ [_ Hk]]]; [exact E |].
+          rewrite (Hk w eq_refl), KeyEqb.eqb_refl in Hp; discriminate Hp.
+      - rewrite T.VSet.add_spec, T.VSet.singleton_spec; split.
+        + intros [E | E]; [right | left; exact E].
+          split; [exact E | split; [discriminate | intros w' E'; discriminate E']].
+        + intros [E | [E _]]; [right; exact E | left; exact E].
       - rewrite T.VSet.singleton_spec; split; [intro E; left; exact E |].
         intros [E | [_ [E _]]]; [exact E | contradiction E; reflexivity].
+    Qed.
+
+    Lemma mem_holderEdges : forall I q a x h,
+        T.DependeesSet.In h (holderEdges I q a x) <->
+        (chains I q a = true /\
+           h = (Nm.Sight (fst q) (snd q) a, T.VSet.singleton x)) \/
+        (chains I q a = false /\ holds I q a = true /\ x <> Vs.Free /\
+           h = (Nm.Intermediate (fst q) (snd q) (slotKey I (base q) a),
+                T.VSet.singleton x)).
+    Proof.
+      intros I q a x h; unfold holderEdges.
+      destruct (chains I q a) eqn:Hc.
+      - rewrite SOhh.singleton_in; split.
+        + intro E; left; split; [reflexivity | exact E].
+        + intros [[_ E] | [E _]]; [exact E | discriminate E].
+      - destruct (holds I q a) eqn:Hh.
+        + destruct x as [w | |]; rewrite ?SOhh.singleton_in; split.
+          * intro E; right; repeat split; [discriminate | exact E].
+          * intros [[E _] | [_ [_ [_ E]]]]; [discriminate E | exact E].
+          * intro E; right; repeat split; [discriminate | exact E].
+          * intros [[E _] | [_ [_ [_ E]]]]; [discriminate E | exact E].
+          * intro H; destruct (SOhh.empty_in _ H).
+          * intros [[E _] | [_ [_ [E _]]]]; [discriminate E | contradiction E; reflexivity].
+        + split; [intro H; destruct (SOhh.empty_in _ H) |].
+          intros [[E _] | [_ [E _]]]; discriminate E.
     Qed.
 
     Lemma dependees_link : forall I k v m u a x h,
         T.DependeesSet.In h (dependees I (Nm.Link k v m u a, x)) <->
         h = (Nm.Sight m u a, sightSet I (k, v) a x) \/
-        exists w, x = Vs.Orig w /\ h = holderEdge I (k, v) a w.
-    Proof.
-      intros I k v m u a x h; cbn [dependees].
-      rewrite SOhh.add_in; destruct x as [w |].
-      - rewrite SOhh.singleton_in; split.
-        + intros [E | E]; [left; exact E | right; exists w; split; [reflexivity | exact E]].
-        + intros [E | [w' [E1 E2]]]; [left; exact E |].
-          injection E1 as <-; right; exact E2.
-      - split.
-        + intros [E | E]; [left; exact E | destruct (SOhh.empty_in _ E)].
-        + intros [E | [w' [E _]]]; [left; exact E | discriminate E].
-    Qed.
+        T.DependeesSet.In h (holderEdges I (k, v) a x).
+    Proof. intros I k v m u a x h; cbn [dependees]; apply SOhh.add_in. Qed.
 
     Definition targetNames (I : Inst) : NmSet.t :=
       NmSet.union
@@ -744,7 +1039,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         (NmSet.union
            (SOpn.unionMap (fun q =>
                 SOnm.map (fun m => Nm.Intermediate (fst q) (snd q) m)
-                  (childKeys I (base q)))
+                  (childKeys I q))
               (realPkgs I))
            (NmSet.union
               (SOpn.unionMap (fun q =>
@@ -757,18 +1052,18 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
                            SOam.map (fun a => Nm.Link (fst q) (snd q) m u a)
                              (peerNames I (snd m, u)))
                          (realVersions (inst_repo I) (snd m)))
-                     (childKeys I (base q)))
+                     (childKeys I q))
                  (realPkgs I)))).
 
     Definition TargetName (I : Inst) (n : Nm.t) : Prop :=
       match n with
       | Nm.Granular k w => PkgSet.In (k, w) (realPkgs I)
       | Nm.Intermediate k v m =>
-          PkgSet.In (k, v) (realPkgs I) /\ KeySet.In m (childKeys I (snd k, v))
+          PkgSet.In (k, v) (realPkgs I) /\ KeySet.In m (childKeys I (k, v))
       | Nm.Sight k v a =>
           PkgSet.In (k, v) (realPkgs I) /\ NSet.In a (peerNames I (snd k, v))
       | Nm.Link k v m u a =>
-          PkgSet.In (k, v) (realPkgs I) /\ KeySet.In m (childKeys I (snd k, v)) /\
+          PkgSet.In (k, v) (realPkgs I) /\ KeySet.In m (childKeys I (k, v)) /\
           VSet.In u (realVersions (inst_repo I) (snd m)) /\
           NSet.In a (peerNames I (snd m, u))
       end.
@@ -864,7 +1159,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       intros S q; unfold npmResolution; apply SOtpp.mem_filterMap_inv.
       - intros [k v]; unfold tryInvPkg, embedPkg; cbn [fst snd].
         rewrite VEqb.eqb_refl; reflexivity.
-      - intros [[k w | k v m | k v a | k v m u a] [x |]] [k' v'] H;
+      - intros [[k w | k v m | k v a | k v m u a] [x | |]] [k' v'] H;
           cbn [tryInvPkg] in H; try discriminate H.
         destruct (VEqb.eqb w x) eqn:E; [| discriminate H].
         apply VEqb.eqb_true_iff in E; subst w.
@@ -891,7 +1186,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       intros S [m u] [k v]; cbn [fst snd].
       unfold npmParents; rewrite SOtp.mem_filterMap; split.
       - intros [[n x] [Hs He]]; destruct n as [k' w | k' v' m' | | ];
-          destruct x as [u' |]; try discriminate He.
+          destruct x as [u' | |]; try discriminate He.
         cbn beta iota in He; apply if_some_iff in He as [Hm He].
         injection He as <- <- <- <-.
         split; [exact Hs | apply T.PkgSet.mem_spec; exact Hm].
@@ -918,7 +1213,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         isSightOf c a s = true ->
         exists w, s = (Nm.Sight (fst c) (snd c) a, Vs.Orig w).
     Proof.
-      intros c a [[k w | k v m | k v b | k v m u b] [x |]]; cbn [isSightOf];
+      intros c a [[k w | k v m | k v b | k v m u b] [x | |]]; cbn [isSightOf];
         try discriminate.
       rewrite !Bool.andb_true_iff, KeyEqb.eqb_true_iff, VEqb.eqb_true_iff,
         NEqb.eqb_true_iff.
@@ -1055,49 +1350,65 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       exists x; split; assumption.
     Qed.
 
-    Lemma link_ranges : forall I S q m u a w,
+    Lemma link_in_cands : forall I S q m u a x,
         T.IsResolution (reduceReal I) (reduceDeps I) (embedRoot I) S ->
         T.PkgSet.In (Nm.Intermediate (fst q) (snd q) m, Vs.Orig u) S ->
-        T.PkgSet.In (Nm.Link (fst q) (snd q) m u a, Vs.Orig w) S ->
-        InPeerRanges I q (snd m, u) a w.
+        T.PkgSet.In (Nm.Link (fst q) (snd q) m u a, x) S ->
+        forall r, In ((snd m, u), r) (inst_peer I) -> p_name r = a ->
+        T.VSet.In x (linkCands I q r).
     Proof.
-      intros I S q m u a w Hres Hin Hl r Hr Hn; subst a.
-      destruct (link_selected I S q m u r Hres Hin Hr) as [x [Hx HxS]].
-      rewrite (T.res_version_unique _ _ _ _ Hres _ _ _ HxS Hl) in Hx.
-      apply mem_linkCands in Hx.
-      destruct Hx as [[E _] | [w' [Hw' E]]]; [discriminate E |].
-      injection E as ->; exact Hw'.
+      intros I S q m u a x Hres Hin Hl r Hr Hn; subst a.
+      destruct (link_selected I S q m u r Hres Hin Hr) as [y [Hy HyS]].
+      rewrite (T.res_version_unique _ _ _ _ Hres _ _ _ Hl HyS); exact Hy.
     Qed.
 
-    Lemma link_sight : forall I S k v m u a x,
-        T.IsResolution (reduceReal I) (reduceDeps I) (embedRoot I) S ->
-        T.PkgSet.In (Nm.Link k v m u a, x) S ->
-        exists y, T.VSet.In y (sightSet I (k, v) a x) /\
-          T.PkgSet.In (Nm.Sight m u a, y) S.
-    Proof.
-      intros I S k v m u a x Hres Hl.
-      destruct (dep_met I S _ (Nm.Sight m u a, sightSet I (k, v) a x) Hres Hl)
-        as [y [Hy HyS]].
-      { apply dependees_link; left; reflexivity. }
-      exists y; split; assumption.
-    Qed.
-
-    Lemma link_shows : forall I S q m u a w,
+    (* what a selected link carries is exactly what its holder offers in
+       the decoded resolution *)
+    Lemma link_shows_iff : forall I S q m u a x,
         T.IsResolution (reduceReal I) (reduceDeps I) (embedRoot I) S ->
         T.PkgSet.In (embedPkg q) S ->
-        T.PkgSet.In (Nm.Link (fst q) (snd q) m u a, Vs.Orig w) S ->
-        Shows I (npmResolution S) (npmParents S) (npmSight S) q a w.
+        T.PkgSet.In (Nm.Intermediate (fst q) (snd q) m, Vs.Orig u) S ->
+        NSet.In a (peerNames I (snd m, u)) ->
+        T.PkgSet.In (Nm.Link (fst q) (snd q) m u a, x) S ->
+        forall w,
+          Shows I (npmResolution S) (npmParents S) (npmSight S) q a w <->
+          x = Vs.Orig w.
     Proof.
-      intros I S [k v] m u a w Hres Hq Hl; cbn [fst snd] in Hl.
-      destruct (dep_met I S _ (holderEdge I (k, v) a w) Hres Hl) as [x [Hx HxS]].
-      { apply dependees_link; right; exists w; split; reflexivity. }
-      unfold holderEdge in Hx, HxS; cbn [fst snd] in Hx, HxS.
-      apply T.VSet.singleton_spec in Hx; subst x.
-      unfold Shows; destruct (chains I (k, v) a).
-      - apply npmSight_in; [exact (T.res_version_unique _ _ _ _ Hres) | exact HxS].
-      - split.
-        + apply mem_npmResolution; exact (exit_selected I S k v _ w Hres HxS).
-        + apply mem_npmParents; cbn [fst snd]; split; assumption.
+      intros I S [k v] m u a x Hres Hq Hi Ha Hl w.
+      pose proof (T.res_version_unique _ _ _ _ Hres) as Huniq.
+      apply mem_peerNames in Ha; destruct Ha as [r [Hr Hn]].
+      pose proof (link_in_cands I S (k, v) m u a x Hres Hi Hl r Hr Hn) as Hx.
+      subst a; apply mem_linkCands in Hx; unfold Shows.
+      destruct Hx as [[Hc _] | [[Hc [Hh Hx']] |
+                     [[Hc [Hh [Hs [_ E]]]] | [Hc [Hh [Hs [_ E]]]]]]];
+        rewrite Hc; [| rewrite Hh | rewrite Hh, Hs | rewrite Hh, Hs].
+      - destruct (dep_met I S _
+                    (Nm.Sight k v (p_name r), T.VSet.singleton x) Hres Hl)
+          as [y [Hy HyS]].
+        { apply dependees_link; right; apply mem_holderEdges; left.
+          split; [exact Hc | reflexivity]. }
+        apply T.VSet.singleton_spec in Hy; subst y; split.
+        + intro Hsg; apply npmSight_some in Hsg; cbn [fst snd] in Hsg.
+          exact (Huniq _ _ _ HyS Hsg).
+        + intros ->; apply npmSight_in; [exact Huniq | exact HyS].
+      - assert (Hxf : x <> Vs.Free)
+          by (destruct Hx' as [[E _] | [w0 [_ E]]]; subst x; discriminate).
+        destruct (dep_met I S _
+                    (Nm.Intermediate k v (slotKey I (base (k, v)) (p_name r)),
+                     T.VSet.singleton x) Hres Hl)
+          as [y [Hy HyS]].
+        { apply dependees_link; right; apply mem_holderEdges; right.
+          split; [exact Hc | split; [exact Hh | split; [exact Hxf | reflexivity]]]. }
+        apply T.VSet.singleton_spec in Hy; subst y; split.
+        + intros [_ Hp]; apply mem_npmParents in Hp; cbn [fst snd] in Hp.
+          destruct Hp as [Hp _].
+          exact (Huniq _ _ _ HyS Hp).
+        + intros ->; split.
+          * apply mem_npmResolution; exact (exit_selected I S k v _ w Hres HyS).
+          * apply mem_npmParents; cbn [fst snd]; split; assumption.
+      - subst x; cbn [snd]; split; [intros ->; reflexivity |].
+        intro E; injection E as <-; reflexivity.
+      - subst x; split; [intros [] | discriminate].
     Qed.
 
     Theorem npm_soundness : forall I S,
@@ -1119,6 +1430,16 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
                  T.PkgSet.In
                    (Nm.Intermediate (fst q) (snd q) m, Vs.Orig u) S).
       { intros q m u [_ Hu]; apply mem_npmParents in Hu; exact (proj1 Hu). }
+      assert (Hlink : forall q m u a,
+                 T.PkgSet.In
+                   (Nm.Intermediate (fst q) (snd q) m, Vs.Orig u) S ->
+                 NSet.In a (peerNames I (snd m, u)) ->
+                 exists x,
+                   T.PkgSet.In (Nm.Link (fst q) (snd q) m u a, x) S).
+      { intros q m u a Hi Ha; apply mem_peerNames in Ha.
+        destruct Ha as [r [Hr <-]].
+        destruct (link_selected I S q m u r Hres Hi Hr) as [x [_ Hl]].
+        exists x; exact Hl. }
       constructor.
       - intros [k w] Hq; apply mem_npmResolution in Hq.
         pose proof (Hsub _ Hq) as Hr; apply mem_reduceReal in Hr.
@@ -1134,34 +1455,64 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         exists v; split; [exact Hv | exact (Hpi p _ v Hp Hi)].
       - intros [k v] Hq a Hch w Hi; apply Hint in Hi.
         apply Hsub, mem_reduceReal in Hi; destruct Hi as [_ Hw].
-        cbn [versions fst snd] in Hw; apply orig_embedVS in Hw.
+        apply orig_versions_int in Hw.
         apply (SOrv.empty_in w).
         rewrite <- (childCands_chains I (k, v)
                       (slotKey I (base (k, v)) a));
           [exact Hw | rewrite slotKey_fst; exact Hch].
-      - intros q Hq m u Hmu a w Ha Hsg.
+      - intros [k v] a w Hsg; apply npmSight_some in Hsg.
+        apply Hsub, mem_reduceReal in Hsg; destruct Hsg as [_ Hw].
+        cbn [versions fst snd] in Hw; rewrite !T.VSet.add_spec in Hw.
+        destruct Hw as [E | [E | Hw]]; [discriminate E | discriminate E |].
+        apply orig_embedVS in Hw; exact Hw.
+      - intros [k v] Hq m u Hmu a Ha Hch [m' [u' [Hc' Ha']]].
+        apply mem_npmResolution in Hq; apply Hint in Hmu; apply Hint in Hc'.
+        cbn [fst snd] in Hmu, Hc'.
+        destruct (Hlink (k, v) m u a Hmu Ha) as [x Hl]; cbn [fst snd] in Hl.
+        destruct (Hlink (m, u) m' u' a Hc' Ha') as [y Hy]; cbn [fst snd] in Hy.
+        destruct (dep_met I S _ (Nm.Sight m u a, T.VSet.singleton y) Hres Hy)
+          as [z [Hz HzS]].
+        { apply dependees_link; right; apply mem_holderEdges; left.
+          split; [exact Hch | reflexivity]. }
+        apply T.VSet.singleton_spec in Hz; subst z.
+        assert (Hyf : y <> Vs.Free).
+        { intro E; subst y.
+          apply mem_peerNames in Ha'; destruct Ha' as [r' [Hr' Hn']].
+          exact (linkCands_free I (m, u) r'
+                   (link_in_cands I S (m, u) m' u' a Vs.Free Hres Hc' Hy r'
+                      Hr' Hn')). }
+        destruct (dep_met I S _ (Nm.Sight m u a, sightSet I (k, v) a x) Hres Hl)
+          as [z [Hz HzS']].
+        { apply dependees_link; left; reflexivity. }
+        rewrite (Huniq _ _ _ HzS' HzS) in Hz.
+        apply mem_sightSet in Hz.
+        destruct Hz as [E | [E [_ Hplain]]]; [contradiction |]; subst x.
+        pose proof (link_shows_iff I S (k, v) m u a y Hres Hq Hmu Ha Hl) as Hsh.
+        split.
+        + intro w; rewrite Hsh; split.
+          * intro Hsg; apply npmSight_some in Hsg; cbn [fst snd] in Hsg.
+            exact (Huniq _ _ _ HzS Hsg).
+          * intros ->; apply npmSight_in; [exact Huniq | exact HzS].
+        + intros w Hs; apply Hsh in Hs; exact (Hplain w Hs).
+      - intros q Hq m u Hmu a w Ha Hs.
         apply mem_npmResolution in Hq; apply Hint in Hmu.
-        apply mem_peerNames in Ha; destruct Ha as [r [Hr Hn]].
-        apply npmSight_some in Hsg; cbn [fst snd] in Hsg.
-        destruct (link_selected I S q m u r Hres Hmu Hr) as [x [_ Hl]].
-        rewrite Hn in Hl.
-        destruct q as [k v]; cbn [fst snd] in Hl, Hmu.
-        destruct (link_sight I S k v m u a x Hres Hl) as [y [Hy HyS]].
-        rewrite (Huniq _ _ _ HyS Hsg) in Hy.
-        apply mem_sightSet in Hy.
-        destruct Hy as [E | [E [_ Hplain]]]; [discriminate E | subst x].
-        split; [exact (link_shows I S (k, v) m u a w Hres Hq Hl) |].
-        split; [exact Hplain |].
-        exact (link_ranges I S (k, v) m u a w Hres Hmu Hl).
-      - intros q Hq m u Hmu r Hr Hact.
+        destruct (Hlink q m u a Hmu Ha) as [x Hl].
+        pose proof (proj1 (link_shows_iff I S q m u a x Hres Hq Hmu Ha Hl w) Hs)
+          as E; subst x.
+        intros r Hr Hn.
+        exact (linkCands_orig I q r w
+                 (link_in_cands I S q m u a (Vs.Orig w) Hres Hmu Hl r Hr Hn)).
+      - intros q Hq m u Hmu r Hr Hopt.
         apply mem_npmResolution in Hq; apply Hint in Hmu.
         destruct (link_selected I S q m u r Hres Hmu Hr) as [x [Hx Hl]].
-        apply mem_linkCands in Hx.
-        destruct Hx as [[_ E] | [w [_ ->]]];
-          [rewrite Hact in E; discriminate E |].
-        exists w; split.
-        + exact (link_shows I S q m u _ w Hres Hq Hl).
-        + exact (link_ranges I S q m u _ w Hres Hmu Hl).
+        assert (Ha : NSet.In (p_name r) (peerNames I (snd m, u)))
+          by (apply mem_peerNames; exists r; split; [exact Hr | reflexivity]).
+        destruct x as [w | |].
+        + exists w.
+          apply (link_shows_iff I S q m u _ _ Hres Hq Hmu Ha Hl w).
+          reflexivity.
+        + apply linkCands_bot in Hx; rewrite Hopt in Hx; discriminate Hx.
+        + exfalso; exact (linkCands_free I q r Hx).
       - intros r Hr Hopt.
         destruct (root_peer_selected I S r Hres Hr
                     (proj2 (Bool.orb_true_iff _ _)
@@ -1191,13 +1542,14 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           T.PkgSet.In (Nm.Intermediate k v m, Vs.Orig u) S ->
         forall r, In ((snd m, u), r) (inst_peer I) ->
           p_optional r = false -> chains I (k, v) (p_name r) = false ->
+          selfb (k, v) (p_name r) = false ->
         exists w,
           PkgSet.In (peerKeyAt I (snd k, v) r, w) (npmResolution S) /\
           Conc.ParentRel.In
             ((peerKeyAt I (snd k, v) r, w), (k, v)) (npmParents S) /\
           VSet.In w (peerCandsAt I (snd k, v) r).
     Proof.
-      intros I S Hres k v m u Hq Hi r Hr Hopt Hch.
+      intros I S Hres k v m u Hq Hi r Hr Hopt Hch Hself.
       pose proof (npm_soundness I S Hres) as Hsrc.
       assert (Hp : PkgSet.In (k, v) (npmResolution S))
         by (apply mem_npmResolution; exact Hq).
@@ -1205,31 +1557,67 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       { split.
         - apply mem_npmResolution; exact (exit_selected I S k v m u Hres Hi).
         - apply mem_npmParents; cbn [fst snd]; split; assumption. }
-      assert (Hact : peerActive I (base (k, v)) r = true)
-        by (unfold peerActive; rewrite Hopt; reflexivity).
-      destruct (res_peer_reach _ _ _ _ Hsrc (k, v) Hp m u HI r Hr Hact)
-        as [w [Hw Hrg]].
+      assert (Ha : NSet.In (p_name r) (peerNames I (snd m, u)))
+        by (apply mem_peerNames; exists r; split; [exact Hr | reflexivity]).
+      destruct (res_peer_need _ _ _ _ Hsrc (k, v) Hp m u HI r Hr Hopt)
+        as [w Hw].
+      pose proof (res_peer_reach _ _ _ _ Hsrc (k, v) Hp m u HI _ w Ha Hw)
+        as Hrg.
       unfold Shows in Hw; rewrite Hch in Hw.
+      destruct (holds I (k, v) (p_name r)); [| rewrite Hself in Hw; destruct Hw].
       exists w; split; [exact (proj1 Hw) | split; [exact (proj2 Hw) |]].
       exact (Hrg r Hr eq_refl).
     Qed.
 
-    Lemma slotKey_childKeys : forall I p a,
-        NSet.In a (childDirs I p) -> KeySet.In (slotKey I p a) (childKeys I p).
+    Lemma slotKey_childKeys : forall I q a,
+        NSet.In a (childDirs I q) ->
+        KeySet.In (slotKey I (base q) a) (childKeys I q).
     Proof.
-      intros I p a Ha; unfold childKeys; apply SOnk.mem_map.
+      intros I q a Ha; unfold childKeys; apply SOnk.mem_map.
       exists a; split; [exact Ha | reflexivity].
     Qed.
 
-    Lemma peerKeyAt_childKeys : forall I p q r,
-        In (q, r) (inst_peer I) -> KeySet.In (peerKeyAt I p r) (childKeys I p).
+    Lemma dirs_childDirs : forall I q a,
+        NSet.In a (dirs I (base q)) -> NSet.In a (childDirs I q).
     Proof.
-      intros I p q r Hr; apply slotKey_childKeys.
-      apply NSet.union_spec; right; exact (peerDirs_peer I q r Hr).
+      intros I q a Ha; unfold childDirs.
+      destruct (PkgEqb.eqb q (rootPkg I)); [apply NSet.union_spec; left |];
+        exact Ha.
+    Qed.
+
+    Lemma holds_childDirs : forall I q a,
+        holds I q a = true -> NSet.In a (peerDirs I) ->
+        NSet.In a (childDirs I q).
+    Proof.
+      intros I q a Hh Hp; unfold holds in Hh; unfold childDirs.
+      apply Bool.orb_true_iff in Hh.
+      destruct (PkgEqb.eqb q (rootPkg I)) eqn:Hq.
+      - apply NSet.union_spec; right; exact Hp.
+      - destruct Hh as [E | Hd]; [discriminate E | apply NSet.mem_spec; exact Hd].
+    Qed.
+
+    Lemma rootPeer_childKeys : forall I r,
+        In (inst_root I, r) (inst_peer I) ->
+        peerActive I (inst_root I) r = true ->
+        KeySet.In (peerKeyAt I (inst_root I) r) (childKeys I (rootPkg I)).
+    Proof.
+      intros I r Hr _; unfold peerKeyAt; rewrite <- (base_rootPkg I).
+      apply slotKey_childKeys.
+      unfold childDirs; rewrite PkgEqb.eqb_refl; apply NSet.union_spec; right.
+      exact (peerDirs_peer I _ r Hr).
+    Qed.
+
+    Lemma peerDirs_keysOf : forall I a,
+        NSet.In a (peerDirs I) ->
+        exists q r, In (q, r) (inst_peer I) /\ p_name r = a.
+    Proof.
+      intros I a Ha; unfold peerDirs in Ha; apply mem_namesOfL in Ha.
+      destruct Ha as [[q r] [Hr Hn]]; exists q, r; split; assumption.
     Qed.
 
     Lemma slotKey_keysOf : forall I p a,
-        NSet.In a (dirs I p) \/ NSet.In a (peerDirs I) ->
+        NSet.In a (dirs I p) \/
+        (exists q r, In (q, r) (inst_peer I) /\ p_name r = a) ->
         KeySet.In (slotKey I p a) (keysOf I).
     Proof.
       intros I p a Ha; unfold keysOf, slotKey.
@@ -1241,21 +1629,31 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         exists (p, d); split; [apply in_ownedBy; exact (proj1 Hin) |].
         cbn [snd]; rewrite Hdir; reflexivity.
       - right; apply mem_keysOfL.
-        destruct Ha as [Ha | Ha].
+        destruct Ha as [Ha | [q [r [Hr Hn]]]].
         + exfalso; unfold dirs in Ha; apply mem_namesOfL in Ha.
           destruct Ha as [d [Hin Hdir]].
           exact (findDepL_none _ _ Hd d Hin Hdir).
-        + unfold peerDirs in Ha; apply mem_namesOfL in Ha.
-          destruct Ha as [[q r] [Hr Hn]]; exists (q, r); split; [exact Hr |].
-          cbn [snd] in Hn |- *; rewrite Hn; reflexivity.
+        + exists (q, r); split; [exact Hr |].
+          cbn [snd]; rewrite Hn; reflexivity.
     Qed.
 
-    Lemma childKeys_keysOf : forall I p m,
-        KeySet.In m (childKeys I p) -> KeySet.In m (keysOf I).
+    Lemma childDirs_keysOf : forall I q a,
+        NSet.In a (childDirs I q) ->
+        NSet.In a (dirs I (base q)) \/
+        (exists q' r, In (q', r) (inst_peer I) /\ p_name r = a).
     Proof.
-      intros I p m H; unfold childKeys in H; apply SOnk.mem_map in H.
+      intros I q a Ha; unfold childDirs in Ha.
+      destruct (PkgEqb.eqb q (rootPkg I)); [| left; exact Ha].
+      apply NSet.union_spec in Ha; destruct Ha as [Ha | Ha]; [left; exact Ha |].
+      right; exact (peerDirs_keysOf I a Ha).
+    Qed.
+
+    Lemma childKeys_keysOf : forall I q m,
+        KeySet.In m (childKeys I q) -> KeySet.In m (keysOf I).
+    Proof.
+      intros I q m H; unfold childKeys in H; apply SOnk.mem_map in H.
       destruct H as [a [Ha ->]]; apply slotKey_keysOf.
-      unfold childDirs in Ha; apply NSet.union_spec in Ha; exact Ha.
+      exact (childDirs_keysOf I q a Ha).
     Qed.
 
     Lemma childCands_real : forall I q m u,
@@ -1270,15 +1668,17 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         split; [rewrite Hk; apply slotKey_keysOf; left; exact Hd |].
         pose proof (slotCands_real I _ _ u Hu) as Hr.
         rewrite <- Hk in Hr; exact Hr.
-      - apply SOrv.in_if_empty in Hu as [Hp Hu].
+      - apply SOrv.in_if_empty in Hu as [Hh Hu].
+        apply Bool.andb_true_iff in Hh; destruct Hh as [_ Hp].
         apply NSet.mem_spec in Hp.
-        split; [rewrite Hk; apply slotKey_keysOf; right; exact Hp |].
+        split; [rewrite Hk; apply slotKey_keysOf; right;
+                exact (peerDirs_keysOf I _ Hp) |].
         apply mem_realVersions; exact Hu.
     Qed.
 
     Lemma installs_childCands : forall I S pi sg p m v,
         IsResolution I S pi sg -> PkgSet.In p S ->
-        KeySet.In m (childKeys I (base p)) ->
+        KeySet.In m (childKeys I p) ->
         Installs S pi p m v ->
         VSet.In v (childCands I p m).
     Proof.
@@ -1292,14 +1692,15 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       - apply NSet.mem_spec in Hsa.
         destruct (res_slot _ _ _ _ Hres p Hp a Hsa) as [v' [Hv' Hi']].
         rewrite (res_unique _ _ _ _ Hres p _ v v' Hi Hi'); exact Hv'.
-      - unfold childDirs in Ha; apply NSet.union_spec in Ha.
-        destruct Ha as [Ha | Ha];
-          [apply NSet.mem_spec in Ha; rewrite Ha in Hsa; discriminate |].
-        assert (Hpa : NSet.mem a (peerDirs I) = true)
-          by (apply NSet.mem_spec; exact Ha).
-        rewrite Hpa; destruct Hi as [HinS _].
-        destruct (res_subset _ _ _ _ Hres _ HinS) as [_ Hb]; unfold base in Hb.
-        cbn [fst snd] in Hb; apply mem_realVersions; exact Hb.
+      - unfold childDirs in Ha.
+        destruct (PkgEqb.eqb p (rootPkg I)) eqn:Hq.
+        + apply NSet.union_spec in Ha; destruct Ha as [Ha | Ha].
+          * apply NSet.mem_spec in Ha; rewrite Ha in Hsa; discriminate Hsa.
+          * apply NSet.mem_spec in Ha; rewrite Ha; cbn [andb].
+            destruct Hi as [HinS _].
+            destruct (res_subset _ _ _ _ Hres _ HinS) as [_ Hb]; unfold base in Hb.
+            cbn [fst snd] in Hb; apply mem_realVersions; exact Hb.
+        + apply NSet.mem_spec in Ha; rewrite Ha in Hsa; discriminate Hsa.
     Qed.
 
     Lemma root_peer_installs : forall I S pi sg r,
@@ -1322,6 +1723,21 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       exists w; unfold peerKeyAt; split;
         [exact (res_root_peer_match _ _ _ _ Hres r Hr Hopt Hact w Hi)
         | exact Hi].
+    Qed.
+
+    Lemma holds_installed : forall I S pi sg q a,
+        IsResolution I S pi sg -> PkgSet.In q S ->
+        holds I q a = true -> loose I q a = false ->
+        exists w, Installs S pi q (slotKey I (base q) a) w.
+    Proof.
+      intros I S pi sg q a Hres Hq Hh Hl.
+      assert (Hd : NSet.In a (dirs I (base q))).
+      { unfold holds in Hh; unfold loose in Hl.
+        destruct (NSet.mem a (dirs I (base q))) eqn:Hm;
+          [apply NSet.mem_spec; exact Hm |].
+        rewrite Bool.orb_false_r in Hh; rewrite Hh in Hl; discriminate Hl. }
+      destruct (res_slot _ _ _ _ Hres q Hq a Hd) as [w [_ Hi]].
+      exists w; exact Hi.
     Qed.
 
     Definition installsb (S : PkgSet.t) (pi : Conc.ParentRel.t)
@@ -1347,28 +1763,27 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       List.find (installsb S pi p k)
         (VSet.elements (realVersions (inst_repo I) (snd k))).
 
-    Definition showsAt (I : Inst) (S : PkgSet.t) (pi : Conc.ParentRel.t)
-        (sg : Pkg.t -> N.t -> option V.t) (q : Pkg.t) (a : N.t)
-      : option V.t :=
-      if chains I q a then sg q a
-      else ownAt I S pi q (slotKey I (base q) a).
-
-    Lemma shows_showsAt : forall I S pi sg q a w,
-        IsResolution I S pi sg ->
-        Shows I S pi sg q a w -> showsAt I S pi sg q a = Some w.
+    Lemma ownAt_some : forall I S pi p k w,
+        ownAt I S pi p k = Some w -> Installs S pi p k w.
     Proof.
-      intros I S pi sg q a w Hres; unfold Shows, showsAt.
-      destruct (chains I q a); [exact (fun H => H) |].
-      intro Hi; unfold ownAt.
-      destruct (List.find (installsb S pi q (slotKey I (base q) a))
-                  (VSet.elements (realVersions (inst_repo I)
-                     (snd (slotKey I (base q) a))))) as [w' |] eqn:Hf.
+      intros I S pi p k w H; unfold ownAt in H.
+      apply List.find_some in H; apply installsb_iff; exact (proj2 H).
+    Qed.
+
+    Lemma ownAt_installs : forall I S pi sg p k w,
+        IsResolution I S pi sg ->
+        Installs S pi p k w -> ownAt I S pi p k = Some w.
+    Proof.
+      intros I S pi sg p k w Hres Hi; unfold ownAt.
+      destruct (List.find (installsb S pi p k)
+                  (VSet.elements (realVersions (inst_repo I) (snd k))))
+        as [w' |] eqn:Hf.
       - apply List.find_some in Hf; destruct Hf as [_ Hb].
         apply installsb_iff in Hb.
         rewrite (res_unique _ _ _ _ Hres _ _ _ _ Hb Hi); reflexivity.
       - exfalso.
         assert (Hw : List.In w (VSet.elements (realVersions (inst_repo I)
-                                  (snd (slotKey I (base q) a))))).
+                                  (snd k)))).
         { apply SOvp.elements_in, mem_realVersions.
           destruct (res_subset _ _ _ _ Hres _ (proj1 Hi)) as [_ Hb].
           exact Hb. }
@@ -1376,119 +1791,130 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         apply installsb_iff in Hi; rewrite Hi in E; discriminate E.
     Qed.
 
-    Definition requiredb (I : Inst) (q : Pkg.t) (c : RPkg.t) (a : N.t)
-      : bool :=
-      existsb (fun r => andb (NEqb.eqb (p_name r) a) (peerActive I (base q) r))
-        (peerDependenciesAt I c).
+    Definition showsAt (I : Inst) (S : PkgSet.t) (pi : Conc.ParentRel.t)
+        (sg : Pkg.t -> N.t -> option V.t) (q : Pkg.t) (a : N.t)
+      : option V.t :=
+      if chains I q a then sg q a
+      else if holds I q a then ownAt I S pi q (slotKey I (base q) a)
+      else if selfb q a then Some (snd q)
+      else None.
 
-    Lemma requiredb_spec : forall I q c a,
-        requiredb I q c a = true <->
-        exists r, In (c, r) (inst_peer I) /\ p_name r = a /\
-          peerActive I (base q) r = true.
+    Lemma showsAt_holds : forall I S pi sg q a,
+        chains I q a = false -> holds I q a = true ->
+        showsAt I S pi sg q a = ownAt I S pi q (slotKey I (base q) a).
     Proof.
-      intros I q c a; unfold requiredb, peerDependenciesAt.
-      rewrite existsb_exists; split; intros [r [Hr H]].
-      - apply Bool.andb_true_iff in H; destruct H as [Hn Ha].
-        apply NEqb.eqb_true_iff in Hn.
-        exists r; split; [apply in_ownedBy; exact Hr | split; assumption].
-      - destruct H as [Hn Ha]; exists r; split; [apply in_ownedBy; exact Hr |].
-        apply Bool.andb_true_iff; split;
-          [apply NEqb.eqb_true_iff; exact Hn | exact Ha].
+      intros I S pi sg q a Hc Hh; unfold showsAt; rewrite Hc, Hh; reflexivity.
     Qed.
 
-    Definition sightVal (I : Inst) (sg : Pkg.t -> N.t -> option V.t)
-        (c : Pkg.t) (a : N.t) : Vs.t :=
-      match sg c a with
-      | Some w =>
-          if VSet.mem w (realVersions (inst_repo I) a) then Vs.Orig w
-          else Vs.Bot
+    Lemma showsAt_spec : forall I S pi sg q a w,
+        IsResolution I S pi sg ->
+        showsAt I S pi sg q a = Some w <-> Shows I S pi sg q a w.
+    Proof.
+      intros I S pi sg q a w Hres; unfold showsAt, Shows.
+      destruct (chains I q a); [reflexivity |].
+      destruct (holds I q a).
+      - split; [apply ownAt_some | apply (ownAt_installs I S pi sg); exact Hres].
+      - destruct (selfb q a); split.
+        + intro E; injection E as <-; reflexivity.
+        + intros ->; reflexivity.
+        + discriminate.
+        + intros [].
+    Qed.
+
+    Definition readb (I : Inst) (S : PkgSet.t) (pi : Conc.ParentRel.t)
+        (c : Pkg.t) (a : N.t) : bool :=
+      KeySet.exists_ (fun m =>
+          VSet.exists_ (fun u =>
+              andb (installsb S pi c m u) (NSet.mem a (peerNames I (snd m, u))))
+            (realVersions (inst_repo I) (snd m)))
+        (childKeys I c).
+
+    Lemma readb_iff : forall I S pi sg c a,
+        IsResolution I S pi sg ->
+        readb I S pi c a = true <-> ReadBelow I S pi c a.
+    Proof.
+      intros I S pi sg c a Hres; unfold readb, ReadBelow.
+      rewrite SOkp.SSA.exists_spec'; split.
+      - intros [m [_ H]]; apply SOvp.SSA.exists_spec' in H.
+        destruct H as [u [_ H]]; apply Bool.andb_true_iff in H.
+        destruct H as [Hi Ha]; apply installsb_iff in Hi.
+        apply NSet.mem_spec in Ha; exists m, u; split; assumption.
+      - intros [m [u [Hi Ha]]]; exists m; split.
+        + exact (proj2 (proj2 (res_parents _ _ _ _ Hres _ _ (proj2 Hi)))).
+        + apply SOvp.SSA.exists_spec'; exists u; split.
+          * apply mem_realVersions.
+            exact (proj2 (res_subset _ _ _ _ Hres _ (proj1 Hi))).
+          * apply Bool.andb_true_iff; split;
+              [apply installsb_iff; exact Hi | apply NSet.mem_spec; exact Ha].
+    Qed.
+
+    Definition sightVal (I : Inst) (S : PkgSet.t) (pi : Conc.ParentRel.t)
+        (sg : Pkg.t -> N.t -> option V.t) (c : Pkg.t) (a : N.t) : Vs.t :=
+      if andb (chains I c a) (readb I S pi c a)
+      then match sg c a with Some w => Vs.Orig w | None => Vs.Bot end
+      else Vs.Free.
+
+    Definition linkVal (I : Inst) (S : PkgSet.t) (pi : Conc.ParentRel.t)
+        (sg : Pkg.t -> N.t -> option V.t) (q : Pkg.t) (a : N.t) : Vs.t :=
+      match showsAt I S pi sg q a with
+      | Some w => Vs.Orig w
       | None => Vs.Bot
       end.
 
-    Lemma shows_cases : forall I S pi sg q a w,
-        Shows I S pi sg q a w ->
-        (chains I q a = true /\ sg q a = Some w) \/
-        (chains I q a = false /\ Installs S pi q (slotKey I (base q) a) w).
+    Lemma linkVal_cands : forall I S pi sg q m u r,
+        IsResolution I S pi sg -> PkgSet.In q S -> Installs S pi q m u ->
+        In ((snd m, u), r) (inst_peer I) ->
+        T.VSet.In (linkVal I S pi sg q (p_name r)) (linkCands I q r).
     Proof.
-      intros I S pi sg q a w; unfold Shows.
-      destruct (chains I q a); intro H; [left | right]; split;
-        solve [reflexivity | exact H].
+      intros I S pi sg q m u r Hres Hq Hi Hr.
+      assert (Ha : NSet.In (p_name r) (peerNames I (snd m, u)))
+        by (apply mem_peerNames; exists r; split; [exact Hr | reflexivity]).
+      assert (Hrange : forall w, showsAt I S pi sg q (p_name r) = Some w ->
+                 VSet.In w (peerCandsAt I (base q) r)).
+      { intros w Hs; apply (showsAt_spec I S pi sg q _ w Hres) in Hs.
+        exact (res_peer_reach _ _ _ _ Hres q Hq m u Hi _ w Ha Hs r Hr eq_refl). }
+      assert (Hneed : showsAt I S pi sg q (p_name r) = None ->
+                 p_optional r = true).
+      { intro Hs; destruct (p_optional r) eqn:Ho; [reflexivity |].
+        destruct (res_peer_need _ _ _ _ Hres q Hq m u Hi r Hr Ho) as [w Hw].
+        apply (showsAt_spec I S pi sg q _ w Hres) in Hw.
+        rewrite Hs in Hw; discriminate Hw. }
+      apply mem_linkCands; unfold linkVal.
+      destruct (chains I q (p_name r)) eqn:Hc.
+      - left; split; [reflexivity |].
+        destruct (showsAt I S pi sg q (p_name r)) as [w |] eqn:Hs.
+        + right; exists w; split; [exact (Hrange w eq_refl) | reflexivity].
+        + left; split; [reflexivity | exact (Hneed eq_refl)].
+      - destruct (holds I q (p_name r)) eqn:Hh.
+        + right; left; split; [reflexivity | split; [reflexivity |]].
+          pose proof (showsAt_holds I S pi sg q _ Hc Hh) as Hs0.
+          destruct (showsAt I S pi sg q (p_name r)) as [w |] eqn:Hs.
+          * right; exists w; split; [exact (Hrange w eq_refl) | reflexivity].
+          * destruct (loose I q (p_name r)) eqn:Hl.
+            -- left; split; [reflexivity | split; [exact (Hneed eq_refl) | reflexivity]].
+            -- exfalso.
+               destruct (holds_installed I S pi sg q _ Hres Hq Hh Hl) as [w Hw].
+               rewrite (ownAt_installs I S pi sg _ _ _ Hres Hw) in Hs0.
+               discriminate Hs0.
+        + assert (Hs0 : showsAt I S pi sg q (p_name r) =
+                        if selfb q (p_name r) then Some (snd q) else None)
+            by (unfold showsAt; rewrite Hc, Hh; reflexivity).
+          destruct (selfb q (p_name r)) eqn:Hsf.
+          * right; right; left; rewrite Hs0.
+            repeat split; try reflexivity.
+            exact (Hrange _ Hs0).
+          * right; right; right; rewrite Hs0.
+            repeat split; try reflexivity; exact (Hneed Hs0).
     Qed.
 
-    Lemma holderEdge_chain : forall I q a w,
-        chains I q a = true ->
-        holderEdge I q a w =
-        (Nm.Sight (fst q) (snd q) a, T.VSet.singleton (Vs.Orig w)).
-    Proof. intros I q a w H; unfold holderEdge; rewrite H; reflexivity. Qed.
-
-    Lemma holderEdge_own : forall I q a w,
-        chains I q a = false ->
-        holderEdge I q a w =
-        (Nm.Intermediate (fst q) (snd q) (slotKey I (base q) a),
-         T.VSet.singleton (Vs.Orig w)).
-    Proof. intros I q a w H; unfold holderEdge; rewrite H; reflexivity. Qed.
-
-    Lemma sightVal_none : forall I sg c a,
-        sg c a = None -> sightVal I sg c a = Vs.Bot.
-    Proof. intros I sg c a H; unfold sightVal; rewrite H; reflexivity. Qed.
-
-    Lemma sightVal_some : forall I sg c a w,
-        sg c a = Some w -> VSet.In w (realVersions (inst_repo I) a) ->
-        sightVal I sg c a = Vs.Orig w.
-    Proof.
-      intros I sg c a w H Hw; unfold sightVal; rewrite H.
-      apply VSet.mem_spec in Hw; rewrite Hw; reflexivity.
-    Qed.
-
-    Definition linkVal (I : Inst) (S : PkgSet.t) (pi : Conc.ParentRel.t)
-        (sg : Pkg.t -> N.t -> option V.t) (q : Pkg.t) (m : NKey.t) (u : V.t)
-        (a : N.t) : Vs.t :=
-      match sg (m, u) a with
-      | Some w => Vs.Orig w
-      | None =>
-          if requiredb I q (snd m, u) a
-          then match showsAt I S pi sg q a with
-               | Some w => Vs.Orig w
-               | None => Vs.Bot
-               end
-          else Vs.Bot
-      end.
-
-    Lemma linkVal_spec : forall I S pi sg p m u a,
-        IsResolution I S pi sg -> PkgSet.In p S -> Installs S pi p m u ->
-        NSet.In a (peerNames I (snd m, u)) ->
-        (linkVal I S pi sg p m u a = Vs.Bot /\ sg (m, u) a = None /\
-         forall r, In ((snd m, u), r) (inst_peer I) -> p_name r = a ->
-           peerActive I (base p) r = false) \/
-        (exists w, linkVal I S pi sg p m u a = Vs.Orig w /\
-           Shows I S pi sg p a w /\ InPeerRanges I p (snd m, u) a w /\
-           forall w', sg (m, u) a = Some w' ->
-             w' = w /\ slotKey I (base p) a = (a, a)).
-    Proof.
-      intros I S pi sg p m u a Hres Hp Hi Ha; unfold linkVal.
-      destruct (sg (m, u) a) as [w |] eqn:Hsg.
-      - destruct (res_peer_sight _ _ _ _ Hres p Hp m u Hi a w Ha Hsg)
-          as [Hs [Hk Hrg]].
-        right; exists w; split; [reflexivity |].
-        split; [exact Hs | split; [exact Hrg |]].
-        intros w' E; injection E as ->; split; [reflexivity | exact Hk].
-      - destruct (requiredb I p (snd m, u) a) eqn:Hreq.
-        + apply requiredb_spec in Hreq; destruct Hreq as [r [Hr [Hn Hact]]].
-          destruct (res_peer_reach _ _ _ _ Hres p Hp m u Hi r Hr Hact)
-            as [w [Hs Hrg]].
-          rewrite Hn in Hs, Hrg.
-          rewrite (shows_showsAt I S pi sg p a w Hres Hs).
-          right; exists w; split; [reflexivity |].
-          split; [exact Hs | split; [exact Hrg |]].
-          intros w' E; discriminate E.
-        + left; split; [reflexivity | split; [reflexivity |]].
-          intros r Hr Hn.
-          destruct (peerActive I (base p) r) eqn:Hact; [| reflexivity].
-          exfalso.
-          assert (requiredb I p (snd m, u) a = true) as H
-            by (apply requiredb_spec; exists r; auto).
-          rewrite H in Hreq; discriminate Hreq.
-    Qed.
+    (* a loose name of the root no peer is offered a copy under, which a
+       link reading it at Bot needs *)
+    Definition looseNode (I : Inst) (S : PkgSet.t) (pi : Conc.ParentRel.t)
+        (p : Pkg.t) (m : NKey.t) : option T.Pkg.t :=
+      if andb (loose I p (fst m))
+           (match ownAt I S pi p m with Some _ => false | None => true end)
+      then Some (Nm.Intermediate (fst p) (snd p) m, Vs.Bot)
+      else None.
 
     Definition coreResolution (I : Inst) (S : PkgSet.t)
         (pi : Conc.ParentRel.t) (sg : Pkg.t -> N.t -> option V.t)
@@ -1499,26 +1925,30 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
                 SOkt.unionMap (fun m =>
                     SOvt.filterMap (instNode S pi p m)
                       (realVersions (inst_repo I) (snd m)))
-                  (childKeys I (base p)))
+                  (childKeys I p))
               S)
            (T.PkgSet.union
               (SOpt.unionMap (fun c =>
                    SOat.map (fun a =>
-                       (Nm.Sight (fst c) (snd c) a, sightVal I sg c a))
+                       (Nm.Sight (fst c) (snd c) a, sightVal I S pi sg c a))
                      (peerNames I (base c)))
                  S)
+              (T.PkgSet.union
               (SOpt.unionMap (fun p =>
                    SOkt.unionMap (fun m =>
                        SOvt.unionMap (fun u =>
                            if installsb S pi p m u
                            then SOat.map (fun a =>
                                     (Nm.Link (fst p) (snd p) m u a,
-                                     linkVal I S pi sg p m u a))
+                                     linkVal I S pi sg p a))
                                   (peerNames I (snd m, u))
                            else T.PkgSet.empty)
                          (realVersions (inst_repo I) (snd m)))
-                     (childKeys I (base p)))
-                 S))).
+                     (childKeys I p))
+                 S)
+              (SOpt.unionMap (fun p =>
+                   SOkt.filterMap (looseNode I S pi p) (childKeys I p))
+                 S)))).
 
     Lemma embedSet_gran : forall S s,
         T.PkgSet.In s (embedSet S) <->
@@ -1534,21 +1964,24 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         T.PkgSet.In s (coreResolution I S pi sg) <->
         (exists (k : NKey.t) (v : V.t), PkgSet.In (k, v) S /\
            s = (Nm.Granular k v, Vs.Orig v)) \/
-        (exists p m u, PkgSet.In p S /\ KeySet.In m (childKeys I (base p)) /\
+        (exists p m u, PkgSet.In p S /\ KeySet.In m (childKeys I p) /\
            VSet.In u (realVersions (inst_repo I) (snd m)) /\
            Installs S pi p m u /\
            s = (Nm.Intermediate (fst p) (snd p) m, Vs.Orig u)) \/
         (exists c a, PkgSet.In c S /\ NSet.In a (peerNames I (base c)) /\
-           s = (Nm.Sight (fst c) (snd c) a, sightVal I sg c a)) \/
+           s = (Nm.Sight (fst c) (snd c) a, sightVal I S pi sg c a)) \/
         (exists p m u a, PkgSet.In p S /\
-           KeySet.In m (childKeys I (base p)) /\
+           KeySet.In m (childKeys I p) /\
            VSet.In u (realVersions (inst_repo I) (snd m)) /\
            Installs S pi p m u /\ NSet.In a (peerNames I (snd m, u)) /\
-           s = (Nm.Link (fst p) (snd p) m u a, linkVal I S pi sg p m u a)).
+           s = (Nm.Link (fst p) (snd p) m u a, linkVal I S pi sg p a)) \/
+        (exists p m, PkgSet.In p S /\ KeySet.In m (childKeys I p) /\
+           loose I p (fst m) = true /\ ownAt I S pi p m = None /\
+           s = (Nm.Intermediate (fst p) (snd p) m, Vs.Bot)).
     Proof.
       intros I S pi sg s; unfold coreResolution.
       rewrite !T.PkgSet.union_spec, embedSet_gran; split.
-      - intros [H | [H | [H | H]]].
+      - intros [H | [H | [H | [H | H]]]].
         + left; exact H.
         + apply SOpt.mem_unionMap in H; destruct H as [p [Hp H]].
           apply SOkt.mem_unionMap in H; destruct H as [m [Hm H]].
@@ -1566,11 +1999,19 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           apply SOat.in_if_empty in H; destruct H as [Hb H].
           apply SOat.mem_map in H; destruct H as [a [Ha ->]].
           apply installsb_iff in Hb.
-          right; right; right; exists p, m, u, a.
+          right; right; right; left; exists p, m, u, a.
           exact (conj Hp (conj Hm (conj Hu (conj Hb (conj Ha eq_refl))))).
+        + apply SOpt.mem_unionMap in H; destruct H as [p [Hp H]].
+          apply SOkt.mem_filterMap in H; destruct H as [m [Hm H]].
+          unfold looseNode in H; apply if_some_iff in H; destruct H as [Hb <-].
+          apply Bool.andb_true_iff in Hb; destruct Hb as [Hl Ho].
+          right; right; right; right; exists p, m.
+          split; [exact Hp | split; [exact Hm | split; [exact Hl | split; [| reflexivity]]]].
+          destruct (ownAt I S pi p m); [discriminate Ho | reflexivity].
       - intros [H | [[p [m [u [Hp [Hm [Hu [Hb ->]]]]]]] |
                  [[c [a [Hc [Ha ->]]]] |
-                  [p [m [u [a [Hp [Hm [Hu [Hb [Ha ->]]]]]]]]]]]].
+                  [[p [m [u [a [Hp [Hm [Hu [Hb [Ha ->]]]]]]]]] |
+                   [p [m [Hp [Hm [Hl [Ho ->]]]]]]]]]].
         + left; exact H.
         + right; left; apply SOpt.mem_unionMap; exists p; split; [exact Hp |].
           apply SOkt.mem_unionMap; exists m; split; [exact Hm |].
@@ -1579,12 +2020,16 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         + right; right; left; apply SOpt.mem_unionMap; exists c;
             split; [exact Hc |].
           apply SOat.mem_map; exists a; split; [exact Ha | reflexivity].
-        + right; right; right; apply SOpt.mem_unionMap; exists p;
+        + right; right; right; left; apply SOpt.mem_unionMap; exists p;
             split; [exact Hp |].
           apply SOkt.mem_unionMap; exists m; split; [exact Hm |].
           apply SOvt.mem_unionMap; exists u; split; [exact Hu |].
           apply SOat.in_if_empty; split; [apply installsb_iff; exact Hb |].
           apply SOat.mem_map; exists a; split; [exact Ha | reflexivity].
+        + right; right; right; right; apply SOpt.mem_unionMap; exists p;
+            split; [exact Hp |].
+          apply SOkt.mem_filterMap; exists m; split; [exact Hm |].
+          unfold looseNode; rewrite Hl, Ho; reflexivity.
     Qed.
 
     Lemma versions_gran_real : forall I (k : NKey.t) (w : V.t),
@@ -1593,6 +2038,60 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Proof.
       intros I k w H; cbn [versions]; apply PkgSet.mem_spec in H.
       rewrite H; apply T.VSet.singleton_spec; reflexivity.
+    Qed.
+
+    Lemma sightVal_versions : forall I S pi sg c a,
+        IsResolution I S pi sg ->
+        T.VSet.In (sightVal I S pi sg c a)
+          (versions I (Nm.Sight (fst c) (snd c) a)).
+    Proof.
+      intros I S pi sg c a Hres; cbn [versions]; unfold sightVal.
+      rewrite !T.VSet.add_spec.
+      destruct (andb (chains I c a) (readb I S pi c a)); [| right; left; reflexivity].
+      destruct (sg c a) as [w |] eqn:Hsg; [| left; reflexivity].
+      right; right; apply orig_embedVS.
+      exact (res_sight_range _ _ _ _ Hres c a w Hsg).
+    Qed.
+
+    (* what a copy's sight reads is what each of its holders offers, where
+       a copy below reads it *)
+    Lemma sightVal_link : forall I S pi sg q m u a,
+        IsResolution I S pi sg -> PkgSet.In q S -> Installs S pi q m u ->
+        NSet.In a (peerNames I (snd m, u)) ->
+        T.VSet.In (sightVal I S pi sg (m, u) a)
+          (sightSet I q a (linkVal I S pi sg q a)).
+    Proof.
+      intros I S pi sg q m u a Hres Hq Hi Ha; apply mem_sightSet.
+      unfold sightVal.
+      destruct (chains I (m, u) a) eqn:Hch; [| left; reflexivity].
+      destruct (readb I S pi (m, u) a) eqn:Hrd; [| left; reflexivity].
+      cbn [andb]; right.
+      apply (readb_iff I S pi sg (m, u) a Hres) in Hrd.
+      destruct (res_peer_sight _ _ _ _ Hres q Hq m u Hi a Ha Hch Hrd)
+        as [Hsg Hplain].
+      unfold linkVal.
+      destruct (sg (m, u) a) as [w |] eqn:Hs.
+      - assert (Hw : Shows I S pi sg q a w) by (apply Hsg; reflexivity).
+        pose proof (proj2 (showsAt_spec I S pi sg q a w Hres) Hw) as E.
+        rewrite E; split; [reflexivity | split; [discriminate |]].
+        intros w' E'; injection E' as <-; exact (Hplain w Hw).
+      - destruct (showsAt I S pi sg q a) as [w |] eqn:E.
+        + apply (showsAt_spec I S pi sg q a w Hres) in E.
+          apply Hsg in E; discriminate E.
+        + split; [reflexivity | split; [discriminate | intros w' E'; discriminate E']].
+    Qed.
+
+    Lemma sightVal_holder : forall I S pi sg q m u a,
+        IsResolution I S pi sg -> Installs S pi q m u ->
+        NSet.In a (peerNames I (snd m, u)) ->
+        chains I q a = true ->
+        sightVal I S pi sg q a = linkVal I S pi sg q a.
+    Proof.
+      intros I S pi sg q m u a Hres Hi Ha Hch.
+      assert (Hrd : readb I S pi q a = true)
+        by (apply (readb_iff I S pi sg q a Hres); exists m, u; split; assumption).
+      unfold sightVal, linkVal, showsAt; rewrite Hch, Hrd; cbn [andb].
+      destruct (sg q a); reflexivity.
     Qed.
 
     Theorem npm_completeness : forall I S pi sg,
@@ -1609,7 +2108,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
                  VSet.In u (realVersions (inst_repo I) (snd m))).
       { intros p m u [HS _]; apply mem_realVersions; exact (proj2 (Hsub _ HS)). }
       assert (Hck : forall p m u, Installs S pi p m u ->
-                 KeySet.In m (childKeys I (base p))).
+                 KeySet.In m (childKeys I p)).
       { intros p m u [_ Hpi].
         exact (proj2 (proj2 (res_parents _ _ _ _ Hres _ _ Hpi))). }
       assert (HcoreG : forall q, PkgSet.In q S ->
@@ -1625,60 +2124,43 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
                                               (conj Hi eq_refl)))). }
       assert (HcoreS : forall c a, PkgSet.In c S ->
                  NSet.In a (peerNames I (base c)) ->
-                 T.PkgSet.In (Nm.Sight (fst c) (snd c) a, sightVal I sg c a)
+                 T.PkgSet.In (Nm.Sight (fst c) (snd c) a, sightVal I S pi sg c a)
                    (coreResolution I S pi sg)).
       { intros c a Hc Ha; apply mem_coreResolution; right; right; left.
         exists c, a; exact (conj Hc (conj Ha eq_refl)). }
       assert (HcoreL : forall p m u a, PkgSet.In p S -> Installs S pi p m u ->
                  NSet.In a (peerNames I (snd m, u)) ->
                  T.PkgSet.In (Nm.Link (fst p) (snd p) m u a,
-                              linkVal I S pi sg p m u a)
+                              linkVal I S pi sg p a)
                    (coreResolution I S pi sg)).
       { intros p m u a Hp Hi Ha; apply mem_coreResolution; right; right; right.
-        exists p, m, u, a.
+        left; exists p, m, u, a.
         exact (conj Hp (conj (Hck _ _ _ Hi) (conj (Hrv _ _ _ Hi)
                                               (conj Hi (conj Ha eq_refl))))). }
-      assert (Hchain : forall q a, PkgSet.In q S -> chains I q a = true ->
-                 slotKey I (base q) a = (a, a)).
-      { intros q a Hq Hch; apply slotKey_plain; intro Hd.
-        destruct (Hslot q Hq a Hd) as [w [_ Hi]].
-        exact (res_peer_local _ _ _ _ Hres q Hq a Hch w Hi). }
-      assert (Hrg_real : forall p c a w, NSet.In a (peerNames I c) ->
-                 InPeerRanges I p c a w ->
-                 VSet.In w (realVersions (inst_repo I)
-                              (snd (slotKey I (base p) a)))).
-      { intros p c a w Ha Hrg; apply mem_peerNames in Ha.
-        destruct Ha as [r [Hr Hn]].
-        pose proof (peerCandsAt_real I (base p) r w (Hrg r Hr Hn)) as H.
-        rewrite Hn in H; exact H. }
       constructor.
       - intros s Hs; apply mem_coreResolution in Hs.
         destruct Hs as
           [[k [v [Hp ->]]] |
            [[[pk pv] [m [u [Hp [Hm [Hu [Hi ->]]]]]]] |
             [[[ck cv] [a [Hc [Ha ->]]]] |
-             [[pk pv] [m [u [a [Hp [Hm [Hu [Hi [Ha ->]]]]]]]]]]]];
+             [[[pk pv] [m [u [a [Hp [Hm [Hu [Hi [Ha ->]]]]]]]]] |
+              [[pk pv] [m [Hp [Hm [Hl [Ho ->]]]]]]]]]];
           cbn [fst snd] in *; apply mem_reduceReal; split.
         + apply mem_targetNames; exact (Hreal _ Hp).
         + exact (versions_gran_real I k v (Hreal _ Hp)).
         + apply mem_targetNames; split; [exact (Hreal _ Hp) | exact Hm].
-        + cbn [versions]; apply orig_embedVS.
+        + apply orig_versions_int.
           exact (installs_childCands I S pi sg (pk, pv) m u Hres Hp Hm Hi).
         + apply mem_targetNames; split; [exact (Hreal _ Hc) | exact Ha].
-        + cbn [versions]; unfold sightVal.
-          destruct (sg (ck, cv) a) as [w |];
-            [destruct (VSet.mem w (realVersions (inst_repo I) a)) eqn:Hw |];
-            apply T.VSet.add_spec;
-            [right; apply orig_embedVS, VSet.mem_spec; exact Hw
-            | left; reflexivity | left; reflexivity].
+        + exact (sightVal_versions I S pi sg (ck, cv) a Hres).
         + apply mem_targetNames.
           split; [exact (Hreal _ Hp) | split; [exact Hm | split; [exact Hu | exact Ha]]].
-        + cbn [versions]; apply T.VSet.add_spec.
-          destruct (linkVal_spec I S pi sg (pk, pv) m u a Hres Hp Hi Ha)
-            as [[E _] | [w [E [_ [Hrg _]]]]]; rewrite E;
-            [left; reflexivity |].
-          right; apply orig_embedVS.
-          exact (Hrg_real (pk, pv) (snd m, u) a w Ha Hrg).
+        + cbn [versions]; apply mem_linkVers.
+          apply mem_peerNames in Ha; destruct Ha as [r [Hr <-]].
+          exists r; split; [exact Hr | split; [reflexivity |]].
+          exact (linkVal_cands I S pi sg (pk, pv) m u r Hres Hp Hi Hr).
+        + apply mem_targetNames; split; [exact (Hreal _ Hp) | exact Hm].
+        + apply versions_int; left; split; [reflexivity | exact Hl].
       - apply mem_coreResolution; left.
         exists (rootKey I), (snd (inst_root I)); split;
           [exact (res_root _ _ _ _ Hres) |].
@@ -1690,7 +2172,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           [[k [v [Hp ->]]] |
            [[[pk pv] [m [u [Hp [Hm [Hu [Hi ->]]]]]]] |
             [[[ck cv] [a [Hc [Ha ->]]]] |
-             [[pk pv] [m [u [a [Hp [Hm [Hu [Hi [Ha ->]]]]]]]]]]]];
+             [[[pk pv] [m [u [a [Hp [Hm [Hu [Hi [Ha ->]]]]]]]]] |
+              [[pk pv] [m [Hp [Hm [Hl [Ho ->]]]]]]]]]];
           cbn [fst snd] in Hd.
         + rewrite dependees_gran in Hd.
           apply T.DependeesSet.union_spec in Hd; destruct Hd as [Hd | Hd].
@@ -1719,82 +2202,67 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
             injection He as -> ->.
             assert (Ha : NSet.In (p_name r) (peerNames I (snd m, u)))
               by (apply mem_peerNames; exists r; split; [exact Hr | reflexivity]).
-            exists (linkVal I S pi sg (pk, pv) m u (p_name r)); split.
-            -- destruct (linkVal_spec I S pi sg (pk, pv) m u (p_name r)
-                           Hres Hp Hi Ha)
-                 as [[E [_ Hno]] | [w [E [_ [Hrg _]]]]];
-                 rewrite E; apply mem_linkCands.
-               ++ left; split; [reflexivity | exact (Hno r Hr eq_refl)].
-               ++ right; exists w; split;
-                    [exact (Hrg r Hr eq_refl) | reflexivity].
+            exists (linkVal I S pi sg (pk, pv) (p_name r)); split.
+            -- exact (linkVal_cands I S pi sg (pk, pv) m u r Hres Hp Hi Hr).
             -- exact (HcoreL (pk, pv) m u (p_name r) Hp Hi Ha).
         + cbn [dependees] in Hd; destruct (SOhh.empty_in _ Hd).
-        + destruct (linkVal_spec I S pi sg (pk, pv) m u a Hres Hp Hi Ha)
-            as [[E [Hsg _]] | [w [E [Hs [Hrg Hsg]]]]];
-            rewrite E in Hd; apply dependees_link in Hd.
-          * destruct Hd as [He | [w [E' _]]]; [| discriminate E'].
-            injection He as -> ->.
-            exists Vs.Bot; split;
-              [exact (proj2 (T.VSet.singleton_spec _ _) eq_refl) |].
-            rewrite <- (sightVal_none I sg (m, u) a Hsg).
-            exact (HcoreS (m, u) a (proj1 Hi) Ha).
-          * destruct Hd as [He | [w' [E' He]]].
+        + apply dependees_link in Hd; destruct Hd as [He | Hd].
+          * injection He as -> ->.
+            exists (sightVal I S pi sg (m, u) a); split.
+            -- exact (sightVal_link I S pi sg (pk, pv) m u a Hres Hp Hi Ha).
+            -- exact (HcoreS (m, u) a (proj1 Hi) Ha).
+          * apply mem_holderEdges in Hd.
+            destruct Hd as [[Hch He] | [Hch [Hh [Hxf He]]]].
             -- injection He as -> ->.
-               destruct (sg (m, u) a) as [w0 |] eqn:Hsg0.
-               ++ destruct (Hsg w0 Hsg0) as [-> Hplain].
-                  assert (Hw : VSet.In w (realVersions (inst_repo I) a)).
-                  { pose proof (Hrg_real (pk, pv) (snd m, u) a w Ha Hrg) as H.
-                    rewrite Hplain in H; exact H. }
-                  exists (Vs.Orig w); split.
-                  ** refine (proj2 (mem_sightSet I (pk, pv) a (Vs.Orig w)
-                                     (Vs.Orig w)) _).
-                     right; split; [reflexivity | split; [discriminate | exact Hplain]].
-                  ** rewrite <- (sightVal_some I sg (m, u) a w Hsg0 Hw).
-                     exact (HcoreS (m, u) a (proj1 Hi) Ha).
-               ++ exists Vs.Bot; split;
-                    [exact (proj2 (mem_sightSet I (pk, pv) a (Vs.Orig w) Vs.Bot)
-                              (or_introl eq_refl)) |].
-                  rewrite <- (sightVal_none I sg (m, u) a Hsg0).
-                  exact (HcoreS (m, u) a (proj1 Hi) Ha).
-            -- injection E' as <-.
-               destruct (shows_cases I S pi sg (pk, pv) a w Hs)
-                 as [[Hch Hs'] | [Hch Hs']].
-               ++ pose proof (eq_trans He (holderEdge_chain I (pk, pv) a w Hch))
-                    as He'.
-                  injection He' as -> ->.
-                  exists (Vs.Orig w);
-                    split; [exact (proj2 (T.VSet.singleton_spec _ _) eq_refl) |].
-                  assert (Hpa : NSet.In a (peerNames I (base (pk, pv)))).
-                  { unfold chains in Hch; apply Bool.andb_true_iff in Hch.
-                    apply NSet.mem_spec; exact (proj2 Hch). }
-                  assert (Hw : VSet.In w (realVersions (inst_repo I) a)).
-                  { pose proof (Hrg_real (pk, pv) (snd m, u) a w Ha Hrg) as H.
-                    rewrite (Hchain (pk, pv) a Hp Hch) in H; exact H. }
-                  rewrite <- (sightVal_some I sg (pk, pv) a w Hs' Hw).
-                  exact (HcoreS (pk, pv) a Hp Hpa).
-               ++ pose proof (eq_trans He (holderEdge_own I (pk, pv) a w Hch))
-                    as He'.
-                  injection He' as -> ->.
-                  exists (Vs.Orig w);
-                    split; [exact (proj2 (T.VSet.singleton_spec _ _) eq_refl) |].
-                  exact (HcoreI (pk, pv) _ w Hp Hs').
+               exists (linkVal I S pi sg (pk, pv) a); split;
+                 [apply T.VSet.singleton_spec; reflexivity |].
+               rewrite <- (sightVal_holder I S pi sg (pk, pv) m u a Hres Hi Ha Hch).
+               apply (HcoreS (pk, pv) a); [exact Hp |].
+               unfold chains in Hch; apply Bool.andb_true_iff in Hch.
+               apply NSet.mem_spec; exact (proj2 Hch).
+            -- injection He as -> ->.
+               exists (linkVal I S pi sg (pk, pv) a); split;
+                 [apply T.VSet.singleton_spec; reflexivity |].
+               unfold linkVal.
+               rewrite (showsAt_holds I S pi sg (pk, pv) a Hch Hh).
+               destruct (ownAt I S pi (pk, pv) (slotKey I (base (pk, pv)) a))
+                 as [w |] eqn:Hs.
+               ++ exact (HcoreI (pk, pv) _ w Hp (ownAt_some _ _ _ _ _ _ Hs)).
+               ++ apply mem_coreResolution; right; right; right; right.
+                  exists (pk, pv), (slotKey I (base (pk, pv)) a).
+                  split; [exact Hp |]; split.
+                  ** apply slotKey_childKeys, holds_childDirs; [exact Hh |].
+                     apply mem_peerNames in Ha; destruct Ha as [r [Hr <-]].
+                     exact (peerDirs_peer I _ r Hr).
+                  ** split; [| split; [exact Hs | reflexivity]].
+                     rewrite slotKey_fst.
+                     destruct (loose I (pk, pv) a) eqn:Hl; [reflexivity |].
+                     destruct (holds_installed I S pi sg (pk, pv) a Hres Hp Hh Hl)
+                       as [w Hw].
+                     rewrite (ownAt_installs I S pi sg _ _ _ Hres Hw) in Hs.
+                     discriminate Hs.
+        + cbn [dependees] in Hd; destruct (SOhh.empty_in _ Hd).
       - intros n x1 x2 H1 H2.
         apply mem_coreResolution in H1; apply mem_coreResolution in H2.
         destruct H1 as
           [[k1 [v1 [Hp1 He1]]] |
            [[[pk1 pv1] [m1 [u1 [Hp1 [Hm1 [Hu1 [Hi1 He1]]]]]]] |
             [[[ck1 cv1] [a1 [Hc1 [Ha1 He1]]]] |
-             [[pk1 pv1] [m1 [u1 [a1 [Hp1 [Hm1 [Hu1 [Hi1 [Ha1 He1]]]]]]]]]]]];
+             [[[pk1 pv1] [m1 [u1 [a1 [Hp1 [Hm1 [Hu1 [Hi1 [Ha1 He1]]]]]]]]] |
+              [[pk1 pv1] [m1 [Hp1 [Hm1 [Hl1 [Ho1 He1]]]]]]]]]];
         destruct H2 as
           [[k2 [v2 [Hp2 He2]]] |
            [[[pk2 pv2] [m2 [u2 [Hp2 [Hm2 [Hu2 [Hi2 He2]]]]]]] |
             [[[ck2 cv2] [a2 [Hc2 [Ha2 He2]]]] |
-             [[pk2 pv2] [m2 [u2 [a2 [Hp2 [Hm2 [Hu2 [Hi2 [Ha2 He2]]]]]]]]]]]];
-          cbn [fst snd] in He1, He2; try congruence.
-        assert (pk1 = pk2) by congruence; assert (pv1 = pv2) by congruence;
-          assert (m1 = m2) by congruence; subst.
-        rewrite (res_unique _ _ _ _ Hres (pk2, pv2) m2 u1 u2 Hi1 Hi2) in He1.
-        congruence.
+             [[[pk2 pv2] [m2 [u2 [a2 [Hp2 [Hm2 [Hu2 [Hi2 [Ha2 He2]]]]]]]]] |
+              [[pk2 pv2] [m2 [Hp2 [Hm2 [Hl2 [Ho2 He2]]]]]]]]]];
+          cbn [fst snd] in He1, He2; try congruence;
+          (assert (pk1 = pk2) by congruence; assert (pv1 = pv2) by congruence;
+           assert (m1 = m2) by congruence; subst).
+        + rewrite (res_unique _ _ _ _ Hres (pk2, pv2) m2 u1 u2 Hi1 Hi2) in He1.
+          congruence.
+        + rewrite (ownAt_installs I S pi sg _ _ _ Hres Hi1) in Ho2; discriminate Ho2.
+        + rewrite (ownAt_installs I S pi sg _ _ _ Hres Hi2) in Ho1; discriminate Ho1.
     Qed.
 
     Theorem dependees_targetNames : forall I s h,
@@ -1811,13 +2279,17 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         destruct Hh as [Hh | Hh].
         + apply mem_entryEdges in Hh; destruct Hh as [a [Ha ->]].
           cbn [fst snd TargetName]; split; [exact Hn |].
-          apply slotKey_childKeys, NSet.union_spec; left; exact Ha.
-        + apply mem_rootPeerEdges in Hh; destruct Hh as [_ [r [Hr [_ ->]]]].
+          apply slotKey_childKeys, dirs_childDirs; exact Ha.
+        + apply mem_rootPeerEdges in Hh; destruct Hh as [Hq [r [Hr [Hact ->]]]].
           cbn [fst snd TargetName]; split; [exact Hn |].
-          exact (peerKeyAt_childKeys I _ _ r Hr).
+          change (k, w) with (fst (k, w), snd (k, w)).
+          rewrite <- surjective_pairing, Hq.
+          rewrite Hq, base_rootPkg in Hr, Hact.
+          rewrite base_rootPkg; exact (rootPeer_childKeys I r Hr Hact).
       - destruct Hn as [Hkv Hm].
-        cbn [versions] in Hx; apply mem_embedVS in Hx.
-        destruct Hx as [u [Hu ->]].
+        apply versions_int in Hx.
+        destruct Hx as [[-> _] | [u [Hu ->]]];
+          [cbn [dependees] in Hh; destruct (SOhh.empty_in _ Hh) |].
         cbn [dependees] in Hh; apply SOhh.add_in in Hh.
         destruct Hh as [-> | Hh].
         + cbn [fst TargetName]; exact (childCands_real I (k, v) m u Hu).
@@ -1830,15 +2302,16 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           * apply mem_peerNames; exists r; split; [exact Hr | reflexivity].
       - cbn [dependees] in Hh; destruct (SOhh.empty_in _ Hh).
       - destruct Hn as [Hkv [Hm [Hu Ha]]].
-        apply dependees_link in Hh; destruct Hh as [-> | [w [_ ->]]].
+        apply dependees_link in Hh; destruct Hh as [-> | Hh].
         + cbn [fst TargetName]; split; [| exact Ha].
           apply mem_realPkgs; split; [exact (childKeys_keysOf I _ m Hm) |].
           apply mem_realVersions in Hu; exact Hu.
-        + unfold holderEdge; destruct (chains I (k, v) a) eqn:Hch;
+        + apply mem_holderEdges in Hh.
+          destruct Hh as [[Hch ->] | [_ [Hh [_ ->]]]];
             cbn [fst snd TargetName]; split; try exact Hkv.
           * unfold chains in Hch; apply Bool.andb_true_iff in Hch.
             apply NSet.mem_spec; exact (proj2 Hch).
-          * apply slotKey_childKeys, NSet.union_spec; right.
+          * apply slotKey_childKeys, holds_childDirs; [exact Hh |].
             apply mem_peerNames in Ha; destruct Ha as [r [Hr <-]].
             exact (peerDirs_peer I _ r Hr).
     Qed.
@@ -1905,6 +2378,14 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         : list (RPkg.t * PeerDependency) :=
         List.filter (fun q => RPkgEqb.eqb (fst q) p) (inst_peer I).
 
+      (* the peer dependencies of two packages: a holder's, which decide
+         where it offers a name, and its dependee's, which ask *)
+      Definition twoPeers (I : Inst) (p c : RPkg.t)
+        : list (RPkg.t * PeerDependency) :=
+        List.filter
+          (fun q => orb (RPkgEqb.eqb (fst q) p) (RPkgEqb.eqb (fst q) c))
+          (inst_peer I).
+
       Definition peerDependenciesNamed (I : Inst) (n : N.t)
         : list (RPkg.t * PeerDependency) :=
         List.filter (fun q => NEqb.eqb (p_name (snd q)) n) (inst_peer I).
@@ -1953,18 +2434,19 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         intros r _; cbn [fst]; apply RPkgEqb.eqb_refl.
       Qed.
 
-      Lemma mem_peerDirs_named : forall I ns deps n,
-          NSet.mem n
-            (peerDirs (subInst I ns deps (peerDependenciesNamed I n))) =
-          NSet.mem n (peerDirs I).
+      Lemma twoPeers_left : forall I p c,
+          ownedBy p (twoPeers I p c) = ownedBy p (inst_peer I).
       Proof.
-        intros I ns deps n; apply Bool.eq_iff_eq_true.
-        rewrite !NSet.mem_spec; unfold peerDirs; cbn [inst_peer subInst].
-        rewrite !mem_namesOfL; unfold peerDependenciesNamed.
-        split; intros [q [Hq Hn]]; exists q; split; try exact Hn.
-        - apply List.filter_In in Hq; exact (proj1 Hq).
-        - apply List.filter_In; split;
-            [exact Hq | apply NEqb.eqb_true_iff; exact Hn].
+        intros I p c; unfold twoPeers; apply ownedBy_filter.
+        intros r _; cbn [fst]; rewrite RPkgEqb.eqb_refl; reflexivity.
+      Qed.
+
+      Lemma twoPeers_right : forall I p c,
+          ownedBy c (twoPeers I p c) = ownedBy c (inst_peer I).
+      Proof.
+        intros I p c; unfold twoPeers; apply ownedBy_filter.
+        intros r _; cbn [fst]; rewrite RPkgEqb.eqb_refl, Bool.orb_true_r.
+        reflexivity.
       Qed.
 
       Lemma mem_peerNames_named : forall I ns deps n p,
@@ -1979,6 +2461,20 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         - apply List.filter_In in Hr; exact (proj1 Hr).
         - apply List.filter_In; split;
             [exact Hr | cbn [snd]; apply NEqb.eqb_true_iff; exact Hn].
+      Qed.
+
+      Lemma mem_peerDirs_named : forall I ns deps n,
+          NSet.mem n
+            (peerDirs (subInst I ns deps (peerDependenciesNamed I n))) =
+          NSet.mem n (peerDirs I).
+      Proof.
+        intros I ns deps n; apply Bool.eq_iff_eq_true.
+        rewrite !NSet.mem_spec; unfold peerDirs; cbn [inst_peer subInst].
+        rewrite !mem_namesOfL; unfold peerDependenciesNamed.
+        split; intros [q [Hq Hn]]; exists q; split; try exact Hn.
+        - apply List.filter_In in Hq; exact (proj1 Hq).
+        - apply List.filter_In; split;
+            [exact Hq | apply NEqb.eqb_true_iff; exact Hn].
       Qed.
 
       Lemma chains_named : forall I ns deps n q,
@@ -2023,6 +2519,41 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         rewrite (slotOf_agree I ns deps prs p a Hdeps); reflexivity.
       Qed.
 
+      Lemma peerNames_agree : forall I ns deps prs p,
+          ownedBy p prs = ownedBy p (inst_peer I) ->
+          peerNames (subInst I ns deps prs) p = peerNames I p.
+      Proof.
+        intros I ns deps prs p Hp; unfold peerNames, peerDependenciesAt.
+        cbn [inst_peer subInst]; rewrite Hp; reflexivity.
+      Qed.
+
+      Lemma chains_agree : forall I ns deps prs q a,
+          ownedBy (base q) prs = ownedBy (base q) (inst_peer I) ->
+          chains (subInst I ns deps prs) q a = chains I q a.
+      Proof.
+        intros I ns deps prs q a Hp; unfold chains.
+        change (rootPkg (subInst I ns deps prs)) with (rootPkg I).
+        rewrite (peerNames_agree I ns deps prs (base q) Hp); reflexivity.
+      Qed.
+
+      Lemma holds_agree : forall I ns deps prs q a,
+          ownedBy (base q) deps = ownedBy (base q) (inst_dep I) ->
+          holds (subInst I ns deps prs) q a = holds I q a.
+      Proof.
+        intros I ns deps prs q a Hd; unfold holds.
+        change (rootPkg (subInst I ns deps prs)) with (rootPkg I).
+        rewrite (dirs_agree I ns deps prs (base q) Hd); reflexivity.
+      Qed.
+
+      Lemma loose_agree : forall I ns deps prs q a,
+          ownedBy (base q) deps = ownedBy (base q) (inst_dep I) ->
+          loose (subInst I ns deps prs) q a = loose I q a.
+      Proof.
+        intros I ns deps prs q a Hd; unfold loose.
+        change (rootPkg (subInst I ns deps prs)) with (rootPkg I).
+        rewrite (dirs_agree I ns deps prs (base q) Hd); reflexivity.
+      Qed.
+
       Lemma slotCands_agree : forall I ns deps prs p,
           ownedBy p deps = ownedBy p (inst_dep I) ->
           (forall d, In d (dependenciesOf I p) -> NSet.In (d_target d) ns) ->
@@ -2036,6 +2567,17 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         cbn [inst_ovr subInst].
         rewrite realVersions_subInst; [reflexivity |].
         apply Htgt; exact (proj1 (findDepL_some _ _ _ Hd)).
+      Qed.
+
+      Lemma peerCandsAt_agree : forall I ns deps prs p r,
+          ownedBy p deps = ownedBy p (inst_dep I) ->
+          NSet.In (snd (slotKey I p (p_name r))) ns ->
+          peerCandsAt (subInst I ns deps prs) p r = peerCandsAt I p r.
+      Proof.
+        intros I ns deps prs p r Hd Hn; unfold peerCandsAt, peerKeyAt.
+        rewrite (slotKey_agree I ns deps prs p (p_name r) Hd).
+        cbn [inst_ovr subInst]; rewrite realVersions_subInst;
+          [reflexivity | exact Hn].
       Qed.
 
       Lemma if_scrutinee : forall (b1 b2 : bool) (x y : T.VSet.t),
@@ -2069,13 +2611,14 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           childCands I q m.
       Proof.
         intros I ns deps prs q m Hd Ht Hm Hpa Hch; unfold childCands.
+        change (rootPkg (subInst I ns deps prs)) with (rootPkg I).
         rewrite (slotKey_agree I ns deps prs (base q) (fst m) Hd).
         rewrite (dirs_agree I ns deps prs (base q) Hd).
         rewrite Hpa, Hch.
         destruct (KeyEqb.eqb m (slotKey I (base q) (fst m)));
           destruct (chains I q (fst m));
           destruct (NSet.mem (fst m) (dirs I (base q)));
-          destruct (NSet.mem (fst m) (peerDirs I));
+          destruct (andb (PkgEqb.eqb q (rootPkg I)) (NSet.mem (fst m) (peerDirs I)));
           try reflexivity.
         - apply slotCands_agree; assumption.
         - apply slotCands_agree; assumption.
@@ -2171,8 +2714,9 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           versions (intSubInst I (snd k, v) m) (Nm.Intermediate k v m) =
           versions I (Nm.Intermediate k v m).
       Proof.
-        intros I k v m; cbn [versions]; f_equal.
-        unfold intSubInst; apply childCands_agree.
+        intros I k v m; cbn [versions]; unfold intSubInst.
+        rewrite (loose_agree I _ _ _ (k, v) (fst m) (ownDependencies_id I (snd k, v))).
+        rewrite childCands_agree; [reflexivity | ..].
         - apply ownDependencies_id.
         - intros d Hd; apply NSet.add_spec; right;
             apply slotTargets_spec; exact Hd.
@@ -2181,16 +2725,27 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         - apply chains_named.
       Qed.
 
-      Definition sightSubInst (I : Inst) (a : N.t) : Inst :=
-        subInst I (NSet.singleton a) nil nil.
+      Definition sightSubInst (I : Inst) (c : RPkg.t) (a : N.t) : Inst :=
+        subInst I (NSet.singleton a) nil (ownPeerDependencies I c).
+
+      Lemma sightCandsL_agree : forall I ns deps prs a l,
+          NSet.In a ns ->
+          sightCandsL (subInst I ns deps prs) a l = sightCandsL I a l.
+      Proof.
+        intros I ns deps prs a l Ha; induction l as [| r l IH];
+          cbn [sightCandsL]; [reflexivity |].
+        unfold plainCands; cbn [inst_ovr subInst].
+        rewrite realVersions_subInst, IH; [reflexivity | exact Ha].
+      Qed.
 
       Theorem versions_lookupSight : forall I k v a,
-          versions (sightSubInst I a) (Nm.Sight k v a) =
+          versions (sightSubInst I (snd k, v) a) (Nm.Sight k v a) =
           versions I (Nm.Sight k v a).
       Proof.
-        intros I k v a; cbn [versions]; unfold sightSubInst.
-        rewrite realVersions_subInst;
-          [reflexivity | apply NSet.singleton_spec; reflexivity].
+        intros I k v a; cbn [versions]; unfold sightSubInst, sightCands.
+        rewrite sightCandsL_agree; [| apply NSet.singleton_spec; reflexivity].
+        unfold peerDependenciesAt; cbn [inst_peer subInst].
+        rewrite ownPeerDependencies_id; reflexivity.
       Qed.
 
       Lemma slotKey_target : forall I p a,
@@ -2202,17 +2757,39 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         - left; reflexivity.
       Qed.
 
-      Definition linkSubInst (I : Inst) (p : RPkg.t) (a : N.t) : Inst :=
-        subInst I (NSet.add a (slotTargets I p)) (ownDependencies I p) nil.
+      Lemma linkCands_agree : forall I ns deps prs (q : Pkg.t) r,
+          ownedBy (base q) deps = ownedBy (base q) (inst_dep I) ->
+          ownedBy (base q) prs = ownedBy (base q) (inst_peer I) ->
+          NSet.In (snd (slotKey I (base q) (p_name r))) ns ->
+          linkCands (subInst I ns deps prs) q r = linkCands I q r.
+      Proof.
+        intros I ns deps prs q r Hd Hp Hn; unfold linkCands.
+        rewrite (chains_agree I ns deps prs q _ Hp),
+          (holds_agree I ns deps prs q _ Hd),
+          (loose_agree I ns deps prs q _ Hd),
+          (peerCandsAt_agree I ns deps prs (base q) r Hd Hn).
+        reflexivity.
+      Qed.
+
+      Definition linkSubInst (I : Inst) (p c : RPkg.t) (a : N.t) : Inst :=
+        subInst I (NSet.add a (slotTargets I p)) (ownDependencies I p)
+          (twoPeers I p c).
 
       Theorem versions_lookupLink : forall I k v m u a,
-          versions (linkSubInst I (snd k, v) a) (Nm.Link k v m u a) =
+          versions (linkSubInst I (snd k, v) (snd m, u) a) (Nm.Link k v m u a) =
           versions I (Nm.Link k v m u a).
       Proof.
-        intros I k v m u a; cbn [versions]; unfold linkSubInst.
-        rewrite (slotKey_agree I _ _ _ (snd k, v) a
-                   (ownDependencies_id I (snd k, v))).
-        rewrite realVersions_subInst; [reflexivity | apply slotKey_target].
+        intros I k v m u a; cbn [versions]; unfold linkSubInst, linkVers.
+        unfold peerDependenciesAt at 1; cbn [inst_peer subInst].
+        rewrite twoPeers_right; fold (peerDependenciesAt I (snd m, u)).
+        induction (peerDependenciesAt I (snd m, u)) as [| r l IH];
+          cbn [linkVersL]; [reflexivity |].
+        rewrite IH; destruct (NEqb.eqb (p_name r) a) eqn:Hn; [| reflexivity].
+        apply NEqb.eqb_true_iff in Hn.
+        rewrite (linkCands_agree I _ _ _ (k, v) r
+                   (ownDependencies_id I (snd k, v))
+                   (twoPeers_left I (snd k, v) (snd m, u))); [reflexivity |].
+        rewrite Hn; apply slotKey_target.
       Qed.
 
       Definition pkgSubInst (I : Inst) (p : RPkg.t) : Inst :=
@@ -2253,7 +2830,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         unfold I'; rewrite (dirs_agree I _ _ _ p Hd).
         unfold depsOfL; f_equal; apply map_ext_in; intros r Hr.
         apply List.filter_In in Hr; destruct Hr as [Hr _].
-        unfold peerKeyAt, peerCandsAt, peerKeyAt.
+        unfold peerCandsAt, peerKeyAt, peerKeyAt.
         rewrite (slotKey_agree I _ _ _ p (p_name r) Hd).
         rewrite realVersions_subInst;
           [reflexivity | apply slotKey_peerTargets; exact Hr].
@@ -2288,31 +2865,28 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       Definition peerSubInst (I : Inst) (p : RPkg.t) (m : NKey.t) (u : V.t)
         : Inst :=
         subInst I (NSet.union (slotTargets I p) (peerNames I (snd m, u)))
-          (ownDependencies I p) (ownPeerDependencies I (snd m, u)).
+          (ownDependencies I p) (twoPeers I p (snd m, u)).
 
       Lemma linkEdges_agree : forall I k v m u,
           linkEdges (peerSubInst I (snd k, v) m u) (k, v) m u =
           linkEdges I (k, v) m u.
       Proof.
         intros I k v m u; unfold peerSubInst.
-        pose proof (ownDependencies_id I (snd k, v)) as Hd.
         assert (Hpr : peerDependenciesAt
                         (subInst I
                            (NSet.union (slotTargets I (snd k, v))
                               (peerNames I (snd m, u)))
                            (ownDependencies I (snd k, v))
-                           (ownPeerDependencies I (snd m, u))) (snd m, u) =
+                           (twoPeers I (snd k, v) (snd m, u))) (snd m, u) =
                       peerDependenciesAt I (snd m, u))
           by (unfold peerDependenciesAt; cbn [inst_peer subInst];
-              apply ownPeerDependencies_id).
+              apply twoPeers_right).
         unfold linkEdges; rewrite Hpr.
         unfold depsOfL; f_equal; apply map_ext_in; intros r Hr.
-        f_equal; unfold linkCands, peerActive, peerCandsAt, peerKeyAt, base.
-        cbn [fst snd].
-        rewrite (dirs_agree I _ _ _ (snd k, v) Hd).
-        rewrite (slotKey_agree I _ _ _ (snd k, v) (p_name r) Hd).
-        rewrite realVersions_subInst;
-          [reflexivity | apply slotKey_peerTargets; exact Hr].
+        rewrite (linkCands_agree I _ _ _ (k, v) r
+                   (ownDependencies_id I (snd k, v))
+                   (twoPeers_left I (snd k, v) (snd m, u))); [reflexivity |].
+        exact (slotKey_peerTargets I (snd k, v) (snd m, u) r Hr).
       Qed.
 
       Theorem dependees_lookupIntermediate : forall I k v m u,
@@ -2327,25 +2901,19 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       Definition holderSubInst (I : Inst) (p : RPkg.t) : Inst :=
         subInst I NSet.empty (ownDependencies I p) (ownPeerDependencies I p).
 
-      Lemma peerNames_own : forall I ns deps p,
-          peerNames (subInst I ns deps (ownPeerDependencies I p)) p =
-          peerNames I p.
-      Proof.
-        intros I ns deps p; unfold peerNames, peerDependenciesAt.
-        cbn [inst_peer subInst]; rewrite ownPeerDependencies_id; reflexivity.
-      Qed.
-
       Theorem dependees_lookupLink : forall I k v m u a x,
           dependees (holderSubInst I (snd k, v)) (Nm.Link k v m u a, x) =
           dependees I (Nm.Link k v m u a, x).
       Proof.
         intros I k v m u a x; unfold holderSubInst.
         pose proof (ownDependencies_id I (snd k, v)) as Hd.
-        destruct x as [w |]; cbn [dependees];
-          unfold sightSet, holderEdge, plainKey, chains, base; cbn [fst snd];
-          change (rootPkg (subInst I _ _ _)) with (rootPkg I);
-          rewrite ?(slotKey_agree I _ _ _ (snd k, v) a Hd), ?peerNames_own;
-          reflexivity.
+        pose proof (ownPeerDependencies_id I (snd k, v)) as Hp.
+        cbn [dependees]; unfold sightSet, holderEdges, plainKey.
+        rewrite (chains_agree I _ _ _ (k, v) a Hp),
+          (holds_agree I _ _ _ (k, v) a Hd).
+        unfold base; cbn [fst snd].
+        rewrite (slotKey_agree I _ _ _ (snd k, v) a Hd).
+        reflexivity.
       Qed.
 
       Theorem dependees_lookupSight : forall I k v a x,
@@ -2363,7 +2931,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       - intros [[k' [v' [Hp He]]] |
                 [[p [m [u [_ [_ [_ [_ He]]]]]]] |
                  [[c [a [_ [_ He]]]] |
-                  [p [m [u [a [_ [_ [_ [_ [_ He]]]]]]]]]]]];
+                  [[p [m [u [a [_ [_ [_ [_ [_ He]]]]]]]]] |
+                   [p [m [_ [_ [_ [_ He]]]]]]]]]];
           try discriminate He.
         injection He as E1 E2 E3; subst; exact Hp.
       - intro Hp; left; exists k, v; split; [exact Hp | reflexivity].
@@ -2379,7 +2948,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       - intros [[[k' [v' [_ He]]] |
                  [[[pk pv] [m' [u' [_ [_ [_ [Hi He]]]]]]] |
                   [[c [a [_ [_ He]]]] |
-                   [p [m' [u' [a [_ [_ [_ [_ [_ He]]]]]]]]]]]] _];
+                   [[p [m' [u' [a [_ [_ [_ [_ [_ He]]]]]]]]] |
+                    [p [m' [_ [_ [_ [_ He]]]]]]]]]] _];
           try discriminate He.
         cbn [fst snd] in He.
         injection He as E1 E2 E3 E4; subst; exact (proj2 Hi).
@@ -2395,5 +2965,4 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
   End Reduction.
-
 End Npm.

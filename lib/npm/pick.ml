@@ -25,7 +25,7 @@ module L = Lookup
    uniformly false.  Bot is no release, so it carries neither criterion. *)
 let rank ar (n : string) (c : PVersion.t) : bool * bool * bool =
   match c with
-  | Np.Vs.Bot -> (true, true, true)
+  | Np.Vs.Bot | Np.Vs.Free -> (true, true, true)
   | Np.Vs.Orig v -> (
       match A.meta ar (n, v) with
       | Some m -> A.ver_rank ar m
@@ -80,4 +80,4 @@ let pick_in st (t : string) (rg : Np.coq_Range) : string option =
   | pool -> (
       match pick st.L.ar t pool with
       | Np.Vs.Orig u -> Some u
-      | Np.Vs.Bot -> None)
+      | Np.Vs.Bot | Np.Vs.Free -> None)

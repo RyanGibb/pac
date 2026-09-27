@@ -62,6 +62,7 @@ module PVersion = struct
     match v with
     | Np.Vs.Orig v -> Format.fprintf fmt "%s" v
     | Np.Vs.Bot -> Format.fprintf fmt "⊥"
+    | Np.Vs.Free -> Format.fprintf fmt "∗"
 end
 
 module PG = Pubgrub.Make (PName) (PVersion)

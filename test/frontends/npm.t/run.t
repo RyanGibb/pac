@@ -37,7 +37,7 @@ polyfill is in the cache.
     app 1.0.0 <- runtime 1.1.0
     app 1.0.0 <- tester 1.0.0
     app 1.0.0 <- widget 1.0.0
-  encoded solution: 17 core nodes (25 lookups)
+  encoded solution: 18 core nodes (25 lookups)
   loaded: 9 names, 15 versions, 0 packuments fetched
 
 A name the root both depends on and declares a peer for is a dependency
@@ -166,7 +166,7 @@ though latest is 4.0.0, and host's peer gadget goes with host.  npm
     omit-app 1.0.0
     taker 1.0.0
     tok 3.0.2
-  encoded solution: 14 core nodes (18 lookups)
+  encoded solution: 14 core nodes (17 lookups)
   loaded: 6 names, 8 versions, 0 packuments fetched
   $ untimed ../../../bin/main.exe npm --offline --cache . --tree --omit=dev ./omit-app/package.json
   root omit-app 1.0.0
@@ -177,7 +177,7 @@ though latest is 4.0.0, and host's peer gadget goes with host.  npm
   node_modules (2):
     omit-app 1.0.0 <- taker 1.0.0
     taker 1.0.0 <- tok 3.0.2
-  encoded solution: 14 core nodes (18 lookups)
+  encoded solution: 14 core nodes (17 lookups)
   loaded: 6 names, 8 versions, 0 packuments fetched
 
 npm's third class, peer, is refused rather than ignored:
@@ -259,7 +259,7 @@ installs gadget 2.0.0 by itself.
   node_modules (2):
     opt-peer-app 1.0.0 <- gadget 2.0.0
     opt-peer-app 1.0.0 <- host 1.0.0
-  encoded solution: 7 core nodes (10 lookups)
+  encoded solution: 7 core nodes (9 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
 
 A root override binds a peer slot too, and wins over the peer's own range
@@ -278,7 +278,7 @@ peer dependency's range exactly as it replaces a dependency's.
   node_modules (2):
     ovr-peer-app 1.0.0 <- gadget 1.0.0
     ovr-peer-app 1.0.0 <- host 1.0.0
-  encoded solution: 7 core nodes (9 lookups)
+  encoded solution: 7 core nodes (8 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
 
 An override to * is no override at all: npm reads an edge's range from an
@@ -379,7 +379,7 @@ codegen: their tslib is util's, the root's one copy, in any order.
     @jsonjoy.com/util 1.9.0 <- @jsonjoy.com/codegen 1.0.0
     . <- @jsonjoy.com/util 1.9.0
     . <- tslib 2.8.1
-  encoded solution: 15 core nodes (23 lookups)
+  encoded solution: 15 core nodes (21 lookups)
 
 So a depender that peers on a name cannot give a dependency's peer on it
 another version.  dq holds tm 1.2.0 and depends on dr, which peers on tm
@@ -398,6 +398,40 @@ tm ^1 and hold wd and we, which peer on tm 1.1.0 and 1.0.0.
   $ ../../../bin/main.exe npm --offline --cache . --tree wq@1.0.0 | head -2
   root .
   unsatisfiable:
+
+A depender other than the root that neither holds nor peers on a name
+offers its dependencies' peers on it nothing, and nothing is put into it
+for them: skipx depends on skipy, which peers on skipt, and the root's
+skipt is out of skipy's reach.  npm nests a skipt under skipx; Yarn Berry
+reports the peer missing.
+
+  $ ../../../bin/main.exe npm --offline --cache . --tree skipx@1.0.0 skipt@1.0.0 | head -2
+  root .
+  unsatisfiable:
+
+A depender of the peer's own name offers itself: selfub peers on selfbl,
+and its depender selfbl is the one copy of it.
+
+  $ ../../../bin/main.exe npm --offline --cache . --tree selfbl@1.0.0 | sed -n '/^node_modules/,/^encoded/p'
+  node_modules (2):
+    . <- selfbl 1.0.0
+    selfbl 1.0.0 <- selfub 1.0.0
+  encoded solution: 7 core nodes (7 lookups)
+
+cycs 1.0.0 and 2.0.0 depend on each other and both peer on cycn, which
+cycz holds at 2.0.0 while the root holds 1.1.0.  npm closes the cycle with
+a link rather than unroll it, and so does the replay npm's order is read
+off, which otherwise never finishes; each copy's peer sees cycz's 2.0.0.
+
+  $ ../../../bin/main.exe npm --offline --cache . --tree cycz@1.0.0 cycn@^1.0.0 | sed -n '/^node_modules/,/^encoded/p'
+  node_modules (6):
+    . <- cycn 1.1.0
+    cycz 1.0.0 <- cycn 2.0.0
+    cycs 2.0.0 <- cycs 1.0.0
+    cycz 1.0.0 <- cycs 1.0.0
+    cycs 1.0.0 <- cycs 2.0.0
+    . <- cycz 1.0.0
+  encoded solution: 17 core nodes (21 lookups)
 
 Only a copy already placed is reused, and npm reaches a package only after
 the one requiring it has placed it.  reach-app depends on early, which
@@ -484,7 +518,7 @@ driver keeps 10.0.0, the pick for resolver's *:
   node_modules (2):
     resolver-app 1.0.0 <- linter 10.0.0
     resolver-app 1.0.0 <- resolver 1.0.0
-  encoded solution: 9 core nodes (13 lookups)
+  encoded solution: 10 core nodes (14 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
 
 npm never places a peer inside a non-root package that declares it, so
@@ -509,7 +543,7 @@ in preset's.
     preset-app 1.0.0 <- preset 1.0.0
     preset 1.0.0 <- syntax-a 1.2.0
     preset 1.0.0 <- syntax-b 1.2.0
-  encoded solution: 15 core nodes (21 lookups)
+  encoded solution: 15 core nodes (19 lookups)
   loaded: 5 names, 10 versions, 0 packuments fetched
 
 However deep the chain of dependencies that each peer on the name, the
@@ -536,31 +570,21 @@ keeps 7.0.0 and leaves coll-a's peer unmet:
     gauge 6.0.0
     coll-app 1.0.0 <- gauge 6.0.0
 
-A peer slot reuses the copy its declarer's node_modules lookup finds, not
-one the tree holds out of its sight.  sight-left's dial 1.0.0 is nested
-under it, below sight-app's dial 2.0.0, and sight-right's sight-host peers
-on dial ^1.0.0; npm places sight-host and its peer under sight-right, where
-the lookup finds only 2.0.0, and fetches ^1.0.0's newest, 1.1.0:
+A dependency's peer is offered only what its depender holds, peers on or
+is.  sight-left's dial 1.0.0 is nested under it, below sight-app's dial
+2.0.0, and sight-right's sight-host peers on dial ^1.0.0.  npm places
+sight-host and a dial 1.1.0 of its own under sight-right; Yarn Berry
+leaves the peer unprovided, since sight-right neither holds nor peers on
+dial, and so does the calculus, which has no answer:
 
   $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./sight-app/package.json
   root sight-app 1.0.0
-  packages (7):
-    dial 1.0.0
-    dial 1.1.0
-    dial 2.0.0
-    sight-app 1.0.0
-    sight-host 1.0.0
-    sight-left 1.0.0
-    sight-right 1.0.0
-  node_modules (6):
-    sight-left 1.0.0 <- dial 1.0.0
-    sight-right 1.0.0 <- dial 1.1.0
-    sight-app 1.0.0 <- dial 2.0.0
-    sight-right 1.0.0 <- sight-host 1.0.0
-    sight-app 1.0.0 <- sight-left 1.0.0
-    sight-app 1.0.0 <- sight-right 1.0.0
-  encoded solution: 15 core nodes (19 lookups)
+  unsatisfiable:
+  Because sight-app@1.0.0 1.0.0 -> <sight-app@1.0.0=>sight-right> 1.0.0 and <sight-app@1.0.0=>sight-right> 1.0.0 -> sight-right@1.0.0 1.0.0, sight-app@1.0.0 * requires sight-right@1.0.0 1.0.0.
+  And because sight-right@1.0.0 1.0.0 -> <sight-right@1.0.0=>sight-host> 1.0.0, sight-app@1.0.0 * requires <sight-right@1.0.0=>sight-host> 1.0.0
+  And because <sight-right@1.0.0=>sight-host> 1.0.0 -> <sight-right@1.0.0=>sight-host@1.0.0^dial> ∅ and root -> sight-app@1.0.0 1.0.0, version solving failed.
   loaded: 5 names, 7 versions, 0 packuments fetched
+  [1]
 
 A name a package both depends on and peers on is a dependency only: npm
 keeps one edge per name and loads dependencies after peers, each
@@ -726,7 +750,7 @@ these fixtures, and refuses plugin@next (ETARGET).
     . <- plugin 1.0.0
     . <- runtime 1.1.0
     . <- tester 1.0.0
-  encoded solution: 13 core nodes (19 lookups)
+  encoded solution: 13 core nodes (17 lookups)
   loaded: 6 names, 12 versions, 0 packuments fetched
 
 A spec added to a project goes where the project already names it, so
@@ -753,7 +777,7 @@ one, and a tag is the version the packument tags.
     . <- plugin 1.0.0
     . <- runtime 1.0.0
     . <- util-lib 1.2.0
-  encoded solution: 11 core nodes (13 lookups)
+  encoded solution: 11 core nodes (12 lookups)
   loaded: 5 names, 11 versions, 0 packuments fetched
 
 An alias spec names the directory and the package apart, so one package
@@ -1041,7 +1065,7 @@ lookup finds, refuses 3.0.2, and nests lurker and a tok 4.0.0 under perch.
     perch 1.0.0 <- lurker 1.0.0
     perch-app 1.0.0 <- perch 1.0.0
     perch-app 1.0.0 <- tok 3.0.2
-  encoded solution: 9 core nodes (10 lookups)
+  encoded solution: 9 core nodes (9 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
 
 Processes sharing a cache fetch into it concurrently, each into a scratch

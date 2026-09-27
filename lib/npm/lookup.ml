@@ -261,26 +261,33 @@ let pkg_sub_inst st (p : string * string) =
   mk_inst st ~repo:(repo_of st ns) ~deps:(own_dependencies st p)
     ~peers:(own_peer_dependencies st p)
 
+(* the peer dependencies of a holder p, which decide where it offers a
+   name, and of its dependee q, which ask for one *)
+let two_peers st p q =
+  own_peer_dependencies st p @ if q = p then [] else own_peer_dependencies st q
+
 (* the intermediate dependees lookup's sub-instance: p's own dependencies,
-   the peer dependencies of the dependee that was selected, and the
-   repository at p's slot targets and at the directories those peers
-   name.  This is the second hop npm's peer auto-installation costs. *)
+   its own peer dependencies and those of the dependee that was selected,
+   and the repository at p's slot targets and at the directories the
+   dependee's peers name *)
 let peer_sub_inst st (p : string * string) (m : string * string) (u : string) =
   let q = (snd m, u) in
   let ns = slot_targets st p @ peer_names_at st q in
   mk_inst st ~repo:(repo_of st ns) ~deps:(own_dependencies st p)
-    ~peers:(own_peer_dependencies st q)
+    ~peers:(two_peers st p q)
 
-(* the sight lookup's sub-instance: the repository at the name alone *)
-let sight_sub_inst st (a : string) =
-  mk_inst st ~repo:(repo_at st a) ~deps:[] ~peers:[]
+(* the sight lookup's sub-instance: the copy's own peer dependencies, whose
+   ranges bound the sight, and the repository at the name *)
+let sight_sub_inst st (c : string * string) (a : string) =
+  mk_inst st ~repo:(repo_at st a) ~deps:[] ~peers:(own_peer_dependencies st c)
 
 (* the link versions lookup's sub-instance: the holder's own dependencies,
-   and the repository at the peer's name and the holder's slot targets *)
-let link_sub_inst st (p : string * string) (a : string) =
+   the holder's and the dependee's peer dependencies, and the repository at
+   the peer's name and the holder's slot targets *)
+let link_sub_inst st (p : string * string) (q : string * string) (a : string) =
   mk_inst st
     ~repo:(repo_of st (a :: slot_targets st p))
-    ~deps:(own_dependencies st p) ~peers:[]
+    ~deps:(own_dependencies st p) ~peers:(two_peers st p q)
 
 (* the link dependees lookup's sub-instance: the holder's own dependencies
    and peer dependencies, which decide where it shows the name *)
@@ -295,15 +302,23 @@ let versions st (n : Np.Nm.name) : Np.Vs.version list =
           T.VSet.elements (R.versions (gran_sub_inst st k w) n)
       | Np.Nm.Intermediate (k, v, m) ->
           T.VSet.elements (R.versions (int_sub_inst st (snd k, v) m) n)
-      | Np.Nm.Sight (_, _, a) ->
-          T.VSet.elements (R.versions (sight_sub_inst st a) n)
-      | Np.Nm.Link (k, v, _, _, a) ->
-          T.VSet.elements (R.versions (link_sub_inst st (snd k, v) a) n))
+      | Np.Nm.Sight (k, v, a) ->
+          T.VSet.elements (R.versions (sight_sub_inst st (snd k, v) a) n)
+      | Np.Nm.Link (k, v, m, u, a) ->
+          T.VSet.elements
+            (R.versions (link_sub_inst st (snd k, v) (snd m, u) a) n))
 
-(* where the copy k at v shows its name a: its own directory, or its sight
-   where it peers on a itself *)
-let holder st ((k, v) : (string * string) * string) (a : string) : Np.Nm.name =
-  fst (R.holderEdge (holder_sub_inst st (snd k, v)) (k, v) a "")
+(* where the copy k at v offers its name a: its sight where it peers on a
+   itself, else its own directory; none where it offers itself or
+   nothing *)
+let holder st ((k, v) : (string * string) * string) (a : string) :
+    Np.Nm.name option =
+  match
+    T.DependeesSet.elements
+      (R.holderEdges (holder_sub_inst st (snd k, v)) (k, v) a (Np.Vs.Orig ""))
+  with
+  | (h, _) :: _ -> Some h
+  | [] -> None
 
 let record_dir st (m : Np.Nm.name) =
   match m with
@@ -315,15 +330,17 @@ let record_dir st (m : Np.Nm.name) =
 
 let record_link st (l : Np.Nm.name) =
   match l with
-  | Np.Nm.Link (k, v, _, _, a) ->
-      let h = holder st (k, v) a in
-      record_dir st h;
-      if
-        not
-          (List.exists
-             (fun x -> Np.Nm.compare x l = E.Eq)
-             (Hashtbl.find_all st.links_into h))
-      then Hashtbl.add st.links_into h l
+  | Np.Nm.Link (k, v, _, _, a) -> (
+      match holder st (k, v) a with
+      | None -> ()
+      | Some h ->
+          record_dir st h;
+          if
+            not
+              (List.exists
+                 (fun x -> Np.Nm.compare x l = E.Eq)
+                 (Hashtbl.find_all st.links_into h))
+          then Hashtbl.add st.links_into h l)
   | _ -> ()
 
 let dependees st (s : T.Pkg.t) : T.Dependees.t list =

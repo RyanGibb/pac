@@ -53,32 +53,29 @@ let is_root st (k, v) =
   let r = st.L.root in
   k = (fst r, fst r) && v = snd r
 
-(* what p (key k at v) holds, by key: its dependencies, then the mandatory
-   peers those install beside them, except on a name p itself peers on *)
+(* what p (key k at v) holds, by key: its dependencies, and for the root
+   the mandatory peers those, and its own, install beside them *)
 let held st ~assigned k v =
   let deps = by_dir st (snd k, v) in
   let dirs = List.map (fun (d : Np.coq_Dependency) -> d.Np.d_dir) deps in
-  let chains a = (not (is_root st (k, v))) && peers_on st (snd k, v) a <> [] in
+  let root = is_root st (k, v) in
   let held = Hashtbl.create 16 in
-  let rec hold key =
+  let rec peers_of q =
+    List.iter
+      (fun (r : Np.coq_PeerDependency) ->
+        if (not r.Np.p_optional) && not (List.mem r.Np.p_name dirs) then
+          hold (r.Np.p_name, r.Np.p_name))
+      (L.peer_dependencies st q)
+  and hold key =
     if not (Hashtbl.mem held key) then (
       let u = decided assigned (Np.Nm.Intermediate (k, v, key)) in
       Hashtbl.replace held key u;
-      Option.iter
-        (fun u ->
-          List.iter
-            (fun (r : Np.coq_PeerDependency) ->
-              if
-                (not r.Np.p_optional)
-                && (not (List.mem r.Np.p_name dirs))
-                && not (chains r.Np.p_name)
-              then hold (r.Np.p_name, r.Np.p_name))
-            (L.peer_dependencies st (snd key, u)))
-        u)
+      if root then Option.iter (fun u -> peers_of (snd key, u)) u)
   in
   List.iter
     (fun (d : Np.coq_Dependency) -> hold (d.Np.d_dir, d.Np.d_target))
     deps;
+  if root then peers_of (snd k, v);
   held
 
 (* the peer ranges on a below the copy of key at u: those of its
@@ -143,10 +140,7 @@ let peer_only st p (a : string) =
    is one of [cands]. *)
 let replace st ~assigned k v (m : string * string) cands c =
   let t = snd m in
-  let holds rg = function
-    | Np.Vs.Orig u -> Np.rgHolds rg u
-    | Np.Vs.Bot -> false
-  in
+  let holds rg = function Np.Vs.Orig u -> Np.rgHolds rg u | _ -> false in
   let takes_over into x =
     List.exists (PVersion.equal x) cands
     && List.for_all (fun r -> holds r x) into
@@ -323,11 +317,19 @@ let place o (x : copy) (m : string * string) (u : string) =
   if not (Hashtbl.mem o.first (m, u)) then Hashtbl.replace o.first (m, u) c;
   o.queue <- DepsQueue.add c o.queue
 
+(* whether x or a copy above it is the copy u at m *)
+let rec within_copy (x : copy) (m : string * string) (u : string) =
+  (x.key = m && x.ver = u)
+  || match x.up with Some p -> within_copy p m u | None -> false
+
 (* npm resolving x's edge on directory m, which the solver has decided at
-   u: nothing happens if x's lookup already finds that copy *)
+   u: nothing happens if x's lookup already finds that copy, nor where the
+   copy is x itself or above it, which npm closes with a link rather than
+   unroll a cycle through one name forever *)
 let settle o (x : copy) (m : string * string) (u : string) =
   match resolve x (fst m) with
   | Some c when c.key = m && c.ver = u -> ()
+  | _ when within_copy x m u -> ()
   | _ -> place o x m u
 
 let dir_of (n : PName.t) =
@@ -404,25 +406,15 @@ let rec sync o ~(assigned : assigned) =
 let is_granular (n, _) = match n with Np.Nm.Granular _ -> true | _ -> false
 let is_link (n, _) = match n with Np.Nm.Link _ -> true | _ -> false
 
-(* whether the link's peer may see nothing: only optional peers of the copy
-   name a, and its holder has no directory there *)
-let bot_ok st (k, v) (m : string * string) u a =
-  List.for_all
-    (fun (r : Np.coq_PeerDependency) ->
-      r.Np.p_name <> a || (r.Np.p_optional && peer_only st (snd k, v) a))
-    (L.peer_dependencies st (snd m, u))
-
 (* A link whose value is already settled, which the replay has no
-   directory for: its holder's copy is decided, or it shows its sight, or
-   its peer may see nothing where no directory is open. *)
+   directory for: it reads its holder's sight, or its holder's copy is
+   decided, or it has no holder, offering the copy itself or nothing. *)
 let eager o ~assigned (n, _) =
   match n with
-  | Np.Nm.Link (k, v, m, u, a) -> (
-      let h = L.holder o.st (k, v) a in
-      match (h, assigned h) with
-      | Np.Nm.Sight _, _ | _, PG.Decided _ -> true
-      | _, PG.Unselected -> bot_ok o.st (k, v) m u a
-      | _ -> false)
+  | Np.Nm.Link (k, v, _, _, a) -> (
+      match L.holder o.st (k, v) a with
+      | None | Some (Np.Nm.Sight _) -> true
+      | Some h -> ( match assigned h with PG.Decided _ -> true | _ -> false))
   | _ -> false
 
 (* A granular name first, since it has one version and only opens its
@@ -473,6 +465,7 @@ let reused at (m : string * string) cands =
   match List.filter found cands with [] -> cands | l -> l
 
 let greatest = Pac_common.Order.greatest PVersion.compare
+let is_orig = function Np.Vs.Orig _ -> true | _ -> false
 
 (* what npm puts in directory m of p (key k at v), resolved at the copy
    the replay holds for the name n that decides it *)
@@ -495,35 +488,39 @@ let within (assigned : assigned) n x =
    does. *)
 let choose_link o ~assigned n (k, v) a cands =
   let st = o.st in
-  let h = L.holder st (k, v) a in
   let origs = List.filter (fun c -> c <> Np.Vs.Bot) cands in
   let bot = List.mem Np.Vs.Bot cands in
   let fallback () = if bot then Np.Vs.Bot else List.hd cands in
-  match (h, assigned h) with
-  | _, PG.Decided x -> if List.mem x cands then x else fallback ()
-  | Np.Nm.Sight _, PG.Entailed r -> (
-      match List.filter (fun x -> PG.Ranges.contains x r) origs with
-      | x :: _ -> x
-      | [] -> fallback ())
-  | Np.Nm.Sight _, PG.Unselected -> fallback ()
-  | Np.Nm.Intermediate (_, _, m), sel -> (
-      let inside = List.filter (within assigned h) origs in
-      let others =
-        List.filter (fun l -> PName.compare l n <> 0) (L.links_into st h)
-      in
-      let agreed =
-        List.filter
-          (fun x -> List.for_all (fun l -> within assigned l x) others)
-          inside
-      in
-      match (sel, inside) with
-      | PG.Unselected, _ when bot -> Np.Vs.Bot
-      | _, [] -> fallback ()
-      | _ -> fill o ~assigned n k v m (if agreed = [] then inside else agreed))
-  | _ -> fallback ()
+  match L.holder st (k, v) a with
+  | None -> fallback ()
+  | Some h -> (
+      match (h, assigned h) with
+      | _, PG.Decided x -> if List.mem x cands then x else fallback ()
+      | Np.Nm.Sight _, PG.Entailed r -> (
+          match List.filter (fun x -> PG.Ranges.contains x r) origs with
+          | x :: _ -> x
+          | [] -> fallback ())
+      | Np.Nm.Sight _, PG.Unselected -> fallback ()
+      | Np.Nm.Intermediate (_, _, m), sel -> (
+          let inside = List.filter (within assigned h) origs in
+          let others =
+            List.filter (fun l -> PName.compare l n <> 0) (L.links_into st h)
+          in
+          let agreed =
+            List.filter
+              (fun x -> List.for_all (fun l -> within assigned l x) others)
+              inside
+          in
+          match (sel, inside) with
+          | PG.Unselected, _ when bot -> Np.Vs.Bot
+          | _, [] -> fallback ()
+          | _ ->
+              fill o ~assigned n k v m (if agreed = [] then inside else agreed))
+      | _ -> fallback ())
 
-(* A sight can only agree with the links into it, so it keeps the value
-   they agree on, and Bot only when they agree on none. *)
+(* A sight no link reads is left Free, so that holders offering different
+   versions can share the copy; one that a link reads keeps the value the
+   links agree on, and Bot only when they agree on none. *)
 let choose o ~assigned (n : PName.t) (cands : PVersion.t list) : PVersion.t =
   match n with
   | Np.Nm.Granular _ -> greatest cands
@@ -533,11 +530,11 @@ let choose o ~assigned (n : PName.t) (cands : PVersion.t list) : PVersion.t =
       c
   | Np.Nm.Link (k, v, _, _, a) -> choose_link o ~assigned n (k, v) a cands
   | Np.Nm.Sight _ -> (
-      match List.filter (fun c -> c <> Np.Vs.Bot) cands with
-      | [] -> Np.Vs.Bot
-      | l -> greatest l)
-
-let is_orig = function Np.Vs.Orig _ -> true | Np.Vs.Bot -> false
+      if L.links_into o.st n = [] && List.mem Np.Vs.Free cands then Np.Vs.Free
+      else
+        match List.filter is_orig cands with
+        | [] -> if List.mem Np.Vs.Bot cands then Np.Vs.Bot else List.hd cands
+        | l -> greatest l)
 
 (* A link, its holder's directory and the copy's sight are one version
    wherever the sight is read, and each constraint between them is one
@@ -562,24 +559,40 @@ let viable st ~assigned (n : PName.t) cands =
     | _ -> None
   in
   match n with
-  | Np.Nm.Link (k, v, m, u, a) ->
-      let h = L.holder st (k, v) a and s = Np.Nm.Sight (m, u, a) in
-      let ok x =
-        match x with
-        | Np.Vs.Bot -> within assigned s Np.Vs.Bot
-        | Np.Vs.Orig _ ->
-            within assigned h x
-            && (within assigned s x || within assigned s Np.Vs.Bot)
-      in
-      let unopened =
-        match assigned h with PG.Unselected -> true | _ -> false
-      in
-      if unopened && List.mem Np.Vs.Bot cands && ok Np.Vs.Bot then [ Np.Vs.Bot ]
-      else keep ok
-  | Np.Nm.Intermediate _ | Np.Nm.Sight _ -> (
+  | Np.Nm.Link (k, v, m, u, a) -> (
+      match L.holder st (k, v) a with
+      | None -> cands
+      | Some h ->
+          let s = Np.Nm.Sight (m, u, a) in
+          let ok x =
+            match x with
+            | Np.Vs.Bot ->
+                within assigned s Np.Vs.Bot || within assigned s Np.Vs.Free
+            | Np.Vs.Orig _ ->
+                within assigned h x
+                && (within assigned s x || within assigned s Np.Vs.Free)
+            | Np.Vs.Free -> false
+          in
+          let unopened =
+            match assigned h with PG.Unselected -> true | _ -> false
+          in
+          if unopened && List.mem Np.Vs.Bot cands && ok Np.Vs.Bot then
+            [ Np.Vs.Bot ]
+          else keep ok)
+  | Np.Nm.Intermediate _ -> (
       match List.filter_map binds (L.links_into st n) with
       | [] -> cands
       | bs -> keep (fun x -> is_orig x && List.for_all (fun b -> b x) bs))
+  | Np.Nm.Sight _ -> (
+      (* a link reading the sight fixes it, Bot included *)
+      let reads l =
+        match assigned l with
+        | PG.Decided x -> Some (PVersion.equal x)
+        | _ -> binds l
+      in
+      match List.filter_map reads (L.links_into st n) with
+      | [] -> cands
+      | bs -> keep (fun x -> List.for_all (fun b -> b x) bs))
   | Np.Nm.Granular _ -> cands
 
 (* build-ideal-tree.js places what each copy's problem edges fetch, taking

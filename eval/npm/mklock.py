@@ -58,7 +58,9 @@ of the lock, apart from how it was placed:
           on a name gives its declarers none of it, which is PEER LOCAL
           again, and their peer finds what the requirer's own does: they
           too go in the requirer's own node_modules, and are told apart by
-          that provider.  For the same reason, a name some package
+          that provider.  So too a requirer of the peer's own name that
+          neither gives nor peers on it, whose declarers find the requirer
+          itself.  For the same reason, a name some package
           on the requirer's chain peers on goes in that package's own
           node_modules only as the last resort.
 
@@ -269,7 +271,13 @@ def place(root, nodes, edges, claims, peers, deep, hints=frozenset(), floor=None
                 through = tuple((p, at[found(path, p)]) for p in sorted(peers.get(child, ()))
                                 if path != "" and p in peers.get(node, ())
                                 and p not in gives and found(path, p) is not None)
-                return (child, tuple(sorted(claims(node, child) + through)))
+                # a requirer of the peer's name that neither gives nor
+                # peers on it offers itself, which the child's lookup
+                # reaches from the requirer's own node_modules
+                itself = tuple((p, node) for p in sorted(peers.get(child, ()))
+                               if path != "" and p == node[0] and p not in gives
+                               and p not in peers.get(node, ()))
+                return (child, tuple(sorted(claims(node, child) + through + itself)))
 
             # a name this package peers on, which it gives its declarers
             # another provider of, is theirs to place

@@ -1,0 +1,28 @@
+{
+ "name": "cycs",
+ "dist-tags": {
+  "latest": "2.0.0"
+ },
+ "versions": {
+  "1.0.0": {
+   "name": "cycs",
+   "version": "1.0.0",
+   "dependencies": {
+    "cycs": "^2.0.0"
+   },
+   "peerDependencies": {
+    "cycn": "*"
+   }
+  },
+  "2.0.0": {
+   "name": "cycs",
+   "version": "2.0.0",
+   "dependencies": {
+    "cycs": "^1.0.0"
+   },
+   "peerDependencies": {
+    "cycn": "*"
+   }
+  }
+ }
+}
