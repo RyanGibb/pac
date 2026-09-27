@@ -1237,3 +1237,45 @@ rather than fall back on the working directory:
   $ env -u HOME -u XDG_CACHE_HOME ../../../bin/main.exe npm --offline ./app/package.json
   error: no packument cache: pass --cache, or set XDG_CACHE_HOME or HOME
   [2]
+
+The common core refuses what npm and Yarn Berry read apart.  A version
+with a peer spec npm cannot read is left out: badp 2.0.0's peer on redux
+=>4.0.0 fails npm's install (EINVALIDTAGNAME) where Berry reads it as *, so
+the core takes badp 1.0.0, and npm's own reading, which drops the peer,
+2.0.0.
+
+  $ PAC_NPM_CORE=1 ../../../bin/main.exe npm --offline --cache . --tree badp | sed -n '/^node_modules/,/^encoded/p'
+  node_modules (1):
+    . <- badp 1.0.0
+  encoded solution: 4 core nodes (4 lookups)
+
+  $ ../../../bin/main.exe npm --offline --cache . --tree badp | sed -n '/^node_modules/,/^encoded/p'
+  node_modules (1):
+    . <- badp 2.0.0
+  encoded solution: 3 core nodes (4 lookups)
+
+A peer only one of Berry's packageExtensions adds is Berry's alone: the
+root installs no copy for redux-thunk 2.3.0's peer on redux, which npm
+would prune, so the core has no answer without a redux of the query's.
+
+  $ PAC_NPM_CORE=1 ../../../bin/main.exe npm --offline --cache . --tree redux-thunk@2.3.0 | head -2
+  root .
+  unsatisfiable:
+
+  $ PAC_NPM_CORE=1 ../../../bin/main.exe npm --offline --cache . --tree redux-thunk@2.3.0 redux@4.0.0 | sed -n '/^node_modules/,/^encoded/p'
+  node_modules (2):
+    . <- redux 4.0.0
+    . <- redux-thunk 2.3.0
+  encoded solution: 9 core nodes (9 lookups)
+
+A root with a mandatory peerDependency, which npm installs and Berry never
+asks of anyone, or with resolutions (Berry's alone) or overrides (npm's
+alone), is refused.
+
+  $ PAC_NPM_CORE=1 ../../../bin/main.exe npm --offline --cache . ./corepeer-app/package.json
+  error: the common core (PAC_NPM_CORE=1) refuses a root with a peerDependency (badp), which npm installs and Yarn Berry does not
+  [2]
+
+  $ PAC_NPM_CORE=1 ../../../bin/main.exe npm --offline --cache . ./coreres-app/package.json
+  error: the common core (PAC_NPM_CORE=1) refuses a root with resolutions, which Yarn Berry reads and npm does not
+  [2]

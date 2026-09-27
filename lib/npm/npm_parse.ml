@@ -17,7 +17,9 @@ type dep = {
   d_raw : string;
 }
 
-type peer = { p_name : string; p_spec : spec; p_optional : bool }
+(* p_root: whether the root installs a copy for the peer where nothing else
+   provides one, which it does not for a peer only Yarn Berry reads *)
+type peer = { p_name : string; p_spec : spec; p_optional : bool; p_root : bool }
 
 (* The common core, PAC_NPM_CORE=1: the manifests as npm and Yarn Berry
    both read them, so that an answer is one both accept.  Read once from
@@ -30,9 +32,6 @@ type ver = {
   v_deps : dep list;
   v_peers : peer list;
   v_ovr : (string * Npm_version.range) list;
-  (* the root's flat resolutions, name to spec, which Berry puts in place
-     of every dependency spec of that name and of no peer's *)
-  v_res : (string * string) list;
   v_deprecated : bool;
   (* engines.node and engines.npm, the two sub-keys checkEngine tests;
      absent means the version imposes no requirement, which is what makes
@@ -144,8 +143,8 @@ let dep_of ~reject ~dev ~optional (key, spec) : dep option =
 (* A peer names a directory and the calculus reads its range against the
    package of that name, so an alias, which puts another package there, is
    dropped and counted like a spec no registry lookup resolves. *)
-let peer_of ~reject (meta : (string * Yojson.Safe.t) list) (key, spec) :
-    peer option =
+let peer_of ~reject ?(berry_only = []) (meta : (string * Yojson.Safe.t) list)
+    (key, spec) : peer option =
   let optional =
     match List.assoc_opt key meta with
     | Some m -> ( match member "optional" m with `Bool b -> b | _ -> false)
@@ -154,13 +153,17 @@ let peer_of ~reject (meta : (string * Yojson.Safe.t) list) (key, spec) :
   match spec with
   | `String spec when not (unresolvable spec || is_alias spec) -> (
       match spec_of_string spec with
-      | Some sp -> Some { p_name = key; p_spec = sp; p_optional = optional }
+      | Some sp ->
+          Some
+            {
+              p_name = key;
+              p_spec = sp;
+              p_optional = optional;
+              p_root = not (List.mem key berry_only);
+            }
       | None ->
           reject ();
           None)
-  | _ when !core ->
-      (* Berry reads a peer range it cannot parse as * (Manifest.ts) *)
-      Some { p_name = key; p_spec = Star; p_optional = optional }
   | _ ->
       reject ();
       None
@@ -173,7 +176,8 @@ let peer_of ~reject (meta : (string * Yojson.Safe.t) list) (key, spec) :
    out: those peers are optional and on *, so they never make Berry reject
    an answer, and asking them would tie every @types copy to one version
    per holder (jest's @types/babel__core), which neither tool requires. *)
-let extend (name : string) (vers : string) (j : Yojson.Safe.t) : Yojson.Safe.t =
+let extend (name : string) (vers : string) (j : Yojson.Safe.t) :
+    Yojson.Safe.t * string list =
   let fields = assoc_of j in
   let get f = assoc_of (member f j) in
   let deps = ref (get "dependencies")
@@ -215,11 +219,15 @@ let extend (name : string) (vers : string) (j : Yojson.Safe.t) : Yojson.Safe.t =
       List.map (fun (k', x) -> if k' = k then (k, v) else (k', x)) l
     else l @ [ (k, v) ]
   in
-  `Assoc
-    (fields
-    |> set "dependencies" (`Assoc !deps)
-    |> set "peerDependencies" (`Assoc !peers)
-    |> set "peerDependenciesMeta" (`Assoc !meta))
+  let own = get "peerDependencies" in
+  ( `Assoc
+      (fields
+      |> set "dependencies" (`Assoc !deps)
+      |> set "peerDependencies" (`Assoc !peers)
+      |> set "peerDependenciesMeta" (`Assoc !meta)),
+    List.filter_map
+      (fun (k, _) -> if List.mem_assoc k own then None else Some k)
+      !peers )
 
 (* npm reads overrides from the root project's package.json; only the
    flat "name": "range" form is a static override, so a nested object --
@@ -269,10 +277,12 @@ let ver_of ~reject ~(root : bool) (vers : string) (j : Yojson.Safe.t) :
     ver option =
   match j with
   | `Assoc _ ->
-      let j =
+      let j, berry_only =
         if !core && not root then
-          match member "name" j with `String n -> extend n vers j | _ -> j
-        else j
+          match member "name" j with
+          | `String n -> extend n vers j
+          | _ -> (j, [])
+        else (j, [])
       in
       let deps_of ~dev ~optional field =
         List.filter_map
@@ -289,54 +299,54 @@ let ver_of ~reject ~(root : bool) (vers : string) (j : Yojson.Safe.t) :
           ([ "dependencies"; "optionalDependencies" ]
           @ if root then [ "devDependencies" ] else [])
       in
+      (* Berry keeps a package's peer beside a dependency of its name (a
+         peer with default); the root's it never asks of anyone *)
+      let peer_decls =
+        List.filter
+          (fun (k, _) -> (!core && not root) || not (List.mem k dep_keys))
+          (assoc_of (member "peerDependencies" j))
+      in
       let peers =
-        if root && !core then []
-        else if !core then
-          (* Berry keeps a peer beside a dependency of its name, and
-             never asks the root's own peers of anyone *)
-          List.filter_map (peer_of ~reject meta)
-            (assoc_of (member "peerDependencies" j))
-        else
-          List.filter_map (peer_of ~reject meta)
-            (List.filter
-               (fun (k, _) -> not (List.mem k dep_keys))
-               (assoc_of (member "peerDependencies" j)))
+        List.filter_map (peer_of ~reject ~berry_only meta) peer_decls
       in
       let opts = deps_of ~dev:false ~optional:true "optionalDependencies" in
+      (* npm fails on a peer spec it cannot read (EINVALIDTAGNAME), which
+         Berry reads as *, so under the common core no answer both accept
+         holds the version *)
+      let unread =
+        !core && (not root) && List.length peers < List.length peer_decls
+      in
       let opt_keys = List.map (fun d -> d.d_dir) opts in
       let dep = is_deprecated (member "deprecated" j) in
-      Some
-        {
-          v_name = (match member "name" j with `String n -> n | _ -> "");
-          v_vers = vers;
-          v_deps =
-            (* arborist loads dependencies, then optionalDependencies,
+      if unread then None
+      else
+        Some
+          {
+            v_name = (match member "name" j with `String n -> n | _ -> "");
+            v_vers = vers;
+            v_deps =
+              (* arborist loads dependencies, then optionalDependencies,
                then a root's devDependencies, and a later entry of a name
                replaces the earlier (Node _loadDeps) *)
-            (let devs =
-               if root then deps_of ~dev:true ~optional:false "devDependencies"
-               else []
-             in
-             let dev_keys = List.map (fun d -> d.d_dir) devs in
-             devs
-             @ List.filter
-                 (fun d -> not (List.mem d.d_dir dev_keys))
-                 (opts
-                 @ List.filter
-                     (fun d -> not (List.mem d.d_dir opt_keys))
-                     (deps_of ~dev:false ~optional:false "dependencies")));
-          v_peers = peers;
-          v_ovr = (if root && not !core then overrides_of ~reject j else []);
-          v_res =
-            (if root && !core then
-               List.filter_map
-                 (function k, `String v -> Some (k, v) | _ -> None)
-                 (assoc_of (member "resolutions" j))
-             else []);
-          v_deprecated = dep;
-          v_eng_node = engine_of j "node";
-          v_eng_npm = engine_of j "npm";
-        }
+              (let devs =
+                 if root then
+                   deps_of ~dev:true ~optional:false "devDependencies"
+                 else []
+               in
+               let dev_keys = List.map (fun d -> d.d_dir) devs in
+               devs
+               @ List.filter
+                   (fun d -> not (List.mem d.d_dir dev_keys))
+                   (opts
+                   @ List.filter
+                       (fun d -> not (List.mem d.d_dir opt_keys))
+                       (deps_of ~dev:false ~optional:false "dependencies")));
+            v_peers = peers;
+            v_ovr = (if root then overrides_of ~reject j else []);
+            v_deprecated = dep;
+            v_eng_node = engine_of j "node";
+            v_eng_npm = engine_of j "npm";
+          }
   | _ ->
       reject ();
       None

@@ -394,9 +394,9 @@ Definition npmDepB : NpmS.Dependency := NpmS.MkDep npmB npmB (npmEq 1) false (So
 Definition npmDepC : NpmS.Dependency :=
   NpmS.MkDep npmC npmC (npmBetween 2 4) false (Some 2).
 Definition npmPeerC : NpmS.PeerDependency :=
-  NpmS.MkPeer npmC (npmBetween 1 3) false.
+  NpmS.MkPeer npmC (npmBetween 1 3) false true.
 Definition npmPeerCOpt : NpmS.PeerDependency :=
-  NpmS.MkPeer npmC (npmBetween 1 3) true.
+  NpmS.MkPeer npmC (npmBetween 1 3) true true.
 
 Definition kA : NpmS.NKey.t := (npmA, npmA).
 Definition kB : NpmS.NKey.t := (npmB, npmB).
@@ -486,6 +486,19 @@ Example npm_auto_versions_computes :
   = NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: NpmS.Vs.Bot :: nil.
 Proof. reflexivity. Qed.
 
+(* the same peer, one the root may not install (p_root false, as for a
+   peer only Yarn Berry's packageExtensions add): the root's C is empty *)
+Definition npmInstExt : NpmS.Inst :=
+  NpmS.MkInst npmRepo (((npmA, 1), npmDepB) :: nil)
+    (((npmB, 1), NpmS.MkPeer npmC (npmBetween 1 3) false false) :: nil)
+    nil (npmA, 1).
+
+Example npm_ext_versions_computes :
+  NpmS.T.VSet.elements
+    (NpmS.Reduction.versions npmInstExt (NpmS.Nm.Intermediate kA 1 kC))
+  = NpmS.Vs.Bot :: nil.
+Proof. reflexivity. Qed.
+
 Example npm_auto_edge_computes :
   npmDeps npmInstAuto (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1)
   = (NpmS.Nm.Granular kB 1, NpmS.Vs.Orig 1 :: nil)
@@ -549,7 +562,7 @@ Definition npmInstSelf : NpmS.Inst :=
   NpmS.MkInst npmChainRepo
     (((npmA, 1), npmDepB) :: ((npmB, 1), NpmS.MkDep npmD npmD (npmEq 1) false (Some 4))
        :: nil)
-    (((npmD, 1), NpmS.MkPeer npmB (npmBetween 1 3) false) :: nil) nil (npmA, 1).
+    (((npmD, 1), NpmS.MkPeer npmB (npmBetween 1 3) false true) :: nil) nil (npmA, 1).
 
 Example npm_self_versions_computes :
   NpmS.T.VSet.elements

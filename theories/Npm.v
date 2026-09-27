@@ -179,10 +179,13 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     ; d_dev : bool
     ; d_desc : option N.t }.
 
+  (* p_root: whether the root installs a copy for this peer where nothing
+     else provides one *)
   Record PeerDependency : Type := MkPeer
     { p_name : N.t
     ; p_range : Range
-    ; p_optional : bool }.
+    ; p_optional : bool
+    ; p_root : bool }.
 
   (* The relation fields are lists: they feed only the spec and the
      translation, and sets would demand a comparator for Range used
@@ -430,6 +433,32 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     exists (q, r); split; [exact Hr | reflexivity].
   Qed.
 
+  (* the names the root installs a copy under for a peer nothing else
+     provides: those of the peers its manifest reader lets it install
+     (p_root), which a peer only Yarn Berry's packageExtensions add is not,
+     npm knowing nothing of it *)
+  Definition rootPeerDirs (I : Inst) : NSet.t :=
+    namesOfL (fun q => p_name (snd q))
+      (List.filter (fun q => p_root (snd q)) (inst_peer I)).
+
+  Lemma mem_rootPeerDirs : forall I a,
+      NSet.In a (rootPeerDirs I) <->
+      exists q r, In (q, r) (inst_peer I) /\ p_root r = true /\ p_name r = a.
+  Proof.
+    intros I a; unfold rootPeerDirs; rewrite mem_namesOfL; split.
+    - intros [[q r] [Hin E]]; apply List.filter_In in Hin.
+      exists q, r; split; [exact (proj1 Hin) | split; [exact (proj2 Hin) | exact E]].
+    - intros [q [r [Hin [Hr E]]]]; exists (q, r); split; [| exact E].
+      apply List.filter_In; split; assumption.
+  Qed.
+
+  Lemma rootPeerDirs_peerDirs : forall I a,
+      NSet.In a (rootPeerDirs I) -> NSet.In a (peerDirs I).
+  Proof.
+    intros I a H; apply mem_rootPeerDirs in H; destruct H as [q [r [Hin [_ <-]]]].
+    exact (peerDirs_peer I q r Hin).
+  Qed.
+
   (* The names a copy holds a copy under: its directories, and for the
      root's copy any name a peer asks for, which npm, pnpm, Bun and Deno
      install at the top for a peer nothing else provides.  Only the root:
@@ -486,7 +515,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     then if NSet.mem (fst m) (dirs I (base q))
          then slotCands I (base q) (fst m)
          else if chains I q (fst m) then VSet.empty
-         else if andb (PkgEqb.eqb q (rootPkg I)) (NSet.mem (fst m) (peerDirs I))
+         else if andb (PkgEqb.eqb q (rootPkg I)) (NSet.mem (fst m) (rootPeerDirs I))
               then realVersions (inst_repo I) (snd m)
               else VSet.empty
     else VSet.empty.
@@ -631,6 +660,10 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         forall a, NSet.In a (dirs I (base p)) ->
         forall v, Installs S pi p (slotKey I (base p) a) v ->
           VSet.In v (slotCands I (base p) a)
+    ; res_root_loose :
+        forall m v, Installs S pi (rootPkg I) m v ->
+          ~ NSet.In (fst m) (dirs I (inst_root I)) ->
+          NSet.In (fst m) (rootPeerDirs I)
     ; res_peer_local :
         forall q, PkgSet.In q S ->
         forall a, chains I q a = true -> dp I q a = false ->
@@ -957,6 +990,22 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       intros I q m H Hd; unfold dp in Hd; rewrite H in Hd; cbn [andb] in Hd.
       unfold childCands; rewrite Hd, H.
       destruct (KeyEqb.eqb m (slotKey I (base q) (fst m))); reflexivity.
+    Qed.
+
+    Lemma childCands_root_loose : forall I m v,
+        VSet.In v (childCands I (rootPkg I) m) ->
+        ~ NSet.In (fst m) (dirs I (inst_root I)) ->
+        NSet.In (fst m) (rootPeerDirs I).
+    Proof.
+      intros I m v Hv Hnd; unfold childCands in Hv; rewrite base_rootPkg in Hv.
+      destruct (KeyEqb.eqb m (slotKey I (inst_root I) (fst m)));
+        [| destruct (SOrv.empty_in _ Hv)].
+      destruct (NSet.mem (fst m) (dirs I (inst_root I))) eqn:Hd;
+        [apply NSet.mem_spec in Hd; contradiction |].
+      destruct (chains I (rootPkg I) (fst m)); [destruct (SOrv.empty_in _ Hv) |].
+      rewrite PkgEqb.eqb_refl in Hv; cbn [andb] in Hv.
+      destruct (NSet.mem (fst m) (rootPeerDirs I)) eqn:Hr;
+        [apply NSet.mem_spec; exact Hr | destruct (SOrv.empty_in _ Hv)].
     Qed.
 
     (* a peer with default may leave its directory empty *)
@@ -1860,6 +1909,11 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         apply mem_slotSet in Hx.
         destruct Hx as [[E _] | [v' [Hv' E]]]; [discriminate E |].
         injection E as ->; exact Hv'.
+      - intros m v Hi Hnd; apply Hint in Hi.
+        apply Hsub, mem_reduceReal in Hi; destruct Hi as [_ Hw].
+        unfold rootPkg in Hw; cbn [fst snd] in Hw.
+        apply orig_versions_int in Hw.
+        exact (childCands_root_loose I m v Hw Hnd).
       - intros [k v] Hq a Hch Hdp w Hi; apply Hint in Hi.
         apply Hsub, mem_reduceReal in Hi; destruct Hi as [_ Hw].
         apply orig_versions_int in Hw.
@@ -2197,7 +2251,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         apply Bool.andb_true_iff in Hh; destruct Hh as [_ Hp].
         apply NSet.mem_spec in Hp.
         split; [rewrite Hk; apply slotKey_keysOf; right;
-                exact (peerDirs_keysOf I _ Hp) |].
+                exact (peerDirs_keysOf I _ (rootPeerDirs_peerDirs I _ Hp)) |].
         apply mem_realVersions; exact Hu.
     Qed.
 
@@ -2221,7 +2275,13 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         destruct (PkgEqb.eqb p (rootPkg I)) eqn:Hq.
         + apply NSet.union_spec in Ha; destruct Ha as [Ha | Ha].
           * apply NSet.mem_spec in Ha; rewrite Ha in Hsa; discriminate Hsa.
-          * apply NSet.mem_spec in Ha; rewrite Ha; cbn [andb].
+          * apply PkgEqb.eqb_true_iff in Hq; subst p.
+            assert (Hr : NSet.In a (rootPeerDirs I)).
+            { pose proof (res_root_loose _ _ _ _ Hres _ v Hi) as Hl.
+              rewrite slotKey_fst in Hl; apply Hl.
+              rewrite <- base_rootPkg; intro Hd; apply NSet.mem_spec in Hd.
+              rewrite Hd in Hsa; discriminate Hsa. }
+            apply NSet.mem_spec in Hr; rewrite Hr; cbn [andb].
             destruct Hi as [HinS _].
             destruct (res_subset _ _ _ _ Hres _ HinS) as [_ Hb]; unfold base in Hb.
             cbn [fst snd] in Hb; apply mem_realVersions; exact Hb.
@@ -3208,18 +3268,18 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
             [exact Hr | cbn [snd]; apply NEqb.eqb_true_iff; exact Hn].
       Qed.
 
-      Lemma mem_peerDirs_named : forall I ns deps n,
+      Lemma mem_rootPeerDirs_named : forall I ns deps n,
           NSet.mem n
-            (peerDirs (subInst I ns deps (peerDependenciesNamed I n))) =
-          NSet.mem n (peerDirs I).
+            (rootPeerDirs (subInst I ns deps (peerDependenciesNamed I n))) =
+          NSet.mem n (rootPeerDirs I).
       Proof.
         intros I ns deps n; apply Bool.eq_iff_eq_true.
-        rewrite !NSet.mem_spec; unfold peerDirs; cbn [inst_peer subInst].
-        rewrite !mem_namesOfL; unfold peerDependenciesNamed.
-        split; intros [q [Hq Hn]]; exists q; split; try exact Hn.
+        rewrite !NSet.mem_spec, !mem_rootPeerDirs; cbn [inst_peer subInst].
+        unfold peerDependenciesNamed.
+        split; intros [q [r [Hq Hr]]]; exists q, r; split; try exact Hr.
         - apply List.filter_In in Hq; exact (proj1 Hq).
         - apply List.filter_In; split;
-            [exact Hq | apply NEqb.eqb_true_iff; exact Hn].
+            [exact Hq | apply NEqb.eqb_true_iff; exact (proj2 Hr)].
       Qed.
 
       Lemma chains_named : forall I ns deps n q,
@@ -3360,8 +3420,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           (forall d, In d (dependenciesOf I (base q)) ->
              NSet.In (d_target d) ns) ->
           NSet.In (snd m) ns ->
-          NSet.mem (fst m) (peerDirs (subInst I ns deps prs)) =
-            NSet.mem (fst m) (peerDirs I) ->
+          NSet.mem (fst m) (rootPeerDirs (subInst I ns deps prs)) =
+            NSet.mem (fst m) (rootPeerDirs I) ->
           chains (subInst I ns deps prs) q (fst m) = chains I q (fst m) ->
           childCands (subInst I ns deps prs) q m =
           childCands I q m.
@@ -3374,7 +3434,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         destruct (KeyEqb.eqb m (slotKey I (base q) (fst m)));
           destruct (chains I q (fst m));
           destruct (NSet.mem (fst m) (dirs I (base q)));
-          destruct (andb (PkgEqb.eqb q (rootPkg I)) (NSet.mem (fst m) (peerDirs I)));
+          destruct (andb (PkgEqb.eqb q (rootPkg I)) (NSet.mem (fst m) (rootPeerDirs I)));
           try reflexivity;
           first [apply slotCands_agree; assumption | apply realVersions_subInst; exact Hm].
       Qed.
@@ -3486,7 +3546,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         - intros d Hd; apply NSet.add_spec; right;
             apply slotTargets_spec; exact Hd.
         - apply NSet.add_spec; left; reflexivity.
-        - apply mem_peerDirs_named.
+        - apply mem_rootPeerDirs_named.
         - apply chains_named.
       Qed.
 

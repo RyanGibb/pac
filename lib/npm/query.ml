@@ -223,6 +223,46 @@ let check_published ar specs =
            ar.Archive.cache
            (if ar.Archive.offline then " (offline)" else ""))
 
+(* Under the common core (PAC_NPM_CORE=1) a root the two tools read
+   apart is refused, as no answer is one both accept: npm installs the
+   root's mandatory peerDependencies and Yarn Berry never asks them of
+   anyone, npm alone reads overrides and Berry alone resolutions.  Any
+   entry refuses, whether or not it would change an answer. *)
+let core_root pkg : (unit, string) result =
+  let entries f = P.assoc_of (P.member f pkg) in
+  let deps =
+    List.concat_map
+      (fun f -> List.map fst (entries f))
+      [ "dependencies"; "optionalDependencies"; "devDependencies" ]
+  in
+  let optional k =
+    match
+      P.member "optional" (P.member k (P.member "peerDependenciesMeta" pkg))
+    with
+    | `Bool b -> b
+    | _ -> false
+  in
+  let refuse why =
+    Error ("the common core (PAC_NPM_CORE=1) refuses a root with " ^ why)
+  in
+  if not !P.core then Ok ()
+  else
+    match
+      List.filter
+        (fun (k, _) -> not (optional k || List.mem k deps))
+        (entries "peerDependencies")
+    with
+    | (k, _) :: _ ->
+        refuse
+          ("a peerDependency (" ^ k
+         ^ "), which npm installs and Yarn Berry does not")
+    | [] ->
+        if entries "overrides" <> [] then
+          refuse "overrides, which npm reads and Yarn Berry does not"
+        else if entries "resolutions" <> [] then
+          refuse "resolutions, which Yarn Berry reads and npm does not"
+        else Ok ()
+
 (* arborist names a root with no name by its directory, which is no part
    of the query; "." is a name no registry package can have *)
 let root_of ar pkg =
@@ -242,6 +282,7 @@ let root_of ar pkg =
 let root ar (args : string list) : (P.ver, string) result =
   let paths, specs = List.partition is_manifest_arg args in
   let* pkg = manifest paths in
+  let* () = core_root pkg in
   let* specs = resolve_specs ar specs in
   let* () = check_published ar specs in
   root_of ar (List.fold_left add_to pkg specs)

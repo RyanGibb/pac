@@ -1,0 +1,12 @@
+{
+ "name": "redux-thunk",
+ "dist-tags": {
+  "latest": "2.3.0"
+ },
+ "versions": {
+  "2.3.0": {
+   "name": "redux-thunk",
+   "version": "2.3.0"
+  }
+ }
+}

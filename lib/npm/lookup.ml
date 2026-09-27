@@ -60,6 +60,7 @@ let xpeer ar (r : P.peer) : Np.coq_PeerDependency =
        rule; arborist checks whatever copy the declarer resolves to
        (edge.js:266-277) *)
     Np.p_optional = r.P.p_optional;
+    Np.p_root = r.P.p_root;
   }
 
 type t = {
@@ -84,8 +85,6 @@ type t = {
   dirs : ((string * string) * string, Np.Nm.name list) Hashtbl.t;
   (* the links resolving into each directory *)
   links_into : (Np.Nm.name, Np.Nm.name) Hashtbl.t;
-  (* the root's resolutions, for the common core *)
-  res : (string * string) list;
   raw_tbl : (string * string, P.dep list) Hashtbl.t;
   (* the directories reading each descriptor, as far as the solver has
      looked *)
@@ -112,7 +111,6 @@ let create ~optional ar root =
     opt_keep = Hashtbl.create 1024;
     dirs = Hashtbl.create 4096;
     links_into = Hashtbl.create 4096;
-    res = (match A.meta ar root with Some v -> v.P.v_res | None -> []);
     raw_tbl = Hashtbl.create 16384;
     desc_dirs = Hashtbl.create 4096;
     n_lookups = 0;
@@ -193,25 +191,12 @@ let optional_verdicts st =
   in
   (Hashtbl.length st.opt_keep, dropped)
 
-(* Berry's resolutions put their spec in place of every dependency spec of
-   the name, the descriptor included (CorePlugin.ts:11-53) *)
-let resolved st (d : P.dep) : P.dep =
-  match List.assoc_opt d.P.d_dir st.res with
-  | Some spec when !P.core -> (
-      match
-        P.dep_of ~reject:ignore ~dev:d.P.d_dev ~optional:d.P.d_optional
-          (d.P.d_dir, `String spec)
-      with
-      | Some d' -> d'
-      | None -> d)
-  | _ -> d
-
 (* p's dependencies as the manifest writes them, those the calculus reads *)
 let raw_deps st p =
   Tbl.memo st.raw_tbl p (fun () ->
       match A.meta st.ar p with
       | None -> []
-      | Some v -> List.map (resolved st) (List.filter (dep_keep st) v.P.v_deps))
+      | Some v -> List.filter (dep_keep st) v.P.v_deps)
 
 let dependencies st p =
   Tbl.memo st.dep_tbl p (fun () -> List.map (xdep st.ar) (raw_deps st p))

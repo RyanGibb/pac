@@ -1,0 +1,10 @@
+{
+  "name": "coreres-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "redux": "^4.0.0"
+  },
+  "resolutions": {
+    "redux": "4.0.0"
+  }
+}

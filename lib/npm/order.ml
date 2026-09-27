@@ -63,8 +63,10 @@ let held st ~assigned k v =
   let rec peers_of q =
     List.iter
       (fun (r : Np.coq_PeerDependency) ->
-        if (not r.Np.p_optional) && not (List.mem r.Np.p_name dirs) then
-          hold (r.Np.p_name, r.Np.p_name))
+        if
+          (not r.Np.p_optional) && r.Np.p_root
+          && not (List.mem r.Np.p_name dirs)
+        then hold (r.Np.p_name, r.Np.p_name))
       (L.peer_dependencies st q)
   and hold key =
     if not (Hashtbl.mem held key) then (
