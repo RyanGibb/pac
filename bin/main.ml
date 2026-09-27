@@ -13,7 +13,9 @@ let core_arg =
            name reachable from the root, each of its versions, absence \
            included, and each version's dependees.  It walks the whole \
            reachable encoding, not only what the solve visits, so it is meant \
-           for small instances.")
+           for small instances; what it loads is left out of the counts and \
+           times the answer reports, and a registry failing it leaves it \
+           incomplete rather than failing the answer.")
 
 (* the tool's own order is the default because the evaluation's first
    question is whether pac answers as the tool does *)
@@ -74,9 +76,12 @@ let error code fmt =
 let guard f = try f () with Sys_error e -> error 3 "%s" e
 
 (* solve time is the wall time since [t0] less what went on loading, which
-   the lazy loaders interleave with the solve *)
-let report ~t0 (loaded : Report.loaded) answer print =
+   the lazy loaders interleave with the solve.  [loaded], an argument, is
+   read before [walk] runs, so that what the walk loads is no part of the
+   counts or the times. *)
+let report ~t0 ~core (loaded : Report.loaded) ~walk answer print =
   let t1 = Unix.gettimeofday () in
+  if core then walk ();
   let code =
     match answer with
     | Ok a ->
@@ -94,19 +99,19 @@ let debian_run debug core order no_recs no_strict native path query =
   Pac_common.Input.file path;
   let t0 = Unix.gettimeofday () in
   match
-    Debian_solve.solve_files ~debug ~core ~order ~recommends:(not no_recs)
+    Debian_solve.solve_files ~debug ~order ~recommends:(not no_recs)
       ~strict_pinning:(not no_strict) ~native ~paths:[ path ] ~query
   with
   | Error e -> error 2 "%s" e
   | Ok r ->
-      report ~t0
+      report ~t0 ~core
         {
           Report.names = r.Debian_solve.names;
           versions = r.Debian_solve.versions;
           extra = [];
           dropped = r.Debian_solve.dropped;
           parse = r.Debian_solve.t_parse;
-        } r.Debian_solve.answer (fun a ->
+        } ~walk:r.Debian_solve.core r.Debian_solve.answer (fun a ->
           Report.packages
             (List.map
                (fun (n, b, v) -> Printf.sprintf "%s:%s %s" n b v)
@@ -188,18 +193,18 @@ let opam_run debug core order with_test with_doc with_dev_setup opam_version
       match Opam_solve.sanitize ar query with
       | Error e -> error 2 "%s" e
       | Ok query ->
-          let r =
-            Opam_solve.solve ~debug ~core ~order ~with_test ~with_doc
-              ~with_dev_setup ~opam_version ar query
+          let r, walk =
+            Opam_solve.solve ~debug ~order ~with_test ~with_doc ~with_dev_setup
+              ~opam_version ar query
           in
-          report ~t0
+          report ~t0 ~core
             {
               Report.names = ar.Opam_solve.n_names;
               versions = ar.Opam_solve.n_vers;
               extra = [];
               dropped = ar.Opam_solve.n_dropped;
               parse = ar.Opam_solve.t_parse;
-            } r (fun a ->
+            } ~walk r (fun a ->
               Report.packages
                 (List.map (fun (n, v) -> n ^ " " ^ v) a.Opam_solve.reals);
               if a.Opam_solve.depexts <> [] then
@@ -295,9 +300,7 @@ let cargo_run debug core order print_parents index manifest features no_default
              " with features " ^ String.concat "," feats
              ^ if default then "" else " and no default feature")
          (match rustv with None -> "" | Some t -> " for rust " ^ t));
-    let r =
-      Cargo_solve.solve ~debug ~core ~order ~index ~features ~rustv root
-    in
+    let r = Cargo_solve.solve ~debug ~order ~index ~features ~rustv root in
     match r.Cargo_solve.answer with
     | Ok a when Cargo_solve.reaches_registry_root root a ->
         error 2
@@ -306,14 +309,14 @@ let cargo_run debug core order print_parents index manifest features no_default
            path = \".\" }"
           n v n
     | answer ->
-        report ~t0
+        report ~t0 ~core
           {
             Report.names = r.Cargo_solve.n_names;
             versions = r.Cargo_solve.n_vers;
             extra = [];
             dropped = r.Cargo_solve.dropped;
             parse = r.Cargo_solve.t_parse;
-          } answer (fun a ->
+          } ~walk:r.Cargo_solve.core answer (fun a ->
             Report.packages
               (List.map
                  (fun (n, v, fs) ->
@@ -413,8 +416,8 @@ let alpine_run debug core order path goals =
             (String.concat ", "
                (List.map (fun n -> n ^ " (no such package)") ns))
       | [] ->
-          let r = A.solve ~debug ~core ~order ar world in
-          report ~t0
+          let r, walk = A.solve ~debug ~order ar world in
+          report ~t0 ~core
             {
               Report.names = Hashtbl.length ar.A.by_name;
               versions = ar.A.n_pkgs;
@@ -426,7 +429,7 @@ let alpine_run debug core order path goals =
               dropped = ar.A.n_dropped;
               parse;
             }
-            r
+            ~walk r
             (fun a ->
               Report.packages (List.map (fun (n, v) -> n ^ " " ^ v) a.A.pkgs);
               Report.encoded ~nodes:a.A.nodes ~lookups:a.A.lookups))
@@ -471,8 +474,8 @@ let npm_run debug core order reading cache offline tree omit nodev npmv query =
         | Ok root ->
             let rc = Npm.Archive.add_root ar root in
             Report.root (Npm.Print.root rc);
-            let r =
-              Npm.Solve.solve ~debug ~core ~order ~omit_dev:(List.mem `Dev omit)
+            let r, walk =
+              Npm.Solve.solve ~debug ~order ~omit_dev:(List.mem `Dev omit)
                 ~omit_optional:(List.mem `Optional omit) ar rc
             in
             let optional =
@@ -486,7 +489,7 @@ let npm_run debug core order reading cache offline tree omit nodev npmv query =
                   ]
               | _ -> []
             in
-            report ~t0
+            report ~t0 ~core
               {
                 Report.names = ar.Npm.Archive.n_names;
                 versions = ar.Npm.Archive.n_vers;
@@ -497,7 +500,7 @@ let npm_run debug core order reading cache offline tree omit nodev npmv query =
                 dropped = ar.Npm.Archive.n_dropped;
                 parse = ar.Npm.Archive.t_parse;
               }
-              r
+              ~walk r
               (fun a ->
                 Report.packages (Npm.Print.packages a);
                 if tree then Report.section "node_modules" (Npm.Print.tree a);

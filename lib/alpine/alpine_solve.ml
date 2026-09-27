@@ -6,9 +6,9 @@ module Make () = struct
 
   type result = { pkgs : (string * string) list; nodes : int; lookups : int }
 
-  let solve ?(debug = false) ?(core = false) ?(order = `Tool) (ar : archive)
+  let solve ?(debug = false) ?(order = `Tool) (ar : archive)
       (world : P.dep list) :
-      (result, Pac_common.Report.explanation) Stdlib.result =
+      (result, Pac_common.Report.explanation) Stdlib.result * (unit -> unit) =
     Pubgrub.set_debug debug;
     let st = lookups ar in
     let touch = touch ar world st in
@@ -18,6 +18,5 @@ module Make () = struct
           let pkgs = Alp.PkgSet.elements (Red.alpineResolution s_pf) in
           { pkgs = List.sort compare pkgs; nodes; lookups = L.lookups st })
     in
-    if core then L.core st ~touch;
-    r
+    (r, fun () -> L.core st ~touch)
 end

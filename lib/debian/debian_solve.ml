@@ -464,7 +464,7 @@ module Make (AP : Tables.ARCH) = struct
           Ok (decode sol, List.length sol)
   end
 
-  let solve ~debug ~core ~order (tables : tables)
+  let solve ~debug ~order (tables : tables)
       (query : ((string * string) * Args.accepts) list) =
     let looked_up = Hashtbl.create 4096 in
     let module S = Search (struct
@@ -481,17 +481,19 @@ module Make (AP : Tables.ARCH) = struct
     let r = S.run ~debug ~order query in
     let lookups = Hashtbl.length looked_up in
     let r = Result.map (fun (pkgs, nodes) -> { pkgs; nodes; lookups }) r in
-    if core then
+    let core () =
       Pac_common.Core.print ~pp_name:PName.pp_core ~pp_version:S.PVersion.pp
         (Pac_common.Core.walk ~versions:S.cands_of
            ~dependees:(fun (n, (pv : S.PVersion.t)) ->
              S.dependees_of n pv.S.PVersion.v)
-           (List.map (fun (n, _) -> DMA.Deb.Name.Orig n) query));
-    r
+           (List.map (fun (n, _) -> DMA.Deb.Name.Orig n) query))
+    in
+    (r, core)
 end
 
 type result = {
   answer : (answer, Pac_common.Report.explanation) Stdlib.result;
+  core : unit -> unit;
   names : int;
   versions : int;
   dropped : int;
@@ -501,8 +503,8 @@ type result = {
 (* Parsing and table construction are reported apart from solving because
    they scale differently: the archive is read whole, while the solve
    touches only the sub-instances the lookup theorems bound. *)
-let solve_files ~debug ~core ~order ~recommends ~strict_pinning ~native ~paths
-    ~query : (result, string) Stdlib.result =
+let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~paths ~query
+    : (result, string) Stdlib.result =
   Pubgrub.set_debug debug;
   let t0 = Unix.gettimeofday () in
   let dropped = ref 0 in
@@ -530,8 +532,10 @@ let solve_files ~debug ~core ~order ~recommends ~strict_pinning ~native ~paths
       let module M = Make (AP) in
       let tables = M.build_tables ~recommends index in
       let t_parse = Unix.gettimeofday () -. t0 in
+      let answer, core = M.solve ~debug ~order tables query in
       {
-        answer = M.solve ~debug ~core ~order tables query;
+        answer;
+        core;
         names = Hashtbl.length tables.M.group_table;
         versions = Hashtbl.length tables.M.stanza_table;
         dropped = !dropped;

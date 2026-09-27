@@ -1215,6 +1215,45 @@ not cached, or already in the cache:
   error: reading corrupt/core.json: not a packument
   [3]
 
+--core walks every version, not only those the solve tries, and so reads
+walkq, which only walkp 1.0.0 depends on.  What it reads counts in neither
+the names loaded nor the packuments fetched, and a registry failing it
+leaves the core incomplete and the answer as it is.
+
+  $ untimed ../../../bin/main.exe npm --offline --cache . walkp@">=1.0.0"
+  root .
+  packages (2):
+    .
+    walkp 2.0.0
+  encoded solution: 3 core nodes (4 lookups)
+  loaded: 2 names, 3 versions, 0 packuments fetched
+  $ untimed ../../../bin/main.exe npm --core --offline --cache . walkp@">=1.0.0"
+  root .
+  core: 5 packages, 4 edges
+  .@ 
+    -> <.@=>walkp> {1.0.0, 2.0.0}
+  <.@=>walkp> 1.0.0
+    -> walkp@1.0.0 {1.0.0}
+  <.@=>walkp> 2.0.0
+    -> walkp@2.0.0 {2.0.0}
+  walkp@1.0.0 1.0.0
+    -> <walkp@1.0.0=>walkq> {}
+  walkp@2.0.0 2.0.0
+  <walkp@1.0.0=>walkq> (none)
+  packages (2):
+    .
+    walkp 2.0.0
+  encoded solution: 3 core nodes (4 lookups)
+  loaded: 2 names, 3 versions, 0 packuments fetched
+  $ untimed env PATH=$PWD/down:$PATH ../../../bin/main.exe npm --core --cache . walkp@">=1.0.0"
+  root .
+  core: incomplete, fetching https://registry.npmjs.org/walkq: curl exited 6: curl: (6) Could not resolve host: registry.npmjs.org
+  packages (2):
+    .
+    walkp 2.0.0
+  encoded solution: 3 core nodes (4 lookups)
+  loaded: 2 names, 3 versions, 0 packuments fetched
+
 So is a package.json that cannot be read, while one that is not a
 package.json is refused:
 

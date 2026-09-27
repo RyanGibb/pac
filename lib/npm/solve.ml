@@ -120,9 +120,9 @@ let drop_dev ar root r =
     tree = List.filter (fun (c, p) -> k c && k p) r.tree;
   }
 
-let solve ?(debug = false) ?(core = false) ?(order = `Tool) ?(omit_dev = false)
+let solve ?(debug = false) ?(order = `Tool) ?(omit_dev = false)
     ?(omit_optional = false) ar (root : string * string) :
-    (result, Pac_common.Report.explanation) Stdlib.result =
+    (result, Pac_common.Report.explanation) Stdlib.result * (unit -> unit) =
   Pubgrub.set_debug debug;
   let st = Lookup.create ~optional:(not omit_optional) ar root in
   let h = Order.hooks order st in
@@ -140,12 +140,19 @@ let solve ?(debug = false) ?(core = false) ?(order = `Tool) ?(omit_dev = false)
         let r = decode st sol in
         Ok (if omit_dev then drop_dev ar root r else r)
   in
-  if core then
-    Pac_common.Core.print ~pp_name:PName.pp ~pp_version:PVersion.pp
-      (Pac_common.Core.walk ~versions:(Lookup.versions st)
-         ~dependees:(fun p ->
-           List.map
-             (fun ((m, vs) : T.Dependees.t) -> (m, T.VSet.elements vs))
-             (Lookup.dependees st p))
-         [ root_n ]);
-  r
+  (* a registry failing the walk says nothing of the answer, which is
+     decoded already *)
+  let core () =
+    match
+      Pac_common.Core.walk ~versions:(Lookup.versions st)
+        ~dependees:(fun p ->
+          List.map
+            (fun ((m, vs) : T.Dependees.t) -> (m, T.VSet.elements vs))
+            (Lookup.dependees st p))
+        [ root_n ]
+    with
+    | c -> Pac_common.Core.print ~pp_name:PName.pp ~pp_version:PVersion.pp c
+    | exception Archive.Fetch_failed e ->
+        Printf.printf "core: incomplete, %s\n%!" e
+  in
+  (r, core)

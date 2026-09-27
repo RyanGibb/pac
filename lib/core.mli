@@ -11,8 +11,9 @@ type ('name, 'version) t = {
    driver hands PubGrub.  The walk is to a fixpoint, since a lazily loaded
    name can gain versions after it was first expanded, and it expands every
    version rather than the ones a solve would try, so it is meant for small
-   instances.  A driver walks once its answer is decoded, so that what the
-   walk loads reaches neither the search nor the counts the answer reports. *)
+   instances.  A driver hands back its walk beside its answer, for the
+   caller to run once it has read the answer's counts and times, so that
+   what the walk loads reaches neither the search nor them. *)
 val walk :
   versions:('name -> 'version list) ->
   dependees:('name * 'version -> ('name * 'version list) list) ->

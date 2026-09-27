@@ -40,11 +40,11 @@ type result = {
   depexts : string list;
 }
 
-let solve ?(debug = false) ?(core = false) ?(order = `Tool) ?(with_test = false)
+let solve ?(debug = false) ?(order = `Tool) ?(with_test = false)
     ?(with_doc = false) ?(with_dev_setup = false)
     ?(opam_version = default_opam_version) ar
     (query : (string * Opam_parse.vc) list) :
-    (result, Pac_common.Report.explanation) Stdlib.result =
+    (result, Pac_common.Report.explanation) Stdlib.result * (unit -> unit) =
   Pubgrub.set_debug debug;
   let rho =
     rho
@@ -73,5 +73,4 @@ let solve ?(debug = false) ?(core = false) ?(order = `Tool) ?(with_test = false)
           depexts = depexts_of rho ar reals;
         })
   in
-  if core then L.core st ~touch;
-  r
+  (r, fun () -> L.core st ~touch)
