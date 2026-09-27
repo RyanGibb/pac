@@ -48,7 +48,7 @@ files (sha256):
 
 directory (sha256 of the sorted list of per-file sha256s):
 
-  repos/npm               907b43b853e608d1bdb381928c6e8d34d8ad12f80943ec866b4d66fd8924a5b2   5228 packuments and 3 tarballs, 1.1G
+  repos/npm               4012c06a05c0c4d228ceb09dbffdd8d71fc3f9e9f34e484975e455ad4e99b17f   5796 packuments and 3 tarballs, 1.3G
 
   cd repos/npm && find . -type f -printf '%P\n' | LC_ALL=C sort | tr '\n' '\0' \
     | xargs -0 sha256sum | awk '{print $1}' | LC_ALL=C sort | sha256sum
@@ -57,22 +57,37 @@ directory (sha256 of the sorted list of per-file sha256s):
   run asks for a name it lacks; eval/npm/seed.sh and a FILL=1 scale.sh run
   deliberately fill a symlink farm under the run directory instead, leaving
   this tree untouched, and the measured sweeps then run against a frozen
-  shim.  A changed hash here means something wrote into the checkout.
+  shim.  eval/npm/close.sh is the one thing that writes into it, copying in
+  what its fill passes fetched; any other change of hash means something
+  wrote into the checkout.
 
-  All of it was fetched from registry.npmjs.org on 2026-09-24 between 12:46
-  and 12:53 UTC, not by scripts/fetch-repos.sh.  The 3992 names
-  eval/npm/names.txt lists, which are the queries of a scale run, were fetched
-  first.  The other 1236 packuments are what closing the snapshot over both
-  sides' cones fetched: 50 by seed.sh's --fill, which also chose
-  baseline/roots.txt, and 1186 by a FILL=1 scale.sh pass over every query,
-  copied here from the farms unchanged -- pac reads them as well, through
-  --cache, so without them the sweep reproduces only from one machine's
-  scratch directory.  tarballs/ holds the three tarballs npm opens because the
-  version bundles its dependencies (npm 11.20.0 and 12.1.0, request 2.11.4);
-  setup.sh links them beside the farm, where the shim serves them.  A frozen
-  scale.sh run over every query then asked for nothing this tree lacks except
-  one git repository (esprima#harmony, which recast 0.5.27 names), which no
-  snapshot of the registry holds.
+  This is the final run's snapshot, replacing 907b43b8..., which was closed
+  over the npm reading alone.  It is that tree, 5228 packuments fetched from
+  registry.npmjs.org on 2026-09-24 between 12:46 and 12:53 UTC, plus 568
+  packuments close.sh fetched on 2026-09-27 between 22:17 and 22:27 UTC,
+  closing it over the shared and placement readings too.  Of the 2026-09-24
+  ones, the 3992 names eval/npm/names.txt lists, which are the queries of a
+  scale run, were fetched first; the other 1236 closed the snapshot over both
+  sides' cones in the npm reading, 50 by seed.sh's --fill, which also chose
+  baseline/roots.txt, and 1186 by a FILL=1 scale.sh pass over every query.
+  pac reads them as well, through --cache, so without them the sweep
+  reproduces only from one machine's scratch directory.  tarballs/ holds the
+  three tarballs npm opens because the version bundles its dependencies (npm
+  11.20.0 and 12.1.0, request 2.11.4); setup.sh links them beside the farm,
+  where the shim serves them.
+
+  The 568 are what close.sh fetched with pac 757e1fd and npm 11.19.0 over
+  every query of the final run -- queries.js's 3962 names and 494 targeted
+  ranges and the 25 of baseline/roots.txt, 4455 once the repeats go -- in the
+  npm, shared and placement readings and both orders.  Its second pass then
+  fetched nothing, and asked for nothing this tree lacks except names no
+  snapshot of the registry holds: the git repository esprima#harmony, which
+  recast 0.5.27 names (qunit@0.x, remove-try-require, replace-method, in
+  every reading), and four names registry.npmjs.org answers 404, which pac
+  alone asks for: @prettier/next in the shared reading, and ignore-rules,
+  @tapjs/.test-built and @75lb/jsdoc-node23-fix in the placement reading.
+  When pac changes, rerun close.sh with it (eval/README.md) and record the
+  hash it ends with here.
 
 The cargo sweeps need nothing pinned beyond repos/crates.io-index above: both
 of them ask cargo only for a lockfile, which it resolves from index rows alone

@@ -2,9 +2,9 @@
 # A query is closed when neither side asked for a name the snapshot lacks,
 # tolerated-misses aside: only then are both answering about the snapshot.
 # FILL=1 is the pass that closes a snapshot: the shim fetches each miss once
-# into the run's farm, pac's fetches go through it, and what the farm gains
-# is then copied into repos/npm by hand; a miss is then only a name the
-# registry itself refuses.
+# into the run's farm, pac's fetches go through it, and close.sh copies what
+# the farm gains into repos/npm; a miss is then only a name the registry
+# itself refuses.
 # READING is pac's --reading, npm, shared or placement, and the check reads the
 # manifests as pac did.
 # usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]
