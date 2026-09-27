@@ -2,7 +2,7 @@ From Stdlib Require Import MSets List.
 From PackageCalculus Require Import Prelude Core Complexity Versions Semver
   Conflict ConflictClass Concurrent PeerDependency Visibility Feature
   Virtual PackageFormula VariableFormula FeatureConcurrent Debian DebianMA
-  Opam Cargo Alpine Npm Placement.
+  Opam Cargo Alpine Npm Placement NpmPlacement.
 
 Module C := Core Nat_as_OT Nat_as_OT.
 Module Cx := Complexity Nat_as_OT Nat_as_OT Nat_as_OT.
@@ -681,4 +681,28 @@ Example npm_prerelease_admitted :
   NpmP.VSet.elements
     (NpmP.rangeEval ((NpmP.COp OpGe 5 :: NpmP.COp OpLt 8 :: nil) :: nil)
        (NpmP.realVersions npmPreRepo npmC)) = 5 :: 6 :: nil.
+Proof. reflexivity. Qed.
+
+Module NplS := NpmPlacement Nat_as_OT Nat_as_OT NpmVM.
+
+(* The project depends on key 4 aliasing package 2 and on 3 optionally;
+   no version of 3 is in range, so that edge may find nothing. *)
+Definition nplInst : NplS.Inst :=
+  NplS.MkInst
+    (fold_right NplS.RepoSet.add NplS.RepoSet.empty
+       ((npmB, 1) :: (npmC, 1) :: nil))
+    (((npmA, 1), NplS.MkDep npmX npmB ((NplS.COp OpEq 1 :: nil) :: nil) false false)
+     :: ((npmA, 1), NplS.MkDep npmC npmC ((NplS.COp OpEq 2 :: nil) :: nil) false true)
+     :: nil)
+    nil nil (npmA, 1).
+
+Example npl_edges :
+  List.map (fun e => (NplS.e_dir e, NplS.e_name e, NplS.e_opt e))
+    (NplS.edgesOf nplInst NplS.Occ.Top) =
+  (npmX, npmB, false) :: (npmC, npmC, true) :: nil.
+Proof. reflexivity. Qed.
+
+Example npl_key :
+  NplS.Pl.VSet.elements (NplS.Pl.repoVersions (NplS.placeRepo nplInst) npmX) =
+  NplS.Occ.Reg npmB 1 :: nil.
 Proof. reflexivity. Qed.

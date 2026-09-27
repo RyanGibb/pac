@@ -981,6 +981,8 @@ module Placement = struct
             (("B", "1"), ("C", vs [ "2" ]));
           ];
       inst_peers = M.C.DepRel.ofList [ (("C", "2"), ("A", vs [ "1" ])) ];
+      inst_optDeps = M.C.DepRel.empty;
+      inst_optPeers = M.C.DepRel.empty;
       inst_root = ("R", "1");
     }
 

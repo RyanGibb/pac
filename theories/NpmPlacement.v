@@ -1,0 +1,571 @@
+From Stdlib Require Import MSets List Bool.
+From PackageCalculus Require Import Prelude Core Versions Semver Placement.
+
+Create HintDb cmp_npl.
+Create Rewrite HintDb cmp_npl.
+
+Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
+  Module RPkg := PairUOT N V.
+  Module RepoSet := FSetUOT RPkg.
+  Module VS := FSetUOT V.
+  Module NKey := PairUOT N N.
+  Module KeySet := FSetUOT NKey.
+  Module NEqb := UOTEqb N.
+  Module RPkgEqb := UOTEqb RPkg.
+  Module RPkgF := UOTCompareFacts RPkg.
+  #[local] Hint Rewrite RPkgF.compare_eq_iff : cmp_npl.
+  #[local] Hint Extern 1 => cmp_by RPkgF.compare_antisym : cmp_npl.
+  #[local] Hint Extern 1 => cmp_by RPkgF.compare_lt_trans : cmp_npl.
+
+  Module Sv := Semver V VS PM.
+  Include Sv.
+
+  (* What a directory holds: a registry package, or the project, which
+     only the root holds.  They differ even at one name and version, as
+     arborist loads devDependencies for the top node alone. *)
+  Module Occ.
+    Inductive occ : Type :=
+    | Top
+    | Reg (m : N.t) (v : V.t).
+    Definition t := occ.
+
+    Definition rank (x : t) : nat := match x with Top => 0 | Reg _ _ => 1 end.
+
+    Definition compare (x y : t) : comparison :=
+      match Nat.compare (rank x) (rank y) with
+      | Eq => match x, y with
+              | Reg m1 v1, Reg m2 v2 => RPkg.compare (m1, v1) (m2, v2)
+              | _, _ => Eq
+              end
+      | c => c
+      end.
+
+    Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
+    Proof. cmp_eq_iff cmp_npl. Qed.
+
+    Lemma compare_antisym : forall x y, compare y x = CompOpp (compare x y).
+    Proof. cmp_antisym cmp_npl. Qed.
+
+    Lemma compare_lt_trans : forall x y z,
+        compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
+    Proof. cmp_lt_trans cmp_npl. Qed.
+  End Occ.
+
+  Module OccOT := UOTFromCompare Occ.
+  Module Pl := Placement N OccOT.
+
+  (* A dependency's directory key and the registry package it names there
+     differ under an npm: alias. *)
+  Record Dependency : Type := MkDep
+    { d_dir : N.t
+    ; d_name : N.t
+    ; d_range : Range
+    ; d_dev : bool
+    ; d_optional : bool }.
+
+  Record PeerDependency : Type := MkPeer
+    { p_dir : N.t
+    ; p_name : N.t
+    ; p_range : Range
+    ; p_optional : bool }.
+
+  (* The relation fields are lists, as in Npm.v: sets would demand an order
+     on Range used nowhere. *)
+  Record Inst : Type := MkInst
+    { inst_repo : RepoSet.t
+    ; inst_deps : list (RPkg.t * Dependency)
+    ; inst_peers : list (RPkg.t * PeerDependency)
+    ; inst_ovr : list (N.t * Range)
+    ; inst_root : RPkg.t }.
+
+  Definition ownedBy {A : Type} (p : RPkg.t) (l : list (RPkg.t * A)) : list A :=
+    List.map snd (List.filter (fun q => RPkgEqb.eqb (fst q) p) l).
+
+  Lemma in_ownedBy : forall (A : Type) (l : list (RPkg.t * A)) p a,
+      In a (ownedBy p l) <-> In (p, a) l.
+  Proof.
+    intros A l p a; unfold ownedBy; rewrite in_map_iff; split.
+    - intros [[q b] [<- H]]; apply filter_In in H; destruct H as [H E].
+      apply RPkgEqb.eqb_true_iff in E; cbn [fst] in E; subst q; exact H.
+    - intro H; exists (p, a); split; [reflexivity |].
+      apply filter_In; split; [exact H | apply RPkgEqb.eqb_refl].
+  Qed.
+
+  Module SOrv := SetOps RPkg V RepoSet VS.
+  Definition realVersions (R : RepoSet.t) (m : N.t) : VS.t :=
+    SOrv.filterMap
+      (fun q => if NEqb.eqb (fst q) m then Some (snd q) else None) R.
+
+  Lemma mem_realVersions : forall R m v,
+      VS.In v (realVersions R m) <-> RepoSet.In (m, v) R.
+  Proof.
+    intros R m v; unfold realVersions; rewrite SOrv.mem_filterMap_if; split.
+    - intros [[m' u] [HR [Hm ->]]]; cbn [fst snd] in *.
+      apply NEqb.eqb_true_iff in Hm; subst m'; exact HR.
+    - intro H; exists (m, v); cbn [fst snd]; rewrite NEqb.eqb_refl; auto.
+  Qed.
+
+  Fixpoint lookupOvr (l : list (N.t * Range)) (n : N.t) : option Range :=
+    match l with
+    | nil => None
+    | (m, rg) :: l' => if NEqb.eqb m n then Some rg else lookupOvr l' n
+    end.
+
+  (* A flat override, keyed by the registry package the edge names, as the
+     npm reading keys it. *)
+  Definition override (I : Inst) (n : N.t) (rg : Range) : Range :=
+    match lookupOvr (inst_ovr I) n with
+    | Some rg' => rg'
+    | None => rg
+    end.
+
+  Definition cands (I : Inst) (m : N.t) (rg : Range) : VS.t :=
+    rangeEval (override I m rg) (realVersions (inst_repo I) m).
+
+  (* An edge as arborist's Edge holds one: the directory it walks for, the
+     package and range it accepts there, whether it is a peer, and whether
+     finding nothing meets it. *)
+  Record Edge : Type := MkEdge
+    { e_dir : N.t
+    ; e_name : N.t
+    ; e_range : Range
+    ; e_peer : bool
+    ; e_opt : bool }.
+
+  (* An optional dependency no published version satisfies is left
+     unplaced, as npm abandons it on ENOTARGET; any other is placed as a
+     dependency, since npm fetches it. *)
+  Definition depEdge (I : Inst) (d : Dependency) : Edge :=
+    MkEdge (d_dir d) (d_name d) (d_range d) false
+      (andb (d_optional d) (VS.is_empty (cands I (d_name d) (d_range d)))).
+
+  Definition peerEdge (r : PeerDependency) : Edge :=
+    MkEdge (p_dir r) (p_name r) (p_range r) true (p_optional r).
+
+  Definition activeDeps (I : Inst) (x : Occ.t) : list Dependency :=
+    match x with
+    | Occ.Top => ownedBy (inst_root I) (inst_deps I)
+    | Occ.Reg m v =>
+        List.filter (fun d => negb (d_dev d)) (ownedBy (m, v) (inst_deps I))
+    end.
+
+  Definition declPeers (I : Inst) (x : Occ.t) : list PeerDependency :=
+    match x with
+    | Occ.Top => ownedBy (inst_root I) (inst_peers I)
+    | Occ.Reg m v => ownedBy (m, v) (inst_peers I)
+    end.
+
+  (* A node keeps one edge per name, and a dependency replaces a peer. *)
+  Definition replaced (ds : list Dependency) (r : PeerDependency) : bool :=
+    List.existsb (fun d => NEqb.eqb (d_dir d) (p_dir r)) ds.
+
+  Definition edgesOf (I : Inst) (x : Occ.t) : list Edge :=
+    List.map (depEdge I) (activeDeps I x) ++
+    List.map peerEdge
+      (List.filter (fun r => negb (replaced (activeDeps I x) r))
+         (declPeers I x)).
+
+  (* The occupant must be the registry package the edge names, not only a
+     version in range as npm's satisfiedBy has it. *)
+  Definition Sat (I : Inst) (e : Edge) (x : Occ.t) : Prop :=
+    exists u, x = Occ.Reg (e_name e) u /\
+      VS.In u (cands I (e_name e) (e_range e)).
+
+  (* edge.js's errors: finding nothing is MISSING unless the edge is
+     optional; a copy found must satisfy the edge, and a peer's must not sit
+     in its declarer's own node_modules (PEER LOCAL). *)
+  Definition EdgeOk (I : Inst) (L : Pl.Layout.t) (l : Pl.Path.t) (e : Edge)
+      : Prop :=
+    match Pl.walk L l (e_dir e) with
+    | None => e_opt e = true
+    | Some (l', x) => Pl.Suffix l' (Pl.land (e_peer e) l) /\ Sat I e x
+    end.
+
+  Module SOkk := SetOps NKey NKey KeySet KeySet.
+  Definition keysOf (I : Inst) : KeySet.t :=
+    SOkk.ofList
+      (List.map (fun q => (d_dir (snd q), d_name (snd q))) (inst_deps I) ++
+       List.map (fun q => (p_dir (snd q), p_name (snd q))) (inst_peers I)).
+
+  Record IsResolution (I : Inst) (L : Pl.Layout.t) : Prop :=
+    { res_avail :
+        forall l a x, Pl.Layout.In (l, (a, x)) L ->
+        exists m v, x = Occ.Reg m v /\ KeySet.In (a, m) (keysOf I) /\
+          RepoSet.In (m, v) (inst_repo I)
+    ; res_occupancy :
+        forall l a x x', Pl.Layout.In (l, (a, x)) L ->
+        Pl.Layout.In (l, (a, x')) L -> x = x'
+    ; res_tree :
+        forall b l p, Pl.Layout.In (b :: l, p) L ->
+        exists x, Pl.Layout.In (l, (b, x)) L
+    ; res_root : forall e, In e (edgesOf I Occ.Top) -> EdgeOk I L nil e
+    ; res_edges :
+        forall l a x, Pl.Layout.In (l, (a, x)) L ->
+        forall e, In e (edgesOf I x) -> EdgeOk I L (a :: l) e }.
+
+  Module SOkp := SetOps NKey Pl.Pkg KeySet Pl.PkgSet.
+  Module SOvp := SetOps V Pl.Pkg VS Pl.PkgSet.
+  Definition placeRepo (I : Inst) : Pl.PkgSet.t :=
+    SOkp.unionMap (fun k =>
+        SOvp.map (fun v => (fst k, Occ.Reg (snd k) v))
+          (realVersions (inst_repo I) (snd k)))
+      (keysOf I).
+
+  Lemma mem_placeRepo : forall I a x,
+      Pl.PkgSet.In (a, x) (placeRepo I) <->
+      exists m v, x = Occ.Reg m v /\ KeySet.In (a, m) (keysOf I) /\
+        RepoSet.In (m, v) (inst_repo I).
+  Proof.
+    intros I a x; unfold placeRepo; rewrite SOkp.mem_unionMap; split.
+    - intros [[a' m] [Hk Hv]]; apply SOvp.mem_map in Hv.
+      destruct Hv as [v [Hv E]]; injection E as -> ->.
+      exists m, v; split; [reflexivity |].
+      split; [exact Hk | apply mem_realVersions; exact Hv].
+    - intros [m [v [-> [Hk Hv]]]]; exists (a, m); split; [exact Hk |].
+      apply SOvp.mem_map; exists v; split; [| reflexivity].
+      apply mem_realVersions; exact Hv.
+  Qed.
+
+  Definition rootOcc (I : Inst) : Pl.Pkg.t := (fst (inst_root I), Occ.Top).
+
+  Definition occs (I : Inst) : Pl.PkgSet.t :=
+    Pl.PkgSet.add (rootOcc I) (placeRepo I).
+
+  Module SOvo := SetOps V OccOT VS Pl.VSet.
+  Definition accepts (I : Inst) (e : Edge) : Pl.VSet.t :=
+    SOvo.map (Occ.Reg (e_name e)) (cands I (e_name e) (e_range e)).
+
+  Lemma mem_accepts : forall I e x,
+      Pl.VSet.In x (accepts I e) <-> Sat I e x.
+  Proof.
+    intros I e x; unfold accepts, Sat; rewrite SOvo.mem_map.
+    split; intros [u [H1 H2]]; exists u; split; assumption.
+  Qed.
+
+  Definition kindb (pe o : bool) (e : Edge) : bool :=
+    andb (Bool.eqb (e_peer e) pe) (Bool.eqb (e_opt e) o).
+
+  Module SOpd := SetOps Pl.Pkg Pl.C.DepElt Pl.PkgSet Pl.C.DepRel.
+  Definition edgeRel (I : Inst) (pe o : bool) : Pl.C.DepRel.t :=
+    SOpd.unionMap (fun p =>
+        SOpd.ofList
+          (List.map (fun e => (p, (e_dir e, accepts I e)))
+             (List.filter (kindb pe o) (edgesOf I (snd p)))))
+      (occs I).
+
+  Lemma mem_edgeRel : forall I pe o p n vs,
+      Pl.C.DepRel.In (p, (n, vs)) (edgeRel I pe o) <->
+      Pl.PkgSet.In p (occs I) /\
+      exists e, In e (edgesOf I (snd p)) /\ e_peer e = pe /\ e_opt e = o /\
+        n = e_dir e /\ vs = accepts I e.
+  Proof.
+    intros I pe o p n vs; unfold edgeRel; rewrite SOpd.mem_unionMap; split.
+    - intros [q [Hq H]]; apply SOpd.mem_ofList, in_map_iff in H.
+      destruct H as [e [E He]]; injection E as <- <- <-.
+      apply filter_In in He; destruct He as [He Hk].
+      unfold kindb in Hk; apply andb_true_iff in Hk.
+      rewrite !Bool.eqb_true_iff in Hk; destruct Hk as [Hp Ho].
+      split; [exact Hq |]; exists e; auto.
+    - intros [Hq [e [He [Hp [Ho [-> ->]]]]]]; exists p; split; [exact Hq |].
+      apply SOpd.mem_ofList, in_map_iff; exists e; split; [reflexivity |].
+      apply filter_In; split; [exact He |].
+      unfold kindb; rewrite Hp, Ho, !Bool.eqb_reflx; reflexivity.
+  Qed.
+
+  (* The npm instance as a placement instance: a key holds every package
+     some entry aliases to it, and an occupant's edges are its package's. *)
+  Definition tr (I : Inst) : Pl.Inst :=
+    {| Pl.inst_repo := placeRepo I
+     ; Pl.inst_deps := edgeRel I false false
+     ; Pl.inst_peers := edgeRel I true false
+     ; Pl.inst_optDeps := edgeRel I false true
+     ; Pl.inst_optPeers := edgeRel I true true
+     ; Pl.inst_root := rootOcc I |}.
+
+  Lemma rel_tr : forall I pe o, Pl.rel (tr I) pe o = edgeRel I pe o.
+  Proof. intros I [|] [|]; reflexivity. Qed.
+
+  Lemma edgeOk_meets : forall I L l e,
+      EdgeOk I L l e <->
+      Pl.Meets L l (Pl.land (e_peer e) l) (e_dir e) (accepts I e) (e_opt e).
+  Proof.
+    intros I L l e; unfold EdgeOk, Pl.Meets, Pl.Resolves.
+    destruct (Pl.walk L l (e_dir e)) as [[l' x] |]; split.
+    - intros [Hs Hx]; left; exists l', x; split; [reflexivity |].
+      split; [exact Hs | apply mem_accepts; exact Hx].
+    - intros [[l0 [u [E [Hs Hu]]]] | [_ E]]; [| discriminate E].
+      injection E as <- <-; split; [exact Hs | apply mem_accepts; exact Hu].
+    - intro Ho; right; split; [exact Ho | reflexivity].
+    - intros [[l0 [u [E _]]] | [Ho _]]; [discriminate E | exact Ho].
+  Qed.
+
+  Theorem tr_resolution : forall I L,
+      Pl.IsResolution (tr I) L <-> IsResolution I L.
+  Proof.
+    intros I L; split.
+    - intros [Hsub Hocc Htree Hroot Hdeps].
+      assert (Hholds : forall p l, Pl.Holds (tr I) L l p ->
+                 Pl.PkgSet.In p (occs I) ->
+                 forall e, In e (edgesOf I (snd p)) -> EdgeOk I L l e).
+      { intros p l Hh Hp e He; apply edgeOk_meets, Hh.
+        rewrite rel_tr, mem_edgeRel; split; [exact Hp |].
+        exists e; auto. }
+      constructor.
+      + intros l a x H; apply mem_placeRepo, (Hsub l (a, x) H).
+      + exact Hocc.
+      + exact Htree.
+      + exact (Hholds (rootOcc I) nil Hroot
+                 (proj2 (Pl.PkgSet.add_spec _ _ _) (or_introl eq_refl))).
+      + intros l a x H; apply (Hholds (a, x) (a :: l) (Hdeps l (a, x) H)).
+        apply Pl.PkgSet.add_spec; right; exact (Hsub l (a, x) H).
+    - intros [Havail Hocc Htree Hroot Hedges].
+      assert (Hholds : forall p l,
+                 (forall e, In e (edgesOf I (snd p)) -> EdgeOk I L l e) ->
+                 Pl.Holds (tr I) L l p).
+      { intros p l He pe o n vs HE; rewrite rel_tr, mem_edgeRel in HE.
+        destruct HE as [_ [e [Hin [<- [<- [-> ->]]]]]].
+        apply edgeOk_meets, He; exact Hin. }
+      constructor.
+      + intros l [a x] H; apply mem_placeRepo, (Havail l a x H).
+      + exact Hocc.
+      + exact Htree.
+      + apply Hholds; exact Hroot.
+      + intros l [a x] H; apply Hholds; exact (Hedges l a x H).
+  Qed.
+
+  (* The npm reduction: the placement reduction of the translation.
+     Placement's Reduction is named in full, as an alias of it inside this
+     functor trips a kernel anomaly when the functor is applied. *)
+  Definition reduceReal (I : Inst) (depth : nat) : Pl.Reduction.T.PkgSet.t :=
+    Pl.Reduction.reduceReal (tr I) depth.
+
+  Definition reduceDeps (I : Inst) (depth : nat) : Pl.Reduction.T.DepRel.t :=
+    Pl.Reduction.reduceDeps (tr I) depth.
+
+  Definition rootPkg (I : Inst) : Pl.Reduction.T.Pkg.t :=
+    Pl.Reduction.rootPkg (tr I).
+
+  Theorem npm_soundness : forall I depth S,
+      Pl.Reduction.T.IsResolution (reduceReal I depth) (reduceDeps I depth)
+        (rootPkg I) S ->
+      IsResolution I (Pl.Reduction.placementResolution S) /\
+      Pl.Depth depth (Pl.Reduction.placementResolution S).
+  Proof.
+    intros I depth S H.
+    destruct (Pl.Reduction.placement_soundness _ _ _ H) as [H1 H2].
+    split; [apply tr_resolution; exact H1 | exact H2].
+  Qed.
+
+  Theorem npm_completeness : forall I depth L,
+      IsResolution I L -> Pl.Depth depth L ->
+      Pl.Reduction.T.IsResolution (reduceReal I depth) (reduceDeps I depth)
+        (rootPkg I) (Pl.Reduction.coreResolution (tr I) depth L).
+  Proof.
+    intros I depth L H Hd; apply Pl.Reduction.placement_completeness;
+      [apply tr_resolution; exact H | exact Hd].
+  Qed.
+
+  Theorem npm_roundtrip : forall I depth L,
+      IsResolution I L -> Pl.Depth depth L ->
+      Pl.Reduction.placementResolution
+        (Pl.Reduction.coreResolution (tr I) depth L) = L.
+  Proof.
+    intros I depth L H Hd;
+      apply Pl.Reduction.placementResolution_coreResolution;
+      [apply tr_resolution; exact H | exact Hd].
+  Qed.
+
+  Module Lookup.
+    (* Where two instances agree on which packages a key may hold. *)
+    Definition AgreesAtKey (I' I : Inst) (a : N.t) : Prop :=
+      forall m v,
+        (KeySet.In (a, m) (keysOf I') /\ RepoSet.In (m, v) (inst_repo I')) <->
+        (KeySet.In (a, m) (keysOf I) /\ RepoSet.In (m, v) (inst_repo I)).
+
+    Lemma keyVersions_agree : forall I' I a, AgreesAtKey I' I a ->
+        Pl.repoVersions (placeRepo I') a = Pl.repoVersions (placeRepo I) a.
+    Proof.
+      intros I' I a H; apply Pl.repoVersions_ext; intro x.
+      rewrite !mem_placeRepo; split; intros [m [v [-> Hk]]];
+        exists m, v; split; try reflexivity; apply H; exact Hk.
+    Qed.
+
+    (* A location's and a walk's versions read the key's packages alone. *)
+    Definition nameInst (I : Inst) : Pl.Inst :=
+      {| Pl.inst_repo := placeRepo I
+       ; Pl.inst_deps := Pl.C.DepRel.empty
+       ; Pl.inst_peers := Pl.C.DepRel.empty
+       ; Pl.inst_optDeps := Pl.C.DepRel.empty
+       ; Pl.inst_optPeers := Pl.C.DepRel.empty
+       ; Pl.inst_root := rootOcc I |}.
+
+    Theorem versions_lookupLoc : forall I I' depth l a,
+        Pl.Reduction.Lookup.Reached (tr I) depth (Pl.Reduction.Name.Loc l a) ->
+        AgreesAtKey I' I a ->
+        Pl.Reduction.T.versions (reduceReal I depth)
+          (Pl.Reduction.Name.Loc l a) =
+        Pl.Reduction.versions (nameInst I') depth (Pl.Reduction.Name.Loc l a).
+    Proof.
+      intros I I' depth l a H Ha; unfold reduceReal.
+      rewrite (Pl.Reduction.Lookup.versions_lookupLoc _ _ _ _ H).
+      unfold Pl.Reduction.versions, Pl.Reduction.Lookup.nameSubInst, nameInst,
+        tr, rootOcc; cbn [Pl.inst_repo].
+      rewrite Pl.Reduction.Lookup.versions_fibre, (keyVersions_agree _ _ _ Ha).
+      reflexivity.
+    Qed.
+
+    Theorem versions_lookupWalk : forall I I' depth l a,
+        Pl.Reduction.Lookup.Reached (tr I) depth (Pl.Reduction.Name.Walk l a) ->
+        AgreesAtKey I' I a ->
+        Pl.Reduction.T.versions (reduceReal I depth)
+          (Pl.Reduction.Name.Walk l a) =
+        Pl.Reduction.versions (nameInst I') depth (Pl.Reduction.Name.Walk l a).
+    Proof.
+      intros I I' depth l a H Ha; unfold reduceReal.
+      rewrite (Pl.Reduction.Lookup.versions_lookupWalk _ _ _ _ H).
+      unfold Pl.Reduction.versions, Pl.Reduction.Lookup.nameSubInst, nameInst,
+        tr, rootOcc; cbn [Pl.inst_repo].
+      rewrite Pl.Reduction.Lookup.versions_fibre, (keyVersions_agree _ _ _ Ha).
+      reflexivity.
+    Qed.
+
+    (* An edge's atom reads the location, the edge, and the packages it
+       accepts, so the driver computes the accepted set once per package
+       and range and the atom once per location and edge. *)
+    Definition atomOf (lam : Pl.Path.t) (e : Edge) (xs : Pl.VSet.t)
+        : Pl.Reduction.T.Dependees.t :=
+      (Pl.Reduction.Name.Walk lam (e_dir e),
+       Pl.Reduction.admit (e_opt e) (Pl.land (e_peer e) lam) xs).
+
+    Definition edgeAtom (I : Inst) (lam : Pl.Path.t) (e : Edge)
+        : Pl.Reduction.T.Dependees.t :=
+      atomOf lam e (accepts I e).
+
+    Module SOhh := SetOps Pl.Reduction.T.Dependees Pl.Reduction.T.Dependees
+      Pl.Reduction.T.DependeesSet Pl.Reduction.T.DependeesSet.
+    Definition occAtoms (I : Inst) (lam : Pl.Path.t) (x : Occ.t)
+        : Pl.Reduction.T.DependeesSet.t :=
+      SOhh.ofList (List.map (edgeAtom I lam) (edgesOf I x)).
+
+    Lemma edgeAtoms_tr : forall I p lam, Pl.PkgSet.In p (occs I) ->
+        Pl.Reduction.edgeAtoms (tr I) p lam = occAtoms I lam (snd p).
+    Proof.
+      intros I p lam Hp; apply Pl.Reduction.T.DependeesSet.ext; intro h.
+      rewrite Pl.Reduction.mem_edgeAtoms; unfold occAtoms.
+      rewrite SOhh.mem_ofList, in_map_iff; split.
+      - intros [pe [o [n [vs [HE ->]]]]]; rewrite rel_tr, mem_edgeRel in HE.
+        destruct HE as [_ [e [He [<- [<- [-> ->]]]]]].
+        exists e; split; [reflexivity | exact He].
+      - intros [e [<- He]].
+        exists (e_peer e), (e_opt e), (e_dir e), (accepts I e).
+        split; [| reflexivity].
+        rewrite rel_tr, mem_edgeRel; split; [exact Hp |].
+        exists e; auto.
+    Qed.
+
+    Theorem dependees_lookupRoot : forall I depth,
+        Pl.Reduction.T.dependees (reduceDeps I depth) (rootPkg I) =
+        occAtoms I nil Occ.Top.
+    Proof.
+      intros I depth; unfold reduceDeps, rootPkg.
+      rewrite Pl.Reduction.dependees_reduceDeps.
+      - cbn [Pl.Reduction.rootPkg Pl.Reduction.dependees tr Pl.inst_root
+               rootOcc snd]; unfold Pl.Reduction.occDeps.
+        rewrite (edgeAtoms_tr I (rootOcc I) nil)
+          by (apply Pl.PkgSet.add_spec; left; reflexivity).
+        apply Pl.Reduction.T.DependeesSet.ext; intro h.
+        rewrite Pl.Reduction.T.DependeesSet.union_spec.
+        cbn [Pl.par Pl.Reduction.treeAtom rootOcc snd]; split.
+        + intros [H | H]; [| exact H].
+          destruct (Pl.Reduction.T.DependeesSet.empty_spec H).
+        + intro H; right; exact H.
+      - apply Pl.Reduction.mem_reduceReal; split; [exact Logic.I |].
+        apply Pl.Reduction.T.VSet.singleton_spec; reflexivity.
+    Qed.
+
+    (* The driver's form: the Tree atom, then one atom per edge. *)
+    Theorem dependees_lookupOcc : forall I depth l a x,
+        Pl.Reduction.T.PkgSet.In
+          (Pl.Reduction.Name.Loc l a, Pl.Reduction.Version.Occ x)
+          (reduceReal I depth) ->
+        Pl.Reduction.T.dependees (reduceDeps I depth)
+          (Pl.Reduction.Name.Loc l a, Pl.Reduction.Version.Occ x) =
+        Pl.Reduction.T.DependeesSet.union
+          (Pl.Reduction.treeAtom (placeRepo I) l) (occAtoms I (a :: l) x).
+    Proof.
+      intros I depth l a x H; unfold reduceDeps.
+      rewrite (Pl.Reduction.dependees_reduceDeps _ _ _ H).
+      apply Pl.Reduction.mem_reduceReal in H; destruct H as [_ H].
+      apply Pl.Reduction.mem_versions_loc in H.
+      destruct H as [E | [v [_ [Hv E]]]]; [discriminate E |].
+      injection E as ->; cbn [Pl.Reduction.dependees].
+      unfold Pl.Reduction.occDeps.
+      rewrite (edgeAtoms_tr I (a, v) (a :: l))
+        by (apply Pl.PkgSet.add_spec; right; exact Hv).
+      reflexivity.
+    Qed.
+
+    Theorem dependees_lookupWalk : forall I depth l a w,
+        Pl.Reduction.T.PkgSet.In (Pl.Reduction.Name.Walk l a, w)
+          (reduceReal I depth) ->
+        Pl.Reduction.T.dependees (reduceDeps I depth)
+          (Pl.Reduction.Name.Walk l a, w) =
+        Pl.Reduction.walkDeps l a w.
+    Proof.
+      intros I depth l a w H.
+      exact (Pl.Reduction.Lookup.dependees_lookupWalk _ _ _ _ _ H).
+    Qed.
+
+    Theorem dependees_lookupAbsent : forall I depth l a,
+        Pl.Reduction.T.dependees (reduceDeps I depth)
+          (Pl.Reduction.Name.Loc l a, Pl.Reduction.Version.Bot) =
+        Pl.Reduction.T.DependeesSet.empty.
+    Proof. intros; apply Pl.Reduction.Lookup.dependees_lookupAbsent. Qed.
+
+    (* Where two instances agree on an occupant's own edges: its package's
+       manifest, the overrides, and the packages its edges name. *)
+    Definition AgreesAtOcc (I' I : Inst) (x : Occ.t) : Prop :=
+      activeDeps I' x = activeDeps I x /\ declPeers I' x = declPeers I x /\
+      inst_ovr I' = inst_ovr I /\
+      forall e, In e (edgesOf I x) -> forall u,
+        RepoSet.In (e_name e, u) (inst_repo I') <->
+        RepoSet.In (e_name e, u) (inst_repo I).
+
+    Lemma cands_agree : forall I' I m rg,
+        inst_ovr I' = inst_ovr I ->
+        (forall u, RepoSet.In (m, u) (inst_repo I') <->
+                   RepoSet.In (m, u) (inst_repo I)) ->
+        cands I' m rg = cands I m rg.
+    Proof.
+      intros I' I m rg Ho Hr; unfold cands, override; rewrite Ho; f_equal.
+      apply VS.ext; intro u; rewrite !mem_realVersions; exact (Hr u).
+    Qed.
+
+    Lemma edgesOf_agree : forall I' I x, AgreesAtOcc I' I x ->
+        edgesOf I' x = edgesOf I x.
+    Proof.
+      intros I' I x [Hd [Hp [Ho Hr]]]; unfold edgesOf; rewrite Hd, Hp.
+      f_equal; apply map_ext_in; intros d Hin; unfold depEdge.
+      rewrite (cands_agree I' I); [reflexivity | exact Ho |].
+      intro u; apply (Hr (depEdge I d)); unfold edgesOf.
+      apply in_or_app; left; apply in_map; exact Hin.
+    Qed.
+
+    Theorem occAtoms_agree : forall I' I lam x, AgreesAtOcc I' I x ->
+        occAtoms I' lam x = occAtoms I lam x.
+    Proof.
+      intros I' I lam x H; unfold occAtoms; rewrite (edgesOf_agree _ _ _ H).
+      f_equal; apply map_ext_in; intros e He; unfold edgeAtom, accepts.
+      destruct H as [_ [_ [Ho Hr]]].
+      rewrite (cands_agree I' I _ _ Ho (Hr e He)); reflexivity.
+    Qed.
+
+    Theorem treeAtom_agree : forall I' I b l, AgreesAtKey I' I b ->
+        Pl.Reduction.treeAtom (placeRepo I') (b :: l) =
+        Pl.Reduction.treeAtom (placeRepo I) (b :: l).
+    Proof.
+      intros I' I b l H; cbn [Pl.Reduction.treeAtom].
+      rewrite (keyVersions_agree _ _ _ H); reflexivity.
+    Qed.
+  End Lookup.
+End NpmPlacement.

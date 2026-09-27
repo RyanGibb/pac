@@ -390,6 +390,24 @@ NpmS.Reduction.reduceDeps
 NpmS.Reduction.reduceReal
 NpmS.Reduction.versions
 NpmS.rootPkg
+
+NplS.Lookup.dependees_lookupAbsent
+NplS.Lookup.dependees_lookupOcc
+NplS.Lookup.dependees_lookupRoot
+NplS.Lookup.dependees_lookupWalk
+NplS.Lookup.edgeAtom
+NplS.Lookup.occAtoms_agree
+NplS.Lookup.treeAtom_agree
+NplS.Lookup.versions_lookupLoc
+NplS.Lookup.versions_lookupWalk
+NplS.edgesOf
+NplS.npm_completeness
+NplS.npm_roundtrip
+NplS.npm_soundness
+NplS.reduceDeps
+NplS.reduceReal
+NplS.tr
+NplS.tr_resolution
 LIST
 )
 

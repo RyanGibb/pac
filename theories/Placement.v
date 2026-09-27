@@ -22,7 +22,23 @@ Module Placement (N V : UsualOrderedType).
     { inst_repo : PkgSet.t
     ; inst_deps : C.DepRel.t
     ; inst_peers : C.DepRel.t
+    ; inst_optDeps : C.DepRel.t
+    ; inst_optPeers : C.DepRel.t
     ; inst_root : Pkg.t }.
+
+  (* An edge's kind: a peer refuses its declarer's own directory, and an
+     optional edge is also met when its walk finds nothing, though a copy
+     it finds must still be in range. *)
+  Definition rel (I : Inst) (pe o : bool) : C.DepRel.t :=
+    match pe, o with
+    | false, false => inst_deps I
+    | true, false => inst_peers I
+    | false, true => inst_optDeps I
+    | true, true => inst_optPeers I
+    end.
+
+  Definition land (pe : bool) (l : Path.t) : Path.t :=
+    if pe then par l else l.
 
   (* Core's versions inserts one version at a time, quadratic in a name's
      versions; this sorts them in one go. *)
@@ -82,12 +98,14 @@ Module Placement (N V : UsualOrderedType).
       : Prop :=
     exists l' u, walk L l n = Some (l', u) /\ Suffix l' la /\ VSet.In u vs.
 
+  Definition Meets (L : Layout.t) (l la : Path.t) (n : N.t) (vs : VSet.t)
+      (o : bool) : Prop :=
+    Resolves L l la n vs \/ (o = true /\ walk L l n = None).
+
   (* The root's peers may land in its own directory, as par nil is nil. *)
   Definition Holds (I : Inst) (L : Layout.t) (l : Path.t) (p : Pkg.t) : Prop :=
-    (forall n vs, C.DepRel.In (p, (n, vs)) (inst_deps I) ->
-       Resolves L l l n vs) /\
-    (forall n vs, C.DepRel.In (p, (n, vs)) (inst_peers I) ->
-       Resolves L l (par l) n vs).
+    forall pe o n vs, C.DepRel.In (p, (n, vs)) (rel I pe o) ->
+      Meets L l (land pe l) n vs o.
 
   Record IsResolution (I : Inst) (L : Layout.t) : Prop :=
     { res_subset :
@@ -130,8 +148,7 @@ Module Placement (N V : UsualOrderedType).
   Qed.
 
   Definition Edge (I : Inst) (p : Pkg.t) (n : N.t) : Prop :=
-    exists vs, C.DepRel.In (p, (n, vs)) (inst_deps I) \/
-               C.DepRel.In (p, (n, vs)) (inst_peers I).
+    exists pe o vs, C.DepRel.In (p, (n, vs)) (rel I pe o).
 
   Inductive Reaches (I : Inst) (L : Layout.t) : OccElt.t -> Prop :=
   | ReachesRoot : forall n l' u,
@@ -180,6 +197,23 @@ Module Placement (N V : UsualOrderedType).
       + rewrite (Hnone _ Hc); exact (IH Hw Hin).
   Qed.
 
+  Lemma walk_none_restrict : forall L L' l a,
+      (forall o, Layout.In o L' -> Layout.In o L) ->
+      walk L l a = None -> walk L' l a = None.
+  Proof.
+    intros L L' l a Hsub.
+    assert (Hnone : forall l, VSet.choose (occupants L l a) = None ->
+               VSet.choose (occupants L' l a) = None).
+    { intros l0 Hc; apply VSet.choose_spec2 in Hc.
+      destruct (VSet.choose (occupants L' l0 a)) as [x |] eqn:Hc';
+        [| reflexivity].
+      apply VSet.choose_spec1, mem_occupants, Hsub in Hc'.
+      destruct (Hc x); apply mem_occupants; exact Hc'. }
+    induction l as [| b l IH]; intro Hw; cbn [walk] in Hw |- *;
+      destruct (VSet.choose (occupants L _ a)) eqn:Hc; try discriminate Hw;
+      rewrite (Hnone _ Hc); [reflexivity | exact (IH Hw)].
+  Qed.
+
   Definition Settled (I : Inst) (L : Layout.t) (w : Path.t) : Prop :=
     forall b l u, Suffix (b :: l) w -> Layout.In (l, (b, u)) L ->
     Reaches I L (l, (b, u)).
@@ -220,18 +254,14 @@ Module Placement (N V : UsualOrderedType).
                (forall n l' u, Edge I p n -> walk L w n = Some (l', u) ->
                   Reaches I L (l', (n, u))) ->
                Holds I L' w p).
-    { intros w p [Hd Hp] Hr.
-      assert (Hw : forall n vs la, Edge I p n -> Resolves L w la n vs ->
-                 Resolves L' w la n vs).
-      { intros n vs la He [l' [u [Hw [Hs Hu]]]]; exists l', u.
-        split; [| split; assumption].
+    { intros w p Hh Hr pe o n vs HE.
+      assert (He : Edge I p n) by (exists pe, o, vs; exact HE).
+      destruct (Hh _ _ _ _ HE) as [[l' [u [Hw [Hs Hu]]]] | [Ho Hw]].
+      - left; exists l', u; split; [| split; assumption].
         apply (walk_restrict L L' w n l' u HinL Hocc Hw), Hin'.
-        exact (Hr _ _ _ He Hw). }
-      split; intros n vs HE; apply Hw.
-      - exists vs; left; exact HE.
-      - exact (Hd _ _ HE).
-      - exists vs; right; exact HE.
-      - exact (Hp _ _ HE). }
+        exact (Hr _ _ _ He Hw).
+      - right; split; [exact Ho |].
+        exact (walk_none_restrict L L' w n HinL Hw). }
     constructor.
     - intros l p H; exact (Hsub _ _ (HinL _ H)).
     - intros l a v v' H H'; exact (Hocc _ _ _ _ (HinL _ H) (HinL _ H')).
@@ -365,10 +395,15 @@ Module Placement (N V : UsualOrderedType).
     Module SOpn := SetOps Pkg N PkgSet NSet.
     Module SOdn := SetOps C.DepElt N C.DepRel NSet.
     Module SOnn := SetOps N N NSet NSet.
+    Definition relNames (E : C.DepRel.t) : NSet.t :=
+      SOdn.map (fun e => fst (snd e)) E.
+
     Definition locNames (I : Inst) : NSet.t :=
       NSet.union (SOpn.map fst (inst_repo I))
-        (NSet.union (SOdn.map (fun e => fst (snd e)) (inst_deps I))
-           (SOdn.map (fun e => fst (snd e)) (inst_peers I))).
+        (NSet.union
+           (NSet.union (relNames (inst_deps I)) (relNames (inst_peers I)))
+           (NSet.union (relNames (inst_optDeps I))
+              (relNames (inst_optPeers I)))).
 
     Lemma locNames_repo : forall I a v,
         PkgSet.In (a, v) (inst_repo I) -> NSet.In a (locNames I).
@@ -377,14 +412,15 @@ Module Placement (N V : UsualOrderedType).
       apply SOpn.mem_map; exists (a, v); split; [exact H | reflexivity].
     Qed.
 
-    Lemma locNames_deps : forall I p n vs,
-        C.DepRel.In (p, (n, vs)) (inst_deps I) \/
-        C.DepRel.In (p, (n, vs)) (inst_peers I) -> NSet.In n (locNames I).
+    Lemma locNames_deps : forall I pe o p n vs,
+        C.DepRel.In (p, (n, vs)) (rel I pe o) -> NSet.In n (locNames I).
     Proof.
-      intros I p n vs H; apply NSet.union_spec; right.
-      apply NSet.union_spec; destruct H as [H | H]; [left | right];
-        apply SOdn.mem_map; exists (p, (n, vs)); split;
-        [exact H | reflexivity | exact H | reflexivity].
+      intros I pe o p n vs H; apply NSet.union_spec; right.
+      assert (Hn : NSet.In n (relNames (rel I pe o)))
+        by (apply SOdn.mem_map; exists (p, (n, vs)); split;
+            [exact H | reflexivity]).
+      rewrite !NSet.union_spec.
+      destruct pe, o; cbn [rel] in Hn; tauto.
     Qed.
 
     Definition LocPath (I : Inst) (l : Path.t) : Prop :=
@@ -555,24 +591,67 @@ Module Placement (N V : UsualOrderedType).
     Definition accept (l : Path.t) (vs : VSet.t) : T.VSet.t :=
       along (fun _ => true) l vs.
 
+    (* An optional edge's walk may also find nothing. *)
+    Definition admit (o : bool) (la : Path.t) (vs : VSet.t) : T.VSet.t :=
+      if o then T.VSet.add Version.Bot (accept la vs) else accept la vs.
+
+    Lemma mem_admit : forall o la vs w,
+        T.VSet.In w (admit o la vs) <->
+        (o = true /\ w = Version.Bot) \/ T.VSet.In w (accept la vs).
+    Proof.
+      intros [|] la vs w; cbn [admit].
+      - rewrite SOvt.add_in; split.
+        + intros [H | H]; [left; split; [reflexivity | exact H] |].
+          right; exact H.
+        + intros [[_ H] | H]; [left; exact H | right; exact H].
+      - split; [intro H; right; exact H |].
+        intros [[E _] | H]; [discriminate E | exact H].
+    Qed.
+
     Module SOdh := SetOps C.DepElt T.Dependees C.DepRel T.DependeesSet.
-    Definition atoms (E : C.DepRel.t) (p : Pkg.t) (l la : Path.t)
+    Definition atoms (o : bool) (E : C.DepRel.t) (p : Pkg.t) (l la : Path.t)
         : T.DependeesSet.t :=
       SOdh.filterMap (fun '(q, (n, vs)) =>
-          if Pkg.eq_dec q p then Some (Name.Walk l n, accept la vs) else None)
+          if Pkg.eq_dec q p then Some (Name.Walk l n, admit o la vs) else None)
         E.
 
-    Lemma mem_atoms : forall E p l la h,
-        T.DependeesSet.In h (atoms E p l la) <->
+    Lemma mem_atoms : forall o E p l la h,
+        T.DependeesSet.In h (atoms o E p l la) <->
         exists n vs, C.DepRel.In (p, (n, vs)) E /\
-          h = (Name.Walk l n, accept la vs).
+          h = (Name.Walk l n, admit o la vs).
     Proof.
-      intros E p l la h; unfold atoms; rewrite SOdh.mem_filterMap; split.
+      intros o E p l la h; unfold atoms; rewrite SOdh.mem_filterMap; split.
       - intros [[q [n vs]] [He H]]; cbn beta iota in H.
         destruct (Pkg.eq_dec q p) as [-> |]; [| discriminate H].
         injection H as <-; exists n, vs; split; [exact He | reflexivity].
       - intros [n [vs [He ->]]]; exists (p, (n, vs)); split; [exact He |].
         cbn beta iota; apply dec_refl.
+    Qed.
+
+    Definition kindAtoms (I : Inst) (pe o : bool) (p : Pkg.t) (l : Path.t)
+        : T.DependeesSet.t :=
+      atoms o (rel I pe o) p l (land pe l).
+
+    Definition edgeAtoms (I : Inst) (p : Pkg.t) (l : Path.t)
+        : T.DependeesSet.t :=
+      T.DependeesSet.union
+        (T.DependeesSet.union (kindAtoms I false false p l)
+           (kindAtoms I true false p l))
+        (T.DependeesSet.union (kindAtoms I false true p l)
+           (kindAtoms I true true p l)).
+
+    Lemma mem_edgeAtoms : forall I p l h,
+        T.DependeesSet.In h (edgeAtoms I p l) <->
+        exists pe o n vs, C.DepRel.In (p, (n, vs)) (rel I pe o) /\
+          h = (Name.Walk l n, admit o (land pe l) vs).
+    Proof.
+      intros I p l h; unfold edgeAtoms, kindAtoms.
+      rewrite !T.DependeesSet.union_spec, !mem_atoms; split.
+      - intros [[H | H] | [H | H]]; destruct H as [n [vs H]];
+          eexists _, _, n, vs; exact H.
+      - intros [pe [o [n [vs H]]]].
+        destruct pe, o; [right; right | left; right | right; left | left; left];
+          exists n, vs; exact H.
     Qed.
 
     Definition treeAtom (R : PkgSet.t) (l : Path.t) : T.DependeesSet.t :=
@@ -585,9 +664,7 @@ Module Placement (N V : UsualOrderedType).
 
     Definition occDeps (I : Inst) (l : Path.t) (p : Pkg.t)
         : T.DependeesSet.t :=
-      T.DependeesSet.union (treeAtom (inst_repo I) (par l))
-        (T.DependeesSet.union (atoms (inst_deps I) p l l)
-           (atoms (inst_peers I) p l (par l))).
+      T.DependeesSet.union (treeAtom (inst_repo I) (par l)) (edgeAtoms I p l).
 
     Definition walkDeps (l : Path.t) (a : N.t) (w : Version.t)
         : T.DependeesSet.t :=
@@ -749,23 +826,19 @@ Module Placement (N V : UsualOrderedType).
            exists w, T.VSet.In w ws /\ T.PkgSet.In (n, w) S) ->
         Holds I (placementResolution S) l p.
     Proof.
-      intros I depth S l p Hres Hcl.
-      assert (Hat : forall E la,
-                 (forall h, T.DependeesSet.In h (atoms E p l la) ->
-                    T.DependeesSet.In h (occDeps I l p)) ->
-                 forall n vs, C.DepRel.In (p, (n, vs)) E ->
-                 Resolves (placementResolution S) l la n vs).
-      { intros E la Hin n vs HE.
-        assert (Ha : T.DependeesSet.In (Name.Walk l n, accept la vs)
-                       (atoms E p l la))
-          by (apply mem_atoms; exists n, vs; split; [exact HE | reflexivity]).
-        destruct (Hcl _ _ (Hin _ Ha)) as [w [Hw HS]].
-        unfold accept in Hw; apply mem_along in Hw.
+      intros I depth S l p Hres Hcl pe o n vs HE.
+      assert (Ha : T.DependeesSet.In (Name.Walk l n, admit o (land pe l) vs)
+                     (occDeps I l p)).
+      { apply T.DependeesSet.union_spec; right; apply mem_edgeAtoms.
+        exists pe, o, n, vs; split; [exact HE | reflexivity]. }
+      destruct (Hcl _ _ Ha) as [w [Hw HS]].
+      pose proof (walk_decode I depth S Hres _ _ _ HS) as Hwalk.
+      apply mem_admit in Hw; destruct Hw as [[Ho ->] | Hw].
+      - right; split; [exact Ho | exact Hwalk].
+      - unfold accept in Hw; apply mem_along in Hw.
         destruct Hw as [l' [u [Hs [_ [Hu ->]]]]].
-        exists l', u; split; [exact (walk_decode I depth S Hres _ _ _ HS) |].
-        split; [exact Hs | exact Hu]. }
-      split; apply Hat; intros h Hh; unfold occDeps;
-        rewrite !T.DependeesSet.union_spec; tauto.
+        left; exists l', u; split; [exact Hwalk |].
+        split; [exact Hs | exact Hu].
     Qed.
 
     Theorem placement_soundness : forall I depth S,
@@ -864,23 +937,24 @@ Module Placement (N V : UsualOrderedType).
 
     Lemma holds_met : forall I depth L l p,
         length l <= depth -> LocPath I l -> Holds I L l p ->
-        forall n ws, T.DependeesSet.In (n, ws)
-          (T.DependeesSet.union (atoms (inst_deps I) p l l)
-             (atoms (inst_peers I) p l (par l))) ->
+        forall n ws, T.DependeesSet.In (n, ws) (edgeAtoms I p l) ->
         exists w, T.VSet.In w ws /\ T.PkgSet.In (n, w) (coreResolution I depth L).
     Proof.
-      intros I depth L l p Hlen Hk [Hd Hp] n ws Hh.
-      apply T.DependeesSet.union_spec in Hh; destruct Hh as [Hh | Hh];
-        apply mem_atoms in Hh; destruct Hh as [m [vs [HE E]]];
-        injection E as -> ->; apply resolves_met.
-      - exact Hlen.
-      - apply List.Forall_cons;
-          [exact (locNames_deps I p m vs (or_introl HE)) | exact Hk].
-      - exact (Hd _ _ HE).
-      - exact Hlen.
-      - apply List.Forall_cons;
-          [exact (locNames_deps I p m vs (or_intror HE)) | exact Hk].
-      - exact (Hp _ _ HE).
+      intros I depth L l p Hlen Hk Hh n ws Hn.
+      apply mem_edgeAtoms in Hn; destruct Hn as [pe [o [m [vs [HE E]]]]].
+      injection E as -> ->.
+      assert (Hr : InRange I depth (Name.Walk l m))
+        by (split; [exact Hlen |];
+            apply List.Forall_cons;
+            [exact (locNames_deps I pe o p m vs HE) | exact Hk]).
+      destruct (Hh _ _ _ _ HE) as [Hres | [Ho Hw]].
+      - destruct (resolves_met I depth L l (land pe l) m vs Hlen
+                    (proj2 Hr) Hres) as [w [Hw HS]].
+        exists w; split; [apply mem_admit; right; exact Hw | exact HS].
+      - exists Version.Bot; split; [apply mem_admit; left; split;
+                                    [exact Ho | reflexivity] |].
+        apply mem_coreResolution; split; [exact Hr |].
+        cbn [value]; rewrite Hw; reflexivity.
     Qed.
 
     Lemma walk_par_inRange : forall I depth l a,
@@ -1031,6 +1105,8 @@ Module Placement (N V : UsualOrderedType).
         {| inst_repo := PkgFibred.tailFibre (inst_repo I) a
          ; inst_deps := C.DepRel.empty
          ; inst_peers := C.DepRel.empty
+         ; inst_optDeps := C.DepRel.empty
+         ; inst_optPeers := C.DepRel.empty
          ; inst_root := inst_root I |}.
 
       Definition occSubInst (I : Inst) (l : Path.t) (p : Pkg.t) : Inst :=
@@ -1040,6 +1116,8 @@ Module Placement (N V : UsualOrderedType).
                         end
          ; inst_deps := DepFibred.tailFibre (inst_deps I) p
          ; inst_peers := DepFibred.tailFibre (inst_peers I) p
+         ; inst_optDeps := DepFibred.tailFibre (inst_optDeps I) p
+         ; inst_optPeers := DepFibred.tailFibre (inst_optPeers I) p
          ; inst_root := inst_root I |}.
 
       Definition Reached (I : Inst) (depth : nat) (n : Name.t) : Prop :=
@@ -1053,21 +1131,29 @@ Module Placement (N V : UsualOrderedType).
         split; [intros [H _]; exact H | intro H; split; [exact H | reflexivity]].
       Qed.
 
-      Lemma atoms_fibre : forall E p l la,
-          atoms (DepFibred.tailFibre E p) p l la = atoms E p l la.
+      Lemma atoms_fibre : forall o E p l la,
+          atoms o (DepFibred.tailFibre E p) p l la = atoms o E p l la.
       Proof.
-        intros E p l la; apply T.DependeesSet.ext; intro h; rewrite !mem_atoms.
+        intros o E p l la; apply T.DependeesSet.ext; intro h.
+        rewrite !mem_atoms.
         split; intros [n [vs [HE ->]]]; exists n, vs; (split; [| reflexivity]).
         - apply DepFibred.mem_tailFibre in HE; exact (proj1 HE).
         - apply DepFibred.mem_tailFibre; split; [exact HE | reflexivity].
       Qed.
 
+      Lemma edgeAtoms_sub : forall I l' l p,
+          edgeAtoms (occSubInst I l' p) p l = edgeAtoms I p l.
+      Proof.
+        intros I l' l p; unfold edgeAtoms, kindAtoms; cbn [rel occSubInst
+          inst_deps inst_peers inst_optDeps inst_optPeers].
+        rewrite !atoms_fibre; reflexivity.
+      Qed.
+
       Lemma occDeps_sub : forall I l p,
           occDeps (occSubInst I (par l) p) l p = occDeps I l p.
       Proof.
-        intros I l p; unfold occDeps;
-          cbn [occSubInst inst_repo inst_deps inst_peers].
-        rewrite !atoms_fibre; f_equal.
+        intros I l p; unfold occDeps; rewrite edgeAtoms_sub; f_equal.
+        cbn [occSubInst inst_repo].
         destruct l as [| a [| b l]]; cbn [par treeAtom]; try reflexivity.
         rewrite versions_fibre; reflexivity.
       Qed.
@@ -1078,20 +1164,16 @@ Module Placement (N V : UsualOrderedType).
       Proof.
         intros I depth l p n ws Hlen Hk Hh.
         destruct (locPath_par I depth l Hlen Hk) as [Htlen Htk].
-        unfold occDeps in Hh; rewrite !T.DependeesSet.union_spec in Hh.
-        destruct Hh as [Hh | [Hh | Hh]].
+        unfold occDeps in Hh; rewrite T.DependeesSet.union_spec in Hh.
+        destruct Hh as [Hh | Hh].
         - destruct l as [| a [| b l]]; cbn [par treeAtom length] in *;
             try destruct (T.DependeesSet.empty_spec Hh).
           apply T.DependeesSet.singleton_spec in Hh; injection Hh as -> _.
           split; [lia | exact Htk].
-        - apply mem_atoms in Hh; destruct Hh as [m [vs [HE E]]].
+        - apply mem_edgeAtoms in Hh; destruct Hh as [pe [o [m [vs [HE E]]]]].
           injection E as -> _; split; [exact Hlen |].
           apply List.Forall_cons;
-            [exact (locNames_deps I p m vs (or_introl HE)) | exact Hk].
-        - apply mem_atoms in Hh; destruct Hh as [m [vs [HE E]]].
-          injection E as -> _; split; [exact Hlen |].
-          apply List.Forall_cons;
-            [exact (locNames_deps I p m vs (or_intror HE)) | exact Hk].
+            [exact (locNames_deps I pe o p m vs HE) | exact Hk].
       Qed.
 
       Lemma reached_inRange : forall I depth n, Reached I depth n -> InRange I depth n.
