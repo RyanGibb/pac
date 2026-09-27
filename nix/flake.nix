@@ -29,11 +29,12 @@
         packages = builtins.attrValues tools;
         # cargo resolves a goal that declares no rust-version for the rustc
         # it would build with, so nothing inherited may point it at another
-        # toolchain; CARGO_CMP_OUT is the harness's own, not cargo's.
+        # toolchain; CARGO_CMP_OUT and CARGO_INDEX are the harness's own,
+        # not cargo's.
         shellHook = ''
           for v in $(compgen -e); do
             case $v in
-              CARGO_CMP_OUT) ;;
+              CARGO_CMP_OUT|CARGO_INDEX) ;;
               CARGO_*|RUSTUP_*|RUSTC|RUSTC_*|RUSTFLAGS|RUSTDOCFLAGS) unset "$v" ;;
             esac
           done

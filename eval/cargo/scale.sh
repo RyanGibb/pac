@@ -1,12 +1,23 @@
 #!/usr/bin/env bash
+# CARGO_INDEX is the index both sides read, repos/crates.io-index by
+# default; another must be one SNAPSHOTS records, such as its held-out
+# row.  SEED draws the sample: 20260923 is the one the development saw,
+# 20260927 the held-out one drawn after it.
 # usage: scale.sh [--regress] <pac-exe> <run-dir> [queries-file]    P=<jobs> TIMEOUT=<s> PORT=<proxy>
-#        MODES="tool pubgrub"
+#        MODES="tool pubgrub" CARGO_INDEX=<index> SEED=<sample seed>
 S="$(cd "$(dirname "$0")" && pwd)"
 ECO=cargo
 . "$S/../scale-lib.sh"
-export PORT=${PORT:-8991}
+export PORT=${PORT:-8991} SEED=${SEED:-20260923}
+if [ -n "${CARGO_INDEX:-}" ]; then
+  CARGO_INDEX=$(realpath "$CARGO_INDEX") || exit 1
+  export CARGO_INDEX
+fi
+IDX=${CARGO_INDEX:-$TOP/repos/crates.io-index}
 
-all_queries() { python3 "$S/scale.py" sample 20260923 3000; }
+all_queries() { python3 "$S/scale.py" sample "$SEED" 3000; }
+
+params() { echo "CARGO_INDEX=${CARGO_INDEX:-}"; echo "SEED=$SEED"; }
 
 prepare() {
   # cargo runs for validity anyway, against the pinned index, and the
@@ -15,12 +26,11 @@ prepare() {
   if [ "$BASELINE" = record ]; then
     echo "$0: cargo keeps no baseline; --regress asks cargo afresh" >&2; return 1
   fi
-  snapshot crates.io-index
+  snapshot crates.io-index ${CARGO_INDEX:+"$CARGO_INDEX"}
   python3 -c "import sys; sys.path[0] = '$S'; import run_query; run_query.check_toolchain()" || return 1
   # run_query.py points cargo at this port, which must serve the snapshot
   # pac reads
-  serve "$PORT" "$TOP/repos/crates.io-index" "$run/proxy.log" \
-    python3 "$S/sparse_proxy.py" "$PORT" "$TOP/repos/crates.io-index"
+  serve "$PORT" "$IDX" "$run/proxy.log" python3 "$S/sparse_proxy.py" "$PORT" "$IDX"
 }
 
 # cargo is asked in run_pac, per mode

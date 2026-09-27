@@ -132,8 +132,10 @@ stats() {  # <stem> <pac status>
 
 emit() { printf '%s' "$1"; }  # <the query's lines>
 
-snapshot() {  # <path under repos/>
-  local p=$TOP/repos/$1 id
+# the snapshot at repos/<path>, or at <dir>, whose id must be one a row of
+# SNAPSHOTS records for repos/<path> or, given <dir>, for held-out/<path>
+snapshot() {  # <path under repos/> [dir]
+  local p=${2:-$TOP/repos/$1} id
   if [ -d "$p/.git" ]; then
     id=$(git -C "$p" rev-parse HEAD)
     [ -z "$(git -C "$p" status --porcelain)" ] || id=$id-dirty
@@ -143,8 +145,9 @@ snapshot() {  # <path under repos/>
   else
     id=$(sha256sum < "$p" | cut -d' ' -f1)
   fi
-  awk -v p="repos/$1" -v id="$id" '$1 == p && $2 == id {ok = 1} END {exit !ok}' \
-    "$E/SNAPSHOTS" || { echo "$0: repos/$1 is $id, not what eval/SNAPSHOTS records" >&2; exit 1; }
+  awk -v p="repos/$1" -v h="${2:+held-out/$1}" -v id="$id" \
+    '($1 == p || $1 == h) && $2 == id {ok = 1} END {exit !ok}' "$E/SNAPSHOTS" ||
+    { echo "$0: ${2:-repos/$1} is $id, not what eval/SNAPSHOTS records" >&2; exit 1; }
 }
 
 one() {  # <key> <query>

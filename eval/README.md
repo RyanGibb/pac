@@ -180,6 +180,14 @@ python3 eval/cargo/scale.py targets 20260923 150 > /tmp/pools.txt && eval/cargo/
 node eval/npm/queries.js repos/npm targeted > /tmp/ranges.txt && eval/npm/scale.sh _build/default/bin/main.exe /tmp/scale/npm /tmp/ranges.txt
 ```
 
+Cargo's sample is seeded by `SEED`, 20260923 by default, the sample the development ran on; 20260927 draws the held-out one, of the same size and by the same method.
+`CARGO_INDEX` points both sides at another index, which must be one `eval/SNAPSHOTS` records, such as its held-out row:
+
+```sh
+SEED=20260927 eval/cargo/scale.sh _build/default/bin/main.exe /tmp/scale/cargo-heldout
+CARGO_INDEX=/path/to/held-out/crates.io-index SEED=20260927 eval/cargo/scale.sh _build/default/bin/main.exe /tmp/scale/cargo-new
+```
+
 ## Results
 
 The run directory gets `results.txt`, one line per query and mode, and raw answers under `out/`, `<key>.<mode>.*` for pac's and the check's, `<key>.*` for the tool's:

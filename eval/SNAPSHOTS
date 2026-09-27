@@ -25,6 +25,20 @@ git checkouts (commit, committer date):
 
   both clean (git -C repos/<dir> status --porcelain is empty)
 
+held out, a later crates.io-index no development run has read, cloned on
+2026-09-27 at 22:05 UTC into its own directory, beside repos/:
+
+  held-out/crates.io-index   3c561d74a4166c49e94e20093f71889b42efc204  2026-09-27T22:03:36Z   341166 crates
+
+  git clone --depth 1 https://github.com/rust-lang/crates.io-index <dir>
+  git -C <dir> rev-parse HEAD      # clean, as above
+
+  It has no baselines; cargo's scale.sh asks cargo afresh anyway.  Run it
+  as CARGO_INDEX=<dir> eval/cargo/scale.sh ..., which refuses a <dir> no
+  row here records.  The clone takes the head of the day, so reproduce it
+  with git fetch --depth 1 origin <commit> into an empty repository, for
+  as long as the index keeps that commit (it is squashed now and then).
+
 files (sha256):
 
   repos/debian/Packages   be70297f6ea499e8ef0bd93906719298c795bc3dc4ce72560f13e6c9836bfedb   54M, 1265204 lines
