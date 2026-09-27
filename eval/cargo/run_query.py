@@ -18,7 +18,7 @@ builds from the lock, and to report it at all it must download each
 resolved package's body for the full manifest.  generate-lockfile writes
 the artifact being compared and downloads nothing.
 """
-import json, os, re, shutil, subprocess, time, tomllib
+import json, os, re, shutil, subprocess, sys, time, tomllib
 
 # The toolchain the recorded results were taken with, pinned by nix/flake.lock.
 # A query declaring no rust-version resolves for the installed rustc, so
