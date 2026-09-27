@@ -1,5 +1,5 @@
-PubGrub on the core instance of the paper's Fig. 1 (A 1 depends on B 1
-and C 1, B 1 on D 1 or 2, C 1 on D 2 or 3), with the resolver's debug
+PubGrub on a core instance in which A 1 depends on B 1 and C 1, B 1 on
+D 1 or 2, and C 1 on D 2 or 3, with the resolver's debug
 trace, in which each incompatibility is named I1, I2, ... where it is
 first printed.  A prior cause is derived from the two it names.
 
