@@ -77,6 +77,16 @@ overrides the peer; here there is no layout.
   unsatisfiable:
   (within depth 8)
 
+PAC_NPM_CHECKCMP checks every comparison of names and versions against
+the calculus's own order, and the answer stands.
+
+  $ export PAC_NPM_CHECKCMP=1
+  $ untimed ../../../bin/main.exe npm --reading=placement --order=pubgrub --offline --cache grow ./grow/wide-app/package.json | grep -c node_modules/
+  5
+  $ untimed ../../../bin/main.exe npm --reading=placement --offline --cache . ./place-app/package.json | grep -c node_modules/
+  12
+  $ unset PAC_NPM_CHECKCMP
+
 A root override applies to the key an edge is written under and replaces
 its spec, alias included.  In ovr/, p depends on x as an alias of b ^2,
 and q peers on it so: an override of x makes each edge the registry's own

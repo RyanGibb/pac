@@ -1,0 +1,1 @@
+{"name": "hq", "dist-tags": {"latest": "1.0.0"}, "versions": {"0.1.0": {"name": "hq", "version": "0.1.0", "dependencies": {"hk": "npm:zz@^1.0.0"}}, "1.0.0": {"name": "hq", "version": "1.0.0", "dependencies": {"hk": "npm:zz@^1.0.0"}}}}
