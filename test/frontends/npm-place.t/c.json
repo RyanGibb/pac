@@ -1,0 +1,1 @@
+{"name": "c", "dist-tags": {"latest": "1.0.0"}, "versions": {"1.0.0": {"name": "c", "version": "1.0.0", "dependencies": {"b": "^1.0.0"}}}}

@@ -18,12 +18,22 @@ type dep = {
 }
 
 (* p_root: whether the root installs a copy for the peer where nothing else
-   provides one, which it does not for a peer only Yarn Berry reads *)
-type peer = { p_name : string; p_spec : spec; p_optional : bool; p_root : bool }
+   provides one, which it does not for a peer only Yarn Berry reads.
+   p_target: the registry package the peer asks for, which an npm: alias
+   makes differ from p_name, the directory; only [`Placement] keeps an
+   aliased peer. *)
+type peer = {
+  p_name : string;
+  p_target : string;
+  p_spec : spec;
+  p_optional : bool;
+  p_root : bool;
+}
 
 (* [`Shared] reads the manifests as npm and Yarn Berry both do, so that an
-   answer is one both accept *)
-type reading = [ `Npm | `Shared ]
+   answer is one both accept; [`Placement] as npm does, keeping a peer's
+   npm: alias, which its calculus reads *)
+type reading = [ `Npm | `Shared | `Placement ]
 
 type ver = {
   v_name : string;

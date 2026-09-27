@@ -9,11 +9,12 @@ type result = {
 }
 
 (* A dependee's versions as runs of the name's own sorted versions rather
-   than as one point per version, as Solve.runs, found from each version's
-   place in the name's list.  A run is closed at its last version rather
-   than at the next one in the list: a key's versions grow when a manifest
-   aliasing another package to it is loaded, and a run reaching up to the
-   next version would then take in whatever was inserted before it. *)
+   than as one point per version, as the npm reading's runs, found from
+   each version's place in the name's list.  A run is closed at its last
+   version rather than at the next one in the list: a key's versions grow
+   when a manifest aliasing another package to it is loaded, and a run
+   reaching up to the next version would then take in whatever was
+   inserted before it. *)
 type index = {
   list : PVersion.t list;
   arr : PVersion.t array;
@@ -86,7 +87,14 @@ let dependencies st cache =
   fun n (u : PVersion.t) ->
     let s = stats.(kind n) in
     s.(0) <- s.(0) +. 1.;
-    Pac_common.Tbl.memo cache (n, u) (fun () ->
+    (* a location's Tree atom reads its parent's key, whose packages grow
+       as aliasing manifests load *)
+    let g =
+      match n with
+      | R.Name.Loc (b :: _, _) -> List.length (L.key_names st b)
+      | _ -> 0
+    in
+    Pac_common.Tbl.memo cache (n, u, g) (fun () ->
         let t = Unix.gettimeofday () in
         let r =
           match L.parts st n u with

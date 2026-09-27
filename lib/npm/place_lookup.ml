@@ -73,7 +73,7 @@ let repo_of st (ns : string list) : Npl.RepoSet.t =
       Npl.RepoSet.unions (List.map (repo_at st) ns))
 
 (* Dist-tags and npm's reading of "*" shape the range handed to the
-   calculus, as in the npm reading (Lookup.spec_range). *)
+   calculus, as in the npm reading (its spec_range). *)
 let xdep ar (d : P.dep) : Npl.coq_Dependency =
   {
     Npl.d_dir = d.P.d_dir;
@@ -86,8 +86,8 @@ let xdep ar (d : P.dep) : Npl.coq_Dependency =
 let xpeer ar (r : P.peer) : Npl.coq_PeerDependency =
   {
     Npl.p_dir = r.P.p_name;
-    p_name = r.P.p_name;
-    p_range = xrange (Lookup.spec_range ar r.P.p_name r.P.p_spec);
+    p_name = r.P.p_target;
+    p_range = xrange (Lookup.spec_range ar r.P.p_target r.P.p_spec);
     p_optional = r.P.p_optional;
   }
 

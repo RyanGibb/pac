@@ -1,0 +1,7 @@
+{
+ "name": "torn-app",
+ "version": "1.0.0",
+ "dependencies": {
+  "dq": "^1.0.0"
+ }
+}

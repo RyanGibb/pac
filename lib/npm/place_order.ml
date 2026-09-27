@@ -53,7 +53,8 @@ let best ar (cands : Npl.Occ.t list) : Npl.Occ.t =
           if d > 0 || (d = 0 && occ_compare b a > 0) then b else a)
         c cs
 
-(* dist-tags.latest first, under the same two criteria (Pick.tagged) *)
+(* dist-tags.latest first, under the same two criteria, as the npm
+   reading's tagged *)
 let tagged ar (cands : Npl.Occ.t list) : Npl.Occ.t option =
   List.find_opt
     (function

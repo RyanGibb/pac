@@ -462,8 +462,9 @@ let alpine_cmd =
 
 module Npm = Npm_solve
 
-(* The placement reading reads manifests as npm does; its answer is the
-   node_modules layout, which is printed whatever --tree says. *)
+(* The placement reading reads manifests as npm does, an aliased peer
+   included; its answer is the node_modules layout, which is printed
+   whatever --tree says. *)
 let npm_place ~t0 ~debug ~core ~order ~omit ~depth ar rc =
   let r, walk =
     Npm.Place_solve.solve ~debug ~order ~omit_dev:(List.mem `Dev omit)
@@ -493,12 +494,7 @@ let npm_run debug core order reading depth cache offline tree omit nodev npmv
   | Some cache -> (
       let t0 = Unix.gettimeofday () in
       let ar =
-        Npm.Archive.create ?node:nodev ?npm:npmv
-          ~reading:
-            (match reading with
-            | `Placement -> `Npm
-            | #Npm_parse.reading as r -> r)
-          ~cache ~offline ()
+        Npm.Archive.create ?node:nodev ?npm:npmv ~reading ~cache ~offline ()
       in
       try
         match Npm.Query.root ar query with

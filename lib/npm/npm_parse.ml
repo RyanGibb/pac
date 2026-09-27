@@ -9,8 +9,15 @@ type dep = {
   d_raw : string;
 }
 
-type peer = { p_name : string; p_spec : spec; p_optional : bool; p_root : bool }
-type reading = [ `Npm | `Shared ]
+type peer = {
+  p_name : string;
+  p_target : string;
+  p_spec : spec;
+  p_optional : bool;
+  p_root : bool;
+}
+
+type reading = [ `Npm | `Shared | `Placement ]
 
 type ver = {
   v_name : string;
@@ -116,31 +123,40 @@ let dep_of ~reject ~dev ~optional (key, spec) : dep option =
       reject ();
       None
 
-(* A peer names a directory and the calculus reads its range against the
-   package of that name, so an alias, which puts another package there, is
-   dropped and counted like a spec no registry lookup resolves. *)
-let peer_of ~reject ?(berry_only = []) (meta : (string * Yojson.Safe.t) list)
-    (key, spec) : peer option =
+(* A peer names a directory and the npm and shared readings read its range
+   against the package of that name, so there an alias, which puts another
+   package there, is dropped and counted like a spec no registry lookup
+   resolves.  The placement reading keeps it, as a dependency's. *)
+let peer_of ~reject ?(berry_only = []) ~aliases
+    (meta : (string * Yojson.Safe.t) list) (key, spec) : peer option =
   let optional =
     match List.assoc_opt key meta with
     | Some m -> ( match member "optional" m with `Bool b -> b | _ -> false)
     | None -> false
   in
-  match spec with
-  | `String spec when not (unresolvable spec || is_alias spec) -> (
-      match spec_of_string spec with
-      | Some sp ->
-          Some
-            {
-              p_name = key;
-              p_spec = sp;
-              p_optional = optional;
-              p_root = not (List.mem key berry_only);
-            }
-      | None ->
-          reject ();
-          None)
-  | _ ->
+  let target, rg =
+    match spec with
+    | `String s when aliases -> (
+        match split_alias s with
+        | Some (n, rg) -> (n, Some rg)
+        | None -> (key, Some s))
+    | `String s when not (is_alias s) -> (key, Some s)
+    | _ -> (key, None)
+  in
+  match
+    Option.bind rg (fun rg ->
+        if unresolvable rg then None else spec_of_string rg)
+  with
+  | Some sp ->
+      Some
+        {
+          p_name = key;
+          p_target = target;
+          p_spec = sp;
+          p_optional = optional;
+          p_root = not (List.mem key berry_only);
+        }
+  | None ->
       reject ();
       None
 
@@ -252,7 +268,7 @@ let deps_of ~reject ~root (j : Yojson.Safe.t) : dep list =
       (opts @ without opts (read ~dev:false ~optional:false "dependencies"))
 
 (* The peers, or None where the shared reading leaves the version out *)
-let peers_of ~shared ~reject ~root ~berry_only (j : Yojson.Safe.t) :
+let peers_of ~shared ~aliases ~reject ~root ~berry_only (j : Yojson.Safe.t) :
     peer list option =
   let meta = assoc_of (member "peerDependenciesMeta" j) in
   (* arborist keeps one edge per name and loads peers first, so a
@@ -271,7 +287,9 @@ let peers_of ~shared ~reject ~root ~berry_only (j : Yojson.Safe.t) :
       (fun (k, _) -> (shared && not root) || not (List.mem k dep_keys))
       (assoc_of (member "peerDependencies" j))
   in
-  let peers = List.filter_map (peer_of ~reject ~berry_only meta) decls in
+  let peers =
+    List.filter_map (peer_of ~reject ~berry_only ~aliases meta) decls
+  in
   (* under the shared reading a version with a peer this parser drops is
      left out, as no answer holding it is one both tools are known to
      accept: npm fails on a spec it cannot read (EINVALIDTAGNAME), which
@@ -292,7 +310,10 @@ let ver_of ~(reading : reading) ~reject ~(root : bool) (vers : string)
           | _ -> (j, [])
         else (j, [])
       in
-      match peers_of ~shared ~reject ~root ~berry_only j with
+      match
+        peers_of ~shared ~aliases:(reading = `Placement) ~reject ~root
+          ~berry_only j
+      with
       | None -> None
       | Some peers ->
           Some

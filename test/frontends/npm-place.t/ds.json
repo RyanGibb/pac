@@ -1,0 +1,1 @@
+{"name": "ds", "dist-tags": {"latest": "1.0.0"}, "versions": {"1.0.0": {"name": "ds", "version": "1.0.0", "dependencies": {"dt": "^1.0.0"}, "peerDependencies": {"tm": "1.1.0"}}}}

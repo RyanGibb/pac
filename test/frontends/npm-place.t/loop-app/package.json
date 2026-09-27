@@ -1,0 +1,7 @@
+{
+ "name": "loop-app",
+ "version": "1.0.0",
+ "dependencies": {
+  "sx": "^2.0.0"
+ }
+}

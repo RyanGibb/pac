@@ -1,0 +1,8 @@
+{
+ "name": "nest-app",
+ "version": "1.0.0",
+ "dependencies": {
+  "c": "^1.0.0",
+  "b": "^2.0.0"
+ }
+}
