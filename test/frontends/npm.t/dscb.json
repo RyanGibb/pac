@@ -1,0 +1,15 @@
+{
+ "name": "dscb",
+ "dist-tags": {
+  "latest": "1.0.0"
+ },
+ "versions": {
+  "1.0.0": {
+   "name": "dscb",
+   "version": "1.0.0",
+   "dependencies": {
+    "dsc": "^1.0.0"
+   }
+  }
+ }
+}

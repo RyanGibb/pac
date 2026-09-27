@@ -110,6 +110,7 @@ import os
 import sys
 import time
 
+from core import CORE, normalize, split
 from relation import fields, misses
 from tree import ancestors, escape, is_link, lookup, parse_tree, slot
 
@@ -361,7 +362,7 @@ def peer_locals(pk):
     reads lookup alone, lets it through"""
     return [(q, f"{q} peers on {p}, which its own node_modules holds")
             for q, e in pk.items() if q and not is_link(e)
-            for p in fields(e)[1] if slot(q, p) in pk]
+            for p in fields(e, npm=True)[1] if slot(q, p) in pk]
 
 
 def levels(root, edges, claims, peers):
@@ -620,6 +621,16 @@ def main():
     for n in sorted(nodes):
         # the query is published nowhere; its manifest is the project's
         m = (rootman or {}) if n == root else manifest(cache, n[0], n[1])
+        if CORE:
+            # the common core's reading, the root asking no peer of anyone
+            if n == root:
+                deps[n] = set(m.get("dependencies") or {}) | set(m.get("optionalDependencies") or {})
+                peers[n], needed[n] = set(), set()
+            else:
+                d, pr, _ = split(normalize(m, n[0], n[1], npm=True), set(out.get(n, {})))
+                deps[n], peers[n] = d, set(pr)
+                needed[n] = {p for p, o in pr.items() if not o}
+            continue
         meta = m.get("peerDependenciesMeta")
         meta = meta if isinstance(meta, dict) else {}
         # a dependency of the same name replaces the peer

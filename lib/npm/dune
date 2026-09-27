@@ -1,7 +1,7 @@
 (library
  (name npm_frontend)
  (wrapped false)
- (modules npm_version npm_parse)
+ (modules npm_version berry_ext npm_parse)
  (libraries version yojson))
 
 (library

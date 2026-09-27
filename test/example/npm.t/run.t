@@ -27,22 +27,25 @@ app's copies are nested as before.
 
   $ untimed ../../../bin/main.exe npm --core --offline --cache . --tree ./app/package.json
   root app 1.0.0
-  core: 22 packages, 16 edges
+  core: 26 packages, 19 edges
   <app@1.0.0=>core> 6.0.0
     -> core@6.0.0 {6.0.0}
   <app@1.0.0=>core> 7.0.0
     -> core@7.0.0 {7.0.0}
   <app@1.0.0=>core> ⊥
   <app@1.0.0=>legacy(npm:core)> 6.0.0
+    -> <legacy(npm:core)@app@1.0.0 npm:core@^6> {6.0.0}
     -> legacy(npm:core)@6.0.0 {6.0.0}
   <app@1.0.0=>plugin> 1.0.0
     -> <app@1.0.0=>plugin@1.0.0^core> {7.0.0}
+    -> <plugin@app@1.0.0 ^1> {1.0.0}
     -> plugin@1.0.0 {1.0.0}
   <app@1.0.0=>plugin@1.0.0^core> 7.0.0
     -> <app@1.0.0=>core> {7.0.0}
     -> <plugin@1.0.0^core> {7.0.0, ∗}
   <app@1.0.0=>preset> 1.0.0
     -> <app@1.0.0=>preset@1.0.0^core> {6.0.0, 7.0.0}
+    -> <preset@app@1.0.0 ^1> {1.0.0}
     -> preset@1.0.0 {1.0.0}
   <app@1.0.0=>preset@1.0.0^core> 6.0.0
     -> <app@1.0.0=>core> {6.0.0}
@@ -50,13 +53,17 @@ app's copies are nested as before.
   <app@1.0.0=>preset@1.0.0^core> 7.0.0
     -> <app@1.0.0=>core> {7.0.0}
     -> <preset@1.0.0^core> {7.0.0, ∗}
+  <legacy(npm:core)@app@1.0.0 npm:core@^6> 6.0.0
+  <legacy(npm:core)@app@1.0.0 npm:core@^6> 7.0.0
   <plugin@1.0.0^core> 7.0.0
   <plugin@1.0.0^core> ∗
   <plugin@1.0.0^core> ⊥
+  <plugin@app@1.0.0 ^1> 1.0.0
   <preset@1.0.0^core> 6.0.0
   <preset@1.0.0^core> 7.0.0
   <preset@1.0.0^core> ∗
   <preset@1.0.0^core> ⊥
+  <preset@app@1.0.0 ^1> 1.0.0
   app@1.0.0 1.0.0
     -> <app@1.0.0=>legacy(npm:core)> {6.0.0}
     -> <app@1.0.0=>plugin> {1.0.0}
@@ -77,5 +84,5 @@ app's copies are nested as before.
     app 1.0.0 <- core 6.0.0 at legacy
     app 1.0.0 <- plugin 1.0.0
     app 1.0.0 <- preset 1.0.0
-  encoded solution: 13 core nodes (16 lookups)
+  encoded solution: 16 core nodes (19 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched

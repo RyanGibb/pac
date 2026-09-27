@@ -12,9 +12,17 @@ type dep = {
   (* not carried into the calculus: it only tells the solver that this
      dependency may be abandoned when the registry cannot satisfy it *)
   d_optional : bool;
+  (* the spec as the manifest writes it, which with the directory is the
+     dependency's descriptor: Yarn Berry resolves each descriptor once *)
+  d_raw : string;
 }
 
 type peer = { p_name : string; p_spec : spec; p_optional : bool }
+
+(* The common core, PAC_NPM_CORE=1: the manifests as npm and Yarn Berry
+   both read them, so that an answer is one both accept.  Read once from
+   the environment, which the npm check reads too. *)
+let core = ref (Sys.getenv_opt "PAC_NPM_CORE" = Some "1")
 
 type ver = {
   v_name : string;
@@ -22,6 +30,9 @@ type ver = {
   v_deps : dep list;
   v_peers : peer list;
   v_ovr : (string * Npm_version.range) list;
+  (* the root's flat resolutions, name to spec, which Berry puts in place
+     of every dependency spec of that name and of no peer's *)
+  v_res : (string * string) list;
   v_deprecated : bool;
   (* engines.node and engines.npm, the two sub-keys checkEngine tests;
      absent means the version imposes no requirement, which is what makes
@@ -103,6 +114,7 @@ let split_alias (s : string) : (string * string) option =
     | i -> Some (String.sub body 0 i, String.sub body (i + 1) (n - i - 1))
 
 let dep_of ~reject ~dev ~optional (key, spec) : dep option =
+  let raw = match spec with `String s -> s | _ -> "" in
   let target, rg =
     match spec with
     | `String spec -> (
@@ -123,6 +135,7 @@ let dep_of ~reject ~dev ~optional (key, spec) : dep option =
           d_spec = sp;
           d_dev = dev;
           d_optional = optional;
+          d_raw = raw;
         }
   | None ->
       reject ();
@@ -145,9 +158,68 @@ let peer_of ~reject (meta : (string * Yojson.Safe.t) list) (key, spec) :
       | None ->
           reject ();
           None)
+  | _ when !core ->
+      (* Berry reads a peer range it cannot parse as * (Manifest.ts) *)
+      Some { p_name = key; p_spec = Star; p_optional = optional }
   | _ ->
       reject ();
       None
+
+(* Berry's normalizePackage (Configuration.ts:1915-2011), for the common
+   core: the built-in packageExtensions matching the version add
+   dependencies and peers the manifest lacks and set peer meta, and a
+   peerDependenciesMeta name with no peer is a peer on *.  The optional
+   peer on its @types package that Berry gives each other peer is left
+   out: those peers are optional and on *, so they never make Berry reject
+   an answer, and asking them would tie every @types copy to one version
+   per holder (jest's @types/babel__core), which neither tool requires. *)
+let extend (name : string) (vers : string) (j : Yojson.Safe.t) : Yojson.Safe.t =
+  let fields = assoc_of j in
+  let get f = assoc_of (member f j) in
+  let deps = ref (get "dependencies")
+  and peers = ref (get "peerDependencies")
+  and meta = ref (get "peerDependenciesMeta") in
+  List.iter
+    (fun (x : Berry_ext.t) ->
+      if
+        x.Berry_ext.x_name = name
+        && Npm_version.holds_pre vers
+             (Npm_version.parse_range ~include_prerelease:true
+                x.Berry_ext.x_range)
+      then begin
+        List.iter
+          (fun (k, v) ->
+            if not (List.mem_assoc k !deps) then
+              deps := !deps @ [ (k, `String v) ])
+          x.Berry_ext.x_deps;
+        List.iter
+          (fun (k, v) ->
+            if not (List.mem_assoc k !peers) then
+              peers := !peers @ [ (k, `String v) ])
+          x.Berry_ext.x_peers;
+        List.iter
+          (fun (k, o) ->
+            meta :=
+              List.remove_assoc k !meta
+              @ [ (k, `Assoc [ ("optional", `Bool o) ]) ])
+          x.Berry_ext.x_meta
+      end)
+    Berry_ext.all;
+  List.iter
+    (fun (k, _) ->
+      if not (List.mem_assoc k !peers) then
+        peers := !peers @ [ (k, `String "*") ])
+    !meta;
+  let set k v l =
+    if List.mem_assoc k l then
+      List.map (fun (k', x) -> if k' = k then (k, v) else (k', x)) l
+    else l @ [ (k, v) ]
+  in
+  `Assoc
+    (fields
+    |> set "dependencies" (`Assoc !deps)
+    |> set "peerDependencies" (`Assoc !peers)
+    |> set "peerDependenciesMeta" (`Assoc !meta))
 
 (* npm reads overrides from the root project's package.json; only the
    flat "name": "range" form is a static override, so a nested object --
@@ -197,6 +269,11 @@ let ver_of ~reject ~(root : bool) (vers : string) (j : Yojson.Safe.t) :
     ver option =
   match j with
   | `Assoc _ ->
+      let j =
+        if !core && not root then
+          match member "name" j with `String n -> extend n vers j | _ -> j
+        else j
+      in
       let deps_of ~dev ~optional field =
         List.filter_map
           (dep_of ~reject ~dev ~optional)
@@ -213,10 +290,17 @@ let ver_of ~reject ~(root : bool) (vers : string) (j : Yojson.Safe.t) :
           @ if root then [ "devDependencies" ] else [])
       in
       let peers =
-        List.filter_map (peer_of ~reject meta)
-          (List.filter
-             (fun (k, _) -> not (List.mem k dep_keys))
-             (assoc_of (member "peerDependencies" j)))
+        if root && !core then []
+        else if !core then
+          (* Berry keeps a peer beside a dependency of its name, and
+             never asks the root's own peers of anyone *)
+          List.filter_map (peer_of ~reject meta)
+            (assoc_of (member "peerDependencies" j))
+        else
+          List.filter_map (peer_of ~reject meta)
+            (List.filter
+               (fun (k, _) -> not (List.mem k dep_keys))
+               (assoc_of (member "peerDependencies" j)))
       in
       let opts = deps_of ~dev:false ~optional:true "optionalDependencies" in
       let opt_keys = List.map (fun d -> d.d_dir) opts in
@@ -242,7 +326,13 @@ let ver_of ~reject ~(root : bool) (vers : string) (j : Yojson.Safe.t) :
                      (fun d -> not (List.mem d.d_dir opt_keys))
                      (deps_of ~dev:false ~optional:false "dependencies")));
           v_peers = peers;
-          v_ovr = (if root then overrides_of ~reject j else []);
+          v_ovr = (if root && not !core then overrides_of ~reject j else []);
+          v_res =
+            (if root && !core then
+               List.filter_map
+                 (function k, `String v -> Some (k, v) | _ -> None)
+                 (assoc_of (member "resolutions" j))
+             else []);
           v_deprecated = dep;
           v_eng_node = engine_of j "node";
           v_eng_npm = engine_of j "npm";

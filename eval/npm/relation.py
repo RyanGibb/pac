@@ -37,6 +37,7 @@ import json
 import subprocess
 import sys
 
+from core import CORE, normalize, split
 from tree import is_link, parse_tree, resolve
 
 SATISFIES = {}
@@ -64,7 +65,16 @@ def identity(pk, path):
     return (pk[path].get("name") or key, pk[path].get("version", ""), key)
 
 
-def fields(e):
+def fields(e, node=None, holds=frozenset(), npm=False):
+    """(dependencies, {peer: optional}, needed dependencies) of the
+    package e at node, the answer giving it copies of holds; under
+    PAC_NPM_CORE, as the common core reads its manifest, unless npm asks
+    for npm's own reading"""
+    if CORE and not npm:
+        if node is None or node[0] == "":
+            opt = set(e.get("optionalDependencies") or {})
+            return set(e.get("dependencies") or {}) | opt, {}, set(e.get("dependencies") or {}) - opt
+        return split(normalize(e, node[0], node[1], npm=True), holds)
     opt = set(e.get("optionalDependencies") or {})
     deps = set(e.get("dependencies") or {}) | opt
     meta = e.get("peerDependenciesMeta") or {}
@@ -97,7 +107,7 @@ def misses(pk, root, nodes, edges):
     for r in sorted(copies):
         given = out.get(r, {})
         for rp in copies[r]:
-            deps, own_peers, needed = fields(pk[rp])
+            deps, own_peers, needed = fields(pk[rp], None if r == root else r, set(given))
             miss += [(rp, f"{name(r)} requires {k}, and the answer gives it nothing")
                      for k in sorted(needed - set(given))]
             found, todo, peered = set(), [], set()
@@ -111,7 +121,7 @@ def misses(pk, root, nodes, edges):
                     todo.append(q)
             while todo:
                 q = todo.pop()
-                for p, optional in sorted(fields(pk[q])[1].items()):
+                for p, optional in sorted(fields(pk[q], at(q), set(out.get(at(q), {})))[1].items()):
                     if p not in given and r != root and p in own_peers:
                         s, t = resolve(pk, q, p), resolve(pk, rp, p)
                         if s != t or (s is None and not optional):

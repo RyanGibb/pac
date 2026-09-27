@@ -336,7 +336,8 @@ let dir_of (n : PName.t) =
   match n with
   | Np.Nm.Intermediate (_, _, m) -> fst m
   | Np.Nm.Granular (k, _) -> fst k
-  | Np.Nm.Sight (_, _, a) | Np.Nm.Link (_, _, _, _, a) -> a
+  | Np.Nm.Sight (_, _, a) | Np.Nm.Link (_, _, _, _, a) | Np.Nm.Desc (a, _, _) ->
+      a
 
 let is_open (assigned : assigned) n =
   match assigned n with PG.Entailed _ -> true | _ -> false
@@ -523,7 +524,7 @@ let choose_link o ~assigned n (k, v) a cands =
    links agree on, and Bot only when they agree on none. *)
 let choose o ~assigned (n : PName.t) (cands : PVersion.t list) : PVersion.t =
   match n with
-  | Np.Nm.Granular _ -> greatest cands
+  | Np.Nm.Granular _ | Np.Nm.Desc _ -> greatest cands
   | Np.Nm.Intermediate (k, v, m) ->
       let c = fill o ~assigned n k v m cands in
       o.decided <- (n, c) :: o.decided;
@@ -579,10 +580,22 @@ let viable st ~assigned (n : PName.t) cands =
           if unopened && List.mem Np.Vs.Bot cands && ok Np.Vs.Bot then
             [ Np.Vs.Bot ]
           else keep ok)
-  | Np.Nm.Intermediate _ -> (
+  | Np.Nm.Intermediate (k, v, m) -> (
+      (* a descriptor another directory has decided binds this one too *)
+      let desc_ok =
+        match L.desc_name st (snd k, v) m with
+        | Some d -> (
+            match assigned d with
+            | PG.Decided y -> fun x -> x = Np.Vs.Bot || PVersion.equal x y
+            | PG.Entailed r -> fun x -> x = Np.Vs.Bot || PG.Ranges.contains x r
+            | PG.Unselected -> fun _ -> true)
+        | None -> fun _ -> true
+      in
       match List.filter_map binds (L.links_into st n) with
-      | [] -> cands
-      | bs -> keep (fun x -> is_orig x && List.for_all (fun b -> b x) bs))
+      | [] -> keep desc_ok
+      | bs ->
+          keep (fun x ->
+              is_orig x && desc_ok x && List.for_all (fun b -> b x) bs))
   | Np.Nm.Sight _ -> (
       (* a link reading the sight fixes it, Bot included *)
       let reads l =
@@ -593,7 +606,7 @@ let viable st ~assigned (n : PName.t) cands =
       match List.filter_map reads (L.links_into st n) with
       | [] -> cands
       | bs -> keep (fun x -> List.for_all (fun b -> b x) bs))
-  | Np.Nm.Granular _ -> cands
+  | Np.Nm.Granular _ | Np.Nm.Desc _ -> cands
 
 (* build-ideal-tree.js places what each copy's problem edges fetch, taking
    copies from a queue ordered by where they sit in node_modules

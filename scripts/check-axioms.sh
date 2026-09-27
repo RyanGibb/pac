@@ -346,10 +346,12 @@ Alp.Reduction.reduceReal
 Alp.Reduction.rootPkg
 Alp.Reduction.versions
 
+NpmS.Reduction.Lookup.dependees_lookupDesc
 NpmS.Reduction.Lookup.dependees_lookupGranular
 NpmS.Reduction.Lookup.dependees_lookupIntermediate
 NpmS.Reduction.Lookup.dependees_lookupLink
 NpmS.Reduction.Lookup.dependees_lookupSight
+NpmS.Reduction.Lookup.versions_lookupDesc
 NpmS.Reduction.Lookup.versions_lookupGranular
 NpmS.Reduction.Lookup.versions_lookupIntermediate
 NpmS.Reduction.Lookup.versions_lookupLink

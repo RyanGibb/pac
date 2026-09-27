@@ -50,6 +50,7 @@ module PName = struct
     | Np.Nm.Sight (k, v, a) -> Format.fprintf fmt "<%a@%s^%s>" pp_key k v a
     | Np.Nm.Link (k, v, m, u, a) ->
         Format.fprintf fmt "<%a@%s=>%a@%s^%s>" pp_key k v pp_key m u a
+    | Np.Nm.Desc (a, t, s) -> Format.fprintf fmt "<%a@%s>" pp_key (a, t) s
 end
 
 module PVersion = struct

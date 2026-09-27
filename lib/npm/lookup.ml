@@ -13,14 +13,18 @@ module Tbl = Pac_common.Tbl
    and no other.  The target's packument decides it, so the rewrite is made
    here rather than in the parser, which sees one manifest at a time. *)
 let star_range ar (t : string) (rg : Npm_version.range) : Npm_version.range =
-  match A.latest ar t with
-  | Some l
-    when Npm_version.is_prerelease l
-         && Hashtbl.mem ar.A.entry (t, l)
-         && (not (A.deprecated ar (t, l)))
-         && A.engine_ok ar (t, l) ->
-      rg @ [ [ Npm_version.Cmp (Npm_version.Eq, l) ] ]
-  | _ -> rg
+  (* Berry reads * as semver does, so the common core admits no
+     prerelease under it *)
+  if !P.core then rg
+  else
+    match A.latest ar t with
+    | Some l
+      when Npm_version.is_prerelease l
+           && Hashtbl.mem ar.A.entry (t, l)
+           && (not (A.deprecated ar (t, l)))
+           && A.engine_ok ar (t, l) ->
+        rg @ [ [ Npm_version.Cmp (Npm_version.Eq, l) ] ]
+    | _ -> rg
 
 (* npm-pick-manifest takes a dist-tag's version exactly, and a tag the
    packument lacks matches nothing (ETARGET) *)
@@ -34,12 +38,17 @@ let spec_range ar (t : string) : P.spec -> Npm_version.range = function
 
 let own_range ar (d : P.dep) = spec_range ar d.P.d_target d.P.d_spec
 
-let xdep ar (d : P.dep) : Np.coq_Dependency =
+(* The descriptor is the spec as written under the common core, where every
+   dependency with it resolves to one version as in Yarn Berry's lockfile.
+   npm resolves each package's dependency apart, so otherwise the owner
+   goes in it too, and only copies of one package share one. *)
+let xdep ar ((n, v) : string * string) (d : P.dep) : Np.coq_Dependency =
   {
     Np.d_dir = d.P.d_dir;
     Np.d_target = d.P.d_target;
     Np.d_range = xrange (own_range ar d);
     Np.d_dev = d.P.d_dev;
+    Np.d_desc = (if !P.core then d.P.d_raw else n ^ "@" ^ v ^ " " ^ d.P.d_raw);
   }
 
 (* a peer names a directory, and npm fetches the peer's range from the
@@ -76,6 +85,9 @@ type t = {
   dirs : ((string * string) * string, Np.Nm.name list) Hashtbl.t;
   (* the links resolving into each directory *)
   links_into : (Np.Nm.name, Np.Nm.name) Hashtbl.t;
+  (* the root's resolutions, for the common core *)
+  res : (string * string) list;
+  raw_tbl : (string * string, P.dep list) Hashtbl.t;
   mutable n_lookups : int;
 }
 
@@ -98,6 +110,8 @@ let create ~optional ar root =
     opt_keep = Hashtbl.create 1024;
     dirs = Hashtbl.create 4096;
     links_into = Hashtbl.create 4096;
+    res = (match A.meta ar root with Some v -> v.P.v_res | None -> []);
+    raw_tbl = Hashtbl.create 16384;
     n_lookups = 0;
   }
 
@@ -166,7 +180,7 @@ let matches_published st (d : P.dep) : bool =
    deliberately does not do.  Read lazily, the target of a dependency that
    survives is a slot target the sub-instance was going to load anyway. *)
 let dep_keep st (d : P.dep) : bool =
-  (not d.P.d_optional) || (st.optional && matches_published st d)
+  (not d.P.d_optional) || (st.optional && (!P.core || matches_published st d))
 
 (* what the optional-dependency test read and what it abandoned, both in
    distinct (target, range) pairs *)
@@ -176,11 +190,28 @@ let optional_verdicts st =
   in
   (Hashtbl.length st.opt_keep, dropped)
 
-let dependencies st p =
-  Tbl.memo st.dep_tbl p (fun () ->
+(* Berry's resolutions put their spec in place of every dependency spec of
+   the name, the descriptor included (CorePlugin.ts:11-53) *)
+let resolved st (d : P.dep) : P.dep =
+  match List.assoc_opt d.P.d_dir st.res with
+  | Some spec when !P.core -> (
+      match
+        P.dep_of ~reject:ignore ~dev:d.P.d_dev ~optional:d.P.d_optional
+          (d.P.d_dir, `String spec)
+      with
+      | Some d' -> d'
+      | None -> d)
+  | _ -> d
+
+(* p's dependencies as the manifest writes them, those the calculus reads *)
+let raw_deps st p =
+  Tbl.memo st.raw_tbl p (fun () ->
       match A.meta st.ar p with
       | None -> []
-      | Some v -> List.map (xdep st.ar) (List.filter (dep_keep st) v.P.v_deps))
+      | Some v -> List.map (resolved st) (List.filter (dep_keep st) v.P.v_deps))
+
+let dependencies st p =
+  Tbl.memo st.dep_tbl p (fun () -> List.map (xdep st.ar p) (raw_deps st p))
 
 let active_dependencies st p =
   List.filter
@@ -188,6 +219,18 @@ let active_dependencies st p =
     (dependencies st p)
 
 let own_dependencies st p = List.map (fun d -> (p, d)) (dependencies st p)
+
+(* the descriptor p's directory m reads, as the calculus's slotOf finds
+   its dependency: the first active one of the directory *)
+let desc_name st p (m : string * string) : Np.Nm.name option =
+  match
+    List.find_opt
+      (fun (d : Np.coq_Dependency) -> d.Np.d_dir = fst m)
+      (active_dependencies st p)
+  with
+  | Some d when d.Np.d_target = snd m ->
+      Some (Np.Nm.Desc (d.Np.d_dir, d.Np.d_target, d.Np.d_desc))
+  | _ -> None
 
 let own_peer_dependencies st p =
   List.map (fun r -> (p, r)) (peer_dependencies st p)
@@ -229,7 +272,8 @@ let gran_sub_inst st (k : string * string) (w : string) =
   let deps =
     Option.to_list
       (List.find_map
-         (fun (q, d) -> if dep_keep st d then Some (q, xdep st.ar d) else None)
+         (fun (q, d) ->
+           if dep_keep st d then Some (q, xdep st.ar q d) else None)
          (Hashtbl.find_all st.ar.A.dep_by_key k))
   in
   let peers =
@@ -266,34 +310,50 @@ let pkg_sub_inst st (p : string * string) =
 let two_peers st p q =
   own_peer_dependencies st p @ if q = p then [] else own_peer_dependencies st q
 
-(* the intermediate dependees lookup's sub-instance: p's own dependencies,
-   its own peer dependencies and those of the dependee that was selected,
-   and the repository at p's slot targets and at the directories the
+(* the dependencies of a holder p and of its dependee q, whose peer with
+   default reads its own *)
+let two_deps st p q =
+  own_dependencies st p @ if q = p then [] else own_dependencies st q
+
+(* the intermediate dependees lookup's sub-instance: p's own dependencies
+   and peer dependencies and those of the dependee that was selected, and
+   the repository at both slot targets and at the directories the
    dependee's peers name *)
 let peer_sub_inst st (p : string * string) (m : string * string) (u : string) =
   let q = (snd m, u) in
-  let ns = slot_targets st p @ peer_names_at st q in
-  mk_inst st ~repo:(repo_of st ns) ~deps:(own_dependencies st p)
+  let ns = slot_targets st p @ peer_names_at st q @ slot_targets st q in
+  mk_inst st ~repo:(repo_of st ns) ~deps:(two_deps st p q)
     ~peers:(two_peers st p q)
 
-(* the sight lookup's sub-instance: the copy's own peer dependencies, whose
-   ranges bound the sight, and the repository at the name *)
+(* the sight lookup's sub-instance: the copy's own peer dependencies and
+   dependencies, whose ranges bound the sight, and the repository at the
+   name and at its slot targets *)
 let sight_sub_inst st (c : string * string) (a : string) =
-  mk_inst st ~repo:(repo_at st a) ~deps:[] ~peers:(own_peer_dependencies st c)
+  mk_inst st
+    ~repo:(repo_of st (a :: slot_targets st c))
+    ~deps:(own_dependencies st c)
+    ~peers:(own_peer_dependencies st c)
 
-(* the link versions lookup's sub-instance: the holder's own dependencies,
-   the holder's and the dependee's peer dependencies, and the repository at
-   the peer's name and the holder's slot targets *)
+(* the link versions lookup's sub-instance: the holder's and the dependee's
+   dependencies and peer dependencies, and the repository at the peer's
+   name and both slot targets *)
 let link_sub_inst st (p : string * string) (q : string * string) (a : string) =
   mk_inst st
-    ~repo:(repo_of st (a :: slot_targets st p))
-    ~deps:(own_dependencies st p) ~peers:(two_peers st p q)
+    ~repo:(repo_of st ((a :: slot_targets st p) @ slot_targets st q))
+    ~deps:(two_deps st p q) ~peers:(two_peers st p q)
 
-(* the link dependees lookup's sub-instance: the holder's own dependencies
-   and peer dependencies, which decide where it shows the name *)
-let holder_sub_inst st (p : string * string) =
-  mk_inst st ~repo:Np.RepoSet.empty ~deps:(own_dependencies st p)
-    ~peers:(own_peer_dependencies st p)
+(* the link dependees lookup's sub-instance: the holder's and the
+   dependee's dependencies and peer dependencies, which decide where the
+   holder shows the name and whether the dependee holds its own, and the
+   repository at the dependee's slot targets *)
+let holder_sub_inst st (p : string * string) (q : string * string) =
+  mk_inst st
+    ~repo:(repo_of st (slot_targets st q))
+    ~deps:(two_deps st p q) ~peers:(two_peers st p q)
+
+(* the descriptor lookup's sub-instance: the repository at its target *)
+let desc_sub_inst st (t : string) =
+  mk_inst st ~repo:(repo_at st t) ~deps:[] ~peers:[]
 
 let versions st (n : Np.Nm.name) : Np.Vs.version list =
   Tbl.memo st.vcache n (fun () ->
@@ -306,16 +366,19 @@ let versions st (n : Np.Nm.name) : Np.Vs.version list =
           T.VSet.elements (R.versions (sight_sub_inst st (snd k, v) a) n)
       | Np.Nm.Link (k, v, m, u, a) ->
           T.VSet.elements
-            (R.versions (link_sub_inst st (snd k, v) (snd m, u) a) n))
+            (R.versions (link_sub_inst st (snd k, v) (snd m, u) a) n)
+      | Np.Nm.Desc (_, t, _) ->
+          T.VSet.elements (R.versions (desc_sub_inst st t) n))
 
 (* where the copy k at v offers its name a: its sight where it peers on a
    itself, else its own directory; none where it offers itself or
    nothing *)
 let holder st ((k, v) : (string * string) * string) (a : string) :
     Np.Nm.name option =
+  let p = (snd k, v) in
   match
     T.DependeesSet.elements
-      (R.holderEdges (holder_sub_inst st (snd k, v)) (k, v) a (Np.Vs.Orig ""))
+      (R.holderEdges (holder_sub_inst st p p) (k, v) a (Np.Vs.Orig ""))
   with
   | (h, _) :: _ -> Some h
   | [] -> None
@@ -350,8 +413,8 @@ let dependees st (s : T.Pkg.t) : T.Dependees.t list =
         R.dependees (pkg_sub_inst st (snd k, v)) s
     | Np.Nm.Intermediate (k, v, m), Np.Vs.Orig u ->
         R.dependees (peer_sub_inst st (snd k, v) m u) s
-    | Np.Nm.Link (k, v, _, _, _), _ ->
-        R.dependees (holder_sub_inst st (snd k, v)) s
+    | Np.Nm.Link (k, v, m, u, _), _ ->
+        R.dependees (holder_sub_inst st (snd k, v) (snd m, u)) s
     | _ -> T.DependeesSet.empty
   in
   let hs = T.DependeesSet.elements hs in

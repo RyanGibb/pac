@@ -1,5 +1,5 @@
 {
-  description = "apt, apk, opam, cargo and npm at the versions eval/'s baselines were recorded with";
+  description = "apt, apk, opam, cargo, npm and Yarn Berry at the versions eval/'s baselines were recorded with";
 
   # Two revisions because neither carries every recorded version: nixos-26.05
   # has apt 3.3.0 but opam 2.5.1 and Rust 1.95, nixos-unstable has opam 2.5.2
@@ -15,7 +15,7 @@
       pkgs = nixpkgs.legacyPackages.${system};
       unstable = nixpkgs-unstable.legacyPackages.${system};
       tools = {
-        inherit (pkgs) apt apk-tools nodejs jq python3 curl;
+        inherit (pkgs) apt apk-tools nodejs jq python3 curl yarn-berry;
         inherit (unstable) opam cargo rustc;
       };
     in {

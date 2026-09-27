@@ -1,0 +1,16 @@
+{
+ "name": "dscr",
+ "dist-tags": {
+  "latest": "1.0.0"
+ },
+ "versions": {
+  "1.0.0": {
+   "name": "dscr",
+   "version": "1.0.0",
+   "dependencies": {
+    "dsca": "1.0.0",
+    "dscb": "1.0.0"
+   }
+  }
+ }
+}

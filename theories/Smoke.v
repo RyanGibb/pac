@@ -390,9 +390,9 @@ Definition npmRepo : NpmS.RepoSet.t :=
   fold_right NpmS.RepoSet.add NpmS.RepoSet.empty
     ((npmA, 1) :: (npmB, 1) :: (npmC, 1) :: (npmC, 2) :: (npmC, 3) :: nil).
 
-Definition npmDepB : NpmS.Dependency := NpmS.MkDep npmB npmB (npmEq 1) false.
+Definition npmDepB : NpmS.Dependency := NpmS.MkDep npmB npmB (npmEq 1) false 1.
 Definition npmDepC : NpmS.Dependency :=
-  NpmS.MkDep npmC npmC (npmBetween 2 4) false.
+  NpmS.MkDep npmC npmC (npmBetween 2 4) false 2.
 Definition npmPeerC : NpmS.PeerDependency :=
   NpmS.MkPeer npmC (npmBetween 1 3) false.
 Definition npmPeerCOpt : NpmS.PeerDependency :=
@@ -437,7 +437,7 @@ Definition npmInstOpt : NpmS.Inst :=
     (((npmB, 1), npmPeerCOpt) :: nil) nil (npmA, 1).
 
 Definition npmDepAlias : NpmS.Dependency :=
-  NpmS.MkDep npmX npmC (npmEq 1) false.
+  NpmS.MkDep npmX npmC (npmEq 1) false 3.
 
 Definition npmInstAlias : NpmS.Inst :=
   NpmS.MkInst npmRepo
@@ -467,11 +467,14 @@ Example npm_slot_versions_computes :
   = NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: nil.
 Proof. reflexivity. Qed.
 
+(* the directory reads B's descriptor too, which every directory with it
+   shares *)
 Example npm_peer_edge_computes :
   npmDeps npmInst (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1)
   = (NpmS.Nm.Granular kB 1, NpmS.Vs.Orig 1 :: nil)
     :: (NpmS.Nm.Link kA 1 kB 1 npmC,
-        NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: nil) :: nil.
+        NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: nil)
+    :: (NpmS.Nm.Desc npmB npmB 1, NpmS.Vs.Orig 1 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
 (* The root A has no directory for C, but installs one for B's peer, or
@@ -487,7 +490,8 @@ Example npm_auto_edge_computes :
   npmDeps npmInstAuto (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1)
   = (NpmS.Nm.Granular kB 1, NpmS.Vs.Orig 1 :: nil)
     :: (NpmS.Nm.Link kA 1 kB 1 npmC,
-        NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: nil) :: nil.
+        NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: nil)
+    :: (NpmS.Nm.Desc npmB npmB 1, NpmS.Vs.Orig 1 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
 Example npm_link_holder_computes :
@@ -503,7 +507,8 @@ Example npm_optional_edge_computes :
   npmDeps npmInstOpt (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1)
   = (NpmS.Nm.Granular kB 1, NpmS.Vs.Orig 1 :: nil)
     :: (NpmS.Nm.Link kA 1 kB 1 npmC,
-        NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: NpmS.Vs.Bot :: nil) :: nil.
+        NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: NpmS.Vs.Bot :: nil)
+    :: (NpmS.Nm.Desc npmB npmB 1, NpmS.Vs.Orig 1 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
 Example npm_optional_bot_computes :
@@ -522,7 +527,7 @@ Definition npmChainRepo : NpmS.RepoSet.t :=
 
 Definition npmInstChain : NpmS.Inst :=
   NpmS.MkInst npmChainRepo
-    (((npmA, 1), npmDepB) :: ((npmB, 1), NpmS.MkDep npmD npmD (npmEq 1) false)
+    (((npmA, 1), npmDepB) :: ((npmB, 1), NpmS.MkDep npmD npmD (npmEq 1) false 4)
        :: nil)
     (((npmB, 1), npmPeerC) :: ((npmD, 1), npmPeerC) :: nil) nil (npmA, 1).
 
@@ -542,7 +547,7 @@ Proof. reflexivity. Qed.
 (* B@1 depends on D@1, which peers on B: B offers itself. *)
 Definition npmInstSelf : NpmS.Inst :=
   NpmS.MkInst npmChainRepo
-    (((npmA, 1), npmDepB) :: ((npmB, 1), NpmS.MkDep npmD npmD (npmEq 1) false)
+    (((npmA, 1), npmDepB) :: ((npmB, 1), NpmS.MkDep npmD npmD (npmEq 1) false 4)
        :: nil)
     (((npmD, 1), NpmS.MkPeer npmB (npmBetween 1 3) false) :: nil) nil (npmA, 1).
 
@@ -562,7 +567,7 @@ Proof. reflexivity. Qed.
    into B for it. *)
 Definition npmInstSkip : NpmS.Inst :=
   NpmS.MkInst npmChainRepo
-    (((npmA, 1), npmDepB) :: ((npmB, 1), NpmS.MkDep npmD npmD (npmEq 1) false)
+    (((npmA, 1), npmDepB) :: ((npmB, 1), NpmS.MkDep npmD npmD (npmEq 1) false 4)
        :: nil)
     (((npmD, 1), npmPeerC) :: nil) nil (npmA, 1).
 
@@ -600,6 +605,39 @@ Example npm_alias_computes :
   = (NpmS.Nm.Intermediate kA 1 kC,
      NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: nil)
     :: (NpmS.Nm.Intermediate kA 1 kX, NpmS.Vs.Orig 1 :: nil) :: nil.
+Proof. reflexivity. Qed.
+
+(* B@1 depends on C in [2,4) and peers on C in [1,3) (a peer with
+   default): the root's link may offer C 2, both ranges' meet, or Bot, and
+   B's directory holds nothing where it is offered one and its own copy
+   where it is not. *)
+Definition npmInstDp : NpmS.Inst :=
+  NpmS.MkInst npmRepo
+    (((npmA, 1), npmDepB) :: ((npmB, 1), npmDepC) :: nil)
+    (((npmB, 1), npmPeerC) :: nil) nil (npmA, 1).
+
+Example npm_dp_link_computes :
+  NpmS.T.VSet.elements
+    (NpmS.Reduction.versions npmInstDp (NpmS.Nm.Link kA 1 kB 1 npmC))
+  = NpmS.Vs.Orig 2 :: NpmS.Vs.Bot :: nil.
+Proof. reflexivity. Qed.
+
+Example npm_dp_offered_computes :
+  npmDeps npmInstDp (NpmS.Nm.Link kA 1 kB 1 npmC, NpmS.Vs.Orig 2)
+  = (NpmS.Nm.Intermediate kA 1 kC, NpmS.Vs.Orig 2 :: nil)
+    :: (NpmS.Nm.Intermediate kB 1 kC, NpmS.Vs.Bot :: nil)
+    :: (NpmS.Nm.Sight kB 1 npmC, NpmS.Vs.Orig 2 :: NpmS.Vs.Free :: nil)
+    :: nil.
+Proof. reflexivity. Qed.
+
+Example npm_dp_own_computes :
+  npmDeps npmInstDp (NpmS.Nm.Link kA 1 kB 1 npmC, NpmS.Vs.Bot)
+  = (NpmS.Nm.Intermediate kA 1 kC, NpmS.Vs.Bot :: nil)
+    :: (NpmS.Nm.Intermediate kB 1 kC,
+        NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: nil)
+    :: (NpmS.Nm.Sight kB 1 npmC,
+        NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: NpmS.Vs.Free :: nil)
+    :: nil.
 Proof. reflexivity. Qed.
 
 Example npm_override_computes :
