@@ -50,7 +50,7 @@ Module Placement (N V : UsualOrderedType).
 
   Module SOlp := SetOps OccElt Pkg Layout PkgSet.
   Definition occupants (L : Layout.t) (l : Path.t) (a : N.t) : VSet.t :=
-    C.versions
+    repoVersions
       (SOlp.filterMap (fun '(l', p) =>
            if Path.eq_dec l' l then Some p else None) L)
       a.
@@ -59,7 +59,7 @@ Module Placement (N V : UsualOrderedType).
       VSet.In v (occupants L l a) <-> Layout.In (l, (a, v)) L.
   Proof.
     intros L l a v; unfold occupants.
-    rewrite C.mem_versions, SOlp.mem_filterMap; split.
+    rewrite mem_repoVersions, SOlp.mem_filterMap; split.
     - intros [[l' p] [Hin H]]; cbn beta iota in H.
       destruct (Path.eq_dec l' l) as [-> |]; [| discriminate H].
       injection H as ->; exact Hin.
