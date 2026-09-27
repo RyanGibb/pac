@@ -103,15 +103,15 @@ Module ConflictClass (N V : UsualOrderedType).
           else None)
         Om.
 
-    Lemma mem_classPkgs : forall X Om (y : T.Pkg.t),
-        T.PkgSet.In y (classPkgs X Om) <->
-        exists q k, InClassRel.In (q, k) Om /\ PkgSet.In q X /\
+    Lemma mem_classPkgs : forall ps Om (y : T.Pkg.t),
+        T.PkgSet.In y (classPkgs ps Om) <->
+        exists q k, InClassRel.In (q, k) Om /\ PkgSet.In q ps /\
           y = (Name.Cls k, Version.Name (fst q)).
     Proof.
-      intros X Om y; unfold classPkgs; rewrite SOit.mem_filterMap.
+      intros ps Om y; unfold classPkgs; rewrite SOit.mem_filterMap.
       split.
       - intros [[q k] [Hc Hy]]; cbn beta iota in Hy.
-        destruct (PkgSet.mem q X) eqn:Hm; [| discriminate].
+        destruct (PkgSet.mem q ps) eqn:Hm; [| discriminate].
         injection Hy as <-.
         exists q, k; split; [exact Hc |].
         split; [apply PkgSet.mem_spec; exact Hm | reflexivity].
