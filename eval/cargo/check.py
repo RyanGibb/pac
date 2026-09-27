@@ -100,12 +100,17 @@ def reproduce(ans, out, manifest):
     if r.returncode != 0:
         raise Unchecked("mklock: " + r.stderr.strip()[-300:])
     shutil.copy(lock, lock + ".ours")
-    rc, msg = cargo_lock(workdir, home, KEEP, locked=True)
-    if rc == 0:
-        return True, None, msg
-    shutil.copy(lock + ".ours", lock)
-    irc, _ = cargo_lock(workdir, home, FRESH, locked=True)
-    return False, irc == 0, msg
+    # the home is only cargo's copy of the index rows it fetched, ~13 MB a
+    # check, which nothing reads afterwards
+    try:
+        rc, msg = cargo_lock(workdir, home, KEEP, locked=True)
+        if rc == 0:
+            return True, None, msg
+        shutil.copy(lock + ".ours", lock)
+        irc, _ = cargo_lock(workdir, home, FRESH, locked=True)
+        return False, irc == 0, msg
+    finally:
+        shutil.rmtree(home, ignore_errors=True)
 
 
 def main():
