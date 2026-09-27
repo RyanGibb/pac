@@ -1,0 +1,8 @@
+# The queries whose slow side makes REPS rounds too dear, as <step> <query>:
+# bench.sh's steps leave them out, and its outliers step measures them.
+debian task-med-blend
+debian kde-full
+cargo openbook-v2
+cargo clob
+cargo leptos-helios
+npm-placement jest@30.5.2

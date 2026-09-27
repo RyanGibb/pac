@@ -215,6 +215,25 @@ Extra fields: opam `mccs`; npm `twall` (the tool's wall time, `-` under `--regre
 | `unchecked` | we answer, but the check, the comparison, or the pin that would say which gap, could not run |
 | `unrecorded` | `--regress` found no recorded answer |
 
+## Benchmarks
+
+```sh
+RUN=/tmp/bench STRAT=/tmp/strat eval/bench.sh info floor debian debian-cold alpine opam opam-cold cargo npm npm-shared npm-placement outliers
+python3 eval/bench/summary.py /tmp/bench
+```
+
+`bench.sh` times pac in each order, `pac-tool` and `pac-pubgrub`, against the tool, one measured process at a time, each asked as `scale.sh` asks it.
+Per query, a warm-up round and then `REPS` (default 5) measured rounds, each running every variant once; a cold step (`debian-cold`, `opam-cold`) instead runs each variant once after dropping the index, the tool's state and both binaries out of the page cache.
+Wall is taken around GNU time, whose `%M` is the RSS, and pac's `parse` and `solve` lines are kept beside it.
+`PIN` is a command prefix both run under, `taskset -c 2` say; `floor` measures GNU time's own start-up under it.
+No query starts at a load average of `LOADSTART` (2.5) or more, and one whose rounds end at `LOADMAX` (3.5) or more is measured again.
+A killed run resumes where it stopped: rerun the same line.
+`CAP` bounds each run (default none); `PORT` and `NPORT` are cargo's proxy and npm's shim.
+
+The queries are the sets `SETS` names (default both): `regress`, the regression set, and `strat`, the queries of `$STRAT/<eco>.q`, a queries file.
+`eval/bench/outliers.txt` names the queries too slow for the rounds; their steps leave them out, and the `outliers` step measures them `OREPS` (3) times under `OCAP` (1800 s).
+Rows land in `$RUN/res/<step>/<set>/<query>.csv`; `summary.py` gathers them into `bench.csv` and prints, per step and set, each query's median wall and IQR, parse and solve, RSS, and pac's time over the tool's, with the geometric mean of those ratios and how many queries pac was faster on.
+
 ## Ecosystem notes
 
 - npm: queries are also split by `closed`, whether neither side asked for a name the snapshot lacks. Edges are scored with `edges.py --peer-parent`; set `NORM=` to score them as npm's lock records them. `FILL=1` runs `scale.sh` as the pass that closes the snapshot, fetching each miss into the run's farm. `READING=shared` asks pac with `--reading=shared` (default `READING=npm`, `--reading=npm`), and the check then reads the manifests as pac did; the run's parameters record it, so a run resumes only in the reading it started in. `READING=placement` is the placement reading above, whose lines carry `cmp` and the check's `why` instead of `nodes` and `edges`.
