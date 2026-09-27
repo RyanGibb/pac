@@ -10,6 +10,8 @@ module type ARCH = sig
   val native : string
 end
 
+type stats = { names : int; versions : int }
+
 (* what the replay is written against; the instance's own types, whatever
    the architectures *)
 module type S = sig
@@ -50,30 +52,25 @@ module type S = sig
     nall : bool;
   }
 
-  type tables = {
-    versions_table : (string * string, string list) Hashtbl.t;
-    stanza_table : (DMA.Pkg.t, nstanza) Hashtbl.t;
-    group_table : (string, (string * string) list) Hashtbl.t;
-    providers_table : (string, (DMA.Pkg.t * DMA.Deb.coq_DTop) list) Hashtbl.t;
-    (* who names a package in a Depends or Pre-Depends, and who in a
-       Conflicts or Breaks, by the bare name as written: the watch lists
-       apt's Reject propagation walks, built from the field text alone, so
-       no clause is parsed for them; only the tool order asks *)
-    rev_dep_table : (string, DMA.Pkg.t list) Hashtbl.t Lazy.t;
-    rev_conf_table : (string, DMA.Pkg.t list) Hashtbl.t Lazy.t;
-    (* the binaries each source name builds, for apt's obsolescence test,
-       likewise asked for by the tool order alone *)
-    source_table : (string, nstanza list) Hashtbl.t Lazy.t;
-    (* selector preimages by name, and a package's clauses in field order,
-       both asked for again by every depender and by the rejection cascade *)
-    sel_cache :
-      (string * DMA.coq_NameArch, DMA.Deb.PkgSet.t * DMA.Deb.Prov.t) Hashtbl.t;
-    oc_cache :
-      (DMA.Pkg.t, (bool * DMA.Deb.Name.t * DMA.Deb.Atom.t list) list) Hashtbl.t;
-  }
+  type tables
 
-  val find_list : ('a, 'b list) Hashtbl.t -> 'a -> 'b list
+  val stats : tables -> stats
   val stanza : tables -> DMA.Pkg.t -> nstanza option
+
+  (* the versions of the package [(name, arch)] *)
+  val versions_of : tables -> string * string -> string list
+
+  (* every [(arch, version)] of every member of the group [name] *)
+  val group_members : tables -> string -> (string * string) list
+
+  (* the packages declaring a Provides of [name], each at the version it
+     provides *)
+  val providers : tables -> string -> (DMA.Pkg.t * DMA.Deb.coq_DTop) list
+
+  (* who names [name] in a Depends or Pre-Depends, and who in a Conflicts or
+     Breaks, by the bare name as written *)
+  val dependers : tables -> string -> DMA.Pkg.t list
+  val conflicters : tables -> string -> DMA.Pkg.t list
 
   (* the alternative's position in the clause being decided, which is what
      PVersion.compare ranks on; max_int for an atom the clause does not list,

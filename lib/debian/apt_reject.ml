@@ -155,7 +155,7 @@ module Make (S : SEARCH) = struct
         let b =
           List.exists
             (fun (q, vt) -> not (self_dropped q n vt))
-            (find_list tables.providers_table n)
+            (providers tables n)
         in
         Hashtbl.add st.provided n b;
         b
@@ -170,7 +170,7 @@ module Make (S : SEARCH) = struct
     | n, DMA.QAArch b ->
         (not (apt_provided st n))
         &&
-        let vs = find_list tables.versions_table (n, b) in
+        let vs = versions_of tables (n, b) in
         vs <> [] && List.for_all (sat (snd a)) vs
     | _ -> false
 
@@ -264,7 +264,7 @@ module Make (S : SEARCH) = struct
       && not
            (List.exists
               (fun w -> installed_at ~assigned ((n, b), w))
-              (find_list tables.versions_table k))
+              (versions_of tables k))
     then (
       Hashtbl.replace st.pdead k ();
       out := `Pkg k :: !out)
@@ -326,7 +326,6 @@ module Make (S : SEARCH) = struct
      already conflicts with its whole group implicitly (AddImplicitDepends,
      pkgcachegen.cc), so skipping every member changes no answer. *)
   let conflicted_by st ~assigned (((pkgname, _), _) as p : DMA.Pkg.t) =
-    let rev_conf = Lazy.force tables.rev_conf_table in
     (* by package, not version: under Strict-Pinning a package has one,
        and with it off the replay judges the first it meets, which moves
        the order and never an answer's validity *)
@@ -355,7 +354,7 @@ module Make (S : SEARCH) = struct
                       (fun a -> List.exists (reaches p a) names)
                       stz.nconfs
                   then reject_pkg st ~assigned out qk))
-          (find_list rev_conf n))
+          (conflicters tables n))
       names;
     List.rev !out
 
@@ -368,7 +367,6 @@ module Make (S : SEARCH) = struct
      provided atoms, a package var the deferred ones; a clause with no
      solution at all never fires, having nothing to watch. *)
   let cascade st ~assigned ~pkgvar names out units =
-    let rev_dep = Lazy.force tables.rev_dep_table in
     (* by package, as in conflicted_by *)
     let seen = Hashtbl.create 16 in
     let watched (opt, _, atoms) =
@@ -398,7 +396,7 @@ module Make (S : SEARCH) = struct
               Hashtbl.replace seen rk ();
               let inst = installed_at ~assigned r in
               List.iter (fire rk inst) (ordered_clauses tables r)))
-          (find_list rev_dep nm))
+          (dependers tables nm))
       names
 
   let propagate st ~assigned r =
@@ -409,14 +407,14 @@ module Make (S : SEARCH) = struct
         if
           List.for_all
             (fun w -> Hashtbl.mem st.vdead ((n, b), w))
-            (find_list tables.versions_table (n, b))
+            (versions_of tables (n, b))
         then reject_pkg st ~assigned out (n, b);
         cascade st ~assigned ~pkgvar:false (pkg_names x) out units
     | `Pkg (n, b) ->
         (* each version's own clause, version -> package *)
         List.iter
           (fun w -> reject_ver st ~assigned out ((n, b), w))
-          (find_list tables.versions_table (n, b));
+          (versions_of tables (n, b));
         cascade st ~assigned ~pkgvar:true [ n ] out units);
     (List.rev !out, List.rev !units)
 

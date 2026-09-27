@@ -7,6 +7,8 @@ module DebVersionOT = Pac_common.Ot.Make (struct
   let compare = Version.Debian.compare
 end)
 
+type stats = { names : int; versions : int }
+
 module type ARCH = sig
   val arches : string list
   val native : string
@@ -43,22 +45,15 @@ module type S = sig
     nall : bool;
   }
 
-  type tables = {
-    versions_table : (string * string, string list) Hashtbl.t;
-    stanza_table : (DMA.Pkg.t, nstanza) Hashtbl.t;
-    group_table : (string, (string * string) list) Hashtbl.t;
-    providers_table : (string, (DMA.Pkg.t * DMA.Deb.coq_DTop) list) Hashtbl.t;
-    rev_dep_table : (string, DMA.Pkg.t list) Hashtbl.t Lazy.t;
-    rev_conf_table : (string, DMA.Pkg.t list) Hashtbl.t Lazy.t;
-    source_table : (string, nstanza list) Hashtbl.t Lazy.t;
-    sel_cache :
-      (string * DMA.coq_NameArch, DMA.Deb.PkgSet.t * DMA.Deb.Prov.t) Hashtbl.t;
-    oc_cache :
-      (DMA.Pkg.t, (bool * DMA.Deb.Name.t * DMA.Deb.Atom.t list) list) Hashtbl.t;
-  }
+  type tables
 
-  val find_list : ('a, 'b list) Hashtbl.t -> 'a -> 'b list
+  val stats : tables -> stats
   val stanza : tables -> DMA.Pkg.t -> nstanza option
+  val versions_of : tables -> string * string -> string list
+  val group_members : tables -> string -> (string * string) list
+  val providers : tables -> string -> (DMA.Pkg.t * DMA.Deb.coq_DTop) list
+  val dependers : tables -> string -> DMA.Pkg.t list
+  val conflicters : tables -> string -> DMA.Pkg.t list
   val atom_pos : DMA.Deb.Clause.t -> DMA.Deb.Atom.t -> int
   val build_tables : recommends:bool -> Deb_packages.stanza list -> tables
   val obsolete : tables -> nstanza -> bool
@@ -167,18 +162,36 @@ module Make (AP : ARCH) : S = struct
     stanza_table : (DMA.Pkg.t, nstanza) Hashtbl.t;
     group_table : (string, (string * string) list) Hashtbl.t;
     providers_table : (string, (DMA.Pkg.t * DMA.Deb.coq_DTop) list) Hashtbl.t;
+    (* who names a package in a Depends or Pre-Depends, and who in a
+       Conflicts or Breaks, by the bare name as written: the watch lists
+       apt's Reject propagation walks, built from the field text alone, so
+       no clause is parsed for them; only the tool order asks *)
     rev_dep_table : (string, DMA.Pkg.t list) Hashtbl.t Lazy.t;
     rev_conf_table : (string, DMA.Pkg.t list) Hashtbl.t Lazy.t;
+    (* the binaries each source name builds, for apt's obsolescence test,
+       likewise asked for by the tool order alone *)
     source_table : (string, nstanza list) Hashtbl.t Lazy.t;
-    sel_cache :
-      (string * DMA.coq_NameArch, DMA.Deb.PkgSet.t * DMA.Deb.Prov.t) Hashtbl.t;
+    (* a package's clauses in field order, asked for again by every depender
+       and by the rejection cascade *)
     oc_cache :
       (DMA.Pkg.t, (bool * DMA.Deb.Name.t * DMA.Deb.Atom.t list) list) Hashtbl.t;
   }
 
   let push = Pac_common.Tbl.push
   let find_list = Pac_common.Tbl.find_list
+
+  let stats tables =
+    {
+      names = Hashtbl.length tables.group_table;
+      versions = Hashtbl.length tables.stanza_table;
+    }
+
   let stanza tables p = Hashtbl.find_opt tables.stanza_table p
+  let versions_of tables k = find_list tables.versions_table k
+  let group_members tables n = find_list tables.group_table n
+  let providers tables n = find_list tables.providers_table n
+  let dependers tables n = find_list (Lazy.force tables.rev_dep_table) n
+  let conflicters tables n = find_list (Lazy.force tables.rev_conf_table) n
 
   let parse_relations fields =
     List.map (List.map matom_of) (DF.parse_depends_fields fields)
@@ -283,7 +296,6 @@ module Make (AP : ARCH) : S = struct
       rev_dep_table = lazy (rev_dep stanza_table);
       rev_conf_table = lazy (rev_conf stanza_table);
       source_table = lazy (by_source stanza_table);
-      sel_cache = Hashtbl.create 4096;
       oc_cache = Hashtbl.create 4096;
     }
 

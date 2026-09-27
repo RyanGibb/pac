@@ -14,7 +14,7 @@ module Make (AP : Tables.ARCH) = struct
 
   let ma_real_at tables (n, b) =
     DMA.PkgSet.ofList
-      (List.map (fun v -> ((n, b), v)) (find_list tables.versions_table (n, b)))
+      (List.map (fun v -> ((n, b), v)) (versions_of tables (n, b)))
 
   (* Every group member at any arch: foreign provides and group provides
      come from any member, so name preimages must span the whole group. *)
@@ -22,16 +22,13 @@ module Make (AP : Tables.ARCH) = struct
     DMA.PkgSet.ofList
       (List.concat_map
          (fun n ->
-           List.map (fun (b, v) -> ((n, b), v)) (find_list tables.group_table n))
+           List.map (fun (b, v) -> ((n, b), v)) (group_members tables n))
          ns)
 
   let ma_prov_of_names tables ns =
     DMA.Prov.ofList
       (List.concat_map
-         (fun n ->
-           List.map
-             (fun (q, vt) -> (q, (n, vt)))
-             (find_list tables.providers_table n))
+         (fun n -> List.map (fun (q, vt) -> (q, (n, vt))) (providers tables n))
          ns)
 
   (* p's own fibre of a component; a package with no stanza has none *)
@@ -74,11 +71,7 @@ module Make (AP : Tables.ARCH) = struct
       :: fibre tables p ~none:[] (fun stz -> List.map DMA.aname stz.nconfs)
     in
     List.concat_map
-      (fun m ->
-        m
-        :: List.map
-             (fun (q, _) -> fst (fst q))
-             (find_list tables.providers_table m))
+      (fun m -> m :: List.map (fun (q, _) -> fst (fst q)) (providers tables m))
       names
 
   (* R/Pi preimages for a mangled name (m, x): whichever x is, every
@@ -98,11 +91,11 @@ module Make (AP : Tables.ARCH) = struct
   (* the preimages depend on the name alone, and every atom on a name --
      each version constraint a depender writes is another selector -- asks
      for the same pair *)
-  let sel_preimages tables mn =
-    Pac_common.Tbl.memo tables.sel_cache mn (fun () ->
+  let sel_preimages sel_cache tables mn =
+    Pac_common.Tbl.memo sel_cache mn (fun () ->
         sel_preimages_uncached tables mn)
 
-  let versions tables (n' : DMA.Deb.Name.t) =
+  let versions sel_cache tables (n' : DMA.Deb.Name.t) =
     match n' with
     | DMA.Deb.Name.Orig (n, DMA.QAArch b) ->
         DMA.Deb.T.VSet.add DMA.Deb.Version.Bot
@@ -117,10 +110,10 @@ module Make (AP : Tables.ARCH) = struct
     | DMA.Deb.Name.Disjunct aset -> DMA.Deb.versionsDisj aset
     | DMA.Deb.Name.Soft aset -> DMA.Deb.versionsSoft aset
     | DMA.Deb.Name.Selector a ->
-        let r, pi = sel_preimages tables (fst a) in
+        let r, pi = sel_preimages sel_cache tables (fst a) in
         DMA.Deb.us r pi a
 
-  let dependees tables (s : DMA.Deb.T.Pkg.t) =
+  let dependees sel_cache tables (s : DMA.Deb.T.Pkg.t) =
     match s with
     | DMA.Deb.Name.Orig (n, DMA.QAArch b), DMA.Deb.Version.Orig v ->
         let p = ((n, b), v) in
@@ -150,7 +143,7 @@ module Make (AP : Tables.ARCH) = struct
           }
           s
     | (DMA.Deb.Name.Disjunct _ | DMA.Deb.Name.Soft _), DMA.Deb.Version.Atom a ->
-        let r, pi = sel_preimages tables (fst a) in
+        let r, pi = sel_preimages sel_cache tables (fst a) in
         DMA.Deb.T.DependeesSet.singleton (DMA.Deb.tgt r pi a)
     | DMA.Deb.Name.Selector _, DMA.Deb.Version.Ref (m, w) ->
         DMA.Deb.T.DependeesSet.singleton
@@ -467,13 +460,16 @@ module Make (AP : Tables.ARCH) = struct
   let solve ~debug ~order (tables : tables)
       (query : ((string * string) * Args.accepts) list) =
     let looked_up = Hashtbl.create 4096 in
+    (* selector preimages by name, asked for again by every depender and by
+       the rejection cascade *)
+    let sel_cache = Hashtbl.create 4096 in
     let module S = Search (struct
       let tables = tables
-      let versions = versions tables
+      let versions = versions sel_cache tables
 
       let dependencies p =
         Hashtbl.replace looked_up p ();
-        dependees tables p
+        dependees sel_cache tables p
     end) in
     let query =
       List.map (fun ((n, b), acc) -> ((n, DMA.QAArch b), acc)) query
@@ -533,12 +529,6 @@ let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~paths ~query
       let tables = M.build_tables ~recommends index in
       let t_parse = Unix.gettimeofday () -. t0 in
       let answer, core = M.solve ~debug ~order tables query in
-      {
-        answer;
-        core;
-        names = Hashtbl.length tables.M.group_table;
-        versions = Hashtbl.length tables.M.stanza_table;
-        dropped = !dropped;
-        t_parse;
-      })
+      let { Tables.names; versions } = M.stats tables in
+      { answer; core; names; versions; dropped = !dropped; t_parse })
     (Args.parse_query ~native ~arches index query)
