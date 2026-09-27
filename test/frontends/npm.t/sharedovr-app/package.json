@@ -1,0 +1,10 @@
+{
+  "name": "sharedovr-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "redux": "^4.0.0"
+  },
+  "overrides": {
+    "redux": "4.0.0"
+  }
+}

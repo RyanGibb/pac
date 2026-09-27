@@ -337,7 +337,7 @@ That is npm's order at work, which --order=pubgrub gives up for PubGrub's
 own: each directory takes its newest admissible version, so taker gets a
 tok 4.0.0 of its own.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree --order=pubgrub ./reuse-app/package.json | sed -n '/^node_modules/,/^loaded/p'
+  $ between node_modules loaded ../../../bin/main.exe npm --offline --cache . --tree --order=pubgrub ./reuse-app/package.json
   node_modules (4):
     reuse-app 1.0.0 <- holder 1.0.0
     reuse-app 1.0.0 <- taker 1.0.0
@@ -350,7 +350,7 @@ tok 4.0.0 of its own.
 a generator seeded by --seed: the same seed gives the same answer, and
 another seed may give another, a resolution all the same:
 
-  $ seed0() { ../../../bin/main.exe npm --offline --cache . --tree --order=random --seed 0 ./reuse-app/package.json | sed -n '/^node_modules/,/^loaded/p'; }; [ "$(seed0)" = "$(seed0)" ] && seed0
+  $ seed0() { between node_modules loaded ../../../bin/main.exe npm --offline --cache . --tree --order=random --seed 0 ./reuse-app/package.json; }; [ "$(seed0)" = "$(seed0)" ] && seed0
   node_modules (4):
     reuse-app 1.0.0 <- holder 1.0.0
     reuse-app 1.0.0 <- taker 1.0.0
@@ -358,7 +358,7 @@ another seed may give another, a resolution all the same:
     taker 1.0.0 <- tok 4.0.0
   encoded solution: 9 core nodes (10 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
-  $ ../../../bin/main.exe npm --offline --cache . --tree --order=random --seed 2 ./reuse-app/package.json | sed -n '/^node_modules/,/^loaded/p'
+  $ between node_modules loaded ../../../bin/main.exe npm --offline --cache . --tree --order=random --seed 2 ./reuse-app/package.json
   node_modules (4):
     reuse-app 1.0.0 <- holder 1.0.0
     reuse-app 1.0.0 <- taker 1.0.0
@@ -373,7 +373,7 @@ past its depender and finds what the depender's own peer finds.
 @jsonjoy.com/util peers on tslib 2, and so do its dependencies buffers and
 codegen: their tslib is util's, the root's one copy, in any order.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree --order=random --seed 0 @jsonjoy.com/util@1.9.0 | sed -n '/^node_modules/,/^encoded/p'
+  $ between node_modules encoded ../../../bin/main.exe npm --offline --cache . --tree --order=random --seed 0 @jsonjoy.com/util@1.9.0
   node_modules (4):
     @jsonjoy.com/util 1.9.0 <- @jsonjoy.com/buffers 1.1.0
     @jsonjoy.com/util 1.9.0 <- @jsonjoy.com/codegen 1.0.0
@@ -388,16 +388,18 @@ peers on tm 1.0.0: ds's peer sees dq's 1.2.0 through dr, and nothing
 resolves.  npm has no tree for it either: it installs one only by
 overriding a peer.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree dq@1.0.0 | head -2
+  $ first 2 ../../../bin/main.exe npm --offline --cache . --tree dq@1.0.0
   root .
   unsatisfiable:
+  [1]
 
 Nor can siblings: wq holds tm 1.2.0 and depends on wr and ws, which peer on
 tm ^1 and hold wd and we, which peer on tm 1.1.0 and 1.0.0.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree wq@1.0.0 | head -2
+  $ first 2 ../../../bin/main.exe npm --offline --cache . --tree wq@1.0.0
   root .
   unsatisfiable:
+  [1]
 
 A depender other than the root that neither holds nor peers on a name
 offers its dependencies' peers on it nothing, and nothing is put into it
@@ -405,14 +407,15 @@ for them: skipx depends on skipy, which peers on skipt, and the root's
 skipt is out of skipy's reach.  npm nests a skipt under skipx; Yarn Berry
 reports the peer missing.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree skipx@1.0.0 skipt@1.0.0 | head -2
+  $ first 2 ../../../bin/main.exe npm --offline --cache . --tree skipx@1.0.0 skipt@1.0.0
   root .
   unsatisfiable:
+  [1]
 
 A depender of the peer's own name offers itself: selfub peers on selfbl,
 and its depender selfbl is the one copy of it.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree selfbl@1.0.0 | sed -n '/^node_modules/,/^encoded/p'
+  $ between node_modules encoded ../../../bin/main.exe npm --offline --cache . --tree selfbl@1.0.0
   node_modules (2):
     . <- selfbl 1.0.0
     selfbl 1.0.0 <- selfub 1.0.0
@@ -423,13 +426,15 @@ selfub's lookup finds no selfbl, though Yarn Berry offers the parent by
 its package name; and selfar holds selfalt at selfbl, which npm's lookup
 finds and Yarn Berry does not offer.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree selfas@1.0.0 | head -2
+  $ first 2 ../../../bin/main.exe npm --offline --cache . --tree selfas@1.0.0
   root .
   unsatisfiable:
+  [1]
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree selfar@1.0.0 | head -2
+  $ first 2 ../../../bin/main.exe npm --offline --cache . --tree selfar@1.0.0
   root .
   unsatisfiable:
+  [1]
 
 Under --reading=shared, which reads manifests as npm and Yarn Berry both
 do, a descriptor, a directory and its spec as written, resolves to one version
@@ -438,7 +443,7 @@ wherever it appears, as Berry's lockfile records it once: dsca's dsc
 though 1.1.0 is newer.  npm resolves them apart, which PubGrub's order,
 taking each directory's newest, shows.
 
-  $ ../../../bin/main.exe npm --reading=shared --offline --cache . --tree --order=pubgrub dscr@1.0.0 | sed -n '/^node_modules/,/^encoded/p'
+  $ between node_modules encoded ../../../bin/main.exe npm --reading=shared --offline --cache . --tree --order=pubgrub dscr@1.0.0
   node_modules (6):
     dsca 1.0.0 <- dsc 1.0.0
     dscb 1.0.0 <- dsc 1.0.0
@@ -448,7 +453,7 @@ taking each directory's newest, shows.
     . <- dscr 1.0.0
   encoded solution: 19 core nodes (21 lookups)
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree --order=pubgrub dscr@1.0.0 | sed -n '/^node_modules/,/^encoded/p'
+  $ between node_modules encoded ../../../bin/main.exe npm --offline --cache . --tree --order=pubgrub dscr@1.0.0
   node_modules (6):
     dsca 1.0.0 <- dsc 1.0.0
     dscb 1.0.0 <- dsc 1.1.0
@@ -463,14 +468,14 @@ default, as Berry reads it: pwdp holds no
 pwdc where its depender offers one in both ranges, as pwdh does with
 1.1.0, and its own where its depender offers none, as pwdo does not.
 
-  $ ../../../bin/main.exe npm --reading=shared --offline --cache . --tree pwdh@1.0.0 | sed -n '/^node_modules/,/^encoded/p'
+  $ between node_modules encoded ../../../bin/main.exe npm --reading=shared --offline --cache . --tree pwdh@1.0.0
   node_modules (3):
     pwdh 1.0.0 <- pwdc 1.1.0
     . <- pwdh 1.0.0
     pwdh 1.0.0 <- pwdp 1.0.0
   encoded solution: 13 core nodes (16 lookups)
 
-  $ ../../../bin/main.exe npm --reading=shared --offline --cache . --tree pwdo@1.0.0 | sed -n '/^node_modules/,/^encoded/p'
+  $ between node_modules encoded ../../../bin/main.exe npm --reading=shared --offline --cache . --tree pwdo@1.0.0
   node_modules (3):
     pwdp 1.0.0 <- pwdc 1.2.0
     . <- pwdo 1.0.0
@@ -482,7 +487,7 @@ cycz holds at 2.0.0 while the root holds 1.1.0.  npm closes the cycle with
 a link rather than unroll it, and so does the replay npm's order is read
 off, which otherwise never finishes; each copy's peer sees cycz's 2.0.0.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree cycz@1.0.0 cycn@^1.0.0 | sed -n '/^node_modules/,/^encoded/p'
+  $ between node_modules encoded ../../../bin/main.exe npm --offline --cache . --tree cycz@1.0.0 cycn@^1.0.0
   node_modules (6):
     . <- cycn 1.1.0
     cycz 1.0.0 <- cycn 2.0.0
@@ -611,8 +616,16 @@ last one's range is met too.  deep-preset peers on compiler ^7.0.0 ||
 only deep-5, five dependencies down, peers on ^7.0.0.  npm installs one
 compiler, 7.0.0, at the top, which every peer in the chain sees:
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./deep-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d' | sed -n '/^node_modules/,$p' | grep compiler
+  $ between node_modules encoded ../../../bin/main.exe npm --offline --cache . --tree ./deep-app/package.json
+  node_modules (7):
     deep-app 1.0.0 <- compiler 7.0.0
+    deep-preset 1.0.0 <- deep-1 1.0.0
+    deep-1 1.0.0 <- deep-2 1.0.0
+    deep-2 1.0.0 <- deep-3 1.0.0
+    deep-3 1.0.0 <- deep-4 1.0.0
+    deep-4 1.0.0 <- deep-5 1.0.0
+    deep-app 1.0.0 <- deep-preset 1.0.0
+  encoded solution: 27 core nodes (33 lookups)
 
 npm meets a package's edges in the collation it sorts names by
 (build-ideal-tree.js, localeCompare), where "_" comes before "-".
@@ -625,7 +638,7 @@ coll-preset peers on gauge and so holds none, and so the calculus has one
 gauge to give all three ranges: 6.0.0, the one they all accept, where npm
 keeps 7.0.0 and leaves coll-a's peer unmet:
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./coll-app/package.json | sed -E '/^(parse|solve) [0-9.]+s$/d' | grep 'gauge'
+  $ holding gauge ../../../bin/main.exe npm --offline --cache . --tree ./coll-app/package.json
     gauge 6.0.0
     coll-app 1.0.0 <- gauge 6.0.0
 
@@ -815,7 +828,7 @@ these fixtures, and refuses plugin@next (ETARGET).
 A spec added to a project goes where the project already names it, so
 tester@1.0.0 replaces the devDependency rather than adding a dependency.
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree ./proj/package.json tester@1.0.0 | grep tester
+  $ holding tester ../../../bin/main.exe npm --offline --cache . --tree ./proj/package.json tester@1.0.0
     tester 1.0.0
     . <- tester 1.0.0
 
@@ -1283,12 +1296,12 @@ with a peer spec npm cannot read is left out: badp 2.0.0's peer on redux
 the shared reading takes badp 1.0.0, and npm's own reading, which drops the peer,
 2.0.0.
 
-  $ ../../../bin/main.exe npm --reading=shared --offline --cache . --tree badp | sed -n '/^node_modules/,/^encoded/p'
+  $ between node_modules encoded ../../../bin/main.exe npm --reading=shared --offline --cache . --tree badp
   node_modules (1):
     . <- badp 1.0.0
   encoded solution: 4 core nodes (4 lookups)
 
-  $ ../../../bin/main.exe npm --offline --cache . --tree badp | sed -n '/^node_modules/,/^encoded/p'
+  $ between node_modules encoded ../../../bin/main.exe npm --offline --cache . --tree badp
   node_modules (1):
     . <- badp 2.0.0
   encoded solution: 3 core nodes (4 lookups)
@@ -1297,11 +1310,12 @@ A peer only one of Berry's packageExtensions adds is Berry's alone: the
 root installs no copy for redux-thunk 2.3.0's peer on redux, which npm
 would prune, so the shared reading has no answer without a redux of the query's.
 
-  $ ../../../bin/main.exe npm --reading=shared --offline --cache . --tree redux-thunk@2.3.0 | head -2
+  $ first 2 ../../../bin/main.exe npm --reading=shared --offline --cache . --tree redux-thunk@2.3.0
   root .
   unsatisfiable:
+  [1]
 
-  $ ../../../bin/main.exe npm --reading=shared --offline --cache . --tree redux-thunk@2.3.0 redux@4.0.0 | sed -n '/^node_modules/,/^encoded/p'
+  $ between node_modules encoded ../../../bin/main.exe npm --reading=shared --offline --cache . --tree redux-thunk@2.3.0 redux@4.0.0
   node_modules (2):
     . <- redux 4.0.0
     . <- redux-thunk 2.3.0
@@ -1359,4 +1373,8 @@ alone), is refused.
 
   $ ../../../bin/main.exe npm --reading=shared --offline --cache . ./sharedres-app/package.json
   error: --reading=shared refuses a root with resolutions, which Yarn Berry reads and npm does not
+  [2]
+
+  $ ../../../bin/main.exe npm --reading=shared --offline --cache . ./sharedovr-app/package.json
+  error: --reading=shared refuses a root with overrides, which npm reads and Yarn Berry does not
   [2]
