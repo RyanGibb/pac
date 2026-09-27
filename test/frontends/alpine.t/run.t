@@ -71,7 +71,7 @@ the dependency has nothing to satisfy it:
 
   $ untimed ../../../bin/main.exe alpine PROVIDERS nokey
   unsatisfiable:
-  Because @root () -> nokey ∅ and root -> @root (), version solving failed..
+  Because @root () -> nokey ∅ and root -> @root (), version solving failed.
   loaded: 14 names, 14 versions, 7 provides entries, 0 install_if rules
   [1]
 
@@ -125,7 +125,7 @@ while without it pv-user has nothing to satisfy pv-virt, as in apk:
 
   $ untimed ../../../bin/main.exe alpine BARE pv-user
   unsatisfiable:
-  Because @root () -> pv-user 1.0 and pv-user 1.0 -> pv-virt ∅, @root * is forbidden..
+  Because @root () -> pv-user 1.0 and pv-user 1.0 -> pv-virt ∅, @root * is forbidden.
   And because root -> @root (), version solving failed.
   loaded: 9 names, 9 versions, 4 provides entries, 1 install_if rules
   [1]
@@ -135,28 +135,28 @@ out of scope here because it depends on why a package is present:
 
   $ untimed ../../../bin/main.exe alpine BARE pv-both
   unsatisfiable:
-  Because @root () -> pv-both 1.0 and pv-both 1.0 -> pv-virt ∅, @root * is forbidden..
+  Because @root () -> pv-both 1.0 and pv-both 1.0 -> pv-virt ∅, @root * is forbidden.
   And because root -> @root (), version solving failed.
   loaded: 9 names, 9 versions, 4 provides entries, 1 install_if rules
   [1]
 
   $ untimed ../../../bin/main.exe alpine BARE pv-user pv-mid
   unsatisfiable:
-  Because @root () -> pv-user 1.0 and pv-user 1.0 -> pv-virt ∅, @root * is forbidden..
+  Because @root () -> pv-user 1.0 and pv-user 1.0 -> pv-virt ∅, @root * is forbidden.
   And because root -> @root (), version solving failed.
   loaded: 9 names, 9 versions, 4 provides entries, 1 install_if rules
   [1]
 
   $ untimed ../../../bin/main.exe alpine BARE al-user
   unsatisfiable:
-  Because @root () -> al-user 1.0 and al-user 1.0 -> al-virt ∅, @root * is forbidden..
+  Because @root () -> al-user 1.0 and al-user 1.0 -> al-virt ∅, @root * is forbidden.
   And because root -> @root (), version solving failed.
   loaded: 9 names, 9 versions, 4 provides entries, 1 install_if rules
   [1]
 
   $ untimed ../../../bin/main.exe alpine BARE ii-anchor ii-user
   unsatisfiable:
-  Because @root () -> ii-user 1.0 and ii-user 1.0 -> ii-virt ∅, @root * is forbidden..
+  Because @root () -> ii-user 1.0 and ii-user 1.0 -> ii-virt ∅, @root * is forbidden.
   And because root -> @root (), version solving failed.
   loaded: 9 names, 9 versions, 4 provides entries, 1 install_if rules
   [1]
@@ -325,7 +325,7 @@ and not bv-ge's:
 
   $ untimed ../../../bin/main.exe alpine BAREVER bv-ge
   unsatisfiable:
-  Because @root () -> bv-ge 1.0 and bv-ge 1.0 -> bv-virt ∅, @root * is forbidden..
+  Because @root () -> bv-ge 1.0 and bv-ge 1.0 -> bv-virt ∅, @root * is forbidden.
   And because root -> @root (), version solving failed.
   loaded: 8 names, 8 versions, 1 provides entries, 3 install_if rules
   [1]
@@ -375,7 +375,7 @@ bh-prov and bh-user:
 
   $ untimed ../../../bin/main.exe alpine BAREHASH bh-user
   unsatisfiable:
-  Because @root () -> bh-user 1.0 and bh-user 1.0 -> bh-virt ∅, @root * is forbidden..
+  Because @root () -> bh-user 1.0 and bh-user 1.0 -> bh-virt ∅, @root * is forbidden.
   And because root -> @root (), version solving failed.
   loaded: 2 names, 2 versions, 1 provides entries, 0 install_if rules
   [1]
@@ -386,14 +386,14 @@ the package uninstallable:
 
   $ untimed ../../../bin/main.exe alpine PARSE pr-bad
   unsatisfiable:
-  Because @root () -> pr-bad ∅ and root -> @root (), version solving failed..
+  Because @root () -> pr-bad ∅ and root -> @root (), version solving failed.
   loaded: 6 names, 7 versions, 1 provides entries, 0 install_if rules
   parser dropped 4 declarations
   [1]
 
   $ untimed ../../../bin/main.exe alpine PARSE pr-badver
   unsatisfiable:
-  Because @root () -> pr-badver ∅ and root -> @root (), version solving failed..
+  Because @root () -> pr-badver ∅ and root -> @root (), version solving failed.
   loaded: 6 names, 7 versions, 1 provides entries, 0 install_if rules
   parser dropped 4 declarations
   [1]

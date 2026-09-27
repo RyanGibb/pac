@@ -152,7 +152,7 @@ class package is what the explanation names:
 
   $ untimed ../../../bin/main.exe opam . cc-both
   unsatisfiable:
-  Because cc-a 1 -> conflict-class:ccls cc-a and cc-b 2 -> conflict-class:ccls cc-b, cc-a (-∞, ⊥) or cc-b (-∞, ⊥) is forbidden..
+  Because cc-a 1 -> conflict-class:ccls cc-a and cc-b 2 -> conflict-class:ccls cc-b, cc-a (-∞, ⊥) or cc-b (-∞, ⊥) is forbidden.
   And because cc-both 1 -> cc-a 1 and cc-both 1 -> cc-b 1 ∪ 2, cc-both (-∞, ⊥) is forbidden.
   And because root () -> cc-both 1 and root -> root (), version solving failed.
   loaded: 3 names, 4 versions

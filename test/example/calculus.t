@@ -186,6 +186,6 @@ the explanation reads out that derivation.
   satisfiying assignment on level 0: Derivation A 1 due to incompatibility I1
   prior cause I11 = (terms: {Root *}, cause: (I10 and I1))
   conflict resolution on: I11
-  Because C 1 -> D 2 ∪ 3 and D 2 is forbidden. not available, C * requires D 3.
+  Because C 1 -> D 2 ∪ 3 and no versions of D match 2, C * requires D 3.
   And because B 1 -> D 1 ∪ 2 and A 1 -> B 1, A * or C * is forbidden.
   And because A 1 -> C 1 and root -> A 1, version solving failed.

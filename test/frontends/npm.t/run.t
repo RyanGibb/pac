@@ -654,7 +654,7 @@ dial, and so does the calculus, which has no answer:
   root sight-app 1.0.0
   unsatisfiable:
   Because sight-app@1.0.0 1.0.0 -> <sight-app@1.0.0=>sight-right> 1.0.0 and <sight-app@1.0.0=>sight-right> 1.0.0 -> sight-right@1.0.0 1.0.0, sight-app@1.0.0 * requires sight-right@1.0.0 1.0.0.
-  And because sight-right@1.0.0 1.0.0 -> <sight-right@1.0.0=>sight-host> 1.0.0, sight-app@1.0.0 * requires <sight-right@1.0.0=>sight-host> 1.0.0
+  And because sight-right@1.0.0 1.0.0 -> <sight-right@1.0.0=>sight-host> 1.0.0, sight-app@1.0.0 * requires <sight-right@1.0.0=>sight-host> 1.0.0.
   And because <sight-right@1.0.0=>sight-host> 1.0.0 -> <sight-right@1.0.0=>sight-host@1.0.0^dial> ∅ and root -> sight-app@1.0.0 1.0.0, version solving failed.
   loaded: 5 names, 7 versions, 0 packuments fetched
   [1]
@@ -1036,7 +1036,7 @@ decide.
   root vp-app 1.0.0
   unsatisfiable:
   Because vp-app@1.0.0 1.0.0 -> <vp-app@1.0.0=>vplus> 1.0.0 and <vp-app@1.0.0=>vplus> 1.0.0 -> vplus@1.0.0 1.0.0, vp-app@1.0.0 * requires vplus@1.0.0 1.0.0.
-  And because vplus@1.0.0 1.0.0 -> <vplus@1.0.0=>mocker> 1.0.0, vp-app@1.0.0 * requires <vplus@1.0.0=>mocker> 1.0.0
+  And because vplus@1.0.0 1.0.0 -> <vplus@1.0.0=>mocker> 1.0.0, vp-app@1.0.0 * requires <vplus@1.0.0=>mocker> 1.0.0.
   And because <vplus@1.0.0=>mocker> 1.0.0 -> <vplus@1.0.0=>mocker@1.0.0^vite> ∅ and root -> vp-app@1.0.0 1.0.0, version solving failed.
   loaded: 5 names, 5 versions, 0 packuments fetched
   [1]
@@ -1194,7 +1194,7 @@ and with it unreachable, or failing, there is no answer at all.
   $ untimed env PATH=$PWD/gone:$PATH ../../../bin/main.exe npm --cache partial plugin
   root .
   unsatisfiable:
-  Because .@  -> <.@=>plugin> 1.0.0 and <.@=>plugin> 1.0.0 -> <.@=>plugin@1.0.0^core> ∅, .@ * is forbidden..
+  Because .@  -> <.@=>plugin> 1.0.0 and <.@=>plugin> 1.0.0 -> <.@=>plugin@1.0.0^core> ∅, .@ * is forbidden.
   And because root -> .@ , version solving failed.
   loaded: 3 names, 2 versions, 1 packuments fetched
   [1]

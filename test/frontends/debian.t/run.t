@@ -491,7 +491,7 @@ pinv 1; with Strict-Pinning off it takes pinv 1:
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinapp
   unsatisfiable:
-  Because pinapp:amd64 1 -> pinv:amd64 2 and pinv:amd64 2 -> pinnone:amd64 ∅, pinapp:amd64 (-∞, ⊥) is forbidden..
+  Because pinapp:amd64 1 -> pinv:amd64 2 and pinv:amd64 2 -> pinnone:amd64 ∅, pinapp:amd64 (-∞, ⊥) is forbidden.
   And because root -> pinapp:amd64 1, version solving failed.
   loaded: 176 names, 176 versions
   [1]
@@ -505,7 +505,7 @@ pinv 1; with Strict-Pinning off it takes pinv 1:
 
   $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages pinapp
   unsatisfiable:
-  Because pinapp:amd64 1 -> pinv:amd64 2 and pinv:amd64 2 -> pinnone:amd64 ∅, pinapp:amd64 (-∞, ⊥) is forbidden..
+  Because pinapp:amd64 1 -> pinv:amd64 2 and pinv:amd64 2 -> pinnone:amd64 ∅, pinapp:amd64 (-∞, ⊥) is forbidden.
   And because root -> pinapp:amd64 1, version solving failed.
   loaded: 176 names, 176 versions
   [1]
@@ -523,7 +523,7 @@ pinok (<< 2):
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinrange
   unsatisfiable:
-  Because pinrange:amd64 1 -> pinok:amd64 ∅ and root -> pinrange:amd64 1, version solving failed..
+  Because pinrange:amd64 1 -> pinok:amd64 ∅ and root -> pinrange:amd64 1, version solving failed.
   loaded: 176 names, 176 versions
   [1]
 
@@ -582,7 +582,7 @@ candidate once per element, in order:
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinapp pinv=1 pinv=2
   unsatisfiable:
-  Because pinv:amd64 2 -> pinnone:amd64 ∅ and root -> pinv:amd64 2, version solving failed..
+  Because pinv:amd64 2 -> pinnone:amd64 ∅ and root -> pinv:amd64 2, version solving failed.
   loaded: 176 names, 176 versions
   [1]
 
@@ -599,13 +599,13 @@ native package's version, so pinmix=1 reaches the amd64 stanza:
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages 'pinv=*'
   unsatisfiable:
-  Because pinv:amd64 2 -> pinnone:amd64 ∅ and root -> pinv:amd64 2, version solving failed..
+  Because pinv:amd64 2 -> pinnone:amd64 ∅ and root -> pinv:amd64 2, version solving failed.
   loaded: 176 names, 176 versions
   [1]
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinv=candidate
   unsatisfiable:
-  Because pinv:amd64 2 -> pinnone:amd64 ∅ and root -> pinv:amd64 2, version solving failed..
+  Because pinv:amd64 2 -> pinnone:amd64 ∅ and root -> pinv:amd64 2, version solving failed.
   loaded: 176 names, 176 versions
   [1]
 
@@ -646,7 +646,7 @@ same after '/':
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinv/candidate
   unsatisfiable:
-  Because pinv:amd64 2 -> pinnone:amd64 ∅ and root -> pinv:amd64 2, version solving failed..
+  Because pinv:amd64 2 -> pinnone:amd64 ∅ and root -> pinv:amd64 2, version solving failed.
   loaded: 176 names, 176 versions
   [1]
 
@@ -685,7 +685,7 @@ and of two stanzas at one version, apt keeps the first read:
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinmix
   unsatisfiable:
-  Because pinmix:amd64 2 -> pinnone:amd64 ∅ and root -> pinmix:amd64 2, version solving failed..
+  Because pinmix:amd64 2 -> pinnone:amd64 ∅ and root -> pinmix:amd64 2, version solving failed.
   loaded: 176 names, 176 versions
   [1]
 
@@ -703,7 +703,7 @@ still provides dupvirt2 beside its amd64 twin:
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 --no-strict-pinning Packages dupgoal
   unsatisfiable:
-  Because dupgoal:amd64 1 -> dupvirt:amd64 ∅ and root -> dupgoal:amd64 1, version solving failed..
+  Because dupgoal:amd64 1 -> dupvirt:amd64 ∅ and root -> dupgoal:amd64 1, version solving failed.
   loaded: 176 names, 182 versions
   [1]
 
@@ -732,7 +732,7 @@ meets the unqualified xfor of xunq:i386:
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.multiarch xdep
   unsatisfiable:
-  Because xdep:amd64 1 -> xfor:<i386> ∅ and root -> xdep:amd64 1, version solving failed..
+  Because xdep:amd64 1 -> xfor:<i386> ∅ and root -> xdep:amd64 1, version solving failed.
   loaded: 17 names, 18 versions
   [1]
 
@@ -759,7 +759,7 @@ needs xforn:native, and xforn is foreign but only at i386:
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.multiarch xnat:i386
   unsatisfiable:
-  Because xnat:i386 1 -> xforn:<amd64> ∅ and root -> xnat:i386 1, version solving failed..
+  Because xnat:i386 1 -> xforn:<amd64> ∅ and root -> xnat:i386 1, version solving failed.
   loaded: 17 names, 18 versions
   [1]
 
@@ -770,7 +770,7 @@ is taken, as xfor2:i386 is for xboth:
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.multiarch xvdep
   unsatisfiable:
-  Because xvdep:amd64 1 -> xvirt:<i386> ∅ and root -> xvdep:amd64 1, version solving failed..
+  Because xvdep:amd64 1 -> xvirt:<i386> ∅ and root -> xvdep:amd64 1, version solving failed.
   loaded: 17 names, 18 versions
   [1]
 
@@ -817,7 +817,7 @@ xvc3:i386 excludes the xpc3:i386 it needs:
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.multiarch xcfl3
   unsatisfiable:
-  Because <sel xpc3:<i386> (T)> ref:xpc3:i386=1 -> xpc3:i386 1 and xcfl3:amd64 1 -> xpc3:i386 ⊥, xcfl3:amd64 (-∞, ⊥) or <sel xpc3:<i386> (T)> * is forbidden..
+  Because <sel xpc3:<i386> (T)> ref:xpc3:i386=1 -> xpc3:i386 1 and xcfl3:amd64 1 -> xpc3:i386 ⊥, xcfl3:amd64 (-∞, ⊥) or <sel xpc3:<i386> (T)> * is forbidden.
   And because xcfl3:amd64 1 -> <sel xpc3:<i386> (T)> ref:xpc3:i386=1 and root -> xcfl3:amd64 1, version solving failed.
   loaded: 17 names, 18 versions
   [1]
@@ -848,7 +848,7 @@ dropped:
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.provides bvgoal
   unsatisfiable:
-  Because bvgoal:amd64 1 -> bvirt:amd64 ∅ and root -> bvgoal:amd64 1, version solving failed..
+  Because bvgoal:amd64 1 -> bvirt:amd64 ∅ and root -> bvgoal:amd64 1, version solving failed.
   loaded: 5 names, 5 versions
   parser dropped 2 declarations
   [1]
@@ -883,7 +883,7 @@ without exv 1.0's missing dependency, and exv=1.0 the one with it:
 
   $ untimed ../../../bin/main.exe debian --native amd64 Packages.versions exv=1.0
   unsatisfiable:
-  Because exv:amd64 1.0 -> exnone:amd64 ∅ and root -> exv:amd64 1.0, version solving failed..
+  Because exv:amd64 1.0 -> exnone:amd64 ∅ and root -> exv:amd64 1.0, version solving failed.
   loaded: 7 names, 7 versions
   [1]
 
