@@ -346,9 +346,10 @@ tok 4.0.0 of its own.
   encoded solution: 9 core nodes (10 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
 
---order=random picks the next name and the version to try uniformly, from
-a generator seeded by --seed: the same seed gives the same answer, and
-another seed may give another, a resolution all the same:
+--order=random picks the next name and the version to try at random,
+from a generator seeded by --seed, among the versions the rest of the
+solution leaves open: the same seed gives the same answer, and another
+seed may give another, a resolution all the same:
 
   $ seed0() { between node_modules loaded ../../../bin/main.exe npm --offline --cache . --tree --order=random --seed 0 ./reuse-app/package.json; }; [ "$(seed0)" = "$(seed0)" ] && seed0
   node_modules (4):
