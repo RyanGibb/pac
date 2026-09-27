@@ -7,9 +7,6 @@ module NVerOT = Ot.Make (struct
   let compare = Npm_version.compare
 end)
 
-(* SemverMatch: the two tests the version order cannot express.  sameCore
-   takes the candidate version first and the comparator's constant
-   second. *)
 module PM = struct
   let isPre = Npm_version.is_prerelease
   let sameCore = Npm_version.same_core

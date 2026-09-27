@@ -66,8 +66,6 @@ let tagged ar (n : string) (cands : PVersion.t list) : PVersion.t option =
 let pick ar (t : string) (cands : PVersion.t list) : PVersion.t =
   match tagged ar t cands with Some c -> c | None -> best ar t cands
 
-(* npm's pick for a range over every published version, under the root's
-   flat override as the calculus reads one *)
 let pick_in st (t : string) (rg : Np.coq_Range) : string option =
   let rg = L.effective st t rg in
   let pool =

@@ -60,11 +60,6 @@ let by_name : (string, t list) Hashtbl.t Lazy.t =
 let of_name (n : string) : t list =
   Option.value (Hashtbl.find_opt (Lazy.force by_name) n) ~default:[]
 
-(* Berry's satisfiesWithPrereleases (yarnpkg-core/sources/semverUtils.ts):
-   the range with prereleases included, and failing that the version with
-   its prerelease tags dropped.  Berry drops the comparators' tags too, but
-   node-semver compares a comparator by its text, which keeps them, so
-   3.13.0 does not match 3.13.0-next.1. *)
 let matches (vers : string) (x : t) : bool =
   Npm_version.holds_pre vers x.x_range
   || Npm_version.holds_pre (Npm_version.release vers) x.x_range

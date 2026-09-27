@@ -244,18 +244,12 @@ let split_alts (s : string) : string list =
   in
   go 0 0 []
 
-(* None where node-semver's Range refuses the string, every set having
-   been thrown out, and npa then reads the spec as a dist-tag.
-   include_prerelease reads the range as semver's includePrerelease does,
-   for [holds_pre]. *)
 let parse_range_opt ?(include_prerelease = false) (s : string) : range option =
   let z = if include_prerelease then "0" else "" in
   match List.filter_map (parse_set ~z ~u:z) (split_alts s) with
   | [] -> None
   | rg -> Some rg
 
-(* satisfies catches the TypeError of a range semver refuses and answers
-   false, so such a range, with no set at all, matches nothing *)
 let parse_range ?include_prerelease s =
   Option.value ~default:[] (parse_range_opt ?include_prerelease s)
 
@@ -278,18 +272,9 @@ let cs_admits cs v =
 let cs_holds cs v =
   List.for_all (fun ct -> comp_match ct v) cs && cs_admits cs v
 
-(* for testing the grammar from OCaml: a dependency range is evaluated
-   against the real version set by the calculus, not here *)
 let holds (v : string) (rg : range) : bool =
   List.exists (fun cs -> cs_holds cs v) rg
 
-(* semver's includePrerelease, which checkEngine passes and a dependency
-   range never does: cs_admits is dropped, so a prerelease version is
-   ordered by an ordinary comparator rather than refused by one that
-   names no prerelease.  It matters only for a prerelease host -- an
-   engines range is matched against the running node or npm, not against
-   a published version -- and the range must be parsed with
-   ~include_prerelease for its -0 bounds. *)
 let holds_pre (v : string) (rg : range) : bool =
   List.exists (fun cs -> List.for_all (fun ct -> comp_match ct v) cs) rg
 

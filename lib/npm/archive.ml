@@ -1,8 +1,5 @@
 module P = Npm_parse
 
-(* Only a 404 says the registry has no such name; anything else leaves the
-   name's versions unknown, and reading them as none would change the
-   answer without saying so. *)
 exception Fetch_failed of string
 
 (* semver takes a leading v or = on the version it tests, which is the
@@ -16,31 +13,18 @@ type t = {
   cache : string;
   offline : bool;
   reading : P.reading;
-  (* The host npm-pick-manifest ranks engines against.  npm always has
-     one, arborist passing process.version as nodeVersion and the CLI its
-     own version as npmVersion, but nothing here can read a node that need
-     not be installed, so an unset half leaves that sub-key untested
-     exactly as checkEngine does for a null version: every candidate then
-     passes and the engine keys tie, leaving deprecated and semver to
-     decide.  A correspondence harness has to supply both, or the two
-     sides rank by different rules. *)
   node : string option;
   npm : string option;
   pkgs : (string, P.ver list) Hashtbl.t;
   latest : (string, string) Hashtbl.t;
   tags : (string, (string * string) list) Hashtbl.t;
   entry : (string * string, P.ver) Hashtbl.t;
-  (* peer dependencies keyed by the directory they name *)
   peer_by_name : (string, (string * string) * P.peer) Hashtbl.t;
-  (* dependencies keyed by the key they introduce, for the granular
-     version lookup's key test *)
   dep_by_key : (string * string, (string * string) * P.dep) Hashtbl.t;
   mutable n_names : int;
   mutable n_vers : int;
   mutable n_fetched : int;
   mutable n_dropped : int;
-  (* wall time fetching and parsing packuments, which the solve
-     interleaves with *)
   mutable t_parse : float;
 }
 
@@ -171,8 +155,6 @@ let ver_engine_ok ar (v : P.ver) : bool =
   in
   ok ar.node v.P.v_eng_node && ok ar.npm v.P.v_eng_npm
 
-(* npm-pick-manifest's sort keys above semver order (index.js:167-181),
-   greater for the version it prefers *)
 let ver_rank ar (v : P.ver) : bool * bool * bool =
   let nd = not v.P.v_deprecated and eng = ver_engine_ok ar v in
   (nd && eng, eng, nd)
@@ -249,13 +231,8 @@ let load_name ar (n : string) : P.ver list =
       ar.t_parse <- ar.t_parse +. (Unix.gettimeofday () -. t);
       vs
 
-(* Prerelease versions stay in: the calculus admits one only inside a
-   comparator set that names a prerelease at the same release core. *)
 let versions_of ar n = List.map (fun (v : P.ver) -> v.P.v_vers) (load_name ar n)
 
-(* the version a dist-tag names, which arborist's #add reads through
-   npm-pick-manifest (index.js, `wanted && type === 'tag'`): the tagged
-   version exactly, whatever its engines or deprecation *)
 let dist_tag ar (n : string) (tag : string) : string option =
   ignore (load_name ar n);
   Option.bind (Hashtbl.find_opt ar.tags n) (List.assoc_opt tag)
@@ -264,9 +241,6 @@ let latest ar n =
   ignore (load_name ar n);
   Hashtbl.find_opt ar.latest n
 
-(* The query is published nowhere, so it enters the archive as the only
-   version of its name; a registry package of that name is then out of
-   reach, as it would be had it been the root. *)
 let add_root ar (v : P.ver) : string * string =
   add_name ar v.P.v_name [ v ];
   (v.P.v_name, v.P.v_vers)
