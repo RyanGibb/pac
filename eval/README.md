@@ -134,7 +134,7 @@ Both refuse a run that was not made with `READING=shared`, and a Yarn other than
 
 ### npm's placement reading
 
-`READING=placement eval/npm/scale.sh ...` asks pac with `--reading=placement --depth $DEPTH` (default 8), which reads manifests as `--reading=npm` does but answers npm's `node_modules` layout itself: a `packages` row per occupied directory, `node_modules/a/node_modules/b b@1.2.3`, the lock's own path and the registry package there.
+`READING=placement eval/npm/scale.sh ...` asks pac with `--reading=placement --depth $DEPTH` (default 8), which reads manifests as `--reading=npm` does, but keeps a peer's `npm:` alias, and answers npm's `node_modules` layout itself: a `packages` row per occupied directory, `node_modules/a/node_modules/b b@1.2.3`, the lock's own path and the registry package there.
 There is no placement to search for, so the check is npm's own commands on that layout as the lock (`place.sh`, sourced by `scale.sh`):
 
 - `lockgen.py` copies each row into a `package-lock.json` entry from the snapshot packument, placing nothing; an entry whose manifest bundles dependencies makes the answer `ERR`, as npm installs those from the tarball whatever the lock says.

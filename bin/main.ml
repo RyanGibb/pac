@@ -32,8 +32,8 @@ let order_arg ~tool ~pubgrub : Pac_common.Order.t Term.t =
                "Which name to decide next and which version to try: $(b,tool) \
                 as %s, $(b,pubgrub) as %s, $(b,random) at random, from a \
                 generator seeded by $(b,--seed): uniformly, but that npm's \
-                picks a version only among those the rest of the solution \
-                leaves open."
+                reading of manifests, not the placement one, picks a version \
+                only among those the rest of the solution leaves open."
                tool pubgrub))
   in
   let seed =
@@ -462,9 +462,6 @@ let alpine_cmd =
 
 module Npm = Npm_solve
 
-(* The placement reading reads manifests as npm does, an aliased peer
-   included; its answer is the node_modules layout, which is printed
-   whatever --tree says. *)
 let npm_place ~t0 ~debug ~core ~order ~omit ~depth ar rc =
   let r, walk =
     Npm.Place_solve.solve ~debug ~order ~omit_dev:(List.mem `Dev omit)
@@ -485,8 +482,8 @@ let npm_place ~t0 ~debug ~core ~order ~omit ~depth ar rc =
       Report.encoded ~nodes:a.Npm.Place_solve.nodes
         ~lookups:a.Npm.Place_solve.lookups)
 
-let npm_run debug core order reading depth cache offline tree omit nodev npmv
-    query =
+let npm_run debug core order (reading, depth, tree) cache offline omit nodev
+    npmv query =
   guard @@ fun () ->
   match cache with
   | None ->
@@ -578,7 +575,12 @@ let npm_cmd =
              command-line spec naming it is refused.")
   in
   let tree =
-    Arg.(value & flag & info [ "tree" ] ~doc:"Print the node_modules nesting.")
+    Arg.(
+      value & flag
+      & info [ "tree" ]
+          ~doc:
+            "Print the node_modules nesting; $(b,--reading=placement) prints \
+             it as its answer.")
   in
   let reading =
     Arg.(
@@ -597,19 +599,35 @@ let npm_cmd =
              key with its spec as written) resolves to one version wherever it \
              is written, and a root the two tools read apart (a mandatory \
              peerDependency, overrides or resolutions) is refused.  \
-             $(b,placement) reads them as $(b,npm) does but solves for npm's \
-             node_modules layout itself, each package loading what Node's \
-             lookup finds from its directory, and prints that layout as the \
-             answer.")
+             $(b,placement) reads them as $(b,npm) does, but keeps a peer's \
+             npm: alias, and solves for npm's node_modules layout itself, each \
+             package loading what Node's lookup finds from its directory, and \
+             prints that layout as the answer.")
   in
   let depth =
     Arg.(
-      value & opt int 8
-      & info [ "depth" ] ~docv:"D"
+      value
+      & opt (some int) None
+      & info [ "depth" ] ~docv:"D" ~absent:"8"
           ~doc:
-            "Under $(b,--reading=placement), place nothing more than $(docv) \
-             node_modules deep; an answer is unsatisfiable only within this \
-             bound.")
+            "Under $(b,--reading=placement), and only there, place nothing \
+             more than $(docv) node_modules deep; an answer is unsatisfiable \
+             only within this bound.")
+  in
+  (* a flag the reading leaves unread would change nothing, which is more
+     likely a caller's slip than a request; the placement reading's answer
+     is the layout itself *)
+  let reading =
+    Term.(
+      ret
+        (const (fun reading depth tree ->
+             match (reading, depth, tree) with
+             | `Placement, _, true ->
+                 `Error (true, "--tree is read only outside --reading=placement")
+             | (`Npm | `Shared), Some _, _ ->
+                 `Error (true, "--depth is read only under --reading=placement")
+             | _ -> `Ok (reading, Option.value depth ~default:8, tree))
+        $ reading $ depth $ tree))
   in
   let order =
     order_arg ~tool:"npm's, replayed, does" ~pubgrub:"PubGrub's own order does"
@@ -672,8 +690,8 @@ let npm_cmd =
   Cmd.v
     (Cmd.info "npm" ~exits ~envs ~doc:"Solve against the npm registry.")
     Term.(
-      const npm_run $ debug_arg $ core_arg $ order $ reading $ depth $ cache
-      $ offline $ tree $ omit $ nodev $ npmv $ query)
+      const npm_run $ debug_arg $ core_arg $ order $ reading $ cache $ offline
+      $ omit $ nodev $ npmv $ query)
 
 (* a command-line error is a refused query like any other, and 124 is
    left to timeout(1) *)

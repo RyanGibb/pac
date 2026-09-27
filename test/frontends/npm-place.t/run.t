@@ -54,6 +54,18 @@ cannot nest, and there is no answer.
   encoded solution: 7 core nodes (14 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
 
+The bound is the placement reading's alone, and its answer is the
+layout, so --depth elsewhere and --tree beside it are refused.
+
+  $ ../../../bin/main.exe npm --depth 2 --offline --cache . ./nest-app/package.json 2> err
+  [2]
+  $ grep -- --depth err
+  pac: --depth is read only under --reading=placement
+  $ ../../../bin/main.exe npm --reading=placement --tree --offline --cache . ./nest-app/package.json 2> err
+  [2]
+  $ grep -- --tree err
+  pac: --tree is read only outside --reading=placement
+
 sx 2 needs sx ^1, which needs sx ^2: each copy sees the other above it, and
 only a link, which the calculus leaves out, closes the loop.  The search
 refutes every nesting down to the bound.
