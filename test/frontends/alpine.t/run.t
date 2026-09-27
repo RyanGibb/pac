@@ -125,7 +125,7 @@ while without it pv-user has nothing to satisfy pv-virt, as in apk:
 
   $ untimed ../../../bin/main.exe alpine BARE pv-user
   unsatisfiable:
-  Because @root () -> pv-user 1.0 and pv-user 1.0 -> pv-virt ∅, @root * is forbidden.
+  Because @root () -> pv-user 1.0 and pv-user 1.0 -> pv-virt ∅, @root () is forbidden.
   And because root -> @root (), version solving failed.
   loaded: 9 names, 9 versions, 4 provides entries, 1 install_if rules
   [1]
@@ -135,28 +135,28 @@ out of scope here because it depends on why a package is present:
 
   $ untimed ../../../bin/main.exe alpine BARE pv-both
   unsatisfiable:
-  Because @root () -> pv-both 1.0 and pv-both 1.0 -> pv-virt ∅, @root * is forbidden.
+  Because @root () -> pv-both 1.0 and pv-both 1.0 -> pv-virt ∅, @root () is forbidden.
   And because root -> @root (), version solving failed.
   loaded: 9 names, 9 versions, 4 provides entries, 1 install_if rules
   [1]
 
   $ untimed ../../../bin/main.exe alpine BARE pv-user pv-mid
   unsatisfiable:
-  Because @root () -> pv-user 1.0 and pv-user 1.0 -> pv-virt ∅, @root * is forbidden.
+  Because @root () -> pv-user 1.0 and pv-user 1.0 -> pv-virt ∅, @root () is forbidden.
   And because root -> @root (), version solving failed.
   loaded: 9 names, 9 versions, 4 provides entries, 1 install_if rules
   [1]
 
   $ untimed ../../../bin/main.exe alpine BARE al-user
   unsatisfiable:
-  Because @root () -> al-user 1.0 and al-user 1.0 -> al-virt ∅, @root * is forbidden.
+  Because @root () -> al-user 1.0 and al-user 1.0 -> al-virt ∅, @root () is forbidden.
   And because root -> @root (), version solving failed.
   loaded: 9 names, 9 versions, 4 provides entries, 1 install_if rules
   [1]
 
   $ untimed ../../../bin/main.exe alpine BARE ii-anchor ii-user
   unsatisfiable:
-  Because @root () -> ii-user 1.0 and ii-user 1.0 -> ii-virt ∅, @root * is forbidden.
+  Because @root () -> ii-user 1.0 and ii-user 1.0 -> ii-virt ∅, @root () is forbidden.
   And because root -> @root (), version solving failed.
   loaded: 9 names, 9 versions, 4 provides entries, 1 install_if rules
   [1]
@@ -253,8 +253,8 @@ so the order in which the two are decided cannot lose it:
 
   $ untimed ../../../bin/main.exe alpine NEGDEP negc negb=1.0
   unsatisfiable:
-  Because negc 1.0 -> nega 1.0 and nega 1.0 -> negb ⊥, negc (-∞, ⊥) requires negb ⊥.
-  And because @root () -> negb 1.0, negc (-∞, ⊥) or @root * is forbidden.
+  Because negc 1.0 -> nega 1.0 and nega 1.0 -> negb ⊥, negc 1.0 requires negb ⊥.
+  And because @root () -> negb 1.0, negc 1.0 or @root () is forbidden.
   And because @root () -> negc 1.0 and root -> @root (), version solving failed.
   loaded: 3 names, 4 versions, 0 provides entries, 0 install_if rules
   [1]
@@ -325,7 +325,7 @@ and not bv-ge's:
 
   $ untimed ../../../bin/main.exe alpine BAREVER bv-ge
   unsatisfiable:
-  Because @root () -> bv-ge 1.0 and bv-ge 1.0 -> bv-virt ∅, @root * is forbidden.
+  Because @root () -> bv-ge 1.0 and bv-ge 1.0 -> bv-virt ∅, @root () is forbidden.
   And because root -> @root (), version solving failed.
   loaded: 8 names, 8 versions, 1 provides entries, 3 install_if rules
   [1]
@@ -334,7 +334,7 @@ It falsifies the conflict !bv-virt<2:
 
   $ untimed ../../../bin/main.exe alpine BAREVER bv-no bv-prov
   unsatisfiable:
-  Because bv-no 1.0 -> bv-prov ⊥ and @root () -> bv-no 1.0, @root * requires bv-prov ⊥.
+  Because bv-no 1.0 -> bv-prov ⊥ and @root () -> bv-no 1.0, @root () requires bv-prov ⊥.
   And because @root () -> bv-prov 1.0 and root -> @root (), version solving failed.
   loaded: 8 names, 8 versions, 1 provides entries, 3 install_if rules
   [1]
@@ -375,7 +375,7 @@ bh-prov and bh-user:
 
   $ untimed ../../../bin/main.exe alpine BAREHASH bh-user
   unsatisfiable:
-  Because @root () -> bh-user 1.0 and bh-user 1.0 -> bh-virt ∅, @root * is forbidden.
+  Because @root () -> bh-user 1.0 and bh-user 1.0 -> bh-virt ∅, @root () is forbidden.
   And because root -> @root (), version solving failed.
   loaded: 2 names, 2 versions, 1 provides entries, 0 install_if rules
   [1]

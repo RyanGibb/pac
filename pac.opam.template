@@ -1,3 +1,3 @@
 pin-depends: [
-  ["pubgrub.dev" "git+https://github.com/RyanGibb/ocaml-pubgrub.git#169b733"]
+  ["pubgrub.dev" "git+https://github.com/RyanGibb/ocaml-pubgrub.git#8e607d6"]
 ]

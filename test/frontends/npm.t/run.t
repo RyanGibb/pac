@@ -239,8 +239,8 @@ agree, which is npm's ERESOLVE rather than a reason to abandon the entry.
   $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./opt-peer-app/package.json
   root opt-peer-app 1.0.0
   unsatisfiable:
-  Because <opt-peer-app@1.0.0=>host> 1.0.0 -> <opt-peer-app@1.0.0=>host@1.0.0^gadget> 2.0.0 and <opt-peer-app@1.0.0=>host@1.0.0^gadget> 2.0.0 -> <opt-peer-app@1.0.0=>gadget> 2.0.0, <opt-peer-app@1.0.0=>host> * requires <opt-peer-app@1.0.0=>gadget> 2.0.0.
-  And because opt-peer-app@1.0.0 1.0.0 -> <opt-peer-app@1.0.0=>gadget> 1.0.0, <opt-peer-app@1.0.0=>host> * or opt-peer-app@1.0.0 * is forbidden.
+  Because <opt-peer-app@1.0.0=>host> 1.0.0 -> <opt-peer-app@1.0.0=>host@1.0.0^gadget> 2.0.0 and <opt-peer-app@1.0.0=>host@1.0.0^gadget> 2.0.0 -> <opt-peer-app@1.0.0=>gadget> 2.0.0, <opt-peer-app@1.0.0=>host> 1.0.0 requires <opt-peer-app@1.0.0=>gadget> 2.0.0.
+  And because opt-peer-app@1.0.0 1.0.0 -> <opt-peer-app@1.0.0=>gadget> 1.0.0, <opt-peer-app@1.0.0=>host> 1.0.0 or opt-peer-app@1.0.0 1.0.0 is forbidden.
   And because opt-peer-app@1.0.0 1.0.0 -> <opt-peer-app@1.0.0=>host> 1.0.0 and root -> opt-peer-app@1.0.0 1.0.0, version solving failed.
   loaded: 3 names, 4 versions, 0 packuments fetched
   [1]
@@ -653,8 +653,8 @@ dial, and so does the calculus, which has no answer:
   $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./sight-app/package.json
   root sight-app 1.0.0
   unsatisfiable:
-  Because sight-app@1.0.0 1.0.0 -> <sight-app@1.0.0=>sight-right> 1.0.0 and <sight-app@1.0.0=>sight-right> 1.0.0 -> sight-right@1.0.0 1.0.0, sight-app@1.0.0 * requires sight-right@1.0.0 1.0.0.
-  And because sight-right@1.0.0 1.0.0 -> <sight-right@1.0.0=>sight-host> 1.0.0, sight-app@1.0.0 * requires <sight-right@1.0.0=>sight-host> 1.0.0.
+  Because sight-app@1.0.0 1.0.0 -> <sight-app@1.0.0=>sight-right> 1.0.0 and <sight-app@1.0.0=>sight-right> 1.0.0 -> sight-right@1.0.0 1.0.0, sight-app@1.0.0 1.0.0 requires sight-right@1.0.0 1.0.0.
+  And because sight-right@1.0.0 1.0.0 -> <sight-right@1.0.0=>sight-host> 1.0.0, sight-app@1.0.0 1.0.0 requires <sight-right@1.0.0=>sight-host> 1.0.0.
   And because <sight-right@1.0.0=>sight-host> 1.0.0 -> <sight-right@1.0.0=>sight-host@1.0.0^dial> ∅ and root -> sight-app@1.0.0 1.0.0, version solving failed.
   loaded: 5 names, 7 versions, 0 packuments fetched
   [1]
@@ -1035,8 +1035,8 @@ decide.
   $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./vp-app/package.json
   root vp-app 1.0.0
   unsatisfiable:
-  Because vp-app@1.0.0 1.0.0 -> <vp-app@1.0.0=>vplus> 1.0.0 and <vp-app@1.0.0=>vplus> 1.0.0 -> vplus@1.0.0 1.0.0, vp-app@1.0.0 * requires vplus@1.0.0 1.0.0.
-  And because vplus@1.0.0 1.0.0 -> <vplus@1.0.0=>mocker> 1.0.0, vp-app@1.0.0 * requires <vplus@1.0.0=>mocker> 1.0.0.
+  Because vp-app@1.0.0 1.0.0 -> <vp-app@1.0.0=>vplus> 1.0.0 and <vp-app@1.0.0=>vplus> 1.0.0 -> vplus@1.0.0 1.0.0, vp-app@1.0.0 1.0.0 requires vplus@1.0.0 1.0.0.
+  And because vplus@1.0.0 1.0.0 -> <vplus@1.0.0=>mocker> 1.0.0, vp-app@1.0.0 1.0.0 requires <vplus@1.0.0=>mocker> 1.0.0.
   And because <vplus@1.0.0=>mocker> 1.0.0 -> <vplus@1.0.0=>mocker@1.0.0^vite> ∅ and root -> vp-app@1.0.0 1.0.0, version solving failed.
   loaded: 5 names, 5 versions, 0 packuments fetched
   [1]
@@ -1098,7 +1098,7 @@ optional, and no tok.
   $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./opt-deep-app/package.json
   root opt-deep-app 1.0.0
   unsatisfiable:
-  Because opt-deep-app@1.0.0 1.0.0 -> <opt-deep-app@1.0.0=>frail> 1.0.0 and <opt-deep-app@1.0.0=>frail> 1.0.0 -> frail@1.0.0 1.0.0, opt-deep-app@1.0.0 * requires frail@1.0.0 1.0.0.
+  Because opt-deep-app@1.0.0 1.0.0 -> <opt-deep-app@1.0.0=>frail> 1.0.0 and <opt-deep-app@1.0.0=>frail> 1.0.0 -> frail@1.0.0 1.0.0, opt-deep-app@1.0.0 1.0.0 requires frail@1.0.0 1.0.0.
   And because frail@1.0.0 1.0.0 -> <frail@1.0.0=>tok> ∅ and root -> opt-deep-app@1.0.0 1.0.0, version solving failed.
   loaded: 4 names, 5 versions, 0 packuments fetched
   [1]
@@ -1194,7 +1194,7 @@ and with it unreachable, or failing, there is no answer at all.
   $ untimed env PATH=$PWD/gone:$PATH ../../../bin/main.exe npm --cache partial plugin
   root .
   unsatisfiable:
-  Because .@  -> <.@=>plugin> 1.0.0 and <.@=>plugin> 1.0.0 -> <.@=>plugin@1.0.0^core> ∅, .@ * is forbidden.
+  Because .@  -> <.@=>plugin> 1.0.0 and <.@=>plugin> 1.0.0 -> <.@=>plugin@1.0.0^core> ∅, .@  is forbidden.
   And because root -> .@ , version solving failed.
   loaded: 3 names, 2 versions, 1 packuments fetched
   [1]

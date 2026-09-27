@@ -152,8 +152,8 @@ class package is what the explanation names:
 
   $ untimed ../../../bin/main.exe opam . cc-both
   unsatisfiable:
-  Because cc-a 1 -> conflict-class:ccls cc-a and cc-b 2 -> conflict-class:ccls cc-b, cc-a (-∞, ⊥) or cc-b (-∞, ⊥) is forbidden.
-  And because cc-both 1 -> cc-a 1 and cc-both 1 -> cc-b 1 ∪ 2, cc-both (-∞, ⊥) is forbidden.
+  Because cc-a 1 -> conflict-class:ccls cc-a and cc-b 2 -> conflict-class:ccls cc-b, cc-a 1 or cc-b 1 ∪ 2 is forbidden.
+  And because cc-both 1 -> cc-a 1 and cc-both 1 -> cc-b 1 ∪ 2, cc-both 1 is forbidden.
   And because root () -> cc-both 1 and root -> root (), version solving failed.
   loaded: 3 names, 4 versions
   [1]
@@ -169,8 +169,8 @@ in which the two are decided cannot lose it:
 
   $ untimed ../../../bin/main.exe opam . cfl-c cfl-b.1
   unsatisfiable:
-  Because cfl-c 1 -> cfl-a 1 and cfl-a 1 -> cfl-b ⊥, cfl-c (-∞, ⊥) requires cfl-b ⊥.
-  And because root () -> cfl-b 1, cfl-c (-∞, ⊥) or root * is forbidden.
+  Because cfl-c 1 -> cfl-a 1 and cfl-a 1 -> cfl-b ⊥, cfl-c 1 requires cfl-b ⊥.
+  And because root () -> cfl-b 1, cfl-c 1 or root () is forbidden.
   And because root () -> cfl-c 1 and root -> root (), version solving failed.
   loaded: 3 names, 4 versions
   [1]

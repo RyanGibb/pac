@@ -37,8 +37,10 @@ cannot nest, and there is no answer.
   root nest-app 1.0.0
   unsatisfiable:
   (within depth 1)
-  Because <ε⇑c> (ε,c@1.0.0) -> <ε,c> c@1.0.0 and <ε,c> c@1.0.0 -> <c⇑b> (c,b@1.0.0) ∪ (ε,b@1.0.0), <ε⇑c> (-∞, ⊥) requires <c⇑b> (c,b@1.0.0) ∪ (ε,b@1.0.0).
-  And because <c⇑b> (ε,b@1.0.0) -> <ε⇑b> (ε,b@1.0.0) and <ε> project -> <ε⇑c> (ε,c@1.0.0), <ε> * requires <ε⇑b> (ε,b@1.0.0).
+  Because no versions of <c⇑b> match (c,b@1.0.0) and <c⇑b> (ε,b@1.0.0) -> <ε⇑b> (ε,b@1.0.0), <c⇑b> (c,b@1.0.0) ∪ (ε,b@1.0.0) requires <ε⇑b> (ε,b@1.0.0).
+  Because <ε⇑c> (ε,c@1.0.0) -> <ε,c> c@1.0.0 and <ε,c> c@1.0.0 -> <c⇑b> (c,b@1.0.0) ∪ (ε,b@1.0.0), <ε⇑c> (ε,c@1.0.0) requires <c⇑b> (c,b@1.0.0) ∪ (ε,b@1.0.0).
+  Thus, <ε⇑c> (ε,c@1.0.0) requires <ε⇑b> (ε,b@1.0.0).
+  And because <ε> project -> <ε⇑c> (ε,c@1.0.0), <ε> project requires <ε⇑b> (ε,b@1.0.0).
   And because <ε> project -> <ε⇑b> (ε,b@2.0.0) and root -> <ε> project, version solving failed.
   loaded: 3 names, 4 versions, 0 packuments fetched
   [1]

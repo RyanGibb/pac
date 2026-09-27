@@ -154,8 +154,8 @@ Strict-Pinning off (below):
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 --no-strict-pinning Packages cfld
   unsatisfiable:
-  Because cflc:amd64 1 -> cfla:amd64 1 and cfla:amd64 1 -> cflb:amd64 ⊥, cflc:amd64 (-∞, ⊥) requires cflb:amd64 ⊥.
-  And because cfld:amd64 1 -> cflb:amd64 1, cfld:amd64 (-∞, ⊥) or cflc:amd64 (-∞, ⊥) is forbidden.
+  Because cflc:amd64 1 -> cfla:amd64 1 and cfla:amd64 1 -> cflb:amd64 ⊥, cflc:amd64 1 requires cflb:amd64 ⊥.
+  And because cfld:amd64 1 -> cflb:amd64 1, cfld:amd64 1 or cflc:amd64 1 is forbidden.
   And because cfld:amd64 1 -> cflc:amd64 1 and root -> cfld:amd64 1, version solving failed.
   loaded: 176 names, 182 versions
   [1]
@@ -491,7 +491,7 @@ pinv 1; with Strict-Pinning off it takes pinv 1:
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinapp
   unsatisfiable:
-  Because pinapp:amd64 1 -> pinv:amd64 2 and pinv:amd64 2 -> pinnone:amd64 ∅, pinapp:amd64 (-∞, ⊥) is forbidden.
+  Because pinapp:amd64 1 -> pinv:amd64 2 and pinv:amd64 2 -> pinnone:amd64 ∅, pinapp:amd64 1 is forbidden.
   And because root -> pinapp:amd64 1, version solving failed.
   loaded: 176 names, 176 versions
   [1]
@@ -505,7 +505,7 @@ pinv 1; with Strict-Pinning off it takes pinv 1:
 
   $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages pinapp
   unsatisfiable:
-  Because pinapp:amd64 1 -> pinv:amd64 2 and pinv:amd64 2 -> pinnone:amd64 ∅, pinapp:amd64 (-∞, ⊥) is forbidden.
+  Because pinapp:amd64 1 -> pinv:amd64 2 and pinv:amd64 2 -> pinnone:amd64 ∅, pinapp:amd64 1 is forbidden.
   And because root -> pinapp:amd64 1, version solving failed.
   loaded: 176 names, 176 versions
   [1]
@@ -817,7 +817,7 @@ xvc3:i386 excludes the xpc3:i386 it needs:
 
   $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.multiarch xcfl3
   unsatisfiable:
-  Because <sel xpc3:<i386> (T)> ref:xpc3:i386=1 -> xpc3:i386 1 and xcfl3:amd64 1 -> xpc3:i386 ⊥, xcfl3:amd64 (-∞, ⊥) or <sel xpc3:<i386> (T)> * is forbidden.
+  Because <sel xpc3:<i386> (T)> ref:xpc3:i386=1 -> xpc3:i386 1 and xcfl3:amd64 1 -> xpc3:i386 ⊥, xcfl3:amd64 1 or <sel xpc3:<i386> (T)> ref:xpc3:i386=1 is forbidden.
   And because xcfl3:amd64 1 -> <sel xpc3:<i386> (T)> ref:xpc3:i386=1 and root -> xcfl3:amd64 1, version solving failed.
   loaded: 17 names, 18 versions
   [1]

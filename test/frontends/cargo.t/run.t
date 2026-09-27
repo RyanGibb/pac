@@ -537,7 +537,7 @@ version carries:
   $ untimed ../../../bin/main.exe cargo index manifests/bgt.toml
   root bgt 1.0.0
   unsatisfiable:
-  Because root () -> bgt@1.0.0 1.0.0 and bgt@1.0.0 1.0.0 -> bgt@1.0.0->bm(>1.0.0+*) ∅, root * is forbidden.
+  Because root () -> bgt@1.0.0 1.0.0 and bgt@1.0.0 1.0.0 -> bgt@1.0.0->bm(>1.0.0+*) ∅, root () is forbidden.
   And because root -> root (), version solving failed.
   loaded: 2 names, 2 versions
   [1]
