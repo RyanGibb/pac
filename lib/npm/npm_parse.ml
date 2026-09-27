@@ -184,12 +184,7 @@ let extend (name : string) (vers : string) (j : Yojson.Safe.t) :
   and meta = ref (get "peerDependenciesMeta") in
   List.iter
     (fun (x : Berry_ext.t) ->
-      if
-        x.Berry_ext.x_name = name
-        && Npm_version.holds_pre vers
-             (Npm_version.parse_range ~include_prerelease:true
-                x.Berry_ext.x_range)
-      then begin
+      if Berry_ext.matches vers x then begin
         List.iter
           (fun (k, v) ->
             if not (List.mem_assoc k !deps) then
@@ -207,7 +202,7 @@ let extend (name : string) (vers : string) (j : Yojson.Safe.t) :
               @ [ (k, `Assoc [ ("optional", `Bool o) ]) ])
           x.Berry_ext.x_meta
       end)
-    Berry_ext.all;
+    (Berry_ext.of_name name);
   List.iter
     (fun (k, _) ->
       if not (List.mem_assoc k !peers) then

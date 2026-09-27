@@ -3,9 +3,9 @@ accept an answer (READING=shared, as pac's --reading=shared reads it).
 
 normalize() is Berry's normalizePackage (Configuration.ts:1915-2011): the
 built-in packageExtensions matching the version add the dependencies and
-peers the manifest lacks and set peer meta (berry-extensions.json, the
-list @yarnpkg/extensions 2.0.6 ships, from which lib/npm/berry_ext.ml is
-generated); and a peerDependenciesMeta name with no peer is a peer on *.
+peers the manifest lacks and set peer meta (lib/npm/berry-extensions.json,
+the list @yarnpkg/extensions 2.0.6 ships, which pac reads too); and a
+peerDependenciesMeta name with no peer is a peer on *.
 The optional peer on its @types package Berry gives every other peer is
 left out, as pac leaves it out: optional and on *, it never makes Berry
 reject an answer.
@@ -26,7 +26,7 @@ if READING not in ("npm", "shared"):
 SHARED = READING == "shared"
 
 with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                       "berry-extensions.json")) as f:
+                       "..", "..", "lib", "npm", "berry-extensions.json")) as f:
     EXT = [(d[:d.rindex("@")], d[d.rindex("@") + 1:], x) for d, x in json.load(f)]
 
 

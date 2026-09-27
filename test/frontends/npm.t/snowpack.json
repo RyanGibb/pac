@@ -1,0 +1,12 @@
+{
+ "name": "snowpack",
+ "dist-tags": {
+  "latest": "3.3.0-beta.1"
+ },
+ "versions": {
+  "3.3.0-beta.1": {
+   "name": "snowpack",
+   "version": "3.3.0-beta.1"
+  }
+ }
+}

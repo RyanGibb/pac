@@ -1,0 +1,12 @@
+{
+ "name": "gatsby-core-utils",
+ "dist-tags": {
+  "latest": "2.15.0"
+ },
+ "versions": {
+  "2.15.0": {
+   "name": "gatsby-core-utils",
+   "version": "2.15.0"
+  }
+ }
+}

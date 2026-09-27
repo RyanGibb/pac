@@ -1307,6 +1307,48 @@ would prune, so the shared reading has no answer without a redux of the query's.
     . <- redux-thunk 2.3.0
   encoded solution: 9 core nodes (9 lookups)
 
+An extension matches a version as Berry's semver does: the range with
+prereleases included, and else the version with its prerelease tags
+dropped.  snowpack 3.3.0-beta.1 takes the dependencies of both snowpack
+entries, ">=3.3.0" and "<3.8.6", and the gatsby-plugin-netlify entry at
+3.13.0-next.1 extends that version and not 3.13.0.
+
+  $ untimed ../../../bin/main.exe npm --reading=shared --offline --cache . --tree snowpack@3.3.0-beta.1
+  root .
+  packages (4):
+    .
+    magic-string 0.25.7
+    node-gyp 7.1.0
+    snowpack 3.3.0-beta.1
+  node_modules (3):
+    snowpack 3.3.0-beta.1 <- magic-string 0.25.7
+    snowpack 3.3.0-beta.1 <- node-gyp 7.1.0
+    . <- snowpack 3.3.0-beta.1
+  encoded solution: 10 core nodes (10 lookups)
+  loaded: 4 names, 4 versions, 0 packuments fetched
+
+  $ untimed ../../../bin/main.exe npm --reading=shared --offline --cache . --tree gatsby-plugin-netlify@3.13.0-next.1
+  root .
+  packages (3):
+    .
+    gatsby-core-utils 2.15.0
+    gatsby-plugin-netlify 3.13.0-next.1
+  node_modules (2):
+    gatsby-plugin-netlify 3.13.0-next.1 <- gatsby-core-utils 2.15.0
+    . <- gatsby-plugin-netlify 3.13.0-next.1
+  encoded solution: 7 core nodes (7 lookups)
+  loaded: 3 names, 4 versions, 0 packuments fetched
+
+  $ untimed ../../../bin/main.exe npm --reading=shared --offline --cache . --tree gatsby-plugin-netlify@3.13.0
+  root .
+  packages (2):
+    .
+    gatsby-plugin-netlify 3.13.0
+  node_modules (1):
+    . <- gatsby-plugin-netlify 3.13.0
+  encoded solution: 4 core nodes (4 lookups)
+  loaded: 2 names, 3 versions, 0 packuments fetched
+
 A root with a mandatory peerDependency, which npm installs and Berry never
 asks of anyone, or with resolutions (Berry's alone) or overrides (npm's
 alone), is refused.

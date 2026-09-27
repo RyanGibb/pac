@@ -2,6 +2,11 @@ module V = Version.Semver
 
 let compare = V.Loose.compare
 let is_prerelease = V.Loose.is_prerelease
+
+let release (v : string) : string =
+  let p = V.Loose.parse v in
+  Printf.sprintf "%d.%d.%d" p.V.major p.V.minor p.V.patch
+
 let same_core = V.Loose.same_core
 
 type op = Ge | Gt | Le | Lt | Eq

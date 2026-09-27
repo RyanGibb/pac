@@ -1,0 +1,12 @@
+{
+ "name": "node-gyp",
+ "dist-tags": {
+  "latest": "7.1.0"
+ },
+ "versions": {
+  "7.1.0": {
+   "name": "node-gyp",
+   "version": "7.1.0"
+  }
+ }
+}

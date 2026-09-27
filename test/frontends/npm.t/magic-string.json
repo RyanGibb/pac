@@ -1,0 +1,12 @@
+{
+ "name": "magic-string",
+ "dist-tags": {
+  "latest": "0.25.7"
+ },
+ "versions": {
+  "0.25.7": {
+   "name": "magic-string",
+   "version": "0.25.7"
+  }
+ }
+}
