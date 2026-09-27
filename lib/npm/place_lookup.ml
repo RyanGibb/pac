@@ -24,7 +24,8 @@ type t = {
   key_names : (string, string list) Hashtbl.t;
   key_inst : (string, int * Pl.coq_Inst) Hashtbl.t;
   vcache : (PName.t, int * PVersion.t list) Hashtbl.t;
-  asked : (PName.t, unit) Hashtbl.t;
+  (* seconds spent in each part of the lookups, under PAC_NPM_STATS *)
+  prof : (string, float ref) Hashtbl.t option;
 }
 
 let create ~depth ar root =
@@ -47,12 +48,13 @@ let create ~depth ar root =
     key_names = Hashtbl.create 4096;
     key_inst = Hashtbl.create 4096;
     vcache = Hashtbl.create 65536;
-    asked = Hashtbl.create 65536;
+    prof =
+      (if Sys.getenv_opt "PAC_NPM_STATS" <> None then Some (Hashtbl.create 8)
+       else None);
   }
 
 let archive st = st.ar
 let depth st = st.depth
-let names_asked st = Hashtbl.length st.asked
 
 let meta st (x : Npl.Occ.t) =
   match x with
@@ -70,7 +72,7 @@ let repo_of st (ns : string list) : Npl.RepoSet.t =
       Npl.RepoSet.unions (List.map (repo_at st) ns))
 
 (* Dist-tags and npm's reading of "*" shape the range handed to the
-   calculus, as in the npm reading (its spec_range). *)
+   calculus, as in the npm reading. *)
 let xdep ar (d : P.dep) : Npl.coq_Dependency =
   {
     Npl.d_dir = d.P.d_dir;
@@ -147,22 +149,24 @@ let note_key st (k : string) (m : string) =
   if not (List.mem m l) then
     Hashtbl.replace st.key_names k (List.sort String.compare (m :: l))
 
-(* seconds spent in each part of the lookups, for PAC_NPM_STATS *)
-let prof : (string, float ref) Hashtbl.t = Hashtbl.create 8
+let timed st name f =
+  match st.prof with
+  | None -> f ()
+  | Some prof ->
+      let t = Unix.gettimeofday () in
+      let r = f () in
+      let a = Tbl.memo prof name (fun () -> ref 0.) in
+      a := !a +. (Unix.gettimeofday () -. t);
+      r
 
-let timed name f =
-  let t = Unix.gettimeofday () in
-  let r = f () in
-  let a = Tbl.memo prof name (fun () -> ref 0.) in
-  a := !a +. (Unix.gettimeofday () -. t);
-  r
-
-let print_prof () =
-  Hashtbl.iter (fun k t -> Printf.eprintf "%s %.2fs\n" k !t) prof
+let print_prof st =
+  Option.iter
+    (Hashtbl.iter (fun k t -> Printf.eprintf "%s %.2fs\n" k !t))
+    st.prof
 
 let edges st (x : Npl.Occ.t) : edge list =
   Tbl.memo st.edge_tbl x (fun () ->
-      timed "edges" (fun () ->
+      timed st "edges" (fun () ->
           List.map
             (fun (e : Npl.coq_Edge) ->
               note_key st e.Npl.e_dir e.Npl.e_name;
@@ -216,19 +220,18 @@ let versions st (n : PName.t) : PVersion.t list =
             R.Name.Loc ((if List.length l < st.depth then [] else l), a)
         | _ -> n
       in
-      Hashtbl.replace st.asked n ();
       match Hashtbl.find_opt st.vcache k with
       | Some (g', vs) when g' = g -> vs
       | _ ->
           let vs =
-            timed "versions" (fun () ->
+            timed st "versions" (fun () ->
                 T.VSet.elements (R.versions (key_inst st a) st.dnat n))
           in
           Hashtbl.replace st.vcache k (g, vs);
           vs)
 
 (* A name's dependees split by what each part reads, so that the parts are
-   shared (Lookup.dependees_lookupOcc): the Tree atom reads the parent's
+   shared: the Tree atom reads the parent's
    location and key, and an edge's atom the location, the edge's kind and
    key, and its accepted set.  PubGrub asks for the dependees of every
    version of a location while it widens a decision, and there these
@@ -242,7 +245,7 @@ let atom_parts st (lam : string list) (x : Npl.Occ.t) =
     (fun (ed : edge) ->
       let e = ed.e in
       ( Atom (lam, e.Npl.e_dir, ed.id, e.Npl.e_peer, e.Npl.e_opt),
-        fun () -> timed "atoms" (fun () -> [ Lk.atomOf lam e ed.acc ]) ))
+        fun () -> timed st "atoms" (fun () -> [ Lk.atomOf lam e ed.acc ]) ))
     (edges st x)
 
 let parts st (n : PName.t) (u : PVersion.t) :
@@ -257,7 +260,7 @@ let parts st (n : PName.t) (u : PVersion.t) :
             [
               ( Tree (l, List.length (key_names st b)),
                 fun () ->
-                  timed "tree" (fun () ->
+                  timed st "tree" (fun () ->
                       T.DependeesSet.elements
                         (R.treeAtom (key_inst st b).Pl.inst_repo l)) );
             ]

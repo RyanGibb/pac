@@ -656,8 +656,21 @@ let npm_cmd =
              to add to it (name, name@range, name@tag, key@npm:name@range); \
              with no path, the project is empty.")
   in
+  let envs =
+    [
+      Cmd.Env.info "PAC_NPM_STATS"
+        ~doc:
+          "When set, a $(b,--reading=placement) run prints to stderr where its \
+           lookups' time goes.";
+      Cmd.Env.info "PAC_NPM_CHECKCMP"
+        ~doc:
+          "When set, $(b,--reading=placement) checks every comparison of its \
+           names and versions against the calculus's own order, and fails on \
+           the first that differs.";
+    ]
+  in
   Cmd.v
-    (Cmd.info "npm" ~exits ~doc:"Solve against the npm registry.")
+    (Cmd.info "npm" ~exits ~envs ~doc:"Solve against the npm registry.")
     Term.(
       const npm_run $ debug_arg $ core_arg $ order $ reading $ depth $ cache
       $ offline $ tree $ omit $ nodev $ npmv $ query)

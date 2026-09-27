@@ -4,8 +4,6 @@ type result = {
   layout : (string list * (string * string)) list;
   nodes : int;
   lookups : int;
-  (* distinct names whose versions were asked *)
-  names : int;
 }
 
 val solve :

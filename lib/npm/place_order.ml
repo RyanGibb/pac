@@ -34,7 +34,8 @@ let is_dep (ed : L.edge) = not ed.L.e.Npl.e_peer
 let is_peer (ed : L.edge) = ed.L.e.Npl.e_peer
 let key (ed : L.edge) = ed.L.e.Npl.e_dir
 
-(* npm-pick-manifest's sort criteria above semver, as Pick ranks them *)
+(* npm-pick-manifest's sort criteria above semver: not deprecated and
+   engines-compatible together, then engines, then not deprecated *)
 let rank ar (x : Npl.Occ.t) : bool * bool * bool =
   match x with
   | Npl.Occ.Top -> (true, true, true)
@@ -53,8 +54,8 @@ let best ar (cands : Npl.Occ.t list) : Npl.Occ.t =
           if d > 0 || (d = 0 && occ_compare b a > 0) then b else a)
         c cs
 
-(* dist-tags.latest first, under the same two criteria, as the npm
-   reading's tagged *)
+(* dist-tags.latest first, when it passes those criteria, as
+   npm-pick-manifest's fast path takes it *)
 let tagged ar (cands : Npl.Occ.t list) : Npl.Occ.t option =
   List.find_opt
     (function
@@ -202,25 +203,26 @@ let choose st ~assigned (n : PName.t) (cands : PVersion.t list) : PVersion.t =
 (* npm's queue (#buildDepStep): the depender shallowest in node_modules,
    then first by path under the collation, and its edges in name order
    (build-ideal-tree.js:60-85, 997) *)
-let rank_tbl : (PName.t, int * string * string) Hashtbl.t = Hashtbl.create 4096
-
-let name_rank (n : PName.t) =
-  Pac_common.Tbl.memo rank_tbl n (fun () ->
+let name_rank tbl (n : PName.t) =
+  Pac_common.Tbl.memo tbl n (fun () ->
       match n with
       | R.Name.Walk (l, a) | R.Name.Loc (l, a) -> (List.length l, lock_path l, a)
       | R.Name.Root -> (-1, "", ""))
 
-let before n m =
-  let d, p, a = name_rank n and d', p', a' = name_rank m in
+let before tbl n m =
+  let d, p, a = name_rank tbl n and d', p', a' = name_rank tbl m in
   match compare d d' with
   | 0 -> (
       match Order.collate p p' with 0 -> Order.collate a a' < 0 | c -> c < 0)
   | c -> c < 0
 
-let least = function
+let least tbl = function
   | [] -> None
   | (n, _) :: rest ->
-      Some (List.fold_left (fun b (m, _) -> if before m b then m else b) n rest)
+      Some
+        (List.fold_left
+           (fun b (m, _) -> if before tbl m b then m else b)
+           n rest)
 
 (* A name the constraints have narrowed to one version, or to none, first:
    deciding it places nothing, and a dead end is found at once.  Then the
@@ -228,7 +230,7 @@ let least = function
    resolves all its edges before popping another, so the copy whose edges
    are being resolved stays current while any is open, however early in
    the queue the copies it places sit. *)
-let next current ~assigned:_ (open_names : (PName.t * int) list) : PName.t =
+let next tbl current ~assigned:_ (open_names : (PName.t * int) list) : PName.t =
   match List.find_opt (fun (_, c) -> c <= 1) open_names with
   | Some (n, _) -> n
   | None -> (
@@ -240,10 +242,10 @@ let next current ~assigned:_ (open_names : (PName.t * int) list) : PName.t =
               open_names
         | None -> []
       in
-      match least own with
+      match least tbl own with
       | Some n -> n
       | None -> (
-          match least open_names with
+          match least tbl open_names with
           | Some (R.Name.Walk (l, _) as n) ->
               current := Some l;
               n
@@ -254,6 +256,8 @@ let hooks : (L.t, PName.t, PG.selection, PVersion.t) Pac_common.Order.driver =
  fun order st ->
   match order with
   | `Tool ->
-      Pac_common.Order.make ~next:(next (ref None)) ~choose:(choose st) ()
+      Pac_common.Order.make
+        ~next:(next (Hashtbl.create 4096) (ref None))
+        ~choose:(choose st) ()
   | `Pubgrub -> Pac_common.Order.make ()
   | `Random seed -> Pac_common.Order.random seed

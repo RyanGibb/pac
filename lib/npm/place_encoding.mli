@@ -1,8 +1,8 @@
 module E = Pac
 module Ot = Pac_common.Ot
 
-(* A version with its parse, made once per distinct string, ordered as the
-   npm reading orders versions (Npm_version.compare). *)
+(* A version with its parse, made once per distinct string, ordered as
+   the npm reading orders versions. *)
 module IVer : sig
   type t = { s : string; p : Version.Semver.t }
 

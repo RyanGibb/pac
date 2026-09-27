@@ -15,9 +15,6 @@ type t
 val create : depth:int -> Archive.t -> string * string -> t
 val archive : t -> Archive.t
 val depth : t -> int
-
-(* the distinct names whose versions were asked *)
-val names_asked : t -> int
 val meta : t -> Npl.Occ.t -> Npm_parse.ver option
 val edges : t -> Npl.Occ.t -> edge list
 
@@ -40,6 +37,6 @@ val parts :
 
 val dependees : t -> PName.t * PVersion.t -> T.Dependees.t list
 
-(* PAC_NPM_STATS: seconds spent in each named part of the lookups *)
-val timed : string -> (unit -> 'a) -> 'a
-val print_prof : unit -> unit
+(* under PAC_NPM_STATS, seconds spent in each named part of the lookups *)
+val timed : t -> string -> (unit -> 'a) -> 'a
+val print_prof : t -> unit
