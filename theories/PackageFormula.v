@@ -634,11 +634,11 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       - discriminate Hy.
     Qed.
 
-    Definition AgreesOn (S : T.PkgSet.t) (M : PkgSet.t) : Prop :=
+    Definition AgreesOn (S : T.PkgSet.t) (ps : PkgSet.t) : Prop :=
       forall m v,
         (Ab.hasAbsent m = true \/
          exists u, T.PkgSet.In (Name.Orig m, Version.Orig u) S) ->
-        (PkgSet.In (m, v) M <->
+        (PkgSet.In (m, v) ps <->
          T.PkgSet.In (Name.Orig m, Version.Orig v) S).
 
     Lemma agreesOn_resolution : forall S,
@@ -648,37 +648,37 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Qed.
 
     Lemma encodeNNF_satisfies : forall (R : T.PkgSet.t) (D : T.DepRel.t)
-                                    (r : T.Pkg.t) (S : T.PkgSet.t) M,
-        T.IsResolution R D r S -> AgreesOn S M ->
+                                    (r : T.Pkg.t) (S : T.PkgSet.t) ps,
+        T.IsResolution R D r S -> AgreesOn S ps ->
         forall (Vq : N.t -> VSet.t) (q : T.Pkg.t) (f : Formula),
           (forall d, T.DepRel.In d (encodeNNF Vq q f) -> T.DepRel.In d D) ->
           T.PkgSet.In q S ->
-          Satisfies M f.
+          Satisfies ps f.
     Proof.
-      intros R D r S M Hres HM Vq; destruct Hres as [Hsub Hroot Hdep Huniq].
+      intros R D r S ps Hres HM Vq; destruct Hres as [Hsub Hroot Hdep Huniq].
       cut (forall f : Formula,
         (forall q : T.Pkg.t,
             (forall d, T.DepRel.In d (encodeNNF Vq q f) -> T.DepRel.In d D) ->
-            T.PkgSet.In q S -> Satisfies M f) /\
+            T.PkgSet.In q S -> Satisfies ps f) /\
         (forall q : T.Pkg.t,
             (forall d, T.DepRel.In d (encodeNNFneg Vq q f) -> T.DepRel.In d D) ->
-            T.PkgSet.In q S -> ~ Satisfies M f) /\
+            T.PkgSet.In q S -> ~ Satisfies ps f) /\
         (forall (n : Name.t) (i0 i : nat),
             (forall d, T.DepRel.In d (encodeDisj Vq n i0 f) -> T.DepRel.In d D) ->
             T.PkgSet.In (n, Version.Idx i) S ->
             i0 <= i -> i < i0 + List.length (disjSpine f) ->
-            Satisfies M f) /\
+            Satisfies ps f) /\
         (forall (n : Name.t) (i0 i : nat),
             (forall d,
                 T.DepRel.In d (encodeConjNeg Vq n i0 f) -> T.DepRel.In d D) ->
             T.PkgSet.In (n, Version.Idx i) S ->
             i0 <= i -> i < i0 + List.length (negConjSpine f) ->
-            ~ Satisfies M f)).
+            ~ Satisfies ps f)).
       { intros H q f; exact (proj1 (H f) q). }
       assert (Hpos : forall (q : T.Pkg.t) m vs,
                  T.DepRel.In (q, (Name.Orig m, embedVS vs)) D ->
                  T.PkgSet.In q S ->
-                 Satisfies M (FDep m vs)).
+                 Satisfies ps (FDep m vs)).
       { intros q m vs Hd HqS.
         destruct (Hdep q HqS _ _ Hd) as [w [Hw HwS]].
         unfold embedVS in Hw; apply SOvv.mem_map in Hw;
@@ -688,7 +688,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       assert (Hneg : forall (q : T.Pkg.t) m vs,
                  T.DepRel.In (q, (Name.Orig m, complementVS Vq m vs)) D ->
                  T.PkgSet.In q S ->
-                 ~ Satisfies M (FDep m vs)).
+                 ~ Satisfies ps (FDep m vs)).
       { intros q m vs Hd HqS.
         destruct (Hdep q HqS _ _ Hd) as [w [Hw HwS]].
         intros [v [Hv HvM]].
@@ -830,13 +830,13 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Qed.
 
     Theorem package_formula_soundness_agree :
-      forall (R : PkgSet.t) (D : DepRel.t) (r : Pkg.t) (S : T.PkgSet.t) M,
+      forall (R : PkgSet.t) (D : DepRel.t) (r : Pkg.t) (S : T.PkgSet.t) ps,
         T.IsResolution (reduceReal R D) (reduceDeps R D) (embedPkg r) S ->
-        AgreesOn S M ->
+        AgreesOn S ps ->
         forall p f, PkgSet.In p (packageFormulaResolution S) ->
-          DepRel.In (p, f) D -> Satisfies M f.
+          DepRel.In (p, f) D -> Satisfies ps f.
     Proof.
-      intros R D r S M Hres HM p f Hp Hdf.
+      intros R D r S ps Hres HM p f Hp Hdf.
       apply mem_packageFormulaResolution in Hp.
       apply (encodeNNF_satisfies _ _ _ _ _ Hres HM (C.versions R)
                (embedPkg p) f); [| exact Hp].
@@ -1430,19 +1430,19 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Qed.
 
     Lemma encodeNNF_dep_closure_aux :
-      forall (S : PkgSet.t) (Vq : N.t -> VSet.t) (Ns : NSet.t) (w : T.PkgSet.t),
+      forall (S : PkgSet.t) (Vq : N.t -> VSet.t) (ns : NSet.t) (w : T.PkgSet.t),
         (forall p, PkgSet.In p S -> T.PkgSet.In (embedPkg p) w) ->
         (forall m u, PkgSet.In (m, u) S -> VSet.In u (Vq m)) ->
-        (forall m, NSet.In m Ns -> Ab.hasAbsent m = true ->
+        (forall m, NSet.In m ns -> Ab.hasAbsent m = true ->
            (forall u, ~ PkgSet.In (m, u) S) ->
            T.PkgSet.In (Name.Orig m, Version.Bot) w) ->
-        (forall m, NSet.In m Ns -> Ab.hasAbsent m = false ->
+        (forall m, NSet.In m ns -> Ab.hasAbsent m = false ->
            exists u, PkgSet.In (m, u) S) ->
         (forall fs i, T.PkgSet.In (Name.Disjunct fs, Version.Idx i) w ->
            exists g, List.nth_error fs i = Some g /\ Satisfies S g /\
              T.PkgSet.Subset (witnessSet S g) w) ->
         forall f : Formula,
-          NSet.Subset (fnames f) Ns ->
+          NSet.Subset (fnames f) ns ->
           (forall q0 : T.Pkg.t,
               ~ T.PkgSet.In q0 w \/
               (Satisfies S f /\ T.PkgSet.Subset (witnessSet S f) w) ->
@@ -1477,9 +1477,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                 T.PkgSet.In q w ->
                 exists v, T.VSet.In v ws /\ T.PkgSet.In (o, v) w).
     Proof.
-      intros S Vq Ns w Hemb HVq Hbot Htot Hdisj f.
+      intros S Vq ns w Hemb HVq Hbot Htot Hdisj f.
       assert (Hneg : forall m vs,
-                 NSet.In m Ns ->
+                 NSet.In m ns ->
                  ~ Satisfies S (FDep m vs) ->
                  exists v, T.VSet.In v (complementVS Vq m vs) /\
                            T.PkgSet.In (Name.Orig m, v) w).
@@ -1497,7 +1497,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             exact (Hbot m Hm Ha Hnone).
           + destruct (Htot m Hm Ha) as [u Hu]; destruct (Hnone u Hu). }
       induction f as [m vs | a IHa b IHb | a IHa b IHb | a IHa]; intro Hsub.
-      - assert (Hm : NSet.In m Ns)
+      - assert (Hm : NSet.In m ns)
           by (apply Hsub; simpl; apply NSet.singleton_spec; reflexivity).
         split4.
         + intros q0 Hwit q o ws Henc Hqw.
@@ -1528,9 +1528,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           apply SOed.singleton_in in Henc; injection Henc as -> -> ->.
           destruct Hwit as [Hq0 | [Hns _]]; [exfalso; exact (Hq0 Hqw) |].
           exact (Hneg m vs Hm Hns).
-      - assert (Hsa : NSet.Subset (fnames a) Ns)
+      - assert (Hsa : NSet.Subset (fnames a) ns)
           by (intros x Hx; apply Hsub; simpl; apply NSet.union_spec; left; exact Hx).
-        assert (Hsb : NSet.Subset (fnames b) Ns)
+        assert (Hsb : NSet.Subset (fnames b) ns)
           by (intros x Hx; apply Hsub; simpl; apply NSet.union_spec; right; exact Hx).
         destruct (IHa Hsa) as (IHa1 & IHa2 & IHa3 & IHa4);
           destruct (IHb Hsb) as (IHb1 & IHb2 & IHb3 & IHb4); split4.
@@ -1604,9 +1604,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             assert (H := Hspine (Datatypes.S k) g Hg).
             replace (Datatypes.S i0 + k) with (i0 + Datatypes.S k) by lia.
             exact H.
-      - assert (Hsa : NSet.Subset (fnames a) Ns)
+      - assert (Hsa : NSet.Subset (fnames a) ns)
           by (intros x Hx; apply Hsub; simpl; apply NSet.union_spec; left; exact Hx).
-        assert (Hsb : NSet.Subset (fnames b) Ns)
+        assert (Hsb : NSet.Subset (fnames b) ns)
           by (intros x Hx; apply Hsub; simpl; apply NSet.union_spec; right; exact Hx).
         destruct (IHa Hsa) as (IHa1 & IHa2 & IHa3 & IHa4);
           destruct (IHb Hsb) as (IHb1 & IHb2 & IHb3 & IHb4); split4.
