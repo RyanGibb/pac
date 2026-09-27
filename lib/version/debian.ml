@@ -68,8 +68,6 @@ let compare_from v1 i1 v2 i2 =
   if c <> 0 then sign c
   else sign (lexical v1 (min n1 (r1 + 1)) n1 v2 (min n2 (r2 + 1)) n2)
 
-(* opam's OpamVersionCompare: opam versions have no epoch, so a ':' is an
-   ordinary character *)
 let compare_no_epoch v1 v2 =
   if String.equal v1 v2 then 0 else compare_from v1 0 v2 0
 

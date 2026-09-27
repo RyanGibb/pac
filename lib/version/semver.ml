@@ -121,8 +121,6 @@ let precedence (x : t) (y : t) : int =
 let same_core_parsed (x : t) (y : t) =
   x.major = y.major && x.minor = y.minor && x.patch = y.patch
 
-(* A component of a partial version, as a range names one: 1.2.x and 1.2
-   are not versions but bounds to widen. *)
 type comp = Num of int | Star | Absent
 
 let comp_of = function
@@ -181,9 +179,6 @@ struct
   let parse_partial = partial_of R.split
 end
 
-(* The semver crate's reading: a prerelease follows a hyphen and nothing
-   else.  Cargo and npm differ only in how a string becomes a version, so
-   each reading is a module of its own rather than a flag. *)
 module Strict = struct
   include Reading (struct
     let split = split_hyphen
@@ -303,8 +298,6 @@ module Strict = struct
             a b
 end
 
-(* node-semver's loose reading, which npm passes for every version and
-   range it reads. *)
 module Loose = struct
   include Reading (struct
     let split = split_hyphen_loose
