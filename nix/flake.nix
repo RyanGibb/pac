@@ -1,22 +1,26 @@
 {
   description = "apt, apk, opam, cargo, npm and Yarn Berry at the versions eval/'s baselines were recorded with";
 
-  # Two revisions because neither carries every recorded version: nixos-26.05
+  # Three revisions because none carries every recorded version: nixos-26.05
   # has apt 3.3.0 but opam 2.5.1 and Rust 1.95, nixos-unstable has opam 2.5.2
-  # and Rust 1.97.1 but apt 3.3.3.
+  # and Rust 1.97.1 but apt 3.3.3, and only a later nixos-26.05 has Node
+  # 24.21.0 with npm 11.19.0 (arborist 9.9.1), the npm body.tex §7.3 cites.
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/5dfba6236110080a54247d6460bc2ff5dda939cc";
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/34ab99075ac4f7e40cf037eef32cb1c360bb85e9";
+    nixpkgs-node.url = "github:NixOS/nixpkgs/5e2305d577ca00acbba631b05cb1094d172b29f3";
   };
 
-  outputs = { self, nixpkgs, nixpkgs-unstable }:
+  outputs = { self, nixpkgs, nixpkgs-unstable, nixpkgs-node }:
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
       unstable = nixpkgs-unstable.legacyPackages.${system};
+      node = nixpkgs-node.legacyPackages.${system};
       tools = {
-        inherit (pkgs) apt apk-tools nodejs jq python3 curl yarn-berry;
+        inherit (pkgs) apt apk-tools jq python3 curl yarn-berry;
         inherit (unstable) opam cargo rustc;
+        inherit (node) nodejs;
       };
     in {
       packages.${system} = tools;
