@@ -381,14 +381,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     rangeEval (override I (snd (peerKeyAt I p r)) (p_range r))
       (realVersions (inst_repo I) (snd (peerKeyAt I p r))).
 
-  Lemma peerCandsAt_real : forall I p r w,
-      VSet.In w (peerCandsAt I p r) ->
-      VSet.In w (realVersions (inst_repo I) (snd (slotKey I p (p_name r)))).
-  Proof.
-    intros I p r w Hw; unfold peerCandsAt in Hw; apply mem_rangeEval in Hw.
-    exact (proj1 Hw).
-  Qed.
-
   (* the root's own peer check, which npm's documented behaviours bound:
      a mandatory peer is installed, an optional one read against a
      directory the root declares *)
@@ -398,16 +390,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Definition activePeers (I : Inst) (p : RPkg.t) (q : RPkg.t)
     : list PeerDependency :=
     List.filter (peerActive I p) (peerDependenciesAt I q).
-
-  Lemma slotKey_plain : forall I p a,
-      ~ NSet.In a (dirs I p) -> slotKey I p a = (a, a).
-  Proof.
-    intros I p a Ha; unfold slotKey.
-    destruct (slotOf I p a) as [d |] eqn:Hd; [| reflexivity].
-    exfalso; apply Ha; unfold dirs; apply mem_namesOfL.
-    destruct (findDepL_some _ _ _ Hd) as [Hin Hdir].
-    exists d; split; assumption.
-  Qed.
 
   Definition base (q : Pkg.t) : RPkg.t := (snd (fst q), snd q).
 
@@ -576,13 +558,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Definition plainCands (I : Inst) (a : N.t) (rg : Range) : VSet.t :=
     rangeEval (override I a rg) (realVersions (inst_repo I) a).
 
-  Lemma peerCandsAt_plain : forall I p r,
-      slotKey I p (p_name r) = (p_name r, p_name r) ->
-      peerCandsAt I p r = plainCands I (p_name r) (p_range r).
-  Proof.
-    intros I p r H; unfold peerCandsAt, peerKeyAt; rewrite H; reflexivity.
-  Qed.
-
   Fixpoint sightCandsL (I : Inst) (a : N.t) (l : list PeerDependency)
     : VSet.t :=
     match l with
@@ -598,41 +573,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
      sight can carry *)
   Definition sightCands (I : Inst) (c : RPkg.t) (a : N.t) : VSet.t :=
     VSet.union (sightCandsL I a (peerDependenciesAt I c)) (slotCands I c a).
-
-  Lemma mem_sightCandsL : forall I a l w,
-      VSet.In w (sightCandsL I a l) <->
-      exists r, In r l /\ p_name r = a /\
-        VSet.In w (plainCands I a (p_range r)).
-  Proof.
-    intros I a l w; induction l as [| r l IH]; cbn [sightCandsL].
-    - split; [intro H; destruct (SOrv.empty_in _ H) | intros [r [[] _]]].
-    - destruct (NEqb.eqb (p_name r) a) eqn:Hn.
-      + apply NEqb.eqb_true_iff in Hn.
-        rewrite VSet.union_spec, IH; split.
-        * intros [H | [r' [Hr' H]]].
-          -- exists r; split; [left; reflexivity | split; [exact Hn | exact H]].
-          -- exists r'; split; [right; exact Hr' | exact H].
-        * intros [r' [[E | Hr'] [Hn' H]]].
-          -- subst r'; left; exact H.
-          -- right; exists r'; split; [exact Hr' | split; assumption].
-      + rewrite IH; split.
-        * intros [r' [Hr' H]]; exists r'; split; [right; exact Hr' | exact H].
-        * intros [r' [[E | Hr'] [Hn' H]]].
-          -- subst r'; rewrite Hn', NEqb.eqb_refl in Hn; discriminate Hn.
-          -- exists r'; split; [exact Hr' | split; assumption].
-  Qed.
-
-  Lemma mem_sightCands : forall I c a w,
-      VSet.In w (sightCands I c a) <->
-      (exists r, In (c, r) (inst_peer I) /\ p_name r = a /\
-         VSet.In w (plainCands I a (p_range r))) \/
-      VSet.In w (slotCands I c a).
-  Proof.
-    intros I c a w; unfold sightCands, peerDependenciesAt.
-    rewrite VSet.union_spec, mem_sightCandsL; split;
-      (intros [[r [Hr H]] | H]; [left; exists r | right; exact H]);
-      (split; [apply in_ownedBy; exact Hr | exact H]).
-  Qed.
 
   (* what q offers c at a: q's show, or, for a peer with default that q
      offers nothing, c's own copy *)
@@ -3584,15 +3524,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       Proof.
         intros I a t s; cbn [versions]; unfold descSubInst.
         rewrite realVersions_subInst; [reflexivity | apply NSet.singleton_spec; reflexivity].
-      Qed.
-
-      Lemma slotKey_target : forall I p a,
-          NSet.In (snd (slotKey I p a)) (NSet.add a (slotTargets I p)).
-      Proof.
-        intros I p a; unfold slotKey; apply NSet.add_spec.
-        destruct (slotOf I p a) as [d |] eqn:Hd; cbn [snd].
-        - right; apply slotTargets_spec; exact (proj1 (findDepL_some _ _ _ Hd)).
-        - left; reflexivity.
       Qed.
 
       Lemma linkCands_agree : forall I ns deps prs (q c : Pkg.t) r,
