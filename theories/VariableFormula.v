@@ -527,9 +527,9 @@ Module VariableFormula (N V : UsualOrderedType)
           destruct (YSet.min_elt (Y_x x)) as [y |] eqn:E2.
           + exact (YSet.min_elt_spec1 E2).
           + exfalso; apply YSet.min_elt_spec3 in E2; exact (E2 y' Hy'). }
-      set (M := liftModel (variableFormulaResolution S) sigma).
-      assert (HM : PF.Reduction.AgreesOn S M).
-      { intros [m | x] w Hn; unfold M.
+      set (ps := liftModel (variableFormulaResolution S) sigma).
+      assert (HM : PF.Reduction.AgreesOn S ps).
+      { intros [m | x] w Hn; unfold ps.
         - rewrite mem_liftModel_inl; destruct w as [v | y]; split.
           + intros [v' [E Hv]]; injection E as <-.
             apply mem_variableFormulaResolution in Hv; exact Hv.
@@ -562,7 +562,7 @@ Module VariableFormula (N V : UsualOrderedType)
       - intros p Hp f Hdf.
         apply (satisfies_liftFormula Y_x _ sigma f Hsig).
         apply (PF.Reduction.package_formula_soundness_agree
-                 (liftReal Y_x R) (liftDeps Y_x D) (liftPkg r) S M Hres HM
+                 (liftReal Y_x R) (liftDeps Y_x D) (liftPkg r) S ps Hres HM
                  (liftPkg p) (liftFormula Y_x f)).
         + apply PF.Reduction.mem_packageFormulaResolution.
           apply mem_variableFormulaResolution in Hp; exact Hp.
