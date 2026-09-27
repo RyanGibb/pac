@@ -12,9 +12,12 @@
 # measured again, up to three times.
 #
 # Wall is taken around GNU time, whose own start-up is what `floor`
-# measures, with PIN, a command prefix such as `taskset -c 2`, in front of
-# both.  RSS is GNU time's %M, the largest single process in the measured
-# tree, so it leaves out the index servers.  Every row lands in
+# measures, with PIN, a command prefix, in front of both.  By default it
+# is `taskset -c 42`, one core of iphito's NUMA node 0 that serves no
+# device interrupt, so pac and the tool run on the same core, and first
+# touch puts their memory on that node; PIN= runs unpinned.  RSS is GNU
+# time's %M, the largest single process in the measured tree, so it
+# leaves out the index servers.  Every row lands in
 # $RUN/res/<step>/<set>/<key>.csv, written whole when its block completes,
 # and a query already there is skipped: after a crash, rerun the same line.
 #
@@ -28,8 +31,9 @@
 #          opam opam-cold cargo npm npm-shared npm-placement outliers
 # env: RUN (outside the source tree), PAC (default _build/default/bin/main.exe),
 #      REPS (5), CAP (seconds, 0 for none), OREPS (3), OCAP (1800),
-#      STRAT, SETS (regress strat), PIN, LOADSTART (2.5), LOADMAX (3.5), PORT (cargo's proxy,
-#      8991), NPORT (npm's shim, 8899), DEPTH (placement's --depth, 8)
+#      STRAT, SETS (regress strat), PIN (taskset -c 42), LOADSTART (2.5),
+#      LOADMAX (3.5), PORT (cargo's proxy, 8991), NPORT (npm's shim, 8899),
+#      DEPTH (placement's --depth, 8)
 # Run inside `nix develop ./nix`, with no ocamlc on PATH: opam reads
 # sys-ocaml-version off whatever ocamlc it finds.
 set -u
@@ -39,7 +43,7 @@ TOP="$(cd "$S/.." && pwd)"
 RUN="${RUN:?set RUN to a run directory outside the source tree}"
 PAC=$(realpath "${PAC:-$TOP/_build/default/bin/main.exe}")
 REPS="${REPS:-5}" CAP="${CAP:-0}" OREPS="${OREPS:-3}" OCAP="${OCAP:-1800}"
-STRAT="${STRAT:-}" SETS="${SETS:-regress strat}" PIN="${PIN:-}"
+STRAT="${STRAT:-}" SETS="${SETS:-regress strat}" PIN="${PIN-taskset -c 42}"
 LOADSTART="${LOADSTART:-2.5}" LOADMAX="${LOADMAX:-3.5}"
 GTIME="${GTIME:-$(readlink -f /run/current-system/sw/bin/time)}"
 APT="${APT:-apt-get}" DEPTH="${DEPTH:-8}"

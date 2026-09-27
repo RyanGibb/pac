@@ -225,7 +225,7 @@ python3 eval/bench/summary.py /tmp/bench
 `bench.sh` times pac in each order, `pac-tool` and `pac-pubgrub`, against the tool, one measured process at a time, each asked as `scale.sh` asks it.
 Per query, a warm-up round and then `REPS` (default 5) measured rounds, each running every variant once; a cold step (`debian-cold`, `opam-cold`) instead runs each variant once after dropping the index, the tool's state and both binaries out of the page cache.
 Wall is taken around GNU time, whose `%M` is the RSS, and pac's `parse` and `solve` lines are kept beside it.
-`PIN` is a command prefix both run under, `taskset -c 2` say; `floor` measures GNU time's own start-up under it.
+`PIN` is a command prefix both run under, by default `taskset -c 42`, a core of iphito's NUMA node 0 that serves no device interrupt, whose memory first touch then takes from that node; `PIN=` runs unpinned. `floor` measures GNU time's own start-up under it.
 No query starts at a load average of `LOADSTART` (2.5) or more, and one whose rounds end at `LOADMAX` (3.5) or more is measured again.
 A killed run resumes where it stopped: rerun the same line.
 `CAP` bounds each run (default none); `PORT` and `NPORT` are cargo's proxy and npm's shim.
