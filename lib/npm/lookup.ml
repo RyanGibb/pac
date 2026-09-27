@@ -383,12 +383,7 @@ let versions st (n : Np.Nm.name) : Np.Vs.version list =
 let holder st ((k, v) : (string * string) * string) (a : string) :
     Np.Nm.name option =
   let p = (snd k, v) in
-  match
-    T.DependeesSet.elements
-      (R.holderEdges (holder_sub_inst st p p) (k, v) a (Np.Vs.Orig ""))
-  with
-  | (h, _) :: _ -> Some h
-  | [] -> None
+  R.holderName (holder_sub_inst st p p) (k, v) a
 
 let record_dir st (m : Np.Nm.name) =
   match m with
