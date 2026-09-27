@@ -29,9 +29,9 @@ type t = {
   entry : (string * string, P.ver) Hashtbl.t;
   (* peer dependencies keyed by the directory they name *)
   peer_by_name : (string, (string * string) * P.peer) Hashtbl.t;
-  (* dependencies keyed by the key they introduce, for the granular
-     version lookup's key test *)
-  dep_by_key : (string * string, (string * string) * P.dep) Hashtbl.t;
+  (* dependencies keyed by the directory they are written under, for the
+     granular version lookup's key test *)
+  dep_by_dir : (string, (string * string) * P.dep) Hashtbl.t;
   mutable n_names : int;
   mutable n_vers : int;
   mutable n_fetched : int;
@@ -74,7 +74,7 @@ let create ?node ?npm ?(reading = `Npm) ~cache ~offline () =
     tags = Hashtbl.create 1024;
     entry = Hashtbl.create 16384;
     peer_by_name = Hashtbl.create 4096;
-    dep_by_key = Hashtbl.create 16384;
+    dep_by_dir = Hashtbl.create 16384;
     n_names = 0;
     n_vers = 0;
     n_fetched = 0;
@@ -166,9 +166,7 @@ let tabulate ar (v : P.ver) =
   let p = (v.P.v_name, v.P.v_vers) in
   Hashtbl.replace ar.entry p v;
   List.iter (fun r -> Hashtbl.add ar.peer_by_name r.P.p_name (p, r)) v.P.v_peers;
-  List.iter
-    (fun d -> Hashtbl.add ar.dep_by_key (d.P.d_dir, d.P.d_name) (p, d))
-    v.P.v_deps
+  List.iter (fun d -> Hashtbl.add ar.dep_by_dir d.P.d_dir (p, d)) v.P.v_deps
 
 let add_name ar n vs =
   Hashtbl.replace ar.pkgs n vs;
@@ -283,7 +281,7 @@ let meta ar p : P.ver option = Hashtbl.find_opt ar.entry p
 let loaded_latest ar n = Hashtbl.find_opt ar.latest n
 let peers_naming ar n = Hashtbl.find_all ar.peer_by_name n
 let peer_naming ar n = Hashtbl.find_opt ar.peer_by_name n
-let deps_introducing ar k = Hashtbl.find_all ar.dep_by_key k
+let deps_at ar a = Hashtbl.find_all ar.dep_by_dir a
 
 let engine_ok ar (p : string * string) : bool =
   match meta ar p with None -> true | Some v -> ver_engine_ok ar v

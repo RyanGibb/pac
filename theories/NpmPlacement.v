@@ -111,16 +111,20 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     | (m, rg) :: l' => if NEqb.eqb m n then Some rg else lookupOvr l' n
     end.
 
-  (* A flat override, keyed by the registry package the edge names, as the
-     npm reading keys it. *)
-  Definition override (I : Inst) (n : N.t) (rg : Range) : Range :=
-    match lookupOvr (inst_ovr I) n with
+  Definition ovrName (I : Inst) (a m : N.t) : N.t :=
+    match lookupOvr (inst_ovr I) a with
+    | Some _ => a
+    | None => m
+    end.
+
+  Definition ovrRange (I : Inst) (a : N.t) (rg : Range) : Range :=
+    match lookupOvr (inst_ovr I) a with
     | Some rg' => rg'
     | None => rg
     end.
 
   Definition cands (I : Inst) (m : N.t) (rg : Range) : VS.t :=
-    rangeEval (override I m rg) (realVersions (inst_repo I) m).
+    rangeEval rg (realVersions (inst_repo I) m).
 
   (* An edge as arborist's Edge holds one: the directory it walks for, the
      package and range it accepts there, whether it is a peer, and whether
@@ -136,11 +140,14 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
      unplaced, as npm abandons it on ENOTARGET; any other is placed as a
      dependency, since npm fetches it. *)
   Definition depEdge (I : Inst) (d : Dependency) : Edge :=
-    MkEdge (d_dir d) (d_name d) (d_range d) false
-      (andb (d_optional d) (VS.is_empty (cands I (d_name d) (d_range d)))).
+    let m := ovrName I (d_dir d) (d_name d) in
+    let rg := ovrRange I (d_dir d) (d_range d) in
+    MkEdge (d_dir d) m rg false
+      (andb (d_optional d) (VS.is_empty (cands I m rg))).
 
-  Definition peerEdge (r : PeerDependency) : Edge :=
-    MkEdge (p_dir r) (p_name r) (p_range r) true (p_optional r).
+  Definition peerEdge (I : Inst) (r : PeerDependency) : Edge :=
+    MkEdge (p_dir r) (ovrName I (p_dir r) (p_name r))
+      (ovrRange I (p_dir r) (p_range r)) true (p_optional r).
 
   Definition activeDeps (I : Inst) (x : Occ.t) : list Dependency :=
     match x with
@@ -161,7 +168,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
 
   Definition edgesOf (I : Inst) (x : Occ.t) : list Edge :=
     List.map (depEdge I) (activeDeps I x) ++
-    List.map peerEdge
+    List.map (peerEdge I)
       (List.filter (fun r => negb (replaced (activeDeps I x) r))
          (declPeers I x)).
 
@@ -184,8 +191,10 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
   Module SOkk := SetOps NKey NKey KeySet KeySet.
   Definition keysOf (I : Inst) : KeySet.t :=
     SOkk.ofList
-      (List.map (fun q => (d_dir (snd q), d_name (snd q))) (inst_deps I) ++
-       List.map (fun q => (p_dir (snd q), p_name (snd q))) (inst_peers I)).
+      (List.map (fun q => (d_dir (snd q), e_name (depEdge I (snd q))))
+         (inst_deps I) ++
+       List.map (fun q => (p_dir (snd q), e_name (peerEdge I (snd q))))
+         (inst_peers I)).
 
   Record IsResolution (I : Inst) (L : Pl.Layout.t) : Prop :=
     { res_avail :
@@ -238,8 +247,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     SOvo.map (Occ.Reg m) (rangeEval rg vs).
 
   Definition accepts (I : Inst) (e : Edge) : Pl.VSet.t :=
-    acceptsIn (e_name e) (override I (e_name e) (e_range e))
-      (realVersions (inst_repo I) (e_name e)).
+    acceptsIn (e_name e) (e_range e) (realVersions (inst_repo I) (e_name e)).
 
   Lemma mem_accepts : forall I e x,
       Pl.VSet.In x (accepts I e) <-> Sat I e x.
@@ -530,38 +538,44 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
 
     (* Where two instances agree on the packages of one name. *)
     Definition AgreesAtName (I' I : Inst) (m : N.t) : Prop :=
-      inst_ovr I' = inst_ovr I /\
       forall u, RepoSet.In (m, u) (inst_repo I') <->
                 RepoSet.In (m, u) (inst_repo I).
 
     (* Where two instances agree on an occupant's own edges: its package's
        manifest, and whether its optional dependencies can be met. *)
     Definition AgreesAtOcc (I' I : Inst) (x : Occ.t) : Prop :=
+      inst_ovr I' = inst_ovr I /\
       activeDeps I' x = activeDeps I x /\ declPeers I' x = declPeers I x /\
       forall d, In d (activeDeps I x) -> d_optional d = true ->
-        AgreesAtName I' I (d_name d).
+        AgreesAtName I' I (ovrName I (d_dir d) (d_name d)).
 
     Lemma cands_agree : forall I' I m rg, AgreesAtName I' I m ->
         cands I' m rg = cands I m rg.
     Proof.
-      intros I' I m rg [Ho Hr]; unfold cands, override; rewrite Ho; f_equal.
+      intros I' I m rg Hr; unfold cands; f_equal.
       apply VS.ext; intro u; rewrite !mem_realVersions; exact (Hr u).
     Qed.
 
     Lemma edgesOf_agree : forall I' I x, AgreesAtOcc I' I x ->
         edgesOf I' x = edgesOf I x.
     Proof.
-      intros I' I x [Hd [Hp Hr]]; unfold edgesOf; rewrite Hd, Hp.
-      f_equal; apply map_ext_in; intros d Hin; unfold depEdge.
-      destruct (d_optional d) eqn:Ho; [| reflexivity]; cbn [andb].
-      rewrite (cands_agree I' I _ _ (Hr d Hin Ho)); reflexivity.
+      intros I' I x [Ho [Hd [Hp Hr]]].
+      assert (Hn : forall a m, ovrName I' a m = ovrName I a m)
+        by (intros a m; unfold ovrName; rewrite Ho; reflexivity).
+      assert (Hg : forall a rg, ovrRange I' a rg = ovrRange I a rg)
+        by (intros a rg; unfold ovrRange; rewrite Ho; reflexivity).
+      unfold edgesOf; rewrite Hd, Hp; f_equal.
+      - apply map_ext_in; intros d Hin; unfold depEdge; cbv zeta.
+        rewrite Hn, Hg.
+        destruct (d_optional d) eqn:Hopt; [| reflexivity]; cbn [andb].
+        rewrite (cands_agree I' I _ _ (Hr d Hin Hopt)); reflexivity.
+      - apply map_ext; intro r; unfold peerEdge; rewrite Hn, Hg; reflexivity.
     Qed.
 
     Lemma edgeAtom_agree : forall I' I lam e, AgreesAtName I' I (e_name e) ->
         edgeAtom I' lam e = edgeAtom I lam e.
     Proof.
-      intros I' I lam e [Ho Hr]; unfold edgeAtom, accepts, override.
-      rewrite Ho.
+      intros I' I lam e Hr; unfold edgeAtom, accepts.
       replace (realVersions (inst_repo I') (e_name e))
         with (realVersions (inst_repo I) (e_name e)); [reflexivity |].
       apply VS.ext; intro u; rewrite !mem_realVersions; symmetry; exact (Hr u).

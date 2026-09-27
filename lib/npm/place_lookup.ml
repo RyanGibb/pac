@@ -100,10 +100,9 @@ let mk_inst st ~repo ~deps ~peers : Npl.coq_Inst =
     inst_root = (fst st.root, IVer.make (snd st.root));
   }
 
-(* The occupant's sub-instance for its edges, as Lookup.occAtoms_parts
-   reads it: its package's manifest, and the repository at the packages
-   its optional dependencies name, which decides whether each can be
-   met. *)
+(* The occupant's sub-instance for its edges: its package's manifest, and
+   the repository at the packages its optional dependencies name once
+   overridden, which decides whether each can be met. *)
 let occ_inst st (x : Npl.Occ.t) : Npl.coq_Inst =
   let p = pkg st x in
   let ds, rs =
@@ -117,19 +116,21 @@ let occ_inst st (x : Npl.Occ.t) : Npl.coq_Inst =
             v.P.v_deps,
           List.map (xpeer st.ar) v.P.v_peers )
   in
+  let base = mk_inst st ~repo:Npl.RepoSet.empty ~deps:[] ~peers:[] in
   mk_inst st
     ~repo:
       (repo_of st
          (List.filter_map
             (fun (d : Npl.coq_Dependency) ->
-              if d.Npl.d_optional then Some d.Npl.d_name else None)
+              if d.Npl.d_optional then
+                Some (Npl.ovrName base d.Npl.d_dir d.Npl.d_name)
+              else None)
             ds))
     ~deps:(List.map (fun d -> ((fst p, IVer.make (snd p)), d)) ds)
     ~peers:(List.map (fun r -> ((fst p, IVer.make (snd p)), r)) rs)
 
 (* An edge's accepted occupants read only the repository at the package it
-   names and the overrides (Lookup.edgeAtom_agree), so they are computed
-   once per package and range, as accepts computes them: acceptsIn over
+   names, so they are computed once per package and range: acceptsIn over
    the name's versions, which are computed once per name. *)
 let real_at st (n : string) : Npl.VS.t =
   Tbl.memo st.real_tbl n (fun () -> Npl.realVersions (repo_at st n) n)
@@ -137,12 +138,7 @@ let real_at st (n : string) : Npl.VS.t =
 let accepted st (e : Npl.coq_Edge) : int * Pl.VSet.t =
   let n = e.Npl.e_name in
   Tbl.memo st.acc_tbl (n, e.Npl.e_range) (fun () ->
-      ( Hashtbl.length st.acc_tbl,
-        Npl.acceptsIn n
-          (Npl.override
-             (mk_inst st ~repo:Npl.RepoSet.empty ~deps:[] ~peers:[])
-             n e.Npl.e_range)
-          (real_at st n) ))
+      (Hashtbl.length st.acc_tbl, Npl.acceptsIn n e.Npl.e_range (real_at st n)))
 
 let note_key st (k : string) (m : string) =
   let l = Tbl.find_list st.key_names k in

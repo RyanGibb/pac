@@ -961,43 +961,41 @@ refused:
   error: digtag@^beta: not a registry spec (name, name@range, name@tag, key@npm:name@range)
   [2]
 
-The cases from here to the fetch race pin where we deliberately differ
-from npm; each states npm's answer, taken from npm 11.17.0 over the same
-fixtures.
-
-An override applies to a dependency by the package it targets; npm
-applies it by the key the dependency is written under (arborist override-set.js:87, edge.js:206).
-The two differ only on an alias, and there npm's override replaces the
-alias spec wholesale.  carrier depends on kit as an alias of util-lib ^1.
-ovr-key-app overrides kit to 1.0.0: npm installs the registry's own kit
-1.0.0 at kit, while here the override names no target in the cone and
-util-lib 1.2.0 stands.  ovr-target-app overrides util-lib to 1.0.0: npm
-leaves the aliased dependency alone and installs util-lib 1.2.0, while
-here the override binds and 1.0.0 is installed.
+A root override applies to the key a dependency is written under, as
+npm's does (arborist override-set.js, getEdgeRule; edge.js, spec), and
+replaces its spec wholesale, alias included.  carrier depends on kit as
+an alias of util-lib ^1.  ovr-key-app overrides kit to 1.0.0, so kit holds
+the registry's own kit 1.0.0; ovr-target-app overrides util-lib to 1.0.0,
+which leaves the aliased dependency alone, and util-lib 1.2.0 stays at
+kit.  npm 11.17.0 answers both the same over these fixtures.
 
   $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./ovr-key-app/package.json
   root ovr-key-app 1.0.0
   packages (3):
     carrier 1.0.0
-    util-lib 1.2.0 at kit
+    kit 1.0.0
     ovr-key-app 1.0.0
   node_modules (2):
     ovr-key-app 1.0.0 <- carrier 1.0.0
-    carrier 1.0.0 <- util-lib 1.2.0 at kit
-  encoded solution: 5 core nodes (6 lookups)
-  loaded: 3 names, 4 versions, 0 packuments fetched
+    carrier 1.0.0 <- kit 1.0.0
+  encoded solution: 5 core nodes (5 lookups)
+  loaded: 3 names, 3 versions, 0 packuments fetched
 
   $ untimed ../../../bin/main.exe npm --offline --cache . --tree ./ovr-target-app/package.json
   root ovr-target-app 1.0.0
   packages (3):
     carrier 1.0.0
-    util-lib 1.0.0 at kit
+    util-lib 1.2.0 at kit
     ovr-target-app 1.0.0
   node_modules (2):
     ovr-target-app 1.0.0 <- carrier 1.0.0
-    carrier 1.0.0 <- util-lib 1.0.0 at kit
-  encoded solution: 5 core nodes (5 lookups)
+    carrier 1.0.0 <- util-lib 1.2.0 at kit
+  encoded solution: 5 core nodes (6 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
+
+The cases from here to the fetch race pin where we deliberately differ
+from npm; each states npm's answer, taken from npm 11.17.0 over the same
+fixtures.
 
 A dependency is met only by the package it names: a source name pairs
 the key with the package installed under it.  npm reads the version

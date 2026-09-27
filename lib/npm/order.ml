@@ -146,7 +146,7 @@ let replace st ~assigned k v (m : string * string) cands c =
     && List.for_all (fun r -> holds r x) into
   in
   let step (into, c) rg =
-    let rg = L.effective st t rg in
+    let rg = L.effective st (fst m) rg in
     let c =
       if holds rg c then c
       else
@@ -244,13 +244,11 @@ let rec resolve (x : copy) (a : string) : copy option =
   | None -> Option.bind x.up (fun u -> resolve u a)
 
 (* the edge a copy's package has on directory a, as npm reads it: the
-   dependee name and the range, under the root's flat override *)
+   dependee name and the range *)
 let edge_at st (x : copy) (a : string) =
   List.find_map
     (fun (d : Np.coq_Dependency) ->
-      if d.Np.d_dir = a then
-        Some (d.Np.d_name, L.effective st d.Np.d_name d.Np.d_range)
-      else None)
+      if d.Np.d_dir = a then Some (d.Np.d_name, d.Np.d_range) else None)
     (L.active_dependencies st (snd x.key, x.ver))
 
 let fits (t, rg) (m : string * string) (u : string) =

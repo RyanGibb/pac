@@ -70,6 +70,7 @@ type t = {
   (* false under --omit=optional: an optional dependency is then dropped
      outright rather than only when the registry cannot satisfy it *)
   optional : bool;
+  ovr_raw : (string * Npm_version.range) list;
   ovr : (string * Np.coq_Range) list;
   dep_tbl : (string * string, Np.coq_Dependency list) Hashtbl.t;
   peer_tbl : (string * string, Np.coq_PeerDependency list) Hashtbl.t;
@@ -93,16 +94,13 @@ type t = {
 }
 
 let create ~optional ar root =
-  let ovr =
-    match A.meta ar root with
-    | Some v -> List.map (fun (n, rg) -> (n, xrange rg)) v.P.v_ovr
-    | None -> []
-  in
+  let ovr_raw = match A.meta ar root with Some v -> v.P.v_ovr | None -> [] in
   {
     ar;
     root;
     optional;
-    ovr;
+    ovr_raw;
+    ovr = List.map (fun (n, rg) -> (n, xrange rg)) ovr_raw;
     dep_tbl = Hashtbl.create 16384;
     peer_tbl = Hashtbl.create 16384;
     repo_at = Hashtbl.create 4096;
@@ -118,8 +116,8 @@ let create ~optional ar root =
 let archive st = st.ar
 let root st = st.root
 
-let effective st (t : string) (rg : Np.coq_Range) : Np.coq_Range =
-  Option.value (List.assoc_opt t st.ovr) ~default:rg
+let effective st (a : string) (rg : Np.coq_Range) : Np.coq_Range =
+  Option.value (List.assoc_opt a st.ovr) ~default:rg
 
 let peer_dependencies st p =
   Tbl.memo st.peer_tbl p (fun () ->
@@ -145,20 +143,34 @@ let mk_inst st ~repo ~deps ~peers : Np.coq_Inst =
     Np.inst_root = st.root;
   }
 
+(* the dependency the calculus reads, the root's flat override on its
+   directory applied *)
+let effective_dep st (d : Np.coq_Dependency) : Np.coq_Dependency =
+  Np.ovrDep (mk_inst st ~repo:Np.RepoSet.empty ~deps:[] ~peers:[]) d
+
+(* effective_dep's dependee name, read off the manifest's entry, whose
+   range is not yet read *)
+let effective_name st (d : P.dep) =
+  if List.mem_assoc d.P.d_dir st.ovr_raw then d.P.d_dir else d.P.d_name
+
 (* Whether some published version of the dependee name matches the range,
-   as the
-   calculus reads the range: via the extracted rgHolds and under the same
-   flat override.  Only the "*" rewrite's engines test (star_range)
-   evaluates in OCaml.  The repository read is the dependee name's alone,
-   memoized per name in repo_at, so the check reuses whatever the
-   sub-instances built. *)
+   as the calculus reads both: via the extracted rgHolds, and under the
+   override on the dependency's directory, as effective_dep reads it.  Only
+   the "*" rewrite's engines test (star_range) evaluates in OCaml.  The
+   repository read is the dependee name's alone, memoized per name in
+   repo_at, so the check reuses whatever the sub-instances built. *)
 let matches_published st (d : P.dep) : bool =
-  let n = d.P.d_name and own = own_range st.ar d in
+  let n = effective_name st d in
+  let rg =
+    match List.assoc_opt d.P.d_dir st.ovr_raw with
+    | Some rg -> rg
+    | None -> own_range st.ar d
+  in
   Tbl.memo st.opt_keep
-    (n, Npm_version.string_of_range own)
+    (n, Npm_version.string_of_range rg)
     (fun () ->
       Np.VSet.exists_
-        (Np.rgHolds (effective st n (xrange own)))
+        (Np.rgHolds (xrange rg))
         (Np.realVersions (repo_at st n) n))
 
 (* An optional entry is an ordinary dependency that this driver abandons
@@ -208,8 +220,10 @@ let dependencies st p =
   Tbl.memo st.dep_tbl p (fun () -> List.map (xdep st.ar) (raw_deps st p))
 
 let active_dependencies st p =
-  List.filter
-    (fun (d : Np.coq_Dependency) -> (not d.Np.d_dev) || p = st.root)
+  List.filter_map
+    (fun (d : Np.coq_Dependency) ->
+      if (not d.Np.d_dev) || p = st.root then Some (effective_dep st d)
+      else None)
     (dependencies st p)
 
 let own_dependencies st p = List.map (fun d -> (p, d)) (dependencies st p)
@@ -262,8 +276,11 @@ let gran_sub_inst st (k : string * string) (w : string) =
   let deps =
     Option.to_list
       (List.find_map
-         (fun (q, d) -> if dep_keep st d then Some (q, xdep st.ar d) else None)
-         (A.deps_introducing st.ar k))
+         (fun (q, (d : P.dep)) ->
+           if effective_name st d = snd k && dep_keep st d then
+             Some (q, xdep st.ar d)
+           else None)
+         (A.deps_at st.ar (fst k)))
   in
   let peers =
     if deps = [] && fst k = snd k then

@@ -659,6 +659,22 @@ Example npm_override_computes :
   = (NpmS.Nm.Intermediate kA 1 kC, NpmS.Vs.Orig 3 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
+Definition npmInstOvrAlias (o : list (nat * NpmS.Range)) : NpmS.Inst :=
+  NpmS.MkInst (NpmS.RepoSet.add (npmX, 1) npmRepo)
+    (((npmA, 1), npmDepAlias) :: nil) nil o (npmA, 1).
+
+Example npm_override_key_computes :
+  npmDeps (npmInstOvrAlias ((npmX, npmEq 1) :: nil))
+    (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
+  = (NpmS.Nm.Intermediate kA 1 (npmX, npmX), NpmS.Vs.Orig 1 :: nil) :: nil.
+Proof. reflexivity. Qed.
+
+Example npm_override_target_computes :
+  npmDeps (npmInstOvrAlias ((npmC, npmEq 3) :: nil))
+    (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
+  = (NpmS.Nm.Intermediate kA 1 kX, NpmS.Vs.Orig 1 :: nil) :: nil.
+Proof. reflexivity. Qed.
+
 Module NpmPreVM <: SemverMatch Nat_as_OT.
   Definition isPre (v : nat) : bool := Nat.odd v.
   Definition sameCore (a b : nat) : bool :=
@@ -705,4 +721,26 @@ Proof. reflexivity. Qed.
 Example npl_key :
   NplS.Pl.VSet.elements (NplS.Pl.repoVersions (NplS.placeRepo nplInst) npmX) =
   NplS.Occ.Reg npmB 1 :: nil.
+Proof. reflexivity. Qed.
+
+Definition nplInstOvr (o : list (nat * NplS.Range)) : NplS.Inst :=
+  NplS.MkInst
+    (fold_right NplS.RepoSet.add NplS.RepoSet.empty
+       ((npmB, 1) :: (npmB, 2) :: (npmX, 1) :: nil))
+    (((npmA, 1), NplS.MkDep npmX npmB ((NplS.COp OpEq 2 :: nil) :: nil) false false)
+     :: nil)
+    nil o (npmA, 1).
+
+Definition nplAccepts (I : NplS.Inst) : list (list NplS.Occ.t) :=
+  List.map (fun e => NplS.Pl.VSet.elements (NplS.accepts I e))
+    (NplS.edgesOf I NplS.Occ.Top).
+
+Example npl_override_key :
+  nplAccepts (nplInstOvr ((npmX, (NplS.COp OpEq 1 :: nil) :: nil) :: nil)) =
+  (NplS.Occ.Reg npmX 1 :: nil) :: nil.
+Proof. reflexivity. Qed.
+
+Example npl_override_target :
+  nplAccepts (nplInstOvr ((npmB, (NplS.COp OpEq 1 :: nil) :: nil) :: nil)) =
+  (NplS.Occ.Reg npmB 2 :: nil) :: nil.
 Proof. reflexivity. Qed.

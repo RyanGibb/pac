@@ -273,17 +273,31 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     | (m, rg) :: l' => if NEqb.eqb m n then Some rg else lookupOvr l' n
     end.
 
-  Definition override (I : Inst) (n : N.t) (rg : Range) : Range :=
-    match lookupOvr (inst_ovr I) n with
+  Definition override (I : Inst) (a : N.t) (rg : Range) : Range :=
+    match lookupOvr (inst_ovr I) a with
     | Some rg' => rg'
     | None => rg
     end.
+
+  Definition ovrDep (I : Inst) (d : Dependency) : Dependency :=
+    match lookupOvr (inst_ovr I) (d_dir d) with
+    | Some rg => MkDep (d_dir d) (d_dir d) rg (d_dev d) (d_desc d)
+    | None => d
+    end.
+
+  Lemma ovrDep_dir : forall I d, d_dir (ovrDep I d) = d_dir d.
+  Proof. intros I d; unfold ovrDep; destruct (lookupOvr _ _); reflexivity. Qed.
+
+  Lemma ovrDep_ovr : forall I' I d, inst_ovr I' = inst_ovr I ->
+      ovrDep I' d = ovrDep I d.
+  Proof. intros I' I d H; unfold ovrDep; rewrite H; reflexivity. Qed.
 
   Definition depActive (I : Inst) (p : RPkg.t) (d : Dependency) : bool :=
     orb (negb (d_dev d)) (RPkgEqb.eqb p (inst_root I)).
 
   Definition dependenciesOf (I : Inst) (p : RPkg.t) : list Dependency :=
-    List.filter (depActive I p) (ownedBy p (inst_deps I)).
+    List.map (ovrDep I)
+      (List.filter (depActive I p) (ownedBy p (inst_deps I))).
 
   Fixpoint findDepL (l : list Dependency) (a : N.t) : option Dependency :=
     match l with
@@ -330,8 +344,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Definition slotCands (I : Inst) (p : RPkg.t) (a : N.t)
     : VSet.t :=
     match slotOf I p a with
-    | Some d => rangeEval (override I (d_name d) (d_range d))
-                  (realVersions (inst_repo I) (d_name d))
+    | Some d => rangeEval (d_range d) (realVersions (inst_repo I) (d_name d))
     | None => VSet.empty
     end.
 
@@ -365,7 +378,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
 
   Definition peerCandsAt (I : Inst) (p : RPkg.t)
       (r : PeerDependency) : VSet.t :=
-    rangeEval (override I (snd (peerKeyAt I p r)) (p_range r))
+    rangeEval (override I (p_name r) (p_range r))
       (realVersions (inst_repo I) (snd (peerKeyAt I p r))).
 
   Definition peerActive (I : Inst) (p : RPkg.t) (r : PeerDependency) : bool :=
@@ -459,7 +472,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Definition keysOf (I : Inst) : KeySet.t :=
     KeySet.add (rootKey I)
       (KeySet.union
-         (keysOfL (fun q => (d_dir (snd q), d_name (snd q)))
+         (keysOfL (fun q => (d_dir (snd q), d_name (ovrDep I (snd q))))
             (inst_deps I))
          (keysOfL (fun q => (p_name (snd q), p_name (snd q)))
             (inst_peers I))).
@@ -1236,11 +1249,12 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       end.
 
     Definition descNames (I : Inst) : NmSet.t :=
-      SOpn.ofList (List.flat_map (fun e => descOf (snd e)) (inst_deps I)).
+      SOpn.ofList
+        (List.flat_map (fun e => descOf (ovrDep I (snd e))) (inst_deps I)).
 
     Lemma mem_descNames : forall I n,
         NmSet.In n (descNames I) <->
-        exists p d, In (p, d) (inst_deps I) /\ In n (descOf d).
+        exists p d, In (p, d) (inst_deps I) /\ In n (descOf (ovrDep I d)).
     Proof.
       intros I n; unfold descNames; rewrite SOpn.mem_ofList, in_flat_map.
       split.
@@ -1303,7 +1317,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           VSet.In u (realVersions (inst_repo I) (snd m)) /\
           NSet.In a (peerNames I (snd m, u))
       | Nm.Desc a t s =>
-          exists p d, In (p, d) (inst_deps I) /\ In (Nm.Desc a t s) (descOf d)
+          exists p d, In (p, d) (inst_deps I) /\
+            In (Nm.Desc a t s) (descOf (ovrDep I d))
       end.
 
     Lemma mem_pkgNames : forall I n,
@@ -1360,7 +1375,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       destruct n as [k w | k v m | k v a | k v m u a | a t s]; cbn [ReducedName];
         split;
         try (intros [[p [d [_ E]]] | [H _]];
-             [destruct (descOf_desc d _ E) as [? [? [? E']]]; discriminate E'
+             [destruct (descOf_desc _ _ E) as [? [? [? E']]]; discriminate E'
              | exact H]);
         try (intro H; right; split; [exact H | intros a' t' s' E; discriminate E]).
       - intros [H | [_ H]]; [exact H | destruct (H a t s eq_refl)].
@@ -2067,9 +2082,10 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       destruct (slotOf I p a) as [d |] eqn:Hd.
       - left; apply mem_keysOfL.
         destruct (findDepL_some _ _ _ Hd) as [Hin Hdir].
-        unfold dependenciesOf in Hin; apply List.filter_In in Hin.
-        exists (p, d); split; [apply in_ownedBy; exact (proj1 Hin) |].
-        cbn [snd]; rewrite Hdir; reflexivity.
+        unfold dependenciesOf in Hin; apply in_map_iff in Hin.
+        destruct Hin as [d0 [<- Hin]]; apply List.filter_In in Hin.
+        exists (p, d0); split; [apply in_ownedBy; exact (proj1 Hin) |].
+        cbn [snd]; rewrite <- (ovrDep_dir I d0), Hdir; reflexivity.
       - right; apply mem_keysOfL.
         destruct Ha as [Ha | [q [r [Hr Hn]]]].
         + exfalso; unfold dirs in Ha; apply mem_namesOfL in Ha.
@@ -2080,12 +2096,16 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Lemma slotOf_dep : forall I p a d,
-        slotOf I p a = Some d -> In (p, d) (inst_deps I) /\ d_dir d = a.
+        slotOf I p a = Some d ->
+        (exists d0, In (p, d0) (inst_deps I) /\ d = ovrDep I d0) /\
+        d_dir d = a.
     Proof.
       intros I p a d Hd.
       destruct (findDepL_some _ _ _ Hd) as [Hin Hdir].
-      unfold dependenciesOf in Hin; apply List.filter_In in Hin.
-      split; [apply in_ownedBy; exact (proj1 Hin) | exact Hdir].
+      unfold dependenciesOf in Hin; apply in_map_iff in Hin.
+      destruct Hin as [d0 [<- Hin]]; apply List.filter_In in Hin.
+      split; [| exact Hdir].
+      exists d0; split; [apply in_ownedBy; exact (proj1 Hin) | reflexivity].
     Qed.
 
     Lemma childDirs_keysOf : forall I q a,
@@ -2705,8 +2725,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         + apply mem_reducedNames; split; [exact (Hreal _ Hp) | exact Hm].
         + apply versions_int; left; split; [reflexivity | exact Hl].
         + apply mem_reducedNames; cbn [ReducedName].
-          destruct (slotOf_dep I _ _ _ Hsl) as [Hin Hdir].
-          exists (base (pk, pv)), d; split; [exact Hin |].
+          destruct (slotOf_dep I _ _ _ Hsl) as [[d0 [Hin ->]] Hdir].
+          exists (base (pk, pv)), d0; split; [exact Hin |].
           apply in_descOf; repeat split; assumption.
         + cbn [versions]; apply orig_embedVS; exact Hu.
       - apply mem_coreResolution; left.
@@ -2940,8 +2960,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           exact (chains_peerNames I (k, v) (fst m) (dp_chains _ _ _ Hdp)).
         + apply mem_descEdges in Hh; destruct Hh as [d [e [Hsl [Ht [Hde ->]]]]].
           cbn [fst ReducedName].
-          destruct (slotOf_dep I _ _ _ Hsl) as [Hin Hdir].
-          exists (base (k, v)), d; split; [exact Hin |].
+          destruct (slotOf_dep I _ _ _ Hsl) as [[d0 [Hin ->]] Hdir].
+          exists (base (k, v)), d0; split; [exact Hin |].
           apply in_descOf; repeat split; assumption.
       - cbn [dependees] in Hh; destruct (SOhh.empty_in _ Hh).
       - destruct Hn as [Hkv [Hm [Hu Ha]]].
@@ -3305,7 +3325,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       Definition keyedDeps (I : Inst) (k : NKey.t)
         : list (RPkg.t * Dependency) :=
         List.filter
-          (fun q => KeyEqb.eqb (d_dir (snd q), d_name (snd q)) k)
+          (fun q => KeyEqb.eqb (d_dir (snd q), d_name (ovrDep I (snd q))) k)
           (inst_deps I).
 
       Definition keyedPeers (I : Inst) (k : NKey.t)
@@ -3316,7 +3336,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
 
       Definition granSubInst (I : Inst) (k : NKey.t) (w : V.t)
           (I' : Inst) : Prop :=
-        inst_root I' = inst_root I /\
+        inst_root I' = inst_root I /\ inst_ovr I' = inst_ovr I /\
         (RepoSet.In (snd k, w) (inst_repo I') <->
          RepoSet.In (snd k, w) (inst_repo I)) /\
         incl (inst_deps I') (keyedDeps I k) /\
@@ -3329,12 +3349,15 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           granSubInst I k w I' ->
           (KeySet.In k (keysOf I') <-> KeySet.In k (keysOf I)).
       Proof.
-        intros I k w I' [Hroot [_ [Hd [Hdne [Hp Hpne]]]]].
+        intros I k w I' [Hroot [Hovr [_ [Hd [Hdne [Hp Hpne]]]]]].
         unfold keysOf, rootKey; rewrite Hroot, !KeySet.add_spec,
           !KeySet.union_spec, !mem_keysOfL.
+        assert (Ho : forall d, ovrDep I' d = ovrDep I d)
+          by (intro d; exact (ovrDep_ovr I' I d Hovr)).
+        setoid_rewrite Ho.
         assert (Hkd : forall q, In q (keyedDeps I k) ->
                   In q (inst_deps I) /\
-                  (d_dir (snd q), d_name (snd q)) = k).
+                  (d_dir (snd q), d_name (ovrDep I (snd q))) = k).
         { intros q Hq; apply List.filter_In in Hq.
           destruct Hq as [Hq He]; apply KeyEqb.eqb_true_iff in He.
           split; assumption. }
@@ -3378,7 +3401,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       Proof.
         intros I k w I' Hsub; cbn [versions].
         pose proof (keysOf_granSubInst I k w I' Hsub) as Hk.
-        destruct Hsub as [_ [Hr _]].
+        destruct Hsub as [_ [_ [Hr _]]].
         apply if_scrutinee, PSS.mem_eq_of_iff; rewrite !mem_realPkgs.
         unfold Available, base; cbn [fst snd]; rewrite Hk, Hr; reflexivity.
       Qed.

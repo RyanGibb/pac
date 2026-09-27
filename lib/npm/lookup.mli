@@ -10,14 +10,16 @@ val root : t -> string * string
    "*" as npm-pick-manifest reads it, its latest prerelease included *)
 val spec_range : Archive.t -> string -> Npm_parse.spec -> Npm_version.range
 
-(* the range the calculus reads for a dependency on t: the root's flat
-   override when there is one *)
+(* the range the calculus reads for an edge on directory a: the root's
+   flat override on a when there is one *)
 val effective : t -> string -> Np.coq_Range -> Np.coq_Range
 val peer_dependencies : t -> string * string -> Np.coq_PeerDependency list
 
 (* what the optional-dependency test read and what it abandoned, both in
    distinct (dependee name, range) pairs *)
 val optional_verdicts : t -> int * int
+
+(* p's dependencies, the root's override on each one's directory applied *)
 val active_dependencies : t -> string * string -> Np.coq_Dependency list
 
 (* the descriptor p's directory m reads, as the calculus's slotOf finds

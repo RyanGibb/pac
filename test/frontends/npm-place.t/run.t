@@ -77,6 +77,18 @@ overrides the peer; here there is no layout.
   unsatisfiable:
   (within depth 8)
 
+A root override applies to the key an edge is written under and replaces
+its spec, alias included.  In ovr/, p depends on x as an alias of b ^2,
+and q peers on it so: an override of x makes each edge the registry's own
+x, and one of b, the alias's target, leaves them alone, as npm 11.17.0
+answers over these fixtures.
+
+  $ for a in key-app peer-key-app target-app root-target-app; do untimed ../../../bin/main.exe npm --reading=placement --offline --cache ovr ./ovr/$a/package.json | grep node_modules/x; done
+    node_modules/x x@1.0.0
+    node_modules/x x@1.0.0
+    node_modules/x b@2.0.0
+    node_modules/x b@2.0.0
+
 --core prints the reachable core, finite under the bound.
 
   $ untimed ../../../bin/main.exe npm --reading=placement --core --depth 1 --offline --cache . c@1.0.0 | head -n 12

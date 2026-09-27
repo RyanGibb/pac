@@ -1,0 +1,1 @@
+{"name": "root-target-app", "version": "1.0.0", "dependencies": {"x": "npm:b@^2.0.0"}, "overrides": {"b": "1.0.0"}}

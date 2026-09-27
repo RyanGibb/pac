@@ -67,7 +67,6 @@ let pick ar (t : string) (cands : PVersion.t list) : PVersion.t =
   match tagged ar t cands with Some c -> c | None -> best ar t cands
 
 let pick_in st (t : string) (rg : Np.coq_Range) : string option =
-  let rg = L.effective st t rg in
   let pool =
     List.filter_map
       (fun u -> if Np.rgHolds rg u then Some (Np.Vs.Orig u) else None)

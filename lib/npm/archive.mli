@@ -60,10 +60,8 @@ val loaded_latest : t -> string -> string option
 val peers_naming : t -> string -> ((string * string) * Npm_parse.peer) list
 val peer_naming : t -> string -> ((string * string) * Npm_parse.peer) option
 
-(* the dependencies introducing a key, the latest added first, with the
-   package declaring each *)
-val deps_introducing :
-  t -> string * string -> ((string * string) * Npm_parse.dep) list
-
+(* the dependencies written under a directory, the latest added first,
+   with the package declaring each *)
+val deps_at : t -> string -> ((string * string) * Npm_parse.dep) list
 val engine_ok : t -> string * string -> bool
 val deprecated : t -> string * string -> bool
