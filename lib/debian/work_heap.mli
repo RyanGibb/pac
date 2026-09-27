@@ -70,27 +70,30 @@ module type DRIVER = sig
      watches it only when the queue reaches it *)
   type rejection
 
-  (* a package decision now stands: the rejections its own Conflicts assign
-     as its clauses are examined, and those assigned as its version var
-     propagates -- the declarers of a conflict it matches -- each to be
-     queued for propagation at that point; [propagate] runs one entry,
-     assigning and returning the rejections it derives in turn, with the
-     clauses of installed packages it leaves unit, whose one solution apt
-     enqueues there and then; [reset] forgets every rejection, ahead of the
-     standing decisions being replayed; [assign] assigns rejections derived
-     outside the driver's own propagation, as [conflicts] assigns its own:
-     those not already assigned, and not of a package the partial solution
-     installs *)
+  (* a package decision now stands: the rejections its own Conflicts
+     assign as its clauses are examined, each to be queued for propagation
+     at that point, those not already assigned and not of a package the
+     partial solution installs *)
   val conflicts :
     state -> assigned:assigned -> name -> version -> rejection list
 
+  (* the rejections assigned as the decided version's var propagates: the
+     declarers of a conflict it matches, each to be queued at that point *)
   val conflicted_by :
     state -> assigned:assigned -> name -> version -> rejection list
 
+  (* runs one entry, assigning and returning the rejections it derives in
+     turn, with the clauses of installed packages it leaves unit, whose one
+     solution apt enqueues there and then *)
   val propagate :
     state -> assigned:assigned -> rejection -> rejection list * name list
 
+  (* forgets every rejection, ahead of the standing decisions being
+     replayed *)
   val reset : state -> unit
+
+  (* assigns rejections derived outside the driver's own propagation, as
+     [conflicts] assigns its own *)
   val assign : state -> assigned:assigned -> rejection list -> rejection list
   val version_equal : version -> version -> bool
 

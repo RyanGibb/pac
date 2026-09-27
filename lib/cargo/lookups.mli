@@ -35,7 +35,9 @@ val dependees : state -> T.Pkg.t -> T.Dependees.t list
 
 (* the dependency the owner's fibre holds at a site, which is what a slot
    name carries: the order replay reads raw manifest records, which
-   slots_of has not merged, so the name is taken from the fibre *)
+   slots_of has not merged, so the name is taken from the fibre.  None for
+   a second site with the same ask as one before it, which the slot rule
+   merged into that one's slot. *)
 val site_data : state -> string * string -> Cg.SlotKey.t -> Cg.SlotData.t option
 val tag : state -> Cg.NPlus.t -> Cg.VPlus.t -> PVersion.t
 val pg_versions : state -> Cg.NPlus.t -> PVersion.t list
