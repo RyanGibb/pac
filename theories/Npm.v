@@ -40,12 +40,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   #[local] Hint Extern 1 => cmp_by KVKVNF.compare_lt_trans : cmp_npm.
   #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_npm.
 
-  (* The Concurrent Reduction's names and versions, widened: a peer's
-     version has to reach the copies below its declarer, which one name per
-     copy and peer name (its sight) and one per holder of that copy (a link)
-     carry.  Bot is a sight or link that offers nothing, and Free a sight no
-     copy below reads, which is what lets holders that offer different
-     versions share a copy. *)
   Module Nm.
     Inductive name : Type :=
     | Granular (k : NKey.t) (w : V.t)
@@ -167,11 +161,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Module Sv := Semver V VSet PM.
   Include Sv.
 
-
-  (* d_desc is the spec as the manifest writes it, which with the directory
-     is the dependency's descriptor: every dependency of one descriptor
-     resolves to one version (Yarn Berry's lockfile).  None where no
-     descriptor binds, as npm resolves each dependency apart. *)
   Record Dependency : Type := MkDep
     { d_dir : N.t
     ; d_target : N.t
@@ -179,8 +168,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     ; d_dev : bool
     ; d_desc : option N.t }.
 
-  (* p_root: whether the root installs a copy for this peer where nothing
-     else provides one *)
   Record PeerDependency : Type := MkPeer
     { p_name : N.t
     ; p_range : Range
@@ -381,9 +368,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     rangeEval (override I (snd (peerKeyAt I p r)) (p_range r))
       (realVersions (inst_repo I) (snd (peerKeyAt I p r))).
 
-  (* the root's own peer check, which npm's documented behaviours bound:
-     a mandatory peer is installed, an optional one read against a
-     directory the root declares *)
   Definition peerActive (I : Inst) (p : RPkg.t) (r : PeerDependency) : bool :=
     orb (negb (p_optional r)) (NSet.mem (p_name r) (dirs I p)).
 
@@ -415,10 +399,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     exists (q, r); split; [exact Hr | reflexivity].
   Qed.
 
-  (* the names the root installs a copy under for a peer nothing else
-     provides: those of the peers its manifest reader lets it install
-     (p_root), which a peer only Yarn Berry's packageExtensions add is not,
-     npm knowing nothing of it *)
   Definition rootPeerDirs (I : Inst) : NSet.t :=
     namesOfL (fun q => p_name (snd q))
       (List.filter (fun q => p_root (snd q)) (inst_peer I)).
@@ -441,12 +421,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     exact (peerDirs_peer I q r Hin).
   Qed.
 
-  (* The names a copy holds a copy under: its directories, and for the
-     root's copy any name a peer asks for, which npm, pnpm, Bun and Deno
-     install at the top for a peer nothing else provides.  Only the root:
-     a copy deeper that neither holds nor peers on the name offers its
-     dependencies' peers nothing, which is Yarn Berry's rule and the one
-     every tool accepts. *)
   Definition childDirs (I : Inst) (q : Pkg.t) : NSet.t :=
     if PkgEqb.eqb q (rootPkg I)
     then NSet.union (dirs I (base q)) (peerDirs I)
@@ -455,39 +429,19 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Definition childKeys (I : Inst) (q : Pkg.t) : KeySet.t :=
     SOnk.map (slotKey I (base q)) (childDirs I q).
 
-  (* where q offers its dependencies' peers a copy of its own: at its
-     directories, and at the root under any name *)
   Definition holds (I : Inst) (q : Pkg.t) (a : N.t) : bool :=
     orb (PkgEqb.eqb q (rootPkg I)) (NSet.mem a (dirs I (base q))).
 
-  (* arborist's PEER LOCAL (edge.js): a peer may not resolve into its own
-     declarer's node_modules unless the declarer is the root, so a copy that
-     peers on a holds nothing there, and what it shows at a is what its own
-     peer sees *)
   Definition chains (I : Inst) (q : Pkg.t) (a : N.t) : bool :=
     andb (negb (PkgEqb.eqb q (rootPkg I))) (NSet.mem a (peerNames I (base q))).
 
-  (* Yarn Berry's peer with default: a copy other than the root's that
-     depends and peers on a holds its own copy there only where its
-     depender offers it nothing, and otherwise takes the offer, which must
-     meet the dependency's range too; what it shows below is its sight
-     either way *)
   Definition dp (I : Inst) (q : Pkg.t) (a : N.t) : bool :=
     andb (chains I q a) (NSet.mem a (dirs I (base q))).
 
-  (* a directory the copy may leave empty: a name the root holds without a
-     directory for it, whose copy is there only when a peer asks for one,
-     and a peer with default whose depender offers it *)
   Definition loose (I : Inst) (q : Pkg.t) (a : N.t) : bool :=
     orb (andb (PkgEqb.eqb q (rootPkg I)) (negb (NSet.mem a (dirs I (base q)))))
       (dp I q a).
 
-  (* the copy is itself of the name, which is where a peer of its
-     dependency resolves when the copy neither holds nor peers on it.
-     npm's lookup from inside the copy's node_modules reaches the copy's
-     own directory, so its directory must be the name; Yarn Berry offers
-     the parent by its package name, so its package must be too.  An
-     alias either way is a copy only one of them offers. *)
   Definition selfb (q : Pkg.t) (a : N.t) : bool :=
     andb (NEqb.eqb (fst (fst q)) a) (NEqb.eqb (snd (fst q)) a).
 
@@ -534,9 +488,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       (p : Pkg.t) (m : NKey.t) (v : V.t) : Prop :=
     PkgSet.In (m, v) S /\ Conc.ParentRel.In ((m, v), p) pi.
 
-  (* The version q offers a copy it holds at a (Yarn Berry's peer
-     provision): what its own peer sees where it chains, else its copy
-     there, else itself where it is of the name, else nothing. *)
   Definition Shows (I : Inst) (S : PkgSet.t) (pi : Conc.ParentRel.t)
       (sg : Pkg.t -> N.t -> option V.t) (q : Pkg.t) (a : N.t) (w : V.t)
     : Prop :=
@@ -550,7 +501,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     forall r, In (c, r) (inst_peer I) -> p_name r = a ->
       VSet.In w (peerCandsAt I (base q) r).
 
-  (* some copy c holds peers on a, so c's sight at a is read *)
   Definition ReadBelow (I : Inst) (S : PkgSet.t) (pi : Conc.ParentRel.t)
       (c : Pkg.t) (a : N.t) : Prop :=
     exists m u, Installs S pi c m u /\ NSet.In a (peerNames I (snd m, u)).
@@ -568,14 +518,9 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         else sightCandsL I a l'
     end.
 
-  (* the versions c's own peers on a admit, and those its own dependency on
-     a admits where it has one (a peer with default), which bounds what c's
-     sight can carry *)
   Definition sightCands (I : Inst) (c : RPkg.t) (a : N.t) : VSet.t :=
     VSet.union (sightCandsL I a (peerDependenciesAt I c)) (slotCands I c a).
 
-  (* what q offers c at a: q's show, or, for a peer with default that q
-     offers nothing, c's own copy *)
   Definition Offers (I : Inst) (S : PkgSet.t) (pi : Conc.ParentRel.t)
       (sg : Pkg.t -> N.t -> option V.t) (q c : Pkg.t) (a : N.t) (w : V.t)
     : Prop :=
@@ -687,20 +632,12 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       - intro Hw; exists w; split; [exact Hw | reflexivity].
     Qed.
 
-    (* what q may offer a copy's peer r: its sight's where it chains (Bot
-       only for an optional peer), its copy's where it holds the name, its
-       own version where it is of the name, and Bot, for an optional peer
-       alone, where it has none of them *)
-    (* the versions a peer r of the copy c accepts from q: its range, and
-       for a peer with default the dependency's range too *)
     Definition peerCands (I : Inst) (q c : Pkg.t) (r : PeerDependency)
       : VSet.t :=
       if dp I c (p_name r)
       then VSet.inter (peerCandsAt I (base q) r) (slotCands I (base c) (p_name r))
       else peerCandsAt I (base q) r.
 
-    (* whether the peer may be offered nothing: an optional peer, and a peer
-       with default, which then takes the copy's own *)
     Definition peerOpt (I : Inst) (c : Pkg.t) (r : PeerDependency) : bool :=
       orb (p_optional r) (dp I c (p_name r)).
 
@@ -717,11 +654,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       - intros [H _]; exact H.
     Qed.
 
-    (* what q may offer the copy c's peer r: its sight's where it chains,
-       its copy's where it holds the name, its own version where it is of
-       the name, and Bot, where the peer may be offered nothing, where q
-       has none of them or offers what its own peer or loose directory
-       leaves empty *)
     Definition linkCands (I : Inst) (q c : Pkg.t) (r : PeerDependency)
       : T.VSet.t :=
       let pc := peerCands I q c r in
@@ -846,8 +778,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           else linkVersL I q c a l'
       end.
 
-    (* what a link from q to the copy c at a can carry: what q may offer
-       any of c's peers on a *)
     Definition linkVers (I : Inst) (q c : Pkg.t) (a : N.t)
       : T.VSet.t :=
       linkVersL I q c a (peerDependenciesAt I (base c)).
@@ -948,7 +878,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         [apply NSet.mem_spec; exact Hr | destruct (SOrv.empty_in _ Hv)].
     Qed.
 
-    (* a peer with default may leave its directory empty *)
     Definition slotSet (I : Inst) (q : Pkg.t) (a : N.t) : T.VSet.t :=
       if dp I q a
       then T.VSet.add Vs.Bot (embedVS (slotCands I (base q) a))
@@ -979,12 +908,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Definition plainKey (I : Inst) (p : RPkg.t) (a : N.t) : bool :=
       KeyEqb.eqb (slotKey I p a) (a, a).
 
-    (* A copy's sight is shared by all its holders, which may offer
-       different versions, so a link leaves it Free or fixes it to what
-       the link carries, and a copy below that reads it forces one of the
-       two.  It is a version of a itself, so a holder's aliased copy
-       leaves it Free, and no copy below may read it.  A peer with default
-       offered nothing shows its own copy, which its intermediate fixes. *)
     Definition sightSet (I : Inst) (q c : Pkg.t) (a : N.t) (x : Vs.t)
       : T.VSet.t :=
       match x with
@@ -1001,8 +924,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       | Vs.Free => T.VSet.singleton Vs.Free
       end.
 
-    (* a peer with default holds its own copy exactly where its depender
-       offers it nothing *)
     Definition dpEdges (I : Inst) (c : Pkg.t) (a : N.t) (x : Vs.t)
       : T.DependeesSet.t :=
       if dp I c a
@@ -1019,7 +940,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
            end
       else T.DependeesSet.empty.
 
-    (* the copy a peer with default holds is what its sight shows below *)
     Definition ownSight (I : Inst) (q : Pkg.t) (m : NKey.t) (u : V.t)
       : T.DependeesSet.t :=
       if andb (dp I q (fst m)) (KeyEqb.eqb m (slotKey I (base q) (fst m)))
@@ -1030,7 +950,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
               else T.VSet.singleton Vs.Free)
       else T.DependeesSet.empty.
 
-    (* the dependency's descriptor, which every directory of it reads *)
     Definition descEdges (I : Inst) (q : Pkg.t) (m : NKey.t) (u : V.t)
       : T.DependeesSet.t :=
       match slotOf I (base q) (fst m) with
@@ -1046,9 +965,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       | None => T.DependeesSet.empty
       end.
 
-    (* where a link reads what q offers: q's sight where q chains, and q's
-       copy where q holds the name, both of which Bot reads too: the root
-       leaves a loose name empty at Bot *)
     Definition holderEdges (I : Inst) (q : Pkg.t) (a : N.t) (x : Vs.t)
       : T.DependeesSet.t :=
       if chains I q a
@@ -1698,8 +1614,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       rewrite (T.res_version_unique _ _ _ _ Hres _ _ _ Hl HyS); exact Hy.
     Qed.
 
-    (* what a selected link carries is exactly what its holder offers in
-       the decoded resolution *)
     Lemma link_shows_iff : forall I S q m u a x,
         T.IsResolution (reduceReal I) (reduceDeps I) (embedRoot I) S ->
         T.PkgSet.In (embedPkg q) S ->
@@ -1768,8 +1682,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       apply NSet.mem_spec; exact (proj2 H).
     Qed.
 
-    (* a copy below c reads c's sight at a through its own link, which
-       carries a version or Bot, never Free *)
     Lemma sight_below : forall I S c m' u' a,
         T.IsResolution (reduceReal I) (reduceDeps I) (embedRoot I) S ->
         T.PkgSet.In (Nm.Intermediate (fst c) (snd c) m', Vs.Orig u') S ->
@@ -2436,8 +2348,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
             repeat split; try reflexivity; exact (Hneed Hs0).
     Qed.
 
-    (* a loose name of the root no peer is offered a copy under, which a
-       link reading it at Bot needs *)
     Definition looseNode (I : Inst) (S : PkgSet.t) (pi : Conc.ParentRel.t)
         (p : Pkg.t) (m : NKey.t) : option T.Pkg.t :=
       if andb (loose I p (fst m))
@@ -2445,7 +2355,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       then Some (Nm.Intermediate (fst p) (snd p) m, Vs.Bot)
       else None.
 
-    (* the descriptor a directory's copy resolves *)
     Definition descNode (I : Inst) (S : PkgSet.t) (pi : Conc.ParentRel.t)
         (p : Pkg.t) (m : NKey.t) (u : V.t) : option T.Pkg.t :=
       if installsb S pi p m u
@@ -2652,8 +2561,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       exact (res_sight_range _ _ _ _ Hres c a w Hsg).
     Qed.
 
-    (* what a copy's sight reads is what each of its holders offers, where
-       a copy below reads it *)
     Lemma sightVal_link : forall I S pi sg q m u a,
         IsResolution I S pi sg -> PkgSet.In q S -> Installs S pi q m u ->
         NSet.In a (peerNames I (snd m, u)) ->
@@ -3100,16 +3007,12 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         : list (RPkg.t * PeerDependency) :=
         List.filter (fun q => RPkgEqb.eqb (fst q) p) (inst_peer I).
 
-      (* the peer dependencies of two packages: a holder's, which decide
-         where it offers a name, and its dependee's, which ask *)
       Definition twoPeers (I : Inst) (p c : RPkg.t)
         : list (RPkg.t * PeerDependency) :=
         List.filter
           (fun q => orb (RPkgEqb.eqb (fst q) p) (RPkgEqb.eqb (fst q) c))
           (inst_peer I).
 
-      (* the dependencies of two packages: a holder's, and those of its
-         dependee, whose peer with default reads its own *)
       Definition twoDeps (I : Inst) (p c : RPkg.t)
         : list (RPkg.t * Dependency) :=
         List.filter
