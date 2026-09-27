@@ -5,7 +5,7 @@ include Lookups
    (fuzzy_name), and an atom no version meets, available or not, is refused
    with not_found_message's words *)
 let sanitize ar (query : (string * Opam_parse.vc) list) =
-  let names = lazy (Sys.readdir (Filename.concat ar.root "packages")) in
+  let names = lazy (Sys.readdir (Filename.concat (repository ar) "packages")) in
   let fuzzy name =
     let l = String.lowercase_ascii name in
     match

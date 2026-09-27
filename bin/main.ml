@@ -199,13 +199,14 @@ let opam_run debug core order with_test with_doc with_dev_setup opam_version
             Opam_solve.solve ~debug ~order ~with_test ~with_doc ~with_dev_setup
               ~opam_version ar query
           in
+          let s = Opam_solve.stats ar in
           report ~t0 ~core
             {
-              Report.names = ar.Opam_solve.n_names;
-              versions = ar.Opam_solve.n_vers;
+              Report.names = s.Opam_solve.names;
+              versions = s.versions;
               extra = [];
-              dropped = ar.Opam_solve.n_dropped;
-              parse = ar.Opam_solve.t_parse;
+              dropped = s.dropped;
+              parse = s.parse;
             } ~walk r (fun a ->
               Report.packages
                 (List.map (fun (n, v) -> n ^ " " ^ v) a.Opam_solve.reals);

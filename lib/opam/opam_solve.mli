@@ -1,14 +1,13 @@
-type archive = {
-  root : string;
-  pkgs : (string, (string * Opam_parse.pkg_meta) list) Hashtbl.t;
-  class_table : (string, (string * string) list) Hashtbl.t;
-  avoid_table : (string, string list) Hashtbl.t;
-  mutable n_names : int;
-  mutable n_vers : int;
-  mutable n_dropped : int;
-  mutable t_parse : float;
+type archive
+
+type stats = Lookups.stats = {
+  names : int;
+  versions : int;
+  dropped : int;
+  parse : float;
 }
 
+val stats : archive -> stats
 val empty_archive : string -> archive
 val default_opam_version : string
 

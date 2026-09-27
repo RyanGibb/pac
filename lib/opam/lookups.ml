@@ -13,13 +13,32 @@ end)
 type archive = {
   root : string;
   pkgs : (string, (string * Opam_parse.pkg_meta) list) Hashtbl.t;
+  (* class -> its members among the names loaded so far.  Unlike every
+     other table here this one is a preimage and so grows as names load;
+     see [class_inst]. *)
   class_table : (string, (string * string) list) Hashtbl.t;
+  (* the versions a name flags avoid-version or deprecated; a table
+     because every version handed to PubGrub is tagged with it, and
+     because all but a hundred or so names answer no *)
   avoid_table : (string, string list) Hashtbl.t;
   mutable n_names : int;
   mutable n_vers : int;
   mutable n_dropped : int;
+  (* wall time inside the parser, which the solve interleaves with *)
   mutable t_parse : float;
 }
+
+type stats = { names : int; versions : int; dropped : int; parse : float }
+
+let stats ar =
+  {
+    names = ar.n_names;
+    versions = ar.n_vers;
+    dropped = ar.n_dropped;
+    parse = ar.t_parse;
+  }
+
+let repository ar = ar.root
 
 let empty_archive root =
   {
