@@ -56,9 +56,9 @@ let xpeer ar (r : P.peer) : Np.coq_PeerDependency =
   {
     Np.p_name = r.P.p_name;
     Np.p_range = xrange (spec_range ar r.P.p_name r.P.p_spec);
-    (* binds only a copy the declarer's depender holds itself, npm's legacy
-       rule; arborist checks whatever copy the declarer resolves to
-       (edge.js:266-277) *)
+    (* need not be met, but what the declarer's depender shows it, its
+       sight, its copy or itself, must be in range, as arborist checks
+       whatever copy the declarer resolves to (edge.js:266-277) *)
     Np.p_optional = r.P.p_optional;
     Np.p_root = r.P.p_root;
   }
@@ -179,7 +179,11 @@ let matches_published st (d : P.dep) : bool =
    is loaded, because deciding at load time would have to resolve every
    optional target of every version eagerly -- the cone pass the driver
    deliberately does not do.  Read lazily, the target of a dependency that
-   survives is a slot target the sub-instance was going to load anyway. *)
+   survives is a slot target the sub-instance was going to load anyway.
+
+   Under the shared reading an optional dependency is kept whatever the
+   registry holds, as Yarn Berry fails to resolve one no version matches
+   (YN0082). *)
 let dep_keep st (d : P.dep) : bool =
   (not d.P.d_optional)
   || (st.optional && (A.shared st.ar || matches_published st d))
@@ -386,7 +390,7 @@ let record_dir st (m : Np.Nm.name) =
       let l = Option.value ~default:[] (Hashtbl.find_opt st.dirs (k, v)) in
       if not (List.exists (fun x -> Np.Nm.compare x m = E.Eq) l) then begin
         Hashtbl.replace st.dirs (k, v) (m :: l);
-        match if A.shared st.ar then desc_name st (snd k, v) d else None with
+        match desc_name st (snd k, v) d with
         | Some x -> Hashtbl.add st.desc_dirs x m
         | None -> ()
       end
