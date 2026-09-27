@@ -44,9 +44,16 @@ def berry_spec(raw):
 
 
 def query_specs(args):
-    """key -> spec as pac reads npm install's arguments"""
+    """key -> spec as pac reads npm install's arguments, a package.json
+    among them giving its own dependencies"""
     out = {}
     for a in args:
+        if a.endswith("package.json") and os.path.isfile(a):
+            with open(a) as f:
+                pj = json.load(f)
+            for field in ("dependencies", "optionalDependencies", "devDependencies"):
+                out.update(pj.get(field) or {})
+            continue
         i = a.find("@", 1)
         k, raw = (a, "*") if i < 0 else (a[:i], a[i + 1:] or "*")
         out[k] = raw

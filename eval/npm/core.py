@@ -17,7 +17,7 @@ a peer where it does not.
 """
 import json
 import os
-import re
+import subprocess
 
 CORE = os.environ.get("PAC_NPM_CORE") == "1"
 
@@ -26,80 +26,58 @@ with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
     EXT = [(d[:d.rindex("@")], d[d.rindex("@") + 1:], x) for d, x in json.load(f)]
 
 
-def _ver(s):
-    m = re.match(r"^\s*v?(\d+)(?:\.(\d+|[xX*]))?(?:\.(\d+|[xX*]))?(?:-([0-9A-Za-z.-]+))?", s)
-    if not m:
-        return None
-    parts = [m.group(1), m.group(2), m.group(3)]
-    return parts, m.group(4)
-
-
-def _key(parts, pre):
-    return tuple(int(p) if p and p.isdigit() else 0 for p in parts) + ((0, pre) if pre else (1, ""),)
-
-
-def _cmp_one(v, op, c):
-    parts, pre = c
-    vk = _key(*v)
-    wild = [p is None or not p.isdigit() for p in parts]
-    lo = _key(parts, pre)
-    if op in ("", "="):
-        if any(wild):
-            n = wild.index(True)
-            return vk[:n] == lo[:n]
-        return vk == lo
-    if op == ">=":
-        return vk >= lo
-    if op == ">":
-        return vk > lo
-    if op == "<=":
-        return vk <= lo
-    if op == "<":
-        return vk < _key(parts, pre) if not any(wild) else vk[:wild.index(True)] < lo[:wild.index(True)]
-    if op in ("^", "~"):
-        if vk < lo:
-            return False
-        n = [int(p) if p and p.isdigit() else 0 for p in parts]
-        if op == "~" or (n[0] == 0 and n[1] != 0 and op == "^"):
-            hi = (n[0], n[1] + 1, 0) if op == "~" or n[0] == 0 else (n[0] + 1, 0, 0)
-        elif op == "^" and n[0] == 0 and n[1] == 0:
-            hi = (0, 0, n[2] + 1)
-        else:
-            hi = (n[0] + 1, 0, 0)
-        return vk[:3] < hi
-    return False
+# Berry's satisfiesWithPrereleases (yarnpkg-core/sources/semverUtils.ts),
+# run on npm's own node-semver: the range with includePrerelease, and else
+# the version and every comparator with their prerelease tags dropped
+_SAT_JS = r"""
+const semver = require(process.argv[1]);
+function sat(version, range) {
+  let r, v;
+  try { r = new semver.Range(range, {includePrerelease: true}); } catch (e) { return false; }
+  try { v = new semver.SemVer(version, r); } catch (e) { return false; }
+  if (r.test(v)) return true;
+  if (v.prerelease) v.prerelease = [];
+  return r.set.some(set => {
+    for (const c of set) if (c.semver.prerelease) c.semver.prerelease = [];
+    return set.every(c => c.test(v));
+  });
+}
+require("readline").createInterface({input: process.stdin}).on("line", l => {
+  const [v, r] = JSON.parse(l);
+  process.stdout.write(sat(v, r) ? "1\n" : "0\n");
+});
+"""
+_SAT = {}
+_SAT_PROC = None
 
 
 def satisfies(version, rng):
-    """semver's satisfies with prereleases admitted, as Berry's
-    satisfiesWithPrereleases reads a packageExtensions key; enough for the
-    shapes that list uses"""
-    v = _ver(version)
-    if v is None:
-        return False
-    for alt in rng.split("||"):
-        alt = alt.strip()
-        if alt in ("", "*", "x"):
-            return True
-        ok = True
-        for tok in re.findall(r"(<=|>=|<|>|=|\^|~)?\s*([0-9vxX*][^\s]*)", alt):
-            c = _ver(tok[1])
-            if c is None or not _cmp_one(v, tok[0], c):
-                ok = False
-                break
-        if ok:
-            return True
-    return False
+    """whether Berry takes version for the packageExtensions key rng"""
+    global _SAT_PROC
+    key = (version, rng)
+    if key not in _SAT:
+        if _SAT_PROC is None:
+            from verdict import resolve_semver
+            _SAT_PROC = subprocess.Popen(["node", "-e", _SAT_JS, resolve_semver()],
+                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                         text=True)
+        _SAT_PROC.stdin.write(json.dumps([version, rng]) + "\n")
+        _SAT_PROC.stdin.flush()
+        _SAT[key] = _SAT_PROC.stdout.readline().strip() == "1"
+    return _SAT[key]
 
 
 def normalize(m, name, version, npm=False):
     """the manifest m of name@version as Berry reads it; for npm's check
-    (npm) only the dependencies the extensions add, since npm itself asks
-    nothing of a peer Berry adds, and our answer gives such a dependency a
-    copy that npm then finds"""
+    (npm), the dependencies the extensions add, and of the peers they add
+    only those on a name the package depends on: npm asks nothing of a peer
+    Berry adds, but where the package also depends on the name the answer
+    reads it as a peer with default, and places the package in sight of
+    what its depender offers"""
     m = dict(m)
     deps = dict(m.get("dependencies") or {})
-    peers = dict(m.get("peerDependencies") or {})
+    own = dict(m.get("peerDependencies") or {})
+    peers = dict(own)
     meta = {k: dict(v) for k, v in (m.get("peerDependenciesMeta") or {}).items()
             if isinstance(v, dict)}
     for n, rg, x in EXT:
@@ -107,17 +85,16 @@ def normalize(m, name, version, npm=False):
             continue
         for k, v in (x.get("dependencies") or {}).items():
             deps.setdefault(k, v)
-        if npm:
-            continue
         for k, v in (x.get("peerDependencies") or {}).items():
             peers.setdefault(k, v)
         for k, v in (x.get("peerDependenciesMeta") or {}).items():
             meta.setdefault(k, {}).update(v)
-    if npm:
-        m["dependencies"] = deps
-        return m
     for k in meta:
         peers.setdefault(k, "*")
+    if npm:
+        named = set(deps) | set(m.get("optionalDependencies") or {})
+        peers = {k: v for k, v in peers.items() if k in own or k in named}
+        meta = {k: v for k, v in meta.items() if k in peers}
     m["dependencies"], m["peerDependencies"], m["peerDependenciesMeta"] = deps, peers, meta
     return m
 

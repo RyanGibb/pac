@@ -17,9 +17,12 @@ usage: lockname.py <package-lock.json>
 Exits 3 on a mismatch, so that a crash, which exits 1, is not read as one.
 """
 import json
+import os
 import sys
 
 from tree import ancestors, resolve
+
+CORE = os.environ.get("PAC_NPM_CORE") == "1"
 
 FIELDS = ("dependencies", "optionalDependencies", "peerDependencies",
           "devDependencies")
@@ -64,6 +67,14 @@ def main():
                 # installed there too, by version alone; relation.py asks
                 # that it be the copy our answer offers
                 if field == "peerDependencies" and got != key:
+                    continue
+                # under the common core a dependency beside a peer of its
+                # name is a peer with default, which takes what the depender
+                # offers under the peer's name: an aliased dependency then
+                # finds the name's own package, as npm and Berry both load
+                peer = (e.get("peerDependencies") or {}).get(key)
+                if (CORE and field != "peerDependencies" and peer is not None
+                        and got == target(key, peer)):
                     continue
                 if got != want:
                     print(f"{path or '(root)'} {field} {key}: {spec} "
