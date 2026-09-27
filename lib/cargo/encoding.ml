@@ -119,13 +119,7 @@ let xentry : P.fentry -> Cg.FEntry.t = function
    (cfg, kind, alias): the tables a manifest offers are maps, so two
    records can only collide here if an index entry repeats a site, which
    no manifest can spell.  Conjoining the requirements and unioning the
-   requested features is what that unreachable case gets; every real
-   repeat of an alias across kinds or cfgs stays its own slot, even at one
-   requirement, because cargo resolves each declaration apart
-   (resolve_features, core/resolver/dep_cache.rs) and its own fresh lock
-   gives two versions where one lacks a feature one declaration asks for.
-   That the lock read back re-locks both to one version (core/registry.rs,
-   lock) is reproduction, not resolution. *)
+   requested features is what that unreachable case gets. *)
 let unify_site (ds : P.dep list) : P.dep =
   let d0 = List.hd ds in
   {
@@ -141,18 +135,40 @@ let unify_site (ds : P.dep list) : P.dep =
 let site_of (d : P.dep) : string * P.kind * string =
   (d.P.d_alias, d.P.d_kind, d.P.d_cfg)
 
-let slots_of (v : P.ver) : P.dep list =
+(* [ds] grouped by [key], in order of first appearance, each group merged *)
+let group key merge (ds : P.dep list) : P.dep list =
   let tbl = Hashtbl.create 16 in
   let order = ref [] in
   List.iter
     (fun (d : P.dep) ->
-      let k = site_of d in
+      let k = key d in
       if not (Hashtbl.mem tbl k) then order := k :: !order;
       Pac_common.Tbl.push tbl k d)
-    v.P.v_deps;
-  List.map
-    (fun k -> unify_site (List.rev (Hashtbl.find tbl k)))
-    (List.rev !order)
+    ds;
+  List.map (fun k -> merge (List.rev (Hashtbl.find tbl k))) (List.rev !order)
+
+(* cargo resolves each declaration apart (resolve_features,
+   core/resolver/dep_cache.rs), so two sites of one alias may take two
+   versions, and cargo's own fresh lock splits them where one version
+   lacks a feature one site asks for.  Two active sites that ask the same
+   of the same crate -- requirement, features, default features -- see
+   the same candidates, newest first, and the second finds the first's
+   version active with nothing new to enable (activate, core/resolver/
+   mod.rs), so they get one version, and are one slot here, at the first
+   site.  A dev-dependency is active from the root alone. *)
+let same_ask ~root (d : P.dep) =
+  if d.P.d_kind = P.Dev && not root then `Site (site_of d)
+  else
+    `Ask
+      ( d.P.d_alias,
+        d.P.d_target,
+        d.P.d_req,
+        List.sort_uniq String.compare d.P.d_feats,
+        d.P.d_default,
+        d.P.d_optional )
+
+let slots_of ~root (v : P.ver) : P.dep list =
+  group (same_ask ~root) List.hd (group site_of unify_site v.P.v_deps)
 
 let slot_data (d : P.dep) : Cg.SlotData.t =
   ( d.P.d_alias,

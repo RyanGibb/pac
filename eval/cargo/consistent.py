@@ -101,8 +101,8 @@ import sys
 import tomllib
 import unicodedata
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-INDEX = os.environ.get("CARGO_INDEX") or os.path.normpath(HERE + "/../../repos/crates.io-index")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from run_query import crate_path  # noqa: E402
 
 
 NUM = re.compile(r"[0-9]+")
@@ -370,15 +370,6 @@ def compat(v):
     return ("major", major) if major else ("minor", minor) if minor else ("patch", patch)
 
 
-def index_path(name):
-    n = name.lower()
-    if len(n) <= 2:
-        return f"{INDEX}/{len(n)}/{n}"
-    if len(n) == 3:
-        return f"{INDEX}/3/{n[0]}/{n}"
-    return f"{INDEX}/{n[:2]}/{n[2:4]}/{n}"
-
-
 class Summary:
     """a package as the resolver sees it: its declarations, feature map
     and links"""
@@ -573,7 +564,7 @@ def unreadable(j, s, declared, doubts):
 
 def from_index(name, vers):
     try:
-        with open(index_path(name)) as f:
+        with open(crate_path(name)) as f:
             rows = [json.loads(l) for l in f if l.strip()]
     except FileNotFoundError:
         return None

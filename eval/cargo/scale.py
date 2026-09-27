@@ -10,79 +10,42 @@
   scale.py one CRATE STEM         pac's and cargo's answers, at STEM.*
   scale.py corr STEM              how the two compare
 """
-import functools, json, multiprocessing, operator, os, random, re, shutil, sys
+import functools, json, multiprocessing, os, random, shutil, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-INDEX = os.environ.get("CARGO_INDEX") or os.path.normpath(HERE + "/../../repos/crates.io-index")
+from consistent import compat as compat_class, matches, pre_key, requirement, version  # noqa: E402
+from run_query import INDEX  # noqa: E402
 TOOLCHAIN = "1.97.1"
-
-
-def num(s):
-    # more than 18 digits saturates, as in Cargo_version
-    x = int(re.match(r"[0-9]*", s).group() or 0)
-    return x if x < 10 ** 18 else (1 << 62) - 1
 
 
 @functools.lru_cache(maxsize=1 << 20)
 def vkey(v):
-    core, _, pre = v.split("+")[0].partition("-")
-    m, n, p = ([num(x) for x in core.split(".")] + [0, 0])[:3]
-    ids = tuple((0, int(i), b"") if re.fullmatch(r"[0-9]+", i) else (1, 0, i.encode())
-                for i in pre.split(".")) if pre else ()
-    return m, n, p, not pre, ids
-
-
-def compat_class(v):
-    m, n, p = vkey(v)[:3]
-    return f"{m}.0.0" if m else f"0.{n}.0" if n else f"0.0.{p}"
-
-
-def bounds(req):
-    """Cargo_version's reading of a requirement, as (op, version) pairs."""
-    out = []
-    for c in req.split(","):
-        op, spec = re.match(r"\s*(>=|<=|>|<|==|=|\^|~|)\s*(.*?)\s*$", c).groups()
-        core, _, pre = spec.split("+")[0].partition("-")
-        ma, mi, pa = ([None if not s else "*" if s in "*xX" or s[0] not in "0123456789" else num(s)
-                       for s in core.split(".")] + [None, None])[:3]
-        if not spec or not isinstance(ma, int):
-            continue
-        n, p = (mi if isinstance(mi, int) else 0), (pa if isinstance(pa, int) else 0)
-        v = lambda a, b, c, pr="": f"{a}.{b}.{c}" + ("-" + pr if pr else "")
-        lo = v(ma, n, p, pre)
-        up = v(ma, mi + 1, 0) if isinstance(mi, int) else v(ma + 1, 0, 0)
-        wild = [(">=", v(ma, n, 0)), ("<", up)]
-        if op == "^" or op == "" and mi != "*" and not (isinstance(mi, int) and pa == "*"):
-            cup = (v(ma + 1, 0, 0) if ma or not isinstance(mi, int) else
-                   v(0, mi + 1, 0) if mi or not isinstance(pa, int) else v(0, 0, pa + 1))
-            out += [(">=", lo), ("<", cup)]
-        elif op == "":
-            out += wild
-        elif op == "~":
-            out += [(">=", lo), ("<", up)]
-        elif op in ("=", "=="):
-            out += [("=", lo)] if isinstance(mi, int) and isinstance(pa, int) else wild
-        elif op in (">=", "<") or isinstance(pa, int):
-            out.append((op, lo))
-        else:
-            out.append((">=" if op == ">" else "<",
-                        v(ma, n + 1, 0) if isinstance(mi, int) else v(ma + 1, 0, 0)))
-    return out
-
-
-OPS = {">=": operator.ge, ">": operator.gt, "<=": operator.le, "<": operator.lt, "=": operator.eq}
+    """semver's order, and below every version one semver refuses, which
+    cargo drops from the index"""
+    try:
+        m, n, p, pre = version(v)
+    except ValueError:
+        return (-1,)
+    return m, n, p, pre_key(pre)
 
 
 def holds(v, req):
-    k = vkey(v)
-    return all(OPS[op](k, vkey(c)) for op, c in req) and (
-        k[3] or any(not vkey(c)[3] and vkey(c)[:3] == k[:3] for _, c in req))
+    """whether the parsed requirement req admits v"""
+    try:
+        return matches(req, v)
+    except ValueError:
+        return False
 
 
 @functools.lru_cache(maxsize=None)
 def msrv_ok(msrv, rustc=TOOLCHAIN):
-    return msrv is None or holds(".".join(map(str, vkey(rustc)[:3])), bounds("^" + msrv))
+    """rustc may be a rust_version, of two components; one semver cannot
+    read constrains nothing here"""
+    try:
+        return msrv is None or matches(requirement("^" + msrv), ".".join((rustc.split(".") + ["0"])[:3]))
+    except ValueError:
+        return True
 
 
 def read_rows(path):
@@ -100,7 +63,8 @@ def read_rows(path):
 def newest(rows):
     """The root a query names: the greatest version not yanked, first of
     equals."""
-    return max((j for j in rows if not j.get("yanked")), key=lambda j: vkey(j["vers"]), default=None)
+    return max((j for j in rows if not j.get("yanked") and vkey(j["vers"]) != (-1,)),
+               key=lambda j: vkey(j["vers"]), default=None)
 
 
 def index_files():
@@ -144,7 +108,10 @@ def targets(seed, k, exclude=None):
     def moves(target, req, tc):
         """Whether the best version req admits is past toolchain tc while an
         older one of its class is not: where the MSRV preference acts."""
-        r = bounds(req)
+        try:
+            r = requirement(req)
+        except ValueError:
+            return False
         adm = [(v, m) for v, m in by[target]["vers"] if holds(v, r)] if target in by else []
         if not adm:
             return False

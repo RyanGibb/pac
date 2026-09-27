@@ -654,8 +654,14 @@ fresh lock.  Reading that lock back re-locks both to 0.60.0
   encoded solution: 14 core nodes (16 lookups)
   loaded: 3 names, 3 versions
 
-The root's dev-dependencies are active beside its normal ones, and are
-declarations apart all the same:
+sti's two declarations ask the same of wsy, requirement and features, so
+cargo gives them one version, and whatever the order, so does pac:
+
+  $ for s in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do ../../../bin/main.exe cargo index manifests/st3.toml --order=random --seed $s | grep -c '^  wsy '; done | sort | uniq -c
+       16 1
+
+The root's dev-dependencies are active beside its normal ones, and one
+asking wsy for a splits from a normal one asking for nothing the same way:
 
   $ untimed ../../../bin/main.exe cargo index manifests/st2.toml --print-parents
   root st2 1.0.0

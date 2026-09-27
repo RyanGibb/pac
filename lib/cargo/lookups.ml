@@ -87,7 +87,7 @@ let fibres_of st (p : string * string) : fibres =
       match meta st n v with
       | None -> empty_fibres n
       | Some m ->
-          let ds = slots_of m in
+          let ds = slots_of ~root:(p = st.rc) m in
           let slots =
             Cg.SlotRel.ofList
               (List.map
