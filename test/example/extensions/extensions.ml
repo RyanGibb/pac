@@ -940,6 +940,78 @@ module Concurrent_features = struct
     parents (M.ParentRel.elements (R.parents s))
 end
 
+module Placement = struct
+  module M = E.Placement (S) (S)
+  module R = M.Reduction
+  module L = R.Lookup
+
+  type name = R.Name.t
+  type version = R.Version.t
+
+  let compare_name = R.NameOT.compare
+  let compare_version = R.VersionOT.compare
+
+  (* a path is stored deepest key first *)
+  let path = function [] -> "ε" | l -> String.concat "/" (List.rev l)
+
+  let pp_name f = function
+    | R.Name.Root -> str f "<ε>"
+    | R.Name.Loc (l, a) -> Format.fprintf f "<%s,%s>" (path l) a
+    | R.Name.Walk (l, a) -> Format.fprintf f "<%s⇑%s>" (path l) a
+
+  let pp_version f = function
+    | R.Version.Occ v -> str f v
+    | R.Version.Found (l, v) -> Format.fprintf f "(%s,%s)" (path l) v
+    | R.Version.Bot -> str f "⊥"
+
+  let vs l = M.VSet.ofList l
+  let d = Pac_common.Ot.int_nat 2
+
+  let i =
+    {
+      M.inst_repo =
+        M.PkgSet.ofList [ ("A", "1"); ("B", "1"); ("C", "1"); ("C", "2") ];
+      inst_deps =
+        M.C.DepRel.ofList
+          [
+            (("R", "1"), ("A", vs [ "1" ]));
+            (("R", "1"), ("B", vs [ "1" ]));
+            (("A", "1"), ("C", vs [ "1" ]));
+            (("B", "1"), ("A", vs [ "1" ]));
+            (("B", "1"), ("C", vs [ "2" ]));
+          ];
+      inst_peers = M.C.DepRel.ofList [ (("C", "2"), ("A", vs [ "1" ])) ];
+      inst_root = ("R", "1");
+    }
+
+  let root = R.rootPkg i
+
+  let versions n =
+    R.T.VSet.elements
+      (match n with
+      | R.Name.Root -> R.T.VSet.singleton (R.Version.Occ (snd i.M.inst_root))
+      | R.Name.Loc (_, a) | R.Name.Walk (_, a) ->
+          R.versions (L.nameSubInst i a) d n)
+
+  let dependees p =
+    edges R.T.VSet.elements R.T.DependeesSet.elements
+      (match p with
+      | R.Name.Root, _ -> R.dependees (L.occSubInst i [] i.M.inst_root) p
+      | R.Name.Loc (l, a), R.Version.Occ v ->
+          R.dependees (L.occSubInst i l (a, v)) p
+      | R.Name.Loc _, _ -> R.T.DependeesSet.empty
+      | R.Name.Walk (l, a), w -> R.walkDeps l a w)
+
+  let real = R.T.PkgSet.elements (R.reduceReal i d)
+  let deps = rel R.T.VSet.elements R.T.DepRel.elements (R.reduceDeps i d)
+
+  let decode s =
+    packages "layout"
+      (List.map
+         (fun (l, (a, v)) -> path (a :: l) ^ " " ^ v)
+         (M.Layout.elements (R.placementResolution (R.T.PkgSet.ofList s))))
+end
+
 let examples : (string * (module EXAMPLE)) list =
   [
     ("conflict-class", (module Conflict_class));
@@ -952,6 +1024,7 @@ let examples : (string * (module EXAMPLE)) list =
     ("variable-formula", (module Variable_formula));
     ("virtual", (module Virtual));
     ("concurrent-features", (module Concurrent_features));
+    ("placement", (module Placement));
   ]
 
 let () =

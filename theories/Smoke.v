@@ -2,7 +2,7 @@ From Stdlib Require Import MSets List.
 From PackageCalculus Require Import Prelude Core Complexity Versions Semver
   Conflict ConflictClass Concurrent PeerDependency Visibility Feature
   Virtual PackageFormula VariableFormula FeatureConcurrent Debian DebianMA
-  Opam Cargo Alpine Npm.
+  Opam Cargo Alpine Npm Placement.
 
 Module C := Core Nat_as_OT Nat_as_OT.
 Module Cx := Complexity Nat_as_OT Nat_as_OT Nat_as_OT.
@@ -12,6 +12,7 @@ Module Ver := Versions Nat_as_OT Nat_as_OT.
 Module Conc := Concurrent Nat_as_OT Nat_as_OT Nat_as_OT.
 Module Peer := PeerDependency Nat_as_OT Nat_as_OT Nat_as_OT.
 Module Vis := Visibility Nat_as_OT Nat_as_OT.
+Module Plc := Placement Nat_as_OT Nat_as_OT.
 
 Module BoolFin <: FiniteUsualOrderedType.
   Include UOTFromCompare BoolComp.

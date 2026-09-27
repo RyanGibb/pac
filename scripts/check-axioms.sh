@@ -120,6 +120,25 @@ Vis.Reduction.reduceRealOccurrence
 Vis.Reduction.visibility_completeness
 Vis.Reduction.visibility_soundness
 
+Plc.reaches_restriction
+Plc.walk
+Plc.Reduction.Lookup.dependees_lookupAbsent
+Plc.Reduction.Lookup.dependees_lookupLoc
+Plc.Reduction.Lookup.dependees_lookupRoot
+Plc.Reduction.Lookup.dependees_lookupWalk
+Plc.Reduction.Lookup.versions_lookupLoc
+Plc.Reduction.Lookup.versions_lookupRoot
+Plc.Reduction.Lookup.versions_lookupWalk
+Plc.Reduction.coreResolution
+Plc.Reduction.dependees
+Plc.Reduction.placementResolution
+Plc.Reduction.placementResolution_coreResolution
+Plc.Reduction.placement_completeness
+Plc.Reduction.placement_soundness
+Plc.Reduction.reduceDeps
+Plc.Reduction.reduceReal
+Plc.Reduction.versions
+
 Feat.Reduction.Lookup.dependees_lookupFeatPkg
 Feat.Reduction.Lookup.dependees_lookupOrig
 Feat.Reduction.Lookup.versions_lookupFeatPkg
