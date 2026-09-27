@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # usage: controls.sh <scratch-dir>        PORT=<free port for the shim>
+#        BPORT=<free port for berryreg.py, default PORT+100>
 set -u
 export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
 T=$(mkdir -p "$1" && cd "$1" && pwd)
-PORT=${PORT:-8899}
+PORT=${PORT:-8899} BPORT=${BPORT:-$((${PORT:-8899} + 100))}
 bad=0
 
 rm -rf "$T/cache" "$T/home" "$T/work"
@@ -12,7 +13,7 @@ mkdir -p "$T/cache" "$T/home" "$T/work"
 : > "$T/home/.npmrc"; : > "$T/home/npmrc-global"
 
 # a: optional peer b@^2.  p: peer b@^1.  q: peer r@^1.  c: b@^1.  y: r@^1.
-python3 - "$T" <<'EOF'
+python3 - "$T" <<'EOF' || exit 1
 import base64, hashlib, json, os, sys
 T = sys.argv[1]
 PKGS = {
@@ -80,6 +81,14 @@ PKGS = {
     "ue": {"1.0.0": {"peerDependencies": {"tm": "^1.0.0"}}},
     "us": {"1.0.0": {"dependencies": {"uf": "^1.0.0"}, "peerDependencies": {"tm": "^1.0.0"}}},
     "uf": {"1.0.0": {"peerDependencies": {"tm": "^1.0.0"}}},
+    "pd": {"1.0.0": {"dependencies": {"pq": "^1.0.0"}, "peerDependencies": {"pq": "^1.0.0"}}},
+    "pq": {"1.0.0": {}, "1.1.0": {}},
+    "snowpack": {"3.3.0": {}},
+    "node-gyp": {"7.1.0": {}},
+    "magic-string": {"0.25.7": {}},
+    "ad": {"1.0.0": {"dependencies": {"b": "npm:baz@^1.0.0"},
+                     "peerDependencies": {"b": "^1.0.0"}}},
+    "cc": {"1.0.0": {"dependencies": {"b": "^1.0.0"}}},
 }
 CASES = {
     "po-valid":   ("VALID/yes/yes", {"a": "^1.0.0", "c": "^1.0.0"},
@@ -231,6 +240,33 @@ OURS = {
                         "us 1.0.0 <- uf 1.0.0", "us 1.0.0 <- tm 1.0.0"]),
     "unreached-broken": ("INVALID/-/-", {"b": "^1.0.0"}, [". <- b 1.0.0"], ["y 1.0.0"]),
 }
+# answers under READING=shared, as npm and Yarn Berry both read the
+# manifests
+SHARED = {
+    # pd depends and peers on pq: its own pq where the root offers none,
+    # and the root's where it offers one
+    "sh-default-own":   ("VALID/yes/yes", {"pd": "^1.0.0"},
+                         [". <- pd 1.0.0", "pd 1.0.0 <- pq 1.0.0"]),
+    "sh-default-offer": ("VALID/yes/yes", {"pd": "^1.0.0", "pq": "^1.0.0"},
+                         [". <- pd 1.0.0", ". <- pq 1.1.0"]),
+    "sh-default-none":  ("INVALID/-/-", {"pd": "^1.0.0"}, [". <- pd 1.0.0"]),
+    # snowpack 3.3.0's packageExtensions add node-gyp and magic-string
+    "sh-ext-met":       ("VALID/no/yes", {"snowpack": "3.3.0"},
+                         [". <- snowpack 3.3.0", "snowpack 3.3.0 <- node-gyp 7.1.0",
+                          "snowpack 3.3.0 <- magic-string 0.25.7"]),
+    "sh-ext-missed":    ("INVALID/-/-", {"snowpack": "3.3.0"}, [". <- snowpack 3.3.0"]),
+    # ad's aliased b beside its peer on b takes the root's b
+    "sh-alias-default": ("VALID/yes/yes", {"ad": "^1.0.0", "b": "^1.0.0"},
+                         [". <- ad 1.0.0", ". <- b 1.0.0"]),
+}
+# answers berry.sh judges
+BERRY = {
+    "berry-valid": ("VALID", {"c": "^1.0.0"}, [". <- c 1.0.0", "c 1.0.0 <- b 1.0.0"]),
+    # c's and cc's b@^1.0.0, one descriptor, resolved two ways
+    "berry-split": ("INVALID", {"c": "^1.0.0", "cc": "^1.0.0"},
+                    [". <- c 1.0.0", ". <- cc 1.0.0", "c 1.0.0 <- b 1.0.0",
+                     "cc 1.0.0 <- b 1.1.0"]),
+}
 # arborist's Node.matches takes two nodes of one name and one integrity for
 # the same package, whatever their versions
 def dist(n, v):
@@ -259,17 +295,22 @@ with open(f"{T}/cases", "w") as out:
             pk["node_modules/" + path] = e
         json.dump({"name": "root", "version": "1.0.0", "lockfileVersion": 3,
                    "requires": True, "packages": pk}, open(f"{d}/package-lock.json", "w"), indent=2)
-        out.write(f"{case} {want} {d}/package-lock.json\n")
-    for case, (want, deps, rows, *extra) in OURS.items():
-        d = f"{T}/work/{case}"
-        os.makedirs(d)
-        root = {"name": "root", "version": "1.0.0", "private": True, "dependencies": deps}
-        json.dump(root, open(f"{d}/package.json", "w"), indent=2)
-        pkgs = sorted({s for r in rows for s in r.split(" <- ")} | set(sum(extra, [])))
-        with open(f"{d}/ans.out", "w") as f:
-            f.write("root .\n" + f"packages ({len(pkgs)}):\n" + "".join(f"  {p}\n" for p in pkgs)
-                    + f"node_modules ({len(rows)}):\n" + "".join(f"  {r}\n" for r in rows))
-        out.write(f"{case} {want} {d}/ans.out\n")
+        out.write(f"{case} {want} npm {d}/package-lock.json\n")
+    def ours(cases, reading, out):
+        for case, (want, deps, rows, *extra) in cases.items():
+            d = f"{T}/work/{case}"
+            os.makedirs(d)
+            root = {"name": "root", "version": "1.0.0", "private": True, "dependencies": deps}
+            json.dump(root, open(f"{d}/package.json", "w"), indent=2)
+            pkgs = sorted({s for r in rows for s in r.split(" <- ")} | set(sum(extra, [])))
+            with open(f"{d}/ans.out", "w") as f:
+                f.write("root .\n" + f"packages ({len(pkgs)}):\n" + "".join(f"  {p}\n" for p in pkgs)
+                        + f"node_modules ({len(rows)}):\n" + "".join(f"  {r}\n" for r in rows))
+            out.write(f"{case} {want} {reading} {d}/ans.out\n")
+    ours(OURS, "npm", out)
+    ours(SHARED, "shared", out)
+with open(f"{T}/berry-cases", "w") as out:
+    ours(BERRY, "shared", out)
 EOF
 
 . "$S/../serve.sh"
@@ -277,18 +318,42 @@ serve "$PORT" "$T/cache" "$T/shim.log" python3 "$S/shim.py" "$PORT" "$T/cache" -
   --log "$T/miss.log" || exit 1
 
 # a check that does not finish is one that reached no verdict
-check() {  # <case> <answer>
-  NPM_RUN=$T timeout 120 bash "$S/../check.sh" npm "$2" "$T/work/$1.check" \
+check() {  # <case> <answer> [reading]
+  NPM_RUN=$T READING=${3:-npm} timeout 120 bash "$S/../check.sh" npm "$2" "$T/work/$1.check" \
     "$T/work/$1/package.json" | tail -n 1
 }
 
 verdicts() { sed -n 's/.* valid=\([A-Z]*\) minimal=\([a-z-]*\) reproduced=\([a-z-]*\)$/\1\/\2\/\3/p'; }
-while read -r case want ans; do
-  line=$(check "$case" "$ans")
+while read -r case want reading ans; do
+  line=$(check "$case" "$ans" "$reading")
   got=$(verdicts <<< "$line")
   printf '%-16s expect %-15s got %-15s %s\n' "$case" "$want" "${got:-ERR/-/-}" "${line% valid=*}"
   [ "$got" = "$want" ] || bad=1
 done < "$T/cases"
+
+# berry.sh against berryreg.py over the same farm
+berry() {  # <case> <answer>
+  NPM_RUN=$T BPORT=$BPORT timeout 600 bash "$S/berry.sh" "$2" "$T/work/$1.bcheck" \
+    "$T/work/$1/package.json" | tail -n 1
+}
+bverdict() { sed -n 's/.* berry=\([A-Z]*\)$/\1/p'; }
+reg=$served
+serve "$BPORT" "$T/cache" "$T/berryreg.log" python3 "$S/berryreg.py" "$BPORT" "$T/cache" || exit 1
+breg=$served served=$reg
+trap 'kill $served $breg 2> /dev/null' EXIT
+while read -r case want reading ans; do
+  mkdir -p "$T/work/$case.bcheck"
+  line=$(berry "$case" "$ans")
+  got=$(bverdict <<< "$line")
+  printf '%-16s expect %-15s got %-15s %s\n' "$case" "$want" "${got:-ERR}" "${line% berry=*}"
+  [ "$got" = "$want" ] || bad=1
+done < "$T/berry-cases"
+# Berry failing for want of a registry says nothing of the answer
+kill $breg; wait $breg 2> /dev/null
+mkdir -p "$T/work/berry-noreg.bcheck"
+got=$(berry berry-valid "$T/work/berry-valid/ans.out" | bverdict)
+printf '%-16s expect %-15s got %s\n' berry-noreg ERR "$got"
+[ "$got" = ERR ] || bad=1
 
 # npm failing for want of a registry says nothing of the answer
 kill $served; wait $served 2> /dev/null

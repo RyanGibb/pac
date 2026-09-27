@@ -25,6 +25,8 @@
 set -u
 export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
+. "$S/berry-lib.sh"
+yarn_check
 RUN=${NPM_RUN:?} BPORT=${BPORT:?}
 ans=$1 out=$2; shift 2
 W=$out/berry
