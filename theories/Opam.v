@@ -1229,6 +1229,15 @@ Module Opam (N V X Y E : UsualOrderedType).
           [exact (HD _ _ H) | exact H].
       Qed.
 
+      Lemma versions_class_mono : forall rho I' I k,
+          ClsRel.Subset (inst_cls I') (inst_cls I) ->
+          PF.VSet.Subset (versions rho I' (TName.Cls k))
+            (versions rho I (TName.Cls k)).
+      Proof.
+        intros rho I' I k HC tv; cbn [versions]; rewrite !mem_clsVersions.
+        intros [p [Hp ->]]; exists p; split; [exact (HC _ Hp) | reflexivity].
+      Qed.
+
       Theorem dependees_lookupRoot : forall rho I,
           dependees rho (rootSubInst I) rootPkg = dependees rho I rootPkg.
       Proof.

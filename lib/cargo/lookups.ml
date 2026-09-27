@@ -235,7 +235,8 @@ let versions st (tn : Cg.NPlus.t) : Cg.VPlus.t list =
         }
   | Cg.NPlus.CLink l ->
       (* Lookup.claimants and LinkFibred.withHead at l, over the
-         declarers loaded so far; see Archive.t *)
+         declarers loaded so far: the answer may only grow
+         (versions_link_mono) *)
       let rs = Archive.link_preimage st.ar l in
       let links = Cg.LinkRel.ofList (List.map (fun q -> (q, l)) rs) in
       let repo =
@@ -307,9 +308,11 @@ let tag st (tn : Cg.NPlus.t) (w : Cg.VPlus.t) : PVersion.t =
       { PVersion.msrv = msrv_fits st (n, v); v = w }
   | _ -> { PVersion.msrv = true; v = w }
 
-(* CLink l is the one name that cannot be held (see Archive.t); a memo
-   would freeze its answer mid-run and refuse a declarer loaded later
-   against a set fixed without it *)
+(* CLink l's versions may only grow (versions_link_mono), so they are not
+   held: a memo would refuse a declarer loaded later.  The rest of the
+   contract that makes growth safe holds too: its dependees are fixed,
+   being none, and every range onto it is an exact set of listed versions,
+   built by pg_dependencies with of_list from a loaded declarer's own *)
 let pg_versions st tn =
   match tn with
   | Cg.NPlus.CLink _ -> List.map (tag st tn) (versions st tn)

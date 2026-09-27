@@ -335,13 +335,12 @@ let root_inst ar (query : (string * Opam_parse.vc) list) : Op.coq_Inst =
    A conflict or pin-depends is no such exception: the reduction turns a
    negated atom into the declarer's own edge on the target's name, so
    nothing of who conflicts with a name is read when the name answers.
-   class_table therefore holds the declarers among the names loaded so far
-   and may grow at any point in the run, and this is built from it at
-   every ask and never held.  That is enough: the growing answer is a
-   versions answer, which PubGrub re-asks at every assignment, whereas a
-   node's dependency list is memoised and so fixed at its first ask.  A
-   class version is also never asked for before its claimant's name has
-   loaded, since the claim is that package's own edge. *)
+   class_table therefore holds the declarers among the names loaded so far,
+   and this is built from it at every ask and never held: its versions may
+   only grow (versions_class_mono), which the resolver's contract allows
+   since the rest of it holds.  A class package's dependees are fixed,
+   being none, and every range onto it is an exact set of listed versions,
+   the claimant's own, whose name has loaded since the claim is its edge. *)
 let class_inst ar (k : string) : Op.coq_Inst =
   {
     empty_inst with

@@ -7,14 +7,14 @@ module P = Cargo_parse
    sub-instance a lookup theorem names must be complete at the moment the
    lookup answers.  Each is complete by construction -- name_set,
    support_of_name and repo_preimage load every name they read whole, and
-   meta and the owner scan load the owner -- except the one
-   versions_lookupLink names.  Its sub-instance is the preimage of the link
-   relation at l -- every crate version declaring l -- and no declaration
-   of any one crate names the other declarers, so nothing a loaded crate
-   carries can bring them in: links_table holds the declarers among the
-   names loaded so far, and may grow after CLink l has answered.
-   Lookups.pg_versions answers it afresh each time rather than memoizing
-   it. *)
+   meta and the owner scan load the owner -- except a links value's: every
+   crate version declaring it, which no one crate's declarations name.
+   links_table holds the declarers among the names loaded so far, so the
+   value's versions may grow after the lookup has answered.  The resolver's
+   contract allows that: versions may only grow (versions_link_mono); a
+   package's dependees are fixed, and the value's package has none; every
+   range onto it is an exact set of listed versions, the singleton of the
+   declarer whose edge it is, loaded before its edges are asked. *)
 type t = {
   index : string;
   crates : (string, P.ver list) Hashtbl.t;

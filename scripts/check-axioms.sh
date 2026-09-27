@@ -265,6 +265,7 @@ Op.Reduction.Lookup.dependees_lookupOrig
 Op.Reduction.Lookup.dependees_lookupOrigCore
 Op.Reduction.Lookup.dependees_lookupRoot
 Op.Reduction.Lookup.dependees_lookupRootCore
+Op.Reduction.Lookup.versions_class_mono
 Op.Reduction.Lookup.versions_lookupClass
 Op.Reduction.Lookup.versions_lookupClassCore
 Op.Reduction.Lookup.versions_lookupOrig
@@ -305,6 +306,7 @@ Cgo.Lookup.reads
 Cgo.Lookup.realPreimage
 Cgo.Lookup.slot_declines
 Cgo.Lookup.supportPreimage
+Cgo.Lookup.versions_link_mono
 Cgo.Lookup.versions_lookupCrate
 Cgo.Lookup.versions_lookupDecision
 Cgo.Lookup.versions_lookupFeatP

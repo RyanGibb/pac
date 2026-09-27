@@ -2677,6 +2677,19 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       reflexivity.
     Qed.
 
+    Lemma versions_link_mono : forall I' I l,
+        PkgSet.Subset (inst_repo I') (inst_repo I) ->
+        LinkRel.Subset (inst_links I') (inst_links I) ->
+        (forall v, inst_gran I' v = inst_gran I v) ->
+        T.VSet.Subset (versions I' (NPlus.CLink l))
+          (versions I (NPlus.CLink l)).
+    Proof.
+      intros I' I l HR HL Hg w; rewrite !mem_versions_link.
+      intros [m [v [-> [Hl Hv]]]]; exists m, v.
+      rewrite Hg; split; [reflexivity |].
+      split; [exact (HL _ Hl) | exact (HR _ Hv)].
+    Qed.
+
     Lemma dep_crate_mono :
       forall g R R' support support' FDefs FDefs' Slots Slots' Links Links'
              dflt rc rootFeats rootFeats' m gr v,
