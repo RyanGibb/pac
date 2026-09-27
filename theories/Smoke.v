@@ -707,10 +707,11 @@ Definition nplInst : NplS.Inst :=
   NplS.MkInst
     (fold_right NplS.RepoSet.add NplS.RepoSet.empty
        ((npmB, 1) :: (npmC, 1) :: nil))
-    (((npmA, 1), NplS.MkDep npmX npmB ((NplS.COp OpEq 1 :: nil) :: nil) false false)
-     :: ((npmA, 1), NplS.MkDep npmC npmC ((NplS.COp OpEq 2 :: nil) :: nil) false true)
+    nil nil nil npmA
+    (NplS.MkDep npmX npmB ((NplS.COp OpEq 1 :: nil) :: nil) false false
+     :: NplS.MkDep npmC npmC ((NplS.COp OpEq 2 :: nil) :: nil) false true
      :: nil)
-    nil nil (npmA, 1).
+    nil.
 
 Example npl_edges :
   List.map (fun e => (NplS.e_dir e, NplS.e_name e, NplS.e_opt e))
@@ -727,9 +728,9 @@ Definition nplInstOvr (o : list (nat * NplS.Range)) : NplS.Inst :=
   NplS.MkInst
     (fold_right NplS.RepoSet.add NplS.RepoSet.empty
        ((npmB, 1) :: (npmB, 2) :: (npmX, 1) :: nil))
-    (((npmA, 1), NplS.MkDep npmX npmB ((NplS.COp OpEq 2 :: nil) :: nil) false false)
-     :: nil)
-    nil o (npmA, 1).
+    nil nil o npmA
+    (NplS.MkDep npmX npmB ((NplS.COp OpEq 2 :: nil) :: nil) false false :: nil)
+    nil.
 
 Definition nplAccepts (I : NplS.Inst) : list (list NplS.Occ.t) :=
   List.map (fun e => NplS.Pl.VSet.elements (NplS.accepts I e))

@@ -3,6 +3,10 @@
    answer without saying so. *)
 exception Fetch_failed of string
 
+(* a lookup of the npm reading read the registry's packages of the root's
+   own name, which that reading cannot tell from the root *)
+exception Reaches_root of string
+
 type t
 
 (* [parse] is the wall time fetching and parsing packuments, which the
@@ -46,10 +50,12 @@ val versions_of : t -> string -> string list
 val dist_tag : t -> string -> string -> string option
 val latest : t -> string -> string option
 
-(* The query is published nowhere, so it enters the archive as the only
-   version of its name; a registry package of that name is then out of
-   reach, as it would be had it been the root. *)
-val add_root : t -> Npm_parse.ver -> string * string
+(* The query is published nowhere, so root_meta reads it apart from the
+   registry's packages.  [named] also enters it as the only version of its
+   name, for a reading that keys the root's package by name and version
+   like any other; a registry package of that name is then out of reach. *)
+val add_root : named:bool -> t -> Npm_parse.ver -> string * string
+val root_meta : t -> Npm_parse.ver option
 val meta : t -> string * string -> Npm_parse.ver option
 
 (* the latest tag of a name already loaded, loading nothing *)

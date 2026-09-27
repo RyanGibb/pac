@@ -76,7 +76,9 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     ; inst_deps : list (RPkg.t * Dependency)
     ; inst_peers : list (RPkg.t * PeerDependency)
     ; inst_ovr : list (N.t * Range)
-    ; inst_root : RPkg.t }.
+    ; inst_root : N.t
+    ; inst_rootDeps : list Dependency
+    ; inst_rootPeers : list PeerDependency }.
 
   Definition ownedBy {A : Type} (p : RPkg.t) (l : list (RPkg.t * A)) : list A :=
     List.map snd (List.filter (fun q => RPkgEqb.eqb (fst q) p) l).
@@ -151,14 +153,14 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
 
   Definition activeDeps (I : Inst) (x : Occ.t) : list Dependency :=
     match x with
-    | Occ.Top => ownedBy (inst_root I) (inst_deps I)
+    | Occ.Top => inst_rootDeps I
     | Occ.Reg m v =>
         List.filter (fun d => negb (d_dev d)) (ownedBy (m, v) (inst_deps I))
     end.
 
   Definition declPeers (I : Inst) (x : Occ.t) : list PeerDependency :=
     match x with
-    | Occ.Top => ownedBy (inst_root I) (inst_peers I)
+    | Occ.Top => inst_rootPeers I
     | Occ.Reg m v => ownedBy (m, v) (inst_peers I)
     end.
 
@@ -191,10 +193,10 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
   Module SOkk := SetOps NKey NKey KeySet KeySet.
   Definition keysOf (I : Inst) : KeySet.t :=
     SOkk.ofList
-      (List.map (fun q => (d_dir (snd q), e_name (depEdge I (snd q))))
-         (inst_deps I) ++
-       List.map (fun q => (p_dir (snd q), e_name (peerEdge I (snd q))))
-         (inst_peers I)).
+      (List.map (fun d => (d_dir d, e_name (depEdge I d)))
+         (inst_rootDeps I ++ List.map snd (inst_deps I)) ++
+       List.map (fun r => (p_dir r, e_name (peerEdge I r)))
+         (inst_rootPeers I ++ List.map snd (inst_peers I))).
 
   Record IsResolution (I : Inst) (L : Pl.Layout.t) : Prop :=
     { res_avail :
@@ -235,7 +237,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       apply mem_realVersions; exact Hv.
   Qed.
 
-  Definition rootOcc (I : Inst) : Pl.Pkg.t := (fst (inst_root I), Occ.Top).
+  Definition rootOcc (I : Inst) : Pl.Pkg.t := (inst_root I, Occ.Top).
 
   Definition occs (I : Inst) : Pl.PkgSet.t :=
     Pl.PkgSet.add (rootOcc I) (placeRepo I).

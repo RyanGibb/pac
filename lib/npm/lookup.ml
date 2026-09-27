@@ -125,7 +125,11 @@ let peer_dependencies st p =
       | None -> []
       | Some v -> List.map (xpeer st.ar) v.P.v_peers)
 
+(* The calculus keys the root's package by its name and version as it
+   keys a registry package, so the registry's packages of the root's name
+   are out of reach, and a sub-instance reading them is refused. *)
 let repo_at st (n : string) : Np.RepoSet.t =
+  if n = fst st.root then raise (A.Reaches_root n);
   Tbl.memo st.repo_at n (fun () ->
       Np.RepoSet.ofList (List.map (fun v -> (n, v)) (A.versions_of st.ar n)))
 

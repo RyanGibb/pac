@@ -500,11 +500,11 @@ let npm_run debug core order reading depth cache offline tree omit nodev npmv
         match Npm.Query.root ar query with
         | Error e -> error 2 "%s" e
         | Ok root when reading = `Placement ->
-            let rc = Npm.Archive.add_root ar root in
+            let rc = Npm.Archive.add_root ~named:false ar root in
             Report.root (Npm.Print.root rc);
             npm_place ~t0 ~debug ~core ~order ~omit ~depth ar rc
         | Ok root ->
-            let rc = Npm.Archive.add_root ar root in
+            let rc = Npm.Archive.add_root ~named:true ar root in
             Report.root (Npm.Print.root rc);
             let r, walk =
               Npm.Solve.solve ~debug ~order ~omit_dev:(List.mem `Dev omit)
@@ -537,7 +537,13 @@ let npm_run debug core order reading depth cache offline tree omit nodev npmv
                 if tree then Report.section "node_modules" (Npm.Print.tree a);
                 Report.encoded ~nodes:a.Npm.Solve.nodes
                   ~lookups:a.Npm.Solve.lookups)
-      with Npm.Archive.Fetch_failed e -> error 3 "%s" e)
+      with
+      | Npm.Archive.Fetch_failed e -> error 3 "%s" e
+      | Npm.Archive.Reaches_root n ->
+          error 2
+            "the project is named %s, as is a package it reaches, which only \
+             --reading=placement tells apart"
+            n)
 
 let npm_cmd =
   (* a user's cache, as npm keeps its own, so that where pac runs from

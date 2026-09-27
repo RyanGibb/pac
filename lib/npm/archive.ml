@@ -1,6 +1,7 @@
 module P = Npm_parse
 
 exception Fetch_failed of string
+exception Reaches_root of string
 
 (* semver takes a leading v or = on the version it tests, which is the
    shape `node --version` prints; our comparator parses digits only. *)
@@ -27,6 +28,7 @@ type t = {
   latest : (string, string) Hashtbl.t;
   tags : (string, (string * string) list) Hashtbl.t;
   entry : (string * string, P.ver) Hashtbl.t;
+  mutable root : P.ver option;
   (* peer dependencies keyed by the directory they name *)
   peer_by_name : (string, (string * string) * P.peer) Hashtbl.t;
   (* dependencies keyed by the directory they are written under, for the
@@ -73,6 +75,7 @@ let create ?node ?npm ?(reading = `Npm) ~cache ~offline () =
     latest = Hashtbl.create 1024;
     tags = Hashtbl.create 1024;
     entry = Hashtbl.create 16384;
+    root = None;
     peer_by_name = Hashtbl.create 4096;
     dep_by_dir = Hashtbl.create 16384;
     n_names = 0;
@@ -273,10 +276,16 @@ let latest ar n =
   ignore (load_name ar n);
   Hashtbl.find_opt ar.latest n
 
-let add_root ar (v : P.ver) : string * string =
-  add_name ar v.P.v_name [ v ];
+let add_root ~named ar (v : P.ver) : string * string =
+  ar.root <- Some v;
+  if named then add_name ar v.P.v_name [ v ]
+  else begin
+    ar.n_names <- ar.n_names + 1;
+    ar.n_vers <- ar.n_vers + 1
+  end;
   (v.P.v_name, v.P.v_vers)
 
+let root_meta ar = ar.root
 let meta ar p : P.ver option = Hashtbl.find_opt ar.entry p
 let loaded_latest ar n = Hashtbl.find_opt ar.latest n
 let peers_naming ar n = Hashtbl.find_all ar.peer_by_name n

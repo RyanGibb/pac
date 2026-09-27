@@ -89,6 +89,34 @@ answers over these fixtures.
     node_modules/x b@2.0.0
     node_modules/x b@2.0.0
 
+The project is not the registry's package of its name, even at its
+version.  In self/, both projects are b 3.0.0: in low-app c takes the
+registry's b ^1, and in same-app d takes its b ^3, whose 3.0.0 needs an
+e the project does not, as npm 11.17.0 answers over these fixtures.  The
+npm reading keys the project as it keys that package, and refuses.
+
+  $ untimed ../../../bin/main.exe npm --reading=placement --offline --cache self ./self/low-app/package.json
+  root b 3.0.0
+  packages (2):
+    node_modules/b b@1.0.0
+    node_modules/c c@1.0.0
+  encoded solution: 7 core nodes (13 lookups)
+  loaded: 3 names, 4 versions, 0 packuments fetched
+
+  $ untimed ../../../bin/main.exe npm --reading=placement --offline --cache self ./self/same-app/package.json
+  root b 3.0.0
+  packages (3):
+    node_modules/b b@3.0.0
+    node_modules/d d@1.0.0
+    node_modules/e e@1.0.0
+  encoded solution: 11 core nodes (23 lookups)
+  loaded: 4 names, 5 versions, 0 packuments fetched
+
+  $ untimed ../../../bin/main.exe npm --offline --cache self ./self/same-app/package.json
+  root b 3.0.0
+  error: the project is named b, as is a package it reaches, which only --reading=placement tells apart
+  [2]
+
 --core prints the reachable core, finite under the bound.
 
   $ untimed ../../../bin/main.exe npm --reading=placement --core --depth 1 --offline --cache . c@1.0.0 | head -n 12

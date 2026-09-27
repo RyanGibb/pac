@@ -30,7 +30,7 @@ type t = {
 
 let create ~optional ~depth ar root =
   let ovr =
-    match A.meta ar root with
+    match A.root_meta ar with
     | Some v -> List.map (fun (n, rg) -> (n, xrange rg)) v.P.v_ovr
     | None -> []
   in
@@ -56,11 +56,10 @@ let archive st = st.ar
 let depth st = st.depth
 let names_asked st = Hashtbl.length st.asked
 
-(* the registry package an occupant is, as the archive keys it *)
-let pkg st (x : Npl.Occ.t) =
-  match x with Npl.Occ.Top -> st.root | Npl.Occ.Reg (m, v) -> (m, v.IVer.s)
-
-let meta st x = A.meta st.ar (pkg st x)
+let meta st (x : Npl.Occ.t) =
+  match x with
+  | Npl.Occ.Top -> A.root_meta st.ar
+  | Npl.Occ.Reg (m, v) -> A.meta st.ar (m, v.IVer.s)
 
 let repo_at st (n : string) : Npl.RepoSet.t =
   Tbl.memo st.repo_at n (fun () ->
@@ -97,16 +96,17 @@ let mk_inst st ~repo ~deps ~peers : Npl.coq_Inst =
     inst_deps = deps;
     inst_peers = peers;
     inst_ovr = st.ovr;
-    inst_root = (fst st.root, IVer.make (snd st.root));
+    inst_root = fst st.root;
+    inst_rootDeps = [];
+    inst_rootPeers = [];
   }
 
 (* The occupant's sub-instance for its edges: its package's manifest, and
    the repository at the packages its optional dependencies name once
    overridden, which decides whether each can be met. *)
 let occ_inst st (x : Npl.Occ.t) : Npl.coq_Inst =
-  let p = pkg st x in
   let ds, rs =
-    match A.meta st.ar p with
+    match meta st x with
     | None -> ([], [])
     | Some v ->
         ( List.filter_map
@@ -117,17 +117,26 @@ let occ_inst st (x : Npl.Occ.t) : Npl.coq_Inst =
           List.map (xpeer st.ar) v.P.v_peers )
   in
   let base = mk_inst st ~repo:Npl.RepoSet.empty ~deps:[] ~peers:[] in
-  mk_inst st
-    ~repo:
-      (repo_of st
-         (List.filter_map
-            (fun (d : Npl.coq_Dependency) ->
-              if d.Npl.d_optional then
-                Some (Npl.ovrName base d.Npl.d_dir d.Npl.d_name)
-              else None)
-            ds))
-    ~deps:(List.map (fun d -> ((fst p, IVer.make (snd p)), d)) ds)
-    ~peers:(List.map (fun r -> ((fst p, IVer.make (snd p)), r)) rs)
+  let repo =
+    repo_of st
+      (List.filter_map
+         (fun (d : Npl.coq_Dependency) ->
+           if d.Npl.d_optional then
+             Some (Npl.ovrName base d.Npl.d_dir d.Npl.d_name)
+           else None)
+         ds)
+  in
+  match x with
+  | Npl.Occ.Top ->
+      {
+        (mk_inst st ~repo ~deps:[] ~peers:[]) with
+        Npl.inst_rootDeps = ds;
+        inst_rootPeers = rs;
+      }
+  | Npl.Occ.Reg (m, v) ->
+      mk_inst st ~repo
+        ~deps:(List.map (fun d -> ((m, v), d)) ds)
+        ~peers:(List.map (fun r -> ((m, v), r)) rs)
 
 (* An edge's accepted occupants read only the repository at the package it
    names, so they are computed once per package and range: acceptsIn over
@@ -183,20 +192,20 @@ let key_inst st (a : string) : Pl.coq_Inst =
   | _ ->
       let i =
         Lk.nameInst
-          (mk_inst st ~repo:(repo_of st ns)
-             ~deps:
-               (List.map
-                  (fun m ->
-                    ( (fst st.root, IVer.make (snd st.root)),
-                      {
-                        Npl.d_dir = a;
-                        d_name = m;
-                        d_range = [];
-                        d_dev = false;
-                        d_optional = false;
-                      } ))
-                  ns)
-             ~peers:[])
+          {
+            (mk_inst st ~repo:(repo_of st ns) ~deps:[] ~peers:[]) with
+            Npl.inst_rootDeps =
+              List.map
+                (fun m ->
+                  {
+                    Npl.d_dir = a;
+                    d_name = m;
+                    d_range = [];
+                    d_dev = false;
+                    d_optional = false;
+                  })
+                ns;
+          }
       in
       Hashtbl.replace st.key_inst a (g, i);
       i
