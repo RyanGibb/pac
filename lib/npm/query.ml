@@ -131,12 +131,7 @@ let add_to (pkg : Yojson.Safe.t) ((name, raw) : string * string) : Yojson.Safe.t
     if List.mem "peerDependencies" drop then "peerDependenciesMeta" :: drop
     else drop
   in
-  (* a JavaScript object keeps a new key last *)
-  let set k v l =
-    if List.mem_assoc k l then
-      List.map (fun (k', x) -> if k' = k then (k, v) else (k', x)) l
-    else l @ [ (k, v) ]
-  in
+  let set = P.set in
   let fields =
     List.map
       (fun (k, v) ->

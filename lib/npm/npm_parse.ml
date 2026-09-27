@@ -54,6 +54,12 @@ let member (k : string) (j : Yojson.Safe.t) : Yojson.Safe.t =
 
 let assoc_of j = match j with `Assoc l -> l | _ -> []
 
+(* a JavaScript object keeps a new key last *)
+let set k v l =
+  if List.mem_assoc k l then
+    List.map (fun (k', x) -> if k' = k then (k, v) else (k', x)) l
+  else l @ [ (k, v) ]
+
 let has_sub s sub =
   let n = String.length s and m = String.length sub in
   let rec go i = i + m <= n && (String.sub s i m = sub || go (i + 1)) in
@@ -208,11 +214,6 @@ let extend (name : string) (vers : string) (j : Yojson.Safe.t) :
       if not (List.mem_assoc k !peers) then
         peers := !peers @ [ (k, `String "*") ])
     !meta;
-  let set k v l =
-    if List.mem_assoc k l then
-      List.map (fun (k', x) -> if k' = k then (k, v) else (k', x)) l
-    else l @ [ (k, v) ]
-  in
   let own = get "peerDependencies" in
   ( `Assoc
       (fields
@@ -261,6 +262,53 @@ let engine_of (j : Yojson.Safe.t) (k : string) : Npm_version.range option =
   | `String rg -> Some (Npm_version.parse_range ~include_prerelease:true rg)
   | _ -> None
 
+(* arborist loads dependencies, then optionalDependencies, then a root's
+   devDependencies, and a later entry of a name replaces the earlier (Node
+   _loadDeps) *)
+let deps_of ~reject ~root (j : Yojson.Safe.t) : dep list =
+  let read ~dev ~optional field =
+    List.filter_map (dep_of ~reject ~dev ~optional) (assoc_of (member field j))
+  in
+  let without (l : dep list) =
+    List.filter (fun d -> not (List.exists (fun e -> e.d_dir = d.d_dir) l))
+  in
+  let devs =
+    if root then read ~dev:true ~optional:false "devDependencies" else []
+  in
+  let opts = read ~dev:false ~optional:true "optionalDependencies" in
+  devs
+  @ without devs
+      (opts @ without opts (read ~dev:false ~optional:false "dependencies"))
+
+(* The peers, or None where the shared reading leaves the version out *)
+let peers_of ~shared ~reject ~root ~berry_only (j : Yojson.Safe.t) :
+    peer list option =
+  let meta = assoc_of (member "peerDependenciesMeta" j) in
+  (* arborist keeps one edge per name and loads peers first, so a
+     dependency of the same name replaces the peer (node.js, _loadDeps),
+     whether or not this parser can read its spec *)
+  let dep_keys =
+    List.concat_map
+      (fun f -> List.map fst (assoc_of (member f j)))
+      ([ "dependencies"; "optionalDependencies" ]
+      @ if root then [ "devDependencies" ] else [])
+  in
+  (* Berry keeps a package's peer beside a dependency of its name (a peer
+     with default); the root's it never asks of anyone *)
+  let decls =
+    List.filter
+      (fun (k, _) -> (shared && not root) || not (List.mem k dep_keys))
+      (assoc_of (member "peerDependencies" j))
+  in
+  let peers = List.filter_map (peer_of ~reject ~berry_only meta) decls in
+  (* under the shared reading a version with a peer this parser drops is
+     left out, as no answer holding it is one both tools are known to
+     accept: npm fails on a spec it cannot read (EINVALIDTAGNAME), which
+     Berry reads as *, and an alias, a git, file or URL spec, or a value
+     that is no string names nothing either reads off the registry *)
+  if shared && (not root) && List.length peers < List.length decls then None
+  else Some peers
+
 (* "os", "cpu" and "libc" are not read: npm-pick-manifest never consults
    them and npm tests them only once the tree is built
    (#checkEngineAndPlatform), so reading them would make our instance
@@ -271,7 +319,7 @@ let ver_of ~(reading : reading) ~reject ~(root : bool) (vers : string)
     (j : Yojson.Safe.t) : ver option =
   let shared = reading = `Shared in
   match j with
-  | `Assoc _ ->
+  | `Assoc _ -> (
       let j, berry_only =
         if shared && not root then
           match member "name" j with
@@ -279,72 +327,20 @@ let ver_of ~(reading : reading) ~reject ~(root : bool) (vers : string)
           | _ -> (j, [])
         else (j, [])
       in
-      let deps_of ~dev ~optional field =
-        List.filter_map
-          (dep_of ~reject ~dev ~optional)
-          (assoc_of (member field j))
-      in
-      let meta = assoc_of (member "peerDependenciesMeta" j) in
-      (* arborist keeps one edge per name and loads peers first, so a
-         dependency of the same name replaces the peer (node.js,
-         _loadDeps), whether or not this parser can read its spec *)
-      let dep_keys =
-        List.concat_map
-          (fun f -> List.map fst (assoc_of (member f j)))
-          ([ "dependencies"; "optionalDependencies" ]
-          @ if root then [ "devDependencies" ] else [])
-      in
-      (* Berry keeps a package's peer beside a dependency of its name (a
-         peer with default); the root's it never asks of anyone *)
-      let peer_decls =
-        List.filter
-          (fun (k, _) -> (shared && not root) || not (List.mem k dep_keys))
-          (assoc_of (member "peerDependencies" j))
-      in
-      let peers =
-        List.filter_map (peer_of ~reject ~berry_only meta) peer_decls
-      in
-      let opts = deps_of ~dev:false ~optional:true "optionalDependencies" in
-      (* under the shared reading a version with a peer this parser drops
-         is left out, as no answer holding it is one both tools are known
-         to accept: npm fails on a spec it cannot read (EINVALIDTAGNAME),
-         which Berry reads as *, and an alias, a git, file or URL spec, or
-         a value that is no string names nothing either reads off the
-         registry *)
-      let unread =
-        shared && (not root) && List.length peers < List.length peer_decls
-      in
-      let opt_keys = List.map (fun d -> d.d_dir) opts in
-      let dep = is_deprecated (member "deprecated" j) in
-      if unread then None
-      else
-        Some
-          {
-            v_name = (match member "name" j with `String n -> n | _ -> "");
-            v_vers = vers;
-            v_deps =
-              (* arborist loads dependencies, then optionalDependencies,
-               then a root's devDependencies, and a later entry of a name
-               replaces the earlier (Node _loadDeps) *)
-              (let devs =
-                 if root then
-                   deps_of ~dev:true ~optional:false "devDependencies"
-                 else []
-               in
-               let dev_keys = List.map (fun d -> d.d_dir) devs in
-               devs
-               @ List.filter
-                   (fun d -> not (List.mem d.d_dir dev_keys))
-                   (opts
-                   @ List.filter
-                       (fun d -> not (List.mem d.d_dir opt_keys))
-                       (deps_of ~dev:false ~optional:false "dependencies")));
-            v_peers = peers;
-            v_ovr = (if root then overrides_of ~reject j else []);
-            v_deprecated = dep;
-            v_eng_node = engine_of j "node";
-            v_eng_npm = engine_of j "npm";
-          }
+      match peers_of ~shared ~reject ~root ~berry_only j with
+      | None -> None
+      | Some peers ->
+          Some
+            {
+              v_name = (match member "name" j with `String n -> n | _ -> "");
+              v_vers = vers;
+              v_deps = deps_of ~reject ~root j;
+              v_peers = peers;
+              v_ovr = (if root then overrides_of ~reject j else []);
+              v_deprecated = is_deprecated (member "deprecated" j);
+              v_eng_node = engine_of j "node";
+              v_eng_npm = engine_of j "npm";
+            })
   | _ ->
       reject ();
       None
