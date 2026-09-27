@@ -9,8 +9,6 @@ module Make
           type t
 
           val v : t -> PF.Reduction.Version.t
-
-          (* the absent version, tagged: [tag] must give it at every name *)
           val bot : t
           val compare : t -> t -> int
           val pp : Format.formatter -> t -> unit
@@ -56,10 +54,6 @@ struct
     mutable canon : PFR.Name.t NameMap.t;
   }
 
-  (* [oracle] is the versions lookup at an original name, before tagging;
-     the encoder reads it at the names a formula negates, so it must be
-     complete when asked.  Its answer is memoised except at a [volatile]
-     name, whose versions may grow as the run loads more of the archive. *)
   let create ~root ~tag ~oracle ?(volatile = fun _ -> false) () =
     {
       root;
@@ -128,9 +122,6 @@ struct
               Tbl.push st.synthetic_vers tn tv)
       (T.PkgSet.elements r)
 
-  (* [dependees] is PF.Reduction's dependees lookup at [q], read off the
-     sub-instance the driver builds for it; a thunk, so a package asked
-     about twice builds it once *)
   let process st (q : PF.Pkg.t) (dependees : unit -> PF.coq_Formula list) =
     if not (Hashtbl.mem st.seen q) then begin
       Hashtbl.replace st.seen q ();
@@ -248,10 +239,6 @@ struct
              (dependees st p))
          [ PFR.Name.Orig (fst st.root) ])
 
-  (* The core solution back through the proved decoder to the package
-     formula's packages.  Reading the ecosystem's packages off the
-     solution directly would be a further, unproved, decoder, and it is
-     the decoded one the soundness theorem is stated about. *)
   let solve st ~touch (h : (Name.t, PG.selection, P.t) Pac_common.Order.hooks) :
       (PF.PkgSet.t * int, Pac_common.Report.explanation) result =
     let root = PFR.Name.Orig (fst st.root) in
