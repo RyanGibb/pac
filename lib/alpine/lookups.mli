@@ -16,6 +16,14 @@ end
 
 module Alp : module type of Pac.Alpine (Pac_common.Ot.Str) (AVerOT) (PM)
 
+type stats = {
+  names : int;
+  versions : int;
+  provides : int;
+  install_ifs : int;
+  dropped : int;
+}
+
 module type S = sig
   module FirstDesignation : sig
     val designation : Alp.CondSet.t -> Alp.Atom.t option
@@ -25,31 +33,9 @@ module type S = sig
   module PF = Red.PF
   module PFR = PF.Reduction
 
-  type iif_rule = {
-    pkg : string * string;
-    conds : Alp.CondSet.t;
-    designation : Alp.Atom.t;
-  }
+  type archive
 
-  type archive = {
-    by_name : (string, P.pkg list) Hashtbl.t;
-    meta : (string * string, P.pkg) Hashtbl.t;
-    providers : (string, ((string * string) * string option) list) Hashtbl.t;
-    (* install-if rules by their designated condition's name: only a package
-       bearing that name, or providing it, can carry the rule *)
-    iif_by_cond : (string, iif_rule list) Hashtbl.t;
-    prio : (string * string, int) Hashtbl.t;
-    (* where each package stands in the index: apk_db_pkg_add appends to a
-       name's provider list in the order the index is read *)
-    pos : (string * string, int) Hashtbl.t;
-    mutable n_pkgs : int;
-    mutable n_provs : int;
-    mutable n_iif : int;
-    n_dropped : int;
-    (* the names only a stanza the parser dropped holds a provider of *)
-    uninstallable : (string, unit) Hashtbl.t;
-  }
-
+  val stats : archive -> stats
   val load_index : string -> archive
 
   (* the world's names no package of the index is or provides, which apk

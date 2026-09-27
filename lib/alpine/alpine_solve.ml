@@ -1,3 +1,11 @@
+type stats = Lookups.stats = {
+  names : int;
+  versions : int;
+  provides : int;
+  install_ifs : int;
+  dropped : int;
+}
+
 module Make () = struct
   open Lookups
   module Lk = Make ()

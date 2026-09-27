@@ -419,16 +419,17 @@ let alpine_run debug core order path goals =
                (List.map (fun n -> n ^ " (no such package)") ns))
       | [] ->
           let r, walk = A.solve ~debug ~order ar world in
+          let s = A.stats ar in
           report ~t0 ~core
             {
-              Report.names = Hashtbl.length ar.A.by_name;
-              versions = ar.A.n_pkgs;
+              Report.names = s.Alpine_solve.names;
+              versions = s.versions;
               extra =
                 [
-                  Printf.sprintf "%d provides entries" ar.A.n_provs;
-                  Printf.sprintf "%d install_if rules" ar.A.n_iif;
+                  Printf.sprintf "%d provides entries" s.provides;
+                  Printf.sprintf "%d install_if rules" s.install_ifs;
                 ];
-              dropped = ar.A.n_dropped;
+              dropped = s.dropped;
               parse;
             }
             ~walk r

@@ -17,4 +17,7 @@ type op = Eq | Lt | Gt | Le | Ge | Fuzzy | Gt_fuzzy | Lt_fuzzy | Hash
    None is a run holding both < and > and = (or ~), a mask apk_version_match
    takes as every version. *)
 val op_of_string : string -> op option
+
+(* for test_apk_version alone: a solve matches constraints through the
+   calculus, not through this *)
 val matches : string -> op -> string -> bool
