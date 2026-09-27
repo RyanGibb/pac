@@ -87,6 +87,41 @@ def fields(e, node=None, holds=frozenset(), npm=False):
     return deps, peers, needed
 
 
+def name(n):
+    return f"{n[0]} {n[1]}" + (f" at {n[2]}" if n[2] != n[0] else "")
+
+
+def open_misses(pk, at, open_, through):
+    """the misses of the peers the answer leaves open, open_ holding each
+    (lock path, peer) left open, and through each peer read through its
+    depender's own as (lock path, depender's lock path, peer, optional,
+    depender)"""
+    miss = []
+    # a peer read through a depender whose own optional peer the answer
+    # leaves open is open too, which a peer that is not optional may not be
+    grew = True
+    while grew:
+        grew = False
+        for q, rp, p, optional, r in through:
+            if (rp, p) in open_ and (q, p) not in open_:
+                open_.add((q, p))
+                grew = True
+    miss += [(q, f"{name(at(q))} at {q}, as {name(r)} requires it, peers on {p}, which the "
+                 f"answer leaves open for {name(r)}'s own optional peer")
+             for q, rp, p, optional, r in through if not optional and (rp, p) in open_]
+    # the answer's word is open, so a copy found anyway is a miss only
+    # where npm finds it out of range; it is asked from that copy, which
+    # mklock.py's search then nests out of sight
+    hit = {(q, p): resolve(pk, q, p) for q, p in open_}
+    asks = {(q, p): (pk[s].get("version", ""), (pk[q].get("peerDependencies") or {}).get(p) or "")
+            for (q, p), s in hit.items() if s is not None and s in pk}
+    ok = satisfies(list(asks.values()))
+    miss += [(hit[q, p], f"{name(at(q))} at {q} peers on {p}, which the answer leaves open, yet it "
+                 f"finds {name(at(hit[q, p]))} outside {asks[q, p][1]}")
+             for (q, p) in sorted(asks) if ok[asks[q, p]] is False]
+    return miss
+
+
 def misses(pk, root, nodes, edges):
     """each miss as (the lock path it was asked from, or None, and why)"""
     out = {}
@@ -99,9 +134,6 @@ def misses(pk, root, nodes, edges):
 
     def at(path):
         return root if path == "" else identity(pk, path) if path in pk else None
-
-    def name(n):
-        return f"{n[0]} {n[1]}" + (f" at {n[2]}" if n[2] != n[0] else "")
 
     miss = [(None, f"{name(n)} is nowhere in the tree") for n in nodes if n not in copies]
     open_, through = set(), []
@@ -156,29 +188,7 @@ def misses(pk, root, nodes, edges):
                         todo.append(s)
             miss += [(rp, f"{name(r)} gives {k} to nothing that requires or peers on it")
                      for k in sorted(set(given) - deps - peered)]
-    # a peer read through a depender whose own optional peer the answer
-    # leaves open is open too, which a peer that is not optional may not be
-    grew = True
-    while grew:
-        grew = False
-        for q, rp, p, optional, r in through:
-            if (rp, p) in open_ and (q, p) not in open_:
-                open_.add((q, p))
-                grew = True
-    miss += [(q, f"{name(at(q))} at {q}, as {name(r)} requires it, peers on {p}, which the "
-                 f"answer leaves open for {name(r)}'s own optional peer")
-             for q, rp, p, optional, r in through if not optional and (rp, p) in open_]
-    # the answer's word is open, so a copy found anyway is a miss only
-    # where npm finds it out of range; it is asked from that copy, which
-    # mklock.py's search then nests out of sight
-    hit = {(q, p): resolve(pk, q, p) for q, p in open_}
-    asks = {(q, p): (pk[s].get("version", ""), (pk[q].get("peerDependencies") or {}).get(p) or "")
-            for (q, p), s in hit.items() if s is not None and s in pk}
-    ok = satisfies(list(asks.values()))
-    miss += [(hit[q, p], f"{name(at(q))} at {q} peers on {p}, which the answer leaves open, yet it "
-                 f"finds {name(at(hit[q, p]))} outside {asks[q, p][1]}")
-             for (q, p) in sorted(asks) if ok[asks[q, p]] is False]
-    return miss
+    return miss + open_misses(pk, at, open_, through)
 
 
 def main():
