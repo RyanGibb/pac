@@ -5,17 +5,17 @@
 # into the run's farm, pac's fetches go through it, and what the farm gains
 # is then copied into repos/npm by hand; a miss is then only a name the
 # registry itself refuses.
-# READING is pac's --reading, npm or shared, and the check reads the
+# READING is pac's --reading, npm, shared or placement, and the check reads the
 # manifests as pac did.
 # usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]
 #        MODES="tool pubgrub" P=<jobs> TIMEOUT=<s> PORT=<shim>
-#        NORM=<edges.py flag> FILL=1 READING=npm|shared
+#        NORM=<edges.py flag> FILL=1 READING=npm|shared|placement DEPTH=<D>
 S="$(cd "$(dirname "$0")" && pwd)"
 ECO=npm
 . "$S/../scale-lib.sh"
 . "$S/npm.sh"
 export PORT=${PORT:-8899} NORM=${NORM---peer-parent} READING=${READING:-npm}
-case $READING in npm|shared) ;; *) echo "$0: READING=$READING is neither npm nor shared" >&2; exit 2 ;; esac
+case $READING in npm|shared|placement) ;; *) echo "$0: READING=$READING is none of npm, shared and placement" >&2; exit 2 ;; esac
 NPMV=$(sed -n 1p "$S/npm-version") NODEV=$(sed -n 2p "$S/npm-version")
 
 all_queries() { node "$S/queries.js" "$TOP/repos/npm"; }
@@ -130,5 +130,8 @@ totals() {
   find "$run/out" -name '*.verdict' -exec cut -f1 {} + | sort | uniq -c |
     sed 's/^ */npm-only edges: /'
 }
+
+# a placement answer is a layout, judged and scored as the lock it is
+[ "$READING" != placement ] || . "$S/place.sh"
 
 main "$@"

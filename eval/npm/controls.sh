@@ -89,6 +89,7 @@ PKGS = {
     "ad": {"1.0.0": {"dependencies": {"b": "npm:baz@^1.0.0"},
                      "peerDependencies": {"b": "^1.0.0"}}},
     "cc": {"1.0.0": {"dependencies": {"b": "^1.0.0"}}},
+    "od": {"1.0.0": {"optionalDependencies": {"b": "^1.0.0"}}},
 }
 CASES = {
     "po-valid":   ("VALID/yes/yes", {"a": "^1.0.0", "c": "^1.0.0"},
@@ -259,6 +260,37 @@ SHARED = {
     "sh-alias-default": ("VALID/yes/yes", {"ad": "^1.0.0", "b": "^1.0.0"},
                          [". <- ad 1.0.0", ". <- b 1.0.0"]),
 }
+# answers under READING=placement, which are layouts, as pac prints them
+PLACE = {
+    "lay-nest":       ("VALID", {"c": "^1.0.0"}, {"c": "c@1.0.0", "c/node_modules/b": "b@1.0.0"}),
+    "lay-missing":    ("INVALID", {"c": "^1.0.0"}, {"c": "c@1.0.0"}),
+    "lay-range":      ("INVALID", {"c": "^1.0.0"}, {"c": "c@1.0.0", "b": "b@2.0.0"}),
+    "lay-alias":      ("VALID", {"d": "^1.0.0"}, {"d": "d@1.0.0", "b": "baz@1.0.0"}),
+    "lay-swap":       ("INVALID", {"c": "^1.0.0"}, {"c": "c@1.0.0", "b": "baz@1.0.0"}),
+    "lay-peer":       ("VALID", {"p": "^1.0.0", "b": "^1.0.0"}, {"p": "p@1.0.0", "b": "b@1.0.0"}),
+    "lay-peer-local": ("INVALID", {"p": "^1.0.0", "b": "^1.0.0"},
+                      {"p": "p@1.0.0", "b": "b@1.0.0", "p/node_modules/b": "b@1.0.0"}),
+    # op's optional peer is the 1.1.0 beside it under or, as npm locks it
+    "lay-optpeer":    ("VALID", {"or": "^1.0.0", "oq": "^2.0.0"},
+                      {"or": "or@1.0.0", "oq": "oq@2.0.0", "or/node_modules/op": "op@1.0.0",
+                       "or/node_modules/oq": "oq@1.1.0"}),
+    # op hoisted, where its optional peer sees the root's 2.0.0
+    "lay-optpeer-far": ("INVALID", {"or": "^1.0.0", "oq": "^2.0.0"},
+                       {"or": "or@1.0.0", "oq": "oq@2.0.0", "op": "op@1.0.0"}),
+    "lay-optdep":     ("VALID", {"od": "^1.0.0"}, {"od": "od@1.0.0", "b": "b@1.0.0"}),
+    # an optional dependency a published version satisfies is fetched
+    "lay-optdep-missing": ("INVALID", {"od": "^1.0.0"}, {"od": "od@1.0.0"}),
+    "lay-torn":       ("VALID", {"hx": "^1.0.0"},
+                      {"hx": "hx@1.0.0", "hx/node_modules/ut": "ut@1.0.0",
+                       "hx/node_modules/tl": "tl@2.6.0", "bu": "bu@1.0.0", "tl": "tl@2.5.0"}),
+    # bu, beside ut, sees ut's tl 2.6.0; ut's own peer is PEER LOCAL there
+    "lay-torn-local": ("INVALID", {"hx": "^1.0.0"},
+                      {"hx": "hx@1.0.0", "hx/node_modules/ut": "ut@1.0.0",
+                       "hx/node_modules/ut/node_modules/tl": "tl@2.6.0",
+                       "hx/node_modules/ut/node_modules/bu": "bu@1.0.0", "tl": "tl@2.5.0"}),
+    # reached by nothing, and its own dependency unmet
+    "lay-extra-broken": ("INVALID", {"b": "^1.0.0"}, {"b": "b@1.0.0", "y": "y@1.0.0"}),
+}
 # answers berry.sh judges
 BERRY = {
     "berry-valid": ("VALID", {"c": "^1.0.0"}, [". <- c 1.0.0", "c 1.0.0 <- b 1.0.0"]),
@@ -309,6 +341,16 @@ with open(f"{T}/cases", "w") as out:
             out.write(f"{case} {want} {reading} {d}/ans.out\n")
     ours(OURS, "npm", out)
     ours(SHARED, "shared", out)
+with open(f"{T}/place-cases", "w") as out:
+    for case, (want, deps, layout) in PLACE.items():
+        d = f"{T}/work/{case}"
+        os.makedirs(d)
+        root = {"name": "root", "version": "1.0.0", "private": True, "dependencies": deps}
+        json.dump(root, open(f"{d}/package.json", "w"), indent=2)
+        with open(f"{d}/ans.out", "w") as f:
+            f.write("root .\n" + f"packages ({len(layout)}):\n"
+                    + "".join(f"  node_modules/{p} {nv}\n" for p, nv in sorted(layout.items())))
+        out.write(f"{case} {want} {d}/ans.out\n")
 with open(f"{T}/berry-cases", "w") as out:
     ours(BERRY, "shared", out)
 EOF
@@ -330,6 +372,18 @@ while read -r case want reading ans; do
   printf '%-16s expect %-15s got %-15s %s\n' "$case" "$want" "${got:-ERR/-/-}" "${line% valid=*}"
   [ "$got" = "$want" ] || bad=1
 done < "$T/cases"
+
+# layouts, as the placement reading answers, which layout-check.sh judges
+place() {  # <case> <answer>
+  NPM_RUN=$T timeout 120 bash "$S/layout-check.sh" "$2" "$T/work/$1.check" \
+    "$T/work/$1/package.json" | tail -n 1
+}
+while read -r case want ans; do
+  line=$(place "$case" "$ans")
+  got=$(sed -n 's/.* valid=\([A-Z]*\)$/\1/p' <<< "$line")
+  printf '%-16s expect %-15s got %-15s %s\n' "$case" "$want" "${got:-ERR}" "${line% valid=*}"
+  [ "$got" = "$want" ] || bad=1
+done < "$T/place-cases"
 
 # berry.sh against berryreg.py over the same farm
 berry() {  # <case> <answer>

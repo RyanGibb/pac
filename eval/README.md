@@ -132,6 +132,18 @@ eval/npm/berryownall.sh <run-dir> <port>
 `berryownall.sh` asks Yarn Berry its own answer to each query (`berryown.py`) and writes `berryown.txt`, a line per answer: packages and dependency edges ours and Berry's hold, and `exact=yes` where they agree on all of them (peers aside, which Berry's lock does not record).
 Both refuse a run that was not made with `READING=shared`, and a Yarn other than the 4.14.1 `nix/flake.lock` pins, whose packageExtensions the list is.
 
+### npm's placement reading
+
+`READING=placement eval/npm/scale.sh ...` asks pac with `--reading=placement --depth $DEPTH` (default 8), which reads manifests as `--reading=npm` does but answers npm's `node_modules` layout itself: a `packages` row per occupied directory, `node_modules/a/node_modules/b b@1.2.3`, the lock's own path and the registry package there.
+There is no placement to search for, so the check is npm's own commands on that layout as the lock (`place.sh`, sourced by `scale.sh`):
+
+- `lockgen.py` copies each row into a `package-lock.json` entry from the snapshot packument, placing nothing; an entry whose manifest bundles dependencies makes the answer `ERR`, as npm installs those from the tarball whatever the lock says.
+- `layout-check.sh` is `VALID` when `npm ci --dry-run` accepts the lock, `npm ls --all --package-lock-only` finds no edge invalid or missing, npm overrides no peer, every edge lands on the package its manifest names (`lockname.py`), and `resolve.js`, which lays the lock out as directories and `require.resolve`s every edge of every entry from its depender's, finds each in range, no peer in its declarer's own `node_modules`, and nothing missing but an optional edge.
+- `minimal=` and `reproduced=` are `-`: the answer is already a lock.
+- `corr=` is `exact` when the layout is npm's own lock path for path (`layout_cmp.py`); the `cmp=` field also scores the resolution relation `edges.py` reads off both locks.
+
+`controls.sh` poses layouts to `layout-check.sh` too, the `lay-` cases.
+
 ## Regression set
 
 `eval/<eco>/queries.txt` lists the queries, one per line in the tool's command-line syntax, flags included (cargo's name a crate).
@@ -203,6 +215,6 @@ Extra fields: opam `mccs`; npm `twall` (the tool's wall time, `-` under `--regre
 
 ## Ecosystem notes
 
-- npm: queries are also split by `closed`, whether neither side asked for a name the snapshot lacks. Edges are scored with `edges.py --peer-parent`; set `NORM=` to score them as npm's lock records them. `FILL=1` runs `scale.sh` as the pass that closes the snapshot, fetching each miss into the run's farm. `READING=shared` asks pac with `--reading=shared` (default `READING=npm`, `--reading=npm`), and the check then reads the manifests as pac did; the run's parameters record it, so a run resumes only in the reading it started in.
+- npm: queries are also split by `closed`, whether neither side asked for a name the snapshot lacks. Edges are scored with `edges.py --peer-parent`; set `NORM=` to score them as npm's lock records them. `FILL=1` runs `scale.sh` as the pass that closes the snapshot, fetching each miss into the run's farm. `READING=shared` asks pac with `--reading=shared` (default `READING=npm`, `--reading=npm`), and the check then reads the manifests as pac did; the run's parameters record it, so a run resumes only in the reading it started in. `READING=placement` is the placement reading above, whose lines carry `solve`, `nodes`, `lookups`, `cmp` and the check's `why` instead of `nodes` and `edges`.
 - `eval/alpine/pin.sh <run-dir>` counts a run's divergent queries pac answers exactly as apk does once every package of apk's answer is in the world. `eval/npm/pin.sh <run-dir>` re-asks a run's divergent queries with npm's picks forced. Both separate preference gaps from instance gaps.
 - `eval/cargo/features.py <crate>...` compares feature sets with `cargo metadata`, with `sparse_proxy.py` serving on `PORT` (default 8991). It is not part of the scale run because it downloads crate sources.
