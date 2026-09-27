@@ -1,30 +1,10 @@
-(* The index as a run has read it so far.  There is no cone pass: a crate
-   is parsed the first time a sub-instance reads its name, as cargo's
-   sparse protocol fetches it, so a run touches the crates the solver asks
-   about and no others.  Because the instance is still being uncovered, the
-   sub-instance a lookup theorem names must be complete at the moment the
-   lookup answers.  Each is complete by construction -- name_set,
-   support_of_name and repo_preimage load every name they read whole, and
-   meta and the owner scan load the owner -- except the one
-   versions_lookupLink names.  Its sub-instance is the preimage of the link
-   relation at l -- every crate version declaring l -- and no declaration
-   of any one crate names the other declarers, so nothing a loaded crate
-   carries can bring them in: links_table holds the declarers among the
-   names loaded so far, and may grow after CLink l has answered.
-   Lookups.pg_versions answers it afresh each time rather than memoizing
-   it. *)
-type t = {
-  index : string;
-  crates : (string, Cargo_parse.ver list) Hashtbl.t;
-  entry : (string * string, Cargo_parse.ver) Hashtbl.t;
-  links_table : (string, (string * string) list) Hashtbl.t;
-  mutable n_names : int;
-  mutable n_vers : int;
-  mutable n_dropped : int;
-  (* wall time inside the parser, which the solve interleaves with *)
-  mutable t_parse : float;
-}
+type t
 
+(* [parse] is the wall time inside the parser, which the solve interleaves
+   with *)
+type stats = { names : int; versions : int; dropped : int; parse : float }
+
+val stats : t -> stats
 val empty : string -> t
 val load_name : t -> string -> Cargo_parse.ver list
 

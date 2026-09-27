@@ -8,7 +8,7 @@ type fibres = {
   r_fdefs : Cg.FDefRel.t;
   r_links : Cg.LinkRel.t;
   r_supp : Cg.SupportSet.t;
-  r_reads : string list;
+  r_reads : string list; (* own name plus the slot targets *)
 }
 
 let empty_fibres n =
@@ -24,6 +24,9 @@ type owner_key =
   [ `Slot of string * string * Cg.SlotData.t
   | `Dec of string * string * string * Cg.SlotData.t * string ]
 
+(* One solve's archive, request and memo tables.  Every table is keyed as
+   narrowly as it is because this record is: a second solve builds its
+   own, so no answer outlives the archive and root it was computed for. *)
 type state = {
   ar : Archive.t;
   rc : string * string;
@@ -34,13 +37,20 @@ type state = {
   fibres : (string * string, fibres) Hashtbl.t;
   dep_of_data : (Cg.SlotData.t, P.dep) Hashtbl.t;
   name_sets : (string, Cg.PkgSet.t) Hashtbl.t;
+  (* keyed by the read names rather than by the crate version, so that
+     versions reading the same names share one entry *)
   repo_preimages : (string list, Cg.PkgSet.t) Hashtbl.t;
   msrv : (string * string, bool) Hashtbl.t;
   supports : (string, Cg.SupportSet.t) Hashtbl.t;
   owners : (owner_key, Cg.SlotRel.t * Cg.FDefRel.t) Hashtbl.t;
   site_datas :
     ((string * string) * Cg.SlotKey.t, Cg.SlotData.t option) Hashtbl.t;
+  (* the tagged list, not just the untagged one, has to be memoized:
+     PubGrub asks a name for its versions at every propagation step *)
   pg_vers : (Cg.NPlus.t, PVersion.t list) Hashtbl.t;
+  (* at each decision PubGrub's dependency_incomps asks for the
+     dependencies of the decided version's neighbours, once per
+     dependency, to widen each incompatibility's range *)
   pg_deps : (Cg.NPlus.t * Cg.VPlus.t, (Cg.NPlus.t * PG.Ranges.t) list) Hashtbl.t;
 }
 
@@ -64,6 +74,10 @@ let create ar (root : Q.root) ~features ~rustv =
     pg_deps = Hashtbl.create 65536;
   }
 
+let root st = st.rc
+let root_features st = st.features
+let slot_dep st sd = Hashtbl.find_opt st.dep_of_data sd
+let dependency_lookups st = Hashtbl.length st.pg_deps
 let granularity st v = Tbl.memo st.granularities v (fun () -> granularity_of v)
 let meta st n v = Archive.meta st.ar n v
 let versions_of st n = Archive.versions_of st.ar n
@@ -107,6 +121,10 @@ let fibres_of st (p : string * string) : fibres =
               List.sort_uniq String.compare
                 (n :: List.map (fun (d : P.dep) -> d.P.d_target) ds);
           })
+
+let slots_and_fdefs st p =
+  let r = fibres_of st p in
+  (r.r_slots, r.r_fdefs)
 
 let name_set st (n : string) : Cg.PkgSet.t =
   Tbl.memo st.name_sets n (fun () ->

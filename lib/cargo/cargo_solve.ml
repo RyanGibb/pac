@@ -47,9 +47,9 @@ let decode st (sol : (Cg.NPlus.t * PVersion.t) list) : result =
      crates it decodes are all it looks at, since it reads Slots and
      FDefs only at the owner a slot node names and keeps the node
      only when that owner is decoded *)
-  let fibres = List.map (L.fibres_of st) (st.L.rc :: crates) in
-  let slots = Cg.SlotRel.unions (List.map (fun r -> r.L.r_slots) fibres) in
-  let fdefs = Cg.FDefRel.unions (List.map (fun r -> r.L.r_fdefs) fibres) in
+  let fibres = List.map (L.slots_and_fdefs st) (L.root st :: crates) in
+  let slots = Cg.SlotRel.unions (List.map fst fibres) in
+  let fdefs = Cg.FDefRel.unions (List.map snd fibres) in
   let parents =
     List.map
       (fun ((((n, v), k), u) : Cg.ParentElt.t) ->
@@ -69,7 +69,7 @@ let decode st (sol : (Cg.NPlus.t * PVersion.t) list) : result =
         (List.sort compare crates);
     parents;
     nodes = List.length sol;
-    lookups = Hashtbl.length st.L.pg_deps;
+    lookups = L.dependency_lookups st;
   }
 
 let solve ?(debug = false) ?(order = `Tool) ~index ~features ~rustv
@@ -117,13 +117,14 @@ let solve ?(debug = false) ?(order = `Tool) ~index ~features ~rustv
              (L.dependees st (tn, v)))
          [ Cg.NPlus.CRoot ])
   in
+  let stats = Archive.stats ar in
   {
     answer;
     core;
-    n_names = ar.Archive.n_names;
-    n_vers = ar.Archive.n_vers;
-    dropped = ar.Archive.n_dropped;
-    t_parse = ar.Archive.t_parse;
+    n_names = stats.Archive.names;
+    n_vers = stats.Archive.versions;
+    dropped = stats.Archive.dropped;
+    t_parse = stats.Archive.parse;
   }
 
 let reaches_registry_root (root : Q.root) (r : result) =

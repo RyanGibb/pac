@@ -174,12 +174,11 @@ let choose pk ~assigned tn (cands : PVersion.t list) =
   in
   let pick =
     match tn with
-    | Cg.NPlus.CSlot (_, _, d) ->
-        Option.bind (Hashtbl.find_opt st.L.dep_of_data d) walk
+    | Cg.NPlus.CSlot (_, _, d) -> Option.bind (L.slot_dep st d) walk
     | Cg.NPlus.CDec (n, gr, _, d, _) -> (
         match decided_v assigned (Cg.NPlus.CSlot (n, gr, d)) with
         | Some w -> offered w
-        | None -> Option.bind (Hashtbl.find_opt st.L.dep_of_data d) walk)
+        | None -> Option.bind (L.slot_dep st d) walk)
     | Cg.NPlus.CCrate (m, gr) ->
         List.find_opt
           (fun (c : PVersion.t) ->
@@ -218,8 +217,8 @@ struct
   let equal a b = Cg.NPlus.compare a b = E.Eq
   let decided = decided
   let version_equal a b = PVersion.compare a b = 0
-  let root = st.L.rc
-  let root_features = st.L.features
+  let root = L.root st
+  let root_features = L.root_features st
   let meta (n, v) = L.meta st n v
   let candidates d = List.length (candidates pk d)
   let choose ~assigned tn cands = choose pk ~assigned tn cands

@@ -7,6 +7,9 @@ type t = Version.Semver.t = {
 
 val parse : string -> t
 val compare : string -> string -> int
+
+(* [compare] off the parsed versions, without its string fast path; only
+   test_cargo_version asks, to check the two agree *)
 val compare_parsed : string -> string -> int
 val is_prerelease : string -> bool
 val same_core : string -> string -> bool
@@ -19,6 +22,8 @@ type req = (op * string) list
 val comparator : string -> req
 val parse_req : string -> req
 val holds : string -> req -> bool
+
+(* for test_cargo_version's failure messages alone *)
 val string_of_req : req -> string
 
 (* VersionReq::from_str of the semver crate cargo 1.97 links.  The index
