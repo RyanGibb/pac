@@ -96,9 +96,9 @@ Module ConflictClass (N V : UsualOrderedType).
     Definition embedVS (vs : VSet.t) : T.VSet.t := SOvt.map Version.Orig vs.
 
     Module SOit := SetOps InClassElt T.Pkg InClassRel T.PkgSet.
-    Definition classPkgs (X : PkgSet.t) (Om : InClassRel.t) : T.PkgSet.t :=
+    Definition classPkgs (ps : PkgSet.t) (Om : InClassRel.t) : T.PkgSet.t :=
       SOit.filterMap (fun '(q, k) =>
-          if PkgSet.mem q X
+          if PkgSet.mem q ps
           then Some (Name.Cls k, Version.Name (fst q))
           else None)
         Om.

@@ -1041,8 +1041,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       DepsFibred.tailFibre D p.
     Definition confFibre (G : Conf.t) (p : Pkg.t) : Conf.t :=
       ConfFibred.tailFibre G p.
-    Definition clsPreimage (M : Cls.t) (P : PkgSet.t) : Cls.t :=
-      ClsPreimage.ofKeys fst P M.
+    Definition clsPreimage (M : Cls.t) (ps : PkgSet.t) : Cls.t :=
+      ClsPreimage.ofKeys fst ps M.
 
     Lemma mem_realAt : forall R (n : N.t) (b : A.t) q,
         PkgSet.In q (realAt R n b) <-> PkgSet.In q R /\ fst q = (n, b).
