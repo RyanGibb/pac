@@ -745,6 +745,9 @@ def check(answer, manifest):
             group = list(group)
             cands = [[c for a, c in kids.get(p, []) if a == key[0] and c[0] == key[1]
                       and matches(requirement(d[2]), c[1])] for d in group]
+            # the first 4096 picks only, as the product grows with each
+            # declaration of the name; past them a pick covering more edges
+            # may be missed, and an edge then goes uncounted as used
             best = max(itertools.islice(itertools.product(*[cs or [None] for cs in cands]), 4096),
                        key=lambda pick: len({c for c in pick if c}))
             out += zip(group, best)
