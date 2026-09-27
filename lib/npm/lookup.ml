@@ -13,9 +13,9 @@ module Tbl = Pac_common.Tbl
    and no other.  The target's packument decides it, so the rewrite is made
    here rather than in the parser, which sees one manifest at a time. *)
 let star_range ar (t : string) (rg : Npm_version.range) : Npm_version.range =
-  (* Berry reads * as semver does, so the common core admits no
+  (* Berry reads * as semver does, so the shared reading admits no
      prerelease under it *)
-  if !P.core then rg
+  if A.shared ar then rg
   else
     match A.latest ar t with
     | Some l
@@ -38,7 +38,7 @@ let spec_range ar (t : string) : P.spec -> Npm_version.range = function
 
 let own_range ar (d : P.dep) = spec_range ar d.P.d_target d.P.d_spec
 
-(* The descriptor is the spec as written under the common core, where every
+(* The descriptor is the spec as written under the shared reading, where every
    dependency with it resolves to one version as in Yarn Berry's lockfile;
    npm resolves each dependency apart, so otherwise there is none. *)
 let xdep ar (d : P.dep) : Np.coq_Dependency =
@@ -47,7 +47,7 @@ let xdep ar (d : P.dep) : Np.coq_Dependency =
     Np.d_target = d.P.d_target;
     Np.d_range = xrange (own_range ar d);
     Np.d_dev = d.P.d_dev;
-    Np.d_desc = (if !P.core then Some d.P.d_raw else None);
+    Np.d_desc = (if A.shared ar then Some d.P.d_raw else None);
   }
 
 (* a peer names a directory, and npm fetches the peer's range from the
@@ -181,7 +181,8 @@ let matches_published st (d : P.dep) : bool =
    deliberately does not do.  Read lazily, the target of a dependency that
    survives is a slot target the sub-instance was going to load anyway. *)
 let dep_keep st (d : P.dep) : bool =
-  (not d.P.d_optional) || (st.optional && (!P.core || matches_published st d))
+  (not d.P.d_optional)
+  || (st.optional && (A.shared st.ar || matches_published st d))
 
 (* what the optional-dependency test read and what it abandoned, both in
    distinct (target, range) pairs *)
@@ -300,12 +301,12 @@ let two_peers st p q =
 (* A copy's own dependencies and slot targets, which only a peer with
    default reads: the copy's sight admits its own copy, and a link to it
    decides whether it holds one.  A peer with default is a peer beside a
-   dependency of its name, which only the common core keeps, the parser
+   dependency of its name, which only the shared reading keeps, the parser
    otherwise dropping the peer (npm's _loadDeps), so outside it they are
    left out: no lookup reads them, and reading them would load packuments
    npm does not. *)
-let dp_deps st q = if !P.core then own_dependencies st q else []
-let dp_targets st q = if !P.core then slot_targets st q else []
+let dp_deps st q = if A.shared st.ar then own_dependencies st q else []
+let dp_targets st q = if A.shared st.ar then slot_targets st q else []
 
 (* the dependencies of a holder p and of its dependee q, whose peer with
    default reads its own *)
@@ -385,7 +386,7 @@ let record_dir st (m : Np.Nm.name) =
       let l = Option.value ~default:[] (Hashtbl.find_opt st.dirs (k, v)) in
       if not (List.exists (fun x -> Np.Nm.compare x m = E.Eq) l) then begin
         Hashtbl.replace st.dirs (k, v) (m :: l);
-        match if !P.core then desc_name st (snd k, v) d else None with
+        match if A.shared st.ar then desc_name st (snd k, v) d else None with
         | Some x -> Hashtbl.add st.desc_dirs x m
         | None -> ()
       end

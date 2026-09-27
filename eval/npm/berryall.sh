@@ -3,10 +3,12 @@
 # time, against one berryreg.py over the run's snapshot farm.  Writes
 # <run>/berry.txt, a line per answer (query, mode, then berry.sh's), and a
 # summary.
-# usage: berryall.sh <run-dir> <port>   P=<jobs>, under PAC_NPM_CORE=1
+# usage: berryall.sh <run-dir> <port>   P=<jobs>; the run's READING=shared
 set -u
 S="$(cd "$(dirname "$0")" && pwd)"
 run=$(cd "$1" && pwd) port=$2
+grep -qx 'READING=shared' "$run/params" ||
+  { echo "$0: $run was not run with READING=shared, whose answers alone Berry must take" >&2; exit 2; }
 export NPM_RUN=$run BPORT=$port S
 python3 "$S/berryreg.py" "$port" "$run/cache" > "$run/berryreg.log" 2>&1 &
 reg=$!

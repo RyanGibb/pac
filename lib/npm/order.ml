@@ -583,7 +583,7 @@ let viable st ~assigned (n : PName.t) cands =
             [ Np.Vs.Bot ]
           else keep ok)
   | Np.Nm.Intermediate (k, v, m) -> (
-      (* one version per descriptor (the common core): what another
+      (* one version per descriptor (the shared reading): what another
          directory reading it has decided binds this one, and so does what
          the others' own constraints leave open, since a pick outside it
          rules out only itself *)

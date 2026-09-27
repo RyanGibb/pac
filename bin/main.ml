@@ -455,14 +455,16 @@ let alpine_cmd =
 
 module Npm = Npm_solve
 
-let npm_run debug core order cache offline tree omit nodev npmv query =
+let npm_run debug core order reading cache offline tree omit nodev npmv query =
   guard @@ fun () ->
   match cache with
   | None ->
       error 2 "no packument cache: pass --cache, or set XDG_CACHE_HOME or HOME"
   | Some cache -> (
       let t0 = Unix.gettimeofday () in
-      let ar = Npm.Archive.create ?node:nodev ?npm:npmv ~cache ~offline () in
+      let ar =
+        Npm.Archive.create ?node:nodev ?npm:npmv ~reading ~cache ~offline ()
+      in
       try
         match Npm.Query.root ar query with
         | Error e -> error 2 "%s" e
@@ -538,6 +540,21 @@ let npm_cmd =
   let tree =
     Arg.(value & flag & info [ "tree" ] ~doc:"Print the node_modules nesting.")
   in
+  let reading =
+    Arg.(
+      value
+      & opt (enum [ ("npm", `Npm); ("shared", `Shared) ]) `Npm
+      & info [ "reading" ] ~docv:"READING"
+          ~doc:
+            "How manifests are read: $(b,npm) as npm reads them, and \
+             $(b,shared) as npm and Yarn Berry both do, so that an answer is \
+             one both accept.  Under $(b,shared), Yarn Berry's built-in \
+             packageExtensions apply, a peer beside a dependency of the same \
+             name is kept as Yarn Berry keeps it, each descriptor (a directory \
+             key with its spec as written) resolves to one version wherever it \
+             is written, and a root the two tools read apart (a mandatory \
+             peerDependency, overrides or resolutions) is refused.")
+  in
   let order =
     order_arg ~tool:"npm's, replayed, does" ~pubgrub:"PubGrub's own order does"
   in
@@ -587,8 +604,8 @@ let npm_cmd =
   Cmd.v
     (Cmd.info "npm" ~exits ~doc:"Solve against the npm registry.")
     Term.(
-      const npm_run $ debug_arg $ core_arg $ order $ cache $ offline $ tree
-      $ omit $ nodev $ npmv $ query)
+      const npm_run $ debug_arg $ core_arg $ order $ reading $ cache $ offline
+      $ tree $ omit $ nodev $ npmv $ query)
 
 (* a command-line error is a refused query like any other, and 124 is
    left to timeout(1) *)

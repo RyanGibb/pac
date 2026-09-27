@@ -110,7 +110,7 @@ import os
 import sys
 import time
 
-from core import CORE, normalize, split
+from shared import SHARED, normalize, split
 from relation import fields, misses
 from tree import ancestors, escape, is_link, lookup, parse_tree, slot
 
@@ -621,8 +621,8 @@ def main():
     for n in sorted(nodes):
         # the query is published nowhere; its manifest is the project's
         m = (rootman or {}) if n == root else manifest(cache, n[0], n[1])
-        if CORE:
-            # the common core's reading, the root asking no peer of anyone
+        if SHARED:
+            # the shared reading, the root asking no peer of anyone
             if n == root:
                 deps[n] = set(m.get("dependencies") or {}) | set(m.get("optionalDependencies") or {})
                 peers[n], needed[n] = set(), set()

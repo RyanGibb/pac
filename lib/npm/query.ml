@@ -223,12 +223,12 @@ let check_published ar specs =
            ar.Archive.cache
            (if ar.Archive.offline then " (offline)" else ""))
 
-(* Under the common core (PAC_NPM_CORE=1) a root the two tools read
-   apart is refused, as no answer is one both accept: npm installs the
-   root's mandatory peerDependencies and Yarn Berry never asks them of
-   anyone, npm alone reads overrides and Berry alone resolutions.  Any
-   entry refuses, whether or not it would change an answer. *)
-let core_root pkg : (unit, string) result =
+(* Under the shared reading a root the two tools read apart is refused, as
+   no answer is one both accept: npm installs the root's mandatory
+   peerDependencies and Yarn Berry never asks them of anyone, npm alone
+   reads overrides and Berry alone resolutions.  Any entry refuses, whether
+   or not it would change an answer. *)
+let shared_root ar pkg : (unit, string) result =
   let entries f = P.assoc_of (P.member f pkg) in
   let deps =
     List.concat_map
@@ -242,10 +242,8 @@ let core_root pkg : (unit, string) result =
     | `Bool b -> b
     | _ -> false
   in
-  let refuse why =
-    Error ("the common core (PAC_NPM_CORE=1) refuses a root with " ^ why)
-  in
-  if not !P.core then Ok ()
+  let refuse why = Error ("--reading=shared refuses a root with " ^ why) in
+  if not (Archive.shared ar) then Ok ()
   else
     match
       List.filter
@@ -268,7 +266,10 @@ let core_root pkg : (unit, string) result =
 let root_of ar pkg =
   let str k = match P.member k pkg with `String s -> s | _ -> "" in
   let name = match str "name" with "" -> "." | n -> n in
-  match P.ver_of ~reject:(Archive.reject ar) ~root:true (str "version") pkg with
+  match
+    P.ver_of ~reading:ar.Archive.reading ~reject:(Archive.reject ar) ~root:true
+      (str "version") pkg
+  with
   | Some v -> Ok { v with P.v_name = name }
   | None -> Error "not a package.json"
 
@@ -282,7 +283,7 @@ let root_of ar pkg =
 let root ar (args : string list) : (P.ver, string) result =
   let paths, specs = List.partition is_manifest_arg args in
   let* pkg = manifest paths in
-  let* () = core_root pkg in
+  let* () = shared_root ar pkg in
   let* specs = resolve_specs ar specs in
   let* () = check_published ar specs in
   root_of ar (List.fold_left add_to pkg specs)

@@ -37,7 +37,7 @@ import json
 import subprocess
 import sys
 
-from core import CORE, normalize, split
+from shared import SHARED, normalize, split
 from tree import is_link, parse_tree, resolve
 
 SATISFIES = {}
@@ -67,10 +67,10 @@ def identity(pk, path):
 
 def fields(e, node=None, holds=frozenset(), npm=False):
     """(dependencies, {peer: optional}, needed dependencies) of the
-    package e at node, the answer giving it copies of holds; under
-    PAC_NPM_CORE, as the common core reads its manifest, unless npm asks
-    for npm's own reading"""
-    if CORE and not npm:
+    package e at node, the answer giving it copies of holds; under the
+    shared reading, as it reads the manifest, unless npm asks for npm's
+    own reading"""
+    if SHARED and not npm:
         if node is None or node[0] == "":
             opt = set(e.get("optionalDependencies") or {})
             return set(e.get("dependencies") or {}) | opt, {}, set(e.get("dependencies") or {}) - opt

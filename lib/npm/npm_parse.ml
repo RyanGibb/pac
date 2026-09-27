@@ -21,10 +21,9 @@ type dep = {
    provides one, which it does not for a peer only Yarn Berry reads *)
 type peer = { p_name : string; p_spec : spec; p_optional : bool; p_root : bool }
 
-(* The common core, PAC_NPM_CORE=1: the manifests as npm and Yarn Berry
-   both read them, so that an answer is one both accept.  Read once from
-   the environment, which the npm check reads too. *)
-let core = ref (Sys.getenv_opt "PAC_NPM_CORE" = Some "1")
+(* [`Shared] reads the manifests as npm and Yarn Berry both do, so that an
+   answer is one both accept *)
+type reading = [ `Npm | `Shared ]
 
 type ver = {
   v_name : string;
@@ -168,8 +167,8 @@ let peer_of ~reject ?(berry_only = []) (meta : (string * Yojson.Safe.t) list)
       reject ();
       None
 
-(* Berry's normalizePackage (Configuration.ts:1915-2011), for the common
-   core: the built-in packageExtensions matching the version add
+(* Berry's normalizePackage (Configuration.ts:1915-2011), for the shared
+   reading: the built-in packageExtensions matching the version add
    dependencies and peers the manifest lacks and set peer meta, and a
    peerDependenciesMeta name with no peer is a peer on *.  The optional
    peer on its @types package that Berry gives each other peer is left
@@ -273,12 +272,13 @@ let engine_of (j : Yojson.Safe.t) (k : string) : Npm_version.range option =
    strictly smaller than npm's.  bundleDependencies entries stay ordinary
    registry dependencies although npm takes their versions from the
    tarball, which is neither fetched nor trusted here. *)
-let ver_of ~reject ~(root : bool) (vers : string) (j : Yojson.Safe.t) :
-    ver option =
+let ver_of ~(reading : reading) ~reject ~(root : bool) (vers : string)
+    (j : Yojson.Safe.t) : ver option =
+  let shared = reading = `Shared in
   match j with
   | `Assoc _ ->
       let j, berry_only =
-        if !core && not root then
+        if shared && not root then
           match member "name" j with
           | `String n -> extend n vers j
           | _ -> (j, [])
@@ -303,7 +303,7 @@ let ver_of ~reject ~(root : bool) (vers : string) (j : Yojson.Safe.t) :
          peer with default); the root's it never asks of anyone *)
       let peer_decls =
         List.filter
-          (fun (k, _) -> (!core && not root) || not (List.mem k dep_keys))
+          (fun (k, _) -> (shared && not root) || not (List.mem k dep_keys))
           (assoc_of (member "peerDependencies" j))
       in
       let peers =
@@ -311,10 +311,10 @@ let ver_of ~reject ~(root : bool) (vers : string) (j : Yojson.Safe.t) :
       in
       let opts = deps_of ~dev:false ~optional:true "optionalDependencies" in
       (* npm fails on a peer spec it cannot read (EINVALIDTAGNAME), which
-         Berry reads as *, so under the common core no answer both accept
-         holds the version *)
+         Berry reads as *, so under the shared reading no answer both
+         accept holds the version *)
       let unread =
-        !core && (not root) && List.length peers < List.length peer_decls
+        shared && (not root) && List.length peers < List.length peer_decls
       in
       let opt_keys = List.map (fun d -> d.d_dir) opts in
       let dep = is_deprecated (member "deprecated" j) in
@@ -351,7 +351,7 @@ let ver_of ~reject ~(root : bool) (vers : string) (j : Yojson.Safe.t) :
       reject ();
       None
 
-let of_json ~reject (j : Yojson.Safe.t) : packument =
+let of_json ~reading ~reject (j : Yojson.Safe.t) : packument =
   let latest =
     match member "latest" (member "dist-tags" j) with
     | `String v -> Some v
@@ -364,15 +364,15 @@ let of_json ~reject (j : Yojson.Safe.t) : packument =
   in
   let vers =
     List.filter_map
-      (fun (v, m) -> ver_of ~reject ~root:false v m)
+      (fun (v, m) -> ver_of ~reading ~reject ~root:false v m)
       (assoc_of (member "versions" j))
   in
   { pk_latest = latest; pk_tags = tags; pk_vers = vers }
 
 (* A packument that will not parse says nothing about the name's versions,
    so it is an error rather than a name with none. *)
-let load ~reject (path : string) : (packument, string) result =
+let load ~reading ~reject (path : string) : (packument, string) result =
   match Yojson.Safe.from_file path with
   | exception Sys_error e -> Error e
-  | `Assoc _ as j -> Ok (of_json ~reject j)
+  | `Assoc _ as j -> Ok (of_json ~reading ~reject j)
   | _ | (exception Yojson.Json_error _) -> Error "not a packument"

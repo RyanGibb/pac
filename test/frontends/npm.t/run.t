@@ -431,14 +431,14 @@ finds and Yarn Berry does not offer.
   root .
   unsatisfiable:
 
-Under PAC_NPM_CORE=1, the common core of npm and Yarn Berry, a
-descriptor, a directory and its spec as written, resolves to one version
+Under --reading=shared, which reads manifests as npm and Yarn Berry both
+do, a descriptor, a directory and its spec as written, resolves to one version
 wherever it appears, as Berry's lockfile records it once: dsca's dsc
 ^1.0.0 must be 1.0.0 for dscp's peer, so dscb's dsc ^1.0.0 is 1.0.0 too,
 though 1.1.0 is newer.  npm resolves them apart, which PubGrub's order,
 taking each directory's newest, shows.
 
-  $ PAC_NPM_CORE=1 ../../../bin/main.exe npm --offline --cache . --tree --order=pubgrub dscr@1.0.0 | sed -n '/^node_modules/,/^encoded/p'
+  $ ../../../bin/main.exe npm --reading=shared --offline --cache . --tree --order=pubgrub dscr@1.0.0 | sed -n '/^node_modules/,/^encoded/p'
   node_modules (6):
     dsca 1.0.0 <- dsc 1.0.0
     dscb 1.0.0 <- dsc 1.0.0
@@ -463,14 +463,14 @@ default, as Berry reads it: pwdp holds no
 pwdc where its depender offers one in both ranges, as pwdh does with
 1.1.0, and its own where its depender offers none, as pwdo does not.
 
-  $ PAC_NPM_CORE=1 ../../../bin/main.exe npm --offline --cache . --tree pwdh@1.0.0 | sed -n '/^node_modules/,/^encoded/p'
+  $ ../../../bin/main.exe npm --reading=shared --offline --cache . --tree pwdh@1.0.0 | sed -n '/^node_modules/,/^encoded/p'
   node_modules (3):
     pwdh 1.0.0 <- pwdc 1.1.0
     . <- pwdh 1.0.0
     pwdh 1.0.0 <- pwdp 1.0.0
   encoded solution: 13 core nodes (16 lookups)
 
-  $ PAC_NPM_CORE=1 ../../../bin/main.exe npm --offline --cache . --tree pwdo@1.0.0 | sed -n '/^node_modules/,/^encoded/p'
+  $ ../../../bin/main.exe npm --reading=shared --offline --cache . --tree pwdo@1.0.0 | sed -n '/^node_modules/,/^encoded/p'
   node_modules (3):
     pwdp 1.0.0 <- pwdc 1.2.0
     . <- pwdo 1.0.0
@@ -1238,13 +1238,13 @@ rather than fall back on the working directory:
   error: no packument cache: pass --cache, or set XDG_CACHE_HOME or HOME
   [2]
 
-The common core refuses what npm and Yarn Berry read apart.  A version
+The shared reading refuses what npm and Yarn Berry read apart.  A version
 with a peer spec npm cannot read is left out: badp 2.0.0's peer on redux
 =>4.0.0 fails npm's install (EINVALIDTAGNAME) where Berry reads it as *, so
-the core takes badp 1.0.0, and npm's own reading, which drops the peer,
+the shared reading takes badp 1.0.0, and npm's own reading, which drops the peer,
 2.0.0.
 
-  $ PAC_NPM_CORE=1 ../../../bin/main.exe npm --offline --cache . --tree badp | sed -n '/^node_modules/,/^encoded/p'
+  $ ../../../bin/main.exe npm --reading=shared --offline --cache . --tree badp | sed -n '/^node_modules/,/^encoded/p'
   node_modules (1):
     . <- badp 1.0.0
   encoded solution: 4 core nodes (4 lookups)
@@ -1256,13 +1256,13 @@ the core takes badp 1.0.0, and npm's own reading, which drops the peer,
 
 A peer only one of Berry's packageExtensions adds is Berry's alone: the
 root installs no copy for redux-thunk 2.3.0's peer on redux, which npm
-would prune, so the core has no answer without a redux of the query's.
+would prune, so the shared reading has no answer without a redux of the query's.
 
-  $ PAC_NPM_CORE=1 ../../../bin/main.exe npm --offline --cache . --tree redux-thunk@2.3.0 | head -2
+  $ ../../../bin/main.exe npm --reading=shared --offline --cache . --tree redux-thunk@2.3.0 | head -2
   root .
   unsatisfiable:
 
-  $ PAC_NPM_CORE=1 ../../../bin/main.exe npm --offline --cache . --tree redux-thunk@2.3.0 redux@4.0.0 | sed -n '/^node_modules/,/^encoded/p'
+  $ ../../../bin/main.exe npm --reading=shared --offline --cache . --tree redux-thunk@2.3.0 redux@4.0.0 | sed -n '/^node_modules/,/^encoded/p'
   node_modules (2):
     . <- redux 4.0.0
     . <- redux-thunk 2.3.0
@@ -1272,10 +1272,10 @@ A root with a mandatory peerDependency, which npm installs and Berry never
 asks of anyone, or with resolutions (Berry's alone) or overrides (npm's
 alone), is refused.
 
-  $ PAC_NPM_CORE=1 ../../../bin/main.exe npm --offline --cache . ./corepeer-app/package.json
-  error: the common core (PAC_NPM_CORE=1) refuses a root with a peerDependency (badp), which npm installs and Yarn Berry does not
+  $ ../../../bin/main.exe npm --reading=shared --offline --cache . ./sharedpeer-app/package.json
+  error: --reading=shared refuses a root with a peerDependency (badp), which npm installs and Yarn Berry does not
   [2]
 
-  $ PAC_NPM_CORE=1 ../../../bin/main.exe npm --offline --cache . ./coreres-app/package.json
-  error: the common core (PAC_NPM_CORE=1) refuses a root with resolutions, which Yarn Berry reads and npm does not
+  $ ../../../bin/main.exe npm --reading=shared --offline --cache . ./sharedres-app/package.json
+  error: --reading=shared refuses a root with resolutions, which Yarn Berry reads and npm does not
   [2]

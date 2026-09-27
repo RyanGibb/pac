@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Whether Yarn Berry takes our answer, as the common core must be taken by
-# every tool (PAC_NPM_CORE=1): the answer is written out as a Berry project
+# Whether Yarn Berry takes our answer, as an answer under the shared
+# reading (pac's --reading=shared) must be taken by both tools: the answer is written out as a Berry project
 # (berrylock.py) against berryreg.py on BPORT, and Berry's strict view is
 # read off it.
 #

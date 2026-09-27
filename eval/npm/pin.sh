@@ -6,6 +6,7 @@ set -u
 export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
 run=$1 NORM=${NORM---peer-parent} MODE=${MODE:-tool} TIMEOUT=${TIMEOUT:-900}
+reading=$(sed -n 's/^READING=//p' "$run/params")
 npmv=$(sed -n 1p "$S/npm-version") nodev=$(sed -n 2p "$S/npm-version")
 
 ok=0; bad=0
@@ -17,7 +18,7 @@ for f in "$run"/out/*."$MODE".edges.npmonly; do
   rm -rf "$W"; mkdir -p "$W"
   cp "$run/work/$k/lock/package.json" "$W/package.json"
   python3 "$S/pinroot.py" "$run/out/$k.theirs" "$run/cache" "$W/cache" "$W/package.json" > "$o.pins"
-  if ! timeout "$TIMEOUT" "$run/pac.exe" npm --offline --cache "$W/cache" --tree \
+  if ! timeout "$TIMEOUT" "$run/pac.exe" npm --reading="${reading:-npm}" --offline --cache "$W/cache" --tree \
        --node-version "$nodev" --npm-version "$npmv" "$(realpath "$W/package.json")" > "$o.out" 2>&1; then
     printf '%-24s NO ANSWER (see %s.out)\n' "$g" "$o"
     bad=$((bad+1)); continue

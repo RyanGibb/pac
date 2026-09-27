@@ -1,5 +1,5 @@
-"""The common core's reading of a manifest, where npm and Yarn Berry must
-both accept an answer (PAC_NPM_CORE=1, as pac reads it).
+"""The shared reading of a manifest, where npm and Yarn Berry must both
+accept an answer (READING=shared, as pac's --reading=shared reads it).
 
 normalize() is Berry's normalizePackage (Configuration.ts:1915-2011): the
 built-in packageExtensions matching the version add the dependencies and
@@ -18,8 +18,12 @@ a peer where it does not.
 import json
 import os
 import subprocess
+import sys
 
-CORE = os.environ.get("PAC_NPM_CORE") == "1"
+READING = os.environ.get("READING") or "npm"
+if READING not in ("npm", "shared"):
+    sys.exit(f"READING={READING} is neither npm nor shared")
+SHARED = READING == "shared"
 
 with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                        "berry-extensions.json")) as f:

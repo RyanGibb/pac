@@ -3,11 +3,13 @@
 # how each of our answers there compares with it, P at a time, against one
 # berryreg.py over the run's snapshot.  Writes <run>/berryown.txt, a line
 # per answer, and a summary.
-# usage: berryownall.sh <run-dir> <port>   P=<jobs>, under PAC_NPM_CORE=1
+# usage: berryownall.sh <run-dir> <port>   P=<jobs>; the run's READING=shared
 set -u
 export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
 run=$(cd "$1" && pwd) port=$2
+grep -qx 'READING=shared' "$run/params" ||
+  { echo "$0: $run was not run with READING=shared, whose answers alone compare with Berry's" >&2; exit 2; }
 export NPM_RUN=$run BPORT=$port S
 python3 "$S/berryreg.py" "$port" "$run/cache" > "$run/berryreg-own.log" 2>&1 &
 reg=$!

@@ -5,21 +5,24 @@
 # into the run's farm, pac's fetches go through it, and what the farm gains
 # is then copied into repos/npm by hand; a miss is then only a name the
 # registry itself refuses.
+# READING is pac's --reading, npm or shared, and the check reads the
+# manifests as pac did.
 # usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]
 #        MODES="tool pubgrub" P=<jobs> TIMEOUT=<s> PORT=<shim>
-#        NORM=<edges.py flag> FILL=1
+#        NORM=<edges.py flag> FILL=1 READING=npm|shared
 S="$(cd "$(dirname "$0")" && pwd)"
 ECO=npm
 . "$S/../scale-lib.sh"
 . "$S/npm.sh"
-export PORT=${PORT:-8899} NORM=${NORM---peer-parent}
+export PORT=${PORT:-8899} NORM=${NORM---peer-parent} READING=${READING:-npm}
+case $READING in npm|shared) ;; *) echo "$0: READING=$READING is neither npm nor shared" >&2; exit 2 ;; esac
 NPMV=$(sed -n 1p "$S/npm-version") NODEV=$(sed -n 2p "$S/npm-version")
 
 all_queries() { node "$S/queries.js" "$TOP/repos/npm"; }
 
 regress_queries() { awk '{print $1 "@" $2}' "$S/baseline/roots.txt"; }
 
-params() { echo "NORM=$NORM"; echo "FILL=${FILL:-}"; }
+params() { echo "NORM=$NORM"; echo "FILL=${FILL:-}"; echo "READING=$READING"; }
 
 prepare() {
   [ -n "${FILL:-}" ] || snapshot npm
@@ -79,7 +82,7 @@ ask_tool() {
 run_pac() {
   rm -f "$2.counts"
   PATH=$run/bin:$PATH PAC_MISS=$o.pacmiss timeout "$TIMEOUT" "$run/pac.exe" npm $(flag "$1") \
-    --cache "$run/cache" --tree --node-version "$NODEV" --npm-version "$NPMV" $3 > "$2.out" 2>&1
+    --reading="$READING" --cache "$run/cache" --tree --node-version "$NODEV" --npm-version "$NPMV" $3 > "$2.out" 2>&1
 }
 
 extract() { :; }

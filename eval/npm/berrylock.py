@@ -16,7 +16,7 @@ compare  whether the lockfile Berry then wrote still resolves every
 
 A descriptor is a directory and its spec as the manifest writes it, the
 spec being Berry's own reading: npm: before a range or tag.  Manifests are
-read as the common core reads them (core.py), packageExtensions included,
+read as the shared reading reads them (shared.py), packageExtensions included,
 so a dependency Berry adds is a descriptor too.
 
 usage: berrylock.py prepare <snapshot> <our --tree output> <dir> <port> <query...>
@@ -28,7 +28,7 @@ import os
 import re
 import sys
 
-from core import normalize, split
+from shared import normalize, split
 from tree import escape, parse_tree
 
 ROOT = "pac-berry-root"
@@ -103,8 +103,8 @@ def prepare(cache, ours, d, port, args):
                 "enableImmutableInstalls: false\nenableProgressBars: false\n"
                 "httpTimeout: 600000\n" % port)
     open(os.path.join(d, "yarn.lock"), "w").close()
-    # what each copy loads: its rows, and the peers it declares as the core
-    # reads them, whose provider its depender decides (berryprobe.cjs)
+    # what each copy loads: its rows, and the peers it declares as the
+    # shared reading reads them, whose provider its depender decides (berryprobe.cjs)
     rows = {}
     for r, key, c in edges:
         rows.setdefault(r, {})[key] = c

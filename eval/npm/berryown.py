@@ -21,7 +21,7 @@ import os
 import sys
 
 from berrylock import ROOT, manifest, query_specs
-from core import normalize
+from shared import normalize
 from tree import parse_tree
 
 

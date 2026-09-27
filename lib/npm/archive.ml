@@ -15,6 +15,7 @@ let host_version (s : string) : string =
 type t = {
   cache : string;
   offline : bool;
+  reading : P.reading;
   (* The host npm-pick-manifest ranks engines against.  npm always has
      one, arborist passing process.version as nodeVersion and the CLI its
      own version as npmVersion, but nothing here can read a node that need
@@ -43,10 +44,11 @@ type t = {
   mutable t_parse : float;
 }
 
-let create ?node ?npm ~cache ~offline () =
+let create ?node ?npm ?(reading = `Npm) ~cache ~offline () =
   {
     cache;
     offline;
+    reading;
     node = Option.map host_version node;
     npm = Option.map host_version npm;
     pkgs = Hashtbl.create 1024;
@@ -119,7 +121,7 @@ let download ar n f =
   | `Fetched -> (
       (* a body that is no packument would be read back from the cache on
          every later run *)
-      match P.load ~reject:ignore tmp with
+      match P.load ~reading:ar.reading ~reject:ignore tmp with
       | Ok _ ->
           Sys.rename tmp f;
           Some f
@@ -134,6 +136,7 @@ let download ar n f =
       raise (Fetch_failed (Printf.sprintf "fetching %s: %s" url e))
 
 let reject ar () = ar.n_dropped <- ar.n_dropped + 1
+let shared ar = ar.reading = `Shared
 
 let fetch ar (n : string) : string option =
   let f = cache_file ar n in
@@ -217,7 +220,7 @@ let one_per_precedence ar (latest : string option) (vs : P.ver list) =
   | d -> List.filter (fun v -> not (List.memq v d)) vs
 
 let read_packument ar n f =
-  match P.load ~reject:(reject ar) f with
+  match P.load ~reading:ar.reading ~reject:(reject ar) f with
   | Error e -> raise (Fetch_failed (Printf.sprintf "reading %s: %s" f e))
   | Ok pk ->
       Option.iter (Hashtbl.replace ar.latest n) pk.P.pk_latest;
