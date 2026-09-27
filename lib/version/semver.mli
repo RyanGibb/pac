@@ -1,15 +1,11 @@
-type t = {
-  major : int;
-  minor : int;
-  patch : int;
-  pre : string list;
-  build : string list;
-}
+type t = { major : int; minor : int; patch : int; pre : string list }
 
 (* A component of a partial version, as a range names one: 1.2.x and 1.2
    are not versions but bounds to widen. *)
 type comp = Num of int | Star | Absent
 
+(* for test_semver, which tells apart versions differing only in build
+   metadata *)
 val strip_build : string -> string * string
 val num_or : int -> comp -> int
 val vstr : ?pre:string -> int -> int -> int -> string

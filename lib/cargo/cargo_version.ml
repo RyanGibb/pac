@@ -1,12 +1,6 @@
 module V = Version.Semver
 
-type t = V.t = {
-  major : int;
-  minor : int;
-  patch : int;
-  pre : string list;
-  build : string list;
-}
+type t = V.t = { major : int; minor : int; patch : int; pre : string list }
 
 let parse = V.Strict.parse
 let compare = V.Strict.compare

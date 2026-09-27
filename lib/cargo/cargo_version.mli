@@ -3,7 +3,6 @@ type t = Version.Semver.t = {
   minor : int;
   patch : int;
   pre : string list;
-  build : string list;
 }
 
 val parse : string -> t

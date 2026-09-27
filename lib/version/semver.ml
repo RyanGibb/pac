@@ -6,13 +6,7 @@ let digits_from s i =
   let rec go j = if j < n && is_digit s.[j] then go (j + 1) else j in
   go i
 
-type t = {
-  major : int;
-  minor : int;
-  patch : int;
-  pre : string list;
-  build : string list;
-}
+type t = { major : int; minor : int; patch : int; pre : string list }
 
 (* leading zeros carry no value; one is kept of an all-zero run *)
 let strip0 s =
@@ -67,18 +61,12 @@ let split_hyphen_loose (s : string) : string * string =
 let ids s = if s = "" then [] else String.split_on_char '.' s
 
 let of_parts split (s : string) : t =
-  let s, build = strip_build s in
+  let s, _ = strip_build s in
   let core, pre = split s in
   let num s = int_of_digits (String.sub s 0 (digits_from s 0)) in
   let parts = String.split_on_char '.' core in
   let get i = match List.nth_opt parts i with Some x -> num x | None -> 0 in
-  {
-    major = get 0;
-    minor = get 1;
-    patch = get 2;
-    pre = ids pre;
-    build = ids build;
-  }
+  { major = get 0; minor = get 1; patch = get 2; pre = ids pre }
 
 let is_num s = s <> "" && String.for_all is_digit s
 
