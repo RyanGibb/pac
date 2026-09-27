@@ -1,6 +1,3 @@
-(* libstdc++'s binary heap (bits/stl_heap.h), reproduced exactly: a
-   comparator whose ties nothing else settles leaves the order to the way
-   equal elements travel, which a textbook sift-down would change. *)
 type 'a t = {
   less : 'a -> 'a -> bool;
   mutable arr : 'a array;
@@ -10,7 +7,6 @@ type 'a t = {
 let create less = { less; arr = [||]; len = 0 }
 let length h = h.len
 
-(* room for one more element, the fresh cells filled with [x] *)
 let grow arr len x =
   if len < Array.length arr then arr
   else
@@ -72,7 +68,6 @@ let make h =
       adjust h parent h.len h.arr.(parent)
     done
 
-(* std::remove_if, which is stable, then std::make_heap *)
 let filter h keep =
   let a = h.arr in
   let j = ref 0 in

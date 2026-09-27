@@ -194,7 +194,7 @@ module Make (S : Apt_reject.SEARCH) = struct
           cands
 
   let filter (t : t) ~assigned n cands =
-    let st = t.Heap.d in
+    let st = Heap.state t in
     live_filter st ~assigned n cands
     |> kept_filter t n
     |> narrowed_filter st ~assigned n
