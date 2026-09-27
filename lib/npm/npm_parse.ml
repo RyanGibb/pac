@@ -305,9 +305,12 @@ let ver_of ~(reading : reading) ~reject ~(root : bool) (vers : string)
         List.filter_map (peer_of ~reject ~berry_only meta) peer_decls
       in
       let opts = deps_of ~dev:false ~optional:true "optionalDependencies" in
-      (* npm fails on a peer spec it cannot read (EINVALIDTAGNAME), which
-         Berry reads as *, so under the shared reading no answer both
-         accept holds the version *)
+      (* under the shared reading a version with a peer this parser drops
+         is left out, as no answer holding it is one both tools are known
+         to accept: npm fails on a spec it cannot read (EINVALIDTAGNAME),
+         which Berry reads as *, and an alias, a git, file or URL spec, or
+         a value that is no string names nothing either reads off the
+         registry *)
       let unread =
         shared && (not root) && List.length peers < List.length peer_decls
       in
