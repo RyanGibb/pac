@@ -28,19 +28,16 @@ import os
 import re
 import sys
 
+from mklock import manifest
 from shared import normalize, split
-from tree import escape, parse_tree
+from tree import parse_tree
 
 ROOT = "pac-berry-root"
 
 
-def manifest(cache, name, version):
-    with open(os.path.join(cache, escape(name) + ".json")) as f:
-        return json.load(f)["versions"][version]
-
-
 def berry_spec(raw):
-    return raw if raw.startswith("npm:") else "npm:" + raw
+    """a spec as Berry reads it: npm: before a range or tag"""
+    return raw if ":" in raw else "npm:" + raw
 
 
 def query_specs(args):
@@ -133,8 +130,14 @@ def prepare(cache, ours, d, port, args):
     print("split %d extra %d" % (len(split_), len(extra)))
 
 
+def unquote(s):
+    s = s.strip()
+    return s[1:-1] if len(s) >= 2 and s[0] == s[-1] == '"' else s
+
+
 def read_lock(path):
-    """[(keys, resolution, body lines)], the header kept as keys None"""
+    """[(keys, resolution, body lines)] of a yarn.lock, the header kept as
+    keys None"""
     with open(path) as f:
         blocks = f.read().split("\n\n")
     out = []
@@ -145,11 +148,22 @@ def read_lock(path):
         if lines[0].startswith("#") or not lines[0].endswith(":") or lines[0].startswith("__metadata"):
             out.append((None, None, lines))
             continue
-        head = lines[0][:-1].strip('"')
-        keys = [k.strip() for k in head.split(",")]
+        keys = [unquote(k) for k in unquote(lines[0][:-1]).split(",")]
         m = next((re.match(r'^  resolution: "?([^"]*)"?$', l) for l in lines[1:]
                   if l.startswith("  resolution:")), None)
         out.append((keys, m.group(1) if m else None, lines[1:]))
+    return out
+
+
+def lock_dependencies(body):
+    """{key: spec} of an entry's dependencies section"""
+    out, sect = {}, None
+    for l in body:
+        if l.startswith("    ") and sect == "dependencies":
+            k, v = l.strip().split(": ", 1)
+            out[unquote(k)] = unquote(v)
+        elif l.startswith("  ") and not l.startswith("   "):
+            sect = l.strip().partition(":")[0]
     return out
 
 

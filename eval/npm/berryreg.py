@@ -13,7 +13,9 @@ entry points, main and exports and the like, as they name files that are
 not there.
 
 A name the snapshot lacks is a 404, so a check never reaches the live
-registry.
+registry.  GET /-/pac-serves answers the snapshot directory, which
+serve.sh asks to tell this registry from one another run left on the
+port.
 
 usage: berryreg.py <port> <snapshot-dir>
 """
@@ -108,7 +110,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = urllib.parse.unquote(self.path.split("?", 1)[0]).lstrip("/")
         body, ctype = None, "application/json"
-        if "/-/" in path and path.endswith(".tgz"):
+        if path == "-/pac-serves":
+            body, ctype = os.path.realpath(SNAP).encode(), "text/plain"
+        elif "/-/" in path and path.endswith(".tgz"):
             name, fn = path.split("/-/", 1)
             stem = fn[:-len(".tgz")]
             b = base(name) + "-"

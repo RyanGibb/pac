@@ -20,7 +20,8 @@ import json
 import os
 import sys
 
-from berrylock import ROOT, manifest, query_specs
+from berrylock import ROOT, berry_spec, lock_dependencies, query_specs, read_lock
+from mklock import manifest
 from shared import normalize
 from tree import parse_tree
 
@@ -41,38 +42,17 @@ def prepare(d, port, args):
     open(os.path.join(d, "yarn.lock"), "w").close()
 
 
-def unq(s):
-    s = s.strip()
-    return s[1:-1] if len(s) >= 2 and s[0] == s[-1] == '"' else s
-
-
 def split_at(desc):
     """name and the rest of name@rest, a scope's @ kept in the name"""
     i = desc.find("@", 1)
     return desc[:i], desc[i + 1:]
 
 
-def read_lock(path):
+def resolved(path):
     """{descriptor: (name, version)} and {(name, version): {key: spec}}"""
     res, deps = {}, {}
-    with open(path) as f:
-        text = f.read()
-    for block in text.split("\n\n"):
-        lines = block.split("\n")
-        if not lines or not lines[0].endswith(":") or lines[0].startswith(("#", "__metadata")):
-            continue
-        keys = [unq(k) for k in unq(lines[0][:-1]).split(", ")]
-        loc, sect, dmap = None, None, {}
-        for l in lines[1:]:
-            if l.startswith("    ") and sect == "dependencies":
-                k, v = l.strip().split(": ", 1)
-                dmap[unq(k)] = unq(v)
-            elif l.startswith("  ") and not l.startswith("   "):
-                k, _, v = l.strip().partition(":")
-                sect = k
-                if k == "resolution":
-                    loc = unq(v)
-        if loc is None:
+    for keys, loc, body in read_lock(path):
+        if keys is None or loc is None:
             continue
         name, rest = split_at(loc)
         if rest.startswith("workspace:"):
@@ -83,16 +63,12 @@ def read_lock(path):
             continue
         for k in keys:
             res[k] = node
-        deps[node] = dmap
+        deps[node] = lock_dependencies(body)
     return res, deps
 
 
-def berry_spec(spec):
-    return spec if ":" in spec else "npm:" + spec
-
-
 def compare(cache, ours, d):
-    res, bdeps = read_lock(os.path.join(d, "yarn.lock"))
+    res, bdeps = resolved(os.path.join(d, "yarn.lock"))
     bnodes = {n for n in bdeps if n != ("", "")}
     bedges = {}
     for n, dmap in bdeps.items():
@@ -124,7 +100,7 @@ def compare(cache, ours, d):
             try:
                 m = normalize(manifest(cache, n[0][0], n[0][1]), n[0][0], n[0][1])
                 mans[n[0]] = (set(), set(m.get("peerDependencies") or {}))
-            except (OSError, KeyError):
+            except (OSError, KeyError, RuntimeError):
                 mans[n[0]] = (set(), set())
         if n[0] != ("", "") and n[1] in mans[n[0]][1]:
             del bedges[n]

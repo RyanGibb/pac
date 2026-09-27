@@ -110,7 +110,6 @@ import os
 import sys
 import time
 
-from shared import SHARED, normalize, split
 from relation import fields, misses
 from tree import ancestors, escape, is_link, lookup, parse_tree, slot
 
@@ -621,22 +620,9 @@ def main():
     for n in sorted(nodes):
         # the query is published nowhere; its manifest is the project's
         m = (rootman or {}) if n == root else manifest(cache, n[0], n[1])
-        if SHARED:
-            # the shared reading, the root asking no peer of anyone
-            if n == root:
-                deps[n] = set(m.get("dependencies") or {}) | set(m.get("optionalDependencies") or {})
-                peers[n], needed[n] = set(), set()
-            else:
-                d, pr, _ = split(normalize(m, n[0], n[1], npm=True), set(out.get(n, {})))
-                deps[n], peers[n] = d, set(pr)
-                needed[n] = {p for p, o in pr.items() if not o}
-            continue
-        meta = m.get("peerDependenciesMeta")
-        meta = meta if isinstance(meta, dict) else {}
-        # a dependency of the same name replaces the peer
-        deps[n] = set(m.get("dependencies") or {}) | set(m.get("optionalDependencies") or {})
-        peers[n] = set(m.get("peerDependencies") or {}) - deps[n]
-        needed[n] = {p for p in peers[n] if not (meta.get(p) or {}).get("optional")}
+        d, pr, _ = fields(m, None if n == root else n, set(out.get(n, {})))
+        deps[n], peers[n] = d, set(pr)
+        needed[n] = {p for p, o in pr.items() if not o}
 
     def claims(r, c):
         """the providers our answer gives c's peers where r requires it.  An

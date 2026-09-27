@@ -77,7 +77,8 @@ def fields(e, node=None, holds=frozenset(), npm=False):
         return split(normalize(e, node[0], node[1], npm=True), holds)
     opt = set(e.get("optionalDependencies") or {})
     deps = set(e.get("dependencies") or {}) | opt
-    meta = e.get("peerDependenciesMeta") or {}
+    meta = e.get("peerDependenciesMeta")
+    meta = meta if isinstance(meta, dict) else {}
     # a dependency of the same name replaces the peer
     peers = {p: bool((meta.get(p) or {}).get("optional"))
              for p in e.get("peerDependencies") or {} if p not in deps}

@@ -7,14 +7,8 @@
 set -u
 export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
-run=$(cd "$1" && pwd) port=$2
-grep -qx 'READING=shared' "$run/params" ||
-  { echo "$0: $run was not run with READING=shared, whose answers alone compare with Berry's" >&2; exit 2; }
-export NPM_RUN=$run BPORT=$port S
-python3 "$S/berryreg.py" "$port" "$run/cache" > "$run/berryreg-own.log" 2>&1 &
-reg=$!
-trap 'kill $reg' EXIT
-sleep 1
+. "$S/berry-lib.sh"
+berry_run "$1" "$2" berryreg-own.log
 one() {  # <key> <query...>
   local key=$1; shift
   local w=$NPM_RUN/out/$key.berryown
