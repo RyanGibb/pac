@@ -6,7 +6,7 @@
 # snapshot, shim, npm and closure are scale.sh's.  DEPTH is pac's --depth.
 export DEPTH=${DEPTH:-8}
 
-params() { echo "READING=$READING"; echo "DEPTH=$DEPTH"; }
+params() { echo "FILL=${FILL:-}"; echo "READING=$READING"; echo "DEPTH=$DEPTH"; }
 
 run_pac() {
   rm -f "$2.cmp"
