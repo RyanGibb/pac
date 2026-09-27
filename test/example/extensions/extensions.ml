@@ -951,7 +951,7 @@ module Placement = struct
   let compare_name = R.NameOT.compare
   let compare_version = R.VersionOT.compare
 
-  (* a path is stored deepest key first *)
+  (* a path is stored deepest name first *)
   let path = function [] -> "ε" | l -> String.concat "/" (List.rev l)
 
   let pp_name f = function
