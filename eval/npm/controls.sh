@@ -290,6 +290,14 @@ PLACE = {
                        "hx/node_modules/ut/node_modules/bu": "bu@1.0.0", "tl": "tl@2.5.0"}),
     # reached by nothing, and its own dependency unmet
     "lay-extra-broken": ("INVALID", {"b": "^1.0.0"}, {"b": "b@1.0.0", "y": "y@1.0.0"}),
+    # the root's devDependencies entry wins over its dependencies one
+    "lay-dev-over":   ("VALID", {"b": "^1.0.0"}, {"b": "b@2.0.0"},
+                       {"devDependencies": {"b": "^2.0.0"}}),
+    "lay-dev-under":  ("INVALID", {"b": "^1.0.0"}, {"b": "b@1.0.0"},
+                       {"devDependencies": {"b": "^2.0.0"}}),
+    # an override on d's aliased key makes it the registry's own b
+    "lay-ovr-key":    ("VALID", {"d": "^1.0.0"}, {"d": "d@1.0.0", "b": "b@1.0.0"},
+                       {"overrides": {"b": "1.0.0"}}),
 }
 # answers berry.sh judges
 BERRY = {
@@ -342,10 +350,11 @@ with open(f"{T}/cases", "w") as out:
     ours(OURS, "npm", out)
     ours(SHARED, "shared", out)
 with open(f"{T}/place-cases", "w") as out:
-    for case, (want, deps, layout) in PLACE.items():
+    for case, (want, deps, layout, *more) in PLACE.items():
         d = f"{T}/work/{case}"
         os.makedirs(d)
-        root = {"name": "root", "version": "1.0.0", "private": True, "dependencies": deps}
+        root = {"name": "root", "version": "1.0.0", "private": True, "dependencies": deps,
+                **(more[0] if more else {})}
         json.dump(root, open(f"{d}/package.json", "w"), indent=2)
         with open(f"{d}/ans.out", "w") as f:
             f.write("root .\n" + f"packages ({len(layout)}):\n"

@@ -60,7 +60,7 @@ broken=$(wc -l < "$out/ls.problems")
 override=$(grep -c 'ERESOLVE overriding peer dependency' "$out/ci.log")
 shim || err=1
 # the placement reading reads manifests as npm does
-READING=npm python3 "$S/lockname.py" "$W/package-lock.json" > "$out/names" 2>&1
+READING=npm python3 "$S/lockname.py" "$W/package-lock.json" "$W/package.json" > "$out/names" 2>&1
 named=$?
 node "$S/resolve.js" "$W/package-lock.json" "$W/package.json" "$out/skel" > "$out/resolve" 2>&1
 resolved=$?

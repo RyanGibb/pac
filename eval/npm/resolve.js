@@ -44,8 +44,10 @@ for (const [p, e] of Object.entries(pk)) {
   if (e.link) continue
   const top = p === ''
   const m = top ? root : e
-  const deps = { ...(top ? m.devDependencies : {}), ...(m.dependencies || {}), ...(m.optionalDependencies || {}) }
-  const optional = new Set(Object.keys(m.optionalDependencies || {}))
+  // arborist loads a root's devDependencies last, so they win
+  const dev = top ? (m.devDependencies || {}) : {}
+  const deps = { ...(m.dependencies || {}), ...(m.optionalDependencies || {}), ...dev }
+  const optional = new Set(Object.keys(m.optionalDependencies || {}).filter(k => !(k in dev)))
   const meta = m.peerDependenciesMeta || {}
   const edges = Object.entries(deps).map(([k, s]) => [k, s, 'dep', optional.has(k)])
   for (const [k, s] of Object.entries(m.peerDependencies || {})) {

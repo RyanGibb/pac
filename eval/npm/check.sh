@@ -96,7 +96,7 @@ override=$(cat "$out/ci.log" "$out/plo.log" | grep -c 'ERESOLVE overriding peer 
 shim || err=1
 diff <(paths "$W/package-lock.json") <(paths "$W.plo/package-lock.json") > "$out/moved"
 moved=$(grep -c '^[<>]' "$out/moved")
-python3 "$S/lockname.py" "$W/package-lock.json" > "$out/names" 2>&1
+python3 "$S/lockname.py" "$W/package-lock.json" "$W/package.json" > "$out/names" 2>&1
 named=$?
 python3 "$S/reach.py" "$W/package-lock.json" > "$out/reach" 2> "$out/reach.log" || err=1
 unmet=$(grep -c '^unmet ' "$out/reach")

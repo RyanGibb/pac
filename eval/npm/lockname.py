@@ -13,7 +13,13 @@ mklock.py writes our answer.  A link names the package it points at.  A
 peer is the exception: it takes an alias sitting at its name, as npm and
 Yarn Berry both offer a holder's alias to its dependencies' peers.
 
-usage: lockname.py <package-lock.json>
+An entry has one edge per key, as arborist loads peers, then
+dependencies, then optionalDependencies, then a root's devDependencies, a
+later one replacing an earlier; and a flat override in the root's
+package.json, given as the second argument, replaces the spec of every
+edge on its key, alias included (arborist override-set.js, edge.js).
+
+usage: lockname.py <package-lock.json> [<root package.json>]
 Exits 3 on a mismatch, so that a crash, which exits 1, is not read as one.
 """
 import json
@@ -22,7 +28,7 @@ import sys
 from shared import SHARED
 from tree import ancestors, resolve
 
-FIELDS = ("dependencies", "optionalDependencies", "peerDependencies",
+FIELDS = ("peerDependencies", "dependencies", "optionalDependencies",
           "devDependencies")
 
 
@@ -40,44 +46,57 @@ def target(key, spec):
     return key
 
 
+def edges(e, top):
+    """each key's field and spec, the last field naming it winning"""
+    out = {}
+    for field in FIELDS:
+        if field == "devDependencies" and not top:
+            continue
+        for key, spec in (e.get(field) or {}).items():
+            out[key] = (field, spec)
+    return out
+
+
 def main():
     with open(sys.argv[1]) as f:
         pk = json.load(f)["packages"]
+    ovr = {}
+    if len(sys.argv) > 2:
+        with open(sys.argv[2]) as f:
+            ovr = {k: v for k, v in (json.load(f).get("overrides") or {}).items()
+                   if isinstance(v, str) and v not in ("", "*")}
     bad = 0
     for path, e in sorted(pk.items()):
-        for field in FIELDS:
-            if field == "devDependencies" and path:
+        for key, (field, spec) in sorted(edges(e, not path).items()):
+            want = target(key, ovr.get(key, spec))
+            if want is None:
                 continue
-            for key, spec in (e.get(field) or {}).items():
-                want = target(key, spec)
-                if want is None:
-                    continue
-                # a copy inside the declarer is PEER LOCAL (arborist
-                # edge.js), which check.sh judges
-                frm = path
-                if field == "peerDependencies" and path:
-                    frm = ancestors(path)[-2]
-                q = resolve(pk, frm, key)
-                if q not in pk:
-                    continue
-                got = pk[q].get("name") or q.rsplit("node_modules/", 1)[-1]
-                # a peer takes whatever sits at its name, an alias a holder
-                # installed there too, by version alone; relation.py asks
-                # that it be the copy our answer offers
-                if field == "peerDependencies" and got != key:
-                    continue
-                # under the shared reading a dependency beside a peer of its
-                # name is a peer with default, which takes what the depender
-                # offers under the peer's name: an aliased dependency then
-                # finds the name's own package, as npm and Berry both load
-                peer = (e.get("peerDependencies") or {}).get(key)
-                if (SHARED and field != "peerDependencies" and peer is not None
-                        and got == target(key, peer)):
-                    continue
-                if got != want:
-                    print(f"{path or '(root)'} {field} {key}: {spec} "
-                          f"names {want}, {q} is {got}")
-                    bad = 3
+            # a copy inside the declarer is PEER LOCAL (arborist
+            # edge.js), which check.sh judges
+            frm = path
+            if field == "peerDependencies" and path:
+                frm = ancestors(path)[-2]
+            q = resolve(pk, frm, key)
+            if q not in pk:
+                continue
+            got = pk[q].get("name") or q.rsplit("node_modules/", 1)[-1]
+            # a peer takes whatever sits at its name, an alias a holder
+            # installed there too, by version alone; relation.py asks
+            # that it be the copy our answer offers
+            if field == "peerDependencies" and got != key:
+                continue
+            # under the shared reading a dependency beside a peer of its
+            # name is a peer with default, which takes what the depender
+            # offers under the peer's name: an aliased dependency then
+            # finds the name's own package, as npm and Berry both load
+            peer = (e.get("peerDependencies") or {}).get(key)
+            if (SHARED and field != "peerDependencies" and peer is not None
+                    and got == target(key, peer)):
+                continue
+            if got != want:
+                print(f"{path or '(root)'} {field} {key}: {spec} "
+                      f"names {want}, {q} is {got}")
+                bad = 3
     return bad
 
 
