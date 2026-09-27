@@ -237,7 +237,8 @@ python3 eval/bench/stratify.py debian /tmp/scale/debian 20260927 > /tmp/strat/de
 ```
 
 `eval/bench/outliers.txt` names the queries too slow for the rounds; their steps leave them out, and the `outliers` step measures them `OREPS` (3) times under `OCAP` (1800 s).
-Rows land in `$RUN/res/<step>/<set>/<query>.csv`; `summary.py` gathers them into `bench.csv` and prints, per step and set, each query's median wall and IQR, parse and solve, RSS, and pac's time over the tool's, with the geometric mean of those ratios and how many queries pac was faster on.
+Rows land in `$RUN/res/<step>/<set>/<query>.csv`; `summary.py` gathers them into `bench.csv` and prints, per step and set, each query's median wall and IQR, parse and solve, RSS, and pac's time over the tool's, with the geometric mean of those ratios, its 95% bootstrap interval (the queries resampled 10,000 times, seeded, so a table regenerates alike), and how many queries pac was faster on.
+`bench.csv` holds that mean and interval too, a row per step, set and pac variant with `rep=gm` and `ratio_gm`, `ci_lo` and `ci_hi`.
 
 ## Ecosystem notes
 

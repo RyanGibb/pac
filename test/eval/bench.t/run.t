@@ -43,6 +43,21 @@ the measured runs, the warm-up left out, and pac's time over the tool's.
   > alpine,regress,"x",pac-pubgrub,2,0.20,0.01,0.03,1024,0,t,0.1
   > alpine,regress,"x",apk,2,0.20,,,2048,1,t,0.1
   > EOF
+
+Two more queries, measured once each, so that the geometric mean of the
+ratios has an interval: the queries resampled, seeded, so it is the same
+on every run.
+
+  $ cat > b/res/alpine/regress/y.csv <<'EOF'
+  > alpine,regress,"y",pac-tool,1,0.10,0.01,0.02,1024,0,t,0.1
+  > alpine,regress,"y",pac-pubgrub,1,0.40,0.01,0.03,1024,0,t,0.1
+  > alpine,regress,"y",apk,1,0.20,,,2048,0,t,0.1
+  > EOF
+  $ cat > b/res/alpine/regress/z.csv <<'EOF'
+  > alpine,regress,"z",pac-tool,1,0.90,0.01,0.02,1024,0,t,0.1
+  > alpine,regress,"z",pac-pubgrub,1,0.30,0.01,0.03,1024,0,t,0.1
+  > alpine,regress,"z",apk,1,0.30,,,2048,0,t,0.1
+  > EOF
   $ python3 ../../../eval/bench/summary.py b
   
   ## alpine, regress
@@ -50,12 +65,19 @@ the measured runs, the warm-up left out, and pac's time over the tool's.
   | query | pac-tool parse / solve | pac-tool wall (IQR) | pac-tool MiB | pac-pubgrub parse / solve | pac-pubgrub wall (IQR) | pac-pubgrub MiB | apk wall (IQR) | apk MiB | pac-tool ÷ apk | pac-pubgrub ÷ apk |
   |---|---|---|---|---|---|---|---|---|---|---|
   | x | 0.01 / 0.02 | 0.200 (0.100) | 1 | 0.01 / 0.03 | 0.200 (0.000) | 1 | 0.300 (0.100) | 2 | 0.67 | 0.67 |
-  | **median over queries** |  | 0.200 |  |  | 0.200 |  | 0.300 |  | gm 0.67 | gm 0.67 |
-  | **sum of medians** |  | 0.2 |  |  | 0.2 |  | 0.3 |  | pac faster on 1/1 | pac faster on 1/1 |
+  | y | 0.01 / 0.02 | 0.100 (0.000) | 1 | 0.01 / 0.03 | 0.400 (0.000) | 1 | 0.200 (0.000) | 2 | 0.50 | 2.00 |
+  | z | 0.01 / 0.02 | 0.900 (0.000) | 1 | 0.01 / 0.03 | 0.300 (0.000) | 1 | 0.300 (0.000) | 2 | 3.00 | 1.00 |
+  | **median over queries** |  | 0.200 |  |  | 0.300 |  | 0.300 |  | gm 1.00× (95% CI 0.50–3.00) | gm 1.10× (95% CI 0.67–2.00) |
+  | **sum of medians** |  | 1.2 |  |  | 0.9 |  | 0.8 |  | pac faster on 2/3 | pac faster on 1/3 |
   
   - x apk exit 0,1
   
-  rows ending at load >= 3.5: 0 of 9
+  rows ending at load >= 3.5: 0 of 15
   $ head -2 b/bench.csv
-  step,set,query,variant,rep,wall_s,parse_s,solve_s,maxrss_kb,rc,end_utc,load1
-  alpine,regress,x,pac-tool,0,9.0,0.01,0.02,1000,0,t,0.1
+  step,set,query,variant,rep,wall_s,parse_s,solve_s,maxrss_kb,rc,end_utc,load1,ratio_gm,ci_lo,ci_hi
+  alpine,regress,x,pac-tool,0,9.0,0.01,0.02,1000,0,t,0.1,,,
+  $ grep ',gm,' b/bench.csv
+  alpine,regress,*,pac-tool,gm,,,,,,,,1.000000,0.500000,3.000000
+  alpine,regress,*,pac-pubgrub,gm,,,,,,,,1.100642,0.666667,2.000000
+  $ python3 ../../../eval/bench/summary.py b c.csv > /dev/null
+  $ cmp b/bench.csv c.csv

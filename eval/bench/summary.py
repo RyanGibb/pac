@@ -5,7 +5,12 @@ measured runs (the warm-up, rep 0, left out; a cold step's one run each).
 Quartiles interpolate linearly between order statistics, so over five
 repetitions the IQR is the fourth value less the second.  Each pac variant
 is set against the tool's median: the ratio per query, and over a set the
-geometric mean of those ratios and how many queries pac was faster on.
+geometric mean of those ratios, with a 95% bootstrap interval (the
+queries resampled BOOT times, the 2.5th and 97.5th percentiles of the
+resampled means, seeded by step, set and variant so a table regenerates
+alike), and how many queries pac was faster on.  The CSV holds the rows
+bench.sh measured and, per step, set and variant, one row with rep=gm
+whose ratio_gm, ci_lo and ci_hi are the mean and its interval.
 
 usage: summary.py <run-dir> [csv-out]      prints markdown on stdout;
        the CSV defaults to <run-dir>/bench.csv
@@ -13,11 +18,14 @@ usage: summary.py <run-dir> [csv-out]      prints markdown on stdout;
 import csv
 import glob
 import math
+import random
 import sys
 from collections import defaultdict
 
 COLS = ["step", "set", "query", "variant", "rep", "wall_s", "parse_s", "solve_s",
         "maxrss_kb", "rc", "end_utc", "load1"]
+GM = ["ratio_gm", "ci_lo", "ci_hi"]
+BOOT = 10000
 TOOL = {"debian": "apt", "alpine": "apk", "opam": "opam", "cargo": "cargo", "npm": "npm"}
 
 
@@ -59,9 +67,19 @@ def s(x, d=3):
     return "" if x is None else f"{x:.{d}f}"
 
 
-def gmean(xs):
-    xs = [x for x in xs if x > 0]
-    return math.exp(sum(map(math.log, xs)) / len(xs)) if xs else None
+def boot(xs, seed):
+    """the geometric mean of xs and the percentile interval of it over BOOT
+    resamples of xs"""
+    ls = [math.log(x) for x in xs if x > 0]
+    if not ls:
+        return None, None, None
+    rng = random.Random(seed)
+    ms = [math.exp(sum(rng.choices(ls, k=len(ls))) / len(ls)) for _ in range(BOOT)]
+    return math.exp(sum(ls) / len(ls)), q(ms, .025), q(ms, .975)
+
+
+def ci(g):
+    return "" if g[0] is None else f"{g[0]:.2f}× (95% CI {g[1]:.2f}–{g[2]:.2f})"
 
 
 def table(step, st, rows):
@@ -106,10 +124,11 @@ def table(step, st, rows):
             if c and c.rcs != ["0"]:
                 notes.append(f"{g} {v} exit {','.join(c.rcs)}")
         out.append("| " + " | ".join(row) + " |")
+    gms = {v: boot(agg[v, "r"], f"{step}:{st}:{v}") for v in pvs}
     foot = ["**median over queries**"]
     for v in pvs:
         foot += ["", s(q(agg[v], .5)), ""]
-    foot += [s(q(agg[tool], .5)), ""] + [f"gm {s(gmean(agg[v, 'r']), 2)}" for v in pvs]
+    foot += [s(q(agg[tool], .5)), ""] + [f"gm {ci(gms[v])}" for v in pvs]
     out.append("| " + " | ".join(foot) + " |")
     foot = ["**sum of medians**"]
     for v in pvs:
@@ -117,16 +136,22 @@ def table(step, st, rows):
     foot += [s(sum(agg[tool]), 1), ""] + [
         f"pac faster on {sum(1 for x in agg[v, 'r'] if x < 1)}/{len(agg[v, 'r'])}" for v in pvs]
     out.append("| " + " | ".join(foot) + " |")
-    return "\n".join(out), notes
+    gm = [{"step": step, "set": st, "query": "*", "variant": v, "rep": "gm",
+           **dict(zip(GM, ("" if x is None else f"{x:.6f}" for x in gms[v])))} for v in pvs]
+    return "\n".join(out), notes, gm
 
 
 def main():
     run = sys.argv[1]
     rows = load(run)
+    tables = {k: table(*k, rows) for k in
+              dict.fromkeys((r["step"], r["set"]) for r in rows if r["step"] != "floor")}
     with open(sys.argv[2] if len(sys.argv) > 2 else f"{run}/bench.csv", "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=COLS)
+        w = csv.DictWriter(f, fieldnames=COLS + GM)
         w.writeheader()
         w.writerows(rows)
+        for _, _, gm in tables.values():
+            w.writerows(gm)
     fl = defaultdict(list)
     for r in rows:
         if r["step"] == "floor" and r["rep"] != "0":
@@ -135,8 +160,7 @@ def main():
         print("## floor\n")
     for v, xs in fl.items():
         print(f"- `{v} true`: median {q(xs, .5) * 1000:.2f} ms, IQR {(q(xs, .75) - q(xs, .25)) * 1000:.2f} ms, n={len(xs)}")
-    for step, st in dict.fromkeys((r["step"], r["set"]) for r in rows if r["step"] != "floor"):
-        t, notes = table(step, st, rows)
+    for (step, st), (t, notes, _) in tables.items():
         print(f"\n## {step}, {st}\n\n{t}\n")
         for n in notes:
             print(f"- {n}")
