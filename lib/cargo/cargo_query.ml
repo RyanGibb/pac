@@ -33,22 +33,7 @@ let rust_trim s =
   let i = left 0 in
   String.sub s i (right i i - i)
 
-type root = {
-  ver : P.ver;
-  (* [patch.crates-io] maps the root's own name to it, which is what the
-     model's one node per (name, version) already says; without it cargo
-     keeps the root apart from the registry's crate of that name *)
-  self_patch : bool;
-  (* the resolver the manifest selects is 3, the one whose MSRV preference
-     reaches version selection *)
-  msrv_pref : bool;
-}
-
-(* the root's feature request.  All is the lock's: every key of the root's
-   feature table, as resolve_with_registry asks with
-   CliFeatures::new_all(true).  Named is --features: the named features,
-   plus default unless --no-default-features, as CliFeatures reads the
-   flags; it resolves afresh rather than filtering the lock. *)
+type root = { ver : P.ver; self_patch : bool; msrv_pref : bool }
 type features = All | Named of { feats : string list; default : bool }
 
 let describe = function
@@ -316,11 +301,6 @@ let rust_version r =
     refuse "package.rust-version %S is not a version like \"1.32\"" r;
   r
 
-(* as cargo 1.97's util/toml/mod.rs reads a manifest.  The root becomes
-   one more crate version, so a field with no place in the index form -- a
-   path or git source, another registry, a [patch] other than the root's
-   own, workspace inheritance -- would change the question cargo is asked
-   without changing ours, and is refused. *)
 let of_manifest (path : string) : root =
   let doc =
     try (T.of_file path).T.fields with T.Error e -> refuse "%s: %s" path e
@@ -396,10 +376,6 @@ let of_manifest (path : string) : root =
 
 let crate (r : root) = (r.ver.P.v_name, r.ver.P.v_vers)
 
-(* cargo splits each --features value on spaces and commas, and an empty
-   value names nothing: [-F ""] still asks for default.  A name the root's
-   table lacks is cargo's MissingFeature; the placeholder default the parser
-   adds is not a key of cargo's. *)
 let features_of_flags (r : root) (flags : string list) ~(no_default : bool) :
     features =
   if flags = [] && not no_default then All
@@ -428,9 +404,6 @@ let features_of_flags (r : root) (flags : string list) ~(no_default : bool) :
       feats;
     Named { feats; default = not no_default }
 
-(* the toolchain resolve.rs ranks candidates against: the root's own
-   rust-version, and only when it declares none the installed rustc; under
-   resolvers 1 and 2, nothing *)
 let toolchain (r : root) ~(installed : string option) : string option =
   Option.iter
     (fun t ->

@@ -15,7 +15,7 @@ let is_prerelease = V.Strict.is_prerelease
 let same_core = V.Strict.same_core
 
 type op = Ge | Gt | Le | Lt | Eq
-type req = (op * string) list (* a conjunction; [] is any version *)
+type req = (op * string) list
 type comp = V.comp = Num of int | Star | Absent
 
 let vstr = V.vstr
@@ -149,12 +149,6 @@ let string_of_req r =
   if r = [] then "*"
   else String.concat ", " (List.map (fun (o, v) -> string_of_op o ^ v) r)
 
-(* VersionReq::from_str of the semver crate cargo 1.97 links.  The index
-   is cargo-validated, so this runs on the root alone; without it
-   parse_req would read a malformed requirement as "*".
-   Stricter than parse_req: no "==", a wildcard only in trailing
-   components or as the whole requirement, no leading zeros, and a comma
-   between comparators. *)
 let req_ok (s : string) : bool =
   let n = String.length s and i = ref 0 in
   let at c = !i < n && s.[!i] = c in
@@ -247,7 +241,6 @@ let num_ok d =
   && (String.length d < 20
      || (String.length d = 20 && d <= "18446744073709551615"))
 
-(* Version::from_str of the semver crate *)
 let version_ok (s : string) : bool =
   let ident ~pre d =
     d <> ""
@@ -278,10 +271,6 @@ let version_ok (s : string) : bool =
   && Option.fold ~none:true ~some:(dotted ~pre:true) pre
   && Option.fold ~none:true ~some:(dotted ~pre:false) build
 
-(* PartialVersion::from_str (cargo-util-schemas): a whole semver version,
-   or one to three numbers read as a caret requirement written without its
-   '^'.  A rust-version is one with neither prerelease nor build
-   (RustVersion::try_from); the toolchain rustc reports may carry either. *)
 let partial_ok ~(rust : bool) (s : string) : bool =
   if String.contains s '-' || String.contains s '+' then
     (not rust) && version_ok s

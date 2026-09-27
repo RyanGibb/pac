@@ -3,10 +3,6 @@ module SS = Set.Make (String)
 
 type crate = string * string
 
-(* build_requirements (dep_cache.rs): the features a request turns on, and
-   what it asks of each dependency, by alias.  A strong a/f over an
-   optional a turning on the feature a is already an entry of the table
-   (Cargo_parse.with_implicit_features). *)
 let requirements (m : P.ver) ~all feats default =
   let on = ref SS.empty and deps = Hashtbl.create 8 in
   let want a f =
@@ -49,8 +45,6 @@ let manifest_order (ds : P.dep list) =
       compare (rank a, a.P.d_alias) (rank b, b.P.d_alias))
     ds
 
-(* resolve_features: the dependencies a request enables, each with the
-   features it asks of its target *)
 let enabled ~root (m : P.ver) deps =
   List.filter_map
     (fun (d : P.dep) ->

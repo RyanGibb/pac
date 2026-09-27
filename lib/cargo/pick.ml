@@ -2,7 +2,6 @@ open Encoding
 module P = Cargo_parse
 module L = Lookups
 
-(* cargo's candidate policy over one solve's lookups, and its memos *)
 type t = {
   lk : L.state;
   cands : (string * Cargo_version.req, string list) Hashtbl.t;

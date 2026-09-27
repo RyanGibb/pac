@@ -9,8 +9,6 @@ module CVerOT = Ot.Make (struct
   let compare = Cargo_version.compare
 end)
 
-(* SemverMatch: the two tests a version order cannot express.  sameCore
-   takes the candidate first and the comparator's constant second. *)
 module PM = struct
   let isPre = Cargo_version.is_prerelease
   let sameCore = Cargo_version.same_core
