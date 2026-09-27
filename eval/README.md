@@ -39,7 +39,7 @@ The queries file is read once, so it may be a pipe; a query it names twice, in t
 - `MODES`: the orders pac decides in, each passed as `--order`: `tool`, the tool's own, and `pubgrub`, PubGrub's; `random-<N>` is `--order=random --seed=N`. Default `tool pubgrub`.
 - `FUZZ`: with `FUZZ=K`, the modes are `random-0` to `random-(K-1)` and the tool is not asked: the run asks only whether every answer, in whatever order it was reached, is valid.
 
-A fuzz run ends in its own summary: runs, pac's statuses, the verdicts and `minimal`, over every seed at once.
+A fuzz run ends in its own summary: runs, pac's statuses, the verdicts and `minimal`, over every seed at once, and how many distinct answers the seeds reached.
 It writes `findings.txt`, the lines of `results.txt` whose answer is `INVALID`, whose check reached no verdict (`ERR`), or whose pac crashed, each naming its seed in `mode=`; and `split.txt`, the queries some seeds answer and others find unsat, which no order may do.
 To reproduce a finding, ask pac the query with `--order=random --seed=N`.
 
@@ -185,7 +185,7 @@ node eval/npm/queries.js repos/npm targeted > /tmp/ranges.txt && eval/npm/scale.
 The run directory gets `results.txt`, one line per query and mode, and raw answers under `out/`, `<key>.<mode>.*` for pac's and the check's, `<key>.*` for the tool's:
 
 ```
-query= mode= pac= tool= corr= valid= minimal= reproduced= oo= to= wall= pin=
+query= mode= pac= tool= corr= valid= minimal= reproduced= oo= to= wall= pin= parse= solve= core= lookups= names= versions= answer=
 ```
 
 `pac` is pac's exit status, as the table above names it.
@@ -193,6 +193,8 @@ query= mode= pac= tool= corr= valid= minimal= reproduced= oo= to= wall= pin=
 `tool` is `ok`, `refuse` (the tool says the query has no answer), `error` (it failed otherwise), `timeout` or, under `--regress`, `unrecorded`.
 `oo` and `to` count packages only in ours and only in the tool's.
 `pin` is pac asked for the tool's own answer, where the tool answered (Alpine and opam; `-` elsewhere): `ok`, `unsat`, or no verdict.
+`parse`, `solve`, `core`, `lookups`, `names` and `versions` are pac's own lines, `parse` and `solve` in seconds, `encoded solution: N core nodes (K lookups)` and `loaded: N names, M versions`, `-` where pac printed none.
+`answer` is a hash of pac's answer, those lines left out, so that two modes or seeds answering alike share it; a fuzz run's summary counts the distinct answers per query.
 Extra fields: opam `mccs`; npm `twall` (the tool's wall time, `-` under `--regress`), `closed`, `nodes`, `edges`; cargo `kept`, `identical`.
 
 `eval/<eco>/triage.py <run-dir>` sorts queries into classes, per mode and per pool, and shows `minimal` and `reproduced` apart, the latter marking the answers that are the tool's own; npm's also groups invalid answers by the clauses they fail, and cargo's by what `consistent.py` found first:
@@ -215,6 +217,6 @@ Extra fields: opam `mccs`; npm `twall` (the tool's wall time, `-` under `--regre
 
 ## Ecosystem notes
 
-- npm: queries are also split by `closed`, whether neither side asked for a name the snapshot lacks. Edges are scored with `edges.py --peer-parent`; set `NORM=` to score them as npm's lock records them. `FILL=1` runs `scale.sh` as the pass that closes the snapshot, fetching each miss into the run's farm. `READING=shared` asks pac with `--reading=shared` (default `READING=npm`, `--reading=npm`), and the check then reads the manifests as pac did; the run's parameters record it, so a run resumes only in the reading it started in. `READING=placement` is the placement reading above, whose lines carry `solve`, `nodes`, `lookups`, `cmp` and the check's `why` instead of `nodes` and `edges`.
+- npm: queries are also split by `closed`, whether neither side asked for a name the snapshot lacks. Edges are scored with `edges.py --peer-parent`; set `NORM=` to score them as npm's lock records them. `FILL=1` runs `scale.sh` as the pass that closes the snapshot, fetching each miss into the run's farm. `READING=shared` asks pac with `--reading=shared` (default `READING=npm`, `--reading=npm`), and the check then reads the manifests as pac did; the run's parameters record it, so a run resumes only in the reading it started in. `READING=placement` is the placement reading above, whose lines carry `cmp` and the check's `why` instead of `nodes` and `edges`.
 - `eval/alpine/pin.sh <run-dir>` counts a run's divergent queries pac answers exactly as apk does once every package of apk's answer is in the world. `eval/npm/pin.sh <run-dir>` re-asks a run's divergent queries with npm's picks forced. Both separate preference gaps from instance gaps.
 - `eval/cargo/features.py <crate>...` compares feature sets with `cargo metadata`, with `sparse_proxy.py` serving on `PORT` (default 8991). It is not part of the scale run because it downloads crate sources.

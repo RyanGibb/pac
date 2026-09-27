@@ -112,6 +112,24 @@ check() {  # <stem> <query words...>
 
 fields() { :; }  # <stem>: extra fields of a mode's line, each " k=v"
 
+# pac's own counts, off the lines every frontend's output ends in, and
+# answer, a hash of the answer without them, which two runs answering
+# alike share
+stats() {  # <stem> <pac status>
+  local a=-
+  [ "$2" != ok ] ||
+    a=$(grep -v -e '^encoded solution: ' -e '^loaded: ' -e '^parser dropped ' -e '^parse ' -e '^solve ' \
+          "$1.out" | sha256sum | cut -c1-16)
+  cat "$1.out" 2> /dev/null | awk -v a="$a" '
+    /^parse [0-9.]+s$/ {p = substr($2, 1, length($2) - 1)}
+    /^solve [0-9.]+s$/ {s = substr($2, 1, length($2) - 1)}
+    /^encoded solution: [0-9]+ core nodes \([0-9]+ lookups\)$/ {n = $3; k = substr($6, 2)}
+    /^loaded: [0-9]+ names, [0-9]+ versions/ {nm = $2; v = $4}
+    function d(x) {return x == "" ? "-" : x}
+    END {printf " parse=%s solve=%s core=%s lookups=%s names=%s versions=%s answer=%s",
+           d(p), d(s), d(n), d(k), d(nm), d(v), a}'
+}
+
 emit() { printf '%s' "$1"; }  # <the query's lines>
 
 snapshot() {  # <path under repos/>
@@ -157,7 +175,7 @@ one() {  # <key> <query>
         if [ -n "$k" ]; then seenv[$k]=$valid seenm[$k]=$minimal seenr[$k]=$reproduced seenp[$k]=$p; fi
       fi
     fi
-    lines+="query=$1 mode=$m pac=$pac tool=$tool corr=$corr valid=$valid minimal=$minimal reproduced=$reproduced oo=$oo to=$to wall=$wall pin=$pin$(fields "$p")"$'\n'
+    lines+="query=$1 mode=$m pac=$pac tool=$tool corr=$corr valid=$valid minimal=$minimal reproduced=$reproduced oo=$oo to=$to wall=$wall pin=$pin$(stats "$p" "$pac")$(fields "$p")"$'\n'
   done
   emit "$lines"
 }
@@ -177,14 +195,18 @@ fuzz_totals() {
      q[f["query"]]; n++; pac[f["pac"]]++; v[f["valid"]]++; mi += f["minimal"] == "yes"
      re += f["reproduced"] == "yes"; ra += f["reproduced"] ~ /^(yes|no)$/
      if (f["valid"] == "INVALID") iq[f["query"]]
-     if (f["pac"] ~ /^(ok|unsat)$/) st[f["query"], f["pac"]]}
+     if (f["pac"] ~ /^(ok|unsat)$/) st[f["query"], f["pac"]]
+     if (f["answer"] ~ /^[0-9a-f]+$/ && !((f["query"], f["answer"]) in an)) {an[f["query"], f["answer"]]; na[f["query"]]++}}
     END {for (x in q) if ((x, "ok") in st && (x, "unsat") in st) {split_n++; print x > (run "/split.txt")}
+         for (x in na) {da += na[x]; if (na[x] > 1) mq++; if (na[x] > mx) mx = na[x]}
          printf "fuzz: %d queries x %d seeds = %d runs; pac ok %d, unsat %d, refuse %d, io-error %d, timeout %d, crash %d",
            length(q), k, n, pac["ok"], pac["unsat"], pac["refuse"], pac["io-error"], pac["timeout"], pac["crash"]
          print pac["harness"] ? sprintf(", harness %d", pac["harness"]) : ""
          printf "fuzz: valid %d, INVALID %d (in %d queries), ERR %d, cyclic %d; minimal %d/%d%s\n",
            v["VALID"], v["INVALID"], length(iq), v["ERR"], v["CYCLIC"], mi, v["VALID"],
            ra ? sprintf("; reproduced %d/%d", re, ra) : ""
+         printf "fuzz: %d distinct answers over the %d queries answered; %d answered more than one way, at most %d\n",
+           da, length(na), mq, mx
          printf "fuzz: %d queries answered under some seeds and unsat under others (split.txt)\n", split_n}' \
     "$run/results.txt"
 }

@@ -40,14 +40,10 @@ check() {  # <stem> <query words...>
 }
 
 fields() {
-  local c=- s n l why=-
+  local c=- why=-
   [ -s "$1.cmp" ] && c=$(tr ' ' ';' < "$1.cmp")
   [ -s "$1.check/log" ] && why=$(tail -n 1 "$1.check/log" | sed 's/ valid=.*//' | tr ' ' ',')
-  s=$(sed -n 's/^solve \([0-9.]*\)s$/\1/p' "$1.out")
-  n=$(sed -n 's/^encoded solution: \([0-9]*\) core nodes (\([0-9]*\) lookups)$/\1/p' "$1.out")
-  l=$(sed -n 's/^encoded solution: \([0-9]*\) core nodes (\([0-9]*\) lookups)$/\2/p' "$1.out")
-  printf ' twall=%s closed=@closed@ solve=%s nodes=%s lookups=%s cmp=%s why=%s' \
-    "$twall" "${s:--}" "${n:--}" "${l:--}" "$c" "$why"
+  printf ' twall=%s closed=@closed@ cmp=%s why=%s' "$twall" "$c" "$why"
 }
 
 # closure, npm's and pac's wall time, and how many answers are npm's
