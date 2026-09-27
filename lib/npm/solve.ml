@@ -123,10 +123,19 @@ let solve ?(debug = false) ?(order = `Tool) ?(omit_dev = false)
   let h = Order.hooks order st in
   (* dependencies' memo, whose size is the lookup count the answer reports *)
   let asked = Hashtbl.create 65536 in
-  let root_n = Np.Nm.Granular ((fst root, fst root), snd root) in
+  let root_k = (fst root, fst root) in
+  let root_n = Np.Nm.Granular (root_k, snd root) in
+  (* Every name's versions are fixed once asked, bar the root's
+     intermediates, which a root-installable peer loaded later can fill
+     (peers_naming). Where the list is fixed, a depender's block of
+     versions may run up to the next listed one, as [runs] does for a
+     dependee's, so ranges stay few. *)
+  let dense (n : Np.Nm.name) _ _ =
+    match n with Np.Nm.Intermediate (k, _, _) -> k <> root_k | _ -> true
+  in
   let r =
     PG.solve ?next:h.Pac_common.Order.next ?choose:h.Pac_common.Order.choose
-      ~vers:(Lookup.versions st) ~deps:(dependencies st asked)
+      ~dense ~vers:(Lookup.versions st) ~deps:(dependencies st asked)
       [ (root_n, PG.Ranges.of_list [ Np.Vs.Orig (snd root) ]) ]
   in
   h.Pac_common.Order.finish ();

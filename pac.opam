@@ -38,5 +38,5 @@ build: [
 ]
 dev-repo: "git+https://github.com/RyanGibb/pac.git"
 pin-depends: [
-  ["pubgrub.dev" "git+https://github.com/RyanGibb/ocaml-pubgrub.git#8e607d6"]
+  ["pubgrub.dev" "git+https://github.com/RyanGibb/ocaml-pubgrub.git#09b6c64"]
 ]
