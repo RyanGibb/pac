@@ -19,7 +19,7 @@
 # and a query already there is skipped: after a crash, rerun the same line.
 #
 # The sets are the regression set, `regress`, and, where STRAT holds
-# <eco>.q, a queries file, `strat`.  outliers.txt names the
+# <eco>.q, as stratify.py writes it, `strat`.  outliers.txt names the
 # queries too slow for REPS rounds: their step leaves them out, and
 # `outliers` measures them OREPS times each under OCAP, with a warm-up for
 # the tool alone.

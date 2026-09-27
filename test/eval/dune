@@ -10,4 +10,6 @@
   ../../eval/scale-lib.sh
   ../../eval/answer.sh
   ../../eval/triage_lib.py
-  ../../eval/bench/summary.py))
+  ../../eval/bench/stratify.py
+  ../../eval/bench/summary.py
+  ../../eval/alpine/queries.txt))

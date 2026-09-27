@@ -230,7 +230,12 @@ No query starts at a load average of `LOADSTART` (2.5) or more, and one whose ro
 A killed run resumes where it stopped: rerun the same line.
 `CAP` bounds each run (default none); `PORT` and `NPORT` are cargo's proxy and npm's shim.
 
-The queries are the sets `SETS` names (default both): `regress`, the regression set, and `strat`, the queries of `$STRAT/<eco>.q`, a queries file.
+The queries are the sets `SETS` names (default both): `regress`, the regression set, and `strat`, where `STRAT` holds `<eco>.q`, a stratified draw from a finished run: the queries pac in the tool's order and the tool both answered, the regression set left out, in ten strata by the size of pac's answer, `K` (default 5) drawn from each.
+
+```sh
+python3 eval/bench/stratify.py debian /tmp/scale/debian 20260927 > /tmp/strat/debian.q
+```
+
 `eval/bench/outliers.txt` names the queries too slow for the rounds; their steps leave them out, and the `outliers` step measures them `OREPS` (3) times under `OCAP` (1800 s).
 Rows land in `$RUN/res/<step>/<set>/<query>.csv`; `summary.py` gathers them into `bench.csv` and prints, per step and set, each query's median wall and IQR, parse and solve, RSS, and pac's time over the tool's, with the geometric mean of those ratios and how many queries pac was faster on.
 
