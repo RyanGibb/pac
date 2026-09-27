@@ -140,8 +140,8 @@ let repo_of st (ns : string list) : Np.RepoSet.t =
 let mk_inst st ~repo ~deps ~peers : Np.coq_Inst =
   {
     Np.inst_repo = repo;
-    Np.inst_dep = deps;
-    Np.inst_peer = peers;
+    Np.inst_deps = deps;
+    Np.inst_peers = peers;
     Np.inst_ovr = st.ovr;
     Np.inst_root = st.root;
   }
