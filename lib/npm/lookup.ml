@@ -67,9 +67,6 @@ let xpeer ar (r : P.peer) : Np.coq_PeerDependency =
 type t = {
   ar : A.t;
   root : string * string;
-  (* false under --omit=optional: an optional dependency is then dropped
-     outright rather than only when the registry cannot satisfy it *)
-  optional : bool;
   ovr_raw : (string * Npm_version.range) list;
   ovr : (string * Np.coq_Range) list;
   dep_tbl : (string * string, Np.coq_Dependency list) Hashtbl.t;
@@ -93,12 +90,11 @@ type t = {
   desc_dirs : (Np.Nm.name, Np.Nm.name) Hashtbl.t;
 }
 
-let create ~optional ar root =
+let create ar root =
   let ovr_raw = match A.meta ar root with Some v -> v.P.v_ovr | None -> [] in
   {
     ar;
     root;
-    optional;
     ovr_raw;
     ovr = List.map (fun (n, rg) -> (n, xrange rg)) ovr_raw;
     dep_tbl = Hashtbl.create 16384;
@@ -204,8 +200,7 @@ let matches_published st (d : P.dep) : bool =
    registry holds, as Yarn Berry fails to resolve one no version matches
    (YN0082). *)
 let dep_keep st (d : P.dep) : bool =
-  (not d.P.d_optional)
-  || (st.optional && (A.shared st.ar || matches_published st d))
+  (not d.P.d_optional) || A.shared st.ar || matches_published st d
 
 let optional_verdicts st =
   let dropped =

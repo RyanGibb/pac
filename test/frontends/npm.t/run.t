@@ -134,10 +134,11 @@ takes it with it: transitivity needs no separate rule.
   encoded solution: 5 core nodes (5 lookups)
   loaded: 5 names, 5 versions, 0 packuments fetched, 2 of 3 optionalDependencies (target, range) pairs dropped
 
---omit=optional drops the class outright, without asking the registry
-anything: gadget goes even though it resolves, and no availability check
-runs, so there is no optionalDependencies line and neither gadget nor
-native is loaded at all.
+--omit=optional leaves the class out of the answer, not out of the
+solve: npm resolves the optional dependencies as always and leaves out
+only what optional edges alone reach (calc-dep-flags.js), so gadget is
+resolved and then left out, as npm 11.17.0 flags it optional in its
+lock.
 
   $ untimed ../../../bin/main.exe npm --offline --cache . --tree --omit=optional ./opt-app/package.json
   root opt-app 1.0.0
@@ -146,12 +147,12 @@ native is loaded at all.
     theme 1.0.0
   node_modules (1):
     opt-app 1.0.0 <- theme 1.0.0
-  encoded solution: 3 core nodes (3 lookups)
-  loaded: 2 names, 2 versions, 0 packuments fetched
+  encoded solution: 5 core nodes (5 lookups)
+  loaded: 5 names, 5 versions, 0 packuments fetched, 2 of 3 optionalDependencies (target, range) pairs dropped
 
---omit=dev is not the same kind of omission.  npm resolves the
-devDependencies as always and leaves out only what dev edges alone reach
-(calc-dep-flags.js), so they still shape what the rest gets.  omit-app
+So does --omit=dev: npm resolves the devDependencies as always and
+leaves out only what dev edges alone reach, so they still shape what the
+rest gets.  omit-app
 depends on taker and has holder and host as devDependencies: holder's
 tok 3.0.2 is placed before taker is reached, so taker's tok stays 3.0.2
 though latest is 4.0.0, and host's peer gadget goes with host.  npm
@@ -245,22 +246,17 @@ agree, which is npm's ERESOLVE rather than a reason to abandon the entry.
   loaded: 3 names, 4 versions, 0 packuments fetched
   [1]
 
-That the optional dependency is what fails the solve, rather than
-something else in the fixture, is what --omit=optional shows: with the
-dependency gone the peer
-installs gadget 2.0.0 by itself.
+--omit=optional does not lift the conflict, as the dependency is still
+resolved before it is left out; npm 11.17.0 fails ERESOLVE with it too.
 
   $ untimed ../../../bin/main.exe npm --offline --cache . --tree --omit=optional ./opt-peer-app/package.json
   root opt-peer-app 1.0.0
-  packages (3):
-    gadget 2.0.0
-    host 1.0.0
-    opt-peer-app 1.0.0
-  node_modules (2):
-    opt-peer-app 1.0.0 <- gadget 2.0.0
-    opt-peer-app 1.0.0 <- host 1.0.0
-  encoded solution: 7 core nodes (9 lookups)
+  unsatisfiable:
+  Because <opt-peer-app@1.0.0=>host> 1.0.0 -> <opt-peer-app@1.0.0=>host@1.0.0^gadget> 2.0.0 and <opt-peer-app@1.0.0=>host@1.0.0^gadget> 2.0.0 -> <opt-peer-app@1.0.0=>gadget> 2.0.0, <opt-peer-app@1.0.0=>host> 1.0.0 requires <opt-peer-app@1.0.0=>gadget> 2.0.0.
+  And because opt-peer-app@1.0.0 1.0.0 -> <opt-peer-app@1.0.0=>gadget> 1.0.0, <opt-peer-app@1.0.0=>host> 1.0.0 or opt-peer-app@1.0.0 1.0.0 is forbidden.
+  And because opt-peer-app@1.0.0 1.0.0 -> <opt-peer-app@1.0.0=>host> 1.0.0 and root -> opt-peer-app@1.0.0 1.0.0, version solving failed.
   loaded: 3 names, 4 versions, 0 packuments fetched
+  [1]
 
 A root override binds a peer slot too, and wins over the peer's own range
 rather than being intersected with it.  ovr-peer-app depends on host and

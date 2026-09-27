@@ -622,10 +622,9 @@ let npm_cmd =
       & opt_all (enum [ ("dev", `Dev); ("optional", `Optional) ]) []
       & info [ "omit" ] ~docv:"TYPE"
           ~doc:
-            "Omit a dependency class, $(b,dev) or $(b,optional). dev \
-             dependencies are still resolved, as npm resolves them, and only \
-             what they alone reach is left out; optional ones are dropped \
-             before solving.")
+            "Leave a dependency class, $(b,dev) or $(b,optional), out of the \
+             answer: it is resolved all the same, as npm resolves it, and what \
+             its edges alone reach is left out.")
   in
   (* npm-pick-manifest's engines preference, which needs a host to rank
      against -- npm reads its own and node's, this asks for them *)

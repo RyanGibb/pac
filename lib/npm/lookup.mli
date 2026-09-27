@@ -2,8 +2,7 @@ open Encoding
 
 type t
 
-val create : optional:bool -> Archive.t -> string * string -> t
-
+val create : Archive.t -> string * string -> t
 val archive : t -> Archive.t
 val root : t -> string * string
 

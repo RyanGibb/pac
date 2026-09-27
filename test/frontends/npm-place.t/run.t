@@ -117,6 +117,27 @@ npm reading keys the project as it keys that package, and refuses.
   error: the project is named b, as is a package it reaches, which only --reading=placement tells apart
   [2]
 
+--omit leaves a class out of the answer, not out of the solve: what
+every path from the root reaches through an edge of that class goes.  In
+dev/, t, which split-app has as a devDependency, goes with the w only it
+needs, while the u that s needs too stays.  both-app's b is ^1 in
+dependencies and ^2 in devDependencies, and the later wins, so b is dev.
+opt-app has t as an optionalDependency instead.  npm 11.17.0 flags the
+same packages dev or optional in its locks.
+
+  $ for a in split-app both-app; do untimed ../../../bin/main.exe npm --reading=placement --omit=dev --offline --cache dev ./dev/$a/package.json | grep node_modules/; done
+    node_modules/s s@1.0.0
+    node_modules/u u@1.0.0
+    node_modules/s s@1.0.0
+    node_modules/u u@1.0.0
+  $ untimed ../../../bin/main.exe npm --reading=placement --omit=optional --offline --cache dev ./dev/opt-app/package.json | grep node_modules/
+    node_modules/b b@2.0.0
+    node_modules/s s@1.0.0
+    node_modules/u u@1.0.0
+  $ untimed ../../../bin/main.exe npm --reading=placement --omit=optional --omit=dev --offline --cache dev ./dev/opt-app/package.json | grep node_modules/
+    node_modules/s s@1.0.0
+    node_modules/u u@1.0.0
+
 --core prints the reachable core, finite under the bound.
 
   $ untimed ../../../bin/main.exe npm --reading=placement --core --depth 1 --offline --cache . c@1.0.0 | head -n 12

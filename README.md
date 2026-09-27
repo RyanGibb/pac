@@ -34,7 +34,7 @@ pac npm --cache repos/npm --tree use-sync-external-store
 ## Trusted base
 
 The reductions and the decoding of their answers are proved in Rocq.
-Trusted: PubGrub (its answer is decoded unchecked), each frontend's parsers and version comparators, and the lookup tables' faithfulness to the parsed index.
+Trusted: PubGrub (its answer is decoded unchecked), each frontend's parsers and version comparators, the lookup tables' faithfulness to the parsed index, and `pac npm --omit`, which leaves out of a decoded answer what the omitted class's edges alone reach.
 The `--order` hooks are not: they only choose among what PubGrub offers.
 
 ## Evaluation

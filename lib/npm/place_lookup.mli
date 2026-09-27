@@ -12,9 +12,7 @@ type edge = {
 
 type t
 
-(* [optional] false is --omit=optional: an optional dependency is then
-   dropped from the instance outright *)
-val create : optional:bool -> depth:int -> Archive.t -> string * string -> t
+val create : depth:int -> Archive.t -> string * string -> t
 val archive : t -> Archive.t
 val depth : t -> int
 

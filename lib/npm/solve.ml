@@ -62,64 +62,83 @@ let decode st ~lookups sol =
     optional_dropped = dropped;
   }
 
-(* npm resolves dev dependencies whatever --omit says, and leaves out of
-   what it installs only the packages that dev edges alone reach
-   (calc-dep-flags.js), so a dev dependency still shapes the versions the
-   rest gets.  A package reaches its depender's directory either as one of
-   its dependencies or as the peer of one, so a copy at the root is kept
-   when the root depends on it outside devDependencies, peers on it
-   itself, or holds a kept copy that peers on it; below the root, a kept
-   copy keeps all it holds. *)
-let kept_without_dev ar (root : string * string) r =
+(* npm resolves dev and optional dependencies whatever --omit says, and
+   leaves out of what it installs only the packages that every path from
+   the root reaches through an omitted edge (calc-dep-flags.js, and
+   Node.shouldOmit), so they still shape the versions the rest gets.  A
+   copy holds its dependencies, and its peer is what its holder shows: the
+   holder's own copy, or where the holder peers on the name too, what the
+   holder's own holders show.  A copy is a package under one holder. *)
+let kept ~dev ~optional ar (root : string * string) r =
   let top = ((fst root, fst root), snd root) in
-  let held = Hashtbl.create 64 in
-  List.iter (fun (c, p) -> Hashtbl.add held p c) r.tree;
-  let at_top = Hashtbl.find_all held top in
-  let peers_on ((k, v) : (string * string) * string) a =
-    match Archive.meta ar (snd k, v) with
+  let kids = Hashtbl.create 64 and up = Hashtbl.create 64 in
+  List.iter
+    (fun (c, p) ->
+      Hashtbl.add kids p c;
+      Hashtbl.add up c p)
+    r.tree;
+  let meta ((k, v) : (string * string) * string) = Archive.meta ar (snd k, v) in
+  let child p a =
+    List.filter_map
+      (fun (((k, _) : (string * string) * string) as c) ->
+        if fst k = a then Some (c, p) else None)
+      (Hashtbl.find_all kids p)
+  in
+  let peers_on n a =
+    match meta n with
     | Some m -> List.exists (fun (q : P.peer) -> q.P.p_name = a) m.P.v_peers
     | None -> false
   in
-  let prod_dir a =
-    match Archive.meta ar root with
-    | Some m ->
-        List.exists
-          (fun (d : P.dep) -> d.P.d_dir = a && not d.P.d_dev)
-          m.P.v_deps
-    | None -> false
+  let rec shows seen p a =
+    if p <> top && peers_on p a && not (List.mem p seen) then
+      match
+        List.concat_map (fun q -> shows (p :: seen) q a) (Hashtbl.find_all up p)
+      with
+      | [] -> child p a
+      | l -> l
+    else child p a
   in
   let kept = Hashtbl.create 64 in
-  let rec keep n =
-    if not (Hashtbl.mem kept n) then begin
-      Hashtbl.replace kept n ();
-      List.iter keep (Hashtbl.find_all held n);
-      if List.mem n at_top then
-        List.iter
-          (fun ((c, _) as x) -> if peers_on n (fst c) then keep x)
-          at_top
+  let rec keep ((n, h) as copy) =
+    if not (Hashtbl.mem kept copy) then begin
+      Hashtbl.replace kept copy ();
+      match meta n with
+      | None -> ()
+      | Some m ->
+          List.iter
+            (fun (d : P.dep) ->
+              if
+                (n = top || not d.P.d_dev)
+                && (not (dev && d.P.d_dev))
+                && not (optional && d.P.d_optional)
+              then List.iter keep (child n d.P.d_dir))
+            m.P.v_deps;
+          List.iter
+            (fun (q : P.peer) ->
+              if not (optional && q.P.p_optional) then
+                List.iter keep (shows [] h q.P.p_name))
+            m.P.v_peers
     end
   in
-  Hashtbl.replace kept top ();
-  List.iter
-    (fun ((c, _) as x) ->
-      if prod_dir (fst c) || peers_on top (fst c) then keep x)
-    at_top;
+  keep (top, top);
   kept
 
-let drop_dev ar root r =
-  let kept = kept_without_dev ar root r in
-  let k n = Hashtbl.mem kept n in
+let drop ~dev ~optional ar root r =
+  let kept = kept ~dev ~optional ar root r in
+  let tree = List.filter (Hashtbl.mem kept) r.tree in
+  let top = ((fst root, fst root), snd root) in
   {
     r with
-    installs = List.filter k r.installs;
-    tree = List.filter (fun (c, p) -> k c && k p) r.tree;
+    installs =
+      List.filter (fun n -> n = top || List.mem_assoc n tree) r.installs;
+    tree;
   }
 
 let solve ?(debug = false) ?(order = `Tool) ?(omit_dev = false)
     ?(omit_optional = false) ar (root : string * string) :
     (result, Pac_common.Report.explanation) Stdlib.result * (unit -> unit) =
   Pubgrub.set_debug debug;
-  let st = Lookup.create ~optional:(not omit_optional) ar root in
+  let st = Lookup.create ar root in
   let h = Order.hooks order st in
   (* dependencies' memo, whose size is the lookup count the answer reports *)
   let asked = Hashtbl.create 65536 in
@@ -144,7 +163,10 @@ let solve ?(debug = false) ?(order = `Tool) ?(omit_dev = false)
     | Error inc -> Error (fun ppf -> PG.explain_incompatibility ppf inc)
     | Ok sol ->
         let r = decode st ~lookups:(Hashtbl.length asked) sol in
-        Ok (if omit_dev then drop_dev ar root r else r)
+        Ok
+          (if omit_dev || omit_optional then
+             drop ~dev:omit_dev ~optional:omit_optional ar root r
+           else r)
   in
   (* a registry failing the walk says nothing of the answer, which is
      decoded already *)

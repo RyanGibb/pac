@@ -13,7 +13,6 @@ type edge = {
 type t = {
   ar : A.t;
   root : string * string;
-  optional : bool;
   ovr : (string * Npl.coq_Range) list;
   depth : int;
   dnat : E.nat;
@@ -28,7 +27,7 @@ type t = {
   asked : (PName.t, unit) Hashtbl.t;
 }
 
-let create ~optional ~depth ar root =
+let create ~depth ar root =
   let ovr =
     match A.root_meta ar with
     | Some v -> List.map (fun (n, rg) -> (n, xrange rg)) v.P.v_ovr
@@ -37,7 +36,6 @@ let create ~optional ~depth ar root =
   {
     ar;
     root;
-    optional;
     ovr;
     depth;
     dnat = Ot.int_nat depth;
@@ -109,12 +107,7 @@ let occ_inst st (x : Npl.Occ.t) : Npl.coq_Inst =
     match meta st x with
     | None -> ([], [])
     | Some v ->
-        ( List.filter_map
-            (fun (d : P.dep) ->
-              if d.P.d_optional && not st.optional then None
-              else Some (xdep st.ar d))
-            v.P.v_deps,
-          List.map (xpeer st.ar) v.P.v_peers )
+        (List.map (xdep st.ar) v.P.v_deps, List.map (xpeer st.ar) v.P.v_peers)
   in
   let base = mk_inst st ~repo:Npl.RepoSet.empty ~deps:[] ~peers:[] in
   let repo =

@@ -144,31 +144,35 @@ let rec walk tbl (l : string list) (a : string) =
   if Hashtbl.mem tbl (a :: l) then Some (a :: l)
   else match l with [] -> None | _ :: t -> walk tbl t a
 
-(* npm resolves dev dependencies whatever --omit says, and leaves out of
-   what it installs only the packages that dev edges alone reach
-   (calc-dep-flags.js): here, the occupants the root's other edges reach,
-   and theirs, each edge through its walk. *)
-let drop_dev st r =
+(* npm resolves dev and optional dependencies whatever --omit says, and
+   leaves out of what it installs only the packages that every path from
+   the root reaches through an omitted edge (calc-dep-flags.js, and
+   Node.shouldOmit): here, the occupants reached through the other edges,
+   each edge through its walk. *)
+let drop ~dev ~optional st r =
   let tbl = Hashtbl.create 256 in
   List.iter
     (fun (l, (m, v)) -> Hashtbl.replace tbl l (Npl.Occ.Reg (m, IVer.make v)))
     r.layout;
-  let prod_dir =
-    match L.meta st Npl.Occ.Top with
-    | Some m ->
-        fun a ->
+  let omitted (x : Npl.Occ.t) (e : Npl.coq_Edge) =
+    if e.Npl.e_peer then optional && e.Npl.e_opt
+    else
+      match L.meta st x with
+      | Some m ->
           List.exists
             (fun (d : Npm_parse.dep) ->
-              d.Npm_parse.d_dir = a && not d.Npm_parse.d_dev)
+              d.Npm_parse.d_dir = e.Npl.e_dir
+              && ((dev && d.Npm_parse.d_dev)
+                 || (optional && d.Npm_parse.d_optional)))
             m.Npm_parse.v_deps
-    | None -> fun _ -> true
+      | None -> false
   in
   let kept = Hashtbl.create 256 in
   let rec reach l (x : Npl.Occ.t) =
     List.iter
       (fun (ed : L.edge) ->
         let e = ed.L.e in
-        if l <> [] || e.Npl.e_peer || prod_dir e.Npl.e_dir then
+        if not (omitted x e) then
           match walk tbl l e.Npl.e_dir with
           | Some l' when not (Hashtbl.mem kept l') ->
               Hashtbl.replace kept l' ();
@@ -183,7 +187,7 @@ let solve ?(debug = false) ?(order = `Tool) ?(omit_dev = false)
     ?(omit_optional = false) ~depth ar (root : string * string) :
     (result, Pac_common.Report.explanation) Stdlib.result * (unit -> unit) =
   Pubgrub.set_debug debug;
-  let st = L.create ~optional:(not omit_optional) ~depth ar root in
+  let st = L.create ~depth ar root in
   let h = Place_order.hooks order st in
   let timed a f x =
     let t = Unix.gettimeofday () in
@@ -222,7 +226,10 @@ let solve ?(debug = false) ?(order = `Tool) ?(omit_dev = false)
             PG.explain_incompatibility ppf inc)
     | Ok sol ->
         let r = decode st ~lookups:(Hashtbl.length asked) sol in
-        Ok (if omit_dev then drop_dev st r else r)
+        Ok
+          (if omit_dev || omit_optional then
+             drop ~dev:omit_dev ~optional:omit_optional st r
+           else r)
   in
   let core () =
     match
