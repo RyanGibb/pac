@@ -40,3 +40,5 @@ The `--order` hooks are not: they only choose among what PubGrub offers.
 ## Evaluation
 
 See [eval/README.md](eval/README.md) for the tests and for comparing pac against apt, apk, opam, cargo and npm.
+
+*Programmed with [Claude Code](https://claude.ai/code)*
