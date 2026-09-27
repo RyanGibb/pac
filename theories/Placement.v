@@ -26,9 +26,6 @@ Module Placement (N V : UsualOrderedType).
     ; inst_optPeers : C.DepRel.t
     ; inst_root : Pkg.t }.
 
-  (* An edge's kind: a peer refuses its declarer's own directory, and an
-     optional edge is also met when its walk finds nothing, though a copy
-     it finds must still be in range. *)
   Definition rel (I : Inst) (pe o : bool) : C.DepRel.t :=
     match pe, o with
     | false, false => inst_deps I
@@ -102,7 +99,6 @@ Module Placement (N V : UsualOrderedType).
       (o : bool) : Prop :=
     Resolves L l la n vs \/ (o = true /\ walk L l n = None).
 
-  (* The root's peers may land in its own directory, as par nil is nil. *)
   Definition Holds (I : Inst) (L : Layout.t) (l : Path.t) (p : Pkg.t) : Prop :=
     forall pe o n vs, C.DepRel.In (p, (n, vs)) (rel I pe o) ->
       Meets L l (land pe l) n vs o.
@@ -591,7 +587,6 @@ Module Placement (N V : UsualOrderedType).
     Definition accept (l : Path.t) (vs : VSet.t) : T.VSet.t :=
       along (fun _ => true) l vs.
 
-    (* An optional edge's walk may also find nothing. *)
     Definition optAccept (o : bool) (la : Path.t) (vs : VSet.t) : T.VSet.t :=
       if o then T.VSet.add Version.Bot (accept la vs) else accept la vs.
 

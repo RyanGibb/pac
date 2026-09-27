@@ -1,5 +1,6 @@
 From Stdlib Require Import MSets List Bool.
-From PackageCalculus Require Import Prelude Core Versions Semver Concurrent.
+From PackageCalculus Require Import Prelude Core Versions Semver Concurrent
+  NpmCommon.
 
 Create HintDb cmp_npm.
 Create Rewrite HintDb cmp_npm.
@@ -122,15 +123,12 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Module SOptp := SetOps Pkg T.Pkg PkgSet T.PkgSet.
   Module SOtpp := SetOps T.Pkg Pkg T.PkgSet PkgSet.
 
-  Module RPkg := PairUOT N V.
-  Module RepoSet := FSetUOT RPkg.
+  Include NpmCommon N V VSet.
   Module KeySet := FSetUOT NKey.
   Module NSet := FSetUOT N.
   Module NmSet := FSetUOT NmOT.
 
-  Module NEqb := UOTEqb N.
   Module VEqb := UOTEqb V.
-  Module RPkgEqb := UOTEqb RPkg.
   Module KeyEqb := UOTEqb NKey.
   Module PkgEqb := UOTEqb Pkg.
 
@@ -140,7 +138,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Module SOnn := SetOps N N NSet NSet.
   Module SOhh := SetOps T.Dependees T.Dependees T.DependeesSet
     T.DependeesSet.
-  Module SOrv := SetOps RPkg V RepoSet VSet.
   Module SOnk := SetOps N NKey NSet KeySet.
   Module SOkp := SetOps NKey Pkg KeySet PkgSet.
   Module SOvp := SetOps V Pkg VSet PkgSet.
@@ -183,29 +180,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     ; inst_peers : list (RPkg.t * PeerDependency)
     ; inst_ovr : list (N.t * Range)
     ; inst_root : RPkg.t }.
-
-  Definition ownedBy {A : Type} (p : RPkg.t) (l : list (RPkg.t * A))
-    : list A :=
-    fold_right
-      (fun q acc => if RPkgEqb.eqb (fst q) p then snd q :: acc else acc)
-      nil l.
-
-  Lemma in_ownedBy : forall (A : Type) (l : list (RPkg.t * A)) p a,
-      In a (ownedBy p l) <-> In (p, a) l.
-  Proof.
-    intros A l p a; induction l as [| [q b] l IH]; simpl.
-    - split; intros [].
-    - destruct (RPkgEqb.eqb q p) eqn:Hq.
-      + apply RPkgEqb.eqb_true_iff in Hq; subst q; simpl.
-        split.
-        * intros [-> | H]; [left; reflexivity | right; apply IH; exact H].
-        * intros [H | H]; [| right; apply IH; exact H].
-          assert (b = a) by congruence; subst b; left; reflexivity.
-      + rewrite IH; split; [intro H; right; exact H |].
-        intros [H | H]; [| exact H].
-        assert (q = p) by congruence; subst q.
-        rewrite RPkgEqb.eqb_refl in Hq; discriminate.
-  Qed.
 
   Lemma ownedBy_filter : forall (A : Type) (l : list (RPkg.t * A)) f p,
       (forall a, In (p, a) l -> f (p, a) = true) ->
@@ -252,26 +226,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     intros A f l h; unfold depsOfL; rewrite SOhh.mem_ofList, in_map_iff.
     split; intros [a [H1 H2]]; exists a; split; assumption.
   Qed.
-
-  Definition realVersions (R : RepoSet.t) (n : N.t) : VSet.t :=
-    SOrv.filterMap
-      (fun q => if NEqb.eqb (fst q) n then Some (snd q) else None) R.
-
-  Lemma mem_realVersions : forall R n v,
-      VSet.In v (realVersions R n) <-> RepoSet.In (n, v) R.
-  Proof.
-    intros R n v; unfold realVersions; rewrite SOrv.mem_filterMap_if.
-    split.
-    - intros [[m u] [HR [Hm ->]]]; cbn [fst snd] in *.
-      apply NEqb.eqb_true_iff in Hm; subst m; exact HR.
-    - intro H; exists (n, v); cbn [fst snd]; rewrite NEqb.eqb_refl; auto.
-  Qed.
-
-  Fixpoint lookupOvr (l : list (N.t * Range)) (n : N.t) : option Range :=
-    match l with
-    | nil => None
-    | (m, rg) :: l' => if NEqb.eqb m n then Some rg else lookupOvr l' n
-    end.
 
   Definition override (I : Inst) (a : N.t) (rg : Range) : Range :=
     match lookupOvr (inst_ovr I) a with

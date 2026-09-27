@@ -1,17 +1,15 @@
 From Stdlib Require Import MSets List Bool.
-From PackageCalculus Require Import Prelude Core Versions Semver Placement.
+From PackageCalculus Require Import Prelude Core Versions Semver Placement
+  NpmCommon.
 
 Create HintDb cmp_npl.
 Create Rewrite HintDb cmp_npl.
 
 Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
-  Module RPkg := PairUOT N V.
-  Module RepoSet := FSetUOT RPkg.
   Module VS := FSetUOT V.
+  Include NpmCommon N V VS.
   Module NKey := PairUOT N N.
   Module KeySet := FSetUOT NKey.
-  Module NEqb := UOTEqb N.
-  Module RPkgEqb := UOTEqb RPkg.
   Module RPkgF := UOTCompareFacts RPkg.
   #[local] Hint Rewrite RPkgF.compare_eq_iff : cmp_npl.
   #[local] Hint Extern 1 => cmp_by RPkgF.compare_antisym : cmp_npl.
@@ -20,9 +18,6 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
   Module Sv := Semver V VS PM.
   Include Sv.
 
-  (* What a directory holds: a registry package, or the project, which
-     only the root holds.  They differ even at one name and version, as
-     arborist loads devDependencies for the top node alone. *)
   Module Occ.
     Inductive occ : Type :=
     | Top
@@ -54,8 +49,6 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
   Module OccOT := UOTFromCompare Occ.
   Module Pl := Placement N OccOT.
 
-  (* A dependency's directory key and the registry package it names there
-     differ under an npm: alias. *)
   Record Dependency : Type := MkDep
     { d_dir : N.t
     ; d_name : N.t
@@ -69,8 +62,8 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     ; p_range : Range
     ; p_optional : bool }.
 
-  (* The relation fields are lists, as in Npm.v: sets would demand an order
-     on Range used nowhere. *)
+  (* The relation fields are lists: sets would demand an order on Range
+     used nowhere. *)
   Record Inst : Type := MkInst
     { inst_repo : RepoSet.t
     ; inst_deps : list (RPkg.t * Dependency)
@@ -79,39 +72,6 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     ; inst_root : N.t
     ; inst_rootDeps : list Dependency
     ; inst_rootPeers : list PeerDependency }.
-
-  Definition ownedBy {A : Type} (p : RPkg.t) (l : list (RPkg.t * A)) : list A :=
-    List.map snd (List.filter (fun q => RPkgEqb.eqb (fst q) p) l).
-
-  Lemma in_ownedBy : forall (A : Type) (l : list (RPkg.t * A)) p a,
-      In a (ownedBy p l) <-> In (p, a) l.
-  Proof.
-    intros A l p a; unfold ownedBy; rewrite in_map_iff; split.
-    - intros [[q b] [<- H]]; apply filter_In in H; destruct H as [H E].
-      apply RPkgEqb.eqb_true_iff in E; cbn [fst] in E; subst q; exact H.
-    - intro H; exists (p, a); split; [reflexivity |].
-      apply filter_In; split; [exact H | apply RPkgEqb.eqb_refl].
-  Qed.
-
-  Module SOrv := SetOps RPkg V RepoSet VS.
-  Definition realVersions (R : RepoSet.t) (m : N.t) : VS.t :=
-    SOrv.filterMap
-      (fun q => if NEqb.eqb (fst q) m then Some (snd q) else None) R.
-
-  Lemma mem_realVersions : forall R m v,
-      VS.In v (realVersions R m) <-> RepoSet.In (m, v) R.
-  Proof.
-    intros R m v; unfold realVersions; rewrite SOrv.mem_filterMap_if; split.
-    - intros [[m' u] [HR [Hm ->]]]; cbn [fst snd] in *.
-      apply NEqb.eqb_true_iff in Hm; subst m'; exact HR.
-    - intro H; exists (m, v); cbn [fst snd]; rewrite NEqb.eqb_refl; auto.
-  Qed.
-
-  Fixpoint lookupOvr (l : list (N.t * Range)) (n : N.t) : option Range :=
-    match l with
-    | nil => None
-    | (m, rg) :: l' => if NEqb.eqb m n then Some rg else lookupOvr l' n
-    end.
 
   Definition ovrName (I : Inst) (a m : N.t) : N.t :=
     match lookupOvr (inst_ovr I) a with
@@ -128,9 +88,6 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
   Definition cands (I : Inst) (m : N.t) (rg : Range) : VS.t :=
     rangeEval rg (realVersions (inst_repo I) m).
 
-  (* An edge as arborist's Edge holds one: the directory it walks for, the
-     package and range it accepts there, whether it is a peer, and whether
-     finding nothing meets it. *)
   Record Edge : Type := MkEdge
     { e_dir : N.t
     ; e_name : N.t
@@ -138,9 +95,6 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     ; e_peer : bool
     ; e_opt : bool }.
 
-  (* An optional dependency no published version satisfies is left
-     unplaced, as npm abandons it on ENOTARGET; any other is placed as a
-     dependency, since npm fetches it. *)
   Definition depEdge (I : Inst) (d : Dependency) : Edge :=
     let m := ovrName I (d_dir d) (d_name d) in
     let rg := ovrRange I (d_dir d) (d_range d) in
@@ -164,7 +118,6 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     | Occ.Reg m v => ownedBy (m, v) (inst_peers I)
     end.
 
-  (* A node keeps one edge per name, and a dependency replaces a peer. *)
   Definition replaced (ds : list Dependency) (r : PeerDependency) : bool :=
     List.existsb (fun d => NEqb.eqb (d_dir d) (p_dir r)) ds.
 
@@ -174,15 +127,10 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       (List.filter (fun r => negb (replaced (activeDeps I x) r))
          (declPeers I x)).
 
-  (* The occupant must be the registry package the edge names, not only a
-     version in range as npm's satisfiedBy has it. *)
   Definition Sat (I : Inst) (e : Edge) (x : Occ.t) : Prop :=
     exists u, x = Occ.Reg (e_name e) u /\
       VS.In u (cands I (e_name e) (e_range e)).
 
-  (* edge.js's errors: finding nothing is MISSING unless the edge is
-     optional; a copy found must satisfy the edge, and a peer's must not sit
-     in its declarer's own node_modules (PEER LOCAL). *)
   Definition EdgeOk (I : Inst) (L : Pl.Layout.t) (l : Pl.Path.t) (e : Edge)
       : Prop :=
     match Pl.walk L l (e_dir e) with
@@ -243,8 +191,6 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     Pl.PkgSet.add (rootOcc I) (placeRepo I).
 
   Module SOvo := SetOps V OccOT VS Pl.VSet.
-  (* The occupants of package m a range admits among versions vs, apart so
-     that a driver evaluates a name's versions once for all its ranges. *)
   Definition acceptsIn (m : N.t) (rg : Range) (vs : VS.t) : Pl.VSet.t :=
     SOvo.map (Occ.Reg m) (rangeEval rg vs).
 
@@ -288,8 +234,6 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       unfold kindb; rewrite Hp, Ho, !Bool.eqb_reflx; reflexivity.
   Qed.
 
-  (* The npm instance as a placement instance: a key holds every package
-     some entry aliases to it, and an occupant's edges are its package's. *)
   Definition tr (I : Inst) : Pl.Inst :=
     {| Pl.inst_repo := placeRepo I
      ; Pl.inst_deps := edgeRel I false false
@@ -349,8 +293,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       + intros l [a x] H; apply Hholds; exact (Hedges l a x H).
   Qed.
 
-  (* The npm reduction: the placement reduction of the translation.
-     Placement's Reduction is named in full, as an alias of it inside this
+  (* Placement's Reduction is named in full: an alias of it inside this
      functor trips a kernel anomaly when the functor is applied. *)
   Definition reduceReal (I : Inst) (depth : nat) : Pl.Reduction.T.PkgSet.t :=
     Pl.Reduction.reduceReal (tr I) depth.
@@ -392,7 +335,6 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
   Qed.
 
   Module Lookup.
-    (* Where two instances agree on which packages a key may hold. *)
     Definition AgreesAtKey (I' I : Inst) (a : N.t) : Prop :=
       forall m v,
         (KeySet.In (a, m) (keysOf I') /\ RepoSet.In (m, v) (inst_repo I')) <->
@@ -406,7 +348,6 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         exists m, v; split; try reflexivity; apply H; exact Hk.
     Qed.
 
-    (* A location's and a walk's versions read the key's packages alone. *)
     Definition nameInst (I : Inst) : Pl.Inst :=
       {| Pl.inst_repo := placeRepo I
        ; Pl.inst_deps := Pl.C.DepRel.empty
@@ -445,9 +386,6 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       reflexivity.
     Qed.
 
-    (* An edge's atom reads the location, the edge, and the packages it
-       accepts, so the driver computes the accepted set once per package
-       and range and the atom once per location and edge. *)
     Definition atomOf (lam : Pl.Path.t) (e : Edge) (xs : Pl.VSet.t)
         : Pl.Reduction.T.Dependees.t :=
       (Pl.Reduction.Name.Walk lam (e_dir e),
@@ -499,7 +437,6 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         apply Pl.Reduction.T.VSet.singleton_spec; reflexivity.
     Qed.
 
-    (* The driver's form: the Tree atom, then one atom per edge. *)
     Theorem dependees_lookupOcc : forall I depth l a x,
         Pl.Reduction.T.PkgSet.In
           (Pl.Reduction.Name.Loc l a, Pl.Reduction.Version.Occ x)
@@ -538,13 +475,10 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         Pl.Reduction.T.DependeesSet.empty.
     Proof. intros; apply Pl.Reduction.Lookup.dependees_lookupAbsent. Qed.
 
-    (* Where two instances agree on the packages of one name. *)
     Definition AgreesAtName (I' I : Inst) (m : N.t) : Prop :=
       forall u, RepoSet.In (m, u) (inst_repo I') <->
                 RepoSet.In (m, u) (inst_repo I).
 
-    (* Where two instances agree on an occupant's own edges: its package's
-       manifest, and whether its optional dependencies can be met. *)
     Definition AgreesAtOcc (I' I : Inst) (x : Occ.t) : Prop :=
       inst_ovr I' = inst_ovr I /\
       activeDeps I' x = activeDeps I x /\ declPeers I' x = declPeers I x /\
@@ -583,8 +517,6 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       apply VS.ext; intro u; rewrite !mem_realVersions; symmetry; exact (Hr u).
     Qed.
 
-    (* The driver's form: an occupant's edges read off one sub-instance,
-       and each edge's atom off another, at the package it names. *)
     Theorem occAtoms_parts : forall I Ix (at_ : Edge -> Inst) lam x,
         AgreesAtOcc Ix I x ->
         (forall e, In e (edgesOf I x) -> AgreesAtName (at_ e) I (e_name e)) ->

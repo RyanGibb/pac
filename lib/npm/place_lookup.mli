@@ -1,7 +1,14 @@
 open Place_encoding
 
-(* An occupant's edge, as the extracted edgesOf gives it, with the
-   occupants it accepts.  [id] names the accepted set, shared by every
+(* An occupant's edge as arborist's Edge holds one: the directory it
+   walks for; the package and range it accepts there, another package than
+   the directory's under an npm: alias, and the directory's own under a
+   root override on it; whether it is a peer; and whether finding nothing
+   meets it, as for an optional peer, or an optional dependency no
+   published version satisfies, which npm abandons (ENOTARGET).  A node
+   keeps one edge per directory, a dependency replacing a peer.  It
+   accepts only the package it names, not any at a version in range as
+   npm's satisfiedBy has it.  [id] names the accepted set, shared by every
    edge asking the same range of the same package. *)
 type edge = {
   e : Npl.coq_Edge;

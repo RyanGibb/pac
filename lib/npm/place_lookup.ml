@@ -56,6 +56,9 @@ let create ~depth ar root =
 let archive st = st.ar
 let depth st = st.depth
 
+(* The project, which only the root holds, is not the registry's package
+   of its name even at its version: arborist loads devDependencies for the
+   top node alone. *)
 let meta st (x : Npl.Occ.t) =
   match x with
   | Npl.Occ.Top -> A.root_meta st.ar
