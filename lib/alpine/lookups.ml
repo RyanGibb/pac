@@ -9,8 +9,6 @@ module AVerOT = Ot.Make (struct
   let compare = Apk_version.compare
 end)
 
-(* ApkVerMatch: the two constraints a version order cannot express.  Both take
-   the candidate version first and the constraint's operand second. *)
 module PM = struct
   let prefix v c = Apk_version.prefix_match v c
   let hash v c = Apk_version.hash_match v c
@@ -21,9 +19,67 @@ module Alp = E.Alpine (Ot.Str) (AVerOT) (PM)
 let first_pos (ds : Alp.coq_Dep list) : Alp.Atom.t option =
   List.find_map (function Alp.DPos a -> Some a | Alp.DNeg _ -> None) ds
 
-(* generative, since each application holds the designations of the one
-   index it loads *)
-module Make () = struct
+module type S = sig
+  module FirstDesignation : sig
+    val designation : Alp.CondSet.t -> Alp.Atom.t option
+  end
+
+  module Red : module type of Alp.Reduct (FirstDesignation)
+  module PF = Red.PF
+  module PFR = PF.Reduction
+
+  type iif_rule = {
+    pkg : string * string;
+    conds : Alp.CondSet.t;
+    designation : Alp.Atom.t;
+  }
+
+  type archive = {
+    by_name : (string, P.pkg list) Hashtbl.t;
+    meta : (string * string, P.pkg) Hashtbl.t;
+    providers : (string, ((string * string) * string option) list) Hashtbl.t;
+    iif_by_cond : (string, iif_rule list) Hashtbl.t;
+    prio : (string * string, int) Hashtbl.t;
+    pos : (string * string, int) Hashtbl.t;
+    mutable n_pkgs : int;
+    mutable n_provs : int;
+    mutable n_iif : int;
+    n_dropped : int;
+    uninstallable : (string, unit) Hashtbl.t;
+  }
+
+  val load_index : string -> archive
+  val no_such_package : archive -> P.dep list -> string list
+  val lone_provider : PF.coq_Formula -> (string * string) option
+  val alt_at : PF.coq_Formula list -> Pac.nat -> (PF.coq_Formula * bool) option
+  val alt_rank : archive -> bool -> PF.coq_Formula -> int
+
+  module PVersion : sig
+    type t = { pv : string option; rank : int; ord : int; v : PFR.Version.t }
+
+    val v : t -> PFR.Version.t
+    val bot : t
+    val pp : Format.formatter -> t -> unit
+    val compare : t -> t -> int
+  end
+
+  val tag : archive -> PFR.Name.t -> PFR.Version.t -> PVersion.t
+  val pp_name : Format.formatter -> PFR.Name.t -> unit
+
+  module L :
+      module type of
+        Package_formula.Make (Red.NameOT) (Red.VersionOT) (PF) (PVersion)
+          (struct
+            let pp_name = pp_name
+          end)
+
+  module PG = L.PG
+
+  val lookups : archive -> L.t
+  val touch : archive -> P.dep list -> L.t -> PFR.T.Pkg.t -> unit
+end
+
+module Make () : S = struct
   (* Which condition a rule designates is free, and is a performance
      choice: the rule is materialised only once that condition is selected.
      Alpine writes the switch name (docs, openrc) first and almost nothing
@@ -98,18 +154,13 @@ module Make () = struct
     by_name : (string, P.pkg list) Hashtbl.t;
     meta : (string * string, P.pkg) Hashtbl.t;
     providers : (string, ((string * string) * string option) list) Hashtbl.t;
-    (* install-if rules by their designated condition's name: only a package
-       bearing that name, or providing it, can carry the rule *)
     iif_by_cond : (string, iif_rule list) Hashtbl.t;
     prio : (string * string, int) Hashtbl.t;
-    (* where each package stands in the index: apk_db_pkg_add appends to a
-       name's provider list in the order the index is read *)
     pos : (string * string, int) Hashtbl.t;
     mutable n_pkgs : int;
     mutable n_provs : int;
     mutable n_iif : int;
     n_dropped : int;
-    (* the names only a stanza the parser dropped holds a provider of *)
     uninstallable : (string, unit) Hashtbl.t;
   }
 
@@ -305,10 +356,6 @@ module Make () = struct
       inst_prio = prio;
     }
 
-  (* the world's names no package of the index is or provides, which apk
-     reports as "no such package" before it solves: it has nothing to select
-     for them.  A package it will not install still names one, and a
-     negated atom asks for nothing. *)
   let no_such_package ar (world : P.dep list) : string list =
     List.filter_map
       (fun (d : P.dep) ->
@@ -460,9 +507,6 @@ module Make () = struct
      admitted: a name only a negated requirement reaches is left out rather
      than installed. *)
   module PVersion = struct
-    (* [pv] is the version offered at the name being decided, absent for a
-       version that is not a provider candidate at a name (the root, and a
-       disjunction's positional [Idx]). *)
     type t = { pv : string option; rank : int; ord : int; v : PFR.Version.t }
 
     let v (x : t) = x.v
@@ -586,5 +630,3 @@ module Make () = struct
         L.process st q (fun () -> dependees empty_inst q)
     | _ -> ()
 end
-
-module type S = module type of Make ()
