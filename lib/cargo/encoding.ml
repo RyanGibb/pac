@@ -119,7 +119,13 @@ let xentry : P.fentry -> Cg.FEntry.t = function
    (cfg, kind, alias): the tables a manifest offers are maps, so two
    records can only collide here if an index entry repeats a site, which
    no manifest can spell.  Conjoining the requirements and unioning the
-   requested features is what that unreachable case gets. *)
+   requested features is what that unreachable case gets; every real
+   repeat of an alias across kinds or cfgs stays its own slot, even at one
+   requirement, because cargo resolves each declaration apart
+   (resolve_features, core/resolver/dep_cache.rs) and its own fresh lock
+   gives two versions where one lacks a feature one declaration asks for.
+   That the lock read back re-locks both to one version (core/registry.rs,
+   lock) is reproduction, not resolution. *)
 let unify_site (ds : P.dep list) : P.dep =
   let d0 = List.hd ds in
   {
@@ -135,44 +141,18 @@ let unify_site (ds : P.dep list) : P.dep =
 let site_of (d : P.dep) : string * P.kind * string =
   (d.P.d_alias, d.P.d_kind, d.P.d_cfg)
 
-(* [ds] grouped by [key], in order of first appearance, each group merged *)
-let group key merge (ds : P.dep list) : P.dep list =
+let slots_of (v : P.ver) : P.dep list =
   let tbl = Hashtbl.create 16 in
   let order = ref [] in
   List.iter
     (fun (d : P.dep) ->
-      let k = key d in
+      let k = site_of d in
       if not (Hashtbl.mem tbl k) then order := k :: !order;
       Pac_common.Tbl.push tbl k d)
-    ds;
-  List.map (fun k -> merge (List.rev (Hashtbl.find tbl k))) (List.rev !order)
-
-(* cargo writes a crate's dependencies to the lock as the versions they
-   resolved to, and reading the lock back locks each declaration to the
-   first of those, in version order, that its requirement admits
-   (core/registry.rs, lock).  Two active declarations of one alias with one
-   requirement therefore get one version, whatever cfg or kind each sits
-   under, and are one slot here: the first's site, both sets of features.
-   A dev-dependency is active from the root alone.  Declarations whose
-   requirements differ but overlap are held to the same rule by cargo and
-   not here. *)
-let lock_merge (ds : P.dep list) : P.dep =
-  let d0 = List.hd ds in
-  {
-    d0 with
-    P.d_feats =
-      List.sort_uniq String.compare
-        (List.concat_map (fun (d : P.dep) -> d.P.d_feats) ds);
-    d_default = List.exists (fun (d : P.dep) -> d.P.d_default) ds;
-  }
-
-let slots_of ~root (v : P.ver) : P.dep list =
-  group
-    (fun (d : P.dep) ->
-      if d.P.d_kind = P.Dev && not root then `Site (site_of d)
-      else `Lock (d.P.d_alias, d.P.d_target, d.P.d_req, d.P.d_optional))
-    lock_merge
-    (group site_of unify_site v.P.v_deps)
+    v.P.v_deps;
+  List.map
+    (fun k -> unify_site (List.rev (Hashtbl.find tbl k)))
+    (List.rev !order)
 
 let slot_data (d : P.dep) : Cg.SlotData.t =
   ( d.P.d_alias,

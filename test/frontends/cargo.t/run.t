@@ -633,33 +633,41 @@ another seed may give another, a resolution all the same:
   encoded solution: 13 core nodes (16 lookups)
   loaded: 4 names, 6 versions
 
-cargo's lock records a crate's dependencies as the versions they resolved
-to, and reading it back locks each declaration to the first of those, in
-version order, that its requirement admits (core/registry.rs, lock).  stk
-declares wsy twice, under two cfgs, with one requirement, so whatever the
-order, the two are one version, with both declarations' features:
-
-  $ for s in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do ../../../bin/main.exe cargo index manifests/st.toml --order=random --seed $s | grep -c '^  wsy '; done | sort | uniq -c
-       16 1
+cargo resolves each of a crate's declarations apart (resolve_features,
+core/resolver/dep_cache.rs), so stk's two declarations of wsy, under two
+cfgs with one requirement, are two slots, and as wsy 0.61.0 lacks the
+feature a one of them asks for, they get two versions, as in cargo's own
+fresh lock.  Reading that lock back re-locks both to 0.60.0
+(core/registry.rs, lock), so cargo --locked refuses even its own:
 
   $ untimed ../../../bin/main.exe cargo index manifests/st.toml --print-parents
   root st 1.0.0
-  packages (3):
+  packages (4):
     st 1.0.0
     stk 0.1.0
-    wsy 0.61.0 [a,b]
-  parent edges (2):
+    wsy 0.60.0 [a]
+    wsy 0.61.0 [b]
+  parent edges (3):
     st 1.0.0 -> stk(stk) 0.1.0
+    stk 0.1.0 -> wsy(wsy) 0.60.0
     stk 0.1.0 -> wsy(wsy) 0.61.0
-  encoded solution: 11 core nodes (12 lookups)
+  encoded solution: 14 core nodes (16 lookups)
   loaded: 3 names, 3 versions
 
-The root's dev-dependencies are active beside its normal ones, so a
-dev-dependency with the requirement of a normal one is the same
-declaration to the lock:
+The root's dev-dependencies are active beside its normal ones, and are
+declarations apart all the same:
 
-  $ for s in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do ../../../bin/main.exe cargo index manifests/st2.toml --order=random --seed $s | grep -c '^  wsy '; done | sort | uniq -c
-       16 1
+  $ untimed ../../../bin/main.exe cargo index manifests/st2.toml --print-parents
+  root st2 1.0.0
+  packages (3):
+    st2 1.0.0
+    wsy 0.60.0 [a]
+    wsy 0.61.0
+  parent edges (2):
+    st2 1.0.0 -> wsy(wsy) 0.61.0
+    st2 1.0.0 -> wsy(wsy) 0.60.0
+  encoded solution: 10 core nodes (12 lookups)
+  loaded: 2 names, 2 versions
 
 The root's feature table passes the checks an index entry's does
 (build_feature_map), or cargo refuses the manifest:
