@@ -581,14 +581,25 @@ let viable st ~assigned (n : PName.t) cands =
             [ Np.Vs.Bot ]
           else keep ok)
   | Np.Nm.Intermediate (k, v, m) -> (
-      (* a descriptor another directory has decided binds this one too *)
+      (* one version per descriptor (the common core): what another
+         directory reading it has decided binds this one, and so does what
+         the others' own constraints leave open, since a pick outside it
+         rules out only itself *)
       let desc_ok =
         match L.desc_name st (snd k, v) m with
-        | Some d -> (
-            match assigned d with
-            | PG.Decided y -> fun x -> x = Np.Vs.Bot || PVersion.equal x y
-            | PG.Entailed r -> fun x -> x = Np.Vs.Bot || PG.Ranges.contains x r
-            | PG.Unselected -> fun _ -> true)
+        | Some d ->
+            let sibs =
+              List.filter (fun s -> PName.compare s n <> 0) (L.desc_dirs st d)
+            in
+            fun x ->
+              x = Np.Vs.Bot
+              || within assigned d x
+                 && List.for_all
+                      (fun s ->
+                        match assigned s with
+                        | PG.Decided Np.Vs.Bot -> true
+                        | _ -> within assigned s x)
+                      sibs
         | None -> fun _ -> true
       in
       match List.filter_map binds (L.links_into st n) with

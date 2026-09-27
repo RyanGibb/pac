@@ -18,7 +18,7 @@ well.
     chain-app 1.0.0 <- base 1.0.0
     chain-app 1.0.0 <- hub 1.0.0
     chain-app 1.0.0 <- relay 1.0.0
-  encoded solution: 12 core nodes (14 lookups)
+  encoded solution: 11 core nodes (13 lookups)
   loaded: 4 names, 4 versions, 0 packuments fetched
 
 Raw, npm's lockfile has each peer edge leave its declarer.

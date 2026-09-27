@@ -390,9 +390,9 @@ Definition npmRepo : NpmS.RepoSet.t :=
   fold_right NpmS.RepoSet.add NpmS.RepoSet.empty
     ((npmA, 1) :: (npmB, 1) :: (npmC, 1) :: (npmC, 2) :: (npmC, 3) :: nil).
 
-Definition npmDepB : NpmS.Dependency := NpmS.MkDep npmB npmB (npmEq 1) false 1.
+Definition npmDepB : NpmS.Dependency := NpmS.MkDep npmB npmB (npmEq 1) false (Some 1).
 Definition npmDepC : NpmS.Dependency :=
-  NpmS.MkDep npmC npmC (npmBetween 2 4) false 2.
+  NpmS.MkDep npmC npmC (npmBetween 2 4) false (Some 2).
 Definition npmPeerC : NpmS.PeerDependency :=
   NpmS.MkPeer npmC (npmBetween 1 3) false.
 Definition npmPeerCOpt : NpmS.PeerDependency :=
@@ -437,7 +437,7 @@ Definition npmInstOpt : NpmS.Inst :=
     (((npmB, 1), npmPeerCOpt) :: nil) nil (npmA, 1).
 
 Definition npmDepAlias : NpmS.Dependency :=
-  NpmS.MkDep npmX npmC (npmEq 1) false 3.
+  NpmS.MkDep npmX npmC (npmEq 1) false (Some 3).
 
 Definition npmInstAlias : NpmS.Inst :=
   NpmS.MkInst npmRepo
@@ -527,7 +527,7 @@ Definition npmChainRepo : NpmS.RepoSet.t :=
 
 Definition npmInstChain : NpmS.Inst :=
   NpmS.MkInst npmChainRepo
-    (((npmA, 1), npmDepB) :: ((npmB, 1), NpmS.MkDep npmD npmD (npmEq 1) false 4)
+    (((npmA, 1), npmDepB) :: ((npmB, 1), NpmS.MkDep npmD npmD (npmEq 1) false (Some 4))
        :: nil)
     (((npmB, 1), npmPeerC) :: ((npmD, 1), npmPeerC) :: nil) nil (npmA, 1).
 
@@ -547,7 +547,7 @@ Proof. reflexivity. Qed.
 (* B@1 depends on D@1, which peers on B: B offers itself. *)
 Definition npmInstSelf : NpmS.Inst :=
   NpmS.MkInst npmChainRepo
-    (((npmA, 1), npmDepB) :: ((npmB, 1), NpmS.MkDep npmD npmD (npmEq 1) false 4)
+    (((npmA, 1), npmDepB) :: ((npmB, 1), NpmS.MkDep npmD npmD (npmEq 1) false (Some 4))
        :: nil)
     (((npmD, 1), NpmS.MkPeer npmB (npmBetween 1 3) false) :: nil) nil (npmA, 1).
 
@@ -567,7 +567,7 @@ Proof. reflexivity. Qed.
    into B for it. *)
 Definition npmInstSkip : NpmS.Inst :=
   NpmS.MkInst npmChainRepo
-    (((npmA, 1), npmDepB) :: ((npmB, 1), NpmS.MkDep npmD npmD (npmEq 1) false 4)
+    (((npmA, 1), npmDepB) :: ((npmB, 1), NpmS.MkDep npmD npmD (npmEq 1) false (Some 4))
        :: nil)
     (((npmD, 1), npmPeerC) :: nil) nil (npmA, 1).
 

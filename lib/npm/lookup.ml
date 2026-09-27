@@ -39,16 +39,15 @@ let spec_range ar (t : string) : P.spec -> Npm_version.range = function
 let own_range ar (d : P.dep) = spec_range ar d.P.d_target d.P.d_spec
 
 (* The descriptor is the spec as written under the common core, where every
-   dependency with it resolves to one version as in Yarn Berry's lockfile.
-   npm resolves each package's dependency apart, so otherwise the owner
-   goes in it too, and only copies of one package share one. *)
-let xdep ar ((n, v) : string * string) (d : P.dep) : Np.coq_Dependency =
+   dependency with it resolves to one version as in Yarn Berry's lockfile;
+   npm resolves each dependency apart, so otherwise there is none. *)
+let xdep ar (d : P.dep) : Np.coq_Dependency =
   {
     Np.d_dir = d.P.d_dir;
     Np.d_target = d.P.d_target;
     Np.d_range = xrange (own_range ar d);
     Np.d_dev = d.P.d_dev;
-    Np.d_desc = (if !P.core then d.P.d_raw else n ^ "@" ^ v ^ " " ^ d.P.d_raw);
+    Np.d_desc = (if !P.core then Some d.P.d_raw else None);
   }
 
 (* a peer names a directory, and npm fetches the peer's range from the
@@ -88,6 +87,9 @@ type t = {
   (* the root's resolutions, for the common core *)
   res : (string * string) list;
   raw_tbl : (string * string, P.dep list) Hashtbl.t;
+  (* the directories reading each descriptor, as far as the solver has
+     looked *)
+  desc_dirs : (Np.Nm.name, Np.Nm.name) Hashtbl.t;
   mutable n_lookups : int;
 }
 
@@ -112,6 +114,7 @@ let create ~optional ar root =
     links_into = Hashtbl.create 4096;
     res = (match A.meta ar root with Some v -> v.P.v_res | None -> []);
     raw_tbl = Hashtbl.create 16384;
+    desc_dirs = Hashtbl.create 4096;
     n_lookups = 0;
   }
 
@@ -211,7 +214,7 @@ let raw_deps st p =
       | Some v -> List.map (resolved st) (List.filter (dep_keep st) v.P.v_deps))
 
 let dependencies st p =
-  Tbl.memo st.dep_tbl p (fun () -> List.map (xdep st.ar p) (raw_deps st p))
+  Tbl.memo st.dep_tbl p (fun () -> List.map (xdep st.ar) (raw_deps st p))
 
 let active_dependencies st p =
   List.filter
@@ -228,8 +231,8 @@ let desc_name st p (m : string * string) : Np.Nm.name option =
       (fun (d : Np.coq_Dependency) -> d.Np.d_dir = fst m)
       (active_dependencies st p)
   with
-  | Some d when d.Np.d_target = snd m ->
-      Some (Np.Nm.Desc (d.Np.d_dir, d.Np.d_target, d.Np.d_desc))
+  | Some { Np.d_target; Np.d_desc = Some s; _ } when d_target = snd m ->
+      Some (Np.Nm.Desc (fst m, d_target, s))
   | _ -> None
 
 let own_peer_dependencies st p =
@@ -272,8 +275,7 @@ let gran_sub_inst st (k : string * string) (w : string) =
   let deps =
     Option.to_list
       (List.find_map
-         (fun (q, d) ->
-           if dep_keep st d then Some (q, xdep st.ar q d) else None)
+         (fun (q, d) -> if dep_keep st d then Some (q, xdep st.ar d) else None)
          (Hashtbl.find_all st.ar.A.dep_by_key k))
   in
   let peers =
@@ -310,10 +312,19 @@ let pkg_sub_inst st (p : string * string) =
 let two_peers st p q =
   own_peer_dependencies st p @ if q = p then [] else own_peer_dependencies st q
 
+(* A copy's own dependencies and slot targets, which only a peer with
+   default reads: the copy's sight admits its own copy, and a link to it
+   decides whether it holds one.  A peer with default is a peer beside a
+   dependency of its name, which only the common core keeps, the parser
+   otherwise dropping the peer (npm's _loadDeps), so outside it they are
+   left out: no lookup reads them, and reading them would load packuments
+   npm does not. *)
+let dp_deps st q = if !P.core then own_dependencies st q else []
+let dp_targets st q = if !P.core then slot_targets st q else []
+
 (* the dependencies of a holder p and of its dependee q, whose peer with
    default reads its own *)
-let two_deps st p q =
-  own_dependencies st p @ if q = p then [] else own_dependencies st q
+let two_deps st p q = own_dependencies st p @ if q = p then [] else dp_deps st q
 
 (* the intermediate dependees lookup's sub-instance: p's own dependencies
    and peer dependencies and those of the dependee that was selected, and
@@ -321,7 +332,7 @@ let two_deps st p q =
    dependee's peers name *)
 let peer_sub_inst st (p : string * string) (m : string * string) (u : string) =
   let q = (snd m, u) in
-  let ns = slot_targets st p @ peer_names_at st q @ slot_targets st q in
+  let ns = slot_targets st p @ peer_names_at st q @ dp_targets st q in
   mk_inst st ~repo:(repo_of st ns) ~deps:(two_deps st p q)
     ~peers:(two_peers st p q)
 
@@ -330,8 +341,8 @@ let peer_sub_inst st (p : string * string) (m : string * string) (u : string) =
    name and at its slot targets *)
 let sight_sub_inst st (c : string * string) (a : string) =
   mk_inst st
-    ~repo:(repo_of st (a :: slot_targets st c))
-    ~deps:(own_dependencies st c)
+    ~repo:(repo_of st (a :: dp_targets st c))
+    ~deps:(dp_deps st c)
     ~peers:(own_peer_dependencies st c)
 
 (* the link versions lookup's sub-instance: the holder's and the dependee's
@@ -339,7 +350,7 @@ let sight_sub_inst st (c : string * string) (a : string) =
    name and both slot targets *)
 let link_sub_inst st (p : string * string) (q : string * string) (a : string) =
   mk_inst st
-    ~repo:(repo_of st ((a :: slot_targets st p) @ slot_targets st q))
+    ~repo:(repo_of st ((a :: slot_targets st p) @ dp_targets st q))
     ~deps:(two_deps st p q) ~peers:(two_peers st p q)
 
 (* the link dependees lookup's sub-instance: the holder's and the
@@ -348,7 +359,7 @@ let link_sub_inst st (p : string * string) (q : string * string) (a : string) =
    repository at the dependee's slot targets *)
 let holder_sub_inst st (p : string * string) (q : string * string) =
   mk_inst st
-    ~repo:(repo_of st (slot_targets st q))
+    ~repo:(repo_of st (dp_targets st q))
     ~deps:(two_deps st p q) ~peers:(two_peers st p q)
 
 (* the descriptor lookup's sub-instance: the repository at its target *)
@@ -385,11 +396,18 @@ let holder st ((k, v) : (string * string) * string) (a : string) :
 
 let record_dir st (m : Np.Nm.name) =
   match m with
-  | Np.Nm.Intermediate (k, v, _) ->
+  | Np.Nm.Intermediate (k, v, d) ->
       let l = Option.value ~default:[] (Hashtbl.find_opt st.dirs (k, v)) in
-      if not (List.exists (fun x -> Np.Nm.compare x m = E.Eq) l) then
-        Hashtbl.replace st.dirs (k, v) (m :: l)
+      if not (List.exists (fun x -> Np.Nm.compare x m = E.Eq) l) then begin
+        Hashtbl.replace st.dirs (k, v) (m :: l);
+        match if !P.core then desc_name st (snd k, v) d else None with
+        | Some x -> Hashtbl.add st.desc_dirs x m
+        | None -> ()
+      end
   | _ -> ()
+
+(* the directories opened so far that read descriptor x *)
+let desc_dirs st (x : Np.Nm.name) = Hashtbl.find_all st.desc_dirs x
 
 let record_link st (l : Np.Nm.name) =
   match l with
