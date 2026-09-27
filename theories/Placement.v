@@ -592,14 +592,14 @@ Module Placement (N V : UsualOrderedType).
       along (fun _ => true) l vs.
 
     (* An optional edge's walk may also find nothing. *)
-    Definition admit (o : bool) (la : Path.t) (vs : VSet.t) : T.VSet.t :=
+    Definition optAccept (o : bool) (la : Path.t) (vs : VSet.t) : T.VSet.t :=
       if o then T.VSet.add Version.Bot (accept la vs) else accept la vs.
 
-    Lemma mem_admit : forall o la vs w,
-        T.VSet.In w (admit o la vs) <->
+    Lemma mem_optAccept : forall o la vs w,
+        T.VSet.In w (optAccept o la vs) <->
         (o = true /\ w = Version.Bot) \/ T.VSet.In w (accept la vs).
     Proof.
-      intros [|] la vs w; cbn [admit].
+      intros [|] la vs w; cbn [optAccept].
       - rewrite SOvt.add_in; split.
         + intros [H | H]; [left; split; [reflexivity | exact H] |].
           right; exact H.
@@ -612,13 +612,14 @@ Module Placement (N V : UsualOrderedType).
     Definition atoms (o : bool) (E : C.DepRel.t) (p : Pkg.t) (l la : Path.t)
         : T.DependeesSet.t :=
       SOdh.filterMap (fun '(q, (n, vs)) =>
-          if Pkg.eq_dec q p then Some (Name.Walk l n, admit o la vs) else None)
+          if Pkg.eq_dec q p then Some (Name.Walk l n, optAccept o la vs)
+          else None)
         E.
 
     Lemma mem_atoms : forall o E p l la h,
         T.DependeesSet.In h (atoms o E p l la) <->
         exists n vs, C.DepRel.In (p, (n, vs)) E /\
-          h = (Name.Walk l n, admit o la vs).
+          h = (Name.Walk l n, optAccept o la vs).
     Proof.
       intros o E p l la h; unfold atoms; rewrite SOdh.mem_filterMap; split.
       - intros [[q [n vs]] [He H]]; cbn beta iota in H.
@@ -643,7 +644,7 @@ Module Placement (N V : UsualOrderedType).
     Lemma mem_edgeAtoms : forall I p l h,
         T.DependeesSet.In h (edgeAtoms I p l) <->
         exists pe o n vs, C.DepRel.In (p, (n, vs)) (rel I pe o) /\
-          h = (Name.Walk l n, admit o (land pe l) vs).
+          h = (Name.Walk l n, optAccept o (land pe l) vs).
     Proof.
       intros I p l h; unfold edgeAtoms, kindAtoms.
       rewrite !T.DependeesSet.union_spec, !mem_atoms; split.
@@ -827,13 +828,13 @@ Module Placement (N V : UsualOrderedType).
         Holds I (placementResolution S) l p.
     Proof.
       intros I depth S l p Hres Hcl pe o n vs HE.
-      assert (Ha : T.DependeesSet.In (Name.Walk l n, admit o (land pe l) vs)
+      assert (Ha : T.DependeesSet.In (Name.Walk l n, optAccept o (land pe l) vs)
                      (occDeps I l p)).
       { apply T.DependeesSet.union_spec; right; apply mem_edgeAtoms.
         exists pe, o, n, vs; split; [exact HE | reflexivity]. }
       destruct (Hcl _ _ Ha) as [w [Hw HS]].
       pose proof (walk_decode I depth S Hres _ _ _ HS) as Hwalk.
-      apply mem_admit in Hw; destruct Hw as [[Ho ->] | Hw].
+      apply mem_optAccept in Hw; destruct Hw as [[Ho ->] | Hw].
       - right; split; [exact Ho | exact Hwalk].
       - unfold accept in Hw; apply mem_along in Hw.
         destruct Hw as [l' [u [Hs [_ [Hu ->]]]]].
@@ -950,8 +951,8 @@ Module Placement (N V : UsualOrderedType).
       destruct (Hh _ _ _ _ HE) as [Hres | [Ho Hw]].
       - destruct (resolves_met I depth L l (land pe l) m vs Hlen
                     (proj2 Hr) Hres) as [w [Hw HS]].
-        exists w; split; [apply mem_admit; right; exact Hw | exact HS].
-      - exists Version.Bot; split; [apply mem_admit; left; split;
+        exists w; split; [apply mem_optAccept; right; exact Hw | exact HS].
+      - exists Version.Bot; split; [apply mem_optAccept; left; split;
                                     [exact Ho | reflexivity] |].
         apply mem_coreResolution; split; [exact Hr |].
         cbn [value]; rewrite Hw; reflexivity.

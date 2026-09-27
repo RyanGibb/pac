@@ -441,7 +441,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     Definition atomOf (lam : Pl.Path.t) (e : Edge) (xs : Pl.VSet.t)
         : Pl.Reduction.T.Dependees.t :=
       (Pl.Reduction.Name.Walk lam (e_dir e),
-       Pl.Reduction.admit (e_opt e) (Pl.land (e_peer e) lam) xs).
+       Pl.Reduction.optAccept (e_opt e) (Pl.land (e_peer e) lam) xs).
 
     Definition edgeAtom (I : Inst) (lam : Pl.Path.t) (e : Edge)
         : Pl.Reduction.T.Dependees.t :=
