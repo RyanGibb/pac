@@ -73,9 +73,15 @@ module Run (X : EXAMPLE) = struct
     show pkg a.packages b.packages;
     show edge a.edges b.edges
 
-  let run () =
+  (* [brief] prints only the reduction's size, where the whole would bury
+     the check and the answer *)
+  let run ~brief =
     let whole = { Core.packages = X.real; edges = X.deps } in
-    Core.print ~pp_name:X.pp_name ~pp_version:X.pp_version whole;
+    if brief then
+      Printf.printf "core: %d packages, %d edges\n"
+        (List.length (List.sort_uniq compare (List.map pkg X.real)))
+        (List.length (List.sort_uniq compare (List.map edge X.deps)))
+    else Core.print ~pp_name:X.pp_name ~pp_version:X.pp_version whole;
     let at k l =
       List.filter_map (fun (j, x) -> if j = k then Some x else None) l
     in
@@ -1014,6 +1020,136 @@ module Placement = struct
          (M.Layout.elements (R.placementResolution (R.T.PkgSet.ofList s))))
 end
 
+module Npm_placement = struct
+  module M =
+    E.NpmPlacement (S) (S)
+      (struct
+        let isPre _ = false
+        let sameCore = String.equal
+      end)
+
+  module R = M.Pl.Reduction
+  module L = M.Lookup
+
+  type name = R.Name.t
+  type version = R.Version.t
+
+  let compare_name = R.NameOT.compare
+  let compare_version = R.VersionOT.compare
+  let path = function [] -> "ε" | l -> String.concat "/" (List.rev l)
+
+  let pp_name f = function
+    | R.Name.Root -> str f "<ε>"
+    | R.Name.Loc (l, a) -> Format.fprintf f "<%s,%s>" (path l) a
+    | R.Name.Walk (l, a) -> Format.fprintf f "<%s⇑%s>" (path l) a
+
+  let occ = function M.Occ.Top -> "R" | M.Occ.Reg (m, v) -> m ^ "@" ^ v
+
+  let pp_version f = function
+    | R.Version.Occ x -> str f (occ x)
+    | R.Version.Found (l, x) -> Format.fprintf f "(%s,%s)" (path l) (occ x)
+    | R.Version.Bot -> str f "⊥"
+
+  let d = Pac_common.Ot.int_nat 1
+  let eq v = [ [ M.COp (E.OpEq, v) ] ]
+
+  let dep dir name v =
+    {
+      M.d_dir = dir;
+      d_name = name;
+      d_range = eq v;
+      d_dev = false;
+      d_optional = false;
+    }
+
+  let repo = [ ("a", "1"); ("b", "1"); ("b", "2") ]
+
+  let i =
+    {
+      M.inst_repo = M.RepoSet.ofList repo;
+      inst_deps = [ (("a", "1"), dep "b" "b" "2") ];
+      inst_peers = [];
+      inst_ovr = [];
+      inst_root = "R";
+      inst_rootDeps = [ dep "x" "b" "1"; dep "a" "a" "1" ];
+      inst_rootPeers = [];
+    }
+
+  let root = R.rootPkg (M.tr i)
+
+  (* the lookups read sub-instances, as the npm driver builds them: an
+     occupant's edges off its manifest alone, an edge's accepted set off
+     the repository at the package it names, and a key's versions off the
+     packages the edges alias to it *)
+  let only ns =
+    M.RepoSet.ofList (List.filter (fun (m, _) -> List.mem m ns) repo)
+
+  let bare =
+    { i with M.inst_repo = M.RepoSet.empty; inst_deps = []; inst_rootDeps = [] }
+
+  let occ_inst = function
+    | M.Occ.Top -> { bare with M.inst_rootDeps = i.M.inst_rootDeps }
+    | M.Occ.Reg (m, v) ->
+        {
+          bare with
+          M.inst_deps = List.filter (fun (p, _) -> p = (m, v)) i.M.inst_deps;
+        }
+
+  let edges_of x = M.edgesOf (occ_inst x) x
+
+  let key_names a =
+    List.sort_uniq compare
+      (List.filter_map
+         (fun (e : M.coq_Edge) ->
+           if e.M.e_dir = a then Some e.M.e_name else None)
+         (List.concat_map edges_of
+            (M.Occ.Top :: List.map (fun (m, v) -> M.Occ.Reg (m, v)) repo)))
+
+  let key_inst a =
+    {
+      bare with
+      M.inst_repo = only (key_names a);
+      inst_rootDeps = List.map (fun m -> dep a m "0") (key_names a);
+    }
+
+  let atoms lam x =
+    List.map
+      (fun (e : M.coq_Edge) ->
+        L.edgeAtom { bare with M.inst_repo = only [ e.M.e_name ] } lam e)
+      (edges_of x)
+
+  let versions n =
+    R.T.VSet.elements
+      (match n with
+      | R.Name.Root -> R.T.VSet.singleton (R.Version.Occ M.Occ.Top)
+      | R.Name.Loc (_, a) | R.Name.Walk (_, a) ->
+          R.versions (L.nameInst (key_inst a)) d n)
+
+  let dependees p =
+    edges R.T.VSet.elements Fun.id
+      (match p with
+      | R.Name.Root, R.Version.Occ x -> atoms [] x
+      | R.Name.Loc (l, a), R.Version.Occ x ->
+          (match l with
+            | [] -> []
+            | b :: _ ->
+                R.T.DependeesSet.elements
+                  (R.treeAtom (M.placeRepo (key_inst b)) l))
+          @ atoms (a :: l) x
+      | R.Name.Loc _, _ -> []
+      | R.Name.Walk (l, a), w -> R.T.DependeesSet.elements (R.walkDeps l a w)
+      | R.Name.Root, _ -> unasked ())
+
+  let real = R.T.PkgSet.elements (M.reduceReal i d)
+  let deps = rel R.T.VSet.elements R.T.DepRel.elements (M.reduceDeps i d)
+
+  let decode s =
+    packages "layout"
+      (List.map
+         (fun (l, (a, x)) -> path (a :: l) ^ " " ^ occ x)
+         (M.Pl.Layout.elements (R.placementResolution (R.T.PkgSet.ofList s))))
+end
+
 let examples : (string * (module EXAMPLE)) list =
   [
     ("conflict-class", (module Conflict_class));
@@ -1027,6 +1163,7 @@ let examples : (string * (module EXAMPLE)) list =
     ("virtual", (module Virtual));
     ("concurrent-features", (module Concurrent_features));
     ("placement", (module Placement));
+    ("npm-placement", (module Npm_placement));
   ]
 
 let () =
@@ -1038,7 +1175,7 @@ let () =
   | Some x ->
       let module X = (val x) in
       let module R = Run (X) in
-      R.run ()
+      R.run ~brief:(List.mem Sys.argv.(1) [ "placement"; "npm-placement" ])
   | None ->
       prerr_endline
         ("usage: extensions <" ^ String.concat "|" (List.map fst examples) ^ ">");
