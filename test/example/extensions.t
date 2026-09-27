@@ -1,7 +1,8 @@
-An instance of each extension.  Each run prints the global reduction
-(reduceReal and reduceDeps), whole or, for a placement, whose reduction
-runs to hundreds of lines, as its size; checks the core walked from the
-root through the calculus's lookup theorems against that reduction
+An instance of each extension.  Each run prints the whole global
+reduction (reduceReal and reduceDeps), or for visibility and the
+placements, whose reductions reach little of themselves from the root,
+a line giving its size and then the core walked from the root through
+the calculus's lookup theorems; checks that walk against the reduction
 restricted to the root's reach, and solves with PubGrub, decoding the
 answer through the soundness decoder.  A reduced name is written <...>,
 and a package (n,v) inside a name as (n,v).
@@ -123,24 +124,18 @@ reduction has 38 edges, 24 of them reached from <A,(A,1)> 1.  <A,(D,1)> 1
 and <B,(D,1)> 1, with their intermediates and 14 edges, and
 <D,1,C,(A,1)> 2, which has none, are unreachable from it.  <C,(D,1)> 1 is
 reached: an occurrence has every version of its name, though no edge
-admits this one.
+admits this one.  The run prints the 25 packages and 24 edges reached.
 
   $ ./extensions/extensions.exe visibility
-  core: 33 packages, 38 edges
+  global: 33 packages, 38 edges
+  core: 25 packages, 24 edges
   <A,(A,1)> 1
     -> <A,1,B,(A,1)> {1}
     -> <A,1,C,(A,1)> {1, 2}
     -> <A,1,D,(A,1)> {1}
-  <A,(D,1)> 1
-    -> <A,1,B,(D,1)> {1}
-    -> <A,1,C,(D,1)> {1, 2}
-    -> <A,1,D,(D,1)> {1}
   <A,1,B,(A,1)> 1
     -> <A,1,B> {1}
     -> <B,(A,1)> {1}
-  <A,1,B,(D,1)> 1
-    -> <A,1,B> {1}
-    -> <B,(D,1)> {1}
   <A,1,B> 1
   <A,1,C,(A,1)> 1
     -> <A,1,C> {1}
@@ -148,31 +143,17 @@ admits this one.
   <A,1,C,(A,1)> 2
     -> <A,1,C> {2}
     -> <C,(A,1)> {2}
-  <A,1,C,(D,1)> 1
-    -> <A,1,C> {1}
-    -> <C,(D,1)> {1}
-  <A,1,C,(D,1)> 2
-    -> <A,1,C> {2}
-    -> <C,(D,1)> {2}
   <A,1,C> 1
   <A,1,C> 2
   <A,1,D,(A,1)> 1
     -> <A,1,D> {1}
     -> <D,(A,1)> {1}
-  <A,1,D,(D,1)> 1
-    -> <A,1,D> {1}
-    -> <D,(D,1)> {1}
   <A,1,D> 1
   <B,(A,1)> 1
     -> <B,1,C,(A,1)> {1}
-  <B,(D,1)> 1
-    -> <B,1,C,(D,1)> {1}
   <B,1,C,(A,1)> 1
     -> <B,1,C> {1}
     -> <C,(A,1)> {1}
-  <B,1,C,(D,1)> 1
-    -> <B,1,C> {1}
-    -> <C,(D,1)> {1}
   <B,1,C> 1
   <C,(A,1)> 1
   <C,(A,1)> 2
@@ -184,7 +165,6 @@ admits this one.
   <D,(D,1)> 1
     -> <D,1,C,(D,1)> {2}
     -> <D,1,E,(D,1)> {1}
-  <D,1,C,(A,1)> 2
   <D,1,C,(D,1)> 2
     -> <C,(D,1)> {2}
     -> <D,1,C> {2}
@@ -416,13 +396,214 @@ from its own location as a dependency would, except that the walk may not
 land in C 2's own directory.  A location <ℓ,a> holds a version of a or ⊥,
 and only ⊥ at depth 2; a walk <ℓ⇑a> holds where the first-match walk up
 from ℓ for a lands, (ℓ',v), or ⊥.  The reduction over the names A, B and
-C has 195 packages and 289 edges.  The answer hoists A 1, which serves R
+C has 195 packages and 289 edges, of which the run prints the 84 packages
+and 115 edges reached from the root.  The answer hoists A 1, which serves R
 and B, and C 1, which serves A, and nests C 2 under B, where it shadows
 C 1 for B; C 2's peer walks from B/C through the absent B/C/A and B/A to
 the hoisted A 1.
 
   $ ./extensions/extensions.exe placement
-  core: 195 packages, 289 edges
+  global: 195 packages, 289 edges
+  core: 84 packages, 115 edges
+  <A,A> 1
+    -> <A/A⇑C> {(A,1), (A/A,1), (ε,1)}
+    -> <ε,A> {1}
+  <A,A> ⊥
+  <A,C> 1
+    -> <ε,A> {1}
+  <A,C> 2
+    -> <A/C⇑A> {(A,1), (ε,1)}
+    -> <ε,A> {1}
+  <A,C> ⊥
+  <A/A,C> ⊥
+  <A/A⇑C> (A,1)
+    -> <A/A,C> {⊥}
+    -> <A⇑C> {(A,1)}
+  <A/A⇑C> (A,2)
+    -> <A/A,C> {⊥}
+    -> <A⇑C> {(A,2)}
+  <A/A⇑C> (ε,1)
+    -> <A/A,C> {⊥}
+    -> <A⇑C> {(ε,1)}
+  <A/A⇑C> (ε,2)
+    -> <A/A,C> {⊥}
+    -> <A⇑C> {(ε,2)}
+  <A/A⇑C> ⊥
+    -> <A/A,C> {⊥}
+    -> <A⇑C> {⊥}
+  <A/C,A> ⊥
+  <A/C⇑A> (A,1)
+    -> <A/C,A> {⊥}
+    -> <A⇑A> {(A,1)}
+  <A/C⇑A> (ε,1)
+    -> <A/C,A> {⊥}
+    -> <A⇑A> {(ε,1)}
+  <A/C⇑A> ⊥
+    -> <A/C,A> {⊥}
+    -> <A⇑A> {⊥}
+  <A⇑A> (A,1)
+    -> <A,A> {1}
+  <A⇑A> (ε,1)
+    -> <A,A> {⊥}
+    -> <ε⇑A> {(ε,1)}
+  <A⇑A> ⊥
+    -> <A,A> {⊥}
+    -> <ε⇑A> {⊥}
+  <A⇑C> (A,1)
+    -> <A,C> {1}
+  <A⇑C> (A,2)
+    -> <A,C> {2}
+  <A⇑C> (ε,1)
+    -> <A,C> {⊥}
+    -> <ε⇑C> {(ε,1)}
+  <A⇑C> (ε,2)
+    -> <A,C> {⊥}
+    -> <ε⇑C> {(ε,2)}
+  <A⇑C> ⊥
+    -> <A,C> {⊥}
+    -> <ε⇑C> {⊥}
+  <B,A> 1
+    -> <B/A⇑C> {(B,1), (B/A,1), (ε,1)}
+    -> <ε,B> {1}
+  <B,A> ⊥
+  <B,C> 1
+    -> <ε,B> {1}
+  <B,C> 2
+    -> <B/C⇑A> {(B,1), (ε,1)}
+    -> <ε,B> {1}
+  <B,C> ⊥
+  <B/A,C> ⊥
+  <B/A⇑C> (B,1)
+    -> <B/A,C> {⊥}
+    -> <B⇑C> {(B,1)}
+  <B/A⇑C> (B,2)
+    -> <B/A,C> {⊥}
+    -> <B⇑C> {(B,2)}
+  <B/A⇑C> (ε,1)
+    -> <B/A,C> {⊥}
+    -> <B⇑C> {(ε,1)}
+  <B/A⇑C> (ε,2)
+    -> <B/A,C> {⊥}
+    -> <B⇑C> {(ε,2)}
+  <B/A⇑C> ⊥
+    -> <B/A,C> {⊥}
+    -> <B⇑C> {⊥}
+  <B/C,A> ⊥
+  <B/C⇑A> (B,1)
+    -> <B/C,A> {⊥}
+    -> <B⇑A> {(B,1)}
+  <B/C⇑A> (ε,1)
+    -> <B/C,A> {⊥}
+    -> <B⇑A> {(ε,1)}
+  <B/C⇑A> ⊥
+    -> <B/C,A> {⊥}
+    -> <B⇑A> {⊥}
+  <B⇑A> (B,1)
+    -> <B,A> {1}
+  <B⇑A> (ε,1)
+    -> <B,A> {⊥}
+    -> <ε⇑A> {(ε,1)}
+  <B⇑A> ⊥
+    -> <B,A> {⊥}
+    -> <ε⇑A> {⊥}
+  <B⇑C> (B,1)
+    -> <B,C> {1}
+  <B⇑C> (B,2)
+    -> <B,C> {2}
+  <B⇑C> (ε,1)
+    -> <B,C> {⊥}
+    -> <ε⇑C> {(ε,1)}
+  <B⇑C> (ε,2)
+    -> <B,C> {⊥}
+    -> <ε⇑C> {(ε,2)}
+  <B⇑C> ⊥
+    -> <B,C> {⊥}
+    -> <ε⇑C> {⊥}
+  <C,A> 1
+    -> <C/A⇑C> {(C,1), (C/A,1), (ε,1)}
+    -> <ε,C> {1, 2}
+  <C,A> ⊥
+  <C,C> 1
+    -> <ε,C> {1, 2}
+  <C,C> 2
+    -> <C/C⇑A> {(C,1), (ε,1)}
+    -> <ε,C> {1, 2}
+  <C,C> ⊥
+  <C/A,C> ⊥
+  <C/A⇑C> (C,1)
+    -> <C/A,C> {⊥}
+    -> <C⇑C> {(C,1)}
+  <C/A⇑C> (C,2)
+    -> <C/A,C> {⊥}
+    -> <C⇑C> {(C,2)}
+  <C/A⇑C> (ε,1)
+    -> <C/A,C> {⊥}
+    -> <C⇑C> {(ε,1)}
+  <C/A⇑C> (ε,2)
+    -> <C/A,C> {⊥}
+    -> <C⇑C> {(ε,2)}
+  <C/A⇑C> ⊥
+    -> <C/A,C> {⊥}
+    -> <C⇑C> {⊥}
+  <C/C,A> ⊥
+  <C/C⇑A> (C,1)
+    -> <C/C,A> {⊥}
+    -> <C⇑A> {(C,1)}
+  <C/C⇑A> (ε,1)
+    -> <C/C,A> {⊥}
+    -> <C⇑A> {(ε,1)}
+  <C/C⇑A> ⊥
+    -> <C/C,A> {⊥}
+    -> <C⇑A> {⊥}
+  <C⇑A> (C,1)
+    -> <C,A> {1}
+  <C⇑A> (ε,1)
+    -> <C,A> {⊥}
+    -> <ε⇑A> {(ε,1)}
+  <C⇑A> ⊥
+    -> <C,A> {⊥}
+    -> <ε⇑A> {⊥}
+  <C⇑C> (C,1)
+    -> <C,C> {1}
+  <C⇑C> (C,2)
+    -> <C,C> {2}
+  <C⇑C> (ε,1)
+    -> <C,C> {⊥}
+    -> <ε⇑C> {(ε,1)}
+  <C⇑C> (ε,2)
+    -> <C,C> {⊥}
+    -> <ε⇑C> {(ε,2)}
+  <C⇑C> ⊥
+    -> <C,C> {⊥}
+    -> <ε⇑C> {⊥}
+  <ε,A> 1
+    -> <A⇑C> {(A,1), (ε,1)}
+  <ε,A> ⊥
+  <ε,B> 1
+    -> <B⇑A> {(B,1), (ε,1)}
+    -> <B⇑C> {(B,2), (ε,2)}
+  <ε,B> ⊥
+  <ε,C> 1
+  <ε,C> 2
+    -> <C⇑A> {(ε,1)}
+  <ε,C> ⊥
+  <ε> 1
+    -> <ε⇑A> {(ε,1)}
+    -> <ε⇑B> {(ε,1)}
+  <ε⇑A> (ε,1)
+    -> <ε,A> {1}
+  <ε⇑A> ⊥
+    -> <ε,A> {⊥}
+  <ε⇑B> (ε,1)
+    -> <ε,B> {1}
+  <ε⇑B> ⊥
+    -> <ε,B> {⊥}
+  <ε⇑C> (ε,1)
+    -> <ε,C> {1}
+  <ε⇑C> (ε,2)
+    -> <ε,C> {2}
+  <ε⇑C> ⊥
+    -> <ε,C> {⊥}
   lookups agree with the global reduction from the root
   layout (4):
     A 1
@@ -434,10 +615,51 @@ The npm reading's placement instance, with depth bound 1: the project
 depends on x, an npm: alias of b 1, and on a 1, which depends on b 2.  The
 lookups read an occupant's edges off its manifest alone, each edge's
 accepted set off the package it names, and each key's versions off the
-packages aliased to it.  Key x holds b 1 and key b holds b 2.
+packages aliased to it.  Key x holds b 1 and key b holds b 2.  The
+reduction has 50 packages and 59 edges, of which the run prints the 21
+packages and 17 edges reached from the root.
 
   $ ./extensions/extensions.exe npm-placement
-  core: 50 packages, 59 edges
+  global: 50 packages, 59 edges
+  core: 21 packages, 17 edges
+  <a,b> ⊥
+  <a⇑b> (ε,b@1)
+    -> <a,b> {⊥}
+    -> <ε⇑b> {(ε,b@1)}
+  <a⇑b> (ε,b@2)
+    -> <a,b> {⊥}
+    -> <ε⇑b> {(ε,b@2)}
+  <a⇑b> ⊥
+    -> <a,b> {⊥}
+    -> <ε⇑b> {⊥}
+  <ε,a> a@1
+    -> <a⇑b> {(a,b@2), (ε,b@2)}
+  <ε,a> ⊥
+  <ε,b> b@1
+  <ε,b> b@2
+  <ε,b> ⊥
+  <ε,x> b@1
+  <ε,x> b@2
+  <ε,x> ⊥
+  <ε> R
+    -> <ε⇑a> {(ε,a@1)}
+    -> <ε⇑x> {(ε,b@1)}
+  <ε⇑a> (ε,a@1)
+    -> <ε,a> {a@1}
+  <ε⇑a> ⊥
+    -> <ε,a> {⊥}
+  <ε⇑b> (ε,b@1)
+    -> <ε,b> {b@1}
+  <ε⇑b> (ε,b@2)
+    -> <ε,b> {b@2}
+  <ε⇑b> ⊥
+    -> <ε,b> {⊥}
+  <ε⇑x> (ε,b@1)
+    -> <ε,x> {b@1}
+  <ε⇑x> (ε,b@2)
+    -> <ε,x> {b@2}
+  <ε⇑x> ⊥
+    -> <ε,x> {⊥}
   lookups agree with the global reduction from the root
   layout (3):
     a a@1

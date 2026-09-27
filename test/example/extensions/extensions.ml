@@ -73,15 +73,11 @@ module Run (X : EXAMPLE) = struct
     show pkg a.packages b.packages;
     show edge a.edges b.edges
 
-  (* [brief] prints only the reduction's size, where the whole would bury
-     the check and the answer *)
-  let run ~brief =
+  (* [walked] prints the core the lookups reach from the root, and of the
+     global reduction only its size, where the whole would bury the check
+     and the answer *)
+  let run ~walked =
     let whole = { Core.packages = X.real; edges = X.deps } in
-    if brief then
-      Printf.printf "core: %d packages, %d edges\n"
-        (List.length (List.sort_uniq compare (List.map pkg X.real)))
-        (List.length (List.sort_uniq compare (List.map edge X.deps)))
-    else Core.print ~pp_name:X.pp_name ~pp_version:X.pp_version whole;
     let at k l =
       List.filter_map (fun (j, x) -> if j = k then Some x else None) l
     in
@@ -94,6 +90,13 @@ module Run (X : EXAMPLE) = struct
     let lookups =
       Core.walk ~versions:X.versions ~dependees:X.dependees [ fst X.root ]
     in
+    if walked then begin
+      Printf.printf "global: %d packages, %d edges\n"
+        (List.length (List.sort_uniq compare (List.map pkg X.real)))
+        (List.length (List.sort_uniq compare (List.map edge X.deps)));
+      Core.print ~pp_name:X.pp_name ~pp_version:X.pp_version lookups
+    end
+    else Core.print ~pp_name:X.pp_name ~pp_version:X.pp_version whole;
     if lookups = reach then
       print_endline "lookups agree with the global reduction from the root"
     else begin
@@ -1175,7 +1178,9 @@ let () =
   | Some x ->
       let module X = (val x) in
       let module R = Run (X) in
-      R.run ~brief:(List.mem Sys.argv.(1) [ "placement"; "npm-placement" ])
+      R.run
+        ~walked:
+          (List.mem Sys.argv.(1) [ "visibility"; "placement"; "npm-placement" ])
   | None ->
       prerr_endline
         ("usage: extensions <" ^ String.concat "|" (List.map fst examples) ^ ">");
