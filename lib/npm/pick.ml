@@ -55,7 +55,7 @@ let best ar (n : string) (cands : PVersion.t list) : PVersion.t =
    archive is no shortcut either (index.js:123, [mani &&]): it may name
    one this keeps only a twin of (Archive.one_per_precedence). *)
 let tagged ar (n : string) (cands : PVersion.t list) : PVersion.t option =
-  match Hashtbl.find_opt ar.A.latest n with
+  match A.loaded_latest ar n with
   | Some l -> (
       match A.meta ar (n, l) with
       | Some m when A.ver_rank ar m = (true, true, true) ->
@@ -71,11 +71,11 @@ let pick_in st (t : string) (rg : Np.coq_Range) : string option =
   let pool =
     List.filter_map
       (fun u -> if Np.rgHolds rg u then Some (Np.Vs.Orig u) else None)
-      (A.versions_of st.L.ar t)
+      (A.versions_of (L.archive st) t)
   in
   match pool with
   | [] -> None
   | pool -> (
-      match pick st.L.ar t pool with
+      match pick (L.archive st) t pool with
       | Np.Vs.Orig u -> Some u
       | Np.Vs.Bot | Np.Vs.Free -> None)

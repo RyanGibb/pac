@@ -216,8 +216,8 @@ let check_published ar specs =
   | Some s ->
       Error
         (Printf.sprintf "no packument for %s under %s%s" (dependee_name s)
-           ar.Archive.cache
-           (if ar.Archive.offline then " (offline)" else ""))
+           (Archive.cache_dir ar)
+           (if Archive.offline ar then " (offline)" else ""))
 
 (* Under the shared reading a root the two tools read apart is refused, as
    no answer is one both accept: npm installs the root's mandatory
@@ -263,8 +263,8 @@ let root_of ar pkg =
   let str k = match P.member k pkg with `String s -> s | _ -> "" in
   let name = match str "name" with "" -> "." | n -> n in
   match
-    P.ver_of ~reading:ar.Archive.reading ~reject:(Archive.reject ar) ~root:true
-      (str "version") pkg
+    P.ver_of ~reading:(Archive.reading ar) ~reject:(Archive.reject ar)
+      ~root:true (str "version") pkg
   with
   | Some v -> Ok { v with P.v_name = name }
   | None -> Error "not a package.json"

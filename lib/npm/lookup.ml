@@ -21,7 +21,7 @@ let star_range ar (t : string) (rg : Npm_version.range) : Npm_version.range =
     match A.latest ar t with
     | Some l
       when Npm_version.is_prerelease l
-           && Hashtbl.mem ar.A.entry (t, l)
+           && Option.is_some (A.meta ar (t, l))
            && (not (A.deprecated ar (t, l)))
            && A.engine_ok ar (t, l) ->
         rg @ [ [ Npm_version.Cmp (Npm_version.Eq, l) ] ]
@@ -67,19 +67,29 @@ let xpeer ar (r : P.peer) : Np.coq_PeerDependency =
 type t = {
   ar : A.t;
   root : string * string;
+  (* false under --omit=optional: an optional dependency is then dropped
+     outright rather than only when the registry cannot satisfy it *)
   optional : bool;
   ovr : (string * Np.coq_Range) list;
   dep_tbl : (string * string, Np.coq_Dependency list) Hashtbl.t;
   peer_tbl : (string * string, Np.coq_PeerDependency list) Hashtbl.t;
   repo_at : (string, Np.RepoSet.t) Hashtbl.t;
+  (* keyed by the names read rather than by the package reading them, so
+     packages that read the same names share one set *)
   repo_of : (string list, Np.RepoSet.t) Hashtbl.t;
   vcache : (Np.Nm.name, Np.Vs.version list) Hashtbl.t;
+  (* the optional-dependency verdict, keyed by what decides it *)
   opt_keep : (string * string, bool) Hashtbl.t;
+  (* each package's directories, as far as the solver has looked: the
+     intermediates its granular node and its directories point to, and the
+     directory each of its links resolves into *)
   dirs : ((string * string) * string, Np.Nm.name list) Hashtbl.t;
+  (* the links resolving into each directory *)
   links_into : (Np.Nm.name, Np.Nm.name) Hashtbl.t;
   raw_tbl : (string * string, P.dep list) Hashtbl.t;
+  (* the directories reading each descriptor, as far as the solver has
+     looked *)
   desc_dirs : (Np.Nm.name, Np.Nm.name) Hashtbl.t;
-  mutable n_lookups : int;
 }
 
 let create ~optional ar root =
@@ -103,8 +113,10 @@ let create ~optional ar root =
     links_into = Hashtbl.create 4096;
     raw_tbl = Hashtbl.create 16384;
     desc_dirs = Hashtbl.create 4096;
-    n_lookups = 0;
   }
+
+let archive st = st.ar
+let root st = st.root
 
 let effective st (t : string) (rg : Np.coq_Range) : Np.coq_Range =
   Option.value (List.assoc_opt t st.ovr) ~default:rg
@@ -228,9 +240,7 @@ let peer_names_at st q =
        (peer_dependencies st q))
 
 let peer_dependencies_named st (n : string) =
-  List.map
-    (fun (p, r) -> (p, xpeer st.ar r))
-    (Hashtbl.find_all st.ar.A.peer_by_name n)
+  List.map (fun (p, r) -> (p, xpeer st.ar r)) (A.peers_naming st.ar n)
 
 (* The granular versions lookup's sub-instance, which the calculus cuts
    to the key's registry name, narrowed twice more here.  The instance's
@@ -253,14 +263,14 @@ let gran_sub_inst st (k : string * string) (w : string) =
     Option.to_list
       (List.find_map
          (fun (q, d) -> if dep_keep st d then Some (q, xdep st.ar d) else None)
-         (Hashtbl.find_all st.ar.A.dep_by_key k))
+         (A.deps_introducing st.ar k))
   in
   let peers =
     if deps = [] && fst k = snd k then
       Option.to_list
         (Option.map
            (fun (q, r) -> (q, xpeer st.ar r))
-           (Hashtbl.find_opt st.ar.A.peer_by_name (fst k)))
+           (A.peer_naming st.ar (fst k)))
     else []
   in
   mk_inst st ~repo ~deps ~peers

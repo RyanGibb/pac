@@ -50,7 +50,7 @@ let peers_on st q (a : string) =
     (L.peer_dependencies st q)
 
 let is_root st (k, v) =
-  let r = st.L.root in
+  let r = L.root st in
   k = (fst r, fst r) && v = snd r
 
 (* what p (key k at v) holds, by key: its dependencies, and for the root
@@ -200,7 +200,7 @@ type t = {
 }
 
 let restart o =
-  let root = o.st.L.root in
+  let root = L.root o.st in
   let top =
     {
       id = 0;
@@ -472,7 +472,9 @@ let is_orig = Viable.is_orig
    the replay holds for the name n that decides it *)
 let fill o ~assigned n k v (m : string * string) cands =
   let st = o.st in
-  let c = Pick.pick st.L.ar (snd m) (reused (resolved_at o n k v) m cands) in
+  let c =
+    Pick.pick (L.archive st) (snd m) (reused (resolved_at o n k v) m cands)
+  in
   if peer_only st (snd k, v) (fst m) then replace st ~assigned k v m cands c
   else c
 

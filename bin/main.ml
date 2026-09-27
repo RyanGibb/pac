@@ -493,16 +493,15 @@ let npm_run debug core order reading cache offline tree omit nodev npmv query =
                   ]
               | _ -> []
             in
+            let s = Npm.Archive.stats ar in
             report ~t0 ~core
               {
-                Report.names = ar.Npm.Archive.n_names;
-                versions = ar.Npm.Archive.n_vers;
+                Report.names = s.Npm.Archive.names;
+                versions = s.versions;
                 extra =
-                  Printf.sprintf "%d packuments fetched"
-                    ar.Npm.Archive.n_fetched
-                  :: optional;
-                dropped = ar.Npm.Archive.n_dropped;
-                parse = ar.Npm.Archive.t_parse;
+                  Printf.sprintf "%d packuments fetched" s.fetched :: optional;
+                dropped = s.dropped;
+                parse = s.parse;
               }
               ~walk r
               (fun a ->

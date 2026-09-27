@@ -3,37 +3,22 @@
    answer without saying so. *)
 exception Fetch_failed of string
 
-type t = {
-  cache : string;
-  offline : bool;
-  reading : Npm_parse.reading;
-  (* The host npm-pick-manifest ranks engines against.  npm always has
-     one, arborist passing process.version as nodeVersion and the CLI its
-     own version as npmVersion, but nothing here can read a node that need
-     not be installed, so an unset half leaves that sub-key untested
-     exactly as checkEngine does for a null version: every candidate then
-     passes and the engine keys tie, leaving deprecated and semver to
-     decide.  A correspondence harness has to supply both, or the two
-     sides rank by different rules. *)
-  node : string option;
-  npm : string option;
-  pkgs : (string, Npm_parse.ver list) Hashtbl.t;
-  latest : (string, string) Hashtbl.t;
-  tags : (string, (string * string) list) Hashtbl.t;
-  entry : (string * string, Npm_parse.ver) Hashtbl.t;
-  (* peer dependencies keyed by the directory they name *)
-  peer_by_name : (string, (string * string) * Npm_parse.peer) Hashtbl.t;
-  (* dependencies keyed by the key they introduce, for the granular
-     version lookup's key test *)
-  dep_by_key : (string * string, (string * string) * Npm_parse.dep) Hashtbl.t;
-  mutable n_names : int;
-  mutable n_vers : int;
-  mutable n_fetched : int;
-  mutable n_dropped : int;
-  (* wall time fetching and parsing packuments, which the solve
-     interleaves with *)
-  mutable t_parse : float;
+type t
+
+(* [parse] is the wall time fetching and parsing packuments, which the
+   solve interleaves with *)
+type stats = {
+  names : int;
+  versions : int;
+  fetched : int;
+  dropped : int;
+  parse : float;
 }
+
+val stats : t -> stats
+val cache_dir : t -> string
+val offline : t -> bool
+val reading : t -> Npm_parse.reading
 
 val create :
   ?node:string ->
@@ -66,5 +51,19 @@ val latest : t -> string -> string option
    reach, as it would be had it been the root. *)
 val add_root : t -> Npm_parse.ver -> string * string
 val meta : t -> string * string -> Npm_parse.ver option
+
+(* the latest tag of a name already loaded, loading nothing *)
+val loaded_latest : t -> string -> string option
+
+(* the peer dependencies naming a directory, the latest added first, with
+   the package declaring each *)
+val peers_naming : t -> string -> ((string * string) * Npm_parse.peer) list
+val peer_naming : t -> string -> ((string * string) * Npm_parse.peer) option
+
+(* the dependencies introducing a key, the latest added first, with the
+   package declaring each *)
+val deps_introducing :
+  t -> string * string -> ((string * string) * Npm_parse.dep) list
+
 val engine_ok : t -> string * string -> bool
 val deprecated : t -> string * string -> bool

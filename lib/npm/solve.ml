@@ -43,24 +43,21 @@ let runs (all : PVersion.t list Lazy.t) (vs : PVersion.t list) : PG.Ranges.t =
 (* PubGrub widens each dependency's depender range by asking for the
    dependencies of the depender's neighbouring versions, once per
    dependency, so the same node is asked for over and over *)
-let dependencies st =
-  let cache = Hashtbl.create 65536 in
-  fun n (u : Np.Vs.version) ->
-    Pac_common.Tbl.memo cache (n, u) (fun () ->
-        st.Lookup.n_lookups <- st.Lookup.n_lookups + 1;
-        List.map
-          (fun ((m, vs) : T.Dependees.t) ->
-            (m, runs (lazy (Lookup.versions st m)) (T.VSet.elements vs)))
-          (Lookup.dependees st (n, u)))
+let dependencies st cache n (u : Np.Vs.version) =
+  Pac_common.Tbl.memo cache (n, u) (fun () ->
+      List.map
+        (fun ((m, vs) : T.Dependees.t) ->
+          (m, runs (lazy (Lookup.versions st m)) (T.VSet.elements vs)))
+        (Lookup.dependees st (n, u)))
 
-let decode st sol =
+let decode st ~lookups sol =
   let s = T.PkgSet.ofList sol in
   let read, dropped = Lookup.optional_verdicts st in
   {
     installs = List.sort compare (Np.PkgSet.elements (R.npmResolution s));
     tree = List.sort compare (Np.Conc.ParentRel.elements (R.npmParents s));
     nodes = List.length sol;
-    lookups = st.Lookup.n_lookups;
+    lookups;
     optional_read = read;
     optional_dropped = dropped;
   }
@@ -124,10 +121,12 @@ let solve ?(debug = false) ?(order = `Tool) ?(omit_dev = false)
   Pubgrub.set_debug debug;
   let st = Lookup.create ~optional:(not omit_optional) ar root in
   let h = Order.hooks order st in
+  (* dependencies' memo, whose size is the lookup count the answer reports *)
+  let asked = Hashtbl.create 65536 in
   let root_n = Np.Nm.Granular ((fst root, fst root), snd root) in
   let r =
     PG.solve ?next:h.Pac_common.Order.next ?choose:h.Pac_common.Order.choose
-      ~vers:(Lookup.versions st) ~deps:(dependencies st)
+      ~vers:(Lookup.versions st) ~deps:(dependencies st asked)
       [ (root_n, PG.Ranges.of_list [ Np.Vs.Orig (snd root) ]) ]
   in
   h.Pac_common.Order.finish ();
@@ -135,7 +134,7 @@ let solve ?(debug = false) ?(order = `Tool) ?(omit_dev = false)
     match r with
     | Error inc -> Error (fun ppf -> PG.explain_incompatibility ppf inc)
     | Ok sol ->
-        let r = decode st sol in
+        let r = decode st ~lookups:(Hashtbl.length asked) sol in
         Ok (if omit_dev then drop_dev ar root r else r)
   in
   (* a registry failing the walk says nothing of the answer, which is

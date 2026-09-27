@@ -13,20 +13,54 @@ type t = {
   cache : string;
   offline : bool;
   reading : P.reading;
+  (* The host npm-pick-manifest ranks engines against.  npm always has
+     one, arborist passing process.version as nodeVersion and the CLI its
+     own version as npmVersion, but nothing here can read a node that need
+     not be installed, so an unset half leaves that sub-key untested
+     exactly as checkEngine does for a null version: every candidate then
+     passes and the engine keys tie, leaving deprecated and semver to
+     decide.  A correspondence harness has to supply both, or the two
+     sides rank by different rules. *)
   node : string option;
   npm : string option;
   pkgs : (string, P.ver list) Hashtbl.t;
   latest : (string, string) Hashtbl.t;
   tags : (string, (string * string) list) Hashtbl.t;
   entry : (string * string, P.ver) Hashtbl.t;
+  (* peer dependencies keyed by the directory they name *)
   peer_by_name : (string, (string * string) * P.peer) Hashtbl.t;
+  (* dependencies keyed by the key they introduce, for the granular
+     version lookup's key test *)
   dep_by_key : (string * string, (string * string) * P.dep) Hashtbl.t;
   mutable n_names : int;
   mutable n_vers : int;
   mutable n_fetched : int;
   mutable n_dropped : int;
+  (* wall time fetching and parsing packuments, which the solve
+     interleaves with *)
   mutable t_parse : float;
 }
+
+type stats = {
+  names : int;
+  versions : int;
+  fetched : int;
+  dropped : int;
+  parse : float;
+}
+
+let stats ar =
+  {
+    names = ar.n_names;
+    versions = ar.n_vers;
+    fetched = ar.n_fetched;
+    dropped = ar.n_dropped;
+    parse = ar.t_parse;
+  }
+
+let cache_dir ar = ar.cache
+let offline ar = ar.offline
+let reading ar = ar.reading
 
 let create ?node ?npm ?(reading = `Npm) ~cache ~offline () =
   {
@@ -246,6 +280,10 @@ let add_root ar (v : P.ver) : string * string =
   (v.P.v_name, v.P.v_vers)
 
 let meta ar p : P.ver option = Hashtbl.find_opt ar.entry p
+let loaded_latest ar n = Hashtbl.find_opt ar.latest n
+let peers_naming ar n = Hashtbl.find_all ar.peer_by_name n
+let peer_naming ar n = Hashtbl.find_opt ar.peer_by_name n
+let deps_introducing ar k = Hashtbl.find_all ar.dep_by_key k
 
 let engine_ok ar (p : string * string) : bool =
   match meta ar p with None -> true | Some v -> ver_engine_ok ar v
