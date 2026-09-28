@@ -2179,48 +2179,48 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         exact (proj1 (encodeNNF_tgt_aux (C.versions R) f) _ _ _ _ He).
       Qed.
 
-      Theorem versions_lookupOrig : forall R D (r : Pkg.t) (m : N.t),
+      Theorem versions_lookupOrig : forall R D (r : Pkg.t) (n : N.t),
           PkgSet.In r R ->
-          (exists p h, T.DepRel.In (p, (Name.Orig m, h)) (reduceDeps R D)) \/
-          Name.Orig m = Name.Orig (fst r) ->
-          Ab.hasAbsent m = true ->
-          T.versions (reduceReal R D) (Name.Orig m) =
+          (exists p h, T.DepRel.In (p, (Name.Orig n, h)) (reduceDeps R D)) \/
+          Name.Orig n = Name.Orig (fst r) ->
+          Ab.hasAbsent n = true ->
+          T.versions (reduceReal R D) (Name.Orig n) =
           T.VSet.add Version.Bot
-            (embedVS (C.versions (PkgFibred.tailFibre R m) m)).
+            (embedVS (C.versions (PkgFibred.tailFibre R n) n)).
       Proof.
-        intros R D r m Hr Hreach Ha.
-        assert (Hm : NSet.In m (instNames R D)).
+        intros R D r n Hr Hreach Ha.
+        assert (Hm : NSet.In n (instNames R D)).
         { destruct Hreach as [Hreach | E];
-            [exact (reachable_instNames R D m Hreach) |].
+            [exact (reachable_instNames R D n Hreach) |].
           injection E as ->; apply mem_instNames; left.
           destruct r as [rn rv]; exists rv; exact Hr. }
         apply T.VSet.ext; intro w.
         rewrite T.mem_versions, mem_reduceReal, SOvv.add_in.
         unfold embedVS; rewrite SOvv.mem_map.
         split.
-        - intros [[[qn qv] [HR Hq]] | [[p [f [_ Hw]]] | [n [_ [_ Hy]]]]].
+        - intros [[[qn qv] [HR Hq]] | [[p [f [_ Hw]]] | [m [_ [_ Hy]]]]].
           + unfold embedPkg in Hq; injection Hq as -> ->.
             right; exists qv; split; [| reflexivity].
             apply C.mem_versions, PkgFibred.mem_tailFibre; auto.
           + exfalso; exact (arisingPkgs_not_orig _ _ _ _ Hw).
           + injection Hy as -> ->; left; reflexivity.
         - intros [-> | [v [Hv ->]]].
-          + right; right; exists m; auto.
+          + right; right; exists n; auto.
           + apply C.mem_versions, PkgFibred.mem_tailFibre in Hv.
             destruct Hv as [Hv _].
-            left; exists (m, v); split; [exact Hv | reflexivity].
+            left; exists (n, v); split; [exact Hv | reflexivity].
       Qed.
 
-      Theorem versions_lookupOrigPresent : forall R D (m : N.t),
-          Ab.hasAbsent m = false ->
-          T.versions (reduceReal R D) (Name.Orig m) =
-          embedVS (C.versions (PkgFibred.tailFibre R m) m).
+      Theorem versions_lookupOrigPresent : forall R D (n : N.t),
+          Ab.hasAbsent n = false ->
+          T.versions (reduceReal R D) (Name.Orig n) =
+          embedVS (C.versions (PkgFibred.tailFibre R n) n).
       Proof.
-        intros R D m Ha; apply T.VSet.ext; intro w.
+        intros R D n Ha; apply T.VSet.ext; intro w.
         rewrite T.mem_versions, mem_reduceReal.
         unfold embedVS; rewrite SOvv.mem_map.
         split.
-        - intros [[[qn qv] [HR Hq]] | [[p [f [_ Hw]]] | [n [_ [Hn Hy]]]]].
+        - intros [[[qn qv] [HR Hq]] | [[p [f [_ Hw]]] | [m [_ [Hn Hy]]]]].
           + unfold embedPkg in Hq; injection Hq as -> ->.
             exists qv; split; [| reflexivity].
             apply C.mem_versions, PkgFibred.mem_tailFibre; auto.
@@ -2229,7 +2229,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         - intros [v [Hv ->]].
           apply C.mem_versions, PkgFibred.mem_tailFibre in Hv.
           destruct Hv as [Hv _].
-          left; exists (m, v); split; [exact Hv | reflexivity].
+          left; exists (n, v); split; [exact Hv | reflexivity].
       Qed.
 
       (* An original package's own edges are the encoding's top level: the
@@ -2346,41 +2346,41 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           exists (m, v), f; split; [exact HD | exact He].
       Qed.
 
-      Theorem dependees_lookupOrigBy : forall R D Vq m v,
-          (forall n,
-             NSet.In n (ownNegDepNames (DepRelFibred.tailFibre D (m, v))) ->
-             Vq n = C.versions R n) ->
-          T.dependees (reduceDeps R D) (Name.Orig m, Version.Orig v) =
-          T.dependees (reduceDepsBy Vq (DepRelFibred.tailFibre D (m, v)))
-            (Name.Orig m, Version.Orig v).
+      Theorem dependees_lookupOrigBy : forall R D Vq n v,
+          (forall m,
+             NSet.In m (ownNegDepNames (DepRelFibred.tailFibre D (n, v))) ->
+             Vq m = C.versions R m) ->
+          T.dependees (reduceDeps R D) (Name.Orig n, Version.Orig v) =
+          T.dependees (reduceDepsBy Vq (DepRelFibred.tailFibre D (n, v)))
+            (Name.Orig n, Version.Orig v).
       Proof.
-        intros R D Vq m v HVq; unfold reduceDeps.
+        intros R D Vq n v HVq; unfold reduceDeps.
         rewrite dependees_tailFibreBy; apply dependees_origAgree.
         intros p f x Hpf Hx; symmetry; apply HVq.
         apply mem_ownNegDepNames; exists p, f; auto.
       Qed.
 
-      Theorem dependees_lookupOrig : forall R D m v,
-          T.dependees (reduceDeps R D) (Name.Orig m, Version.Orig v) =
+      Theorem dependees_lookupOrig : forall R D n v,
+          T.dependees (reduceDeps R D) (Name.Orig n, Version.Orig v) =
           T.dependees
             (reduceDeps
                (realPreimage R
-                  (ownNegDepNames (DepRelFibred.tailFibre D (m, v))))
-               (DepRelFibred.tailFibre D (m, v)))
-            (Name.Orig m, Version.Orig v).
+                  (ownNegDepNames (DepRelFibred.tailFibre D (n, v))))
+               (DepRelFibred.tailFibre D (n, v)))
+            (Name.Orig n, Version.Orig v).
       Proof.
-        intros R D m v; rewrite (dependees_lookupOrigBy R D
+        intros R D n v; rewrite (dependees_lookupOrigBy R D
           (C.versions (realPreimage R
-             (ownNegDepNames (DepRelFibred.tailFibre D (m, v)))))).
+             (ownNegDepNames (DepRelFibred.tailFibre D (n, v)))))).
         - reflexivity.
-        - intros n Hn; apply versions_realPreimage; exact Hn.
+        - intros m Hn; apply versions_realPreimage; exact Hn.
       Qed.
 
-      Theorem dependees_lookupAbsent : forall R D m,
-          T.dependees (reduceDeps R D) (Name.Orig m, Version.Bot) =
+      Theorem dependees_lookupAbsent : forall R D n,
+          T.dependees (reduceDeps R D) (Name.Orig n, Version.Bot) =
           T.DependeesSet.empty.
       Proof.
-        intros R D m; apply T.dependees_empty_iff; intros h H.
+        intros R D n; apply T.dependees_empty_iff; intros h H.
         apply mem_reduceDeps in H.
         destruct H as [[pn pv] [f [_ He]]].
         assert (E := proj1 (encodeNNF_src_orig_aux (C.versions R) f)
@@ -2922,8 +2922,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       Theorem dependees_lookupDisjunctBy : forall R D R' D' Vq fs i,
           DepRel.Subset D' D ->
           T.PkgSet.In (Name.Disjunct fs, i) (reduceReal R' D') ->
-          (forall p f n, DepRel.In (p, f) D' -> NSet.In n (negNames f) ->
-                         Vq n = C.versions R n) ->
+          (forall p f m, DepRel.In (p, f) D' -> NSet.In m (negNames f) ->
+                         Vq m = C.versions R m) ->
           T.dependees (reduceDeps R D) (Name.Disjunct fs, i) =
           T.dependees (reduceDepsBy Vq D') (Name.Disjunct fs, i).
       Proof.
