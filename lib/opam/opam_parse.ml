@@ -193,7 +193,18 @@ let rec brace_of ?(locals = local_vars) ~reject ~owner ~selfv (v : value) :
     in
     BF (if holds then FT else FF)
   in
+  (* opam's filter parser reads an integer as the string of its digits
+     (OpamFormat.V.filter), which a comparison then orders as a version
+     like any other string *)
+  let digits (e : value) =
+    match e.pelem with
+    | Int i -> { e with pelem = String (string_of_int i) }
+    | _ -> e
+  in
   match v.pelem with
+  | Relop (r, ({ pelem = Int _; _ } as a), b)
+  | Relop (r, a, ({ pelem = Int _; _ } as b)) ->
+      brace_of { v with pelem = Relop (r, digits a, digits b) }
   | Bool true -> BF FT
   | Bool false -> BF FF
   | Ident x -> BF (FCmp (Eq, qualify ~owner x, "true"))

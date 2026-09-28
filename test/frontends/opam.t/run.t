@@ -430,6 +430,17 @@ and brk.2, which does not parse, is skipped:
   loaded: 1 names, 1 versions
   parser dropped 1 declarations
 
+opam reads an unquoted integer in a filter as the string of its digits and
+compares it as a version, so on Debian 12 os-version >= 8 holds, where a
+comparison of strings byte by byte would not, and 13 <= os-version does
+not; osv.2 is the newest version available:
+
+  $ untimed ../../../bin/main.exe opam . osv
+  packages (1):
+    osv 2
+  encoded solution: 2 core nodes (2 lookups)
+  loaded: 1 names, 3 versions
+
 opam keys a package by its version's order, so eqv.1.0 and eqv.1.00,
 whose versions compare equal, are one package to it: the directory it
 reads last, the later in byte order, and that directory's opam file.
