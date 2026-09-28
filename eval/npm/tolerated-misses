@@ -5,3 +5,11 @@
 # npm fetches the packument to check it and never places it
 @swc/helpers
 @swc/wasm
+
+# dependencies of an old or pre-release version on a name the registry
+# does not hold (it answers 404): pac reads each as a name with no
+# versions, which fails the version as npm's E404 would
+@prettier/next          # of prettier 4.0.0-alpha.0
+ignore-rules            # of ignore 0.1.0 and 0.1.2
+@tapjs/.test-built      # of @tapjs/test 0.0.0-1
+@75lb/jsdoc-node23-fix  # of jsdoc-api 9.3.2

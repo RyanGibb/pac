@@ -85,8 +85,8 @@ directory (sha256 of the sorted list of per-file sha256s):
   recast 0.5.27 names (qunit@0.x, remove-try-require, replace-method, in
   every reading), and four names registry.npmjs.org answers 404, which pac
   alone asks for: @prettier/next in the shared reading, and ignore-rules,
-  @tapjs/.test-built and @75lb/jsdoc-node23-fix in the placement reading.
-  When pac changes, rerun close.sh with it (eval/README.md) and record the
+  @tapjs/.test-built and @75lb/jsdoc-node23-fix in the placement reading,
+  which eval/npm/tolerated-misses lists.  When pac changes, rerun close.sh with it (eval/README.md) and record the
   hash it ends with here.
 
 The cargo sweeps need nothing pinned beyond repos/crates.io-index above: both
