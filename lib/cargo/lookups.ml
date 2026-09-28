@@ -37,9 +37,7 @@ type state = {
   fibres : (string * string, fibres) Hashtbl.t;
   dep_of_data : (Cg.SlotData.t, P.dep) Hashtbl.t;
   name_sets : (string, Cg.PkgSet.t) Hashtbl.t;
-  (* keyed by the read names rather than by the crate version, so that
-     versions reading the same names share one entry *)
-  repo_preimages : (string list, Cg.PkgSet.t) Hashtbl.t;
+  name_versions : (string, Cg.VSet.t) Hashtbl.t;
   msrv : (string * string, bool) Hashtbl.t;
   supports : (string, Cg.SupportSet.t) Hashtbl.t;
   owners : (owner_key, Cg.SlotRel.t * Cg.FDefRel.t) Hashtbl.t;
@@ -65,7 +63,7 @@ let create ar (root : Q.root) ~features ~rustv =
     fibres = Hashtbl.create 4096;
     dep_of_data = Hashtbl.create 4096;
     name_sets = Hashtbl.create 4096;
-    repo_preimages = Hashtbl.create 4096;
+    name_versions = Hashtbl.create 4096;
     msrv = Hashtbl.create 65536;
     supports = Hashtbl.create 4096;
     owners = Hashtbl.create 4096;
@@ -130,10 +128,10 @@ let name_set st (n : string) : Cg.PkgSet.t =
   Tbl.memo st.name_sets n (fun () ->
       Cg.PkgSet.ofList (List.map (fun v -> (n, v)) (versions_of st n)))
 
-let repo_preimage st (p : string * string) : Cg.PkgSet.t =
-  let reads = (fibres_of st p).r_reads in
-  Tbl.memo st.repo_preimages reads (fun () ->
-      Cg.PkgSet.unions (List.map (name_set st) reads))
+(* the Vq the dependees lookups take, realVersions at a name: loaded
+   whole, as name_set is *)
+let name_versions st (m : string) : Cg.VSet.t =
+  Tbl.memo st.name_versions m (fun () -> Cg.VSet.ofList (versions_of st m))
 
 let msrv_fits st ((n, v) : string * string) : bool =
   match st.rustv with
@@ -244,46 +242,38 @@ let versions st (tn : Cg.NPlus.t) : Cg.VPlus.t list =
       in
       call { e with inst_repo = repo; inst_links = links }
 
-(* one branch per dependees_lookup{Root,Crate,FeatP,Slot,Decision}; the
-   fall-through is dependees_reduceDepsInert, empty *)
+(* one branch per dependees_lookup{Root,Crate,FeatP,Slot,Decision}, the
+   repository read through name_versions alone; the fall-through is
+   dependees_reduceDepsInert, empty.  A crate version's reads are all
+   loaded before it answers, an optional slot's target too, so that which
+   names are loaded, and so a links value's declarers so far, does not
+   turn on which ranges the lookup evaluates. *)
 let dependees st (p : T.Pkg.t) : T.Dependees.t list =
-  let call i = T.DependeesSet.elements (Cg.dependees i p) in
+  let call i =
+    T.DependeesSet.elements (Cg.dependeesBy (name_versions st) i p)
+  in
   let e = empty_inst st in
   match p with
   | Cg.NPlus.CRoot, _ -> call e
   | Cg.NPlus.CCrate (n, _), Cg.VPlus.WOrig v ->
       let rw = fibres_of st (n, v) in
-      let repo = repo_preimage st (n, v) in
-      call
-        {
-          e with
-          inst_repo = repo;
-          inst_slots = rw.r_slots;
-          inst_links = rw.r_links;
-        }
+      List.iter (fun m -> ignore (name_versions st m)) rw.r_reads;
+      call { e with inst_slots = rw.r_slots; inst_links = rw.r_links }
   | Cg.NPlus.CFeatP (n, _, _), Cg.VPlus.WOrig v ->
       let rw = fibres_of st (n, v) in
-      let repo = repo_preimage st (n, v) in
+      List.iter (fun m -> ignore (name_versions st m)) rw.r_reads;
       call
         {
           e with
-          inst_repo = repo;
           inst_support = rw.r_supp;
           inst_fdefs = rw.r_fdefs;
           inst_slots = rw.r_slots;
         }
   | Cg.NPlus.CSlot (n, gr, d), Cg.VPlus.WClass _ ->
-      let slots = slot_owner st n gr d in
-      call { e with inst_repo = name_set st (Cg.sTarget d); inst_slots = slots }
+      call { e with inst_slots = slot_owner st n gr d }
   | Cg.NPlus.CDec (n, gr, f, d, feat), Cg.VPlus.WClass _ ->
       let slots, fdefs = dec_owner st n gr f d feat in
-      call
-        {
-          e with
-          inst_repo = name_set st (Cg.sTarget d);
-          inst_fdefs = fdefs;
-          inst_slots = slots;
-        }
+      call { e with inst_fdefs = fdefs; inst_slots = slots }
   | _, _ -> []
 
 let site_data st (p : string * string) (k : Cg.SlotKey.t) =

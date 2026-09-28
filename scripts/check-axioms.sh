@@ -338,9 +338,12 @@ Cgo.decodeFS_coreResolution
 Cgo.decodeParents
 Cgo.decodeParents_coreResolution
 Cgo.dependees
+Cgo.dependeesBy
 Cgo.evalReq
+Cgo.evalReqBy
 Cgo.linkRel
 Cgo.rangeEval
+Cgo.realVersions
 Cgo.reduceDeps
 Cgo.reduceReal
 Cgo.rgHolds

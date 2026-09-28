@@ -240,24 +240,38 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Module SKEqb := UOTEqb SlotKey.
 
   Module SOpv := SetOps Pkg V PkgSet VSet.
+  Definition realVersions (R : PkgSet.t) (m : N.t) : VSet.t :=
+    SOpv.filterMap (fun '(o, u) => if NEqb.eqb o m then Some u else None) R.
+
+  Lemma mem_realVersions : forall R m u,
+      VSet.In u (realVersions R m) <-> PkgSet.In (m, u) R.
+  Proof.
+    intros R m u; unfold realVersions; rewrite SOpv.mem_filterMap.
+    split.
+    - intros [[o w] [HR He]]; cbn beta iota in He.
+      rewrite if_some_iff, NEqb.eqb_true_iff in He.
+      destruct He as [-> <-]; exact HR.
+    - intro HR; exists (m, u); split; [exact HR | cbn beta iota].
+      rewrite NEqb.eqb_refl; reflexivity.
+  Qed.
+
+  Definition evalReqBy (Vq : N.t -> VSet.t) (m : N.t) (rg : Range) : VSet.t :=
+    VSet.filter (rgHolds rg) (Vq m).
+
+  Lemma mem_evalReqBy : forall Vq m rg u,
+      VSet.In u (evalReqBy Vq m rg) <->
+      VSet.In u (Vq m) /\ rgHolds rg u = true.
+  Proof. intros; unfold evalReqBy; apply VSet.filter_spec'. Qed.
+
   Definition evalReq (R : PkgSet.t) (m : N.t) (rg : Range) : VSet.t :=
-    SOpv.filterMap (fun '(o, u) =>
-        if NEqb.eqb o m then if rgHolds rg u then Some u else None
-        else None)
-      R.
+    evalReqBy (realVersions R) m rg.
 
   Lemma mem_evalReq : forall R m rg u,
       VSet.In u (evalReq R m rg) <->
       PkgSet.In (m, u) R /\ rgHolds rg u = true.
   Proof.
-    intros R m rg u; unfold evalReq; rewrite SOpv.mem_filterMap.
-    split.
-    - intros [[o w] [HR He]]; cbn beta iota in He.
-      destruct (NEqb.eqb o m) eqn:En; [| discriminate].
-      apply NEqb.eqb_true_iff in En; subst o.
-      rewrite if_some_iff in He; destruct He as [Hv <-]; split; assumption.
-    - intros [HR Hv]; exists (m, u); split; [exact HR | cbn beta iota].
-      rewrite NEqb.eqb_refl, Hv; reflexivity.
+    intros; unfold evalReq; rewrite mem_evalReqBy, mem_realVersions;
+      reflexivity.
   Qed.
 
   Definition slotsAt (Slots : SlotRel.t)
@@ -709,7 +723,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           (inst_links I)
     end.
 
-  Definition dependees (I : Inst) (p : T.Pkg.t) : T.DependeesSet.t :=
+  Definition dependeesBy (Vq : N.t -> VSet.t) (I : Inst) (p : T.Pkg.t)
+    : T.DependeesSet.t :=
     match p with
     | (NPlus.CRoot, VPlus.WUnit) =>
         let '(m, v) := inst_root I in
@@ -721,7 +736,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
              (inst_rootFeats I))
     | (NPlus.CCrate m gr, VPlus.WOrig v) =>
         if negb (andb (GEqb.eqb (inst_gran I v) gr)
-                   (PkgSet.mem (m, v) (inst_repo I)))
+                   (VSet.mem v (Vq m)))
         then T.DependeesSet.empty else
         T.DependeesSet.union
           (SOsh.filterMap (fun '(q, d) =>
@@ -730,7 +745,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                        (negb (sOptional d)))
                then Some (NPlus.CSlot m (inst_gran I v) d,
                           gransOf (inst_gran I)
-                            (evalReq (inst_repo I) (sTarget d) (sReq d)))
+                            (evalReqBy Vq (sTarget d) (sReq d)))
                else None)
              (inst_slots I))
           (SOlh.filterMap (fun '(q, l) =>
@@ -763,7 +778,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                            SOsh.map (fun '(_, d) =>
                                (NPlus.CSlot m (inst_gran I v) d,
                                 gransOf (inst_gran I)
-                                  (evalReq (inst_repo I) (sTarget d) (sReq d))))
+                                  (evalReqBy Vq (sTarget d) (sReq d))))
                              (slotsAt (inst_slots I) (inst_root I) (m, v) a)
                        | None => T.DependeesSet.empty
                        end)
@@ -772,7 +787,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                            SOsh.map (fun '(_, d) =>
                                (NPlus.CDec m (inst_gran I v) f d feat,
                                 gransOf (inst_gran I)
-                                  (evalReq (inst_repo I) (sTarget d) (sReq d))))
+                                  (evalReqBy Vq (sTarget d) (sReq d))))
                              (slotsAt (inst_slots I) (inst_root I) (m, v) a)
                        | None => T.DependeesSet.empty
                        end)))
@@ -781,30 +796,33 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         if negb (andb (slotOwnedb (inst_gran I) (inst_slots I) (inst_root I)
                          m gr0 d)
                    (granMet (inst_gran I) gr
-                      (evalReq (inst_repo I) (sTarget d) (sReq d))))
+                      (evalReqBy Vq (sTarget d) (sReq d))))
         then T.DependeesSet.empty else
         T.DependeesSet.add
           (NPlus.CCrate (sTarget d) gr,
-           inGran (inst_gran I) gr (evalReq (inst_repo I) (sTarget d) (sReq d)))
+           inGran (inst_gran I) gr (evalReqBy Vq (sTarget d) (sReq d)))
           (SOfsh.map (fun f =>
                (NPlus.CFeatP (sTarget d) f gr,
                 inGran (inst_gran I) gr
-                  (evalReq (inst_repo I) (sTarget d) (sReq d))))
+                  (evalReqBy Vq (sTarget d) (sReq d))))
              (slotRequests d (inst_dflt I)))
     | (NPlus.CDec m gr0 f d feat, VPlus.WClass gr) =>
         if negb (andb (decOwnedb (inst_gran I) (inst_fdefs I) (inst_slots I)
                          (inst_root I) m gr0 f d feat)
                    (granMet (inst_gran I) gr
-                      (evalReq (inst_repo I) (sTarget d) (sReq d))))
+                      (evalReqBy Vq (sTarget d) (sReq d))))
         then T.DependeesSet.empty else
         T.DependeesSet.add
           (NPlus.CSlot m gr0 d, T.VSet.singleton (VPlus.WClass gr))
           (T.DependeesSet.singleton
              (NPlus.CFeatP (sTarget d) feat gr,
               inGran (inst_gran I) gr
-                (evalReq (inst_repo I) (sTarget d) (sReq d))))
+                (evalReqBy Vq (sTarget d) (sReq d))))
     | _ => T.DependeesSet.empty
     end.
+
+  Definition dependees (I : Inst) (p : T.Pkg.t) : T.DependeesSet.t :=
+    dependeesBy (realVersions (inst_repo I)) I p.
 
   Module SOhe := SetOps T.Dependees T.DepElt T.DependeesSet T.DepRel.
   Definition depEdges (p : T.Pkg.t) (hs : T.DependeesSet.t) : T.DepRel.t :=
@@ -1094,37 +1112,36 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       exists f, FSet.In f rootFeats /\
         h = (NPlus.CFeatP rn f (g rv), T.VSet.singleton (VPlus.WOrig rv)).
   Proof.
-    intros; cbn [dependees rootPkg inst_gran inst_root inst_rootFeats].
+    intros; cbn [dependees dependeesBy rootPkg inst_gran inst_root
+                 inst_rootFeats].
     rewrite T.DependeesSet.add_spec, SOfsh.mem_map.
     split; (intros [Hx | [f [Hf Hx]]];
             [left; exact Hx
              | right; exists f; split; [exact Hf | exact Hx]]).
   Qed.
 
-  Lemma mem_dep_crate :
-    forall I m gr v h,
+  Lemma mem_depBy_crate :
+    forall Vq I m gr v h,
       T.DependeesSet.In h
-        (dependees I (NPlus.CCrate m gr, VPlus.WOrig v)) <->
-      inst_gran I v = gr /\ PkgSet.In (m, v) (inst_repo I) /\
+        (dependeesBy Vq I (NPlus.CCrate m gr, VPlus.WOrig v)) <->
+      inst_gran I v = gr /\ VSet.In v (Vq m) /\
       ((exists d, SlotRel.In ((m, v), d) (inst_slots I) /\
           slotActive (inst_root I) (m, v) d = true /\
           sOptional d = false /\
           h = (NPlus.CSlot m (inst_gran I v) d,
-               gransOf (inst_gran I)
-                 (evalReq (inst_repo I) (sTarget d) (sReq d)))) \/
+               gransOf (inst_gran I) (evalReqBy Vq (sTarget d) (sReq d)))) \/
        (exists l, LinkRel.In ((m, v), l) (inst_links I) /\
           h = (NPlus.CLink l,
                T.VSet.singleton (VPlus.WName (NPlus.CCrate m gr))))).
   Proof.
-    intros; cbn [dependees].
-    destruct (andb (GEqb.eqb (inst_gran I v) gr)
-                (PkgSet.mem (m, v) (inst_repo I))) eqn:Eb;
+    intros; cbn [dependeesBy].
+    destruct (andb (GEqb.eqb (inst_gran I v) gr) (VSet.mem v (Vq m))) eqn:Eb;
       cbn [negb].
     2:{ split; [intro Hc; destruct (T.DependeesSet.empty_spec Hc) |].
         intros [<- [Em _]].
-        rewrite GEqb.eqb_refl, (proj2 (PkgSet.mem_spec _ _) Em) in Eb.
+        rewrite GEqb.eqb_refl, (proj2 (VSet.mem_spec _ _) Em) in Eb.
         discriminate Eb. }
-    rewrite andb_true_iff, GEqb.eqb_true_iff, PkgSet.mem_spec in Eb.
+    rewrite andb_true_iff, GEqb.eqb_true_iff, VSet.mem_spec in Eb.
     destruct Eb as [<- Em].
     rewrite T.DependeesSet.union_spec, SOsh.mem_filterMap,
       SOlh.mem_filterMap.
@@ -1142,10 +1159,29 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         rewrite PkgEqb.eqb_refl; reflexivity.
   Qed.
 
-  Lemma mem_dep_featP :
-    forall I m f gr v h,
+  Lemma mem_dep_crate :
+    forall I m gr v h,
       T.DependeesSet.In h
-        (dependees I (NPlus.CFeatP m f gr, VPlus.WOrig v)) <->
+        (dependees I (NPlus.CCrate m gr, VPlus.WOrig v)) <->
+      inst_gran I v = gr /\ PkgSet.In (m, v) (inst_repo I) /\
+      ((exists d, SlotRel.In ((m, v), d) (inst_slots I) /\
+          slotActive (inst_root I) (m, v) d = true /\
+          sOptional d = false /\
+          h = (NPlus.CSlot m (inst_gran I v) d,
+               gransOf (inst_gran I)
+                 (evalReq (inst_repo I) (sTarget d) (sReq d)))) \/
+       (exists l, LinkRel.In ((m, v), l) (inst_links I) /\
+          h = (NPlus.CLink l,
+               T.VSet.singleton (VPlus.WName (NPlus.CCrate m gr))))).
+  Proof.
+    intros; unfold dependees; rewrite mem_depBy_crate, mem_realVersions;
+      reflexivity.
+  Qed.
+
+  Lemma mem_depBy_featP :
+    forall Vq I m f gr v h,
+      T.DependeesSet.In h
+        (dependeesBy Vq I (NPlus.CFeatP m f gr, VPlus.WOrig v)) <->
       inst_gran I v = gr /\ SupportSet.In ((m, v), f) (inst_support I) /\
       (h = (NPlus.CCrate m (inst_gran I v), T.VSet.singleton (VPlus.WOrig v)) \/
        exists e0, FDefRel.In (((m, v), f), e0) (inst_fdefs I) /\
@@ -1156,16 +1192,14 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
              SlotRel.In ((m, v), d) (inst_slots I) /\ sAlias d = a /\
              slotActive (inst_root I) (m, v) d = true /\
              h = (NPlus.CSlot m (inst_gran I v) d,
-                  gransOf (inst_gran I)
-                    (evalReq (inst_repo I) (sTarget d) (sReq d)))) \/
+                  gransOf (inst_gran I) (evalReqBy Vq (sTarget d) (sReq d)))) \/
           (exists a feat d, entryFeatD e0 = Some (a, feat) /\
              SlotRel.In ((m, v), d) (inst_slots I) /\ sAlias d = a /\
              slotActive (inst_root I) (m, v) d = true /\
              h = (NPlus.CDec m (inst_gran I v) f d feat,
-                  gransOf (inst_gran I)
-                    (evalReq (inst_repo I) (sTarget d) (sReq d)))))).
+                  gransOf (inst_gran I) (evalReqBy Vq (sTarget d) (sReq d)))))).
   Proof.
-    intros; cbn [dependees].
+    intros; cbn [dependeesBy].
     destruct (GEqb.eqb (inst_gran I v) gr) eqn:Eg; cbn [negb].
     2:{ split; [intro Hc; exfalso; exact (T.DependeesSet.empty_spec Hc) |].
         intros [Hg _]; exfalso;
@@ -1223,22 +1257,46 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         apply mem_slotsAt; repeat split; assumption.
   Qed.
 
-  Lemma mem_dep_slot :
-    forall I m gr0 d gr h,
+  Lemma mem_dep_featP :
+    forall I m f gr v h,
       T.DependeesSet.In h
-        (dependees I (NPlus.CSlot m gr0 d, VPlus.WClass gr)) <->
+        (dependees I (NPlus.CFeatP m f gr, VPlus.WOrig v)) <->
+      inst_gran I v = gr /\ SupportSet.In ((m, v), f) (inst_support I) /\
+      (h = (NPlus.CCrate m (inst_gran I v), T.VSet.singleton (VPlus.WOrig v)) \/
+       exists e0, FDefRel.In (((m, v), f), e0) (inst_fdefs I) /\
+         ((exists f', e0 = FEntry.EFeat f' /\
+             h = (NPlus.CFeatP m f' (inst_gran I v),
+                  T.VSet.singleton (VPlus.WOrig v))) \/
+          (exists a d, entryActivates e0 = Some a /\
+             SlotRel.In ((m, v), d) (inst_slots I) /\ sAlias d = a /\
+             slotActive (inst_root I) (m, v) d = true /\
+             h = (NPlus.CSlot m (inst_gran I v) d,
+                  gransOf (inst_gran I)
+                    (evalReq (inst_repo I) (sTarget d) (sReq d)))) \/
+          (exists a feat d, entryFeatD e0 = Some (a, feat) /\
+             SlotRel.In ((m, v), d) (inst_slots I) /\ sAlias d = a /\
+             slotActive (inst_root I) (m, v) d = true /\
+             h = (NPlus.CDec m (inst_gran I v) f d feat,
+                  gransOf (inst_gran I)
+                    (evalReq (inst_repo I) (sTarget d) (sReq d)))))).
+  Proof. intros; unfold dependees; apply mem_depBy_featP. Qed.
+
+  Lemma mem_depBy_slot :
+    forall Vq I m gr0 d gr h,
+      T.DependeesSet.In h
+        (dependeesBy Vq I (NPlus.CSlot m gr0 d, VPlus.WClass gr)) <->
       SlotOwned (inst_gran I) (inst_slots I) (inst_root I) m gr0 d /\
-      exists u, VSet.In u (evalReq (inst_repo I) (sTarget d) (sReq d)) /\
+      exists u, VSet.In u (evalReqBy Vq (sTarget d) (sReq d)) /\
         inst_gran I u = gr /\
         (h = (NPlus.CCrate (sTarget d) gr,
               inGran (inst_gran I) gr
-                (evalReq (inst_repo I) (sTarget d) (sReq d))) \/
+                (evalReqBy Vq (sTarget d) (sReq d))) \/
          exists f, FSet.In f (slotRequests d (inst_dflt I)) /\
            h = (NPlus.CFeatP (sTarget d) f gr,
                 inGran (inst_gran I) gr
-                  (evalReq (inst_repo I) (sTarget d) (sReq d)))).
+                  (evalReqBy Vq (sTarget d) (sReq d)))).
   Proof.
-    intros; cbn [dependees].
+    intros; cbn [dependeesBy].
     destruct (slotOwnedb (inst_gran I) (inst_slots I) (inst_root I) m gr0 d)
       eqn:Eo; cbn [andb].
     2:{ split; [intro Hc; cbn [negb] in Hc;
@@ -1248,7 +1306,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     split.
     - intro Hh; split; [exact Eo |].
       destruct (granMet (inst_gran I) gr
-                  (evalReq (inst_repo I) (sTarget d) (sReq d))) eqn:Ec;
+                  (evalReqBy Vq (sTarget d) (sReq d))) eqn:Ec;
         cbn [negb] in Hh;
         [| exfalso; exact (T.DependeesSet.empty_spec Hh)].
       apply granMet_iff in Ec; destruct Ec as [u [Hu Hgu]].
@@ -1264,20 +1322,36 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         [left; exact Hh | right; exists f; split; [exact Hf | exact Hh]].
   Qed.
 
-  Lemma mem_dep_dec :
-    forall I m gr0 f d feat gr h,
+  Lemma mem_dep_slot :
+    forall I m gr0 d gr h,
       T.DependeesSet.In h
-        (dependees I (NPlus.CDec m gr0 f d feat, VPlus.WClass gr)) <->
+        (dependees I (NPlus.CSlot m gr0 d, VPlus.WClass gr)) <->
+      SlotOwned (inst_gran I) (inst_slots I) (inst_root I) m gr0 d /\
+      exists u, VSet.In u (evalReq (inst_repo I) (sTarget d) (sReq d)) /\
+        inst_gran I u = gr /\
+        (h = (NPlus.CCrate (sTarget d) gr,
+              inGran (inst_gran I) gr
+                (evalReq (inst_repo I) (sTarget d) (sReq d))) \/
+         exists f, FSet.In f (slotRequests d (inst_dflt I)) /\
+           h = (NPlus.CFeatP (sTarget d) f gr,
+                inGran (inst_gran I) gr
+                  (evalReq (inst_repo I) (sTarget d) (sReq d)))).
+  Proof. intros; unfold dependees; apply mem_depBy_slot. Qed.
+
+  Lemma mem_depBy_dec :
+    forall Vq I m gr0 f d feat gr h,
+      T.DependeesSet.In h
+        (dependeesBy Vq I (NPlus.CDec m gr0 f d feat, VPlus.WClass gr)) <->
       DecOwned (inst_gran I) (inst_fdefs I) (inst_slots I) (inst_root I)
         m gr0 f d feat /\
-      exists u, VSet.In u (evalReq (inst_repo I) (sTarget d) (sReq d)) /\
+      exists u, VSet.In u (evalReqBy Vq (sTarget d) (sReq d)) /\
         inst_gran I u = gr /\
         (h = (NPlus.CSlot m gr0 d, T.VSet.singleton (VPlus.WClass gr)) \/
          h = (NPlus.CFeatP (sTarget d) feat gr,
               inGran (inst_gran I) gr
-                (evalReq (inst_repo I) (sTarget d) (sReq d)))).
+                (evalReqBy Vq (sTarget d) (sReq d)))).
   Proof.
-    intros; cbn [dependees].
+    intros; cbn [dependeesBy].
     destruct (decOwnedb (inst_gran I) (inst_fdefs I) (inst_slots I)
                 (inst_root I) m gr0 f d feat) eqn:Eo; cbn [andb].
     2:{ split; [intro Hc; cbn [negb] in Hc;
@@ -1287,7 +1361,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     split.
     - intro Hh; split; [exact Eo |].
       destruct (granMet (inst_gran I) gr
-                  (evalReq (inst_repo I) (sTarget d) (sReq d))) eqn:Ec;
+                  (evalReqBy Vq (sTarget d) (sReq d))) eqn:Ec;
         cbn [negb] in Hh;
         [| exfalso; exact (T.DependeesSet.empty_spec Hh)].
       apply granMet_iff in Ec; destruct Ec as [u [Hu Hgu]].
@@ -1300,6 +1374,20 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       rewrite T.DependeesSet.add_spec, T.DependeesSet.singleton_spec.
       exact Hh.
   Qed.
+
+  Lemma mem_dep_dec :
+    forall I m gr0 f d feat gr h,
+      T.DependeesSet.In h
+        (dependees I (NPlus.CDec m gr0 f d feat, VPlus.WClass gr)) <->
+      DecOwned (inst_gran I) (inst_fdefs I) (inst_slots I) (inst_root I)
+        m gr0 f d feat /\
+      exists u, VSet.In u (evalReq (inst_repo I) (sTarget d) (sReq d)) /\
+        inst_gran I u = gr /\
+        (h = (NPlus.CSlot m gr0 d, T.VSet.singleton (VPlus.WClass gr)) \/
+         h = (NPlus.CFeatP (sTarget d) feat gr,
+              inGran (inst_gran I) gr
+                (evalReq (inst_repo I) (sTarget d) (sReq d)))).
+  Proof. intros; unfold dependees; apply mem_depBy_dec. Qed.
   Lemma dep_real :
     forall I p h,
       T.DependeesSet.In h
@@ -2420,22 +2508,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       apply SlotFibred.mem_tailFibre; split; [exact Hs | reflexivity].
     Qed.
 
-    Lemma in_realPreimage_own : forall R Slots p,
-        PkgSet.In p R <-> PkgSet.In p (realPreimage R (reads Slots p)).
-    Proof.
-      intros; rewrite mem_realPreimage; split;
-        [intro H; split; [exact H | apply reads_own] | intros [H _]; exact H].
-    Qed.
-
-    Lemma evalReq_reads : forall R Slots p d,
-        SlotRel.In (p, d) Slots ->
-        evalReq R (sTarget d) (sReq d) =
-        evalReq (realPreimage R (reads Slots p)) (sTarget d) (sReq d).
-    Proof.
-      intros R Slots p d Hs; symmetry; apply evalReq_realPreimage.
-      apply reads_target; exact Hs.
-    Qed.
-
     Lemma in_slotFibre : forall Slots p d,
         SlotRel.In (p, d) Slots <->
         SlotRel.In (p, d) (SlotFibred.tailFibre Slots p).
@@ -2606,7 +2678,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                   = false)
         by (apply Bool.not_true_iff_false; rewrite slotOwnedb_iff; exact Hn).
       split; [cbn [versions]; rewrite E; reflexivity |].
-      intro w'; cbn [dependees]; rewrite E; reflexivity.
+      intro w'; cbn [dependees dependeesBy]; rewrite E; reflexivity.
     Qed.
 
     Theorem decision_declines :
@@ -2624,7 +2696,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                     (inst_root I) n w f d f' = false)
         by (apply Bool.not_true_iff_false; rewrite decOwnedb_iff; exact Hn).
       split; [cbn [versions]; rewrite E; reflexivity |].
-      intro w'; cbn [dependees]; rewrite E; reflexivity.
+      intro w'; cbn [dependees dependeesBy]; rewrite E; reflexivity.
     Qed.
 
     Lemma crateReal_claimants : forall g R Links l,
@@ -2691,26 +2763,28 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Lemma dep_crate_mono :
-      forall g R R' support support' FDefs FDefs' Slots Slots' Links Links'
-             dflt rc rootFeats rootFeats' m gr v,
+      forall Vq Vq' g R R' support support' FDefs FDefs' Slots Slots' Links
+             Links' dflt rc rootFeats rootFeats' m gr v,
         (forall d, SlotRel.In ((m, v), d) Slots ->
            SlotRel.In ((m, v), d) Slots') ->
         (forall d, SlotRel.In ((m, v), d) Slots ->
-           evalReq R (sTarget d) (sReq d) = evalReq R' (sTarget d) (sReq d)) ->
-        (PkgSet.In (m, v) R -> PkgSet.In (m, v) R') ->
+           evalReqBy Vq (sTarget d) (sReq d) =
+           evalReqBy Vq' (sTarget d) (sReq d)) ->
+        (VSet.In v (Vq m) -> VSet.In v (Vq' m)) ->
         (forall l, LinkRel.In ((m, v), l) Links -> LinkRel.In ((m, v), l) Links') ->
         forall h,
           T.DependeesSet.In h
-            (dependees (MkInst R support FDefs Slots Links g dflt rc rootFeats)
+            (dependeesBy Vq
+               (MkInst R support FDefs Slots Links g dflt rc rootFeats)
                (NPlus.CCrate m gr, VPlus.WOrig v)) ->
           T.DependeesSet.In h
-            (dependees
+            (dependeesBy Vq'
                (MkInst R' support' FDefs' Slots' Links' g dflt rc rootFeats')
                (NPlus.CCrate m gr, VPlus.WOrig v)).
     Proof.
       intros * HS Hev HR HL h Hh.
-      apply mem_dep_crate in Hh; apply mem_dep_crate.
-      cbn [inst_repo inst_slots inst_links inst_gran inst_root] in Hh |- *.
+      apply mem_depBy_crate in Hh; apply mem_depBy_crate.
+      cbn [inst_slots inst_links inst_gran inst_root] in Hh |- *.
       destruct Hh as [Hg [Hm Hh]]; split; [exact Hg | split; [exact (HR Hm) |]].
       destruct Hh as [[d [Hd [Ha [Ho ->]]]] | [l [Hl ->]]].
       - left; exists d; rewrite <- (Hev d Hd).
@@ -2719,28 +2793,29 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Lemma dep_featP_mono :
-      forall g R R' support support' FDefs FDefs' Slots Slots' Links Links'
-             dflt rc rootFeats rootFeats' m f gr v,
+      forall Vq Vq' g R R' support support' FDefs FDefs' Slots Slots' Links
+             Links' dflt rc rootFeats rootFeats' m f gr v,
         (forall d, SlotRel.In ((m, v), d) Slots ->
            SlotRel.In ((m, v), d) Slots') ->
         (forall d, SlotRel.In ((m, v), d) Slots ->
-           evalReq R (sTarget d) (sReq d) = evalReq R' (sTarget d) (sReq d)) ->
+           evalReqBy Vq (sTarget d) (sReq d) =
+           evalReqBy Vq' (sTarget d) (sReq d)) ->
         (SupportSet.In ((m, v), f) support -> SupportSet.In ((m, v), f) support') ->
         (forall e, FDefRel.In (((m, v), f), e) FDefs ->
            FDefRel.In (((m, v), f), e) FDefs') ->
         forall h,
           T.DependeesSet.In h
-            (dependees (MkInst R support FDefs Slots Links g dflt rc rootFeats)
+            (dependeesBy Vq
+               (MkInst R support FDefs Slots Links g dflt rc rootFeats)
                (NPlus.CFeatP m f gr, VPlus.WOrig v)) ->
           T.DependeesSet.In h
-            (dependees
+            (dependeesBy Vq'
                (MkInst R' support' FDefs' Slots' Links' g dflt rc rootFeats')
                (NPlus.CFeatP m f gr, VPlus.WOrig v)).
     Proof.
       intros * HS Hev Hsp HF h Hh.
-      apply mem_dep_featP in Hh; apply mem_dep_featP.
-      cbn [inst_repo inst_support inst_fdefs inst_slots inst_gran inst_root]
-        in Hh |- *.
+      apply mem_depBy_featP in Hh; apply mem_depBy_featP.
+      cbn [inst_support inst_fdefs inst_slots inst_gran inst_root] in Hh |- *.
       destruct Hh as [Hg [Hs Hh]]; split; [exact Hg | split; [exact (Hsp Hs) |]].
       destruct Hh as [Hh | [e0 [Hfd Hc]]]; [left; exact Hh | right].
       exists e0; split; [exact (HF e0 Hfd) |].
@@ -2756,17 +2831,19 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Lemma dep_crate_agree :
-      forall g R R' support support' FDefs FDefs' Slots Slots' Links Links'
-             dflt rc rootFeats rootFeats' m gr v,
+      forall Vq Vq' g R R' support support' FDefs FDefs' Slots Slots' Links
+             Links' dflt rc rootFeats rootFeats' m gr v,
         (forall d, SlotRel.In ((m, v), d) Slots <->
            SlotRel.In ((m, v), d) Slots') ->
         (forall d, SlotRel.In ((m, v), d) Slots ->
-           evalReq R (sTarget d) (sReq d) = evalReq R' (sTarget d) (sReq d)) ->
-        (PkgSet.In (m, v) R <-> PkgSet.In (m, v) R') ->
+           evalReqBy Vq (sTarget d) (sReq d) =
+           evalReqBy Vq' (sTarget d) (sReq d)) ->
+        (VSet.In v (Vq m) <-> VSet.In v (Vq' m)) ->
         (forall l, LinkRel.In ((m, v), l) Links <-> LinkRel.In ((m, v), l) Links') ->
-        dependees (MkInst R support FDefs Slots Links g dflt rc rootFeats)
+        dependeesBy Vq (MkInst R support FDefs Slots Links g dflt rc rootFeats)
           (NPlus.CCrate m gr, VPlus.WOrig v) =
-        dependees (MkInst R' support' FDefs' Slots' Links' g dflt rc rootFeats')
+        dependeesBy Vq'
+          (MkInst R' support' FDefs' Slots' Links' g dflt rc rootFeats')
           (NPlus.CCrate m gr, VPlus.WOrig v).
     Proof.
       intros * HS Hev HR HL; apply T.DependeesSet.ext; intro h; split.
@@ -2780,18 +2857,20 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Lemma dep_featP_agree :
-      forall g R R' support support' FDefs FDefs' Slots Slots' Links Links'
-             dflt rc rootFeats rootFeats' m f gr v,
+      forall Vq Vq' g R R' support support' FDefs FDefs' Slots Slots' Links
+             Links' dflt rc rootFeats rootFeats' m f gr v,
         (forall d, SlotRel.In ((m, v), d) Slots <->
            SlotRel.In ((m, v), d) Slots') ->
         (forall d, SlotRel.In ((m, v), d) Slots ->
-           evalReq R (sTarget d) (sReq d) = evalReq R' (sTarget d) (sReq d)) ->
+           evalReqBy Vq (sTarget d) (sReq d) =
+           evalReqBy Vq' (sTarget d) (sReq d)) ->
         (SupportSet.In ((m, v), f) support <-> SupportSet.In ((m, v), f) support') ->
         (forall e, FDefRel.In (((m, v), f), e) FDefs <->
            FDefRel.In (((m, v), f), e) FDefs') ->
-        dependees (MkInst R support FDefs Slots Links g dflt rc rootFeats)
+        dependeesBy Vq (MkInst R support FDefs Slots Links g dflt rc rootFeats)
           (NPlus.CFeatP m f gr, VPlus.WOrig v) =
-        dependees (MkInst R' support' FDefs' Slots' Links' g dflt rc rootFeats')
+        dependeesBy Vq'
+          (MkInst R' support' FDefs' Slots' Links' g dflt rc rootFeats')
           (NPlus.CFeatP m f gr, VPlus.WOrig v).
     Proof.
       intros * HS Hev Hsp HF; apply T.DependeesSet.ext; intro h; split.
@@ -2804,10 +2883,27 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
            | apply Hsp | intros e He; apply HF; exact He].
     Qed.
 
+    Lemma evalReqBy_reads : forall R Slots p d Vq,
+        (forall m, NSet.In m (reads Slots p) -> Vq m = realVersions R m) ->
+        SlotRel.In (p, d) Slots ->
+        evalReq R (sTarget d) (sReq d) = evalReqBy Vq (sTarget d) (sReq d).
+    Proof.
+      intros R Slots p d Vq HVq Hs; unfold evalReq, evalReqBy.
+      rewrite (HVq (sTarget d)); [reflexivity | apply reads_target; exact Hs].
+    Qed.
+
+    Lemma realVersions_reads_own : forall R Slots n v Vq,
+        (forall m, NSet.In m (reads Slots (n, v)) -> Vq m = realVersions R m) ->
+        VSet.In v (realVersions R n) <-> VSet.In v (Vq n).
+    Proof.
+      intros R Slots n v Vq HVq; rewrite (HVq n (reads_own Slots (n, v)));
+        reflexivity.
+    Qed.
+
     Theorem dependees_lookupRoot :
-      forall I,
+      forall I Vq,
         dependees I rootPkg =
-        dependees
+        dependeesBy Vq
           (MkInst PkgSet.empty SupportSet.empty FDefRel.empty SlotRel.empty
              LinkRel.empty (inst_gran I) (inst_dflt I) (inst_root I)
              (inst_rootFeats I))
@@ -2815,89 +2911,98 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Proof. reflexivity. Qed.
 
     Theorem dependees_lookupCrate :
-      forall I n w v,
+      forall I n w v Vq,
+        (forall m, NSet.In m (reads (inst_slots I) (n, v)) ->
+           Vq m = realVersions (inst_repo I) m) ->
         dependees I (NPlus.CCrate n w, VPlus.WOrig v) =
-        dependees
-          (MkInst (realPreimage (inst_repo I) (reads (inst_slots I) (n, v)))
-             SupportSet.empty FDefRel.empty
+        dependeesBy Vq
+          (MkInst PkgSet.empty SupportSet.empty FDefRel.empty
              (SlotFibred.tailFibre (inst_slots I) (n, v))
              (LinkFibred.tailFibre (inst_links I) (n, v))
              (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
           (NPlus.CCrate n w, VPlus.WOrig v).
     Proof.
-      intros [R support FDefs Slots Links g dflt rc rootFeats] n w v.
+      intros [R support FDefs Slots Links g dflt rc rootFeats] n w v Vq HVq.
       cbn [inst_repo inst_slots inst_links inst_gran inst_dflt inst_root
-           inst_rootFeats].
+           inst_rootFeats] in HVq |- *.
+      unfold dependees; cbn [inst_repo].
       apply dep_crate_agree;
-        [intro d; apply in_slotFibre | apply evalReq_reads
-         | apply in_realPreimage_own | intro l; apply in_linkFibre].
+        [intro d; apply in_slotFibre
+         | intros d Hd; exact (evalReqBy_reads R Slots (n, v) d Vq HVq Hd)
+         | exact (realVersions_reads_own R Slots n v Vq HVq)
+         | intro l; apply in_linkFibre].
     Qed.
 
     Theorem dependees_lookupFeatP :
-      forall I n f w v,
+      forall I n f w v Vq,
+        (forall m, NSet.In m (reads (inst_slots I) (n, v)) ->
+           Vq m = realVersions (inst_repo I) m) ->
         dependees I (NPlus.CFeatP n f w, VPlus.WOrig v) =
-        dependees
-          (MkInst (realPreimage (inst_repo I) (reads (inst_slots I) (n, v)))
+        dependeesBy Vq
+          (MkInst PkgSet.empty
              (SupportFibred.tailFibre (inst_support I) (n, v))
              (fdefFibre (inst_fdefs I) (n, v))
              (SlotFibred.tailFibre (inst_slots I) (n, v)) LinkRel.empty
              (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
           (NPlus.CFeatP n f w, VPlus.WOrig v).
     Proof.
-      intros [R support FDefs Slots Links g dflt rc rootFeats] n f w v.
+      intros [R support FDefs Slots Links g dflt rc rootFeats] n f w v Vq HVq.
       cbn [inst_repo inst_support inst_fdefs inst_slots inst_gran inst_dflt
-           inst_root inst_rootFeats].
+           inst_root inst_rootFeats] in HVq |- *.
+      unfold dependees; cbn [inst_repo].
       apply dep_featP_agree;
-        [intro d; apply in_slotFibre | apply evalReq_reads
+        [intro d; apply in_slotFibre
+         | intros d Hd; exact (evalReqBy_reads R Slots (n, v) d Vq HVq Hd)
          | apply in_supportFibre | intro e; apply in_fdefFibre].
     Qed.
 
     Theorem dependees_lookupSlot :
-      forall I n w d w' u,
+      forall I n w d w' u Vq,
         SlotRel.In ((n, u), d) (inst_slots I) -> inst_gran I u = w ->
         slotActive (inst_root I) (n, u) d = true ->
+        Vq (sTarget d) = realVersions (inst_repo I) (sTarget d) ->
         dependees I (NPlus.CSlot n w d, VPlus.WClass w') =
-        dependees
-          (MkInst (realPreimage (inst_repo I) (NSet.singleton (sTarget d)))
-             SupportSet.empty FDefRel.empty
+        dependeesBy Vq
+          (MkInst PkgSet.empty SupportSet.empty FDefRel.empty
              (SlotFibred.tailFibre (inst_slots I) (n, u)) LinkRel.empty
              (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
           (NPlus.CSlot n w d, VPlus.WClass w').
     Proof.
-      intros I n w d w' u
-        Hs Hg Hact.
+      intros I n w d w' u Vq
+        Hs Hg Hact HVq.
       destruct (slotOwnedb_witness (inst_gran I) (inst_slots I) (inst_root I)
                   n w d u Hs Hg Hact)
         as [E1 E2].
-      cbn [dependees inst_repo inst_slots inst_gran inst_dflt inst_root];
+      unfold dependees;
+        cbn [dependeesBy inst_slots inst_gran inst_dflt inst_root];
         rewrite E1, E2.
-      rewrite evalReq_realPreimage;
-        [reflexivity | apply NSet.singleton_spec; reflexivity].
+      unfold evalReqBy; rewrite HVq; reflexivity.
     Qed.
 
     Theorem dependees_lookupDecision :
-      forall I n w f d f' w' u e,
+      forall I n w f d f' w' u e Vq,
         FDefRel.In (((n, u), f), e) (inst_fdefs I) ->
         entryFeatD e = Some (sAlias d, f') ->
         SlotRel.In ((n, u), d) (inst_slots I) -> inst_gran I u = w ->
         slotActive (inst_root I) (n, u) d = true ->
+        Vq (sTarget d) = realVersions (inst_repo I) (sTarget d) ->
         dependees I (NPlus.CDec n w f d f', VPlus.WClass w') =
-        dependees
-          (MkInst (realPreimage (inst_repo I) (NSet.singleton (sTarget d)))
-             SupportSet.empty (fdefFibre (inst_fdefs I) (n, u))
+        dependeesBy Vq
+          (MkInst PkgSet.empty SupportSet.empty
+             (fdefFibre (inst_fdefs I) (n, u))
              (SlotFibred.tailFibre (inst_slots I) (n, u)) LinkRel.empty
              (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
           (NPlus.CDec n w f d f', VPlus.WClass w').
     Proof.
       intros I n w f d f' w'
-        u e Hf Ee Hs Hg Hact.
+        u e Vq Hf Ee Hs Hg Hact HVq.
       destruct (decOwnedb_witness (inst_gran I) (inst_fdefs I) (inst_slots I)
                   (inst_root I) n w f d f' u e Hf Ee Hs Hg Hact)
         as [E1 E2].
-      cbn [dependees inst_repo inst_fdefs inst_slots inst_gran inst_root];
+      unfold dependees;
+        cbn [dependeesBy inst_fdefs inst_slots inst_gran inst_root];
         rewrite E1, E2.
-      rewrite evalReq_realPreimage;
-        [reflexivity | apply NSet.singleton_spec; reflexivity].
+      unfold evalReqBy; rewrite HVq; reflexivity.
     Qed.
 
   End Lookup.
