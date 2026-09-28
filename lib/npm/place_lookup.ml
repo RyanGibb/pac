@@ -167,6 +167,10 @@ let print_prof st =
     (Hashtbl.iter (fun k t -> Printf.eprintf "%s %.2fs\n" k !t))
     st.prof
 
+(* An edge's key is noted before its atom is built, so the walk name the
+   atom constrains already lists every package the atom accepts: every
+   version set handed to the solver holds exact versions, as the resolver
+   contract asks. *)
 let edges st (x : Npl.Occ.t) : edge list =
   Tbl.memo st.edge_tbl x (fun () ->
       timed st "edges" (fun () ->
@@ -179,11 +183,12 @@ let edges st (x : Npl.Occ.t) : edge list =
 
 let key_names st k = Tbl.find_list st.key_names k
 
-(* A key's placement sub-instance, as Lookup.versions_lookupLoc reads it:
-   every package the manifests loaded so far alias to the key, and their
-   versions.  A manifest aliasing another package there grows it, so it is
-   rebuilt then; this is the one place the driver's instance is the
-   explored part of npm's rather than the whole. *)
+(* A key's placement sub-instance: every package the manifests loaded so
+   far alias to the key, and their versions.  A manifest aliasing another
+   package there grows it, so it is rebuilt then; this is the one place
+   the driver's instance is the explored part of npm's rather than the
+   whole.  A location's and a walk's versions then only grow, which the
+   resolver contract allows. *)
 let key_inst st (a : string) : Pl.coq_Inst =
   let ns = key_names st a in
   let g = List.length ns in
@@ -234,14 +239,11 @@ let versions st (n : PName.t) : PVersion.t list =
           vs)
 
 (* A name's dependees split by what each part reads, so that the parts are
-   shared: the Tree atom reads the parent's
-   location and key, and an edge's atom the location, the edge's kind and
-   key, and its accepted set.  PubGrub asks for the dependees of every
-   version of a location while it widens a decision, and there these
-   differ only in some edges. *)
-type part =
-  | Tree of string list * int
-  | Atom of string list * string * int * bool * bool
+   shared: an edge's atom reads the location, the edge's kind and key, and
+   its accepted set.  PubGrub asks for the dependees of every version of a
+   location while it widens a decision, and there these differ only in
+   some edges. *)
+type part = Atom of string list * string * int * bool * bool
 
 let atom_parts st (lam : string list) (x : Npl.Occ.t) =
   List.map
@@ -255,20 +257,7 @@ let parts st (n : PName.t) (u : PVersion.t) :
     (part * (unit -> T.Dependees.t list)) list option =
   match (n, u) with
   | R.Name.Root, R.Version.Occ x -> Some (atom_parts st [] x)
-  | R.Name.Loc (l, a), R.Version.Occ x ->
-      let tree =
-        match l with
-        | [] -> []
-        | b :: _ ->
-            [
-              ( Tree (l, List.length (key_names st b)),
-                fun () ->
-                  timed st "tree" (fun () ->
-                      T.DependeesSet.elements
-                        (R.treeAtom (key_inst st b).Pl.inst_repo l)) );
-            ]
-      in
-      Some (tree @ atom_parts st (a :: l) x)
+  | R.Name.Loc (l, a), R.Version.Occ x -> Some (atom_parts st (a :: l) x)
   | _ -> None
 
 let dependees st (n, u) : T.Dependees.t list =

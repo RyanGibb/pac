@@ -7,13 +7,25 @@ type result = {
   lookups : int;
 }
 
+(* A location's or a walk's versions fall into stretches, the versions of
+   one registry package at one location, which a package's packument lists
+   whole.  A key gains a package when a manifest aliasing one to it loads,
+   and its versions sort between stretches, never inside one, so a range
+   spanning adjacent versions of one stretch stays exact. *)
+let same_stretch (a : PVersion.t) (b : PVersion.t) =
+  match (a, b) with
+  | R.Version.Occ (Npl.Occ.Reg (m, _)), R.Version.Occ (Npl.Occ.Reg (m', _)) ->
+      String.equal m m'
+  | ( R.Version.Found (l, Npl.Occ.Reg (m, _)),
+      R.Version.Found (l', Npl.Occ.Reg (m', _)) ) ->
+      String.equal m m' && l = l'
+  | _ -> false
+
 (* A dependee's versions as runs of the name's own sorted versions rather
    than as one point per version, as the npm reading's runs, found from
-   each version's place in the name's list.  A run is closed at its last
-   version rather than at the next one in the list: a key's versions grow
-   when a manifest aliasing another package to it is loaded, and a run
-   reaching up to the next version would then take in whatever was
-   inserted before it. *)
+   each version's place in the name's list.  A run stays inside one
+   stretch and is closed at its last version, since the next one in the
+   list may be another stretch's. *)
 type index = {
   list : PVersion.t list;
   arr : PVersion.t array;
@@ -48,7 +60,8 @@ let runs (ix : index Lazy.t) (vs : PVersion.t list) : PG.Ranges.t =
     in
     let rec go acc lo hi = function
       | [] -> close acc lo hi
-      | p :: rest when p = hi + 1 -> go acc lo p rest
+      | p :: rest when p = hi + 1 && same_stretch ix.arr.(hi) ix.arr.(p) ->
+          go acc lo p rest
       | p :: rest -> go (close acc lo hi) p p rest
     in
     match ps with
@@ -58,9 +71,8 @@ let runs (ix : index Lazy.t) (vs : PVersion.t list) : PG.Ranges.t =
 
 (* PubGrub widens each dependency's depender range by asking for the
    dependencies of the depender's neighbouring versions, and at a location
-   every version of the key is a neighbour, each with the same Tree atom.
-   A location's dependees are therefore built from parts each converted
-   once. *)
+   every version of the key is a neighbour.  A location's dependees are
+   therefore built from parts each converted once. *)
 let kind = function R.Name.Root -> 0 | R.Name.Loc _ -> 1 | R.Name.Walk _ -> 2
 
 let dependencies st stats cache =
@@ -84,14 +96,7 @@ let dependencies st stats cache =
   in
   fun n (u : PVersion.t) ->
     Option.iter (fun m -> m.(kind n).(0) <- m.(kind n).(0) +. 1.) stats;
-    (* a location's Tree atom reads its parent's key, whose packages grow
-       as aliasing manifests load *)
-    let g =
-      match n with
-      | R.Name.Loc (b :: _, _) -> List.length (L.key_names st b)
-      | _ -> 0
-    in
-    Pac_common.Tbl.memo cache (n, u, g) (fun () ->
+    Pac_common.Tbl.memo cache (n, u) (fun () ->
         let compute () =
           match L.parts st n u with
           | Some ps ->
@@ -141,12 +146,14 @@ let rec walk tbl (l : string list) (a : string) =
   if Hashtbl.mem tbl (a :: l) then Some (a :: l)
   else match l with [] -> None | _ :: t -> walk tbl t a
 
-(* npm resolves dev and optional dependencies whatever --omit says, and
-   leaves out of what it installs only the packages that every path from
-   the root reaches through an omitted edge (calc-dep-flags.js, and
-   Node.shouldOmit): here, the occupants reached through the other edges,
-   each edge through its walk. *)
-let drop ~dev ~optional st r =
+(* The occupants the root's edges reach, each edge through its walk, and
+   the occupants their edges reach: the decoded layout restricted so is a
+   placement resolution, while the whole of it need not be.  npm resolves
+   dev and optional dependencies whatever --omit says, and leaves out of
+   what it installs only the packages that every path from the root
+   reaches through an omitted edge (calc-dep-flags.js, and
+   Node.shouldOmit), so an omitted edge is not followed. *)
+let reached ~dev ~optional st r =
   let tbl = Hashtbl.create 256 in
   List.iter
     (fun (l, (m, v)) -> Hashtbl.replace tbl l (Npl.Occ.Reg (m, IVer.make v)))
@@ -211,6 +218,7 @@ let solve ?(debug = false) ?(order = `Tool) ?(omit_dev = false)
   in
   let r =
     PG.solve ?next ?choose
+      ~dense:(fun _ -> same_stretch)
       ~vers:(timed tv (L.versions st))
       ~deps:(dependencies st stats asked)
       [ (R.Name.Root, PG.Ranges.of_list [ R.Version.Occ Npl.Occ.Top ]) ]
@@ -227,11 +235,9 @@ let solve ?(debug = false) ?(order = `Tool) ?(omit_dev = false)
             Format.fprintf ppf "(within depth %d)@." depth;
             PG.explain_incompatibility ppf inc)
     | Ok sol ->
-        let r = decode ~lookups:(Hashtbl.length asked) sol in
         Ok
-          (if omit_dev || omit_optional then
-             drop ~dev:omit_dev ~optional:omit_optional st r
-           else r)
+          (reached ~dev:omit_dev ~optional:omit_optional st
+             (decode ~lookups:(Hashtbl.length asked) sol))
   in
   let core () =
     match

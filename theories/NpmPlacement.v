@@ -307,8 +307,10 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
   Theorem npm_soundness : forall I depth S,
       Pl.Reduction.T.IsResolution (reduceReal I depth) (reduceDeps I depth)
         (rootPkg I) S ->
-      IsResolution I (Pl.Reduction.placementResolution S) /\
-      Pl.Depth depth (Pl.Reduction.placementResolution S).
+      IsResolution I
+        (Pl.reachable (tr I) (Pl.Reduction.placementResolution S)) /\
+      Pl.Depth depth
+        (Pl.reachable (tr I) (Pl.Reduction.placementResolution S)).
   Proof.
     intros I depth S H.
     destruct (Pl.Reduction.placement_soundness _ _ _ H) as [H1 H2].
@@ -326,8 +328,10 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
 
   Theorem npm_roundtrip : forall I depth L,
       IsResolution I L -> Pl.Depth depth L ->
-      Pl.Reduction.placementResolution
-        (Pl.Reduction.coreResolution (tr I) depth L) = L.
+      Pl.reachable (tr I)
+        (Pl.Reduction.placementResolution
+           (Pl.Reduction.coreResolution (tr I) depth L)) =
+      Pl.reachable (tr I) L.
   Proof.
     intros I depth L H Hd;
       apply Pl.Reduction.placementResolution_coreResolution;
@@ -347,6 +351,11 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       rewrite !mem_placeRepo; split; intros [m [v [-> Hk]]];
         exists m, v; split; try reflexivity; apply H; exact Hk.
     Qed.
+
+    Definition SubAtKey (I' I : Inst) (a : N.t) : Prop :=
+      forall m v,
+        KeySet.In (a, m) (keysOf I') /\ RepoSet.In (m, v) (inst_repo I') ->
+        KeySet.In (a, m) (keysOf I) /\ RepoSet.In (m, v) (inst_repo I).
 
     Definition nameInst (I : Inst) : Pl.Inst :=
       {| Pl.inst_repo := placeRepo I
@@ -384,6 +393,48 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         tr, rootOcc; cbn [Pl.inst_repo].
       rewrite Pl.Reduction.Lookup.versions_fibre, (keyVersions_agree _ _ _ Ha).
       reflexivity.
+    Qed.
+
+    Lemma keyRepo_sub : forall I' I a x, SubAtKey I' I a ->
+        Pl.PkgSet.In (a, x) (placeRepo I') -> Pl.PkgSet.In (a, x) (placeRepo I).
+    Proof.
+      intros I' I a x H Hx; apply mem_placeRepo in Hx.
+      destruct Hx as [m [v [-> Hk]]]; apply mem_placeRepo.
+      exists m, v; split; [reflexivity | exact (H m v Hk)].
+    Qed.
+
+    Theorem versions_lookupLoc_sub : forall I I' depth l a,
+        Pl.Reduction.Lookup.Reached (tr I) depth (Pl.Reduction.Name.Loc l a) ->
+        SubAtKey I' I a ->
+        Pl.Reduction.T.VSet.Subset
+          (Pl.Reduction.versions (nameInst I') depth
+             (Pl.Reduction.Name.Loc l a))
+          (Pl.Reduction.T.versions (reduceReal I depth)
+             (Pl.Reduction.Name.Loc l a)).
+    Proof.
+      intros I I' depth l a H Ha w.
+      rewrite (versions_lookupLoc I I depth l a H (fun m v => iff_refl _)).
+      rewrite !Pl.Reduction.mem_versions_loc.
+      intros [-> | [x [Hl [Hx ->]]]]; [left; reflexivity |].
+      right; exists x; split; [exact Hl |].
+      split; [exact (keyRepo_sub I' I a x Ha Hx) | reflexivity].
+    Qed.
+
+    Theorem versions_lookupWalk_sub : forall I I' depth l a,
+        Pl.Reduction.Lookup.Reached (tr I) depth (Pl.Reduction.Name.Walk l a) ->
+        SubAtKey I' I a ->
+        Pl.Reduction.T.VSet.Subset
+          (Pl.Reduction.versions (nameInst I') depth
+             (Pl.Reduction.Name.Walk l a))
+          (Pl.Reduction.T.versions (reduceReal I depth)
+             (Pl.Reduction.Name.Walk l a)).
+    Proof.
+      intros I I' depth l a H Ha w.
+      rewrite (versions_lookupWalk I I depth l a H (fun m v => iff_refl _)).
+      rewrite !Pl.Reduction.mem_versions_walk.
+      intros [-> | [l' [x [Hs [Hl [Hx ->]]]]]]; [left; reflexivity |].
+      right; exists l', x; split; [exact Hs |]; split; [exact Hl |].
+      split; [exact (keyRepo_sub I' I a x Ha Hx) | reflexivity].
     Qed.
 
     Definition atomOf (lam : Pl.Path.t) (e : Edge) (xs : Pl.VSet.t)
@@ -424,15 +475,9 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       intros I depth; unfold reduceDeps, rootPkg.
       rewrite Pl.Reduction.dependees_reduceDeps.
       - cbn [Pl.Reduction.rootPkg Pl.Reduction.dependees tr Pl.inst_root
-               rootOcc snd]; unfold Pl.Reduction.occDeps.
-        rewrite (edgeAtoms_tr I (rootOcc I) nil)
-          by (apply Pl.PkgSet.add_spec; left; reflexivity).
-        apply Pl.Reduction.T.DependeesSet.ext; intro h.
-        rewrite Pl.Reduction.T.DependeesSet.union_spec.
-        cbn [Pl.par Pl.Reduction.treeAtom rootOcc snd]; split.
-        + intros [H | H]; [| exact H].
-          destruct (Pl.Reduction.T.DependeesSet.empty_spec H).
-        + intro H; right; exact H.
+               rootOcc snd].
+        exact (edgeAtoms_tr I (rootOcc I) nil
+                 (proj2 (Pl.PkgSet.add_spec _ _ _) (or_introl eq_refl))).
       - apply Pl.Reduction.mem_reduceReal; split; [exact Logic.I |].
         apply Pl.Reduction.T.VSet.singleton_spec; reflexivity.
     Qed.
@@ -443,8 +488,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
           (reduceReal I depth) ->
         Pl.Reduction.T.dependees (reduceDeps I depth)
           (Pl.Reduction.Name.Loc l a, Pl.Reduction.Version.Occ x) =
-        Pl.Reduction.T.DependeesSet.union
-          (Pl.Reduction.treeAtom (placeRepo I) l) (occAtoms I (a :: l) x).
+        occAtoms I (a :: l) x.
     Proof.
       intros I depth l a x H; unfold reduceDeps.
       rewrite (Pl.Reduction.dependees_reduceDeps _ _ _ H).
@@ -452,10 +496,8 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       apply Pl.Reduction.mem_versions_loc in H.
       destruct H as [E | [v [_ [Hv E]]]]; [discriminate E |].
       injection E as ->; cbn [Pl.Reduction.dependees].
-      unfold Pl.Reduction.occDeps.
-      rewrite (edgeAtoms_tr I (a, v) (a :: l))
-        by (apply Pl.PkgSet.add_spec; right; exact Hv).
-      reflexivity.
+      exact (edgeAtoms_tr I (a, v) (a :: l)
+               (proj2 (Pl.PkgSet.add_spec _ _ _) (or_intror Hv))).
     Qed.
 
     Theorem dependees_lookupWalk : forall I depth l a w,
@@ -527,14 +569,6 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       rewrite (edgesOf_agree _ _ _ Hx); f_equal.
       apply map_ext_in; intros e Hin.
       exact (eq_sym (edgeAtom_agree _ _ _ _ (He e Hin))).
-    Qed.
-
-    Theorem treeAtom_agree : forall I' I b l, AgreesAtKey I' I b ->
-        Pl.Reduction.treeAtom (placeRepo I') (b :: l) =
-        Pl.Reduction.treeAtom (placeRepo I) (b :: l).
-    Proof.
-      intros I' I b l H; cbn [Pl.Reduction.treeAtom].
-      rewrite (keyVersions_agree _ _ _ H); reflexivity.
     Qed.
   End Lookup.
 End NpmPlacement.

@@ -1007,9 +1007,9 @@ module Placement = struct
   let dependees p =
     edges R.T.VSet.elements R.T.DependeesSet.elements
       (match p with
-      | R.Name.Root, _ -> R.dependees (L.occSubInst i [] i.M.inst_root) p
-      | R.Name.Loc (l, a), R.Version.Occ v ->
-          R.dependees (L.occSubInst i l (a, v)) p
+      | R.Name.Root, _ -> R.dependees (L.occSubInst i i.M.inst_root) p
+      | R.Name.Loc (_, a), R.Version.Occ v ->
+          R.dependees (L.occSubInst i (a, v)) p
       | R.Name.Loc _, _ -> R.T.DependeesSet.empty
       | R.Name.Walk (l, a), w -> R.walkDeps l a w)
 
@@ -1020,7 +1020,8 @@ module Placement = struct
     packages "layout"
       (List.map
          (fun (l, (a, v)) -> path (a :: l) ^ " " ^ v)
-         (M.Layout.elements (R.placementResolution (R.T.PkgSet.ofList s))))
+         (M.Layout.elements
+            (M.reachable i (R.placementResolution (R.T.PkgSet.ofList s)))))
 end
 
 module Npm_placement = struct
@@ -1132,13 +1133,7 @@ module Npm_placement = struct
     edges R.T.VSet.elements Fun.id
       (match p with
       | R.Name.Root, R.Version.Occ x -> atoms [] x
-      | R.Name.Loc (l, a), R.Version.Occ x ->
-          (match l with
-            | [] -> []
-            | b :: _ ->
-                R.T.DependeesSet.elements
-                  (R.treeAtom (M.placeRepo (key_inst b)) l))
-          @ atoms (a :: l) x
+      | R.Name.Loc (l, a), R.Version.Occ x -> atoms (a :: l) x
       | R.Name.Loc _, _ -> []
       | R.Name.Walk (l, a), w -> R.T.DependeesSet.elements (R.walkDeps l a w)
       | R.Name.Root, _ -> unasked ())
@@ -1150,7 +1145,9 @@ module Npm_placement = struct
     packages "layout"
       (List.map
          (fun (l, (a, x)) -> path (a :: l) ^ " " ^ occ x)
-         (M.Pl.Layout.elements (R.placementResolution (R.T.PkgSet.ofList s))))
+         (M.Pl.Layout.elements
+            (M.Pl.reachable (M.tr i)
+               (R.placementResolution (R.T.PkgSet.ofList s)))))
 end
 
 let examples : (string * (module EXAMPLE)) list =

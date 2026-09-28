@@ -120,6 +120,9 @@ Vis.Reduction.reduceRealOccurrence
 Vis.Reduction.visibility_completeness
 Vis.Reduction.visibility_soundness
 
+Plc.mem_reachable
+Plc.reachable
+Plc.reaches_parented
 Plc.reaches_restriction
 Plc.walk
 Plc.Reduction.Lookup.dependees_lookupAbsent
@@ -131,10 +134,12 @@ Plc.Reduction.Lookup.versions_lookupRoot
 Plc.Reduction.Lookup.versions_lookupWalk
 Plc.Reduction.coreResolution
 Plc.Reduction.dependees
+Plc.Reduction.lookup_resolution
 Plc.Reduction.placementResolution
 Plc.Reduction.placementResolution_coreResolution
 Plc.Reduction.placement_completeness
 Plc.Reduction.placement_soundness
+Plc.Reduction.reached_reduceReal
 Plc.Reduction.reduceDeps
 Plc.Reduction.reduceReal
 Plc.Reduction.versions
@@ -399,9 +404,10 @@ NplS.Lookup.dependees_lookupRoot
 NplS.Lookup.dependees_lookupWalk
 NplS.Lookup.edgeAtom
 NplS.Lookup.occAtoms_parts
-NplS.Lookup.treeAtom_agree
 NplS.Lookup.versions_lookupLoc
+NplS.Lookup.versions_lookupLoc_sub
 NplS.Lookup.versions_lookupWalk
+NplS.Lookup.versions_lookupWalk_sub
 NplS.edgesOf
 NplS.npm_completeness
 NplS.npm_roundtrip

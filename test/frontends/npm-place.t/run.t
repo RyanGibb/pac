@@ -27,7 +27,7 @@ peer on pb is itself an alias of baz, which the root's pb holds.
     node_modules/or/node_modules/op op@1.0.0
     node_modules/or/node_modules/oq oq@1.1.0
     node_modules/pb baz@1.0.0
-  encoded solution: 35 core nodes (93 lookups)
+  encoded solution: 35 core nodes (84 lookups)
   loaded: 11 names, 14 versions, 0 packuments fetched
 
 The layout is found within a depth bound, 8 by default: at depth 1 c's b
@@ -37,7 +37,7 @@ cannot nest, and there is no answer.
   root nest-app 1.0.0
   unsatisfiable:
   (within depth 1)
-  Because no versions of <c⇑b> match (c,b@1.0.0) and <c⇑b> (ε,b@1.0.0) -> <ε⇑b> (ε,b@1.0.0), <c⇑b> (c,b@1.0.0) ∪ (ε,b@1.0.0) requires <ε⇑b> (ε,b@1.0.0).
+  Because no versions of <c⇑b> match (c,b@1.0.0) and <c⇑b> (ε,b@1.0.0) -> <ε⇑b> (ε,b@1.0.0), <c⇑b> (c,b@1.0.0) ∪ [(ε,b@1.0.0), (ε,b@2.0.0)) requires <ε⇑b> (ε,b@1.0.0).
   Because <ε⇑c> (ε,c@1.0.0) -> <ε,c> c@1.0.0 and <ε,c> c@1.0.0 -> <c⇑b> (c,b@1.0.0) ∪ (ε,b@1.0.0), <ε⇑c> (ε,c@1.0.0) requires <c⇑b> (c,b@1.0.0) ∪ (ε,b@1.0.0).
   Thus, <ε⇑c> (ε,c@1.0.0) requires <ε⇑b> (ε,b@1.0.0).
   And because <ε> project -> <ε⇑c> (ε,c@1.0.0), <ε> project requires <ε⇑b> (ε,b@1.0.0).
@@ -51,7 +51,7 @@ cannot nest, and there is no answer.
     node_modules/b b@2.0.0
     node_modules/c c@1.0.0
     node_modules/c/node_modules/b b@1.0.0
-  encoded solution: 7 core nodes (14 lookups)
+  encoded solution: 7 core nodes (12 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
 
 The bound is the placement reading's alone, and its answer is the
@@ -89,6 +89,22 @@ overrides the peer; here there is no layout.
   unsatisfiable:
   (within depth 8)
 
+A key holds every package some loaded manifest aliases to it, so it can
+gain one after the solve has read its versions.  In grow/, p takes m *,
+m has 20 versions, and aq, which r brings in, aliases zz to m: p's copy
+of m is the registry's m, never zz.
+
+  $ untimed ../../../bin/main.exe npm --reading=placement --order=pubgrub --offline --cache grow ./grow/wide-app/package.json
+  root wide-app 1.0.0
+  packages (5):
+    node_modules/aq aq@1.0.0
+    node_modules/m zz@1.0.0
+    node_modules/p p@1.0.0
+    node_modules/p/node_modules/m m@20.0.0
+    node_modules/r r@1.0.0
+  encoded solution: 15 core nodes (71 lookups)
+  loaded: 6 names, 25 versions, 0 packuments fetched
+
 PAC_NPM_CHECKCMP checks every comparison of names and versions against
 the calculus's own order, and the answer stands.
 
@@ -98,6 +114,30 @@ the calculus's own order, and the answer stands.
   $ untimed ../../../bin/main.exe npm --reading=placement --offline --cache . ./place-app/package.json | grep -c node_modules/
   12
   $ unset PAC_NPM_CHECKCMP
+
+  $ untimed ../../../bin/main.exe npm --reading=placement --order=random --offline --cache grow ./grow/wide-app/package.json
+  root wide-app 1.0.0
+  packages (5):
+    node_modules/m m@20.0.0
+    node_modules/p p@1.0.0
+    node_modules/r r@1.0.0
+    node_modules/r/node_modules/aq aq@1.0.0
+    node_modules/r/node_modules/m zz@1.0.0
+  encoded solution: 15 core nodes (89 lookups)
+  loaded: 6 names, 25 versions, 0 packuments fetched
+
+ha 2.0.0 needs hk ^2, whose only version needs an hd ^5 no one
+publishes, and hq aliases zz to hk.  What was learnt of hk before zz
+joined it does not rule zz out, so ha 1.0.0 with hq's zz is found.
+
+  $ untimed ../../../bin/main.exe npm --reading=placement --order=pubgrub --depth 1 --offline --cache grow ./grow/stale-app/package.json
+  root stale-app 1.0.0
+  packages (3):
+    node_modules/ha ha@1.0.0
+    node_modules/hk zz@1.0.0
+    node_modules/hq hq@1.0.0
+  encoded solution: 9 core nodes (26 lookups)
+  loaded: 6 names, 8 versions, 0 packuments fetched
 
 A root override applies to the key an edge is written under and replaces
 its spec, alias included.  In ovr/, p depends on x as an alias of b ^2,

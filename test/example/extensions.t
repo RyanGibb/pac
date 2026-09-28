@@ -396,24 +396,21 @@ from its own location as a dependency would, except that the walk may not
 land in C 2's own directory.  A location <ℓ,a> holds a version of a or ⊥,
 and only ⊥ at depth 2; a walk <ℓ⇑a> holds where the first-match walk up
 from ℓ for a lands, (ℓ',v), or ⊥.  The reduction over the names A, B and
-C has 195 packages and 289 edges, of which the run prints the 84 packages
-and 115 edges reached from the root.  The answer hoists A 1, which serves R
+C has 195 packages and 277 edges, of which the run prints the 84 packages
+and 106 edges reached from the root.  The answer hoists A 1, which serves R
 and B, and C 1, which serves A, and nests C 2 under B, where it shadows
 C 1 for B; C 2's peer walks from B/C through the absent B/C/A and B/A to
 the hoisted A 1.
 
   $ ./extensions/extensions.exe placement
-  global: 195 packages, 289 edges
-  core: 84 packages, 115 edges
+  global: 195 packages, 277 edges
+  core: 84 packages, 106 edges
   <A,A> 1
     -> <A/A⇑C> {(A,1), (A/A,1), (ε,1)}
-    -> <ε,A> {1}
   <A,A> ⊥
   <A,C> 1
-    -> <ε,A> {1}
   <A,C> 2
     -> <A/C⇑A> {(A,1), (ε,1)}
-    -> <ε,A> {1}
   <A,C> ⊥
   <A/A,C> ⊥
   <A/A⇑C> (A,1)
@@ -464,13 +461,10 @@ the hoisted A 1.
     -> <ε⇑C> {⊥}
   <B,A> 1
     -> <B/A⇑C> {(B,1), (B/A,1), (ε,1)}
-    -> <ε,B> {1}
   <B,A> ⊥
   <B,C> 1
-    -> <ε,B> {1}
   <B,C> 2
     -> <B/C⇑A> {(B,1), (ε,1)}
-    -> <ε,B> {1}
   <B,C> ⊥
   <B/A,C> ⊥
   <B/A⇑C> (B,1)
@@ -521,13 +515,10 @@ the hoisted A 1.
     -> <ε⇑C> {⊥}
   <C,A> 1
     -> <C/A⇑C> {(C,1), (C/A,1), (ε,1)}
-    -> <ε,C> {1, 2}
   <C,A> ⊥
   <C,C> 1
-    -> <ε,C> {1, 2}
   <C,C> 2
     -> <C/C⇑A> {(C,1), (ε,1)}
-    -> <ε,C> {1, 2}
   <C,C> ⊥
   <C/A,C> ⊥
   <C/A⇑C> (C,1)
