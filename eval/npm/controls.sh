@@ -92,6 +92,7 @@ PKGS = {
     "od": {"1.0.0": {"optionalDependencies": {"b": "^1.0.0"}}},
     "pm": {"1.0.0": {"os": ["darwin"], "cpu": ["arm64"]}},
     "pn": {"1.0.0": {"os": ["darwin"], "dependencies": {"b": "^1.0.0"}}},
+    "po": {"1.0.0": {"os": ["darwin"]}, "1.1.0": {"os": ["darwin"]}},
 }
 CASES = {
     "po-valid":   ("VALID/yes/yes", {"a": "^1.0.0", "c": "^1.0.0"},
@@ -247,6 +248,9 @@ OURS = {
     "plat":         ("PLATFORM/-/-", {"pm": "^1.0.0"}, [". <- pm 1.0.0"]),
     # pn is for darwin too, and its b is missing
     "plat-missing": ("INVALID/-/-", {"pn": "^1.0.0"}, [". <- pn 1.0.0"]),
+    # npm's resolver, its platform check skipped, takes po 1.1.0: this one
+    # is no answer npm gives
+    "plat-older":   ("INVALID/-/-", {"po": "^1.0.0"}, [". <- po 1.0.0"]),
 }
 # answers under READING=shared, as npm and Yarn Berry both read the
 # manifests

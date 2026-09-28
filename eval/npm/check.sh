@@ -113,11 +113,13 @@ why="ci=$ci_rc ls=$broken override=$override named=$named unmet=$unmet relation=
 why="$why relock=$relock_rc moved=$moved repaired=$repaired"
 [ "$err" -eq 0 ] || verdict ERR - - "$why"
 case $named$related in [03][03]) ;; *) verdict ERR - - "$why" ;; esac
-# the tree holds our answer and npm ls finds it whole, and `npm ci` refuses
-# it only for a package whose os, cpu or libc excludes this host: a
-# resolution npm's resolver agrees with, which this host cannot install
+# the tree holds our answer and npm ls finds it whole, `npm ci` refuses it
+# only for a package whose os, cpu or libc excludes this host, and npm's
+# resolver, that check alone skipped, answers exactly our packages: a
+# resolution npm agrees with, which this host cannot install
 platform "$ci_rc" "$out/ci.log" && [ "$broken" -eq 0 ] && [ "$override" -eq 0 ] &&
-  [ "$named" -eq 0 ] && [ "$unmet" -eq 0 ] && [ "$related" -eq 0 ] && verdict PLATFORM - - "$why"
+  [ "$named" -eq 0 ] && [ "$unmet" -eq 0 ] && [ "$related" -eq 0 ] &&
+  resolves "$W/package-lock.json" "$W/package.json" "$W.force" && verdict PLATFORM - - "$why"
 [ "$ci_rc" -eq 0 ] && [ "$broken" -eq 0 ] && [ "$override" -eq 0 ] && [ "$named" -eq 0 ] &&
   [ "$unmet" -eq 0 ] && [ "$related" -eq 0 ] || verdict INVALID - - "$why"
 [ "$relock_rc" -eq 0 ] && [ "$repaired" -eq 0 ]; reproduced=$(yn $?)
