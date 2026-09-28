@@ -35,7 +35,7 @@ check() {  # <stem> <query words...>
   timeout "$TIMEOUT" bash "$S/layout-check.sh" "$p.out" "$p.check" "$@" > "$p.check/log" 2>&1
   v=" $(tail -n 1 "$p.check/log")"
   valid=$(sed -n 's/.* valid=\([A-Z]*\)$/\1/p' <<< "$v")
-  case $valid in VALID|INVALID) ;; *) valid=ERR ;; esac
+  case $valid in VALID|INVALID|PLATFORM) ;; *) valid=ERR ;; esac
   minimal=- reproduced=-
 }
 

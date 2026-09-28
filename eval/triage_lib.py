@@ -41,6 +41,10 @@ def classify(r):
     # order, is not an error of the resolution
     if pac == "ok" and valid == "CYCLIC":
         return "post-resolution"
+    # nor is one the tool's resolver takes and its installer then refuses on
+    # the host's platform alone (npm ci's EBADPLATFORM)
+    if pac == "ok" and valid == "PLATFORM":
+        return "platform-excluded"
     if pac == "ok" and valid not in ("VALID", "INVALID"):
         return "unchecked"
     # an answer the tool rejects is pac's error whether or not the tool had

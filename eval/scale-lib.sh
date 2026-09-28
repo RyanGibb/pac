@@ -105,7 +105,7 @@ check() {  # <stem> <query words...>
   valid=$(sed -n 's/.* valid=\([A-Z]*\)\( .*\)\{0,1\}$/\1/p' <<< "$v")
   minimal=$(sed -n 's/.* minimal=\([a-z-]*\)\( .*\)\{0,1\}$/\1/p' <<< "$v")
   reproduced=$(sed -n 's/.* reproduced=\([a-z-]*\)\( .*\)\{0,1\}$/\1/p' <<< "$v")
-  case $valid in VALID|INVALID|CYCLIC) ;; *) valid=ERR ;; esac
+  case $valid in VALID|INVALID|CYCLIC|PLATFORM) ;; *) valid=ERR ;; esac
   [ "$valid" = VALID ] && [ -n "$minimal" ] || minimal=-
   [ "$valid" = VALID ] && [ -n "$reproduced" ] || reproduced=-
 }
@@ -205,8 +205,9 @@ fuzz_totals() {
          printf "fuzz: %d queries x %d seeds = %d runs; pac ok %d, unsat %d, refuse %d, io-error %d, timeout %d, crash %d",
            length(q), k, n, pac["ok"], pac["unsat"], pac["refuse"], pac["io-error"], pac["timeout"], pac["crash"]
          print pac["harness"] ? sprintf(", harness %d", pac["harness"]) : ""
-         printf "fuzz: valid %d, INVALID %d (in %d queries), ERR %d, cyclic %d; minimal %d/%d%s\n",
-           v["VALID"], v["INVALID"], length(iq), v["ERR"], v["CYCLIC"], mi, v["VALID"],
+         printf "fuzz: valid %d, INVALID %d (in %d queries), ERR %d, cyclic %d%s; minimal %d/%d%s\n",
+           v["VALID"], v["INVALID"], length(iq), v["ERR"], v["CYCLIC"],
+           v["PLATFORM"] ? sprintf(", platform-excluded %d", v["PLATFORM"]) : "", mi, v["VALID"],
            ra ? sprintf("; reproduced %d/%d", re, ra) : ""
          printf "fuzz: %d distinct answers over the %d queries answered; %d answered more than one way, at most %d\n",
            da, length(na), mq, mx
@@ -278,13 +279,14 @@ main() {
      if (f["valid"] ~ /^(VALID|INVALID)$/) {chk[m]++; ok[m] += f["valid"] == "VALID"}
      if (f["valid"] == "VALID") mi[m] += f["minimal"] == "yes"
      re[m] += f["reproduced"] == "yes"; ra[m] += f["reproduced"] ~ /^(yes|no)$/
-     cy[m] += f["valid"] == "CYCLIC"; er[m] += f["valid"] == "ERR"}
+     cy[m] += f["valid"] == "CYCLIC"; pl[m] += f["valid"] == "PLATFORM"; er[m] += f["valid"] == "ERR"}
     END {k = split(modes, ms, " "); np = split("unsat refuse io-error timeout crash harness", st, " ")
       for (i = 1; i <= k; i++) if (ms[i] in n) {
         m = ms[i]
         printf "%s: %d queries, exact %d/%d, valid %d/%d, minimal %d/%d", m, n[m], ex[m], ans[m], ok[m], chk[m], mi[m], ok[m]
         if (ra[m]) printf ", reproduced %d/%d", re[m], ra[m]
         if (cy[m]) printf ", cyclic %d", cy[m]
+        if (pl[m]) printf ", platform-excluded %d", pl[m]
         if (er[m]) printf ", unchecked %d", er[m]
         if (uc[m]) printf ", uncompared %d", uc[m]
         for (j = 1; j <= np; j++) if (ps[m, st[j]]) printf ", pac %s %d", st[j], ps[m, st[j]]

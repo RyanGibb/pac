@@ -12,6 +12,9 @@
 # (resolve.js).  An answer holding a package that bundles dependencies is
 # ERR bundled: npm installs those from the tarball whatever the lock says.
 #
+# PLATFORM: all of that holds but `npm ci`, which refuses only for the
+# host's platform (EBADPLATFORM), as check.sh has it.
+#
 # npm exits 1 for every error; one is read as a verdict only under a code
 # npm gives an answer it will not take (refusals), and anything else leaves
 # the answer unchecked.
@@ -69,6 +72,8 @@ why="ci=$ci_rc ls=$broken override=$override named=$named resolve=$resolved bund
 [ "$err" -eq 0 ] || verdict ERR "$why"
 case $named$resolved in [03][03]) ;; *) verdict ERR "$why" ;; esac
 [ "$bundled" -eq 0 ] || verdict ERR "$why"
+platform "$ci_rc" "$out/ci.log" && [ "$broken" -eq 0 ] && [ "$override" -eq 0 ] &&
+  [ "$named" -eq 0 ] && [ "$resolved" -eq 0 ] && verdict PLATFORM "$why"
 [ "$ci_rc" -eq 0 ] && [ "$broken" -eq 0 ] && [ "$override" -eq 0 ] && [ "$named" -eq 0 ] &&
   [ "$resolved" -eq 0 ] || verdict INVALID "$why"
 verdict VALID "$why"

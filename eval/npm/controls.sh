@@ -90,6 +90,8 @@ PKGS = {
                      "peerDependencies": {"b": "^1.0.0"}}},
     "cc": {"1.0.0": {"dependencies": {"b": "^1.0.0"}}},
     "od": {"1.0.0": {"optionalDependencies": {"b": "^1.0.0"}}},
+    "pm": {"1.0.0": {"os": ["darwin"], "cpu": ["arm64"]}},
+    "pn": {"1.0.0": {"os": ["darwin"], "dependencies": {"b": "^1.0.0"}}},
 }
 CASES = {
     "po-valid":   ("VALID/yes/yes", {"a": "^1.0.0", "c": "^1.0.0"},
@@ -240,6 +242,11 @@ OURS = {
                         "ur 1.0.0 <- tm 1.2.0", "ud 1.0.0 <- ue 1.0.0", "ud 1.0.0 <- tm 1.1.0",
                         "us 1.0.0 <- uf 1.0.0", "us 1.0.0 <- tm 1.0.0"]),
     "unreached-broken": ("INVALID/-/-", {"b": "^1.0.0"}, [". <- b 1.0.0"], ["y 1.0.0"]),
+    # pm is for darwin on arm64 alone: npm ci refuses it here, and nothing
+    # else does
+    "plat":         ("PLATFORM/-/-", {"pm": "^1.0.0"}, [". <- pm 1.0.0"]),
+    # pn is for darwin too, and its b is missing
+    "plat-missing": ("INVALID/-/-", {"pn": "^1.0.0"}, [". <- pn 1.0.0"]),
 }
 # answers under READING=shared, as npm and Yarn Berry both read the
 # manifests
@@ -298,6 +305,8 @@ PLACE = {
     # an override on d's aliased key makes it the registry's own b
     "lay-ovr-key":    ("VALID", {"d": "^1.0.0"}, {"d": "d@1.0.0", "b": "b@1.0.0"},
                        {"overrides": {"b": "1.0.0"}}),
+    "lay-plat":       ("PLATFORM", {"pm": "^1.0.0"}, {"pm": "pm@1.0.0"}),
+    "lay-plat-missing": ("INVALID", {"pn": "^1.0.0"}, {"pn": "pn@1.0.0"}),
 }
 # answers berry.sh judges
 BERRY = {
