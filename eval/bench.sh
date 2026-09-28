@@ -7,9 +7,11 @@
 # every variant once, so a drift in the machine lands on all of them alike
 # rather than on whichever ran last.  One measured process at a time; the
 # only other processes are the index servers cargo and npm are pointed at,
-# idle between their requests.  No query starts at a load average of
-# LOADSTART or more, and one whose block ends at LOADMAX or more is
-# measured again, up to three times.
+# idle between their requests, and npm asks its server nothing after the
+# warm-up: its measured rounds are --offline, answered from its own cache,
+# as pac answers from the snapshot on disk.  No query starts at a load
+# average of LOADSTART or more, and one whose block ends at LOADMAX or more
+# is measured again, up to three times.
 #
 # Wall is taken around GNU time, whose own start-up is what `floor`
 # measures, with PIN, a command prefix, in front of both.  By default it
@@ -96,14 +98,15 @@ run1() {  # <step> <query> <variant> <rep> <cap> <out> <command...>
     "$(elapsed "$t0" "$t1")" "$parse" "$solve" "$rss" "$rc" "$(date -u +%FT%TZ)" "$(load1)" >> "$ROWS"
 }
 
-# Each step supplies argv_<eco> <variant> <key> <query>, setting CMD and
-# DIR, and may supply pre_<eco> <variant> <key> <query>, run untimed before
-# each measured run; a variant pac-<order> is pac in that order
+# Each step supplies argv_<eco> <variant> <key> <query> <rep>, setting CMD
+# and DIR, and may supply pre_<eco> <variant> <key> <query>, run untimed
+# before each measured run; a variant pac-<order> is pac in that order, and
+# rep 0 is the warm-up
 measure() {  # <step> <key> <query> <variant> <rep> <cap>
   local step=$1 k=$2 q=$3 v=$4 r=$5 cap=$6 e=${1%-*} o
   if declare -F "pre_$e" > /dev/null; then "pre_$e" "$v" "$k" "$q" < /dev/null ||
     { log "$step $q $v: pre-step failed, not measured"; return 1; }; fi
-  "argv_$e" "$v" "$k" "$q"
+  "argv_$e" "$v" "$k" "$q" "$r"
   o="$RUN/out/$step/$SET/$k.$v"
   case $r in 0|1|cold) o="$o.$r" ;; *) o="$o.last" ;; esac
   pushd "$DIR" > /dev/null || return 1
@@ -269,17 +272,21 @@ pre_npm() {
   rm -f "$w/package-lock.json"
 }
 argv_npm() {
+  local more=(--tree)
   DIR=$TOP
+  [ "$READING" != placement ] || more=(--depth "$DEPTH")
   case $1 in
     pac-*)
-      if [ "$READING" = placement ]; then set -- "$@" --depth "$DEPTH"; else set -- "$@" --tree; fi
-      CMD=("$PAC" npm $(order "$1") --reading="$READING" "${@:4}" --cache "$NPM_RUN/cache"
+      CMD=("$PAC" npm $(order "$1") --reading="$READING" "${more[@]}" --cache "$NPM_RUN/cache"
            --node-version "$NODEV" --npm-version "$NPMV" $3) ;;
     npm)
       DIR=$NPM_RUN/work/$2
       CMD=(npm install --package-lock-only --loglevel=http --registry "http://127.0.0.1:$NPORT"
            --cache "$NPM_RUN/home/npmcache" --userconfig "$NPM_RUN/home/.npmrc"
-           --globalconfig "$NPM_RUN/home/npmrc-global" --no-audit --no-fund --no-update-notifier) ;;
+           --globalconfig "$NPM_RUN/home/npmrc-global" --no-audit --no-fund --no-update-notifier)
+      # the warm-up fills npm's cache from the shim; a measured round then
+      # reads that cache alone, as pac reads the snapshot from disk
+      [ "$4" = 0 ] || CMD+=(--offline) ;;
   esac
 }
 setup_npm() {
