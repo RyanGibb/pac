@@ -40,7 +40,12 @@ type state = {
   name_versions : (string, Cg.VSet.t) Hashtbl.t;
   msrv : (string * string, bool) Hashtbl.t;
   supports : (string, Cg.SupportSet.t) Hashtbl.t;
-  owners : (owner_key, Cg.SlotRel.t * Cg.FDefRel.t) Hashtbl.t;
+  owners :
+    ( owner_key,
+      (string * string) option * (Cg.SlotRel.t * Cg.FDefRel.t) )
+    Hashtbl.t;
+  (* the crate version whose dependees first named a slot or decision *)
+  producers : (owner_key, string * string) Hashtbl.t;
   site_datas :
     ((string * string) * Cg.SlotKey.t, Cg.SlotData.t option) Hashtbl.t;
   (* the tagged list, not just the untagged one, has to be memoized:
@@ -67,6 +72,7 @@ let create ar (root : Q.root) ~features ~rustv =
     msrv = Hashtbl.create 65536;
     supports = Hashtbl.create 4096;
     owners = Hashtbl.create 4096;
+    producers = Hashtbl.create 4096;
     site_datas = Hashtbl.create 4096;
     pg_vers = Hashtbl.create 65536;
     pg_deps = Hashtbl.create 65536;
@@ -153,32 +159,43 @@ let support_of_name st (n : string) : Cg.SupportSet.t =
            (fun (v : P.ver) -> (fibres_of st (n, v.P.v_vers)).r_supp)
            (Archive.load_name st.ar n)))
 
-(* the owner versions_lookup{Slot,Decision} name: a version of n in
-   granularity class gr whose own declarations make the name, found by
-   scanning n's index entry, which holds every version of n and is loaded
+(* the witness versions_lookup{Slot,Decision} take: a version of n in
+   granularity gr whose own declarations make the name.  The version whose
+   dependees named it is one, and its fibres are built already; only a
+   name no dependees answer has named falls back to scanning n's index
+   entry, oldest first, which holds every version of n and is loaded
    whole.  With none, the empty fibres stand for slot_declines and
    decision_declines: nothing in the instance makes the name, and the
    lookup declines.  The verdict reads st.rc through slotActive. *)
 let owner st key (ok : string * string -> fibres -> bool) n gr =
   Tbl.memo st.owners key (fun () ->
+      let owns v =
+        if granularity st v = gr then
+          let rw = fibres_of st (n, v) in
+          if ok (n, v) rw then Some (v, rw) else None
+        else None
+      in
+      let known =
+        match Hashtbl.find_opt st.producers key with
+        | Some (_, v) -> owns v
+        | None -> None
+      in
       match
-        List.find_map
-          (fun v ->
-            if granularity st v = gr then
-              let rw = fibres_of st (n, v) in
-              if ok (n, v) rw then Some rw else None
-            else None)
-          (versions_of st n)
+        match known with
+        | Some _ -> known
+        | None -> List.find_map owns (versions_of st n)
       with
-      | Some rw -> (rw.r_slots, rw.r_fdefs)
-      | None -> (Cg.SlotRel.empty, Cg.FDefRel.empty))
+      | Some (v, rw) -> (Some (n, v), (rw.r_slots, rw.r_fdefs))
+      | None -> (None, (Cg.SlotRel.empty, Cg.FDefRel.empty)))
 
 let slot_owner st n gr d =
   fst
-    (owner st
-       (`Slot (n, gr, d))
-       (fun p rw -> Cg.SlotRel.mem (p, d) rw.r_slots && Cg.slotActive st.rc p d)
-       n gr)
+    (snd
+       (owner st
+          (`Slot (n, gr, d))
+          (fun p rw ->
+            Cg.SlotRel.mem (p, d) rw.r_slots && Cg.slotActive st.rc p d)
+          n gr))
 
 let dec_owner st n gr f d feat =
   owner st
@@ -191,6 +208,23 @@ let dec_owner st n gr f d feat =
              f' = f && Cg.entryFeatD e = Some (Cg.sAlias d, feat))
            (Cg.FDefRel.elements rw.r_fdefs))
     n gr
+
+(* p is a witness for every slot and decision name its dependees name *)
+let produced st p (hs : T.Dependees.t list) =
+  List.iter
+    (fun ((m, _) : T.Dependees.t) ->
+      let key =
+        match m with
+        | Cg.NPlus.CSlot (n, gr, d) -> Some (`Slot (n, gr, d))
+        | Cg.NPlus.CDec (n, gr, f, d, feat) -> Some (`Dec (n, gr, f, d, feat))
+        | _ -> None
+      in
+      match key with
+      | Some k when not (Hashtbl.mem st.producers k) ->
+          Hashtbl.replace st.producers k p
+      | _ -> ())
+    hs;
+  hs
 
 (* every lookup theorem carries the request (granularity, default, rc,
    rootFeats) whole, so its instance differs from this one only in the
@@ -223,7 +257,7 @@ let versions st (tn : Cg.NPlus.t) : Cg.VPlus.t list =
       let slots = slot_owner st n gr d in
       call { e with inst_repo = name_set st (Cg.sTarget d); inst_slots = slots }
   | Cg.NPlus.CDec (n, gr, f, d, feat) ->
-      let slots, fdefs = dec_owner st n gr f d feat in
+      let slots, fdefs = snd (dec_owner st n gr f d feat) in
       call
         {
           e with
@@ -258,22 +292,25 @@ let dependees st (p : T.Pkg.t) : T.Dependees.t list =
   | Cg.NPlus.CCrate (n, _), Cg.VPlus.WOrig v ->
       let rw = fibres_of st (n, v) in
       List.iter (fun m -> ignore (name_versions st m)) rw.r_reads;
-      call { e with inst_slots = rw.r_slots; inst_links = rw.r_links }
+      produced st (n, v)
+        (call { e with inst_slots = rw.r_slots; inst_links = rw.r_links })
   | Cg.NPlus.CFeatP (n, _, _), Cg.VPlus.WOrig v ->
       let rw = fibres_of st (n, v) in
       List.iter (fun m -> ignore (name_versions st m)) rw.r_reads;
-      call
-        {
-          e with
-          inst_support = rw.r_supp;
-          inst_fdefs = rw.r_fdefs;
-          inst_slots = rw.r_slots;
-        }
+      produced st (n, v)
+        (call
+           {
+             e with
+             inst_support = rw.r_supp;
+             inst_fdefs = rw.r_fdefs;
+             inst_slots = rw.r_slots;
+           })
   | Cg.NPlus.CSlot (n, gr, d), Cg.VPlus.WClass _ ->
       call { e with inst_slots = slot_owner st n gr d }
   | Cg.NPlus.CDec (n, gr, f, d, feat), Cg.VPlus.WClass _ ->
-      let slots, fdefs = dec_owner st n gr f d feat in
-      call { e with inst_fdefs = fdefs; inst_slots = slots }
+      let w, (slots, fdefs) = dec_owner st n gr f d feat in
+      let hs = call { e with inst_fdefs = fdefs; inst_slots = slots } in
+      Option.fold ~none:hs ~some:(fun u -> produced st u hs) w
   | _, _ -> []
 
 let site_data st (p : string * string) (k : Cg.SlotKey.t) =
