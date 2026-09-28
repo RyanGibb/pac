@@ -86,6 +86,10 @@ let granularity st v = Tbl.memo st.granularities v (fun () -> granularity_of v)
 let meta st n v = Archive.meta st.ar n v
 let versions_of st n = Archive.versions_of st.ar n
 
+(* a version's support pairs, one per key of its feature table, which
+   with_implicit_features has completed *)
+let support_pairs p (m : P.ver) = List.map (fun (f, _) -> (p, f)) m.P.v_feats
+
 let fibres_of st (p : string * string) : fibres =
   Tbl.memo st.fibres p (fun () ->
       let n, v = p in
@@ -108,9 +112,7 @@ let fibres_of st (p : string * string) : fibres =
                  (fun (f, es) -> List.map (fun e -> ((p, f), xentry e)) es)
                  m.P.v_feats)
           in
-          let supp =
-            Cg.SupportSet.ofList (List.map (fun (f, _) -> (p, f)) m.P.v_feats)
-          in
+          let supp = Cg.SupportSet.ofList (support_pairs p m) in
           let links =
             match m.P.v_links with
             | None -> Cg.LinkRel.empty
@@ -149,14 +151,19 @@ let msrv_fits st ((n, v) : string * string) : bool =
           | Some m -> msrv_ok rustc m.P.v_msrv)
 
 (* the support relation at a name -- Lookup.supportPreimage at {n},
-   which versions_lookupFeatP reads -- as the union of its versions'
-   fibres.  Memoized for the same reason name_set is: load_name takes a
-   name whole, so this cannot grow once it has been asked. *)
+   which versions_lookupFeatP reads -- as its versions' support pairs,
+   the r_supp of their fibres without the rest of each fibre.  Memoized
+   for the same reason name_set is: load_name takes a name whole, so this
+   cannot grow once it has been asked. *)
 let support_of_name st (n : string) : Cg.SupportSet.t =
   Tbl.memo st.supports n (fun () ->
-      Cg.SupportSet.unions
-        (List.map
-           (fun (v : P.ver) -> (fibres_of st (n, v.P.v_vers)).r_supp)
+      Cg.SupportSet.ofList
+        (List.concat_map
+           (fun (v : P.ver) ->
+             let p = (n, v.P.v_vers) in
+             match meta st n v.P.v_vers with
+             | None -> []
+             | Some m -> support_pairs p m)
            (Archive.load_name st.ar n)))
 
 (* the witness versions_lookup{Slot,Decision} take: a version of n in
