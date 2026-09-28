@@ -156,11 +156,38 @@ let implicit_features (deps : dep list) (tbl : (string * fentry list) list) =
       else None)
     deps
 
+(* Each check is a lookup in a table built once, since web-sys declares
+   over a thousand features: the implicit features are the optional
+   aliases the table neither keys nor names in a dep: entry, each defined
+   as [FDep a], which is an entry that passes and uses a. *)
 let feature_map_ok (deps : dep list) (tbl : (string * fentry list) list) : bool
     =
-  let dep a = List.exists (fun d -> d.d_alias = a) deps in
-  let optional a = List.exists (fun d -> d.d_optional && d.d_alias = a) deps in
-  let map = tbl @ implicit_features deps tbl in
+  let set () = Hashtbl.create 16 in
+  let aliases = set () and optionals = set () and keys = set () in
+  let named = set () and used = set () and implicit = set () in
+  let add h a = Hashtbl.replace h a () in
+  List.iter
+    (fun d ->
+      add aliases d.d_alias;
+      if d.d_optional then add optionals d.d_alias)
+    deps;
+  List.iter
+    (fun (f, es) ->
+      add keys f;
+      List.iter
+        (function
+          | FDep b ->
+              add named b;
+              add used b
+          | FDepFeat (b, _) | FWeakFeat (b, _) -> add used b
+          | FFeat _ -> ())
+        es)
+    tbl;
+  Hashtbl.iter
+    (fun a () ->
+      if not (Hashtbl.mem keys a || Hashtbl.mem named a) then add implicit a)
+    optionals;
+  let dep = Hashtbl.mem aliases and optional = Hashtbl.mem optionals in
   let name_ok f =
     let alnum c =
       (c >= 'a' && c <= 'z')
@@ -175,23 +202,16 @@ let feature_map_ok (deps : dep list) (tbl : (string * fentry list) list) : bool
     && String.for_all (fun c -> alnum c || c = '-' || c = '+' || c = '.') f
   in
   let entry_ok = function
-    | FFeat f -> List.mem_assoc f tbl || (optional f && List.mem_assoc f map)
+    | FFeat f -> Hashtbl.mem keys f || Hashtbl.mem implicit f
     | FDep a -> optional a
     | FDepFeat (a, f) -> dep a && not (String.contains f '/')
     | FWeakFeat (a, f) -> optional a && not (String.contains f '/')
   in
-  let used a =
-    List.exists
-      (fun (_, es) ->
-        List.exists
-          (function
-            | FDep b | FDepFeat (b, _) | FWeakFeat (b, _) -> b = a
-            | FFeat _ -> false)
-          es)
-      map
-  in
-  List.for_all (fun (f, es) -> name_ok f && List.for_all entry_ok es) map
-  && List.for_all (fun d -> (not d.d_optional) || used d.d_alias) deps
+  List.for_all (fun (f, es) -> name_ok f && List.for_all entry_ok es) tbl
+  && Hashtbl.fold (fun a () ok -> ok && name_ok a) implicit true
+  && Hashtbl.fold
+       (fun a () ok -> ok && (Hashtbl.mem used a || Hashtbl.mem implicit a))
+       optionals true
 
 let default_feature = "default"
 

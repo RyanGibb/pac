@@ -47,6 +47,11 @@
  (libraries cargo_frontend))
 
 (test
+ (name test_feature_map)
+ (modules test_feature_map)
+ (libraries cargo_frontend))
+
+(test
  (name test_cargo_solve)
  (modules test_cargo_solve)
  (deps
