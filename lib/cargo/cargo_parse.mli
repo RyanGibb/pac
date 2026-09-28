@@ -59,4 +59,6 @@ val default_feature : string
 val with_implicit_features :
   dep list -> (string * fentry list) list -> (string * fentry list) list
 
-val load_crate : reject:(unit -> unit) -> index:string -> string -> ver list
+(* a crate's index file, from its bytes, so that the cache keys an entry
+   by exactly the bytes parsed *)
+val parse_crate : reject:(unit -> unit) -> string -> ver list

@@ -5,6 +5,7 @@
 # 20260927 the held-out one drawn after it.
 # usage: scale.sh [--regress] <pac-exe> <run-dir> [queries-file]    P=<jobs> TIMEOUT=<s> PORT=<proxy>
 #        MODES="tool pubgrub" CARGO_INDEX=<index> SEED=<sample seed>
+#        PAC_CACHE=<pac's cargo --cache, as run_query.py reads it>
 S="$(cd "$(dirname "$0")" && pwd)"
 ECO=cargo
 . "$S/../scale-lib.sh"

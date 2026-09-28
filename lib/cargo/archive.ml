@@ -17,35 +17,47 @@ module P = Cargo_parse
    declarer whose edge it is, loaded before its edges are asked. *)
 type t = {
   index : string;
+  cache : string option;
   crates : (string, P.ver list) Hashtbl.t;
   entry : (string * string, P.ver) Hashtbl.t;
   links_table : (string, (string * string) list) Hashtbl.t;
   mutable n_names : int;
   mutable n_vers : int;
   mutable n_dropped : int;
-  (* wall time inside the parser, which the solve interleaves with *)
+  mutable n_cached : int;
+  (* wall time inside the parser or the cache, which the solve interleaves
+     with *)
   mutable t_parse : float;
 }
 
-type stats = { names : int; versions : int; dropped : int; parse : float }
+type stats = {
+  names : int;
+  versions : int;
+  dropped : int;
+  cached : int;
+  parse : float;
+}
 
 let stats ar =
   {
     names = ar.n_names;
     versions = ar.n_vers;
     dropped = ar.n_dropped;
+    cached = ar.n_cached;
     parse = ar.t_parse;
   }
 
-let empty index =
+let empty ?cache index =
   {
     index;
+    cache;
     crates = Hashtbl.create 4096;
     entry = Hashtbl.create 65536;
     links_table = Hashtbl.create 256;
     n_names = 0;
     n_vers = 0;
     n_dropped = 0;
+    n_cached = 0;
     t_parse = 0.;
   }
 
@@ -58,11 +70,12 @@ let load_name ar (n : string) : P.ver list =
   | Some vs -> vs
   | None ->
       let t = Unix.gettimeofday () in
-      let vs =
-        P.load_crate
+      let vs, hit =
+        Index_cache.load ~cache:ar.cache
           ~reject:(fun () -> ar.n_dropped <- ar.n_dropped + 1)
           ~index:ar.index n
       in
+      if hit then ar.n_cached <- ar.n_cached + 1;
       ar.t_parse <- ar.t_parse +. (Unix.gettimeofday () -. t);
       Hashtbl.replace ar.crates n vs;
       ar.n_names <- ar.n_names + 1;

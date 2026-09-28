@@ -35,7 +35,8 @@
 #      REPS (5), CAP (seconds, 0 for none), OREPS (3), OCAP (1800),
 #      STRAT, SETS (regress strat), PIN (taskset -c 42), LOADSTART (2.5),
 #      LOADMAX (3.5), PORT (cargo's proxy, 8991), NPORT (npm's shim, 8899),
-#      DEPTH (placement's --depth, 8)
+#      DEPTH (placement's --depth, 8), PAC_CACHE (pac's cargo --cache, as
+#      run_query.py reads it)
 # Run inside `nix develop ./nix`, with no ocamlc on PATH: opam reads
 # sys-ocaml-version off whatever ocamlc it finds.
 set -u
@@ -248,12 +249,14 @@ argv_cargo() {
   DIR=$TOP
   case $1 in
     pac-*) CMD=("$PAC" cargo "$TOP/repos/crates.io-index" "$CARGO_CMP_OUT/work/$3/Cargo.toml"
-                --rust-version "$RUSTV" --print-parents $(order "$1")) ;;
+                --rust-version "$RUSTV" --print-parents $(order "$1")
+                ${PCACHE:+--cache "$PCACHE"}) ;;
     cargo) CMD=(cargo generate-lockfile --manifest-path "$CARGO_CMP_OUT/work/$3/Cargo.toml") ;;
   esac
 }
 setup_cargo() {
   export CARGO_CMP_OUT=$RUN/cargo CARGO_HOME=$RUN/cargo/cargo-home
+  PCACHE=${PAC_CACHE-$CARGO_CMP_OUT/pac-cache}
   python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import run_query as r
 r.check_toolchain(); r.write_cargo_config()' "$S/cargo" || return 1
   RUSTV=$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import run_query as r

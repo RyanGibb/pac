@@ -26,12 +26,14 @@ type run = {
   n_names : int;
   n_vers : int;
   dropped : int;
+  cached : int;
   t_parse : float;
 }
 
 val solve :
   ?debug:bool ->
   ?order:Pac_common.Order.t ->
+  ?cache:string ->
   index:string ->
   features:Cargo_query.features ->
   rustv:string option ->

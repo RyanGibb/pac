@@ -16,6 +16,7 @@ type run = {
   n_names : int;
   n_vers : int;
   dropped : int;
+  cached : int;
   t_parse : float;
 }
 
@@ -72,10 +73,10 @@ let decode st (sol : (Cg.NPlus.t * PVersion.t) list) : result =
     lookups = L.dependency_lookups st;
   }
 
-let solve ?(debug = false) ?(order = `Tool) ~index ~features ~rustv
+let solve ?(debug = false) ?(order = `Tool) ?cache ~index ~features ~rustv
     (root : Q.root) : run =
   Pubgrub.set_debug debug;
-  let ar = Archive.empty index in
+  let ar = Archive.empty ?cache index in
   (* cargo's "no matching package named" is its own error, not a failed
      resolve, where the dependency is the root's: nothing else could have
      been chosen instead.  A crate further down is a version that fails. *)
@@ -124,6 +125,7 @@ let solve ?(debug = false) ?(order = `Tool) ~index ~features ~rustv
     n_names = stats.Archive.names;
     n_vers = stats.Archive.versions;
     dropped = stats.Archive.dropped;
+    cached = stats.Archive.cached;
     t_parse = stats.Archive.parse;
   }
 

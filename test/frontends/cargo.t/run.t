@@ -468,6 +468,37 @@ never a candidate, so cargo takes 1.0.0 of each of fa (dep:o/extra), fb
   loaded: 4 names, 3 versions
   parser dropped 3 declarations
 
+--cache keeps what the parser makes of each index file, keyed by the
+file's bytes, and a later run reads it back: the same answer, the same
+lines dropped.  fm, the root, has no index file, so three names are read
+back.
+
+  $ untimed ../../../bin/main.exe cargo --cache c index manifests/fm.toml > cold
+  $ tail -n 2 cold
+  loaded: 4 names, 3 versions, 0 names read from the cache
+  parser dropped 3 declarations
+  $ untimed ../../../bin/main.exe cargo --cache c index manifests/fm.toml > warm
+  $ tail -n 2 warm
+  loaded: 4 names, 3 versions, 3 names read from the cache
+  parser dropped 3 declarations
+  $ grep -v '^loaded: ' cold > a; grep -v '^loaded: ' warm > b; cmp a b
+
+A changed file misses the cache: with fc's refused feature gone from a
+copy of the index, fc 1.1.0 is a candidate and is taken.
+
+  $ cp -RL index idx && chmod -R u+w idx
+  $ sed 's/"nope"//' index/2/fc > idx/2/fc
+  $ untimed ../../../bin/main.exe cargo --cache c idx manifests/fm.toml
+  root fm 1.0.0
+  packages (4):
+    fa 1.0.0
+    fb 1.0.0
+    fc 1.1.0
+    fm 1.0.0
+  encoded solution: 12 core nodes (13 lookups)
+  loaded: 4 names, 4 versions, 2 names read from the cache
+  parser dropped 2 declarations
+
 The manifest is TOML, which cargo refuses where a header defines a table
 dotted keys already made, an integer has a leading zero, or an escape
 names a surrogate rather than a Unicode scalar value:

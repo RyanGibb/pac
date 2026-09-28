@@ -6,8 +6,43 @@
 
 (library
  (name cargo_solve)
- (modules archive encoding lookups order pick cargo_solve)
+ (modules
+  index_format
+  index_cache
+  archive
+  encoding
+  lookups
+  order
+  pick
+  cargo_solve)
  (libraries cargo_frontend pac pac_common pubgrub unix))
+
+(executable
+ (name gen_index_format)
+ (modules gen_index_format))
+
+; whatever can change what the parser makes of a file, or how its values
+; are laid out: its sources, its types', those of what it runs on, and
+; the entry's own
+
+(rule
+ (target index_format.ml)
+ (deps
+  cargo_parse.ml
+  cargo_parse.mli
+  cargo_version.ml
+  cargo_version.mli
+  ../version/semver.ml
+  ../version/semver.mli
+  index_cache.ml)
+ (action
+  (with-stdout-to
+   %{target}
+   (run
+    %{exe:gen_index_format.exe}
+    ocaml=%{ocaml_version}
+    yojson=%{version:yojson}
+    %{deps}))))
 
 (test
  (name test_cargo_version)

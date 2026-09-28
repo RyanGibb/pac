@@ -264,20 +264,8 @@ let parse_line ~reject (line : string) : ver option =
       reject ();
       None
 
-let load_crate ~reject ~index (name : string) : ver list =
-  let path = crate_path ~index name in
-  if not (Sys.file_exists path) then []
-  else
-    let ic = open_in_bin path in
-    let acc = ref [] in
-    (try
-       while true do
-         let line = input_line ic in
-         if String.trim line <> "" then
-           match parse_line ~reject line with
-           | Some v -> acc := v :: !acc
-           | None -> ()
-       done
-     with End_of_file -> ());
-    close_in ic;
-    List.rev !acc
+let parse_crate ~reject (s : string) : ver list =
+  List.filter_map
+    (fun line ->
+      if String.trim line = "" then None else parse_line ~reject line)
+    (String.split_on_char '\n' s)

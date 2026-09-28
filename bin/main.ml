@@ -280,8 +280,8 @@ let opam_cmd =
       const opam_run $ debug_arg $ core_arg $ order $ with_test $ with_doc
       $ with_dev_setup $ opam_version $ repo $ query)
 
-let cargo_run debug core order print_parents index manifest features no_default
-    installed =
+let cargo_run debug core order print_parents cache index manifest features
+    no_default installed =
   guard @@ fun () ->
   Pac_common.Input.dir index;
   Pac_common.Input.file manifest;
@@ -303,7 +303,9 @@ let cargo_run debug core order print_parents index manifest features no_default
              " with features " ^ String.concat "," feats
              ^ if default then "" else " and no default feature")
          (match rustv with None -> "" | Some t -> " for rust " ^ t));
-    let r = Cargo_solve.solve ~debug ~order ~index ~features ~rustv root in
+    let r =
+      Cargo_solve.solve ~debug ~order ?cache ~index ~features ~rustv root
+    in
     match r.Cargo_solve.answer with
     | Ok a when Cargo_solve.reaches_registry_root root a ->
         error 2
@@ -312,11 +314,20 @@ let cargo_run debug core order print_parents index manifest features no_default
            path = \".\" }"
           n v n
     | answer ->
+        let extra =
+          match cache with
+          | None -> []
+          | Some _ ->
+              [
+                Printf.sprintf "%d names read from the cache"
+                  r.Cargo_solve.cached;
+              ]
+        in
         report ~t0 ~core
           {
             Report.names = r.Cargo_solve.n_names;
             versions = r.Cargo_solve.n_vers;
-            extra = [];
+            extra;
             dropped = r.Cargo_solve.dropped;
             parse = r.Cargo_solve.t_parse;
           } ~walk:r.Cargo_solve.core answer (fun a ->
@@ -396,12 +407,24 @@ let cargo_cmd =
       & info [ "print-parents" ]
           ~doc:"Print the decoded parent relation, one edge per line.")
   in
+  (* off by default, unlike npm's, since the index is local and a run
+     needs none; cargo keeps its own under CARGO_HOME *)
+  let cache =
+    Arg.(
+      value
+      & opt (some string) None
+      & info [ "cache" ] ~docv:"DIR"
+          ~doc:
+            "Keep what the parser makes of each index file in $(docv), keyed \
+             by the file's bytes, and read it back when a later run loads the \
+             same file.")
+  in
   Cmd.v
     (Cmd.info "cargo" ~exits
        ~doc:"Solve a root Cargo.toml against a crates.io index.")
     Term.(
-      const cargo_run $ debug_arg $ core_arg $ order $ print_parents $ index
-      $ manifest $ features $ no_default $ rustv)
+      const cargo_run $ debug_arg $ core_arg $ order $ print_parents $ cache
+      $ index $ manifest $ features $ no_default $ rustv)
 
 let alpine_run debug core order path goals =
   guard @@ fun () ->

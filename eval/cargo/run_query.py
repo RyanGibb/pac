@@ -36,6 +36,10 @@ INDEX = os.environ.get("CARGO_INDEX") or ROOT + "/repos/crates.io-index"
 OUT = os.environ.get("CARGO_CMP_OUT", "/tmp/cargo-cmp")
 TIMEOUT = float(os.environ.get("TIMEOUT", 900))
 CARGO_HOME = OUT + "/cargo-home"
+# pac's parse cache, kept beside cargo's CARGO_HOME and as long: a scale
+# query starts with both empty, a bench run's warm-up fills both.
+# PAC_CACHE names another, and empty runs pac without one.
+PAC_CACHE = os.environ.get("PAC_CACHE", OUT + "/pac-cache")
 WORK = OUT + "/work"
 MANIFEST_JQ = HERE + "/manifest.jq"
 
@@ -98,7 +102,8 @@ def run_pac(manifest):
     # no rust-version and which pac cannot read off the toolchain; a
     # declared one pac reads off the manifest, as cargo does
     cmd = [PAC, "cargo", INDEX, manifest, "--rust-version", installed_rustc(),
-           "--print-parents"] + os.environ.get("EXTRA", "").split()
+           "--print-parents"] + (["--cache", PAC_CACHE] if PAC_CACHE else []) \
+        + os.environ.get("EXTRA", "").split()
     t0 = time.time()
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT)

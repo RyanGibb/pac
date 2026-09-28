@@ -1,11 +1,20 @@
 type t
 
-(* [parse] is the wall time inside the parser, which the solve interleaves
-   with *)
-type stats = { names : int; versions : int; dropped : int; parse : float }
+(* [parse] is the wall time inside the parser, or reading its output back
+   from the cache, which the solve interleaves with; [cached] counts the
+   names read back *)
+type stats = {
+  names : int;
+  versions : int;
+  dropped : int;
+  cached : int;
+  parse : float;
+}
 
 val stats : t -> stats
-val empty : string -> t
+
+(* [cache] keeps what the parser made of each index file across runs *)
+val empty : ?cache:string -> string -> t
 val load_name : t -> string -> Cargo_parse.ver list
 
 (* whether the index has a file for the name, yanked versions and all *)
