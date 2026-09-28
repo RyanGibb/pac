@@ -709,21 +709,21 @@ Module VariableFormula (N V : UsualOrderedType)
           reflexivity.
       Qed.
 
-      Theorem versions_lookupOrig : forall Y_x R D (r : Pkg.t) (m : N.t),
+      Theorem versions_lookupOrig : forall Y_x R D (r : Pkg.t) (n : N.t),
           PkgSet.In r R ->
           (exists p h,
-              T.DepRel.In (p, (Name.Orig (inl m), h)) (reduceDeps Y_x R D)) \/
-          m = fst r ->
-          T.versions (reduceReal Y_x R D) (Name.Orig (inl m)) =
+              T.DepRel.In (p, (Name.Orig (inl n), h)) (reduceDeps Y_x R D)) \/
+          n = fst r ->
+          T.versions (reduceReal Y_x R D) (Name.Orig (inl n)) =
           T.VSet.add Version.Bot
-            (embedVS (C.versions (PkgFibred.tailFibre R m) m)).
+            (embedVS (C.versions (PkgFibred.tailFibre R n) n)).
       Proof.
-        intros Y_x R D r m Hr Hreach.
+        intros Y_x R D r n Hr Hreach.
         assert (Hr' : PF.PkgSet.In (liftPkg r) (liftReal Y_x R))
           by (apply mem_liftReal; left; exists (fst r), (snd r);
               destruct r; split; [exact Hr | reflexivity]).
         unfold reduceReal; rewrite (PF.Reduction.Lookup.versions_lookupOrig
-                                      _ _ (liftPkg r) (inl m) Hr').
+                                      _ _ (liftPkg r) (inl n) Hr').
         - unfold embedVS; do 2 f_equal; apply PF.VSet.ext; intro w.
           rewrite PF.C.mem_versions,
             PF.Reduction.Lookup.PkgFibred.mem_tailFibre, mem_liftReal,
@@ -734,7 +734,7 @@ Module VariableFormula (N V : UsualOrderedType)
             split; [exact Hp | reflexivity].
           + intros [v [Hv ->]].
             apply C.mem_versions, PkgFibred.mem_tailFibre in Hv.
-            destruct Hv as [Hv _]; split; [left; exists m, v; auto |].
+            destruct Hv as [Hv _]; split; [left; exists n, v; auto |].
             reflexivity.
         - destruct Hreach as [H | ->]; [left; exact H | right; reflexivity].
         - reflexivity.
@@ -765,16 +765,16 @@ Module VariableFormula (N V : UsualOrderedType)
             [intro Hy; exact Hy | contradiction NE; reflexivity].
       Qed.
 
-      Theorem dependees_lookupOrigBy : forall Y_x R D Vq m v,
-          (forall n,
-             NSet.In n (ownNegDepNames (DepRelFibred.tailFibre D (m, v))) ->
-             Vq n = C.versions R n) ->
+      Theorem dependees_lookupOrigBy : forall Y_x R D Vq n v,
+          (forall m,
+             NSet.In m (ownNegDepNames (DepRelFibred.tailFibre D (n, v))) ->
+             Vq m = C.versions R m) ->
           T.dependees (reduceDeps Y_x R D)
-            (Name.Orig (inl m), Version.Orig (inl v)) =
-          T.dependees (reduceDepsBy Y_x Vq (DepRelFibred.tailFibre D (m, v)))
-            (Name.Orig (inl m), Version.Orig (inl v)).
+            (Name.Orig (inl n), Version.Orig (inl v)) =
+          T.dependees (reduceDepsBy Y_x Vq (DepRelFibred.tailFibre D (n, v)))
+            (Name.Orig (inl n), Version.Orig (inl v)).
       Proof.
-        intros Y_x R D Vq m v HVq; unfold reduceDeps, reduceDepsBy.
+        intros Y_x R D Vq n v HVq; unfold reduceDeps, reduceDepsBy.
         rewrite (PF.Reduction.Lookup.dependees_lookupOrigBy _ _
                    (liftOracle Y_x Vq)).
         - rewrite liftDeps_tailFibre; reflexivity.
@@ -784,31 +784,31 @@ Module VariableFormula (N V : UsualOrderedType)
           exact (ownNegDepNames_liftDeps Y_x _ m' Hn).
       Qed.
 
-      Theorem dependees_lookupOrig : forall Y_x R D m v,
+      Theorem dependees_lookupOrig : forall Y_x R D n v,
           T.dependees (reduceDeps Y_x R D)
-            (Name.Orig (inl m), Version.Orig (inl v)) =
+            (Name.Orig (inl n), Version.Orig (inl v)) =
           T.dependees
             (reduceDeps Y_x
                (realPreimage R
-                  (ownNegDepNames (DepRelFibred.tailFibre D (m, v))))
-               (DepRelFibred.tailFibre D (m, v)))
-            (Name.Orig (inl m), Version.Orig (inl v)).
+                  (ownNegDepNames (DepRelFibred.tailFibre D (n, v))))
+               (DepRelFibred.tailFibre D (n, v)))
+            (Name.Orig (inl n), Version.Orig (inl v)).
       Proof.
-        intros Y_x R D m v.
+        intros Y_x R D n v.
         rewrite (dependees_lookupOrigBy Y_x R D
                    (C.versions (realPreimage R
-                      (ownNegDepNames (DepRelFibred.tailFibre D (m, v)))))),
+                      (ownNegDepNames (DepRelFibred.tailFibre D (n, v)))))),
           reduceDeps_by by
-          (intros n Hn; apply C.versions_ext; intro w;
+          (intros m Hn; apply C.versions_ext; intro w;
            unfold realPreimage; rewrite RKeys.mem_ofKeys; cbn [fst]; tauto).
         reflexivity.
       Qed.
 
-      Theorem dependees_lookupAbsent : forall Y_x R D m,
-          T.dependees (reduceDeps Y_x R D) (Name.Orig (inl m), Version.Bot) =
+      Theorem dependees_lookupAbsent : forall Y_x R D n,
+          T.dependees (reduceDeps Y_x R D) (Name.Orig (inl n), Version.Bot) =
           T.DependeesSet.empty.
       Proof.
-        intros Y_x R D m; apply PF.Reduction.Lookup.dependees_lookupAbsent.
+        intros Y_x R D n; apply PF.Reduction.Lookup.dependees_lookupAbsent.
       Qed.
 
       Theorem dependees_lookupVar : forall Y_x R D x (y : Version.t),
@@ -859,10 +859,10 @@ Module VariableFormula (N V : UsualOrderedType)
       Theorem dependees_lookupDisjunctBy : forall Y_x R D R' D' Vq fs i,
           DepRel.Subset D' D ->
           T.PkgSet.In (Name.Disjunct fs, i) (reduceReal Y_x R' D') ->
-          (forall p f n, DepRel.In (p, f) D' ->
-             PF.Reduction.NSet.In n
+          (forall p f m, DepRel.In (p, f) D' ->
+             PF.Reduction.NSet.In m
                (PF.Reduction.Lookup.negNames (liftFormula Y_x f)) ->
-             liftOracle Y_x Vq n = liftOracle Y_x (C.versions R) n) ->
+             liftOracle Y_x Vq m = liftOracle Y_x (C.versions R) m) ->
           T.dependees (reduceDeps Y_x R D) (Name.Disjunct fs, i) =
           T.dependees (reduceDepsBy Y_x Vq D') (Name.Disjunct fs, i).
       Proof.
