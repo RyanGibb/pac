@@ -8,9 +8,13 @@ is set against the tool's median: the ratio per query, and over a set the
 geometric mean of those ratios, with a 95% bootstrap interval (the
 queries resampled BOOT times, the 2.5th and 97.5th percentiles of the
 resampled means, seeded by step, set and variant so a table regenerates
-alike), and how many queries pac was faster on.  The CSV holds the rows
-bench.sh measured and, per step, set and variant, one row with rep=gm
-whose ratio_gm, ci_lo and ci_hi are the mean and its interval.
+alike), and how many queries pac was faster on.  Where a step also times
+a second reference (opam's builtin-mccs beside its builtin-0install),
+each pac variant is set against it too, alike.  The CSV holds the rows
+bench.sh measured and, per step, set and pac variant, one row with rep=gm
+whose ratio_gm, ci_lo and ci_hi are the mean and its interval against the
+tool, and against a second reference one whose variant is
+<pac variant>/<reference>.
 
 usage: summary.py <run-dir> [csv-out]      prints markdown on stdout;
        the CSV defaults to <run-dir>/bench.csv
@@ -27,6 +31,8 @@ COLS = ["step", "set", "query", "variant", "rep", "wall_s", "parse_s", "solve_s"
 GM = ["ratio_gm", "ci_lo", "ci_hi"]
 BOOT = 10000
 TOOL = {"debian": "apt", "alpine": "apk", "opam": "opam", "cargo": "cargo", "npm": "npm"}
+# a step's other references, set beside the tool pac is compared with
+ALSO = {"opam": ["opam-mccs"]}
 
 
 def q(xs, p):
@@ -83,7 +89,8 @@ def ci(g):
 
 
 def table(step, st, rows):
-    tool = TOOL[step.split("-")[0]]
+    eco = step.split("-")[0]
+    tool = TOOL[eco]
     cells = defaultdict(list)
     queries, variants = [], []
     for r in rows:
@@ -95,15 +102,18 @@ def table(step, st, rows):
             if r["rep"] != "0":
                 cells[r["query"], r["variant"]].append(r)
     C = {k: Cell(v) for k, v in cells.items()}
-    pvs = [v for v in variants if v != tool]
+    refs = [tool] + [a for a in ALSO.get(eco, []) if a in variants]
+    pvs = [v for v in variants if v not in refs]
+    pairs = [(v, t) for t in refs for v in pvs]
     hdr = ["query"]
     for v in pvs:
         hdr += [f"{v} parse / solve", f"{v} wall (IQR)", f"{v} MiB"]
-    hdr += [f"{tool} wall (IQR)", f"{tool} MiB"] + [f"{v} ÷ {tool}" for v in pvs]
+    for t in refs:
+        hdr += [f"{t} wall (IQR)", f"{t} MiB"]
+    hdr += [f"{v} ÷ {t}" for v, t in pairs]
     out = ["| " + " | ".join(hdr) + " |", "|" + "---|" * len(hdr)]
     agg, notes = defaultdict(list), []
     for g in queries:
-        t = C.get((g, tool))
         row = [g]
         for v in pvs:
             c = C.get((g, v))
@@ -112,32 +122,40 @@ def table(step, st, rows):
                     "" if c is None or c.rss is None else f"{c.rss:.0f}"]
             if c:
                 agg[v].append(c.med)
-                if t:
-                    agg[v, "r"].append(c.med / t.med)
-        row += ["" if t is None else f"{t.med:.3f} ({t.iqr:.3f})",
-                "" if t is None or t.rss is None else f"{t.rss:.0f}"]
-        row += ["" if C.get((g, v)) is None or t is None else f"{C[g, v].med / t.med:.2f}" for v in pvs]
-        if t:
-            agg[tool].append(t.med)
+        for r in refs:
+            t = C.get((g, r))
+            row += ["" if t is None else f"{t.med:.3f} ({t.iqr:.3f})",
+                    "" if t is None or t.rss is None else f"{t.rss:.0f}"]
+            if t:
+                agg[r].append(t.med)
+        for v, r in pairs:
+            c, t = C.get((g, v)), C.get((g, r))
+            row.append("" if c is None or t is None else f"{c.med / t.med:.2f}")
+            if c and t:
+                agg[v, r].append(c.med / t.med)
         for v in variants:
             c = C.get((g, v))
             if c and c.rcs != ["0"]:
                 notes.append(f"{g} {v} exit {','.join(c.rcs)}")
         out.append("| " + " | ".join(row) + " |")
-    gms = {v: boot(agg[v, "r"], f"{step}:{st}:{v}") for v in pvs}
+    # the tool's own intervals are seeded as they always were
+    gms = {(v, r): boot(agg[v, r], f"{step}:{st}:{v}" + ("" if r == tool else f":{r}")) for v, r in pairs}
     foot = ["**median over queries**"]
     for v in pvs:
         foot += ["", s(q(agg[v], .5)), ""]
-    foot += [s(q(agg[tool], .5)), ""] + [f"gm {ci(gms[v])}" for v in pvs]
+    for r in refs:
+        foot += [s(q(agg[r], .5)), ""]
+    foot += [f"gm {ci(gms[p])}" for p in pairs]
     out.append("| " + " | ".join(foot) + " |")
     foot = ["**sum of medians**"]
     for v in pvs:
         foot += ["", s(sum(agg[v]), 1), ""]
-    foot += [s(sum(agg[tool]), 1), ""] + [
-        f"pac faster on {sum(1 for x in agg[v, 'r'] if x < 1)}/{len(agg[v, 'r'])}" for v in pvs]
+    for r in refs:
+        foot += [s(sum(agg[r]), 1), ""]
+    foot += [f"pac faster on {sum(1 for x in agg[p] if x < 1)}/{len(agg[p])}" for p in pairs]
     out.append("| " + " | ".join(foot) + " |")
-    gm = [{"step": step, "set": st, "query": "*", "variant": v, "rep": "gm",
-           **dict(zip(GM, ("" if x is None else f"{x:.6f}" for x in gms[v])))} for v in pvs]
+    gm = [{"step": step, "set": st, "query": "*", "variant": v if r == tool else f"{v}/{r}", "rep": "gm",
+           **dict(zip(GM, ("" if x is None else f"{x:.6f}" for x in gms[v, r])))} for v, r in pairs]
     return "\n".join(out), notes, gm
 
 

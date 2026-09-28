@@ -217,6 +217,9 @@ argv_opam() {
   case $1 in
     pac-*) CMD=("$PAC" opam --opam-version "$OV" $(order "$1") repos/opam-repository $3) ;;
     opam) CMD=(opam install $3 --dry-run --solver=builtin-0install --switch cmp --no-depexts -y) ;;
+    # opam's default solver, an optimising one, timed beside the one pac
+    # is compared with
+    opam-mccs) CMD=(opam install $3 --dry-run --solver=builtin-mccs+glpk --switch cmp --no-depexts -y) ;;
   esac
 }
 setup_opam() {
@@ -313,16 +316,16 @@ in_npm() {  # <command...>
   export PATH=$p HOME=$h
 }
 
-# the step's eco, set-up and variants, the tool last
+# the step's eco, set-up and variants, the tool last (opam: then builtin-mccs)
 step() {
   case $1 in
     debian) setup_debian && sets debian debian "" pac-tool pac-pubgrub apt ;;
     debian-cold) setup_debian &&
       sets debian-cold debian "repos/debian/Packages $RUN/aptroot $PAC $(store "$APT")" pac-tool pac-pubgrub apt ;;
     alpine) setup_alpine && sets alpine alpine "" pac-tool pac-pubgrub apk ;;
-    opam) setup_opam && sets opam opam "" pac-tool pac-pubgrub opam ;;
+    opam) setup_opam && sets opam opam "" pac-tool pac-pubgrub opam opam-mccs ;;
     opam-cold) setup_opam &&
-      sets opam-cold opam "repos/opam-repository $RUN/opamroot $PAC $(store opam)" pac-tool pac-pubgrub opam ;;
+      sets opam-cold opam "repos/opam-repository $RUN/opamroot $PAC $(store opam)" pac-tool pac-pubgrub opam opam-mccs ;;
     cargo) setup_cargo && sets cargo cargo "" pac-tool pac-pubgrub cargo ;;
     npm|npm-shared|npm-placement) READING=${1#npm-}; setup_npm && in_npm sets "$1" npm "" pac-tool pac-pubgrub npm ;;
     *) return 2 ;;
