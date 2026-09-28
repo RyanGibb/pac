@@ -2479,16 +2479,16 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Proof. reflexivity. Qed.
 
     Theorem versions_lookupCrate :
-      forall I m gr,
-        versions I (NPlus.CCrate m gr) =
+      forall I n w,
+        versions I (NPlus.CCrate n w) =
         versions
-          (MkInst (realPreimage (inst_repo I) (NSet.singleton m))
+          (MkInst (realPreimage (inst_repo I) (NSet.singleton n))
              SupportSet.empty FDefRel.empty SlotRel.empty LinkRel.empty
              (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
-          (NPlus.CCrate m gr).
+          (NPlus.CCrate n w).
     Proof.
       intros; cbn [versions inst_repo inst_gran];
-        apply T.VSet.ext; intro w; symmetry.
+        apply T.VSet.ext; intro y; symmetry.
       apply SOpv2.filterMap_restrict; [apply PkgPre.ofKeys_subset |].
       intros [n' v] HR He; cbn beta iota in He.
       rewrite if_some_iff, andb_true_iff, NEqb.eqb_true_iff in He.
@@ -2497,17 +2497,17 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Theorem versions_lookupFeatP :
-      forall I m f gr,
-        versions I (NPlus.CFeatP m f gr) =
+      forall I n f w,
+        versions I (NPlus.CFeatP n f w) =
         versions
-          (MkInst (realPreimage (inst_repo I) (NSet.singleton m))
-             (supportPreimage (inst_support I) (NSet.singleton m))
+          (MkInst (realPreimage (inst_repo I) (NSet.singleton n))
+             (supportPreimage (inst_support I) (NSet.singleton n))
              FDefRel.empty SlotRel.empty LinkRel.empty
              (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
-          (NPlus.CFeatP m f gr).
+          (NPlus.CFeatP n f w).
     Proof.
       intros; cbn [versions inst_support inst_gran];
-        apply T.VSet.ext; intro w; symmetry.
+        apply T.VSet.ext; intro y; symmetry.
       apply SOspv.filterMap_restrict; [apply SupportPre.ofKeys_subset |].
       intros [[n' v] f'] Hs He; cbn beta iota in He.
       rewrite if_some_iff, !andb_true_iff, NEqb.eqb_true_iff in He.
@@ -2547,20 +2547,20 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Theorem versions_lookupSlot :
-      forall I m gr d u,
-        SlotRel.In ((m, u), d) (inst_slots I) -> inst_gran I u = gr ->
-        slotActive (inst_root I) (m, u) d = true ->
-        versions I (NPlus.CSlot m gr d) =
+      forall I n w d u,
+        SlotRel.In ((n, u), d) (inst_slots I) -> inst_gran I u = w ->
+        slotActive (inst_root I) (n, u) d = true ->
+        versions I (NPlus.CSlot n w d) =
         versions
           (MkInst (realPreimage (inst_repo I) (NSet.singleton (sTarget d)))
              SupportSet.empty FDefRel.empty
-             (SlotFibred.tailFibre (inst_slots I) (m, u)) LinkRel.empty
+             (SlotFibred.tailFibre (inst_slots I) (n, u)) LinkRel.empty
              (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
-          (NPlus.CSlot m gr d).
+          (NPlus.CSlot n w d).
     Proof.
-      intros I m gr d u Hs Hg Hact.
+      intros I n w d u Hs Hg Hact.
       destruct (slotOwnedb_witness (inst_gran I) (inst_slots I) (inst_root I)
-                  m gr d u Hs Hg Hact)
+                  n w d u Hs Hg Hact)
         as [E1 E2].
       cbn [versions inst_repo inst_slots inst_gran inst_root]; rewrite E1, E2.
       rewrite evalReq_realPreimage;
@@ -2568,23 +2568,23 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Theorem versions_lookupDecision :
-      forall I m gr f d feat u e,
-        FDefRel.In (((m, u), f), e) (inst_fdefs I) ->
-        entryFeatD e = Some (sAlias d, feat) ->
-        SlotRel.In ((m, u), d) (inst_slots I) -> inst_gran I u = gr ->
-        slotActive (inst_root I) (m, u) d = true ->
-        versions I (NPlus.CDec m gr f d feat) =
+      forall I n w f d f' u e,
+        FDefRel.In (((n, u), f), e) (inst_fdefs I) ->
+        entryFeatD e = Some (sAlias d, f') ->
+        SlotRel.In ((n, u), d) (inst_slots I) -> inst_gran I u = w ->
+        slotActive (inst_root I) (n, u) d = true ->
+        versions I (NPlus.CDec n w f d f') =
         versions
           (MkInst (realPreimage (inst_repo I) (NSet.singleton (sTarget d)))
-             SupportSet.empty (fdefFibre (inst_fdefs I) (m, u))
-             (SlotFibred.tailFibre (inst_slots I) (m, u)) LinkRel.empty
+             SupportSet.empty (fdefFibre (inst_fdefs I) (n, u))
+             (SlotFibred.tailFibre (inst_slots I) (n, u)) LinkRel.empty
              (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
-          (NPlus.CDec m gr f d feat).
+          (NPlus.CDec n w f d f').
     Proof.
-      intros I m gr f d feat u e
+      intros I n w f d f' u e
         Hf Ee Hs Hg Hact.
       destruct (decOwnedb_witness (inst_gran I) (inst_fdefs I) (inst_slots I)
-                  (inst_root I) m gr f d feat u e Hf Ee Hs Hg Hact)
+                  (inst_root I) n w f d f' u e Hf Ee Hs Hg Hact)
         as [E1 E2].
       cbn [versions inst_repo inst_fdefs inst_slots inst_gran inst_root];
         rewrite E1, E2.
@@ -2593,38 +2593,38 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Theorem slot_declines :
-      forall I m gr d,
-        ~ SlotOwned (inst_gran I) (inst_slots I) (inst_root I) m gr d ->
-        versions I (NPlus.CSlot m gr d) =
+      forall I n w d,
+        ~ SlotOwned (inst_gran I) (inst_slots I) (inst_root I) n w d ->
+        versions I (NPlus.CSlot n w d) =
         T.VSet.empty /\
-        forall gr', dependees I
-                      (NPlus.CSlot m gr d, VPlus.WClass gr') =
+        forall w', dependees I
+                      (NPlus.CSlot n w d, VPlus.WClass w') =
                     T.DependeesSet.empty.
     Proof.
-      intros I m gr d Hn.
-      assert (E : slotOwnedb (inst_gran I) (inst_slots I) (inst_root I) m gr d
+      intros I n w d Hn.
+      assert (E : slotOwnedb (inst_gran I) (inst_slots I) (inst_root I) n w d
                   = false)
         by (apply Bool.not_true_iff_false; rewrite slotOwnedb_iff; exact Hn).
       split; [cbn [versions]; rewrite E; reflexivity |].
-      intro gr'; cbn [dependees]; rewrite E; reflexivity.
+      intro w'; cbn [dependees]; rewrite E; reflexivity.
     Qed.
 
     Theorem decision_declines :
-      forall I m gr f d feat,
+      forall I n w f d f',
         ~ DecOwned (inst_gran I) (inst_fdefs I) (inst_slots I) (inst_root I)
-            m gr f d feat ->
-        versions I (NPlus.CDec m gr f d feat) =
+            n w f d f' ->
+        versions I (NPlus.CDec n w f d f') =
         T.VSet.empty /\
-        forall gr', dependees I
-                      (NPlus.CDec m gr f d feat, VPlus.WClass gr') =
+        forall w', dependees I
+                      (NPlus.CDec n w f d f', VPlus.WClass w') =
                     T.DependeesSet.empty.
     Proof.
-      intros I m gr f d feat Hn.
+      intros I n w f d f' Hn.
       assert (E : decOwnedb (inst_gran I) (inst_fdefs I) (inst_slots I)
-                    (inst_root I) m gr f d feat = false)
+                    (inst_root I) n w f d f' = false)
         by (apply Bool.not_true_iff_false; rewrite decOwnedb_iff; exact Hn).
       split; [cbn [versions]; rewrite E; reflexivity |].
-      intro gr'; cbn [dependees]; rewrite E; reflexivity.
+      intro w'; cbn [dependees]; rewrite E; reflexivity.
     Qed.
 
     Lemma crateReal_claimants : forall g R Links l,
@@ -2815,17 +2815,17 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Proof. reflexivity. Qed.
 
     Theorem dependees_lookupCrate :
-      forall I m gr v,
-        dependees I (NPlus.CCrate m gr, VPlus.WOrig v) =
+      forall I n w v,
+        dependees I (NPlus.CCrate n w, VPlus.WOrig v) =
         dependees
-          (MkInst (realPreimage (inst_repo I) (reads (inst_slots I) (m, v)))
+          (MkInst (realPreimage (inst_repo I) (reads (inst_slots I) (n, v)))
              SupportSet.empty FDefRel.empty
-             (SlotFibred.tailFibre (inst_slots I) (m, v))
-             (LinkFibred.tailFibre (inst_links I) (m, v))
+             (SlotFibred.tailFibre (inst_slots I) (n, v))
+             (LinkFibred.tailFibre (inst_links I) (n, v))
              (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
-          (NPlus.CCrate m gr, VPlus.WOrig v).
+          (NPlus.CCrate n w, VPlus.WOrig v).
     Proof.
-      intros [R support FDefs Slots Links g dflt rc rootFeats] m gr v.
+      intros [R support FDefs Slots Links g dflt rc rootFeats] n w v.
       cbn [inst_repo inst_slots inst_links inst_gran inst_dflt inst_root
            inst_rootFeats].
       apply dep_crate_agree;
@@ -2834,17 +2834,17 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Theorem dependees_lookupFeatP :
-      forall I m f gr v,
-        dependees I (NPlus.CFeatP m f gr, VPlus.WOrig v) =
+      forall I n f w v,
+        dependees I (NPlus.CFeatP n f w, VPlus.WOrig v) =
         dependees
-          (MkInst (realPreimage (inst_repo I) (reads (inst_slots I) (m, v)))
-             (SupportFibred.tailFibre (inst_support I) (m, v))
-             (fdefFibre (inst_fdefs I) (m, v))
-             (SlotFibred.tailFibre (inst_slots I) (m, v)) LinkRel.empty
+          (MkInst (realPreimage (inst_repo I) (reads (inst_slots I) (n, v)))
+             (SupportFibred.tailFibre (inst_support I) (n, v))
+             (fdefFibre (inst_fdefs I) (n, v))
+             (SlotFibred.tailFibre (inst_slots I) (n, v)) LinkRel.empty
              (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
-          (NPlus.CFeatP m f gr, VPlus.WOrig v).
+          (NPlus.CFeatP n f w, VPlus.WOrig v).
     Proof.
-      intros [R support FDefs Slots Links g dflt rc rootFeats] m f gr v.
+      intros [R support FDefs Slots Links g dflt rc rootFeats] n f w v.
       cbn [inst_repo inst_support inst_fdefs inst_slots inst_gran inst_dflt
            inst_root inst_rootFeats].
       apply dep_featP_agree;
@@ -2853,21 +2853,21 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Theorem dependees_lookupSlot :
-      forall I m gr0 d gr u,
-        SlotRel.In ((m, u), d) (inst_slots I) -> inst_gran I u = gr0 ->
-        slotActive (inst_root I) (m, u) d = true ->
-        dependees I (NPlus.CSlot m gr0 d, VPlus.WClass gr) =
+      forall I n w d w' u,
+        SlotRel.In ((n, u), d) (inst_slots I) -> inst_gran I u = w ->
+        slotActive (inst_root I) (n, u) d = true ->
+        dependees I (NPlus.CSlot n w d, VPlus.WClass w') =
         dependees
           (MkInst (realPreimage (inst_repo I) (NSet.singleton (sTarget d)))
              SupportSet.empty FDefRel.empty
-             (SlotFibred.tailFibre (inst_slots I) (m, u)) LinkRel.empty
+             (SlotFibred.tailFibre (inst_slots I) (n, u)) LinkRel.empty
              (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
-          (NPlus.CSlot m gr0 d, VPlus.WClass gr).
+          (NPlus.CSlot n w d, VPlus.WClass w').
     Proof.
-      intros I m gr0 d gr u
+      intros I n w d w' u
         Hs Hg Hact.
       destruct (slotOwnedb_witness (inst_gran I) (inst_slots I) (inst_root I)
-                  m gr0 d u Hs Hg Hact)
+                  n w d u Hs Hg Hact)
         as [E1 E2].
       cbn [dependees inst_repo inst_slots inst_gran inst_dflt inst_root];
         rewrite E1, E2.
@@ -2876,23 +2876,23 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Theorem dependees_lookupDecision :
-      forall I m gr0 f d feat gr u e,
-        FDefRel.In (((m, u), f), e) (inst_fdefs I) ->
-        entryFeatD e = Some (sAlias d, feat) ->
-        SlotRel.In ((m, u), d) (inst_slots I) -> inst_gran I u = gr0 ->
-        slotActive (inst_root I) (m, u) d = true ->
-        dependees I (NPlus.CDec m gr0 f d feat, VPlus.WClass gr) =
+      forall I n w f d f' w' u e,
+        FDefRel.In (((n, u), f), e) (inst_fdefs I) ->
+        entryFeatD e = Some (sAlias d, f') ->
+        SlotRel.In ((n, u), d) (inst_slots I) -> inst_gran I u = w ->
+        slotActive (inst_root I) (n, u) d = true ->
+        dependees I (NPlus.CDec n w f d f', VPlus.WClass w') =
         dependees
           (MkInst (realPreimage (inst_repo I) (NSet.singleton (sTarget d)))
-             SupportSet.empty (fdefFibre (inst_fdefs I) (m, u))
-             (SlotFibred.tailFibre (inst_slots I) (m, u)) LinkRel.empty
+             SupportSet.empty (fdefFibre (inst_fdefs I) (n, u))
+             (SlotFibred.tailFibre (inst_slots I) (n, u)) LinkRel.empty
              (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
-          (NPlus.CDec m gr0 f d feat, VPlus.WClass gr).
+          (NPlus.CDec n w f d f', VPlus.WClass w').
     Proof.
-      intros I m gr0 f d feat gr
+      intros I n w f d f' w'
         u e Hf Ee Hs Hg Hact.
       destruct (decOwnedb_witness (inst_gran I) (inst_fdefs I) (inst_slots I)
-                  (inst_root I) m gr0 f d feat u e Hf Ee Hs Hg Hact)
+                  (inst_root I) n w f d f' u e Hf Ee Hs Hg Hact)
         as [E1 E2].
       cbn [dependees inst_repo inst_fdefs inst_slots inst_gran inst_root];
         rewrite E1, E2.
