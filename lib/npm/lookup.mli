@@ -27,6 +27,9 @@ val active_dependencies : t -> string * string -> Np.coq_Dependency list
 val desc_name : t -> string * string -> string * string -> Np.Nm.name option
 val versions : t -> Np.Nm.name -> Np.Vs.version list
 
+(* whether a name's versions may grow after it was first asked *)
+val grows : t -> Np.Nm.name -> bool
+
 (* where the copy k at v offers its name a: its sight where it peers on a
    itself, else its own directory; none where it offers itself or
    nothing *)

@@ -3294,16 +3294,15 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         (RepoSet.In (snd k, w) (inst_repo I') <->
          RepoSet.In (snd k, w) (inst_repo I)) /\
         incl (inst_deps I') (keyedDeps I k) /\
-        (keyedDeps I k <> nil -> inst_deps I' <> nil) /\
         incl (inst_peers I') (keyedPeers I k) /\
-        (keyedDeps I k = nil -> keyedPeers I k <> nil ->
-         inst_peers I' <> nil).
+        ((inst_deps I' <> nil \/ inst_peers I' <> nil) <->
+         (keyedDeps I k <> nil \/ keyedPeers I k <> nil)).
 
       Lemma keysOf_granSubInst : forall I k w I',
           granSubInst I k w I' ->
           (KeySet.In k (keysOf I') <-> KeySet.In k (keysOf I)).
       Proof.
-        intros I k w I' [Hroot [Hovr [_ [Hd [Hdne [Hp Hpne]]]]]].
+        intros I k w I' [Hroot [Hovr [_ [Hd [Hp Hne]]]]].
         unfold keysOf, rootKey; rewrite Hroot, !KeySet.add_spec,
           !KeySet.union_spec, !mem_keysOfL.
         assert (Ho : forall d, ovrDep I' d = ovrDep I d)
@@ -3326,27 +3325,30 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           + right; left; exists q; exact (conj (proj1 (Hkd q (Hd q Hq))) E).
           + right; right; exists q; exact (conj (proj1 (Hkp q (Hp q Hq))) E).
         - intros [E | Hk]; [left; exact E | right].
-          destruct (keyedDeps I k) as [| q0 l0] eqn:Hkl.
-          + destruct Hk as [[q [Hq E]] | [q [Hq E]]].
-            * exfalso.
-              assert (Hin : In q (keyedDeps I k))
+          assert (Hne' : inst_deps I' <> nil \/ inst_peers I' <> nil).
+          { apply Hne; destruct Hk as [[q [Hq E]] | [q [Hq E]]];
+              [left | right]; intro Hn.
+            - assert (Hin : In q (keyedDeps I k))
                 by (apply List.filter_In; split;
                     [exact Hq | apply KeyEqb.eqb_true_iff; exact E]).
-              rewrite Hkl in Hin; destruct Hin.
-            * destruct (inst_peers I') as [| q1 l1] eqn:Hpl.
-              -- exfalso; refine (Hpne eq_refl _ eq_refl); intro Hn.
-                 assert (Hin : In q (keyedPeers I k))
-                   by (apply List.filter_In; split;
-                       [exact Hq | apply KeyEqb.eqb_true_iff; exact E]).
-                 rewrite Hn in Hin; destruct Hin.
-              -- right; exists q1; split; [left; reflexivity |].
-                 refine (proj2 (Hkp q1 (Hp q1 _))).
-                 left; reflexivity.
-          + destruct (inst_deps I') as [| q1 l1] eqn:Hdl.
-            * exfalso; refine (Hdne _ eq_refl); discriminate.
-            * left; exists q1; split; [left; reflexivity |].
-              refine (proj2 (Hkd q1 (Hd q1 _))).
-              left; reflexivity.
+              rewrite Hn in Hin; destruct Hin.
+            - assert (Hin : In q (keyedPeers I k))
+                by (apply List.filter_In; split;
+                    [exact Hq | apply KeyEqb.eqb_true_iff; exact E]).
+              rewrite Hn in Hin; destruct Hin. }
+          destruct Hne' as [Hn | Hn].
+          + assert (Hx : exists q, In q (inst_deps I'))
+              by (destruct (inst_deps I') as [| q1 l1] eqn:Hl;
+                  [congruence | exists q1;
+                   first [left; reflexivity | rewrite Hl; left; reflexivity]]).
+            destruct Hx as [q1 Hq1]; left; exists q1; split; [exact Hq1 |].
+            exact (proj2 (Hkd q1 (Hd q1 Hq1))).
+          + assert (Hx : exists q, In q (inst_peers I'))
+              by (destruct (inst_peers I') as [| q1 l1] eqn:Hl;
+                  [congruence | exists q1;
+                   first [left; reflexivity | rewrite Hl; left; reflexivity]]).
+            destruct Hx as [q1 Hq1]; right; exists q1; split; [exact Hq1 |].
+            exact (proj2 (Hkp q1 (Hp q1 Hq1))).
       Qed.
 
       Theorem versions_lookupGranular : forall I k w I',
@@ -3378,6 +3380,65 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         - apply NSet.add_spec; left; reflexivity.
         - apply mem_rootPeerDirs_named.
         - apply chains_named.
+      Qed.
+
+      Lemma versions_intermediate_mono : forall I' I k v m,
+          inst_repo I' = inst_repo I -> inst_deps I' = inst_deps I ->
+          inst_ovr I' = inst_ovr I -> inst_root I' = inst_root I ->
+          incl (inst_peers I') (inst_peers I) ->
+          T.VSet.Subset (versions I' (Nm.Intermediate k v m))
+            (versions I (Nm.Intermediate k v m)).
+      Proof.
+        intros [repo' deps' prs' ovr' r'] [repo deps prs ovr r] k v m
+          HR HD HO Hr HP;
+          cbn [inst_repo inst_deps inst_ovr inst_root inst_peers] in *;
+          subst repo' deps' ovr' r'.
+        set (J' := MkInst repo deps prs' ovr r).
+        set (J := MkInst repo deps prs ovr r).
+        assert (Hch : forall q a, chains J' q a = true -> chains J q a = true).
+        { intros q a; unfold chains.
+          change (rootPkg J') with (rootPkg J).
+          rewrite !Bool.andb_true_iff, !NSet.mem_spec, !mem_peerNames.
+          intros [Hq [x [Hx Hn]]]; split; [exact Hq |].
+          exists x; split; [exact (HP _ Hx) | exact Hn]. }
+        assert (Hrp : forall a, NSet.mem a (rootPeerDirs J') = true ->
+                   NSet.mem a (rootPeerDirs J) = true).
+        { intro a; rewrite !NSet.mem_spec, !mem_rootPeerDirs.
+          intros [q [x [Hx Hx']]]; exists q, x.
+          split; [exact (HP _ Hx) | exact Hx']. }
+        assert (Hcb : forall q a, canBeAbsent J' q a = true ->
+                   canBeAbsent J q a = true).
+        { intros q a; unfold canBeAbsent, dp.
+          change (rootPkg J') with (rootPkg J); change (dirs J') with (dirs J).
+          rewrite !Bool.orb_true_iff, !Bool.andb_true_iff.
+          intros [H | [H1 H2]]; [left; exact H |].
+          right; split; [exact (Hch _ _ H1) | exact H2]. }
+        assert (Hcc : VSet.Subset (childCands J' (k, v) m)
+                        (childCands J (k, v) m)).
+        { unfold childCands.
+          change (slotKey J') with (slotKey J); change (dirs J') with (dirs J).
+          change (slotCands J') with (slotCands J).
+          change (rootPkg J') with (rootPkg J).
+          change (inst_repo J') with (inst_repo J).
+          destruct (KeyEqb.eqb m (slotKey J (base (k, v)) (fst m)));
+            [| intros x Hx; exact Hx].
+          destruct (NSet.mem (fst m) (dirs J (base (k, v))));
+            [intros x Hx; exact Hx |].
+          destruct (chains J' (k, v) (fst m)) eqn:E1;
+            [intros x Hx; destruct (VSet.empty_spec Hx) |].
+          destruct (chains J (k, v) (fst m)) eqn:E2.
+          - unfold chains in E2; apply Bool.andb_true_iff in E2.
+            destruct E2 as [E2 _]; apply Bool.negb_true_iff in E2.
+            rewrite E2; intros x Hx; destruct (VSet.empty_spec Hx).
+          - destruct (PkgEqb.eqb (k, v) (rootPkg J)); cbn [andb];
+              [| intros x Hx; exact Hx].
+            destruct (NSet.mem (fst m) (rootPeerDirs J')) eqn:E3;
+              [rewrite (Hrp _ E3); intros x Hx; exact Hx |].
+            intros x Hx; destruct (VSet.empty_spec Hx). }
+        intro w; rewrite !versions_int.
+        intros [[-> Hb] | [u [Hu ->]]].
+        - left; split; [reflexivity | exact (Hcb _ _ Hb)].
+        - right; exists u; split; [exact (Hcc _ Hu) | reflexivity].
       Qed.
 
       Definition sightSubInst (I : Inst) (c : RPkg.t) (a : N.t) : Inst :=

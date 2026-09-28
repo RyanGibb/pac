@@ -371,20 +371,33 @@ let holder_sub_inst st (p : string * string) (q : string * string) =
 let desc_sub_inst st (t : string) =
   mk_inst st ~repo:(repo_at st t) ~deps:[] ~peers:[]
 
+(* The root's intermediates read the peer dependencies naming their
+   directory that the manifests loaded so far declare, so a root-installable
+   peer loaded later can fill a directory that answered empty.  Their
+   versions only grow (versions_intermediate_mono), which the resolver
+   contract allows, so they are asked afresh each time rather than held;
+   every other name's versions are fixed once asked. *)
+let grows st (n : Np.Nm.name) =
+  match n with
+  | Np.Nm.Intermediate (k, _, _) -> k = (fst st.root, fst st.root)
+  | _ -> false
+
 let versions st (n : Np.Nm.name) : Np.Vs.version list =
-  Tbl.memo st.vcache n (fun () ->
-      match n with
-      | Np.Nm.Granular (k, w) ->
-          T.VSet.elements (R.versions (gran_sub_inst st k w) n)
-      | Np.Nm.Intermediate (k, v, m) ->
-          T.VSet.elements (R.versions (int_sub_inst st (snd k, v) m) n)
-      | Np.Nm.Sight (k, v, a) ->
-          T.VSet.elements (R.versions (sight_sub_inst st (snd k, v) a) n)
-      | Np.Nm.Link (k, v, m, u, a) ->
-          T.VSet.elements
-            (R.versions (link_sub_inst st (snd k, v) (snd m, u) a) n)
-      | Np.Nm.Desc (_, t, _) ->
-          T.VSet.elements (R.versions (desc_sub_inst st t) n))
+  let answer () =
+    match n with
+    | Np.Nm.Granular (k, w) ->
+        T.VSet.elements (R.versions (gran_sub_inst st k w) n)
+    | Np.Nm.Intermediate (k, v, m) ->
+        T.VSet.elements (R.versions (int_sub_inst st (snd k, v) m) n)
+    | Np.Nm.Sight (k, v, a) ->
+        T.VSet.elements (R.versions (sight_sub_inst st (snd k, v) a) n)
+    | Np.Nm.Link (k, v, m, u, a) ->
+        T.VSet.elements
+          (R.versions (link_sub_inst st (snd k, v) (snd m, u) a) n)
+    | Np.Nm.Desc (_, t, _) ->
+        T.VSet.elements (R.versions (desc_sub_inst st t) n)
+  in
+  if grows st n then answer () else Tbl.memo st.vcache n answer
 
 let holder st ((k, v) : (string * string) * string) (a : string) :
     Np.Nm.name option =

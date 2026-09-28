@@ -42,12 +42,17 @@ let runs (all : PVersion.t list Lazy.t) (vs : PVersion.t list) : PG.Ranges.t =
 
 (* PubGrub widens each dependency's depender range by asking for the
    dependencies of the depender's neighbouring versions, once per
-   dependency, so the same node is asked for over and over *)
+   dependency, so the same node is asked for over and over.  A run over a
+   name whose versions grow could take in one listed later, so there the
+   versions are handed over as points. *)
 let dependencies st cache n (u : Np.Vs.version) =
   Pac_common.Tbl.memo cache (n, u) (fun () ->
       List.map
         (fun ((m, vs) : T.Dependees.t) ->
-          (m, runs (lazy (Lookup.versions st m)) (T.VSet.elements vs)))
+          let vs = T.VSet.elements vs in
+          ( m,
+            if Lookup.grows st m then PG.Ranges.of_list vs
+            else runs (lazy (Lookup.versions st m)) vs ))
         (Lookup.dependees st (n, u)))
 
 let decode st ~lookups sol =
@@ -142,16 +147,11 @@ let solve ?(debug = false) ?(order = `Tool) ?(omit_dev = false)
   let h = Order.hooks order st in
   (* dependencies' memo, whose size is the lookup count the answer reports *)
   let asked = Hashtbl.create 65536 in
-  let root_k = (fst root, fst root) in
-  let root_n = Np.Nm.Granular (root_k, snd root) in
-  (* Every name's versions are fixed once asked, bar the root's
-     intermediates, which a root-installable peer loaded later can fill
-     (peers_naming). Where the list is fixed, a depender's block of
-     versions may run up to the next listed one, as [runs] does for a
-     dependee's, so ranges stay few. *)
-  let dense (n : Np.Nm.name) _ _ =
-    match n with Np.Nm.Intermediate (k, _, _) -> k <> root_k | _ -> true
-  in
+  let root_n = Np.Nm.Granular ((fst root, fst root), snd root) in
+  (* Where a name's versions are fixed, a depender's block of versions may
+     run up to the next listed one, as [runs] does for a dependee's, so
+     ranges stay few. *)
+  let dense n _ _ = not (Lookup.grows st n) in
   let r =
     PG.solve ?next:h.Pac_common.Order.next ?choose:h.Pac_common.Order.choose
       ~dense ~vers:(Lookup.versions st) ~deps:(dependencies st asked)
