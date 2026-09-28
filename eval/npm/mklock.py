@@ -659,7 +659,7 @@ def main():
 
     def verify(at, links):
         pk = packages(at, links)
-        return misses(pk, root, nodes, edges) + peer_locals(pk)
+        return misses(pk, root, nodes, edges, cache) + peer_locals(pk)
 
     at, links = search(root, nodes, edges, claims, peers, deep, deps, verify)
     packages = packages(at, links)

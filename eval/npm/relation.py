@@ -15,7 +15,9 @@ sits at a directory of that name offers itself, which the declarer's
 lookup reaches from inside the requirer's node_modules.  A peer read
 through a requirer whose own optional peer the answer leaves open is open
 too.  An optional peer the answer leaves open that finds a copy anyway
-must find one in its range, as npm judges it (arborist dep-valid.js).  A
+must find one in its range, as npm judges it (arborist dep-valid.js), a
+dist-tag read as the version the packument's dist-tags give it, as npm's
+fetch resolves one (npm-pick-manifest), where the snapshot is at hand.  A
 provider the answer gives a peer
 may declare peers of its own, which hang on the same requirer, and is asked
 from where it was found.  Every copy of a requirer in the lock is asked,
@@ -29,16 +31,17 @@ not be ours.
 This reads only the lock and the answer, not how mklock.py placed it, so a
 placement that does not hold the answer is caught whatever wrote it.
 
-usage: relation.py <package-lock.json> <our --tree output>
+usage: relation.py <package-lock.json> <our --tree output> [<cache-dir>]
 Prints each miss and exits 3 when there is one, so that a crash, which
 exits 1, is not read as one.
 """
 import json
+import os
 import subprocess
 import sys
 
 from shared import SHARED, normalize, split
-from tree import is_link, parse_tree, resolve
+from tree import escape, is_link, parse_tree, resolve
 
 SATISFIES = {}
 
@@ -58,6 +61,21 @@ def satisfies(pairs):
                              capture_output=True, text=True, check=True)
         SATISFIES.update(zip(todo, json.loads(out.stdout)))
     return {p: True if p[1].strip() in ("", "*") else SATISFIES[p] for p in pairs}
+
+
+def tagged(cache, name, spec):
+    """the version the packument's dist-tags give spec, or spec itself
+    where it names no tag: npm refuses a tag that is a valid range, so a
+    spec that is a key of dist-tags is a tag"""
+    if cache is None:
+        return spec
+    try:
+        with open(os.path.join(cache, escape(name) + ".json")) as f:
+            tags = json.load(f).get("dist-tags") or {}
+    except (OSError, ValueError):
+        return spec
+    v = tags.get(spec.strip()) if isinstance(tags, dict) else None
+    return v if isinstance(v, str) else spec
 
 
 def identity(pk, path):
@@ -91,7 +109,7 @@ def name(n):
     return f"{n[0]} {n[1]}" + (f" at {n[2]}" if n[2] != n[0] else "")
 
 
-def open_misses(pk, at, open_, through):
+def open_misses(pk, at, open_, through, cache=None):
     """the misses of the peers the answer leaves open, open_ holding each
     (lock path, peer) left open, and through each peer read through its
     depender's own as (lock path, depender's lock path, peer, optional,
@@ -113,17 +131,21 @@ def open_misses(pk, at, open_, through):
     # where npm finds it out of range; it is asked from that copy, which
     # mklock.py's search then nests out of sight
     hit = {(q, p): resolve(pk, q, p) for q, p in open_}
-    asks = {(q, p): (pk[s].get("version", ""), (pk[q].get("peerDependencies") or {}).get(p) or "")
+    spec = {(q, p): (pk[q].get("peerDependencies") or {}).get(p) or ""
             for (q, p), s in hit.items() if s is not None and s in pk}
+    asks = {(q, p): (pk[hit[q, p]].get("version", ""), tagged(cache, p, r))
+            for (q, p), r in spec.items()}
     ok = satisfies(list(asks.values()))
     miss += [(hit[q, p], f"{name(at(q))} at {q} peers on {p}, which the answer leaves open, yet it "
-                 f"finds {name(at(hit[q, p]))} outside {asks[q, p][1]}")
+                 f"finds {name(at(hit[q, p]))} outside {spec[q, p]}"
+                 + (f" ({asks[q, p][1]})" if asks[q, p][1] != spec[q, p] else ""))
              for (q, p) in sorted(asks) if ok[asks[q, p]] is False]
     return miss
 
 
-def misses(pk, root, nodes, edges):
-    """each miss as (the lock path it was asked from, or None, and why)"""
+def misses(pk, root, nodes, edges, cache=None):
+    """each miss as (the lock path it was asked from, or None, and why),
+    cache the snapshot's packuments where a dist-tag is to be read"""
     out = {}
     for r, key, c in edges:
         out.setdefault(r, {})[key] = c
@@ -188,7 +210,7 @@ def misses(pk, root, nodes, edges):
                         todo.append(s)
             miss += [(rp, f"{name(r)} gives {k} to nothing that requires or peers on it")
                      for k in sorted(set(given) - deps - peered)]
-    return miss + open_misses(pk, at, open_, through)
+    return miss + open_misses(pk, at, open_, through, cache)
 
 
 def main():
@@ -196,7 +218,7 @@ def main():
         pk = json.load(f)["packages"]
     with open(sys.argv[2]) as f:
         root, nodes, edges = parse_tree(f.read())
-    miss = misses(pk, root, nodes, edges)
+    miss = misses(pk, root, nodes, edges, sys.argv[3] if len(sys.argv) > 3 else None)
     for line in sorted({why for _, why in miss}):
         print(line)
     return 3 if miss else 0

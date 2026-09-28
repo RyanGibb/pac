@@ -1,0 +1,10 @@
+root .
+packages (4):
+  .
+  host 1.0.0
+  mid 1.0.0
+  nat 0.1.11
+node_modules (3):
+  . <- mid 1.0.0
+  . <- nat 0.1.11
+  mid 1.0.0 <- host 1.0.0

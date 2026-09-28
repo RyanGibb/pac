@@ -4,6 +4,7 @@
   ../../eval/npm/edges.py
   ../../eval/npm/lockname.py
   ../../eval/npm/npmlib.js
+  ../../eval/npm/relation.py
   ../../eval/npm/resolve.js
   ../../eval/npm/shared.py
   ../../eval/npm/verdict.py

@@ -102,7 +102,7 @@ python3 "$S/reach.py" "$W/package-lock.json" > "$out/reach" 2> "$out/reach.log" 
 unmet=$(grep -c '^unmet ' "$out/reach")
 related=0
 if [ -n "$ours" ]; then
-  python3 "$S/relation.py" "$W/package-lock.json" "$ours" > "$out/relation" 2>&1
+  python3 "$S/relation.py" "$W/package-lock.json" "$ours" "$RUN/cache" > "$out/relation" 2>&1
   related=$?
 fi
 # every change the relock made is the pruning of a package nothing reaches
