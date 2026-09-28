@@ -718,21 +718,21 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         split; [exact HD | reflexivity].
       Qed.
 
-      Theorem versions_lookupIntermediate : forall R D Th g n v m,
-          T.versions (reduceReal R D Th g) (Name.Intermediate n v m) =
+      Theorem versions_lookupIntermediate : forall R D Th g n v o,
+          T.versions (reduceReal R D Th g) (Name.Intermediate n v o) =
           T.versions
             (reduceReal PkgSet.empty (DepRelFibred.tailFibre D (n, v))
-               (peersOfDeps D Th (n, v) m) g)
-            (Name.Intermediate n v m).
+               (peersOfDeps D Th (n, v) o) g)
+            (Name.Intermediate n v o).
       Proof.
-        intros R D Th g n v m; apply T.versions_ext; intro y.
+        intros R D Th g n v o; apply T.versions_ext; intro y.
         rewrite !mem_reduceReal.
         split; intro H;
           inversion H as [| n' v' m' vs u HD Hu
-                          | n' v' o us u m' ws w HD Hu HTh Hb Hw]; subst.
-        - apply (PkgIntermediate _ _ _ _ n v m vs u); [| exact Hu].
+                          | n' v' o' us u m' ws w HD Hu HTh Hb Hw]; subst.
+        - apply (PkgIntermediate _ _ _ _ n v o vs u); [| exact Hu].
           apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
-        - apply (PkgPeer _ _ _ _ n v o us u m ws w); try assumption.
+        - apply (PkgPeer _ _ _ _ n v o' us u o ws w); try assumption.
           + apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
           + apply mem_peersOfDeps; split; [exact HTh |].
             split; [reflexivity | exists us; split; [exact HD | exact Hu]].
@@ -740,10 +740,10 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
             apply hasDepOnb_iff; exists vs2.
             apply DepRelFibred.mem_tailFibre; split; [exact HD2 | reflexivity].
         - apply DepRelFibred.mem_tailFibre in HD as [HD _].
-          apply (PkgIntermediate _ _ _ _ n v m vs u); assumption.
+          apply (PkgIntermediate _ _ _ _ n v o vs u); assumption.
         - apply DepRelFibred.mem_tailFibre in HD as [HD _].
           apply mem_peersOfDeps in HTh as [HTh _].
-          apply (PkgPeer _ _ _ _ n v o us u m ws w); try assumption.
+          apply (PkgPeer _ _ _ _ n v o' us u o ws w); try assumption.
           apply hasDepOnb_iff in Hb; destruct Hb as [vs2 HD2].
           apply hasDepOnb_iff; exists vs2.
           exact (DepRelFibred.tailFibre_subset _ _ _ HD2).
