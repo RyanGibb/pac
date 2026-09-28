@@ -3366,13 +3366,13 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         subInst I (NSet.add (snd m) (slotNames I p)) (ownDependencies I p)
           (peerDependenciesNamed I (fst m)).
 
-      Theorem versions_lookupIntermediate : forall I k v m,
-          versions (intSubInst I (snd k, v) m) (Nm.Intermediate k v m) =
-          versions I (Nm.Intermediate k v m).
+      Theorem versions_lookupIntermediate : forall I k v k',
+          versions (intSubInst I (snd k, v) k') (Nm.Intermediate k v k') =
+          versions I (Nm.Intermediate k v k').
       Proof.
-        intros I k v m; cbn [versions]; unfold intSubInst.
-        rewrite (canBeAbsent_agree I _ _ _ (k, v) (fst m) (ownDependencies_id I (snd k, v))
-                   (chains_named I _ _ (fst m) (k, v))).
+        intros I k v k'; cbn [versions]; unfold intSubInst.
+        rewrite (canBeAbsent_agree I _ _ _ (k, v) (fst k') (ownDependencies_id I (snd k, v))
+                   (chains_named I _ _ (fst k') (k, v))).
         rewrite childCands_agree; [reflexivity | ..].
         - apply ownDependencies_id.
         - intros d Hd; apply NSet.add_spec; right;
@@ -3455,11 +3455,11 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         rewrite realVersions_subInst, IH; [reflexivity | exact Ha].
       Qed.
 
-      Theorem versions_lookupSight : forall I k v a,
-          versions (sightSubInst I (snd k, v) a) (Nm.Sight k v a) =
-          versions I (Nm.Sight k v a).
+      Theorem versions_lookupSight : forall I k v n,
+          versions (sightSubInst I (snd k, v) n) (Nm.Sight k v n) =
+          versions I (Nm.Sight k v n).
       Proof.
-        intros I k v a; cbn [versions]; unfold sightSubInst, sightCands.
+        intros I k v n; cbn [versions]; unfold sightSubInst, sightCands.
         rewrite sightCandsL_agree; [| apply NSet.add_spec; left; reflexivity].
         rewrite (slotCands_agree I _ _ _ (snd k, v) (ownDependencies_id I (snd k, v)));
           [| intros d Hd; apply NSet.add_spec; right; apply slotNames_spec; exact Hd].
@@ -3470,10 +3470,10 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       Definition descSubInst (I : Inst) (t : N.t) : Inst :=
         subInst I (NSet.singleton t) nil nil.
 
-      Theorem versions_lookupDesc : forall I a t s,
-          versions (descSubInst I t) (Nm.Desc a t s) = versions I (Nm.Desc a t s).
+      Theorem versions_lookupDesc : forall I a m s,
+          versions (descSubInst I m) (Nm.Desc a m s) = versions I (Nm.Desc a m s).
       Proof.
-        intros I a t s; cbn [versions]; unfold descSubInst.
+        intros I a m s; cbn [versions]; unfold descSubInst.
         rewrite realVersions_subInst; [reflexivity | apply NSet.singleton_spec; reflexivity].
       Qed.
 
@@ -3501,23 +3501,23 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         subInst I (NSet.add a (NSet.union (slotNames I p) (slotNames I c)))
           (twoDeps I p c) (twoPeers I p c).
 
-      Theorem versions_lookupLink : forall I k v m u a,
-          versions (linkSubInst I (snd k, v) (snd m, u) a) (Nm.Link k v m u a) =
-          versions I (Nm.Link k v m u a).
+      Theorem versions_lookupLink : forall I k v k' u n,
+          versions (linkSubInst I (snd k, v) (snd k', u) n) (Nm.Link k v k' u n) =
+          versions I (Nm.Link k v k' u n).
       Proof.
-        intros I k v m u a; cbn [versions]; unfold linkSubInst, linkVers.
-        change (base (m, u)) with (snd m, u).
+        intros I k v k' u n; cbn [versions]; unfold linkSubInst, linkVers.
+        change (base (k', u)) with (snd k', u).
         unfold peerDependenciesAt at 1; cbn [inst_peers subInst].
-        rewrite twoPeers_right; fold (peerDependenciesAt I (snd m, u)).
-        induction (peerDependenciesAt I (snd m, u)) as [| r l IH];
+        rewrite twoPeers_right; fold (peerDependenciesAt I (snd k', u)).
+        induction (peerDependenciesAt I (snd k', u)) as [| r l IH];
           cbn [linkVersL]; [reflexivity |].
-        rewrite IH; destruct (NEqb.eqb (p_name r) a) eqn:Hn; [| reflexivity].
+        rewrite IH; destruct (NEqb.eqb (p_name r) n) eqn:Hn; [| reflexivity].
         apply NEqb.eqb_true_iff in Hn.
-        rewrite (linkCands_agree I _ _ _ (k, v) (m, u) r
-                   (twoDeps_left I (snd k, v) (snd m, u))
-                   (twoPeers_left I (snd k, v) (snd m, u))
-                   (twoDeps_right I (snd k, v) (snd m, u))
-                   (twoPeers_right I (snd k, v) (snd m, u))); [reflexivity | |].
+        rewrite (linkCands_agree I _ _ _ (k, v) (k', u) r
+                   (twoDeps_left I (snd k, v) (snd k', u))
+                   (twoPeers_left I (snd k, v) (snd k', u))
+                   (twoDeps_right I (snd k, v) (snd k', u))
+                   (twoPeers_right I (snd k, v) (snd k', u))); [reflexivity | |].
         - apply slotKey_in; [rewrite Hn; apply NSet.add_spec; left; reflexivity |].
           intros d Hd; apply NSet.add_spec; right; apply NSet.union_spec; left.
           apply slotNames_spec; exact Hd.
@@ -3634,58 +3634,58 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           apply slotNames_spec; exact Hd.
       Qed.
 
-      Theorem dependees_lookupIntermediate : forall I k v m u,
-          dependees (peerSubInst I (snd k, v) m u)
-            (Nm.Intermediate k v m, Vs.Orig u) =
-          dependees I (Nm.Intermediate k v m, Vs.Orig u).
+      Theorem dependees_lookupIntermediate : forall I k v k' u,
+          dependees (peerSubInst I (snd k, v) k' u)
+            (Nm.Intermediate k v k', Vs.Orig u) =
+          dependees I (Nm.Intermediate k v k', Vs.Orig u).
       Proof.
-        intros I k v m u; cbn [dependees]; f_equal; f_equal;
+        intros I k v k' u; cbn [dependees]; f_equal; f_equal;
           [apply linkEdges_agree | f_equal].
         - unfold peerSubInst, ownSight.
-          pose proof (twoDeps_left I (snd k, v) (snd m, u)) as Hd.
-          pose proof (twoPeers_left I (snd k, v) (snd m, u)) as Hp.
-          rewrite (dp_agree I _ _ _ (k, v) (fst m) Hd
-                     (chains_agree I _ _ _ (k, v) (fst m) Hp)).
+          pose proof (twoDeps_left I (snd k, v) (snd k', u)) as Hd.
+          pose proof (twoPeers_left I (snd k, v) (snd k', u)) as Hp.
+          rewrite (dp_agree I _ _ _ (k, v) (fst k') Hd
+                     (chains_agree I _ _ _ (k, v) (fst k') Hp)).
           unfold plainKey, base; cbn [fst snd].
-          rewrite (slotKey_agree I _ _ _ (snd k, v) (fst m) Hd).
+          rewrite (slotKey_agree I _ _ _ (snd k, v) (fst k') Hd).
           reflexivity.
         - unfold peerSubInst, descEdges, base; cbn [fst snd].
-          rewrite (slotOf_agree I _ _ _ (snd k, v) (fst m)
-                     (twoDeps_left I (snd k, v) (snd m, u))).
+          rewrite (slotOf_agree I _ _ _ (snd k, v) (fst k')
+                     (twoDeps_left I (snd k, v) (snd k', u))).
           reflexivity.
       Qed.
 
       Definition holderSubInst (I : Inst) (p c : RPkg.t) : Inst :=
         subInst I (slotNames I c) (twoDeps I p c) (twoPeers I p c).
 
-      Theorem dependees_lookupLink : forall I k v m u a x,
-          dependees (holderSubInst I (snd k, v) (snd m, u)) (Nm.Link k v m u a, x) =
-          dependees I (Nm.Link k v m u a, x).
+      Theorem dependees_lookupLink : forall I k v k' u n x,
+          dependees (holderSubInst I (snd k, v) (snd k', u)) (Nm.Link k v k' u n, x) =
+          dependees I (Nm.Link k v k' u n, x).
       Proof.
-        intros I k v m u a x; unfold holderSubInst.
-        pose proof (twoDeps_left I (snd k, v) (snd m, u)) as Hd.
-        pose proof (twoPeers_left I (snd k, v) (snd m, u)) as Hp.
-        pose proof (twoDeps_right I (snd k, v) (snd m, u)) as Hdc.
-        pose proof (twoPeers_right I (snd k, v) (snd m, u)) as Hpc.
+        intros I k v k' u n x; unfold holderSubInst.
+        pose proof (twoDeps_left I (snd k, v) (snd k', u)) as Hd.
+        pose proof (twoPeers_left I (snd k, v) (snd k', u)) as Hp.
+        pose proof (twoDeps_right I (snd k, v) (snd k', u)) as Hdc.
+        pose proof (twoPeers_right I (snd k, v) (snd k', u)) as Hpc.
         cbn [dependees]; unfold sightSet, holderEdges, dpEdges, plainKey.
-        rewrite (chains_agree I _ _ _ (k, v) a Hp),
-          (holds_agree I _ _ _ (k, v) a Hd),
-          (dp_agree I _ _ _ (m, u) a Hdc (chains_agree I _ _ _ (m, u) a Hpc)).
+        rewrite (chains_agree I _ _ _ (k, v) n Hp),
+          (holds_agree I _ _ _ (k, v) n Hd),
+          (dp_agree I _ _ _ (k', u) n Hdc (chains_agree I _ _ _ (k', u) n Hpc)).
         unfold base; cbn [fst snd].
-        rewrite (slotKey_agree I _ _ _ (snd k, v) a Hd),
-          (slotKey_agree I _ _ _ (snd m, u) a Hdc),
-          (slotCands_agree I _ _ _ (snd m, u) Hdc
-             (fun d Hdr => slotNames_spec I (snd m, u) d Hdr) a).
+        rewrite (slotKey_agree I _ _ _ (snd k, v) n Hd),
+          (slotKey_agree I _ _ _ (snd k', u) n Hdc),
+          (slotCands_agree I _ _ _ (snd k', u) Hdc
+             (fun d Hdr => slotNames_spec I (snd k', u) d Hdr) n).
         reflexivity.
       Qed.
 
-      Theorem dependees_lookupSight : forall I k v a x,
-          dependees I (Nm.Sight k v a, x) = T.DependeesSet.empty.
-      Proof. intros I k v a x; reflexivity. Qed.
+      Theorem dependees_lookupSight : forall I k v n x,
+          dependees I (Nm.Sight k v n, x) = T.DependeesSet.empty.
+      Proof. intros I k v n x; reflexivity. Qed.
 
-      Theorem dependees_lookupDesc : forall I a t s x,
-          dependees I (Nm.Desc a t s, x) = T.DependeesSet.empty.
-      Proof. intros I a t s x; reflexivity. Qed.
+      Theorem dependees_lookupDesc : forall I a m s x,
+          dependees I (Nm.Desc a m s, x) = T.DependeesSet.empty.
+      Proof. intros I a m s x; reflexivity. Qed.
 
     End Lookup.
 
