@@ -9,12 +9,12 @@
 # manifests as pac did.
 # usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]
 #        MODES="tool pubgrub" P=<jobs> TIMEOUT=<s> PORT=<shim>
-#        NORM=<edges.py flag> FILL=1 READING=npm|shared|placement DEPTH=<D>
+#        FILL=1 READING=npm|shared|placement DEPTH=<D>
 S="$(cd "$(dirname "$0")" && pwd)"
 ECO=npm
 . "$S/../scale-lib.sh"
 . "$S/npm.sh"
-export PORT=${PORT:-8899} NORM=${NORM---peer-parent} READING=${READING:-npm}
+export PORT=${PORT:-8899} READING=${READING:-npm}
 case $READING in npm|shared|placement) ;; *) echo "$0: READING=$READING is none of npm, shared and placement" >&2; exit 2 ;; esac
 NPMV=$(sed -n 1p "$S/npm-version") NODEV=$(sed -n 2p "$S/npm-version")
 
@@ -22,7 +22,7 @@ all_queries() { node "$S/queries.js" "$TOP/repos/npm"; }
 
 regress_queries() { awk '{print $1 "@" $2}' "$S/baseline/roots.txt"; }
 
-params() { echo "NORM=$NORM"; echo "FILL=${FILL:-}"; echo "READING=$READING"; }
+params() { echo "FILL=${FILL:-}"; echo "READING=$READING"; }
 
 prepare() {
   [ -n "${FILL:-}" ] || snapshot npm
@@ -89,7 +89,7 @@ extract() { :; }
 
 correspond() {
   local n
-  n=$(python3 "$S/edges.py" "$name" "$o.theirs" "$1.out" "$1" $NORM) && n=${n##*#} && [ -n "$n" ] ||
+  n=$(python3 "$S/edges.py" "$name" "$o.theirs" "$1.out" "$1" --peer-parent) && n=${n##*#} && [ -n "$n" ] ||
     return 1
   oo=$(wc -l < "$1.nodes.oursonly") to=$(wc -l < "$1.nodes.npmonly")
   echo "${n%,*,*,*} ${n#*,*,*,}" > "$1.counts"
