@@ -92,6 +92,23 @@ let user_cache eco =
 let user_cache_absent eco =
   Printf.sprintf "$(b,\\$XDG_CACHE_HOME)/pac/%s, else ~/.cache/pac/%s" eco eco
 
+(* --cache and --no-cache for a cache of what a parser makes of an index,
+   in the user's cache by default *)
+let parse_cache eco ~what =
+  let dir =
+    Arg.(
+      value
+      & opt (some string) (user_cache eco)
+      & info [ "cache" ] ~docv:"DIR" ~absent:(user_cache_absent eco)
+          ~doc:
+            (what
+           ^ "; with neither variable set there is none unless it is given."))
+  in
+  let off =
+    Arg.(value & flag & info [ "no-cache" ] ~doc:"Read and write no cache.")
+  in
+  Term.(const (fun dir off -> if off then None else dir) $ dir $ off)
+
 (* solve time is the wall time since [t0] less what went on loading, which
    the lazy loaders interleave with the solve.  [loaded], an argument, is
    read before [walk] runs, so that what the walk loads is no part of the
@@ -111,13 +128,13 @@ let report ~t0 ~core (loaded : Report.loaded) ~walk answer print =
   Report.loaded loaded ~solve:(t1 -. t0 -. loaded.Report.parse);
   code
 
-let debian_run debug core order no_recs no_strict native path query =
+let debian_run debug core order no_recs no_strict native cache path query =
   guard @@ fun () ->
   Pac_common.Input.file path;
   let t0 = Unix.gettimeofday () in
   match
     Debian_solve.solve_files ~debug ~order ~recommends:(not no_recs)
-      ~strict_pinning:(not no_strict) ~native ~paths:[ path ] ~query
+      ~strict_pinning:(not no_strict) ~native ~cache ~paths:[ path ] ~query
   with
   | Error e -> error 2 "%s" e
   | Ok r ->
@@ -125,10 +142,17 @@ let debian_run debug core order no_recs no_strict native path query =
         {
           Report.names = r.Debian_solve.names;
           versions = r.Debian_solve.versions;
-          extra = [];
+          extra =
+            (match cache with
+            | None -> []
+            | Some _ when r.Debian_solve.cached ->
+                [ "index read from the cache" ]
+            | Some _ -> [ "index parsed" ]);
           dropped = r.Debian_solve.dropped;
           parse = r.Debian_solve.t_parse;
-        } ~walk:r.Debian_solve.core r.Debian_solve.answer (fun a ->
+        }
+        ~walk:r.Debian_solve.core r.Debian_solve.answer
+        (fun a ->
           Report.packages
             (List.map
                (fun (n, b, v) -> Printf.sprintf "%s:%s %s" n b v)
@@ -166,6 +190,13 @@ let debian_cmd =
       value & opt string "amd64"
       & info [ "native" ] ~docv:"ARCH" ~doc:"Native architecture.")
   in
+  let cache =
+    parse_cache "debian"
+      ~what:
+        "Keep what the parser and the table builder make of the Packages file \
+         in $(docv), keyed by the file's bytes, and read it back when a later \
+         run loads the same file with the same flags"
+  in
   let path =
     Arg.(
       required
@@ -196,7 +227,7 @@ let debian_cmd =
        ~doc:"Solve against a Debian Packages index.")
     Term.(
       const debian_run $ debug_arg $ core_arg $ order $ no_recs $ no_strict
-      $ native $ path $ query)
+      $ native $ cache $ path $ query)
 
 let opam_run debug core order with_test with_doc with_dev_setup opam_version
     repo atoms =
@@ -423,22 +454,11 @@ let cargo_cmd =
           ~doc:"Print the decoded parent relation, one edge per line.")
   in
   let cache =
-    let dir =
-      Arg.(
-        value
-        & opt (some string) (user_cache "cargo")
-        & info [ "cache" ] ~docv:"DIR"
-            ~absent:(user_cache_absent "cargo")
-            ~doc:
-              "Keep what the parser makes of each index file in $(docv), keyed \
-               by the file's bytes, and read it back when a later run loads \
-               the same file; with neither variable set there is none unless \
-               it is given.")
-    in
-    let off =
-      Arg.(value & flag & info [ "no-cache" ] ~doc:"Read and write no cache.")
-    in
-    Term.(const (fun dir off -> if off then None else dir) $ dir $ off)
+    parse_cache "cargo"
+      ~what:
+        "Keep what the parser makes of each index file in $(docv), keyed by \
+         the file's bytes, and read it back when a later run loads the same \
+         file"
   in
   Cmd.v
     (Cmd.info "cargo" ~exits

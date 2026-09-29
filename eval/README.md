@@ -235,6 +235,7 @@ python3 eval/bench/summary.py /tmp/bench
 opam's steps also time `opam-mccs`, the same command with `--solver=builtin-mccs+glpk`, opam's default solver, set beside builtin-0install.
 npm's measured rounds run `--offline`, from the cache its warm-up filled, as pac reads the snapshot from disk.
 Per query, a warm-up round and then `REPS` (default 5) measured rounds, each running every variant once; a cold step (`debian-cold`, `opam-cold`) instead runs each variant once after dropping the index, the tool's state and both binaries out of the page cache.
+pac's Debian runs pass `--cache` a directory of the run's rather than pac's default, the user's cache: the warm-up round fills it, and `debian-cold` empties it before each run; `PAC_CACHE` names another directory, and `PAC_CACHE=` passes `--no-cache`, here and in `eval/debian/scale.sh`, whose default is `<run-dir>/pac-cache`.
 Wall is taken around GNU time, whose `%M` is the RSS, and pac's `parse` and `solve` lines are kept beside it.
 `PIN` is a command prefix both run under, by default `taskset -c 42`, a core of iphito's NUMA node 0 that serves no device interrupt, whose memory first touch then takes from that node; `PIN=` runs unpinned. `floor` measures GNU time's own start-up under it.
 No query starts at a load average of `LOADSTART` (2.5) or more, and one whose rounds end at `LOADMAX` (3.5) or more is measured again.

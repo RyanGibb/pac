@@ -493,21 +493,66 @@ type result = {
   names : int;
   versions : int;
   dropped : int;
+  cached : bool;
   t_parse : float;
 }
 
+(* a parse says whether it read the bytes the entry is keyed by *)
+type source = Entry of in_channel | Parsed of DF.stanza list * int * bool
+
 (* Parsing and table construction are reported apart from solving because
    they scale differently: the archive is read whole, while the solve
-   touches only the sub-instances the lookup theorems bound. *)
-let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~paths ~query
-    : (result, string) Stdlib.result =
+   touches only the sub-instances the lookup theorems bound.
+
+   A cache entry holds the parsed index with the parser's drop count, which
+   the query is read against, and the tables built from it with no version
+   named.  Their types are made at the index's architectures, so those lead
+   the entry, and the rest is read at them.  A query naming a version cuts
+   the other candidates under Strict-Pinning, so it builds its own tables
+   and writes no entry. *)
+let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~cache ~paths
+    ~query : (result, string) Stdlib.result =
   Pubgrub.set_debug debug;
   let t0 = Unix.gettimeofday () in
-  let dropped = ref 0 in
-  let index =
-    List.concat_map (DF.parse_file ~reject:(fun () -> incr dropped)) paths
+  let entry, digests =
+    match cache with
+    | None -> (None, [])
+    | Some dir ->
+        let ds = List.map Digest.file paths in
+        ( Some
+            (Pac_common.Cache.entry dir ~format:Index_format.digest
+               (Digest.to_hex
+                  (Digest.string
+                     (String.concat "\000"
+                        (List.map Digest.to_hex ds
+                        @ [
+                            native;
+                            string_of_bool recommends;
+                            string_of_bool strict_pinning;
+                          ]))))),
+          ds )
   in
-  let arches =
+  let ic = Option.bind entry Pac_common.Cache.open_entry in
+  Fun.protect ~finally:(fun () -> Option.iter close_in_noerr ic) @@ fun () ->
+  (* a file changed since it was hashed is parsed but not cached *)
+  let parse () =
+    let dropped = ref 0 in
+    let reject () = incr dropped in
+    let index, keyed =
+      if Option.is_none entry then
+        (List.concat_map (DF.parse_file ~reject) paths, false)
+      else
+        let bytes =
+          List.map
+            (fun p -> In_channel.with_open_bin p In_channel.input_all)
+            paths
+        in
+        let index = List.concat_map (DF.parse_string ~reject) bytes in
+        (index, List.map Digest.string bytes = digests)
+    in
+    Parsed (index, !dropped, keyed)
+  in
+  let arches_of index =
     List.sort_uniq String.compare
       (native
       :: List.filter_map
@@ -515,20 +560,65 @@ let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~paths ~query
              if st.architecture = "all" then None else Some st.architecture)
            index)
   in
-  Result.map
-    (fun (query, named) ->
-      let index =
-        if strict_pinning then Args.pin_candidates ~native ~named index
-        else index
-      in
-      let module AP = struct
-        let arches = arches
-        let native = native
-      end in
-      let module M = Make (AP) in
-      let tables = M.build_tables ~recommends index in
-      let t_parse = Unix.gettimeofday () -. t0 in
-      let answer, core = M.solve ~debug ~order tables query in
-      let { Tables.names; versions } = M.stats tables in
-      { answer; core; names; versions; dropped = !dropped; t_parse })
-    (Args.parse_query ~native ~arches index query)
+  let rec at arches source =
+    let module AP = struct
+      let arches = arches
+      let native = native
+    end in
+    let module M = Make (AP) in
+    match
+      match source with
+      | Entry ic ->
+          Option.map
+            (fun (index, dropped, e) ->
+              (index, dropped, Some (e : M.eager), false))
+            (Pac_common.Cache.value ic)
+      | Parsed (index, dropped, keyed) -> Some (index, dropped, None, keyed)
+    with
+    | None -> start (parse ())
+    | Some (index, dropped, eager, keyed) ->
+        Result.map
+          (fun (query, named) ->
+            let unnamed = (not strict_pinning) || Hashtbl.length named = 0 in
+            let tables =
+              match eager with
+              | Some e when unnamed -> M.of_eager e
+              | _ ->
+                  let tables =
+                    M.build_tables ~recommends
+                      (if strict_pinning then
+                         Args.pin_candidates ~native ~named index
+                       else index)
+                  in
+                  if keyed && unnamed then
+                    Option.iter
+                      (fun f ->
+                        Pac_common.Cache.store f (fun oc ->
+                            Marshal.to_channel oc arches [];
+                            Marshal.to_channel oc
+                              (index, dropped, M.eager tables)
+                              []))
+                      entry;
+                  tables
+            in
+            let t_parse = Unix.gettimeofday () -. t0 in
+            let answer, core = M.solve ~debug ~order tables query in
+            let { Tables.names; versions } = M.stats tables in
+            {
+              answer;
+              core;
+              names;
+              versions;
+              dropped;
+              cached = Option.is_some eager;
+              t_parse;
+            })
+          (Args.parse_query ~native ~arches index query)
+  and start = function
+    | Parsed (index, _, _) as p -> at (arches_of index) p
+    | Entry ic as e -> (
+        match Pac_common.Cache.value ic with
+        | Some arches -> at arches e
+        | None -> start (parse ()))
+  in
+  start (match ic with Some ic -> Entry ic | None -> parse ())

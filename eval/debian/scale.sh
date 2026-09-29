@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]
 #        MODES="tool pubgrub" P=<jobs> TIMEOUT=<s>
+#        PAC_CACHE=<pac's --cache, by default <run-dir>/pac-cache; empty for none>
 S="$(cd "$(dirname "$0")" && pwd)"
 ECO=debian
 . "$S/../scale-lib.sh"
@@ -10,7 +11,7 @@ all_queries() { sed -n 's/^Package: //p' "$TOP/repos/debian/Packages" | sort -u;
 prepare() {
   snapshot debian/Packages
   bash "$S/setup.sh" "$run/aptroot" > "$run/setup.log" 2>&1 || { cat "$run/setup.log" >&2; return 1; }
-  export APTROOT=$run/aptroot APT=${APT:-apt-get}
+  export APTROOT=$run/aptroot APT=${APT:-apt-get} PAC_CACHE=${PAC_CACHE-$run/pac-cache}
 }
 
 . "$S/refused.sh"
@@ -25,8 +26,10 @@ ask() {
 ask_tool() { answer "$S/baseline/apt-$1" names "$o.apt" ask "$2"; }
 
 run_pac() {
+  local c=(--no-cache)
+  [ -z "$PAC_CACHE" ] || c=(--cache "$PAC_CACHE")
   (cd "$TOP" && timeout "$TIMEOUT" "$run/pac.exe" debian $(flag "$1") --native amd64 \
-     repos/debian/Packages $3) > "$2.out" 2>&1
+     "${c[@]}" repos/debian/Packages $3) > "$2.out" 2>&1
 }
 
 extract() { rows "$1.out" | sed -n 's/:amd64 .*//p' | sort -u > "$1.ours"; }

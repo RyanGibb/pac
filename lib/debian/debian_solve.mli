@@ -10,6 +10,8 @@ type result = {
   names : int;
   versions : int;
   dropped : int;
+  (* whether the parsed index was read from the cache *)
+  cached : bool;
   t_parse : float;
 }
 
@@ -19,6 +21,7 @@ val solve_files :
   recommends:bool ->
   strict_pinning:bool ->
   native:string ->
+  cache:string option ->
   paths:string list ->
   query:string list ->
   (result, string) Stdlib.result

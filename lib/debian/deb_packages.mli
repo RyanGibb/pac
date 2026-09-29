@@ -38,3 +38,4 @@ val priority_lowest : int
 val parse_depends : string -> atom list list
 val parse_depends_fields : string list -> atom list list
 val parse_file : reject:(unit -> unit) -> string -> stanza list
+val parse_string : reject:(unit -> unit) -> string -> stanza list

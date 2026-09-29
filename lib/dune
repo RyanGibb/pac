@@ -1,3 +1,8 @@
 (library
  (name pac_common)
- (libraries pac))
+ (modules :standard \ gen_format)
+ (libraries pac unix))
+
+(executable
+ (name gen_format)
+ (modules gen_format))

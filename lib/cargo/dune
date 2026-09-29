@@ -17,10 +17,6 @@
   cargo_solve)
  (libraries cargo_frontend pac pac_common pubgrub unix))
 
-(executable
- (name gen_index_format)
- (modules gen_index_format))
-
 ; whatever can change what the parser makes of a file, or how its values
 ; are laid out: its sources, its types', those of what it runs on, and
 ; the entry's own
@@ -34,12 +30,13 @@
   cargo_version.mli
   ../version/semver.ml
   ../version/semver.mli
-  index_cache.ml)
+  index_cache.ml
+  ../cache.ml)
  (action
   (with-stdout-to
    %{target}
    (run
-    %{exe:gen_index_format.exe}
+    %{exe:../gen_format.exe}
     ocaml=%{ocaml_version}
     yojson=%{version:yojson}
     %{deps}))))

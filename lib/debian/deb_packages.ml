@@ -311,9 +311,7 @@ let stanza_of_fields ~reject (fs : (string * string) list) : stanza option =
 (* Stanzas are built as the file is read.  Accumulating every physical line
    first cost 1.27M live strings and conses on a Debian archive before any
    stanza was looked at; nothing needs a line once its stanza is closed. *)
-let parse_file ~reject path =
-  let ic = open_in path in
-  Fun.protect ~finally:(fun () -> close_in_noerr ic) @@ fun () ->
+let parse_lines ~reject input =
   let acc = ref [] and fields = ref [] in
   let flush () =
     (match !fields with
@@ -326,7 +324,7 @@ let parse_file ~reject path =
   in
   (try
      while true do
-       let line = input_line ic in
+       let line = input () in
        if line = "" then flush ()
        else if line.[0] = ' ' || line.[0] = '\t' then
          match !fields with
@@ -345,3 +343,18 @@ let parse_file ~reject path =
    with End_of_file -> ());
   flush ();
   List.rev !acc
+
+let parse_file ~reject path =
+  let ic = open_in path in
+  Fun.protect ~finally:(fun () -> close_in_noerr ic) @@ fun () ->
+  parse_lines ~reject (fun () -> input_line ic)
+
+(* the lines input_line would read off a file of these bytes *)
+let parse_string ~reject s =
+  let n = String.length s and pos = ref 0 in
+  parse_lines ~reject (fun () ->
+      if !pos >= n then raise End_of_file;
+      let e = Option.value (String.index_from_opt s !pos '\n') ~default:n in
+      let line = String.sub s !pos (e - !pos) in
+      pos := e + 1;
+      line)

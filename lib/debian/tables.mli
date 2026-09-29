@@ -54,6 +54,12 @@ module type S = sig
 
   type tables
 
+  (* what build_tables makes at once, which is all a cache need keep: the
+     rest is built from it on demand *)
+  type eager
+
+  val eager : tables -> eager
+  val of_eager : eager -> tables
   val stats : tables -> stats
   val stanza : tables -> DMA.Pkg.t -> nstanza option
 

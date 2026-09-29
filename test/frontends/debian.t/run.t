@@ -976,3 +976,92 @@ while a name one package alone provides selects that package, as apt's
     hsysd:amd64 1
   encoded solution: 1 core nodes (1 lookups)
   loaded: 176 names, 176 versions
+
+A run keeps what the parser and the table builder make of the index in a
+cache, keyed by the file's bytes and the flags that shape the tables, and
+a later run reads it back: the same answer, the same declarations
+dropped, as with none.  The cache is $XDG_CACHE_HOME/pac/debian by
+default, which these cases set, and --cache names another:
+
+  $ noted() { "$@" > out 2>&1; s=$?; grep -e '^loaded' -e '^parser' out; return $s; }
+  $ untimed ../../../bin/main.exe debian --native amd64 Packages.nameless nl > none
+  $ tail -n 2 none
+  loaded: 5 names, 5 versions
+  parser dropped 7 declarations
+  $ XDG_CACHE_HOME=$PWD/xdg noted ../../../bin/main.exe debian --native amd64 Packages.nameless nl
+  loaded: 5 names, 5 versions, index parsed
+  parser dropped 7 declarations
+  $ XDG_CACHE_HOME=$PWD/xdg untimed ../../../bin/main.exe debian --native amd64 Packages.nameless nl > warm
+  $ tail -n 2 warm
+  loaded: 5 names, 5 versions, index read from the cache
+  parser dropped 7 declarations
+  $ diff none warm
+  8c8
+  < loaded: 5 names, 5 versions
+  ---
+  > loaded: 5 names, 5 versions, index read from the cache
+  [1]
+  $ ls xdg/pac/debian | wc -l
+  1
+
+--no-cache reads and writes none, whatever --cache says:
+
+  $ XDG_CACHE_HOME=$PWD/xdg noted ../../../bin/main.exe debian --no-cache --native amd64 Packages.nameless nl
+  loaded: 5 names, 5 versions
+  parser dropped 7 declarations
+  $ noted ../../../bin/main.exe debian --cache c --no-cache --native amd64 Packages.nameless nl
+  loaded: 5 names, 5 versions
+  parser dropped 7 declarations
+  $ ls c
+  ls: cannot access 'c': No such file or directory
+  [2]
+
+A changed file misses the cache, and so do flags that shape the tables:
+
+  $ noted ../../../bin/main.exe debian --cache c --native amd64 Packages.nameless nl
+  loaded: 5 names, 5 versions, index parsed
+  parser dropped 7 declarations
+  $ cp Packages.nameless idx && chmod u+w idx
+  $ printf '\nPackage: nx\nVersion: 1\n' >> idx
+  $ noted ../../../bin/main.exe debian --cache c --native amd64 idx nl
+  loaded: 6 names, 6 versions, index parsed
+  parser dropped 7 declarations
+  $ noted ../../../bin/main.exe debian --cache c --native amd64 --no-install-recommends Packages.nameless nl
+  loaded: 5 names, 5 versions, index parsed
+  parser dropped 7 declarations
+
+A query naming a version makes it the candidate, so it reads the index
+back but builds its own tables: the cached ones hold pinv 2 alone.
+
+  $ noted ../../../bin/main.exe debian --cache c --native amd64 Packages pinapp
+  loaded: 176 names, 176 versions, index parsed
+  [1]
+  $ untimed ../../../bin/main.exe debian --cache c --native amd64 Packages pinapp pinv=1
+  packages (2):
+    pinapp:amd64 1
+    pinv:amd64 1
+  encoded solution: 2 core nodes (3 lookups)
+  loaded: 176 names, 176 versions, index read from the cache
+
+An entry cut short is a miss, never a misread, and is written again:
+
+  $ ../../../bin/main.exe debian --cache d --native amd64 Packages app > /dev/null
+  $ f=$(find d -type f) && head -c 100 "$f" > cut && mv cut "$f"
+  $ noted ../../../bin/main.exe debian --cache d --native amd64 Packages app
+  loaded: 176 names, 176 versions, index parsed
+  $ noted ../../../bin/main.exe debian --cache d --native amd64 Packages app
+  loaded: 176 names, 176 versions, index read from the cache
+
+Runs sharing a cache each write an entry to a file of their own and
+rename it into place, so none reads another's half-written one:
+
+  $ for i in 1 2 3 4 5 6 7 8; do ../../../bin/main.exe debian --cache e --native amd64 Packages app > o$i & done; wait
+  $ cat o1 o2 o3 o4 o5 o6 o7 o8 | grep -v -e '^loaded: ' -e '^parse ' -e '^solve ' | sort | uniq -c
+        8   app:amd64 1
+        8   lib:amd64 1
+        8   prov1:amd64 1
+        8 encoded solution: 5 core nodes (8 lookups)
+        8 packages (3):
+  $ find e -name '*.tmp'
+  $ noted ../../../bin/main.exe debian --cache e --native amd64 Packages app
+  loaded: 176 names, 176 versions, index read from the cache

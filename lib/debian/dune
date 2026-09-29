@@ -6,8 +6,42 @@
 
 (library
  (name debian_solve)
- (modules tables stl_heap work_heap apt_reject order debian_solve)
+ (modules
+  index_format
+  tables
+  stl_heap
+  work_heap
+  apt_reject
+  order
+  debian_solve)
  (libraries debian_frontend pac pac_common pubgrub unix version))
+
+; whatever can change what a cache entry holds, or how its values are laid
+; out: the parser, the candidate cut, the tables and the types they are
+; built from, and the entry's own reading and writing
+
+(rule
+ (target index_format.ml)
+ (deps
+  deb_packages.ml
+  deb_packages.mli
+  apt_args.ml
+  apt_args.mli
+  tables.ml
+  tables.mli
+  debian_solve.ml
+  ../cache.ml
+  ../version/debian.ml
+  ../version/debian.mli
+  ../ot.ml
+  ../ot.mli
+  ../tbl.ml
+  ../tbl.mli
+  ../../extraction/pac.ml)
+ (action
+  (with-stdout-to
+   %{target}
+   (run %{exe:../gen_format.exe} ocaml=%{ocaml_version} %{deps}))))
 
 (test
  (name test_apt_args)

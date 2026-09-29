@@ -35,8 +35,8 @@
 #      REPS (5), CAP (seconds, 0 for none), OREPS (3), OCAP (1800),
 #      STRAT, SETS (regress strat), PIN (taskset -c 42), LOADSTART (2.5),
 #      LOADMAX (3.5), PORT (cargo's proxy, 8991), NPORT (npm's shim, 8899),
-#      DEPTH (placement's --depth, 8), PAC_CACHE (pac's cargo --cache, as
-#      run_query.py reads it)
+#      DEPTH (placement's --depth, 8), PAC_CACHE (pac's cargo and debian
+#      --cache, as run_query.py reads it; empty for --no-cache)
 # Run inside `nix develop ./nix`, with no ocamlc on PATH: opam reads
 # sys-ocaml-version off whatever ocamlc it finds.
 set -u
@@ -184,10 +184,18 @@ sets() {  # <step> <eco> <evict paths or ""> <variant>...
 
 store() { local p; p=$(readlink -f "$(command -v "$1")"); dirname "$(dirname "$p")"; }
 
+# pac's --cache, as apt reads its pkgcache.bin: the warm-up round fills
+# it, and under debian-cold each run starts with it empty, as the first
+# run on an index does.  PAC_CACHE names another for the warm steps.
+pre_debian() {
+  [ -z "$DCOLD" ] || [ -z "$DCACHE" ] || rm -rf "$DCACHE"
+}
 argv_debian() {
+  local cache=(--no-cache)
   DIR=$TOP
+  [ -z "$DCACHE" ] || cache=(--cache "$DCACHE")
   case $1 in
-    pac-*) CMD=("$PAC" debian $(order "$1") --native amd64 repos/debian/Packages $3) ;;
+    pac-*) CMD=("$PAC" debian $(order "$1") --native amd64 "${cache[@]}" repos/debian/Packages $3) ;;
     apt) CMD=("$APT" -s install $3) ;;
   esac
 }
@@ -196,6 +204,7 @@ setup_debian() {
     bash "$S/debian/setup.sh" "$RUN/aptroot" > "$RUN/apt-setup.log" 2>&1 ||
     { log "debian setup failed"; return 1; }
   export APT_CONFIG="$RUN/aptroot/etc/apt/apt.conf"
+  DCACHE=${PAC_CACHE-$RUN/debian/pac-cache} DCOLD=
 }
 
 argv_alpine() {
@@ -324,7 +333,7 @@ in_npm() {  # <command...>
 step() {
   case $1 in
     debian) setup_debian && sets debian debian "" pac-tool pac-pubgrub apt ;;
-    debian-cold) setup_debian &&
+    debian-cold) setup_debian && DCOLD=1 && DCACHE=${DCACHE:+$RUN/debian-cold/pac-cache} &&
       sets debian-cold debian "repos/debian/Packages $RUN/aptroot $PAC $(store "$APT")" pac-tool pac-pubgrub apt ;;
     alpine) setup_alpine && sets alpine alpine "" pac-tool pac-pubgrub apk ;;
     opam) setup_opam && sets opam opam "" pac-tool pac-pubgrub opam opam-mccs ;;

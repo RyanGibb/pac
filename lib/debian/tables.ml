@@ -46,7 +46,10 @@ module type S = sig
   }
 
   type tables
+  type eager
 
+  val eager : tables -> eager
+  val of_eager : eager -> tables
   val stats : tables -> stats
   val stanza : tables -> DMA.Pkg.t -> nstanza option
   val versions_of : tables -> string * string -> string list
@@ -157,11 +160,15 @@ module Make (AP : ARCH) : S = struct
       nall = st.architecture = "all";
     }
 
-  type tables = {
+  type eager = {
     versions_table : (string * string, string list) Hashtbl.t;
     stanza_table : (DMA.Pkg.t, nstanza) Hashtbl.t;
     group_table : (string, (string * string) list) Hashtbl.t;
     providers_table : (string, (DMA.Pkg.t * DMA.Deb.coq_DTop) list) Hashtbl.t;
+  }
+
+  type tables = {
+    eager : eager;
     (* who names a package in a Depends or Pre-Depends, and who in a
        Conflicts or Breaks, by the bare name as written: the watch lists
        apt's Reject propagation walks, built from the field text alone, so
@@ -182,14 +189,14 @@ module Make (AP : ARCH) : S = struct
 
   let stats tables =
     {
-      names = Hashtbl.length tables.group_table;
-      versions = Hashtbl.length tables.stanza_table;
+      names = Hashtbl.length tables.eager.group_table;
+      versions = Hashtbl.length tables.eager.stanza_table;
     }
 
-  let stanza tables p = Hashtbl.find_opt tables.stanza_table p
-  let versions_of tables k = find_list tables.versions_table k
-  let group_members tables n = find_list tables.group_table n
-  let providers tables n = find_list tables.providers_table n
+  let stanza tables p = Hashtbl.find_opt tables.eager.stanza_table p
+  let versions_of tables k = find_list tables.eager.versions_table k
+  let group_members tables n = find_list tables.eager.group_table n
+  let providers tables n = find_list tables.eager.providers_table n
   let dependers tables n = find_list (Lazy.force tables.rev_dep_table) n
   let conflicters tables n = find_list (Lazy.force tables.rev_conf_table) n
 
@@ -258,6 +265,17 @@ module Make (AP : ARCH) : S = struct
     Hashtbl.iter (fun _ (s : nstanza) -> push t (fst s.nsrc) s) stanza_table;
     t
 
+  let eager tables = tables.eager
+
+  let of_eager eager =
+    {
+      eager;
+      rev_dep_table = lazy (rev_dep eager.stanza_table);
+      rev_conf_table = lazy (rev_conf eager.stanza_table);
+      source_table = lazy (by_source eager.stanza_table);
+      oc_cache = Hashtbl.create 4096;
+    }
+
   (* Of two stanzas at one version apt keeps the first read, Provides and
      all.  An arch:all stanza is a version of its own to apt (Version::All),
      which the package's one version here cannot be, so that pair is still
@@ -288,16 +306,7 @@ module Make (AP : ARCH) : S = struct
             add { stz with nprovs = old.nprovs @ stz.nprovs }
         | Some _ -> ())
       index;
-    {
-      versions_table;
-      stanza_table;
-      group_table;
-      providers_table;
-      rev_dep_table = lazy (rev_dep stanza_table);
-      rev_conf_table = lazy (rev_conf stanza_table);
-      source_table = lazy (by_source stanza_table);
-      oc_cache = Hashtbl.create 4096;
-    }
+    of_eager { versions_table; stanza_table; group_table; providers_table }
 
   (* apt's ObsoletedByNewerSourceVersion (solver3.cc:863-888): another
      binary of the same source, on the same architecture and equally arch:all
