@@ -1,0 +1,14 @@
+Package: apdep
+Version: 1
+Architecture: i386
+Depends: aptool
+
+Package: aptool
+Version: 1
+Architecture: amd64
+Multi-Arch: foreign
+
+Package: aptool
+Version: 1
+Architecture: i386
+Multi-Arch: foreign

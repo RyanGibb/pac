@@ -158,10 +158,6 @@ module Make (AP : Tables.ARCH) = struct
            pseudo-name, because no reduced clause hangs there *)
         DMA.Deb.T.DependeesSet.empty
 
-  let is_native = function
-    | DMA.QAArch a -> String.equal a AP.native
-    | _ -> false
-
   (* apt's CompareProviders3 (apt-pkg/solver3.cc) sorts the candidates of one
      alternative and takes the first undecided one.  Resolving from an empty
      system with no pins leaves it these keys, in this order: the Essential
@@ -170,8 +166,7 @@ module Make (AP : Tables.ARCH) = struct
      are a pin, the upgrade candidate, the installed version, obsoleteness and
      a Multi-Arch:same package with another arch installed, none of which an
      empty system can distinguish; the one live key above these is "same group
-     as the target", which is the real-before-provided split PVersion.compare
-     already makes. *)
+     as the target", which provider_compare reads. *)
   type pref = {
     pess : bool;
     pimp : bool;
@@ -216,20 +211,21 @@ module Make (AP : Tables.ARCH) = struct
           pkgname = n;
         }
 
-  (* A Ref names the provider package it came from, so its keys are that
-     package's own.  embedPkg introduces only QAArch names, so the other
-     cases are unreachable and rank as a package with no stanza would. *)
-  let ref_pref tables ((n, x) : string * DMA.coq_NameArch) w =
-    match x with
-    | DMA.QAArch b -> pref_of_pkg tables ((n, b), w)
-    | _ ->
-        {
-          pess = false;
-          pimp = false;
-          pnat = is_native x;
-          pprio = DF.priority_lowest;
-          pkgname = n;
-        }
+  (* apt's order of two candidates for the name n, as the packages they
+     install: one package's versions by the version alone, and two packages
+     first by whether each is in n's group, where foo:amd64 and foo:i386 tie
+     whichever architecture asks for foo, and then by pref, which takes the
+     native one. *)
+  let provider_compare tables n ((pk, _) as p : DMA.Pkg.t) ((qk, _) as q) =
+    if pk = qk then Version.Debian.compare (snd p) (snd q)
+    else
+      let c =
+        Bool.compare (String.equal (fst pk) n) (String.equal (fst qk) n)
+      in
+      if c <> 0 then c
+      else
+        let c = pref_compare (pref_of_pkg tables p) (pref_of_pkg tables q) in
+        if c <> 0 then c else Version.Debian.compare (snd p) (snd q)
 
   (* The candidate order reads the tables the candidates were introduced
      from, so the comparator and the PubGrub instance over it are built per
@@ -242,17 +238,29 @@ module Make (AP : Tables.ARCH) = struct
   struct
     module PVersion = struct
       (* pos is the candidate's position in the clause whose name is being
-         decided -- supplied by tag, where that name is known -- and is a
-         constant for every candidate that is not an alternative of one. *)
-      type t = { pos : int; v : DMA.Deb.Version.t }
+         decided, and tgt the name a selector's candidates provide -- both
+         supplied by tag, where that name is known.  pos is a constant for
+         every candidate that is not an alternative of a clause, and tgt is
+         None for every one that is not a selector's. *)
+      type t = {
+        pos : int;
+        v : DMA.Deb.Version.t;
+        tgt : (string * DMA.coq_NameArch) option;
+      }
+
+      (* A selector candidate as the package it installs: RefReal names no
+         package, so it is a version of the target itself. *)
+      let sel_pkg (pv : t) =
+        match (pv.tgt, pv.v) with
+        | Some (n, DMA.QAArch b), DMA.Deb.Version.RefReal w -> Some ((n, b), w)
+        | Some _, DMA.Deb.Version.Ref ((m, DMA.QAArch c), w) -> Some ((m, c), w)
+        | _ -> None
 
       (* PubGrub decides the greatest candidate under compare, so preference
          lives here: dpkg-newest for real versions, leftmost alternative by
-         clause position, a real package above any provider claiming its
-         name, and apt's candidate order among the providers.  The calculus
-         only makes the real/provided split legible -- RefReal has no name,
-         so it is the one candidate that cannot be a provider -- and says
-         nothing about which to try first.
+         clause position, and apt's candidate order among a selector's real
+         versions and providers.  The calculus says nothing about which to
+         try first.
 
          Position is the whole of the alternative order because apt's sort is
          per alternative: TranslateOrGroup (apt-pkg/solver3.cc) sorts each
@@ -282,23 +290,15 @@ module Make (AP : Tables.ARCH) = struct
             if c <> 0 then c else fallback ()
         | DMA.Deb.Version.Zero, DMA.Deb.Version.Atom _ -> -1
         | DMA.Deb.Version.Atom _, DMA.Deb.Version.Zero -> 1
-        | DMA.Deb.Version.RefReal w, DMA.Deb.Version.RefReal w' ->
-            (* one selector's real candidates all share its name, hence its
-               arch: only the version separates them *)
-            let c = Version.Debian.compare w w' in
-            if c <> 0 then c else fallback ()
-        | DMA.Deb.Version.RefReal _, DMA.Deb.Version.Ref (_, _) -> 1
-        | DMA.Deb.Version.Ref (_, _), DMA.Deb.Version.RefReal _ -> -1
-        | DMA.Deb.Version.Ref (m, w), DMA.Deb.Version.Ref (m', w') ->
-            let c =
-              pref_compare (ref_pref I.tables m w) (ref_pref I.tables m' w')
-            in
-            if c <> 0 then c
-            else
-              (* two versions of one provider are apt's same-package case,
-                 which the version alone settles *)
-              let c = Version.Debian.compare w w' in
-              if c <> 0 then c else fallback ()
+        | ( (DMA.Deb.Version.RefReal _ | DMA.Deb.Version.Ref _),
+            (DMA.Deb.Version.RefReal _ | DMA.Deb.Version.Ref _) ) -> (
+            (* a RefReal and its package's own provide are one version to
+               apt, and the fallback puts the RefReal first *)
+            match (a.tgt, sel_pkg a, sel_pkg b) with
+            | Some (n, _), Some p, Some q ->
+                let c = provider_compare I.tables n p q in
+                if c <> 0 then c else fallback ()
+            | _ -> fallback ())
         | _ -> fallback ()
 
       let pp fmt ({ v; _ } : t) =
@@ -312,15 +312,18 @@ module Make (AP : Tables.ARCH) = struct
         | DMA.Deb.Version.Bot -> Format.fprintf fmt "⊥"
     end
 
-    (* The clause position is known only where the name is: a Disjunct or Soft
-       name holds the clause its candidates are alternatives of, and no other
-       name has Version.Atom candidates at all. *)
+    (* The clause position and the target are known only where the name is:
+       a Disjunct or Soft name holds the clause its candidates are
+       alternatives of, and no other name has Version.Atom candidates at all;
+       a Selector holds the atom its candidates provide. *)
     let tag (n' : DMA.Deb.Name.t) (v : DMA.Deb.Version.t) : PVersion.t =
       match (n', v) with
       | ( (DMA.Deb.Name.Disjunct aset | DMA.Deb.Name.Soft aset),
           DMA.Deb.Version.Atom a ) ->
-          { PVersion.pos = atom_pos aset a; v }
-      | _ -> { PVersion.pos = 0; v }
+          { PVersion.pos = atom_pos aset a; v; tgt = None }
+      | DMA.Deb.Name.Selector a, _ ->
+          { PVersion.pos = 0; v; tgt = Some (fst a) }
+      | _ -> { PVersion.pos = 0; v; tgt = None }
 
     module PG = Pubgrub.Make (PName) (PVersion)
 

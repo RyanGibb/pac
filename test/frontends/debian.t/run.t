@@ -795,6 +795,25 @@ is taken, as xfor2:i386 is for xboth:
   encoded solution: 4 core nodes (4 lookups)
   loaded: 17 names, 18 versions
 
+An unqualified atom meets a package of its own architecture and a
+Multi-Arch: foreign one of another alike.  apt ranks them on the target's
+group first, which aptool:amd64 and aptool:i386 share, and then on the
+native architecture, so apdep:i386 takes aptool:amd64 in both orders:
+
+  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages.archpref apdep:i386
+  packages (2):
+    apdep:i386 1
+    aptool:amd64 1
+  encoded solution: 4 core nodes (4 lookups)
+  loaded: 2 names, 3 versions
+
+  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.archpref apdep:i386
+  packages (2):
+    apdep:i386 1
+    aptool:amd64 1
+  encoded solution: 4 core nodes (4 lookups)
+  loaded: 2 names, 3 versions
+
 A Conflicts or Breaks on pkg:b is apt's negative on the same
 pseudo-package, so it reaches what the atom would meet as a dependency:
 xcfl's Conflicts: xfc:i386 spares the foreign xfc:amd64 it depends on, and

@@ -2,7 +2,11 @@ module type SEARCH = sig
   module T : Tables.S
 
   module PVersion : sig
-    type t = { pos : int; v : T.DMA.Deb.Version.t }
+    type t = {
+      pos : int;
+      v : T.DMA.Deb.Version.t;
+      tgt : (string * T.DMA.coq_NameArch) option;
+    }
 
     val compare : t -> t -> int
   end
