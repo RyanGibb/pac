@@ -22,26 +22,35 @@
         inherit (unstable) opam cargo rustc;
         inherit (node) nodejs;
       };
+      # eval/paper/figures.py's pgfplots, set in acmart's fonts
+      tex = pkgs.texliveSmall.withPackages (ps: with ps; [
+        pgf pgfplots standalone booktabs libertine newtx inconsolata
+        fontaxes mweights xstring kastrup xkeyval etoolbox
+      ]);
     in {
       packages.${system} = tools;
 
-      devShells.${system}.default = pkgs.mkShellNoCC {
-        packages = builtins.attrValues tools;
-        # cargo resolves a goal that declares no rust-version for the rustc
-        # it would build with, so nothing inherited may point it at another
-        # toolchain; CARGO_CMP_OUT and CARGO_INDEX are the harness's own,
-        # not cargo's.
-        shellHook = ''
-          for v in $(compgen -e); do
-            case $v in
-              CARGO_CMP_OUT|CARGO_INDEX) ;;
-              CARGO_*|RUSTUP_*|RUSTC|RUSTC_*|RUSTFLAGS|RUSTDOCFLAGS) unset "$v" ;;
-            esac
-          done
-          export RUSTC=${tools.rustc}/bin/rustc
-          export APT=${tools.apt}/bin/apt-get
-          export APK=${tools.apk-tools}/bin/apk
-        '';
+      devShells.${system} = {
+        paper = pkgs.mkShellNoCC { packages = [ pkgs.python3 tex ]; };
+
+        default = pkgs.mkShellNoCC {
+          packages = builtins.attrValues tools;
+          # cargo resolves a goal that declares no rust-version for the rustc
+          # it would build with, so nothing inherited may point it at another
+          # toolchain; CARGO_CMP_OUT and CARGO_INDEX are the harness's own,
+          # not cargo's.
+          shellHook = ''
+            for v in $(compgen -e); do
+              case $v in
+                CARGO_CMP_OUT|CARGO_INDEX) ;;
+                CARGO_*|RUSTUP_*|RUSTC|RUSTC_*|RUSTFLAGS|RUSTDOCFLAGS) unset "$v" ;;
+              esac
+            done
+            export RUSTC=${tools.rustc}/bin/rustc
+            export APT=${tools.apt}/bin/apt-get
+            export APK=${tools.apk-tools}/bin/apk
+          '';
+        };
       };
     };
 }

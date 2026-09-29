@@ -1,0 +1,9 @@
+# The cause of each INVALID answer the paper's tables name, as
+#   ecosystem | query | cause
+# found by hand from the check's own log and the run reports.  figures.py
+# prints an INVALID it finds no line for as "cause not recorded".
+opam | oui | parser drops {= opam-version}, trusted base (A2)
+npm | qunit@0.x | git dependency outside the snapshot, closed=no (A7)
+npm | wd@1.14.0 | ecc-jsbn's git jsbn outside the snapshot, closed=no
+npm | @request/promise-core@1.1.0 | ecc-jsbn's git jsbn outside the snapshot, closed=no
+npm | less-loader@13.0.0 | ecc-jsbn's git jsbn outside the snapshot, closed=no
