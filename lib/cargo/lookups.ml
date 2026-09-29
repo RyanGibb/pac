@@ -10,7 +10,7 @@ module Make (Encoding : Encoding.S) = struct
     r_fdefs : Cg.FDefRel.t;
     r_links : Cg.LinkRel.t;
     r_supp : Cg.SupportSet.t;
-    r_reads : string list; (* own name plus the slot targets *)
+    r_reads : string list; (* own name plus its slots' dependee names *)
   }
 
   let empty_fibres n =
@@ -135,7 +135,7 @@ module Make (Encoding : Encoding.S) = struct
               r_supp = supp;
               r_reads =
                 List.sort_uniq String.compare
-                  (n :: List.map (fun (d : P.dep) -> d.P.d_target) ds);
+                  (n :: List.map (fun (d : P.dep) -> d.P.d_name) ds);
             })
 
   let slots_and_fdefs st p =
@@ -303,7 +303,7 @@ module Make (Encoding : Encoding.S) = struct
   (* one branch per dependees_lookup{Root,Crate,FeatP,Slot,Decision}, the
      repository read through name_versions alone; the fall-through is
      dependees_reduceDepsInert, empty.  A crate version's reads are all
-     loaded before it answers, an optional slot's target too, so that which
+     loaded before it answers, an optional slot's dependee too, so that which
      names are loaded, and so a links value's declarers so far, does not
      turn on which ranges the lookup evaluates. *)
   let dependees st (p : T.Pkg.t) : T.Dependees.t list =

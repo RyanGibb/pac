@@ -34,8 +34,8 @@ struct
      xreq, so these are the members of the granularity classes the slot
      offers. *)
   let candidates pk (d : P.dep) =
-    Pac_common.Tbl.memo pk.cands (d.P.d_target, d.P.d_req) (fun () ->
-        let fits u = L.msrv_fits pk.lk (d.P.d_target, u) in
+    Pac_common.Tbl.memo pk.cands (d.P.d_name, d.P.d_req) (fun () ->
+        let fits u = L.msrv_fits pk.lk (d.P.d_name, u) in
         List.stable_sort
           (fun a b ->
             match (fits a, fits b) with
@@ -44,7 +44,7 @@ struct
             | _ -> Cargo_version.compare b a)
           (List.filter
              (fun u -> Cargo_version.holds u d.P.d_req)
-             (L.versions_of pk.lk d.P.d_target)))
+             (L.versions_of pk.lk d.P.d_name)))
 
   let enabled_deps pk t u feats default =
     Pac_common.Tbl.memo pk.enabled
@@ -126,7 +126,7 @@ struct
         (fun () ->
           List.exists
             (fun ((d : P.dep), fs) ->
-              let t' = d.P.d_target and dflt = d.P.d_default in
+              let t' = d.P.d_name and dflt = d.P.d_default in
               match first_two t' [] (candidates pk d) with
               | [] -> true
               | [ w ] -> chain > 0 && dead depth (chain - 1) t' w fs dflt
@@ -174,7 +174,7 @@ struct
     let walk (d : P.dep) =
       List.find_map
         (fun u ->
-          if la.live d.P.d_target u (Order.SS.of_list d.P.d_feats) d.P.d_default
+          if la.live d.P.d_name u (Order.SS.of_list d.P.d_feats) d.P.d_default
           then offered (Cg.VPlus.WClass (L.granularity st u))
           else None)
         (candidates pk d)
@@ -205,7 +205,7 @@ struct
 
   (* processing one of cargo's dependencies is, in the encoding, the slot,
      then what the parent delivers to it at that site, then the granularity
-     class's crate, then the target's own features, forced by then.  The
+     class's crate, then the dependee's own features, forced by then.  The
      deliveries go before the crate so that its version is chosen seeing
      every feature asked of it, as cargo's candidate is activated with
      them. *)
@@ -260,7 +260,7 @@ struct
                 es)
             m.P.v_feats
 
-    (* once the target crate is decided, its owned names, then the
+    (* once the dependee crate is decided, its owned names, then the
        activation that ends the dependency's processing *)
     let crate_step assigned t gr =
       let g = Cg.NPlus.CCrate (t, gr) in
@@ -285,7 +285,7 @@ struct
                 List.find_opt (is_open assigned) (delivered (n, v) gr0 sd d)
               with
               | Some x -> Order.Decide x
-              | None -> crate_step assigned d.P.d_target gr)
+              | None -> crate_step assigned d.P.d_name gr)
           | _ -> Order.Skip)
   end
 end

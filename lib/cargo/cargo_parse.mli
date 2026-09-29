@@ -2,13 +2,13 @@ type kind = Normal | Build | Dev
 
 type dep = {
   d_alias : string; (* the manifest key: what dep:/a/feat entries name *)
-  d_target : string; (* the published crate, differing under a rename *)
+  d_name : string; (* the published crate, differing under a rename *)
   d_req : Cargo_version.req;
   d_feats : string list;
   d_optional : bool;
   d_default : bool;
   d_kind : kind;
-  d_cfg : string; (* the target cfg predicate, "" when unconditional *)
+  d_cfg : string; (* the platform cfg predicate, "" when unconditional *)
 }
 
 type fentry =

@@ -173,7 +173,7 @@ let dep_of ~kind ~cfg ~where (alias, v) : P.dep =
   in
   {
     P.d_alias = alias;
-    d_target =
+    d_name =
       (match get "package" fields with
       | Some p -> package_name (str (where ^ ".package") p)
       | None -> alias);

@@ -210,7 +210,7 @@ module Make () = struct
     else
       `Ask
         ( d.P.d_alias,
-          d.P.d_target,
+          d.P.d_name,
           d.P.d_req,
           List.sort_uniq String.compare d.P.d_feats,
           d.P.d_default,
@@ -221,7 +221,7 @@ module Make () = struct
 
   let slot_data (d : P.dep) : Cg.SlotData.t =
     ( d.P.d_alias,
-      ( d.P.d_target,
+      ( d.P.d_name,
         ( xreq d.P.d_req,
           ( xkind d.P.d_kind,
             ( d.P.d_optional,

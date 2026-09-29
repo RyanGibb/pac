@@ -2,7 +2,7 @@ type kind = Normal | Build | Dev
 
 type dep = {
   d_alias : string;
-  d_target : string;
+  d_name : string;
   d_req : Cargo_version.req;
   d_feats : string list;
   d_optional : bool;
@@ -67,14 +67,14 @@ let dep_of ~reject (j : Yojson.Safe.t) : dep option =
   | `Assoc _ -> (
       match member "name" j with
       | `String alias ->
-          let target =
+          let name =
             match member "package" j with `String p -> p | _ -> alias
           in
           let req = match member "req" j with `String r -> r | _ -> "*" in
           Some
             {
               d_alias = alias;
-              d_target = target;
+              d_name = name;
               d_req = Cargo_version.parse_req req;
               d_feats = string_list ~reject (member "features" j);
               d_optional = bool_def false (member "optional" j);

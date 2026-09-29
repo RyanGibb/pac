@@ -28,8 +28,8 @@ let requirements (m : P.ver) ~all feats default =
 
 (* a path package's dependencies in the order to_real_manifest gathers them
    (util/toml/mod.rs): dependencies, dev- and build-dependencies, then each
-   target's normal, build and dev tables, the targets and the keys of every
-   table being BTreeMaps *)
+   platform's normal, build and dev tables, the platforms and the keys of
+   every table being BTreeMaps *)
 let manifest_order (ds : P.dep list) =
   let rank (d : P.dep) =
     match (d.P.d_cfg, d.P.d_kind) with

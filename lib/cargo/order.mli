@@ -10,7 +10,7 @@ val requirements :
   Cargo_parse.ver -> all:bool -> SS.t -> bool -> SS.t * (string, SS.t) Hashtbl.t
 
 (* resolve_features: the dependencies a request enables, each with the
-   features it asks of its target *)
+   features it asks of its dependee *)
 val enabled :
   root:bool ->
   Cargo_parse.ver ->

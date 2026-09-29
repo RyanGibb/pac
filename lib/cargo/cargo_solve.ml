@@ -86,8 +86,8 @@ module Make () = struct
        been chosen instead.  A crate further down is a version that fails. *)
     List.iter
       (fun (d : P.dep) ->
-        if not (Archive.listed ar d.P.d_target) then
-          Q.refuse "no matching package named `%s` found" d.P.d_target)
+        if not (Archive.listed ar d.P.d_name) then
+          Q.refuse "no matching package named `%s` found" d.P.d_name)
       root.Q.ver.P.v_deps;
     Archive.install_root ar root.Q.ver;
     let st = L.create ar root ~features ~rustv in

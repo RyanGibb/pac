@@ -3,7 +3,7 @@ open Cargo_parse
 let d ?(optional = false) a =
   {
     d_alias = a;
-    d_target = a;
+    d_name = a;
     d_req = Cargo_version.parse_req "*";
     d_feats = [];
     d_optional = optional;
