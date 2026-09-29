@@ -59,8 +59,8 @@ module Make (S : SEARCH) = struct
        depender is installed; the name, which another depender may share,
        is keyed by that depender too. *)
     narrowed : (name, DMA.Pkg.t * DMA.Deb.Atom.t) Hashtbl.t;
-    (* whether apt's cache has a Provides entry for a name *)
-    provided : (string, bool) Hashtbl.t;
+    (* whether apt's cache has a Provides entry for a name at an arch *)
+    provided : (string * string, bool) Hashtbl.t;
   }
 
   let create_state () =
@@ -112,6 +112,17 @@ module Make (S : SEARCH) = struct
     | DMA.Deb.DTTop -> true
     | DMA.Deb.DTVal u -> Version.Debian.compare u w = 0
 
+  (* the entry a Multi-Arch: foreign foo gives foo at each other
+     architecture (NewProvidesAllArch, pkgcachegen.cc), which skips its own *)
+  let sibling_provides (((m, b), _) : DMA.Pkg.t) (stz : nstanza)
+      (a : DMA.Deb.Atom.t) =
+    String.equal m (fst (fst a))
+    && stz.ncls = DMA.MAForeign
+    &&
+    match snd (fst a) with
+    | DMA.QAArch c -> not (String.equal b c)
+    | _ -> false
+
   (* apt's solution counts: an alternative's solutions are its target's
      versions that satisfy it and, one per entry, the target's ProvidesList
      entries that do (AllTargets, pkgcache.cc), so a package providing its
@@ -120,8 +131,7 @@ module Make (S : SEARCH) = struct
      entries apt holds for one are its declared Provides of the name, plus
      the foo:any of a Multi-Arch: allowed package and the foo:b
      pseudo-package's entry for each version of b's own foo (ParseProvides,
-     deblistparser.cc), and none of the calculus's other implicit provides,
-     which apt's cache has only with a second architecture configured. *)
+     deblistparser.cc), and a sibling's (sibling_provides). *)
   let provides_count ((m, x) : string * DMA.coq_NameArch) w (a : DMA.Deb.Atom.t)
       =
     let n = fst (fst a) in
@@ -139,6 +149,7 @@ module Make (S : SEARCH) = struct
             let implicit =
               match snd (fst a) with
               | (DMA.QAAny | DMA.QAExact _) when String.equal m n -> 1
+              | _ when sibling_provides ((m, b), w) stz a -> 1
               | _ -> 0
             in
             declared + implicit)
@@ -152,17 +163,29 @@ module Make (S : SEARCH) = struct
 
   let is_bot (pv : PVersion.t) = pv.PVersion.v = DMA.Deb.Version.Bot
 
-  let apt_provided st n =
-    match Hashtbl.find_opt st.provided n with
-    | Some b -> b
+  (* n at b has an entry from a declared Provides that reaches b, or from a
+     Multi-Arch: foreign n at another architecture, as provides_count counts
+     them *)
+  let apt_provided st ((n, b) as k) =
+    match Hashtbl.find_opt st.provided k with
+    | Some p -> p
     | None ->
-        let b =
-          List.exists
-            (fun (q, vt) -> not (self_dropped q n vt))
-            (providers tables n)
+        let foreign q =
+          match stanza q with
+          | Some stz -> stz.ncls = DMA.MAForeign
+          | None -> false
         in
-        Hashtbl.add st.provided n b;
-        b
+        let p =
+          List.exists
+            (fun ((((_, c), _) as q), vt) ->
+              (not (self_dropped q n vt)) && (String.equal b c || foreign q))
+            (providers tables n)
+          || List.exists
+               (fun (c, w) -> (not (String.equal b c)) && foreign ((n, c), w))
+               (group_members tables n)
+        in
+        Hashtbl.add st.provided k p;
+        p
 
   (* Defer-Version-Selection (TranslateOrGroup): an atom whose target has no
      Provides entry and every version of which satisfies it is one solution,
@@ -172,7 +195,7 @@ module Make (S : SEARCH) = struct
   let deferred st (a : DMA.Deb.Atom.t) =
     match fst a with
     | n, DMA.QAArch b ->
-        (not (apt_provided st n))
+        (not (apt_provided st (n, b)))
         &&
         let vs = versions_of tables (n, b) in
         vs <> [] && List.for_all (sat (snd a)) vs

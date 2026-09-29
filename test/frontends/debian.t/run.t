@@ -814,6 +814,43 @@ native architecture, so apdep:i386 takes aptool:amd64 in both orders:
   encoded solution: 4 core nodes (4 lookups)
   loaded: 2 names, 3 versions
 
+A Multi-Arch: foreign package gives its name a Provides entry at every
+other architecture, and apt's solution counts see it.  cnu's cns is two
+solutions, cns:amd64 and cns:i386's provide, so it ties with cnc's
+cnx | cny, which was pushed first and so is worked first, taking cnx; and
+cnd, arch:all and so held at amd64, is one solution to cnw:i386's
+Recommends, which the tool order then installs:
+
+  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages.counts cnr
+  packages (6):
+    cnc:amd64 1
+    cnr:amd64 1
+    cns:amd64 1
+    cnu:amd64 1
+    cnx:amd64 1
+    cny:amd64 1
+  encoded solution: 9 core nodes (10 lookups)
+  loaded: 11 names, 13 versions
+
+  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages.counts cnw:i386
+  packages (2):
+    cnd:amd64 1
+    cnw:i386 1
+  encoded solution: 4 core nodes (5 lookups)
+  loaded: 11 names, 13 versions
+
+The entry is among a folded clause's solutions too: cnv:i386's cnt (>= 1)
+and cnt (<< 2) fold into one clause, which keeps the one cnt:amd64 gives
+and so takes it:
+
+  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages.counts cnq:i386
+  packages (3):
+    cnq:i386 1
+    cnt:amd64 1
+    cnv:i386 1
+  encoded solution: 6 core nodes (6 lookups)
+  loaded: 11 names, 13 versions
+
 A Conflicts or Breaks on pkg:b is apt's negative on the same
 pseudo-package, so it reaches what the atom would meet as a dependency:
 xcfl's Conflicts: xfc:i386 spares the foreign xfc:amd64 it depends on, and

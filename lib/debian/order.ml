@@ -183,6 +183,7 @@ module Make (S : Apt_reject.SEARCH) = struct
                 match stanza ((m, b), w) with
                 | Some stz ->
                     provides_matching stz (fst (fst na)) (snd na) <> []
+                    || (sibling_provides ((m, b), w) stz na && sat (snd na) w)
                 | None -> false)
             | _ -> true)
           cands

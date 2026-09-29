@@ -1,0 +1,64 @@
+Package: cnr
+Version: 1
+Architecture: amd64
+Depends: cnc, cnu
+
+Package: cnu
+Version: 1
+Architecture: amd64
+Depends: cns
+
+Package: cnc
+Version: 1
+Architecture: amd64
+Depends: cnx | cny
+
+Package: cns
+Version: 1
+Architecture: amd64
+Multi-Arch: foreign
+Depends: cny
+
+Package: cns
+Version: 1
+Architecture: i386
+Multi-Arch: foreign
+Depends: cny
+
+Package: cnx
+Version: 1
+Architecture: amd64
+
+Package: cny
+Version: 1
+Architecture: amd64
+
+Package: cnw
+Version: 1
+Architecture: i386
+Recommends: cnd
+
+Package: cnd
+Version: 1
+Architecture: all
+Multi-Arch: foreign
+
+Package: cnq
+Version: 1
+Architecture: i386
+Depends: cnv
+
+Package: cnv
+Version: 1
+Architecture: i386
+Depends: cnt (>= 1), cnt (<< 2)
+
+Package: cnt
+Version: 1
+Architecture: amd64
+Multi-Arch: foreign
+
+Package: cnt
+Version: 1
+Architecture: i386
+Multi-Arch: foreign

@@ -89,6 +89,9 @@ module Make (S : SEARCH) : sig
     DMA.Deb.Ver.coq_Formula ->
     (string * DMA.Deb.coq_DTop) list
 
+  (* whether the package, a Multi-Arch: foreign one of the atom's name, meets
+     it from another architecture *)
+  val sibling_provides : DMA.Pkg.t -> nstanza -> DMA.Deb.Atom.t -> bool
   val alt_name : DMA.Deb.Atom.t -> name
   val orig_versions : name -> (PVersion.t * string) list
   val deferred : state -> DMA.Deb.Atom.t -> bool
