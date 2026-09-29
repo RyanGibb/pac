@@ -2441,7 +2441,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
 
   End Lookup.
 
-  Corollary debianResolution_coreResolution : forall I S,
+  Theorem debianResolution_coreResolution : forall I S,
       debianResolution (coreResolution I S) = S.
   Proof.
     intros I S; apply PkgSet.ext; intros [n v].

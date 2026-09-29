@@ -331,7 +331,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       [apply tr_resolution; exact H | exact Hd].
   Qed.
 
-  Theorem npm_roundtrip : forall I depth L,
+  Theorem npmPlacementResolution_coreResolution : forall I depth L,
       IsResolution I L -> Pl.Depth depth L ->
       Pl.reachable (tr I)
         (Pl.Reduction.placementResolution

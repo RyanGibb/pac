@@ -626,7 +626,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       - intro H; left; exists (n, v); split; [exact H | reflexivity].
     Qed.
 
-    Lemma opamResolution_coreResolution : forall cls S,
+    Theorem opamResolution_coreResolution : forall cls S,
         opamResolution (coreResolution cls S) = S.
     Proof.
       intros cls S; apply PkgSet.ext; intros [n v].

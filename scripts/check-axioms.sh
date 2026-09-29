@@ -264,7 +264,7 @@ DMA.debian_ma_core_completeness
 DMA.debian_ma_core_soundness
 DMA.debian_ma_soundness
 DMA.multiarchResolution_core
-DMA.multiarchResolution_reduceReal
+DMA.multiarchResolution_coreResolution
 DMA.reduceAtom
 DMA.reduceClause
 DMA.reduceConf
@@ -301,6 +301,7 @@ Op.Reduction.dependeesBy
 Op.Reduction.encR
 Op.Reduction.encodeOF
 Op.Reduction.opamResolution
+Op.Reduction.opamResolution_coreResolution
 Op.Reduction.opam_completeness
 Op.Reduction.opam_soundness
 Op.Reduction.reduceDeps
@@ -429,8 +430,8 @@ NplS.Lookup.versions_lookupWalk
 NplS.Lookup.versions_lookupWalk_sub
 NplS.edgesOf
 NplS.edgesOfBy
+NplS.npmPlacementResolution_coreResolution
 NplS.npm_completeness
-NplS.npm_roundtrip
 NplS.npm_soundness
 NplS.reduceDeps
 NplS.reduceReal
