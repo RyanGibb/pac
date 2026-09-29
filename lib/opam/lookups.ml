@@ -13,6 +13,9 @@ end)
 type archive = {
   root : string;
   pkgs : (string, (string * Opam_parse.pkg_meta) list) Hashtbl.t;
+  (* a loaded package's declarations; a table because repo_and_avail asks
+     for every version's *)
+  metas : (string * string, Opam_parse.pkg_meta) Hashtbl.t;
   (* class -> its members among the names loaded so far.  Unlike every
      other table here this one is a preimage and so grows as names load;
      see [class_inst]. *)
@@ -44,6 +47,7 @@ let empty_archive root =
   {
     root;
     pkgs = Hashtbl.create 4096;
+    metas = Hashtbl.create 16384;
     class_table = Hashtbl.create 64;
     avoid_table = Hashtbl.create 64;
     n_names = 0;
@@ -115,6 +119,7 @@ let load_name ar (name : string) : (string * Opam_parse.pkg_meta) list =
       ar.n_vers <- ar.n_vers + List.length vs;
       List.iter
         (fun (version, (m : Opam_parse.pkg_meta)) ->
+          Hashtbl.replace ar.metas (name, version) m;
           List.iter
             (fun k -> Pac_common.Tbl.push ar.class_table k (name, version))
             m.classes;
@@ -129,9 +134,8 @@ let versions_of ar n = List.map fst (load_name ar n)
 (* a package's declarations are read only through its name's load, so
    they are never taken from a name parsed in part *)
 let meta_of ar n v =
-  Option.value
-    (List.assoc_opt v (load_name ar n))
-    ~default:Opam_parse.empty_meta
+  ignore (load_name ar n);
+  Option.value (Hashtbl.find_opt ar.metas (n, v)) ~default:Opam_parse.empty_meta
 
 (* loads, because the answer decides the class a version sorts into and
    the same version must sort the same way whether it is met in a name's
