@@ -15,9 +15,12 @@
 # package only a Suggests reaches.
 #
 # A dpkg status holds one version of a package, and apt reads the last
-# stanza of a name as installed, silently; the status holds amd64 rows
-# only.  So a name at two versions, or a row at any other architecture,
-# fails before apt is asked.
+# stanza of a name and architecture as installed, silently; the status
+# holds rows only at the architectures the root's APT::Architectures
+# names, amd64 native.  So a name at two versions of one architecture, or
+# a row at any other architecture, fails before apt is asked.  A
+# Multi-Arch: same name at two architectures and two versions is apt's to
+# refuse: it gives each such version an implicit Breaks on the others.
 #
 # The recs= column reports, and never fails on, the Recommends the answer
 # leaves out: the whole answer asked for fresh at apt's default.  Naming
@@ -31,8 +34,9 @@
 #
 # APTROOT is the root setup.sh builds, whose lists each answer's own
 # status is read beside; APT names the binary when apt-get is not on PATH;
-# INDEX overrides the index, for a fixture, and must be the one that root
-# holds.
+# INDEX overrides the index, for a fixture, and must hold what that root
+# holds: with a foreign architecture, its Packages after the native one,
+# whose Architecture: all stanzas it repeats, which count once.
 # usage: check.sh <answer> <out-dir> <query...>, through eval/check.sh
 set -u
 # byte order, so the output is the same whatever the host's locale
@@ -60,13 +64,20 @@ ran() {  # <rc> <log>: whether apt ran to an answer, a refusal included
 }
 # a root with no lists has apt locate nothing, which reads as a refusal
 ls "$ROOT"/var/lib/apt/lists/*Packages > /dev/null 2>&1 || err=1
+# the root's architectures, amd64 native and first
+archs=$(sed -n 's/^APT::Architectures { \(.*\) };$/\1/p' "$ROOT/etc/apt/apt.conf" 2> /dev/null | tr -d '";')
+archs=${archs:-amd64}
 
-# name=version, the form apt's install pins with, for every :amd64 row
-rows "$ans" | sed -n 's/^\([^ :]*\):amd64 \(.*\)$/\1=\2/p' | sort -u > "$out/req"
+# name[:arch]=version, the form apt's install pins with, the native
+# architecture left out as apt leaves it out, for every row at one of them
+rows "$ans" | awk -v as="$archs" 'BEGIN {split(as, a, " "); for (i in a) ok[a[i]]}
+  NF == 2 && split($1, n, ":") == 2 && n[2] in ok {print (n[2] == "amd64" ? n[1] : $1) "=" $2}' |
+  sort -u > "$out/req"
 mapfile -t req < "$out/req"
 n=${#req[@]}
 dups=$(cut -d= -f1 "$out/req" | sort | uniq -d | wc -l)
-foreign=$(rows "$ans" | awk 'NF == 2 && $1 ~ /:/ && $1 !~ /:amd64$/' | wc -l)
+foreign=$(rows "$ans" | awk -v as="$archs" 'BEGIN {split(as, a, " "); for (i in a) ok[a[i]]}
+  NF == 2 && $1 ~ /:/ && !(substr($1, index($1, ":") + 1) in ok)' | wc -l)
 # the extraction above skips any line that is not a row, so such a line
 # would leave apt judging fewer packages than the answer names
 malformed=$(rows "$ans" | awk '!/^[^[:space:]:]+:[^[:space:]:]+ [^[:space:]]+$/' | wc -l)
@@ -86,7 +97,7 @@ Dir::Cache::pkgcache "";
 Dir::Cache::srcpkgcache "";
 Dir::Etc "$r/etc";
 APT::Architecture "amd64";
-APT::Architectures { "amd64"; };
+APT::Architectures { $(printf '"%s"; ' $archs)};
 Acquire::Languages "none";
 APT::Install-Recommends "$recs";
 APT::AutoRemove::RecommendsImportant "$recs";
@@ -99,21 +110,34 @@ awk 'NR==FNR {want[$0]=1; nw++; next}
         if (ls[i] ~ /^Version: /) v=substr(ls[i], 10)
         if (ls[i] ~ /^Architecture: /) a=substr(ls[i], 15)
       }
-      if ((p "=" v) in want && (a == "amd64" || a == "all")) {
-        sub(/\n/, "\nStatus: install ok installed\n"); print $0 "\n"; got++
+      k=(a == "amd64" || a == "all" ? p : p ":" a) "=" v
+      if (k in want && !(k in seen)) {
+        seen[k]; sub(/\n/, "\nStatus: install ok installed\n"); print $0 "\n"; got++
       }}
      END {if (got != nw) exit 1}' \
   "$out/req" RS= "$INDEX" > "$r/status"
 stanzas=$?
-# the rows name packages bare, and an atom qualified with the native
-# architecture, or pinned to a version, names the same package
+# the rows name native packages bare, and an atom qualified with the
+# native architecture, or pinned to a version, names the same package; an
+# unqualified one names another architecture's where the answer holds no
+# native package of that name, as apt's FindPreferredPkg takes the first
+# architecture with a version
+names=" $(cut -d= -f1 "$out/req" | tr '\n' ' ')"
 for p in "${req[@]}"; do
   asked=
   for a in "${atoms[@]}"; do
-    a=${a%%[=/]*}
-    [ "${p%%=*}" = "${a%:amd64}" ] && asked=1
+    a=${a%%[=/]*} a=${a%:amd64}
+    case $a in
+      *:*) ;;
+      *) if [[ $names != *" $a "* ]]; then
+           for b in $archs; do [[ $names == *" $a:$b "* ]] && { a=$a:$b; break; }; done
+         fi ;;
+    esac
+    [ "${p%%=*}" = "$a" ] && asked=1
   done
-  [ -n "$asked" ] || printf 'Package: %s\nArchitecture: amd64\nAuto-Installed: 1\n\n' "${p%%=*}"
+  k=${p%%=*}
+  case $k in *:*) b=${k#*:} ;; *) b=amd64 ;; esac
+  [ -n "$asked" ] || printf 'Package: %s\nArchitecture: %s\nAuto-Installed: 1\n\n' "${k%%:*}" "$b"
 done > "$r/extended_states"
 
 export APT_CONFIG="$r/etc/apt.conf"
@@ -143,7 +167,7 @@ none='0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.'
 
 export APT_CONFIG="$ROOT/etc/apt/apt.conf"
 "$APT" -s install "${req[@]}" > "$out/aptrecs" 2>&1
-sed -n 's/^Inst \([^ :]*\)\(:[^ ]*\)\{0,1\} (\([^ ]*\) .*/\1=\3/p' "$out/aptrecs" \
+sed -n 's/^Inst \([^ ]*\) (\([^ ]*\) .*/\1=\2/p' "$out/aptrecs" | sed 's/:amd64=/=/' \
   | sort -u > "$out/instrecs"
 re=$(comm -13 "$out/req" "$out/instrecs" | wc -l)
 # the installed state skips the one question installing asks: whether
