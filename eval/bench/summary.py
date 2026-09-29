@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Tables from a bench.sh run directory: every row into one CSV, and per
 step, set, query and variant the median and interquartile range of the
-measured runs (the warm-up, rep 0, left out; a cold step's one run each).
+measured runs (the warm-up, rep 0, left out; a cold step's one run each,
+rep 0 there the run that fills the caches of a cold start).
 Quartiles interpolate linearly between order statistics, so over five
 repetitions the IQR is the fourth value less the second.  Each pac variant
 is set against the tool's median: the ratio per query, and over a set the
@@ -14,7 +15,8 @@ each pac variant is set against it too, alike.  The CSV holds the rows
 bench.sh measured and, per step, set and pac variant, one row with rep=gm
 whose ratio_gm, ci_lo and ci_hi are the mean and its interval against the
 tool, and against a second reference one whose variant is
-<pac variant>/<reference>.
+<pac variant>/<reference>.  Last, those means again, every step's in one
+table, so a cold start and a first run sit beside the warm rounds.
 
 usage: summary.py <run-dir> [csv-out]      prints markdown on stdout;
        the CSV defaults to <run-dir>/bench.csv
@@ -156,7 +158,9 @@ def table(step, st, rows):
     out.append("| " + " | ".join(foot) + " |")
     gm = [{"step": step, "set": st, "query": "*", "variant": v if r == tool else f"{v}/{r}", "rep": "gm",
            **dict(zip(GM, ("" if x is None else f"{x:.6f}" for x in gms[v, r])))} for v, r in pairs]
-    return "\n".join(out), notes, gm
+    every = [f"| {step} | {st} | {v if r == tool else f'{v} ÷ {r}'} | {ci(gms[v, r])} | "
+             f"{sum(1 for x in agg[v, r] if x < 1)}/{len(agg[v, r])} |" for v, r in pairs]
+    return "\n".join(out), notes, gm, every
 
 
 def main():
@@ -168,7 +172,7 @@ def main():
         w = csv.DictWriter(f, fieldnames=COLS + GM)
         w.writeheader()
         w.writerows(rows)
-        for _, _, gm in tables.values():
+        for _, _, gm, _ in tables.values():
             w.writerows(gm)
     fl = defaultdict(list)
     for r in rows:
@@ -178,10 +182,14 @@ def main():
         print("## floor\n")
     for v, xs in fl.items():
         print(f"- `{v} true`: median {q(xs, .5) * 1000:.2f} ms, IQR {(q(xs, .75) - q(xs, .25)) * 1000:.2f} ms, n={len(xs)}")
-    for (step, st), (t, notes, _) in tables.items():
+    for (step, st), (t, notes, _, _) in tables.items():
         print(f"\n## {step}, {st}\n\n{t}\n")
         for n in notes:
             print(f"- {n}")
+    if tables:
+        print("\n## pac ÷ tool, every step\n\n| step | set | variant | gm | pac faster on |\n|---|---|---|---|---|")
+    for _, _, _, every in tables.values():
+        print("\n".join(every))
     hi = [r for r in rows if r["step"] != "floor" and float(r["load1"]) >= 3.5]
     print(f"\nrows ending at load >= 3.5: {len(hi)} of {len(rows)}")
 

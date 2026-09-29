@@ -72,6 +72,13 @@ on every run.
   
   - x apk exit 0,1
   
+  ## pac ÷ tool, every step
+  
+  | step | set | variant | gm | pac faster on |
+  |---|---|---|---|---|
+  | alpine | regress | pac-tool | 1.00× (95% CI 0.50–3.00) | 2/3 |
+  | alpine | regress | pac-pubgrub | 1.10× (95% CI 0.67–2.00) | 1/3 |
+  
   rows ending at load >= 3.5: 0 of 15
   $ head -2 b/bench.csv
   step,set,query,variant,rep,wall_s,parse_s,solve_s,maxrss_kb,rc,end_utc,load1,ratio_gm,ci_lo,ci_hi
@@ -99,9 +106,51 @@ variant is set against both; the gm row against mccs names it.
   | x | 0.010 / 0.020 | 0.100 (0.000) | 1 | 0.010 / 0.030 | 0.200 (0.000) | 1 | 0.400 (0.000) | 2 | 0.800 (0.000) | 4 | 0.25 | 0.50 | 0.12 | 0.25 |
   | **median over queries** |  | 0.100 |  |  | 0.200 |  | 0.400 |  | 0.800 |  | gm 0.25× (95% CI 0.25–0.25) | gm 0.50× (95% CI 0.50–0.50) | gm 0.13× (95% CI 0.13–0.13) | gm 0.25× (95% CI 0.25–0.25) |
   | **sum of medians** |  | 0.1 |  |  | 0.2 |  | 0.4 |  | 0.8 |  | pac faster on 1/1 | pac faster on 1/1 | pac faster on 1/1 | pac faster on 1/1 |
+  ## pac ÷ tool, every step
+  | step | set | variant | gm | pac faster on |
+  |---|---|---|---|---|
+  | opam | regress | pac-tool | 0.25× (95% CI 0.25–0.25) | 1/1 |
+  | opam | regress | pac-pubgrub | 0.50× (95% CI 0.50–0.50) | 1/1 |
+  | opam | regress | pac-tool ÷ opam-mccs | 0.13× (95% CI 0.13–0.13) | 1/1 |
+  | opam | regress | pac-pubgrub ÷ opam-mccs | 0.25× (95% CI 0.25–0.25) | 1/1 |
   rows ending at load >= 3.5: 0 of 4
   $ grep ',gm,' o/bench.csv
   opam,regress,*,pac-tool,gm,,,,,,,,0.250000,0.250000,0.250000
   opam,regress,*,pac-pubgrub,gm,,,,,,,,0.500000,0.500000,0.500000
   opam,regress,*,pac-tool/opam-mccs,gm,,,,,,,,0.125000,0.125000,0.125000
   opam,regress,*,pac-pubgrub/opam-mccs,gm,,,,,,,,0.250000,0.250000,0.250000
+
+A cold step's variants run once each, rep cold; under a cold start rep 0
+is the run just before that fills both sides' caches, left out as a
+warm-up is.  The last table sets the modes beside each other.
+
+  $ mkdir -p d/res/debian-cold/regress d/res/debian-first/regress
+  $ cat > d/res/debian-cold/regress/x.csv <<'EOF'
+  > debian-cold,regress,"x",pac-tool,0,0.50,0.40,0.02,1024,0,t,0.1
+  > debian-cold,regress,"x",pac-tool,cold,0.90,0.60,0.02,1024,0,t,0.1
+  > debian-cold,regress,"x",apt,0,0.70,,,2048,0,t,0.1
+  > debian-cold,regress,"x",apt,cold,1.80,,,2048,0,t,0.1
+  > EOF
+  $ cat > d/res/debian-first/regress/x.csv <<'EOF'
+  > debian-first,regress,"x",pac-tool,cold,1.50,1.20,0.02,2048,0,t,0.1
+  > debian-first,regress,"x",apt,cold,2.00,,,2048,0,t,0.1
+  > EOF
+  $ python3 ../../../eval/bench/summary.py d | grep -v '^$'
+  ## debian-cold, regress
+  | query | pac-tool parse / solve | pac-tool wall (IQR) | pac-tool MiB | apt wall (IQR) | apt MiB | pac-tool ÷ apt |
+  |---|---|---|---|---|---|---|
+  | x | 0.600 / 0.020 | 0.900 (0.000) | 1 | 1.800 (0.000) | 2 | 0.50 |
+  | **median over queries** |  | 0.900 |  | 1.800 |  | gm 0.50× (95% CI 0.50–0.50) |
+  | **sum of medians** |  | 0.9 |  | 1.8 |  | pac faster on 1/1 |
+  ## debian-first, regress
+  | query | pac-tool parse / solve | pac-tool wall (IQR) | pac-tool MiB | apt wall (IQR) | apt MiB | pac-tool ÷ apt |
+  |---|---|---|---|---|---|---|
+  | x | 1.200 / 0.020 | 1.500 (0.000) | 2 | 2.000 (0.000) | 2 | 0.75 |
+  | **median over queries** |  | 1.500 |  | 2.000 |  | gm 0.75× (95% CI 0.75–0.75) |
+  | **sum of medians** |  | 1.5 |  | 2.0 |  | pac faster on 1/1 |
+  ## pac ÷ tool, every step
+  | step | set | variant | gm | pac faster on |
+  |---|---|---|---|---|
+  | debian-cold | regress | pac-tool | 0.50× (95% CI 0.50–0.50) | 1/1 |
+  | debian-first | regress | pac-tool | 0.75× (95% CI 0.75–0.75) | 1/1 |
+  rows ending at load >= 3.5: 0 of 6
