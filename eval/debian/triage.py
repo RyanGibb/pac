@@ -4,14 +4,19 @@ contested clause: a Depends or Recommends of a package both answers install
 that some package only one answer installs satisfies.  Clustering there
 rather than on the whole difference folds what a choice pulled in
 downstream into the choice itself.  Satisfaction is read by name, with
-version constraints ignored.
+version constraints ignored, and architecture too: a package is named as
+apt names it, name:arch at a foreign architecture, and an atom is met by
+its name at any architecture.
 usage: triage.py <run-dir>"""
 import collections, os, re, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from triage_lib import first_incompatibility, lines, report, show
 
 run = sys.argv[1]
-PACKAGES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../repos/debian/Packages")
+# a run with a foreign architecture reads both indexes as one, which it keeps
+PACKAGES = os.path.join(run, "Packages")
+if not os.path.exists(PACKAGES):
+    PACKAGES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../repos/debian/Packages")
 ATOM = re.compile(r"\s*([^\s(:\[<]+)(?::([^\s(\[<]+))?\s*(?:\(\s*([<>=]+)\s*([^)\s]+)\s*\))?")
 
 
@@ -22,22 +27,25 @@ def clauses(field):
 
 
 def load():
-    idx, prov = {}, collections.defaultdict(set)
+    idx, prov, archs = {}, collections.defaultdict(set), set()
     for st in open(PACKAGES, encoding="utf-8", errors="replace").read().split("\n\n"):
         f = dict(re.findall(r"^(\S+): (.*(?:\n[ \t].*)*)", st, re.M))
-        if "Package" in f and f["Package"] not in idx:
-            idx[f["Package"]] = {"dep": clauses(f.get("Pre-Depends", "")) + clauses(f.get("Depends", "")),
-                                 "rec": clauses(f.get("Recommends", ""))}
-            for a in clauses(f.get("Provides", "")):
-                prov[a[0][0]].add(f["Package"])
-    return idx, prov
+        a = f.get("Architecture", "amd64")
+        p = f.get("Package", "") + ("" if a in ("amd64", "all") else ":" + a)
+        if "Package" in f and p not in idx:
+            archs.add(a)
+            idx[p] = {"dep": clauses(f.get("Pre-Depends", "")) + clauses(f.get("Depends", "")),
+                      "rec": clauses(f.get("Recommends", ""))}
+            for c in clauses(f.get("Provides", "")):
+                prov[c[0][0]].add(p)
+    return idx, prov, sorted(archs - {"amd64", "all"})
 
 
-idx, prov = load()
+idx, prov, foreign = load()
 
 
 def sat(ans, cl):
-    return {x for a in cl for x in ({a[0]} | prov[a[0]]) & ans}
+    return {x for a in cl for x in ({a[0]} | {a[0] + ":" + b for b in foreign} | prov[a[0]]) & ans}
 
 
 def decisions(ours, apt, query):
