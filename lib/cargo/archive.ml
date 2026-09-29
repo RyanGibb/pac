@@ -6,7 +6,7 @@ module P = Cargo_parse
    about and no others.  Because the instance is still being uncovered, the
    sub-instance a lookup theorem names must be complete at the moment the
    lookup answers.  Each is complete by construction -- name_set,
-   support_of_name and repo_preimage load every name they read whole, and
+   name_versions and support_at load every name they read whole, and
    meta and the owner scan load the owner -- except a links value's: every
    crate version declaring it, which no one crate's declarations name.
    links_table holds the declarers among the names loaded so far, so the

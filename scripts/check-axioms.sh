@@ -312,7 +312,7 @@ Cgo.Lookup.fdefFibre
 Cgo.Lookup.reads
 Cgo.Lookup.realPreimage
 Cgo.Lookup.slot_declines
-Cgo.Lookup.supportPreimage
+Cgo.Lookup.supportAt
 Cgo.Lookup.versions_link_mono
 Cgo.Lookup.versions_lookupCrate
 Cgo.Lookup.versions_lookupDecision

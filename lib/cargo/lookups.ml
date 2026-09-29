@@ -39,7 +39,10 @@ type state = {
   name_sets : (string, Cg.PkgSet.t) Hashtbl.t;
   name_versions : (string, Cg.VSet.t) Hashtbl.t;
   msrv : (string * string, bool) Hashtbl.t;
-  supports : (string, Cg.SupportSet.t) Hashtbl.t;
+  (* a name's support pairs by feature, which support_at builds sets of *)
+  support_pairs_at :
+    (string, (string, ((string * string) * string) list) Hashtbl.t) Hashtbl.t;
+  supports : (string * string, Cg.SupportSet.t) Hashtbl.t;
   owners :
     ( owner_key,
       (string * string) option * (Cg.SlotRel.t * Cg.FDefRel.t) )
@@ -70,6 +73,7 @@ let create ar (root : Q.root) ~features ~rustv =
     name_sets = Hashtbl.create 4096;
     name_versions = Hashtbl.create 4096;
     msrv = Hashtbl.create 65536;
+    support_pairs_at = Hashtbl.create 4096;
     supports = Hashtbl.create 4096;
     owners = Hashtbl.create 4096;
     producers = Hashtbl.create 4096;
@@ -150,21 +154,27 @@ let msrv_fits st ((n, v) : string * string) : bool =
           | None -> true
           | Some m -> msrv_ok rustc m.P.v_msrv)
 
-(* the support relation at a name -- Lookup.supportPreimage at {n},
-   which versions_lookupFeatP reads -- as its versions' support pairs,
-   the r_supp of their fibres without the rest of each fibre.  Memoized
-   for the same reason name_set is: load_name takes a name whole, so this
-   cannot grow once it has been asked. *)
-let support_of_name st (n : string) : Cg.SupportSet.t =
-  Tbl.memo st.supports n (fun () ->
-      Cg.SupportSet.ofList
-        (List.concat_map
-           (fun (v : P.ver) ->
-             let p = (n, v.P.v_vers) in
-             match meta st n v.P.v_vers with
-             | None -> []
-             | Some m -> support_pairs p m)
-           (Archive.load_name st.ar n)))
+(* the support relation at a name and feature -- Lookup.supportAt n f,
+   which versions_lookupFeatP reads -- from its versions' support pairs.
+   Memoized for the same reason name_set is: load_name takes a name whole,
+   so this cannot grow once it has been asked. *)
+let support_at st (n : string) (f : string) : Cg.SupportSet.t =
+  Tbl.memo st.supports (n, f) (fun () ->
+      let by_feature =
+        Tbl.memo st.support_pairs_at n (fun () ->
+            let h = Hashtbl.create 64 in
+            List.iter
+              (fun (v : P.ver) ->
+                match meta st n v.P.v_vers with
+                | None -> ()
+                | Some m ->
+                    List.iter
+                      (fun ((_, f) as x) -> Tbl.push h f x)
+                      (support_pairs (n, v.P.v_vers) m))
+              (Archive.load_name st.ar n);
+            h)
+      in
+      Cg.SupportSet.ofList (Tbl.find_list by_feature f))
 
 (* the witness versions_lookup{Slot,Decision} take: a version of n in
    granularity gr whose own declarations make the name.  The version whose
@@ -257,8 +267,8 @@ let versions st (tn : Cg.NPlus.t) : Cg.VPlus.t list =
   match tn with
   | Cg.NPlus.CRoot -> call e
   | Cg.NPlus.CCrate (n, _) -> call { e with inst_repo = name_set st n }
-  | Cg.NPlus.CFeatP (n, _, _) ->
-      let supp = support_of_name st n in
+  | Cg.NPlus.CFeatP (n, f, _) ->
+      let supp = support_at st n f in
       call { e with inst_repo = name_set st n; inst_support = supp }
   | Cg.NPlus.CSlot (n, gr, d) ->
       let slots = slot_owner st n gr d in

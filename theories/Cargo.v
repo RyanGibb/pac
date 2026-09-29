@@ -2435,7 +2435,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
     Module NSet := FSetUOT N.
     Module PkgPre := PreimageOfKeys N Pkg NSet PkgSet.
-    Module SupportPre := PreimageOfKeys N PkgF NSet SupportSet.
     Module FDefPre := Preimage FDefElt FDefRel.
     Module SlotFibred := FibredRel Pkg SlotData SlotElt SlotRel.
     Module LinkFibred := FibredRel Pkg N LinkElt LinkRel.
@@ -2445,9 +2444,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Definition realPreimage (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
       PkgPre.ofKeys fst ns R.
 
-    Definition supportPreimage (support : SupportSet.t) (ns : NSet.t)
+    Definition supportAt (support : SupportSet.t) (n : N.t) (f : F.t)
       : SupportSet.t :=
-      SupportPre.ofKeys (fun x => fst (fst x)) ns support.
+      SupportSet.filter (fun '((m, _), f') =>
+          andb (NEqb.eqb m n) (FEqb.eqb f' f))
+        support.
 
     Definition fdefFibre (FDefs : FDefRel.t) (p : Pkg.t) : FDefRel.t :=
       FDefPre.preimage (fun x => fst (fst x)) (fun q => PkgEqb.eqb q p) FDefs.
@@ -2473,12 +2474,13 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       rewrite !mem_evalReq, mem_realPreimage; cbn [fst]; tauto.
     Qed.
 
-    Lemma mem_supportPreimage : forall support ns m v f,
-        SupportSet.In ((m, v), f) (supportPreimage support ns) <->
-        SupportSet.In ((m, v), f) support /\ NSet.In m ns.
+    Lemma mem_supportAt : forall support n f m v f',
+        SupportSet.In ((m, v), f') (supportAt support n f) <->
+        SupportSet.In ((m, v), f') support /\ m = n /\ f' = f.
     Proof.
-      intros; unfold supportPreimage; rewrite SupportPre.mem_ofKeys;
-        cbn [fst]; reflexivity.
+      intros; unfold supportAt; rewrite SupportSet.filter_spec'; cbn beta iota.
+      rewrite andb_true_iff, NEqb.eqb_true_iff, FEqb.eqb_true_iff;
+        reflexivity.
     Qed.
 
     Lemma mem_fdefFibre : forall FDefs p q f e,
@@ -2573,18 +2575,19 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         versions I (NPlus.CFeatP n f w) =
         versions
           (MkInst (realPreimage (inst_repo I) (NSet.singleton n))
-             (supportPreimage (inst_support I) (NSet.singleton n))
+             (supportAt (inst_support I) n f)
              FDefRel.empty SlotRel.empty LinkRel.empty
              (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
           (NPlus.CFeatP n f w).
     Proof.
       intros; cbn [versions inst_support inst_gran];
         apply T.VSet.ext; intro y; symmetry.
-      apply SOspv.filterMap_restrict; [apply SupportPre.ofKeys_subset |].
-      intros [[n' v] f'] Hs He; cbn beta iota in He.
-      rewrite if_some_iff, !andb_true_iff, NEqb.eqb_true_iff in He.
-      destruct He as [[[-> _] _] _]; apply mem_supportPreimage; split;
-        [exact Hs | apply NSet.singleton_spec; reflexivity].
+      apply SOspv.filterMap_restrict.
+      - intros [[m v] f'] Hs; apply mem_supportAt in Hs; exact (proj1 Hs).
+      - intros [[n' v] f'] Hs He; cbn beta iota in He.
+        rewrite if_some_iff, !andb_true_iff, NEqb.eqb_true_iff,
+          FEqb.eqb_true_iff in He.
+        destruct He as [[[-> ->] _] _]; apply mem_supportAt; auto.
     Qed.
 
     Lemma slotOwnedb_witness :
