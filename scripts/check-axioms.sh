@@ -155,6 +155,7 @@ Feat.Reduction.Lookup.dependees_lookupFeatPkg
 Feat.Reduction.Lookup.dependees_lookupOrig
 Feat.Reduction.Lookup.versions_lookupFeatPkg
 Feat.Reduction.Lookup.versions_lookupOrig
+Feat.Reduction.featureResolution_coreResolution
 Feat.Reduction.feature_completeness
 Feat.Reduction.feature_soundness
 Feat.Reduction.reduceDeps
@@ -215,8 +216,10 @@ FC.Reduction.Lookup.versions_lookupGranularOrig
 FC.Reduction.Lookup.versions_lookupIntermediate
 FC.Reduction.Lookup.versions_lookupIntermediateA
 FC.Reduction.Lookup.versions_lookupIntermediateF
+FC.Reduction.featureConcurrentResolution_coreResolution
 FC.Reduction.feature_concurrent_completeness
 FC.Reduction.feature_concurrent_soundness
+FC.Reduction.parents_coreResolution
 FC.Reduction.reduceDeps
 FC.Reduction.reduceReal
 

@@ -564,6 +564,35 @@ Module Feature (N V F : UsualOrderedType).
           exact (Hvu _ _ _ _ _ HS1 HS2).
     Qed.
 
+    Theorem featureResolution_coreResolution :
+      forall R support Df Da r S_f,
+        IsResolution R support Df Da r S_f ->
+        featureResolution (coreResolution S_f) = S_f.
+    Proof.
+      intros R support Df Da r S_f Hres.
+      assert (Hfeats : forall n v fs, FeaturedSet.In ((n, v), fs) S_f ->
+                 featsOf n v (coreResolution S_f) = fs).
+      { intros n v fs HS; apply FSet.ext; intro f.
+        rewrite featsOf_spec, mem_coreResolution; split.
+        - intros [[n' [v' [fs' [_ E]]]] | [n' [v' [fs' [f' [HS' [Hf E]]]]]]];
+            [discriminate E |].
+          injection E as <- <- <-.
+          rewrite <- (res_feature_unification _ _ _ _ _ _ Hres
+                        n v v fs fs' HS HS') in Hf.
+          exact Hf.
+        - intro Hf; right; exists n, v, fs, f; auto. }
+      apply FeaturedSet.ext; intros [[n v] fs].
+      rewrite mem_featureResolution; split.
+      - intros [n' [v' [Hc E]]]; injection E as <- <- ->.
+        rewrite mem_coreResolution in Hc.
+        destruct Hc as [[n' [v' [fs' [HS E]]]] | [n' [v' [fs' [f [_ [_ E]]]]]]];
+          [| discriminate E].
+        injection E as <- <-; rewrite (Hfeats _ _ _ HS); exact HS.
+      - intro HS; exists n, v; split.
+        + apply mem_coreResolution; left; exists n, v, fs; auto.
+        + rewrite (Hfeats _ _ _ HS); reflexivity.
+    Qed.
+
     Module Lookup.
       Lemma reduceDeps_mono :
         forall R R' support support' Df Df' Da Da' (y : T.DepElt.t),

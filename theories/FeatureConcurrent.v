@@ -961,6 +961,76 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
              end.
     Qed.
 
+    Theorem featureConcurrentResolution_coreResolution :
+      forall R support Df Da g r S_CF pi,
+        IsResolution R support Df Da g r S_CF pi ->
+        featureConcurrentResolution g (coreResolution S_CF pi Df Da g) = S_CF.
+    Proof.
+      intros R support Df Da g r S_CF pi Hres.
+      assert (Hfeats : forall n v fs, Feat.FeaturedSet.In ((n, v), fs) S_CF ->
+                 featsOf g n v (coreResolution S_CF pi Df Da g) = fs).
+      { intros n v fs HS; apply Feat.FSet.ext; intro f.
+        rewrite featsOf_spec, mem_coreResolution; split.
+        - intro Hc; inversion Hc; subst.
+          match goal with
+          | H1 : Feat.FeaturedSet.In (?p, ?fs1) S_CF,
+            H2 : Feat.FeaturedSet.In (?p, ?fs2) S_CF,
+            Hf : Feat.FSet.In ?x ?fs2 |- Feat.FSet.In ?x ?fs1 =>
+              rewrite <- (res_feature_unification _ _ _ _ _ _ _ _ Hres
+                            _ _ _ _ H1 H2) in Hf; exact Hf
+          end.
+        - intro Hf; exact (CoreFeatPkg _ _ _ _ _ n v fs f HS Hf). }
+      apply Feat.FeaturedSet.ext; intros [[n v] fs].
+      rewrite mem_featureConcurrentResolution; split.
+      - intros [n' [v' [Hc E]]]; injection E as <- <- ->.
+        rewrite mem_coreResolution in Hc; inversion Hc; subst.
+        match goal with
+        | HS : Feat.FeaturedSet.In ((_, _), _) S_CF |- _ =>
+            rewrite (Hfeats _ _ _ HS); exact HS
+        end.
+      - intro HS; exists n, v; split.
+        + apply mem_coreResolution; exact (CoreOrig _ _ _ _ _ n v fs HS).
+        + rewrite (Hfeats _ _ _ HS); reflexivity.
+    Qed.
+
+    Theorem parents_coreResolution : forall R support Df Da g r S_CF pi,
+        IsResolution R support Df Da g r S_CF pi ->
+        (forall n v m u, ParentRel.In ((m, u), (n, v)) pi ->
+           exists fs_p, Feat.FeaturedSet.In ((n, v), fs_p) S_CF /\
+             ((exists vs fs, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df) \/
+              (exists f vs fs, Feat.FSet.In f fs_p /\
+                 Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da))) ->
+        parents (coreResolution S_CF pi Df Da g) = pi.
+    Proof.
+      intros R support Df Da g r S_CF pi Hres Hedge.
+      apply ParentRel.ext; intros [[m u] [n v]]; rewrite mem_parents; split.
+      - intro H; apply mem_coreResolution in H; inversion H; subst;
+          match goal with
+          | Hw : witnessCondb _ _ _ _ _ _ = true |- _ =>
+              apply witnessCondb_iff in Hw; destruct Hw as (_ & _ & Hpi);
+              exact Hpi
+          end.
+      - intro Hpi.
+        destruct (Hedge _ _ _ _ Hpi)
+          as (fs_p & Hp & [(vs & fs & HD) | (f & vs & fs & Hf & HA)]);
+          apply mem_coreResolution.
+        + destruct (res_parent_closure _ _ _ _ _ _ _ _ Hres _ _ Hp _ _ _ HD)
+            as (w & (Hw & Htk & Hpiw) & _).
+          assert (w = u) as ->
+            by exact (res_pi_functional _ _ _ _ _ _ _ _ Hres _ _ _ _ Hpiw Hpi).
+          apply (CoreFInter _ _ _ _ _ n v m vs fs u HD Hw).
+          apply witnessCondb_iff; split; [exists fs_p; exact Hp |].
+          split; [exact Htk | exact Hpi].
+        + destruct (res_parent_closure_addl _ _ _ _ _ _ _ _ Hres _ _ Hp _ Hf
+                      _ _ _ HA)
+            as (w & (Hw & Htk & Hpiw) & _).
+          assert (w = u) as ->
+            by exact (res_pi_functional _ _ _ _ _ _ _ _ Hres _ _ _ _ Hpiw Hpi).
+          apply (CoreAInter _ _ _ _ _ n v f m vs fs u HA Hw).
+          apply witnessCondb_iff; split; [exists fs_p; exact Hp |].
+          split; [exact Htk | exact Hpi].
+    Qed.
+
     Module Lookup.
       Module NEqb := UOTEqb N.
       Definition pkgNodeFibre (Da : Feat.AddlDepRel.t) (p : Pkg.t) (m : N.t) :
