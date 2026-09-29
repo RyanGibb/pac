@@ -791,8 +791,8 @@ COMPS = [("debian", "Debian, amd64 / apt", "amd64", "debian", "apt", "debian", "
          ("npm", "npm reading / npm", "amd64", "npm", "npm", "npm", "npm"),
          ("npm-shared", "shared reading / npm", "amd64", "npm-shared", "npm", "npm-shared", "npm"),
          ("npm-placement", "placement reading / npm", "amd64", "npm-placement", "npm", "npm-placement", "npm")]
-BENCH_STEPS = {"debian", "debian-cold", "debian-first", "alpine", "opam", "opam-cold", "opam-first", "cargo",
-               "cargo-cold", "cargo-first", "npm", "npm-shared", "npm-placement"}
+BENCH_STEPS = {b + m for b in ("debian", "debian-ma", "alpine", "opam", "cargo", "npm", "npm-shared", "npm-placement")
+               for m in ("", "-cold", "-first")}
 MODES = [("warm", "", "warm"), ("cold", "-cold", "cold start"), ("first", "-first", "first run")]
 
 
