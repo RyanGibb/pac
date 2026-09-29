@@ -1,6 +1,7 @@
 (* the entry in the cache [dir] for [key], a hex digest, as written by the
    code whose digest is [format] (gen_format.exe's) *)
 val entry : string -> format:string -> string -> string
+val mkdir_p : string -> unit
 
 (* the entry, open at its start, if it is there and whole Marshal values *)
 val open_entry : string -> in_channel option

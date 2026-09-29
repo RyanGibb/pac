@@ -92,13 +92,6 @@ let escape (n : string) : string =
   String.concat "%2F" (String.split_on_char '/' n)
 
 let cache_file ar n = Filename.concat ar.cache (escape n ^ ".json")
-
-let rec mkdir_p d =
-  if d <> "" && d <> "/" && d <> "." && not (Sys.file_exists d) then begin
-    mkdir_p (Filename.dirname d);
-    try Sys.mkdir d 0o755 with Sys_error _ -> ()
-  end
-
 let remove f = try Sys.remove f with Sys_error _ -> ()
 
 let slurp f =
@@ -131,7 +124,7 @@ let curl ~url ~out =
            (if msg = "" then "" else ": " ^ msg))
 
 let download ar n f =
-  mkdir_p ar.cache;
+  Pac_common.Cache.mkdir_p ar.cache;
   (* one scratch file per process: processes sharing a cache fetch the
      same name at once, and a shared one is renamed away under the other;
      the rename stays within the directory, so it is atomic *)
