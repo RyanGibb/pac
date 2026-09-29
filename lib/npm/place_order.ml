@@ -117,17 +117,12 @@ struct
     | Some y -> go (Some l) y
     | None -> []
 
-  (* arborist's PlaceDep for the walk from l for a, which is the edge's
-     placement (place-dep.js, can-place-dep.js):
-     - KEEP: the copy the walk already reaches, when the edge takes it;
-     - an optional edge that reaches nothing stays unplaced;
-     - otherwise npm-pick-manifest's pick among what the edges take, put in
-       the shallowest node_modules from l up that holds nothing yet, stopping
-       at the first that holds a copy or that a walk already passes (⊥), and
-       at a level whose own package wants another version; a level whose
-       package peers on a is passed over (deepest-nesting-target.js).
-     Preference only: every answer is one of [cands], and a placement that
-     breaks a decided walk is a conflict the solver backtracks from. *)
+  (* arborist's PlaceDep (place-dep.js, can-place-dep.js): KEEP the copy the
+     walk reaches if the edge takes it; leave an optional edge that reaches
+     nothing unplaced; else pick, into the shallowest empty node_modules from
+     l up, stopping at a copy, a walk passing through or a level wanting
+     another version, and passing over one that peers on a
+     (deepest-nesting-target.js).  Preference only. *)
   let choose_walk st ~assigned l a cands =
     let keep =
       match visible ~assigned l a with

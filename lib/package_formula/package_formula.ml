@@ -176,17 +176,12 @@ struct
         | _ -> false)
     | PFR.Name.Disjunct _ -> false
 
-  (* Absence is the greatest version but the last decision.  A name a
-     negated atom reaches is entailed to a range admitting ⊥ the moment its
-     declarer is decided, and PubGrub's own order -- fewest candidates
-     first -- would then decide it, to ⊥, before the packages that need it
-     are decided, narrowing their ranges to the versions that do not (opam's
-     lwt 6.1.2 needs dune-configurator; dune's conflict on old
-     dune-configurators had it decided absent first, and lwt fell to
-     4.2.1).  So a name whose open range still admits ⊥ waits until every
-     name that must be present is decided; by then either something needs
-     it, and its range excludes ⊥, or nothing does, and ⊥ is right.  The
-     names [last] holds wait behind even those. *)
+  (* Absence is the greatest version but the last decision: decided early,
+     by PubGrub's fewest-candidates order, a name a negated atom reaches goes
+     to ⊥ before the packages that need it, narrowing them (opam's lwt fell
+     to 4.2.1).  So a name whose range admits ⊥ waits until every name that
+     must be present is decided, and the names [last] holds wait behind
+     those. *)
   let defer_bot ?(last = fun _ -> false) ~assigned
       (open_names : (PFR.Name.t * int) list) =
     let rank (n, _) =

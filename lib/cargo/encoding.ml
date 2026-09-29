@@ -68,42 +68,21 @@ module Make () = struct
   module Cg = E.Cargo (Ot.Str) (CVerOT) (Ot.Str) (CVerOT) (Ot.Str) (Ot.Str) (PM)
   module T = Cg.T
 
-  (* rootFeats.  Under All, every key of the root crate's own feature table,
-     which is the instantiation Cargo.lock is.  Cargo resolves twice.  The
-     lock comes from resolve_with_registry, which passes
-     CliFeatures::new_all(true) and HasDevUnits::Yes, and build_requirements
-     turns all_features into require_feature for each key of the root
-     summary's feature map; with_implicit_features has already put an
-     optional dependency's implicit feature into that table, so every
-     optional dependency the root declares is reachable.  The build is a
-     second resolve handed the lock, so it keeps the lock's versions.  Named
-     is not that: it resolves afresh with the features named, and default
-     where the root declares one, so its versions can differ from the
-     lock's.
-
-     The flag reaches workspace members only: ws.members_with_features
-     hands CliFeatures to the root alone, and every other summary arrives as
-     RequestedFeatures::DepFeatures carrying whatever its declaring record
-     asked for, past resolve_features' [if dep.is_optional() && !reqs.deps
-     .contains_key(..) { continue }].  So a *transitive* crate's unactivated
-     optionals stay out of the lock, which is sOptional's guard, and nothing
-     here forces them in. *)
+  (* rootFeats.  Under All, every key of the root's feature table, as
+     Cargo.lock is resolved with every feature (resolve_with_registry,
+     CliFeatures::new_all), with_implicit_features having given each optional
+     dependency its implicit feature.  Only the root gets them
+     (members_with_features), so a transitive crate's unactivated optional
+     dependencies stay out. *)
   let root_feats (m : P.ver) : Q.features -> string list = function
     | Q.All -> List.map fst m.P.v_feats
     | Q.Named { feats; default } ->
         if default && m.P.v_default_declared then feats @ [ P.default_feature ]
         else feats
 
-  (* cargo's RustVersion::is_compatible_with: the declared MSRV read as a
-     caret requirement and matched against the toolchain with its missing
-     components zeroed and any pre-release dropped.  The index writes an
-     MSRV as a partial version ("1.71"), and caret expansion is defined on
-     exactly that, so nothing has to pad it.
-
-     A crate declaring no MSRV is compatible with every toolchain, not with
-     none: msrv_compat_count returns self.rust_versions.len() -- the
-     maximum -- when summary.rust_version() is None, so the field's absence
-     ranks a candidate up. *)
+  (* cargo's RustVersion::is_compatible_with: the MSRV as a caret
+     requirement against the toolchain with any pre-release dropped.  No MSRV
+     is compatible with every toolchain (msrv_compat_count). *)
   let msrv_ok (rustc : string) (msrv : string option) : bool =
     match msrv with
     | None -> true

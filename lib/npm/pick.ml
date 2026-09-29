@@ -6,27 +6,12 @@ module Make
 struct
   open Encoding
 
-  (* npm-pick-manifest's sort criteria above semver, lib/index.js:167-181:
-
-       ((notdeprb && engineb) - (notdepra && enginea)) ||
-       (engineb - enginea) ||
-       (notdeprb - notdepra) ||
-       semver.rcompare(vera, verb, sortSemverOpt)
-
-     deprecated and engines are one preference because they are one sort
-     function, and the middle criterion is what orders them against each
-     other: a deprecated version the host can run outranks a current one it
-     cannot.
-     Neither drops a candidate, so neither can make anything unsatisfiable
-     -- a package whose every version is deprecated resolves to its newest,
-     and a pinned version the host cannot run still installs, which is what
-     --engine-strict exists to refuse at install time.
-
-     The three criteria npm sorts above these have no counterpart here.  avoid
-     is npm audit fix's, passed by nothing that writes an ordinary
-     lockfile; policyRestrictions and stagedVersions appear in no public
-     packument, and the parser reads neither, so restricted and staged are
-     uniformly false.  Bot is no release, so it carries neither criterion. *)
+  (* npm-pick-manifest's sort above semver (lib/index.js:167-181): runnable
+     and not deprecated, then runnable, then not deprecated, so a deprecated
+     version the host can run outranks a current one it cannot.  Neither
+     drops a candidate.  Its avoid (npm audit fix's), policyRestrictions and
+     stagedVersions criteria have no counterpart: no ordinary install passes
+     avoid, and no public packument carries the other two. *)
   let rank ar (n : string) (c : PVersion.t) : bool * bool * bool =
     match c with
     | Np.Vs.Bot | Np.Vs.Free -> (true, true, true)
@@ -45,19 +30,11 @@ struct
             if d > 0 || (d = 0 && PVersion.compare b a > 0) then b else a)
           c cs
 
-  (* npm-pick-manifest offers dist-tags.latest before the highest version
-     the range admits, and takes it whenever the range admits it; only the
-     ordering differs from ours, so a package published ahead of its own
-     latest tag keeps its newest release out.  Preference only:
-     the tag is consulted inside the candidates, never outside them.
-
-     The fast path is guarded by the same two criteria as the sort
-     (index.js:119-132, [engineOk(mani, ..) && !mani.deprecated]), so a
-     deprecated or unrunnable latest is not a shortcut past them.  It is
-     not merely redundant with the sort: the tag may name a version the
-     sort would rank below a newer one.  A tag naming no version of the
-     archive is no shortcut either (index.js:123, [mani &&]): it may name
-     one this keeps only a twin of (Archive.one_per_precedence). *)
+  (* npm-pick-manifest takes dist-tags.latest whenever the range admits it,
+     if it passes the sort's engine and deprecation tests (index.js:119-132),
+     so it can outrank a newer version; a tag naming no version the archive
+     keeps is no shortcut (index.js:123).  Preference only: the tag is sought
+     among [cands]. *)
   let tagged ar (n : string) (cands : PVersion.t list) : PVersion.t option =
     match A.loaded_latest ar n with
     | Some l -> (

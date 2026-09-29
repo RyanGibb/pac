@@ -77,25 +77,13 @@ module type DRIVER = sig
   val choose : assigned:assigned -> name -> version list -> version
 end
 
-(* activate_deps_loop (core/resolver/mod.rs) keeps the dependencies still
-   to activate as frames, one per activation, each holding its crate's
-   enabled dependencies sorted by how many candidates the registry offers
-   (dep_cache.rs, build_deps: a stable sort, so declaration order breaks
-   ties).  pop_most_constrained (types.rs) takes the frame whose next
-   dependency has the fewest candidates, the oldest frame among equals, so
-   the order over every pending dependency is (candidates, frame age,
-   place in the frame).  Processing one picks its candidate and activates
-   it, and a crate activated with features it did not yet have gets a
-   fresh frame of every dependency those features enable, the mandatory
-   ones again among them (flag_activated, then build_deps).
-
-   PubGrub decides one encoded name at a time, so a dependency is
-   processed as the run of decisions the driver's step names, and a frame
-   is made when the step reports the crate it activated.  A backjump
-   undoes a suffix of PubGrub's decisions, and the shadow returns to the
-   state it had before the first of them: the order is a function of the
-   decisions that stand, as cargo's is of the activations in the context
-   it restores. *)
+(* activate_deps_loop (core/resolver/mod.rs): pending dependencies are
+   ordered by (candidates, frame age, place in the frame), as build_deps
+   sorts a frame stably by candidate count (dep_cache.rs) and
+   pop_most_constrained (types.rs) takes the oldest frame among equals.  A
+   crate activated with new features gets a fresh frame (flag_activated).
+   The order is a function of the decisions that stand, as cargo's is of
+   the activations in the context it restores on backtracking. *)
 module Make (D : DRIVER) = struct
   type item = {
     count : int;

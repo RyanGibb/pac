@@ -2,27 +2,13 @@ module DF = Deb_packages
 
 type accepts = Any | Only of string
 
-(* apt's solver rejects every version but the candidate before it starts
-   (APT::Solver::Strict-Pinning, on by default: FromDepCache, solver3.cc),
-   so its answer holds only candidates, though its cache still lists the
-   rest, rejected.  The cut is made on the index, before any table is
-   built, so that the lookups answer over the instance their theorems are
-   stated over.  The candidate
-   is the version of highest pin priority, the newest among equals
-   (pkgPolicy::GetCandidateVer), and an arch:all stanza belongs to the
-   native architecture's package (pkgCacheGenerator::NewPackage).  What
-   sets one version's priority apart is a pin (a preferences file,
-   APT::Default-Release) or a Release file's NotAutomatic or
-   ButAutomaticUpgrades; pac reads Packages files alone, which hold none
-   of them, so they are out of scope and every version ties.
-   A query naming a version (apt-get install pkg=ver) makes it pkg's
-   candidate (TryToInstall, apt-private/private-install.cc), so [named]
-   overrides the newest.  That version is a string: apt keeps two versions
-   that compare equal apart (pkgCacheGenerator::MergeListVersion, when
-   their hashes differ), and the one named is the one whose string matched.
-   Of two stanzas at one version the first read is kept: apt files the
-   later one behind it in the package's version list, and the candidate is
-   the first to reach the top priority. *)
+(* apt's Strict-Pinning (on by default: FromDepCache, solver3.cc) rejects
+   every version but the candidate, so the index is cut to candidates
+   before any table is built.  With no pin or Release file read, priorities
+   tie, so the candidate is the newest (pkgPolicy::GetCandidateVer) unless
+   the query names a version string (TryToInstall), and of two stanzas at
+   one version the first read; an arch:all stanza is the native
+   architecture's (pkgCacheGenerator::NewPackage). *)
 let stanza_key ~native (st : DF.stanza) =
   (st.package, if st.architecture = "all" then native else st.architecture)
 

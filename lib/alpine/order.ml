@@ -105,16 +105,12 @@ module Make (Lk : Lookups.S) = struct
      before either is known to be needed. *)
   let next = L.defer_bot ~last:is_install_if
 
-  (* apk's solver, rerun on an installed set, swaps a provider for a
-     higher-ranked one and drops a package nothing needs, so an answer that
-     departs from apk's choices is valid but not minimal.  The rules that
-     keep it minimal are kept in both orders: apk's provider ranking, which
-     PVersion carries, a name already provided by a selected package kept
-     for it, and install-if rules decided last.  On 2222 goals chosen to
-     exercise providers and install-if rules, dropping the second leaves 175
-     answers apk would change, the third 200, and PubGrub's own choose and
-     next together 359; dropping the install-if rule of [choose], which is
-     all [`Pubgrub] drops, changes none. *)
+  (* apk rerun on an installed set swaps a provider for a higher-ranked one
+     and drops a package nothing needs, so both orders keep the rules that
+     make an answer minimal: apk's provider ranking, a name a selected
+     package already provides kept for it, and install-if rules decided
+     last.  [`Pubgrub] drops only [choose]'s install-if rule, which changes
+     no answer. *)
   let hooks :
       (archive, PFR.Name.t, PG.selection, PVersion.t) Pac_common.Order.driver =
    fun order ar ->

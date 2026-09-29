@@ -452,16 +452,10 @@ struct
     | Some (n', x) when PName.compare n n' = 0 -> Some x
     | _ -> Hashtbl.find_opt o.first (k, v)
 
-  (* npm leaves a slot on a version its tree already holds when the range
-     admits it: an edge whose node_modules lookup finds a satisfying copy is
-     valid, so #problemEdges fetches nothing for it.  So the copy the
-     requirer's lookup finds in the replayed tree outranks both the dist-tag
-     and the newest; resolving afresh is what brings in a second copy of a
-     package npm's tree already holds.  A peer edge is no different: one the
-     lookup already satisfies is skipped (build-ideal-tree.js:1427, 1438),
-     and a copy out of the lookup's sight is not reused.  Preference only:
-     the filter falls back to the whole candidate list, so nothing that was
-     satisfiable stops being so. *)
+  (* npm leaves an edge on a copy its node_modules lookup already finds and
+     the range admits (#problemEdges; build-ideal-tree.js:1427, 1438 for
+     peers), so that copy outranks the dist-tag and the newest.  Preference
+     only: with no such copy the whole candidate list stands. *)
   let reused at (m : string * string) cands =
     let found c =
       match (at, c) with

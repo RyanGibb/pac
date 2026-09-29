@@ -1,18 +1,10 @@
 type result = {
   (* each crate version with the features the solution turns on *)
   crates : (string * string * string list) list;
-  (* the parent relation, keyed in the theory by manifest site: one
-     crate may depend on a single crate name twice -- under two aliases
-     through a rename, or under one alias from two sites -- and the
-     copies may land on different granularity classes, so the edge has
-     to record which declaration received which version.  ParentElt
-     carries only the dependee's version, since the site already
-     determines the slot it came through; the dependee name is read back
-     off that slot here, and the alias is what is reported, because a
-     consumer comparing against cargo's (depender, dependee) edges has
-     no other way to name the crate the version belongs to and no notion
-     of a site at all.
-     (owner, owner version, alias, dependee name, dependee version) *)
+  (* (owner, owner version, alias, dependee name, dependee version): a crate
+     can depend on one name twice, under two aliases or from two sites, and
+     get two versions, so the alias names the edge for a consumer comparing
+     against cargo's (depender, dependee) edges. *)
   parents : (string * string * string * string * string) list;
   nodes : int;
   lookups : int;

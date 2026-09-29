@@ -97,20 +97,12 @@ struct
             | _ -> true)
           && links_free t u gr)
     in
-    (* a candidate one of whose mandatory dependencies has no valid
-       candidate left, or only one that is itself dead: cargo activates
-       it, fails on that dependency and backtracks to this candidate's
-       frame, every frame between being younger than the clash
-       (find_candidate), and the next time the same dependency comes up
-       its conflict cache skips the candidate outright
-       (past_conflicting_activations, keyed by the dependency and not by
-       who declares it).  PubGrub learns the same thing one slot at a
-       time, a slot being named by its owner's granularity class and the
-       dependency as that owner declares it, and each lesson can cost a
-       backjump past every decision since the clashing activation.  What it
-       has learned against the forced candidate is out of sight here,
-       assigned reporting only what a name is entailed to, so the chain
-       of forced candidates is followed a few steps instead. *)
+    (* a candidate one of whose mandatory dependencies has no valid candidate
+       left, or only a dead one: cargo backtracks from it and its conflict
+       cache then skips it (past_conflicting_activations), while PubGrub learns
+       the same one slot at a time, each lesson a backjump; what it has learned
+       is out of sight here, so the chain of forced candidates is followed a
+       few steps instead. *)
     let rec first_two t acc = function
       | [] -> acc
       | _ when List.length acc = 2 -> acc

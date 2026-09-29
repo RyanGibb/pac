@@ -256,27 +256,13 @@ module Make (AP : Tables.ARCH) = struct
         | Some _, DMA.Deb.Version.Ref ((m, DMA.QAArch c), w) -> Some ((m, c), w)
         | _ -> None
 
-      (* PubGrub decides the greatest candidate under compare, so preference
-         lives here: dpkg-newest for real versions, leftmost alternative by
-         clause position, and apt's candidate order among a selector's real
-         versions and providers.  The calculus says nothing about which to
-         try first.
-
-         Position is the whole of the alternative order because apt's sort is
-         per alternative: TranslateOrGroup (apt-pkg/solver3.cc) sorts each
-         alternative's solutions among themselves and leaves the alternatives in
-         the field's order, and Solve takes the first solution not already
-         decided.  So pref only ever separates the providers of one atom.
-
-         The escape is likewise a preference and not a constraint: the calculus
-         tags it above Version.Atom, but we want the soft disjunct to try
-         every real alternative before giving up on the clause, so it is ranked
-         below them here.  Only candidates of one name are ever compared
-         (PubGrub ranges are per name), and Version.Zero shares a name with
-         Version.Atom in the soft disjunct and nowhere else, so the escape
-         case cannot disturb any other pair.  Absence is the greatest version
-         of a real name (VersionOT.compare), so a name nothing comes to
-         require is decided absent. *)
+      (* PubGrub decides the greatest candidate, so preference lives here:
+         dpkg order for real versions; the leftmost alternative, as apt sorts
+         solutions within an alternative and keeps the field's order between
+         them (TranslateOrGroup, apt-pkg/solver3.cc); apt's provider order among
+         a selector's candidates; the escape below every alternative, so a soft
+         disjunct tries them all; and absence greatest, so a name nothing
+         requires is decided absent. *)
       let compare (a : t) (b : t) =
         let fallback () =
           Pac_common.Ot.r2c (DMA.Deb.VersionOT.compare a.v b.v)
@@ -530,24 +516,14 @@ type source =
   | Entry of in_channel
   | Parsed of DF.stanza list * int * string list option
 
-(* Parsing and table construction are reported apart from solving because
-   they scale differently: the archive is read whole, while the solve
-   touches only the sub-instances the lookup theorems bound.
-
-   A cache entry holds the parsed index with the parser's drop count, which
-   the query is read against, and the tables built from it with no version
-   named.  Their types are made at the index's architectures, so those lead
-   the entry, and the rest is read at them.  A query naming a version cuts
-   the other candidates under Strict-Pinning, so it builds its own tables
-   and writes no entry.
-
-   An entry is keyed by each file's device, inode, size and times, taken
-   from the open file, which NFS revalidates, so a hit reads none of it: a
-   write moves its ctime, which no user tool can set, unless it falls in
-   the clock tick of the change before it.  So a file changed less than two
-   seconds before the run, longer than a tick or FAT's two-second times, is
-   parsed but not cached.  The entry keeps the digests of the bytes it was
-   built from, which --debug checks on a hit. *)
+(* A cache entry holds the parsed index, its drop count and the tables
+   built with no version named; a query naming a version cuts the other
+   candidates under Strict-Pinning, so it builds its own tables and writes
+   no entry.  An entry is keyed by each file's device, inode, size and
+   times, so a hit reads none of it.  A write moves the ctime unless it
+   falls in the previous change's clock tick, so a file changed under two
+   seconds before the run (a tick, or FAT's step) is parsed but not
+   cached. *)
 let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~cache ~paths
     ~query : (result, string) Stdlib.result =
   Pubgrub.set_debug debug;

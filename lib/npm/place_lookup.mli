@@ -1,16 +1,12 @@
 module Make (Place_encoding : Place_encoding.S) : sig
   open Place_encoding
 
-  (* An occupant's edge as arborist's Edge holds one: the directory it
-     walks for; the package and range it accepts there, another package than
-     the directory's under an npm: alias, and the directory's own under a
-     root override on it; whether it is a peer; and whether finding nothing
-     meets it, as for an optional peer, or an optional dependency no
-     published version satisfies, which npm abandons (ENOTARGET).  A node
-     keeps one edge per directory, a dependency replacing a peer.  It
-     accepts only the package it names, not any at a version in range as
-     npm's satisfiedBy has it.  [id] names the accepted set, shared by every
-     edge asking the same range of the same package. *)
+  (* An occupant's edge as arborist's Edge holds one: its directory, the
+     package and range it accepts there (an npm: alias's or a root
+     override's), whether it is a peer, and whether nothing need meet it.  A
+     node keeps one edge per directory, a dependency over a peer.  It accepts
+     only the package it names, unlike npm's satisfiedBy.  [id] names the
+     accepted set, shared by edges asking one range of one package. *)
   type edge = {
     e : Npl.coq_Edge;
     acc : Pl.VSet.t;

@@ -3,15 +3,11 @@ module P = Npm_parse
 module A = Archive
 module Tbl = Pac_common.Tbl
 
-(* This is what npm does for the literal range "*", and for an empty one,
-   which it reads as "*": npm-pick-manifest's special case (lib/index.js,
-   range === '*') takes dist-tags.latest even when that is a prerelease,
-   provided it is neither deprecated nor refused by the host's engines,
-   where semver itself admits no prerelease under "*".  Our ranges admit a
-   prerelease only beside a comparator naming one at its release core, so
-   such a range is read as "* || =latest", which admits that one prerelease
-   and no other.  The dependee name's packument decides it, so the rewrite
-   is made
+(* npm-pick-manifest takes dist-tags.latest for the range "*" (or an empty
+   one) even when it is a prerelease, if it is neither deprecated nor
+   refused by the host's engines (lib/index.js, range === '*'), where
+   semver admits no prerelease under "*"; so such a range is read as
+   "* || =latest".  The dependee name's packument decides it, so it is made
    here rather than in the parser, which sees one manifest at a time. *)
 let star_range ar (t : string) (rg : Npm_version.range) : Npm_version.range =
   (* Berry reads * as semver does, so the shared reading admits no
@@ -178,32 +174,12 @@ module Make (Encoding : Encoding.S) = struct
           (Np.rgHolds (xrange rg))
           (Np.realVersions (repo_at st n) n))
 
-  (* An optional entry is an ordinary dependency that this driver abandons
-     in one situation only: no published version of the dependee name matches
-     the
-     range (ENOTARGET).  npm abandons more.  #pruneFailedOptional makes the
-     dependency's whole optional set inert when anything in it fails to
-     load, a transitive ENOTARGET, a network failure or an allow-* gate
-     included, and #checkEngineAndPlatform does the same when anything in
-     it fails engines or platform; none of these is modelled.  A peer
-     conflict over an optional dependency is an ordinary ERESOLVE.  The
-     test lives here rather than in the parser, which sees one manifest at
-     a time and has no registry.
-
-     An optional package the host cannot run is only marked inert, and the
-     lockfile still records it, so a darwin-only binary such as fsevents
-     stays in the answer on linux exactly as it stays in npm's lockfile.
-
-     It is applied where a dependency is read rather than where a packument
-     is loaded, because deciding at load time would have to resolve every
-     optional dependee name of every version eagerly -- the cone pass the
-     driver deliberately does not do.  Read lazily, the dependee name of a
-     dependency that survives is a slot name the sub-instance was going to
-     load anyway.
-
-     Under the shared reading an optional dependency is kept whatever the
-     registry holds, as Yarn Berry fails to resolve one no version matches
-     (YN0082). *)
+  (* An optional dependency is abandoned only when no published version of
+     its dependee name matches the range (ENOTARGET); npm's other grounds
+     (#pruneFailedOptional, #checkEngineAndPlatform) are not modelled.  It is
+     tested where a dependency is read, since testing at load time would
+     resolve every optional dependee name eagerly.  The shared reading keeps
+     it, as Yarn Berry fails on one no version matches (YN0082). *)
   let dep_keep st (d : P.dep) : bool =
     (not d.P.d_optional) || A.shared st.ar || matches_published st d
 
@@ -260,17 +236,12 @@ module Make (Encoding : Encoding.S) = struct
   let peer_dependencies_named st (n : string) =
     List.map (fun (p, r) -> (p, xpeer st.ar r)) (A.peers_naming st.ar n)
 
-  (* The granular versions lookup's sub-instance, which the calculus cuts
-     to the key's registry name, narrowed twice more here.  The instance's
-     keys are a union of one per dependency and per peer dependency plus the
-     root's, and the granular lookup asks only whether they contain k, so
-     one dependency introducing k answers it, or failing that one peer:
-     google-closure-compiler's releases pin each platform binary at a range
-     of their own, and testing every such dependency costs a pass over the
-     binary's versions per range.  The filter is the one dependencies
-     applies, so the two views of a package's dependencies cannot disagree
-     about the keys.  The lookup asks the repository only whether the
-     looked-up version is published, so it is cut to that one package. *)
+  (* The granular versions lookup's sub-instance, cut further: the lookup
+     asks only whether the keys contain k, so one dependency introducing k
+     answers it, filtered as dependencies are, or failing that one peer
+     (google-closure-compiler pins each platform binary at its own range, and
+     testing every such dependency costs a pass per range); and it asks the
+     repository only whether the looked-up version is published. *)
   let gran_sub_inst st (k : string * string) (w : string) =
     let repo =
       if List.mem w (A.versions_of st.ar (snd k)) then
@@ -307,9 +278,8 @@ module Make (Encoding : Encoding.S) = struct
 
   (* the granular dependees lookup's sub-instance: p's own dependencies, its
      own peer dependencies, and the repository at their dependee names.  The
-     peer
-     dependencies are there for the root, whose granular node carries the
-     edges that install its own peers; for any other package they emit no
+     peer dependencies are there for the root, whose granular node carries
+     the edges that install its own peers; for any other package they emit no
      edge, so they are inert. *)
   let pkg_sub_inst st (p : string * string) =
     let ns = slot_names st p @ peer_names_at st p in

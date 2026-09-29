@@ -171,21 +171,11 @@ type request = {
   opam_version : string;
 }
 
-(* [build] and [post] are true because opam builds what it installs and
-   has no flag to say otherwise; [dev] and [pinned] are false because
-   nothing here is pinned.
-
-   with-test, with-doc and with-dev-setup are the three opam does have a
-   flag for, and they are query-scoped rather than global: the variable
-   is on for every name the synthetic root depends on and off
-   everywhere else, which is why each package's with-test is its own
-   variable here.  [OpamSwitchState.universe] (opamSwitchState.ml:971-974)
-   takes the request's names and expands them back to every version of
-   each, and [package_env_t] (opamSwitchState.ml:908-921) then reads
-   with-test as [test && OpamPackage.Set.mem nv requested_allpkgs] -- so
-   the scope is a set of names, not of versions and not a dependency
-   cone.  [--with-test]'s own help text says the same: "This only
-   affects packages listed on the command-line" (opamArg.ml:1476-1477). *)
+(* [build] and [post] hold, as opam builds what it installs; [dev] and
+   [pinned] do not, as nothing is pinned.  with-test, with-doc and
+   with-dev-setup hold for every version of exactly the names the query
+   lists (OpamSwitchState.universe and package_env_t,
+   opamSwitchState.ml:908-921, 971-974), so each package's is its own. *)
 let rho (rq : request) : string -> string option =
   let globals = ("opam-version", rq.opam_version) :: globals in
   fun x ->
@@ -318,18 +308,10 @@ let root_inst ar (query : (string * Opam_parse.vc) list) : Op.coq_Inst =
   in
   { empty_inst with Op.inst_repo = repo; inst_avl = avl; inst_query = gamma }
 
-(* Lookup.classSubInst: the class relation restricted to k, which is all
-   the class package's version lookup reads.  That version list is every
-   declarer of the class, which no declaration of any one package names.
-   A conflict or pin-depends is no such exception: the reduction turns a
-   negated atom into the declarer's own edge on the target's name, so
-   nothing of who conflicts with a name is read when the name answers.
-   class_table therefore holds the declarers among the names loaded so far,
-   and this is built from it at every ask and never held: its versions may
-   only grow (versions_class_mono), which the resolver's contract allows
-   since the rest of it holds.  A class package's dependees are fixed,
-   being none, and every range onto it is an exact set of listed versions,
-   the claimant's own, whose name has loaded since the claim is its edge. *)
+(* Lookup.classSubInst: a class package's versions are every declarer of
+   the class, which no one package's declarations name, so this is built
+   from class_table at every ask and never held; its versions only grow
+   (versions_class_mono), as the resolver contract allows. *)
 let class_inst ar (k : string) : Op.coq_Inst =
   {
     empty_inst with
@@ -367,26 +349,13 @@ let pp_name fmt (n : PFR.Name.t) =
   | PFR.Name.Orig (Red.TName.Cls k) -> Format.fprintf fmt "conflict-class:%s" k
   | PFR.Name.Disjunct _ -> Format.fprintf fmt "<disj>"
 
-(* PubGrub decides the compare-maximum candidate, so preference lives
-   here.  Newest-first among a name's own versions falls out of the
-   encoded order, since the version order is opam's, and the absent
-   version is the encoded order's greatest, so a name only a conflict
-   reaches is left out rather than installed.  On top of it, a
-   version flagged avoid-version or deprecated is a last resort rather
-   than an impossibility, so it sits in a class below every unflagged
-   version of its name and newest-first decides within each class --
-   the order builtin-0install sorts a name's candidates in
-   (opam_0install_cudf.ml:15-23), opam having marked a deprecated
-   version avoid-version too (opamSwitchState.ml:886-895).
-
-   The class is carried on the version rather than read off it: which
-   package a version belongs to is what decides, and a comparator sees
-   two versions and not their name.  Every version PubGrub holds is
-   handed to it by [versions] or by a dependency range, both of which
-   know the name, so both tag as they go and the class is a function
-   of the (name, version) pair -- keeping this a total order, and one
-   consistent with the tags on any range the same name is compared
-   against. *)
+(* PubGrub decides the greatest candidate, so preference lives here: a
+   version flagged avoid-version or deprecated ranks below every unflagged
+   one of its name, then opam's order, as builtin-0install sorts
+   (opam_0install_cudf.ml:15-23; opam flags deprecated versions
+   avoid-version, opamSwitchState.ml:886-895).  [avoid] rides on the
+   version, as a comparator sees no name; [bot] is greatest, so a name only
+   a conflict reaches is left out. *)
 module PVersion = struct
   type t = { avoid : bool; v : PFR.Version.t }
 

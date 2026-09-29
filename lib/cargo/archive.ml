@@ -1,20 +1,10 @@
 module P = Cargo_parse
 
-(* The index as a run has read it so far.  There is no cone pass: a crate
-   is parsed the first time a sub-instance reads its name, as cargo's
-   sparse protocol fetches it, so a run touches the crates the solver asks
-   about and no others.  Because the instance is still being uncovered, the
-   sub-instance a lookup theorem names must be complete at the moment the
-   lookup answers.  Each is complete by construction -- name_set,
-   name_versions and support_at load every name they read whole, and
-   meta and the owner scan load the owner -- except a links value's: every
-   crate version declaring it, which no one crate's declarations name.
-   links_table holds the declarers among the names loaded so far, so the
-   value's versions may grow after the lookup has answered.  The resolver's
-   contract allows that: versions may only grow (versions_link_mono); a
-   package's dependees are fixed, and the value's package has none; every
-   range onto it is an exact set of listed versions, the singleton of the
-   declarer whose edge it is, loaded before its edges are asked. *)
+(* The index as read so far: a crate is parsed when a sub-instance first
+   reads its name, as cargo's sparse protocol fetches it.  A links value's
+   declarers are the one sub-instance no crate's declarations name, so
+   links_table holds those among the names loaded so far; its versions only
+   grow (versions_link_mono), as the resolver contract allows. *)
 type t = {
   index : string;
   cache : string option;

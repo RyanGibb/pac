@@ -455,62 +455,14 @@ module Make () : S = struct
     else
       match lone_provider f with Some q -> prov_rank ar q | None -> rank_none
 
-  (* PubGrub decides the compare-maximum candidate, so preference lives
-     here, and what it has to reproduce is apk's compare_providers over
-     the providers of the name being decided.  Against a fresh root and one
-     repository its installed-db and pinning keys are dead, and its
-     solver-state keys (solver.c:578-595) only rank a provider apk has not
-     disqualified -- for an applied constraint it misses, or a dependency
-     it can no longer meet -- above one it has, which is left to PubGrub's
-     ranges and backtracking.  Of the rest, two are kept, in order, the
-     version the provider offers *at the requested name* and then
-     provider_priority, with the repository order below both and a single
-     repository here.  The one live key between them, the newer version by
-     the provider's own name (solver.c:651-661), is omitted: it separates
-     only two versions of one package, and an index that lists each
-     package once has no such pair.  Past its last key select_package keeps
-     the provider it met first, since it takes a later one only when
-     compare_providers says strictly better, and it meets them in index
-     order -- so [ord], the provider's place in the index, is the final key,
-     and the encoded order only keeps the comparison total.
-
-     What a provider offers at a name is its own version where it claims
-     the name itself, the p: operand where it is a versioned provides, and
-     nothing at all where the provides carries no version.  So a package
-     of a name is not privileged over a provider of it: the two are compared
-     on the versions they offer, and a provider offering the newer one wins.
-     An unversioned provides is the one case where this order puts a real
-     package first, and not by privilege either -- it offers no version, and
-     no version loses to every version.  provider_priority is read off
-     whichever package offers the name, provider or not, and so decides only
-     once the offered versions tie.
-
-     A synthetic version selects one alternative of its disjunction by
-     position, and which alternative is wanted depends on the disjunction.
-     installIfForm lists the negations of the install_if conditions first
-     and the augmented package last, so preferring the earliest alternative is
-     apk's rule that an install-if fires only when its conditions already hold
-     -- without it every install_if rule in the index is discharged by
-     installing its target.  encPos folds the versioned provides of a name
-     into the name's own version set, where the comparison above settles
-     them, and lists only the unversioned providers as separate
-     alternatives ahead of it -- so that disjunction is exactly the case
-     where the name's own versions rank highest, with k: ordering the
-     unversioned providers among themselves.
-
-     The offered version and the k: are carried on the version rather than
-     read off it: which disjunction a position belongs to is what decides
-     an [Idx], and a comparator sees two versions and not their name.
-     Every version PubGrub holds is handed to it by [versions] or by a
-     dependency range, both of which know the name, so both tag as they go
-     and both fields are a function of the (name, version) pair -- keeping
-     this a total order, and one consistent with the tags on any range the
-     same name is compared against.
-
-     The absent version every original name has offers nothing at the name
-     and is the encoded order's greatest, so it wins wherever it is
-     admitted: a name only a negated requirement reaches is left out rather
-     than installed. *)
+  (* apk's compare_providers (solver.c): the version offered at the name
+     [pv], provider_priority [rank], then index order [ord], as
+     select_package keeps the first provider it meets; the newer-own-version
+     key (solver.c:651-661) never separates packages an index lists once.
+     Among other [Idx] alternatives the earliest wins, so an install-if fires
+     only once its conditions hold.  The keys ride on the version, as a
+     comparator sees no name; [bot] is greatest, so a name only a negated
+     requirement reaches is left out. *)
   module PVersion = struct
     type t = { pv : string option; rank : int; ord : int; v : PFR.Version.t }
 

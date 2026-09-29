@@ -50,24 +50,13 @@ module Make (S : SEARCH) : sig
   type name = DMA.Deb.Name.t
   type assigned = name -> PG.selection
 
-  (* apt's Reject propagation (Solver::Propagate, solver3.cc): a package is
-     rejected the moment a hard clause of its loses its last solution, or a
-     package it conflicts with is installed, and the rejection cascades
-     through the discovered closure along the watch lists.  PubGrub learns
-     the same only when it decides the package, so without this the live
-     solution counts and the choice among alternatives would see
-     alternatives apt has already crossed off.  apt assigns a rejection the
-     moment it is derived and propagates it only when the queue reaches it,
-     so each step of the cascade is one queue entry, which the shadow heap
-     holds; and a package is two literals, whose order the cascade
-     alternates: the installed package's own Conflicts reject the other's
-     version var (its solutions are versions) and its package var follows
-     through the SelectVersion clause, while a conflict declared against
-     something installed rejects the declarer's package var, the reason of
-     its clauses, and its version var follows through the version's own
-     clause.  A solution reads the literal apt made it: the package var for
-     an unversioned atom on a name nothing provides (Defer-Version-Selection),
-     a version var otherwise. *)
+  (* apt's Reject propagation (Solver::Propagate, solver3.cc), which PubGrub
+     learns only on deciding the package: a package is rejected once a hard
+     clause of its loses its last solution or a package it conflicts with is
+     installed, and the rejection cascades one queue entry at a time.  A
+     solution is the var apt made it: the package var for an unversioned
+     atom on a name nothing provides (Defer-Version-Selection), else a
+     version var. *)
   type state
 
   (* one queue entry of the cascade: a version var or a package var

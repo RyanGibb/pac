@@ -472,19 +472,12 @@ module Make (S : SEARCH) = struct
         cascade st ~assigned ~pkgvar:true [ n ] out units);
     (List.rev !out, List.rev !units)
 
-  (* RegisterClause's merge (solver3.cc): a single-atom clause on a target
-     an earlier single-atom clause of the same optionality already names,
-     with a solution in common, is folded into the earlier one, whose
-     solutions become the intersection -- the `(>= v), (<< v')` pairs of
-     2076 stanzas -- and a Recommends on a Depends' target keeps the
-     Depends' solutions only.  Solutions are apt's vars, so two deferred
-     atoms share their one package var and a deferred atom shares nothing
-     with a versioned one.  The folded clause is not gone: Discover
-     registers a version's dependencies afresh unless a clause of the
-     package has the same one, and the folded clause has the
-     earlier's, so the second half comes back on the version var with its
-     own solutions, propagated as the version pops, right after the
-     package's own wave. *)
+  (* RegisterClause's merge (solver3.cc): a single-atom clause on a name an
+     earlier one of the same optionality names, with a solution in common, is
+     folded into it, keeping the intersection; a Recommends on a Depends'
+     name keeps the Depends' solutions.  Discover registers the folded
+     clause's second half again on the version var, with its own solutions,
+     so it propagates right after the package's own wave. *)
   let conj ((n, f) : DMA.Deb.Atom.t) ((_, f') : DMA.Deb.Atom.t) : DMA.Deb.Atom.t
       =
     (n, DMA.Deb.Ver.FConj (f, f'))

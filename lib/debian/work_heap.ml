@@ -780,17 +780,11 @@ module Make (D : DRIVER) = struct
         record_popped t w;
         pop_offered t ~assigned offered)
 
-  (* PubGrub's [next] hook: sync the trail against the partial solution
-     (replaying any backjump as Solver::Pop), push the waves of the newly
-     standing decisions -- their unit clauses' solutions into apt's
-     propagation queue, the rest onto the heap -- then drain the queue
-     before answering from the heap.  Tier 0 is apt's Enqueues -- hard
-     clauses down to one live solution, and an optional clause with none
-     left, which only its escape can settle -- drained in queue order, the
-     rejections queued among them propagated as their slots come up.  A
-     name with a slot was queued by a wave that found it unit, and stays
-     so: nothing rejected comes back short of a backjump, which forgets the
-     slot. *)
+  (* PubGrub's [next] hook: sync the trail (a backjump replayed as
+     Solver::Pop), push the new decisions' waves, then drain apt's
+     propagation queue (tier 0: its Enqueues) before answering from the heap.
+     A name with a slot stays unit until a backjump forgets the slot, as
+     nothing rejected comes back before one. *)
   let next t ~assigned open_names =
     sync t ~assigned;
     wave t ~assigned;

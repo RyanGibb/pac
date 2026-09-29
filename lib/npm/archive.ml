@@ -187,16 +187,12 @@ let ver_rank ar (v : P.ver) : bool * bool * bool =
   let nd = not v.P.v_deprecated and eng = ver_engine_ok ar v in
   (nd && eng, eng, nd)
 
-(* node-semver compares two versions that differ only in build metadata
-   equal, and satisfies ignores the metadata, so a range admits both or
-   neither and npm-pick-manifest never tells them apart but by the rest of
-   its choice: the latest tag's version, where it is one of them and passes
-   the fast path's test (index.js:119-132), else the one its sort ranks
-   first, which on a tie is the first the packument lists, the sort being
-   stable.  That one is what npm installs wherever either is admitted, and
-   so the only one kept.  The exception is a spec that is itself a version,
-   which npm looks up as the key semver.clean makes of it (index.js:108-111),
-   with the metadata stripped, and which is a range here. *)
+(* node-semver compares versions differing only in build metadata equal,
+   so npm-pick-manifest tells them apart only by the latest tag
+   (index.js:119-132) or, its sort being stable, packument order: that one
+   is all npm installs, so the only one kept.  A spec that is itself a
+   version npm looks up by semver.clean's key, metadata stripped
+   (index.js:108-111); here it is a range like any other. *)
 let one_per_precedence ar (latest : string option) (vs : P.ver list) =
   let chosen (c : P.ver list) =
     match
