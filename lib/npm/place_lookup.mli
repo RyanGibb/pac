@@ -44,8 +44,4 @@ module Make (Place_encoding : Place_encoding.S) : sig
     (part * (unit -> T.Dependees.t list)) list option
 
   val dependees : t -> PName.t * PVersion.t -> T.Dependees.t list
-
-  (* under PAC_NPM_STATS, seconds spent in each named part of the lookups *)
-  val timed : t -> string -> (unit -> 'a) -> 'a
-  val print_prof : t -> unit
 end

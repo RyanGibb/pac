@@ -730,10 +730,6 @@ let npm_cmd =
   in
   let envs =
     [
-      Cmd.Env.info "PAC_NPM_STATS"
-        ~doc:
-          "When set, a $(b,--reading=placement) run prints to stderr where its \
-           lookups' time goes.";
       Cmd.Env.info "PAC_NPM_CHECKCMP"
         ~doc:
           "When set, $(b,--reading=placement) checks every comparison of its \

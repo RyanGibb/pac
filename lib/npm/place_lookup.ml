@@ -26,8 +26,6 @@ module Make (Place_encoding : Place_encoding.S) = struct
     key_names : (string, string list) Hashtbl.t;
     key_inst : (string, int * Pl.coq_Inst) Hashtbl.t;
     vcache : (PName.t, int * PVersion.t list) Hashtbl.t;
-    (* seconds spent in each part of the lookups, under PAC_NPM_STATS *)
-    prof : (string, float ref) Hashtbl.t option;
   }
 
   let create ~depth ar root =
@@ -50,9 +48,6 @@ module Make (Place_encoding : Place_encoding.S) = struct
       key_names = Hashtbl.create 4096;
       key_inst = Hashtbl.create 4096;
       vcache = Hashtbl.create 65536;
-      prof =
-        (if Sys.getenv_opt "PAC_NPM_STATS" <> None then Some (Hashtbl.create 8)
-         else None);
     }
 
   let archive st = st.ar
@@ -144,34 +139,18 @@ module Make (Place_encoding : Place_encoding.S) = struct
     if not (List.mem m l) then
       Hashtbl.replace st.key_names k (List.sort String.compare (m :: l))
 
-  let timed st name f =
-    match st.prof with
-    | None -> f ()
-    | Some prof ->
-        let t = Unix.gettimeofday () in
-        let r = f () in
-        let a = Tbl.memo prof name (fun () -> ref 0.) in
-        a := !a +. (Unix.gettimeofday () -. t);
-        r
-
-  let print_prof st =
-    Option.iter
-      (Hashtbl.iter (fun k t -> Printf.eprintf "%s %.2fs\n" k !t))
-      st.prof
-
   (* An edge's key is noted before its atom is built, so the walk name the
      atom constrains already lists every package the atom accepts: every
      version set handed to the solver holds exact versions, as the resolver
      contract asks. *)
   let edges st (x : Npl.Occ.t) : edge list =
     Tbl.memo st.edge_tbl x (fun () ->
-        timed st "edges" (fun () ->
-            List.map
-              (fun (e : Npl.coq_Edge) ->
-                note_key st e.Npl.e_dir e.Npl.e_name;
-                let id, acc = accepted st e in
-                { e; acc; accepts = Pl.VSet.elements acc; id })
-              (Npl.edgesOfBy (real_at st) (occ_inst st x) x)))
+        List.map
+          (fun (e : Npl.coq_Edge) ->
+            note_key st e.Npl.e_dir e.Npl.e_name;
+            let id, acc = accepted st e in
+            { e; acc; accepts = Pl.VSet.elements acc; id })
+          (Npl.edgesOfBy (real_at st) (occ_inst st x) x))
 
   let key_names st k = Tbl.find_list st.key_names k
 
@@ -223,10 +202,7 @@ module Make (Place_encoding : Place_encoding.S) = struct
         match Hashtbl.find_opt st.vcache k with
         | Some (g', vs) when g' = g -> vs
         | _ ->
-            let vs =
-              timed st "versions" (fun () ->
-                  T.VSet.elements (R.versions (key_inst st a) st.dnat n))
-            in
+            let vs = T.VSet.elements (R.versions (key_inst st a) st.dnat n) in
             Hashtbl.replace st.vcache k (g, vs);
             vs)
 
@@ -242,7 +218,7 @@ module Make (Place_encoding : Place_encoding.S) = struct
       (fun (ed : edge) ->
         let e = ed.e in
         ( Atom (lam, e.Npl.e_dir, ed.id, e.Npl.e_peer, e.Npl.e_opt),
-          fun () -> timed st "atoms" (fun () -> [ Lk.atomOf lam e ed.acc ]) ))
+          fun () -> [ Lk.atomOf lam e ed.acc ] ))
       (edges st x)
 
   let parts st (n : PName.t) (u : PVersion.t) :

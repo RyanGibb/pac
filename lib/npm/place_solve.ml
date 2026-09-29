@@ -77,12 +77,7 @@ module Make () = struct
      dependencies of the depender's neighbouring versions, and at a location
      every version of the key is a neighbour.  A location's dependees are
      therefore built from parts each converted once. *)
-  let kind = function
-    | R.Name.Root -> 0
-    | R.Name.Loc _ -> 1
-    | R.Name.Walk _ -> 2
-
-  let dependencies st stats cache =
+  let dependencies st cache =
     let part_cache = Hashtbl.create 65536 in
     let indices = Hashtbl.create 65536 in
     let conv hs =
@@ -102,37 +97,14 @@ module Make () = struct
         hs
     in
     fun n (u : PVersion.t) ->
-      Option.iter (fun m -> m.(kind n).(0) <- m.(kind n).(0) +. 1.) stats;
       Pac_common.Tbl.memo cache (n, u) (fun () ->
-          let compute () =
-            match L.parts st n u with
-            | Some ps ->
-                List.concat_map
-                  (fun (k, f) ->
-                    Pac_common.Tbl.memo part_cache k (fun () ->
-                        let h = f () in
-                        L.timed st "conv" (fun () -> conv h)))
-                  ps
-            | None -> conv (L.dependees st (n, u))
-          in
-          match stats with
-          | None -> compute ()
-          | Some m ->
-              let s = m.(kind n) and t = Unix.gettimeofday () in
-              let r = compute () in
-              s.(1) <- s.(1) +. 1.;
-              s.(2) <- s.(2) +. (Unix.gettimeofday () -. t);
-              r)
-
-  (* where the lookups' time goes, by the kind of name *)
-  let print_stats st stats =
-    L.print_prof st;
-    Option.iter
-      (Array.iteri (fun i s ->
-           Printf.eprintf "dependees %s: %.0f asked, %.0f computed, %.2fs\n"
-             [| "root"; "location"; "walk" |].(i)
-             s.(0) s.(1) s.(2)))
-      stats
+          match L.parts st n u with
+          | Some ps ->
+              List.concat_map
+                (fun (k, f) ->
+                  Pac_common.Tbl.memo part_cache k (fun () -> conv (f ())))
+                ps
+          | None -> conv (L.dependees st (n, u)))
 
   let decode ~lookups sol =
     {
@@ -199,41 +171,16 @@ module Make () = struct
       (result, Pac_common.Report.explanation) Stdlib.result * (unit -> unit) =
     Pubgrub.set_debug debug;
     let st = L.create ~depth ar root in
-    let prof = Sys.getenv_opt "PAC_NPM_STATS" <> None in
-    let stats = if prof then Some (Array.make_matrix 3 3 0.) else None in
-    let timed a f x =
-      if prof then begin
-        let t = Unix.gettimeofday () in
-        let r = f x in
-        a := !a +. (Unix.gettimeofday () -. t);
-        r
-      end
-      else f x
-    in
-    let tv = ref 0. and tn = ref 0. and tc = ref 0. in
     let h = Place_order.hooks order st in
     (* each node whose dependencies the solve looked up *)
     let asked = Hashtbl.create 65536 in
-    let next =
-      Option.map
-        (fun f ~assigned o -> timed tn (fun o -> f ~assigned o) o)
-        h.Pac_common.Order.next
-    and choose =
-      Option.map
-        (fun f ~assigned n c -> timed tc (fun c -> f ~assigned n c) c)
-        h.Pac_common.Order.choose
-    in
     let r =
-      PG.solve ?next ?choose
+      PG.solve ?next:h.Pac_common.Order.next ?choose:h.Pac_common.Order.choose
         ~dense:(fun _ -> same_stretch)
-        ~vers:(timed tv (L.versions st))
-        ~deps:(dependencies st stats asked)
+        ~vers:(L.versions st) ~deps:(dependencies st asked)
         [ (R.Name.Root, PG.Ranges.of_list [ R.Version.Occ Npl.Occ.Top ]) ]
     in
     h.Pac_common.Order.finish ();
-    print_stats st stats;
-    if prof then
-      Printf.eprintf "versions %.2fs, next %.2fs, choose %.2fs\n" !tv !tn !tc;
     let r =
       match r with
       | Error inc ->
