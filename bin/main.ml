@@ -77,6 +77,21 @@ let error code fmt =
 
 let guard f = try f () with Sys_error e -> error 3 "%s" e
 
+(* an ecosystem's cache in the user's, as cargo and npm keep their own, so
+   that where pac runs from does not decide what it reads; with neither
+   variable set there is none *)
+let user_cache eco =
+  let set v =
+    match Sys.getenv_opt v with Some d when d <> "" -> Some d | _ -> None
+  in
+  match (set "XDG_CACHE_HOME", set "HOME") with
+  | Some d, _ -> Some (Filename.concat d ("pac/" ^ eco))
+  | None, Some h -> Some (Filename.concat h (".cache/pac/" ^ eco))
+  | None, None -> None
+
+let user_cache_absent eco =
+  Printf.sprintf "$(b,\\$XDG_CACHE_HOME)/pac/%s, else ~/.cache/pac/%s" eco eco
+
 (* solve time is the wall time since [t0] less what went on loading, which
    the lazy loaders interleave with the solve.  [loaded], an argument, is
    read before [walk] runs, so that what the walk loads is no part of the
@@ -407,17 +422,23 @@ let cargo_cmd =
       & info [ "print-parents" ]
           ~doc:"Print the decoded parent relation, one edge per line.")
   in
-  (* off by default, unlike npm's, since the index is local and a run
-     needs none; cargo keeps its own under CARGO_HOME *)
   let cache =
-    Arg.(
-      value
-      & opt (some string) None
-      & info [ "cache" ] ~docv:"DIR"
-          ~doc:
-            "Keep what the parser makes of each index file in $(docv), keyed \
-             by the file's bytes, and read it back when a later run loads the \
-             same file.")
+    let dir =
+      Arg.(
+        value
+        & opt (some string) (user_cache "cargo")
+        & info [ "cache" ] ~docv:"DIR"
+            ~absent:(user_cache_absent "cargo")
+            ~doc:
+              "Keep what the parser makes of each index file in $(docv), keyed \
+               by the file's bytes, and read it back when a later run loads \
+               the same file; with neither variable set there is none unless \
+               it is given.")
+    in
+    let off =
+      Arg.(value & flag & info [ "no-cache" ] ~doc:"Read and write no cache.")
+    in
+    Term.(const (fun dir off -> if off then None else dir) $ dir $ off)
   in
   Cmd.v
     (Cmd.info "cargo" ~exits
@@ -566,24 +587,12 @@ let npm_run debug core order (reading, depth, tree) cache offline omit nodev
             n)
 
 let npm_cmd =
-  (* a user's cache, as npm keeps its own, so that where pac runs from
-     does not decide which packuments it reads; with neither variable set
-     there is none, and the run is refused *)
+  (* with no cache the run is refused, since npm has no bulk index *)
   let cache =
-    let set v =
-      match Sys.getenv_opt v with Some d when d <> "" -> Some d | _ -> None
-    in
-    let default =
-      match (set "XDG_CACHE_HOME", set "HOME") with
-      | Some d, _ -> Some (Filename.concat d "pac/npm")
-      | None, Some h -> Some (Filename.concat h ".cache/pac/npm")
-      | None, None -> None
-    in
     Arg.(
       value
-      & opt (some string) default
-      & info [ "cache" ] ~docv:"DIR"
-          ~absent:"$(b,\\$XDG_CACHE_HOME)/pac/npm, else ~/.cache/pac/npm"
+      & opt (some string) (user_cache "npm")
+      & info [ "cache" ] ~docv:"DIR" ~absent:(user_cache_absent "npm")
           ~doc:
             "Packument cache directory; with neither variable set it must be \
              given.")

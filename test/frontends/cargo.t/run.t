@@ -483,6 +483,14 @@ back.
   parser dropped 3 declarations
   $ grep -v '^loaded: ' cold > a; grep -v '^loaded: ' warm > b; cmp a b
 
+Unless given, the cache is the user's, and --no-cache keeps none:
+
+  $ XDG_CACHE_HOME=$PWD/xdg ../../../bin/main.exe cargo index manifests/fm.toml > /dev/null
+  $ find xdg/pac/cargo -type f | wc -l
+  3
+  $ untimed ../../../bin/main.exe cargo --cache c --no-cache index manifests/fm.toml | grep '^loaded: '
+  loaded: 4 names, 3 versions
+
 A changed file misses the cache: with fc's refused feature gone from a
 copy of the index, fc 1.1.0 is a candidate and is taken.
 

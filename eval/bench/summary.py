@@ -117,7 +117,7 @@ def table(step, st, rows):
         row = [g]
         for v in pvs:
             c = C.get((g, v))
-            row += ["" if c is None or c.parse is None and c.solve is None else f"{s(c.parse, 2)} / {s(c.solve, 2)}",
+            row += ["" if c is None or c.parse is None and c.solve is None else f"{s(c.parse)} / {s(c.solve)}",
                     "" if c is None else f"{c.med:.3f} ({c.iqr:.3f})",
                     "" if c is None or c.rss is None else f"{c.rss:.0f}"]
             if c:

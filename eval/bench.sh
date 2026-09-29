@@ -250,13 +250,14 @@ argv_cargo() {
   case $1 in
     pac-*) CMD=("$PAC" cargo "$TOP/repos/crates.io-index" "$CARGO_CMP_OUT/work/$3/Cargo.toml"
                 --rust-version "$RUSTV" --print-parents $(order "$1")
-                ${PCACHE:+--cache "$PCACHE"}) ;;
+                "${PCACHE[@]}") ;;
     cargo) CMD=(cargo generate-lockfile --manifest-path "$CARGO_CMP_OUT/work/$3/Cargo.toml") ;;
   esac
 }
 setup_cargo() {
   export CARGO_CMP_OUT=$RUN/cargo CARGO_HOME=$RUN/cargo/cargo-home
-  PCACHE=${PAC_CACHE-$CARGO_CMP_OUT/pac-cache}
+  PCACHE=(--cache "${PAC_CACHE-$CARGO_CMP_OUT/pac-cache}")
+  [ -n "${PCACHE[1]}" ] || PCACHE=(--no-cache)
   python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import run_query as r
 r.check_toolchain(); r.write_cargo_config()' "$S/cargo" || return 1
   RUSTV=$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import run_query as r

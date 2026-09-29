@@ -1,3 +1,7 @@
+# no test reads or writes the user's caches: with neither variable set pac
+# has none, and a case wanting one names it
+unset XDG_CACHE_HOME HOME
+
 # the output less its timing lines, which vary from run to run, and the
 # exit status, which a pipe into sed would lose
 untimed() { "$@" > out 2>&1; s=$?; sed -E '/^(parse|solve) [0-9.]+s$/d' out; return $s; }

@@ -29,4 +29,4 @@ let loaded l ~solve =
        :: l.extra));
   if l.dropped > 0 then
     Printf.printf "parser dropped %d declarations\n" l.dropped;
-  Printf.printf "parse %.2fs\nsolve %.2fs\n" l.parse solve
+  Printf.printf "parse %.3fs\nsolve %.3fs\n" l.parse solve
