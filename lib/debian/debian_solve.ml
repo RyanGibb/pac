@@ -459,6 +459,8 @@ module Make (AP : Tables.ARCH) = struct
 
   let solve ~debug ~order (tables : tables)
       (query : ((string * string) * Args.accepts) list) =
+    (* each package's dependees, which the rejection cascade and every check
+       of a clause's candidates ask for again *)
     let looked_up = Hashtbl.create 4096 in
     (* selector preimages by name, asked for again by every depender and by
        the rejection cascade *)
@@ -468,8 +470,7 @@ module Make (AP : Tables.ARCH) = struct
       let versions = versions sel_cache tables
 
       let dependencies p =
-        Hashtbl.replace looked_up p ();
-        dependees sel_cache tables p
+        Pac_common.Tbl.memo looked_up p (fun () -> dependees sel_cache tables p)
     end) in
     let query =
       List.map (fun ((n, b), acc) -> ((n, DMA.QAArch b), acc)) query
