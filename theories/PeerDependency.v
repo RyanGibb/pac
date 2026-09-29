@@ -618,6 +618,38 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
           congruence.
     Qed.
 
+    Theorem peerResolution_coreResolution : forall S pi D g,
+        Conc.Reduction.concurrentResolution g (coreResolution S pi D g) = S.
+    Proof.
+      intros S pi D g; apply PkgSet.ext; intros [n v].
+      rewrite Conc.Reduction.mem_concurrentResolution, mem_coreResolution.
+      unfold Conc.Reduction.embedPkg; cbn [fst snd].
+      split; [intro H; inversion H; assumption | apply CoreGranular].
+    Qed.
+
+    Theorem parents_coreResolution : forall R D Th g r S pi,
+        IsResolution R D Th g r S pi ->
+        (forall n v m u, ParentRel.In ((m, u), (n, v)) pi ->
+           exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs) ->
+        parents D g (coreResolution S pi D g) = pi.
+    Proof.
+      intros R D Th g r S pi [[_ _ _ _ Hps] _] Hedge.
+      apply ParentRel.ext; intros [[m u] [n v]]; rewrite mem_parents; split.
+      - intros (n' & v' & m' & vs & u' & _ & _ & _ & Hint & E).
+        injection E as <- <- <- <-.
+        apply mem_coreResolution in Hint; inversion Hint; assumption.
+      - intro Hpi.
+        destruct (Hedge _ _ _ _ Hpi) as (vs & HD & Hu).
+        destruct (Hps _ _ Hpi) as [HmS HnS].
+        exists n, v, m, vs, u.
+        split; [exact HD |].
+        split; [exact (mem_coreResolution_granular S pi D g n v HnS) |].
+        split; [exact Hu |].
+        split; [| reflexivity].
+        exact (mem_coreResolution_intermediate S pi D g n v m vs u
+                 HD HnS HmS Hu Hpi).
+    Qed.
+
     Module Lookup.
       Lemma reduceDeps_mono : forall D D' Th Th' g (y : T.DepElt.t),
           C.DepRel.Subset D' D -> PeerRel.Subset Th' Th ->

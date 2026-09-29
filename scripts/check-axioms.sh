@@ -79,8 +79,10 @@ Conc.Reduction.Lookup.dependees_lookupIntermediateOrig
 Conc.Reduction.Lookup.versions_lookupGranular
 Conc.Reduction.Lookup.versions_lookupIntermediate
 Conc.Reduction.concurrentResolution
+Conc.Reduction.concurrentResolution_coreResolution
 Conc.Reduction.concurrent_completeness
 Conc.Reduction.concurrent_soundness
+Conc.Reduction.parents_coreResolution
 Conc.Reduction.reduceDeps
 Conc.Reduction.reduceDepsDirect
 Conc.Reduction.reduceDepsEmpty
@@ -93,6 +95,8 @@ Peer.Reduction.Lookup.dependees_lookupIntermediate
 Peer.Reduction.Lookup.dependees_lookupIntermediateGran
 Peer.Reduction.Lookup.versions_lookupGranular
 Peer.Reduction.Lookup.versions_lookupIntermediate
+Peer.Reduction.parents_coreResolution
+Peer.Reduction.peerResolution_coreResolution
 Peer.Reduction.peer_completeness
 Peer.Reduction.peer_soundness
 Peer.Reduction.reduceDeps
@@ -109,6 +113,7 @@ Vis.Reduction.Lookup.dependees_lookupOccurrence
 Vis.Reduction.Lookup.versions_lookupAgreement
 Vis.Reduction.Lookup.versions_lookupIntermediate
 Vis.Reduction.Lookup.versions_lookupOccurrence
+Vis.Reduction.parents_coreResolution
 Vis.Reduction.reduceDeps
 Vis.Reduction.reduceDepsIntToAgr
 Vis.Reduction.reduceDepsIntToOcc
@@ -118,6 +123,7 @@ Vis.Reduction.reduceReal
 Vis.Reduction.reduceRealAgreement
 Vis.Reduction.reduceRealIntermediate
 Vis.Reduction.reduceRealOccurrence
+Vis.Reduction.visibilityResolution_coreResolution
 Vis.Reduction.visibility_completeness
 Vis.Reduction.visibility_soundness
 

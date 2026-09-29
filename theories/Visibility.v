@@ -1237,6 +1237,54 @@ Module Visibility (N V : UsualOrderedType).
           congruence.
     Qed.
 
+    Theorem visibilityResolution_coreResolution : forall R D pub r S pi,
+        IsResolution R D pub r S pi ->
+        (forall p, PkgSet.In p S ->
+           exists q, IsOrigin D pub r S q /\ InSub pub pi q p) ->
+        visibilityResolution R D pub r (coreResolution R D pub r S pi) = S.
+    Proof.
+      intros R D pub r S pi [[Hsub _ _ _ _] _] Hvis.
+      apply PkgSet.ext; intros [n v].
+      rewrite mem_visibilityResolution; split.
+      - intros [_ [q [_ Hocc]]]; apply mem_coreResolution in Hocc.
+        inversion Hocc; assumption.
+      - intro HS; split; [exact (Hsub _ HS) |].
+        destruct (Hvis _ HS) as [q [Ho Hins]].
+        assert (Hq : PkgSet.In q (potentialOrigins R D pub r)).
+        { apply mem_potentialOrigins.
+          destruct Ho as [-> | [HqS Hpriv]]; [left; reflexivity | right].
+          split; [exact (Hsub _ HqS) | exact Hpriv]. }
+        exists q; split; [exact Hq |].
+        apply mem_coreResolution; constructor; assumption.
+    Qed.
+
+    Theorem parents_coreResolution : forall R D pub r S pi,
+        IsResolution R D pub r S pi ->
+        (forall p, PkgSet.In p S ->
+           exists q, IsOrigin D pub r S q /\ InSub pub pi q p) ->
+        (forall n v m u, ParentRel.In ((m, u), (n, v)) pi ->
+           exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs) ->
+        parents R D pub r (coreResolution R D pub r S pi) = pi.
+    Proof.
+      intros R D pub r S pi Hres Hvis Hedge.
+      assert (Hdec := visibilityResolution_coreResolution R D pub r S pi
+                        Hres Hvis).
+      destruct Hres as [[_ _ _ _ Hps] _].
+      apply ParentRel.ext; intros [[m u] [n v]]; rewrite mem_parents, Hdec.
+      split.
+      - intros (n' & v' & m' & vs & u' & _ & _ & Hagr & _ & E).
+        injection E as <- <- <- <-.
+        apply mem_coreResolution in Hagr; inversion Hagr; assumption.
+      - intro Hpi.
+        destruct (Hedge _ _ _ _ Hpi) as (vs & HD & Hu).
+        destruct (Hps _ _ Hpi) as [HmS HnS].
+        exists n, v, m, vs, u.
+        split; [exact HD |]; split; [exact Hu |].
+        split; [| split; [exact HnS | reflexivity]].
+        apply mem_coreResolution; exact (CoreAgreement R D pub r S pi
+                                           n v m vs u HD Hu HnS Hpi).
+    Qed.
+
     Module Lookup.
       Module DepFibred :=
         FibredLabelledRel Pkg N VSet.AsUOT C.DepElt C.DepRel.

@@ -710,6 +710,70 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           congruence.
     Qed.
 
+    Theorem concurrentResolution_coreResolution : forall S pi D g,
+        concurrentResolution g (coreResolution S pi D g) = S.
+    Proof.
+      intros S pi D g; apply PkgSet.ext; intros [n v].
+      rewrite mem_concurrentResolution, mem_coreResolution.
+      unfold embedPkg; cbn [fst snd].
+      split; [intro H; inversion H; assumption | apply CoreGranular].
+    Qed.
+
+    Lemma coreResolution_granular_inv : forall S pi D g n v,
+        T.PkgSet.In (Name.Granular n (g v), Version.Orig v)
+          (coreResolution S pi D g) ->
+        PkgSet.In (n, v) S.
+    Proof.
+      intros S pi D g n v H; apply mem_coreResolution in H.
+      inversion H; assumption.
+    Qed.
+
+    Lemma coreResolution_intermediate_inv : forall S pi D g n v m w,
+        T.PkgSet.In (Name.Intermediate n v m, Version.Gran w)
+          (coreResolution S pi D g) ->
+        exists u, PkgSet.In (m, u) S /\ ParentRel.In ((m, u), (n, v)) pi /\
+          g u = w.
+    Proof.
+      intros S pi D g n v m w H; apply mem_coreResolution in H.
+      inversion H; subst; eauto.
+    Qed.
+
+    Theorem parents_coreResolution : forall R D g r S pi,
+        IsResolution R D g r S pi ->
+        (forall n v m u, ParentRel.In ((m, u), (n, v)) pi ->
+           exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs) ->
+        parents D g (coreResolution S pi D g) = pi.
+    Proof.
+      intros R D g r S pi [_ _ Hpc Hvg Hps] Hedge.
+      apply ParentRel.ext; intros [[m u] [n v]]; rewrite mem_parents; split.
+      - intros (n' & v' & m' & vs & u' & HD & Hnv & Hu & Hmu & Hsplit & E).
+        injection E as <- <- <- <-.
+        apply coreResolution_granular_inv in Hnv, Hmu.
+        destruct (isSplitb g vs) eqn:Es.
+        + apply isSplitb_iff in Es.
+          destruct (Hsplit Es) as (u0 & _ & Hint & Hg).
+          apply coreResolution_intermediate_inv in Hint.
+          destruct Hint as (u1 & Hmu1 & Hpi1 & Hg1).
+          destruct (V.eq_dec u u1) as [-> | NE]; [exact Hpi1 | exfalso].
+          apply (Hvg m u u1 Hmu Hmu1 NE); congruence.
+        + apply isSplitb_false_iff in Es.
+          destruct (Hpc _ Hnv _ _ HD) as (w & (Hw & HwS & Hpiw) & _).
+          destruct (V.eq_dec u w) as [-> | NE]; [exact Hpiw | exfalso].
+          exact (Hvg m u w Hmu HwS NE (Es u w Hu Hw)).
+      - intro Hpi.
+        destruct (Hedge _ _ _ _ Hpi) as (vs & HD & Hu).
+        destruct (Hps _ _ Hpi) as [HmS HnS].
+        exists n, v, m, vs, u.
+        split; [exact HD |].
+        split; [exact (mem_coreResolution_granular S pi D g n v HnS) |].
+        split; [exact Hu |].
+        split; [exact (mem_coreResolution_granular S pi D g m u HmS) |].
+        split; [| reflexivity].
+        intro Hs; exists u; split; [exact Hu | split; [| reflexivity]].
+        exact (mem_coreResolution_intermediate S pi D g n v m vs u
+                 HD HnS Hs HmS Hu Hpi).
+    Qed.
+
     Module Lookup.
       Lemma reduceDeps_mono : forall D D' g (y : T.DepElt.t),
           C.DepRel.Subset D' D ->
