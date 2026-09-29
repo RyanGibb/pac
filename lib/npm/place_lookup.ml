@@ -104,9 +104,9 @@ let mk_inst st ~repo ~deps ~peers : Npl.coq_Inst =
     inst_rootPeers = [];
   }
 
-(* The occupant's sub-instance for its edges: its package's manifest, and
-   the repository at the packages its optional dependencies name once
-   overridden, which decides whether each can be met. *)
+(* The occupant's sub-instance for its edges: its package's manifest.  The
+   versions that decide whether each optional dependency can be met are
+   real_at's, at the package it names once overridden. *)
 let occ_inst st (x : Npl.Occ.t) : Npl.coq_Inst =
   let ds, rs =
     match meta st x with
@@ -114,25 +114,15 @@ let occ_inst st (x : Npl.Occ.t) : Npl.coq_Inst =
     | Some v ->
         (List.map (xdep st.ar) v.P.v_deps, List.map (xpeer st.ar) v.P.v_peers)
   in
-  let base = mk_inst st ~repo:Npl.RepoSet.empty ~deps:[] ~peers:[] in
-  let repo =
-    repo_of st
-      (List.filter_map
-         (fun (d : Npl.coq_Dependency) ->
-           if d.Npl.d_optional then
-             Some (Npl.ovrName base d.Npl.d_dir d.Npl.d_name)
-           else None)
-         ds)
-  in
   match x with
   | Npl.Occ.Top ->
       {
-        (mk_inst st ~repo ~deps:[] ~peers:[]) with
+        (mk_inst st ~repo:Npl.RepoSet.empty ~deps:[] ~peers:[]) with
         Npl.inst_rootDeps = ds;
         inst_rootPeers = rs;
       }
   | Npl.Occ.Reg (m, v) ->
-      mk_inst st ~repo
+      mk_inst st ~repo:Npl.RepoSet.empty
         ~deps:(List.map (fun d -> ((m, v), d)) ds)
         ~peers:(List.map (fun r -> ((m, v), r)) rs)
 
@@ -179,7 +169,7 @@ let edges st (x : Npl.Occ.t) : edge list =
               note_key st e.Npl.e_dir e.Npl.e_name;
               let id, acc = accepted st e in
               { e; acc; accepts = Pl.VSet.elements acc; id })
-            (Npl.edgesOf (occ_inst st x) x)))
+            (Npl.edgesOfBy (real_at st) (occ_inst st x) x)))
 
 let key_names st k = Tbl.find_list st.key_names k
 

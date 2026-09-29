@@ -412,6 +412,7 @@ NplS.Lookup.versions_lookupLoc_sub
 NplS.Lookup.versions_lookupWalk
 NplS.Lookup.versions_lookupWalk_sub
 NplS.edgesOf
+NplS.edgesOfBy
 NplS.npm_completeness
 NplS.npm_roundtrip
 NplS.npm_soundness

@@ -95,11 +95,11 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     ; e_peer : bool
     ; e_opt : bool }.
 
-  Definition depEdge (I : Inst) (d : Dependency) : Edge :=
+  Definition depEdge (Vq : N.t -> VS.t) (I : Inst) (d : Dependency) : Edge :=
     let m := ovrName I (d_dir d) (d_name d) in
     let rg := ovrRange I (d_dir d) (d_range d) in
     MkEdge (d_dir d) m rg false
-      (andb (d_optional d) (VS.is_empty (cands I m rg))).
+      (andb (d_optional d) (VS.is_empty (rangeEval rg (Vq m)))).
 
   Definition peerEdge (I : Inst) (r : PeerDependency) : Edge :=
     MkEdge (p_dir r) (ovrName I (p_dir r) (p_name r))
@@ -121,11 +121,15 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
   Definition replaced (ds : list Dependency) (r : PeerDependency) : bool :=
     List.existsb (fun d => NEqb.eqb (d_dir d) (p_dir r)) ds.
 
-  Definition edgesOf (I : Inst) (x : Occ.t) : list Edge :=
-    List.map (depEdge I) (activeDeps I x) ++
+  Definition edgesOfBy (Vq : N.t -> VS.t) (I : Inst) (x : Occ.t)
+      : list Edge :=
+    List.map (depEdge Vq I) (activeDeps I x) ++
     List.map (peerEdge I)
       (List.filter (fun r => negb (replaced (activeDeps I x) r))
          (declPeers I x)).
+
+  Definition edgesOf (I : Inst) (x : Occ.t) : list Edge :=
+    edgesOfBy (realVersions (inst_repo I)) I x.
 
   Definition Sat (I : Inst) (e : Edge) (x : Occ.t) : Prop :=
     exists u, x = Occ.Reg (e_name e) u /\
@@ -141,7 +145,8 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
   Module SOkk := SetOps NKey NKey KeySet KeySet.
   Definition keysOf (I : Inst) : KeySet.t :=
     SOkk.ofList
-      (List.map (fun d => (d_dir d, e_name (depEdge I d)))
+      (List.map
+         (fun d => (d_dir d, e_name (depEdge (realVersions (inst_repo I)) I d)))
          (inst_rootDeps I ++ List.map snd (inst_deps I)) ++
        List.map (fun r => (p_dir r, e_name (peerEdge I r)))
          (inst_rootPeers I ++ List.map snd (inst_peers I))).
@@ -521,32 +526,27 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       forall u, RepoSet.In (m, u) (inst_repo I') <->
                 RepoSet.In (m, u) (inst_repo I).
 
-    Definition AgreesAtOcc (I' I : Inst) (x : Occ.t) : Prop :=
+    Definition AgreesAtOcc (Vq : N.t -> VS.t) (I' I : Inst) (x : Occ.t)
+        : Prop :=
       inst_ovr I' = inst_ovr I /\
       activeDeps I' x = activeDeps I x /\ declPeers I' x = declPeers I x /\
-      forall d, In d (activeDeps I x) -> d_optional d = true ->
-        AgreesAtName I' I (ovrName I (d_dir d) (d_name d)).
+      forall d m, In d (activeDeps I x) -> d_optional d = true ->
+        m = ovrName I (d_dir d) (d_name d) ->
+        Vq m = realVersions (inst_repo I) m.
 
-    Lemma cands_agree : forall I' I m rg, AgreesAtName I' I m ->
-        cands I' m rg = cands I m rg.
+    Lemma edgesOfBy_agree : forall Vq I' I x, AgreesAtOcc Vq I' I x ->
+        edgesOfBy Vq I' x = edgesOf I x.
     Proof.
-      intros I' I m rg Hr; unfold cands; f_equal.
-      apply VS.ext; intro u; rewrite !mem_realVersions; exact (Hr u).
-    Qed.
-
-    Lemma edgesOf_agree : forall I' I x, AgreesAtOcc I' I x ->
-        edgesOf I' x = edgesOf I x.
-    Proof.
-      intros I' I x [Ho [Hd [Hp Hr]]].
+      intros Vq I' I x [Ho [Hd [Hp Hr]]].
       assert (Hn : forall a m, ovrName I' a m = ovrName I a m)
         by (intros a m; unfold ovrName; rewrite Ho; reflexivity).
       assert (Hg : forall a rg, ovrRange I' a rg = ovrRange I a rg)
         by (intros a rg; unfold ovrRange; rewrite Ho; reflexivity).
-      unfold edgesOf; rewrite Hd, Hp; f_equal.
+      unfold edgesOf, edgesOfBy; rewrite Hd, Hp; f_equal.
       - apply map_ext_in; intros d Hin; unfold depEdge; cbv zeta.
         rewrite Hn, Hg.
         destruct (d_optional d) eqn:Hopt; [| reflexivity]; cbn [andb].
-        rewrite (cands_agree I' I _ _ (Hr d Hin Hopt)); reflexivity.
+        rewrite (Hr d _ Hin Hopt eq_refl); reflexivity.
       - apply map_ext; intro r; unfold peerEdge; rewrite Hn, Hg; reflexivity.
     Qed.
 
@@ -559,14 +559,15 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       apply VS.ext; intro u; rewrite !mem_realVersions; symmetry; exact (Hr u).
     Qed.
 
-    Theorem occAtoms_parts : forall I Ix (at_ : Edge -> Inst) lam x,
-        AgreesAtOcc Ix I x ->
+    Theorem occAtoms_parts : forall I Ix Vq (at_ : Edge -> Inst) lam x,
+        AgreesAtOcc Vq Ix I x ->
         (forall e, In e (edgesOf I x) -> AgreesAtName (at_ e) I (e_name e)) ->
         occAtoms I lam x =
-        SOhh.ofList (List.map (fun e => edgeAtom (at_ e) lam e) (edgesOf Ix x)).
+        SOhh.ofList
+          (List.map (fun e => edgeAtom (at_ e) lam e) (edgesOfBy Vq Ix x)).
     Proof.
-      intros I Ix at_ lam x Hx He; unfold occAtoms.
-      rewrite (edgesOf_agree _ _ _ Hx); f_equal.
+      intros I Ix Vq at_ lam x Hx He; unfold occAtoms.
+      rewrite (edgesOfBy_agree _ _ _ _ Hx); f_equal.
       apply map_ext_in; intros e Hin.
       exact (eq_sym (edgeAtom_agree _ _ _ _ (He e Hin))).
     Qed.
