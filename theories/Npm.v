@@ -953,20 +953,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       then Some (Nm.Intermediate (fst q) (snd q) (slotKey I (base q) a))
       else None.
 
-    Lemma holderEdges_holderName : forall I q a x,
-        x <> Vs.Free ->
-        holderEdges I q a x =
-        match holderName I q a with
-        | Some h => T.DependeesSet.singleton (h, T.VSet.singleton x)
-        | None => T.DependeesSet.empty
-        end.
-    Proof.
-      intros I q a x Hx; unfold holderEdges, holderName.
-      destruct (chains I q a); [reflexivity |].
-      destruct (holds I q a); [| reflexivity].
-      destruct x; [reflexivity | reflexivity | contradiction Hx; reflexivity].
-    Qed.
-
     Definition dependees (I : Inst) (s : T.Pkg.t)
       : T.DependeesSet.t :=
       match s with
