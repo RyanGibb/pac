@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """The evaluation's figures and tables, from the run directories alone.
 
-usage: figures.py <sources.conf> <out-dir> [--pdf]
+usage: figures.py <sources.conf>... <out-dir> [--pdf]
 
-sources.conf names every run directory read (see its header).  The outputs
-land in <out-dir>:
+sources.conf names every run directory read (see its header); a later
+conf's rows replace an earlier's, as level2.conf's do sources.conf's.  The
+outputs land in <out-dir>:
 
   preamble.tex           what the paper's preamble \\input's: packages,
                          colours and the \\ev* macros the rest use
@@ -51,13 +52,14 @@ ORDER_NAME = {"tool": "tool", "pubgrub": "PubGrub"}
 # ---------------------------------------------------------------- sources
 
 class Conf:
-    def __init__(self, path):
-        self.dir = os.path.dirname(os.path.abspath(path))
+    """the sources the conf files name, a later line replacing an earlier
+    one of its kind and id"""
+    def __init__(self, paths):
         self.current = None
         self.binaries = {}
         self.runs, self.fuzz, self.bench = {}, {}, {}
         self.totals = self.causes = None
-        for l in lines(path):
+        for path, l in ((p, l) for p in paths for l in lines(p)):
             if l.lstrip().startswith("#"):
                 continue
             f = [x.strip() for x in l.split("|")]
@@ -77,7 +79,7 @@ class Conf:
             elif k == "totals":
                 self.totals = os.path.expandvars(f[1])
             elif k == "causes":
-                self.causes = os.path.join(self.dir, os.path.expandvars(f[1]))
+                self.causes = os.path.join(os.path.dirname(os.path.abspath(path)), os.path.expandvars(f[1]))
 
 
 def sha(p):
@@ -1199,10 +1201,11 @@ def pdf(d, sets):
 
 
 def main():
-    if len(sys.argv) < 3:
+    args = [a for a in sys.argv[1:] if a != "--pdf"]
+    if len(args) < 2:
         raise SystemExit(__doc__)
-    conf = Conf(sys.argv[1])
-    out = Out(sys.argv[2])
+    conf = Conf(args[:-1])
+    out = Out(args[-1])
     prov = Prov(conf)
     oc = outcome_counts(conf, prov)
     fig_a(out, prov, oc)
