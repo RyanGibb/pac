@@ -183,22 +183,29 @@ can_drop() {  # <step>
 # first: a first run, both sides' persistent caches deleted, as caches_<eco>
 # lists them, so each parses from scratch and writes its cache.
 cblock() {  # <step> <key> <query> <mode> <variant>...
-  local step=$1 k=$2 q=$3 mode=$4 dest v
+  local step=$1 k=$2 q=$3 mode=$4 dest try v l
   shift 4
   dest="$RUN/res/$step/$SET/$k.csv"
   [ -s "$dest" ] && return 0
   mkdir -p "$RUN/res/$step/$SET" "$RUN/out/$step/$SET"
-  quiet
-  ROWS="$dest.tmp"; : > "$ROWS"
-  for v in "$@"; do
-    if [ "$mode" = cold ]; then measure "$step" "$k" "$q" "$v" 0 "$CAP" || continue
-    else rm -rf $("caches_${step%-*}"); fi
-    pre "$step" "$k" "$q" "$v" || continue
-    drop || { log "$step $q $v: drop_caches failed, not measured"; continue; }
-    measure "$step" "$k" "$q" "$v" cold "$CAP"
+  for try in 1 2 3; do
+    quiet
+    ROWS="$dest.tmp"; : > "$ROWS"
+    for v in "$@"; do
+      if [ "$mode" = cold ]; then measure "$step" "$k" "$q" "$v" 0 "$CAP" || continue
+      else rm -rf $("caches_${step%-*}"); fi
+      pre "$step" "$k" "$q" "$v" || continue
+      drop || { log "$step $q $v: drop_caches failed, not measured"; continue; }
+      measure "$step" "$k" "$q" "$v" cold "$CAP"
+    done
+    l=$(load1)
+    if below "$l" "$LOADMAX" || [ "$try" = 3 ]; then
+      mv "$ROWS" "$dest"
+      log "$step/$SET $q done (load $l)"
+      return 0
+    fi
+    log "$step/$SET $q load $l at the end of its block, measuring it again"
   done
-  mv "$ROWS" "$dest"
-  log "$step/$SET $q done (load $(load1))"
 }
 
 # each set of a step, every query a block, or in a mode a cold one
