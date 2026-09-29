@@ -9,7 +9,7 @@ requirer, and the dist-tag, deprecated and prerelease status of each pick.
 usage: triage.py <run-dir>"""
 import collections, json, os, re, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from triage_lib import first_incompatibility, lines, report, show
+from triage_lib import first_incompatibility, group, lines, report, show
 
 run = sys.argv[1]
 pk_cache = {}
@@ -75,6 +75,12 @@ def clauses(o):
     return " ".join(bad) or last[:80]
 
 
+def reasons(r):
+    o = os.path.join(run, "out", r["query"])
+    pac = first_incompatibility(o + "." + r["mode"] + ".out") if r["pac"] == "unsat" else "ours " + r["valid"]
+    return "npm %s | %s" % (npm_code(o + ".npm"), pac)
+
+
 rows = report(run)
 report(run, by="closed")
 for m, closed in ((m, c) for m in dict.fromkeys(r["mode"] for r in rows) for c in ("yes", "no")):
@@ -86,16 +92,9 @@ for m, closed in ((m, c) for m in dict.fromkeys(r["mode"] for r in rows) for c i
                 for p in set(primaries(os.path.join(run, "out", r["query"] + "." + m))) or ["?"]:
                     g[p].append(r["query"])
         show("%s, mode %s, closed %s, by primary divergence (a query counts once per kind)" % (c, m, closed), g)
-    g = collections.defaultdict(list)
-    for r in rs:
-        if r["class"] in ("invalid", "exact-invalid"):
-            g[clauses(os.path.join(run, "out", r["query"] + "." + m))].append(r["query"])
-    show("invalid, mode %s, closed %s, by the clauses it fails" % (m, closed), g)
+    show("invalid, mode %s, closed %s, by the clauses it fails" % (m, closed), group(
+        [r for r in rs if r["class"] in ("invalid", "exact-invalid")],
+        lambda r: clauses(os.path.join(run, "out", r["query"] + "." + r["mode"]))))
     for c in ("tool-declines", "tool-error", "both-refuse", "instance-gap", "unconfirmed"):
-        g = collections.defaultdict(list)
-        for r in rs:
-            if r["class"] == c:
-                o = os.path.join(run, "out", r["query"])
-                pac = first_incompatibility(o + "." + m + ".out") if r["pac"] == "unsat" else "ours " + r["valid"]
-                g["npm %s | %s" % (npm_code(o + ".npm"), pac)].append(r["query"])
-        show("%s, mode %s, closed %s, by each side's reason" % (c, m, closed), g)
+        show("%s, mode %s, closed %s, by each side's reason" % (c, m, closed),
+             group([r for r in rs if r["class"] == c], reasons))

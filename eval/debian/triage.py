@@ -10,7 +10,7 @@ its name at any architecture.
 usage: triage.py <run-dir>"""
 import collections, os, re, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from triage_lib import first_incompatibility, lines, report, show
+from triage_lib import first_incompatibility, group, lines, report, show
 
 run = sys.argv[1]
 # a run with a foreign architecture reads both indexes as one, which it keeps
@@ -79,14 +79,10 @@ for c in ("preference-gap", "invalid", "exact-invalid"):
                 ds = set(decisions(set(lines(o + "." + m + ".ours")), set(lines(o + ".theirs")), r["query"]))
                 for d in ds or ["?"]:
                     groups[d].append(r["query"])
-        if groups:
-            show("%s, mode %s, by contested clause (a query counts once per clause)" % (c, m), groups)
+        show("%s, mode %s, by contested clause (a query counts once per clause)" % (c, m), groups)
 for c in ("instance-gap", "unconfirmed", "both-refuse", "tool-declines", "tool-error"):
     for m in dict.fromkeys(r["mode"] for r in rows):
-        rs = [r for r in rows if r["class"] == c and r["mode"] == m]
-        if rs:
-            g = collections.defaultdict(list)
-            for r in rs:
-                why = first_incompatibility(os.path.join(run, "out", r["query"] + "." + m + ".out"))
-                g["pac: %s | apt: %s" % (why, apt_reason(r))].append(r["query"])
-            show("%s, mode %s, by each side's reason" % (c, m), g)
+        show("%s, mode %s, by each side's reason" % (c, m), group(
+            [r for r in rows if r["class"] == c and r["mode"] == m],
+            lambda r: "pac: %s | apt: %s" % (first_incompatibility(
+                os.path.join(run, "out", r["query"] + "." + r["mode"] + ".out")), apt_reason(r))))

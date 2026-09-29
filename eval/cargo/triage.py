@@ -9,7 +9,7 @@ usage: triage.py <run-dir>"""
 import collections, json, os, re, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.join(HERE, "..")]
-from triage_lib import first_incompatibility, report, show
+from triage_lib import first_incompatibility, group, report, show
 from run_query import crate_path
 from scale import compat_class, msrv_ok, read_rows, vkey
 
@@ -81,8 +81,4 @@ for c, label in (("preference-gap", lambda r: divergence(res(r))),
                  ("both-refuse", lambda r: "cargo: %s | pac: %s" % (
                      cargo_reason(res(r)), first_incompatibility(out(r, ".out"))))):
     for m in dict.fromkeys(r["mode"] for r in rows):
-        g = collections.defaultdict(list)
-        for r in rows:
-            if r["class"] == c and r["mode"] == m:
-                g[label(r)].append(r["query"])
-        show("%s, mode %s" % (c, m), g)
+        show("%s, mode %s" % (c, m), group([r for r in rows if r["class"] == c and r["mode"] == m], label))

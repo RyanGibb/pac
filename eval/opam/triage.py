@@ -6,9 +6,9 @@ versions flagged avoid-version or deprecated only 0install took.  Errors
 are grouped by what check.sh's opam runs had to change, refusals by each
 side's reason.
 usage: triage.py <run-dir>"""
-import collections, os, re, sys
+import os, re, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from triage_lib import first_incompatibility, lines, report, show
+from triage_lib import first_incompatibility, group, lines, report, show
 
 run = sys.argv[1]
 REPO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../repos/opam-repository")
@@ -63,8 +63,4 @@ for m in dict.fromkeys(r["mode"] for r in rows):
                      ("unchecked", lambda r: "valid %s, pin %s" % (r["valid"], r["pin"])),
                      ("tool-declines", refused),
                      ("both-refuse", refused)):
-        g = collections.defaultdict(list)
-        for r in rows:
-            if r["class"] == c and r["mode"] == m:
-                g[label(r)].append(r["query"])
-        show("%s, mode %s" % (c, m), g)
+        show("%s, mode %s" % (c, m), group([r for r in rows if r["class"] == c and r["mode"] == m], label))
