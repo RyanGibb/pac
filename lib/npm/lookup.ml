@@ -416,7 +416,7 @@ module Make (Encoding : Encoding.S) = struct
   let record_dir st (m : Np.Nm.name) =
     match m with
     | Np.Nm.Intermediate (k, v, d) ->
-        let l = Option.value ~default:[] (Hashtbl.find_opt st.dirs (k, v)) in
+        let l = Tbl.find_list st.dirs (k, v) in
         if not (List.exists (fun x -> Np.Nm.compare x m = E.Eq) l) then begin
           Hashtbl.replace st.dirs (k, v) (m :: l);
           match desc_name st (snd k, v) d with
@@ -462,5 +462,5 @@ module Make (Encoding : Encoding.S) = struct
     hs
 
   let links_into st (h : Np.Nm.name) = Hashtbl.find_all st.links_into h
-  let dirs st p = Option.value ~default:[] (Hashtbl.find_opt st.dirs p)
+  let dirs st p = Tbl.find_list st.dirs p
 end
