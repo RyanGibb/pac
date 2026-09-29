@@ -12,7 +12,7 @@ type kind =
   | Alternative
 
 (* One clause of a decided package as apt registers it: [name] stands for
-   it -- its clause package, or the one target of a bare Depends, which apt
+   it -- its clause package, or the one dependee of a bare Depends, which apt
    enqueues rather than queues as work -- and is None for a clause folded
    into an earlier one. *)
 type ('name, 'atom) clause = {
@@ -46,7 +46,7 @@ module type DRIVER = sig
   (* the alternatives of the clause [name] stands for *)
   val clause_atoms : name -> atom list option
 
-  (* apt's solution count for one alternative: the target packages it can
+  (* apt's solution count for one alternative: the dependee packages it can
      still be discharged by, live under the partial solution and over the
      candidates-only instance respectively (apt's static count also takes
      in the versions Strict-Pinning rejected) *)

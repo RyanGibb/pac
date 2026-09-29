@@ -249,7 +249,7 @@ module Make (AP : Tables.ARCH) = struct
       }
 
       (* A selector candidate as the package it installs: RefReal names no
-         package, so it is a version of the target itself. *)
+         package, so it is a version of the dependee itself. *)
       let sel_pkg (pv : t) =
         match (pv.tgt, pv.v) with
         | Some (n, DMA.QAArch b), DMA.Deb.Version.RefReal w -> Some ((n, b), w)
@@ -298,7 +298,7 @@ module Make (AP : Tables.ARCH) = struct
         | DMA.Deb.Version.Bot -> Format.fprintf fmt "⊥"
     end
 
-    (* The clause position and the target are known only where the name is:
+    (* The clause position and the dependee are known only where the name is:
        a Disjunct or Soft name holds the clause its candidates are
        alternatives of, and no other name has Version.Atom candidates at all;
        a Selector holds the atom its candidates provide. *)
@@ -363,7 +363,7 @@ module Make (AP : Tables.ARCH) = struct
         (cands_of n)
 
     (* the candidates of a clause name the partial solution already
-       discharges: an alternative whose target it holds, or which resolves
+       discharges: an alternative whose dependee it holds, or which resolves
        through a selector one of whose providers it holds.  Non-empty is apt's
        ELIDED, a popped clause some solution of which is true. *)
     let free_of ~assigned n cands =

@@ -79,7 +79,7 @@ module Make (D : DRIVER) = struct
     wobs : bool;
     (* the alternatives the item's solutions are counted over, as the wave
        that pushed it read them: narrower than the name's own where apt
-       folded a second clause on the same target into this one *)
+       folded a second clause on the same dependee into this one *)
     watoms : D.atom list;
   }
 
@@ -157,7 +157,7 @@ module Make (D : DRIVER) = struct
     (* apt re-examines a clause only when a literal it watches changes; the
        drain's unit test of an open name is likewise kept from one call to
        the next while nothing it depends on has: PubGrub's own count of the
-       name's candidates, which its propagation narrows as a target is
+       name's candidates, which its propagation narrows as a dependee is
        decided or excluded, and the rejections propagated so far *)
     nonunit : (D.name, int * int) Hashtbl.t;
     mutable epoch : int;
@@ -707,7 +707,7 @@ module Make (D : DRIVER) = struct
     | Soft -> live_of_name t ~assigned n <= 0
     | Hard -> static_nsol t n <= 1 || live_of_name t ~assigned n <= 1
     | Alternative ->
-        (* one live target package is apt's Enqueue: Strict-Pinning leaves
+        (* one live dependee package is apt's Enqueue: Strict-Pinning leaves
            each package one live version, so apt's count of version vars is
            this count of packages *)
         c < 2 || live_of_name t ~assigned n <= 1

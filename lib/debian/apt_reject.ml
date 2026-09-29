@@ -84,7 +84,7 @@ module Make (S : SEARCH) = struct
       stz.nprovs
 
   (* the alternative's own name in the encoding: its selector where a
-     provider matches it, the target otherwise *)
+     provider matches it, its dependee otherwise *)
   let alt_name a =
     if has_ref (DMA.Deb.Name.Selector a) then DMA.Deb.Name.Selector a
     else DMA.Deb.Name.Orig (fst a)
@@ -123,8 +123,8 @@ module Make (S : SEARCH) = struct
     | DMA.QAArch c -> not (String.equal b c)
     | _ -> false
 
-  (* apt's solution counts: an alternative's solutions are its target's
-     versions that satisfy it and, one per entry, the target's ProvidesList
+  (* apt's solution counts: an alternative's solutions are its dependee's
+     versions that satisfy it and, one per entry, the dependee's ProvidesList
      entries that do (AllTargets, pkgcache.cc), so a package providing its
      own name is two solutions.  A provided name resolves through its
      selector, whose Ref candidates are keyed by provider package; the
@@ -187,9 +187,9 @@ module Make (S : SEARCH) = struct
         Hashtbl.add st.provided k p;
         p
 
-  (* Defer-Version-Selection (TranslateOrGroup): an atom whose target has no
+  (* Defer-Version-Selection (TranslateOrGroup): an atom whose dependee has no
      Provides entry and every version of which satisfies it is one solution,
-     the target's package var; any other atom's solutions are version vars.
+     the dependee's package var; any other atom's solutions are version vars.
      apt tests every version in its cache, those Strict-Pinning rejected
      included; this tests the candidates only. *)
   let deferred st (a : DMA.Deb.Atom.t) =
@@ -264,7 +264,7 @@ module Make (S : SEARCH) = struct
 
   (* the clause's name in this encoding: its synthetic name, or for a
      one-alternative Depends the alternative's selector where a provider
-     matches it, and the target itself otherwise *)
+     matches it, and its dependee otherwise *)
   let clause_name opt g = function [ a ] when not opt -> alt_name a | _ -> g
 
   let pkg_names (((n, _), _) as p : DMA.Pkg.t) =
