@@ -880,6 +880,22 @@ never installed:
   encoded solution: 5 core nodes (7 lookups)
   loaded: 4 names, 4 versions
 
+Once a package's version var is true, apt's Enqueue of it does nothing,
+however else the package is reached: dgd's dgg (>= 1), worked after dgr's
+dgg:amd64 has installed dgg, walks none of dgg's clauses again, so the half
+of dgg's dgh (>= 1), dgh (<< 2) that apt registers on the version is pushed
+once.  apt pushes three work items here, and so does the replay's heap:
+
+  $ PACSHADOW=1 ../../../bin/main.exe debian --order=tool --native amd64 Packages.again dgr 2>&1 | sed -E '/^(parse|solve) [0-9.]+s$/d; s/^PACSHADOW.* (push=[0-9]+ readd=[0-9]+).*/\1/'
+  push=3 readd=0
+  packages (4):
+    dgd:amd64 1
+    dgg:amd64 1
+    dgh:amd64 1
+    dgr:amd64 1
+  encoded solution: 10 core nodes (10 lookups)
+  loaded: 5 names, 7 versions
+
 A Conflicts or Breaks on pkg:b is apt's negative on the same
 pseudo-package, so it reaches what the atom would meet as a dependency:
 xcfl's Conflicts: xfc:i386 spares the foreign xfc:amd64 it depends on, and

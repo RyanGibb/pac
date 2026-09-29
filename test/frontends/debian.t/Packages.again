@@ -1,0 +1,36 @@
+Package: dgr
+Version: 1
+Architecture: amd64
+Depends: dgg:amd64, dgd
+
+Package: dgd
+Version: 1
+Architecture: amd64
+Depends: dgg (>= 1)
+
+Package: dgg
+Version: 1
+Architecture: amd64
+Multi-Arch: foreign
+Depends: dgh (>= 1), dgh (<< 2)
+
+Package: dgg
+Version: 1
+Architecture: i386
+Multi-Arch: foreign
+Depends: dgh (>= 1), dgh (<< 2)
+
+Package: dgh
+Version: 1
+Architecture: amd64
+Multi-Arch: foreign
+
+Package: dgh
+Version: 1
+Architecture: i386
+Multi-Arch: foreign
+
+Package: dgp
+Version: 1
+Architecture: amd64
+Provides: dgh (= 1)

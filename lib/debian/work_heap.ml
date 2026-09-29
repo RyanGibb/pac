@@ -280,6 +280,11 @@ module Make (D : DRIVER) = struct
 
   let top t = if t.tlen > 0 then Some t.tarr.(t.tlen - 1) else None
 
+  (* whether an entry of the trail before [i] decided [n] *)
+  let decided_before t i n =
+    let rec go j = j < i && (D.same_name t.tarr.(j).tname n || go (j + 1)) in
+    go 0
+
   let record_popped t w =
     let lvl = t.wide_count in
     match Hashtbl.find_opt t.popped_at lvl with
@@ -571,9 +576,14 @@ module Make (D : DRIVER) = struct
         e.tenq <- n :: e.tenq
     | _ -> ()
 
-  (* the selector's slot was the version var's: it pops here *)
+  (* the selector's slot was the version var's: it pops here, unless it is
+     true already -- its package decided earlier on the trail, or reached
+     through another selector -- when apt's Enqueue of it does nothing *)
   let selector_version_pops t ~assigned (e : tentry) pv =
     match D.version_of t.d e.tname pv with
+    | Some (orig, _)
+      when Hashtbl.mem t.ver_done orig || decided_before t e.tidx orig ->
+        ()
     | Some (orig, ov) ->
         version_pops t ~assigned e
           ~pkg_var:(fun () -> enqueue t (Some e) orig)
