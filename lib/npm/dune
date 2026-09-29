@@ -50,3 +50,8 @@
  (name test_npm_version)
  (modules test_npm_version)
  (libraries npm_frontend))
+
+(test
+ (name test_npm_parse)
+ (modules test_npm_parse)
+ (libraries npm_frontend))

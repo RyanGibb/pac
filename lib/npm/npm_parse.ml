@@ -349,8 +349,218 @@ let of_json ~reading ~reject (j : Yojson.Safe.t) : packument =
   in
   { pk_latest = latest; pk_tags = tags; pk_vers = vers }
 
+(* Most of a packument is what no reading uses (readmes, the time table,
+   each version's dist and scripts), so it is checked in place against the
+   grammar Yojson reads (read.mll: comments, NaN and Infinity, unquoted
+   keys, a high surrogate escape only with its low one), and only what
+   of_json and ver_of read of a registry version is built: Yojson's tree
+   with every other member removed. *)
+let fail () = raise (Yojson.Json_error "not JSON")
+let digit c = c >= '0' && c <= '9'
+
+let rec close s j =
+  if j + 1 >= String.length s then fail ()
+  else if s.[j] = '*' && s.[j + 1] = '/' then j + 2
+  else close s (j + 1)
+
+let rec space s i =
+  let n = String.length s in
+  if i >= n then i
+  else
+    match s.[i] with
+    | ' ' | '\t' | '\r' | '\n' -> space s (i + 1)
+    | '/' when i + 1 < n && s.[i + 1] = '/' -> (
+        match String.index_from_opt s i '\n' with
+        | Some j -> space s (j + 1)
+        | None -> n)
+    | '/' when i + 1 < n && s.[i + 1] = '*' -> space s (close s (i + 2))
+    | _ -> i
+
+let hex = function
+  | '0' .. '9' as c -> Char.code c - 48
+  | 'a' .. 'f' as c -> Char.code c - 87
+  | 'A' .. 'F' as c -> Char.code c - 55
+  | _ -> fail ()
+
+let hex4 s i =
+  if i + 4 > String.length s then fail ()
+  else
+    (hex s.[i] lsl 12)
+    lor (hex s.[i + 1] lsl 8)
+    lor (hex s.[i + 2] lsl 4)
+    lor hex s.[i + 3]
+
+(* the end of the string whose opening quote is at i - 1 *)
+let rec str s i =
+  if i >= String.length s then fail ()
+  else
+    match s.[i] with
+    | '"' -> i + 1
+    | '\\' -> str s (escape s (i + 1))
+    | _ -> str s (i + 1)
+
+and escape s i =
+  let n = String.length s in
+  if i >= n then fail ()
+  else
+    match s.[i] with
+    | '"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't' -> i + 1
+    | 'u' ->
+        let x = hex4 s (i + 1) in
+        if x < 0xD800 || x > 0xDBFF then i + 5
+        else if i + 6 < n && s.[i + 5] = '\\' && s.[i + 6] = 'u' then
+          let y = hex4 s (i + 7) in
+          if y >= 0xDC00 && y <= 0xDFFF then i + 11 else fail ()
+        else fail ()
+    | _ -> fail ()
+
+let rec digits s j =
+  if j < String.length s && digit s.[j] then digits s (j + 1) else j
+
+let number s i =
+  let n = String.length s in
+  let i = if s.[i] = '-' then i + 1 else i in
+  if i >= n || not (digit s.[i]) then fail ()
+  else
+    let j = if s.[i] = '0' then i + 1 else digits s (i + 1) in
+    let j =
+      if j + 1 < n && s.[j] = '.' && digit s.[j + 1] then digits s (j + 2)
+      else j
+    in
+    if j < n && (s.[j] = 'e' || s.[j] = 'E') then
+      let k =
+        if j + 1 < n && (s.[j + 1] = '+' || s.[j + 1] = '-') then j + 2
+        else j + 1
+      in
+      if k < n && digit s.[k] then digits s k else j
+    else j
+
+let rec ident s j =
+  if
+    j < String.length s
+    &&
+    match s.[j] with
+    | 'a' .. 'z' | 'A' .. 'Z' | '_' | '0' .. '9' -> true
+    | _ -> false
+  then ident s (j + 1)
+  else j
+
+let rec lit s i w j =
+  j = String.length w
+  || (i + j < String.length s && s.[i + j] = w.[j] && lit s i w (j + 1))
+
+(* the members from the key at a: [f s a k j] takes the key at [a, k) and
+   the value at j and returns the value's end *)
+let rec member_at s f a =
+  let n = String.length s in
+  let k =
+    if a >= n then fail ()
+    else
+      match s.[a] with
+      | '"' -> str s (a + 1)
+      | 'a' .. 'z' | 'A' .. 'Z' | '_' -> ident s (a + 1)
+      | _ -> fail ()
+  in
+  let c = space s k in
+  if c >= n || s.[c] <> ':' then fail ();
+  let e = space s (f s a k (space s (c + 1))) in
+  if e >= n then fail ()
+  else
+    match s.[e] with
+    | ',' -> member_at s f (space s (e + 1))
+    | '}' -> e + 1
+    | _ -> fail ()
+
+(* the object whose brace is at i - 1 *)
+let members s i f =
+  let i = space s i in
+  if i < String.length s && s.[i] = '}' then i + 1 else member_at s f i
+
+let rec skip s i =
+  if i >= String.length s then fail ()
+  else
+    match s.[i] with
+    | '"' -> str s (i + 1)
+    | '{' -> members s (i + 1) skip_member
+    | '[' ->
+        let j = space s (i + 1) in
+        if j < String.length s && s.[j] = ']' then j + 1 else elem s j
+    | 't' when lit s i "true" 0 -> i + 4
+    | 'f' when lit s i "false" 0 -> i + 5
+    | 'n' when lit s i "null" 0 -> i + 4
+    | 'N' when lit s i "NaN" 0 -> i + 3
+    | 'I' when lit s i "Infinity" 0 -> i + 8
+    | '-' when lit s i "-Infinity" 0 -> i + 9
+    | '-' | '0' .. '9' -> number s i
+    | _ -> fail ()
+
+and skip_member s _ _ j = skip s j
+
+and elem s j =
+  let e = space s (skip s j) in
+  if e >= String.length s then fail ()
+  else
+    match s.[e] with
+    | ',' -> elem s (space s (e + 1))
+    | ']' -> e + 1
+    | _ -> fail ()
+
+let rec plain s a k = a >= k || (s.[a] <> '\\' && plain s (a + 1) k)
+
+let skim (s : string) : Yojson.Safe.t =
+  let n = String.length s in
+  let whole j =
+    let e = skip s j in
+    (e, Yojson.Safe.from_string (String.sub s j (e - j)))
+  in
+  let key a k =
+    if s.[a] <> '"' then String.sub s a (k - a)
+    else if not (plain s a k) then
+      match Yojson.Safe.from_string (String.sub s a (k - a)) with
+      | `String x -> x
+      | _ -> fail ()
+    else String.sub s (a + 1) (k - a - 2)
+  in
+  (* the members of an object that [keep] names a reader for, and anything
+     but an object as `Null, which every reader takes as a non-object *)
+  let fields keep j =
+    if j < n && s.[j] = '{' then begin
+      let acc = ref [] in
+      let e =
+        members s (j + 1) (fun s a k j ->
+            let x = key a k in
+            match keep x with
+            | Some f ->
+                let e, v = f j in
+                acc := (x, v) :: !acc;
+                e
+            | None -> skip s j)
+      in
+      (e, `Assoc (List.rev !acc))
+    end
+    else (skip s j, `Null)
+  in
+  let version =
+    fields (function
+      | "name" | "dependencies" | "optionalDependencies" | "peerDependencies"
+      | "peerDependenciesMeta" | "deprecated" | "engines" ->
+          Some whole
+      | _ -> None)
+  in
+  let versions = fields (fun _ -> Some version) in
+  let e, j =
+    fields
+      (function
+        | "dist-tags" -> Some whole | "versions" -> Some versions | _ -> None)
+      (space s 0)
+  in
+  if space s e <> n then fail ();
+  j
+
 let load ~reading ~reject (path : string) : (packument, string) result =
-  match Yojson.Safe.from_file path with
+  match In_channel.with_open_bin path In_channel.input_all with
   | exception Sys_error e -> Error e
-  | `Assoc _ as j -> Ok (of_json ~reading ~reject j)
-  | _ | (exception Yojson.Json_error _) -> Error "not a packument"
+  | s -> (
+      match skim s with
+      | `Assoc _ as j -> Ok (of_json ~reading ~reject j)
+      | _ | (exception Yojson.Json_error _) -> Error "not a packument")
