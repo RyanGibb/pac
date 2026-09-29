@@ -36,30 +36,10 @@ Prints each miss and exits 3 when there is one, so that a crash, which
 exits 1, is not read as one.
 """
 import json
-import subprocess
 import sys
 
 from shared import SHARED, normalize, split
-from tree import is_link, packument, parse_tree, resolve
-
-SATISFIES = {}
-
-
-def satisfies(pairs):
-    """{(version, range): whether npm's semver takes it}, as arborist's
-    dep-valid.js asks it (loose, "" and * taking anything); None for a
-    range semver cannot read, which is not ours to judge"""
-    todo = sorted({p for p in pairs if p not in SATISFIES and p[1].strip() not in ("", "*")})
-    if todo:
-        # npm's own semver, looked for only when some range needs it
-        from verdict import resolve_semver
-        js = ("const s=require(%s);console.log(JSON.stringify(JSON.parse(process.argv[1])"
-              ".map(([v,r])=>{try{return s.satisfies(v,r,true)}catch(e){return null}})))"
-              % json.dumps(resolve_semver()))
-        out = subprocess.run(["node", "-e", js, json.dumps(todo)],
-                             capture_output=True, text=True, check=True)
-        SATISFIES.update(zip(todo, json.loads(out.stdout)))
-    return {p: True if p[1].strip() in ("", "*") else SATISFIES[p] for p in pairs}
+from tree import is_link, packument, parse_tree, resolve, satisfies
 
 
 def tagged(cache, name, spec):
@@ -133,7 +113,9 @@ def open_misses(pk, at, open_, through, cache=None):
             for (q, p), s in hit.items() if s is not None and s in pk}
     asks = {(q, p): (pk[hit[q, p]].get("version", ""), tagged(cache, p, r))
             for (q, p), r in spec.items()}
-    ok = satisfies(list(asks.values()))
+    # "" and * take anything; a range semver cannot read (None) is not ours
+    # to judge
+    ok = {a: a[1].strip() in ("", "*") or satisfies(*a, "loose") for a in asks.values()}
     miss += [(hit[q, p], f"{name(at(q))} at {q} peers on {p}, which the answer leaves open, yet it "
                  f"finds {name(at(hit[q, p]))} outside {spec[q, p]}"
                  + (f" ({asks[q, p][1]})" if asks[q, p][1] != spec[q, p] else ""))

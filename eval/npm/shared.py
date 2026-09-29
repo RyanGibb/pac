@@ -17,8 +17,9 @@ a peer where it does not.
 """
 import json
 import os
-import subprocess
 import sys
+
+from tree import satisfies
 
 READING = os.environ.get("READING") or "npm"
 if READING not in ("npm", "shared"):
@@ -28,47 +29,6 @@ SHARED = READING == "shared"
 with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                        "..", "..", "lib", "npm", "berry-extensions.json")) as f:
     EXT = [(d[:d.rindex("@")], d[d.rindex("@") + 1:], x) for d, x in json.load(f)]
-
-
-# Berry's satisfiesWithPrereleases (yarnpkg-core/sources/semverUtils.ts),
-# run on npm's own node-semver: the range with includePrerelease, and else
-# the version and every comparator with their prerelease tags dropped
-_SAT_JS = r"""
-const semver = require(process.argv[1]);
-function sat(version, range) {
-  let r, v;
-  try { r = new semver.Range(range, {includePrerelease: true}); } catch (e) { return false; }
-  try { v = new semver.SemVer(version, r); } catch (e) { return false; }
-  if (r.test(v)) return true;
-  if (v.prerelease) v.prerelease = [];
-  return r.set.some(set => {
-    for (const c of set) if (c.semver.prerelease) c.semver.prerelease = [];
-    return set.every(c => c.test(v));
-  });
-}
-require("readline").createInterface({input: process.stdin}).on("line", l => {
-  const [v, r] = JSON.parse(l);
-  process.stdout.write(sat(v, r) ? "1\n" : "0\n");
-});
-"""
-_SAT = {}
-_SAT_PROC = None
-
-
-def satisfies(version, rng):
-    """whether Berry takes version for the packageExtensions key rng"""
-    global _SAT_PROC
-    key = (version, rng)
-    if key not in _SAT:
-        if _SAT_PROC is None:
-            from verdict import resolve_semver
-            _SAT_PROC = subprocess.Popen(["node", "-e", _SAT_JS, resolve_semver()],
-                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                         text=True)
-        _SAT_PROC.stdin.write(json.dumps([version, rng]) + "\n")
-        _SAT_PROC.stdin.flush()
-        _SAT[key] = _SAT_PROC.stdout.readline().strip() == "1"
-    return _SAT[key]
 
 
 def normalize(m, name, version, npm=False):
@@ -85,7 +45,7 @@ def normalize(m, name, version, npm=False):
     meta = {k: dict(v) for k, v in (m.get("peerDependenciesMeta") or {}).items()
             if isinstance(v, dict)}
     for n, rg, x in EXT:
-        if n != name or not satisfies(version, rg):
+        if n != name or not satisfies(version, rg, "berry"):
             continue
         for k, v in (x.get("dependencies") or {}).items():
             deps.setdefault(k, v)

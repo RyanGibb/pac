@@ -44,7 +44,7 @@ as arborist loads the later over the earlier.
   > {"dependencies": {"d": "^1", "o": "^1"}, "devDependencies": {"d": "^2"},
   >  "overrides": {"o": "3.0.0", "s": "*"}}
   > EOF
-  $ SEMVER=unused python3 -c '
+  $ python3 -c '
   > import json, sys; sys.path.insert(0, "../../../eval/npm"); import verdict as v
   > m = json.load(open("m.json"))
   > print(v.wanted(m, "d", m, True), v.wanted(m, "o", m, True), v.wanted(m, "d", m, False))

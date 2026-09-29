@@ -1,11 +1,13 @@
 """The two trees the npm scripts read: pac's --tree output, and a
 package-lock's node_modules paths, which a lookup walks as require()
-does.  Also the snapshot's packuments, which a lock's entries copy."""
+does.  Also the snapshot's packuments, which a lock's entries copy, and
+npm's semver."""
 import base64
 import functools
 import json
 import os
 import re
+import subprocess
 
 # "name 1.2.3" or "name 1.2.3 at dir", and the root may have no version
 SIDE = re.compile(r"^(\S+)(?: (\S+?))?(?: at (\S+))?$")
@@ -133,6 +135,23 @@ def entry(cache, name, version, key):
         if m.get(k):
             e[k] = m[k]
     return e
+
+
+SEMVER, SAT = None, {}
+
+
+def satisfies(version, rng, mode):
+    """semver.js's answer, from one node process"""
+    global SEMVER
+    k = (version, rng, mode)
+    if k not in SAT:
+        if SEMVER is None:
+            js = os.path.join(os.path.dirname(os.path.abspath(__file__)), "semver.js")
+            SEMVER = subprocess.Popen(["node", js], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        SEMVER.stdin.write(json.dumps(k) + "\n")
+        SEMVER.stdin.flush()
+        SAT[k] = json.loads(SEMVER.stdout.readline())
+    return SAT[k]
 
 
 def write_lock(dst, packages):

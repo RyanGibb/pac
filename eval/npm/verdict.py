@@ -46,48 +46,9 @@ usage: verdict.py <run-dir> <query> <out-prefix> [root package.json]
 """
 import json
 import os
-import shutil
-import subprocess
 import sys
 
-from tree import manifest
-
-
-def resolve_semver():
-    """npm's *bundled* semver, not any semver on the module path: the range
-    test asks npm's reading of the range."""
-    env = os.environ.get("SEMVER")
-    if env:
-        return env
-    cands = []
-    npm = shutil.which("npm")
-    if npm:
-        # the CLI is a symlink into npm's own lib/node_modules on Nix and on
-        # nvm alike, where `npm root -g` may name a node without npm beside it
-        real = os.path.realpath(npm)
-        here = os.path.dirname(real)
-        while here != "/":
-            if os.path.basename(here) == "npm":
-                cands.append(os.path.join(here, "node_modules", "semver"))
-                break
-            here = os.path.dirname(here)
-        for arg in (["root", "-g"], ["prefix", "-g"]):
-            try:
-                out = subprocess.run(["npm"] + arg, capture_output=True,
-                                     text=True, timeout=30)
-            except (OSError, subprocess.SubprocessError):
-                continue
-            root = out.stdout.strip()
-            if out.returncode != 0 or not root:
-                continue
-            if arg[0] == "prefix":
-                root = os.path.join(root, "lib", "node_modules")
-            cands.append(os.path.join(root, "npm", "node_modules", "semver"))
-    cands.append("/run/current-system/sw/lib/node_modules/npm/node_modules/semver")
-    for c in cands:
-        if os.path.isdir(c):
-            return c
-    return "semver"
+from tree import manifest, satisfies
 
 
 def resolve_host():
@@ -103,7 +64,6 @@ def resolve_host():
     return host
 
 
-SEMVER = resolve_semver()
 HOST = resolve_host()
 
 
@@ -153,23 +113,6 @@ def wanted(m, d, root, is_root):
     return declared(m, d, is_root)
 
 
-def satisfies(pairs):
-    """npm's own semver, asked in one batch"""
-    if not pairs:
-        return {}
-    js = (
-        "const s=require(%s);"
-        "console.log(JSON.stringify(JSON.parse(process.argv[1])"
-        ".map(([v,r])=>{try{return s.satisfies(v,r)}catch(e){return null}})))"
-        % json.dumps(SEMVER)
-    )
-    out = subprocess.run(
-        ["node", "-e", js, json.dumps(pairs)],
-        capture_output=True, text=True, check=True,
-    )
-    return dict(zip(map(tuple, pairs), json.loads(out.stdout)))
-
-
 def main():
     run, pkg, prefix = sys.argv[1], sys.argv[2], sys.argv[3]
     cache = os.path.join(run, "cache")
@@ -184,7 +127,7 @@ def main():
     except OSError:
         bundled = set()
 
-    rows, pairs = [], []
+    rows = []
     with open(prefix + ".edges.npmonly") as f:
         for line in f:
             rn, rv, d, vn, vv = line.rstrip("\n").split("\t")
@@ -200,10 +143,6 @@ def main():
             eng = {k: v for k, v in eng.items()
                    if k in ("node", "npm") and isinstance(v, str) and HOST[k]}
             rows.append((rn, rv, d, vn, vv, rg, vm, eng))
-            if rg is not None:
-                pairs.append([vv, rg])
-            pairs += [[HOST[k], v] for k, v in eng.items()]
-    sat = satisfies(pairs)
 
     counts, lines = {}, []
     for rn, rv, d, vn, vv, rg, vm, eng in rows:
@@ -215,9 +154,9 @@ def main():
             why = "instance gap (gate): os/cpu/libc"
         elif rg is None:
             why = "unclassified: requirer's row not found"
-        elif sat[(vv, rg)] is not True:
+        elif satisfies(vv, rg, "strict") is not True:
             why = "instance gap: row read differently"
-        elif not all(sat[(HOST[k], v)] for k, v in eng.items()):
+        elif not all(satisfies(HOST[k], v, "strict") for k, v in eng.items()):
             why = "preference gap (engines)"
         else:
             why = "preference gap"

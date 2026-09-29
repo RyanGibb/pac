@@ -6,6 +6,7 @@
   ../../eval/npm/npmlib.js
   ../../eval/npm/relation.py
   ../../eval/npm/resolve.js
+  ../../eval/npm/semver.js
   ../../eval/npm/shared.py
   ../../eval/npm/verdict.py
   ../../eval/npm/npm-version
