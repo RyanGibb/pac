@@ -415,8 +415,6 @@ Module SetSpecs (E : UsualOrderedType) (S : SetsOn E).
   Qed.
 End SetSpecs.
 
-(* The packages of one name and granularity, which the granular versions
-   lookup of each concurrent reduction reads *)
 Module GranFibre (N V G : UsualOrderedType)
     (P : UsualOrderedType with Definition t := (N.t * V.t)%type) (S : SetsOn P).
   Definition granFibre (g : V.t -> G.t) (R : S.t) (n : N.t) (w : G.t) : S.t :=

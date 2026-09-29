@@ -95,7 +95,7 @@ Module Feature (N V F : UsualOrderedType).
 
     Module T := Core NameOT V.
 
-    (* The target core is a distinct instantiation even though versions are
+    (* The core is a distinct instantiation even though versions are
        unchanged, so version sets are rebuilt element-wise. *)
     Module SOvt := SetOps V V VSet T.VSet.
     Definition embedVS (vs : VSet.t) : T.VSet.t :=

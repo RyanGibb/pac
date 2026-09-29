@@ -2183,11 +2183,6 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           left; exists (n, v); split; [exact Hv | reflexivity].
       Qed.
 
-      (* An original package's own edges are the encoding's top level: the
-         alternatives of a disjunction, and by De Morgan those of a negated
-         conjunction, hang off their disjunct package, and of the atoms left
-         only a negated one reads its name's versions, for its complement.
-         ownNegNamesNeg is the same walk under a negation. *)
       Fixpoint ownNegNames (f : Formula) : NSet.t :=
         match f with
         | FDep _ _ => NSet.empty

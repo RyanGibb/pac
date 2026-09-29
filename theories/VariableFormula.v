@@ -655,8 +655,6 @@ Module VariableFormula (N V : UsualOrderedType)
       Module PkgFibred := FibredRel N V Pkg PkgSet.
       Module DepRelFibred := FibredRel Pkg Dependees DepElt DepRel.
 
-      (* A negated comparison complements against Y_x, which the
-         sub-instance carries whole, so only atoms count. *)
       Fixpoint ownNegNames (f : Formula) : NSet.t :=
         match f with
         | FDep _ _ => NSet.empty

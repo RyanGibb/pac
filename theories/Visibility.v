@@ -401,7 +401,7 @@ Module Visibility (N V : UsualOrderedType).
     Module T := Core NameOT V.
 
     Module SOvv := SetOps V V VSet T.VSet.
-    (* Module application is generative, so the target's version sets are a
+    (* Module application is generative, so the core's version sets are a
        fresh type even though the versions in them are the same. *)
     Definition embedVS (vs : VSet.t) : T.VSet.t := SOvv.map (fun u => u) vs.
 
@@ -668,8 +668,8 @@ Module Visibility (N V : UsualOrderedType).
         rewrite carriedb_iff, SOvtd.mem_map; eauto.
     Qed.
 
-    (* Source and target name together fix which of the four parts an edge
-       is from, so inversion discards the others. *)
+    (* An edge's depender and dependee name together fix which of the four
+       parts it is from, so inversion discards the others. *)
     Inductive DepsSpec (R : PkgSet.t) (D : C.DepRel.t) (pub : PubRel.t)
         (r : Pkg.t) : T.DepElt.t -> Prop :=
     | DepsSelf : forall n v q,

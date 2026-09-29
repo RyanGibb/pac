@@ -711,8 +711,9 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       intros I y; rewrite reduceReal_coreResolution; apply mem_coreResolution.
     Qed.
 
-    (* Each target name draws its versions from one branch of coreResolution, so
-       the callers name the branch they mean rather than its position. *)
+    (* Each of the core's names draws its versions from one branch of
+       coreResolution, so the callers name the branch they mean rather than
+       its position. *)
     Lemma coreResolution_at_root : forall I S w,
         PF.PkgSet.In (Name.Root, w) (coreResolution I S) -> w = Version.RootV.
     Proof.

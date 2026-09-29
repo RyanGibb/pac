@@ -123,9 +123,8 @@ Module Opam (N V X Y E : UsualOrderedType).
   Module ClsRel := Cls.InClassRel.
   Module ESet := FSetUOT E.
 
-  (* The opam instance.  Formula-valued relations are lists: they feed
-     only the spec and the translation, and sets would demand formula
-     comparators used nowhere. *)
+  (* Formula-valued relations are lists: they feed only the spec and the
+     translation, and sets would demand formula comparators used nowhere. *)
   Record Inst : Type := MkInst
     { inst_repo : PkgSet.t
     ; inst_dep : list (Pkg.t * OFormula)
@@ -617,8 +616,9 @@ Module Opam (N V X Y E : UsualOrderedType).
       rewrite mem_opamResolution, mem_coreResolution_real; reflexivity.
     Qed.
 
-    (* Each target name draws its versions from one branch of coreResolution, so
-       version uniqueness splits three ways rather than nine. *)
+    (* Each of the core's names draws its versions from one branch of
+       coreResolution, so version uniqueness splits three ways rather than
+       nine. *)
     Lemma coreResolution_at_root : forall cls S tv,
         PF.PkgSet.In (TName.Root, tv) (coreResolution cls S) -> tv = TVer.UnitV.
     Proof.
