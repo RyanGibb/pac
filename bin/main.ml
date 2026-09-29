@@ -750,6 +750,9 @@ let npm_cmd =
 (* a command-line error is a refused query like any other, and 124 is
    left to timeout(1) *)
 let () =
+  (* a query is one short run, so a larger heap buys fewer major
+     collections *)
+  Gc.set { (Gc.get ()) with space_overhead = 200 };
   let doc = "Solve dependencies through the verified package calculus." in
   let code =
     Cmd.eval'
