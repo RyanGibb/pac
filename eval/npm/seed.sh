@@ -9,18 +9,18 @@
 # where npm cannot, the query is dropped.  A packument in repos/npm can be
 # old enough that a newer release's own dependency range matches nothing
 # in it, which stops npm as well.  The version that comes out is written
-# to baseline/roots.txt and used verbatim by both sides, so the question stays shared whatever the reason
-# for walking back.
+# to baseline/roots.txt and used verbatim by both sides, so the question
+# stays shared whatever the reason for walking back.
 #
 # Snapshot closure.  repos/npm is an on-demand cache accumulated by earlier
 # `pac npm` runs, so it holds our cone and not necessarily npm's: npm asks
 # for names our parser drops (git and tag specs) and for peers we place
-# differently.  A frozen shim would
-# answer those 404 and npm would be solving a different registry from ours.
-# So our side runs online and fills the farm with what it needs, and npm
-# runs against a --fill shim that fetches a miss once into the same farm.
-# After this the farm is closed over the seeded roots; a FILL=1 scale.sh
-# pass closes it over the rest.
+# differently.  A frozen shim would answer those 404 and npm would be
+# solving a different registry from ours.  So our side runs online and
+# fills the farm with what it needs, and npm runs against a --fill shim
+# that fetches a miss once into the same farm.  After this the farm is
+# closed over the seeded roots; a FILL=1 scale.sh pass closes it over the
+# rest.
 #
 # usage: seed.sh <exe> [run-dir] [port] [max-walkback]      TIMEOUT=<s per pac call>
 set -eu
