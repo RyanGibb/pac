@@ -103,6 +103,10 @@ module Make (S : SEARCH) : sig
   val installed_at : assigned:assigned -> DMA.Pkg.t -> bool
   val assign : state -> assigned:assigned -> rejection list -> rejection list
   val conflicts : state -> assigned:assigned -> DMA.Pkg.t -> rejection list
+
+  val group_conflicts :
+    state -> assigned:assigned -> DMA.Pkg.t -> rejection list
+
   val conflicted_by : state -> assigned:assigned -> DMA.Pkg.t -> rejection list
 
   val propagate :

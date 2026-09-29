@@ -325,6 +325,27 @@ module Make (S : SEARCH) = struct
       (dependees_of (orig_of p) (DMA.Deb.Version.Orig v));
     List.rev !out
 
+  (* apt's implicit Multi-Arch negatives (AddImplicitDepends,
+     apt-pkg/pkgcachegen.cc:812-880): a version of foo:b conflicts with every
+     other architecture's foo that has a version, or, if it is Multi-Arch:
+     same, breaks those versions but its own *)
+  let group_reaches (((_, b), v) as p : DMA.Pkg.t) c w =
+    (not (String.equal b c))
+    && ((match stanza p with
+          | Some stz -> stz.ncls <> DMA.MASame
+          | None -> true)
+       || Version.Debian.compare v w <> 0)
+
+  (* what installing p assigns through its implicit negatives, which the
+     cache appends to its dependencies after the Recommends *)
+  let group_conflicts st ~assigned (((n, _), _) as p : DMA.Pkg.t) =
+    let out = ref [] in
+    List.iter
+      (fun (c, w) ->
+        if group_reaches p c w then reject_ver st ~assigned out ((n, c), w))
+      (group_members tables n);
+    List.rev !out
+
   (* The declarer's atom names p, or a name p provides, at p's architecture
      -- an explicit :arch elsewhere is another package, one apt's cache holds
      as an empty pseudo-package -- and its version formula holds of p's
@@ -350,9 +371,9 @@ module Make (S : SEARCH) = struct
      conflict on the declarer itself, on a provider in its group, and on its
      group from an MA:same declarer (IsIgnorable,
      apt-pkg/pkgcache.cc:757-790), and a declarer that is not MA:same
-     already conflicts with its whole group implicitly (AddImplicitDepends,
-     pkgcachegen.cc), so skipping every member changes no answer. *)
-  let conflicted_by st ~assigned (((pkgname, _), _) as p : DMA.Pkg.t) =
+     already conflicts with its whole group implicitly: those implicit
+     negatives, group_reaches, are what reaches p from its own group. *)
+  let conflicted_by st ~assigned (((pkgname, pb), v) as p : DMA.Pkg.t) =
     (* by package, not version: under Strict-Pinning a package has one,
        and with it off the replay judges the first it meets, which moves
        the order and never an answer's validity *)
@@ -383,6 +404,12 @@ module Make (S : SEARCH) = struct
                   then reject_pkg st ~assigned out qk))
           (conflicters tables n))
       names;
+    List.iter
+      (fun (c, w) ->
+        let q = ((pkgname, c), w) in
+        if (not (Hashtbl.mem st.pdead (pkgname, c))) && group_reaches q pb v
+        then reject_pkg st ~assigned out (pkgname, c))
+      (group_members tables pkgname);
     List.rev !out
 
   (* the clauses a rejected literal is watched by, and what they assign: a

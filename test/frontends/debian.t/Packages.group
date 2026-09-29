@@ -1,0 +1,32 @@
+Package: gca
+Version: 1
+Architecture: amd64
+Depends: gcx | gcy
+
+Package: gct
+Version: 1
+Architecture: amd64
+
+Package: gct
+Version: 1
+Architecture: i386
+
+Package: gcw
+Version: 1
+Architecture: i386
+Depends: gct | gcu
+
+Package: gcu
+Version: 1
+Architecture: i386
+Depends: gcy
+
+Package: gcx
+Version: 1
+Architecture: amd64
+Multi-Arch: foreign
+
+Package: gcy
+Version: 1
+Architecture: amd64
+Multi-Arch: foreign

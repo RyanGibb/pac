@@ -31,6 +31,9 @@ module type DRIVER = sig
   val conflicts :
     state -> assigned:assigned -> name -> version -> rejection list
 
+  val group_conflicts :
+    state -> assigned:assigned -> name -> version -> rejection list
+
   val conflicted_by :
     state -> assigned:assigned -> name -> version -> rejection list
 
@@ -444,6 +447,7 @@ module Make (D : DRIVER) = struct
       match e.tval with
       | Some pv ->
           queue_rejections t (D.conflicts t.d ~assigned e.tname pv);
+          queue_rejections t (D.group_conflicts t.d ~assigned e.tname pv);
           queue_rejections t (D.conflicted_by t.d ~assigned e.tname pv)
       | None -> ()
     done;
@@ -594,7 +598,8 @@ module Make (D : DRIVER) = struct
      package var pops: its version var is queued first, then the Depends,
      then what its Conflicts and Breaks reject -- assigned before the
      Recommends are counted, since the negatives sit between the two in the
-     cache's field order -- and the Recommends go to the heap *)
+     cache's field order -- then the Recommends go to the heap, and last
+     come the implicit negatives the cache appends *)
   let wave t ~assigned =
     for i = t.waved_upto to t.tlen - 1 do
       let e = t.tarr.(i) in
@@ -612,6 +617,7 @@ module Make (D : DRIVER) = struct
           List.iter (clause t ~assigned e) hard;
           queue_rejections t (D.conflicts t.d ~assigned e.tname pv);
           List.iter (clause t ~assigned e) soft;
+          queue_rejections t (D.group_conflicts t.d ~assigned e.tname pv);
           (* apt's Assume of the chosen alternative queues it *)
           List.iter (enqueue t (Some e)) (D.continuation e.tname pv)
     done;

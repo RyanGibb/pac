@@ -851,6 +851,22 @@ and so takes it:
   encoded solution: 6 core nodes (6 lookups)
   loaded: 11 names, 13 versions
 
+A package that is not Multi-Arch: same conflicts with its own name at every
+other architecture, and installing it rejects those at once.  gct:amd64
+rejects gct:i386, so gcw:i386's gct | gcu has one solution left, gcu:i386,
+which apt installs straight away; gcu's gcy then meets gca's gcx | gcy
+before that clause is worked, and gcx is never installed:
+
+  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages.group gca gct gcw:i386
+  packages (5):
+    gca:amd64 1
+    gct:amd64 1
+    gcu:i386 1
+    gcw:i386 1
+    gcy:amd64 1
+  encoded solution: 10 core nodes (11 lookups)
+  loaded: 6 names, 7 versions
+
 A Conflicts or Breaks on pkg:b is apt's negative on the same
 pseudo-package, so it reaches what the atom would meet as a dependency:
 xcfl's Conflicts: xfc:i386 spares the foreign xfc:amd64 it depends on, and

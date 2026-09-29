@@ -68,6 +68,9 @@ module Make (S : Apt_reject.SEARCH) = struct
 
     let conflicts st ~assigned n pv = at_pkg (conflicts st ~assigned) n pv
 
+    let group_conflicts st ~assigned n pv =
+      at_pkg (group_conflicts st ~assigned) n pv
+
     let conflicted_by st ~assigned n pv =
       at_pkg (conflicted_by st ~assigned) n pv
 

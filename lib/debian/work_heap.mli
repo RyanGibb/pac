@@ -77,6 +77,11 @@ module type DRIVER = sig
   val conflicts :
     state -> assigned:assigned -> name -> version -> rejection list
 
+  (* likewise for the negatives the cache adds to a package after its
+     Recommends: those on its own name at the other architectures *)
+  val group_conflicts :
+    state -> assigned:assigned -> name -> version -> rejection list
+
   (* the rejections assigned as the decided version's var propagates: the
      declarers of a conflict it matches, each to be queued at that point *)
   val conflicted_by :
