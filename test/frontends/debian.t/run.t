@@ -896,6 +896,19 @@ once.  apt pushes three work items here, and so does the replay's heap:
   encoded solution: 10 core nodes (10 lookups)
   loaded: 5 names, 7 versions
 
+A choice PubGrub refutes as soon as it is made, apt first propagates up to
+the conflict: rfr's Recommends tries rff, whose rfa | rfb is pushed before
+rfnone, which nothing provides, fails, and Pop then adds the Recommends back.
+apt's heap takes those three pushes, and the replay's takes them too, two in
+waves and one added back:
+
+  $ PACSHADOW=1 ../../../bin/main.exe debian --order=tool --native amd64 Packages.refuted rfr 2>&1 | sed -E '/^(parse|solve) [0-9.]+s$/d; s/^PACSHADOW.* (push=[0-9]+ readd=[0-9]+).*/\1/'
+  push=2 readd=1
+  packages (1):
+    rfr:amd64 1
+  encoded solution: 2 core nodes (4 lookups)
+  loaded: 4 names, 4 versions
+
 A Conflicts or Breaks on pkg:b is apt's negative on the same
 pseudo-package, so it reaches what the atom would meet as a dependency:
 xcfl's Conflicts: xfc:i386 spares the foreign xfc:amd64 it depends on, and

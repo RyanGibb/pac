@@ -53,6 +53,7 @@ module type DRIVER = sig
   val continuation : name -> version -> name list
   val forced_to : state -> name -> version -> name option
   val version_of : state -> name -> version -> (name * version) option
+  val installs : name -> version -> (name * version) option
 
   val head :
     state -> assigned:assigned -> atom list -> (name, version) unit_head option
@@ -497,9 +498,42 @@ module Make (D : DRIVER) = struct
     in
     go (top_wide + 1)
 
+  (* A choice PubGrub refutes as soon as the chosen package is decided,
+     before its wave, apt propagates up to the conflict: the package's
+     clauses push their work items at the new level until a hard one with
+     no live solution fails.  Pop then erases those items, but their pushes
+     have reshaped the heap. *)
+  let refuted_wave t ~assigned top_wide ((m : tentry), mv) =
+    let n, v = choice_at t top_wide (m, mv) in
+    let chosen =
+      if D.kind n = Package then Some (n, v)
+      else match D.version_of t.d n v with None -> D.installs n v | p -> p
+    in
+    match chosen with
+    | Some (orig, pv) when not (decided_before t t.waved_upto orig) ->
+        let pkg, ver = D.registered t.d orig pv in
+        let live (c : (D.name, D.atom) clause) =
+          live_size t ~assigned c.atoms
+        in
+        let fails c = (not c.optional) && live c = 0 in
+        let rec go = function
+          | c :: rest when not (fails c) ->
+              (match c.name with
+              | Some g ->
+                  let sz = live c in
+                  if (c.optional && sz >= 1) || sz >= 2 then
+                    push_item t m c g (static_nsol_atoms t c.atoms) sz
+              | None -> ());
+              go rest
+          | _ -> ()
+        in
+        if List.exists fails (ver @ pkg) then go (ver @ pkg)
+    | _ -> ()
+
   (* apt's Pop of the top level, the wide decision [m] at [top_wide]: the
      levels below stay, their fallen entries to be redone *)
   let pop_level t ~assigned ~cut top_wide ((m : tentry), mv) =
+    refuted_wave t ~assigned top_wide (m, mv);
     let choice = choice_at t top_wide (m, mv) in
     for i = cut to top_wide - 1 do
       match value t i with

@@ -126,6 +126,11 @@ module type DRIVER = sig
      version are walked then, and its package var joins the queue *)
   val version_of : state -> name -> version -> (name * version) option
 
+  (* the package, and its version, a clause decided to one of its
+     alternatives installs, where that alternative names a package and not
+     a selector *)
+  val installs : name -> version -> (name * version) option
+
   (* the unit head of a clause found unit: its version var is there only
      for an atom neither deferred nor matched by a provider, whose package
      var apt reaches only as the version pops *)

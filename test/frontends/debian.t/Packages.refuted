@@ -1,0 +1,17 @@
+Package: rfr
+Version: 1
+Architecture: amd64
+Recommends: rff
+
+Package: rff
+Version: 1
+Architecture: amd64
+Depends: rfa | rfb, rfnone
+
+Package: rfa
+Version: 1
+Architecture: amd64
+
+Package: rfb
+Version: 1
+Architecture: amd64

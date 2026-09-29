@@ -122,6 +122,22 @@ module Make (S : Apt_reject.SEARCH) = struct
           Some (on, tag on (DMA.Deb.Version.Orig w))
       | _ -> None
 
+    let installs n (pv : PVersion.t) =
+      match (n, pv.PVersion.v) with
+      | (DMA.Deb.Name.Disjunct _ | DMA.Deb.Name.Soft _), DMA.Deb.Version.Atom a
+        -> (
+          match alt_name a with
+          | DMA.Deb.Name.Orig _ as on -> (
+              match
+                List.filter_map
+                  (fun (c, w) -> if sat (snd a) w then Some c else None)
+                  (orig_versions on)
+              with
+              | [] -> None
+              | vs -> Some (on, greatest vs))
+          | _ -> None)
+      | _ -> None
+
     let head = head
     let same_name a b = PName.compare a b = 0
     let negation = negation
