@@ -578,8 +578,8 @@ let npm_run debug core order (reading, depth, tree) cache offline omit nodev
               | Ok a when a.Npm.Solve.optional_read > 0 ->
                   [
                     Printf.sprintf
-                      "%d of %d optionalDependencies (target, range) pairs \
-                       dropped"
+                      "%d of %d optionalDependencies (dependee name, range) \
+                       pairs dropped"
                       a.Npm.Solve.optional_dropped a.Npm.Solve.optional_read;
                   ]
               | _ -> []

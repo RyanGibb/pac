@@ -132,7 +132,7 @@ takes it with it: transitivity needs no separate rule.
     opt-app 1.0.0 <- gadget 1.0.0
     opt-app 1.0.0 <- theme 1.0.0
   encoded solution: 5 core nodes (5 lookups)
-  loaded: 5 names, 5 versions, 0 packuments fetched, 2 of 3 optionalDependencies (target, range) pairs dropped
+  loaded: 5 names, 5 versions, 0 packuments fetched, 2 of 3 optionalDependencies (dependee name, range) pairs dropped
 
 --omit=optional leaves the class out of the answer, not out of the
 solve: npm resolves the optional dependencies as always and leaves out
@@ -148,7 +148,7 @@ lock.
   node_modules (1):
     opt-app 1.0.0 <- theme 1.0.0
   encoded solution: 5 core nodes (5 lookups)
-  loaded: 5 names, 5 versions, 0 packuments fetched, 2 of 3 optionalDependencies (target, range) pairs dropped
+  loaded: 5 names, 5 versions, 0 packuments fetched, 2 of 3 optionalDependencies (dependee name, range) pairs dropped
 
 So does --omit=dev: npm resolves the devDependencies as always and
 leaves out only what dev edges alone reach, so they still shape what the
@@ -209,7 +209,7 @@ platform but macOS.
     opt-plat-app 1.0.0 <- nativefs 1.0.0
     opt-plat-app 1.0.0 <- theme 1.0.0
   encoded solution: 7 core nodes (7 lookups)
-  loaded: 4 names, 4 versions, 0 packuments fetched, 0 of 1 optionalDependencies (target, range) pairs dropped
+  loaded: 4 names, 4 versions, 0 packuments fetched, 0 of 1 optionalDependencies (dependee name, range) pairs dropped
 
 A non-optional dependency on the same package resolves alike, which is
 what plat-app shows: the same dependency against the same cache, and
@@ -919,7 +919,7 @@ nothing, so alpha, whose optional entry asks for nosuch, is abandoned:
     devprod 1.0.0
     tag-app 1.0.0
   encoded solution: 3 core nodes (3 lookups)
-  loaded: 3 names, 4 versions, 0 packuments fetched, 1 of 1 optionalDependencies (target, range) pairs dropped
+  loaded: 3 names, 4 versions, 0 packuments fetched, 1 of 1 optionalDependencies (dependee name, range) pairs dropped
 
 A spec is a range where semver, reading loosely, finds one, and a dist-tag
 otherwise, as npa reads it; nothing unread becomes *.  spec-app's
