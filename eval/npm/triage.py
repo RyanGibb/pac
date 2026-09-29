@@ -7,21 +7,19 @@ what could decide it: the kind of dependency, which side took the newer
 version, whether npm's version is one its tree already holds for another
 requirer, and the dist-tag, deprecated and prerelease status of each pick.
 usage: triage.py <run-dir>"""
-import collections, json, os, re, sys
+import collections, os, re, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from triage_lib import first_incompatibility, group, lines, report, show
+import tree
 
 run = sys.argv[1]
-pk_cache = {}
 
 
 def packument(n):
-    if n not in pk_cache:
-        try:
-            pk_cache[n] = json.load(open(os.path.join(run, "cache", n.replace("/", "%2F") + ".json")))
-        except (OSError, ValueError):
-            pk_cache[n] = {}
-    return pk_cache[n]
+    try:
+        return tree.packument(os.path.join(run, "cache"), n)
+    except (OSError, ValueError):
+        return {}
 
 
 def vkey(v):

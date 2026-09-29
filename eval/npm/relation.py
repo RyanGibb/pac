@@ -36,12 +36,11 @@ Prints each miss and exits 3 when there is one, so that a crash, which
 exits 1, is not read as one.
 """
 import json
-import os
 import subprocess
 import sys
 
 from shared import SHARED, normalize, split
-from tree import escape, is_link, parse_tree, resolve
+from tree import is_link, packument, parse_tree, resolve
 
 SATISFIES = {}
 
@@ -70,8 +69,7 @@ def tagged(cache, name, spec):
     if cache is None:
         return spec
     try:
-        with open(os.path.join(cache, escape(name) + ".json")) as f:
-            tags = json.load(f).get("dist-tags") or {}
+        tags = packument(cache, name).get("dist-tags") or {}
     except (OSError, ValueError):
         return spec
     v = tags.get(spec.strip()) if isinstance(tags, dict) else None

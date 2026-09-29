@@ -1,6 +1,10 @@
 """The two trees the npm scripts read: pac's --tree output, and a
 package-lock's node_modules paths, which a lookup walks as require()
-does."""
+does.  Also the snapshot's packuments, which a lock's entries copy."""
+import base64
+import functools
+import json
+import os
 import re
 
 # "name 1.2.3" or "name 1.2.3 at dir", and the root may have no version
@@ -88,3 +92,58 @@ def target(pkgs, s):
 def resolve(pkgs, path, key):
     s = lookup(pkgs, path, key)
     return None if s is None else target(pkgs, s)
+
+
+@functools.lru_cache(maxsize=None)
+def packument(cache, name):
+    with open(os.path.join(cache, escape(name) + ".json")) as f:
+        return json.load(f)
+
+
+def manifest(cache, name, version):
+    v = packument(cache, name)["versions"].get(version)
+    if v is None:
+        raise RuntimeError(f"{name}@{version} not in the snapshot packument")
+    return v
+
+
+COPY = ["dependencies", "optionalDependencies", "peerDependencies",
+        "peerDependenciesMeta", "bin", "engines", "os", "cpu", "libc",
+        "funding", "deprecated", "hasInstallScript"]
+
+
+def entry(cache, name, version, key):
+    """the lock entry of name@version under the directory key: copied from
+    the snapshot, so that the lock describes the packages pac read"""
+    m = manifest(cache, name, version)
+    e = {"version": version}
+    dist = m.get("dist") or {}
+    if dist.get("tarball"):
+        e["resolved"] = dist["tarball"]
+    if dist.get("integrity"):
+        e["integrity"] = dist["integrity"]
+    elif dist.get("shasum"):
+        # npm's own rendering of a pre-integrity dist for the lockfile
+        e["integrity"] = "sha1-" + base64.b64encode(bytes.fromhex(dist["shasum"])).decode()
+    if key != name:
+        e["name"] = name
+    if m.get("license"):
+        e["license"] = m["license"]
+    for k in COPY:
+        if m.get(k):
+            e[k] = m[k]
+    return e
+
+
+def write_lock(dst, packages):
+    lock = {
+        # npm names a nameless project by its directory
+        "name": packages[""].get("name", os.path.basename(os.path.dirname(os.path.abspath(dst)))),
+        "version": packages[""].get("version", "1.0.0"),
+        "lockfileVersion": 3,
+        "requires": True,
+        "packages": packages,
+    }
+    with open(dst, "w") as f:
+        json.dump(lock, f, indent=2)
+        f.write("\n")

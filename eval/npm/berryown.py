@@ -21,9 +21,8 @@ import os
 import sys
 
 from berrylock import ROOT, berry_spec, lock_dependencies, query_specs, read_lock
-from mklock import manifest
 from shared import normalize
-from tree import parse_tree
+from tree import manifest, parse_tree
 
 
 def prepare(d, port, args):

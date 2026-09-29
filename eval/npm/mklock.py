@@ -104,14 +104,13 @@ differs from the registry name) carries "name", the way npm records one.
 usage: mklock.py <cache-dir> <our --tree output> <out package-lock.json>
        [--root-manifest <package.json>]
 """
-import functools
 import json
 import os
 import sys
 import time
 
 from relation import fields, misses
-from tree import ancestors, escape, is_link, lookup, parse_tree, slot
+from tree import ancestors, entry, is_link, lookup, manifest, parse_tree, slot, write_lock
 
 
 class Unplaced(Exception):
@@ -561,47 +560,6 @@ def search(root, nodes, edges, claims, peers, deep, deps, verify):
     raise RuntimeError(f"no tree in {rounds} placements: " + "; ".join(whys[:5]))
 
 
-@functools.lru_cache(maxsize=None)
-def packument(cache, name):
-    with open(os.path.join(cache, escape(name) + ".json")) as f:
-        return json.load(f)
-
-
-def manifest(cache, name, version):
-    v = packument(cache, name)["versions"].get(version)
-    if v is None:
-        raise RuntimeError(f"{name}@{version} not in the snapshot packument")
-    return v
-
-
-COPY = ["dependencies", "optionalDependencies", "peerDependencies",
-        "peerDependenciesMeta", "bin", "engines", "os", "cpu", "libc",
-        "funding", "deprecated", "hasInstallScript"]
-
-
-def entry(cache, name, version, key):
-    m = manifest(cache, name, version)
-    e = {"version": version}
-    dist = m.get("dist") or {}
-    if dist.get("tarball"):
-        e["resolved"] = dist["tarball"]
-    if dist.get("integrity"):
-        e["integrity"] = dist["integrity"]
-    elif dist.get("shasum"):
-        # npm's own rendering of a pre-integrity dist for the lockfile
-        import base64
-        e["integrity"] = "sha1-" + base64.b64encode(
-            bytes.fromhex(dist["shasum"])).decode()
-    if key != name:
-        e["name"] = name
-    if m.get("license"):
-        e["license"] = m["license"]
-    for k in COPY:
-        if m.get(k):
-            e[k] = m[k]
-    return e
-
-
 def main():
     cache, oursp, dst = sys.argv[1], sys.argv[2], sys.argv[3]
     rootman = None
@@ -662,20 +620,7 @@ def main():
         return misses(pk, root, nodes, edges, cache) + peer_locals(pk)
 
     at, links = search(root, nodes, edges, claims, peers, deep, deps, verify)
-    packages = packages(at, links)
-
-    lock = {
-        # npm names a nameless project by its directory
-        "name": packages[""].get(
-            "name", os.path.basename(os.path.dirname(os.path.abspath(dst)))),
-        "version": packages[""].get("version", "1.0.0"),
-        "lockfileVersion": 3,
-        "requires": True,
-        "packages": packages,
-    }
-    with open(dst, "w") as f:
-        json.dump(lock, f, indent=2)
-        f.write("\n")
+    write_lock(dst, packages(at, links))
     depth = max((p.count("/node_modules/") for p in at), default=0)
     print(f"{dst}: {len(at) - len(links)} placements and {len(links)} links for "
           f"{len(nodes)} packages, {len(edges)} edges, max nesting {depth}")

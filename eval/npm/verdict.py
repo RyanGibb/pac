@@ -50,7 +50,7 @@ import shutil
 import subprocess
 import sys
 
-from tree import escape
+from tree import manifest
 
 
 def resolve_semver():
@@ -107,18 +107,12 @@ SEMVER = resolve_semver()
 HOST = resolve_host()
 
 
-class Snapshot:
-    def __init__(self, cache):
-        self.cache, self.cached = cache, {}
-
-    def manifest(self, name, ver):
-        if name not in self.cached:
-            try:
-                with open(os.path.join(self.cache, escape(name) + ".json")) as f:
-                    self.cached[name] = json.load(f)["versions"]
-            except (OSError, KeyError, ValueError):
-                self.cached[name] = {}
-        return self.cached[name].get(ver)
+def known(cache, name, ver):
+    """name@ver's manifest, or None where the snapshot lacks it"""
+    try:
+        return manifest(cache, name, ver)
+    except (OSError, KeyError, ValueError, RuntimeError):
+        return None
 
 
 def listed(m, field, host):
@@ -178,7 +172,7 @@ def satisfies(pairs):
 
 def main():
     run, pkg, prefix = sys.argv[1], sys.argv[2], sys.argv[3]
-    snap = Snapshot(os.path.join(run, "cache"))
+    cache = os.path.join(run, "cache")
     # the query is published nowhere, so its manifest is the project's
     root = None
     if len(sys.argv) > 4:
@@ -195,8 +189,8 @@ def main():
         for line in f:
             rn, rv, d, vn, vv = line.rstrip("\n").split("\t")
             is_root = (rn, rv) == ("", "")
-            rm = root if is_root else snap.manifest(rn, rv)
-            vm = snap.manifest(vn, vv)
+            rm = root if is_root else known(cache, rn, rv)
+            vm = known(cache, vn, vv)
             rg = wanted(rm, d, root, is_root) if rm else None
             eng = (vm or {}).get("engines", {})
             # the old array form, ["node >= 0.4"], is no requirement to

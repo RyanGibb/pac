@@ -28,9 +28,8 @@ import os
 import re
 import sys
 
-from mklock import manifest
 from shared import normalize, split
-from tree import parse_tree
+from tree import manifest, parse_tree
 
 ROOT = "pac-berry-root"
 
