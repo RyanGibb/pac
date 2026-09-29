@@ -388,6 +388,16 @@ Module Conflict (N V : UsualOrderedType).
         + congruence.
     Qed.
 
+    Theorem conflictResolution_coreResolution : forall S R D G,
+        conflictResolution (coreResolution S R D G) = S.
+    Proof.
+      intros S R D G; apply PkgSet.ext; intro p.
+      rewrite mem_conflictResolution.
+      split; [exact (embed_mem_coreResolution_inv S R D G p) |].
+      intro H; apply mem_coreResolution; left; exists p; split;
+        [exact H | reflexivity].
+    Qed.
+
     Module Lookup.
       Module PkgFibred := FibredRel N V Pkg PkgSet.
       Module DepRelFibred := FibredRel Pkg C.Dependees C.DepElt C.DepRel.

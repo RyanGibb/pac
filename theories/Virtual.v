@@ -881,6 +881,14 @@ Module Virtual (N V : UsualOrderedType).
         + rewrite (Hfn _ _ _ _ HD1 HD2); reflexivity.
     Qed.
 
+    Theorem virtualResolution_coreResolution : forall D Pi S_Pi rho,
+        virtualResolution (coreResolution D Pi S_Pi rho) = S_Pi.
+    Proof.
+      intros D Pi S_Pi rho; apply PkgSet.ext; intros [n v].
+      rewrite mem_virtualResolution, mem_coreResolution; cbn [embedPkg].
+      split; [intro H; inversion H; assumption | apply CoreOrig].
+    Qed.
+
     Module Lookup.
       Module ProvFibred := FibredLabelledRel Pkg N VTOT ProvElt ProvidesRel.
       Lemma hasProvider_nodeFibre : forall Pi n vs,

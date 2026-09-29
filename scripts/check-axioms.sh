@@ -50,6 +50,7 @@ Cfl.Reduction.Lookup.dependees_lookupAbsent
 Cfl.Reduction.Lookup.dependees_lookupOrig
 Cfl.Reduction.Lookup.versions_lookupOrig
 Cfl.Reduction.conflictResolution
+Cfl.Reduction.conflictResolution_coreResolution
 Cfl.Reduction.conflict_completeness
 Cfl.Reduction.conflict_soundness
 Cfl.Reduction.reduceDeps
@@ -160,6 +161,7 @@ Virt.Reduction.Lookup.versions_lookupSelector
 Virt.Reduction.reduceDeps
 Virt.Reduction.reduceReal
 Virt.Reduction.selectorVersions
+Virt.Reduction.virtualResolution_coreResolution
 Virt.Reduction.virtual_completeness
 Virt.Reduction.virtual_soundness
 
@@ -189,9 +191,11 @@ VarF.Reduction.Lookup.versions_lookupDisjunct
 VarF.Reduction.Lookup.versions_lookupOrig
 VarF.Reduction.Lookup.versions_lookupVar
 VarF.Reduction.extractAssignment
+VarF.Reduction.extractAssignment_coreResolution
 VarF.Reduction.reduceDeps
 VarF.Reduction.reduceDepsBy
 VarF.Reduction.reduceReal
+VarF.Reduction.variableFormulaResolution_coreResolution
 VarF.Reduction.variable_formula_completeness
 VarF.Reduction.variable_formula_soundness
 

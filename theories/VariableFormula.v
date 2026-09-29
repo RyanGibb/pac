@@ -616,6 +616,41 @@ Module VariableFormula (N V : UsualOrderedType)
         exists (inr (sigma x)); apply mem_liftModel_inr; reflexivity.
     Qed.
 
+    Theorem variableFormulaResolution_coreResolution : forall Y_x S R D sigma,
+        variableFormulaResolution (coreResolution Y_x S R D sigma) = S.
+    Proof.
+      intros Y_x S R D sigma; apply PkgSet.ext; intros [m v].
+      rewrite mem_variableFormulaResolution; unfold embedPkg, coreResolution.
+      rewrite <- PF.Reduction.mem_packageFormulaResolution,
+        PF.Reduction.packageFormulaResolution_coreResolution.
+      unfold liftPkg; cbn [fst snd]; rewrite mem_liftModel_inl; split.
+      - intros [v' [E Hv]]; injection E as <-; exact Hv.
+      - intro Hv; exists v; split; [reflexivity | exact Hv].
+    Qed.
+
+    Theorem extractAssignment_coreResolution :
+      forall y0 Y_x S R D sigma x,
+        extractAssignment y0 Y_x (coreResolution Y_x S R D sigma) x = sigma x.
+    Proof.
+      intros y0 Y_x S R D sigma x.
+      assert (Hc : forall y,
+                 YSet.In y (assignCand (coreResolution Y_x S R D sigma) x) <->
+                 y = sigma x).
+      { intro y; rewrite mem_assignCand; unfold coreResolution.
+        change (Name.Orig (inr x), Version.Orig (inr y))
+          with (PF.Reduction.embedPkg (inr x, inr y)).
+        rewrite <- PF.Reduction.mem_packageFormulaResolution,
+          PF.Reduction.packageFormulaResolution_coreResolution,
+          mem_liftModel_inr.
+        split; [intro E; injection E as -> | intros ->]; reflexivity. }
+      unfold extractAssignment.
+      destruct (YSet.min_elt (assignCand (coreResolution Y_x S R D sigma) x))
+        as [y |] eqn:E.
+      - apply YSet.min_elt_spec1, Hc in E; exact E.
+      - exfalso; apply YSet.min_elt_spec3 in E.
+        exact (E (sigma x) (proj2 (Hc _) eq_refl)).
+    Qed.
+
     Module Lookup.
       Module PkgFibred := FibredRel N V Pkg PkgSet.
       Module DepRelFibred := FibredRel Pkg Dependees DepElt DepRel.
