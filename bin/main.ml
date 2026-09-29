@@ -349,9 +349,8 @@ let cargo_run debug core order print_parents cache index manifest features
              " with features " ^ String.concat "," feats
              ^ if default then "" else " and no default feature")
          (match rustv with None -> "" | Some t -> " for rust " ^ t));
-    let r =
-      Cargo_solve.solve ~debug ~order ?cache ~index ~features ~rustv root
-    in
+    let module C = Cargo_solve.Make () in
+    let r = C.solve ~debug ~order ?cache ~index ~features ~rustv root in
     match r.Cargo_solve.answer with
     | Ok a when Cargo_solve.reaches_registry_root root a ->
         error 2
@@ -527,8 +526,9 @@ let alpine_cmd =
 module Npm = Npm_solve
 
 let npm_place ~t0 ~debug ~core ~order ~omit ~depth ar rc =
+  let module S = Npm.Place_solve.Make () in
   let r, walk =
-    Npm.Place_solve.solve ~debug ~order ~omit_dev:(List.mem `Dev omit)
+    S.solve ~debug ~order ~omit_dev:(List.mem `Dev omit)
       ~omit_optional:(List.mem `Optional omit) ~depth ar rc
   in
   let s = Npm.Archive.stats ar in
@@ -542,7 +542,7 @@ let npm_place ~t0 ~debug ~core ~order ~omit ~depth ar rc =
     }
     ~walk r
     (fun a ->
-      Report.packages (Npm.Place_solve.print_layout a);
+      Report.packages (S.print_layout a);
       Report.encoded ~nodes:a.Npm.Place_solve.nodes
         ~lookups:a.Npm.Place_solve.lookups)
 
@@ -567,8 +567,9 @@ let npm_run debug core order (reading, depth, tree) cache offline omit nodev
         | Ok root ->
             let rc = Npm.Archive.add_root ~named:true ar root in
             Report.root (Npm.Print.root rc);
+            let module S = Npm.Solve.Make () in
             let r, walk =
-              Npm.Solve.solve ~debug ~order ~omit_dev:(List.mem `Dev omit)
+              S.solve ~debug ~order ~omit_dev:(List.mem `Dev omit)
                 ~omit_optional:(List.mem `Optional omit) ar rc
             in
             let optional =

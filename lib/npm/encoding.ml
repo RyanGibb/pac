@@ -1,21 +1,6 @@
 module E = Pac
 module Ot = Pac_common.Ot
 
-module NVerOT = Ot.Make (struct
-  type t = string
-
-  let compare = Npm_version.compare
-end)
-
-module PM = struct
-  let isPre = Npm_version.is_prerelease
-  let sameCore = Npm_version.same_core
-end
-
-module Np = E.Npm (Ot.Str) (NVerOT) (PM)
-module R = Np.Reduction
-module T = Np.T
-
 let xop : Npm_version.op -> E.cmpOp = function
   | Npm_version.Ge -> E.OpGe
   | Npm_version.Gt -> E.OpGt
@@ -23,44 +8,98 @@ let xop : Npm_version.op -> E.cmpOp = function
   | Npm_version.Lt -> E.OpLt
   | Npm_version.Eq -> E.OpEq
 
-let xcomp : Npm_version.comparator -> Np.coq_Comparator = function
-  | Npm_version.Any -> Np.CAny
-  | Npm_version.Cmp (o, c) -> Np.COp (xop o, c)
+module type S = sig
+  module NVerOT : sig
+    type t = string
 
-let xrange (rg : Npm_version.range) : Np.coq_Range =
-  List.map (fun cs -> List.map xcomp cs) rg
+    val compare : t -> t -> Pac.comparison
+    val eq_dec : t -> t -> bool
+  end
 
-module PName = struct
-  type t = Np.Nm.name
+  module PM : sig
+    val isPre : string -> bool
+    val sameCore : string -> string -> bool
+  end
 
-  let compare a b = Ot.r2c (Np.Nm.compare a b)
+  module Np : module type of Pac.Npm (Pac_common.Ot.Str) (NVerOT) (PM)
+  module R = Np.Reduction
+  module T = Np.T
 
-  let pp_key fmt ((a, t) : string * string) =
-    if a = t then Format.fprintf fmt "%s" a
-    else Format.fprintf fmt "%s(npm:%s)" a t
+  val xrange : Npm_version.range -> Np.coq_Range
 
-  let pp fmt (n : t) =
-    match n with
-    | Np.Nm.Granular (k, w) -> Format.fprintf fmt "%a@%s" pp_key k w
-    | Np.Nm.Intermediate (k, v, m) ->
-        Format.fprintf fmt "<%a@%s=>%a>" pp_key k v pp_key m
-    | Np.Nm.Sight (k, v, a) -> Format.fprintf fmt "<%a@%s^%s>" pp_key k v a
-    | Np.Nm.Link (k, v, m, u, a) ->
-        Format.fprintf fmt "<%a@%s=>%a@%s^%s>" pp_key k v pp_key m u a
-    | Np.Nm.Desc (a, t, s) -> Format.fprintf fmt "<%a@%s>" pp_key (a, t) s
+  module PName : sig
+    type t = Np.Nm.name
+
+    val compare : t -> t -> int
+    val pp : Format.formatter -> t -> unit
+  end
+
+  module PVersion : sig
+    type t = Np.Vs.version
+
+    val compare : t -> t -> int
+    val equal : t -> t -> bool
+    val pp : Format.formatter -> t -> unit
+  end
+
+  module PG : module type of Pubgrub.Make (PName) (PVersion)
 end
 
-module PVersion = struct
-  type t = Np.Vs.version
+module Make () = struct
+  module NVerOT = Ot.Make (struct
+    type t = string
 
-  let compare a b = Ot.r2c (Np.Vs.compare a b)
-  let equal a b = compare a b = 0
+    let compare = Npm_version.compare
+  end)
 
-  let pp fmt (v : t) =
-    match v with
-    | Np.Vs.Orig v -> Format.fprintf fmt "%s" v
-    | Np.Vs.Bot -> Format.fprintf fmt "⊥"
-    | Np.Vs.Free -> Format.fprintf fmt "∗"
+  module PM = struct
+    let isPre = Npm_version.is_prerelease
+    let sameCore = Npm_version.same_core
+  end
+
+  module Np = E.Npm (Ot.Str) (NVerOT) (PM)
+  module R = Np.Reduction
+  module T = Np.T
+
+  let xcomp : Npm_version.comparator -> Np.coq_Comparator = function
+    | Npm_version.Any -> Np.CAny
+    | Npm_version.Cmp (o, c) -> Np.COp (xop o, c)
+
+  let xrange (rg : Npm_version.range) : Np.coq_Range =
+    List.map (fun cs -> List.map xcomp cs) rg
+
+  module PName = struct
+    type t = Np.Nm.name
+
+    let compare a b = Ot.r2c (Np.Nm.compare a b)
+
+    let pp_key fmt ((a, t) : string * string) =
+      if a = t then Format.fprintf fmt "%s" a
+      else Format.fprintf fmt "%s(npm:%s)" a t
+
+    let pp fmt (n : t) =
+      match n with
+      | Np.Nm.Granular (k, w) -> Format.fprintf fmt "%a@%s" pp_key k w
+      | Np.Nm.Intermediate (k, v, m) ->
+          Format.fprintf fmt "<%a@%s=>%a>" pp_key k v pp_key m
+      | Np.Nm.Sight (k, v, a) -> Format.fprintf fmt "<%a@%s^%s>" pp_key k v a
+      | Np.Nm.Link (k, v, m, u, a) ->
+          Format.fprintf fmt "<%a@%s=>%a@%s^%s>" pp_key k v pp_key m u a
+      | Np.Nm.Desc (a, t, s) -> Format.fprintf fmt "<%a@%s>" pp_key (a, t) s
+  end
+
+  module PVersion = struct
+    type t = Np.Vs.version
+
+    let compare a b = Ot.r2c (Np.Vs.compare a b)
+    let equal a b = compare a b = 0
+
+    let pp fmt (v : t) =
+      match v with
+      | Np.Vs.Orig v -> Format.fprintf fmt "%s" v
+      | Np.Vs.Bot -> Format.fprintf fmt "⊥"
+      | Np.Vs.Free -> Format.fprintf fmt "∗"
+  end
+
+  module PG = Pubgrub.Make (PName) (PVersion)
 end
-
-module PG = Pubgrub.Make (PName) (PVersion)

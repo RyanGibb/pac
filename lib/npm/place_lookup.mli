@@ -1,49 +1,51 @@
-open Place_encoding
+module Make (Place_encoding : Place_encoding.S) : sig
+  open Place_encoding
 
-(* An occupant's edge as arborist's Edge holds one: the directory it
-   walks for; the package and range it accepts there, another package than
-   the directory's under an npm: alias, and the directory's own under a
-   root override on it; whether it is a peer; and whether finding nothing
-   meets it, as for an optional peer, or an optional dependency no
-   published version satisfies, which npm abandons (ENOTARGET).  A node
-   keeps one edge per directory, a dependency replacing a peer.  It
-   accepts only the package it names, not any at a version in range as
-   npm's satisfiedBy has it.  [id] names the accepted set, shared by every
-   edge asking the same range of the same package. *)
-type edge = {
-  e : Npl.coq_Edge;
-  acc : Pl.VSet.t;
-  accepts : Npl.Occ.t list;
-  id : int;
-}
+  (* An occupant's edge as arborist's Edge holds one: the directory it
+     walks for; the package and range it accepts there, another package than
+     the directory's under an npm: alias, and the directory's own under a
+     root override on it; whether it is a peer; and whether finding nothing
+     meets it, as for an optional peer, or an optional dependency no
+     published version satisfies, which npm abandons (ENOTARGET).  A node
+     keeps one edge per directory, a dependency replacing a peer.  It
+     accepts only the package it names, not any at a version in range as
+     npm's satisfiedBy has it.  [id] names the accepted set, shared by every
+     edge asking the same range of the same package. *)
+  type edge = {
+    e : Npl.coq_Edge;
+    acc : Pl.VSet.t;
+    accepts : Npl.Occ.t list;
+    id : int;
+  }
 
-type t
+  type t
 
-val create : depth:int -> Archive.t -> string * string -> t
-val archive : t -> Archive.t
-val depth : t -> int
-val meta : t -> Npl.Occ.t -> Npm_parse.ver option
-val edges : t -> Npl.Occ.t -> edge list
+  val create : depth:int -> Archive.t -> string * string -> t
+  val archive : t -> Archive.t
+  val depth : t -> int
+  val meta : t -> Npl.Occ.t -> Npm_parse.ver option
+  val edges : t -> Npl.Occ.t -> edge list
 
-(* the registry packages each key has been seen to name, as the manifests
-   loaded so far alias them there *)
-val key_names : t -> string -> string list
-val versions : t -> PName.t -> PVersion.t list
+  (* the registry packages each key has been seen to name, as the manifests
+     loaded so far alias them there *)
+  val key_names : t -> string -> string list
+  val versions : t -> PName.t -> PVersion.t list
 
-(* what one part of a name's dependees reads, so that the solve converts
-   each part once *)
-type part
+  (* what one part of a name's dependees reads, so that the solve converts
+     each part once *)
+  type part
 
-(* a root's or an occupant's dependees, in parts; None for a walk's or an
-   absent location's *)
-val parts :
-  t ->
-  PName.t ->
-  PVersion.t ->
-  (part * (unit -> T.Dependees.t list)) list option
+  (* a root's or an occupant's dependees, in parts; None for a walk's or an
+     absent location's *)
+  val parts :
+    t ->
+    PName.t ->
+    PVersion.t ->
+    (part * (unit -> T.Dependees.t list)) list option
 
-val dependees : t -> PName.t * PVersion.t -> T.Dependees.t list
+  val dependees : t -> PName.t * PVersion.t -> T.Dependees.t list
 
-(* under PAC_NPM_STATS, seconds spent in each named part of the lookups *)
-val timed : t -> string -> (unit -> 'a) -> 'a
-val print_prof : t -> unit
+  (* under PAC_NPM_STATS, seconds spent in each named part of the lookups *)
+  val timed : t -> string -> (unit -> 'a) -> 'a
+  val print_prof : t -> unit
+end

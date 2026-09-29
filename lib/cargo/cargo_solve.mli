@@ -30,15 +30,17 @@ type run = {
   t_parse : float;
 }
 
-val solve :
-  ?debug:bool ->
-  ?order:Pac_common.Order.t ->
-  ?cache:string ->
-  index:string ->
-  features:Cargo_query.features ->
-  rustv:string option ->
-  Cargo_query.root ->
-  run
+module Make () : sig
+  val solve :
+    ?debug:bool ->
+    ?order:Pac_common.Order.t ->
+    ?cache:string ->
+    index:string ->
+    features:Cargo_query.features ->
+    rustv:string option ->
+    Cargo_query.root ->
+    run
+end
 
 (* cargo tells packages apart by source as well, so without the
    self-patch the registry's crate at the root's name and version is a

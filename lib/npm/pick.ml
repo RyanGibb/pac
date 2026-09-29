@@ -1,80 +1,85 @@
-open Encoding
 module A = Archive
-module L = Lookup
 
-(* npm-pick-manifest's sort criteria above semver, lib/index.js:167-181:
+module Make
+    (Encoding : Encoding.S)
+    (L : module type of Lookup.Make (Encoding)) =
+struct
+  open Encoding
 
-     ((notdeprb && engineb) - (notdepra && enginea)) ||
-     (engineb - enginea) ||
-     (notdeprb - notdepra) ||
-     semver.rcompare(vera, verb, sortSemverOpt)
+  (* npm-pick-manifest's sort criteria above semver, lib/index.js:167-181:
 
-   deprecated and engines are one preference because they are one sort
-   function, and the middle criterion is what orders them against each
-   other: a deprecated version the host can run outranks a current one it
-   cannot.
-   Neither drops a candidate, so neither can make anything unsatisfiable
-   -- a package whose every version is deprecated resolves to its newest,
-   and a pinned version the host cannot run still installs, which is what
-   --engine-strict exists to refuse at install time.
+       ((notdeprb && engineb) - (notdepra && enginea)) ||
+       (engineb - enginea) ||
+       (notdeprb - notdepra) ||
+       semver.rcompare(vera, verb, sortSemverOpt)
 
-   The three criteria npm sorts above these have no counterpart here.  avoid
-   is npm audit fix's, passed by nothing that writes an ordinary
-   lockfile; policyRestrictions and stagedVersions appear in no public
-   packument, and the parser reads neither, so restricted and staged are
-   uniformly false.  Bot is no release, so it carries neither criterion. *)
-let rank ar (n : string) (c : PVersion.t) : bool * bool * bool =
-  match c with
-  | Np.Vs.Bot | Np.Vs.Free -> (true, true, true)
-  | Np.Vs.Orig v -> (
-      match A.meta ar (n, v) with
-      | Some m -> A.ver_rank ar m
-      | None -> (true, true, true))
+     deprecated and engines are one preference because they are one sort
+     function, and the middle criterion is what orders them against each
+     other: a deprecated version the host can run outranks a current one it
+     cannot.
+     Neither drops a candidate, so neither can make anything unsatisfiable
+     -- a package whose every version is deprecated resolves to its newest,
+     and a pinned version the host cannot run still installs, which is what
+     --engine-strict exists to refuse at install time.
 
-let best ar (n : string) (cands : PVersion.t list) : PVersion.t =
-  match cands with
-  | [] -> invalid_arg "best"
-  | c :: cs ->
-      List.fold_left
-        (fun a b ->
-          let d = compare (rank ar n b) (rank ar n a) in
-          if d > 0 || (d = 0 && PVersion.compare b a > 0) then b else a)
-        c cs
+     The three criteria npm sorts above these have no counterpart here.  avoid
+     is npm audit fix's, passed by nothing that writes an ordinary
+     lockfile; policyRestrictions and stagedVersions appear in no public
+     packument, and the parser reads neither, so restricted and staged are
+     uniformly false.  Bot is no release, so it carries neither criterion. *)
+  let rank ar (n : string) (c : PVersion.t) : bool * bool * bool =
+    match c with
+    | Np.Vs.Bot | Np.Vs.Free -> (true, true, true)
+    | Np.Vs.Orig v -> (
+        match A.meta ar (n, v) with
+        | Some m -> A.ver_rank ar m
+        | None -> (true, true, true))
 
-(* npm-pick-manifest offers dist-tags.latest before the highest version
-   the range admits, and takes it whenever the range admits it; only the
-   ordering differs from ours, so a package published ahead of its own
-   latest tag keeps its newest release out.  Preference only:
-   the tag is consulted inside the candidates, never outside them.
+  let best ar (n : string) (cands : PVersion.t list) : PVersion.t =
+    match cands with
+    | [] -> invalid_arg "best"
+    | c :: cs ->
+        List.fold_left
+          (fun a b ->
+            let d = compare (rank ar n b) (rank ar n a) in
+            if d > 0 || (d = 0 && PVersion.compare b a > 0) then b else a)
+          c cs
 
-   The fast path is guarded by the same two criteria as the sort
-   (index.js:119-132, [engineOk(mani, ..) && !mani.deprecated]), so a
-   deprecated or unrunnable latest is not a shortcut past them.  It is
-   not merely redundant with the sort: the tag may name a version the
-   sort would rank below a newer one.  A tag naming no version of the
-   archive is no shortcut either (index.js:123, [mani &&]): it may name
-   one this keeps only a twin of (Archive.one_per_precedence). *)
-let tagged ar (n : string) (cands : PVersion.t list) : PVersion.t option =
-  match A.loaded_latest ar n with
-  | Some l -> (
-      match A.meta ar (n, l) with
-      | Some m when A.ver_rank ar m = (true, true, true) ->
-          List.find_opt (PVersion.equal (Np.Vs.Orig l)) cands
-      | _ -> None)
-  | None -> None
+  (* npm-pick-manifest offers dist-tags.latest before the highest version
+     the range admits, and takes it whenever the range admits it; only the
+     ordering differs from ours, so a package published ahead of its own
+     latest tag keeps its newest release out.  Preference only:
+     the tag is consulted inside the candidates, never outside them.
 
-let pick ar (t : string) (cands : PVersion.t list) : PVersion.t =
-  match tagged ar t cands with Some c -> c | None -> best ar t cands
+     The fast path is guarded by the same two criteria as the sort
+     (index.js:119-132, [engineOk(mani, ..) && !mani.deprecated]), so a
+     deprecated or unrunnable latest is not a shortcut past them.  It is
+     not merely redundant with the sort: the tag may name a version the
+     sort would rank below a newer one.  A tag naming no version of the
+     archive is no shortcut either (index.js:123, [mani &&]): it may name
+     one this keeps only a twin of (Archive.one_per_precedence). *)
+  let tagged ar (n : string) (cands : PVersion.t list) : PVersion.t option =
+    match A.loaded_latest ar n with
+    | Some l -> (
+        match A.meta ar (n, l) with
+        | Some m when A.ver_rank ar m = (true, true, true) ->
+            List.find_opt (PVersion.equal (Np.Vs.Orig l)) cands
+        | _ -> None)
+    | None -> None
 
-let pick_in st (t : string) (rg : Np.coq_Range) : string option =
-  let pool =
-    List.filter_map
-      (fun u -> if Np.rgHolds rg u then Some (Np.Vs.Orig u) else None)
-      (A.versions_of (L.archive st) t)
-  in
-  match pool with
-  | [] -> None
-  | pool -> (
-      match pick (L.archive st) t pool with
-      | Np.Vs.Orig u -> Some u
-      | Np.Vs.Bot | Np.Vs.Free -> None)
+  let pick ar (t : string) (cands : PVersion.t list) : PVersion.t =
+    match tagged ar t cands with Some c -> c | None -> best ar t cands
+
+  let pick_in st (t : string) (rg : Np.coq_Range) : string option =
+    let pool =
+      List.filter_map
+        (fun u -> if Np.rgHolds rg u then Some (Np.Vs.Orig u) else None)
+        (A.versions_of (L.archive st) t)
+    in
+    match pool with
+    | [] -> None
+    | pool -> (
+        match pick (L.archive st) t pool with
+        | Np.Vs.Orig u -> Some u
+        | Np.Vs.Bot | Np.Vs.Free -> None)
+end

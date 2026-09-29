@@ -9,11 +9,13 @@ type result = {
   optional_dropped : int;
 }
 
-val solve :
-  ?debug:bool ->
-  ?order:Pac_common.Order.t ->
-  ?omit_dev:bool ->
-  ?omit_optional:bool ->
-  Archive.t ->
-  string * string ->
-  (result, Pac_common.Report.explanation) Stdlib.result * (unit -> unit)
+module Make () : sig
+  val solve :
+    ?debug:bool ->
+    ?order:Pac_common.Order.t ->
+    ?omit_dev:bool ->
+    ?omit_optional:bool ->
+    Archive.t ->
+    string * string ->
+    (result, Pac_common.Report.explanation) Stdlib.result * (unit -> unit)
+end
