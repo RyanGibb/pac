@@ -227,24 +227,40 @@ Extra fields: opam `mccs`; npm `twall` (the tool's wall time, `-` under `--regre
 ## Benchmarks
 
 ```sh
-RUN=/tmp/bench STRAT=/tmp/strat eval/bench.sh info floor debian debian-cold debian-first alpine opam opam-cold opam-first cargo cargo-cold cargo-first npm npm-shared npm-placement outliers
+RUN=/tmp/bench STRAT=/tmp/strat eval/bench.sh info floor debian debian-cold debian-first alpine alpine-cold alpine-first opam opam-cold opam-first cargo cargo-cold cargo-first npm npm-cold npm-first npm-shared npm-shared-cold npm-shared-first npm-placement npm-placement-cold npm-placement-first outliers
+FOREIGN=<dir>/Packages.i386 RUN=/tmp/bench STRAT=/tmp/strat eval/bench.sh debian-ma debian-ma-cold debian-ma-first
 python3 eval/bench/summary.py /tmp/bench
 ```
 
 `bench.sh` times pac in each order, `pac-tool` and `pac-pubgrub`, against the tool, one measured process at a time, each asked as `scale.sh` asks it.
 opam's steps also time `opam-mccs`, the same command with `--solver=builtin-mccs+glpk`, opam's default solver, set beside builtin-0install.
-npm's measured rounds run `--offline`, from the cache its warm-up filled, as pac reads the snapshot from disk.
+npm's measured rounds run `--offline`, from the cache its warm-up filled, as pac reads the snapshot from disk; only a first run, below, does not.
 Per query, a warm-up round and then `REPS` (default 5) measured rounds, each running every variant once.
 A cold step instead runs each variant once, from nothing in RAM: before each run, `sync` and then `echo 3 | sudo -n /run/current-system/sw/bin/tee /proc/sys/vm/drop_caches` (`TEE` names another `tee`) drop the page cache and the dentry and inode caches, system-wide, so run it with nothing else of yours running; without that sudo rule a cold step logs why and is not run.
-Each ecosystem with one has two, alike for both sides:
+Every step has two, alike for both sides:
 
 | step | persistent caches | before each run |
 |---|---|---|
-| `<eco>-cold`, a cold start | on disk | the same command runs once, as rep 0, a warm-up the tables leave out, to fill them |
-| `<eco>-first`, a first run | deleted | nothing: each side parses from scratch and writes its cache |
+| `<step>-cold`, a cold start | on disk | the same command runs once, as rep 0, a warm-up the tables leave out, to fill them |
+| `<step>-first`, a first run | deleted | nothing: each side parses from scratch and writes its cache |
 
-The persistent caches are pac's `--cache` (Debian, Cargo) and the tool's own: apt's `pkgcache.bin` and `srcpkgcache.bin`, opam's `repo/state-*.cache`, and cargo's `registry/index` under `CARGO_HOME`; pac keeps none for opam.
+The persistent caches are these; a first run deletes them, and nothing else:
+
+| ecosystem | pac's | the tool's |
+|---|---|---|
+| Debian | `--cache` | apt's `pkgcache.bin` and `srcpkgcache.bin` |
+| Alpine | none | none: apk re-reads `APKINDEX.tar.gz` every run, and its root's `var/cache/apk` stays empty |
+| opam | none | `repo/state-*.cache` |
+| Cargo | `--cache` | `registry/index` under `CARGO_HOME` |
+| npm | none: its `--cache` is the snapshot, which it only reads | npm's `--cache` |
+
+So an Alpine first run is a cold start without the warm-up before it, which leaves nothing behind: the two measure the same thing.
+An npm first run has no cache to answer `--offline` from, so npm asks the shim, which serves the snapshot from disk; both sides then read the same bytes cold, npm over HTTP.
+
 pac's Debian and Cargo runs pass `--cache` a directory of the run's rather than pac's default, the user's cache, one per step, that the warm-up round fills; `PAC_CACHE` names another directory for the warm steps, and `PAC_CACHE=` passes `--no-cache` in every step, here and in `eval/debian/scale.sh`, whose default is `<run-dir>/pac-cache`.
+A cold step keeps its own caches in `$RUN/<step>/`, pac's and, for npm, npm's, so a warm step's are never touched.
+
+`debian-ma` and its two cold modes are Debian with i386 a foreign architecture, as `FOREIGN` asks `eval/debian/scale.sh` (see Ecosystem notes): `FOREIGN` names the i386 index, which must be the one `eval/SNAPSHOTS` records; apt's root, `$RUN/aptroot-ma`, holds both indexes; and pac reads the two as one file, `$RUN/debian-ma/Packages`, amd64's first, with `--native amd64`. Its sets are Debian's regression set, asked with i386 configured, and `STRAT/debian-ma.q`.
 Wall is taken around GNU time, whose `%M` is the RSS, and pac's `parse` and `solve` lines are kept beside it.
 `PIN` is a command prefix both run under, by default `taskset -c 42`, a core of iphito's NUMA node 0 that serves no device interrupt, whose memory first touch then takes from that node; `PIN=` runs unpinned. `floor` measures GNU time's own start-up under it.
 No query starts at a load average of `LOADSTART` (2.5) or more, and one whose rounds end at `LOADMAX` (3.5) or more is measured again.
@@ -255,9 +271,12 @@ The queries are the sets `SETS` names (default both): `regress`, the regression 
 
 ```sh
 python3 eval/bench/stratify.py debian /tmp/scale/debian 20260927 > /tmp/strat/debian.q
+python3 eval/bench/stratify.py debian /tmp/scale/debian-ma-sample 20260927 > /tmp/strat/debian-ma.q
 ```
 
-`eval/bench/outliers.txt` names the queries too slow for the rounds; their steps leave them out, and the `outliers` step measures them `OREPS` (3) times under `OCAP` (1800 s).
+`debian-ma.q` is drawn from a run over `multiarch.py`'s `sample`, i386 packages as `pkg:i386`.
+
+`eval/bench/outliers.txt` names the queries too slow for the rounds; their steps leave them out, cold modes too, and the `outliers` step measures them `OREPS` (3) times under `OCAP` (1800 s).
 Rows land in `$RUN/res/<step>/<set>/<query>.csv`; `summary.py` gathers them into `bench.csv` and prints, per step and set, each query's median wall and IQR, parse and solve, RSS, and pac's time over the tool's, with the geometric mean of those ratios, its 95% bootstrap interval (the queries resampled 10,000 times, seeded, so a table regenerates alike), and how many queries pac was faster on; for opam, against mccs too; and last, those means for every step in one table, the cold modes beside the warm rounds.
 `bench.csv` holds that mean and interval too, a row per step, set and pac variant with `rep=gm` and `ratio_gm`, `ci_lo` and `ci_hi`; against mccs, the row's variant is `pac-tool/opam-mccs` or `pac-pubgrub/opam-mccs`.
 
