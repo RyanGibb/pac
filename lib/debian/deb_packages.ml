@@ -50,22 +50,7 @@ let flag_yes = function
       String.ends_with ~suffix:"1" s
       && String.for_all (( = ) '0') (String.sub s 0 (String.length s - 1))
 
-(* newlines count as whitespace: a relationship field may be folded over
-   several lines (Policy 5.1), and its continuations are joined with "\n",
-   so an atom can arrive with one still attached *)
-let strip s =
-  let is_ws c = c = ' ' || c = '\t' || c = '\n' || c = '\r' in
-  let n = String.length s in
-  let i = ref 0 and j = ref n in
-  while !i < n && is_ws s.[!i] do
-    incr i
-  done;
-  while !j > !i && is_ws s.[!j - 1] do
-    decr j
-  done;
-  String.sub s !i (!j - !i)
-
-let split_on c s = String.split_on_char c s |> List.map strip
+let split_on c s = String.split_on_char c s |> List.map String.trim
 
 (* the two-character operators first, so that ">" is not read off ">=";
    the deprecated one-character ">" and "<" mean ">=" and "<=" (Policy 7.1) *)
@@ -81,7 +66,7 @@ let operators =
   ]
 
 let parse_atom s =
-  let s = strip s in
+  let s = String.trim s in
   let cut mark s =
     match String.index_opt s mark with Some i -> String.sub s 0 i | None -> s
   in
@@ -100,17 +85,17 @@ let parse_atom s =
      the '<<' operator. *)
   match String.index_opt s '(' with
   | None ->
-      let name, aqual = split_qual (strip (cut '[' (cut '<' s))) in
+      let name, aqual = split_qual (String.trim (cut '[' (cut '<' s))) in
       if name = "" then None else Some { name; aqual; constr = None }
   | Some i ->
-      let name, aqual = split_qual (strip (String.sub s 0 i)) in
+      let name, aqual = split_qual (String.trim (String.sub s 0 i)) in
       let rest = String.sub s (i + 1) (String.length s - i - 1) in
       let rest =
         match String.index_opt rest ')' with
         | Some j -> String.sub rest 0 j
         | None -> rest
       in
-      let rest = strip rest in
+      let rest = String.trim rest in
       let op, v =
         match
           List.find_opt
@@ -123,7 +108,7 @@ let parse_atom s =
         | None -> (Eq, rest)
       in
       if name = "" then None
-      else Some { name; aqual; constr = Some (op, strip v) }
+      else Some { name; aqual; constr = Some (op, String.trim v) }
 
 (* The alternatives parse_depends drops, those parse_atom finds no name in:
    an empty one, or one opening on a qualifier or, with no version to cut
@@ -169,7 +154,7 @@ let nameless_alternatives field =
 let parse_depends field =
   split_on ',' field
   |> List.filter_map (fun clause ->
-      if strip clause = "" then None
+      if String.trim clause = "" then None
       else
         let alts = split_on '|' clause |> List.filter_map parse_atom in
         match alts with [] -> None | _ -> Some alts)
@@ -294,7 +279,7 @@ let stanza_of_fields ~reject (fs : (string * string) list) : stanza option =
             | None -> (package, version)
             | Some s -> (
                 match String.index_opt s '(' with
-                | None -> (strip s, version)
+                | None -> (String.trim s, version)
                 | Some i ->
                     let v = String.sub s (i + 1) (String.length s - i - 1) in
                     let v =
@@ -302,7 +287,7 @@ let stanza_of_fields ~reject (fs : (string * string) list) : stanza option =
                       | Some j -> String.sub v 0 j
                       | None -> v
                     in
-                    (strip (String.sub s 0 i), strip v)));
+                    (String.trim (String.sub s 0 i), String.trim v)));
         }
   | _ ->
       reject ();
@@ -328,14 +313,15 @@ let parse_lines ~reject input =
        if line = "" then flush ()
        else if line.[0] = ' ' || line.[0] = '\t' then
          match !fields with
-         | (k, v) :: tl -> fields := (k, v ^ "\n" ^ strip line) :: tl
+         | (k, v) :: tl -> fields := (k, v ^ "\n" ^ String.trim line) :: tl
          | [] -> reject ()
        else
          match String.index_opt line ':' with
          | Some i ->
              let k = String.sub line 0 i in
              let v =
-               strip (String.sub line (i + 1) (String.length line - i - 1))
+               String.trim
+                 (String.sub line (i + 1) (String.length line - i - 1))
              in
              fields := (k, v) :: !fields
          | None -> reject ()
