@@ -263,6 +263,14 @@ Rows land in `$RUN/res/<step>/<set>/<query>.csv`; `summary.py` gathers them into
 
 ## Ecosystem notes
 
+- Debian: `FOREIGN=<dir>/Packages.i386 eval/debian/scale.sh ...` adds i386 as a foreign architecture, amd64 staying native, with an index `eval/SNAPSHOTS` records as `foreign/debian/Packages.i386`. apt's root holds it as a second flat repository, and `APT::Architectures` lists i386 after amd64, as `dpkg --add-architecture i386` would. pac and the check read the two indexes as one file, `<run-dir>/Packages`, amd64's first: pac takes one Packages file, and reads several as their stanzas in turn. Both answers name a foreign package `name:i386`; the check installs rows at either architecture. `eval/debian/multiarch.py` draws the queries, seeded: `targeted`, pools whose answers turn on a choice across architectures (a Multi-Arch: same library at one or both, a Multi-Arch: foreign tool, an `:any` dependency, an Architecture: all one, an explicit qualifier), and `sample`, i386 packages as `pkg:i386`:
+
+  ```sh
+  F=<dir>/Packages.i386
+  python3 eval/debian/multiarch.py repos/debian/Packages $F 20260929 targeted > /tmp/ma.txt
+  FOREIGN=$F eval/debian/scale.sh _build/default/bin/main.exe /tmp/scale/debian-ma /tmp/ma.txt
+  ```
+
 - npm: queries are also split by `closed`, whether neither side asked for a name the snapshot lacks. Edges are scored with `edges.py --peer-parent`; set `NORM=` to score them as npm's lock records them. `FILL=1` runs `scale.sh` as the pass that closes the snapshot, fetching each miss into the run's farm; `eval/npm/close.sh <pac-exe> <work-dir>` runs that pass over every query (the listed names, the targeted ranges and the regression set) in all three readings at once, `PORT` to `PORT`+2 their shims, copies what the farms fetched into `repos/npm`, and repeats until a pass fetches nothing, ending in the hash `eval/SNAPSHOTS` then records. `READING=shared` asks pac with `--reading=shared` (default `READING=npm`, `--reading=npm`), and the check then reads the manifests as pac did; the run's parameters record it, so a run resumes only in the reading it started in. `READING=placement` is the placement reading above, whose lines carry `cmp` and the check's `why` instead of `nodes` and `edges`.
 - `eval/opam/mccs.sh <run-dir>` asks builtin-mccs+glpk, opam's default solver, every query of a finished opam run and writes `mccs.txt`: whether its answer is pac's in each order. That is divergence from an optimising solver, not correspondence, which is 0install's. `--accept <n> <seed>` then asks 0install, for n of the queries where mccs and pac differ, whether it takes mccs's answer as it stands (`mccs-accept.txt`).
 - `eval/alpine/pin.sh <run-dir>` counts a run's divergent queries pac answers exactly as apk does once every package of apk's answer is in the world. `eval/npm/pin.sh <run-dir>` re-asks a run's divergent queries with npm's picks forced. Both separate preference gaps from instance gaps.

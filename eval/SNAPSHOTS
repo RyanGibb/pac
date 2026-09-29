@@ -46,6 +46,21 @@ files (sha256):
 
   sha256sum repos/debian/Packages repos/alpine/APKINDEX
 
+a foreign architecture for repos/debian/Packages, fetched on 2026-09-29 into
+its own directory, beside repos/, for eval/debian/scale.sh's FOREIGN:
+
+  foreign/debian/Packages.i386   99050497cda9ce7f72110b0988278a755800ba7cf939031bb7368a1fbbab39be   53M, 1232187 lines
+
+  https://snapshot.debian.org/archive/debian/20260910T203409Z/dists/stable/main/binary-i386/Packages.xz
+  (sha256 93960abe2eb854d7279869b415bfb8fb46ef6495c7f37791d9dbdbf28c8f89ac), unpacked with xz -dc
+
+  20260910T203409Z is the last snapshot before repos/debian/Packages was
+  fetched (2026-09-10 21:03 UTC).  Its stable Release is trixie 13.6, dated
+  2026-07-11, the same file at the snapshots on either side; it lists both
+  hashes above, and be70297f... for main/binary-amd64/Packages, which the
+  same snapshot's binary-amd64/Packages.xz unpacks to.  The two indexes'
+  Architecture: all stanzas are the same 33671, byte for byte.
+
 directory (sha256 of the sorted list of per-file sha256s):
 
   repos/npm               4012c06a05c0c4d228ceb09dbffdd8d71fc3f9e9f34e484975e455ad4e99b17f   5796 packuments and 3 tarballs, 1.3G

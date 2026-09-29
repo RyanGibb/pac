@@ -134,6 +134,7 @@ emit() { printf '%s' "$1"; }  # <the query's lines>
 
 # the snapshot at repos/<path>, or at <dir>, whose id must be one a row of
 # SNAPSHOTS records for repos/<path> or, given <dir>, for held-out/<path>
+# or foreign/<path>
 snapshot() {  # <path under repos/> [dir]
   local p=${2:-$TOP/repos/$1} id
   if [ -d "$p/.git" ]; then
@@ -145,8 +146,8 @@ snapshot() {  # <path under repos/> [dir]
   else
     id=$(sha256sum < "$p" | cut -d' ' -f1)
   fi
-  awk -v p="repos/$1" -v h="${2:+held-out/$1}" -v id="$id" \
-    '($1 == p || $1 == h) && $2 == id {ok = 1} END {exit !ok}' "$E/SNAPSHOTS" ||
+  awk -v p="repos/$1" -v h="${2:+held-out/$1}" -v f="${2:+foreign/$1}" -v id="$id" \
+    '($1 == p || $1 == h || $1 == f) && $2 == id {ok = 1} END {exit !ok}' "$E/SNAPSHOTS" ||
     { echo "$0: ${2:-repos/$1} is $id, not what eval/SNAPSHOTS records" >&2; exit 1; }
 }
 
