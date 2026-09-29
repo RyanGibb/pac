@@ -15,8 +15,7 @@ import functools, json, multiprocessing, os, random, shutil, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from consistent import compat as compat_class, matches, pre_key, requirement, version  # noqa: E402
-from run_query import INDEX  # noqa: E402
-TOOLCHAIN = "1.97.1"
+from run_query import INDEX, RUSTC_VERSION, read_rows  # noqa: E402
 
 
 @functools.lru_cache(maxsize=1 << 20)
@@ -39,25 +38,13 @@ def holds(v, req):
 
 
 @functools.lru_cache(maxsize=None)
-def msrv_ok(msrv, rustc=TOOLCHAIN):
+def msrv_ok(msrv, rustc=RUSTC_VERSION):
     """rustc may be a rust_version, of two components; one semver cannot
     read constrains nothing here"""
     try:
         return msrv is None or matches(requirement("^" + msrv), ".".join((rustc.split(".") + ["0"])[:3]))
     except ValueError:
         return True
-
-
-def read_rows(path):
-    rows = []
-    for line in open(os.path.join(INDEX, path), encoding="utf-8"):
-        try:
-            j = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(j.get("name"), str) and isinstance(j.get("vers"), str):
-            rows.append(j)
-    return rows
 
 
 def newest(rows):
@@ -120,7 +107,7 @@ def targets(seed, k, exclude=None):
             msrv_ok(m, tc) for v, m in adm if compat_class(v) == compat_class(best[0]) and v != best[0])
 
     def msrv_move(s):
-        return any(moves(d["target"], d["req"], s["msrv"] or TOOLCHAIN) for d in s["deps"])
+        return any(moves(d["target"], d["req"], s["msrv"] or RUSTC_VERSION) for d in s["deps"])
 
     def several(s, key, val):
         seen = {}

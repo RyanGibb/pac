@@ -10,8 +10,8 @@ import collections, json, os, re, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.join(HERE, "..")]
 from triage_lib import first_incompatibility, group, report, show
-from run_query import crate_path
-from scale import compat_class, msrv_ok, read_rows, vkey
+from run_query import crate_path, read_rows
+from scale import compat_class, msrv_ok, vkey
 
 run = sys.argv[1]
 msrv = {}
@@ -19,8 +19,7 @@ msrv = {}
 
 def rust_version(n, v):
     if n not in msrv:
-        msrv[n] = {j["vers"]: j.get("rust_version") for j in read_rows(crate_path(n))} \
-            if os.path.exists(crate_path(n)) else {}
+        msrv[n] = {j["vers"]: j.get("rust_version") for j in read_rows(crate_path(n))}
     return msrv[n].get(v)
 
 

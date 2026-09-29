@@ -56,22 +56,27 @@ def crate_path(name, index=INDEX):
     return f"{index}/{n[0:2]}/{n[2:4]}/{n}"
 
 
+def read_rows(path):
+    """the rows of an index file, its path absolute or under INDEX, that
+    JSON reads as an object with a version; none where there is no file"""
+    try:
+        with open(os.path.join(INDEX, path), encoding="utf-8") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        return []
+    rows = []
+    for line in lines:
+        try:
+            j = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(j, dict) and isinstance(j.get("vers"), str):
+            rows.append(j)
+    return rows
+
+
 def index_line(name, version):
-    path = crate_path(name)
-    if not os.path.exists(path):
-        return None
-    with open(path) as f:
-        for l in f:
-            l = l.strip()
-            if not l:
-                continue
-            try:
-                j = json.loads(l)
-            except json.JSONDecodeError:
-                continue
-            if j.get("vers") == version:
-                return j
-    return None
+    return next((j for j in read_rows(crate_path(name)) if j["vers"] == version), None)
 
 
 def tool_version(exe):
@@ -157,8 +162,7 @@ def parse_answer(out):
 def newest(crate):
     """The release the query names, as scale.py's sample names it."""
     import scale
-    path = crate_path(crate)
-    return scale.newest(scale.read_rows(path)) if os.path.exists(path) else None
+    return scale.newest(read_rows(crate_path(crate)))
 
 
 def ask_pac(crate):
@@ -215,9 +219,8 @@ def build_manifest(crate, version, workdir, patch_self=False):
     if j.get("links") and not os.path.exists(workdir + "/build.rs"):
         with open(workdir + "/build.rs", "w") as f:
             f.write("fn main() {}\n")
-    for stale in (workdir + "/Cargo.lock",):
-        if os.path.exists(stale):
-            os.remove(stale)
+    if os.path.exists(workdir + "/Cargo.lock"):
+        os.remove(workdir + "/Cargo.lock")
 
 
 def write_cargo_config(home=None):

@@ -102,7 +102,7 @@ import tomllib
 import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from run_query import crate_path  # noqa: E402
+from run_query import index_line, parse_answer  # noqa: E402
 
 
 NUM = re.compile(r"[0-9]+")
@@ -563,12 +563,7 @@ def unreadable(j, s, declared, doubts):
 
 
 def from_index(name, vers):
-    try:
-        with open(crate_path(name)) as f:
-            rows = [json.loads(l) for l in f if l.strip()]
-    except FileNotFoundError:
-        return None
-    j = next((r for r in rows if isinstance(r, dict) and r.get("vers") == vers), None)
+    j = index_line(name, vers)
     return None if j is None else from_row(j)
 
 
@@ -615,29 +610,6 @@ def from_manifest(path):
                              tuple(d.get("features") or ())))
     pkg = doc["package"]
     return (pkg["name"], pkg["version"]), Summary(deps, doc.get("features") or {}, pkg.get("links"))
-
-
-def parse_answer(text):
-    m = re.search(r"^root (\S+) (\S+)", text, re.M)
-    root = (m.group(1), m.group(2)) if m else None
-    crates, edges, section = {}, [], None
-    for line in text.splitlines():
-        if line.startswith("packages ("):
-            section = "c"
-        elif line.startswith("parent edges ("):
-            section = "e"
-        elif not line.startswith("  "):
-            section = None
-        elif section == "c":
-            mm = re.match(r"^  (\S+) (\S+)(?: \[(.*)\])?$", line)
-            if mm:
-                crates[(mm.group(1), mm.group(2))] = set(mm.group(3).split(",")) if mm.group(3) else set()
-        elif section == "e":
-            mm = re.match(r"^  (\S+) (\S+) -> (\S+)\((\S+)\) (\S+)$", line)
-            if mm:
-                pn, pv, alias, cn, cv = mm.groups()
-                edges.append(((pn, pv), alias, (cn, cv)))
-    return root, crates, edges
 
 
 class Requirements:
@@ -698,10 +670,12 @@ def cycles(graph):
 
 
 def check(answer, manifest):
-    root, crates, edges = parse_answer(answer)
+    root, crates, feats, edges = parse_answer(answer)
+    crates = {(n, v): set(feats[f"{n}@{v}"]) for n, v in crates}
+    edges = [((pn, pv), alias, (cn, cv)) for pn, pv, alias, cn, cv in edges]
     mroot, rsum = from_manifest(manifest)
     miss = []
-    if root is None or tuple(root) != mroot:
+    if root != mroot:
         return {"valid": None, "minimal": None, "miss": [f"the answer's root is {root}, not {mroot}"]}
     summaries = {}
     for c in crates:

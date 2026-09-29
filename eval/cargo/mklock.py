@@ -25,30 +25,21 @@ legitimately carry two majors of one crate.
 
 usage: mklock.py <pac --print-parents output> <out Cargo.lock>
 """
-import json
 import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from run_query import crate_path, parse_answer  # noqa: E402
+from run_query import index_line, parse_answer  # noqa: E402
 
 REGISTRY = "registry+https://github.com/rust-lang/crates.io-index"
 
 
 def cksum(name, version):
-    path = crate_path(name)
-    if not os.path.exists(path):
-        raise RuntimeError(f"no index file for {name}")
-    with open(path) as f:
-        for raw in f:
-            raw = raw.strip()
-            if not raw:
-                continue
-            j = json.loads(raw)
-            if j.get("vers") == version:
-                return j.get("cksum")
-    raise RuntimeError(f"{name} {version} is not in the index")
+    j = index_line(name, version)
+    if j is None:
+        raise RuntimeError(f"{name} {version} is not in the index")
+    return j.get("cksum")
 
 
 def parse(text):
