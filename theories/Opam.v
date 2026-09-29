@@ -428,7 +428,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Definition dependees (rho : Valuation) (I : Inst) (q : PF.Pkg.t)
       : FSet.t :=
-      dependeesBy rho (srcVersions rho I) I q.
+      let R := effRepo rho I in dependeesBy rho (realVersions R) I q.
 
     Definition versions (rho : Valuation) (I : Inst) (tn : TName.t)
       : PF.VSet.t :=
@@ -1048,6 +1048,17 @@ Module Opam (N V X Y E : UsualOrderedType).
           (List.filter (ownb p) (inst_pind I))
           (inst_goal I) (inst_inv I).
 
+      Definition declSubInst (I : Inst) (p : Pkg.t) : Inst :=
+        MkInst PkgSet.empty
+          (List.filter (ownb p) (inst_dep I))
+          (List.filter (ownb p) (inst_cfl I))
+          (clsFibre (inst_cls I) p)
+          nil
+          (List.filter (ownb p) (inst_dxt I))
+          (inst_pins I)
+          (List.filter (ownb p) (inst_pind I))
+          (inst_goal I) (inst_inv I).
+
       Definition nameSubInst (I : Inst) (n : N.t) : Inst :=
         MkInst (realPreimage (NSet.singleton n) (inst_repo I))
           (inst_dep I) (inst_cfl I) (inst_cls I)
@@ -1258,20 +1269,23 @@ Module Opam (N V X Y E : UsualOrderedType).
         reflexivity.
       Qed.
 
-      Theorem dependees_lookupOrig : forall rho I n v,
-          dependees rho (pkgSubInst I (n, v)) (embedPkg (n, v)) =
+      Theorem dependeesBy_lookupOrig : forall rho I Vq n v,
+          (forall m, NSet.In m (declaredNames I (n, v)) ->
+             Vq m = srcVersions rho (nameSubInst I m) m) ->
+          dependeesBy rho Vq (declSubInst I (n, v)) (embedPkg (n, v)) =
           dependees rho I (embedPkg (n, v)).
       Proof.
-        intros rho I n v; unfold dependees.
+        intros rho I Vq n v HV.
         assert (HVq : forall m, NSet.In m (declaredNames I (n, v)) ->
-                   srcVersions rho (pkgSubInst I (n, v)) m =
-                   srcVersions rho I m).
-        { intros m Hm.
-          apply (srcVersions_subInst_agree rho I (pkgSubInst I (n, v))
-                   (declaredNames I (n, v)) m); reflexivity || exact Hm. }
-        unfold embedPkg, declaredNames in *; cbn [fst snd dependeesBy].
+                   Vq m = srcVersions rho I m).
+        { intros m Hm; rewrite (HV m Hm).
+          apply (srcVersions_subInst_agree rho I (nameSubInst I m)
+                   (NSet.singleton m) m); try reflexivity.
+          apply NSet.singleton_spec; reflexivity. }
+        unfold dependees, embedPkg, declaredNames in *;
+          cbn [fst snd dependeesBy].
         unfold depForms, cflForms, pindForms.
-        cbn [pkgSubInst inst_dep inst_cfl inst_cls inst_pins inst_pind].
+        cbn [declSubInst inst_dep inst_cfl inst_cls inst_pins inst_pind].
         rewrite !ownedBy_filter.
         f_equal; [| f_equal; [| f_equal]].
         - f_equal; apply List.map_ext_in; intros f0 Hin.
@@ -1290,6 +1304,22 @@ Module Opam (N V X Y E : UsualOrderedType).
           f_equal; apply List.map_ext_in; intros nvu Hin.
           apply pindForm_agree, HVq; rewrite !NSet.union_spec; right; right.
           apply (listNames_in _ _ _ _ _ Hin), NSet.singleton_spec; reflexivity.
+      Qed.
+
+      Theorem dependees_lookupOrig : forall rho I n v,
+          dependees rho (pkgSubInst I (n, v)) (embedPkg (n, v)) =
+          dependees rho I (embedPkg (n, v)).
+      Proof.
+        intros rho I n v.
+        rewrite <- (dependeesBy_lookupOrig rho I
+                      (srcVersions rho (pkgSubInst I (n, v))) n v);
+          [reflexivity |].
+        intros m Hm.
+        rewrite (srcVersions_subInst_agree rho I (pkgSubInst I (n, v))
+                   (declaredNames I (n, v)) m); try reflexivity; [| exact Hm].
+        symmetry; apply (srcVersions_subInst_agree rho I (nameSubInst I m)
+                           (NSet.singleton m) m); try reflexivity.
+        apply NSet.singleton_spec; reflexivity.
       Qed.
 
       Lemma versions_reduceReal : forall rho I tn,

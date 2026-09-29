@@ -264,6 +264,7 @@ DMA.reduceRec
 
 Op.Reduction.Lookup.clsVersions_reduceReal
 Op.Reduction.Lookup.declarers
+Op.Reduction.Lookup.dependeesBy_lookupOrig
 Op.Reduction.Lookup.dependees_lookupClassCore
 Op.Reduction.Lookup.dependees_lookupDisjunctCore
 Op.Reduction.Lookup.dependees_lookupOrig

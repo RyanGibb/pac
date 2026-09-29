@@ -80,9 +80,9 @@ let one_per_version (vs : (string * Opam_parse.pkg_meta) list) =
    There is no cone pass, so each lookup's sub-instance must be complete
    at the moment it answers.  That holds by construction for all but one
    lookup: versions and root_inst read names that load_name takes whole;
-   pkg_inst reads (n, v)'s own declarations and the repository at the
-   names they mention, and loads every one of them; depexts_of reads the
-   selected packages' own declarations.  class_inst is the exception. *)
+   pkg_inst reads (n, v)'s own declarations, and its dependees read the
+   names they mention through versions; depexts_of reads the selected
+   packages' own declarations.  class_inst is the exception. *)
 let load_name ar (name : string) : (string * Opam_parse.pkg_meta) list =
   match Hashtbl.find_opt ar.pkgs name with
   | Some vs -> vs
@@ -270,8 +270,7 @@ let empty_inst =
     inst_inv = empty_formula;
   }
 
-(* Lookup.pkgSubInst: (n, v)'s own declarations, and the repository at the
-   names they mention *)
+(* Lookup.declSubInst: (n, v)'s own declarations *)
 let pkg_inst ar (p : string * string) : Op.coq_Inst =
   let n, v = p in
   let m = meta_of ar n v in
@@ -292,25 +291,11 @@ let pkg_inst ar (p : string * string) : Op.coq_Inst =
   let pind_fibre =
     List.map (fun (nv, u) -> (p, (nv, u))) m.Opam_parse.pindeps
   in
-  let declared_names =
-    let acc =
-      match m.Opam_parse.depends with
-      | None -> []
-      | Some f -> Opam_parse.off_names [] f
-    in
-    let acc =
-      List.fold_left (fun a (cn, _) -> cn :: a) acc m.Opam_parse.conflicts
-    in
-    List.fold_left (fun a ((pn, _), _) -> pn :: a) acc m.Opam_parse.pindeps
-  in
-  let repo, avl = repo_and_avail ar declared_names in
   {
     empty_inst with
-    Op.inst_repo = repo;
-    inst_dep = dep_fibre;
+    Op.inst_dep = dep_fibre;
     inst_cfl = cfl_fibre;
     inst_cls = clsrel_of cls_fibre;
-    inst_avl = avl;
     inst_dxt = dxt_fibre;
     inst_pind = pind_fibre;
   }
@@ -434,8 +419,8 @@ let tag ar (tn : PFR.Name.t) (tv : PFR.Version.t) : PVersion.t =
   | _ -> { PVersion.avoid = false; v = tv }
 
 (* the encoder reads this at the names a formula negates, all of which
-   pkg_inst has loaded; a class package's versions are its declarers
-   among the names loaded so far, and so are never held *)
+   the depender's dependees have loaded; a class package's versions are
+   its declarers among the names loaded so far, and so are never held *)
 let oracle rho ar (tn : Red.TName.t) : PF.VSet.t =
   match tn with
   | Red.TName.Real m -> Red.versions rho (name_inst ar m) tn
@@ -449,13 +434,24 @@ let lookups rho ar : L.t =
     ~volatile:(function Red.TName.Cls _ -> true | _ -> false)
     ()
 
-let touch rho ar query st ((tn, tv) : T.Pkg.t) =
-  let process q inst =
-    L.process st q (fun () -> Red.FSet.elements (Red.dependees rho (inst ()) q))
+(* Lookup.dependeesBy_lookupOrig: a package's dependees read each name
+   its declarations mention through that name's versions, which are held
+   for the run *)
+let touch rho ar query st =
+  let memo = Hashtbl.create 1024 in
+  let src_versions m =
+    Pac_common.Tbl.memo memo m (fun () ->
+        Red.srcVersions rho (name_inst ar m) m)
   in
-  match (tn, tv) with
-  | PFR.Name.Orig Red.TName.Root, _ ->
-      process Red.rootPkg (fun () -> root_inst ar query)
-  | PFR.Name.Orig (Red.TName.Real n), PFR.Version.Orig (Red.TVer.RV v) ->
-      process (Red.TName.Real n, Red.TVer.RV v) (fun () -> pkg_inst ar (n, v))
-  | _ -> ()
+  fun ((tn, tv) : T.Pkg.t) ->
+    match (tn, tv) with
+    | PFR.Name.Orig Red.TName.Root, _ ->
+        L.process st Red.rootPkg (fun () ->
+            Red.FSet.elements
+              (Red.dependees rho (root_inst ar query) Red.rootPkg))
+    | PFR.Name.Orig (Red.TName.Real n), PFR.Version.Orig (Red.TVer.RV v) ->
+        let q = (Red.TName.Real n, Red.TVer.RV v) in
+        L.process st q (fun () ->
+            Red.FSet.elements
+              (Red.dependeesBy rho src_versions (pkg_inst ar (n, v)) q))
+    | _ -> ()

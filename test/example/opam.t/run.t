@@ -43,7 +43,7 @@ which no edge admits.
     ocaml-system 5.2.0
     saturn 1.0.0
   encoded solution: 6 core nodes (13 lookups)
-  loaded: 5 names, 7 versions
+  loaded: 4 names, 6 versions
 
 Asked for saturn alone, the same reduction yields ocaml-base-compiler in
 ocaml-system's place:
@@ -54,4 +54,4 @@ ocaml-system's place:
     ocaml-base-compiler 5.2.0
     saturn 1.0.0
   encoded solution: 6 core nodes (11 lookups)
-  loaded: 5 names, 7 versions
+  loaded: 4 names, 6 versions

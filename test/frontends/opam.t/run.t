@@ -264,7 +264,7 @@ mlib under with-test.  Off, none of the four is in:
     mid 1
     tst 1
   encoded solution: 3 core nodes (5 lookups)
-  loaded: 6 names, 6 versions
+  loaded: 2 names, 2 versions
 
 --with-test brings in tlib, the queried package's own test dependency, and
 not mlib, which belongs to a package the query merely reaches:
@@ -275,7 +275,7 @@ not mlib, which belongs to a package the query merely reaches:
     tlib 1
     tst 1
   encoded solution: 4 core nodes (6 lookups)
-  loaded: 6 names, 6 versions
+  loaded: 3 names, 3 versions
 
 The other two flags scope the same way, each over its own variable:
 
@@ -285,7 +285,7 @@ The other two flags scope the same way, each over its own variable:
     tdoc 1
     tst 1
   encoded solution: 4 core nodes (6 lookups)
-  loaded: 6 names, 6 versions
+  loaded: 3 names, 3 versions
 
   $ untimed ../../../bin/main.exe opam --with-dev-setup . tst
   packages (3):
@@ -293,7 +293,7 @@ The other two flags scope the same way, each over its own variable:
     mid 1
     tst 1
   encoded solution: 4 core nodes (6 lookups)
-  loaded: 6 names, 6 versions
+  loaded: 3 names, 3 versions
 
 Naming mid too puts it in the query, so with-test holds of it as well and
 mlib comes in beside tlib.  mlib's own test dependency mleaf stays out:
@@ -306,7 +306,7 @@ mlib is reached, not asked for.
     tlib 1
     tst 1
   encoded solution: 5 core nodes (8 lookups)
-  loaded: 7 names, 7 versions
+  loaded: 4 names, 4 versions
 
 In opam a conflict's filter sees only switch and global variables and the
 package's own name and version.  So with-test is undefined there even for
