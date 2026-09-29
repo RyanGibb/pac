@@ -143,6 +143,10 @@ module Make (D : DRIVER) : sig
   type t
 
   val create : D.state -> t
+
+  (* the install request's packages, which apt enqueues ahead of anything
+     else, in its order *)
+  val request : t -> D.name list -> unit
   val state : t -> D.state
   val kept : t -> D.name -> D.version option
   val next : t -> assigned:D.assigned -> (D.name * int) list -> D.name

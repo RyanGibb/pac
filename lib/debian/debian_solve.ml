@@ -441,8 +441,32 @@ module Make (AP : Tables.ARCH) = struct
         (DMA.PkgSet.elements
            (DMA.multiarchResolution (DMA.Deb.debianResolution s')))
 
+    (* apt enqueues the requested packages as it walks its package table
+       (FromDepCache, apt-pkg/solver3.cc): bucket by bucket of sHash, the
+       djb2 hash of the lower-cased name modulo APT::Cache-HashTableSize,
+       196613 by default; a bucket's groups by name length, then name
+       (StringViewCompareFast); and a group's packages as they were
+       created, the native one first (pkgcache.cc, pkgcachegen.cc) *)
+    let request query =
+      let bucket n =
+        let h = ref 5381 in
+        String.iter
+          (fun c ->
+            h :=
+              ((33 * !h) + Char.code (Char.lowercase_ascii c)) land 0xffffffff)
+          n;
+        !h mod 196613
+      in
+      let key ((n, x), _) =
+        let b = match x with DMA.QAArch b -> b | _ -> "" in
+        (bucket n, String.length n, n, not (String.equal b AP.native), b)
+      in
+      List.map (fun ((m, _) as q) -> (DMA.Deb.Name.Orig m, q)) query
+      |> List.stable_sort (fun (_, a) (_, b) -> compare (key a) (key b))
+      |> List.map fst
+
     let run ~debug ~order query =
-      let h = Replay.hooks order () in
+      let h = Replay.hooks order (request query) in
       let r =
         PG.solve ?next:h.Pac_common.Order.next ?choose:h.Pac_common.Order.choose
           ~vers:cands_of ~deps:dependencies (List.map root query)

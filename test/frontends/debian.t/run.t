@@ -867,6 +867,19 @@ before that clause is worked, and gcx is never installed:
   encoded solution: 10 core nodes (11 lookups)
   loaded: 6 names, 7 versions
 
+apt enqueues the packages a request names as it walks its package table,
+bucket by bucket of the name's hash, not in the order given or by name:
+rqomega comes before rqalpha, so its rqy | rqx is worked first and rqx is
+never installed:
+
+  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages.request rqalpha rqomega
+  packages (3):
+    rqalpha:amd64 1
+    rqomega:amd64 1
+    rqy:amd64 1
+  encoded solution: 5 core nodes (7 lookups)
+  loaded: 4 names, 4 versions
+
 A Conflicts or Breaks on pkg:b is apt's negative on the same
 pseudo-package, so it reaches what the atom would meet as a dependency:
 xcfl's Conflicts: xfc:i386 spares the foreign xfc:amd64 it depends on, and

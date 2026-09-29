@@ -232,6 +232,8 @@ module Make (D : DRIVER) = struct
       Hashtbl.add t.pos n t.clock;
       match e with Some e -> e.tenq <- n :: e.tenq | None -> ())
 
+  let request t goals = List.iter (enqueue t None) goals
+
   let queue_rejections t rs =
     List.iter
       (fun r ->

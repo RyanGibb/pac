@@ -1,0 +1,17 @@
+Package: rqalpha
+Version: 1
+Architecture: amd64
+Depends: rqx | rqy
+
+Package: rqomega
+Version: 1
+Architecture: amd64
+Depends: rqy | rqx
+
+Package: rqx
+Version: 1
+Architecture: amd64
+
+Package: rqy
+Version: 1
+Architecture: amd64
