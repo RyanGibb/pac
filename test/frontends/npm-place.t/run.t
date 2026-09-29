@@ -27,7 +27,7 @@ peer on pb is itself an alias of baz, which the root's pb holds.
     node_modules/or/node_modules/op op@1.0.0
     node_modules/or/node_modules/oq oq@1.1.0
     node_modules/pb baz@1.0.0
-  encoded solution: 35 core nodes (84 lookups)
+  encoded solution: 35 core nodes (42 lookups)
   loaded: 11 names, 14 versions, 0 packuments fetched
 
 The layout is found within a depth bound, 8 by default: at depth 1 c's b
@@ -37,7 +37,7 @@ cannot nest, and there is no answer.
   root nest-app 1.0.0
   unsatisfiable:
   (within depth 1)
-  Because no versions of <c⇑b> match (c,b@1.0.0) and <c⇑b> (ε,b@1.0.0) -> <ε⇑b> (ε,b@1.0.0), <c⇑b> (c,b@1.0.0) ∪ [(ε,b@1.0.0), (ε,b@2.0.0)) requires <ε⇑b> (ε,b@1.0.0).
+  Because no versions of <c⇑b> match (c,b@1.0.0) and <c⇑b> [(ε,b@1.0.0), (ε,b@2.0.0)) -> <ε⇑b> (ε,b@1.0.0), <c⇑b> (c,b@1.0.0) ∪ [(ε,b@1.0.0), (ε,b@2.0.0)) requires <ε⇑b> (ε,b@1.0.0).
   Because <ε⇑c> (ε,c@1.0.0) -> <ε,c> c@1.0.0 and <ε,c> c@1.0.0 -> <c⇑b> (c,b@1.0.0) ∪ (ε,b@1.0.0), <ε⇑c> (ε,c@1.0.0) requires <c⇑b> (c,b@1.0.0) ∪ (ε,b@1.0.0).
   Thus, <ε⇑c> (ε,c@1.0.0) requires <ε⇑b> (ε,b@1.0.0).
   And because <ε> project -> <ε⇑c> (ε,c@1.0.0), <ε> project requires <ε⇑b> (ε,b@1.0.0).
@@ -51,7 +51,7 @@ cannot nest, and there is no answer.
     node_modules/b b@2.0.0
     node_modules/c c@1.0.0
     node_modules/c/node_modules/b b@1.0.0
-  encoded solution: 7 core nodes (12 lookups)
+  encoded solution: 7 core nodes (7 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
 
 The bound is the placement reading's alone, and its answer is the
@@ -102,7 +102,7 @@ of m is the registry's m, never zz.
     node_modules/p p@1.0.0
     node_modules/p/node_modules/m m@20.0.0
     node_modules/r r@1.0.0
-  encoded solution: 15 core nodes (71 lookups)
+  encoded solution: 15 core nodes (35 lookups)
   loaded: 6 names, 25 versions, 0 packuments fetched
 
 PAC_NPM_CHECKCMP checks every comparison of names and versions against
@@ -123,7 +123,7 @@ the calculus's own order, and the answer stands.
     node_modules/r r@1.0.0
     node_modules/r/node_modules/aq aq@1.0.0
     node_modules/r/node_modules/m zz@1.0.0
-  encoded solution: 15 core nodes (89 lookups)
+  encoded solution: 15 core nodes (15 lookups)
   loaded: 6 names, 25 versions, 0 packuments fetched
 
 ha 2.0.0 needs hk ^2, whose only version needs an hd ^5 no one
@@ -136,7 +136,7 @@ joined it does not rule zz out, so ha 1.0.0 with hq's zz is found.
     node_modules/ha ha@1.0.0
     node_modules/hk zz@1.0.0
     node_modules/hq hq@1.0.0
-  encoded solution: 9 core nodes (26 lookups)
+  encoded solution: 9 core nodes (15 lookups)
   loaded: 6 names, 8 versions, 0 packuments fetched
 
 A root override applies to the key an edge is written under and replaces
@@ -162,7 +162,7 @@ npm reading keys the project as it keys that package, and refuses.
   packages (2):
     node_modules/b b@1.0.0
     node_modules/c c@1.0.0
-  encoded solution: 7 core nodes (13 lookups)
+  encoded solution: 7 core nodes (7 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
 
   $ untimed ../../../bin/main.exe npm --reading=placement --offline --cache self ./self/same-app/package.json
@@ -171,7 +171,7 @@ npm reading keys the project as it keys that package, and refuses.
     node_modules/b b@3.0.0
     node_modules/d d@1.0.0
     node_modules/e e@1.0.0
-  encoded solution: 11 core nodes (23 lookups)
+  encoded solution: 11 core nodes (11 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
 
   $ untimed ../../../bin/main.exe npm --offline --cache self ./self/same-app/package.json

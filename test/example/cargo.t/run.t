@@ -58,5 +58,5 @@ packages and 14 edges, and this encoding has no ⊥.
     derivative 2.2.0 -> syn(syn) 1.0.109
     serde 1.0.210 -> serde_derive(serde_derive) 1.0.210
     serde_derive 1.0.210 -> syn(syn) 2.0.77
-  encoded solution: 13 core nodes (14 lookups)
+  encoded solution: 13 core nodes (13 lookups)
   loaded: 5 names, 6 versions

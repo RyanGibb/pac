@@ -68,5 +68,5 @@ app is the root, which may leave a core no peer asks for absent, so
     app 1.0.0 <- core 6.0.0 at legacy
     app 1.0.0 <- plugin 1.0.0
     app 1.0.0 <- preset 1.0.0
-  encoded solution: 13 core nodes (16 lookups)
+  encoded solution: 13 core nodes (13 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched

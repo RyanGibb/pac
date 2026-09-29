@@ -31,7 +31,7 @@ q publishes 1.0.0-alpha.1 alone, which ^1.0.0-alpha reaches.
     g 1.0.0
     p 1.0.0
     q 1.0.0-alpha.1
-  encoded solution: 9 core nodes (10 lookups)
+  encoded solution: 9 core nodes (9 lookups)
   loaded: 3 names, 4 versions
 
 A dev-dependency participates only from the root crate.  k declares m both
@@ -91,7 +91,7 @@ without it.
     x 0.9.0
     y 1.0.2
     z 1.0.0
-  encoded solution: 13 core nodes (20 lookups)
+  encoded solution: 13 core nodes (19 lookups)
   loaded: 4 names, 7 versions
 
 The root's own links key excludes as a dependency's does.  rl claims
@@ -102,7 +102,7 @@ links=foo, so x 1.0.0, which claims it too, is out and x 0.9.0 is taken.
   packages (2):
     rl 1.0.0
     x 0.9.0
-  encoded solution: 7 core nodes (8 lookups)
+  encoded solution: 7 core nodes (7 lookups)
   loaded: 2 names, 3 versions
 
 A weak feature entry resolves as the strong one.  u's default feature
@@ -131,7 +131,7 @@ m1 takes the older 1.0.0.
   packages (2):
     d1 1.0.0
     m1 1.0.0
-  encoded solution: 6 core nodes (7 lookups)
+  encoded solution: 6 core nodes (6 lookups)
   loaded: 2 names, 3 versions
 
 With no toolchain configured the preference is off, as it is in cargo when
@@ -142,7 +142,7 @@ the rust-versions list is empty, and the same index takes the newest.
   packages (2):
     d1 1.1.0
     m1 1.0.0
-  encoded solution: 6 core nodes (7 lookups)
+  encoded solution: 6 core nodes (6 lookups)
   loaded: 2 names, 3 versions
 
 A crate declaring no MSRV is compatible with every toolchain rather than
@@ -157,7 +157,7 @@ would give.
   packages (2):
     d2 1.1.0
     m2 1.0.0
-  encoded solution: 6 core nodes (7 lookups)
+  encoded solution: 6 core nodes (6 lookups)
   loaded: 2 names, 4 versions
 
   $ untimed ../../../bin/main.exe cargo index manifests/m2.toml
@@ -165,7 +165,7 @@ would give.
   packages (2):
     d2 1.2.0
     m2 1.0.0
-  encoded solution: 6 core nodes (7 lookups)
+  encoded solution: 6 core nodes (6 lookups)
   loaded: 2 names, 4 versions
 
 This is a preference and not a constraint.  m3 requires ^2 of d3, whose
@@ -257,7 +257,7 @@ and cp falls back to 0.1.6.
     ga 0.14.9
     oa 1.0.0
     pa 1.0.0
-  encoded solution: 13 core nodes (16 lookups)
+  encoded solution: 13 core nodes (13 lookups)
   loaded: 4 names, 6 versions
 
 pb declares zp, a copy of cp, first, so zp 0.1.7 is activated first and its
@@ -270,7 +270,7 @@ pin, with one candidate, is taken before pb's own ^0.14 of ga.
     ob 1.0.0
     pb 1.0.0
     zp 0.1.7
-  encoded solution: 13 core nodes (16 lookups)
+  encoded solution: 13 core nodes (13 lookups)
   loaded: 4 names, 6 versions
 
 The root's own dependencies are read from its manifest, whose tables cargo
@@ -282,7 +282,7 @@ keys by name, so oc's zp-then-ga reaches the resolver as ga-then-zp.
     ga 0.14.9
     oc 1.0.0
     zp 0.1.6
-  encoded solution: 10 core nodes (13 lookups)
+  encoded solution: 10 core nodes (10 lookups)
   loaded: 3 names, 5 versions
 
 Resolver v3 ranks the candidate versions of a dependency, not their
@@ -300,7 +300,7 @@ the rest, 0.6.5, although it needs a newer Rust than 1.70.
     ms 1.0.0
     sk 0.5.10
     sk 0.6.5
-  encoded solution: 12 core nodes (14 lookups)
+  encoded solution: 12 core nodes (12 lookups)
   loaded: 3 names, 5 versions
 
 mu pins sl to 0.6.5, which needs 1.80, so mt's range skips the compatible
@@ -314,7 +314,7 @@ older one.
     mu 1.0.0
     sl 0.5.9
     sl 0.6.5
-  encoded solution: 12 core nodes (14 lookups)
+  encoded solution: 12 core nodes (12 lookups)
   loaded: 3 names, 5 versions
 
 A candidate one of whose mandatory dependencies has no valid candidate
@@ -374,14 +374,16 @@ t3, and only then zj, whose versions both need ae 0.10.3 and so sb below
 2.5.  Refuting it costs whole replays of the queue, not the answer: cargo,
 backtracking into its saved frame, lands on sb 2.4.1 too.
 zj 1.1.0 and 1.2.0 are one granularity class declaring ae alike, so they
-share one slot, and the conflict learned against it refutes both at once.
+share one slot: once 1.2.0 is refuted, 1.1.0 is tried, its dependency on
+the slot merges with 1.2.0's, and the conflict learned against the merged
+one refutes both.
 
   $ ../../../bin/main.exe cargo index manifests/dv.toml | grep -E '^  (ae|sb|zj) '
     ae 0.10.3
     sb 2.4.1
     zj 1.2.0
   $ ../../../bin/main.exe cargo index manifests/dv.toml --debug | grep -c '^deciding on'
-  72
+  75
 
 A root Cargo.toml of its own.  app takes s under [dependencies], e under
 the key x through package = "e", the optional i with its default
@@ -503,7 +505,7 @@ copy of the index, fc 1.1.0 is a candidate and is taken.
     fb 1.0.0
     fc 1.1.0
     fm 1.0.0
-  encoded solution: 12 core nodes (13 lookups)
+  encoded solution: 12 core nodes (12 lookups)
   loaded: 4 names, 4 versions, 2 names read from the cache
   parser dropped 2 declarations
 
@@ -543,7 +545,7 @@ newer, as cargo does.
   packages (2):
     tv 1.0.1234567891
     vt 1.0.0
-  encoded solution: 6 core nodes (7 lookups)
+  encoded solution: 6 core nodes (6 lookups)
   loaded: 2 names, 2 versions
 
 Two versions that differ only in build metadata are two packages to cargo,
@@ -564,7 +566,7 @@ of bm's and bp's, and each name takes the greater: 1.0.0+b over 1.0.0+a,
     bn 1.0.0+x
     bo 1.0.0+10
     bp 1.0.0+1
-  encoded solution: 18 core nodes (23 lookups)
+  encoded solution: 18 core nodes (18 lookups)
   loaded: 7 names, 10 versions
 
 Nor does a greater-than bound take a version of the same precedence, so
@@ -646,7 +648,7 @@ PubGrub's own order oa keeps cp's newest, 0.1.7, and ga at its pin.
     ga 0.14.7
     oa 1.0.0
     pa 1.0.0
-  encoded solution: 13 core nodes (16 lookups)
+  encoded solution: 13 core nodes (13 lookups)
   loaded: 4 names, 6 versions
 
 --order=random picks the next name and the version to try uniformly, from
@@ -660,7 +662,7 @@ another seed may give another, a resolution all the same:
     ga 0.14.9
     oa 1.0.0
     pa 1.0.0
-  encoded solution: 13 core nodes (16 lookups)
+  encoded solution: 13 core nodes (13 lookups)
   loaded: 4 names, 6 versions
   $ untimed ../../../bin/main.exe cargo index manifests/oa.toml --order=random --seed 4
   root oa 1.0.0
@@ -669,7 +671,7 @@ another seed may give another, a resolution all the same:
     ga 0.14.7
     oa 1.0.0
     pa 1.0.0
-  encoded solution: 13 core nodes (16 lookups)
+  encoded solution: 13 core nodes (13 lookups)
   loaded: 4 names, 6 versions
 
 cargo resolves each of a crate's declarations apart (resolve_features,
@@ -690,7 +692,7 @@ fresh lock.  Reading that lock back re-locks both to 0.60.0
     st 1.0.0 -> stk(stk) 0.1.0
     stk 0.1.0 -> wsy(wsy) 0.60.0
     stk 0.1.0 -> wsy(wsy) 0.61.0
-  encoded solution: 14 core nodes (16 lookups)
+  encoded solution: 14 core nodes (15 lookups)
   loaded: 3 names, 3 versions
 
 sti's two declarations ask the same of wsy, requirement and features, so
@@ -711,7 +713,7 @@ asking wsy for a splits from a normal one asking for nothing the same way:
   parent edges (2):
     st2 1.0.0 -> wsy(wsy) 0.61.0
     st2 1.0.0 -> wsy(wsy) 0.60.0
-  encoded solution: 10 core nodes (12 lookups)
+  encoded solution: 10 core nodes (11 lookups)
   loaded: 2 names, 2 versions
 
 The root's feature table passes the checks an index entry's does

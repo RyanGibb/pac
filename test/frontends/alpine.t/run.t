@@ -8,7 +8,7 @@ exit status:
     app 1.0
     app-doc 1.0
     docs 1.0
-  encoded solution: 5 core nodes (7 lookups)
+  encoded solution: 5 core nodes (5 lookups)
   loaded: 3 names, 3 versions, 0 provides entries, 1 install_if rules
 
 apk picks among the providers of a name with compare_providers, whose first
@@ -26,7 +26,7 @@ disjunction, but vim carries the higher k: and is what apk installs:
   $ untimed ../../../bin/main.exe alpine PROVIDERS editor
   packages (1):
     vim 1.0
-  encoded solution: 3 core nodes (4 lookups)
+  encoded solution: 3 core nodes (3 lookups)
   loaded: 14 names, 14 versions, 7 provides entries, 0 install_if rules
 
 --order=random picks the next name and the provider to try uniformly, from
@@ -36,12 +36,12 @@ another seed may give another, a resolution all the same:
   $ seed0() { untimed ../../../bin/main.exe alpine --order=random --seed 0 PROVIDERS editor; }; [ "$(seed0)" = "$(seed0)" ] && seed0
   packages (1):
     vim 1.0
-  encoded solution: 3 core nodes (5 lookups)
+  encoded solution: 3 core nodes (4 lookups)
   loaded: 14 names, 14 versions, 7 provides entries, 0 install_if rules
   $ untimed ../../../bin/main.exe alpine --order=random --seed 1 PROVIDERS editor
   packages (1):
     nano 1.0
-  encoded solution: 3 core nodes (5 lookups)
+  encoded solution: 3 core nodes (3 lookups)
   loaded: 14 names, 14 versions, 7 provides entries, 0 install_if rules
 
 Any other order has no generator to seed, so a --seed beside it is a
@@ -60,7 +60,7 @@ against tool-extra's empty version:
   $ untimed ../../../bin/main.exe alpine PROVIDERS tool
   packages (1):
     tool 2.0
-  encoded solution: 3 core nodes (4 lookups)
+  encoded solution: 3 core nodes (3 lookups)
   loaded: 14 names, 14 versions, 7 provides entries, 0 install_if rules
 
 An unversioned provides without k: is not a low-ranked candidate but no
@@ -84,7 +84,7 @@ versions they offer.  vers-alt provides vers=9.9 where the real vers is
   packages (2):
     vers-alt 9.9
     vers-user 1.0
-  encoded solution: 4 core nodes (8 lookups)
+  encoded solution: 4 core nodes (4 lookups)
   loaded: 14 names, 14 versions, 7 provides entries, 0 install_if rules
 
 k: is the key below the offered version, and it is read off whichever
@@ -95,7 +95,7 @@ real prio 1.0 on version, and prio's own k:100 beats prio-alt's k:1:
   packages (2):
     prio 1.0
     prio-user 1.0
-  encoded solution: 3 core nodes (4 lookups)
+  encoded solution: 3 core nodes (3 lookups)
   loaded: 14 names, 14 versions, 7 provides entries, 0 install_if rules
 
 and the same tie goes the other way when the provider is the one carrying the
@@ -106,7 +106,7 @@ with none, so the provider wins:
   packages (2):
     prio-lo-alt 2.0
     prio-lo-user 1.0
-  encoded solution: 4 core nodes (8 lookups)
+  encoded solution: 4 core nodes (4 lookups)
   loaded: 14 names, 14 versions, 7 provides entries, 0 install_if rules
 
 An unversioned provides without k: still satisfies a dependency when the
@@ -118,7 +118,7 @@ world".  pv-prov provides pv-virt with no k:, and here the world names it:
   packages (2):
     pv-prov 1.0
     pv-user 1.0
-  encoded solution: 4 core nodes (6 lookups)
+  encoded solution: 4 core nodes (4 lookups)
   loaded: 9 names, 9 versions, 4 provides entries, 1 install_if rules
 
 while without it pv-user has nothing to satisfy pv-virt, as in apk:
@@ -172,7 +172,7 @@ apk keeps ru-lo for ru-virt and never adds ru-hi despite its higher k:
     ru-app 1.0
     ru-lo 1.0
     ru-user 1.0
-  encoded solution: 5 core nodes (9 lookups)
+  encoded solution: 5 core nodes (5 lookups)
   loaded: 10 names, 10 versions, 6 provides entries, 0 install_if rules
 
 and the same when the owner arrives only several steps below the
@@ -183,7 +183,7 @@ dependency on the virtual name:
     ru-deep 1.0
     ru-lo 1.0
     ru-mid 1.0
-  encoded solution: 5 core nodes (9 lookups)
+  encoded solution: 5 core nodes (5 lookups)
   loaded: 10 names, 10 versions, 6 provides entries, 0 install_if rules
 
   $ untimed ../../../bin/main.exe alpine REUSE ru-user ru-deep
@@ -192,7 +192,7 @@ dependency on the virtual name:
     ru-lo 1.0
     ru-mid 1.0
     ru-user 1.0
-  encoded solution: 6 core nodes (11 lookups)
+  encoded solution: 6 core nodes (6 lookups)
   loaded: 10 names, 10 versions, 6 provides entries, 0 install_if rules
 
 With no owner already there, k: still decides:
@@ -201,7 +201,7 @@ With no owner already there, k: still decides:
   packages (2):
     ru-hi 1.0
     ru-user 1.0
-  encoded solution: 4 core nodes (6 lookups)
+  encoded solution: 4 core nodes (4 lookups)
   loaded: 10 names, 10 versions, 6 provides entries, 0 install_if rules
 
 Two providers that offer the same version at a name and tie on k: are
@@ -213,13 +213,13 @@ first, beats tie2-a:
   $ untimed ../../../bin/main.exe alpine REUSE tie-cmd
   packages (1):
     tie-a 1.0
-  encoded solution: 3 core nodes (6 lookups)
+  encoded solution: 3 core nodes (3 lookups)
   loaded: 10 names, 10 versions, 6 provides entries, 0 install_if rules
 
   $ untimed ../../../bin/main.exe alpine REUSE tie2-cmd
   packages (1):
     tie2-b 1.0
-  encoded solution: 3 core nodes (6 lookups)
+  encoded solution: 3 core nodes (3 lookups)
   loaded: 10 names, 10 versions, 6 provides entries, 0 install_if rules
 
 LUA is the part of the snapshot's APKINDEX that lua5.1-lyaml and dmvpn can
@@ -237,7 +237,7 @@ lua:
     lua5.1-lyaml 6.2.8-r1
     musl 1.2.5-r11
     yaml 0.2.5-r2
-  encoded solution: 24 core nodes (48 lookups)
+  encoded solution: 24 core nodes (24 lookups)
   loaded: 81 names, 81 versions, 219 provides entries, 11 install_if rules
 
   $ ../../../bin/main.exe alpine LUA dmvpn | grep -E '^  lua5\.[0-9] '
@@ -266,7 +266,7 @@ installed: ⊥ is the greatest version, and PubGrub decides the greatest:
   packages (2):
     nega 1.0
     negc 1.0
-  encoded solution: 4 core nodes (6 lookups)
+  encoded solution: 4 core nodes (4 lookups)
   loaded: 3 names, 4 versions, 0 provides entries, 0 install_if rules
 
 An install-if condition may be negated, i:ni-a !ni-b, and apk then fires
@@ -283,7 +283,7 @@ provides one of its conditions' names:
     ni-lt 1.0
     ni-self 1.0
     ni-z 1.0
-  encoded solution: 8 core nodes (12 lookups)
+  encoded solution: 8 core nodes (8 lookups)
   loaded: 8 names, 9 versions, 3 provides entries, 4 install_if rules
 
 Requiring ni-b falsifies !ni-b.  apk takes ni-alias, which provides it at
@@ -295,7 +295,7 @@ Requiring ni-b falsifies !ni-b.  apk takes ni-alias, which provides it at
     ni-alias 1.0
     ni-lt 1.0
     ni-self 1.0
-  encoded solution: 10 core nodes (18 lookups)
+  encoded solution: 10 core nodes (10 lookups)
   loaded: 8 names, 9 versions, 3 provides entries, 4 install_if rules
 
 and ni-b 1.0 falsifies both:
@@ -305,7 +305,7 @@ and ni-b 1.0 falsifies both:
     ni-a 1.0
     ni-b 1.0
     ni-self 1.0
-  encoded solution: 9 core nodes (15 lookups)
+  encoded solution: 9 core nodes (9 lookups)
   loaded: 8 names, 9 versions, 3 provides entries, 4 install_if rules
 
 apk gives a bare provides the empty version, which it orders below every
@@ -318,7 +318,7 @@ bare, with k:, and so meets bv-lt's requirement:
   packages (2):
     bv-lt 1.0
     bv-prov 1.0
-  encoded solution: 4 core nodes (6 lookups)
+  encoded solution: 4 core nodes (4 lookups)
   loaded: 8 names, 8 versions, 1 provides entries, 3 install_if rules
 
 and not bv-ge's:
@@ -347,7 +347,7 @@ on !bv-virt<2 nor the one on bv-virt>=1:
     bv-anc 1.0
     bv-iif 1.0
     bv-prov 1.0
-  encoded solution: 9 core nodes (14 lookups)
+  encoded solution: 9 core nodes (9 lookups)
   loaded: 8 names, 8 versions, 1 provides entries, 3 install_if rules
 
 It answers a constrained world entry:
@@ -355,7 +355,7 @@ It answers a constrained world entry:
   $ untimed ../../../bin/main.exe alpine BAREVER 'bv-virt<2'
   packages (1):
     bv-prov 1.0
-  encoded solution: 3 core nodes (4 lookups)
+  encoded solution: 3 core nodes (3 lookups)
   loaded: 8 names, 8 versions, 1 provides entries, 3 install_if rules
 
 And in NEGIIF the bare provider ni-virt falsifies ni-lt's !ni-b<2:
@@ -365,7 +365,7 @@ And in NEGIIF the bare provider ni-virt falsifies ni-lt's !ni-b<2:
     ni-a 1.0
     ni-self 1.0
     ni-virt 1.0
-  encoded solution: 9 core nodes (15 lookups)
+  encoded solution: 9 core nodes (9 lookups)
   loaded: 8 names, 9 versions, 3 provides entries, 4 install_if rules
 
 A >< atom names a package digest, which pac cannot match, so bh-user's
@@ -404,7 +404,7 @@ Any run of < > = ~ is an operator, the bit-OR of its characters, so == is =:
   packages (2):
     pr-eq 1.0
     pr-lib 1.0
-  encoded solution: 3 core nodes (4 lookups)
+  encoded solution: 3 core nodes (3 lookups)
   loaded: 6 names, 7 versions, 1 provides entries, 0 install_if rules
   parser dropped 4 declarations
 
@@ -433,7 +433,7 @@ pr-pa and not pr-pc:
   $ untimed ../../../bin/main.exe alpine PARSE pr-pa
   packages (1):
     pr-provs 1.0
-  encoded solution: 3 core nodes (5 lookups)
+  encoded solution: 3 core nodes (3 lookups)
   loaded: 6 names, 7 versions, 1 provides entries, 0 install_if rules
   parser dropped 4 declarations
 
@@ -468,7 +468,7 @@ than refused, as apk has it "uninstallable":
   $ untimed ../../../bin/main.exe alpine APKINDEX app '!nosuch'
   packages (1):
     app 1.0
-  encoded solution: 5 core nodes (7 lookups)
+  encoded solution: 5 core nodes (5 lookups)
   loaded: 3 names, 3 versions, 0 provides entries, 1 install_if rules
 
 An empty argument is no atom at all, and apk skips it:
@@ -476,7 +476,7 @@ An empty argument is no atom at all, and apk skips it:
   $ untimed ../../../bin/main.exe alpine APKINDEX app ''
   packages (1):
     app 1.0
-  encoded solution: 4 core nodes (6 lookups)
+  encoded solution: 4 core nodes (4 lookups)
   loaded: 3 names, 3 versions, 0 provides entries, 1 install_if rules
 
 PubGrub's own order keeps the rules apk's acceptance rests on, since apk
@@ -489,7 +489,7 @@ it in beside ru-lo:
     ru-app 1.0
     ru-lo 1.0
     ru-user 1.0
-  encoded solution: 5 core nodes (9 lookups)
+  encoded solution: 5 core nodes (5 lookups)
   loaded: 10 names, 10 versions, 6 provides entries, 0 install_if rules
 
 An index that cannot be read is a read error, not a refused query:

@@ -58,5 +58,5 @@ only ⊥.
     lua-stringy 0.5.1-r3
     lua5.4 5.4.7-r0
     lua5.4-stringy 0.5.1-r3
-  encoded solution: 9 core nodes (16 lookups)
+  encoded solution: 9 core nodes (9 lookups)
   loaded: 7 names, 7 versions, 3 provides entries, 1 install_if rules

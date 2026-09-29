@@ -42,7 +42,7 @@ version of it.
     bsd-mailx:amd64 8.1.2
     exim4-daemon-light:amd64 4.98.2
     liblockfile1:amd64 1.17
-  encoded solution: 6 core nodes (9 lookups)
+  encoded solution: 6 core nodes (7 lookups)
   loaded: 4 names, 4 versions
 
 Asked for postfix as well, postfix's conflict edge leaves <sel
@@ -54,5 +54,5 @@ mail-transport-agent and its selector takes postfix:
     bsd-mailx:amd64 8.1.2
     liblockfile1:amd64 1.17
     postfix:amd64 3.10.11
-  encoded solution: 6 core nodes (10 lookups)
+  encoded solution: 6 core nodes (6 lookups)
   loaded: 4 names, 4 versions
