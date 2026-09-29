@@ -19,48 +19,21 @@
 # npm exits 1 for every error; one is read as a verdict only under a code
 # npm gives an answer it will not take (refusals), and anything else leaves
 # the answer unchecked.
-#
-# NPM_RUN holds the snapshot farm (cache/) and a scratch home/, as
-# setup.sh builds them; PORT is where shim.py serves that farm.
 # usage: layout-check.sh <answer> <out-dir> <query...>; the query as npm's
 #        specs, or the path of a package.json
-set -u
-export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
-RUN=${NPM_RUN:?} PORT=${PORT:-8899}
-ans=$1 out=$2; shift 2
-mkdir -p "$out"
-W=$out/ci
-. "$S/npm.sh"
-. "$S/refused.sh"
-npmc() { GIT_MISS=$out/gitmiss NPM_TIMEOUT= npm_in "$@" --loglevel=http; }
-shim() { curl -s -o /dev/null "http://127.0.0.1:$PORT/-/ping"; }
 verdict() {  # <valid> <why>
   printf '%s valid=%s\n' "$2" "$1"
   exit 0
 }
-err=0
-ran() { [ "$1" -eq 0 ] || refused "$1" "$2" || err=1; }
-
-rm -rf "$W"; mkdir -p "$W"
-shim || verdict ERR "no shim on $PORT"
-if [ $# -eq 1 ] && [ "${1##*/}" = package.json ] && [ -f "$1" ]; then
-  cp "$1" "$W/package.json"
-else
-  node "$S/root.js" "$RUN/cache" "$@" > "$W/package.json" 2> "$out/root.log" ||
-    verdict ERR "root.js failed"
-fi
+. "$S/check-lib.sh"
 python3 "$S/lockgen.py" "$RUN/cache" "$ans" "$W/package-lock.json" "$W/package.json" \
   > "$out/lockgen" 2>&1 || verdict ERR "lockgen failed: $(tail -n 1 "$out/lockgen" | cut -c 1-300)"
 bundled=$(grep -c '^bundled ' "$out/lockgen")
 
 npmc "$W" ci --dry-run > "$out/ci.log" 2>&1
 ci_rc=$?; ran $ci_rc "$out/ci.log"
-npmc "$W" ls --all --package-lock-only --json > "$out/ls.json" 2> "$out/ls.log" ||
-  grep -q ELSPROBLEMS "$out/ls.log" || err=1
-jq -r '.problems[]? | select(startswith("invalid:") or startswith("missing:"))' \
-  "$out/ls.json" > "$out/ls.problems" 2>&1 || err=1
-broken=$(wc -l < "$out/ls.problems")
+problems
 override=$(grep -c 'ERESOLVE overriding peer dependency' "$out/ci.log")
 shim || err=1
 # the placement reading reads manifests as npm does

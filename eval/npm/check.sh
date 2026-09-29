@@ -36,42 +36,17 @@
 # npm gives an answer it will not take (refusals, the codes scale.sh reads
 # as npm refusing a query), and anything else, like a shim that stopped
 # answering, leaves the answer unchecked.
-#
-# NPM_RUN holds the snapshot farm (cache/) and a scratch home/, as
-# setup.sh builds them; PORT is where shim.py serves that farm; NPM_GIT
-# names the git npm is to run (default: none).
 # usage: check.sh <answer> <out-dir> <query...>, through eval/check.sh; the
 #        query as npm's specs, or the path of a package.json
-set -u
-# byte order, so the output is the same whatever the host's locale
-export LC_ALL=C
 S="$(cd "$(dirname "$0")" && pwd)"
-RUN=${NPM_RUN:?} PORT=${PORT:-8899}
-ans=$1 out=$2; shift 2
-W=$out/ci
-. "$S/npm.sh"
-. "$S/refused.sh"
-npmc() { GIT_MISS=$out/gitmiss NPM_TIMEOUT= npm_in "$@" --loglevel=http; }  # <dir> <npm args...>
-shim() { curl -s -o /dev/null "http://127.0.0.1:$PORT/-/ping"; }
-paths() { jq -r '.packages | to_entries[] | select(.key != "") | "\(.key) \(.value.version)"' "$1" | sort; }
-verdict() {  # <valid> <minimal> <reproduced> <why>
-  printf '%s valid=%s minimal=%s reproduced=%s\n' "$4" "$1" "$2" "$3"
+verdict() {  # <valid> <why> [<minimal> <reproduced>]
+  printf '%s valid=%s minimal=%s reproduced=%s\n' "$2" "$1" "${3:--}" "${4:--}"
   exit 0
 }
+. "$S/check-lib.sh"
+paths() { jq -r '.packages | to_entries[] | select(.key != "") | "\(.key) \(.value.version)"' "$1" | sort; }
 yn() { if [ "$1" -eq 0 ]; then echo yes; else echo no; fi; }
-err=0
-ran() {  # <rc> <log>: whether npm ran to an answer, a refusal included
-  [ "$1" -eq 0 ] || refused "$1" "$2" || err=1
-}
 
-rm -rf "$W" "$W.plo"; mkdir -p "$W"
-shim || verdict ERR - - "no shim on $PORT"
-if [ $# -eq 1 ] && [ "${1##*/}" = package.json ] && [ -f "$1" ]; then
-  cp "$1" "$W/package.json"
-else
-  node "$S/root.js" "$RUN/cache" "$@" > "$W/package.json" 2> "$out/root.log" ||
-    verdict ERR - - "root.js failed"
-fi
 ours=
 if jq -e .packages "$ans" > /dev/null 2>&1; then
   cp "$ans" "$W/package-lock.json"
@@ -79,7 +54,7 @@ else
   ours=$ans
   python3 "$S/mklock.py" "$RUN/cache" "$ans" "$W/package-lock.json" \
     --root-manifest "$W/package.json" > "$out/mklock" 2>&1 ||
-    verdict ERR - - "mklock failed: $(tail -n 1 "$out/mklock" | cut -c 1-300)"
+    verdict ERR "mklock failed: $(tail -n 1 "$out/mklock" | cut -c 1-300)"
 fi
 
 npmc "$W" ci --dry-run > "$out/ci.log" 2>&1
@@ -87,11 +62,7 @@ ci_rc=$?; ran $ci_rc "$out/ci.log"
 cp -r "$W" "$W.plo"
 npmc "$W.plo" install --package-lock-only --ignore-scripts > "$out/plo.log" 2>&1
 relock_rc=$?; ran $relock_rc "$out/plo.log"
-npmc "$W" ls --all --package-lock-only --json > "$out/ls.json" 2> "$out/ls.log" ||
-  grep -q ELSPROBLEMS "$out/ls.log" || err=1
-jq -r '.problems[]? | select(startswith("invalid:") or startswith("missing:"))' \
-  "$out/ls.json" > "$out/ls.problems" 2>&1 || err=1
-broken=$(wc -l < "$out/ls.problems")
+problems
 override=$(cat "$out/ci.log" "$out/plo.log" | grep -c 'ERESOLVE overriding peer dependency')
 shim || err=1
 diff <(paths "$W/package-lock.json") <(paths "$W.plo/package-lock.json") > "$out/moved"
@@ -111,8 +82,8 @@ repaired=$(awk 'FILENAME == ARGV[1] {if ($1 == "unreached") u[$2]; next}
 
 why="ci=$ci_rc ls=$broken override=$override named=$named unmet=$unmet relation=$related"
 why="$why relock=$relock_rc moved=$moved repaired=$repaired"
-[ "$err" -eq 0 ] || verdict ERR - - "$why"
-case $named$related in [03][03]) ;; *) verdict ERR - - "$why" ;; esac
+[ "$err" -eq 0 ] || verdict ERR "$why"
+case $named$related in [03][03]) ;; *) verdict ERR "$why" ;; esac
 # the tree holds our answer and npm ls finds it whole, and `npm ci` refuses
 # it only for a package whose os, cpu or libc excludes this host, taking it
 # once that check alone is skipped: a resolution npm agrees with, which
@@ -120,10 +91,10 @@ case $named$related in [03][03]) ;; *) verdict ERR - - "$why" ;; esac
 if platform "$ci_rc" "$out/ci.log" && [ "$broken" -eq 0 ] && [ "$override" -eq 0 ] &&
    [ "$named" -eq 0 ] && [ "$unmet" -eq 0 ] && [ "$related" -eq 0 ]; then
   why="$why $(forced "$W" "$out")"
-  case $why in *" ci-force=0 "*) verdict PLATFORM - - "$why" ;; esac
+  case $why in *" ci-force=0 "*) verdict PLATFORM "$why" ;; esac
 fi
 [ "$ci_rc" -eq 0 ] && [ "$broken" -eq 0 ] && [ "$override" -eq 0 ] && [ "$named" -eq 0 ] &&
-  [ "$unmet" -eq 0 ] && [ "$related" -eq 0 ] || verdict INVALID - - "$why"
+  [ "$unmet" -eq 0 ] && [ "$related" -eq 0 ] || verdict INVALID "$why"
 [ "$relock_rc" -eq 0 ] && [ "$repaired" -eq 0 ]; reproduced=$(yn $?)
 [ "$relock_rc" -eq 0 ] && [ "$moved" -eq 0 ]; minimal=$(yn $?)
-verdict VALID "$minimal" "$reproduced" "$why"
+verdict VALID "$why" "$minimal" "$reproduced"
