@@ -96,7 +96,7 @@ variant is set against both; the gm row against mccs names it.
   ## opam, regress
   | query | pac-tool parse / solve | pac-tool wall (IQR) | pac-tool MiB | pac-pubgrub parse / solve | pac-pubgrub wall (IQR) | pac-pubgrub MiB | opam wall (IQR) | opam MiB | opam-mccs wall (IQR) | opam-mccs MiB | pac-tool ÷ opam | pac-pubgrub ÷ opam | pac-tool ÷ opam-mccs | pac-pubgrub ÷ opam-mccs |
   |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-  | x | 0.01 / 0.02 | 0.100 (0.000) | 1 | 0.01 / 0.03 | 0.200 (0.000) | 1 | 0.400 (0.000) | 2 | 0.800 (0.000) | 4 | 0.25 | 0.50 | 0.12 | 0.25 |
+  | x | 0.010 / 0.020 | 0.100 (0.000) | 1 | 0.010 / 0.030 | 0.200 (0.000) | 1 | 0.400 (0.000) | 2 | 0.800 (0.000) | 4 | 0.25 | 0.50 | 0.12 | 0.25 |
   | **median over queries** |  | 0.100 |  |  | 0.200 |  | 0.400 |  | 0.800 |  | gm 0.25× (95% CI 0.25–0.25) | gm 0.50× (95% CI 0.50–0.50) | gm 0.13× (95% CI 0.13–0.13) | gm 0.25× (95% CI 0.25–0.25) |
   | **sum of medians** |  | 0.1 |  |  | 0.2 |  | 0.4 |  | 0.8 |  | pac faster on 1/1 | pac faster on 1/1 | pac faster on 1/1 | pac faster on 1/1 |
   rows ending at load >= 3.5: 0 of 4
