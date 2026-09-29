@@ -135,7 +135,7 @@ Module Opam (N V X Y E : UsualOrderedType).
     ; inst_dxt : list (Pkg.t * (E.t * Filter))
     ; inst_pins : PkgSet.t
     ; inst_pind : list (Pkg.t * (Pkg.t * Y.t))
-    ; inst_goal : OFormula
+    ; inst_query : OFormula
     ; inst_inv : OFormula }.
 
   Definition availOK (rho : Valuation) (I : Inst) (p : Pkg.t) : Prop :=
@@ -146,7 +146,7 @@ Module Opam (N V X Y E : UsualOrderedType).
     { res_subset : PkgSet.Subset S (inst_repo I)
     ; res_version_unique : C.VersionUnique S
     ; res_available : forall p, PkgSet.In p S -> availOK rho I p
-    ; res_goal : oSat rho S (inst_goal I)
+    ; res_query : oSat rho S (inst_query I)
     ; res_invariant : oSat rho S (inst_inv I)
     ; res_dep_closure :
         forall p, PkgSet.In p S ->
@@ -405,7 +405,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Definition rootForm (rho : Valuation) (Vq : N.t -> VSet.t) (I : Inst)
       : PF.Formula :=
-      PF.FConj (encodeOF rho Vq (inst_goal I))
+      PF.FConj (encodeOF rho Vq (inst_query I))
         (encodeOF rho Vq (inst_inv I)).
 
     Module SOlf := SetOps Pkg PF.Dependees PkgSet FSet.
@@ -829,7 +829,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       assert (Hrootdep :=
                 PF.res_formula_closure _ _ _ _ HR _ Hroot _ Hdep).
       unfold rootForm in Hrootdep; cbn [PF.Satisfies] in Hrootdep.
-      destruct Hrootdep as [Hgoal Hinv].
+      destruct Hrootdep as [Hquery Hinv].
       assert (Hdeps : forall n v f,
                  PkgSet.In (n, v) (opamResolution S') ->
                  FSet.In f (dependees rho I (embedPkg (n, v))) ->
@@ -849,7 +849,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         injection E as ->; reflexivity.
       - intros [n v] Hp.
         assert (H := Hsub _ _ Hp); apply mem_effRepo in H; tauto.
-      - apply (encodeOF_correct rho _ _ HV Hroot); exact Hgoal.
+      - apply (encodeOF_correct rho _ _ HV Hroot); exact Hquery.
       - apply (encodeOF_correct rho _ _ HV Hroot); exact Hinv.
       - intros [n v] Hp f Hf.
         assert (Hs : PF.Satisfies S'
@@ -978,7 +978,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           unfold rootForm; cbn [PF.Satisfies].
           split; apply (encodeOF_correct rho _ _ HV Hr);
             rewrite opamResolution_coreResolution;
-            [exact (res_goal _ _ _ HR) | exact (res_invariant _ _ _ HR)].
+            [exact (res_query _ _ _ HR) | exact (res_invariant _ _ _ HR)].
         + unfold dependees, dependeesBy in Hf'; cbn beta iota in Hf'.
           destruct (FSet.empty_spec Hf').
       - intros tn tv tv' Hv Hv'; destruct tn as [| n | k].
@@ -1026,7 +1026,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           (List.filter (ownb p) (inst_dxt I))
           (inst_pins I)
           (List.filter (ownb p) (inst_pind I))
-          (inst_goal I) (inst_inv I).
+          (inst_query I) (inst_inv I).
 
       Definition declSubInst (I : Inst) (p : Pkg.t) : Inst :=
         MkInst PkgSet.empty
@@ -1037,25 +1037,25 @@ Module Opam (N V X Y E : UsualOrderedType).
           (List.filter (ownb p) (inst_dxt I))
           (inst_pins I)
           (List.filter (ownb p) (inst_pind I))
-          (inst_goal I) (inst_inv I).
+          (inst_query I) (inst_inv I).
 
       Definition nameSubInst (I : Inst) (n : N.t) : Inst :=
         MkInst (C.realPreimage (inst_repo I) (NSet.singleton n))
           (inst_dep I) (inst_cfl I) (inst_cls I)
           (inst_avl I) (inst_dxt I) (inst_pins I)
-          (inst_pind I) (inst_goal I) (inst_inv I).
+          (inst_pind I) (inst_query I) (inst_inv I).
 
       Definition classSubInst (I : Inst) (k : N.t) : Inst :=
         MkInst PkgSet.empty nil nil
           (Cls.Reduction.Lookup.classRelAt (inst_cls I) k)
-          nil nil PkgSet.empty nil (inst_goal I) (inst_inv I).
+          nil nil PkgSet.empty nil (inst_query I) (inst_inv I).
 
       Definition rootSubInst (I : Inst) : Inst :=
         MkInst
           (C.realPreimage (inst_repo I)
-             (NSet.union (ofNames (inst_goal I)) (ofNames (inst_inv I))))
+             (NSet.union (ofNames (inst_query I)) (ofNames (inst_inv I))))
           nil nil ClsRel.empty (inst_avl I) nil
-          (inst_pins I) nil (inst_goal I) (inst_inv I).
+          (inst_pins I) nil (inst_query I) (inst_inv I).
 
       Lemma srcVersions_restrict : forall rho I ns n,
           NSet.In n ns ->
@@ -1064,7 +1064,7 @@ Module Opam (N V X Y E : UsualOrderedType).
                (MkInst (C.realPreimage (inst_repo I) ns) (inst_dep I)
                   (inst_cfl I) (inst_cls I) (inst_avl I)
                   (inst_dxt I) (inst_pins I) (inst_pind I)
-                  (inst_goal I) (inst_inv I))) n =
+                  (inst_query I) (inst_inv I))) n =
           srcVersions rho I n.
       Proof.
         intros rho I ns n Hn; apply VSet.ext; intro v.
@@ -1088,7 +1088,7 @@ Module Opam (N V X Y E : UsualOrderedType).
                       (MkInst (C.realPreimage (inst_repo I) ns) (inst_dep I)
                          (inst_cfl I) (inst_cls I)
                          (inst_avl I) (inst_dxt I)
-                         (inst_pins I) (inst_pind I) (inst_goal I)
+                         (inst_pins I) (inst_pind I) (inst_query I)
                          (inst_inv I))).
         { unfold effRepo; rewrite Hr, Ha, Hp; reflexivity. }
         rewrite E; apply (srcVersions_restrict rho I ns n Hn).
@@ -1233,15 +1233,15 @@ Module Opam (N V X Y E : UsualOrderedType).
       Proof.
         intros rho I; unfold dependees, dependeesBy, rootPkg, rootForm.
         assert (H : forall n,
-                   NSet.In n (NSet.union (ofNames (inst_goal I))
+                   NSet.In n (NSet.union (ofNames (inst_query I))
                                 (ofNames (inst_inv I))) ->
                    srcVersions rho (rootSubInst I) n = srcVersions rho I n)
           by (intros n Hn;
               apply (srcVersions_subInst_agree rho I (rootSubInst I)
-                       (NSet.union (ofNames (inst_goal I))
+                       (NSet.union (ofNames (inst_query I))
                           (ofNames (inst_inv I))) n);
               reflexivity || exact Hn).
-        cbn [rootSubInst inst_goal inst_inv].
+        cbn [rootSubInst inst_query inst_inv].
         rewrite !(encodeOF_agree rho (srcVersions rho (rootSubInst I))
                     (srcVersions rho I))
           by (intros n Hn; apply H, NSet.union_spec; auto).

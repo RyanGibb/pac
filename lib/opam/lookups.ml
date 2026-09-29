@@ -270,7 +270,7 @@ let empty_inst =
     inst_dxt = [];
     inst_pins = Op.PkgSet.empty;
     inst_pind = [];
-    inst_goal = empty_formula;
+    inst_query = empty_formula;
     inst_inv = empty_formula;
   }
 
@@ -311,12 +311,12 @@ let pkg_inst ar (p : string * string) : Op.coq_Inst =
    pinned. *)
 let root_inst ar (query : (string * Opam_parse.vc) list) : Op.coq_Inst =
   let repo, avl = repo_and_avail ar (List.map fst query) in
-  let goal =
+  let gamma =
     match List.map (fun (n, c) -> Op.OFAtom (n, Op.FlTrue, xvc c)) query with
     | [] -> empty_formula
     | a :: rest -> List.fold_left (fun f b -> Op.OFAnd (f, b)) a rest
   in
-  { empty_inst with Op.inst_repo = repo; inst_avl = avl; inst_goal = goal }
+  { empty_inst with Op.inst_repo = repo; inst_avl = avl; inst_query = gamma }
 
 (* Lookup.classSubInst: the class relation restricted to k, which is all
    the class package's version lookup reads.  That version list is every
