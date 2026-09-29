@@ -40,7 +40,9 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
 sys.path.insert(0, os.path.join(HERE, "..", "bench"))
+sys.path.insert(0, os.path.join(HERE, "..", "debian"))
 from triage_lib import classify, lines, unkey  # noqa: E402
+from multiarch import stanzas  # noqa: E402
 import summary  # noqa: E402
 
 ORDERS = ("tool", "pubgrub")
@@ -294,8 +296,8 @@ OTHER_WORD = {"post-resolution": "cyclic", "unconfirmed": "unconfirmed", "tool-e
               "pac-crash": "crash", "pac-io-error": "i/o error", "harness-error": "harness error"}
 
 
-def segment_triage(r, placement):
-    c = classify(r)
+def segment(r, c, placement):
+    """Figure A's segment of r, of class c"""
     if placement and c == "preference-gap" and cmpf(r, "relation") == "exact":
         return "relexact"
     # pac refusing the query itself (apt's "Unable to locate package") is
@@ -307,23 +309,9 @@ def segment_triage(r, placement):
             "tool-timeout": "timeout"}.get(c, "other")
 
 
-def segment_berry(r, b, o):
-    """the shared reading against Berry: its check, then its own answer"""
-    if r["pac"] == "timeout":
-        return "timeout"
-    if r["pac"] != "ok":
-        return "other"
-    v = b.get((r["query"], r["mode"]))
-    if v == "INVALID":
-        return "invalid"
-    if v != "VALID":
-        return "other"
-    e = o.get((r["query"], r["mode"]))
-    return "exact" if e == "yes" else "gap" if e == "no" else "other"
-
-
 def berry_class(r, b, o):
-    """B's classes for the shared reading judged by Berry"""
+    """the shared reading's class against Berry: its check, then its own
+    answer"""
     if r["pac"] == "timeout":
         return "pac-timeout"
     if r["pac"] != "ok":
@@ -393,10 +381,11 @@ def outcome_counts(conf, prov):
                 continue
             seg, other = collections.Counter(), collections.Counter()
             for r in mr:
-                sg = segment_berry(r, b, o) if rd == "shared" else segment_triage(r, rd == "placement")
+                c = berry_class(r, b, o) if rd == "shared" else classify(r)
+                sg = segment(r, c, rd == "placement")
                 seg[sg] += 1
                 if sg == "other":
-                    other[berry_class(r, b, o) if rd == "shared" else classify(r)] += 1
+                    other[c] += 1
             cls = collections.Counter(classify(r) for r in mr)
             bcls = collections.Counter(berry_class(r, b, o) for r in mr) if rd == "shared" else None
             ans = sum(1 for r in mr if r["tool"] == "ok" and r["corr"] != "ERR")
@@ -791,8 +780,6 @@ COMPS = [("debian", "Debian, amd64 / apt", "amd64", "debian", "apt", "debian", "
          ("npm", "npm reading / npm", "amd64", "npm", "npm", "npm", "npm"),
          ("npm-shared", "shared reading / npm", "amd64", "npm-shared", "npm", "npm-shared", "npm"),
          ("npm-placement", "placement reading / npm", "amd64", "npm-placement", "npm", "npm-placement", "npm")]
-BENCH_STEPS = {b + m for b in ("debian", "debian-ma", "alpine", "opam", "cargo", "npm", "npm-shared", "npm-placement")
-               for m in ("", "-cold", "-first")}
 MODES = [("warm", "", "warm"), ("cold", "-cold", "cold start"), ("first", "-first", "first run")]
 
 
@@ -848,8 +835,6 @@ def timing(conf, prov, st):
             if b is None or not b.has(s, st):
                 if b is None or not b.rows:
                     why = "no bench run: " + (ent["note"] if ent else "no bench line")
-                elif s not in BENCH_STEPS:
-                    why = "bench.sh has no %s step" % s
                 else:
                     why = "no %s rows for set %s" % (s, st)
                 prov.miss("E/G", "%s %s (%s)" % (label, mname, st), why)
@@ -1005,28 +990,6 @@ def fig_f(out, prov, tm, suffix, st):
     out.write("fig-F-scatter%s.tex" % suffix, "\n".join(t))
 
 
-def debian_totals(path):
-    """names and (name, architecture, version) stanzas of a run's Packages,
-    for an index index-totals.txt does not list"""
-    names, vs = set(), set()
-    cur = {}
-    for l in open(os.path.join(path, "Packages"), errors="replace"):
-        l = l.rstrip("\n")
-        if not l:
-            if "Package" in cur:
-                names.add(cur["Package"])
-                vs.add((cur["Package"], cur.get("Architecture"), cur.get("Version")))
-            cur = {}
-        elif not l[0].isspace() and ":" in l:
-            k, v = l.split(":", 1)
-            if k in ("Package", "Architecture", "Version"):
-                cur[k] = v.strip()
-    if "Package" in cur:
-        names.add(cur["Package"])
-        vs.add((cur["Package"], cur.get("Architecture"), cur.get("Version")))
-    return len(names), len(vs)
-
-
 def tab_g(out, prov, conf, tm, suffix, st):
     tot = {}
     for l in lines(conf.totals) if conf.totals else []:
@@ -1044,8 +1007,10 @@ def tab_g(out, prov, conf, tm, suffix, st):
         _, label, _, _, _, lrun, tkey = comp[c["id"]]
         ent = conf.runs.get(lrun)
         lz_src = run_source(prov, ent, "run " + lrun) if have(ent) else None
+        # the names of a run's own Packages, an index index-totals.txt does
+        # not list
         if tkey not in tot and have(ent) and os.path.exists(os.path.join(ent["path"], "Packages")):
-            tot[tkey] = list(debian_totals(ent["path"]))
+            tot[tkey] = [len({f["Package"] for f in stanzas(os.path.join(ent["path"], "Packages"))})]
         lrows = rows(ent["path"]) if have(ent) else []
         for i, o in enumerate(ORDERS):
             w = c["modes"].get(("warm", o))
