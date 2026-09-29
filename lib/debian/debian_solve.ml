@@ -498,8 +498,10 @@ type result = {
   t_parse : float;
 }
 
-(* a parse says whether it read the bytes the entry is keyed by *)
-type source = Entry of in_channel | Parsed of DF.stanza list * int * bool
+(* a parse the entry may be written from carries its bytes' digests *)
+type source =
+  | Entry of in_channel
+  | Parsed of DF.stanza list * int * string list option
 
 (* Parsing and table construction are reported apart from solving because
    they scale differently: the archive is read whole, while the solve
@@ -510,48 +512,64 @@ type source = Entry of in_channel | Parsed of DF.stanza list * int * bool
    named.  Their types are made at the index's architectures, so those lead
    the entry, and the rest is read at them.  A query naming a version cuts
    the other candidates under Strict-Pinning, so it builds its own tables
-   and writes no entry. *)
+   and writes no entry.
+
+   An entry is keyed by each file's device, inode, size and times, taken
+   from the open file, which NFS revalidates, so a hit reads none of it: a
+   write moves its ctime, which no user tool can set, unless it falls in
+   the clock tick of the change before it.  So a file changed less than two
+   seconds before the run, longer than a tick or FAT's two-second times, is
+   parsed but not cached.  The entry keeps the digests of the bytes it was
+   built from, which --debug checks on a hit. *)
 let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~cache ~paths
     ~query : (result, string) Stdlib.result =
   Pubgrub.set_debug debug;
   let t0 = Unix.gettimeofday () in
-  let entry, digests =
+  let entry, settled =
     match cache with
-    | None -> (None, [])
+    | None -> (None, false)
     | Some dir ->
-        let ds = List.map Digest.file paths in
+        let ss =
+          List.map
+            (fun p ->
+              In_channel.with_open_bin p (fun ic ->
+                  Unix.fstat (Unix.descr_of_in_channel ic)))
+            paths
+        in
         ( Some
             (Pac_common.Cache.entry dir ~format:Index_format.digest
                (Digest.to_hex
                   (Digest.string
                      (String.concat "\000"
-                        (List.map Digest.to_hex ds
+                        (List.map
+                           (fun (s : Unix.stats) ->
+                             Printf.sprintf "%d %d %d %h %h" s.st_dev s.st_ino
+                               s.st_size s.st_mtime s.st_ctime)
+                           ss
                         @ [
                             native;
                             string_of_bool recommends;
                             string_of_bool strict_pinning;
                           ]))))),
-          ds )
+          List.for_all (fun (s : Unix.stats) -> s.st_ctime < t0 -. 2.) ss )
   in
   let ic = Option.bind entry Pac_common.Cache.open_entry in
   Fun.protect ~finally:(fun () -> Option.iter close_in_noerr ic) @@ fun () ->
-  (* a file changed since it was hashed is parsed but not cached *)
   let parse () =
     let dropped = ref 0 in
     let reject () = incr dropped in
-    let index, keyed =
-      if Option.is_none entry then
-        (List.concat_map (DF.parse_file ~reject) paths, false)
+    let index, digests =
+      if not settled then (List.concat_map (DF.parse_file ~reject) paths, None)
       else
         let bytes =
           List.map
             (fun p -> In_channel.with_open_bin p In_channel.input_all)
             paths
         in
-        let index = List.concat_map (DF.parse_string ~reject) bytes in
-        (index, List.map Digest.string bytes = digests)
+        ( List.concat_map (DF.parse_string ~reject) bytes,
+          Some (List.map Digest.string bytes) )
     in
-    Parsed (index, !dropped, keyed)
+    Parsed (index, !dropped, digests)
   in
   let arches_of index =
     List.sort_uniq String.compare
@@ -572,12 +590,12 @@ let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~cache ~paths
       | Entry ic ->
           Option.map
             (fun (index, dropped, e) ->
-              (index, dropped, Some (e : M.eager), false))
+              (index, dropped, Some (e : M.eager), None))
             (Pac_common.Cache.value ic)
-      | Parsed (index, dropped, keyed) -> Some (index, dropped, None, keyed)
+      | Parsed (index, dropped, digests) -> Some (index, dropped, None, digests)
     with
     | None -> start (parse ())
-    | Some (index, dropped, eager, keyed) ->
+    | Some (index, dropped, eager, digests) ->
         Result.map
           (fun (query, named) ->
             let unnamed = (not strict_pinning) || Hashtbl.length named = 0 in
@@ -591,15 +609,14 @@ let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~cache ~paths
                          Args.pin_candidates ~native ~named index
                        else index)
                   in
-                  if keyed && unnamed then
-                    Option.iter
-                      (fun f ->
-                        Pac_common.Cache.store f (fun oc ->
-                            Marshal.to_channel oc arches [];
-                            Marshal.to_channel oc
-                              (index, dropped, M.eager tables)
-                              []))
-                      entry;
+                  (match (entry, digests) with
+                  | Some f, Some ds when unnamed ->
+                      Pac_common.Cache.store f (fun oc ->
+                          Marshal.to_channel oc (ds, arches) [];
+                          Marshal.to_channel oc
+                            (index, dropped, M.eager tables)
+                            [])
+                  | _ -> ());
                   tables
             in
             let t_parse = Unix.gettimeofday () -. t0 in
@@ -619,7 +636,10 @@ let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~cache ~paths
     | Parsed (index, _, _) as p -> at (arches_of index) p
     | Entry ic as e -> (
         match Pac_common.Cache.value ic with
-        | Some arches -> at arches e
+        | Some (ds, _) when debug && List.map Digest.file paths <> ds ->
+            prerr_endline "the cache entry was built from other bytes";
+            start (parse ())
+        | Some (_, arches) -> at arches e
         | None -> start (parse ()))
   in
   start (match ic with Some ic -> Entry ic | None -> parse ())

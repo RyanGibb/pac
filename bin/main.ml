@@ -194,8 +194,9 @@ let debian_cmd =
     parse_cache "debian"
       ~what:
         "Keep what the parser and the table builder make of the Packages file \
-         in $(docv), keyed by the file's bytes, and read it back when a later \
-         run loads the same file with the same flags"
+         in $(docv), keyed by the file's device, inode, size and times, and \
+         read it back when a later run loads the same file with the same \
+         flags; $(b,--debug) checks that it was built from the file's bytes"
   in
   let path =
     Arg.(

@@ -978,12 +978,17 @@ while a name one package alone provides selects that package, as apt's
   loaded: 176 names, 176 versions
 
 A run keeps what the parser and the table builder make of the index in a
-cache, keyed by the file's bytes and the flags that shape the tables, and
-a later run reads it back: the same answer, the same declarations
-dropped, as with none.  The cache is $XDG_CACHE_HOME/pac/debian by
-default, which these cases set, and --cache names another:
+cache, keyed by the file's device, inode, size and times and the flags
+that shape the tables, and a later run reads it back: the same answer,
+the same declarations dropped, as with none.  The cache is
+$XDG_CACHE_HOME/pac/debian by default, which these cases set, and --cache
+names another.  A file changed less than two seconds before a run is not
+cached (below), so the cases wait that long first:
 
   $ noted() { "$@" > out 2>&1; s=$?; grep -e '^loaded' -e '^parser' out; return $s; }
+  $ for f in touched changed other; do cp Packages.nameless $f; done
+  $ chmod u+w changed other && printf '\nPackage: nx\nVersion: 1\n' >> other
+  $ sleep 2
   $ untimed ../../../bin/main.exe debian --native amd64 Packages.nameless nl > none
   $ tail -n 2 none
   loaded: 5 names, 5 versions
@@ -1016,19 +1021,60 @@ default, which these cases set, and --cache names another:
   ls: cannot access 'c': No such file or directory
   [2]
 
-A changed file misses the cache, and so do flags that shape the tables:
+Any write moves a file's ctime, which no tool can set back, so a file
+touched, or changed in place with its size and mtime kept, misses, and so
+do flags that shape the tables:
 
-  $ noted ../../../bin/main.exe debian --cache c --native amd64 Packages.nameless nl
+  $ noted ../../../bin/main.exe debian --cache c --native amd64 touched nl
   loaded: 5 names, 5 versions, index parsed
   parser dropped 7 declarations
-  $ cp Packages.nameless idx && chmod u+w idx
-  $ printf '\nPackage: nx\nVersion: 1\n' >> idx
-  $ noted ../../../bin/main.exe debian --cache c --native amd64 idx nl
-  loaded: 6 names, 6 versions, index parsed
+  $ noted ../../../bin/main.exe debian --cache c --native amd64 touched nl
+  loaded: 5 names, 5 versions, index read from the cache
   parser dropped 7 declarations
+  $ touch touched
+  $ noted ../../../bin/main.exe debian --cache c --native amd64 touched nl
+  loaded: 5 names, 5 versions, index parsed
+  parser dropped 7 declarations
+  $ noted ../../../bin/main.exe debian --cache c --native amd64 changed nl
+  loaded: 5 names, 5 versions, index parsed
+  parser dropped 7 declarations
+  $ noted ../../../bin/main.exe debian --cache c --native amd64 changed nl
+  loaded: 5 names, 5 versions, index read from the cache
+  parser dropped 7 declarations
+  $ stat -c '%i %s %y' changed > before && touch -r changed mtime
+  $ sed 's/^Package: nb$/Package: nx/' changed > new && cat new > changed
+  $ touch -r mtime changed && stat -c '%i %s %y' changed | cmp - before
+  $ noted ../../../bin/main.exe debian --cache c --native amd64 changed nl
+  loaded: 5 names, 5 versions, index parsed
+  parser dropped 7 declarations
+  [1]
   $ noted ../../../bin/main.exe debian --cache c --native amd64 --no-install-recommends Packages.nameless nl
   loaded: 5 names, 5 versions, index parsed
   parser dropped 7 declarations
+
+A write in the clock tick of the change before it need not move the
+times, so a file changed less than two seconds before the run is parsed
+but not cached:
+
+  $ noted ../../../bin/main.exe debian --cache c --native amd64 touched nl
+  loaded: 5 names, 5 versions, index parsed
+  parser dropped 7 declarations
+
+An entry keeps the digests of the bytes it was built from, which a hit
+under --debug checks, so an entry put in another's place is a miss there:
+
+  $ ../../../bin/main.exe debian --cache f --native amd64 Packages.nameless nl > /dev/null
+  $ a=$(find f -type f)
+  $ ../../../bin/main.exe debian --cache f --native amd64 other nl > /dev/null
+  $ cp "$a" "$(find f -type f ! -path "$a")"
+  $ noted ../../../bin/main.exe debian --cache f --native amd64 other nl
+  loaded: 5 names, 5 versions, index read from the cache
+  parser dropped 7 declarations
+  $ noted ../../../bin/main.exe debian --debug --cache f --native amd64 other nl
+  loaded: 6 names, 6 versions, index parsed
+  parser dropped 7 declarations
+  $ grep 'cache entry' out
+  the cache entry was built from other bytes
 
 A query naming a version makes it the candidate, so it reads the index
 back but builds its own tables: the cached ones hold pinv 2 alone.
