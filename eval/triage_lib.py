@@ -71,6 +71,11 @@ def classify(r):
     return "both-refuse"
 
 
+def results(run, name="results.txt"):
+    """a run's lines of key=value fields"""
+    return [dict(f.split("=", 1) for f in l.split() if "=" in f) for l in lines(os.path.join(run, name))]
+
+
 def group(rows, label):
     g = collections.defaultdict(list)
     for r in rows:
@@ -100,7 +105,7 @@ def report(run, by="mode"):
     """Print the class counts per mode (or per value of another field), per
     pool of the queries file, and between modes, and return the rows, each
     with its class."""
-    rows = [dict(f.split("=", 1) for f in l.split()) for l in lines(os.path.join(run, "results.txt"))]
+    rows = results(run)
     for r in rows:
         r["class"] = classify(r)
     parts = sorted(dict.fromkeys(r[by] for r in rows), key=lambda m: m != "tool")
