@@ -1,22 +1,12 @@
 #!/usr/bin/env python3
-"""A query names a crate, and the question is the lock of its newest
-release's own published manifest as the one workspace member.  That
-manifest is written out from the index entry (manifest.jq), and both sides
-are handed the same file: pac as its root Cargo.toml, cargo as the
-workspace it is run in.
-
-Both sides are asked the lockfile question, and asked it the same way.
-pac enables every feature the root declares by default;
-`cargo generate-lockfile` resolves the one workspace member under
-CliFeatures::new_all(true) with HasDevUnits::Yes, which is that same
-instantiation.  Neither side is given a feature selection, because a
-lock is the resolve that has to serve every selection.
-
-The answer is read out of Cargo.lock rather than out of `cargo
-metadata`: metadata reports the second, feature-filtered resolve cargo
-builds from the lock, and to report it at all it must download each
-resolved package's body for the full manifest.  generate-lockfile writes
-the artifact being compared and downloads nothing.
+"""A query names a crate and asks for the lock of its newest release's
+published manifest, written from the index row (manifest.jq) and handed
+to both sides: to pac as its root Cargo.toml, and to `cargo
+generate-lockfile` as the workspace, which resolves it under
+CliFeatures::new_all(true) and HasDevUnits::Yes, as pac does by default.
+cargo's answer is read from the Cargo.lock generate-lockfile writes,
+downloading nothing, and not from `cargo metadata`, a second resolve,
+filtered by features.
 """
 import json, os, re, shutil, subprocess, sys, time, tomllib
 

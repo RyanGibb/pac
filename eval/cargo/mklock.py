@@ -1,27 +1,11 @@
 #!/usr/bin/env python3
-"""Write OUR Cargo resolution out as a Cargo.lock, so cargo can be asked
-to verify it.
-
-The inverse of the reading run_query.py does: `pac cargo --print-parents`
-prints the resolved crate set and the parent relation over it, which is
-exactly the two things a lockfile records -- one [[package]] per node,
-and each node's `dependencies` list naming its children.  Nothing else
-in the file is a choice: `source` is the one registry every non-root
-node came from, and `checksum` is the index's own cksum for that exact
-version, copied rather than computed, since cargo compares a locked
-checksum against the index's on every re-resolve (Resolve::merge_from).
-
-The root is the queried crate itself, built as a path package by
-run_query.py's build_manifest, so its [[package]] carries neither source
-nor checksum -- that absence is what tells cargo which node is the
-workspace member.  Where the queried crate is also reached as a dependency
-of something, that too is this one node, and build_manifest has told
-cargo so with a [patch].
-
-Dependency entries are written "name version" rather than bare "name":
-both are legal in lockfile v4, but the bare form is only unambiguous
-while one version of a name is in the lock, and a cargo resolution may
-legitimately carry two majors of one crate.
+"""Write pac's Cargo answer out as a Cargo.lock, so that cargo can be asked
+to verify it: a [[package]] per crate of `pac cargo --print-parents`, its
+dependencies its children there, written "name version", as a lock may
+hold two versions of a name.  The root, the path package run_query.py's
+build_manifest writes, has neither source nor checksum; every other
+crate has the one registry and the index's own cksum, copied, since cargo
+compares a locked checksum with the index's (Resolve::merge_from).
 
 usage: mklock.py <pac --print-parents output> <out Cargo.lock>
 """

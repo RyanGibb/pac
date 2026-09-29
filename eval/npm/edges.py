@@ -1,42 +1,14 @@
 #!/usr/bin/env python3
-"""Score one query: our resolution against npm's, on nodes and on edges.
+"""Score one query, pac's resolution against npm's lock, on nodes,
+(registry name, version) pairs with the root, and on edges, (requirer
+name, requirer version, directory, provider name, provider version): the
+resolution relation, read off the lock by walking node_modules up from
+each requirer as require() does, and not its layout.  The directory is
+the manifest key, so that an alias is compared as the alias it is.
 
-Both sides are reduced to the same two sets.
-
-  nodes   (registry-name, version) pairs, the root included.  npm's tree
-          nests duplicate versions at different depths and our solution
-          carries one granular node per (key, version), so a name may
-          legitimately appear twice on either side; the pair is the unit
-          on both, and a duplicate placed twice on npm's side collapses
-          to the one pair it is.
-
-  edges   (requirer-name, requirer-version, directory, provider-name,
-          provider-version).  This is the resolution relation, not the
-          directory layout: npm hoists to dedupe on disk, which is a
-          separate question, and lockfileVersion 3 records enough to
-          reconstruct resolution independently of placement -- each
-          node's own dependency ranges, resolved by walking the
-          node_modules chain upwards from that node's path, which is
-          exactly what require() would do.
-
-  The directory component is the manifest key rather than the registry
-  name so that an alias (npm:pkg@range) is compared as the alias it is.
-
-One optional normalisation names a difference between the two answers
-that is not a difference of resolution, applied to npm's side alone so
-the delta it accounts for can be read off:
-
-  --peer-parent   re-attribute an auto-installed peer's edge from the
-                  package that declared the peer to each package that
-                  selected the declarer, by a dependency or by a peer
-                  edge itself re-attributed.  Where both sides put the
-                  peer in the same place, they disagree only about which
-                  node the edge leaves.  npm's lockfile resolves a peer
-                  the way require() would, from the declarer; pac hangs
-                  the declarer's peer edges on the package that selected
-                  it, or, where that package is not the root and peers on
-                  the name itself, on whichever package its own peer edge
-                  hangs on; and none where the peer is that package itself.
+--peer-parent hangs each auto-installed peer's edge in npm's lock on the
+package that selected its declarer, as pac does, rather than on the
+declarer, from which npm resolves it.
 
 usage: edges.py <package> <lockfile> <our --tree output> <out-prefix>
                 [--peer-parent]

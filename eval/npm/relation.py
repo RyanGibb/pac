@@ -1,35 +1,14 @@
 #!/usr/bin/env python3
-"""Whether a package-lock.json holds our answer: for every edge of the
-answer, node_modules lookup from where the requirer sits lands on the copy
-the answer chose, links followed, as require() resolves from a realpath.
-
-An edge the requirer's manifest names as a dependency is resolved from the
-requirer.  Our answer hangs a declarer's peers on the package that required
-the declarer, so an edge naming a peer of a declarer the requirer requires
-is resolved as npm resolves a peer: from where that declarer sits, its own
-node_modules first (arborist edge.js).  A requirer other than the root that
-peers on the name itself holds none of it (arborist's PEER LOCAL), so there
-the declarer's peer must find what the requirer's own peer finds, and a
-requirer other than the root that neither gives nor peers on the name but
-sits at a directory of that name offers itself, which the declarer's
-lookup reaches from inside the requirer's node_modules.  A peer read
-through a requirer whose own optional peer the answer leaves open is open
-too.  An optional peer the answer leaves open that finds a copy anyway
-must find one in its range, as npm judges it (arborist dep-valid.js), a
-dist-tag read as the version the packument's dist-tags give it, as npm's
-fetch resolves one (npm-pick-manifest), where the snapshot is at hand.  A
-provider the answer gives a peer
-may declare peers of its own, which hang on the same requirer, and is asked
-from where it was found.  Every copy of a requirer in the lock is asked,
-since each resolves for itself.
-
-The answer must also give a provider to every dependency a manifest names
-(bundled and optional ones aside) and to every peer that is not optional of
-a declarer required: npm might find a package there by lookup, but it would
-not be ours.
-
-This reads only the lock and the answer, not how mklock.py placed it, so a
-placement that does not hold the answer is caught whatever wrote it.
+"""Whether a package-lock.json holds pac's answer: every edge of the answer,
+looked up from where its requirer sits, links followed as require()
+resolves from a realpath, lands on the copy the answer chose; a peer of a
+declarer the requirer requires is looked up from the declarer, as npm
+resolves one (arborist edge.js), and a requirer other than the root that
+peers on the name holds none of it (PEER LOCAL).  An optional peer the
+answer leaves open may find a copy only in its range (dep-valid.js), a
+dist-tag read from the snapshot.  Every dependency and every peer that is
+not optional has a provider.  Only the lock and the answer are read, so a
+placement that misses is caught whatever wrote it.
 
 usage: relation.py <package-lock.json> <our --tree output> [<cache-dir>]
 Prints each miss and exits 3 when there is one, so that a crash, which

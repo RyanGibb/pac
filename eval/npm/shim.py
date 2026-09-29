@@ -1,28 +1,14 @@
 #!/usr/bin/env python3
-"""A local npm registry that serves the packument snapshot verbatim.
-
-The snapshot is a directory of registry documents named as the registry
-names them, `/` escaped to `%2F`, which is also the shape `pac npm
---cache` reads, so both sides are answering from the same bytes.  GET
-/<name> returns that file unchanged, and with --frozen a name the
-snapshot does not hold is a 404 rather than a fetch, which is what keeps
-a measured run off the live registry.
-
---fill is the seeding mode used before a sweep: a miss is fetched once
-into the snapshot directory, so the snapshot ends up closed over whatever
-npm asked for and a later --frozen run answers everything from disk.
-Misses are appended to the file named by --log either way.
-
-GET /-/pac-serves answers the snapshot directory, which serve.sh asks to
-tell this shim from one another run left on the port.
-
-`npm install --package-lock-only` asks for the tarball of exactly those
-versions whose manifest declares bundleDependencies or a shrinkwrap,
-because it takes that part of the tree from inside the tarball rather
-than resolving it.  GET /<name>/-/<file>.tgz is answered from tarballs/
-beside the snapshot directory, frozen and filled as packuments are.  npm
-asks here although dist.tarball names registry.npmjs.org, because pacote
-rewrites that host to the configured registry.
+"""A local npm registry that serves the packument snapshot verbatim, the
+files `pac npm --cache` reads, so that both sides answer from the same
+bytes.  --frozen answers a name the snapshot lacks with a 404, which keeps
+a run off the live registry; --fill fetches it once into the snapshot,
+closing it over what npm asks.  A tarball, which npm asks for a version
+that bundles dependencies or has a shrinkwrap (pacote rewrites
+dist.tarball's host to this registry), comes from tarballs/ beside the
+snapshot, frozen or filled alike.  Misses go to --log.  GET /-/pac-serves
+answers the snapshot directory, so that serve.sh can tell this shim from
+one another run left on the port.
 
 usage: shim.py <port> <snapshot-dir> [--frozen|--fill] [--log FILE]
 """

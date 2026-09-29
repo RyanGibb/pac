@@ -1,105 +1,14 @@
 #!/usr/bin/env python3
-"""Write OUR npm resolution out as a lockfileVersion 3 package-lock.json,
-so npm can be asked to verify it.
-
-The inverse of edges.py, and not a symmetric one.  edges.py reads a
-lockfile and recovers the resolution relation from it by walking
-node_modules chains upward; going the other way means inventing a
-placement, because our answer is the relation and carries no directory
-layout at all.  A placement is only a faithful encoding of our answer if
-resolving each requirer's key from that requirer's directory lands on
-exactly the provider we chose, so that is what is computed here, rather
-than npm's hoisting heuristic being guessed at; relation.py then asks it
-of the lock, apart from how it was placed:
-
-  place   for each placed requirer and each of its edges, put the
-          provider in the shallowest node_modules on the path from the
-          root to that requirer that is *safe*, not merely the
-          shallowest that is empty.  A slot is safe when taking it
-          leaves every lookup already answered still answering the same
-          way.  Two things can go wrong, and both are checked:
-
-          A free slot is not automatically harmless.  The directory it
-          sits in is itself a package, and every package already placed
-          at or below that directory sees the new slot; if one of them
-          requires the same key at a different provider it is now
-          shadowed.  So a free
-          slot is rejected when some lookup for this key that is
-          already answered comes from a package at or below that
-          directory and is answered from higher up.
-
-          Symmetrically, the requirer's own chain may already carry a
-          slot for this key deeper than the candidate, and that deeper
-          slot is what the requirer would find.  So nothing shallower
-          than the deepest existing slot on the chain is a candidate at
-          all: either that slot already holds our provider, in which
-          case it is shared, or the provider goes strictly below it.
-
-          A slot therefore always exists: the requirer's own
-          node_modules is reached only once, at which point nothing
-          below the requirer has been asked anything yet.
-
-          Where the slot would hold a copy that a directory above it
-          already is, it holds a link to that copy instead, as arborist
-          writes one to close a cycle (place-dep.js), since nesting the
-          copy again would repeat the chain forever.  So placement always
-          ends, and every answer has a tree.
-
-          A package whose peers our answer gives is the exception to
-          shallowest: it goes in its requirer's own node_modules.  npm
-          resolves a peer from the declarer, and a copy in the declarer's
-          own node_modules is PEER LOCAL, an invalid edge (arborist
-          edge.js); our answer puts the peer beside the declarer, among
-          its requirer's edges.  Hoisted any higher, the declarer would
-          look its peer up from a directory that may hold another
-          version.  So a copy is the package and the providers its
-          requirer gives its peers, and two requirers giving different
-          ones get two copies.  A requirer other than the root that peers
-          on a name gives its declarers none of it, which is PEER LOCAL
-          again, and their peer finds what the requirer's own does: they
-          too go in the requirer's own node_modules, and are told apart by
-          that provider.  So too a requirer of the peer's own name that
-          neither gives nor peers on it, whose declarers find the requirer
-          itself.  For the same reason, a name some package
-          on the requirer's chain peers on goes in that package's own
-          node_modules only as the last resort.
-
-          A declarer whose own declarers need another provider of a name
-          it peers on cannot hold them in its node_modules, where they
-          would see its peer, nor the provider they need, which it would
-          then see itself.  So they go above the directory holding the
-          declarer's peer, with their provider beside them, and to leave
-          that room the declarer's peer goes in its requirer's own
-          node_modules.  Where the root holds the declarer's peer, there
-          is no room above it, and no tree holds the answer.
-
-  search  where no directory above the peer takes them, or relation.py
-          finds a miss in the placement, another tree might, and search()
-          looks for one: it nests the copies in the way, and places each
-          copy no shallower than the torn peers below it need (levels()).
-          It returns only a tree relation.py holds, and where impossible()
-          shows that none does, or none is found, the first placement
-          instead, for relation.py to name what it misses.  What neither
-          settles is left unchecked.  A miss is typically a copy hoisted
-          into sight of an optional peer our answer leaves open, which
-          finds it out of range; nested in its requirer, it is not seen.
-
-          npm's arborist decides the same question with a third move we
-          deliberately do not make: an occupied slot may be taken over,
-          evicting an incumbent that could still be pushed deeper
-          (can-place-dep.js REPLACE).  Adding that would make this
-          writer a small reimplementation of arborist, and `npm ci`
-          accepting the result would then be testing the clone rather
-          than our solver.  Refusing to evict costs nesting, and where a
-          peer's only slot beside its declarer is held by an incumbent
-          that could move deeper, it puts the peer in the declarer's own
-          node_modules, which npm rejects.
-
-Every other field is copied, not decided: version, resolved and
-integrity come from the snapshot packument's own dist block, and the
-dependency maps come from that version's manifest, so the lockfile
-describes the same packages our solver read.  An aliased slot (the key
-differs from the registry name) carries "name", the way npm records one.
+"""Write pac's npm answer, a resolution relation with no directory layout,
+out as a lockfileVersion 3 package-lock.json, so that npm can be asked to
+verify it.  place() puts each provider in the shallowest node_modules on
+its requirer's chain that leaves every lookup already answered as it was,
+and a package whose peers the answer gives in its requirer's own; a copy
+a directory above already is becomes a link, as arborist closes a cycle
+(place-dep.js).  Where a declarer's peers leave it no directory, or
+relation.py finds a miss, search() nests copies deeper.  arborist's
+REPLACE (can-place-dep.js) is left out, so that npm judges pac's answer
+and not a copy of arborist.  Every other field is copied from the snapshot.
 
 usage: mklock.py <cache-dir> <our --tree output> <out package-lock.json>
        [--root-manifest <package.json>]

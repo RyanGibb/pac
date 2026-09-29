@@ -1,40 +1,13 @@
 #!/usr/bin/env python3
-"""Two questions of pac's Cargo answer, apart.
-
-Valid: whether the answer is consistent, as consistent.py judges it from
-the index rows and the query's manifest alone: every active declaration
-met by the version the answer gives it, features existing and unified as
-cargo unifies them, one version per semver compatibility class, one
-package per `links`.
-
-Reproduced: whether cargo keeps the answer as its lock.  The answer is
-written out as the query's Cargo.lock (mklock.py), beside a copy of the
-manifest pac was asked about, and `cargo update --workspace --locked` is
-run: cargo re-resolves with our lock as the previous resolve and, naming
-no package, avoids none, so it keeps every locked version a requirement
-still admits and changes only what its rules force; --locked makes any
-change a refusal.  A consistent answer cargo does not keep is one it
-would repair by its own rules, and no less valid for that: a crate
-declaring one package at two sites with different ranges gets two
-versions in cargo's own fresh lock, which the re-resolve then re-locks to
-the first previous version matching either (kreuzberg's zip), so cargo
-does not keep even its own lock.  Where cargo refuses, `cargo
-generate-lockfile --locked` says whether the lock is cargo's own fresh
-answer (`identical`), which is correspondence rather than validity.
-
-Minimal: whether every package and edge of the answer is one an active
-declaration reaches from the root.
-
---locked is the right question for reproduced only because our answer is
-meant to BE a Cargo.lock.  A lock is the feature-independent resolve:
-cargo writes it with every feature of the workspace member enabled, so
-that one lock serves every later --features selection, and pac resolves
-the root the same way by default.
-
-cargo fails with 101 for a lock it would change, for a requirement it
-cannot meet, and for a registry it cannot reach alike; only the first two
-are read as an answer, and anything else leaves reproduced unknown (-), as
-does a proxy that is not answering.
+"""Whether pac's Cargo answer is valid and minimal, as consistent.py
+judges them from the index rows and the query's manifest alone, and,
+apart, whether it is reproduced: whether `cargo update --workspace
+--locked` keeps it as the query's Cargo.lock (mklock.py), a lock being
+what the answer is meant to be.  An answer cargo would repair by its own
+rules is no less valid.  Where cargo refuses, `cargo generate-lockfile
+--locked` says whether the lock is cargo's own fresh answer (identical).
+cargo's exit 101 is read as an answer only for a lock it would change or
+a requirement it cannot meet; anything else leaves reproduced unknown (-).
 
 usage: check.py <answer> <out-dir> <Cargo.toml pac was asked>, through
        eval/check.sh

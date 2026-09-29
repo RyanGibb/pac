@@ -1,46 +1,14 @@
 #!/usr/bin/env python3
-"""Classify each divergent edge as a preference gap or an instance gap.
-
-The question a divergence poses is whether npm's answer was one our
-instance already admitted -- in which case only our preference ordering
-ranked it second -- or one our instance forbids outright.  For an npm-only
-edge (R wants directory d, npm resolved it to V) that is two tests:
-
-  range   does V satisfy the range R's manifest declares for d?  The check
-          runs against npm's own bundled semver, against the root's flat
-          override for d where there is one, and npm usually chose V so
-          it satisfies; it does not when npm keeps an invalid optional peer.
-          Otherwise a failure means our reading of the requirer's
-          declaration differs from npm's -- an alias or an override read
-          differently, or the edge attributed to the wrong requirer -- and
-          is not a preference at all.
-  gate    is V in the snapshot, and does its os/cpu/libc admit the run
-          host (linux/x64/glibc)?  A failure here would be our instance
-          being strictly smaller than npm's.
-
-range and gate both pass  ->  preference gap
-gate fails                ->  instance gap (gate)
-range fails               ->  instance gap (row read differently)
-either end inBundle       ->  out of scope (bundled)
-
-The last is decided before either test.  A lock entry marked inBundle was
-never resolved: npm grafts a bundling package's node_modules in from its
-tarball verbatim, so the version there is whatever the publisher packed,
-published or not, and neither test says anything about it.
-
-The gate test is a tripwire rather than a classification: our frontend
-applies no os/cpu/libc gate, since npm-pick-manifest reads none of them,
-so it reads the manifests and not our instance.  A "gate" verdict means
-either a regression or a version the snapshot simply lacks.
-
-engines is deliberately not a gate on either side.  npm-pick-manifest
-sorts on it (lib/index.js:165-179) and installs an unrunnable version
-when nothing else matches, and so do we, so npm picking a version this
-host cannot run is an ordinary preference gap.  It is named separately
-because engines is the one preference key whose input is a host
-constant: both sides have to be given the same node and npm versions, or
-they rank by different rules and every such edge diverges.  The host
-here is npm-version, which is what scale.sh passes our side.
+"""Classify each npm-only edge of a divergence as a preference gap, npm's
+version being one pac's instance admits, or an instance gap.  range: the
+version meets the range the requirer declares, or the root's flat
+override, read by npm's own semver; gate: the version is in the snapshot,
+and its os, cpu and libc admit this host.  Both pass: a preference gap,
+marked (engines) where the version's engines exclude npm-version's node
+or npm, which both sides rank by (npm-pick-manifest lib/index.js:165-179).
+A failed range is a row read differently; a failed gate, a regression or
+a version the snapshot lacks.  An edge with an end inBundle was never
+resolved, and is out of scope.
 
 usage: verdict.py <run-dir> <query> <out-prefix> [root package.json]
 """
