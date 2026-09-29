@@ -227,15 +227,24 @@ Extra fields: opam `mccs`; npm `twall` (the tool's wall time, `-` under `--regre
 ## Benchmarks
 
 ```sh
-RUN=/tmp/bench STRAT=/tmp/strat eval/bench.sh info floor debian debian-cold alpine opam opam-cold cargo npm npm-shared npm-placement outliers
+RUN=/tmp/bench STRAT=/tmp/strat eval/bench.sh info floor debian debian-cold debian-first alpine opam opam-cold opam-first cargo cargo-cold cargo-first npm npm-shared npm-placement outliers
 python3 eval/bench/summary.py /tmp/bench
 ```
 
 `bench.sh` times pac in each order, `pac-tool` and `pac-pubgrub`, against the tool, one measured process at a time, each asked as `scale.sh` asks it.
 opam's steps also time `opam-mccs`, the same command with `--solver=builtin-mccs+glpk`, opam's default solver, set beside builtin-0install.
 npm's measured rounds run `--offline`, from the cache its warm-up filled, as pac reads the snapshot from disk.
-Per query, a warm-up round and then `REPS` (default 5) measured rounds, each running every variant once; a cold step (`debian-cold`, `opam-cold`) instead runs each variant once after dropping the index, the tool's state and both binaries out of the page cache.
-pac's Debian runs pass `--cache` a directory of the run's rather than pac's default, the user's cache: the warm-up round fills it, and `debian-cold` empties it before each run; `PAC_CACHE` names another directory, and `PAC_CACHE=` passes `--no-cache`, here and in `eval/debian/scale.sh`, whose default is `<run-dir>/pac-cache`.
+Per query, a warm-up round and then `REPS` (default 5) measured rounds, each running every variant once.
+A cold step instead runs each variant once, from nothing in RAM: before each run, `sync` and then `echo 3 | sudo -n /run/current-system/sw/bin/tee /proc/sys/vm/drop_caches` (`TEE` names another `tee`) drop the page cache and the dentry and inode caches, system-wide, so run it with nothing else of yours running; without that sudo rule a cold step logs why and is not run.
+Each ecosystem with one has two, alike for both sides:
+
+| step | persistent caches | before each run |
+|---|---|---|
+| `<eco>-cold`, a cold start | on disk | the same command runs once, as rep 0, a warm-up the tables leave out, to fill them |
+| `<eco>-first`, a first run | deleted | nothing: each side parses from scratch and writes its cache |
+
+The persistent caches are pac's `--cache` (Debian, Cargo) and the tool's own: apt's `pkgcache.bin` and `srcpkgcache.bin`, opam's `repo/state-*.cache`, and cargo's `registry/index` under `CARGO_HOME`; pac keeps none for opam.
+pac's Debian and Cargo runs pass `--cache` a directory of the run's rather than pac's default, the user's cache, one per step, that the warm-up round fills; `PAC_CACHE` names another directory for the warm steps, and `PAC_CACHE=` passes `--no-cache` in every step, here and in `eval/debian/scale.sh`, whose default is `<run-dir>/pac-cache`.
 Wall is taken around GNU time, whose `%M` is the RSS, and pac's `parse` and `solve` lines are kept beside it.
 `PIN` is a command prefix both run under, by default `taskset -c 42`, a core of iphito's NUMA node 0 that serves no device interrupt, whose memory first touch then takes from that node; `PIN=` runs unpinned. `floor` measures GNU time's own start-up under it.
 No query starts at a load average of `LOADSTART` (2.5) or more, and one whose rounds end at `LOADMAX` (3.5) or more is measured again.
@@ -249,7 +258,7 @@ python3 eval/bench/stratify.py debian /tmp/scale/debian 20260927 > /tmp/strat/de
 ```
 
 `eval/bench/outliers.txt` names the queries too slow for the rounds; their steps leave them out, and the `outliers` step measures them `OREPS` (3) times under `OCAP` (1800 s).
-Rows land in `$RUN/res/<step>/<set>/<query>.csv`; `summary.py` gathers them into `bench.csv` and prints, per step and set, each query's median wall and IQR, parse and solve, RSS, and pac's time over the tool's, with the geometric mean of those ratios, its 95% bootstrap interval (the queries resampled 10,000 times, seeded, so a table regenerates alike), and how many queries pac was faster on; for opam, against mccs too.
+Rows land in `$RUN/res/<step>/<set>/<query>.csv`; `summary.py` gathers them into `bench.csv` and prints, per step and set, each query's median wall and IQR, parse and solve, RSS, and pac's time over the tool's, with the geometric mean of those ratios, its 95% bootstrap interval (the queries resampled 10,000 times, seeded, so a table regenerates alike), and how many queries pac was faster on; for opam, against mccs too; and last, those means for every step in one table, the cold modes beside the warm rounds.
 `bench.csv` holds that mean and interval too, a row per step, set and pac variant with `rep=gm` and `ratio_gm`, `ci_lo` and `ci_hi`; against mccs, the row's variant is `pac-tool/opam-mccs` or `pac-pubgrub/opam-mccs`.
 
 ## Ecosystem notes

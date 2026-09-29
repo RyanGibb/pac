@@ -29,14 +29,20 @@
 # `outliers` measures them OREPS times each under OCAP, with a warm-up for
 # the tool alone.
 #
-# usage: bench.sh <step>...    step: info floor debian debian-cold alpine
-#          opam opam-cold cargo npm npm-shared npm-placement outliers
+# A cold step runs each variant once from nothing in RAM, <eco>-cold with
+# both sides' persistent caches on disk, <eco>-first with them deleted;
+# cblock says how.
+#
+# usage: bench.sh <step>...    step: info floor debian debian-cold
+#          debian-first alpine opam opam-cold opam-first cargo cargo-cold
+#          cargo-first npm npm-shared npm-placement outliers
 # env: RUN (outside the source tree), PAC (default _build/default/bin/main.exe),
 #      REPS (5), CAP (seconds, 0 for none), OREPS (3), OCAP (1800),
 #      STRAT, SETS (regress strat), PIN (taskset -c 42), LOADSTART (2.5),
 #      LOADMAX (3.5), PORT (cargo's proxy, 8991), NPORT (npm's shim, 8899),
 #      DEPTH (placement's --depth, 8), PAC_CACHE (pac's cargo and debian
-#      --cache, as run_query.py reads it; empty for --no-cache)
+#      --cache in the warm steps, as run_query.py reads it; empty for
+#      --no-cache, in every step), TEE (/run/current-system/sw/bin/tee)
 # Run inside `nix develop ./nix`, with no ocamlc on PATH: opam reads
 # sys-ocaml-version off whatever ocamlc it finds.
 set -u
@@ -49,7 +55,7 @@ REPS="${REPS:-5}" CAP="${CAP:-0}" OREPS="${OREPS:-3}" OCAP="${OCAP:-1800}"
 STRAT="${STRAT:-}" SETS="${SETS:-regress strat}" PIN="${PIN-taskset -c 42}"
 LOADSTART="${LOADSTART:-2.5}" LOADMAX="${LOADMAX:-3.5}"
 GTIME="${GTIME:-$(readlink -f /run/current-system/sw/bin/time)}"
-APT="${APT:-apt-get}" DEPTH="${DEPTH:-8}"
+APT="${APT:-apt-get}" DEPTH="${DEPTH:-8}" TEE="${TEE:-/run/current-system/sw/bin/tee}"
 export PORT="${PORT:-8991}" NPORT="${NPORT:-8899}"
 mkdir -p "$RUN" && RUN=$(cd "$RUN" && pwd)
 cd "$TOP" || exit 1
@@ -103,10 +109,14 @@ run1() {  # <step> <query> <variant> <rep> <cap> <out> <command...>
 # and DIR, and may supply pre_<eco> <variant> <key> <query>, run untimed
 # before each measured run; a variant pac-<order> is pac in that order, and
 # rep 0 is the warm-up
+pre() {  # <step> <key> <query> <variant>
+  local e=${1%-*}
+  ! declare -F "pre_$e" > /dev/null || "pre_$e" "$4" "$2" "$3" < /dev/null ||
+    { log "$1 $3 $4: pre-step failed, not measured"; return 1; }
+}
 measure() {  # <step> <key> <query> <variant> <rep> <cap>
   local step=$1 k=$2 q=$3 v=$4 r=$5 cap=$6 e=${1%-*} o
-  if declare -F "pre_$e" > /dev/null; then "pre_$e" "$v" "$k" "$q" < /dev/null ||
-    { log "$step $q $v: pre-step failed, not measured"; return 1; }; fi
+  [ "$r" = cold ] || pre "$step" "$k" "$q" "$v" || return 1
   "argv_$e" "$v" "$k" "$q" "$r"
   o="$RUN/out/$step/$SET/$k.$v"
   case $r in 0|1|cold) o="$o.$r" ;; *) o="$o.last" ;; esac
@@ -149,12 +159,31 @@ block() {  # <step> <key> <query> <variant>...
   done
 }
 
-# one run per variant, with the files it reads out of the page cache first:
-# without root there is no drop_caches, so this is posix_fadvise(DONTNEED)
-# on the index, the tool's state, pac and the tool's store path, which
-# leaves the kernel's dentry and inode caches warm
-cblock() {  # <step> <key> <query> <evict paths> <variant>...
-  local step=$1 k=$2 q=$3 ev=$4 dest v
+# A cold run starts with nothing in RAM: sync, then drop_caches, which
+# drops the page cache and the dentry and inode caches alike, so a side
+# that opens many small files pays for their directory entries as one
+# reading a single cache file does not.  It is system-wide and needs root:
+# the one command `sudo -n $TEE /proc/sys/vm/drop_caches`, TEE by full
+# path as a sudoers rule names it.  drop.log keeps how long each took.
+drop() {
+  local t0=$EPOCHREALTIME
+  sync && echo 3 | sudo -n "$TEE" /proc/sys/vm/drop_caches > /dev/null || return 1
+  printf '%s %s\n' "$(date -u +%FT%TZ)" "$(elapsed "$t0" "$EPOCHREALTIME")" >> "$RUN/drop.log"
+}
+can_drop() {  # <step>
+  sudo -n "$TEE" /proc/sys/vm/drop_caches < /dev/null > /dev/null 2>&1 && return 0
+  log "$1: not run, a cold step needs 'sudo -n $TEE /proc/sys/vm/drop_caches', which sudo refuses"
+  return 1
+}
+
+# One run per variant, in one of two modes, the same for both sides.
+# cold: a cold start, both sides' persistent caches on disk and nothing in
+# RAM; a run of the same command just before, rep 0, a warm-up the tables
+# leave out, fills them with what this query reads.
+# first: a first run, both sides' persistent caches deleted, as caches_<eco>
+# lists them, so each parses from scratch and writes its cache.
+cblock() {  # <step> <key> <query> <mode> <variant>...
+  local step=$1 k=$2 q=$3 mode=$4 dest v
   shift 4
   dest="$RUN/res/$step/$SET/$k.csv"
   [ -s "$dest" ] && return 0
@@ -162,33 +191,34 @@ cblock() {  # <step> <key> <query> <evict paths> <variant>...
   quiet
   ROWS="$dest.tmp"; : > "$ROWS"
   for v in "$@"; do
-    python3 "$S/bench/evict.py" $ev >> "$RUN/evict.log" 2>&1
+    if [ "$mode" = cold ]; then measure "$step" "$k" "$q" "$v" 0 "$CAP" || continue
+    else rm -rf $("caches_${step%-*}"); fi
+    pre "$step" "$k" "$q" "$v" || continue
+    drop || { log "$step $q $v: drop_caches failed, not measured"; continue; }
     measure "$step" "$k" "$q" "$v" cold "$CAP"
   done
   mv "$ROWS" "$dest"
   log "$step/$SET $q done (load $(load1))"
 }
 
-# each set of a step, every query a block, or with evict paths a cold one
-sets() {  # <step> <eco> <evict paths or ""> <variant>...
-  local step=$1 eco=$2 ev=$3 k q
+# each set of a step, every query a block, or in a mode a cold one
+sets() {  # <step> <eco> <mode or ""> <variant>...
+  local step=$1 eco=$2 mode=$3 k q
   shift 3
-  log "== $step start: $(uptime)"
+  [ -z "$mode" ] || can_drop "$step" || return 1
+  log "== $step start${mode:+ ($mode, drop_caches)}: $(uptime)"
   for SET in $SETS; do
     while IFS=$'\t' read -r k q <&3; do
-      if [ -n "$ev" ]; then cblock "$step" "$k" "$q" "$ev" "$@"; else block "$step" "$k" "$q" "$@"; fi
+      if [ -n "$mode" ]; then cblock "$step" "$k" "$q" "$mode" "$@"; else block "$step" "$k" "$q" "$@"; fi
     done 3< <(queries "$step" "$eco")
   done
   log "== $step end: $(uptime)"
 }
 
-store() { local p; p=$(readlink -f "$(command -v "$1")"); dirname "$(dirname "$p")"; }
-
 # pac's --cache, as apt reads its pkgcache.bin: the warm-up round fills
-# it, and under debian-cold each run starts with it empty, as the first
-# run on an index does.  PAC_CACHE names another for the warm steps.
-pre_debian() {
-  [ -z "$DCOLD" ] || [ -z "$DCACHE" ] || rm -rf "$DCACHE"
+# it.  PAC_CACHE names another for the warm step; a cold step keeps its own.
+caches_debian() {
+  echo "$DCACHE" "$RUN/aptroot/var/cache/apt/pkgcache.bin" "$RUN/aptroot/var/cache/apt/srcpkgcache.bin"
 }
 argv_debian() {
   local cache=(--no-cache)
@@ -204,7 +234,7 @@ setup_debian() {
     bash "$S/debian/setup.sh" "$RUN/aptroot" > "$RUN/apt-setup.log" 2>&1 ||
     { log "debian setup failed"; return 1; }
   export APT_CONFIG="$RUN/aptroot/etc/apt/apt.conf"
-  DCACHE=${PAC_CACHE-$RUN/debian/pac-cache} DCOLD=
+  DCACHE=${PAC_CACHE-$RUN/debian/pac-cache}
 }
 
 argv_alpine() {
@@ -232,6 +262,8 @@ argv_opam() {
     opam-mccs) CMD=(opam install $3 --dry-run --solver=builtin-mccs+glpk --switch cmp --no-depexts -y) ;;
   esac
 }
+# pac keeps no cache for opam; opam, its repository state marshalled
+caches_opam() { echo "$OPAMROOT"/repo/state-*.cache; }
 setup_opam() {
   if command -v ocamlc > /dev/null; then
     log "ocamlc on PATH ($(command -v ocamlc)): opam would read sys-ocaml-version from it"
@@ -254,6 +286,8 @@ sys.exit(run_query.ask_pac(sys.argv[2])[1] is None)' "$S/cargo" "$3" || return 1
   touch "$w/.asked"
   rm -f "$w/Cargo.lock"
 }
+# pac's and, under CARGO_HOME, cargo's copy of the index entries it fetched
+caches_cargo() { echo "${PCACHE[1]:-}" "$CARGO_HOME/registry/index"; }
 argv_cargo() {
   DIR=$TOP
   case $1 in
@@ -333,13 +367,15 @@ in_npm() {  # <command...>
 step() {
   case $1 in
     debian) setup_debian && sets debian debian "" pac-tool pac-pubgrub apt ;;
-    debian-cold) setup_debian && DCOLD=1 && DCACHE=${DCACHE:+$RUN/debian-cold/pac-cache} &&
-      sets debian-cold debian "repos/debian/Packages $RUN/aptroot $PAC $(store "$APT")" pac-tool pac-pubgrub apt ;;
+    debian-cold|debian-first) setup_debian && DCACHE=${DCACHE:+$RUN/$1/pac-cache} &&
+      sets "$1" debian "${1#*-}" pac-tool pac-pubgrub apt ;;
     alpine) setup_alpine && sets alpine alpine "" pac-tool pac-pubgrub apk ;;
     opam) setup_opam && sets opam opam "" pac-tool pac-pubgrub opam opam-mccs ;;
-    opam-cold) setup_opam &&
-      sets opam-cold opam "repos/opam-repository $RUN/opamroot $PAC $(store opam)" pac-tool pac-pubgrub opam opam-mccs ;;
+    opam-cold|opam-first) setup_opam && sets "$1" opam "${1#*-}" pac-tool pac-pubgrub opam opam-mccs ;;
     cargo) setup_cargo && sets cargo cargo "" pac-tool pac-pubgrub cargo ;;
+    cargo-cold|cargo-first) setup_cargo || return 1
+      [ "${PCACHE[0]}" = --no-cache ] || PCACHE=(--cache "$RUN/$1/pac-cache")
+      sets "$1" cargo "${1#*-}" pac-tool pac-pubgrub cargo ;;
     npm|npm-shared|npm-placement) READING=${1#npm-}; setup_npm && in_npm sets "$1" npm "" pac-tool pac-pubgrub npm ;;
     *) return 2 ;;
   esac
@@ -402,6 +438,7 @@ run_info() {
     echo "governor: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2> /dev/null)"
     echo "pac: $(sha256sum "$PAC")"
     echo "pin: ${PIN:-none}"
+    echo "drop_caches: $(sudo -n "$TEE" /proc/sys/vm/drop_caches < /dev/null > /dev/null 2>&1 && echo allowed || echo refused)"
     echo "time: $GTIME ($("$GTIME" --version 2>&1 | head -n 1))"
     echo "apt: $("$APT" --version 2> /dev/null | head -n 1)"; echo "apk: $("${APK:-apk}" --version 2>&1)"
     echo "opam: $(opam --version)"; echo "cargo: $(cargo --version)"; echo "rustc: $(rustc --version)"
