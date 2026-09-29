@@ -25,10 +25,6 @@ module Make (Place_encoding : Place_encoding.S) : sig
   val depth : t -> int
   val meta : t -> Npl.Occ.t -> Npm_parse.ver option
   val edges : t -> Npl.Occ.t -> edge list
-
-  (* the registry packages each key has been seen to name, as the manifests
-     loaded so far alias them there *)
-  val key_names : t -> string -> string list
   val versions : t -> PName.t -> PVersion.t list
 
   (* what one part of a name's dependees reads, so that the solve converts
