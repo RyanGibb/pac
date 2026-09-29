@@ -60,7 +60,7 @@ Module Conflict (N V : UsualOrderedType).
 
     Module VersionOT := UOTFromCompare Version.
     Module T := Core N VersionOT.
-    Module NSet := FSetUOT N.
+    Module NSet := C.NSet.
 
     Definition embedPkg (p : Pkg.t) : T.Pkg.t := (fst p, Version.Orig (snd p)).
 
@@ -274,36 +274,10 @@ Module Conflict (N V : UsualOrderedType).
         injection E as <-; exact (Hnv Hu).
     Qed.
 
-    Definition absentIn (S : PkgSet.t) (ns : NSet.t) : NSet.t :=
-      NSet.filter
-        (fun n => negb (PkgSet.exists_
-                          (fun p => if N.eq_dec (fst p) n then true else false)
-                          S))
-        ns.
-
-    Lemma exists_name_iff : forall S n,
-        PkgSet.exists_ (fun p => if N.eq_dec (fst p) n then true else false) S
-          = true <-> exists v, PkgSet.In (n, v) S.
-    Proof.
-      intros S n; rewrite PkgSet.exists_spec'; split.
-      - intros [[m v] [Hm Ht]]; cbn [fst] in Ht.
-        destruct (N.eq_dec m n) as [-> | ]; [eauto | discriminate].
-      - intros [v Hv]; exists (n, v); cbn [fst]; rewrite dec_refl; auto.
-    Qed.
-
-    Lemma mem_absentIn : forall S ns n,
-        NSet.In n (absentIn S ns) <->
-        NSet.In n ns /\ forall v, ~ PkgSet.In (n, v) S.
-    Proof.
-      intros S ns n; unfold absentIn.
-      rewrite NSet.filter_spec', Bool.negb_true_iff,
-        <- Bool.not_true_iff_false, exists_name_iff.
-      firstorder.
-    Qed.
-
     Definition coreResolution (S : PkgSet.t) R D (G : ConflictRel.t) :
         T.PkgSet.t :=
-      T.PkgSet.union (embedSet S) (absentPkgs (absentIn S (instNames R D G))).
+      T.PkgSet.union (embedSet S)
+        (absentPkgs (C.absentIn S (instNames R D G))).
 
     Lemma mem_coreResolution :
       forall S R D G (y : T.Pkg.t),
@@ -316,11 +290,11 @@ Module Conflict (N V : UsualOrderedType).
       rewrite T.PkgSet.union_spec, SOpt.mem_map, mem_absentPkgs.
       split.
       - intros [H | [n [Hn ->]]]; [left; exact H | right].
-        apply mem_absentIn in Hn; destruct Hn as [Hn Hnone].
+        apply C.mem_absentIn in Hn; destruct Hn as [Hn Hnone].
         exists n; auto.
       - intros [H | [n [Hn [Hnone ->]]]]; [left; exact H | right].
         exists n; split; [| reflexivity].
-        apply mem_absentIn; auto.
+        apply C.mem_absentIn; auto.
     Qed.
 
     Lemma embed_mem_coreResolution_inv :
@@ -358,16 +332,14 @@ Module Conflict (N V : UsualOrderedType).
           * apply mem_coreResolution; left; exists (m0, v); auto.
         + assert (HpS : PkgSet.In p S)
             by (apply (embed_mem_coreResolution_inv S R D G p); exact Hq).
-          destruct (PkgSet.exists_
-                      (fun q => if N.eq_dec (fst q) n then true else false) S)
-            eqn:E.
-          * apply exists_name_iff in E; destruct E as [u Hu].
+          destruct (C.hasNameb S n) eqn:E.
+          * apply C.hasNameb_true in E; destruct E as [u Hu].
             exists (Version.Orig u); split.
             -- apply mem_complementVS; right; exists u.
                split; [apply Hsub; exact Hu | split; [| reflexivity]].
                intro Huv; apply (Havoid p HpS n vs HG); exists u; auto.
             -- apply mem_coreResolution; left; exists (n, u); auto.
-          * rewrite <- Bool.not_true_iff_false, exists_name_iff in E.
+          * rewrite <- Bool.not_true_iff_false, C.hasNameb_true in E.
             exists Version.Bot;
               split; [apply mem_complementVS; left; reflexivity |].
             apply mem_coreResolution; right; exists n.
@@ -403,10 +375,6 @@ Module Conflict (N V : UsualOrderedType).
       Module DepRelFibred := FibredRel Pkg C.Dependees C.DepElt C.DepRel.
       Module ConflictRelFibred :=
         FibredLabelledRel Pkg N VSet.AsUOT ConfElt ConflictRel.
-      Module RKeys := PreimageOfKeys N Pkg NSet PkgSet.
-
-      Definition realPreimage (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
-        RKeys.ofKeys fst ns R.
 
       Definition conflictNames (G : ConflictRel.t) : NSet.t :=
         SOcn.map (fun '(_, (n, _)) => n) G.
@@ -420,13 +388,6 @@ Module Conflict (N V : UsualOrderedType).
           exists p, vs; exact HG.
         - intros [p [vs HG]]; exists (p, (n, vs)); split;
             [exact HG | reflexivity].
-      Qed.
-
-      Lemma versions_realPreimage : forall R ns n,
-          NSet.In n ns -> C.versions (realPreimage R ns) n = C.versions R n.
-      Proof.
-        intros R ns n Hn; apply C.versions_ext; intro v.
-        unfold realPreimage; rewrite RKeys.mem_ofKeys; cbn [fst]; tauto.
       Qed.
 
       Lemma reachable_instNames : forall R D G (n : N.t),
@@ -476,7 +437,7 @@ Module Conflict (N V : UsualOrderedType).
           T.dependees (reduceDeps R D G) (embedPkg (n, v)) =
           T.dependees
             (reduceDeps
-               (realPreimage R
+               (C.realPreimage R
                   (conflictNames (ConflictRelFibred.tailFibre G (n, v))))
                (DepRelFibred.tailFibre D (n, v))
                (ConflictRelFibred.tailFibre G (n, v)))
@@ -484,11 +445,11 @@ Module Conflict (N V : UsualOrderedType).
       Proof.
         intros R D G n v; apply T.dependees_ext; intros [m ws].
         assert (Hc : forall n' vs, ConflictRel.In ((n, v), (n', vs)) G ->
-                  complementVS (realPreimage R (conflictNames
+                  complementVS (C.realPreimage R (conflictNames
                     (ConflictRelFibred.tailFibre G (n, v)))) n' vs =
                   complementVS R n' vs).
         { intros n' vs HG; unfold complementVS.
-          rewrite versions_realPreimage; [reflexivity |].
+          rewrite C.versions_realPreimage; [reflexivity |].
           apply mem_conflictNames; exists (n, v), vs.
           apply ConflictRelFibred.mem_tailFibre; auto. }
         rewrite !mem_reduceDeps.

@@ -57,28 +57,20 @@ Module Core (N V : UsualOrderedType).
          destruct (DependeesSet.empty_spec Hin)].
   Qed.
 
-  Definition versions (R : PkgSet.t) (n : N.t) : VSet.t :=
-    PkgSet.fold (fun '(m, v) acc =>
-        if N.eq_dec m n then VSet.add v acc else acc)
-      R VSet.empty.
-
   Module SOpv := SetOps Pkg V PkgSet VSet.
+  Definition versions (R : PkgSet.t) (n : N.t) : VSet.t :=
+    SOpv.filterMap (fun '(m, v) => if N.eq_dec m n then Some v else None) R.
+
   Lemma mem_versions : forall R (n : N.t) (v : V.t),
       VSet.In v (versions R n) <-> PkgSet.In (n, v) R.
   Proof.
-    intros R n v; unfold versions.
-    rewrite (SOpv.in_fold _
-      (fun e => if N.eq_dec (fst e) n
-                then VSet.singleton (snd e) else VSet.empty)).
-    2:{ intros [m u] a y; simpl; pose proof (SOpv.empty_in y).
-        destruct (N.eq_dec m n); rewrite ?SOpv.add_in, ?SOpv.singleton_in;
-          tauto. }
-    pose proof (SOpv.empty_in v) as E0; split.
-    - intros [H | [[m u] [HeR He]]]; [tauto | simpl in He].
-      destruct (N.eq_dec m n) as [-> | _]; [| tauto].
-      apply SOpv.singleton_in in He; subst u; exact HeR.
-    - intro H; right; exists (n, v); simpl.
-      rewrite dec_refl, SOpv.singleton_in; auto.
+    intros R n v; unfold versions; rewrite SOpv.mem_filterMap.
+    split.
+    - intros [[m u] [HR Hm]]; cbn beta iota in Hm.
+      destruct (N.eq_dec m n) as [-> | NE]; [| discriminate].
+      injection Hm as <-; exact HR.
+    - intro H; exists (n, v); split; [exact H | cbn beta iota].
+      rewrite dec_refl; reflexivity.
   Qed.
 
   Lemma versions_ext : forall R R' (n : N.t),
@@ -87,6 +79,61 @@ Module Core (N V : UsualOrderedType).
   Proof.
     intros R R' n H; apply VSet.ext; intro v.
     rewrite !mem_versions; exact (H v).
+  Qed.
+
+  Module NSet := FSetUOT N.
+
+  Definition hasNameb (S : PkgSet.t) (n : N.t) : bool :=
+    PkgSet.exists_ (fun p => if N.eq_dec (fst p) n then true else false) S.
+
+  Lemma hasNameb_true : forall S n,
+      hasNameb S n = true <-> exists v, PkgSet.In (n, v) S.
+  Proof.
+    intros S n; unfold hasNameb; rewrite PkgSet.exists_spec'.
+    split.
+    - intros [[m v] [Hm Ht]]; cbn [fst] in Ht.
+      destruct (N.eq_dec m n) as [-> | ]; [| discriminate].
+      exists v; exact Hm.
+    - intros [v Hv]; exists (n, v); split; [exact Hv |].
+      cbn [fst]; apply dec_refl.
+  Qed.
+
+  Lemma hasNameb_false : forall S n,
+      hasNameb S n = false <-> forall v, ~ PkgSet.In (n, v) S.
+  Proof.
+    intros S n; split.
+    - intros E v Hv.
+      assert (Ht : hasNameb S n = true)
+        by (apply hasNameb_true; exists v; exact Hv).
+      congruence.
+    - intro Hnone; destruct (hasNameb S n) eqn:E; [| reflexivity].
+      apply hasNameb_true in E; destruct E as [v Hv]; destruct (Hnone v Hv).
+  Qed.
+
+  Definition absentIn (S : PkgSet.t) (ns : NSet.t) : NSet.t :=
+    NSet.filter (fun n => negb (hasNameb S n)) ns.
+
+  Lemma mem_absentIn : forall S ns n,
+      NSet.In n (absentIn S ns) <->
+      NSet.In n ns /\ forall v, ~ PkgSet.In (n, v) S.
+  Proof.
+    intros S ns n; unfold absentIn; rewrite NSet.filter_spec'.
+    rewrite Bool.negb_true_iff, hasNameb_false; reflexivity.
+  Qed.
+
+  Module PkgPreimage := PreimageOfKeys N Pkg NSet PkgSet.
+  Definition realPreimage (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
+    PkgPreimage.ofKeys fst ns R.
+
+  Lemma mem_realPreimage : forall R ns q,
+      PkgSet.In q (realPreimage R ns) <-> PkgSet.In q R /\ NSet.In (fst q) ns.
+  Proof. intros R ns q; apply PkgPreimage.mem_ofKeys. Qed.
+
+  Lemma versions_realPreimage : forall R ns n,
+      NSet.In n ns -> versions (realPreimage R ns) n = versions R n.
+  Proof.
+    intros R ns n Hn; apply versions_ext; intro v.
+    rewrite mem_realPreimage; cbn [fst]; tauto.
   Qed.
 
   Definition VersionUnique (S : PkgSet.t) : Prop :=

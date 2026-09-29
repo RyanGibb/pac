@@ -26,6 +26,7 @@ C.Merge.merge_functionalInName
 C.Merge.merge_resolution_iff
 C.Merge.mergedVS
 C.dependees
+C.realPreimage
 C.versions
 
 Cx.Encoding.satEncoding
@@ -324,7 +325,6 @@ Cgo.Lookup.dependees_reduceDeps
 Cgo.Lookup.dependees_reduceDepsInert
 Cgo.Lookup.fdefFibre
 Cgo.Lookup.reads
-Cgo.Lookup.realPreimage
 Cgo.Lookup.slot_declines
 Cgo.Lookup.supportAt
 Cgo.Lookup.versions_link_mono
@@ -357,7 +357,6 @@ Cgo.evalReq
 Cgo.evalReqBy
 Cgo.linkRel
 Cgo.rangeEval
-Cgo.realVersions
 Cgo.reduceDeps
 Cgo.reduceReal
 Cgo.rgHolds

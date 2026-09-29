@@ -46,22 +46,6 @@ Module Versions (N V : UsualOrderedType).
   Module PkgSet := C.PkgSet.
   Module VSet := C.VSet.
 
-  Module SOpv := SetOps Pkg V PkgSet VSet.
-  Definition realVersions (R : PkgSet.t) (n : N.t) : VSet.t :=
-    SOpv.filterMap (fun '(m, v) => if N.eq_dec m n then Some v else None) R.
-
-  Lemma realVersions_spec : forall R n v,
-      VSet.In v (realVersions R n) <-> PkgSet.In (n, v) R.
-  Proof.
-    intros R m v; unfold realVersions; rewrite SOpv.mem_filterMap.
-    split.
-    - intros [[pn pv] [HpR Hp]]; cbn beta iota in Hp.
-      destruct (N.eq_dec pn m) as [-> | NE]; [| discriminate].
-      injection Hp as <-; exact HpR.
-    - intro H; exists (m, v); split; [exact H | cbn beta iota].
-      rewrite dec_refl; reflexivity.
-  Qed.
-
   Inductive Formula : Type :=
   | FTop
   | FBot
@@ -167,17 +151,17 @@ Module Versions (N V : UsualOrderedType).
         forall p, PkgSet.In p S ->
         forall (n : N.t) (f : Formula),
           DepRel.In (p, (n, f)) D ->
-          exists v, VSet.In v (eval f (realVersions R n)) /\ PkgSet.In (n, v) S
+          exists v, VSet.In v (eval f (C.versions R n)) /\ PkgSet.In (n, v) S
     ; res_version_unique : C.VersionUnique S }.
 
   Module Reduction.
     Module SOvd := SetOps DepElt C.DepElt DepRel C.DepRel.
     Definition reduce (R : PkgSet.t) (D : DepRel.t) : C.DepRel.t :=
-      SOvd.map (fun '(p, (n, f)) => (p, (n, eval f (realVersions R n)))) D.
+      SOvd.map (fun '(p, (n, f)) => (p, (n, eval f (C.versions R n)))) D.
 
     Lemma mem_reduce : forall R D (p : Pkg.t) (n : N.t) (ws : VSet.t),
         C.DepRel.In (p, (n, ws)) (reduce R D) <->
-        exists f, DepRel.In (p, (n, f)) D /\ ws = eval f (realVersions R n).
+        exists f, DepRel.In (p, (n, f)) D /\ ws = eval f (C.versions R n).
     Proof.
       intros R D p n ws; unfold reduce; rewrite SOvd.mem_map.
       split.
@@ -194,7 +178,7 @@ Module Versions (N V : UsualOrderedType).
       intros R D r S; split; intros [Hsub Hroot Hdep Huniq]; constructor;
         try assumption.
       - intros p Hp m f HD.
-        apply (Hdep p Hp m (eval f (realVersions R m))).
+        apply (Hdep p Hp m (eval f (C.versions R m))).
         apply mem_reduce; exists f; split; [exact HD | reflexivity].
       - intros p Hp m ws Hmem.
         apply mem_reduce in Hmem; destruct Hmem as [f [HD ->]].
@@ -209,13 +193,13 @@ Module Versions (N V : UsualOrderedType).
       Definition realPreimage (R : PkgSet.t) (Dp : DepRel.t) : PkgSet.t :=
         PkgPreimage.preimage fst (DepKeys.hasKey DepRelFibred.node Dp) R.
 
-      Lemma realVersions_realPreimage : forall R Dp n,
+      Lemma versions_realPreimage : forall R Dp n,
           (exists q m f, DepRel.In (q, (m, f)) Dp /\ m = n) ->
-          realVersions (realPreimage R Dp) n = realVersions R n.
+          C.versions (realPreimage R Dp) n = C.versions R n.
       Proof.
         intros R Dp m [q [m' [f [He Hm]]]].
         apply VSet.ext; intro v.
-        rewrite !realVersions_spec; unfold realPreimage.
+        rewrite !C.mem_versions; unfold realPreimage.
         rewrite PkgPreimage.mem_preimage.
         split.
         - intros [H _]; exact H.
@@ -240,7 +224,7 @@ Module Versions (N V : UsualOrderedType).
         intros R Dp; apply C.DepRel.ext; intros [q [n vs]].
         rewrite !mem_reduce.
         split; intros [f [HD ->]]; exists f; split; [exact HD | | exact HD |];
-          rewrite (realVersions_realPreimage R Dp n);
+          rewrite (versions_realPreimage R Dp n);
           solve [reflexivity | exists q, n, f; split; [exact HD | reflexivity]].
       Qed.
 

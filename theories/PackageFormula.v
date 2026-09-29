@@ -230,7 +230,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Module NameOT := UOTFromCompare Name.
     Module VersionOT := UOTFromCompare Version.
     Module T := Core NameOT VersionOT.
-    Module NSet := FSetUOT N.
+    Module NSet := C.NSet.
 
     Definition embedPkg (p : Pkg.t) : T.Pkg.t :=
       let '(m, v) := p in (Name.Orig m, Version.Orig v).
@@ -1007,44 +1007,6 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         intros y Hy; simpl; rewrite Ea; exact Hy.
     Qed.
 
-    Definition hasNameb (S : PkgSet.t) (n : N.t) : bool :=
-      PkgSet.exists_ (fun p => if N.eq_dec (fst p) n then true else false) S.
-
-    Lemma hasNameb_true : forall S n,
-        hasNameb S n = true <-> exists v, PkgSet.In (n, v) S.
-    Proof.
-      intros S n; unfold hasNameb; rewrite PkgSet.exists_spec'.
-      split.
-      - intros [[m v] [Hm Ht]]; cbn [fst] in Ht.
-        destruct (N.eq_dec m n) as [-> | ]; [| discriminate].
-        exists v; exact Hm.
-      - intros [v Hv]; exists (n, v); split; [exact Hv |].
-        cbn [fst]; destruct (N.eq_dec n n) as [_ | NE];
-          [reflexivity | contradiction NE; reflexivity].
-    Qed.
-
-    Lemma hasNameb_false : forall S n,
-        hasNameb S n = false <-> forall v, ~ PkgSet.In (n, v) S.
-    Proof.
-      intros S n; split.
-      - intros E v Hv.
-        assert (Ht : hasNameb S n = true) by (apply hasNameb_true; exists v; exact Hv).
-        congruence.
-      - intro Hnone; destruct (hasNameb S n) eqn:E; [| reflexivity].
-        apply hasNameb_true in E; destruct E as [v Hv]; destruct (Hnone v Hv).
-    Qed.
-
-    Definition absentIn (S : PkgSet.t) (ns : NSet.t) : NSet.t :=
-      NSet.filter (fun n => negb (hasNameb S n)) ns.
-
-    Lemma mem_absentIn : forall S ns n,
-        NSet.In n (absentIn S ns) <->
-        NSet.In n ns /\ forall v, ~ PkgSet.In (n, v) S.
-    Proof.
-      intros S ns n; unfold absentIn; rewrite NSet.filter_spec'.
-      rewrite Bool.negb_true_iff, hasNameb_false; reflexivity.
-    Qed.
-
     Definition coreResolution (S : PkgSet.t) (R : PkgSet.t) (D : DepRel.t)
       : T.PkgSet.t :=
       T.PkgSet.union (SOpt.map embedPkg S)
@@ -1052,7 +1014,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
            (SOet.unionMap (fun '(p, f) =>
                 if PkgSet.mem p S then witnessSet S f else T.PkgSet.empty)
               D)
-           (absentPkgs (absentIn S (instNames R D)))).
+           (absentPkgs (C.absentIn S (instNames R D)))).
 
     Lemma witnessSet_subset_arisingPkgs_aux : forall S f,
         (forall p : T.Pkg.t,
@@ -1266,14 +1228,14 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             [| exfalso; exact (SOpt.empty_in _ Hy)].
           exists q, g; split; [exact He |];
             split; [apply PkgSet.mem_spec; exact E | exact Hy].
-        + right; right; apply mem_absentIn in Hn; destruct Hn as [Hn Hnone].
+        + right; right; apply C.mem_absentIn in Hn; destruct Hn as [Hn Hnone].
           exists n; auto.
       - intros [H | [[q [g [Hd [HqS Hy]]]] | [n [Hn [Ha [Hnone ->]]]]]];
           [left; exact H | |].
         + right; left; exists (q, g); split; [exact Hd |].
           apply PkgSet.mem_spec in HqS; cbn beta iota; rewrite HqS; exact Hy.
         + right; right; exists n; split; [| split; [exact Ha | reflexivity]].
-          apply mem_absentIn; auto.
+          apply C.mem_absentIn; auto.
     Qed.
 
     Theorem packageFormulaResolution_coreResolution : forall S R D,
@@ -1484,13 +1446,13 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                  exists v, T.VSet.In v (complementVS Vq m vs) /\
                            T.PkgSet.In (Name.Orig m, v) w).
       { intros m vs Hm Hns.
-        destruct (hasNameb S m) eqn:E.
-        - apply hasNameb_true in E; destruct E as [u Hu].
+        destruct (C.hasNameb S m) eqn:E.
+        - apply C.hasNameb_true in E; destruct E as [u Hu].
           exists (Version.Orig u); split; [| exact (Hemb (m, u) Hu)].
           apply mem_complementVS; right; exists u.
           split; [exact (HVq m u Hu) | split; [| reflexivity]].
           intro Huv; apply Hns; exists u; auto.
-        - assert (Hnone := proj1 (hasNameb_false S m) E).
+        - assert (Hnone := proj1 (C.hasNameb_false S m) E).
           destruct (Ab.hasAbsent m) eqn:Ha.
           + exists Version.Bot; split;
               [apply mem_complementVS; left; split; [reflexivity | exact Ha] |].
@@ -2026,17 +1988,6 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
 
       Module PkgFibred := FibredRel N V Pkg PkgSet.
       Module DepRelFibred := FibredRel Pkg Dependees DepElt DepRel.
-      Module RKeys := PreimageOfKeys N Pkg NSet PkgSet.
-
-      Definition realPreimage (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
-        RKeys.ofKeys fst ns R.
-
-      Lemma versions_realPreimage : forall R ns n,
-          NSet.In n ns -> C.versions (realPreimage R ns) n = C.versions R n.
-      Proof.
-        intros R ns n Hn; apply C.versions_ext; intro v.
-        unfold realPreimage; rewrite RKeys.mem_ofKeys; cbn [fst]; tauto.
-      Qed.
 
       Definition syntheticPkgs (n : Name.t) : T.PkgSet.t :=
         match n with
@@ -2364,16 +2315,16 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           T.dependees (reduceDeps R D) (Name.Orig n, Version.Orig v) =
           T.dependees
             (reduceDeps
-               (realPreimage R
+               (C.realPreimage R
                   (ownNegDepNames (DepRelFibred.tailFibre D (n, v))))
                (DepRelFibred.tailFibre D (n, v)))
             (Name.Orig n, Version.Orig v).
       Proof.
         intros R D n v; rewrite (dependees_lookupOrigBy R D
-          (C.versions (realPreimage R
+          (C.versions (C.realPreimage R
              (ownNegDepNames (DepRelFibred.tailFibre D (n, v)))))).
         - reflexivity.
-        - intros m Hn; apply versions_realPreimage; exact Hn.
+        - intros m Hn; apply C.versions_realPreimage; exact Hn.
       Qed.
 
       Theorem dependees_lookupAbsent : forall R D n,

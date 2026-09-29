@@ -183,7 +183,7 @@ Module VariableFormula (N V : UsualOrderedType)
     Module Name := PF.Reduction.Name.
     Module Version := PF.Reduction.Version.
     Module YSet := FSetUOT Y.
-    Module NSet := FSetUOT N.
+    Module NSet := C.NSet.
 
     Definition liftPkg (p : Pkg.t) : PF.Pkg.t := (inl (fst p), inl (snd p)).
 
@@ -654,7 +654,6 @@ Module VariableFormula (N V : UsualOrderedType)
     Module Lookup.
       Module PkgFibred := FibredRel N V Pkg PkgSet.
       Module DepRelFibred := FibredRel Pkg Dependees DepElt DepRel.
-      Module RKeys := PreimageOfKeys N Pkg NSet PkgSet.
 
       (* A negated comparison complements against Y_x, which the
          sub-instance carries whole, so only atoms count. *)
@@ -678,9 +677,6 @@ Module VariableFormula (N V : UsualOrderedType)
       Module SOen := SetOps DepElt N DepRel NSet.
       Definition ownNegDepNames (D : DepRel.t) : NSet.t :=
         SOen.unionMap (fun e => ownNegNames (snd e)) D.
-
-      Definition realPreimage (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
-        RKeys.ofKeys fst ns R.
 
       Definition valuesAt (Y_x : X.t -> YSet.t) (x : X.t) : X.t -> YSet.t :=
         fun x' => if X.eq_dec x x' then Y_x x else YSet.empty.
@@ -824,18 +820,17 @@ Module VariableFormula (N V : UsualOrderedType)
             (Name.Orig (inl n), Version.Orig (inl v)) =
           T.dependees
             (reduceDeps Y_x
-               (realPreimage R
+               (C.realPreimage R
                   (ownNegDepNames (DepRelFibred.tailFibre D (n, v))))
                (DepRelFibred.tailFibre D (n, v)))
             (Name.Orig (inl n), Version.Orig (inl v)).
       Proof.
         intros Y_x R D n v.
         rewrite (dependees_lookupOrigBy Y_x R D
-                   (C.versions (realPreimage R
+                   (C.versions (C.realPreimage R
                       (ownNegDepNames (DepRelFibred.tailFibre D (n, v)))))),
           reduceDeps_by by
-          (intros m Hn; apply C.versions_ext; intro w;
-           unfold realPreimage; rewrite RKeys.mem_ofKeys; cbn [fst]; tauto).
+          (intros m Hn; apply C.versions_realPreimage; exact Hn).
         reflexivity.
       Qed.
 

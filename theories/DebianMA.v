@@ -1206,15 +1206,15 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       rewrite Hf; reflexivity.
     Qed.
 
-    Lemma realVersions_restrict : forall R Rs (nx : QN.t),
+    Lemma versions_restrict : forall R Rs (nx : QN.t),
         PkgSet.Subset Rs R ->
         (forall q, PkgSet.In q R ->
            (pname q, QAArch (parch q)) = nx -> PkgSet.In q Rs) ->
-        Deb.Ver.realVersions (reduceReal Rs) nx =
-        Deb.Ver.realVersions (reduceReal R) nx.
+        Deb.C.versions (reduceReal Rs) nx =
+        Deb.C.versions (reduceReal R) nx.
     Proof.
       intros R Rs nx Hsub Hcov; apply Deb.VSet.ext; intro v.
-      rewrite !Deb.Ver.realVersions_spec, !mem_reduceReal.
+      rewrite !Deb.C.mem_versions, !mem_reduceReal.
       split; intros [q [HqR Hq]]; exists q; (split; [| exact Hq]).
       - exact (Hsub _ HqR).
       - apply Hcov; [exact HqR | exact (f_equal fst (eq_sym Hq))].
@@ -1315,7 +1315,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       assert (Hev : Deb.evalAt (reduceReal Rr) ((m, x), f)
                     = Deb.evalAt (reduceReal (inst_repo I)) ((m, x), f)).
       { unfold Deb.evalAt; cbn [Deb.aname Deb.aform fst snd].
-        rewrite (realVersions_restrict (inst_repo I) Rr (m, x) Hrr);
+        rewrite (versions_restrict (inst_repo I) Rr (m, x) Hrr);
           [reflexivity |].
         intros q HqR Hq.
         assert (Hq2 : pname q = m) by exact (f_equal fst Hq).
@@ -1347,7 +1347,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       destruct (Deb.provb (reduceProv (inst_repo I) (inst_prov I) (inst_cls I))
                   a'); [reflexivity |].
       unfold Deb.evalAt.
-      rewrite (realVersions_restrict (inst_repo I) Rr (Deb.aname a') Hrr);
+      rewrite (versions_restrict (inst_repo I) Rr (Deb.aname a') Hrr);
         [reflexivity |].
       intros q HqR Hq.
       assert (Hq2 : pname q = fst (fst a')) by exact (f_equal fst Hq).
@@ -1689,7 +1689,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         Deb.versions (reduceInst I) (Deb.Name.Orig (n, QAArch b)) =
         Deb.T.VSet.add Deb.Version.Bot
           (Deb.embedVS
-             (Deb.Ver.realVersions (reduceReal (realAt (inst_repo I) n b))
+             (Deb.C.versions (reduceReal (realAt (inst_repo I) n b))
                 (n, QAArch b))).
     Proof.
       intros I n b Hr H.
@@ -1698,8 +1698,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         by (apply mem_reduceReal; exists (inst_root I);
             split; [exact Hr | reflexivity]).
       rewrite (Deb.Lookup.versions_lookupOrig (reduceInst I) _ Hr' H).
-      rewrite Deb.Lookup.realVersions_tailFibre.
-      rewrite (realVersions_restrict (inst_repo I) (realAt (inst_repo I) n b)
+      rewrite Deb.Lookup.versions_tailFibre.
+      rewrite (versions_restrict (inst_repo I) (realAt (inst_repo I) n b)
                  (n, QAArch b));
         [reflexivity | |].
       - intros q Hq; exact (proj1 (proj1 (mem_realAt (inst_repo I) n b q) Hq)).
@@ -1727,7 +1727,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       rewrite Deb.SOvw.add_in, Deb.T.VSet.singleton_spec.
       split; [intros [H | H]; [exact H |] | intro H; left; exact H].
       exfalso; unfold Deb.embedVS in H; apply Deb.SOvw.mem_map in H.
-      destruct H as [v [Hv _]]; apply Deb.Ver.realVersions_spec in Hv.
+      destruct H as [v [Hv _]]; apply Deb.C.mem_versions in Hv.
       destruct (reduceReal_arch (inst_repo I) (n, x) v Hv) as [b Hb];
         cbn [snd] in Hb.
       exact (Hx b Hb).

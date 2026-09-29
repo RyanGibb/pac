@@ -720,7 +720,7 @@ Example npl_edges :
 Proof. reflexivity. Qed.
 
 Example npl_key :
-  NplS.Pl.VSet.elements (NplS.Pl.repoVersions (NplS.placeRepo nplInst) npmX) =
+  NplS.Pl.VSet.elements (NplS.Pl.C.versions (NplS.placeRepo nplInst) npmX) =
   NplS.Occ.Reg npmB 1 :: nil.
 Proof. reflexivity. Qed.
 

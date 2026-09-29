@@ -37,33 +37,9 @@ Module Placement (N V : UsualOrderedType).
   Definition land (pe : bool) (l : Path.t) : Path.t :=
     if pe then par l else l.
 
-  (* Core's versions inserts one version at a time, quadratic in a name's
-     versions; this sorts them in one go. *)
-  Definition repoVersions (R : PkgSet.t) (a : N.t) : VSet.t :=
-    C.SOpv.filterMap
-      (fun '(m, v) => if N.eq_dec m a then Some v else None) R.
-
-  Lemma mem_repoVersions : forall R a v,
-      VSet.In v (repoVersions R a) <-> PkgSet.In (a, v) R.
-  Proof.
-    intros R a v; unfold repoVersions; rewrite C.SOpv.mem_filterMap; split.
-    - intros [[m u] [H E]]; cbn beta iota in E.
-      destruct (N.eq_dec m a) as [-> |]; [| discriminate E].
-      injection E as ->; exact H.
-    - intro H; exists (a, v); split; [exact H | cbn beta iota; apply dec_refl].
-  Qed.
-
-  Lemma repoVersions_ext : forall R R' a,
-      (forall v, PkgSet.In (a, v) R <-> PkgSet.In (a, v) R') ->
-      repoVersions R a = repoVersions R' a.
-  Proof.
-    intros R R' a H; apply VSet.ext; intro v.
-    rewrite !mem_repoVersions; exact (H v).
-  Qed.
-
   Module SOlp := SetOps OccElt Pkg Layout PkgSet.
   Definition occupants (L : Layout.t) (l : Path.t) (a : N.t) : VSet.t :=
-    repoVersions
+    C.versions
       (SOlp.filterMap (fun '(l', p) =>
            if Path.eq_dec l' l then Some p else None) L)
       a.
@@ -72,7 +48,7 @@ Module Placement (N V : UsualOrderedType).
       VSet.In v (occupants L l a) <-> Layout.In (l, (a, v)) L.
   Proof.
     intros L l a v; unfold occupants.
-    rewrite mem_repoVersions, SOlp.mem_filterMap; split.
+    rewrite C.mem_versions, SOlp.mem_filterMap; split.
     - intros [[l' p] [Hin H]]; cbn beta iota in H.
       destruct (Path.eq_dec l' l) as [-> |]; [| discriminate H].
       injection H as ->; exact Hin.
@@ -738,12 +714,12 @@ Module Placement (N V : UsualOrderedType).
       | Name.Loc l a =>
           T.VSet.add Version.Bot
             (if Nat.ltb (length l) depth
-             then SOvt.map Version.Occ (repoVersions (inst_repo I) a)
+             then SOvt.map Version.Occ (C.versions (inst_repo I) a)
              else T.VSet.empty)
       | Name.Walk l a =>
           T.VSet.add Version.Bot
             (along (fun l' => Nat.ltb (length l') depth) l
-               (repoVersions (inst_repo I) a))
+               (C.versions (inst_repo I) a))
       end.
 
     Lemma mem_versions_loc : forall I depth l a w,
@@ -754,7 +730,7 @@ Module Placement (N V : UsualOrderedType).
     Proof.
       intros; cbn [versions].
       rewrite SOvt.add_in, SOvt.in_if_empty, SOvt.mem_map, Nat.ltb_lt.
-      setoid_rewrite mem_repoVersions; firstorder.
+      setoid_rewrite C.mem_versions; firstorder.
     Qed.
 
     Lemma mem_versions_walk : forall I depth l a w,
@@ -764,7 +740,7 @@ Module Placement (N V : UsualOrderedType).
           PkgSet.In (a, u) (inst_repo I) /\ w = Version.Found l' u.
     Proof.
       intros; cbn [versions]; rewrite SOvt.add_in, mem_along.
-      setoid_rewrite Nat.ltb_lt; setoid_rewrite mem_repoVersions; reflexivity.
+      setoid_rewrite Nat.ltb_lt; setoid_rewrite C.mem_versions; reflexivity.
     Qed.
 
     Module SOvp := SetOps VersionOT T.Pkg T.VSet T.PkgSet.
@@ -1371,9 +1347,9 @@ Module Placement (N V : UsualOrderedType).
         exists q h, T.DepRel.In (q, (n, h)) (reduceDeps I depth).
 
       Lemma versions_fibre : forall R a,
-          repoVersions (PkgFibred.tailFibre R a) a = repoVersions R a.
+          C.versions (PkgFibred.tailFibre R a) a = C.versions R a.
       Proof.
-        intros R a; apply repoVersions_ext; intro v.
+        intros R a; apply C.versions_ext; intro v.
         rewrite PkgFibred.mem_tailFibre.
         split; [intros [H _]; exact H | intro H; split; [exact H | reflexivity]].
       Qed.

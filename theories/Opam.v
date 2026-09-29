@@ -290,10 +290,6 @@ Module Opam (N V X Y E : UsualOrderedType).
       SOpt.map embedPkg S.
 
     Module SOvv := SetOps V TVOT VSet PF.VSet.
-    Module SOpv := SetOps Pkg V PkgSet VSet.
-    Definition realVersions (R : PkgSet.t) (n : N.t) : VSet.t :=
-      SOpv.filterMap
-        (fun '(m, v) => if N.eq_dec m n then Some v else None) R.
 
     Definition pinOKb (Pins : PkgSet.t) (p : Pkg.t) : bool :=
       PkgSet.for_all
@@ -319,7 +315,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Definition srcVersions (rho : Valuation) (I : Inst) (n : N.t)
       : VSet.t :=
-      realVersions (effRepo rho I) n.
+      C.versions (effRepo rho I) n.
 
     Definition versSetBy (Vq : N.t -> VSet.t) (n : N.t) (c : VConstraint)
       : PF.VSet.t :=
@@ -344,7 +340,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       if N.eq_dec (fst p) n then PF.VSet.empty else versSetBy Vq n c.
 
     Module FSet := FSetUOT PF.Dependees.
-    Module NSet := FSetUOT N.
+    Module NSet := C.NSet.
 
     Definition ownb {A : Type} (p : Pkg.t) (r : Pkg.t * A) : bool :=
       if Pkg.eq_dec (fst r) p then true else false.
@@ -428,7 +424,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Definition dependees (rho : Valuation) (I : Inst) (q : PF.Pkg.t)
       : FSet.t :=
-      let R := effRepo rho I in dependeesBy rho (realVersions R) I q.
+      let R := effRepo rho I in dependeesBy rho (C.versions R) I q.
 
     Definition versions (rho : Valuation) (I : Inst) (tn : TName.t)
       : PF.VSet.t :=
@@ -469,18 +465,6 @@ Module Opam (N V X Y E : UsualOrderedType).
     Definition opamResolution (S' : PF.PkgSet.t) : PkgSet.t :=
       SOtp.filterMap tryInvPkg S'.
 
-    Lemma mem_realVersions : forall R n v,
-        VSet.In v (realVersions R n) <-> PkgSet.In (n, v) R.
-    Proof.
-      intros R n v; unfold realVersions; rewrite SOpv.mem_filterMap.
-      split.
-      - intros [[m w] [Hm Hf]]; destruct (N.eq_dec m n) as [-> |];
-          [injection Hf as -> | discriminate].
-        exact Hm.
-      - intro H; exists (n, v); split; [exact H |].
-        cbn beta iota; rewrite dec_refl; reflexivity.
-    Qed.
-
     Lemma mem_versSetBy : forall Vq n c tv,
         PF.VSet.In tv (versSetBy Vq n c) <->
         exists v, tv = TVer.RV v /\ VSet.In v (Vq n) /\
@@ -498,7 +482,7 @@ Module Opam (N V X Y E : UsualOrderedType).
     Lemma mem_srcVersions : forall rho I n v,
         VSet.In v (srcVersions rho I n) <->
         PkgSet.In (n, v) (effRepo rho I).
-    Proof. intros; unfold srcVersions; apply mem_realVersions. Qed.
+    Proof. intros; unfold srcVersions; apply C.mem_versions. Qed.
 
     Lemma mem_opamResolution : forall S' n v,
         PkgSet.In (n, v) (opamResolution S') <->
@@ -1010,10 +994,6 @@ Module Opam (N V X Y E : UsualOrderedType).
     Qed.
 
     Module Lookup.
-      Module PkgPre := PreimageOfKeys N Pkg NSet PkgSet.
-      Definition realPreimage (ns : NSet.t) (R : PkgSet.t) : PkgSet.t :=
-        PkgPre.ofKeys fst ns R.
-
       Fixpoint ofNames (f : OFormula) : NSet.t :=
         match f with
         | OFAtom n _ _ => NSet.singleton n
@@ -1038,7 +1018,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           (fun qk => if Pkg.eq_dec (fst qk) p then true else false) cls.
 
       Definition pkgSubInst (I : Inst) (p : Pkg.t) : Inst :=
-        MkInst (realPreimage (declaredNames I p) (inst_repo I))
+        MkInst (C.realPreimage (inst_repo I) (declaredNames I p))
           (List.filter (ownb p) (inst_dep I))
           (List.filter (ownb p) (inst_cfl I))
           (clsFibre (inst_cls I) p)
@@ -1060,7 +1040,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           (inst_goal I) (inst_inv I).
 
       Definition nameSubInst (I : Inst) (n : N.t) : Inst :=
-        MkInst (realPreimage (NSet.singleton n) (inst_repo I))
+        MkInst (C.realPreimage (inst_repo I) (NSet.singleton n))
           (inst_dep I) (inst_cfl I) (inst_cls I)
           (inst_avl I) (inst_dxt I) (inst_pins I)
           (inst_pind I) (inst_goal I) (inst_inv I).
@@ -1072,32 +1052,31 @@ Module Opam (N V X Y E : UsualOrderedType).
 
       Definition rootSubInst (I : Inst) : Inst :=
         MkInst
-          (realPreimage
-             (NSet.union (ofNames (inst_goal I)) (ofNames (inst_inv I)))
-             (inst_repo I))
+          (C.realPreimage (inst_repo I)
+             (NSet.union (ofNames (inst_goal I)) (ofNames (inst_inv I))))
           nil nil ClsRel.empty (inst_avl I) nil
           (inst_pins I) nil (inst_goal I) (inst_inv I).
 
       Lemma srcVersions_restrict : forall rho I ns n,
           NSet.In n ns ->
-          realVersions
+          C.versions
             (effRepo rho
-               (MkInst (realPreimage ns (inst_repo I)) (inst_dep I)
+               (MkInst (C.realPreimage (inst_repo I) ns) (inst_dep I)
                   (inst_cfl I) (inst_cls I) (inst_avl I)
                   (inst_dxt I) (inst_pins I) (inst_pind I)
                   (inst_goal I) (inst_inv I))) n =
           srcVersions rho I n.
       Proof.
         intros rho I ns n Hn; apply VSet.ext; intro v.
-        rewrite mem_realVersions.
-        unfold srcVersions; rewrite mem_realVersions.
+        rewrite C.mem_versions.
+        unfold srcVersions; rewrite C.mem_versions.
         rewrite !mem_effRepo; simpl.
-        unfold realPreimage; rewrite PkgPre.mem_ofKeys; simpl.
+        rewrite C.mem_realPreimage; simpl.
         unfold PinOK, availOK; simpl; intuition.
       Qed.
 
       Lemma srcVersions_subInst_agree : forall rho I sl ns n,
-          inst_repo sl = realPreimage ns (inst_repo I) ->
+          inst_repo sl = C.realPreimage (inst_repo I) ns ->
           inst_avl sl = inst_avl I -> inst_pins sl = inst_pins I ->
           NSet.In n ns ->
           srcVersions rho sl n = srcVersions rho I n.
@@ -1106,7 +1085,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         unfold srcVersions at 1.
         assert (E : effRepo rho sl =
                     effRepo rho
-                      (MkInst (realPreimage ns (inst_repo I)) (inst_dep I)
+                      (MkInst (C.realPreimage (inst_repo I) ns) (inst_dep I)
                          (inst_cfl I) (inst_cls I)
                          (inst_avl I) (inst_dxt I)
                          (inst_pins I) (inst_pind I) (inst_goal I)

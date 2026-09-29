@@ -100,7 +100,7 @@ module Make (AP : Tables.ARCH) = struct
     | DMA.Deb.Name.Orig (n, DMA.QAArch b) ->
         DMA.Deb.T.VSet.add DMA.Deb.Version.Bot
           (DMA.Deb.embedVS
-             (DMA.Deb.Ver.realVersions
+             (DMA.Deb.C.versions
                 (DMA.reduceReal (ma_real_at tables (n, b)))
                 (n, DMA.QAArch b)))
     | DMA.Deb.Name.Orig _ ->

@@ -350,9 +350,9 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         (KeySet.In (a, m) (keysOf I) /\ RepoSet.In (m, v) (inst_repo I)).
 
     Lemma keyVersions_agree : forall I' I a, AgreesAtKey I' I a ->
-        Pl.repoVersions (placeRepo I') a = Pl.repoVersions (placeRepo I) a.
+        Pl.C.versions (placeRepo I') a = Pl.C.versions (placeRepo I) a.
     Proof.
-      intros I' I a H; apply Pl.repoVersions_ext; intro x.
+      intros I' I a H; apply Pl.C.versions_ext; intro x.
       rewrite !mem_placeRepo; split; intros [m [v [-> Hk]]];
         exists m, v; split; try reflexivity; apply H; exact Hk.
     Qed.

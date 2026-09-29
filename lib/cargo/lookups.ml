@@ -146,7 +146,7 @@ module Make (Encoding : Encoding.S) = struct
     Tbl.memo st.name_sets n (fun () ->
         Cg.PkgSet.ofList (List.map (fun v -> (n, v)) (versions_of st n)))
 
-  (* the Vq the dependees lookups take, realVersions at a name: loaded
+  (* the Vq the dependees lookups take, C.versions at a name: loaded
      whole, as name_set is *)
   let name_versions st (m : string) : Cg.VSet.t =
     Tbl.memo st.name_versions m (fun () -> Cg.VSet.ofList (versions_of st m))
