@@ -227,6 +227,7 @@ Deb.debian_completeness
 Deb.debian_soundness
 Deb.dependees
 Deb.matchb
+Deb.matchb_nodeFibre
 Deb.reduceDeps
 Deb.reduceReal
 Deb.versions

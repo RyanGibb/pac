@@ -355,9 +355,11 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Definition confNames (R : PkgSet.t) (Pi : Prov.t) (a : Atom.t) : NSet.t :=
     SOrn.filterMap (fun q => if matchb Pi q a then Some (fst q) else None) R.
 
+  Module ProvFibred := FibredLabelledRel Pkg N DTOT ProvElt Prov.
   Module SOnd := SetOps N T.Dependees NSet T.DependeesSet.
   Definition confEdges (R : PkgSet.t) (Pi : Prov.t) (p : Pkg.t) (a : Atom.t)
       (x : bool) : T.DependeesSet.t :=
+    let Pi := ProvFibred.nodeFibre Pi (aname a) in
     SOnd.filterMap
       (fun qn =>
          if orb (NEqb.eqb qn (fst p)) (exemptb x qn (fst p)) then None
@@ -698,13 +700,38 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     intros [u [HR Hm]]; exists (qn, u); auto.
   Qed.
 
+  Lemma matchb_nodeFibre : forall Pi q a,
+      matchb (ProvFibred.nodeFibre Pi (aname a)) q a = matchb Pi q a.
+  Proof.
+    intros Pi q a; unfold matchb; f_equal.
+    apply Prov.exists_restrict; [apply ProvFibred.nodeFibre_subset |].
+    intros [q' [m vt]] Hin Hb; cbn beta iota in Hb.
+    apply andb_prop in Hb; destruct Hb as [_ Hb].
+    apply andb_prop in Hb; destruct Hb as [Hn _].
+    apply ProvFibred.mem_nodeFibre; split;
+      [exact Hin | apply NEqb.eqb_true_iff; exact Hn].
+  Qed.
+
   Lemma mem_confEdges : forall R Pi (p : Pkg.t) a x (y : T.Dependees.t),
       T.DependeesSet.In y (confEdges R Pi p a x) <->
       exists qn, NSet.In qn (confNames R Pi a) /\ qn <> fst p /\
                  exemptb x qn (fst p) = false /\
                  y = (Name.Orig qn, complementVS R Pi a qn).
   Proof.
-    intros R Pi p a x y; unfold confEdges; rewrite SOnd.mem_filterMap.
+    intros R Pi p a x y; unfold confEdges; cbv zeta.
+    assert (HN : confNames R (ProvFibred.nodeFibre Pi (aname a)) a =
+                 confNames R Pi a).
+    { apply NSet.ext; intro qn; rewrite !mem_confNames.
+      split; intros [u [HR Hm]]; exists u; rewrite matchb_nodeFibre in *;
+        auto. }
+    assert (HC : forall qn,
+               complementVS R (ProvFibred.nodeFibre Pi (aname a)) a qn =
+               complementVS R Pi a qn).
+    { intro qn; apply T.VSet.ext; intro w; rewrite !mem_complementVS.
+      apply or_iff_compat_l.
+      split; intros [u [HR [Hm Hw]]]; exists u; rewrite matchb_nodeFibre in *;
+        auto. }
+    rewrite HN, SOnd.mem_filterMap.
     split.
     - intros [qn [Hqn Hf]].
       destruct (orb (NEqb.eqb qn (fst p)) (exemptb x qn (fst p))) eqn:Ho;
@@ -713,11 +740,11 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       apply Bool.orb_false_iff in Ho; destruct Ho as [Hn Hx].
       exists qn; split; [exact Hqn |].
       split; [apply NEqb.eqb_false_iff; exact Hn |].
-      split; [exact Hx | reflexivity].
+      split; [exact Hx | rewrite HC; reflexivity].
     - intros [qn [Hqn [Hn [Hx ->]]]]; exists qn; split; [exact Hqn |].
       replace (NEqb.eqb qn (fst p)) with false
         by (symmetry; apply NEqb.eqb_false_iff; exact Hn).
-      rewrite Hx; reflexivity.
+      rewrite Hx, HC; reflexivity.
   Qed.
 
   Lemma mem_realOrig : forall R y,
@@ -1755,7 +1782,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       rewrite realVersions_tailFibre; reflexivity.
     Qed.
 
-    Module ProvFibred := FibredLabelledRel Pkg N DTOT ProvElt Prov.
     Lemma provb_nodeFibre : forall Pi (n : N.t) (f : Ver.Formula),
         provb (ProvFibred.nodeFibre Pi n) (n, f) = provb Pi (n, f).
     Proof.
