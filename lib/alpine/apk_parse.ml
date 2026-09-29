@@ -11,75 +11,78 @@ type pkg = {
   priority : int option;
 }
 
-(* apk_dep_parse: [!]name[op ver], where the operator run is any of
-   < > = ~ and the name is everything before it.  None is an atom
-   apk_blob_pull_dep fails on; the flag is false where it marks the atom
-   broken instead, its version not one apk_version_validate accepts. *)
 let comparer c = c = '<' || c = '>' || c = '=' || c = '~'
 
-let parse_atom (tok : string) : (dep * bool) option =
-  let neg = String.length tok > 0 && tok.[0] = '!' in
-  let s = if neg then String.sub tok 1 (String.length tok - 1) else tok in
-  let len = String.length s in
+let rec index_of c s i b =
+  if i < b && s.[i] <> c then index_of c s (i + 1) b else i
+
+(* the first index in [i, b) at which [comparer] is [cmp], else b *)
+let rec index_cmp cmp s i b =
+  if i < b && comparer s.[i] <> cmp then index_cmp cmp s (i + 1) b else i
+
+(* apk_dep_parse over s.[a, b): [!]name[op ver], where the operator run is
+   any of < > = ~ and the name is everything before it.  None is an atom
+   apk_blob_pull_dep fails on; the flag is false where it marks the atom
+   broken instead, its version not one apk_version_validate accepts. *)
+let parse_atom (s : string) (a : int) (b : int) : (dep * bool) option =
+  let neg = a < b && s.[a] = '!' in
+  let a = if neg then a + 1 else a in
   (* name@tag pins the atom to a repository, which the calculus does not
      model; apk itself rejects a tag in an index dependency. *)
-  if len = 0 || String.contains s '@' then None
+  if a = b || index_of '@' s a b < b then None
   else
-    let i = ref 0 in
-    while !i < len && not (comparer s.[!i]) do
-      incr i
-    done;
-    if !i = len then Some ({ d_neg = neg; d_name = s; d_constr = Any }, true)
+    let i = index_cmp true s a b in
+    if i = b then
+      Some
+        ({ d_neg = neg; d_name = String.sub s a (b - a); d_constr = Any }, true)
     else
-      let j = ref !i in
-      while !j < len && comparer s.[!j] do
-        incr j
-      done;
-      let n = String.sub s 0 !i in
-      let opstr = String.sub s !i (!j - !i) in
-      let ver = String.sub s !j (len - !j) in
-      if n = "" || ver = "" then None
+      let j = index_cmp false s i b in
+      if i = a || j = b then None
       else
-        let d c = { d_neg = neg; d_name = n; d_constr = c } in
+        let d c =
+          { d_neg = neg; d_name = String.sub s a (i - a); d_constr = c }
+        in
+        let ver = String.sub s j (b - j) in
         (* a mask holding both < and > is exempt from the version check *)
-        match Apk_version.op_of_string opstr with
+        match Apk_version.op_of_string (String.sub s i (j - i)) with
         | None -> Some (d Any, true)
         | Some Apk_version.Hash -> Some (d (Op (Apk_version.Hash, ver)), true)
         | Some o -> Some (d (Op (o, ver)), Apk_version.validate ver)
 
 (* Only space and newline separate dependency atoms; a tab does not. *)
-let split_deps (v : string) : string list =
-  String.split_on_char ' ' v |> List.filter (fun s -> s <> "")
+let atom_end s a b = index_of ' ' s a b
 
-(* None where apk_blob_pull_deps fails, which for D: makes the package
-   uninstallable and for i: drops the whole rule *)
-let parse_deps (v : string) : dep list option =
-  let ds = List.map parse_atom (split_deps v) in
-  if List.for_all (function Some (_, ok) -> ok | None -> false) ds then
-    Some (List.map (fun a -> fst (Option.get a)) ds)
-  else None
+(* the atoms of s.[a, b) pushed onto acc, the last on top; None where
+   apk_blob_pull_deps fails, which for D: makes the package uninstallable
+   and for i: drops the whole rule *)
+let rec push_deps s a b acc : dep list option =
+  if a = b then Some acc
+  else if s.[a] = ' ' then push_deps s (a + 1) b acc
+  else
+    let e = atom_end s a b in
+    match parse_atom s a e with
+    | Some (d, true) -> push_deps s e b (d :: acc)
+    | _ -> None
 
 (* apk keeps the provides before an atom it fails on and drops the rest *)
-let parse_provs ~reject (v : string) : prov list =
-  let rec go = function
-    | [] -> []
-    | tok :: rest -> (
-        match parse_atom tok with
-        | None ->
-            reject ();
-            []
-        | Some ({ d_name; d_constr = Any; _ }, _)
-          when not (String.exists comparer tok) ->
-            { p_name = d_name; p_ver = None } :: go rest
-        | Some ({ d_name; d_constr = Op (Apk_version.Eq, ver); _ }, _) ->
-            { p_name = d_name; p_ver = Some ver } :: go rest
-        | Some _ ->
-            (* apk only ever emits = in p:, and the calculus has no room
-               for an inequality-constrained provides *)
-            reject ();
-            go rest)
-  in
-  go (split_deps v)
+let rec push_provs ~reject s a b acc : prov list =
+  if a = b then acc
+  else if s.[a] = ' ' then push_provs ~reject s (a + 1) b acc
+  else
+    let e = atom_end s a b in
+    match parse_atom s a e with
+    | None ->
+        reject ();
+        acc
+    | Some ({ d_name; d_constr = Any; _ }, _) when index_cmp true s a e = e ->
+        push_provs ~reject s e b ({ p_name = d_name; p_ver = None } :: acc)
+    | Some ({ d_name; d_constr = Op (Apk_version.Eq, ver); _ }, _) ->
+        push_provs ~reject s e b ({ p_name = d_name; p_ver = Some ver } :: acc)
+    | Some _ ->
+        (* apk only ever emits = in p:, and the calculus has no room
+           for an inequality-constrained provides *)
+        reject ();
+        push_provs ~reject s e b acc
 
 type acc = {
   mutable a_name : string option;
@@ -130,36 +133,39 @@ let flush ~reject ~broken a out =
   a.a_prio <- None;
   a.a_broken <- false
 
+(* the value of the field line s.[i, e) *)
+let value s i e = String.sub s (i + 2) (e - i - 2)
+
 (* apk_db_fdb_read (apk-tools src/database.c): stanzas end at a line
    shorter than two bytes, with no continuations and no quoting *)
 let parse_file ~reject ~broken (path : string) : pkg list =
-  let ic = open_in_bin path in
+  let s = In_channel.with_open_bin path In_channel.input_all in
+  let n = String.length s in
   let out = ref [] and a = fresh () in
-  (try
-     while true do
-       let line = input_line ic in
-       if String.length line < 2 then flush ~reject ~broken a out
-       else if line.[1] <> ':' then
+  let rec line i =
+    if i < n then begin
+      let e = try String.index_from s i '\n' with Not_found -> n in
+      (if e - i < 2 then flush ~reject ~broken a out
+       else if s.[i + 1] <> ':' then
          (* a line that is not "X:..." cannot be part of a stanza *)
          a.a_broken <- true
        else
-         let v = String.sub line 2 (String.length line - 2) in
-         match line.[0] with
-         | 'P' -> a.a_name <- Some v
-         | 'V' -> a.a_ver <- v
+         match s.[i] with
+         | 'P' -> a.a_name <- Some (value s i e)
+         | 'V' -> a.a_ver <- value s i e
          | 'D' -> (
-             match parse_deps v with
-             | Some ds -> a.a_deps <- List.rev_append ds a.a_deps
+             match push_deps s (i + 2) e a.a_deps with
+             | Some ds -> a.a_deps <- ds
              | None -> a.a_broken <- true)
-         | 'p' -> a.a_provs <- List.rev_append (parse_provs ~reject v) a.a_provs
+         | 'p' -> a.a_provs <- push_provs ~reject s (i + 2) e a.a_provs
          | 'i' -> (
-             match parse_deps v with
-             | Some ds -> a.a_iif <- List.rev_append ds a.a_iif
+             match push_deps s (i + 2) e a.a_iif with
+             | Some ds -> a.a_iif <- ds
              | None ->
                  reject ();
                  a.a_iif <- [])
          | 'k' -> (
-             match int_of_string_opt v with
+             match int_of_string_opt (value s i e) with
              | Some k -> a.a_prio <- Some k
              | None -> reject ())
          (* A C o S I T U L m t c carry no instance data, and apk skips the
@@ -171,11 +177,12 @@ let parse_file ~reject ~broken (path : string) : pkg list =
          | 'M' | 'R' | 'Z' ->
              ()
          | ch when ch >= 'a' && ch <= 'z' -> ()
-         | _ -> a.a_broken <- true
-     done
-   with End_of_file -> ());
+         | _ -> a.a_broken <- true);
+      line (e + 1)
+    end
+  in
+  line 0;
   flush ~reject ~broken a out;
-  close_in ic;
   List.rev !out
 
 let world_of_args (args : string list) : (dep list, string) Stdlib.result =
@@ -183,7 +190,7 @@ let world_of_args (args : string list) : (dep list, string) Stdlib.result =
     | [] -> Ok (List.rev acc)
     | "" :: rest -> go acc rest
     | a :: rest -> (
-        match parse_atom a with
+        match parse_atom a 0 (String.length a) with
         | Some (d, true) -> go (d :: acc) rest
         | Some (_, false) -> Error (Printf.sprintf "%S: not a valid version" a)
         | None when String.contains a '@' ->

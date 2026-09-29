@@ -12,3 +12,8 @@
  (name test_apk_version)
  (modules test_apk_version)
  (libraries alpine_frontend))
+
+(test
+ (name test_apk_parse)
+ (modules test_apk_parse)
+ (libraries alpine_frontend))
