@@ -569,12 +569,11 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
       forall (R : PkgSet.t) (D : C.DepRel.t) (Th : PeerRel.t)
              (g : V.t -> G.t) (r : Pkg.t)
              (S : PkgSet.t) (pi : ParentRel.t),
-        C.FunctionalInName D ->
         IsResolution R D Th g r S pi ->
         T.IsResolution (reduceReal R D Th g) (reduceDeps D Th g)
           (Conc.Reduction.embedPkg g r) (coreResolution S pi D g).
     Proof.
-      intros R D Th g r S pi Hfunc Hres.
+      intros R D Th g r S pi Hres.
       destruct Hres as [Hconc Hpsat].
       destruct Hconc as [Hsub Hroot Hpc Hpif Hvg Hps _].
       constructor.

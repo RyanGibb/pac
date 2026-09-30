@@ -657,12 +657,11 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Theorem concurrent_completeness :
       forall (R : PkgSet.t) (D : C.DepRel.t) (g : V.t -> G.t) (r : Pkg.t)
              (S : PkgSet.t) (pi : ParentRel.t),
-        C.FunctionalInName D ->
         IsResolution R D g r S pi ->
         T.IsResolution (reduceReal R D g) (reduceDeps D g)
           (embedPkg g r) (coreResolution S pi D g).
     Proof.
-      intros R D g r S pi Hfunc Hres.
+      intros R D g r S pi Hres.
       destruct Hres as [Hsub Hroot Hpc Hpif Hvg Hps _].
       constructor.
       - intros q Hq; apply mem_reduceReal; apply mem_coreResolution in Hq.

@@ -1182,12 +1182,11 @@ Module Visibility (N V : UsualOrderedType).
     Theorem visibility_completeness :
       forall (R : PkgSet.t) (D : C.DepRel.t) (pub : PubRel.t) (r : Pkg.t)
              (S : PkgSet.t) (pi : ParentRel.t),
-        C.FunctionalInName D ->
         IsResolution R D pub r S pi ->
         T.IsResolution (reduceReal R D pub r) (reduceDeps R D pub r)
           (embedRoot r) (coreResolution R D pub r S pi).
     Proof.
-      intros R D pub r S pi Hfunc Hres.
+      intros R D pub r S pi Hres.
       destruct Hres as [Hconc Hvv].
       destruct Hconc as [Hsub Hroot Hpc Hpif Hvg Hps _].
       constructor.
