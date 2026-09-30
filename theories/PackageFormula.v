@@ -419,10 +419,10 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Definition reduceDeps (R : PkgSet.t) (D : DepRel.t) : T.DepRel.t :=
       reduceDepsBy (C.versions R) D.
 
-    Lemma mem_idxSet : forall k w,
-        T.VSet.In w (idxSet k) <-> exists i, i < k /\ w = Version.Idx i.
+    Lemma mem_idxSet : forall k v,
+        T.VSet.In v (idxSet k) <-> exists i, i < k /\ v = Version.Idx i.
     Proof.
-      intros k w; unfold idxSet;
+      intros k v; unfold idxSet;
         rewrite T.VSet.mem_ofList, in_map_iff.
       split.
       - intros [i [<- Hi]]; apply in_seq in Hi.
@@ -444,15 +444,15 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         apply in_seq; lia.
     Qed.
 
-    Lemma mem_complementVS : forall Vq m vs (w : Version.t),
-        T.VSet.In w (complementVS Vq m vs) <->
-        (w = Version.Bot /\ Ab.hasAbsent m = true) \/
-        exists u, VSet.In u (Vq m) /\ ~ VSet.In u vs /\ w = Version.Orig u.
+    Lemma mem_complementVS : forall Vq m vs (v : Version.t),
+        T.VSet.In v (complementVS Vq m vs) <->
+        (v = Version.Bot /\ Ab.hasAbsent m = true) \/
+        exists u, VSet.In u (Vq m) /\ ~ VSet.In u vs /\ v = Version.Orig u.
     Proof.
-      intros Vq m vs w.
-      assert (Hd : T.VSet.In w (embedVS (VSet.diff (Vq m) vs)) <->
+      intros Vq m vs v.
+      assert (Hd : T.VSet.In v (embedVS (VSet.diff (Vq m) vs)) <->
                    exists u, VSet.In u (Vq m) /\ ~ VSet.In u vs /\
-                             w = Version.Orig u).
+                             v = Version.Orig u).
       { unfold embedVS; rewrite SOvv.mem_map; split.
         - intros [u [Hu ->]]; apply VSet.diff_spec in Hu.
           destruct Hu as [Hu Hnv]; exists u; auto.
@@ -982,20 +982,20 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
         intro Hsat;
         try (eexists; split; [reflexivity |]; split;
-             [exact Hsat | intros y Hy; exact Hy]).
+             [exact Hsat | intros p Hy; exact Hy]).
       cbn [disjSpine];
         rewrite (firstSatIdx_cons S psiL (disjSpine psiR)
             (disjSpine_nonnil psiR)).
       destruct (satisfiesb S psiL) eqn:Ea.
       - exists psiL; split; [reflexivity |]; split;
           [apply satisfiesb_iff; exact Ea |].
-        intros y Hy; simpl; rewrite Ea; exact Hy.
+        intros p Hy; simpl; rewrite Ea; exact Hy.
       - assert (Hb : Satisfies S psiR).
         { destruct Hsat as [Ha | Hb]; [| exact Hb].
           exfalso; exact (proj1 (satisfiesb_false_iff S psiL) Ea Ha). }
         destruct (IHb Hb) as [chi [Hg [Hsg Hsub]]].
         exists chi; split; [exact Hg |]; split; [exact Hsg |].
-        intros y Hy; simpl; rewrite Ea; exact (Hsub y Hy).
+        intros p Hy; simpl; rewrite Ea; exact (Hsub p Hy).
     Qed.
 
     Lemma takenConjNeg_firstSat : forall S psi,
@@ -1011,7 +1011,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
         intro Hsat;
         try (eexists; split; [reflexivity |]; split;
-             [exact Hsat | intros y Hy; exact Hy]).
+             [exact Hsat | intros p Hy; exact Hy]).
       cbn [negConjSpine];
         rewrite (firstSatIdx_cons S (FNeg psiL) (negConjSpine psiR)
                    (negConjSpine_nonnil psiR)).
@@ -1023,12 +1023,12 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         exists chi; split;
           [change (satisfiesb S (FNeg psiL)) with (negb (satisfiesb S psiL));
            rewrite Ea; exact Hg |]; split; [exact Hsg |].
-        intros y Hy; simpl; rewrite Ea; exact (Hsub y Hy).
+        intros p Hy; simpl; rewrite Ea; exact (Hsub p Hy).
       - exists (FNeg psiL); split;
           [change (satisfiesb S (FNeg psiL)) with (negb (satisfiesb S psiL));
            rewrite Ea; reflexivity |]; split;
           [apply satisfiesb_false_iff; exact Ea |].
-        intros y Hy; simpl; rewrite Ea; exact Hy.
+        intros p Hy; simpl; rewrite Ea; exact Hy.
     Qed.
 
     Definition coreResolution (R : PkgSet.t) (D : DepRel.t) (S : PkgSet.t)
@@ -1053,7 +1053,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       intros S psi;
         induction psi
           as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa].
-      - split4; intros; intros y H; exfalso; exact (SOpt.empty_in _ H).
+      - split4; intros; intros q H; exfalso; exact (SOpt.empty_in _ H).
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
           destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
         + intros p y; simpl; intro H;
@@ -1423,7 +1423,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         destruct (proj1 (witnessSet_disj_mono_aux S chi) Hsat chis i Hw)
           as [h [Hh [Hsh Hsubh]]].
         exists h; split; [exact Hh |]; split; [exact Hsh |].
-        intros y Hy;
+        intros q Hy;
           apply (witnessSet_subset_coreResolution S R D p chi Hd HpS), Hsubh;
           exact Hy.
       - discriminate Hn.
@@ -1544,11 +1544,11 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           * refine (IHa1 q0 _ q n ws He Hqw).
             destruct Hwit as [Hq0 | [Hsat Hsub']];
               [left; exact Hq0 | right; split; [exact (proj1 Hsat) |]];
-              intros y Hy; apply Hsub', T.PkgSet.union_spec; left; exact Hy.
+              intros p' Hy; apply Hsub', T.PkgSet.union_spec; left; exact Hy.
           * refine (IHb1 q0 _ q n ws He Hqw).
             destruct Hwit as [Hq0 | [Hsat Hsub']];
               [left; exact Hq0 | right; split; [exact (proj2 Hsat) |]];
-              intros y Hy; apply Hsub', T.PkgSet.union_spec; right; exact Hy.
+              intros p' Hy; apply Hsub', T.PkgSet.union_spec; right; exact Hy.
         + intros q0 Hwit q n ws Henc Hqw.
           apply SOed.add_in in Henc; destruct Henc as [He | He].
           * injection He as -> -> ->.
@@ -1595,11 +1595,11 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           * refine (IHa1 (n', Version.Idx i0) _ q n ws He Hqw).
             destruct Hwit as [Hq0 | [Hsat Hsub']];
               [left; exact Hq0 | right; split; [exact (proj1 Hsat) |]];
-              intros y Hy; apply Hsub', T.PkgSet.union_spec; left; exact Hy.
+              intros p' Hy; apply Hsub', T.PkgSet.union_spec; left; exact Hy.
           * refine (IHb1 (n', Version.Idx i0) _ q n ws He Hqw).
             destruct Hwit as [Hq0 | [Hsat Hsub']];
               [left; exact Hq0 | right; split; [exact (proj2 Hsat) |]];
-              intros y Hy; apply Hsub', T.PkgSet.union_spec; right; exact Hy.
+              intros p' Hy; apply Hsub', T.PkgSet.union_spec; right; exact Hy.
         + intros n' i0 Hspine q n ws Henc Hqw.
           apply T.DepRel.union_spec in Henc; destruct Henc as [He | He].
           * refine (IHa2 (n', Version.Idx i0) _ q n ws He Hqw).
@@ -1658,12 +1658,12 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             destruct Hwit as [Hq0 | [Hns Hsub']];
               [left; exact Hq0
               | right; split; [intro Ha; exact (Hns (or_introl Ha)) |]];
-              intros y Hy; apply Hsub', T.PkgSet.union_spec; left; exact Hy.
+              intros p' Hy; apply Hsub', T.PkgSet.union_spec; left; exact Hy.
           * refine (IHb2 q0 _ q n ws He Hqw).
             destruct Hwit as [Hq0 | [Hns Hsub']];
               [left; exact Hq0
               | right; split; [intro Hb; exact (Hns (or_intror Hb)) |]];
-              intros y Hy; apply Hsub', T.PkgSet.union_spec; right; exact Hy.
+              intros p' Hy; apply Hsub', T.PkgSet.union_spec; right; exact Hy.
         + intros n' i0 Hspine q n ws Henc Hqw.
           apply T.DepRel.union_spec in Henc; destruct Henc as [He | He].
           * refine (IHa1 (n', Version.Idx i0) _ q n ws He Hqw).
@@ -1683,12 +1683,12 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             destruct Hwit as [Hq0 | [Hns Hsub']];
               [left; exact Hq0
               | right; split; [intro Ha; exact (Hns (or_introl Ha)) |]];
-              intros y Hy; apply Hsub', T.PkgSet.union_spec; left; exact Hy.
+              intros p' Hy; apply Hsub', T.PkgSet.union_spec; left; exact Hy.
           * refine (IHb2 (n', Version.Idx i0) _ q n ws He Hqw).
             destruct Hwit as [Hq0 | [Hns Hsub']];
               [left; exact Hq0
               | right; split; [intro Hb; exact (Hns (or_intror Hb)) |]];
-              intros y Hy; apply Hsub', T.PkgSet.union_spec; right; exact Hy.
+              intros p' Hy; apply Hsub', T.PkgSet.union_spec; right; exact Hy.
       - destruct (IHa Hsub) as (IHa1 & IHa2 & IHa3 & IHa4); split4.
         + intros q0 Hwit q n ws Henc Hqw.
           exact (IHa2 q0 Hwit q n ws Henc Hqw).
@@ -1746,7 +1746,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         - discriminate Hn. }
       assert (Hdisj := fun chis i => coreResolution_disj S R D chis i Hclo).
       constructor.
-      - intros y Hy; apply mem_coreResolution in Hy.
+      - intros p' Hy; apply mem_coreResolution in Hy.
         apply mem_reduceReal.
         destruct Hy as [[p [Hp ->]] | [[p [chi [Hd [_ Hw]]]]
                        | [n [Hn [Ha [_ ->]]]]]].
@@ -1805,17 +1805,17 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         end.
 
       Lemma encodeNNF_depender_orig_aux : forall Vq psi,
-          (forall (q : T.Pkg.t) m (w : Version.t) (d : T.Dependees.t),
-              T.DepRel.In ((Name.Orig m, w), d) (encodeNNF Vq q psi) ->
-              q = (Name.Orig m, w)) /\
-          (forall (q : T.Pkg.t) m (w : Version.t) (d : T.Dependees.t),
-              T.DepRel.In ((Name.Orig m, w), d) (encodeNNFneg Vq q psi) ->
-              q = (Name.Orig m, w)) /\
-          (forall (n : Name.t) (i0 : nat) m (w : Version.t) (d : T.Dependees.t),
-              T.DepRel.In ((Name.Orig m, w), d) (encodeDisj Vq n i0 psi) ->
+          (forall (q : T.Pkg.t) m (v : Version.t) (d : T.Dependees.t),
+              T.DepRel.In ((Name.Orig m, v), d) (encodeNNF Vq q psi) ->
+              q = (Name.Orig m, v)) /\
+          (forall (q : T.Pkg.t) m (v : Version.t) (d : T.Dependees.t),
+              T.DepRel.In ((Name.Orig m, v), d) (encodeNNFneg Vq q psi) ->
+              q = (Name.Orig m, v)) /\
+          (forall (n : Name.t) (i0 : nat) m (v : Version.t) (d : T.Dependees.t),
+              T.DepRel.In ((Name.Orig m, v), d) (encodeDisj Vq n i0 psi) ->
               n = Name.Orig m) /\
-          (forall (n : Name.t) (i0 : nat) m (w : Version.t) (d : T.Dependees.t),
-              T.DepRel.In ((Name.Orig m, w), d) (encodeConjNeg Vq n i0 psi) ->
+          (forall (n : Name.t) (i0 : nat) m (v : Version.t) (d : T.Dependees.t),
+              T.DepRel.In ((Name.Orig m, v), d) (encodeConjNeg Vq n i0 psi) ->
               n = Name.Orig m).
       Proof.
         intros Vq psi;
@@ -2280,13 +2280,13 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
 
       Lemma encodeNNF_agreeOwn_aux : forall Vq Vq' psi,
           ((forall m, NSet.In m (ownNegNames psi) -> Vq m = Vq' m) ->
-           forall (q : T.Pkg.t) n (w : Version.t) (d : T.Dependees.t),
-             T.DepRel.In ((Name.Orig n, w), d) (encodeNNF Vq q psi) ->
-             T.DepRel.In ((Name.Orig n, w), d) (encodeNNF Vq' q psi)) /\
+           forall (q : T.Pkg.t) n (v : Version.t) (d : T.Dependees.t),
+             T.DepRel.In ((Name.Orig n, v), d) (encodeNNF Vq q psi) ->
+             T.DepRel.In ((Name.Orig n, v), d) (encodeNNF Vq' q psi)) /\
           ((forall m, NSet.In m (ownNegNamesNeg psi) -> Vq m = Vq' m) ->
-           forall (q : T.Pkg.t) n (w : Version.t) (d : T.Dependees.t),
-             T.DepRel.In ((Name.Orig n, w), d) (encodeNNFneg Vq q psi) ->
-             T.DepRel.In ((Name.Orig n, w), d) (encodeNNFneg Vq' q psi)).
+           forall (q : T.Pkg.t) n (v : Version.t) (d : T.Dependees.t),
+             T.DepRel.In ((Name.Orig n, v), d) (encodeNNFneg Vq q psi) ->
+             T.DepRel.In ((Name.Orig n, v), d) (encodeNNFneg Vq' q psi)).
       Proof.
         intros Vq Vq' psi;
           induction psi
@@ -2330,13 +2330,13 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             [exact (IHa2 Hag _ _ _ _ H) | exact (IHa1 Hag _ _ _ _ H)].
       Qed.
 
-      Lemma dependees_origAgree : forall Vq Vq' D n (w : Version.t),
+      Lemma dependees_origAgree : forall Vq Vq' D n (v : Version.t),
           (forall p psi m, DepRel.In (p, psi) D ->
                            NSet.In m (ownNegNames psi) -> Vq m = Vq' m) ->
-          T.dependees (reduceDepsBy Vq D) (Name.Orig n, w) =
-          T.dependees (reduceDepsBy Vq' D) (Name.Orig n, w).
+          T.dependees (reduceDepsBy Vq D) (Name.Orig n, v) =
+          T.dependees (reduceDepsBy Vq' D) (Name.Orig n, v).
       Proof.
-        intros Vq Vq' D n w Hag; apply T.dependees_ext; intro h.
+        intros Vq Vq' D n v Hag; apply T.dependees_ext; intro h.
         rewrite !mem_reduceDepsBy.
         split; intros [p [psi [Hd He]]]; exists p, psi; split; try exact Hd.
         - exact (proj1 (encodeNNF_agreeOwn_aux Vq Vq' psi)
@@ -2846,20 +2846,20 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       Qed.
 
       Lemma arisingPkgs_negNames_aux : forall psi : Formula,
-          (forall (p : T.Pkg.t) chis w chi m,
-              T.PkgSet.In (Name.Disjunct chis, w) (arisingPkgs p psi) ->
+          (forall (p : T.Pkg.t) chis v chi m,
+              T.PkgSet.In (Name.Disjunct chis, v) (arisingPkgs p psi) ->
               List.In chi chis -> NSet.In m (negNames chi) ->
               NSet.In m (negNames psi)) /\
-          (forall (p : T.Pkg.t) chis w chi m,
-              T.PkgSet.In (Name.Disjunct chis, w) (arisingNeg p psi) ->
+          (forall (p : T.Pkg.t) chis v chi m,
+              T.PkgSet.In (Name.Disjunct chis, v) (arisingNeg p psi) ->
               List.In chi chis -> NSet.In m (negNames chi) ->
               NSet.In m (fnames psi)) /\
-          (forall (n : Name.t) (i : nat) chis w chi m,
-              T.PkgSet.In (Name.Disjunct chis, w) (arisingDisj n i psi) ->
+          (forall (n : Name.t) (i : nat) chis v chi m,
+              T.PkgSet.In (Name.Disjunct chis, v) (arisingDisj n i psi) ->
               List.In chi chis -> NSet.In m (negNames chi) ->
               NSet.In m (negNames psi)) /\
-          (forall (n : Name.t) (i : nat) chis w chi m,
-              T.PkgSet.In (Name.Disjunct chis, w) (arisingConjNeg n i psi) ->
+          (forall (n : Name.t) (i : nat) chis v chi m,
+              T.PkgSet.In (Name.Disjunct chis, v) (arisingConjNeg n i psi) ->
               List.In chi chis -> NSet.In m (negNames chi) ->
               NSet.In m (fnames psi)).
       Proof.
@@ -2868,12 +2868,12 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         - split4; intros; exfalso; eapply SOpt.empty_in; eassumption.
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
             destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
-          + intros p chis w chi m H Hg Hx; simpl in H; cbn [negNames].
+          + intros p chis v chi m H Hg Hx; simpl in H; cbn [negNames].
             apply NSet.union_spec; apply T.PkgSet.union_spec in H;
               destruct H as [H | H];
               [left; exact (IHa1 _ _ _ _ _ H Hg Hx)
               | right; exact (IHb1 _ _ _ _ _ H Hg Hx)].
-          + intros p chis w chi m H Hg Hx; simpl in H; cbn [fnames].
+          + intros p chis v chi m H Hg Hx; simpl in H; cbn [fnames].
             apply NSet.union_spec.
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
               [| apply T.PkgSet.union_spec in H; destruct H as [H | H]].
@@ -2883,19 +2883,19 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                 | right; exact (negConjSpine_negNames _ _ _ Hg Hx)].
             * left; exact (IHa2 _ _ _ _ _ H Hg Hx).
             * right; exact (IHb4 _ _ _ _ _ _ H Hg Hx).
-          + intros n i chis w chi m H Hg Hx; simpl in H; cbn [negNames].
+          + intros n i chis v chi m H Hg Hx; simpl in H; cbn [negNames].
             apply NSet.union_spec; apply T.PkgSet.union_spec in H;
               destruct H as [H | H];
               [left; exact (IHa1 _ _ _ _ _ H Hg Hx)
               | right; exact (IHb1 _ _ _ _ _ H Hg Hx)].
-          + intros n i chis w chi m H Hg Hx; simpl in H; cbn [fnames].
+          + intros n i chis v chi m H Hg Hx; simpl in H; cbn [fnames].
             apply NSet.union_spec; apply T.PkgSet.union_spec in H;
               destruct H as [H | H];
               [left; exact (IHa2 _ _ _ _ _ H Hg Hx)
               | right; exact (IHb4 _ _ _ _ _ _ H Hg Hx)].
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
             destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
-          + intros p chis w chi m H Hg Hx; simpl in H; cbn [negNames].
+          + intros p chis v chi m H Hg Hx; simpl in H; cbn [negNames].
             apply NSet.union_spec.
             apply T.PkgSet.union_spec in H; destruct H as [H | H];
               [| apply T.PkgSet.union_spec in H; destruct H as [H | H]].
@@ -2905,29 +2905,29 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                 | right; exact (disjSpine_negNames _ _ _ Hg Hx)].
             * left; exact (IHa1 _ _ _ _ _ H Hg Hx).
             * right; exact (IHb3 _ _ _ _ _ _ H Hg Hx).
-          + intros p chis w chi m H Hg Hx; simpl in H; cbn [fnames].
+          + intros p chis v chi m H Hg Hx; simpl in H; cbn [fnames].
             apply NSet.union_spec; apply T.PkgSet.union_spec in H;
               destruct H as [H | H];
               [left; exact (IHa2 _ _ _ _ _ H Hg Hx)
               | right; exact (IHb2 _ _ _ _ _ H Hg Hx)].
-          + intros n i chis w chi m H Hg Hx; simpl in H; cbn [negNames].
+          + intros n i chis v chi m H Hg Hx; simpl in H; cbn [negNames].
             apply NSet.union_spec; apply T.PkgSet.union_spec in H;
               destruct H as [H | H];
               [left; exact (IHa1 _ _ _ _ _ H Hg Hx)
               | right; exact (IHb3 _ _ _ _ _ _ H Hg Hx)].
-          + intros n i chis w chi m H Hg Hx; simpl in H; cbn [fnames].
+          + intros n i chis v chi m H Hg Hx; simpl in H; cbn [fnames].
             apply NSet.union_spec; apply T.PkgSet.union_spec in H;
               destruct H as [H | H];
               [left; exact (IHa2 _ _ _ _ _ H Hg Hx)
               | right; exact (IHb2 _ _ _ _ _ H Hg Hx)].
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4.
-          + intros p chis w chi m H Hg Hx; simpl in H.
+          + intros p chis v chi m H Hg Hx; simpl in H.
             exact (IHa2 _ _ _ _ _ H Hg Hx).
-          + intros p chis w chi m H Hg Hx; simpl in H.
+          + intros p chis v chi m H Hg Hx; simpl in H.
             exact (negNames_fnames _ _ (IHa1 _ _ _ _ _ H Hg Hx)).
-          + intros n i chis w chi m H Hg Hx; simpl in H.
+          + intros n i chis v chi m H Hg Hx; simpl in H.
             exact (IHa2 _ _ _ _ _ H Hg Hx).
-          + intros n i chis w chi m H Hg Hx; simpl in H.
+          + intros n i chis v chi m H Hg Hx; simpl in H.
             exact (negNames_fnames _ _ (IHa1 _ _ _ _ _ H Hg Hx)).
       Qed.
 

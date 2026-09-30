@@ -321,14 +321,14 @@ Module Virtual (N V : UsualOrderedType).
              else None)
            vs).
 
-    Lemma mem_selectorVersions : forall R Pi n vs y,
-        T.VSet.In y (selectorVersions R Pi n vs) <->
+    Lemma mem_selectorVersions : forall R Pi n vs u',
+        T.VSet.In u' (selectorVersions R Pi n vs) <->
         (exists m w v, ProvidesRel.In ((m, w), (n, v)) Pi /\ MemTop v vs /\
-           y = Version.Provider m w) \/
+           u' = Version.Provider m w) \/
         (exists u,
-           VSet.In u vs /\ PkgSet.In (n, u) R /\ y = Version.Orig u).
+           VSet.In u vs /\ PkgSet.In (n, u) R /\ u' = Version.Orig u).
     Proof.
-      intros R Pi n vs y; unfold selectorVersions.
+      intros R Pi n vs u'; unfold selectorVersions.
       rewrite T.VSet.union_spec, SOpv.mem_filterMap, SOvv.mem_filterMap_if.
       cbn beta; setoid_rewrite PkgSet.mem_spec; apply or_iff_compat_r.
       split.
@@ -845,8 +845,8 @@ Module Virtual (N V : UsualOrderedType).
         - left; exists q; split; [exact HqS |].
           exists v; repeat split; assumption. }
       constructor.
-      - intros y Hy; apply mem_coreResolution in Hy; apply mem_reduceReal.
-        destruct Hy as [n v HpS | p n vs HD HpS Hb].
+      - intros p' Hp'; apply mem_coreResolution in Hp'; apply mem_reduceReal.
+        destruct Hp' as [n v HpS | p n vs HD HpS Hb].
         + constructor; apply Hsub; exact HpS.
         + destruct (Hsel p n vs HpS HD)
             as [(m & w & v & -> & HmwS & Hm & HP) | (u & -> & Hu & HuS)].
@@ -854,8 +854,8 @@ Module Virtual (N V : UsualOrderedType).
           * eapply RealDirect;
               [exact HD | exact Hb | exact Hu | apply Hsub; exact HuS].
       - apply mem_coreResolution_embed; exact Hroot.
-      - intros y Hy; apply mem_coreResolution in Hy.
-        destruct Hy as [pn pv HpS | p0 n0 vs0 HD0 HpS0 Hb0];
+      - intros p' Hp'; apply mem_coreResolution in Hp'.
+        destruct Hp' as [pn pv HpS | p0 n0 vs0 HD0 HpS0 Hb0];
           intros m' ws Hd; apply mem_reduceDeps in Hd.
         + inversion Hd as [pn1 pv1 n vs HD Hb | pn1 pv1 n vs HD Hb | |];
             subst.
@@ -1013,7 +1013,7 @@ Module Virtual (N V : UsualOrderedType).
           selectorVersions (realPreimage R Dp) (provPreimage Pi Dp) n vs =
           selectorVersions R Pi n vs.
       Proof.
-        intros R Pi Dp n vs Hn; apply T.VSet.ext; intro y.
+        intros R Pi Dp n vs Hn; apply T.VSet.ext; intro u'.
         rewrite !mem_selectorVersions; split.
         - intros [[m [u [v [Hin [Hm ->]]]]] | [u [Hu [HR ->]]]].
           + apply mem_provPreimage in Hin; destruct Hin as [Hin _].
@@ -1040,7 +1040,7 @@ Module Virtual (N V : UsualOrderedType).
                ProvidesRel.empty)
             (Name.Orig n).
       Proof.
-        intros R D Pi n; apply T.versions_ext; intro y.
+        intros R D Pi n; apply T.versions_ext; intro v.
         rewrite !mem_reduceReal.
         split; intro H; inversion H as [n1 v1 HR | |]; subst; constructor.
         - apply PkgFibred.mem_tailFibre; split; [exact HR | reflexivity].
@@ -1087,7 +1087,7 @@ Module Virtual (N V : UsualOrderedType).
                (DepRelFibred.endsFibre D p n) (ProvFibred.nodeFibre Pi n))
             (Name.Selector p n).
       Proof.
-        intros R D Pi p n; apply T.versions_ext; intro y.
+        intros R D Pi p n; apply T.versions_ext; intro w.
         rewrite !mem_reduceReal.
         split; intro H;
           inversion H as [| q n' vs m u v HD HP Hm | q n' vs u HD Hb Hu HuR];
@@ -1110,17 +1110,17 @@ Module Virtual (N V : UsualOrderedType).
             | exact Hu | exact (PkgFibred.tailFibre_subset _ _ _ HuR)].
       Qed.
 
-      Theorem dependees_lookupSelector : forall D R Pi (p : Pkg.t) n y,
-          T.dependees (reduceDeps R D Pi) (Name.Selector p n, y) =
+      Theorem dependees_lookupSelector : forall D R Pi (p : Pkg.t) n v,
+          T.dependees (reduceDeps R D Pi) (Name.Selector p n, v) =
           T.dependees
             (reduceDeps (PkgFibred.tailFibre R n) (DepRelFibred.tailFibre D p)
                         (ProvFibred.nodeFibre Pi n))
-            (Name.Selector p n, y).
+            (Name.Selector p n, v).
       Proof.
-        intros D R Pi p n y; apply T.dependees_ext; intros [m0 ws];
+        intros D R Pi p n v; apply T.dependees_ext; intros [m0 ws];
           rewrite !mem_reduceDeps.
         split; intro H;
-          inversion H as [| | q n' vs m' u v HD HP Hm
+          inversion H as [| | q n' vs m' u v' HD HP Hm
                          | q n' vs u HD Hb Hu HuR]; subst.
         - eapply DepsProvider; [| | exact Hm].
           + apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].

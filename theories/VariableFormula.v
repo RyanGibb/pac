@@ -253,15 +253,15 @@ Module VariableFormula (N V : UsualOrderedType)
       : T.DepRel.t :=
       PF.Reduction.reduceDeps (liftReal Y_x R) (liftDeps Y_x D).
 
-    Lemma mem_liftVS : forall vs w,
-        PF.VSet.In w (liftVS vs) <-> exists v, VSet.In v vs /\ w = inl v.
-    Proof. intros vs w; unfold liftVS; apply SOvl.mem_map. Qed.
+    Lemma mem_liftVS : forall vs u,
+        PF.VSet.In u (liftVS vs) <-> exists v, VSet.In v vs /\ u = inl v.
+    Proof. intros vs u; unfold liftVS; apply SOvl.mem_map. Qed.
 
-    Lemma mem_cmpVersionSet : forall Y_x x op y w,
-        PF.VSet.In w (cmpVersionSet Y_x x op y) <->
-        exists v, YSet.In v (Y_x x) /\ opEvalY op v y = true /\ w = inr v.
+    Lemma mem_cmpVersionSet : forall Y_x x op y u,
+        PF.VSet.In u (cmpVersionSet Y_x x op y) <->
+        exists v, YSet.In v (Y_x x) /\ opEvalY op v y = true /\ u = inr v.
     Proof.
-      intros Y_x x op y w; unfold cmpVersionSet; rewrite SOyl.mem_filterMap.
+      intros Y_x x op y u; unfold cmpVersionSet; rewrite SOyl.mem_filterMap.
       split.
       - intros [v [Hy He]]; destruct (opEvalY op v y) eqn:Ho;
           [| discriminate He].
