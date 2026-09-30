@@ -999,6 +999,9 @@ Module Visibility (N V : UsualOrderedType).
                       (Htr m vs HD) Hocc Hagr) as [_ Hcp2].
           exact (occurrence_mem_visibilityResolution R D pub r S m u c0
                    Hsub Hcp2).
+        + intros n v m u Hpi; apply mem_parents in Hpi.
+          destruct Hpi as (n' & v' & m' & vs & u' & HD & Hu & _ & _ & E).
+          injection E as <- <- <- <-; exists vs; split; assumption.
       - intros [pn pv] Hp n v v' Hv Hv'.
         destruct (base_occurrence R D pub r S pn pv Hres Hp)
           as [c0 [Hc0 [Hocc Htr]]].
@@ -1186,7 +1189,7 @@ Module Visibility (N V : UsualOrderedType).
     Proof.
       intros R D pub r S pi Hfunc Hres.
       destruct Hres as [Hconc Hvv].
-      destruct Hconc as [Hsub Hroot Hpc Hvg Hps].
+      destruct Hconc as [Hsub Hroot Hpc Hvg Hps _].
       constructor.
       - intros y Hy; apply mem_coreResolution in Hy; apply mem_reduceReal.
         destruct Hy; econstructor; try apply Hsub; eassumption.
@@ -1269,7 +1272,7 @@ Module Visibility (N V : UsualOrderedType).
       intros R D pub r S pi Hres Hvis Hedge.
       assert (Hdec := visibilityResolution_coreResolution R D pub r S pi
                         Hres Hvis).
-      destruct Hres as [[_ _ _ _ Hps] _].
+      destruct Hres as [[_ _ _ _ Hps _] _].
       apply ParentRel.ext; intros [[m u] [n v]]; rewrite mem_parents, Hdec.
       split.
       - intros (n' & v' & m' & vs & u' & _ & _ & Hagr & _ & E).

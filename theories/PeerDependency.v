@@ -484,6 +484,9 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
             as [cv [Hcv HcvS]].
           apply SOvcv.singleton_in in Hcv; subst cv.
           apply Conc.Reduction.mem_concurrentResolution; exact HcvS.
+        + intros n v m u Hpi; apply mem_parents in Hpi.
+          destruct Hpi as (n' & v' & m' & vs & u' & HD & _ & Hu & _ & E).
+          injection E as <- <- <- <-; exists vs; split; assumption.
       - intros p Hp n vs HTh q Hpq us Hqus v Hv Hnvq.
         apply mem_parents in Hpq.
         destruct Hpq as [qn [qv [o [vs1 [ou [HD1 [HqS [Hou [HiS Heq]]]]]]]]].
@@ -573,7 +576,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     Proof.
       intros R D Th g r S pi Hfunc Hres.
       destruct Hres as [Hconc Hpsat].
-      destruct Hconc as [Hsub Hroot Hpc Hvg Hps].
+      destruct Hconc as [Hsub Hroot Hpc Hvg Hps _].
       constructor.
       - intros q Hq; apply mem_reduceReal; apply mem_coreResolution in Hq.
         destruct Hq as [n v Hnv | n v m vs u HD Hnv Hmu Hu Hpi];
@@ -633,7 +636,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
            exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs) ->
         parents D g (coreResolution S pi D g) = pi.
     Proof.
-      intros R D Th g r S pi [[_ _ _ _ Hps] _] Hedge.
+      intros R D Th g r S pi [[_ _ _ _ Hps _] _] Hedge.
       apply ParentRel.ext; intros [[m u] [n v]]; rewrite mem_parents; split.
       - intros (n' & v' & m' & vs & u' & _ & _ & _ & Hint & E).
         injection E as <- <- <- <-.
