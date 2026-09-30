@@ -41,7 +41,7 @@ Module Visibility (N V : UsualOrderedType).
   Inductive InSub (pub : PubRel.t) (pi : ParentRel.t) (q : Pkg.t)
     : Pkg.t -> Prop :=
   | InSubSelf : InSub pub pi q q
-  | InSubChild : forall c, ParentRel.In (c, q) pi -> InSub pub pi q c
+  | InSubChild : forall p, ParentRel.In (p, q) pi -> InSub pub pi q p
   | InSubPubStep : forall (p : Pkg.t) (m : N.t) (u : V.t),
       InSub pub pi q p -> ParentRel.In ((m, u), p) pi ->
       PubRel.In (p, m) pub -> InSub pub pi q (m, u).
@@ -61,14 +61,14 @@ Module Visibility (N V : UsualOrderedType).
   Definition children (pi : ParentRel.t) (p : Pkg.t) : PkgSet.t :=
     SOpp.filterMap (fun '(c, d) => if Pkg.eq_dec d p then Some c else None) pi.
 
-  Lemma mem_children : forall pi p c,
-      PkgSet.In c (children pi p) <-> ParentRel.In (c, p) pi.
+  Lemma mem_children : forall pi p q,
+      PkgSet.In q (children pi p) <-> ParentRel.In (q, p) pi.
   Proof.
-    intros pi p c; unfold children; rewrite SOpp.mem_filterMap.
+    intros pi p q; unfold children; rewrite SOpp.mem_filterMap.
     split.
-    - intros [[c' d] [He Hc]]; cbn beta iota in Hc.
+    - intros [[q' d] [He Hc]]; cbn beta iota in Hc.
       destruct (Pkg.eq_dec d p); [mem_destruct; exact He | discriminate].
-    - intro H; exists (c, p); split; [exact H | cbn beta iota].
+    - intro H; exists (q, p); split; [exact H | cbn beta iota].
       apply dec_refl.
   Qed.
 
@@ -80,27 +80,27 @@ Module Visibility (N V : UsualOrderedType).
         else None)
       pi.
 
-  Lemma mem_pubChildren : forall pub pi p c,
-      PkgSet.In c (pubChildren pub pi p) <->
-      ParentRel.In (c, p) pi /\ PubRel.In (p, fst c) pub.
+  Lemma mem_pubChildren : forall pub pi p q,
+      PkgSet.In q (pubChildren pub pi p) <->
+      ParentRel.In (q, p) pi /\ PubRel.In (p, fst q) pub.
   Proof.
-    intros pub pi p c; unfold pubChildren; rewrite SOpp.mem_filterMap.
+    intros pub pi p q; unfold pubChildren; rewrite SOpp.mem_filterMap.
     split.
-    - intros [[c' d] [He Hc]]; cbn beta iota in Hc.
+    - intros [[q' d] [He Hc]]; cbn beta iota in Hc.
       destruct (Pkg.eq_dec d p) as [-> |]; [| discriminate].
-      destruct (PubRel.mem (p, fst c') pub) eqn:Hm; [| discriminate].
+      destruct (PubRel.mem (p, fst q') pub) eqn:Hm; [| discriminate].
       mem_destruct; split; [exact He | apply PubRel.mem_spec; exact Hm].
-    - intros [He Hm]; exists (c, p); split; [exact He | cbn beta iota].
+    - intros [He Hm]; exists (q, p); split; [exact He | cbn beta iota].
       apply PubRel.mem_spec in Hm; rewrite dec_refl, Hm; reflexivity.
   Qed.
 
   Definition subBase (pi : ParentRel.t) (q : Pkg.t) : PkgSet.t :=
     PkgSet.add q (children pi q).
 
-  Lemma mem_subBase : forall pi q c,
-      PkgSet.In c (subBase pi q) <-> c = q \/ ParentRel.In (c, q) pi.
+  Lemma mem_subBase : forall pi q p,
+      PkgSet.In p (subBase pi q) <-> p = q \/ ParentRel.In (p, q) pi.
   Proof.
-    intros pi q c; unfold subBase.
+    intros pi q p; unfold subBase.
     rewrite SOppp.add_in, mem_children; reflexivity.
   Qed.
 
@@ -108,13 +108,13 @@ Module Visibility (N V : UsualOrderedType).
       : PkgSet.t :=
     PkgSet.union acc (SOppp.unionMap (pubChildren pub pi) acc).
 
-  Lemma mem_subStep : forall pub pi acc c,
-      PkgSet.In c (subStep pub pi acc) <->
-      PkgSet.In c acc \/
-      (exists p, PkgSet.In p acc /\ ParentRel.In (c, p) pi /\
-         PubRel.In (p, fst c) pub).
+  Lemma mem_subStep : forall pub pi acc q,
+      PkgSet.In q (subStep pub pi acc) <->
+      PkgSet.In q acc \/
+      (exists p, PkgSet.In p acc /\ ParentRel.In (q, p) pi /\
+         PubRel.In (p, fst q) pub).
   Proof.
-    intros pub pi acc c; unfold subStep.
+    intros pub pi acc q; unfold subStep.
     rewrite PkgSet.union_spec, SOppp.mem_unionMap.
     apply or_iff_compat_l; split.
     - intros [p [Hp Hc]]; apply mem_pubChildren in Hc.
@@ -157,16 +157,16 @@ Module Visibility (N V : UsualOrderedType).
          P p -> ParentRel.In ((m, u), p) pi -> PubRel.In (p, m) pub ->
          P (m, u)) ->
       forall fuel acc,
-        (forall c, PkgSet.In c acc -> P c) ->
-        forall c, PkgSet.In c (subIter pub pi fuel acc) -> P c.
+        (forall q, PkgSet.In q acc -> P q) ->
+        forall q, PkgSet.In q (subIter pub pi fuel acc) -> P q.
   Proof.
     intros pub pi P Hstep fuel; induction fuel as [| k IH];
-      intros acc Hacc c Hc.
-    - exact (Hacc c Hc).
+      intros acc Hacc q Hc.
+    - exact (Hacc q Hc).
     - apply (IH (subStep pub pi acc)); [| exact Hc].
-      intros c' Hc'; apply mem_subStep in Hc'.
-      destruct Hc' as [Hc' | [p [Hp [He Hm]]]]; [exact (Hacc c' Hc') |].
-      destruct c' as [m u]; exact (Hstep p m u (Hacc p Hp) He Hm).
+      intros q' Hc'; apply mem_subStep in Hc'.
+      destruct Hc' as [Hc' | [p [Hp [He Hm]]]]; [exact (Hacc q' Hc') |].
+      destruct q' as [m u]; exact (Hstep p m u (Hacc p Hp) He Hm).
   Qed.
 
   (* The saturation never leaves q and the tails of pi, so that set's
@@ -174,11 +174,11 @@ Module Visibility (N V : UsualOrderedType).
   Definition subUniverse (pi : ParentRel.t) (q : Pkg.t) : PkgSet.t :=
     PkgSet.add q (SOpp.map fst pi).
 
-  Lemma mem_subUniverse_tail : forall pi q c p,
-      ParentRel.In (c, p) pi -> PkgSet.In c (subUniverse pi q).
+  Lemma mem_subUniverse_tail : forall pi q p' p,
+      ParentRel.In (p', p) pi -> PkgSet.In p' (subUniverse pi q).
   Proof.
-    intros pi q c p H; unfold subUniverse; apply SOppp.add_in; right.
-    apply SOpp.mem_map; exists (c, p); split; [exact H | reflexivity].
+    intros pi q p' p H; unfold subUniverse; apply SOppp.add_in; right.
+    apply SOpp.mem_map; exists (p', p); split; [exact H | reflexivity].
   Qed.
 
   Lemma subBase_universe : forall pi q,
@@ -257,21 +257,21 @@ Module Visibility (N V : UsualOrderedType).
     lia.
   Qed.
 
-  Lemma mem_sub : forall pub pi q c,
-      PkgSet.In c (sub pub pi q) <-> InSub pub pi q c.
+  Lemma mem_sub : forall pub pi q p,
+      PkgSet.In p (sub pub pi q) <-> InSub pub pi q p.
   Proof.
-    intros pub pi q c; split.
+    intros pub pi q p; split.
     - unfold sub; apply subIter_sound.
-      + intros p m u Hp He Hm; exact (InSubPubStep pub pi q p m u Hp He Hm).
-      + intros c' Hc'; apply mem_subBase in Hc'.
+      + intros p' m u Hp He Hm; exact (InSubPubStep pub pi q p' m u Hp He Hm).
+      + intros q' Hc'; apply mem_subBase in Hc'.
         destruct Hc' as [-> | He];
-          [apply InSubSelf | exact (InSubChild pub pi q c' He)].
-    - intro H; induction H as [| c He | p m u H IH He Hm].
+          [apply InSubSelf | exact (InSubChild pub pi q q' He)].
+    - intro H; induction H as [| p He | p' m u H IH He Hm].
       + unfold sub; apply subIter_incl, mem_subBase; left; reflexivity.
       + unfold sub; apply subIter_incl, mem_subBase; right; exact He.
       + assert (Hin : PkgSet.In (m, u) (subStep pub pi (sub pub pi q))).
         { apply mem_subStep; right.
-          exists p; split; [exact IH | split; [exact He | exact Hm]]. }
+          exists p'; split; [exact IH | split; [exact He | exact Hm]]. }
         rewrite sub_fix in Hin; exact Hin.
   Qed.
 
@@ -504,12 +504,12 @@ Module Visibility (N V : UsualOrderedType).
               (reduceDepsIntToOcc D pub (potentialOrigins R D pub r))
               (reduceDepsIntToAgr D pub (potentialOrigins R D pub r)))).
 
-    Lemma mem_reduceRealOccurrence : forall R origins y,
-        T.PkgSet.In y (reduceRealOccurrence R origins) <->
+    Lemma mem_reduceRealOccurrence : forall R origins p,
+        T.PkgSet.In p (reduceRealOccurrence R origins) <->
         exists n v q, PkgSet.In (n, v) R /\ PkgSet.In q origins /\
-          y = (Name.Occurrence n q, v).
+          p = (Name.Occurrence n q, v).
     Proof.
-      intros R origins y; unfold reduceRealOccurrence.
+      intros R origins p; unfold reduceRealOccurrence.
       rewrite SOptp.mem_unionMap.
       split.
       - intros [[n v] [HR Hh]]; cbn beta iota in Hh.
@@ -520,13 +520,13 @@ Module Visibility (N V : UsualOrderedType).
         apply SOptp.mem_map; exists q; auto.
     Qed.
 
-    Lemma mem_reduceRealIntermediate : forall D origins y,
-        T.PkgSet.In y (reduceRealIntermediate D origins) <->
+    Lemma mem_reduceRealIntermediate : forall D origins p,
+        T.PkgSet.In p (reduceRealIntermediate D origins) <->
         exists n v m vs q u,
           C.DepRel.In ((n, v), (m, vs)) D /\ PkgSet.In q origins /\
-          VSet.In u vs /\ y = (Name.Intermediate n v m q, u).
+          VSet.In u vs /\ p = (Name.Intermediate n v m q, u).
     Proof.
-      intros D origins y; unfold reduceRealIntermediate.
+      intros D origins p; unfold reduceRealIntermediate.
       rewrite SOdtp.mem_unionMap.
       split.
       - intros [[[n v] [m vs]] [HD Hh]]; cbn beta iota in Hh.
@@ -539,13 +539,13 @@ Module Visibility (N V : UsualOrderedType).
         apply SOvtp.mem_map; exists u; auto.
     Qed.
 
-    Lemma mem_reduceRealAgreement : forall D y,
-        T.PkgSet.In y (reduceRealAgreement D) <->
+    Lemma mem_reduceRealAgreement : forall D p,
+        T.PkgSet.In p (reduceRealAgreement D) <->
         exists n v m vs u,
           C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs /\
-          y = (Name.Agreement n v m, u).
+          p = (Name.Agreement n v m, u).
     Proof.
-      intros D y; unfold reduceRealAgreement; rewrite SOdtp.mem_unionMap.
+      intros D p; unfold reduceRealAgreement; rewrite SOdtp.mem_unionMap.
       split.
       - intros [[[n v] [m vs]] [HD Hh]]; cbn beta iota in Hh.
         apply SOvtp.mem_map in Hh; destruct Hh as [u [Hu ->]].
@@ -570,10 +570,10 @@ Module Visibility (N V : UsualOrderedType).
         C.DepRel.In ((n, v), (m, vs)) D -> VSet.In u vs ->
         RealSpec R D pub r (Name.Agreement n v m, u).
 
-    Lemma mem_reduceReal : forall R D pub r y,
-        T.PkgSet.In y (reduceReal R D pub r) <-> RealSpec R D pub r y.
+    Lemma mem_reduceReal : forall R D pub r p,
+        T.PkgSet.In p (reduceReal R D pub r) <-> RealSpec R D pub r p.
     Proof.
-      intros R D pub r y; unfold reduceReal.
+      intros R D pub r p; unfold reduceReal.
       rewrite !T.PkgSet.union_spec, mem_reduceRealOccurrence,
         mem_reduceRealIntermediate, mem_reduceRealAgreement.
       split.
@@ -904,52 +904,52 @@ Module Visibility (N V : UsualOrderedType).
         T.IsResolution (reduceReal R D pub r) (reduceDeps R D pub r)
           (embedRoot r) S ->
         PkgSet.In (n, v) (visibilityResolution R D pub r S) ->
-        exists c0, PkgSet.In c0 (potentialOrigins R D pub r) /\
-          T.PkgSet.In (Name.Occurrence n c0, v) S /\
+        exists q, PkgSet.In q (potentialOrigins R D pub r) /\
+          T.PkgSet.In (Name.Occurrence n q, v) S /\
           (forall (m : N.t) (vs : VSet.t),
-             C.DepRel.In ((n, v), (m, vs)) D -> Carried pub (n, v) m c0).
+             C.DepRel.In ((n, v), (m, vs)) D -> Carried pub (n, v) m q).
     Proof.
       intros R D pub r S n v Hres Hp.
       apply mem_visibilityResolution in Hp.
-      destruct Hp as [HR [q [Hq Hocc]]].
+      destruct Hp as [HR [q0 [Hq Hocc]]].
       destruct (privb D pub (n, v)) eqn:Hpb.
       - apply privb_iff in Hpb.
         exists (n, v); split;
           [apply mem_potentialOrigins; right; split; assumption |].
         split;
-          [exact (self_occurrence R D pub r S n v q Hres HR Hq Hpb Hocc) |].
+          [exact (self_occurrence R D pub r S n v q0 Hres HR Hq Hpb Hocc) |].
         intros m vs _; right; reflexivity.
-      - exists q; split; [exact Hq | split; [exact Hocc |]].
+      - exists q0; split; [exact Hq | split; [exact Hocc |]].
         intros m vs HD; left.
         apply (not_priv_pub D pub (n, v) m vs); [| exact HD].
         intro Hpr; apply privb_iff in Hpr; congruence.
     Qed.
 
     Lemma inSub_occurrence : forall R D pub r S (n : N.t) (v : V.t)
-        (c0 c : Pkg.t),
+        (q p : Pkg.t),
         T.IsResolution (reduceReal R D pub r) (reduceDeps R D pub r)
           (embedRoot r) S ->
-        PkgSet.In c0 (potentialOrigins R D pub r) ->
-        T.PkgSet.In (Name.Occurrence n c0, v) S ->
+        PkgSet.In q (potentialOrigins R D pub r) ->
+        T.PkgSet.In (Name.Occurrence n q, v) S ->
         (forall (m : N.t) (vs : VSet.t),
-           C.DepRel.In ((n, v), (m, vs)) D -> Carried pub (n, v) m c0) ->
-        InSub pub (parents R D pub r S) (n, v) c ->
-        T.PkgSet.In (Name.Occurrence (fst c) c0, snd c) S.
+           C.DepRel.In ((n, v), (m, vs)) D -> Carried pub (n, v) m q) ->
+        InSub pub (parents R D pub r S) (n, v) p ->
+        T.PkgSet.In (Name.Occurrence (fst p) q, snd p) S.
     Proof.
-      intros R D pub r S n v c0 c Hres Hc0 Hocc Htr Hins.
-      induction Hins as [| c He | p m u Hp IH He Hm].
+      intros R D pub r S n v q p Hres Hc0 Hocc Htr Hins.
+      induction Hins as [| p He | p' m u Hp IH He Hm].
       - exact Hocc.
-      - destruct c as [cn cv].
+      - destruct p as [cn cv].
         apply mem_parents in He.
         destruct He as [n2 [v2 [m2 [vs2 [u2 [HD [Hu2 [Hagr [_ Heq]]]]]]]]].
         injection Heq as <- <- <- <-.
-        exact (proj2 (occurrence_step_at R D pub r S n v cn vs2 c0 cv Hres HD
+        exact (proj2 (occurrence_step_at R D pub r S n v cn vs2 q cv Hres HD
                         Hc0 (Htr cn vs2 HD) Hocc Hagr)).
-      - destruct p as [pn pv].
+      - destruct p' as [pn pv].
         apply mem_parents in He.
         destruct He as [n2 [v2 [m2 [vs2 [u2 [HD [Hu2 [Hagr [_ Heq]]]]]]]]].
         injection Heq as <- <- <- <-.
-        exact (proj2 (occurrence_step_at R D pub r S pn pv m vs2 c0 u Hres HD
+        exact (proj2 (occurrence_step_at R D pub r S pn pv m vs2 q u Hres HD
                         Hc0 (or_introl Hm) IH Hagr)).
     Qed.
 
@@ -1075,13 +1075,13 @@ Module Visibility (N V : UsualOrderedType).
               (potentialOrigins R D pub r))
            (coreResolutionAgreement D S pi)).
 
-    Lemma mem_coreResolutionOccurrence : forall D pub r S pi origins y,
-        T.PkgSet.In y (coreResolutionOccurrence D pub r S pi origins) <->
+    Lemma mem_coreResolutionOccurrence : forall D pub r S pi origins p,
+        T.PkgSet.In p (coreResolutionOccurrence D pub r S pi origins) <->
         exists n v q, PkgSet.In (n, v) S /\ PkgSet.In q origins /\
           IsOrigin D pub r S q /\ InSub pub pi q (n, v) /\
-          y = (Name.Occurrence n q, v).
+          p = (Name.Occurrence n q, v).
     Proof.
-      intros D pub r S pi origins y; unfold coreResolutionOccurrence.
+      intros D pub r S pi origins p; unfold coreResolutionOccurrence.
       rewrite SOptp.mem_unionMap.
       split.
       - intros [[n v] [HS Hh]]; cbn beta iota in Hh.
@@ -1096,15 +1096,15 @@ Module Visibility (N V : UsualOrderedType).
           auto.
     Qed.
 
-    Lemma mem_coreResolutionIntermediate : forall D pub r S pi origins y,
-        T.PkgSet.In y (coreResolutionIntermediate D pub r S pi origins) <->
+    Lemma mem_coreResolutionIntermediate : forall D pub r S pi origins p,
+        T.PkgSet.In p (coreResolutionIntermediate D pub r S pi origins) <->
         exists n v m vs q u,
           C.DepRel.In ((n, v), (m, vs)) D /\ PkgSet.In q origins /\
           VSet.In u vs /\ IsOrigin D pub r S q /\ InSub pub pi q (n, v) /\
           Carried pub (n, v) m q /\ ParentRel.In ((m, u), (n, v)) pi /\
-          y = (Name.Intermediate n v m q, u).
+          p = (Name.Intermediate n v m q, u).
     Proof.
-      intros D pub r S pi origins y; unfold coreResolutionIntermediate.
+      intros D pub r S pi origins p; unfold coreResolutionIntermediate.
       rewrite SOdtp.mem_unionMap.
       split.
       - intros [[[n v] [m vs]] [HD Hh]]; cbn beta iota in Hh.
@@ -1125,14 +1125,14 @@ Module Visibility (N V : UsualOrderedType).
         rewrite edgeb_iff; auto.
     Qed.
 
-    Lemma mem_coreResolutionAgreement : forall D S pi y,
-        T.PkgSet.In y (coreResolutionAgreement D S pi) <->
+    Lemma mem_coreResolutionAgreement : forall D S pi p,
+        T.PkgSet.In p (coreResolutionAgreement D S pi) <->
         exists n v m vs u,
           C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs /\
           PkgSet.In (n, v) S /\ ParentRel.In ((m, u), (n, v)) pi /\
-          y = (Name.Agreement n v m, u).
+          p = (Name.Agreement n v m, u).
     Proof.
-      intros D S pi y; unfold coreResolutionAgreement.
+      intros D S pi p; unfold coreResolutionAgreement.
       rewrite SOdtp.mem_unionMap.
       split.
       - intros [[[n v] [m vs]] [HD Hh]]; cbn beta iota in Hh.
@@ -1164,11 +1164,11 @@ Module Visibility (N V : UsualOrderedType).
         PkgSet.In (n, v) S -> ParentRel.In ((m, u), (n, v)) pi ->
         CoreSpec R D pub r S pi (Name.Agreement n v m, u).
 
-    Lemma mem_coreResolution : forall R D pub r S pi y,
-        T.PkgSet.In y (coreResolution R D pub r S pi) <->
-        CoreSpec R D pub r S pi y.
+    Lemma mem_coreResolution : forall R D pub r S pi p,
+        T.PkgSet.In p (coreResolution R D pub r S pi) <->
+        CoreSpec R D pub r S pi p.
     Proof.
-      intros R D pub r S pi y; unfold coreResolution.
+      intros R D pub r S pi p; unfold coreResolution.
       rewrite !T.PkgSet.union_spec, mem_coreResolutionOccurrence,
         mem_coreResolutionIntermediate, mem_coreResolutionAgreement.
       split.
@@ -1346,16 +1346,16 @@ Module Visibility (N V : UsualOrderedType).
             split; [exact HD | split; reflexivity].
       Qed.
 
-      Lemma reduceDeps_target_potentialOrigin :
-        forall R D pub r (p : T.Pkg.t) (n : Name.t) (h : T.VSet.t)
+      Lemma reduceDeps_dependee_potentialOrigin :
+        forall R D pub r (p : T.Pkg.t) (o : Name.t) (h : T.VSet.t)
                (q : Pkg.t),
-          T.DepRel.In (p, (n, h)) (reduceDeps R D pub r) ->
-          (exists m : N.t, n = Name.Occurrence m q) \/
-          (exists (m : N.t) (v : V.t) (o : N.t),
-              n = Name.Intermediate m v o q) ->
+          T.DepRel.In (p, (o, h)) (reduceDeps R D pub r) ->
+          (exists n : N.t, o = Name.Occurrence n q) \/
+          (exists (n : N.t) (v : V.t) (m : N.t),
+              o = Name.Intermediate n v m q) ->
           PkgSet.In q (potentialOrigins R D pub r).
       Proof.
-        intros R D pub r p n h q Hin Hname; apply mem_reduceDeps in Hin.
+        intros R D pub r p o h q Hin Hname; apply mem_reduceDeps in Hin.
         inversion Hin; subst;
           destruct Hname as [[n2 Hn] | [n2 [v2 [m2 Hn]]]];
           try discriminate Hn; injection Hn; intros; subst;
@@ -1374,7 +1374,7 @@ Module Visibility (N V : UsualOrderedType).
         intros R D pub r n q Hreach.
         assert (Hq : PkgSet.In q (potentialOrigins R D pub r)).
         { destruct Hreach as [[p [h Hin]] | Heq].
-          - apply (reduceDeps_target_potentialOrigin R D pub r p
+          - apply (reduceDeps_dependee_potentialOrigin R D pub r p
                      (Name.Occurrence n q) h q Hin).
             left; exists n; reflexivity.
           - injection Heq as _ ->.
@@ -1432,7 +1432,7 @@ Module Visibility (N V : UsualOrderedType).
         intros R D pub r n v m q Hreach.
         assert (Hq : PkgSet.In q (potentialOrigins R D pub r)).
         { destruct Hreach as [p [h Hin]].
-          apply (reduceDeps_target_potentialOrigin R D pub r p
+          apply (reduceDeps_dependee_potentialOrigin R D pub r p
                    (Name.Intermediate n v m q) h q Hin).
           right; exists n, v, m; reflexivity. }
         apply T.VSet.ext; intro u.
