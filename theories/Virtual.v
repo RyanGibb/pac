@@ -205,20 +205,20 @@ Module Virtual (N V : UsualOrderedType).
         Pi.
 
     Lemma mem_realProviderBlock :
-      forall Pi (p : Pkg.t) (n : N.t) (vs : VSet.t) y,
-        T.PkgSet.In y (realProviderBlock Pi p n vs) <->
-        exists m u v, ProvidesRel.In ((m, u), (n, v)) Pi /\ MemTop v vs /\
-          y = (Name.Selector p n, Version.Provider m u).
+      forall Pi (p : Pkg.t) (n : N.t) (vs : VSet.t) q,
+        T.PkgSet.In q (realProviderBlock Pi p n vs) <->
+        exists m w v, ProvidesRel.In ((m, w), (n, v)) Pi /\ MemTop v vs /\
+          q = (Name.Selector p n, Version.Provider m w).
     Proof.
-      intros Pi p n vs y; unfold realProviderBlock.
+      intros Pi p n vs q; unfold realProviderBlock.
       rewrite SOpp.mem_filterMap.
       split.
-      - intros [[[m u] [m0 v]] [Ht Hy]]; cbn [fst snd] in Hy.
+      - intros [[[m w] [m0 v]] [Ht Hy]]; cbn [fst snd] in Hy.
         apply if_some_iff in Hy; destruct Hy as [Hc <-].
         rewrite Bool.andb_true_iff, NEqb.eqb_true_iff, memTopb_iff in Hc.
-        destruct Hc as [-> Hm]; exists m, u, v; auto.
-      - intros (m & u & v & Hin & Hm & ->).
-        exists ((m, u), (n, v)); split; [exact Hin | cbn [fst snd]].
+        destruct Hc as [-> Hm]; exists m, w, v; auto.
+      - intros (m & w & v & Hin & Hm & ->).
+        exists ((m, w), (n, v)); split; [exact Hin | cbn [fst snd]].
         apply if_some_iff; rewrite Bool.andb_true_iff, NEqb.eqb_true_iff,
           memTopb_iff; auto.
     Qed.
@@ -233,12 +233,12 @@ Module Virtual (N V : UsualOrderedType).
         vs.
 
     Lemma mem_realDirectBlock :
-      forall R (p : Pkg.t) (n : N.t) (vs : VSet.t) y,
-        T.PkgSet.In y (realDirectBlock R p n vs) <->
+      forall R (p : Pkg.t) (n : N.t) (vs : VSet.t) q,
+        T.PkgSet.In q (realDirectBlock R p n vs) <->
         exists u, VSet.In u vs /\ PkgSet.In (n, u) R /\
-          y = (Name.Selector p n, Version.Provider n u).
+          q = (Name.Selector p n, Version.Provider n u).
     Proof.
-      intros R p n vs y; unfold realDirectBlock.
+      intros R p n vs q; unfold realDirectBlock.
       rewrite SOvp.mem_filterMap_if; cbn beta.
       setoid_rewrite PkgSet.mem_spec; reflexivity.
     Qed.
@@ -273,10 +273,10 @@ Module Virtual (N V : UsualOrderedType).
         PkgSet.In (n, u) R ->
         RealSpec R D Pi (Name.Selector p n, Version.Provider n u).
 
-    Lemma mem_reduceReal : forall R D Pi y,
-        T.PkgSet.In y (reduceReal R D Pi) <-> RealSpec R D Pi y.
+    Lemma mem_reduceReal : forall R D Pi q,
+        T.PkgSet.In q (reduceReal R D Pi) <-> RealSpec R D Pi q.
     Proof.
-      intros R D Pi y; unfold reduceReal, embedSet.
+      intros R D Pi q; unfold reduceReal, embedSet.
       rewrite !T.PkgSet.union_spec, SOsp.mem_map, !SOdp.mem_unionMap.
       split.
       - intros [([n v] & HR & ->) | [([p [n vs]] & HD & He)
@@ -314,8 +314,8 @@ Module Virtual (N V : UsualOrderedType).
 
     Lemma mem_selectorVersions : forall R Pi n vs y,
         T.VSet.In y (selectorVersions R Pi n vs) <->
-        (exists m u v, ProvidesRel.In ((m, u), (n, v)) Pi /\ MemTop v vs /\
-           y = Version.Provider m u) \/
+        (exists m w v, ProvidesRel.In ((m, w), (n, v)) Pi /\ MemTop v vs /\
+           y = Version.Provider m w) \/
         (exists u,
            VSet.In u vs /\ PkgSet.In (n, u) R /\ y = Version.Provider n u).
     Proof.
@@ -347,19 +347,19 @@ Module Virtual (N V : UsualOrderedType).
     Lemma mem_depsProviderBlock :
       forall Pi (p : Pkg.t) (n : N.t) (vs : VSet.t) y,
         T.DepRel.In y (depsProviderBlock Pi p n vs) <->
-        exists m u v, ProvidesRel.In ((m, u), (n, v)) Pi /\ MemTop v vs /\
-          y = ((Name.Selector p n, Version.Provider m u),
-               (Name.Orig m, T.VSet.singleton (Version.Orig u))).
+        exists m w v, ProvidesRel.In ((m, w), (n, v)) Pi /\ MemTop v vs /\
+          y = ((Name.Selector p n, Version.Provider m w),
+               (Name.Orig m, T.VSet.singleton (Version.Orig w))).
     Proof.
       intros Pi p n vs y; unfold depsProviderBlock.
       rewrite SOpd.mem_filterMap.
       split.
-      - intros [[[m u] [m0 v]] [Ht Hy]]; cbn [fst snd] in Hy.
+      - intros [[[m w] [m0 v]] [Ht Hy]]; cbn [fst snd] in Hy.
         apply if_some_iff in Hy; destruct Hy as [Hc <-].
         rewrite Bool.andb_true_iff, NEqb.eqb_true_iff, memTopb_iff in Hc.
-        destruct Hc as [-> Hm]; exists m, u, v; auto.
-      - intros (m & u & v & Hin & Hm & ->).
-        exists ((m, u), (n, v)); split; [exact Hin | cbn [fst snd]].
+        destruct Hc as [-> Hm]; exists m, w, v; auto.
+      - intros (m & w & v & Hin & Hm & ->).
+        exists ((m, w), (n, v)); split; [exact Hin | cbn [fst snd]].
         apply if_some_iff; rewrite Bool.andb_true_iff, NEqb.eqb_true_iff,
           memTopb_iff; auto.
     Qed.
@@ -531,14 +531,14 @@ Module Virtual (N V : UsualOrderedType).
 
     Lemma mem_rhoBlock :
       forall Pi (S : T.PkgSet.t) (p : Pkg.t) (n : N.t) (vs : VSet.t)
-             (m : N.t) (u : V.t) (m' : N.t) (p' : Pkg.t),
-        RhoRel.In ((m, u), (m', p')) (rhoBlock Pi S p n vs) <->
-        (exists v, ProvidesRel.In ((m, u), (n, v)) Pi /\ MemTop v vs /\
+             (m : N.t) (w : V.t) (m' : N.t) (p' : Pkg.t),
+        RhoRel.In ((m, w), (m', p')) (rhoBlock Pi S p n vs) <->
+        (exists v, ProvidesRel.In ((m, w), (n, v)) Pi /\ MemTop v vs /\
            T.PkgSet.In (embedPkg p) S /\
-           T.PkgSet.In (Name.Selector p n, Version.Provider m u) S /\
+           T.PkgSet.In (Name.Selector p n, Version.Provider m w) S /\
            m' = n /\ p' = p).
     Proof.
-      intros Pi S p n vs m u m' p'; unfold rhoBlock.
+      intros Pi S p n vs m w m' p'; unfold rhoBlock.
       rewrite SOpr.mem_filterMap.
       split.
       - intros [[[m0 u0] [m1 v]] [Ht Hy]]; cbn [fst snd] in Hy.
@@ -548,7 +548,7 @@ Module Virtual (N V : UsualOrderedType).
           !T.PkgSet.mem_spec in Hc.
         destruct Hc as (-> & Hm & HpS & HselS); exists v; auto 8.
       - intros (v & Hin & Hm & HpS & HselS & -> & ->).
-        exists ((m, u), (n, v)); split; [exact Hin | cbn [fst snd]].
+        exists ((m, w), (n, v)); split; [exact Hin | cbn [fst snd]].
         apply if_some_iff; rewrite !Bool.andb_true_iff, NEqb.eqb_true_iff,
           memTopb_iff, !T.PkgSet.mem_spec; auto 8.
     Qed.
@@ -559,14 +559,14 @@ Module Virtual (N V : UsualOrderedType).
       SOdr.unionMap (fun '(p, (n, vs)) => rhoBlock Pi S p n vs) D.
 
     Lemma mem_providers :
-      forall D Pi S (m : N.t) (u : V.t) (p : Pkg.t) (n : N.t),
-        RhoRel.In ((m, u), (n, p)) (providers D Pi S) <->
+      forall D Pi S (m : N.t) (w : V.t) (p : Pkg.t) (n : N.t),
+        RhoRel.In ((m, w), (n, p)) (providers D Pi S) <->
         exists vs, C.DepRel.In (p, (n, vs)) D /\
-          exists v, MemTop v vs /\ ProvidesRel.In ((m, u), (n, v)) Pi /\
+          exists v, MemTop v vs /\ ProvidesRel.In ((m, w), (n, v)) Pi /\
             T.PkgSet.In (embedPkg p) S /\
-            T.PkgSet.In (Name.Selector p n, Version.Provider m u) S.
+            T.PkgSet.In (Name.Selector p n, Version.Provider m w) S.
     Proof.
-      intros D Pi S m u p n; unfold providers; rewrite SOdr.mem_unionMap.
+      intros D Pi S m w p n; unfold providers; rewrite SOdr.mem_unionMap.
       split.
       - intros [[p0 [n0 vs]] [HeD He]]; cbn beta iota in He.
         apply mem_rhoBlock in He.
@@ -783,11 +783,11 @@ Module Virtual (N V : UsualOrderedType).
         CoreSpec D Pi S_Pi rho
           (Name.Selector p n, chooseSelector S_Pi rho Pi p n vs).
 
-    Lemma mem_coreResolution : forall D Pi S_Pi rho (y : T.Pkg.t),
-        T.PkgSet.In y (coreResolution D Pi S_Pi rho) <->
-        CoreSpec D Pi S_Pi rho y.
+    Lemma mem_coreResolution : forall D Pi S_Pi rho (q : T.Pkg.t),
+        T.PkgSet.In q (coreResolution D Pi S_Pi rho) <->
+        CoreSpec D Pi S_Pi rho q.
     Proof.
-      intros D Pi S_Pi rho y; unfold coreResolution, embedSet.
+      intros D Pi S_Pi rho q; unfold coreResolution, embedSet.
       rewrite T.PkgSet.union_spec, SOsp.mem_map, SOdp.mem_filterMap.
       split.
       - intros [([n v] & HS & ->) | ([p [n vs]] & HD & He)].
