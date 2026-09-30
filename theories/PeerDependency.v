@@ -35,15 +35,15 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         D.
 
     Lemma hasDepOnb_iff : forall D (p : Pkg.t) (n : N.t),
-        hasDepOnb D p n = true <-> exists ws, C.DepRel.In (p, (n, ws)) D.
+        hasDepOnb D p n = true <-> exists vs, C.DepRel.In (p, (n, vs)) D.
     Proof.
       intros D p m; unfold hasDepOnb; rewrite C.DepRel.exists_spec'.
       split.
-      - intros [[q [m' ws]] [He Hb]]; cbn [fst snd] in Hb.
+      - intros [[q [m' vs]] [He Hb]]; cbn [fst snd] in Hb.
         rewrite Bool.andb_true_iff, PkgEqb.eqb_true_iff, NEqb.eqb_true_iff
           in Hb.
         destruct Hb as [-> ->]; eauto.
-      - intros [ws He]; exists (p, (m, ws)); split; [exact He |].
+      - intros [vs He]; exists (p, (m, vs)); split; [exact He |].
         cbn [fst snd]; rewrite PkgEqb.eqb_refl, NEqb.eqb_refl; reflexivity.
     Qed.
 
@@ -162,13 +162,13 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         rewrite Bool.andb_true_iff, !T.PkgSet.mem_spec; repeat split; auto.
     Qed.
 
-    Lemma mem_reduceRealIntermediate : forall D y,
-        T.PkgSet.In y (reduceRealIntermediate D) <->
+    Lemma mem_reduceRealIntermediate : forall D p,
+        T.PkgSet.In p (reduceRealIntermediate D) <->
         exists n v m vs u,
           C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs /\
-          y = (Name.Intermediate n v m, Version.Orig u).
+          p = (Name.Intermediate n v m, Version.Orig u).
     Proof.
-      intros D y; unfold reduceRealIntermediate; rewrite SOdtp.mem_unionMap.
+      intros D p; unfold reduceRealIntermediate; rewrite SOdtp.mem_unionMap.
       split.
       - intros [[[n v] [m vs]] [HeD Hh]]; cbn beta iota in Hh.
         apply SOvtp.mem_map in Hh; destruct Hh as [u [Hu ->]].
@@ -178,13 +178,13 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         apply SOvtp.mem_map; exists u; split; [exact Hu | reflexivity].
     Qed.
 
-    Lemma mem_peerReals : forall D Th n v o u y,
-        T.PkgSet.In y (peerReals D Th n v o u) <->
+    Lemma mem_peerReals : forall D Th n v o u p,
+        T.PkgSet.In p (peerReals D Th n v o u) <->
         exists m ws w,
           PeerRel.In ((o, u), (m, ws)) Th /\ hasDepOnb D (n, v) m = true /\
-          VSet.In w ws /\ y = (Name.Intermediate n v m, Version.Orig w).
+          VSet.In w ws /\ p = (Name.Intermediate n v m, Version.Orig w).
     Proof.
-      intros D Th n v o u y; unfold peerReals; rewrite SOetp.mem_unionMap.
+      intros D Th n v o u p; unfold peerReals; rewrite SOetp.mem_unionMap.
       split.
       - intros [[q [m ws]] [HtTh Hh]]; cbn beta iota in Hh.
         destruct (Pkg.eq_dec q (o, u)) as [-> | NE];
@@ -198,14 +198,14 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         rewrite dec_refl, Hb; apply SOvtp.mem_map; eauto.
     Qed.
 
-    Lemma mem_peerRealsOfVS : forall D Th n v o us y,
-        T.PkgSet.In y (peerRealsOfVS D Th n v o us) <->
+    Lemma mem_peerRealsOfVS : forall D Th n v o us p,
+        T.PkgSet.In p (peerRealsOfVS D Th n v o us) <->
         exists u m ws w,
           VSet.In u us /\ PeerRel.In ((o, u), (m, ws)) Th /\
           hasDepOnb D (n, v) m = true /\ VSet.In w ws /\
-          y = (Name.Intermediate n v m, Version.Orig w).
+          p = (Name.Intermediate n v m, Version.Orig w).
     Proof.
-      intros D Th n v o us y; unfold peerRealsOfVS;
+      intros D Th n v o us p; unfold peerRealsOfVS;
         rewrite SOvtp.mem_unionMap.
       split.
       - intros [u [Hu Hh]]; apply mem_peerReals in Hh.
@@ -216,14 +216,14 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         apply mem_peerReals; exists m, ws, w; repeat split; assumption.
     Qed.
 
-    Lemma mem_reduceRealPeer : forall D Th y,
-        T.PkgSet.In y (reduceRealPeer D Th) <->
+    Lemma mem_reduceRealPeer : forall D Th p,
+        T.PkgSet.In p (reduceRealPeer D Th) <->
         exists n v o us u m ws w,
           C.DepRel.In ((n, v), (o, us)) D /\ VSet.In u us /\
           PeerRel.In ((o, u), (m, ws)) Th /\ hasDepOnb D (n, v) m = true /\
-          VSet.In w ws /\ y = (Name.Intermediate n v m, Version.Orig w).
+          VSet.In w ws /\ p = (Name.Intermediate n v m, Version.Orig w).
     Proof.
-      intros D Th y; unfold reduceRealPeer; rewrite SOdtp.mem_unionMap.
+      intros D Th p; unfold reduceRealPeer; rewrite SOdtp.mem_unionMap.
       split.
       - intros [[[n v] [o us]] [HeD Hh]]; cbn beta iota in Hh.
         apply mem_peerRealsOfVS in Hh.
@@ -413,16 +413,16 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
           (reduceDeps D Th g).
     Proof. intros; apply mem_reduceDeps; eapply EdgeIntToDep; eassumption. Qed.
 
-    Lemma mem_reduceDeps_peer : forall D Th g qn qv o vs1 m' ws' ou,
-        C.DepRel.In ((qn, qv), (o, vs1)) D ->
-        VSet.In ou vs1 ->
-        PeerRel.In ((o, ou), (m', ws')) Th ->
-        (exists vs2, C.DepRel.In ((qn, qv), (m', vs2)) D) ->
-        T.DepRel.In ((Name.Intermediate qn qv o, Version.Orig ou),
-                     (Name.Intermediate qn qv m', Conc.Reduction.embedVS ws'))
+    Lemma mem_reduceDeps_peer : forall D Th g n v o us m ws u,
+        C.DepRel.In ((n, v), (o, us)) D ->
+        VSet.In u us ->
+        PeerRel.In ((o, u), (m, ws)) Th ->
+        (exists vs, C.DepRel.In ((n, v), (m, vs)) D) ->
+        T.DepRel.In ((Name.Intermediate n v o, Version.Orig u),
+                     (Name.Intermediate n v m, Conc.Reduction.embedVS ws))
           (reduceDeps D Th g).
     Proof.
-      intros D Th g qn qv o vs1 m' ws' ou HD Hou HTh Hpar.
+      intros D Th g n v o us m ws u HD Hou HTh Hpar.
       apply mem_reduceDeps; eapply EdgePeer; try eassumption.
       apply hasDepOnb_iff; exact Hpar.
     Qed.
@@ -702,18 +702,18 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
       Qed.
 
       Definition peersOfDeps (D : C.DepRel.t) (Th : PeerRel.t) (p : Pkg.t)
-          (m : N.t) : PeerRel.t :=
-        PeerRel.filter (fun '(q, (m0, _)) =>
-            andb (NEqb.eqb m0 m) (dependsOnb D p q))
+          (o : N.t) : PeerRel.t :=
+        PeerRel.filter (fun '(q, (o', _)) =>
+            andb (NEqb.eqb o' o) (dependsOnb D p q))
           Th.
 
       Lemma mem_peersOfDeps :
-        forall D Th (p q : Pkg.t) (m m0 : N.t) (ws : VSet.t),
-          PeerRel.In (q, (m0, ws)) (peersOfDeps D Th p m) <->
-          PeerRel.In (q, (m0, ws)) Th /\ m0 = m /\
+        forall D Th (p q : Pkg.t) (o o' : N.t) (ws : VSet.t),
+          PeerRel.In (q, (o', ws)) (peersOfDeps D Th p o) <->
+          PeerRel.In (q, (o', ws)) Th /\ o' = o /\
           (exists vs, C.DepRel.In (p, (fst q, vs)) D /\ VSet.In (snd q) vs).
       Proof.
-        intros D Th p q m m0 ws; unfold peersOfDeps.
+        intros D Th p q o o' ws; unfold peersOfDeps.
         rewrite PeerRel.filter_spec'; cbn beta iota.
         rewrite Bool.andb_true_iff, NEqb.eqb_true_iff, dependsOnb_iff.
         tauto.

@@ -188,8 +188,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Definition gransOfVS (g : V.t -> G.t) (vs : VSet.t) : T.VSet.t :=
       SOvcv.map (fun u => Version.Gran (g u)) vs.
 
-    Definition filterGran (g : V.t -> G.t) (u : V.t) (vs : VSet.t) : VSet.t :=
-      VSet.filter (fun w => granEqb (g w) (g u)) vs.
+    Definition filterGran (g : V.t -> G.t) (w : V.t) (vs : VSet.t) : VSet.t :=
+      VSet.filter (fun u => granEqb (g u) (g w)) vs.
 
     Module SOvtp := SetOps V T.Pkg VSet T.PkgSet.
     Module SOdtp := SetOps C.DepElt T.Pkg C.DepRel T.PkgSet.
@@ -250,10 +250,10 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         (T.DepRel.union (reduceDepsSplitEntry D g)
            (T.DepRel.union (reduceDepsSplitFanout D g) (reduceDepsEmpty D g))).
 
-    Lemma mem_filterGran : forall g u0 vs u,
-        VSet.In u (filterGran g u0 vs) <-> VSet.In u vs /\ g u = g u0.
+    Lemma mem_filterGran : forall g w vs u,
+        VSet.In u (filterGran g w vs) <-> VSet.In u vs /\ g u = g w.
     Proof.
-      intros g u0 vs u; unfold filterGran.
+      intros g w vs u; unfold filterGran.
       rewrite VSet.filter_spec'.
       rewrite granEqb_iff; reflexivity.
     Qed.
@@ -460,10 +460,10 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       inversion H; subst; assumption.
     Qed.
 
-    Lemma mem_reduceDeps_direct : forall D g n v m vs u0,
-        C.DepRel.In ((n, v), (m, vs)) D -> IsDirect g vs -> VSet.In u0 vs ->
+    Lemma mem_reduceDeps_direct : forall D g n v m vs w,
+        C.DepRel.In ((n, v), (m, vs)) D -> IsDirect g vs -> VSet.In w vs ->
         T.DepRel.In ((Name.Granular n (g v), Version.Orig v),
-                     (Name.Granular m (g u0), embedVS vs))
+                     (Name.Granular m (g w), embedVS vs))
           (reduceDeps D g).
     Proof. intros; apply mem_reduceDeps, EdgeDirect; assumption. Qed.
 
@@ -474,10 +474,10 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           (reduceDeps D g).
     Proof. intros; apply mem_reduceDeps, EdgeSplitEntry; assumption. Qed.
 
-    Lemma mem_reduceDeps_split2 : forall D g n v m vs u0,
-        C.DepRel.In ((n, v), (m, vs)) D -> IsSplit g vs -> VSet.In u0 vs ->
-        T.DepRel.In ((Name.Intermediate n v m, Version.Gran (g u0)),
-                     (Name.Granular m (g u0), embedVS (filterGran g u0 vs)))
+    Lemma mem_reduceDeps_split2 : forall D g n v m vs w,
+        C.DepRel.In ((n, v), (m, vs)) D -> IsSplit g vs -> VSet.In w vs ->
+        T.DepRel.In ((Name.Intermediate n v m, Version.Gran (g w)),
+                     (Name.Granular m (g w), embedVS (filterGran g w vs)))
           (reduceDeps D g).
     Proof. intros; apply mem_reduceDeps, EdgeSplitFanout; assumption. Qed.
 
