@@ -427,9 +427,9 @@ Module Opam (N V X Y E : UsualOrderedType).
       : FSet.t :=
       let R := effRepo sigma I in dependeesBy sigma (C.versions R) I q.
 
-    Definition versions (sigma : Valuation) (I : Inst) (tn : TName.t)
+    Definition versions (sigma : Valuation) (I : Inst) (m : TName.t)
       : PF.VSet.t :=
-      match tn with
+      match m with
       | TName.Root => PF.VSet.singleton TVer.UnitV
       | TName.Real n => SOvv.map TVer.RV (srcVersions sigma I n)
       | TName.Cls k => clsVersions (inst_cls I) k
@@ -466,12 +466,12 @@ Module Opam (N V X Y E : UsualOrderedType).
     Definition opamResolution (S' : PF.PkgSet.t) : PkgSet.t :=
       SOtp.filterMap tryInvPkg S'.
 
-    Lemma mem_versSetBy : forall Vq n phi tv,
-        PF.VSet.In tv (versSetBy Vq n phi) <->
-        exists v, tv = TVer.RV v /\ VSet.In v (Vq n) /\
+    Lemma mem_versSetBy : forall Vq n phi u,
+        PF.VSet.In u (versSetBy Vq n phi) <->
+        exists v, u = TVer.RV v /\ VSet.In v (Vq n) /\
                   vcHolds phi v = true.
     Proof.
-      intros Vq n phi tv; unfold versSetBy; rewrite SOvv.mem_map.
+      intros Vq n phi u; unfold versSetBy; rewrite SOvv.mem_map.
       split.
       - intros [v [Hv ->]]; apply VSet.filter_spec' in Hv;
           destruct Hv as [Hv Hh].
@@ -491,8 +491,8 @@ Module Opam (N V X Y E : UsualOrderedType).
     Proof.
       intros S' n v; unfold opamResolution; rewrite SOtp.mem_filterMap.
       split.
-      - intros [[tn tv] [Hm Hf]];
-          destruct tn as [| m | k]; destruct tv as [w | | m'];
+      - intros [[o u] [Hm Hf]];
+          destruct o as [| m | k]; destruct u as [w | | m'];
           simpl in Hf; try discriminate.
         injection Hf as -> ->; exact Hm.
       - intro H; exists (TName.Real n, TVer.RV v); split;
@@ -528,11 +528,11 @@ Module Opam (N V X Y E : UsualOrderedType).
           [exact Hm | simpl; apply PkgSet.mem_spec; exact Hs].
     Qed.
 
-    Lemma mem_clsVersions : forall cls k tv,
-        PF.VSet.In tv (clsVersions cls k) <->
-        exists p, ClsRel.In (p, k) cls /\ tv = TVer.NV (fst p).
+    Lemma mem_clsVersions : forall cls k v,
+        PF.VSet.In v (clsVersions cls k) <->
+        exists p, ClsRel.In (p, k) cls /\ v = TVer.NV (fst p).
     Proof.
-      intros cls k tv; unfold clsVersions; rewrite SOcv.mem_filterMap.
+      intros cls k v; unfold clsVersions; rewrite SOcv.mem_filterMap.
       split.
       - intros [[p k'] [Hm Hf]]; cbn beta iota in Hf.
         destruct (N.eq_dec k' k) as [-> |]; [| discriminate].
@@ -621,32 +621,32 @@ Module Opam (N V X Y E : UsualOrderedType).
     (* Each of the core's names draws its versions from one branch of
        coreResolution, so version uniqueness splits three ways rather than
        nine. *)
-    Lemma coreResolution_at_root : forall cls S tv,
-        PF.PkgSet.In (TName.Root, tv) (coreResolution cls S) -> tv = TVer.UnitV.
+    Lemma coreResolution_at_root : forall cls S v,
+        PF.PkgSet.In (TName.Root, v) (coreResolution cls S) -> v = TVer.UnitV.
     Proof.
-      intros cls S tv H; apply mem_coreResolution in H.
+      intros cls S v H; apply mem_coreResolution in H.
       destruct H as [[[m w] [_ He]] | [He | [p [k [_ [_ He]]]]]];
         unfold embedPkg, rootPkg in He; try discriminate.
       injection He as ->; reflexivity.
     Qed.
 
-    Lemma coreResolution_at_real : forall cls S n tv,
-        PF.PkgSet.In (TName.Real n, tv) (coreResolution cls S) ->
-        exists v, tv = TVer.RV v /\ PkgSet.In (n, v) S.
+    Lemma coreResolution_at_real : forall cls S n u,
+        PF.PkgSet.In (TName.Real n, u) (coreResolution cls S) ->
+        exists v, u = TVer.RV v /\ PkgSet.In (n, v) S.
     Proof.
-      intros cls S n tv H; apply mem_coreResolution in H.
+      intros cls S n u H; apply mem_coreResolution in H.
       destruct H as [[[m w] [Hp He]] | [He | [p [k [_ [_ He]]]]]];
         unfold embedPkg, rootPkg in He; cbn [fst snd] in He;
         try discriminate.
       injection He as -> ->; exists w; split; [reflexivity | exact Hp].
     Qed.
 
-    Lemma coreResolution_at_cls : forall cls S k tv,
-        PF.PkgSet.In (TName.Cls k, tv) (coreResolution cls S) ->
-        exists p, tv = TVer.NV (fst p) /\ PkgSet.In p S /\
+    Lemma coreResolution_at_cls : forall cls S k v,
+        PF.PkgSet.In (TName.Cls k, v) (coreResolution cls S) ->
+        exists p, v = TVer.NV (fst p) /\ PkgSet.In p S /\
                   ClsRel.In (p, k) cls.
     Proof.
-      intros cls S k tv H; apply mem_coreResolution in H.
+      intros cls S k v H; apply mem_coreResolution in H.
       destruct H as [[[m w] [_ He]] | [He | [p [k' [Hp [Hpk He]]]]]];
         unfold embedPkg, rootPkg in He; cbn [fst snd] in He;
         try discriminate.
@@ -669,8 +669,8 @@ Module Opam (N V X Y E : UsualOrderedType).
       intros Vq S' HV.
       induction g as [n phi | a IHa b IHb | a IHa b IHb]; simpl.
       - split.
-        + intros [tv [Htv Hm]].
-          apply mem_versSetBy in Htv; destruct Htv as [v [-> [_ Hh]]].
+        + intros [u [Hu Hm]].
+          apply mem_versSetBy in Hu; destruct Hu as [v [-> [_ Hh]]].
           exists v; split; [apply mem_opamResolution; exact Hm | exact Hh].
         + intros [v [Hv Hh]].
           assert (Hvq := HV _ _ Hv).
@@ -887,8 +887,8 @@ Module Opam (N V X Y E : UsualOrderedType).
           { apply (Hdeps _ _ _ Hm); unfold dependees.
             apply mem_dependees_real; right; right; left.
             exists k; split; [exact Hmk | reflexivity]. }
-          destruct Hs as [tv [Htv Hin]].
-          apply PF.VSet.singleton_spec in Htv; subst tv; exact Hin. }
+          destruct Hs as [v [Hv Hin]].
+          apply PF.VSet.singleton_spec in Hv; subst v; exact Hin. }
         assert (E := PF.res_version_unique _ _ _ _ HR (TName.Cls k)
                        _ _ (Hcl _ _ Hp Hpk) (Hcl _ _ Hq Hqk)).
         injection E as ->.
@@ -953,12 +953,12 @@ Module Opam (N V X Y E : UsualOrderedType).
           * destruct nc as [n [c phi]]; unfold cflForm; cbn [fst snd].
             destruct (defTrue sigma c) eqn:Hg;
               [| exact (PTrue_sat (coreResolution (inst_cls I) S) Hr)].
-            cbn [PF.Satisfies]; intros [tv [Htv Hm]].
-            unfold confVS in Htv.
+            cbn [PF.Satisfies]; intros [u [Hu Hm]].
+            unfold confVS in Hu.
             destruct (N.eq_dec (fst (pn, pv)) n) as [| Hne].
-            { destruct (PF.VSet.empty_spec Htv). }
-            apply mem_versSetBy in Htv;
-              destruct Htv as [v [-> [Hra Hh]]].
+            { destruct (PF.VSet.empty_spec Hu). }
+            apply mem_versSetBy in Hu;
+              destruct Hu as [v [-> [Hra Hh]]].
             apply mem_coreResolution_real in Hm.
             exact (res_conflict_avoidance _ _ _ HR _ Hp0 _ _ _ Hin
                      Hg _ Hm Hne Hh).
@@ -969,8 +969,8 @@ Module Opam (N V X Y E : UsualOrderedType).
             exists (pn, pv), k; split;
               [exact Hp0 | split; [exact Hpk | reflexivity]].
           * destruct nvu as [[n v] u]; unfold pindForm; simpl.
-            intros [tv [Htv Hm]].
-            apply SOvv.mem_map in Htv; destruct Htv as [v' [Hv' ->]].
+            intros [w [Hw Hm]].
+            apply SOvv.mem_map in Hw; destruct Hw as [v' [Hv' ->]].
             apply VSet.remove_spec in Hv'; destruct Hv' as [_ NE].
             apply mem_coreResolution_real in Hm.
             exact (NE (res_pin_depends _ _ _ HR _ Hp0 Hpin _ _ _ Hin
@@ -983,7 +983,7 @@ Module Opam (N V X Y E : UsualOrderedType).
             [exact (res_query _ _ _ HR) | exact (res_invariant _ _ _ HR)].
         + unfold dependees, dependeesBy in Hf'; cbn beta iota in Hf'.
           destruct (FSet.empty_spec Hf').
-      - intros tn tv tv' Hv Hv'; destruct tn as [| n | k].
+      - intros m u u' Hv Hv'; destruct m as [| n | k].
         + rewrite (coreResolution_at_root _ _ _ Hv),
             (coreResolution_at_root _ _ _ Hv'); reflexivity.
         + destruct (coreResolution_at_real _ _ _ _ Hv) as [v [-> Hp]].
@@ -1219,15 +1219,15 @@ Module Opam (N V X Y E : UsualOrderedType).
       Module SOcd := SetOps ClsElt Pkg ClsRel PkgSet.
       Definition declarers (cls : ClsRel.t) : PkgSet.t := SOcd.map fst cls.
 
-      Lemma clsVersions_reduceReal : forall cls R k tv,
+      Lemma clsVersions_reduceReal : forall cls R k v,
           (forall q k', ClsRel.In (q, k') cls -> PkgSet.In q R) ->
-          PF.VSet.In tv (clsVersions cls k) <->
-          exists n, tv = TVer.NV n /\
+          PF.VSet.In v (clsVersions cls k) <->
+          exists n, v = TVer.NV n /\
             Cls.Reduction.T.VSet.In (Cls.Reduction.Version.Name n)
               (Cls.Reduction.T.versions (Cls.Reduction.reduceReal R cls)
                  (Cls.Reduction.Name.Cls k)).
       Proof.
-        intros cls R k tv HR.
+        intros cls R k v HR.
         rewrite mem_clsVersions, Cls.Reduction.Lookup.versions_cls.
         split.
         - intros [q [Hq ->]]; exists (fst q); split; [reflexivity |].
@@ -1250,7 +1250,7 @@ Module Opam (N V X Y E : UsualOrderedType).
                        PkgSet.In q (declarers (inst_cls I)))
           by (intros q k' H; apply SOcd.mem_map; exists (q, k');
               split; [exact H | reflexivity]).
-        apply PF.VSet.ext; intro tv.
+        apply PF.VSet.ext; intro v.
         rewrite (clsVersions_reduceReal (inst_cls I) _ _ _ HD),
           (Cls.Reduction.Lookup.versions_lookupClass (declarers (inst_cls I))).
         apply clsVersions_reduceReal; intros q k' H.
@@ -1264,7 +1264,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           PF.VSet.Subset (versions sigma I' (TName.Cls k))
             (versions sigma I (TName.Cls k)).
       Proof.
-        intros sigma I' I k HC tv; cbn [versions]; rewrite !mem_clsVersions.
+        intros sigma I' I k HC v; cbn [versions]; rewrite !mem_clsVersions.
         intros [p [Hp ->]]; exists p; split; [exact (HC _ Hp) | reflexivity].
       Qed.
 
@@ -1341,12 +1341,12 @@ Module Opam (N V X Y E : UsualOrderedType).
         apply NSet.singleton_spec; reflexivity.
       Qed.
 
-      Lemma versions_reduceReal : forall sigma I tn,
-          PF.C.versions (reduceReal sigma I) tn = versions sigma I tn.
+      Lemma versions_reduceReal : forall sigma I n,
+          PF.C.versions (reduceReal sigma I) n = versions sigma I n.
       Proof.
-        intros sigma I tn; apply PF.VSet.ext; intro tv.
+        intros sigma I m; apply PF.VSet.ext; intro u.
         rewrite PF.C.mem_versions, mem_reduceReal.
-        destruct tn as [| n | k]; cbn [versions].
+        destruct m as [| n | k]; cbn [versions].
         - rewrite PF.VSet.singleton_spec; split.
           + intros [[p [_ E]] | [E | [p [k [_ E]]]]];
               unfold embedPkg, rootPkg in E; try discriminate E.
@@ -1398,7 +1398,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           PF.Reduction.NSet.In m (PF.Reduction.Lookup.negNames psi) ->
           exists n, m = TName.Real n.
       Proof.
-        intros sigma Vq I [tn tv] psi m Hf Hx.
+        intros sigma Vq I [o u] psi m Hf Hx.
         assert (HT : ~ PF.Reduction.NSet.In m
                          (PF.Reduction.Lookup.negNames PTrue))
           by apply PF.Reduction.NSet.empty_spec.
@@ -1407,7 +1407,7 @@ Module Opam (N V X Y E : UsualOrderedType).
                        (PF.Reduction.Lookup.negNames (encodeOF sigma Vq d))).
         { intro d; unfold encodeOF.
           destruct (redOF sigma d); [apply negNames_encR | exact HT]. }
-        destruct tn as [| n' | k]; destruct tv as [v | | n];
+        destruct o as [| n' | k]; destruct u as [v | | n];
           try (cbn [dependeesBy] in Hf; destruct (FSet.empty_spec Hf)).
         - cbn [dependeesBy] in Hf; apply FSet.singleton_spec in Hf; subst psi.
           unfold rootForm in Hx; cbn [PF.Reduction.Lookup.negNames] in Hx.
@@ -1440,11 +1440,11 @@ Module Opam (N V X Y E : UsualOrderedType).
             (PF.Reduction.Name.Orig (fst q),
              PF.Reduction.Version.Orig (snd q)).
       Proof.
-        intros sigma I Vq [tn tv] Hq HVq; cbn [fst snd].
+        intros sigma I Vq [o u] Hq HVq; cbn [fst snd].
         rewrite
           (PF.Reduction.Lookup.dependees_lookupOrigBy _ _ (versions sigma I))
           by (intros n _; symmetry; apply versions_reduceReal).
-        rewrite (reduceDeps_tailFibre sigma I (tn, tv) Hq).
+        rewrite (reduceDeps_tailFibre sigma I (o, u) Hq).
         f_equal; apply PF.Reduction.Lookup.reduceDepsBy_agreeNeg.
         intros p psi x Hpf Hx.
         unfold depEdges in Hpf; apply SOfd.mem_map in Hpf as [psi0 [Hf0 E]].
@@ -1534,36 +1534,36 @@ Module Opam (N V X Y E : UsualOrderedType).
         rewrite HVq, versions_reduceReal; reflexivity.
       Qed.
 
-      Lemma versions_core : forall sigma I tn,
-          (exists tv, PF.PkgSet.In (tn, tv) (reduceReal sigma I)) \/
-          (exists s h,
-              PF.Reduction.T.DepRel.In (s, (PF.Reduction.Name.Orig tn, h))
+      Lemma versions_core : forall sigma I n,
+          (exists v, PF.PkgSet.In (n, v) (reduceReal sigma I)) \/
+          (exists p h,
+              PF.Reduction.T.DepRel.In (p, (PF.Reduction.Name.Orig n, h))
                 (PF.Reduction.reduceDeps (reduceReal sigma I)
                    (reduceDeps sigma I))) ->
           PF.Reduction.T.versions
             (PF.Reduction.reduceReal (reduceReal sigma I) (reduceDeps sigma I))
-            (PF.Reduction.Name.Orig tn) =
+            (PF.Reduction.Name.Orig n) =
           PF.Reduction.T.VSet.add PF.Reduction.Version.Bot
-            (PF.Reduction.embedVS (versions sigma I tn)).
+            (PF.Reduction.embedVS (versions sigma I n)).
       Proof.
-        intros sigma I tn Hreach.
+        intros sigma I n Hreach.
         assert (Hr : PF.PkgSet.In rootPkg (reduceReal sigma I))
           by (apply mem_reduceReal; right; left; reflexivity).
-        destruct Hreach as [[tv Htv] | Hreach];
-          [rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ (tn, tv) tn Htv
+        destruct Hreach as [[v Hv] | Hreach];
+          [rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ (n, v) n Hv
                       (or_intror eq_refl) eq_refl)
-          | rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ rootPkg tn Hr
+          | rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ rootPkg n Hr
                        (or_introl Hreach) eq_refl)];
           do 2 f_equal; rewrite <- versions_reduceReal;
-          apply PF.C.versions_ext; intro v;
+          apply PF.C.versions_ext; intro u;
           rewrite PF.Reduction.Lookup.PkgFibred.mem_tailFibre; tauto.
       Qed.
 
       Theorem versions_lookupOrigCore : forall sigma I n,
           (exists v, PkgSet.In (n, v) (effRepo sigma I)) \/
-          (exists s h,
+          (exists p h,
               PF.Reduction.T.DepRel.In
-                (s, (PF.Reduction.Name.Orig (TName.Real n), h))
+                (p, (PF.Reduction.Name.Orig (TName.Real n), h))
                 (PF.Reduction.reduceDeps (reduceReal sigma I)
                    (reduceDeps sigma I))) ->
           PF.Reduction.T.versions
@@ -1591,9 +1591,9 @@ Module Opam (N V X Y E : UsualOrderedType).
       Qed.
 
       Theorem versions_lookupClassCore : forall sigma I k,
-          (exists s h,
+          (exists p h,
               PF.Reduction.T.DepRel.In
-                (s, (PF.Reduction.Name.Orig (TName.Cls k), h))
+                (p, (PF.Reduction.Name.Orig (TName.Cls k), h))
                 (PF.Reduction.reduceDeps (reduceReal sigma I)
                    (reduceDeps sigma I))) ->
           PF.Reduction.T.versions
