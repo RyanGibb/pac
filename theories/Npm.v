@@ -3344,12 +3344,13 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
             exact (proj2 (Hkp q1 (Hp q1 Hq1))).
       Qed.
 
-      Theorem versions_lookupGranular : forall I k w I',
-          granSubInst I k w I' ->
-          versions I' (Nm.Granular k w) = versions I (Nm.Granular k w).
+      Theorem versions_lookupGranular : forall I a m w I',
+          granSubInst I (a, m) w I' ->
+          versions I' (Nm.Granular (a, m) w) =
+          versions I (Nm.Granular (a, m) w).
       Proof.
-        intros I k w I' Hsub; cbn [versions].
-        pose proof (keysOf_granSubInst I k w I' Hsub) as Hk.
+        intros I a m w I' Hsub; cbn [versions].
+        pose proof (keysOf_granSubInst I (a, m) w I' Hsub) as Hk.
         destruct Hsub as [_ [_ [Hr _]]].
         apply if_scrutinee, PSS.mem_eq_of_iff; rewrite !mem_realPkgs.
         unfold Available, base; cbn [fst snd]; rewrite Hk, Hr; reflexivity.
@@ -3678,9 +3679,9 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         reflexivity.
       Qed.
 
-      Theorem dependees_lookupSight : forall I k v n x,
-          dependees I (Nm.Sight k v n, x) = T.DependeesSet.empty.
-      Proof. intros I k v n x; reflexivity. Qed.
+      Theorem dependees_lookupSight : forall I a m v n x,
+          dependees I (Nm.Sight (a, m) v n, x) = T.DependeesSet.empty.
+      Proof. intros I a m v n x; reflexivity. Qed.
 
       Theorem dependees_lookupDesc : forall I a m s x,
           dependees I (Nm.Desc a m s, x) = T.DependeesSet.empty.
