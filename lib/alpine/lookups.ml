@@ -458,11 +458,16 @@ module Make () : S = struct
   (* apk's compare_providers (solver.c): the version offered at the name
      [pv], provider_priority [rank], then index order [ord], as
      select_package keeps the first provider it meets; the newer-own-version
-     key (solver.c:651-661) never separates packages an index lists once.
-     Among other [Idx] alternatives the earliest wins, so an install-if fires
-     only once its conditions hold.  The keys ride on the version, as a
-     comparator sees no name; [bot] is greatest, so a name only a negated
-     requirement reaches is left out. *)
+     key (solver.c:651-661) never separates packages an index lists once,
+     and the solver-state keys (solver.c:578-595) only rank a provider apk
+     has not disqualified above one it has, which PubGrub's ranges and
+     backtracking do.  Among other
+     [Idx] alternatives the earliest wins, so an install-if fires only once
+     its conditions hold.  The keys ride on the version, as a comparator
+     sees no name.  [tag] sets them from the (name, version) pair for the
+     versions lookup and every range alike, so the order stays total and
+     agrees with any range's tags.  [bot] is greatest, so a name only a
+     negated requirement reaches is left out. *)
   module PVersion = struct
     type t = { pv : string option; rank : int; ord : int; v : PFR.Version.t }
 

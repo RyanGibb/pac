@@ -356,8 +356,10 @@ let pp_name fmt (n : PFR.Name.t) =
    one of its name, then opam's order, as builtin-0install sorts
    (opam_0install_cudf.ml:15-23; opam flags deprecated versions
    avoid-version, opamSwitchState.ml:886-895).  [avoid] rides on the
-   version, as a comparator sees no name; [bot] is greatest, so a name only
-   a conflict reaches is left out. *)
+   version, as a comparator sees no name.  [tag] sets it from the (name,
+   version) pair for the versions lookup and every range alike, so the order
+   stays total and agrees with any range's tags.  [bot] is greatest, so a
+   name only a conflict reaches is left out. *)
 module PVersion = struct
   type t = { avoid : bool; v : PFR.Version.t }
 
