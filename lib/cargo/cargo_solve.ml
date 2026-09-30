@@ -24,14 +24,15 @@ module Make () = struct
   module L = Lookups.Make (Encoding)
   module Pick = Pick.Make (Encoding) (L)
 
-  let decode st (sol : (Cg.NPlus.t * PVersion.t) list) : result =
+  let decode st (sol : (Cg.Reduction.NPlus.t * PVersion.t) list) : result =
     let sol =
       List.map
-        (fun ((tn, { PVersion.v; _ }) : Cg.NPlus.t * PVersion.t) -> (tn, v))
+        (fun ((tn, { PVersion.v; _ }) : Cg.Reduction.NPlus.t * PVersion.t) ->
+          (tn, v))
         sol
     in
     let s = T.PkgSet.ofList sol in
-    let crates = Cg.PkgSet.elements (Cg.cargoResolution s) in
+    let crates = Cg.PkgSet.elements (Cg.Reduction.cargoResolution s) in
     (* the placeholder default the parser gives a crate declaring none
        keeps a depender's default-features request satisfiable; cargo
        records no such feature (dep_cache.rs, handle_default requires
@@ -45,7 +46,7 @@ module Make () = struct
           | Some m when not m.P.v_default_declared ->
               ((n, v), List.filter (fun f -> f <> P.default_feature) fs)
           | _ -> ((n, v), fs))
-        (Cg.FeaturedSet.elements (Cg.features s))
+        (Cg.FeaturedSet.elements (Cg.Reduction.features s))
     in
     (* parents is the one decoder that reads the instance, and a
        lazy run has no global relation to hand it; the fibres of the
@@ -62,7 +63,7 @@ module Make () = struct
           | Some sd -> (n, v, Cg.kAlias k, Cg.sName sd, u)
           | None -> (n, v, Cg.kAlias k, Cg.kAlias k, u))
         (Cg.ParentRel.elements
-           (Cg.parents
+           (Cg.Reduction.parents
               { (L.empty_inst st) with inst_fdefs = fdefs; inst_slots = slots }
               s))
     in
@@ -93,8 +94,9 @@ module Make () = struct
     let st = L.create ar root ~features ~rustv in
     let query =
       [
-        ( Cg.NPlus.CRoot,
-          PG.Ranges.of_list [ L.tag st Cg.NPlus.CRoot Cg.VPlus.WUnit ] );
+        ( Cg.Reduction.NPlus.CRoot,
+          PG.Ranges.of_list
+            [ L.tag st Cg.Reduction.NPlus.CRoot Cg.Reduction.VPlus.WUnit ] );
       ]
     in
     let module O = Order.Make (Pick.Driver (struct
@@ -120,7 +122,7 @@ module Make () = struct
                (fun ((m, vs) : T.Dependees.t) ->
                  (m, List.map (L.tag st m) (T.VSet.elements vs)))
                (L.dependees st (tn, v)))
-           [ Cg.NPlus.CRoot ])
+           [ Cg.Reduction.NPlus.CRoot ])
     in
     let stats = Archive.stats ar in
     {

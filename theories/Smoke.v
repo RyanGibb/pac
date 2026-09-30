@@ -194,34 +194,34 @@ Definition debRec : Deb.Deps.t :=
     Deb.Deps.empty.
 
 Example debian_vers_computes :
-  Deb.T.VSet.cardinal
-    (Deb.versions
+  Deb.Reduction.T.VSet.cardinal
+    (Deb.Reduction.versions
        (Deb.MkInst debR debD Deb.Deps.empty Deb.Prov.empty Deb.Conf.empty
           (1, 10))
-       (Deb.Name.Orig 1)) = 3.
+       (Deb.Reduction.Name.Orig 1)) = 3.
 Proof. reflexivity. Qed.
 
 Example debian_dependees_computes :
-  Deb.T.DependeesSet.cardinal
-    (Deb.dependees
+  Deb.Reduction.T.DependeesSet.cardinal
+    (Deb.Reduction.dependees
        (Deb.MkInst debR debD Deb.Deps.empty Deb.Prov.empty Deb.Conf.empty
           (1, 10))
-       (Deb.Name.Orig 1, Deb.Version.Orig 10)) = 1.
+       (Deb.Reduction.Name.Orig 1, Deb.Reduction.Version.Orig 10)) = 1.
 Proof. reflexivity. Qed.
 
 Example debian_soft_vers_computes :
-  Deb.T.VSet.cardinal
-    (Deb.versions
+  Deb.Reduction.T.VSet.cardinal
+    (Deb.Reduction.versions
        (Deb.MkInst debR debD debRec Deb.Prov.empty Deb.Conf.empty (1, 10))
-       (Deb.Name.Soft ((2, Deb.Ver.FTop) :: nil))) = 2.
+       (Deb.Reduction.Name.Soft ((2, Deb.Ver.FTop) :: nil))) = 2.
 Proof. reflexivity. Qed.
 
 Example debian_soft_escape_computes :
-  Deb.T.DependeesSet.cardinal
-    (Deb.dependees
+  Deb.Reduction.T.DependeesSet.cardinal
+    (Deb.Reduction.dependees
        (Deb.MkInst debR debD debRec Deb.Prov.empty Deb.Conf.empty (1, 10))
-       (Deb.Name.Soft ((2, Deb.Ver.FTop) :: nil),
-        Deb.Version.Zero)) = 0.
+       (Deb.Reduction.Name.Soft ((2, Deb.Ver.FTop) :: nil),
+        Deb.Reduction.Version.Zero)) = 0.
 Proof. reflexivity. Qed.
 
 Definition maR : DMA.PkgSet.t :=
@@ -229,12 +229,12 @@ Definition maR : DMA.PkgSet.t :=
     (DMA.PkgSet.add ((1, true), 10) DMA.PkgSet.empty).
 
 Example debianMA_reduceReal_computes :
-  DMA.Deb.Ver.C.PkgSet.cardinal (DMA.reduceReal maR) = 2.
+  DMA.Deb.Ver.C.PkgSet.cardinal (DMA.Reduction.reduceReal maR) = 2.
 Proof. reflexivity. Qed.
 
 Example debianMA_reduceConf_computes :
   DMA.Deb.Conf.cardinal
-    (DMA.reduceConf maR DMA.Conf.empty DMA.Cls.empty) = 2.
+    (DMA.Reduction.reduceConf maR DMA.Conf.empty DMA.Cls.empty) = 2.
 Proof. reflexivity. Qed.
 
 Definition visR : Vis.PkgSet.t :=
@@ -315,19 +315,19 @@ Proof. reflexivity. Qed.
 
 Example cargo_evalReq_computes :
   Cgo.VSet.cardinal
-    (Cgo.evalReq (Cgo.PkgSet.add (0, 4) (Cgo.PkgSet.add (0, 6)
+    (Cgo.Reduction.evalReq (Cgo.PkgSet.add (0, 4) (Cgo.PkgSet.add (0, 6)
        Cgo.PkgSet.empty)) 0 cgoAny) = 2.
 Proof. reflexivity. Qed.
 
 Example cargo_prerelease_excluded :
   Cgo.VSet.elements
-    (Cgo.evalReq (Cgo.PkgSet.add (0, 4) (Cgo.PkgSet.add (0, 5)
+    (Cgo.Reduction.evalReq (Cgo.PkgSet.add (0, 4) (Cgo.PkgSet.add (0, 5)
        Cgo.PkgSet.empty)) 0 ((Cgo.COp OpGe 4 :: nil) :: nil)) = 4 :: nil.
 Proof. reflexivity. Qed.
 
 Example cargo_prerelease_admitted :
   Cgo.VSet.elements
-    (Cgo.evalReq (Cgo.PkgSet.add (0, 4) (Cgo.PkgSet.add (0, 5)
+    (Cgo.Reduction.evalReq (Cgo.PkgSet.add (0, 4) (Cgo.PkgSet.add (0, 5)
        Cgo.PkgSet.empty)) 0 ((Cgo.COp OpGe 5 :: nil) :: nil)) = 5 :: nil.
 Proof. reflexivity. Qed.
 
@@ -720,7 +720,8 @@ Example npl_edges :
 Proof. reflexivity. Qed.
 
 Example npl_key :
-  NplS.Pl.VSet.elements (NplS.Pl.C.versions (NplS.placeRepo nplInst) npmX) =
+  NplS.Pl.VSet.elements
+    (NplS.Pl.C.versions (NplS.Reduction.placeRepo nplInst) npmX) =
   NplS.Occ.Reg npmB 1 :: nil.
 Proof. reflexivity. Qed.
 
@@ -733,7 +734,7 @@ Definition nplInstOvr (o : list (nat * NplS.Range)) : NplS.Inst :=
     nil.
 
 Definition nplAccepts (I : NplS.Inst) : list (list NplS.Occ.t) :=
-  List.map (fun e => NplS.Pl.VSet.elements (NplS.accepts I e))
+  List.map (fun e => NplS.Pl.VSet.elements (NplS.Reduction.accepts I e))
     (NplS.edgesOf I NplS.Occ.Top).
 
 Example npl_override_key :

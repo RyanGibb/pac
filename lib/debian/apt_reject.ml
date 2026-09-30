@@ -4,7 +4,7 @@ module type SEARCH = sig
   module PVersion : sig
     type t = {
       pos : int;
-      v : T.DMA.Deb.Version.t;
+      v : T.DMA.Deb.Reduction.Version.t;
       tgt : (string * T.DMA.coq_NameArch) option;
     }
 
@@ -22,19 +22,22 @@ module type SEARCH = sig
   end
 
   val tables : T.tables
-  val tag : T.DMA.Deb.Name.t -> T.DMA.Deb.Version.t -> PVersion.t
-  val cands_of : T.DMA.Deb.Name.t -> PVersion.t list
+
+  val tag :
+    T.DMA.Deb.Reduction.Name.t -> T.DMA.Deb.Reduction.Version.t -> PVersion.t
+
+  val cands_of : T.DMA.Deb.Reduction.Name.t -> PVersion.t list
 
   val dependees_of :
-    T.DMA.Deb.Name.t ->
-    T.DMA.Deb.Version.t ->
-    (T.DMA.Deb.Name.t * PVersion.t list) list
+    T.DMA.Deb.Reduction.Name.t ->
+    T.DMA.Deb.Reduction.Version.t ->
+    (T.DMA.Deb.Reduction.Name.t * PVersion.t list) list
 
-  val has_ref : T.DMA.Deb.Name.t -> bool
+  val has_ref : T.DMA.Deb.Reduction.Name.t -> bool
 
   val free_of :
-    assigned:(T.DMA.Deb.Name.t -> PG.selection) ->
-    T.DMA.Deb.Name.t ->
+    assigned:(T.DMA.Deb.Reduction.Name.t -> PG.selection) ->
+    T.DMA.Deb.Reduction.Name.t ->
     PVersion.t list ->
     PVersion.t list
 
@@ -45,7 +48,7 @@ module Make (S : SEARCH) = struct
   open S
   open T
 
-  type name = DMA.Deb.Name.t
+  type name = DMA.Deb.Reduction.Name.t
   type assigned = name -> PG.selection
 
   type state = {
@@ -86,15 +89,16 @@ module Make (S : SEARCH) = struct
   (* the alternative's own name in the encoding: its selector where a
      provider matches it, its dependee otherwise *)
   let alt_name a =
-    if has_ref (DMA.Deb.Name.Selector a) then DMA.Deb.Name.Selector a
-    else DMA.Deb.Name.Orig (fst a)
+    if has_ref (DMA.Deb.Reduction.Name.Selector a) then
+      DMA.Deb.Reduction.Name.Selector a
+    else DMA.Deb.Reduction.Name.Orig (fst a)
 
   (* the real versions among a name's candidates *)
   let orig_versions n =
     List.filter_map
       (fun (pv : PVersion.t) ->
         match pv.PVersion.v with
-        | DMA.Deb.Version.Orig w -> Some (pv, w)
+        | DMA.Deb.Reduction.Version.Orig w -> Some (pv, w)
         | _ -> None)
       (cands_of n)
 
@@ -161,7 +165,7 @@ module Make (S : SEARCH) = struct
     | PG.Decided u -> fun (pv : PVersion.t) -> PVersion.compare u pv = 0
     | PG.Entailed r -> fun pv -> PG.Ranges.contains pv r
 
-  let is_bot (pv : PVersion.t) = pv.PVersion.v = DMA.Deb.Version.Bot
+  let is_bot (pv : PVersion.t) = pv.PVersion.v = DMA.Deb.Reduction.Version.Bot
 
   (* n at b has an entry from a declared Provides that reaches b, or from a
      Multi-Arch: foreign n at another architecture, as provides_count counts
@@ -225,9 +229,9 @@ module Make (S : SEARCH) = struct
       | Some assigned when not pkgvar -> allowed_of ~assigned n
       | _ -> fun _ -> true
     in
-    match cands_of (DMA.Deb.Name.Selector a) with
+    match cands_of (DMA.Deb.Reduction.Name.Selector a) with
     | [] ->
-        let tn = DMA.Deb.Name.Orig (fst a) in
+        let tn = DMA.Deb.Reduction.Name.Orig (fst a) in
         let ok = allowed ~pkgvar tn in
         let sols =
           List.filter
@@ -241,17 +245,17 @@ module Make (S : SEARCH) = struct
            that, since deciding it to one provider leaves the others
            installable *)
         let ok ~pkgvar m w =
-          let on = DMA.Deb.Name.Orig m in
-          allowed ~pkgvar on (tag on (DMA.Deb.Version.Orig w))
+          let on = DMA.Deb.Reduction.Name.Orig m in
+          allowed ~pkgvar on (tag on (DMA.Deb.Reduction.Version.Orig w))
           && live ~pkgvar m w
         in
         let reals, provs =
           List.fold_left
             (fun (r, p) (pv : PVersion.t) ->
               match pv.PVersion.v with
-              | DMA.Deb.Version.RefReal w ->
+              | DMA.Deb.Reduction.Version.RefReal w ->
                   ((if ok ~pkgvar (fst a) w then r + 1 else r), p)
-              | DMA.Deb.Version.Ref (m, w) ->
+              | DMA.Deb.Reduction.Version.Ref (m, w) ->
                   ( r,
                     if ok ~pkgvar:false m w then p + provides_count m w a else p
                   )
@@ -271,11 +275,12 @@ module Make (S : SEARCH) = struct
     n
     :: (match stanza p with Some stz -> List.map fst stz.nprovs | None -> [])
 
-  let orig_of (((n, b), _) : DMA.Pkg.t) = DMA.Deb.Name.Orig (n, DMA.QAArch b)
+  let orig_of (((n, b), _) : DMA.Pkg.t) =
+    DMA.Deb.Reduction.Name.Orig (n, DMA.QAArch b)
 
   let installed_at ~(assigned : assigned) (((_, _), v) as p : DMA.Pkg.t) =
     match assigned (orig_of p) with
-    | PG.Decided u -> u.PVersion.v = DMA.Deb.Version.Orig v
+    | PG.Decided u -> u.PVersion.v = DMA.Deb.Reduction.Version.Orig v
     | _ -> false
 
   type rejection = [ `Ver of DMA.Pkg.t | `Pkg of string * string ]
@@ -314,7 +319,7 @@ module Make (S : SEARCH) = struct
       (fun (tn, tvs) ->
         if List.exists is_bot tvs then
           match tn with
-          | DMA.Deb.Name.Orig (m, DMA.QAArch mb)
+          | DMA.Deb.Reduction.Name.Orig (m, DMA.QAArch mb)
             when not (String.equal m pkgname) ->
               List.iter
                 (fun ((c : PVersion.t), w) ->
@@ -322,7 +327,7 @@ module Make (S : SEARCH) = struct
                   then reject_ver st ~assigned out ((m, mb), w))
                 (orig_versions tn)
           | _ -> ())
-      (dependees_of (orig_of p) (DMA.Deb.Version.Orig v));
+      (dependees_of (orig_of p) (DMA.Deb.Reduction.Version.Orig v));
     List.rev !out
 
   (* apt's implicit Multi-Arch negatives (AddImplicitDepends,
@@ -539,12 +544,13 @@ module Make (S : SEARCH) = struct
      package var then joins the queue at the back as the version pops. *)
   let head st ~assigned atoms =
     let one a =
-      let h = clause_name false (DMA.Deb.Name.Disjunct atoms) [ a ] in
+      let h = clause_name false (DMA.Deb.Reduction.Name.Disjunct atoms) [ a ] in
       match h with
-      | DMA.Deb.Name.Orig ((m, DMA.QAArch b) as mn) when not (deferred st a) ->
+      | DMA.Deb.Reduction.Name.Orig ((m, DMA.QAArch b) as mn)
+        when not (deferred st a) ->
           (* the newest live version, which apt's sort of one package's
              versions puts first (CompareProviders3) *)
-          let on = DMA.Deb.Name.Orig mn in
+          let on = DMA.Deb.Reduction.Name.Orig mn in
           let live =
             List.filter_map
               (fun (pv, w) ->
@@ -578,24 +584,26 @@ module Make (S : SEARCH) = struct
       match head st ~assigned [ a ] with
       | Some
           {
-            Work_heap.solution = DMA.Deb.Name.Orig (m, DMA.QAArch b);
+            Work_heap.solution = DMA.Deb.Reduction.Name.Orig (m, DMA.QAArch b);
             version_var = None;
           } ->
           [ `Pkg (m, b) ]
       | Some { version_var = Some (_, (ov : PVersion.t)); _ } -> (
           match ov.PVersion.v with
-          | DMA.Deb.Version.Orig w -> ver (fst a) w
+          | DMA.Deb.Reduction.Version.Orig w -> ver (fst a) w
           | _ -> [])
       | _ -> []
     in
     match (n, pv.PVersion.v) with
-    | DMA.Deb.Name.Orig m, DMA.Deb.Version.Orig w -> ver m w
-    | DMA.Deb.Name.Selector a, DMA.Deb.Version.RefReal w ->
+    | DMA.Deb.Reduction.Name.Orig m, DMA.Deb.Reduction.Version.Orig w -> ver m w
+    | DMA.Deb.Reduction.Name.Selector a, DMA.Deb.Reduction.Version.RefReal w ->
         if deferred st a then
           match fst a with m, DMA.QAArch b -> [ `Pkg (m, b) ] | _ -> []
         else ver (fst a) w
-    | DMA.Deb.Name.Selector _, DMA.Deb.Version.Ref (m, w) -> ver m w
-    | (DMA.Deb.Name.Disjunct _ | DMA.Deb.Name.Soft _), DMA.Deb.Version.Atom a ->
+    | DMA.Deb.Reduction.Name.Selector _, DMA.Deb.Reduction.Version.Ref (m, w) ->
+        ver m w
+    | ( (DMA.Deb.Reduction.Name.Disjunct _ | DMA.Deb.Reduction.Name.Soft _),
+        DMA.Deb.Reduction.Version.Atom a ) ->
         of_atom a
     | _ -> []
 end

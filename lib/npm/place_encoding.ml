@@ -27,7 +27,7 @@ module type S = sig
   module Pl = Npl.Pl
   module R = Pl.Reduction
   module T = R.T
-  module Lk = Npl.Lookup
+  module Lk = Npl.Reduction.Lookup
 
   val xrange : Npm_version.range -> Npl.coq_Range
   val lock_path : string list -> string
@@ -89,7 +89,7 @@ module Make () = struct
   module Pl = Npl.Pl
   module R = Pl.Reduction
   module T = R.T
-  module Lk = Npl.Lookup
+  module Lk = Npl.Reduction.Lookup
 
   (* Npl's ranges are its own type, as each application of Semver makes one *)
   let xcomp : Npm_version.comparator -> Npl.coq_Comparator = function

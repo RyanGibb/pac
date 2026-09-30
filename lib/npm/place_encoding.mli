@@ -30,7 +30,7 @@ module type S = sig
   module Pl = Npl.Pl
   module R = Pl.Reduction
   module T = R.T
-  module Lk = Npl.Lookup
+  module Lk = Npl.Reduction.Lookup
 
   val xrange : Npm_version.range -> Npl.coq_Range
 

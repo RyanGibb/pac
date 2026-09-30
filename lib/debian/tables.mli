@@ -88,14 +88,16 @@ module type S = sig
   val recs_of : nstanza -> DMA.Atom.t list list
 
   val ordered_clauses :
-    tables -> DMA.Pkg.t -> (bool * DMA.Deb.Name.t * DMA.Deb.Atom.t list) list
+    tables ->
+    DMA.Pkg.t ->
+    (bool * DMA.Deb.Reduction.Name.t * DMA.Deb.Atom.t list) list
 
   val sat : DMA.Deb.Ver.coq_Formula -> string -> bool
   val pp_mname : Format.formatter -> string * DMA.coq_NameArch -> unit
   val pp_atom : Format.formatter -> DMA.Deb.Atom.t -> unit
 
   module PName : sig
-    type t = DMA.Deb.Name.t
+    type t = DMA.Deb.Reduction.Name.t
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit

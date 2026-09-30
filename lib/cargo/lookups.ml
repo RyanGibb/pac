@@ -55,12 +55,14 @@ module Make (Encoding : Encoding.S) = struct
       ((string * string) * Cg.SlotKey.t, Cg.SlotData.t option) Hashtbl.t;
     (* the tagged list, not just the untagged one, has to be memoized:
        PubGrub asks a name for its versions at every propagation step *)
-    pg_vers : (Cg.NPlus.t, PVersion.t list) Hashtbl.t;
+    pg_vers : (Cg.Reduction.NPlus.t, PVersion.t list) Hashtbl.t;
     (* at each decision PubGrub's dependency_incomps asks for the
        dependencies of the decided version's neighbours, once per
        dependency, to widen each incompatibility's range *)
     pg_deps :
-      (Cg.NPlus.t * Cg.VPlus.t, (Cg.NPlus.t * PG.Ranges.t) list) Hashtbl.t;
+      ( Cg.Reduction.NPlus.t * Cg.Reduction.VPlus.t,
+        (Cg.Reduction.NPlus.t * PG.Ranges.t) list )
+      Hashtbl.t;
   }
 
   let create ar (root : Q.root) ~features ~rustv =
@@ -228,7 +230,7 @@ module Make (Encoding : Encoding.S) = struct
         && Cg.slotActive st.rc p d
         && List.exists
              (fun (((_, f'), e) : Cg.FDefElt.t) ->
-               f' = f && Cg.entryFeatD e = Some (Cg.sAlias d, feat))
+               f' = f && Cg.Reduction.entryFeatD e = Some (Cg.sAlias d, feat))
              (Cg.FDefRel.elements rw.r_fdefs))
       n gr
 
@@ -238,8 +240,9 @@ module Make (Encoding : Encoding.S) = struct
       (fun ((m, _) : T.Dependees.t) ->
         let key =
           match m with
-          | Cg.NPlus.CSlot (n, gr, d) -> Some (`Slot (n, gr, d))
-          | Cg.NPlus.CDec (n, gr, f, d, feat) -> Some (`Dec (n, gr, f, d, feat))
+          | Cg.Reduction.NPlus.CSlot (n, gr, d) -> Some (`Slot (n, gr, d))
+          | Cg.Reduction.NPlus.CDec (n, gr, f, d, feat) ->
+              Some (`Dec (n, gr, f, d, feat))
           | _ -> None
         in
         match key with
@@ -267,19 +270,20 @@ module Make (Encoding : Encoding.S) = struct
 
   (* one branch per versions_lookup{Root,Crate,FeatP,Slot,Decision,Link},
      each filling in the components its theorem names and nothing else *)
-  let versions st (tn : Cg.NPlus.t) : Cg.VPlus.t list =
-    let call i = T.VSet.elements (Cg.versions i tn) in
+  let versions st (tn : Cg.Reduction.NPlus.t) : Cg.Reduction.VPlus.t list =
+    let call i = T.VSet.elements (Cg.Reduction.versions i tn) in
     let e = empty_inst st in
     match tn with
-    | Cg.NPlus.CRoot -> call e
-    | Cg.NPlus.CCrate (n, _) -> call { e with inst_repo = name_set st n }
-    | Cg.NPlus.CFeatP (n, f, _) ->
+    | Cg.Reduction.NPlus.CRoot -> call e
+    | Cg.Reduction.NPlus.CCrate (n, _) ->
+        call { e with inst_repo = name_set st n }
+    | Cg.Reduction.NPlus.CFeatP (n, f, _) ->
         let supp = support_at st n f in
         call { e with inst_repo = name_set st n; inst_support = supp }
-    | Cg.NPlus.CSlot (n, gr, d) ->
+    | Cg.Reduction.NPlus.CSlot (n, gr, d) ->
         let slots = slot_owner st n gr d in
         call { e with inst_repo = name_set st (Cg.sName d); inst_slots = slots }
-    | Cg.NPlus.CDec (n, gr, f, d, feat) ->
+    | Cg.Reduction.NPlus.CDec (n, gr, f, d, feat) ->
         let slots, fdefs = snd (dec_owner st n gr f d feat) in
         call
           {
@@ -288,7 +292,7 @@ module Make (Encoding : Encoding.S) = struct
             inst_fdefs = fdefs;
             inst_slots = slots;
           }
-    | Cg.NPlus.CLink l ->
+    | Cg.Reduction.NPlus.CLink l ->
         (* Lookup.claimants and LinkFibred.withHead at l, over the
            declarers loaded so far: the answer may only grow
            (versions_link_mono) *)
@@ -307,17 +311,17 @@ module Make (Encoding : Encoding.S) = struct
      turn on which ranges the lookup evaluates. *)
   let dependees st (p : T.Pkg.t) : T.Dependees.t list =
     let call i =
-      T.DependeesSet.elements (Cg.dependeesBy (name_versions st) i p)
+      T.DependeesSet.elements (Cg.Reduction.dependeesBy (name_versions st) i p)
     in
     let e = empty_inst st in
     match p with
-    | Cg.NPlus.CRoot, _ -> call e
-    | Cg.NPlus.CCrate (n, _), Cg.VPlus.WOrig v ->
+    | Cg.Reduction.NPlus.CRoot, _ -> call e
+    | Cg.Reduction.NPlus.CCrate (n, _), Cg.Reduction.VPlus.WOrig v ->
         let rw = fibres_of st (n, v) in
         List.iter (fun m -> ignore (name_versions st m)) rw.r_reads;
         produced st (n, v)
           (call { e with inst_slots = rw.r_slots; inst_links = rw.r_links })
-    | Cg.NPlus.CFeatP (n, _, _), Cg.VPlus.WOrig v ->
+    | Cg.Reduction.NPlus.CFeatP (n, _, _), Cg.Reduction.VPlus.WOrig v ->
         let rw = fibres_of st (n, v) in
         List.iter (fun m -> ignore (name_versions st m)) rw.r_reads;
         produced st (n, v)
@@ -328,9 +332,10 @@ module Make (Encoding : Encoding.S) = struct
                inst_fdefs = rw.r_fdefs;
                inst_slots = rw.r_slots;
              })
-    | Cg.NPlus.CSlot (n, gr, d), Cg.VPlus.WClass _ ->
+    | Cg.Reduction.NPlus.CSlot (n, gr, d), Cg.Reduction.VPlus.WClass _ ->
         call { e with inst_slots = slot_owner st n gr d }
-    | Cg.NPlus.CDec (n, gr, f, d, feat), Cg.VPlus.WClass _ ->
+    | Cg.Reduction.NPlus.CDec (n, gr, f, d, feat), Cg.Reduction.VPlus.WClass _
+      ->
         let w, (slots, fdefs) = dec_owner st n gr f d feat in
         let hs = call { e with inst_fdefs = fdefs; inst_slots = slots } in
         Option.fold ~none:hs ~some:(fun u -> produced st u hs) w
@@ -352,9 +357,11 @@ module Make (Encoding : Encoding.S) = struct
      ranks the versions a dependency admits and not their granularity
      classes, and which one the ranked walk lands on depends on what is
      already activated, which only choose can see. *)
-  let tag st (tn : Cg.NPlus.t) (w : Cg.VPlus.t) : PVersion.t =
+  let tag st (tn : Cg.Reduction.NPlus.t) (w : Cg.Reduction.VPlus.t) : PVersion.t
+      =
     match (tn, w) with
-    | (Cg.NPlus.CCrate (n, _) | Cg.NPlus.CFeatP (n, _, _)), Cg.VPlus.WOrig v ->
+    | ( (Cg.Reduction.NPlus.CCrate (n, _) | Cg.Reduction.NPlus.CFeatP (n, _, _)),
+        Cg.Reduction.VPlus.WOrig v ) ->
         { PVersion.msrv = msrv_fits st (n, v); v = w }
     | _ -> { PVersion.msrv = true; v = w }
 
@@ -365,7 +372,7 @@ module Make (Encoding : Encoding.S) = struct
      built by pg_dependencies with of_list from a loaded declarer's own *)
   let pg_versions st tn =
     match tn with
-    | Cg.NPlus.CLink _ -> List.map (tag st tn) (versions st tn)
+    | Cg.Reduction.NPlus.CLink _ -> List.map (tag st tn) (versions st tn)
     | _ ->
         Tbl.memo st.pg_vers tn (fun () -> List.map (tag st tn) (versions st tn))
 

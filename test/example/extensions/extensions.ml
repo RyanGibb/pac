@@ -1030,7 +1030,7 @@ module Npm_placement = struct
       end)
 
   module R = M.Pl.Reduction
-  module L = M.Lookup
+  module L = M.Reduction.Lookup
 
   type name = R.Name.t
   type version = R.Version.t
@@ -1076,7 +1076,7 @@ module Npm_placement = struct
       inst_rootPeers = [];
     }
 
-  let root = R.rootPkg (M.tr i)
+  let root = R.rootPkg (M.Reduction.tr i)
 
   (* the lookups read sub-instances, as the npm driver builds them: an
      occupant's edges off its manifest alone, an edge's accepted set off
@@ -1135,15 +1135,17 @@ module Npm_placement = struct
       | R.Name.Walk (l, a), w -> R.T.DependeesSet.elements (R.walkDeps l a w)
       | R.Name.Root, _ -> unasked ())
 
-  let real = R.T.PkgSet.elements (M.reduceReal i d)
-  let deps = rel R.T.VSet.elements R.T.DepRel.elements (M.reduceDeps i d)
+  let real = R.T.PkgSet.elements (M.Reduction.reduceReal i d)
+
+  let deps =
+    rel R.T.VSet.elements R.T.DepRel.elements (M.Reduction.reduceDeps i d)
 
   let decode s =
     packages "layout"
       (List.map
          (fun (l, (a, x)) -> path (a :: l) ^ " " ^ occ x)
          (M.Pl.Layout.elements
-            (M.Pl.reachable (M.tr i)
+            (M.Pl.reachable (M.Reduction.tr i)
                (R.placementResolution (R.T.PkgSet.ofList s)))))
 end
 

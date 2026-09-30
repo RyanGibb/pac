@@ -132,7 +132,8 @@ module Make (Place_encoding : Place_encoding.S) = struct
   let accepted st (e : Npl.coq_Edge) : int * Pl.VSet.t =
     let n = e.Npl.e_name in
     Tbl.memo st.acc_tbl (n, e.Npl.e_range) (fun () ->
-        (Hashtbl.length st.acc_tbl, Npl.acceptsIn n e.Npl.e_range (real_at st n)))
+        ( Hashtbl.length st.acc_tbl,
+          Npl.Reduction.acceptsIn n e.Npl.e_range (real_at st n) ))
 
   let note_key st (k : string) (m : string) =
     let l = Tbl.find_list st.key_names k in

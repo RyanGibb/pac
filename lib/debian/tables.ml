@@ -64,14 +64,16 @@ module type S = sig
   val recs_of : nstanza -> DMA.Atom.t list list
 
   val ordered_clauses :
-    tables -> DMA.Pkg.t -> (bool * DMA.Deb.Name.t * DMA.Deb.Atom.t list) list
+    tables ->
+    DMA.Pkg.t ->
+    (bool * DMA.Deb.Reduction.Name.t * DMA.Deb.Atom.t list) list
 
   val sat : DMA.Deb.Ver.coq_Formula -> string -> bool
   val pp_mname : Format.formatter -> string * DMA.coq_NameArch -> unit
   val pp_atom : Format.formatter -> DMA.Deb.Atom.t -> unit
 
   module PName : sig
-    type t = DMA.Deb.Name.t
+    type t = DMA.Deb.Reduction.Name.t
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit
@@ -181,7 +183,9 @@ module Make (AP : ARCH) : S = struct
     (* a package's clauses in field order, asked for again by every depender
        and by the rejection cascade *)
     oc_cache :
-      (DMA.Pkg.t, (bool * DMA.Deb.Name.t * DMA.Deb.Atom.t list) list) Hashtbl.t;
+      ( DMA.Pkg.t,
+        (bool * DMA.Deb.Reduction.Name.t * DMA.Deb.Atom.t list) list )
+      Hashtbl.t;
   }
 
   let push = Pac_common.Tbl.push
@@ -346,7 +350,7 @@ module Make (AP : ARCH) : S = struct
      resolves because a selector in turn exists only where a Provides
      matches the atom. *)
   let ordered_clauses tables (p : DMA.Pkg.t) :
-      (bool * DMA.Deb.Name.t * DMA.Deb.Atom.t list) list =
+      (bool * DMA.Deb.Reduction.Name.t * DMA.Deb.Atom.t list) list =
     match Hashtbl.find_opt tables.oc_cache p with
     | Some r -> r
     | None ->
@@ -359,16 +363,18 @@ module Make (AP : ARCH) : S = struct
                  a clause by its atom set (Debian.dependees): a | a, or
                  a (>= 1.0) | a (>= 1.00), is one atom, a direct edge *)
               let mk opt synth alts =
-                let ma = DMA.reduceClause b alts in
+                let ma = DMA.Reduction.reduceClause b alts in
                 ( opt,
                   synth ma,
                   DMA.Deb.AtomSet.elements (DMA.Deb.clauseAtoms ma) )
               in
               List.map
-                (fun alts -> mk false (fun s -> DMA.Deb.Name.Disjunct s) alts)
+                (fun alts ->
+                  mk false (fun s -> DMA.Deb.Reduction.Name.Disjunct s) alts)
                 (deps_of stz)
               @ List.map
-                  (fun alts -> mk true (fun s -> DMA.Deb.Name.Soft s) alts)
+                  (fun alts ->
+                    mk true (fun s -> DMA.Deb.Reduction.Name.Soft s) alts)
                   (recs_of stz)
         in
         Hashtbl.add tables.oc_cache p r;
@@ -406,15 +412,16 @@ module Make (AP : ARCH) : S = struct
   let pp_atom fmt (m, f) = Format.fprintf fmt "%a (%a)" pp_mname m pp_formula f
 
   module PName = struct
-    type t = DMA.Deb.Name.t
+    type t = DMA.Deb.Reduction.Name.t
 
-    let compare a b = Pac_common.Ot.r2c (DMA.Deb.NameOT.compare a b)
+    let compare a b = Pac_common.Ot.r2c (DMA.Deb.Reduction.NameOT.compare a b)
 
     let pp fmt = function
-      | DMA.Deb.Name.Orig m -> pp_mname fmt m
-      | DMA.Deb.Name.Disjunct _ -> Format.fprintf fmt "<alts>"
-      | DMA.Deb.Name.Soft _ -> Format.fprintf fmt "<rec>"
-      | DMA.Deb.Name.Selector a -> Format.fprintf fmt "<sel %a>" pp_atom a
+      | DMA.Deb.Reduction.Name.Orig m -> pp_mname fmt m
+      | DMA.Deb.Reduction.Name.Disjunct _ -> Format.fprintf fmt "<alts>"
+      | DMA.Deb.Reduction.Name.Soft _ -> Format.fprintf fmt "<rec>"
+      | DMA.Deb.Reduction.Name.Selector a ->
+          Format.fprintf fmt "<sel %a>" pp_atom a
 
     (* [pp] abbreviates a clause, which the explanations print; the core
        block lists clauses side by side, so it spells each one out *)
@@ -425,8 +432,9 @@ module Make (AP : ARCH) : S = struct
           pp_atom
       in
       match n with
-      | DMA.Deb.Name.Disjunct a -> Format.fprintf fmt "<alts %a>" alts a
-      | DMA.Deb.Name.Soft a -> Format.fprintf fmt "<rec %a>" alts a
+      | DMA.Deb.Reduction.Name.Disjunct a ->
+          Format.fprintf fmt "<alts %a>" alts a
+      | DMA.Deb.Reduction.Name.Soft a -> Format.fprintf fmt "<rec %a>" alts a
       | _ -> pp fmt n
   end
 end

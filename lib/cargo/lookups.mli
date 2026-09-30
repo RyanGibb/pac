@@ -42,9 +42,12 @@ module Make (Encoding : Encoding.S) : sig
   val site_data :
     state -> string * string -> Cg.SlotKey.t -> Cg.SlotData.t option
 
-  val tag : state -> Cg.NPlus.t -> Cg.VPlus.t -> PVersion.t
-  val pg_versions : state -> Cg.NPlus.t -> PVersion.t list
+  val tag : state -> Cg.Reduction.NPlus.t -> Cg.Reduction.VPlus.t -> PVersion.t
+  val pg_versions : state -> Cg.Reduction.NPlus.t -> PVersion.t list
 
   val pg_dependencies :
-    state -> Cg.NPlus.t -> PVersion.t -> (Cg.NPlus.t * PG.Ranges.t) list
+    state ->
+    Cg.Reduction.NPlus.t ->
+    PVersion.t ->
+    (Cg.Reduction.NPlus.t * PG.Ranges.t) list
 end

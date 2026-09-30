@@ -22,7 +22,7 @@ module type S = sig
           (Pac_common.Ot.Str)
           (PM)
 
-  module T = Cg.T
+  module T = Cg.Reduction.T
 
   val root_feats : Cargo_parse.ver -> Cargo_query.features -> string list
   val msrv_ok : string -> string option -> bool
@@ -34,14 +34,14 @@ module type S = sig
   val site_key : Cargo_parse.dep -> Cg.SlotKey.t
 
   module PName : sig
-    type t = Cg.NPlus.t
+    type t = Cg.Reduction.NPlus.t
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit
   end
 
   module PVersion : sig
-    type t = { msrv : bool; v : Cg.VPlus.t }
+    type t = { msrv : bool; v : Cg.Reduction.VPlus.t }
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit

@@ -78,8 +78,10 @@ struct
     let links_free t u gr =
       match L.meta st t u with
       | Some { P.v_links = Some l; _ } -> (
-          match decided_v assigned (Cg.NPlus.CLink l) with
-          | Some (Cg.VPlus.WName (Cg.NPlus.CCrate (t', gr'))) ->
+          match decided_v assigned (Cg.Reduction.NPlus.CLink l) with
+          | Some
+              (Cg.Reduction.VPlus.WName (Cg.Reduction.NPlus.CCrate (t', gr')))
+            ->
               t' = t && gr' = gr
           | _ -> true)
       | _ -> true
@@ -88,12 +90,12 @@ struct
     let valid t u =
       Pac_common.Tbl.memo valid_memo (t, u) (fun () ->
           let gr = L.granularity st u in
-          let g = Cg.NPlus.CCrate (t, gr) in
+          let g = Cg.Reduction.NPlus.CCrate (t, gr) in
           (match assigned g with
-            | PG.Decided { PVersion.v = Cg.VPlus.WOrig w; _ } ->
+            | PG.Decided { PVersion.v = Cg.Reduction.VPlus.WOrig w; _ } ->
                 Cargo_version.compare w u = 0
             | PG.Entailed r ->
-                PG.Ranges.contains (L.tag st g (Cg.VPlus.WOrig u)) r
+                PG.Ranges.contains (L.tag st g (Cg.Reduction.VPlus.WOrig u)) r
             | _ -> true)
           && links_free t u gr)
     in
@@ -144,12 +146,14 @@ struct
     | Some mm ->
         List.fold_left
           (fun acc (f, _) ->
-            let x = Cg.NPlus.CFeatP (m, f, gr) in
+            let x = Cg.Reduction.NPlus.CFeatP (m, f, gr) in
             match assigned x with
             | PG.Entailed r
-              when PG.Ranges.contains (L.tag st x (Cg.VPlus.WOrig u)) r ->
+              when PG.Ranges.contains
+                     (L.tag st x (Cg.Reduction.VPlus.WOrig u))
+                     r ->
                 Order.SS.add f acc
-            | PG.Decided { PVersion.v = Cg.VPlus.WOrig w; _ }
+            | PG.Decided { PVersion.v = Cg.Reduction.VPlus.WOrig w; _ }
               when Cargo_version.compare w u = 0 ->
                 Order.SS.add f acc
             | _ -> acc)
@@ -160,35 +164,38 @@ struct
     let la = lookahead pk ~assigned in
     let offered w =
       List.find_opt
-        (fun (c : PVersion.t) -> Cg.VPlus.compare c.PVersion.v w = E.Eq)
+        (fun (c : PVersion.t) ->
+          Cg.Reduction.VPlus.compare c.PVersion.v w = E.Eq)
         cands
     in
     let walk (d : P.dep) =
       List.find_map
         (fun u ->
           if la.live d.P.d_name u (Order.SS.of_list d.P.d_feats) d.P.d_default
-          then offered (Cg.VPlus.WClass (L.granularity st u))
+          then offered (Cg.Reduction.VPlus.WClass (L.granularity st u))
           else None)
         (candidates pk d)
     in
     let pick =
       match tn with
-      | Cg.NPlus.CSlot (_, _, d) -> Option.bind (L.slot_dep st d) walk
-      | Cg.NPlus.CDec (n, gr, _, d, _) -> (
-          match decided_v assigned (Cg.NPlus.CSlot (n, gr, d)) with
+      | Cg.Reduction.NPlus.CSlot (_, _, d) -> Option.bind (L.slot_dep st d) walk
+      | Cg.Reduction.NPlus.CDec (n, gr, _, d, _) -> (
+          match decided_v assigned (Cg.Reduction.NPlus.CSlot (n, gr, d)) with
           | Some w -> offered w
           | None -> Option.bind (L.slot_dep st d) walk)
-      | Cg.NPlus.CCrate (m, gr) ->
+      | Cg.Reduction.NPlus.CCrate (m, gr) ->
           List.find_opt
             (fun (c : PVersion.t) ->
               match c.PVersion.v with
-              | Cg.VPlus.WOrig u ->
+              | Cg.Reduction.VPlus.WOrig u ->
                   la.links_free m u gr
                   && la.live m u (asked st ~assigned m gr u) false
               | _ -> true)
             (List.sort (fun a b -> PVersion.compare b a) cands)
-      | Cg.NPlus.CFeatP (m, _, gr) ->
-          Option.bind (decided_v assigned (Cg.NPlus.CCrate (m, gr))) offered
+      | Cg.Reduction.NPlus.CFeatP (m, _, gr) ->
+          Option.bind
+            (decided_v assigned (Cg.Reduction.NPlus.CCrate (m, gr)))
+            offered
       | _ -> None
     in
     match pick with
@@ -208,12 +215,12 @@ struct
     let pk = S.pk
     let st = pk.lk
 
-    type name = Cg.NPlus.t
+    type name = Cg.Reduction.NPlus.t
     type version = PVersion.t
     type selection = PG.selection
     type assigned = name -> selection
 
-    let equal a b = Cg.NPlus.compare a b = E.Eq
+    let equal a b = Cg.Reduction.NPlus.compare a b = E.Eq
     let decided = decided
     let version_equal a b = PVersion.compare a b = 0
     let root = L.root st
@@ -226,14 +233,21 @@ struct
       match meta (t, u) with
       | None -> []
       | Some m -> (
-          List.map (fun (f, _) -> Cg.NPlus.CFeatP (t, f, gr)) m.P.v_feats
-          @ match m.P.v_links with Some l -> [ Cg.NPlus.CLink l ] | None -> [])
+          List.map
+            (fun (f, _) -> Cg.Reduction.NPlus.CFeatP (t, f, gr))
+            m.P.v_feats
+          @
+          match m.P.v_links with
+          | Some l -> [ Cg.Reduction.NPlus.CLink l ]
+          | None -> [])
 
     let root_step assigned =
       let n, v = root in
       let gr = L.granularity st v in
       List.find_opt (is_open assigned)
-        (Cg.NPlus.CRoot :: Cg.NPlus.CCrate (n, gr) :: owned (n, v) gr)
+        (Cg.Reduction.NPlus.CRoot
+        :: Cg.Reduction.NPlus.CCrate (n, gr)
+        :: owned (n, v) gr)
 
     (* the decisions for what (n, v) delivers to d's site: every dependency
        feature one of its features names under d's alias *)
@@ -247,7 +261,7 @@ struct
                 (function
                   | (P.FDepFeat (a, f') | P.FWeakFeat (a, f'))
                     when a = d.P.d_alias ->
-                      Some (Cg.NPlus.CDec (n, gr0, f, sd, f'))
+                      Some (Cg.Reduction.NPlus.CDec (n, gr0, f, sd, f'))
                   | _ -> None)
                 es)
             m.P.v_feats
@@ -255,10 +269,10 @@ struct
     (* once the dependee crate is decided, its owned names, then the
        activation that ends the dependency's processing *)
     let crate_step assigned t gr =
-      let g = Cg.NPlus.CCrate (t, gr) in
+      let g = Cg.Reduction.NPlus.CCrate (t, gr) in
       match assigned g with
       | PG.Entailed _ -> Order.Decide g
-      | PG.Decided { PVersion.v = Cg.VPlus.WOrig u; _ } -> (
+      | PG.Decided { PVersion.v = Cg.Reduction.VPlus.WOrig u; _ } -> (
           match List.find_opt (is_open assigned) (owned (t, u) gr) with
           | Some x -> Order.Decide x
           | None -> Order.Activated (t, u))
@@ -269,10 +283,10 @@ struct
       | None -> Order.Skip
       | Some sd -> (
           let gr0 = L.granularity st v in
-          let sigma = Cg.NPlus.CSlot (n, gr0, sd) in
+          let sigma = Cg.Reduction.NPlus.CSlot (n, gr0, sd) in
           match assigned sigma with
           | PG.Entailed _ -> Order.Decide sigma
-          | PG.Decided { PVersion.v = Cg.VPlus.WClass gr; _ } -> (
+          | PG.Decided { PVersion.v = Cg.Reduction.VPlus.WClass gr; _ } -> (
               match
                 List.find_opt (is_open assigned) (delivered (n, v) gr0 sd d)
               with

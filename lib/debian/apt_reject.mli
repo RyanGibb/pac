@@ -6,7 +6,7 @@ module type SEARCH = sig
   module PVersion : sig
     type t = {
       pos : int;
-      v : T.DMA.Deb.Version.t;
+      v : T.DMA.Deb.Reduction.Version.t;
       tgt : (string * T.DMA.coq_NameArch) option;
     }
 
@@ -24,19 +24,22 @@ module type SEARCH = sig
   end
 
   val tables : T.tables
-  val tag : T.DMA.Deb.Name.t -> T.DMA.Deb.Version.t -> PVersion.t
-  val cands_of : T.DMA.Deb.Name.t -> PVersion.t list
+
+  val tag :
+    T.DMA.Deb.Reduction.Name.t -> T.DMA.Deb.Reduction.Version.t -> PVersion.t
+
+  val cands_of : T.DMA.Deb.Reduction.Name.t -> PVersion.t list
 
   val dependees_of :
-    T.DMA.Deb.Name.t ->
-    T.DMA.Deb.Version.t ->
-    (T.DMA.Deb.Name.t * PVersion.t list) list
+    T.DMA.Deb.Reduction.Name.t ->
+    T.DMA.Deb.Reduction.Version.t ->
+    (T.DMA.Deb.Reduction.Name.t * PVersion.t list) list
 
-  val has_ref : T.DMA.Deb.Name.t -> bool
+  val has_ref : T.DMA.Deb.Reduction.Name.t -> bool
 
   val free_of :
-    assigned:(T.DMA.Deb.Name.t -> PG.selection) ->
-    T.DMA.Deb.Name.t ->
+    assigned:(T.DMA.Deb.Reduction.Name.t -> PG.selection) ->
+    T.DMA.Deb.Reduction.Name.t ->
     PVersion.t list ->
     PVersion.t list
 
@@ -47,7 +50,7 @@ module Make (S : SEARCH) : sig
   open S
   open T
 
-  type name = DMA.Deb.Name.t
+  type name = DMA.Deb.Reduction.Name.t
   type assigned = name -> PG.selection
 
   (* apt's Reject propagation (Solver::Propagate, solver3.cc), which PubGrub

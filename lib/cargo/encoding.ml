@@ -20,7 +20,7 @@ module type S = sig
           (Pac_common.Ot.Str)
           (PM)
 
-  module T = Cg.T
+  module T = Cg.Reduction.T
 
   val root_feats : Cargo_parse.ver -> Cargo_query.features -> string list
   val msrv_ok : string -> string option -> bool
@@ -32,14 +32,14 @@ module type S = sig
   val site_key : Cargo_parse.dep -> Cg.SlotKey.t
 
   module PName : sig
-    type t = Cg.NPlus.t
+    type t = Cg.Reduction.NPlus.t
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit
   end
 
   module PVersion : sig
-    type t = { msrv : bool; v : Cg.VPlus.t }
+    type t = { msrv : bool; v : Cg.Reduction.VPlus.t }
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit
@@ -66,7 +66,7 @@ module Make () = struct
   end
 
   module Cg = E.Cargo (Ot.Str) (CVerOT) (Ot.Str) (CVerOT) (Ot.Str) (Ot.Str) (PM)
-  module T = Cg.T
+  module T = Cg.Reduction.T
 
   (* rootFeats.  Under All, every key of the root's feature table, as
      Cargo.lock is resolved with every feature (resolve_with_registry,
@@ -246,38 +246,39 @@ module Make () = struct
             (Cg.sReq d)))
 
   module PName = struct
-    type t = Cg.NPlus.t
+    type t = Cg.Reduction.NPlus.t
 
-    let compare a b = Ot.r2c (Cg.NPlus.compare a b)
+    let compare a b = Ot.r2c (Cg.Reduction.NPlus.compare a b)
 
     let pp fmt (tn : t) =
       match tn with
-      | Cg.NPlus.CRoot -> Format.fprintf fmt "root"
-      | Cg.NPlus.CCrate (n, gr) -> Format.fprintf fmt "%s@%s" n gr
-      | Cg.NPlus.CFeatP (n, f, gr) -> Format.fprintf fmt "%s/%s@%s" n f gr
-      | Cg.NPlus.CSlot (n, gr, d) ->
+      | Cg.Reduction.NPlus.CRoot -> Format.fprintf fmt "root"
+      | Cg.Reduction.NPlus.CCrate (n, gr) -> Format.fprintf fmt "%s@%s" n gr
+      | Cg.Reduction.NPlus.CFeatP (n, f, gr) ->
+          Format.fprintf fmt "%s/%s@%s" n f gr
+      | Cg.Reduction.NPlus.CSlot (n, gr, d) ->
           Format.fprintf fmt "%s@%s->%a%a" n gr pp_site (Cg.sKey d) pp_req d
-      | Cg.NPlus.CDec (n, gr, f, d, feat) ->
+      | Cg.Reduction.NPlus.CDec (n, gr, f, d, feat) ->
           Format.fprintf fmt "<%s@%s/%s=>%a%a/%s>" n gr f pp_site (Cg.sKey d)
             pp_req d feat
-      | Cg.NPlus.CLink l -> Format.fprintf fmt "links:%s" l
+      | Cg.Reduction.NPlus.CLink l -> Format.fprintf fmt "links:%s" l
   end
 
   module PVersion = struct
-    type t = { msrv : bool; v : Cg.VPlus.t }
+    type t = { msrv : bool; v : Cg.Reduction.VPlus.t }
 
     let compare a b =
       match (a.msrv, b.msrv) with
       | false, true -> -1
       | true, false -> 1
-      | _ -> Ot.r2c (Cg.VPlus.compare a.v b.v)
+      | _ -> Ot.r2c (Cg.Reduction.VPlus.compare a.v b.v)
 
     let pp fmt ({ v; _ } : t) =
       match v with
-      | Cg.VPlus.WUnit -> Format.fprintf fmt "()"
-      | Cg.VPlus.WOrig x -> Format.fprintf fmt "%s" x
-      | Cg.VPlus.WClass gr -> Format.fprintf fmt "granularity:%s" gr
-      | Cg.VPlus.WName n -> PName.pp fmt n
+      | Cg.Reduction.VPlus.WUnit -> Format.fprintf fmt "()"
+      | Cg.Reduction.VPlus.WOrig x -> Format.fprintf fmt "%s" x
+      | Cg.Reduction.VPlus.WClass gr -> Format.fprintf fmt "granularity:%s" gr
+      | Cg.Reduction.VPlus.WName n -> PName.pp fmt n
   end
 
   module PG = Pubgrub.Make (PName) (PVersion)
