@@ -502,8 +502,8 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         injection He as <-; exact Hw.
     Qed.
 
-    Definition coreResolution (S : PkgSet.t) (pi : ParentRel.t)
-        (D : C.DepRel.t) (g : V.t -> G.t) : T.PkgSet.t :=
+    Definition coreResolution (D : C.DepRel.t) (g : V.t -> G.t)
+        (S : PkgSet.t) (pi : ParentRel.t) : T.PkgSet.t :=
       T.PkgSet.union (SOptp.map (Conc.Reduction.embedPkg g) S)
         (SOdtp.unionMap (fun '((n, v), (m, vs)) =>
              if PkgSet.mem (n, v) S
@@ -527,7 +527,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         CorePkg S pi D g (Name.Intermediate n v m, Version.Orig u).
 
     Lemma mem_coreResolution : forall S pi D g (q : T.Pkg.t),
-        T.PkgSet.In q (coreResolution S pi D g) <-> CorePkg S pi D g q.
+        T.PkgSet.In q (coreResolution D g S pi) <-> CorePkg S pi D g q.
     Proof.
       intros S pi D g q; unfold coreResolution.
       rewrite T.PkgSet.union_spec, SOptp.mem_map, SOdtp.mem_unionMap.
@@ -551,7 +551,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     Lemma mem_coreResolution_granular : forall S pi D g n v,
         PkgSet.In (n, v) S ->
         T.PkgSet.In (Name.Granular n (g v), Version.Orig v)
-          (coreResolution S pi D g).
+          (coreResolution D g S pi).
     Proof. intros; apply mem_coreResolution, CoreGranular; assumption. Qed.
 
     Lemma mem_coreResolution_intermediate : forall S pi D g n v m vs u,
@@ -559,7 +559,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         PkgSet.In (m, u) S -> VSet.In u vs ->
         ParentRel.In ((m, u), (n, v)) pi ->
         T.PkgSet.In (Name.Intermediate n v m, Version.Orig u)
-          (coreResolution S pi D g).
+          (coreResolution D g S pi).
     Proof. intros; apply mem_coreResolution; econstructor; eassumption. Qed.
 
     Theorem peer_completeness :
@@ -568,7 +568,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
              (S : PkgSet.t) (pi : ParentRel.t),
         IsResolution R D Th g r S pi ->
         T.IsResolution (reduceReal R D Th g) (reduceDeps D Th g)
-          (Conc.Reduction.embedPkg g r) (coreResolution S pi D g).
+          (Conc.Reduction.embedPkg g r) (coreResolution D g S pi).
     Proof.
       intros R D Th g r S pi Hres.
       destruct Hres as [Hconc Hpsat].
@@ -614,7 +614,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Theorem peer_retraction : forall S pi D g,
-        Conc.Reduction.concurrentResolution g (coreResolution S pi D g) = S.
+        Conc.Reduction.concurrentResolution g (coreResolution D g S pi) = S.
     Proof.
       intros S pi D g; apply PkgSet.ext; intros [n v].
       rewrite Conc.Reduction.mem_concurrentResolution, mem_coreResolution.
@@ -625,7 +625,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     Theorem peer_parents_retraction : forall R D Th g r S pi,
         IsResolution R D Th g r S pi ->
         forall m u n v,
-          ParentRel.In ((m, u), (n, v)) (parents D g (coreResolution S pi D g))
+          ParentRel.In ((m, u), (n, v)) (parents D g (coreResolution D g S pi))
           <-> ParentRel.In ((m, u), (n, v)) pi /\
               exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs.
     Proof.
@@ -650,7 +650,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         IsResolution R D Th g r S pi ->
         (forall n v m u, ParentRel.In ((m, u), (n, v)) pi ->
            exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs) ->
-        parents D g (coreResolution S pi D g) = pi.
+        parents D g (coreResolution D g S pi) = pi.
     Proof.
       intros R D Th g r S pi Hres Hdom; apply ParentRel.ext.
       intros [[m u] [n v]].

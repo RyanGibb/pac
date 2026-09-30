@@ -585,17 +585,17 @@ Module VariableFormula (N V : UsualOrderedType)
       - exact Hsig.
     Qed.
 
-    Definition coreResolution (Y_x : X.t -> YSet.t) (S : PkgSet.t)
-        (R : PkgSet.t) (D : DepRel.t) (sigma : X.t -> Y.t) : T.PkgSet.t :=
-      PF.Reduction.coreResolution (liftModel S sigma) (liftReal Y_x R)
-        (liftDeps Y_x D).
+    Definition coreResolution (Y_x : X.t -> YSet.t) (R : PkgSet.t)
+        (D : DepRel.t) (S : PkgSet.t) (sigma : X.t -> Y.t) : T.PkgSet.t :=
+      PF.Reduction.coreResolution (liftReal Y_x R) (liftDeps Y_x D)
+        (liftModel S sigma).
 
     Theorem variable_formula_completeness :
       forall (Y_x : X.t -> YSet.t) (R : PkgSet.t) (D : DepRel.t)
              (r : Pkg.t) (S : PkgSet.t) (sigma : X.t -> Y.t),
         IsResolution Y_x R D r S sigma ->
         T.IsResolution (reduceReal Y_x R D) (reduceDeps Y_x R D) (embedPkg r)
-          (coreResolution Y_x S R D sigma).
+          (coreResolution Y_x R D S sigma).
     Proof.
       intros Y_x R D r S sigma [Hsub Hroot Hclo Huniq Hs].
       apply PF.Reduction.formula_calculus_completeness.
@@ -626,7 +626,7 @@ Module VariableFormula (N V : UsualOrderedType)
     Qed.
 
     Theorem variable_formula_retraction : forall Y_x S R D sigma,
-        variableFormulaResolution (coreResolution Y_x S R D sigma) = S.
+        variableFormulaResolution (coreResolution Y_x R D S sigma) = S.
     Proof.
       intros Y_x S R D sigma; apply PkgSet.ext; intros [m v].
       rewrite mem_variableFormulaResolution; unfold embedPkg, coreResolution.
@@ -639,11 +639,11 @@ Module VariableFormula (N V : UsualOrderedType)
 
     Theorem variable_formula_assignment_retraction :
       forall y0 Y_x S R D sigma x,
-        extractAssignment y0 Y_x (coreResolution Y_x S R D sigma) x = sigma x.
+        extractAssignment y0 Y_x (coreResolution Y_x R D S sigma) x = sigma x.
     Proof.
       intros y0 Y_x S R D sigma x.
       assert (Hc : forall y,
-                 YSet.In y (assignCand (coreResolution Y_x S R D sigma) x) <->
+                 YSet.In y (assignCand (coreResolution Y_x R D S sigma) x) <->
                  y = sigma x).
       { intro y; rewrite mem_assignCand; unfold coreResolution.
         change (Name.Orig (inr x), Version.Orig (inr y))
@@ -653,7 +653,7 @@ Module VariableFormula (N V : UsualOrderedType)
           mem_liftModel_inr.
         split; [intro E; injection E as -> | intros ->]; reflexivity. }
       unfold extractAssignment.
-      destruct (YSet.min_elt (assignCand (coreResolution Y_x S R D sigma) x))
+      destruct (YSet.min_elt (assignCand (coreResolution Y_x R D S sigma) x))
         as [y |] eqn:E.
       - apply YSet.min_elt_spec1, Hc in E; exact E.
       - exfalso; apply YSet.min_elt_spec3 in E.

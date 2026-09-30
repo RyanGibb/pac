@@ -433,7 +433,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
         | exact Hs].
     Qed.
 
-    Definition coreResolution (sigma : X.t -> bool) (cs : list ClauseOT.t)
+    Definition coreResolution (cs : list ClauseOT.t) (sigma : X.t -> bool)
       : T.PkgSet.t :=
       T.PkgSet.ofList
         (root ::
@@ -446,7 +446,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
            cs).
 
     Lemma mem_coreResolution : forall sigma cs (p : T.Pkg.t),
-        T.PkgSet.In p (coreResolution sigma cs) <->
+        T.PkgSet.In p (coreResolution cs sigma) <->
         p = root \/
         exists c, List.In c cs /\
           (p = (Name.Clause c, Version.Lit (firstSatisfied sigma c)) \/
@@ -470,7 +470,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
     Theorem three_sat_completeness : forall cs sigma,
         CnfSat sigma (cnf cs) ->
         T.IsResolution (reduceReal cs) (reduceDeps cs) root
-          (coreResolution sigma cs).
+          (coreResolution cs sigma).
     Proof.
       intros cs sigma Hsat; constructor.
       - intros y Hy; apply mem_coreResolution in Hy; apply mem_reduceReal.
@@ -513,7 +513,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
         exists S, T.IsResolution (reduceReal cs) (reduceDeps cs) root S.
     Proof.
       intro cs; split.
-      - intros [sigma Hs]; exists (coreResolution sigma cs).
+      - intros [sigma Hs]; exists (coreResolution cs sigma).
         exact (three_sat_completeness cs sigma Hs).
       - intros [S HS]; exists (extractAssignment S).
         exact (three_sat_soundness cs S HS).

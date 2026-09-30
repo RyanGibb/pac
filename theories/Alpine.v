@@ -2075,8 +2075,8 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           (PF.Reduction.reduceReal (reduceReal I) (reduceDeps I))
           (PF.Reduction.reduceDeps (reduceReal I) (reduceDeps I))
           (PF.Reduction.embedPkg rootPkg)
-          (PF.Reduction.coreResolution (coreResolution I S) (reduceReal I)
-             (reduceDeps I)).
+          (PF.Reduction.coreResolution (reduceReal I) (reduceDeps I)
+             (coreResolution I S)).
     Proof.
       intros I S Hwf H.
       exact (PF.package_formula_completeness _ _ _ _
@@ -2086,8 +2086,8 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Corollary alpine_core_retraction : forall I S,
         alpineResolution
           (PF.Reduction.packageFormulaResolution
-             (PF.Reduction.coreResolution (coreResolution I S) (reduceReal I)
-                (reduceDeps I)))
+             (PF.Reduction.coreResolution (reduceReal I) (reduceDeps I)
+                (coreResolution I S)))
         = S.
     Proof.
       intros I S; rewrite PF.Reduction.package_formula_retraction.

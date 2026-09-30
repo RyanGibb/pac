@@ -274,14 +274,14 @@ Module Conflict (N V : UsualOrderedType).
         injection E as <-; exact (Hnv Hu).
     Qed.
 
-    Definition coreResolution (S : PkgSet.t) R D (G : ConflictRel.t) :
+    Definition coreResolution R D (G : ConflictRel.t) (S : PkgSet.t) :
         T.PkgSet.t :=
       T.PkgSet.union (embedSet S)
         (absentPkgs (C.absentIn S (instNames R D G))).
 
     Lemma mem_coreResolution :
       forall S R D G (q : T.Pkg.t),
-        T.PkgSet.In q (coreResolution S R D G) <->
+        T.PkgSet.In q (coreResolution R D G S) <->
         (exists p, PkgSet.In p S /\ q = embedPkg p) \/
         (exists n, NSet.In n (instNames R D G) /\
            (forall v, ~ PkgSet.In (n, v) S) /\ q = (n, Version.Bot)).
@@ -299,7 +299,7 @@ Module Conflict (N V : UsualOrderedType).
 
     Lemma embed_mem_coreResolution_inv :
       forall S R D G (p : Pkg.t),
-        T.PkgSet.In (embedPkg p) (coreResolution S R D G) -> PkgSet.In p S.
+        T.PkgSet.In (embedPkg p) (coreResolution R D G S) -> PkgSet.In p S.
     Proof.
       intros S R D G p H; apply mem_coreResolution in H.
       destruct H as [[q [HqS Hq]] | [n [_ [_ Hq]]]].
@@ -312,7 +312,7 @@ Module Conflict (N V : UsualOrderedType).
              (r : Pkg.t) (S : PkgSet.t),
         IsResolution R D G r S ->
         T.IsResolution (reduceReal R D G) (reduceDeps R D G) (embedPkg r)
-          (coreResolution S R D G).
+          (coreResolution R D G S).
     Proof.
       intros R D G r S [[Hsub Hroot Hdep Huniq] Havoid].
       constructor.
@@ -361,7 +361,7 @@ Module Conflict (N V : UsualOrderedType).
     Qed.
 
     Theorem conflict_retraction : forall S R D G,
-        conflictResolution (coreResolution S R D G) = S.
+        conflictResolution (coreResolution R D G S) = S.
     Proof.
       intros S R D G; apply PkgSet.ext; intro p.
       rewrite mem_conflictResolution.

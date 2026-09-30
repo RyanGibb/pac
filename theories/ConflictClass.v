@@ -290,7 +290,7 @@ Module ConflictClass (N V : UsualOrderedType).
         rewrite (Hvu pn pv qv Hp Hq); reflexivity.
     Qed.
 
-    Definition coreResolution (S : PkgSet.t) (Om : InClassRel.t) :
+    Definition coreResolution (Om : InClassRel.t) (S : PkgSet.t) :
         T.PkgSet.t :=
       reduceReal S Om.
 
@@ -298,7 +298,7 @@ Module ConflictClass (N V : UsualOrderedType).
       forall R D Om (r : Pkg.t) (S : PkgSet.t),
         IsResolution R D Om r S ->
         T.IsResolution (reduceReal R Om) (reduceDeps D Om) (embedPkg r)
-          (coreResolution S Om).
+          (coreResolution Om S).
     Proof.
       intros R D Om r S [[Hsub Hroot Hdep Huniq] Hexcl].
       unfold coreResolution; constructor.
@@ -335,7 +335,7 @@ Module ConflictClass (N V : UsualOrderedType).
     Qed.
 
     Theorem conflict_class_retraction : forall (S : PkgSet.t) Om,
-        classResolution (coreResolution S Om) = S.
+        classResolution (coreResolution Om S) = S.
     Proof.
       intros S Om; apply PkgSet.ext; intro p.
       rewrite mem_classResolution; unfold coreResolution.

@@ -1031,7 +1031,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         intros y Hy; simpl; rewrite Ea; exact Hy.
     Qed.
 
-    Definition coreResolution (S : PkgSet.t) (R : PkgSet.t) (D : DepRel.t)
+    Definition coreResolution (R : PkgSet.t) (D : DepRel.t) (S : PkgSet.t)
       : T.PkgSet.t :=
       T.PkgSet.union (SOpt.map embedPkg S)
         (T.PkgSet.union
@@ -1241,7 +1241,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Qed.
 
     Lemma mem_coreResolution : forall S R D (p' : T.Pkg.t),
-        T.PkgSet.In p' (coreResolution S R D) <->
+        T.PkgSet.In p' (coreResolution R D S) <->
         (exists p, PkgSet.In p S /\ p' = embedPkg p) \/
         (exists p psi, DepRel.In (p, psi) D /\ PkgSet.In p S /\
                      T.PkgSet.In p' (witnessSet S psi)) \/
@@ -1271,7 +1271,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Qed.
 
     Theorem package_formula_retraction : forall S R D,
-        packageFormulaResolution (coreResolution S R D) = S.
+        packageFormulaResolution (coreResolution R D S) = S.
     Proof.
       intros S R D; apply PkgSet.ext; intro p.
       rewrite mem_packageFormulaResolution, mem_coreResolution.
@@ -1286,7 +1286,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
 
     Lemma witnessSet_subset_coreResolution : forall S R D p psi,
         DepRel.In (p, psi) D -> PkgSet.In p S ->
-        T.PkgSet.Subset (witnessSet S psi) (coreResolution S R D).
+        T.PkgSet.Subset (witnessSet S psi) (coreResolution R D S).
     Proof.
       intros S R D p psi Hd HpS y Hy; apply mem_coreResolution; right; left.
       exists p, psi; auto.
@@ -1411,9 +1411,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         (forall p, PkgSet.In p S ->
          forall psi, DepRel.In (p, psi) D -> Satisfies S psi) ->
         T.PkgSet.In (Name.Disjunct chis, Version.Idx i)
-          (coreResolution S R D) ->
+          (coreResolution R D S) ->
         exists chi, List.nth_error chis i = Some chi /\ Satisfies S chi /\
-          T.PkgSet.Subset (witnessSet S chi) (coreResolution S R D).
+          T.PkgSet.Subset (witnessSet S chi) (coreResolution R D S).
     Proof.
       intros S R D chis i Hclo H; apply mem_coreResolution in H.
       destruct H
@@ -1720,11 +1720,11 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         (forall m, NSet.In m (depNames D) -> Ab.hasAbsent m = false ->
            exists u, PkgSet.In (m, u) S) ->
         T.IsResolution (reduceReal R D) (reduceDeps R D) (embedPkg r)
-          (coreResolution S R D).
+          (coreResolution R D S).
     Proof.
       intros R D r S Hres Htot; destruct Hres as [Hsub Hroot Hclo Huniq].
       assert (Hemb : forall p, PkgSet.In p S ->
-          T.PkgSet.In (embedPkg p) (coreResolution S R D)).
+          T.PkgSet.In (embedPkg p) (coreResolution R D S)).
       { intros p Hp; apply mem_coreResolution; left.
         exists p; split; [exact Hp | reflexivity]. }
       assert (HVq : forall m u, PkgSet.In (m, u) S ->
@@ -1732,11 +1732,11 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       { intros m u Hu; apply C.mem_versions; apply Hsub; exact Hu. }
       assert (Hbot : forall m, NSet.In m (depNames D) ->
           Ab.hasAbsent m = true -> (forall u, ~ PkgSet.In (m, u) S) ->
-          T.PkgSet.In (Name.Orig m, Version.Bot) (coreResolution S R D)).
+          T.PkgSet.In (Name.Orig m, Version.Bot) (coreResolution R D S)).
       { intros m Hm Ha Hnone; apply mem_coreResolution; right; right.
         exists m; split; [apply mem_instNames; right; exact Hm |]; auto. }
       assert (Horig : forall m v,
-          T.PkgSet.In (Name.Orig m, Version.Orig v) (coreResolution S R D) ->
+          T.PkgSet.In (Name.Orig m, Version.Orig v) (coreResolution R D S) ->
           PkgSet.In (m, v) S).
       { intros m v Hv; apply mem_coreResolution in Hv.
         destruct Hv as [[[pn pv] [Hp Hpe]] | [[p [chi [_ [_ Hw]]]]
@@ -3010,7 +3010,7 @@ Module PackageFormula (N V : UsualOrderedType).
       IsResolution R D r S ->
       Reduction.T.IsResolution (Reduction.reduceReal R D)
         (Reduction.reduceDeps R D) (Reduction.embedPkg r)
-        (Reduction.coreResolution S R D).
+        (Reduction.coreResolution R D S).
   Proof.
     intros R D r S Hres.
     apply (Reduction.formula_calculus_completeness R D r S Hres).

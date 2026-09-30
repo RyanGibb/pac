@@ -807,8 +807,8 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         (andb (takenWithb S_CF fs (m, u)) (ParentRel.mem ((m, u), p) pi)).
 
     Module SOsw := SetOps Feat.Featured T.Pkg Feat.FeaturedSet T.PkgSet.
-    Definition coreResolution (S_CF : Feat.FeaturedSet.t) (pi : ParentRel.t)
-        (Df : Feat.FeatDepRel.t) (Da : Feat.AddlDepRel.t) (g : V.t -> G.t) :
+    Definition coreResolution (Df : Feat.FeatDepRel.t) (Da : Feat.AddlDepRel.t)
+        (g : V.t -> G.t) (S_CF : Feat.FeaturedSet.t) (pi : ParentRel.t) :
         T.PkgSet.t :=
       T.PkgSet.union
         (SOsw.map (fun '((n, v), _) => (Name.GranularOrig n (g v), v)) S_CF)
@@ -925,7 +925,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
     #[local] Hint Constructors CoreMember : fc_mem.
 
     Lemma mem_coreResolution : forall S_CF pi Df Da g (q : T.Pkg.t),
-        T.PkgSet.In q (coreResolution S_CF pi Df Da g) <->
+        T.PkgSet.In q (coreResolution Df Da g S_CF pi) <->
         CoreMember S_CF pi Df Da g q.
     Proof.
       intros S_CF pi Df Da g q; unfold coreResolution.
@@ -946,7 +946,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         IsResolution R support Df Da g r S_CF pi ->
         T.IsResolution (reduceReal R support Df Da g)
           (reduceDeps R support Df Da g)
-          (embedOrigPkg g r) (coreResolution S_CF pi Df Da g).
+          (embedOrigPkg g r) (coreResolution Df Da g S_CF pi).
     Proof.
       intros R support Df Da g r S_CF pi Hres.
       destruct Hres as [Hsubset Hrootm Hfu Hpc Hpca Hpif Hvg Hsm _].
@@ -1035,11 +1035,11 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
     Theorem feature_concurrent_retraction :
       forall R support Df Da g r S_CF pi,
         IsResolution R support Df Da g r S_CF pi ->
-        featureConcurrentResolution g (coreResolution S_CF pi Df Da g) = S_CF.
+        featureConcurrentResolution g (coreResolution Df Da g S_CF pi) = S_CF.
     Proof.
       intros R support Df Da g r S_CF pi Hres.
       assert (Hfeats : forall n v fs, Feat.FeaturedSet.In ((n, v), fs) S_CF ->
-                 featsOf g n v (coreResolution S_CF pi Df Da g) = fs).
+                 featsOf g n v (coreResolution Df Da g S_CF pi) = fs).
       { intros n v fs HS; apply Feat.FSet.ext; intro f.
         rewrite featsOf_spec, mem_coreResolution; split.
         - intro Hc; inversion Hc; subst.
@@ -1069,7 +1069,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         IsResolution R support Df Da g r S_CF pi ->
         forall m u n v,
           ParentRel.In ((m, u), (n, v))
-            (parents Df Da g (coreResolution S_CF pi Df Da g))
+            (parents Df Da g (coreResolution Df Da g S_CF pi))
           <-> ParentRel.In ((m, u), (n, v)) pi /\
           ((exists vs fs, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df) \/
            (exists fs_p f vs fs, Feat.FeaturedSet.In ((n, v), fs_p) S_CF /\
@@ -1128,7 +1128,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
            (exists fs_p f vs fs, Feat.FeaturedSet.In ((n, v), fs_p) S_CF /\
               Feat.FSet.In f fs_p /\
               Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da)) ->
-        parents Df Da g (coreResolution S_CF pi Df Da g) = pi.
+        parents Df Da g (coreResolution Df Da g S_CF pi) = pi.
     Proof.
       intros R support Df Da g r S_CF pi Hres Hdom.
       apply ParentRel.ext; intros [[m u] [n v]].

@@ -1014,8 +1014,8 @@ Module Opam (N V X Y E : UsualOrderedType).
           (PF.Reduction.reduceReal (reduceReal sigma I) (reduceDeps sigma I))
           (PF.Reduction.reduceDeps (reduceReal sigma I) (reduceDeps sigma I))
           (PF.Reduction.embedPkg rootPkg)
-          (PF.Reduction.coreResolution (coreResolution (inst_cls I) S)
-             (reduceReal sigma I) (reduceDeps sigma I)).
+          (PF.Reduction.coreResolution (reduceReal sigma I)
+             (reduceDeps sigma I) (coreResolution (inst_cls I) S)).
     Proof.
       intros sigma I S H.
       exact (PF.package_formula_completeness _ _ _ _
@@ -1025,8 +1025,8 @@ Module Opam (N V X Y E : UsualOrderedType).
     Corollary opam_core_retraction : forall sigma I S,
         opamResolution
           (PF.Reduction.packageFormulaResolution
-             (PF.Reduction.coreResolution (coreResolution (inst_cls I) S)
-                (reduceReal sigma I) (reduceDeps sigma I)))
+             (PF.Reduction.coreResolution (reduceReal sigma I)
+                (reduceDeps sigma I) (coreResolution (inst_cls I) S)))
         = S.
     Proof.
       intros sigma I S; rewrite PF.Reduction.package_formula_retraction.

@@ -587,8 +587,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         split; apply mem_concurrentResolution; [exact HuS | exact HvS].
     Qed.
 
-    Definition coreResolution (S : PkgSet.t) (pi : ParentRel.t)
-        (D : C.DepRel.t) (g : V.t -> G.t) : T.PkgSet.t :=
+    Definition coreResolution (D : C.DepRel.t) (g : V.t -> G.t)
+        (S : PkgSet.t) (pi : ParentRel.t) : T.PkgSet.t :=
       T.PkgSet.union (SOptp.map (embedPkg g) S)
         (SOdtp.unionMap (fun '((n, v), (m, vs)) =>
              if andb (isSplitb g vs) (PkgSet.mem (n, v) S)
@@ -612,7 +612,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         CorePkg S pi D g (Name.Intermediate n v m, Version.Gran (g u)).
 
     Lemma mem_coreResolution : forall S pi D g (q : T.Pkg.t),
-        T.PkgSet.In q (coreResolution S pi D g) <-> CorePkg S pi D g q.
+        T.PkgSet.In q (coreResolution D g S pi) <-> CorePkg S pi D g q.
     Proof.
       intros S pi D g q; unfold coreResolution.
       rewrite T.PkgSet.union_spec, SOptp.mem_map, SOdtp.mem_unionMap.
@@ -637,7 +637,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Lemma mem_coreResolution_granular : forall S pi D g n v,
         PkgSet.In (n, v) S ->
         T.PkgSet.In (Name.Granular n (g v), Version.Orig v)
-          (coreResolution S pi D g).
+          (coreResolution D g S pi).
     Proof. intros; apply mem_coreResolution, CoreGranular; assumption. Qed.
 
     Lemma mem_coreResolution_intermediate : forall S pi D g n v m vs u,
@@ -645,7 +645,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         IsSplit g vs -> PkgSet.In (m, u) S -> VSet.In u vs ->
         ParentRel.In ((m, u), (n, v)) pi ->
         T.PkgSet.In (Name.Intermediate n v m, Version.Gran (g u))
-          (coreResolution S pi D g).
+          (coreResolution D g S pi).
     Proof. intros; apply mem_coreResolution; econstructor; eassumption. Qed.
 
     Theorem concurrent_completeness :
@@ -653,7 +653,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
              (S : PkgSet.t) (pi : ParentRel.t),
         IsResolution R D g r S pi ->
         T.IsResolution (reduceReal R D g) (reduceDeps D g)
-          (embedPkg g r) (coreResolution S pi D g).
+          (embedPkg g r) (coreResolution D g S pi).
     Proof.
       intros R D g r S pi Hres.
       destruct Hres as [Hsub Hroot Hpc Hpif Hvg Hps].
@@ -704,7 +704,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Theorem concurrent_retraction : forall S pi D g,
-        concurrentResolution g (coreResolution S pi D g) = S.
+        concurrentResolution g (coreResolution D g S pi) = S.
     Proof.
       intros S pi D g; apply PkgSet.ext; intros [n v].
       rewrite mem_concurrentResolution, mem_coreResolution.
@@ -714,7 +714,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
 
     Lemma coreResolution_granular_inv : forall S pi D g n v,
         T.PkgSet.In (Name.Granular n (g v), Version.Orig v)
-          (coreResolution S pi D g) ->
+          (coreResolution D g S pi) ->
         PkgSet.In (n, v) S.
     Proof.
       intros S pi D g n v H; apply mem_coreResolution in H.
@@ -723,7 +723,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
 
     Lemma coreResolution_intermediate_inv : forall S pi D g n v m w,
         T.PkgSet.In (Name.Intermediate n v m, Version.Gran w)
-          (coreResolution S pi D g) ->
+          (coreResolution D g S pi) ->
         exists u, PkgSet.In (m, u) S /\ ParentRel.In ((m, u), (n, v)) pi /\
           g u = w.
     Proof.
@@ -734,7 +734,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Theorem concurrent_parents_retraction : forall R D g r S pi,
         IsResolution R D g r S pi ->
         forall m u n v,
-          ParentRel.In ((m, u), (n, v)) (parents D g (coreResolution S pi D g))
+          ParentRel.In ((m, u), (n, v)) (parents D g (coreResolution D g S pi))
           <-> ParentRel.In ((m, u), (n, v)) pi /\
               exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs.
     Proof.
@@ -772,7 +772,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         IsResolution R D g r S pi ->
         (forall n v m u, ParentRel.In ((m, u), (n, v)) pi ->
            exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs) ->
-        parents D g (coreResolution S pi D g) = pi.
+        parents D g (coreResolution D g S pi) = pi.
     Proof.
       intros R D g r S pi Hres Hdom; apply ParentRel.ext; intros [[m u] [n v]].
       rewrite (concurrent_parents_retraction _ _ _ _ _ _ Hres).

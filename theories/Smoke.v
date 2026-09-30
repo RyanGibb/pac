@@ -178,7 +178,7 @@ Proof. reflexivity. Qed.
 Example conflictClass_retraction_computes :
   Cls.C.PkgSet.equal
     (Cls.Reduction.classResolution
-       (Cls.Reduction.coreResolution clsR clsOm))
+       (Cls.Reduction.coreResolution clsOm clsR))
     clsR = true.
 Proof. reflexivity. Qed.
 
