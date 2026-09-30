@@ -1228,7 +1228,7 @@ Module Placement (N V : UsualOrderedType).
       destruct (Htree _ _ _ H) as [u Hu]; exact (IH _ _ Hres Hu).
     Qed.
 
-    Lemma decode_coreResolution : forall I depth L,
+    Theorem placement_retraction : forall I depth L,
         IsResolution I L -> Depth depth L ->
         placementResolution (coreResolution I depth L) = L.
     Proof.
@@ -1245,13 +1245,13 @@ Module Placement (N V : UsualOrderedType).
         split; [lia | exact (keyed_layout I L l a v Hres H)].
     Qed.
 
-    Theorem placement_retraction : forall I depth L,
+    Corollary placement_retraction_reachable : forall I depth L,
         IsResolution I L -> Depth depth L ->
         reachable I (placementResolution (coreResolution I depth L)) =
         reachable I L.
     Proof.
       intros I depth L Hres Hdepth.
-      rewrite (decode_coreResolution I depth L Hres Hdepth); reflexivity.
+      rewrite (placement_retraction I depth L Hres Hdepth); reflexivity.
     Qed.
 
     Lemma edgeAtoms_inRange : forall I depth l p n ws,

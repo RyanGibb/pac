@@ -31,10 +31,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         forall (n : N.t) (v v' : V.t),
           PkgSet.In (n, v) S -> PkgSet.In (n, v') S -> v <> v' -> g v <> g v'
     ; res_parent_subset :
-        forall c p, ParentRel.In (c, p) pi -> PkgSet.In c S /\ PkgSet.In p S
-    ; res_pi_dom :
-        forall n v m u, ParentRel.In ((m, u), (n, v)) pi ->
-        exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs }.
+        forall c p, ParentRel.In (c, p) pi -> PkgSet.In c S /\ PkgSet.In p S }.
 
   Module Reduction.
     Definition IsSplit (g : V.t -> G.t) (vs : VSet.t) : Prop :=
@@ -588,9 +585,6 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         destruct Hcp as [n [v [m [vs [u [_ [HvS [_ [HuS [_ Heq]]]]]]]]]].
         injection Heq as -> ->.
         split; apply mem_concurrentResolution; [exact HuS | exact HvS].
-      - intros n v m u Hpi; apply mem_parents in Hpi.
-        destruct Hpi as (n' & v' & m' & vs & u' & HD & _ & Hu & _ & _ & E).
-        injection E as <- <- <- <-; exists vs; split; assumption.
     Qed.
 
     Definition coreResolution (S : PkgSet.t) (pi : ParentRel.t)
@@ -662,7 +656,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           (embedPkg g r) (coreResolution S pi D g).
     Proof.
       intros R D g r S pi Hres.
-      destruct Hres as [Hsub Hroot Hpc Hpif Hvg Hps _].
+      destruct Hres as [Hsub Hroot Hpc Hpif Hvg Hps].
       constructor.
       - intros q Hq; apply mem_reduceReal; apply mem_coreResolution in Hq.
         destruct Hq as [n v Hnv | n v m vs u HD Hnv Hs Hmu Hu Hpi];
@@ -739,12 +733,16 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
 
     Theorem concurrent_parents_retraction : forall R D g r S pi,
         IsResolution R D g r S pi ->
-        parents D g (coreResolution S pi D g) = pi.
+        forall m u n v,
+          ParentRel.In ((m, u), (n, v)) (parents D g (coreResolution S pi D g))
+          <-> ParentRel.In ((m, u), (n, v)) pi /\
+              exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs.
     Proof.
-      intros R D g r S pi [_ _ Hpc _ Hvg Hps Hedge].
-      apply ParentRel.ext; intros [[m u] [n v]]; rewrite mem_parents; split.
+      intros R D g r S pi [_ _ Hpc _ Hvg Hps] m u n v; rewrite mem_parents.
+      split.
       - intros (n' & v' & m' & vs & u' & HD & Hnv & Hu & Hmu & Hsplit & E).
         injection E as <- <- <- <-.
+        split; [| exists vs; split; assumption].
         apply coreResolution_granular_inv in Hnv, Hmu.
         destruct (isSplitb g vs) eqn:Es.
         + apply isSplitb_iff in Es.
@@ -757,8 +755,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           destruct (Hpc _ Hnv _ _ HD) as (w & Hw & HwS & Hpiw).
           destruct (V.eq_dec u w) as [-> | NE]; [exact Hpiw | exfalso].
           exact (Hvg m u w Hmu HwS NE (Es u w Hu Hw)).
-      - intro Hpi.
-        destruct (Hedge _ _ _ _ Hpi) as (vs & HD & Hu).
+      - intros [Hpi (vs & HD & Hu)].
         destruct (Hps _ _ Hpi) as [HmS HnS].
         exists n, v, m, vs, u.
         split; [exact HD |].
@@ -769,6 +766,17 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         intro Hs; exists u; split; [exact Hu | split; [| reflexivity]].
         exact (mem_coreResolution_intermediate S pi D g n v m vs u
                  HD HnS Hs HmS Hu Hpi).
+    Qed.
+
+    Corollary concurrent_parents_retraction_dom : forall R D g r S pi,
+        IsResolution R D g r S pi ->
+        (forall n v m u, ParentRel.In ((m, u), (n, v)) pi ->
+           exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs) ->
+        parents D g (coreResolution S pi D g) = pi.
+    Proof.
+      intros R D g r S pi Hres Hdom; apply ParentRel.ext; intros [[m u] [n v]].
+      rewrite (concurrent_parents_retraction _ _ _ _ _ _ Hres).
+      split; [intros [H _]; exact H | intro H; exact (conj H (Hdom _ _ _ _ H))].
     Qed.
 
     Module Lookup.

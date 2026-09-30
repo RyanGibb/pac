@@ -82,6 +82,7 @@ Conc.Reduction.Lookup.versions_lookupIntermediate
 Conc.Reduction.concurrentResolution
 Conc.Reduction.concurrent_completeness
 Conc.Reduction.concurrent_parents_retraction
+Conc.Reduction.concurrent_parents_retraction_dom
 Conc.Reduction.concurrent_retraction
 Conc.Reduction.concurrent_soundness
 Conc.Reduction.reduceDeps
@@ -98,6 +99,7 @@ Peer.Reduction.Lookup.versions_lookupGranular
 Peer.Reduction.Lookup.versions_lookupIntermediate
 Peer.Reduction.peer_completeness
 Peer.Reduction.peer_parents_retraction
+Peer.Reduction.peer_parents_retraction_dom
 Peer.Reduction.peer_retraction
 Peer.Reduction.peer_soundness
 Peer.Reduction.reduceDeps
@@ -125,7 +127,9 @@ Vis.Reduction.reduceRealIntermediate
 Vis.Reduction.reduceRealOccurrence
 Vis.Reduction.visibility_completeness
 Vis.Reduction.visibility_parents_retraction
+Vis.Reduction.visibility_parents_retraction_dom
 Vis.Reduction.visibility_retraction
+Vis.Reduction.visibility_retraction_visible
 Vis.Reduction.visibility_soundness
 
 Plc.mem_reachable
@@ -146,6 +150,7 @@ Plc.Reduction.lookup_resolution
 Plc.Reduction.placementResolution
 Plc.Reduction.placement_completeness
 Plc.Reduction.placement_retraction
+Plc.Reduction.placement_retraction_reachable
 Plc.Reduction.placement_soundness
 Plc.Reduction.reached_reduceReal
 Plc.Reduction.reduceDeps
@@ -171,6 +176,7 @@ Virt.Reduction.reduceReal
 Virt.Reduction.selectorVersions
 Virt.Reduction.virtual_completeness
 Virt.Reduction.virtual_providers_retraction
+Virt.Reduction.virtual_providers_retraction_dom
 Virt.Reduction.virtual_retraction
 Virt.Reduction.virtual_soundness
 
@@ -220,6 +226,7 @@ FC.Reduction.Lookup.versions_lookupIntermediateA
 FC.Reduction.Lookup.versions_lookupIntermediateF
 FC.Reduction.feature_concurrent_completeness
 FC.Reduction.feature_concurrent_parents_retraction
+FC.Reduction.feature_concurrent_parents_retraction_dom
 FC.Reduction.feature_concurrent_retraction
 FC.Reduction.feature_concurrent_soundness
 FC.Reduction.reduceDeps
@@ -432,6 +439,7 @@ NplS.edgesOf
 NplS.edgesOfBy
 NplS.npm_completeness
 NplS.npm_retraction
+NplS.npm_retraction_reachable
 NplS.npm_soundness
 NplS.reduceDeps
 NplS.reduceReal

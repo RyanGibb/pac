@@ -999,9 +999,6 @@ Module Visibility (N V : UsualOrderedType).
                       (Htr m vs HD) Hocc Hagr) as [_ Hcp2].
           exact (occurrence_mem_visibilityResolution R D pub r S m u c0
                    Hsub Hcp2).
-        + intros n v m u Hpi; apply mem_parents in Hpi.
-          destruct Hpi as (n' & v' & m' & vs & u' & HD & Hu & _ & _ & E).
-          injection E as <- <- <- <-; exists vs; split; assumption.
       - intros [pn pv] Hp n v v' Hv Hv'.
         destruct (base_occurrence R D pub r S pn pv Hres Hp)
           as [c0 [Hc0 [Hocc Htr]]].
@@ -1188,7 +1185,7 @@ Module Visibility (N V : UsualOrderedType).
     Proof.
       intros R D pub r S pi Hres.
       destruct Hres as [Hconc Hvv].
-      destruct Hconc as [Hsub Hroot Hpc Hpif Hvg Hps _].
+      destruct Hconc as [Hsub Hroot Hpc Hpif Hvg Hps].
       constructor.
       - intros y Hy; apply mem_coreResolution in Hy; apply mem_reduceReal.
         destruct Hy; econstructor; try apply Hsub; eassumption.
@@ -1235,17 +1232,18 @@ Module Visibility (N V : UsualOrderedType).
 
     Theorem visibility_retraction : forall R D pub r S pi,
         IsResolution R D pub r S pi ->
-        (forall p, PkgSet.In p S ->
-           exists q, IsOrigin D pub r S q /\ InSub pub pi q p) ->
-        visibilityResolution R D pub r (coreResolution R D pub r S pi) = S.
+        forall p,
+          PkgSet.In p
+            (visibilityResolution R D pub r (coreResolution R D pub r S pi))
+          <-> PkgSet.In p S /\
+              exists q, IsOrigin D pub r S q /\ InSub pub pi q p.
     Proof.
-      intros R D pub r S pi [[Hsub _ _ _ _ _ _] _] Hvis.
-      apply PkgSet.ext; intros [n v].
+      intros R D pub r S pi [[Hsub _ _ _ _ _] _] [n v].
       rewrite mem_visibilityResolution; split.
       - intros [_ [q [_ Hocc]]]; apply mem_coreResolution in Hocc.
-        inversion Hocc; assumption.
-      - intro HS; split; [exact (Hsub _ HS) |].
-        destruct (Hvis _ HS) as [q [Ho Hins]].
+        inversion Hocc; subst.
+        split; [assumption | eexists; split; eassumption].
+      - intros [HS [q [Ho Hins]]]; split; [exact (Hsub _ HS) |].
         assert (Hq : PkgSet.In q (potentialOrigins R D pub r)).
         { apply mem_potentialOrigins.
           destruct Ho as [-> | [HqS Hpriv]]; [left; reflexivity | right].
@@ -1254,29 +1252,60 @@ Module Visibility (N V : UsualOrderedType).
         apply mem_coreResolution; constructor; assumption.
     Qed.
 
-    Theorem visibility_parents_retraction : forall R D pub r S pi,
+    Corollary visibility_retraction_visible : forall R D pub r S pi,
         IsResolution R D pub r S pi ->
         (forall p, PkgSet.In p S ->
            exists q, IsOrigin D pub r S q /\ InSub pub pi q p) ->
-        parents R D pub r (coreResolution R D pub r S pi) = pi.
+        visibilityResolution R D pub r (coreResolution R D pub r S pi) = S.
     Proof.
-      intros R D pub r S pi Hres Hvis.
-      assert (Hdec := visibility_retraction R D pub r S pi
-                        Hres Hvis).
-      destruct Hres as [[_ _ _ _ _ Hps Hedge] _].
-      apply ParentRel.ext; intros [[m u] [n v]]; rewrite mem_parents, Hdec.
-      split.
-      - intros (n' & v' & m' & vs & u' & _ & _ & Hagr & _ & E).
+      intros R D pub r S pi Hres Hvis; apply PkgSet.ext; intro p.
+      rewrite (visibility_retraction R D pub r S pi Hres).
+      split; [intros [H _]; exact H | intro H; exact (conj H (Hvis p H))].
+    Qed.
+
+    Theorem visibility_parents_retraction : forall R D pub r S pi,
+        IsResolution R D pub r S pi ->
+        forall m u n v,
+          ParentRel.In ((m, u), (n, v))
+            (parents R D pub r (coreResolution R D pub r S pi))
+          <-> ParentRel.In ((m, u), (n, v)) pi /\
+              (exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs) /\
+              exists q, IsOrigin D pub r S q /\ InSub pub pi q (n, v).
+    Proof.
+      intros R D pub r S pi Hres m u n v.
+      assert (Hdec := visibility_retraction R D pub r S pi Hres (n, v)).
+      destruct Hres as [[_ _ _ _ _ Hps] _].
+      rewrite mem_parents; split.
+      - intros (n' & v' & m' & vs & u' & HD & Hu & Hagr & Hnv & E).
         injection E as <- <- <- <-.
-        apply mem_coreResolution in Hagr; inversion Hagr; assumption.
-      - intro Hpi.
-        destruct (Hedge _ _ _ _ Hpi) as (vs & HD & Hu).
-        destruct (Hps _ _ Hpi) as [HmS HnS].
+        apply Hdec in Hnv; destruct Hnv as [_ Hvis].
+        apply mem_coreResolution in Hagr.
+        split; [inversion Hagr; assumption |].
+        split; [exists vs; split; assumption | exact Hvis].
+      - intros [Hpi [(vs & HD & Hu) Hvis]].
+        destruct (Hps _ _ Hpi) as [_ HnS].
         exists n, v, m, vs, u.
         split; [exact HD |]; split; [exact Hu |].
-        split; [| split; [exact HnS | reflexivity]].
+        split; [| split; [apply Hdec; split; assumption | reflexivity]].
         apply mem_coreResolution; exact (CoreAgreement R D pub r S pi
                                            n v m vs u HD Hu HnS Hpi).
+    Qed.
+
+    Corollary visibility_parents_retraction_dom : forall R D pub r S pi,
+        IsResolution R D pub r S pi ->
+        (forall p, PkgSet.In p S ->
+           exists q, IsOrigin D pub r S q /\ InSub pub pi q p) ->
+        (forall n v m u, ParentRel.In ((m, u), (n, v)) pi ->
+           exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs) ->
+        parents R D pub r (coreResolution R D pub r S pi) = pi.
+    Proof.
+      intros R D pub r S pi Hres Hvis Hdom.
+      apply ParentRel.ext; intros [[m u] [n v]].
+      rewrite (visibility_parents_retraction R D pub r S pi Hres).
+      split; [intros [H _]; exact H | intro H].
+      split; [exact H | split; [exact (Hdom _ _ _ _ H) | apply Hvis]].
+      exact (proj2 (Conc.res_parent_subset _ _ _ _ _ _
+                      (res_concurrent _ _ _ _ _ _ Hres) _ _ H)).
     Qed.
 
     Module Lookup.

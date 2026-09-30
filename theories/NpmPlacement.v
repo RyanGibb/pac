@@ -336,14 +336,23 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
 
   Theorem npm_retraction : forall I depth L,
       IsResolution I L -> Pl.Depth depth L ->
+      Pl.Reduction.placementResolution
+        (Pl.Reduction.coreResolution (tr I) depth L) = L.
+  Proof.
+    intros I depth L H Hd;
+      apply Pl.Reduction.placement_retraction;
+      [apply tr_resolution; exact H | exact Hd].
+  Qed.
+
+  Corollary npm_retraction_reachable : forall I depth L,
+      IsResolution I L -> Pl.Depth depth L ->
       Pl.reachable (tr I)
         (Pl.Reduction.placementResolution
            (Pl.Reduction.coreResolution (tr I) depth L)) =
       Pl.reachable (tr I) L.
   Proof.
-    intros I depth L H Hd;
-      apply Pl.Reduction.placement_retraction;
-      [apply tr_resolution; exact H | exact Hd].
+    intros I depth L H Hd; rewrite (npm_retraction I depth L H Hd).
+    reflexivity.
   Qed.
 
   Module Lookup.
