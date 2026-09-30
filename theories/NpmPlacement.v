@@ -156,14 +156,14 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         forall l a o, Pl.Layout.In (l, (a, o)) L ->
         exists m v, o = Occ.Reg m v /\ KeySet.In (a, m) (keysOf I) /\
           RepoSet.In (m, v) (inst_repo I)
-    ; res_occupancy :
+    ; res_location_unique :
         forall l a o o', Pl.Layout.In (l, (a, o)) L ->
         Pl.Layout.In (l, (a, o')) L -> o = o'
     ; res_tree :
         forall b l p, Pl.Layout.In (b :: l, p) L ->
         exists o, Pl.Layout.In (l, (b, o)) L
     ; res_root : forall e, In e (edgesOf I Occ.Top) -> EdgeOk I L nil e
-    ; res_deps :
+    ; res_dep_resolution :
         forall l a o, Pl.Layout.In (l, (a, o)) L ->
         forall e, In e (edgesOf I o) -> EdgeOk I L (a :: l) e }.
 

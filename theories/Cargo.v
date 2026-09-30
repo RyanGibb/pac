@@ -175,7 +175,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     ; res_fs_functional :
         forall p fs fs', FeaturedSet.In (p, fs) FS ->
         FeaturedSet.In (p, fs') FS -> fs = fs'
-    ; res_version_granularity :
+    ; res_class_unique :
         forall n v v', PkgSet.In (n, v) S -> PkgSet.In (n, v') S ->
         v <> v' -> inst_gran I v <> inst_gran I v'
     ; res_support_mem :
@@ -3086,7 +3086,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           by (apply parentsb_iff in Eb; exact (proj1 Eb)).
         assert (v0 = v).
         { destruct (V.eq_dec v0 v) as [E | NE]; [exact E |].
-          exfalso; apply (res_version_granularity Hres Hv0 HSv NE);
+          exfalso; apply (res_class_unique Hres Hv0 HSv NE);
             congruence. }
         subst v0.
         destruct (Hslot _ _ _ _ Hpi Eb)
@@ -3096,7 +3096,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         apply core_shape in Hcr; cbn beta iota in Hcr.
         destruct Hcr as [u'' [Eu'' [Hname Eg]]]; injection Eu'' as <-.
         destruct (V.eq_dec u u') as [-> | NE]; [exact Hpi |].
-        exfalso; apply (res_version_granularity Hres Hname Hname' NE);
+        exfalso; apply (res_class_unique Hres Hname Hname' NE);
           congruence.
       - intros [Hpi [fs [d [Hfs [Hd [<- [Hact Hreq]]]]]]].
         assert (HS := res_fs_dom Hres Hfs).

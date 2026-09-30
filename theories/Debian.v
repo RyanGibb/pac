@@ -154,7 +154,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Record IsResolution (I : Inst) (S : PkgSet.t) : Prop :=
     { res_subset : PkgSet.Subset S (inst_repo I)
     ; res_root_mem : PkgSet.In (inst_root I) S
-    ; res_clause_closure :
+    ; res_dep_closure :
         forall p, PkgSet.In p S ->
         forall A, Deps.In (p, A) (inst_deps I) ->
         exists a, List.In a A /\

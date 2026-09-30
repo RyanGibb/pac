@@ -82,14 +82,14 @@ Module Placement (N V : UsualOrderedType).
   Record IsResolution (I : Inst) (L : Layout.t) : Prop :=
     { res_subset :
         forall l p, Layout.In (l, p) L -> PkgSet.In p (inst_repo I)
-    ; res_occupancy :
+    ; res_location_unique :
         forall l a v v', Layout.In (l, (a, v)) L -> Layout.In (l, (a, v')) L ->
         v = v'
     ; res_tree :
         forall b l p, Layout.In (b :: l, p) L ->
         exists u, Layout.In (l, (b, u)) L
     ; res_root : Holds I L nil (inst_root I)
-    ; res_deps :
+    ; res_dep_resolution :
         forall l p, Layout.In (l, p) L -> Holds I L (fst p :: l) p }.
 
   Definition Depth (depth : nat) (L : Layout.t) : Prop :=

@@ -230,7 +230,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Record IsResolution (I : Inst) (S : PkgSet.t) : Prop :=
     { res_subset : PkgSet.Subset S (inst_repo I)
     ; res_root_mem : PkgSet.In (inst_root I) S
-    ; res_clause_closure :
+    ; res_dep_closure :
         forall p, PkgSet.In p S ->
         forall Al, Deps.In (p, Al) (inst_deps I) ->
         exists a, List.In a Al /\
