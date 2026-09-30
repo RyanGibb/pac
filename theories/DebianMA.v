@@ -1660,16 +1660,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           Deps.In (p, Al) (Deps.singleton (p, Al)).
       Proof. intros p Al; apply Deps.singleton_spec; reflexivity. Qed.
 
-      Lemma hasClauseb_reduceDeps : forall D (p : Pkg.t) Al,
-          Deps.In (p, Al) D ->
-          Deb.Reduction.hasClauseb (reduceDeps D) (reduceClause (parch p) Al) =
-            true.
-      Proof.
-        intros D p Al HD; apply Deb.Reduction.hasClauseb_iff.
-        exists (embedPkg p); rewrite mem_reduceDeps.
-        exists p, Al; split; [exact HD | reflexivity].
-      Qed.
-
       Lemma occursAtomb_reduceDeps : forall D (p : Pkg.t) Al a,
           Deps.In (p, Al) D -> List.In a Al ->
           Deb.Reduction.occursAtomb (reduceDeps D) (reduceAtom (parch p) a) =
@@ -1954,11 +1944,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           Deb.Reduction.versions (reduceInst I)
             (Deb.Reduction.Name.Soft (reduceClause (parch p) Al)) =
           Deb.Reduction.versionsSoft (reduceClause (parch p) Al).
-      Proof.
-        intros I p Al HD; cbn [Deb.Reduction.versions reduceInst Deb.inst_rec].
-        unfold reduceRec.
-        rewrite (hasClauseb_reduceDeps (inst_rec I) p Al HD); reflexivity.
-      Qed.
+      Proof. intros; reflexivity. Qed.
 
       Theorem dependees_lookupSoft :
         forall I (p : Pkg.t) Al (a' : Deb.Atom.t),
@@ -2010,23 +1996,18 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                Deb.Conf.empty (embedPkg (inst_root I)))
             (Deb.Reduction.Name.Selector (reduceAtom (parch p) a)).
       Proof.
-        intros I D' Dopt' p a Hagree; cbv zeta.
+        intros I D' Dopt' p a _; cbv zeta.
         rewrite reduceProv_provClsPreimage.
         assert (Hm : NSet.In (fst (fst (reduceAtom (parch p) a)))
                        (NSet.singleton (aname a)))
           by (apply NSet.singleton_spec; reflexivity).
-        assert (Hpb := provb_restrict I (NSet.singleton (aname a)) _
-                         (reduceAtom (parch p) a) (preimageProvSubInst I _) Hm).
         assert (Hus := us_restrict I (NSet.singleton (aname a))
                          (realPreimage (inst_repo I) (NSet.singleton (aname a)))
                          _ (reduceAtom (parch p) a) (realPreimage_sub _ _)
                          (realPreimage_cov _ _) (preimageProvSubInst I _) Hm).
-        cbn [inst_repo inst_prov] in Hpb, Hus.
-        apply Deb.Reduction.T.VSet.ext; intro w.
-        rewrite !Deb.Reduction.versions_selector_spec.
-        cbn [reduceInst Deb.inst_repo Deb.inst_deps Deb.inst_rec Deb.inst_prov].
-        rewrite <- Hagree, Hpb, Hus.
-        reflexivity.
+        cbn [inst_repo inst_prov] in Hus.
+        cbn [Deb.Reduction.versions reduceInst Deb.inst_repo Deb.inst_prov].
+        rewrite Hus; reflexivity.
       Qed.
 
       Theorem dependees_lookupSelectorAgree :
@@ -2048,28 +2029,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                Deb.Conf.empty (embedPkg (inst_root I)))
             (Deb.Reduction.Name.Selector (reduceAtom (parch p) a), v).
       Proof.
-        intros I D' Dopt' p a v Hagree; cbv zeta.
-        rewrite reduceProv_provClsPreimage.
-        assert (Hm : NSet.In (fst (fst (reduceAtom (parch p) a)))
-                       (NSet.singleton (aname a)))
-          by (apply NSet.singleton_spec; reflexivity).
-        assert (Hpb := provb_restrict I (NSet.singleton (aname a)) _
-                         (reduceAtom (parch p) a) (preimageProvSubInst I _) Hm).
-        assert (Hus := us_restrict I (NSet.singleton (aname a))
-                         (realPreimage (inst_repo I) (NSet.singleton (aname a)))
-                         _ (reduceAtom (parch p) a) (realPreimage_sub _ _)
-                         (realPreimage_cov _ _) (preimageProvSubInst I _) Hm).
-        cbn [inst_repo inst_prov] in Hpb, Hus.
-        destruct v; try reflexivity;
-          apply Deb.Reduction.T.DependeesSet.ext; intro z.
-        - rewrite !Deb.Reduction.dependees_selector_spec.
-          cbn [reduceInst Deb.inst_repo Deb.inst_deps Deb.inst_rec
-               Deb.inst_prov].
-          rewrite <- Hagree, Hpb, Hus; reflexivity.
-        - rewrite !Deb.Reduction.dependees_selector_real_spec.
-          cbn [reduceInst Deb.inst_repo Deb.inst_deps Deb.inst_rec
-               Deb.inst_prov].
-          rewrite <- Hagree, Hpb, Hus; reflexivity.
+        intros I D' Dopt' p a v _; destruct v; reflexivity.
       Qed.
 
       Theorem versions_lookupSelector :
