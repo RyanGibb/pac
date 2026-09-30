@@ -13,8 +13,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Module A := AP.A.
 
   Inductive NameArch : Type :=
-  | QAArch (a : A.t)
-  | QAExact (a : A.t)
+  | QAArch (alpha : A.t)
+  | QAExact (alpha : A.t)
   | QAAny
   | QAGroup.
 
@@ -142,7 +142,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   | QUnq
   | QAny
   | QNative
-  | QArch (a : A.t).
+  | QArch (alpha : A.t).
 
   Module QualComp <: ComparableType.
     Definition t := Qual.
@@ -198,13 +198,13 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     (pname q = n /\ Deb.vfHolds phi (pver q) = true) \/
     (exists v, Prov.In (q, (n, v)) Pi /\ Deb.vtMatchb v phi = true).
 
-  Definition MAMatch (Pi : Prov.t) (M : Cls.t) (da : A.t)
+  Definition MAMatch (Pi : Prov.t) (M : Cls.t) (alpha : A.t)
       (a : Atom.t) (q : Pkg.t) : Prop :=
     BaseMatch Pi (aname a) (aform a) q /\
     match aqual a with
-    | QUnq => parch q = da \/ classOf M q = MAForeign
+    | QUnq => parch q = alpha \/ classOf M q = MAForeign
     | QNative => parch q = AP.native
-    | QArch b => parch q = b
+    | QArch alpha' => parch q = alpha'
     | QAny => classOf M q = MAAllowed
     end.
 
@@ -214,7 +214,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     match aqual a with
     | QUnq => True
     | QNative => parch q = AP.native
-    | QArch b => parch q = b
+    | QArch alpha' => parch q = alpha'
     | QAny => classOf M q = MAAllowed
     end.
 
@@ -255,23 +255,23 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Definition reduceReal (R : PkgSet.t) : Deb.Ver.C.PkgSet.t :=
     SOmr.map embedPkg R.
 
-  Definition reduceAtom (da : A.t) (a : Atom.t) : Deb.Atom.t :=
+  Definition reduceAtom (alpha : A.t) (a : Atom.t) : Deb.Atom.t :=
     ((aname a,
       match aqual a with
-      | QUnq => QAArch da
+      | QUnq => QAArch alpha
       | QNative => QAExact AP.native
-      | QArch b => QAExact b
+      | QArch alpha' => QAExact alpha'
       | QAny => QAAny
       end), aform a).
 
-  Definition reduceClause (da : A.t) (Al : Clause.t) : Deb.Clause.t :=
-    List.map (reduceAtom da) Al.
+  Definition reduceClause (alpha : A.t) (Al : Clause.t) : Deb.Clause.t :=
+    List.map (reduceAtom alpha) Al.
 
-  Lemma mem_reduceClause : forall da Al a',
-      Deb.AtomSet.In a' (Deb.clauseAtoms (reduceClause da Al)) <->
-      exists a, List.In a Al /\ a' = reduceAtom da a.
+  Lemma mem_reduceClause : forall alpha Al a',
+      Deb.AtomSet.In a' (Deb.clauseAtoms (reduceClause alpha Al)) <->
+      exists a, List.In a Al /\ a' = reduceAtom alpha a.
   Proof.
-    intros da Al a'; rewrite Deb.mem_clauseAtoms; unfold reduceClause.
+    intros alpha Al a'; rewrite Deb.mem_clauseAtoms; unfold reduceClause.
     rewrite List.in_map_iff; split; intros [a [Ha He]]; exists a; auto.
   Qed.
 
@@ -582,16 +582,16 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         apply in_implProvOf; exists QAGroup; split; [reflexivity | exact I].
   Qed.
 
-  Lemma match_transfer : forall R Pi M da a q,
+  Lemma match_transfer : forall R Pi M alpha a q,
       PkgSet.In q R ->
-      (MAMatch Pi M da a q <->
-       Deb.Match (reduceProv R Pi M) (embedPkg q) (reduceAtom da a)).
+      (MAMatch Pi M alpha a q <->
+       Deb.Match (reduceProv R Pi M) (embedPkg q) (reduceAtom alpha a)).
   Proof.
-    intros R Pi M da a q HqR.
+    intros R Pi M alpha a q HqR.
     unfold MAMatch, reduceAtom.
     destruct (aqual a) as [ | | | b].
     - exact (iff_sym
-        (debMatch_char R Pi M q (aname a) (QAArch da) (aform a) HqR)).
+        (debMatch_char R Pi M q (aname a) (QAArch alpha) (aform a) HqR)).
     - exact (iff_sym
         (debMatch_char R Pi M q (aname a) QAAny (aform a) HqR)).
     - exact (iff_sym
@@ -1029,8 +1029,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Module ConfFibred := FibredRel Pkg Atom ConfElt Conf.
     Module ClsPreimage := PreimageOfKeys Pkg ClsElt PkgSet Cls.
 
-    Definition realAt (R : PkgSet.t) (n : N.t) (b : A.t) : PkgSet.t :=
-      PkgFibred.tailFibre R (n, b).
+    Definition realAt (R : PkgSet.t) (n : N.t) (alpha : A.t) : PkgSet.t :=
+      PkgFibred.tailFibre R (n, alpha).
     Definition realPreimage (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
       PkgPreimage.ofKeys pname ns R.
     Definition provPreimage (Pi : Prov.t) (ns : NSet.t) : Prov.t :=
@@ -1044,10 +1044,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Definition clsPreimage (M : Cls.t) (ps : PkgSet.t) : Cls.t :=
       ClsPreimage.ofKeys fst ps M.
 
-    Lemma mem_realAt : forall R (n : N.t) (b : A.t) q,
-        PkgSet.In q (realAt R n b) <-> PkgSet.In q R /\ fst q = (n, b).
+    Lemma mem_realAt : forall R (n : N.t) (alpha : A.t) q,
+        PkgSet.In q (realAt R n alpha) <-> PkgSet.In q R /\ fst q = (n, alpha).
     Proof.
-      intros R n b [[qn qb] qv]; unfold realAt.
+      intros R n alpha [[qn qb] qv]; unfold realAt.
       rewrite PkgFibred.mem_tailFibre; cbn [fst]; reflexivity.
     Qed.
 
@@ -1679,30 +1679,31 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       apply mem_clauseNames; exists a0; split; [exact Ha0 | reflexivity].
     Qed.
 
-    Theorem versions_lookupOrig : forall I (n : N.t) (b : A.t),
+    Theorem versions_lookupOrig : forall I (n : N.t) (alpha : A.t),
         PkgSet.In (inst_root I) (inst_repo I) ->
         (exists p h,
-            Deb.T.DepRel.In (p, (Deb.Name.Orig (n, QAArch b), h))
+            Deb.T.DepRel.In (p, (Deb.Name.Orig (n, QAArch alpha), h))
               (Deb.reduceDeps (reduceInst I))) \/
-        Deb.Name.Orig (n, QAArch b) =
+        Deb.Name.Orig (n, QAArch alpha) =
         Deb.Name.Orig (fst (embedPkg (inst_root I))) ->
-        Deb.versions (reduceInst I) (Deb.Name.Orig (n, QAArch b)) =
+        Deb.versions (reduceInst I) (Deb.Name.Orig (n, QAArch alpha)) =
         Deb.T.VSet.add Deb.Version.Bot
           (Deb.embedVS
-             (Deb.C.versions (reduceReal (realAt (inst_repo I) n b))
-                (n, QAArch b))).
+             (Deb.C.versions (reduceReal (realAt (inst_repo I) n alpha))
+                (n, QAArch alpha))).
     Proof.
-      intros I n b Hr H.
+      intros I n alpha Hr H.
       assert (Hr' : Deb.PkgSet.In (embedPkg (inst_root I))
                       (reduceReal (inst_repo I)))
         by (apply mem_reduceReal; exists (inst_root I);
             split; [exact Hr | reflexivity]).
       rewrite (Deb.Lookup.versions_lookupOrig (reduceInst I) _ Hr' H).
       rewrite Deb.Lookup.versions_tailFibre.
-      rewrite (versions_restrict (inst_repo I) (realAt (inst_repo I) n b)
-                 (n, QAArch b));
+      rewrite (versions_restrict (inst_repo I) (realAt (inst_repo I) n alpha)
+                 (n, QAArch alpha));
         [reflexivity | |].
-      - intros q Hq; exact (proj1 (proj1 (mem_realAt (inst_repo I) n b q) Hq)).
+      - intros q Hq;
+          exact (proj1 (proj1 (mem_realAt (inst_repo I) n alpha q) Hq)).
       - intros q HqR Hq; apply mem_realAt; split; [exact HqR |].
         destruct q as [[qn qb] qv]; unfold pname, parch in Hq;
           cbn [fst snd] in Hq.
