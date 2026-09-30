@@ -795,13 +795,13 @@ Module Opam (N V X Y E : UsualOrderedType).
       - exact (res_available _ _ _ HR _ Hp).
     Qed.
 
-    Theorem opam_soundness : forall sigma I S',
-        PF.IsResolution (reduceReal sigma I) (reduceDeps sigma I) rootPkg S' ->
-        IsResolution sigma I (opamResolution S').
+    Theorem opam_soundness : forall sigma I S,
+        PF.IsResolution (reduceReal sigma I) (reduceDeps sigma I) rootPkg S ->
+        IsResolution sigma I (opamResolution S).
     Proof.
-      intros sigma I S' HR.
+      intros sigma I S HR.
       assert (Hsub : forall n v,
-                 PkgSet.In (n, v) (opamResolution S') ->
+                 PkgSet.In (n, v) (opamResolution S) ->
                  PkgSet.In (n, v) (effRepo sigma I)).
       { intros n v Hnv; apply mem_opamResolution in Hnv.
         apply (PF.res_subset _ _ _ _ HR) in Hnv.
@@ -811,12 +811,12 @@ Module Opam (N V X Y E : UsualOrderedType).
         destruct p as [m w]; unfold embedPkg in He; simpl in He.
         injection He as -> ->; exact Hp. }
       assert (HV : forall n v,
-                 PkgSet.In (n, v) (opamResolution S') ->
+                 PkgSet.In (n, v) (opamResolution S) ->
                  VSet.In v (srcVersions sigma I n)).
       { intros n v Hnv; apply mem_srcVersions, Hsub; exact Hnv. }
       assert (Hemb : forall n v,
-                 PkgSet.In (n, v) (opamResolution S') ->
-                 PF.PkgSet.In (embedPkg (n, v)) S').
+                 PkgSet.In (n, v) (opamResolution S) ->
+                 PF.PkgSet.In (embedPkg (n, v)) S).
       { intros n v Hnv; apply mem_opamResolution in Hnv; exact Hnv. }
       assert (Hroot := PF.res_root_mem _ _ _ _ HR).
       assert (HrootR : PF.PkgSet.In rootPkg (reduceReal sigma I)).
@@ -831,9 +831,9 @@ Module Opam (N V X Y E : UsualOrderedType).
       unfold rootForm in Hrootdep; cbn [PF.Satisfies] in Hrootdep.
       destruct Hrootdep as [Hquery Hinv].
       assert (Hdeps : forall n v psi,
-                 PkgSet.In (n, v) (opamResolution S') ->
+                 PkgSet.In (n, v) (opamResolution S) ->
                  FSet.In psi (dependees sigma I (embedPkg (n, v))) ->
-                 PF.Satisfies S' psi).
+                 PF.Satisfies S psi).
       { intros n v psi Hnv Hf.
         apply (PF.res_formula_closure _ _ _ _ HR _ (Hemb _ _ Hnv)).
         apply mem_reduceDeps; split; [| exact Hf].
@@ -849,13 +849,13 @@ Module Opam (N V X Y E : UsualOrderedType).
         destruct H as [_ [Hp _]]; symmetry.
         exact (Hp _ _ Hpin eq_refl).
       - intros [n v] Hp d Hf.
-        assert (Hs : PF.Satisfies S'
+        assert (Hs : PF.Satisfies S
                        (encodeOF sigma (srcVersions sigma I) d)).
         { apply (Hdeps _ _ _ Hp); unfold dependees.
           apply mem_dependees_real; left; exists d; auto. }
         apply (encodeOF_correct sigma _ _ HV Hroot) in Hs; exact Hs.
       - intros pn pv Hp n c phi Hcfl Hg [v [Hv [Hne Hh]]].
-        assert (Hs : PF.Satisfies S'
+        assert (Hs : PF.Satisfies S
                        (cflForm sigma (srcVersions sigma I) (pn, pv)
                           (n, (c, phi)))).
         { apply (Hdeps _ _ _ Hp); unfold dependees.
@@ -872,11 +872,11 @@ Module Opam (N V X Y E : UsualOrderedType).
           | split; [exact (HV _ _ Hv) | exact Hh]].
       - intros k [pn pv] [qn qv] Hp Hq Hpk Hqk.
         assert (Hcl : forall m w,
-                   PkgSet.In (m, w) (opamResolution S') ->
+                   PkgSet.In (m, w) (opamResolution S) ->
                    ClsRel.In ((m, w), k) (inst_cls I) ->
-                   PF.PkgSet.In (TName.Cls k, TVer.NV m) S').
+                   PF.PkgSet.In (TName.Cls k, TVer.NV m) S).
         { intros m w Hm Hmk.
-          assert (Hs : PF.Satisfies S'
+          assert (Hs : PF.Satisfies S
                          (PF.FDep (TName.Cls k)
                             (PF.VSet.singleton (TVer.NV m)))).
           { apply (Hdeps _ _ _ Hm); unfold dependees.
@@ -892,7 +892,7 @@ Module Opam (N V X Y E : UsualOrderedType).
                        (TName.Real qn) _ _ Hp Hq).
         injection E as ->; reflexivity.
       - intros [pn pv] Hp Hpin n v u Hpind v' Hv'.
-        assert (Hs : PF.Satisfies S'
+        assert (Hs : PF.Satisfies S
                        (pindForm (srcVersions sigma I) ((n, v), u))).
         { apply (Hdeps _ _ _ Hp); unfold dependees.
           apply mem_dependees_real; right; right; right.

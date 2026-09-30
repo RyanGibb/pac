@@ -1060,12 +1060,12 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       forall p B, InstallIf.In (p, B) (inst_installIf I) ->
       exists a, CondSet.In (DPos a) B.
 
-    Theorem alpine_soundness : forall I S',
+    Theorem alpine_soundness : forall I S,
         WfInstallIf I ->
-        PF.IsResolution (reduceReal I) (reduceDeps I) rootPkg S' ->
-        IsResolution I (alpineResolution S').
+        PF.IsResolution (reduceReal I) (reduceDeps I) rootPkg S ->
+        IsResolution I (alpineResolution S).
     Proof.
-      intros I S' Hwf Hres.
+      intros I S Hwf Hres.
       assert (Hres' := Hres); destruct Hres' as [Hsub Hroot Hclo Huniq].
       constructor.
       - intros p Hp; apply mem_alpineResolution in Hp.
@@ -1099,7 +1099,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       - intros m p q HpS HqS Hp Hq.
         apply mem_alpineResolution in HpS, HqS.
         assert (Hwp : exists w,
-                   PF.PkgSet.In (Name.Orig m, w) S' /\
+                   PF.PkgSet.In (Name.Orig m, w) S /\
                    ((exists v, p = (m, v) /\ w = Version.Orig v) \/
                     (exists u, w = Version.Prov p u))).
         { destruct Hp as [Hp | [u Hprovp]].
@@ -1110,7 +1110,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             + exact (reg_edge _ _ _ _ _ Hres HpS Hprovp).
             + right; exists u; reflexivity. }
         assert (Hwq : exists w,
-                   PF.PkgSet.In (Name.Orig m, w) S' /\
+                   PF.PkgSet.In (Name.Orig m, w) S /\
                    ((exists v, q = (m, v) /\ w = Version.Orig v) \/
                     (exists u, w = Version.Prov q u))).
         { destruct Hq as [Hq | [u Hprovq]].
@@ -1132,7 +1132,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         destruct (D.designation_spec B (Hwf _ _ Hrule))
           as [[na cta] [Hdes Hin]].
         assert (HM := Hc _ Hin); cbn [MatchCond] in HM.
-        apply (matchPos_attachAt I (alpineResolution S') na cta) in HM.
+        apply (matchPos_attachAt I (alpineResolution S) na cta) in HM.
         destruct HM as [p [HpS Hatt]].
         apply mem_alpineResolution in HpS.
         assert (Hfib : InstallIf.In (z, B) (installIfFibre I p)).
