@@ -48,15 +48,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Module PkgSet := C.PkgSet.
   Module VSet := C.VSet.
 
-  Fixpoint vfHolds (phi : Ver.Formula) (v : V.t) : bool :=
-    match phi with
-    | Ver.FTop => true
-    | Ver.FBot => false
-    | Ver.FConj phi1 phi2 => andb (vfHolds phi1 v) (vfHolds phi2 v)
-    | Ver.FDisj phi1 phi2 => orb (vfHolds phi1 v) (vfHolds phi2 v)
-    | Ver.FCmp op c => Ver.cmpOpEval op v c
-    end.
-
   Inductive DTop : Type :=
   | DTVal (v : V.t)
   | DTTop.
@@ -87,7 +78,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Module FEqb := UOTEqb Ver.FOT.
   Definition vtMatchb (v : DTop) (phi : Ver.Formula) : bool :=
     match v with
-    | DTVal u => vfHolds phi u
+    | DTVal u => Ver.satisfiesb u phi
     | DTTop => FEqb.eqb phi Ver.FTop
     end.
 
@@ -117,7 +108,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Module Conf := FSetUOT ConfElt.
 
   Definition Match (Pi : Prov.t) (q : Pkg.t) (a : Atom.t) : Prop :=
-    (fst q = aname a /\ vfHolds (aform a) (snd q) = true) \/
+    (fst q = aname a /\ Ver.satisfiesb (snd q) (aform a) = true) \/
     (exists v, Prov.In (q, (aname a, v)) Pi /\
        vtMatchb v (aform a) = true).
 
@@ -126,7 +117,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
 
   Definition matchb (Pi : Prov.t) (q : Pkg.t) (a : Atom.t) : bool :=
     orb
-      (andb (NEqb.eqb (fst q) (aname a)) (vfHolds (aform a) (snd q)))
+      (andb (NEqb.eqb (fst q) (aname a)) (Ver.satisfiesb (snd q) (aform a)))
       (Prov.exists_ (fun '(p, (m, v)) =>
            andb (PkgEqb.eqb p q)
              (andb (NEqb.eqb m (aname a)) (vtMatchb v (aform a))))
@@ -1074,22 +1065,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     rewrite SOde.in_if_empty, !Bool.andb_true_iff, SOde.singleton_in; tauto.
   Qed.
 
-  Module SOpv := SetOps Pkg V PkgSet VSet.
-  Lemma eval_vfHolds : forall phi Vn u,
-      VSet.In u (Ver.eval phi Vn) <-> VSet.In u Vn /\ vfHolds phi u = true.
-  Proof.
-    intros phi Vn u;
-      induction phi as [ | | phi1 IH1 phi2 IH2 | phi1 IH1 phi2 IH2 | op c];
-      cbn [Ver.eval vfHolds].
-    - split; [intro H; split; [exact H | reflexivity] | intros [H _]; exact H].
-    - split; [intro H; exfalso; exact (SOpv.empty_in _ H) |
-              intros [_ H]; discriminate H].
-    - rewrite VSet.inter_spec, IH1, IH2, Bool.andb_true_iff; tauto.
-    - rewrite VSet.union_spec, IH1, IH2, Bool.orb_true_iff; tauto.
-    - rewrite VSet.filter_spec'.
-      tauto.
-  Qed.
-
   Lemma cardinal_in : forall A (a : Atom.t),
       AtomSet.In a (clauseAtoms A) -> 1 <= AtomSet.cardinal (clauseAtoms A).
   Proof.
@@ -1148,7 +1123,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           exists (an, u); split.
           { apply mem_debianResolution; exact Hdv2S. }
           { left; cbn [aname aform fst snd]; split; [reflexivity |].
-            unfold evalAt in Hu; apply eval_vfHolds in Hu.
+            unfold evalAt, Ver.eval in Hu; apply VSet.filter_spec' in Hu.
             destruct Hu as [_ Hh]; exact Hh. }
         + assert (Hmem : T.VSet.mem (Version.Ref m0 u0)
                            (us (inst_repo I) (inst_prov I) (an, af)) = true).
@@ -1184,7 +1159,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         exists (an, u); split.
         { apply mem_debianResolution; exact HdvS. }
         { left; cbn [aname aform fst snd]; split; [reflexivity |].
-          unfold evalAt in Hu; apply eval_vfHolds in Hu.
+          unfold evalAt, Ver.eval in Hu; apply VSet.filter_spec' in Hu.
           destruct Hu as [_ Hh]; exact Hh. } }
     constructor.
     - intros p Hp.
@@ -1316,7 +1291,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       (clauseAtoms A).
 
   Definition rmatchb (q : Pkg.t) (a : Atom.t) : bool :=
-    andb (NEqb.eqb (fst q) (aname a)) (vfHolds (aform a) (snd q)).
+    andb (NEqb.eqb (fst q) (aname a)) (Ver.satisfiesb (snd q) (aform a)).
 
   Definition chosenVersion (q : Pkg.t) (a : Atom.t) : Version.t :=
     if rmatchb q a
@@ -1524,11 +1499,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         T.VSet.In (chosenVersion q a) (us (inst_repo I) (inst_prov I) a)).
     { intros [m qv] [an af] HqS HM.
       unfold chosenVersion, rmatchb; cbn [aname aform fst snd].
-      destruct (andb (NEqb.eqb m an) (vfHolds af qv)) eqn:Hr; apply mem_us.
+      destruct (andb (NEqb.eqb m an) (Ver.satisfiesb qv af)) eqn:Hr;
+        apply mem_us.
       - apply andb_prop in Hr; destruct Hr as [Hn Hh].
         apply NEqb.eqb_true_iff in Hn as ->.
         left; exists qv; split; [| reflexivity].
-        unfold evalAt; cbn [aname aform fst snd]; apply eval_vfHolds.
+        unfold evalAt, Ver.eval; cbn [aname aform fst snd].
+        apply VSet.filter_spec'.
         split; [| exact Hh].
         apply C.mem_versions.
         apply Hsub; exact HqS.
@@ -1568,7 +1545,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         exists (Version.Orig qv); split.
         + unfold embedVS; apply SOvw.mem_map;
             exists qv; split; [| reflexivity].
-          unfold evalAt; apply eval_vfHolds.
+          unfold evalAt, Ver.eval; apply VSet.filter_spec'.
           split; [| exact Hh].
           apply C.mem_versions.
           rewrite <- Hfq.
@@ -1696,7 +1673,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           as [qn0 [qv0 [Hq0S [Hq0m Ew]]]].
         subst w0.
         unfold chosenVersion, rmatchb in Hout; cbn [fst snd] in Hout.
-        destruct (andb (NEqb.eqb qn0 (aname a0)) (vfHolds (aform a0) qv0))
+        destruct (andb (NEqb.eqb qn0 (aname a0))
+                    (Ver.satisfiesb qv0 (aform a0)))
           eqn:Hr.
         * apply dependees_selector_real_spec in Hout.
           destruct Hout as (_ & _ & _ & Heq).

@@ -195,7 +195,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
   Definition BaseMatch (Pi : Prov.t) (n : N.t) (phi : Deb.Ver.Formula)
       (q : Pkg.t) : Prop :=
-    (pname q = n /\ Deb.vfHolds phi (pver q) = true) \/
+    (pname q = n /\ Deb.Ver.satisfiesb (pver q) phi = true) \/
     (exists v, Prov.In (q, (n, v)) Pi /\ Deb.vtMatchb v phi = true).
 
   Definition MAMatch (Pi : Prov.t) (M : Cls.t) (alpha : A.t)
@@ -519,7 +519,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
            BaseMatch Pi n phi q /\ (parch q = b \/ classOf M q = MAForeign)
        | QAExact b => BaseMatch Pi n phi q /\ parch q = b
        | QAAny => BaseMatch Pi n phi q /\ classOf M q = MAAllowed
-       | QAGroup => pname q = n /\ Deb.vfHolds phi (pver q) = true
+       | QAGroup => pname q = n /\ Deb.Ver.satisfiesb (pver q) phi = true
        end).
   Proof.
     intros R Pi M q n x phi HqR.

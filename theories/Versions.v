@@ -73,14 +73,46 @@ Module Versions (N V : UsualOrderedType).
     - reflexivity.
   Qed.
 
-  Fixpoint eval (phi : Formula) (Vn : VSet.t) : VSet.t :=
+  Fixpoint Satisfies (v : V.t) (phi : Formula) : Prop :=
     match phi with
-    | FTop => Vn
-    | FBot => VSet.empty
-    | FConj phi1 phi2 => VSet.inter (eval phi1 Vn) (eval phi2 Vn)
-    | FDisj phi1 phi2 => VSet.union (eval phi1 Vn) (eval phi2 Vn)
-    | FCmp op c => VSet.filter (fun v => cmpOpEval op v c) Vn
+    | FTop => True
+    | FBot => False
+    | FConj phi1 phi2 => Satisfies v phi1 /\ Satisfies v phi2
+    | FDisj phi1 phi2 => Satisfies v phi1 \/ Satisfies v phi2
+    | FCmp op c => cmpOpEval op v c = true
     end.
+
+  Fixpoint satisfiesb (v : V.t) (phi : Formula) : bool :=
+    match phi with
+    | FTop => true
+    | FBot => false
+    | FConj phi1 phi2 => andb (satisfiesb v phi1) (satisfiesb v phi2)
+    | FDisj phi1 phi2 => orb (satisfiesb v phi1) (satisfiesb v phi2)
+    | FCmp op c => cmpOpEval op v c
+    end.
+
+  Lemma satisfiesb_iff : forall v phi,
+      satisfiesb v phi = true <-> Satisfies v phi.
+  Proof.
+    intros v phi;
+      induction phi as [ | | phi1 IH1 phi2 IH2 | phi1 IH1 phi2 IH2 | op c ];
+      simpl.
+    - split; intros _; reflexivity + exact I.
+    - split; intro H; [discriminate H | destruct H].
+    - rewrite Bool.andb_true_iff, IH1, IH2; reflexivity.
+    - rewrite Bool.orb_true_iff, IH1, IH2; reflexivity.
+    - reflexivity.
+  Qed.
+
+  Definition eval (phi : Formula) (Vn : VSet.t) : VSet.t :=
+    VSet.filter (fun v => satisfiesb v phi) Vn.
+
+  Lemma mem_eval : forall phi Vn v,
+      VSet.In v (eval phi Vn) <-> VSet.In v Vn /\ Satisfies v phi.
+  Proof.
+    intros phi Vn v; unfold eval; rewrite VSet.filter_spec', satisfiesb_iff.
+    reflexivity.
+  Qed.
 
   Module FComp <: ComparableType.
     Definition t := Formula.
@@ -151,7 +183,7 @@ Module Versions (N V : UsualOrderedType).
         forall p, PkgSet.In p S ->
         forall (n : N.t) (phi : Formula),
           DepRel.In (p, (n, phi)) D ->
-          exists v, VSet.In v (eval phi (C.versions R n)) /\ PkgSet.In (n, v) S
+          exists v, Satisfies v phi /\ PkgSet.In (n, v) S
     ; res_version_unique : C.VersionUnique S }.
 
   Module Reduction.
@@ -178,11 +210,15 @@ Module Versions (N V : UsualOrderedType).
       intros R D r S; split; intros [Hsub Hroot Hdep Huniq]; constructor;
         try assumption.
       - intros p Hp m phi HD.
-        apply (Hdep p Hp m (eval phi (C.versions R m))).
-        apply mem_reduce; exists phi; split; [exact HD | reflexivity].
+        destruct (Hdep p Hp m (eval phi (C.versions R m))) as [v [Hv HvS]].
+        + apply mem_reduce; exists phi; split; [exact HD | reflexivity].
+        + apply mem_eval in Hv; exists v; split; [apply Hv | exact HvS].
       - intros p Hp m ws Hmem.
         apply mem_reduce in Hmem; destruct Hmem as [phi [HD ->]].
-        exact (Hdep p Hp m phi HD).
+        destruct (Hdep p Hp m phi HD) as [v [Hv HvS]].
+        exists v; split; [| exact HvS].
+        apply mem_eval; split; [| exact Hv].
+        apply C.mem_versions, Hsub; exact HvS.
     Qed.
 
     Module Lookup.

@@ -374,7 +374,7 @@ module Make (AP : ARCH) : S = struct
         Hashtbl.add tables.oc_cache p r;
         r
 
-  let sat f w = DMA.Deb.vfHolds f w
+  let sat f w = DMA.Deb.Ver.satisfiesb w f
 
   let pp_formula fmt (f : DMA.Deb.Ver.coq_Formula) =
     let rec go fmt = function
