@@ -1307,6 +1307,7 @@ Module Visibility (N V : UsualOrderedType).
     Qed.
 
     Module Lookup.
+      Module PkgFibred := FibredRel N V Pkg PkgSet.
       Module DepFibred :=
         FibredLabelledRel Pkg N VSet.AsUOT C.DepElt C.DepRel.
       Module PubFibred := FibredRel Pkg N PubElt PubRel.
@@ -1389,7 +1390,9 @@ Module Visibility (N V : UsualOrderedType).
                          (reduceDeps R D pub (m, u))) \/
           Name.Occurrence n q = Name.Occurrence m (m, u) ->
           T.versions (reduceReal R D pub (m, u)) (Name.Occurrence n q) =
-          embedVS (C.versions R n).
+          T.versions
+            (reduceReal (PkgFibred.tailFibre R n) C.DepRel.empty PubRel.empty q)
+            (Name.Occurrence n q).
       Proof.
         intros R D pub rn rv n q Hreach; set (r := (rn, rv)) in *.
         assert (Hq : PkgSet.In q (potentialOrigins R D pub r)).
@@ -1400,11 +1403,17 @@ Module Visibility (N V : UsualOrderedType).
           - injection Heq as _ ->.
             apply mem_potentialOrigins; left; reflexivity. }
         apply T.VSet.ext; intro v.
-        rewrite T.mem_versions, mem_embedVS, C.mem_versions.
+        rewrite !T.mem_versions.
         split.
-        - intro Hin;
-            exact (proj1 (occurrence_mem_reduceReal R D pub r n v q Hin)).
-        - intro HR; apply mem_reduceReal; constructor; assumption.
+        - intro Hin.
+          destruct (occurrence_mem_reduceReal R D pub r n v q Hin) as [HR _].
+          apply mem_reduceReal; constructor.
+          + apply PkgFibred.mem_tailFibre; split; [exact HR | reflexivity].
+          + apply mem_potentialOrigins; left; reflexivity.
+        - intro Hin; apply mem_reduceReal; constructor; [| exact Hq].
+          apply mem_reduceReal in Hin; inversion Hin as [n1 v1 q1 HR | |];
+            subst.
+          exact (PkgFibred.tailFibre_subset R _ _ HR).
       Qed.
 
       (* Membership gives R (n, v) and q's origin status for the fibre. *)
@@ -1447,7 +1456,10 @@ Module Visibility (N V : UsualOrderedType).
           (exists p h, T.DepRel.In (p, (Name.Intermediate n v m q, h))
                          (reduceDeps R D pub r)) ->
           T.versions (reduceReal R D pub r) (Name.Intermediate n v m q) =
-          embedVS (depRange D (n, v) m).
+          T.versions
+            (reduceReal PkgSet.empty (DepFibred.endsFibre D (n, v) m)
+               PubRel.empty q)
+            (Name.Intermediate n v m q).
       Proof.
         intros R D pub r n v m q Hreach.
         assert (Hq : PkgSet.In q (potentialOrigins R D pub r)).
@@ -1456,11 +1468,15 @@ Module Visibility (N V : UsualOrderedType).
                    (Name.Intermediate n v m q) h q Hin).
           right; exists n, v, m; reflexivity. }
         apply T.VSet.ext; intro u.
-        rewrite T.mem_versions, mem_embedVS, mem_depRange, mem_reduceReal.
+        rewrite !T.mem_versions, !mem_reduceReal.
         split.
         - intro H; inversion H as [| n1 v1 m1 vs q1 u1 HD _ Hu |]; subst.
-          exists vs; split; [exact HD | exact Hu].
-        - intros [vs [HD Hu]]; econstructor; eassumption.
+          econstructor; [| | exact Hu].
+          + apply DepFibred.mem_endsFibre; split; [exact HD | auto].
+          + apply mem_potentialOrigins; left; reflexivity.
+        - intro H; inversion H as [| n1 v1 m1 vs q1 u1 HD _ Hu |]; subst.
+          econstructor; [| exact Hq | exact Hu].
+          exact (DepFibred.endsFibre_subset D _ _ _ HD).
       Qed.
 
       (* Membership is what makes q a potential origin for the fibre. *)
