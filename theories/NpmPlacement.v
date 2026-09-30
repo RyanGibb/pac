@@ -453,10 +453,10 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         split; [exact (keyRepo_sub I' I a o Ha Hx) | reflexivity].
       Qed.
 
-      Definition atomOf (l : Pl.Path.t) (e : Edge) (xs : Pl.VSet.t)
+      Definition atomOf (l : Pl.Path.t) (e : Edge) (vs : Pl.VSet.t)
           : Pl.Reduction.T.Dependees.t :=
         (Pl.Reduction.Name.Walk l (e_dir e),
-         Pl.Reduction.optAccept (e_opt e) (Pl.land (e_peer e) l) xs).
+         Pl.Reduction.optAccept (e_opt e) (Pl.land (e_peer e) l) vs).
 
       Definition edgeAtom (I : Inst) (l : Pl.Path.t) (e : Edge)
           : Pl.Reduction.T.Dependees.t :=
