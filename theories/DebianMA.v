@@ -1713,28 +1713,15 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Qed.
 
       Theorem versions_lookupOrig : forall I (n : N.t) (alpha : A.t),
-          PkgSet.In (inst_root I) (inst_repo I) ->
-          (exists p h,
-              Deb.Reduction.T.DepRel.In
-                (p, (Deb.Reduction.Name.Orig (n, QAArch alpha), h))
-                (Deb.Reduction.reduceDeps (reduceInst I))) \/
-          Deb.Reduction.Name.Orig (n, QAArch alpha) =
-          Deb.Reduction.Name.Orig (fst (embedPkg (inst_root I))) ->
           Deb.Reduction.versions (reduceInst I)
             (Deb.Reduction.Name.Orig (n, QAArch alpha)) =
-          Deb.Reduction.T.VSet.add Deb.Reduction.Version.Bot
-            (Deb.Reduction.embedVS
-               (Deb.C.versions (reduceReal (realAt (inst_repo I) n alpha))
-                  (n, QAArch alpha))).
+          Deb.Reduction.versions
+            (Deb.MkInst (reduceReal (realAt (inst_repo I) n alpha))
+               Deb.Deps.empty Deb.Deps.empty Deb.Prov.empty Deb.Conf.empty
+               (embedPkg (inst_root I)))
+            (Deb.Reduction.Name.Orig (n, QAArch alpha)).
       Proof.
-        intros I n alpha Hr H.
-        assert (Hr' : Deb.PkgSet.In (embedPkg (inst_root I))
-                        (reduceReal (inst_repo I)))
-          by (apply mem_reduceReal; exists (inst_root I);
-              split; [exact Hr | reflexivity]).
-        rewrite
-          (Deb.Reduction.Lookup.versions_lookupOrig (reduceInst I) _ Hr' H).
-        rewrite Deb.Reduction.Lookup.versions_tailFibre.
+        intros I n alpha; cbn [Deb.Reduction.versions reduceInst Deb.inst_repo].
         rewrite (versions_restrict (inst_repo I) (realAt (inst_repo I) n alpha)
                    (n, QAArch alpha));
           [reflexivity | |].
@@ -1749,28 +1736,22 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Theorem versions_lookupOrig_pseudo :
         forall I (n : N.t) (x : NameArch),
           (forall b, x <> QAArch b) ->
-          (exists p h,
-              Deb.Reduction.T.DepRel.In (p, (Deb.Reduction.Name.Orig (n, x), h))
-                (Deb.Reduction.reduceDeps (reduceInst I))) ->
           Deb.Reduction.versions (reduceInst I)
             (Deb.Reduction.Name.Orig (n, x)) =
-          Deb.Reduction.T.VSet.singleton Deb.Reduction.Version.Bot.
+          Deb.Reduction.T.VSet.empty.
       Proof.
-        intros I n x Hx Hreach.
-        pose proof (Deb.Reduction.Lookup.reachable_instNames _ _ Hreach) as Hin.
-        cbn [Deb.Reduction.versions].
-        replace (Deb.Reduction.NSet.mem (n, x)
-                   (Deb.Reduction.instNames (reduceInst I)))
-          with true; [| symmetry; apply Deb.Reduction.NSet.mem_spec; exact Hin].
-        apply Deb.Reduction.T.VSet.ext; intro w.
-        rewrite Deb.Reduction.SOvw.add_in, Deb.Reduction.T.VSet.singleton_spec.
-        split; [intros [H | H]; [exact H |] | intro H; left; exact H].
-        exfalso; unfold Deb.Reduction.embedVS in H;
-          apply Deb.Reduction.SOvw.mem_map in H.
-        destruct H as [v [Hv _]]; apply Deb.C.mem_versions in Hv.
-        destruct (reduceReal_arch (inst_repo I) (n, x) v Hv) as [b Hb];
-          cbn [snd] in Hb.
-        exact (Hx b Hb).
+        intros I n x Hx; cbn [Deb.Reduction.versions reduceInst Deb.inst_repo].
+        destruct (Deb.VSet.is_empty
+                    (Deb.C.versions (reduceReal (inst_repo I)) (n, x))) eqn:He;
+          [reflexivity | exfalso].
+        destruct (Deb.VSet.choose
+                    (Deb.C.versions (reduceReal (inst_repo I)) (n, x)))
+          as [v |] eqn:Hc.
+        - apply Deb.VSet.choose_spec1, Deb.C.mem_versions in Hc.
+          destruct (reduceReal_arch (inst_repo I) (n, x) v Hc) as [b Hb].
+          exact (Hx b Hb).
+        - apply Deb.VSet.choose_spec2, Deb.VSet.is_empty_spec in Hc.
+          congruence.
       Qed.
 
       Theorem dependees_lookupOrig : forall I (p : Pkg.t),

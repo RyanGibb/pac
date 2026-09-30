@@ -98,15 +98,19 @@ module Make (AP : Tables.ARCH) = struct
   let versions sel_cache tables (n' : DMA.Deb.Reduction.Name.t) =
     match n' with
     | DMA.Deb.Reduction.Name.Orig (n, DMA.QAArch b) ->
-        DMA.Deb.Reduction.T.VSet.add DMA.Deb.Reduction.Version.Bot
-          (DMA.Deb.Reduction.embedVS
-             (DMA.Deb.C.versions
-                (DMA.Reduction.reduceReal (ma_real_at tables (n, b)))
-                (n, DMA.QAArch b)))
+        let vs =
+          DMA.Deb.C.versions
+            (DMA.Reduction.reduceReal (ma_real_at tables (n, b)))
+            (n, DMA.QAArch b)
+        in
+        if DMA.Deb.VSet.is_empty vs then DMA.Deb.Reduction.T.VSet.empty
+        else
+          DMA.Deb.Reduction.T.VSet.add DMA.Deb.Reduction.Version.Bot
+            (DMA.Deb.Reduction.embedVS vs)
     | DMA.Deb.Reduction.Name.Orig _ ->
         (* embedPkg introduces only QAArch names, so an explicit-qualifier,
-           :any or group pseudo-name has absence alone *)
-        DMA.Deb.Reduction.T.VSet.singleton DMA.Deb.Reduction.Version.Bot
+           :any or group pseudo-name has no real package *)
+        DMA.Deb.Reduction.T.VSet.empty
     | DMA.Deb.Reduction.Name.Disjunct aset ->
         DMA.Deb.Reduction.versionsDisj aset
     | DMA.Deb.Reduction.Name.Soft aset -> DMA.Deb.Reduction.versionsSoft aset

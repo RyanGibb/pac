@@ -299,25 +299,11 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Definition clauseNames (A : Clause.t) : NSet.t :=
       SOan.map (fun '(n, _) => n) (clauseAtoms A).
 
-    Module SOcnn := SetOps ClauseElt N Deps NSet.
-    Definition depNames (D : Deps.t) : NSet.t :=
-      SOcnn.unionMap (fun '(_, A) => clauseNames A) D.
-
     Module SOgn := SetOps ConfElt N Conf NSet.
-    Definition confAtomNames (G : Conf.t) : NSet.t :=
-      SOgn.map (fun '(_, (a, _)) => aname a) G.
-
     Module SOpin := SetOps ProvElt N Prov NSet.
-    Definition provOwners (Pi : Prov.t) : NSet.t :=
-      SOpin.map (fun '(q, _) => fst q) Pi.
 
     Module SOrn := SetOps Pkg N PkgSet NSet.
-    Definition instNames (I : Inst) : NSet.t :=
-      NSet.union (SOrn.map fst (inst_repo I))
-        (NSet.union (depNames (inst_deps I))
-           (NSet.union (depNames (inst_rec I))
-              (NSet.union (confAtomNames (inst_conf I))
-                 (provOwners (inst_prov I))))).
+    Definition repoNames (R : PkgSet.t) : NSet.t := SOrn.map fst R.
 
     Module SOaw := SetOps Atom VersionOT AtomSet T.VSet.
     Definition versionsDisj (A : Clause.t) : T.VSet.t :=
@@ -361,10 +347,9 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Definition versions (I : Inst) (n' : Name.t) : T.VSet.t :=
       match n' with
       | Name.Orig n =>
-          if NSet.mem n (instNames I)
-          then T.VSet.add Version.Bot
-                 (embedVS (C.versions (inst_repo I) n))
-          else T.VSet.empty
+          let vs := C.versions (inst_repo I) n in
+          if VSet.is_empty vs then T.VSet.empty
+          else T.VSet.add Version.Bot (embedVS vs)
       | Name.Disjunct A =>
           if andb (hasClauseb (inst_deps I) A)
                (2 <=? AtomSet.cardinal (clauseAtoms A))
@@ -489,7 +474,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
               (T.PkgSet.union
                  (realSelector (inst_repo I)
                     (allClauses (inst_deps I) (inst_rec I)) (inst_prov I))
-                 (absentPkgs (instNames I))))).
+                 (absentPkgs (repoNames (inst_repo I)))))).
 
     Module SOee := SetOps T.Dependees T.DepElt T.DependeesSet T.DepRel.
     Definition depEdges (p : T.Pkg.t) (es : T.DependeesSet.t) : T.DepRel.t :=
@@ -615,49 +600,12 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         exists (n, phi); split; [exact Ha | reflexivity].
     Qed.
 
-    Lemma mem_depNames : forall D (n : N.t),
-        NSet.In n (depNames D) <->
-        exists p A, Deps.In (p, A) D /\ NSet.In n (clauseNames A).
+    Lemma mem_repoNames : forall R (n : N.t),
+        NSet.In n (repoNames R) <-> exists v, PkgSet.In (n, v) R.
     Proof.
-      intros D n; unfold depNames; rewrite SOcnn.mem_unionMap.
-      split.
-      - intros [[q A] [Hc Hn]]; exists q, A; split; assumption.
-      - intros [q [A [Hc Hn]]]; exists (q, A); split; assumption.
-    Qed.
-
-    Lemma mem_provOwners : forall Pi (n : N.t),
-        NSet.In n (provOwners Pi) <->
-        exists q m v, Prov.In (q, (m, v)) Pi /\ fst q = n.
-    Proof.
-      intros Pi n; unfold provOwners; rewrite SOpin.mem_map.
-      split.
-      - intros [[q [m v]] [He Hn]]; cbn beta iota in Hn; subst n.
-        exists q, m, v; split; [exact He | reflexivity].
-      - intros [q [m [v [He <-]]]]; exists (q, (m, v)); split;
-          [exact He | reflexivity].
-    Qed.
-
-    Lemma mem_instNames : forall I (n : N.t),
-        NSet.In n (instNames I) <->
-        (exists v, PkgSet.In (n, v) (inst_repo I)) \/
-        NSet.In n (depNames (inst_deps I)) \/
-        NSet.In n (depNames (inst_rec I)) \/
-        NSet.In n (confAtomNames (inst_conf I)) \/
-        NSet.In n (provOwners (inst_prov I)).
-    Proof.
-      intros I n; unfold instNames.
-      rewrite !NSet.union_spec, SOrn.mem_map.
-      split.
-      - intros [[[m v] [HR Hm]] | H]; [simpl in Hm; subst | tauto].
-        left; exists v; exact HR.
-      - intros [[v HR] | H]; [| tauto].
-        left; exists (n, v); split; [exact HR | reflexivity].
-    Qed.
-
-    Lemma repo_instNames : forall I n v,
-        PkgSet.In (n, v) (inst_repo I) -> NSet.In n (instNames I).
-    Proof.
-      intros I n v H; apply mem_instNames; left; exists v; exact H.
+      intros R n; unfold repoNames; rewrite SOrn.mem_map.
+      split; [intros [[m v] [HR Hm]]; cbn [fst] in Hm; subst m; eauto |].
+      intros [v HR]; exists (n, v); auto.
     Qed.
 
     Lemma mem_absentPkgs : forall ns (p : T.Pkg.t),
@@ -842,22 +790,24 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Lemma versions_orig_spec : forall I n w,
         T.VSet.In w (versions I (Name.Orig n)) <->
         (exists v, PkgSet.In (n, v) (inst_repo I) /\ w = Version.Orig v) \/
-        (NSet.In n (instNames I) /\ w = Version.Bot).
+        ((exists v, PkgSet.In (n, v) (inst_repo I)) /\ w = Version.Bot).
     Proof.
       intros I n w; cbn [versions].
-      destruct (NSet.mem n (instNames I)) eqn:Hm.
-      - apply NSet.mem_spec in Hm.
+      destruct (VSet.is_empty (C.versions (inst_repo I) n)) eqn:He.
+      - apply VSet.is_empty_spec in He.
+        split; [intro H; exfalso; exact (SOvw.empty_in _ H) |].
+        intros [[v [Hv _]] | [[v Hv] _]];
+          exfalso; apply (He v), C.mem_versions; exact Hv.
+      - assert (Hne : exists v, PkgSet.In (n, v) (inst_repo I)).
+        { destruct (VSet.choose (C.versions (inst_repo I) n)) as [v |] eqn:Hc.
+          - exists v; apply C.mem_versions, VSet.choose_spec1; exact Hc.
+          - apply VSet.choose_spec2, VSet.is_empty_spec in Hc; congruence. }
         rewrite SOvw.add_in; unfold embedVS; rewrite SOvw.mem_map.
         split.
         + intros [-> | [v [Hv ->]]]; [right; auto | left].
           exists v; split; [apply C.mem_versions; exact Hv | reflexivity].
         + intros [[v [Hv ->]] | [_ ->]]; [right | left; reflexivity].
           exists v; split; [apply C.mem_versions; exact Hv | reflexivity].
-      - split; [intro H; exfalso; exact (SOvw.empty_in _ H) |].
-        intros [[v [Hv _]] | [Hn _]].
-        + exfalso; apply (repo_instNames I n v), NSet.mem_spec
-            in Hv; congruence.
-        + apply NSet.mem_spec in Hn; congruence.
     Qed.
 
     Lemma versions_disjunct_spec : forall I A w,
@@ -893,6 +843,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       rewrite !T.PkgSet.union_spec.
       rewrite mem_realOrig, mem_realDisjunct, mem_realSoft, mem_realSelector,
         mem_absentPkgs.
+      setoid_rewrite mem_repoNames.
       destruct n';
         rewrite ?versions_orig_spec, ?versions_disjunct_spec,
           ?versions_soft_spec, ?versions_selector_spec, ?hasClauseb_iff,
@@ -1352,7 +1303,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
                       then cwSelector (inst_prov I) S A
                       else T.PkgSet.empty)
                     (allClauses (inst_deps I) (inst_rec I)))
-                 (absentPkgs (C.absentIn S (instNames I)))))).
+                 (absentPkgs (C.absentIn S (repoNames (inst_repo I))))))).
 
     Lemma cardinal1_eq : forall A (a b : Atom.t),
         AtomSet.cardinal (clauseAtoms A) = 1 ->
@@ -1452,7 +1403,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         provb (inst_prov I) a = true ->
         chooseSatisfier (inst_prov I) S a = Some w ->
         CoreMem I S (Name.Selector a, w)
-    | CoreAbsent : forall n, NSet.In n (instNames I) ->
+    | CoreAbsent : forall n v, PkgSet.In (n, v) (inst_repo I) ->
         (forall v, ~ PkgSet.In (n, v) S) ->
         CoreMem I S (Name.Orig n, Version.Bot).
 
@@ -1480,10 +1431,10 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         + cbn beta iota in Hy; apply SOcp.in_if_empty in Hy as [Hm Hy].
           apply mem_cwSelector in Hy; mem_destruct.
           eapply CoreSelector; eassumption.
-        + apply C.mem_absentIn in Hn as [Hn Hnone]; apply CoreAbsent;
-          assumption.
+        + apply C.mem_absentIn in Hn as [Hn Hnone].
+          apply mem_repoNames in Hn as [v Hv]; eapply CoreAbsent; eassumption.
       - destruct 1 as [n v Hp | p Al a Hc Hm Hcard Hmin | p Al Hc Hm
-                      | p Al a w Hc Hm Ha Hpv Hcs | n Hn Hnone].
+                      | p Al a w Hc Hm Ha Hpv Hcs | n v Hn Hnone].
         + left; exists (n, v); auto.
         + right; left; exists (p, Al); split; [exact Hc | cbn [fst snd]].
           rewrite Hm, Hcard, Hmin; reflexivity.
@@ -1491,7 +1442,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         + right; right; right; left; exists (p, Al); split; [exact Hc |].
           cbn beta iota; rewrite Hm; apply mem_cwSelector; eauto 7.
         + right; right; right; right; exists n; split; [| reflexivity].
-          apply C.mem_absentIn; auto.
+          apply C.mem_absentIn; split; [apply mem_repoNames; eauto | exact Hnone].
     Qed.
 
     Theorem debian_completeness :
@@ -1563,7 +1514,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       - intros y Hy.
         apply mem_coreResolution in Hy.
         destruct Hy as [n v Hp | cp cA a0 Hc Hm Hcard Hmin | cp cA Hc Hm
-                       | cp cA a0 w0 Hc Hm Ha0 Hp0 Hcs | n0 Hn0 _].
+                       | cp cA a0 w0 Hc Hm Ha0 Hp0 Hcs | n0 v0 Hn0 _].
         + apply (mem_reduceReal I (Name.Orig n) (Version.Orig v)).
           apply versions_orig_spec; left.
           exists v; split; [apply Hsub; exact Hp | reflexivity].
@@ -1589,14 +1540,14 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           destruct Hcs as [m [qv [HqS [Hqm ->]]]].
           apply (Hus (m, qv)); [exact HqS | apply matchb_iff; exact Hqm].
         + apply (mem_reduceReal I (Name.Orig n0) Version.Bot).
-          apply versions_orig_spec; right; auto.
+          apply versions_orig_spec; right; eauto.
       - revert Hroot; destruct (inst_root I) as [rn rv]; intro Hroot.
         apply mem_coreResolution, CoreReal; exact Hroot.
       - intros y Hy n vs Hd.
         apply mem_coreResolution in Hy.
         apply mem_reduceDeps in Hd; destruct Hd as [_ Hout].
         destruct Hy as [pn pv HpS | cp cA a0 Hc Hmem Hcard Hmin | cp cA Hc Hmem
-                       | cp cA a0 w0 Hc Hmem Ha0 Hpv Hcs | n0 _ _].
+                       | cp cA a0 w0 Hc Hmem Ha0 Hpv Hcs | n0 _ _ _].
         + apply (dependees_orig_spec I pn pv) in Hout.
           destruct Hout as [[A [HA Hcase]] |
                             [[A [HA Heq]] |
@@ -1653,9 +1604,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
               - apply mem_coreResolution, CoreReal; exact Hu. }
             { assert (Hnone := proj1 (C.hasNameb_false S m) Hh).
               exists Version.Bot; split; [apply mem_complementVS; left; reflexivity |].
-              apply mem_coreResolution, CoreAbsent; [| exact Hnone].
               apply mem_confNames in Hqn; destruct Hqn as [u [HuR _]].
-              exact (repo_instNames I m u HuR). }
+              apply mem_coreResolution; exact (CoreAbsent I S m u HuR Hnone). }
         + apply dependees_disjunct_spec in Hout.
           destruct Hout as (Hhc & Hc2 & Hmm & Heq).
           assert (Hmin1 := AtomSet.min_elt_spec1 Hmin).
@@ -1931,91 +1881,15 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
 
       Module DepsFibred := FibredRel Pkg Clause ClauseElt Deps.
       Module ConfFibred := FibredRel Pkg Conflictees ConfElt Conf.
-      Lemma reachable_instNames : forall I (n : N.t),
-          (exists q h,
-              T.DepRel.In (q, (Name.Orig n, h)) (reduceDeps I)) ->
-          NSet.In n (instNames I).
-      Proof.
-        intros I n [[sn sv] [h Hd]].
-        apply mem_reduceDeps in Hd; destruct Hd as [_ Hout].
-        assert (Hclause : forall (E : Deps.t) (p : Pkg.t) A (a : Atom.t),
-                   Deps.In (p, A) E -> AtomSet.In a (clauseAtoms A) ->
-                   NSet.In (aname a) (depNames E)).
-        { intros E p A [an af] HE Ha; apply mem_depNames; exists p, A.
-          split; [exact HE | apply mem_clauseNames; exists af; exact Ha]. }
-        assert (Hdependee : forall (a : Atom.t),
-                   dependee (inst_repo I) (inst_prov I) a = (Name.Orig n, h) ->
-                   (exists p A,
-                      Deps.In (p, A) (allClauses (inst_deps I) (inst_rec I)) /\
-                                AtomSet.In a (clauseAtoms A)) ->
-                   NSet.In n (instNames I)).
-        { intros a Ht [p [A [HE Ha]]]; unfold dependee in Ht.
-          destruct (provb (inst_prov I) a); [discriminate Ht |].
-          injection Ht as Hn _; subst n.
-          apply mem_instNames.
-          apply Deps.union_spec in HE; destruct HE as [HE | HE];
-            [right; left | right; right; left]; exact (Hclause _ _ _ _ HE Ha). }
-        destruct sn as [m | A | A | a]; destruct sv as [v | a' | m' w | w | | ];
-          try (exfalso; exact (SOde.empty_in _ Hout)).
-        - apply dependees_orig_spec in Hout.
-          destruct Hout as [[A [HA [[_ [a [Hmin Hy]]] | [_ Hy]]]] |
-                            [[A [HA Hy]] |
-                             [a [e [qn [_ [Hqn [_ [_ Hy]]]]]]]]];
-            try discriminate Hy.
-          + apply (Hdependee a); [symmetry; exact Hy |].
-            exists (m, v), A; split; [apply allClauses_inL; exact HA |].
-            exact (AtomSet.min_elt_spec1 Hmin).
-          + injection Hy as -> _.
-            apply mem_confNames in Hqn; destruct Hqn as [u [HR _]].
-            exact (repo_instNames I _ u HR).
-        - apply dependees_disjunct_spec in Hout.
-          destruct Hout as [Hhc [_ [Hmem Hy]]].
-          apply hasClauseb_iff in Hhc; destruct Hhc as [p Hp].
-          apply (Hdependee a'); [symmetry; exact Hy |].
-          exists p, A; split; [apply allClauses_inL; exact Hp |].
-          apply AtomSet.mem_spec; exact Hmem.
-        - apply dependees_soft_spec in Hout.
-          destruct Hout as [Hhc [Hmem Hy]].
-          apply hasClauseb_iff in Hhc; destruct Hhc as [p Hp].
-          apply (Hdependee a'); [symmetry; exact Hy |].
-          exists p, A; split; [apply allClauses_inR; exact Hp |].
-          apply AtomSet.mem_spec; exact Hmem.
-        - destruct a as [an af]; apply dependees_selector_spec in Hout.
-          destruct Hout as [_ [_ [Hus Hy]]]; injection Hy as -> _.
-          apply T.VSet.mem_spec, mem_us in Hus.
-          destruct Hus as [[u [_ E]] | [m0 [u0 [vt [Hin [_ E]]]]]];
-            [discriminate E |].
-          injection E as -> ->.
-          apply mem_instNames; right; right; right; right.
-          apply mem_provOwners; exists (m0, u0), an, vt; split;
-            [exact Hin | reflexivity].
-        - apply dependees_selector_real_spec in Hout.
-          destruct Hout as [Hocc [_ [_ Hy]]]; injection Hy as -> _.
-          apply occursAtomb_iff in Hocc; destruct Hocc as [p [A [HE Ha]]].
-          apply mem_instNames.
-          apply Deps.union_spec in HE; destruct HE as [HE | HE];
-            [right; left | right; right; left]; exact (Hclause _ _ _ _ HE Ha).
-      Qed.
-
       Theorem versions_lookupOrig : forall I (n : N.t),
-          PkgSet.In (inst_root I) (inst_repo I) ->
-          (exists p h,
-              T.DepRel.In (p, (Name.Orig n, h)) (reduceDeps I)) \/
-          Name.Orig n = Name.Orig (fst (inst_root I)) ->
           versions I (Name.Orig n) =
-          T.VSet.add Version.Bot
-            (embedVS (C.versions (PkgFibred.tailFibre (inst_repo I) n) n)).
+          versions
+            (MkInst (PkgFibred.tailFibre (inst_repo I) n) Deps.empty Deps.empty
+               Prov.empty Conf.empty (inst_root I))
+            (Name.Orig n).
       Proof.
-        intros I n Hr Hreach.
-        assert (Hn : NSet.In n (instNames I)).
-        { destruct Hreach as [Hreach | E];
-            [exact (reachable_instNames I n Hreach) |].
-          injection E as ->; revert Hr.
-          destruct (inst_root I) as [rn rv]; intro Hr.
-          exact (repo_instNames I rn rv Hr). }
-        cbn [versions]; rewrite versions_tailFibre.
-        replace (NSet.mem n (instNames I)) with true;
-          [reflexivity | symmetry; apply NSet.mem_spec; exact Hn].
+        intros I n; cbn [versions inst_repo]; rewrite versions_tailFibre.
+        reflexivity.
       Qed.
 
       Theorem dependees_lookupAbsent : forall I (n : N.t),
