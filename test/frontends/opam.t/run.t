@@ -135,8 +135,9 @@ other, exactly as opam's own rule, which removes the declarer's own name
 from the member map, does not.  cc-pick prefers cc-b, being the alternative
 written first, but cannot have it beside cc-a and falls back to cc-plain.
 The class name is also a package name here, and ccls.1 is installed
-regardless: a class and a real package of the same name are separate target
-names, as opam's ocaml-system -- both a class and a package -- requires.
+regardless: a class and a real package of the same name are separate
+dependee names, as opam's ocaml-system -- both a class and a package --
+requires.
 
   $ untimed ../../../bin/main.exe opam . cc-pick
   packages (4):

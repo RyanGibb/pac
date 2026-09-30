@@ -197,8 +197,8 @@ lockfile with e 0.1.0 beside e 0.2.0.
   loaded: 2 names, 3 versions
 
 Two sites may also share an alias while naming different crates, since
-package = renames the target and the cross-table check constrains only the
-source registry.  rn's x is e under [dependencies] and w under
+package = sets the dependee name and the cross-table check constrains only
+the source registry.  rn's x is e under [dependencies] and w under
 [target.'cfg(windows)'.dependencies], and both are installed.
 
   $ untimed ../../../bin/main.exe cargo index manifests/rn.toml

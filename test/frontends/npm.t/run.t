@@ -909,8 +909,8 @@ other specs no registry lookup resolves are:
   loaded: 1 names, 1 versions, 0 packuments fetched
   parser dropped 1 declarations
 
-A dist-tag is resolved from the target's packument, to the tagged version
-exactly: devprod's old is 1.0.0.  A tag the packument lacks matches
+A dist-tag is resolved from the dependee name's packument, to the tagged
+version exactly: devprod's old is 1.0.0.  A tag the packument lacks matches
 nothing, so alpha, whose optional entry asks for nosuch, is abandoned:
 
   $ untimed ../../../bin/main.exe npm --offline --cache . ./tag-app/package.json

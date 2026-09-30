@@ -32,7 +32,7 @@ FIELDS = ("peerDependencies", "dependencies", "optionalDependencies",
           "devDependencies")
 
 
-def target(key, spec):
+def name(key, spec):
     """the registry package spec names at key, or None when it names
     something off the registry, whose identity npm does not take from a name"""
     if not isinstance(spec, str):
@@ -68,7 +68,7 @@ def main():
     bad = 0
     for path, e in sorted(pk.items()):
         for key, (field, spec) in sorted(edges(e, not path).items()):
-            want = target(key, ovr.get(key, spec))
+            want = name(key, ovr.get(key, spec))
             if want is None:
                 continue
             # a copy inside the declarer is PEER LOCAL (arborist
@@ -91,7 +91,7 @@ def main():
             # finds the name's own package, as npm and Berry both load
             peer = (e.get("peerDependencies") or {}).get(key)
             if (SHARED and field != "peerDependencies" and peer is not None
-                    and got == target(key, peer)):
+                    and got == name(key, peer)):
                 continue
             if got != want:
                 print(f"{path or '(root)'} {field} {key}: {spec} "

@@ -146,7 +146,7 @@ the same conflict, so softb is installed rather than nothing:
   loaded: 176 names, 176 versions
 
 A Conflicts is an edge of the package that declares it, admitting the
-target's non-matching versions and its absence ⊥.  cfla conflicts with cflb
+dependee's non-matching versions and its absence ⊥.  cfla conflicts with cflb
 (every version), so cfla 1 admits cflb only at ⊥; cflc depends on cfla, and
 cfld depends on cflb (= 1) and cflc, whichever order the solver reaches them.
 cflb 1 is not the candidate, so both versions are offered, as with apt's

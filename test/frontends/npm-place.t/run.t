@@ -142,7 +142,7 @@ joined it does not rule zz out, so ha 1.0.0 with hq's zz is found.
 A root override applies to the key an edge is written under and replaces
 its spec, alias included.  In ovr/, p depends on x as an alias of b ^2,
 and q peers on it so: an override of x makes each edge the registry's own
-x, and one of b, the alias's target, leaves them alone, as npm 11.17.0
+x, and one of b, the alias's dependee name, leaves them alone, as npm 11.17.0
 answers over these fixtures.
 
   $ for a in key-app peer-key-app target-app root-target-app; do untimed ../../../bin/main.exe npm --reading=placement --offline --cache ovr ./ovr/$a/package.json | grep node_modules/x; done

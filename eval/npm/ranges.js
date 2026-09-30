@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // For each {key, spec, version} of the JSON array on stdin, whether the
 // version meets the spec as arborist's dep-valid.js reads a registry
-// range, loosely: null where npm-package-arg reads the spec as no range or
-// version, an alias's target included, and otherwise true or false, false
+// range, loosely: null where npm-package-arg reads the spec, or the spec an
+// alias names, as no range or version, and otherwise true or false, false
 // for a null version.  reach.py asks it, so that ranges are read with
 // npm's own npm-package-arg and semver.
 // usage: ranges.js < asks.json

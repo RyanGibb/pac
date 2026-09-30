@@ -3,7 +3,7 @@
 // the lock's tree is laid out on disk as bare directories, each holding a
 // package.json with the entry's name and version, and each edge is
 // require.resolve'd from its depender's directory.  An edge holds when it
-// lands on the package its spec names (the alias's target for npm:, the key
+// lands on the package its spec names (the one an npm: alias names, the key
 // otherwise) at a version the spec admits, as npm's dep-valid reads it
 // (semver.satisfies, loose; a tag or * admits any version), under the root's
 // flat override on the key.  A peer landing in the declarer's own
