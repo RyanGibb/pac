@@ -189,9 +189,9 @@ module Make (Encoding : Encoding.S) = struct
      dependees named it is one, and its fibres are built already; only a
      name no dependees answer has named falls back to scanning n's index
      entry, oldest first, which holds every version of n and is loaded
-     whole.  With none, the empty fibres stand for slot_declines and
-     decision_declines: nothing in the instance makes the name, and the
-     lookup declines.  The verdict reads st.rc through slotActive. *)
+     whole.  With none the fibres are empty; the lookups read the
+     repository at the slot's dependee name alone, so the answer stands.
+     The verdict reads st.rc through slotActive. *)
   let owner st key (ok : string * string -> fibres -> bool) n gr =
     Tbl.memo st.owners key (fun () ->
         let owns v =
