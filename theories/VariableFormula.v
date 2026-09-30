@@ -162,16 +162,18 @@ Module VariableFormula (N V : UsualOrderedType)
   Module Dependees := FOT.
   Module DepElt := PairUOT Pkg Dependees.
   Module DepRel := FSetUOT DepElt.
+  Module YSet := FSetUOT Y.
 
   Record IsResolution
-      (R : PkgSet.t) (D : DepRel.t) (r : Pkg.t) (S : PkgSet.t)
-      (sigma : X.t -> Y.t) : Prop :=
+      (Y_x : X.t -> YSet.t) (R : PkgSet.t) (D : DepRel.t) (r : Pkg.t)
+      (S : PkgSet.t) (sigma : X.t -> Y.t) : Prop :=
     { res_subset : PkgSet.Subset S R
     ; res_root_mem : PkgSet.In r S
     ; res_formula_closure :
         forall p, PkgSet.In p S ->
         forall psi : Formula, DepRel.In (p, psi) D -> Satisfies S sigma psi
-    ; res_version_unique : C.VersionUnique S }.
+    ; res_version_unique : C.VersionUnique S
+    ; res_assignment_mem : forall x, YSet.In (sigma x) (Y_x x) }.
 
   Module NX := SumUOT N X.
   Module VY := SumUOT V Y.
@@ -187,7 +189,6 @@ Module VariableFormula (N V : UsualOrderedType)
     Module T := PF.Reduction.T.
     Module Name := PF.Reduction.Name.
     Module Version := PF.Reduction.Version.
-    Module YSet := FSetUOT Y.
     Module NSet := C.NSet.
 
     Definition liftPkg (p : Pkg.t) : PF.Pkg.t := (inl (fst p), inl (snd p)).
@@ -516,9 +517,8 @@ Module VariableFormula (N V : UsualOrderedType)
         forall (R : PkgSet.t) (D : DepRel.t) (r : Pkg.t) (S : T.PkgSet.t),
           T.IsResolution (reduceReal Y_x R D) (reduceDeps Y_x R D)
             (embedPkg r) S ->
-          IsResolution R D r (variableFormulaResolution S)
-            (extractAssignment y0 Y_x S) /\
-          forall x, YSet.In (extractAssignment y0 Y_x S x) (Y_x x).
+          IsResolution Y_x R D r (variableFormulaResolution S)
+            (extractAssignment y0 Y_x S).
     Proof.
       intros y0 Y_x Hne R D r S Hres.
       set (sigma := extractAssignment y0 Y_x S).
@@ -563,7 +563,6 @@ Module VariableFormula (N V : UsualOrderedType)
           + intros ->; exact Hu.
           + intro Hw; assert (E := Huniq _ _ _ Hu Hw).
             injection E as E'; exact (eq_sym E'). }
-      split; [| exact Hsig].
       constructor.
       - intros [m v] Hp; apply mem_variableFormulaResolution in Hp.
         apply (Hreal (inl m) (inl v)), mem_liftReal in Hp.
@@ -583,6 +582,7 @@ Module VariableFormula (N V : UsualOrderedType)
         unfold embedPkg, PF.Reduction.embedPkg, liftPkg in Hv, Hv'.
         cbn [fst snd] in Hv, Hv'.
         assert (E := Huniq _ _ _ Hv Hv'); injection E as E; exact E.
+      - exact Hsig.
     Qed.
 
     Definition coreResolution (Y_x : X.t -> YSet.t) (S : PkgSet.t)
@@ -592,14 +592,12 @@ Module VariableFormula (N V : UsualOrderedType)
 
     Theorem variable_formula_completeness :
       forall (Y_x : X.t -> YSet.t) (R : PkgSet.t) (D : DepRel.t)
-             (r : Pkg.t) (sigma : X.t -> Y.t),
-        (forall x, YSet.In (sigma x) (Y_x x)) ->
-        forall (S : PkgSet.t),
-          IsResolution R D r S sigma ->
-          T.IsResolution (reduceReal Y_x R D) (reduceDeps Y_x R D) (embedPkg r)
-            (coreResolution Y_x S R D sigma).
+             (r : Pkg.t) (S : PkgSet.t) (sigma : X.t -> Y.t),
+        IsResolution Y_x R D r S sigma ->
+        T.IsResolution (reduceReal Y_x R D) (reduceDeps Y_x R D) (embedPkg r)
+          (coreResolution Y_x S R D sigma).
     Proof.
-      intros Y_x R D r sigma Hs S [Hsub Hroot Hclo Huniq].
+      intros Y_x R D r S sigma [Hsub Hroot Hclo Huniq Hs].
       apply PF.Reduction.formula_calculus_completeness.
       - constructor.
         + intros [[m | x] w] Hq; apply mem_liftReal.

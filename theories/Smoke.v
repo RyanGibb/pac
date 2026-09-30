@@ -96,7 +96,7 @@ Proof. reflexivity. Qed.
 
 Example variableFormula_reduceDeps_computes :
   VarF.Reduction.T.DepRel.cardinal
-    (VarF.Reduction.reduceDeps (fun _ => VarF.Reduction.YSet.singleton 0)
+    (VarF.Reduction.reduceDeps (fun _ => VarF.YSet.singleton 0)
        VarF.PkgSet.empty
        (VarF.DepRel.add ((1, 2), VarF.FDep 3 (VarF.VSet.singleton 4))
           VarF.DepRel.empty)) = 1.

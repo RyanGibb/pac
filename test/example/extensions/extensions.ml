@@ -651,7 +651,7 @@ module Variable_formula = struct
     | R.Version.Idx i -> Format.pp_print_int f (Pac_common.Ot.nat_int i)
     | R.Version.Bot -> str f "⊥"
 
-  let yx x = R.YSet.ofList (if x = "os" then [ "linux"; "macos" ] else [])
+  let yx x = M.YSet.ofList (if x = "os" then [ "linux"; "macos" ] else [])
   let r = M.PkgSet.ofList [ ("A", "1"); ("B", "1") ]
 
   let d =
