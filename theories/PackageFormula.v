@@ -44,7 +44,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
   Lemma satisfiesb_iff : forall S psi, satisfiesb S psi = true <-> Satisfies S psi.
   Proof.
     intros S psi;
-      induction psi as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa];
+      induction psi as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
       simpl.
     - rewrite VSet.exists_spec'.
       split; intros [v [Hv Hm]]; exists v; split; try assumption;
@@ -53,7 +53,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     - rewrite Bool.orb_true_iff, IHa, IHb; reflexivity.
     - rewrite Bool.negb_true_iff; split.
       + intros E Hs; apply IHa in Hs; congruence.
-      + intro Hn; destruct (satisfiesb S psiL) eqn:E; [| reflexivity].
+      + intro Hn; destruct (satisfiesb S psi') eqn:E; [| reflexivity].
         exfalso; apply Hn, IHa; reflexivity.
   Qed.
 
@@ -103,7 +103,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
     Proof.
       intros x;
-        induction x as [n1 vs1 | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa];
+        induction x as [n1 vs1 | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
         intros y; destruct y as [n2 vs2 | a2 b2 | a2 b2 | a2]; simpl;
         try (split; intro H; congruence).
       - rewrite lex_eq_iff, NF.compare_eq_iff, VSF.compare_eq_iff;
@@ -118,7 +118,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Lemma compare_antisym : forall x y, compare y x = CompOpp (compare x y).
     Proof.
       intros x;
-        induction x as [n1 vs1 | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa];
+        induction x as [n1 vs1 | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
         intros y; destruct y as [n2 vs2 | a2 b2 | a2 b2 | a2]; simpl;
         try reflexivity.
       - rewrite lex_opp, NF.compare_antisym, VSF.compare_antisym; reflexivity.
@@ -576,7 +576,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             T.PkgSet.In (n, v) (arisingConjNeg n' i psi) -> SyntheticName n).
     Proof.
       unfold SyntheticName;
-        induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa].
+        induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa].
       - split4; intros; exfalso; eapply SOpt.empty_in; eassumption.
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
           destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
@@ -702,7 +702,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         - apply (HM m v (or_intror (ex_intro _ u HwS))) in HvM.
           assert (E := Huniq _ _ _ HwS HvM); injection E as ->.
           exact (Hnv Hv). }
-      induction psi as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa].
+      induction psi as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa].
       - split4.
         + intros q Henc HqS; apply (Hpos q); [| exact HqS].
           apply Henc; simpl; apply SOed.singleton_in; reflexivity.
@@ -962,7 +962,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           T.PkgSet.Subset (witnessSet S chi) (takenDisj S psi).
     Proof.
       intros S psi;
-        induction psi as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa];
+        induction psi as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
         intro Hsat;
         try (eexists; split; [reflexivity |]; split;
              [exact Hsat | intros y Hy; exact Hy]).
@@ -989,7 +989,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           T.PkgSet.Subset (witnessSet S chi) (takenConjNeg S psi).
     Proof.
       intros S psi;
-        induction psi as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa];
+        induction psi as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
         intro Hsat;
         try (eexists; split; [reflexivity |]; split;
              [exact Hsat | intros y Hy; exact Hy]).
@@ -1032,7 +1032,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             T.PkgSet.Subset (takenConjNeg S psi) (arisingConjNeg n i psi)).
     Proof.
       intros S psi;
-        induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa].
+        induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa].
       - split4; intros; intros y H; exfalso; exact (SOpt.empty_in _ H).
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
           destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
@@ -1113,7 +1113,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             v = Version.Idx (firstSatIdx S chis)).
     Proof.
       intros S psi;
-        induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa].
+        induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa].
       - split4; intros chis v; simpl; intro H;
           exfalso; exact (SOpt.empty_in _ H).
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
@@ -1169,7 +1169,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             T.PkgSet.In (n, v) (takenConjNeg S psi) -> SyntheticName n).
     Proof.
       unfold SyntheticName; intros S psi;
-        induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa].
+        induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa].
       - split4; intros n v; simpl; intro H;
           exfalso; exact (SOpt.empty_in _ H).
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
@@ -1300,7 +1300,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
              T.PkgSet.Subset (witnessSet S chi) (takenConjNeg S psi)).
     Proof.
       intros S psi;
-        induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa].
+        induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa].
       - split4; intros Hyp chis i; simpl; intro H;
           exfalso; exact (SOpt.empty_in _ H).
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
@@ -1374,9 +1374,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
               ltac:(apply T.PkgSet.union_spec; right).
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4; intros Hyp chis i.
         + exact (IHa2 Hyp chis i).
-        + exact (IHa1 (satisfies_double_neg S psiL Hyp) chis i).
+        + exact (IHa1 (satisfies_double_neg S psi' Hyp) chis i).
         + exact (IHa2 Hyp chis i).
-        + exact (IHa1 (satisfies_double_neg S psiL Hyp) chis i).
+        + exact (IHa1 (satisfies_double_neg S psi' Hyp) chis i).
     Qed.
 
     Lemma coreResolution_disj : forall S R D chis i,
@@ -1466,7 +1466,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
               [apply mem_complementVS; left; split; [reflexivity | exact Ha] |].
             exact (Hbot m Hm Ha Hnone).
           + destruct (Htot m Hm Ha) as [u Hu]; destruct (Hnone u Hu). }
-      induction psi as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa];
+      induction psi as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
         intro Hsub.
       - assert (Hm : NSet.In m ns)
           by (apply Hsub; simpl; apply NSet.singleton_spec; reflexivity).
@@ -1659,19 +1659,19 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           destruct Hwit as [Hq0 | [Hnn Hsub']];
             [exact (IHa1 q0 (or_introl Hq0) q n ws Henc Hqw)
             | exact (IHa1 q0
-                       (or_intror (conj (satisfies_double_neg S_Psi psiL Hnn) Hsub'))
+                       (or_intror (conj (satisfies_double_neg S_Psi psi' Hnn) Hsub'))
                        q n ws Henc Hqw)].
         + intros n' i0 Hspine q n ws Henc Hqw.
-          assert (Hwit := Hspine 0 (FNeg psiL) eq_refl);
+          assert (Hwit := Hspine 0 (FNeg psi') eq_refl);
             replace (i0 + 0) with i0 in Hwit by lia.
           exact (IHa2 (n', Version.Idx i0) Hwit q n ws Henc Hqw).
         + intros n' i0 Hspine q n ws Henc Hqw.
-          assert (Hwit := Hspine 0 (FNeg (FNeg psiL)) eq_refl);
+          assert (Hwit := Hspine 0 (FNeg (FNeg psi')) eq_refl);
             replace (i0 + 0) with i0 in Hwit by lia.
           destruct Hwit as [Hq0 | [Hnn Hsub']];
             [exact (IHa1 (n', Version.Idx i0) (or_introl Hq0) q n ws Henc Hqw)
             | exact (IHa1 (n', Version.Idx i0)
-                       (or_intror (conj (satisfies_double_neg S_Psi psiL Hnn) Hsub'))
+                       (or_intror (conj (satisfies_double_neg S_Psi psi' Hnn) Hsub'))
                        q n ws Henc Hqw)].
     Qed.
 
@@ -1780,7 +1780,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
               n = Name.Orig m).
       Proof.
         intros Vq psi;
-          induction psi as [o ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa].
+          induction psi as [o ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa].
         - split4.
           + intros q m w d H; apply SOed.singleton_in in H; congruence.
           + intros q m w d H; apply SOed.singleton_in in H; congruence.
@@ -1846,7 +1846,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
               NSet.In m (fnames psi)).
       Proof.
         intros Vq psi;
-          induction psi as [o vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa].
+          induction psi as [o vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa].
         - split4; intros; apply SOed.singleton_in in H; injection H as _ <- _;
             simpl; apply NSet.singleton_spec; reflexivity.
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
@@ -1902,7 +1902,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           (forall n i, encodeConjNeg Vq n i psi = encodeConjNeg Vq' n i psi).
       Proof.
         intros Vq Vq' psi;
-          induction psi as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa];
+          induction psi as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
             intro Hag.
         - assert (E : Vq m = Vq' m)
             by (apply Hag; simpl; apply NSet.singleton_spec; reflexivity).
@@ -1964,7 +1964,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           (forall n i, encodeDisj Vq n i psi = encodeDisj Vq' n i psi).
       Proof.
         intros Vq Vq' psi;
-          induction psi as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa];
+          induction psi as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
             intro Hag.
         - split; intros; reflexivity.
         - assert (Ha : forall m, NSet.In m (negNames psiL) -> Vq m = Vq' m)
@@ -1983,7 +1983,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                 exact Hm).
           destruct (IHa Ha) as [IHa1 _]; destruct (IHb Hb) as [_ IHb2];
             split; intros; simpl; rewrite IHa1, IHb2; reflexivity.
-        - destruct (encodeNNF_agree_aux Vq Vq' psiL Hag) as (_ & Hn & _ & _);
+        - destruct (encodeNNF_agree_aux Vq Vq' psi' Hag) as (_ & Hn & _ & _);
             split; intros; simpl; apply Hn.
       Qed.
 
@@ -2022,7 +2022,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
               T.PkgSet.In q (arisingConjNeg n i psi) ->
               T.PkgSet.In q (syntheticPkgs (fst q))).
       Proof.
-        induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa].
+        induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa].
         - split4; intros; exfalso; eapply SOpt.empty_in; eassumption.
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
             destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
@@ -2081,7 +2081,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                 (arisingConjNeg n i psi)).
       Proof.
         intros Vq psi;
-          induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa].
+          induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa].
         - split4; intros; apply SOed.singleton_in in H; subst d;
             cbn [fst snd syntheticPkgs]; apply T.PkgSet.empty_subset.
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
@@ -2240,7 +2240,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
              T.DepRel.In ((Name.Orig n, w), d) (encodeNNFneg Vq' q psi)).
       Proof.
         intros Vq Vq' psi;
-          induction psi as [o vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa].
+          induction psi as [o vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa].
         - split; intros Hag q n w d H; simpl in H |- *; [exact H |].
           assert (E : Vq o = Vq' o)
             by (apply Hag; simpl; apply NSet.singleton_spec; reflexivity).
@@ -2386,7 +2386,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           T.DepRel.In ((n, Version.Idx (i0 + j)), d) (encodeDisj Vq n i0 psi).
       Proof.
         intros Vq psi;
-          induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa];
+          induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
           intros n i0 j chi d Hg Hd; simpl in Hg.
         - destruct j as [| j]; [| destruct j; discriminate].
           injection Hg as <-; replace (i0 + 0) with i0 in * by lia; exact Hd.
@@ -2411,7 +2411,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           T.DepRel.In ((n, Version.Idx (i0 + j)), d) (encodeConjNeg Vq n i0 psi).
       Proof.
         intros Vq psi;
-          induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa];
+          induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
           intros n i0 j chi d Hg Hd; simpl in Hg.
         - destruct j as [| j]; [| destruct j; discriminate].
           injection Hg as <-; replace (i0 + 0) with i0 in * by lia; exact Hd.
@@ -2465,7 +2465,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                 (encodeConjNeg Vq n i0 psi)).
       Proof.
         intros Vq psi;
-          induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa].
+          induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa].
         - split4; intros; exfalso; eapply SOpt.empty_in; eassumption.
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
             destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
@@ -2580,7 +2580,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                            (encodeNNF Vq (Name.Disjunct chis, Version.Idx i) chi))).
       Proof.
         intros Vq psi;
-          induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa].
+          induction psi as [m ws | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa].
         - split4.
           + intros q chis i d H; apply SOed.singleton_in in H;
               left; congruence.
@@ -2690,14 +2690,14 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             destruct (IHa2 _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
             injection Eq as Eq1 Eq2; subst n; left;
               split; [reflexivity |].
-            exists 0, (FNeg psiL); subst i;
+            exists 0, (FNeg psi'); subst i;
               split; [lia | split; [reflexivity |]].
             exact H.
           + intros n i0 chis i d H; simpl in H.
             destruct (IHa1 _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
             injection Eq as Eq1 Eq2; subst n; left;
               split; [reflexivity |].
-            exists 0, (FNeg (FNeg psiL)); subst i;
+            exists 0, (FNeg (FNeg psi')); subst i;
               split; [lia | split; [reflexivity |]].
             exact H.
       Qed.
@@ -2737,7 +2737,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       Lemma negNames_fnames : forall psi m,
           NSet.In m (negNames psi) -> NSet.In m (fnames psi).
       Proof.
-        induction psi as [o vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa];
+        induction psi as [o vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
           intros m Hx; cbn [negNames fnames] in *.
         - destruct (NSet.empty_spec Hx).
         - apply NSet.union_spec in Hx; apply NSet.union_spec.
@@ -2753,7 +2753,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           List.In chi (disjSpine psiR) -> NSet.In m (negNames chi) ->
           NSet.In m (negNames psiR).
       Proof.
-        induction psiR as [o vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa];
+        induction psiR as [o vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
           intros chi m Hg Hx; cbn [disjSpine] in Hg;
           try (destruct Hg as [<- | []]; exact Hx).
         destruct Hg as [<- | Hg]; cbn [negNames]; apply NSet.union_spec;
@@ -2764,7 +2764,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           List.In chi (negConjSpine psiR) -> NSet.In m (negNames chi) ->
           NSet.In m (fnames psiR).
       Proof.
-        induction psiR as [o vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa];
+        induction psiR as [o vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
           intros chi m Hg Hx; cbn [negConjSpine] in Hg;
           try (destruct Hg as [<- | []]; exact Hx).
         destruct Hg as [<- | Hg]; cbn [fnames]; apply NSet.union_spec;
@@ -2789,7 +2789,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
               List.In chi chis -> NSet.In m (negNames chi) ->
               NSet.In m (fnames psi)).
       Proof.
-        induction psi as [o vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa].
+        induction psi as [o vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa].
         - split4; intros; exfalso; eapply SOpt.empty_in; eassumption.
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
             destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.

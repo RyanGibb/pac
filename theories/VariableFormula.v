@@ -45,7 +45,7 @@ Module VariableFormula (N V : UsualOrderedType)
   Proof.
     intros S sigma psi;
       induction psi
-        as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa | x op y];
+        as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa | x op y];
       simpl.
     - rewrite VSet.exists_spec'.
       split; intros [v [Hv Hm]]; exists v; split; try assumption;
@@ -54,7 +54,7 @@ Module VariableFormula (N V : UsualOrderedType)
     - rewrite Bool.orb_true_iff, IHa, IHb; reflexivity.
     - rewrite Bool.negb_true_iff; split.
       + intros E Hs; apply IHa in Hs; congruence.
-      + intro Hn; destruct (satisfiesb S sigma psiL) eqn:E; [| reflexivity].
+      + intro Hn; destruct (satisfiesb S sigma psi') eqn:E; [| reflexivity].
         exfalso; apply Hn, IHa; reflexivity.
     - reflexivity.
   Qed.
@@ -111,7 +111,7 @@ Module VariableFormula (N V : UsualOrderedType)
     Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
     Proof.
       intros x; induction x
-        as [n1 vs1 | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa | x1 o1 y1];
+        as [n1 vs1 | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa | x1 o1 y1];
         intros y; destruct y as [n2 vs2 | a2 b2 | a2 b2 | a2 | x2 o2 y2]; simpl;
         try (split; intro H; congruence).
       - rewrite lex_eq_iff, NF.compare_eq_iff, VSF.compare_eq_iff;
@@ -127,7 +127,7 @@ Module VariableFormula (N V : UsualOrderedType)
     Lemma compare_antisym : forall x y, compare y x = CompOpp (compare x y).
     Proof.
       intros x; induction x
-        as [n1 vs1 | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa | x1 o1 y1];
+        as [n1 vs1 | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa | x1 o1 y1];
         intros y; destruct y as [n2 vs2 | a2 b2 | a2 b2 | a2 | x2 o2 y2]; simpl;
         try reflexivity.
       - rewrite lex_opp, NF.compare_antisym, VSF.compare_antisym; reflexivity.
@@ -479,7 +479,7 @@ Module VariableFormula (N V : UsualOrderedType)
     Proof.
       intros Y_x S sigma psi Hs;
         induction psi
-          as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa | x op y];
+          as [m vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa | x op y];
         cbn [Satisfies PF.Satisfies liftFormula].
       - split.
         + intros [v [Hv Hm]]; exists (inl v); split;
@@ -695,7 +695,7 @@ Module VariableFormula (N V : UsualOrderedType)
       Proof.
         intros Y_x psi m;
           induction psi
-            as [o vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psiL IHa | x op y];
+            as [o vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa | x op y];
           cbn [liftFormula PF.Reduction.Lookup.ownNegNames
                PF.Reduction.Lookup.ownNegNamesNeg ownNegNames ownNegNamesNeg];
           split; intro H;
