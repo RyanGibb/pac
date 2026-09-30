@@ -50,13 +50,13 @@ def primaries(o):
         n, u = sorted(slot["npm"].get(k, ())), sorted(slot["ours"].get(k, ()))
         if k[:2] not in nodes["npm"] & nodes["ours"] or n == u:
             continue
-        target, vn, vo = (n or u)[0][0], n[0][1] if n else None, u[0][1] if u else None
-        held = sum(1 for e in edges["npm"] if e[3:] == (target, vn)) > 1
+        name, vn, vo = (n or u)[0][0], n[0][1] if n else None, u[0][1] if u else None
+        held = sum(1 for e in edges["npm"] if e[3:] == (name, vn)) > 1
         rel = ("npm only" if vo is None else "ours only" if vn is None else
                ("npm older" if vkey(vn) < vkey(vo) else "npm newer") + (", held by another requirer" if held else ""))
         tags = [side + tag for side, v in (("npm", vn), ("ours", vo)) if v for tag, on in (
-            ("=latest", v == packument(target).get("dist-tags", {}).get("latest")),
-            (" deprecated", packument(target).get("versions", {}).get(v, {}).get("deprecated")),
+            ("=latest", v == packument(name).get("dist-tags", {}).get("latest")),
+            (" deprecated", packument(name).get("versions", {}).get(v, {}).get("deprecated")),
             (" prerelease", "-" in v)) if on]
         yield "%s; %s; %s" % (kind(*k), rel, " ".join(tags) or "-")
 

@@ -4,7 +4,7 @@
   scale.py sample SEED N          N index files drawn uniformly, as crate
                                   names; one with no release left unyanked
                                   is dropped, since there is no root to ask
-  scale.py targets SEED K [EXCL]  K crates per pool, as pool<TAB>crate, each
+  scale.py pools SEED K [EXCL]    K crates per pool, as pool<TAB>crate, each
                                   pool exercising one modelling decision in
                                   the crate's newest release
   scale.py one CRATE STEM         pac's and cargo's answers, at STEM.*
@@ -79,27 +79,27 @@ def summary(rel):
     return {"name": top["name"], "msrv": top.get("rust_version"), "links": top.get("links"),
             "weak": any("?/" in e for e in feats),
             "vers": [(j["vers"], j.get("rust_version")) for j in rows if not j.get("yanked")],
-            "deps": [{"alias": d["name"], "target": (d.get("package") or d["name"]).lower(),
+            "deps": [{"alias": d["name"], "dependee": (d.get("package") or d["name"]).lower(),
                       "renamed": d["name"] != (d.get("package") or d["name"]),
                       "req": d.get("req", "*"), "kind": d.get("kind") or "normal",
                       "cfg": d.get("target"), "optional": bool(d.get("optional"))}
                      for d in top.get("deps") or []]}
 
 
-def targets(seed, k, exclude=None):
+def pool_crates(seed, k, exclude=None):
     with multiprocessing.Pool() as pool:
         tops = [s for s in pool.imap(summary, index_files(), chunksize=256) if s]
     by = {s["name"].lower(): s for s in tops}
 
     @functools.lru_cache(maxsize=None)
-    def moves(target, req, tc):
+    def moves(name, req, tc):
         """Whether the best version req admits is past toolchain tc while an
         older one of its class is not: where the MSRV preference acts."""
         try:
             r = requirement(req)
         except ValueError:
             return False
-        adm = [(v, m) for v, m in by[target]["vers"] if holds(v, r)] if target in by else []
+        adm = [(v, m) for v, m in by[name]["vers"] if holds(v, r)] if name in by else []
         if not adm:
             return False
         best = max(adm, key=lambda x: vkey(x[0]))
@@ -107,7 +107,7 @@ def targets(seed, k, exclude=None):
             msrv_ok(m, tc) for v, m in adm if compat_class(v) == compat_class(best[0]) and v != best[0])
 
     def msrv_move(s):
-        return any(moves(d["target"], d["req"], s["msrv"] or RUSTC_VERSION) for d in s["deps"])
+        return any(moves(d["dependee"], d["req"], s["msrv"] or RUSTC_VERSION) for d in s["deps"])
 
     def several(s, key, val):
         seen = {}
@@ -116,7 +116,7 @@ def targets(seed, k, exclude=None):
         return any(len(v) > 1 for v in seen.values())
 
     def reached(s, pred):
-        return any(d["target"] in by and pred(d, by[d["target"]]) for d in s["deps"])
+        return any(d["dependee"] in by and pred(d, by[d["dependee"]]) for d in s["deps"])
 
     pools = {
         "msrv-fallback": lambda s: not s["msrv"] and msrv_move(s),
@@ -124,13 +124,13 @@ def targets(seed, k, exclude=None):
         "weak-features": lambda s: s["weak"],
         "optional": lambda s: any(d["optional"] for d in s["deps"]),
         "renamed": lambda s: any(d["renamed"] for d in s["deps"]),
-        "multisite": lambda s: several(s, lambda d: d["target"], lambda d: (d["alias"], d["kind"], d["cfg"])),
+        "multisite": lambda s: several(s, lambda d: d["dependee"], lambda d: (d["alias"], d["kind"], d["cfg"])),
         "cfg": lambda s: any(d["cfg"] for d in s["deps"]),
-        "cfg-split": lambda s: several(s, lambda d: (d["target"], d["kind"]), lambda d: d["cfg"]),
+        "cfg-split": lambda s: several(s, lambda d: (d["dependee"], d["kind"]), lambda d: d["cfg"]),
         "build": lambda s: any(d["kind"] == "build" for d in s["deps"]),
         "dev": lambda s: any(d["kind"] == "dev" for d in s["deps"]),
         "dev-cycle": lambda s: reached(s, lambda d, t: d["kind"] == "dev" and any(
-            e["target"] == s["name"].lower() and e["kind"] != "dev" for e in t["deps"])),
+            e["dependee"] == s["name"].lower() and e["kind"] != "dev" for e in t["deps"])),
         "links": lambda s: bool(s["links"]),
         "links-user": lambda s: reached(s, lambda d, t: d["kind"] != "dev" and bool(t["links"])),
     }
@@ -204,4 +204,4 @@ def corr(p):
 
 
 if __name__ == "__main__":
-    {"sample": sample, "targets": targets, "one": one, "corr": corr}[sys.argv[1]](*sys.argv[2:])
+    {"sample": sample, "pools": pool_crates, "one": one, "corr": corr}[sys.argv[1]](*sys.argv[2:])

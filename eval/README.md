@@ -176,7 +176,7 @@ With neither flag, `scale.sh` asks the tool over every package in the index (car
 MODES=pubgrub eval/alpine/scale.sh _build/default/bin/main.exe /tmp/scale/alpine
 MODES=tool P=32 eval/debian/scale.sh _build/default/bin/main.exe /tmp/scale/debian
 eval/opam/scale.sh _build/default/bin/main.exe /tmp/scale/opam-test <(ls repos/opam-repository/packages | sed 's/^/--with-test /')
-python3 eval/cargo/scale.py targets 20260923 150 > /tmp/pools.txt && eval/cargo/scale.sh _build/default/bin/main.exe /tmp/scale/cargo /tmp/pools.txt
+python3 eval/cargo/scale.py pools 20260923 150 > /tmp/pools.txt && eval/cargo/scale.sh _build/default/bin/main.exe /tmp/scale/cargo /tmp/pools.txt
 node eval/npm/queries.js repos/npm targeted > /tmp/ranges.txt && eval/npm/scale.sh _build/default/bin/main.exe /tmp/scale/npm /tmp/ranges.txt
 ```
 
