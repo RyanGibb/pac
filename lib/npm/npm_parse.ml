@@ -10,8 +10,8 @@ type dep = {
 }
 
 type peer = {
+  p_dir : string;
   p_name : string;
-  p_target : string;
   p_spec : spec;
   p_optional : bool;
   p_root : bool;
@@ -134,7 +134,7 @@ let peer_of ~reject ?(berry_only = []) ~aliases
     | Some m -> ( match member "optional" m with `Bool b -> b | _ -> false)
     | None -> false
   in
-  let target, rg =
+  let name, rg =
     match spec with
     | `String s when aliases -> (
         match split_alias s with
@@ -150,8 +150,8 @@ let peer_of ~reject ?(berry_only = []) ~aliases
   | Some sp ->
       Some
         {
-          p_name = key;
-          p_target = target;
+          p_dir = key;
+          p_name = name;
           p_spec = sp;
           p_optional = optional;
           p_root = not (List.mem key berry_only);

@@ -99,7 +99,7 @@ module Make () = struct
     in
     let peers_on n a =
       match meta n with
-      | Some m -> List.exists (fun (q : P.peer) -> q.P.p_name = a) m.P.v_peers
+      | Some m -> List.exists (fun (q : P.peer) -> q.P.p_dir = a) m.P.v_peers
       | None -> false
     in
     let rec shows seen p a =
@@ -131,7 +131,7 @@ module Make () = struct
             List.iter
               (fun (q : P.peer) ->
                 if not (optional && q.P.p_optional) then
-                  List.iter keep (shows [] h q.P.p_name))
+                  List.iter keep (shows [] h q.P.p_dir))
               m.P.v_peers
       end
     in

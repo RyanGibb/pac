@@ -19,12 +19,12 @@ type dep = {
 
 (* p_root: whether the root installs a copy for the peer where nothing else
    provides one, which it does not for a peer only Yarn Berry reads.
-   p_target: the registry package the peer asks for, which an npm: alias
-   makes differ from p_name, the directory; only [`Placement] keeps an
+   p_name: the registry package the peer asks for, which an npm: alias
+   makes differ from p_dir, the directory; only [`Placement] keeps an
    aliased peer. *)
 type peer = {
+  p_dir : string;
   p_name : string;
-  p_target : string;
   p_spec : spec;
   p_optional : bool;
   p_root : bool;
