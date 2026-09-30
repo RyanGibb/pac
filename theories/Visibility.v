@@ -410,13 +410,13 @@ Module Visibility (N V : UsualOrderedType).
     Module SOvv := SetOps V V VSet T.VSet.
     (* Module application is generative, so the core's version sets are a
        fresh type even though the versions in them are the same. *)
-    Definition embedVS (vs : VSet.t) : T.VSet.t := SOvv.map (fun u => u) vs.
+    Definition embedVS (vs : VSet.t) : T.VSet.t := SOvv.map (fun v => v) vs.
 
-    Lemma mem_embedVS : forall vs u, T.VSet.In u (embedVS vs) <-> VSet.In u vs.
+    Lemma mem_embedVS : forall vs v, T.VSet.In v (embedVS vs) <-> VSet.In v vs.
     Proof.
-      intros vs u; unfold embedVS; rewrite SOvv.mem_map.
-      split; [intros [x [Hx ->]]; exact Hx |].
-      intro H; exists u; split; [exact H | reflexivity].
+      intros vs v; unfold embedVS; rewrite SOvv.mem_map.
+      split; [intros [u [Hu ->]]; exact Hu |].
+      intro H; exists v; split; [exact H | reflexivity].
     Qed.
 
     Definition embedRoot (r : Pkg.t) : T.Pkg.t :=
@@ -1194,17 +1194,17 @@ Module Visibility (N V : UsualOrderedType).
       destruct Hres as [Hconc Hvv].
       destruct Hconc as [Hsub Hroot Hpc Hpif Hvg Hps].
       constructor.
-      - intros y Hy; apply mem_coreResolution in Hy; apply mem_reduceReal.
-        destruct Hy; econstructor; try apply Hsub; eassumption.
+      - intros p Hp; apply mem_coreResolution in Hp; apply mem_reduceReal.
+        destruct Hp; econstructor; try apply Hsub; eassumption.
       - destruct r as [rn rv].
         apply mem_coreResolution; constructor;
           [exact Hroot | apply mem_potentialOrigins; left; reflexivity
           | left; reflexivity | apply InSubSelf].
-      - intros y Hy; apply mem_coreResolution in Hy.
-        destruct Hy as [n v q HS Hq Ho Hins
+      - intros p Hp; apply mem_coreResolution in Hp.
+        destruct Hp as [n v q HS Hq Ho Hins
                        | n v m vs q u HD Hq Hu Ho Hins Hc Hpi
                        | n v m vs u HD Hu HS Hpi];
-          intros tn tvs Hd; apply mem_reduceDeps in Hd.
+          intros o us Hd; apply mem_reduceDeps in Hd.
         + inversion Hd as [n1 v1 q1 HR1 Hq1 Hpriv1 Hne1
                           | n1 v1 m1 vs1 q1 HD1 Hq1 Hc1 | |]; subst.
           * eexists; split; [apply SOvv.singleton_in; reflexivity |].
@@ -1420,7 +1420,7 @@ Module Visibility (N V : UsualOrderedType).
       Proof.
         intros R D pub r n v q Hmem.
         destruct (occurrence_mem_reduceReal R D pub r n v q Hmem) as [HR Hq].
-        apply T.dependees_ext; intros [tn tvs].
+        apply T.dependees_ext; intros [o us].
         rewrite !mem_reduceDeps.
         split; intro H;
           inversion H as [n1 v1 q1 HR1 Hq1 Hpriv Hne
@@ -1477,7 +1477,7 @@ Module Visibility (N V : UsualOrderedType).
         intros R D pub r n v m q u Hmem.
         assert (Hq : PkgSet.In q (potentialOrigins R D pub r))
           by (apply mem_reduceReal in Hmem; inversion Hmem; assumption).
-        apply T.dependees_ext; intros [tn tvs].
+        apply T.dependees_ext; intros [o us].
         rewrite !mem_reduceDeps.
         split; intro H;
           inversion H as [| | n1 v1 m1 vs q1 u1 HD1 Hq1 Hc Hu1
@@ -1514,7 +1514,7 @@ Module Visibility (N V : UsualOrderedType).
           T.DependeesSet.empty.
       Proof.
         intros R D pub r n v m u; apply T.dependees_empty_iff.
-        intros [tn tvs] H; apply mem_reduceDeps in H; inversion H.
+        intros [o us] H; apply mem_reduceDeps in H; inversion H.
       Qed.
 
     End Lookup.

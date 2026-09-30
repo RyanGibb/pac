@@ -688,12 +688,12 @@ Module Placement (N V : UsualOrderedType).
         (if keep l then SOvt.map (Version.Found l) vs else T.VSet.empty)
         (match l with nil => T.VSet.empty | _ :: l' => along keep l' vs end).
 
-    Lemma mem_along : forall keep l vs w,
-        T.VSet.In w (along keep l vs) <->
+    Lemma mem_along : forall keep l vs v,
+        T.VSet.In v (along keep l vs) <->
         exists l' u, Suffix l' l /\ keep l' = true /\ VSet.In u vs /\
-          w = Version.Found l' u.
+          v = Version.Found l' u.
     Proof.
-      intros keep l vs w; induction l as [| b l IH]; cbn [along];
+      intros keep l vs v; induction l as [| b l IH]; cbn [along];
         rewrite T.VSet.union_spec, SOvt.in_if_empty, SOvt.mem_map.
       - split.
         + intros [[Hk [u [Hu ->]]] | H]; [| destruct (T.VSet.empty_spec H)].
@@ -723,22 +723,22 @@ Module Placement (N V : UsualOrderedType).
                (C.versions (inst_repo I) a))
       end.
 
-    Lemma mem_versions_loc : forall I depth l a w,
-        T.VSet.In w (versions I depth (Name.Loc l a)) <->
-        w = Version.Bot \/
+    Lemma mem_versions_loc : forall I depth l a u,
+        T.VSet.In u (versions I depth (Name.Loc l a)) <->
+        u = Version.Bot \/
         exists v, length l < depth /\ PkgSet.In (a, v) (inst_repo I) /\
-          w = Version.Occ v.
+          u = Version.Occ v.
     Proof.
       intros; cbn [versions].
       rewrite SOvt.add_in, SOvt.in_if_empty, SOvt.mem_map, Nat.ltb_lt.
       setoid_rewrite C.mem_versions; firstorder.
     Qed.
 
-    Lemma mem_versions_walk : forall I depth l a w,
-        T.VSet.In w (versions I depth (Name.Walk l a)) <->
-        w = Version.Bot \/
+    Lemma mem_versions_walk : forall I depth l a v,
+        T.VSet.In v (versions I depth (Name.Walk l a)) <->
+        v = Version.Bot \/
         exists l' u, Suffix l' l /\ length l' < depth /\
-          PkgSet.In (a, u) (inst_repo I) /\ w = Version.Found l' u.
+          PkgSet.In (a, u) (inst_repo I) /\ v = Version.Found l' u.
     Proof.
       intros; cbn [versions]; rewrite SOvt.add_in, mem_along.
       setoid_rewrite Nat.ltb_lt; setoid_rewrite C.mem_versions; reflexivity.
@@ -747,22 +747,22 @@ Module Placement (N V : UsualOrderedType).
     Module SOvp := SetOps VersionOT T.Pkg T.VSet T.PkgSet.
     Definition reduceReal (I : Inst) (depth : nat) : T.PkgSet.t :=
       T.PkgSet.unions
-        (List.map (fun n => SOvp.map (fun w => (n, w)) (versions I depth n))
+        (List.map (fun n => SOvp.map (fun v => (n, v)) (versions I depth n))
            (rangeNames I depth)).
 
-    Lemma mem_reduceReal : forall I depth n w,
-        T.PkgSet.In (n, w) (reduceReal I depth) <->
-        InRange I depth n /\ T.VSet.In w (versions I depth n).
+    Lemma mem_reduceReal : forall I depth n v,
+        T.PkgSet.In (n, v) (reduceReal I depth) <->
+        InRange I depth n /\ T.VSet.In v (versions I depth n).
     Proof.
-      intros I depth n w; unfold reduceReal; rewrite T.PkgSet.mem_unions; split.
-      - intros [s [Hs Hw]]; apply List.in_map_iff in Hs.
-        destruct Hs as [m [<- Hm]]; apply SOvp.mem_map in Hw.
-        destruct Hw as [w' [Hw' E]]; injection E as -> ->.
-        split; [apply in_rangeNames; exact Hm | exact Hw'].
-      - intros [Hn Hw]; exists (SOvp.map (fun w => (n, w)) (versions I depth n)).
+      intros I depth n v; unfold reduceReal; rewrite T.PkgSet.mem_unions; split.
+      - intros [s [Hs Hv]]; apply List.in_map_iff in Hs.
+        destruct Hs as [m [<- Hm]]; apply SOvp.mem_map in Hv.
+        destruct Hv as [v' [Hv' E]]; injection E as -> ->.
+        split; [apply in_rangeNames; exact Hm | exact Hv'].
+      - intros [Hn Hv]; exists (SOvp.map (fun v => (n, v)) (versions I depth n)).
         split; [apply List.in_map_iff; exists n; split;
                 [reflexivity | apply in_rangeNames; exact Hn] |].
-        apply SOvp.mem_map; exists w; split; [exact Hw | reflexivity].
+        apply SOvp.mem_map; exists v; split; [exact Hv | reflexivity].
     Qed.
 
     Definition accept (l : Path.t) (vs : VSet.t) : T.VSet.t :=
@@ -772,11 +772,11 @@ Module Placement (N V : UsualOrderedType).
         : T.VSet.t :=
       if optional then T.VSet.add Version.Bot (accept la vs) else accept la vs.
 
-    Lemma mem_optAccept : forall optional la vs w,
-        T.VSet.In w (optAccept optional la vs) <->
-        (optional = true /\ w = Version.Bot) \/ T.VSet.In w (accept la vs).
+    Lemma mem_optAccept : forall optional la vs v,
+        T.VSet.In v (optAccept optional la vs) <->
+        (optional = true /\ v = Version.Bot) \/ T.VSet.In v (accept la vs).
     Proof.
-      intros [|] la vs w; cbn [optAccept].
+      intros [|] la vs v; cbn [optAccept].
       - rewrite SOvt.add_in; split.
         + intros [H | H]; [left; split; [reflexivity | exact H] |].
           right; exact H.
@@ -835,9 +835,9 @@ Module Placement (N V : UsualOrderedType).
           exists n, vs; exact H.
     Qed.
 
-    Definition walkDeps (l : Path.t) (a : N.t) (w : Version.t)
+    Definition walkDeps (l : Path.t) (a : N.t) (v : Version.t)
         : T.DependeesSet.t :=
-      match w with
+      match v with
       | Version.Occ _ => T.DependeesSet.empty
       | Version.Found l' u =>
           if Path.eq_dec l' l
@@ -845,7 +845,7 @@ Module Placement (N V : UsualOrderedType).
                  (Name.Loc l a, T.VSet.singleton (Version.Occ u))
           else T.DependeesSet.add (Name.Loc l a, T.VSet.singleton Version.Bot)
                  (T.DependeesSet.singleton
-                    (Name.Walk (par l) a, T.VSet.singleton w))
+                    (Name.Walk (par l) a, T.VSet.singleton v))
       | Version.Bot =>
           T.DependeesSet.add (Name.Loc l a, T.VSet.singleton Version.Bot)
             (match l with
@@ -860,7 +860,7 @@ Module Placement (N V : UsualOrderedType).
       match q with
       | (Name.Root, Version.Occ _) => edgeAtoms I (inst_root I) nil
       | (Name.Loc l a, Version.Occ v) => edgeAtoms I (a, v) (a :: l)
-      | (Name.Walk l a, w) => walkDeps l a w
+      | (Name.Walk l a, v) => walkDeps l a v
       | _ => T.DependeesSet.empty
       end.
 
@@ -916,32 +916,32 @@ Module Placement (N V : UsualOrderedType).
         injection H as <-; reflexivity.
     Qed.
 
-    Lemma choose_decode : forall S l a w,
-        T.VersionUnique S -> T.PkgSet.In (Name.Loc l a, w) S ->
+    Lemma choose_decode : forall S l a v,
+        T.VersionUnique S -> T.PkgSet.In (Name.Loc l a, v) S ->
         VSet.choose (occupants (placementResolution S) l a) =
-        match w with Version.Occ u => Some u | _ => None end.
+        match v with Version.Occ u => Some u | _ => None end.
     Proof.
-      intros S l a w Huniq Hw.
-      assert (Hocc : forall v,
-                 VSet.In v (occupants (placementResolution S) l a) <->
-                 w = Version.Occ v).
-      { intro v; rewrite mem_occupants, mem_placementResolution.
-        split; [intro H; exact (Huniq _ _ _ Hw H) | intros <-; exact Hw]. }
+      intros S l a v Huniq Hv.
+      assert (Hocc : forall u,
+                 VSet.In u (occupants (placementResolution S) l a) <->
+                 v = Version.Occ u).
+      { intro u; rewrite mem_occupants, mem_placementResolution.
+        split; [intro H; exact (Huniq _ _ _ Hv H) | intros <-; exact Hv]. }
       destruct (VSet.choose (occupants (placementResolution S) l a))
-        as [x |] eqn:Hc.
-      - apply VSet.choose_spec1, Hocc in Hc; subst w; reflexivity.
+        as [u |] eqn:Hc.
+      - apply VSet.choose_spec1, Hocc in Hc; subst v; reflexivity.
       - apply VSet.choose_spec2 in Hc.
-        destruct w as [u | |]; try reflexivity.
+        destruct v as [u | |]; try reflexivity.
         exfalso; apply (Hc u), Hocc; reflexivity.
     Qed.
 
-    Definition walkOf (w : Version.t) : option (Path.t * V.t) :=
-      match w with Version.Found l u => Some (l, u) | _ => None end.
+    Definition walkOf (v : Version.t) : option (Path.t * V.t) :=
+      match v with Version.Found l u => Some (l, u) | _ => None end.
 
     Lemma walk_decode : forall I depth S,
         T.IsResolution (reduceReal I depth) (reduceDeps I depth) (rootPkg I) S ->
-        forall l a w, T.PkgSet.In (Name.Walk l a, w) S ->
-        walk (placementResolution S) l a = walkOf w.
+        forall l a v, T.PkgSet.In (Name.Walk l a, v) S ->
+        walk (placementResolution S) l a = walkOf v.
     Proof.
       intros I depth S [Hsub _ Hdep Huniq] l a.
       assert (Hone : forall l0 w n x, T.PkgSet.In (Name.Walk l0 a, w) S ->
@@ -992,7 +992,7 @@ Module Placement (N V : UsualOrderedType).
     Lemma holds_decode : forall I depth S l p,
         T.IsResolution (reduceReal I depth) (reduceDeps I depth) (rootPkg I) S ->
         (forall n ws, T.DependeesSet.In (n, ws) (edgeAtoms I p l) ->
-           exists w, T.VSet.In w ws /\ T.PkgSet.In (n, w) S) ->
+           exists v, T.VSet.In v ws /\ T.PkgSet.In (n, v) S) ->
         Holds I (placementResolution S) l p.
     Proof.
       intros I depth S l p Hres Hcl peer optional n vs HE.
@@ -1064,11 +1064,11 @@ Module Placement (N V : UsualOrderedType).
         : T.PkgSet.t :=
       T.PkgSet.ofList (List.map (fun n => (n, value I L n)) (rangeNames I depth)).
 
-    Lemma mem_coreResolution : forall I depth L n w,
-        T.PkgSet.In (n, w) (coreResolution I depth L) <->
-        InRange I depth n /\ w = value I L n.
+    Lemma mem_coreResolution : forall I depth L n v,
+        T.PkgSet.In (n, v) (coreResolution I depth L) <->
+        InRange I depth n /\ v = value I L n.
     Proof.
-      intros I depth L n w; unfold coreResolution.
+      intros I depth L n v; unfold coreResolution.
       rewrite T.PkgSet.mem_ofList, List.in_map_iff, <- in_rangeNames; split.
       - intros [m [E Hm]]; injection E as <- <-; split; [exact Hm | reflexivity].
       - intros [Hn ->]; exists n; split; [reflexivity | exact Hn].
@@ -1087,8 +1087,8 @@ Module Placement (N V : UsualOrderedType).
 
     Lemma resolves_met : forall I depth L l la n vs,
         length l <= depth -> LocPath I (n :: l) -> Resolves L l la n vs ->
-        exists w, T.VSet.In w (accept la vs) /\
-          T.PkgSet.In (Name.Walk l n, w) (coreResolution I depth L).
+        exists v, T.VSet.In v (accept la vs) /\
+          T.PkgSet.In (Name.Walk l n, v) (coreResolution I depth L).
     Proof.
       intros I depth L l la n vs Hlen Hk [l' [u [Hw [Hs Hu]]]].
       exists (Version.Found l' u); split.
@@ -1102,7 +1102,7 @@ Module Placement (N V : UsualOrderedType).
     Lemma holds_met : forall I depth L l p,
         length l <= depth -> LocPath I l -> Holds I L l p ->
         forall n ws, T.DependeesSet.In (n, ws) (edgeAtoms I p l) ->
-        exists w, T.VSet.In w ws /\ T.PkgSet.In (n, w) (coreResolution I depth L).
+        exists v, T.VSet.In v ws /\ T.PkgSet.In (n, v) (coreResolution I depth L).
     Proof.
       intros I depth L l p Hlen Hk Hh n ws Hn.
       apply mem_edgeAtoms in Hn;
@@ -1292,17 +1292,17 @@ Module Placement (N V : UsualOrderedType).
 
     Inductive Reached (I : Inst) (depth : nat) : T.Pkg.t -> Prop :=
     | reached_root : Reached I depth (rootPkg I)
-    | reached_dependee : forall q h x,
+    | reached_dependee : forall q h v,
         Reached I depth q -> T.DependeesSet.In h (dependees I q) ->
-        T.VSet.In x (versions I depth (fst h)) -> Reached I depth (fst h, x).
+        T.VSet.In v (versions I depth (fst h)) -> Reached I depth (fst h, v).
 
     Theorem reached_reduceReal : forall I depth q,
         Reached I depth q -> T.PkgSet.In q (reduceReal I depth).
     Proof.
-      intros I depth q H; induction H as [| q h x _ IH Hh Hx];
+      intros I depth q H; induction H as [| q h v _ IH Hh Hv];
         apply mem_reduceReal.
       - split; [exact Logic.I | apply T.VSet.singleton_spec; reflexivity].
-      - split; [exact (dependees_inRange I depth q h IH Hh) | exact Hx].
+      - split; [exact (dependees_inRange I depth q h IH Hh) | exact Hv].
     Qed.
 
     Theorem lookup_resolution : forall I depth S,

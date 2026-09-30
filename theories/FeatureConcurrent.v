@@ -156,7 +156,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
     Definition embedOrigPkg (g : V.t -> G.t) (p : Pkg.t) : T.Pkg.t :=
       let '(n, v) := p in (Name.GranularOrig n (g v), v).
 
-    Definition singVS (u : V.t) : T.VSet.t := T.VSet.singleton u.
+    Definition singVS (v : V.t) : T.VSet.t := T.VSet.singleton v.
 
     Module SOvv := SetOps V V VSet T.VSet.
     Definition embedVS (vs : VSet.t) : T.VSet.t :=
@@ -327,14 +327,14 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
                                 (T.DepRel.union (aInterToFeatEdges Da g)
                                    (aInterFeatToInterEdges Da)))))))))).
 
-    Lemma mem_embedVS : forall vs w, T.VSet.In w (embedVS vs) <-> VSet.In w vs.
+    Lemma mem_embedVS : forall vs v, T.VSet.In v (embedVS vs) <-> VSet.In v vs.
     Proof.
-      intros vs w; unfold embedVS.
-      exact (SOvv.mem_map_inj (fun v => v) vs w (fun x y H => H)).
+      intros vs v; unfold embedVS.
+      exact (SOvv.mem_map_inj (fun u => u) vs v (fun x y H => H)).
     Qed.
 
-    Lemma mem_singVS : forall u w, T.VSet.In w (singVS u) <-> w = u.
-    Proof. intros u w; exact (SOvv.singleton_in u w). Qed.
+    Lemma mem_singVS : forall v u, T.VSet.In u (singVS v) <-> u = v.
+    Proof. intros v u; exact (SOvv.singleton_in v u). Qed.
 
     (* The encodings are unions of map, unionMap and guarded filterMap over
        tuples.  mem_open takes a membership apart into its witnesses;
