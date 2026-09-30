@@ -105,18 +105,18 @@ Module ConflictClass (N V : UsualOrderedType).
 
     Lemma mem_classPkgs : forall ps Om (p : T.Pkg.t),
         T.PkgSet.In p (classPkgs ps Om) <->
-        exists q k, InClassRel.In (q, k) Om /\ PkgSet.In q ps /\
-          p = (Name.Cls k, Version.Name (fst q)).
+        exists n v k, InClassRel.In ((n, v), k) Om /\ PkgSet.In (n, v) ps /\
+          p = (Name.Cls k, Version.Name n).
     Proof.
       intros ps Om p; unfold classPkgs; rewrite SOit.mem_filterMap.
       split.
-      - intros [[q k] [Hc Hy]]; cbn beta iota in Hy.
-        destruct (PkgSet.mem q ps) eqn:Hm; [| discriminate].
+      - intros [[[n v] k] [Hc Hy]]; cbn beta iota in Hy.
+        destruct (PkgSet.mem (n, v) ps) eqn:Hm; [| discriminate].
         injection Hy as <-.
-        exists q, k; split; [exact Hc |].
+        exists n, v, k; split; [exact Hc |].
         split; [apply PkgSet.mem_spec; exact Hm | reflexivity].
-      - intros [q [k [Hc [Hq ->]]]].
-        exists (q, k); split; [exact Hc | cbn beta iota].
+      - intros [n [v [k [Hc [Hq ->]]]]].
+        exists ((n, v), k); split; [exact Hc | cbn beta iota].
         rewrite (proj2 (PkgSet.mem_spec _ _) Hq); reflexivity.
     Qed.
 
@@ -126,8 +126,8 @@ Module ConflictClass (N V : UsualOrderedType).
     Lemma mem_reduceReal : forall R Om (p' : T.Pkg.t),
         T.PkgSet.In p' (reduceReal R Om) <->
         (exists p, PkgSet.In p R /\ p' = embedPkg p) \/
-        (exists q k, InClassRel.In (q, k) Om /\ PkgSet.In q R /\
-           p' = (Name.Cls k, Version.Name (fst q))).
+        (exists n v k, InClassRel.In ((n, v), k) Om /\ PkgSet.In (n, v) R /\
+           p' = (Name.Cls k, Version.Name n)).
     Proof.
       intros; unfold reduceReal, embedSet.
       rewrite T.PkgSet.union_spec, SOpt.mem_map, mem_classPkgs; reflexivity.
@@ -163,25 +163,25 @@ Module ConflictClass (N V : UsualOrderedType).
 
     Lemma mem_classEdges : forall Om (y : T.DepElt.t),
         T.DepRel.In y (classEdges Om) <->
-        exists q k, InClassRel.In (q, k) Om /\
-          y = (embedPkg q,
-               (Name.Cls k, T.VSet.singleton (Version.Name (fst q)))).
+        exists n v k, InClassRel.In ((n, v), k) Om /\
+          y = (embedPkg (n, v),
+               (Name.Cls k, T.VSet.singleton (Version.Name n))).
     Proof.
       intros Om y; unfold classEdges; rewrite SOitd.mem_map.
       split.
-      - intros [[q k] [Hc Hy]]; cbn beta iota in Hy.
-        exists q, k; split; [exact Hc | exact Hy].
-      - intros [q [k [Hc ->]]].
-        exists (q, k); split; [exact Hc | reflexivity].
+      - intros [[[n v] k] [Hc Hy]]; cbn beta iota in Hy.
+        exists n, v, k; split; [exact Hc | exact Hy].
+      - intros [n [v [k [Hc ->]]]].
+        exists ((n, v), k); split; [exact Hc | reflexivity].
     Qed.
 
     Lemma mem_reduceDeps : forall D Om (y : T.DepElt.t),
         T.DepRel.In y (reduceDeps D Om) <->
         (exists p n vs, C.DepRel.In (p, (n, vs)) D /\
            y = (embedPkg p, (Name.Orig n, embedVS vs))) \/
-        (exists q k, InClassRel.In (q, k) Om /\
-           y = (embedPkg q,
-                (Name.Cls k, T.VSet.singleton (Version.Name (fst q))))).
+        (exists n v k, InClassRel.In ((n, v), k) Om /\
+           y = (embedPkg (n, v),
+                (Name.Cls k, T.VSet.singleton (Version.Name n)))).
     Proof.
       intros; unfold reduceDeps.
       rewrite T.DepRel.union_spec, mem_origEdges, mem_classEdges;
@@ -224,7 +224,7 @@ Module ConflictClass (N V : UsualOrderedType).
         T.PkgSet.In (embedPkg p) (reduceReal R Om) -> PkgSet.In p R.
     Proof.
       intros p R Om H; apply mem_reduceReal in H.
-      destruct H as [[q [HqR Hq]] | [q [k [_ [_ Hy]]]]].
+      destruct H as [[q [HqR Hq]] | [n [v [k [_ [_ Hy]]]]]].
       - apply embedPkg_injective in Hq; subst q; exact HqR.
       - discriminate Hy.
     Qed.
@@ -239,12 +239,12 @@ Module ConflictClass (N V : UsualOrderedType).
                  PkgSet.In q (conflictClassResolution S) ->
                  InClassRel.In (q, k) Om ->
                  T.PkgSet.In (Name.Cls k, Version.Name (fst q)) S).
-      { intros q k Hq Hc; apply mem_conflictClassResolution in Hq.
+      { intros [n v] k Hq Hc; apply mem_conflictClassResolution in Hq.
         assert (Hd : T.DepRel.In
-                       (embedPkg q,
-                        (Name.Cls k, T.VSet.singleton (Version.Name (fst q))))
+                       (embedPkg (n, v),
+                        (Name.Cls k, T.VSet.singleton (Version.Name n)))
                        (reduceDeps D Om))
-          by (apply mem_reduceDeps; right; exists q, k;
+          by (apply mem_reduceDeps; right; exists n, v, k;
               split; [exact Hc | reflexivity]).
         destruct (Hdep _ Hq _ _ Hd) as [w [Hw HwS]].
         rewrite SOvt.singleton_in in Hw; subst w; exact HwS. }
@@ -289,14 +289,14 @@ Module ConflictClass (N V : UsualOrderedType).
       intros R D Om r S [[Hsub Hroot Hdep Huniq] Hexcl].
       unfold coreResolution; constructor.
       - intros p' Hy; apply mem_reduceReal in Hy; apply mem_reduceReal.
-        destruct Hy as [[p [Hp ->]] | [q [k [Hc [Hq ->]]]]].
+        destruct Hy as [[p [Hp ->]] | [n [v [k [Hc [Hq ->]]]]]].
         + left; exists p; split; [exact (Hsub _ Hp) | reflexivity].
-        + right; exists q, k; split; [exact Hc |].
+        + right; exists n, v, k; split; [exact Hc |].
           split; [exact (Hsub _ Hq) | reflexivity].
       - apply mem_reduceReal; left; exists r; split;
           [exact Hroot | reflexivity].
       - intros p' Hy m ws Hd; apply mem_reduceDeps in Hd.
-        destruct Hd as [[p [n [vs [HD Hyd]]]] | [q [k [Hc Hyd]]]];
+        destruct Hd as [[p [n [vs [HD Hyd]]]] | [qn [qv [k [Hc Hyd]]]]];
           injection Hyd as -> -> ->.
         + apply embedPkg_mem_real in Hy.
           destruct (Hdep p Hy n vs HD) as [v [Hv HvS]].
@@ -305,19 +305,19 @@ Module ConflictClass (N V : UsualOrderedType).
           * apply mem_reduceReal; left; exists (n, v);
               split; [exact HvS | reflexivity].
         + apply embedPkg_mem_real in Hy.
-          exists (Version.Name (fst q)); split.
+          exists (Version.Name qn); split.
           * apply SOvt.singleton_in; reflexivity.
-          * apply mem_reduceReal; right; exists q, k;
+          * apply mem_reduceReal; right; exists qn, qv, k;
               split; [exact Hc | split; [exact Hy | reflexivity]].
       - intros n w w' Hw Hw'; apply mem_reduceReal in Hw, Hw'.
-        destruct Hw as [[p [Hp E]] | [q [k [Hc [Hq E]]]]];
-          destruct Hw' as [[p' [Hp' E']] | [q' [k' [Hc' [Hq' E']]]]];
+        destruct Hw as [[p [Hp E]] | [qn [qv [k [Hc [Hq E]]]]]];
+          destruct Hw' as [[p' [Hp' E']] | [qn' [qv' [k' [Hc' [Hq' E']]]]]];
           unfold embedPkg in *; try congruence.
         + destruct p as [pn pv], p' as [pn' pv']; cbn [fst snd] in E, E'.
           assert (pn' = pn) as -> by congruence.
           rewrite (Huniq pn pv pv' Hp Hp') in E; congruence.
         + assert (k' = k) as -> by congruence.
-          rewrite (Hexcl k q q' Hq Hq' Hc Hc') in E; congruence.
+          injection (Hexcl k _ _ Hq Hq' Hc Hc') as -> _; congruence.
     Qed.
 
     Theorem conflict_class_retraction : forall (S : PkgSet.t) Om,
@@ -367,11 +367,11 @@ Module ConflictClass (N V : UsualOrderedType).
         intros R Om k; apply T.VSet.ext; intro w.
         rewrite T.mem_versions, mem_reduceReal, SOpv.mem_map.
         split.
-        - intros [[p [_ Hp]] | [q [k' [Hc [Hq Hy]]]]]; [discriminate Hp |].
+        - intros [[p [_ Hp]] | [n [v [k' [Hc [Hq Hy]]]]]]; [discriminate Hp |].
           injection Hy as -> ->.
-          exists q; split; [apply mem_inClass; auto | reflexivity].
-        - intros [q [Hq ->]]; apply mem_inClass in Hq.
-          right; exists q, k; tauto.
+          exists (n, v); split; [apply mem_inClass; auto | reflexivity].
+        - intros [[n v] [Hq ->]]; apply mem_inClass in Hq.
+          right; exists n, v, k; tauto.
       Qed.
 
       Theorem versions_lookupOrig : forall R Om (n : N.t),
@@ -382,13 +382,14 @@ Module ConflictClass (N V : UsualOrderedType).
         intros R Om n; apply T.versions_ext; intro w.
         rewrite !mem_reduceReal.
         split.
-        - intros [[[qn qv] [HR Hq]] | [q [k [_ [_ Hy]]]]]; [| discriminate Hy].
+        - intros [[[qn qv] [HR Hq]] | [m [u [k [_ [_ Hy]]]]]];
+            [| discriminate Hy].
           unfold embedPkg in Hq; cbn [fst snd] in Hq.
           injection Hq as -> ->.
           left; exists (qn, qv); split;
             [apply PkgFibred.mem_tailFibre; split; [exact HR | reflexivity]
             | reflexivity].
-        - intros [[p [HR Hp]] | [q [k [Hc _]]]].
+        - intros [[p [HR Hp]] | [m [u [k [Hc _]]]]].
           + apply PkgFibred.tailFibre_subset in HR.
             left; exists p; split; [exact HR | exact Hp].
           + destruct (InClassRel.empty_spec Hc).
@@ -404,17 +405,19 @@ Module ConflictClass (N V : UsualOrderedType).
         intros D Om p; apply T.dependees_ext; intros [m ws].
         rewrite !mem_reduceDeps.
         split.
-        - intros [[q [n [vs [HD Hy]]]] | [q [k [Hc Hy]]]];
-            assert (q = p) as -> by (apply embedPkg_injective; congruence).
-          + left; exists p, n, vs; split; [| exact Hy].
+        - intros [[q [n [vs [HD Hy]]]] | [qn [qv [k [Hc Hy]]]]].
+          + assert (q = p) as -> by (apply embedPkg_injective; congruence).
+            left; exists p, n, vs; split; [| exact Hy].
             apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
-          + right; exists p, k; split; [| exact Hy].
+          + assert ((qn, qv) = p) as <-
+              by (apply embedPkg_injective; congruence).
+            right; exists qn, qv, k; split; [| exact Hy].
             apply InClassFibred.mem_tailFibre; split; [exact Hc | reflexivity].
-        - intros [[q [n [vs [HD Hy]]]] | [q [k [Hc Hy]]]].
+        - intros [[q [n [vs [HD Hy]]]] | [qn [qv [k [Hc Hy]]]]].
           + apply DepRelFibred.tailFibre_subset in HD.
             left; exists q, n, vs; split; [exact HD | exact Hy].
           + apply InClassFibred.tailFibre_subset in Hc.
-            right; exists q, k; split; [exact Hc | exact Hy].
+            right; exists qn, qv, k; split; [exact Hc | exact Hy].
       Qed.
 
       Theorem versions_lookupClass : forall R Om (k : N.t),
@@ -434,7 +437,7 @@ Module ConflictClass (N V : UsualOrderedType).
       Proof.
         intros D Om k n; apply T.dependees_empty_iff; intros h H.
         apply mem_reduceDeps in H.
-        destruct H as [[q [m [vs [_ Hy]]]] | [q [k' [_ Hy]]]];
+        destruct H as [[q [m [vs [_ Hy]]]] | [m [u [k' [_ Hy]]]]];
           unfold embedPkg in Hy; congruence.
       Qed.
     End Lookup.
