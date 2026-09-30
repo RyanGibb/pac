@@ -58,6 +58,18 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           (exists fs_c, Feat.FeaturedSet.In (c, fs_c) S) /\
           (exists fs_p, Feat.FeaturedSet.In (p, fs_p) S) }.
 
+  (* Rules out a pair of pi that neither a dependency of the parent nor an
+     additional dependency of one of its selected features admits: the
+     decoding reads pi off those edges, so it cannot give one back. *)
+  Definition ParentDependency (Df : Feat.FeatDepRel.t)
+      (Da : Feat.AddlDepRel.t) (S : Feat.FeaturedSet.t) (pi : ParentRel.t)
+      : Prop :=
+    forall m u n v, ParentRel.In ((m, u), (n, v)) pi ->
+      (exists vs fs, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df) \/
+      (exists fs_p f vs fs, Feat.FeaturedSet.In ((n, v), fs_p) S /\
+         Feat.FSet.In f fs_p /\
+         Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da).
+
   Module Reduction.
     Module OrigName := PairUOT N G.
     Module OrigNameF := UOTCompareFacts OrigName.
@@ -1032,7 +1044,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
              end.
     Qed.
 
-    Theorem feature_concurrent_retraction :
+    Lemma featureConcurrentResolution_coreResolution :
       forall R support Df Da g r S_CF pi,
         IsResolution R support Df Da g r S_CF pi ->
         featureConcurrentResolution g (coreResolution Df Da g S_CF pi) = S_CF.
@@ -1064,7 +1076,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         + rewrite (Hfeats _ _ _ HS); reflexivity.
     Qed.
 
-    Theorem feature_concurrent_parents_retraction :
+    Lemma parents_coreResolution_iff :
       forall R support Df Da g r S_CF pi,
         IsResolution R support Df Da g r S_CF pi ->
         forall m u n v,
@@ -1120,20 +1132,19 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
             exact (CoreFeatPkg _ _ _ _ _ n v fs_p f Hp Hf).
     Qed.
 
-    Corollary feature_concurrent_parents_retraction_dom :
+    Theorem feature_concurrent_retraction :
       forall R support Df Da g r S_CF pi,
         IsResolution R support Df Da g r S_CF pi ->
-        (forall n v m u, ParentRel.In ((m, u), (n, v)) pi ->
-           (exists vs fs, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df) \/
-           (exists fs_p f vs fs, Feat.FeaturedSet.In ((n, v), fs_p) S_CF /\
-              Feat.FSet.In f fs_p /\
-              Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da)) ->
-        parents Df Da g (coreResolution Df Da g S_CF pi) = pi.
+        ParentDependency Df Da S_CF pi ->
+        featureConcurrentResolution g (coreResolution Df Da g S_CF pi) = S_CF
+        /\ parents Df Da g (coreResolution Df Da g S_CF pi) = pi.
     Proof.
-      intros R support Df Da g r S_CF pi Hres Hdom.
+      intros R support Df Da g r S_CF pi Hres Hdep.
+      split; [exact (featureConcurrentResolution_coreResolution
+                       _ _ _ _ _ _ _ _ Hres) |].
       apply ParentRel.ext; intros [[m u] [n v]].
-      rewrite (feature_concurrent_parents_retraction _ _ _ _ _ _ _ _ Hres).
-      split; [intros [H _]; exact H | intro H; exact (conj H (Hdom _ _ _ _ H))].
+      rewrite (parents_coreResolution_iff _ _ _ _ _ _ _ _ Hres).
+      split; [intros [H _]; exact H | intro H; exact (conj H (Hdep _ _ _ _ H))].
     Qed.
 
     Module Lookup.

@@ -1245,15 +1245,6 @@ Module Placement (N V : UsualOrderedType).
         split; [lia | exact (keyed_layout I L l a v Hres H)].
     Qed.
 
-    Corollary placement_retraction_reachable : forall I depth L,
-        IsResolution I L -> Depth depth L ->
-        reachable I (placementResolution (coreResolution I depth L)) =
-        reachable I L.
-    Proof.
-      intros I depth L Hres Hdepth.
-      rewrite (placement_retraction I depth L Hres Hdepth); reflexivity.
-    Qed.
-
     Lemma edgeAtoms_inRange : forall I depth l p n ws,
         length l <= depth -> LocPath I l ->
         T.DependeesSet.In (n, ws) (edgeAtoms I p l) -> InRange I depth n.

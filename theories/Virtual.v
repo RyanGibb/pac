@@ -89,6 +89,15 @@ Module Virtual (N V : UsualOrderedType).
         forall (q q' : Pkg.t) (n : N.t) (p : Pkg.t),
           RhoRel.In (q, (n, p)) rho -> RhoRel.In (q', (n, p)) rho -> q = q' }.
 
+  (* Rules out a provider in rho that no dependency of its depender admits:
+     the decoding reads rho off dependency edges, so it cannot give one
+     back. *)
+  Definition ProviderDependency (D : C.DepRel.t) (Pi : ProvidesRel.t)
+      (rho : RhoRel.t) : Prop :=
+    forall q n p, RhoRel.In (q, (n, p)) rho ->
+      exists vs, C.DepRel.In (p, (n, vs)) D /\
+        exists v, MemTop v vs /\ ProvidesRel.In (q, (n, v)) Pi.
+
   Module Reduction.
 
     Module PkgN := PairUOT Pkg N.
@@ -877,7 +886,7 @@ Module Virtual (N V : UsualOrderedType).
         + rewrite (Hfn _ _ _ _ HD1 HD2); reflexivity.
     Qed.
 
-    Theorem virtual_retraction : forall D Pi S_Pi rho,
+    Lemma virtualResolution_coreResolution : forall D Pi S_Pi rho,
         virtualResolution (coreResolution D Pi S_Pi rho) = S_Pi.
     Proof.
       intros D Pi S_Pi rho; apply PkgSet.ext; intros [n v].
@@ -885,7 +894,7 @@ Module Virtual (N V : UsualOrderedType).
       split; [intro H; inversion H; assumption | apply CoreOrig].
     Qed.
 
-    Theorem virtual_providers_retraction : forall R D Pi r S_Pi rho,
+    Lemma providers_coreResolution_iff : forall R D Pi r S_Pi rho,
         IsResolution R D Pi r S_Pi rho ->
         forall q n p,
           RhoRel.In (q, (n, p)) (providers D Pi (coreResolution D Pi S_Pi rho))
@@ -929,16 +938,16 @@ Module Virtual (N V : UsualOrderedType).
           split; [exact HqS | exists v; auto].
     Qed.
 
-    Corollary virtual_providers_retraction_dom : forall R D Pi r S_Pi rho,
-        IsResolution R D Pi r S_Pi rho ->
-        (forall q n p, RhoRel.In (q, (n, p)) rho ->
-           exists vs, C.DepRel.In (p, (n, vs)) D /\
-             exists v, MemTop v vs /\ ProvidesRel.In (q, (n, v)) Pi) ->
+    Theorem virtual_retraction : forall R D Pi r S_Pi rho,
+        IsResolution R D Pi r S_Pi rho -> ProviderDependency D Pi rho ->
+        virtualResolution (coreResolution D Pi S_Pi rho) = S_Pi /\
         providers D Pi (coreResolution D Pi S_Pi rho) = rho.
     Proof.
-      intros R D Pi r S_Pi rho Hres Hdom; apply RhoRel.ext; intros [q [n p]].
-      rewrite (virtual_providers_retraction R D Pi r S_Pi rho Hres).
-      split; [intros [H _]; exact H | intro H; exact (conj H (Hdom _ _ _ H))].
+      intros R D Pi r S_Pi rho Hres Hdep.
+      split; [apply virtualResolution_coreResolution |].
+      apply RhoRel.ext; intros [q [n p]].
+      rewrite (providers_coreResolution_iff R D Pi r S_Pi rho Hres).
+      split; [intros [H _]; exact H | intro H; exact (conj H (Hdep _ _ _ H))].
     Qed.
 
     Module Lookup.

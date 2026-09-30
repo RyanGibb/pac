@@ -625,23 +625,20 @@ Module VariableFormula (N V : UsualOrderedType)
         exists (inr (sigma x)); apply mem_liftModel_inr; reflexivity.
     Qed.
 
-    Theorem variable_formula_retraction : forall Y_x S R D sigma,
-        variableFormulaResolution (coreResolution Y_x R D S sigma) = S.
+    Theorem variable_formula_retraction : forall y0 Y_x S R D sigma,
+        variableFormulaResolution (coreResolution Y_x R D S sigma) = S /\
+        forall x,
+          extractAssignment y0 Y_x (coreResolution Y_x R D S sigma) x = sigma x.
     Proof.
-      intros Y_x S R D sigma; apply PkgSet.ext; intros [m v].
-      rewrite mem_variableFormulaResolution; unfold embedPkg, coreResolution.
-      rewrite <- PF.Reduction.mem_packageFormulaResolution,
-        PF.Reduction.package_formula_retraction.
-      unfold liftPkg; cbn [fst snd]; rewrite mem_liftModel_inl; split.
-      - intros [v' [E Hv]]; injection E as <-; exact Hv.
-      - intro Hv; exists v; split; [reflexivity | exact Hv].
-    Qed.
-
-    Theorem variable_formula_assignment_retraction :
-      forall y0 Y_x S R D sigma x,
-        extractAssignment y0 Y_x (coreResolution Y_x R D S sigma) x = sigma x.
-    Proof.
-      intros y0 Y_x S R D sigma x.
+      intros y0 Y_x S R D sigma; split.
+      { apply PkgSet.ext; intros [m v].
+        rewrite mem_variableFormulaResolution; unfold embedPkg, coreResolution.
+        rewrite <- PF.Reduction.mem_packageFormulaResolution,
+          PF.Reduction.package_formula_retraction.
+        unfold liftPkg; cbn [fst snd]; rewrite mem_liftModel_inl; split.
+        - intros [v' [E Hv]]; injection E as <-; exact Hv.
+        - intro Hv; exists v; split; [reflexivity | exact Hv]. }
+      intro x.
       assert (Hc : forall y,
                  YSet.In y (assignCand (coreResolution Y_x R D S sigma) x) <->
                  y = sigma x).

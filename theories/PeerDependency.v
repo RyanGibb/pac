@@ -613,7 +613,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         + rewrite (Hpif _ _ _ _ Hpi1 Hpi2); reflexivity.
     Qed.
 
-    Theorem peer_retraction : forall S pi D g,
+    Lemma concurrentResolution_coreResolution : forall S pi D g,
         Conc.Reduction.concurrentResolution g (coreResolution D g S pi) = S.
     Proof.
       intros S pi D g; apply PkgSet.ext; intros [n v].
@@ -622,7 +622,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
       split; [intro H; inversion H; assumption | apply CoreGranular].
     Qed.
 
-    Theorem peer_parents_retraction : forall R D Th g r S pi,
+    Lemma parents_coreResolution_iff : forall R D Th g r S pi,
         IsResolution R D Th g r S pi ->
         forall m u n v,
           ParentRel.In ((m, u), (n, v)) (parents D g (coreResolution D g S pi))
@@ -646,16 +646,16 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
                  HD HnS HmS Hu Hpi).
     Qed.
 
-    Corollary peer_parents_retraction_dom : forall R D Th g r S pi,
-        IsResolution R D Th g r S pi ->
-        (forall n v m u, ParentRel.In ((m, u), (n, v)) pi ->
-           exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs) ->
+    Theorem peer_retraction : forall R D Th g r S pi,
+        IsResolution R D Th g r S pi -> Conc.ParentDependency D pi ->
+        Conc.Reduction.concurrentResolution g (coreResolution D g S pi) = S /\
         parents D g (coreResolution D g S pi) = pi.
     Proof.
-      intros R D Th g r S pi Hres Hdom; apply ParentRel.ext.
-      intros [[m u] [n v]].
-      rewrite (peer_parents_retraction _ _ _ _ _ _ _ Hres).
-      split; [intros [H _]; exact H | intro H; exact (conj H (Hdom _ _ _ _ H))].
+      intros R D Th g r S pi Hres Hdep.
+      split; [apply concurrentResolution_coreResolution |].
+      apply ParentRel.ext; intros [[m u] [n v]].
+      rewrite (parents_coreResolution_iff _ _ _ _ _ _ _ Hres).
+      split; [intros [H _]; exact H | intro H; exact (conj H (Hdep _ _ _ _ H))].
     Qed.
 
     Module Lookup.

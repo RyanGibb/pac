@@ -55,6 +55,13 @@ Module Visibility (N V : UsualOrderedType).
         forall (n : N.t) (v v' : V.t),
           InSub pub pi p (n, v) -> InSub pub pi p (n, v') -> v = v' }.
 
+  (* Rules out a package of S that no origin sees, which the decoding
+     drops: it reads S off the subgraphs the origins see. *)
+  Definition OriginVisibility (D : C.DepRel.t) (pub : PubRel.t) (r : Pkg.t)
+      (S : PkgSet.t) (pi : ParentRel.t) : Prop :=
+    forall p, PkgSet.In p S ->
+      exists q, IsOrigin D pub r S q /\ InSub pub pi q p.
+
   Module SOpp := SetOps ParentElt Pkg ParentRel PkgSet.
   Module SOppp := SetOps Pkg Pkg PkgSet PkgSet.
 
@@ -1230,7 +1237,7 @@ Module Visibility (N V : UsualOrderedType).
         all: exact (Hpif _ _ _ _ Hpi1 Hpi2).
     Qed.
 
-    Theorem visibility_retraction : forall R D pub r S pi,
+    Lemma visibilityResolution_coreResolution_iff : forall R D pub r S pi,
         IsResolution R D pub r S pi ->
         forall p,
           PkgSet.In p
@@ -1252,18 +1259,7 @@ Module Visibility (N V : UsualOrderedType).
         apply mem_coreResolution; constructor; assumption.
     Qed.
 
-    Corollary visibility_retraction_visible : forall R D pub r S pi,
-        IsResolution R D pub r S pi ->
-        (forall p, PkgSet.In p S ->
-           exists q, IsOrigin D pub r S q /\ InSub pub pi q p) ->
-        visibilityResolution R D pub r (coreResolution R D pub r S pi) = S.
-    Proof.
-      intros R D pub r S pi Hres Hvis; apply PkgSet.ext; intro p.
-      rewrite (visibility_retraction R D pub r S pi Hres).
-      split; [intros [H _]; exact H | intro H; exact (conj H (Hvis p H))].
-    Qed.
-
-    Theorem visibility_parents_retraction : forall R D pub r S pi,
+    Lemma parents_coreResolution_iff : forall R D pub r S pi,
         IsResolution R D pub r S pi ->
         forall m u n v,
           ParentRel.In ((m, u), (n, v))
@@ -1273,7 +1269,8 @@ Module Visibility (N V : UsualOrderedType).
               exists q, IsOrigin D pub r S q /\ InSub pub pi q (n, v).
     Proof.
       intros R D pub r S pi Hres m u n v.
-      assert (Hdec := visibility_retraction R D pub r S pi Hres (n, v)).
+      assert (Hdec := visibilityResolution_coreResolution_iff R D pub r S pi
+                        Hres (n, v)).
       destruct Hres as [[_ _ _ _ _ Hps] _].
       rewrite mem_parents; split.
       - intros (n' & v' & m' & vs & u' & HD & Hu & Hagr & Hnv & E).
@@ -1291,21 +1288,22 @@ Module Visibility (N V : UsualOrderedType).
                                            n v m vs u HD Hu HnS Hpi).
     Qed.
 
-    Corollary visibility_parents_retraction_dom : forall R D pub r S pi,
-        IsResolution R D pub r S pi ->
-        (forall p, PkgSet.In p S ->
-           exists q, IsOrigin D pub r S q /\ InSub pub pi q p) ->
-        (forall n v m u, ParentRel.In ((m, u), (n, v)) pi ->
-           exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs) ->
+    Theorem visibility_retraction : forall R D pub r S pi,
+        IsResolution R D pub r S pi -> OriginVisibility D pub r S pi ->
+        Conc.ParentDependency D pi ->
+        visibilityResolution R D pub r (coreResolution R D pub r S pi) = S /\
         parents R D pub r (coreResolution R D pub r S pi) = pi.
     Proof.
-      intros R D pub r S pi Hres Hvis Hdom.
-      apply ParentRel.ext; intros [[m u] [n v]].
-      rewrite (visibility_parents_retraction R D pub r S pi Hres).
-      split; [intros [H _]; exact H | intro H].
-      split; [exact H | split; [exact (Hdom _ _ _ _ H) | apply Hvis]].
-      exact (proj2 (Conc.res_parent_subset _ _ _ _ _ _
-                      (res_concurrent _ _ _ _ _ _ Hres) _ _ H)).
+      intros R D pub r S pi Hres Hvis Hdep; split.
+      - apply PkgSet.ext; intro p.
+        rewrite (visibilityResolution_coreResolution_iff R D pub r S pi Hres).
+        split; [intros [H _]; exact H | intro H; exact (conj H (Hvis p H))].
+      - apply ParentRel.ext; intros [[m u] [n v]].
+        rewrite (parents_coreResolution_iff R D pub r S pi Hres).
+        split; [intros [H _]; exact H | intro H].
+        split; [exact H | split; [exact (Hdep _ _ _ _ H) | apply Hvis]].
+        exact (proj2 (Conc.res_parent_subset _ _ _ _ _ _
+                        (res_concurrent _ _ _ _ _ _ Hres) _ _ H)).
     Qed.
 
     Module Lookup.

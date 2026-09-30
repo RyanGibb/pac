@@ -579,6 +579,14 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           PkgSet.In c S /\ PkgSet.In q S /\
           KeySet.In (fst c) (childKeys I q) }.
 
+  (* Rules out a sight where the copy does not chain on n or nothing it
+     holds reads n: the encoding writes free there, which decodes to no
+     sight. *)
+  Definition SightRead (I : Inst) (S : PkgSet.t) (pi : Conc.ParentRel.t)
+      (sg : Pkg.t -> N.t -> option V.t) : Prop :=
+    forall c n w, sg c n = Some w ->
+      chains I c n = true /\ ReadBelow I S pi c n.
+
   Module Reduction.
 
     Definition embedPkg (q : Pkg.t) : T.Pkg.t :=
@@ -3689,7 +3697,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
 
     End Lookup.
 
-    Theorem npm_retraction : forall I S pi sg,
+    Lemma npmResolution_coreResolution : forall I S pi sg,
         npmResolution (coreResolution I S pi sg) = S.
     Proof.
       intros I S pi sg; apply PkgSet.ext; intros [k v].
@@ -3706,7 +3714,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       - intro Hp; left; exists k, v; split; [exact Hp | reflexivity].
     Qed.
 
-    Theorem npm_parents_retraction : forall I S pi sg,
+    Lemma npmParents_coreResolution : forall I S pi sg,
         IsResolution I S pi sg ->
         npmParents (coreResolution I S pi sg) = pi.
     Proof.
@@ -3733,7 +3741,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         + left; exists k, v; split; [exact Hq | reflexivity].
     Qed.
 
-    Theorem npm_sight_retraction : forall I S pi sg,
+    Lemma npmSight_coreResolution_iff : forall I S pi sg,
         IsResolution I S pi sg ->
         forall c n w,
           npmSight (coreResolution I S pi sg) c n = Some w <->
@@ -3770,6 +3778,26 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           unfold sightVal; rewrite Hch,
             (proj2 (readb_iff _ _ _ _ _ _ Hres) Hrd), Hsg.
           reflexivity.
+    Qed.
+
+    Theorem npm_retraction : forall I S pi sg,
+        IsResolution I S pi sg -> SightRead I S pi sg ->
+        npmResolution (coreResolution I S pi sg) = S /\
+        npmParents (coreResolution I S pi sg) = pi /\
+        forall c n, npmSight (coreResolution I S pi sg) c n = sg c n.
+    Proof.
+      intros I S pi sg Hres Hread.
+      split; [apply npmResolution_coreResolution |].
+      split; [exact (npmParents_coreResolution _ _ _ _ Hres) |].
+      intros c n.
+      destruct (npmSight (coreResolution I S pi sg) c n) as [w |] eqn:E.
+      - symmetry.
+        exact (proj1 (proj1 (npmSight_coreResolution_iff _ _ _ _ Hres c n w) E)).
+      - destruct (sg c n) as [w |] eqn:Es; [exfalso | reflexivity].
+        destruct (Hread _ _ _ Es) as [Hch Hrd].
+        assert (Hs := proj2 (npmSight_coreResolution_iff _ _ _ _ Hres c n w)
+                        (conj Es (conj Hch Hrd))).
+        rewrite E in Hs; discriminate Hs.
     Qed.
 
   End Reduction.

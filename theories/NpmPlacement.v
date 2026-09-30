@@ -344,17 +344,6 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       [apply tr_resolution; exact H | exact Hd].
   Qed.
 
-  Corollary npm_placement_retraction_reachable : forall I depth L,
-      IsResolution I L -> Pl.Depth depth L ->
-      Pl.reachable (tr I)
-        (Pl.Reduction.placementResolution
-           (Pl.Reduction.coreResolution (tr I) depth L)) =
-      Pl.reachable (tr I) L.
-  Proof.
-    intros I depth L H Hd; rewrite (npm_placement_retraction I depth L H Hd).
-    reflexivity.
-  Qed.
-
   Module Lookup.
     Definition AgreesAtKey (I' I : Inst) (a : N.t) : Prop :=
       forall m v,

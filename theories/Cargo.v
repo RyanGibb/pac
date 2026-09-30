@@ -212,6 +212,16 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         p = q }.
   #[local] Unset Implicit Arguments.
 
+  (* Rules out a pair of pi at a slot Slot Closure does not enter: the
+     decoding reads pi off the entered slots, so it cannot give one back. *)
+  Definition ParentDependency (I : Inst) (FS : FeaturedSet.t)
+      (pi : ParentRel.t) : Prop :=
+    forall p k u, ParentRel.In ((p, k), u) pi ->
+      exists fs d, FeaturedSet.In (p, fs) FS /\
+        SlotRel.In (p, d) (inst_slots I) /\
+        sKey d = k /\ slotActive (inst_root I) p d = true /\
+        (sOptional d = false \/ Activated (inst_fdefs I) fs p (sAlias d)).
+
   Module GF := UOTCompareFacts G.
   Module VF := UOTCompareFacts V.
   Module SlotName := TripleUOT N G SlotData.
@@ -2983,7 +2993,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
   End Lookup.
 
-  Theorem cargo_retraction :
+  Lemma cargoResolution_coreResolution :
     forall I S FS pi,
       cargoResolution (coreResolution I S FS pi) = S.
   Proof.
@@ -3011,14 +3021,14 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       repeat split; [exact (fsAt_mem Hres _ Hp) | exact Hf].
   Qed.
 
-  Theorem cargo_features_retraction :
+  Lemma decodeFS_coreResolution :
     forall I S FS pi,
       IsResolution I S FS pi ->
       decodeFS (coreResolution I S FS pi) = FS.
   Proof.
     intros I S FS pi Hres.
     apply FeaturedSet.ext; intros [p fs].
-    rewrite mem_decodeFS, cargo_retraction; split.
+    rewrite mem_decodeFS, cargoResolution_coreResolution; split.
     - intros [Hp ->]; rewrite (featsAt_coreResolution Hres _ Hp).
       exact (fsAt_mem Hres _ Hp).
     - intro Hfs; assert (Hp := res_fs_dom Hres Hfs).
@@ -3027,7 +3037,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       exact (fsAt_in FS p fs (res_fs_functional Hres) Hfs).
   Qed.
 
-  Theorem cargo_parents_retraction :
+  Lemma decodeParents_coreResolution_iff :
     forall I S FS pi,
       SiteFunctional (inst_slots I) ->
       IsResolution I S FS pi ->
@@ -3086,20 +3096,19 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       + exists u; repeat split; exact Hname.
   Qed.
 
-  Corollary cargo_parents_retraction_dom :
+  Theorem cargo_retraction :
     forall I S FS pi,
       SiteFunctional (inst_slots I) ->
-      IsResolution I S FS pi ->
-      (forall p k u, ParentRel.In ((p, k), u) pi ->
-         exists fs d, FeaturedSet.In (p, fs) FS /\
-           SlotRel.In (p, d) (inst_slots I) /\
-           sKey d = k /\ slotActive (inst_root I) p d = true /\
-           (sOptional d = false \/
-            Activated (inst_fdefs I) fs p (sAlias d))) ->
+      IsResolution I S FS pi -> ParentDependency I FS pi ->
+      cargoResolution (coreResolution I S FS pi) = S /\
+      decodeFS (coreResolution I S FS pi) = FS /\
       decodeParents I (coreResolution I S FS pi) = pi.
   Proof.
-    intros I S FS pi Hsite Hres Hdom; apply ParentRel.ext; intros [[p k] u].
-    rewrite (cargo_parents_retraction _ _ _ _ Hsite Hres).
-    split; [intros [H _]; exact H | intro H; exact (conj H (Hdom _ _ _ H))].
+    intros I S FS pi Hsite Hres Hdep.
+    split; [apply cargoResolution_coreResolution |].
+    split; [exact (decodeFS_coreResolution _ _ _ _ Hres) |].
+    apply ParentRel.ext; intros [[p k] u].
+    rewrite (decodeParents_coreResolution_iff _ _ _ _ Hsite Hres).
+    split; [intros [H _]; exact H | intro H; exact (conj H (Hdep _ _ _ H))].
   Qed.
 End Cargo.
