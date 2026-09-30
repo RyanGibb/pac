@@ -3,8 +3,11 @@
 judges them from the index rows and the query's manifest alone, and,
 apart, whether it is reproduced: whether `cargo update --workspace
 --locked` keeps it as the query's Cargo.lock (mklock.py), a lock being
-what the answer is meant to be.  An answer cargo would repair by its own
-rules is no less valid.  Where cargo refuses, `cargo generate-lockfile
+what the answer is meant to be.  Naming no package, the update avoids
+none, so cargo keeps every locked version a requirement admits.  An
+answer cargo would repair by its own rules is no less valid: cargo
+re-locks even its own fresh lock where a crate declares one package at
+two ranges (kreuzberg's zip).  Where cargo refuses, `cargo generate-lockfile
 --locked` says whether the lock is cargo's own fresh answer (identical).
 cargo's exit 101 is read as an answer only for a lock it would change or
 a requirement it cannot meet; anything else leaves reproduced unknown (-).

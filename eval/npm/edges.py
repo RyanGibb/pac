@@ -8,7 +8,9 @@ the manifest key, so that an alias is compared as the alias it is.
 
 --peer-parent hangs each auto-installed peer's edge in npm's lock on the
 package that selected its declarer, as pac does, rather than on the
-declarer, from which npm resolves it.
+declarer, from which npm resolves it.  A selecting package that is not
+the root and peers on the name itself passes it on to where its own peer
+edge hangs, and a peer that is the selecting package itself gets none.
 
 usage: edges.py <package> <lockfile> <our --tree output> <out-prefix>
                 [--peer-parent]
