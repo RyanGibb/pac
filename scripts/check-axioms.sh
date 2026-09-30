@@ -311,7 +311,6 @@ Op.depextsOf
 Op.mem_depextsOf
 
 Cgo.Reduction.Lookup.claimants
-Cgo.Reduction.Lookup.decision_declines
 Cgo.Reduction.Lookup.dependees_lookupCrate
 Cgo.Reduction.Lookup.dependees_lookupDecision
 Cgo.Reduction.Lookup.dependees_lookupFeatP
@@ -321,7 +320,6 @@ Cgo.Reduction.Lookup.dependees_reduceDeps
 Cgo.Reduction.Lookup.dependees_reduceDepsInert
 Cgo.Reduction.Lookup.fdefFibre
 Cgo.Reduction.Lookup.reads
-Cgo.Reduction.Lookup.slot_declines
 Cgo.Reduction.Lookup.supportAt
 Cgo.Reduction.Lookup.versions_link_mono
 Cgo.Reduction.Lookup.versions_lookupCrate
