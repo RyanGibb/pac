@@ -995,6 +995,44 @@ Module Opam (N V X Y E : UsualOrderedType).
             reflexivity.
     Qed.
 
+    Corollary opam_core_soundness : forall sigma I S,
+        PF.Reduction.T.IsResolution
+          (PF.Reduction.reduceReal (reduceReal sigma I) (reduceDeps sigma I))
+          (PF.Reduction.reduceDeps (reduceReal sigma I) (reduceDeps sigma I))
+          (PF.Reduction.embedPkg rootPkg) S ->
+        IsResolution sigma I
+          (opamResolution (PF.Reduction.packageFormulaResolution S)).
+    Proof.
+      intros sigma I S H.
+      exact (opam_soundness sigma I _
+               (PF.Reduction.package_formula_soundness _ _ _ S H)).
+    Qed.
+
+    Corollary opam_core_completeness : forall sigma I S,
+        IsResolution sigma I S ->
+        PF.Reduction.T.IsResolution
+          (PF.Reduction.reduceReal (reduceReal sigma I) (reduceDeps sigma I))
+          (PF.Reduction.reduceDeps (reduceReal sigma I) (reduceDeps sigma I))
+          (PF.Reduction.embedPkg rootPkg)
+          (PF.Reduction.coreResolution (coreResolution (inst_cls I) S)
+             (reduceReal sigma I) (reduceDeps sigma I)).
+    Proof.
+      intros sigma I S H.
+      exact (PF.package_formula_completeness _ _ _ _
+               (opam_completeness sigma I S H)).
+    Qed.
+
+    Corollary opam_core_retraction : forall sigma I S,
+        opamResolution
+          (PF.Reduction.packageFormulaResolution
+             (PF.Reduction.coreResolution (coreResolution (inst_cls I) S)
+                (reduceReal sigma I) (reduceDeps sigma I)))
+        = S.
+    Proof.
+      intros sigma I S; rewrite PF.Reduction.package_formula_retraction.
+      apply opam_retraction.
+    Qed.
+
     Module Lookup.
       Fixpoint ofNames (d : OFormula) : NSet.t :=
         match d with

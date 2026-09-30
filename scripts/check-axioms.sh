@@ -312,6 +312,9 @@ Op.Reduction.encR
 Op.Reduction.encodeOF
 Op.Reduction.opamResolution
 Op.Reduction.opam_completeness
+Op.Reduction.opam_core_completeness
+Op.Reduction.opam_core_retraction
+Op.Reduction.opam_core_soundness
 Op.Reduction.opam_retraction
 Op.Reduction.opam_soundness
 Op.Reduction.reduceDeps
@@ -384,7 +387,9 @@ Alp.Reduction.Lookup.versions_lookupOrig
 Alp.Reduction.Lookup.versions_lookupOrigCore
 Alp.Reduction.Lookup.versions_lookupRootCore
 Alp.Reduction.alpine_completeness
+Alp.Reduction.alpine_core_completeness
 Alp.Reduction.alpine_core_retraction
+Alp.Reduction.alpine_core_soundness
 Alp.Reduction.alpine_retraction
 Alp.Reduction.alpine_soundness
 Alp.Reduction.attachAt

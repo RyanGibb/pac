@@ -2055,7 +2055,35 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       rewrite mem_alpineResolution, coreResolution_embed; reflexivity.
     Qed.
 
-    Theorem alpine_core_retraction : forall I S,
+    Corollary alpine_core_soundness : forall I S,
+        WfInstallIf I ->
+        PF.Reduction.T.IsResolution
+          (PF.Reduction.reduceReal (reduceReal I) (reduceDeps I))
+          (PF.Reduction.reduceDeps (reduceReal I) (reduceDeps I))
+          (PF.Reduction.embedPkg rootPkg) S ->
+        IsResolution I
+          (alpineResolution (PF.Reduction.packageFormulaResolution S)).
+    Proof.
+      intros I S Hwf H.
+      exact (alpine_soundness I _ Hwf
+               (PF.Reduction.package_formula_soundness _ _ _ S H)).
+    Qed.
+
+    Corollary alpine_core_completeness : forall I S,
+        WfProvides I -> IsResolution I S ->
+        PF.Reduction.T.IsResolution
+          (PF.Reduction.reduceReal (reduceReal I) (reduceDeps I))
+          (PF.Reduction.reduceDeps (reduceReal I) (reduceDeps I))
+          (PF.Reduction.embedPkg rootPkg)
+          (PF.Reduction.coreResolution (coreResolution I S) (reduceReal I)
+             (reduceDeps I)).
+    Proof.
+      intros I S Hwf H.
+      exact (PF.package_formula_completeness _ _ _ _
+               (alpine_completeness I S Hwf H)).
+    Qed.
+
+    Corollary alpine_core_retraction : forall I S,
         alpineResolution
           (PF.Reduction.packageFormulaResolution
              (PF.Reduction.coreResolution (coreResolution I S) (reduceReal I)
