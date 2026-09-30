@@ -175,7 +175,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
   Definition HasPriority (I : Inst) (q : Pkg.t) : Prop :=
     exists prio, Prio.In (q, prio) (inst_prio I) /\ prio <> 0.
 
-  Definition AutoSelectable (I : Inst) '(((m, u) as q) : Pkg.t) : Prop :=
+  Definition Selectable (I : Inst) '(((m, u) as q) : Pkg.t) : Prop :=
     HasPriority I q \/ exists zeta, WSet.In (DPos (m, zeta)) (inst_world I).
 
   Definition MatchReq (I : Inst) (S : PkgSet.t)
@@ -185,7 +185,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
        PkgSet.In q S /\ constrMatch zeta u = true) \/
     (bareMatch zeta = true /\
      exists q, Prov.In (q, (n, PBare)) (inst_prov I) /\ PkgSet.In q S /\
-       AutoSelectable I q).
+       Selectable I q).
 
   Definition MatchDep (I : Inst) (S : PkgSet.t) (d : Dep) : Prop :=
     match d with
@@ -857,9 +857,9 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Qed.
 
     Lemma selectableb_spec : forall I q,
-        selectableb I q = true <-> AutoSelectable I q.
+        selectableb I q = true <-> Selectable I q.
     Proof.
-      intros I [m u]; unfold selectableb, AutoSelectable.
+      intros I [m u]; unfold selectableb, Selectable.
       rewrite Bool.orb_true_iff, hasPriorityb_spec.
       apply or_iff_compat_l.
       unfold worldNamesb; rewrite WSet.exists_spec'; split.
