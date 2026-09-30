@@ -423,17 +423,18 @@ Module Conflict (N V : UsualOrderedType).
       Qed.
 
       Theorem versions_lookupOrig :
-        forall R D G (m : N.t) (u : V.t) (n : N.t),
-          PkgSet.In (m, u) R ->
+        forall R D G (r : Pkg.t) (n : N.t),
+          PkgSet.In r R ->
           (exists p h, T.DepRel.In (p, (n, h)) (reduceDeps R D G)) \/
-          n = m ->
+          n = fst r ->
           T.versions (reduceReal R D G) n =
           T.VSet.add Version.Bot
             (T.versions
                (reduceReal (PkgFibred.tailFibre R n) C.DepRel.empty
                   ConflictRel.empty) n).
       Proof.
-        intros R D G rn rv n Hr Hreach; rewrite versions_reduceReal_bot.
+        intros R D G [rn rv] n Hr Hreach; cbn [fst] in Hreach.
+        rewrite versions_reduceReal_bot.
         assert (Hn : NSet.In n (instNames R D G)).
         { destruct Hreach as [Hreach | ->];
             [exact (reachable_instNames R D G n Hreach) |].

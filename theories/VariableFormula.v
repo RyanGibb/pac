@@ -752,11 +752,11 @@ Module VariableFormula (N V : UsualOrderedType)
       Qed.
 
       Theorem versions_lookupOrig :
-        forall Y_x R D (m : N.t) (u : V.t) (n : N.t),
-          PkgSet.In (m, u) R ->
+        forall Y_x R D (r : Pkg.t) (n : N.t),
+          PkgSet.In r R ->
           (exists p h,
               T.DepRel.In (p, (Name.Orig (inl n), h)) (reduceDeps Y_x R D)) \/
-          n = m ->
+          n = fst r ->
           T.versions (reduceReal Y_x R D) (Name.Orig (inl n)) =
           T.VSet.add Version.Bot
             (T.versions
@@ -764,12 +764,12 @@ Module VariableFormula (N V : UsualOrderedType)
                   DepRel.empty)
                (Name.Orig (inl n))).
       Proof.
-        intros Y_x R D rn rv n Hr Hreach.
+        intros Y_x R D [rn rv] n Hr Hreach; cbn [fst] in Hreach.
         assert (Hr' : PF.PkgSet.In (inl rn, inl rv) (liftReal Y_x R))
           by (apply mem_liftReal; left; exists rn, rv;
               split; [exact Hr | reflexivity]).
         unfold reduceReal; rewrite (PF.Reduction.Lookup.versions_lookupOrig
-                                      _ _ (inl rn) (inl rv) (inl n) Hr').
+                                      _ _ (inl rn, inl rv) (inl n) Hr').
         - rewrite !PF.Reduction.Lookup.versions_reduceReal_bot.
           do 2 f_equal; apply PF.C.versions_ext; intro w.
           rewrite PF.Reduction.Lookup.PkgFibred.mem_tailFibre, !mem_liftReal.

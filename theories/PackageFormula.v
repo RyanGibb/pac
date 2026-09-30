@@ -2212,17 +2212,18 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       Qed.
 
       Theorem versions_lookupOrig :
-        forall R D (m : N.t) (u : V.t) (n : N.t),
-          PkgSet.In (m, u) R ->
+        forall R D (r : Pkg.t) (n : N.t),
+          PkgSet.In r R ->
           (exists p h, T.DepRel.In (p, (Name.Orig n, h)) (reduceDeps R D)) \/
-          n = m ->
+          n = fst r ->
           Ab.hasAbsent n = true ->
           T.versions (reduceReal R D) (Name.Orig n) =
           T.VSet.add Version.Bot
             (T.versions (reduceReal (PkgFibred.tailFibre R n) DepRel.empty)
                (Name.Orig n)).
       Proof.
-        intros R D rn rv n Hr Hreach Ha; rewrite versions_reduceReal_bot.
+        intros R D [rn rv] n Hr Hreach Ha; cbn [fst] in Hreach.
+        rewrite versions_reduceReal_bot.
         assert (Hm : NSet.In n (instNames R D)).
         { destruct Hreach as [Hreach | ->];
             [exact (reachable_instNames R D n Hreach) |].

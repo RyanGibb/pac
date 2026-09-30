@@ -1545,9 +1545,9 @@ Module Opam (N V X Y E : UsualOrderedType).
         assert (Hr : PF.PkgSet.In rootPkg (reduceReal sigma I))
           by (apply mem_reduceReal; right; left; reflexivity).
         destruct Hreach as [[v Hv] | Hreach];
-          [rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ n v n Hv
+          [rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ (n, v) n Hv
                       (or_intror eq_refl) eq_refl)
-          | rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ _ _ n Hr
+          | rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ _ n Hr
                        (or_introl Hreach) eq_refl)];
           rewrite PF.Reduction.Lookup.versions_reduceReal_bot;
           do 2 f_equal; rewrite <- versions_reduceReal;
