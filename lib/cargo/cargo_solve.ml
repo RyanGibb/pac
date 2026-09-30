@@ -45,9 +45,9 @@ module Make () = struct
           | Some m when not m.P.v_default_declared ->
               ((n, v), List.filter (fun f -> f <> P.default_feature) fs)
           | _ -> ((n, v), fs))
-        (Cg.FeaturedSet.elements (Cg.decodeFS s))
+        (Cg.FeaturedSet.elements (Cg.features s))
     in
-    (* decodeParents is the one decoder that reads the instance, and a
+    (* parents is the one decoder that reads the instance, and a
        lazy run has no global relation to hand it; the fibres of the
        crates it decodes are all it looks at, since it reads Slots and
        FDefs only at the owner a slot node names and keeps the node
@@ -62,7 +62,7 @@ module Make () = struct
           | Some sd -> (n, v, Cg.kAlias k, Cg.sName sd, u)
           | None -> (n, v, Cg.kAlias k, Cg.kAlias k, u))
         (Cg.ParentRel.elements
-           (Cg.decodeParents
+           (Cg.parents
               { (L.empty_inst st) with inst_fdefs = fdefs; inst_slots = slots }
               s))
     in

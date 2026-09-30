@@ -388,7 +388,7 @@ Module VariableFormula (N V : UsualOrderedType)
           end)
         S.
 
-    Definition extractAssignment (y0 : Y.t) (Y_x : X.t -> YSet.t)
+    Definition assignment (y0 : Y.t) (Y_x : X.t -> YSet.t)
         (S : T.PkgSet.t) (x : X.t) : Y.t :=
       match YSet.min_elt (assignCand S x) with
       | Some y => y
@@ -415,12 +415,12 @@ Module VariableFormula (N V : UsualOrderedType)
           [reflexivity | contradiction NE; reflexivity].
     Qed.
 
-    Lemma extractAssignment_at : forall y0 Y_x S x y,
+    Lemma assignment_at : forall y0 Y_x S x y,
         T.VersionUnique S ->
         T.PkgSet.In (Name.Orig (inr x), Version.Orig (inr y)) S ->
-        extractAssignment y0 Y_x S x = y.
+        assignment y0 Y_x S x = y.
     Proof.
-      intros y0 Y_x S x y Huniq Hin; unfold extractAssignment.
+      intros y0 Y_x S x y Huniq Hin; unfold assignment.
       destruct (YSet.min_elt (assignCand S x)) as [v |] eqn:E.
       - apply YSet.min_elt_spec1, mem_assignCand in E.
         assert (Ev := Huniq _ _ _ E Hin); injection Ev as ->; reflexivity.
@@ -518,10 +518,10 @@ Module VariableFormula (N V : UsualOrderedType)
           T.IsResolution (reduceReal Y_x R D) (reduceDeps Y_x R D)
             (embedPkg r) S ->
           IsResolution Y_x R D r (variableFormulaResolution S)
-            (extractAssignment y0 Y_x S).
+            (assignment y0 Y_x S).
     Proof.
       intros y0 Y_x Hne R D r S Hres.
-      set (sigma := extractAssignment y0 Y_x S).
+      set (sigma := assignment y0 Y_x S).
       assert (Hres' := Hres); destruct Hres' as [Hsub Hroot Hdep Huniq].
       assert (Hreal : forall n w,
                  T.PkgSet.In (Name.Orig n, Version.Orig w) S ->
@@ -529,7 +529,7 @@ Module VariableFormula (N V : UsualOrderedType)
       { intros n w H.
         exact (PF.Reduction.embedPkg_mem_reduceReal (n, w) _ _ (Hsub _ H)). }
       assert (Hsig : forall x, YSet.In (sigma x) (Y_x x)).
-      { intro x; unfold sigma, extractAssignment.
+      { intro x; unfold sigma, assignment.
         destruct (YSet.min_elt (assignCand S x)) as [y |] eqn:E.
         - apply YSet.min_elt_spec1, mem_assignCand, Hreal, mem_liftReal in E.
           destruct E as [[m [v [_ E]]] | [x' [y' [Hy E]]]]; [discriminate E |].
@@ -558,7 +558,7 @@ Module VariableFormula (N V : UsualOrderedType)
             [discriminate E |].
           injection E as <- ->.
           assert (Hs : sigma x = y)
-            by exact (extractAssignment_at y0 Y_x S x y Huniq Hu).
+            by exact (assignment_at y0 Y_x S x y Huniq Hu).
           rewrite Hs; split.
           + intros ->; exact Hu.
           + intro Hw; assert (E := Huniq _ _ _ Hu Hw).
@@ -628,7 +628,7 @@ Module VariableFormula (N V : UsualOrderedType)
     Theorem variable_formula_retraction : forall y0 Y_x S R D sigma,
         variableFormulaResolution (coreResolution Y_x R D S sigma) = S /\
         forall x,
-          extractAssignment y0 Y_x (coreResolution Y_x R D S sigma) x = sigma x.
+          assignment y0 Y_x (coreResolution Y_x R D S sigma) x = sigma x.
     Proof.
       intros y0 Y_x S R D sigma; split.
       { apply PkgSet.ext; intros [m v].
@@ -649,7 +649,7 @@ Module VariableFormula (N V : UsualOrderedType)
           PF.Reduction.package_formula_retraction,
           mem_liftModel_inr.
         split; [intro E; injection E as -> | intros ->]; reflexivity. }
-      unfold extractAssignment.
+      unfold assignment.
       destruct (YSet.min_elt (assignCand (coreResolution Y_x R D S sigma) x))
         as [y |] eqn:E.
       - apply YSet.min_elt_spec1, Hc in E; exact E.

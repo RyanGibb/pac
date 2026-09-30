@@ -209,13 +209,13 @@ Module ConflictClass (N V : UsualOrderedType).
       forall p q : Pkg.t, embedPkg p = embedPkg q -> p = q.
     Proof. exact (SOtp.emb_injective tryInvPkg embedPkg tryInvPkg_embed). Qed.
 
-    Definition classResolution (S : T.PkgSet.t) : PkgSet.t :=
+    Definition conflictClassResolution (S : T.PkgSet.t) : PkgSet.t :=
       SOtp.filterMap tryInvPkg S.
 
-    Lemma mem_classResolution : forall (S : T.PkgSet.t) (p : Pkg.t),
-        PkgSet.In p (classResolution S) <-> T.PkgSet.In (embedPkg p) S.
+    Lemma mem_conflictClassResolution : forall (S : T.PkgSet.t) (p : Pkg.t),
+        PkgSet.In p (conflictClassResolution S) <-> T.PkgSet.In (embedPkg p) S.
     Proof.
-      unfold classResolution.
+      unfold conflictClassResolution.
       exact (SOtp.mem_filterMap_inv tryInvPkg embedPkg tryInvPkg_embed
                tryInvPkg_some).
     Qed.
@@ -232,13 +232,14 @@ Module ConflictClass (N V : UsualOrderedType).
     Theorem conflict_class_soundness :
       forall R D Om (r : Pkg.t) (S : T.PkgSet.t),
         T.IsResolution (reduceReal R Om) (reduceDeps D Om) (embedPkg r) S ->
-        IsResolution R D Om r (classResolution S).
+        IsResolution R D Om r (conflictClassResolution S).
     Proof.
       intros R D Om r S [Hsub Hroot Hdep Huniq].
       assert (Hcls : forall q k,
-                 PkgSet.In q (classResolution S) -> InClassRel.In (q, k) Om ->
+                 PkgSet.In q (conflictClassResolution S) ->
+                 InClassRel.In (q, k) Om ->
                  T.PkgSet.In (Name.Cls k, Version.Name (fst q)) S).
-      { intros q k Hq Hc; apply mem_classResolution in Hq.
+      { intros q k Hq Hc; apply mem_conflictClassResolution in Hq.
         assert (Hd : T.DepRel.In
                        (embedPkg q,
                         (Name.Cls k, T.VSet.singleton (Version.Name (fst q))))
@@ -247,17 +248,17 @@ Module ConflictClass (N V : UsualOrderedType).
               split; [exact Hc | reflexivity]).
         destruct (Hdep _ Hq _ _ Hd) as [w [Hw HwS]].
         rewrite SOvt.singleton_in in Hw; subst w; exact HwS. }
-      assert (Hvu : C.VersionUnique (classResolution S)).
-      { intros n v v' Hv Hv'; apply mem_classResolution in Hv, Hv'.
+      assert (Hvu : C.VersionUnique (conflictClassResolution S)).
+      { intros n v v' Hv Hv'; apply mem_conflictClassResolution in Hv, Hv'.
         assert (E : Version.Orig v = Version.Orig v')
           by (apply (Huniq (Name.Orig n)); assumption).
         injection E as E; exact E. }
       constructor.
       - constructor.
-        + intros p Hp; apply mem_classResolution in Hp.
+        + intros p Hp; apply mem_conflictClassResolution in Hp.
           exact (embedPkg_mem_real p R Om (Hsub _ Hp)).
-        + apply mem_classResolution; exact Hroot.
-        + intros p Hp m vs HD; apply mem_classResolution in Hp.
+        + apply mem_conflictClassResolution; exact Hroot.
+        + intros p Hp m vs HD; apply mem_conflictClassResolution in Hp.
           assert (Hd : T.DepRel.In (embedPkg p, (Name.Orig m, embedVS vs))
                          (reduceDeps D Om))
             by (apply mem_reduceDeps; left; exists p, m, vs;
@@ -266,7 +267,7 @@ Module ConflictClass (N V : UsualOrderedType).
           unfold embedVS in Hw; apply SOvt.mem_map in Hw;
             destruct Hw as [v [Hv ->]].
           exists v; split;
-            [exact Hv | apply mem_classResolution; exact HwS].
+            [exact Hv | apply mem_conflictClassResolution; exact HwS].
         + exact Hvu.
       - intros k [pn pv] [qn qv] Hp Hq Hpk Hqk.
         assert (E : Version.Name pn = Version.Name qn)
@@ -320,10 +321,10 @@ Module ConflictClass (N V : UsualOrderedType).
     Qed.
 
     Theorem conflict_class_retraction : forall (S : PkgSet.t) Om,
-        classResolution (coreResolution Om S) = S.
+        conflictClassResolution (coreResolution Om S) = S.
     Proof.
       intros S Om; apply PkgSet.ext; intro p.
-      rewrite mem_classResolution; unfold coreResolution.
+      rewrite mem_conflictClassResolution; unfold coreResolution.
       split; [exact (embedPkg_mem_real p S Om) |].
       intro H; apply mem_reduceReal; left; exists p; split;
         [exact H | reflexivity].

@@ -17,7 +17,7 @@ module Make (Encoding : Encoding.S) : sig
   val root_features : state -> Cargo_query.features
 
   (* the crate version's slots and feature definitions, which is all
-     decodeParents reads of it *)
+     parents reads of it *)
   val slots_and_fdefs : state -> string * string -> Cg.SlotRel.t * Cg.FDefRel.t
 
   (* the manifest record a slot name's dependency came from, for choose's

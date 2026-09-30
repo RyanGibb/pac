@@ -382,16 +382,16 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Qed.
 
   Module SOpre := SetOps Deb.Ver.C.Pkg Pkg Deb.Ver.C.PkgSet PkgSet.
-  Definition multiarchResolution (S : Deb.Ver.C.PkgSet.t) : PkgSet.t :=
+  Definition debianMAResolution (S : Deb.Ver.C.PkgSet.t) : PkgSet.t :=
     SOpre.filterMap tryInvPkg S.
 
   Lemma embedPkg_injective : forall p q, embedPkg p = embedPkg q -> p = q.
   Proof. exact (SOpre.emb_injective tryInvPkg embedPkg tryInvPkg_embed). Qed.
 
-  Lemma mem_multiarchResolution : forall S q,
-      PkgSet.In q (multiarchResolution S) <-> Deb.Ver.C.PkgSet.In (embedPkg q) S.
+  Lemma mem_debianMAResolution : forall S q,
+      PkgSet.In q (debianMAResolution S) <-> Deb.Ver.C.PkgSet.In (embedPkg q) S.
   Proof.
-    unfold multiarchResolution.
+    unfold debianMAResolution.
     exact (SOpre.mem_filterMap_inv tryInvPkg embedPkg tryInvPkg_embed
              tryInvPkg_some).
   Qed.
@@ -781,7 +781,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
   Theorem debian_ma_soundness : forall I S,
       Deb.IsResolution (reduceInst I) S ->
-      IsResolution I (multiarchResolution S).
+      IsResolution I (debianMAResolution S).
   Proof.
     intros [R D Dopt Pi G M r] S HT.
     destruct HT as [Hsub Hroot Hcc Hca Hvu].
@@ -789,17 +789,17 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
          Deb.inst_root inst_repo inst_deps inst_prov inst_conf inst_cls
          inst_root] in Hsub, Hroot, Hcc, Hca.
     assert (HinR : forall q,
-               PkgSet.In q (multiarchResolution S) -> PkgSet.In q R).
+               PkgSet.In q (debianMAResolution S) -> PkgSet.In q R).
     { intros q Hq.
-      rewrite mem_multiarchResolution in Hq.
+      rewrite mem_debianMAResolution in Hq.
       apply Hsub in Hq; unfold reduceReal in Hq.
       exact (proj1 (SOmr.mem_map_inj _ _ _ embedPkg_injective) Hq). }
     constructor; cbn [inst_repo inst_deps inst_conf inst_prov inst_cls
                       inst_root].
     - exact HinR.
-    - rewrite mem_multiarchResolution; exact Hroot.
+    - rewrite mem_debianMAResolution; exact Hroot.
     - intros p HpS Al HAl.
-      pose proof HpS as HpT; rewrite mem_multiarchResolution in HpT.
+      pose proof HpS as HpT; rewrite mem_debianMAResolution in HpT.
       assert (Hd : Deb.Deps.In (embedPkg p, reduceClause (parch p) Al)
                      (reduceDeps D)).
       { rewrite mem_reduceDeps; exists p, Al; split;
@@ -811,10 +811,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       unfold reduceReal in *; rewrite SOmr.mem_map in HqhR; destruct HqhR as [q [HqR Hqe]]; subst qh.
       exists a; split; [exact Hat |].
       exists q; split.
-      + rewrite mem_multiarchResolution; exact HqhS.
+      + rewrite mem_debianMAResolution; exact HqhS.
       + exact (proj2 (match_transfer R Pi M (parch p) a q HqR) HqhM).
     - intros p HpS a HG [q [HqS [Hqp HCM]]].
-      pose proof HpS as HpT; rewrite mem_multiarchResolution in HpT.
+      pose proof HpS as HpT; rewrite mem_debianMAResolution in HpT.
       pose proof (HinR q HqS) as HqR.
       destruct (proj2 (conf_transfer R Pi M p a q HqR) HCM)
         as [c1 [c2 [c3 [Hce HM]]]].
@@ -826,7 +826,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           [exact HG | exact Hce]. }
       apply (Hca (embedPkg p) HpT c2 true HceG).
       exists (embedPkg q); split;
-        [ rewrite mem_multiarchResolution in HqS; exact HqS
+        [ rewrite mem_debianMAResolution in HqS; exact HqS
         | split;
           [ intro E; apply Hqp; rewrite (embedPkg_injective _ _ E); reflexivity
           | split;
@@ -837,8 +837,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             | exact HM ] ] ].
     - intros p q HpS HqS Hname Harch.
       pose proof (HinR p HpS) as HpR; pose proof (HinR q HqS) as HqR.
-      pose proof HpS as HpT; rewrite mem_multiarchResolution in HpT.
-      pose proof HqS as HqT; rewrite mem_multiarchResolution in HqT.
+      pose proof HpS as HpT; rewrite mem_debianMAResolution in HpT.
+      pose proof HqS as HqT; rewrite mem_debianMAResolution in HqT.
       assert (Hpq : embedPkg q <> embedPkg p).
       { intro E; apply Harch; unfold embedPkg in E; injection E; intros;
           congruence. }
@@ -891,15 +891,19 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                 [ symmetry; exact Hname
                 | intro E; apply Hv; symmetry; exact E ] ] ] ].
     - intros n v v' Hv Hv'.
-      rewrite mem_multiarchResolution in Hv, Hv'.
+      rewrite mem_debianMAResolution in Hv, Hv'.
       destruct n as [m ar].
       exact (Hvu (m, QAArch ar) v v' Hv Hv').
   Qed.
 
+  Definition coreResolution (S : PkgSet.t) : Deb.Ver.C.PkgSet.t :=
+    reduceReal S.
+
   Theorem debian_ma_completeness : forall I S,
       IsResolution I S ->
-      Deb.IsResolution (reduceInst I) (reduceReal S).
+      Deb.IsResolution (reduceInst I) (coreResolution S).
   Proof.
+    unfold coreResolution.
     intros [R D Dopt Pi G M r] S HS.
     destruct HS as [HSsub HSroot HScc HSca HSci HSvu].
     cbn [inst_repo inst_deps inst_prov inst_conf inst_cls inst_root]
@@ -1000,7 +1004,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         (Deb.reduceDeps (reduceInst I))
         (Deb.embedPkg (embedPkg (inst_root I))) S ->
       IsResolution I
-        (multiarchResolution (Deb.debianResolution S)).
+        (debianMAResolution (Deb.debianResolution S)).
   Proof.
     intros I S H.
     exact (debian_ma_soundness I (Deb.debianResolution S)
@@ -1013,10 +1017,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         (Deb.reduceReal (reduceInst I))
         (Deb.reduceDeps (reduceInst I))
         (Deb.embedPkg (embedPkg (inst_root I)))
-        (Deb.coreResolution (reduceInst I) (reduceReal S)).
+        (Deb.coreResolution (reduceInst I) (coreResolution S)).
   Proof.
     intros I S H.
-    exact (Deb.debian_completeness (reduceInst I) (reduceReal S)
+    exact (Deb.debian_completeness (reduceInst I) (coreResolution S)
              (debian_ma_completeness I S H)).
   Qed.
 
@@ -2144,17 +2148,17 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   End Lookup.
 
   Theorem debian_ma_retraction : forall S,
-      multiarchResolution (reduceReal S) = S.
+      debianMAResolution (coreResolution S) = S.
   Proof.
     intro S; apply PkgSet.ext; intro q.
-    rewrite mem_multiarchResolution; unfold reduceReal.
+    rewrite mem_debianMAResolution; unfold coreResolution, reduceReal.
     exact (SOmr.mem_map_inj _ _ _ embedPkg_injective).
   Qed.
 
   Corollary debian_ma_core_retraction : forall I S,
-      multiarchResolution
+      debianMAResolution
         (Deb.debianResolution
-           (Deb.coreResolution (reduceInst I) (reduceReal S))) = S.
+           (Deb.coreResolution (reduceInst I) (coreResolution S))) = S.
   Proof.
     intros I S.
     rewrite Deb.debian_retraction.

@@ -66,7 +66,7 @@ module Make () = struct
     let read, dropped = Lookup.optional_verdicts st in
     {
       installs = List.sort compare (Np.PkgSet.elements (R.npmResolution s));
-      tree = List.sort compare (Np.Conc.ParentRel.elements (R.npmParents s));
+      tree = List.sort compare (Np.Conc.ParentRel.elements (R.parents s));
       nodes = List.length sol;
       lookups;
       optional_read = read;

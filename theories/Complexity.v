@@ -363,14 +363,14 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
         congruence.
     Qed.
 
-    Definition extractAssignment (S : T.PkgSet.t) (x : X.t) : bool :=
+    Definition assignment (S : T.PkgSet.t) (x : X.t) : bool :=
       T.PkgSet.mem (Name.Var x, Version.Truth true) S.
 
-    Lemma extractAssignment_spec : forall S x b,
+    Lemma assignment_spec : forall S x b,
         T.VersionUnique S -> T.PkgSet.In (Name.Var x, Version.Truth b) S ->
-        extractAssignment S x = b.
+        assignment S x = b.
     Proof.
-      intros S x b Huniq Hin; unfold extractAssignment.
+      intros S x b Huniq Hin; unfold assignment.
       destruct b; [apply T.PkgSet.mem_spec; exact Hin |].
       destruct (T.PkgSet.mem (Name.Var x, Version.Truth true) S) eqn:E;
         [| reflexivity].
@@ -380,7 +380,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
 
     Theorem three_sat_soundness : forall cs S,
         T.IsResolution (reduceReal cs) (reduceDeps cs) root S ->
-        CnfSat (extractAssignment S) (cnf cs).
+        CnfSat (assignment S) (cnf cs).
     Proof.
       intros cs S [_ Hroot Hdep Huniq] c Hc.
       unfold cnf in Hc; apply List.in_map_iff in Hc.
@@ -395,7 +395,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
         right; exists l; split; [exact Hl | reflexivity]. }
       apply T.VSet.singleton_spec in Hw; subst w.
       exists l; split; [exact Hl |].
-      apply extractAssignment_spec; assumption.
+      apply assignment_spec; assumption.
     Qed.
 
     Definition litSatb (sigma : X.t -> bool) (l : LitOT.t) : bool :=
@@ -515,7 +515,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
       intro cs; split.
       - intros [sigma Hs]; exists (coreResolution cs sigma).
         exact (three_sat_completeness cs sigma Hs).
-      - intros [S HS]; exists (extractAssignment S).
+      - intros [S HS]; exists (assignment S).
         exact (three_sat_soundness cs S HS).
     Qed.
   End Reduction.

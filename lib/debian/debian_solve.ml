@@ -428,7 +428,7 @@ module Make (AP : Tables.ARCH) = struct
       List.map
         (fun ((n, b), v) -> (n, b, v))
         (DMA.PkgSet.elements
-           (DMA.multiarchResolution (DMA.Deb.debianResolution s')))
+           (DMA.debianMAResolution (DMA.Deb.debianResolution s')))
 
     (* apt enqueues the requested packages as it walks its package table
        (FromDepCache, apt-pkg/solver3.cc): bucket by bucket of sHash, the

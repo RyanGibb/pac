@@ -1395,7 +1395,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         injection H as <- <-; reflexivity.
     Qed.
 
-    Definition npmParents (S : T.PkgSet.t) : Conc.ParentRel.t :=
+    Definition parents (S : T.PkgSet.t) : Conc.ParentRel.t :=
       SOtp.filterMap
         (fun s => match s with
                   | (Nm.Intermediate k v m, Vs.Orig u) =>
@@ -1406,14 +1406,14 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
                   end)
         S.
 
-    Lemma mem_npmParents : forall S c q,
-        Conc.ParentRel.In (c, q) (npmParents S) <->
+    Lemma mem_parents : forall S c q,
+        Conc.ParentRel.In (c, q) (parents S) <->
         T.PkgSet.In
           (Nm.Intermediate (fst q) (snd q) (fst c), Vs.Orig (snd c)) S /\
         T.PkgSet.In (embedPkg q) S.
     Proof.
       intros S [m u] [k v]; cbn [fst snd].
-      unfold npmParents; rewrite SOtp.mem_filterMap; split.
+      unfold parents; rewrite SOtp.mem_filterMap; split.
       - intros [[n x] [Hs He]]; destruct n as [k' w | k' v' m' | | | ];
           destruct x as [u' | |]; try discriminate He.
         cbn beta iota in He; apply if_some_iff in He as [Hm He].
@@ -1432,7 +1432,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       | _ => false
       end.
 
-    Definition npmSight (S : T.PkgSet.t) (c : Pkg.t) (a : N.t) : option V.t :=
+    Definition sight (S : T.PkgSet.t) (c : Pkg.t) (a : N.t) : option V.t :=
       match List.find (isSightOf c a) (T.PkgSet.elements S) with
       | Some (_, Vs.Orig w) => Some w
       | _ => None
@@ -1449,11 +1449,11 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       intros [-> [-> ->]]; exists x; reflexivity.
     Qed.
 
-    Lemma npmSight_some : forall S c a w,
-        npmSight S c a = Some w ->
+    Lemma sight_some : forall S c a w,
+        sight S c a = Some w ->
         T.PkgSet.In (Nm.Sight (fst c) (snd c) a, Vs.Orig w) S.
     Proof.
-      intros S c a w; unfold npmSight.
+      intros S c a w; unfold sight.
       destruct (List.find (isSightOf c a) (T.PkgSet.elements S)) as [s |] eqn:Hf;
         [| discriminate].
       apply List.find_some in Hf; destruct Hf as [Hin Hp].
@@ -1461,12 +1461,12 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       intro H; injection H as ->; apply SOtp.elements_in; exact Hin.
     Qed.
 
-    Lemma npmSight_in : forall S c a w,
+    Lemma sight_in : forall S c a w,
         T.VersionUnique S ->
         T.PkgSet.In (Nm.Sight (fst c) (snd c) a, Vs.Orig w) S ->
-        npmSight S c a = Some w.
+        sight S c a = Some w.
     Proof.
-      intros S c a w Hu Hin; unfold npmSight.
+      intros S c a w Hu Hin; unfold sight.
       destruct (List.find (isSightOf c a) (T.PkgSet.elements S)) as [s |] eqn:Hf.
       - apply List.find_some in Hf; destruct Hf as [Hs Hp].
         destruct (isSightOf_true _ _ _ Hp) as [w' ->].
@@ -1610,7 +1610,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         NSet.In n (peerNames I (snd m, u)) ->
         T.PkgSet.In (Nm.Link (fst q) (snd q) m u n, x) S ->
         forall w,
-          Shows I (npmResolution S) (npmParents S) (npmSight S) q n w <->
+          Shows I (npmResolution S) (parents S) (sight S) q n w <->
           x = Vs.Orig w.
     Proof.
       intros I S [k v] m u n x Hres Hq Hi Ha Hl w.
@@ -1627,9 +1627,9 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         { apply dependees_link; right; left; apply mem_holderEdges; left.
           split; [exact Hc | reflexivity]. }
         apply T.VSet.singleton_spec in Hy; subst y; split.
-        + intro Hsg; apply npmSight_some in Hsg; cbn [fst snd] in Hsg.
+        + intro Hsg; apply sight_some in Hsg; cbn [fst snd] in Hsg.
           exact (Huniq _ _ _ HyS Hsg).
-        + intros ->; apply npmSight_in; [exact Huniq | exact HyS].
+        + intros ->; apply sight_in; [exact Huniq | exact HyS].
       - assert (Hxf : x <> Vs.Free)
           by (destruct Hx' as [[E _] | [w0 [_ E]]]; subst x; discriminate).
         destruct (dep_met I S _
@@ -1639,12 +1639,12 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         { apply dependees_link; right; left; apply mem_holderEdges; right.
           split; [exact Hc | split; [exact Hh | split; [exact Hxf | reflexivity]]]. }
         apply T.VSet.singleton_spec in Hy; subst y; split.
-        + intros [_ Hp]; apply mem_npmParents in Hp; cbn [fst snd] in Hp.
+        + intros [_ Hp]; apply mem_parents in Hp; cbn [fst snd] in Hp.
           destruct Hp as [Hp _].
           exact (Huniq _ _ _ HyS Hp).
         + intros ->; split.
           * apply mem_npmResolution; exact (exit_selected I S k v _ w Hres HyS).
-          * apply mem_npmParents; cbn [fst snd]; split; assumption.
+          * apply mem_parents; cbn [fst snd]; split; assumption.
       - subst x; cbn [snd]; split; [intros ->; reflexivity |].
         intro E; injection E as <-; reflexivity.
       - subst x; split; [intros [] | discriminate].
@@ -1692,7 +1692,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
 
     Theorem npm_soundness : forall I S,
         T.IsResolution (reduceReal I) (reduceDeps I) (embedRoot I) S ->
-        IsResolution I (npmResolution S) (npmParents S) (npmSight S).
+        IsResolution I (npmResolution S) (parents S) (sight S).
     Proof.
       intros I S Hres.
       assert (Hres' := Hres); destruct Hres' as [Hsub Hroot Hdep Huniq].
@@ -1700,15 +1700,15 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
                  T.PkgSet.In (embedPkg q) S ->
                  T.PkgSet.In
                    (Nm.Intermediate (fst q) (snd q) m, Vs.Orig v) S ->
-                 Installs (npmResolution S) (npmParents S) q m v).
+                 Installs (npmResolution S) (parents S) q m v).
       { intros [k w] m v Hq Hi; split.
         - apply mem_npmResolution; exact (exit_selected I S k w m v Hres Hi).
-        - apply mem_npmParents; cbn [fst snd]; split; assumption. }
+        - apply mem_parents; cbn [fst snd]; split; assumption. }
       assert (Hint : forall q m u,
-                 Installs (npmResolution S) (npmParents S) q m u ->
+                 Installs (npmResolution S) (parents S) q m u ->
                  T.PkgSet.In
                    (Nm.Intermediate (fst q) (snd q) m, Vs.Orig u) S).
-      { intros q m u [_ Hu]; apply mem_npmParents in Hu; exact (proj1 Hu). }
+      { intros q m u [_ Hu]; apply mem_parents in Hu; exact (proj1 Hu). }
       assert (Hlink : forall q m u a,
                  T.PkgSet.In
                    (Nm.Intermediate (fst q) (snd q) m, Vs.Orig u) S ->
@@ -1822,9 +1822,9 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         + apply KeyEqb.eqb_true_iff in Hp; cbv iota in Hz.
           rewrite T.VSet.add_spec, T.VSet.singleton_spec in Hz.
           destruct Hz as [E | E]; [subst y | contradiction].
-          split; [apply npmSight_in; [exact Huniq | exact Hy] | exact Hp].
+          split; [apply sight_in; [exact Huniq | exact Hy] | exact Hp].
         + cbv iota in Hz; rewrite T.VSet.singleton_spec in Hz; contradiction.
-      - intros [k v] a w Hsg; apply npmSight_some in Hsg.
+      - intros [k v] a w Hsg; apply sight_some in Hsg.
         apply Hsub, mem_reduceReal in Hsg; destruct Hsg as [_ Hw].
         cbn [versions fst snd] in Hw; rewrite !T.VSet.add_spec in Hw.
         destruct Hw as [E | [E | Hw]]; [discriminate E | discriminate E |].
@@ -1847,12 +1847,12 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           destruct Hz as [E | [E Hplain]]; [contradiction | subst y].
           split.
           * intro w'; unfold Offers; split.
-            -- intro Hsg; apply npmSight_some in Hsg; cbn [fst snd] in Hsg.
+            -- intro Hsg; apply sight_some in Hsg; cbn [fst snd] in Hsg.
                pose proof (Huniq _ _ _ Hy Hsg) as E; injection E as <-.
                left; apply Hsh; reflexivity.
             -- intros [Hs | [_ [Hno _]]].
                ++ apply Hsh in Hs; injection Hs as <-.
-                  apply npmSight_in; [exact Huniq | exact Hy].
+                  apply sight_in; [exact Huniq | exact Hy].
                ++ exfalso; apply (Hno w); apply Hsh; reflexivity.
           * intros w' _; exact Hplain.
         + apply (sightSet_bot I (k, v) (m, u)) in Hz.
@@ -1860,7 +1860,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
             [contradiction | |].
           * subst y; split.
             -- intro w'; unfold Offers; split.
-               ++ intro Hsg; apply npmSight_some in Hsg; cbn [fst snd] in Hsg.
+               ++ intro Hsg; apply sight_some in Hsg; cbn [fst snd] in Hsg.
                   pose proof (Huniq _ _ _ Hy Hsg) as E; discriminate E.
                ++ intros [Hs | [Hd' _]];
                     [apply Hsh in Hs; discriminate Hs | rewrite Hd in Hd'; discriminate Hd'].
@@ -1886,7 +1886,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
             destruct Hz3 as [E | E]; [injection E as E; subst u'' | discriminate E].
             split.
             -- intro w'; unfold Offers; split.
-               ++ intro Hsg; apply npmSight_some in Hsg; cbn [fst snd] in Hsg.
+               ++ intro Hsg; apply sight_some in Hsg; cbn [fst snd] in Hsg.
                   pose proof (Huniq _ _ _ Hy Hsg) as E; injection E as <-.
                   right; split; [exact Hd |].
                   split; [intros w0 Hs; apply Hsh in Hs; discriminate Hs |].
@@ -1894,7 +1894,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
                ++ intros [Hs | [_ [_ Hi2]]]; [apply Hsh in Hs; discriminate Hs |].
                   apply Hint in Hi2.
                   pose proof (Huniq _ _ _ HzS' Hi2) as E; injection E as <-.
-                  apply npmSight_in; [exact Huniq | exact Hy].
+                  apply sight_in; [exact Huniq | exact Hy].
             -- intros w' Hs; apply Hsh in Hs; discriminate Hs.
       - intros q Hq m u Hmu a w Ha Hs.
         apply mem_npmResolution in Hq; apply Hint in Hmu.
@@ -1938,7 +1938,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         destruct (root_peer_selected I S theta Hres Hr Hact) as [v0 [Hv0 Hj]].
         apply Hint in Hv.
         pose proof (Huniq _ _ _ Hv Hj) as Heq; injection Heq as ->; exact Hv0.
-      - intros [m u] [k w] Hcq; apply mem_npmParents in Hcq.
+      - intros [m u] [k w] Hcq; apply mem_parents in Hcq.
         cbn [fst snd] in Hcq; destruct Hcq as [Hi Hq].
         split; [| split].
         + apply mem_npmResolution; exact (exit_selected I S k w m u Hres Hi).
@@ -1958,17 +1958,17 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         exists w,
           PkgSet.In (peerKeyAt I (snd k, v) theta, w) (npmResolution S) /\
           Conc.ParentRel.In
-            ((peerKeyAt I (snd k, v) theta, w), (k, v)) (npmParents S) /\
+            ((peerKeyAt I (snd k, v) theta, w), (k, v)) (parents S) /\
           VSet.In w (peerCandsAt I (snd k, v) theta).
     Proof.
       intros I S Hres k v m u Hq Hi theta Hr Hopt Hch Hself Hdp.
       pose proof (npm_soundness I S Hres) as Hsrc.
       assert (Hp : PkgSet.In (k, v) (npmResolution S))
         by (apply mem_npmResolution; exact Hq).
-      assert (HI : Installs (npmResolution S) (npmParents S) (k, v) m u).
+      assert (HI : Installs (npmResolution S) (parents S) (k, v) m u).
       { split.
         - apply mem_npmResolution; exact (exit_selected I S k v m u Hres Hi).
-        - apply mem_npmParents; cbn [fst snd]; split; assumption. }
+        - apply mem_parents; cbn [fst snd]; split; assumption. }
       assert (Ha : NSet.In (p_name theta) (peerNames I (snd m, u)))
         by (apply mem_peerNames; exists theta; split; [exact Hr | reflexivity]).
       destruct (res_peer_need _ _ _ _ Hsrc (k, v) Hp m u HI theta Hr Hopt Hdp)
@@ -3714,13 +3714,13 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       - intro Hp; left; exists k, v; split; [exact Hp | reflexivity].
     Qed.
 
-    Lemma npmParents_coreResolution : forall I S pi sg,
+    Lemma parents_coreResolution : forall I S pi sg,
         IsResolution I S pi sg ->
-        npmParents (coreResolution I S pi sg) = pi.
+        parents (coreResolution I S pi sg) = pi.
     Proof.
       intros I S pi sg Hres.
       apply Conc.ParentRel.ext; intros [[m u] [k v]].
-      rewrite mem_npmParents, !mem_coreResolution; cbn [fst snd]; split.
+      rewrite mem_parents, !mem_coreResolution; cbn [fst snd]; split.
       - intros [[[k' [v' [_ He]]] |
                  [[[pk pv] [m' [u' [_ [_ [_ [Hi He]]]]]]] |
                   [[c [a [_ [_ He]]]] |
@@ -3741,14 +3741,14 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         + left; exists k, v; split; [exact Hq | reflexivity].
     Qed.
 
-    Lemma npmSight_coreResolution_iff : forall I S pi sg,
+    Lemma sight_coreResolution_iff : forall I S pi sg,
         IsResolution I S pi sg ->
         forall c n w,
-          npmSight (coreResolution I S pi sg) c n = Some w <->
+          sight (coreResolution I S pi sg) c n = Some w <->
           sg c n = Some w /\ chains I c n = true /\ ReadBelow I S pi c n.
     Proof.
       intros I S pi sg Hres [k v] n w; split.
-      - intro Hsg; apply npmSight_some, mem_coreResolution in Hsg.
+      - intro Hsg; apply sight_some, mem_coreResolution in Hsg.
         destruct Hsg as
             [[k' [v' [_ He]]] |
              [[p [m [u [_ [_ [_ [_ He]]]]]]] |
@@ -3767,7 +3767,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         split; [reflexivity | split; [exact Hch |]].
         exact (proj1 (readb_iff _ _ _ _ _ _ Hres) Hrd).
       - intros [Hsg [Hch Hrd]].
-        apply npmSight_in;
+        apply sight_in;
           [exact (T.res_version_unique _ _ _ _ (npm_completeness _ _ _ _ Hres))
           |].
         apply mem_coreResolution; right; right; left.
@@ -3783,19 +3783,19 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Theorem npm_retraction : forall I S pi sg,
         IsResolution I S pi sg -> SightRead I S pi sg ->
         npmResolution (coreResolution I S pi sg) = S /\
-        npmParents (coreResolution I S pi sg) = pi /\
-        forall c n, npmSight (coreResolution I S pi sg) c n = sg c n.
+        parents (coreResolution I S pi sg) = pi /\
+        forall c n, sight (coreResolution I S pi sg) c n = sg c n.
     Proof.
       intros I S pi sg Hres Hread.
       split; [apply npmResolution_coreResolution |].
-      split; [exact (npmParents_coreResolution _ _ _ _ Hres) |].
+      split; [exact (parents_coreResolution _ _ _ _ Hres) |].
       intros c n.
-      destruct (npmSight (coreResolution I S pi sg) c n) as [w |] eqn:E.
+      destruct (sight (coreResolution I S pi sg) c n) as [w |] eqn:E.
       - symmetry.
-        exact (proj1 (proj1 (npmSight_coreResolution_iff _ _ _ _ Hres c n w) E)).
+        exact (proj1 (proj1 (sight_coreResolution_iff _ _ _ _ Hres c n w) E)).
       - destruct (sg c n) as [w |] eqn:Es; [exfalso | reflexivity].
         destruct (Hread _ _ _ Es) as [Hch Hrd].
-        assert (Hs := proj2 (npmSight_coreResolution_iff _ _ _ _ Hres c n w)
+        assert (Hs := proj2 (sight_coreResolution_iff _ _ _ _ Hres c n w)
                         (conj Es (conj Hch Hrd))).
         rewrite E in Hs; discriminate Hs.
     Qed.

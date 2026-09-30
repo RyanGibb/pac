@@ -32,8 +32,8 @@ C.versions
 Cx.Encoding.satEncoding
 Cx.Encoding.sat_encoding_completeness
 Cx.Encoding.sat_encoding_soundness
+Cx.Reduction.assignment
 Cx.Reduction.coreResolution
-Cx.Reduction.extractAssignment
 Cx.Reduction.reduceDeps
 Cx.Reduction.reduceDeps_functionalInName
 Cx.Reduction.reduceReal
@@ -64,7 +64,7 @@ Cls.Reduction.Lookup.inClass
 Cls.Reduction.Lookup.versions_lookupClass
 Cls.Reduction.Lookup.versions_lookupOrig
 Cls.Reduction.classPkgs
-Cls.Reduction.classResolution
+Cls.Reduction.conflictClassResolution
 Cls.Reduction.conflict_class_completeness
 Cls.Reduction.conflict_class_retraction
 Cls.Reduction.conflict_class_soundness
@@ -194,7 +194,7 @@ VarF.Reduction.Lookup.dependees_lookupVar
 VarF.Reduction.Lookup.versions_lookupDisjunct
 VarF.Reduction.Lookup.versions_lookupOrig
 VarF.Reduction.Lookup.versions_lookupVar
-VarF.Reduction.extractAssignment
+VarF.Reduction.assignment
 VarF.Reduction.reduceDeps
 VarF.Reduction.reduceDepsBy
 VarF.Reduction.reduceReal
@@ -344,13 +344,13 @@ Cgo.cargo_soundness
 Cgo.coreResolution
 Cgo.csAdmits
 Cgo.csHolds
-Cgo.decodeFS
-Cgo.decodeParents
 Cgo.dependees
 Cgo.dependeesBy
 Cgo.evalReq
 Cgo.evalReqBy
+Cgo.features
 Cgo.linkRel
+Cgo.parents
 Cgo.rangeEval
 Cgo.reduceDeps
 Cgo.reduceReal
@@ -402,7 +402,6 @@ NpmS.Reduction.dependees
 NpmS.Reduction.dependees_reducedNames
 NpmS.Reduction.embedRoot
 NpmS.Reduction.lookup_resolution
-NpmS.Reduction.npmSight
 NpmS.Reduction.npm_completeness
 NpmS.Reduction.npm_retraction
 NpmS.Reduction.npm_soundness
@@ -410,6 +409,7 @@ NpmS.Reduction.peer_installed
 NpmS.Reduction.reached_reduceReal
 NpmS.Reduction.reduceDeps
 NpmS.Reduction.reduceReal
+NpmS.Reduction.sight
 NpmS.Reduction.versions
 NpmS.rootPkg
 

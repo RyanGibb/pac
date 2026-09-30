@@ -176,7 +176,7 @@ module Conflict_class = struct
   let deps = rel R.T.VSet.elements R.T.DepRel.elements (R.reduceDeps d om)
 
   let decode s =
-    pkgs (M.PkgSet.elements (R.classResolution (R.T.PkgSet.ofList s)))
+    pkgs (M.PkgSet.elements (R.conflictClassResolution (R.T.PkgSet.ofList s)))
 end
 
 module Conflict = struct
@@ -703,8 +703,7 @@ module Variable_formula = struct
   let decode s =
     let s = R.T.PkgSet.ofList s in
     pkgs (M.PkgSet.elements (R.variableFormulaResolution s));
-    Printf.printf "assignment: os = %s\n"
-      (R.extractAssignment "linux" yx s "os")
+    Printf.printf "assignment: os = %s\n" (R.assignment "linux" yx s "os")
 end
 
 module Virtual = struct
