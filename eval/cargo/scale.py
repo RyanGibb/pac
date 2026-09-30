@@ -65,13 +65,13 @@ def index_files():
 
 def sample(seed, n):
     for rel in random.Random(int(seed)).sample(index_files(), int(n)):
-        rows = read_rows(rel)
+        rows = read_rows(os.path.join(INDEX, rel))
         if newest(rows):
             print(rows[0]["name"])
 
 
 def summary(rel):
-    rows = read_rows(rel)
+    rows = read_rows(os.path.join(INDEX, rel))
     top = newest(rows)
     if top is None:
         return None

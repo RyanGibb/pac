@@ -47,10 +47,10 @@ def crate_path(name, index=INDEX):
 
 
 def read_rows(path):
-    """the rows of an index file, its path absolute or under INDEX, that
-    JSON reads as an object with a version; none where there is no file"""
+    """the rows of the index file at path that JSON reads as an object
+    with a version; none where there is no file"""
     try:
-        with open(os.path.join(INDEX, path), encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             lines = f.readlines()
     except FileNotFoundError:
         return []

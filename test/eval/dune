@@ -1,6 +1,9 @@
 (cram
  (deps
   %{exe:../../bin/main.exe}
+  ../../eval/cargo/consistent.py
+  ../../eval/cargo/run_query.py
+  ../../eval/cargo/scale.py
   ../../eval/npm/edges.py
   ../../eval/npm/lockname.py
   ../../eval/npm/npmlib.js
