@@ -1714,7 +1714,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                        q n ws Henc Hqw)].
     Qed.
 
-    Theorem package_formula_completeness :
+    Theorem formula_calculus_completeness :
       forall (R : PkgSet.t) (D : DepRel.t) (r : Pkg.t) (S : PkgSet.t),
         IsResolution R D r S ->
         (forall m, NSet.In m (depNames D) -> Ab.hasAbsent m = false ->
@@ -3004,4 +3004,16 @@ End AllAbsent.
 Module PackageFormula (N V : UsualOrderedType).
   Module Ab := AllAbsent N.
   Include FormulaCalculus N V Ab.
+
+  Theorem package_formula_completeness :
+    forall (R : PkgSet.t) (D : DepRel.t) (r : Pkg.t) (S : PkgSet.t),
+      IsResolution R D r S ->
+      Reduction.T.IsResolution (Reduction.reduceReal R D)
+        (Reduction.reduceDeps R D) (Reduction.embedPkg r)
+        (Reduction.coreResolution S R D).
+  Proof.
+    intros R D r S Hres.
+    apply (Reduction.formula_calculus_completeness R D r S Hres).
+    intros m _ Ha; discriminate Ha.
+  Qed.
 End PackageFormula.

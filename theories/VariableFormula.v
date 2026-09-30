@@ -600,7 +600,7 @@ Module VariableFormula (N V : UsualOrderedType)
             (coreResolution Y_x S R D sigma).
     Proof.
       intros Y_x R D r sigma Hs S [Hsub Hroot Hclo Huniq].
-      apply PF.Reduction.package_formula_completeness.
+      apply PF.Reduction.formula_calculus_completeness.
       - constructor.
         + intros [[m | x] w] Hq; apply mem_liftReal.
           * apply mem_liftModel_inl in Hq; destruct Hq as [v [-> Hv]].
