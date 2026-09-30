@@ -84,9 +84,9 @@ module Make (Place_encoding : Place_encoding.S) = struct
 
   let xpeer ar (r : P.peer) : Npl.coq_PeerDependency =
     {
-      Npl.p_dir = r.P.p_dir;
-      p_name = r.P.p_name;
-      p_range = xrange (Lookup.spec_range ar r.P.p_name r.P.p_spec);
+      Npl.p_dir = r.P.p_name;
+      p_name = r.P.p_dependee_name;
+      p_range = xrange (Lookup.spec_range ar r.P.p_dependee_name r.P.p_spec);
       p_optional = r.P.p_optional;
     }
 

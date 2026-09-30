@@ -54,8 +54,8 @@ module Make (Encoding : Encoding.S) = struct
      packument of that name *)
   let xpeer ar (r : P.peer) : Np.coq_PeerDependency =
     {
-      Np.p_name = r.P.p_dir;
-      Np.p_range = xrange (spec_range ar r.P.p_dir r.P.p_spec);
+      Np.p_name = r.P.p_name;
+      Np.p_range = xrange (spec_range ar r.P.p_name r.P.p_spec);
       (* need not be met, but what the declarer's depender shows it, its
          sight, its copy or itself, must be in range, as arborist checks
          whatever copy the declarer resolves to (edge.js:266-277) *)

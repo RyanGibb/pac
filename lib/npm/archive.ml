@@ -161,7 +161,7 @@ let fetch ar (n : string) : string option =
 let tabulate ar (v : P.ver) =
   let p = (v.P.v_name, v.P.v_vers) in
   Hashtbl.replace ar.entry p v;
-  List.iter (fun r -> Hashtbl.add ar.peer_by_name r.P.p_dir (p, r)) v.P.v_peers;
+  List.iter (fun r -> Hashtbl.add ar.peer_by_name r.P.p_name (p, r)) v.P.v_peers;
   List.iter (fun d -> Hashtbl.add ar.dep_by_dir d.P.d_dir (p, d)) v.P.v_deps
 
 let add_name ar n vs =
