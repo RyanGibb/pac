@@ -402,6 +402,26 @@ Module Conflict (N V : UsualOrderedType).
         - right; right; exists q, vs; exact HG.
       Qed.
 
+      Lemma versions_reduceReal_bot : forall R D G (n : N.t),
+          T.VSet.add Version.Bot (T.versions (reduceReal R D G) n) =
+          T.VSet.add Version.Bot (embedVS (C.versions R n)).
+      Proof.
+        intros R D G n; apply T.VSet.ext; intro w.
+        rewrite !SOvt.add_in, T.mem_versions, mem_reduceReal.
+        unfold embedVS; rewrite SOvt.mem_map.
+        split.
+        - intros [-> | [[[qn qv] [HR Hq]] | [m [_ Hy]]]];
+            [left; reflexivity | |].
+          + unfold embedPkg in Hq; cbn [fst snd] in Hq.
+            injection Hq as -> ->.
+            right; exists qv; split; [apply C.mem_versions; exact HR |].
+            reflexivity.
+          + injection Hy as -> ->; left; reflexivity.
+        - intros [-> | [v [Hv ->]]]; [left; reflexivity |].
+          right; left; exists (n, v); split; [| reflexivity].
+          apply C.mem_versions; exact Hv.
+      Qed.
+
       Theorem versions_lookupOrig :
         forall R D G (m : N.t) (u : V.t) (n : N.t),
           PkgSet.In (m, u) R ->
@@ -409,9 +429,11 @@ Module Conflict (N V : UsualOrderedType).
           n = m ->
           T.versions (reduceReal R D G) n =
           T.VSet.add Version.Bot
-            (embedVS (C.versions (PkgFibred.tailFibre R n) n)).
+            (T.versions
+               (reduceReal (PkgFibred.tailFibre R n) C.DepRel.empty
+                  ConflictRel.empty) n).
       Proof.
-        intros R D G rn rv n Hr Hreach.
+        intros R D G rn rv n Hr Hreach; rewrite versions_reduceReal_bot.
         assert (Hn : NSet.In n (instNames R D G)).
         { destruct Hreach as [Hreach | ->];
             [exact (reachable_instNames R D G n Hreach) |].
