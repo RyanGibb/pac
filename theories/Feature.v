@@ -32,7 +32,7 @@ Module Feature (N V F : UsualOrderedType).
       (r : Pkg.t) (S : FeaturedSet.t) : Prop :=
     { res_subset : forall p fs, FeaturedSet.In (p, fs) S -> PkgSet.In p R
     ; res_root_mem : FeaturedSet.In (r, FSet.empty) S
-    ; res_dep_closure :
+    ; res_param_dep_closure :
         forall p fs_p, FeaturedSet.In (p, fs_p) S ->
         forall n vs fs, FeatDepRel.In (p, (n, (vs, fs))) Df ->
         exists v, VSet.In v vs /\

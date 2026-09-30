@@ -145,8 +145,7 @@ Module Opam (N V X Y E : UsualOrderedType).
     { res_subset : PkgSet.Subset S (inst_repo I)
     ; res_version_unique : C.VersionUnique S
     ; res_available : forall p, PkgSet.In p S -> availOK sigma I p
-    ; res_query : oSat sigma S (inst_query I)
-    ; res_invariant : oSat sigma S (inst_inv I)
+    ; res_request : oSat sigma S (inst_query I) /\ oSat sigma S (inst_inv I)
     ; res_dep_closure :
         forall p, PkgSet.In p S ->
         forall d, In (p, d) (inst_dep I) -> oSat sigma S d
@@ -851,8 +850,8 @@ Module Opam (N V X Y E : UsualOrderedType).
         injection E as ->; reflexivity.
       - intros [n v] Hp.
         assert (H := Hsub _ _ Hp); apply mem_effRepo in H; tauto.
-      - apply (encodeOF_correct sigma _ _ HV Hroot); exact Hquery.
-      - apply (encodeOF_correct sigma _ _ HV Hroot); exact Hinv.
+      - split; apply (encodeOF_correct sigma _ _ HV Hroot);
+          [exact Hquery | exact Hinv].
       - intros [n v] Hp d Hf.
         assert (Hs : PF.Satisfies S'
                        (encodeOF sigma (srcVersions sigma I) d)).
@@ -980,7 +979,8 @@ Module Opam (N V X Y E : UsualOrderedType).
           unfold rootForm; cbn [PF.Satisfies].
           split; apply (encodeOF_correct sigma _ _ HV Hr);
             rewrite opam_retraction;
-            [exact (res_query _ _ _ HR) | exact (res_invariant _ _ _ HR)].
+            [exact (proj1 (res_request _ _ _ HR))
+            | exact (proj2 (res_request _ _ _ HR))].
         + unfold dependees, dependeesBy in Hf'; cbn beta iota in Hf'.
           destruct (FSet.empty_spec Hf').
       - intros m u u' Hv Hv'; destruct m as [| n | k].

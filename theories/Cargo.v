@@ -195,17 +195,17 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           rgHolds (sReq d) u = true /\ PkgSet.In (sName d, u) S /\
           forall fs', FeaturedSet.In ((sName d, u), fs') FS ->
           FSet.Subset (slotRequests d (inst_dflt I)) fs'
-    ; res_feat_closure_same :
-        forall p fs f f', FeaturedSet.In (p, fs) FS -> FSet.In f fs ->
-        FDefRel.In ((p, f), FEntry.EFeat f') (inst_fdefs I) -> FSet.In f' fs
-    ; res_feat_closure_dep :
-        forall p fs f a f', FeaturedSet.In (p, fs) FS -> FSet.In f fs ->
-        (FDefRel.In ((p, f), FEntry.EDepFeat a f') (inst_fdefs I) \/
-         FDefRel.In ((p, f), FEntry.EWeakFeat a f') (inst_fdefs I)) ->
-        forall d u, SlotRel.In (p, d) (inst_slots I) -> sAlias d = a ->
-        ParentRel.In ((p, sKey d), u) pi ->
-        forall fs', FeaturedSet.In ((sName d, u), fs') FS ->
-        FSet.In f' fs'
+    ; res_feat_closure :
+        (forall p fs f f', FeaturedSet.In (p, fs) FS -> FSet.In f fs ->
+         FDefRel.In ((p, f), FEntry.EFeat f') (inst_fdefs I) ->
+         FSet.In f' fs) /\
+        (forall p fs f a f', FeaturedSet.In (p, fs) FS -> FSet.In f fs ->
+         (FDefRel.In ((p, f), FEntry.EDepFeat a f') (inst_fdefs I) \/
+          FDefRel.In ((p, f), FEntry.EWeakFeat a f') (inst_fdefs I)) ->
+         forall d u, SlotRel.In (p, d) (inst_slots I) -> sAlias d = a ->
+         ParentRel.In ((p, sKey d), u) pi ->
+         forall fs', FeaturedSet.In ((sName d, u), fs') FS ->
+         FSet.In f' fs')
     ; res_links_unique :
         forall p q l, PkgSet.In p S -> PkgSet.In q S ->
         LinkRel.In (p, l) (inst_links I) -> LinkRel.In (q, l) (inst_links I) ->
@@ -1762,88 +1762,93 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           destruct (Hdep _ Hffs _ _ Hed) as [w [Hw HwS]].
           apply mem_gransOf in Hw; destruct Hw as [u1 [Hu1 ->]].
           exact (Achain _ HwS).
-      - intros [n v] fs f f0 Hfs Hf He.
-        apply mem_features in Hfs; destruct Hfs as [_ ->].
-        apply mem_featsAt in Hf; destruct Hf as [w Hf].
-        destruct (A2 _ _ _ _ Hf) as [_ Egr]; subst w.
-        assert (Hed : T.DepRel.In
-            ((NPlus.CFeatP n f (g v), VPlus.WOrig v),
-             (NPlus.CFeatP n f0 (g v), T.VSet.singleton (VPlus.WOrig v)))
-            (reduceDeps
-               (MkInst R support FDefs Slots Links g dflt (rn, rv) rootFeats))).
-        { apply mem_reduceDeps; split; [exact (Hsub _ Hf) |].
-          apply mem_dep_featP; split; [reflexivity |].
-          split; [exact (proj1 (A2 _ _ _ _ Hf)) |].
-          right; exists (FEntry.EFeat f0); split; [exact He |].
-          left; exists f0; split; reflexivity. }
-        destruct (Hdep _ Hf _ _ Hed) as [w [Hw HwS]].
-        apply T.VSet.singleton_spec in Hw; subst w.
-        apply mem_featsAt; exists (g v); exact HwS.
-      - intros [n v] fs f a f' Hfs Hf Hent d u Hd Halias Hpi fs' Hfs'.
-        apply mem_features in Hfs; destruct Hfs as [_ ->].
-        apply mem_featsAt in Hf; destruct Hf as [w Hf].
-        destruct (A2 _ _ _ _ Hf) as [_ Egr]; subst w.
-        subst a.
-        assert (He' : exists e', FDefRel.In (((n, v), f), e') FDefs /\
-            entryFeatD e' = Some (sAlias d, f')).
-        { destruct Hent as [He | He].
-          - exists (FEntry.EDepFeat (sAlias d) f'); split;
-              [exact He | reflexivity].
-          - exists (FEntry.EWeakFeat (sAlias d) f'); split;
-              [exact He | reflexivity]. }
-        destruct He' as [e' [He' Ee]].
-        apply mem_parents in Hpi;
-          destruct Hpi as [w2 [w2' [d2 [Hslot2 [Hcr2 [Hs2 [Ha2 [Hact2
-            [_ Hcr2t]]]]]]]]].
-        assert (d2 = d) by exact (Hsite (n, v) d2 d Hs2 Hd Ha2); subst d2.
-        destruct (A1 _ _ _ Hcr2) as [_ ->].
-        assert (Hed : T.DepRel.In
-            ((NPlus.CFeatP n f (g v), VPlus.WOrig v),
-             (NPlus.CDec n (g v) f d f',
-              gransOf g (evalReq R (sName d) (sReq d))))
-            (reduceDeps
-               (MkInst R support FDefs Slots Links g dflt (rn, rv) rootFeats))).
-        { apply mem_reduceDeps; split; [exact (Hsub _ Hf) |].
-          apply mem_dep_featP; split; [reflexivity |].
-          split; [exact (proj1 (A2 _ _ _ _ Hf)) |].
-          right; exists e'; split; [exact He' |].
-          right; right; exists (sAlias d), f', d; repeat split;
-            assumption. }
-        destruct (Hdep _ Hf _ _ Hed) as [w [Hw HwS]].
-        apply mem_gransOf in Hw; destruct Hw as [u1 [Hu1 ->]].
-        assert (Hdo := proj1 (proj1 (real_shape _ _ _)
-                                (Hsub _ HwS))).
-        assert (Hpin : T.DepRel.In
-            ((NPlus.CDec n (g v) f d f', VPlus.WClass (g u1)),
-             (NPlus.CSlot n (g v) d,
-              T.VSet.singleton (VPlus.WClass (g u1))))
-            (reduceDeps
-               (MkInst R support FDefs Slots Links g dflt (rn, rv) rootFeats))).
-        { apply mem_reduceDeps; split; [exact (Hsub _ HwS) |].
-          apply mem_dep_dec; split; [exact Hdo |].
-          exists u1; split; [exact Hu1 |].
-          split; [reflexivity | left; reflexivity]. }
-        destruct (Hdep _ HwS _ _ Hpin) as [w [Hx HxS]].
-        apply T.VSet.singleton_spec in Hx; subst w.
-        assert (Hdel : T.DepRel.In
-            ((NPlus.CDec n (g v) f d f', VPlus.WClass (g u1)),
-             (NPlus.CFeatP (sName d) f' (g u1),
-              inGran g (g u1) (evalReq R (sName d) (sReq d))))
-            (reduceDeps
-               (MkInst R support FDefs Slots Links g dflt (rn, rv) rootFeats))).
-        { apply mem_reduceDeps; split; [exact (Hsub _ HwS) |].
-          apply mem_dep_dec; split; [exact Hdo |].
-          exists u1; split; [exact Hu1 |].
-          split; [reflexivity | right; reflexivity]. }
-        destruct (Hdep _ HwS _ _ Hdel) as [w [Hy HyS]].
-        apply mem_inGran in Hy; destruct Hy as [u2 [Hu2 [Hgu2 ->]]].
-        assert (Egr : VPlus.WClass w2' = VPlus.WClass (g u1))
-          by exact (Huniq _ _ _ Hslot2 HxS).
-        injection Egr as Egr; subst w2'.
-        assert (u2 = u) by (apply (A5 (sName d) f' (g u1)); assumption).
-        subst u2.
-        apply mem_features in Hfs'; destruct Hfs' as [_ ->].
-        apply mem_featsAt; exists (g u1); exact HyS.
+      - split.
+        + intros [n v] fs f f0 Hfs Hf He.
+          apply mem_features in Hfs; destruct Hfs as [_ ->].
+          apply mem_featsAt in Hf; destruct Hf as [w Hf].
+          destruct (A2 _ _ _ _ Hf) as [_ Egr]; subst w.
+          assert (Hed : T.DepRel.In
+              ((NPlus.CFeatP n f (g v), VPlus.WOrig v),
+               (NPlus.CFeatP n f0 (g v), T.VSet.singleton (VPlus.WOrig v)))
+              (reduceDeps
+                 (MkInst R support FDefs Slots Links g dflt (rn, rv)
+                    rootFeats))).
+          { apply mem_reduceDeps; split; [exact (Hsub _ Hf) |].
+            apply mem_dep_featP; split; [reflexivity |].
+            split; [exact (proj1 (A2 _ _ _ _ Hf)) |].
+            right; exists (FEntry.EFeat f0); split; [exact He |].
+            left; exists f0; split; reflexivity. }
+          destruct (Hdep _ Hf _ _ Hed) as [w [Hw HwS]].
+          apply T.VSet.singleton_spec in Hw; subst w.
+          apply mem_featsAt; exists (g v); exact HwS.
+        + intros [n v] fs f a f' Hfs Hf Hent d u Hd Halias Hpi fs' Hfs'.
+          apply mem_features in Hfs; destruct Hfs as [_ ->].
+          apply mem_featsAt in Hf; destruct Hf as [w Hf].
+          destruct (A2 _ _ _ _ Hf) as [_ Egr]; subst w.
+          subst a.
+          assert (He' : exists e', FDefRel.In (((n, v), f), e') FDefs /\
+              entryFeatD e' = Some (sAlias d, f')).
+          { destruct Hent as [He | He].
+            - exists (FEntry.EDepFeat (sAlias d) f'); split;
+                [exact He | reflexivity].
+            - exists (FEntry.EWeakFeat (sAlias d) f'); split;
+                [exact He | reflexivity]. }
+          destruct He' as [e' [He' Ee]].
+          apply mem_parents in Hpi;
+            destruct Hpi as [w2 [w2' [d2 [Hslot2 [Hcr2 [Hs2 [Ha2 [Hact2
+              [_ Hcr2t]]]]]]]]].
+          assert (d2 = d) by exact (Hsite (n, v) d2 d Hs2 Hd Ha2); subst d2.
+          destruct (A1 _ _ _ Hcr2) as [_ ->].
+          assert (Hed : T.DepRel.In
+              ((NPlus.CFeatP n f (g v), VPlus.WOrig v),
+               (NPlus.CDec n (g v) f d f',
+                gransOf g (evalReq R (sName d) (sReq d))))
+              (reduceDeps
+                 (MkInst R support FDefs Slots Links g dflt (rn, rv)
+                    rootFeats))).
+          { apply mem_reduceDeps; split; [exact (Hsub _ Hf) |].
+            apply mem_dep_featP; split; [reflexivity |].
+            split; [exact (proj1 (A2 _ _ _ _ Hf)) |].
+            right; exists e'; split; [exact He' |].
+            right; right; exists (sAlias d), f', d; repeat split;
+              assumption. }
+          destruct (Hdep _ Hf _ _ Hed) as [w [Hw HwS]].
+          apply mem_gransOf in Hw; destruct Hw as [u1 [Hu1 ->]].
+          assert (Hdo := proj1 (proj1 (real_shape _ _ _)
+                                  (Hsub _ HwS))).
+          assert (Hpin : T.DepRel.In
+              ((NPlus.CDec n (g v) f d f', VPlus.WClass (g u1)),
+               (NPlus.CSlot n (g v) d,
+                T.VSet.singleton (VPlus.WClass (g u1))))
+              (reduceDeps
+                 (MkInst R support FDefs Slots Links g dflt (rn, rv)
+                    rootFeats))).
+          { apply mem_reduceDeps; split; [exact (Hsub _ HwS) |].
+            apply mem_dep_dec; split; [exact Hdo |].
+            exists u1; split; [exact Hu1 |].
+            split; [reflexivity | left; reflexivity]. }
+          destruct (Hdep _ HwS _ _ Hpin) as [w [Hx HxS]].
+          apply T.VSet.singleton_spec in Hx; subst w.
+          assert (Hdel : T.DepRel.In
+              ((NPlus.CDec n (g v) f d f', VPlus.WClass (g u1)),
+               (NPlus.CFeatP (sName d) f' (g u1),
+                inGran g (g u1) (evalReq R (sName d) (sReq d))))
+              (reduceDeps
+                 (MkInst R support FDefs Slots Links g dflt (rn, rv)
+                    rootFeats))).
+          { apply mem_reduceDeps; split; [exact (Hsub _ HwS) |].
+            apply mem_dep_dec; split; [exact Hdo |].
+            exists u1; split; [exact Hu1 |].
+            split; [reflexivity | right; reflexivity]. }
+          destruct (Hdep _ HwS _ _ Hdel) as [w [Hy HyS]].
+          apply mem_inGran in Hy; destruct Hy as [u2 [Hu2 [Hgu2 ->]]].
+          assert (Egr : VPlus.WClass w2' = VPlus.WClass (g u1))
+            by exact (Huniq _ _ _ Hslot2 HxS).
+          injection Egr as Egr; subst w2'.
+          assert (u2 = u) by (apply (A5 (sName d) f' (g u1)); assumption).
+          subst u2.
+          apply mem_features in Hfs'; destruct Hfs' as [_ ->].
+          apply mem_featsAt; exists (g u1); exact HyS.
       - intros p q l Hp Hq Hlp Hlq.
         destruct p as [pn pv]; destruct q as [qn qv].
         apply mem_cargoResolution in Hp; destruct Hp as [grp Hp].
@@ -2150,7 +2155,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       cbn [inst_repo inst_support inst_fdefs inst_slots inst_links inst_gran
            inst_dflt inst_root inst_rootFeats] in Hsite, Hpick, Hslot.
       destruct Hres as [Hsub Hroot Hrootf Hdom Htot Hfun Hclass Hsupp
-        Hpifun _ Hslotc Hfsame Hfdep Hlinks].
+        Hpifun _ Hslotc [Hfsame Hfdep] Hlinks].
       cbn [inst_repo inst_support inst_fdefs inst_slots inst_links inst_gran
            inst_dflt inst_root inst_rootFeats] in *.
       constructor.
