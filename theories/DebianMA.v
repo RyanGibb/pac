@@ -1367,7 +1367,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
     Lemma reduceConf_pkg : forall R G M (p : Pkg.t) Rc Gs ea e,
         PkgSet.Subset Rc R -> Conf.Subset Gs G -> PkgSet.In p Rc ->
-        (forall c, Conf.In c G -> fst c = p -> Conf.In c Gs) ->
+        (forall e, Conf.In e G -> fst e = p -> Conf.In e Gs) ->
         (Deb.Conf.In (embedPkg p, (ea, e)) (reduceConf R G M) <->
          Deb.Conf.In (embedPkg p, (ea, e)) (reduceConf Rc Gs M)).
     Proof.
@@ -1516,7 +1516,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         right; exists a0; split;
           [exact He | exact (reduceConfEntry_name p a0 (embedPkg p) ea e Hl)].
       - left.
-        pose proof (f_equal (fun c => fst (fst (snd c))) He) as Hn.
+        pose proof (f_equal (fun e => fst (fst (snd e))) He) as Hn.
         cbn [fst snd] in Hn; rewrite (implConfOf_atomName M p0) in Hn.
         rewrite (implConfOf_pkg M p0) in He.
         pose proof (f_equal fst He) as Hq; cbn [fst] in Hq.
@@ -1792,8 +1792,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       assert (HGs : Conf.Subset Gs (inst_conf I)).
       { intros [q a0] He;
           exact (proj1 (proj1 (mem_confFibre (inst_conf I) p q a0) He)). }
-      assert (Hown : forall c, Conf.In c (inst_conf I) -> fst c = p ->
-                     Conf.In c Gs).
+      assert (Hown : forall e, Conf.In e (inst_conf I) -> fst e = p ->
+                     Conf.In e Gs).
       { intros [q a0] He Hq; cbn [fst] in Hq; apply mem_confFibre; split;
           [exact He | exact Hq]. }
       assert (Hatom : forall an,
