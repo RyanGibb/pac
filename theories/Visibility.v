@@ -668,8 +668,8 @@ Module Visibility (N V : UsualOrderedType).
         rewrite carriedb_iff, SOvtd.mem_map; eauto.
     Qed.
 
-    (* An edge's depender and dependee name together fix which of the four
-       parts it is from, so inversion discards the others. *)
+    (* An edge's depender's name and dependee name together fix which of
+       the four parts it is from, so inversion discards the others. *)
     Inductive DepsSpec (R : PkgSet.t) (D : C.DepRel.t) (pub : PubRel.t)
         (r : Pkg.t) : T.DepElt.t -> Prop :=
     | DepsSelf : forall n v q,

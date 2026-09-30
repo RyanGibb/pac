@@ -660,7 +660,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       left; exists (n, v); split; [exact HR | reflexivity].
   Qed.
 
-  Lemma versions_instNames : forall I n v,
+  Lemma repo_instNames : forall I n v,
       PkgSet.In (n, v) (inst_repo I) -> NSet.In n (instNames I).
   Proof.
     intros I n v H; apply mem_instNames; left; exists v; exact H.
@@ -861,7 +861,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         exists v; split; [apply C.mem_versions; exact Hv | reflexivity].
     - split; [intro H; exfalso; exact (SOvw.empty_in _ H) |].
       intros [[v [Hv _]] | [Hn _]].
-      + exfalso; apply (versions_instNames I n v), NSet.mem_spec
+      + exfalso; apply (repo_instNames I n v), NSet.mem_spec
           in Hv; congruence.
       + apply NSet.mem_spec in Hn; congruence.
   Qed.
@@ -1664,7 +1664,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
             exists Version.Bot; split; [apply mem_complementVS; left; reflexivity |].
             apply mem_coreResolution, CoreAbsent; [| exact Hnone].
             apply mem_confNames in Hqn; destruct Hqn as [u [HuR _]].
-            exact (versions_instNames I qn u HuR). }
+            exact (repo_instNames I qn u HuR). }
       + apply dependees_disjunct_spec in Hout.
         destruct Hout as (Hhc & Hc2 & Hmm & Heq).
         assert (Hmin1 := AtomSet.min_elt_spec1 Hmin).
@@ -1974,7 +1974,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           exact (AtomSet.min_elt_spec1 Hmin).
         + injection Hy as -> _.
           apply mem_confNames in Hqn; destruct Hqn as [u [HR _]].
-          exact (versions_instNames I _ u HR).
+          exact (repo_instNames I _ u HR).
       - apply dependees_disjunct_spec in Hout.
         destruct Hout as [Hhc [_ [Hmem Hy]]].
         apply hasClauseb_iff in Hhc; destruct Hhc as [p Hp].
@@ -2019,7 +2019,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           [exact (reachable_instNames I n Hreach) |].
         injection E as ->; revert Hr.
         destruct (inst_root I) as [rn rv]; intro Hr.
-        exact (versions_instNames I rn rv Hr). }
+        exact (repo_instNames I rn rv Hr). }
       cbn [versions]; rewrite versions_tailFibre.
       replace (NSet.mem n (instNames I)) with true;
         [reflexivity | symmetry; apply NSet.mem_spec; exact Hn].
