@@ -312,18 +312,18 @@ Module Visibility (N V : UsualOrderedType).
         intro Hm; apply Hn, PubRel.mem_spec; exact Hm.
     Qed.
 
-    Definition Carried (pub : PubRel.t) (p : Pkg.t) (m : N.t) (q : Pkg.t)
+    Definition Carried (pub : PubRel.t) (q : Pkg.t) (p : Pkg.t) (m : N.t)
         : Prop :=
       PubRel.In (p, m) pub \/ p = q.
 
-    Definition carriedb (pub : PubRel.t) (p : Pkg.t) (m : N.t) (q : Pkg.t)
+    Definition carriedb (pub : PubRel.t) (q : Pkg.t) (p : Pkg.t) (m : N.t)
         : bool :=
       orb (PubRel.mem (p, m) pub) (PkgEqb.eqb p q).
 
-    Lemma carriedb_iff : forall pub p m q,
-        carriedb pub p m q = true <-> Carried pub p m q.
+    Lemma carriedb_iff : forall pub q p m,
+        carriedb pub q p m = true <-> Carried pub q p m.
     Proof.
-      intros pub p m q; unfold carriedb, Carried.
+      intros pub q p m; unfold carriedb, Carried.
       rewrite Bool.orb_true_iff, PubRel.mem_spec, PkgEqb.eqb_true_iff;
         reflexivity.
     Qed.
@@ -472,7 +472,7 @@ Module Visibility (N V : UsualOrderedType).
         (origins : PkgSet.t) : T.DepRel.t :=
       SOdtd.unionMap (fun '((n, v), (m, vs)) =>
           SOptd.filterMap (fun q =>
-              if carriedb pub (n, v) m q
+              if carriedb pub q (n, v) m
               then Some ((Name.Occurrence n q, v),
                          (Name.Intermediate n v m q, embedVS vs))
               else None)
@@ -484,7 +484,7 @@ Module Visibility (N V : UsualOrderedType).
         (origins : PkgSet.t) : T.DepRel.t :=
       SOdtd.unionMap (fun '((n, v), (m, vs)) =>
           SOptd.unionMap (fun q =>
-              if carriedb pub (n, v) m q
+              if carriedb pub q (n, v) m
               then SOvtd.map (fun u =>
                        ((Name.Intermediate n v m q, u),
                         (Name.Occurrence m q, T.VSet.singleton u)))
@@ -497,7 +497,7 @@ Module Visibility (N V : UsualOrderedType).
         (origins : PkgSet.t) : T.DepRel.t :=
       SOdtd.unionMap (fun '((n, v), (m, vs)) =>
           SOptd.unionMap (fun q =>
-              if carriedb pub (n, v) m q
+              if carriedb pub q (n, v) m
               then SOvtd.map (fun u =>
                        ((Name.Intermediate n v m q, u),
                         (Name.Agreement n v m, T.VSet.singleton u)))
@@ -621,7 +621,7 @@ Module Visibility (N V : UsualOrderedType).
         T.DepRel.In y (reduceDepsOccToInt D pub origins) <->
         exists n v m vs q,
           C.DepRel.In ((n, v), (m, vs)) D /\ PkgSet.In q origins /\
-          Carried pub (n, v) m q /\
+          Carried pub q (n, v) m /\
           y = ((Name.Occurrence n q, v),
                (Name.Intermediate n v m q, embedVS vs)).
     Proof.
@@ -641,7 +641,7 @@ Module Visibility (N V : UsualOrderedType).
         T.DepRel.In y (reduceDepsIntToOcc D pub origins) <->
         exists n v m vs q u,
           C.DepRel.In ((n, v), (m, vs)) D /\ PkgSet.In q origins /\
-          Carried pub (n, v) m q /\ VSet.In u vs /\
+          Carried pub q (n, v) m /\ VSet.In u vs /\
           y = ((Name.Intermediate n v m q, u),
                (Name.Occurrence m q, T.VSet.singleton u)).
     Proof.
@@ -662,7 +662,7 @@ Module Visibility (N V : UsualOrderedType).
         T.DepRel.In y (reduceDepsIntToAgr D pub origins) <->
         exists n v m vs q u,
           C.DepRel.In ((n, v), (m, vs)) D /\ PkgSet.In q origins /\
-          Carried pub (n, v) m q /\ VSet.In u vs /\
+          Carried pub q (n, v) m /\ VSet.In u vs /\
           y = ((Name.Intermediate n v m q, u),
                (Name.Agreement n v m, T.VSet.singleton u)).
     Proof.
@@ -691,19 +691,19 @@ Module Visibility (N V : UsualOrderedType).
            (Name.Occurrence n (n, v), T.VSet.singleton v))
     | DepsOccToInt : forall n v m vs q,
         C.DepRel.In ((n, v), (m, vs)) D ->
-        PkgSet.In q (potentialOrigins R D pub r) -> Carried pub (n, v) m q ->
+        PkgSet.In q (potentialOrigins R D pub r) -> Carried pub q (n, v) m ->
         DepsSpec R D pub r
           ((Name.Occurrence n q, v), (Name.Intermediate n v m q, embedVS vs))
     | DepsIntToOcc : forall n v m vs q u,
         C.DepRel.In ((n, v), (m, vs)) D ->
-        PkgSet.In q (potentialOrigins R D pub r) -> Carried pub (n, v) m q ->
+        PkgSet.In q (potentialOrigins R D pub r) -> Carried pub q (n, v) m ->
         VSet.In u vs ->
         DepsSpec R D pub r
           ((Name.Intermediate n v m q, u),
            (Name.Occurrence m q, T.VSet.singleton u))
     | DepsIntToAgr : forall n v m vs q u,
         C.DepRel.In ((n, v), (m, vs)) D ->
-        PkgSet.In q (potentialOrigins R D pub r) -> Carried pub (n, v) m q ->
+        PkgSet.In q (potentialOrigins R D pub r) -> Carried pub q (n, v) m ->
         VSet.In u vs ->
         DepsSpec R D pub r
           ((Name.Intermediate n v m q, u),
@@ -742,7 +742,7 @@ Module Visibility (N V : UsualOrderedType).
 
     Lemma mem_reduceDeps_occ2int : forall R D pub r n v m vs q,
         C.DepRel.In ((n, v), (m, vs)) D ->
-        PkgSet.In q (potentialOrigins R D pub r) -> Carried pub (n, v) m q ->
+        PkgSet.In q (potentialOrigins R D pub r) -> Carried pub q (n, v) m ->
         T.DepRel.In ((Name.Occurrence n q, v),
                      (Name.Intermediate n v m q, embedVS vs))
           (reduceDeps R D pub r).
@@ -750,7 +750,7 @@ Module Visibility (N V : UsualOrderedType).
 
     Lemma mem_reduceDeps_int2occ : forall R D pub r n v m vs q u,
         C.DepRel.In ((n, v), (m, vs)) D ->
-        PkgSet.In q (potentialOrigins R D pub r) -> Carried pub (n, v) m q ->
+        PkgSet.In q (potentialOrigins R D pub r) -> Carried pub q (n, v) m ->
         VSet.In u vs ->
         T.DepRel.In ((Name.Intermediate n v m q, u),
                      (Name.Occurrence m q, T.VSet.singleton u))
@@ -759,7 +759,7 @@ Module Visibility (N V : UsualOrderedType).
 
     Lemma mem_reduceDeps_int2agr : forall R D pub r n v m vs q u,
         C.DepRel.In ((n, v), (m, vs)) D ->
-        PkgSet.In q (potentialOrigins R D pub r) -> Carried pub (n, v) m q ->
+        PkgSet.In q (potentialOrigins R D pub r) -> Carried pub q (n, v) m ->
         VSet.In u vs ->
         T.DepRel.In ((Name.Intermediate n v m q, u),
                      (Name.Agreement n v m, T.VSet.singleton u))
@@ -850,7 +850,7 @@ Module Visibility (N V : UsualOrderedType).
           (embedRoot r) S ->
         C.DepRel.In ((n, v), (m, vs)) D ->
         PkgSet.In q (potentialOrigins R D pub r) ->
-        Carried pub (n, v) m q ->
+        Carried pub q (n, v) m ->
         T.PkgSet.In (Name.Occurrence n q, v) S ->
         exists u, VSet.In u vs /\
           T.PkgSet.In (Name.Intermediate n v m q, u) S /\
@@ -880,7 +880,7 @@ Module Visibility (N V : UsualOrderedType).
           (embedRoot r) S ->
         C.DepRel.In ((n, v), (m, vs)) D ->
         PkgSet.In q (potentialOrigins R D pub r) ->
-        Carried pub (n, v) m q ->
+        Carried pub q (n, v) m ->
         T.PkgSet.In (Name.Occurrence n q, v) S ->
         T.PkgSet.In (Name.Agreement n v m, u) S ->
         VSet.In u vs /\ T.PkgSet.In (Name.Occurrence m q, u) S.
@@ -917,7 +917,7 @@ Module Visibility (N V : UsualOrderedType).
         exists q, PkgSet.In q (potentialOrigins R D pub r) /\
           T.PkgSet.In (Name.Occurrence n q, v) S /\
           (forall (m : N.t) (vs : VSet.t),
-             C.DepRel.In ((n, v), (m, vs)) D -> Carried pub (n, v) m q).
+             C.DepRel.In ((n, v), (m, vs)) D -> Carried pub q (n, v) m).
     Proof.
       intros R D pub r S n v Hres Hp.
       apply mem_visibilityResolution in Hp.
@@ -942,7 +942,7 @@ Module Visibility (N V : UsualOrderedType).
         PkgSet.In q (potentialOrigins R D pub r) ->
         T.PkgSet.In (Name.Occurrence n q, v) S ->
         (forall (o : N.t) (vs : VSet.t),
-           C.DepRel.In ((n, v), (o, vs)) D -> Carried pub (n, v) o q) ->
+           C.DepRel.In ((n, v), (o, vs)) D -> Carried pub q (n, v) o) ->
         InSub pub (parents R D pub r S) (n, v) (m, u) ->
         T.PkgSet.In (Name.Occurrence m q, u) S.
     Proof.
@@ -1049,7 +1049,7 @@ Module Visibility (N V : UsualOrderedType).
           SOptp.unionMap (fun q =>
               if andb (isOriginb D pub r S q)
                    (andb (PkgSet.mem (n, v) (sub pub pi q))
-                      (carriedb pub (n, v) m q))
+                      (carriedb pub q (n, v) m))
               then SOvtp.filterMap (fun u =>
                        if edgeb pi n v m u
                        then Some (Name.Intermediate n v m q, u)
@@ -1106,7 +1106,7 @@ Module Visibility (N V : UsualOrderedType).
         exists n v m vs q u,
           C.DepRel.In ((n, v), (m, vs)) D /\ PkgSet.In q origins /\
           VSet.In u vs /\ IsOrigin D pub r S q /\ InSub pub pi q (n, v) /\
-          Carried pub (n, v) m q /\ ParentRel.In ((m, u), (n, v)) pi /\
+          Carried pub q (n, v) m /\ ParentRel.In ((m, u), (n, v)) pi /\
           p = (Name.Intermediate n v m q, u).
     Proof.
       intros D pub r S pi origins p; unfold coreResolutionIntermediate.
@@ -1162,7 +1162,7 @@ Module Visibility (N V : UsualOrderedType).
         C.DepRel.In ((n, v), (m, vs)) D ->
         PkgSet.In q (potentialOrigins R D pub r) -> VSet.In u vs ->
         IsOrigin D pub r S q -> InSub pub pi q (n, v) ->
-        Carried pub (n, v) m q -> ParentRel.In ((m, u), (n, v)) pi ->
+        Carried pub q (n, v) m -> ParentRel.In ((m, u), (n, v)) pi ->
         CoreSpec R D pub r S pi (Name.Intermediate n v m q, u)
     | CoreAgreement : forall n v m vs u,
         C.DepRel.In ((n, v), (m, vs)) D -> VSet.In u vs ->
@@ -1339,10 +1339,10 @@ Module Visibility (N V : UsualOrderedType).
         - apply PubFibred.tailFibre_subset.
       Qed.
 
-      Lemma carried_tailFibre : forall pub (p : Pkg.t) (m : N.t) (q : Pkg.t),
-          Carried (PubFibred.tailFibre pub p) p m q <-> Carried pub p m q.
+      Lemma carried_tailFibre : forall pub (q p : Pkg.t) (m : N.t),
+          Carried (PubFibred.tailFibre pub p) q p m <-> Carried pub q p m.
       Proof.
-        intros pub p m q; unfold Carried.
+        intros pub q p m; unfold Carried.
         rewrite PubFibred.mem_tailFibre.
         split; [intros [[Hin _] | ->] | intros [Hin | ->]];
           [left; exact Hin | right; reflexivity
