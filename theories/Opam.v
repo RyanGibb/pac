@@ -1209,10 +1209,10 @@ Module Opam (N V X Y E : UsualOrderedType).
       Qed.
 
       Theorem versions_lookupOrig : forall sigma I n,
-          versions sigma (nameSubInst I n) (TName.Real n) =
-          versions sigma I (TName.Real n).
+          versions sigma I (TName.Real n) =
+          versions sigma (nameSubInst I n) (TName.Real n).
       Proof.
-        intros sigma I n; simpl.
+        intros sigma I n; simpl; symmetry.
         rewrite (srcVersions_subInst_agree sigma I (nameSubInst I n)
                    (NSet.singleton n) n); try reflexivity.
         apply NSet.singleton_spec; reflexivity.
@@ -1244,10 +1244,10 @@ Module Opam (N V X Y E : UsualOrderedType).
       Qed.
 
       Theorem versions_lookupClass : forall sigma I k,
-          versions sigma (classSubInst I k) (TName.Cls k) =
-          versions sigma I (TName.Cls k).
+          versions sigma I (TName.Cls k) =
+          versions sigma (classSubInst I k) (TName.Cls k).
       Proof.
-        intros sigma I k; cbn [versions classSubInst inst_cls].
+        intros sigma I k; symmetry; cbn [versions classSubInst inst_cls].
         assert (HD : forall q k', ClsRel.In (q, k') (inst_cls I) ->
                        PkgSet.In q (declarers (inst_cls I)))
           by (intros q k' H; apply SOcd.mem_map; exists (q, k');
@@ -1272,9 +1272,9 @@ Module Opam (N V X Y E : UsualOrderedType).
       Qed.
 
       Theorem dependees_lookupRoot : forall sigma I,
-          dependees sigma (rootSubInst I) rootPkg = dependees sigma I rootPkg.
+          dependees sigma I rootPkg = dependees sigma (rootSubInst I) rootPkg.
       Proof.
-        intros sigma I; unfold dependees, dependeesBy, rootPkg, rootForm.
+        intros sigma I; symmetry; unfold dependees, dependeesBy, rootPkg, rootForm.
         assert (H : forall n,
                    NSet.In n (NSet.union (ofNames (inst_query I))
                                 (ofNames (inst_inv I))) ->
@@ -1294,10 +1294,10 @@ Module Opam (N V X Y E : UsualOrderedType).
       Theorem dependeesBy_lookupOrig : forall sigma I Vq n v,
           (forall m, NSet.In m (declaredNames I (n, v)) ->
              Vq m = srcVersions sigma (nameSubInst I m) m) ->
-          dependeesBy sigma Vq (declSubInst I (n, v)) (embedPkg (n, v)) =
-          dependees sigma I (embedPkg (n, v)).
+          dependees sigma I (embedPkg (n, v)) =
+          dependeesBy sigma Vq (declSubInst I (n, v)) (embedPkg (n, v)).
       Proof.
-        intros sigma I Vq n v HV.
+        intros sigma I Vq n v HV; symmetry.
         assert (HVq : forall m, NSet.In m (declaredNames I (n, v)) ->
                    Vq m = srcVersions sigma I m).
         { intros m Hm; rewrite (HV m Hm).
@@ -1329,11 +1329,11 @@ Module Opam (N V X Y E : UsualOrderedType).
       Qed.
 
       Theorem dependees_lookupOrig : forall sigma I n v,
-          dependees sigma (pkgSubInst I (n, v)) (embedPkg (n, v)) =
-          dependees sigma I (embedPkg (n, v)).
+          dependees sigma I (embedPkg (n, v)) =
+          dependees sigma (pkgSubInst I (n, v)) (embedPkg (n, v)).
       Proof.
         intros sigma I n v.
-        rewrite <- (dependeesBy_lookupOrig sigma I
+        rewrite (dependeesBy_lookupOrig sigma I
                       (srcVersions sigma (pkgSubInst I (n, v))) n v);
           [reflexivity |].
         intros m Hm.
@@ -1469,7 +1469,7 @@ Module Opam (N V X Y E : UsualOrderedType).
                   (dependees sigma (pkgSubInst I (n, v)) (embedPkg (n, v)))))
             (PF.Reduction.embedPkg (embedPkg (n, v))).
       Proof.
-        intros sigma I Vq n v Hnv HVq; rewrite dependees_lookupOrig.
+        intros sigma I Vq n v Hnv HVq; rewrite <- dependees_lookupOrig.
         apply (dependees_core sigma I Vq (embedPkg (n, v))); [| exact HVq].
         apply mem_reduceReal; left; exists (n, v); split;
           [exact Hnv | reflexivity].
@@ -1485,7 +1485,7 @@ Module Opam (N V X Y E : UsualOrderedType).
                (depEdges rootPkg (dependees sigma (rootSubInst I) rootPkg)))
             (PF.Reduction.embedPkg rootPkg).
       Proof.
-        intros sigma I Vq HVq; rewrite dependees_lookupRoot.
+        intros sigma I Vq HVq; rewrite <- dependees_lookupRoot.
         apply (dependees_core sigma I Vq rootPkg); [| exact HVq].
         apply mem_reduceReal; right; left; reflexivity.
       Qed.
@@ -1577,7 +1577,7 @@ Module Opam (N V X Y E : UsualOrderedType).
             (PF.Reduction.embedVS
                (versions sigma (nameSubInst I n) (TName.Real n))).
       Proof.
-        intros sigma I n H; rewrite versions_lookupOrig; apply versions_core.
+        intros sigma I n H; rewrite <- versions_lookupOrig; apply versions_core.
         destruct H as [[v Hv] | H]; [left | right; exact H].
         exists (TVer.RV v); apply mem_reduceReal; left; exists (n, v); split;
           [exact Hv | reflexivity].
@@ -1607,7 +1607,7 @@ Module Opam (N V X Y E : UsualOrderedType).
             (PF.Reduction.embedVS
                (versions sigma (classSubInst I k) (TName.Cls k))).
       Proof.
-        intros sigma I k H; rewrite versions_lookupClass; apply versions_core.
+        intros sigma I k H; rewrite <- versions_lookupClass; apply versions_core.
         right; exact H.
       Qed.
     End Lookup.
