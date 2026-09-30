@@ -20,14 +20,14 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
   Module VSet := C.VSet.
 
   Inductive Formula : Type :=
-  | FDep (m : N.t) (vs : VSet.t)
+  | FDep (n : N.t) (vs : VSet.t)
   | FConj (psiL psiR : Formula)
   | FDisj (psiL psiR : Formula)
   | FNeg (psi : Formula).
 
   Fixpoint Satisfies (S : PkgSet.t) (psi : Formula) : Prop :=
     match psi with
-    | FDep m vs => exists v, VSet.In v vs /\ PkgSet.In (m, v) S
+    | FDep n vs => exists v, VSet.In v vs /\ PkgSet.In (n, v) S
     | FConj psiL psiR => Satisfies S psiL /\ Satisfies S psiR
     | FDisj psiL psiR => Satisfies S psiL \/ Satisfies S psiR
     | FNeg psi' => ~ Satisfies S psi'
@@ -478,7 +478,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
 
     Lemma mem_instNames : forall R D (n : N.t),
         NSet.In n (instNames R D) <->
-        (exists v, PkgSet.In (n, v) R) \/ NSet.In n (depNames D).
+        (exists u, PkgSet.In (n, u) R) \/ NSet.In n (depNames D).
     Proof.
       intros R D n; unfold instNames.
       rewrite NSet.union_spec, SOpn.mem_map.
@@ -1246,7 +1246,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         (exists p psi, DepRel.In (p, psi) D /\ PkgSet.In p S /\
                      T.PkgSet.In p' (witnessSet S psi)) \/
         (exists n, NSet.In n (instNames R D) /\ Ab.hasAbsent n = true /\
-                   (forall v, ~ PkgSet.In (n, v) S) /\
+                   (forall u, ~ PkgSet.In (n, u) S) /\
                    p' = (Name.Orig n, Version.Bot)).
     Proof.
       intros S R D p'; unfold coreResolution.
@@ -2191,21 +2191,21 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             (encodeNNF_dependee_orig_aux (C.versions R) psi) _ _ _ _ He).
       Qed.
 
-      Theorem versions_lookupOrig : forall R D (r : Pkg.t) (n : N.t),
-          PkgSet.In r R ->
+      Theorem versions_lookupOrig :
+        forall R D (m : N.t) (u : V.t) (n : N.t),
+          PkgSet.In (m, u) R ->
           (exists p h, T.DepRel.In (p, (Name.Orig n, h)) (reduceDeps R D)) \/
-          Name.Orig n = Name.Orig (fst r) ->
+          n = m ->
           Ab.hasAbsent n = true ->
           T.versions (reduceReal R D) (Name.Orig n) =
           T.VSet.add Version.Bot
             (embedVS (C.versions (PkgFibred.tailFibre R n) n)).
       Proof.
-        intros R D r n Hr Hreach Ha.
+        intros R D rn rv n Hr Hreach Ha.
         assert (Hm : NSet.In n (instNames R D)).
-        { destruct Hreach as [Hreach | E];
+        { destruct Hreach as [Hreach | ->];
             [exact (reachable_instNames R D n Hreach) |].
-          injection E as ->; apply mem_instNames; left.
-          destruct r as [rn rv]; exists rv; exact Hr. }
+          apply mem_instNames; left; exists rv; exact Hr. }
         apply T.VSet.ext; intro w.
         rewrite T.mem_versions, mem_reduceReal, SOvv.add_in.
         unfold embedVS; rewrite SOvv.mem_map.

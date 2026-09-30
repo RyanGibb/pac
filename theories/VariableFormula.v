@@ -12,7 +12,7 @@ Module VariableFormula (N V : UsualOrderedType)
   Module VSet := C.VSet.
 
   Inductive Formula : Type :=
-  | FDep (m : N.t) (vs : VSet.t)
+  | FDep (n : N.t) (vs : VSet.t)
   | FConj (psiL psiR : Formula)
   | FDisj (psiL psiR : Formula)
   | FNeg (psi : Formula)
@@ -24,7 +24,7 @@ Module VariableFormula (N V : UsualOrderedType)
   Fixpoint Satisfies (S : PkgSet.t) (sigma : X.t -> Y.t) (psi : Formula) :
       Prop :=
     match psi with
-    | FDep m vs => exists v, VSet.In v vs /\ PkgSet.In (m, v) S
+    | FDep n vs => exists v, VSet.In v vs /\ PkgSet.In (n, v) S
     | FConj psiL psiR => Satisfies S sigma psiL /\ Satisfies S sigma psiR
     | FDisj psiL psiR => Satisfies S sigma psiL \/ Satisfies S sigma psiR
     | FNeg psi' => ~ Satisfies S sigma psi'
@@ -751,21 +751,22 @@ Module VariableFormula (N V : UsualOrderedType)
           reflexivity.
       Qed.
 
-      Theorem versions_lookupOrig : forall Y_x R D (r : Pkg.t) (n : N.t),
-          PkgSet.In r R ->
+      Theorem versions_lookupOrig :
+        forall Y_x R D (m : N.t) (u : V.t) (n : N.t),
+          PkgSet.In (m, u) R ->
           (exists p h,
               T.DepRel.In (p, (Name.Orig (inl n), h)) (reduceDeps Y_x R D)) \/
-          n = fst r ->
+          n = m ->
           T.versions (reduceReal Y_x R D) (Name.Orig (inl n)) =
           T.VSet.add Version.Bot
             (embedVS (C.versions (PkgFibred.tailFibre R n) n)).
       Proof.
-        intros Y_x R D r n Hr Hreach.
-        assert (Hr' : PF.PkgSet.In (liftPkg r) (liftReal Y_x R))
-          by (apply mem_liftReal; left; exists (fst r), (snd r);
-              destruct r; split; [exact Hr | reflexivity]).
+        intros Y_x R D rn rv n Hr Hreach.
+        assert (Hr' : PF.PkgSet.In (inl rn, inl rv) (liftReal Y_x R))
+          by (apply mem_liftReal; left; exists rn, rv;
+              split; [exact Hr | reflexivity]).
         unfold reduceReal; rewrite (PF.Reduction.Lookup.versions_lookupOrig
-                                      _ _ (liftPkg r) (inl n) Hr').
+                                      _ _ (inl rn) (inl rv) (inl n) Hr').
         - unfold embedVS; do 2 f_equal; apply PF.VSet.ext; intro w.
           rewrite PF.C.mem_versions,
             PF.Reduction.Lookup.PkgFibred.mem_tailFibre, mem_liftReal,
