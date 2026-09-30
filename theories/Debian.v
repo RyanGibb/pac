@@ -227,7 +227,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       | Orig (v : V.t)
       | Atom (a : Atom.t)
       | Ref (m : N.t) (w : V.t)
-      | RefReal (w : V.t)
+      | RefReal (u : V.t)
       | Zero
       | Bot.
       Definition t := version.
@@ -392,9 +392,9 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       | (Name.Selector _, Version.Ref m w) =>
           T.DependeesSet.singleton
             (Name.Orig m, T.VSet.singleton (Version.Orig w))
-      | (Name.Selector a, Version.RefReal w) =>
+      | (Name.Selector a, Version.RefReal u) =>
           T.DependeesSet.singleton
-            (Name.Orig (aname a), T.VSet.singleton (Version.Orig w))
+            (Name.Orig (aname a), T.VSet.singleton (Version.Orig u))
       | _ => T.DependeesSet.empty
       end.
 
@@ -940,10 +940,11 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         y = (Name.Orig m, T.VSet.singleton (Version.Orig w)).
     Proof. intros; apply SOde.singleton_in. Qed.
 
-    Lemma dependees_selector_real_spec : forall I a (u : V.t) y,
+    Lemma dependees_selector_real_spec :
+      forall I (n : N.t) (phi : Ver.Formula) (u : V.t) y,
         T.DependeesSet.In y
-          (dependees I (Name.Selector a, Version.RefReal u)) <->
-        y = (Name.Orig (aname a), T.VSet.singleton (Version.Orig u)).
+          (dependees I (Name.Selector (n, phi), Version.RefReal u)) <->
+        y = (Name.Orig n, T.VSet.singleton (Version.Orig u)).
     Proof. intros; apply SOde.singleton_in. Qed.
 
     Lemma cardinal_in : forall A (a : Atom.t),
@@ -1139,10 +1140,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Definition rmatchb (q : Pkg.t) (a : Atom.t) : bool :=
       andb (NEqb.eqb (fst q) (aname a)) (Ver.satisfiesb (snd q) (aform a)).
 
-    Definition chosenVersion (q : Pkg.t) (a : Atom.t) : Version.t :=
-      if rmatchb q a
-      then Version.RefReal (snd q)
-      else Version.Ref (fst q) (snd q).
+    Definition chosenVersion '((m, w) : Pkg.t) (a : Atom.t) : Version.t :=
+      if rmatchb (m, w) a then Version.RefReal w else Version.Ref m w.
 
     Definition chooseSatisfier (Pi : Prov.t) (S : PkgSet.t) (a : Atom.t) :
         option Version.t :=
@@ -1219,10 +1218,10 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       unfold PkgSet.Exists; reflexivity.
     Qed.
 
-    Lemma chooseSatisfier_spec : forall Pi S a u,
-        chooseSatisfier Pi S a = Some u ->
-        exists n v, PkgSet.In (n, v) S /\ matchb Pi (n, v) a = true /\
-          u = chosenVersion (n, v) a.
+    Lemma chooseSatisfier_spec : forall Pi S a v,
+        chooseSatisfier Pi S a = Some v ->
+        exists m w, PkgSet.In (m, w) S /\ matchb Pi (m, w) a = true /\
+          v = chosenVersion (m, w) a.
     Proof.
       intros Pi S a u H; unfold chooseSatisfier in H.
       destruct (PkgSet.min_elt (PkgSet.filter (fun q => matchb Pi q a) S))
@@ -1515,10 +1514,11 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           destruct (andb (NEqb.eqb qn0 (aname a0))
                       (Ver.satisfiesb qv0 (aform a0)))
             eqn:Hr.
-          * apply dependees_selector_real_spec in Hout.
+          * destruct a0 as [an0 af0].
+            apply dependees_selector_real_spec in Hout.
             injection Hout as -> ->.
             apply andb_prop in Hr; destruct Hr as [Hn _].
-            apply NEqb.eqb_true_iff in Hn.
+            apply NEqb.eqb_true_iff in Hn; cbn [aname fst] in Hn.
             exists (Version.Orig qv0); split.
             { apply T.VSet.singleton_spec; reflexivity. }
             { rewrite <- Hn; apply mem_coreResolution, CoreReal.
