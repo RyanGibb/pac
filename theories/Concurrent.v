@@ -812,7 +812,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           T.versions (reduceReal (granFibre g R n w) C.DepRel.empty g)
             (Name.Granular n w).
       Proof.
-        intros R D g n w; apply T.versions_ext; intro y.
+        intros R D g n w; apply T.versions_ext; intro v.
         rewrite !mem_reduceReal.
         split; intro H; inversion H as [qn qv HR |]; subst; apply PkgEmbed.
         - apply mem_granFibre; auto.
@@ -847,7 +847,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
             (reduceReal PkgSet.empty (DepRelFibred.endsFibre D (n, v) m) g)
             (Name.Intermediate n v m).
       Proof.
-        intros R D g n v m; apply T.versions_ext; intro y.
+        intros R D g n v m; apply T.versions_ext; intro w.
         rewrite !mem_reduceReal.
         split; intro H; inversion H as [| n' v' m' vs u HD Hs Hu]; subst;
           apply (PkgIntermediate _ _ _ n v m vs u); try assumption.

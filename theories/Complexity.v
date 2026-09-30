@@ -473,7 +473,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
           (coreResolution cs sigma).
     Proof.
       intros cs sigma Hsat; constructor.
-      - intros y Hy; apply mem_coreResolution in Hy; apply mem_reduceReal.
+      - intros p Hy; apply mem_coreResolution in Hy; apply mem_reduceReal.
         destruct Hy as [-> | [c [Hc [-> | [l [Hl ->]]]]]];
           [left; reflexivity | right | right].
         + exists c, (firstSatisfied sigma c).

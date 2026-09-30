@@ -288,14 +288,14 @@ Module ConflictClass (N V : UsualOrderedType).
     Proof.
       intros R D Om r S [[Hsub Hroot Hdep Huniq] Hexcl].
       unfold coreResolution; constructor.
-      - intros y Hy; apply mem_reduceReal in Hy; apply mem_reduceReal.
+      - intros p' Hy; apply mem_reduceReal in Hy; apply mem_reduceReal.
         destruct Hy as [[p [Hp ->]] | [q [k [Hc [Hq ->]]]]].
         + left; exists p; split; [exact (Hsub _ Hp) | reflexivity].
         + right; exists q, k; split; [exact Hc |].
           split; [exact (Hsub _ Hq) | reflexivity].
       - apply mem_reduceReal; left; exists r; split;
           [exact Hroot | reflexivity].
-      - intros y Hy m ws Hd; apply mem_reduceDeps in Hd.
+      - intros p' Hy m ws Hd; apply mem_reduceDeps in Hd.
         destruct Hd as [[p [n [vs [HD Hyd]]]] | [q [k [Hc Hyd]]]];
           injection Hyd as -> -> ->.
         + apply embedPkg_mem_real in Hy.

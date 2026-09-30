@@ -137,12 +137,12 @@ Module Conflict (N V : UsualOrderedType).
       : T.DepRel.t :=
       T.DepRel.union (origEdges D) (conflictEdges R G).
 
-    Lemma mem_complementVS : forall R n vs (w : Version.t),
-        T.VSet.In w (complementVS R n vs) <->
-        w = Version.Bot \/
-        exists u, PkgSet.In (n, u) R /\ ~ VSet.In u vs /\ w = Version.Orig u.
+    Lemma mem_complementVS : forall R n vs (v : Version.t),
+        T.VSet.In v (complementVS R n vs) <->
+        v = Version.Bot \/
+        exists u, PkgSet.In (n, u) R /\ ~ VSet.In u vs /\ v = Version.Orig u.
     Proof.
-      intros R n vs w; unfold complementVS.
+      intros R n vs v; unfold complementVS.
       rewrite SOvt.add_in; unfold embedVS; rewrite SOvt.mem_map.
       split.
       - intros [-> | [u [Hu ->]]]; [left; reflexivity | right].
@@ -316,7 +316,7 @@ Module Conflict (N V : UsualOrderedType).
     Proof.
       intros R D G r S [[Hsub Hroot Hdep Huniq] Havoid].
       constructor.
-      - intros y Hy; apply mem_coreResolution in Hy; apply mem_reduceReal.
+      - intros p' Hy; apply mem_coreResolution in Hy; apply mem_reduceReal.
         destruct Hy as [[p [HpS ->]] | [n [Hn [_ ->]]]].
         + left; exists p; split; [apply Hsub; exact HpS | reflexivity].
         + right; exists n; auto.
@@ -346,10 +346,10 @@ Module Conflict (N V : UsualOrderedType).
             split; [| split; [| reflexivity]].
             -- apply mem_instNames; right; right; exists p, vs; exact HG.
             -- intros v Hv; apply E; exists v; exact Hv.
-      - intros n w w' Hw Hw'.
-        apply mem_coreResolution in Hw, Hw'.
-        destruct Hw as [[[pn pv] [HpS Hp]] | [m [_ [Hnone Hp]]]];
-          destruct Hw' as [[[pn' pv'] [Hp'S Hp']] | [m' [_ [Hnone' Hp']]]];
+      - intros n v v' Hv Hv'.
+        apply mem_coreResolution in Hv, Hv'.
+        destruct Hv as [[[pn pv] [HpS Hp]] | [m [_ [Hnone Hp]]]];
+          destruct Hv' as [[[pn' pv'] [Hp'S Hp']] | [m' [_ [Hnone' Hp']]]];
           unfold embedPkg in *; cbn [fst snd] in *.
         + injection Hp as -> ->; injection Hp' as -> ->.
           f_equal; exact (Huniq _ _ _ HpS Hp'S).

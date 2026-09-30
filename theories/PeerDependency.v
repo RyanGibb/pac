@@ -734,7 +734,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
                C.DepRel.empty PeerRel.empty g)
             (Name.Granular n w).
       Proof.
-        intros R D Th g n w; apply T.versions_ext; intro y.
+        intros R D Th g n w; apply T.versions_ext; intro v.
         rewrite !mem_reduceReal.
         split; intro H; inversion H as [qn qv HR | |]; subst; apply PkgEmbed.
         - apply Conc.Reduction.Lookup.mem_granFibre; auto.
@@ -765,7 +765,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
                (peersOfDeps D Th (n, v) o) g)
             (Name.Intermediate n v o).
       Proof.
-        intros R D Th g n v o; apply T.versions_ext; intro y.
+        intros R D Th g n v o; apply T.versions_ext; intro u'.
         rewrite !mem_reduceReal.
         split; intro H;
           inversion H as [| n' v' m' vs u HD Hu
