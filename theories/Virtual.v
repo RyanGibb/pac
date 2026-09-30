@@ -78,25 +78,28 @@ Module Virtual (N V : UsualOrderedType).
         forall (n : N.t) (vs : VSet.t),
           C.DepRel.In (p, (n, vs)) D ->
           (exists v, VSet.In v vs /\ PkgSet.In (n, v) S) \/
-          (exists q, PkgSet.In q S /\
-             exists v, MemTop v vs /\ ProvidesRel.In (q, (n, v)) Pi /\
-               RhoRel.In (q, (n, p)) rho)
+          (exists m w, PkgSet.In (m, w) S /\
+             exists v, MemTop v vs /\ ProvidesRel.In ((m, w), (n, v)) Pi /\
+               RhoRel.In ((m, w), (n, p)) rho)
     ; res_version_unique : C.VersionUnique S
     ; res_provider_subset :
-        forall (q : Pkg.t) (n : N.t) (p : Pkg.t),
-          RhoRel.In (q, (n, p)) rho -> PkgSet.In q S /\ PkgSet.In p S
+        forall (m : N.t) (w : V.t) (n : N.t) (p : Pkg.t),
+          RhoRel.In ((m, w), (n, p)) rho ->
+          PkgSet.In (m, w) S /\ PkgSet.In p S
     ; res_rho_functional :
-        forall (q q' : Pkg.t) (n : N.t) (p : Pkg.t),
-          RhoRel.In (q, (n, p)) rho -> RhoRel.In (q', (n, p)) rho -> q = q' }.
+        forall (m : N.t) (w : V.t) (m' : N.t) (w' : V.t) (n : N.t)
+               (p : Pkg.t),
+          RhoRel.In ((m, w), (n, p)) rho -> RhoRel.In ((m', w'), (n, p)) rho ->
+          (m, w) = (m', w') }.
 
   (* Rules out a provider in rho that no dependency of its depender admits:
      the decoding reads rho off dependency edges, so it cannot give one
      back. *)
   Definition ProviderDependency (D : C.DepRel.t) (Pi : ProvidesRel.t)
       (rho : RhoRel.t) : Prop :=
-    forall q n p, RhoRel.In (q, (n, p)) rho ->
+    forall m w n p, RhoRel.In ((m, w), (n, p)) rho ->
       exists vs, C.DepRel.In (p, (n, vs)) D /\
-        exists v, MemTop v vs /\ ProvidesRel.In (q, (n, v)) Pi.
+        exists v, MemTop v vs /\ ProvidesRel.In ((m, w), (n, v)) Pi.
 
   Module Reduction.
 
@@ -273,10 +276,10 @@ Module Virtual (N V : UsualOrderedType).
         : T.Pkg.t -> Prop :=
     | RealOrig : forall n v,
         PkgSet.In (n, v) R -> RealSpec R D Pi (Name.Orig n, Version.Orig v)
-    | RealProvider : forall p n vs m u v,
-        C.DepRel.In (p, (n, vs)) D -> ProvidesRel.In ((m, u), (n, v)) Pi ->
+    | RealProvider : forall p n vs m w v,
+        C.DepRel.In (p, (n, vs)) D -> ProvidesRel.In ((m, w), (n, v)) Pi ->
         MemTop v vs ->
-        RealSpec R D Pi (Name.Selector p n, Version.Provider m u)
+        RealSpec R D Pi (Name.Selector p n, Version.Provider m w)
     | RealDirect : forall p n vs u,
         C.DepRel.In (p, (n, vs)) D -> HasProvider Pi n vs -> VSet.In u vs ->
         PkgSet.In (n, u) R ->
@@ -433,12 +436,12 @@ Module Virtual (N V : UsualOrderedType).
         DepsSpec R D Pi
           ((Name.Orig pn, Version.Orig pv),
            (Name.Selector (pn, pv) n, selectorVersions R Pi n vs))
-    | DepsProvider : forall p n vs m u v,
-        C.DepRel.In (p, (n, vs)) D -> ProvidesRel.In ((m, u), (n, v)) Pi ->
+    | DepsProvider : forall p n vs m w v,
+        C.DepRel.In (p, (n, vs)) D -> ProvidesRel.In ((m, w), (n, v)) Pi ->
         MemTop v vs ->
         DepsSpec R D Pi
-          ((Name.Selector p n, Version.Provider m u),
-           (Name.Orig m, T.VSet.singleton (Version.Orig u)))
+          ((Name.Selector p n, Version.Provider m w),
+           (Name.Orig m, T.VSet.singleton (Version.Orig w)))
     | DepsDirect : forall p n vs u,
         C.DepRel.In (p, (n, vs)) D -> HasProvider Pi n vs -> VSet.In u vs ->
         PkgSet.In (n, u) R ->
@@ -631,7 +634,7 @@ Module Virtual (N V : UsualOrderedType).
           destruct Hsv as [[m [u [v [HP [Hm Hsv]]]]] | [u [Hu [HuR Hsv]]]].
           * subst sv; right.
             assert (HqS := Hsel_emb m u (pn, pv) n v vs HD HP Hm HsvS).
-            exists (m, u).
+            exists m, u.
             split; [apply mem_virtualResolution; exact HqS |].
             exists v; split; [exact Hm |]; split; [exact HP |].
             apply mem_providers.
@@ -662,13 +665,13 @@ Module Virtual (N V : UsualOrderedType).
         assert (H := Huniq (Name.Orig n)
                        (Version.Orig v) (Version.Orig v') Hv Hv').
         injection H as H; exact H.
-      - intros [m u] n p Hrho.
+      - intros m u n p Hrho.
         apply mem_providers in Hrho.
         destruct Hrho as [vs [HD [v [Hm [HP [HpS HselS]]]]]].
         split; apply mem_virtualResolution.
         + exact (Hsel_emb m u p n v vs HD HP Hm HselS).
         + exact HpS.
-      - intros [m u] [m' u'] n p H1 H2; apply mem_providers in H1, H2.
+      - intros m u m' u' n p H1 H2; apply mem_providers in H1, H2.
         destruct H1 as (vs1 & _ & v1 & _ & _ & _ & Hsel1).
         destruct H2 as (vs2 & _ & v2 & _ & _ & _ & Hsel2).
         assert (E := Huniq _ _ _ Hsel1 Hsel2); injection E as -> ->.
@@ -724,8 +727,9 @@ Module Virtual (N V : UsualOrderedType).
 
     Lemma chooseSelector_spec :
       forall S_Pi rho Pi (p : Pkg.t) (n : N.t) vs,
-        ((exists q, PkgSet.In q S_Pi /\ exists v, MemTop v vs /\
-            ProvidesRel.In (q, (n, v)) Pi /\ RhoRel.In (q, (n, p)) rho) \/
+        ((exists m w, PkgSet.In (m, w) S_Pi /\ exists v, MemTop v vs /\
+            ProvidesRel.In ((m, w), (n, v)) Pi /\
+            RhoRel.In ((m, w), (n, p)) rho) \/
          (exists u, VSet.In u vs /\ PkgSet.In (n, u) S_Pi)) ->
         (exists m w v,
            chooseSelector S_Pi rho Pi p n vs = Version.Provider m w /\
@@ -753,9 +757,9 @@ Module Virtual (N V : UsualOrderedType).
           destruct H2 as [Hu1 Hmem]; apply PkgSet.mem_spec in Hmem.
           right; exists u1; auto.
         + exfalso.
-          destruct Hcase as [[q [HqS [v [Hm [HP Hr]]]]] | [u [Hu HuS]]].
+          destruct Hcase as [[m [w [HqS [v [Hm [HP Hr]]]]]] | [u [Hu HuS]]].
           * pose proof (PkgSet.min_elt_spec3 H1) as Hemp.
-            apply (Hemp q).
+            apply (Hemp (m, w)).
             apply mem_rhoProviders.
             split; [exact HqS |].
             exists v; repeat split; assumption.
@@ -840,9 +844,9 @@ Module Virtual (N V : UsualOrderedType).
       { intros p n vs HpS HD.
         apply chooseSelector_spec.
         destruct (Hclo p HpS n vs HD)
-          as [[v [Hv HvS]] | [q [HqS [v [Hm [HP Hr]]]]]].
+          as [[v [Hv HvS]] | [m [w [HqS [v [Hm [HP Hr]]]]]]].
         - right; exists v; split; assumption.
-        - left; exists q; split; [exact HqS |].
+        - left; exists m, w; split; [exact HqS |].
           exists v; repeat split; assumption. }
       constructor.
       - intros p' Hp'; apply mem_coreResolution in Hp'; apply mem_reduceReal.
@@ -860,8 +864,8 @@ Module Virtual (N V : UsualOrderedType).
         + inversion Hd as [pn1 pv1 n vs HD Hb | pn1 pv1 n vs HD Hb | |];
             subst.
           * destruct (Hclo _ HpS _ _ HD)
-              as [[v [Hv HvS]] | [q [HqS [v [Hm [HP Hr]]]]]];
-              [| exfalso; apply Hb; exists q, v; split; assumption].
+              as [[v [Hv HvS]] | [m [w [HqS [v [Hm [HP Hr]]]]]]];
+              [| exfalso; apply Hb; exists (m, w), v; split; assumption].
             exists (Version.Orig v); split.
             -- unfold embedVS; apply SOvv.mem_map; exists v; auto.
             -- exact (mem_coreResolution_embed _ _ _ _ _ HvS).
@@ -896,13 +900,14 @@ Module Virtual (N V : UsualOrderedType).
 
     Lemma providers_coreResolution_iff : forall R D Pi r S_Pi rho,
         IsResolution R D Pi r S_Pi rho ->
-        forall q n p,
-          RhoRel.In (q, (n, p)) (providers D Pi (coreResolution D Pi S_Pi rho))
-          <-> RhoRel.In (q, (n, p)) rho /\
+        forall m w n p,
+          RhoRel.In ((m, w), (n, p))
+            (providers D Pi (coreResolution D Pi S_Pi rho))
+          <-> RhoRel.In ((m, w), (n, p)) rho /\
               exists vs, C.DepRel.In (p, (n, vs)) D /\
-                exists v, MemTop v vs /\ ProvidesRel.In (q, (n, v)) Pi.
+                exists v, MemTop v vs /\ ProvidesRel.In ((m, w), (n, v)) Pi.
     Proof.
-      intros R D Pi r S_Pi rho [_ _ _ _ Hps Hfun] [m w] n p.
+      intros R D Pi r S_Pi rho [_ _ _ _ Hps Hfun] m w n p.
       rewrite mem_providers; split.
       - intros (vs & HD & v & Hm & HP & _ & Hsel).
         split; [| exists vs; split; [exact HD | exists v; split; assumption]].
@@ -919,7 +924,7 @@ Module Virtual (N V : UsualOrderedType).
         + match type of Ec with context [VSet.min_elt ?c] =>
             destruct (VSet.min_elt c) end; discriminate.
       - intros [Hr (vs & HD & v & Hm & HP)].
-        destruct (Hps _ _ _ Hr) as [HqS HpS].
+        destruct (Hps _ _ _ _ Hr) as [HqS HpS].
         exists vs; split; [exact HD |]; exists v; split; [exact Hm |].
         split; [exact HP |].
         split; [exact (mem_coreResolution_embed _ _ _ _ _ HpS) |].
@@ -930,9 +935,10 @@ Module Virtual (N V : UsualOrderedType).
         unfold chooseSelector.
         destruct (PkgSet.min_elt (rhoProviders S_Pi rho Pi p n vs))
           as [q |] eqn:H1.
-        + apply PkgSet.min_elt_spec1, mem_rhoProviders in H1.
+        + destruct q as [m1 w1].
+          apply PkgSet.min_elt_spec1, mem_rhoProviders in H1.
           destruct H1 as (_ & _ & _ & _ & Hq).
-          rewrite (Hfun _ _ _ _ Hq Hr); reflexivity.
+          rewrite (Hfun _ _ _ _ _ _ Hq Hr); reflexivity.
         + exfalso; apply PkgSet.min_elt_spec3 in H1.
           apply (H1 (m, w)), mem_rhoProviders.
           split; [exact HqS | exists v; auto].
@@ -945,9 +951,10 @@ Module Virtual (N V : UsualOrderedType).
     Proof.
       intros R D Pi r S_Pi rho Hres Hdep.
       split; [apply virtualResolution_coreResolution |].
-      apply RhoRel.ext; intros [q [n p]].
+      apply RhoRel.ext; intros [[m w] [n p]].
       rewrite (providers_coreResolution_iff R D Pi r S_Pi rho Hres).
-      split; [intros [H _]; exact H | intro H; exact (conj H (Hdep _ _ _ H))].
+      split;
+        [intros [H _]; exact H | intro H; exact (conj H (Hdep _ _ _ _ H))].
     Qed.
 
     Module Lookup.
