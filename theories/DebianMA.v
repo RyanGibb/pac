@@ -194,27 +194,28 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Module Conf := FSetUOT ConfElt.
 
   Definition BaseMatch (Pi : Prov.t) (n : N.t) (phi : Deb.Ver.Formula)
-      (q : Pkg.t) : Prop :=
-    (pname q = n /\ Deb.Ver.satisfiesb (pver q) phi = true) \/
-    (exists v, Prov.In (q, (n, v)) Pi /\ Deb.vtMatchb v phi = true).
+      '(((m, alpha'), u) : Pkg.t) : Prop :=
+    (m = n /\ Deb.Ver.satisfiesb u phi = true) \/
+    (exists v, Prov.In (((m, alpha'), u), (n, v)) Pi /\
+       Deb.vtMatchb v phi = true).
 
   Definition MAMatch (Pi : Prov.t) (M : Cls.t) (alpha : A.t)
-      (a : Atom.t) (q : Pkg.t) : Prop :=
-    BaseMatch Pi (aname a) (aform a) q /\
-    match aqual a with
-    | QUnq => parch q = alpha \/ classOf M q = MAForeign
-    | QNative => parch q = AP.native
-    | QArch alpha' => parch q = alpha'
+      '((n, (x, phi)) : Atom.t) '((((m, alpha'), u) as q) : Pkg.t) : Prop :=
+    BaseMatch Pi n phi q /\
+    match x with
+    | QUnq => alpha' = alpha \/ classOf M q = MAForeign
+    | QNative => alpha' = AP.native
+    | QArch alpha'' => alpha' = alpha''
     | QAny => classOf M q = MAAllowed
     end.
 
   Definition MAConfMatch (Pi : Prov.t) (M : Cls.t)
-      (a : Atom.t) (q : Pkg.t) : Prop :=
-    BaseMatch Pi (aname a) (aform a) q /\
-    match aqual a with
+      '((n, (x, phi)) : Atom.t) '((((m, alpha'), u) as q) : Pkg.t) : Prop :=
+    BaseMatch Pi n phi q /\
+    match x with
     | QUnq => True
-    | QNative => parch q = AP.native
-    | QArch alpha' => parch q = alpha'
+    | QNative => alpha' = AP.native
+    | QArch alpha'' => alpha' = alpha''
     | QAny => classOf M q = MAAllowed
     end.
 
@@ -527,7 +528,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
          | QAGroup => pname q = n /\ Deb.Ver.satisfiesb (pver q) phi = true
          end).
     Proof.
-      intros R Pi M q n x phi HqR.
+      intros R Pi M [[m b0] u] n x phi HqR; set (q := ((m, b0), u)) in *.
       unfold Deb.Match; cbn [Deb.aname Deb.aform fst snd].
       split.
       - intros [[He Hv] | [v [Hin Hvt]]].
@@ -595,18 +596,19 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         (MAMatch Pi M alpha a q <->
          Deb.Match (reduceProv R Pi M) (embedPkg q) (reduceAtom alpha a)).
     Proof.
-      intros R Pi M alpha a q HqR.
-      unfold MAMatch, reduceAtom.
-      destruct (aqual a) as [ | | | b].
+      intros R Pi M alpha [n [x phi]] [[m b0] u] HqR.
+      unfold MAMatch, reduceAtom; cbn [aname aqual aform fst snd].
+      set (q := ((m, b0), u)) in *.
+      destruct x as [ | | | b].
       - exact (iff_sym
-          (debMatch_char R Pi M q (aname a) (QAArch alpha) (aform a) HqR)).
+          (debMatch_char R Pi M q n (QAArch alpha) phi HqR)).
       - exact (iff_sym
-          (debMatch_char R Pi M q (aname a) QAAny (aform a) HqR)).
+          (debMatch_char R Pi M q n QAAny phi HqR)).
       - exact (iff_sym
-          (debMatch_char R Pi M q (aname a) (QAExact AP.native) (aform a)
+          (debMatch_char R Pi M q n (QAExact AP.native) phi
              HqR)).
       - exact (iff_sym
-          (debMatch_char R Pi M q (aname a) (QAExact b) (aform a) HqR)).
+          (debMatch_char R Pi M q n (QAExact b) phi HqR)).
     Qed.
 
     Lemma conf_transfer : forall R Pi M (p : Pkg.t) a q,
@@ -615,71 +617,72 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             Deb.Match (reduceProv R Pi M) (embedPkg q) ea) <->
          MAConfMatch Pi M a q).
     Proof.
-      intros R Pi M p a q HqR.
-      unfold MAConfMatch, reduceConfEntry; cbn [fst snd].
-      destruct (aqual a) as [ | | | b].
+      intros R Pi M p [n [x phi]] [[m b0] u] HqR.
+      unfold MAConfMatch, reduceConfEntry; cbn [fst snd aname aqual aform].
+      set (q := ((m, b0), u)) in *.
+      destruct x as [ | | | b].
       - split.
         + intros [q' [ea [e [Hce HM]]]].
           split; [| exact I].
           destruct Hce as [E | [E | Hce]].
           * injection E as _ <- _.
-            destruct (proj1 (debMatch_char R Pi M q (aname a) QAGroup
-                               (aform a) HqR) HM) as [Hn Hv].
+            destruct (proj1 (debMatch_char R Pi M q n QAGroup
+                               phi HqR) HM) as [Hn Hv].
             left; split; assumption.
           * injection E as _ <- _.
-            exact (proj1 (proj1 (debMatch_char R Pi M q (aname a) QAAny
-                                   (aform a) HqR) HM)).
+            exact (proj1 (proj1 (debMatch_char R Pi M q n QAAny
+                                   phi HqR) HM)).
           * apply in_map_iff in Hce; destruct Hce as [b [E Hb]].
             injection E as _ <- _.
-            exact (proj1 (proj1 (debMatch_char R Pi M q (aname a) (QAArch b)
-                                   (aform a) HqR) HM)).
+            exact (proj1 (proj1 (debMatch_char R Pi M q n (QAArch b)
+                                   phi HqR) HM)).
         + intros [HB _].
           destruct HB as [[Hn Hv] | [v [HPi Hvt]]].
-          * exists (embedPkg p), ((aname a, QAGroup), aform a), true.
+          * exists (embedPkg p), ((n, QAGroup), phi), true.
             split; [left; reflexivity |].
-            apply (proj2 (debMatch_char R Pi M q (aname a) QAGroup
-                            (aform a) HqR)).
+            apply (proj2 (debMatch_char R Pi M q n QAGroup
+                            phi HqR)).
             split; assumption.
-          * exists (embedPkg p), ((aname a, QAArch (parch q)), aform a), true.
+          * exists (embedPkg p), ((n, QAArch (parch q)), phi), true.
             split.
             -- right; right; apply in_map_iff.
                exists (parch q); split; [reflexivity | apply A.enum_complete].
-            -- apply (proj2 (debMatch_char R Pi M q (aname a)
-                               (QAArch (parch q)) (aform a) HqR)).
+            -- apply (proj2 (debMatch_char R Pi M q n
+                               (QAArch (parch q)) phi HqR)).
                split; [right; exists v; split; assumption | left; reflexivity].
       - split.
         + intros [q' [ea [e [Hce HM]]]].
           destruct Hce as [E | []].
           injection E as _ <- _.
-          exact (proj1 (debMatch_char R Pi M q (aname a) QAAny (aform a)
+          exact (proj1 (debMatch_char R Pi M q n QAAny phi
                           HqR) HM).
         + intros H.
-          exists (embedPkg p), ((aname a, QAAny), aform a), true.
+          exists (embedPkg p), ((n, QAAny), phi), true.
           split; [left; reflexivity |].
-          exact (proj2 (debMatch_char R Pi M q (aname a) QAAny (aform a)
+          exact (proj2 (debMatch_char R Pi M q n QAAny phi
                           HqR) H).
       - split.
         + intros [q' [ea [e [Hce HM]]]].
           destruct Hce as [E | []].
           injection E as _ <- _.
-          exact (proj1 (debMatch_char R Pi M q (aname a) (QAExact AP.native)
-                          (aform a) HqR) HM).
+          exact (proj1 (debMatch_char R Pi M q n (QAExact AP.native)
+                          phi HqR) HM).
         + intros H.
-          exists (embedPkg p), ((aname a, QAExact AP.native), aform a), true.
+          exists (embedPkg p), ((n, QAExact AP.native), phi), true.
           split; [left; reflexivity |].
-          exact (proj2 (debMatch_char R Pi M q (aname a) (QAExact AP.native)
-                          (aform a) HqR) H).
+          exact (proj2 (debMatch_char R Pi M q n (QAExact AP.native)
+                          phi HqR) H).
       - split.
         + intros [q' [ea [e [Hce HM]]]].
           destruct Hce as [E | []].
           injection E as _ <- _.
-          exact (proj1 (debMatch_char R Pi M q (aname a) (QAExact b)
-                          (aform a) HqR) HM).
+          exact (proj1 (debMatch_char R Pi M q n (QAExact b)
+                          phi HqR) HM).
         + intros H.
-          exists (embedPkg p), ((aname a, QAExact b), aform a), true.
+          exists (embedPkg p), ((n, QAExact b), phi), true.
           split; [left; reflexivity |].
-          exact (proj2 (debMatch_char R Pi M q (aname a) (QAExact b)
-                          (aform a) HqR) H).
+          exact (proj2 (debMatch_char R Pi M q n (QAExact b)
+                          phi HqR) H).
     Qed.
 
     Lemma impl_conf_transfer : forall R Pi M (p q : Pkg.t),
@@ -1428,8 +1431,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           Deb.Match (reduceProv R Pi M) (embedPkg p) ((m, x), phi) ->
           m = pname p \/ exists v, Prov.In (p, (m, v)) Pi.
       Proof.
-        intros R Pi M p m x phi HpR HM.
-        apply (debMatch_char R Pi M p m x phi HpR) in HM.
+        intros R Pi M [[n0 b0] u] m x phi HpR HM.
+        apply (debMatch_char R Pi M _ m x phi HpR) in HM.
         destruct x as [b | b | |];
           try (destruct HM as [[[Hn _] | [v [Hin _]]] _];
                [left; symmetry; exact Hn | right; exists v; exact Hin]).
