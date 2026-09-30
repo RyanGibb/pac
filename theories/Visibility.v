@@ -976,18 +976,18 @@ Module Visibility (N V : UsualOrderedType).
             as [c0 [Hc0 [Hocc Htr]]].
           destruct (occurrence_step R D pub r S pn pv m vs c0 Hres HD Hc0
                       (Htr m vs HD) Hocc) as [u [Hu [_ [Hagr Hcp]]]].
-          exists u; split.
-          * split; [exact Hu | split].
-            -- exact (occurrence_mem_visibilityResolution R D pub r S m u c0
-                        Hsub Hcp).
-            -- apply mem_parents.
-               exists pn, pv, m, vs, u; repeat split; assumption.
-          * intros u' [_ [_ Hpi']].
-            apply mem_parents in Hpi'.
-            destruct Hpi'
-              as [n2 [v2 [m2 [vs2 [u2 [_ [_ [Hagr2 [_ Heq]]]]]]]]].
-            injection Heq as <- <- <- <-.
-            exact (Huniq _ _ _ Hagr Hagr2).
+          exists u; split; [exact Hu | split].
+          * exact (occurrence_mem_visibilityResolution R D pub r S m u c0
+                     Hsub Hcp).
+          * apply mem_parents.
+            exists pn, pv, m, vs, u; repeat split; assumption.
+        + intros m u u' [pn pv] H1 H2.
+          apply mem_parents in H1, H2.
+          destruct H1 as (n1 & v1 & m1 & vs & u1 & _ & _ & Hagr & _ & E1).
+          injection E1 as <- <- <- <-.
+          destruct H2 as (n2 & v2 & m2 & vs' & u2 & _ & _ & Hagr' & _ & E2).
+          injection E2 as <- <- <- <-.
+          exact (Huniq _ _ _ Hagr Hagr').
         + intros n v v' _ _ Hne; exact Hne.
         + intros c p Hcp; apply mem_parents in Hcp.
           destruct Hcp as [n [v [m [vs [u [HD [Hu [Hagr [Hnv Heq]]]]]]]]].
@@ -1189,7 +1189,7 @@ Module Visibility (N V : UsualOrderedType).
     Proof.
       intros R D pub r S pi Hfunc Hres.
       destruct Hres as [Hconc Hvv].
-      destruct Hconc as [Hsub Hroot Hpc Hvg Hps _].
+      destruct Hconc as [Hsub Hroot Hpc Hpif Hvg Hps _].
       constructor.
       - intros y Hy; apply mem_coreResolution in Hy; apply mem_reduceReal.
         destruct Hy; econstructor; try apply Hsub; eassumption.
@@ -1208,7 +1208,7 @@ Module Visibility (N V : UsualOrderedType).
             apply mem_coreResolution; constructor;
               [exact HS | apply mem_potentialOrigins; right; split; assumption
               | right; split; assumption | apply InSubSelf].
-          * destruct (Hpc _ HS _ _ HD1) as [u [[Hu [HmS Hpi]] _]].
+          * destruct (Hpc _ HS _ _ HD1) as [u [Hu [HmS Hpi]]].
             exists u; split; [apply mem_embedVS; exact Hu |].
             apply mem_coreResolution; econstructor; eassumption.
         + inversion Hd as [| | n1 v1 m1 vs1 q1 u1 HD1 Hq1 Hc1 Hu1
@@ -1231,13 +1231,7 @@ Module Visibility (N V : UsualOrderedType).
                           | n2 v2 m2 vs2 u2 HD2 Hu2 _ Hpi2]; subst;
           [exact (Hvv _ (isOrigin_mem D pub r S _ Ho1 Hroot) _ _ _
                     Hins1 Hins2) | |].
-        all: assert (vs2 = vs1) as -> by exact (Hfunc _ _ _ _ HD2 HD1);
-          destruct (Hpc _ (proj2 (Hps _ _ Hpi1)) _ _ HD1) as [u0 [_ Huniq0]];
-          pose proof (Huniq0 _ (conj Hu1 (conj (proj1 (Hps _ _ Hpi1)) Hpi1)))
-            as E1;
-          pose proof (Huniq0 _ (conj Hu2 (conj (proj1 (Hps _ _ Hpi2)) Hpi2)))
-            as E2;
-          congruence.
+        all: exact (Hpif _ _ _ _ Hpi1 Hpi2).
     Qed.
 
     Theorem visibilityResolution_coreResolution : forall R D pub r S pi,
@@ -1246,7 +1240,7 @@ Module Visibility (N V : UsualOrderedType).
            exists q, IsOrigin D pub r S q /\ InSub pub pi q p) ->
         visibilityResolution R D pub r (coreResolution R D pub r S pi) = S.
     Proof.
-      intros R D pub r S pi [[Hsub _ _ _ _] _] Hvis.
+      intros R D pub r S pi [[Hsub _ _ _ _ _ _] _] Hvis.
       apply PkgSet.ext; intros [n v].
       rewrite mem_visibilityResolution; split.
       - intros [_ [q [_ Hocc]]]; apply mem_coreResolution in Hocc.
@@ -1270,7 +1264,7 @@ Module Visibility (N V : UsualOrderedType).
       intros R D pub r S pi Hres Hvis.
       assert (Hdec := visibilityResolution_coreResolution R D pub r S pi
                         Hres Hvis).
-      destruct Hres as [[_ _ _ _ Hps Hedge] _].
+      destruct Hres as [[_ _ _ _ _ Hps Hedge] _].
       apply ParentRel.ext; intros [[m u] [n v]]; rewrite mem_parents, Hdec.
       split.
       - intros (n' & v' & m' & vs & u' & _ & _ & Hagr & _ & E).

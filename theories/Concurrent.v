@@ -22,8 +22,11 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         forall p, PkgSet.In p S ->
         forall (n : N.t) (vs : VSet.t),
           C.DepRel.In (p, (n, vs)) D ->
-          exists! v, VSet.In v vs /\
+          exists v, VSet.In v vs /\
             PkgSet.In (n, v) S /\ ParentRel.In ((n, v), p) pi
+    ; res_pi_functional :
+        forall n v v' p,
+          ParentRel.In ((n, v), p) pi -> ParentRel.In ((n, v'), p) pi -> v = v'
     ; res_version_granularity :
         forall (n : N.t) (v v' : V.t),
           PkgSet.In (n, v) S -> PkgSet.In (n, v') S -> v <> v' -> g v <> g v'
@@ -525,31 +528,12 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
             assert (T.PkgSet.In (Name.Granular m (g u), Version.Orig u) S)
               as HuS
               by (rewrite Hgu; exact HcvS).
-            exists u; split.
-            { split; [exact Hu | split].
-              - apply mem_concurrentResolution; exact HuS.
-              - apply mem_parents.
-                exists pn, pv, m, vs, u.
-                repeat split; try assumption.
-                intros _; exists u0; repeat split; assumption. }
-            { intros u' [Hu' [Hu'S Hpi']].
-              apply mem_concurrentResolution in Hu'S; unfold embedPkg in Hu'S;
-                simpl in Hu'S.
-              apply mem_parents in Hpi'.
-              destruct Hpi'
-                as [n' [v' [m' [vs' [u'' [Hdep' [_ [_ [_ [Hsc Heq]]]]]]]]]].
-              injection Heq as <- <- <- <-.
-              assert (vs' = vs) as -> by (exact (Hfunc _ _ _ _ Hdep' Hdep0)).
-              destruct (Hsc Hs) as [u0' [Hu0' [Hu0'S Hgu']]].
-              assert (Version.Gran (g u0') = Version.Gran (g u0)) as Hg0
-                by (exact (Huniq _ _ _ Hu0'S Hcv0S)).
-              injection Hg0 as Hg0.
-              rewrite Hg0 in Hgu'; rewrite Hgu' in Hu'S.
-              assert (T.PkgSet.In (Name.Granular m (g u0), Version.Orig u) S)
-                as HuS0
-                by (rewrite <- Hgu; exact HuS).
-              pose proof (Huniq _ _ _ Hu'S HuS0) as He.
-              injection He as He; congruence. }
+            exists u; split; [exact Hu | split].
+            -- apply mem_concurrentResolution; exact HuS.
+            -- apply mem_parents.
+               exists pn, pv, m, vs, u.
+               repeat split; try assumption.
+               intros _; exists u0; repeat split; assumption.
           * pose proof (proj1 (isSplitb_false_iff g vs) Hs) as Hdir.
             destruct (VSet.choose vs) as [u0 |] eqn:Hch.
             2:{ apply VSet.choose_spec2 in Hch.
@@ -564,22 +548,35 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
             assert (T.PkgSet.In (Name.Granular m (g u), Version.Orig u) S)
               as HuS
               by (rewrite Hgu; exact HcvS).
-            exists u; split.
-            { split; [exact Hu | split].
-              - apply mem_concurrentResolution; exact HuS.
-              - apply mem_parents.
-                exists pn, pv, m, vs, u.
-                repeat split; try assumption.
-                intro Hsplit; exfalso.
-                destruct Hsplit as [u1 [u2 [Hu1 [Hu2 Hne]]]].
-                exact (Hne (Hdir u1 u2 Hu1 Hu2)). }
-            { intros u' [Hu' [Hu'S _]].
-              apply mem_concurrentResolution in Hu'S; unfold embedPkg in Hu'S;
-                simpl in Hu'S.
-              pose proof (Hdir u' u0 Hu' Hu0) as Hgu'.
-              rewrite Hgu' in Hu'S.
-              pose proof (Huniq _ _ _ Hu'S HcvS) as He.
-              injection He as He; congruence. }
+            exists u; split; [exact Hu | split].
+            -- apply mem_concurrentResolution; exact HuS.
+            -- apply mem_parents.
+               exists pn, pv, m, vs, u.
+               repeat split; try assumption.
+               intro Hsplit; exfalso.
+               destruct Hsplit as [u1 [u2 [Hu1 [Hu2 Hne]]]].
+               exact (Hne (Hdir u1 u2 Hu1 Hu2)).
+      - intros m u u' [pn pv] H1 H2.
+        apply mem_parents in H1, H2.
+        destruct H1
+          as (n1 & v1 & m1 & vs & u1 & HD1 & _ & Hu & HuS & Hsc & E1).
+        injection E1 as <- <- <- <-.
+        destruct H2
+          as (n2 & v2 & m2 & vs' & u2 & HD2 & _ & Hu' & Hu'S & Hsc' & E2).
+        injection E2 as <- <- <- <-.
+        assert (vs' = vs) as -> by exact (Hfunc _ _ _ _ HD2 HD1).
+        assert (g u' = g u) as Hg.
+        { destruct (isSplitb g vs) eqn:Hs.
+          - apply isSplitb_iff in Hs.
+            destruct (Hsc Hs) as [u0 [_ [Hu0S Hgu]]].
+            destruct (Hsc' Hs) as [u0' [_ [Hu0'S Hgu']]].
+            assert (Version.Gran (g u0') = Version.Gran (g u0)) as Hg0
+              by exact (Huniq _ _ _ Hu0'S Hu0S).
+            injection Hg0 as Hg0; congruence.
+          - exact (proj1 (isSplitb_false_iff g vs) Hs u' u Hu' Hu). }
+        rewrite Hg in Hu'S.
+        pose proof (Huniq _ _ _ HuS Hu'S) as He.
+        injection He as He; exact He.
       - intros n v v' Hv Hv' Hne Hg.
         apply mem_concurrentResolution in Hv, Hv'; unfold embedPkg in Hv, Hv';
           simpl in Hv, Hv'.
@@ -666,7 +663,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           (embedPkg g r) (coreResolution S pi D g).
     Proof.
       intros R D g r S pi Hfunc Hres.
-      destruct Hres as [Hsub Hroot Hpc Hvg Hps _].
+      destruct Hres as [Hsub Hroot Hpc Hpif Hvg Hps _].
       constructor.
       - intros q Hq; apply mem_reduceReal; apply mem_coreResolution in Hq.
         destruct Hq as [n v Hnv | n v m vs u HD Hnv Hs Hmu Hu Hpi];
@@ -678,27 +675,28 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         destruct Hq as [n v Hnv | n v m vs u HD Hnv Hs Hmu Hu Hpi].
         + inversion Hd as [n' v' m' vs' u' HD' Hdir' Hu' | n' v' m' vs' HD' Hs'
                           | | n' v' m' HD']; subst.
-          * destruct (Hpc _ Hnv _ _ HD') as [u [[Huv [HmuS Hpiu]] _]].
+          * destruct (Hpc _ Hnv _ _ HD') as [u [Huv [HmuS Hpiu]]].
             exists (Version.Orig u); split.
             { unfold embedVS; apply SOvcv.mem_map;
                 exists u; split; [exact Huv | reflexivity]. }
             { rewrite <- (Hdir' u u' Huv Hu').
               exact (mem_coreResolution_granular S pi D g m' u HmuS). }
-          * destruct (Hpc _ Hnv _ _ HD') as [u [[Huv [HmuS Hpiu]] _]].
+          * destruct (Hpc _ Hnv _ _ HD') as [u [Huv [HmuS Hpiu]]].
             exists (Version.Gran (g u)); split.
             { unfold gransOfVS; apply SOvcv.mem_map;
                 exists u; split; [exact Huv | reflexivity]. }
             { exact (mem_coreResolution_intermediate S pi D g n v m' vs' u
                        HD' Hnv Hs' HmuS Huv Hpiu). }
-          * destruct (Hpc _ Hnv _ _ HD') as [u [[Huv _] _]].
+          * destruct (Hpc _ Hnv _ _ HD') as [u [Huv _]].
             destruct (VSet.empty_spec Huv).
         + inversion Hd as [| | n' v' m' vs' u' HD' Hs' Hu' |]; subst.
           match goal with Hg : g u' = g u |- _ => rename Hg into Hgu end.
-          assert (vs' = vs) as -> by (exact (Hfunc _ _ _ _ HD' HD)).
+          destruct (Hpc _ Hnv _ _ HD') as [w [Hw [_ Hpiw]]].
+          assert (w = u) as -> by exact (Hpif _ _ _ _ Hpiw Hpi).
           exists (Version.Orig u); split.
           { unfold embedVS; apply SOvcv.mem_map; exists u; split;
               [| reflexivity].
-            apply mem_filterGran; split; [exact Hu | symmetry; exact Hgu]. }
+            apply mem_filterGran; split; [exact Hw | symmetry; exact Hgu]. }
           { rewrite Hgu.
             exact (mem_coreResolution_granular S pi D g m u Hmu). }
       - intros n cv1 cv2 H1 H2.
@@ -709,11 +707,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           as [n2 v2 Hm2 | n2 v2 m2 vs2 u2 Hd2 Hnv2 Hs2 Hmu2 Hu2 Hpi2]; subst.
         + destruct (V.eq_dec v1 v2) as [-> | NE]; [reflexivity | exfalso].
           apply (Hvg n1 v1 v2 Hm1 Hm2 NE); congruence.
-        + assert (vs2 = vs1) as -> by (exact (Hfunc _ _ _ _ Hd2 Hd1)).
-          destruct (Hpc _ Hnv1 _ _ Hd1) as [w [_ Huniq]].
-          pose proof (Huniq u1 (conj Hu1 (conj Hmu1 Hpi1))) as E1.
-          pose proof (Huniq u2 (conj Hu2 (conj Hmu2 Hpi2))) as E2.
-          congruence.
+        + rewrite (Hpif _ _ _ _ Hpi1 Hpi2); reflexivity.
     Qed.
 
     Theorem concurrentResolution_coreResolution : forall S pi D g,
@@ -748,7 +742,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         IsResolution R D g r S pi ->
         parents D g (coreResolution S pi D g) = pi.
     Proof.
-      intros R D g r S pi [_ _ Hpc Hvg Hps Hedge].
+      intros R D g r S pi [_ _ Hpc _ Hvg Hps Hedge].
       apply ParentRel.ext; intros [[m u] [n v]]; rewrite mem_parents; split.
       - intros (n' & v' & m' & vs & u' & HD & Hnv & Hu & Hmu & Hsplit & E).
         injection E as <- <- <- <-.
@@ -761,7 +755,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           destruct (V.eq_dec u u1) as [-> | NE]; [exact Hpi1 | exfalso].
           apply (Hvg m u u1 Hmu Hmu1 NE); congruence.
         + apply isSplitb_false_iff in Es.
-          destruct (Hpc _ Hnv _ _ HD) as (w & (Hw & HwS & Hpiw) & _).
+          destruct (Hpc _ Hnv _ _ HD) as (w & Hw & HwS & Hpiw).
           destruct (V.eq_dec u w) as [-> | NE]; [exact Hpiw | exfalso].
           exact (Hvg m u w Hmu HwS NE (Es u w Hu Hw)).
       - intro Hpi.

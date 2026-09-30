@@ -30,7 +30,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
     ; res_parent_closure :
         forall p fs_p, Feat.FeaturedSet.In (p, fs_p) S ->
         forall n vs fs, Feat.FeatDepRel.In (p, (n, (vs, fs))) Df ->
-        exists! v, VSet.In v vs /\
+        exists v, VSet.In v vs /\
           (exists fs', Feat.FSet.Subset fs fs' /\
              Feat.FeaturedSet.In ((n, v), fs') S) /\
           ParentRel.In ((n, v), p) pi
@@ -38,7 +38,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         forall p fs_p, Feat.FeaturedSet.In (p, fs_p) S ->
         forall f, Feat.FSet.In f fs_p ->
         forall n vs fs, Feat.AddlDepRel.In ((p, f), (n, (vs, fs))) Da ->
-        exists! v, VSet.In v vs /\
+        exists v, VSet.In v vs /\
           (exists fs', Feat.FSet.Subset fs fs' /\
              Feat.FeaturedSet.In ((n, v), fs') S) /\
           ParentRel.In ((n, v), p) pi
@@ -635,8 +635,6 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         (forall u, VSet.In u vs ->
            T.PkgSet.In (Name.Intermediate n v m, u) S ->
            ParentRel.In ((m, u), (n, v)) P) ->
-        (forall u, ParentRel.In ((m, u), (n, v)) P ->
-           T.PkgSet.In (Name.Intermediate n v m, u) S) ->
         T.DepRel.In (q, (Name.Intermediate n v m, embedVS vs)) D ->
         (forall u, VSet.In u vs ->
            T.DepRel.In ((Name.Intermediate n v m, u),
@@ -648,18 +646,18 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         (forall f u, Feat.FSet.In f fs -> VSet.In u vs ->
            T.DepRel.In ((iF f, u),
                         (Name.GranularFeatPkg m f (g u), singVS u)) D) ->
-        exists! u, VSet.In u vs /\
+        exists u, VSet.In u vs /\
           (exists fs', Feat.FSet.Subset fs fs' /\
              Feat.FeaturedSet.In ((m, u), fs')
                (featureConcurrentResolution g S)) /\
           ParentRel.In ((m, u), (n, v)) P.
     Proof.
-      intros RR D r g S P q n v m vs fs iF [_ _ Hdep Huniq] HqS Hin Hout Hd
+      intros RR D r g S P q n v m vs fs iF [_ _ Hdep Huniq] HqS Hin Hd
         Hto Hfd Hback Hfwd.
       destruct (Hdep _ HqS _ _ Hd) as [u [Hu HiS]]; rewrite mem_embedVS in Hu.
       destruct (Hdep _ HiS _ _ (Hto u Hu)) as [w [Hw HoS]].
       apply mem_singVS in Hw; subst w.
-      exists u; split; [split; [exact Hu | split] |].
+      exists u; split; [exact Hu | split].
       - exists (featsOf g m u S); split.
         + intros f Hf; apply featsOf_spec.
           destruct (Hdep _ HqS _ _ (Hfd f Hf)) as [u1 [Hu1 HfS]].
@@ -672,7 +670,6 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         + apply mem_featureConcurrentResolution; exists m, u;
             split; [exact HoS | reflexivity].
       - exact (Hin u Hu HiS).
-      - intros u' [_ [_ Hpi]]; exact (Huniq _ _ _ HiS (Hout u' Hpi)).
     Qed.
 
     Theorem feature_concurrent_soundness :
@@ -732,8 +729,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
                  (Name.IntermediateF n v m) Hres HpS
                  (fun u Hu Hi => proj2 (mem_parents Df Da g S m u n v)
                     (conj Hi (or_introl (ex_intro _ vs (ex_intro _ fs
-                       (conj Hdf (conj Hu HpS)))))))
-                 (fun u H => proj1 (proj1 (mem_parents Df Da g S m u n v) H)));
+                       (conj Hdf (conj Hu HpS))))))));
           intros; apply mem_reduceDeps;
           [eapply EdgeFDepToInter | eapply EdgeFInterToOrig
           | eapply EdgeFDepToInterFeat | eapply EdgeFInterFeatToInter
@@ -747,8 +743,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
                  (Name.IntermediateA n v f m) Hres Hf
                  (fun u Hu Hi => proj2 (mem_parents Df Da g S m u n v)
                     (conj Hi (or_intror (ex_intro _ f (ex_intro _ vs
-                       (ex_intro _ fs (conj Hda (conj Hu Hf))))))))
-                 (fun u H => proj1 (proj1 (mem_parents Df Da g S m u n v) H)));
+                       (ex_intro _ fs (conj Hda (conj Hu Hf)))))))));
           intros; apply mem_reduceDeps;
           [eapply EdgeADepToInter | eapply EdgeAInterToOrig
           | eapply EdgeADepToInterFeat | eapply EdgeAInterFeatToInter
@@ -972,12 +967,12 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           | n v m vs fs f u HD Hf Hu Hc | n v f m vs fs f' u HD Hf' Hu Hc].
         + inversion Hd; subst.
           * destruct (Hpc _ _ HS _ _ _ ltac:(eassumption))
-              as [u [[Hu [Htk Hpi]] _]].
+              as [u [Hu [Htk Hpi]]].
             exists u; split; [apply mem_embedVS; exact Hu |].
             apply mem_coreResolution; eapply CoreFInter;
               [eassumption | exact Hu | apply witnessCondb_iff; eauto].
           * destruct (Hpc _ _ HS _ _ _ ltac:(eassumption))
-              as [u [[Hu [Htk Hpi]] _]].
+              as [u [Hu [Htk Hpi]]].
             exists u; split; [apply mem_embedVS; exact Hu |].
             apply mem_coreResolution; eapply CoreFInterF;
               [eassumption | eassumption | exact Hu
@@ -986,12 +981,12 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           * eexists; split; [apply mem_singVS; reflexivity |].
             apply mem_coreResolution; eapply CoreOrig; exact HS.
           * destruct (Hpca _ _ HS _ Hf _ _ _ ltac:(eassumption))
-              as [u [[Hu [Htk Hpi]] _]].
+              as [u [Hu [Htk Hpi]]].
             exists u; split; [apply mem_embedVS; exact Hu |].
             apply mem_coreResolution; eapply CoreAInter;
               [eassumption | exact Hu | apply witnessCondb_iff; eauto].
           * destruct (Hpca _ _ HS _ Hf _ _ _ ltac:(eassumption))
-              as [u [[Hu [Htk Hpi]] _]].
+              as [u [Hu [Htk Hpi]]].
             exists u; split; [apply mem_embedVS; exact Hu |].
             apply mem_coreResolution; eapply CoreAInterA;
               [eassumption | eassumption | exact Hu
@@ -1079,7 +1074,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         destruct (res_pi_dom _ _ _ _ _ _ _ _ Hres _ _ _ _ Hpi)
           as (fs_p & Hp & [(vs & fs & HD) | (f & vs & fs & Hf & HA)]).
         + destruct (res_parent_closure _ _ _ _ _ _ _ _ Hres _ _ Hp _ _ _ HD)
-            as (w & (Hw & Htk & Hpiw) & _).
+            as (w & Hw & Htk & Hpiw).
           assert (w = u) as ->
             by exact (res_pi_functional _ _ _ _ _ _ _ _ Hres _ _ _ _ Hpiw Hpi).
           split.
@@ -1091,7 +1086,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
             apply mem_coreResolution; exact (CoreOrig _ _ _ _ _ n v fs_p Hp).
         + destruct (res_parent_closure_addl _ _ _ _ _ _ _ _ Hres _ _ Hp _ Hf
                       _ _ _ HA)
-            as (w & (Hw & Htk & Hpiw) & _).
+            as (w & Hw & Htk & Hpiw).
           assert (w = u) as ->
             by exact (res_pi_functional _ _ _ _ _ _ _ _ Hres _ _ _ _ Hpiw Hpi).
           split.

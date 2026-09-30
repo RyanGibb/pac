@@ -455,18 +455,18 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
               (mem_reduceDeps_int_to_dep D Th g pn pv m vs u Hdep0 Hu))
             as [cv2 [Hcv2 Hcv2S]].
           apply SOvcv.singleton_in in Hcv2; subst cv2.
-          exists u; split.
-          { split; [exact Hu | split].
-            - apply Conc.Reduction.mem_concurrentResolution; exact Hcv2S.
-            - apply mem_parents.
-              exists pn, pv, m, vs, u; repeat split; assumption. }
-          { intros u' [Hu' [Hu'S Hpi']].
-            apply mem_parents in Hpi'.
-            destruct Hpi'
-              as [n' [v' [m' [vs' [u'' [Hdep' [_ [_ [HiS' Heq]]]]]]]]].
-            injection Heq as -> -> -> ->.
-            pose proof (Huniq _ _ _ HiS' HcvS) as He.
-            injection He as He; congruence. }
+          exists u; split; [exact Hu | split].
+          * apply Conc.Reduction.mem_concurrentResolution; exact Hcv2S.
+          * apply mem_parents.
+            exists pn, pv, m, vs, u; repeat split; assumption.
+        + intros m u u' [pn pv] H1 H2.
+          apply mem_parents in H1, H2.
+          destruct H1 as (n1 & v1 & m1 & vs & u1 & _ & _ & _ & HiS & E1).
+          injection E1 as <- <- <- <-.
+          destruct H2 as (n2 & v2 & m2 & vs' & u2 & _ & _ & _ & HiS' & E2).
+          injection E2 as <- <- <- <-.
+          pose proof (Huniq _ _ _ HiS HiS') as He.
+          injection He as He; exact He.
         + intros n v v' Hv Hv' Hne Hg.
           apply Conc.Reduction.mem_concurrentResolution in Hv, Hv';
             unfold Conc.Reduction.embedPkg in Hv, Hv';
@@ -576,7 +576,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     Proof.
       intros R D Th g r S pi Hfunc Hres.
       destruct Hres as [Hconc Hpsat].
-      destruct Hconc as [Hsub Hroot Hpc Hvg Hps _].
+      destruct Hconc as [Hsub Hroot Hpc Hpif Hvg Hps _].
       constructor.
       - intros q Hq; apply mem_reduceReal; apply mem_coreResolution in Hq.
         destruct Hq as [n v Hnv | n v m vs u HD Hnv Hmu Hu Hpi];
@@ -587,7 +587,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         apply mem_coreResolution in Hq; apply mem_reduceDeps in Hd.
         destruct Hq as [n v Hnv | n v m vs u HD Hnv Hmu Hu Hpi].
         + inversion Hd as [n' v' m' vs' HD' | |]; subst.
-          destruct (Hpc _ Hnv _ _ HD') as [u [[Huv [HmuS Hpiu]] _]].
+          destruct (Hpc _ Hnv _ _ HD') as [u [Huv [HmuS Hpiu]]].
           exists (Version.Orig u); split.
           { unfold Conc.Reduction.embedVS; apply SOvcv.mem_map;
               exists u; split; [exact Huv | reflexivity]. }
@@ -599,7 +599,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
             { apply SOvcv.singleton_in; reflexivity. }
             { exact (mem_coreResolution_granular S pi D g m u Hmu). }
           * apply hasDepOnb_iff in Hb; destruct Hb as [vs2 HD2].
-            destruct (Hpc _ Hnv _ _ HD2) as [w [[Hw [HmwS Hpiw]] _]].
+            destruct (Hpc _ Hnv _ _ HD2) as [w [Hw [HmwS Hpiw]]].
             exists (Version.Orig w); split.
             { unfold Conc.Reduction.embedVS; apply SOvcv.mem_map; exists w;
                 split; [| reflexivity].
@@ -614,11 +614,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
           subst.
         + destruct (V.eq_dec v1 v2) as [-> | NE]; [reflexivity | exfalso].
           apply (Hvg n1 v1 v2 Hm1 Hm2 NE); congruence.
-        + assert (vs2 = vs1) as -> by (exact (Hfunc _ _ _ _ Hd2 Hd1)).
-          destruct (Hpc _ Hnv1 _ _ Hd1) as [w [_ Huniq1]].
-          pose proof (Huniq1 u1 (conj Hu1 (conj Hmu1 Hpi1))) as E1.
-          pose proof (Huniq1 u2 (conj Hu2 (conj Hmu2 Hpi2))) as E2.
-          congruence.
+        + rewrite (Hpif _ _ _ _ Hpi1 Hpi2); reflexivity.
     Qed.
 
     Theorem peerResolution_coreResolution : forall S pi D g,
@@ -634,7 +630,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         IsResolution R D Th g r S pi ->
         parents D g (coreResolution S pi D g) = pi.
     Proof.
-      intros R D Th g r S pi [[_ _ _ _ Hps Hedge] _].
+      intros R D Th g r S pi [[_ _ _ _ _ Hps Hedge] _].
       apply ParentRel.ext; intros [[m u] [n v]]; rewrite mem_parents; split.
       - intros (n' & v' & m' & vs & u' & _ & _ & _ & Hint & E).
         injection E as <- <- <- <-.
