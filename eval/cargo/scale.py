@@ -4,7 +4,7 @@
   scale.py sample SEED N          N index files drawn uniformly, as crate
                                   names; one with no release left unyanked
                                   is dropped, since there is no root to ask
-  scale.py pools SEED K [EXCL]    K crates per pool, as pool<TAB>crate, each
+  scale.py targets SEED K [EXCL]  K crates per pool, as pool<TAB>crate, each
                                   pool exercising one modelling decision in
                                   the crate's newest release
   scale.py one CRATE STEM         pac's and cargo's answers, at STEM.*
@@ -86,7 +86,7 @@ def summary(rel):
                      for d in top.get("deps") or []]}
 
 
-def pool_crates(seed, k, exclude=None):
+def targets(seed, k, exclude=None):
     with multiprocessing.Pool() as pool:
         tops = [s for s in pool.imap(summary, index_files(), chunksize=256) if s]
     by = {s["name"].lower(): s for s in tops}
@@ -204,4 +204,4 @@ def corr(p):
 
 
 if __name__ == "__main__":
-    {"sample": sample, "pools": pool_crates, "one": one, "corr": corr}[sys.argv[1]](*sys.argv[2:])
+    {"sample": sample, "targets": targets, "one": one, "corr": corr}[sys.argv[1]](*sys.argv[2:])
