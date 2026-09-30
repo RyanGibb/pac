@@ -759,7 +759,10 @@ Module VariableFormula (N V : UsualOrderedType)
           n = m ->
           T.versions (reduceReal Y_x R D) (Name.Orig (inl n)) =
           T.VSet.add Version.Bot
-            (embedVS (C.versions (PkgFibred.tailFibre R n) n)).
+            (T.versions
+               (reduceReal (fun _ => YSet.empty) (PkgFibred.tailFibre R n)
+                  DepRel.empty)
+               (Name.Orig (inl n))).
       Proof.
         intros Y_x R D rn rv n Hr Hreach.
         assert (Hr' : PF.PkgSet.In (inl rn, inl rv) (liftReal Y_x R))
@@ -767,17 +770,18 @@ Module VariableFormula (N V : UsualOrderedType)
               split; [exact Hr | reflexivity]).
         unfold reduceReal; rewrite (PF.Reduction.Lookup.versions_lookupOrig
                                       _ _ (inl rn) (inl rv) (inl n) Hr').
-        - unfold embedVS; do 2 f_equal; apply PF.VSet.ext; intro w.
-          rewrite PF.C.mem_versions,
-            PF.Reduction.Lookup.PkgFibred.mem_tailFibre, mem_liftReal,
-            mem_liftVS; split.
+        - rewrite !PF.Reduction.Lookup.versions_reduceReal_bot.
+          do 2 f_equal; apply PF.C.versions_ext; intro w.
+          rewrite PF.Reduction.Lookup.PkgFibred.mem_tailFibre, !mem_liftReal.
+          split.
           + intros [[[m' [v [Hp E]]] | [x [y [_ E]]]] _]; [| discriminate E].
-            injection E as <- ->; exists v; split; [| reflexivity].
-            apply C.mem_versions, PkgFibred.mem_tailFibre.
-            split; [exact Hp | reflexivity].
-          + intros [v [Hv ->]].
-            apply C.mem_versions, PkgFibred.mem_tailFibre in Hv.
-            destruct Hv as [Hv _]; split; [left; exists n, v; auto |].
+            injection E as <- ->; left; exists n, v; split; [| reflexivity].
+            apply PkgFibred.mem_tailFibre; split; [exact Hp | reflexivity].
+          + intros [[m' [v [Hp E]]] | [x [y [Hy _]]]];
+              [| destruct (YSet.empty_spec Hy)].
+            apply PkgFibred.mem_tailFibre in Hp; destruct Hp as [Hp Hm].
+            cbn [fst] in Hm; subst m'; injection E as ->.
+            split; [left; exists n, v; split; [exact Hp | reflexivity] |].
             reflexivity.
         - destruct Hreach as [H | ->]; [left; exact H | right; reflexivity].
         - reflexivity.

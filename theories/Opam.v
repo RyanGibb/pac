@@ -1549,6 +1549,7 @@ Module Opam (N V X Y E : UsualOrderedType).
                       (or_intror eq_refl) eq_refl)
           | rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ _ _ n Hr
                        (or_introl Hreach) eq_refl)];
+          rewrite PF.Reduction.Lookup.versions_reduceReal_bot;
           do 2 f_equal; rewrite <- versions_reduceReal;
           apply PF.C.versions_ext; intro u;
           rewrite PF.Reduction.Lookup.PkgFibred.mem_tailFibre; tauto.

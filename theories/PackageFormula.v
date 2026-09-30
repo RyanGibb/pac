@@ -2191,6 +2191,26 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             (encodeNNF_dependee_orig_aux (C.versions R) psi) _ _ _ _ He).
       Qed.
 
+      Lemma versions_reduceReal_bot : forall R D (n : N.t),
+          T.VSet.add Version.Bot (T.versions (reduceReal R D) (Name.Orig n)) =
+          T.VSet.add Version.Bot (embedVS (C.versions R n)).
+      Proof.
+        intros R D n; apply T.VSet.ext; intro w.
+        rewrite !SOvv.add_in, T.mem_versions, mem_reduceReal.
+        unfold embedVS; rewrite SOvv.mem_map.
+        split.
+        - intros [-> | [[[qn qv] [HR Hq]] | [[p [psi [_ Hw]]] | [m [_ [_ Hy]]]]]];
+            [left; reflexivity | | |].
+          + unfold embedPkg in Hq; injection Hq as -> ->.
+            right; exists qv; split; [apply C.mem_versions; exact HR |].
+            reflexivity.
+          + exfalso; exact (arisingPkgs_not_orig _ _ _ _ Hw).
+          + injection Hy as -> ->; left; reflexivity.
+        - intros [-> | [v [Hv ->]]]; [left; reflexivity |].
+          right; left; exists (n, v); split; [| reflexivity].
+          apply C.mem_versions; exact Hv.
+      Qed.
+
       Theorem versions_lookupOrig :
         forall R D (m : N.t) (u : V.t) (n : N.t),
           PkgSet.In (m, u) R ->
@@ -2199,9 +2219,10 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           Ab.hasAbsent n = true ->
           T.versions (reduceReal R D) (Name.Orig n) =
           T.VSet.add Version.Bot
-            (embedVS (C.versions (PkgFibred.tailFibre R n) n)).
+            (T.versions (reduceReal (PkgFibred.tailFibre R n) DepRel.empty)
+               (Name.Orig n)).
       Proof.
-        intros R D rn rv n Hr Hreach Ha.
+        intros R D rn rv n Hr Hreach Ha; rewrite versions_reduceReal_bot.
         assert (Hm : NSet.In n (instNames R D)).
         { destruct Hreach as [Hreach | ->];
             [exact (reachable_instNames R D n Hreach) |].

@@ -2011,6 +2011,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                       (or_intror eq_refl) eq_refl)
           | rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ _ _ n
                        (root_reduceReal I) (or_introl Hreach) eq_refl)];
+          rewrite PF.Reduction.Lookup.versions_reduceReal_bot;
           do 2 f_equal; apply PF.C.versions_ext; intro u;
           rewrite PF.Reduction.Lookup.PkgFibred.mem_tailFibre; tauto.
       Qed.
