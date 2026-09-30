@@ -714,13 +714,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       [exact Hin | apply NEqb.eqb_true_iff; exact Hn].
   Qed.
 
-  Lemma mem_confEdges : forall R Pi (p : Pkg.t) a e (y : T.Dependees.t),
-      T.DependeesSet.In y (confEdges R Pi p a e) <->
+  Lemma mem_confEdges : forall R Pi (p : Pkg.t) a e (h : T.Dependees.t),
+      T.DependeesSet.In h (confEdges R Pi p a e) <->
       exists m, NSet.In m (confNames R Pi a) /\ m <> fst p /\
                  exemptb e m (fst p) = false /\
-                 y = (Name.Orig m, complementVS R Pi a m).
+                 h = (Name.Orig m, complementVS R Pi a m).
   Proof.
-    intros R Pi p a e y; unfold confEdges; cbv zeta.
+    intros R Pi p a e h; unfold confEdges; cbv zeta.
     assert (HN : confNames R (ProvFibred.nodeFibre Pi (aname a)) a =
                  confNames R Pi a).
     { apply NSet.ext; intro m; rewrite !mem_confNames.

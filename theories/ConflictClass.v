@@ -123,11 +123,11 @@ Module ConflictClass (N V : UsualOrderedType).
     Definition reduceReal (R : PkgSet.t) (Om : InClassRel.t) : T.PkgSet.t :=
       T.PkgSet.union (embedSet R) (classPkgs R Om).
 
-    Lemma mem_reduceReal : forall R Om (y : T.Pkg.t),
-        T.PkgSet.In y (reduceReal R Om) <->
-        (exists p, PkgSet.In p R /\ y = embedPkg p) \/
+    Lemma mem_reduceReal : forall R Om (p' : T.Pkg.t),
+        T.PkgSet.In p' (reduceReal R Om) <->
+        (exists p, PkgSet.In p R /\ p' = embedPkg p) \/
         (exists q k, InClassRel.In (q, k) Om /\ PkgSet.In q R /\
-           y = (Name.Cls k, Version.Name (fst q))).
+           p' = (Name.Cls k, Version.Name (fst q))).
     Proof.
       intros; unfold reduceReal, embedSet.
       rewrite T.PkgSet.union_spec, SOpt.mem_map, mem_classPkgs; reflexivity.

@@ -502,15 +502,15 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         rewrite Ha; reflexivity.
     Qed.
 
-    Lemma mem_reduceReal : forall R D (y : T.Pkg.t),
-        T.PkgSet.In y (reduceReal R D) <->
-        (exists p, PkgSet.In p R /\ y = embedPkg p) \/
+    Lemma mem_reduceReal : forall R D (p' : T.Pkg.t),
+        T.PkgSet.In p' (reduceReal R D) <->
+        (exists p, PkgSet.In p R /\ p' = embedPkg p) \/
         (exists p psi, DepRel.In (p, psi) D /\
-                     T.PkgSet.In y (arisingPkgs (embedPkg p) psi)) \/
+                     T.PkgSet.In p' (arisingPkgs (embedPkg p) psi)) \/
         (exists n, NSet.In n (instNames R D) /\ Ab.hasAbsent n = true /\
-                   y = (Name.Orig n, Version.Bot)).
+                   p' = (Name.Orig n, Version.Bot)).
     Proof.
-      intros R D y; unfold reduceReal.
+      intros R D p'; unfold reduceReal.
       rewrite !T.PkgSet.union_spec, SOpt.mem_map, SOet.mem_unionMap,
         mem_absentPkgs.
       split.
@@ -1240,16 +1240,16 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         discriminate.
     Qed.
 
-    Lemma mem_coreResolution : forall S R D (y : T.Pkg.t),
-        T.PkgSet.In y (coreResolution S R D) <->
-        (exists p, PkgSet.In p S /\ y = embedPkg p) \/
+    Lemma mem_coreResolution : forall S R D (p' : T.Pkg.t),
+        T.PkgSet.In p' (coreResolution S R D) <->
+        (exists p, PkgSet.In p S /\ p' = embedPkg p) \/
         (exists p psi, DepRel.In (p, psi) D /\ PkgSet.In p S /\
-                     T.PkgSet.In y (witnessSet S psi)) \/
+                     T.PkgSet.In p' (witnessSet S psi)) \/
         (exists n, NSet.In n (instNames R D) /\ Ab.hasAbsent n = true /\
                    (forall v, ~ PkgSet.In (n, v) S) /\
-                   y = (Name.Orig n, Version.Bot)).
+                   p' = (Name.Orig n, Version.Bot)).
     Proof.
-      intros S R D y; unfold coreResolution.
+      intros S R D p'; unfold coreResolution.
       rewrite !T.PkgSet.union_spec, SOpt.mem_map, SOet.mem_unionMap,
         mem_absentPkgs.
       split.
