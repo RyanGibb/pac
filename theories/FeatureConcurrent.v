@@ -20,8 +20,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
       (Df : Feat.FeatDepRel.t) (Da : Feat.AddlDepRel.t)
       (g : V.t -> G.t) (r : Pkg.t)
       (S : Feat.FeaturedSet.t) (pi : ParentRel.t) : Prop :=
-    { res_no_root_support : forall f, ~ Feat.SupportSet.In (r, f) support
-    ; res_subset : forall p fs, Feat.FeaturedSet.In (p, fs) S -> PkgSet.In p R
+    { res_subset : forall p fs, Feat.FeaturedSet.In (p, fs) S -> PkgSet.In p R
     ; res_root_mem : Feat.FeaturedSet.In (r, Feat.FSet.empty) S
     ; res_feature_unification :
         forall n v fs fs',
@@ -670,14 +669,14 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
       forall (R : PkgSet.t) (support : Feat.SupportSet.t)
              (Df : Feat.FeatDepRel.t) (Da : Feat.AddlDepRel.t)
              (g : V.t -> G.t) (r : Pkg.t) (S : T.PkgSet.t),
+        (forall f, ~ Feat.SupportSet.In (r, f) support) ->
         T.IsResolution (reduceReal R support Df Da g)
           (reduceDeps R support Df Da g)
           (embedOrigPkg g r) S ->
-        (forall f, ~ Feat.SupportSet.In (r, f) support) ->
         IsResolution R support Df Da g r
           (featureConcurrentResolution g S) (parents Df Da g S).
     Proof.
-      intros R support Df Da g r S Hres Hnosupp.
+      intros R support Df Da g r S Hnosupp Hres.
       pose proof Hres as [Hsub Hroot Hdep Huniq].
       destruct r as [rn rv].
       unfold embedOrigPkg in Hroot; simpl in Hroot.
@@ -695,7 +694,6 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         apply mem_reduceReal in HF; inversion HF; subst.
         eapply Feat.Reduction.mem_reduceReal_featPkg; eassumption. }
       constructor.
-      - exact Hnosupp.
       - intros p fs Hmem.
         rewrite mem_featureConcurrentResolution in Hmem.
         destruct Hmem as [n [v [HS Heq]]].
@@ -923,7 +921,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           (embedOrigPkg g r) (coreResolution S_CF pi Df Da g).
     Proof.
       intros R support Df Da g r S_CF pi Hres.
-      destruct Hres as [Hnrs Hsubset Hrootm Hfu Hpc Hpca Hpif Hvg Hsm].
+      destruct Hres as [Hsubset Hrootm Hfu Hpc Hpca Hpif Hvg Hsm].
       destruct r as [rn rv].
       constructor.
       - intros q Hq; apply mem_coreResolution in Hq; apply mem_reduceReal.

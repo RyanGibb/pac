@@ -30,8 +30,7 @@ Module Feature (N V F : UsualOrderedType).
       (R : PkgSet.t) (support : SupportSet.t)
       (Df : FeatDepRel.t) (Da : AddlDepRel.t)
       (r : Pkg.t) (S : FeaturedSet.t) : Prop :=
-    { res_no_root_support : forall f, ~ SupportSet.In (r, f) support
-    ; res_subset : forall p fs, FeaturedSet.In (p, fs) S -> PkgSet.In p R
+    { res_subset : forall p fs, FeaturedSet.In (p, fs) S -> PkgSet.In p R
     ; res_root_mem : FeaturedSet.In (r, FSet.empty) S
     ; res_dep_closure :
         forall p fs_p, FeaturedSet.In (p, fs_p) S ->
@@ -386,12 +385,12 @@ Module Feature (N V F : UsualOrderedType).
       forall (R : PkgSet.t) (support : SupportSet.t)
              (Df : FeatDepRel.t) (Da : AddlDepRel.t)
              (r : Pkg.t) (S : T.PkgSet.t),
+        (forall f, ~ SupportSet.In (r, f) support) ->
         T.IsResolution (reduceReal R support) (reduceDeps R support Df Da)
           (embedPkg r) S ->
-        (forall f, ~ SupportSet.In (r, f) support) ->
         IsResolution R support Df Da r (featureResolution S).
     Proof.
-      intros R support Df Da r S Hres Hnosupp.
+      intros R support Df Da r S Hnosupp Hres.
       pose proof Hres as [Hsub Hroot Hdep Huniq].
       destruct r as [rn rv].
       unfold embedPkg in Hroot; simpl in Hroot.
@@ -417,7 +416,6 @@ Module Feature (N V F : UsualOrderedType).
         rewrite SOvt.singleton_in in Hv0; subst v0.
         exact Hv0S. }
       constructor.
-      - exact Hnosupp.
       - intros p fs Hmem.
         apply mem_featureResolution in Hmem;
           destruct Hmem as [n [v [HS Heq]]].
@@ -506,7 +504,7 @@ Module Feature (N V F : UsualOrderedType).
           (embedPkg r) (coreResolution S_f).
     Proof.
       intros R support Df Da r S_f Hres.
-      destruct Hres as [Hnrs Hsubset Hrootm Hdepc Haddlc Hfu Hvu Hsm].
+      destruct Hres as [Hsubset Hrootm Hdepc Haddlc Hfu Hvu Hsm].
       destruct r as [rn rv].
       constructor.
       - intros q Hq; rewrite mem_coreResolution in Hq.
