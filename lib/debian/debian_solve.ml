@@ -144,7 +144,7 @@ module Make (AP : Tables.ARCH) = struct
           s
     | (DMA.Deb.Name.Disjunct _ | DMA.Deb.Name.Soft _), DMA.Deb.Version.Atom a ->
         let r, pi = sel_preimages sel_cache tables (fst a) in
-        DMA.Deb.T.DependeesSet.singleton (DMA.Deb.tgt r pi a)
+        DMA.Deb.T.DependeesSet.singleton (DMA.Deb.dependee r pi a)
     | DMA.Deb.Name.Selector _, DMA.Deb.Version.Ref (m, w) ->
         DMA.Deb.T.DependeesSet.singleton
           ( DMA.Deb.Name.Orig m,
