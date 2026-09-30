@@ -1293,17 +1293,11 @@ Module Opam (N V X Y E : UsualOrderedType).
 
       Theorem dependeesBy_lookupOrig : forall sigma I Vq n v,
           (forall m, NSet.In m (declaredNames I (n, v)) ->
-             Vq m = srcVersions sigma (nameSubInst I m) m) ->
+             Vq m = srcVersions sigma I m) ->
           dependees sigma I (embedPkg (n, v)) =
           dependeesBy sigma Vq (declSubInst I (n, v)) (embedPkg (n, v)).
       Proof.
-        intros sigma I Vq n v HV; symmetry.
-        assert (HVq : forall m, NSet.In m (declaredNames I (n, v)) ->
-                   Vq m = srcVersions sigma I m).
-        { intros m Hm; rewrite (HV m Hm).
-          apply (srcVersions_subInst_agree sigma I (nameSubInst I m)
-                   (NSet.singleton m) m); try reflexivity.
-          apply NSet.singleton_spec; reflexivity. }
+        intros sigma I Vq n v HVq; symmetry.
         unfold dependees, embedPkg, declaredNames in *;
           cbn [fst snd dependeesBy].
         unfold depForms, cflForms, pindForms.
@@ -1337,11 +1331,8 @@ Module Opam (N V X Y E : UsualOrderedType).
                       (srcVersions sigma (pkgSubInst I (n, v))) n v);
           [reflexivity |].
         intros m Hm.
-        rewrite (srcVersions_subInst_agree sigma I (pkgSubInst I (n, v))
-                   (declaredNames I (n, v)) m); try reflexivity; [| exact Hm].
-        symmetry; apply (srcVersions_subInst_agree sigma I (nameSubInst I m)
-                           (NSet.singleton m) m); try reflexivity.
-        apply NSet.singleton_spec; reflexivity.
+        apply (srcVersions_subInst_agree sigma I (pkgSubInst I (n, v))
+                 (declaredNames I (n, v)) m); try reflexivity; exact Hm.
       Qed.
 
       Lemma versions_reduceReal : forall sigma I n,
