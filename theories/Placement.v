@@ -1389,8 +1389,19 @@ Module Placement (N V : UsualOrderedType).
 
       Theorem versions_lookupRoot : forall I depth,
           T.versions (reduceReal I depth) Name.Root =
-          T.VSet.singleton (Version.Occ (snd (inst_root I))).
-      Proof. intros I depth; exact (versions_reduceReal I depth Name.Root Logic.I). Qed.
+          T.versions
+            (reduceReal
+               {| inst_repo := PkgSet.empty
+                ; inst_deps := C.DepRel.empty
+                ; inst_peers := C.DepRel.empty
+                ; inst_optDeps := C.DepRel.empty
+                ; inst_optPeers := C.DepRel.empty
+                ; inst_root := inst_root I |} depth)
+            Name.Root.
+      Proof.
+        intros I depth; rewrite !versions_reduceReal by exact Logic.I.
+        reflexivity.
+      Qed.
 
       Theorem versions_lookupLoc : forall I depth l a,
           Reached I depth (Name.Loc l a) ->
