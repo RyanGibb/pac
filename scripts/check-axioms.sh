@@ -419,6 +419,7 @@ NpmS.Reduction.npmSight
 NpmS.Reduction.npm_completeness
 NpmS.Reduction.npm_parents_retraction
 NpmS.Reduction.npm_retraction
+NpmS.Reduction.npm_sight_retraction
 NpmS.Reduction.npm_soundness
 NpmS.Reduction.peer_installed
 NpmS.Reduction.reached_reduceReal

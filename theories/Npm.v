@@ -3733,5 +3733,44 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         + left; exists k, v; split; [exact Hq | reflexivity].
     Qed.
 
+    Theorem npm_sight_retraction : forall I S pi sg,
+        IsResolution I S pi sg ->
+        forall c n w,
+          npmSight (coreResolution I S pi sg) c n = Some w <->
+          sg c n = Some w /\ chains I c n = true /\ ReadBelow I S pi c n.
+    Proof.
+      intros I S pi sg Hres [k v] n w; split.
+      - intro Hsg; apply npmSight_some, mem_coreResolution in Hsg.
+        destruct Hsg as
+            [[k' [v' [_ He]]] |
+             [[p [m [u [_ [_ [_ [_ He]]]]]]] |
+              [[[k' v'] [a [_ [_ He]]]] |
+               [[p [m [u [a [_ [_ [_ [_ [_ He]]]]]]]]] |
+                [[p [m [_ [_ [_ [_ He]]]]]] |
+                 [p [m [u [d [_ [_ [_ [_ [_ [_ [e [_ He]]]]]]]]]]]]]]]]];
+          try discriminate He.
+        cbn [fst snd] in He; injection He as <- <- <- Ev.
+        unfold sightVal in Ev.
+        destruct (andb (chains I (k, v) n) (readb I S pi (k, v) n)) eqn:Eb;
+          [| discriminate Ev].
+        apply Bool.andb_true_iff in Eb; destruct Eb as [Hch Hrd].
+        destruct (sg (k, v) n) as [w' |] eqn:Es; [| discriminate Ev].
+        injection Ev as ->.
+        split; [reflexivity | split; [exact Hch |]].
+        exact (proj1 (readb_iff _ _ _ _ _ _ Hres) Hrd).
+      - intros [Hsg [Hch Hrd]].
+        apply npmSight_in;
+          [exact (T.res_version_unique _ _ _ _ (npm_completeness _ _ _ _ Hres))
+          |].
+        apply mem_coreResolution; right; right; left.
+        exists (k, v), n; split.
+        + destruct Hrd as [m [u [[_ Hpi] _]]].
+          exact (proj1 (proj2 (res_parents _ _ _ _ Hres _ _ Hpi))).
+        + split; [exact (chains_peerNames _ _ _ Hch) |].
+          unfold sightVal; rewrite Hch,
+            (proj2 (readb_iff _ _ _ _ _ _ Hres) Hrd), Hsg.
+          reflexivity.
+    Qed.
+
   End Reduction.
 End Npm.
