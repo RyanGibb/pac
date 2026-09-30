@@ -107,16 +107,16 @@ Module Conflict (N V : UsualOrderedType).
         + right; right; exists (p, (n, vs)); split; [exact HG | reflexivity].
     Qed.
 
-    Lemma mem_absentPkgs : forall ns (y : T.Pkg.t),
-        T.PkgSet.In y (absentPkgs ns) <->
-        exists n, NSet.In n ns /\ y = (n, Version.Bot).
-    Proof. intros ns y; unfold absentPkgs; apply SOnt.mem_map. Qed.
+    Lemma mem_absentPkgs : forall ns (p : T.Pkg.t),
+        T.PkgSet.In p (absentPkgs ns) <->
+        exists n, NSet.In n ns /\ p = (n, Version.Bot).
+    Proof. intros ns p; unfold absentPkgs; apply SOnt.mem_map. Qed.
 
     Lemma mem_reduceReal :
-      forall R D G (y : T.Pkg.t),
-        T.PkgSet.In y (reduceReal R D G) <->
-        (exists p, PkgSet.In p R /\ y = embedPkg p) \/
-        (exists n, NSet.In n (instNames R D G) /\ y = (n, Version.Bot)).
+      forall R D G (q : T.Pkg.t),
+        T.PkgSet.In q (reduceReal R D G) <->
+        (exists p, PkgSet.In p R /\ q = embedPkg p) \/
+        (exists n, NSet.In n (instNames R D G) /\ q = (n, Version.Bot)).
     Proof.
       intros; unfold reduceReal, embedSet.
       rewrite T.PkgSet.union_spec, SOpt.mem_map, mem_absentPkgs; reflexivity.
@@ -280,13 +280,13 @@ Module Conflict (N V : UsualOrderedType).
         (absentPkgs (C.absentIn S (instNames R D G))).
 
     Lemma mem_coreResolution :
-      forall S R D G (y : T.Pkg.t),
-        T.PkgSet.In y (coreResolution S R D G) <->
-        (exists p, PkgSet.In p S /\ y = embedPkg p) \/
+      forall S R D G (q : T.Pkg.t),
+        T.PkgSet.In q (coreResolution S R D G) <->
+        (exists p, PkgSet.In p S /\ q = embedPkg p) \/
         (exists n, NSet.In n (instNames R D G) /\
-           (forall v, ~ PkgSet.In (n, v) S) /\ y = (n, Version.Bot)).
+           (forall v, ~ PkgSet.In (n, v) S) /\ q = (n, Version.Bot)).
     Proof.
-      intros S R D G y; unfold coreResolution, embedSet.
+      intros S R D G q; unfold coreResolution, embedSet.
       rewrite T.PkgSet.union_spec, SOpt.mem_map, mem_absentPkgs.
       split.
       - intros [H | [n [Hn ->]]]; [left; exact H | right].

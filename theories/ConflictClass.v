@@ -103,12 +103,12 @@ Module ConflictClass (N V : UsualOrderedType).
           else None)
         Om.
 
-    Lemma mem_classPkgs : forall ps Om (y : T.Pkg.t),
-        T.PkgSet.In y (classPkgs ps Om) <->
+    Lemma mem_classPkgs : forall ps Om (p : T.Pkg.t),
+        T.PkgSet.In p (classPkgs ps Om) <->
         exists q k, InClassRel.In (q, k) Om /\ PkgSet.In q ps /\
-          y = (Name.Cls k, Version.Name (fst q)).
+          p = (Name.Cls k, Version.Name (fst q)).
     Proof.
-      intros ps Om y; unfold classPkgs; rewrite SOit.mem_filterMap.
+      intros ps Om p; unfold classPkgs; rewrite SOit.mem_filterMap.
       split.
       - intros [[q k] [Hc Hy]]; cbn beta iota in Hy.
         destruct (PkgSet.mem q ps) eqn:Hm; [| discriminate].
@@ -442,13 +442,13 @@ Module ConflictClass (N V : UsualOrderedType).
       Qed.
 
       Theorem dependees_lookupClass :
-        forall D Om (k : N.t) (w : Version.t),
-          T.dependees (reduceDeps D Om) (Name.Cls k, w) =
+        forall D Om (k : N.t) (n : Version.t),
+          T.dependees (reduceDeps D Om) (Name.Cls k, n) =
           T.DependeesSet.empty.
       Proof.
-        intros D Om k w; apply T.dependees_empty_iff; intros h H.
+        intros D Om k n; apply T.dependees_empty_iff; intros h H.
         apply mem_reduceDeps in H.
-        destruct H as [[q [n [vs [_ Hy]]]] | [q [k' [_ Hy]]]];
+        destruct H as [[q [m [vs [_ Hy]]]] | [q [k' [_ Hy]]]];
           unfold embedPkg in Hy; congruence.
       Qed.
     End Lookup.
