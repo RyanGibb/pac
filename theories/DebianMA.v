@@ -1936,24 +1936,21 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           Deb.Reduction.dependees (reduceInst I)
             (Deb.Reduction.Name.Disjunct (reduceClause alpha Al),
              Deb.Reduction.Version.Atom ((m, x), phi)) =
-          let Rs := realPreimage (inst_repo I)
-            (NSet.singleton m) in
-          let Pis := provPreimage (inst_prov I)
-            (NSet.singleton m) in
-          Deb.Reduction.T.DependeesSet.singleton
-            (Deb.Reduction.dependee (reduceReal Rs)
+          let Rs := realPreimage (inst_repo I) (NSet.singleton m) in
+          let Pis := provPreimage (inst_prov I) (NSet.singleton m) in
+          Deb.Reduction.dependees
+            (Deb.MkInst (reduceReal Rs) Deb.Deps.empty Deb.Deps.empty
                (reduceProv Rs Pis (provClsPreimage (inst_cls I) Rs Pis))
-               ((m, x), phi)).
+               Deb.Conf.empty (embedPkg (inst_root I)))
+            (Deb.Reduction.Name.Disjunct (reduceClause alpha Al),
+             Deb.Reduction.Version.Atom ((m, x), phi)).
       Proof.
-        intros I alpha Al m x phi H; cbv zeta.
+        intros I alpha Al m x phi _; cbv zeta.
         rewrite reduceProv_provClsPreimage.
         assert (Hm : NSet.In m (NSet.singleton m))
           by (apply NSet.singleton_spec; reflexivity).
-        etransitivity;
-          [exact (Deb.Reduction.Lookup.dependees_lookupDisjunct
-                    (reduceInst I)
-                    (reduceClause alpha Al) (m, x) phi H) |].
-        rewrite Deb.Reduction.Lookup.dependee_filter; f_equal; symmetry.
+        cbn [Deb.Reduction.dependees Deb.inst_repo Deb.inst_prov].
+        f_equal; symmetry.
         exact (dependee_restrict I (NSet.singleton m)
                  (realPreimage (inst_repo I) (NSet.singleton m)) _ ((m, x), phi)
                  (realPreimage_sub _ _) (realPreimage_cov _ _)
@@ -1978,24 +1975,21 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           Deb.Reduction.dependees (reduceInst I)
             (Deb.Reduction.Name.Soft (reduceClause alpha Al),
              Deb.Reduction.Version.Atom ((m, x), phi)) =
-          let Rs := realPreimage (inst_repo I)
-            (NSet.singleton m) in
-          let Pis := provPreimage (inst_prov I)
-            (NSet.singleton m) in
-          Deb.Reduction.T.DependeesSet.singleton
-            (Deb.Reduction.dependee (reduceReal Rs)
+          let Rs := realPreimage (inst_repo I) (NSet.singleton m) in
+          let Pis := provPreimage (inst_prov I) (NSet.singleton m) in
+          Deb.Reduction.dependees
+            (Deb.MkInst (reduceReal Rs) Deb.Deps.empty Deb.Deps.empty
                (reduceProv Rs Pis (provClsPreimage (inst_cls I) Rs Pis))
-               ((m, x), phi)).
+               Deb.Conf.empty (embedPkg (inst_root I)))
+            (Deb.Reduction.Name.Soft (reduceClause alpha Al),
+             Deb.Reduction.Version.Atom ((m, x), phi)).
       Proof.
-        intros I alpha Al m x phi H; cbv zeta.
+        intros I alpha Al m x phi _; cbv zeta.
         rewrite reduceProv_provClsPreimage.
         assert (Hm : NSet.In m (NSet.singleton m))
           by (apply NSet.singleton_spec; reflexivity).
-        etransitivity;
-          [exact (Deb.Reduction.Lookup.dependees_lookupSoft
-                    (reduceInst I)
-                    (reduceClause alpha Al) (m, x) phi H) |].
-        rewrite Deb.Reduction.Lookup.dependee_filter; f_equal; symmetry.
+        cbn [Deb.Reduction.dependees Deb.inst_repo Deb.inst_prov].
+        f_equal; symmetry.
         exact (dependee_restrict I (NSet.singleton m)
                  (realPreimage (inst_repo I) (NSet.singleton m)) _ ((m, x), phi)
                  (realPreimage_sub _ _) (realPreimage_cov _ _)

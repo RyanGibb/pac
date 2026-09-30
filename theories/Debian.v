@@ -1921,12 +1921,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           T.PkgSet.In (Name.Disjunct A, Version.Atom (n, phi))
             (reduceReal I) ->
           dependees I (Name.Disjunct A, Version.Atom (n, phi)) =
-          T.DependeesSet.singleton
-            (dependee (PkgFibred.tailFibre (inst_repo I) n)
-               (ProvFibred.nodeFibre (inst_prov I) n) (n, phi)).
+          dependees
+            (MkInst (PkgFibred.tailFibre (inst_repo I) n) Deps.empty Deps.empty
+               (ProvFibred.nodeFibre (inst_prov I) n) Conf.empty (inst_root I))
+            (Name.Disjunct A, Version.Atom (n, phi)).
       Proof.
-        intros I A n phi _; cbn [dependees]; rewrite dependee_filter.
-        reflexivity.
+        intros I A n phi _; cbn [dependees inst_repo inst_prov].
+        rewrite dependee_filter; reflexivity.
       Qed.
 
       Theorem versions_lookupSoft : forall I (A : Clause.t),
@@ -1940,12 +1941,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           T.PkgSet.In (Name.Soft A, Version.Atom (n, phi))
             (reduceReal I) ->
           dependees I (Name.Soft A, Version.Atom (n, phi)) =
-          T.DependeesSet.singleton
-            (dependee (PkgFibred.tailFibre (inst_repo I) n)
-               (ProvFibred.nodeFibre (inst_prov I) n) (n, phi)).
+          dependees
+            (MkInst (PkgFibred.tailFibre (inst_repo I) n) Deps.empty Deps.empty
+               (ProvFibred.nodeFibre (inst_prov I) n) Conf.empty (inst_root I))
+            (Name.Soft A, Version.Atom (n, phi)).
       Proof.
-        intros I A n phi _; cbn [dependees]; rewrite dependee_filter.
-        reflexivity.
+        intros I A n phi _; cbn [dependees inst_repo inst_prov].
+        rewrite dependee_filter; reflexivity.
       Qed.
 
       Theorem versions_lookupSelectorAgree :
@@ -1980,10 +1982,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
               T.DepRel.In (p, (Name.Selector (n, phi), h))
                 (reduceDeps I)) ->
           versions I (Name.Selector (n, phi)) =
-          us (PkgFibred.tailFibre (inst_repo I) n)
-            (ProvFibred.nodeFibre (inst_prov I) n) (n, phi).
+          versions
+            (MkInst (PkgFibred.tailFibre (inst_repo I) n) Deps.empty Deps.empty
+               (ProvFibred.nodeFibre (inst_prov I) n) Conf.empty (inst_root I))
+            (Name.Selector (n, phi)).
       Proof.
-        intros I n phi _; cbn [versions]; symmetry; apply us_filter.
+        intros I n phi _; cbn [versions inst_repo inst_prov].
+        symmetry; apply us_filter.
       Qed.
 
       Theorem dependees_lookupSelector :
