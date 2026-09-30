@@ -1765,7 +1765,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         | _ => None
         end.
 
-      Lemma encodeNNF_src_orig_aux : forall Vq psi,
+      Lemma encodeNNF_depender_orig_aux : forall Vq psi,
           (forall (q : T.Pkg.t) m (w : Version.t) (d : T.Dependees.t),
               T.DepRel.In ((Name.Orig m, w), d) (encodeNNF Vq q psi) ->
               q = (Name.Orig m, w)) /\
@@ -2254,19 +2254,22 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           + apply SOed.add_in in H; apply SOed.add_in.
             destruct H as [H | H]; [left; exact H | exfalso].
             apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [assert (E := proj1 (proj2 (encodeNNF_src_orig_aux Vq psiL))
+              [assert (E := proj1 (proj2 (encodeNNF_depender_orig_aux Vq psiL))
                               _ _ _ _ H)
               | assert (E := proj2 (proj2 (proj2
-                                (encodeNNF_src_orig_aux Vq psiR))) _ _ _ _ _ H)];
+                               (encodeNNF_depender_orig_aux Vq psiR)))
+                              _ _ _ _ _ H)];
               discriminate E.
         - destruct IHa as [IHa1 IHa2]; destruct IHb as [IHb1 IHb2]; split;
             intros Hag q n w d H; simpl in H |- *.
           + apply SOed.add_in in H; apply SOed.add_in.
             destruct H as [H | H]; [left; exact H | exfalso].
             apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [assert (E := proj1 (encodeNNF_src_orig_aux Vq psiL) _ _ _ _ H)
+              [assert (E := proj1 (encodeNNF_depender_orig_aux Vq psiL)
+                              _ _ _ _ H)
               | assert (E := proj1 (proj2 (proj2
-                                (encodeNNF_src_orig_aux Vq psiR))) _ _ _ _ _ H)];
+                               (encodeNNF_depender_orig_aux Vq psiR)))
+                              _ _ _ _ _ H)];
               discriminate E.
           + apply T.DepRel.union_spec in H; apply T.DepRel.union_spec.
             destruct H as [H | H]; [left | right];
@@ -2301,7 +2304,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         rewrite !mem_reduceDepsBy.
         split.
         - intros [p [psi [Hd He]]].
-          assert (E := proj1 (encodeNNF_src_orig_aux Vq psi) _ _ _ _ He).
+          assert (E := proj1 (encodeNNF_depender_orig_aux Vq psi) _ _ _ _ He).
           destruct p as [pn pv]; unfold embedPkg in E; injection E as -> ->.
           exists (m, v), psi; split; [| exact He].
           apply DepRelFibred.mem_tailFibre; auto.
@@ -2347,7 +2350,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         intros R D n; apply T.dependees_empty_iff; intros h H.
         apply mem_reduceDeps in H.
         destruct H as [[pn pv] [psi [_ He]]].
-        assert (E := proj1 (encodeNNF_src_orig_aux (C.versions R) psi)
+        assert (E := proj1 (encodeNNF_depender_orig_aux (C.versions R) psi)
                        _ _ _ _ He).
         unfold embedPkg in E; discriminate.
       Qed.

@@ -1456,7 +1456,8 @@ Module Opam (N V X Y E : UsualOrderedType).
         intros sigma I k n; apply PF.Reduction.T.dependees_empty_iff; intros h H.
         apply PF.Reduction.mem_reduceDeps in H.
         destruct H as [[pn pv] [psi [Hd He]]].
-        assert (E := proj1 (PF.Reduction.Lookup.encodeNNF_src_orig_aux _ psi)
+        assert (E := proj1
+                       (PF.Reduction.Lookup.encodeNNF_depender_orig_aux _ psi)
                        _ _ _ _ He).
         unfold PF.Reduction.embedPkg in E; injection E as -> ->.
         apply mem_reduceDeps in Hd; destruct Hd as [_ Hf].

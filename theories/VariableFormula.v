@@ -853,7 +853,8 @@ Module VariableFormula (N V : UsualOrderedType)
         intros Y_x R D x y; apply T.dependees_empty_iff; intros h H.
         apply PF.Reduction.mem_reduceDeps in H.
         destruct H as [p [g [Hg He]]].
-        assert (E := proj1 (PF.Reduction.Lookup.encodeNNF_src_orig_aux _ g)
+        assert (E := proj1
+                       (PF.Reduction.Lookup.encodeNNF_depender_orig_aux _ g)
                        _ _ _ _ He).
         apply mem_liftDeps in Hg; destruct Hg as [[m v] [psi [_ Ep]]].
         injection Ep as -> _.
