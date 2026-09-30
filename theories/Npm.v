@@ -3487,21 +3487,20 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           [apply Ht; exact (proj1 (findDepL_some _ _ _ Hd)) | exact Ha].
       Qed.
 
-      Theorem versions_lookupGranular : forall I a m w I',
-          versions I' (Nm.Granular (a, m) w) =
-          versions I (Nm.Granular (a, m) w).
-      Proof. intros I a m w I'; reflexivity. Qed.
+      Theorem versions_lookupGranular : forall I a m w,
+          versions I (Nm.Granular (a, m) w) = T.VSet.singleton (Vs.Orig w).
+      Proof. intros I a m w; reflexivity. Qed.
 
       Definition intSubInst (I : Inst) (p : RPkg.t) (m : NKey.t) : Inst :=
         subInst I (NSet.add (snd m) (slotNames I p)) (ownDependencies I p)
           (peerDependenciesNamed I (fst m)).
 
       Theorem versions_lookupIntermediate : forall I a m v a' m',
+          versions I (Nm.Intermediate (a, m) v (a', m')) =
           versions (intSubInst I (m, v) (a', m'))
-            (Nm.Intermediate (a, m) v (a', m')) =
-          versions I (Nm.Intermediate (a, m) v (a', m')).
+            (Nm.Intermediate (a, m) v (a', m')).
       Proof.
-        intros I a m v a' m'; cbn [versions]; unfold intSubInst;
+        intros I a m v a' m'; symmetry; cbn [versions]; unfold intSubInst;
           cbn [fst snd].
         rewrite (canBeAbsent_agree I _ _ _ ((a, m), v) a' (ownDependencies_id I (m, v))
                    (chains_named I _ _ a' ((a, m), v))).
@@ -3588,10 +3587,11 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Theorem versions_lookupSight : forall I a m v n,
-          versions (sightSubInst I (m, v) n) (Nm.Sight (a, m) v n) =
-          versions I (Nm.Sight (a, m) v n).
+          versions I (Nm.Sight (a, m) v n) =
+          versions (sightSubInst I (m, v) n) (Nm.Sight (a, m) v n).
       Proof.
-        intros I a m v n; cbn [versions snd]; unfold sightSubInst, sightCands.
+        intros I a m v n; symmetry; cbn [versions snd].
+        unfold sightSubInst, sightCands.
         rewrite sightCandsL_agree; [| apply NSet.add_spec; left; reflexivity].
         rewrite (slotCands_agree I _ _ _ (m, v) (ownDependencies_id I (m, v)));
           [| intros d Hd; apply NSet.add_spec; right; apply slotNames_spec; exact Hd].
@@ -3603,9 +3603,10 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         subInst I (NSet.singleton m) nil nil.
 
       Theorem versions_lookupDesc : forall I a m s,
-          versions (descSubInst I m) (Nm.Desc a m s) = versions I (Nm.Desc a m s).
+          versions I (Nm.Desc a m s) =
+          versions (descSubInst I m) (Nm.Desc a m s).
       Proof.
-        intros I a m s; cbn [versions]; unfold descSubInst.
+        intros I a m s; symmetry; cbn [versions]; unfold descSubInst.
         rewrite realVersions_subInst; [reflexivity | apply NSet.singleton_spec; reflexivity].
       Qed.
 
@@ -3634,11 +3635,12 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           (twoDeps I p p_c) (twoPeers I p p_c).
 
       Theorem versions_lookupLink : forall I a m v a' m' u n,
+          versions I (Nm.Link (a, m) v (a', m') u n) =
           versions (linkSubInst I (m, v) (m', u) n)
-            (Nm.Link (a, m) v (a', m') u n) =
-          versions I (Nm.Link (a, m) v (a', m') u n).
+            (Nm.Link (a, m) v (a', m') u n).
       Proof.
-        intros I a m v a' m' u n; cbn [versions]; unfold linkSubInst, linkVers.
+        intros I a m v a' m' u n; symmetry; cbn [versions].
+        unfold linkSubInst, linkVers.
         change (base ((a', m'), u)) with (m', u).
         unfold peerDependenciesAt at 1; cbn [inst_peers subInst].
         rewrite twoPeers_right; fold (peerDependenciesAt I (m', u)).
@@ -3703,11 +3705,11 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Theorem dependees_lookupGranular : forall I a m v,
+          dependees I (Nm.Granular (a, m) v, Vs.Orig v) =
           dependees (pkgSubInst I (m, v))
-            (Nm.Granular (a, m) v, Vs.Orig v) =
-          dependees I (Nm.Granular (a, m) v, Vs.Orig v).
+            (Nm.Granular (a, m) v, Vs.Orig v).
       Proof.
-        intros I a m v; rewrite !dependees_gran.
+        intros I a m v; symmetry; rewrite !dependees_gran.
         pose proof (ownDependencies_id I (m, v)) as Hd.
         pose proof (ownPeerDependencies_id I (m, v)) as Hp.
         assert (Hname : forall d, In d (dependenciesOf I (m, v)) ->
@@ -3769,11 +3771,11 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Theorem dependees_lookupIntermediate : forall I a m v a' m' u,
+          dependees I (Nm.Intermediate (a, m) v (a', m'), Vs.Orig u) =
           dependees (peerSubInst I (m, v) (a', m') u)
-            (Nm.Intermediate (a, m) v (a', m'), Vs.Orig u) =
-          dependees I (Nm.Intermediate (a, m) v (a', m'), Vs.Orig u).
+            (Nm.Intermediate (a, m) v (a', m'), Vs.Orig u).
       Proof.
-        intros I a m v a' m' u; cbn [dependees]; f_equal; f_equal;
+        intros I a m v a' m' u; symmetry; cbn [dependees]; f_equal; f_equal;
           [exact (linkEdges_agree I (a, m) v (a', m') u) | f_equal].
         - unfold peerSubInst, ownSight; cbn [fst snd].
           pose proof (twoDeps_left I (m, v) (m', u)) as Hd.
@@ -3793,11 +3795,11 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         subInst I (slotNames I p_c) (twoDeps I p p_c) (twoPeers I p p_c).
 
       Theorem dependees_lookupLink : forall I a m v a' m' u n w,
+          dependees I (Nm.Link (a, m) v (a', m') u n, w) =
           dependees (holderSubInst I (m, v) (m', u))
-            (Nm.Link (a, m) v (a', m') u n, w) =
-          dependees I (Nm.Link (a, m) v (a', m') u n, w).
+            (Nm.Link (a, m) v (a', m') u n, w).
       Proof.
-        intros I a m v a' m' u n w; unfold holderSubInst.
+        intros I a m v a' m' u n w; symmetry; unfold holderSubInst.
         pose proof (twoDeps_left I (m, v) (m', u)) as Hd.
         pose proof (twoPeers_left I (m, v) (m', u)) as Hp.
         pose proof (twoDeps_right I (m, v) (m', u)) as Hdc.
