@@ -143,9 +143,10 @@ Module Opam (N V X Y E : UsualOrderedType).
   Record IsResolution (sigma : Valuation) (I : Inst) (S : PkgSet.t)
     : Prop := MkRes
     { res_subset : PkgSet.Subset S (inst_repo I)
-    ; res_version_unique : C.VersionUnique S
     ; res_available : forall p, PkgSet.In p S -> availOK sigma I p
-    ; res_request : oSat sigma S (inst_query I) /\ oSat sigma S (inst_inv I)
+    ; res_pins :
+        forall n v, PkgSet.In (n, v) (inst_pins I) ->
+        forall v', PkgSet.In (n, v') S -> v' = v
     ; res_dep_closure :
         forall p, PkgSet.In p S ->
         forall d, In (p, d) (inst_dep I) -> oSat sigma S d
@@ -155,13 +156,12 @@ Module Opam (N V X Y E : UsualOrderedType).
           defTrue sigma c = true ->
         ~ exists u, PkgSet.In (m, u) S /\ m <> n /\ vcHolds phi u = true
     ; res_class_exclusion : Cls.ClassExclusion (inst_cls I) S
-    ; res_pins :
-        forall n v, PkgSet.In (n, v) (inst_pins I) ->
-        forall v', PkgSet.In (n, v') S -> v' = v
     ; res_pin_depends :
         forall p, PkgSet.In p S -> PkgSet.In p (inst_pins I) ->
         forall m u y, In (p, ((m, u), y)) (inst_pind I) ->
-        forall u', PkgSet.In (m, u') S -> u' = u }.
+        forall u', PkgSet.In (m, u') S -> u' = u
+    ; res_version_unique : C.VersionUnique S
+    ; res_request : oSat sigma S (inst_query I) /\ oSat sigma S (inst_inv I) }.
 
   Definition depextsOf (sigma : Valuation) (I : Inst) (S : PkgSet.t)
     : ESet.t :=
@@ -842,15 +842,12 @@ Module Opam (N V X Y E : UsualOrderedType).
       constructor.
       - intros [n v] Hp.
         assert (H := Hsub _ _ Hp); apply mem_effRepo in H; tauto.
-      - intros n v v' Hv Hv'.
-        apply mem_opamResolution in Hv, Hv'.
-        assert (E := PF.res_version_unique _ _ _ _ HR
-                       (TName.Real n) _ _ Hv Hv').
-        injection E as ->; reflexivity.
       - intros [n v] Hp.
         assert (H := Hsub _ _ Hp); apply mem_effRepo in H; tauto.
-      - split; apply (encodeOF_correct sigma _ _ HV Hroot);
-          [exact Hquery | exact Hinv].
+      - intros n v Hpin v' Hv'.
+        assert (H := Hsub _ _ Hv'); apply mem_effRepo in H.
+        destruct H as [_ [Hp _]]; symmetry.
+        exact (Hp _ _ Hpin eq_refl).
       - intros [n v] Hp d Hf.
         assert (Hs : PF.Satisfies S'
                        (encodeOF sigma (srcVersions sigma I) d)).
@@ -894,10 +891,6 @@ Module Opam (N V X Y E : UsualOrderedType).
         assert (E := PF.res_version_unique _ _ _ _ HR
                        (TName.Real qn) _ _ Hp Hq).
         injection E as ->; reflexivity.
-      - intros n v Hpin v' Hv'.
-        assert (H := Hsub _ _ Hv'); apply mem_effRepo in H.
-        destruct H as [_ [Hp _]]; symmetry.
-        exact (Hp _ _ Hpin eq_refl).
       - intros [pn pv] Hp Hpin n v u Hpind v' Hv'.
         assert (Hs : PF.Satisfies S'
                        (pindForm (srcVersions sigma I) ((n, v), u))).
@@ -912,6 +905,13 @@ Module Opam (N V X Y E : UsualOrderedType).
         apply SOvv.mem_map; exists v'; split; [| reflexivity].
         apply VSet.remove_spec; split;
           [exact (HV _ _ Hv') | exact NE].
+      - intros n v v' Hv Hv'.
+        apply mem_opamResolution in Hv, Hv'.
+        assert (E := PF.res_version_unique _ _ _ _ HR
+                       (TName.Real n) _ _ Hv Hv').
+        injection E as ->; reflexivity.
+      - split; apply (encodeOF_correct sigma _ _ HV Hroot);
+          [exact Hquery | exact Hinv].
     Qed.
 
     Theorem opam_completeness : forall sigma I S,
