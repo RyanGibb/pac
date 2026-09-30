@@ -238,36 +238,9 @@ module Make (Encoding : Encoding.S) = struct
   let peer_dependencies_named st (n : string) =
     List.map (fun (p, r) -> (p, xpeer st.ar r)) (A.peers_naming st.ar n)
 
-  (* The granular versions lookup's sub-instance, cut further: the lookup
-     asks only whether the keys contain k, so one dependency introducing k
-     answers it, filtered as dependencies are, or failing that one peer
-     (google-closure-compiler pins each platform binary at its own range, and
-     testing every such dependency costs a pass per range); and it asks the
-     repository only whether the looked-up version is published. *)
-  let gran_sub_inst st (k : string * string) (w : string) =
-    let repo =
-      if List.mem w (A.versions_of st.ar (snd k)) then
-        Np.RepoSet.add (snd k, w) Np.RepoSet.empty
-      else Np.RepoSet.empty
-    in
-    let deps =
-      Option.to_list
-        (List.find_map
-           (fun (q, (d : P.dep)) ->
-             if effective_name st d = snd k && dep_keep st d then
-               Some (q, xdep st.ar d)
-             else None)
-           (A.deps_at st.ar (fst k)))
-    in
-    let peers =
-      if deps = [] && fst k = snd k then
-        Option.to_list
-          (Option.map
-             (fun (q, r) -> (q, xpeer st.ar r))
-             (A.peer_naming st.ar (fst k)))
-      else []
-    in
-    mk_inst st ~repo ~deps ~peers
+  (* the granular versions lookup's sub-instance: the lookup reads no
+     instance at a granular name *)
+  let gran_sub_inst st = mk_inst st ~repo:Np.RepoSet.empty ~deps:[] ~peers:[]
 
   (* the intermediate versions lookup's sub-instance: p's own dependencies,
      the peer dependencies naming the key's directory (p's own among them,
@@ -366,8 +339,7 @@ module Make (Encoding : Encoding.S) = struct
   let versions st (n : Np.Nm.name) : Np.Vs.version list =
     let answer () =
       match n with
-      | Np.Nm.Granular (k, w) ->
-          T.VSet.elements (R.versions (gran_sub_inst st k w) n)
+      | Np.Nm.Granular _ -> T.VSet.elements (R.versions (gran_sub_inst st) n)
       | Np.Nm.Intermediate (k, v, m) ->
           T.VSet.elements (R.versions (int_sub_inst st (snd k, v) m) n)
       | Np.Nm.Sight (k, v, a) ->

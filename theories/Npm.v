@@ -242,10 +242,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Lemma ovrDep_dir : forall I d, d_dir (ovrDep I d) = d_dir d.
   Proof. intros I d; unfold ovrDep; destruct (lookupOvr _ _); reflexivity. Qed.
 
-  Lemma ovrDep_ovr : forall I' I d, inst_ovr I' = inst_ovr I ->
-      ovrDep I' d = ovrDep I d.
-  Proof. intros I' I d H; unfold ovrDep; rewrite H; reflexivity. Qed.
-
   Definition depActive (I : Inst) (p : RPkg.t) (d : Dependency) : bool :=
     orb (negb (d_dev d)) (RPkgEqb.eqb p (inst_root I)).
 
@@ -806,10 +802,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
 
     Definition versions (I : Inst) (n : Nm.t) : T.VSet.t :=
       match n with
-      | Nm.Granular k w =>
-          if PkgSet.mem (k, w) (realPkgs I)
-          then T.VSet.singleton (Vs.Orig w)
-          else T.VSet.empty
+      | Nm.Granular _ w => T.VSet.singleton (Vs.Orig w)
       | Nm.Intermediate k v m =>
           if canBeAbsent I (k, v) (fst m)
           then T.VSet.add Vs.Bot (embedVS (childCands I (k, v) m))
@@ -844,11 +837,9 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Lemma versions_gran_real : forall I (k : NKey.t) (w : V.t),
-        PkgSet.In (k, w) (realPkgs I) ->
         T.VSet.In (Vs.Orig w) (versions I (Nm.Granular k w)).
     Proof.
-      intros I k w H; cbn [versions]; apply PkgSet.mem_spec in H.
-      rewrite H; apply T.VSet.singleton_spec; reflexivity.
+      intros I k w; cbn [versions]; apply T.VSet.singleton_spec; reflexivity.
     Qed.
 
     Lemma childCands_chains : forall I q m,
@@ -987,11 +978,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Definition dependees (I : Inst) (p : T.Pkg.t)
       : T.DependeesSet.t :=
       match p with
-      | (Nm.Granular k w, Vs.Orig v) =>
-          if VEqb.eqb w v
-          then T.DependeesSet.union (entryEdges I (k, v))
-                 (rootPeerEdges I (k, v))
-          else T.DependeesSet.empty
+      | (Nm.Granular k _, Vs.Orig v) =>
+          T.DependeesSet.union (entryEdges I (k, v)) (rootPeerEdges I (k, v))
       | (Nm.Intermediate k v m, Vs.Orig u) =>
           T.DependeesSet.add (Nm.Granular m u, T.VSet.singleton (Vs.Orig u))
             (T.DependeesSet.union (linkEdges I (k, v) m u)
@@ -1520,8 +1508,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
                      [a' [t' [e' [u' [Hd [Hu E]]]]]]]]]];
           try discriminate E; cbn [fst snd] in E; injection E; intros; subst
          | ]).
-      - apply versions_gran_real; exact Hp.
-      - intro Hx; cbn [versions] in Hx; apply SOvcv.in_if_empty in Hx as [_ Hx].
+      - apply versions_gran_real.
+      - intro Hx; cbn [versions] in Hx.
         apply T.VSet.singleton_spec in Hx; subst x.
         left; exists k, w; split; [exact Hn | reflexivity].
       - apply versions_int; exact Hy.
@@ -1686,7 +1674,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         T.DependeesSet.union (entryEdges I q) (rootPeerEdges I q).
     Proof.
       intros I [k v]; unfold embedPkg; cbn [fst snd].
-      cbn [dependees]; rewrite VEqb.eqb_refl; reflexivity.
+      reflexivity.
     Qed.
 
     Lemma dependees_gran : forall I k v,
@@ -1694,7 +1682,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         T.DependeesSet.union (entryEdges I (k, v))
           (rootPeerEdges I (k, v)).
     Proof.
-      intros I k v; cbn [dependees]; rewrite VEqb.eqb_refl; reflexivity.
+      intros I k v; reflexivity.
     Qed.
 
     Lemma dep_met : forall I S p h,
@@ -2849,7 +2837,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
               [[[pk pv] [m [Hp [Hm [Hl [Ho ->]]]]]] |
                [[pk pv] [m [u [d [Hp [Hm [Hu [Hi [Hsl [Ht [e [He ->]]]]]]]]]]]]]]]]];
           cbn [fst snd] in *; apply T.mem_versions; rewrite versions_reduceReal.
-        + exact (versions_gran_real I k v (Hreal _ Hp)).
+        + exact (versions_gran_real I k v).
         + exact (Hreal _ Hp).
         + apply orig_versions_int.
           exact (installs_childCands I S pi sg (pk, pv) m u Hres Hp Hm Hi).
@@ -3070,7 +3058,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       apply mem_reducedNames.
       destruct n as [k w | k v m | k v a | k v m u a | a t s]; cbn [ReducedName] in Hn.
       - cbn [versions] in Hx.
-        apply SOvcv.in_if_empty in Hx as [_ Hx].
         apply T.VSet.singleton_spec in Hx; subst x.
         rewrite dependees_gran in Hh; apply T.DependeesSet.union_spec in Hh.
         destruct Hh as [Hh | Hh].
@@ -3143,7 +3130,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           unfold keysOf; apply KeySet.add_spec; left; reflexivity. }
         unfold embedRoot, embedPkg.
         apply T.mem_versions; rewrite versions_reduceReal by exact Hr.
-        exact (versions_gran_real I (fst (rootPkg I)) (snd (rootPkg I)) Hr).
+        exact (versions_gran_real I (fst (rootPkg I)) (snd (rootPkg I))).
       - apply T.mem_versions; rewrite versions_reduceReal; [exact Hv |].
         apply mem_reducedNames; exact (dependees_reducedNames I p h IH Hh).
     Qed.
@@ -3421,8 +3408,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           [reflexivity | exact Hn].
       Qed.
 
-      Module PSS := SetSpecs Pkg PkgSet.
-
       Lemma slotNames_spec : forall I p d,
           In d (dependenciesOf I p) -> NSet.In (d_name d) (slotNames I p).
       Proof.
@@ -3464,92 +3449,10 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           [apply Ht; exact (proj1 (findDepL_some _ _ _ Hd)) | exact Ha].
       Qed.
 
-      Definition keyedDeps (I : Inst) (k : NKey.t)
-        : list (RPkg.t * Dependency) :=
-        List.filter
-          (fun q => KeyEqb.eqb (d_dir (snd q), d_name (ovrDep I (snd q))) k)
-          (inst_deps I).
-
-      Definition keyedPeers (I : Inst) (k : NKey.t)
-        : list (RPkg.t * PeerDependency) :=
-        List.filter
-          (fun q => KeyEqb.eqb (p_name (snd q), p_name (snd q)) k)
-          (inst_peers I).
-
-      Definition granSubInst (I : Inst) (k : NKey.t) (w : V.t)
-          (I' : Inst) : Prop :=
-        inst_root I' = inst_root I /\ inst_ovr I' = inst_ovr I /\
-        (RepoSet.In (snd k, w) (inst_repo I') <->
-         RepoSet.In (snd k, w) (inst_repo I)) /\
-        incl (inst_deps I') (keyedDeps I k) /\
-        incl (inst_peers I') (keyedPeers I k) /\
-        ((inst_deps I' <> nil \/ inst_peers I' <> nil) <->
-         (keyedDeps I k <> nil \/ keyedPeers I k <> nil)).
-
-      Lemma keysOf_granSubInst : forall I k w I',
-          granSubInst I k w I' ->
-          (KeySet.In k (keysOf I') <-> KeySet.In k (keysOf I)).
-      Proof.
-        intros I k w I' [Hroot [Hovr [_ [Hd [Hp Hne]]]]].
-        unfold keysOf, rootKey; rewrite Hroot, !KeySet.add_spec,
-          !KeySet.union_spec, !mem_keysOfL.
-        assert (Ho : forall d, ovrDep I' d = ovrDep I d)
-          by (intro d; exact (ovrDep_ovr I' I d Hovr)).
-        setoid_rewrite Ho.
-        assert (Hkd : forall q, In q (keyedDeps I k) ->
-                  In q (inst_deps I) /\
-                  (d_dir (snd q), d_name (ovrDep I (snd q))) = k).
-        { intros q Hq; apply List.filter_In in Hq.
-          destruct Hq as [Hq He]; apply KeyEqb.eqb_true_iff in He.
-          split; assumption. }
-        assert (Hkp : forall q, In q (keyedPeers I k) ->
-                  In q (inst_peers I) /\
-                  (p_name (snd q), p_name (snd q)) = k).
-        { intros q Hq; apply List.filter_In in Hq.
-          destruct Hq as [Hq He]; apply KeyEqb.eqb_true_iff in He.
-          split; assumption. }
-        split.
-        - intros [E | [[q [Hq E]] | [q [Hq E]]]]; [left; exact E | |].
-          + right; left; exists q; exact (conj (proj1 (Hkd q (Hd q Hq))) E).
-          + right; right; exists q; exact (conj (proj1 (Hkp q (Hp q Hq))) E).
-        - intros [E | Hk]; [left; exact E | right].
-          assert (Hne' : inst_deps I' <> nil \/ inst_peers I' <> nil).
-          { apply Hne; destruct Hk as [[q [Hq E]] | [q [Hq E]]];
-              [left | right]; intro Hn.
-            - assert (Hin : In q (keyedDeps I k))
-                by (apply List.filter_In; split;
-                    [exact Hq | apply KeyEqb.eqb_true_iff; exact E]).
-              rewrite Hn in Hin; destruct Hin.
-            - assert (Hin : In q (keyedPeers I k))
-                by (apply List.filter_In; split;
-                    [exact Hq | apply KeyEqb.eqb_true_iff; exact E]).
-              rewrite Hn in Hin; destruct Hin. }
-          destruct Hne' as [Hn | Hn].
-          + assert (Hx : exists q, In q (inst_deps I'))
-              by (destruct (inst_deps I') as [| q1 l1] eqn:Hl;
-                  [congruence | exists q1;
-                   first [left; reflexivity | rewrite Hl; left; reflexivity]]).
-            destruct Hx as [q1 Hq1]; left; exists q1; split; [exact Hq1 |].
-            exact (proj2 (Hkd q1 (Hd q1 Hq1))).
-          + assert (Hx : exists q, In q (inst_peers I'))
-              by (destruct (inst_peers I') as [| q1 l1] eqn:Hl;
-                  [congruence | exists q1;
-                   first [left; reflexivity | rewrite Hl; left; reflexivity]]).
-            destruct Hx as [q1 Hq1]; right; exists q1; split; [exact Hq1 |].
-            exact (proj2 (Hkp q1 (Hp q1 Hq1))).
-      Qed.
-
       Theorem versions_lookupGranular : forall I a m w I',
-          granSubInst I (a, m) w I' ->
           versions I' (Nm.Granular (a, m) w) =
           versions I (Nm.Granular (a, m) w).
-      Proof.
-        intros I a m w I' Hsub; cbn [versions].
-        pose proof (keysOf_granSubInst I (a, m) w I' Hsub) as Hk.
-        destruct Hsub as [_ [_ [Hr _]]].
-        apply if_scrutinee, PSS.mem_eq_of_iff; rewrite !mem_realPkgs.
-        unfold Available, base; cbn [fst snd]; rewrite Hk, Hr; reflexivity.
-      Qed.
+      Proof. intros I a m w I'; reflexivity. Qed.
 
       Definition intSubInst (I : Inst) (p : RPkg.t) (m : NKey.t) : Inst :=
         subInst I (NSet.add (snd m) (slotNames I p)) (ownDependencies I p)
