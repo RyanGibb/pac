@@ -420,11 +420,11 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
           (reduceDeps D Th g).
     Proof. intros; apply mem_reduceDeps, EdgeDepToInt; assumption. Qed.
 
-    Lemma mem_reduceDeps_int_to_dep : forall D Th g n v m vs u0,
-        C.DepRel.In ((n, v), (m, vs)) D -> VSet.In u0 vs ->
-        T.DepRel.In ((Name.Intermediate n v m, Version.Orig u0),
-                     (Name.Granular m (g u0),
-                      T.VSet.singleton (Version.Orig u0)))
+    Lemma mem_reduceDeps_int_to_dep : forall D Th g n v m vs u,
+        C.DepRel.In ((n, v), (m, vs)) D -> VSet.In u vs ->
+        T.DepRel.In ((Name.Intermediate n v m, Version.Orig u),
+                     (Name.Granular m (g u),
+                      T.VSet.singleton (Version.Orig u)))
           (reduceDeps D Th g).
     Proof. intros; apply mem_reduceDeps; eapply EdgeIntToDep; eassumption. Qed.
 

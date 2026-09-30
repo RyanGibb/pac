@@ -41,10 +41,10 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
 
   Module Reduction.
     Definition IsSplit (g : V.t -> G.t) (vs : VSet.t) : Prop :=
-      exists u1 u2, VSet.In u1 vs /\ VSet.In u2 vs /\ g u1 <> g u2.
+      exists u u', VSet.In u vs /\ VSet.In u' vs /\ g u <> g u'.
 
     Definition IsDirect (g : V.t -> G.t) (vs : VSet.t) : Prop :=
-      forall u1 u2, VSet.In u1 vs -> VSet.In u2 vs -> g u1 = g u2.
+      forall u u', VSet.In u vs -> VSet.In u' vs -> g u = g u'.
 
     Module GEqb := UOTEqb G.
     Definition granEqb : G.t -> G.t -> bool := GEqb.eqb.
