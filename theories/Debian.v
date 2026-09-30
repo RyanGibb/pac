@@ -620,10 +620,10 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       intros [u [HR Hm]]; exists (m, u); auto.
     Qed.
 
-    Lemma matchb_nodeFibre : forall Pi q a,
-        matchb (ProvFibred.nodeFibre Pi (aname a)) q a = matchb Pi q a.
+    Lemma matchb_nodeFibre : forall Pi q (n : N.t) (phi : Ver.Formula),
+        matchb (ProvFibred.nodeFibre Pi n) q (n, phi) = matchb Pi q (n, phi).
     Proof.
-      intros Pi q a; unfold matchb; f_equal.
+      intros Pi q n phi; unfold matchb; f_equal.
       apply Prov.exists_restrict; [apply ProvFibred.nodeFibre_subset |].
       intros [q' [m v]] Hin Hb; cbn beta iota in Hb.
       apply andb_prop in Hb; destruct Hb as [_ Hb].
@@ -642,13 +642,15 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       intros R Pi n v a e h; unfold confEdges; cbv zeta; cbn [fst].
       assert (HN : confNames R (ProvFibred.nodeFibre Pi (aname a)) a =
                    confNames R Pi a).
-      { apply NSet.ext; intro m; rewrite !mem_confNames.
+      { destruct a as [an af]; cbn [aname fst].
+        apply NSet.ext; intro m; rewrite !mem_confNames.
         split; intros [u [HR Hm]]; exists u; rewrite matchb_nodeFibre in *;
           auto. }
       assert (HC : forall m,
                  complementVS R (ProvFibred.nodeFibre Pi (aname a)) a m =
                  complementVS R Pi a m).
-      { intro m; apply T.VSet.ext; intro w; rewrite !mem_complementVS.
+      { destruct a as [an af]; cbn [aname fst].
+        intro m; apply T.VSet.ext; intro w; rewrite !mem_complementVS.
         apply or_iff_compat_l.
         split; intros [u [HR [Hm Hw]]]; exists u; rewrite matchb_nodeFibre in *;
           auto. }
