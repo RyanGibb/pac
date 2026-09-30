@@ -270,10 +270,10 @@ DMA.Lookup.versions_lookupSelectorRec
 DMA.Lookup.versions_lookupSoft
 DMA.debian_ma_completeness
 DMA.debian_ma_core_completeness
+DMA.debian_ma_core_retraction
 DMA.debian_ma_core_soundness
 DMA.debian_ma_retraction
 DMA.debian_ma_soundness
-DMA.multiarchResolution_core
 DMA.reduceAtom
 DMA.reduceClause
 DMA.reduceConf
@@ -381,8 +381,8 @@ Alp.Reduction.Lookup.dependees_lookupRootCore
 Alp.Reduction.Lookup.versions_lookupOrig
 Alp.Reduction.Lookup.versions_lookupOrigCore
 Alp.Reduction.Lookup.versions_lookupRootCore
-Alp.Reduction.alpineResolution_core
 Alp.Reduction.alpine_completeness
+Alp.Reduction.alpine_core_retraction
 Alp.Reduction.alpine_retraction
 Alp.Reduction.alpine_soundness
 Alp.Reduction.attachAt

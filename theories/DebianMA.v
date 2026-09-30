@@ -2151,7 +2151,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     exact (SOmr.mem_map_inj _ _ _ embedPkg_injective).
   Qed.
 
-  Theorem multiarchResolution_core : forall I S,
+  Theorem debian_ma_core_retraction : forall I S,
       multiarchResolution
         (Deb.debianResolution
            (Deb.coreResolution (reduceInst I) (reduceReal S))) = S.

@@ -2055,7 +2055,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       rewrite mem_alpineResolution, coreResolution_embed; reflexivity.
     Qed.
 
-    Theorem alpineResolution_core : forall I S,
+    Theorem alpine_core_retraction : forall I S,
         alpineResolution
           (PF.Reduction.packageFormulaResolution
              (PF.Reduction.coreResolution (coreResolution I S) (reduceReal I)
