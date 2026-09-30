@@ -1294,17 +1294,17 @@ Module Placement (N V : UsualOrderedType).
 
     Inductive Reached (I : Inst) (depth : nat) : T.Pkg.t -> Prop :=
     | reached_root : Reached I depth (rootPkg I)
-    | reached_dependee : forall q h v,
-        Reached I depth q -> T.DependeesSet.In h (dependees I q) ->
-        T.VSet.In v (versions I depth (fst h)) -> Reached I depth (fst h, v).
+    | reached_dependee : forall q n vs v,
+        Reached I depth q -> T.DependeesSet.In (n, vs) (dependees I q) ->
+        T.VSet.In v (versions I depth n) -> Reached I depth (n, v).
 
     Theorem reached_reduceReal : forall I depth q,
         Reached I depth q -> T.PkgSet.In q (reduceReal I depth).
     Proof.
-      intros I depth q H; induction H as [| q h v _ IH Hh Hv];
+      intros I depth q H; induction H as [| q n vs v _ IH Hh Hv];
         apply mem_reduceReal.
       - split; [exact Logic.I | apply T.VSet.singleton_spec; reflexivity].
-      - split; [exact (dependees_inRange I depth q h IH Hh) | exact Hv].
+      - split; [exact (dependees_inRange I depth q (n, vs) IH Hh) | exact Hv].
     Qed.
 
     Theorem lookup_resolution : forall I depth S,

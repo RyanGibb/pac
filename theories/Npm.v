@@ -3086,11 +3086,13 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           reflexivity.
     Qed.
 
-    Theorem dependees_reducedNames : forall I p h,
-        T.PkgSet.In p (reduceReal I) -> T.DependeesSet.In h (dependees I p) ->
-        NmSet.In (fst h) (reducedNames I).
+    Theorem dependees_reducedNames : forall I p m vs,
+        T.PkgSet.In p (reduceReal I) ->
+        T.DependeesSet.In (m, vs) (dependees I p) ->
+        NmSet.In m (reducedNames I).
     Proof.
-      intros I [n x] h Hs Hh; pose proof (reduced_reduceReal I n x Hs) as Hn.
+      intros I [n x] n' vs Hs Hh; change n' with (fst (n', vs)).
+      revert Hh; generalize (n', vs); intros h Hh; pose proof (reduced_reduceReal I n x Hs) as Hn.
       apply T.mem_versions in Hs as Hx.
       rewrite (versions_reduceReal I n Hn) in Hx.
       apply mem_reducedNames.
@@ -3154,15 +3156,15 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
 
     Inductive Reached (I : Inst) : T.Pkg.t -> Prop :=
     | reached_root : Reached I (embedRoot I)
-    | reached_dependee : forall p h v,
-        Reached I p -> T.DependeesSet.In h (dependees I p) ->
-        T.VSet.In v (versions I (fst h)) -> Reached I (fst h, v).
+    | reached_dependee : forall p n vs v,
+        Reached I p -> T.DependeesSet.In (n, vs) (dependees I p) ->
+        T.VSet.In v (versions I n) -> Reached I (n, v).
 
     Theorem reached_reduceReal : forall I p,
         RepoSet.In (inst_root I) (inst_repo I) ->
         Reached I p -> T.PkgSet.In p (reduceReal I).
     Proof.
-      intros I p Hroot H; induction H as [| p h v Hp IH Hh Hv].
+      intros I p Hroot H; induction H as [| p n vs v Hp IH Hh Hv].
       - assert (Hr : PkgSet.In (rootPkg I) (realPkgs I)).
         { apply mem_realPkgs; split; [| rewrite base_rootPkg; exact Hroot].
           unfold keysOf; apply KeySet.add_spec; left; reflexivity. }
@@ -3170,7 +3172,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         apply T.mem_versions; rewrite versions_reduceReal by exact Hr.
         exact (versions_gran_real I (fst (rootPkg I)) (snd (rootPkg I))).
       - apply T.mem_versions; rewrite versions_reduceReal; [exact Hv |].
-        apply mem_reducedNames; exact (dependees_reducedNames I p h IH Hh).
+        apply mem_reducedNames; exact (dependees_reducedNames I p n vs IH Hh).
     Qed.
 
     Theorem lookup_resolution : forall I S,
