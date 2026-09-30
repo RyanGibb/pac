@@ -608,6 +608,16 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       - intro Hw; exists w; split; [exact Hw | reflexivity].
     Qed.
 
+    Lemma embedSet_gran : forall S s,
+        T.PkgSet.In s (embedSet S) <->
+        exists (k : NKey.t) (v : V.t), PkgSet.In (k, v) S /\
+          s = (Nm.Granular k v, Vs.Orig v).
+    Proof.
+      intros S s; unfold embedSet; rewrite SOptp.mem_map; split.
+      - intros [[k v] [Hp ->]]; exists k, v; split; [exact Hp | reflexivity].
+      - intros [k [v [Hp ->]]]; exists (k, v); split; [exact Hp | reflexivity].
+    Qed.
+
     Definition peerCands (I : Inst) (q c : Pkg.t) (theta : PeerDependency)
       : VSet.t :=
       if dp I c (p_name theta)
@@ -831,6 +841,14 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       intros I k v m u; rewrite versions_int; split.
       - intros [[E _] | [u' [Hu E]]]; [discriminate E | injection E as ->; exact Hu].
       - intro Hu; right; exists u; split; [exact Hu | reflexivity].
+    Qed.
+
+    Lemma versions_gran_real : forall I (k : NKey.t) (w : V.t),
+        PkgSet.In (k, w) (realPkgs I) ->
+        T.VSet.In (Vs.Orig w) (versions I (Nm.Granular k w)).
+    Proof.
+      intros I k w H; cbn [versions]; apply PkgSet.mem_spec in H.
+      rewrite H; apply T.VSet.singleton_spec; reflexivity.
     Qed.
 
     Lemma childCands_chains : forall I q m,
@@ -1336,19 +1354,202 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Definition reduceReal (I : Inst) : T.PkgSet.t :=
-      SOmt.unionMap
-        (fun n => SOwt.map (fun x => (n, x)) (versions I n))
-        (reducedNames I).
+      T.PkgSet.union (embedSet (realPkgs I))
+        (T.PkgSet.union
+           (SOpt.unionMap (fun p =>
+                SOkt.unionMap (fun m =>
+                    SOwt.map (fun x => (Nm.Intermediate (fst p) (snd p) m, x))
+                      (if canBeAbsent I p (fst m)
+                       then T.VSet.add Vs.Bot (embedVS (childCands I p m))
+                       else embedVS (childCands I p m)))
+                  (childKeys I p))
+              (realPkgs I))
+           (T.PkgSet.union
+              (SOpt.unionMap (fun c =>
+                   SOat.unionMap (fun n =>
+                       SOwt.map (fun x => (Nm.Sight (fst c) (snd c) n, x))
+                         (T.VSet.add Vs.Bot
+                            (T.VSet.add Vs.Free
+                               (embedVS (sightCands I (base c) n)))))
+                     (peerNames I (base c)))
+                 (realPkgs I))
+              (T.PkgSet.union
+                 (SOpt.unionMap (fun p =>
+                      SOkt.unionMap (fun m =>
+                          SOvt.unionMap (fun u =>
+                              SOat.unionMap (fun n =>
+                                  SOwt.map
+                                    (fun x => (Nm.Link (fst p) (snd p) m u n, x))
+                                    (linkVers I p (m, u) n))
+                                (peerNames I (snd m, u)))
+                            (realVersions (inst_repo I) (snd m)))
+                        (childKeys I p))
+                    (realPkgs I))
+                 (SOmt.unionMap (fun n =>
+                      match n with
+                      | Nm.Desc _ t _ =>
+                          SOwt.map (fun x => (n, x))
+                            (embedVS (realVersions (inst_repo I) t))
+                      | _ => T.PkgSet.empty
+                      end)
+                    (descNames I))))).
 
-    Lemma mem_reduceReal : forall I n x,
-        T.PkgSet.In (n, x) (reduceReal I) <->
-        NmSet.In n (reducedNames I) /\ T.VSet.In x (versions I n).
+    Lemma mem_reduceReal : forall I s,
+        T.PkgSet.In s (reduceReal I) <->
+        (exists (k : NKey.t) (v : V.t), PkgSet.In (k, v) (realPkgs I) /\
+           s = (Nm.Granular k v, Vs.Orig v)) \/
+        (exists p m x, PkgSet.In p (realPkgs I) /\ KeySet.In m (childKeys I p) /\
+           ((x = Vs.Bot /\ canBeAbsent I p (fst m) = true) \/
+            exists u, VSet.In u (childCands I p m) /\ x = Vs.Orig u) /\
+           s = (Nm.Intermediate (fst p) (snd p) m, x)) \/
+        (exists c n x, PkgSet.In c (realPkgs I) /\
+           NSet.In n (peerNames I (base c)) /\
+           (x = Vs.Bot \/ x = Vs.Free \/
+            exists w, VSet.In w (sightCands I (base c) n) /\ x = Vs.Orig w) /\
+           s = (Nm.Sight (fst c) (snd c) n, x)) \/
+        (exists p m u n x, PkgSet.In p (realPkgs I) /\
+           KeySet.In m (childKeys I p) /\
+           VSet.In u (realVersions (inst_repo I) (snd m)) /\
+           NSet.In n (peerNames I (snd m, u)) /\
+           T.VSet.In x (linkVers I p (m, u) n) /\
+           s = (Nm.Link (fst p) (snd p) m u n, x)) \/
+        (exists a t e u, NmSet.In (Nm.Desc a t e) (descNames I) /\
+           VSet.In u (realVersions (inst_repo I) t) /\
+           s = (Nm.Desc a t e, Vs.Orig u)).
     Proof.
-      intros I n x; unfold reduceReal; rewrite SOmt.mem_unionMap; split.
-      - intros [n0 [Hnm Hm]]; apply SOwt.mem_map in Hm; mem_destruct.
-        split; assumption.
-      - intros [Hnm Hx]; exists n; split; [exact Hnm |].
-        apply SOwt.mem_map; exists x; split; [exact Hx | reflexivity].
+      intros I s; unfold reduceReal.
+      rewrite !T.PkgSet.union_spec, embedSet_gran.
+      assert (Hint : forall p m x,
+                 T.VSet.In x (if canBeAbsent I p (fst m)
+                              then T.VSet.add Vs.Bot (embedVS (childCands I p m))
+                              else embedVS (childCands I p m)) <->
+                 (x = Vs.Bot /\ canBeAbsent I p (fst m) = true) \/
+                 exists u, VSet.In u (childCands I p m) /\ x = Vs.Orig u)
+        by (intros [k v] m x; exact (versions_int I k v m x)).
+      assert (Hsight : forall c n x,
+                 T.VSet.In x (T.VSet.add Vs.Bot (T.VSet.add Vs.Free
+                                (embedVS (sightCands I (base c) n)))) <->
+                 x = Vs.Bot \/ x = Vs.Free \/
+                 exists w, VSet.In w (sightCands I (base c) n) /\ x = Vs.Orig w)
+        by (intros c n x; rewrite !T.VSet.add_spec, mem_embedVS; reflexivity).
+      split.
+      - intros [H | [H | [H | [H | H]]]].
+        + left; exact H.
+        + apply SOpt.mem_unionMap in H; destruct H as [p [Hp H]].
+          apply SOkt.mem_unionMap in H; destruct H as [m [Hm H]].
+          apply SOwt.mem_map in H; destruct H as [x [Hx ->]].
+          apply Hint in Hx.
+          right; left; exists p, m, x.
+          exact (conj Hp (conj Hm (conj Hx eq_refl))).
+        + apply SOpt.mem_unionMap in H; destruct H as [c [Hc H]].
+          apply SOat.mem_unionMap in H; destruct H as [n [Hn H]].
+          apply SOwt.mem_map in H; destruct H as [x [Hx ->]].
+          apply Hsight in Hx.
+          right; right; left; exists c, n, x.
+          exact (conj Hc (conj Hn (conj Hx eq_refl))).
+        + apply SOpt.mem_unionMap in H; destruct H as [p [Hp H]].
+          apply SOkt.mem_unionMap in H; destruct H as [m [Hm H]].
+          apply SOvt.mem_unionMap in H; destruct H as [u [Hu H]].
+          apply SOat.mem_unionMap in H; destruct H as [n [Hn H]].
+          apply SOwt.mem_map in H; destruct H as [x [Hx ->]].
+          right; right; right; left; exists p, m, u, n, x.
+          exact (conj Hp (conj Hm (conj Hu (conj Hn (conj Hx eq_refl))))).
+        + apply SOmt.mem_unionMap in H; destruct H as [n [Hn H]].
+          destruct n as [k w | k v m | k v a | k v m u a | a t e];
+            cbn beta iota in H; try destruct (SOwt.empty_in _ H).
+          apply SOwt.mem_map in H; destruct H as [x [Hx ->]].
+          apply mem_embedVS in Hx; destruct Hx as [u [Hu ->]].
+          right; right; right; right; exists a, t, e, u.
+          exact (conj Hn (conj Hu eq_refl)).
+      - intros [H | [[p [m [x [Hp [Hm [Hx ->]]]]]] |
+                 [[c [n [x [Hc [Hn [Hx ->]]]]]] |
+                  [[p [m [u [n [x [Hp [Hm [Hu [Hn [Hx ->]]]]]]]]]] |
+                   [a [t [e [u [Hd [Hu ->]]]]]]]]]].
+        + left; exact H.
+        + right; left; apply SOpt.mem_unionMap; exists p; split; [exact Hp |].
+          apply SOkt.mem_unionMap; exists m; split; [exact Hm |].
+          apply SOwt.mem_map; exists x; split;
+            [apply Hint; exact Hx | reflexivity].
+        + right; right; left; apply SOpt.mem_unionMap; exists c;
+            split; [exact Hc |].
+          apply SOat.mem_unionMap; exists n; split; [exact Hn |].
+          apply SOwt.mem_map; exists x; split;
+            [apply Hsight; exact Hx | reflexivity].
+        + right; right; right; left; apply SOpt.mem_unionMap; exists p;
+            split; [exact Hp |].
+          apply SOkt.mem_unionMap; exists m; split; [exact Hm |].
+          apply SOvt.mem_unionMap; exists u; split; [exact Hu |].
+          apply SOat.mem_unionMap; exists n; split; [exact Hn |].
+          apply SOwt.mem_map; exists x; split; [exact Hx | reflexivity].
+        + right; right; right; right; apply SOmt.mem_unionMap.
+          exists (Nm.Desc a t e); split; [exact Hd | cbn beta iota].
+          apply SOwt.mem_map; exists (Vs.Orig u); split;
+            [apply orig_embedVS; exact Hu | reflexivity].
+    Qed.
+
+    Lemma reduced_reduceReal : forall I n x,
+        T.PkgSet.In (n, x) (reduceReal I) -> ReducedName I n.
+    Proof.
+      intros I n x H; apply mem_reduceReal in H.
+      destruct H as
+          [[k [v [Hp E]]] |
+           [[[k v] [m [y [Hp [Hm [_ E]]]]]] |
+            [[[k v] [a [y [Hc [Ha [_ E]]]]]] |
+             [[[k v] [m [u [a [y [Hp [Hm [Hu [Ha [_ E]]]]]]]]]] |
+              [a [t [e [u [Hd [_ E]]]]]]]]]];
+        injection E as -> _; cbn [ReducedName fst snd].
+      - exact Hp.
+      - split; assumption.
+      - split; assumption.
+      - repeat split; assumption.
+      - apply mem_descNames; exact Hd.
+    Qed.
+
+    Lemma versions_reduceReal : forall I n,
+        ReducedName I n -> T.versions (reduceReal I) n = versions I n.
+    Proof.
+      intros I n Hn; apply T.VSet.ext; intro x.
+      rewrite T.mem_versions, mem_reduceReal.
+      destruct n as [k w | k v m | k v a | k v m u a | a t e];
+        cbn [ReducedName] in Hn;
+        (split;
+         [intros [[k' [v' [Hp E]]] |
+                  [[[k' v'] [m' [y [Hp [Hm [Hy E]]]]]] |
+                   [[[k' v'] [a' [y [Hc [Ha [Hy E]]]]]] |
+                    [[[k' v'] [m' [u' [a' [y [Hp [Hm [Hu [Ha [Hy E]]]]]]]]]] |
+                     [a' [t' [e' [u' [Hd [Hu E]]]]]]]]]];
+          try discriminate E; cbn [fst snd] in E; injection E; intros; subst
+         | ]).
+      - apply versions_gran_real; exact Hp.
+      - intro Hx; cbn [versions] in Hx; apply SOvcv.in_if_empty in Hx as [_ Hx].
+        apply T.VSet.singleton_spec in Hx; subst x.
+        left; exists k, w; split; [exact Hn | reflexivity].
+      - apply versions_int; exact Hy.
+      - intro Hx; apply versions_int in Hx; destruct Hn as [Hp Hm].
+        right; left; exists (k, v), m, x.
+        exact (conj Hp (conj Hm (conj Hx eq_refl))).
+      - cbn [versions]; rewrite !T.VSet.add_spec, mem_embedVS; exact Hy.
+      - intro Hx; cbn [versions] in Hx.
+        rewrite !T.VSet.add_spec, mem_embedVS in Hx; destruct Hn as [Hp Ha].
+        right; right; left; exists (k, v), a, x.
+        exact (conj Hp (conj Ha (conj Hx eq_refl))).
+      - exact Hy.
+      - intro Hx; destruct Hn as [Hp [Hm [Hu Ha]]].
+        right; right; right; left; exists (k, v), m, u, a, x.
+        exact (conj Hp (conj Hm (conj Hu (conj Ha (conj Hx eq_refl))))).
+      - cbn [versions]; apply orig_embedVS; exact Hu.
+      - intro Hx; cbn [versions] in Hx; apply mem_embedVS in Hx.
+        destruct Hx as [u [Hu ->]].
+        right; right; right; right; exists a, t, e, u.
+        split; [apply mem_descNames; exact Hn | split; [exact Hu | reflexivity]].
+    Qed.
+
+    Lemma versions_reduceReal_unreduced : forall I n,
+        ~ ReducedName I n -> T.versions (reduceReal I) n = T.VSet.empty.
+    Proof.
+      intros I n Hn; apply T.VSet.ext; intro x; rewrite T.mem_versions; split.
+      - intro H; contradiction (Hn (reduced_reduceReal I n x H)).
+      - intro H; destruct (T.VSet.empty_spec H).
     Qed.
 
     Definition depEdges (s : T.Pkg.t) (hs : T.DependeesSet.t) : T.DepRel.t :=
@@ -1731,11 +1932,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
                  (link_in_cands I S q m u a Vs.Free Hres Hi Hl theta Hr Hn)). }
       constructor.
       - intros [k w] Hq; apply mem_npmResolution in Hq.
-        pose proof (Hsub _ Hq) as Hr; apply mem_reduceReal in Hr.
-        destruct Hr as [_ Hv].
-        cbn [versions embedPkg fst snd] in Hv.
-        apply SOvcv.in_if_empty in Hv as [Hm _].
-        apply PkgSet.mem_spec in Hm; apply mem_realPkgs; exact Hm.
+        apply mem_realPkgs.
+        exact (reduced_reduceReal I (Nm.Granular k w) (Vs.Orig w) (Hsub _ Hq)).
       - apply mem_npmResolution; exact Hroot.
       - intros p m v v' H1 H2; apply Hint in H1; apply Hint in H2.
         pose proof (Huniq _ _ _ H1 H2) as He; injection He as ->; reflexivity.
@@ -1750,13 +1948,17 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         apply mem_slotSet in Hx.
         destruct Hx as [[E _] | [v' [Hv' E]]]; [discriminate E |].
         injection E as ->; exact Hv'.
-      - intros m v Hi Hnd; apply Hint in Hi.
-        apply Hsub, mem_reduceReal in Hi; destruct Hi as [_ Hw].
+      - intros m v Hi Hnd; apply Hint, Hsub in Hi.
+        pose proof (reduced_reduceReal I _ _ Hi) as Hn.
+        apply T.mem_versions in Hi as Hw.
+        rewrite (versions_reduceReal I _ Hn) in Hw.
         unfold rootPkg in Hw; cbn [fst snd] in Hw.
         apply orig_versions_int in Hw.
         exact (childCands_root_dirs I m v Hw Hnd).
-      - intros [k v] Hq a Hch Hdp w Hi; apply Hint in Hi.
-        apply Hsub, mem_reduceReal in Hi; destruct Hi as [_ Hw].
+      - intros [k v] Hq a Hch Hdp w Hi; apply Hint, Hsub in Hi.
+        pose proof (reduced_reduceReal I _ _ Hi) as Hn.
+        apply T.mem_versions in Hi as Hw.
+        rewrite (versions_reduceReal I _ Hn) in Hw.
         apply orig_versions_int in Hw.
         apply (SOrv.empty_in w).
         rewrite <- (childCands_chains I (k, v)
@@ -1824,8 +2026,10 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           destruct Hz as [E | E]; [subst y | contradiction].
           split; [apply sight_in; [exact Huniq | exact Hy] | exact Hp].
         + cbv iota in Hz; rewrite T.VSet.singleton_spec in Hz; contradiction.
-      - intros [k v] a w Hsg; apply sight_some in Hsg.
-        apply Hsub, mem_reduceReal in Hsg; destruct Hsg as [_ Hw].
+      - intros [k v] a w Hsg; apply sight_some, Hsub in Hsg.
+        pose proof (reduced_reduceReal I _ _ Hsg) as Hn.
+        apply T.mem_versions in Hsg as Hw.
+        rewrite (versions_reduceReal I _ Hn) in Hw.
         cbn [versions fst snd] in Hw; rewrite !T.VSet.add_spec in Hw.
         destruct Hw as [E | [E | Hw]]; [discriminate E | discriminate E |].
         apply orig_embedVS in Hw; exact Hw.
@@ -1943,8 +2147,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         split; [| split].
         + apply mem_npmResolution; exact (exit_selected I S k w m u Hres Hi).
         + apply mem_npmResolution; exact Hq.
-        + apply Hsub, mem_reduceReal in Hi; destruct Hi as [Hn _].
-          apply mem_reducedNames in Hn; exact (proj2 Hn).
+        + exact (proj2 (reduced_reduceReal I _ _ (Hsub _ Hi))).
     Qed.
 
     Corollary peer_installed : forall I S,
@@ -2435,16 +2638,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
                         (childKeys I p))
                     S))))).
 
-    Lemma embedSet_gran : forall S s,
-        T.PkgSet.In s (embedSet S) <->
-        exists (k : NKey.t) (v : V.t), PkgSet.In (k, v) S /\
-          s = (Nm.Granular k v, Vs.Orig v).
-    Proof.
-      intros S s; unfold embedSet; rewrite SOptp.mem_map; split.
-      - intros [[k v] [Hp ->]]; exists k, v; split; [exact Hp | reflexivity].
-      - intros [k [v [Hp ->]]]; exists (k, v); split; [exact Hp | reflexivity].
-    Qed.
-
     Lemma mem_coreResolution : forall I S pi sg s,
         T.PkgSet.In s (coreResolution I S pi sg) <->
         (exists (k : NKey.t) (v : V.t), PkgSet.In (k, v) S /\
@@ -2533,14 +2726,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           apply SOvt.mem_filterMap; exists u; split; [exact Hu |].
           apply descNode_some; split; [exact Hi |].
           exists d, e; repeat split; assumption.
-    Qed.
-
-    Lemma versions_gran_real : forall I (k : NKey.t) (w : V.t),
-        PkgSet.In (k, w) (realPkgs I) ->
-        T.VSet.In (Vs.Orig w) (versions I (Nm.Granular k w)).
-    Proof.
-      intros I k w H; cbn [versions]; apply PkgSet.mem_spec in H.
-      rewrite H; apply T.VSet.singleton_spec; reflexivity.
     Qed.
 
     Lemma sightVal_versions : forall I S pi sg c n,
@@ -2663,27 +2848,27 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
              [[[pk pv] [m [u [a [Hp [Hm [Hu [Hi [Ha ->]]]]]]]]] |
               [[[pk pv] [m [Hp [Hm [Hl [Ho ->]]]]]] |
                [[pk pv] [m [u [d [Hp [Hm [Hu [Hi [Hsl [Ht [e [He ->]]]]]]]]]]]]]]]]];
-          cbn [fst snd] in *; apply mem_reduceReal; split.
-        + apply mem_reducedNames; exact (Hreal _ Hp).
+          cbn [fst snd] in *; apply T.mem_versions; rewrite versions_reduceReal.
         + exact (versions_gran_real I k v (Hreal _ Hp)).
-        + apply mem_reducedNames; split; [exact (Hreal _ Hp) | exact Hm].
+        + exact (Hreal _ Hp).
         + apply orig_versions_int.
           exact (installs_childCands I S pi sg (pk, pv) m u Hres Hp Hm Hi).
-        + apply mem_reducedNames; split; [exact (Hreal _ Hc) | exact Ha].
+        + split; [exact (Hreal _ Hp) | exact Hm].
         + exact (sightVal_versions I S pi sg (ck, cv) a Hres).
-        + apply mem_reducedNames.
-          split; [exact (Hreal _ Hp) | split; [exact Hm | split; [exact Hu | exact Ha]]].
+        + split; [exact (Hreal _ Hc) | exact Ha].
         + cbn [versions]; apply mem_linkVers.
           apply mem_peerNames in Ha; destruct Ha as [theta [Hr <-]].
           exists theta; split; [exact Hr | split; [reflexivity |]].
           exact (linkVal_cands I S pi sg (pk, pv) m u theta Hres Hp Hi Hr).
-        + apply mem_reducedNames; split; [exact (Hreal _ Hp) | exact Hm].
+        + split; [exact (Hreal _ Hp) |].
+          split; [exact Hm | split; [exact Hu | exact Ha]].
         + apply versions_int; left; split; [reflexivity | exact Hl].
-        + apply mem_reducedNames; cbn [ReducedName].
+        + split; [exact (Hreal _ Hp) | exact Hm].
+        + cbn [versions]; apply orig_embedVS; exact Hu.
+        + cbn [ReducedName].
           destruct (slotOf_dep I _ _ _ Hsl) as [[d0 [Hin ->]] Hdir].
           exists (base (pk, pv)), d0; split; [exact Hin |].
           apply in_descOf; repeat split; assumption.
-        + cbn [versions]; apply orig_embedVS; exact Hu.
       - apply mem_coreResolution; left.
         exists (rootKey I), (snd (inst_root I)); split;
           [exact (res_root_mem _ _ _ _ Hres) |].
@@ -2879,8 +3064,10 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         T.PkgSet.In s (reduceReal I) -> T.DependeesSet.In h (dependees I s) ->
         NmSet.In (fst h) (reducedNames I).
     Proof.
-      intros I [n x] h Hs Hh; apply mem_reduceReal in Hs.
-      destruct Hs as [Hn Hx]; apply mem_reducedNames in Hn; apply mem_reducedNames.
+      intros I [n x] h Hs Hh; pose proof (reduced_reduceReal I n x Hs) as Hn.
+      apply T.mem_versions in Hs as Hx.
+      rewrite (versions_reduceReal I n Hn) in Hx.
+      apply mem_reducedNames.
       destruct n as [k w | k v m | k v a | k v m u a | a t s]; cbn [ReducedName] in Hn.
       - cbn [versions] in Hx.
         apply SOvcv.in_if_empty in Hx as [_ Hx].
@@ -2955,10 +3142,10 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         { apply mem_realPkgs; split; [| rewrite base_rootPkg; exact Hroot].
           unfold keysOf; apply KeySet.add_spec; left; reflexivity. }
         unfold embedRoot, embedPkg.
-        apply mem_reduceReal; split; [apply mem_reducedNames; exact Hr |].
+        apply T.mem_versions; rewrite versions_reduceReal by exact Hr.
         exact (versions_gran_real I (fst (rootPkg I)) (snd (rootPkg I)) Hr).
-      - apply mem_reduceReal; split; [| exact Hx].
-        exact (dependees_reducedNames I s h IH Hh).
+      - apply T.mem_versions; rewrite versions_reduceReal; [exact Hx |].
+        apply mem_reducedNames; exact (dependees_reducedNames I s h IH Hh).
     Qed.
 
     Theorem lookup_resolution : forall I S,
