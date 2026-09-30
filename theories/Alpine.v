@@ -1513,9 +1513,9 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           InstallIf.empty WSet.empty.
 
       Theorem versions_lookupOrig : forall I n,
-          versions (nameSubInst I n) n = versions I n.
+          versions I n = versions (nameSubInst I n) n.
       Proof.
-        intros I n; unfold versions, nameSubInst.
+        intros I n; symmetry; unfold versions, nameSubInst.
         apply constrVers_subInst.
         - apply NSet.singleton_spec; reflexivity.
         - intros e He; destruct (Prov.empty_spec He).
@@ -1737,10 +1737,10 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           (installIfFibre I p) (inst_world I).
 
       Theorem dependees_lookupOrig : forall I n v,
-          dependees (pkgSubInst I (n, v)) (embedPkg (n, v)) =
-          dependees I (embedPkg (n, v)).
+          dependees I (embedPkg (n, v)) =
+          dependees (pkgSubInst I (n, v)) (embedPkg (n, v)).
       Proof.
-        intros I n v.
+        intros I n v; symmetry.
         assert (Hown : Prov.Subset
                          (ProvFibred.tailFibre (inst_prov I) (n, v))
                          (inst_prov I))
@@ -1837,9 +1837,9 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Proof. reflexivity. Qed.
 
       Theorem dependees_lookupRoot : forall I,
-          dependees (rootSubInst I) rootPkg = dependees I rootPkg.
+          dependees I rootPkg = dependees (rootSubInst I) rootPkg.
       Proof.
-        intro I.
+        intro I; symmetry.
         assert (Hown : Prov.Subset Prov.empty (inst_prov I)).
         { intros e He; destruct (Prov.empty_spec He). }
         cbn [dependees rootPkg]; rewrite rootSubInst_world.
@@ -1923,7 +1923,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                   (dependees (pkgSubInst I (n, v)) (embedPkg (n, v)))))
             (PF.Reduction.embedPkg (embedPkg (n, v))).
       Proof.
-        intros I Vq n v Hnv HR HO; rewrite dependees_lookupOrig.
+        intros I Vq n v Hnv HR HO; rewrite <- dependees_lookupOrig.
         apply (dependees_core I Vq (embedPkg (n, v))); [| exact HR | exact HO].
         rewrite reduceReal_coreResolution, coreResolution_embed; exact Hnv.
       Qed.
@@ -1939,7 +1939,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                (depEdges rootPkg (dependees (rootSubInst I) rootPkg)))
             (PF.Reduction.embedPkg rootPkg).
       Proof.
-        intros I Vq HR HO; rewrite dependees_lookupRoot.
+        intros I Vq HR HO; rewrite <- dependees_lookupRoot.
         exact (dependees_core I Vq rootPkg (root_reduceReal I) HR HO).
       Qed.
 
@@ -2027,7 +2027,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           PF.Reduction.T.VSet.add PF.Reduction.Version.Bot
             (PF.Reduction.embedVS (versions (nameSubInst I n) n)).
       Proof.
-        intros I n H; rewrite versions_lookupOrig, <- versions_reduceReal.
+        intros I n H; rewrite <- versions_lookupOrig, <- versions_reduceReal.
         apply versions_core.
         destruct H as [[v Hv] | H];
           [left; exists (Version.Orig v) | right; exact H].
