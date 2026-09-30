@@ -310,8 +310,10 @@ let root_inst ar (query : (string * Opam_parse.vc) list) : Op.coq_Inst =
 
 (* Lookup.classSubInst: a class package's versions are every declarer of
    the class, which no one package's declarations name, so this is built
-   from class_table at every ask and never held; its versions only grow
-   (versions_class_mono), as the resolver contract allows. *)
+   from class_table at every ask and never held.  The resolver contract
+   allows this: its versions only grow (versions_class_mono), a class
+   package has no dependees, and every range onto it is the claimant's own
+   singleton, whose name has loaded since the claim is its edge. *)
 let class_inst ar (k : string) : Op.coq_Inst =
   {
     empty_inst with

@@ -1,10 +1,13 @@
 module P = Cargo_parse
 
 (* The index as read so far: a crate is parsed when a sub-instance first
-   reads its name, as cargo's sparse protocol fetches it.  A links value's
-   declarers are the one sub-instance no crate's declarations name, so
-   links_table holds those among the names loaded so far; its versions only
-   grow (versions_link_mono), as the resolver contract allows. *)
+   reads its name, as cargo's sparse protocol fetches it.  Every other
+   sub-instance is complete by construction, as it loads each name it reads
+   whole, but a links value's declarers are named by no one crate, so
+   links_table holds those among the names loaded so far.  The resolver
+   contract allows this: its versions only grow (versions_link_mono), the
+   value's package has no dependees, and every range onto it is its
+   declarer's singleton, loaded before its edges are asked. *)
 type t = {
   index : string;
   cache : string option;
