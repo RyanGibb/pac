@@ -771,16 +771,14 @@ module Virtual = struct
           R.T.dependees
             (R.reduceDeps (L.realPreimage r dp) dp (L.provPreimage pi dp))
             p
-      | R.Name.Selector (q, m), R.Version.Provider _ ->
+      | R.Name.Selector (q, m), _ ->
           R.T.dependees
             (R.reduceDeps
                (L.PkgFibred.tailFibre r m)
                (L.DepRelFibred.tailFibre d q)
                (L.ProvFibred.nodeFibre pi m))
             p
-      | R.Name.Orig _, R.Version.Provider _
-      | R.Name.Selector _, R.Version.Orig _ ->
-          unasked ())
+      | R.Name.Orig _, R.Version.Provider _ -> unasked ())
 
   let real = R.T.PkgSet.elements (R.reduceReal r d pi)
   let deps = rel R.T.VSet.elements R.T.DepRel.elements (R.reduceDeps r d pi)
