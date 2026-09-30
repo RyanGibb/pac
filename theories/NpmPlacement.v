@@ -101,9 +101,9 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     MkEdge (d_dir d) m rg false
       (andb (d_optional d) (VS.is_empty (rangeEval rg (Vq m)))).
 
-  Definition peerEdge (I : Inst) (r : PeerDependency) : Edge :=
-    MkEdge (p_dir r) (ovrName I (p_dir r) (p_name r))
-      (ovrRange I (p_dir r) (p_range r)) true (p_optional r).
+  Definition peerEdge (I : Inst) (theta : PeerDependency) : Edge :=
+    MkEdge (p_dir theta) (ovrName I (p_dir theta) (p_name theta))
+      (ovrRange I (p_dir theta) (p_range theta)) true (p_optional theta).
 
   Definition activeDeps (I : Inst) (x : Occ.t) : list Dependency :=
     match x with
@@ -118,14 +118,14 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     | Occ.Reg m v => ownedBy (m, v) (inst_peers I)
     end.
 
-  Definition replaced (ds : list Dependency) (r : PeerDependency) : bool :=
-    List.existsb (fun d => NEqb.eqb (d_dir d) (p_dir r)) ds.
+  Definition replaced (ds : list Dependency) (theta : PeerDependency) : bool :=
+    List.existsb (fun d => NEqb.eqb (d_dir d) (p_dir theta)) ds.
 
   Definition edgesOfBy (Vq : N.t -> VS.t) (I : Inst) (x : Occ.t)
       : list Edge :=
     List.map (depEdge Vq I) (activeDeps I x) ++
     List.map (peerEdge I)
-      (List.filter (fun r => negb (replaced (activeDeps I x) r))
+      (List.filter (fun theta => negb (replaced (activeDeps I x) theta))
          (declPeers I x)).
 
   Definition edgesOf (I : Inst) (x : Occ.t) : list Edge :=
@@ -148,7 +148,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       (List.map
          (fun d => (d_dir d, e_name (depEdge (realVersions (inst_repo I)) I d)))
          (inst_rootDeps I ++ List.map snd (inst_deps I)) ++
-       List.map (fun r => (p_dir r, e_name (peerEdge I r)))
+       List.map (fun theta => (p_dir theta, e_name (peerEdge I theta)))
          (inst_rootPeers I ++ List.map snd (inst_peers I))).
 
   Record IsResolution (I : Inst) (L : Pl.Layout.t) : Prop :=
@@ -209,24 +209,24 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     split; intros [u [H1 H2]]; exists u; split; assumption.
   Qed.
 
-  Definition kindb (pe o : bool) (e : Edge) : bool :=
-    andb (Bool.eqb (e_peer e) pe) (Bool.eqb (e_opt e) o).
+  Definition kindb (peer optional : bool) (e : Edge) : bool :=
+    andb (Bool.eqb (e_peer e) peer) (Bool.eqb (e_opt e) optional).
 
   Module SOpd := SetOps Pl.Pkg Pl.C.DepElt Pl.PkgSet Pl.C.DepRel.
-  Definition edgeRel (I : Inst) (pe o : bool) : Pl.C.DepRel.t :=
+  Definition edgeRel (I : Inst) (peer optional : bool) : Pl.C.DepRel.t :=
     SOpd.unionMap (fun p =>
         SOpd.ofList
           (List.map (fun e => (p, (e_dir e, accepts I e)))
-             (List.filter (kindb pe o) (edgesOf I (snd p)))))
+             (List.filter (kindb peer optional) (edgesOf I (snd p)))))
       (occs I).
 
-  Lemma mem_edgeRel : forall I pe o p n vs,
-      Pl.C.DepRel.In (p, (n, vs)) (edgeRel I pe o) <->
+  Lemma mem_edgeRel : forall I peer optional p n vs,
+      Pl.C.DepRel.In (p, (n, vs)) (edgeRel I peer optional) <->
       Pl.PkgSet.In p (occs I) /\
-      exists e, In e (edgesOf I (snd p)) /\ e_peer e = pe /\ e_opt e = o /\
+      exists e, In e (edgesOf I (snd p)) /\ e_peer e = peer /\ e_opt e = optional /\
         n = e_dir e /\ vs = accepts I e.
   Proof.
-    intros I pe o p n vs; unfold edgeRel; rewrite SOpd.mem_unionMap; split.
+    intros I peer optional p n vs; unfold edgeRel; rewrite SOpd.mem_unionMap; split.
     - intros [q [Hq H]]; apply SOpd.mem_ofList, in_map_iff in H.
       destruct H as [e [E He]]; injection E as <- <- <-.
       apply filter_In in He; destruct He as [He Hk].
@@ -247,7 +247,8 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
      ; Pl.inst_optPeers := edgeRel I true true
      ; Pl.inst_root := rootOcc I |}.
 
-  Lemma rel_tr : forall I pe o, Pl.rel (tr I) pe o = edgeRel I pe o.
+  Lemma rel_tr : forall I peer optional,
+      Pl.rel (tr I) peer optional = edgeRel I peer optional.
   Proof. intros I [|] [|]; reflexivity. Qed.
 
   Lemma edgeOk_meets : forall I L l e,
@@ -287,7 +288,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       assert (Hholds : forall p l,
                  (forall e, In e (edgesOf I (snd p)) -> EdgeOk I L l e) ->
                  Pl.Holds (tr I) L l p).
-      { intros p l He pe o n vs HE; rewrite rel_tr, mem_edgeRel in HE.
+      { intros p l He peer optional n vs HE; rewrite rel_tr, mem_edgeRel in HE.
         destruct HE as [_ [e [Hin [<- [<- [-> ->]]]]]].
         apply edgeOk_meets, He; exact Hin. }
       constructor.
@@ -442,28 +443,28 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       split; [exact (keyRepo_sub I' I a x Ha Hx) | reflexivity].
     Qed.
 
-    Definition atomOf (lam : Pl.Path.t) (e : Edge) (xs : Pl.VSet.t)
+    Definition atomOf (l : Pl.Path.t) (e : Edge) (xs : Pl.VSet.t)
         : Pl.Reduction.T.Dependees.t :=
-      (Pl.Reduction.Name.Walk lam (e_dir e),
-       Pl.Reduction.optAccept (e_opt e) (Pl.land (e_peer e) lam) xs).
+      (Pl.Reduction.Name.Walk l (e_dir e),
+       Pl.Reduction.optAccept (e_opt e) (Pl.land (e_peer e) l) xs).
 
-    Definition edgeAtom (I : Inst) (lam : Pl.Path.t) (e : Edge)
+    Definition edgeAtom (I : Inst) (l : Pl.Path.t) (e : Edge)
         : Pl.Reduction.T.Dependees.t :=
-      atomOf lam e (accepts I e).
+      atomOf l e (accepts I e).
 
     Module SOhh := SetOps Pl.Reduction.T.Dependees Pl.Reduction.T.Dependees
       Pl.Reduction.T.DependeesSet Pl.Reduction.T.DependeesSet.
-    Definition occAtoms (I : Inst) (lam : Pl.Path.t) (x : Occ.t)
+    Definition occAtoms (I : Inst) (l : Pl.Path.t) (x : Occ.t)
         : Pl.Reduction.T.DependeesSet.t :=
-      SOhh.ofList (List.map (edgeAtom I lam) (edgesOf I x)).
+      SOhh.ofList (List.map (edgeAtom I l) (edgesOf I x)).
 
-    Lemma edgeAtoms_tr : forall I p lam, Pl.PkgSet.In p (occs I) ->
-        Pl.Reduction.edgeAtoms (tr I) p lam = occAtoms I lam (snd p).
+    Lemma edgeAtoms_tr : forall I p l, Pl.PkgSet.In p (occs I) ->
+        Pl.Reduction.edgeAtoms (tr I) p l = occAtoms I l (snd p).
     Proof.
-      intros I p lam Hp; apply Pl.Reduction.T.DependeesSet.ext; intro h.
+      intros I p l Hp; apply Pl.Reduction.T.DependeesSet.ext; intro h.
       rewrite Pl.Reduction.mem_edgeAtoms; unfold occAtoms.
       rewrite SOhh.mem_ofList, in_map_iff; split.
-      - intros [pe [o [n [vs [HE ->]]]]]; rewrite rel_tr, mem_edgeRel in HE.
+      - intros [peer [optional [n [vs [HE ->]]]]]; rewrite rel_tr, mem_edgeRel in HE.
         destruct HE as [_ [e [He [<- [<- [-> ->]]]]]].
         exists e; split; [reflexivity | exact He].
       - intros [e [<- He]].
@@ -547,26 +548,26 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         rewrite Hn, Hg.
         destruct (d_optional d) eqn:Hopt; [| reflexivity]; cbn [andb].
         rewrite (Hr d _ Hin Hopt eq_refl); reflexivity.
-      - apply map_ext; intro r; unfold peerEdge; rewrite Hn, Hg; reflexivity.
+      - apply map_ext; intro theta; unfold peerEdge; rewrite Hn, Hg; reflexivity.
     Qed.
 
-    Lemma edgeAtom_agree : forall I' I lam e, AgreesAtName I' I (e_name e) ->
-        edgeAtom I' lam e = edgeAtom I lam e.
+    Lemma edgeAtom_agree : forall I' I l e, AgreesAtName I' I (e_name e) ->
+        edgeAtom I' l e = edgeAtom I l e.
     Proof.
-      intros I' I lam e Hr; unfold edgeAtom, accepts.
+      intros I' I l e Hr; unfold edgeAtom, accepts.
       replace (realVersions (inst_repo I') (e_name e))
         with (realVersions (inst_repo I) (e_name e)); [reflexivity |].
       apply VS.ext; intro u; rewrite !mem_realVersions; symmetry; exact (Hr u).
     Qed.
 
-    Theorem occAtoms_parts : forall I Ix Vq (at_ : Edge -> Inst) lam x,
+    Theorem occAtoms_parts : forall I Ix Vq (at_ : Edge -> Inst) l x,
         AgreesAtOcc Vq Ix I x ->
         (forall e, In e (edgesOf I x) -> AgreesAtName (at_ e) I (e_name e)) ->
-        occAtoms I lam x =
+        occAtoms I l x =
         SOhh.ofList
-          (List.map (fun e => edgeAtom (at_ e) lam e) (edgesOfBy Vq Ix x)).
+          (List.map (fun e => edgeAtom (at_ e) l e) (edgesOfBy Vq Ix x)).
     Proof.
-      intros I Ix Vq at_ lam x Hx He; unfold occAtoms.
+      intros I Ix Vq at_ l x Hx He; unfold occAtoms.
       rewrite (edgesOfBy_agree _ _ _ _ Hx); f_equal.
       apply map_ext_in; intros e Hin.
       exact (eq_sym (edgeAtom_agree _ _ _ _ (He e Hin))).
