@@ -230,10 +230,10 @@ Module Versions (N V : UsualOrderedType).
         PkgPreimage.preimage fst (DepKeys.hasKey DepRelFibred.node Dp) R.
 
       Lemma versions_realPreimage : forall R Dp n,
-          (exists q m phi, DepRel.In (q, (m, phi)) Dp /\ m = n) ->
+          (exists q phi, DepRel.In (q, (n, phi)) Dp) ->
           C.versions (realPreimage R Dp) n = C.versions R n.
       Proof.
-        intros R Dp m [q [m' [phi [He Hm]]]].
+        intros R Dp m [q [phi He]].
         apply VSet.ext; intro v.
         rewrite !C.mem_versions; unfold realPreimage.
         rewrite PkgPreimage.mem_preimage.
@@ -241,7 +241,7 @@ Module Versions (N V : UsualOrderedType).
         - intros [H _]; exact H.
         - intro H; split; [exact H |].
           apply DepKeys.hasKey_iff.
-          exists (q, (m', phi)); split; [exact He | exact Hm].
+          exists (q, (m, phi)); split; [exact He | reflexivity].
       Qed.
 
       Lemma dependees_fibre : forall R D (p : Pkg.t),
@@ -263,7 +263,7 @@ Module Versions (N V : UsualOrderedType).
           [exact HD | | exact HD |];
           rewrite (versions_realPreimage R Dp n);
           solve [reflexivity
-                | exists q, n, phi; split; [exact HD | reflexivity]].
+                | exists q, phi; exact HD].
       Qed.
 
       Module PkgFibred := FibredRel N V Pkg PkgSet.

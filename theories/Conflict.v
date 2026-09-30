@@ -89,7 +89,7 @@ Module Conflict (N V : UsualOrderedType).
 
     Lemma mem_instNames : forall R D G (n : N.t),
         NSet.In n (instNames R D G) <->
-        (exists v, PkgSet.In (n, v) R) \/
+        (exists u, PkgSet.In (n, u) R) \/
         (exists p vs, C.DepRel.In (p, (n, vs)) D) \/
         (exists p vs, ConflictRel.In (p, (n, vs)) G).
     Proof.
@@ -284,7 +284,7 @@ Module Conflict (N V : UsualOrderedType).
         T.PkgSet.In q (coreResolution R D G S) <->
         (exists p, PkgSet.In p S /\ q = embedPkg p) \/
         (exists n, NSet.In n (instNames R D G) /\
-           (forall v, ~ PkgSet.In (n, v) S) /\ q = (n, Version.Bot)).
+           (forall u, ~ PkgSet.In (n, u) S) /\ q = (n, Version.Bot)).
     Proof.
       intros S R D G q; unfold coreResolution, embedSet.
       rewrite T.PkgSet.union_spec, SOpt.mem_map, mem_absentPkgs.
@@ -402,20 +402,20 @@ Module Conflict (N V : UsualOrderedType).
         - right; right; exists q, vs; exact HG.
       Qed.
 
-      Theorem versions_lookupOrig : forall R D G (r : Pkg.t) (n : N.t),
-          PkgSet.In r R ->
+      Theorem versions_lookupOrig :
+        forall R D G (m : N.t) (u : V.t) (n : N.t),
+          PkgSet.In (m, u) R ->
           (exists p h, T.DepRel.In (p, (n, h)) (reduceDeps R D G)) \/
-          n = fst r ->
+          n = m ->
           T.versions (reduceReal R D G) n =
           T.VSet.add Version.Bot
             (embedVS (C.versions (PkgFibred.tailFibre R n) n)).
       Proof.
-        intros R D G r n Hr Hreach.
+        intros R D G rn rv n Hr Hreach.
         assert (Hn : NSet.In n (instNames R D G)).
         { destruct Hreach as [Hreach | ->];
             [exact (reachable_instNames R D G n Hreach) |].
-          apply mem_instNames; left; destruct r as [rn rv]; exists rv;
-            exact Hr. }
+          apply mem_instNames; left; exists rv; exact Hr. }
         apply T.VSet.ext; intro w.
         rewrite T.mem_versions, mem_reduceReal, SOvt.add_in.
         unfold embedVS; rewrite SOvt.mem_map.

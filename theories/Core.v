@@ -125,9 +125,10 @@ Module Core (N V : UsualOrderedType).
   Definition namePreimage (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
     PkgPreimage.ofKeys fst ns R.
 
-  Lemma mem_namePreimage : forall R ns q,
-      PkgSet.In q (namePreimage R ns) <-> PkgSet.In q R /\ NSet.In (fst q) ns.
-  Proof. intros R ns q; apply PkgPreimage.mem_ofKeys. Qed.
+  Lemma mem_namePreimage : forall R ns n v,
+      PkgSet.In (n, v) (namePreimage R ns) <->
+      PkgSet.In (n, v) R /\ NSet.In n ns.
+  Proof. intros R ns n v; apply PkgPreimage.mem_ofKeys. Qed.
 
   Lemma versions_namePreimage : forall R ns n,
       NSet.In n ns -> versions (namePreimage R ns) n = versions R n.
@@ -141,8 +142,8 @@ Module Core (N V : UsualOrderedType).
       PkgSet.In (n, v) S -> PkgSet.In (n, v') S -> v = v'.
 
   Definition FunctionalInName (D : DepRel.t) : Prop :=
-    forall (p : Pkg.t) (n : N.t) (vs1 vs2 : VSet.t),
-      DepRel.In (p, (n, vs1)) D -> DepRel.In (p, (n, vs2)) D -> vs1 = vs2.
+    forall (p : Pkg.t) (n : N.t) (vs vs' : VSet.t),
+      DepRel.In (p, (n, vs)) D -> DepRel.In (p, (n, vs')) D -> vs = vs'.
 
   Record IsResolution
       (R : PkgSet.t) (D : DepRel.t) (r : Pkg.t) (S : PkgSet.t) : Prop :=
