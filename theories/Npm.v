@@ -467,7 +467,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
 
   Definition ReadBelow (I : Inst) (S : PkgSet.t) (pi : Conc.ParentRel.t)
       (c : Pkg.t) (n : N.t) : Prop :=
-    exists m u, Installs S pi c m u /\ NSet.In n (peerNames I (snd m, u)).
+    exists a'' m'' u'', Installs S pi c (a'', m'') u'' /\
+      NSet.In n (peerNames I (m'', u'')).
 
   Definition plainCands (I : Inst) (n : N.t) (rg : Range) : VSet.t :=
     rangeEval (override I n rg) (realVersions (inst_repo I) n).
@@ -1994,9 +1995,9 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           apply mem_embedVS in Hz; destruct Hz as [u' [Hu' ->]]; split.
           * intros [w Hw]; apply Hsh in Hw; discriminate Hw.
           * intros _; exists u'; split; [exact Hu' | exact (Hpi (m, u) _ u' Hm HzS)].
-      - intros [k v] Hc a u Hdp [m' [u' [Hc' Ha']]] Hi.
+      - intros [k v] Hc a u Hdp [a'' [m'' [u' [Hc' Ha']]]] Hi.
         apply Hint in Hi; apply Hint in Hc'; cbn [fst snd] in Hi, Hc'.
-        destruct (sight_below I S (k, v) m' u' a Hres Hc' Ha'
+        destruct (sight_below I S (k, v) (a'', m'') u' a Hres Hc' Ha'
                     (dp_chains I (k, v) a Hdp)) as [y [Hyf Hy]].
         cbn [fst snd] in Hy.
         destruct (dep_met I S _
@@ -2021,11 +2022,12 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         cbn [versions fst snd] in Hw; rewrite !T.VSet.add_spec in Hw.
         destruct Hw as [E | [E | Hw]]; [discriminate E | discriminate E |].
         apply orig_embedVS in Hw; exact Hw.
-      - intros [k v] Hq m u Hmu a Ha Hch [m' [u' [Hc' Ha']]].
+      - intros [k v] Hq m u Hmu a Ha Hch [a'' [m'' [u' [Hc' Ha']]]].
         apply mem_npmResolution in Hq; apply Hint in Hmu; apply Hint in Hc'.
         cbn [fst snd] in Hmu, Hc'.
         destruct (Hlink (k, v) m u a Hmu Ha) as [x Hl]; cbn [fst snd] in Hl.
-        destruct (sight_below I S (m, u) m' u' a Hres Hc' Ha' Hch) as [y [Hyf Hy]].
+        destruct (sight_below I S (m, u) (a'', m'') u' a Hres Hc' Ha' Hch)
+          as [y [Hyf Hy]].
         cbn [fst snd] in Hy.
         destruct (dep_met I S _ (Nm.Sight m u a, sightSet I (k, v) (m, u) a x)
                     Hres Hl) as [z [Hz HzS]].
@@ -2459,11 +2461,11 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Proof.
       intros I S pi sg c n Hres; unfold readb, ReadBelow.
       rewrite SOkp.SSA.exists_spec'; split.
-      - intros [m [_ H]]; apply SOvp.SSA.exists_spec' in H.
+      - intros [[a'' m''] [_ H]]; apply SOvp.SSA.exists_spec' in H.
         destruct H as [u [_ H]]; apply Bool.andb_true_iff in H.
         destruct H as [Hi Ha]; apply installsb_iff in Hi.
-        apply NSet.mem_spec in Ha; exists m, u; split; assumption.
-      - intros [m [u [Hi Ha]]]; exists m; split.
+        apply NSet.mem_spec in Ha; exists a'', m'', u; split; assumption.
+      - intros [a'' [m'' [u [Hi Ha]]]]; exists (a'', m''); split.
         + exact (proj2 (proj2 (res_parent_closure _ _ _ _ Hres _ _ (proj2 Hi)))).
         + apply SOvp.SSA.exists_spec'; exists u; split.
           * apply mem_realVersions.
@@ -2777,9 +2779,10 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         chains I q n = true ->
         sightVal I S pi sg q n = linkVal I S pi sg q n.
     Proof.
-      intros I S pi sg q m u n Hres Hi Ha Hch.
+      intros I S pi sg q [a'' m''] u n Hres Hi Ha Hch.
       assert (Hrd : readb I S pi q n = true)
-        by (apply (readb_iff I S pi sg q n Hres); exists m, u; split; assumption).
+        by (apply (readb_iff I S pi sg q n Hres); exists a'', m'', u;
+            split; assumption).
       unfold sightVal, linkVal, showsAt; rewrite Hch, Hrd; cbn [andb].
       destruct (sg q n); reflexivity.
     Qed.
@@ -3862,7 +3865,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           |].
         apply mem_coreResolution; right; right; left.
         exists (k, v), n; split.
-        + destruct Hrd as [m [u [[_ Hpi] _]]].
+        + destruct Hrd as [a'' [m'' [u [[_ Hpi] _]]]].
           exact (proj1 (proj2 (res_parent_closure _ _ _ _ Hres _ _ Hpi))).
         + split; [exact (chains_peerNames _ _ _ Hch) |].
           unfold sightVal; rewrite Hch,
