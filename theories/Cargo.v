@@ -152,10 +152,10 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
   Record Inst : Type := MkInst
     { inst_repo : PkgSet.t
-    ; inst_support : SupportSet.t
-    ; inst_fdefs : FDefRel.t
     ; inst_slots : SlotRel.t
+    ; inst_fdefs : FDefRel.t
     ; inst_links : LinkRel.t
+    ; inst_support : SupportSet.t
     ; inst_gran : V.t -> G.t
     ; inst_dflt : F.t
     ; inst_root : Pkg.t
@@ -1009,7 +1009,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Lemma mem_dep_root :
       forall g R support FDefs Slots Links dflt rn rv rootFeats h,
         T.DependeesSet.In h
-          (dependees (MkInst R support FDefs Slots Links g dflt (rn, rv)
+          (dependees (MkInst R Slots FDefs Links support g dflt (rn, rv)
                         rootFeats) rootPkg) <->
         h = (NPlus.CCrate rn (g rv), T.VSet.singleton (VPlus.WOrig rv)) \/
         exists f, FSet.In f rootFeats /\
@@ -1359,7 +1359,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         T.IsResolution (reduceReal I) (reduceDeps I) rootPkg S ->
         IsResolution I (cargoResolution S) (features S) (parents I S).
     Proof.
-      intros [R support FDefs Slots Links g dflt [rn rv] rootFeats] S
+      intros [R Slots FDefs Links support g dflt [rn rv] rootFeats] S
         Hsite Hres.
       cbn [inst_slots] in Hsite.
       destruct Hres as [Hsub Hroot Hdep Huniq].
@@ -1387,7 +1387,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             ((NPlus.CFeatP n f (g u'), VPlus.WOrig u'),
              (NPlus.CCrate n (g u'), T.VSet.singleton (VPlus.WOrig u')))
             (reduceDeps
-               (MkInst R support FDefs Slots Links g dflt (rn, rv) rootFeats))).
+               (MkInst R Slots FDefs Links support g dflt (rn, rv) rootFeats))).
         { apply mem_reduceDeps; split; [exact (Hsub _ Hf) |].
           apply mem_dep_featP; left; reflexivity. }
         destruct (Hdep _ Hf _ _ Hed) as [w [Hw HwS]].
@@ -1402,7 +1402,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             (rootPkg, (NPlus.CCrate rn (g rv),
                          T.VSet.singleton (VPlus.WOrig rv)))
             (reduceDeps
-               (MkInst R support FDefs Slots Links g dflt (rn, rv) rootFeats))).
+               (MkInst R Slots FDefs Links support g dflt (rn, rv) rootFeats))).
         { apply mem_reduceDeps; split; [exact (Hsub _ Hroot) |].
           apply mem_dep_root; left; reflexivity. }
         destruct (Hdep _ Hroot _ _ Hed) as [w [Hw HwS]].
@@ -1424,7 +1424,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             T.PkgSet.In (NPlus.CSlot n (g v) d, VPlus.WClass w) S ->
             exists u, ParentRel.In (((n, v), sKey d), u)
                         (parents
-                           (MkInst R support FDefs Slots Links g dflt (rn, rv)
+                           (MkInst R Slots FDefs Links support g dflt (rn, rv)
                               rootFeats) S) /\
               rgHolds (sReq d) u = true /\
               PkgSet.In (sName d, u) (cargoResolution S) /\
@@ -1439,7 +1439,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                (NPlus.CCrate (sName d) (g u0),
                 inGran g (g u0) (evalReq R (sName d) (sReq d))))
               (reduceDeps
-                 (MkInst R support FDefs Slots Links g dflt (rn, rv)
+                 (MkInst R Slots FDefs Links support g dflt (rn, rv)
                     rootFeats))).
           { apply mem_reduceDeps; split; [exact (Hsub _ Hslot) |].
             apply mem_dep_slot; left; reflexivity. }
@@ -1462,7 +1462,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                  (NPlus.CFeatP (sName d) f (g u0),
                   inGran g (g u0) (evalReq R (sName d) (sReq d))))
                 (reduceDeps
-                   (MkInst R support FDefs Slots Links g dflt (rn, rv)
+                   (MkInst R Slots FDefs Links support g dflt (rn, rv)
                       rootFeats))).
             { apply mem_reduceDeps; split; [exact (Hsub _ Hslot) |].
               apply mem_dep_slot; right; exists f; split;
@@ -1479,7 +1479,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                (NPlus.CSlot n (g v) d,
                 gransOf g (evalReq R (sName d) (sReq d))))
               (reduceDeps
-                 (MkInst R support FDefs Slots Links g dflt (rn, rv)
+                 (MkInst R Slots FDefs Links support g dflt (rn, rv)
                     rootFeats))).
           { apply mem_reduceDeps; split; [exact (Hsub _ Hp) |].
             apply mem_dep_crate; left; exists d; repeat split; assumption. }
@@ -1504,7 +1504,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                (NPlus.CSlot n (g v) d,
                 gransOf g (evalReq R (sName d) (sReq d))))
               (reduceDeps
-                 (MkInst R support FDefs Slots Links g dflt (rn, rv)
+                 (MkInst R Slots FDefs Links support g dflt (rn, rv)
                     rootFeats))).
           { apply mem_reduceDeps; split; [exact (Hsub _ Hffs) |].
             apply mem_dep_featP; right; exists e'; split; [exact He' |].
@@ -1521,7 +1521,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
               ((NPlus.CFeatP n f (g v), VPlus.WOrig v),
                (NPlus.CFeatP n f0 (g v), T.VSet.singleton (VPlus.WOrig v)))
               (reduceDeps
-                 (MkInst R support FDefs Slots Links g dflt (rn, rv)
+                 (MkInst R Slots FDefs Links support g dflt (rn, rv)
                     rootFeats))).
           { apply mem_reduceDeps; split; [exact (Hsub _ Hf) |].
             apply mem_dep_featP; right; exists (FEntry.EFeat f0);
@@ -1553,7 +1553,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                (NPlus.CDec n (g v) f d f',
                 gransOf g (evalReq R (sName d) (sReq d))))
               (reduceDeps
-                 (MkInst R support FDefs Slots Links g dflt (rn, rv)
+                 (MkInst R Slots FDefs Links support g dflt (rn, rv)
                     rootFeats))).
           { apply mem_reduceDeps; split; [exact (Hsub _ Hf) |].
             apply mem_dep_featP; right; exists e'; split; [exact He' |].
@@ -1566,7 +1566,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                (NPlus.CSlot n (g v) d,
                 T.VSet.singleton (VPlus.WClass (g u1))))
               (reduceDeps
-                 (MkInst R support FDefs Slots Links g dflt (rn, rv)
+                 (MkInst R Slots FDefs Links support g dflt (rn, rv)
                     rootFeats))).
           { apply mem_reduceDeps; split; [exact (Hsub _ HwS) |].
             apply mem_dep_dec; left; reflexivity. }
@@ -1577,7 +1577,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                (NPlus.CFeatP (sName d) f' (g u1),
                 inGran g (g u1) (evalReq R (sName d) (sReq d))))
               (reduceDeps
-                 (MkInst R support FDefs Slots Links g dflt (rn, rv)
+                 (MkInst R Slots FDefs Links support g dflt (rn, rv)
                     rootFeats))).
           { apply mem_reduceDeps; split; [exact (Hsub _ HwS) |].
             apply mem_dep_dec; right; reflexivity. }
@@ -1601,7 +1601,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
              (NPlus.CLink l,
               T.VSet.singleton (VPlus.WName (NPlus.CCrate pn (g pv)))))
             (reduceDeps
-               (MkInst R support FDefs Slots Links g dflt (rn, rv) rootFeats))).
+               (MkInst R Slots FDefs Links support g dflt (rn, rv) rootFeats))).
         { apply mem_reduceDeps; split; [exact (Hsub _ Hp) |].
           apply mem_dep_crate; right; exists l; split;
             [exact Hlp | reflexivity]. }
@@ -1610,7 +1610,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
              (NPlus.CLink l,
               T.VSet.singleton (VPlus.WName (NPlus.CCrate qn (g qv)))))
             (reduceDeps
-               (MkInst R support FDefs Slots Links g dflt (rn, rv) rootFeats))).
+               (MkInst R Slots FDefs Links support g dflt (rn, rv) rootFeats))).
         { apply mem_reduceDeps; split; [exact (Hsub _ Hq) |].
           apply mem_dep_crate; right; exists l; split;
             [exact Hlq | reflexivity]. }
@@ -1634,7 +1634,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             (rootPkg, (NPlus.CFeatP rn f (g rv),
                      T.VSet.singleton (VPlus.WOrig rv)))
             (reduceDeps
-               (MkInst R support FDefs Slots Links g dflt (rn, rv) rootFeats))).
+               (MkInst R Slots FDefs Links support g dflt (rn, rv) rootFeats))).
         { apply mem_reduceDeps; split; [exact (Hsub _ Hroot) |].
           apply mem_dep_root; right; exists f; split;
             [exact Hf | reflexivity]. }
@@ -1925,7 +1925,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         T.IsResolution (reduceReal I) (reduceDeps I) rootPkg
           (coreResolution I S FS pi).
     Proof.
-      intros [R support FDefs Slots Links g dflt [rn rv] rootFeats]
+      intros [R Slots FDefs Links support g dflt [rn rv] rootFeats]
         S FS pi Hsite Hres.
       assert (HfsAt := fsAt_mem Hres).
       assert (Hpick := parent_pick Hres).
@@ -2319,8 +2319,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         forall I,
           versions I NPlus.CRoot =
           versions
-            (MkInst PkgSet.empty SupportSet.empty FDefRel.empty SlotRel.empty
-               LinkRel.empty (inst_gran I) (inst_dflt I) (inst_root I)
+            (MkInst PkgSet.empty SlotRel.empty FDefRel.empty LinkRel.empty
+               SupportSet.empty (inst_gran I) (inst_dflt I) (inst_root I)
                (inst_rootFeats I))
             NPlus.CRoot.
       Proof. reflexivity. Qed.
@@ -2330,7 +2330,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           versions I (NPlus.CCrate n w) =
           versions
             (MkInst (C.namePreimage (inst_repo I) (NSet.singleton n))
-               SupportSet.empty FDefRel.empty SlotRel.empty LinkRel.empty
+               SlotRel.empty FDefRel.empty LinkRel.empty SupportSet.empty
                (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
             (NPlus.CCrate n w).
       Proof.
@@ -2348,8 +2348,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           versions I (NPlus.CFeatP n f w) =
           versions
             (MkInst (C.namePreimage (inst_repo I) (NSet.singleton n))
+               SlotRel.empty FDefRel.empty LinkRel.empty
                (supportAt (inst_support I) n f)
-               FDefRel.empty SlotRel.empty LinkRel.empty
                (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
             (NPlus.CFeatP n f w).
       Proof.
@@ -2368,7 +2368,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           versions I (NPlus.CSlot n w d) =
           versions
             (MkInst (C.namePreimage (inst_repo I) (NSet.singleton (sName d)))
-               SupportSet.empty FDefRel.empty SlotRel.empty LinkRel.empty
+               SlotRel.empty FDefRel.empty LinkRel.empty SupportSet.empty
                (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
             (NPlus.CSlot n w d).
       Proof.
@@ -2382,7 +2382,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           versions I (NPlus.CDec n w f d f') =
           versions
             (MkInst (C.namePreimage (inst_repo I) (NSet.singleton (sName d)))
-               SupportSet.empty FDefRel.empty SlotRel.empty LinkRel.empty
+               SlotRel.empty FDefRel.empty LinkRel.empty SupportSet.empty
                (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
             (NPlus.CDec n w f d f').
       Proof.
@@ -2429,9 +2429,9 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         forall I l,
           versions I (NPlus.CLink l) =
           versions
-            (MkInst (claimants (inst_repo I) (inst_links I) l) SupportSet.empty
-               FDefRel.empty SlotRel.empty
-                 (LinkFibred.withHead (inst_links I) l)
+            (MkInst (claimants (inst_repo I) (inst_links I) l) SlotRel.empty
+               FDefRel.empty (LinkFibred.withHead (inst_links I) l)
+               SupportSet.empty
                (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
             (NPlus.CLink l).
       Proof.
@@ -2468,11 +2468,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           forall h,
             T.DependeesSet.In h
               (dependeesBy Vq
-                 (MkInst R support FDefs Slots Links g dflt r rootFeats)
+                 (MkInst R Slots FDefs Links support g dflt r rootFeats)
                  (NPlus.CCrate n w, VPlus.WOrig v)) ->
             T.DependeesSet.In h
               (dependeesBy Vq'
-                 (MkInst R' support' FDefs' Slots' Links' g dflt r rootFeats')
+                 (MkInst R' Slots' FDefs' Links' support' g dflt r rootFeats')
                  (NPlus.CCrate n w, VPlus.WOrig v)).
       Proof.
         intros * HS Hev HL h Hh.
@@ -2497,11 +2497,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           forall h,
             T.DependeesSet.In h
               (dependeesBy Vq
-                 (MkInst R support FDefs Slots Links g dflt r rootFeats)
+                 (MkInst R Slots FDefs Links support g dflt r rootFeats)
                  (NPlus.CFeatP n f w, VPlus.WOrig v)) ->
             T.DependeesSet.In h
               (dependeesBy Vq'
-                 (MkInst R' support' FDefs' Slots' Links' g dflt r rootFeats')
+                 (MkInst R' Slots' FDefs' Links' support' g dflt r rootFeats')
                  (NPlus.CFeatP n f w, VPlus.WOrig v)).
       Proof.
         intros * HS Hev HF h Hh.
@@ -2531,10 +2531,10 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
              evalReqBy Vq' (sName d) (sReq d)) ->
           (forall l, LinkRel.In ((n, v), l) Links <->
              LinkRel.In ((n, v), l) Links') ->
-          dependeesBy Vq (MkInst R support FDefs Slots Links g dflt r rootFeats)
+          dependeesBy Vq (MkInst R Slots FDefs Links support g dflt r rootFeats)
             (NPlus.CCrate n w, VPlus.WOrig v) =
           dependeesBy Vq'
-            (MkInst R' support' FDefs' Slots' Links' g dflt r rootFeats')
+            (MkInst R' Slots' FDefs' Links' support' g dflt r rootFeats')
             (NPlus.CCrate n w, VPlus.WOrig v).
       Proof.
         intros * HS Hev HL; apply T.DependeesSet.ext; intro h; split.
@@ -2557,10 +2557,10 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
              evalReqBy Vq' (sName d) (sReq d)) ->
           (forall e, FDefRel.In (((n, v), f), e) FDefs <->
              FDefRel.In (((n, v), f), e) FDefs') ->
-          dependeesBy Vq (MkInst R support FDefs Slots Links g dflt r rootFeats)
+          dependeesBy Vq (MkInst R Slots FDefs Links support g dflt r rootFeats)
             (NPlus.CFeatP n f w, VPlus.WOrig v) =
           dependeesBy Vq'
-            (MkInst R' support' FDefs' Slots' Links' g dflt r rootFeats')
+            (MkInst R' Slots' FDefs' Links' support' g dflt r rootFeats')
             (NPlus.CFeatP n f w, VPlus.WOrig v).
       Proof.
         intros * HS Hev HF; apply T.DependeesSet.ext; intro h; split.
@@ -2586,8 +2586,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         forall I Vq,
           dependees I rootPkg =
           dependeesBy Vq
-            (MkInst PkgSet.empty SupportSet.empty FDefRel.empty SlotRel.empty
-               LinkRel.empty (inst_gran I) (inst_dflt I) (inst_root I)
+            (MkInst PkgSet.empty SlotRel.empty FDefRel.empty LinkRel.empty
+               SupportSet.empty (inst_gran I) (inst_dflt I) (inst_root I)
                (inst_rootFeats I))
             rootPkg.
       Proof. reflexivity. Qed.
@@ -2598,13 +2598,13 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
              Vq m = C.versions (inst_repo I) m) ->
           dependees I (NPlus.CCrate n w, VPlus.WOrig v) =
           dependeesBy Vq
-            (MkInst PkgSet.empty SupportSet.empty FDefRel.empty
-               (SlotFibred.tailFibre (inst_slots I) (n, v))
-               (LinkFibred.tailFibre (inst_links I) (n, v))
+            (MkInst PkgSet.empty (SlotFibred.tailFibre (inst_slots I) (n, v))
+               FDefRel.empty (LinkFibred.tailFibre (inst_links I) (n, v))
+               SupportSet.empty
                (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
             (NPlus.CCrate n w, VPlus.WOrig v).
       Proof.
-        intros [R support FDefs Slots Links g dflt r rootFeats] n w v Vq HVq.
+        intros [R Slots FDefs Links support g dflt r rootFeats] n w v Vq HVq.
         cbn [inst_repo inst_slots inst_links inst_gran inst_dflt inst_root
              inst_rootFeats] in HVq |- *.
         unfold dependees; cbn [inst_repo].
@@ -2621,13 +2621,13 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           dependees I (NPlus.CFeatP n f w, VPlus.WOrig v) =
           dependeesBy Vq
             (MkInst PkgSet.empty
+               (SlotFibred.tailFibre (inst_slots I) (n, v))
+               (fdefFibre (inst_fdefs I) (n, v)) LinkRel.empty
                (SupportFibred.tailFibre (inst_support I) (n, v))
-               (fdefFibre (inst_fdefs I) (n, v))
-               (SlotFibred.tailFibre (inst_slots I) (n, v)) LinkRel.empty
                (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
             (NPlus.CFeatP n f w, VPlus.WOrig v).
       Proof.
-        intros [R support FDefs Slots Links g dflt r rootFeats] n f w v Vq HVq.
+        intros [R Slots FDefs Links support g dflt r rootFeats] n f w v Vq HVq.
         cbn [inst_repo inst_support inst_fdefs inst_slots inst_gran inst_dflt
              inst_root inst_rootFeats] in HVq |- *.
         unfold dependees; cbn [inst_repo].
@@ -2642,8 +2642,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           Vq (sName d) = C.versions (inst_repo I) (sName d) ->
           dependees I (NPlus.CSlot n w d, VPlus.WClass w') =
           dependeesBy Vq
-            (MkInst PkgSet.empty SupportSet.empty FDefRel.empty SlotRel.empty
-               LinkRel.empty (inst_gran I) (inst_dflt I) (inst_root I)
+            (MkInst PkgSet.empty SlotRel.empty FDefRel.empty LinkRel.empty
+               SupportSet.empty (inst_gran I) (inst_dflt I) (inst_root I)
                (inst_rootFeats I))
             (NPlus.CSlot n w d, VPlus.WClass w').
       Proof.
@@ -2657,8 +2657,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           Vq (sName d) = C.versions (inst_repo I) (sName d) ->
           dependees I (NPlus.CDec n w f d f', VPlus.WClass w') =
           dependeesBy Vq
-            (MkInst PkgSet.empty SupportSet.empty FDefRel.empty SlotRel.empty
-               LinkRel.empty (inst_gran I) (inst_dflt I) (inst_root I)
+            (MkInst PkgSet.empty SlotRel.empty FDefRel.empty LinkRel.empty
+               SupportSet.empty (inst_gran I) (inst_dflt I) (inst_root I)
                (inst_rootFeats I))
             (NPlus.CDec n w f d f', VPlus.WClass w').
       Proof.
