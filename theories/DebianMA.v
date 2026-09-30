@@ -947,7 +947,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         exact (proj1 (match_transfer R Pi M (parch p) a q (HSsub q HqS)) HqM).
       - intros phn phv HphT ea x HaG [qhn [qhv [HqhT [Hne [Hex HM]]]]].
         unfold reduceReal in *; rewrite SOmr.mem_map in HphT; destruct HphT as [p1 [Hp1S Hp1e]].
-        unfold reduceReal in *; rewrite SOmr.mem_map in HqhT; destruct HqhT as [q [HqS Hqe]].
+        unfold reduceReal in *; rewrite SOmr.mem_map in HqhT.
+        destruct HqhT as [q [HqS Hqe]].
         injection Hqe as -> ->.
         set (ph := (phn, phv)) in *.
         change ((pname q, QAArch (parch q), pver q) <> ph) in Hne.
