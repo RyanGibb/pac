@@ -221,22 +221,23 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
                (List.filter (kindb peer optional) (edgesOf I (snd p)))))
         (occs I).
 
-    Lemma mem_edgeRel : forall I peer optional p n vs,
-        Pl.C.DepRel.In (p, (n, vs)) (edgeRel I peer optional) <->
-        Pl.PkgSet.In p (occs I) /\
-        exists e, In e (edgesOf I (snd p)) /\ e_peer e = peer /\
+    Lemma mem_edgeRel : forall I peer optional a' o n vs,
+        Pl.C.DepRel.In ((a', o), (n, vs)) (edgeRel I peer optional) <->
+        Pl.PkgSet.In (a', o) (occs I) /\
+        exists e, In e (edgesOf I o) /\ e_peer e = peer /\
           e_opt e = optional /\
           n = e_dir e /\ vs = accepts I e.
     Proof.
-      intros I peer optional p n vs; unfold edgeRel; rewrite SOpd.mem_unionMap;
-        split.
+      intros I peer optional a' o n vs; unfold edgeRel;
+        rewrite SOpd.mem_unionMap; split.
       - intros [q [Hq H]]; apply SOpd.mem_ofList, in_map_iff in H.
-        destruct H as [e [E He]]; injection E as <- <- <-.
+        destruct H as [e [E He]]; injection E as -> <- <-.
         apply filter_In in He; destruct He as [He Hk].
         unfold kindb in Hk; apply andb_true_iff in Hk.
         rewrite !Bool.eqb_true_iff in Hk; destruct Hk as [Hp Ho].
         split; [exact Hq |]; exists e; auto.
-      - intros [Hq [e [He [Hp [Ho [-> ->]]]]]]; exists p; split; [exact Hq |].
+      - intros [Hq [e [He [Hp [Ho [-> ->]]]]]]; exists (a', o);
+          split; [exact Hq |].
         apply SOpd.mem_ofList, in_map_iff; exists e; split; [reflexivity |].
         apply filter_In; split; [exact He |].
         unfold kindb; rewrite Hp, Ho, !Bool.eqb_reflx; reflexivity.
@@ -276,7 +277,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         assert (Hholds : forall p l, Pl.Holds (tr I) L l p ->
                    Pl.PkgSet.In p (occs I) ->
                    forall e, In e (edgesOf I (snd p)) -> EdgeOk I L l e).
-        { intros p l Hh Hp e He; apply edgeOk_meets, Hh.
+        { intros [a' o] l Hh Hp e He; apply edgeOk_meets, Hh.
           rewrite rel_tr, mem_edgeRel; split; [exact Hp |].
           exists e; auto. }
         constructor.
@@ -291,7 +292,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         assert (Hholds : forall p l,
                    (forall e, In e (edgesOf I (snd p)) -> EdgeOk I L l e) ->
                    Pl.Holds (tr I) L l p).
-        { intros p l He peer optional n vs HE;
+        { intros [a' o] l He peer optional n vs HE;
           rewrite rel_tr, mem_edgeRel in HE.
           destruct HE as [_ [e [Hin [<- [<- [-> ->]]]]]].
           apply edgeOk_meets, He; exact Hin. }
@@ -468,10 +469,10 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
           : Pl.Reduction.T.DependeesSet.t :=
         SOhh.ofList (List.map (edgeAtom I l) (edgesOf I o)).
 
-      Lemma edgeAtoms_tr : forall I p l, Pl.PkgSet.In p (occs I) ->
-          Pl.Reduction.edgeAtoms (tr I) p l = occAtoms I l (snd p).
+      Lemma edgeAtoms_tr : forall I a' o l, Pl.PkgSet.In (a', o) (occs I) ->
+          Pl.Reduction.edgeAtoms (tr I) (a', o) l = occAtoms I l o.
       Proof.
-        intros I p l Hp; apply Pl.Reduction.T.DependeesSet.ext; intro h.
+        intros I a' o l Hp; apply Pl.Reduction.T.DependeesSet.ext; intro h.
         rewrite Pl.Reduction.mem_edgeAtoms; unfold occAtoms.
         rewrite SOhh.mem_ofList, in_map_iff; split.
         - intros [peer [optional [n [vs [HE ->]]]]];
@@ -493,7 +494,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         rewrite Pl.Reduction.dependees_reduceDeps.
         - cbn [Pl.Reduction.rootPkg Pl.Reduction.dependees tr Pl.inst_root
                  rootOcc snd].
-          exact (edgeAtoms_tr I (rootOcc I) nil
+          exact (edgeAtoms_tr I (inst_root I) Occ.Top nil
                    (proj2 (Pl.PkgSet.add_spec _ _ _) (or_introl eq_refl))).
         - apply Pl.Reduction.mem_reduceReal; split; [exact Logic.I |].
           apply Pl.Reduction.T.VSet.singleton_spec; reflexivity.
@@ -513,7 +514,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         apply Pl.Reduction.mem_versions_loc in H.
         destruct H as [E | [v [_ [Hv E]]]]; [discriminate E |].
         injection E as ->; cbn [Pl.Reduction.dependees].
-        exact (edgeAtoms_tr I (a, v) (a :: l)
+        exact (edgeAtoms_tr I a v (a :: l)
                  (proj2 (Pl.PkgSet.add_spec _ _ _) (or_intror Hv))).
       Qed.
 
