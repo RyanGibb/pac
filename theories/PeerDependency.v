@@ -141,22 +141,20 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
             vs)
         D.
 
-    Lemma mem_parents : forall D g S (pair : ParentElt.t),
-        ParentRel.In pair (parents D g S) <->
-        exists n v m vs u,
-          C.DepRel.In ((n, v), (m, vs)) D /\
+    Lemma mem_parents : forall D g S m u n v,
+        ParentRel.In ((m, u), (n, v)) (parents D g S) <->
+        exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs /\
           T.PkgSet.In (Name.Granular n (g v), Version.Orig v) S /\
-          VSet.In u vs /\
-          T.PkgSet.In (Name.Intermediate n v m, Version.Orig u) S /\
-          pair = ((m, u), (n, v)).
+          T.PkgSet.In (Name.Intermediate n v m, Version.Orig u) S.
     Proof.
-      intros D g S pair; unfold parents; rewrite SOdpp.mem_unionMap.
+      intros D g S m u n v; unfold parents; rewrite SOdpp.mem_unionMap.
       split.
-      - intros [[[n v] [m vs]] [HeD Hh]]; cbn beta iota in Hh.
-        apply SOvpp.mem_filterMap_if in Hh; destruct Hh as [u [Hu [Hb ->]]].
+      - intros [[[n' v'] [m' vs]] [HeD Hh]]; cbn beta iota in Hh.
+        apply SOvpp.mem_filterMap_if in Hh; destruct Hh as [u' [Hu [Hb E]]].
+        injection E as <- <- <- <-.
         rewrite Bool.andb_true_iff, !T.PkgSet.mem_spec in Hb.
-        exists n, v, m, vs, u; intuition.
-      - intros [n [v [m [vs [u [HD [HvS [Hu [HuS ->]]]]]]]]].
+        exists vs; intuition.
+      - intros (vs & HD & Hu & HvS & HuS).
         exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
         apply SOvpp.mem_filterMap_if; exists u.
         rewrite Bool.andb_true_iff, !T.PkgSet.mem_spec; repeat split; auto.
@@ -243,10 +241,10 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     | PkgIntermediate : forall n v m vs u,
         C.DepRel.In ((n, v), (m, vs)) D -> VSet.In u vs ->
         ReducedPkg R D Th g (Name.Intermediate n v m, Version.Orig u)
-    | PkgPeer : forall n v o us u m ws w,
+    | PkgPeer : forall n v m vs o us u ws w,
+        C.DepRel.In ((n, v), (m, vs)) D ->
         C.DepRel.In ((n, v), (o, us)) D -> VSet.In u us ->
-        PeerRel.In ((o, u), (m, ws)) Th -> hasDepOnb D (n, v) m = true ->
-        VSet.In w ws ->
+        PeerRel.In ((o, u), (m, ws)) Th -> VSet.In w ws ->
         ReducedPkg R D Th g (Name.Intermediate n v m, Version.Orig w).
 
     Lemma mem_reduceReal : forall R D Th g q,
@@ -256,12 +254,20 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
       rewrite !T.PkgSet.union_spec, SOptp.mem_map,
         mem_reduceRealIntermediate, mem_reduceRealPeer.
       split.
-      - intros [[[n v] [Hp ->]] | [H | H]]; mem_destruct;
-          [apply PkgEmbed | eapply PkgIntermediate | eapply PkgPeer];
-          eassumption.
+      - intros [[[n v] [Hp ->]] | [H | H]].
+        + apply PkgEmbed; exact Hp.
+        + destruct H as (n & v & m & vs & u & HD & Hu & ->).
+          eapply PkgIntermediate; eassumption.
+        + destruct H
+            as (n & v & o & us & u & m & ws & w & HD & Hu & HTh & Hb & Hw & ->).
+          apply hasDepOnb_iff in Hb; destruct Hb as [vs HDm].
+          exact (PkgPeer _ _ _ _ n v m vs o us u ws w HDm HD Hu HTh Hw).
       - destruct 1 as [n v Hp | n v m vs u HD Hu
-                      | n v o us u m ws w HD Hu HTh Hb Hw];
-          [left; exists (n, v) | right; left | right; right]; eauto 20.
+                      | n v m vs o us u ws w HDm HD Hu HTh Hw];
+          [left; exists (n, v) | right; left | right; right]; try eauto 20.
+        assert (hasDepOnb D (n, v) m = true)
+          by (apply hasDepOnb_iff; exists vs; exact HDm).
+        eauto 20.
     Qed.
 
     Lemma embedPkg_mem_reduceReal : forall g (p : Pkg.t) R D Th,
@@ -376,9 +382,10 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         ReducedEdge D Th g
           ((Name.Intermediate n v m, Version.Orig u),
            (Name.Granular m (g u), T.VSet.singleton (Version.Orig u)))
-    | EdgePeer : forall n v o us u m ws,
+    | EdgePeer : forall n v m vs o us u ws,
+        C.DepRel.In ((n, v), (m, vs)) D ->
         C.DepRel.In ((n, v), (o, us)) D -> VSet.In u us ->
-        PeerRel.In ((o, u), (m, ws)) Th -> hasDepOnb D (n, v) m = true ->
+        PeerRel.In ((o, u), (m, ws)) Th ->
         ReducedEdge D Th g
           ((Name.Intermediate n v o, Version.Orig u),
            (Name.Intermediate n v m, Conc.Reduction.embedVS ws)).
@@ -390,12 +397,20 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
       rewrite !T.DepRel.union_spec, mem_reduceDepsDepToInt,
         mem_reduceDepsIntToDep, mem_reduceDepsPeer.
       split.
-      - intros [H | [H | H]]; mem_destruct;
-          [eapply EdgeDepToInt | eapply EdgeIntToDep | eapply EdgePeer];
-          eassumption.
+      - intros [H | [H | H]].
+        + destruct H as (n & v & m & vs & HD & ->).
+          eapply EdgeDepToInt; eassumption.
+        + destruct H as (n & v & m & vs & u & HD & Hu & ->).
+          eapply EdgeIntToDep; eassumption.
+        + destruct H as (n & v & o & us & u & m & ws & HD & Hu & HTh & Hb & ->).
+          apply hasDepOnb_iff in Hb; destruct Hb as [vs HDm].
+          exact (EdgePeer _ _ _ n v m vs o us u ws HDm HD Hu HTh).
       - destruct 1 as [n v m vs HD | n v m vs u HD Hu
-                      | n v o us u m ws HD Hu HTh Hb];
-          [left | right; left | right; right]; eauto 15.
+                      | n v m vs o us u ws HDm HD Hu HTh];
+          [left | right; left | right; right]; try eauto 15.
+        assert (hasDepOnb D (n, v) m = true)
+          by (apply hasDepOnb_iff; exists vs; exact HDm).
+        eauto 15.
     Qed.
 
     Lemma mem_reduceDeps_dep_to_int : forall D Th g n v m vs,
@@ -422,9 +437,8 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
                      (Name.Intermediate n v m, Conc.Reduction.embedVS ws))
           (reduceDeps D Th g).
     Proof.
-      intros D Th g n v o us m ws u HD Hou HTh Hpar.
-      apply mem_reduceDeps; eapply EdgePeer; try eassumption.
-      apply hasDepOnb_iff; exact Hpar.
+      intros D Th g n v o us m ws u HD Hou HTh [vs Hpar].
+      apply mem_reduceDeps; eapply EdgePeer; eassumption.
     Qed.
 
     Module SOvcv := Conc.Reduction.SOvcv.
@@ -458,13 +472,11 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
           exists u; split; [exact Hu | split].
           * apply Conc.Reduction.mem_concurrentResolution; exact Hcv2S.
           * apply mem_parents.
-            exists pn, pv, m, vs, u; repeat split; assumption.
+            exists vs; repeat split; assumption.
         + intros m u u' [pn pv] H1 H2.
           apply mem_parents in H1, H2.
-          destruct H1 as (n1 & v1 & m1 & vs & u1 & _ & _ & _ & HiS & E1).
-          injection E1 as <- <- <- <-.
-          destruct H2 as (n2 & v2 & m2 & vs' & u2 & _ & _ & _ & HiS' & E2).
-          injection E2 as <- <- <- <-.
+          destruct H1 as (vs & _ & _ & _ & HiS).
+          destruct H2 as (vs' & _ & _ & _ & HiS').
           pose proof (Huniq _ _ _ HiS HiS') as He.
           injection He as He; exact He.
         + intros n v v' Hv Hv' Hne Hg.
@@ -474,26 +486,22 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
           rewrite Hg in Hv.
           pose proof (Huniq _ _ _ Hv Hv') as He.
           injection He as He; exact (Hne He).
-        + intros c p0 Hcp.
+        + intros [m u] [n v] Hcp.
           apply mem_parents in Hcp.
-          destruct Hcp as [n [v [m [vs [u [HD [HvS [Hu [HiS Heq]]]]]]]]].
-          injection Heq as -> ->.
+          destruct Hcp as (vs & HD & Hu & HvS & HiS).
           split; [| apply Conc.Reduction.mem_concurrentResolution; exact HvS].
           destruct (Hdep _ HiS _ _
               (mem_reduceDeps_int_to_dep D Th g n v m vs u HD Hu))
             as [cv [Hcv HcvS]].
           apply SOvcv.singleton_in in Hcv; subst cv.
           apply Conc.Reduction.mem_concurrentResolution; exact HcvS.
-      - intros p Hp n vs HTh q Hpq us Hqus v Hv Hnvq.
+      - intros [pn pv] Hp n vs HTh [qn qv] Hpq us Hqus v Hv Hnvq.
         apply mem_parents in Hpq.
-        destruct Hpq as [qn [qv [o [vs1 [ou [HD1 [HqS [Hou [HiS Heq]]]]]]]]].
-        injection Heq as -> ->.
+        destruct Hpq as (vs1 & HD1 & Hou & HqS & HiS).
         apply mem_parents in Hnvq.
-        destruct Hnvq
-          as [qn' [qv' [n' [us' [v' [HD2 [_ [Hv' [HvS Heq2]]]]]]]]].
-        injection Heq2 as -> -> -> ->.
+        destruct Hnvq as (us' & HD2 & Hv' & _ & HvS).
         destruct (Hdep _ HiS _ _
-            (mem_reduceDeps_peer D Th g qn' qv' o vs1 n' vs ou HD1 Hou HTh
+            (mem_reduceDeps_peer D Th g qn qv pn vs1 n vs pv HD1 Hou HTh
                (ex_intro _ us Hqus)))
           as [cv [Hcv HcvS]].
         unfold Conc.Reduction.embedVS in Hcv; apply SOvcv.mem_map in Hcv;
@@ -590,12 +598,11 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
           { exact (mem_coreResolution_intermediate S pi D g n v m' vs' u
                      HD' Hnv HmuS Huv Hpiu). }
         + inversion Hd as [| n' v' m' vs' u' HD' Hu'
-                          | qn qv o us0 u0 m' ws' HD1 Hu0 HTh Hb]; subst.
+                          | qn qv m' vs2 o us0 u0 ws' HD2 HD1 Hu0 HTh]; subst.
           * exists (Version.Orig u); split.
             { apply SOvcv.singleton_in; reflexivity. }
             { exact (mem_coreResolution_granular S pi D g m u Hmu). }
-          * apply hasDepOnb_iff in Hb; destruct Hb as [vs2 HD2].
-            destruct (Hpc _ Hnv _ _ HD2) as [w [Hw [HmwS Hpiw]]].
+          * destruct (Hpc _ Hnv _ _ HD2) as [w [Hw [HmwS Hpiw]]].
             exists (Version.Orig w); split.
             { unfold Conc.Reduction.embedVS; apply SOvcv.mem_map; exists w;
                 split; [| reflexivity].
@@ -631,17 +638,15 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     Proof.
       intros R D Th g r S pi [[_ _ _ _ _ Hps] _] m u n v; rewrite mem_parents.
       split.
-      - intros (n' & v' & m' & vs & u' & HD & _ & Hu & Hint & E).
-        injection E as <- <- <- <-.
+      - intros (vs & HD & Hu & _ & Hint).
         split; [| exists vs; split; assumption].
         apply mem_coreResolution in Hint; inversion Hint; assumption.
       - intros [Hpi (vs & HD & Hu)].
         destruct (Hps _ _ Hpi) as [HmS HnS].
-        exists n, v, m, vs, u.
+        exists vs.
         split; [exact HD |].
-        split; [exact (mem_coreResolution_granular S pi D g n v HnS) |].
         split; [exact Hu |].
-        split; [| reflexivity].
+        split; [exact (mem_coreResolution_granular S pi D g n v HnS) |].
         exact (mem_coreResolution_intermediate S pi D g n v m vs u
                  HD HnS HmS Hu Hpi).
     Qed.
@@ -693,17 +698,17 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
               (andb (NEqb.eqb m0 (fst q)) (VSet.mem (snd q) vs)))
           D.
 
-      Lemma dependsOnb_iff : forall D (p q : Pkg.t),
-          dependsOnb D p q = true <->
-          exists vs, C.DepRel.In (p, (fst q, vs)) D /\ VSet.In (snd q) vs.
+      Lemma dependsOnb_iff : forall D (p : Pkg.t) (m : N.t) (u : V.t),
+          dependsOnb D p (m, u) = true <->
+          exists vs, C.DepRel.In (p, (m, vs)) D /\ VSet.In u vs.
       Proof.
-        intros D p q; unfold dependsOnb; rewrite C.DepRel.exists_spec'.
+        intros D p m u; unfold dependsOnb; rewrite C.DepRel.exists_spec'.
         split.
         - intros [[p0 [m0 vs]] [He Hb]]; cbn [fst snd] in Hb.
           rewrite !Bool.andb_true_iff, PkgEqb.eqb_true_iff,
             NEqb.eqb_true_iff, VSet.mem_spec in Hb.
           destruct Hb as [-> [-> Hu]]; eauto.
-        - intros [vs [He Hu]]; exists (p, (fst q, vs)); split; [exact He |].
+        - intros [vs [He Hu]]; exists (p, (m, vs)); split; [exact He |].
           cbn [fst snd]; rewrite PkgEqb.eqb_refl, NEqb.eqb_refl; cbn [andb].
           apply VSet.mem_spec; exact Hu.
       Qed.
@@ -715,12 +720,13 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
           Th.
 
       Lemma mem_peersOfDeps :
-        forall D Th (p q : Pkg.t) (o o' : N.t) (ws : VSet.t),
-          PeerRel.In (q, (o', ws)) (peersOfDeps D Th p o) <->
-          PeerRel.In (q, (o', ws)) Th /\ o' = o /\
-          (exists vs, C.DepRel.In (p, (fst q, vs)) D /\ VSet.In (snd q) vs).
+        forall D Th (p : Pkg.t) (m : N.t) (u : V.t) (o o' : N.t)
+               (ws : VSet.t),
+          PeerRel.In ((m, u), (o', ws)) (peersOfDeps D Th p o) <->
+          PeerRel.In ((m, u), (o', ws)) Th /\ o' = o /\
+          (exists vs, C.DepRel.In (p, (m, vs)) D /\ VSet.In u vs).
       Proof.
-        intros D Th p q o o' ws; unfold peersOfDeps.
+        intros D Th p m u o o' ws; unfold peersOfDeps.
         rewrite PeerRel.filter_spec'; cbn beta iota.
         rewrite Bool.andb_true_iff, NEqb.eqb_true_iff, dependsOnb_iff.
         tauto.
@@ -769,24 +775,20 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         rewrite !mem_reduceReal.
         split; intro H;
           inversion H as [| n' v' m' vs u HD Hu
-                          | n' v' o' us u m' ws w HD Hu HTh Hb Hw]; subst.
+                          | n' v' m' vs2 o' us u ws w HD2 HD Hu HTh Hw]; subst.
         - apply (PkgIntermediate _ _ _ _ n v o vs u); [| exact Hu].
           apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
-        - apply (PkgPeer _ _ _ _ n v o' us u o ws w); try assumption.
+        - apply (PkgPeer _ _ _ _ n v o vs2 o' us u ws w); try assumption.
+          + apply DepRelFibred.mem_tailFibre; split; [exact HD2 | reflexivity].
           + apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
           + apply mem_peersOfDeps; split; [exact HTh |].
             split; [reflexivity | exists us; split; [exact HD | exact Hu]].
-          + apply hasDepOnb_iff in Hb; destruct Hb as [vs2 HD2].
-            apply hasDepOnb_iff; exists vs2.
-            apply DepRelFibred.mem_tailFibre; split; [exact HD2 | reflexivity].
         - apply DepRelFibred.mem_tailFibre in HD as [HD _].
           apply (PkgIntermediate _ _ _ _ n v o vs u); assumption.
         - apply DepRelFibred.mem_tailFibre in HD as [HD _].
+          apply DepRelFibred.mem_tailFibre in HD2 as [HD2 _].
           apply mem_peersOfDeps in HTh as [HTh _].
-          apply (PkgPeer _ _ _ _ n v o' us u o ws w); try assumption.
-          apply hasDepOnb_iff in Hb; destruct Hb as [vs2 HD2].
-          apply hasDepOnb_iff; exists vs2.
-          exact (DepRelFibred.tailFibre_subset _ _ _ HD2).
+          apply (PkgPeer _ _ _ _ n v o vs2 o' us u ws w); assumption.
       Qed.
 
       Theorem dependees_lookupIntermediate : forall D Th g n v o u,
@@ -803,15 +805,13 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
                     (PeerRelFibred.tailFibre_subset _ _) H)].
         intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
         inversion H as [| n' v' m' vs' u' HD Hu
-                        | qn qv o' us0 u0 m' ws' HD1 Hu0 HTh Hb]; subst.
+                        | qn qv m' vs2 o' us0 u0 ws' HD2 HD1 Hu0 HTh]; subst.
         - apply (EdgeIntToDep _ _ _ n v o vs' u); [| exact Hu].
           apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
-        - apply (EdgePeer _ _ _ n v o us0 u m' ws'); [| exact Hu0 | |].
+        - apply (EdgePeer _ _ _ n v m' vs2 o us0 u ws'); [| | exact Hu0 |].
+          + apply DepRelFibred.mem_tailFibre; split; [exact HD2 | reflexivity].
           + apply DepRelFibred.mem_tailFibre; split; [exact HD1 | reflexivity].
           + apply PeerRelFibred.mem_tailFibre; split; [exact HTh | reflexivity].
-          + apply hasDepOnb_iff in Hb; destruct Hb as [vs2 HD2].
-            apply hasDepOnb_iff; exists vs2.
-            apply DepRelFibred.mem_tailFibre; split; [exact HD2 | reflexivity].
       Qed.
 
       Theorem dependees_lookupIntermediateGran : forall D Th g n v o (w : G.t),
