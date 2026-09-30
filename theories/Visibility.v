@@ -1265,14 +1265,12 @@ Module Visibility (N V : UsualOrderedType).
         IsResolution R D pub r S pi ->
         (forall p, PkgSet.In p S ->
            exists q, IsOrigin D pub r S q /\ InSub pub pi q p) ->
-        (forall n v m u, ParentRel.In ((m, u), (n, v)) pi ->
-           exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs) ->
         parents R D pub r (coreResolution R D pub r S pi) = pi.
     Proof.
-      intros R D pub r S pi Hres Hvis Hedge.
+      intros R D pub r S pi Hres Hvis.
       assert (Hdec := visibilityResolution_coreResolution R D pub r S pi
                         Hres Hvis).
-      destruct Hres as [[_ _ _ _ Hps _] _].
+      destruct Hres as [[_ _ _ _ Hps Hedge] _].
       apply ParentRel.ext; intros [[m u] [n v]]; rewrite mem_parents, Hdec.
       split.
       - intros (n' & v' & m' & vs & u' & _ & _ & Hagr & _ & E).
