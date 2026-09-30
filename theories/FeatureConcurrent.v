@@ -45,6 +45,12 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
     ; res_pi_functional :
         forall n v v' p,
           ParentRel.In ((n, v), p) pi -> ParentRel.In ((n, v'), p) pi -> v = v'
+    ; res_pi_dom :
+        forall n v m u, ParentRel.In ((m, u), (n, v)) pi ->
+        exists fs_p, Feat.FeaturedSet.In ((n, v), fs_p) S /\
+          ((exists vs fs, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df) \/
+           (exists f vs fs, Feat.FSet.In f fs_p /\
+              Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da))
     ; res_version_granularity :
         forall n v v' fs fs',
           Feat.FeaturedSet.In ((n, v), fs) S ->
@@ -523,14 +529,30 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           end)
         S.
 
-    Module SOtpp := SetOps T.Pkg ParentElt T.PkgSet ParentRel.
-    Definition parents (S : T.PkgSet.t) : ParentRel.t :=
-      SOtpp.filterMap (fun q =>
-          match q with
-          | (Name.Intermediate n v m, u) => Some ((m, u), (n, v))
-          | _ => None
-          end)
-        S.
+    Module SOvpp := SetOps V ParentElt VSet ParentRel.
+    Definition parentsOf (S : T.PkgSet.t) (n : N.t) (v : V.t) (m : N.t)
+        (vs : VSet.t) : ParentRel.t :=
+      SOvpp.filterMap (fun u =>
+          if T.PkgSet.mem (Name.Intermediate n v m, u) S
+          then Some ((m, u), (n, v))
+          else None)
+        vs.
+
+    Module SOfpp := SetOps Feat.FeatDepElt ParentElt Feat.FeatDepRel ParentRel.
+    Module SOapp := SetOps Feat.AddlDepElt ParentElt Feat.AddlDepRel ParentRel.
+    Definition parents (Df : Feat.FeatDepRel.t) (Da : Feat.AddlDepRel.t)
+        (g : V.t -> G.t) (S : T.PkgSet.t) : ParentRel.t :=
+      ParentRel.union
+        (SOfpp.unionMap (fun '((n, v), (m, (vs, _))) =>
+             if T.PkgSet.mem (Name.GranularOrig n (g v), v) S
+             then parentsOf S n v m vs
+             else ParentRel.empty)
+           Df)
+        (SOapp.unionMap (fun '(((n, v), f), (m, (vs, _))) =>
+             if T.PkgSet.mem (Name.GranularFeatPkg n f (g v), v) S
+             then parentsOf S n v m vs
+             else ParentRel.empty)
+           Da).
 
     Lemma featsOf_spec : forall g n v S f,
         Feat.FSet.In f (featsOf g n v S) <->
@@ -566,25 +588,55 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           split; [exact HS | cbn beta iota; apply dec_refl].
     Qed.
 
-    Lemma mem_parents : forall (S : T.PkgSet.t) m u n v,
-        ParentRel.In ((m, u), (n, v)) (parents S) <->
-        T.PkgSet.In (Name.Intermediate n v m, u) S.
+    Lemma mem_parentsOf : forall S n v m vs m' u n' v',
+        ParentRel.In ((m', u), (n', v')) (parentsOf S n v m vs) <->
+        VSet.In u vs /\ T.PkgSet.In (Name.Intermediate n v m, u) S /\
+        m' = m /\ n' = n /\ v' = v.
     Proof.
-      intros S m u n v; unfold parents; rewrite SOtpp.mem_filterMap.
+      intros S n v m vs m' u n' v'; unfold parentsOf.
+      rewrite SOvpp.mem_filterMap_if; setoid_rewrite T.PkgSet.mem_spec; split.
+      - intros (u' & Hu & Hi & E); injection E as -> -> -> ->; auto.
+      - intros (Hu & Hi & -> & -> & ->); exists u; auto.
+    Qed.
+
+    Lemma mem_parents : forall Df Da g (S : T.PkgSet.t) m u n v,
+        ParentRel.In ((m, u), (n, v)) (parents Df Da g S) <->
+        T.PkgSet.In (Name.Intermediate n v m, u) S /\
+        ((exists vs fs, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df /\
+            VSet.In u vs /\ T.PkgSet.In (Name.GranularOrig n (g v), v) S) \/
+         (exists f vs fs, Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da /\
+            VSet.In u vs /\
+            T.PkgSet.In (Name.GranularFeatPkg n f (g v), v) S)).
+    Proof.
+      intros Df Da g S m u n v; unfold parents.
+      rewrite ParentRel.union_spec, SOfpp.mem_unionMap, SOapp.mem_unionMap.
       split.
-      - intros [[[n0 w0 | n0 f0 w0 | n0 v0 m0 | n0 v0 m0 f0 | n0 v0 f0 m0 f1]
-                 u0] [HqS Hy]]; cbn beta iota in Hy; try discriminate.
-        injection Hy as E1 E2 E3 E4; subst m0 u0 n0 v0; exact HqS.
-      - intro HS.
-        exists (Name.Intermediate n v m, u); split; [exact HS | reflexivity].
+      - intros [([[n' v'] [m' [vs fs]]] & HD & Hh)
+               | ([[[n' v'] f] [m' [vs fs]]] & HA & Hh)];
+          cbn beta iota in Hh; apply SOvpp.in_if_empty in Hh;
+          rewrite T.PkgSet.mem_spec, mem_parentsOf in Hh;
+          destruct Hh as (Hs & Hu & Hi & -> & -> & ->);
+          (split; [exact Hi |]);
+          [left; exists vs, fs | right; exists f, vs, fs]; auto.
+      - intros [Hi [(vs & fs & HD & Hu & Hs) | (f & vs & fs & HA & Hu & Hs)]];
+          [left; exists ((n, v), (m, (vs, fs)))
+          | right; exists (((n, v), f), (m, (vs, fs)))];
+          (split; [assumption | cbn beta iota]);
+          apply SOvpp.in_if_empty; rewrite T.PkgSet.mem_spec, mem_parentsOf;
+          repeat split; assumption.
     Qed.
 
     (* A dependency and an additional dependency are closed over by the same
        argument; they differ only in the node their edges leave from and in
        how its intermediate feature nodes are named. *)
     Lemma parent_closure_step :
-      forall RR D r g S (q : T.Pkg.t) n v m vs fs (iF : F.t -> Name.t),
+      forall RR D r g S P (q : T.Pkg.t) n v m vs fs (iF : F.t -> Name.t),
         T.IsResolution RR D r S -> T.PkgSet.In q S ->
+        (forall u, VSet.In u vs ->
+           T.PkgSet.In (Name.Intermediate n v m, u) S ->
+           ParentRel.In ((m, u), (n, v)) P) ->
+        (forall u, ParentRel.In ((m, u), (n, v)) P ->
+           T.PkgSet.In (Name.Intermediate n v m, u) S) ->
         T.DepRel.In (q, (Name.Intermediate n v m, embedVS vs)) D ->
         (forall u, VSet.In u vs ->
            T.DepRel.In ((Name.Intermediate n v m, u),
@@ -600,10 +652,10 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           (exists fs', Feat.FSet.Subset fs fs' /\
              Feat.FeaturedSet.In ((m, u), fs')
                (featureConcurrentResolution g S)) /\
-          ParentRel.In ((m, u), (n, v)) (parents S).
+          ParentRel.In ((m, u), (n, v)) P.
     Proof.
-      intros RR D r g S q n v m vs fs iF [_ _ Hdep Huniq] HqS Hd Hto Hfd
-        Hback Hfwd.
+      intros RR D r g S P q n v m vs fs iF [_ _ Hdep Huniq] HqS Hin Hout Hd
+        Hto Hfd Hback Hfwd.
       destruct (Hdep _ HqS _ _ Hd) as [u [Hu HiS]]; rewrite mem_embedVS in Hu.
       destruct (Hdep _ HiS _ _ (Hto u Hu)) as [w [Hw HoS]].
       apply mem_singVS in Hw; subst w.
@@ -619,9 +671,8 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           apply mem_singVS in Hw; subst w; exact HgS.
         + apply mem_featureConcurrentResolution; exists m, u;
             split; [exact HoS | reflexivity].
-      - apply mem_parents; exact HiS.
-      - intros u' [_ [_ Hpi]]; apply mem_parents in Hpi.
-        exact (Huniq _ _ _ HiS Hpi).
+      - exact (Hin u Hu HiS).
+      - intros u' [_ [_ Hpi]]; exact (Huniq _ _ _ HiS (Hout u' Hpi)).
     Qed.
 
     Theorem feature_concurrent_soundness :
@@ -633,7 +684,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           (embedOrigPkg g r) S ->
         (forall f, ~ Feat.SupportSet.In (r, f) support) ->
         IsResolution R support Df Da g r
-          (featureConcurrentResolution g S) (parents S).
+          (featureConcurrentResolution g S) (parents Df Da g S).
     Proof.
       intros R support Df Da g r S Hres Hnosupp.
       pose proof Hres as [Hsub Hroot Hdep Huniq].
@@ -677,8 +728,12 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         rewrite mem_featureConcurrentResolution in Hmem.
         destruct Hmem as [n [v [HpS Heq]]].
         injection Heq as E1 E2; subst p fs_p.
-        apply (parent_closure_step _ _ _ g S _ n v m vs fs
-                 (Name.IntermediateF n v m) Hres HpS);
+        apply (parent_closure_step _ _ _ g S _ _ n v m vs fs
+                 (Name.IntermediateF n v m) Hres HpS
+                 (fun u Hu Hi => proj2 (mem_parents Df Da g S m u n v)
+                    (conj Hi (or_introl (ex_intro _ vs (ex_intro _ fs
+                       (conj Hdf (conj Hu HpS)))))))
+                 (fun u H => proj1 (proj1 (mem_parents Df Da g S m u n v) H)));
           intros; apply mem_reduceDeps;
           [eapply EdgeFDepToInter | eapply EdgeFInterToOrig
           | eapply EdgeFDepToInterFeat | eapply EdgeFInterFeatToInter
@@ -688,19 +743,34 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         destruct Hmem as [n [v [HpS Heq]]].
         injection Heq as E1 E2; subst p fs_p.
         rewrite featsOf_spec in Hf.
-        apply (parent_closure_step _ _ _ g S _ n v m vs fs
-                 (Name.IntermediateA n v f m) Hres Hf);
+        apply (parent_closure_step _ _ _ g S _ _ n v m vs fs
+                 (Name.IntermediateA n v f m) Hres Hf
+                 (fun u Hu Hi => proj2 (mem_parents Df Da g S m u n v)
+                    (conj Hi (or_intror (ex_intro _ f (ex_intro _ vs
+                       (ex_intro _ fs (conj Hda (conj Hu Hf))))))))
+                 (fun u H => proj1 (proj1 (mem_parents Df Da g S m u n v) H)));
           intros; apply mem_reduceDeps;
           [eapply EdgeADepToInter | eapply EdgeAInterToOrig
           | eapply EdgeADepToInterFeat | eapply EdgeAInterFeatToInter
           | eapply EdgeAInterToFeat]; eassumption.
       - intros m u u' p H1 H2.
         destruct p as [pn pv].
-        pose proof (proj1 (mem_parents S m u pn pv) H1) as HS1.
-        pose proof (proj1 (mem_parents S m u' pn pv) H2) as HS2.
-        assert (E : u = u')
-          by exact (Huniq (Name.Intermediate pn pv m) _ _ HS1 HS2).
-        exact E.
+        apply mem_parents in H1, H2.
+        exact (Huniq (Name.Intermediate pn pv m) _ _ (proj1 H1) (proj1 H2)).
+      - intros n v m u Hpi; apply mem_parents in Hpi.
+        exists (featsOf g n v S); rewrite mem_featureConcurrentResolution.
+        destruct Hpi
+          as [_ [(vs & fs & HD & _ & HS) | (f & vs & fs & HA & _ & HS)]].
+        + split; [exists n, v; split; [exact HS | reflexivity] |].
+          left; exists vs, fs; exact HD.
+        + destruct (HfeatSup n f v HS) as [Hsup HR].
+          destruct (Hdep _ HS _ _ (proj2 (mem_reduceDeps _ _ _ _ _ _)
+                                     (EdgeSupport _ _ _ _ _ n v f Hsup HR)))
+            as [w [Hw HoS]].
+          apply mem_singVS in Hw; subst w.
+          split; [exists n, v; split; [exact HoS | reflexivity] |].
+          right; exists f, vs, fs.
+          split; [apply featsOf_spec; exact HS | exact HA].
       - intros n v v' fs fs' H1 H2 Hne Hg.
         rewrite mem_featureConcurrentResolution in H1, H2.
         destruct H1 as [n1 [v1 [HS1 Heq1]]];
@@ -878,7 +948,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           (embedOrigPkg g r) (coreResolution S_CF pi Df Da g).
     Proof.
       intros R support Df Da g r S_CF pi Hres.
-      destruct Hres as [Hnrs Hsubset Hrootm Hfu Hpc Hpca Hpif Hvg Hsm].
+      destruct Hres as [Hnrs Hsubset Hrootm Hfu Hpc Hpca Hpif _ Hvg Hsm].
       destruct r as [rn rv].
       constructor.
       - intros q Hq; apply mem_coreResolution in Hq; apply mem_reduceReal.
@@ -995,40 +1065,43 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
 
     Theorem parents_coreResolution : forall R support Df Da g r S_CF pi,
         IsResolution R support Df Da g r S_CF pi ->
-        (forall n v m u, ParentRel.In ((m, u), (n, v)) pi ->
-           exists fs_p, Feat.FeaturedSet.In ((n, v), fs_p) S_CF /\
-             ((exists vs fs, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df) \/
-              (exists f vs fs, Feat.FSet.In f fs_p /\
-                 Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da))) ->
-        parents (coreResolution S_CF pi Df Da g) = pi.
+        parents Df Da g (coreResolution S_CF pi Df Da g) = pi.
     Proof.
-      intros R support Df Da g r S_CF pi Hres Hedge.
+      intros R support Df Da g r S_CF pi Hres.
       apply ParentRel.ext; intros [[m u] [n v]]; rewrite mem_parents; split.
-      - intro H; apply mem_coreResolution in H; inversion H; subst;
+      - intros [H _]; apply mem_coreResolution in H; inversion H; subst;
           match goal with
           | Hw : witnessCondb _ _ _ _ _ _ = true |- _ =>
               apply witnessCondb_iff in Hw; destruct Hw as (_ & _ & Hpi);
               exact Hpi
           end.
       - intro Hpi.
-        destruct (Hedge _ _ _ _ Hpi)
-          as (fs_p & Hp & [(vs & fs & HD) | (f & vs & fs & Hf & HA)]);
-          apply mem_coreResolution.
+        destruct (res_pi_dom _ _ _ _ _ _ _ _ Hres _ _ _ _ Hpi)
+          as (fs_p & Hp & [(vs & fs & HD) | (f & vs & fs & Hf & HA)]).
         + destruct (res_parent_closure _ _ _ _ _ _ _ _ Hres _ _ Hp _ _ _ HD)
             as (w & (Hw & Htk & Hpiw) & _).
           assert (w = u) as ->
             by exact (res_pi_functional _ _ _ _ _ _ _ _ Hres _ _ _ _ Hpiw Hpi).
-          apply (CoreFInter _ _ _ _ _ n v m vs fs u HD Hw).
-          apply witnessCondb_iff; split; [exists fs_p; exact Hp |].
-          split; [exact Htk | exact Hpi].
+          split.
+          * apply mem_coreResolution,
+              (CoreFInter _ _ _ _ _ n v m vs fs u HD Hw).
+            apply witnessCondb_iff; split; [exists fs_p; exact Hp |].
+            split; [exact Htk | exact Hpi].
+          * left; exists vs, fs; split; [exact HD | split; [exact Hw |]].
+            apply mem_coreResolution; exact (CoreOrig _ _ _ _ _ n v fs_p Hp).
         + destruct (res_parent_closure_addl _ _ _ _ _ _ _ _ Hres _ _ Hp _ Hf
                       _ _ _ HA)
             as (w & (Hw & Htk & Hpiw) & _).
           assert (w = u) as ->
             by exact (res_pi_functional _ _ _ _ _ _ _ _ Hres _ _ _ _ Hpiw Hpi).
-          apply (CoreAInter _ _ _ _ _ n v f m vs fs u HA Hw).
-          apply witnessCondb_iff; split; [exists fs_p; exact Hp |].
-          split; [exact Htk | exact Hpi].
+          split.
+          * apply mem_coreResolution,
+              (CoreAInter _ _ _ _ _ n v f m vs fs u HA Hw).
+            apply witnessCondb_iff; split; [exists fs_p; exact Hp |].
+            split; [exact Htk | exact Hpi].
+          * right; exists f, vs, fs; split; [exact HA | split; [exact Hw |]].
+            apply mem_coreResolution.
+            exact (CoreFeatPkg _ _ _ _ _ n v fs_p f Hp Hf).
     Qed.
 
     Module Lookup.

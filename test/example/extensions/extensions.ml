@@ -946,7 +946,7 @@ module Concurrent_features = struct
          (fun ((n, v), fs) ->
            Printf.sprintf "%s %s %s" n v (set (F.FSet.elements fs)))
          (F.FeaturedSet.elements (R.featureConcurrentResolution g s)));
-    parents (M.ParentRel.elements (R.parents s))
+    parents (M.ParentRel.elements (R.parents df da g s))
 end
 
 module Placement = struct
