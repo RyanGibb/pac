@@ -422,13 +422,13 @@ Module GranFibre (N V G : UsualOrderedType)
         if N.eq_dec m n then if G.eq_dec (g v) w then true else false
         else false) R.
 
-  Lemma mem_granFibre : forall g R (n m : N.t) (w : G.t) (v : V.t),
-      S.In (m, v) (granFibre g R n w) <-> S.In (m, v) R /\ m = n /\ g v = w.
+  Lemma mem_granFibre : forall g R (n m : N.t) (w : G.t) (u : V.t),
+      S.In (m, u) (granFibre g R n w) <-> S.In (m, u) R /\ m = n /\ g u = w.
   Proof.
-    intros g R n m w v; unfold granFibre.
+    intros g R n m w u; unfold granFibre.
     rewrite S.filter_spec by (intros x y Heq; rewrite Heq; reflexivity).
     cbn beta iota.
-    destruct (N.eq_dec m n) as [-> | NE]; [destruct (G.eq_dec (g v) w) |];
+    destruct (N.eq_dec m n) as [-> | NE]; [destruct (G.eq_dec (g u) w) |];
       intuition congruence.
   Qed.
 End GranFibre.
@@ -620,52 +620,52 @@ Module FibredRel (T H : UsualOrderedType)
 
   Definition tail '((q, _) : E.t) : T.t := q.
 
-  Definition tailFibre (D : S.t) (p : T.t) : S.t :=
-    S.filter (fun e => if T.eq_dec (tail e) p then true else false) D.
+  Definition tailFibre (R : S.t) (t : T.t) : S.t :=
+    S.filter (fun e => if T.eq_dec (tail e) t then true else false) R.
 
-  Lemma mem_tailFibre : forall D (p q : T.t) (h : H.t),
-      S.In (q, h) (tailFibre D p) <-> S.In (q, h) D /\ q = p.
+  Lemma mem_tailFibre : forall R (t q : T.t) (h : H.t),
+      S.In (q, h) (tailFibre R t) <-> S.In (q, h) R /\ q = t.
   Proof.
-    intros D p q h; unfold tailFibre.
+    intros R t q h; unfold tailFibre.
     rewrite SS.filter_spec'.
     simpl.
-    destruct (T.eq_dec q p); intuition congruence.
+    destruct (T.eq_dec q t); intuition congruence.
   Qed.
 
-  Lemma tailFibre_subset : forall D (p : T.t), S.Subset (tailFibre D p) D.
+  Lemma tailFibre_subset : forall R (t : T.t), S.Subset (tailFibre R t) R.
   Proof.
-    intros D p [q h] Hin; apply mem_tailFibre in Hin; destruct Hin as [Hin _];
+    intros R t [q h] Hin; apply mem_tailFibre in Hin; destruct Hin as [Hin _];
       exact Hin.
   Qed.
 
   Definition head '((_, h) : E.t) : H.t := h.
 
-  Definition withHead (D : S.t) (h : H.t) : S.t :=
-    S.filter (fun e => if H.eq_dec (head e) h then true else false) D.
+  Definition withHead (R : S.t) (h : H.t) : S.t :=
+    S.filter (fun e => if H.eq_dec (head e) h then true else false) R.
 
-  Lemma mem_withHead : forall D (q : T.t) (h g : H.t),
-      S.In (q, g) (withHead D h) <-> S.In (q, g) D /\ g = h.
+  Lemma mem_withHead : forall R (q : T.t) (h g : H.t),
+      S.In (q, g) (withHead R h) <-> S.In (q, g) R /\ g = h.
   Proof.
-    intros D q h g; unfold withHead.
+    intros R q h g; unfold withHead.
     rewrite SS.filter_spec'.
     simpl.
     destruct (H.eq_dec g h); intuition congruence.
   Qed.
 
-  Definition idFibre (D : S.t) (x : E.t) : S.t :=
-    S.filter (fun e => if E.eq_dec e x then true else false) D.
+  Definition idFibre (R : S.t) (x : E.t) : S.t :=
+    S.filter (fun e => if E.eq_dec e x then true else false) R.
 
-  Lemma mem_idFibre : forall D (x y : E.t),
-      S.In y (idFibre D x) <-> S.In y D /\ y = x.
+  Lemma mem_idFibre : forall R (x y : E.t),
+      S.In y (idFibre R x) <-> S.In y R /\ y = x.
   Proof.
-    intros D x y; unfold idFibre.
+    intros R x y; unfold idFibre.
     rewrite SS.filter_spec'.
     destruct (E.eq_dec y x); intuition congruence.
   Qed.
 
-  Lemma idFibre_subset : forall D (x : E.t), S.Subset (idFibre D x) D.
+  Lemma idFibre_subset : forall R (x : E.t), S.Subset (idFibre R x) R.
   Proof.
-    intros D x y Hin; apply mem_idFibre in Hin; destruct Hin as [Hin _];
+    intros R x y Hin; apply mem_idFibre in Hin; destruct Hin as [Hin _];
       exact Hin.
   Qed.
 End FibredRel.
@@ -678,48 +678,48 @@ Module FibredLabelledRel (T N L : UsualOrderedType)
 
   Definition ends '((q, (m, _)) : E.t) : (T.t * N.t)%type := (q, m).
 
-  Definition endsFibre (D : S.t) (p : T.t) (n : N.t) : S.t :=
-    S.filter (fun e => let '(q, m) := ends e in
-        if T.eq_dec q p
-        then if N.eq_dec m n then true else false
+  Definition endsFibre (R : S.t) (t : T.t) (m : N.t) : S.t :=
+    S.filter (fun e => let '(q, m') := ends e in
+        if T.eq_dec q t
+        then if N.eq_dec m' m then true else false
         else false)
-      D.
+      R.
 
-  Lemma mem_endsFibre : forall D (p q : T.t) (n m : N.t) (l : L.t),
-      S.In (q, (m, l)) (endsFibre D p n) <->
-      S.In (q, (m, l)) D /\ q = p /\ m = n.
+  Lemma mem_endsFibre : forall R (t q : T.t) (m m' : N.t) (l : L.t),
+      S.In (q, (m', l)) (endsFibre R t m) <->
+      S.In (q, (m', l)) R /\ q = t /\ m' = m.
   Proof.
-    intros D p q n m l; unfold endsFibre.
+    intros R t q m m' l; unfold endsFibre.
     rewrite SS.filter_spec'.
     simpl.
-    destruct (T.eq_dec q p); [destruct (N.eq_dec m n) |];
+    destruct (T.eq_dec q t); [destruct (N.eq_dec m' m) |];
       intuition congruence.
   Qed.
 
-  Lemma endsFibre_subset : forall D (p : T.t) (n : N.t),
-      S.Subset (endsFibre D p n) D.
+  Lemma endsFibre_subset : forall R (t : T.t) (m : N.t),
+      S.Subset (endsFibre R t m) R.
   Proof.
-    intros D p n [q [m l]] Hin; apply mem_endsFibre in Hin;
+    intros R t m [q [m' l]] Hin; apply mem_endsFibre in Hin;
       destruct Hin as [Hin _]; exact Hin.
   Qed.
 
   Definition node '((_, (n, _)) : E.t) : N.t := n.
 
-  Definition nodeFibre (D : S.t) (n : N.t) : S.t :=
-    S.filter (fun e => if N.eq_dec (node e) n then true else false) D.
+  Definition nodeFibre (R : S.t) (m : N.t) : S.t :=
+    S.filter (fun e => if N.eq_dec (node e) m then true else false) R.
 
-  Lemma mem_nodeFibre : forall D (q : T.t) (n m : N.t) (l : L.t),
-      S.In (q, (m, l)) (nodeFibre D n) <-> S.In (q, (m, l)) D /\ m = n.
+  Lemma mem_nodeFibre : forall R (q : T.t) (m m' : N.t) (l : L.t),
+      S.In (q, (m', l)) (nodeFibre R m) <-> S.In (q, (m', l)) R /\ m' = m.
   Proof.
-    intros D q n m l; unfold nodeFibre.
+    intros R q m m' l; unfold nodeFibre.
     rewrite SS.filter_spec'.
     simpl.
-    destruct (N.eq_dec m n); intuition congruence.
+    destruct (N.eq_dec m' m); intuition congruence.
   Qed.
 
-  Lemma nodeFibre_subset : forall D (n : N.t), S.Subset (nodeFibre D n) D.
+  Lemma nodeFibre_subset : forall R (m : N.t), S.Subset (nodeFibre R m) R.
   Proof.
-    intros D n [q [m l]] Hin; apply mem_nodeFibre in Hin;
+    intros R m [q [m' l]] Hin; apply mem_nodeFibre in Hin;
       destruct Hin as [Hin _]; exact Hin.
   Qed.
 End FibredLabelledRel.
@@ -768,13 +768,13 @@ Module RelKeys (K B : UsualOrderedType) (SB : SetsOn B).
   Module SS := SetSpecs B SB.
   Module KEqb := UOTEqb K.
 
-  Definition hasKey (tgt : B.t -> K.t) (D : SB.t) (k : K.t) : bool :=
-    SB.exists_ (fun e => KEqb.eqb (tgt e) k) D.
+  Definition hasKey (key : B.t -> K.t) (R : SB.t) (k : K.t) : bool :=
+    SB.exists_ (fun e => KEqb.eqb (key e) k) R.
 
-  Lemma hasKey_iff : forall tgt (D : SB.t) (k : K.t),
-      hasKey tgt D k = true <-> exists e : B.t, SB.In e D /\ tgt e = k.
+  Lemma hasKey_iff : forall key (R : SB.t) (k : K.t),
+      hasKey key R k = true <-> exists e : B.t, SB.In e R /\ key e = k.
   Proof.
-    intros tgt D k; unfold hasKey; rewrite SS.exists_spec'.
+    intros key R k; unfold hasKey; rewrite SS.exists_spec'.
     split; (intros [e [He Hk]]; exists e;
             split; [exact He | apply KEqb.eqb_true_iff; exact Hk]).
   Qed.
