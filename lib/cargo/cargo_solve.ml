@@ -59,7 +59,7 @@ module Make () = struct
       List.map
         (fun ((((n, v), k), u) : Cg.ParentElt.t) ->
           match L.site_data st (n, v) k with
-          | Some sd -> (n, v, Cg.kAlias k, Cg.sTarget sd, u)
+          | Some sd -> (n, v, Cg.kAlias k, Cg.sName sd, u)
           | None -> (n, v, Cg.kAlias k, Cg.kAlias k, u))
         (Cg.ParentRel.elements
            (Cg.decodeParents

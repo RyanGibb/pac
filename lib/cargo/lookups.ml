@@ -278,14 +278,13 @@ module Make (Encoding : Encoding.S) = struct
         call { e with inst_repo = name_set st n; inst_support = supp }
     | Cg.NPlus.CSlot (n, gr, d) ->
         let slots = slot_owner st n gr d in
-        call
-          { e with inst_repo = name_set st (Cg.sTarget d); inst_slots = slots }
+        call { e with inst_repo = name_set st (Cg.sName d); inst_slots = slots }
     | Cg.NPlus.CDec (n, gr, f, d, feat) ->
         let slots, fdefs = snd (dec_owner st n gr f d feat) in
         call
           {
             e with
-            inst_repo = name_set st (Cg.sTarget d);
+            inst_repo = name_set st (Cg.sName d);
             inst_fdefs = fdefs;
             inst_slots = slots;
           }
