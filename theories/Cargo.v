@@ -2364,37 +2364,29 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Theorem versions_lookupSlot :
-        forall I n w d u,
-          SlotRel.In ((n, u), d) (inst_slots I) -> inst_gran I u = w ->
-          slotActive (inst_root I) (n, u) d = true ->
+        forall I n w d,
           versions I (NPlus.CSlot n w d) =
           versions
             (MkInst (C.namePreimage (inst_repo I) (NSet.singleton (sName d)))
-               SupportSet.empty FDefRel.empty
-               (SlotFibred.tailFibre (inst_slots I) (n, u)) LinkRel.empty
+               SupportSet.empty FDefRel.empty SlotRel.empty LinkRel.empty
                (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
             (NPlus.CSlot n w d).
       Proof.
-        intros I n w d u _ _ _; cbn [versions inst_repo inst_gran].
+        intros I n w d; cbn [versions inst_repo inst_gran].
         rewrite evalReq_namePreimage;
           [reflexivity | apply NSet.singleton_spec; reflexivity].
       Qed.
 
       Theorem versions_lookupDecision :
-        forall I n w f d f' u e,
-          FDefRel.In (((n, u), f), e) (inst_fdefs I) ->
-          entryFeatD e = Some (sAlias d, f') ->
-          SlotRel.In ((n, u), d) (inst_slots I) -> inst_gran I u = w ->
-          slotActive (inst_root I) (n, u) d = true ->
+        forall I n w f d f',
           versions I (NPlus.CDec n w f d f') =
           versions
             (MkInst (C.namePreimage (inst_repo I) (NSet.singleton (sName d)))
-               SupportSet.empty (fdefFibre (inst_fdefs I) (n, u))
-               (SlotFibred.tailFibre (inst_slots I) (n, u)) LinkRel.empty
+               SupportSet.empty FDefRel.empty SlotRel.empty LinkRel.empty
                (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
             (NPlus.CDec n w f d f').
       Proof.
-        intros I n w f d f' u e _ _ _ _ _; cbn [versions inst_repo inst_gran].
+        intros I n w f d f'; cbn [versions inst_repo inst_gran].
         rewrite evalReq_namePreimage;
           [reflexivity | apply NSet.singleton_spec; reflexivity].
       Qed.
@@ -2646,38 +2638,31 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Theorem dependees_lookupSlot :
-        forall I n w d w' u Vq,
-          SlotRel.In ((n, u), d) (inst_slots I) -> inst_gran I u = w ->
-          slotActive (inst_root I) (n, u) d = true ->
+        forall I n w d w' Vq,
           Vq (sName d) = C.versions (inst_repo I) (sName d) ->
           dependees I (NPlus.CSlot n w d, VPlus.WClass w') =
           dependeesBy Vq
-            (MkInst PkgSet.empty SupportSet.empty FDefRel.empty
-               (SlotFibred.tailFibre (inst_slots I) (n, u)) LinkRel.empty
-               (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
+            (MkInst PkgSet.empty SupportSet.empty FDefRel.empty SlotRel.empty
+               LinkRel.empty (inst_gran I) (inst_dflt I) (inst_root I)
+               (inst_rootFeats I))
             (NPlus.CSlot n w d, VPlus.WClass w').
       Proof.
-        intros I n w d w' u Vq _ _ _ HVq.
+        intros I n w d w' Vq HVq.
         unfold dependees; cbn [dependeesBy inst_gran inst_dflt].
         unfold evalReqBy; rewrite HVq; reflexivity.
       Qed.
 
       Theorem dependees_lookupDecision :
-        forall I n w f d f' w' u e Vq,
-          FDefRel.In (((n, u), f), e) (inst_fdefs I) ->
-          entryFeatD e = Some (sAlias d, f') ->
-          SlotRel.In ((n, u), d) (inst_slots I) -> inst_gran I u = w ->
-          slotActive (inst_root I) (n, u) d = true ->
+        forall I n w f d f' w' Vq,
           Vq (sName d) = C.versions (inst_repo I) (sName d) ->
           dependees I (NPlus.CDec n w f d f', VPlus.WClass w') =
           dependeesBy Vq
-            (MkInst PkgSet.empty SupportSet.empty
-               (fdefFibre (inst_fdefs I) (n, u))
-               (SlotFibred.tailFibre (inst_slots I) (n, u)) LinkRel.empty
-               (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
+            (MkInst PkgSet.empty SupportSet.empty FDefRel.empty SlotRel.empty
+               LinkRel.empty (inst_gran I) (inst_dflt I) (inst_root I)
+               (inst_rootFeats I))
             (NPlus.CDec n w f d f', VPlus.WClass w').
       Proof.
-        intros I n w f d f' w' u e Vq _ _ _ _ _ HVq.
+        intros I n w f d f' w' Vq HVq.
         unfold dependees; cbn [dependeesBy inst_gran].
         unfold evalReqBy; rewrite HVq; reflexivity.
       Qed.
