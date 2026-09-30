@@ -1447,7 +1447,8 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
          ; inst_world := world
          ; inst_prio := prioOf I (repoPreimage I ns) |}.
 
-      Lemma constrVers_subInst : forall I ns deps ownProv installIf world n zeta,
+      Lemma constrVers_subInst :
+        forall I ns deps ownProv installIf world n zeta,
           NSet.In n ns ->
           Prov.Subset ownProv (inst_prov I) ->
           constrVers (subInst I ns deps ownProv installIf world) n zeta =

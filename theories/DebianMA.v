@@ -330,7 +330,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     | QUnq =>
         (embedPkg p, (((n, QAGroup), phi), true))
           :: (embedPkg p, (((n, QAAny), phi), true))
-          :: List.map (fun b => (embedPkg p, (((n, QAArch b), phi), true))) A.enum
+          :: List.map
+            (fun b => (embedPkg p, (((n, QAArch b), phi), true))) A.enum
     | QNative => (embedPkg p, (((n, QAExact AP.native), phi), true)) :: nil
     | QArch b => (embedPkg p, (((n, QAExact b), phi), true)) :: nil
     | QAny => (embedPkg p, (((n, QAAny), phi), true)) :: nil
@@ -1815,7 +1816,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       { intros ea e Hg q v Hin; apply NSet.union_spec; right.
         apply mem_confRead; exists (fst (fst ea)); split;
           [exact (reduceConf_confAtom _ _ _ p ea e Hg) | right].
-        apply mem_providerNames; exists q, v; split; [exact Hin | reflexivity]. }
+        apply mem_providerNames; exists q, v; split;
+          [exact Hin | reflexivity]. }
       replace (Deb.embedPkg (embedPkg p))
         with (Deb.Name.Orig (pname p, QAArch (parch p)),
               Deb.Version.Orig (pver p)) by reflexivity.

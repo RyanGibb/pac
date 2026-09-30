@@ -223,9 +223,11 @@ Module Versions (N V : UsualOrderedType).
       Proof.
         intros R Dp; apply C.DepRel.ext; intros [q [n vs]].
         rewrite !mem_reduce.
-        split; intros [phi [HD ->]]; exists phi; split; [exact HD | | exact HD |];
+        split; intros [phi [HD ->]]; exists phi; split;
+          [exact HD | | exact HD |];
           rewrite (versions_realPreimage R Dp n);
-          solve [reflexivity | exists q, n, phi; split; [exact HD | reflexivity]].
+          solve [reflexivity
+                | exists q, n, phi; split; [exact HD | reflexivity]].
       Qed.
 
       Module PkgFibred := FibredRel N V Pkg PkgSet.

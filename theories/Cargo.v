@@ -582,7 +582,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         andb (andb (NEqb.eqb n' n) (GEqb.eqb (g v) w))
           (andb (FEqb.eqb f0 f)
              (andb (match entryFeatD e with
-                    | Some (a, t) => andb (NEqb.eqb a (sAlias d)) (FEqb.eqb t f')
+                    | Some (a, t) =>
+                        andb (NEqb.eqb a (sAlias d)) (FEqb.eqb t f')
                     | None => false
                     end)
                 (andb (SlotRel.mem ((n', v), d) Slots)
@@ -616,7 +617,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
   Definition featReal (g : V.t -> G.t) (support : SupportSet.t)
     : T.PkgSet.t :=
-    SOsp.map (fun '((n, v), f) => (NPlus.CFeatP n f (g v), VPlus.WOrig v)) support.
+    SOsp.map (fun '((n, v), f) =>
+        (NPlus.CFeatP n f (g v), VPlus.WOrig v)) support.
 
   Definition slotReal (g : V.t -> G.t) (R : PkgSet.t) (Slots : SlotRel.t)
       (r : Pkg.t) : T.PkgSet.t :=
@@ -2749,7 +2751,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
            evalReqBy Vq (sName d) (sReq d) =
            evalReqBy Vq' (sName d) (sReq d)) ->
         (VSet.In v (Vq n) -> VSet.In v (Vq' n)) ->
-        (forall l, LinkRel.In ((n, v), l) Links -> LinkRel.In ((n, v), l) Links') ->
+        (forall l, LinkRel.In ((n, v), l) Links ->
+           LinkRel.In ((n, v), l) Links') ->
         forall h,
           T.DependeesSet.In h
             (dependeesBy Vq
@@ -2778,7 +2781,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         (forall d, SlotRel.In ((n, v), d) Slots ->
            evalReqBy Vq (sName d) (sReq d) =
            evalReqBy Vq' (sName d) (sReq d)) ->
-        (SupportSet.In ((n, v), f) support -> SupportSet.In ((n, v), f) support') ->
+        (SupportSet.In ((n, v), f) support ->
+           SupportSet.In ((n, v), f) support') ->
         (forall e, FDefRel.In (((n, v), f), e) FDefs ->
            FDefRel.In (((n, v), f), e) FDefs') ->
         forall h,
@@ -2817,7 +2821,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
            evalReqBy Vq (sName d) (sReq d) =
            evalReqBy Vq' (sName d) (sReq d)) ->
         (VSet.In v (Vq n) <-> VSet.In v (Vq' n)) ->
-        (forall l, LinkRel.In ((n, v), l) Links <-> LinkRel.In ((n, v), l) Links') ->
+        (forall l, LinkRel.In ((n, v), l) Links <->
+           LinkRel.In ((n, v), l) Links') ->
         dependeesBy Vq (MkInst R support FDefs Slots Links g dflt r rootFeats)
           (NPlus.CCrate n w, VPlus.WOrig v) =
         dependeesBy Vq'
@@ -2842,7 +2847,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         (forall d, SlotRel.In ((n, v), d) Slots ->
            evalReqBy Vq (sName d) (sReq d) =
            evalReqBy Vq' (sName d) (sReq d)) ->
-        (SupportSet.In ((n, v), f) support <-> SupportSet.In ((n, v), f) support') ->
+        (SupportSet.In ((n, v), f) support <->
+           SupportSet.In ((n, v), f) support') ->
         (forall e, FDefRel.In (((n, v), f), e) FDefs <->
            FDefRel.In (((n, v), f), e) FDefs') ->
         dependeesBy Vq (MkInst R support FDefs Slots Links g dflt r rootFeats)

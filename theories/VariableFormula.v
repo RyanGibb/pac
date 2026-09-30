@@ -21,7 +21,8 @@ Module VariableFormula (N V : UsualOrderedType)
   Definition opEvalY (op : CmpOp) (v y : Y.t) : bool :=
     cmpOpEvalBy Y.compare op v y.
 
-  Fixpoint Satisfies (S : PkgSet.t) (sigma : X.t -> Y.t) (psi : Formula) : Prop :=
+  Fixpoint Satisfies (S : PkgSet.t) (sigma : X.t -> Y.t) (psi : Formula) :
+      Prop :=
     match psi with
     | FDep m vs => exists v, VSet.In v vs /\ PkgSet.In (m, v) S
     | FConj psiL psiR => Satisfies S sigma psiL /\ Satisfies S sigma psiR
@@ -34,7 +35,8 @@ Module VariableFormula (N V : UsualOrderedType)
       bool :=
     match psi with
     | FDep m vs => VSet.exists_ (fun v => PkgSet.mem (m, v) S) vs
-    | FConj psiL psiR => andb (satisfiesb S sigma psiL) (satisfiesb S sigma psiR)
+    | FConj psiL psiR =>
+        andb (satisfiesb S sigma psiL) (satisfiesb S sigma psiR)
     | FDisj psiL psiR => orb (satisfiesb S sigma psiL) (satisfiesb S sigma psiR)
     | FNeg psi' => negb (satisfiesb S sigma psi')
     | FVarCmp x op y => opEvalY op (sigma x) y
@@ -111,7 +113,8 @@ Module VariableFormula (N V : UsualOrderedType)
     Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
     Proof.
       intros x; induction x
-        as [n1 vs1 | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa | x1 o1 y1];
+        as [n1 vs1 | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa
+           | x1 o1 y1];
         intros y; destruct y as [n2 vs2 | a2 b2 | a2 b2 | a2 | x2 o2 y2]; simpl;
         try (split; intro H; congruence).
       - rewrite lex_eq_iff, NF.compare_eq_iff, VSF.compare_eq_iff;
@@ -127,7 +130,8 @@ Module VariableFormula (N V : UsualOrderedType)
     Lemma compare_antisym : forall x y, compare y x = CompOpp (compare x y).
     Proof.
       intros x; induction x
-        as [n1 vs1 | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa | x1 o1 y1];
+        as [n1 vs1 | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa
+           | x1 o1 y1];
         intros y; destruct y as [n2 vs2 | a2 b2 | a2 b2 | a2 | x2 o2 y2]; simpl;
         try reflexivity.
       - rewrite lex_opp, NF.compare_antisym, VSF.compare_antisym; reflexivity.
@@ -207,8 +211,10 @@ Module VariableFormula (N V : UsualOrderedType)
     Fixpoint liftFormula (Y_x : X.t -> YSet.t) (psi : Formula) : PF.Formula :=
       match psi with
       | FDep m vs => PF.FDep (inl m) (liftVS vs)
-      | FConj psiL psiR => PF.FConj (liftFormula Y_x psiL) (liftFormula Y_x psiR)
-      | FDisj psiL psiR => PF.FDisj (liftFormula Y_x psiL) (liftFormula Y_x psiR)
+      | FConj psiL psiR =>
+          PF.FConj (liftFormula Y_x psiL) (liftFormula Y_x psiR)
+      | FDisj psiL psiR =>
+          PF.FDisj (liftFormula Y_x psiL) (liftFormula Y_x psiR)
       | FNeg psi' => PF.FNeg (liftFormula Y_x psi')
       | FVarCmp x op y => PF.FDep (inr x) (cmpVersionSet Y_x x op y)
       end.
@@ -305,11 +311,14 @@ Module VariableFormula (N V : UsualOrderedType)
 
     Lemma mem_liftDeps : forall Y_x D e,
         PF.DepRel.In e (liftDeps Y_x D) <->
-        exists p psi, DepRel.In (p, psi) D /\ e = (liftPkg p, liftFormula Y_x psi).
+        exists p psi, DepRel.In (p, psi) D /\
+          e = (liftPkg p, liftFormula Y_x psi).
     Proof.
       intros Y_x D e; unfold liftDeps; rewrite SOdl.mem_map; split.
-      - intros [[p psi] [He ->]]; exists p, psi; split; [exact He | reflexivity].
-      - intros [p [psi [He ->]]]; exists (p, psi); split; [exact He | reflexivity].
+      - intros [[p psi] [He ->]]; exists p, psi; split;
+          [exact He | reflexivity].
+      - intros [p [psi [He ->]]]; exists (p, psi); split;
+          [exact He | reflexivity].
     Qed.
 
     Lemma versions_liftReal : forall Y_x R n,
@@ -673,7 +682,8 @@ Module VariableFormula (N V : UsualOrderedType)
         match psi with
         | FDep m _ => NSet.singleton m
         | FConj _ _ => NSet.empty
-        | FDisj psiL psiR => NSet.union (ownNegNamesNeg psiL) (ownNegNamesNeg psiR)
+        | FDisj psiL psiR =>
+            NSet.union (ownNegNamesNeg psiL) (ownNegNamesNeg psiR)
         | FNeg psi' => ownNegNames psi'
         | FVarCmp _ _ _ => NSet.empty
         end.
@@ -695,7 +705,8 @@ Module VariableFormula (N V : UsualOrderedType)
       Proof.
         intros Y_x psi m;
           induction psi
-            as [o vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa | x op y];
+            as [o vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa
+               | x op y];
           cbn [liftFormula PF.Reduction.Lookup.ownNegNames
                PF.Reduction.Lookup.ownNegNamesNeg ownNegNames ownNegNamesNeg];
           split; intro H;
@@ -886,7 +897,8 @@ Module VariableFormula (N V : UsualOrderedType)
       Proof.
         intros Y_x R D chis i H; unfold reduceDeps.
         rewrite (PF.Reduction.Lookup.dependees_lookupDisjunct _ _ chis i H).
-        destruct (PF.Reduction.Lookup.disjAlt chis i) as [chi |]; [| reflexivity].
+        destruct (PF.Reduction.Lookup.disjAlt chis i) as [chi |];
+          [| reflexivity].
         f_equal.
         refine (proj1 (PF.Reduction.Lookup.encodeNNF_agree_aux _ _ chi _) _).
         intros n _; apply versions_liftReal.

@@ -395,7 +395,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
                if Pkg.eq_dec (fst c) (n, v)
                then if AtomSet.cardinal (clauseAtoms (snd c)) =? 1
                     then match AtomSet.min_elt (clauseAtoms (snd c)) with
-                         | Some a => Some (dependee (inst_repo I) (inst_prov I) a)
+                         | Some a =>
+                             Some (dependee (inst_repo I) (inst_prov I) a)
                          | None => None
                          end
                     else Some (Name.Disjunct (snd c), versionsDisj (snd c))
@@ -611,7 +612,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Qed.
 
   Lemma mem_clauseNames : forall A (n : N.t),
-      NSet.In n (clauseNames A) <-> exists phi, AtomSet.In (n, phi) (clauseAtoms A).
+      NSet.In n (clauseNames A) <->
+        exists phi, AtomSet.In (n, phi) (clauseAtoms A).
   Proof.
     intros A n; unfold clauseNames; rewrite SOan.mem_map.
     split.
@@ -1106,7 +1108,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     intros I S [Hsub Hroot Hdep Huniq].
     assert (Hdependee : forall (s : T.Pkg.t) (a : Atom.t),
         T.PkgSet.In s S ->
-        T.DependeesSet.In (dependee (inst_repo I) (inst_prov I) a) (dependees I s) ->
+        T.DependeesSet.In (dependee (inst_repo I) (inst_prov I) a)
+          (dependees I s) ->
         occursAtomb (allClauses (inst_deps I) (inst_rec I)) a = true ->
         exists q, PkgSet.In q (debianResolution S) /\ Match (inst_prov I) q a).
     { intros s [an af] HsS Hedge Hocc.
@@ -1205,7 +1208,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
                          = true)
             by (apply occursAtomb_allClausesL, occursAtomb_iff;
                 exists p, A; split; [exact HA | exact HaA]).
-          assert (Hedge : T.DependeesSet.In (dependee (inst_repo I) (inst_prov I) a)
+          assert (Hedge : T.DependeesSet.In
+                            (dependee (inst_repo I) (inst_prov I) a)
                             (dependees I (embedPkg p))).
           { apply (dependees_orig_spec I (fst p) (snd p)).
             left; exists A; split.
@@ -1246,14 +1250,16 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           apply Nat.eqb_neq in Hcard.
           assert (H1 := cardinal_in A a HaA).
           lia. }
-        assert (Hedge2 : T.DependeesSet.In (dependee (inst_repo I) (inst_prov I) a)
+        assert (Hedge2 : T.DependeesSet.In
+                           (dependee (inst_repo I) (inst_prov I) a)
                            (dependees I
                               (Name.Disjunct A, Version.Atom a))).
         { apply dependees_disjunct_spec.
           split; [apply hasClauseb_iff; exists p; exact HA |].
           split; [exact Hcard2 |].
           split; [apply AtomSet.mem_spec; exact HaA | reflexivity]. }
-        destruct (Hdependee (Name.Disjunct A, Version.Atom a) a HdvS Hedge2 Hocc)
+        destruct
+          (Hdependee (Name.Disjunct A, Version.Atom a) a HdvS Hedge2 Hocc)
           as [q [HqS HqM]].
         exists a; split; [apply mem_clauseAtoms; exact HaA |].
         exists q; split; assumption.
@@ -1770,7 +1776,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Qed.
 
     Lemma dependee_filter : forall R Pi (n : N.t) (phi : Ver.Formula),
-        dependee (PkgFibred.tailFibre R n) (ProvFibred.nodeFibre Pi n) (n, phi) =
+        dependee (PkgFibred.tailFibre R n) (ProvFibred.nodeFibre Pi n)
+          (n, phi) =
         dependee R Pi (n, phi).
     Proof.
       intros R Pi n phi; unfold dependee.

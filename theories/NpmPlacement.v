@@ -223,10 +223,12 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
   Lemma mem_edgeRel : forall I peer optional p n vs,
       Pl.C.DepRel.In (p, (n, vs)) (edgeRel I peer optional) <->
       Pl.PkgSet.In p (occs I) /\
-      exists e, In e (edgesOf I (snd p)) /\ e_peer e = peer /\ e_opt e = optional /\
+      exists e, In e (edgesOf I (snd p)) /\ e_peer e = peer /\
+        e_opt e = optional /\
         n = e_dir e /\ vs = accepts I e.
   Proof.
-    intros I peer optional p n vs; unfold edgeRel; rewrite SOpd.mem_unionMap; split.
+    intros I peer optional p n vs; unfold edgeRel; rewrite SOpd.mem_unionMap;
+      split.
     - intros [q [Hq H]]; apply SOpd.mem_ofList, in_map_iff in H.
       destruct H as [e [E He]]; injection E as <- <- <-.
       apply filter_In in He; destruct He as [He Hk].
@@ -464,7 +466,8 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       intros I p l Hp; apply Pl.Reduction.T.DependeesSet.ext; intro h.
       rewrite Pl.Reduction.mem_edgeAtoms; unfold occAtoms.
       rewrite SOhh.mem_ofList, in_map_iff; split.
-      - intros [peer [optional [n [vs [HE ->]]]]]; rewrite rel_tr, mem_edgeRel in HE.
+      - intros [peer [optional [n [vs [HE ->]]]]];
+          rewrite rel_tr, mem_edgeRel in HE.
         destruct HE as [_ [e [He [<- [<- [-> ->]]]]]].
         exists e; split; [reflexivity | exact He].
       - intros [e [<- He]].
@@ -548,7 +551,8 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         rewrite Hn, Hg.
         destruct (d_optional d) eqn:Hopt; [| reflexivity]; cbn [andb].
         rewrite (Hr d _ Hin Hopt eq_refl); reflexivity.
-      - apply map_ext; intro theta; unfold peerEdge; rewrite Hn, Hg; reflexivity.
+      - apply map_ext; intro theta; unfold peerEdge; rewrite Hn, Hg;
+          reflexivity.
     Qed.
 
     Lemma edgeAtom_agree : forall I' I l e, AgreesAtName I' I (e_name e) ->

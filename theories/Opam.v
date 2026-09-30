@@ -180,7 +180,8 @@ Module Opam (N V X Y E : UsualOrderedType).
                   defTrue sigma c = true.
   Proof.
     intros sigma I S e; unfold depextsOf.
-    induction (inst_dxt I) as [| [p [e' c]] l IH]; cbn [List.fold_right fst snd].
+    induction (inst_dxt I) as [| [p [e' c]] l IH];
+      cbn [List.fold_right fst snd].
     - split.
       + intro H; apply ESet.empty_spec in H; destruct H.
       + intros [q [c [_ [[] _]]]].
@@ -198,7 +199,8 @@ Module Opam (N V X Y E : UsualOrderedType).
           -- right; exists q, c'; repeat split; assumption.
       + rewrite IH; split.
         * intros [q [c' [Hq [Hin Hg]]]].
-          exists q, c'; split; [exact Hq | split; [right; exact Hin | exact Hg]].
+          exists q, c'; split;
+            [exact Hq | split; [right; exact Hin | exact Hg]].
         * intros [q [c' [Hq [[Heq | Hin] Hg]]]].
           -- injection Heq as <- <- <-.
              apply Bool.andb_false_iff in Hc; destruct Hc as [Hm | Hg'].
@@ -1453,7 +1455,8 @@ Module Opam (N V X Y E : UsualOrderedType).
              PF.Reduction.Version.Orig n) =
           PF.Reduction.T.DependeesSet.empty.
       Proof.
-        intros sigma I k n; apply PF.Reduction.T.dependees_empty_iff; intros h H.
+        intros sigma I k n; apply PF.Reduction.T.dependees_empty_iff;
+          intros h H.
         apply PF.Reduction.mem_reduceDeps in H.
         destruct H as [[pn pv] [psi [Hd He]]].
         assert (E := proj1
