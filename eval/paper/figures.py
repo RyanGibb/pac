@@ -1205,6 +1205,15 @@ def main():
     if len(args) < 2:
         raise SystemExit(__doc__)
     conf = Conf(args[:-1])
+    # a set not yet measured has a row with path -; a set with no row at
+    # all is a conf read alone that should have been read over another
+    lack = [k for k, v in (("current", conf.current), ("totals", conf.totals), ("causes", conf.causes)) if not v]
+    lack += ["%s %s" % (k, i) for k, have_, ids in (("run", conf.runs, [r for r, _ in ROWS_BC]),
+                                                    ("fuzz", conf.fuzz, [f for f, _ in FUZZ_ROWS]),
+                                                    ("bench", conf.bench, sorted({c[2] for c in COMPS})))
+             for i in ids if i not in have_]
+    if lack:
+        raise SystemExit("figures.py: no conf line for %s (is sources.conf first?)" % ", ".join(lack))
     out = Out(args[-1])
     prov = Prov(conf)
     oc = outcome_counts(conf, prov)

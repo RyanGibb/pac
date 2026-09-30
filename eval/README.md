@@ -224,6 +224,15 @@ Extra fields: opam `mccs`; npm `twall` (the tool's wall time, `-` under `--regre
 | `unchecked` | we answer, but the check, the comparison, or the pin that would say which gap, could not run |
 | `unrecorded` | `--regress` found no recorded answer |
 
+The paper's figures and tables come from `eval/paper/figures.py`, which reads the run directories its conf files name:
+
+```sh
+eval/paper/figures.py eval/paper/sources.conf eval/paper/level2.conf <out-dir> [--pdf]
+```
+
+A later conf's lines replace an earlier's, so `sources.conf` comes first and `level2.conf`, the regression runs on the current binary, over it.
+`level2.conf` alone lacks the rows only `sources.conf` holds, and figures.py refuses it.
+
 ## Benchmarks
 
 ```sh
