@@ -52,9 +52,9 @@ Module Feature (N V F : UsualOrderedType).
           FeaturedSet.In ((n, v), fs) S ->
           FeaturedSet.In ((n, v'), fs') S -> v = v'
     ; res_support_mem :
-        forall n v fs f,
-          FeaturedSet.In ((n, v), fs) S -> FSet.In f fs ->
-          SupportSet.In ((n, v), f) support }.
+        forall p fs f,
+          FeaturedSet.In (p, fs) S -> FSet.In f fs ->
+          SupportSet.In (p, f) support }.
 
   Module Reduction.
     Module NFPair := PairUOT N F.
@@ -234,11 +234,11 @@ Module Feature (N V F : UsualOrderedType).
         FeatDepRel.In ((n, v), (m, (vs, FSet.empty))) Df ->
         EncodedEdge R support Df Da
           ((Name.Orig n, v), (Name.Orig m, embedVS vs))
-    | EdgeDepFeatPkg : forall n v m vs fs f,
+    | EdgeDepFeatPkg : forall n v m vs fs f',
         FeatDepRel.In ((n, v), (m, (vs, fs))) Df ->
-        FSet.is_empty fs = false -> FSet.In f fs ->
+        FSet.is_empty fs = false -> FSet.In f' fs ->
         EncodedEdge R support Df Da
-          ((Name.Orig n, v), (Name.FeatPkg m f, embedVS vs))
+          ((Name.Orig n, v), (Name.FeatPkg m f', embedVS vs))
     | EdgeAddlOrig : forall n v f m vs,
         AddlDepRel.In (((n, v), f), (m, (vs, FSet.empty))) Da ->
         EncodedEdge R support Df Da
@@ -333,16 +333,16 @@ Module Feature (N V F : UsualOrderedType).
           end)
         S.
 
-    Lemma mem_featureResolution : forall (S : T.PkgSet.t) (y : Featured.t),
-        FeaturedSet.In y (featureResolution S) <->
-        exists n v,
-          T.PkgSet.In (Name.Orig n, v) S /\ y = ((n, v), featsOf n v S).
+    Lemma mem_featureResolution : forall (S : T.PkgSet.t) n v fs,
+        FeaturedSet.In ((n, v), fs) (featureResolution S) <->
+        T.PkgSet.In (Name.Orig n, v) S /\ fs = featsOf n v S.
     Proof.
-      intros S y; unfold featureResolution; rewrite SOts.mem_filterMap.
+      intros S n v fs; unfold featureResolution; rewrite SOts.mem_filterMap.
       split.
-      - intros [[[n | n f] v] [HeS Hy]]; cbn beta iota in Hy; [| discriminate].
-        injection Hy as <-; exists n, v; split; [exact HeS | reflexivity].
-      - intros [n [v [HS ->]]].
+      - intros [[[n' | n' f] v'] [HeS Hy]]; cbn beta iota in Hy;
+          [| discriminate].
+        injection Hy as <- <- <-; split; [exact HeS | reflexivity].
+      - intros [HS ->].
         exists (Name.Orig n, v); split; [exact HS | reflexivity].
     Qed.
 
@@ -367,8 +367,7 @@ Module Feature (N V F : UsualOrderedType).
         exists v; split; [apply mem_embedVS; exact Hv |].
         exists (featsOf n v S); split.
         + subst fs; intros x Hx; destruct (FSet.empty_spec Hx).
-        + apply mem_featureResolution; exists n, v;
-            split; [exact HvS | reflexivity].
+        + apply mem_featureResolution; split; [exact HvS | reflexivity].
       - destruct (FSet.choose_nonempty _ E) as [f0 Hf0].
         destruct (Hdep _ HqS _ _ (Hfeat f0 eq_refl Hf0)) as [v [Hv HvS]].
         apply mem_embedVS in Hv; apply HfeatOrig in HvS.
@@ -377,8 +376,7 @@ Module Feature (N V F : UsualOrderedType).
         + intros f Hf; apply featsOf_spec.
           destruct (Hdep _ HqS _ _ (Hfeat f eq_refl Hf)) as [v' [_ Hv'S]].
           rewrite (Huniq _ _ _ HvS (HfeatOrig _ _ _ Hv'S)); exact Hv'S.
-        + apply mem_featureResolution; exists n, v;
-            split; [exact HvS | reflexivity].
+        + apply mem_featureResolution; split; [exact HvS | reflexivity].
     Qed.
 
     Theorem feature_soundness :
@@ -416,50 +414,37 @@ Module Feature (N V F : UsualOrderedType).
         rewrite SOvt.singleton_in in Hv0; subst v0.
         exact Hv0S. }
       constructor.
-      - intros p fs Hmem.
-        apply mem_featureResolution in Hmem;
-          destruct Hmem as [n [v [HS Heq]]].
-        injection Heq as E1 E2; subst p.
+      - intros [n v] fs Hmem.
+        apply mem_featureResolution in Hmem; destruct Hmem as [HS _].
         exact (HorigR n v HS).
       - assert (Hfe : featsOf rn rv S = FSet.empty).
         { apply FSet.ext; intro f; rewrite featsOf_spec; split; intro H.
           + exfalso; exact (Hnosupp f (proj1 (HfeatR _ _ _ H))).
           + exfalso; exact (FSet.empty_spec H). }
         rewrite <- Hfe.
-        apply mem_featureResolution; exists rn, rv;
-          split; [exact Hroot | reflexivity].
-      - intros p fs_p Hmem n vs fs Hdf.
-        apply mem_featureResolution in Hmem;
-          destruct Hmem as [pn [pv [HpS Heq]]].
-        injection Heq as E1 E2; subst p fs_p.
+        apply mem_featureResolution; split; [exact Hroot | reflexivity].
+      - intros [pn pv] fs_p Hmem n vs fs Hdf.
+        apply mem_featureResolution in Hmem; destruct Hmem as [HpS ->].
         apply (dep_closure_step _ _ _ S _ n vs fs Hres HfeatOrig HpS);
           [intro; subst fs | intros f E Hf]; apply mem_reduceDeps;
           [apply EdgeDepOrig | eapply EdgeDepFeatPkg]; eassumption.
-      - intros p fs_p Hmem f Hf n vs fs Hda.
-        apply mem_featureResolution in Hmem;
-          destruct Hmem as [pn [pv [HpS Heq]]].
-        injection Heq as E1 E2; subst p fs_p.
+      - intros [pn pv] fs_p Hmem f Hf n vs fs Hda.
+        apply mem_featureResolution in Hmem; destruct Hmem as [HpS ->].
         rewrite featsOf_spec in Hf.
         apply (dep_closure_step _ _ _ S _ n vs fs Hres HfeatOrig Hf);
           [intro; subst fs | intros f' E Hf']; apply mem_reduceDeps;
           [apply EdgeAddlOrig | eapply EdgeAddlFeatPkg]; eassumption.
       - intros n v v' fs fs' H1 H2.
-        apply mem_featureResolution in H1; destruct H1 as [n1 [v1 [HS1 Heq1]]].
-        apply mem_featureResolution in H2; destruct H2 as [n2 [v2 [HS2 Heq2]]].
-        injection Heq1 as E1 E2 E3; subst n1 v1 fs.
-        injection Heq2 as E4 E5 E6; subst n2 v2 fs'.
+        apply mem_featureResolution in H1; destruct H1 as [HS1 ->].
+        apply mem_featureResolution in H2; destruct H2 as [HS2 ->].
         assert (Ev : v = v') by exact (Huniq (Name.Orig n) v v' HS1 HS2).
         rewrite Ev; reflexivity.
       - intros n v v' fs fs' H1 H2.
-        apply mem_featureResolution in H1; destruct H1 as [n1 [v1 [HS1 Heq1]]].
-        apply mem_featureResolution in H2; destruct H2 as [n2 [v2 [HS2 Heq2]]].
-        injection Heq1 as E1 E2 E3; subst n1 v1 fs.
-        injection Heq2 as E4 E5 E6; subst n2 v2 fs'.
+        apply mem_featureResolution in H1; destruct H1 as [HS1 _].
+        apply mem_featureResolution in H2; destruct H2 as [HS2 _].
         exact (Huniq (Name.Orig n) v v' HS1 HS2).
-      - intros n v fs f Hmem Hf.
-        apply mem_featureResolution in Hmem;
-          destruct Hmem as [n1 [v1 [HS Heq]]].
-        injection Heq as E1 E2 E3; subst n1 v1 fs.
+      - intros [n v] fs f Hmem Hf.
+        apply mem_featureResolution in Hmem; destruct Hmem as [HS ->].
         rewrite featsOf_spec in Hf.
         exact (proj1 (HfeatR _ _ _ Hf)).
     Qed.
@@ -511,7 +496,7 @@ Module Feature (N V F : UsualOrderedType).
         destruct Hq as [[n [v [fs [HS ->]]]] | [n [v [fs [f [HS [Hf ->]]]]]]].
         + apply mem_reduceReal_orig; exact (Hsubset _ _ HS).
         + apply mem_reduceReal_featPkg;
-            exact (conj (Hsm n v fs f HS Hf) (Hsubset _ _ HS)).
+            exact (conj (Hsm _ fs f HS Hf) (Hsubset _ _ HS)).
       - rewrite mem_coreResolution.
         left; exists rn, rv, FSet.empty; split; [exact Hrootm | reflexivity].
       - intros q Hq m vs Hd.
@@ -581,12 +566,12 @@ Module Feature (N V F : UsualOrderedType).
         - intro Hf; right; exists n, v, fs, f; auto. }
       apply FeaturedSet.ext; intros [[n v] fs].
       rewrite mem_featureResolution; split.
-      - intros [n' [v' [Hc E]]]; injection E as <- <- ->.
+      - intros [Hc ->].
         rewrite mem_coreResolution in Hc.
         destruct Hc as [[n' [v' [fs' [HS E]]]] | [n' [v' [fs' [f [_ [_ E]]]]]]];
           [| discriminate E].
         injection E as <- <-; rewrite (Hfeats _ _ _ HS); exact HS.
-      - intro HS; exists n, v; split.
+      - intro HS; split.
         + apply mem_coreResolution; left; exists n, v, fs; auto.
         + rewrite (Hfeats _ _ _ HS); reflexivity.
     Qed.
