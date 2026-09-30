@@ -2143,7 +2143,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
   End Lookup.
 
-  Theorem multiarchResolution_coreResolution : forall S,
+  Theorem debian_ma_retraction : forall S,
       multiarchResolution (reduceReal S) = S.
   Proof.
     intro S; apply PkgSet.ext; intro q.
@@ -2157,7 +2157,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
            (Deb.coreResolution (reduceInst I) (reduceReal S))) = S.
   Proof.
     intros I S.
-    rewrite Deb.debianResolution_coreResolution.
-    apply multiarchResolution_coreResolution.
+    rewrite Deb.debian_retraction.
+    apply debian_ma_retraction.
   Qed.
 End DebianMA.

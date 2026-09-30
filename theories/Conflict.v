@@ -360,7 +360,7 @@ Module Conflict (N V : UsualOrderedType).
         + congruence.
     Qed.
 
-    Theorem conflictResolution_coreResolution : forall S R D G,
+    Theorem conflict_retraction : forall S R D G,
         conflictResolution (coreResolution S R D G) = S.
     Proof.
       intros S R D G; apply PkgSet.ext; intro p.

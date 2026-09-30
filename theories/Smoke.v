@@ -117,7 +117,7 @@ Definition conflictR : Cfl.C.PkgSet.t :=
   Cfl.C.PkgSet.add (1, 10)
     (Cfl.C.PkgSet.add (1, 11) (Cfl.C.PkgSet.add (2, 20) Cfl.C.PkgSet.empty)).
 
-Example conflict_conflictResolution_roundtrip_computes :
+Example conflict_conflictResolution_retraction_computes :
   Cfl.C.PkgSet.equal
     (Cfl.Reduction.conflictResolution (Cfl.Reduction.embedSet conflictR))
     conflictR = true.
@@ -175,7 +175,7 @@ Example conflictClass_reduceReal_computes :
        (Cls.Reduction.Name.Cls 0)) = 2.
 Proof. reflexivity. Qed.
 
-Example conflictClass_roundtrip_computes :
+Example conflictClass_retraction_computes :
   Cls.C.PkgSet.equal
     (Cls.Reduction.classResolution
        (Cls.Reduction.coreResolution clsR clsOm))

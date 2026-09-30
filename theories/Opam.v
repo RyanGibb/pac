@@ -611,7 +611,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       - intro H; left; exists (n, v); split; [exact H | reflexivity].
     Qed.
 
-    Theorem opamResolution_coreResolution : forall cls S,
+    Theorem opam_retraction : forall cls S,
         opamResolution (coreResolution cls S) = S.
     Proof.
       intros cls S; apply PkgSet.ext; intros [n v].
@@ -927,7 +927,7 @@ Module Opam (N V X Y E : UsualOrderedType).
                  PkgSet.In (n, v)
                    (opamResolution (coreResolution (inst_cls I) S)) ->
                  VSet.In v (srcVersions sigma I n)).
-      { intros n v Hm; rewrite opamResolution_coreResolution in Hm.
+      { intros n v Hm; rewrite opam_retraction in Hm.
         apply mem_srcVersions; exact (Hse _ Hm). }
       assert (Hr : PF.PkgSet.In rootPkg (coreResolution (inst_cls I) S))
         by (apply mem_coreResolution; right; left; reflexivity).
@@ -948,7 +948,7 @@ Module Opam (N V X Y E : UsualOrderedType).
             as [[d [Hin ->]] | [[nc [Hin ->]]
                | [[k [Hpk ->]] | [Hpin [nvu [Hin ->]]]]]].
           * apply (encodeOF_correct sigma _ _ HV Hr).
-            rewrite opamResolution_coreResolution.
+            rewrite opam_retraction.
             exact (res_dep_closure _ _ _ HR _ Hp0 _ Hin).
           * destruct nc as [n [c phi]]; unfold cflForm; cbn [fst snd].
             destruct (defTrue sigma c) eqn:Hg;
@@ -979,7 +979,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           apply FSet.singleton_spec in Hf'; subst psi'.
           unfold rootForm; cbn [PF.Satisfies].
           split; apply (encodeOF_correct sigma _ _ HV Hr);
-            rewrite opamResolution_coreResolution;
+            rewrite opam_retraction;
             [exact (res_query _ _ _ HR) | exact (res_invariant _ _ _ HR)].
         + unfold dependees, dependeesBy in Hf'; cbn beta iota in Hf'.
           destruct (FSet.empty_spec Hf').

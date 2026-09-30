@@ -709,7 +709,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         + rewrite (Hpif _ _ _ _ Hpi1 Hpi2); reflexivity.
     Qed.
 
-    Theorem concurrentResolution_coreResolution : forall S pi D g,
+    Theorem concurrent_retraction : forall S pi D g,
         concurrentResolution g (coreResolution S pi D g) = S.
     Proof.
       intros S pi D g; apply PkgSet.ext; intros [n v].
@@ -737,7 +737,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       inversion H; subst; eauto.
     Qed.
 
-    Theorem parents_coreResolution : forall R D g r S pi,
+    Theorem concurrent_parents_retraction : forall R D g r S pi,
         IsResolution R D g r S pi ->
         parents D g (coreResolution S pi D g) = pi.
     Proof.

@@ -334,7 +334,7 @@ Module ConflictClass (N V : UsualOrderedType).
           rewrite (Hexcl k q q' Hq Hq' Hc Hc') in E; congruence.
     Qed.
 
-    Theorem classResolution_coreResolution : forall (S : PkgSet.t) Om,
+    Theorem conflict_class_retraction : forall (S : PkgSet.t) Om,
         classResolution (coreResolution S Om) = S.
     Proof.
       intros S Om; apply PkgSet.ext; intro p.

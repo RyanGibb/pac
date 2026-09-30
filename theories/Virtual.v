@@ -893,7 +893,7 @@ Module Virtual (N V : UsualOrderedType).
         + rewrite (Hfn _ _ _ _ HD1 HD2); reflexivity.
     Qed.
 
-    Theorem virtualResolution_coreResolution : forall D Pi S_Pi rho,
+    Theorem virtual_retraction : forall D Pi S_Pi rho,
         virtualResolution (coreResolution D Pi S_Pi rho) = S_Pi.
     Proof.
       intros D Pi S_Pi rho; apply PkgSet.ext; intros [n v].
@@ -901,7 +901,7 @@ Module Virtual (N V : UsualOrderedType).
       split; [intro H; inversion H; assumption | apply CoreOrig].
     Qed.
 
-    Theorem providers_coreResolution : forall R D Pi r S_Pi rho,
+    Theorem virtual_providers_retraction : forall R D Pi r S_Pi rho,
         IsResolution R D Pi r S_Pi rho ->
         providers D Pi (coreResolution D Pi S_Pi rho) = rho.
     Proof.

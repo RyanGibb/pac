@@ -1245,7 +1245,7 @@ Module Placement (N V : UsualOrderedType).
         split; [lia | exact (keyed_layout I L l a v Hres H)].
     Qed.
 
-    Theorem placementResolution_coreResolution : forall I depth L,
+    Theorem placement_retraction : forall I depth L,
         IsResolution I L -> Depth depth L ->
         reachable I (placementResolution (coreResolution I depth L)) =
         reachable I L.

@@ -1233,7 +1233,7 @@ Module Visibility (N V : UsualOrderedType).
         all: exact (Hpif _ _ _ _ Hpi1 Hpi2).
     Qed.
 
-    Theorem visibilityResolution_coreResolution : forall R D pub r S pi,
+    Theorem visibility_retraction : forall R D pub r S pi,
         IsResolution R D pub r S pi ->
         (forall p, PkgSet.In p S ->
            exists q, IsOrigin D pub r S q /\ InSub pub pi q p) ->
@@ -1254,14 +1254,14 @@ Module Visibility (N V : UsualOrderedType).
         apply mem_coreResolution; constructor; assumption.
     Qed.
 
-    Theorem parents_coreResolution : forall R D pub r S pi,
+    Theorem visibility_parents_retraction : forall R D pub r S pi,
         IsResolution R D pub r S pi ->
         (forall p, PkgSet.In p S ->
            exists q, IsOrigin D pub r S q /\ InSub pub pi q p) ->
         parents R D pub r (coreResolution R D pub r S pi) = pi.
     Proof.
       intros R D pub r S pi Hres Hvis.
-      assert (Hdec := visibilityResolution_coreResolution R D pub r S pi
+      assert (Hdec := visibility_retraction R D pub r S pi
                         Hres Hvis).
       destruct Hres as [[_ _ _ _ _ Hps Hedge] _].
       apply ParentRel.ext; intros [[m u] [n v]]; rewrite mem_parents, Hdec.

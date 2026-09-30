@@ -2991,7 +2991,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
   End Lookup.
 
-  Theorem cargoResolution_coreResolution :
+  Theorem cargo_retraction :
     forall I S FS pi,
       cargoResolution (coreResolution I S FS pi) = S.
   Proof.
@@ -3019,14 +3019,14 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       repeat split; [exact (fsAt_mem Hres _ Hp) | exact Hf].
   Qed.
 
-  Theorem decodeFS_coreResolution :
+  Theorem cargo_features_retraction :
     forall I S FS pi,
       IsResolution I S FS pi ->
       decodeFS (coreResolution I S FS pi) = FS.
   Proof.
     intros I S FS pi Hres.
     apply FeaturedSet.ext; intros [p fs].
-    rewrite mem_decodeFS, cargoResolution_coreResolution; split.
+    rewrite mem_decodeFS, cargo_retraction; split.
     - intros [Hp ->]; rewrite (featsAt_coreResolution Hres _ Hp).
       exact (fsAt_mem Hres _ Hp).
     - intro Hfs; assert (Hp := res_fs_dom Hres Hfs).
@@ -3035,7 +3035,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       exact (fsAt_in FS p fs (res_fs_functional Hres) Hfs).
   Qed.
 
-  Theorem decodeParents_coreResolution :
+  Theorem cargo_parents_retraction :
     forall I S FS pi,
       SiteFunctional (inst_slots I) ->
       IsResolution I S FS pi ->

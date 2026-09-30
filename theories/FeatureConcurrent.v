@@ -1026,7 +1026,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
              end.
     Qed.
 
-    Theorem featureConcurrentResolution_coreResolution :
+    Theorem feature_concurrent_retraction :
       forall R support Df Da g r S_CF pi,
         IsResolution R support Df Da g r S_CF pi ->
         featureConcurrentResolution g (coreResolution S_CF pi Df Da g) = S_CF.
@@ -1058,7 +1058,8 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         + rewrite (Hfeats _ _ _ HS); reflexivity.
     Qed.
 
-    Theorem parents_coreResolution : forall R support Df Da g r S_CF pi,
+    Theorem feature_concurrent_parents_retraction :
+      forall R support Df Da g r S_CF pi,
         IsResolution R support Df Da g r S_CF pi ->
         parents Df Da g (coreResolution S_CF pi Df Da g) = pi.
     Proof.

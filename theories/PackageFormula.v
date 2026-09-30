@@ -1270,7 +1270,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           apply C.mem_absentIn; auto.
     Qed.
 
-    Theorem packageFormulaResolution_coreResolution : forall S R D,
+    Theorem package_formula_retraction : forall S R D,
         packageFormulaResolution (coreResolution S R D) = S.
     Proof.
       intros S R D; apply PkgSet.ext; intro p.

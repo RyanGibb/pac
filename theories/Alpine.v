@@ -2048,7 +2048,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Qed.
     End Lookup.
 
-    Theorem alpineResolution_coreResolution : forall I S,
+    Theorem alpine_retraction : forall I S,
         alpineResolution (coreResolution I S) = S.
     Proof.
       intros I S; apply PkgSet.ext; intros [n v].
@@ -2062,8 +2062,8 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                 (reduceDeps I)))
         = S.
     Proof.
-      intros I S; rewrite PF.Reduction.packageFormulaResolution_coreResolution.
-      apply alpineResolution_coreResolution.
+      intros I S; rewrite PF.Reduction.package_formula_retraction.
+      apply alpine_retraction.
     Qed.
   End Reduct.
 

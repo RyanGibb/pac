@@ -3689,7 +3689,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
 
     End Lookup.
 
-    Theorem npmResolution_coreResolution : forall I S pi sg,
+    Theorem npm_retraction : forall I S pi sg,
         npmResolution (coreResolution I S pi sg) = S.
     Proof.
       intros I S pi sg; apply PkgSet.ext; intros [k v].
@@ -3706,7 +3706,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       - intro Hp; left; exists k, v; split; [exact Hp | reflexivity].
     Qed.
 
-    Theorem npmParents_coreResolution : forall I S pi sg,
+    Theorem npm_parents_retraction : forall I S pi sg,
         IsResolution I S pi sg ->
         npmParents (coreResolution I S pi sg) = pi.
     Proof.

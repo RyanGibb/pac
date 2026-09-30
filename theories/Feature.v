@@ -564,7 +564,7 @@ Module Feature (N V F : UsualOrderedType).
           exact (Hvu _ _ _ _ _ HS1 HS2).
     Qed.
 
-    Theorem featureResolution_coreResolution :
+    Theorem feature_retraction :
       forall R support Df Da r S_f,
         IsResolution R support Df Da r S_f ->
         featureResolution (coreResolution S_f) = S_f.

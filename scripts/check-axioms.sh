@@ -51,8 +51,8 @@ Cfl.Reduction.Lookup.dependees_lookupAbsent
 Cfl.Reduction.Lookup.dependees_lookupOrig
 Cfl.Reduction.Lookup.versions_lookupOrig
 Cfl.Reduction.conflictResolution
-Cfl.Reduction.conflictResolution_coreResolution
 Cfl.Reduction.conflict_completeness
+Cfl.Reduction.conflict_retraction
 Cfl.Reduction.conflict_soundness
 Cfl.Reduction.reduceDeps
 Cfl.Reduction.reduceReal
@@ -65,8 +65,8 @@ Cls.Reduction.Lookup.versions_lookupClass
 Cls.Reduction.Lookup.versions_lookupOrig
 Cls.Reduction.classPkgs
 Cls.Reduction.classResolution
-Cls.Reduction.classResolution_coreResolution
 Cls.Reduction.conflict_class_completeness
+Cls.Reduction.conflict_class_retraction
 Cls.Reduction.conflict_class_soundness
 Cls.Reduction.coreResolution
 Cls.Reduction.reduceDeps
@@ -80,10 +80,10 @@ Conc.Reduction.Lookup.dependees_lookupIntermediateOrig
 Conc.Reduction.Lookup.versions_lookupGranular
 Conc.Reduction.Lookup.versions_lookupIntermediate
 Conc.Reduction.concurrentResolution
-Conc.Reduction.concurrentResolution_coreResolution
 Conc.Reduction.concurrent_completeness
+Conc.Reduction.concurrent_parents_retraction
+Conc.Reduction.concurrent_retraction
 Conc.Reduction.concurrent_soundness
-Conc.Reduction.parents_coreResolution
 Conc.Reduction.reduceDeps
 Conc.Reduction.reduceDepsDirect
 Conc.Reduction.reduceDepsEmpty
@@ -96,9 +96,9 @@ Peer.Reduction.Lookup.dependees_lookupIntermediate
 Peer.Reduction.Lookup.dependees_lookupIntermediateGran
 Peer.Reduction.Lookup.versions_lookupGranular
 Peer.Reduction.Lookup.versions_lookupIntermediate
-Peer.Reduction.parents_coreResolution
-Peer.Reduction.peerResolution_coreResolution
 Peer.Reduction.peer_completeness
+Peer.Reduction.peer_parents_retraction
+Peer.Reduction.peer_retraction
 Peer.Reduction.peer_soundness
 Peer.Reduction.reduceDeps
 Peer.Reduction.reduceDepsDepToInt
@@ -114,7 +114,6 @@ Vis.Reduction.Lookup.dependees_lookupOccurrence
 Vis.Reduction.Lookup.versions_lookupAgreement
 Vis.Reduction.Lookup.versions_lookupIntermediate
 Vis.Reduction.Lookup.versions_lookupOccurrence
-Vis.Reduction.parents_coreResolution
 Vis.Reduction.reduceDeps
 Vis.Reduction.reduceDepsIntToAgr
 Vis.Reduction.reduceDepsIntToOcc
@@ -124,8 +123,9 @@ Vis.Reduction.reduceReal
 Vis.Reduction.reduceRealAgreement
 Vis.Reduction.reduceRealIntermediate
 Vis.Reduction.reduceRealOccurrence
-Vis.Reduction.visibilityResolution_coreResolution
 Vis.Reduction.visibility_completeness
+Vis.Reduction.visibility_parents_retraction
+Vis.Reduction.visibility_retraction
 Vis.Reduction.visibility_soundness
 
 Plc.mem_reachable
@@ -144,8 +144,8 @@ Plc.Reduction.coreResolution
 Plc.Reduction.dependees
 Plc.Reduction.lookup_resolution
 Plc.Reduction.placementResolution
-Plc.Reduction.placementResolution_coreResolution
 Plc.Reduction.placement_completeness
+Plc.Reduction.placement_retraction
 Plc.Reduction.placement_soundness
 Plc.Reduction.reached_reduceReal
 Plc.Reduction.reduceDeps
@@ -156,8 +156,8 @@ Feat.Reduction.Lookup.dependees_lookupFeatPkg
 Feat.Reduction.Lookup.dependees_lookupOrig
 Feat.Reduction.Lookup.versions_lookupFeatPkg
 Feat.Reduction.Lookup.versions_lookupOrig
-Feat.Reduction.featureResolution_coreResolution
 Feat.Reduction.feature_completeness
+Feat.Reduction.feature_retraction
 Feat.Reduction.feature_soundness
 Feat.Reduction.reduceDeps
 Feat.Reduction.reduceReal
@@ -166,12 +166,12 @@ Virt.Reduction.Lookup.dependees_lookupOrig
 Virt.Reduction.Lookup.dependees_lookupSelector
 Virt.Reduction.Lookup.versions_lookupOrig
 Virt.Reduction.Lookup.versions_lookupSelector
-Virt.Reduction.providers_coreResolution
 Virt.Reduction.reduceDeps
 Virt.Reduction.reduceReal
 Virt.Reduction.selectorVersions
-Virt.Reduction.virtualResolution_coreResolution
 Virt.Reduction.virtual_completeness
+Virt.Reduction.virtual_providers_retraction
+Virt.Reduction.virtual_retraction
 Virt.Reduction.virtual_soundness
 
 PkgF.Reduction.Lookup.dependees_lookupAbsent
@@ -182,8 +182,8 @@ PkgF.Reduction.Lookup.dependees_lookupOrigBy
 PkgF.Reduction.Lookup.versions_lookupDisjunct
 PkgF.Reduction.Lookup.versions_lookupOrig
 PkgF.Reduction.Lookup.versions_lookupOrigPresent
-PkgF.Reduction.packageFormulaResolution_coreResolution
 PkgF.Reduction.package_formula_completeness
+PkgF.Reduction.package_formula_retraction
 PkgF.Reduction.package_formula_soundness
 PkgF.Reduction.package_formula_soundness_agree
 PkgF.Reduction.reduceDeps
@@ -200,12 +200,12 @@ VarF.Reduction.Lookup.versions_lookupDisjunct
 VarF.Reduction.Lookup.versions_lookupOrig
 VarF.Reduction.Lookup.versions_lookupVar
 VarF.Reduction.extractAssignment
-VarF.Reduction.extractAssignment_coreResolution
 VarF.Reduction.reduceDeps
 VarF.Reduction.reduceDepsBy
 VarF.Reduction.reduceReal
-VarF.Reduction.variableFormulaResolution_coreResolution
+VarF.Reduction.variable_formula_assignment_retraction
 VarF.Reduction.variable_formula_completeness
+VarF.Reduction.variable_formula_retraction
 VarF.Reduction.variable_formula_soundness
 
 FC.Reduction.Lookup.dependees_lookupGranularFeatPkg
@@ -218,10 +218,10 @@ FC.Reduction.Lookup.versions_lookupGranularOrig
 FC.Reduction.Lookup.versions_lookupIntermediate
 FC.Reduction.Lookup.versions_lookupIntermediateA
 FC.Reduction.Lookup.versions_lookupIntermediateF
-FC.Reduction.featureConcurrentResolution_coreResolution
 FC.Reduction.feature_concurrent_completeness
+FC.Reduction.feature_concurrent_parents_retraction
+FC.Reduction.feature_concurrent_retraction
 FC.Reduction.feature_concurrent_soundness
-FC.Reduction.parents_coreResolution
 FC.Reduction.reduceDeps
 FC.Reduction.reduceReal
 
@@ -237,8 +237,8 @@ Deb.Lookup.versions_lookupOrig
 Deb.Lookup.versions_lookupSelector
 Deb.Lookup.versions_lookupSelectorAgree
 Deb.Lookup.versions_lookupSoft
-Deb.debianResolution_coreResolution
 Deb.debian_completeness
+Deb.debian_retraction
 Deb.debian_soundness
 Deb.dependees
 Deb.matchb
@@ -264,9 +264,9 @@ DMA.Lookup.versions_lookupSoft
 DMA.debian_ma_completeness
 DMA.debian_ma_core_completeness
 DMA.debian_ma_core_soundness
+DMA.debian_ma_retraction
 DMA.debian_ma_soundness
 DMA.multiarchResolution_core
-DMA.multiarchResolution_coreResolution
 DMA.reduceAtom
 DMA.reduceClause
 DMA.reduceConf
@@ -303,8 +303,8 @@ Op.Reduction.dependeesBy
 Op.Reduction.encR
 Op.Reduction.encodeOF
 Op.Reduction.opamResolution
-Op.Reduction.opamResolution_coreResolution
 Op.Reduction.opam_completeness
+Op.Reduction.opam_retraction
 Op.Reduction.opam_soundness
 Op.Reduction.reduceDeps
 Op.Reduction.reduceReal
@@ -342,16 +342,16 @@ Cgo.Lookup.versions_reduceRealLink
 Cgo.Lookup.versions_reduceRealRoot
 Cgo.Lookup.versions_reduceRealSlot
 Cgo.cargoResolution
-Cgo.cargoResolution_coreResolution
 Cgo.cargo_completeness
+Cgo.cargo_features_retraction
+Cgo.cargo_parents_retraction
+Cgo.cargo_retraction
 Cgo.cargo_soundness
 Cgo.coreResolution
 Cgo.csAdmits
 Cgo.csHolds
 Cgo.decodeFS
-Cgo.decodeFS_coreResolution
 Cgo.decodeParents
-Cgo.decodeParents_coreResolution
 Cgo.dependees
 Cgo.dependeesBy
 Cgo.evalReq
@@ -375,8 +375,8 @@ Alp.Reduction.Lookup.versions_lookupOrig
 Alp.Reduction.Lookup.versions_lookupOrigCore
 Alp.Reduction.Lookup.versions_lookupRootCore
 Alp.Reduction.alpineResolution_core
-Alp.Reduction.alpineResolution_coreResolution
 Alp.Reduction.alpine_completeness
+Alp.Reduction.alpine_retraction
 Alp.Reduction.alpine_soundness
 Alp.Reduction.attachAt
 Alp.Reduction.dependees
@@ -406,10 +406,10 @@ NpmS.Reduction.dependees
 NpmS.Reduction.dependees_reducedNames
 NpmS.Reduction.embedRoot
 NpmS.Reduction.lookup_resolution
-NpmS.Reduction.npmParents_coreResolution
-NpmS.Reduction.npmResolution_coreResolution
 NpmS.Reduction.npmSight
 NpmS.Reduction.npm_completeness
+NpmS.Reduction.npm_parents_retraction
+NpmS.Reduction.npm_retraction
 NpmS.Reduction.npm_soundness
 NpmS.Reduction.peer_installed
 NpmS.Reduction.reached_reduceReal
@@ -430,8 +430,8 @@ NplS.Lookup.versions_lookupWalk
 NplS.Lookup.versions_lookupWalk_sub
 NplS.edgesOf
 NplS.edgesOfBy
-NplS.npmPlacementResolution_coreResolution
 NplS.npm_completeness
+NplS.npm_retraction
 NplS.npm_soundness
 NplS.reduceDeps
 NplS.reduceReal

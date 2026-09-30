@@ -616,7 +616,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         + rewrite (Hpif _ _ _ _ Hpi1 Hpi2); reflexivity.
     Qed.
 
-    Theorem peerResolution_coreResolution : forall S pi D g,
+    Theorem peer_retraction : forall S pi D g,
         Conc.Reduction.concurrentResolution g (coreResolution S pi D g) = S.
     Proof.
       intros S pi D g; apply PkgSet.ext; intros [n v].
@@ -625,7 +625,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
       split; [intro H; inversion H; assumption | apply CoreGranular].
     Qed.
 
-    Theorem parents_coreResolution : forall R D Th g r S pi,
+    Theorem peer_parents_retraction : forall R D Th g r S pi,
         IsResolution R D Th g r S pi ->
         parents D g (coreResolution S pi D g) = pi.
     Proof.
