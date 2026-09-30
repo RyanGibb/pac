@@ -166,26 +166,9 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       (S : PkgSet.t) (FS : FeaturedSet.t) (pi : ParentRel.t) : Prop :=
     { res_subset : PkgSet.Subset S (inst_repo I)
     ; res_root_mem : PkgSet.In (inst_root I) S
-    ; res_root_feats :
-        forall fs, FeaturedSet.In (inst_root I, fs) FS ->
-        FSet.Subset (inst_rootFeats I) fs
-    ; res_fs_dom : forall p fs, FeaturedSet.In (p, fs) FS -> PkgSet.In p S
-    ; res_fs_total : forall p, PkgSet.In p S ->
-        exists fs, FeaturedSet.In (p, fs) FS
-    ; res_fs_functional :
-        forall p fs fs', FeaturedSet.In (p, fs) FS ->
-        FeaturedSet.In (p, fs') FS -> fs = fs'
     ; res_class_unique :
         forall n v v', PkgSet.In (n, v) S -> PkgSet.In (n, v') S ->
         v <> v' -> inst_gran I v <> inst_gran I v'
-    ; res_support_mem :
-        forall p fs f, FeaturedSet.In (p, fs) FS -> FSet.In f fs ->
-        SupportSet.In (p, f) (inst_support I)
-    ; res_pi_functional :
-        forall p k u u', ParentRel.In ((p, k), u) pi ->
-        ParentRel.In ((p, k), u') pi -> u = u'
-    ; res_parent_subset :
-        forall p k u, ParentRel.In ((p, k), u) pi -> PkgSet.In p S
     ; res_slot_closure :
         forall p fs, PkgSet.In p S -> FeaturedSet.In (p, fs) FS ->
         forall d, SlotRel.In (p, d) (inst_slots I) ->
@@ -209,7 +192,24 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     ; res_links_unique :
         forall p q l, PkgSet.In p S -> PkgSet.In q S ->
         LinkRel.In (p, l) (inst_links I) -> LinkRel.In (q, l) (inst_links I) ->
-        p = q }.
+        p = q
+    ; res_fs_dom : forall p fs, FeaturedSet.In (p, fs) FS -> PkgSet.In p S
+    ; res_fs_total : forall p, PkgSet.In p S ->
+        exists fs, FeaturedSet.In (p, fs) FS
+    ; res_fs_functional :
+        forall p fs fs', FeaturedSet.In (p, fs) FS ->
+        FeaturedSet.In (p, fs') FS -> fs = fs'
+    ; res_root_feats :
+        forall fs, FeaturedSet.In (inst_root I, fs) FS ->
+        FSet.Subset (inst_rootFeats I) fs
+    ; res_support_mem :
+        forall p fs f, FeaturedSet.In (p, fs) FS -> FSet.In f fs ->
+        SupportSet.In (p, f) (inst_support I)
+    ; res_pi_functional :
+        forall p k u u', ParentRel.In ((p, k), u) pi ->
+        ParentRel.In ((p, k), u') pi -> u = u'
+    ; res_parent_subset :
+        forall p k u, ParentRel.In ((p, k), u) pi -> PkgSet.In p S }.
   #[local] Unset Implicit Arguments.
 
   (* Rules out a pair of pi at a slot Slot Closure does not enter: the
@@ -1408,25 +1408,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         destruct (Hdep _ Hroot _ _ Hed) as [w [Hw HwS]].
         apply T.VSet.singleton_spec in Hw; subst w.
         apply mem_cargoResolution; exists (g rv); exact HwS.
-      - intros fs Hfs; apply mem_features in Hfs;
-          destruct Hfs as [_ ->]; intros f Hf.
-        assert (Hed : T.DepRel.In
-            (rootPkg, (NPlus.CFeatP rn f (g rv),
-                     T.VSet.singleton (VPlus.WOrig rv)))
-            (reduceDeps
-               (MkInst R support FDefs Slots Links g dflt (rn, rv) rootFeats))).
-        { apply mem_reduceDeps; split; [exact (Hsub _ Hroot) |].
-          apply mem_dep_root; right; exists f; split;
-            [exact Hf | reflexivity]. }
-        destruct (Hdep _ Hroot _ _ Hed) as [w [Hw HwS]].
-        apply T.VSet.singleton_spec in Hw; subst w.
-        apply mem_featsAt; exists (g rv); exact HwS.
-      - intros p fs Hfs; apply mem_features in Hfs; exact (proj1 Hfs).
-      - intros p Hp; exists (featsAt S p); apply mem_features; split;
-          [exact Hp | reflexivity].
-      - intros p fs fs' Hfs Hfs'.
-        apply mem_features in Hfs; destruct Hfs as [_ ->].
-        apply mem_features in Hfs'; destruct Hfs' as [_ ->]; reflexivity.
       - intros n v v' Hv Hv' NE Hg.
         apply mem_cargoResolution in Hv; destruct Hv as [w Hv].
         apply mem_cargoResolution in Hv'; destruct Hv' as [w' Hv'].
@@ -1435,26 +1416,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         rewrite <- Hg in Hv'.
         assert (E := Huniq _ _ _ Hv Hv'); injection E as E.
         contradiction NE.
-      - intros [n v] fs f Hfs Hf.
-        apply mem_features in Hfs; destruct Hfs as [_ ->].
-        apply mem_featsAt in Hf; destruct Hf as [w Hf].
-        exact (proj1 (A2 _ _ _ _ Hf)).
-      - intros [n v] a u u' Hu Hu'.
-        apply mem_parents in Hu;
-          destruct Hu as [w [w1 [d [Hslot [Hown [Hs [Ha [Hact [_ Hcr]]]]]]]]].
-        apply mem_parents in Hu';
-          destruct Hu' as [w' [w1' [d' [Hslot' [Hown' [Hs' [Ha' [Hact'
-            [_ Hcr']]]]]]]]].
-        assert (d' = d)
-          by exact (Hsite (n, v) d' d Hs' Hs (eq_trans Ha' (eq_sym Ha))).
-        subst d'.
-        destruct (A1 _ _ _ Hown) as [_ ->].
-        destruct (A1 _ _ _ Hown') as [_ ->].
-        assert (E := Huniq _ _ _ Hslot Hslot'); injection E as E; subst w1'.
-        assert (E2 := Huniq _ _ _ Hcr Hcr'); injection E2 as E2; exact E2.
-      - intros [n v] k u Hpi.
-        apply mem_parents in Hpi; destruct Hpi as [w [_ [_ [_ [Hown _]]]]].
-        apply mem_cargoResolution; exists w; exact Hown.
       - intros [n v] fs Hp Hfs d Hd Hact Hopt.
         apply mem_features in Hfs; destruct Hfs as [_ ->].
         apply mem_cargoResolution in Hp; destruct Hp as [w0 Hp].
@@ -1661,6 +1622,45 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         subst qn; rewrite <- E2 in Hq.
         assert (E' := Huniq _ _ _ Hp Hq); injection E' as E'.
         rewrite E'; reflexivity.
+      - intros p fs Hfs; apply mem_features in Hfs; exact (proj1 Hfs).
+      - intros p Hp; exists (featsAt S p); apply mem_features; split;
+          [exact Hp | reflexivity].
+      - intros p fs fs' Hfs Hfs'.
+        apply mem_features in Hfs; destruct Hfs as [_ ->].
+        apply mem_features in Hfs'; destruct Hfs' as [_ ->]; reflexivity.
+      - intros fs Hfs; apply mem_features in Hfs;
+          destruct Hfs as [_ ->]; intros f Hf.
+        assert (Hed : T.DepRel.In
+            (rootPkg, (NPlus.CFeatP rn f (g rv),
+                     T.VSet.singleton (VPlus.WOrig rv)))
+            (reduceDeps
+               (MkInst R support FDefs Slots Links g dflt (rn, rv) rootFeats))).
+        { apply mem_reduceDeps; split; [exact (Hsub _ Hroot) |].
+          apply mem_dep_root; right; exists f; split;
+            [exact Hf | reflexivity]. }
+        destruct (Hdep _ Hroot _ _ Hed) as [w [Hw HwS]].
+        apply T.VSet.singleton_spec in Hw; subst w.
+        apply mem_featsAt; exists (g rv); exact HwS.
+      - intros [n v] fs f Hfs Hf.
+        apply mem_features in Hfs; destruct Hfs as [_ ->].
+        apply mem_featsAt in Hf; destruct Hf as [w Hf].
+        exact (proj1 (A2 _ _ _ _ Hf)).
+      - intros [n v] a u u' Hu Hu'.
+        apply mem_parents in Hu;
+          destruct Hu as [w [w1 [d [Hslot [Hown [Hs [Ha [Hact [_ Hcr]]]]]]]]].
+        apply mem_parents in Hu';
+          destruct Hu' as [w' [w1' [d' [Hslot' [Hown' [Hs' [Ha' [Hact'
+            [_ Hcr']]]]]]]]].
+        assert (d' = d)
+          by exact (Hsite (n, v) d' d Hs' Hs (eq_trans Ha' (eq_sym Ha))).
+        subst d'.
+        destruct (A1 _ _ _ Hown) as [_ ->].
+        destruct (A1 _ _ _ Hown') as [_ ->].
+        assert (E := Huniq _ _ _ Hslot Hslot'); injection E as E; subst w1'.
+        assert (E2 := Huniq _ _ _ Hcr Hcr'); injection E2 as E2; exact E2.
+      - intros [n v] k u Hpi.
+        apply mem_parents in Hpi; destruct Hpi as [w [_ [_ [_ [Hown _]]]]].
+        apply mem_cargoResolution; exists w; exact Hown.
     Qed.
 
     Module SOfw2 := SetOps Featured T.Pkg FeaturedSet T.PkgSet.
@@ -1932,8 +1932,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       assert (Hslot := parent_slot Hsite Hres).
       cbn [inst_repo inst_support inst_fdefs inst_slots inst_links inst_gran
            inst_dflt inst_root inst_rootFeats] in Hsite, Hpick, Hslot.
-      destruct Hres as [Hsub Hroot Hrootf Hdom Htot Hfun Hclass Hsupp
-        Hpifun _ Hslotc [Hfsame Hfdep] Hlinks].
+      destruct Hres as [Hsub Hroot Hclass Hslotc [Hfsame Hfdep] Hlinks
+        Hdom Htot Hfun Hrootf Hsupp Hpifun _].
       cbn [inst_repo inst_support inst_fdefs inst_slots inst_links inst_gran
            inst_dflt inst_root inst_rootFeats] in *.
       constructor.
