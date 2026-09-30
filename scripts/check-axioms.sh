@@ -222,12 +222,10 @@ Deb.Reduction.Lookup.dependees_lookupAbsent
 Deb.Reduction.Lookup.dependees_lookupDisjunct
 Deb.Reduction.Lookup.dependees_lookupOrig
 Deb.Reduction.Lookup.dependees_lookupSelector
-Deb.Reduction.Lookup.dependees_lookupSelectorAgree
 Deb.Reduction.Lookup.dependees_lookupSoft
 Deb.Reduction.Lookup.versions_lookupDisjunct
 Deb.Reduction.Lookup.versions_lookupOrig
 Deb.Reduction.Lookup.versions_lookupSelector
-Deb.Reduction.Lookup.versions_lookupSelectorAgree
 Deb.Reduction.Lookup.versions_lookupSoft
 Deb.Reduction.debian_completeness
 Deb.Reduction.debian_retraction
@@ -244,13 +242,11 @@ Deb.matchb
 DMA.Reduction.Lookup.dependees_lookupDisjunct
 DMA.Reduction.Lookup.dependees_lookupOrig
 DMA.Reduction.Lookup.dependees_lookupSelector
-DMA.Reduction.Lookup.dependees_lookupSelectorAgree
 DMA.Reduction.Lookup.dependees_lookupSelectorRec
 DMA.Reduction.Lookup.dependees_lookupSoft
 DMA.Reduction.Lookup.versions_lookupOrig
 DMA.Reduction.Lookup.versions_lookupOrig_pseudo
 DMA.Reduction.Lookup.versions_lookupSelector
-DMA.Reduction.Lookup.versions_lookupSelectorAgree
 DMA.Reduction.Lookup.versions_lookupSelectorRec
 DMA.Reduction.Lookup.versions_lookupSoft
 DMA.Reduction.debian_ma_completeness

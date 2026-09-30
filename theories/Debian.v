@@ -1910,90 +1910,51 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       Qed.
 
       Theorem versions_lookupDisjunct : forall I (A : Clause.t),
-          (exists p h,
-              T.DepRel.In (p, (Name.Disjunct A, h))
-                (reduceDeps I)) ->
           versions I (Name.Disjunct A) = versionsDisj A.
       Proof. intros; reflexivity. Qed.
 
       Theorem dependees_lookupDisjunct :
         forall I (A : Clause.t) (n : N.t) (phi : Ver.Formula),
-          T.PkgSet.In (Name.Disjunct A, Version.Atom (n, phi))
-            (reduceReal I) ->
           dependees I (Name.Disjunct A, Version.Atom (n, phi)) =
           dependees
             (MkInst (PkgFibred.tailFibre (inst_repo I) n) Deps.empty Deps.empty
                (ProvFibred.nodeFibre (inst_prov I) n) Conf.empty (inst_root I))
             (Name.Disjunct A, Version.Atom (n, phi)).
       Proof.
-        intros I A n phi _; cbn [dependees inst_repo inst_prov].
+        intros I A n phi; cbn [dependees inst_repo inst_prov].
         rewrite dependee_filter; reflexivity.
       Qed.
 
       Theorem versions_lookupSoft : forall I (A : Clause.t),
-          (exists p h,
-              T.DepRel.In (p, (Name.Soft A, h)) (reduceDeps I)) ->
           versions I (Name.Soft A) = versionsSoft A.
       Proof. intros; reflexivity. Qed.
 
       Theorem dependees_lookupSoft :
         forall I (A : Clause.t) (n : N.t) (phi : Ver.Formula),
-          T.PkgSet.In (Name.Soft A, Version.Atom (n, phi))
-            (reduceReal I) ->
           dependees I (Name.Soft A, Version.Atom (n, phi)) =
           dependees
             (MkInst (PkgFibred.tailFibre (inst_repo I) n) Deps.empty Deps.empty
                (ProvFibred.nodeFibre (inst_prov I) n) Conf.empty (inst_root I))
             (Name.Soft A, Version.Atom (n, phi)).
       Proof.
-        intros I A n phi _; cbn [dependees inst_repo inst_prov].
+        intros I A n phi; cbn [dependees inst_repo inst_prov].
         rewrite dependee_filter; reflexivity.
       Qed.
 
-      Theorem versions_lookupSelectorAgree :
-        forall I D' Dopt' (n : N.t) (phi : Ver.Formula),
-          occursAtomb (allClauses (inst_deps I) (inst_rec I)) (n, phi) =
-          occursAtomb (allClauses D' Dopt') (n, phi) ->
-          versions I (Name.Selector (n, phi)) =
-          versions
-            (MkInst (PkgFibred.tailFibre (inst_repo I) n) D' Dopt'
-               (ProvFibred.nodeFibre (inst_prov I) n) Conf.empty (inst_root I))
-            (Name.Selector (n, phi)).
-      Proof.
-        intros I D' Dopt' n phi _; cbn [versions inst_repo inst_prov].
-        symmetry; apply us_filter.
-      Qed.
-
-      Theorem dependees_lookupSelectorAgree :
-        forall I D' Dopt' (n : N.t) (phi : Ver.Formula)
-               (v : Version.t),
-          occursAtomb (allClauses (inst_deps I) (inst_rec I)) (n, phi) =
-          occursAtomb (allClauses D' Dopt') (n, phi) ->
-          dependees I (Name.Selector (n, phi), v) =
-          dependees
-            (MkInst (PkgFibred.tailFibre (inst_repo I) n) D' Dopt'
-               (ProvFibred.nodeFibre (inst_prov I) n) Conf.empty (inst_root I))
-            (Name.Selector (n, phi), v).
-      Proof. intros I D' Dopt' n phi v _; destruct v; reflexivity. Qed.
-
       Theorem versions_lookupSelector :
         forall I (n : N.t) (phi : Ver.Formula),
-          (exists p h,
-              T.DepRel.In (p, (Name.Selector (n, phi), h))
-                (reduceDeps I)) ->
           versions I (Name.Selector (n, phi)) =
           versions
             (MkInst (PkgFibred.tailFibre (inst_repo I) n) Deps.empty Deps.empty
                (ProvFibred.nodeFibre (inst_prov I) n) Conf.empty (inst_root I))
             (Name.Selector (n, phi)).
       Proof.
-        intros I n phi _; cbn [versions inst_repo inst_prov].
+        intros I n phi; cbn [versions inst_repo inst_prov].
         symmetry; apply us_filter.
       Qed.
 
       Theorem dependees_lookupSelector :
         forall I (n : N.t) (phi : Ver.Formula) (v : Version.t),
-          T.PkgSet.In (Name.Selector (n, phi), v) (reduceReal I) ->
           dependees I (Name.Selector (n, phi), v) =
           match v with
           | Version.Ref m w =>
@@ -2004,7 +1965,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
                 (Name.Orig n, T.VSet.singleton (Version.Orig u))
           | _ => T.DependeesSet.empty
           end.
-      Proof. intros I n phi v _; destruct v; reflexivity. Qed.
+      Proof. intros I n phi v; destruct v; reflexivity. Qed.
 
     End Lookup.
 

@@ -1914,10 +1914,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Theorem dependees_lookupDisjunct :
         forall I (alpha : A.t) Al (m : N.t) (x : NameArch)
                (phi : Deb.Ver.Formula),
-          Deb.Reduction.T.PkgSet.In
-            (Deb.Reduction.Name.Disjunct (reduceClause alpha Al),
-             Deb.Reduction.Version.Atom ((m, x), phi))
-            (Deb.Reduction.reduceReal (reduceInst I)) ->
           Deb.Reduction.dependees (reduceInst I)
             (Deb.Reduction.Name.Disjunct (reduceClause alpha Al),
              Deb.Reduction.Version.Atom ((m, x), phi)) =
@@ -1930,7 +1926,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             (Deb.Reduction.Name.Disjunct (reduceClause alpha Al),
              Deb.Reduction.Version.Atom ((m, x), phi)).
       Proof.
-        intros I alpha Al m x phi _; cbv zeta.
+        intros I alpha Al m x phi; cbv zeta.
         rewrite reduceProv_provClsPreimage.
         assert (Hm : NSet.In m (NSet.singleton m))
           by (apply NSet.singleton_spec; reflexivity).
@@ -1943,8 +1939,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Qed.
 
       Theorem versions_lookupSoft :
-        forall I (n : N.t) (alpha : A.t) (v : V.t) Al,
-          Deps.In (((n, alpha), v), Al) (inst_rec I) ->
+        forall I (alpha : A.t) Al,
           Deb.Reduction.versions (reduceInst I)
             (Deb.Reduction.Name.Soft (reduceClause alpha Al)) =
           Deb.Reduction.versionsSoft (reduceClause alpha Al).
@@ -1953,10 +1948,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Theorem dependees_lookupSoft :
         forall I (alpha : A.t) Al (m : N.t) (x : NameArch)
                (phi : Deb.Ver.Formula),
-          Deb.Reduction.T.PkgSet.In
-            (Deb.Reduction.Name.Soft (reduceClause alpha Al),
-               Deb.Reduction.Version.Atom ((m, x), phi))
-            (Deb.Reduction.reduceReal (reduceInst I)) ->
           Deb.Reduction.dependees (reduceInst I)
             (Deb.Reduction.Name.Soft (reduceClause alpha Al),
              Deb.Reduction.Version.Atom ((m, x), phi)) =
@@ -1969,7 +1960,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             (Deb.Reduction.Name.Soft (reduceClause alpha Al),
              Deb.Reduction.Version.Atom ((m, x), phi)).
       Proof.
-        intros I alpha Al m x phi _; cbv zeta.
+        intros I alpha Al m x phi; cbv zeta.
         rewrite reduceProv_provClsPreimage.
         assert (Hm : NSet.In m (NSet.singleton m))
           by (apply NSet.singleton_spec; reflexivity).
@@ -1979,63 +1970,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                  (realPreimage (inst_repo I) (NSet.singleton m)) _ ((m, x), phi)
                  (realPreimage_sub _ _) (realPreimage_cov _ _)
                  (preimageProvSubInst I _) Hm).
-      Qed.
-
-      Theorem versions_lookupSelectorAgree :
-        forall I (D' Dopt' : Deb.Deps.t) (alpha : A.t) (m : N.t) (x : Qual)
-               (phi : Deb.Ver.Formula),
-          Deb.Reduction.occursAtomb
-            (Deb.Reduction.allClauses (reduceDeps (inst_deps I))
-               (reduceRec (inst_rec I)))
-            (reduceAtom alpha (m, (x, phi))) =
-          Deb.Reduction.occursAtomb (Deb.Reduction.allClauses D' Dopt')
-            (reduceAtom alpha (m, (x, phi))) ->
-          Deb.Reduction.versions (reduceInst I)
-            (Deb.Reduction.Name.Selector (reduceAtom alpha (m, (x, phi)))) =
-          let Rs := realPreimage (inst_repo I) (NSet.singleton m) in
-          let Pis := provPreimage (inst_prov I) (NSet.singleton m) in
-          Deb.Reduction.versions
-            (Deb.MkInst (reduceReal Rs) D' Dopt'
-               (reduceProv Rs Pis (provClsPreimage (inst_cls I) Rs Pis))
-               Deb.Conf.empty (embedPkg (inst_root I)))
-            (Deb.Reduction.Name.Selector (reduceAtom alpha (m, (x, phi)))).
-      Proof.
-        intros I D' Dopt' alpha m x phi _; cbv zeta.
-        rewrite reduceProv_provClsPreimage.
-        assert (Hm : NSet.In (fst (fst (reduceAtom alpha (m, (x, phi)))))
-                       (NSet.singleton m))
-          by (apply NSet.singleton_spec; reflexivity).
-        assert (Hus := us_restrict I (NSet.singleton m)
-                         (realPreimage (inst_repo I) (NSet.singleton m))
-                         _ (reduceAtom alpha (m, (x, phi)))
-                         (realPreimage_sub _ _)
-                         (realPreimage_cov _ _) (preimageProvSubInst I _) Hm).
-        cbn [inst_repo inst_prov] in Hus.
-        cbn [Deb.Reduction.versions reduceInst Deb.inst_repo Deb.inst_prov].
-        rewrite Hus; reflexivity.
-      Qed.
-
-      Theorem dependees_lookupSelectorAgree :
-        forall I (D' Dopt' : Deb.Deps.t) (alpha : A.t) (m : N.t) (x : Qual)
-               (phi : Deb.Ver.Formula)
-               (w : Deb.Reduction.Version.t),
-          Deb.Reduction.occursAtomb
-            (Deb.Reduction.allClauses (reduceDeps (inst_deps I))
-               (reduceRec (inst_rec I)))
-            (reduceAtom alpha (m, (x, phi))) =
-          Deb.Reduction.occursAtomb (Deb.Reduction.allClauses D' Dopt')
-            (reduceAtom alpha (m, (x, phi))) ->
-          Deb.Reduction.dependees (reduceInst I)
-            (Deb.Reduction.Name.Selector (reduceAtom alpha (m, (x, phi))), w) =
-          let Rs := realPreimage (inst_repo I) (NSet.singleton m) in
-          let Pis := provPreimage (inst_prov I) (NSet.singleton m) in
-          Deb.Reduction.dependees
-            (Deb.MkInst (reduceReal Rs) D' Dopt'
-               (reduceProv Rs Pis (provClsPreimage (inst_cls I) Rs Pis))
-               Deb.Conf.empty (embedPkg (inst_root I)))
-            (Deb.Reduction.Name.Selector (reduceAtom alpha (m, (x, phi))), w).
-      Proof.
-        intros I D' Dopt' alpha m x phi w _; destruct w; reflexivity.
       Qed.
 
       Theorem versions_lookupSelector :
