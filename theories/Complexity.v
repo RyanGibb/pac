@@ -18,8 +18,8 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
     exists l, List.In l c /\ LitSat sigma l.
 
   Definition CnfSat {A : Type} (sigma : A -> bool)
-      (f : list (list (A * bool))) : Prop :=
-    forall c, List.In c f -> ClauseSat sigma c.
+      (cs : list (list (A * bool))) : Prop :=
+    forall c, List.In c cs -> ClauseSat sigma c.
 
   Module LitOT := PairUOT X BoolOT.
   Module ClauseOT := TripleUOT LitOT LitOT LitOT.
@@ -27,8 +27,8 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
   Definition lits (c : ClauseOT.t) : list LitOT.t :=
     fst c :: fst (snd c) :: snd (snd c) :: nil.
 
-  Definition cnf (phi : list ClauseOT.t) : list (list LitOT.t) :=
-    List.map lits phi.
+  Definition cnf (cs : list ClauseOT.t) : list (list LitOT.t) :=
+    List.map lits cs.
 
   Module Encoding.
     Module VF := UOTCompareFacts V.
@@ -283,8 +283,8 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
                   (Name.Clause c, Version.Lit l) :: nil)
         (lits c).
 
-    Definition reduceReal (phi : list ClauseOT.t) : T.PkgSet.t :=
-      T.PkgSet.ofList (root :: List.flat_map clauseReal phi).
+    Definition reduceReal (cs : list ClauseOT.t) : T.PkgSet.t :=
+      T.PkgSet.ofList (root :: List.flat_map clauseReal cs).
 
     Definition litVersions (c : ClauseOT.t) : T.VSet.t :=
       T.VSet.ofList (List.map Version.Lit (lits c)).
@@ -296,17 +296,17 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
                    (Name.Var (fst l), T.VSet.singleton (Version.Truth (snd l)))))
         (lits c).
 
-    Definition reduceDeps (phi : list ClauseOT.t) : T.DepRel.t :=
-      T.DepRel.ofList (List.flat_map clauseDeps phi).
+    Definition reduceDeps (cs : list ClauseOT.t) : T.DepRel.t :=
+      T.DepRel.ofList (List.flat_map clauseDeps cs).
 
-    Lemma mem_reduceReal : forall phi (y : T.Pkg.t),
-        T.PkgSet.In y (reduceReal phi) <->
-        y = root \/
-        exists c l, List.In c phi /\ List.In l (lits c) /\
-          ((exists b, y = (Name.Var (fst l), Version.Truth b)) \/
-           y = (Name.Clause c, Version.Lit l)).
+    Lemma mem_reduceReal : forall cs (p : T.Pkg.t),
+        T.PkgSet.In p (reduceReal cs) <->
+        p = root \/
+        exists c l, List.In c cs /\ List.In l (lits c) /\
+          ((exists b, p = (Name.Var (fst l), Version.Truth b)) \/
+           p = (Name.Clause c, Version.Lit l)).
     Proof.
-      intros phi y; unfold reduceReal.
+      intros cs p; unfold reduceReal.
       rewrite T.PkgSet.mem_ofList; cbn [List.In]; rewrite List.in_flat_map.
       split.
       - intros [<- | [c [Hc Hy]]]; [left; reflexivity | right].
@@ -322,25 +322,25 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
         destruct Hy as [[[|] ->] | ->]; cbn [List.In]; tauto.
     Qed.
 
-    Lemma mem_litVersions : forall c w,
-        T.VSet.In w (litVersions c) <->
-        exists l, List.In l (lits c) /\ w = Version.Lit l.
+    Lemma mem_litVersions : forall c v,
+        T.VSet.In v (litVersions c) <->
+        exists l, List.In l (lits c) /\ v = Version.Lit l.
     Proof.
-      intros c w; unfold litVersions.
+      intros c v; unfold litVersions.
       rewrite T.VSet.mem_ofList, List.in_map_iff.
       split; intros [l [H1 H2]]; exists l; split; auto.
     Qed.
 
-    Lemma mem_reduceDeps : forall phi (e : T.DepElt.t),
-        T.DepRel.In e (reduceDeps phi) <->
-        exists c, List.In c phi /\
+    Lemma mem_reduceDeps : forall cs (e : T.DepElt.t),
+        T.DepRel.In e (reduceDeps cs) <->
+        exists c, List.In c cs /\
           (e = (root, (Name.Clause c, litVersions c)) \/
            exists l, List.In l (lits c) /\
              e = ((Name.Clause c, Version.Lit l),
                   (Name.Var (fst l),
                    T.VSet.singleton (Version.Truth (snd l))))).
     Proof.
-      intros phi e; unfold reduceDeps.
+      intros cs e; unfold reduceDeps.
       rewrite T.DepRel.mem_ofList, List.in_flat_map.
       split.
       - intros [c [Hc He]]; exists c; split; [exact Hc |].
@@ -353,10 +353,10 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
         right; apply List.in_map_iff; exists l; split; [reflexivity | exact Hl].
     Qed.
 
-    Theorem reduceDeps_functionalInName : forall phi,
-        T.FunctionalInName (reduceDeps phi).
+    Theorem reduceDeps_functionalInName : forall cs,
+        T.FunctionalInName (reduceDeps cs).
     Proof.
-      intros phi p n vs1 vs2 H1 H2; apply mem_reduceDeps in H1, H2.
+      intros cs p n vs1 vs2 H1 H2; apply mem_reduceDeps in H1, H2.
       unfold root in *.
       destruct H1 as [c1 [_ [E1 | [l1 [_ E1]]]]],
                H2 as [c2 [_ [E2 | [l2 [_ E2]]]]];
@@ -378,11 +378,11 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
       discriminate (Huniq _ _ _ E Hin).
     Qed.
 
-    Theorem three_sat_soundness : forall phi S,
-        T.IsResolution (reduceReal phi) (reduceDeps phi) root S ->
-        CnfSat (extractAssignment S) (cnf phi).
+    Theorem three_sat_soundness : forall cs S,
+        T.IsResolution (reduceReal cs) (reduceDeps cs) root S ->
+        CnfSat (extractAssignment S) (cnf cs).
     Proof.
-      intros phi S [_ Hroot Hdep Huniq] c Hc.
+      intros cs S [_ Hroot Hdep Huniq] c Hc.
       unfold cnf in Hc; apply List.in_map_iff in Hc.
       destruct Hc as [c0 [<- Hc0]].
       destruct (Hdep _ Hroot (Name.Clause c0) (litVersions c0)) as [w [Hw HwS]].
@@ -433,7 +433,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
         | exact Hs].
     Qed.
 
-    Definition coreResolution (sigma : X.t -> bool) (phi : list ClauseOT.t)
+    Definition coreResolution (sigma : X.t -> bool) (cs : list ClauseOT.t)
       : T.PkgSet.t :=
       T.PkgSet.ofList
         (root ::
@@ -443,17 +443,17 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
                        (fun l => (Name.Var (fst l),
                                   Version.Truth (sigma (fst l))))
                        (lits c))
-           phi).
+           cs).
 
-    Lemma mem_coreResolution : forall sigma phi (y : T.Pkg.t),
-        T.PkgSet.In y (coreResolution sigma phi) <->
-        y = root \/
-        exists c, List.In c phi /\
-          (y = (Name.Clause c, Version.Lit (firstSatisfied sigma c)) \/
+    Lemma mem_coreResolution : forall sigma cs (p : T.Pkg.t),
+        T.PkgSet.In p (coreResolution sigma cs) <->
+        p = root \/
+        exists c, List.In c cs /\
+          (p = (Name.Clause c, Version.Lit (firstSatisfied sigma c)) \/
            exists l, List.In l (lits c) /\
-             y = (Name.Var (fst l), Version.Truth (sigma (fst l)))).
+             p = (Name.Var (fst l), Version.Truth (sigma (fst l)))).
     Proof.
-      intros sigma phi y; unfold coreResolution.
+      intros sigma cs p; unfold coreResolution.
       rewrite T.PkgSet.mem_ofList; cbn [List.In]; rewrite List.in_flat_map.
       split.
       - intros [<- | [c [Hc Hy]]]; [left; reflexivity | right].
@@ -467,12 +467,12 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
         apply List.in_map_iff; exists l; split; [reflexivity | exact Hl].
     Qed.
 
-    Theorem three_sat_completeness : forall phi sigma,
-        CnfSat sigma (cnf phi) ->
-        T.IsResolution (reduceReal phi) (reduceDeps phi) root
-          (coreResolution sigma phi).
+    Theorem three_sat_completeness : forall cs sigma,
+        CnfSat sigma (cnf cs) ->
+        T.IsResolution (reduceReal cs) (reduceDeps cs) root
+          (coreResolution sigma cs).
     Proof.
-      intros phi sigma Hsat; constructor.
+      intros cs sigma Hsat; constructor.
       - intros y Hy; apply mem_coreResolution in Hy; apply mem_reduceReal.
         destruct Hy as [-> | [c [Hc [-> | [l [Hl ->]]]]]];
           [left; reflexivity | right | right].
@@ -508,15 +508,15 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
           congruence.
     Qed.
 
-    Theorem three_sat_correct : forall phi,
-        (exists sigma, CnfSat sigma (cnf phi)) <->
-        exists S, T.IsResolution (reduceReal phi) (reduceDeps phi) root S.
+    Theorem three_sat_correct : forall cs,
+        (exists sigma, CnfSat sigma (cnf cs)) <->
+        exists S, T.IsResolution (reduceReal cs) (reduceDeps cs) root S.
     Proof.
-      intro phi; split.
-      - intros [sigma Hs]; exists (coreResolution sigma phi).
-        exact (three_sat_completeness phi sigma Hs).
+      intro cs; split.
+      - intros [sigma Hs]; exists (coreResolution sigma cs).
+        exact (three_sat_completeness cs sigma Hs).
       - intros [S HS]; exists (extractAssignment S).
-        exact (three_sat_soundness phi S HS).
+        exact (three_sat_soundness cs S HS).
     Qed.
   End Reduction.
 End Complexity.
