@@ -445,10 +445,10 @@ NplS.Lookup.versions_lookupWalk
 NplS.Lookup.versions_lookupWalk_sub
 NplS.edgesOf
 NplS.edgesOfBy
-NplS.npm_completeness
-NplS.npm_retraction
-NplS.npm_retraction_reachable
-NplS.npm_soundness
+NplS.npm_placement_completeness
+NplS.npm_placement_retraction
+NplS.npm_placement_retraction_reachable
+NplS.npm_placement_soundness
 NplS.reduceDeps
 NplS.reduceReal
 NplS.tr

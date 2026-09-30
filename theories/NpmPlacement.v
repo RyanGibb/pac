@@ -312,7 +312,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
   Definition rootPkg (I : Inst) : Pl.Reduction.T.Pkg.t :=
     Pl.Reduction.rootPkg (tr I).
 
-  Theorem npm_soundness : forall I depth S,
+  Theorem npm_placement_soundness : forall I depth S,
       Pl.Reduction.T.IsResolution (reduceReal I depth) (reduceDeps I depth)
         (rootPkg I) S ->
       IsResolution I
@@ -325,7 +325,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     split; [apply tr_resolution; exact H1 | exact H2].
   Qed.
 
-  Theorem npm_completeness : forall I depth L,
+  Theorem npm_placement_completeness : forall I depth L,
       IsResolution I L -> Pl.Depth depth L ->
       Pl.Reduction.T.IsResolution (reduceReal I depth) (reduceDeps I depth)
         (rootPkg I) (Pl.Reduction.coreResolution (tr I) depth L).
@@ -334,7 +334,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       [apply tr_resolution; exact H | exact Hd].
   Qed.
 
-  Theorem npm_retraction : forall I depth L,
+  Theorem npm_placement_retraction : forall I depth L,
       IsResolution I L -> Pl.Depth depth L ->
       Pl.Reduction.placementResolution
         (Pl.Reduction.coreResolution (tr I) depth L) = L.
@@ -344,14 +344,14 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       [apply tr_resolution; exact H | exact Hd].
   Qed.
 
-  Corollary npm_retraction_reachable : forall I depth L,
+  Corollary npm_placement_retraction_reachable : forall I depth L,
       IsResolution I L -> Pl.Depth depth L ->
       Pl.reachable (tr I)
         (Pl.Reduction.placementResolution
            (Pl.Reduction.coreResolution (tr I) depth L)) =
       Pl.reachable (tr I) L.
   Proof.
-    intros I depth L H Hd; rewrite (npm_retraction I depth L H Hd).
+    intros I depth L H Hd; rewrite (npm_placement_retraction I depth L H Hd).
     reflexivity.
   Qed.
 
