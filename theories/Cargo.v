@@ -184,13 +184,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     ; res_pi_functional :
         forall p k u u', ParentRel.In ((p, k), u) pi ->
         ParentRel.In ((p, k), u') pi -> u = u'
-    ; res_pi_dom :
-        forall p k u, ParentRel.In ((p, k), u) pi ->
-        exists fs d, FeaturedSet.In (p, fs) FS /\
-          SlotRel.In (p, d) (inst_slots I) /\
-          sKey d = k /\ slotActive (inst_root I) p d = true /\
-          (sOptional d = false \/
-           Activated (inst_fdefs I) fs p (sAlias d))
     ; res_slot_closure :
         forall p fs, PkgSet.In p S -> FeaturedSet.In (p, fs) FS ->
         forall d, SlotRel.In (p, d) (inst_slots I) ->
@@ -1638,12 +1631,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       destruct (A1 _ _ _ Hown') as [_ ->].
       assert (E := Huniq _ _ _ Hslot Hslot'); injection E as E; subst w1'.
       assert (E2 := Huniq _ _ _ Hcr Hcr'); injection E2 as E2; exact E2.
-    - intros [n v] k u Hu.
-      apply mem_decodeParents in Hu;
-        destruct Hu as [w [w1 [d [_ [Hown [Hs [Ha [Hact [Hreq _]]]]]]]]].
-      exists (featsAt S (n, v)), d; repeat split; try assumption.
-      apply mem_decodeFS; split; [| reflexivity].
-      apply mem_cargoResolution; exists w; exact Hown.
     - intros [n v] fs Hp Hfs d Hd Hact Hopt.
       apply mem_decodeFS in Hfs; destruct Hfs as [_ ->].
       apply mem_cargoResolution in Hp; destruct Hp as [w0 Hp].
@@ -2133,7 +2120,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     cbn [inst_repo inst_support inst_fdefs inst_slots inst_links inst_gran
          inst_dflt inst_root inst_rootFeats] in Hsite, Hpick, Hslot.
     destruct Hres as [Hsub Hroot Hrootf Hdom Htot Hfun Hclass Hsupp
-      Hpifun _ Hslotc Hfsame Hfdep Hlinks].
+      Hpifun Hslotc Hfsame Hfdep Hlinks].
     cbn [inst_repo inst_support inst_fdefs inst_slots inst_links inst_gran
          inst_dflt inst_root inst_rootFeats] in *.
     constructor.
@@ -3039,18 +3026,28 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     forall I S FS pi,
       SiteFunctional (inst_slots I) ->
       IsResolution I S FS pi ->
-      decodeParents I
-        (coreResolution I S FS pi) = pi.
+      forall p k u,
+        ParentRel.In ((p, k), u) (decodeParents I (coreResolution I S FS pi))
+        <-> ParentRel.In ((p, k), u) pi /\
+            exists fs d, FeaturedSet.In (p, fs) FS /\
+              SlotRel.In (p, d) (inst_slots I) /\
+              sKey d = k /\ slotActive (inst_root I) p d = true /\
+              (sOptional d = false \/
+               Activated (inst_fdefs I) fs p (sAlias d)).
   Proof.
-    intros I S FS pi Hsite Hres.
+    intros I S FS pi Hsite Hres [n v] k u.
     assert (Hslot := parent_slot Hsite Hres).
-    apply ParentRel.ext; intros [[[n v] k] u].
     rewrite mem_decodeParents; split.
-    - intros [w [w' [d [Hsl [Hown [Hd [<- [_ [_ Hcr]]]]]]]]].
+    - intros [w [w' [d [Hsl [Hown [Hd [<- [Hact [Hreq Hcr]]]]]]]]].
       apply core_shape in Hsl; cbn beta iota in Hsl.
       destruct Hsl as [v0 [u' [Eu [Egr [Hpi [Eb _]]]]]]; injection Eu as Eu.
       apply core_shape in Hown; cbn beta iota in Hown.
       destruct Hown as [v1 [Ev [HSv Egv]]]; injection Ev as <-.
+      split.
+      2:{ exists (fsAt FS (n, v)), d.
+          split; [exact (fsAt_mem Hres _ HSv) |].
+          split; [exact Hd | split; [reflexivity | split; [exact Hact |]]].
+          rewrite (featsAt_coreResolution Hres _ HSv) in Hreq; exact Hreq. }
       assert (Hv0 : PkgSet.In (n, v0) S)
         by (apply parentsb_iff in Eb; exact (proj1 Eb)).
       assert (v0 = v).
@@ -3065,9 +3062,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       destruct Hcr as [u'' [Eu'' [Hname Eg]]]; injection Eu'' as <-.
       destruct (V.eq_dec u u') as [-> | NE]; [exact Hpi |].
       exfalso; apply (res_gran_unique Hres Hname Hname' NE); congruence.
-    - intro Hpi.
-      destruct (res_pi_dom Hres Hpi)
-        as [fs [d [Hfs [Hd [<- [Hact Hreq]]]]]].
+    - intros [Hpi [fs [d [Hfs [Hd [<- [Hact Hreq]]]]]]].
       assert (HS := res_fs_dom Hres Hfs).
       rewrite <- (fsAt_in FS (n, v) fs (res_fs_functional Hres) Hfs) in Hreq.
       assert (Eb : parentsb (inst_fdefs I) (inst_slots I) (inst_root I) S FS
@@ -3084,5 +3079,22 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       + exists v, u; repeat split; assumption.
       + exists v; repeat split; exact HS.
       + exists u; repeat split; exact Hname.
+  Qed.
+
+  Corollary cargo_parents_retraction_dom :
+    forall I S FS pi,
+      SiteFunctional (inst_slots I) ->
+      IsResolution I S FS pi ->
+      (forall p k u, ParentRel.In ((p, k), u) pi ->
+         exists fs d, FeaturedSet.In (p, fs) FS /\
+           SlotRel.In (p, d) (inst_slots I) /\
+           sKey d = k /\ slotActive (inst_root I) p d = true /\
+           (sOptional d = false \/
+            Activated (inst_fdefs I) fs p (sAlias d))) ->
+      decodeParents I (coreResolution I S FS pi) = pi.
+  Proof.
+    intros I S FS pi Hsite Hres Hdom; apply ParentRel.ext; intros [[p k] u].
+    rewrite (cargo_parents_retraction _ _ _ _ Hsite Hres).
+    split; [intros [H _]; exact H | intro H; exact (conj H (Hdom _ _ _ H))].
   Qed.
 End Cargo.

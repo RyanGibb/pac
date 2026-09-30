@@ -352,6 +352,7 @@ Cgo.cargoResolution
 Cgo.cargo_completeness
 Cgo.cargo_features_retraction
 Cgo.cargo_parents_retraction
+Cgo.cargo_parents_retraction_dom
 Cgo.cargo_retraction
 Cgo.cargo_soundness
 Cgo.coreResolution
