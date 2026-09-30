@@ -285,7 +285,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         + exact Htree.
         + exact (Hholds (rootOcc I) nil Hroot
                    (proj2 (Pl.PkgSet.add_spec _ _ _) (or_introl eq_refl))).
-        + intros l a o H; apply (Hholds (a, o) (a :: l) (Hdeps l (a, o) H)).
+        + intros l a o H; apply (Hholds (a, o) (a :: l) (Hdeps l a o H)).
           apply Pl.PkgSet.add_spec; right; exact (Hsub l (a, o) H).
       - intros [Havail Hocc Htree Hroot Hedges].
         assert (Hholds : forall p l,
@@ -300,7 +300,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         + exact Hocc.
         + exact Htree.
         + apply Hholds; exact Hroot.
-        + intros l [a o] H; apply Hholds; exact (Hedges l a o H).
+        + intros l a o H; apply Hholds; exact (Hedges l a o H).
     Qed.
 
     (* Placement's Reduction is named in full: an alias of it inside this

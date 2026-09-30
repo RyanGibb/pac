@@ -90,7 +90,7 @@ Module Placement (N V : UsualOrderedType).
         exists u, Layout.In (l, (b, u)) L
     ; res_root : Holds I L nil (inst_root I)
     ; res_dep_resolution :
-        forall l p, Layout.In (l, p) L -> Holds I L (fst p :: l) p }.
+        forall l a v, Layout.In (l, (a, v)) L -> Holds I L (a :: l) (a, v) }.
 
   Definition Depth (depth : nat) (L : Layout.t) : Prop :=
     forall l p, Layout.In (l, p) L -> length l < depth.
@@ -126,32 +126,32 @@ Module Placement (N V : UsualOrderedType).
   | ReachesRoot : forall n l' u,
       Edge I (inst_root I) n -> walk L nil n = Some (l', u) ->
       Reaches I L (l', (n, u))
-  | ReachesStep : forall l p n l' u,
-      Reaches I L (l, p) -> Edge I p n ->
-      walk L (fst p :: l) n = Some (l', u) -> Reaches I L (l', (n, u)).
+  | ReachesStep : forall l a v n l' u,
+      Reaches I L (l, (a, v)) -> Edge I (a, v) n ->
+      walk L (a :: l) n = Some (l', u) -> Reaches I L (l', (n, u)).
 
   Lemma reaches_in : forall I L o, Reaches I L o -> Layout.In o L.
   Proof.
-    intros I L o H; destruct H as [n l' u _ Hw | l p n l' u _ _ Hw];
+    intros I L o H; destruct H as [n l' u _ Hw | l a v n l' u _ _ Hw];
       exact (proj1 (walk_found _ _ _ _ _ Hw)).
   Qed.
 
-  Lemma reaches_parented : forall I L l p, Reaches I L (l, p) ->
-      forall b l', Suffix (b :: l') (fst p :: l) ->
+  Lemma reaches_parented : forall I L l a v, Reaches I L (l, (a, v)) ->
+      forall b l', Suffix (b :: l') (a :: l) ->
       exists u, Layout.In (l', (b, u)) L.
   Proof.
-    intros I L l p H.
+    intros I L l a v H.
     assert (Hg : forall o, Reaches I L o ->
                forall b l', Suffix (b :: l') (fst (snd o) :: fst o) ->
                exists u, Layout.In (l', (b, u)) L).
-    { intros o Ho; induction Ho as [n l0 u _ Hw | l1 p0 n l0 u _ IH _ Hw];
+    { intros o Ho; induction Ho as [n l0 u _ Hw | l1 a0 v0 n l0 u _ IH _ Hw];
         intros b l' Hs; cbn [fst snd] in *;
         apply walk_found in Hw; destruct Hw as [Hin Hs0];
         inversion Hs as [| b2 l2 Hs1]; subst;
         try (exists u; exact Hin).
       - inversion Hs0; subst; inversion Hs1.
       - exact (IH b l' (suffix_trans _ _ _ Hs1 Hs0)). }
-    exact (Hg (l, p) H).
+    exact (Hg (l, (a, v)) H).
   Qed.
 
   Lemma walk_restrict : forall L L' l a l' u,
@@ -211,7 +211,7 @@ Module Placement (N V : UsualOrderedType).
   Lemma reaches_settled : forall I L,
       (forall l a v v', Layout.In (l, (a, v)) L -> Layout.In (l, (a, v')) L ->
          v = v') ->
-      forall o, Reaches I L o -> Settled I L (fst (snd o) :: fst o).
+      forall l a v, Reaches I L (l, (a, v)) -> Settled I L (a :: l).
   Proof.
     intros I L Hocc.
     assert (Hstep : forall w n l' u, Settled I L w ->
@@ -223,13 +223,15 @@ Module Placement (N V : UsualOrderedType).
         exact Hr.
       - apply (Hset b m u'); [| exact Hin].
         exact (suffix_trans _ _ _ Hs' (proj2 (walk_found _ _ _ _ _ Hw))). }
-    intros o H; induction H as [n l' u He Hw | l p n l' u Hr IH He Hw];
+    enough (Hg : forall o, Reaches I L o -> Settled I L (fst (snd o) :: fst o))
+      by (intros l a v H; exact (Hg _ H)).
+    intros o H; induction H as [n l' u He Hw | l a v n l' u Hr IH He Hw];
       cbn [fst snd] in *.
     - apply (Hstep nil n l' u);
         [| exact Hw | exact (ReachesRoot I L n l' u He Hw)].
       intros b m u' Hs; inversion Hs.
-    - apply (Hstep (fst p :: l) n l' u IH Hw).
-      exact (ReachesStep I L l p n l' u Hr He Hw).
+    - apply (Hstep (a :: l) n l' u IH Hw).
+      exact (ReachesStep I L l a v n l' u Hr He Hw).
   Qed.
 
   Lemma reaches_resolution : forall I L L',
@@ -237,7 +239,7 @@ Module Placement (N V : UsualOrderedType).
       (forall l a v v', Layout.In (l, (a, v)) L -> Layout.In (l, (a, v')) L ->
          v = v') ->
       Holds I L nil (inst_root I) ->
-      (forall l p, Layout.In (l, p) L -> Holds I L (fst p :: l) p) ->
+      (forall l a v, Layout.In (l, (a, v)) L -> Holds I L (a :: l) (a, v)) ->
       (forall o, Layout.In o L' <-> Layout.In o L /\ Reaches I L o) ->
       IsResolution I L'.
   Proof.
@@ -262,16 +264,16 @@ Module Placement (N V : UsualOrderedType).
     - intros l p H; exact (Hsub _ _ (HinL _ H)).
     - intros l a v v' H H'; exact (Hocc _ _ _ _ (HinL _ H) (HinL _ H')).
     - intros b l [a v] H; apply HL' in H; destruct H as [_ Hr].
-      destruct (reaches_parented I L _ _ Hr b l) as [u Hu];
-        [cbn [fst]; constructor; constructor |].
+      destruct (reaches_parented I L _ _ _ Hr b l) as [u Hu];
+        [constructor; constructor |].
       exists u; apply Hin'.
-      apply (reaches_settled I L Hocc _ Hr b l u); [| exact Hu].
+      apply (reaches_settled I L Hocc _ _ _ Hr b l u); [| exact Hu].
       cbn [fst snd]; constructor; constructor.
     - apply (Hholds _ _ Hroot); intros n l' u He Hw.
       exact (ReachesRoot I L n l' u He Hw).
-    - intros l p H; apply HL' in H; destruct H as [HL Hr].
-      apply (Hholds _ _ (Hdeps _ _ HL)); intros n l' u He Hw.
-      exact (ReachesStep I L l p n l' u Hr He Hw).
+    - intros l a v H; apply HL' in H; destruct H as [HL Hr].
+      apply (Hholds _ _ (Hdeps _ _ _ HL)); intros n l' u He Hw.
+      exact (ReachesStep I L l a v n l' u Hr He Hw).
   Qed.
 
   Theorem reaches_restriction : forall I L L',
@@ -352,15 +354,15 @@ Module Placement (N V : UsualOrderedType).
   Lemma mem_reachStep : forall I L os o,
       Layout.In o (reachStep I L os) <->
       Layout.In o (landings I L nil (inst_root I)) \/
-      exists l p, Layout.In (l, p) os /\
-        Layout.In o (landings I L (fst p :: l) p).
+      exists l a v, Layout.In (l, (a, v)) os /\
+        Layout.In o (landings I L (a :: l) (a, v)).
   Proof.
     intros I L os o; unfold reachStep; rewrite Layout.union_spec,
       SOll.mem_unionMap; split.
-    - intros [H | [[l p] [Hx H]]]; [left; exact H |].
-      right; exists l, p; split; [exact Hx | exact H].
-    - intros [H | [l [p [Hx H]]]]; [left; exact H |].
-      right; exists (l, p); split; [exact Hx | exact H].
+    - intros [H | [[l [a v]] [Hx H]]]; [left; exact H |].
+      right; exists l, a, v; split; [exact Hx | exact H].
+    - intros [H | [l [a [v [Hx H]]]]]; [left; exact H |].
+      right; exists (l, (a, v)); split; [exact Hx | exact H].
   Qed.
 
   Lemma reachStep_mono : forall I L os os',
@@ -368,8 +370,8 @@ Module Placement (N V : UsualOrderedType).
       Layout.Subset (reachStep I L os) (reachStep I L os').
   Proof.
     intros I L os os' H o; rewrite !mem_reachStep.
-    intros [Ho | [l [p [Hx Ho]]]]; [left; exact Ho |].
-    right; exists l, p; split; [exact (H _ Hx) | exact Ho].
+    intros [Ho | [l [a [v [Hx Ho]]]]]; [left; exact Ho |].
+    right; exists l, a, v; split; [exact (H _ Hx) | exact Ho].
   Qed.
 
   Lemma reachN_chain : forall I L k,
@@ -385,10 +387,10 @@ Module Placement (N V : UsualOrderedType).
   Proof.
     intros I L k; induction k as [| k IH]; intros o H; cbn [reachN] in H;
       [destruct (Layout.empty_spec H) |].
-    apply mem_reachStep in H; destruct H as [H | [l [p [Hx H]]]];
+    apply mem_reachStep in H; destruct H as [H | [l [a [v [Hx H]]]]];
       apply mem_landings in H; destruct H as [n [l' [u [He [Hw ->]]]]].
     - exact (ReachesRoot I L n l' u He Hw).
-    - exact (ReachesStep I L l p n l' u (IH _ Hx) He Hw).
+    - exact (ReachesStep I L l a v n l' u (IH _ Hx) He Hw).
   Qed.
 
   Lemma reachN_stable : forall I L k,
@@ -453,10 +455,10 @@ Module Placement (N V : UsualOrderedType).
           by (eapply LP.subset_cardinal; exact (reachN_in I L _)).
         lia. }
       specialize (Hfix _ eq_refl).
-      induction H as [n l' u He Hw | l p n l' u _ IH He Hw];
+      induction H as [n l' u He Hw | l a v n l' u _ IH He Hw];
         apply Hfix, mem_reachStep.
       + left; apply mem_landings; exists n, l', u; auto.
-      + right; exists l, p; split; [exact IH |].
+      + right; exists l, a, v; split; [exact IH |].
         apply mem_landings; exists n, l', u; auto.
   Qed.
 
@@ -1040,7 +1042,7 @@ Module Placement (N V : UsualOrderedType).
         pose proof (Huniq _ _ _ H H') as E; injection E as E; exact E.
       - apply (holds_decode I depth S _ _ Hres); intros n ws Hh.
         exact (Hcl _ _ _ Hroot Hh).
-      - intros l [a v] H; apply mem_placementResolution in H.
+      - intros l a v H; apply mem_placementResolution in H.
         apply (holds_decode I depth S _ _ Hres); intros n ws Hh.
         exact (Hcl _ _ _ H Hh).
     Qed.
@@ -1174,7 +1176,7 @@ Module Placement (N V : UsualOrderedType).
           apply VSet.choose_spec1, mem_occupants in Hc.
           destruct Hn as [Hlen Hk]; pose proof (Hdepth _ _ Hc).
           apply (holds_met I depth L (a :: l) (a, v));
-            [cbn [length]; lia | exact Hk | exact (Hdeps _ _ Hc) | exact Hh].
+            [cbn [length]; lia | exact Hk | exact (Hdeps _ _ _ Hc) | exact Hh].
         + assert (Hup := walk_par_inRange I depth l a Hn).
           destruct (VSet.choose (occupants L l a)) as [v |] eqn:Hc.
           * assert (Hw : walk L l a = Some (l, v))
