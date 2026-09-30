@@ -514,7 +514,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         forall u, Installs S pi q (slotKey I (base q) a) u ->
           VSet.In u (slotCands I (base q) a)
     ; res_root_dirs :
-        forall m v, Installs S pi (rootPkg I) m v ->
+        forall m u, Installs S pi (rootPkg I) m u ->
           ~ NSet.In (fst m) (dirs I (inst_root I)) ->
           NSet.In (fst m) (rootPeerDirs I)
     ; res_peer_local :
@@ -566,14 +566,14 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     ; res_root_peer :
         forall theta, In (inst_root I, theta) (inst_peers I) ->
           p_optional theta = false ->
-        exists v, VSet.In v (peerCandsAt I (inst_root I) theta) /\
-          Installs S pi (rootPkg I) (peerKeyAt I (inst_root I) theta) v
+        exists u, VSet.In u (peerCandsAt I (inst_root I) theta) /\
+          Installs S pi (rootPkg I) (peerKeyAt I (inst_root I) theta) u
     ; res_root_peer_match :
         forall theta, In (inst_root I, theta) (inst_peers I) ->
           p_optional theta = true ->
           NSet.In (p_name theta) (dirs I (inst_root I)) ->
-        forall v, Installs S pi (rootPkg I) (peerKeyAt I (inst_root I) theta) v ->
-          VSet.In v (peerCandsAt I (inst_root I) theta)
+        forall u, Installs S pi (rootPkg I) (peerKeyAt I (inst_root I) theta) u ->
+          VSet.In u (peerCandsAt I (inst_root I) theta)
     ; res_parents :
         forall c q, Conc.ParentRel.In (c, q) pi ->
           PkgSet.In c S /\ PkgSet.In q S /\
@@ -3656,12 +3656,12 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       Definition holderSubInst (I : Inst) (p p_c : RPkg.t) : Inst :=
         subInst I (slotNames I p_c) (twoDeps I p p_c) (twoPeers I p p_c).
 
-      Theorem dependees_lookupLink : forall I a m v a' m' u n x,
+      Theorem dependees_lookupLink : forall I a m v a' m' u n w,
           dependees (holderSubInst I (m, v) (m', u))
-            (Nm.Link (a, m) v (a', m') u n, x) =
-          dependees I (Nm.Link (a, m) v (a', m') u n, x).
+            (Nm.Link (a, m) v (a', m') u n, w) =
+          dependees I (Nm.Link (a, m) v (a', m') u n, w).
       Proof.
-        intros I a m v a' m' u n x; unfold holderSubInst.
+        intros I a m v a' m' u n w; unfold holderSubInst.
         pose proof (twoDeps_left I (m, v) (m', u)) as Hd.
         pose proof (twoPeers_left I (m, v) (m', u)) as Hp.
         pose proof (twoDeps_right I (m, v) (m', u)) as Hdc.
