@@ -49,12 +49,12 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           Feat.FeaturedSet.In ((n, v'), fs') S ->
           v <> v' -> g v <> g v'
     ; res_support_mem :
-        forall n v fs f,
-          Feat.FeaturedSet.In ((n, v), fs) S -> Feat.FSet.In f fs ->
-          Feat.SupportSet.In ((n, v), f) support
+        forall p fs f,
+          Feat.FeaturedSet.In (p, fs) S -> Feat.FSet.In f fs ->
+          Feat.SupportSet.In (p, f) support
     ; res_parent_subset :
-        forall c p, ParentRel.In (c, p) pi ->
-          (exists fs_c, Feat.FeaturedSet.In (c, fs_c) S) /\
+        forall q p, ParentRel.In (q, p) pi ->
+          (exists fs_q, Feat.FeaturedSet.In (q, fs_q) S) /\
           (exists fs_p, Feat.FeaturedSet.In (p, fs_p) S) }.
 
   (* Rules out a pair of pi that neither a dependency of the parent nor an
@@ -579,19 +579,19 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
     Qed.
 
     Lemma mem_featureConcurrentResolution :
-      forall g (S : T.PkgSet.t) (y : Feat.Featured.t),
-        Feat.FeaturedSet.In y (featureConcurrentResolution g S) <->
-        exists n v, T.PkgSet.In (Name.GranularOrig n (g v), v) S /\
-          y = ((n, v), featsOf g n v S).
+      forall g (S : T.PkgSet.t) n v fs,
+        Feat.FeaturedSet.In ((n, v), fs) (featureConcurrentResolution g S) <->
+        T.PkgSet.In (Name.GranularOrig n (g v), v) S /\ fs = featsOf g n v S.
     Proof.
-      intros g S y; unfold featureConcurrentResolution;
+      intros g S n v fs; unfold featureConcurrentResolution;
         rewrite SOts.mem_filterMap.
       split.
-      - intros [[[n w | n f w | n v m | n v m f | n v f m f'] v0] [HeS Hy]];
+      - intros [[[n0 w | n0 f w | n0 v1 m | n0 v1 m f | n0 v1 f m f'] v0]
+                  [HeS Hy]];
           cbn beta iota in Hy; try discriminate.
         destruct (G.eq_dec w (g v0)) as [-> | NE]; [| discriminate].
-        injection Hy as <-; exists n, v0; split; [exact HeS | reflexivity].
-      - intros [n [v [HS ->]]].
+        injection Hy as <- <- <-; split; [exact HeS | reflexivity].
+      - intros [HS ->].
         exists (Name.GranularOrig n (g v), v);
           split; [exact HS | cbn beta iota; apply dec_refl].
     Qed.
@@ -675,7 +675,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           assert (u1 = u) as -> by exact (Huniq _ _ _ Hi1S HiS).
           destruct (Hdep _ HfS _ _ (Hfwd f u Hf Hu)) as [w [Hw HgS]].
           apply mem_singVS in Hw; subst w; exact HgS.
-        + apply mem_featureConcurrentResolution; exists m, u;
+        + apply mem_featureConcurrentResolution;
             split; [exact HoS | reflexivity].
       - exact (Hin u Hu HiS).
     Qed.
@@ -709,30 +709,25 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         apply mem_reduceReal in HF; inversion HF; subst.
         eapply Feat.Reduction.mem_reduceReal_featPkg; eassumption. }
       constructor.
-      - intros p fs Hmem.
+      - intros [n v] fs Hmem.
         rewrite mem_featureConcurrentResolution in Hmem.
-        destruct Hmem as [n [v [HS Heq]]].
-        injection Heq as E1 E2; subst p.
+        destruct Hmem as [HS _].
         exact (HorigR n v HS).
       - assert (Hfe : featsOf g rn rv S = Feat.FSet.empty).
         { apply Feat.FSet.ext; intro f; rewrite featsOf_spec; split; intro H.
           - exfalso; exact (Hnosupp f (proj1 (HfeatSup rn f rv H))).
           - exfalso; exact (Feat.FSet.empty_spec H). }
         rewrite <- Hfe.
-        rewrite mem_featureConcurrentResolution; exists rn, rv; split;
+        rewrite mem_featureConcurrentResolution; split;
           [exact Hroot | reflexivity].
       - intros n v fs fs' H1 H2.
         rewrite mem_featureConcurrentResolution in H1, H2.
-        destruct H1 as [n1 [v1 [HS1 Heq1]]];
-          destruct H2 as [n2 [v2 [HS2 Heq2]]].
-        injection Heq1 as E1 E2 E3; subst n1 v1 fs.
-        injection Heq2 as E4 E5 E6; subst n2 v2 fs'.
+        destruct H1 as [HS1 ->]; destruct H2 as [HS2 ->].
         reflexivity.
       - split.
-        + intros p fs_p Hmem m vs fs Hdf.
+        + intros [n v] fs_p Hmem m vs fs Hdf.
           rewrite mem_featureConcurrentResolution in Hmem.
-          destruct Hmem as [n [v [HpS Heq]]].
-          injection Heq as E1 E2; subst p fs_p.
+          destruct Hmem as [HpS ->].
           apply (parent_closure_step _ _ _ g S _ _ n v m vs fs
                    (Name.IntermediateF n v m) Hres HpS
                    (fun u Hu Hi => proj2 (mem_parents Df Da g S m u n v)
@@ -742,10 +737,9 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
             [eapply EdgeFDepToInter | eapply EdgeFInterToOrig
             | eapply EdgeFDepToInterFeat | eapply EdgeFInterFeatToInter
             | eapply EdgeFInterToFeat]; eassumption.
-        + intros p fs_p Hmem f Hf m vs fs Hda.
+        + intros [n v] fs_p Hmem f Hf m vs fs Hda.
           rewrite mem_featureConcurrentResolution in Hmem.
-          destruct Hmem as [n [v [HpS Heq]]].
-          injection Heq as E1 E2; subst p fs_p.
+          destruct Hmem as [HpS ->].
           rewrite featsOf_spec in Hf.
           apply (parent_closure_step _ _ _ g S _ _ n v m vs fs
                    (Name.IntermediateA n v f m) Hres Hf
@@ -762,18 +756,14 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         exact (Huniq (Name.Intermediate pn pv m) _ _ (proj1 H1) (proj1 H2)).
       - intros n v v' fs fs' H1 H2 Hne Hg.
         rewrite mem_featureConcurrentResolution in H1, H2.
-        destruct H1 as [n1 [v1 [HS1 Heq1]]];
-          destruct H2 as [n2 [v2 [HS2 Heq2]]].
-        injection Heq1 as E1 E2 E3; subst n1 v1 fs.
-        injection Heq2 as E4 E5 E6; subst n2 v2 fs'.
+        destruct H1 as [HS1 _]; destruct H2 as [HS2 _].
         rewrite Hg in HS1.
         assert (E : v = v')
           by exact (Huniq (Name.GranularOrig n (g v')) _ _ HS1 HS2).
         exact (Hne E).
-      - intros n v fs f Hmem Hf.
+      - intros [n v] fs f Hmem Hf.
         rewrite mem_featureConcurrentResolution in Hmem.
-        destruct Hmem as [n1 [v1 [HS1 Heq]]].
-        injection Heq as E1 E2 E3; subst n1 v1 fs.
+        destruct Hmem as [HS1 ->].
         rewrite featsOf_spec in Hf.
         exact (proj1 (HfeatSup n f v Hf)).
       - intros [m u] [n v] Hpi; apply mem_parents in Hpi.
@@ -782,7 +772,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
                   exists fs, Feat.FeaturedSet.In ((n', v'), fs)
                                (featureConcurrentResolution g S))
           by (intros n' v' HS; exists (featsOf g n' v' S);
-              apply mem_featureConcurrentResolution; exists n', v'; auto).
+              apply mem_featureConcurrentResolution; auto).
         destruct Hpi as [Hi [(vs & fs & HD & Hu & Hp)
                              | (f & vs & fs & HA & Hu & Hf)]];
           split; apply Hin.
@@ -971,7 +961,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         + apply RealOrig, Feat.Reduction.mem_reduceReal_orig.
           exact (Hsubset _ _ HS).
         + apply RealFeatPkg, Feat.Reduction.mem_reduceReal_featPkg.
-          exact (conj (Hsm n v fs f HS Hf) (Hsubset _ _ HS)).
+          exact (conj (Hsm _ fs f HS Hf) (Hsubset _ _ HS)).
         + eapply RealFInter; eassumption.
         + eapply RealAInter; eassumption.
         + eapply RealFInterF; eassumption.
@@ -1065,13 +1055,13 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         - intro Hf; exact (CoreFeatPkg _ _ _ _ _ n v fs f HS Hf). }
       apply Feat.FeaturedSet.ext; intros [[n v] fs].
       rewrite mem_featureConcurrentResolution; split.
-      - intros [n' [v' [Hc E]]]; injection E as <- <- ->.
+      - intros [Hc ->].
         rewrite mem_coreResolution in Hc; inversion Hc; subst.
         match goal with
         | HS : Feat.FeaturedSet.In ((_, _), _) S_CF |- _ =>
             rewrite (Hfeats _ _ _ HS); exact HS
         end.
-      - intro HS; exists n, v; split.
+      - intro HS; split.
         + apply mem_coreResolution; exact (CoreOrig _ _ _ _ _ n v fs HS).
         + rewrite (Hfeats _ _ _ HS); reflexivity.
     Qed.
