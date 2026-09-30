@@ -632,11 +632,9 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
 
     Theorem parents_coreResolution : forall R D Th g r S pi,
         IsResolution R D Th g r S pi ->
-        (forall n v m u, ParentRel.In ((m, u), (n, v)) pi ->
-           exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs) ->
         parents D g (coreResolution S pi D g) = pi.
     Proof.
-      intros R D Th g r S pi [[_ _ _ _ Hps _] _] Hedge.
+      intros R D Th g r S pi [[_ _ _ _ Hps Hedge] _].
       apply ParentRel.ext; intros [[m u] [n v]]; rewrite mem_parents; split.
       - intros (n' & v' & m' & vs & u' & _ & _ & _ & Hint & E).
         injection E as <- <- <- <-.
