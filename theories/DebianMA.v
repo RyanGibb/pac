@@ -231,21 +231,22 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     { res_subset : PkgSet.Subset S (inst_repo I)
     ; res_root_mem : PkgSet.In (inst_root I) S
     ; res_dep_closure :
-        forall p, PkgSet.In p S ->
-        forall Al, Deps.In (p, Al) (inst_deps I) ->
+        forall n alpha v, PkgSet.In ((n, alpha), v) S ->
+        forall Al, Deps.In (((n, alpha), v), Al) (inst_deps I) ->
         exists a, List.In a Al /\
           exists q, PkgSet.In q S /\
-            MAMatch (inst_prov I) (inst_cls I) (parch p) a q
+            MAMatch (inst_prov I) (inst_cls I) alpha a q
     ; res_conflict_avoidance :
-        forall p, PkgSet.In p S ->
-        forall a, Conf.In (p, a) (inst_conf I) ->
-        ~ exists q, PkgSet.In q S /\ pname q <> pname p /\
-            MAConfMatch (inst_prov I) (inst_cls I) a q
+        forall n alpha v, PkgSet.In ((n, alpha), v) S ->
+        forall a, Conf.In (((n, alpha), v), a) (inst_conf I) ->
+        ~ exists m alpha' u, PkgSet.In ((m, alpha'), u) S /\ m <> n /\
+            MAConfMatch (inst_prov I) (inst_cls I) a ((m, alpha'), u)
     ; res_lockstep :
-        forall p q, PkgSet.In p S -> PkgSet.In q S ->
-        pname p = pname q -> parch p <> parch q ->
-        classOf (inst_cls I) p = MASame /\ classOf (inst_cls I) q = MASame /\
-        pver p = pver q
+        forall n alpha v alpha' u,
+        PkgSet.In ((n, alpha), v) S -> PkgSet.In ((n, alpha'), u) S ->
+        alpha <> alpha' ->
+        classOf (inst_cls I) ((n, alpha), v) = MASame /\
+        classOf (inst_cls I) ((n, alpha'), u) = MASame /\ v = u
     ; res_version_unique : C.VersionUnique S }.
 
   Module Reduction.
@@ -804,7 +805,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                         inst_root].
       - exact HinR.
       - rewrite mem_debianMAResolution; exact Hroot.
-      - intros p HpS Al HAl.
+      - intros n alpha v HpS Al HAl; set (p := ((n, alpha), v)) in *.
         pose proof HpS as HpT; rewrite mem_debianMAResolution in HpT.
         assert (Hd : Deb.Deps.In (embedPkg p, reduceClause (parch p) Al)
                        (reduceDeps D)).
@@ -819,7 +820,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         exists q; split.
         + rewrite mem_debianMAResolution; exact HqhS.
         + exact (proj2 (match_transfer R Pi M (parch p) a q HqR) HqhM).
-      - intros p HpS a HG [q [HqS [Hqp HCM]]].
+      - intros n alpha v HpS a HG [m [alpha' [u [HqS [Hqp HCM]]]]].
+        set (p := ((n, alpha), v)) in *; set (q := ((m, alpha'), u)) in *.
         pose proof HpS as HpT; rewrite mem_debianMAResolution in HpT.
         pose proof (HinR q HqS) as HqR.
         destruct (proj2 (conf_transfer R Pi M p a q HqR) HCM)
@@ -830,25 +832,26 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         assert (HceG : Deb.Conf.In (embedPkg p, (c2, true)) (reduceConf R G M)).
         { rewrite mem_reduceConf; left; exists (p, a); split;
             [exact HG | exact Hce]. }
-        apply (Hca (embedPkg p) HpT c2 true HceG).
-        exists (embedPkg q); split;
+        apply (Hca (pname p, QAArch (parch p)) (pver p) HpT c2 true HceG).
+        exists (pname q, QAArch (parch q)), (pver q); split;
           [ rewrite mem_debianMAResolution in HqS; exact HqS
           | split;
-            [ intro E; apply Hqp; rewrite (embedPkg_injective _ _ E);
-              reflexivity
+            [ intro E; apply Hqp; injection E; intros; assumption
             | split;
               [ intros _; apply Bool.not_true_is_false; intro Eg;
                 apply Hqp;
                 exact (proj1 (groupEq_iff (pname q) (pname p)
                                 (QAArch (parch q)) (QAArch (parch p))) Eg)
               | exact HM ] ] ].
-      - intros p q HpS HqS Hname Harch.
+      - intros n alpha v alpha' u HpS HqS Harch.
+        set (p := ((n, alpha), v)) in *; set (q := ((n, alpha'), u)) in *.
+        assert (Hname : pname p = pname q) by reflexivity.
         pose proof (HinR p HpS) as HpR; pose proof (HinR q HqS) as HqR.
         pose proof HpS as HpT; rewrite mem_debianMAResolution in HpT.
         pose proof HqS as HqT; rewrite mem_debianMAResolution in HqT.
         assert (Hpq : embedPkg q <> embedPkg p).
-        { intro E; apply Harch; unfold embedPkg in E; injection E; intros;
-            congruence. }
+        { intro E; apply Harch; unfold embedPkg, p, q in E; cbn in E;
+            injection E; intros; congruence. }
         assert (HinCp : Deb.Conf.In
                           (embedPkg p, (fst (snd (implConfOf M p)), false))
                           (reduceConf R G M)).
@@ -861,8 +864,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             [exact HqR | symmetry; apply implConfOf_flag]. }
         assert (HclsP : classOf M p = MASame).
         { destruct (classOf M p) eqn:Hc; try reflexivity; exfalso;
-            apply (Hca (embedPkg p) HpT _ _ HinCp);
-            exists (embedPkg q);
+            apply (Hca (pname p, QAArch (parch p)) (pver p) HpT _ _ HinCp);
+            exists (pname q, QAArch (parch q)), (pver q);
             (split;
              [ exact HqT
              | split;
@@ -874,8 +877,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                      [symmetry; exact Hname | exact I] ] ] ]). }
         assert (HclsQ : classOf M q = MASame).
         { destruct (classOf M q) eqn:Hc; try reflexivity; exfalso;
-            apply (Hca (embedPkg q) HqT _ _ HinCq);
-            exists (embedPkg p);
+            apply (Hca (pname q, QAArch (parch q)) (pver q) HqT _ _ HinCq);
+            exists (pname p, QAArch (parch p)), (pver p);
             (split;
              [ exact HpT
              | split;
@@ -887,8 +890,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         destruct (V.eq_dec (pver p) (pver q)) as [Hv | Hv].
         + split; [exact HclsP | split; [exact HclsQ | exact Hv]].
         + exfalso.
-          apply (Hca (embedPkg p) HpT _ _ HinCp).
-          exists (embedPkg q); split;
+          apply (Hca (pname p, QAArch (parch p)) (pver p) HpT _ _ HinCp).
+          exists (pname q, QAArch (parch q)), (pver q); split;
             [ exact HqT
             | split;
               [ exact Hpq
@@ -931,16 +934,24 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           pose proof (f_equal snd Heq) as HA2;
           cbn [fst snd] in Hp2, HA2.
         apply embedPkg_injective in Hp2; subst p0 A.
-        destruct (HScc p HpS Al HD) as [a [Hat [q [HqS HqM]]]].
+        destruct p as [[pn pa] pv]; set (p := ((pn, pa), pv)) in *.
+        destruct (HScc pn pa pv HpS Al HD) as [a [Hat [q [HqS HqM]]]].
         exists (reduceAtom (parch p) a); split.
         { apply List.in_map; exact Hat. }
         exists (embedPkg q); split.
         { unfold reduceReal; apply (SOmr.mem_map_inj _ _ _ embedPkg_injective).
           exact HqS. }
         exact (proj1 (match_transfer R Pi M (parch p) a q (HSsub q HqS)) HqM).
-      - intros ph HphT ea x HaG [qh [HqhT [Hne [Hex HM]]]].
+      - intros phn phv HphT ea x HaG [qhn [qhv [HqhT [Hne [Hex HM]]]]].
         unfold reduceReal in *; rewrite SOmr.mem_map in HphT; destruct HphT as [p1 [Hp1S Hp1e]].
-        unfold reduceReal in *; rewrite SOmr.mem_map in HqhT; destruct HqhT as [q [HqS Hqe]]; subst qh.
+        unfold reduceReal in *; rewrite SOmr.mem_map in HqhT; destruct HqhT as [q [HqS Hqe]].
+        injection Hqe as -> ->.
+        set (ph := (phn, phv)) in *.
+        change ((pname q, QAArch (parch q), pver q) <> ph) in Hne.
+        change (Deb.Match (reduceProv R Pi M) (embedPkg q) ea) in HM.
+        change (x = true -> MG.groupEq (fst (embedPkg q)) (fst ph) = false)
+          in Hex.
+        clearbody ph.
         rewrite mem_reduceConf in HaG.
         destruct HaG as [[e [HG Hce]] | [p0 [Hp0R Heq]]].
         + destruct e as [p0 a].
@@ -957,8 +968,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                               (QAArch (parch q)) (QAArch (parch p0))) En)
               in Hex.
             discriminate. }
-          apply (HSca p0 Hp1S a HG).
-          exists q; split;
+          destruct p0 as [[pn pa] pv]; set (p0 := ((pn, pa), pv)) in *.
+          apply (HSca pn pa pv Hp1S a HG).
+          destruct q as [[qn qa] qv]; set (q := ((qn, qa), qv)) in *.
+          exists qn, qa, qv; split;
             [ exact HqS
             | split;
               [ exact Hnp
@@ -985,8 +998,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
               by (rewrite Hnm; exact Hp1S).
             pose proof (HSvu (qn, pa) qv pv HqS Hin2) as Hvv.
             apply Hqp; congruence.
-          * destruct (HSci ((pn, pa), pv) ((qn, qa), qv) Hp1S HqS
-                        (eq_sym Hnm) (fun E => Ea (eq_sym E)))
+          * subst qn.
+            destruct (HSci pn pa pv qa qv Hp1S HqS (fun E => Ea (eq_sym E)))
               as [Hc0 [Hcq Hveq]].
             rewrite Hc0 in Hcm.
             exact (Hcm (eq_sym Hveq)).
