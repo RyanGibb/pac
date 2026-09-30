@@ -49,43 +49,43 @@ Module Versions (N V : UsualOrderedType).
   Inductive Formula : Type :=
   | FTop
   | FBot
-  | FConj (f1 f2 : Formula)
-  | FDisj (f1 f2 : Formula)
+  | FConj (phi1 phi2 : Formula)
+  | FDisj (phi1 phi2 : Formula)
   | FCmp (op : CmpOp) (c : V.t).
 
   Definition cmpOpEval (op : CmpOp) (v c : V.t) : bool :=
     cmpOpEvalBy V.compare op v c.
 
   Module VF := UOTCompareFacts V.
-  Lemma cmpOpEval_ne_iff : forall v w, cmpOpEval OpNe v w = true <-> v <> w.
+  Lemma cmpOpEval_ne_iff : forall v c, cmpOpEval OpNe v c = true <-> v <> c.
   Proof.
-    intros v w; unfold cmpOpEval, cmpOpEvalBy.
-    destruct (V.compare v w) eqn:Hc; split; intro H.
+    intros v c; unfold cmpOpEval, cmpOpEvalBy.
+    destruct (V.compare v c) eqn:Hc; split; intro H.
     - discriminate.
     - apply VF.compare_eq_iff in Hc; contradiction.
-    - intro He; subst w;
+    - intro He; subst c;
         rewrite (proj2 (VF.compare_eq_iff v v) eq_refl) in Hc;
         discriminate.
     - reflexivity.
-    - intro He; subst w;
+    - intro He; subst c;
         rewrite (proj2 (VF.compare_eq_iff v v) eq_refl) in Hc;
         discriminate.
     - reflexivity.
   Qed.
 
-  Fixpoint eval (f : Formula) (Vn : VSet.t) : VSet.t :=
-    match f with
+  Fixpoint eval (phi : Formula) (Vn : VSet.t) : VSet.t :=
+    match phi with
     | FTop => Vn
     | FBot => VSet.empty
-    | FConj f1 f2 => VSet.inter (eval f1 Vn) (eval f2 Vn)
-    | FDisj f1 f2 => VSet.union (eval f1 Vn) (eval f2 Vn)
+    | FConj phi1 phi2 => VSet.inter (eval phi1 Vn) (eval phi2 Vn)
+    | FDisj phi1 phi2 => VSet.union (eval phi1 Vn) (eval phi2 Vn)
     | FCmp op c => VSet.filter (fun v => cmpOpEval op v c) Vn
     end.
 
   Module FComp <: ComparableType.
     Definition t := Formula.
-    Definition rank (f : Formula) : nat :=
-      match f with
+    Definition rank (phi : Formula) : nat :=
+      match phi with
       | FTop => 0 | FBot => 1 | FConj _ _ => 2 | FDisj _ _ => 3 | FCmp _ _ => 4
       end.
 
@@ -149,27 +149,27 @@ Module Versions (N V : UsualOrderedType).
     ; res_root_mem : PkgSet.In r S
     ; res_dep_closure :
         forall p, PkgSet.In p S ->
-        forall (n : N.t) (f : Formula),
-          DepRel.In (p, (n, f)) D ->
-          exists v, VSet.In v (eval f (C.versions R n)) /\ PkgSet.In (n, v) S
+        forall (n : N.t) (phi : Formula),
+          DepRel.In (p, (n, phi)) D ->
+          exists v, VSet.In v (eval phi (C.versions R n)) /\ PkgSet.In (n, v) S
     ; res_version_unique : C.VersionUnique S }.
 
   Module Reduction.
     Module SOvd := SetOps DepElt C.DepElt DepRel C.DepRel.
     Definition reduce (R : PkgSet.t) (D : DepRel.t) : C.DepRel.t :=
-      SOvd.map (fun '(p, (n, f)) => (p, (n, eval f (C.versions R n)))) D.
+      SOvd.map (fun '(p, (m, phi)) => (p, (m, eval phi (C.versions R m)))) D.
 
-    Lemma mem_reduce : forall R D (p : Pkg.t) (n : N.t) (ws : VSet.t),
-        C.DepRel.In (p, (n, ws)) (reduce R D) <->
-        exists f, DepRel.In (p, (n, f)) D /\ ws = eval f (C.versions R n).
+    Lemma mem_reduce : forall R D (p : Pkg.t) (n : N.t) (vs : VSet.t),
+        C.DepRel.In (p, (n, vs)) (reduce R D) <->
+        exists phi, DepRel.In (p, (n, phi)) D /\ vs = eval phi (C.versions R n).
     Proof.
-      intros R D p n ws; unfold reduce; rewrite SOvd.mem_map.
+      intros R D p n vs; unfold reduce; rewrite SOvd.mem_map.
       split.
-      - intros [[q [m f]] [HeD He]]; cbn beta iota in He.
+      - intros [[q [m phi]] [HeD He]]; cbn beta iota in He.
         injection He as -> -> ->.
-        exists f; split; [exact HeD | reflexivity].
-      - intros [f [HD ->]].
-        exists (p, (n, f)); split; [exact HD | reflexivity].
+        exists phi; split; [exact HeD | reflexivity].
+      - intros [phi [HD ->]].
+        exists (p, (n, phi)); split; [exact HD | reflexivity].
     Qed.
 
     Theorem version_formula_correct : forall R D r S,
@@ -177,12 +177,12 @@ Module Versions (N V : UsualOrderedType).
     Proof.
       intros R D r S; split; intros [Hsub Hroot Hdep Huniq]; constructor;
         try assumption.
-      - intros p Hp m f HD.
-        apply (Hdep p Hp m (eval f (C.versions R m))).
-        apply mem_reduce; exists f; split; [exact HD | reflexivity].
+      - intros p Hp m phi HD.
+        apply (Hdep p Hp m (eval phi (C.versions R m))).
+        apply mem_reduce; exists phi; split; [exact HD | reflexivity].
       - intros p Hp m ws Hmem.
-        apply mem_reduce in Hmem; destruct Hmem as [f [HD ->]].
-        exact (Hdep p Hp m f HD).
+        apply mem_reduce in Hmem; destruct Hmem as [phi [HD ->]].
+        exact (Hdep p Hp m phi HD).
     Qed.
 
     Module Lookup.
@@ -194,10 +194,10 @@ Module Versions (N V : UsualOrderedType).
         PkgPreimage.preimage fst (DepKeys.hasKey DepRelFibred.node Dp) R.
 
       Lemma versions_realPreimage : forall R Dp n,
-          (exists q m f, DepRel.In (q, (m, f)) Dp /\ m = n) ->
+          (exists q m phi, DepRel.In (q, (m, phi)) Dp /\ m = n) ->
           C.versions (realPreimage R Dp) n = C.versions R n.
       Proof.
-        intros R Dp m [q [m' [f [He Hm]]]].
+        intros R Dp m [q [m' [phi [He Hm]]]].
         apply VSet.ext; intro v.
         rewrite !C.mem_versions; unfold realPreimage.
         rewrite PkgPreimage.mem_preimage.
@@ -205,7 +205,7 @@ Module Versions (N V : UsualOrderedType).
         - intros [H _]; exact H.
         - intro H; split; [exact H |].
           apply DepKeys.hasKey_iff.
-          exists (q, (m', f)); split; [exact He | exact Hm].
+          exists (q, (m', phi)); split; [exact He | exact Hm].
       Qed.
 
       Lemma dependees_fibre : forall R D (p : Pkg.t),
@@ -213,7 +213,7 @@ Module Versions (N V : UsualOrderedType).
           C.dependees (reduce R (DepRelFibred.tailFibre D p)) p.
       Proof.
         intros R D p; apply C.dependees_ext; intros [n vs]; rewrite !mem_reduce.
-        split; intros [f [HD ->]]; exists f; split; try reflexivity.
+        split; intros [phi [HD ->]]; exists phi; split; try reflexivity.
         - apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
         - exact (DepRelFibred.tailFibre_subset _ _ _ HD).
       Qed.
@@ -223,9 +223,9 @@ Module Versions (N V : UsualOrderedType).
       Proof.
         intros R Dp; apply C.DepRel.ext; intros [q [n vs]].
         rewrite !mem_reduce.
-        split; intros [f [HD ->]]; exists f; split; [exact HD | | exact HD |];
+        split; intros [phi [HD ->]]; exists phi; split; [exact HD | | exact HD |];
           rewrite (versions_realPreimage R Dp n);
-          solve [reflexivity | exists q, n, f; split; [exact HD | reflexivity]].
+          solve [reflexivity | exists q, n, phi; split; [exact HD | reflexivity]].
       Qed.
 
       Module PkgFibred := FibredRel N V Pkg PkgSet.
@@ -269,16 +269,16 @@ Module Versions (N V : UsualOrderedType).
         intros R D; apply C.DepRel.ext; intros [q [n ws]].
         rewrite SOpcd.mem_unionMap, mem_reduce.
         split.
-        - intros [f [HD ->]].
+        - intros [phi [HD ->]].
           exists q; split; [apply mem_tails; eauto |].
           rewrite reduce_realPreimage, mem_reduce.
-          exists f; split; [| reflexivity].
+          exists phi; split; [| reflexivity].
           apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
         - intros [p [_ Hy]].
           rewrite reduce_realPreimage, mem_reduce in Hy.
-          destruct Hy as [f [Hf ->]].
+          destruct Hy as [phi [Hf ->]].
           apply DepRelFibred.mem_tailFibre in Hf; destruct Hf as [HD _].
-          exists f; split; [exact HD | reflexivity].
+          exists phi; split; [exact HD | reflexivity].
       Qed.
 
     End Lookup.
