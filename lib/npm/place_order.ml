@@ -122,7 +122,9 @@ struct
      nothing unplaced; else pick, into the shallowest empty node_modules from
      l up, stopping at a copy, a walk passing through or a level wanting
      another version, and passing over one that peers on a
-     (deepest-nesting-target.js).  Preference only. *)
+     (deepest-nesting-target.js).  Preference only: every answer is one of
+     [cands], and a placement that breaks a decided walk is a conflict the
+     solver backtracks from. *)
   let choose_walk st ~assigned l a cands =
     let keep =
       match visible ~assigned l a with

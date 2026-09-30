@@ -454,8 +454,10 @@ struct
 
   (* npm leaves an edge on a copy its node_modules lookup already finds and
      the range admits (#problemEdges; build-ideal-tree.js:1427, 1438 for
-     peers), so that copy outranks the dist-tag and the newest.  Preference
-     only: with no such copy the whole candidate list stands. *)
+     peers), so that copy outranks the dist-tag and the newest; a copy out
+     of the lookup's sight is not reused.  Preference only: with no such
+     copy the whole candidate list stands, so nothing satisfiable stops
+     being so. *)
   let reused at (m : string * string) cands =
     let found c =
       match (at, c) with

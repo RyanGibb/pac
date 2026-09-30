@@ -178,9 +178,11 @@ struct
 
   (* Absence is the greatest version but the last decision: decided early,
      by PubGrub's fewest-candidates order, a name a negated atom reaches goes
-     to ⊥ before the packages that need it, narrowing them (opam's lwt fell
-     to 4.2.1).  So a name whose range admits ⊥ waits until every name that
-     must be present is decided, and the names [last] holds wait behind
+     to ⊥ before the packages that need it, narrowing them (dune's conflict
+     on old dune-configurators had dune-configurator decided absent, and
+     opam's lwt, which needs it, fell to 4.2.1).  So a name whose range admits ⊥ waits until every name that
+     must be present is decided: then either something needs it and its
+     range excludes ⊥, or ⊥ is right.  The names [last] holds wait behind
      those. *)
   let defer_bot ?(last = fun _ -> false) ~assigned
       (open_names : (PFR.Name.t * int) list) =

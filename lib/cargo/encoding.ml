@@ -71,9 +71,10 @@ module Make () = struct
   (* rootFeats.  Under All, every key of the root's feature table, as
      Cargo.lock is resolved with every feature (resolve_with_registry,
      CliFeatures::new_all), with_implicit_features having given each optional
-     dependency its implicit feature.  Only the root gets them
+     dependency its implicit feature.  Only the root gets every feature
      (members_with_features), so a transitive crate's unactivated optional
-     dependencies stay out. *)
+     dependencies stay out, as cargo's resolve_features skips them.  Named
+     resolves afresh, so its versions can differ from the lock's. *)
   let root_feats (m : P.ver) : Q.features -> string list = function
     | Q.All -> List.map fst m.P.v_feats
     | Q.Named { feats; default } ->
@@ -81,8 +82,10 @@ module Make () = struct
         else feats
 
   (* cargo's RustVersion::is_compatible_with: the MSRV as a caret
-     requirement against the toolchain with any pre-release dropped.  No MSRV
-     is compatible with every toolchain (msrv_compat_count). *)
+     requirement against the toolchain with any pre-release dropped.  The
+     index writes a partial MSRV ("1.71"), which caret expansion is defined
+     on, so nothing pads it.  No MSRV is compatible with every toolchain
+     (msrv_compat_count). *)
   let msrv_ok (rustc : string) (msrv : string option) : bool =
     match msrv with
     | None -> true

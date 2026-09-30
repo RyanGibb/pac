@@ -188,7 +188,8 @@ let ver_rank ar (v : P.ver) : bool * bool * bool =
   (nd && eng, eng, nd)
 
 (* node-semver compares versions differing only in build metadata equal,
-   so npm-pick-manifest tells them apart only by the latest tag
+   and satisfies ignores the metadata, so a range admits both or neither,
+   and npm-pick-manifest tells them apart only by the latest tag
    (index.js:119-132) or, its sort being stable, packument order: that one
    is all npm installs, so the only one kept.  A spec that is itself a
    version npm looks up by semver.clean's key, metadata stripped

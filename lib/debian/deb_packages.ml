@@ -50,6 +50,8 @@ let flag_yes = function
       String.ends_with ~suffix:"1" s
       && String.for_all (( = ) '0') (String.sub s 0 (String.length s - 1))
 
+(* String.trim takes the "\n" parse_lines joins a folded field's
+   continuations with (Policy 5.1) *)
 let split_on c s = String.split_on_char c s |> List.map String.trim
 
 (* the two-character operators first, so that ">" is not read off ">=";
