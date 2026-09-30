@@ -176,7 +176,9 @@ module Make (Encoding : Encoding.S) = struct
 
   (* An optional dependency is abandoned only when no published version of
      its dependee name matches the range (ENOTARGET); npm's other grounds
-     (#pruneFailedOptional, #checkEngineAndPlatform) are not modelled.  It is
+     (#pruneFailedOptional, #checkEngineAndPlatform) are not modelled.  An
+     optional package the host cannot run stays in the answer, as npm only
+     marks it inert and still locks it (fsevents on linux).  It is
      tested where a dependency is read, since testing at load time would
      resolve every optional dependee name eagerly.  The shared reading keeps
      it, as Yarn Berry fails on one no version matches (YN0082). *)
