@@ -22,10 +22,6 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
       (S : Feat.FeaturedSet.t) (pi : ParentRel.t) : Prop :=
     { res_subset : forall p fs, Feat.FeaturedSet.In (p, fs) S -> PkgSet.In p R
     ; res_root_mem : Feat.FeaturedSet.In (r, Feat.FSet.empty) S
-    ; res_feature_unification :
-        forall n v fs fs',
-          Feat.FeaturedSet.In ((n, v), fs) S ->
-          Feat.FeaturedSet.In ((n, v), fs') S -> fs = fs'
     ; res_parent_closure :
         (forall p fs_p, Feat.FeaturedSet.In (p, fs_p) S ->
          forall n vs fs, Feat.FeatDepRel.In (p, (n, (vs, fs))) Df ->
@@ -48,6 +44,10 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           Feat.FeaturedSet.In ((n, v), fs) S ->
           Feat.FeaturedSet.In ((n, v'), fs') S ->
           v <> v' -> g v <> g v'
+    ; res_feature_unification :
+        forall n v fs fs',
+          Feat.FeaturedSet.In ((n, v), fs) S ->
+          Feat.FeaturedSet.In ((n, v), fs') S -> fs = fs'
     ; res_support_mem :
         forall p fs f,
           Feat.FeaturedSet.In (p, fs) S -> Feat.FSet.In f fs ->
@@ -720,10 +720,6 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         rewrite <- Hfe.
         rewrite mem_featureConcurrentResolution; split;
           [exact Hroot | reflexivity].
-      - intros n v fs fs' H1 H2.
-        rewrite mem_featureConcurrentResolution in H1, H2.
-        destruct H1 as [HS1 ->]; destruct H2 as [HS2 ->].
-        reflexivity.
       - split.
         + intros [n v] fs_p Hmem m vs fs Hdf.
           rewrite mem_featureConcurrentResolution in Hmem.
@@ -761,6 +757,10 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         assert (E : v = v')
           by exact (Huniq (Name.GranularOrig n (g v')) _ _ HS1 HS2).
         exact (Hne E).
+      - intros n v fs fs' H1 H2.
+        rewrite mem_featureConcurrentResolution in H1, H2.
+        destruct H1 as [HS1 ->]; destruct H2 as [HS2 ->].
+        reflexivity.
       - intros [n v] fs f Hmem Hf.
         rewrite mem_featureConcurrentResolution in Hmem.
         destruct Hmem as [HS1 ->].
@@ -951,7 +951,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           (embedOrigPkg g r) (coreResolution Df Da g S_CF pi).
     Proof.
       intros R support Df Da g r S_CF pi Hres.
-      destruct Hres as [Hsubset Hrootm Hfu [Hpc Hpca] Hpif Hvg Hsm _].
+      destruct Hres as [Hsubset Hrootm [Hpc Hpca] Hpif Hvg Hfu Hsm _].
       destruct r as [rn rv].
       constructor.
       - intros q Hq; apply mem_coreResolution in Hq; apply mem_reduceReal.
