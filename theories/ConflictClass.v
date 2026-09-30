@@ -229,21 +229,6 @@ Module ConflictClass (N V : UsualOrderedType).
       - discriminate Hy.
     Qed.
 
-    Theorem reduceDeps_functionalInName : forall D Om,
-        C.FunctionalInName D -> T.FunctionalInName (reduceDeps D Om).
-    Proof.
-      intros D Om Hfn p' n' ws1 ws2 H1 H2.
-      apply mem_reduceDeps in H1, H2.
-      destruct H1 as [[p [n [vs [HD E]]]] | [q [k [Hc E]]]];
-        destruct H2 as [[p2 [n2 [vs2 [HD2 E2]]]] | [q2 [k2 [Hc2 E2]]]];
-        try congruence.
-      - assert (p2 = p) as -> by (apply embedPkg_injective; congruence).
-        assert (n2 = n) as -> by congruence.
-        rewrite (Hfn _ _ _ _ HD HD2) in E; congruence.
-      - assert (q2 = q) as -> by (apply embedPkg_injective; congruence).
-        congruence.
-    Qed.
-
     Theorem conflict_class_soundness :
       forall R D Om (r : Pkg.t) (S : T.PkgSet.t),
         T.IsResolution (reduceReal R Om) (reduceDeps D Om) (embedPkg r) S ->

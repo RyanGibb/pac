@@ -845,7 +845,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         injection E as E; exact E.
     Qed.
 
-    Theorem package_formula_soundness_agree :
+    Lemma package_formula_soundness_agree :
       forall (R : PkgSet.t) (D : DepRel.t) (r : Pkg.t) (S : T.PkgSet.t) ps,
         T.IsResolution (reduceReal R D) (reduceDeps R D) (embedPkg r) S ->
         AgreesOn S ps ->

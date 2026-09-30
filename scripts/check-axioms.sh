@@ -70,7 +70,6 @@ Cls.Reduction.conflict_class_retraction
 Cls.Reduction.conflict_class_soundness
 Cls.Reduction.coreResolution
 Cls.Reduction.reduceDeps
-Cls.Reduction.reduceDeps_functionalInName
 Cls.Reduction.reduceReal
 
 Conc.Reduction.Lookup.dependees_lookupGranular
@@ -191,7 +190,6 @@ PkgF.Reduction.Lookup.versions_lookupOrigPresent
 PkgF.Reduction.formula_calculus_completeness
 PkgF.Reduction.package_formula_retraction
 PkgF.Reduction.package_formula_soundness
-PkgF.Reduction.package_formula_soundness_agree
 PkgF.Reduction.reduceDeps
 PkgF.Reduction.reduceDepsBy
 PkgF.Reduction.reduceReal
