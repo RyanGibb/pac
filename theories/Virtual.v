@@ -1054,13 +1054,13 @@ Module Virtual (N V : UsualOrderedType).
         - exact (PkgFibred.tailFibre_subset _ _ _ HR).
       Qed.
 
-      Theorem dependees_lookupOrig : forall D R Pi (p : Pkg.t),
+      Theorem dependees_lookupOrig : forall R D Pi (p : Pkg.t),
           let Dp := DepRelFibred.tailFibre D p in
           T.dependees (reduceDeps R D Pi) (embedPkg p) =
           T.dependees (reduceDeps (realPreimage R Dp) Dp (provPreimage Pi Dp))
             (embedPkg p).
       Proof.
-        intros D R Pi [pn pv]; cbv zeta; cbn [embedPkg].
+        intros R D Pi [pn pv]; cbv zeta; cbn [embedPkg].
         assert (Hn : forall n vs, C.DepRel.In ((pn, pv), (n, vs)) D ->
                   hasDepNameb (DepRelFibred.tailFibre D (pn, pv)) n = true).
         { intros n vs HD; apply hasDepNameb_iff; exists (pn, pv), vs.
@@ -1117,14 +1117,14 @@ Module Virtual (N V : UsualOrderedType).
             | exact Hu | exact (PkgFibred.tailFibre_subset _ _ _ HuR)].
       Qed.
 
-      Theorem dependees_lookupSelector : forall D R Pi (p : Pkg.t) n v,
+      Theorem dependees_lookupSelector : forall R D Pi (p : Pkg.t) n v,
           T.dependees (reduceDeps R D Pi) (Name.Selector p n, v) =
           T.dependees
             (reduceDeps (PkgFibred.tailFibre R n) (DepRelFibred.tailFibre D p)
                         (ProvFibred.nodeFibre Pi n))
             (Name.Selector p n, v).
       Proof.
-        intros D R Pi p n v; apply T.dependees_ext; intros [m0 ws];
+        intros R D Pi p n v; apply T.dependees_ext; intros [m0 ws];
           rewrite !mem_reduceDeps.
         split; intro H;
           inversion H as [| | q n' vs m' u v' HD HP Hm
