@@ -166,7 +166,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
   Definition MatchPos (I : Inst) (S : PkgSet.t)
       (n : N.t) (zeta : Constr) : Prop :=
-    (exists v, PkgSet.In (n, v) S /\ constrMatch zeta v = true) \/
+    (exists u, PkgSet.In (n, u) S /\ constrMatch zeta u = true) \/
     (exists q u, Prov.In (q, (n, PVer u)) (inst_prov I) /\
        PkgSet.In q S /\ constrMatch zeta u = true) \/
     (bareMatch zeta = true /\
@@ -175,12 +175,12 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
   Definition HasPriority (I : Inst) (q : Pkg.t) : Prop :=
     exists prio, Prio.In (q, prio) (inst_prio I) /\ prio <> 0.
 
-  Definition AutoSelectable (I : Inst) (q : Pkg.t) : Prop :=
-    HasPriority I q \/ exists zeta, WSet.In (DPos (fst q, zeta)) (inst_world I).
+  Definition AutoSelectable (I : Inst) '(((m, u) as q) : Pkg.t) : Prop :=
+    HasPriority I q \/ exists zeta, WSet.In (DPos (m, zeta)) (inst_world I).
 
   Definition MatchReq (I : Inst) (S : PkgSet.t)
       (n : N.t) (zeta : Constr) : Prop :=
-    (exists v, PkgSet.In (n, v) S /\ constrMatch zeta v = true) \/
+    (exists u, PkgSet.In (n, u) S /\ constrMatch zeta u = true) \/
     (exists q u, Prov.In (q, (n, PVer u)) (inst_prov I) /\
        PkgSet.In q S /\ constrMatch zeta u = true) \/
     (bareMatch zeta = true /\
@@ -212,9 +212,9 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         forall n p q, PkgSet.In p S -> PkgSet.In q S ->
         Claims I n p -> Claims I n q -> p = q
     ; res_install_if :
-        forall p B, InstallIf.In (p, B) (inst_installIf I) ->
+        forall n v B, InstallIf.In ((n, v), B) (inst_installIf I) ->
         (forall a, CondSet.In a B -> MatchCond I S a) ->
-        MatchPos I S (fst p) CAny }.
+        MatchPos I S n CAny }.
 
   Module Type Designation.
     Parameter designation : CondSet.t -> option Atom.t.
@@ -859,13 +859,13 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Lemma selectableb_spec : forall I q,
         selectableb I q = true <-> AutoSelectable I q.
     Proof.
-      intros I q; unfold selectableb, AutoSelectable.
+      intros I [m u]; unfold selectableb, AutoSelectable.
       rewrite Bool.orb_true_iff, hasPriorityb_spec.
       apply or_iff_compat_l.
       unfold worldNamesb; rewrite WSet.exists_spec'; split.
-      - intros [[[m zeta] | [m zeta]] [Hd Hb]]; cbn in Hb; [| discriminate].
-        apply NEqb.eqb_true_iff in Hb; subst m; exists zeta; exact Hd.
-      - intros [zeta Hd]; exists (DPos (fst q, zeta)); split; [exact Hd | cbn].
+      - intros [[[m' zeta] | [m' zeta]] [Hd Hb]]; cbn in Hb; [| discriminate].
+        apply NEqb.eqb_true_iff in Hb; subst m'; exists zeta; exact Hd.
+      - intros [zeta Hd]; exists (DPos (m, zeta)); split; [exact Hd | cbn].
         apply NEqb.eqb_true_iff; reflexivity.
     Qed.
 
@@ -890,13 +890,13 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           * right; right; exact Hb.
     Qed.
 
-    Lemma satisfies_installIfForm : forall I S' p B,
-        PF.Satisfies S' (installIfForm I p B) <->
+    Lemma satisfies_installIfForm : forall I S' n v B,
+        PF.Satisfies S' (installIfForm I (n, v) B) <->
         (exists a, CondSet.In a (condRest B) /\
            ~ PF.Satisfies S' (encCond I a)) \/
-        PF.Satisfies S' (encPos I (fst p) CAny).
+        PF.Satisfies S' (encPos I n CAny).
     Proof.
-      intros I S' p B; unfold installIfForm.
+      intros I S' n v B; unfold installIfForm.
       rewrite satisfies_negFold.
       split; intros [[a [Ha Hn]] | Hb];
         try (right; exact Hb); left; exists a;
@@ -1128,7 +1128,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           try discriminate He.
         + injection He as <-; reflexivity.
         + injection He as <- _; reflexivity.
-      - intros z B Hrule Hc.
+      - intros zn zv B Hrule Hc; set (z := (zn, zv)) in *.
         destruct (D.designation_spec B (Hwf _ _ Hrule))
           as [[na cta] [Hdes Hin]].
         assert (HM := Hc _ Hin); cbn [MatchCond] in HM.
@@ -1282,7 +1282,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             exists (Version.Prov (n0, v0) u); split.
             -- apply PF.VSet.singleton_spec; reflexivity.
             -- apply coreResolution_prov; split; assumption.
-          * apply SOtf.mem_map in Hf; destruct Hf as [[z B] [Hfib ->]].
+          * apply SOtf.mem_map in Hf; destruct Hf as [[[zn zv] B] [Hfib ->]].
             apply mem_installIfFibre in Hfib.
             destruct Hfib as [Ht0 Hatt]; unfold attachDesignation in Hatt.
             destruct (D.designation B) as [a |] eqn:Edes; [| discriminate].
@@ -1296,7 +1296,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                apply Bool.negb_true_iff in Hnb.
                left; exists b; split; [exact Hb |].
                intro Hs; apply PF.satisfiesb_iff in Hs; congruence.
-            -- right; apply Hiff, (Ht z B Ht0).
+            -- right; apply Hiff, (Ht zn zv B Ht0).
                intros c Hc.
                destruct (DepOT.eq_dec c (DPos a)) as [He | Hne].
                ++ subst c; destruct a as [ma cta]; cbn [MatchCond].
@@ -1502,11 +1502,10 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             right; exists n, PBare; split; assumption.
       Qed.
 
-      Theorem dependees_lookupProv : forall I m q u,
-          dependees I (Name.Orig m, Version.Prov q u) =
+      Theorem dependees_lookupProv : forall I m n v u,
+          dependees I (Name.Orig m, Version.Prov (n, v) u) =
           FSet.singleton
-            (PF.FDep (Name.Orig (fst q))
-               (PF.VSet.singleton (Version.Orig (snd q)))).
+            (PF.FDep (Name.Orig n) (PF.VSet.singleton (Version.Orig v))).
       Proof. reflexivity. Qed.
 
       Definition nameSubInst (I : Inst) (n : N.t) : Inst :=
@@ -1944,24 +1943,24 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         exact (dependees_core I Vq rootPkg (root_reduceReal I) HR HO).
       Qed.
 
-      Theorem dependees_lookupProvCore : forall I I' Vq m q u,
-          Prov.In (q, (m, PVer u)) (inst_prov I) ->
-          PkgSet.In q (inst_repo I) ->
+      Theorem dependees_lookupProvCore : forall I I' Vq m n v u,
+          Prov.In ((n, v), (m, PVer u)) (inst_prov I) ->
+          PkgSet.In (n, v) (inst_repo I) ->
           Vq Name.Root = PF.VSet.singleton Version.RootV ->
           (forall m, Vq (Name.Orig m) = versions I m) ->
           PF.Reduction.T.dependees
             (PF.Reduction.reduceDeps (reduceReal I) (reduceDeps I))
-            (PF.Reduction.embedPkg (Name.Orig m, Version.Prov q u)) =
+            (PF.Reduction.embedPkg (Name.Orig m, Version.Prov (n, v) u)) =
           PF.Reduction.T.dependees
             (PF.Reduction.reduceDepsBy Vq
-               (depEdges (Name.Orig m, Version.Prov q u)
-                  (dependees I' (Name.Orig m, Version.Prov q u))))
-            (PF.Reduction.embedPkg (Name.Orig m, Version.Prov q u)).
+               (depEdges (Name.Orig m, Version.Prov (n, v) u)
+                  (dependees I' (Name.Orig m, Version.Prov (n, v) u))))
+            (PF.Reduction.embedPkg (Name.Orig m, Version.Prov (n, v) u)).
       Proof.
-        intros I I' Vq m q u Hprov Hq HR HO.
-        rewrite (dependees_lookupProv I' m q u),
-          <- (dependees_lookupProv I m q u).
-        apply (dependees_core I Vq (Name.Orig m, Version.Prov q u));
+        intros I I' Vq m n v u Hprov Hq HR HO.
+        rewrite (dependees_lookupProv I' m n v u),
+          <- (dependees_lookupProv I m n v u).
+        apply (dependees_core I Vq (Name.Orig m, Version.Prov (n, v) u));
           [| exact HR | exact HO].
         rewrite reduceReal_coreResolution, coreResolution_prov.
         split; assumption.
