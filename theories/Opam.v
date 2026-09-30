@@ -1018,7 +1018,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           (fun qk => if Pkg.eq_dec (fst qk) p then true else false) cls.
 
       Definition pkgSubInst (I : Inst) (p : Pkg.t) : Inst :=
-        MkInst (C.realPreimage (inst_repo I) (declaredNames I p))
+        MkInst (C.namePreimage (inst_repo I) (declaredNames I p))
           (List.filter (ownb p) (inst_dep I))
           (List.filter (ownb p) (inst_cfl I))
           (clsFibre (inst_cls I) p)
@@ -1040,7 +1040,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           (inst_query I) (inst_inv I).
 
       Definition nameSubInst (I : Inst) (n : N.t) : Inst :=
-        MkInst (C.realPreimage (inst_repo I) (NSet.singleton n))
+        MkInst (C.namePreimage (inst_repo I) (NSet.singleton n))
           (inst_dep I) (inst_cfl I) (inst_cls I)
           (inst_avl I) (inst_dxt I) (inst_pins I)
           (inst_pind I) (inst_query I) (inst_inv I).
@@ -1052,7 +1052,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
       Definition rootSubInst (I : Inst) : Inst :=
         MkInst
-          (C.realPreimage (inst_repo I)
+          (C.namePreimage (inst_repo I)
              (NSet.union (ofNames (inst_query I)) (ofNames (inst_inv I))))
           nil nil ClsRel.empty (inst_avl I) nil
           (inst_pins I) nil (inst_query I) (inst_inv I).
@@ -1061,7 +1061,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           NSet.In n ns ->
           C.versions
             (effRepo rho
-               (MkInst (C.realPreimage (inst_repo I) ns) (inst_dep I)
+               (MkInst (C.namePreimage (inst_repo I) ns) (inst_dep I)
                   (inst_cfl I) (inst_cls I) (inst_avl I)
                   (inst_dxt I) (inst_pins I) (inst_pind I)
                   (inst_query I) (inst_inv I))) n =
@@ -1071,12 +1071,12 @@ Module Opam (N V X Y E : UsualOrderedType).
         rewrite C.mem_versions.
         unfold srcVersions; rewrite C.mem_versions.
         rewrite !mem_effRepo; simpl.
-        rewrite C.mem_realPreimage; simpl.
+        rewrite C.mem_namePreimage; simpl.
         unfold PinOK, availOK; simpl; intuition.
       Qed.
 
       Lemma srcVersions_subInst_agree : forall rho I sl ns n,
-          inst_repo sl = C.realPreimage (inst_repo I) ns ->
+          inst_repo sl = C.namePreimage (inst_repo I) ns ->
           inst_avl sl = inst_avl I -> inst_pins sl = inst_pins I ->
           NSet.In n ns ->
           srcVersions rho sl n = srcVersions rho I n.
@@ -1085,7 +1085,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         unfold srcVersions at 1.
         assert (E : effRepo rho sl =
                     effRepo rho
-                      (MkInst (C.realPreimage (inst_repo I) ns) (inst_dep I)
+                      (MkInst (C.namePreimage (inst_repo I) ns) (inst_dep I)
                          (inst_cfl I) (inst_cls I)
                          (inst_avl I) (inst_dxt I)
                          (inst_pins I) (inst_pind I) (inst_query I)

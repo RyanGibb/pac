@@ -2441,12 +2441,12 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       : PkgSet.t :=
       PkgSet.filter (fun q => LinkRel.mem (q, l) Links) R.
 
-    Lemma evalReq_realPreimage : forall R ns m rg,
+    Lemma evalReq_namePreimage : forall R ns m rg,
         NSet.In m ns ->
-        evalReq (C.realPreimage R ns) m rg = evalReq R m rg.
+        evalReq (C.namePreimage R ns) m rg = evalReq R m rg.
     Proof.
       intros R ns m rg Hm; apply VSet.ext; intro u.
-      rewrite !mem_evalReq, C.mem_realPreimage; cbn [fst]; tauto.
+      rewrite !mem_evalReq, C.mem_namePreimage; cbn [fst]; tauto.
     Qed.
 
     Lemma mem_supportAt : forall support n f m v f',
@@ -2531,7 +2531,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       forall I n w,
         versions I (NPlus.CCrate n w) =
         versions
-          (MkInst (C.realPreimage (inst_repo I) (NSet.singleton n))
+          (MkInst (C.namePreimage (inst_repo I) (NSet.singleton n))
              SupportSet.empty FDefRel.empty SlotRel.empty LinkRel.empty
              (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
           (NPlus.CCrate n w).
@@ -2541,7 +2541,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       apply SOpv2.filterMap_restrict; [apply C.PkgPreimage.ofKeys_subset |].
       intros [n' v] HR He; cbn beta iota in He.
       rewrite if_some_iff, andb_true_iff, NEqb.eqb_true_iff in He.
-      destruct He as [[-> _] _]; apply C.mem_realPreimage; split;
+      destruct He as [[-> _] _]; apply C.mem_namePreimage; split;
         [exact HR | apply NSet.singleton_spec; reflexivity].
     Qed.
 
@@ -2549,7 +2549,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       forall I n f w,
         versions I (NPlus.CFeatP n f w) =
         versions
-          (MkInst (C.realPreimage (inst_repo I) (NSet.singleton n))
+          (MkInst (C.namePreimage (inst_repo I) (NSet.singleton n))
              (supportAt (inst_support I) n f)
              FDefRel.empty SlotRel.empty LinkRel.empty
              (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
@@ -2602,7 +2602,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         slotActive (inst_root I) (n, u) d = true ->
         versions I (NPlus.CSlot n w d) =
         versions
-          (MkInst (C.realPreimage (inst_repo I) (NSet.singleton (sTarget d)))
+          (MkInst (C.namePreimage (inst_repo I) (NSet.singleton (sTarget d)))
              SupportSet.empty FDefRel.empty
              (SlotFibred.tailFibre (inst_slots I) (n, u)) LinkRel.empty
              (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
@@ -2613,7 +2613,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                   n w d u Hs Hg Hact)
         as [E1 E2].
       cbn [versions inst_repo inst_slots inst_gran inst_root]; rewrite E1, E2.
-      rewrite evalReq_realPreimage;
+      rewrite evalReq_namePreimage;
         [reflexivity | apply NSet.singleton_spec; reflexivity].
     Qed.
 
@@ -2625,7 +2625,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         slotActive (inst_root I) (n, u) d = true ->
         versions I (NPlus.CDec n w f d f') =
         versions
-          (MkInst (C.realPreimage (inst_repo I) (NSet.singleton (sTarget d)))
+          (MkInst (C.namePreimage (inst_repo I) (NSet.singleton (sTarget d)))
              SupportSet.empty (fdefFibre (inst_fdefs I) (n, u))
              (SlotFibred.tailFibre (inst_slots I) (n, u)) LinkRel.empty
              (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
@@ -2638,7 +2638,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         as [E1 E2].
       cbn [versions inst_repo inst_fdefs inst_slots inst_gran inst_root];
         rewrite E1, E2.
-      rewrite evalReq_realPreimage;
+      rewrite evalReq_namePreimage;
         [reflexivity | apply NSet.singleton_spec; reflexivity].
     Qed.
 

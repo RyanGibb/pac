@@ -122,18 +122,18 @@ Module Core (N V : UsualOrderedType).
   Qed.
 
   Module PkgPreimage := PreimageOfKeys N Pkg NSet PkgSet.
-  Definition realPreimage (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
+  Definition namePreimage (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
     PkgPreimage.ofKeys fst ns R.
 
-  Lemma mem_realPreimage : forall R ns q,
-      PkgSet.In q (realPreimage R ns) <-> PkgSet.In q R /\ NSet.In (fst q) ns.
+  Lemma mem_namePreimage : forall R ns q,
+      PkgSet.In q (namePreimage R ns) <-> PkgSet.In q R /\ NSet.In (fst q) ns.
   Proof. intros R ns q; apply PkgPreimage.mem_ofKeys. Qed.
 
-  Lemma versions_realPreimage : forall R ns n,
-      NSet.In n ns -> versions (realPreimage R ns) n = versions R n.
+  Lemma versions_namePreimage : forall R ns n,
+      NSet.In n ns -> versions (namePreimage R ns) n = versions R n.
   Proof.
     intros R ns n Hn; apply versions_ext; intro v.
-    rewrite mem_realPreimage; cbn [fst]; tauto.
+    rewrite mem_namePreimage; cbn [fst]; tauto.
   Qed.
 
   Definition VersionUnique (S : PkgSet.t) : Prop :=

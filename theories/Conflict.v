@@ -437,7 +437,7 @@ Module Conflict (N V : UsualOrderedType).
           T.dependees (reduceDeps R D G) (embedPkg (n, v)) =
           T.dependees
             (reduceDeps
-               (C.realPreimage R
+               (C.namePreimage R
                   (conflictNames (ConflictRelFibred.tailFibre G (n, v))))
                (DepRelFibred.tailFibre D (n, v))
                (ConflictRelFibred.tailFibre G (n, v)))
@@ -445,11 +445,11 @@ Module Conflict (N V : UsualOrderedType).
       Proof.
         intros R D G n v; apply T.dependees_ext; intros [m ws].
         assert (Hc : forall n' vs, ConflictRel.In ((n, v), (n', vs)) G ->
-                  complementVS (C.realPreimage R (conflictNames
+                  complementVS (C.namePreimage R (conflictNames
                     (ConflictRelFibred.tailFibre G (n, v)))) n' vs =
                   complementVS R n' vs).
         { intros n' vs HG; unfold complementVS.
-          rewrite C.versions_realPreimage; [reflexivity |].
+          rewrite C.versions_namePreimage; [reflexivity |].
           apply mem_conflictNames; exists (n, v), vs.
           apply ConflictRelFibred.mem_tailFibre; auto. }
         rewrite !mem_reduceDeps.

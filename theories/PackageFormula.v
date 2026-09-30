@@ -2314,16 +2314,16 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           T.dependees (reduceDeps R D) (Name.Orig n, Version.Orig v) =
           T.dependees
             (reduceDeps
-               (C.realPreimage R
+               (C.namePreimage R
                   (ownNegDepNames (DepRelFibred.tailFibre D (n, v))))
                (DepRelFibred.tailFibre D (n, v)))
             (Name.Orig n, Version.Orig v).
       Proof.
         intros R D n v; rewrite (dependees_lookupOrigBy R D
-          (C.versions (C.realPreimage R
+          (C.versions (C.namePreimage R
              (ownNegDepNames (DepRelFibred.tailFibre D (n, v)))))).
         - reflexivity.
-        - intros m Hn; apply C.versions_realPreimage; exact Hn.
+        - intros m Hn; apply C.versions_namePreimage; exact Hn.
       Qed.
 
       Theorem dependees_lookupAbsent : forall R D n,

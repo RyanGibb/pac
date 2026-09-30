@@ -26,7 +26,7 @@ C.Merge.merge_functionalInName
 C.Merge.merge_resolution_iff
 C.Merge.mergedVS
 C.dependees
-C.realPreimage
+C.namePreimage
 C.versions
 
 Cx.Encoding.satEncoding

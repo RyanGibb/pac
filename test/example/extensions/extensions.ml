@@ -211,7 +211,7 @@ module Conflict = struct
         edges R.T.VSet.elements R.T.DependeesSet.elements
           (R.T.dependees
              (R.reduceDeps
-                (M.C.realPreimage r (L.conflictNames gp))
+                (M.C.namePreimage r (L.conflictNames gp))
                 (L.DepRelFibred.tailFibre d (n, v))
                 gp)
              p)
@@ -598,7 +598,7 @@ module Package_formula = struct
       | R.Name.Orig m, R.Version.Orig v ->
           let dp = L.DepRelFibred.tailFibre d (m, v) in
           R.T.dependees
-            (R.reduceDeps (M.C.realPreimage r (L.ownNegDepNames dp)) dp)
+            (R.reduceDeps (M.C.namePreimage r (L.ownNegDepNames dp)) dp)
             p
       | R.Name.Orig _, R.Version.Bot -> R.T.DependeesSet.empty
       | R.Name.Disjunct fs, i -> (
@@ -684,7 +684,7 @@ module Variable_formula = struct
       | R.Name.Orig (E.Inl m), R.Version.Orig (E.Inl v) ->
           let dp = L.DepRelFibred.tailFibre d (m, v) in
           R.T.dependees
-            (R.reduceDeps yx (M.C.realPreimage r (L.ownNegDepNames dp)) dp)
+            (R.reduceDeps yx (M.C.namePreimage r (L.ownNegDepNames dp)) dp)
             p
       | R.Name.Orig (E.Inl _), R.Version.Bot | R.Name.Orig (E.Inr _), _ ->
           R.T.DependeesSet.empty

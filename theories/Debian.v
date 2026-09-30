@@ -1869,12 +1869,12 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Definition provPreimage (Pi : Prov.t) (ns : NSet.t) : Prov.t :=
       ProvPreimage.ofKeys ProvFibred.node ns Pi.
 
-    Lemma evalAt_realPreimage : forall R ns (n : N.t) (f : Ver.Formula),
+    Lemma evalAt_namePreimage : forall R ns (n : N.t) (f : Ver.Formula),
         NSet.In n ns ->
-        evalAt (C.realPreimage R ns) (n, f) = evalAt R (n, f).
+        evalAt (C.namePreimage R ns) (n, f) = evalAt R (n, f).
     Proof.
       intros R ns n f Hm; unfold evalAt.
-      rewrite C.versions_realPreimage by exact Hm; reflexivity.
+      rewrite C.versions_namePreimage by exact Hm; reflexivity.
     Qed.
 
     Lemma provRestrict_sub : forall Pi ns (p : Pkg.t),
@@ -1906,13 +1906,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Lemma us_union_restrict :
       forall R Pi ns (p : Pkg.t) (n : N.t) (f : Ver.Formula),
         NSet.In n ns ->
-        us (C.realPreimage R ns)
+        us (C.namePreimage R ns)
           (Prov.union (provPreimage Pi ns) (ProvFibred.tailFibre Pi p))
           (n, f)
         = us R Pi (n, f).
     Proof.
       intros R Pi ns p n f Hm; apply T.VSet.ext; intro y; unfold us.
-      rewrite !T.VSet.union_spec, evalAt_realPreimage by exact Hm.
+      rewrite !T.VSet.union_spec, evalAt_namePreimage by exact Hm.
       apply or_iff_compat_l.
       apply SOew.filterMap_restrict; [apply provRestrict_sub |].
       intros [q [m vt]] Hin Hf; cbn [fst snd aname aform] in Hf.
@@ -1925,13 +1925,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Lemma tgt_union_restrict :
       forall R Pi ns (p : Pkg.t) (n : N.t) (f : Ver.Formula),
         NSet.In n ns ->
-        tgt (C.realPreimage R ns)
+        tgt (C.namePreimage R ns)
           (Prov.union (provPreimage Pi ns) (ProvFibred.tailFibre Pi p))
           (n, f)
         = tgt R Pi (n, f).
     Proof.
       intros R Pi ns p n f Hm; unfold tgt.
-      rewrite provb_union_restrict, us_union_restrict, evalAt_realPreimage
+      rewrite provb_union_restrict, us_union_restrict, evalAt_namePreimage
         by exact Hm.
       reflexivity.
     Qed.
@@ -2085,7 +2085,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         dependees I (Name.Orig n, Version.Orig v) =
         dependees
           (MkInst
-             (C.realPreimage (inst_repo I)
+             (C.namePreimage (inst_repo I)
                 (NSet.union (atomNames (inst_deps I) (n, v))
                    (confRead (inst_prov I) (inst_conf I) (n, v))))
              (DepsFibred.tailFibre (inst_deps I) (n, v))
@@ -2145,24 +2145,24 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         - cbn [fst] in Hn; rewrite Hn; exact (Hcn a x Hg).
         - exact (Hcp a x qn u vt Hg Hin). }
       assert (HconfN : forall a x, Conf.In ((n, v), (a, x)) (inst_conf I) ->
-                 confNames (C.realPreimage (inst_repo I) ns)
+                 confNames (C.namePreimage (inst_repo I) ns)
                    (Prov.union (provPreimage (inst_prov I) ns)
                       (ProvFibred.tailFibre (inst_prov I) (n, v))) a
                  = confNames (inst_repo I) (inst_prov I) a).
       { intros a x Hg; apply NSet.ext; intro qn; rewrite !mem_confNames.
         split; intros [u [HR Hm]]; exists u.
-        - apply C.mem_realPreimage in HR.
+        - apply C.mem_namePreimage in HR.
           destruct HR as [HR _].
           rewrite matchb_provPreimage in Hm by exact (Hcn a x Hg).
           auto.
         - split;
             [| rewrite matchb_provPreimage by exact (Hcn a x Hg); exact Hm].
-          apply C.mem_realPreimage; split;
+          apply C.mem_namePreimage; split;
             [exact HR | cbn [fst]; exact (Hmatch a x qn u Hg Hm)]. }
       assert (Hadm : forall a x (qn : N.t),
                  Conf.In ((n, v), (a, x)) (inst_conf I) ->
                  NSet.In qn (confNames (inst_repo I) (inst_prov I) a) ->
-                 complementVS (C.realPreimage (inst_repo I) ns)
+                 complementVS (C.namePreimage (inst_repo I) ns)
                    (Prov.union (provPreimage (inst_prov I) ns)
                       (ProvFibred.tailFibre (inst_prov I) (n, v))) a qn
                  = complementVS (inst_repo I) (inst_prov I) a qn).
@@ -2173,12 +2173,12 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         apply T.VSet.ext; intro w; rewrite !mem_complementVS.
         apply or_iff_compat_l.
         split; intros [u [HR [Hm Hw]]]; exists u.
-        - apply C.mem_realPreimage in HR.
+        - apply C.mem_namePreimage in HR.
           destruct HR as [HR _].
           rewrite matchb_provPreimage in Hm by exact (Hcn a x Hg).
           auto.
         - split; [| split; [| exact Hw]].
-          + apply C.mem_realPreimage; split;
+          + apply C.mem_namePreimage; split;
               [exact HR | exact Hqn'].
           + rewrite matchb_provPreimage by exact (Hcn a x Hg); exact Hm. }
       split.

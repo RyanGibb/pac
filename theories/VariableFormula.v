@@ -822,17 +822,17 @@ Module VariableFormula (N V : UsualOrderedType)
             (Name.Orig (inl n), Version.Orig (inl v)) =
           T.dependees
             (reduceDeps Y_x
-               (C.realPreimage R
+               (C.namePreimage R
                   (ownNegDepNames (DepRelFibred.tailFibre D (n, v))))
                (DepRelFibred.tailFibre D (n, v)))
             (Name.Orig (inl n), Version.Orig (inl v)).
       Proof.
         intros Y_x R D n v.
         rewrite (dependees_lookupOrigBy Y_x R D
-                   (C.versions (C.realPreimage R
+                   (C.versions (C.namePreimage R
                       (ownNegDepNames (DepRelFibred.tailFibre D (n, v)))))),
           reduceDeps_by by
-          (intros m Hn; apply C.versions_realPreimage; exact Hn).
+          (intros m Hn; apply C.versions_namePreimage; exact Hn).
         reflexivity.
       Qed.
 
