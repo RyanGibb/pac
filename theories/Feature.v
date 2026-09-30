@@ -630,13 +630,13 @@ Module Feature (N V F : UsualOrderedType).
           support.
 
       Lemma mem_supportFibre :
-        forall support (n m : N.t) (v : V.t) (f g : F.t),
-          SupportSet.In ((m, v), g) (supportFibre support n f) <->
-          SupportSet.In ((m, v), g) support /\ m = n /\ g = f.
+        forall support (n m : N.t) (v : V.t) (f f' : F.t),
+          SupportSet.In ((m, v), f') (supportFibre support n f) <->
+          SupportSet.In ((m, v), f') support /\ m = n /\ f' = f.
       Proof.
-        intros support n m v f g; unfold supportFibre.
+        intros support n m v f f'; unfold supportFibre.
         rewrite SupportSet.filter_spec'; cbn beta iota.
-        destruct (N.eq_dec m n); [destruct (F.eq_dec g f) |];
+        destruct (N.eq_dec m n); [destruct (F.eq_dec f' f) |];
           intuition congruence.
       Qed.
 

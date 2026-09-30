@@ -401,11 +401,11 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         RealMember R support Df Da g (Name.IntermediateA n v f m f', u).
     #[local] Hint Constructors RealMember : fc_mem.
 
-    Lemma mem_reduceReal : forall R support Df Da g (y : T.Pkg.t),
-        T.PkgSet.In y (reduceReal R support Df Da g) <->
-        RealMember R support Df Da g y.
+    Lemma mem_reduceReal : forall R support Df Da g (p : T.Pkg.t),
+        T.PkgSet.In p (reduceReal R support Df Da g) <->
+        RealMember R support Df Da g p.
     Proof.
-      intros R support Df Da g y; unfold reduceReal, granularReal,
+      intros R support Df Da g p; unfold reduceReal, granularReal,
         fInterReal, fInterFeatReal, aInterReal, aInterFeatReal.
       rewrite !T.PkgSet.union_spec, SOqp.mem_map, !SOfp.mem_unionMap,
         !SOap.mem_unionMap.
@@ -1335,16 +1335,16 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
             | eassumption].
       Qed.
 
-      Theorem versions_lookupIntermediateF : forall R support Df Da g n v m f,
+      Theorem versions_lookupIntermediateF : forall R support Df Da g n v m f',
           T.versions (reduceReal R support Df Da g)
-            (Name.IntermediateF n v m f) =
+            (Name.IntermediateF n v m f') =
           T.versions
             (reduceReal PkgSet.empty Feat.SupportSet.empty
                (FeatDepRelFibred.endsFibre Df (n, v) m)
                Feat.AddlDepRel.empty g)
-            (Name.IntermediateF n v m f).
+            (Name.IntermediateF n v m f').
       Proof.
-        intros R support Df Da g n v m f; apply T.versions_ext; intro u.
+        intros R support Df Da g n v m f'; apply T.versions_ext; intro u.
         rewrite !mem_reduceReal.
         split; intro H; inversion H; subst.
         - eapply RealFInterF; [| eassumption | eassumption].
@@ -1358,16 +1358,16 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
       Qed.
 
       Theorem dependees_lookupIntermediateF :
-        forall R support Df Da g n v m f u,
+        forall R support Df Da g n v m f' u,
           T.dependees (reduceDeps R support Df Da g)
-            (Name.IntermediateF n v m f, u) =
+            (Name.IntermediateF n v m f', u) =
           T.dependees
             (reduceDeps PkgSet.empty Feat.SupportSet.empty
                (FeatDepRelFibred.endsFibre Df (n, v) m)
                Feat.AddlDepRel.empty g)
-            (Name.IntermediateF n v m f, u).
+            (Name.IntermediateF n v m f', u).
       Proof.
-        intros R support Df Da g n v m f u.
+        intros R support Df Da g n v m f' u.
         apply T.dependees_ext; intros [m' ws].
         split; [| apply reduceDeps_mono;
                   [apply PkgSet.empty_subset
