@@ -1548,6 +1548,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           [apply NSet.add_spec in Hm'; exact Hm' | apply NSet.add_spec; exact Hm'].
       Qed.
 
+      Definition readNames (Pi : Prov.t) (D : Deps.t) (G : Conf.t) (p : Pkg.t)
+        : NSet.t :=
+        NSet.union (atomNames D p) (confRead Pi G p).
+
       Lemma reduceConf_confAtom : forall R G M (p : Pkg.t) (ea : Deb.Atom.t) e,
           Deb.Conf.In (embedPkg p, (ea, e)) (reduceConf R G M) ->
           NSet.In (fst (fst ea)) (confAtomNames G p).
@@ -1765,14 +1769,13 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           PkgSet.In p (inst_repo I) ->
           Deb.Reduction.dependees (reduceInst I)
             (Deb.Reduction.embedPkg (embedPkg p)) =
-          let ns := NSet.union (atomNames (inst_deps I) p)
-                      (confRead (inst_prov I) (inst_conf I) p) in
-          let Rp := PkgSet.add p (realPreimage (inst_repo I) ns) in
-          let Pis := Prov.union (provPreimage (inst_prov I) ns)
+          let ms := readNames (inst_prov I) (inst_deps I) (inst_conf I) p in
+          let Rp := PkgSet.add p (realPreimage (inst_repo I) ms) in
+          let Pis := Prov.union (provPreimage (inst_prov I) ms)
                        (provFibre (inst_prov I) p) in
           let Mp := provClsPreimage (inst_cls I) Rp Pis in
           Deb.Reduction.dependees
-            (Deb.MkInst (reduceReal (realPreimage (inst_repo I) ns))
+            (Deb.MkInst (reduceReal (realPreimage (inst_repo I) ms))
                (reduceDeps (depsFibre (inst_deps I) p))
                (reduceRec (depsFibre (inst_rec I) p))
                (reduceProv Rp Pis Mp)
@@ -1784,17 +1787,16 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         rewrite reduceProv_provClsPreimage, reduceConf_provClsPreimage
           by (intros q Hq; apply PkgSet.singleton_spec in Hq;
               apply PkgSet.add_spec; left; exact Hq).
-        set (ns := NSet.union (atomNames (inst_deps I) p)
-                     (confRead (inst_prov I) (inst_conf I) p)).
-        set (Rr := realPreimage (inst_repo I) ns).
+        set (ms := readNames (inst_prov I) (inst_deps I) (inst_conf I) p).
+        set (Rr := realPreimage (inst_repo I) ms).
         set (Rp := PkgSet.add p Rr).
-        set (Pis := Prov.union (provPreimage (inst_prov I) ns)
+        set (Pis := Prov.union (provPreimage (inst_prov I) ms)
                       (provFibre (inst_prov I) p)).
         set (Rc := PkgSet.singleton p).
         set (Gs := confFibre (inst_conf I) p).
         assert (HRr : PkgSet.Subset Rr (inst_repo I)) by apply realPreimage_sub.
         assert (HcovR : forall q, PkgSet.In q (inst_repo I) ->
-                          NSet.In (pname q) ns ->
+                          NSet.In (pname q) ms ->
                           PkgSet.In q Rr) by apply realPreimage_cov.
         assert (HRp : PkgSet.Subset Rp (inst_repo I)).
         { intros q Hq; apply PkgSet.add_spec in Hq;
@@ -1802,12 +1804,12 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         assert (HPis : Prov.Subset Pis (inst_prov I)).
         { intros [q [m v]] He; apply Prov.union_spec in He;
             destruct He as [He | He];
-            [ exact (proj1 (proj1 (mem_provPreimage (inst_prov I) ns q m v) He))
+            [ exact (proj1 (proj1 (mem_provPreimage (inst_prov I) ms q m v) He))
             | exact
               (proj1 (proj1 (mem_provFibre (inst_prov I) p q m v) He)) ]. }
         set (Ip := MkInst Rp (inst_deps I) (inst_rec I) Pis (inst_conf I)
                      (inst_cls I) (inst_root I)).
-        assert (Hsl : ProvSubInst I ns Ip).
+        assert (Hsl : ProvSubInst I ms Ip).
         { unfold ProvSubInst, Ip; cbn [inst_repo inst_prov]; repeat split;
             [ exact HRp | exact HPis
             | intros q Hq Hn; apply PkgSet.add_spec; right;
@@ -1827,12 +1829,12 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         { intros [q a0] He Hq; cbn [fst] in Hq; apply mem_confFibre; split;
             [exact He | exact Hq]. }
         assert (Hatom : forall an,
-                   NSet.In an (atomNames (inst_deps I) p) -> NSet.In an ns)
+                   NSet.In an (atomNames (inst_deps I) p) -> NSet.In an ms)
           by (intros an Ha; apply NSet.union_spec; left; exact Ha).
         assert (Hcn : forall (ea : Deb.Atom.t) e,
                    Deb.Conf.In (embedPkg p, (ea, e))
                      (reduceConf (inst_repo I) (inst_conf I) (inst_cls I)) ->
-                   NSet.In (fst (fst ea)) ns).
+                   NSet.In (fst (fst ea)) ms).
         { intros ea e Hg; apply NSet.union_spec; right; apply mem_confRead.
           exists (fst (fst ea)); split;
             [exact (reduceConf_confAtom _ _ _ p ea e Hg) | left; reflexivity]. }
@@ -1841,7 +1843,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                      (reduceConf (inst_repo I) (inst_conf I) (inst_cls I)) ->
                    forall (q : Pkg.t) v,
                      Prov.In (q, (fst (fst ea), v)) (inst_prov I) ->
-                     NSet.In (pname q) ns).
+                     NSet.In (pname q) ms).
         { intros ea e Hg q v Hin; apply NSet.union_spec; right.
           apply mem_confRead; exists (fst (fst ea)); split;
             [exact (reduceConf_confAtom _ _ _ p ea e Hg) | right].
@@ -1866,7 +1868,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             * left; split; [exact Hcard |].
               exists a1; split; [exact Hmin |].
               rewrite Hy; symmetry.
-              apply (dependee_restrict I ns Rr _ a1 HRr HcovR Hsl).
+              apply (dependee_restrict I ms Rr _ a1 HRr HcovR Hsl).
               exact (Hatom _ (reduceDeps_atomNames (inst_deps I) p A a1 HA
                                 (Deb.AtomSet.min_elt_spec1 Hmin))).
             * right; split; [exact Hcard | exact Hy].
@@ -1878,13 +1880,13 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                 (proj1 (reduceConf_pkg _ _ _ p Rc Gs a0 e HRc HGs Hinp Hown)
                         Hg) |].
             split;
-              [rewrite (confNames_restrict I ns Rr _ a0 HRr HcovR Hsl
+              [rewrite (confNames_restrict I ms Rr _ a0 HRr HcovR Hsl
                           (Hcn a0 e Hg) (Hcp a0 e Hg)); exact Hqn |].
             split; [exact Hne |].
             split; [exact Hx |].
-            rewrite (complementVS_restrict I ns Rr _ a0 qn HRr HcovR Hsl
+            rewrite (complementVS_restrict I ms Rr _ a0 qn HRr HcovR Hsl
                        (Hcn a0 e Hg)
-                       (confNames_inNs _ _ _ ns a0 qn (Hcn a0 e Hg)
+                       (confNames_inNs _ _ _ ms a0 qn (Hcn a0 e Hg)
                           (Hcp a0 e Hg)
                           Hqn)).
             exact Hy.
@@ -1899,7 +1901,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             * left; split; [exact Hcard |].
               exists a1; split; [exact Hmin |].
               rewrite Hy.
-              apply (dependee_restrict I ns Rr _ a1 HRr HcovR Hsl).
+              apply (dependee_restrict I ms Rr _ a1 HRr HcovR Hsl).
               exact (Hatom _ (reduceDeps_atomNames (inst_deps I) p A a1 HA'
                                 (Deb.AtomSet.min_elt_spec1 Hmin))).
             * right; split; [exact Hcard | exact Hy].
@@ -1911,11 +1913,11 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
               by exact (proj2 (reduceConf_pkg _ _ _ p Rc Gs a0 e HRc HGs Hinp
                                  Hown)
                           Hg).
-            rewrite (confNames_restrict I ns Rr _ a0 HRr HcovR Hsl
+            rewrite (confNames_restrict I ms Rr _ a0 HRr HcovR Hsl
                        (Hcn a0 e Hg') (Hcp a0 e Hg')) in Hqn.
-            rewrite (complementVS_restrict I ns Rr _ a0 qn HRr HcovR Hsl
+            rewrite (complementVS_restrict I ms Rr _ a0 qn HRr HcovR Hsl
                        (Hcn a0 e Hg')
-                       (confNames_inNs _ _ _ ns a0 qn (Hcn a0 e Hg')
+                       (confNames_inNs _ _ _ ms a0 qn (Hcn a0 e Hg')
                           (Hcp a0 e Hg') Hqn)) in Hy.
             right; right; exists a0, e, qn.
             split; [exact Hg' |].

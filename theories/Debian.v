@@ -1743,6 +1743,10 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           rewrite NSet.add_spec; auto.
       Qed.
 
+      Definition readNames (Pi : Prov.t) (D : Deps.t) (G : Conf.t) (p : Pkg.t)
+        : NSet.t :=
+        NSet.union (atomNames D p) (confRead Pi G p).
+
       Lemma matchb_provPreimage : forall Pi ns (p q : Pkg.t) a,
           NSet.In (aname a) ns ->
           matchb (Prov.union (provPreimage Pi ns) (ProvFibred.tailFibre Pi p))
@@ -1761,25 +1765,20 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
 
       Theorem dependees_lookupOrig : forall I (n : N.t) (v : V.t),
           dependees I (Name.Orig n, Version.Orig v) =
+          let ms :=
+            readNames (inst_prov I) (inst_deps I) (inst_conf I) (n, v) in
           dependees
-            (MkInst
-               (C.namePreimage (inst_repo I)
-                  (NSet.union (atomNames (inst_deps I) (n, v))
-                     (confRead (inst_prov I) (inst_conf I) (n, v))))
+            (MkInst (C.namePreimage (inst_repo I) ms)
                (DepsFibred.tailFibre (inst_deps I) (n, v))
                (DepsFibred.tailFibre (inst_rec I) (n, v))
-               (Prov.union
-                  (provPreimage (inst_prov I)
-                     (NSet.union (atomNames (inst_deps I) (n, v))
-                        (confRead (inst_prov I) (inst_conf I) (n, v))))
+               (Prov.union (provPreimage (inst_prov I) ms)
                   (ProvFibred.tailFibre (inst_prov I) (n, v)))
                (ConfFibred.tailFibre (inst_conf I) (n, v))
                (inst_root I))
             (Name.Orig n, Version.Orig v).
       Proof.
-        intros I n v; apply T.DependeesSet.ext; intro y.
-        set (ns := NSet.union (atomNames (inst_deps I) (n, v))
-                     (confRead (inst_prov I) (inst_conf I) (n, v))).
+        intros I n v; cbv zeta; apply T.DependeesSet.ext; intro y.
+        set (ms := readNames (inst_prov I) (inst_deps I) (inst_conf I) (n, v)).
         rewrite !dependees_orig_spec.
         cbn [inst_repo inst_deps inst_rec inst_prov inst_conf].
         assert (Hfib : forall (E : Deps.t) A,
@@ -1802,29 +1801,29 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           - intro H; split; [exact H |].
             apply dec_refl. }
         assert (Hatom : forall an,
-                   NSet.In an (atomNames (inst_deps I) (n, v)) -> NSet.In an ns)
+                   NSet.In an (atomNames (inst_deps I) (n, v)) -> NSet.In an ms)
           by (intros an H; apply NSet.union_spec; left; exact H).
         assert (Hcn : forall a e, Conf.In ((n, v), (a, e)) (inst_conf I) ->
-                                NSet.In (aname a) ns).
+                                NSet.In (aname a) ms).
         { intros a e Hg; apply NSet.union_spec; right; apply mem_confRead.
           exists a, e; split; [exact Hg | left; reflexivity]. }
         assert (Hcp : forall a e (m : N.t) u vt,
                    Conf.In ((n, v), (a, e)) (inst_conf I) ->
                    Prov.In ((m, u), (aname a, vt)) (inst_prov I) ->
-                   NSet.In m ns).
+                   NSet.In m ms).
         { intros a e m u vt Hg Hin; apply NSet.union_spec; right.
           apply mem_confRead; exists a, e; split; [exact Hg | right].
           apply mem_providerNames; exists (m, u), vt; auto. }
         assert (Hmatch : forall a e (m : N.t) u,
                    Conf.In ((n, v), (a, e)) (inst_conf I) ->
-                   matchb (inst_prov I) (m, u) a = true -> NSet.In m ns).
+                   matchb (inst_prov I) (m, u) a = true -> NSet.In m ms).
         { intros [an af] e m u Hg Hm; apply matchb_iff in Hm.
           destruct Hm as [[Hn _] | [vt [Hin _]]].
           - rewrite Hn; exact (Hcn (an, af) e Hg).
           - exact (Hcp (an, af) e m u vt Hg Hin). }
         assert (HconfN : forall a e, Conf.In ((n, v), (a, e)) (inst_conf I) ->
-                   confNames (C.namePreimage (inst_repo I) ns)
-                     (Prov.union (provPreimage (inst_prov I) ns)
+                   confNames (C.namePreimage (inst_repo I) ms)
+                     (Prov.union (provPreimage (inst_prov I) ms)
                         (ProvFibred.tailFibre (inst_prov I) (n, v))) a
                    = confNames (inst_repo I) (inst_prov I) a).
         { intros a e Hg; apply NSet.ext; intro m; rewrite !mem_confNames.
@@ -1840,12 +1839,12 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         assert (Hadm : forall a e (m : N.t),
                    Conf.In ((n, v), (a, e)) (inst_conf I) ->
                    NSet.In m (confNames (inst_repo I) (inst_prov I) a) ->
-                   complementVS (C.namePreimage (inst_repo I) ns)
-                     (Prov.union (provPreimage (inst_prov I) ns)
+                   complementVS (C.namePreimage (inst_repo I) ms)
+                     (Prov.union (provPreimage (inst_prov I) ms)
                         (ProvFibred.tailFibre (inst_prov I) (n, v))) a m
                    = complementVS (inst_repo I) (inst_prov I) a m).
         { intros a e m Hg Hqn.
-          assert (Hqn' : NSet.In m ns).
+          assert (Hqn' : NSet.In m ms).
           { apply mem_confNames in Hqn; destruct Hqn as [u [_ Hm]].
             exact (Hmatch a e m u Hg Hm). }
           apply T.VSet.ext; intro w; rewrite !mem_complementVS.
@@ -1867,7 +1866,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
               [apply (proj2 (Hfib (inst_deps I) A)); exact HA |].
             destruct Hcase as [[Hcard [a0 [Hmin Hy]]] | [Hcard Hy]].
             * destruct a0 as [an af].
-              assert (Hin : NSet.In an ns).
+              assert (Hin : NSet.In an ms).
               { apply Hatom, mem_atomNames; exists A; split; [exact HA |].
                 exists af; exact (AtomSet.min_elt_spec1 Hmin). }
               left; split; [exact Hcard |].
@@ -1890,7 +1889,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
             left; exists A; split; [exact HA |].
             destruct Hcase as [[Hcard [a0 [Hmin Hy]]] | [Hcard Hy]].
             * destruct a0 as [an af].
-              assert (Hin : NSet.In an ns).
+              assert (Hin : NSet.In an ms).
               { apply Hatom, mem_atomNames; exists A; split; [exact HA |].
                 exists af; exact (AtomSet.min_elt_spec1 Hmin). }
               left; split; [exact Hcard |].
