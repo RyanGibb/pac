@@ -52,7 +52,11 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
     ; res_support_mem :
         forall n v fs f,
           Feat.FeaturedSet.In ((n, v), fs) S -> Feat.FSet.In f fs ->
-          Feat.SupportSet.In ((n, v), f) support }.
+          Feat.SupportSet.In ((n, v), f) support
+    ; res_parent_subset :
+        forall c p, ParentRel.In (c, p) pi ->
+          (exists fs_c, Feat.FeaturedSet.In (c, fs_c) S) /\
+          (exists fs_p, Feat.FeaturedSet.In (p, fs_p) S) }.
 
   Module Reduction.
     Module OrigName := PairUOT N G.
@@ -760,6 +764,30 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         injection Heq as E1 E2 E3; subst n1 v1 fs.
         rewrite featsOf_spec in Hf.
         exact (proj1 (HfeatSup n f v Hf)).
+      - intros [m u] [n v] Hpi; apply mem_parents in Hpi.
+        assert (Hin : forall n' v',
+                  T.PkgSet.In (Name.GranularOrig n' (g v'), v') S ->
+                  exists fs, Feat.FeaturedSet.In ((n', v'), fs)
+                               (featureConcurrentResolution g S))
+          by (intros n' v' HS; exists (featsOf g n' v' S);
+              apply mem_featureConcurrentResolution; exists n', v'; auto).
+        destruct Hpi as [Hi [(vs & fs & HD & Hu & Hp)
+                             | (f & vs & fs & HA & Hu & Hf)]];
+          split; apply Hin.
+        + destruct (Hdep _ Hi _ _ (proj2 (mem_reduceDeps _ _ _ _ _ _)
+                     (EdgeFInterToOrig _ _ _ _ _ n v m vs fs u HD Hu)))
+            as [w [Hw HwS]].
+          apply mem_singVS in Hw; subst w; exact HwS.
+        + exact Hp.
+        + destruct (Hdep _ Hi _ _ (proj2 (mem_reduceDeps _ _ _ _ _ _)
+                     (EdgeAInterToOrig _ _ _ _ _ n v f m vs fs u HA Hu)))
+            as [w [Hw HwS]].
+          apply mem_singVS in Hw; subst w; exact HwS.
+        + destruct (HfeatSup _ _ _ Hf) as [Hs HR].
+          destruct (Hdep _ Hf _ _ (proj2 (mem_reduceDeps _ _ _ _ _ _)
+                     (EdgeSupport _ _ _ _ _ n v f Hs HR)))
+            as [w [Hw HwS]].
+          apply mem_singVS in Hw; subst w; exact HwS.
     Qed.
 
     Module PkgEqb := UOTEqb Pkg.
@@ -921,7 +949,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           (embedOrigPkg g r) (coreResolution S_CF pi Df Da g).
     Proof.
       intros R support Df Da g r S_CF pi Hres.
-      destruct Hres as [Hsubset Hrootm Hfu Hpc Hpca Hpif Hvg Hsm].
+      destruct Hres as [Hsubset Hrootm Hfu Hpc Hpca Hpif Hvg Hsm _].
       destruct r as [rn rv].
       constructor.
       - intros q Hq; apply mem_coreResolution in Hq; apply mem_reduceReal.
@@ -1043,10 +1071,10 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           ParentRel.In ((m, u), (n, v))
             (parents Df Da g (coreResolution S_CF pi Df Da g))
           <-> ParentRel.In ((m, u), (n, v)) pi /\
-          exists fs_p, Feat.FeaturedSet.In ((n, v), fs_p) S_CF /\
-            ((exists vs fs, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df) \/
-             (exists f vs fs, Feat.FSet.In f fs_p /\
-                Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da)).
+          ((exists vs fs, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df) \/
+           (exists fs_p f vs fs, Feat.FeaturedSet.In ((n, v), fs_p) S_CF /\
+              Feat.FSet.In f fs_p /\
+              Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da)).
     Proof.
       intros R support Df Da g r S_CF pi Hres m u n v; rewrite mem_parents.
       split.
@@ -1058,13 +1086,15 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
                 exact Hpi
             end. }
         destruct Hdep
-          as [(vs & fs & HD & _ & Hs) | (f & vs & fs & HA & _ & Hs)];
-          apply mem_coreResolution in Hs; inversion Hs; subst.
-        + eexists; split; [eassumption |]; left; exists vs, fs; exact HD.
-        + eexists; split; [eassumption |].
-          right; exists f, vs, fs; split; [assumption | exact HA].
-      - intros [Hpi (fs_p & Hp & [(vs & fs & HD) | (f & vs & fs & Hf & HA)])].
-        + destruct (res_parent_closure _ _ _ _ _ _ _ _ Hres _ _ Hp _ _ _ HD)
+          as [(vs & fs & HD & _ & Hs) | (f & vs & fs & HA & _ & Hs)].
+        + left; exists vs, fs; exact HD.
+        + apply mem_coreResolution in Hs; inversion Hs; subst.
+          right; do 4 eexists; split; [eassumption |].
+          split; [| exact HA]; eassumption.
+      - intros [Hpi [(vs & fs & HD) | (fs_p & f & vs & fs & Hp & Hf & HA)]].
+        + destruct (proj2 (res_parent_subset _ _ _ _ _ _ _ _ Hres _ _ Hpi))
+            as [fs_p Hp].
+          destruct (res_parent_closure _ _ _ _ _ _ _ _ Hres _ _ Hp _ _ _ HD)
             as (w & Hw & Htk & Hpiw).
           assert (w = u) as ->
             by exact (res_pi_functional _ _ _ _ _ _ _ _ Hres _ _ _ _ Hpiw Hpi).
@@ -1094,10 +1124,10 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
       forall R support Df Da g r S_CF pi,
         IsResolution R support Df Da g r S_CF pi ->
         (forall n v m u, ParentRel.In ((m, u), (n, v)) pi ->
-           exists fs_p, Feat.FeaturedSet.In ((n, v), fs_p) S_CF /\
-             ((exists vs fs, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df) \/
-              (exists f vs fs, Feat.FSet.In f fs_p /\
-                 Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da))) ->
+           (exists vs fs, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df) \/
+           (exists fs_p f vs fs, Feat.FeaturedSet.In ((n, v), fs_p) S_CF /\
+              Feat.FSet.In f fs_p /\
+              Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da)) ->
         parents Df Da g (coreResolution S_CF pi Df Da g) = pi.
     Proof.
       intros R support Df Da g r S_CF pi Hres Hdom.
