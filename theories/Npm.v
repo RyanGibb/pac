@@ -500,7 +500,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       (S : PkgSet.t) (pi : Conc.ParentRel.t)
       (sg : Pkg.t -> N.t -> option V.t) : Prop :=
     { res_subset : forall q, PkgSet.In q S -> Available I q
-    ; res_root : PkgSet.In (rootPkg I) S
+    ; res_root_mem : PkgSet.In (rootPkg I) S
     ; res_unique :
         forall q m u u', Installs S pi q m u -> Installs S pi q m u' -> u = u'
     ; res_slot :
@@ -2141,7 +2141,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         cbn [negb orb] in Hact; apply NSet.mem_spec in Hact.
       assert (Hdir : NSet.In (p_name theta) (dirs I (base (rootPkg I))))
         by (rewrite base_rootPkg; exact Hact).
-      destruct (res_slot _ _ _ _ Hres (rootPkg I) (res_root _ _ _ _ Hres)
+      destruct (res_slot _ _ _ _ Hres (rootPkg I) (res_root_mem _ _ _ _ Hres)
                   (p_name theta) Hdir (dp_root I (p_name theta))) as [w [_ Hi]].
       rewrite base_rootPkg in Hi.
       exists w; unfold peerKeyAt; split;
@@ -2678,7 +2678,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         + cbn [versions]; apply orig_embedVS; exact Hu.
       - apply mem_coreResolution; left.
         exists (rootKey I), (snd (inst_root I)); split;
-          [exact (res_root _ _ _ _ Hres) |].
+          [exact (res_root_mem _ _ _ _ Hres) |].
         unfold embedRoot, rootPkg, embedPkg; reflexivity.
       - intros s Hs n vs Hd.
         apply mem_reduceDeps in Hd; destruct Hd as [_ Hd].

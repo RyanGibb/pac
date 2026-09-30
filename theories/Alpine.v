@@ -205,13 +205,13 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
   Record IsResolution (I : Inst) (S : PkgSet.t) : Prop :=
     { res_subset : PkgSet.Subset S (inst_repo I)
     ; res_world : forall d, WSet.In d (inst_world I) -> MatchDep I S d
-    ; res_dep :
+    ; res_dep_closure :
         forall p d, PkgSet.In p S -> Deps.In (p, d) (inst_deps I) ->
         MatchDep I S d
     ; res_claim_unique :
         forall n p q, PkgSet.In p S -> PkgSet.In q S ->
         Claims I n p -> Claims I n q -> p = q
-    ; res_installIf :
+    ; res_install_if :
         forall p B, InstallIf.In (p, B) (inst_installIf I) ->
         (forall a, CondSet.In a B -> MatchCond I S a) ->
         MatchPos I S (fst p) CAny }.
