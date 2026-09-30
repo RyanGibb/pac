@@ -224,7 +224,6 @@ Deb.Reduction.Lookup.dependees_lookupOrig
 Deb.Reduction.Lookup.dependees_lookupSelector
 Deb.Reduction.Lookup.dependees_lookupSelectorAgree
 Deb.Reduction.Lookup.dependees_lookupSoft
-Deb.Reduction.Lookup.reachable_instNames
 Deb.Reduction.Lookup.versions_lookupDisjunct
 Deb.Reduction.Lookup.versions_lookupOrig
 Deb.Reduction.Lookup.versions_lookupSelector
