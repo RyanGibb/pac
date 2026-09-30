@@ -166,6 +166,7 @@ Virt.Reduction.Lookup.dependees_lookupOrig
 Virt.Reduction.Lookup.dependees_lookupSelector
 Virt.Reduction.Lookup.versions_lookupOrig
 Virt.Reduction.Lookup.versions_lookupSelector
+Virt.Reduction.providers_coreResolution
 Virt.Reduction.reduceDeps
 Virt.Reduction.reduceReal
 Virt.Reduction.selectorVersions
