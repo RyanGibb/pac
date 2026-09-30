@@ -184,6 +184,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     ; res_pi_functional :
         forall p k u u', ParentRel.In ((p, k), u) pi ->
         ParentRel.In ((p, k), u') pi -> u = u'
+    ; res_parent_subset :
+        forall p k u, ParentRel.In ((p, k), u) pi -> PkgSet.In p S
     ; res_slot_closure :
         forall p fs, PkgSet.In p S -> FeaturedSet.In (p, fs) FS ->
         forall d, SlotRel.In (p, d) (inst_slots I) ->
@@ -1631,6 +1633,9 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       destruct (A1 _ _ _ Hown') as [_ ->].
       assert (E := Huniq _ _ _ Hslot Hslot'); injection E as E; subst w1'.
       assert (E2 := Huniq _ _ _ Hcr Hcr'); injection E2 as E2; exact E2.
+    - intros [n v] k u Hpi.
+      apply mem_decodeParents in Hpi; destruct Hpi as [w [_ [_ [_ [Hown _]]]]].
+      apply mem_cargoResolution; exists w; exact Hown.
     - intros [n v] fs Hp Hfs d Hd Hact Hopt.
       apply mem_decodeFS in Hfs; destruct Hfs as [_ ->].
       apply mem_cargoResolution in Hp; destruct Hp as [w0 Hp].
@@ -2120,7 +2125,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     cbn [inst_repo inst_support inst_fdefs inst_slots inst_links inst_gran
          inst_dflt inst_root inst_rootFeats] in Hsite, Hpick, Hslot.
     destruct Hres as [Hsub Hroot Hrootf Hdom Htot Hfun Hclass Hsupp
-      Hpifun Hslotc Hfsame Hfdep Hlinks].
+      Hpifun _ Hslotc Hfsame Hfdep Hlinks].
     cbn [inst_repo inst_support inst_fdefs inst_slots inst_links inst_gran
          inst_dflt inst_root inst_rootFeats] in *.
     constructor.
