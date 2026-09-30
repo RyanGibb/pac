@@ -53,10 +53,14 @@ module Make (S : SEARCH) : sig
   (* apt's Reject propagation (Solver::Propagate, solver3.cc), which PubGrub
      learns only on deciding the package: a package is rejected once a hard
      clause of its loses its last solution or a package it conflicts with is
-     installed, and the rejection cascades one queue entry at a time.  A
-     solution is the var apt made it: the package var for an unversioned
-     atom on a name nothing provides (Defer-Version-Selection), else a
-     version var. *)
+     installed, and the rejection cascades one queue entry at a time, as apt
+     assigns a rejection at once and propagates it when the queue reaches
+     it.  An installed package's own Conflicts reject the other's version
+     var first, and its package var follows; a conflict declared against
+     something installed rejects the declarer's package var first, and its
+     version var follows.  A solution is the var apt made it: the package
+     var for an unversioned atom on a name nothing provides
+     (Defer-Version-Selection), else a version var. *)
   type state
 
   (* one queue entry of the cascade: a version var or a package var

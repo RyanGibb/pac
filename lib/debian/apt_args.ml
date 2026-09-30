@@ -8,7 +8,9 @@ type accepts = Any | Only of string
    tie, so the candidate is the newest (pkgPolicy::GetCandidateVer) unless
    the query names a version string (TryToInstall), and of two stanzas at
    one version the first read; an arch:all stanza is the native
-   architecture's (pkgCacheGenerator::NewPackage). *)
+   architecture's (pkgCacheGenerator::NewPackage).  A named version is
+   matched by its string, as apt keeps two versions that compare equal
+   apart when their hashes differ (pkgCacheGenerator::MergeListVersion). *)
 let stanza_key ~native (st : DF.stanza) =
   (st.package, if st.architecture = "all" then native else st.architecture)
 

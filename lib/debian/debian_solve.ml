@@ -262,7 +262,10 @@ module Make (AP : Tables.ARCH) = struct
          them (TranslateOrGroup, apt-pkg/solver3.cc); apt's provider order among
          a selector's candidates; the escape below every alternative, so a soft
          disjunct tries them all; and absence greatest, so a name nothing
-         requires is decided absent. *)
+         requires is decided absent.  The escape's rank contradicts
+         VersionOT's safely: only one name's candidates are compared, and
+         Version.Zero shares a name with Version.Atom only in the soft
+         disjunct. *)
       let compare (a : t) (b : t) =
         let fallback () =
           Pac_common.Ot.r2c (DMA.Deb.VersionOT.compare a.v b.v)
