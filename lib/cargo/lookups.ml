@@ -22,10 +22,6 @@ module Make (Encoding : Encoding.S) = struct
       r_reads = [ n ];
     }
 
-  type owner_key =
-    [ `Slot of string * string * Cg.SlotData.t
-    | `Dec of string * string * string * Cg.SlotData.t * string ]
-
   (* One solve's archive, request and memo tables.  Every table is keyed as
      narrowly as it is because this record is: a second solve builds its
      own, so no answer outlives the archive and root it was computed for. *)
@@ -45,12 +41,6 @@ module Make (Encoding : Encoding.S) = struct
     support_pairs_at :
       (string, (string, ((string * string) * string) list) Hashtbl.t) Hashtbl.t;
     supports : (string * string, Cg.SupportSet.t) Hashtbl.t;
-    owners :
-      ( owner_key,
-        (string * string) option * (Cg.SlotRel.t * Cg.FDefRel.t) )
-      Hashtbl.t;
-    (* the crate version whose dependees first named a slot or decision *)
-    producers : (owner_key, string * string) Hashtbl.t;
     site_datas :
       ((string * string) * Cg.SlotKey.t, Cg.SlotData.t option) Hashtbl.t;
     (* the tagged list, not just the untagged one, has to be memoized:
@@ -80,8 +70,6 @@ module Make (Encoding : Encoding.S) = struct
       msrv = Hashtbl.create 65536;
       support_pairs_at = Hashtbl.create 4096;
       supports = Hashtbl.create 4096;
-      owners = Hashtbl.create 4096;
-      producers = Hashtbl.create 4096;
       site_datas = Hashtbl.create 4096;
       pg_vers = Hashtbl.create 65536;
       pg_deps = Hashtbl.create 65536;
@@ -184,74 +172,6 @@ module Make (Encoding : Encoding.S) = struct
         in
         Cg.SupportSet.ofList (Tbl.find_list by_feature f))
 
-  (* the witness versions_lookup{Slot,Decision} take: a version of n in
-     granularity gr whose own declarations make the name.  The version whose
-     dependees named it is one, and its fibres are built already; only a
-     name no dependees answer has named falls back to scanning n's index
-     entry, oldest first, which holds every version of n and is loaded
-     whole.  With none the fibres are empty; the lookups read the
-     repository at the slot's dependee name alone, so the answer stands.
-     The verdict reads st.rc through slotActive. *)
-  let owner st key (ok : string * string -> fibres -> bool) n gr =
-    Tbl.memo st.owners key (fun () ->
-        let owns v =
-          if granularity st v = gr then
-            let rw = fibres_of st (n, v) in
-            if ok (n, v) rw then Some (v, rw) else None
-          else None
-        in
-        let known =
-          match Hashtbl.find_opt st.producers key with
-          | Some (_, v) -> owns v
-          | None -> None
-        in
-        match
-          match known with
-          | Some _ -> known
-          | None -> List.find_map owns (versions_of st n)
-        with
-        | Some (v, rw) -> (Some (n, v), (rw.r_slots, rw.r_fdefs))
-        | None -> (None, (Cg.SlotRel.empty, Cg.FDefRel.empty)))
-
-  let slot_owner st n gr d =
-    fst
-      (snd
-         (owner st
-            (`Slot (n, gr, d))
-            (fun p rw ->
-              Cg.SlotRel.mem (p, d) rw.r_slots && Cg.slotActive st.rc p d)
-            n gr))
-
-  let dec_owner st n gr f d feat =
-    owner st
-      (`Dec (n, gr, f, d, feat))
-      (fun p rw ->
-        Cg.SlotRel.mem (p, d) rw.r_slots
-        && Cg.slotActive st.rc p d
-        && List.exists
-             (fun (((_, f'), e) : Cg.FDefElt.t) ->
-               f' = f && Cg.Reduction.entryFeatD e = Some (Cg.sAlias d, feat))
-             (Cg.FDefRel.elements rw.r_fdefs))
-      n gr
-
-  (* p is a witness for every slot and decision name its dependees name *)
-  let produced st p (hs : T.Dependees.t list) =
-    List.iter
-      (fun ((m, _) : T.Dependees.t) ->
-        let key =
-          match m with
-          | Cg.Reduction.NPlus.CSlot (n, gr, d) -> Some (`Slot (n, gr, d))
-          | Cg.Reduction.NPlus.CDec (n, gr, f, d, feat) ->
-              Some (`Dec (n, gr, f, d, feat))
-          | _ -> None
-        in
-        match key with
-        | Some k when not (Hashtbl.mem st.producers k) ->
-            Hashtbl.replace st.producers k p
-        | _ -> ())
-      hs;
-    hs
-
   (* every lookup theorem carries the request (granularity, default, rc,
      rootFeats) whole, so its instance differs from this one only in the
      relations it names *)
@@ -280,18 +200,9 @@ module Make (Encoding : Encoding.S) = struct
     | Cg.Reduction.NPlus.CFeatP (n, f, _) ->
         let supp = support_at st n f in
         call { e with inst_repo = name_set st n; inst_support = supp }
-    | Cg.Reduction.NPlus.CSlot (n, gr, d) ->
-        let slots = slot_owner st n gr d in
-        call { e with inst_repo = name_set st (Cg.sName d); inst_slots = slots }
-    | Cg.Reduction.NPlus.CDec (n, gr, f, d, feat) ->
-        let slots, fdefs = snd (dec_owner st n gr f d feat) in
-        call
-          {
-            e with
-            inst_repo = name_set st (Cg.sName d);
-            inst_fdefs = fdefs;
-            inst_slots = slots;
-          }
+    | Cg.Reduction.NPlus.CSlot (_, _, d)
+    | Cg.Reduction.NPlus.CDec (_, _, _, d, _) ->
+        call { e with inst_repo = name_set st (Cg.sName d) }
     | Cg.Reduction.NPlus.CLink l ->
         (* Lookup.claimants and LinkFibred.withHead at l, over the
            declarers loaded so far: the answer may only grow
@@ -319,26 +230,20 @@ module Make (Encoding : Encoding.S) = struct
     | Cg.Reduction.NPlus.CCrate (n, _), Cg.Reduction.VPlus.WOrig v ->
         let rw = fibres_of st (n, v) in
         List.iter (fun m -> ignore (name_versions st m)) rw.r_reads;
-        produced st (n, v)
-          (call { e with inst_slots = rw.r_slots; inst_links = rw.r_links })
+        call { e with inst_slots = rw.r_slots; inst_links = rw.r_links }
     | Cg.Reduction.NPlus.CFeatP (n, _, _), Cg.Reduction.VPlus.WOrig v ->
         let rw = fibres_of st (n, v) in
         List.iter (fun m -> ignore (name_versions st m)) rw.r_reads;
-        produced st (n, v)
-          (call
-             {
-               e with
-               inst_support = rw.r_supp;
-               inst_fdefs = rw.r_fdefs;
-               inst_slots = rw.r_slots;
-             })
-    | Cg.Reduction.NPlus.CSlot (n, gr, d), Cg.Reduction.VPlus.WClass _ ->
-        call { e with inst_slots = slot_owner st n gr d }
-    | Cg.Reduction.NPlus.CDec (n, gr, f, d, feat), Cg.Reduction.VPlus.WClass _
-      ->
-        let w, (slots, fdefs) = dec_owner st n gr f d feat in
-        let hs = call { e with inst_fdefs = fdefs; inst_slots = slots } in
-        Option.fold ~none:hs ~some:(fun u -> produced st u hs) w
+        call
+          {
+            e with
+            inst_support = rw.r_supp;
+            inst_fdefs = rw.r_fdefs;
+            inst_slots = rw.r_slots;
+          }
+    | ( (Cg.Reduction.NPlus.CSlot _ | Cg.Reduction.NPlus.CDec _),
+        Cg.Reduction.VPlus.WClass _ ) ->
+        call e
     | _, _ -> []
 
   let site_data st (p : string * string) (k : Cg.SlotKey.t) =
