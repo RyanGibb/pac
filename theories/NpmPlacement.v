@@ -327,6 +327,60 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       split; [apply tr_resolution; exact H1 | exact H2].
     Qed.
 
+    (* What the driver runs: the occupants' edges come from its lookups, not
+       from the whole of npm's instance, which it never builds. *)
+    Definition reachableOf (edges : Occ.t -> list Edge) (root : N.t)
+        (L : Pl.Layout.t) : Pl.Layout.t :=
+      Pl.reachableBy (fun p => List.map e_dir (edges (snd p)))
+        (root, Occ.Top) L.
+
+    Theorem reachableOf_reachable : forall I depth S edges,
+        Pl.Reduction.T.IsResolution (reduceReal I depth) (reduceDeps I depth)
+          (rootPkg I) S ->
+        edges Occ.Top = edgesOf I Occ.Top ->
+        (forall l a o,
+           Pl.Layout.In (l, (a, o)) (Pl.Reduction.placementResolution S) ->
+           edges o = edgesOf I o) ->
+        reachableOf edges (inst_root I) (Pl.Reduction.placementResolution S) =
+        Pl.reachable (tr I) (Pl.Reduction.placementResolution S).
+    Proof.
+      intros I depth S edges H Htop Hocc; unfold reachableOf.
+      change (inst_root I, Occ.Top) with (Pl.inst_root (tr I)).
+      apply Pl.reachableBy_reachable.
+      intros [a o] n Hp; cbn [snd]; unfold Pl.Edge.
+      assert (Hin : Pl.PkgSet.In (a, o) (occs I) /\ edges o = edgesOf I o).
+      { destruct Hp as [E | [l Hl]].
+        - cbn in E; injection E as -> ->; split; [| exact Htop].
+          apply Pl.PkgSet.add_spec; left; reflexivity.
+        - split; [| exact (Hocc _ _ _ Hl)].
+          apply Pl.PkgSet.add_spec; right.
+          exact (proj2 (Pl.Reduction.placementResolution_loc
+                          (tr I) depth S H l a o Hl)). }
+      destruct Hin as [Hp' ->]; rewrite in_map_iff; split.
+      - intros [e [<- He]]; exists (e_peer e), (e_opt e), (accepts I e).
+        rewrite rel_tr, mem_edgeRel; split; [exact Hp' |].
+        exists e; auto.
+      - intros [peer [optional [vs HE]]]; rewrite rel_tr, mem_edgeRel in HE.
+        destruct HE as [_ [e [He [_ [_ [-> _]]]]]]; exists e; auto.
+    Qed.
+
+    Theorem npm_placement_soundness_of : forall I depth S edges,
+        Pl.Reduction.T.IsResolution (reduceReal I depth) (reduceDeps I depth)
+          (rootPkg I) S ->
+        edges Occ.Top = edgesOf I Occ.Top ->
+        (forall l a o,
+           Pl.Layout.In (l, (a, o)) (Pl.Reduction.placementResolution S) ->
+           edges o = edgesOf I o) ->
+        IsResolution I
+          (reachableOf edges (inst_root I) (Pl.Reduction.placementResolution S))
+        /\ Pl.Depth depth
+          (reachableOf edges (inst_root I) (Pl.Reduction.placementResolution S)).
+    Proof.
+      intros I depth S edges H Htop Hocc.
+      rewrite (reachableOf_reachable I depth S edges H Htop Hocc).
+      exact (npm_placement_soundness I depth S H).
+    Qed.
+
     Theorem npm_placement_completeness : forall I depth L,
         IsResolution I L -> Pl.Depth depth L ->
         Pl.Reduction.T.IsResolution (reduceReal I depth) (reduceDeps I depth)

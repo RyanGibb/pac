@@ -106,38 +106,14 @@ module Make () = struct
                 ps
           | None -> conv (L.dependees st (n, u)))
 
-  let decode ~lookups sol =
-    {
-      layout =
-        List.sort
-          (fun (l, _) (l', _) -> compare (lock_path l) (lock_path l'))
-          (List.filter_map
-             (fun (l, (a, x)) ->
-               match x with
-               | Npl.Occ.Reg (m, v) -> Some (a :: l, (m, v.IVer.s))
-               | Npl.Occ.Top -> None)
-             (Pl.Layout.elements (R.placementResolution (T.PkgSet.ofList sol))));
-      nodes = List.length sol;
-      lookups;
-    }
-
-  let rec walk tbl (l : string list) (a : string) =
-    if Hashtbl.mem tbl (a :: l) then Some (a :: l)
-    else match l with [] -> None | _ :: t -> walk tbl t a
-
-  (* The occupants the root's edges reach, each edge through its walk, and
-     the occupants their edges reach: the decoded layout restricted so is a
-     placement resolution, while the whole of it need not be.  npm resolves
-     dev and optional dependencies whatever --omit says, and leaves out of
-     what it installs only the packages that every path from the root
-     reaches through an omitted edge (calc-dep-flags.js, and
-     Node.shouldOmit), so an omitted edge is not followed. *)
-  let reached ~dev ~optional st r =
-    let tbl = Hashtbl.create 256 in
-    List.iter
-      (fun (l, (m, v)) -> Hashtbl.replace tbl l (Npl.Occ.Reg (m, IVer.make v)))
-      r.layout;
-    let omitted (x : Npl.Occ.t) (e : Npl.coq_Edge) =
+  (* Each occupant's edges as the lookups read them, the ones the check read
+     the answer against.  npm resolves dev and optional dependencies whatever
+     --omit says, and leaves out of what it installs only the packages that
+     every path from the root reaches through an omitted edge
+     (calc-dep-flags.js, and Node.shouldOmit), so an omitted edge is not
+     followed. *)
+  let edges ~dev ~optional st (x : Npl.Occ.t) : Npl.coq_Edge list =
+    let omitted (e : Npl.coq_Edge) =
       if e.Npl.e_peer then optional && e.Npl.e_opt
       else
         match L.meta st x with
@@ -150,21 +126,28 @@ module Make () = struct
               m.Npm_parse.v_deps
         | None -> false
     in
-    let kept = Hashtbl.create 256 in
-    let rec reach l (x : Npl.Occ.t) =
-      List.iter
-        (fun (ed : L.edge) ->
-          let e = ed.L.e in
-          if not (omitted x e) then
-            match walk tbl l e.Npl.e_dir with
-            | Some l' when not (Hashtbl.mem kept l') ->
-                Hashtbl.replace kept l' ();
-                reach l' (Hashtbl.find tbl l')
-            | _ -> ())
-        (L.edges st x)
-    in
-    reach [] Npl.Occ.Top;
-    { r with layout = List.filter (fun (l, _) -> Hashtbl.mem kept l) r.layout }
+    List.filter_map
+      (fun (ed : L.edge) -> if omitted ed.L.e then None else Some ed.L.e)
+      (L.edges st x)
+
+  (* The occupants the root reaches: the decoded layout restricted so is a
+     placement resolution, while the whole of it need not be. *)
+  let decode ~dev ~optional ~lookups st root sol =
+    {
+      layout =
+        List.sort
+          (fun (l, _) (l', _) -> compare (lock_path l) (lock_path l'))
+          (List.filter_map
+             (fun (l, (a, x)) ->
+               match x with
+               | Npl.Occ.Reg (m, v) -> Some (a :: l, (m, v.IVer.s))
+               | Npl.Occ.Top -> None)
+             (Pl.Layout.elements
+                (Npl.Reduction.reachableOf (edges ~dev ~optional st) root
+                   (R.placementResolution (T.PkgSet.ofList sol)))));
+      nodes = List.length sol;
+      lookups;
+    }
 
   let check_answer st sol =
     let versions m = T.VSet.ofList (L.versions st m) in
@@ -203,8 +186,8 @@ module Make () = struct
       | Ok sol ->
           if check then check_answer st sol;
           Ok
-            (reached ~dev:omit_dev ~optional:omit_optional st
-               (decode ~lookups:(Hashtbl.length asked) sol))
+            (decode ~dev:omit_dev ~optional:omit_optional
+               ~lookups:(Hashtbl.length asked) st (fst root) sol)
     in
     let core () =
       match

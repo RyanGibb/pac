@@ -462,6 +462,218 @@ Module Placement (N V : UsualOrderedType).
         apply mem_landings; exists n, l', u; auto.
   Qed.
 
+  (* reachable runs S (cardinal L) rounds, each over the whole relation, too
+     slow for a driver to run.  reachableBy visits each occupant once, and
+     reads its edges' directories from dirs, which a driver supplies from
+     its lookups; given they are the instance's, the two agree. *)
+  Definition landingsBy (dirs : Pkg.t -> list N.t) (L : Layout.t)
+      (l : Path.t) (p : Pkg.t) : list OccElt.t :=
+    List.fold_right (fun n acc =>
+        match walk L l n with
+        | Some (l', u) => (l', (n, u)) :: acc
+        | None => acc
+        end) nil (dirs p).
+
+  Definition visit (st : Layout.t * list OccElt.t) (o : OccElt.t)
+      : Layout.t * list OccElt.t :=
+    if Layout.mem o (fst st) then st else (Layout.add o (fst st), o :: snd st).
+
+  Fixpoint reachW (dirs : Pkg.t -> list N.t) (L : Layout.t) (fuel : nat)
+      (seen : Layout.t) (todo : list OccElt.t) : Layout.t :=
+    match fuel, todo with
+    | O, _ | _, nil => seen
+    | S k, (l, (a, v)) :: todo' =>
+        let '(seen', todo'') :=
+          List.fold_left visit (landingsBy dirs L (a :: l) (a, v))
+            (seen, todo') in
+        reachW dirs L k seen' todo''
+    end.
+
+  (* a round visits one occupant and queues only occupants of L not yet
+     seen, so cardinal L rounds empty the queue (reachW_spec) *)
+  Definition reachableBy (dirs : Pkg.t -> list N.t) (root : Pkg.t)
+      (L : Layout.t) : Layout.t :=
+    let '(seen, todo) :=
+      List.fold_left visit (landingsBy dirs L nil root) (Layout.empty, nil) in
+    reachW dirs L (Layout.cardinal L) seen todo.
+
+  Lemma mem_landingsBy : forall dirs L l p o,
+      List.In o (landingsBy dirs L l p) <->
+      exists n l' u, List.In n (dirs p) /\ walk L l n = Some (l', u) /\
+        o = (l', (n, u)).
+  Proof.
+    intros dirs L l p o; unfold landingsBy.
+    induction (dirs p) as [| n ns IH]; cbn [List.fold_right].
+    - split; [intros [] | intros [n [l' [u [[] _]]]]].
+    - destruct (walk L l n) as [[l' u] |] eqn:Hw.
+      + cbn [List.In]; rewrite IH; split.
+        * intros [<- | [m [l1 [u1 [Hm [Hw1 ->]]]]]];
+            [exists n, l', u | exists m, l1, u1]; cbn [List.In]; auto.
+        * intros [m [l1 [u1 [[<- | Hm] [Hw1 ->]]]]].
+          -- left; rewrite Hw in Hw1; injection Hw1 as -> ->; reflexivity.
+          -- right; exists m, l1, u1; auto.
+      + rewrite IH; split.
+        * intros [m [l1 [u1 [Hm [Hw1 ->]]]]]; exists m, l1, u1.
+          cbn [List.In]; auto.
+        * intros [m [l1 [u1 [[<- | Hm] [Hw1 ->]]]]];
+            [rewrite Hw in Hw1; discriminate Hw1 |].
+          exists m, l1, u1; auto.
+  Qed.
+
+  Lemma visit_fold : forall xs s t s' t',
+      List.fold_left visit xs (s, t) = (s', t') ->
+      (forall o, Layout.In o s' <-> Layout.In o s \/ List.In o xs) /\
+      (forall o, List.In o t' <->
+         List.In o t \/ (List.In o xs /\ ~ Layout.In o s)) /\
+      length t' + Layout.cardinal s = length t + Layout.cardinal s'.
+  Proof.
+    induction xs as [| x xs IH]; intros s t s' t' H; cbn [List.fold_left] in H.
+    - injection H as <- <-; cbn [List.In]; split; [| split]; [tauto | tauto |].
+      reflexivity.
+    - assert (E : visit (s, t) x =
+                  if Layout.mem x s then (s, t) else (Layout.add x s, x :: t))
+        by reflexivity.
+      rewrite E in H; clear E.
+      destruct (Layout.mem x s) eqn:Hm.
+      + apply Layout.mem_spec in Hm.
+        destruct (IH _ _ _ _ H) as [Hs [Ht Hc]].
+        split; [| split; [| exact Hc]]; intro o; [rewrite Hs | rewrite Ht];
+          cbn [List.In]; split; try tauto.
+        * intros [Ho | [<- | Ho]]; tauto.
+        * intros [Ho | [[<- | Ho] Hn]]; tauto.
+      + assert (Hn : ~ Layout.In x s)
+          by (intro Hx; apply Layout.mem_spec in Hx; congruence).
+        destruct (IH _ _ _ _ H) as [Hs [Ht Hc]].
+        split; [| split].
+        * intro o; rewrite Hs, Layout.add_spec; cbn [List.In].
+          split; [intros [[-> | Ho] | Ho]; tauto | intros [Ho | [<- | Ho]]];
+            auto.
+        * intro o; rewrite Ht, Layout.add_spec; cbn [List.In].
+          destruct (OccElt.eq_dec o x) as [-> | Hox]; [tauto |].
+          assert (x <> o) by congruence; tauto.
+        * rewrite (LP.add_cardinal_2 Hn) in Hc; cbn [length] in Hc; lia.
+  Qed.
+
+  Section ReachableBy.
+    Variables (I : Inst) (L : Layout.t) (dirs : Pkg.t -> list N.t).
+    Hypothesis Hdirs : forall p n,
+        (p = inst_root I \/ exists l, Layout.In (l, p) L) ->
+        List.In n (dirs p) <-> Edge I p n.
+
+    Let Inv (seen : Layout.t) (todo : list OccElt.t) : Prop :=
+      (forall o, Layout.In o seen -> Reaches I L o) /\
+      (forall o, List.In o todo -> Layout.In o seen) /\
+      (forall o, List.In o (landingsBy dirs L nil (inst_root I)) ->
+         Layout.In o seen) /\
+      (forall l a v o, Layout.In (l, (a, v)) seen ->
+         ~ List.In (l, (a, v)) todo ->
+         List.In o (landingsBy dirs L (a :: l) (a, v)) -> Layout.In o seen).
+
+    Lemma landingsBy_root : forall o,
+        List.In o (landingsBy dirs L nil (inst_root I)) <->
+        exists n l' u, Edge I (inst_root I) n /\ walk L nil n = Some (l', u) /\
+          o = (l', (n, u)).
+    Proof.
+      intro o; rewrite mem_landingsBy.
+      split; intros [n [l' [u [He H]]]]; exists n, l', u;
+        (split; [| exact H]); apply Hdirs; auto.
+    Qed.
+
+    Lemma landingsBy_occ : forall l a v o, Layout.In (l, (a, v)) L ->
+        List.In o (landingsBy dirs L (a :: l) (a, v)) <->
+        exists n l' u, Edge I (a, v) n /\ walk L (a :: l) n = Some (l', u) /\
+          o = (l', (n, u)).
+    Proof.
+      intros l a v o Hl; rewrite mem_landingsBy.
+      split; intros [n [l' [u [He H]]]]; exists n, l', u;
+        (split; [| exact H]); apply Hdirs; eauto.
+    Qed.
+
+    Lemma reachW_done : forall seen, Inv seen nil ->
+        forall o, Layout.In o seen <-> Reaches I L o.
+    Proof.
+      intros seen [Hr [_ [Hroot Hcl]]] o; split; [exact (Hr o) |].
+      intro H; induction H as [n l' u He Hw | l a v n l' u Hrl IH He Hw].
+      - apply Hroot, landingsBy_root; exists n, l', u; auto.
+      - apply (Hcl l a v _ IH (fun H => H)).
+        apply landingsBy_occ; [exact (reaches_in _ _ _ Hrl) |].
+        exists n, l', u; auto.
+    Qed.
+
+    Lemma reachW_spec : forall fuel seen todo, Inv seen todo ->
+        length todo + Layout.cardinal L <= fuel + Layout.cardinal seen ->
+        forall o, Layout.In o (reachW dirs L fuel seen todo) <-> Reaches I L o.
+    Proof.
+      induction fuel as [| k IH]; intros seen todo Hinv Hc.
+      - assert (Hle : Layout.cardinal seen <= Layout.cardinal L).
+        { apply LP.subset_cardinal; intros x Hx.
+          exact (reaches_in _ _ _ (proj1 Hinv _ Hx)). }
+        destruct todo as [| x todo]; [| cbn [length] in Hc; lia].
+        exact (reachW_done _ Hinv).
+      - destruct todo as [| [l [a v]] todo']; [exact (reachW_done _ Hinv) |].
+        cbn [reachW].
+        destruct (List.fold_left visit (landingsBy dirs L (a :: l) (a, v))
+                    (seen, todo')) as [seen' todo''] eqn:Hf.
+        destruct (visit_fold _ _ _ _ _ Hf) as [Hs [Ht Hc']].
+        destruct Hinv as [Hr [Htodo [Hroot Hcl]]].
+        assert (Hx : Layout.In (l, (a, v)) seen)
+          by (apply Htodo; left; reflexivity).
+        apply IH; [| cbn [length] in Hc; lia].
+        split; [| split; [| split]].
+        + intros o Ho; apply Hs in Ho; destruct Ho as [Ho | Ho]; [exact (Hr _ Ho) |].
+          pose proof (Hr _ Hx) as Hrx.
+          apply (landingsBy_occ l a v o (reaches_in _ _ _ Hrx)) in Ho.
+          destruct Ho as [n [l' [u [He [Hw ->]]]]].
+          exact (ReachesStep I L l a v n l' u Hrx He Hw).
+        + intros o Ho; apply Hs; apply Ht in Ho.
+          destruct Ho as [Ho | [Ho _]]; [left; apply Htodo; right; exact Ho |].
+          right; exact Ho.
+        + intros o Ho; apply Hs; left; exact (Hroot _ Ho).
+        + intros l1 a1 v1 o H1 Hn1 Ho; apply Hs.
+          apply Hs in H1; destruct H1 as [H1 | H1].
+          * destruct (OccElt.eq_dec (l1, (a1, v1)) (l, (a, v))) as [E | NE].
+            -- injection E as -> -> ->; right; exact Ho.
+            -- left; apply (Hcl l1 a1 v1 o H1); [| exact Ho].
+               intros [E | Hin]; [exact (NE (eq_sym E)) |].
+               apply Hn1, Ht; left; exact Hin.
+          * destruct (Layout.mem (l1, (a1, v1)) seen) eqn:Hm.
+            -- apply Layout.mem_spec in Hm.
+               destruct (OccElt.eq_dec (l1, (a1, v1)) (l, (a, v))) as [E | NE].
+               ++ injection E as -> -> ->; right; exact Ho.
+               ++ left; apply (Hcl l1 a1 v1 o Hm); [| exact Ho].
+                  intros [E | Hin]; [exact (NE (eq_sym E)) |].
+                  apply Hn1, Ht; left; exact Hin.
+            -- exfalso; apply Hn1, Ht; right; split; [exact H1 |].
+               intro Hin; apply Layout.mem_spec in Hin; congruence.
+    Qed.
+
+    Theorem reachableBy_reachable :
+        reachableBy dirs (inst_root I) L = reachable I L.
+    Proof.
+      apply Layout.ext; intro o; rewrite mem_reachable; unfold reachableBy.
+      destruct (List.fold_left visit (landingsBy dirs L nil (inst_root I))
+                  (Layout.empty, nil)) as [seen todo] eqn:Hf.
+      destruct (visit_fold _ _ _ _ _ Hf) as [Hs [Ht Hc]].
+      assert (Hseen : forall x, Layout.In x seen <->
+                 List.In x (landingsBy dirs L nil (inst_root I))).
+      { intro x; rewrite Hs; split; [| auto].
+        intros [H | H]; [destruct (Layout.empty_spec H) | exact H]. }
+      rewrite (reachW_spec (Layout.cardinal L) seen todo).
+      - split; [intro H; split; [exact (reaches_in _ _ _ H) | exact H] |].
+        intros [_ H]; exact H.
+      - split; [| split; [| split]].
+        + intros x Hx; apply Hseen, landingsBy_root in Hx.
+          destruct Hx as [n [l' [u [He [Hw ->]]]]].
+          exact (ReachesRoot I L n l' u He Hw).
+        + intros x Hx; apply Ht in Hx; destruct Hx as [[] | [Hx _]].
+          apply Hseen; exact Hx.
+        + intros x Hx; apply Hseen; exact Hx.
+        + intros l a v x H Hn; exfalso; apply Hn, Ht; right.
+          split; [apply Hseen; exact H | exact (@Layout.empty_spec _)].
+      - rewrite LP.empty_cardinal in Hc; cbn [length] in Hc; lia.
+    Qed.
+  End ReachableBy.
+
   Module Reduction.
     Module PathF := UOTCompareFacts Path.
 
@@ -1013,6 +1225,18 @@ Module Placement (N V : UsualOrderedType).
         split; [exact Hs | exact Hu].
     Qed.
 
+    Lemma placementResolution_loc : forall I depth S,
+        T.IsResolution (reduceReal I depth) (reduceDeps I depth) (rootPkg I) S ->
+        forall l a v, Layout.In (l, (a, v)) (placementResolution S) ->
+        length l < depth /\ PkgSet.In (a, v) (inst_repo I).
+    Proof.
+      intros I depth S [Hsub _ _ _] l a v H.
+      apply mem_placementResolution, Hsub, mem_reduceReal in H.
+      destruct H as [_ H]; apply mem_versions_loc in H.
+      destruct H as [H | [v' [Hl [Hr E]]]]; [discriminate H |].
+      injection E as <-; split; assumption.
+    Qed.
+
     Theorem placement_soundness : forall I depth S,
         T.IsResolution (reduceReal I depth) (reduceDeps I depth) (rootPkg I) S ->
         IsResolution I (reachable I (placementResolution S)) /\
@@ -1024,14 +1248,7 @@ Module Placement (N V : UsualOrderedType).
                  exists w, T.VSet.In w ws /\ T.PkgSet.In (n, w) S)
         by (intros q n ws Hq Hh; apply (Hdep _ Hq), mem_reduceDeps;
             split; [exact (Hsub _ Hq) | exact Hh]).
-      assert (Hloc : forall l a v,
-                 Layout.In (l, (a, v)) (placementResolution S) ->
-                 length l < depth /\ PkgSet.In (a, v) (inst_repo I)).
-      { intros l a v H.
-        apply mem_placementResolution, Hsub, mem_reduceReal in H.
-        destruct H as [_ H]; apply mem_versions_loc in H.
-        destruct H as [H | [v' [Hl [Hr E]]]]; [discriminate H |].
-        injection E as <-; split; assumption. }
+      pose proof (placementResolution_loc I depth S Hres) as Hloc.
       split;
         [| intros l [a v] H; apply mem_reachable in H;
            exact (proj1 (Hloc _ _ _ (proj1 H)))].

@@ -132,6 +132,8 @@ Vis.Reduction.visibility_soundness
 
 Plc.mem_reachable
 Plc.reachable
+Plc.reachableBy
+Plc.reachableBy_reachable
 Plc.reaches_parented
 Plc.reaches_restriction
 Plc.walk
@@ -423,6 +425,9 @@ NplS.Reduction.Lookup.versions_lookupWalk_sub
 NplS.Reduction.npm_placement_completeness
 NplS.Reduction.npm_placement_retraction
 NplS.Reduction.npm_placement_soundness
+NplS.Reduction.npm_placement_soundness_of
+NplS.Reduction.reachableOf
+NplS.Reduction.reachableOf_reachable
 NplS.Reduction.reduceDeps
 NplS.Reduction.reduceReal
 NplS.Reduction.tr
