@@ -338,7 +338,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         (phi : VConstraint) : PF.VSet.t :=
       if N.eq_dec (fst p) n then PF.VSet.empty else versSetBy Vq n phi.
 
-    Module FSet := FSetUOT PF.Dependees.
+    Module FSet := PF.FSet.
     Module NSet := C.NSet.
 
     Definition ownb {A : Type} (p : Pkg.t) (r : Pkg.t * A) : bool :=
@@ -438,13 +438,10 @@ Module Opam (N V X Y E : UsualOrderedType).
         (PF.PkgSet.union (PF.PkgSet.singleton rootPkg)
            (clsPkgs (inst_cls I))).
 
-    Module SOfd := SetOps PF.Dependees PF.DepElt FSet PF.DepRel.
-    Definition depEdges (q : PF.Pkg.t) (psis : FSet.t) : PF.DepRel.t :=
-      SOfd.map (fun psi => (q, psi)) psis.
 
     Module SOqd := SetOps PF.Pkg PF.DepElt PF.PkgSet PF.DepRel.
     Definition reduceDeps (sigma : Valuation) (I : Inst) : PF.DepRel.t :=
-      SOqd.unionMap (fun q => depEdges q (dependees sigma I q))
+      SOqd.unionMap (fun q => PF.depEdges q (dependees sigma I q))
         (reduceReal sigma I).
 
     Definition clsSel (cls : ClsRel.t) (S : PkgSet.t) : PF.PkgSet.t :=
@@ -777,10 +774,10 @@ Module Opam (N V X Y E : UsualOrderedType).
     Proof.
       intros sigma I q psi; unfold reduceDeps; rewrite SOqd.mem_unionMap.
       split.
-      - intros [q0 [Hq0 Hf]]; unfold depEdges in Hf.
-        apply SOfd.mem_map in Hf; mem_destruct; split; assumption.
+      - intros [q0 [Hq0 Hf]]; unfold PF.depEdges in Hf.
+        apply PF.SOfd.mem_map in Hf; mem_destruct; split; assumption.
       - intros [Hq Hf]; exists q; split; [exact Hq |].
-        unfold depEdges; apply SOfd.mem_map; exists psi; split;
+        unfold PF.depEdges; apply PF.SOfd.mem_map; exists psi; split;
           [exact Hf | reflexivity].
     Qed.
 
@@ -1366,11 +1363,11 @@ Module Opam (N V X Y E : UsualOrderedType).
       Lemma reduceDeps_tailFibre : forall sigma I q,
           PF.PkgSet.In q (reduceReal sigma I) ->
           PF.Reduction.Lookup.DepRelFibred.tailFibre (reduceDeps sigma I) q =
-          depEdges q (dependees sigma I q).
+          PF.depEdges q (dependees sigma I q).
       Proof.
         intros sigma I q Hq; apply PF.DepRel.ext; intros [q' psi].
         rewrite PF.Reduction.Lookup.DepRelFibred.mem_tailFibre, mem_reduceDeps.
-        unfold depEdges; rewrite SOfd.mem_map.
+        unfold PF.depEdges; rewrite PF.SOfd.mem_map.
         split.
         - intros [[_ Hf] ->]; exists psi; split; [exact Hf | reflexivity].
         - intros [psi0 [Hf0 E]]; mem_destruct.
@@ -1431,7 +1428,7 @@ Module Opam (N V X Y E : UsualOrderedType).
             (PF.Reduction.Name.Orig (fst q),
              PF.Reduction.Version.Orig (snd q)) =
           PF.Reduction.T.dependees
-            (PF.Reduction.reduceDepsBy Vq (depEdges q (dependees sigma I q)))
+            (PF.Reduction.reduceDepsBy Vq (PF.depEdges q (dependees sigma I q)))
             (PF.Reduction.Name.Orig (fst q),
              PF.Reduction.Version.Orig (snd q)).
       Proof.
@@ -1442,7 +1439,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         rewrite (reduceDeps_tailFibre sigma I (o, u) Hq).
         f_equal; apply PF.Reduction.Lookup.reduceDepsBy_agreeNeg.
         intros p psi x Hpf Hx.
-        unfold depEdges in Hpf; apply SOfd.mem_map in Hpf as [psi0 [Hf0 E]].
+        unfold PF.depEdges in Hpf; apply PF.SOfd.mem_map in Hpf as [psi0 [Hf0 E]].
         mem_destruct.
         destruct (dependees_negNames _ _ _ _ _ _ Hf0 Hx) as [m ->].
         symmetry; apply HVq.
@@ -1456,7 +1453,7 @@ Module Opam (N V X Y E : UsualOrderedType).
             (PF.Reduction.embedPkg (embedPkg (n, v))) =
           PF.Reduction.T.dependees
             (PF.Reduction.reduceDepsBy Vq
-               (depEdges (embedPkg (n, v))
+               (PF.depEdges (embedPkg (n, v))
                   (dependees sigma (pkgSubInst I (n, v)) (embedPkg (n, v)))))
             (PF.Reduction.embedPkg (embedPkg (n, v))).
       Proof.
@@ -1473,7 +1470,7 @@ Module Opam (N V X Y E : UsualOrderedType).
             (PF.Reduction.embedPkg rootPkg) =
           PF.Reduction.T.dependees
             (PF.Reduction.reduceDepsBy Vq
-               (depEdges rootPkg (dependees sigma (rootSubInst I) rootPkg)))
+               (PF.depEdges rootPkg (dependees sigma (rootSubInst I) rootPkg)))
             (PF.Reduction.embedPkg rootPkg).
       Proof.
         intros sigma I Vq HVq; rewrite <- dependees_lookupRoot.
@@ -1507,23 +1504,23 @@ Module Opam (N V X Y E : UsualOrderedType).
           (forall m, Vq (TName.Real m) = versions sigma I (TName.Real m)) ->
           PF.Reduction.T.PkgSet.In (PF.Reduction.Name.Disjunct chis, i)
             (PF.Reduction.reduceReal (PF.PkgSet.singleton q)
-               (depEdges q (dependees sigma I' q))) ->
+               (PF.depEdges q (dependees sigma I' q))) ->
           PF.Reduction.T.dependees
             (PF.Reduction.reduceDeps (reduceReal sigma I) (reduceDeps sigma I))
             (PF.Reduction.Name.Disjunct chis, i) =
           PF.Reduction.T.dependees
-            (PF.Reduction.reduceDepsBy Vq (depEdges q (dependees sigma I' q)))
+            (PF.Reduction.reduceDepsBy Vq (PF.depEdges q (dependees sigma I' q)))
             (PF.Reduction.Name.Disjunct chis, i).
       Proof.
         intros sigma I I' Vq q chis i Hq HI HVq Hin; rewrite HI in Hin |- *.
-        assert (Hsub : PF.DepRel.Subset (depEdges q (dependees sigma I q))
+        assert (Hsub : PF.DepRel.Subset (PF.depEdges q (dependees sigma I q))
                          (reduceDeps sigma I)).
         { rewrite <- (reduceDeps_tailFibre sigma I q Hq).
           apply PF.Reduction.Lookup.DepRelFibred.tailFibre_subset. }
         apply (PF.Reduction.Lookup.dependees_lookupDisjunctBy
                  _ _ _ _ _ _ _ Hsub Hin).
         intros p psi x Hpf Hx.
-        unfold depEdges in Hpf; apply SOfd.mem_map in Hpf as [psi0 [Hf0 E]].
+        unfold PF.depEdges in Hpf; apply PF.SOfd.mem_map in Hpf as [psi0 [Hf0 E]].
         mem_destruct.
         destruct (dependees_negNames _ _ _ _ _ _ Hf0 Hx) as [m ->].
         rewrite HVq, versions_reduceReal; reflexivity.

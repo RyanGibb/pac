@@ -152,6 +152,11 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
   Module Dependees := FOT.
   Module DepElt := PairUOT Pkg Dependees.
   Module DepRel := FSetUOT DepElt.
+  Module FSet := FSetUOT FOT.
+
+  Module SOfd := SetOps FOT DepElt FSet DepRel.
+  Definition depEdges (q : Pkg.t) (psis : FSet.t) : DepRel.t :=
+    SOfd.map (fun psi => (q, psi)) psis.
 
   Record IsResolution
       (R : PkgSet.t) (D : DepRel.t) (r : Pkg.t) (S : PkgSet.t) : Prop :=

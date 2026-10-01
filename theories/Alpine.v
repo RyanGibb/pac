@@ -464,7 +464,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     Definition rootPkg : PF.Pkg.t := (Name.Root, Version.RootV).
 
-    Module FSet := FSetUOT PF.FOT.
+    Module FSet := PF.FSet.
     Module SOdf := SetOps DepElt PF.FOT Deps FSet.
     Module SOrf := SetOps ProvElt PF.FOT Prov FSet.
     Module SOtf := SetOps InstallIfElt PF.FOT InstallIf FSet.
@@ -518,12 +518,9 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
            (provPkgs I (inst_repo I))).
 
     Module SOqd := SetOps PF.Pkg PF.DepElt PF.PkgSet PF.DepRel.
-    Module SOfd := SetOps PF.FOT PF.DepElt FSet PF.DepRel.
-    Definition depEdges (q : PF.Pkg.t) (psis : FSet.t) : PF.DepRel.t :=
-      SOfd.map (fun psi => (q, psi)) psis.
 
     Definition reduceDeps (I : Inst) : PF.DepRel.t :=
-      SOqd.unionMap (fun q => depEdges q (dependees I q)) (reduceReal I).
+      SOqd.unionMap (fun q => PF.depEdges q (dependees I q)) (reduceReal I).
 
     Definition tryInvPkg (q : PF.Pkg.t) : option Pkg.t :=
       match q with
@@ -764,10 +761,10 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Proof.
       intros I p psi; unfold reduceDeps; rewrite SOqd.mem_unionMap.
       split.
-      - intros [q [Hq Hf]]; unfold depEdges in Hf.
-        apply SOfd.mem_map in Hf; mem_destruct; auto.
+      - intros [q [Hq Hf]]; unfold PF.depEdges in Hf.
+        apply PF.SOfd.mem_map in Hf; mem_destruct; auto.
       - intros [Hy Hf]; exists p; split; [exact Hy |].
-        unfold depEdges; apply SOfd.mem_map; exists psi; split;
+        unfold PF.depEdges; apply PF.SOfd.mem_map; exists psi; split;
           [exact Hf | reflexivity].
     Qed.
 
@@ -1878,11 +1875,11 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Lemma reduceDeps_tailFibre : forall I q,
           PF.PkgSet.In q (reduceReal I) ->
           PF.Reduction.Lookup.DepRelFibred.tailFibre (reduceDeps I) q =
-          depEdges q (dependees I q).
+          PF.depEdges q (dependees I q).
       Proof.
         intros I q Hq; apply PF.DepRel.ext; intros [q' f].
         rewrite PF.Reduction.Lookup.DepRelFibred.mem_tailFibre, mem_reduceDeps.
-        unfold depEdges; rewrite SOfd.mem_map.
+        unfold PF.depEdges; rewrite PF.SOfd.mem_map.
         split.
         - intros [[_ Hf] ->]; exists f; split; [exact Hf | reflexivity].
         - intro H; mem_destruct; auto.
@@ -1897,7 +1894,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             (PF.Reduction.Name.Orig (fst q),
              PF.Reduction.Version.Orig (snd q)) =
           PF.Reduction.T.dependees
-            (PF.Reduction.reduceDepsBy Vq (depEdges q (dependees I q)))
+            (PF.Reduction.reduceDepsBy Vq (PF.depEdges q (dependees I q)))
             (PF.Reduction.Name.Orig (fst q),
              PF.Reduction.Version.Orig (snd q)).
       Proof.
@@ -1919,7 +1916,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             (PF.Reduction.embedPkg (embedPkg (n, v))) =
           PF.Reduction.T.dependees
             (PF.Reduction.reduceDepsBy Vq
-               (depEdges (embedPkg (n, v))
+               (PF.depEdges (embedPkg (n, v))
                   (dependees (pkgSubInst I (n, v)) (embedPkg (n, v)))))
             (PF.Reduction.embedPkg (embedPkg (n, v))).
       Proof.
@@ -1936,7 +1933,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             (PF.Reduction.embedPkg rootPkg) =
           PF.Reduction.T.dependees
             (PF.Reduction.reduceDepsBy Vq
-               (depEdges rootPkg (dependees (rootSubInst I) rootPkg)))
+               (PF.depEdges rootPkg (dependees (rootSubInst I) rootPkg)))
             (PF.Reduction.embedPkg rootPkg).
       Proof.
         intros I Vq HR HO; rewrite <- dependees_lookupRoot.
@@ -1953,7 +1950,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             (PF.Reduction.embedPkg (Name.Orig m, Version.Prov (n, v) u)) =
           PF.Reduction.T.dependees
             (PF.Reduction.reduceDepsBy Vq
-               (depEdges (Name.Orig m, Version.Prov (n, v) u)
+               (PF.depEdges (Name.Orig m, Version.Prov (n, v) u)
                   (dependees I' (Name.Orig m, Version.Prov (n, v) u))))
             (PF.Reduction.embedPkg (Name.Orig m, Version.Prov (n, v) u)).
       Proof.
@@ -1973,16 +1970,16 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           (forall m, Vq (Name.Orig m) = versions I m) ->
           PF.Reduction.T.PkgSet.In (PF.Reduction.Name.Disjunct fs, i)
             (PF.Reduction.reduceReal (PF.PkgSet.singleton q)
-               (depEdges q (dependees I' q))) ->
+               (PF.depEdges q (dependees I' q))) ->
           PF.Reduction.T.dependees
             (PF.Reduction.reduceDeps (reduceReal I) (reduceDeps I))
             (PF.Reduction.Name.Disjunct fs, i) =
           PF.Reduction.T.dependees
-            (PF.Reduction.reduceDepsBy Vq (depEdges q (dependees I' q)))
+            (PF.Reduction.reduceDepsBy Vq (PF.depEdges q (dependees I' q)))
             (PF.Reduction.Name.Disjunct fs, i).
       Proof.
         intros I I' Vq q fs i Hq HI HR HO Hin; rewrite HI in Hin |- *.
-        assert (Hsub : PF.DepRel.Subset (depEdges q (dependees I q))
+        assert (Hsub : PF.DepRel.Subset (PF.depEdges q (dependees I q))
                          (reduceDeps I)).
         { rewrite <- (reduceDeps_tailFibre I q Hq).
           apply PF.Reduction.Lookup.DepRelFibred.tailFibre_subset. }
