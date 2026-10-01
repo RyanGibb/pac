@@ -346,8 +346,6 @@ Module Feature (N V F : UsualOrderedType).
         exists (Name.Orig n, v); split; [exact HS | reflexivity].
     Qed.
 
-    (* A dependency and an additional dependency are closed over by the same
-       argument; only the node their edges leave from differs. *)
     Lemma dep_closure_step : forall RR D r S q n vs fs,
         T.IsResolution RR D r S ->
         (forall m f v, T.PkgSet.In (Name.FeatPkg m f, v) S ->

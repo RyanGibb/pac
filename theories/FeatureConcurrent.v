@@ -57,9 +57,6 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           (exists fs_q, Feat.FeaturedSet.In (q, fs_q) S) /\
           (exists fs_p, Feat.FeaturedSet.In (p, fs_p) S) }.
 
-  (* Rules out a pair of pi that neither a dependency of the parent nor an
-     additional dependency of one of its selected features admits: the
-     decoding reads pi off those edges, so it cannot give one back. *)
   Definition ParentDependency (Df : Feat.FeatDepRel.t)
       (Da : Feat.AddlDepRel.t) (S : Feat.FeaturedSet.t) (pi : ParentRel.t)
       : Prop :=
@@ -634,9 +631,6 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           repeat split; assumption.
     Qed.
 
-    (* A dependency and an additional dependency are closed over by the same
-       argument; they differ only in the node their edges leave from and in
-       how its intermediate feature nodes are named. *)
     Lemma parent_closure_step :
       forall RR D r g S P (q : T.Pkg.t) n v m vs fs (iF : F.t -> Name.t),
         T.IsResolution RR D r S -> T.PkgSet.In q S ->

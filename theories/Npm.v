@@ -566,9 +566,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         forall u, Installs S pi (rootPkg I) (peerKeyAt I (inst_root I) theta) u ->
           VSet.In u (peerCandsAt I (inst_root I) theta) }.
 
-  (* Rules out a sight where the copy does not chain on n or nothing it
-     holds reads n: the encoding writes free there, which decodes to no
-     sight. *)
   Definition SightRead (I : Inst) (S : PkgSet.t) (pi : Conc.ParentRel.t)
       (sg : Pkg.t -> N.t -> option V.t) : Prop :=
     forall c n w, sg c n = Some w ->

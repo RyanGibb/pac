@@ -56,8 +56,6 @@ Module Visibility (N V : UsualOrderedType).
         forall (n : N.t) (v v' : V.t),
           InSub pub pi p (n, v) -> InSub pub pi p (n, v') -> v = v' }.
 
-  (* Rules out a package of S that no origin sees, which the decoding
-     drops: it reads S off the subgraphs the origins see. *)
   Definition OriginVisibility (D : C.DepRel.t) (pub : PubRel.t) (r : Pkg.t)
       (S : PkgSet.t) (pi : ParentRel.t) : Prop :=
     forall p, PkgSet.In p S ->

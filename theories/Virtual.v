@@ -92,9 +92,6 @@ Module Virtual (N V : UsualOrderedType).
           RhoRel.In ((m, w), (n, p)) rho -> RhoRel.In ((m', w'), (n, p)) rho ->
           (m, w) = (m', w') }.
 
-  (* Rules out a provider in rho that no dependency of its depender admits:
-     the decoding reads rho off dependency edges, so it cannot give one
-     back. *)
   Definition ProviderDependency (D : C.DepRel.t) (Pi : ProvidesRel.t)
       (rho : RhoRel.t) : Prop :=
     forall m w n p, RhoRel.In ((m, w), (n, p)) rho ->

@@ -661,10 +661,6 @@ Module VariableFormula (N V : UsualOrderedType)
       Module PkgFibred := FibredRel N V Pkg PkgSet.
       Module DepRelFibred := FibredRel Pkg Dependees DepElt DepRel.
 
-      (* Disjunctions, and by De Morgan negated conjunctions, hang off their
-         disjunct, so only a negated atom reads its name's versions.  A
-         negated FVarCmp complements against Y_x, which the sub-instance
-         carries whole, so it reads none. *)
       Fixpoint ownNegNames (psi : Formula) : NSet.t :=
         match psi with
         | FDep _ _ => NSet.empty

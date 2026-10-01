@@ -686,8 +686,6 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
                                 (or_introl eq_refl))).
       Qed.
 
-      (* An occupant's edges are in the translation only while it is in R_P,
-         so its sub-instance keeps the entries putting (a, m) into keysOf. *)
       Theorem dependees_lookupOcc : forall I depth l a m v,
           Pl.Reduction.T.PkgSet.In
             (Pl.Reduction.Name.Loc l a,

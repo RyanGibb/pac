@@ -212,8 +212,6 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         forall p k u, ParentRel.In ((p, k), u) pi -> PkgSet.In p S }.
   #[local] Unset Implicit Arguments.
 
-  (* Rules out a pair of pi at a slot Slot Closure does not enter: the
-     decoding reads pi off the entered slots, so it cannot give one back. *)
   Definition ParentDependency (I : Inst) (FS : FeaturedSet.t)
       (pi : ParentRel.t) : Prop :=
     forall p k u, ParentRel.In ((p, k), u) pi ->

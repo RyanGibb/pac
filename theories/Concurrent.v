@@ -33,8 +33,6 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     ; res_parent_subset :
         forall q p, ParentRel.In (q, p) pi -> PkgSet.In q S /\ PkgSet.In p S }.
 
-  (* Rules out a pair of pi that no dependency of the parent admits: the
-     decoding reads pi off dependency edges, so it cannot give one back. *)
   Definition ParentDependency (D : C.DepRel.t) (pi : ParentRel.t) : Prop :=
     forall m u n v, ParentRel.In ((m, u), (n, v)) pi ->
       exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs.
