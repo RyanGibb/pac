@@ -1,6 +1,20 @@
 From Stdlib Require Import MSets MSetRBT Sorted.
 From PackageCalculus Require Import Prelude.
 
+(* Outside the functor, so that extraction gives the drivers one type to
+   report, not one per instantiation. *)
+Inductive CheckFailure (P H : Type) : Type :=
+| CheckSubset (p : P)
+| CheckVersionUnique (p : P)
+| CheckRootMem (h : H)
+| CheckDepClosure (p : P) (h : H)
+| CheckReached (p : P).
+Arguments CheckSubset {P H}.
+Arguments CheckVersionUnique {P H}.
+Arguments CheckRootMem {P H}.
+Arguments CheckDepClosure {P H}.
+Arguments CheckReached {P H}.
+
 (* Module application is generative: two instantiations of Core at equal
    parameters have incompatible types. Instantiate once and share. *)
 Module Core (N V : UsualOrderedType).
@@ -168,12 +182,7 @@ Module Core (N V : UsualOrderedType).
   Definition rootQuery '((n, v) : Pkg.t) : DependeesSet.t :=
     DependeesSet.singleton (n, VSet.singleton v).
 
-  Inductive CheckFailure : Type :=
-  | CheckSubset (p : Pkg.t)
-  | CheckVersionUnique (p : Pkg.t)
-  | CheckRootMem (h : Dependees.t)
-  | CheckDepClosure (p : Pkg.t) (h : Dependees.t)
-  | CheckReached (p : Pkg.t).
+  Definition CheckFailure := CheckFailure Pkg.t Dependees.t.
 
   (* PkgSet is a sorted list, so a membership test walks it; the check asks
      one per dependee version, which a tree answers in logarithmic time. *)

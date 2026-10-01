@@ -67,24 +67,24 @@ Example core_check_accepts : ckCheck ((0, 0) :: (1, 2) :: nil) = None.
 Proof. reflexivity. Qed.
 
 Example core_check_subset :
-  ckCheck ((0, 0) :: (1, 3) :: nil) = Some (C.CheckSubset (1, 3)).
+  ckCheck ((0, 0) :: (1, 3) :: nil) = Some (CheckSubset (1, 3)).
 Proof. reflexivity. Qed.
 
 Example core_check_version_unique :
   ckCheck ((0, 0) :: (1, 1) :: (1, 2) :: nil) =
-  Some (C.CheckVersionUnique (1, 2)).
+  Some (CheckVersionUnique (1, 2)).
 Proof. reflexivity. Qed.
 
 Example core_check_root_mem :
-  ckCheck ((1, 2) :: nil) = Some (C.CheckRootMem (0, C.VSet.singleton 0)).
+  ckCheck ((1, 2) :: nil) = Some (CheckRootMem (0, C.VSet.singleton 0)).
 Proof. reflexivity. Qed.
 
 Example core_check_dep_closure :
-  ckCheck ((0, 0) :: nil) = Some (C.CheckDepClosure (0, 0) (1, ckVS)).
+  ckCheck ((0, 0) :: nil) = Some (CheckDepClosure (0, 0) (1, ckVS)).
 Proof. reflexivity. Qed.
 
 Example core_check_reached :
-  ckCheck ((0, 0) :: (1, 2) :: (2, 0) :: nil) = Some (C.CheckReached (2, 0)).
+  ckCheck ((0, 0) :: (1, 2) :: (2, 0) :: nil) = Some (CheckReached (2, 0)).
 Proof. reflexivity. Qed.
 
 Definition cxPhi : list Cx.ClauseOT.t :=

@@ -471,14 +471,7 @@ module Make (AP : Tables.ARCH) = struct
       | Some f ->
           Pac_common.Check.fail ~pp_name:PName.pp
             ~pp_version:(fun n fmt v -> PVersion.pp fmt (tag n v))
-            Pac_common.Check.(
-              match f with
-              | CT.CheckSubset p -> Subset p
-              | CT.CheckVersionUnique p -> Version_unique p
-              | CT.CheckRootMem (n, vs) -> Root_mem (n, CT.VSet.elements vs)
-              | CT.CheckDepClosure (p, (n, vs)) ->
-                  Dep_closure (p, (n, CT.VSet.elements vs))
-              | CT.CheckReached p -> Reached p)
+            ~elements:CT.VSet.elements f
 
     let decode sol =
       let s' =
