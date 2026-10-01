@@ -762,18 +762,21 @@ def tab_d(out, prov, conf):
 
 # ---------------------------------------------------------------- timing
 
-# comparison id, label, bench id, step, reference, scale run for laziness,
-# index totals key
-COMPS = [("debian", "Debian, amd64 / apt", "amd64", "debian", "apt", "debian", "debian"),
-         ("debian-ma", "Debian, amd64+i386 / apt", "debian-ma", "debian-ma", "apt", "debian-ma-sample", "debian-ma"),
-         ("alpine", "Alpine / apk", "amd64", "alpine", "apk", "alpine", "alpine"),
-         ("opam", "opam / 0install", "amd64", "opam", "opam", "opam", "opam"),
-         ("opam-mccs", "opam / mccs", "amd64", "opam", "opam-mccs", "opam", "opam"),
-         ("cargo", "Cargo / cargo", "amd64", "cargo", "cargo", "cargo", "cargo"),
-         ("npm", "npm reading / npm", "amd64", "npm", "npm", "npm", "npm"),
-         ("npm-shared", "shared reading / npm", "amd64", "npm-shared", "npm", "npm-shared", "npm"),
-         ("npm-placement", "placement reading / npm", "amd64", "npm-placement", "npm", "npm-placement", "npm")]
-MODES = [("warm", "", "warm"), ("cold", "-cold", "cold start"), ("first", "-first", "first run")]
+def comp(id, label, bench, step, ref, run, totals):
+    """a comparison: its bench id, bench step, reference variant, scale run
+    (for laziness) and index totals key"""
+    return {"id": id, "label": label, "bench": bench, "step": step, "ref": ref, "run": run, "totals": totals}
+
+
+COMPS = [comp("debian", "Debian, amd64 / apt", "amd64", "debian", "apt", "debian", "debian"),
+         comp("debian-ma", "Debian, amd64+i386 / apt", "debian-ma", "debian-ma", "apt", "debian-ma-sample", "debian-ma"),
+         comp("alpine", "Alpine / apk", "amd64", "alpine", "apk", "alpine", "alpine"),
+         comp("opam", "opam / 0install", "amd64", "opam", "opam", "opam", "opam"),
+         comp("opam-mccs", "opam / mccs", "amd64", "opam", "opam-mccs", "opam", "opam"),
+         comp("cargo", "Cargo / cargo", "amd64", "cargo", "cargo", "cargo", "cargo"),
+         comp("npm", "npm reading / npm", "amd64", "npm", "npm", "npm", "npm"),
+         comp("npm-shared", "shared reading / npm", "amd64", "npm-shared", "npm", "npm-shared", "npm"),
+         comp("npm-placement", "placement reading / npm", "amd64", "npm-placement", "npm", "npm-placement", "npm")]
 
 
 class Bench:
@@ -819,10 +822,11 @@ class Bench:
 def timing(conf, prov, st):
     benches = {k: Bench(e["path"]) for k, e in conf.bench.items()}
     res = []
-    for cid, label, bid, step, ref, lrun, tkey in COMPS:
-        ent = conf.bench.get(bid)
-        b = benches.get(bid)
-        cell = {"id": cid, "label": label, "run": lrun, "totals": tkey, "modes": {}, "src": {}}
+    for c in COMPS:
+        ent = conf.bench.get(c["bench"])
+        b = benches.get(c["bench"])
+        step, ref = c["step"], c["ref"]
+        cell = {"id": c["id"], "label": c["label"], "run": c["run"], "totals": c["totals"], "modes": {}, "src": {}}
         for mk, suf, mname in MODES:
             s = step + suf
             if b is None or not b.has(s, st):
@@ -830,7 +834,7 @@ def timing(conf, prov, st):
                     why = "no bench run: " + (ent["note"] if ent else "no bench line")
                 else:
                     why = "no %s rows for set %s" % (s, st)
-                prov.miss("E/G", "%s %s (%s)" % (label, mname, st), why)
+                prov.miss("E/G", "%s %s (%s)" % (c["label"], mname, st), why)
                 continue
             cell["src"][mk] = bench_source(prov, ent, s)
             for o in ORDERS:
@@ -1210,7 +1214,7 @@ def main():
     lack = [k for k, v in (("current", conf.current), ("totals", conf.totals), ("causes", conf.causes)) if not v]
     lack += ["%s %s" % (k, i) for k, have_, ids in (("run", conf.runs, [r for r, _ in ROWS_BC]),
                                                     ("fuzz", conf.fuzz, [f for f, _ in FUZZ_ROWS]),
-                                                    ("bench", conf.bench, sorted({c[2] for c in COMPS})))
+                                                    ("bench", conf.bench, sorted({c["bench"] for c in COMPS})))
              for i in ids if i not in have_]
     if lack:
         raise SystemExit("figures.py: no conf line for %s (is sources.conf first?)" % ", ".join(lack))
