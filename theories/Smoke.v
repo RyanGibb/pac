@@ -52,6 +52,41 @@ Example core_merge_computes :
                    C.DepRel.empty))) = 1.
 Proof. reflexivity. Qed.
 
+Definition ckR : C.PkgSet.t :=
+  C.PkgSet.ofList ((0, 0) :: (1, 1) :: (1, 2) :: (2, 0) :: nil).
+
+Definition ckVS : C.VSet.t := C.VSet.ofList (1 :: 2 :: nil).
+
+Definition ckD : C.DepRel.t := C.DepRel.ofList (((0, 0), (1, ckVS)) :: nil).
+
+Definition ckCheck (S : list (nat * nat)) : option C.CheckFailure :=
+  C.check (C.versions ckR) (C.dependees ckD) (C.rootQuery (0, 0))
+    (C.PkgSet.ofList S).
+
+Example core_check_accepts : ckCheck ((0, 0) :: (1, 2) :: nil) = None.
+Proof. reflexivity. Qed.
+
+Example core_check_subset :
+  ckCheck ((0, 0) :: (1, 3) :: nil) = Some (C.CheckSubset (1, 3)).
+Proof. reflexivity. Qed.
+
+Example core_check_version_unique :
+  ckCheck ((0, 0) :: (1, 1) :: (1, 2) :: nil) =
+  Some (C.CheckVersionUnique (1, 2)).
+Proof. reflexivity. Qed.
+
+Example core_check_root_mem :
+  ckCheck ((1, 2) :: nil) = Some (C.CheckRootMem (0, C.VSet.singleton 0)).
+Proof. reflexivity. Qed.
+
+Example core_check_dep_closure :
+  ckCheck ((0, 0) :: nil) = Some (C.CheckDepClosure (0, 0) (1, ckVS)).
+Proof. reflexivity. Qed.
+
+Example core_check_reached :
+  ckCheck ((0, 0) :: (1, 2) :: (2, 0) :: nil) = Some (C.CheckReached (2, 0)).
+Proof. reflexivity. Qed.
+
 Definition cxPhi : list Cx.ClauseOT.t :=
   ((0, true), ((1, false), (2, true))) :: nil.
 
