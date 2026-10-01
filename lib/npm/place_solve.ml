@@ -166,8 +166,27 @@ module Make () = struct
     reach [] Npl.Occ.Top;
     { r with layout = List.filter (fun (l, _) -> Hashtbl.mem kept l) r.layout }
 
-  let solve ?(debug = false) ?(order = `Tool) ?(omit_dev = false)
-      ?(omit_optional = false) ~depth ar (root : string * string) :
+  let check_answer st sol =
+    let versions m = T.VSet.ofList (L.versions st m) in
+    let dependees p = T.DependeesSet.ofList (L.dependees st p) in
+    let q = T.rootQuery (R.Name.Root, R.Version.Occ Npl.Occ.Top) in
+    match T.check versions dependees q (T.PkgSet.ofList sol) with
+    | None -> ()
+    | Some f ->
+        Pac_common.Check.fail ~pp_name:PName.pp
+          ~pp_version:(fun _ -> PVersion.pp)
+          Pac_common.Check.(
+            match f with
+            | T.CheckSubset p -> Subset p
+            | T.CheckVersionUnique p -> Version_unique p
+            | T.CheckRootMem (n, vs) -> Root_mem (n, T.VSet.elements vs)
+            | T.CheckDepClosure (p, (n, vs)) ->
+                Dep_closure (p, (n, T.VSet.elements vs))
+            | T.CheckReached p -> Reached p)
+
+  let solve ?(debug = false) ?(check = false) ?(order = `Tool)
+      ?(omit_dev = false) ?(omit_optional = false) ~depth ar
+      (root : string * string) :
       (result, Pac_common.Report.explanation) Stdlib.result * (unit -> unit) =
     Pubgrub.set_debug debug;
     let st = L.create ~depth ar root in
@@ -189,6 +208,7 @@ module Make () = struct
               Format.fprintf ppf "(within depth %d)@." depth;
               PG.explain_incompatibility ppf inc)
       | Ok sol ->
+          if check then check_answer st sol;
           Ok
             (reached ~dev:omit_dev ~optional:omit_optional st
                (decode ~lookups:(Hashtbl.length asked) sol))

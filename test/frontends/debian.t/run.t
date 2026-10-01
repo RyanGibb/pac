@@ -7,7 +7,7 @@ Two providers of a name that differ in nothing apt ranks on -- no Essential or
 Important flag, the same architecture, the same Priority -- are separated by
 its last key, the package name:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages app
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages app
   packages (3):
     app:amd64 1
     lib:amd64 1
@@ -19,14 +19,14 @@ its last key, the package name:
 a generator seeded by --seed: the same seed gives the same answer, and
 another seed may give another, a resolution all the same:
 
-  $ seed0() { untimed ../../../bin/main.exe debian --order=random --seed 0 --native amd64 Packages app; }; [ "$(seed0)" = "$(seed0)" ] && seed0
+  $ seed0() { untimed ../../../bin/main.exe debian --check --order=random --seed 0 --native amd64 Packages app; }; [ "$(seed0)" = "$(seed0)" ] && seed0
   packages (3):
     altlib:amd64 1
     app:amd64 1
     prov2:amd64 1
   encoded solution: 5 core nodes (5 lookups)
   loaded: 176 names, 176 versions
-  $ untimed ../../../bin/main.exe debian --order=random --seed 1 --native amd64 Packages app
+  $ untimed ../../../bin/main.exe debian --check --order=random --seed 1 --native amd64 Packages app
   packages (3):
     app:amd64 1
     lib:amd64 1
@@ -37,7 +37,7 @@ another seed may give another, a resolution all the same:
 The Priority field outranks the name, and sorts the other way round -- this is
 apt taking mawk, which is Priority: required, for a bare Depends on awk:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages prioapp
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages prioapp
   packages (2):
     prioapp:amd64 1
     zprio:amd64 1
@@ -48,7 +48,7 @@ The Essential flag outranks both, and apt's cache generator sets it on the
 package named apt whatever the stanza says, so apt beats aaaess for essvirt
 where the name would have gone the other way:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages essapp
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages essapp
   packages (2):
     apt:amd64 1
     essapp:amd64 1
@@ -58,14 +58,14 @@ where the name would have gone the other way:
 apt reads the flag's value as StringToBool does, so enable, and 0x1 as
 strtol reads it, are yes:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages enapp
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages enapp
   packages (2):
     enapp:amd64 1
     zzen:amd64 1
   encoded solution: 3 core nodes (3 lookups)
   loaded: 176 names, 176 versions
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages hexapp
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages hexapp
   packages (2):
     hexapp:amd64 1
     zzhex:amd64 1
@@ -75,7 +75,7 @@ strtol reads it, are yes:
 A relationship field may be folded over several lines (Policy 5.1); the
 newline is not part of the atom that follows it:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages folded
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages folded
   packages (3):
     folded:amd64 1
     lib:amd64 1
@@ -88,7 +88,7 @@ preferred over anything claiming its name.  altlib alone would not
 discriminate -- it sorts before lib, so the referent ordering hides the
 question; zzlib sorts after it and does not:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages realdep
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages realdep
   packages (2):
     lib:amd64 1
     realdep:amd64 1
@@ -98,14 +98,14 @@ question; zzlib sorts after it and does not:
 Recommends are installed by default, as under apt's APT::Install-Recommends,
 and the leftmost alternative is preferred as in a Depends clause:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages softpair
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages softpair
   packages (2):
     softa:amd64 1
     softpair:amd64 1
   encoded solution: 3 core nodes (5 lookups)
   loaded: 176 names, 176 versions
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 --no-install-recommends Packages softpair
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 --no-install-recommends Packages softpair
   packages (1):
     softpair:amd64 1
   encoded solution: 1 core nodes (1 lookups)
@@ -115,7 +115,7 @@ A one-alternative Recommends still gets its soft disjunct: unlike a Depends
 clause, which is inlined below two alternatives, the escape is the whole point
 of the encoding and there is no cardinality test to skip it:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages softone
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages softone
   packages (2):
     softlib:amd64 1
     softone:amd64 1
@@ -126,7 +126,7 @@ An unsatisfiable Recommends is not an error.  softconf recommends softnope,
 which conflicts with the softkeep it depends on; the solve succeeds by taking
 the escape, and softnope is absent:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages softconf
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages softconf
   packages (2):
     softconf:amd64 1
     softkeep:amd64 1
@@ -137,7 +137,7 @@ The escape sorts below every alternative, so it is reached only once they have
 all failed: softalt recommends softnope | softb, and softnope is ruled out by
 the same conflict, so softb is installed rather than nothing:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages softalt
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages softalt
   packages (3):
     softalt:amd64 1
     softb:amd64 1
@@ -152,7 +152,7 @@ cfld depends on cflb (= 1) and cflc, whichever order the solver reaches them.
 cflb 1 is not the candidate, so both versions are offered, as with apt's
 Strict-Pinning off (below):
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 --no-strict-pinning Packages cfld
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 --no-strict-pinning Packages cfld
   unsatisfiable:
   Because cflc:amd64 1 -> cfla:amd64 1 and cfla:amd64 1 -> cflb:amd64 ⊥, cflc:amd64 1 requires cflb:amd64 ⊥.
   And because cfld:amd64 1 -> cflb:amd64 1, cfld:amd64 1 or cflc:amd64 1 is forbidden.
@@ -163,7 +163,7 @@ Strict-Pinning off (below):
 Absence is a version of the encoding, not an installation: cflc alone
 decides cflb to ⊥, and the answer lists what is present.
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages cflc
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages cflc
   packages (2):
     cfla:amd64 1
     cflc:amd64 1
@@ -175,7 +175,7 @@ the same alternatives the solver read first.  ordapp recommends ordx | ordy
 and depends on orddep, which depends on ordy | ordx; apt takes ordy for
 orddep, and the recommendation is then already met:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages ordapp
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages ordapp
   packages (3):
     ordapp:amd64 1
     orddep:amd64 1
@@ -183,7 +183,7 @@ orddep, and the recommendation is then already met:
   encoded solution: 5 core nodes (8 lookups)
   loaded: 176 names, 176 versions
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages ordapp
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages ordapp
   packages (3):
     ordapp:amd64 1
     orddep:amd64 1
@@ -196,7 +196,7 @@ selcommon depends on selbase, which selutils provides, so its selector is
 entailed before seldep's selutils | selbase is decided; apt reaches seldep's
 clause first, takes selutils, and selutils then provides selbase:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages selapp
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages selapp
   packages (4):
     selapp:amd64 1
     selcommon:amd64 1
@@ -205,7 +205,7 @@ clause first, takes selutils, and selutils then provides selbase:
   encoded solution: 6 core nodes (7 lookups)
   loaded: 176 names, 176 versions
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages selapp
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages selapp
   packages (4):
     selapp:amd64 1
     selcommon:amd64 1
@@ -218,7 +218,7 @@ Nor is a name a conflict has reached: its range still admits ⊥.  botcfl
 conflicts with botx (<< 2), which leaves botx at 2 or ⊥, and botdep's
 boty | botx takes its leftmost:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages botapp
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages botapp
   packages (4):
     botapp:amd64 1
     botcfl:amd64 1
@@ -227,7 +227,7 @@ boty | botx takes its leftmost:
   encoded solution: 5 core nodes (6 lookups)
   loaded: 176 names, 176 versions
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages botapp
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages botapp
   packages (4):
     botapp:amd64 1
     botcfl:amd64 1
@@ -245,7 +245,7 @@ requires it, so hgui's Recommends (htheme -> hsysd, providing hsysusers) is
 pushed after hglib's (hdbus: hadduser | hsysusers), and hdbus pops first,
 taking hadduser before hsysd arrives, as apt does:
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages hgoal
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages hgoal
   packages (9):
     hadduser:amd64 1
     hcore:amd64 1
@@ -268,7 +268,7 @@ ksysd, providing ksysusers) is then pushed before that of kcore, five
 dependencies deep (krc: kadduser | ksysusers), and krc finds ksysusers
 installed:
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages kgoal
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages kgoal
   packages (16):
     kc1:amd64 1
     kc2:amd64 1
@@ -293,7 +293,7 @@ The watch lists are read from the field text, folded or not: jgoal is kgoal
 with jquick-gles's Depends folded, its first name on a continuation line,
 and the rejection still reaches jquick-gles:
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages jgoal
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages jgoal
   packages (16):
     jc1:amd64 1
     jc2:amd64 1
@@ -323,7 +323,7 @@ A two-solution item ranks behind mb's one-solution mc, which pops first and
 brings in my, and mself's mx | my then finds my installed; the one-solution
 items tie, and na's, pushed first, pops first:
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages mgoal
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages mgoal
   packages (6):
     ma:amd64 1
     mb:amd64 1
@@ -334,7 +334,7 @@ items tie, and na's, pushed first, pops first:
   encoded solution: 10 core nodes (14 lookups)
   loaded: 176 names, 176 versions
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages ngoal
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages ngoal
   packages (7):
     na:amd64 1
     nb:amd64 1
@@ -351,7 +351,7 @@ apt's cache holds as an empty pseudo-package, so ca's Conflicts: cb:x32
 does not reject ca when cb is installed, and cq's ca | cz takes its
 leftmost:
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages cgoal
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages cgoal
   packages (4):
     ca:amd64 1
     cb:amd64 1
@@ -367,7 +367,7 @@ dfoo and dbar's dfoo (= 2), dfoo (>= 2) has dbar's and dbaz's dfoo (= 3),
 so the merged clause is unit at dbar, and the real dfoo, which each half
 alone would have let a leftmost-first choice install, is never installed:
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages dgoal
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages dgoal
   packages (2):
     dbar:amd64 1
     dgoal:amd64 1
@@ -378,7 +378,7 @@ The fold narrows the depender's own clause, and only while the depender is
 installed: rpa folds rfoo (<< 3) and rfoo (>= 2) down to rbar, then fails,
 and rqa's rfoo (<< 3), unfolded, takes the real rfoo:
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages rgoal
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages rgoal
   packages (3):
     rfoo:amd64 1
     rgoal:amd64 1
@@ -394,7 +394,7 @@ after fq's wave has counted fx | fw as two live solutions.  A two-solution
 Recommends ranks behind fo's one-solution fz, so fz is installed first, and
 its conflict with fw leaves fq's Recommends with nothing:
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages fgoal
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages fgoal
   packages (5):
     fgoal:amd64 1
     fo:amd64 1
@@ -411,7 +411,7 @@ gv, and the item pops with gw its one solution left.  The answer is the
 same either way; what trying the rejected gv first would cost is a
 backjump, which the shadow heap's counters count:
 
-  $ PACSHADOW=1 ../../../bin/main.exe debian --order=tool --native amd64 Packages ggoal 2>&1 | sed -E '/^(parse|solve) [0-9.]+s$/d; s/^PACSHADOW.* (backjump=[0-9]+).*/\1/'
+  $ PACSHADOW=1 ../../../bin/main.exe debian --check --order=tool --native amd64 Packages ggoal 2>&1 | sed -E '/^(parse|solve) [0-9.]+s$/d; s/^PACSHADOW.* (backjump=[0-9]+).*/\1/'
   backjump=0
   packages (4):
     ga:amd64 1
@@ -427,7 +427,7 @@ solver3.cc).  vgoal tries wa, which fails, then vb's vp, which fails too; by
 the time vq's Recommends are counted, wa | wxc has one solution left, so it
 pops ahead of wyd | wxc and wxc meets both:
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages wgoal
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages wgoal
   packages (3):
     wb:amd64 1
     wgoal:amd64 1
@@ -435,7 +435,7 @@ pops ahead of wyd | wxc and wxc meets both:
   encoded solution: 6 core nodes (16 lookups)
   loaded: 176 names, 176 versions
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages vgoal
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages vgoal
   packages (4):
     vb:amd64 1
     vgoal:amd64 1
@@ -451,14 +451,14 @@ behind its obsq | obsr, which takes obsq, and obsp | obsq then finds obsq
 installed.  obsgoal2 is the same with obsx, which nothing makes obsolete, and
 its first clause goes first:
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages obsgoal
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages obsgoal
   packages (2):
     obsgoal:amd64 1
     obsq:amd64 1
   encoded solution: 4 core nodes (6 lookups)
   loaded: 176 names, 176 versions
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages obsgoal2
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages obsgoal2
   packages (3):
     obsgoal2:amd64 1
     obsq:amd64 1
@@ -469,14 +469,14 @@ its first clause goes first:
 The tool order is the default.  PubGrub's own order decides obsgoal's
 obsp | obsq first, and installs obsp too:
 
-  $ untimed ../../../bin/main.exe debian --native amd64 Packages obsgoal
+  $ untimed ../../../bin/main.exe debian --check --native amd64 Packages obsgoal
   packages (2):
     obsgoal:amd64 1
     obsq:amd64 1
   encoded solution: 4 core nodes (6 lookups)
   loaded: 176 names, 176 versions
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages obsgoal
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages obsgoal
   packages (3):
     obsgoal:amd64 1
     obsp:amd64 1
@@ -489,28 +489,28 @@ on by default), which with no pins is the newest.  pinv 2 needs pinnone,
 which nothing provides, and apt refuses pinapp rather than fall back to
 pinv 1; with Strict-Pinning off it takes pinv 1:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinapp
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages pinapp
   unsatisfiable:
   Because pinapp:amd64 1 -> pinv:amd64 2 and pinv:amd64 2 -> pinnone:amd64 ∅, pinapp:amd64 1 is forbidden.
   And because root -> pinapp:amd64 1, version solving failed.
   loaded: 176 names, 176 versions
   [1]
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 --no-strict-pinning Packages pinapp
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 --no-strict-pinning Packages pinapp
   packages (2):
     pinapp:amd64 1
     pinv:amd64 1
   encoded solution: 2 core nodes (3 lookups)
   loaded: 176 names, 182 versions
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages pinapp
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages pinapp
   unsatisfiable:
   Because pinapp:amd64 1 -> pinv:amd64 2 and pinv:amd64 2 -> pinnone:amd64 ∅, pinapp:amd64 1 is forbidden.
   And because root -> pinapp:amd64 1, version solving failed.
   loaded: 176 names, 176 versions
   [1]
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 --no-strict-pinning Packages pinapp
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 --no-strict-pinning Packages pinapp
   packages (2):
     pinapp:amd64 1
     pinv:amd64 1
@@ -521,13 +521,13 @@ apt refuses too where a dependency's range misses the candidate, however
 installable an older version is: pinok 2 installs, and pinrange asks for
 pinok (<< 2):
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinrange
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages pinrange
   unsatisfiable:
   Because pinrange:amd64 1 -> pinok:amd64 ∅ and root -> pinrange:amd64 1, version solving failed.
   loaded: 176 names, 176 versions
   [1]
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 --no-strict-pinning Packages pinrange
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 --no-strict-pinning Packages pinrange
   packages (2):
     pinok:amd64 1
     pinrange:amd64 1
@@ -539,28 +539,28 @@ may name a version, NAME=VERSION.  That version becomes the package's
 candidate, so Strict-Pinning keeps it rather than the newest: pinv=1 makes
 pinapp installable, and so does pinok=1 pinrange:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinapp pinv=1
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages pinapp pinv=1
   packages (2):
     pinapp:amd64 1
     pinv:amd64 1
   encoded solution: 2 core nodes (2 lookups)
   loaded: 176 names, 176 versions
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages pinapp pinv=1
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages pinapp pinv=1
   packages (2):
     pinapp:amd64 1
     pinv:amd64 1
   encoded solution: 2 core nodes (2 lookups)
   loaded: 176 names, 176 versions
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinrange pinok=1
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages pinrange pinok=1
   packages (2):
     pinok:amd64 1
     pinrange:amd64 1
   encoded solution: 2 core nodes (2 lookups)
   loaded: 176 names, 176 versions
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages app prioapp
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages app prioapp
   packages (5):
     app:amd64 1
     lib:amd64 1
@@ -573,14 +573,14 @@ pinapp installable, and so does pinok=1 pinrange:
 Of two elements naming one package the later wins, as apt sets the
 candidate once per element, in order:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinapp pinv=2 pinv=1
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages pinapp pinv=2 pinv=1
   packages (2):
     pinapp:amd64 1
     pinv:amd64 1
   encoded solution: 2 core nodes (2 lookups)
   loaded: 176 names, 176 versions
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinapp pinv=1 pinv=2
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages pinapp pinv=1 pinv=2
   unsatisfiable:
   Because pinv:amd64 2 -> pinnone:amd64 ∅ and root -> pinv:amd64 2, version solving failed.
   loaded: 176 names, 176 versions
@@ -591,25 +591,25 @@ package's versions, newest first, that is the string, or matches it as a
 glob; candidate and newest name the newest.  An arch:all stanza is the
 native package's version, so pinmix=1 reaches the amd64 stanza:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages 'pinok=1*'
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages 'pinok=1*'
   packages (1):
     pinok:amd64 1
   encoded solution: 1 core nodes (1 lookups)
   loaded: 176 names, 176 versions
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages 'pinv=*'
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages 'pinv=*'
   unsatisfiable:
   Because pinv:amd64 2 -> pinnone:amd64 ∅ and root -> pinv:amd64 2, version solving failed.
   loaded: 176 names, 176 versions
   [1]
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinv=candidate
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages pinv=candidate
   unsatisfiable:
   Because pinv:amd64 2 -> pinnone:amd64 ∅ and root -> pinv:amd64 2, version solving failed.
   loaded: 176 names, 176 versions
   [1]
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinmix:amd64=1
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages pinmix:amd64=1
   packages (1):
     pinmix:amd64 1
   encoded solution: 1 core nodes (1 lookups)
@@ -620,31 +620,31 @@ not the newer 1.23; failing every version, a version whose package provides
 itself at a matching version is taken; and candidate and newest read the
 same after '/':
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages 'pinglob=1.*2*'
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages 'pinglob=1.*2*'
   packages (1):
     pinglob:amd64 1.2
   encoded solution: 1 core nodes (1 lookups)
   loaded: 176 names, 176 versions
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages 'pinglob=1.2*'
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages 'pinglob=1.2*'
   packages (1):
     pinglob:amd64 1.23
   encoded solution: 1 core nodes (1 lookups)
   loaded: 176 names, 176 versions
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinself=5
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages pinself=5
   packages (1):
     pinself:amd64 1
   encoded solution: 1 core nodes (1 lookups)
   loaded: 176 names, 176 versions
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinok/newest
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages pinok/newest
   packages (1):
     pinok:amd64 2
   encoded solution: 1 core nodes (1 lookups)
   loaded: 176 names, 176 versions
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinv/candidate
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages pinv/candidate
   unsatisfiable:
   Because pinv:amd64 2 -> pinnone:amd64 ∅ and root -> pinv:amd64 2, version solving failed.
   loaded: 176 names, 176 versions
@@ -657,23 +657,23 @@ matches every version.  apt refuses these before it solves, with the
 cacheset's own message (CacheSetHelper::canNotGetVersion), so they are
 refusals and not unsatisfiable queries:
 
-  $ ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinv=3
+  $ ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages pinv=3
   error: Version '3' for 'pinv' was not found
   [2]
 
-  $ ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinv=installed
+  $ ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages pinv=installed
   error: Can't select installed version from package pinv as it is not installed
   [2]
 
-  $ ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinv/stable
+  $ ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages pinv/stable
   error: Release 'stable' for 'pinv' was not found
   [2]
 
-  $ ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.multiarch xunq=2
+  $ ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.multiarch xunq=2
   error: Version '2' for 'xunq:i386' was not found
   [2]
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages 'pinok/*'
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages 'pinok/*'
   packages (1):
     pinok:amd64 2
   encoded solution: 1 core nodes (1 lookups)
@@ -683,13 +683,13 @@ apt holds an arch:all stanza under the native architecture's package, so
 pinmix 2 (all), which needs pinnone, is the candidate over pinmix 1 (amd64);
 and of two stanzas at one version, apt keeps the first read:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pinmix
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages pinmix
   unsatisfiable:
   Because pinmix:amd64 2 -> pinnone:amd64 ∅ and root -> pinmix:amd64 2, version solving failed.
   loaded: 176 names, 176 versions
   [1]
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages pindup
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages pindup
   packages (1):
     pindup:amd64 1
   encoded solution: 1 core nodes (1 lookups)
@@ -701,20 +701,20 @@ the dupr that does is the first, so dupgoal3 installs it.  An arch:all
 stanza is a version of its own to apt (Version::All), so the arch:all dupq
 still provides dupvirt2 beside its amd64 twin:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 --no-strict-pinning Packages dupgoal
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 --no-strict-pinning Packages dupgoal
   unsatisfiable:
   Because dupgoal:amd64 1 -> dupvirt:amd64 ∅ and root -> dupgoal:amd64 1, version solving failed.
   loaded: 176 names, 182 versions
   [1]
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 --no-strict-pinning Packages dupgoal3
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 --no-strict-pinning Packages dupgoal3
   packages (2):
     dupgoal3:amd64 1
     dupr:amd64 1
   encoded solution: 3 core nodes (3 lookups)
   loaded: 176 names, 182 versions
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 --no-strict-pinning Packages dupgoal2
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 --no-strict-pinning Packages dupgoal2
   packages (2):
     dupgoal2:amd64 1
     dupq:amd64 1
@@ -730,13 +730,13 @@ ignored", deb-control(5)).  apt, with i386 configured beside amd64, refuses
 xdep, whose xfor:i386 only the foreign xfor:amd64 could meet, while it
 meets the unqualified xfor of xunq:i386:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.multiarch xdep
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.multiarch xdep
   unsatisfiable:
   Because xdep:amd64 1 -> xfor:<i386> ∅ and root -> xdep:amd64 1, version solving failed.
   loaded: 17 names, 18 versions
   [1]
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.multiarch xunq:i386
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.multiarch xunq:i386
   packages (2):
     xfor:amd64 1
     xunq:i386 1
@@ -747,7 +747,7 @@ An unqualified name in a query is the native package if there is one with
 a version, and otherwise another architecture's (FindPreferredPkg,
 pkgcache.cc): xunq exists only at i386:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.multiarch xunq
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.multiarch xunq
   packages (2):
     xfor:amd64 1
     xunq:i386 1
@@ -757,7 +757,7 @@ pkgcache.cc): xunq exists only at i386:
 :native is an explicit qualifier of the native architecture: xnat:i386
 needs xforn:native, and xforn is foreign but only at i386:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.multiarch xnat:i386
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.multiarch xnat:i386
   unsatisfiable:
   Because xnat:i386 1 -> xforn:<amd64> ∅ and root -> xnat:i386 1, version solving failed.
   loaded: 17 names, 18 versions
@@ -768,27 +768,27 @@ alone: the foreign xvprov:amd64 does not meet xvdep's xvirt:i386, while
 xvprov2:i386 meets xvok's xvirt2:i386; and where b's own package exists it
 is taken, as xfor2:i386 is for xboth:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.multiarch xvdep
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.multiarch xvdep
   unsatisfiable:
   Because xvdep:amd64 1 -> xvirt:<i386> ∅ and root -> xvdep:amd64 1, version solving failed.
   loaded: 17 names, 18 versions
   [1]
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.multiarch xvok
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.multiarch xvok
   packages (2):
     xvok:amd64 1
     xvprov2:i386 1
   encoded solution: 3 core nodes (3 lookups)
   loaded: 17 names, 18 versions
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages.multiarch xvok
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages.multiarch xvok
   packages (2):
     xvok:amd64 1
     xvprov2:i386 1
   encoded solution: 3 core nodes (3 lookups)
   loaded: 17 names, 18 versions
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.multiarch xboth
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.multiarch xboth
   packages (2):
     xboth:amd64 1
     xfor2:i386 1
@@ -800,14 +800,14 @@ Multi-Arch: foreign one of another alike.  apt ranks them on the target's
 group first, which aptool:amd64 and aptool:i386 share, and then on the
 native architecture, so apdep:i386 takes aptool:amd64 in both orders:
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages.archpref apdep:i386
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages.archpref apdep:i386
   packages (2):
     apdep:i386 1
     aptool:amd64 1
   encoded solution: 4 core nodes (4 lookups)
   loaded: 2 names, 3 versions
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.archpref apdep:i386
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.archpref apdep:i386
   packages (2):
     apdep:i386 1
     aptool:amd64 1
@@ -821,7 +821,7 @@ cnx | cny, which was pushed first and so is worked first, taking cnx; and
 cnd, arch:all and so held at amd64, is one solution to cnw:i386's
 Recommends, which the tool order then installs:
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages.counts cnr
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages.counts cnr
   packages (6):
     cnc:amd64 1
     cnr:amd64 1
@@ -832,7 +832,7 @@ Recommends, which the tool order then installs:
   encoded solution: 9 core nodes (10 lookups)
   loaded: 11 names, 13 versions
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages.counts cnw:i386
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages.counts cnw:i386
   packages (2):
     cnd:amd64 1
     cnw:i386 1
@@ -843,7 +843,7 @@ The entry is among a folded clause's solutions too: cnv:i386's cnt (>= 1)
 and cnt (<< 2) fold into one clause, which keeps the one cnt:amd64 gives
 and so takes it:
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages.counts cnq:i386
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages.counts cnq:i386
   packages (3):
     cnq:i386 1
     cnt:amd64 1
@@ -857,7 +857,7 @@ rejects gct:i386, so gcw:i386's gct | gcu has one solution left, gcu:i386,
 which apt installs straight away; gcu's gcy then meets gca's gcx | gcy
 before that clause is worked, and gcx is never installed:
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages.group gca gct gcw:i386
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages.group gca gct gcw:i386
   packages (5):
     gca:amd64 1
     gct:amd64 1
@@ -872,7 +872,7 @@ bucket by bucket of the name's hash, not in the order given or by name:
 rqomega comes before rqalpha, so its rqy | rqx is worked first and rqx is
 never installed:
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages.request rqalpha rqomega
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages.request rqalpha rqomega
   packages (3):
     rqalpha:amd64 1
     rqomega:amd64 1
@@ -886,7 +886,7 @@ dgg:amd64 has installed dgg, walks none of dgg's clauses again, so the half
 of dgg's dgh (>= 1), dgh (<< 2) that apt registers on the version is pushed
 once.  apt pushes three work items here, and so does the replay's heap:
 
-  $ PACSHADOW=1 ../../../bin/main.exe debian --order=tool --native amd64 Packages.again dgr 2>&1 | sed -E '/^(parse|solve) [0-9.]+s$/d; s/^PACSHADOW.* (push=[0-9]+ readd=[0-9]+).*/\1/'
+  $ PACSHADOW=1 ../../../bin/main.exe debian --check --order=tool --native amd64 Packages.again dgr 2>&1 | sed -E '/^(parse|solve) [0-9.]+s$/d; s/^PACSHADOW.* (push=[0-9]+ readd=[0-9]+).*/\1/'
   push=3 readd=0
   packages (4):
     dgd:amd64 1
@@ -902,7 +902,7 @@ rfnone, which nothing provides, fails, and Pop then adds the Recommends back.
 apt's heap takes those three pushes, and the replay's takes them too, two in
 waves and one added back:
 
-  $ PACSHADOW=1 ../../../bin/main.exe debian --order=tool --native amd64 Packages.refuted rfr 2>&1 | sed -E '/^(parse|solve) [0-9.]+s$/d; s/^PACSHADOW.* (push=[0-9]+ readd=[0-9]+).*/\1/'
+  $ PACSHADOW=1 ../../../bin/main.exe debian --check --order=tool --native amd64 Packages.refuted rfr 2>&1 | sed -E '/^(parse|solve) [0-9.]+s$/d; s/^PACSHADOW.* (push=[0-9]+ readd=[0-9]+).*/\1/'
   push=2 readd=1
   packages (1):
     rfr:amd64 1
@@ -915,21 +915,21 @@ xcfl's Conflicts: xfc:i386 spares the foreign xfc:amd64 it depends on, and
 xcfl2's xvc:i386 the foreign xpc:amd64 providing xvc, while xcfl3's
 xvc3:i386 excludes the xpc3:i386 it needs:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.multiarch xcfl
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.multiarch xcfl
   packages (2):
     xcfl:amd64 1
     xfc:amd64 1
   encoded solution: 3 core nodes (3 lookups)
   loaded: 17 names, 18 versions
 
-  $ untimed ../../../bin/main.exe debian --order=tool --native amd64 Packages.multiarch xcfl2
+  $ untimed ../../../bin/main.exe debian --check --order=tool --native amd64 Packages.multiarch xcfl2
   packages (2):
     xcfl2:amd64 1
     xpc:amd64 1
   encoded solution: 3 core nodes (3 lookups)
   loaded: 17 names, 18 versions
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.multiarch xcfl3
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.multiarch xcfl3
   unsatisfiable:
   Because <sel xpc3:<i386> (T)> ref:xpc3:i386=1 -> xpc3:i386 1 and xcfl3:amd64 1 -> xpc3:i386 ⊥, xcfl3:amd64 1 or <sel xpc3:<i386> (T)> ref:xpc3:i386=1 is forbidden.
   And because xcfl3:amd64 1 -> <sel xpc3:<i386> (T)> ref:xpc3:i386=1 and root -> xcfl3:amd64 1, version solving failed.
@@ -942,7 +942,7 @@ apt-private/private-cacheset.cc), and a Multi-Arch: foreign package
 provides itself to every architecture, so apt-get install xfor:i386
 installs xfor:amd64:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.multiarch xfor:i386
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.multiarch xfor:i386
   packages (1):
     xfor:amd64 1
   encoded solution: 1 core nodes (1 lookups)
@@ -952,7 +952,7 @@ Provides admits only "=" (Policy 7.5).  apt ignores any other Provides with a
 warning and keeps the rest of the stanza; so does pac, counting what it
 dropped:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.provides bvgoal2
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.provides bvgoal2
   packages (2):
     bvgoal2:amd64 1
     bvprov2:amd64 1
@@ -960,7 +960,7 @@ dropped:
   loaded: 5 names, 5 versions
   parser dropped 2 declarations
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.provides bvgoal
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.provides bvgoal
   unsatisfiable:
   Because bvgoal:amd64 1 -> bvirt:amd64 ∅ and root -> bvgoal:amd64 1, version solving failed.
   loaded: 5 names, 5 versions
@@ -974,7 +974,7 @@ version, a qualifier and two restrictions), and the file a stray
 continuation and a line with no colon.  An empty clause is no alternative
 at all:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --native amd64 Packages.nameless nl
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.nameless nl
   packages (5):
     na:amd64 1
     nb:amd64 1
@@ -989,13 +989,13 @@ apt keeps 1.0 and 1.00 as two versions, which compare equal, and NAME=VERSION
 matches the string (pkgVersionMatch::MatchVer), so exv=1.00 is the stanza
 without exv 1.0's missing dependency, and exv=1.0 the one with it:
 
-  $ untimed ../../../bin/main.exe debian --native amd64 Packages.versions exv=1.00
+  $ untimed ../../../bin/main.exe debian --check --native amd64 Packages.versions exv=1.00
   packages (1):
     exv:amd64 1.00
   encoded solution: 1 core nodes (1 lookups)
   loaded: 7 names, 7 versions
 
-  $ untimed ../../../bin/main.exe debian --native amd64 Packages.versions exv=1.0
+  $ untimed ../../../bin/main.exe debian --check --native amd64 Packages.versions exv=1.0
   unsatisfiable:
   Because exv:amd64 1.0 -> exnone:amd64 ∅ and root -> exv:amd64 1.0, version solving failed.
   loaded: 7 names, 7 versions
@@ -1004,7 +1004,7 @@ without exv 1.0's missing dependency, and exv=1.0 the one with it:
 An epoch is compared as dpkg's digit runs are, however long, and never
 read into a machine integer:
 
-  $ untimed ../../../bin/main.exe debian --native amd64 Packages.versions epgoal
+  $ untimed ../../../bin/main.exe debian --check --native amd64 Packages.versions epgoal
   packages (2):
     epgoal:amd64 1
     epv:amd64 99999999999999999999:1
@@ -1017,7 +1017,7 @@ queue enqueues eqa at once rather than push a work item for a clause name
 PubGrub never offers, which would part the two when it popped ahead of
 eqy | eqz:
 
-  $ PACSHADOW=1 ../../../bin/main.exe debian --order=tool --native amd64 Packages.versions eqgoal 2>&1 | sed -E '/^(parse|solve) [0-9.]+s$/d; s/^PACSHADOW.* (desync=[0-9]+).*/\1/'
+  $ PACSHADOW=1 ../../../bin/main.exe debian --check --order=tool --native amd64 Packages.versions eqgoal 2>&1 | sed -E '/^(parse|solve) [0-9.]+s$/d; s/^PACSHADOW.* (desync=[0-9]+).*/\1/'
   desync=0
   packages (3):
     eqa:amd64 1.0
@@ -1032,21 +1032,21 @@ Strict-Pinning on, the first read is the candidate and the twin is gone;
 off, the tool order's solution count finds each of twvirt and twvirt2
 provided by twin and takes it, as PubGrub's own order does:
 
-  $ untimed ../../../bin/main.exe debian --order=tool --no-strict-pinning --native amd64 Packages.twin twgoal
+  $ untimed ../../../bin/main.exe debian --check --order=tool --no-strict-pinning --native amd64 Packages.twin twgoal
   packages (2):
     twgoal:amd64 1
     twin:amd64 1
   encoded solution: 4 core nodes (5 lookups)
   loaded: 4 names, 4 versions
 
-  $ untimed ../../../bin/main.exe debian --order=tool --no-strict-pinning --native amd64 Packages.twin twgoal2
+  $ untimed ../../../bin/main.exe debian --check --order=tool --no-strict-pinning --native amd64 Packages.twin twgoal2
   packages (2):
     twgoal2:amd64 1
     twin:amd64 1
   encoded solution: 4 core nodes (5 lookups)
   loaded: 4 names, 4 versions
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub --no-strict-pinning --native amd64 Packages.twin twgoal
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --no-strict-pinning --native amd64 Packages.twin twgoal
   packages (2):
     twgoal:amd64 1
     twin:amd64 1
@@ -1055,7 +1055,7 @@ provided by twin and takes it, as PubGrub's own order does:
 
 An index that cannot be read is a read error, not a refused query:
 
-  $ ../../../bin/main.exe debian nope/Packages app
+  $ ../../../bin/main.exe debian --check nope/Packages app
   error: nope/Packages: No such file or directory
   [3]
 
@@ -1063,29 +1063,29 @@ A name apt cannot locate at all, one only referred to or provided by no
 candidate, and one several packages provide, are apt's errors before it
 solves:
 
-  $ ../../../bin/main.exe debian Packages app nosuchpkg
+  $ ../../../bin/main.exe debian --check Packages app nosuchpkg
   error: Unable to locate package nosuchpkg
   [2]
-  $ ../../../bin/main.exe debian Packages nosuchpkg:i386
+  $ ../../../bin/main.exe debian --check Packages nosuchpkg:i386
   error: Unable to locate package nosuchpkg:i386
   [2]
-  $ ../../../bin/main.exe debian Packages nosuchpkg=1
+  $ ../../../bin/main.exe debian --check Packages nosuchpkg=1
   error: Unable to locate package nosuchpkg
   [2]
-  $ ../../../bin/main.exe debian Packages pinnone
+  $ ../../../bin/main.exe debian --check Packages pinnone
   error: Package 'pinnone' has no installation candidate
   [2]
-  $ ../../../bin/main.exe debian Packages dupvirt
+  $ ../../../bin/main.exe debian --check Packages dupvirt
   error: Package 'dupvirt' has no installation candidate
   [2]
-  $ ../../../bin/main.exe debian Packages virt
+  $ ../../../bin/main.exe debian --check Packages virt
   error: Package 'virt' has no installation candidate
   [2]
 
 while a name one package alone provides selects that package, as apt's
 "Note, selecting 'hsysd' instead of 'hsysusers'" does:
 
-  $ untimed ../../../bin/main.exe debian --order=pubgrub Packages hsysusers
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub Packages hsysusers
   packages (1):
     hsysd:amd64 1
   encoded solution: 1 core nodes (1 lookups)
@@ -1103,14 +1103,14 @@ cached (below), so the cases wait that long first:
   $ for f in touched changed other; do cp Packages.nameless $f; done
   $ chmod u+w changed other && printf '\nPackage: nx\nVersion: 1\n' >> other
   $ sleep 2
-  $ untimed ../../../bin/main.exe debian --native amd64 Packages.nameless nl > none
+  $ untimed ../../../bin/main.exe debian --check --native amd64 Packages.nameless nl > none
   $ tail -n 2 none
   loaded: 5 names, 5 versions
   parser dropped 7 declarations
-  $ XDG_CACHE_HOME=$PWD/xdg noted ../../../bin/main.exe debian --native amd64 Packages.nameless nl
+  $ XDG_CACHE_HOME=$PWD/xdg noted ../../../bin/main.exe debian --check --native amd64 Packages.nameless nl
   loaded: 5 names, 5 versions, index parsed
   parser dropped 7 declarations
-  $ XDG_CACHE_HOME=$PWD/xdg untimed ../../../bin/main.exe debian --native amd64 Packages.nameless nl > warm
+  $ XDG_CACHE_HOME=$PWD/xdg untimed ../../../bin/main.exe debian --check --native amd64 Packages.nameless nl > warm
   $ tail -n 2 warm
   loaded: 5 names, 5 versions, index read from the cache
   parser dropped 7 declarations
@@ -1125,10 +1125,10 @@ cached (below), so the cases wait that long first:
 
 --no-cache reads and writes none, whatever --cache says:
 
-  $ XDG_CACHE_HOME=$PWD/xdg noted ../../../bin/main.exe debian --no-cache --native amd64 Packages.nameless nl
+  $ XDG_CACHE_HOME=$PWD/xdg noted ../../../bin/main.exe debian --check --no-cache --native amd64 Packages.nameless nl
   loaded: 5 names, 5 versions
   parser dropped 7 declarations
-  $ noted ../../../bin/main.exe debian --cache c --no-cache --native amd64 Packages.nameless nl
+  $ noted ../../../bin/main.exe debian --check --cache c --no-cache --native amd64 Packages.nameless nl
   loaded: 5 names, 5 versions
   parser dropped 7 declarations
   $ ls c
@@ -1139,30 +1139,30 @@ Any write moves a file's ctime, which no tool can set back, so a file
 touched, or changed in place with its size and mtime kept, misses, and so
 do flags that shape the tables:
 
-  $ noted ../../../bin/main.exe debian --cache c --native amd64 touched nl
+  $ noted ../../../bin/main.exe debian --check --cache c --native amd64 touched nl
   loaded: 5 names, 5 versions, index parsed
   parser dropped 7 declarations
-  $ noted ../../../bin/main.exe debian --cache c --native amd64 touched nl
+  $ noted ../../../bin/main.exe debian --check --cache c --native amd64 touched nl
   loaded: 5 names, 5 versions, index read from the cache
   parser dropped 7 declarations
   $ touch touched
-  $ noted ../../../bin/main.exe debian --cache c --native amd64 touched nl
+  $ noted ../../../bin/main.exe debian --check --cache c --native amd64 touched nl
   loaded: 5 names, 5 versions, index parsed
   parser dropped 7 declarations
-  $ noted ../../../bin/main.exe debian --cache c --native amd64 changed nl
+  $ noted ../../../bin/main.exe debian --check --cache c --native amd64 changed nl
   loaded: 5 names, 5 versions, index parsed
   parser dropped 7 declarations
-  $ noted ../../../bin/main.exe debian --cache c --native amd64 changed nl
+  $ noted ../../../bin/main.exe debian --check --cache c --native amd64 changed nl
   loaded: 5 names, 5 versions, index read from the cache
   parser dropped 7 declarations
   $ stat -c '%i %s %y' changed > before && touch -r changed mtime
   $ sed 's/^Package: nb$/Package: nx/' changed > new && cat new > changed
   $ touch -r mtime changed && stat -c '%i %s %y' changed | cmp - before
-  $ noted ../../../bin/main.exe debian --cache c --native amd64 changed nl
+  $ noted ../../../bin/main.exe debian --check --cache c --native amd64 changed nl
   loaded: 5 names, 5 versions, index parsed
   parser dropped 7 declarations
   [1]
-  $ noted ../../../bin/main.exe debian --cache c --native amd64 --no-install-recommends Packages.nameless nl
+  $ noted ../../../bin/main.exe debian --check --cache c --native amd64 --no-install-recommends Packages.nameless nl
   loaded: 5 names, 5 versions, index parsed
   parser dropped 7 declarations
 
@@ -1170,21 +1170,21 @@ A write in the clock tick of the change before it need not move the
 times, so a file changed less than two seconds before the run is parsed
 but not cached:
 
-  $ noted ../../../bin/main.exe debian --cache c --native amd64 touched nl
+  $ noted ../../../bin/main.exe debian --check --cache c --native amd64 touched nl
   loaded: 5 names, 5 versions, index parsed
   parser dropped 7 declarations
 
 An entry keeps the digests of the bytes it was built from, which a hit
 under --debug checks, so an entry put in another's place is a miss there:
 
-  $ ../../../bin/main.exe debian --cache f --native amd64 Packages.nameless nl > /dev/null
+  $ ../../../bin/main.exe debian --check --cache f --native amd64 Packages.nameless nl > /dev/null
   $ a=$(find f -type f)
-  $ ../../../bin/main.exe debian --cache f --native amd64 other nl > /dev/null
+  $ ../../../bin/main.exe debian --check --cache f --native amd64 other nl > /dev/null
   $ cp "$a" "$(find f -type f ! -path "$a")"
-  $ noted ../../../bin/main.exe debian --cache f --native amd64 other nl
+  $ noted ../../../bin/main.exe debian --check --cache f --native amd64 other nl
   loaded: 5 names, 5 versions, index read from the cache
   parser dropped 7 declarations
-  $ noted ../../../bin/main.exe debian --debug --cache f --native amd64 other nl
+  $ noted ../../../bin/main.exe debian --check --debug --cache f --native amd64 other nl
   loaded: 6 names, 6 versions, index parsed
   parser dropped 7 declarations
   $ grep 'cache entry' out
@@ -1193,10 +1193,10 @@ under --debug checks, so an entry put in another's place is a miss there:
 A query naming a version makes it the candidate, so it reads the index
 back but builds its own tables: the cached ones hold pinv 2 alone.
 
-  $ noted ../../../bin/main.exe debian --cache c --native amd64 Packages pinapp
+  $ noted ../../../bin/main.exe debian --check --cache c --native amd64 Packages pinapp
   loaded: 176 names, 176 versions, index parsed
   [1]
-  $ untimed ../../../bin/main.exe debian --cache c --native amd64 Packages pinapp pinv=1
+  $ untimed ../../../bin/main.exe debian --check --cache c --native amd64 Packages pinapp pinv=1
   packages (2):
     pinapp:amd64 1
     pinv:amd64 1
@@ -1205,17 +1205,17 @@ back but builds its own tables: the cached ones hold pinv 2 alone.
 
 An entry cut short is a miss, never a misread, and is written again:
 
-  $ ../../../bin/main.exe debian --cache d --native amd64 Packages app > /dev/null
+  $ ../../../bin/main.exe debian --check --cache d --native amd64 Packages app > /dev/null
   $ f=$(find d -type f) && head -c 100 "$f" > cut && mv cut "$f"
-  $ noted ../../../bin/main.exe debian --cache d --native amd64 Packages app
+  $ noted ../../../bin/main.exe debian --check --cache d --native amd64 Packages app
   loaded: 176 names, 176 versions, index parsed
-  $ noted ../../../bin/main.exe debian --cache d --native amd64 Packages app
+  $ noted ../../../bin/main.exe debian --check --cache d --native amd64 Packages app
   loaded: 176 names, 176 versions, index read from the cache
 
 Runs sharing a cache each write an entry to a file of their own and
 rename it into place, so none reads another's half-written one:
 
-  $ for i in 1 2 3 4 5 6 7 8; do ../../../bin/main.exe debian --cache e --native amd64 Packages app > o$i & done; wait
+  $ for i in 1 2 3 4 5 6 7 8; do ../../../bin/main.exe debian --check --cache e --native amd64 Packages app > o$i & done; wait
   $ cat o1 o2 o3 o4 o5 o6 o7 o8 | grep -v -e '^loaded: ' -e '^parse ' -e '^solve ' | sort | uniq -c
         8   app:amd64 1
         8   lib:amd64 1
@@ -1223,5 +1223,5 @@ rename it into place, so none reads another's half-written one:
         8 encoded solution: 5 core nodes (5 lookups)
         8 packages (3):
   $ find e -name '*.tmp'
-  $ noted ../../../bin/main.exe debian --cache e --native amd64 Packages app
+  $ noted ../../../bin/main.exe debian --check --cache e --native amd64 Packages app
   loaded: 176 names, 176 versions, index read from the cache

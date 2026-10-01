@@ -65,9 +65,12 @@ module Make
   (* The core solution back through the proved decoder to the package
      formula's packages.  Reading the ecosystem's packages off the
      solution directly would be a further, unproved, decoder, and it is
-     the decoded one the soundness theorem is stated about. *)
+     the decoded one the soundness theorem is stated about.  [check] runs
+     the calculus's check on the core solution first, which raises
+     [Pac_common.Check.Failed] on one that fails it. *)
   val solve :
     t ->
+    check:bool ->
     touch:(PF.Reduction.T.Pkg.t -> unit) ->
     (Name.t, PG.selection, P.t) Pac_common.Order.hooks ->
     (PF.PkgSet.t * int, Pac_common.Report.explanation) result

@@ -8,7 +8,7 @@ root a crate of the index through the manifest it was published with,
 manifests/<crate>.toml, so the root's own dev-dependencies and features
 are in play.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/a.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/a.toml
   root a 1.0.0
   packages (6):
     a 1.0.0
@@ -25,7 +25,7 @@ names a prerelease at the same release core.  p publishes 1.0.0 and the
 newer 1.0.1-alpha, and ^1.0.0 names no prerelease, so it takes 1.0.0;
 q publishes 1.0.0-alpha.1 alone, which ^1.0.0-alpha reaches.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/g.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/g.toml
   root g 1.0.0
   packages (3):
     g 1.0.0
@@ -39,7 +39,7 @@ as an optional normal dependency and as a dev-dependency; from root h, k is
 not the root, so neither record installs m -- the optional one is never
 activated and the dev one does not participate.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/h.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/h.toml
   root h 1.0.0
   packages (2):
     h 1.0.0
@@ -53,7 +53,7 @@ resolve: the implicit feature of the optional m is among them, so that
 record activates as well and each of the two binds m through its own
 slot, two parent edges onto the one installed crate.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/k.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/k.toml
   root k 1.0.0
   packages (2):
     k 1.0.0 [m]
@@ -68,7 +68,7 @@ mandatory dev record installs m by itself.  The two stay
 separate slots -- conjoined, the dev record's non-optionality would bind
 on every depender, which is the h case above.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/k.toml --features ""
+  $ untimed ../../../bin/main.exe cargo --check index manifests/k.toml --features ""
   root k 1.0.0 with default features
   packages (2):
     k 1.0.0
@@ -84,7 +84,7 @@ known.  z must still be admitted once it arrives -- the answer is the older,
 link-free x beside z, not a rejection of z against a version set fixed
 without it.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/r.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/r.toml
   root r 1.0.0
   packages (4):
     r 1.0.0
@@ -97,7 +97,7 @@ without it.
 The root's own links key excludes as a dependency's does.  rl claims
 links=foo, so x 1.0.0, which claims it too, is out and x 0.9.0 is taken.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/rl.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/rl.toml
   root rl 1.0.0
   packages (2):
     rl 1.0.0
@@ -111,7 +111,7 @@ nowhere else; cargo's resolver activates such an entry unconditionally and
 narrows it only in a later pass over the fixed resolution, so that w keeps
 its place in the lock as --features varies, and w is installed with extra.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/s.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/s.toml
   root s 1.0.0
   packages (3):
     s 1.0.0
@@ -126,7 +126,7 @@ it does, and newest-first still decides within each of the two.  d1 publishes
 1.0.0 with rust-version 1.60 and 1.1.0 with 1.80; under a 1.70 toolchain
 m1 takes the older 1.0.0.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/m1.toml --rust-version 1.70
+  $ untimed ../../../bin/main.exe cargo --check index manifests/m1.toml --rust-version 1.70
   root m1 1.0.0 for rust 1.70
   packages (2):
     d1 1.0.0
@@ -137,7 +137,7 @@ m1 takes the older 1.0.0.
 With no toolchain configured the preference is off, as it is in cargo when
 the rust-versions list is empty, and the same index takes the newest.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/m1.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/m1.toml
   root m1 1.0.0
   packages (2):
     d1 1.1.0
@@ -152,7 +152,7 @@ and 1.2.0 needing 1.95, so under 1.70 the field-less 1.1.0 wins -- neither
 the newest nor the oldest, which no other reading of the missing field
 would give.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/m2.toml --rust-version 1.70
+  $ untimed ../../../bin/main.exe cargo --check index manifests/m2.toml --rust-version 1.70
   root m2 1.0.0 for rust 1.70
   packages (2):
     d2 1.1.0
@@ -160,7 +160,7 @@ would give.
   encoded solution: 6 core nodes (6 lookups)
   loaded: 2 names, 4 versions
 
-  $ untimed ../../../bin/main.exe cargo index manifests/m2.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/m2.toml
   root m2 1.0.0
   packages (2):
     d2 1.2.0
@@ -172,7 +172,7 @@ This is a preference and not a constraint.  m3 requires ^2 of d3, whose
 only version in range is 2.0.0 needing 1.90; the MSRV-compatible 1.0.0 is
 out of range, so 2.0.0 is taken rather than the solve failing.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/m3.toml --rust-version 1.70
+  $ untimed ../../../bin/main.exe cargo --check index manifests/m3.toml --rust-version 1.70
   root m3 1.0.0 for rust 1.70
   packages (2):
     d3 2.0.0
@@ -187,7 +187,7 @@ declared it -- the target section, the kind table, and the key inside it --
 so the two are separate rows of the summary and both resolve, giving a
 lockfile with e 0.1.0 beside e 0.2.0.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/t.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/t.toml
   root t 1.0.0
   packages (3):
     e 0.1.0
@@ -201,7 +201,7 @@ package = sets the dependee name and the cross-table check constrains only
 the source registry.  rn's x is e under [dependencies] and w under
 [target.'cfg(windows)'.dependencies], and both are installed.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/rn.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/rn.toml
   root rn 1.0.0
   packages (3):
     e 0.2.0
@@ -221,7 +221,7 @@ has one (dep_cache.rs, require_dep_feature): ir asks i for net alone, net
 is "o/extra" over the optional o, whose implicit feature o exists, so i is
 resolved with o on:
 
-  $ untimed ../../../bin/main.exe cargo index manifests/ir.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/ir.toml
   root ir 1.0.0
   packages (3):
     i 1.0.0 [net,o]
@@ -233,7 +233,7 @@ resolved with o on:
 Where dep:o names the dependency there is no implicit feature o to enable,
 and i3 is resolved with net alone:
 
-  $ untimed ../../../bin/main.exe cargo index manifests/ir3.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/ir3.toml
   root ir3 1.0.0
   packages (3):
     i3 1.0.0 [net]
@@ -250,7 +250,7 @@ crate's dependencies fewest candidates first and in declaration order
 between equals: ga is activated at 0.14.9, cp 0.1.7 then fails on its pin,
 and cp falls back to 0.1.6.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/oa.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/oa.toml
   root oa 1.0.0
   packages (4):
     cp 0.1.6
@@ -263,7 +263,7 @@ and cp falls back to 0.1.6.
 pb declares zp, a copy of cp, first, so zp 0.1.7 is activated first and its
 pin, with one candidate, is taken before pb's own ^0.14 of ga.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/ob.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/ob.toml
   root ob 1.0.0
   packages (4):
     ga 0.14.7
@@ -276,7 +276,7 @@ pin, with one candidate, is taken before pb's own ^0.14 of ga.
 The root's own dependencies are read from its manifest, whose tables cargo
 keys by name, so oc's zp-then-ga reaches the resolver as ga-then-zp.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/oc.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/oc.toml
   root oc 1.0.0
   packages (3):
     ga 0.14.9
@@ -293,7 +293,7 @@ ms activates sk 0.5.10 through its pin; mq's >=0.5, <0.7 then meets the
 compatible 0.5.9, which that activation rules out, and takes the newest of
 the rest, 0.6.5, although it needs a newer Rust than 1.70.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/ms.toml --rust-version 1.70
+  $ untimed ../../../bin/main.exe cargo --check index manifests/ms.toml --rust-version 1.70
   root ms 1.0.0 for rust 1.70
   packages (4):
     mq 1.0.0
@@ -307,7 +307,7 @@ mu pins sl to 0.6.5, which needs 1.80, so mt's range skips the compatible
 0.6.4 of that granularity class and takes the compatible 0.5.9 of the
 older one.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/mu.toml --rust-version 1.70
+  $ untimed ../../../bin/main.exe cargo --check index manifests/mu.toml --rust-version 1.70
   root mu 1.0.0 for rust 1.70
   packages (4):
     mt 1.0.0
@@ -324,10 +324,10 @@ sp to its own version, so zk's newest two are dead on arrival: the solve
 takes zk 1.0.0 without a single conflict, where learning it would cost
 one per version, since each version's slot is its own name.
 
-  $ ../../../bin/main.exe cargo index manifests/dz.toml | grep -E '^  (sp|zk) '
+  $ ../../../bin/main.exe cargo --check index manifests/dz.toml | grep -E '^  (sp|zk) '
     sp 1.0.0
     zk 1.0.0
-  $ ../../../bin/main.exe cargo index manifests/dz.toml --debug | grep -c '^conflict resolution'
+  $ ../../../bin/main.exe cargo --check index manifests/dz.toml --debug | grep -c '^conflict resolution'
   0
   [1]
 
@@ -337,10 +337,10 @@ ae has one candidate for it and that candidate is dead: the chain of
 forced candidates is followed, and zj 1.0.0 is again reached without a
 conflict.
 
-  $ ../../../bin/main.exe cargo index manifests/dy.toml | grep -E '^  (ae|sb|zj) '
+  $ ../../../bin/main.exe cargo --check index manifests/dy.toml | grep -E '^  (ae|sb|zj) '
     sb 2.6.1
     zj 1.0.0
-  $ ../../../bin/main.exe cargo index manifests/dy.toml --debug | grep -c '^conflict resolution'
+  $ ../../../bin/main.exe cargo --check index manifests/dy.toml --debug | grep -c '^conflict resolution'
   0
   [1]
 
@@ -349,10 +349,10 @@ the candidate turn on.  dx asks tr for url, which in tr 1.1.0 enables sb
 at a range the pinned 2.6.1 misses, so tr 1.0.0 is taken, again without a
 conflict.
 
-  $ ../../../bin/main.exe cargo index manifests/dx.toml | grep -E '^  (sb|tr) '
+  $ ../../../bin/main.exe cargo --check index manifests/dx.toml | grep -E '^  (sb|tr) '
     sb 2.6.1
     tr 1.0.0 [url]
-  $ ../../../bin/main.exe cargo index manifests/dx.toml --debug | grep -c '^conflict resolution'
+  $ ../../../bin/main.exe cargo --check index manifests/dx.toml --debug | grep -c '^conflict resolution'
   0
   [1]
 
@@ -360,10 +360,10 @@ A dependency with several valid candidates dies when every one of them
 does.  xw 1.1.0 needs zv, and each zv needs sb at a range the pinned 2.6.1
 misses, so xw 1.1.0 is passed over for 1.0.0, again without a conflict.
 
-  $ ../../../bin/main.exe cargo index manifests/dw.toml | grep -E '^  (sb|xw|zv) '
+  $ ../../../bin/main.exe cargo --check index manifests/dw.toml | grep -E '^  (sb|xw|zv) '
     sb 2.6.1
     xw 1.0.0
-  $ ../../../bin/main.exe cargo index manifests/dw.toml --debug | grep -c '^conflict resolution'
+  $ ../../../bin/main.exe cargo --check index manifests/dw.toml --debug | grep -c '^conflict resolution'
   0
   [1]
 
@@ -378,11 +378,11 @@ share one slot: once 1.2.0 is refuted, 1.1.0 is tried, its dependency on
 the slot merges with 1.2.0's, and the conflict learned against the merged
 one refutes both.
 
-  $ ../../../bin/main.exe cargo index manifests/dv.toml | grep -E '^  (ae|sb|zj) '
+  $ ../../../bin/main.exe cargo --check index manifests/dv.toml | grep -E '^  (ae|sb|zj) '
     ae 0.10.3
     sb 2.4.1
     zj 1.2.0
-  $ ../../../bin/main.exe cargo index manifests/dv.toml --debug | grep -c '^deciding on'
+  $ ../../../bin/main.exe cargo --check index manifests/dv.toml --debug | grep -c '^deciding on'
   75
 
 A root Cargo.toml of its own.  app takes s under [dependencies], e under
@@ -392,7 +392,7 @@ feature net asks i for net.  The lock enables every root feature, so i
 comes in through net, with o behind i's own net, and e is locked at both
 0.1.0 (for x) and 0.2.0.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/app.toml --print-parents
+  $ untimed ../../../bin/main.exe cargo --check index manifests/app.toml --print-parents
   root app 0.1.0
   packages (9):
     app 0.1.0 [default,i,net]
@@ -422,10 +422,10 @@ cargo keeps two packages, the path root and the registry's b, unless a
 [patch] maps the name to the root, so pac refuses the first manifest and
 answers the second.
 
-  $ ../../../bin/main.exe cargo index manifests/selfdep.toml > /dev/null
+  $ ../../../bin/main.exe cargo --check index manifests/selfdep.toml > /dev/null
   error: the answer reaches b 1.0.0 through the registry, which cargo keeps apart from the root unless [patch.crates-io] maps b to it with { path = "." }
   [2]
-  $ untimed ../../../bin/main.exe cargo index manifests/selfpatch.toml --print-parents
+  $ untimed ../../../bin/main.exe cargo --check index manifests/selfpatch.toml --print-parents
   root b 1.0.0
   packages (6):
     a 1.0.0
@@ -448,10 +448,10 @@ answers the second.
 Sources and patches the model does not cover are refused rather than
 dropped:
 
-  $ ../../../bin/main.exe cargo index manifests/pathdep.toml
+  $ ../../../bin/main.exe cargo --check index manifests/pathdep.toml
   error: dependencies.m: a path source is not a registry crate, and only the registry is modelled
   [2]
-  $ ../../../bin/main.exe cargo index manifests/otherpatch.toml
+  $ ../../../bin/main.exe cargo --check index manifests/otherpatch.toml
   error: [patch.crates-io] m: the only patch modelled maps the root's own name to the root, { path = "." }
   [2]
 
@@ -459,7 +459,7 @@ An index entry whose feature table cargo's build_feature_map refuses is
 never a candidate, so cargo takes 1.0.0 of each of fa (dep:o/extra), fb
 (o/extra/z) and fc (a feature naming neither a feature nor a dependency):
 
-  $ untimed ../../../bin/main.exe cargo index manifests/fm.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/fm.toml
   root fm 1.0.0
   packages (4):
     fa 1.0.0
@@ -475,11 +475,11 @@ file's bytes, and a later run reads it back: the same answer, the same
 lines dropped.  fm, the root, has no index file, so three names are read
 back.
 
-  $ untimed ../../../bin/main.exe cargo --cache c index manifests/fm.toml > cold
+  $ untimed ../../../bin/main.exe cargo --check --cache c index manifests/fm.toml > cold
   $ tail -n 2 cold
   loaded: 4 names, 3 versions, 0 names read from the cache
   parser dropped 3 declarations
-  $ untimed ../../../bin/main.exe cargo --cache c index manifests/fm.toml > warm
+  $ untimed ../../../bin/main.exe cargo --check --cache c index manifests/fm.toml > warm
   $ tail -n 2 warm
   loaded: 4 names, 3 versions, 3 names read from the cache
   parser dropped 3 declarations
@@ -487,10 +487,10 @@ back.
 
 Unless given, the cache is the user's, and --no-cache keeps none:
 
-  $ XDG_CACHE_HOME=$PWD/xdg ../../../bin/main.exe cargo index manifests/fm.toml > /dev/null
+  $ XDG_CACHE_HOME=$PWD/xdg ../../../bin/main.exe cargo --check index manifests/fm.toml > /dev/null
   $ find xdg/pac/cargo -type f | wc -l
   3
-  $ untimed ../../../bin/main.exe cargo --cache c --no-cache index manifests/fm.toml | grep '^loaded: '
+  $ untimed ../../../bin/main.exe cargo --check --cache c --no-cache index manifests/fm.toml | grep '^loaded: '
   loaded: 4 names, 3 versions
 
 A changed file misses the cache: with fc's refused feature gone from a
@@ -498,7 +498,7 @@ copy of the index, fc 1.1.0 is a candidate and is taken.
 
   $ cp -RL index idx && chmod -R u+w idx
   $ sed 's/"nope"//' index/2/fc > idx/2/fc
-  $ untimed ../../../bin/main.exe cargo --cache c idx manifests/fm.toml
+  $ untimed ../../../bin/main.exe cargo --check --cache c idx manifests/fm.toml
   root fm 1.0.0
   packages (4):
     fa 1.0.0
@@ -513,20 +513,20 @@ The manifest is TOML, which cargo refuses where a header defines a table
 dotted keys already made, an integer has a leading zero, or an escape
 names a surrogate rather than a Unicode scalar value:
 
-  $ ../../../bin/main.exe cargo index manifests/tomldot.toml
+  $ ../../../bin/main.exe cargo --check index manifests/tomldot.toml
   error: manifests/tomldot.toml: line 13: table "dependencies.b" defined twice
   [2]
-  $ ../../../bin/main.exe cargo index manifests/tomlint.toml
+  $ ../../../bin/main.exe cargo --check index manifests/tomlint.toml
   error: manifests/tomlint.toml: line 7: bad value "0_1"
   [2]
-  $ ../../../bin/main.exe cargo index manifests/tomlesc.toml
+  $ ../../../bin/main.exe cargo --check index manifests/tomlesc.toml
   error: manifests/tomlesc.toml: line 5: bad \u escape
   [2]
 
 while dotted keys over one table, a sub-table header under them, and
 numbers TOML allows all read:
 
-  $ untimed ../../../bin/main.exe cargo index manifests/tomlok.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/tomlok.toml
   root tomlok 1.0.0
   packages (4):
     b 1.0.0
@@ -540,7 +540,7 @@ A version component is a u64 in cargo's semver, so tv's timestamp-style
 1.0.1234567890 and 1.0.1234567891 are two versions, and ^1 takes the
 newer, as cargo does.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/vt.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/vt.toml
   root vt 1.0.0
   packages (2):
     tv 1.0.1234567891
@@ -557,7 +557,7 @@ of bm's and bp's, and each name takes the greater: 1.0.0+b over 1.0.0+a,
 1.0.0+9.  bf's 1.0.0+b needs a crate the index lacks, so bf falls back to
 1.0.0+a.  cargo 1.97 locks the same six:
 
-  $ untimed ../../../bin/main.exe cargo index manifests/bmeta.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/bmeta.toml
   root bmeta 1.0.0
   packages (6):
     bf 1.0.0+a
@@ -575,7 +575,7 @@ bgt's >1.0.0 has nothing, as it has nothing in cargo, which fails with
 the bound as the greatest version of its precedence, 1.0.0+*, a build no
 version carries:
 
-  $ untimed ../../../bin/main.exe cargo index manifests/bgt.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/bgt.toml
   root bgt 1.0.0
   unsatisfiable:
   Because root () -> bgt@1.0.0 1.0.0 and bgt@1.0.0 1.0.0 -> bgt@1.0.0->bm(>1.0.0+*) ∅, root () is forbidden.
@@ -588,7 +588,7 @@ but not an object is dropped and counted, and so is a version one of
 whose dependencies is not an object, or has no name: nb's 1.1.0 and 1.2.0
 are out, and cargo, like pac, locks 1.0.0.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/nbr.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/nbr.toml
   root nbr 1.0.0
   packages (2):
     nb 1.0.0
@@ -602,7 +602,7 @@ it, as cargo's CliFeatures does, and an empty --features names nothing
 rather than everything.  fd's default enables net, which asks the
 optional i for net.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/fd.toml
+  $ untimed ../../../bin/main.exe cargo --check index manifests/fd.toml
   root fd 1.0.0
   packages (3):
     fd 1.0.0 [default,i,net,plain]
@@ -610,7 +610,7 @@ optional i for net.
     o 1.0.0 [extra]
   encoded solution: 17 core nodes (17 lookups)
   loaded: 3 names, 2 versions
-  $ untimed ../../../bin/main.exe cargo index manifests/fd.toml -F ""
+  $ untimed ../../../bin/main.exe cargo --check index manifests/fd.toml -F ""
   root fd 1.0.0 with default features
   packages (3):
     fd 1.0.0 [default,i,net]
@@ -618,13 +618,13 @@ optional i for net.
     o 1.0.0 [extra]
   encoded solution: 16 core nodes (16 lookups)
   loaded: 3 names, 2 versions
-  $ untimed ../../../bin/main.exe cargo index manifests/fd.toml --no-default-features
+  $ untimed ../../../bin/main.exe cargo --check index manifests/fd.toml --no-default-features
   root fd 1.0.0 with no features
   packages (1):
     fd 1.0.0
   encoded solution: 2 core nodes (2 lookups)
   loaded: 2 names, 1 versions
-  $ untimed ../../../bin/main.exe cargo index manifests/fd.toml --no-default-features -F plain
+  $ untimed ../../../bin/main.exe cargo --check index manifests/fd.toml --no-default-features -F plain
   root fd 1.0.0 with features plain and no default feature
   packages (1):
     fd 1.0.0 [plain]
@@ -633,7 +633,7 @@ optional i for net.
 
 A requirement cargo cannot parse is refused, not read as "*":
 
-  $ ../../../bin/main.exe cargo index manifests/badreq.toml
+  $ ../../../bin/main.exe cargo --check index manifests/badreq.toml
   error: failed to parse the version requirement `abc` for dependency `i`
   [2]
 
@@ -641,7 +641,7 @@ The order is cargo's unless --order=pubgrub leaves it to PubGrub, whose
 answer is a resolution too, though not always the one cargo locks: under
 PubGrub's own order oa keeps cp's newest, 0.1.7, and ga at its pin.
 
-  $ untimed ../../../bin/main.exe cargo index manifests/oa.toml --order=pubgrub
+  $ untimed ../../../bin/main.exe cargo --check index manifests/oa.toml --order=pubgrub
   root oa 1.0.0
   packages (4):
     cp 0.1.7
@@ -655,7 +655,7 @@ PubGrub's own order oa keeps cp's newest, 0.1.7, and ga at its pin.
 a generator seeded by --seed: the same seed gives the same answer, and
 another seed may give another, a resolution all the same:
 
-  $ seed0() { untimed ../../../bin/main.exe cargo index manifests/oa.toml --order=random --seed 0; }; [ "$(seed0)" = "$(seed0)" ] && seed0
+  $ seed0() { untimed ../../../bin/main.exe cargo --check index manifests/oa.toml --order=random --seed 0; }; [ "$(seed0)" = "$(seed0)" ] && seed0
   root oa 1.0.0
   packages (4):
     cp 0.1.6
@@ -664,7 +664,7 @@ another seed may give another, a resolution all the same:
     pa 1.0.0
   encoded solution: 13 core nodes (13 lookups)
   loaded: 4 names, 6 versions
-  $ untimed ../../../bin/main.exe cargo index manifests/oa.toml --order=random --seed 4
+  $ untimed ../../../bin/main.exe cargo --check index manifests/oa.toml --order=random --seed 4
   root oa 1.0.0
   packages (4):
     cp 0.1.7
@@ -681,7 +681,7 @@ feature a one of them asks for, they get two versions, as in cargo's own
 fresh lock.  Reading that lock back re-locks both to 0.60.0
 (core/registry.rs, lock), so cargo --locked refuses even its own:
 
-  $ untimed ../../../bin/main.exe cargo index manifests/st.toml --print-parents
+  $ untimed ../../../bin/main.exe cargo --check index manifests/st.toml --print-parents
   root st 1.0.0
   packages (4):
     st 1.0.0
@@ -698,13 +698,13 @@ fresh lock.  Reading that lock back re-locks both to 0.60.0
 sti's two declarations ask the same of wsy, requirement and features, so
 cargo gives them one version, and whatever the order, so does pac:
 
-  $ for s in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do ../../../bin/main.exe cargo index manifests/st3.toml --order=random --seed $s | grep -c '^  wsy '; done | sort | uniq -c
+  $ for s in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do ../../../bin/main.exe cargo --check index manifests/st3.toml --order=random --seed $s | grep -c '^  wsy '; done | sort | uniq -c
        16 1
 
 The root's dev-dependencies are active beside its normal ones, and one
 asking wsy for a splits from a normal one asking for nothing the same way:
 
-  $ untimed ../../../bin/main.exe cargo index manifests/st2.toml --print-parents
+  $ untimed ../../../bin/main.exe cargo --check index manifests/st2.toml --print-parents
   root st2 1.0.0
   packages (3):
     st2 1.0.0
@@ -719,25 +719,25 @@ asking wsy for a splits from a normal one asking for nothing the same way:
 The root's feature table passes the checks an index entry's does
 (build_feature_map), or cargo refuses the manifest:
 
-  $ ../../../bin/main.exe cargo index manifests/rfm.toml
+  $ ../../../bin/main.exe cargo --check index manifests/rfm.toml
   error: manifests/rfm.toml: [features] is not a table cargo accepts: every entry names a feature, an optional dependency (dep:), or a dependency's feature
   [2]
-  $ ../../../bin/main.exe cargo index manifests/rfm2.toml
+  $ ../../../bin/main.exe cargo --check index manifests/rfm2.toml
   error: manifests/rfm2.toml: [features] is not a table cargo accepts: every entry names a feature, an optional dependency (dep:), or a dependency's feature
   [2]
 
 A feature --features names must be the root's, and a version must be one:
 
-  $ ../../../bin/main.exe cargo index manifests/fd.toml -F nope
+  $ ../../../bin/main.exe cargo --check index manifests/fd.toml -F nope
   error: the package `fd v1.0.0` does not have the feature `nope`
   [2]
-  $ ../../../bin/main.exe cargo index manifests/fd.toml -F i/net
+  $ ../../../bin/main.exe cargo --check index manifests/fd.toml -F i/net
   error: --features i/net: a dependency's feature on the command line is not modelled
   [2]
-  $ ../../../bin/main.exe cargo index manifests/m1.toml --rust-version 1.x
+  $ ../../../bin/main.exe cargo --check index manifests/m1.toml --rust-version 1.x
   error: --rust-version 1.x is not a version like "1.32" or "1.32.0"
   [2]
-  $ ../../../bin/main.exe cargo index manifests/rv.toml
+  $ ../../../bin/main.exe cargo --check index manifests/rv.toml
   error: package.rust-version "1.70-beta" is not a version like "1.32"
   [2]
 
@@ -746,7 +746,7 @@ the whitespace around it:
 
   $ for v in 1.x 1.0 01.0.0 1.0.0-01 1.0.0- 1.0.0+a..b 18446744073709551616.0.0 ' 1.0.0 ' 1.0.0+001 18446744073709551615.0.0; do
   >   printf '[package]\nname = "vt"\nversion = "%s"\n' "$v" > v.toml
-  >   ../../../bin/main.exe cargo index v.toml > out; s=$?; grep '^root' out; echo "[$s]"
+  >   ../../../bin/main.exe cargo --check index v.toml > out; s=$?; grep '^root' out; echo "[$s]"
   > done
   error: package.version "1.x" is not a semver version like "1.2.3"
   [2]
@@ -776,7 +776,7 @@ the version one cargo refuses, as cargo 1.97 does:
 
   $ for v in '\u000B1.0.0' ' 1.0.0　' '​1.0.0'; do
   >   printf '[package]\nname = "vt"\nversion = "%s"\n' "$v" > v.toml
-  >   ../../../bin/main.exe cargo index v.toml > out; s=$?; grep '^root' out; echo "[$s]"
+  >   ../../../bin/main.exe cargo --check index v.toml > out; s=$?; grep '^root' out; echo "[$s]"
   > done
   root vt 1.0.0
   [0]
@@ -785,7 +785,7 @@ the version one cargo refuses, as cargo 1.97 does:
   error: package.version "\226\128\1391.0.0" is not a semver version like "1.2.3"
   [2]
   $ printf '[package]\nname = "vt"\nversion = "1.x"\n' > v.toml
-  $ ../../../bin/main.exe cargo index v.toml
+  $ ../../../bin/main.exe cargo --check index v.toml
   error: package.version "1.x" is not a semver version like "1.2.3"
   [2]
 
@@ -794,7 +794,7 @@ non-ASCII name, which no crates.io crate has, is refused unread:
 
   $ for n in 'a b' 1a -a a.b a:b a::b '' _a a-b café; do
   >   printf '[package]\nname = "%s"\nversion = "1.0.0"\n' "$n" > n.toml
-  >   ../../../bin/main.exe cargo index n.toml > out; s=$?; grep '^root' out; echo "[$s]"
+  >   ../../../bin/main.exe cargo --check index n.toml > out; s=$?; grep '^root' out; echo "[$s]"
   > done
   error: invalid character ` ` in package name: `a b`, characters must be Unicode XID characters (numbers, `-`, `_`, or most letters)
   [2]
@@ -817,15 +817,15 @@ non-ASCII name, which no crates.io crate has, is refused unread:
   error: package name `café`: a non-ASCII name is not modelled
   [2]
   $ printf '[package]\nname = "a b"\nversion = "1.0.0"\n' > n.toml
-  $ ../../../bin/main.exe cargo index n.toml
+  $ ../../../bin/main.exe cargo --check index n.toml
   error: invalid character ` ` in package name: `a b`, characters must be Unicode XID characters (numbers, `-`, `_`, or most letters)
   [2]
   $ printf '[package]\nname = "vt"\nversion = "1.0.0"\n[dependencies]\n"a b" = "1"\n' > d.toml
-  $ ../../../bin/main.exe cargo index d.toml
+  $ ../../../bin/main.exe cargo --check index d.toml
   error: invalid character ` ` in package name: `a b`, characters must be Unicode XID characters (numbers, `-`, `_`, or most letters)
   [2]
   $ printf '[package]\nname = "vt"\nversion = "1.0.0"\n[dependencies]\nx = { version = "1", package = "1a" }\n' > d.toml
-  $ ../../../bin/main.exe cargo index d.toml
+  $ ../../../bin/main.exe cargo --check index d.toml
   error: invalid character `1` in package name: `1a`, the name cannot start with a digit
   [2]
 
@@ -835,7 +835,7 @@ with cargo 1.97's words.  One further down the graph fails only the version
 declaring it, as bf's 1.0.0+b above does:
 
   $ printf '[package]\nname = "vt"\nversion = "1.0.0"\n[dependencies]\na = "1"\n[dev-dependencies]\nnx = "1"\n' > d.toml
-  $ ../../../bin/main.exe cargo index d.toml
+  $ ../../../bin/main.exe cargo --check index d.toml
   root vt 1.0.0
   error: no matching package named `nx` found
   [2]
@@ -843,15 +843,15 @@ declaring it, as bf's 1.0.0+b above does:
 An index or a manifest that cannot be read is a read error, not a refused
 query:
 
-  $ ../../../bin/main.exe cargo nope manifests/a.toml
+  $ ../../../bin/main.exe cargo --check nope manifests/a.toml
   error: nope: No such file or directory
   [3]
-  $ ../../../bin/main.exe cargo manifests/a.toml manifests/a.toml
+  $ ../../../bin/main.exe cargo --check manifests/a.toml manifests/a.toml
   error: manifests/a.toml: Not a directory
   [3]
-  $ ../../../bin/main.exe cargo index manifests/nope.toml
+  $ ../../../bin/main.exe cargo --check index manifests/nope.toml
   error: manifests/nope.toml: No such file or directory
   [3]
-  $ ../../../bin/main.exe cargo index manifests
+  $ ../../../bin/main.exe cargo --check index manifests
   error: manifests: Is a directory
   [3]

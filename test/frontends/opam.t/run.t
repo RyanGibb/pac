@@ -3,7 +3,7 @@ exit status:
 
   $ . ../untimed.sh
 
-  $ untimed ../../../bin/main.exe opam . app
+  $ untimed ../../../bin/main.exe opam --check . app
   packages (2):
     app 1
     c 1
@@ -13,7 +13,7 @@ exit status:
 A dependency constrained to the depender's own version takes that version,
 not the newest one available:
 
-  $ untimed ../../../bin/main.exe opam . tool
+  $ untimed ../../../bin/main.exe opam --check . tool
   packages (2):
     lib 2
     tool 2
@@ -23,7 +23,7 @@ not the newest one available:
 A parenthesised group conjoins its elements, as the top level of a brace
 does, so both ends of (>= "2" < "4") bind and dep.9 is out of range:
 
-  $ untimed ../../../bin/main.exe opam . grp
+  $ untimed ../../../bin/main.exe opam --check . grp
   packages (2):
     dep 3
     grp 1
@@ -34,7 +34,7 @@ A version disjunction inside one brace is one set of versions, as opam reads
 it, so dep takes the newest version in either range, not the lower range's
 dep.3 for being written first:
 
-  $ untimed ../../../bin/main.exe opam . bdisj
+  $ untimed ../../../bin/main.exe opam --check . bdisj
   packages (2):
     bdisj 1
     dep 9
@@ -45,14 +45,14 @@ A brace mixing a filter into the disjunction stays two atoms under a
 disjunction, each with its own filter.  Without --with-test only < "5" is
 left, and with it the unconstrained alternative, written first, is taken:
 
-  $ untimed ../../../bin/main.exe opam . bmix
+  $ untimed ../../../bin/main.exe opam --check . bmix
   packages (2):
     bmix 1
     dep 3
   encoded solution: 3 core nodes (3 lookups)
   loaded: 2 names, 3 versions
 
-  $ untimed ../../../bin/main.exe opam --with-test . bmix
+  $ untimed ../../../bin/main.exe opam --check --with-test . bmix
   packages (2):
     bmix 1
     dep 9
@@ -62,7 +62,7 @@ left, and with it the unconstrained alternative, written first, is taken:
 pin-depends is read only when its owner is pinned, and nothing is pinned
 here, so pind.1's entry for dep.dev constrains nothing:
 
-  $ untimed ../../../bin/main.exe opam . pind
+  $ untimed ../../../bin/main.exe opam --check . pind
   packages (2):
     dep 9
     pind 1
@@ -76,7 +76,7 @@ filter holds under the environment.  sys.1 asks for libfoo-dev and
 pkg-config on a debian family and libbar-dev on alpine; helper.1 asks
 unconditionally for pkg-config, which is named once:
 
-  $ untimed ../../../bin/main.exe opam . sys
+  $ untimed ../../../bin/main.exe opam --check . sys
   packages (2):
     helper 1
     sys 1
@@ -91,13 +91,13 @@ else works", which is a preference and not a constraint.  A flagged
 version is ranked below every unflagged version of its name, so the older
 avoid.1 and depr.1 are taken over the newer flagged ones:
 
-  $ untimed ../../../bin/main.exe opam . avoid
+  $ untimed ../../../bin/main.exe opam --check . avoid
   packages (1):
     avoid 1
   encoded solution: 2 core nodes (2 lookups)
   loaded: 1 names, 2 versions
 
-  $ untimed ../../../bin/main.exe opam . depr
+  $ untimed ../../../bin/main.exe opam --check . depr
   packages (1):
     depr 1
   encoded solution: 2 core nodes (2 lookups)
@@ -106,7 +106,7 @@ avoid.1 and depr.1 are taken over the newer flagged ones:
 Nothing else works when a dependency pins the flagged version, and it is
 selected:
 
-  $ untimed ../../../bin/main.exe opam . needav
+  $ untimed ../../../bin/main.exe opam --check . needav
   packages (2):
     avoid 2
     needav 1
@@ -120,7 +120,7 @@ reverses the alternatives -- PubGrub decides the larger version and the
 disjunct package's largest index selects the last alternative -- so that
 this is what falls out:
 
-  $ untimed ../../../bin/main.exe opam . pick
+  $ untimed ../../../bin/main.exe opam --check . pick
   packages (2):
     alt1 1
     pick 1
@@ -139,7 +139,7 @@ regardless: a class and a real package of the same name are separate
 dependee names, as opam's ocaml-system -- both a class and a package --
 requires.
 
-  $ untimed ../../../bin/main.exe opam . cc-pick
+  $ untimed ../../../bin/main.exe opam --check . cc-pick
   packages (4):
     cc-a 1
     cc-pick 1
@@ -151,7 +151,7 @@ requires.
 Asking for both names of the class outright has no resolution, and the
 class package is what the explanation names:
 
-  $ untimed ../../../bin/main.exe opam . cc-both
+  $ untimed ../../../bin/main.exe opam --check . cc-both
   unsatisfiable:
   Because cc-a 1 -> conflict-class:ccls cc-a and cc-b 1 ∪ 2 -> conflict-class:ccls cc-b, cc-a 1 or cc-b 1 ∪ 2 is forbidden.
   And because cc-both 1 -> cc-a 1 and cc-both 1 -> cc-b 1 ∪ 2, cc-both 1 is forbidden.
@@ -168,7 +168,7 @@ the versions the conflict does not name, or absent -- here ⊥ alone, the
 conflict naming every version.  Nothing hangs on cfl-b's side, so the order
 in which the two are decided cannot lose it:
 
-  $ untimed ../../../bin/main.exe opam . cfl-c cfl-b.1
+  $ untimed ../../../bin/main.exe opam --check . cfl-c cfl-b.1
   unsatisfiable:
   Because cfl-c 1 -> cfl-a 1 and cfl-a 1 -> cfl-b ⊥, cfl-c 1 requires cfl-b ⊥.
   And because root () -> cfl-b 1, cfl-c 1 or root () is forbidden.
@@ -179,7 +179,7 @@ in which the two are decided cannot lose it:
 A name only a conflict reaches is left absent rather than installed: ⊥ is
 the greatest version, and PubGrub decides the greatest:
 
-  $ untimed ../../../bin/main.exe opam . cfl-c
+  $ untimed ../../../bin/main.exe opam --check . cfl-c
   packages (2):
     cfl-a 1
     cfl-c 1
@@ -191,7 +191,7 @@ versions -- realised as the dependencies of the synthetic root.  Naming
 two packages asks for both, and each is solved against the same
 repository:
 
-  $ untimed ../../../bin/main.exe opam . app tool
+  $ untimed ../../../bin/main.exe opam --check . app tool
   packages (4):
     app 1
     c 1
@@ -203,7 +203,7 @@ repository:
 An atom's version constraint is the set of versions its name is accepted
 at.  Unconstrained, dep takes its newest version:
 
-  $ untimed ../../../bin/main.exe opam . dep
+  $ untimed ../../../bin/main.exe opam --check . dep
   packages (1):
     dep 9
   encoded solution: 2 core nodes (2 lookups)
@@ -211,7 +211,7 @@ at.  Unconstrained, dep takes its newest version:
 
 An operator narrows that set, in opam's own command-line syntax:
 
-  $ untimed ../../../bin/main.exe opam . 'dep<9'
+  $ untimed ../../../bin/main.exe opam --check . 'dep<9'
   packages (1):
     dep 3
   encoded solution: 2 core nodes (2 lookups)
@@ -219,7 +219,7 @@ An operator narrows that set, in opam's own command-line syntax:
 
 and NAME.VERSION is opam's shorthand for the =-constraint:
 
-  $ untimed ../../../bin/main.exe opam . dep.3
+  $ untimed ../../../bin/main.exe opam --check . dep.3
   packages (1):
     dep 3
   encoded solution: 2 core nodes (2 lookups)
@@ -227,7 +227,7 @@ and NAME.VERSION is opam's shorthand for the =-constraint:
 
 Constraints and several names compose, the query being one per name:
 
-  $ untimed ../../../bin/main.exe opam . 'dep<9' app
+  $ untimed ../../../bin/main.exe opam --check . 'dep<9' app
   packages (3):
     app 1
     c 1
@@ -240,16 +240,16 @@ opam refuses it, rather than solved as the name of nothing: an operator
 left without a version, an empty name, a character no name may hold, and
 a path, which opam install takes for a local package to pin:
 
-  $ ../../../bin/main.exe opam . 'dep>='
+  $ ../../../bin/main.exe opam --check . 'dep>='
   error: "dep>=": "=" is not a version
   [2]
-  $ ../../../bin/main.exe opam . ''
+  $ ../../../bin/main.exe opam --check . ''
   error: "": not a package name or atom
   [2]
-  $ ../../../bin/main.exe opam . 'dep!1'
+  $ ../../../bin/main.exe opam --check . 'dep!1'
   error: "dep!1": not a package name or atom
   [2]
-  $ ../../../bin/main.exe opam . ./packages/dep
+  $ ../../../bin/main.exe opam --check . ./packages/dep
   error: "./packages/dep": a local package, which is not a query
   [2]
 
@@ -260,7 +260,7 @@ universe's [requested_allpkgs]).  tst.1 asks for tlib under with-test,
 tdoc under with-doc and dsetup under with-dev-setup, and mid.1 asks for
 mlib under with-test.  Off, none of the four is in:
 
-  $ untimed ../../../bin/main.exe opam . tst
+  $ untimed ../../../bin/main.exe opam --check . tst
   packages (2):
     mid 1
     tst 1
@@ -270,7 +270,7 @@ mlib under with-test.  Off, none of the four is in:
 --with-test brings in tlib, the queried package's own test dependency, and
 not mlib, which belongs to a package the query merely reaches:
 
-  $ untimed ../../../bin/main.exe opam --with-test . tst
+  $ untimed ../../../bin/main.exe opam --check --with-test . tst
   packages (3):
     mid 1
     tlib 1
@@ -280,7 +280,7 @@ not mlib, which belongs to a package the query merely reaches:
 
 The other two flags scope the same way, each over its own variable:
 
-  $ untimed ../../../bin/main.exe opam --with-doc . tst
+  $ untimed ../../../bin/main.exe opam --check --with-doc . tst
   packages (3):
     mid 1
     tdoc 1
@@ -288,7 +288,7 @@ The other two flags scope the same way, each over its own variable:
   encoded solution: 4 core nodes (4 lookups)
   loaded: 3 names, 3 versions
 
-  $ untimed ../../../bin/main.exe opam --with-dev-setup . tst
+  $ untimed ../../../bin/main.exe opam --check --with-dev-setup . tst
   packages (3):
     dsetup 1
     mid 1
@@ -300,7 +300,7 @@ Naming mid too puts it in the query, so with-test holds of it as well and
 mlib comes in beside tlib.  mlib's own test dependency mleaf stays out:
 mlib is reached, not asked for.
 
-  $ untimed ../../../bin/main.exe opam --with-test . tst mid
+  $ untimed ../../../bin/main.exe opam --check --with-test . tst mid
   packages (4):
     mid 1
     mlib 1
@@ -315,7 +315,7 @@ a queried name, and cflt.1's conflict
 on dep >= "5" under with-test is void, while its conflict on lib >= "3" on
 linux holds:
 
-  $ untimed ../../../bin/main.exe opam --with-test . cflt
+  $ untimed ../../../bin/main.exe opam --check --with-test . cflt
   packages (3):
     cflt 1
     dep 9
@@ -329,7 +329,7 @@ carries the version of the opam whose answers are being matched, 2.5.2
 unless told otherwise.  ov.1 is available
 below 2.3 and ov.2 from 2.3 on:
 
-  $ untimed ../../../bin/main.exe opam . ov
+  $ untimed ../../../bin/main.exe opam --check . ov
   packages (1):
     ov 2
   encoded solution: 2 core nodes (2 lookups)
@@ -337,7 +337,7 @@ below 2.3 and ov.2 from 2.3 on:
 
 --opam-version asks the same question as another opam would:
 
-  $ untimed ../../../bin/main.exe opam --opam-version 2.2.0 . ov
+  $ untimed ../../../bin/main.exe opam --check --opam-version 2.2.0 . ov
   packages (1):
     ov 1
   encoded solution: 2 core nodes (2 lookups)
@@ -349,7 +349,7 @@ the list it builds).  ord-p.2 and ord-q.2 each need ord-r on the other side
 of 2, so whichever name is decided first keeps its newest: asked for ord-p
 then ord-q, opam installs ord-q.2, ord-p.1 and ord-r.1:
 
-  $ untimed ../../../bin/main.exe opam . ord-p ord-q
+  $ untimed ../../../bin/main.exe opam --check . ord-p ord-q
   packages (3):
     ord-p 1
     ord-q 2
@@ -360,7 +360,7 @@ then ord-q, opam installs ord-q.2, ord-p.1 and ord-r.1:
 In PubGrub's own order the answer is as valid, but which name keeps its
 newest is PubGrub's choice:
 
-  $ untimed ../../../bin/main.exe opam --order=pubgrub . ord-p ord-q
+  $ untimed ../../../bin/main.exe opam --check --order=pubgrub . ord-p ord-q
   packages (3):
     ord-p 2
     ord-q 1
@@ -372,14 +372,14 @@ newest is PubGrub's choice:
 a generator seeded by --seed: the same seed gives the same answer, and
 another seed may give another, a resolution all the same:
 
-  $ seed0() { untimed ../../../bin/main.exe opam --order=random --seed 0 . ord-p ord-q; }; [ "$(seed0)" = "$(seed0)" ] && seed0
+  $ seed0() { untimed ../../../bin/main.exe opam --check --order=random --seed 0 . ord-p ord-q; }; [ "$(seed0)" = "$(seed0)" ] && seed0
   packages (3):
     ord-p 2
     ord-q 1
     ord-r 2
   encoded solution: 4 core nodes (4 lookups)
   loaded: 3 names, 6 versions
-  $ untimed ../../../bin/main.exe opam --order=random --seed 2 . ord-p ord-q
+  $ untimed ../../../bin/main.exe opam --check --order=random --seed 2 . ord-p ord-q
   packages (3):
     ord-p 1
     ord-q 2
@@ -392,7 +392,7 @@ Every filter reads the package's own version as version, _:version or
 at 2, and its conflict with svl >= "2" too, so opam installs svd.2 beside
 svl.1:
 
-  $ untimed ../../../bin/main.exe opam . svd
+  $ untimed ../../../bin/main.exe opam --check . svd
   packages (2):
     svd 2
     svl 1
@@ -404,27 +404,27 @@ expression, so two leave avm.1 available; flags: are idents, so a string
 leaves flg.2 unflagged, while a tags: entry flags:avoid-version flags tg.2;
 and brk.2, which does not parse, is skipped:
 
-  $ untimed ../../../bin/main.exe opam . avm
+  $ untimed ../../../bin/main.exe opam --check . avm
   packages (1):
     avm 1
   encoded solution: 2 core nodes (2 lookups)
   loaded: 1 names, 1 versions
   parser dropped 1 declarations
 
-  $ untimed ../../../bin/main.exe opam . flg
+  $ untimed ../../../bin/main.exe opam --check . flg
   packages (1):
     flg 2
   encoded solution: 2 core nodes (2 lookups)
   loaded: 1 names, 2 versions
   parser dropped 1 declarations
 
-  $ untimed ../../../bin/main.exe opam . tg
+  $ untimed ../../../bin/main.exe opam --check . tg
   packages (1):
     tg 1
   encoded solution: 2 core nodes (2 lookups)
   loaded: 1 names, 2 versions
 
-  $ untimed ../../../bin/main.exe opam . brk
+  $ untimed ../../../bin/main.exe opam --check . brk
   packages (1):
     brk 1
   encoded solution: 2 core nodes (2 lookups)
@@ -436,7 +436,7 @@ compares it as a version, so on Debian 12 os-version >= 8 holds, where a
 comparison of strings byte by byte would not, and 13 <= os-version does
 not; osv.2 is the newest version available:
 
-  $ untimed ../../../bin/main.exe opam . osv
+  $ untimed ../../../bin/main.exe opam --check . osv
   packages (1):
     osv 2
   encoded solution: 2 core nodes (2 lookups)
@@ -448,14 +448,14 @@ reads last, the later in byte order, and that directory's opam file.
 eqv.1.00 needs dep.3 where eqv.1.0 needs dep.9, and asking for either
 version installs eqv.1.00 with dep.3:
 
-  $ untimed ../../../bin/main.exe opam . eqv.1.0
+  $ untimed ../../../bin/main.exe opam --check . eqv.1.0
   packages (2):
     dep 3
     eqv 1.00
   encoded solution: 3 core nodes (3 lookups)
   loaded: 2 names, 3 versions
 
-  $ untimed ../../../bin/main.exe opam . eqv.1.00
+  $ untimed ../../../bin/main.exe opam --check . eqv.1.00
   packages (2):
     dep 3
     eqv 1.00
@@ -464,10 +464,10 @@ version installs eqv.1.00 with dep.3:
 
 A repository that cannot be read is a read error, not a refused query:
 
-  $ ../../../bin/main.exe opam nope eqv
+  $ ../../../bin/main.exe opam --check nope eqv
   error: nope: No such file or directory
   [3]
-  $ ../../../bin/main.exe opam packages/eqv/eqv.1.0/opam eqv
+  $ ../../../bin/main.exe opam --check packages/eqv/eqv.1.0/opam eqv
   error: packages/eqv/eqv.1.0/opam: Not a directory
   [3]
 
@@ -475,7 +475,7 @@ and so is an opam file of the repository that cannot be read, which would
 otherwise read as a version the name does not have:
 
   $ mkdir -p unread/packages/u/u.1 && printf 'opam-version: "2.0"\n' > unread/packages/u/u.1/opam && chmod 000 unread/packages/u/u.1/opam
-  $ ../../../bin/main.exe opam unread u
+  $ ../../../bin/main.exe opam --check unread u
   error: unread/packages/u/u.1/opam: Permission denied
   [3]
   $ chmod 644 unread/packages/u/u.1/opam
@@ -484,22 +484,22 @@ opam install refuses an atom no package of the repository meets, whether
 or not it is available, and first matches a name that differs only in case
 from one other name:
 
-  $ ../../../bin/main.exe opam . nosuch
+  $ ../../../bin/main.exe opam --check . nosuch
   error: No package named nosuch found.
   [2]
-  $ ../../../bin/main.exe opam . dep nosuch.1
+  $ ../../../bin/main.exe opam --check . dep nosuch.1
   error: No package named nosuch found.
   [2]
-  $ ../../../bin/main.exe opam . dep.99
+  $ ../../../bin/main.exe opam --check . dep.99
   error: Package dep has no version 99.
   [2]
-  $ ../../../bin/main.exe opam . 'dep>=99'
+  $ ../../../bin/main.exe opam --check . 'dep>=99'
   error: Package dep has no version >=99.
   [2]
-  $ ../../../bin/main.exe opam . 'dep<3'
+  $ ../../../bin/main.exe opam --check . 'dep<3'
   error: Package dep has no version <3.
   [2]
-  $ untimed ../../../bin/main.exe opam . Dep
+  $ untimed ../../../bin/main.exe opam --check . Dep
   packages (1):
     dep 9
   encoded solution: 2 core nodes (2 lookups)

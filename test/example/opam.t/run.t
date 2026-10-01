@@ -11,7 +11,7 @@ is the class, its versions the two compilers.  The core is 16 packages and
 9 edges, among them the ⊥ of saturn, ocaml, both compilers and the class,
 which no edge admits.
 
-  $ untimed ../../../bin/main.exe opam --core . saturn ocaml-system
+  $ untimed ../../../bin/main.exe opam --check --core . saturn ocaml-system
   core: 16 packages, 9 edges
   <ocaml-system{5.2.0} | ocaml-base-compiler{5.2.0}> z0
     -> ocaml-system {5.2.0}
@@ -48,7 +48,7 @@ which no edge admits.
 Asked for saturn alone, the same reduction yields ocaml-base-compiler in
 ocaml-system's place:
 
-  $ untimed ../../../bin/main.exe opam . saturn
+  $ untimed ../../../bin/main.exe opam --check . saturn
   packages (3):
     ocaml 5.2.0
     ocaml-base-compiler 5.2.0

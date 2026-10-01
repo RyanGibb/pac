@@ -40,8 +40,8 @@ type result = {
   depexts : string list;
 }
 
-let solve ?(debug = false) ?(order = `Tool) ?(with_test = false)
-    ?(with_doc = false) ?(with_dev_setup = false)
+let solve ?(debug = false) ?(check = false) ?(order = `Tool)
+    ?(with_test = false) ?(with_doc = false) ?(with_dev_setup = false)
     ?(opam_version = default_opam_version) ar
     (query : (string * Opam_parse.vc) list) :
     (result, Pac_common.Report.explanation) Stdlib.result * (unit -> unit) =
@@ -59,7 +59,7 @@ let solve ?(debug = false) ?(order = `Tool) ?(with_test = false)
   let st = lookups rho ar in
   let touch = touch rho ar query st in
   let r =
-    L.solve st ~touch (Order.hooks order (ar, query, st, touch))
+    L.solve st ~check ~touch (Order.hooks order (ar, query, st, touch))
     |> Result.map (fun (s_pf, nodes) ->
         (* the package formula's packages decode to opam's through the
             second of the two layers the reduction composes *)

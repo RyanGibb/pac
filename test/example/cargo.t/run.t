@@ -14,7 +14,7 @@ feature f in class c; and a slot name n@c->a(req) is n's dependency a,
 whose version granularity:c is the class it resolves in.  The core is 14
 packages and 14 edges, and this encoding has no ⊥.
 
-  $ untimed ../../../bin/main.exe cargo --core --no-default-features --print-parents index app/Cargo.toml
+  $ untimed ../../../bin/main.exe cargo --check --core --no-default-features --print-parents index app/Cargo.toml
   root app 0.1.0 with no features
   core: 14 packages, 14 edges
   app@0.1.0 0.1.0

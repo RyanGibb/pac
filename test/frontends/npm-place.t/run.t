@@ -12,7 +12,7 @@ or.  od's optional gone ^9 matches no published version, so nothing is
 placed for it, while its optional b ^2 is met, as npm fetches it.  ap's
 peer on pb is itself an alias of baz, which the root's pb holds.
 
-  $ untimed ../../../bin/main.exe npm --reading=placement --offline --cache . ./place-app/package.json
+  $ untimed ../../../bin/main.exe npm --check --reading=placement --offline --cache . ./place-app/package.json
   root place-app 1.0.0
   packages (12):
     node_modules/ap ap@1.0.0
@@ -33,7 +33,7 @@ peer on pb is itself an alias of baz, which the root's pb holds.
 The layout is found within a depth bound, 8 by default: at depth 1 c's b
 cannot nest, and there is no answer.
 
-  $ untimed ../../../bin/main.exe npm --reading=placement --depth 1 --offline --cache . ./nest-app/package.json
+  $ untimed ../../../bin/main.exe npm --check --reading=placement --depth 1 --offline --cache . ./nest-app/package.json
   root nest-app 1.0.0
   unsatisfiable:
   (within depth 1)
@@ -45,7 +45,7 @@ cannot nest, and there is no answer.
   loaded: 3 names, 4 versions, 0 packuments fetched
   [1]
 
-  $ untimed ../../../bin/main.exe npm --reading=placement --depth 2 --offline --cache . ./nest-app/package.json
+  $ untimed ../../../bin/main.exe npm --check --reading=placement --depth 2 --offline --cache . ./nest-app/package.json
   root nest-app 1.0.0
   packages (3):
     node_modules/b b@2.0.0
@@ -57,11 +57,11 @@ cannot nest, and there is no answer.
 The bound is the placement reading's alone, and its answer is the
 layout, so --depth elsewhere and --tree beside it are refused.
 
-  $ ../../../bin/main.exe npm --depth 2 --offline --cache . ./nest-app/package.json 2> err
+  $ ../../../bin/main.exe npm --check --depth 2 --offline --cache . ./nest-app/package.json 2> err
   [2]
   $ grep -- --depth err
   pac: --depth is read only under --reading=placement
-  $ ../../../bin/main.exe npm --reading=placement --tree --offline --cache . ./nest-app/package.json 2> err
+  $ ../../../bin/main.exe npm --check --reading=placement --tree --offline --cache . ./nest-app/package.json 2> err
   [2]
   $ grep -- --tree err
   pac: --tree is read only outside --reading=placement
@@ -70,7 +70,7 @@ sx 2 needs sx ^1, which needs sx ^2: each copy sees the other above it, and
 only a link, which the calculus leaves out, closes the loop.  The search
 refutes every nesting down to the bound.
 
-  $ untimed ../../../bin/main.exe npm --reading=placement --offline --cache . ./loop-app/package.json > loop.out; echo $?
+  $ untimed ../../../bin/main.exe npm --check --reading=placement --offline --cache . ./loop-app/package.json > loop.out; echo $?
   1
   $ head -n 3 loop.out
   root loop-app 1.0.0
@@ -82,7 +82,7 @@ tm 1.0.0.  A declarer's own node_modules holds no copy of what it peers on,
 so dt, whether beside ds or inside it, walks on to the tm ds sees.  npm
 overrides the peer; here there is no layout.
 
-  $ untimed ../../../bin/main.exe npm --reading=placement --offline --cache . ./torn-app/package.json > torn.out; echo $?
+  $ untimed ../../../bin/main.exe npm --check --reading=placement --offline --cache . ./torn-app/package.json > torn.out; echo $?
   1
   $ head -n 3 torn.out
   root torn-app 1.0.0
@@ -94,7 +94,7 @@ gain one after the solve has read its versions.  In grow/, p takes m *,
 m has 20 versions, and aq, which r brings in, aliases zz to m: p's copy
 of m is the registry's m, never zz.
 
-  $ untimed ../../../bin/main.exe npm --reading=placement --order=pubgrub --offline --cache grow ./grow/wide-app/package.json
+  $ untimed ../../../bin/main.exe npm --check --reading=placement --order=pubgrub --offline --cache grow ./grow/wide-app/package.json
   root wide-app 1.0.0
   packages (5):
     node_modules/aq aq@1.0.0
@@ -109,13 +109,13 @@ PAC_NPM_CHECKCMP checks every comparison of names and versions against
 the calculus's own order, and the answer stands.
 
   $ export PAC_NPM_CHECKCMP=1
-  $ untimed ../../../bin/main.exe npm --reading=placement --order=pubgrub --offline --cache grow ./grow/wide-app/package.json | grep -c node_modules/
+  $ untimed ../../../bin/main.exe npm --check --reading=placement --order=pubgrub --offline --cache grow ./grow/wide-app/package.json | grep -c node_modules/
   5
-  $ untimed ../../../bin/main.exe npm --reading=placement --offline --cache . ./place-app/package.json | grep -c node_modules/
+  $ untimed ../../../bin/main.exe npm --check --reading=placement --offline --cache . ./place-app/package.json | grep -c node_modules/
   12
   $ unset PAC_NPM_CHECKCMP
 
-  $ untimed ../../../bin/main.exe npm --reading=placement --order=random --offline --cache grow ./grow/wide-app/package.json
+  $ untimed ../../../bin/main.exe npm --check --reading=placement --order=random --offline --cache grow ./grow/wide-app/package.json
   root wide-app 1.0.0
   packages (5):
     node_modules/m m@20.0.0
@@ -130,7 +130,7 @@ ha 2.0.0 needs hk ^2, whose only version needs an hd ^5 no one
 publishes, and hq aliases zz to hk.  What was learnt of hk before zz
 joined it does not rule zz out, so ha 1.0.0 with hq's zz is found.
 
-  $ untimed ../../../bin/main.exe npm --reading=placement --order=pubgrub --depth 1 --offline --cache grow ./grow/stale-app/package.json
+  $ untimed ../../../bin/main.exe npm --check --reading=placement --order=pubgrub --depth 1 --offline --cache grow ./grow/stale-app/package.json
   root stale-app 1.0.0
   packages (3):
     node_modules/ha ha@1.0.0
@@ -145,7 +145,7 @@ and q peers on it so: an override of x makes each edge the registry's own
 x, and one of b, the alias's dependee name, leaves them alone, as npm 11.17.0
 answers over these fixtures.
 
-  $ for a in key-app peer-key-app target-app root-target-app; do untimed ../../../bin/main.exe npm --reading=placement --offline --cache ovr ./ovr/$a/package.json | grep node_modules/x; done
+  $ for a in key-app peer-key-app target-app root-target-app; do untimed ../../../bin/main.exe npm --check --reading=placement --offline --cache ovr ./ovr/$a/package.json | grep node_modules/x; done
     node_modules/x x@1.0.0
     node_modules/x x@1.0.0
     node_modules/x b@2.0.0
@@ -157,7 +157,7 @@ registry's b ^1, and in same-app d takes its b ^3, whose 3.0.0 needs an
 e the project does not, as npm 11.17.0 answers over these fixtures.  The
 npm reading keys the project as it keys that package, and refuses.
 
-  $ untimed ../../../bin/main.exe npm --reading=placement --offline --cache self ./self/low-app/package.json
+  $ untimed ../../../bin/main.exe npm --check --reading=placement --offline --cache self ./self/low-app/package.json
   root b 3.0.0
   packages (2):
     node_modules/b b@1.0.0
@@ -165,7 +165,7 @@ npm reading keys the project as it keys that package, and refuses.
   encoded solution: 7 core nodes (7 lookups)
   loaded: 3 names, 4 versions, 0 packuments fetched
 
-  $ untimed ../../../bin/main.exe npm --reading=placement --offline --cache self ./self/same-app/package.json
+  $ untimed ../../../bin/main.exe npm --check --reading=placement --offline --cache self ./self/same-app/package.json
   root b 3.0.0
   packages (3):
     node_modules/b b@3.0.0
@@ -174,7 +174,7 @@ npm reading keys the project as it keys that package, and refuses.
   encoded solution: 11 core nodes (11 lookups)
   loaded: 4 names, 5 versions, 0 packuments fetched
 
-  $ untimed ../../../bin/main.exe npm --offline --cache self ./self/same-app/package.json
+  $ untimed ../../../bin/main.exe npm --check --offline --cache self ./self/same-app/package.json
   root b 3.0.0
   error: the project is named b, as is a package it reaches, which only --reading=placement tells apart
   [2]
@@ -187,22 +187,22 @@ dependencies and ^2 in devDependencies, and the later wins, so b is dev.
 opt-app has t as an optionalDependency instead.  npm 11.17.0 flags the
 same packages dev or optional in its locks.
 
-  $ for a in split-app both-app; do untimed ../../../bin/main.exe npm --reading=placement --omit=dev --offline --cache dev ./dev/$a/package.json | grep node_modules/; done
+  $ for a in split-app both-app; do untimed ../../../bin/main.exe npm --check --reading=placement --omit=dev --offline --cache dev ./dev/$a/package.json | grep node_modules/; done
     node_modules/s s@1.0.0
     node_modules/u u@1.0.0
     node_modules/s s@1.0.0
     node_modules/u u@1.0.0
-  $ untimed ../../../bin/main.exe npm --reading=placement --omit=optional --offline --cache dev ./dev/opt-app/package.json | grep node_modules/
+  $ untimed ../../../bin/main.exe npm --check --reading=placement --omit=optional --offline --cache dev ./dev/opt-app/package.json | grep node_modules/
     node_modules/b b@2.0.0
     node_modules/s s@1.0.0
     node_modules/u u@1.0.0
-  $ untimed ../../../bin/main.exe npm --reading=placement --omit=optional --omit=dev --offline --cache dev ./dev/opt-app/package.json | grep node_modules/
+  $ untimed ../../../bin/main.exe npm --check --reading=placement --omit=optional --omit=dev --offline --cache dev ./dev/opt-app/package.json | grep node_modules/
     node_modules/s s@1.0.0
     node_modules/u u@1.0.0
 
 --core prints the reachable core, finite under the bound.
 
-  $ untimed ../../../bin/main.exe npm --reading=placement --core --depth 1 --offline --cache . c@1.0.0 | head -n 12
+  $ untimed ../../../bin/main.exe npm --check --reading=placement --core --depth 1 --offline --cache . c@1.0.0 | head -n 12
   root .
   core: 15 packages, 13 edges
   <c,b> ⊥

@@ -16,7 +16,7 @@ link sets to that version or leaves ∗ where no copy below plugin reads it
 app is the root, which may leave a core no peer asks for absent, so
 <app@1.0.0=>core> has ⊥ too.  The core is 22 packages and 16 edges.
 
-  $ untimed ../../../bin/main.exe npm --core --offline --cache . --tree ./app/package.json
+  $ untimed ../../../bin/main.exe npm --check --core --offline --cache . --tree ./app/package.json
   root app 1.0.0
   core: 22 packages, 16 edges
   <app@1.0.0=>core> 6.0.0

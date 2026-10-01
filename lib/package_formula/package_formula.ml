@@ -236,7 +236,31 @@ struct
              (dependees st p))
          [ PFR.Name.Orig (fst st.root) ])
 
-  let solve st ~touch (h : (Name.t, PG.selection, P.t) Pac_common.Order.hooks) :
+  let check st ~touch (core : T.PkgSet.t) =
+    let versions tn = T.VSet.ofList (List.map P.v (versions st tn)) in
+    let dependees p =
+      touch p;
+      T.DependeesSet.ofList (dependees st p)
+    in
+    let root =
+      T.rootQuery (PFR.Name.Orig (fst st.root), PFR.Version.Orig (snd st.root))
+    in
+    match T.check versions dependees root core with
+    | None -> ()
+    | Some f ->
+        Pac_common.Check.fail ~pp_name:Pp.pp_name
+          ~pp_version:(fun tn fmt v -> P.pp fmt (st.tag tn v))
+          Pac_common.Check.(
+            match f with
+            | T.CheckSubset p -> Subset p
+            | T.CheckVersionUnique p -> Version_unique p
+            | T.CheckRootMem (n, vs) -> Root_mem (n, T.VSet.elements vs)
+            | T.CheckDepClosure (p, (n, vs)) ->
+                Dep_closure (p, (n, T.VSet.elements vs))
+            | T.CheckReached p -> Reached p)
+
+  let solve st ~check:checked ~touch
+      (h : (Name.t, PG.selection, P.t) Pac_common.Order.hooks) :
       (PF.PkgSet.t * int, Pac_common.Report.explanation) result =
     let root = PFR.Name.Orig (fst st.root) in
     let r =
@@ -251,5 +275,6 @@ struct
         let core =
           T.PkgSet.ofList (List.map (fun (tn, pv) -> (tn, P.v pv)) sol)
         in
+        if checked then check st ~touch core;
         Ok (PFR.packageFormulaResolution core, List.length sol)
 end

@@ -14,7 +14,7 @@ provided=9.1.1105-r0(gvim-9.1.1105-r0) is gvim's provides.  The core is 22
 packages and 14 edges; lua, which no package of its own provides, has
 only ⊥.
 
-  $ untimed ../../../bin/main.exe alpine --core APKINDEX lua-stdlib-debug lua-stringy vim gvim
+  $ untimed ../../../bin/main.exe alpine --check --core APKINDEX lua-stdlib-debug lua-stringy vim gvim
   core: 22 packages, 14 edges
   <!lua5.4{5.4.7-r0} | lua5.4-stringy{0.5.1-r3}> 0
     -> lua5.4 {⊥}

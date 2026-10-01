@@ -17,6 +17,7 @@ type result = {
 
 val solve_files :
   debug:bool ->
+  check:bool ->
   order:Pac_common.Order.t ->
   recommends:bool ->
   strict_pinning:bool ->

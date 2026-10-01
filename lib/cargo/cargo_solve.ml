@@ -78,8 +78,34 @@ module Make () = struct
       lookups = L.dependency_lookups st;
     }
 
-  let solve ?(debug = false) ?(order = `Tool) ?cache ~index ~features ~rustv
-      (root : Q.root) : run =
+  let check_answer st (sol : (Cg.Reduction.NPlus.t * PVersion.t) list) =
+    let s =
+      T.PkgSet.ofList (List.map (fun (tn, { PVersion.v; _ }) -> (tn, v)) sol)
+    in
+    let versions tn =
+      T.VSet.ofList
+        (List.map (fun { PVersion.v; _ } -> v) (L.pg_versions st tn))
+    in
+    let dependees p = T.DependeesSet.ofList (L.dependees st p) in
+    let root =
+      T.rootQuery (Cg.Reduction.NPlus.CRoot, Cg.Reduction.VPlus.WUnit)
+    in
+    match T.check versions dependees root s with
+    | None -> ()
+    | Some f ->
+        Pac_common.Check.fail ~pp_name:PName.pp
+          ~pp_version:(fun tn fmt w -> PVersion.pp fmt (L.tag st tn w))
+          Pac_common.Check.(
+            match f with
+            | T.CheckSubset p -> Subset p
+            | T.CheckVersionUnique p -> Version_unique p
+            | T.CheckRootMem (n, vs) -> Root_mem (n, T.VSet.elements vs)
+            | T.CheckDepClosure (p, (n, vs)) ->
+                Dep_closure (p, (n, T.VSet.elements vs))
+            | T.CheckReached p -> Reached p)
+
+  let solve ?(debug = false) ?(check = false) ?(order = `Tool) ?cache ~index
+      ~features ~rustv (root : Q.root) : run =
     Pubgrub.set_debug debug;
     let ar = Archive.empty ?cache index in
     (* cargo's "no matching package named" is its own error, not a failed
@@ -112,7 +138,9 @@ module Make () = struct
     let answer =
       match outcome with
       | Error inc -> Error (fun ppf -> PG.explain_incompatibility ppf inc)
-      | Ok sol -> Ok (decode st sol)
+      | Ok sol ->
+          if check then check_answer st sol;
+          Ok (decode st sol)
     in
     let core () =
       Pac_common.Core.print ~pp_name:PName.pp ~pp_version:PVersion.pp

@@ -25,6 +25,7 @@ type run = {
 module Make () : sig
   val solve :
     ?debug:bool ->
+    ?check:bool ->
     ?order:Pac_common.Order.t ->
     ?cache:string ->
     index:string ->

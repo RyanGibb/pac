@@ -12,6 +12,7 @@ type result = {
 module Make () : sig
   val solve :
     ?debug:bool ->
+    ?check:bool ->
     ?order:Pac_common.Order.t ->
     ?omit_dev:bool ->
     ?omit_optional:bool ->

@@ -25,6 +25,7 @@ type result = {
 
 val solve :
   ?debug:bool ->
+  ?check:bool ->
   ?order:Pac_common.Order.t ->
   ?with_test:bool ->
   ?with_doc:bool ->

@@ -149,8 +149,26 @@ module Make () = struct
       tree;
     }
 
-  let solve ?(debug = false) ?(order = `Tool) ?(omit_dev = false)
-      ?(omit_optional = false) ar (root : string * string) :
+  let check_answer st root_n (root : string * string) sol =
+    let versions m = T.VSet.ofList (Lookup.versions st m) in
+    let dependees p = T.DependeesSet.ofList (Lookup.dependees st p) in
+    let q = T.rootQuery (root_n, Np.Vs.Orig (snd root)) in
+    match T.check versions dependees q (T.PkgSet.ofList sol) with
+    | None -> ()
+    | Some f ->
+        Pac_common.Check.fail ~pp_name:PName.pp
+          ~pp_version:(fun _ -> PVersion.pp)
+          Pac_common.Check.(
+            match f with
+            | T.CheckSubset p -> Subset p
+            | T.CheckVersionUnique p -> Version_unique p
+            | T.CheckRootMem (n, vs) -> Root_mem (n, T.VSet.elements vs)
+            | T.CheckDepClosure (p, (n, vs)) ->
+                Dep_closure (p, (n, T.VSet.elements vs))
+            | T.CheckReached p -> Reached p)
+
+  let solve ?(debug = false) ?(check = false) ?(order = `Tool)
+      ?(omit_dev = false) ?(omit_optional = false) ar (root : string * string) :
       (result, Pac_common.Report.explanation) Stdlib.result * (unit -> unit) =
     Pubgrub.set_debug debug;
     let st = Lookup.create ar root in
@@ -172,6 +190,7 @@ module Make () = struct
       match r with
       | Error inc -> Error (fun ppf -> PG.explain_incompatibility ppf inc)
       | Ok sol ->
+          if check then check_answer st root_n root sol;
           let r = decode st ~lookups:(Hashtbl.length asked) sol in
           Ok
             (if omit_dev || omit_optional then

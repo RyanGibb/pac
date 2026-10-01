@@ -16,6 +16,7 @@ module Make () : sig
 
   val solve :
     ?debug:bool ->
+    ?check:bool ->
     ?order:Pac_common.Order.t ->
     archive ->
     Apk_parse.dep list ->

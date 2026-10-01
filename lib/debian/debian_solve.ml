@@ -435,7 +435,7 @@ module Make (AP : Tables.ARCH) = struct
     (* Ranges.full would admit ⊥, which PubGrub then picks, so a bare query
        would answer nothing; the query asks for the name, so it excludes
        absence.  A named version is the string apt matched. *)
-    let root (n, acc) =
+    let root_cands (n, acc) =
       let accepted (pv : PVersion.t) =
         match (pv.PVersion.v, acc) with
         | DMA.Deb.Reduction.Version.Orig _, Args.Any -> true
@@ -443,8 +443,42 @@ module Make (AP : Tables.ARCH) = struct
         | _ -> false
       in
       ( DMA.Deb.Reduction.Name.Orig n,
-        PG.Ranges.of_list
-          (List.filter accepted (cands_of (DMA.Deb.Reduction.Name.Orig n))) )
+        List.filter accepted (cands_of (DMA.Deb.Reduction.Name.Orig n)) )
+
+    let root q =
+      let n, cs = root_cands q in
+      (n, PG.Ranges.of_list cs)
+
+    module CT = DMA.Deb.Reduction.T
+
+    (* the query has no root package: its names are the roots PubGrub is
+       handed, each at the versions its range lists *)
+    let check query sol =
+      let s =
+        CT.PkgSet.ofList
+          (List.map (fun (n, (pv : PVersion.t)) -> (n, pv.PVersion.v)) sol)
+      in
+      let q =
+        CT.DependeesSet.ofList
+          (List.map
+             (fun x ->
+               let n, cs = root_cands x in
+               (n, CT.VSet.ofList (List.map (fun pv -> pv.PVersion.v) cs)))
+             query)
+      in
+      match CT.check I.versions I.dependencies q s with
+      | None -> ()
+      | Some f ->
+          Pac_common.Check.fail ~pp_name:PName.pp
+            ~pp_version:(fun n fmt v -> PVersion.pp fmt (tag n v))
+            Pac_common.Check.(
+              match f with
+              | CT.CheckSubset p -> Subset p
+              | CT.CheckVersionUnique p -> Version_unique p
+              | CT.CheckRootMem (n, vs) -> Root_mem (n, CT.VSet.elements vs)
+              | CT.CheckDepClosure (p, (n, vs)) ->
+                  Dep_closure (p, (n, CT.VSet.elements vs))
+              | CT.CheckReached p -> Reached p)
 
     let decode sol =
       let s' =
@@ -481,7 +515,7 @@ module Make (AP : Tables.ARCH) = struct
       |> List.stable_sort (fun (_, a) (_, b) -> compare (key a) (key b))
       |> List.map fst
 
-    let run ~debug ~order query =
+    let run ~debug ~check:checked ~order query =
       let h = Replay.hooks order (request query) in
       let r =
         PG.solve ?next:h.Pac_common.Order.next ?choose:h.Pac_common.Order.choose
@@ -497,10 +531,11 @@ module Make (AP : Tables.ARCH) = struct
               (fun (n, v) ->
                 Format.printf "  %a = %a@." PName.pp n PVersion.pp v)
               sol);
+          if checked then check query sol;
           Ok (decode sol, List.length sol)
   end
 
-  let solve ~debug ~order (tables : tables)
+  let solve ~debug ~check ~order (tables : tables)
       (query : ((string * string) * Args.accepts) list) =
     (* each package's dependees, which the rejection cascade and every check
        of a clause's candidates ask for again *)
@@ -518,7 +553,7 @@ module Make (AP : Tables.ARCH) = struct
     let query =
       List.map (fun ((n, b), acc) -> ((n, DMA.QAArch b), acc)) query
     in
-    let r = S.run ~debug ~order query in
+    let r = S.run ~debug ~check ~order query in
     let lookups = Hashtbl.length looked_up in
     let r = Result.map (fun (pkgs, nodes) -> { pkgs; nodes; lookups }) r in
     let core () =
@@ -555,8 +590,8 @@ type source =
    it falls in the previous change's clock tick, so a file changed under two
    seconds before the run (a tick, or FAT's step) is parsed but not cached.
    The entry keeps its source's digests, which --debug checks on a hit. *)
-let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~cache ~paths
-    ~query : (result, string) Stdlib.result =
+let solve_files ~debug ~check ~order ~recommends ~strict_pinning ~native ~cache
+    ~paths ~query : (result, string) Stdlib.result =
   Pubgrub.set_debug debug;
   let t0 = Unix.gettimeofday () in
   let entry, settled =
@@ -654,7 +689,7 @@ let solve_files ~debug ~order ~recommends ~strict_pinning ~native ~cache ~paths
                   tables
             in
             let t_parse = Unix.gettimeofday () -. t0 in
-            let answer, core = M.solve ~debug ~order tables query in
+            let answer, core = M.solve ~debug ~check ~order tables query in
             let { Tables.names; versions } = M.stats tables in
             {
               answer;

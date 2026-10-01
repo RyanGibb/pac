@@ -14,7 +14,7 @@ The core is 13 packages and 9 edges, every ⊥ among them.  <sel
 mail-transport-agent:amd64 (T)> is reached though the answer holds no
 version of it.
 
-  $ untimed ../../../bin/main.exe debian --core Packages bsd-mailx
+  $ untimed ../../../bin/main.exe debian --check --core Packages bsd-mailx
   core: 13 packages, 9 edges
   <alts default-mta:amd64 (T) | mail-transport-agent:amd64 (T)> alt:default-mta:amd64 (T)
     -> <sel default-mta:amd64 (T)> {ref:exim4-daemon-light:amd64=4.98.2}
@@ -49,7 +49,7 @@ Asked for postfix as well, postfix's conflict edge leaves <sel
 default-mta:amd64 (T)> no provider, so the alternation takes
 mail-transport-agent and its selector takes postfix:
 
-  $ untimed ../../../bin/main.exe debian Packages bsd-mailx postfix
+  $ untimed ../../../bin/main.exe debian --check Packages bsd-mailx postfix
   packages (3):
     bsd-mailx:amd64 8.1.2
     liblockfile1:amd64 1.17

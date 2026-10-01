@@ -4,6 +4,16 @@ module Report = Pac_common.Report
 let debug_arg =
   Arg.(value & flag & info [ "debug" ] ~doc:"Trace the PubGrub search.")
 
+let check_arg =
+  Arg.(
+    value & flag
+    & info [ "check" ]
+        ~doc:
+          "Before decoding the answer, check that the core answer is a \
+           resolution of the instance the lookups the solve was given \
+           describe, by the calculus's own check, and exit with an internal \
+           error naming the condition and the package it fails at if not.")
+
 let core_arg =
   Arg.(
     value & flag
@@ -75,7 +85,10 @@ let error code fmt =
       code)
     fmt
 
-let guard f = try f () with Sys_error e -> error 3 "%s" e
+let guard f =
+  try f () with
+  | Sys_error e -> error 3 "%s" e
+  | Pac_common.Check.Failed e -> error 125 "%s" e
 
 (* an ecosystem's cache in the user's, as cargo and npm keep their own, so
    that where pac runs from does not decide what it reads; with neither
@@ -128,12 +141,13 @@ let report ~t0 ~core (loaded : Report.loaded) ~walk answer print =
   Report.loaded loaded ~solve:(t1 -. t0 -. loaded.Report.parse);
   code
 
-let debian_run debug core order no_recs no_strict native cache path query =
+let debian_run debug check core order no_recs no_strict native cache path query
+    =
   guard @@ fun () ->
   Pac_common.Input.file path;
   let t0 = Unix.gettimeofday () in
   match
-    Debian_solve.solve_files ~debug ~order ~recommends:(not no_recs)
+    Debian_solve.solve_files ~debug ~check ~order ~recommends:(not no_recs)
       ~strict_pinning:(not no_strict) ~native ~cache ~paths:[ path ] ~query
   with
   | Error e -> error 2 "%s" e
@@ -227,11 +241,11 @@ let debian_cmd =
     (Cmd.info "debian" ~exits ~envs
        ~doc:"Solve against a Debian Packages index.")
     Term.(
-      const debian_run $ debug_arg $ core_arg $ order $ no_recs $ no_strict
-      $ native $ cache $ path $ query)
+      const debian_run $ debug_arg $ check_arg $ core_arg $ order $ no_recs
+      $ no_strict $ native $ cache $ path $ query)
 
-let opam_run debug core order with_test with_doc with_dev_setup opam_version
-    repo atoms =
+let opam_run debug check core order with_test with_doc with_dev_setup
+    opam_version repo atoms =
   guard @@ fun () ->
   Pac_common.Input.dir repo;
   match Opam_parse.query_of_args atoms with
@@ -243,8 +257,8 @@ let opam_run debug core order with_test with_doc with_dev_setup opam_version
       | Error e -> error 2 "%s" e
       | Ok query ->
           let r, walk =
-            Opam_solve.solve ~debug ~order ~with_test ~with_doc ~with_dev_setup
-              ~opam_version ar query
+            Opam_solve.solve ~debug ~check ~order ~with_test ~with_doc
+              ~with_dev_setup ~opam_version ar query
           in
           let s = Opam_solve.stats ar in
           report ~t0 ~core
@@ -324,10 +338,10 @@ let opam_cmd =
   Cmd.v
     (Cmd.info "opam" ~exits ~doc:"Solve against an opam repository.")
     Term.(
-      const opam_run $ debug_arg $ core_arg $ order $ with_test $ with_doc
-      $ with_dev_setup $ opam_version $ repo $ query)
+      const opam_run $ debug_arg $ check_arg $ core_arg $ order $ with_test
+      $ with_doc $ with_dev_setup $ opam_version $ repo $ query)
 
-let cargo_run debug core order print_parents cache index manifest features
+let cargo_run debug check core order print_parents cache index manifest features
     no_default installed =
   guard @@ fun () ->
   Pac_common.Input.dir index;
@@ -351,7 +365,7 @@ let cargo_run debug core order print_parents cache index manifest features
              ^ if default then "" else " and no default feature")
          (match rustv with None -> "" | Some t -> " for rust " ^ t));
     let module C = Cargo_solve.Make () in
-    let r = C.solve ~debug ~order ?cache ~index ~features ~rustv root in
+    let r = C.solve ~debug ~check ~order ?cache ~index ~features ~rustv root in
     match r.Cargo_solve.answer with
     | Ok a when Cargo_solve.reaches_registry_root root a ->
         error 2
@@ -464,10 +478,10 @@ let cargo_cmd =
     (Cmd.info "cargo" ~exits
        ~doc:"Solve a root Cargo.toml against a crates.io index.")
     Term.(
-      const cargo_run $ debug_arg $ core_arg $ order $ print_parents $ cache
-      $ index $ manifest $ features $ no_default $ rustv)
+      const cargo_run $ debug_arg $ check_arg $ core_arg $ order $ print_parents
+      $ cache $ index $ manifest $ features $ no_default $ rustv)
 
-let alpine_run debug core order path goals =
+let alpine_run debug check core order path goals =
   guard @@ fun () ->
   Pac_common.Input.file path;
   match Apk_parse.world_of_args goals with
@@ -483,7 +497,7 @@ let alpine_run debug core order path goals =
             (String.concat ", "
                (List.map (fun n -> n ^ " (no such package)") ns))
       | [] ->
-          let r, walk = A.solve ~debug ~order ar world in
+          let r, walk = A.solve ~debug ~check ~order ar world in
           let s = A.stats ar in
           report ~t0 ~core
             {
@@ -522,14 +536,15 @@ let alpine_cmd =
   in
   Cmd.v
     (Cmd.info "alpine" ~exits ~doc:"Solve against an Alpine APKINDEX.")
-    Term.(const alpine_run $ debug_arg $ core_arg $ order $ path $ goals)
+    Term.(
+      const alpine_run $ debug_arg $ check_arg $ core_arg $ order $ path $ goals)
 
 module Npm = Npm_solve
 
-let npm_place ~t0 ~debug ~core ~order ~omit ~depth ar rc =
+let npm_place ~t0 ~debug ~check ~core ~order ~omit ~depth ar rc =
   let module S = Npm.Place_solve.Make () in
   let r, walk =
-    S.solve ~debug ~order ~omit_dev:(List.mem `Dev omit)
+    S.solve ~debug ~check ~order ~omit_dev:(List.mem `Dev omit)
       ~omit_optional:(List.mem `Optional omit) ~depth ar rc
   in
   let s = Npm.Archive.stats ar in
@@ -547,8 +562,8 @@ let npm_place ~t0 ~debug ~core ~order ~omit ~depth ar rc =
       Report.encoded ~nodes:a.Npm.Place_solve.nodes
         ~lookups:a.Npm.Place_solve.lookups)
 
-let npm_run debug core order (reading, depth, tree) cache offline omit nodev
-    npmv query =
+let npm_run debug check core order (reading, depth, tree) cache offline omit
+    nodev npmv query =
   guard @@ fun () ->
   match cache with
   | None ->
@@ -564,13 +579,13 @@ let npm_run debug core order (reading, depth, tree) cache offline omit nodev
         | Ok root when reading = `Placement ->
             let rc = Npm.Archive.add_root ~named:false ar root in
             Report.root (Npm.Print.root rc);
-            npm_place ~t0 ~debug ~core ~order ~omit ~depth ar rc
+            npm_place ~t0 ~debug ~check ~core ~order ~omit ~depth ar rc
         | Ok root ->
             let rc = Npm.Archive.add_root ~named:true ar root in
             Report.root (Npm.Print.root rc);
             let module S = Npm.Solve.Make () in
             let r, walk =
-              S.solve ~debug ~order ~omit_dev:(List.mem `Dev omit)
+              S.solve ~debug ~check ~order ~omit_dev:(List.mem `Dev omit)
                 ~omit_optional:(List.mem `Optional omit) ar rc
             in
             let optional =
@@ -740,8 +755,8 @@ let npm_cmd =
   Cmd.v
     (Cmd.info "npm" ~exits ~envs ~doc:"Solve against the npm registry.")
     Term.(
-      const npm_run $ debug_arg $ core_arg $ order $ reading $ cache $ offline
-      $ omit $ nodev $ npmv $ query)
+      const npm_run $ debug_arg $ check_arg $ core_arg $ order $ reading $ cache
+      $ offline $ omit $ nodev $ npmv $ query)
 
 (* a command-line error is a refused query like any other, and 124 is
    left to timeout(1) *)
