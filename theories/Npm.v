@@ -1520,14 +1520,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         split; [apply mem_descNames; exact Hn | split; [exact Hu | reflexivity]].
     Qed.
 
-    Lemma versions_reduceReal_unreduced : forall I n,
-        ~ ReducedName I n -> T.versions (reduceReal I) n = T.VSet.empty.
-    Proof.
-      intros I n Hn; apply T.VSet.ext; intro x; rewrite T.mem_versions; split.
-      - intro H; contradiction (Hn (reduced_reduceReal I n x H)).
-      - intro H; destruct (T.VSet.empty_spec H).
-    Qed.
-
     Definition depEdges (p : T.Pkg.t) (hs : T.DependeesSet.t) : T.DepRel.t :=
       SOhd.map (fun h => (p, h)) hs.
 
