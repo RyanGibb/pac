@@ -171,9 +171,8 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     Module SOkp := SetOps NKey Pl.Pkg KeySet Pl.PkgSet.
     Module SOvp := SetOps V Pl.Pkg VS Pl.PkgSet.
     Definition placeRepo (I : Inst) : Pl.PkgSet.t :=
-      SOkp.unionMap (fun k =>
-          SOvp.map (fun v => (fst k, Occ.Reg (snd k) v))
-            (realVersions (inst_repo I) (snd k)))
+      SOkp.unionMap (fun '(a, m) =>
+          SOvp.map (fun v => (a, Occ.Reg m v)) (realVersions (inst_repo I) m))
         (keysOf I).
 
     Lemma mem_placeRepo : forall I a o,
@@ -182,12 +181,12 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
           RepoSet.In (m, v) (inst_repo I).
     Proof.
       intros I a o; unfold placeRepo; rewrite SOkp.mem_unionMap; split.
-      - intros [[a' m] [Hk Hv]]; apply SOvp.mem_map in Hv.
+      - intros [[a' m] [Hk Hv]]; cbn beta iota in Hv; apply SOvp.mem_map in Hv.
         destruct Hv as [v [Hv E]]; injection E as -> ->.
         exists m, v; split; [reflexivity |].
         split; [exact Hk | apply mem_realVersions; exact Hv].
       - intros [m [v [-> [Hk Hv]]]]; exists (a, m); split; [exact Hk |].
-        apply SOvp.mem_map; exists v; split; [| reflexivity].
+        cbn beta iota; apply SOvp.mem_map; exists v; split; [| reflexivity].
         apply mem_realVersions; exact Hv.
     Qed.
 
