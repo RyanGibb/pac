@@ -486,38 +486,6 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
           exists e; auto.
       Qed.
 
-      Theorem dependees_lookupRoot : forall I depth,
-          Pl.Reduction.T.dependees (reduceDeps I depth) (rootPkg I) =
-          occAtoms I nil Occ.Top.
-      Proof.
-        intros I depth; unfold reduceDeps, rootPkg.
-        rewrite Pl.Reduction.dependees_reduceDeps.
-        - cbn [Pl.Reduction.rootPkg Pl.Reduction.dependees tr Pl.inst_root
-                 rootOcc snd].
-          exact (edgeAtoms_tr I (inst_root I) Occ.Top nil
-                   (proj2 (Pl.PkgSet.add_spec _ _ _) (or_introl eq_refl))).
-        - apply Pl.Reduction.mem_reduceReal; split; [exact Logic.I |].
-          apply Pl.Reduction.T.VSet.singleton_spec; reflexivity.
-      Qed.
-
-      Theorem dependees_lookupOcc : forall I depth l a o,
-          Pl.Reduction.T.PkgSet.In
-            (Pl.Reduction.Name.Loc l a, Pl.Reduction.Version.Occ o)
-            (reduceReal I depth) ->
-          Pl.Reduction.T.dependees (reduceDeps I depth)
-            (Pl.Reduction.Name.Loc l a, Pl.Reduction.Version.Occ o) =
-          occAtoms I (a :: l) o.
-      Proof.
-        intros I depth l a o H; unfold reduceDeps.
-        rewrite (Pl.Reduction.dependees_reduceDeps _ _ _ H).
-        apply Pl.Reduction.mem_reduceReal in H; destruct H as [_ H].
-        apply Pl.Reduction.mem_versions_loc in H.
-        destruct H as [E | [v [_ [Hv E]]]]; [discriminate E |].
-        injection E as ->; cbn [Pl.Reduction.dependees].
-        exact (edgeAtoms_tr I a v (a :: l)
-                 (proj2 (Pl.PkgSet.add_spec _ _ _) (or_intror Hv))).
-      Qed.
-
       Theorem dependees_lookupWalk : forall I depth l a w,
           Pl.Reduction.T.PkgSet.In (Pl.Reduction.Name.Walk l a, w)
             (reduceReal I depth) ->
@@ -585,6 +553,238 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         rewrite (edgesOfBy_agree _ _ _ _ Hx); f_equal.
         apply map_ext_in; intros e Hin.
         exact (eq_sym (edgeAtom_agree _ _ _ _ (He e Hin))).
+      Qed.
+
+      Lemma dependees_occAtomsRoot : forall I depth,
+          Pl.Reduction.T.dependees (reduceDeps I depth) (rootPkg I) =
+          occAtoms I nil Occ.Top.
+      Proof.
+        intros I depth; unfold reduceDeps, rootPkg.
+        rewrite Pl.Reduction.dependees_reduceDeps.
+        - cbn [Pl.Reduction.rootPkg Pl.Reduction.dependees tr Pl.inst_root
+                 rootOcc snd].
+          exact (edgeAtoms_tr I (inst_root I) Occ.Top nil
+                   (proj2 (Pl.PkgSet.add_spec _ _ _) (or_introl eq_refl))).
+        - apply Pl.Reduction.mem_reduceReal; split; [exact Logic.I |].
+          apply Pl.Reduction.T.VSet.singleton_spec; reflexivity.
+      Qed.
+
+      Lemma dependees_occAtomsOcc : forall I depth l a o,
+          Pl.Reduction.T.PkgSet.In
+            (Pl.Reduction.Name.Loc l a, Pl.Reduction.Version.Occ o)
+            (reduceReal I depth) ->
+          Pl.Reduction.T.dependees (reduceDeps I depth)
+            (Pl.Reduction.Name.Loc l a, Pl.Reduction.Version.Occ o) =
+          occAtoms I (a :: l) o.
+      Proof.
+        intros I depth l a o H; unfold reduceDeps.
+        rewrite (Pl.Reduction.dependees_reduceDeps _ _ _ H).
+        apply Pl.Reduction.mem_reduceReal in H; destruct H as [_ H].
+        apply Pl.Reduction.mem_versions_loc in H.
+        destruct H as [E | [v [_ [Hv E]]]]; [discriminate E |].
+        injection E as ->; cbn [Pl.Reduction.dependees].
+        exact (edgeAtoms_tr I a v (a :: l)
+                 (proj2 (Pl.PkgSet.add_spec _ _ _) (or_intror Hv))).
+      Qed.
+
+      Lemma mem_repoPreimage : forall I ns n u,
+          RepoSet.In (n, u)
+            (RepoSet.filter (fun '(n', _) => List.existsb (NEqb.eqb n') ns)
+               (inst_repo I)) <->
+          RepoSet.In (n, u) (inst_repo I) /\ In n ns.
+      Proof.
+        intros I ns n u.
+        rewrite RepoSet.filter_spec
+          by (intros x y Heq; rewrite Heq; reflexivity).
+        cbn beta iota; rewrite List.existsb_exists; split.
+        - intros [H [n' [Hn E]]]; apply NEqb.eqb_true_iff in E; subst n'.
+          split; [exact H | exact Hn].
+        - intros [H Hn]; split; [exact H |].
+          exists n; split; [exact Hn | apply NEqb.eqb_refl].
+      Qed.
+
+      Lemma occAtoms_sub : forall I' I ns l o,
+          inst_repo I' =
+            RepoSet.filter
+              (fun '(n, _) => List.existsb (NEqb.eqb n) ns) (inst_repo I) ->
+          inst_ovr I' = inst_ovr I ->
+          activeDeps I' o = activeDeps I o -> declPeers I' o = declPeers I o ->
+          incl (List.map e_name (edgesOf I o)) ns ->
+          occAtoms I' l o = occAtoms I l o.
+      Proof.
+        intros I' I ns l o HR Ho Hd Hp Hns.
+        assert (Ha : forall n, In n (List.map e_name (edgesOf I o)) ->
+                   AgreesAtName I' I n)
+          by (intros n Hn u; rewrite HR, mem_repoPreimage;
+              pose proof (Hns n Hn); tauto).
+        assert (Hx : AgreesAtOcc (realVersions (inst_repo I')) I' I o).
+        { split; [exact Ho |]; split; [exact Hd |]; split; [exact Hp |].
+          intros d m Hin _ ->.
+          assert (Hm : In (ovrName I (d_dir d) (d_name d))
+                         (List.map e_name (edgesOf I o))).
+          { apply in_map_iff.
+            exists (depEdge (realVersions (inst_repo I)) I d);
+              split; [reflexivity |].
+            unfold edgesOf, edgesOfBy; apply in_or_app; left.
+            apply in_map; exact Hin. }
+          apply VS.ext; intro u; rewrite !mem_realVersions; exact (Ha _ Hm u). }
+        symmetry; exact (occAtoms_parts I I' (realVersions (inst_repo I'))
+                           (fun _ => I') l o Hx
+                           (fun e He => Ha _ (in_map e_name _ e He))).
+      Qed.
+
+      Lemma keysOf_sub : forall I' I k,
+          inst_ovr I' = inst_ovr I ->
+          (forall d, In d (inst_rootDeps I ++ List.map snd (inst_deps I)) ->
+             (d_dir d, ovrName I (d_dir d) (d_name d)) = k ->
+             In d (inst_rootDeps I' ++ List.map snd (inst_deps I'))) ->
+          (forall theta,
+             In theta (inst_rootPeers I ++ List.map snd (inst_peers I)) ->
+             (p_dir theta, ovrName I (p_dir theta) (p_name theta)) = k ->
+             In theta (inst_rootPeers I' ++ List.map snd (inst_peers I'))) ->
+          KeySet.In k (keysOf I) -> KeySet.In k (keysOf I').
+      Proof.
+        intros I' I k Ho Hd Hp Hk.
+        assert (Hn : forall a n, ovrName I' a n = ovrName I a n)
+          by (intros a n; unfold ovrName; rewrite Ho; reflexivity).
+        unfold keysOf in Hk |- *; rewrite SOkk.mem_ofList in Hk |- *.
+        apply in_app_or in Hk; apply in_or_app.
+        destruct Hk as [Hk | Hk]; apply in_map_iff in Hk;
+          destruct Hk as [x [E Hx]].
+        - left; apply in_map_iff; exists x.
+          cbn [e_name depEdge] in E |- *; rewrite Hn.
+          split; [exact E | exact (Hd x Hx E)].
+        - right; apply in_map_iff; exists x.
+          cbn [e_name peerEdge] in E |- *; rewrite Hn.
+          split; [exact E | exact (Hp x Hx E)].
+      Qed.
+
+      Theorem dependees_lookupRoot : forall I depth,
+          Pl.Reduction.T.dependees (reduceDeps I depth) (rootPkg I) =
+          Pl.Reduction.dependees
+            (tr (MkInst
+                   (RepoSet.filter
+                      (fun '(n, _) =>
+                         List.existsb (NEqb.eqb n)
+                           (List.map e_name (edgesOf I Occ.Top)))
+                      (inst_repo I))
+                   nil nil (inst_ovr I) (inst_root I) (inst_rootDeps I)
+                   (inst_rootPeers I)))
+            (rootPkg I).
+      Proof.
+        intros I depth; rewrite dependees_occAtomsRoot.
+        match goal with
+        | |- _ = Pl.Reduction.dependees (tr ?J) _ => set (I' := J)
+        end.
+        transitivity (occAtoms I' nil Occ.Top).
+        - symmetry;
+            apply (occAtoms_sub I' I (List.map e_name (edgesOf I Occ.Top)));
+            [reflexivity | reflexivity | reflexivity | reflexivity
+            | intros n Hn; exact Hn].
+        - symmetry; exact (edgeAtoms_tr I' (inst_root I') Occ.Top nil
+                             (proj2 (Pl.PkgSet.add_spec _ _ _)
+                                (or_introl eq_refl))).
+      Qed.
+
+      (* An occupant's edges are in the translation only while it is in R_P,
+         so its sub-instance keeps the entries putting (a, m) into keysOf. *)
+      Theorem dependees_lookupOcc : forall I depth l a m v,
+          Pl.Reduction.T.PkgSet.In
+            (Pl.Reduction.Name.Loc l a,
+             Pl.Reduction.Version.Occ (Occ.Reg m v))
+            (reduceReal I depth) ->
+          Pl.Reduction.T.dependees (reduceDeps I depth)
+            (Pl.Reduction.Name.Loc l a,
+             Pl.Reduction.Version.Occ (Occ.Reg m v)) =
+          Pl.Reduction.dependees
+            (tr (MkInst
+                   (RepoSet.filter
+                      (fun '(n, _) =>
+                         List.existsb (NEqb.eqb n)
+                           (m :: List.map e_name (edgesOf I (Occ.Reg m v))))
+                      (inst_repo I))
+                   (List.filter
+                      (fun '(p, d) =>
+                         orb (RPkgEqb.eqb p (m, v))
+                           (andb (NEqb.eqb (d_dir d) a)
+                              (NEqb.eqb (ovrName I (d_dir d) (d_name d)) m)))
+                      (inst_deps I))
+                   (List.filter
+                      (fun '(p, theta) =>
+                         orb (RPkgEqb.eqb p (m, v))
+                           (andb (NEqb.eqb (p_dir theta) a)
+                              (NEqb.eqb
+                                 (ovrName I (p_dir theta) (p_name theta)) m)))
+                      (inst_peers I))
+                   (inst_ovr I) (inst_root I)
+                   (List.filter
+                      (fun d =>
+                         andb (NEqb.eqb (d_dir d) a)
+                           (NEqb.eqb (ovrName I (d_dir d) (d_name d)) m))
+                      (inst_rootDeps I))
+                   (List.filter
+                      (fun theta =>
+                         andb (NEqb.eqb (p_dir theta) a)
+                           (NEqb.eqb
+                              (ovrName I (p_dir theta) (p_name theta)) m))
+                      (inst_rootPeers I))))
+            (Pl.Reduction.Name.Loc l a,
+             Pl.Reduction.Version.Occ (Occ.Reg m v)).
+      Proof.
+        intros I depth l a m v H.
+        rewrite (dependees_occAtomsOcc I depth l a _ H).
+        assert (Hk : KeySet.In (a, m) (keysOf I) /\
+                     RepoSet.In (m, v) (inst_repo I)).
+        { apply Pl.Reduction.mem_reduceReal in H; destruct H as [_ H].
+          apply Pl.Reduction.mem_versions_loc in H.
+          destruct H as [E | [o [_ [Ho E]]]]; [discriminate E |].
+          injection E as <-; cbn [tr Pl.inst_repo] in Ho.
+          apply mem_placeRepo in Ho; destruct Ho as [m' [v' [E Hk]]].
+          injection E as <- <-; exact Hk. }
+        destruct Hk as [Hk Hr].
+        match goal with
+        | |- _ = Pl.Reduction.dependees (tr ?J) _ => set (I' := J)
+        end.
+        assert (Hocc : Pl.PkgSet.In (a, Occ.Reg m v) (occs I')).
+        { unfold occs; apply Pl.PkgSet.add_spec; right; apply mem_placeRepo.
+          exists m, v; split; [reflexivity |]; split.
+          - apply (keysOf_sub I' I); [reflexivity | | | exact Hk].
+            + intros d Hd E; injection E as Ea Em.
+              unfold I'; cbn [inst_rootDeps inst_deps].
+              apply in_app_or in Hd; apply in_or_app; destruct Hd as [Hd | Hd].
+              * left; apply filter_In; split; [exact Hd |].
+                cbn beta iota; rewrite Em, Ea, !NEqb.eqb_refl; reflexivity.
+              * right; apply in_map_iff in Hd; apply in_map_iff.
+                destruct Hd as [[p d'] [E Hd]]; cbn [snd] in E; subst d'.
+                exists (p, d); split; [reflexivity |].
+                apply filter_In; split; [exact Hd |]; cbn beta iota.
+                rewrite Em, Ea, !NEqb.eqb_refl; apply Bool.orb_true_r.
+            + intros theta Hp E; injection E as Ea Em.
+              unfold I'; cbn [inst_rootPeers inst_peers].
+              apply in_app_or in Hp; apply in_or_app; destruct Hp as [Hp | Hp].
+              * left; apply filter_In; split; [exact Hp |].
+                cbn beta iota; rewrite Em, Ea, !NEqb.eqb_refl; reflexivity.
+              * right; apply in_map_iff in Hp; apply in_map_iff.
+                destruct Hp as [[p theta'] [E Hp]]; cbn [snd] in E;
+                  subst theta'.
+                exists (p, theta); split; [reflexivity |].
+                apply filter_In; split; [exact Hp |]; cbn beta iota.
+                rewrite Em, Ea, !NEqb.eqb_refl; apply Bool.orb_true_r.
+          - unfold I'; cbn [inst_repo]; apply mem_repoPreimage.
+            split; [exact Hr | left; reflexivity]. }
+        transitivity (occAtoms I' (a :: l) (Occ.Reg m v));
+          [| symmetry; exact (edgeAtoms_tr I' a (Occ.Reg m v) (a :: l) Hocc)].
+        symmetry;
+          apply (occAtoms_sub I' I
+                   (m :: List.map e_name (edgesOf I (Occ.Reg m v))));
+          [reflexivity | reflexivity | | | intros n Hn; right; exact Hn].
+        - unfold I'; cbn [activeDeps inst_deps].
+          rewrite ownedBy_filter; [reflexivity |].
+          intros d _; cbn beta iota; rewrite RPkgEqb.eqb_refl; reflexivity.
+        - unfold I'; cbn [declPeers inst_peers].
+          rewrite ownedBy_filter; [reflexivity |].
+          intros theta _; cbn beta iota; rewrite RPkgEqb.eqb_refl;
+            reflexivity.
       Qed.
     End Lookup.
   End Reduction.

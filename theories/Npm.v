@@ -181,21 +181,6 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     ; inst_ovr : list (N.t * Range)
     ; inst_root : RPkg.t }.
 
-  Lemma ownedBy_filter : forall (A : Type) (l : list (RPkg.t * A)) f p,
-      (forall a, In (p, a) l -> f (p, a) = true) ->
-      ownedBy p (List.filter f l) = ownedBy p l.
-  Proof.
-    intros A l f p; induction l as [| [q b] l IH]; simpl; [reflexivity |].
-    intro H.
-    assert (Htl : forall a, In (p, a) l -> f (p, a) = true)
-      by (intros a Ha; apply H; right; exact Ha).
-    destruct (RPkgEqb.eqb q p) eqn:Hq.
-    - apply RPkgEqb.eqb_true_iff in Hq; subst q.
-      rewrite (H b (or_introl eq_refl)); simpl.
-      rewrite RPkgEqb.eqb_refl, (IH Htl); reflexivity.
-    - destruct (f (q, b)); simpl; rewrite ?Hq; exact (IH Htl).
-  Qed.
-
   Definition keysOfL {A : Type} (f : A -> NKey.t) (l : list A) : KeySet.t :=
     SOkk.ofList (List.map f l).
 
