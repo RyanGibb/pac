@@ -2217,27 +2217,27 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       Qed.
 
       Theorem versions_lookupOrig :
-        forall R D (r : Pkg.t) (n : N.t),
-          PkgSet.In r R ->
+        forall R D (m : N.t) (u : V.t) (n : N.t),
+          PkgSet.In (m, u) R ->
           (exists p h, T.DepRel.In (p, (Name.Orig n, h)) (reduceDeps R D)) \/
-          n = fst r ->
+          n = m ->
           Ab.hasAbsent n = true ->
           T.versions (reduceReal R D) (Name.Orig n) =
           T.VSet.add Version.Bot
             (T.versions (reduceReal (PkgFibred.tailFibre R n) DepRel.empty)
                (Name.Orig n)).
       Proof.
-        intros R D [rn rv] n Hr Hreach Ha; cbn [fst] in Hreach.
+        intros R D m u n Hr Hreach Ha.
         rewrite versions_reduceReal_bot.
         assert (Hm : NSet.In n (instNames R D)).
         { destruct Hreach as [Hreach | ->];
             [exact (reachable_instNames R D n Hreach) |].
-          apply mem_instNames; left; exists rv; exact Hr. }
+          apply mem_instNames; left; exists u; exact Hr. }
         apply T.VSet.ext; intro w.
         rewrite T.mem_versions, mem_reduceReal, SOvv.add_in.
         unfold embedVS; rewrite SOvv.mem_map.
         split.
-        - intros [[[qn qv] [HR Hq]] | [[p [psi [_ Hw]]] | [m [_ [_ Hy]]]]].
+        - intros [[[qn qv] [HR Hq]] | [[p [psi [_ Hw]]] | [m' [_ [_ Hy]]]]].
           + unfold embedPkg in Hq; injection Hq as -> ->.
             right; exists qv; split; [| reflexivity].
             apply C.mem_versions, PkgFibred.mem_tailFibre; auto.

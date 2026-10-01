@@ -2004,9 +2004,9 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Proof.
         intros I n Hreach.
         destruct Hreach as [[v Hv] | Hreach];
-          [rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ (n, v) n Hv
+          [rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ n v n Hv
                       (or_intror eq_refl) eq_refl)
-          | rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ _ n
+          | rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ _ _ n
                        (root_reduceReal I) (or_introl Hreach) eq_refl)];
           rewrite PF.Reduction.Lookup.versions_reduceReal_bot;
           do 2 f_equal; apply PF.C.versions_ext; intro u;

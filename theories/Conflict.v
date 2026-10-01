@@ -423,27 +423,27 @@ Module Conflict (N V : UsualOrderedType).
       Qed.
 
       Theorem versions_lookupOrig :
-        forall R D G (r : Pkg.t) (n : N.t),
-          PkgSet.In r R ->
+        forall R D G (m : N.t) (u : V.t) (n : N.t),
+          PkgSet.In (m, u) R ->
           (exists p h, T.DepRel.In (p, (n, h)) (reduceDeps R D G)) \/
-          n = fst r ->
+          n = m ->
           T.versions (reduceReal R D G) n =
           T.VSet.add Version.Bot
             (T.versions
                (reduceReal (PkgFibred.tailFibre R n) C.DepRel.empty
                   ConflictRel.empty) n).
       Proof.
-        intros R D G [rn rv] n Hr Hreach; cbn [fst] in Hreach.
+        intros R D G m u n Hr Hreach.
         rewrite versions_reduceReal_bot.
         assert (Hn : NSet.In n (instNames R D G)).
         { destruct Hreach as [Hreach | ->];
             [exact (reachable_instNames R D G n Hreach) |].
-          apply mem_instNames; left; exists rv; exact Hr. }
+          apply mem_instNames; left; exists u; exact Hr. }
         apply T.VSet.ext; intro w.
         rewrite T.mem_versions, mem_reduceReal, SOvt.add_in.
         unfold embedVS; rewrite SOvt.mem_map.
         split.
-        - intros [[[qn qv] [HR Hq]] | [m [_ Hy]]].
+        - intros [[[qn qv] [HR Hq]] | [m' [_ Hy]]].
           + unfold embedPkg in Hq; cbn [fst snd] in Hq.
             injection Hq as -> ->.
             right; exists qv; split; [| reflexivity].
