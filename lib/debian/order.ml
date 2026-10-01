@@ -244,7 +244,7 @@ module Make (S : Apt_reject.SEARCH) = struct
      narrows the candidates to those apt would consider. *)
   let hooks :
       (name list, name, PG.selection, PVersion.t) Pac_common.Order.driver =
-   fun order goals ->
+   fun order query ->
     let next pick ~assigned open_names =
       match
         List.filter (fun (tn, _) -> not (admits_bot ~assigned tn)) open_names
@@ -261,7 +261,7 @@ module Make (S : Apt_reject.SEARCH) = struct
     match order with
     | `Tool ->
         let t = create () in
-        Heap.request t goals;
+        Heap.request t query;
         Pac_common.Order.make
           ~next:(next (Heap.next t))
           ~choose:(choose (filter t))

@@ -346,7 +346,7 @@ module Make () : S = struct
 
   (* Lookup.rootSubInst: the world set and the repository at the names it
      mentions.  Every install-if rule is carried by a package, so the root
-     reads no part of the rule table.  The world is the query's goal
+     reads no part of the rule table.  The world is the query's
      arguments and nothing else: this resolves from an empty root rather
      than from an existing /etc/apk/world. *)
   let root_inst ar (world : P.dep list) : Alp.coq_Inst =

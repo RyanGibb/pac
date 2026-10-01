@@ -481,10 +481,10 @@ let cargo_cmd =
       const cargo_run $ debug_arg $ check_arg $ core_arg $ order $ print_parents
       $ cache $ index $ manifest $ features $ no_default $ rustv)
 
-let alpine_run debug check core order path goals =
+let alpine_run debug check core order path pkgs =
   guard @@ fun () ->
   Pac_common.Input.file path;
-  match Apk_parse.world_of_args goals with
+  match Apk_parse.world_of_args pkgs with
   | Error e -> error 2 "%s" e
   | Ok world -> (
       let t0 = Unix.gettimeofday () in
@@ -523,7 +523,7 @@ let alpine_cmd =
       & pos 0 (some string) None
       & info [] ~docv:"APKINDEX" ~doc:"Uncompressed APKINDEX file.")
   in
-  let goals =
+  let pkgs =
     Arg.(
       non_empty & pos_right 0 string []
       & info [] ~docv:"PKG" ~doc:"Packages forming the world.")
@@ -537,7 +537,7 @@ let alpine_cmd =
   Cmd.v
     (Cmd.info "alpine" ~exits ~doc:"Solve against an Alpine APKINDEX.")
     Term.(
-      const alpine_run $ debug_arg $ check_arg $ core_arg $ order $ path $ goals)
+      const alpine_run $ debug_arg $ check_arg $ core_arg $ order $ path $ pkgs)
 
 module Npm = Npm_solve
 

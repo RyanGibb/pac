@@ -233,7 +233,7 @@ module Make (D : DRIVER) = struct
       Hashtbl.add t.pos n t.clock;
       match e with Some e -> e.tenq <- n :: e.tenq | None -> ())
 
-  let request t goals = List.iter (enqueue t None) goals
+  let request t query = List.iter (enqueue t None) query
 
   let queue_rejections t rs =
     List.iter
@@ -627,8 +627,8 @@ module Make (D : DRIVER) = struct
         e.tvd <- orig :: e.tvd
     | None -> ()
 
-  (* a decided package's version var: the goal's popped first, the request
-     having enqueued it, and queued the package var behind the clauses
+  (* a decided package's version var: a requested one's popped first, the
+     request having enqueued it, and queued the package var behind the clauses
      registered on the version; one reached through a selector has popped
      already; any other is queued now, behind the package's own wave *)
   let queue_version t ~assigned (e : tentry) pv ver_clauses =

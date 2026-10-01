@@ -20,7 +20,7 @@ module Make () = struct
      against its range on each assignment and each decision, and a union of
      points costs a comparison per point, so a wide name under "*" -- 2364
      versions of @types/node -- made each test quadratic, and that was most
-     of the solve time of a seven-node goal.  A run [lo, next) holds exactly
+     of the solve time of a seven-node query.  A run [lo, next) holds exactly
      the same versions of this name, and the solver considers no others.  A
      few points cost less than asking for the name's versions, which the
      solver may never need. *)

@@ -18,7 +18,7 @@ type pkg = {
 val parse_file :
   reject:(unit -> unit) -> broken:(string list -> unit) -> string -> pkg list
 
-(* A goal argument is an /etc/apk/world line: a dependency atom.  apk
+(* A world argument is an /etc/apk/world line: a dependency atom.  apk
    refuses the whole world over an atom it cannot parse, one whose version
    is not a version, or one tagged with a repository it lacks -- and no
    repository here is tagged -- and skips an empty one. *)
