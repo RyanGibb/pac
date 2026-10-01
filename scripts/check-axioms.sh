@@ -248,12 +248,10 @@ Deb.matchb
 DMA.Reduction.Lookup.dependees_lookupDisjunct
 DMA.Reduction.Lookup.dependees_lookupOrig
 DMA.Reduction.Lookup.dependees_lookupSelector
-DMA.Reduction.Lookup.dependees_lookupSelectorRec
 DMA.Reduction.Lookup.dependees_lookupSoft
 DMA.Reduction.Lookup.versions_lookupOrig
 DMA.Reduction.Lookup.versions_lookupOrig_pseudo
 DMA.Reduction.Lookup.versions_lookupSelector
-DMA.Reduction.Lookup.versions_lookupSelectorRec
 DMA.Reduction.Lookup.versions_lookupSoft
 DMA.Reduction.debian_ma_completeness
 DMA.Reduction.debian_ma_core_completeness

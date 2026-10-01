@@ -2013,33 +2013,6 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             (Deb.Reduction.Name.Selector (reduceAtom alpha (m, (x, phi))), w).
       Proof. intros I alpha m x phi w; destruct w; reflexivity. Qed.
 
-      Theorem versions_lookupSelectorRec :
-        forall I (alpha : A.t) (m : N.t) (x : Qual) (phi : Deb.Ver.Formula),
-          Deb.Reduction.versions (reduceInst I)
-            (Deb.Reduction.Name.Selector (reduceAtom alpha (m, (x, phi)))) =
-          let Rs := realPreimage (inst_repo I) (NSet.singleton m) in
-          let Pis := provPreimage (inst_prov I) (NSet.singleton m) in
-          Deb.Reduction.versions
-            (Deb.MkInst (reduceReal Rs) Deb.Deps.empty Deb.Deps.empty
-               (reduceProv Rs Pis (provClsPreimage (inst_cls I) Rs Pis))
-               Deb.Conf.empty (embedPkg (inst_root I)))
-            (Deb.Reduction.Name.Selector (reduceAtom alpha (m, (x, phi)))).
-      Proof. exact versions_lookupSelector. Qed.
-
-      Theorem dependees_lookupSelectorRec :
-        forall I (alpha : A.t) (m : N.t) (x : Qual) (phi : Deb.Ver.Formula)
-               (w : Deb.Reduction.Version.t),
-          Deb.Reduction.dependees (reduceInst I)
-            (Deb.Reduction.Name.Selector (reduceAtom alpha (m, (x, phi))), w) =
-          let Rs := realPreimage (inst_repo I) (NSet.singleton m) in
-          let Pis := provPreimage (inst_prov I) (NSet.singleton m) in
-          Deb.Reduction.dependees
-            (Deb.MkInst (reduceReal Rs) Deb.Deps.empty Deb.Deps.empty
-               (reduceProv Rs Pis (provClsPreimage (inst_cls I) Rs Pis))
-               Deb.Conf.empty (embedPkg (inst_root I)))
-            (Deb.Reduction.Name.Selector (reduceAtom alpha (m, (x, phi))), w).
-      Proof. exact dependees_lookupSelector. Qed.
-
     End Lookup.
 
     Theorem debian_ma_retraction : forall S,
