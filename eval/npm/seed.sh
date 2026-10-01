@@ -1,27 +1,13 @@
 #!/usr/bin/env bash
-# One online pass that fixes what the measured sweep then answers offline:
-# which root version each query is asked about, and a snapshot closed over
-# both sides' cones.
-#
-# Root choice.  It starts at the newest release, usually dist-tags.latest.
-# Where our side cannot answer it it walks back to the next-newest,
-# because a query whose root no one can resolve yields no edges to score;
-# where npm cannot, the query is dropped.  A packument in repos/npm can be
-# old enough that a newer release's own dependency range matches nothing
-# in it, which stops npm as well.  The version that comes out is written
-# to baseline/roots.txt and used verbatim by both sides, so the question
-# stays shared whatever the reason for walking back.
-#
-# Snapshot closure.  repos/npm is an on-demand cache accumulated by earlier
-# `pac npm` runs, so it holds our cone and not necessarily npm's: npm asks
-# for names our parser drops (git and tag specs) and for peers we place
-# differently.  A frozen shim would answer those 404 and npm would be
-# solving a different registry from ours.  So our side runs online and
-# fills the farm with what it needs, and npm runs against a --fill shim
-# that fetches a miss once into the same farm.  After this the farm is
-# closed over the seeded roots; a FILL=1 scale.sh pass closes it over the
+# One online pass before the offline sweep: the root version each query is
+# asked about, written to baseline/roots.txt and used verbatim by both
+# sides, and a snapshot closed over both sides' cones.
+# The root starts at the newest release and walks back while our side
+# cannot answer it (a root no one resolves yields no edges to score); a
+# query npm cannot answer is dropped.  repos/npm holds only what earlier
+# `pac npm` runs asked for, so npm runs against a --fill shim that fetches
+# a miss once into the same farm; a FILL=1 scale.sh pass closes it over the
 # rest.
-#
 # usage: seed.sh <exe> [run-dir] [port] [max-walkback]      TIMEOUT=<s per pac call>
 set -eu
 # byte order, so the output is the same whatever the host's locale

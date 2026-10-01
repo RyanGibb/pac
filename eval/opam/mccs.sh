@@ -1,18 +1,12 @@
 #!/usr/bin/env bash
-# How often pac's answer is builtin-mccs's, opam's default solver (with
-# GLPK, builtin-mccs+glpk, the one nix/flake.lock's opam has), over a
-# finished scale.sh run: divergence from an optimising solver, which
-# ranks whole resolutions, and not correspondence, which is 0install's.
-# Each query of the run is asked of mccs as scale.sh asks 0install, with
-# the run's OPAMROOT, one copy per worker (opam holds the switch's lock for
-# a whole dry run), and set against pac's answer in each mode.
-#
-# --accept <n> <seed> then asks, of n of the queries where mccs's answer
-# differs from pac's in the tool's order, drawn seeded, whether 0install
-# takes mccs's answer: 0install asked for exactly its packages, each at its
-# version, and installing no more.  One it takes is a difference of
-# optimisation alone, both answers resolutions 0install accepts.
-#
+# How often pac's answer is builtin-mccs+glpk's, opam's default solver,
+# over a finished scale.sh run: divergence from an optimising solver, not
+# correspondence, which is 0install's.  Each query is asked as scale.sh
+# asks 0install, with the run's OPAMROOT, one copy per worker (opam holds
+# the switch's lock for a whole dry run).
+# --accept <n> <seed> then asks 0install, for n of the queries where mccs
+# and pac differ in the tool's order, drawn seeded, whether it takes mccs's
+# answer as it stands.
 # Writes <run-dir>/mccs.txt, a line per query:
 #   query=<key> mccs=ok|refuse|error|timeout tool=<mode>:exact|diff ...
 # and with --accept, <run-dir>/mccs-accept.txt:

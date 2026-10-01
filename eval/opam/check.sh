@@ -1,37 +1,17 @@
 #!/usr/bin/env bash
-# Our selection becomes the switch's installed state, written straight
-# into switch-state with only the packages the query names as roots.
-#
-# Valid asks two questions that must have nothing to do.  `opam install`
-# of the query as given: every atom is satisfied by what is installed.
-# `opam upgrade --fixup`, which resolves for the roots at their installed
-# versions with the fewest changes, so it acts only on an inconsistent
-# state -- a dependency missing, a conflicts, a package no longer
-# available -- and any action at all is that inconsistency.  Asking
-# instead for the whole selection at exact versions makes every package
-# requested, and --with-test, --with-doc and --with-dev-setup, which
-# enable dependencies of requested packages only, would be enabled for
-# every package: a different query.  A switch-state holds one version of
-# a name, and opam cannot load one holding a version the repository lacks,
-# so both fail before opam is asked.
-#
-# Minimal asks a third: the same fixup, every package pinned at its
-# version and the solver told to remove what it can, must also have
-# nothing to do, or the roots do not need everything installed.
-# `opam remove --auto-remove` would ask a weaker "needed": it keeps the
-# depopts of whatever it keeps and every arm of an `|`, and decides with
-# --with-test and the like off.  fixup takes those flags through its roots.
-#
+# Our selection becomes the switch's installed state, with only the
+# packages the query names as roots, and opam is asked: valid, `opam
+# install` of the query as given and `opam upgrade --fixup`, which acts
+# only on an inconsistent state; minimal, the same fixup with every package
+# pinned and the solver told to remove what it can.  A switch-state holds
+# one version of a name, and opam cannot load one holding a version the
+# repository lacks, so both fail before opam is asked.
 # opam exits 20 where the solver finds nothing, and 5 for a package it
-# cannot install at all; any other failure, a switch it cannot find among
-# them, leaves the answer unchecked.
-#
-# The solver is opam's own default (builtin-mccs), not the
-# builtin-0install scale.sh takes its baseline from: the question here is
-# whether opam as shipped accepts the selection.  Each answer gets its own
-# copy of OPAMROOT, the root setup.sh built, whose pinned global variables
-# are load-bearing -- without them opam reads a different universe from
-# our loader and the two are no longer answering about one instance.
+# cannot install at all; any other failure leaves the answer unchecked.
+# The solver is opam's default (builtin-mccs), not the builtin-0install
+# scale.sh takes its baseline from: the question is whether opam as shipped
+# accepts the selection.  Each answer gets its own copy of OPAMROOT, the
+# root setup.sh built, whose pinned global variables fix the universe.
 # usage: check.sh <answer> <out-dir> <query...>, through eval/check.sh
 set -u
 # byte order, so the output is the same whatever the host's locale

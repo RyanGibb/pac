@@ -1,33 +1,17 @@
 #!/usr/bin/env bash
 # Our answer becomes the installed database, each package's stanza taken
-# from the same APKINDEX the loader reads, and `apk fix --simulate` must
-# then succeed with nothing to do, twice over.
-#
-# Valid: the world is the whole answer, each package pinned at its version,
-# and the query.  apk then keeps every package we named and can only report
-# an inconsistency: a dependency missing, a conflict, an install_if whose
-# conditions hold and whose package is absent (apk installs it as soon as
-# they hold, and our model makes the rule hard too).  Naming every package
-# also names every owner of a bare provides, which apk lets count only once
-# something names it, so bare.py asks that rule of the answer itself.
-#
-# Minimal: the world is the query alone.  apk keeps an installed package
-# only while it still resolves from the world, and takes a name's provider
-# by its own preference, so it purges what nothing leads to and swaps a
-# provider it ranks lower (controls.sh f5-prio); neither is an
-# inconsistency.
-#
+# from the APKINDEX, and `apk fix --simulate` must have nothing to do:
+# valid, with the whole answer pinned and the query as the world (bare.py
+# asks apk's rule for a bare provides, which naming every package would
+# hide); minimal, with the query alone as the world.
 # Any Installing, Purging, Upgrading, Downgrading, Replacing or
-# Re-installing line is a change; the closing "OK: ... in K packages" must
-# count exactly our set, so no change can pass unprinted.  apk's changeset
-# tracks one installed package per name, so two versions of one name both
-# installed go unreported by fix; that is checked here.  apk failing other
-# than by being unable to select packages leaves the answer unchecked.
-#
-# `fix` rejects --usermode, so each answer gets its own copy of the root
-# setup.sh built; the repository is shared.  APKROOT is that root; APK
-# names the binary when apk is not on PATH (setup.sh prints the invocation
-# it resolved); INDEX overrides the index, for a fixture.
+# Re-installing line is a change, and the closing "OK: ... in K packages"
+# must count exactly our set.  apk tracks one installed package per name,
+# so two versions of one name are checked here.  apk failing other than by
+# being unable to select packages leaves the answer unchecked.
+# `fix` rejects --usermode, so each answer gets its own copy of APKROOT,
+# the root setup.sh built; APK names the binary when apk is not on PATH;
+# INDEX overrides the index, for a fixture.
 # usage: check.sh <answer> <out-dir> <query...>, through eval/check.sh
 set -u
 # byte order, so the output is the same whatever the host's locale

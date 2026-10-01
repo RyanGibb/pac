@@ -1,25 +1,12 @@
 #!/usr/bin/env bash
-# Whether Yarn Berry takes our answer, as an answer under the shared
-# reading (pac's --reading=shared) must be taken by both tools: the answer is written out as a Berry project
-# (berrylock.py) against berryreg.py on BPORT, and Berry's strict view is
-# read off it.
-#
-# Valid: a first install, with a pin per package of the answer, locks every
-# version the answer uses; the lock is then patched so that each descriptor
-# resolves as the answer resolves it and the pins go, and an install keeps
-# it so (Berry keeps a locked resolution); `yarn install --immutable
-# --check-resolutions` then accepts the lock as it stands, every locked
-# version within its descriptor's range; and `yarn explain
-# peer-requirements` marks no requirement unmet (no ✘), Berry's warnings
-# YN0002 and YN0060 being those.
-#
-# And the answer is what loads: under PnP every row of the answer loads the
-# copy it names and every peer the copy it is offered (berryprobe.cjs); no
-# descriptor resolves two ways; and no row puts a copy where no manifest
-# asks for one.  A peer the answer leaves open that loads something anyway
-# (PnP's top-level fallback) is counted apart and does not count against
-# it, as is a package Berry disabled for another os or cpu.
-#
+# Whether Yarn Berry takes our answer under the shared reading: the answer
+# is written out as a Berry project (berrylock.py) against berryreg.py on
+# BPORT; `yarn install --immutable --check-resolutions` must accept the
+# lock, `yarn explain peer-requirements` mark no requirement unmet (YN0002,
+# YN0060), and under PnP every row must load the copy it names
+# (berryprobe.cjs).  A peer the answer leaves open that PnP's fallback
+# fills, and a package Berry disabled for another os or cpu, are counted
+# apart.
 # usage: berry.sh <answer> <out-dir> <query...>
 #        NPM_RUN=<run with cache/> BPORT=<berryreg.py port>
 set -u

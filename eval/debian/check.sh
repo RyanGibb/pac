@@ -1,42 +1,20 @@
 #!/usr/bin/env bash
 # Our answer becomes the dpkg status, each package's stanza taken from the
-# same Packages file the loader reads and marked installed, and
-# extended_states marks every package but the query's automatically
-# installed.  Valid asks two questions that must have nothing to do:
-# `apt-get check`, that no installed package has a Depends, Pre-Depends,
-# Conflicts or Breaks unmet; and `apt-get install <query>`, that the query
-# as asked is satisfied.  Minimal asks a third, `apt-get autoremove`: that
-# the query needs everything installed.
-#
-# What autoremove counts as needed has to be what installing the query
-# installs: Recommends exactly when they were installed -- apt's default,
-# which --no-install-recommends turns off -- and Suggests never.  apt's
-# own default for autoremove follows Suggests too, which would pass a
-# package only a Suggests reaches.
-#
-# A dpkg status holds one version of a package, and apt reads the last
-# stanza of a name and architecture as installed, silently; the status
-# holds rows only at the architectures the root's APT::Architectures
-# names, amd64 native.  So a name at two versions of one architecture, or
-# a row at any other architecture, fails before apt is asked.  A
-# Multi-Arch: same name at two architectures and two versions is apt's to
-# refuse: it gives each such version an implicit Breaks on the others.
-#
-# The recs= column reports, and never fails on, the Recommends the answer
-# leaves out: the whole answer asked for fresh at apt's default.  Naming
-# every package asks the same question as naming the query here, since apt
-# follows the Recommends of every package it installs, requested or not.
-#
+# Packages file and marked installed, and apt is asked: valid, `apt-get
+# check` and `apt-get install <query>`; minimal, `apt-get autoremove`, with
+# extended_states marking every package but the query's automatically
+# installed and Recommends counted exactly when they were installed.
+# A dpkg status holds one version of a name and only the root's
+# architectures, so two versions of one architecture, or a row at another,
+# fail before apt is asked.  The recs= column reports, never fails on, the
+# Recommends the answer leaves out.
 # apt exits 100 for an inconsistency and for a broken environment alike,
 # so an exit is read as an inconsistency only beside one of the errors apt
-# gives for one (refusals, the errors scale.sh reads as apt refusing a
-# query); any other failure leaves the answer unchecked (ERR).
-#
-# APTROOT is the root setup.sh builds, whose lists each answer's own
-# status is read beside; APT names the binary when apt-get is not on PATH;
-# INDEX overrides the index, for a fixture, and must hold what that root
-# holds: with a foreign architecture, its Packages after the native one,
-# whose Architecture: all stanzas it repeats, which count once.
+# gives for one (refusals); any other failure leaves the answer unchecked.
+# APTROOT is the root setup.sh builds; APT names the binary when apt-get is
+# not on PATH; INDEX overrides the index, for a fixture, and must hold what
+# that root holds: with a foreign architecture, its Packages after the
+# native one.
 # usage: check.sh <answer> <out-dir> <query...>, through eval/check.sh
 set -u
 # byte order, so the output is the same whatever the host's locale

@@ -1,23 +1,8 @@
 #!/usr/bin/env bash
 # usage: check.sh <eco> <answer> <out-dir> <query...>
 # The query is what pac was asked, in the words pac took; the answer is
-# pac's output.  The last line printed ends in two verdicts:
-#   valid=VALID|INVALID|CYCLIC|PLATFORM|ERR  whether the tool takes the
-#     answer as consistent: every package's dependencies met, no conflict,
-#     one version of a name where the tool allows one.  CYCLIC is a
-#     resolution the tool cannot install for a cycle in its install order;
-#     PLATFORM, one npm takes and cannot install on this host's platform
-#     (npm ci's EBADPLATFORM); ERR, that the check could not be run to a
-#     verdict.
-#   minimal=yes|no|-  whether the tool, left to settle the answer for the
-#     query alone, would keep it as it stands rather than remove or swap
-#     something; - where the answer is not VALID.
-#   reproduced=yes|no|-  for cargo and npm, whose answer is a lockfile:
-#     whether the tool keeps it as its own lock, repairing nothing; - where
-#     the answer is not VALID, the question could not be asked, or the
-#     ecosystem has no lockfile to ask it of.
-# The core calculus asks a resolution for no minimality, and a tool's lock
-# repairs by its own preferences, so only valid counts against pac.
+# pac's output.  The last line printed ends in the verdicts valid=, minimal=
+# and reproduced=, as eval/README.md's Validity check defines them.
 set -u
 E="$(cd "$(dirname "$0")" && pwd)"
 [ $# -ge 3 ] && [ -f "$E/$1/check.sh" -o -f "$E/$1/check.py" ] ||

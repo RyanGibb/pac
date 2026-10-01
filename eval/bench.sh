@@ -1,43 +1,7 @@
 #!/usr/bin/env bash
-# Resolution time and memory, pac in each order against each ecosystem's
+# Resolution time and memory: pac in each order against each ecosystem's
 # own tool, asked what eval/<eco>/scale.sh asks and invoked as it invokes
-# them.
-#
-# Per query, one warm-up round and then REPS measured rounds.  A round runs
-# every variant once, so a drift in the machine lands on all of them alike
-# rather than on whichever ran last.  One measured process at a time; the
-# only other processes are the index servers cargo and npm are pointed at,
-# idle between their requests, and npm asks its server nothing after the
-# warm-up: its measured rounds are --offline, answered from its own cache,
-# as pac answers from the snapshot on disk.  No query starts at a load
-# average of LOADSTART or more, and one whose block ends at LOADMAX or more
-# is measured again, up to three times.
-#
-# Wall is taken around GNU time, whose own start-up is what `floor`
-# measures, with PIN, a command prefix, in front of both.  By default it
-# is `taskset -c 42`, one core of iphito's NUMA node 0 that serves no
-# device interrupt, so pac and the tool run on the same core, and first
-# touch puts their memory on that node; PIN= runs unpinned.  RSS is GNU
-# time's %M, the largest single process in the measured tree, so it
-# leaves out the index servers.  Every row lands in
-# $RUN/res/<step>/<set>/<key>.csv, written whole when its block completes,
-# and a query already there is skipped: after a crash, rerun the same line.
-#
-# The sets are the regression set, `regress`, and, where STRAT holds
-# <eco>.q, as stratify.py writes it, `strat`.  outliers.txt names the
-# queries too slow for REPS rounds: their step leaves them out, and
-# `outliers` measures them OREPS times each under OCAP, with a warm-up for
-# the tool alone.
-#
-# A cold step runs each variant once from nothing in RAM, <step>-cold with
-# both sides' persistent caches on disk, <step>-first with them deleted;
-# cblock says how.
-#
-# debian-ma is debian with i386 a foreign architecture, as scale.sh asks it
-# under FOREIGN: apt's root holds both indexes, and pac reads the two as
-# one file, amd64's first, with --native amd64.  Its strat set is
-# STRAT/debian-ma.q.
-#
+# them, one measured process at a time; eval/README.md, Benchmarks.
 # usage: bench.sh <step>...    step: info floor outliers, or
 #          debian debian-ma alpine opam cargo npm npm-shared npm-placement,
 #          each also as <step>-cold and <step>-first
@@ -47,9 +11,9 @@
 #      LOADMAX (3.5), PORT (cargo's proxy, 8991), NPORT (npm's shim, 8899),
 #      DEPTH (placement's --depth, 8), PAC_CACHE (pac's cargo and debian
 #      --cache in the warm steps, as run_query.py reads it; empty for
-#      --no-cache, in every step), TEE (/run/current-system/sw/bin/tee),
-#      FOREIGN (debian-ma's <dir>/Packages.i386, as eval/SNAPSHOTS records
-#      it)
+#      --no-cache, in every step), GTIME (GNU time), TEE
+#      (/run/current-system/sw/bin/tee), FOREIGN (debian-ma's
+#      <dir>/Packages.i386, as eval/SNAPSHOTS records it)
 # Run inside `nix develop ./nix`, with no ocamlc on PATH: opam reads
 # sys-ocaml-version off whatever ocamlc it finds.
 set -u

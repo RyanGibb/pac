@@ -1,21 +1,10 @@
 #!/usr/bin/env bash
 # The check for an answer that is itself a node_modules layout: lockgen.py
 # writes it as the project's package-lock.json, copying each entry from the
-# snapshot and placing nothing, and npm's own commands judge it.
-#
-# Valid: `npm ci --dry-run` builds the tree the lock describes and accepts
-# it; `npm ls --all --package-lock-only` finds no edge invalid or missing;
-# npm overrides no peer ("ERESOLVE overriding peer dependency"); every edge
-# lands on the registry package its manifest names (lockname.py, since npm
-# checks by version alone); and every edge of every entry, require.resolve'd
-# on a skeleton of the tree, lands in range and no peer is PEER LOCAL
-# (resolve.js).  An answer holding a package that bundles dependencies is
-# ERR bundled: npm installs those from the tarball whatever the lock says.
-#
-# PLATFORM: all of that holds but `npm ci`, which refuses only for the
-# host's platform (EBADPLATFORM) and takes the lock once that check alone
-# is skipped, as check.sh has it.
-#
+# snapshot and placing nothing, and npm's own commands judge it (`npm ci
+# --dry-run`, `npm ls --all --package-lock-only`, no peer overridden,
+# lockname.py, resolve.js).  A package that bundles dependencies is ERR
+# bundled: npm installs those from the tarball whatever the lock says.
 # npm exits 1 for every error; one is read as a verdict only under a code
 # npm gives an answer it will not take (refusals), and anything else leaves
 # the answer unchecked.
