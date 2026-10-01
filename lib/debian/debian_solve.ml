@@ -585,11 +585,10 @@ type source =
    built with no version named; a query naming a version cuts the other
    candidates under Strict-Pinning, so it builds its own tables and writes
    no entry.  An entry is keyed by each file's device, inode, size and
-   times, taken from the open file, which NFS revalidates, so a hit reads
-   none of it.  A write moves the ctime, which no user tool can set, unless
-   it falls in the previous change's clock tick, so a file changed under two
-   seconds before the run (a tick, or FAT's step) is parsed but not cached.
-   The entry keeps its source's digests, which --debug checks on a hit. *)
+   times, so a hit reads none of it; a file changed under two seconds before
+   the run is parsed but not cached, since a write within the previous
+   change's clock tick leaves the ctime where it was.  The entry keeps its
+   source's digests, which --debug checks on a hit. *)
 let solve_files ~debug ~check ~order ~recommends ~strict_pinning ~native ~cache
     ~paths ~query : (result, string) Stdlib.result =
   Pubgrub.set_debug debug;

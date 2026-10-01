@@ -109,10 +109,7 @@ module Make (Lk : Lookups.S) = struct
      and drops a package nothing needs, so both orders keep the rules that
      make an answer minimal: apk's provider ranking, a name a selected
      package already provides kept for it, and install-if rules decided
-     last.  On 2222 goals exercising providers and install-if rules,
-     dropping the second or third leaves 175 and 200 answers apk would
-     change; dropping [choose]'s install-if rule, all [`Pubgrub] drops,
-     changes none. *)
+     last. *)
   let hooks :
       (archive, PFR.Name.t, PG.selection, PVersion.t) Pac_common.Order.driver =
    fun order ar ->
