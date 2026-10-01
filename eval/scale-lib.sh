@@ -17,12 +17,16 @@ TOP="$(dirname "$E")"
 export FUZZ="${FUZZ:-}"
 if [ -n "$FUZZ" ]; then MODES="${MODES:-$(seq -f 'random-%g' 0 $((FUZZ - 1)) | tr '\n' ' ')}"; fi
 export P="${P:-$(nproc)}" TIMEOUT="${TIMEOUT:-900}" MODES="${MODES:-tool pubgrub}"
+# CHECK=0 asks pac without --check, which the evaluation otherwise passes:
+# an answer pac's check rejects is then an internal error, not an answer
+export CHECK="${CHECK:-1}"
 
 flag() {
   case $1 in
     random-*) printf -- '--order=random --seed=%s' "${1#random-}" ;;
     *) printf -- '--order=%s' "$1" ;;
   esac
+  [ "$CHECK" = 0 ] || printf -- ' --check'
 }
 
 since() { awk -v a="$1" -v b="$EPOCHREALTIME" 'BEGIN {printf "%.2f", b - a}'; }
@@ -247,7 +251,8 @@ main() {
   fi
   # one binary, one source of answers and one set of parameters per run, so a
   # resumed run never mixes two
-  { echo "baseline=$BASELINE"; echo "MODES=$MODES"; echo "TIMEOUT=$TIMEOUT"; params
+  { echo "baseline=$BASELINE"; echo "MODES=$MODES"; echo "TIMEOUT=$TIMEOUT"
+    echo "CHECK=$CHECK"; params
     echo "queries=$(sha256sum < "$q" | cut -d' ' -f1)"; } > "$run/params.new"
   if [ -e "$run/pac.exe" ]; then
     cmp -s "$1" "$run/pac.exe" || { echo "$0: $run was started with another pac" >&2; exit 1; }
