@@ -491,7 +491,14 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
             (reduceReal I depth) ->
           Pl.Reduction.T.dependees (reduceDeps I depth)
             (Pl.Reduction.Name.Walk l a, w) =
-          Pl.Reduction.walkDeps l a w.
+          Pl.Reduction.dependees
+            {| Pl.inst_repo := Pl.PkgSet.empty
+             ; Pl.inst_deps := Pl.C.DepRel.empty
+             ; Pl.inst_peers := Pl.C.DepRel.empty
+             ; Pl.inst_optDeps := Pl.C.DepRel.empty
+             ; Pl.inst_optPeers := Pl.C.DepRel.empty
+             ; Pl.inst_root := Pl.inst_root (tr I) |}
+            (Pl.Reduction.Name.Walk l a, w).
       Proof.
         intros I depth l a w H.
         exact (Pl.Reduction.Lookup.dependees_lookupWalk _ _ _ _ _ H).

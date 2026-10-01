@@ -1455,8 +1455,19 @@ Module Placement (N V : UsualOrderedType).
 
       Theorem dependees_lookupWalk : forall I depth l a w,
           T.PkgSet.In (Name.Walk l a, w) (reduceReal I depth) ->
-          T.dependees (reduceDeps I depth) (Name.Walk l a, w) = walkDeps l a w.
-      Proof. intros I depth l a w H; exact (dependees_reduceDeps I depth _ H). Qed.
+          T.dependees (reduceDeps I depth) (Name.Walk l a, w) =
+          dependees
+            {| inst_repo := PkgSet.empty
+             ; inst_deps := C.DepRel.empty
+             ; inst_peers := C.DepRel.empty
+             ; inst_optDeps := C.DepRel.empty
+             ; inst_optPeers := C.DepRel.empty
+             ; inst_root := inst_root I |}
+            (Name.Walk l a, w).
+      Proof.
+        intros I depth l a w H; rewrite (dependees_reduceDeps I depth _ H).
+        reflexivity.
+      Qed.
     End Lookup.
   End Reduction.
 End Placement.
