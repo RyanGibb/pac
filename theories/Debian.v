@@ -313,13 +313,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Definition versionsSoft (A : Clause.t) : T.VSet.t :=
       T.VSet.add Version.Zero (versionsDisj A).
 
-    Module ClauseEqb := UOTEqb Clause.
-    Definition hasClauseb (D : Deps.t) (A : Clause.t) : bool :=
-      Deps.exists_ (fun '(_, Al) => ClauseEqb.eqb Al A) D.
-
-    Definition occursAtomb (D : Deps.t) (a : Atom.t) : bool :=
-      Deps.exists_ (fun '(_, A) => AtomSet.mem a (clauseAtoms A)) D.
-
     Definition allClauses (D Dopt : Deps.t) : Deps.t := Deps.union D Dopt.
 
     Definition exemptb (e : bool) (m n : N.t) : bool :=
@@ -504,47 +497,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           rewrite NEqb.eqb_refl, Hm; reflexivity.
     Qed.
 
-    Lemma hasClauseb_iff : forall D A,
-        hasClauseb D A = true <-> exists p, Deps.In (p, A) D.
-    Proof.
-      intros D A; unfold hasClauseb.
-      rewrite Deps.exists_spec'.
-      unfold Deps.Exists; split.
-      - intros [c [Hc Hb]]; destruct c as [p Al]; cbn beta iota in Hb.
-        apply ClauseEqb.eqb_true_iff in Hb as ->; exists p; exact Hc.
-      - intros [p Hc].
-        exists (p, A); split; [exact Hc | apply ClauseEqb.eqb_refl].
-    Qed.
-
-    Lemma occursAtomb_iff : forall D a,
-        occursAtomb D a = true <->
-        exists p Al, Deps.In (p, Al) D /\ AtomSet.In a (clauseAtoms Al).
-    Proof.
-      intros D a; unfold occursAtomb.
-      rewrite Deps.exists_spec'.
-      unfold Deps.Exists; split.
-      - intros [c [Hc Hm]]; destruct c as [p Al]; simpl in Hm.
-        exists p, Al; split; [exact Hc | apply AtomSet.mem_spec; exact Hm].
-      - intros [p [Al [Hc Hm]]].
-        exists (p, Al); split; [exact Hc | simpl].
-        apply AtomSet.mem_spec; exact Hm.
-    Qed.
-
-    Lemma occursAtomb_allClauses : forall D Dopt a,
-        occursAtomb (allClauses D Dopt) a =
-        orb (occursAtomb D a) (occursAtomb Dopt a).
-    Proof.
-      intros D Dopt a; apply Bool.eq_true_iff_eq.
-      rewrite Bool.orb_true_iff, !occursAtomb_iff; unfold allClauses.
-      split.
-      - intros [p [Al [Hc Hm]]]; apply Deps.union_spec in Hc.
-        destruct Hc as [Hc | Hc]; [left | right]; exists p, Al; split;
-          assumption.
-      - intros [[p [Al [Hc Hm]]] | [p [Al [Hc Hm]]]]; exists p, Al.
-        + split; [apply Deps.union_spec; left; exact Hc | exact Hm].
-        + split; [apply Deps.union_spec; right; exact Hc | exact Hm].
-    Qed.
-
     Lemma allClauses_inL : forall D Dopt (p : Pkg.t) A,
         Deps.In (p, A) D -> Deps.In (p, A) (allClauses D Dopt).
     Proof. intros D Dopt p A H; apply Deps.union_spec; left; exact H. Qed.
@@ -552,19 +504,6 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Lemma allClauses_inR : forall D Dopt (p : Pkg.t) A,
         Deps.In (p, A) Dopt -> Deps.In (p, A) (allClauses D Dopt).
     Proof. intros D Dopt p A H; apply Deps.union_spec; right; exact H. Qed.
-
-    Lemma occursAtomb_allClausesL : forall D Dopt a,
-        occursAtomb D a = true -> occursAtomb (allClauses D Dopt) a = true.
-    Proof.
-      intros D Dopt a H; rewrite occursAtomb_allClauses, H; reflexivity.
-    Qed.
-
-    Lemma occursAtomb_allClausesR : forall D Dopt a,
-        occursAtomb Dopt a = true -> occursAtomb (allClauses D Dopt) a = true.
-    Proof.
-      intros D Dopt a H; rewrite occursAtomb_allClauses, H, Bool.orb_true_r;
-        reflexivity.
-    Qed.
 
     Lemma mem_clauseNames : forall A (n : N.t),
         NSet.In n (clauseNames A) <->
