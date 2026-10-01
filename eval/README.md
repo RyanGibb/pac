@@ -38,6 +38,7 @@ The queries file is read once, so it may be a pipe; a query it names twice, in t
 - `TIMEOUT`: seconds per call (default 900).
 - `MODES`: the orders pac decides in, each passed as `--order`: `tool`, the tool's own, and `pubgrub`, PubGrub's; `random-<N>` is `--order=random --seed=N`. Default `tool pubgrub`.
 - `FUZZ`: with `FUZZ=K`, the modes are `random-0` to `random-(K-1)` and the tool is not asked: the run asks only whether every answer, in whatever order it was reached, is valid.
+- `CHECK`: the runs pass pac `--check`, so an answer the calculus's check rejects is `pac=crash`; `CHECK=0` leaves it off.
 
 A fuzz run ends in its own summary: runs, pac's statuses, the verdicts and `minimal`, over every seed at once, and how many distinct answers the seeds reached.
 It writes `findings.txt`, the lines of `results.txt` whose answer is `INVALID`, whose check reached no verdict (`ERR`), or whose pac crashed, each naming its seed in `mode=`; and `split.txt`, the queries some seeds answer and others find unsat, which no order may do.
