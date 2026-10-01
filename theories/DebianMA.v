@@ -132,8 +132,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Module Cls := FSetUOT ClsElt.
 
   Module ClsFibred := FibredRel Pkg MCOT ClsElt Cls.
-  Definition classOf (M : Cls.t) (p : Pkg.t) : MAClass :=
-    match Cls.min_elt (ClsFibred.tailFibre M p) with
+  Definition classOf (mu : Cls.t) (p : Pkg.t) : MAClass :=
+    match Cls.min_elt (ClsFibred.tailFibre mu p) with
     | Some e => snd e
     | None => MANo
     end.
@@ -199,24 +199,24 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     (exists v, Prov.In (((m, alpha'), u), (n, v)) Pi /\
        Deb.vtMatchb v phi = true).
 
-  Definition MAMatch (Pi : Prov.t) (M : Cls.t) (alpha : A.t)
+  Definition MAMatch (Pi : Prov.t) (mu : Cls.t) (alpha : A.t)
       '((n, (x, phi)) : Atom.t) '((((m, alpha'), u) as q) : Pkg.t) : Prop :=
     BaseMatch Pi n phi q /\
     match x with
-    | QUnq => alpha' = alpha \/ classOf M q = MAForeign
+    | QUnq => alpha' = alpha \/ classOf mu q = MAForeign
     | QNative => alpha' = AP.native
     | QArch alpha'' => alpha' = alpha''
-    | QAny => classOf M q = MAAllowed
+    | QAny => classOf mu q = MAAllowed
     end.
 
-  Definition MAConfMatch (Pi : Prov.t) (M : Cls.t)
+  Definition MAConfMatch (Pi : Prov.t) (mu : Cls.t)
       '((n, (x, phi)) : Atom.t) '((((m, alpha'), u) as q) : Pkg.t) : Prop :=
     BaseMatch Pi n phi q /\
     match x with
     | QUnq => True
     | QNative => alpha' = AP.native
     | QArch alpha'' => alpha' = alpha''
-    | QAny => classOf M q = MAAllowed
+    | QAny => classOf mu q = MAAllowed
     end.
 
   Record Inst : Type := MkInst
@@ -286,13 +286,13 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
     Definition reduceRec (Dopt : Deps.t) : Deb.Deps.t := reduceDeps Dopt.
 
-    Definition reduceProvEntry (M : Cls.t) (e : ProvElt.t) :
+    Definition reduceProvEntry (mu : Cls.t) (e : ProvElt.t) :
         list Deb.ProvElt.t :=
       let p := fst e in
       let m := fst (snd e) in
       let v := snd (snd e) in
       (embedPkg p, ((m, QAExact (parch p)), v))
-        :: match classOf M p with
+        :: match classOf mu p with
            | MAForeign =>
                List.map (fun b => (embedPkg p, ((m, QAArch b), v))) A.enum
            | MAAllowed =>
@@ -301,10 +301,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
            | _ => (embedPkg p, ((m, QAArch (parch p)), v)) :: nil
            end.
 
-    Definition implProvOf (M : Cls.t) (p : Pkg.t) : list Deb.ProvElt.t :=
+    Definition implProvOf (mu : Cls.t) (p : Pkg.t) : list Deb.ProvElt.t :=
       (embedPkg p, ((pname p, QAGroup), Deb.DTVal (pver p)))
         :: (embedPkg p, ((pname p, QAExact (parch p)), Deb.DTVal (pver p)))
-        :: match classOf M p with
+        :: match classOf mu p with
            | MAForeign =>
                List.map
                  (fun b =>
@@ -318,11 +318,11 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Module SOpv2 := SetOps ProvElt Deb.ProvElt Prov Deb.Prov.
     Module SOppv := SetOps Deb.ProvElt Deb.ProvElt Deb.Prov Deb.Prov.
     Module SOrpv := SetOps Pkg Deb.ProvElt PkgSet Deb.Prov.
-    Definition reduceProv (R : PkgSet.t) (Pi : Prov.t) (M : Cls.t) :
+    Definition reduceProv (R : PkgSet.t) (Pi : Prov.t) (mu : Cls.t) :
         Deb.Prov.t :=
       Deb.Prov.union
-        (SOpv2.unionMap (fun e => SOppv.ofList (reduceProvEntry M e)) Pi)
-        (SOrpv.unionMap (fun p => SOppv.ofList (implProvOf M p)) R).
+        (SOpv2.unionMap (fun e => SOppv.ofList (reduceProvEntry mu e)) Pi)
+        (SOrpv.unionMap (fun p => SOppv.ofList (implProvOf mu p)) R).
 
     Definition reduceConfEntry (e : ConfElt.t) : list Deb.ConfElt.t :=
       let p := fst e in
@@ -340,8 +340,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       | QAny => (embedPkg p, (((n, QAAny), phi), true)) :: nil
       end.
 
-    Definition implConfOf (M : Cls.t) (p : Pkg.t) : Deb.ConfElt.t :=
-      match classOf M p with
+    Definition implConfOf (mu : Cls.t) (p : Pkg.t) : Deb.ConfElt.t :=
+      match classOf mu p with
       | MASame =>
           (embedPkg p,
              (((pname p, QAGroup), Deb.Ver.FCmp OpNe (pver p)), false))
@@ -352,11 +352,11 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Module SOcf := SetOps ConfElt Deb.ConfElt Conf Deb.Conf.
     Module SOccf := SetOps Deb.ConfElt Deb.ConfElt Deb.Conf Deb.Conf.
     Module SOrcf := SetOps Pkg Deb.ConfElt PkgSet Deb.Conf.
-    Definition reduceConf (R : PkgSet.t) (G : Conf.t) (M : Cls.t) :
+    Definition reduceConf (R : PkgSet.t) (G : Conf.t) (mu : Cls.t) :
         Deb.Conf.t :=
       Deb.Conf.union
         (SOcf.unionMap (fun e => SOccf.ofList (reduceConfEntry e)) G)
-        (SOrcf.map (implConfOf M) R).
+        (SOrcf.map (implConfOf mu) R).
 
     Definition reduceInst (I : Inst) : Deb.Inst :=
       Deb.MkInst (reduceReal (inst_repo I)) (reduceDeps (inst_deps I))
@@ -414,22 +414,22 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         [exact Hc | reflexivity].
     Qed.
 
-    Lemma mem_reduceProv : forall R Pi M y,
-        Deb.Prov.In y (reduceProv R Pi M) <->
-        (exists e, Prov.In e Pi /\ List.In y (reduceProvEntry M e)) \/
-        (exists p, PkgSet.In p R /\ List.In y (implProvOf M p)).
+    Lemma mem_reduceProv : forall R Pi mu y,
+        Deb.Prov.In y (reduceProv R Pi mu) <->
+        (exists e, Prov.In e Pi /\ List.In y (reduceProvEntry mu e)) \/
+        (exists p, PkgSet.In p R /\ List.In y (implProvOf mu p)).
     Proof.
-      intros R Pi M y; unfold reduceProv.
+      intros R Pi mu y; unfold reduceProv.
       rewrite Deb.Prov.union_spec, SOpv2.mem_unionMap, SOrpv.mem_unionMap.
       cbn beta; setoid_rewrite SOppv.mem_ofList; reflexivity.
     Qed.
 
-    Lemma mem_reduceConf : forall R G M y,
-        Deb.Conf.In y (reduceConf R G M) <->
+    Lemma mem_reduceConf : forall R G mu y,
+        Deb.Conf.In y (reduceConf R G mu) <->
         (exists e, Conf.In e G /\ List.In y (reduceConfEntry e)) \/
-        (exists p, PkgSet.In p R /\ y = implConfOf M p).
+        (exists p, PkgSet.In p R /\ y = implConfOf mu p).
     Proof.
-      intros R G M y; unfold reduceConf.
+      intros R G mu y; unfold reduceConf.
       rewrite Deb.Conf.union_spec, SOcf.mem_unionMap, SOrcf.mem_map.
       cbn beta; setoid_rewrite SOccf.mem_ofList; reflexivity.
     Qed.
@@ -448,21 +448,21 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       exact (conj (embedPkg_injective _ _ Hp) (conj Hm (conj Hx Hv))).
     Qed.
 
-    Lemma in_reduceProvEntry : forall M (p : Pkg.t) (m : N.t) v y,
-        List.In y (reduceProvEntry M (p, (m, v))) <->
+    Lemma in_reduceProvEntry : forall mu (p : Pkg.t) (m : N.t) v y,
+        List.In y (reduceProvEntry mu (p, (m, v))) <->
         exists x, y = (embedPkg p, ((m, x), v)) /\
           match x with
-          | QAArch b => parch p = b \/ classOf M p = MAForeign
+          | QAArch b => parch p = b \/ classOf mu p = MAForeign
           | QAExact b => parch p = b
-          | QAAny => classOf M p = MAAllowed
+          | QAAny => classOf mu p = MAAllowed
           | QAGroup => False
           end.
     Proof.
-      intros M p m v y; unfold reduceProvEntry; cbn [fst snd].
+      intros mu p m v y; unfold reduceProvEntry; cbn [fst snd].
       split.
       - intros [<- | H].
         + exists (QAExact (parch p)); split; reflexivity.
-        + destruct (classOf M p) eqn:Hc.
+        + destruct (classOf mu p) eqn:Hc.
           * destruct H as [<- | []].
             exists (QAArch (parch p)); split; [reflexivity | left; reflexivity].
           * destruct H as [<- | []].
@@ -476,7 +476,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       - intros [x [-> Hx]].
         destruct x as [b | b | |].
         + right.
-          destruct (classOf M p) eqn:Hc.
+          destruct (classOf mu p) eqn:Hc.
           * destruct Hx as [<- | Hf]; [left; reflexivity | congruence].
           * destruct Hx as [<- | Hf]; [left; reflexivity | congruence].
           * apply in_map_iff; exists b; split;
@@ -487,22 +487,22 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         + contradiction.
     Qed.
 
-    Lemma in_implProvOf : forall M (p : Pkg.t) y,
-        List.In y (implProvOf M p) <->
+    Lemma in_implProvOf : forall mu (p : Pkg.t) y,
+        List.In y (implProvOf mu p) <->
         exists x, y = (embedPkg p, ((pname p, x), Deb.DTVal (pver p))) /\
           match x with
-          | QAArch _ => classOf M p = MAForeign
+          | QAArch _ => classOf mu p = MAForeign
           | QAExact b => parch p = b
-          | QAAny => classOf M p = MAAllowed
+          | QAAny => classOf mu p = MAAllowed
           | QAGroup => True
           end.
     Proof.
-      intros M p y; unfold implProvOf.
+      intros mu p y; unfold implProvOf.
       split.
       - intros [<- | [<- | H]].
         + exists QAGroup; split; [reflexivity | exact I].
         + exists (QAExact (parch p)); split; reflexivity.
-        + destruct (classOf M p) eqn:Hc; cbn [List.In] in H; try contradiction.
+        + destruct (classOf mu p) eqn:Hc; cbn [List.In] in H; try contradiction.
           * apply in_map_iff in H; destruct H as [b [<- _]].
             exists (QAArch b); split; [reflexivity | reflexivity].
           * destruct H as [<- | []].
@@ -517,18 +517,18 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         + left; reflexivity.
     Qed.
 
-    Lemma debMatch_char : forall R Pi M q n x phi,
+    Lemma debMatch_char : forall R Pi mu q n x phi,
         PkgSet.In q R ->
-        (Deb.Match (reduceProv R Pi M) (embedPkg q) ((n, x), phi) <->
+        (Deb.Match (reduceProv R Pi mu) (embedPkg q) ((n, x), phi) <->
          match x with
          | QAArch b =>
-             BaseMatch Pi n phi q /\ (parch q = b \/ classOf M q = MAForeign)
+             BaseMatch Pi n phi q /\ (parch q = b \/ classOf mu q = MAForeign)
          | QAExact b => BaseMatch Pi n phi q /\ parch q = b
-         | QAAny => BaseMatch Pi n phi q /\ classOf M q = MAAllowed
+         | QAAny => BaseMatch Pi n phi q /\ classOf mu q = MAAllowed
          | QAGroup => pname q = n /\ Deb.Ver.satisfiesb (pver q) phi = true
          end).
     Proof.
-      intros R Pi M [[m b0] u] n x phi HqR; set (q := ((m, b0), u)) in *.
+      intros R Pi mu [[m b0] u] n x phi HqR; set (q := ((m, b0), u)) in *.
       unfold Deb.Match; cbn [Deb.aname Deb.aform fst snd].
       split.
       - intros [[He Hv] | [v [Hin Hvt]]].
@@ -591,33 +591,33 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           apply in_implProvOf; exists QAGroup; split; [reflexivity | exact I].
     Qed.
 
-    Lemma match_transfer : forall R Pi M alpha a q,
+    Lemma match_transfer : forall R Pi mu alpha a q,
         PkgSet.In q R ->
-        (MAMatch Pi M alpha a q <->
-         Deb.Match (reduceProv R Pi M) (embedPkg q) (reduceAtom alpha a)).
+        (MAMatch Pi mu alpha a q <->
+         Deb.Match (reduceProv R Pi mu) (embedPkg q) (reduceAtom alpha a)).
     Proof.
-      intros R Pi M alpha [n [x phi]] [[m b0] u] HqR.
+      intros R Pi mu alpha [n [x phi]] [[m b0] u] HqR.
       unfold MAMatch, reduceAtom; cbn [aname aqual aform fst snd].
       set (q := ((m, b0), u)) in *.
       destruct x as [ | | | b].
       - exact (iff_sym
-          (debMatch_char R Pi M q n (QAArch alpha) phi HqR)).
+          (debMatch_char R Pi mu q n (QAArch alpha) phi HqR)).
       - exact (iff_sym
-          (debMatch_char R Pi M q n QAAny phi HqR)).
+          (debMatch_char R Pi mu q n QAAny phi HqR)).
       - exact (iff_sym
-          (debMatch_char R Pi M q n (QAExact AP.native) phi
+          (debMatch_char R Pi mu q n (QAExact AP.native) phi
              HqR)).
       - exact (iff_sym
-          (debMatch_char R Pi M q n (QAExact b) phi HqR)).
+          (debMatch_char R Pi mu q n (QAExact b) phi HqR)).
     Qed.
 
-    Lemma conf_transfer : forall R Pi M (p : Pkg.t) a q,
+    Lemma conf_transfer : forall R Pi mu (p : Pkg.t) a q,
         PkgSet.In q R ->
         ((exists q' ea e, List.In (q', (ea, e)) (reduceConfEntry (p, a)) /\
-            Deb.Match (reduceProv R Pi M) (embedPkg q) ea) <->
-         MAConfMatch Pi M a q).
+            Deb.Match (reduceProv R Pi mu) (embedPkg q) ea) <->
+         MAConfMatch Pi mu a q).
     Proof.
-      intros R Pi M p [n [x phi]] [[m b0] u] HqR.
+      intros R Pi mu p [n [x phi]] [[m b0] u] HqR.
       unfold MAConfMatch, reduceConfEntry; cbn [fst snd aname aqual aform].
       set (q := ((m, b0), u)) in *.
       destruct x as [ | | | b].
@@ -626,113 +626,113 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           split; [| exact I].
           destruct Hce as [E | [E | Hce]].
           * injection E as _ <- _.
-            destruct (proj1 (debMatch_char R Pi M q n QAGroup
+            destruct (proj1 (debMatch_char R Pi mu q n QAGroup
                                phi HqR) HM) as [Hn Hv].
             left; split; assumption.
           * injection E as _ <- _.
-            exact (proj1 (proj1 (debMatch_char R Pi M q n QAAny
+            exact (proj1 (proj1 (debMatch_char R Pi mu q n QAAny
                                    phi HqR) HM)).
           * apply in_map_iff in Hce; destruct Hce as [b [E Hb]].
             injection E as _ <- _.
-            exact (proj1 (proj1 (debMatch_char R Pi M q n (QAArch b)
+            exact (proj1 (proj1 (debMatch_char R Pi mu q n (QAArch b)
                                    phi HqR) HM)).
         + intros [HB _].
           destruct HB as [[Hn Hv] | [v [HPi Hvt]]].
           * exists (embedPkg p), ((n, QAGroup), phi), true.
             split; [left; reflexivity |].
-            apply (proj2 (debMatch_char R Pi M q n QAGroup
+            apply (proj2 (debMatch_char R Pi mu q n QAGroup
                             phi HqR)).
             split; assumption.
           * exists (embedPkg p), ((n, QAArch (parch q)), phi), true.
             split.
             -- right; right; apply in_map_iff.
                exists (parch q); split; [reflexivity | apply A.enum_complete].
-            -- apply (proj2 (debMatch_char R Pi M q n
+            -- apply (proj2 (debMatch_char R Pi mu q n
                                (QAArch (parch q)) phi HqR)).
                split; [right; exists v; split; assumption | left; reflexivity].
       - split.
         + intros [q' [ea [e [Hce HM]]]].
           destruct Hce as [E | []].
           injection E as _ <- _.
-          exact (proj1 (debMatch_char R Pi M q n QAAny phi
+          exact (proj1 (debMatch_char R Pi mu q n QAAny phi
                           HqR) HM).
         + intros H.
           exists (embedPkg p), ((n, QAAny), phi), true.
           split; [left; reflexivity |].
-          exact (proj2 (debMatch_char R Pi M q n QAAny phi
+          exact (proj2 (debMatch_char R Pi mu q n QAAny phi
                           HqR) H).
       - split.
         + intros [q' [ea [e [Hce HM]]]].
           destruct Hce as [E | []].
           injection E as _ <- _.
-          exact (proj1 (debMatch_char R Pi M q n (QAExact AP.native)
+          exact (proj1 (debMatch_char R Pi mu q n (QAExact AP.native)
                           phi HqR) HM).
         + intros H.
           exists (embedPkg p), ((n, QAExact AP.native), phi), true.
           split; [left; reflexivity |].
-          exact (proj2 (debMatch_char R Pi M q n (QAExact AP.native)
+          exact (proj2 (debMatch_char R Pi mu q n (QAExact AP.native)
                           phi HqR) H).
       - split.
         + intros [q' [ea [e [Hce HM]]]].
           destruct Hce as [E | []].
           injection E as _ <- _.
-          exact (proj1 (debMatch_char R Pi M q n (QAExact b)
+          exact (proj1 (debMatch_char R Pi mu q n (QAExact b)
                           phi HqR) HM).
         + intros H.
           exists (embedPkg p), ((n, QAExact b), phi), true.
           split; [left; reflexivity |].
-          exact (proj2 (debMatch_char R Pi M q n (QAExact b)
+          exact (proj2 (debMatch_char R Pi mu q n (QAExact b)
                           phi HqR) H).
     Qed.
 
-    Lemma impl_conf_transfer : forall R Pi M (p q : Pkg.t),
+    Lemma impl_conf_transfer : forall R Pi mu (p q : Pkg.t),
         PkgSet.In q R ->
-        (Deb.Match (reduceProv R Pi M) (embedPkg q)
-           (fst (snd (implConfOf M p))) <->
+        (Deb.Match (reduceProv R Pi mu) (embedPkg q)
+           (fst (snd (implConfOf mu p))) <->
          (pname q = pname p /\
-          match classOf M p with
+          match classOf mu p with
           | MASame => pver q <> pver p
           | _ => True
           end)).
     Proof.
       pose proof Deb.Ver.cmpOpEval_ne_iff as Hne.
-      intros R Pi M p q HqR.
+      intros R Pi mu p q HqR.
       unfold implConfOf.
-      destruct (classOf M p) eqn:Hcls; cbn [fst snd].
+      destruct (classOf mu p) eqn:Hcls; cbn [fst snd].
       - split.
         + intro HM.
-          destruct (proj1 (debMatch_char R Pi M q (pname p) QAGroup
+          destruct (proj1 (debMatch_char R Pi mu q (pname p) QAGroup
                              Deb.Ver.FTop HqR) HM) as [Hn _].
           split; [exact Hn | exact I].
         + intros [Hn _].
-          apply (proj2 (debMatch_char R Pi M q (pname p) QAGroup
+          apply (proj2 (debMatch_char R Pi mu q (pname p) QAGroup
                           Deb.Ver.FTop HqR)).
           split; [exact Hn | reflexivity].
       - split.
         + intro HM.
-          destruct (proj1 (debMatch_char R Pi M q (pname p) QAGroup
+          destruct (proj1 (debMatch_char R Pi mu q (pname p) QAGroup
                              (Deb.Ver.FCmp OpNe (pver p)) HqR) HM) as [Hn Hv].
           split; [exact Hn | exact (proj1 (Hne _ _) Hv)].
         + intros [Hn Hv].
-          apply (proj2 (debMatch_char R Pi M q (pname p) QAGroup
+          apply (proj2 (debMatch_char R Pi mu q (pname p) QAGroup
                           (Deb.Ver.FCmp OpNe (pver p)) HqR)).
           split; [exact Hn | exact (proj2 (Hne _ _) Hv)].
       - split.
         + intro HM.
-          destruct (proj1 (debMatch_char R Pi M q (pname p) QAGroup
+          destruct (proj1 (debMatch_char R Pi mu q (pname p) QAGroup
                              Deb.Ver.FTop HqR) HM) as [Hn _].
           split; [exact Hn | exact I].
         + intros [Hn _].
-          apply (proj2 (debMatch_char R Pi M q (pname p) QAGroup
+          apply (proj2 (debMatch_char R Pi mu q (pname p) QAGroup
                           Deb.Ver.FTop HqR)).
           split; [exact Hn | reflexivity].
       - split.
         + intro HM.
-          destruct (proj1 (debMatch_char R Pi M q (pname p) QAGroup
+          destruct (proj1 (debMatch_char R Pi mu q (pname p) QAGroup
                              Deb.Ver.FTop HqR) HM) as [Hn _].
           split; [exact Hn | exact I].
         + intros [Hn _].
-          apply (proj2 (debMatch_char R Pi M q (pname p) QAGroup
+          apply (proj2 (debMatch_char R Pi mu q (pname p) QAGroup
                           Deb.Ver.FTop HqR)).
           split; [exact Hn | reflexivity].
     Qed.
@@ -771,29 +771,29 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       injection E as _ E2 _; rewrite <- E2; reflexivity.
     Qed.
 
-    Lemma implConfOf_atomName : forall M (p : Pkg.t),
-        fst (fst (snd (implConfOf M p))) = (pname p, QAGroup).
+    Lemma implConfOf_atomName : forall mu (p : Pkg.t),
+        fst (fst (snd (implConfOf mu p))) = (pname p, QAGroup).
     Proof.
-      intros M p; unfold implConfOf; destruct (classOf M p); reflexivity.
+      intros mu p; unfold implConfOf; destruct (classOf mu p); reflexivity.
     Qed.
 
-    Lemma implConfOf_pkg : forall M p,
-        implConfOf M p = (embedPkg p, snd (implConfOf M p)).
+    Lemma implConfOf_pkg : forall mu p,
+        implConfOf mu p = (embedPkg p, snd (implConfOf mu p)).
     Proof.
-      intros M p; unfold implConfOf; destruct (classOf M p); reflexivity.
+      intros mu p; unfold implConfOf; destruct (classOf mu p); reflexivity.
     Qed.
 
-    Lemma implConfOf_flag : forall M p,
-        implConfOf M p = (embedPkg p, (fst (snd (implConfOf M p)), false)).
+    Lemma implConfOf_flag : forall mu p,
+        implConfOf mu p = (embedPkg p, (fst (snd (implConfOf mu p)), false)).
     Proof.
-      intros M p; unfold implConfOf; destruct (classOf M p); reflexivity.
+      intros mu p; unfold implConfOf; destruct (classOf mu p); reflexivity.
     Qed.
 
     Theorem debian_ma_soundness : forall I S,
         Deb.IsResolution (reduceInst I) S ->
         IsResolution I (debianMAResolution S).
     Proof.
-      intros [R D Dopt Pi G M r] S HT.
+      intros [R D Dopt Pi G mu r] S HT.
       destruct HT as [Hsub Hroot Hcc Hca Hvu].
       cbn [reduceInst Deb.inst_repo Deb.inst_deps Deb.inst_prov Deb.inst_conf
            Deb.inst_root inst_repo inst_deps inst_prov inst_conf inst_cls
@@ -822,17 +822,17 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         exists a; split; [exact Hat |].
         exists q; split.
         + rewrite mem_debianMAResolution; exact HqhS.
-        + exact (proj2 (match_transfer R Pi M (parch p) a q HqR) HqhM).
+        + exact (proj2 (match_transfer R Pi mu (parch p) a q HqR) HqhM).
       - intros n alpha v HpS a HG [m [alpha' [u [HqS [Hqp HCM]]]]].
         set (p := ((n, alpha), v)) in *; set (q := ((m, alpha'), u)) in *.
         pose proof HpS as HpT; rewrite mem_debianMAResolution in HpT.
         pose proof (HinR q HqS) as HqR.
-        destruct (proj2 (conf_transfer R Pi M p a q HqR) HCM)
+        destruct (proj2 (conf_transfer R Pi mu p a q HqR) HCM)
           as [c1 [c2 [c3 [Hce HM]]]].
         pose proof (reduceConfEntry_pkg p a c1 c2 c3 Hce) as Hf; subst c1.
         pose proof (reduceConfEntry_flag p a (embedPkg p) c2 c3 Hce) as Hx;
           subst c3.
-        assert (HceG : Deb.Conf.In (embedPkg p, (c2, true)) (reduceConf R G M)).
+        assert (HceG : Deb.Conf.In (embedPkg p, (c2, true)) (reduceConf R G mu)).
         { rewrite mem_reduceConf; left; exists (p, a); split;
             [exact HG | exact Hce]. }
         apply (Hca (pname p, QAArch (parch p)) (pver p) HpT c2 true HceG).
@@ -856,17 +856,17 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         { intro E; apply Harch; unfold embedPkg, p, q in E; cbn in E;
             injection E; intros; congruence. }
         assert (HinCp : Deb.Conf.In
-                          (embedPkg p, (fst (snd (implConfOf M p)), false))
-                          (reduceConf R G M)).
+                          (embedPkg p, (fst (snd (implConfOf mu p)), false))
+                          (reduceConf R G mu)).
         { rewrite mem_reduceConf; right; exists p; split;
             [exact HpR | symmetry; apply implConfOf_flag]. }
         assert (HinCq : Deb.Conf.In
-                          (embedPkg q, (fst (snd (implConfOf M q)), false))
-                          (reduceConf R G M)).
+                          (embedPkg q, (fst (snd (implConfOf mu q)), false))
+                          (reduceConf R G mu)).
         { rewrite mem_reduceConf; right; exists q; split;
             [exact HqR | symmetry; apply implConfOf_flag]. }
-        assert (HclsP : classOf M p = MASame).
-        { destruct (classOf M p) eqn:Hc; try reflexivity; exfalso;
+        assert (HclsP : classOf mu p = MASame).
+        { destruct (classOf mu p) eqn:Hc; try reflexivity; exfalso;
             apply (Hca (pname p, QAArch (parch p)) (pver p) HpT _ _ HinCp);
             exists (pname q, QAArch (parch q)), (pver q);
             (split;
@@ -875,11 +875,11 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                [ exact Hpq
                | split;
                  [ intro Hx; discriminate Hx
-                 | apply (proj2 (impl_conf_transfer R Pi M p q HqR));
+                 | apply (proj2 (impl_conf_transfer R Pi mu p q HqR));
                    rewrite Hc; split;
                      [symmetry; exact Hname | exact I] ] ] ]). }
-        assert (HclsQ : classOf M q = MASame).
-        { destruct (classOf M q) eqn:Hc; try reflexivity; exfalso;
+        assert (HclsQ : classOf mu q = MASame).
+        { destruct (classOf mu q) eqn:Hc; try reflexivity; exfalso;
             apply (Hca (pname q, QAArch (parch q)) (pver q) HqT _ _ HinCq);
             exists (pname p, QAArch (parch p)), (pver p);
             (split;
@@ -888,7 +888,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                [ intro E; apply Hpq; symmetry; exact E
                | split;
                  [ intro Hx; discriminate Hx
-                 | apply (proj2 (impl_conf_transfer R Pi M q p HpR));
+                 | apply (proj2 (impl_conf_transfer R Pi mu q p HpR));
                    rewrite Hc; split; [exact Hname | exact I] ] ] ]). }
         destruct (V.eq_dec (pver p) (pver q)) as [Hv | Hv].
         + split; [exact HclsP | split; [exact HclsQ | exact Hv]].
@@ -900,7 +900,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
               [ exact Hpq
               | split;
                 [ intro Hx; discriminate Hx
-                | apply (proj2 (impl_conf_transfer R Pi M p q HqR));
+                | apply (proj2 (impl_conf_transfer R Pi mu p q HqR));
                   rewrite HclsP; split;
                   [ symmetry; exact Hname
                   | intro E; apply Hv; symmetry; exact E ] ] ] ].
@@ -918,7 +918,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         Deb.IsResolution (reduceInst I) (coreResolution S).
     Proof.
       unfold coreResolution.
-      intros [R D Dopt Pi G M r] S HS.
+      intros [R D Dopt Pi G mu r] S HS.
       destruct HS as [HSsub HSroot HScc HSca HSci HSvu].
       cbn [inst_repo inst_deps inst_prov inst_conf inst_cls inst_root]
         in HSsub, HSroot, HScc, HSca, HSci.
@@ -944,7 +944,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         exists (embedPkg q); split.
         { unfold reduceReal; apply (SOmr.mem_map_inj _ _ _ embedPkg_injective).
           exact HqS. }
-        exact (proj1 (match_transfer R Pi M (parch p) a q (HSsub q HqS)) HqM).
+        exact (proj1 (match_transfer R Pi mu (parch p) a q (HSsub q HqS)) HqM).
       - intros phn phv HphT ea x HaG [qhn [qhv [HqhT [Hne [Hex HM]]]]].
         unfold reduceReal in *; rewrite SOmr.mem_map in HphT; destruct HphT as [p1 [Hp1S Hp1e]].
         unfold reduceReal in *; rewrite SOmr.mem_map in HqhT.
@@ -952,7 +952,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         injection Hqe as -> ->.
         set (ph := (phn, phv)) in *.
         change ((pname q, QAArch (parch q), pver q) <> ph) in Hne.
-        change (Deb.Match (reduceProv R Pi M) (embedPkg q) ea) in HM.
+        change (Deb.Match (reduceProv R Pi mu) (embedPkg q) ea) in HM.
         change (x = true -> MG.groupEq (fst (embedPkg q)) (fst ph) = false)
           in Hex.
         clearbody ph.
@@ -979,7 +979,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             [ exact HqS
             | split;
               [ exact Hnp
-              | apply (proj1 (conf_transfer R Pi M p0 a q (HSsub q HqS)));
+              | apply (proj1 (conf_transfer R Pi mu p0 a q (HSsub q HqS)));
                 exists (embedPkg p0), ea, true; split;
                 [exact Hce | exact HM] ] ].
         + rewrite implConfOf_pkg in Heq.
@@ -990,7 +990,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           subst ph.
           pose proof (f_equal fst Hs) as Ha; cbn [fst] in Ha; subst ea.
           pose proof (HSsub q HqS) as HqR.
-          destruct (proj1 (impl_conf_transfer R Pi M p0 q HqR) HM)
+          destruct (proj1 (impl_conf_transfer R Pi mu p0 q HqR) HM)
             as [Hnm Hcm].
           assert (Hqp : q <> p0).
           { intro E; apply Hne; rewrite E; reflexivity. }
@@ -1076,8 +1076,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         DepsFibred.tailFibre D p.
       Definition confFibre (G : Conf.t) (p : Pkg.t) : Conf.t :=
         ConfFibred.tailFibre G p.
-      Definition clsPreimage (M : Cls.t) (ps : PkgSet.t) : Cls.t :=
-        ClsPreimage.ofKeys fst ps M.
+      Definition clsPreimage (mu : Cls.t) (ps : PkgSet.t) : Cls.t :=
+        ClsPreimage.ofKeys fst ps mu.
 
       Lemma mem_realAt : forall R (n : N.t) (alpha : A.t) q,
           PkgSet.In q (realAt R n alpha) <->
@@ -1120,18 +1120,18 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         intros G p q a; unfold confFibre; apply ConfFibred.mem_tailFibre.
       Qed.
 
-      Lemma mem_clsPreimage : forall M ps e,
-          Cls.In e (clsPreimage M ps) <-> Cls.In e M /\ PkgSet.In (fst e) ps.
-      Proof. intros M ps e; unfold clsPreimage;
+      Lemma mem_clsPreimage : forall mu ps e,
+          Cls.In e (clsPreimage mu ps) <-> Cls.In e mu /\ PkgSet.In (fst e) ps.
+      Proof. intros mu ps e; unfold clsPreimage;
         apply ClsPreimage.mem_ofKeys. Qed.
 
-      Lemma reduceProv_class_sub : forall R Pi M M',
-          (forall p, PkgSet.In p R -> classOf M' p = classOf M p) ->
+      Lemma reduceProv_class_sub : forall R Pi mu mu',
+          (forall p, PkgSet.In p R -> classOf mu' p = classOf mu p) ->
           (forall (q : Pkg.t) (m : N.t) v,
-              Prov.In (q, (m, v)) Pi -> classOf M' q = classOf M q) ->
-          Deb.Prov.Subset (reduceProv R Pi M') (reduceProv R Pi M).
+              Prov.In (q, (m, v)) Pi -> classOf mu' q = classOf mu q) ->
+          Deb.Prov.Subset (reduceProv R Pi mu') (reduceProv R Pi mu).
       Proof.
-        intros R Pi M M' H1 H2 y Hy.
+        intros R Pi mu mu' H1 H2 y Hy.
         rewrite mem_reduceProv in Hy |- *.
         destruct Hy as [[[q [m v]] [He Hl]] | [p0 [Hp0 Hl]]].
         - left; exists (q, (m, v)); split; [exact He |].
@@ -1142,11 +1142,11 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           rewrite <- (H1 p0 Hp0); exact Hl.
       Qed.
 
-      Lemma reduceConf_class_sub : forall R G M M',
-          (forall p, PkgSet.In p R -> classOf M' p = classOf M p) ->
-          Deb.Conf.Subset (reduceConf R G M') (reduceConf R G M).
+      Lemma reduceConf_class_sub : forall R G mu mu',
+          (forall p, PkgSet.In p R -> classOf mu' p = classOf mu p) ->
+          Deb.Conf.Subset (reduceConf R G mu') (reduceConf R G mu).
       Proof.
-        intros R G M M' H1 y Hy; rewrite mem_reduceConf in Hy |- *.
+        intros R G mu mu' H1 y Hy; rewrite mem_reduceConf in Hy |- *.
         destruct Hy as [[e [He Hl]] | [p0 [Hp0 Hl]]].
         - left; exists e; split; [exact He | exact Hl].
         - right; exists p0; split; [exact Hp0 |].
@@ -1154,12 +1154,12 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           rewrite <- (H1 p0 Hp0); exact Hl.
       Qed.
 
-      Lemma classOf_clsPreimage : forall M ps p,
-          PkgSet.In p ps -> classOf (clsPreimage M ps) p = classOf M p.
+      Lemma classOf_clsPreimage : forall mu ps p,
+          PkgSet.In p ps -> classOf (clsPreimage mu ps) p = classOf mu p.
       Proof.
-        intros M ps p Hp; unfold classOf.
-        assert (E : ClsFibred.tailFibre (clsPreimage M ps) p
-                    = ClsFibred.tailFibre M p).
+        intros mu ps p Hp; unfold classOf.
+        assert (E : ClsFibred.tailFibre (clsPreimage mu ps) p
+                    = ClsFibred.tailFibre mu p).
         { apply Cls.ext; intros [q c].
           rewrite !ClsFibred.mem_tailFibre, mem_clsPreimage; cbn [fst].
           split.
@@ -1169,26 +1169,26 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         rewrite E; reflexivity.
       Qed.
 
-      Lemma reduceProv_class : forall R Pi M M',
-          (forall p, PkgSet.In p R -> classOf M' p = classOf M p) ->
+      Lemma reduceProv_class : forall R Pi mu mu',
+          (forall p, PkgSet.In p R -> classOf mu' p = classOf mu p) ->
           (forall (q : Pkg.t) (m : N.t) v,
-              Prov.In (q, (m, v)) Pi -> classOf M' q = classOf M q) ->
-          reduceProv R Pi M' = reduceProv R Pi M.
+              Prov.In (q, (m, v)) Pi -> classOf mu' q = classOf mu q) ->
+          reduceProv R Pi mu' = reduceProv R Pi mu.
       Proof.
-        intros R Pi M M' H1 H2; apply Deb.Prov.ext; intro y; split; intro Hy.
-        - exact (reduceProv_class_sub R Pi M M' H1 H2 y Hy).
-        - refine (reduceProv_class_sub R Pi M' M _ _ y Hy);
+        intros R Pi mu mu' H1 H2; apply Deb.Prov.ext; intro y; split; intro Hy.
+        - exact (reduceProv_class_sub R Pi mu mu' H1 H2 y Hy).
+        - refine (reduceProv_class_sub R Pi mu' mu _ _ y Hy);
             [intros p Hp; symmetry; exact (H1 p Hp)
             | intros q m v He; symmetry; exact (H2 q m v He)].
       Qed.
 
-      Lemma reduceConf_class : forall R G M M',
-          (forall p, PkgSet.In p R -> classOf M' p = classOf M p) ->
-          reduceConf R G M' = reduceConf R G M.
+      Lemma reduceConf_class : forall R G mu mu',
+          (forall p, PkgSet.In p R -> classOf mu' p = classOf mu p) ->
+          reduceConf R G mu' = reduceConf R G mu.
       Proof.
-        intros R G M M' H1; apply Deb.Conf.ext; intro y; split; intro Hy.
-        - exact (reduceConf_class_sub R G M M' H1 y Hy).
-        - refine (reduceConf_class_sub R G M' M _ y Hy).
+        intros R G mu mu' H1; apply Deb.Conf.ext; intro y; split; intro Hy.
+        - exact (reduceConf_class_sub R G mu mu' H1 y Hy).
+        - refine (reduceConf_class_sub R G mu' mu _ y Hy).
           intros p Hp; symmetry; exact (H1 p Hp).
       Qed.
 
@@ -1205,14 +1205,14 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           split; [exact He | reflexivity].
       Qed.
 
-      Definition provClsPreimage (M : Cls.t) (Rp : PkgSet.t) (Pis : Prov.t) :
+      Definition provClsPreimage (mu : Cls.t) (Rp : PkgSet.t) (Pis : Prov.t) :
           Cls.t :=
-        clsPreimage M (PkgSet.union Rp (provOwners Pis)).
+        clsPreimage mu (PkgSet.union Rp (provOwners Pis)).
 
-      Lemma reduceProv_provClsPreimage : forall Rp Pis M,
-          reduceProv Rp Pis (provClsPreimage M Rp Pis) = reduceProv Rp Pis M.
+      Lemma reduceProv_provClsPreimage : forall Rp Pis mu,
+          reduceProv Rp Pis (provClsPreimage mu Rp Pis) = reduceProv Rp Pis mu.
       Proof.
-        intros Rp Pis M; apply reduceProv_class.
+        intros Rp Pis mu; apply reduceProv_class.
         - intros p Hp; apply classOf_clsPreimage.
           apply PkgSet.union_spec; left; exact Hp.
         - intros q m v He; apply classOf_clsPreimage.
@@ -1220,11 +1220,11 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           exists m, v; exact He.
       Qed.
 
-      Lemma reduceConf_provClsPreimage : forall Rc Gs M Rp Pis,
+      Lemma reduceConf_provClsPreimage : forall Rc Gs mu Rp Pis,
           PkgSet.Subset Rc Rp ->
-          reduceConf Rc Gs (provClsPreimage M Rp Pis) = reduceConf Rc Gs M.
+          reduceConf Rc Gs (provClsPreimage mu Rp Pis) = reduceConf Rc Gs mu.
       Proof.
-        intros Rc Gs M Rp Pis Hsub; apply reduceConf_class.
+        intros Rc Gs mu Rp Pis Hsub; apply reduceConf_class.
         intros p Hp; apply classOf_clsPreimage.
         apply PkgSet.union_spec; left; exact (Hsub _ Hp).
       Qed.
@@ -1267,31 +1267,31 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             Prov.In (q, (m, v)) (inst_prov I')).
 
 
-      Lemma reduceProvEntry_shape : forall M (p0 : Pkg.t) (m0 : N.t) v0
+      Lemma reduceProvEntry_shape : forall mu (p0 : Pkg.t) (m0 : N.t) v0
           (q : Deb.Pkg.t) (n : QN.t) v,
-          List.In (q, (n, v)) (reduceProvEntry M (p0, (m0, v0))) ->
+          List.In (q, (n, v)) (reduceProvEntry mu (p0, (m0, v0))) ->
           q = embedPkg p0 /\ fst n = m0.
       Proof.
-        intros M p0 m0 v0 q n v H.
+        intros mu p0 m0 v0 q n v H.
         apply in_reduceProvEntry in H; destruct H as [x [E _]].
         injection E as -> -> _; split; reflexivity.
       Qed.
 
-      Lemma implProvOf_shape : forall M (p0 : Pkg.t)
+      Lemma implProvOf_shape : forall mu (p0 : Pkg.t)
           (q : Deb.Pkg.t) (n : QN.t) v,
-          List.In (q, (n, v)) (implProvOf M p0) ->
+          List.In (q, (n, v)) (implProvOf mu p0) ->
           q = embedPkg p0 /\ fst n = pname p0.
       Proof.
-        intros M p0 q n v H.
+        intros mu p0 q n v H.
         apply in_implProvOf in H; destruct H as [x [E _]].
         injection E as -> -> _; split; reflexivity.
       Qed.
 
-      Lemma reduceProv_mono : forall R Rp Pi Pis M,
+      Lemma reduceProv_mono : forall R Rp Pi Pis mu,
           PkgSet.Subset Rp R -> Prov.Subset Pis Pi ->
-          Deb.Prov.Subset (reduceProv Rp Pis M) (reduceProv R Pi M).
+          Deb.Prov.Subset (reduceProv Rp Pis mu) (reduceProv R Pi mu).
       Proof.
-        intros R Rp Pi Pis M Hr Hp y Hy.
+        intros R Rp Pi Pis mu Hr Hp y Hy.
         rewrite mem_reduceProv in Hy |- *.
         destruct Hy as [[e [He Hl]] | [p0 [Hp0 Hl]]];
           [left; exists e; split; [exact (Hp _ He) | exact Hl]
@@ -1395,45 +1395,45 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         apply (Hcr q HqR); rewrite Hq2; exact Hm.
       Qed.
 
-      Lemma reduceConf_mono : forall R Rc G Gs M,
+      Lemma reduceConf_mono : forall R Rc G Gs mu,
           PkgSet.Subset Rc R -> Conf.Subset Gs G ->
-          Deb.Conf.Subset (reduceConf Rc Gs M) (reduceConf R G M).
+          Deb.Conf.Subset (reduceConf Rc Gs mu) (reduceConf R G mu).
       Proof.
-        intros R Rc G Gs M Hr Hg y Hy.
+        intros R Rc G Gs mu Hr Hg y Hy.
         rewrite mem_reduceConf in Hy |- *.
         destruct Hy as [[e [He Hl]] | [p0 [Hp0 Hl]]];
           [left; exists e; split; [exact (Hg _ He) | exact Hl]
           | right; exists p0; split; [exact (Hr _ Hp0) | exact Hl]].
       Qed.
 
-      Lemma reduceConf_pkg : forall R G M (p : Pkg.t) Rc Gs ea e,
+      Lemma reduceConf_pkg : forall R G mu (p : Pkg.t) Rc Gs ea e,
           PkgSet.Subset Rc R -> Conf.Subset Gs G -> PkgSet.In p Rc ->
           (forall e, Conf.In e G -> fst e = p -> Conf.In e Gs) ->
-          (Deb.Conf.In (embedPkg p, (ea, e)) (reduceConf R G M) <->
-           Deb.Conf.In (embedPkg p, (ea, e)) (reduceConf Rc Gs M)).
+          (Deb.Conf.In (embedPkg p, (ea, e)) (reduceConf R G mu) <->
+           Deb.Conf.In (embedPkg p, (ea, e)) (reduceConf Rc Gs mu)).
       Proof.
-        intros R G M p Rc Gs ea e Hr Hg Hin Hown.
-        split; [| exact (reduceConf_mono R Rc G Gs M Hr Hg _)].
+        intros R G mu p Rc Gs ea e Hr Hg Hin Hown.
+        split; [| exact (reduceConf_mono R Rc G Gs mu Hr Hg _)].
         rewrite !mem_reduceConf.
         intros [[[p0 a0] [He Hl]] | [p0 [Hp0 He]]].
         - pose proof (reduceConfEntry_pkg p0 a0 (embedPkg p) ea e Hl) as Hq.
           apply embedPkg_injective in Hq; subst p0.
           left; exists (p, a0); split;
             [exact (Hown (p, a0) He eq_refl) | exact Hl].
-        - rewrite (implConfOf_pkg M p0) in He.
+        - rewrite (implConfOf_pkg mu p0) in He.
           pose proof (f_equal fst He) as Hq; cbn [fst] in Hq.
           apply embedPkg_injective in Hq; subst p0.
           right; exists p; split; [exact Hin |].
-          rewrite (implConfOf_pkg M p); exact He.
+          rewrite (implConfOf_pkg mu p); exact He.
       Qed.
 
-      Lemma match_name : forall R Pi M (p : Pkg.t) (m : N.t) (x : NameArch) phi,
+      Lemma match_name : forall R Pi mu (p : Pkg.t) (m : N.t) (x : NameArch) phi,
           PkgSet.In p R ->
-          Deb.Match (reduceProv R Pi M) (embedPkg p) ((m, x), phi) ->
+          Deb.Match (reduceProv R Pi mu) (embedPkg p) ((m, x), phi) ->
           m = pname p \/ exists v, Prov.In (p, (m, v)) Pi.
       Proof.
-        intros R Pi M [[n0 b0] u] m x phi HpR HM.
-        apply (debMatch_char R Pi M _ m x phi HpR) in HM.
+        intros R Pi mu [[n0 b0] u] m x phi HpR HM.
+        apply (debMatch_char R Pi mu _ m x phi HpR) in HM.
         destruct x as [b | b | |];
           try (destruct HM as [[[Hn _] | [v [Hin _]]] _];
                [left; symmetry; exact Hn | right; exists v; exact Hin]).
@@ -1552,11 +1552,11 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         : NSet.t :=
         NSet.union (atomNames D p) (confRead Pi G p).
 
-      Lemma reduceConf_confAtom : forall R G M (p : Pkg.t) (ea : Deb.Atom.t) e,
-          Deb.Conf.In (embedPkg p, (ea, e)) (reduceConf R G M) ->
+      Lemma reduceConf_confAtom : forall R G mu (p : Pkg.t) (ea : Deb.Atom.t) e,
+          Deb.Conf.In (embedPkg p, (ea, e)) (reduceConf R G mu) ->
           NSet.In (fst (fst ea)) (confAtomNames G p).
       Proof.
-        intros R G M p ea e H; rewrite mem_reduceConf in H.
+        intros R G mu p ea e H; rewrite mem_reduceConf in H.
         apply mem_confAtomNames.
         destruct H as [[[p0 a0] [He Hl]] | [p0 [_ He]]].
         - pose proof (reduceConfEntry_pkg p0 a0 (embedPkg p) ea e Hl) as Hq.
@@ -1565,8 +1565,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             [exact He | exact (reduceConfEntry_name p a0 (embedPkg p) ea e Hl)].
         - left.
           pose proof (f_equal (fun e => fst (fst (snd e))) He) as Hn.
-          cbn [fst snd] in Hn; rewrite (implConfOf_atomName M p0) in Hn.
-          rewrite (implConfOf_pkg M p0) in He.
+          cbn [fst snd] in Hn; rewrite (implConfOf_atomName mu p0) in Hn.
+          rewrite (implConfOf_pkg mu p0) in He.
           pose proof (f_equal fst He) as Hq; cbn [fst] in Hq.
           apply embedPkg_injective in Hq; subst p0.
           exact (f_equal fst Hn).
@@ -1627,15 +1627,15 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             [exact Hm | exact (Hpn q v Hin)].
       Qed.
 
-      Lemma confNames_inNs : forall R Pi M ns (a' : Deb.Atom.t) (m : QN.t),
+      Lemma confNames_inNs : forall R Pi mu ns (a' : Deb.Atom.t) (m : QN.t),
           NSet.In (fst (fst a')) ns ->
           (forall (q : Pkg.t) v, Prov.In (q, (fst (fst a'), v)) Pi ->
                                   NSet.In (pname q) ns) ->
           Deb.Reduction.NSet.In m
-            (Deb.Reduction.confNames (reduceReal R) (reduceProv R Pi M) a') ->
+            (Deb.Reduction.confNames (reduceReal R) (reduceProv R Pi mu) a') ->
           NSet.In (fst m) ns.
       Proof.
-        intros R Pi M ns [[m x] phi] qn Hm Hpn Hqn; cbn [fst] in Hm, Hpn.
+        intros R Pi mu ns [[m x] phi] qn Hm Hpn Hqn; cbn [fst] in Hm, Hpn.
         apply Deb.Reduction.mem_confNames in Hqn; destruct Hqn as [u [HR Hmb]].
         rewrite mem_reduceReal in HR; destruct HR as [q [Hq Hqe]].
         assert (E : fst qn = pname q).
@@ -1643,7 +1643,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           rewrite E1; reflexivity. }
         rewrite E; rewrite Hqe in Hmb.
         apply Deb.matchb_iff in Hmb.
-        destruct (match_name R Pi M q m x phi Hq Hmb) as [-> | [v Hin]];
+        destruct (match_name R Pi mu q m x phi Hq Hmb) as [-> | [v Hin]];
           [exact Hm | exact (Hpn q v Hin)].
       Qed.
 
