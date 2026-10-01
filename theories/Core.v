@@ -854,6 +854,26 @@ Module Core (N V : UsualOrderedType).
         exact (Hclo p Hp n vs Hd).
   Qed.
 
+  Theorem check_agree : forall versions dependees versions' dependees' Q S,
+      (forall (n : N.t) (v : V.t), PkgSet.In (n, v) S ->
+       VSet.In v (versions' n) -> VSet.In v (versions n)) ->
+      (forall p, PkgSet.In p S -> dependees' p = dependees p) ->
+      check versions' dependees' Q S = None ->
+      check versions dependees Q S = None.
+  Proof.
+    intros versions dependees versions' dependees' Q S HV HD Hc.
+    apply check_spec in Hc; destruct Hc as [Hv [Hu [Hroot [Hclo Hreach]]]].
+    apply check_spec.
+    split; [intros n v HS; exact (HV n v HS (Hv n v HS)) |].
+    split; [exact Hu |]; split; [exact Hroot |]; split.
+    - intros p Hp n vs Hd; rewrite <- (HD p Hp) in Hd; exact (Hclo p Hp n vs Hd).
+    - intros p Hp; specialize (Hreach p Hp); clear Hp.
+      induction Hreach as [n vs v Hn Hvs HS | p n vs v Hr IH Hd Hvs HS].
+      + exact (reached_query dependees Q S n vs v Hn Hvs HS).
+      + rewrite (HD p (reached_in _ _ _ _ Hr)) in Hd.
+        exact (reached_dependee dependees Q S p n vs v IH Hd Hvs HS).
+  Qed.
+
   Corollary check_iff_sets : forall R D r S,
       check (versions R) (dependees D) (rootQuery r) S = None <->
       IsResolution R D r S /\

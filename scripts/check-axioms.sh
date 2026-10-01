@@ -25,6 +25,12 @@ C.Merge.merge
 C.Merge.merge_functionalInName
 C.Merge.merge_resolution_iff
 C.Merge.mergedVS
+C.check
+C.check_agree
+C.check_iff
+C.check_iff_sets
+C.check_resolution
+C.check_spec
 C.dependees
 C.namePreimage
 C.versions
