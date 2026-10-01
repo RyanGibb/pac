@@ -164,10 +164,6 @@ Lemma if_some_iff : forall (A : Type) (b : bool) (x y : A),
     (if b then Some x else None) = Some y <-> b = true /\ x = y.
 Proof. intros A [|] x y; cbn; intuition congruence. Qed.
 
-Lemma if_scrutinee : forall {A : Type} (b1 b2 : bool) (x y : A),
-    b1 = b2 -> (if b1 then x else y) = (if b2 then x else y).
-Proof. intros A b1 b2 x y ->; reflexivity. Qed.
-
 (* Deciding equality inside a set-comprehension guard means an if-then-else on
    eq_dec, whose two branches then have to be re-derived at every proof that
    reads the guard back; this packages the test with its three laws. *)
@@ -403,15 +399,6 @@ Module SetSpecs (E : UsualOrderedType) (S : SetsOn E).
       { apply exists_spec'; exists x;
           split; [exact (Hkeep _ Hx Hf) | exact Hf]. }
       rewrite C in H'; discriminate.
-  Qed.
-
-  Lemma mem_eq_of_iff : forall (s s' : S.t) x,
-      (S.In x s <-> S.In x s') -> S.mem x s = S.mem x s'.
-  Proof.
-    intros s s' x H; destruct (S.mem x s) eqn:E; destruct (S.mem x s') eqn:E';
-      try reflexivity; exfalso.
-    - apply S.mem_spec, H, S.mem_spec in E; congruence.
-    - apply S.mem_spec, H, S.mem_spec in E'; congruence.
   Qed.
 End SetSpecs.
 
