@@ -130,6 +130,7 @@ Vis.Reduction.visibility_completeness
 Vis.Reduction.visibility_retraction
 Vis.Reduction.visibility_soundness
 
+Plc.index
 Plc.mem_reachable
 Plc.reachable
 Plc.reachableBy
@@ -137,6 +138,8 @@ Plc.reachableBy_reachable
 Plc.reaches_parented
 Plc.reaches_restriction
 Plc.walk
+Plc.walkIx
+Plc.walkIx_index
 Plc.Reduction.Lookup.dependees_lookupAbsent
 Plc.Reduction.Lookup.dependees_lookupLoc
 Plc.Reduction.Lookup.dependees_lookupRoot

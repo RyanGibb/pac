@@ -1,4 +1,5 @@
 From Stdlib Require Import MSets List Lia PeanoNat.
+From Stdlib Require FMapAVL FMapFacts OrdersAlt.
 From PackageCalculus Require Import Prelude Core.
 
 Create HintDb cmp_plc.
@@ -462,14 +463,86 @@ Module Placement (N V : UsualOrderedType).
         apply mem_landings; exists n, l', u; auto.
   Qed.
 
+  (* occupants filters the whole layout, at every step of every walk; an
+     index built once looks each location up instead.  It keeps a location's
+     every version, so it agrees with occupants on any layout, not only one
+     with a version per location. *)
+  Module LocKey := PairUOT Path N.
+  Module LocKeyOrig := OrdersAlt.Backport_OT LocKey.
+  Module LocMap := FMapAVL.Make LocKeyOrig.
+  Module LocMapF := FMapFacts.WFacts_fun LocMap.E LocMap.
+
+  Definition occupantsIx (ix : LocMap.t VSet.t) (l : Path.t) (a : N.t)
+      : VSet.t :=
+    match LocMap.find (l, a) ix with Some vs => vs | None => VSet.empty end.
+
+  Definition index (L : Layout.t) : LocMap.t VSet.t :=
+    Layout.fold (fun o ix =>
+        let '(l, (a, v)) := o in
+        LocMap.add (l, a) (VSet.add v (occupantsIx ix l a)) ix)
+      L (LocMap.empty VSet.t).
+
+  Fixpoint walkIx (ix : LocMap.t VSet.t) (l : Path.t) (a : N.t)
+      : option (Path.t * V.t) :=
+    match VSet.choose (occupantsIx ix l a) with
+    | Some v => Some (l, v)
+    | None => match l with nil => None | _ :: l' => walkIx ix l' a end
+    end.
+
+  Lemma occupantsIx_add : forall ix l' a' vs l a,
+      occupantsIx (LocMap.add (l', a') vs ix) l a =
+      if LocKey.eq_dec (l', a') (l, a) then vs else occupantsIx ix l a.
+  Proof.
+    intros ix l' a' vs l a; unfold occupantsIx; rewrite LocMapF.add_o.
+    destruct (LocMap.E.eq_dec (l', a') (l, a)) as [E | NE],
+      (LocKey.eq_dec (l', a') (l, a)) as [E' | NE'];
+      [reflexivity | destruct (NE' E) | destruct (NE E') | reflexivity].
+  Qed.
+
+  Lemma occupantsIx_index : forall L l a,
+      occupantsIx (index L) l a = occupants L l a.
+  Proof.
+    intros L l a; apply VSet.ext; intro v; rewrite mem_occupants.
+    unfold index; rewrite Layout.fold_spec, <- Layout.elements_spec1,
+      SetoidList.InA_alt.
+    assert (G : forall xs ix,
+               VSet.In v (occupantsIx (List.fold_left (fun ix o =>
+                   let '(l, (a, v)) := o in
+                   LocMap.add (l, a) (VSet.add v (occupantsIx ix l a)) ix)
+                 xs ix) l a) <->
+               VSet.In v (occupantsIx ix l a) \/ List.In (l, (a, v)) xs).
+    { induction xs as [| [l' [a' v']] xs IH]; intro ix;
+        cbn [List.fold_left List.In]; [tauto |].
+      rewrite IH, occupantsIx_add.
+      destruct (LocKey.eq_dec (l', a') (l, a)) as [E | NE].
+      - injection E as -> ->; rewrite VSet.add_spec.
+        split; [intros [[-> | H] | H]; auto |].
+        intros [H | [E | H]]; auto; injection E as ->; auto.
+      - split; [intros [H | H]; auto |].
+        intros [H | [E | H]]; auto; injection E as -> -> ->.
+        destruct (NE eq_refl). }
+    etransitivity; [exact (G _ _) |].
+    unfold occupantsIx at 1; rewrite LocMapF.empty_o.
+    split; [intros [H | H]; [destruct (VSet.empty_spec H) |] | intro H].
+    - exists (l, (a, v)); split; [reflexivity | exact H].
+    - right; destruct H as [y [<- H]]; exact H.
+  Qed.
+
+  Lemma walkIx_index : forall L l a, walkIx (index L) l a = walk L l a.
+  Proof.
+    intros L l a; induction l as [| b l IH]; cbn [walkIx walk];
+      rewrite occupantsIx_index; [reflexivity |].
+    rewrite IH; reflexivity.
+  Qed.
+
   (* reachable runs S (cardinal L) rounds, each over the whole relation, too
      slow for a driver to run.  reachableBy visits each occupant once, and
      reads its edges' directories from dirs, which a driver supplies from
      its lookups; given they are the instance's, the two agree. *)
-  Definition landingsBy (dirs : Pkg.t -> list N.t) (L : Layout.t)
+  Definition landingsBy (dirs : Pkg.t -> list N.t) (ix : LocMap.t VSet.t)
       (l : Path.t) (p : Pkg.t) : list OccElt.t :=
     List.fold_right (fun n acc =>
-        match walk L l n with
+        match walkIx ix l n with
         | Some (l', u) => (l', (n, u)) :: acc
         | None => acc
         end) nil (dirs p).
@@ -478,34 +551,36 @@ Module Placement (N V : UsualOrderedType).
       : Layout.t * list OccElt.t :=
     if Layout.mem o (fst st) then st else (Layout.add o (fst st), o :: snd st).
 
-  Fixpoint reachW (dirs : Pkg.t -> list N.t) (L : Layout.t) (fuel : nat)
-      (seen : Layout.t) (todo : list OccElt.t) : Layout.t :=
+  Fixpoint reachW (dirs : Pkg.t -> list N.t) (ix : LocMap.t VSet.t)
+      (fuel : nat) (seen : Layout.t) (todo : list OccElt.t) : Layout.t :=
     match fuel, todo with
     | O, _ | _, nil => seen
     | S k, (l, (a, v)) :: todo' =>
         let '(seen', todo'') :=
-          List.fold_left visit (landingsBy dirs L (a :: l) (a, v))
+          List.fold_left visit (landingsBy dirs ix (a :: l) (a, v))
             (seen, todo') in
-        reachW dirs L k seen' todo''
+        reachW dirs ix k seen' todo''
     end.
 
   (* a round visits one occupant and queues only occupants of L not yet
      seen, so cardinal L rounds empty the queue (reachW_spec) *)
   Definition reachableBy (dirs : Pkg.t -> list N.t) (root : Pkg.t)
       (L : Layout.t) : Layout.t :=
+    let ix := index L in
     let '(seen, todo) :=
-      List.fold_left visit (landingsBy dirs L nil root) (Layout.empty, nil) in
-    reachW dirs L (Layout.cardinal L) seen todo.
+      List.fold_left visit (landingsBy dirs ix nil root) (Layout.empty, nil) in
+    reachW dirs ix (Layout.cardinal L) seen todo.
 
   Lemma mem_landingsBy : forall dirs L l p o,
-      List.In o (landingsBy dirs L l p) <->
+      List.In o (landingsBy dirs (index L) l p) <->
       exists n l' u, List.In n (dirs p) /\ walk L l n = Some (l', u) /\
         o = (l', (n, u)).
   Proof.
     intros dirs L l p o; unfold landingsBy.
     induction (dirs p) as [| n ns IH]; cbn [List.fold_right].
     - split; [intros [] | intros [n [l' [u [[] _]]]]].
-    - destruct (walk L l n) as [[l' u] |] eqn:Hw.
+    - rewrite (walkIx_index L l n).
+      destruct (walk L l n) as [[l' u] |] eqn:Hw.
       + cbn [List.In]; rewrite IH; split.
         * intros [<- | [m [l1 [u1 [Hm [Hw1 ->]]]]]];
             [exists n, l', u | exists m, l1, u1]; cbn [List.In]; auto.
@@ -563,14 +638,15 @@ Module Placement (N V : UsualOrderedType).
     Let Inv (seen : Layout.t) (todo : list OccElt.t) : Prop :=
       (forall o, Layout.In o seen -> Reaches I L o) /\
       (forall o, List.In o todo -> Layout.In o seen) /\
-      (forall o, List.In o (landingsBy dirs L nil (inst_root I)) ->
+      (forall o, List.In o (landingsBy dirs (index L) nil (inst_root I)) ->
          Layout.In o seen) /\
       (forall l a v o, Layout.In (l, (a, v)) seen ->
          ~ List.In (l, (a, v)) todo ->
-         List.In o (landingsBy dirs L (a :: l) (a, v)) -> Layout.In o seen).
+         List.In o (landingsBy dirs (index L) (a :: l) (a, v)) ->
+         Layout.In o seen).
 
     Lemma landingsBy_root : forall o,
-        List.In o (landingsBy dirs L nil (inst_root I)) <->
+        List.In o (landingsBy dirs (index L) nil (inst_root I)) <->
         exists n l' u, Edge I (inst_root I) n /\ walk L nil n = Some (l', u) /\
           o = (l', (n, u)).
     Proof.
@@ -580,7 +656,7 @@ Module Placement (N V : UsualOrderedType).
     Qed.
 
     Lemma landingsBy_occ : forall l a v o, Layout.In (l, (a, v)) L ->
-        List.In o (landingsBy dirs L (a :: l) (a, v)) <->
+        List.In o (landingsBy dirs (index L) (a :: l) (a, v)) <->
         exists n l' u, Edge I (a, v) n /\ walk L (a :: l) n = Some (l', u) /\
           o = (l', (n, u)).
     Proof.
@@ -602,7 +678,8 @@ Module Placement (N V : UsualOrderedType).
 
     Lemma reachW_spec : forall fuel seen todo, Inv seen todo ->
         length todo + Layout.cardinal L <= fuel + Layout.cardinal seen ->
-        forall o, Layout.In o (reachW dirs L fuel seen todo) <-> Reaches I L o.
+        forall o,
+          Layout.In o (reachW dirs (index L) fuel seen todo) <-> Reaches I L o.
     Proof.
       induction fuel as [| k IH]; intros seen todo Hinv Hc.
       - assert (Hle : Layout.cardinal seen <= Layout.cardinal L).
@@ -612,7 +689,8 @@ Module Placement (N V : UsualOrderedType).
         exact (reachW_done _ Hinv).
       - destruct todo as [| [l [a v]] todo']; [exact (reachW_done _ Hinv) |].
         cbn [reachW].
-        destruct (List.fold_left visit (landingsBy dirs L (a :: l) (a, v))
+        destruct (List.fold_left visit
+                    (landingsBy dirs (index L) (a :: l) (a, v))
                     (seen, todo')) as [seen' todo''] eqn:Hf.
         destruct (visit_fold _ _ _ _ _ Hf) as [Hs [Ht Hc']].
         destruct Hinv as [Hr [Htodo [Hroot Hcl]]].
@@ -651,11 +729,13 @@ Module Placement (N V : UsualOrderedType).
         reachableBy dirs (inst_root I) L = reachable I L.
     Proof.
       apply Layout.ext; intro o; rewrite mem_reachable; unfold reachableBy.
-      destruct (List.fold_left visit (landingsBy dirs L nil (inst_root I))
+      cbv zeta.
+      destruct (List.fold_left visit
+                  (landingsBy dirs (index L) nil (inst_root I))
                   (Layout.empty, nil)) as [seen todo] eqn:Hf.
       destruct (visit_fold _ _ _ _ _ Hf) as [Hs [Ht Hc]].
       assert (Hseen : forall x, Layout.In x seen <->
-                 List.In x (landingsBy dirs L nil (inst_root I))).
+                 List.In x (landingsBy dirs (index L) nil (inst_root I))).
       { intro x; rewrite Hs; split; [| auto].
         intros [H | H]; [destruct (Layout.empty_spec H) | exact H]. }
       rewrite (reachW_spec (Layout.cardinal L) seen todo).
