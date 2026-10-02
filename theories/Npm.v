@@ -326,7 +326,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     : list PeerDependency :=
     List.filter (peerActive I p) (peerDependenciesAt I q).
 
-  Definition base (q : Pkg.t) : RPkg.t := (snd (fst q), snd q).
+  Definition base '(((_, m), v) : Pkg.t) : RPkg.t := (m, v).
 
   Definition rootKey (I : Inst) : NKey.t :=
     (fst (inst_root I), fst (inst_root I)).
@@ -394,8 +394,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     orb (andb (PkgEqb.eqb q (rootPkg I)) (negb (NSet.mem n (dirs I (base q)))))
       (dp I q n).
 
-  Definition selfb (q : Pkg.t) (n : N.t) : bool :=
-    andb (NEqb.eqb (fst (fst q)) n) (NEqb.eqb (snd (fst q)) n).
+  Definition selfb '(((a, m), _) : Pkg.t) (n : N.t) : bool :=
+    andb (NEqb.eqb a n) (NEqb.eqb m n).
 
   Definition childCands (I : Inst) (q : Pkg.t)
       '((a, m) as k : NKey.t) : VSet.t :=
@@ -2939,7 +2939,9 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
                              exact Ha |].
                      split; [unfold canBeAbsent;
                              apply Bool.orb_true_iff; right; exact Hdp |].
-                     split; [rewrite <- Ek; exact Ho | rewrite Ek; reflexivity].
+                     split.
+                     --- exact (eq_rect _ (fun k' => ownAt I S pi (k, v) k' = None) Ho _ Ek).
+                     --- exact (f_equal (fun k' => (Nm.Intermediate k v k', Vs.Bot)) Ek).
             -- destruct (Hslot (k, v) Hp a Ha Hdp) as [w [Hw Hi]].
                exists (Vs.Orig w); split;
                  [apply mem_slotSet; right; exists w; split; [exact Hw | reflexivity] |].
@@ -2949,6 +2951,9 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
             injection He as -> ->.
             assert (Hbr : base (k, v) = inst_root I)
               by (rewrite Hq; apply base_rootPkg).
+            change (exists x, T.VSet.In x (embedVS (peerCandsAt I (base (k, v)) theta)) /\
+                     T.PkgSet.In (Nm.Intermediate k v (peerKeyAt I (base (k, v)) theta), x)
+                       (coreResolution I S pi sg)).
             rewrite Hbr in Hr, Hact |- *.
             destruct (root_peer_installs I S pi sg theta Hres Hr Hact)
               as [w [Hw Hi]].
