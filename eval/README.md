@@ -181,6 +181,9 @@ python3 eval/cargo/scale.py targets 20260923 150 > /tmp/pools.txt && eval/cargo/
 node eval/npm/queries.js repos/npm targeted > /tmp/ranges.txt && eval/npm/scale.sh _build/default/bin/main.exe /tmp/scale/npm /tmp/ranges.txt
 ```
 
+opam is asked about Debian 12 on x86_64, pac's default platform, through the global variables of the root `eval/opam/setup.sh` builds.
+`PLATFORM=<var=value,...>` asks both sides about another (`eval/opam/platform.sh`): `setup.sh` pins it into the root, and pac is handed, as `--environment`, what that root holds. `--regress` and `--record` refuse it, the baselines being of the default.
+
 Cargo's sample is seeded by `SEED`, 20260923 by default, the sample the development ran on; 20260927 draws the held-out one, of the same size and by the same method.
 `CARGO_INDEX` points both sides at another index, which must be one `eval/SNAPSHOTS` records, such as its held-out row:
 

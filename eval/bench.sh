@@ -264,7 +264,7 @@ setup_alpine() {
 argv_opam() {
   DIR=$TOP
   case $1 in
-    pac-*) CMD=("$PAC" opam --opam-version "$OV" $(order "$1") repos/opam-repository $3) ;;
+    pac-*) CMD=("$PAC" opam --opam-version "$OV" --environment "$PLAT" $(order "$1") repos/opam-repository $3) ;;
     opam) CMD=(opam install $3 --dry-run --solver=builtin-0install --switch cmp --no-depexts -y) ;;
     # opam's default solver, an optimising one, timed beside the one pac
     # is compared with
@@ -282,6 +282,7 @@ setup_opam() {
   [ -d "$OPAMROOT/cmp" ] || bash "$S/opam/setup.sh" "$OPAMROOT" > "$RUN/opam-setup.log" 2>&1 ||
     { log "opam setup failed"; return 1; }
   OV=$(opam --version)
+  PLAT=$(. "$S/opam/platform.sh" && root_platform) || { log "$OPAMROOT holds no platform"; return 1; }
 }
 
 # The manifest is the one scale.py writes, self-patched where pac's answer

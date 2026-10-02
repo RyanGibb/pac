@@ -24,6 +24,7 @@ val meta_of : archive -> string -> string -> Opam_parse.pkg_meta
    nix/flake.lock fixes, so that a run outside the harness answers about
    the same opam the recorded baselines did *)
 val default_opam_version : string
+val default_platform : (string * string) list
 
 module Op :
     module type of
@@ -42,6 +43,7 @@ type request = {
   with_doc : bool;
   with_dev_setup : bool;
   opam_version : string;
+  platform : (string * string) list;
 }
 
 val rho : request -> string -> string option

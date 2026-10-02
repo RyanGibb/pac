@@ -154,7 +154,8 @@ module PF = Red.PF
 module PFR = PF.Reduction
 module T = PFR.T
 
-let globals =
+(* Debian 12 on x86_64, which the recorded baselines were taken on *)
+let default_platform =
   [
     ("os", "linux");
     ("os-family", "debian");
@@ -169,6 +170,7 @@ type request = {
   with_doc : bool;
   with_dev_setup : bool;
   opam_version : string;
+  platform : (string * string) list;
 }
 
 (* [build] and [post] hold, as opam builds what it installs; [dev] and
@@ -177,7 +179,7 @@ type request = {
    lists (OpamSwitchState.universe and package_env_t,
    opamSwitchState.ml:908-921, 971-974), so each package's is its own. *)
 let rho (rq : request) : string -> string option =
-  let globals = ("opam-version", rq.opam_version) :: globals in
+  let globals = ("opam-version", rq.opam_version) :: rq.platform in
   fun x ->
     match List.assoc_opt x globals with
     | Some v -> Some v

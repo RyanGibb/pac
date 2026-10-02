@@ -343,6 +343,61 @@ below 2.3 and ov.2 from 2.3 on:
   encoded solution: 2 core nodes (2 lookups)
   loaded: 1 names, 2 versions
 
+The platform variables are Debian 12 on x86_64 unless --environment binds
+them, as opam admin's option of that name does.  plat.2 is available only
+on macos on arm64, so by default plat.1 is the newest available:
+
+  $ untimed ../../../bin/main.exe opam --check . plat
+  packages (1):
+    plat 1
+  encoded solution: 2 core nodes (2 lookups)
+  loaded: 1 names, 2 versions
+
+  $ untimed ../../../bin/main.exe opam --check --environment os=macos,arch=arm64 . plat
+  packages (1):
+    plat 2
+  encoded solution: 2 core nodes (2 lookups)
+  loaded: 1 names, 2 versions
+
+A variable the option leaves out keeps its default, so on macos arch is
+still x86_64 and plat.2 still unavailable:
+
+  $ untimed ../../../bin/main.exe opam --check --environment os=macos . plat
+  packages (1):
+    plat 1
+  encoded solution: 2 core nodes (2 lookups)
+  loaded: 1 names, 2 versions
+
+Depext filters read the same variables, so sys.1 on the alpine family asks
+for libbar-dev rather than libfoo-dev:
+
+  $ untimed ../../../bin/main.exe opam --check --environment os-family=alpine . sys
+  packages (2):
+    helper 1
+    sys 1
+  system packages (2):
+    libbar-dev
+    pkg-config
+  encoded solution: 3 core nodes (3 lookups)
+  loaded: 2 names, 2 versions
+
+A binding of any other variable, one without a value, and a variable bound
+twice are refused:
+
+  $ ../../../bin/main.exe opam --check --environment opam-version=2.2.0 . plat
+  Usage: pac opam [--help] [OPTION]… REPO PACKAGES…
+  pac: --environment: "opam-version" is not one of os, os-family,
+       os-distribution, os-version, arch
+  [2]
+  $ ../../../bin/main.exe opam --check --environment os . plat
+  Usage: pac opam [--help] [OPTION]… REPO PACKAGES…
+  pac: --environment: "os" is not VAR=VALUE
+  [2]
+  $ ../../../bin/main.exe opam --check --environment os=macos,os=linux . plat
+  Usage: pac opam [--help] [OPTION]… REPO PACKAGES…
+  pac: --environment: os is bound twice
+  [2]
+
 In builtin-0install's order, the default, the query's atoms are walked
 last first, as opam hands them to 0install (create_spec conses each onto
 the list it builds).  ord-p.2 and ord-q.2 each need ord-r on the other side

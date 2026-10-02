@@ -29,6 +29,7 @@ pac cargo repos/crates.io-index path/to/Cargo.toml
 pac npm --cache repos/npm --tree use-sync-external-store
 ```
 
+`pac opam` evaluates filters on Debian 12, x86_64 Linux unless `--environment` binds the platform variables otherwise, as `opam admin list --environment` does, e.g. `--environment os=macos,os-family=homebrew,os-distribution=homebrew,arch=arm64`.
 `pac npm` reads manifests as npm does; `--reading=shared` reads them as npm and Yarn Berry both do, so that an answer is one both accept; and `--reading=placement` answers npm's `node_modules` layout itself, within `--depth` levels.
 
 ## Trusted base

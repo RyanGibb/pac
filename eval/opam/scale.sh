@@ -7,10 +7,15 @@
 # gives up where a solution may still exist.
 # usage: scale.sh [--regress | --record] <pac-exe> <run-dir> [queries-file]
 #        MODES="tool pubgrub" P=<jobs> TIMEOUT=<s>
+# PLATFORM=<var=value,...> asks both sides about another platform
+# (platform.sh), which neither --regress nor --record takes
 S="$(cd "$(dirname "$0")" && pwd)"
 ECO=opam
 . "$S/../scale-lib.sh"
+. "$S/platform.sh"
 REPO=$TOP/repos/opam-repository
+
+params() { echo "PLATFORM=$PLATFORM"; }
 
 all_queries() { ls "$REPO/packages"; }
 
@@ -18,11 +23,16 @@ prepare() {
   # opam runs ocamlc to set sys-ocaml-version, which would make ocaml-system
   # available to opam and to nothing on our side
   if command -v ocamlc > /dev/null; then echo "$0: ocamlc is on PATH" >&2; return 1; fi
+  if [ -n "$BASELINE" ] && [ "$PLATFORM" != "$BASELINE_PLATFORM" ]; then
+    echo "$0: the baselines are of $BASELINE_PLATFORM, not $PLATFORM" >&2; return 1
+  fi
   snapshot opam-repository
   bash "$S/setup.sh" "$run/opamroot" > "$run/setup.log" 2>&1 || { cat "$run/setup.log" >&2; return 1; }
   mkdir -p "$run/ovl/packages" "$run/ovl.tmp"
   ln -sfn -t "$run/ovl/packages" "$REPO"/packages/*
   export OPAMROOT=$run/opamroot OV=$(opam --version)
+  PLAT=$(root_platform) || { echo "$0: $OPAMROOT holds no platform" >&2; return 1; }
+  export PLAT
 }
 
 . "$S/refused.sh"
@@ -64,13 +74,14 @@ pin_tool() {
   if [ -d "$run/ovl/packages/$pn" ]; then mv "$t/$pn.0/opam" "$run/ovl/packages/$pn/$pn.0/opam"
   else mv -T "$t" "$run/ovl/packages/$pn"; fi
   rm -rf "$t"
-  timeout "$TIMEOUT" "$run/pac.exe" opam --opam-version "$OV" "$run/ovl" $2 "$pn" > "$o.pin" 2>&1
+  timeout "$TIMEOUT" "$run/pac.exe" opam --opam-version "$OV" --environment "$PLAT" "$run/ovl" $2 "$pn" \
+    > "$o.pin" 2>&1
   pin=$(pac_status $? "$o.pin")
 }
 
 run_pac() {
-  (cd "$TOP" && timeout "$TIMEOUT" "$run/pac.exe" opam --opam-version "$OV" $(flag "$1") \
-     repos/opam-repository $3) > "$2.out" 2>&1
+  (cd "$TOP" && timeout "$TIMEOUT" "$run/pac.exe" opam --opam-version "$OV" --environment "$PLAT" \
+     $(flag "$1") repos/opam-repository $3) > "$2.out" 2>&1
 }
 
 extract() { rows "$1.out" | sed -n 's/^\([^ ]*\) \([^ ]*\)$/\1.\2/p' | sort -u > "$1.ours"; }

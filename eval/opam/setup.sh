@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Build the throwaway OPAMROOT scale.sh solves against: repos/opam-repository
 # as the only repository, an empty switch with an empty invariant and
-# nothing installed, and the environment variables our driver assumes
-# (lib/opam/lookups.ml, [globals]) pinned through `opam var --global`,
-# so opam answers the same question our loader does rather than the host's.
+# nothing installed, and the platform variables, PLATFORM (platform.sh),
+# pinned through `opam var --global`, so opam answers the same question pac
+# does rather than the host's.
 # Without the pinning opam infers os-distribution=nixos here, which changes
 # what is available (srt's conf-srt-openssl, for one): a different instance,
 # not a different preference.
@@ -14,8 +14,10 @@
 #
 # usage: setup.sh [opamroot-dir]   (default $TMPDIR/pac-opam-root)
 #        REPO=<dir> builds it over another repository
+#        PLATFORM=<var=value,...> pins another platform
 set -eu
 S="$(cd "$(dirname "$0")" && pwd)"
+. "$S/platform.sh"
 REPO="$(cd "${REPO:-$S/../../repos/opam-repository}" && pwd)"
 export OPAMROOT="${1:-${TMPDIR:-/tmp}/pac-opam-root}"
 
@@ -31,10 +33,13 @@ opam init --bare --no-setup --disable-sandboxing --bypass-checks -y \
   -k local snapshot "$REPO"
 opam switch create cmp --empty -y
 
-for kv in os=linux os-family=debian os-distribution=debian os-version=12 \
-          arch=x86_64; do
+IFS=, read -ra kvs <<< "$PLATFORM"
+for kv in "${kvs[@]}"; do
   opam var "$kv" --global -y
 done
 
 opam --version
 opam var --global
+p=$(root_platform)
+[ "$p" = "$PLATFORM" ] || {
+  echo "setup.sh: the root holds $p, not PLATFORM=$PLATFORM" >&2; exit 1; }

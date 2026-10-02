@@ -10,6 +10,7 @@ type stats = Lookups.stats = {
 val stats : archive -> stats
 val empty_archive : string -> archive
 val default_opam_version : string
+val default_platform : (string * string) list
 
 val sanitize :
   archive ->
@@ -31,6 +32,7 @@ val solve :
   ?with_doc:bool ->
   ?with_dev_setup:bool ->
   ?opam_version:string ->
+  ?platform:(string * string) list ->
   archive ->
   (string * Opam_parse.vc) list ->
   (result, Pac_common.Report.explanation) Stdlib.result * (unit -> unit)

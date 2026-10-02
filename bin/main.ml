@@ -245,7 +245,7 @@ let debian_cmd =
       $ no_strict $ native $ cache $ path $ query)
 
 let opam_run debug check core order with_test with_doc with_dev_setup
-    opam_version repo atoms =
+    opam_version platform repo atoms =
   guard @@ fun () ->
   Pac_common.Input.dir repo;
   match Opam_parse.query_of_args atoms with
@@ -258,7 +258,7 @@ let opam_run debug check core order with_test with_doc with_dev_setup
       | Ok query ->
           let r, walk =
             Opam_solve.solve ~debug ~check ~order ~with_test ~with_doc
-              ~with_dev_setup ~opam_version ar query
+              ~with_dev_setup ~opam_version ~platform ar query
           in
           let s = Opam_solve.stats ar in
           report ~t0 ~core
@@ -319,6 +319,53 @@ let opam_cmd =
             "Value of the opam-version variable, the version of the opam whose \
              answer is being matched.")
   in
+  (* opam admin's option for the same bindings (env_arg,
+     opamAdminCommand.ml), but a variable left out keeps its default rather
+     than going undefined, and only the platform's are taken, opam-version
+     having a flag of its own.  A name outside them, or one given twice, is
+     more likely a caller's slip than a request. *)
+  let platform =
+    let names = List.map fst Opam_solve.default_platform in
+    let bindings =
+      Arg.(
+        value
+        & opt (list string) []
+        & info [ "environment" ] ~docv:"VAR=VALUE[,VAR=VALUE]"
+            ~doc:
+              (Printf.sprintf
+                 "Values of the platform variables filters read, %s, as a \
+                  comma-separated list of bindings; a variable left out keeps \
+                  its default, %s."
+                 (String.concat ", "
+                    (List.map (Printf.sprintf "$(b,%s)") names))
+                 (String.concat ","
+                    (List.map
+                       (fun (k, v) -> k ^ "=" ^ v)
+                       Opam_solve.default_platform))))
+    in
+    let err fmt = Printf.ksprintf (fun e -> `Error (true, e)) fmt in
+    let rec bind acc = function
+      | [] ->
+          `Ok
+            (List.map
+               (fun (k, v) ->
+                 (k, Option.value (List.assoc_opt k acc) ~default:v))
+               Opam_solve.default_platform)
+      | b :: rest -> (
+          match String.index_opt b '=' with
+          | None -> err "--environment: %S is not VAR=VALUE" b
+          | Some i ->
+              let k = String.sub b 0 i in
+              let v = String.sub b (i + 1) (String.length b - i - 1) in
+              if not (List.mem k names) then
+                err "--environment: %S is not one of %s" k
+                  (String.concat ", " names)
+              else if List.mem_assoc k acc then
+                err "--environment: %s is bound twice" k
+              else bind ((k, v) :: acc) rest)
+    in
+    Term.(ret (const (bind []) $ bindings))
+  in
   let repo =
     Arg.(
       required
@@ -339,7 +386,7 @@ let opam_cmd =
     (Cmd.info "opam" ~exits ~doc:"Solve against an opam repository.")
     Term.(
       const opam_run $ debug_arg $ check_arg $ core_arg $ order $ with_test
-      $ with_doc $ with_dev_setup $ opam_version $ repo $ query)
+      $ with_doc $ with_dev_setup $ opam_version $ platform $ repo $ query)
 
 let cargo_run debug check core order print_parents cache index manifest features
     no_default installed =

@@ -42,7 +42,7 @@ type result = {
 
 let solve ?(debug = false) ?(check = false) ?(order = `Tool)
     ?(with_test = false) ?(with_doc = false) ?(with_dev_setup = false)
-    ?(opam_version = default_opam_version) ar
+    ?(opam_version = default_opam_version) ?(platform = default_platform) ar
     (query : (string * Opam_parse.vc) list) :
     (result, Pac_common.Report.explanation) Stdlib.result * (unit -> unit) =
   Pubgrub.set_debug debug;
@@ -54,6 +54,7 @@ let solve ?(debug = false) ?(check = false) ?(order = `Tool)
         with_doc;
         with_dev_setup;
         opam_version;
+        platform;
       }
   in
   let st = lookups rho ar in

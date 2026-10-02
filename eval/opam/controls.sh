@@ -32,7 +32,8 @@ pkg p2.1 'depends: ["q2"]'; pkg q2.1 'depends: ["p2"]'
 pkg pp.1 'depends: ["a" {post & < "2"}]'
 pkg m1.1 'depends: ["m2"]'; pkg m2.1 'depends: ["m1"]'
 
-if ! REPO=$R bash "$S/setup.sh" "$T/opamroot" > "$T/setup.log" 2>&1; then
+# uos's verdict is the default platform's
+if ! PLATFORM= REPO=$R bash "$S/setup.sh" "$T/opamroot" > "$T/setup.log" 2>&1; then
   echo "setup failed, see $T/setup.log"; exit 1
 fi
 
