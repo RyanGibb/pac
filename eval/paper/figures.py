@@ -777,6 +777,7 @@ COMPS = [comp("debian", "Debian, amd64 / apt", "amd64", "debian", "apt", "debian
          comp("npm", "npm reading / npm", "amd64", "npm", "npm", "npm", "npm"),
          comp("npm-shared", "shared reading / npm", "amd64", "npm-shared", "npm", "npm-shared", "npm"),
          comp("npm-placement", "placement reading / npm", "amd64", "npm-placement", "npm", "npm-placement", "npm")]
+MODES = [("warm", "", "warm"), ("cold", "-cold", "cold start"), ("first", "-first", "first run")]
 
 
 class Bench:
