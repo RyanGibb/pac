@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """The evaluation's figures and tables, from the run directories alone.
 
-usage: figures.py <sources.conf>... <out-dir> [--pdf]
+usage: figures.py <sources.conf>... <out-dir> [--pdf | --thesis]
 
 sources.conf names every run directory read (see its header); a later
-conf's rows replace an earlier's, as level2.conf's do sources.conf's.  The
-outputs land in <out-dir>:
+conf's rows replace an earlier's, as level2.conf's do sources.conf's.
+
+The default target is the paper's 9pt page.  --thesis lays every figure
+and table out for the thesis instead (a 455pt text block at 12pt, its
+tables rotated onto 731pt at \\footnotesize, unscaled), prints no source
+superscripts, and writes no provenance table, preview or PDFs.
+
+The outputs land in <out-dir>:
 
   preamble.tex           what the paper's preamble \\input's: packages,
                          colours and the \\ev* macros the rest use
@@ -13,6 +19,10 @@ outputs land in <out-dir>:
                          set and order
   tab-B-correspondence.tex, tab-C-validity.tex, tab-C-fuzz.tex,
   tab-D-npm.tex, tab-G-time.tex
+  tab-B-correspondence-1/-2.tex, tab-C-validity-1/-2.tex
+                         with --thesis, B and C again in two halves,
+                         Debian to opam and Cargo to npm, as a rotated
+                         page holds neither whole
   fig-E-timing.tex       pac ÷ tool per comparison, warm, cold start and
                          first run
   fig-F-scatter.tex      per query, the tool's time against pac's
@@ -24,9 +34,9 @@ outputs land in <out-dir>:
   data/*.tsv             the numbers behind every figure
   eval-figures.pdf, fig-*.pdf     with --pdf and pdflatex on PATH
 
-Every cell carries a superscript naming its source in the provenance
-table; a stale source's is red.  Data a source lacks prints as a red
-"missing", never as a number from elsewhere.
+In the paper, every cell carries a superscript naming its source in the
+provenance table; a stale source's is red.  Data a source lacks prints as
+a red "missing", never as a number from elsewhere.
 """
 import collections
 import glob
@@ -47,6 +57,7 @@ import summary  # noqa: E402
 
 ORDERS = ("tool", "pubgrub")
 ORDER_NAME = {"tool": "tool", "pubgrub": "PubGrub"}
+THESIS = False  # --thesis
 
 
 # ---------------------------------------------------------------- sources
@@ -127,7 +138,7 @@ class Prov:
 
     def mark(self, key):
         """a cell's superscript"""
-        if key is None:
+        if key is None or THESIS:
             return ""
         return "\\evsrc{%s}" % key if not self.stale(key) else "\\evstale{%s}" % key
 
@@ -336,9 +347,42 @@ def cnt(n):
     return "{:,}".format(n).replace(",", "\\,")
 
 
+def head(h, align):
+    """a header cell; a | is where the thesis breaks it, and nothing in the
+    paper"""
+    if not THESIS:
+        return h.replace("|", "")
+    ps = [p.strip().removesuffix("\\") for p in h.split("|")]
+    return ps[0] if len(ps) == 1 else "\\makecell[b%s]{%s}" % (align, "\\\\".join(ps))
+
+
 def header(hdr, k):
     """a table's header row, its first k cells bold"""
-    return " & ".join("\\textbf{%s}" % h if i < k else h for i, h in enumerate(hdr)) + " \\\\"
+    return " & ".join("\\textbf{%s}" % head(h, "l") if i < k else head(h, "r") for i, h in enumerate(hdr)) + " \\\\"
+
+
+def set_cells(eco, st, n):
+    """the first cells of a set's n rows: the paper names the set on its
+    first row, the thesis on its first two, which a rotated page's width
+    needs"""
+    if THESIS and n > 1:
+        return [eco, st] + [""] * (n - 2)
+    return ["%s, %s" % (eco, st)] + [""] * (n - 1)
+
+
+HALF = "cargo"  # where the thesis splits B and C
+
+
+def halves(out, name, t, cut, mid):
+    """the thesis's table t again as <name>-1 and -2, split at line cut
+    (the first of HALF's rows) and keeping lines mid on (the tail) in the
+    first: a rotated page holds about thirty rows at \\footnotesize, and B
+    and C each hold more"""
+    if not THESIS or cut is None:
+        return
+    rest = t[cut + 1:mid] if t[cut] == "\\addlinespace" else t[cut:mid]
+    out.write(name + "-1.tex", "\n".join(t[:cut] + t[mid:]))
+    out.write(name + "-2.tex", "\n".join(t[:5] + rest + t[-3:]))
 
 
 def order_label(ent, m):
@@ -348,9 +392,17 @@ def order_label(ent, m):
     return s
 
 
-def row_title(ent, eco, rid):
+def row_title(ent, eco, rid, sep="\\\\"):
     j = judge_label(rid)
-    return "%s\\\\%s%s" % (eco, esc(ent["set"]), (", " + j) if j and rid.endswith(("shared", "shared-tgt")) else "")
+    return "%s%s%s%s" % (eco, sep, esc(ent["set"]), (", " + j) if j and rid.endswith(("shared", "shared-tgt")) else "")
+
+
+def widest(name, font, texts, pad):
+    """TeX that sets \\<name> to the widest of texts in font, plus pad: the
+    width a thesis figure leaves for its labels"""
+    return "".join(["\\begingroup%s\\dimen0=0pt" % font] +
+                   ["\\setbox0\\hbox{%s}\\ifdim\\wd0>\\dimen0 \\dimen0=\\wd0\\fi" % x for x in dict.fromkeys(texts)] +
+                   ["\\advance\\dimen0 by %s\\xdef\\%s{\\the\\dimen0}\\endgroup%%" % (pad, name)])
 
 
 # ---------------------------------------------------------------- A and B
@@ -413,25 +465,14 @@ def fig_a(out, prov, oc):
                 continue
             bars.append((y, o, x, m))
             data.append([x["id"], ent["set"], m, o["n"]] + [o["seg"].get(s, 0) for s, _, _ in SEGS])
-        groups.append((sum(ys) / len(ys), x))
-        y += 0.6
+        # the thesis names a set above its bars, the paper beside them
+        groups.append((max(ys) if THESIS else sum(ys) / len(ys), x))
+        y += 1.9 if THESIS else 0.6
     out.tsv("fig-A-outcomes.tsv", ["id", "set", "order", "queries"] + [s for s, _, _ in SEGS], list(reversed(data)))
     h = y
-    t = ["% Figure A: every query of each set, by outcome, in each order.  Generated by eval/paper/figures.py.",
-         "\\begin{tikzpicture}",
-         "\\begin{axis}[evbars, xbar stacked, scale only axis, width=\\linewidth-265pt, height=%.1fpt, ymin=0.3, ymax=%.1f," % (h * 11, h),
-         "  xmin=0, xmax=100, xlabel={share of the set's queries (\\%)},",
-         "  ytick={%s}, yticklabels={%s}]" % (
-             ",".join("%.1f" % b[0] for b in bars),
-             ",".join("{%s}" % order_label(b[2]["ent"], b[3]) for b in bars))]
-    for s, label, col in SEGS:
-        co = " ".join("(%.4f,%.1f)" % (100 * (b[1]["seg"].get(s, 0) / b[1]["n"]) if b[1] else 0, b[0]) for b in bars)
-        pat = ", postaction={pattern=north east lines, pattern color=black!45}" if s == "other" else ""
-        t.append("\\addplot[fill=%s, draw=white, line width=0.3pt%s] coordinates {%s};" % (col, pat, co))
-        t.append("\\addlegendentry{%s}" % label)
+    labs = {}
     for yv, o, x, m in bars:
         if o is None:
-            t.append("\\node[anchor=west, font=\\scriptsize] at (axis cs:0,%.1f) {\\evmissing};" % yv)
             continue
         small = []
         for s, word in (("invalid", "invalid"), ("platform", "platform-excl."), ("timeout", "timeout")):
@@ -443,8 +484,37 @@ def fig_a(out, prov, oc):
         lab = "%s\\,\\%%" % pct(o["seg"].get("exact", 0), o["n"])
         if small:
             lab += "\\enspace{\\color{evink2}%s}" % esc(", ".join(small))
-        t.append("\\node[anchor=west, font=\\scriptsize, inner sep=1pt] at (axis cs:100,%.1f) {%s};" % (yv, lab))
+        labs[yv] = lab
+    ticks = ["{%s}" % order_label(b[2]["ent"], b[3]) for b in bars]
+    t = ["% Figure A: every query of each set, by outcome, in each order.  Generated by eval/paper/figures.py."]
+    if THESIS:
+        # the bars take what the order and share labels leave of the line
+        t += [widest("evAleft", "\\footnotesize", ticks, "8pt"),
+              widest("evAright", "\\scriptsize", list(labs.values()) + ["\\evmissing"], "4pt")]
+        width = "\\linewidth-\\evAleft-\\evAright"
+        legend = ", legend columns=3, legend style={xshift=\\evAright/2-\\evAleft/2}"
+    else:
+        width, legend = "\\linewidth-265pt", ""
+    t += ["\\begin{tikzpicture}",
+          "\\begin{axis}[evbars, xbar stacked, scale only axis, width=%s, height=%.1fpt, ymin=0.3, ymax=%.1f%s," % (
+              width, h * 11, h, legend),
+          "  xmin=0, xmax=100, xlabel={share of the set's queries (\\%)},",
+          "  ytick={%s}, yticklabels={%s}]" % (",".join("%.1f" % b[0] for b in bars), ",".join(ticks))]
+    for s, label, col in SEGS:
+        co = " ".join("(%.4f,%.1f)" % (100 * (b[1]["seg"].get(s, 0) / b[1]["n"]) if b[1] else 0, b[0]) for b in bars)
+        pat = ", postaction={pattern=north east lines, pattern color=black!45}" if s == "other" else ""
+        t.append("\\addplot[fill=%s, draw=white, line width=0.3pt%s] coordinates {%s};" % (col, pat, co))
+        t.append("\\addlegendentry{%s}" % label)
+    for yv, o, x, m in bars:
+        if o is None:
+            t.append("\\node[anchor=west, font=\\scriptsize] at (axis cs:0,%.1f) {\\evmissing};" % yv)
+            continue
+        t.append("\\node[anchor=west, font=\\scriptsize, inner sep=1pt] at (axis cs:100,%.1f) {%s};" % (yv, labs[yv]))
     for yv, x in groups:
+        if THESIS:
+            t.append("\\node[anchor=south west, font=\\footnotesize, inner sep=0pt, yshift=5pt] at (axis cs:0,%.1f) "
+                     "{%s};" % (yv, row_title(x["ent"], x["eco"], x["id"], ", ")))
+            continue
         t.append("\\node[anchor=east, font=\\footnotesize, align=right, xshift=-32pt] at (axis cs:0,%.2f) "
                  "{%s%s};" % (yv, row_title(x["ent"], x["eco"], x["id"]), prov.mark(x["src"])))
     t += ["\\end{axis}", "\\end{tikzpicture}", ""]
@@ -457,32 +527,34 @@ def tab_b(out, prov, oc, conf):
                         "tool-timeout", "pac-refuse", "pac-crash", "pac-io-error", "tool-error", "harness-error",
                         "unchecked", "unrecorded"]
             if any(o["cls"].get(c) for x in oc for o in x["orders"].values())]
-    short = {"exact": "exact", "preference-gap": "pref.\\ gap", "instance-gap": "inst.\\ gap",
-             "unconfirmed": "unconf.", "invalid": "invalid", "exact-invalid": "exact-inv.",
-             "post-resolution": "cyclic", "platform-excluded": "platf.", "tool-declines": "tool decl.",
-             "both-refuse": "both ref.", "pac-timeout": "pac t/o", "tool-timeout": "tool t/o",
-             "pac-refuse": "pac ref.", "pac-crash": "crash", "pac-io-error": "i/o err.", "tool-error": "tool err.",
+    short = {"exact": "exact", "preference-gap": "pref.\\ |gap", "instance-gap": "inst.\\ |gap",
+             "unconfirmed": "unconf.", "invalid": "invalid", "exact-invalid": "exact-|inv.",
+             "post-resolution": "cyclic", "platform-excluded": "platf.", "tool-declines": "tool |decl.",
+             "both-refuse": "both |ref.", "pac-timeout": "pac |t/o", "tool-timeout": "tool |t/o",
+             "pac-refuse": "pac |ref.", "pac-crash": "crash", "pac-io-error": "i/o |err.", "tool-error": "tool |err.",
              "harness-error": "harn.", "unchecked": "unchk.", "unrecorded": "unrec."}
-    hdr = ["set", "order", "queries", "tool ans.", "exact \\%", "95\\% Wilson"] + [short[c] for c in cols] + \
-        ["re-ask 3600\\,s"]
+    hdr = ["set", "order", "queries", "tool |ans.", "exact |\\%", "95\\% |Wilson"] + [short[c] for c in cols] + \
+        ["re-ask |3600\\,s"]
     data = []
     t = ["% Table B: correspondence per set and order (triage_lib.classify).  Generated by eval/paper/figures.py.",
          "\\begin{tabular}{@{}ll" + "r" * (len(hdr) - 2) + "@{}}", "\\toprule",
          header(hdr, 2), "\\midrule"]
-    last_eco = None
+    last_eco, cut = None, None
     for x in oc:
         ent = x["ent"]
+        cut = len(t) if cut is None and eco_of(x["id"]) == HALF else cut
         if last_eco is not None and eco_of(x["id"]) != last_eco:
             t.append("\\addlinespace")
         last_eco = eco_of(x["id"])
-        title = "%s, %s%s" % (x["eco"], esc(ent["set"]), prov.mark(x["src"]))
+        st = esc(ent["set"]) + prov.mark(x["src"])
         if not x["orders"]:
             prov.miss("B", "%s %s" % (x["id"], ent["set"]), "no run")
-            t.append("%s & & \\multicolumn{%d}{l}{\\evmissing} \\\\" % (title, len(hdr) - 2))
+            t.append("%s & & \\multicolumn{%d}{l}{\\evmissing} \\\\" % (set_cells(x["eco"], st, 1)[0], len(hdr) - 2))
             continue
+        titles = set_cells(x["eco"], st, len(ORDERS))
         for i, m in enumerate(ORDERS):
             o = x["orders"].get(m)
-            first = title if i == 0 else ""
+            first = titles[i]
             if not o:
                 t.append("%s & %s & \\multicolumn{%d}{l}{\\evmissing} \\\\" % (first, order_label(ent, m), len(hdr) - 2))
                 prov.miss("B", "%s %s %s" % (x["id"], ent["set"], m), "no %s-order lines" % m)
@@ -500,6 +572,8 @@ def tab_b(out, prov, oc, conf):
                         ["%d/%d/%d/%d" % ra if ra else ""])
         if reading(x["id"]) == "shared":
             # the same answers judged by Berry, as Figure A shows them
+            sub = ["\\quad against Berry's", "\\quad own answer"] if THESIS else \
+                ["\\quad against Berry's own answer", ""]
             for i, m in enumerate(ORDERS):
                 o = x["orders"].get(m)
                 if not o:
@@ -509,7 +583,7 @@ def tab_b(out, prov, oc, conf):
                 rest = ", ".join("%s %d" % (k, v) for k, v in sorted(bc.items())
                                  if k not in ("exact", "preference-gap"))
                 t.append("%s & %s & %s & %s & %s & %s & %s & %s & \\multicolumn{%d}{l}{\\footnotesize %s} \\\\" % (
-                    "\\quad against Berry's own answer" if i == 0 else "", order_label(ent, m), cnt(o["n"]),
+                    sub[i], order_label(ent, m), cnt(o["n"]),
                     cnt(o["berry_asked"]), pct(o["berry_exact"], o["berry_asked"]),
                     "%.1f--%.1f" % w if w else "--", cnt(bc.get("exact", 0)), cnt(bc.get("preference-gap", 0)),
                     len(hdr) - 8, esc(rest)))
@@ -518,6 +592,7 @@ def tab_b(out, prov, oc, conf):
                              "%.2f-%.2f" % w if w else ""] + [bc.get(c, 0) for c in cols] + [rest])
     # opam against builtin-mccs, which optimises: divergence, not correspondence
     ent = conf.runs.get("opam")
+    mid = len(t)
     t += ["\\midrule", "\\multicolumn{%d}{@{}l}{\\emph{Divergence from an optimising solver, not correspondence:} "
           "opam against builtin-mccs+glpk, opam's default} \\\\" % len(hdr)]
     mc = results(ent["path"], "mccs.txt") if have(ent) else []
@@ -529,15 +604,18 @@ def tab_b(out, prov, oc, conf):
         st = collections.Counter(r["mccs"] for r in mc)
         acc = results(ent["path"], "mccs-accept.txt")
         a = collections.Counter(r["accepted"] for r in acc)
+        notes = ["mccs refuses %d, errs %d, times out %d;" % (st.get("refuse", 0), st.get("error", 0),
+                                                              st.get("timeout", 0)),
+                 "of %d differences drawn, 0install takes mccs's answer for %d" % (len(acc), a["yes"])]
+        # the thesis's rotated page is too narrow for the note on one row
+        notes = notes if THESIS else [" ".join(notes), ""]
         for i, m in enumerate(ORDERS):
             both = [r for r in mc if r.get(m) in ("exact", "diff")]
             ex = sum(1 for r in both if r[m] == "exact")
             w = wilson(ex, len(both))
-            note = ("mccs refuses %d, errs %d, times out %d; of %d differences drawn, 0install takes mccs's "
-                    "answer for %d" % (st.get("refuse", 0), st.get("error", 0), st.get("timeout", 0), len(acc),
-                                       a["yes"])) if i == 0 else ""
+            note = notes[i]
             t.append("%s & %s & %s & %s & %s & %s & \\multicolumn{%d}{l}{\\footnotesize %s} \\\\" % (
-                ("opam, " + esc(ent["set"]) + prov.mark(src)) if i == 0 else "", ORDER_NAME[m], cnt(len(mc)),
+                set_cells("opam", esc(ent["set"]) + prov.mark(src), len(ORDERS))[i], ORDER_NAME[m], cnt(len(mc)),
                 cnt(len(both)), pct(ex, len(both)), "%.1f--%.1f" % w if w else "--", len(hdr) - 6, esc(note)))
             data.append(["opam:mccs", ent["set"], m, len(mc), st["ok"], len(both), ex, pct(ex, len(both), 2),
                          "%.2f-%.2f" % w if w else ""] + [""] * len(cols) + [dict(st)])
@@ -545,34 +623,39 @@ def tab_b(out, prov, oc, conf):
     out.tsv("tab-B-correspondence.tsv", ["id", "set", "order", "queries", "tool answered", "compared", "exact",
                                          "exact %", "wilson 95%"] + cols + ["re-ask answered/exact/timeout/of"], data)
     out.write("tab-B-correspondence.tex", "\n".join(t))
+    halves(out, "tab-B-correspondence", t, cut, mid)
 
 
 # ---------------------------------------------------------------- C
 
 def tab_c(out, prov, oc, conf):
     cs = causes(conf)
-    hdr = ["set", "order", "answers", "checked", "valid", "invalid", "cause of the invalid", "platf.-excl.",
-           "cyclic", "check t/o", "minimal", "reproduced"]
+    hdr = ["set", "order", "answers", "checked", "valid", "invalid", "cause of the invalid", "platf.-|excl.",
+           "cyclic", "check |t/o", "minimal", "reproduced"]
+    # a rotated float's \linewidth is the page's height, so the thesis's
+    # causes take what the other columns leave of it
+    cause_col = ">{\\raggedright\\arraybackslash}p{200pt}" if THESIS else "p{0.24\\linewidth}"
     t = ["% Table C: validity by the tool's own check.  Generated by eval/paper/figures.py.",
-         "\\begin{tabular}{@{}llrrrrp{0.24\\linewidth}rrrrr@{}}", "\\toprule",
+         "\\begin{tabular}{@{}llrrrr%srrrrr@{}}" % cause_col, "\\toprule",
          header(hdr, 2), "\\midrule"]
     data = []
-    last = None
+    last, cut = None, None
     for x in oc:
         ent = x["ent"]
+        cut = len(t) if cut is None and eco_of(x["id"]) == HALF else cut
         if last is not None and eco_of(x["id"]) != last:
             t.append("\\addlinespace")
         last = eco_of(x["id"])
-        title = "%s, %s%s" % (x["eco"], esc(ent["set"]), prov.mark(x["src"]))
+        st = esc(ent["set"]) + prov.mark(x["src"])
         if not x["orders"]:
             prov.miss("C", "%s %s" % (x["id"], ent["set"]), "no run")
-            t.append("%s & & \\multicolumn{%d}{l}{\\evmissing} \\\\" % (title, len(hdr) - 2))
+            t.append("%s & & \\multicolumn{%d}{l}{\\evmissing} \\\\" % (set_cells(x["eco"], st, 1)[0], len(hdr) - 2))
             continue
         rs = results(ent["path"])
-        for i, m in enumerate(ORDERS):
-            ok = [r for r in rs if r["mode"] == m and r["pac"] == "ok"]
-            if not ok:
-                continue
+        oks = [(m, [r for r in rs if r["mode"] == m and r["pac"] == "ok"]) for m in ORDERS]
+        oks = [(m, ok) for m, ok in oks if ok]
+        titles = set_cells(x["eco"], st, len(oks))
+        for i, (m, ok) in enumerate(oks):
             v = collections.Counter(r["valid"] for r in ok)
             inv = [unkey(r["query"]) for r in ok if r["valid"] == "INVALID"]
             cause = collections.Counter(cause_of(cs, eco_of(x["id"]), g) for g in inv)
@@ -590,7 +673,7 @@ def tab_c(out, prov, oc, conf):
             re_ = sum(1 for r in ok if r.get("reproduced") == "yes")
             ra = sum(1 for r in ok if r.get("reproduced") in ("yes", "no"))
             checked = v["VALID"] + v["INVALID"]
-            t.append(" & ".join([title if i == 0 else "", ORDER_NAME[m],
+            t.append(" & ".join([titles[i], ORDER_NAME[m],
                                  cnt(len(ok)), cnt(checked), cnt(v["VALID"]),
                                  cnt(v["INVALID"]) if v["INVALID"] else "\\evzero", cz or "",
                                  cnt(v["PLATFORM"]) if v["PLATFORM"] else "\\evzero",
@@ -600,11 +683,13 @@ def tab_c(out, prov, oc, conf):
                                  "%s/%s" % (cnt(re_), cnt(ra)) if ra else "--"]) + " \\\\")
             data.append([x["id"], ent["set"], m, len(ok), checked, v["VALID"], v["INVALID"], " ".join(inv),
                          v["PLATFORM"], v["CYCLIC"], v["ERR"], mi, mi_asked, re_, ra])
+    mid = len(t)
     t += ["\\bottomrule", "\\end{tabular}", ""]
     out.tsv("tab-C-validity.tsv", ["id", "set", "order", "answers", "checked", "VALID", "INVALID", "invalid queries",
                                    "PLATFORM", "CYCLIC", "ERR", "minimal", "minimal asked", "reproduced",
                                    "reproduced asked"], data)
     out.write("tab-C-validity.tex", "\n".join(t))
+    halves(out, "tab-C-validity", t, cut, mid)
 
 
 FUZZ_ROWS = [("debian-reg", "Debian, amd64"), ("debian", "Debian, amd64"), ("debian-ma", "Debian, amd64+i386"),
@@ -628,9 +713,9 @@ def rechecks(path):
 
 def tab_fuzz(out, prov, conf):
     cs = causes(conf)
-    hdr = ["set", "queries $\\times$ seeds", "answers", "distinct per query (median / max)", "valid / checked",
-           "invalid (queries)", "platf.-excl.", "check t/o (at 3600\\,s)", "valid-invalid split",
-           "sat-unsat split", "pac t/o"]
+    hdr = ["set", "queries |$\\times$ seeds", "answers", "distinct per query |(median / max)", "valid / |checked",
+           "invalid |(queries)", "platf.-|excl.", "check t/o |(at 3600\\,s)", "valid-invalid |split",
+           "sat-unsat |split", "pac t/o"]
     t = ["% Table C, fuzz: validity under random decision orders.  Generated by eval/paper/figures.py.",
          "\\begin{tabular}{@{}l" + "r" * (len(hdr) - 1) + "@{}}", "\\toprule",
          header(hdr, 1), "\\midrule"]
@@ -638,7 +723,8 @@ def tab_fuzz(out, prov, conf):
     notes = []
     for fid, eco in FUZZ_ROWS:
         ent = conf.fuzz.get(fid) or {"path": None, "set": "?", "note": "", "flags": []}
-        title = "%s, %s" % (eco, esc(ent["set"]))
+        name = "%s, %s" % (eco, esc(ent["set"]))
+        title = "\\makecell[tl]{%s\\\\%s}" % (eco, esc(ent["set"])) if THESIS else name
         if not have(ent):
             prov.miss("C-fuzz", "%s %s" % (fid, ent["set"]), ent["note"] or "no run")
             t.append("%s & \\multicolumn{%d}{l}{\\evmissing} \\\\" % (title, len(hdr) - 1))
@@ -682,7 +768,7 @@ def tab_fuzz(out, prov, conf):
                              str(vsplit) if vsplit else "\\evzero", str(split) if split else "\\evzero",
                              cnt(tmo) if tmo else "\\evzero"]) + " \\\\")
         if iq:
-            notes.append("%s: %s" % (title, "; ".join("%s (%s)" % (esc(g), esc(cause_of(cs, eco_of(fid), g) or "")
+            notes.append("%s: %s" % (name, "; ".join("%s (%s)" % (esc(g), esc(cause_of(cs, eco_of(fid), g) or "")
                                                                     or "\\evnocause{}") for g in iq)))
         data.append([fid, ent["set"], len(qs), len(seeds), len(ok), sum(per), q(per, .5) if per else "",
                      max(per, default=0), v["VALID"], checked, inv_n, len(iq), " ".join(iq), v["PLATFORM"], v0["ERR"],
@@ -700,8 +786,8 @@ def tab_fuzz(out, prov, conf):
 # ---------------------------------------------------------------- D
 
 def tab_d(out, prov, conf):
-    hdr = ["set", "reading", "order", "queries", "answers", "npm-valid", "platf.-excl.", "Berry-valid",
-           "exact vs npm's lock", "layout-exact", "Berry's own exact", "timeouts (at 3600\\,s)"]
+    hdr = ["set", "reading", "order", "queries", "answers", "npm-valid", "platf.-|excl.", "Berry-valid",
+           "exact vs |npm's lock", "layout-exact", "Berry's |own exact", "timeouts |(at 3600\\,s)"]
     t = ["% Table D: npm's three readings on one query set.  Generated by eval/paper/figures.py.",
          "\\begin{tabular}{@{}lll" + "r" * (len(hdr) - 3) + "@{}}", "\\toprule",
          header(hdr, 3), "\\midrule"]
@@ -857,6 +943,8 @@ def timing(conf, prov, st):
     return res
 
 
+# the thesis's larger legend text runs its entries together without it
+LEGEND_SEP = ", legend style={/tikz/every even column/.append style={column sep=6pt}}"
 MODE_STYLE = {"warm": ("evwarm", "*", 0.24), "cold": ("evcold", "square*", 0.0), "first": ("evfirst", "triangle*", -0.24)}
 
 
@@ -866,19 +954,19 @@ def fig_e(out, prov, tm, suffix, st):
     hi = max([m["hi"] for c in tm for k, m in c["modes"].items() if "hi" in m] + [2])
     xmin, xmax = lo / 1.6, hi * 4
     ticks = [x for x in (0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100, 300) if xmin <= x <= xmax]
+    ylabs = ["{%s%s}" % (esc(c["label"]), "".join(prov.mark(s) for s in dict.fromkeys(c["src"].values()))) for c in tm]
     t = ["% Figure E: pac's time over the tool's, geometric mean over the " + esc(st) + " set with its 95% bootstrap",
          "% interval, warm, cold start and first run; tool order filled, PubGrub order hollow.",
-         "% Generated by eval/paper/figures.py.",
-         "\\begin{tikzpicture}",
-         "\\begin{axis}[evdots, scale only axis, width=\\linewidth-120pt, height=%dpt, xmode=log, xmin=%g, xmax=%g, ymin=0.4, ymax=%.1f," %
-         (n * 20, xmin, xmax, n + 0.6),
-         "  xtick={%s}, xticklabels={%s}, xlabel={pac $\\div$ tool, wall time (log scale)}," % (
-             ",".join("%g" % x for x in ticks), ",".join("%g$\\times$" % x for x in ticks)),
-         "  ytick={%s}, yticklabels={%s}]" % (
-             ",".join(str(n - i) for i in range(n)),
-             ",".join("{%s%s}" % (esc(c["label"]), "".join(prov.mark(s) for s in dict.fromkeys(c["src"].values())))
-                      for c in tm)),
-         "\\draw[evink2, dashed] (axis cs:1,0.4) -- (axis cs:1,%.1f);" % (n + 0.6)]
+         "% Generated by eval/paper/figures.py."]
+    if THESIS:
+        t.append(widest("evEleft", "\\footnotesize", ylabs, "12pt"))
+    t += ["\\begin{tikzpicture}",
+          "\\begin{axis}[evdots, scale only axis, width=%s, height=%dpt, xmode=log, xmin=%g, xmax=%g, ymin=0.4, ymax=%.1f," %
+          ("\\linewidth-\\evEleft" + LEGEND_SEP if THESIS else "\\linewidth-120pt", n * 20, xmin, xmax, n + 0.6),
+          "  xtick={%s}, xticklabels={%s}, xlabel={pac $\\div$ tool, wall time (log scale)}," % (
+              ",".join("%g" % x for x in ticks), ",".join("%g$\\times$" % x for x in ticks)),
+          "  ytick={%s}, yticklabels={%s}]" % (",".join(str(n - i) for i in range(n)), ",".join(ylabs)),
+          "\\draw[evink2, dashed] (axis cs:1,0.4) -- (axis cs:1,%.1f);" % (n + 0.6)]
     for mk, _, mname in MODES:
         col, mark, _ = MODE_STYLE[mk]
         t.append("\\addlegendimage{only marks, mark=%s, color=%s, mark size=2pt}\\addlegendentry{%s}" % (mark, col, mname))
@@ -932,7 +1020,10 @@ def fig_f(out, prov, tm, suffix, st):
          "\\begin{tikzpicture}",
          "\\begin{groupplot}[evscatter, group style={group size=3 by %d, horizontal sep=34pt, vertical sep=40pt},"
          % math.ceil(len(tm) / 3),
-         "  scale only axis, width=0.25\\linewidth, height=0.25\\linewidth]"]
+         "  scale only axis, %s]" % (
+             # the thesis's line leaves the two gaps and the axis labels the room the paper's did not
+             "width=(\\linewidth-128pt)/3, height=(\\linewidth-128pt)/3" if THESIS else
+             "width=0.25\\linewidth, height=0.25\\linewidth")]
     data = []
     legend = False
     for i, c in enumerate(tm):
@@ -949,7 +1040,8 @@ def fig_f(out, prov, tm, suffix, st):
             continue
         vals = [v for _, a, b in allp for v in (a, b) if v > 0]
         lo, hi = 10 ** math.floor(math.log10(min(vals))), 10 ** math.ceil(math.log10(max(vals)))
-        leg = "" if legend else "legend to name=evF%s, legend columns=3, " % suffix.strip("-")
+        leg = "" if legend else "legend to name=evF%s, legend columns=3, %s" % (
+            suffix.strip("-"), LEGEND_SEP[2:] + ", " if THESIS else "")
         t.append("\\nextgroupplot[%s, %s %s %sxmin=%g, xmax=%g, ymin=%g, ymax=%g]" % (title, xl, yl, leg, lo, hi,
                                                                                      lo, hi))
         t.append("\\addplot[evink2, dashed, domain=%g:%g, samples=2, forget plot] {x};" % (lo, hi))
@@ -993,8 +1085,8 @@ def tab_g(out, prov, conf, tm, suffix, st):
     for l in lines(conf.totals) if conf.totals else []:
         k, *v = l.split()
         tot[k] = [int(x) for x in v]
-    hdr = ["comparison", "order", "pac parse", "pac solve", "pac wall", "tool wall", "pac $\\div$ tool (95\\% CI)",
-           "pac faster", "cold start", "first run", "names loaded / index"]
+    hdr = ["comparison", "order", "pac |parse", "pac |solve", "pac |wall", "tool |wall",
+           "pac $\\div$ tool |(95\\% CI)", "pac |faster", "cold |start", "first |run", "names loaded |/ index"]
     t = ["% Table G: time (median seconds over the " + esc(st) + " set, warm) and laziness (median over the",
          "% scale run's answers).  Generated by eval/paper/figures.py.",
          "\\begin{tabular}{@{}ll" + "r" * (len(hdr) - 2) + "@{}}", "\\toprule",
@@ -1110,7 +1202,8 @@ def provenance(out, prov, conf):
             esc(e["path"]).replace("/", "/\\allowbreak{}")))
     tx += ["\\bottomrule", "\\end{tabular}", ""]
     out.write("provenance.md", "\n".join(md) + "\n")
-    out.write("provenance.tex", "\n".join(tx))
+    if not THESIS:  # the thesis names no runs or commits
+        out.write("provenance.tex", "\n".join(tx))
     mm = ["# Cells printed as missing", "", "| where | what | why |", "|---|---|---|"]
     for w, what, why in prov.missing:
         mm.append("| %s | %s | %s |" % (w, what, why))
@@ -1206,7 +1299,9 @@ def pdf(d, sets):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if a != "--pdf"]
+    global THESIS
+    THESIS = "--thesis" in sys.argv
+    args = [a for a in sys.argv[1:] if a not in ("--pdf", "--thesis")]
     if len(args) < 2:
         raise SystemExit(__doc__)
     conf = Conf(args[:-1])
@@ -1234,11 +1329,14 @@ def main():
         fig_e(out, prov, tm, suf, st)
         fig_f(out, prov, tm, suf, st)
         tab_g(out, prov, conf, tm, suf, st)
-    out.write("preamble.tex", PREAMBLE)
+    out.write("preamble.tex", PREAMBLE + ("% the thesis's two-line column heads\n\\usepackage{makecell}\n"
+                                          if THESIS else ""))
     provenance(out, prov, conf)
-    preview(out, sets, conf)
-    if "--pdf" in sys.argv:
-        pdf(out.d, sets)
+    # the preview is the paper's 9pt page; the thesis is its own
+    if not THESIS:
+        preview(out, sets, conf)
+        if "--pdf" in sys.argv:
+            pdf(out.d, sets)
     print("%d sources, %d of them stale; %d missing cells (missing.md)" % (
         len(prov.ents), sum(1 for e in prov.ents.values() if e["stale"]), len(prov.missing)))
 
