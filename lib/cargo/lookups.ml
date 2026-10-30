@@ -183,7 +183,7 @@ module Make (Encoding : Encoding.S) = struct
       inst_slots = Cg.SlotRel.empty;
       inst_links = Cg.LinkRel.empty;
       inst_gran = granularity st;
-      inst_dflt = P.default_feature;
+      inst_default = P.default_feature;
       inst_root = st.rc;
       inst_rootFeats = st.rfeats;
     }
