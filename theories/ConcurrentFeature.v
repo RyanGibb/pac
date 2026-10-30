@@ -797,7 +797,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           andb (PkgEqb.eqb q' q) (Feat.FSet.subset fs fs'))
         S_CF.
 
-    Definition witnessCondb (S_CF : Feat.FeaturedSet.t) (pi : ParentRel.t)
+    Definition activeb (S_CF : Feat.FeaturedSet.t) (pi : ParentRel.t)
         (p : Pkg.t) (fs : Feat.FSet.t) (m : N.t) (u : V.t) : bool :=
       andb (inSb S_CF p)
         (andb (takenWithb S_CF fs (m, u)) (ParentRel.mem ((m, u), p) pi)).
@@ -815,7 +815,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
            (T.PkgSet.union
               (SOfp.unionMap (fun '((n, v), (m, (vs, fs))) =>
                    SOvp.filterMap (fun u =>
-                       if witnessCondb S_CF pi (n, v) fs m u
+                       if activeb S_CF pi (n, v) fs m u
                        then Some (Name.Intermediate n v m, u)
                        else None)
                      vs)
@@ -823,7 +823,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
               (T.PkgSet.union
                  (SOap.unionMap (fun '(((n, v), _), (m, (vs, fs))) =>
                       SOvp.filterMap (fun u =>
-                          if witnessCondb S_CF pi (n, v) fs m u
+                          if activeb S_CF pi (n, v) fs m u
                           then Some (Name.Intermediate n v m, u)
                           else None)
                         vs)
@@ -832,7 +832,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
                     (SOfp.unionMap (fun '((n, v), (m, (vs, fs))) =>
                          SOfsp.unionMap (fun f =>
                              SOvp.filterMap (fun u =>
-                                 if witnessCondb S_CF pi (n, v) fs m u
+                                 if activeb S_CF pi (n, v) fs m u
                                  then Some (Name.IntermediateF n v m f, u)
                                  else None)
                                vs)
@@ -841,7 +841,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
                     (SOap.unionMap (fun '(((n, v), f), (m, (vs, fs))) =>
                          SOfsp.unionMap (fun f' =>
                              SOvp.filterMap (fun u =>
-                                 if witnessCondb S_CF pi (n, v) fs m u
+                                 if activeb S_CF pi (n, v) fs m u
                                  then Some (Name.IntermediateA n v f m f', u)
                                  else None)
                                vs)
@@ -879,14 +879,14 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           [apply PkgEqb.eqb_refl | apply Feat.FSet.subset_spec; exact Hsub].
     Qed.
 
-    Lemma witnessCondb_iff : forall S_CF pi p fs m u,
-        witnessCondb S_CF pi p fs m u = true <->
+    Lemma activeb_iff : forall S_CF pi p fs m u,
+        activeb S_CF pi p fs m u = true <->
         (exists fs_p, Feat.FeaturedSet.In (p, fs_p) S_CF) /\
         (exists fs', Feat.FSet.Subset fs fs' /\
            Feat.FeaturedSet.In ((m, u), fs') S_CF) /\
         ParentRel.In ((m, u), p) pi.
     Proof.
-      intros S_CF pi p fs m u; unfold witnessCondb.
+      intros S_CF pi p fs m u; unfold activeb.
       rewrite !Bool.andb_true_iff, inSb_iff, takenWithb_iff,
         ParentRel.mem_spec.
       tauto.
@@ -903,20 +903,20 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         CoreMember S_CF pi Df Da g (Name.GranularFeatPkg n f (g v), v)
     | CoreFInter : forall n v m vs fs u,
         Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df -> VSet.In u vs ->
-        witnessCondb S_CF pi (n, v) fs m u = true ->
+        activeb S_CF pi (n, v) fs m u = true ->
         CoreMember S_CF pi Df Da g (Name.Intermediate n v m, u)
     | CoreAInter : forall n v f m vs fs u,
         Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da -> VSet.In u vs ->
-        witnessCondb S_CF pi (n, v) fs m u = true ->
+        activeb S_CF pi (n, v) fs m u = true ->
         CoreMember S_CF pi Df Da g (Name.Intermediate n v m, u)
     | CoreFInterF : forall n v m vs fs f u,
         Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df -> Feat.FSet.In f fs ->
-        VSet.In u vs -> witnessCondb S_CF pi (n, v) fs m u = true ->
+        VSet.In u vs -> activeb S_CF pi (n, v) fs m u = true ->
         CoreMember S_CF pi Df Da g (Name.IntermediateF n v m f, u)
     | CoreAInterA : forall n v f m vs fs f' u,
         Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da ->
         Feat.FSet.In f' fs -> VSet.In u vs ->
-        witnessCondb S_CF pi (n, v) fs m u = true ->
+        activeb S_CF pi (n, v) fs m u = true ->
         CoreMember S_CF pi Df Da g (Name.IntermediateA n v f m f', u).
     #[local] Hint Constructors CoreMember : fc_mem.
 
@@ -972,13 +972,13 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
               as [u [Hu [Htk Hpi]]].
             exists u; split; [apply mem_embedVS; exact Hu |].
             apply mem_coreResolution; eapply CoreFInter;
-              [eassumption | exact Hu | apply witnessCondb_iff; eauto].
+              [eassumption | exact Hu | apply activeb_iff; eauto].
           * destruct (Hpc _ _ HS _ _ _ ltac:(eassumption))
               as [u [Hu [Htk Hpi]]].
             exists u; split; [apply mem_embedVS; exact Hu |].
             apply mem_coreResolution; eapply CoreFInterF;
               [eassumption | eassumption | exact Hu
-              | apply witnessCondb_iff; eauto].
+              | apply activeb_iff; eauto].
         + inversion Hd; subst.
           * eexists; split; [apply mem_singVS; reflexivity |].
             apply mem_coreResolution; eapply CoreOrig; exact HS.
@@ -986,39 +986,39 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
               as [u [Hu [Htk Hpi]]].
             exists u; split; [apply mem_embedVS; exact Hu |].
             apply mem_coreResolution; eapply CoreAInter;
-              [eassumption | exact Hu | apply witnessCondb_iff; eauto].
+              [eassumption | exact Hu | apply activeb_iff; eauto].
           * destruct (Hpca _ _ HS _ Hf _ _ _ ltac:(eassumption))
               as [u [Hu [Htk Hpi]]].
             exists u; split; [apply mem_embedVS; exact Hu |].
             apply mem_coreResolution; eapply CoreAInterA;
               [eassumption | eassumption | exact Hu
-              | apply witnessCondb_iff; eauto].
+              | apply activeb_iff; eauto].
         + inversion Hd; subst;
-            apply witnessCondb_iff in Hc as [_ [[fs' [_ HS']] _]];
+            apply activeb_iff in Hc as [_ [[fs' [_ HS']] _]];
             eexists; (split; [apply mem_singVS; reflexivity |]);
             apply mem_coreResolution; eapply CoreOrig; exact HS'.
         + inversion Hd; subst;
-            apply witnessCondb_iff in Hc as [_ [[fs' [_ HS']] _]];
+            apply activeb_iff in Hc as [_ [[fs' [_ HS']] _]];
             eexists; (split; [apply mem_singVS; reflexivity |]);
             apply mem_coreResolution; eapply CoreOrig; exact HS'.
         + inversion Hd; subst;
             eexists; (split; [apply mem_singVS; reflexivity |]);
             apply mem_coreResolution.
-          * apply witnessCondb_iff in Hc as [_ [[fs' [Hsub' HS']] _]].
+          * apply activeb_iff in Hc as [_ [[fs' [Hsub' HS']] _]].
             eapply CoreFeatPkg; [exact HS' | exact (Hsub' _ Hf)].
           * eapply CoreFInter; [exact HD | exact Hu | exact Hc].
         + inversion Hd; subst;
             eexists; (split; [apply mem_singVS; reflexivity |]);
             apply mem_coreResolution.
-          * apply witnessCondb_iff in Hc as [_ [[fs' [Hsub' HS']] _]].
+          * apply activeb_iff in Hc as [_ [[fs' [Hsub' HS']] _]].
             eapply CoreFeatPkg; [exact HS' | exact (Hsub' _ Hf')].
           * eapply CoreAInter; [exact HD | exact Hu | exact Hc].
       - intros n cv1 cv2 H1 H2.
         apply mem_coreResolution in H1, H2.
         inversion H1; subst; inversion H2; subst;
           repeat match goal with
-                 | H : witnessCondb _ _ _ _ _ _ = true |- _ =>
-                     apply witnessCondb_iff in H; destruct H as [_ [_ ?]]
+                 | H : activeb _ _ _ _ _ _ = true |- _ =>
+                     apply activeb_iff in H; destruct H as [_ [_ ?]]
                  end;
           try (eapply Hpif; eassumption).
         all: match goal with |- ?a = ?b =>
@@ -1077,8 +1077,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       - intros [H Hdep]; split.
         { apply mem_coreResolution in H; inversion H; subst;
             match goal with
-            | Hw : witnessCondb _ _ _ _ _ _ = true |- _ =>
-                apply witnessCondb_iff in Hw; destruct Hw as (_ & _ & Hpi);
+            | Hw : activeb _ _ _ _ _ _ = true |- _ =>
+                apply activeb_iff in Hw; destruct Hw as (_ & _ & Hpi);
                 exact Hpi
             end. }
         destruct Hdep
@@ -1098,7 +1098,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           split.
           * apply mem_coreResolution,
               (CoreFInter _ _ _ _ _ n v m vs fs u HD Hw).
-            apply witnessCondb_iff; split; [exists fs_p; exact Hp |].
+            apply activeb_iff; split; [exists fs_p; exact Hp |].
             split; [exact Htk | exact Hpi].
           * left; exists vs, fs; split; [exact HD | split; [exact Hw |]].
             apply mem_coreResolution; exact (CoreOrig _ _ _ _ _ n v fs_p Hp).
@@ -1110,7 +1110,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           split.
           * apply mem_coreResolution,
               (CoreAInter _ _ _ _ _ n v f m vs fs u HA Hw).
-            apply witnessCondb_iff; split; [exists fs_p; exact Hp |].
+            apply activeb_iff; split; [exists fs_p; exact Hp |].
             split; [exact Htk | exact Hpi].
           * right; exists f, vs, fs; split; [exact HA | split; [exact Hw |]].
             apply mem_coreResolution.
