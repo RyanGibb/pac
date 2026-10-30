@@ -180,22 +180,22 @@ Module Virtual (N V : UsualOrderedType).
     Definition embedVS (vs : VSet.t) : T.VSet.t :=
       SOvv.map Version.Orig vs.
 
-    Definition HasProvider
+    Definition Prov
         (Pi : ProvidesRel.t) (n : N.t) (vs : VSet.t) : Prop :=
       exists q v, ProvidesRel.In (q, (n, v)) Pi /\ MemTop v vs.
 
     Module NEqb := UOTEqb N.
 
-    Definition hasProviderb
+    Definition provb
         (Pi : ProvidesRel.t) (n : N.t) (vs : VSet.t) : bool :=
       ProvidesRel.exists_ (fun '(_, (m, v)) =>
           andb (NEqb.eqb m n) (memTopb v vs))
         Pi.
 
-    Lemma hasProviderb_iff : forall Pi n vs,
-        hasProviderb Pi n vs = true <-> HasProvider Pi n vs.
+    Lemma provb_iff : forall Pi n vs,
+        provb Pi n vs = true <-> Prov Pi n vs.
     Proof.
-      intros Pi n vs; unfold hasProviderb, HasProvider.
+      intros Pi n vs; unfold provb, Prov.
       rewrite ProvidesRel.exists_spec'.
       unfold ProvidesRel.Exists; split.
       - intros [t [Ht Hb]]; destruct t as [q [n' v]]; cbn beta iota in Hb.
@@ -264,7 +264,7 @@ Module Virtual (N V : UsualOrderedType).
                 realProviderBlock Pi p n vs)
               D)
            (SOdp.unionMap (fun '(p, (n, vs)) =>
-                if hasProviderb Pi n vs
+                if provb Pi n vs
                 then realDirectBlock R p n vs
                 else T.PkgSet.empty)
               D)).
@@ -278,7 +278,7 @@ Module Virtual (N V : UsualOrderedType).
         MemTop v vs ->
         RealSpec R D Pi (Name.Selector p n, Version.Provider m w)
     | RealDirect : forall p n vs u,
-        C.DepRel.In (p, (n, vs)) D -> HasProvider Pi n vs -> VSet.In u vs ->
+        C.DepRel.In (p, (n, vs)) D -> Prov Pi n vs -> VSet.In u vs ->
         PkgSet.In (n, u) R ->
         RealSpec R D Pi (Name.Selector p n, Version.Orig u).
 
@@ -294,7 +294,7 @@ Module Virtual (N V : UsualOrderedType).
         + cbn beta iota in He; apply mem_realProviderBlock in He.
           mem_destruct; eapply RealProvider; eassumption.
         + cbn beta iota in He; apply SOdp.in_if_empty in He.
-          destruct He as [Hb He]; apply hasProviderb_iff in Hb.
+          destruct He as [Hb He]; apply provb_iff in Hb.
           apply mem_realDirectBlock in He; mem_destruct.
           eapply RealDirect; eassumption.
       - destruct 1 as [n v HR | p n vs m u v HD HP Hm | p n vs u HD Hb Hu HR].
@@ -302,7 +302,7 @@ Module Virtual (N V : UsualOrderedType).
         + right; left; exists (p, (n, vs)); split; [exact HD | cbn beta iota].
           apply mem_realProviderBlock; exists m, u, v; auto.
         + right; right; exists (p, (n, vs)); split; [exact HD | cbn beta iota].
-          apply SOdp.in_if_empty; rewrite hasProviderb_iff.
+          apply SOdp.in_if_empty; rewrite provb_iff.
           split; [exact Hb | apply mem_realDirectBlock; exists u; auto].
     Qed.
 
@@ -400,12 +400,12 @@ Module Virtual (N V : UsualOrderedType).
         T.DepRel.t :=
       T.DepRel.union
         (SOdd.filterMap (fun '(p, (n, vs)) =>
-             if hasProviderb Pi n vs then None
+             if provb Pi n vs then None
              else Some (embedPkg p, (Name.Orig n, embedVS vs)))
            D)
         (T.DepRel.union
            (SOdd.filterMap (fun '(p, (n, vs)) =>
-                if hasProviderb Pi n vs
+                if provb Pi n vs
                 then Some (embedPkg p,
                            (Name.Selector p n, selectorVersions R Pi n vs))
                 else None)
@@ -415,7 +415,7 @@ Module Virtual (N V : UsualOrderedType).
                    depsProviderBlock Pi p n vs)
                  D)
               (SOdd.unionMap (fun '(p, (n, vs)) =>
-                   if hasProviderb Pi n vs
+                   if provb Pi n vs
                    then depsDirectBlock R p n vs
                    else T.DepRel.empty)
                  D))).
@@ -425,11 +425,11 @@ Module Virtual (N V : UsualOrderedType).
     Inductive DepsSpec (R : PkgSet.t) (D : C.DepRel.t) (Pi : ProvidesRel.t)
         : T.DepElt.t -> Prop :=
     | DepsOrig : forall pn pv n vs,
-        C.DepRel.In ((pn, pv), (n, vs)) D -> ~ HasProvider Pi n vs ->
+        C.DepRel.In ((pn, pv), (n, vs)) D -> ~ Prov Pi n vs ->
         DepsSpec R D Pi
           ((Name.Orig pn, Version.Orig pv), (Name.Orig n, embedVS vs))
     | DepsSelector : forall pn pv n vs,
-        C.DepRel.In ((pn, pv), (n, vs)) D -> HasProvider Pi n vs ->
+        C.DepRel.In ((pn, pv), (n, vs)) D -> Prov Pi n vs ->
         DepsSpec R D Pi
           ((Name.Orig pn, Version.Orig pv),
            (Name.Selector (pn, pv) n, selectorVersions R Pi n vs))
@@ -440,7 +440,7 @@ Module Virtual (N V : UsualOrderedType).
           ((Name.Selector p n, Version.Provider m w),
            (Name.Orig m, T.VSet.singleton (Version.Orig w)))
     | DepsDirect : forall p n vs u,
-        C.DepRel.In (p, (n, vs)) D -> HasProvider Pi n vs -> VSet.In u vs ->
+        C.DepRel.In (p, (n, vs)) D -> Prov Pi n vs -> VSet.In u vs ->
         PkgSet.In (n, u) R ->
         DepsSpec R D Pi
           ((Name.Selector p n, Version.Orig u),
@@ -456,31 +456,31 @@ Module Virtual (N V : UsualOrderedType).
                | [([[pn pv] [n vs]] & HD & He)
                  | [([p [n vs]] & HD & He) | ([p [n vs]] & HD & He)]]];
           cbn beta iota in He.
-        + destruct (hasProviderb Pi n vs) eqn:Hb; [discriminate |].
+        + destruct (provb Pi n vs) eqn:Hb; [discriminate |].
           injection He as <-; apply DepsOrig; [exact HD |].
-          rewrite <- hasProviderb_iff, Hb; discriminate.
-        + destruct (hasProviderb Pi n vs) eqn:Hb; [| discriminate].
-          injection He as <-; apply hasProviderb_iff in Hb.
+          rewrite <- provb_iff, Hb; discriminate.
+        + destruct (provb Pi n vs) eqn:Hb; [| discriminate].
+          injection He as <-; apply provb_iff in Hb.
           apply DepsSelector; assumption.
         + apply mem_depsProviderBlock in He; mem_destruct.
           eapply DepsProvider; eassumption.
         + apply SOdd.in_if_empty in He; destruct He as [Hb He].
-          apply hasProviderb_iff in Hb; apply mem_depsDirectBlock in He.
+          apply provb_iff in Hb; apply mem_depsDirectBlock in He.
           mem_destruct; eapply DepsDirect; eassumption.
       - destruct 1 as [pn pv n vs HD Hb | pn pv n vs HD Hb
                       | p n vs m u v HD HP Hm | p n vs u HD Hb Hu HR].
         + left; exists ((pn, pv), (n, vs)); split; [exact HD | cbn beta iota].
-          destruct (hasProviderb Pi n vs) eqn:Hb'; [| reflexivity].
-          apply hasProviderb_iff in Hb'; contradiction.
+          destruct (provb Pi n vs) eqn:Hb'; [| reflexivity].
+          apply provb_iff in Hb'; contradiction.
         + right; left; exists ((pn, pv), (n, vs)).
           split; [exact HD | cbn beta iota].
-          apply hasProviderb_iff in Hb; rewrite Hb; reflexivity.
+          apply provb_iff in Hb; rewrite Hb; reflexivity.
         + right; right; left; exists (p, (n, vs)).
           split; [exact HD | cbn beta iota].
           apply mem_depsProviderBlock; exists m, u, v; auto.
         + right; right; right; exists (p, (n, vs)).
           split; [exact HD | cbn beta iota].
-          apply SOdd.in_if_empty; rewrite hasProviderb_iff.
+          apply SOdd.in_if_empty; rewrite provb_iff.
           split; [exact Hb | apply mem_depsDirectBlock; exists u; auto].
     Qed.
 
@@ -619,8 +619,8 @@ Module Virtual (N V : UsualOrderedType).
       - apply mem_virtualResolution; exact Hroot.
       - intros [pn pv] Hp n vs HD.
         apply mem_virtualResolution in Hp.
-        destruct (hasProviderb Pi n vs) eqn:Hb.
-        + apply hasProviderb_iff in Hb.
+        destruct (provb Pi n vs) eqn:Hb.
+        + apply provb_iff in Hb.
           assert (Hd2 : T.DepRel.In
               (embedPkg (pn, pv),
                (Name.Selector (pn, pv) n, selectorVersions R Pi n vs))
@@ -651,7 +651,7 @@ Module Virtual (N V : UsualOrderedType).
               (embedPkg (pn, pv), (Name.Orig n, embedVS vs))
               (reduceDeps R D Pi)).
           { apply mem_reduceDeps; apply DepsOrig; [exact HD |].
-            rewrite <- hasProviderb_iff, Hb; discriminate. }
+            rewrite <- provb_iff, Hb; discriminate. }
           destruct (Hdep _ Hp _ _ Hd1) as [w [Hw HwS]].
           unfold embedVS in Hw; apply SOvv.mem_map in Hw;
             destruct Hw as [u [Hu ->]].
@@ -770,7 +770,7 @@ Module Virtual (N V : UsualOrderedType).
         (S_Pi : PkgSet.t) (rho : RhoRel.t) : T.PkgSet.t :=
       T.PkgSet.union (embedSet S_Pi)
         (SOdp.filterMap (fun '(p, (n, vs)) =>
-             if andb (PkgSet.mem p S_Pi) (hasProviderb Pi n vs)
+             if andb (PkgSet.mem p S_Pi) (provb Pi n vs)
              then Some (Name.Selector p n, chooseSelector S_Pi rho Pi p n vs)
              else None)
            D).
@@ -782,7 +782,7 @@ Module Virtual (N V : UsualOrderedType).
         CoreSpec D Pi S_Pi rho (Name.Orig n, Version.Orig v)
     | CoreSelector : forall p n vs,
         C.DepRel.In (p, (n, vs)) D -> PkgSet.In p S_Pi ->
-        HasProvider Pi n vs ->
+        Prov Pi n vs ->
         CoreSpec D Pi S_Pi rho
           (Name.Selector p n, chooseSelector S_Pi rho Pi p n vs).
 
@@ -797,13 +797,13 @@ Module Virtual (N V : UsualOrderedType).
         + exact (CoreOrig D Pi S_Pi rho n v HS).
         + cbn beta iota in He; apply if_some_iff in He.
           destruct He as [Hc <-].
-          rewrite Bool.andb_true_iff, PkgSet.mem_spec, hasProviderb_iff in Hc.
+          rewrite Bool.andb_true_iff, PkgSet.mem_spec, provb_iff in Hc.
           destruct Hc; constructor; assumption.
       - destruct 1 as [n v HS | p n vs HD HS Hb].
         + left; exists (n, v); auto.
         + right; exists (p, (n, vs)); split; [exact HD | cbn beta iota].
           apply if_some_iff; rewrite Bool.andb_true_iff, PkgSet.mem_spec,
-            hasProviderb_iff; auto.
+            provb_iff; auto.
     Qed.
 
     Lemma mem_coreResolution_embed : forall D Pi S_Pi rho (p : Pkg.t),
@@ -816,7 +816,7 @@ Module Virtual (N V : UsualOrderedType).
 
     Lemma mem_coreResolution_selector :
       forall D Pi S_Pi rho (p : Pkg.t) n vs,
-        PkgSet.In p S_Pi -> C.DepRel.In (p, (n, vs)) D -> HasProvider Pi n vs ->
+        PkgSet.In p S_Pi -> C.DepRel.In (p, (n, vs)) D -> Prov Pi n vs ->
         T.PkgSet.In (Name.Selector p n, chooseSelector S_Pi rho Pi p n vs)
           (coreResolution D Pi S_Pi rho).
     Proof. intros; apply mem_coreResolution; constructor; assumption. Qed.
@@ -956,10 +956,10 @@ Module Virtual (N V : UsualOrderedType).
 
     Module Lookup.
       Module ProvFibred := FibredLabelledRel Pkg N VTOT ProvElt ProvidesRel.
-      Lemma hasProvider_nodeFibre : forall Pi n vs,
-          HasProvider (ProvFibred.nodeFibre Pi n) n vs <-> HasProvider Pi n vs.
+      Lemma prov_nodeFibre : forall Pi n vs,
+          Prov (ProvFibred.nodeFibre Pi n) n vs <-> Prov Pi n vs.
       Proof.
-        intros Pi n vs; unfold HasProvider; split.
+        intros Pi n vs; unfold Prov; split.
         - intros [q [v [Hin Hm]]]; exists q, v;
             split; [exact (ProvFibred.nodeFibre_subset _ _ _ Hin) | exact Hm].
         - intros [q [v [Hin Hm]]]; exists q, v; split; [| exact Hm].
@@ -1001,11 +1001,11 @@ Module Virtual (N V : UsualOrderedType).
           ProvidesRel.In (q, (n, v)) Pi /\ hasDepNameb Dp n = true.
       Proof. intros Pi Dp q n v; apply ProvPreimage.mem_preimage. Qed.
 
-      Lemma hasProvider_provPreimage : forall Pi Dp n vs,
+      Lemma prov_provPreimage : forall Pi Dp n vs,
           hasDepNameb Dp n = true ->
-          (HasProvider (provPreimage Pi Dp) n vs <-> HasProvider Pi n vs).
+          (Prov (provPreimage Pi Dp) n vs <-> Prov Pi n vs).
       Proof.
-        intros Pi Dp n vs Hn; unfold HasProvider; split.
+        intros Pi Dp n vs Hn; unfold Prov; split.
         - intros [q [v [Hin Hm]]]; apply mem_provPreimage in Hin.
           destruct Hin as [Hin _]; exists q, v; split; assumption.
         - intros [q [v [Hin Hm]]]; exists q, v; split; [| exact Hm].
@@ -1068,20 +1068,20 @@ Module Virtual (N V : UsualOrderedType).
         - apply DepsOrig;
             [apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity]
             |].
-          rewrite (hasProvider_provPreimage Pi _ n vs (Hn _ _ HD)); exact Hb.
+          rewrite (prov_provPreimage Pi _ n vs (Hn _ _ HD)); exact Hb.
         - rewrite <- (selectorVersions_preimage R Pi _ n vs (Hn _ _ HD)).
           apply DepsSelector;
             [apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity]
             |].
-          apply (hasProvider_provPreimage Pi _ n vs (Hn _ _ HD)); exact Hb.
+          apply (prov_provPreimage Pi _ n vs (Hn _ _ HD)); exact Hb.
         - pose proof (DepRelFibred.tailFibre_subset _ _ _ HD) as HD'.
           apply DepsOrig; [exact HD' |].
-          rewrite <- (hasProvider_provPreimage Pi _ n vs (Hn _ _ HD')).
+          rewrite <- (prov_provPreimage Pi _ n vs (Hn _ _ HD')).
           exact Hb.
         - pose proof (DepRelFibred.tailFibre_subset _ _ _ HD) as HD'.
           rewrite (selectorVersions_preimage R Pi _ n vs (Hn _ _ HD')).
           apply DepsSelector; [exact HD' |].
-          apply (hasProvider_provPreimage Pi _ n vs (Hn _ _ HD')); exact Hb.
+          apply (prov_provPreimage Pi _ n vs (Hn _ _ HD')); exact Hb.
       Qed.
 
       Theorem versions_lookupSelector : forall R D Pi (p : Pkg.t) (n : N.t),
@@ -1103,14 +1103,14 @@ Module Virtual (N V : UsualOrderedType).
         - eapply RealDirect; [| | exact Hu |].
           + apply DepRelFibred.mem_endsFibre;
               split; [exact HD | split; reflexivity].
-          + apply (proj2 (hasProvider_nodeFibre _ _ _)); exact Hb.
+          + apply (proj2 (prov_nodeFibre _ _ _)); exact Hb.
           + apply PkgFibred.mem_tailFibre; split; [exact HuR | reflexivity].
         - eapply RealProvider;
             [exact (DepRelFibred.endsFibre_subset _ _ _ _ HD)
             | exact (ProvFibred.nodeFibre_subset _ _ _ HP) | exact Hm].
         - eapply RealDirect;
             [exact (DepRelFibred.endsFibre_subset _ _ _ _ HD)
-            | apply (proj1 (hasProvider_nodeFibre _ _ _)); exact Hb
+            | apply (proj1 (prov_nodeFibre _ _ _)); exact Hb
             | exact Hu | exact (PkgFibred.tailFibre_subset _ _ _ HuR)].
       Qed.
 
@@ -1131,14 +1131,14 @@ Module Virtual (N V : UsualOrderedType).
           + apply ProvFibred.mem_nodeFibre; split; [exact HP | reflexivity].
         - eapply DepsDirect; [| | exact Hu |].
           + apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
-          + apply (proj2 (hasProvider_nodeFibre _ _ _)); exact Hb.
+          + apply (proj2 (prov_nodeFibre _ _ _)); exact Hb.
           + apply PkgFibred.mem_tailFibre; split; [exact HuR | reflexivity].
         - eapply DepsProvider;
             [exact (DepRelFibred.tailFibre_subset _ _ _ HD)
             | exact (ProvFibred.nodeFibre_subset _ _ _ HP) | exact Hm].
         - eapply DepsDirect;
             [exact (DepRelFibred.tailFibre_subset _ _ _ HD)
-            | apply (proj1 (hasProvider_nodeFibre _ _ _)); exact Hb
+            | apply (proj1 (prov_nodeFibre _ _ _)); exact Hb
             | exact Hu | exact (PkgFibred.tailFibre_subset _ _ _ HuR)].
       Qed.
 
