@@ -142,7 +142,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   | QUnq
   | QAny
   | QNative
-  | QArch (alpha : A.t).
+  | QExact (alpha : A.t).
 
   Module QualComp <: ComparableType.
     Definition t := Qual.
@@ -157,7 +157,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       | QNative, QNative => Eq
       | QNative, _ => Lt
       | _, QNative => Gt
-      | QArch a1, QArch a2 => A.compare a1 a2
+      | QExact a1, QExact a2 => A.compare a1 a2
       end.
     Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
     Proof. cmp_eq_iff cmp_debma. Qed.
@@ -205,7 +205,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     match x with
     | QUnq => alpha' = alpha \/ classOf mu q = MAForeign
     | QNative => alpha' = AP.native
-    | QArch alpha'' => alpha' = alpha''
+    | QExact alpha'' => alpha' = alpha''
     | QAny => classOf mu q = MAAllowed
     end.
 
@@ -215,7 +215,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     match x with
     | QUnq => True
     | QNative => alpha' = AP.native
-    | QArch alpha'' => alpha' = alpha''
+    | QExact alpha'' => alpha' = alpha''
     | QAny => classOf mu q = MAAllowed
     end.
 
@@ -263,7 +263,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         match aqual a with
         | QUnq => QAArch alpha
         | QNative => QAExact AP.native
-        | QArch alpha' => QAExact alpha'
+        | QExact alpha' => QAExact alpha'
         | QAny => QAAny
         end), aform a).
 
@@ -336,7 +336,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             :: List.map
               (fun b => (embedPkg p, (((n, QAArch b), phi), true))) A.enum
       | QNative => (embedPkg p, (((n, QAExact AP.native), phi), true)) :: nil
-      | QArch b => (embedPkg p, (((n, QAExact b), phi), true)) :: nil
+      | QExact b => (embedPkg p, (((n, QAExact b), phi), true)) :: nil
       | QAny => (embedPkg p, (((n, QAAny), phi), true)) :: nil
       end.
 

@@ -362,7 +362,7 @@ module Make (S : SEARCH) = struct
     && (match DMA.aqual a with
       | DMA.QUnq | DMA.QAny -> true
       | DMA.QNative -> String.equal APx.native pb
-      | DMA.QArch c -> String.equal c pb)
+      | DMA.QExact c -> String.equal c pb)
     &&
     if String.equal n pkgname then sat (DMA.aform a) v
     else

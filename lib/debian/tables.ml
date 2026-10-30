@@ -106,7 +106,7 @@ module Make (AP : ARCH) : S = struct
     | DF.Unqual -> DMA.QUnq
     | DF.AnyArch -> DMA.QAny
     | DF.NativeArch -> DMA.QNative
-    | DF.ExplicitArch a -> DMA.QArch a
+    | DF.ExplicitArch a -> DMA.QExact a
 
   let matom_of (a : DF.atom) : DMA.Atom.t =
     (a.name, (qual_of a.aqual, formula_of_constr a.constr))
