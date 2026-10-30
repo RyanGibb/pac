@@ -338,7 +338,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     Module SOpw := SetOps Pkg VersionOT PkgSet PF.VSet.
     Module SOrw := SetOps ProvElt VersionOT Prov PF.VSet.
-    Definition constrVers (I : Inst) (n : N.t) (zeta : Constr) : PF.VSet.t :=
+    Definition versionsAt (I : Inst) (n : N.t) (zeta : Constr) : PF.VSet.t :=
       PF.VSet.union
         (SOpw.filterMap
            (fun p =>
@@ -358,7 +358,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
            (inst_prov I)).
 
     Definition versions (I : Inst) (n : N.t) : PF.VSet.t :=
-      constrVers I n CAny.
+      versionsAt I n CAny.
 
     Module SOrp := SetOps ProvElt Pkg Prov PkgSet.
     Definition bareProvSet (I : Inst) (n : N.t) : PkgSet.t :=
@@ -376,7 +376,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       PkgSet.elements (bareProvSet I n).
 
     Definition encPos (I : Inst) (n : N.t) (zeta : Constr) : PF.Formula :=
-      let base := PF.FDep (Name.Orig n) (constrVers I n zeta) in
+      let base := PF.FDep (Name.Orig n) (versionsAt I n zeta) in
       if bareMatch zeta
       then
         fold_right
@@ -404,7 +404,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       orb (hasPriorityb I q) (worldNamesb I (fst q)).
 
     Definition encReq (I : Inst) (n : N.t) (zeta : Constr) : PF.Formula :=
-      let base := PF.FDep (Name.Orig n) (constrVers I n zeta) in
+      let base := PF.FDep (Name.Orig n) (versionsAt I n zeta) in
       if bareMatch zeta
       then
         fold_right
@@ -552,15 +552,15 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                tryInvPkg_embed tryInvPkg_some).
     Qed.
 
-    Lemma mem_constrVers : forall I n zeta w,
-        PF.VSet.In w (constrVers I n zeta) <->
+    Lemma mem_versionsAt : forall I n zeta w,
+        PF.VSet.In w (versionsAt I n zeta) <->
         (exists v, PkgSet.In (n, v) (inst_repo I) /\
            constrMatch zeta v = true /\ w = Version.Orig v) \/
         (exists q u, Prov.In (q, (n, PVer u)) (inst_prov I) /\
            PkgSet.In q (inst_repo I) /\ constrMatch zeta u = true /\
            w = Version.Prov q u).
     Proof.
-      intros I n zeta w; unfold constrVers.
+      intros I n zeta w; unfold versionsAt.
       rewrite PF.VSet.union_spec, SOpw.mem_filterMap_if, SOrw.mem_filterMap.
       split.
       - intros [[[m v] [Hm [Hb ->]]] | [[q [m tg]] [Hm Hf]]].
@@ -796,7 +796,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     Lemma satisfies_encPos : forall I S' n zeta,
         PF.Satisfies S' (encPos I n zeta) <->
-        (exists v, PF.VSet.In v (constrVers I n zeta) /\
+        (exists v, PF.VSet.In v (versionsAt I n zeta) /\
            PF.PkgSet.In (Name.Orig n, v) S') \/
         (bareMatch zeta = true /\
          exists q, PkgSet.In q (bareProvSet I n) /\
@@ -819,7 +819,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     Lemma satisfies_encReq : forall I S' n zeta,
         PF.Satisfies S' (encReq I n zeta) <->
-        (exists v, PF.VSet.In v (constrVers I n zeta) /\
+        (exists v, PF.VSet.In v (versionsAt I n zeta) /\
            PF.PkgSet.In (Name.Orig n, v) S') \/
         (bareMatch zeta = true /\
          exists q, PkgSet.In q (bareProvSet I n) /\ selectableb I q = true /\
@@ -969,7 +969,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     Lemma base_decode : forall I S' n zeta,
         PF.IsResolution (reduceReal I) (reduceDeps I) rootPkg S' ->
-        ((exists w, PF.VSet.In w (constrVers I n zeta) /\
+        ((exists w, PF.VSet.In w (versionsAt I n zeta) /\
             PF.PkgSet.In (Name.Orig n, w) S') <->
          (exists v, PkgSet.In (n, v) (alpineResolution S') /\
             constrMatch zeta v = true) \/
@@ -980,7 +980,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       assert (Hsub := PF.res_subset _ _ _ _ Hres).
       split.
       - intros [w [Hw Hm]].
-        apply mem_constrVers in Hw.
+        apply mem_versionsAt in Hw.
         destruct Hw as
           [[v [Hrep [Hc ->]]] | [q [u [Hprov [Hrep [Hc ->]]]]]].
         + left; exists v; split; [| exact Hc].
@@ -992,12 +992,12 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       - intros [[v [HvS Hc]] | [q [u [Hprov [HqS Hc]]]]].
         + apply mem_alpineResolution in HvS.
           exists (Version.Orig v); split; [| exact HvS].
-          apply mem_constrVers; left; exists v.
+          apply mem_versionsAt; left; exists v.
           repeat split; try assumption.
           exact (embed_reduceReal _ _ (Hsub _ HvS)).
         + apply mem_alpineResolution in HqS.
           exists (Version.Prov q u); split.
-          * apply mem_constrVers; right; exists q, u.
+          * apply mem_versionsAt; right; exists q, u.
             repeat split; try assumption.
             exact (embed_reduceReal _ _ (Hsub _ HqS)).
           * exact (reg_edge _ _ _ _ _ Hres HqS Hprov).
@@ -1161,26 +1161,26 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     Lemma base_coreResolution : forall I S n zeta,
         PkgSet.Subset S (inst_repo I) ->
-        ((exists w, PF.VSet.In w (constrVers I n zeta) /\
+        ((exists w, PF.VSet.In w (versionsAt I n zeta) /\
             PF.PkgSet.In (Name.Orig n, w) (coreResolution I S)) <->
          (exists v, PkgSet.In (n, v) S /\ constrMatch zeta v = true) \/
          (exists q u, Prov.In (q, (n, PVer u)) (inst_prov I) /\
             PkgSet.In q S /\ constrMatch zeta u = true)).
     Proof.
       intros I S n zeta Hsub; split.
-      - intros [w [Hw Hm]]; apply mem_constrVers in Hw.
+      - intros [w [Hw Hm]]; apply mem_versionsAt in Hw.
         destruct Hw as [[v [_ [Hc ->]]] | [q [u [_ [_ [Hc ->]]]]]].
         + apply (coreResolution_embed I S (n, v)) in Hm; left; eauto.
         + apply coreResolution_prov in Hm; destruct Hm as [Hprov Hq].
           right; exists q, u; auto.
       - intros [[v [HvS Hc]] | [q [u [Hprov [HqS Hc]]]]].
         + exists (Version.Orig v); split.
-          * apply mem_constrVers; left; exists v.
+          * apply mem_versionsAt; left; exists v.
             repeat split; try assumption.
             exact (Hsub _ HvS).
           * exact (proj2 (coreResolution_embed I S (n, v)) HvS).
         + exists (Version.Prov q u); split.
-          * apply mem_constrVers; right; exists q, u.
+          * apply mem_versionsAt; right; exists q, u.
             repeat split; try assumption.
             exact (Hsub _ HqS).
           * apply coreResolution_prov; split; assumption.
@@ -1415,7 +1415,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Qed.
 
       Lemma encPos_agree : forall I I' n zeta,
-          constrVers I' n zeta = constrVers I n zeta ->
+          versionsAt I' n zeta = versionsAt I n zeta ->
           bareProvSet I' n = bareProvSet I n ->
           encPos I' n zeta = encPos I n zeta.
       Proof.
@@ -1444,16 +1444,16 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
          ; inst_world := world
          ; inst_prio := prioOf I (repoPreimage I ns) |}.
 
-      Lemma constrVers_subInst :
+      Lemma versionsAt_subInst :
         forall I ns deps ownProv installIf world n zeta,
           NSet.In n ns ->
           Prov.Subset ownProv (inst_prov I) ->
-          constrVers (subInst I ns deps ownProv installIf world) n zeta =
-          constrVers I n zeta.
+          versionsAt (subInst I ns deps ownProv installIf world) n zeta =
+          versionsAt I n zeta.
       Proof.
         intros I ns deps ownProv installIf world n zeta Hn Hown.
         apply PF.VSet.ext; intro w.
-        rewrite !mem_constrVers; cbn [subInst inst_repo inst_prov].
+        rewrite !mem_versionsAt; cbn [subInst inst_repo inst_prov].
         split.
         - intros [[v [Hrep [Hc ->]]] | [q [u [Hprov [Hrep [Hc ->]]]]]].
           + apply mem_repoPreimage in Hrep; destruct Hrep as [Hrep _].
@@ -1513,7 +1513,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           versions I n = versions (nameSubInst I n) n.
       Proof.
         intros I n; symmetry; unfold versions, nameSubInst.
-        apply constrVers_subInst.
+        apply versionsAt_subInst.
         - apply NSet.singleton_spec; reflexivity.
         - intros e He; destruct (Prov.empty_spec He).
       Qed.
@@ -1534,7 +1534,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Proof.
         intros I ns deps ownProv installIf world n zeta Hn Hown.
         apply encPos_agree.
-        - apply constrVers_subInst; assumption.
+        - apply versionsAt_subInst; assumption.
         - apply bareProvSet_subInst; assumption.
       Qed.
 
@@ -1563,7 +1563,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Proof.
         intros I ns deps ownProv installIf n zeta Hn Hown.
         unfold encReq, bareProvL; cbv zeta.
-        rewrite (constrVers_subInst I ns deps ownProv installIf
+        rewrite (versionsAt_subInst I ns deps ownProv installIf
                    (inst_world I) n zeta Hn Hown).
         rewrite (bareProvSet_subInst I ns deps ownProv installIf
                    (inst_world I) n Hn Hown).
@@ -1853,7 +1853,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Proof.
         intros I n; apply PF.VSet.ext; intro w.
         rewrite PF.C.mem_versions, reduceReal_coreResolution; unfold versions.
-        rewrite mem_constrVers; split.
+        rewrite mem_versionsAt; split.
         - intro H; apply coreResolution_at_orig in H.
           destruct H as [[v [Hv ->]] | [q [u [Hprov [Hq ->]]]]];
             [left; exists v | right; exists q, u]; auto.
