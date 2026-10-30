@@ -29,7 +29,7 @@ module type S = sig
   val xentry : Cargo_parse.fentry -> Cg.FEntry.t
   val slots_of : root:bool -> Cargo_parse.ver -> Cargo_parse.dep list
   val slot_data : Cargo_parse.dep -> Cg.SlotData.t
-  val site_key : Cargo_parse.dep -> Cg.SlotKey.t
+  val site_key : Cargo_parse.dep -> Cg.Site.t
 
   module PName : sig
     type t = Cg.Reduction.NPlus.t
@@ -210,13 +210,13 @@ module Make () = struct
               (d.P.d_default, (fset_of d.P.d_feats, (d.P.d_cfg, "registry"))) )
           ) ) ) )
 
-  let site_key (d : P.dep) : Cg.SlotKey.t =
+  let site_key (d : P.dep) : Cg.Site.t =
     (d.P.d_alias, (xkind d.P.d_kind, d.P.d_cfg))
 
   (* a slot node is one manifest site, so its name has to spell the site
      out: bare alias for the plain [dependencies] record, and the kind or cfg
      that told the record apart otherwise *)
-  let pp_site fmt ((a, (k, cfg)) : Cg.SlotKey.t) =
+  let pp_site fmt ((a, (k, cfg)) : Cg.Site.t) =
     Format.fprintf fmt "%s%s%s" a
       (match k with
       | Cg.Kind.KNormal -> ""
@@ -243,7 +243,7 @@ module Make () = struct
                 (List.map
                    (function Cg.CAny -> "*" | Cg.COp (o, v) -> op o ^ v)
                    cs))
-            (Cg.sReq d)))
+            (Cg.sRange d)))
 
   module PName = struct
     type t = Cg.Reduction.NPlus.t
@@ -253,13 +253,13 @@ module Make () = struct
     let pp fmt (tn : t) =
       match tn with
       | Cg.Reduction.NPlus.CRoot -> Format.fprintf fmt "root"
-      | Cg.Reduction.NPlus.CCrate (n, gr) -> Format.fprintf fmt "%s@%s" n gr
+      | Cg.Reduction.NPlus.CGran (n, gr) -> Format.fprintf fmt "%s@%s" n gr
       | Cg.Reduction.NPlus.CFeatP (n, f, gr) ->
           Format.fprintf fmt "%s/%s@%s" n f gr
       | Cg.Reduction.NPlus.CSlot (n, gr, d) ->
-          Format.fprintf fmt "%s@%s->%a%a" n gr pp_site (Cg.sKey d) pp_req d
+          Format.fprintf fmt "%s@%s->%a%a" n gr pp_site (Cg.sSite d) pp_req d
       | Cg.Reduction.NPlus.CDec (n, gr, f, d, feat) ->
-          Format.fprintf fmt "<%s@%s/%s=>%a%a/%s>" n gr f pp_site (Cg.sKey d)
+          Format.fprintf fmt "<%s@%s/%s=>%a%a/%s>" n gr f pp_site (Cg.sSite d)
             pp_req d feat
       | Cg.Reduction.NPlus.CLink l -> Format.fprintf fmt "links:%s" l
   end

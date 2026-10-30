@@ -316,9 +316,9 @@ Op.depextsOf
 Op.mem_depextsOf
 
 Cgo.Reduction.Lookup.claimants
-Cgo.Reduction.Lookup.dependees_lookupCrate
 Cgo.Reduction.Lookup.dependees_lookupDecision
 Cgo.Reduction.Lookup.dependees_lookupFeatP
+Cgo.Reduction.Lookup.dependees_lookupGranular
 Cgo.Reduction.Lookup.dependees_lookupRoot
 Cgo.Reduction.Lookup.dependees_lookupSlot
 Cgo.Reduction.Lookup.dependees_reduceDeps
@@ -327,15 +327,15 @@ Cgo.Reduction.Lookup.fdefFibre
 Cgo.Reduction.Lookup.reads
 Cgo.Reduction.Lookup.supportAt
 Cgo.Reduction.Lookup.versions_link_mono
-Cgo.Reduction.Lookup.versions_lookupCrate
 Cgo.Reduction.Lookup.versions_lookupDecision
 Cgo.Reduction.Lookup.versions_lookupFeatP
+Cgo.Reduction.Lookup.versions_lookupGranular
 Cgo.Reduction.Lookup.versions_lookupLink
 Cgo.Reduction.Lookup.versions_lookupRoot
 Cgo.Reduction.Lookup.versions_lookupSlot
-Cgo.Reduction.Lookup.versions_reduceRealCrate
 Cgo.Reduction.Lookup.versions_reduceRealDecision
 Cgo.Reduction.Lookup.versions_reduceRealFeatP
+Cgo.Reduction.Lookup.versions_reduceRealGranular
 Cgo.Reduction.Lookup.versions_reduceRealLink
 Cgo.Reduction.Lookup.versions_reduceRealRoot
 Cgo.Reduction.Lookup.versions_reduceRealSlot

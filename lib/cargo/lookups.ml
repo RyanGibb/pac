@@ -42,7 +42,7 @@ module Make (Encoding : Encoding.S) = struct
       (string, (string, ((string * string) * string) list) Hashtbl.t) Hashtbl.t;
     supports : (string * string, Cg.SupportSet.t) Hashtbl.t;
     site_datas :
-      ((string * string) * Cg.SlotKey.t, Cg.SlotData.t option) Hashtbl.t;
+      ((string * string) * Cg.Site.t, Cg.SlotData.t option) Hashtbl.t;
     (* the tagged list, not just the untagged one, has to be memoized:
        PubGrub asks a name for its versions at every propagation step *)
     pg_vers : (Cg.Reduction.NPlus.t, PVersion.t list) Hashtbl.t;
@@ -188,14 +188,14 @@ module Make (Encoding : Encoding.S) = struct
       inst_rootFeats = st.rfeats;
     }
 
-  (* one branch per versions_lookup{Root,Crate,FeatP,Slot,Decision,Link},
+  (* one branch per versions_lookup{Root,Granular,FeatP,Slot,Decision,Link},
      each filling in the components its theorem names and nothing else *)
   let versions st (tn : Cg.Reduction.NPlus.t) : Cg.Reduction.VPlus.t list =
     let call i = T.VSet.elements (Cg.Reduction.versions i tn) in
     let e = empty_inst st in
     match tn with
     | Cg.Reduction.NPlus.CRoot -> call e
-    | Cg.Reduction.NPlus.CCrate (n, _) ->
+    | Cg.Reduction.NPlus.CGran (n, _) ->
         call { e with inst_repo = name_set st n }
     | Cg.Reduction.NPlus.CFeatP (n, f, _) ->
         let supp = support_at st n f in
@@ -214,7 +214,7 @@ module Make (Encoding : Encoding.S) = struct
         in
         call { e with inst_repo = repo; inst_links = links }
 
-  (* one branch per dependees_lookup{Root,Crate,FeatP,Slot,Decision}, the
+  (* one branch per dependees_lookup{Root,Granular,FeatP,Slot,Decision}, the
      repository read through name_versions alone; the fall-through is
      dependees_reduceDepsInert, empty.  A crate version's reads are all
      loaded before it answers, an optional slot's dependee too, so that which
@@ -227,7 +227,7 @@ module Make (Encoding : Encoding.S) = struct
     let e = empty_inst st in
     match p with
     | Cg.Reduction.NPlus.CRoot, _ -> call e
-    | Cg.Reduction.NPlus.CCrate (n, _), Cg.Reduction.VPlus.WOrig v ->
+    | Cg.Reduction.NPlus.CGran (n, _), Cg.Reduction.VPlus.WOrig v ->
         let rw = fibres_of st (n, v) in
         List.iter (fun m -> ignore (name_versions st m)) rw.r_reads;
         call { e with inst_slots = rw.r_slots; inst_links = rw.r_links }
@@ -246,17 +246,17 @@ module Make (Encoding : Encoding.S) = struct
         call e
     | _, _ -> []
 
-  let site_data st (p : string * string) (k : Cg.SlotKey.t) =
+  let site_data st (p : string * string) (k : Cg.Site.t) =
     Tbl.memo st.site_datas (p, k) (fun () ->
         List.find_map
           (fun ((_, sd) : Cg.SlotElt.t) ->
-            if Cg.sKey sd = k then Some sd else None)
+            if Cg.sSite sd = k then Some sd else None)
           (Cg.SlotRel.elements (fibres_of st p).r_slots))
 
   (* the preference must land on both names whose candidates are crate
-     versions: CFeatP carries WOrig as CCrate does, and whichever of the
+     versions: CFeatP carries WOrig as CGran does, and whichever of the
      two is decided first fixes the version (a decided CFeatP entails its
-     CCrate; choose gives a later CFeatP its CCrate's version), so a family
+     CGran; choose gives a later CFeatP its CGran's version), so a family
      left untagged decides by bare semver and the demotion never acts.  A
      granularity class, which CSlot and CDec carry, has no standing: cargo
      ranks the versions a dependency admits and not their granularity
@@ -265,7 +265,7 @@ module Make (Encoding : Encoding.S) = struct
   let tag st (tn : Cg.Reduction.NPlus.t) (w : Cg.Reduction.VPlus.t) : PVersion.t
       =
     match (tn, w) with
-    | ( (Cg.Reduction.NPlus.CCrate (n, _) | Cg.Reduction.NPlus.CFeatP (n, _, _)),
+    | ( (Cg.Reduction.NPlus.CGran (n, _) | Cg.Reduction.NPlus.CFeatP (n, _, _)),
         Cg.Reduction.VPlus.WOrig v ) ->
         { PVersion.msrv = msrv_fits st (n, v); v = w }
     | _ -> { PVersion.msrv = true; v = w }

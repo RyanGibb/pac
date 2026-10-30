@@ -80,7 +80,7 @@ struct
       | Some { P.v_links = Some l; _ } -> (
           match decided_v assigned (Cg.Reduction.NPlus.CLink l) with
           | Some
-              (Cg.Reduction.VPlus.WName (Cg.Reduction.NPlus.CCrate (t', gr')))
+              (Cg.Reduction.VPlus.WName (Cg.Reduction.NPlus.CGran (t', gr')))
             ->
               t' = t && gr' = gr
           | _ -> true)
@@ -90,7 +90,7 @@ struct
     let valid t u =
       Pac_common.Tbl.memo valid_memo (t, u) (fun () ->
           let gr = L.granularity st u in
-          let g = Cg.Reduction.NPlus.CCrate (t, gr) in
+          let g = Cg.Reduction.NPlus.CGran (t, gr) in
           (match assigned g with
             | PG.Decided { PVersion.v = Cg.Reduction.VPlus.WOrig w; _ } ->
                 Cargo_version.compare w u = 0
@@ -183,7 +183,7 @@ struct
           match decided_v assigned (Cg.Reduction.NPlus.CSlot (n, gr, d)) with
           | Some w -> offered w
           | None -> Option.bind (L.slot_dep st d) walk)
-      | Cg.Reduction.NPlus.CCrate (m, gr) ->
+      | Cg.Reduction.NPlus.CGran (m, gr) ->
           List.find_opt
             (fun (c : PVersion.t) ->
               match c.PVersion.v with
@@ -194,7 +194,7 @@ struct
             (List.sort (fun a b -> PVersion.compare b a) cands)
       | Cg.Reduction.NPlus.CFeatP (m, _, gr) ->
           Option.bind
-            (decided_v assigned (Cg.Reduction.NPlus.CCrate (m, gr)))
+            (decided_v assigned (Cg.Reduction.NPlus.CGran (m, gr)))
             offered
       | _ -> None
     in
@@ -246,7 +246,7 @@ struct
       let gr = L.granularity st v in
       List.find_opt (is_open assigned)
         (Cg.Reduction.NPlus.CRoot
-        :: Cg.Reduction.NPlus.CCrate (n, gr)
+        :: Cg.Reduction.NPlus.CGran (n, gr)
         :: owned (n, v) gr)
 
     (* the decisions for what (n, v) delivers to d's site: every dependency
@@ -269,7 +269,7 @@ struct
     (* once the dependee crate is decided, its owned names, then the
        activation that ends the dependency's processing *)
     let crate_step assigned t gr =
-      let g = Cg.Reduction.NPlus.CCrate (t, gr) in
+      let g = Cg.Reduction.NPlus.CGran (t, gr) in
       match assigned g with
       | PG.Entailed _ -> Order.Decide g
       | PG.Decided { PVersion.v = Cg.Reduction.VPlus.WOrig u; _ } -> (

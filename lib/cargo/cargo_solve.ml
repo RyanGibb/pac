@@ -60,8 +60,8 @@ module Make () = struct
       List.map
         (fun ((((n, v), k), u) : Cg.ParentElt.t) ->
           match L.site_data st (n, v) k with
-          | Some sd -> (n, v, Cg.kAlias k, Cg.sName sd, u)
-          | None -> (n, v, Cg.kAlias k, Cg.kAlias k, u))
+          | Some sd -> (n, v, Cg.siteAlias k, Cg.sName sd, u)
+          | None -> (n, v, Cg.siteAlias k, Cg.siteAlias k, u))
         (Cg.ParentRel.elements
            (Cg.Reduction.parents
               { (L.empty_inst st) with inst_fdefs = fdefs; inst_slots = slots }
