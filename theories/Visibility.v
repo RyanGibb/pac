@@ -43,7 +43,7 @@ Module Visibility (N V : UsualOrderedType).
   | InSubSelf : InSub pub pi p p
   | InSubChild : forall (n : N.t) (v : V.t),
       ParentRel.In ((n, v), p) pi -> InSub pub pi p (n, v)
-  | InSubPubStep : forall (q : Pkg.t) (n : N.t) (v : V.t),
+  | PublicPropagation : forall (q : Pkg.t) (n : N.t) (v : V.t),
       InSub pub pi p q -> ParentRel.In ((n, v), q) pi ->
       PubRel.In (q, n) pub -> InSub pub pi p (n, v).
 
@@ -271,7 +271,7 @@ Module Visibility (N V : UsualOrderedType).
   Proof.
     intros pub pi q p; split.
     - unfold sub; apply subIter_sound.
-      + intros p' m u Hp He Hm; exact (InSubPubStep pub pi q p' m u Hp He Hm).
+      + intros p' m u Hp He Hm; exact (PublicPropagation pub pi q p' m u Hp He Hm).
       + intros [n v] Hc'; apply mem_subBase in Hc'.
         destruct Hc' as [-> | He];
           [apply InSubSelf | exact (InSubChild pub pi q n v He)].
@@ -1219,7 +1219,7 @@ Module Visibility (N V : UsualOrderedType).
             apply mem_coreResolution.
           * constructor; [exact (proj1 (Hps _ _ Hpi)) | exact Hq | exact Ho |].
             destruct Hc as [Hpub | <-];
-              [eapply InSubPubStep; eassumption | apply InSubChild; exact Hpi].
+              [eapply PublicPropagation; eassumption | apply InSubChild; exact Hpi].
           * econstructor;
               [exact HD1 | exact Hu1 | exact (proj2 (Hps _ _ Hpi)) | exact Hpi].
         + inversion Hd.
