@@ -39,9 +39,7 @@ module Make (Encoding : Encoding.S) : sig
      slots_of has not merged, so the name is taken from the fibre.  None for
      a second site with the same ask as one before it, which the slot rule
      merged into that one's slot. *)
-  val site_data :
-    state -> string * string -> Cg.Site.t -> Cg.SlotData.t option
-
+  val site_data : state -> string * string -> Cg.Site.t -> Cg.SlotData.t option
   val tag : state -> Cg.Reduction.NPlus.t -> Cg.Reduction.VPlus.t -> PVersion.t
   val pg_versions : state -> Cg.Reduction.NPlus.t -> PVersion.t list
 

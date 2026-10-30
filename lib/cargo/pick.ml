@@ -79,8 +79,7 @@ struct
       match L.meta st t u with
       | Some { P.v_links = Some l; _ } -> (
           match decided_v assigned (Cg.Reduction.NPlus.CCls l) with
-          | Some
-              (Cg.Reduction.VPlus.WName (Cg.Reduction.NPlus.CGran (t', gr')))
+          | Some (Cg.Reduction.VPlus.WName (Cg.Reduction.NPlus.CGran (t', gr')))
             ->
               t' = t && gr' = gr
           | _ -> true)

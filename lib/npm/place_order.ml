@@ -113,7 +113,9 @@ struct
           (List.filter is_dep (L.edges st y))
       end
     in
-    match match l with [] -> Some Npl.Occ.Proj | _ -> occupant ~assigned l with
+    match
+      match l with [] -> Some Npl.Occ.Proj | _ -> occupant ~assigned l
+    with
     | Some y -> go (Some l) y
     | None -> []
 
