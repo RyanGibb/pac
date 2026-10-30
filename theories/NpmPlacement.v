@@ -256,7 +256,8 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
 
     Lemma edgeOk_meets : forall I L l e,
         EdgeOk I L l e <->
-        Pl.Meets L l (Pl.land (e_peer e) l) (e_dir e) (accepts I e) (e_optional e).
+        Pl.Meets L l (Pl.land (e_peer e) l) (e_dir e) (accepts I e)
+          (e_optional e).
     Proof.
       intros I L l e; unfold EdgeOk, Pl.Meets, Pl.Resolves.
       destruct (Pl.walk L l (e_dir e)) as [[l' o] |]; split.

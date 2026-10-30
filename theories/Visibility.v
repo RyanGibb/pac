@@ -271,7 +271,8 @@ Module Visibility (N V : UsualOrderedType).
   Proof.
     intros pub pi q p; split.
     - unfold sub; apply subIter_sound.
-      + intros p' m u Hp He Hm; exact (PublicPropagation pub pi q p' m u Hp He Hm).
+      + intros p' m u Hp He Hm.
+        exact (PublicPropagation pub pi q p' m u Hp He Hm).
       + intros [n v] Hc'; apply mem_subBase in Hc'.
         destruct Hc' as [-> | He];
           [apply InSubSelf | exact (InSubChild pub pi q n v He)].
@@ -1219,7 +1220,8 @@ Module Visibility (N V : UsualOrderedType).
             apply mem_coreResolution.
           * constructor; [exact (proj1 (Hps _ _ Hpi)) | exact Hq | exact Ho |].
             destruct Hc as [Hpub | <-];
-              [eapply PublicPropagation; eassumption | apply InSubChild; exact Hpi].
+              [ eapply PublicPropagation; eassumption
+              | apply InSubChild; exact Hpi ].
           * econstructor;
               [exact HD1 | exact Hu1 | exact (proj2 (Hps _ _ Hpi)) | exact Hpi].
         + inversion Hd.
