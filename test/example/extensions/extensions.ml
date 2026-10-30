@@ -793,7 +793,7 @@ module Virtual = struct
 end
 
 module Concurrent_features = struct
-  module M = E.FeatureConcurrent (S) (S) (S) (S)
+  module M = E.ConcurrentFeature (S) (S) (S) (S)
   module F = M.Feat
   module R = M.Reduction
   module L = R.Lookup
@@ -942,7 +942,7 @@ module Concurrent_features = struct
       (List.map
          (fun ((n, v), fs) ->
            Printf.sprintf "%s %s %s" n v (set (F.FSet.elements fs)))
-         (F.FeaturedSet.elements (R.featureConcurrentResolution g s)));
+         (F.FeaturedSet.elements (R.concurrentFeatureResolution g s)));
     parents (M.ParentRel.elements (R.parents df da g s))
 end
 

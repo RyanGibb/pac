@@ -1,7 +1,7 @@
 From Stdlib Require Import MSets List.
 From PackageCalculus Require Import Prelude Core Complexity Versions Semver
   Conflict ConflictClass Concurrent PeerDependency Visibility Feature
-  Virtual PackageFormula VariableFormula FeatureConcurrent Debian DebianMA
+  Virtual PackageFormula VariableFormula ConcurrentFeature Debian DebianMA
   Opam Cargo Alpine Npm Placement NpmPlacement.
 
 Module C := Core Nat_as_OT Nat_as_OT.
@@ -25,7 +25,7 @@ Module Feat := Feature Nat_as_OT Nat_as_OT BoolFin.
 Module Virt := Virtual Nat_as_OT Nat_as_OT.
 Module PkgF := PackageFormula Nat_as_OT Nat_as_OT.
 Module VarF := VariableFormula Nat_as_OT Nat_as_OT BoolFin Nat_as_OT.
-Module FC := FeatureConcurrent Nat_as_OT Nat_as_OT BoolFin Nat_as_OT.
+Module CF := ConcurrentFeature Nat_as_OT Nat_as_OT BoolFin Nat_as_OT.
 Module NatTriv := TrivialGroup Nat_as_OT.
 Module Deb := Debian Nat_as_OT Nat_as_OT NatTriv.
 

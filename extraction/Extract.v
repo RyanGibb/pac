@@ -21,5 +21,5 @@ Extraction Inline lex.
 
 Extraction "pac_extraction.ml"
   Smoke.C Smoke.Ver Smoke.Cfl Smoke.Conc Smoke.Peer Smoke.Vis
-  Smoke.Feat Smoke.Virt Smoke.PkgF Smoke.VarF Smoke.FC Smoke.Op Smoke.Cgo Smoke.Alp
+  Smoke.Feat Smoke.Virt Smoke.PkgF Smoke.VarF Smoke.CF Smoke.Op Smoke.Cgo Smoke.Alp
   Debian DebianMA Opam Cargo Alpine Npm Placement NpmPlacement.

@@ -5,7 +5,7 @@ Create HintDb cmp_fconc.
 Create Rewrite HintDb cmp_fconc.
 Create HintDb fc_mem.
 
-Module FeatureConcurrent (N V F G : UsualOrderedType).
+Module ConcurrentFeature (N V F G : UsualOrderedType).
   Module Feat := Feature N V F.
   Module C := Feat.C.
   Module Pkg := C.Pkg.
@@ -524,7 +524,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         S.
 
     Module SOts := SetOps T.Pkg Feat.Featured T.PkgSet Feat.FeaturedSet.
-    Definition featureConcurrentResolution (g : V.t -> G.t)
+    Definition concurrentFeatureResolution (g : V.t -> G.t)
         (S : T.PkgSet.t) : Feat.FeaturedSet.t :=
       SOts.filterMap (fun p' =>
           match p' with
@@ -575,12 +575,12 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           split; [exact HS | cbn beta iota; apply dec_refl].
     Qed.
 
-    Lemma mem_featureConcurrentResolution :
+    Lemma mem_concurrentFeatureResolution :
       forall g (S : T.PkgSet.t) n v fs,
-        Feat.FeaturedSet.In ((n, v), fs) (featureConcurrentResolution g S) <->
+        Feat.FeaturedSet.In ((n, v), fs) (concurrentFeatureResolution g S) <->
         T.PkgSet.In (Name.GranularOrig n (g v), v) S /\ fs = featsOf g n v S.
     Proof.
-      intros g S n v fs; unfold featureConcurrentResolution;
+      intros g S n v fs; unfold concurrentFeatureResolution;
         rewrite SOts.mem_filterMap.
       split.
       - intros [[[n0 w | n0 f w | n0 v1 m | n0 v1 m f | n0 v1 f m f'] v0]
@@ -651,7 +651,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         exists u, VSet.In u vs /\
           (exists fs', Feat.FSet.Subset fs fs' /\
              Feat.FeaturedSet.In ((m, u), fs')
-               (featureConcurrentResolution g S)) /\
+               (concurrentFeatureResolution g S)) /\
           ParentRel.In ((m, u), (n, v)) P.
     Proof.
       intros RR D r g S P q n v m vs fs iF [_ _ Hdep Huniq] HqS Hin Hd
@@ -669,12 +669,12 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           assert (u1 = u) as -> by exact (Huniq _ _ _ Hi1S HiS).
           destruct (Hdep _ HfS _ _ (Hfwd f u Hf Hu)) as [w [Hw HgS]].
           apply mem_singVS in Hw; subst w; exact HgS.
-        + apply mem_featureConcurrentResolution;
+        + apply mem_concurrentFeatureResolution;
             split; [exact HoS | reflexivity].
       - exact (Hin u Hu HiS).
     Qed.
 
-    Theorem feature_concurrent_soundness :
+    Theorem concurrent_feature_soundness :
       forall (R : PkgSet.t) (support : Feat.SupportSet.t)
              (Df : Feat.FeatDepRel.t) (Da : Feat.AddlDepRel.t)
              (g : V.t -> G.t) (r : Pkg.t) (S : T.PkgSet.t),
@@ -683,7 +683,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           (reduceDeps R support Df Da g)
           (embedOrigPkg g r) S ->
         IsResolution R support Df Da g r
-          (featureConcurrentResolution g S) (parents Df Da g S).
+          (concurrentFeatureResolution g S) (parents Df Da g S).
     Proof.
       intros R support Df Da g r S Hnosupp Hres.
       pose proof Hres as [Hsub Hroot Hdep Huniq].
@@ -704,7 +704,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         eapply Feat.Reduction.mem_reduceReal_featPkg; eassumption. }
       constructor.
       - intros [n v] fs Hmem.
-        rewrite mem_featureConcurrentResolution in Hmem.
+        rewrite mem_concurrentFeatureResolution in Hmem.
         destruct Hmem as [HS _].
         exact (HorigR n v HS).
       - assert (Hfe : featsOf g rn rv S = Feat.FSet.empty).
@@ -712,11 +712,11 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           - exfalso; exact (Hnosupp f (proj1 (HfeatSup rn f rv H))).
           - exfalso; exact (Feat.FSet.empty_spec H). }
         rewrite <- Hfe.
-        rewrite mem_featureConcurrentResolution; split;
+        rewrite mem_concurrentFeatureResolution; split;
           [exact Hroot | reflexivity].
       - split.
         + intros [n v] fs_p Hmem m vs fs Hdf.
-          rewrite mem_featureConcurrentResolution in Hmem.
+          rewrite mem_concurrentFeatureResolution in Hmem.
           destruct Hmem as [HpS ->].
           apply (parent_closure_step _ _ _ g S _ _ n v m vs fs
                    (Name.IntermediateF n v m) Hres HpS
@@ -728,7 +728,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
             | eapply EdgeFDepToInterFeat | eapply EdgeFInterFeatToInter
             | eapply EdgeFInterToFeat]; eassumption.
         + intros [n v] fs_p Hmem f Hf m vs fs Hda.
-          rewrite mem_featureConcurrentResolution in Hmem.
+          rewrite mem_concurrentFeatureResolution in Hmem.
           destruct Hmem as [HpS ->].
           rewrite featsOf_spec in Hf.
           apply (parent_closure_step _ _ _ g S _ _ n v m vs fs
@@ -745,18 +745,18 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         apply mem_parents in H1, H2.
         exact (Huniq (Name.Intermediate pn pv m) _ _ (proj1 H1) (proj1 H2)).
       - intros n v v' fs fs' H1 H2 Hne Hg.
-        rewrite mem_featureConcurrentResolution in H1, H2.
+        rewrite mem_concurrentFeatureResolution in H1, H2.
         destruct H1 as [HS1 _]; destruct H2 as [HS2 _].
         rewrite Hg in HS1.
         assert (E : v = v')
           by exact (Huniq (Name.GranularOrig n (g v')) _ _ HS1 HS2).
         exact (Hne E).
       - intros n v fs fs' H1 H2.
-        rewrite mem_featureConcurrentResolution in H1, H2.
+        rewrite mem_concurrentFeatureResolution in H1, H2.
         destruct H1 as [HS1 ->]; destruct H2 as [HS2 ->].
         reflexivity.
       - intros [n v] fs f Hmem Hf.
-        rewrite mem_featureConcurrentResolution in Hmem.
+        rewrite mem_concurrentFeatureResolution in Hmem.
         destruct Hmem as [HS1 ->].
         rewrite featsOf_spec in Hf.
         exact (proj1 (HfeatSup n f v Hf)).
@@ -764,9 +764,9 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
         assert (Hin : forall n' v',
                   T.PkgSet.In (Name.GranularOrig n' (g v'), v') S ->
                   exists fs, Feat.FeaturedSet.In ((n', v'), fs)
-                               (featureConcurrentResolution g S))
+                               (concurrentFeatureResolution g S))
           by (intros n' v' HS; exists (featsOf g n' v' S);
-              apply mem_featureConcurrentResolution; auto).
+              apply mem_concurrentFeatureResolution; auto).
         destruct Hpi as [Hi [(vs & fs & HD & Hu & Hp)
                              | (f & vs & fs & HA & Hu & Hf)]];
           split; apply Hin.
@@ -934,7 +934,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
       - destruct 1; pick_close.
     Qed.
 
-    Theorem feature_concurrent_completeness :
+    Theorem concurrent_feature_completeness :
       forall (R : PkgSet.t) (support : Feat.SupportSet.t)
              (Df : Feat.FeatDepRel.t) (Da : Feat.AddlDepRel.t)
              (g : V.t -> G.t) (r : Pkg.t)
@@ -1028,10 +1028,10 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
              end.
     Qed.
 
-    Lemma featureConcurrentResolution_coreResolution :
+    Lemma concurrentFeatureResolution_coreResolution :
       forall R support Df Da g r S_CF pi,
         IsResolution R support Df Da g r S_CF pi ->
-        featureConcurrentResolution g (coreResolution Df Da g S_CF pi) = S_CF.
+        concurrentFeatureResolution g (coreResolution Df Da g S_CF pi) = S_CF.
     Proof.
       intros R support Df Da g r S_CF pi Hres.
       assert (Hfeats : forall n v fs, Feat.FeaturedSet.In ((n, v), fs) S_CF ->
@@ -1048,7 +1048,7 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
           end.
         - intro Hf; exact (CoreFeatPkg _ _ _ _ _ n v fs f HS Hf). }
       apply Feat.FeaturedSet.ext; intros [[n v] fs].
-      rewrite mem_featureConcurrentResolution; split.
+      rewrite mem_concurrentFeatureResolution; split.
       - intros [Hc ->].
         rewrite mem_coreResolution in Hc; inversion Hc; subst.
         match goal with
@@ -1117,15 +1117,15 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
             exact (CoreFeatPkg _ _ _ _ _ n v fs_p f Hp Hf).
     Qed.
 
-    Theorem feature_concurrent_retraction :
+    Theorem concurrent_feature_retraction :
       forall R support Df Da g r S_CF pi,
         IsResolution R support Df Da g r S_CF pi ->
         ParentDependency Df Da S_CF pi ->
-        featureConcurrentResolution g (coreResolution Df Da g S_CF pi) = S_CF
+        concurrentFeatureResolution g (coreResolution Df Da g S_CF pi) = S_CF
         /\ parents Df Da g (coreResolution Df Da g S_CF pi) = pi.
     Proof.
       intros R support Df Da g r S_CF pi Hres Hdep.
-      split; [exact (featureConcurrentResolution_coreResolution
+      split; [exact (concurrentFeatureResolution_coreResolution
                        _ _ _ _ _ _ _ _ Hres) |].
       apply ParentRel.ext; intros [[m u] [n v]].
       rewrite (parents_coreResolution_iff _ _ _ _ _ _ _ _ Hres).
@@ -1466,4 +1466,4 @@ Module FeatureConcurrent (N V F G : UsualOrderedType).
 
     End Lookup.
   End Reduction.
-End FeatureConcurrent.
+End ConcurrentFeature.

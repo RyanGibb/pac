@@ -213,21 +213,21 @@ VarF.Reduction.variable_formula_completeness
 VarF.Reduction.variable_formula_retraction
 VarF.Reduction.variable_formula_soundness
 
-FC.Reduction.Lookup.dependees_lookupGranularFeatPkg
-FC.Reduction.Lookup.dependees_lookupGranularOrig
-FC.Reduction.Lookup.dependees_lookupIntermediate
-FC.Reduction.Lookup.dependees_lookupIntermediateA
-FC.Reduction.Lookup.dependees_lookupIntermediateF
-FC.Reduction.Lookup.versions_lookupGranularFeatPkg
-FC.Reduction.Lookup.versions_lookupGranularOrig
-FC.Reduction.Lookup.versions_lookupIntermediate
-FC.Reduction.Lookup.versions_lookupIntermediateA
-FC.Reduction.Lookup.versions_lookupIntermediateF
-FC.Reduction.feature_concurrent_completeness
-FC.Reduction.feature_concurrent_retraction
-FC.Reduction.feature_concurrent_soundness
-FC.Reduction.reduceDeps
-FC.Reduction.reduceReal
+CF.Reduction.Lookup.dependees_lookupGranularFeatPkg
+CF.Reduction.Lookup.dependees_lookupGranularOrig
+CF.Reduction.Lookup.dependees_lookupIntermediate
+CF.Reduction.Lookup.dependees_lookupIntermediateA
+CF.Reduction.Lookup.dependees_lookupIntermediateF
+CF.Reduction.Lookup.versions_lookupGranularFeatPkg
+CF.Reduction.Lookup.versions_lookupGranularOrig
+CF.Reduction.Lookup.versions_lookupIntermediate
+CF.Reduction.Lookup.versions_lookupIntermediateA
+CF.Reduction.Lookup.versions_lookupIntermediateF
+CF.Reduction.concurrent_feature_completeness
+CF.Reduction.concurrent_feature_retraction
+CF.Reduction.concurrent_feature_soundness
+CF.Reduction.reduceDeps
+CF.Reduction.reduceReal
 
 Deb.Reduction.Lookup.dependees_lookupAbsent
 Deb.Reduction.Lookup.dependees_lookupDisjunct
