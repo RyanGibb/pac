@@ -178,7 +178,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
   Definition Selectable (I : Inst) '(((m, u) as q) : Pkg.t) : Prop :=
     HasPriority I q \/ exists zeta, WSet.In (DPos (m, zeta)) (inst_world I).
 
-  Definition MatchReq (I : Inst) (S : PkgSet.t)
+  Definition Req (I : Inst) (S : PkgSet.t)
       (n : N.t) (zeta : Constr) : Prop :=
     (exists u, PkgSet.In (n, u) S /\ constrMatch zeta u = true) \/
     (exists q u, Prov.In (q, (n, PVer u)) (inst_prov I) /\
@@ -189,7 +189,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
   Definition MatchDep (I : Inst) (S : PkgSet.t) (d : Dep) : Prop :=
     match d with
-    | DPos (n, zeta) => MatchReq I S n zeta
+    | DPos (n, zeta) => Req I S n zeta
     | DNeg (n, zeta) => ~ Match I S n zeta
     end.
 
@@ -1022,15 +1022,15 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           [exact Hp | exact (embed_reduceReal _ _ (Hsub _ HqS))].
     Qed.
 
-    Lemma match_req_decode : forall I S' n zeta,
+    Lemma req_decode : forall I S' n zeta,
         PF.IsResolution (reduceReal I) (reduceDeps I) rootPkg S' ->
         (PF.Satisfies S' (encReq I n zeta) <->
-         MatchReq I (alpineResolution S') n zeta).
+         Req I (alpineResolution S') n zeta).
     Proof.
       intros I S' n zeta Hres.
       assert (Hsub := PF.res_subset _ _ _ _ Hres).
       rewrite satisfies_encReq, (base_decode I S' n zeta Hres).
-      unfold MatchReq; rewrite or_assoc.
+      unfold Req; rewrite or_assoc.
       apply or_iff_compat_l, or_iff_compat_l, and_iff_compat_l; split.
       - intros [q [Hq [Hs Hm]]]; apply mem_bareProvSet in Hq.
         exists q; split; [exact (proj1 Hq) |].
@@ -1075,7 +1075,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         { apply mem_reduceDeps; split; [apply root_reduceReal | exact Hf]. }
         assert (Hs := Hclo _ Hroot _ Hdep).
         destruct d as [[m zeta] | [m zeta]]; cbn [MatchDep].
-        + exact (proj1 (match_req_decode _ _ _ _ Hres) Hs).
+        + exact (proj1 (req_decode _ _ _ _ Hres) Hs).
         + intro HM; cbn [encDep] in Hs.
           exact (Hs (proj2 (match_decode _ _ _ _ Hres) HM)).
       - intros p d Hp Hdep0; apply mem_alpineResolution in Hp.
@@ -1090,7 +1090,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         { apply mem_reduceDeps; split; [apply Hsub; exact Hp | exact Hf]. }
         assert (Hs := Hclo _ Hp _ Hdep).
         destruct d as [[m zeta] | [m zeta]]; cbn [MatchDep].
-        + exact (proj1 (match_req_decode _ _ _ _ Hres) Hs).
+        + exact (proj1 (req_decode _ _ _ _ Hres) Hs).
         + intro HM; cbn [encDep] in Hs.
           exact (Hs (proj2 (match_decode _ _ _ _ Hres) HM)).
       - intros m p q HpS HqS Hp Hq.
@@ -1203,14 +1203,14 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           | apply coreResolution_embed; exact HqS].
     Qed.
 
-    Lemma match_req_coreResolution : forall I S n zeta,
+    Lemma req_coreResolution : forall I S n zeta,
         PkgSet.Subset S (inst_repo I) ->
         (PF.Satisfies (coreResolution I S) (encReq I n zeta) <->
-         MatchReq I S n zeta).
+         Req I S n zeta).
     Proof.
       intros I S n zeta Hsub.
       rewrite satisfies_encReq, (base_coreResolution I S n zeta Hsub).
-      unfold MatchReq; rewrite or_assoc.
+      unfold Req; rewrite or_assoc.
       apply or_iff_compat_l, or_iff_compat_l, and_iff_compat_l; split.
       - intros [q [Hq [Hs Hm]]]; apply mem_bareProvSet in Hq.
         apply coreResolution_embed in Hm; exists q; split; [exact (proj1 Hq) |].
@@ -1230,7 +1230,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       intros I S [Wf1 Wf2] Hres.
       destruct Hres as [Hsub Hw Hd Hcu Ht].
       assert (Hiff := fun n zeta => match_coreResolution I S n zeta Hsub).
-      assert (Hreq := fun n zeta => match_req_coreResolution I S n zeta Hsub).
+      assert (Hreq := fun n zeta => req_coreResolution I S n zeta Hsub).
       assert (Hcond : forall c,
                  PF.Satisfies (coreResolution I S) (encCond I c) <->
                                 MatchCond I S c).

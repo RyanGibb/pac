@@ -382,10 +382,10 @@ Alp.Reduction.encReq
 Alp.Reduction.installIfFibre
 Alp.Reduction.installIfForm
 Alp.Reduction.match_attachAt
-Alp.Reduction.match_req_coreResolution
-Alp.Reduction.match_req_decode
 Alp.Reduction.reduceDeps
 Alp.Reduction.reduceReal
+Alp.Reduction.req_coreResolution
+Alp.Reduction.req_decode
 Alp.Reduction.rootPkg
 Alp.Reduction.versions
 
