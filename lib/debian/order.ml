@@ -34,8 +34,8 @@ module Make (S : Apt_reject.SEARCH) = struct
     (* apt tests each solution's package, not the version the solution
        names; under Strict-Pinning the one is the other's only version *)
     let obsolete (a : atom) =
-      let at (n, x) w =
-        match x with
+      let at (n, y) w =
+        match y with
         | DMA.QAArch b -> (
             match stanza ((n, b), w) with
             | Some stz -> T.obsolete tables stz

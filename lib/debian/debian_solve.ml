@@ -500,8 +500,8 @@ module Make (AP : Tables.ARCH) = struct
           n;
         !h mod 196613
       in
-      let key ((n, x), _) =
-        let b = match x with DMA.QAArch b -> b | _ -> "" in
+      let key ((n, y), _) =
+        let b = match y with DMA.QAArch b -> b | _ -> "" in
         (bucket n, String.length n, n, not (String.equal b AP.native), b)
       in
       List.map (fun ((m, _) as q) -> (DMA.Deb.Reduction.Name.Orig m, q)) query

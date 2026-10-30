@@ -408,7 +408,7 @@ module Make (AP : ARCH) : S = struct
     | DMA.QAAny -> Format.fprintf fmt "any"
     | DMA.QAGroup -> Format.fprintf fmt "<group>"
 
-  let pp_mname fmt (n, x) = Format.fprintf fmt "%s:%a" n pp_qarch x
+  let pp_mname fmt (n, y) = Format.fprintf fmt "%s:%a" n pp_qarch y
   let pp_atom fmt (m, f) = Format.fprintf fmt "%a (%a)" pp_mname m pp_formula f
 
   module PName = struct

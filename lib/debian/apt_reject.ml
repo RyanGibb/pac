@@ -136,10 +136,10 @@ module Make (S : SEARCH) = struct
      the foo:any of a Multi-Arch: allowed package and the foo:b
      pseudo-package's entry for each version of b's own foo (ParseProvides,
      deblistparser.cc), and a sibling's (sibling_provides). *)
-  let provides_count ((m, x) : string * DMA.coq_NameArch) w (a : DMA.Deb.Atom.t)
+  let provides_count ((m, y) : string * DMA.coq_NameArch) w (a : DMA.Deb.Atom.t)
       =
     let n = fst (fst a) in
-    match x with
+    match y with
     | DMA.QAArch b -> (
         match stanza ((m, b), w) with
         | None -> 0
@@ -206,8 +206,8 @@ module Make (S : SEARCH) = struct
     | _ -> false
 
   (* the literal a solution reads is still unassigned *)
-  let live_at st ~pkgvar ((n, x) : string * DMA.coq_NameArch) w =
-    match x with
+  let live_at st ~pkgvar ((n, y) : string * DMA.coq_NameArch) w =
+    match y with
     | DMA.QAArch b ->
         if pkgvar then not (Hashtbl.mem st.pdead (n, b))
         else not (Hashtbl.mem st.vdead ((n, b), w))
@@ -577,8 +577,8 @@ module Make (S : SEARCH) = struct
         | _ -> None)
 
   let negation st ~assigned n (pv : PVersion.t) : rejection list =
-    let ver ((m, x) : string * DMA.coq_NameArch) w =
-      match x with DMA.QAArch b -> [ `Ver ((m, b), w) ] | _ -> []
+    let ver ((m, y) : string * DMA.coq_NameArch) w =
+      match y with DMA.QAArch b -> [ `Ver ((m, b), w) ] | _ -> []
     in
     let of_atom a =
       match head st ~assigned [ a ] with
