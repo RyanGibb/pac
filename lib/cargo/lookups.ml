@@ -177,7 +177,7 @@ module Make (Encoding : Encoding.S) = struct
      relations it names *)
   let empty_inst st : Cg.coq_Inst =
     {
-      Cg.inst_repo = Cg.PkgSet.empty;
+      Cg.inst_real = Cg.PkgSet.empty;
       inst_support = Cg.SupportSet.empty;
       inst_fdefs = Cg.FDefRel.empty;
       inst_slots = Cg.SlotRel.empty;
@@ -196,13 +196,13 @@ module Make (Encoding : Encoding.S) = struct
     match tn with
     | Cg.Reduction.NPlus.CRoot -> call e
     | Cg.Reduction.NPlus.CGran (n, _) ->
-        call { e with inst_repo = name_set st n }
+        call { e with inst_real = name_set st n }
     | Cg.Reduction.NPlus.CFeatP (n, f, _) ->
         let supp = support_at st n f in
-        call { e with inst_repo = name_set st n; inst_support = supp }
+        call { e with inst_real = name_set st n; inst_support = supp }
     | Cg.Reduction.NPlus.CSlot (_, _, d)
     | Cg.Reduction.NPlus.CDec (_, _, _, d, _) ->
-        call { e with inst_repo = name_set st (Cg.sName d) }
+        call { e with inst_real = name_set st (Cg.sName d) }
     | Cg.Reduction.NPlus.CCls l ->
         (* Lookup.claimants and LinkFibred.headFibre at l, over the
            declarers loaded so far: the answer may only grow
@@ -212,7 +212,7 @@ module Make (Encoding : Encoding.S) = struct
         let repo =
           Cg.PkgSet.ofList (List.filter (fun (n, v) -> meta st n v <> None) rs)
         in
-        call { e with inst_repo = repo; inst_links = links }
+        call { e with inst_real = repo; inst_links = links }
 
   (* one branch per dependees_lookup{Root,Granular,FeatP,Slot,Decision}, the
      repository read through name_versions alone; the fall-through is

@@ -137,7 +137,7 @@ module Make (Encoding : Encoding.S) = struct
 
   let mk_inst st ~repo ~deps ~peers : Np.coq_Inst =
     {
-      Np.inst_repo = repo;
+      Np.inst_real = repo;
       Np.inst_deps = deps;
       Np.inst_peers = peers;
       Np.inst_ovr = st.ovr;

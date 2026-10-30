@@ -92,7 +92,7 @@ module Make (Place_encoding : Place_encoding.S) = struct
 
   let mk_inst st ~repo ~deps ~peers : Npl.coq_Inst =
     {
-      Npl.inst_repo = repo;
+      Npl.inst_real = repo;
       inst_deps = deps;
       inst_peers = peers;
       inst_ovr = st.ovr;

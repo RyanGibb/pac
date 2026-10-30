@@ -237,7 +237,7 @@ module Make () : S = struct
 
   let empty_inst =
     {
-      Alp.inst_repo = Alp.PkgSet.empty;
+      Alp.inst_real = Alp.PkgSet.empty;
       inst_deps = Alp.Deps.empty;
       inst_prov = Alp.Prov.empty;
       inst_installIf = Alp.InstallIf.empty;
@@ -279,7 +279,7 @@ module Make () : S = struct
   (* Lookup.nameSubInst *)
   let name_inst ar (n : string) : Alp.coq_Inst =
     let repo, prov, prio = preimages_at ar [ n ] in
-    { empty_inst with Alp.inst_repo = repo; inst_prov = prov; inst_prio = prio }
+    { empty_inst with Alp.inst_real = repo; inst_prov = prov; inst_prio = prio }
 
   (* Lookup.installIfFibre: of the rules designating a name this package
      bears or provides, the ones whose designated condition it actually
@@ -333,7 +333,7 @@ module Make () : S = struct
           Alp.Deps.ofList (List.map (fun d -> ((n, v), xdep d)) m.P.depends)
         in
         {
-          Alp.inst_repo = repo;
+          Alp.inst_real = repo;
           inst_deps = deps;
           inst_prov = Alp.Prov.union prov own;
           inst_installIf =
@@ -355,7 +355,7 @@ module Make () : S = struct
     in
     {
       empty_inst with
-      Alp.inst_repo = repo;
+      Alp.inst_real = repo;
       inst_prov = prov;
       inst_world = Alp.WSet.ofList (List.map xdep world);
       inst_prio = prio;

@@ -126,7 +126,7 @@ Module Opam (N V X Y E : UsualOrderedType).
   (* Formula-valued relations are lists: they feed only the spec and the
      translation, and sets would demand formula comparators used nowhere. *)
   Record Inst : Type := MkInst
-    { inst_repo : PkgSet.t
+    { inst_real : PkgSet.t
     ; inst_dep : list (Pkg.t * OFormula)
     ; inst_cfl : list (Pkg.t * (N.t * (Filter * VFormula)))
     ; inst_cls : ClsRel.t
@@ -142,7 +142,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
   Record IsResolution (sigma : Valuation) (I : Inst) (S : PkgSet.t)
     : Prop := MkRes
-    { res_subset : PkgSet.Subset S (inst_repo I)
+    { res_subset : PkgSet.Subset S (inst_real I)
     ; res_available : forall p, PkgSet.In p S -> availOK sigma I p
     ; res_pins :
         forall n v, PkgSet.In (n, v) (inst_pins I) ->
@@ -307,7 +307,7 @@ Module Opam (N V X Y E : UsualOrderedType).
     Definition effRepo (sigma : Valuation) (I : Inst) : PkgSet.t :=
       PkgSet.filter
         (fun p => andb (pinOKb (inst_pins I) p) (availb sigma (inst_av I) p))
-        (inst_repo I).
+        (inst_real I).
 
     Definition PTrue : PF.Formula :=
       PF.FAtom TName.Root (PF.VSet.singleton TVer.UnitV).
@@ -541,7 +541,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Lemma mem_effRepo : forall sigma I p,
         PkgSet.In p (effRepo sigma I) <->
-        PkgSet.In p (inst_repo I) /\ PinOK (inst_pins I) p /\
+        PkgSet.In p (inst_real I) /\ PinOK (inst_pins I) p /\
         availOK sigma I p.
     Proof.
       intros sigma I p; unfold effRepo; rewrite PkgSet.filter_spec'.
@@ -1057,7 +1057,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           (fun qk => if Pkg.eq_dec (fst qk) p then true else false) cls.
 
       Definition pkgSubInst (I : Inst) (p : Pkg.t) : Inst :=
-        MkInst (C.namePreimage (inst_repo I) (declaredNames I p))
+        MkInst (C.namePreimage (inst_real I) (declaredNames I p))
           (List.filter (ownb p) (inst_dep I))
           (List.filter (ownb p) (inst_cfl I))
           (clsFibre (inst_cls I) p)
@@ -1079,7 +1079,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           (inst_query I) (inst_inv I).
 
       Definition nameSubInst (I : Inst) (n : N.t) : Inst :=
-        MkInst (C.namePreimage (inst_repo I) (NSet.singleton n))
+        MkInst (C.namePreimage (inst_real I) (NSet.singleton n))
           (inst_dep I) (inst_cfl I) (inst_cls I)
           (inst_av I) (inst_depexts I) (inst_pins I)
           (inst_pind I) (inst_query I) (inst_inv I).
@@ -1091,7 +1091,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
       Definition rootSubInst (I : Inst) : Inst :=
         MkInst
-          (C.namePreimage (inst_repo I)
+          (C.namePreimage (inst_real I)
              (NSet.union (ofNames (inst_query I)) (ofNames (inst_inv I))))
           nil nil ClsRel.empty (inst_av I) nil
           (inst_pins I) nil (inst_query I) (inst_inv I).
@@ -1100,7 +1100,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           NSet.In n ns ->
           C.versions
             (effRepo sigma
-               (MkInst (C.namePreimage (inst_repo I) ns) (inst_dep I)
+               (MkInst (C.namePreimage (inst_real I) ns) (inst_dep I)
                   (inst_cfl I) (inst_cls I) (inst_av I)
                   (inst_depexts I) (inst_pins I) (inst_pind I)
                   (inst_query I) (inst_inv I))) n =
@@ -1115,7 +1115,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       Qed.
 
       Lemma srcVersions_subInst_agree : forall sigma I sl ns n,
-          inst_repo sl = C.namePreimage (inst_repo I) ns ->
+          inst_real sl = C.namePreimage (inst_real I) ns ->
           inst_av sl = inst_av I -> inst_pins sl = inst_pins I ->
           NSet.In n ns ->
           srcVersions sigma sl n = srcVersions sigma I n.
@@ -1124,7 +1124,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         unfold srcVersions at 1.
         assert (E : effRepo sigma sl =
                     effRepo sigma
-                      (MkInst (C.namePreimage (inst_repo I) ns) (inst_dep I)
+                      (MkInst (C.namePreimage (inst_real I) ns) (inst_dep I)
                          (inst_cfl I) (inst_cls I)
                          (inst_av I) (inst_depexts I)
                          (inst_pins I) (inst_pind I) (inst_query I)

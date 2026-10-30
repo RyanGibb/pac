@@ -975,7 +975,7 @@ module Placement = struct
 
   let i =
     {
-      M.inst_repo =
+      M.inst_real =
         M.PkgSet.ofList [ ("A", "1"); ("B", "1"); ("C", "1"); ("C", "2") ];
       inst_deps =
         M.C.DepRel.ofList
@@ -1067,7 +1067,7 @@ module Npm_placement = struct
 
   let i =
     {
-      M.inst_repo = M.RepoSet.ofList repo;
+      M.inst_real = M.RepoSet.ofList repo;
       inst_deps = [ (("a", "1"), dep "b" "b" "2") ];
       inst_peers = [];
       inst_ovr = [];
@@ -1086,7 +1086,7 @@ module Npm_placement = struct
     M.RepoSet.ofList (List.filter (fun (m, _) -> List.mem m ns) repo)
 
   let bare =
-    { i with M.inst_repo = M.RepoSet.empty; inst_deps = []; inst_rootDeps = [] }
+    { i with M.inst_real = M.RepoSet.empty; inst_deps = []; inst_rootDeps = [] }
 
   let occ_inst = function
     | M.Occ.Proj -> { bare with M.inst_rootDeps = i.M.inst_rootDeps }
@@ -1109,14 +1109,14 @@ module Npm_placement = struct
   let key_inst a =
     {
       bare with
-      M.inst_repo = only (key_names a);
+      M.inst_real = only (key_names a);
       inst_rootDeps = List.map (fun m -> dep a m "0") (key_names a);
     }
 
   let atoms lam x =
     List.map
       (fun (e : M.coq_Edge) ->
-        L.edgeAtom { bare with M.inst_repo = only [ e.M.e_name ] } lam e)
+        L.edgeAtom { bare with M.inst_real = only [ e.M.e_name ] } lam e)
       (edges_of x)
 
   let versions n =

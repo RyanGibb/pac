@@ -20,7 +20,7 @@ Module Placement (N V : UsualOrderedType).
     match l with nil => nil | _ :: l' => l' end.
 
   Record Inst : Type :=
-    { inst_repo : PkgSet.t
+    { inst_real : PkgSet.t
     ; inst_deps : C.DepRel.t
     ; inst_peers : C.DepRel.t
     ; inst_optDeps : C.DepRel.t
@@ -82,7 +82,7 @@ Module Placement (N V : UsualOrderedType).
 
   Record IsResolution (I : Inst) (L : Layout.t) : Prop :=
     { res_subset :
-        forall l p, Layout.In (l, p) L -> PkgSet.In p (inst_repo I)
+        forall l p, Layout.In (l, p) L -> PkgSet.In p (inst_real I)
     ; res_location_unique :
         forall l a v v', Layout.In (l, (a, v)) L -> Layout.In (l, (a, v')) L ->
         v = v'
@@ -236,7 +236,7 @@ Module Placement (N V : UsualOrderedType).
   Qed.
 
   Lemma reaches_resolution : forall I L L',
-      (forall l p, Layout.In (l, p) L -> PkgSet.In p (inst_repo I)) ->
+      (forall l p, Layout.In (l, p) L -> PkgSet.In p (inst_real I)) ->
       (forall l a v v', Layout.In (l, (a, v)) L -> Layout.In (l, (a, v')) L ->
          v = v') ->
       Holds I L nil (inst_root I) ->
@@ -877,14 +877,14 @@ Module Placement (N V : UsualOrderedType).
       SOdn.map (fun e => fst (snd e)) E.
 
     Definition locNames (I : Inst) : NSet.t :=
-      NSet.union (SOpn.map fst (inst_repo I))
+      NSet.union (SOpn.map fst (inst_real I))
         (NSet.union
            (NSet.union (relNames (inst_deps I)) (relNames (inst_peers I)))
            (NSet.union (relNames (inst_optDeps I))
               (relNames (inst_optPeers I)))).
 
     Lemma locNames_repo : forall I a v,
-        PkgSet.In (a, v) (inst_repo I) -> NSet.In a (locNames I).
+        PkgSet.In (a, v) (inst_real I) -> NSet.In a (locNames I).
     Proof.
       intros I a v H; apply NSet.union_spec; left.
       apply SOpn.mem_map; exists (a, v); split; [exact H | reflexivity].
@@ -1009,18 +1009,18 @@ Module Placement (N V : UsualOrderedType).
       | Name.Loc l a =>
           T.VSet.add Version.Bot
             (if Nat.ltb (length l) depth
-             then SOvt.map Version.Occ (C.versions (inst_repo I) a)
+             then SOvt.map Version.Occ (C.versions (inst_real I) a)
              else T.VSet.empty)
       | Name.Walk l a =>
           T.VSet.add Version.Bot
             (along (fun l' => Nat.ltb (length l') depth) l
-               (C.versions (inst_repo I) a))
+               (C.versions (inst_real I) a))
       end.
 
     Lemma mem_versions_loc : forall I depth l a u,
         T.VSet.In u (versions I depth (Name.Loc l a)) <->
         u = Version.Bot \/
-        exists v, length l < depth /\ PkgSet.In (a, v) (inst_repo I) /\
+        exists v, length l < depth /\ PkgSet.In (a, v) (inst_real I) /\
           u = Version.Occ v.
     Proof.
       intros; cbn [versions].
@@ -1032,7 +1032,7 @@ Module Placement (N V : UsualOrderedType).
         T.VSet.In v (versions I depth (Name.Walk l a)) <->
         v = Version.Bot \/
         exists l' u, Suffix l' l /\ length l' < depth /\
-          PkgSet.In (a, u) (inst_repo I) /\ v = Version.Found l' u.
+          PkgSet.In (a, u) (inst_real I) /\ v = Version.Found l' u.
     Proof.
       intros; cbn [versions]; rewrite SOvt.add_in, mem_along.
       setoid_rewrite Nat.ltb_lt; setoid_rewrite C.mem_versions; reflexivity.
@@ -1308,7 +1308,7 @@ Module Placement (N V : UsualOrderedType).
     Lemma placementResolution_loc : forall I depth S,
         T.IsResolution (reduceReal I depth) (reduceDeps I depth) (rootPkg I) S ->
         forall l a v, Layout.In (l, (a, v)) (placementResolution S) ->
-        length l < depth /\ PkgSet.In (a, v) (inst_repo I).
+        length l < depth /\ PkgSet.In (a, v) (inst_real I).
     Proof.
       intros I depth S [Hsub _ _ _] l a v H.
       apply mem_placementResolution, Hsub, mem_reduceReal in H.
@@ -1626,7 +1626,7 @@ Module Placement (N V : UsualOrderedType).
       Module DepFibred := FibredRel Pkg C.Dependees C.DepElt C.DepRel.
 
       Definition nameSubInst (I : Inst) (a : N.t) : Inst :=
-        {| inst_repo := PkgFibred.tailFibre (inst_repo I) a
+        {| inst_real := PkgFibred.tailFibre (inst_real I) a
          ; inst_deps := C.DepRel.empty
          ; inst_peers := C.DepRel.empty
          ; inst_optDeps := C.DepRel.empty
@@ -1634,7 +1634,7 @@ Module Placement (N V : UsualOrderedType).
          ; inst_root := inst_root I |}.
 
       Definition occSubInst (I : Inst) (p : Pkg.t) : Inst :=
-        {| inst_repo := PkgSet.empty
+        {| inst_real := PkgSet.empty
          ; inst_deps := DepFibred.tailFibre (inst_deps I) p
          ; inst_peers := DepFibred.tailFibre (inst_peers I) p
          ; inst_optDeps := DepFibred.tailFibre (inst_optDeps I) p
@@ -1688,7 +1688,7 @@ Module Placement (N V : UsualOrderedType).
           T.versions (reduceReal I depth) Name.Root =
           T.versions
             (reduceReal
-               {| inst_repo := PkgSet.empty
+               {| inst_real := PkgSet.empty
                 ; inst_deps := C.DepRel.empty
                 ; inst_peers := C.DepRel.empty
                 ; inst_optDeps := C.DepRel.empty
@@ -1707,7 +1707,7 @@ Module Placement (N V : UsualOrderedType).
       Proof.
         intros I depth l a H.
         rewrite (versions_reduceReal I depth _ (reached_inRange I depth _ H)).
-        cbn [versions nameSubInst inst_repo]; rewrite versions_fibre.
+        cbn [versions nameSubInst inst_real]; rewrite versions_fibre.
         reflexivity.
       Qed.
 
@@ -1718,7 +1718,7 @@ Module Placement (N V : UsualOrderedType).
       Proof.
         intros I depth l a H.
         rewrite (versions_reduceReal I depth _ (reached_inRange I depth _ H)).
-        cbn [versions nameSubInst inst_repo]; rewrite versions_fibre.
+        cbn [versions nameSubInst inst_real]; rewrite versions_fibre.
         reflexivity.
       Qed.
 
@@ -1754,7 +1754,7 @@ Module Placement (N V : UsualOrderedType).
           T.PkgSet.In (Name.Walk l a, w) (reduceReal I depth) ->
           T.dependees (reduceDeps I depth) (Name.Walk l a, w) =
           dependees
-            {| inst_repo := PkgSet.empty
+            {| inst_real := PkgSet.empty
              ; inst_deps := C.DepRel.empty
              ; inst_peers := C.DepRel.empty
              ; inst_optDeps := C.DepRel.empty

@@ -254,7 +254,7 @@ let empty_formula = Op.OFAtom ("", Op.FlFalse, Op.VFTop)
 
 let empty_inst =
   {
-    Op.inst_repo = Op.PkgSet.empty;
+    Op.inst_real = Op.PkgSet.empty;
     inst_dep = [];
     inst_cfl = [];
     inst_cls = Op.ClsRel.empty;
@@ -308,7 +308,7 @@ let root_inst ar (query : (string * Opam_parse.vc) list) : Op.coq_Inst =
     | [] -> empty_formula
     | a :: rest -> List.fold_left (fun f b -> Op.OFAnd (f, b)) a rest
   in
-  { empty_inst with Op.inst_repo = repo; inst_av = avl; inst_query = gamma }
+  { empty_inst with Op.inst_real = repo; inst_av = avl; inst_query = gamma }
 
 (* Lookup.classSubInst: a class package's versions are every declarer of
    the class, which no one package's declarations name, so this is built
@@ -325,7 +325,7 @@ let class_inst ar (k : string) : Op.coq_Inst =
 (* Lookup.nameSubInst *)
 let name_inst ar (n : string) : Op.coq_Inst =
   let repo, avl = repo_and_avail ar [ n ] in
-  { empty_inst with Op.inst_repo = repo; inst_av = avl }
+  { empty_inst with Op.inst_real = repo; inst_av = avl }
 
 (* The system packages a solution needs.  Depexts never reach the
    solver, so this runs once the resolution is fixed, on an instance

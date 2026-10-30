@@ -373,7 +373,7 @@ End NatPM.
 Module Alp := Alpine Nat_as_OT Nat_as_OT NatPM.
 
 Definition alpI : Alp.Inst :=
-  {| Alp.inst_repo :=
+  {| Alp.inst_real :=
        Alp.PkgSet.add (1, 10)
          (Alp.PkgSet.add (2, 20) (Alp.PkgSet.add (3, 30) Alp.PkgSet.empty))
    ; Alp.inst_deps :=

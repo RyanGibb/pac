@@ -137,7 +137,7 @@ module Make (AP : Tables.ARCH) = struct
         in
         DMA.Deb.Reduction.dependees
           {
-            DMA.Deb.inst_repo = DMA.Reduction.reduceReal r_ma;
+            DMA.Deb.inst_real = DMA.Reduction.reduceReal r_ma;
             inst_deps = DMA.Reduction.reduceDeps (ma_deps_of_pkg tables p);
             inst_rec = DMA.Reduction.reduceRec (ma_recs_of_pkg tables p);
             inst_prov = DMA.Reduction.reduceProv r_pi pi_decl pi_cls;

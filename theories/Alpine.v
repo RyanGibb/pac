@@ -157,7 +157,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
   Module Prio := FSetUOT PrioElt.
 
   Record Inst : Type :=
-    { inst_repo : PkgSet.t
+    { inst_real : PkgSet.t
     ; inst_deps : Deps.t
     ; inst_prov : Prov.t
     ; inst_installIf : InstallIf.t
@@ -203,7 +203,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     fst p = n \/ exists u, Prov.In (p, (n, PVer u)) (inst_prov I).
 
   Record IsResolution (I : Inst) (S : PkgSet.t) : Prop :=
-    { res_subset : PkgSet.Subset S (inst_repo I)
+    { res_subset : PkgSet.Subset S (inst_real I)
     ; res_world : forall d, WSet.In d (inst_world I) -> MatchDep I S d
     ; res_dep_closure :
         forall p d, PkgSet.In p S -> Deps.In (p, d) (inst_deps I) ->
@@ -344,13 +344,13 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
            (fun p =>
               if andb (NEqb.eqb (fst p) n) (constrMatch zeta (snd p))
               then Some (Version.Orig (snd p)) else None)
-           (inst_repo I))
+           (inst_real I))
         (SOrw.filterMap
            (fun '(q, (m, tg)) =>
               match tg with
               | PVer u =>
                   if andb (NEqb.eqb m n)
-                       (andb (PkgSet.mem q (inst_repo I))
+                       (andb (PkgSet.mem q (inst_real I))
                           (constrMatch zeta u))
                   then Some (Version.Prov q u) else None
               | PBare => None
@@ -366,7 +366,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         (fun '(q, (m, tg)) =>
            match tg with
            | PBare =>
-               if andb (NEqb.eqb m n) (PkgSet.mem q (inst_repo I))
+               if andb (NEqb.eqb m n) (PkgSet.mem q (inst_real I))
                then Some q else None
            | PVer _ => None
            end)
@@ -514,8 +514,8 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     Definition reduceReal (I : Inst) : PF.PkgSet.t :=
       PF.PkgSet.add rootPkg
-        (PF.PkgSet.union (SOpp.map embedPkg (inst_repo I))
-           (provPkgs I (inst_repo I))).
+        (PF.PkgSet.union (SOpp.map embedPkg (inst_real I))
+           (provPkgs I (inst_real I))).
 
     Module SOqd := SetOps PF.Pkg PF.DepElt PF.PkgSet PF.DepRel.
 
@@ -554,10 +554,10 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     Lemma mem_versionsAt : forall I n zeta w,
         PF.VSet.In w (versionsAt I n zeta) <->
-        (exists v, PkgSet.In (n, v) (inst_repo I) /\
+        (exists v, PkgSet.In (n, v) (inst_real I) /\
            constrMatch zeta v = true /\ w = Version.Orig v) \/
         (exists q u, Prov.In (q, (n, PVer u)) (inst_prov I) /\
-           PkgSet.In q (inst_repo I) /\ constrMatch zeta u = true /\
+           PkgSet.In q (inst_real I) /\ constrMatch zeta u = true /\
            w = Version.Prov q u).
     Proof.
       intros I n zeta w; unfold versionsAt.
@@ -582,7 +582,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Lemma mem_bareProvSet : forall I n q,
         PkgSet.In q (bareProvSet I n) <->
         Prov.In (q, (n, PBare)) (inst_prov I) /\
-        PkgSet.In q (inst_repo I).
+        PkgSet.In q (inst_real I).
     Proof.
       intros I n q; unfold bareProvSet; rewrite SOrp.mem_filterMap.
       split.
@@ -694,15 +694,15 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Qed.
 
     Lemma reduceReal_coreResolution : forall I,
-        reduceReal I = coreResolution I (inst_repo I).
+        reduceReal I = coreResolution I (inst_real I).
     Proof. reflexivity. Qed.
 
     Lemma mem_reduceReal : forall I p',
         PF.PkgSet.In p' (reduceReal I) <->
         p' = rootPkg \/
-        (exists p, PkgSet.In p (inst_repo I) /\ p' = embedPkg p) \/
+        (exists p, PkgSet.In p (inst_real I) /\ p' = embedPkg p) \/
         (exists q m u, Prov.In (q, (m, PVer u)) (inst_prov I) /\
-           PkgSet.In q (inst_repo I) /\
+           PkgSet.In q (inst_real I) /\
            p' = (Name.Orig m, Version.Prov q u)).
     Proof.
       intros I p'; rewrite reduceReal_coreResolution; apply mem_coreResolution.
@@ -902,7 +902,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     Lemma embed_reduceReal : forall I p,
         PF.PkgSet.In (embedPkg p) (reduceReal I) ->
-        PkgSet.In p (inst_repo I).
+        PkgSet.In p (inst_real I).
     Proof.
       intros I p H.
       rewrite reduceReal_coreResolution, coreResolution_embed in H; exact H.
@@ -1160,7 +1160,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       (forall n v u, ~ Prov.In ((n, v), (n, PVer u)) (inst_prov I)).
 
     Lemma base_coreResolution : forall I S n zeta,
-        PkgSet.Subset S (inst_repo I) ->
+        PkgSet.Subset S (inst_real I) ->
         ((exists w, PF.VSet.In w (versionsAt I n zeta) /\
             PF.PkgSet.In (Name.Orig n, w) (coreResolution I S)) <->
          (exists v, PkgSet.In (n, v) S /\ constrMatch zeta v = true) \/
@@ -1187,7 +1187,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Qed.
 
     Lemma match_coreResolution : forall I S n zeta,
-        PkgSet.Subset S (inst_repo I) ->
+        PkgSet.Subset S (inst_real I) ->
         (PF.Satisfies (coreResolution I S) (encPos I n zeta) <->
          Match I S n zeta).
     Proof.
@@ -1204,7 +1204,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Qed.
 
     Lemma req_coreResolution : forall I S n zeta,
-        PkgSet.Subset S (inst_repo I) ->
+        PkgSet.Subset S (inst_real I) ->
         (PF.Satisfies (coreResolution I S) (encReq I n zeta) <->
          Req I S n zeta).
     Proof.
@@ -1375,7 +1375,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Definition repoPreimage (I : Inst) (ns : NSet.t) : PkgSet.t :=
         PkgPre.preimage (fun p => p)
           (fun q => orb (NSet.mem (fst q) ns) (provTouchb I ns q))
-          (inst_repo I).
+          (inst_real I).
 
       Module ProvPre := Preimage ProvElt Prov.
       Definition provPreimage (I : Inst) (ns : NSet.t) : Prov.t :=
@@ -1384,7 +1384,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
       Lemma mem_repoPreimage : forall I ns q,
           PkgSet.In q (repoPreimage I ns) <->
-          PkgSet.In q (inst_repo I) /\
+          PkgSet.In q (inst_real I) /\
           (NSet.In (fst q) ns \/
            exists m tg, Prov.In (q, (m, tg)) (inst_prov I) /\
              NSet.In m ns).
@@ -1437,7 +1437,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Definition subInst (I : Inst) (ns : NSet.t) (deps : Deps.t)
           (ownProv : Prov.t) (installIf : InstallIf.t) (world : WSet.t)
         : Inst :=
-        {| inst_repo := repoPreimage I ns
+        {| inst_real := repoPreimage I ns
          ; inst_deps := deps
          ; inst_prov := Prov.union ownProv (provPreimage I ns)
          ; inst_installIf := installIf
@@ -1453,7 +1453,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Proof.
         intros I ns deps ownProv installIf world n zeta Hn Hown.
         apply PF.VSet.ext; intro w.
-        rewrite !mem_versionsAt; cbn [subInst inst_repo inst_prov].
+        rewrite !mem_versionsAt; cbn [subInst inst_real inst_prov].
         split.
         - intros [[v [Hrep [Hc ->]]] | [q [u [Hprov [Hrep [Hc ->]]]]]].
           + apply mem_repoPreimage in Hrep; destruct Hrep as [Hrep _].
@@ -1483,7 +1483,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Proof.
         intros I ns deps ownProv installIf world n Hn Hown.
         apply PkgSet.ext; intro q.
-        rewrite !mem_bareProvSet; cbn [subInst inst_repo inst_prov].
+        rewrite !mem_bareProvSet; cbn [subInst inst_real inst_prov].
         split.
         - intros [Hprov Hrep].
           apply Prov.union_spec in Hprov.
@@ -1908,7 +1908,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Qed.
 
       Theorem dependees_lookupOrigCore : forall I Vq n v,
-          PkgSet.In (n, v) (inst_repo I) ->
+          PkgSet.In (n, v) (inst_real I) ->
           Vq Name.Root = PF.VSet.singleton Version.UnitV ->
           (forall m, Vq (Name.Orig m) = versions I m) ->
           PF.Reduction.T.dependees
@@ -1942,7 +1942,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
       Theorem dependees_lookupProvCore : forall I I' Vq m n v u,
           Prov.In ((n, v), (m, PVer u)) (inst_prov I) ->
-          PkgSet.In (n, v) (inst_repo I) ->
+          PkgSet.In (n, v) (inst_real I) ->
           Vq Name.Root = PF.VSet.singleton Version.UnitV ->
           (forall m, Vq (Name.Orig m) = versions I m) ->
           PF.Reduction.T.dependees
@@ -2014,7 +2014,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Qed.
 
       Theorem versions_lookupOrigCore : forall I n,
-          (exists v, PkgSet.In (n, v) (inst_repo I)) \/
+          (exists v, PkgSet.In (n, v) (inst_real I)) \/
           (exists p h,
               PF.Reduction.T.DepRel.In
                 (p, (PF.Reduction.Name.Orig (Name.Orig n), h))
