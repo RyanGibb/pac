@@ -31,8 +31,8 @@ let spine_positions ar (n : string) (v : string) : (string, int) Hashtbl.t =
 
 let rec form_names acc (f : PF.coq_Formula) =
   match f with
-  | PF.FDep (Red.TName.Real m, _) -> m :: acc
-  | PF.FDep (_, _) -> acc
+  | PF.FAtom (Red.TName.Real m, _) -> m :: acc
+  | PF.FAtom (_, _) -> acc
   | PF.FConj (a, b) | PF.FDisj (a, b) -> form_names (form_names acc a) b
   | PF.FNeg a -> form_names acc a
 

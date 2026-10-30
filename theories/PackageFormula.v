@@ -20,14 +20,14 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
   Module VSet := C.VSet.
 
   Inductive Formula : Type :=
-  | FDep (n : N.t) (vs : VSet.t)
+  | FAtom (n : N.t) (vs : VSet.t)
   | FConj (psiL psiR : Formula)
   | FDisj (psiL psiR : Formula)
   | FNeg (psi : Formula).
 
   Fixpoint Satisfies (S : PkgSet.t) (psi : Formula) : Prop :=
     match psi with
-    | FDep n vs => exists v, VSet.In v vs /\ PkgSet.In (n, v) S
+    | FAtom n vs => exists v, VSet.In v vs /\ PkgSet.In (n, v) S
     | FConj psiL psiR => Satisfies S psiL /\ Satisfies S psiR
     | FDisj psiL psiR => Satisfies S psiL \/ Satisfies S psiR
     | FNeg psi' => ~ Satisfies S psi'
@@ -35,7 +35,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
 
   Fixpoint satisfiesb (S : PkgSet.t) (psi : Formula) : bool :=
     match psi with
-    | FDep m vs => VSet.exists_ (fun v => PkgSet.mem (m, v) S) vs
+    | FAtom m vs => VSet.exists_ (fun v => PkgSet.mem (m, v) S) vs
     | FConj psiL psiR => andb (satisfiesb S psiL) (satisfiesb S psiR)
     | FDisj psiL psiR => orb (satisfiesb S psiL) (satisfiesb S psiR)
     | FNeg psi' => negb (satisfiesb S psi')
@@ -86,14 +86,14 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Definition t := Formula.
     Definition rank (psi : Formula) : nat :=
       match psi with
-      | FDep _ _ => 0 | FConj _ _ => 1 | FDisj _ _ => 2 | FNeg _ => 3
+      | FAtom _ _ => 0 | FConj _ _ => 1 | FDisj _ _ => 2 | FNeg _ => 3
       end.
 
     Fixpoint compare (x y : Formula) : comparison :=
       match Nat.compare (rank x) (rank y) with
       | Eq =>
           match x, y with
-          | FDep n1 vs1, FDep n2 vs2 =>
+          | FAtom n1 vs1, FAtom n2 vs2 =>
               lex (N.compare n1 n2) (VSet.AsUOT.compare vs1 vs2)
           | FConj a1 b1, FConj a2 b2 => lex (compare a1 a2) (compare b1 b2)
           | FDisj a1 b1, FDisj a2 b2 => lex (compare a1 a2) (compare b1 b2)
@@ -287,7 +287,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Fixpoint encode (Vq : N.t -> VSet.t) (p : T.Pkg.t) (psi : Formula)
       : T.DepRel.t :=
       match psi with
-      | FDep m vs =>
+      | FAtom m vs =>
           T.DepRel.singleton (p, (Name.Orig m, embedVS vs))
       | FConj psiL psiR =>
           T.DepRel.union (encode Vq p psiL) (encode Vq p psiR)
@@ -301,7 +301,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     with encodeDisj (Vq : N.t -> VSet.t) (n : Name.t) (i : nat) (psi : Formula)
       : T.DepRel.t :=
       match psi with
-      | FDep m vs =>
+      | FAtom m vs =>
           T.DepRel.singleton ((n, Version.Idx i), (Name.Orig m, embedVS vs))
       | FConj psiL psiR =>
           T.DepRel.union (encode Vq (n, Version.Idx i) psiL)
@@ -314,7 +314,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     with encodeNNFneg (Vq : N.t -> VSet.t) (p : T.Pkg.t) (psi : Formula)
       : T.DepRel.t :=
       match psi with
-      | FDep m vs =>
+      | FAtom m vs =>
           T.DepRel.singleton (p, (Name.Orig m, complementVS Vq m vs))
       | FConj psiL psiR =>
           let n := Name.Disjunct (FNeg psiL :: negSpine psiR) in
@@ -329,7 +329,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     with encodeConjNeg (Vq : N.t -> VSet.t) (n : Name.t) (i : nat)
         (psi : Formula) : T.DepRel.t :=
       match psi with
-      | FDep m vs =>
+      | FAtom m vs =>
           T.DepRel.singleton ((n, Version.Idx i), (Name.Orig m, complementVS Vq m vs))
       | FConj psiL psiR =>
           T.DepRel.union (encodeNNFneg Vq (n, Version.Idx i) psiL)
@@ -342,7 +342,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
 
     Fixpoint arisingPkgs (p : T.Pkg.t) (psi : Formula) : T.PkgSet.t :=
       match psi with
-      | FDep _ _ => T.PkgSet.empty
+      | FAtom _ _ => T.PkgSet.empty
       | FConj psiL psiR =>
           T.PkgSet.union (arisingPkgs p psiL) (arisingPkgs p psiR)
       | FDisj psiL psiR =>
@@ -354,7 +354,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       end
     with arisingDisj (n : Name.t) (i : nat) (psi : Formula) : T.PkgSet.t :=
       match psi with
-      | FDep _ _ => T.PkgSet.empty
+      | FAtom _ _ => T.PkgSet.empty
       | FConj psiL psiR =>
           T.PkgSet.union (arisingPkgs (n, Version.Idx i) psiL)
             (arisingPkgs (n, Version.Idx i) psiR)
@@ -365,7 +365,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       end
     with arisingNeg (p : T.Pkg.t) (psi : Formula) : T.PkgSet.t :=
       match psi with
-      | FDep _ _ => T.PkgSet.empty
+      | FAtom _ _ => T.PkgSet.empty
       | FConj psiL psiR =>
           let n := Name.Disjunct (FNeg psiL :: negSpine psiR) in
           T.PkgSet.union
@@ -378,7 +378,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       end
     with arisingConjNeg (n : Name.t) (i : nat) (psi : Formula) : T.PkgSet.t :=
       match psi with
-      | FDep _ _ => T.PkgSet.empty
+      | FAtom _ _ => T.PkgSet.empty
       | FConj psiL psiR =>
           T.PkgSet.union (arisingNeg (n, Version.Idx i) psiL)
             (arisingConjNeg n (S i) psiR)
@@ -390,7 +390,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
 
     Fixpoint fnames (psi : Formula) : NSet.t :=
       match psi with
-      | FDep m _ => NSet.singleton m
+      | FAtom m _ => NSet.singleton m
       | FConj psiL psiR => NSet.union (fnames psiL) (fnames psiR)
       | FDisj psiL psiR => NSet.union (fnames psiL) (fnames psiR)
       | FNeg psi' => fnames psi'
@@ -698,7 +698,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       assert (Hpos : forall (q : T.Pkg.t) m vs,
                  T.DepRel.In (q, (Name.Orig m, embedVS vs)) D ->
                  T.PkgSet.In q S ->
-                 Satisfies ps (FDep m vs)).
+                 Satisfies ps (FAtom m vs)).
       { intros q m vs Hd HqS.
         destruct (Hdep q HqS _ _ Hd) as [w [Hw HwS]].
         unfold embedVS in Hw; apply SOvv.mem_map in Hw;
@@ -708,7 +708,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       assert (Hneg : forall (q : T.Pkg.t) m vs,
                  T.DepRel.In (q, (Name.Orig m, complementVS Vq m vs)) D ->
                  T.PkgSet.In q S ->
-                 ~ Satisfies ps (FDep m vs)).
+                 ~ Satisfies ps (FAtom m vs)).
       { intros q m vs Hd HqS.
         destruct (Hdep q HqS _ _ Hd) as [w [Hw HwS]].
         intros [v [Hv HvM]].
@@ -875,7 +875,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
 
     Fixpoint witnessSet (S : PkgSet.t) (psi : Formula) : T.PkgSet.t :=
       match psi with
-      | FDep _ _ => T.PkgSet.empty
+      | FAtom _ _ => T.PkgSet.empty
       | FConj psiL psiR =>
           T.PkgSet.union (witnessSet S psiL) (witnessSet S psiR)
       | FDisj psiL psiR =>
@@ -887,7 +887,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       end
     with takenDisj (S : PkgSet.t) (psi : Formula) : T.PkgSet.t :=
       match psi with
-      | FDep _ _ => T.PkgSet.empty
+      | FAtom _ _ => T.PkgSet.empty
       | FConj psiL psiR =>
           T.PkgSet.union (witnessSet S psiL) (witnessSet S psiR)
       | FDisj psiL psiR =>
@@ -896,7 +896,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       end
     with witnessSetNeg (S : PkgSet.t) (psi : Formula) : T.PkgSet.t :=
       match psi with
-      | FDep _ _ => T.PkgSet.empty
+      | FAtom _ _ => T.PkgSet.empty
       | FConj psiL psiR =>
           T.PkgSet.add
             (Name.Disjunct (FNeg psiL :: negSpine psiR),
@@ -909,7 +909,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       end
     with takenConjNeg (S : PkgSet.t) (psi : Formula) : T.PkgSet.t :=
       match psi with
-      | FDep _ _ => T.PkgSet.empty
+      | FAtom _ _ => T.PkgSet.empty
       | FConj psiL psiR =>
           if satisfiesb S psiL then takenConjNeg S psiR
           else witnessSetNeg S psiL
@@ -1488,7 +1488,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       intros S_Psi Vq ns S Hemb HVq Hbot Htot Hdisj psi.
       assert (Hneg : forall m vs,
                  NSet.In m ns ->
-                 ~ Satisfies S_Psi (FDep m vs) ->
+                 ~ Satisfies S_Psi (FAtom m vs) ->
                  exists v, T.VSet.In v (complementVS Vq m vs) /\
                            T.PkgSet.In (Name.Orig m, v) S).
       { intros m vs Hm Hns.
@@ -1523,7 +1523,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           destruct Hwit as [Hq0 | [Hns _]]; [exfalso; exact (Hq0 Hqw) |].
           exact (Hneg m vs Hm Hns).
         + intros n' i0 Hspine q n ws Henc Hqw.
-          assert (Hwit := Hspine 0 (FDep m vs) eq_refl);
+          assert (Hwit := Hspine 0 (FAtom m vs) eq_refl);
             replace (i0 + 0) with i0 in Hwit by lia.
           apply SOed.singleton_in in Henc; injection Henc as -> -> ->.
           destruct Hwit as [Hq0 | [Hsat _]]; [exfalso; exact (Hq0 Hqw) |].
@@ -1533,7 +1533,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
              exists u; split; [exact Hu | reflexivity]
             | exact (Hemb (m, u) HuS)].
         + intros n' i0 Hspine q n ws Henc Hqw.
-          assert (Hwit := Hspine 0 (FNeg (FDep m vs)) eq_refl);
+          assert (Hwit := Hspine 0 (FNeg (FAtom m vs)) eq_refl);
             replace (i0 + 0) with i0 in Hwit by lia.
           apply SOed.singleton_in in Henc; injection Henc as -> -> ->.
           destruct Hwit as [Hq0 | [Hns _]]; [exfalso; exact (Hq0 Hqw) |].
@@ -1999,7 +1999,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
 
       Fixpoint negNames (psi : Formula) : NSet.t :=
         match psi with
-        | FDep _ _ => NSet.empty
+        | FAtom _ _ => NSet.empty
         | FConj psiL psiR => NSet.union (negNames psiL) (negNames psiR)
         | FDisj psiL psiR => NSet.union (negNames psiL) (negNames psiR)
         | FNeg psi' => fnames psi'
@@ -2273,14 +2273,14 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
 
       Fixpoint ownNegNames (psi : Formula) : NSet.t :=
         match psi with
-        | FDep _ _ => NSet.empty
+        | FAtom _ _ => NSet.empty
         | FConj psiL psiR => NSet.union (ownNegNames psiL) (ownNegNames psiR)
         | FDisj _ _ => NSet.empty
         | FNeg psi' => ownNegNamesNeg psi'
         end
       with ownNegNamesNeg (psi : Formula) : NSet.t :=
         match psi with
-        | FDep m _ => NSet.singleton m
+        | FAtom m _ => NSet.singleton m
         | FConj _ _ => NSet.empty
         | FDisj psiL psiR =>
             NSet.union (ownNegNamesNeg psiL) (ownNegNamesNeg psiR)
@@ -2677,12 +2677,12 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
               left; congruence.
           + intros n i0 chis i d H; apply SOed.singleton_in in H;
               injection H as H1 H2 H3; left; split; [congruence |].
-            exists 0, (FDep m ws); subst i;
+            exists 0, (FAtom m ws); subst i;
               split; [lia | split; [reflexivity |]].
             apply SOed.singleton_in; subst d; reflexivity.
           + intros n i0 chis i d H; apply SOed.singleton_in in H;
               injection H as H1 H2 H3; left; split; [congruence |].
-            exists 0, (FNeg (FDep m ws)); subst i;
+            exists 0, (FNeg (FAtom m ws)); subst i;
               split; [lia | split; [reflexivity |]].
             simpl; apply SOed.singleton_in; subst d; reflexivity.
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);

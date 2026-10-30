@@ -556,7 +556,7 @@ module Package_formula = struct
   let compare_version = R.VersionOT.compare
 
   let rec form = function
-    | M.FDep (n, vs) -> Printf.sprintf "(%s,%s)" n (set (M.VSet.elements vs))
+    | M.FAtom (n, vs) -> Printf.sprintf "(%s,%s)" n (set (M.VSet.elements vs))
     | M.FConj (a, b) -> Printf.sprintf "(%s ∧ %s)" (form a) (form b)
     | M.FDisj (a, b) -> Printf.sprintf "(%s ∨ %s)" (form a) (form b)
     | M.FNeg a -> "¬" ^ form a
@@ -570,7 +570,7 @@ module Package_formula = struct
     | R.Version.Idx i -> Format.pp_print_int f (Pac_common.Ot.nat_int i)
     | R.Version.Bot -> str f "⊥"
 
-  let dep n vs = M.FDep (n, M.VSet.ofList vs)
+  let dep n vs = M.FAtom (n, M.VSet.ofList vs)
   let r = M.PkgSet.ofList [ ("A", "1"); ("B", "1"); ("B", "2"); ("C", "1") ]
 
   let d =
@@ -635,7 +635,7 @@ module Variable_formula = struct
   let vy = function E.Inl s | E.Inr s -> s
 
   let rec form = function
-    | PF.FDep (n, vs) ->
+    | PF.FAtom (n, vs) ->
         Printf.sprintf "(%s,%s)" (nx n)
           (set (List.map vy (PF.VSet.elements vs)))
     | PF.FConj (a, b) -> Printf.sprintf "(%s ∧ %s)" (form a) (form b)
@@ -660,7 +660,7 @@ module Variable_formula = struct
         ( ("A", "1"),
           M.FDisj
             ( M.FNeg (M.FVarCmp ("os", E.OpEq, "linux")),
-              M.FDep ("B", M.VSet.ofList [ "1" ]) ) );
+              M.FAtom ("B", M.VSet.ofList [ "1" ]) ) );
       ]
 
   let root = R.embedPkg ("A", "1")

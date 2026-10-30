@@ -21,7 +21,7 @@ module Make (Lk : Lookups.S) = struct
 
   let rec leaves ar (f : PF.coq_Formula) : (PFR.Name.t * PVersion.t list) list =
     match f with
-    | PF.FDep (m, vs) ->
+    | PF.FAtom (m, vs) ->
         let tn = PFR.Name.Orig m in
         [
           ( tn,

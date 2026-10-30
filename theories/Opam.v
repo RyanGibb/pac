@@ -310,7 +310,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         (inst_repo I).
 
     Definition PTrue : PF.Formula :=
-      PF.FDep TName.Root (PF.VSet.singleton TVer.UnitV).
+      PF.FAtom TName.Root (PF.VSet.singleton TVer.UnitV).
 
     Definition srcVersions (sigma : Valuation) (I : Inst) (n : N.t)
       : VSet.t :=
@@ -322,7 +322,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Fixpoint encR (Vq : N.t -> VSet.t) (g : RFormula) : PF.Formula :=
       match g with
-      | RAtom n phi => PF.FDep (TName.Real n) (versSetBy Vq n phi)
+      | RAtom n phi => PF.FAtom (TName.Real n) (versSetBy Vq n phi)
       | RAnd a b => PF.FConj (encR Vq a) (encR Vq b)
       | ROr a b => PF.FDisj (encR Vq b) (encR Vq a)
       end.
@@ -357,7 +357,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       if defTrue sigma (fst (snd nc))
       then
         PF.FNeg
-          (PF.FDep (TName.Real (fst nc))
+          (PF.FAtom (TName.Real (fst nc))
              (confVS Vq p (fst nc) (snd (snd nc))))
       else PTrue.
 
@@ -370,7 +370,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       SOcf.filterMap
         (fun '(q, k) =>
            if Pkg.eq_dec q p
-           then Some (PF.FDep (TName.Cls k)
+           then Some (PF.FAtom (TName.Cls k)
                         (PF.VSet.singleton (TVer.NV (fst p))))
            else None)
         cls.
@@ -392,7 +392,7 @@ Module Opam (N V X Y E : UsualOrderedType).
     Definition pindForm (Vq : N.t -> VSet.t) (nvu : Pkg.t * Y.t)
       : PF.Formula :=
       PF.FNeg
-        (PF.FDep (TName.Real (fst (fst nvu)))
+        (PF.FAtom (TName.Real (fst (fst nvu)))
            (SOvv.map TVer.RV
               (VSet.remove (snd (fst nvu)) (Vq (fst (fst nvu)))))).
 
@@ -733,7 +733,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         (exists nc, In ((n, v), nc) (inst_cfl I) /\
                     psi = cflForm sigma Vq (n, v) nc) \/
         (exists k, ClsRel.In ((n, v), k) (inst_cls I) /\
-                   psi = PF.FDep (TName.Cls k)
+                   psi = PF.FAtom (TName.Cls k)
                          (PF.VSet.singleton (TVer.NV n))) \/
         (PkgSet.In (n, v) (inst_pins I) /\
          exists nvu, In ((n, v), nvu) (inst_pind I) /\
@@ -874,7 +874,7 @@ Module Opam (N V X Y E : UsualOrderedType).
                    PF.PkgSet.In (TName.Cls k, TVer.NV m) S).
         { intros m w Hm Hmk.
           assert (Hs : PF.Satisfies S
-                         (PF.FDep (TName.Cls k)
+                         (PF.FAtom (TName.Cls k)
                             (PF.VSet.singleton (TVer.NV m)))).
           { apply (Hdeps _ _ _ Hm); unfold dependees.
             apply mem_dependees_real; right; right; left.

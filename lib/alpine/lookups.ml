@@ -378,7 +378,7 @@ module Make () : S = struct
     if depth <= 0 then Format.fprintf fmt "..."
     else
       match f with
-      | PF.FDep (n, vs) ->
+      | PF.FAtom (n, vs) ->
           Format.fprintf fmt "%a{%d}" pp_alp_name n
             (List.length (PF.VSet.elements vs))
       | PF.FConj (a, b) ->
@@ -430,7 +430,7 @@ module Make () : S = struct
      identifies a provider list. *)
   let lone_provider (f : PF.coq_Formula) : (string * string) option =
     match f with
-    | PF.FDep (Red.Name.Orig m, vs) -> (
+    | PF.FAtom (Red.Name.Orig m, vs) -> (
         match PF.VSet.elements vs with
         | [ Red.Version.Orig w ] -> Some (m, w)
         | _ -> None)
@@ -449,7 +449,7 @@ module Make () : S = struct
   let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
     if last then
       match f with
-      | PF.FDep (_, vs) ->
+      | PF.FAtom (_, vs) ->
           if PF.VSet.elements vs = [] then rank_none else rank_pkg
       | _ -> rank_none
     else

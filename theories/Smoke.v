@@ -125,7 +125,7 @@ Proof. reflexivity. Qed.
 Example packageFormula_reduceDeps_computes :
   PkgF.Reduction.T.DepRel.cardinal
     (PkgF.Reduction.reduceDeps PkgF.PkgSet.empty
-       (PkgF.DepRel.add ((1, 2), PkgF.FDep 3 (PkgF.VSet.singleton 4))
+       (PkgF.DepRel.add ((1, 2), PkgF.FAtom 3 (PkgF.VSet.singleton 4))
           PkgF.DepRel.empty)) = 1.
 Proof. reflexivity. Qed.
 
@@ -133,7 +133,7 @@ Example variableFormula_reduceDeps_computes :
   VarF.Reduction.T.DepRel.cardinal
     (VarF.Reduction.reduceDeps (fun _ => VarF.YSet.singleton 0)
        VarF.PkgSet.empty
-       (VarF.DepRel.add ((1, 2), VarF.FDep 3 (VarF.VSet.singleton 4))
+       (VarF.DepRel.add ((1, 2), VarF.FAtom 3 (VarF.VSet.singleton 4))
           VarF.DepRel.empty)) = 1.
 Proof. reflexivity. Qed.
 

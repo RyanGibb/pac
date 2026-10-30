@@ -12,7 +12,7 @@ Module VariableFormula (N V : UsualOrderedType)
   Module VSet := C.VSet.
 
   Inductive Formula : Type :=
-  | FDep (n : N.t) (vs : VSet.t)
+  | FAtom (n : N.t) (vs : VSet.t)
   | FConj (psiL psiR : Formula)
   | FDisj (psiL psiR : Formula)
   | FNeg (psi : Formula)
@@ -24,7 +24,7 @@ Module VariableFormula (N V : UsualOrderedType)
   Fixpoint Satisfies (S : PkgSet.t) (sigma : X.t -> Y.t) (psi : Formula) :
       Prop :=
     match psi with
-    | FDep n vs => exists v, VSet.In v vs /\ PkgSet.In (n, v) S
+    | FAtom n vs => exists v, VSet.In v vs /\ PkgSet.In (n, v) S
     | FConj psiL psiR => Satisfies S sigma psiL /\ Satisfies S sigma psiR
     | FDisj psiL psiR => Satisfies S sigma psiL \/ Satisfies S sigma psiR
     | FNeg psi' => ~ Satisfies S sigma psi'
@@ -34,7 +34,7 @@ Module VariableFormula (N V : UsualOrderedType)
   Fixpoint satisfiesb (S : PkgSet.t) (sigma : X.t -> Y.t) (psi : Formula) :
       bool :=
     match psi with
-    | FDep m vs => VSet.exists_ (fun v => PkgSet.mem (m, v) S) vs
+    | FAtom m vs => VSet.exists_ (fun v => PkgSet.mem (m, v) S) vs
     | FConj psiL psiR =>
         andb (satisfiesb S sigma psiL) (satisfiesb S sigma psiR)
     | FDisj psiL psiR => orb (satisfiesb S sigma psiL) (satisfiesb S sigma psiR)
@@ -90,7 +90,7 @@ Module VariableFormula (N V : UsualOrderedType)
     Definition t := Formula.
     Definition rank (psi : Formula) : nat :=
       match psi with
-      | FDep _ _ => 0 | FConj _ _ => 1 | FDisj _ _ => 2 | FNeg _ => 3
+      | FAtom _ _ => 0 | FConj _ _ => 1 | FDisj _ _ => 2 | FNeg _ => 3
       | FVarCmp _ _ _ => 4
       end.
 
@@ -98,7 +98,7 @@ Module VariableFormula (N V : UsualOrderedType)
       match Nat.compare (rank x) (rank y) with
       | Eq =>
           match x, y with
-          | FDep n1 vs1, FDep n2 vs2 =>
+          | FAtom n1 vs1, FAtom n2 vs2 =>
               lex (N.compare n1 n2) (VSet.AsUOT.compare vs1 vs2)
           | FConj a1 b1, FConj a2 b2 => lex (compare a1 a2) (compare b1 b2)
           | FDisj a1 b1, FDisj a2 b2 => lex (compare a1 a2) (compare b1 b2)
@@ -211,13 +211,13 @@ Module VariableFormula (N V : UsualOrderedType)
 
     Fixpoint liftFormula (Y_x : X.t -> YSet.t) (psi : Formula) : PF.Formula :=
       match psi with
-      | FDep m vs => PF.FDep (inl m) (liftVS vs)
+      | FAtom m vs => PF.FAtom (inl m) (liftVS vs)
       | FConj psiL psiR =>
           PF.FConj (liftFormula Y_x psiL) (liftFormula Y_x psiR)
       | FDisj psiL psiR =>
           PF.FDisj (liftFormula Y_x psiL) (liftFormula Y_x psiR)
       | FNeg psi' => PF.FNeg (liftFormula Y_x psi')
-      | FVarCmp x op y => PF.FDep (inr x) (cmpVersionSet Y_x x op y)
+      | FVarCmp x op y => PF.FAtom (inr x) (cmpVersionSet Y_x x op y)
       end.
 
     Module SOyp := SetOps Y PF.Pkg YSet PF.PkgSet.
@@ -663,7 +663,7 @@ Module VariableFormula (N V : UsualOrderedType)
 
       Fixpoint ownNegNames (psi : Formula) : NSet.t :=
         match psi with
-        | FDep _ _ => NSet.empty
+        | FAtom _ _ => NSet.empty
         | FConj psiL psiR => NSet.union (ownNegNames psiL) (ownNegNames psiR)
         | FDisj _ _ => NSet.empty
         | FNeg psi' => ownNegNamesNeg psi'
@@ -671,7 +671,7 @@ Module VariableFormula (N V : UsualOrderedType)
         end
       with ownNegNamesNeg (psi : Formula) : NSet.t :=
         match psi with
-        | FDep m _ => NSet.singleton m
+        | FAtom m _ => NSet.singleton m
         | FConj _ _ => NSet.empty
         | FDisj psiL psiR =>
             NSet.union (ownNegNamesNeg psiL) (ownNegNamesNeg psiR)

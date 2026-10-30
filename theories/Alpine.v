@@ -376,13 +376,13 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       PkgSet.elements (bareProvSet I n).
 
     Definition encPos (I : Inst) (n : N.t) (zeta : Constr) : PF.Formula :=
-      let base := PF.FDep (Name.Orig n) (versionsAt I n zeta) in
+      let base := PF.FAtom (Name.Orig n) (versionsAt I n zeta) in
       if bareMatch zeta
       then
         fold_right
           (fun q f =>
              PF.FDisj
-               (PF.FDep (Name.Orig (fst q))
+               (PF.FAtom (Name.Orig (fst q))
                   (PF.VSet.singleton (Version.Orig (snd q)))) f)
           base (bareProvL I n)
       else base.
@@ -404,13 +404,13 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       orb (hasPriorityb I q) (worldNamesb I (fst q)).
 
     Definition encReq (I : Inst) (n : N.t) (zeta : Constr) : PF.Formula :=
-      let base := PF.FDep (Name.Orig n) (versionsAt I n zeta) in
+      let base := PF.FAtom (Name.Orig n) (versionsAt I n zeta) in
       if bareMatch zeta
       then
         fold_right
           (fun q f =>
              PF.FDisj
-               (PF.FDep (Name.Orig (fst q))
+               (PF.FAtom (Name.Orig (fst q))
                   (PF.VSet.singleton (Version.Orig (snd q)))) f)
           base (List.filter (selectableb I) (bareProvL I n))
       else base.
@@ -481,7 +481,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                   (fun '(_, (m, tg)) =>
                      match tg with
                      | PVer u =>
-                         Some (PF.FDep (Name.Orig m)
+                         Some (PF.FAtom (Name.Orig m)
                                  (PF.VSet.singleton
                                     (Version.Prov (n, v) u)))
                      | PBare => None
@@ -491,7 +491,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                   (installIfFibre I (n, v))))
       | (Name.Orig _, Version.Prov q0 _) =>
           FSet.singleton
-            (PF.FDep (Name.Orig (fst q0))
+            (PF.FAtom (Name.Orig (fst q0))
                (PF.VSet.singleton (Version.Orig (snd q0))))
       | _ => FSet.empty
       end.
@@ -773,7 +773,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           (fold_right
              (fun q f =>
                 PF.FDisj
-                  (PF.FDep (Name.Orig (fst q))
+                  (PF.FAtom (Name.Orig (fst q))
                      (PF.VSet.singleton (Version.Orig (snd q)))) f)
              base l) <->
         PF.Satisfies S' base \/
@@ -924,13 +924,13 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       rewrite reduceReal_coreResolution, coreResolution_prov in Ht.
       split; [exact (proj1 Ht) |].
       assert (Hf : FSet.In
-                     (PF.FDep (Name.Orig (fst q))
+                     (PF.FAtom (Name.Orig (fst q))
                         (PF.VSet.singleton (Version.Orig (snd q))))
                      (dependees I (Name.Orig m, Version.Prov q u))).
       { cbn [dependees]; apply FSet.singleton_spec; reflexivity. }
       assert (Hd : PF.DepRel.In
                      ((Name.Orig m, Version.Prov q u),
-                      PF.FDep (Name.Orig (fst q))
+                      PF.FAtom (Name.Orig (fst q))
                         (PF.VSet.singleton (Version.Orig (snd q))))
                      (reduceDeps I)).
       { apply mem_reduceDeps; split; [apply Hsub; exact Hm | exact Hf]. }
@@ -948,7 +948,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Proof.
       intros I S' [n v] m u [Hsub Hroot Hclo Huniq] HpS Hprov.
       assert (Hf : FSet.In
-                     (PF.FDep (Name.Orig m)
+                     (PF.FAtom (Name.Orig m)
                         (PF.VSet.singleton (Version.Prov (n, v) u)))
                      (dependees I (embedPkg (n, v)))).
       { cbn [dependees embedPkg fst snd]; apply FSet.union_spec; right.
@@ -958,7 +958,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         apply ProvFibred.mem_tailFibre; split; [exact Hprov | reflexivity]. }
       assert (Hd : PF.DepRel.In
                      (embedPkg (n, v),
-                      PF.FDep (Name.Orig m)
+                      PF.FAtom (Name.Orig m)
                         (PF.VSet.singleton (Version.Prov (n, v) u)))
                      (reduceDeps I)).
       { apply mem_reduceDeps; split; [apply Hsub; exact HpS | exact Hf]. }
@@ -1502,7 +1502,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Theorem dependees_lookupProv : forall I m n v u,
           dependees I (Name.Orig m, Version.Prov (n, v) u) =
           FSet.singleton
-            (PF.FDep (Name.Orig n) (PF.VSet.singleton (Version.Orig v))).
+            (PF.FAtom (Name.Orig n) (PF.VSet.singleton (Version.Orig v))).
       Proof. reflexivity. Qed.
 
       Definition nameSubInst (I : Inst) (n : N.t) : Inst :=

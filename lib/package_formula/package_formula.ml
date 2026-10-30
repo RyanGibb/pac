@@ -197,7 +197,7 @@ struct
      one out, its versions tagged as PubGrub sees them *)
   let rec pp_formula st fmt (f : PF.coq_Formula) =
     match f with
-    | PF.FDep (n, vs) ->
+    | PF.FAtom (n, vs) ->
         let tn = PFR.Name.Orig n in
         Format.fprintf fmt "%a{%a}" Pp.pp_name tn
           (Format.pp_print_list
