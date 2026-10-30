@@ -193,15 +193,15 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Module ConfElt := PairUOT Pkg Atom.
   Module Conf := FSetUOT ConfElt.
 
-  Definition BaseMatch (Pi : Prov.t) (n : N.t) (phi : Deb.Ver.Formula)
-      '(((m, alpha'), u) : Pkg.t) : Prop :=
+  Definition BaseMatch (Pi : Prov.t) '(((m, alpha'), u) : Pkg.t)
+      (n : N.t) (phi : Deb.Ver.Formula) : Prop :=
     (m = n /\ Deb.Ver.satisfiesb u phi = true) \/
     (exists v, Prov.In (((m, alpha'), u), (n, v)) Pi /\
        Deb.vtMatchb v phi = true).
 
   Definition MAMatch (Pi : Prov.t) (mu : Cls.t) (alpha : A.t)
-      '((n, (x, phi)) : Atom.t) '((((m, alpha'), u) as q) : Pkg.t) : Prop :=
-    BaseMatch Pi n phi q /\
+      '((((m, alpha'), u) as q) : Pkg.t) '((n, (x, phi)) : Atom.t) : Prop :=
+    BaseMatch Pi q n phi /\
     match x with
     | QUnq => alpha' = alpha \/ classOf mu q = MAForeign
     | QNative => alpha' = AP.native
@@ -210,8 +210,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     end.
 
   Definition MAConfMatch (Pi : Prov.t) (mu : Cls.t)
-      '((n, (x, phi)) : Atom.t) '((((m, alpha'), u) as q) : Pkg.t) : Prop :=
-    BaseMatch Pi n phi q /\
+      '((((m, alpha'), u) as q) : Pkg.t) '((n, (x, phi)) : Atom.t) : Prop :=
+    BaseMatch Pi q n phi /\
     match x with
     | QUnq => True
     | QNative => alpha' = AP.native
@@ -236,12 +236,12 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         forall Al, Deps.In (((n, alpha), v), Al) (inst_deps I) ->
         exists a, List.In a Al /\
           exists q, PkgSet.In q S /\
-            MAMatch (inst_prov I) (inst_cls I) alpha a q
+            MAMatch (inst_prov I) (inst_cls I) alpha q a
     ; res_conflict_avoidance :
         forall n alpha v, PkgSet.In ((n, alpha), v) S ->
         forall a, Conf.In (((n, alpha), v), a) (inst_conf I) ->
         ~ exists m alpha' u, PkgSet.In ((m, alpha'), u) S /\ m <> n /\
-            MAConfMatch (inst_prov I) (inst_cls I) a ((m, alpha'), u)
+            MAConfMatch (inst_prov I) (inst_cls I) ((m, alpha'), u) a
     ; res_lockstep :
         forall n alpha v alpha' u,
         PkgSet.In ((n, alpha), v) S -> PkgSet.In ((n, alpha'), u) S ->
@@ -522,9 +522,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         (Deb.Match (reduceProv R Pi mu) (embedPkg q) ((n, x), phi) <->
          match x with
          | QAArch b =>
-             BaseMatch Pi n phi q /\ (parch q = b \/ classOf mu q = MAForeign)
-         | QAExact b => BaseMatch Pi n phi q /\ parch q = b
-         | QAAny => BaseMatch Pi n phi q /\ classOf mu q = MAAllowed
+             BaseMatch Pi q n phi /\ (parch q = b \/ classOf mu q = MAForeign)
+         | QAExact b => BaseMatch Pi q n phi /\ parch q = b
+         | QAAny => BaseMatch Pi q n phi /\ classOf mu q = MAAllowed
          | QAGroup => pname q = n /\ Deb.Ver.satisfiesb (pver q) phi = true
          end).
     Proof.
@@ -593,7 +593,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
     Lemma match_transfer : forall R Pi mu alpha a q,
         PkgSet.In q R ->
-        (MAMatch Pi mu alpha a q <->
+        (MAMatch Pi mu alpha q a <->
          Deb.Match (reduceProv R Pi mu) (embedPkg q) (reduceAtom alpha a)).
     Proof.
       intros R Pi mu alpha [n [x phi]] [[m b0] u] HqR.
@@ -615,7 +615,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         PkgSet.In q R ->
         ((exists q' ea e, List.In (q', (ea, e)) (declConfOf (p, a)) /\
             Deb.Match (reduceProv R Pi mu) (embedPkg q) ea) <->
-         MAConfMatch Pi mu a q).
+         MAConfMatch Pi mu q a).
     Proof.
       intros R Pi mu p [n [x phi]] [[m b0] u] HqR.
       unfold MAConfMatch, declConfOf; cbn [fst snd aname aqual aform].
