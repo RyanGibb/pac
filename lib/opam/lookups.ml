@@ -220,11 +220,11 @@ let rec xfilt : Opam_parse.filt -> Op.coq_Filter = function
   | FOr (a, b) -> Op.FlOr (xfilt a, xfilt b)
   | FNot a -> Op.FlNot (xfilt a)
 
-let rec xvc : Opam_parse.vc -> Op.coq_VConstraint = function
-  | VTop -> Op.VCTop
-  | VCmp (o, s) -> Op.VCCmp (xop o, s)
-  | VAnd (a, b) -> Op.VCAnd (xvc a, xvc b)
-  | VOr (a, b) -> Op.VCOr (xvc a, xvc b)
+let rec xvc : Opam_parse.vc -> Op.coq_VFormula = function
+  | VTop -> Op.VFTop
+  | VCmp (o, s) -> Op.VFCmp (xop o, s)
+  | VAnd (a, b) -> Op.VFAnd (xvc a, xvc b)
+  | VOr (a, b) -> Op.VFOr (xvc a, xvc b)
 
 let rec xoff : Opam_parse.off -> Op.coq_OFormula = function
   | OAtom (n, g, c) -> Op.OFAtom (n, xfilt g, xvc c)
@@ -250,7 +250,7 @@ let repo_and_avail ar (ns : string list) =
 
 (* an atom under a false guard, since the calculus spells no empty formula
    otherwise *)
-let empty_formula = Op.OFAtom ("", Op.FlFalse, Op.VCTop)
+let empty_formula = Op.OFAtom ("", Op.FlFalse, Op.VFTop)
 
 let empty_inst =
   {

@@ -67,29 +67,29 @@ Module Opam (N V X Y E : UsualOrderedType).
   Definition defTrue (sigma : Valuation) (c : Filter) : bool :=
     match evalF sigma c with Some true => true | _ => false end.
 
-  Inductive VConstraint : Type :=
-  | VCTop
-  | VCCmp (op : CmpOp) (c : V.t)
-  | VCAnd (a b : VConstraint)
-  | VCOr (a b : VConstraint)
-  | VCNot (a : VConstraint).
+  Inductive VFormula : Type :=
+  | VFTop
+  | VFCmp (op : CmpOp) (c : V.t)
+  | VFAnd (a b : VFormula)
+  | VFOr (a b : VFormula)
+  | VFNot (a : VFormula).
 
-  Fixpoint vcHolds (phi : VConstraint) (v : V.t) : bool :=
+  Fixpoint vfHolds (phi : VFormula) (v : V.t) : bool :=
     match phi with
-    | VCTop => true
-    | VCCmp op c => Ver.cmpOpEval op v c
-    | VCAnd a b => andb (vcHolds a v) (vcHolds b v)
-    | VCOr a b => orb (vcHolds a v) (vcHolds b v)
-    | VCNot a => negb (vcHolds a v)
+    | VFTop => true
+    | VFCmp op c => Ver.cmpOpEval op v c
+    | VFAnd a b => andb (vfHolds a v) (vfHolds b v)
+    | VFOr a b => orb (vfHolds a v) (vfHolds b v)
+    | VFNot a => negb (vfHolds a v)
     end.
 
   Inductive OFormula : Type :=
-  | OFAtom (n : N.t) (c : Filter) (phi : VConstraint)
+  | OFAtom (n : N.t) (c : Filter) (phi : VFormula)
   | OFAnd (a b : OFormula)
   | OFOr (a b : OFormula).
 
   Inductive RFormula : Type :=
-  | RAtom (n : N.t) (phi : VConstraint)
+  | RAtom (n : N.t) (phi : VFormula)
   | RAnd (a b : RFormula)
   | ROr (a b : RFormula).
 
@@ -111,7 +111,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
   Fixpoint rSat (S : PkgSet.t) (f : RFormula) : Prop :=
     match f with
-    | RAtom n phi => exists v, PkgSet.In (n, v) S /\ vcHolds phi v = true
+    | RAtom n phi => exists v, PkgSet.In (n, v) S /\ vfHolds phi v = true
     | RAnd a b => rSat S a /\ rSat S b
     | ROr a b => rSat S a \/ rSat S b
     end.
@@ -128,7 +128,7 @@ Module Opam (N V X Y E : UsualOrderedType).
   Record Inst : Type := MkInst
     { inst_repo : PkgSet.t
     ; inst_dep : list (Pkg.t * OFormula)
-    ; inst_cfl : list (Pkg.t * (N.t * (Filter * VConstraint)))
+    ; inst_cfl : list (Pkg.t * (N.t * (Filter * VFormula)))
     ; inst_cls : ClsRel.t
     ; inst_avl : list (Pkg.t * Filter)
     ; inst_dxt : list (Pkg.t * (E.t * Filter))
@@ -154,7 +154,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         forall n v, PkgSet.In (n, v) S ->
         forall m c phi, In ((n, v), (m, (c, phi))) (inst_cfl I) ->
           defTrue sigma c = true ->
-        ~ exists u, PkgSet.In (m, u) S /\ m <> n /\ vcHolds phi u = true
+        ~ exists u, PkgSet.In (m, u) S /\ m <> n /\ vfHolds phi u = true
     ; res_class_exclusion : Cls.ClassExclusion (inst_cls I) S
     ; res_pin_depends :
         forall p, PkgSet.In p S -> PkgSet.In p (inst_pins I) ->
@@ -316,9 +316,9 @@ Module Opam (N V X Y E : UsualOrderedType).
       : VSet.t :=
       C.versions (effRepo sigma I) n.
 
-    Definition versSetBy (Vq : N.t -> VSet.t) (n : N.t) (phi : VConstraint)
+    Definition versSetBy (Vq : N.t -> VSet.t) (n : N.t) (phi : VFormula)
       : PF.VSet.t :=
-      SOvv.map TVer.RV (VSet.filter (fun v => vcHolds phi v) (Vq n)).
+      SOvv.map TVer.RV (VSet.filter (fun v => vfHolds phi v) (Vq n)).
 
     Fixpoint encR (Vq : N.t -> VSet.t) (g : RFormula) : PF.Formula :=
       match g with
@@ -335,7 +335,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       end.
 
     Definition confVS (Vq : N.t -> VSet.t) (p : Pkg.t) (n : N.t)
-        (phi : VConstraint) : PF.VSet.t :=
+        (phi : VFormula) : PF.VSet.t :=
       if N.eq_dec (fst p) n then PF.VSet.empty else versSetBy Vq n phi.
 
     Module FSet := PF.FSet.
@@ -353,7 +353,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       List.map (encodeOF sigma Vq) (ownedBy p (inst_dep I)).
 
     Definition cflForm (sigma : Valuation) (Vq : N.t -> VSet.t) (p : Pkg.t)
-        (nc : N.t * (Filter * VConstraint)) : PF.Formula :=
+        (nc : N.t * (Filter * VFormula)) : PF.Formula :=
       if defTrue sigma (fst (snd nc))
       then
         PF.FNeg
@@ -464,7 +464,7 @@ Module Opam (N V X Y E : UsualOrderedType).
     Lemma mem_versSetBy : forall Vq n phi u,
         PF.VSet.In u (versSetBy Vq n phi) <->
         exists v, u = TVer.RV v /\ VSet.In v (Vq n) /\
-                  vcHolds phi v = true.
+                  vfHolds phi v = true.
     Proof.
       intros Vq n phi u; unfold versSetBy; rewrite SOvv.mem_map.
       split.

@@ -47,7 +47,7 @@ type request = {
 }
 
 val rho : request -> string -> string option
-val xvc : Opam_parse.vc -> Op.coq_VConstraint
+val xvc : Opam_parse.vc -> Op.coq_VFormula
 
 val depexts_of :
   (string -> string option) -> archive -> (string * string) list -> string list

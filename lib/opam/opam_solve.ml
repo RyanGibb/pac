@@ -21,7 +21,7 @@ let sanitize ar (query : (string * Opam_parse.vc) list) =
     | (name, c) :: rest -> (
         let name = fuzzy name in
         let vs = versions_of ar name in
-        if List.exists (Op.vcHolds (xvc c)) vs then go ((name, c) :: acc) rest
+        if List.exists (Op.vfHolds (xvc c)) vs then go ((name, c) :: acc) rest
         else
           match c with
           | Opam_parse.VCmp (o, w) when vs <> [] ->

@@ -303,15 +303,15 @@ Definition opRepo : Op.PkgSet.t :=
 Definition opInst : Op.Inst :=
   Op.MkInst opRepo
     (((1, 10),
-      Op.OFAtom 2 (Op.FlCmp OpEq false 1) (Op.VCCmp OpGe 15)) :: nil)
+      Op.OFAtom 2 (Op.FlCmp OpEq false 1) (Op.VFCmp OpGe 15)) :: nil)
     nil
     Op.ClsRel.empty
     nil
     (((2, 20), (7, Op.FlTrue)) :: nil)
     Op.PkgSet.empty
     nil
-    (Op.OFAtom 1 Op.FlTrue Op.VCTop)
-    (Op.OFAtom 1 Op.FlFalse Op.VCTop).
+    (Op.OFAtom 1 Op.FlTrue Op.VFTop)
+    (Op.OFAtom 1 Op.FlFalse Op.VFTop).
 
 Example opam_reduceReal_computes :
   Op.Reduction.PF.PkgSet.cardinal (Op.Reduction.reduceReal opRho opInst) = 3.
