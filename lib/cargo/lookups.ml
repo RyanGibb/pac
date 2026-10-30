@@ -204,7 +204,7 @@ module Make (Encoding : Encoding.S) = struct
     | Cg.Reduction.NPlus.CDec (_, _, _, d, _) ->
         call { e with inst_repo = name_set st (Cg.sName d) }
     | Cg.Reduction.NPlus.CLink l ->
-        (* Lookup.claimants and LinkFibred.withHead at l, over the
+        (* Lookup.claimants and LinkFibred.headFibre at l, over the
            declarers loaded so far: the answer may only grow
            (versions_link_mono) *)
         let rs = Archive.link_preimage st.ar l in

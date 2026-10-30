@@ -2408,19 +2408,19 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                               | reflexivity].
       Qed.
 
-      Lemma linkRel_withHead : forall g Links l,
-          linkRel g (LinkFibred.withHead Links l) =
+      Lemma linkRel_headFibre : forall g Links l,
+          linkRel g (LinkFibred.headFibre Links l) =
           ClsT.Reduction.Lookup.classRelAt (linkRel g Links) (NPlus.CLink l).
       Proof.
         intros; apply ClsT.InClassRel.ext; intros [q k].
         rewrite ClsT.Reduction.Lookup.mem_classRelAt, !mem_linkRel.
         split.
         - intros [n [v [l' [Hl [-> ->]]]]].
-          apply LinkFibred.mem_withHead in Hl; destruct Hl as [Hl ->].
+          apply LinkFibred.mem_headFibre in Hl; destruct Hl as [Hl ->].
           split; [exists n, v, l; repeat split; exact Hl | reflexivity].
         - intros [[n [v [l' [Hl [-> ->]]]]] Ek]; injection Ek as ->.
           exists n, v, l; repeat split.
-          apply LinkFibred.mem_withHead; split; [exact Hl | reflexivity].
+          apply LinkFibred.mem_headFibre; split; [exact Hl | reflexivity].
       Qed.
 
       Theorem versions_lookupLink :
@@ -2428,7 +2428,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           versions I (NPlus.CLink l) =
           versions
             (MkInst (claimants (inst_repo I) (inst_links I) l) SlotRel.empty
-               FDefRel.empty (LinkFibred.withHead (inst_links I) l)
+               FDefRel.empty (LinkFibred.headFibre (inst_links I) l)
                SupportSet.empty
                (inst_gran I) (inst_dflt I) (inst_root I) (inst_rootFeats I))
             (NPlus.CLink l).
@@ -2436,7 +2436,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         intros; apply T.VSet.ext; intro w.
         rewrite !versions_link_reduceReal; cbn [inst_repo inst_links inst_gran].
         rewrite crateReal_claimants,
-          linkRel_withHead, <- ClsT.Reduction.Lookup.versions_lookupClass.
+          linkRel_headFibre, <- ClsT.Reduction.Lookup.versions_lookupClass.
         reflexivity.
       Qed.
 

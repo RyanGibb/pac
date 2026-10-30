@@ -627,13 +627,13 @@ Module FibredRel (T H : UsualOrderedType)
 
   Definition head '((_, h) : E.t) : H.t := h.
 
-  Definition withHead (R : S.t) (h : H.t) : S.t :=
+  Definition headFibre (R : S.t) (h : H.t) : S.t :=
     S.filter (fun e => if H.eq_dec (head e) h then true else false) R.
 
-  Lemma mem_withHead : forall R (q : T.t) (h g : H.t),
-      S.In (q, g) (withHead R h) <-> S.In (q, g) R /\ g = h.
+  Lemma mem_headFibre : forall R (q : T.t) (h g : H.t),
+      S.In (q, g) (headFibre R h) <-> S.In (q, g) R /\ g = h.
   Proof.
-    intros R q h g; unfold withHead.
+    intros R q h g; unfold headFibre.
     rewrite SS.filter_spec'.
     simpl.
     destruct (H.eq_dec g h); intuition congruence.
