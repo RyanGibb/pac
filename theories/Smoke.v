@@ -750,7 +750,7 @@ Definition nplInst : NplS.Inst :=
 
 Example npl_edges :
   List.map (fun e => (NplS.e_dir e, NplS.e_name e, NplS.e_optional e))
-    (NplS.edgesOf nplInst NplS.Occ.Top) =
+    (NplS.edgesOf nplInst NplS.Occ.Proj) =
   (npmX, npmB, false) :: (npmC, npmC, true) :: nil.
 Proof. reflexivity. Qed.
 
@@ -770,7 +770,7 @@ Definition nplInstOvr (o : list (nat * NplS.Range)) : NplS.Inst :=
 
 Definition nplAccepts (I : NplS.Inst) : list (list NplS.Occ.t) :=
   List.map (fun e => NplS.Pl.VSet.elements (NplS.Reduction.accepts I e))
-    (NplS.edgesOf I NplS.Occ.Top).
+    (NplS.edgesOf I NplS.Occ.Proj).
 
 Example npl_override_key :
   nplAccepts (nplInstOvr ((npmX, (NplS.COp OpEq 1 :: nil) :: nil) :: nil)) =

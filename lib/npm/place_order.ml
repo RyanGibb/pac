@@ -42,7 +42,7 @@ struct
      engines-compatible together, then engines, then not deprecated *)
   let rank ar (x : Npl.Occ.t) : bool * bool * bool =
     match x with
-    | Npl.Occ.Top -> (true, true, true)
+    | Npl.Occ.Proj -> (true, true, true)
     | Npl.Occ.Reg (m, v) -> (
         match A.meta ar (m, v.IVer.s) with
         | Some mt -> A.ver_rank ar mt
@@ -63,7 +63,7 @@ struct
   let tagged ar (cands : Npl.Occ.t list) : Npl.Occ.t option =
     List.find_opt
       (function
-        | Npl.Occ.Top -> false
+        | Npl.Occ.Proj -> false
         | Npl.Occ.Reg (m, v) -> (
             A.loaded_latest ar m = Some v.IVer.s
             &&
@@ -113,7 +113,7 @@ struct
           (List.filter is_dep (L.edges st y))
       end
     in
-    match match l with [] -> Some Npl.Occ.Top | _ -> occupant ~assigned l with
+    match match l with [] -> Some Npl.Occ.Proj | _ -> occupant ~assigned l with
     | Some y -> go (Some l) y
     | None -> []
 

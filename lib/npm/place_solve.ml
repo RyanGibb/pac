@@ -141,7 +141,7 @@ module Make () = struct
              (fun (l, (a, x)) ->
                match x with
                | Npl.Occ.Reg (m, v) -> Some (a :: l, (m, v.IVer.s))
-               | Npl.Occ.Top -> None)
+               | Npl.Occ.Proj -> None)
              (Pl.Layout.elements
                 (Npl.Reduction.reachableOf (edges ~dev ~optional st) root
                    (R.placementResolution (T.PkgSet.ofList sol)))));
@@ -152,7 +152,7 @@ module Make () = struct
   let check_answer st sol =
     let versions m = T.VSet.ofList (L.versions st m) in
     let dependees p = T.DependeesSet.ofList (L.dependees st p) in
-    let q = T.rootQuery (R.Name.Root, R.Version.Occ Npl.Occ.Top) in
+    let q = T.rootQuery (R.Name.Root, R.Version.Occ Npl.Occ.Proj) in
     match T.check versions dependees q (T.PkgSet.ofList sol) with
     | None -> ()
     | Some f ->
@@ -173,7 +173,7 @@ module Make () = struct
       PG.solve ?next:h.Pac_common.Order.next ?choose:h.Pac_common.Order.choose
         ~dense:(fun _ -> same_stretch)
         ~vers:(L.versions st) ~deps:(dependencies st asked)
-        [ (R.Name.Root, PG.Ranges.of_list [ R.Version.Occ Npl.Occ.Top ]) ]
+        [ (R.Name.Root, PG.Ranges.of_list [ R.Version.Occ Npl.Occ.Proj ]) ]
     in
     h.Pac_common.Order.finish ();
     let r =

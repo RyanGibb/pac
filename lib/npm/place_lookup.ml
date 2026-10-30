@@ -58,7 +58,7 @@ module Make (Place_encoding : Place_encoding.S) = struct
      top node alone. *)
   let meta st (x : Npl.Occ.t) =
     match x with
-    | Npl.Occ.Top -> A.root_meta st.ar
+    | Npl.Occ.Proj -> A.root_meta st.ar
     | Npl.Occ.Reg (m, v) -> A.meta st.ar (m, v.IVer.s)
 
   let repo_at st (n : string) : Npl.RepoSet.t =
@@ -112,7 +112,7 @@ module Make (Place_encoding : Place_encoding.S) = struct
           (List.map (xdep st.ar) v.P.v_deps, List.map (xpeer st.ar) v.P.v_peers)
     in
     match x with
-    | Npl.Occ.Top ->
+    | Npl.Occ.Proj ->
         {
           (mk_inst st ~repo:Npl.RepoSet.empty ~deps:[] ~peers:[]) with
           Npl.inst_rootDeps = ds;
@@ -189,7 +189,7 @@ module Make (Place_encoding : Place_encoding.S) = struct
 
   let versions st (n : PName.t) : PVersion.t list =
     match n with
-    | R.Name.Root -> [ R.Version.Occ Npl.Occ.Top ]
+    | R.Name.Root -> [ R.Version.Occ Npl.Occ.Proj ]
     | R.Name.Loc (l, a) | R.Name.Walk (l, a) -> (
         let g = List.length (key_names st a) in
         (* a location's versions read only the key and whether it is above

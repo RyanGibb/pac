@@ -127,9 +127,9 @@ module Make () = struct
 
   let occ_compare (x : Npl.Occ.t) (y : Npl.Occ.t) =
     match (x, y) with
-    | Npl.Occ.Top, Npl.Occ.Top -> 0
-    | Npl.Occ.Top, Npl.Occ.Reg _ -> -1
-    | Npl.Occ.Reg _, Npl.Occ.Top -> 1
+    | Npl.Occ.Proj, Npl.Occ.Proj -> 0
+    | Npl.Occ.Proj, Npl.Occ.Reg _ -> -1
+    | Npl.Occ.Reg _, Npl.Occ.Proj -> 1
     | Npl.Occ.Reg (m, v), Npl.Occ.Reg (m', v') -> (
         match String.compare m m' with 0 -> IVer.compare v v' | c -> c)
 
@@ -181,7 +181,7 @@ module Make () = struct
     let equal a b = compare a b = 0
 
     let pp_occ fmt = function
-      | Npl.Occ.Top -> Format.fprintf fmt "project"
+      | Npl.Occ.Proj -> Format.fprintf fmt "project"
       | Npl.Occ.Reg (m, v) -> Format.fprintf fmt "%s@%s" m v.IVer.s
 
     let pp fmt (v : t) =
