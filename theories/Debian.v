@@ -1072,11 +1072,18 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         injection H as H; exact H.
     Qed.
 
+    Definition sat (Pi : Prov.t) (S : PkgSet.t) (a : Atom.t) : option Pkg.t :=
+      PkgSet.min_elt (PkgSet.filter (fun q => matchb Pi q a) S).
+
     Definition satAtoms (Pi : Prov.t) (S : PkgSet.t) (A : Clause.t) :
         AtomSet.t :=
       AtomSet.filter (fun a =>
           PkgSet.exists_ (fun q => matchb Pi q a) S)
         (clauseAtoms A).
+
+    Definition satClause (Pi : Prov.t) (S : PkgSet.t) (A : Clause.t) :
+        option Atom.t :=
+      AtomSet.min_elt (satAtoms Pi S A).
 
     Definition rmatchb (q : Pkg.t) (a : Atom.t) : bool :=
       andb (NEqb.eqb (fst q) (aname a)) (Ver.satisfiesb (snd q) (aform a)).
@@ -1086,7 +1093,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
 
     Definition chooseSatisfier (Pi : Prov.t) (S : PkgSet.t) (a : Atom.t) :
         option Version.t :=
-      match PkgSet.min_elt (PkgSet.filter (fun q => matchb Pi q a) S) with
+      match sat Pi S a with
       | Some q => Some (chosenVersion q a)
       | None => None
       end.
@@ -1103,7 +1110,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         (clauseAtoms A).
 
     Definition cwSoft (Pi : Prov.t) (S : PkgSet.t) (A : Clause.t) : Version.t :=
-      match AtomSet.min_elt (satAtoms Pi S A) with
+      match satClause Pi S A with
       | Some a => Version.Atom a
       | None => Version.Zero
       end.
@@ -1114,9 +1121,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
            (SOcp.filterMap (fun c =>
                 if andb (PkgSet.mem (fst c) S)
                      (2 <=? AtomSet.cardinal (clauseAtoms (snd c)))
-                then match
-                       AtomSet.min_elt (satAtoms (inst_prov I) S (snd c))
-                     with
+                then match satClause (inst_prov I) S (snd c) with
                      | Some a => Some (Name.Disjunct (snd c), Version.Atom a)
                      | None => None
                      end
@@ -1164,7 +1169,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         exists m w, PkgSet.In (m, w) S /\ matchb Pi (m, w) a = true /\
           v = chosenVersion (m, w) a.
     Proof.
-      intros Pi S a u H; unfold chooseSatisfier in H.
+      intros Pi S a u H; unfold chooseSatisfier, sat in H.
       destruct (PkgSet.min_elt (PkgSet.filter (fun q => matchb Pi q a) S))
         as [q |] eqn:Hmin; [| discriminate].
       injection H as <-.
@@ -1179,7 +1184,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         PkgSet.In q S -> matchb Pi q a = true ->
         exists v, chooseSatisfier Pi S a = Some v.
     Proof.
-      intros Pi S a q HqS Hm; unfold chooseSatisfier.
+      intros Pi S a q HqS Hm; unfold chooseSatisfier, sat.
       destruct (PkgSet.min_elt (PkgSet.filter (fun q0 => matchb Pi q0 a) S))
         as [q1 |] eqn:Hmin.
       - exists (chosenVersion q1 a); reflexivity.
@@ -1210,7 +1215,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Lemma cwSoft_versionsSoft : forall Pi S A,
         T.VSet.In (cwSoft Pi S A) (versionsSoft A).
     Proof.
-      intros Pi S A; unfold cwSoft.
+      intros Pi S A; unfold cwSoft, satClause.
       destruct (AtomSet.min_elt (satAtoms Pi S A)) as [a |] eqn:Hmin;
         apply mem_versionsSoft; [right | left; reflexivity].
       apply AtomSet.min_elt_spec1, mem_satAtoms in Hmin.
@@ -1242,7 +1247,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         T.PkgSet.In q (coreResolution I S) <->
         CoreMem I S q.
     Proof.
-      intros I S q; unfold coreResolution.
+      intros I S q; unfold coreResolution, satClause.
       rewrite !T.PkgSet.union_spec, SOrp.mem_map, SOcp.mem_filterMap_if,
         SOcp.mem_filterMap, SOcp.mem_unionMap, mem_absentPkgs.
       split.
@@ -1436,7 +1441,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
             [apply matchb_iff; exact Hqm | | exact Heq].
           exists cp, cA; split; [apply allClauses_inL; exact Hc |].
           split; [apply PkgSet.mem_spec; exact Hmem | exact Ha0A].
-        + unfold cwSoft in Hout.
+        + unfold cwSoft, satClause in Hout.
           destruct (AtomSet.min_elt (satAtoms (inst_prov I) S cA))
             as [a0 |] eqn:Hmin.
           * apply dependees_soft_spec in Hout; rename Hout into Heq.
