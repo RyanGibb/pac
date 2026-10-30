@@ -73,6 +73,17 @@ Version: 1
 Architecture: amd64
 Provides: v5 (= 1)
 
+Package: a7
+Version: 1
+Architecture: amd64
+Provides: v7
+Conflicts: v7
+
+Package: bar7
+Version: 1
+Architecture: amd64
+Provides: v7
+
 Package: libboost-chrono1.83.0t64
 Version: 1.83.0-4.2
 Architecture: amd64

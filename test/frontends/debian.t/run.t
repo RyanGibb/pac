@@ -949,21 +949,38 @@ unversioned v2; and a3 at both, conflicting with a3:
     a1:amd64 1
     a1:i386 1
   encoded solution: 2 core nodes (2 lookups)
-  loaded: 15 names, 18 versions
+  loaded: 17 names, 20 versions
 
   $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.exemption a2:amd64 a2:i386
   packages (2):
     a2:amd64 1
     a2:i386 1
   encoded solution: 3 core nodes (3 lookups)
-  loaded: 15 names, 18 versions
+  loaded: 17 names, 20 versions
 
   $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.exemption a3:amd64 a3:i386
   packages (2):
     a3:amd64 1
     a3:i386 1
   encoded solution: 2 core nodes (2 lookups)
-  loaded: 15 names, 18 versions
+  loaded: 17 names, 20 versions
+
+The provider half needs no Multi-Arch: same: a7, with no Multi-Arch field,
+conflicts with v7, a name it provides, and apt installs it alone but
+refuses it beside bar7, which provides v7 too:
+
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.exemption a7
+  packages (1):
+    a7:amd64 1
+  encoded solution: 2 core nodes (2 lookups)
+  loaded: 17 names, 20 versions
+
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.exemption a7 bar7
+  unsatisfiable:
+  Because a7:amd64 1 -> bar7:amd64 ⊥ and root -> a7:amd64 1, not bar7:amd64 ⊥ is forbidden.
+  And because root -> bar7:amd64 1, version solving failed.
+  loaded: 17 names, 20 versions
+  [1]
 
 The exemption is for the declarer's group alone: a4's Conflicts: v4, a name
 it provides, still meets bar4 1, which provides v4 too, and not bar4 2,
@@ -975,13 +992,13 @@ refuses it with bar4=1:
     a4:amd64 1
     bar4:amd64 2
   encoded solution: 2 core nodes (2 lookups)
-  loaded: 15 names, 18 versions
+  loaded: 17 names, 20 versions
 
   $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.exemption a4 bar4=1
   unsatisfiable:
   Because a4:amd64 1 -> bar4:amd64 ⊥ and root -> a4:amd64 1, not bar4:amd64 ⊥ is forbidden.
   And because root -> bar4:amd64 1, version solving failed.
-  loaded: 15 names, 18 versions
+  loaded: 17 names, 20 versions
   [1]
 
 A versioned conflict on a name only another package provides meets that
@@ -992,10 +1009,10 @@ beside baz5, which provides v5 (= 1):
   unsatisfiable:
   Because a5:amd64 1 -> baz5:amd64 ⊥ and root -> a5:amd64 1, not baz5:amd64 ⊥ is forbidden.
   And because root -> baz5:amd64 1, version solving failed.
-  loaded: 15 names, 18 versions
+  loaded: 17 names, 20 versions
   [1]
 
-So it is in trixie: libboost-chrono1.88.0t64 1.88.0-1, Multi-Arch: same,
+Trixie has the same: libboost-chrono1.88.0t64 1.88.0-1, Multi-Arch: same,
 Breaks: libboost-chrono1.83.0 (<< 1.88.0-1), which
 libboost-chrono1.83.0t64 1.83.0-4.2 provides at 1.83.0-4.2, and apt
 refuses the two together.  The stanzas are trixie's, with the libraries
@@ -1005,7 +1022,7 @@ they depend on, cut to the relationships among these packages:
   unsatisfiable:
   Because libboost-chrono1.88.0t64:amd64 1.88.0-1 -> libboost-chrono1.83.0t64:amd64 ⊥ and root -> libboost-chrono1.88.0t64:amd64 1.88.0-1, not libboost-chrono1.83.0t64:amd64 ⊥ is forbidden.
   And because root -> libboost-chrono1.83.0t64:amd64 1.83.0-4.2, version solving failed.
-  loaded: 15 names, 18 versions
+  loaded: 17 names, 20 versions
   [1]
 
 A query is not a relationship: apt-get's command line takes a name with no
