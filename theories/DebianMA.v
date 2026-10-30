@@ -286,7 +286,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
     Definition reduceRec (Dopt : Deps.t) : Deb.Deps.t := reduceDeps Dopt.
 
-    Definition reduceProvEntry (mu : Cls.t) (e : ProvElt.t) :
+    Definition declProvOf (mu : Cls.t) (e : ProvElt.t) :
         list Deb.ProvElt.t :=
       let p := fst e in
       let m := fst (snd e) in
@@ -321,10 +321,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Definition reduceProv (R : PkgSet.t) (Pi : Prov.t) (mu : Cls.t) :
         Deb.Prov.t :=
       Deb.Prov.union
-        (SOpv2.unionMap (fun e => SOppv.ofList (reduceProvEntry mu e)) Pi)
+        (SOpv2.unionMap (fun e => SOppv.ofList (declProvOf mu e)) Pi)
         (SOrpv.unionMap (fun p => SOppv.ofList (implProvOf mu p)) R).
 
-    Definition reduceConfEntry (e : ConfElt.t) : list Deb.ConfElt.t :=
+    Definition declConfOf (e : ConfElt.t) : list Deb.ConfElt.t :=
       let p := fst e in
       let a := snd e in
       let n := aname a in
@@ -355,7 +355,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Definition reduceConf (R : PkgSet.t) (G : Conf.t) (mu : Cls.t) :
         Deb.Conf.t :=
       Deb.Conf.union
-        (SOcf.unionMap (fun e => SOccf.ofList (reduceConfEntry e)) G)
+        (SOcf.unionMap (fun e => SOccf.ofList (declConfOf e)) G)
         (SOrcf.map (implConfOf mu) R).
 
     Definition reduceInst (I : Inst) : Deb.Inst :=
@@ -416,7 +416,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
     Lemma mem_reduceProv : forall R Pi mu y,
         Deb.Prov.In y (reduceProv R Pi mu) <->
-        (exists e, Prov.In e Pi /\ List.In y (reduceProvEntry mu e)) \/
+        (exists e, Prov.In e Pi /\ List.In y (declProvOf mu e)) \/
         (exists p, PkgSet.In p R /\ List.In y (implProvOf mu p)).
     Proof.
       intros R Pi mu y; unfold reduceProv.
@@ -426,7 +426,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
     Lemma mem_reduceConf : forall R G mu y,
         Deb.Conf.In y (reduceConf R G mu) <->
-        (exists e, Conf.In e G /\ List.In y (reduceConfEntry e)) \/
+        (exists e, Conf.In e G /\ List.In y (declConfOf e)) \/
         (exists p, PkgSet.In p R /\ y = implConfOf mu p).
     Proof.
       intros R G mu y; unfold reduceConf.
@@ -448,8 +448,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       exact (conj (embedPkg_injective _ _ Hp) (conj Hm (conj Hx Hv))).
     Qed.
 
-    Lemma in_reduceProvEntry : forall mu (p : Pkg.t) (m : N.t) v y,
-        List.In y (reduceProvEntry mu (p, (m, v))) <->
+    Lemma in_declProvOf : forall mu (p : Pkg.t) (m : N.t) v y,
+        List.In y (declProvOf mu (p, (m, v))) <->
         exists x, y = (embedPkg p, ((m, x), v)) /\
           match x with
           | QAArch b => parch p = b \/ classOf mu p = MAForeign
@@ -458,7 +458,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           | QAGroup => False
           end.
     Proof.
-      intros mu p m v y; unfold reduceProvEntry; cbn [fst snd].
+      intros mu p m v y; unfold declProvOf; cbn [fst snd].
       split.
       - intros [<- | H].
         + exists (QAExact (parch p)); split; reflexivity.
@@ -537,7 +537,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           split; [left; split; [reflexivity | exact Hv] | left; reflexivity].
         + rewrite mem_reduceProv in Hin.
           destruct Hin as [[[p0 [m0 v0]] [HePi Hl]] | [p0 [Hp0 Hl]]].
-          * apply in_reduceProvEntry in Hl; destruct Hl as [x' [Heq Hx']].
+          * apply in_declProvOf in Hl; destruct Hl as [x' [Heq Hx']].
             destruct (provElt_eq _ _ _ _ _ _ _ _ Heq) as [<- [<- [<- <-]]].
             destruct x as [b | b | |];
               try (split; [right; exists v; split; assumption | exact Hx']);
@@ -562,7 +562,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           * right; exists v; split; [| exact Hvt].
             rewrite mem_reduceProv; left; exists (q, (n, v)); split;
               [exact HPi |].
-            apply in_reduceProvEntry; exists (QAArch b); split;
+            apply in_declProvOf; exists (QAArch b); split;
               [reflexivity | exact Harch].
         + intros [HB Hb]; subst b.
           destruct HB as [[Hn Hv] | [v [HPi Hvt]]].
@@ -572,7 +572,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           * right; exists v; split; [| exact Hvt].
             rewrite mem_reduceProv; left; exists (q, (n, v)); split;
               [exact HPi |].
-            apply in_reduceProvEntry; exists (QAExact (parch q)); split;
+            apply in_declProvOf; exists (QAExact (parch q)); split;
               reflexivity.
         + intros [HB Hall].
           destruct HB as [[Hn Hv] | [v [HPi Hvt]]].
@@ -583,7 +583,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           * right; exists v; split; [| exact Hvt].
             rewrite mem_reduceProv; left; exists (q, (n, v)); split;
               [exact HPi |].
-            apply in_reduceProvEntry; exists QAAny; split;
+            apply in_declProvOf; exists QAAny; split;
               [reflexivity | exact Hall].
         + intros [Hn Hv]; subst n.
           right; exists (Deb.DTVal (pver q)); split; [| exact Hv].
@@ -613,12 +613,12 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
     Lemma conf_transfer : forall R Pi mu (p : Pkg.t) a q,
         PkgSet.In q R ->
-        ((exists q' ea e, List.In (q', (ea, e)) (reduceConfEntry (p, a)) /\
+        ((exists q' ea e, List.In (q', (ea, e)) (declConfOf (p, a)) /\
             Deb.Match (reduceProv R Pi mu) (embedPkg q) ea) <->
          MAConfMatch Pi mu a q).
     Proof.
       intros R Pi mu p [n [x phi]] [[m b0] u] HqR.
-      unfold MAConfMatch, reduceConfEntry; cbn [fst snd aname aqual aform].
+      unfold MAConfMatch, declConfOf; cbn [fst snd aname aqual aform].
       set (q := ((m, b0), u)) in *.
       destruct x as [ | | | b].
       - split.
@@ -737,32 +737,32 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           split; [exact Hn | reflexivity].
     Qed.
 
-    Lemma reduceConfEntry_pkg : forall p a q ea e,
-        List.In (q, (ea, e)) (reduceConfEntry (p, a)) -> q = embedPkg p.
+    Lemma declConfOf_pkg : forall p a q ea e,
+        List.In (q, (ea, e)) (declConfOf (p, a)) -> q = embedPkg p.
     Proof.
-      intros p a q ea e H; unfold reduceConfEntry in H; cbn [fst snd] in H.
+      intros p a q ea e H; unfold declConfOf in H; cbn [fst snd] in H.
       destruct (aqual a) as [ | | | b]; simpl in H;
         repeat (destruct H as [E | H]; [congruence |]);
         try contradiction.
       apply in_map_iff in H; destruct H as [b' [E _]]; congruence.
     Qed.
 
-    Lemma reduceConfEntry_flag : forall p a q ea e,
-        List.In (q, (ea, e)) (reduceConfEntry (p, a)) -> e = true.
+    Lemma declConfOf_flag : forall p a q ea e,
+        List.In (q, (ea, e)) (declConfOf (p, a)) -> e = true.
     Proof.
-      intros p a q ea e H; unfold reduceConfEntry in H; cbn [fst snd] in H.
+      intros p a q ea e H; unfold declConfOf in H; cbn [fst snd] in H.
       destruct (aqual a) as [ | | | b]; simpl in H;
         repeat (destruct H as [E | H]; [congruence |]);
         try contradiction.
       apply in_map_iff in H; destruct H as [b' [E _]]; congruence.
     Qed.
 
-    Lemma reduceConfEntry_name : forall (p : Pkg.t) (a : Atom.t)
+    Lemma declConfOf_name : forall (p : Pkg.t) (a : Atom.t)
         (q : Deb.Ver.C.Pkg.t) (ea : Deb.Atom.t) (e : bool),
-        List.In (q, (ea, e)) (reduceConfEntry (p, a)) ->
+        List.In (q, (ea, e)) (declConfOf (p, a)) ->
         fst (fst ea) = aname a.
     Proof.
-      intros p a q ea e H; unfold reduceConfEntry in H; cbn [fst snd] in H.
+      intros p a q ea e H; unfold declConfOf in H; cbn [fst snd] in H.
       destruct (aqual a) as [ | | | b]; simpl in H;
         repeat (destruct H as [E | H];
                 [injection E as _ E2 _; rewrite <- E2; reflexivity |]);
@@ -829,8 +829,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         pose proof (HinR q HqS) as HqR.
         destruct (proj2 (conf_transfer R Pi mu p a q HqR) HCM)
           as [c1 [c2 [c3 [Hce HM]]]].
-        pose proof (reduceConfEntry_pkg p a c1 c2 c3 Hce) as Hf; subst c1.
-        pose proof (reduceConfEntry_flag p a (embedPkg p) c2 c3 Hce) as Hx;
+        pose proof (declConfOf_pkg p a c1 c2 c3 Hce) as Hf; subst c1.
+        pose proof (declConfOf_flag p a (embedPkg p) c2 c3 Hce) as Hx;
           subst c3.
         assert (HceG : Deb.Conf.In (embedPkg p, (c2, true)) (reduceConf R G mu)).
         { rewrite mem_reduceConf; left; exists (p, a); split;
@@ -959,10 +959,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         rewrite mem_reduceConf in HaG.
         destruct HaG as [[e [HG Hce]] | [p0 [Hp0R Heq]]].
         + destruct e as [p0 a].
-          pose proof (reduceConfEntry_pkg p0 a ph ea x Hce) as Hf.
+          pose proof (declConfOf_pkg p0 a ph ea x Hce) as Hf.
           rewrite Hp1e in Hf; apply embedPkg_injective in Hf; subst p1.
           subst ph.
-          pose proof (reduceConfEntry_flag p0 a (embedPkg p0) ea x Hce) as Hx;
+          pose proof (declConfOf_flag p0 a (embedPkg p0) ea x Hce) as Hx;
             subst x.
           assert (Hnp : pname q <> pname p0).
           { intro En.
@@ -1135,7 +1135,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         rewrite mem_reduceProv in Hy |- *.
         destruct Hy as [[[q [m v]] [He Hl]] | [p0 [Hp0 Hl]]].
         - left; exists (q, (m, v)); split; [exact He |].
-          unfold reduceProvEntry in Hl |- *; cbn [fst snd] in Hl |- *.
+          unfold declProvOf in Hl |- *; cbn [fst snd] in Hl |- *.
           rewrite <- (H2 q m v He); exact Hl.
         - right; exists p0; split; [exact Hp0 |].
           unfold implProvOf in Hl |- *.
@@ -1267,13 +1267,13 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             Prov.In (q, (m, v)) (inst_prov I')).
 
 
-      Lemma reduceProvEntry_shape : forall mu (p0 : Pkg.t) (m0 : N.t) v0
+      Lemma declProvOf_shape : forall mu (p0 : Pkg.t) (m0 : N.t) v0
           (q : Deb.Pkg.t) (n : QN.t) v,
-          List.In (q, (n, v)) (reduceProvEntry mu (p0, (m0, v0))) ->
+          List.In (q, (n, v)) (declProvOf mu (p0, (m0, v0))) ->
           q = embedPkg p0 /\ fst n = m0.
       Proof.
         intros mu p0 m0 v0 q n v H.
-        apply in_reduceProvEntry in H; destruct H as [x [E _]].
+        apply in_declProvOf in H; destruct H as [x [E _]].
         injection E as -> -> _; split; reflexivity.
       Qed.
 
@@ -1310,7 +1310,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         split; [| exact (reduceProv_mono _ _ _ _ (inst_cls I) Hr Hp _)].
         rewrite !mem_reduceProv.
         intros [[[e1 [e2 e3]] [He Hl]] | [p0 [Hp0 Hl]]].
-        - destruct (reduceProvEntry_shape (inst_cls I) e1 e2 e3 q (m, x) v Hl)
+        - destruct (declProvOf_shape (inst_cls I) e1 e2 e3 q (m, x) v Hl)
             as [_ Hn].
           cbn [fst] in Hn.
           left; exists (e1, (e2, e3)); split; [| exact Hl].
@@ -1416,7 +1416,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         split; [| exact (reduceConf_mono R Rc G Gs mu Hr Hg _)].
         rewrite !mem_reduceConf.
         intros [[[p0 a0] [He Hl]] | [p0 [Hp0 He]]].
-        - pose proof (reduceConfEntry_pkg p0 a0 (embedPkg p) ea e Hl) as Hq.
+        - pose proof (declConfOf_pkg p0 a0 (embedPkg p) ea e Hl) as Hq.
           apply embedPkg_injective in Hq; subst p0.
           left; exists (p, a0); split;
             [exact (Hown (p, a0) He eq_refl) | exact Hl].
@@ -1559,10 +1559,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         intros R G mu p ea e H; rewrite mem_reduceConf in H.
         apply mem_confAtomNames.
         destruct H as [[[p0 a0] [He Hl]] | [p0 [_ He]]].
-        - pose proof (reduceConfEntry_pkg p0 a0 (embedPkg p) ea e Hl) as Hq.
+        - pose proof (declConfOf_pkg p0 a0 (embedPkg p) ea e Hl) as Hq.
           apply embedPkg_injective in Hq; subst p0.
           right; exists a0; split;
-            [exact He | exact (reduceConfEntry_name p a0 (embedPkg p) ea e Hl)].
+            [exact He | exact (declConfOf_name p a0 (embedPkg p) ea e Hl)].
         - left.
           pose proof (f_equal (fun e => fst (fst (snd e))) He) as Hn.
           cbn [fst snd] in Hn; rewrite (implConfOf_atomName mu p0) in Hn.

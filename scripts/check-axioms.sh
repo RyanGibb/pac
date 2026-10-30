@@ -264,14 +264,14 @@ DMA.Reduction.debian_ma_core_retraction
 DMA.Reduction.debian_ma_core_soundness
 DMA.Reduction.debian_ma_retraction
 DMA.Reduction.debian_ma_soundness
+DMA.Reduction.declConfOf
+DMA.Reduction.declProvOf
 DMA.Reduction.reduceAtom
 DMA.Reduction.reduceClause
 DMA.Reduction.reduceConf
-DMA.Reduction.reduceConfEntry
 DMA.Reduction.reduceDeps
 DMA.Reduction.reduceInst
 DMA.Reduction.reduceProv
-DMA.Reduction.reduceProvEntry
 DMA.Reduction.reduceReal
 DMA.Reduction.reduceRec
 
