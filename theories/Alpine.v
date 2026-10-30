@@ -164,7 +164,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     ; inst_world : WSet.t
     ; inst_prio : Prio.t }.
 
-  Definition MatchPos (I : Inst) (S : PkgSet.t)
+  Definition Match (I : Inst) (S : PkgSet.t)
       (n : N.t) (zeta : Constr) : Prop :=
     (exists u, PkgSet.In (n, u) S /\ constrMatch zeta u = true) \/
     (exists q u, Prov.In (q, (n, PVer u)) (inst_prov I) /\
@@ -190,13 +190,13 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
   Definition MatchDep (I : Inst) (S : PkgSet.t) (d : Dep) : Prop :=
     match d with
     | DPos (n, zeta) => MatchReq I S n zeta
-    | DNeg (n, zeta) => ~ MatchPos I S n zeta
+    | DNeg (n, zeta) => ~ Match I S n zeta
     end.
 
   Definition MatchCond (I : Inst) (S : PkgSet.t) (a : Dep) : Prop :=
     match a with
-    | DPos (n, zeta) => MatchPos I S n zeta
-    | DNeg (n, zeta) => ~ MatchPos I S n zeta
+    | DPos (n, zeta) => Match I S n zeta
+    | DNeg (n, zeta) => ~ Match I S n zeta
     end.
 
   Definition Claims (I : Inst) (n : N.t) (p : Pkg.t) : Prop :=
@@ -214,7 +214,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     ; res_install_if :
         forall n v B, InstallIf.In ((n, v), B) (inst_installIf I) ->
         (forall a, CondSet.In a B -> MatchCond I S a) ->
-        MatchPos I S n CAny }.
+        Match I S n CAny }.
 
   Module Type Designation.
     Parameter designation : CondSet.t -> option Atom.t.
@@ -303,13 +303,13 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     Module Version.
       Inductive version : Type :=
-      | RootV
+      | UnitV
       | Orig (v : V.t)
       | Prov (p : Pkg.t) (u : V.t).
       Definition t := version.
 
       Definition rank (w : t) : nat :=
-        match w with RootV => 0 | Orig _ => 1 | Prov _ _ => 2 end.
+        match w with UnitV => 0 | Orig _ => 1 | Prov _ _ => 2 end.
       Definition compare (x y : t) : comparison :=
         match Nat.compare (rank x) (rank y) with
         | Eq =>
@@ -462,7 +462,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         (fun a psi => PF.FDisj (PF.FNeg (encCond I a)) psi)
         (encPos I (fst p) CAny) (CondSet.elements (condRest B)).
 
-    Definition rootPkg : PF.Pkg.t := (Name.Root, Version.RootV).
+    Definition rootPkg : PF.Pkg.t := (Name.Root, Version.UnitV).
 
     Module FSet := PF.FSet.
     Module SOdf := SetOps DepElt PF.FOT Deps FSet.
@@ -471,7 +471,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Module SOwf := SetOps DepOT PF.FOT WSet FSet.
     Definition dependees (I : Inst) (q : PF.Pkg.t) : FSet.t :=
       match q with
-      | (Name.Root, Version.RootV) => SOwf.map (encDep I) (inst_world I)
+      | (Name.Root, Version.UnitV) => SOwf.map (encDep I) (inst_world I)
       | (Name.Orig n, Version.Orig v) =>
           FSet.union
             (SOdf.map (fun '(_, d) => encDep I d)
@@ -642,11 +642,11 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           rewrite Hany; reflexivity.
     Qed.
 
-    Lemma matchPos_attachAt : forall I S n zeta,
-        MatchPos I S n zeta <->
+    Lemma match_attachAt : forall I S n zeta,
+        Match I S n zeta <->
         exists p, PkgSet.In p S /\ attachAt I p (n, zeta) = true.
     Proof.
-      intros I S n zeta; unfold MatchPos; split.
+      intros I S n zeta; unfold Match; split.
       - intros [[v [Hv Hc]] |
                 [[q [u [Hr [Hq Hc]]]] | [Hany [q [Hr Hq]]]]].
         + exists (n, v); split; [exact Hv |].
@@ -712,7 +712,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
        coreResolution, so the callers name the branch they mean rather than
        its position. *)
     Lemma coreResolution_at_root : forall I S v,
-        PF.PkgSet.In (Name.Root, v) (coreResolution I S) -> v = Version.RootV.
+        PF.PkgSet.In (Name.Root, v) (coreResolution I S) -> v = Version.UnitV.
     Proof.
       intros I S v H; apply mem_coreResolution in H.
       unfold embedPkg, rootPkg in H.
@@ -1006,12 +1006,12 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Lemma match_decode : forall I S' n zeta,
         PF.IsResolution (reduceReal I) (reduceDeps I) rootPkg S' ->
         (PF.Satisfies S' (encPos I n zeta) <->
-         MatchPos I (alpineResolution S') n zeta).
+         Match I (alpineResolution S') n zeta).
     Proof.
       intros I S' n zeta Hres.
       assert (Hsub := PF.res_subset _ _ _ _ Hres).
       rewrite satisfies_encPos, (base_decode I S' n zeta Hres).
-      unfold MatchPos; rewrite or_assoc.
+      unfold Match; rewrite or_assoc.
       apply or_iff_compat_l, or_iff_compat_l, and_iff_compat_l; split.
       - intros [q [Hq Hm]]; apply mem_bareProvSet in Hq.
         exists q; split; [exact (proj1 Hq) |].
@@ -1129,7 +1129,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         destruct (D.designation_spec B (Hwf _ _ Hrule))
           as [[na cta] [Hdes Hin]].
         assert (HM := Hc _ Hin); cbn [MatchCond] in HM.
-        apply (matchPos_attachAt I (alpineResolution S) na cta) in HM.
+        apply (match_attachAt I (alpineResolution S) na cta) in HM.
         destruct HM as [p [HpS Hatt]].
         apply mem_alpineResolution in HpS.
         assert (Hfib : InstallIf.In (z, B) (installIfFibre I p)).
@@ -1189,11 +1189,11 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Lemma match_coreResolution : forall I S n zeta,
         PkgSet.Subset S (inst_repo I) ->
         (PF.Satisfies (coreResolution I S) (encPos I n zeta) <->
-         MatchPos I S n zeta).
+         Match I S n zeta).
     Proof.
       intros I S n zeta Hsub.
       rewrite satisfies_encPos, (base_coreResolution I S n zeta Hsub).
-      unfold MatchPos; rewrite or_assoc.
+      unfold Match; rewrite or_assoc.
       apply or_iff_compat_l, or_iff_compat_l, and_iff_compat_l; split.
       - intros [q [Hq Hm]]; apply mem_bareProvSet in Hq.
         apply coreResolution_embed in Hm; exists q; split; [exact (proj1 Hq) |].
@@ -1297,7 +1297,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                intros c Hc.
                destruct (DepOT.eq_dec c (DPos a)) as [He | Hne].
                ++ subst c; destruct a as [ma cta]; cbn [MatchCond].
-                  apply matchPos_attachAt; exists (n0, v0).
+                  apply match_attachAt; exists (n0, v0).
                   split; [exact Hp | exact Hatt].
                ++ assert (Hr : CondSet.In c (condRest B)).
                   { unfold condRest; rewrite Edes.
@@ -1864,7 +1864,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
       Lemma versions_reduceReal_root : forall I,
           PF.C.versions (reduceReal I) Name.Root =
-          PF.VSet.singleton Version.RootV.
+          PF.VSet.singleton Version.UnitV.
       Proof.
         intro I; apply PF.VSet.ext; intro w.
         rewrite PF.C.mem_versions, PF.VSet.singleton_spec.
@@ -1887,7 +1887,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
       Lemma dependees_core : forall I Vq q,
           PF.PkgSet.In q (reduceReal I) ->
-          Vq Name.Root = PF.VSet.singleton Version.RootV ->
+          Vq Name.Root = PF.VSet.singleton Version.UnitV ->
           (forall m, Vq (Name.Orig m) = versions I m) ->
           PF.Reduction.T.dependees
             (PF.Reduction.reduceDeps (reduceReal I) (reduceDeps I))
@@ -1909,7 +1909,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
       Theorem dependees_lookupOrigCore : forall I Vq n v,
           PkgSet.In (n, v) (inst_repo I) ->
-          Vq Name.Root = PF.VSet.singleton Version.RootV ->
+          Vq Name.Root = PF.VSet.singleton Version.UnitV ->
           (forall m, Vq (Name.Orig m) = versions I m) ->
           PF.Reduction.T.dependees
             (PF.Reduction.reduceDeps (reduceReal I) (reduceDeps I))
@@ -1926,7 +1926,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Qed.
 
       Theorem dependees_lookupRootCore : forall I Vq,
-          Vq Name.Root = PF.VSet.singleton Version.RootV ->
+          Vq Name.Root = PF.VSet.singleton Version.UnitV ->
           (forall m, Vq (Name.Orig m) = versions I m) ->
           PF.Reduction.T.dependees
             (PF.Reduction.reduceDeps (reduceReal I) (reduceDeps I))
@@ -1943,7 +1943,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Theorem dependees_lookupProvCore : forall I I' Vq m n v u,
           Prov.In ((n, v), (m, PVer u)) (inst_prov I) ->
           PkgSet.In (n, v) (inst_repo I) ->
-          Vq Name.Root = PF.VSet.singleton Version.RootV ->
+          Vq Name.Root = PF.VSet.singleton Version.UnitV ->
           (forall m, Vq (Name.Orig m) = versions I m) ->
           PF.Reduction.T.dependees
             (PF.Reduction.reduceDeps (reduceReal I) (reduceDeps I))
@@ -1966,7 +1966,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Theorem dependees_lookupDisjunctCore : forall I I' Vq q fs i,
           PF.PkgSet.In q (reduceReal I) ->
           dependees I' q = dependees I q ->
-          Vq Name.Root = PF.VSet.singleton Version.RootV ->
+          Vq Name.Root = PF.VSet.singleton Version.UnitV ->
           (forall m, Vq (Name.Orig m) = versions I m) ->
           PF.Reduction.T.PkgSet.In (PF.Reduction.Name.Disjunct fs, i)
             (PF.Reduction.reduceReal (PF.PkgSet.singleton q)
@@ -2038,10 +2038,10 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
             (PF.Reduction.reduceReal (reduceReal I) (reduceDeps I))
             (PF.Reduction.Name.Orig Name.Root) =
           PF.Reduction.T.VSet.add PF.Reduction.Version.Bot
-            (PF.Reduction.embedVS (PF.VSet.singleton Version.RootV)).
+            (PF.Reduction.embedVS (PF.VSet.singleton Version.UnitV)).
       Proof.
         intro I; rewrite <- (versions_reduceReal_root I); apply versions_core.
-        left; exists Version.RootV; exact (root_reduceReal I).
+        left; exists Version.UnitV; exact (root_reduceReal I).
       Qed.
     End Lookup.
 

@@ -476,7 +476,7 @@ module Make () : S = struct
 
     let pp fmt ({ v; _ } : t) =
       match v with
-      | PFR.Version.Orig Red.Version.RootV -> Format.fprintf fmt "()"
+      | PFR.Version.Orig Red.Version.UnitV -> Format.fprintf fmt "()"
       | PFR.Version.Orig (Red.Version.Orig s) -> Format.fprintf fmt "%s" s
       | PFR.Version.Orig (Red.Version.Prov ((n, w), pv)) ->
           Format.fprintf fmt "provided=%s(%s-%s)" pv n w
@@ -566,18 +566,18 @@ module Make () : S = struct
   let oracle ar (tn : Red.Name.name) : PF.VSet.t =
     match tn with
     | Red.Name.Orig n -> Red.versions (name_inst ar n) n
-    | Red.Name.Root -> PF.VSet.singleton Red.Version.RootV
+    | Red.Name.Root -> PF.VSet.singleton Red.Version.UnitV
 
   let lookups ar : L.t =
     L.create
-      ~root:(Red.Name.Root, Red.Version.RootV)
+      ~root:(Red.Name.Root, Red.Version.UnitV)
       ~tag:(tag ar) ~oracle:(oracle ar) ()
 
   let dependees inst q = Red.FSet.elements (Red.dependees inst q)
 
   let touch ar world st ((tn, tv) : T.Pkg.t) =
     match (tn, tv) with
-    | PFR.Name.Orig Red.Name.Root, PFR.Version.Orig Red.Version.RootV ->
+    | PFR.Name.Orig Red.Name.Root, PFR.Version.Orig Red.Version.UnitV ->
         (* Lookup.dependees_lookupRoot *)
         L.process st Red.rootPkg (fun () ->
             dependees (root_inst ar world) Red.rootPkg)

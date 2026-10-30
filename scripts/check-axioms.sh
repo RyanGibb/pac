@@ -381,7 +381,7 @@ Alp.Reduction.dependees
 Alp.Reduction.encReq
 Alp.Reduction.installIfFibre
 Alp.Reduction.installIfForm
-Alp.Reduction.matchPos_attachAt
+Alp.Reduction.match_attachAt
 Alp.Reduction.match_req_coreResolution
 Alp.Reduction.match_req_decode
 Alp.Reduction.reduceDeps
