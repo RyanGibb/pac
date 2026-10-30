@@ -5,7 +5,7 @@ module P = Cargo_parse
    sub-instance is complete by construction, as it loads each name it reads
    whole, but a links value's declarers are named by no one crate, so
    links_table holds those among the names loaded so far.  The resolver
-   contract allows this: its versions only grow (versions_link_mono), the
+   contract allows this: its versions only grow (versions_cls_mono), the
    value's package has no dependees, and every range onto it is its
    declarer's singleton, loaded before its edges are asked. *)
 type t = {

@@ -188,7 +188,7 @@ module Make (Encoding : Encoding.S) = struct
       inst_rootFeats = st.rfeats;
     }
 
-  (* one branch per versions_lookup{Root,Granular,FeatP,Slot,Decision,Link},
+  (* one branch per versions_lookup{Root,Granular,FeatP,Slot,Decision,Cls},
      each filling in the components its theorem names and nothing else *)
   let versions st (tn : Cg.Reduction.NPlus.t) : Cg.Reduction.VPlus.t list =
     let call i = T.VSet.elements (Cg.Reduction.versions i tn) in
@@ -203,10 +203,10 @@ module Make (Encoding : Encoding.S) = struct
     | Cg.Reduction.NPlus.CSlot (_, _, d)
     | Cg.Reduction.NPlus.CDec (_, _, _, d, _) ->
         call { e with inst_repo = name_set st (Cg.sName d) }
-    | Cg.Reduction.NPlus.CLink l ->
+    | Cg.Reduction.NPlus.CCls l ->
         (* Lookup.claimants and LinkFibred.headFibre at l, over the
            declarers loaded so far: the answer may only grow
-           (versions_link_mono) *)
+           (versions_cls_mono) *)
         let rs = Archive.link_preimage st.ar l in
         let links = Cg.LinkRel.ofList (List.map (fun q -> (q, l)) rs) in
         let repo =
@@ -270,14 +270,14 @@ module Make (Encoding : Encoding.S) = struct
         { PVersion.msrv = msrv_fits st (n, v); v = w }
     | _ -> { PVersion.msrv = true; v = w }
 
-  (* CLink l's versions may only grow (versions_link_mono), so they are not
+  (* CCls l's versions may only grow (versions_cls_mono), so they are not
      held: a memo would refuse a declarer loaded later.  The rest of the
      contract that makes growth safe holds too: its dependees are fixed,
      being none, and every range onto it is an exact set of listed versions,
      built by pg_dependencies with of_list from a loaded declarer's own *)
   let pg_versions st tn =
     match tn with
-    | Cg.Reduction.NPlus.CLink _ -> List.map (tag st tn) (versions st tn)
+    | Cg.Reduction.NPlus.CCls _ -> List.map (tag st tn) (versions st tn)
     | _ ->
         Tbl.memo st.pg_vers tn (fun () -> List.map (tag st tn) (versions st tn))
 

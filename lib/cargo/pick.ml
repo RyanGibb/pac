@@ -78,7 +78,7 @@ struct
     let links_free t u gr =
       match L.meta st t u with
       | Some { P.v_links = Some l; _ } -> (
-          match decided_v assigned (Cg.Reduction.NPlus.CLink l) with
+          match decided_v assigned (Cg.Reduction.NPlus.CCls l) with
           | Some
               (Cg.Reduction.VPlus.WName (Cg.Reduction.NPlus.CGran (t', gr')))
             ->
@@ -238,7 +238,7 @@ struct
             m.P.v_feats
           @
           match m.P.v_links with
-          | Some l -> [ Cg.Reduction.NPlus.CLink l ]
+          | Some l -> [ Cg.Reduction.NPlus.CCls l ]
           | None -> [])
 
     let root_step assigned =

@@ -261,7 +261,7 @@ module Make () = struct
       | Cg.Reduction.NPlus.CDec (n, gr, f, d, feat) ->
           Format.fprintf fmt "<%s@%s/%s=>%a%a/%s>" n gr f pp_site (Cg.sSite d)
             pp_req d feat
-      | Cg.Reduction.NPlus.CLink l -> Format.fprintf fmt "links:%s" l
+      | Cg.Reduction.NPlus.CCls l -> Format.fprintf fmt "links:%s" l
   end
 
   module PVersion = struct
