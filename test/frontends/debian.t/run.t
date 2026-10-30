@@ -936,6 +936,78 @@ xvc3:i386 excludes the xpc3:i386 it needs:
   loaded: 17 names, 18 versions
   [1]
 
+A Conflicts or Breaks never meets a provider in its declarer's own group,
+and, when the declarer is Multi-Arch: same, never a real package of that
+group either (DepIterator::IsIgnorable, pkgcache.cc), so a library goes in
+at two architectures though it conflicts with a name it provides, or with
+its own name.  apt, with i386 configured beside amd64, installs a1 at both,
+each conflicting with the v1 (<< 2) each provides; a2 at both, with an
+unversioned v2; and a3 at both, conflicting with a3:
+
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.exemption a1:amd64 a1:i386
+  packages (2):
+    a1:amd64 1
+    a1:i386 1
+  encoded solution: 2 core nodes (2 lookups)
+  loaded: 15 names, 18 versions
+
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.exemption a2:amd64 a2:i386
+  packages (2):
+    a2:amd64 1
+    a2:i386 1
+  encoded solution: 3 core nodes (3 lookups)
+  loaded: 15 names, 18 versions
+
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.exemption a3:amd64 a3:i386
+  packages (2):
+    a3:amd64 1
+    a3:i386 1
+  encoded solution: 2 core nodes (2 lookups)
+  loaded: 15 names, 18 versions
+
+The exemption is for the declarer's group alone: a4's Conflicts: v4, a name
+it provides, still meets bar4 1, which provides v4 too, and not bar4 2,
+which neither is v4 nor provides it.  apt installs a4 with bar4=2 and
+refuses it with bar4=1:
+
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.exemption a4 bar4=2
+  packages (2):
+    a4:amd64 1
+    bar4:amd64 2
+  encoded solution: 2 core nodes (2 lookups)
+  loaded: 15 names, 18 versions
+
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.exemption a4 bar4=1
+  unsatisfiable:
+  Because a4:amd64 1 -> bar4:amd64 ⊥ and root -> a4:amd64 1, not bar4:amd64 ⊥ is forbidden.
+  And because root -> bar4:amd64 1, version solving failed.
+  loaded: 15 names, 18 versions
+  [1]
+
+A versioned conflict on a name only another package provides meets that
+provider at a matching version: apt refuses a5, conflicting with v5 (<< 2),
+beside baz5, which provides v5 (= 1):
+
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.exemption a5 baz5
+  unsatisfiable:
+  Because a5:amd64 1 -> baz5:amd64 ⊥ and root -> a5:amd64 1, not baz5:amd64 ⊥ is forbidden.
+  And because root -> baz5:amd64 1, version solving failed.
+  loaded: 15 names, 18 versions
+  [1]
+
+So it is in trixie: libboost-chrono1.88.0t64 1.88.0-1, Multi-Arch: same,
+Breaks: libboost-chrono1.83.0 (<< 1.88.0-1), which
+libboost-chrono1.83.0t64 1.83.0-4.2 provides at 1.83.0-4.2, and apt
+refuses the two together.  The stanzas are trixie's, with the libraries
+they depend on, cut to the relationships among these packages:
+
+  $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.exemption libboost-chrono1.88.0t64 libboost-chrono1.83.0t64
+  unsatisfiable:
+  Because libboost-chrono1.88.0t64:amd64 1.88.0-1 -> libboost-chrono1.83.0t64:amd64 ⊥ and root -> libboost-chrono1.88.0t64:amd64 1.88.0-1, not libboost-chrono1.83.0t64:amd64 ⊥ is forbidden.
+  And because root -> libboost-chrono1.83.0t64:amd64 1.83.0-4.2, version solving failed.
+  loaded: 15 names, 18 versions
+  [1]
+
 A query is not a relationship: apt-get's command line takes a name with no
 version of its own to the one package providing it (tryVirtualPackage,
 apt-private/private-cacheset.cc), and a Multi-Arch: foreign package

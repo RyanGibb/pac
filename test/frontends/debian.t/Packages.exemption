@@ -1,0 +1,122 @@
+Package: a1
+Version: 1
+Architecture: amd64
+Multi-Arch: same
+Provides: v1 (= 1)
+Conflicts: v1 (<< 2)
+
+Package: a1
+Version: 1
+Architecture: i386
+Multi-Arch: same
+Provides: v1 (= 1)
+Conflicts: v1 (<< 2)
+
+Package: v1
+Version: 5
+Architecture: amd64
+
+Package: a2
+Version: 1
+Architecture: amd64
+Multi-Arch: same
+Provides: v2 (= 1)
+Conflicts: v2
+
+Package: a2
+Version: 1
+Architecture: i386
+Multi-Arch: same
+Provides: v2 (= 1)
+Conflicts: v2
+
+Package: v2
+Version: 5
+Architecture: amd64
+
+Package: a3
+Version: 1
+Architecture: amd64
+Multi-Arch: same
+Conflicts: a3
+
+Package: a3
+Version: 1
+Architecture: i386
+Multi-Arch: same
+Conflicts: a3
+
+Package: a4
+Version: 1
+Architecture: amd64
+Multi-Arch: same
+Provides: v4
+Conflicts: v4
+
+Package: bar4
+Version: 1
+Architecture: amd64
+Provides: v4
+
+Package: bar4
+Version: 2
+Architecture: amd64
+
+Package: a5
+Version: 1
+Architecture: amd64
+Multi-Arch: same
+Conflicts: v5 (<< 2)
+
+Package: baz5
+Version: 1
+Architecture: amd64
+Provides: v5 (= 1)
+
+Package: libboost-chrono1.83.0t64
+Version: 1.83.0-4.2
+Architecture: amd64
+Replaces: libboost-chrono1.83.0
+Provides: libboost-chrono1.83.0 (= 1.83.0-4.2)
+Depends: libc6 (>= 2.34), libgcc-s1 (>= 3.0), libstdc++6 (>= 5.2)
+Breaks: libboost-chrono1.83.0 (<< 1.83.0-4.2)
+Multi-Arch: same
+Priority: optional
+
+Package: libboost-chrono1.88.0t64
+Version: 1.88.0-1
+Architecture: amd64
+Replaces: libboost-chrono1.83.0
+Provides: libboost-chrono1.88.0 (= 1.88.0-1)
+Depends: libc6 (>= 2.34), libgcc-s1 (>= 3.0), libstdc++6 (>= 5.2)
+Breaks: libboost-chrono1.83.0 (<< 1.88.0-1)
+Multi-Arch: same
+Priority: optional
+
+Package: libc6
+Version: 2.41-12+deb13u3
+Architecture: amd64
+Depends: libgcc-s1
+Multi-Arch: same
+Priority: optional
+
+Package: libgcc-s1
+Version: 14.2.0-19
+Architecture: amd64
+Provides: libgcc1 (= 1:14.2.0-19)
+Depends: gcc-14-base (= 14.2.0-19), libc6 (>= 2.35)
+Multi-Arch: same
+Priority: optional
+
+Package: libstdc++6
+Version: 14.2.0-19
+Architecture: amd64
+Depends: gcc-14-base (= 14.2.0-19), libc6 (>= 2.38), libgcc-s1 (>= 4.3)
+Multi-Arch: same
+Priority: optional
+
+Package: gcc-14-base
+Version: 14.2.0-19
+Architecture: amd64
+Multi-Arch: same
+Priority: optional
