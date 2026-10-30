@@ -749,7 +749,7 @@ Definition nplInst : NplS.Inst :=
     nil.
 
 Example npl_edges :
-  List.map (fun e => (NplS.e_dir e, NplS.e_name e, NplS.e_opt e))
+  List.map (fun e => (NplS.e_dir e, NplS.e_name e, NplS.e_optional e))
     (NplS.edgesOf nplInst NplS.Occ.Top) =
   (npmX, npmB, false) :: (npmC, npmC, true) :: nil.
 Proof. reflexivity. Qed.

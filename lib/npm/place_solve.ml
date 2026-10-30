@@ -114,7 +114,7 @@ module Make () = struct
      followed. *)
   let edges ~dev ~optional st (x : Npl.Occ.t) : Npl.coq_Edge list =
     let omitted (e : Npl.coq_Edge) =
-      if e.Npl.e_peer then optional && e.Npl.e_opt
+      if e.Npl.e_peer then optional && e.Npl.e_optional
       else
         match L.meta st x with
         | Some m ->

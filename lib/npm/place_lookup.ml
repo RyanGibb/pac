@@ -218,7 +218,7 @@ module Make (Place_encoding : Place_encoding.S) = struct
     List.map
       (fun (ed : edge) ->
         let e = ed.e in
-        ( Atom (lam, e.Npl.e_dir, ed.id, e.Npl.e_peer, e.Npl.e_opt),
+        ( Atom (lam, e.Npl.e_dir, ed.id, e.Npl.e_peer, e.Npl.e_optional),
           fun () -> [ Lk.atomOf lam e ed.acc ] ))
       (edges st x)
 

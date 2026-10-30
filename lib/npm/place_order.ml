@@ -104,7 +104,7 @@ struct
                 match
                   List.filter
                     (fun (p : L.edge) ->
-                      is_peer p && key p = a && not p.L.e.Npl.e_opt)
+                      is_peer p && key p = a && not p.L.e.Npl.e_optional)
                     (L.edges st x)
                 with
                 | [] -> []

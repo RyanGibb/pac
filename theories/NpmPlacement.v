@@ -93,7 +93,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     ; e_name : N.t
     ; e_range : Range
     ; e_peer : bool
-    ; e_opt : bool }.
+    ; e_optional : bool }.
 
   Definition depEdge (Vq : N.t -> VS.t) (I : Inst) (d : Dependency) : Edge :=
     let m := ovrName I (d_dir d) (d_name d) in
@@ -138,7 +138,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
   Definition EdgeOk (I : Inst) (L : Pl.Layout.t) (l : Pl.Path.t) (e : Edge)
       : Prop :=
     match Pl.walk L l (e_dir e) with
-    | None => e_opt e = true
+    | None => e_optional e = true
     | Some (l', o) => Pl.Suffix l' (Pl.land (e_peer e) l) /\ Sat I e o
     end.
 
@@ -210,7 +210,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Definition kindb (peer optional : bool) (e : Edge) : bool :=
-      andb (Bool.eqb (e_peer e) peer) (Bool.eqb (e_opt e) optional).
+      andb (Bool.eqb (e_peer e) peer) (Bool.eqb (e_optional e) optional).
 
     Module SOpd := SetOps Pl.Pkg Pl.C.DepElt Pl.PkgSet Pl.C.DepRel.
     Definition edgeRel (I : Inst) (peer optional : bool) : Pl.C.DepRel.t :=
@@ -224,7 +224,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         Pl.C.DepRel.In ((a', o), (n, vs)) (edgeRel I peer optional) <->
         Pl.PkgSet.In (a', o) (occs I) /\
         exists e, In e (edgesOf I o) /\ e_peer e = peer /\
-          e_opt e = optional /\
+          e_optional e = optional /\
           n = e_dir e /\ vs = accepts I e.
     Proof.
       intros I peer optional a' o n vs; unfold edgeRel;
@@ -256,7 +256,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
 
     Lemma edgeOk_meets : forall I L l e,
         EdgeOk I L l e <->
-        Pl.Meets L l (Pl.land (e_peer e) l) (e_dir e) (accepts I e) (e_opt e).
+        Pl.Meets L l (Pl.land (e_peer e) l) (e_dir e) (accepts I e) (e_optional e).
     Proof.
       intros I L l e; unfold EdgeOk, Pl.Meets, Pl.Resolves.
       destruct (Pl.walk L l (e_dir e)) as [[l' o] |]; split.
@@ -357,7 +357,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
           exact (proj2 (Pl.Reduction.placementResolution_loc
                           (tr I) depth S H l a o Hl)). }
       destruct Hin as [Hp' ->]; rewrite in_map_iff; split.
-      - intros [e [<- He]]; exists (e_peer e), (e_opt e), (accepts I e).
+      - intros [e [<- He]]; exists (e_peer e), (e_optional e), (accepts I e).
         rewrite rel_tr, mem_edgeRel; split; [exact Hp' |].
         exists e; auto.
       - intros [peer [optional [vs HE]]]; rewrite rel_tr, mem_edgeRel in HE.
@@ -510,7 +510,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       Definition atomOf (l : Pl.Path.t) (e : Edge) (vs : Pl.VSet.t)
           : Pl.Reduction.T.Dependees.t :=
         (Pl.Reduction.Name.Walk l (e_dir e),
-         Pl.Reduction.optAccept (e_opt e) (Pl.land (e_peer e) l) vs).
+         Pl.Reduction.optAccept (e_optional e) (Pl.land (e_peer e) l) vs).
 
       Definition edgeAtom (I : Inst) (l : Pl.Path.t) (e : Edge)
           : Pl.Reduction.T.Dependees.t :=
@@ -533,7 +533,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
           destruct HE as [_ [e [He [<- [<- [-> ->]]]]]].
           exists e; split; [reflexivity | exact He].
         - intros [e [<- He]].
-          exists (e_peer e), (e_opt e), (e_dir e), (accepts I e).
+          exists (e_peer e), (e_optional e), (e_dir e), (accepts I e).
           split; [| reflexivity].
           rewrite rel_tr, mem_edgeRel; split; [exact Hp |].
           exists e; auto.

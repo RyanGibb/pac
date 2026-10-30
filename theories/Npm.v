@@ -632,20 +632,20 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Definition linkCands (I : Inst) (q c : Pkg.t) (theta : PeerDependency)
       : T.VSet.t :=
       let pc := peerCands I q c theta in
-      let opt := peerOpt I c theta in
+      let optional := peerOpt I c theta in
       if chains I q (p_name theta)
-      then if opt
+      then if optional
            then T.VSet.add Vs.Bot (embedVS pc)
            else embedVS pc
       else if holds I q (p_name theta)
-      then if andb (canBeAbsent I q (p_name theta)) opt
+      then if andb (canBeAbsent I q (p_name theta)) optional
            then T.VSet.add Vs.Bot (embedVS pc)
            else embedVS pc
       else if selfb q (p_name theta)
       then if VSet.mem (snd q) pc
            then T.VSet.singleton (Vs.Orig (snd q))
            else T.VSet.empty
-      else if opt then T.VSet.singleton Vs.Bot else T.VSet.empty.
+      else if optional then T.VSet.singleton Vs.Bot else T.VSet.empty.
 
     Lemma mem_linkCands : forall I q c theta v,
         T.VSet.In v (linkCands I q c theta) <->
