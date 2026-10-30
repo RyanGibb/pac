@@ -130,15 +130,15 @@ Module Opam (N V X Y E : UsualOrderedType).
     ; inst_dep : list (Pkg.t * OFormula)
     ; inst_cfl : list (Pkg.t * (N.t * (Filter * VFormula)))
     ; inst_cls : ClsRel.t
-    ; inst_avl : list (Pkg.t * Filter)
-    ; inst_dxt : list (Pkg.t * (E.t * Filter))
+    ; inst_av : list (Pkg.t * Filter)
+    ; inst_depexts : list (Pkg.t * (E.t * Filter))
     ; inst_pins : PkgSet.t
     ; inst_pind : list (Pkg.t * (Pkg.t * Y.t))
     ; inst_query : OFormula
     ; inst_inv : OFormula }.
 
   Definition availOK (sigma : Valuation) (I : Inst) (p : Pkg.t) : Prop :=
-    forall c, In (p, c) (inst_avl I) -> defTrue sigma c = true.
+    forall c, In (p, c) (inst_av I) -> defTrue sigma c = true.
 
   Record IsResolution (sigma : Valuation) (I : Inst) (S : PkgSet.t)
     : Prop := MkRes
@@ -170,15 +170,15 @@ Module Opam (N V X Y E : UsualOrderedType).
          if andb (PkgSet.mem (fst r) S) (defTrue sigma (snd (snd r)))
          then ESet.add (fst (snd r)) acc
          else acc)
-      ESet.empty (inst_dxt I).
+      ESet.empty (inst_depexts I).
 
   Lemma mem_depextsOf : forall sigma I S e,
       ESet.In e (depextsOf sigma I S) <->
-      exists p c, PkgSet.In p S /\ In (p, (e, c)) (inst_dxt I) /\
+      exists p c, PkgSet.In p S /\ In (p, (e, c)) (inst_depexts I) /\
                   defTrue sigma c = true.
   Proof.
     intros sigma I S e; unfold depextsOf.
-    induction (inst_dxt I) as [| [p [e' c]] l IH];
+    induction (inst_depexts I) as [| [p [e' c]] l IH];
       cbn [List.fold_right fst snd].
     - split.
       + intro H; apply ESet.empty_spec in H; destruct H.
@@ -306,7 +306,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Definition effRepo (sigma : Valuation) (I : Inst) : PkgSet.t :=
       PkgSet.filter
-        (fun p => andb (pinOKb (inst_pins I) p) (availb sigma (inst_avl I) p))
+        (fun p => andb (pinOKb (inst_pins I) p) (availb sigma (inst_av I) p))
         (inst_repo I).
 
     Definition PTrue : PF.Formula :=
@@ -1061,8 +1061,8 @@ Module Opam (N V X Y E : UsualOrderedType).
           (List.filter (ownb p) (inst_dep I))
           (List.filter (ownb p) (inst_cfl I))
           (clsFibre (inst_cls I) p)
-          (inst_avl I)
-          (List.filter (ownb p) (inst_dxt I))
+          (inst_av I)
+          (List.filter (ownb p) (inst_depexts I))
           (inst_pins I)
           (List.filter (ownb p) (inst_pind I))
           (inst_query I) (inst_inv I).
@@ -1073,7 +1073,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           (List.filter (ownb p) (inst_cfl I))
           (clsFibre (inst_cls I) p)
           nil
-          (List.filter (ownb p) (inst_dxt I))
+          (List.filter (ownb p) (inst_depexts I))
           (inst_pins I)
           (List.filter (ownb p) (inst_pind I))
           (inst_query I) (inst_inv I).
@@ -1081,7 +1081,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       Definition nameSubInst (I : Inst) (n : N.t) : Inst :=
         MkInst (C.namePreimage (inst_repo I) (NSet.singleton n))
           (inst_dep I) (inst_cfl I) (inst_cls I)
-          (inst_avl I) (inst_dxt I) (inst_pins I)
+          (inst_av I) (inst_depexts I) (inst_pins I)
           (inst_pind I) (inst_query I) (inst_inv I).
 
       Definition classSubInst (I : Inst) (k : N.t) : Inst :=
@@ -1093,7 +1093,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         MkInst
           (C.namePreimage (inst_repo I)
              (NSet.union (ofNames (inst_query I)) (ofNames (inst_inv I))))
-          nil nil ClsRel.empty (inst_avl I) nil
+          nil nil ClsRel.empty (inst_av I) nil
           (inst_pins I) nil (inst_query I) (inst_inv I).
 
       Lemma srcVersions_restrict : forall sigma I ns n,
@@ -1101,8 +1101,8 @@ Module Opam (N V X Y E : UsualOrderedType).
           C.versions
             (effRepo sigma
                (MkInst (C.namePreimage (inst_repo I) ns) (inst_dep I)
-                  (inst_cfl I) (inst_cls I) (inst_avl I)
-                  (inst_dxt I) (inst_pins I) (inst_pind I)
+                  (inst_cfl I) (inst_cls I) (inst_av I)
+                  (inst_depexts I) (inst_pins I) (inst_pind I)
                   (inst_query I) (inst_inv I))) n =
           srcVersions sigma I n.
       Proof.
@@ -1116,7 +1116,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
       Lemma srcVersions_subInst_agree : forall sigma I sl ns n,
           inst_repo sl = C.namePreimage (inst_repo I) ns ->
-          inst_avl sl = inst_avl I -> inst_pins sl = inst_pins I ->
+          inst_av sl = inst_av I -> inst_pins sl = inst_pins I ->
           NSet.In n ns ->
           srcVersions sigma sl n = srcVersions sigma I n.
       Proof.
@@ -1126,7 +1126,7 @@ Module Opam (N V X Y E : UsualOrderedType).
                     effRepo sigma
                       (MkInst (C.namePreimage (inst_repo I) ns) (inst_dep I)
                          (inst_cfl I) (inst_cls I)
-                         (inst_avl I) (inst_dxt I)
+                         (inst_av I) (inst_depexts I)
                          (inst_pins I) (inst_pind I) (inst_query I)
                          (inst_inv I))).
         { unfold effRepo; rewrite Hr, Ha, Hp; reflexivity. }

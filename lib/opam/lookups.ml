@@ -258,8 +258,8 @@ let empty_inst =
     inst_dep = [];
     inst_cfl = [];
     inst_cls = Op.ClsRel.empty;
-    inst_avl = [];
-    inst_dxt = [];
+    inst_av = [];
+    inst_depexts = [];
     inst_pins = Op.PkgSet.empty;
     inst_pind = [];
     inst_query = empty_formula;
@@ -292,7 +292,7 @@ let pkg_inst ar (p : string * string) : Op.coq_Inst =
     Op.inst_dep = dep_fibre;
     inst_cfl = cfl_fibre;
     inst_cls = clsrel_of cls_fibre;
-    inst_dxt = dxt_fibre;
+    inst_depexts = dxt_fibre;
     inst_pind = pind_fibre;
   }
 
@@ -308,7 +308,7 @@ let root_inst ar (query : (string * Opam_parse.vc) list) : Op.coq_Inst =
     | [] -> empty_formula
     | a :: rest -> List.fold_left (fun f b -> Op.OFAnd (f, b)) a rest
   in
-  { empty_inst with Op.inst_repo = repo; inst_avl = avl; inst_query = gamma }
+  { empty_inst with Op.inst_repo = repo; inst_av = avl; inst_query = gamma }
 
 (* Lookup.classSubInst: a class package's versions are every declarer of
    the class, which no one package's declarations name, so this is built
@@ -325,7 +325,7 @@ let class_inst ar (k : string) : Op.coq_Inst =
 (* Lookup.nameSubInst *)
 let name_inst ar (n : string) : Op.coq_Inst =
   let repo, avl = repo_and_avail ar [ n ] in
-  { empty_inst with Op.inst_repo = repo; inst_avl = avl }
+  { empty_inst with Op.inst_repo = repo; inst_av = avl }
 
 (* The system packages a solution needs.  Depexts never reach the
    solver, so this runs once the resolution is fixed, on an instance
@@ -343,7 +343,7 @@ let depexts_of rho ar (reals : (string * string) list) : string list =
   in
   Op.ESet.elements
     (Op.depextsOf rho
-       { empty_inst with Op.inst_dxt = dxt_entries }
+       { empty_inst with Op.inst_depexts = dxt_entries }
        (pkgset_of reals))
 
 let pp_name fmt (n : PFR.Name.t) =
