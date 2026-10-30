@@ -252,15 +252,15 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Definition embedVS (vs : VSet.t) : T.VSet.t :=
       SOvv.map Version.Orig vs.
 
-    Fixpoint disjSpine (psi : Formula) : list Formula :=
+    Fixpoint spine (psi : Formula) : list Formula :=
       match psi with
-      | FDisj psiL psiR => psiL :: disjSpine psiR
+      | FDisj psiL psiR => psiL :: spine psiR
       | _ => psi :: nil
       end.
 
-    Fixpoint negConjSpine (psi : Formula) : list Formula :=
+    Fixpoint negSpine (psi : Formula) : list Formula :=
       match psi with
-      | FConj psiL psiR => FNeg psiL :: negConjSpine psiR
+      | FConj psiL psiR => FNeg psiL :: negSpine psiR
       | _ => FNeg psi :: nil
       end.
 
@@ -284,17 +284,17 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
        encoding, and repeat their sibling's non-spine cases for the same
        reason: calling the sibling on the matched term itself would leave
        the guard condition. *)
-    Fixpoint encodeNNF (Vq : N.t -> VSet.t) (p : T.Pkg.t) (psi : Formula)
+    Fixpoint encode (Vq : N.t -> VSet.t) (p : T.Pkg.t) (psi : Formula)
       : T.DepRel.t :=
       match psi with
       | FDep m vs =>
           T.DepRel.singleton (p, (Name.Orig m, embedVS vs))
       | FConj psiL psiR =>
-          T.DepRel.union (encodeNNF Vq p psiL) (encodeNNF Vq p psiR)
+          T.DepRel.union (encode Vq p psiL) (encode Vq p psiR)
       | FDisj psiL psiR =>
-          let n := Name.Disjunct (psiL :: disjSpine psiR) in
-          T.DepRel.add (p, (n, idxSet (List.length (psiL :: disjSpine psiR))))
-            (T.DepRel.union (encodeNNF Vq (n, Version.Idx 0) psiL)
+          let n := Name.Disjunct (psiL :: spine psiR) in
+          T.DepRel.add (p, (n, idxSet (List.length (psiL :: spine psiR))))
+            (T.DepRel.union (encode Vq (n, Version.Idx 0) psiL)
                (encodeDisj Vq n 1 psiR))
       | FNeg psi' => encodeNNFneg Vq p psi'
       end
@@ -304,10 +304,10 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       | FDep m vs =>
           T.DepRel.singleton ((n, Version.Idx i), (Name.Orig m, embedVS vs))
       | FConj psiL psiR =>
-          T.DepRel.union (encodeNNF Vq (n, Version.Idx i) psiL)
-            (encodeNNF Vq (n, Version.Idx i) psiR)
+          T.DepRel.union (encode Vq (n, Version.Idx i) psiL)
+            (encode Vq (n, Version.Idx i) psiR)
       | FDisj psiL psiR =>
-          T.DepRel.union (encodeNNF Vq (n, Version.Idx i) psiL)
+          T.DepRel.union (encode Vq (n, Version.Idx i) psiL)
             (encodeDisj Vq n (S i) psiR)
       | FNeg psi' => encodeNNFneg Vq (n, Version.Idx i) psi'
       end
@@ -317,14 +317,14 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       | FDep m vs =>
           T.DepRel.singleton (p, (Name.Orig m, complementVS Vq m vs))
       | FConj psiL psiR =>
-          let n := Name.Disjunct (FNeg psiL :: negConjSpine psiR) in
+          let n := Name.Disjunct (FNeg psiL :: negSpine psiR) in
           T.DepRel.add
-            (p, (n, idxSet (List.length (FNeg psiL :: negConjSpine psiR))))
+            (p, (n, idxSet (List.length (FNeg psiL :: negSpine psiR))))
             (T.DepRel.union (encodeNNFneg Vq (n, Version.Idx 0) psiL)
                (encodeConjNeg Vq n 1 psiR))
       | FDisj psiL psiR =>
           T.DepRel.union (encodeNNFneg Vq p psiL) (encodeNNFneg Vq p psiR)
-      | FNeg psi' => encodeNNF Vq p psi'
+      | FNeg psi' => encode Vq p psi'
       end
     with encodeConjNeg (Vq : N.t -> VSet.t) (n : Name.t) (i : nat)
         (psi : Formula) : T.DepRel.t :=
@@ -337,7 +337,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       | FDisj psiL psiR =>
           T.DepRel.union (encodeNNFneg Vq (n, Version.Idx i) psiL)
             (encodeNNFneg Vq (n, Version.Idx i) psiR)
-      | FNeg psi' => encodeNNF Vq (n, Version.Idx i) psi'
+      | FNeg psi' => encode Vq (n, Version.Idx i) psi'
       end.
 
     Fixpoint arisingPkgs (p : T.Pkg.t) (psi : Formula) : T.PkgSet.t :=
@@ -346,8 +346,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       | FConj psiL psiR =>
           T.PkgSet.union (arisingPkgs p psiL) (arisingPkgs p psiR)
       | FDisj psiL psiR =>
-          let n := Name.Disjunct (psiL :: disjSpine psiR) in
-          T.PkgSet.union (idxPkgs n (List.length (psiL :: disjSpine psiR)))
+          let n := Name.Disjunct (psiL :: spine psiR) in
+          T.PkgSet.union (idxPkgs n (List.length (psiL :: spine psiR)))
             (T.PkgSet.union (arisingPkgs (n, Version.Idx 0) psiL)
                (arisingDisj n 1 psiR))
       | FNeg psi' => arisingNeg p psi'
@@ -367,9 +367,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       match psi with
       | FDep _ _ => T.PkgSet.empty
       | FConj psiL psiR =>
-          let n := Name.Disjunct (FNeg psiL :: negConjSpine psiR) in
+          let n := Name.Disjunct (FNeg psiL :: negSpine psiR) in
           T.PkgSet.union
-            (idxPkgs n (List.length (FNeg psiL :: negConjSpine psiR)))
+            (idxPkgs n (List.length (FNeg psiL :: negSpine psiR)))
             (T.PkgSet.union (arisingNeg (n, Version.Idx 0) psiL)
                (arisingConjNeg n 1 psiR))
       | FDisj psiL psiR =>
@@ -419,7 +419,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
 
     Module SOed := SetOps DepElt T.DepElt DepRel T.DepRel.
     Definition reduceDepsBy (Vq : N.t -> VSet.t) (D : DepRel.t) : T.DepRel.t :=
-      SOed.unionMap (fun '(p, psi) => encodeNNF Vq (embedPkg p) psi) D.
+      SOed.unionMap (fun '(p, psi) => encode Vq (embedPkg p) psi) D.
 
     Definition reduceDeps (R : PkgSet.t) (D : DepRel.t) : T.DepRel.t :=
       reduceDepsBy (C.versions R) D.
@@ -530,7 +530,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Lemma mem_reduceDepsBy : forall Vq D (d : T.DepElt.t),
         T.DepRel.In d (reduceDepsBy Vq D) <->
         exists p psi, DepRel.In (p, psi) D /\
-                    T.DepRel.In d (encodeNNF Vq (embedPkg p) psi).
+                    T.DepRel.In d (encode Vq (embedPkg p) psi).
     Proof.
       intros Vq D d; unfold reduceDepsBy; rewrite SOed.mem_unionMap.
       split.
@@ -541,7 +541,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Lemma mem_reduceDeps : forall R D (d : T.DepElt.t),
         T.DepRel.In d (reduceDeps R D) <->
         exists p psi, DepRel.In (p, psi) D /\
-                    T.DepRel.In d (encodeNNF (C.versions R) (embedPkg p) psi).
+                    T.DepRel.In d (encode (C.versions R) (embedPkg p) psi).
     Proof. intros R D d; apply mem_reduceDepsBy. Qed.
 
     Definition tryInvPkg (p' : T.Pkg.t) : option Pkg.t :=
@@ -665,18 +665,18 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       intros S m v _; rewrite mem_packageFormulaResolution; reflexivity.
     Qed.
 
-    Lemma encodeNNF_satisfies : forall (R : T.PkgSet.t) (D : T.DepRel.t)
+    Lemma encode_satisfies : forall (R : T.PkgSet.t) (D : T.DepRel.t)
                                     (r : T.Pkg.t) (S : T.PkgSet.t) ps,
         T.IsResolution R D r S -> AgreesOn S ps ->
         forall (Vq : N.t -> VSet.t) (q : T.Pkg.t) (psi : Formula),
-          (forall d, T.DepRel.In d (encodeNNF Vq q psi) -> T.DepRel.In d D) ->
+          (forall d, T.DepRel.In d (encode Vq q psi) -> T.DepRel.In d D) ->
           T.PkgSet.In q S ->
           Satisfies ps psi.
     Proof.
       intros R D r S ps Hres HM Vq; destruct Hres as [Hsub Hroot Hdep Huniq].
       cut (forall psi : Formula,
         (forall q : T.Pkg.t,
-            (forall d, T.DepRel.In d (encodeNNF Vq q psi) -> T.DepRel.In d D) ->
+            (forall d, T.DepRel.In d (encode Vq q psi) -> T.DepRel.In d D) ->
             T.PkgSet.In q S -> Satisfies ps psi) /\
         (forall q : T.Pkg.t,
             (forall d, T.DepRel.In d (encodeNNFneg Vq q psi) ->
@@ -686,13 +686,13 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             (forall d, T.DepRel.In d (encodeDisj Vq n i0 psi) ->
                T.DepRel.In d D) ->
             T.PkgSet.In (n, Version.Idx i) S ->
-            i0 <= i -> i < i0 + List.length (disjSpine psi) ->
+            i0 <= i -> i < i0 + List.length (spine psi) ->
             Satisfies ps psi) /\
         (forall (n : Name.t) (i0 i : nat),
             (forall d,
                 T.DepRel.In d (encodeConjNeg Vq n i0 psi) -> T.DepRel.In d D) ->
             T.PkgSet.In (n, Version.Idx i) S ->
-            i0 <= i -> i < i0 + List.length (negConjSpine psi) ->
+            i0 <= i -> i < i0 + List.length (negSpine psi) ->
             ~ Satisfies ps psi)).
       { intros H q psi; exact (proj1 (H psi) q). }
       assert (Hpos : forall (q : T.Pkg.t) m vs,
@@ -744,10 +744,10 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             intros d Hd; apply Henc; simpl;
               apply T.DepRel.union_spec; right; exact Hd.
         + intros q Henc HqS; simpl.
-          set (n := Name.Disjunct (FNeg psiL :: negConjSpine psiR)).
+          set (n := Name.Disjunct (FNeg psiL :: negSpine psiR)).
           assert (Hd : T.DepRel.In
                     (q, (n, idxSet
-                           (List.length (FNeg psiL :: negConjSpine psiR)))) D).
+                           (List.length (FNeg psiL :: negSpine psiR)))) D).
           { apply Henc; simpl; apply SOed.add_in; left; reflexivity. }
           destruct (Hdep q HqS _ _ Hd) as [w [Hw HwS]].
           apply mem_idxSet in Hw; destruct Hw as [i [Hi ->]].
@@ -779,9 +779,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
           destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
         + intros q Henc HqS; simpl.
-          set (n := Name.Disjunct (psiL :: disjSpine psiR)).
+          set (n := Name.Disjunct (psiL :: spine psiR)).
           assert (Hd : T.DepRel.In
-                    (q, (n, idxSet (List.length (psiL :: disjSpine psiR)))) D).
+                    (q, (n, idxSet (List.length (psiL :: spine psiR)))) D).
           { apply Henc; simpl; apply SOed.add_in; left; reflexivity. }
           destruct (Hdep q HqS _ _ Hd) as [w [Hw HwS]].
           apply mem_idxSet in Hw; destruct Hw as [i [Hi ->]].
@@ -839,7 +839,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       - apply mem_packageFormulaResolution; exact Hroot.
       - intros p Hp psi Hdf.
         apply mem_packageFormulaResolution in Hp.
-        apply (encodeNNF_satisfies _ _ _ _ _ Hres (agreesOn_resolution S)
+        apply (encode_satisfies _ _ _ _ _ Hres (agreesOn_resolution S)
                  (C.versions R) (embedPkg p) psi); [| exact Hp].
         intros d Hd; apply mem_reduceDeps;
           exists p, psi; split; [exact Hdf | exact Hd].
@@ -859,7 +859,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Proof.
       intros R D r S ps Hres HM p psi Hp Hdf.
       apply mem_packageFormulaResolution in Hp.
-      apply (encodeNNF_satisfies _ _ _ _ _ Hres HM (C.versions R)
+      apply (encode_satisfies _ _ _ _ _ Hres HM (C.versions R)
                (embedPkg p) psi); [| exact Hp].
       intros d Hd; apply mem_reduceDeps; exists p, psi.
       split; [exact Hdf | exact Hd].
@@ -880,8 +880,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           T.PkgSet.union (witnessSet S psiL) (witnessSet S psiR)
       | FDisj psiL psiR =>
           T.PkgSet.add
-            (Name.Disjunct (psiL :: disjSpine psiR),
-             Version.Idx (firstSatIdx S (psiL :: disjSpine psiR)))
+            (Name.Disjunct (psiL :: spine psiR),
+             Version.Idx (firstSatIdx S (psiL :: spine psiR)))
             (if satisfiesb S psiL then witnessSet S psiL else takenDisj S psiR)
       | FNeg psi' => witnessSetNeg S psi'
       end
@@ -899,8 +899,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       | FDep _ _ => T.PkgSet.empty
       | FConj psiL psiR =>
           T.PkgSet.add
-            (Name.Disjunct (FNeg psiL :: negConjSpine psiR),
-             Version.Idx (firstSatIdx S (FNeg psiL :: negConjSpine psiR)))
+            (Name.Disjunct (FNeg psiL :: negSpine psiR),
+             Version.Idx (firstSatIdx S (FNeg psiL :: negSpine psiR)))
             (if satisfiesb S psiL then takenConjNeg S psiR
              else witnessSetNeg S psiL)
       | FDisj psiL psiR =>
@@ -921,16 +921,16 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Lemma witnessSet_disj_eq : forall S psiL psiR,
         witnessSet S (FDisj psiL psiR) =
         T.PkgSet.add
-          (Name.Disjunct (psiL :: disjSpine psiR),
-           Version.Idx (firstSatIdx S (psiL :: disjSpine psiR)))
+          (Name.Disjunct (psiL :: spine psiR),
+           Version.Idx (firstSatIdx S (psiL :: spine psiR)))
           (takenDisj S (FDisj psiL psiR)).
     Proof. reflexivity. Qed.
 
     Lemma witnessSetNeg_conj_eq : forall S psiL psiR,
         witnessSetNeg S (FConj psiL psiR) =
         T.PkgSet.add
-          (Name.Disjunct (FNeg psiL :: negConjSpine psiR),
-           Version.Idx (firstSatIdx S (FNeg psiL :: negConjSpine psiR)))
+          (Name.Disjunct (FNeg psiL :: negSpine psiR),
+           Version.Idx (firstSatIdx S (FNeg psiL :: negSpine psiR)))
           (takenConjNeg S (FConj psiL psiR)).
     Proof. reflexivity. Qed.
 
@@ -959,10 +959,10 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         destruct (satisfiesb S chi); simpl List.length in *; lia.
     Qed.
 
-    Lemma disjSpine_nonnil : forall psi, disjSpine psi <> nil.
+    Lemma spine_nonnil : forall psi, spine psi <> nil.
     Proof. intro psi; destruct psi; simpl; discriminate. Qed.
 
-    Lemma negConjSpine_nonnil : forall psi, negConjSpine psi <> nil.
+    Lemma negSpine_nonnil : forall psi, negSpine psi <> nil.
     Proof. intro psi; destruct psi; simpl; discriminate. Qed.
 
     Lemma firstSatIdx_cons : forall S chi chis,
@@ -977,7 +977,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Lemma takenDisj_firstSat : forall S psi,
         Satisfies S psi ->
         exists chi,
-          List.nth_error (disjSpine psi) (firstSatIdx S (disjSpine psi)) =
+          List.nth_error (spine psi) (firstSatIdx S (spine psi)) =
             Some chi /\
           Satisfies S chi /\
           T.PkgSet.Subset (witnessSet S chi) (takenDisj S psi).
@@ -988,9 +988,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         intro Hsat;
         try (eexists; split; [reflexivity |]; split;
              [exact Hsat | intros p Hy; exact Hy]).
-      cbn [disjSpine];
-        rewrite (firstSatIdx_cons S psiL (disjSpine psiR)
-            (disjSpine_nonnil psiR)).
+      cbn [spine];
+        rewrite (firstSatIdx_cons S psiL (spine psiR)
+            (spine_nonnil psiR)).
       destruct (satisfiesb S psiL) eqn:Ea.
       - exists psiL; split; [reflexivity |]; split;
           [apply satisfiesb_iff; exact Ea |].
@@ -1006,7 +1006,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Lemma takenConjNeg_firstSat : forall S psi,
         ~ Satisfies S psi ->
         exists chi,
-          List.nth_error (negConjSpine psi) (firstSatIdx S (negConjSpine psi)) =
+          List.nth_error (negSpine psi) (firstSatIdx S (negSpine psi)) =
             Some chi /\
           Satisfies S chi /\
           T.PkgSet.Subset (witnessSet S chi) (takenConjNeg S psi).
@@ -1017,9 +1017,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         intro Hsat;
         try (eexists; split; [reflexivity |]; split;
              [exact Hsat | intros p Hy; exact Hy]).
-      cbn [negConjSpine];
-        rewrite (firstSatIdx_cons S (FNeg psiL) (negConjSpine psiR)
-                   (negConjSpine_nonnil psiR)).
+      cbn [negSpine];
+        rewrite (firstSatIdx_cons S (FNeg psiL) (negSpine psiR)
+                   (negSpine_nonnil psiR)).
       destruct (satisfiesb S psiL) eqn:Ea.
       - assert (Hb : ~ Satisfies S psiR).
         { intro Hb; apply Hsat; split;
@@ -1070,7 +1070,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             apply T.PkgSet.union_spec.
           destruct H as [-> | H].
           * left; apply mem_idxPkgs;
-              exists (firstSatIdx S (FNeg psiL :: negConjSpine psiR));
+              exists (firstSatIdx S (FNeg psiL :: negSpine psiR));
               split; [apply firstSatIdx_lt; discriminate | reflexivity].
           * right; revert H; rewrite takenConjNeg_conj_eq;
               destruct (satisfiesb S psiL); intro H;
@@ -1091,7 +1091,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             apply T.PkgSet.union_spec.
           destruct H as [-> | H].
           * left; apply mem_idxPkgs;
-              exists (firstSatIdx S (psiL :: disjSpine psiR));
+              exists (firstSatIdx S (psiL :: spine psiR));
               split; [apply firstSatIdx_lt; discriminate | reflexivity].
           * right; revert H; rewrite takenDisj_disj_eq;
               destruct (satisfiesb S psiL); intro H;
@@ -1434,7 +1434,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       - discriminate Hn.
     Qed.
 
-    Lemma encodeNNF_dep_closure_aux :
+    Lemma encode_dep_closure_aux :
       forall (S_Psi : PkgSet.t) (Vq : N.t -> VSet.t) (ns : NSet.t)
         (S : T.PkgSet.t),
         (forall p, PkgSet.In p S_Psi -> T.PkgSet.In (embedPkg p) S) ->
@@ -1455,7 +1455,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
               (Satisfies S_Psi psi /\
                  T.PkgSet.Subset (witnessSet S_Psi psi) S) ->
               forall (q : T.Pkg.t) (n : NameOT.t) (ws : T.VSet.t),
-                T.DepRel.In (q, (n, ws)) (encodeNNF Vq q0 psi) ->
+                T.DepRel.In (q, (n, ws)) (encode Vq q0 psi) ->
                 T.PkgSet.In q S ->
                 exists v, T.VSet.In v ws /\ T.PkgSet.In (n, v) S) /\
           (forall q0 : T.Pkg.t,
@@ -1467,7 +1467,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                 T.PkgSet.In q S ->
                 exists v, T.VSet.In v ws /\ T.PkgSet.In (n, v) S) /\
           (forall (n' : Name.t) (i0 : nat),
-              (forall k chi, List.nth_error (disjSpine psi) k = Some chi ->
+              (forall k chi, List.nth_error (spine psi) k = Some chi ->
                  ~ T.PkgSet.In (n', Version.Idx (i0 + k)) S \/
                  (Satisfies S_Psi chi /\
                   T.PkgSet.Subset (witnessSet S_Psi chi) S)) ->
@@ -1476,7 +1476,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                 T.PkgSet.In q S ->
                 exists v, T.VSet.In v ws /\ T.PkgSet.In (n, v) S) /\
           (forall (n' : Name.t) (i0 : nat),
-              (forall k chi, List.nth_error (negConjSpine psi) k = Some chi ->
+              (forall k chi, List.nth_error (negSpine psi) k = Some chi ->
                  ~ T.PkgSet.In (n', Version.Idx (i0 + k)) S \/
                  (Satisfies S_Psi chi /\
                   T.PkgSet.Subset (witnessSet S_Psi chi) S)) ->
@@ -1559,19 +1559,19 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           * injection He as -> -> ->.
             destruct Hwit as [Hq0 | [_ Hsub']]; [exfalso; exact (Hq0 Hqw) |].
             exists (Version.Idx
-                      (firstSatIdx S_Psi (FNeg psiL :: negConjSpine psiR)));
+                      (firstSatIdx S_Psi (FNeg psiL :: negSpine psiR)));
                         split.
             -- apply mem_idxSet;
-                 exists (firstSatIdx S_Psi (FNeg psiL :: negConjSpine psiR));
+                 exists (firstSatIdx S_Psi (FNeg psiL :: negSpine psiR));
                    split;
                  [apply firstSatIdx_lt; discriminate | reflexivity].
             -- apply Hsub'; rewrite witnessSetNeg_conj_eq;
                  apply SOpt.add_in; left; reflexivity.
           * apply T.DepRel.union_spec in He; destruct He as [He | He].
-            -- refine (IHa2 (Name.Disjunct (FNeg psiL :: negConjSpine psiR),
+            -- refine (IHa2 (Name.Disjunct (FNeg psiL :: negSpine psiR),
                              Version.Idx 0) _ q n ws He Hqw).
                destruct (T.PkgSet.mem
-                           (Name.Disjunct (FNeg psiL :: negConjSpine psiR),
+                           (Name.Disjunct (FNeg psiL :: negSpine psiR),
                             Version.Idx 0) S) eqn:EM.
                ++ apply T.PkgSet.mem_spec in EM.
                   destruct (Hdisj _ _ EM) as [chi [Hg [Hsg Hsub']]].
@@ -1579,13 +1579,13 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                   right; split; [exact Hsg | exact Hsub'].
                ++ left; intro Hin; apply T.PkgSet.mem_spec in Hin;
                     discriminate (eq_trans (eq_sym Hin) EM).
-            -- refine (IHb4 (Name.Disjunct (FNeg psiL :: negConjSpine psiR)) 1
+            -- refine (IHb4 (Name.Disjunct (FNeg psiL :: negSpine psiR)) 1
                          _ q n ws He Hqw).
                intros k chi Hg.
-               assert (Hg' : List.nth_error (FNeg psiL :: negConjSpine psiR)
+               assert (Hg' : List.nth_error (FNeg psiL :: negSpine psiR)
                                (1 + k) = Some chi) by exact Hg.
                destruct (T.PkgSet.mem
-                           (Name.Disjunct (FNeg psiL :: negConjSpine psiR),
+                           (Name.Disjunct (FNeg psiL :: negSpine psiR),
                             Version.Idx (1 + k)) S) eqn:EM.
                ++ apply T.PkgSet.mem_spec in EM.
                   destruct (Hdisj _ _ EM) as [chi' [Hg2 [Hsg Hsub']]].
@@ -1626,17 +1626,17 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           apply SOed.add_in in Henc; destruct Henc as [He | He].
           * injection He as -> -> ->.
             destruct Hwit as [Hq0 | [_ Hsub']]; [exfalso; exact (Hq0 Hqw) |].
-            exists (Version.Idx (firstSatIdx S_Psi (psiL :: disjSpine psiR)));
+            exists (Version.Idx (firstSatIdx S_Psi (psiL :: spine psiR)));
               split.
             -- apply mem_idxSet;
-                 exists (firstSatIdx S_Psi (psiL :: disjSpine psiR)); split;
+                 exists (firstSatIdx S_Psi (psiL :: spine psiR)); split;
                  [apply firstSatIdx_lt; discriminate | reflexivity].
             -- apply Hsub'; rewrite witnessSet_disj_eq;
                  apply SOpt.add_in; left; reflexivity.
           * apply T.DepRel.union_spec in He; destruct He as [He | He].
-            -- refine (IHa1 (Name.Disjunct (psiL :: disjSpine psiR),
+            -- refine (IHa1 (Name.Disjunct (psiL :: spine psiR),
                              Version.Idx 0) _ q n ws He Hqw).
-               destruct (T.PkgSet.mem (Name.Disjunct (psiL :: disjSpine psiR),
+               destruct (T.PkgSet.mem (Name.Disjunct (psiL :: spine psiR),
                                        Version.Idx 0) S) eqn:EM.
                ++ apply T.PkgSet.mem_spec in EM.
                   destruct (Hdisj _ _ EM) as [chi [Hg [Hsg Hsub']]].
@@ -1644,12 +1644,12 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                   right; split; [exact Hsg | exact Hsub'].
                ++ left; intro Hin; apply T.PkgSet.mem_spec in Hin;
                     discriminate (eq_trans (eq_sym Hin) EM).
-            -- refine (IHb3 (Name.Disjunct (psiL :: disjSpine psiR)) 1
+            -- refine (IHb3 (Name.Disjunct (psiL :: spine psiR)) 1
                          _ q n ws He Hqw).
                intros k chi Hg.
-               assert (Hg' : List.nth_error (psiL :: disjSpine psiR) (1 + k)
+               assert (Hg' : List.nth_error (psiL :: spine psiR) (1 + k)
                              = Some chi) by exact Hg.
-               destruct (T.PkgSet.mem (Name.Disjunct (psiL :: disjSpine psiR),
+               destruct (T.PkgSet.mem (Name.Disjunct (psiL :: spine psiR),
                                        Version.Idx (1 + k)) S) eqn:EM.
                ++ apply T.PkgSet.mem_spec in EM.
                   destruct (Hdisj _ _ EM) as [chi' [Hg2 [Hsg Hsub']]].
@@ -1764,7 +1764,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         apply mem_reduceDeps in Hd; destruct Hd as [p [chi [Hpg Henc]]].
         assert (Hfn : NSet.Subset (fnames chi) (depNames D)).
         { intros x Hx; apply mem_depNames; exists p, chi; auto. }
-        refine (proj1 (encodeNNF_dep_closure_aux S (C.versions R) (depNames D)
+        refine (proj1 (encode_dep_closure_aux S (C.versions R) (depNames D)
                          _ Hemb HVq Hbot Htot Hdisj chi Hfn)
                   (embedPkg p) _ q m vs Henc Hq).
         destruct (PkgSet.mem p S) eqn:Ep.
@@ -1809,9 +1809,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         | _ => None
         end.
 
-      Lemma encodeNNF_depender_orig_aux : forall Vq psi,
+      Lemma encode_depender_orig_aux : forall Vq psi,
           (forall (q : T.Pkg.t) m (v : Version.t) (d : T.Dependees.t),
-              T.DepRel.In ((Name.Orig m, v), d) (encodeNNF Vq q psi) ->
+              T.DepRel.In ((Name.Orig m, v), d) (encode Vq q psi) ->
               q = (Name.Orig m, v)) /\
           (forall (q : T.Pkg.t) m (v : Version.t) (d : T.Dependees.t),
               T.DepRel.In ((Name.Orig m, v), d) (encodeNNFneg Vq q psi) ->
@@ -1876,9 +1876,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
               injection E as E _; exact E.
       Qed.
 
-      Lemma encodeNNF_dependee_orig_aux : forall Vq psi,
+      Lemma encode_dependee_orig_aux : forall Vq psi,
           (forall (q q' : T.Pkg.t) m (ws : T.VSet.t),
-              T.DepRel.In (q', (Name.Orig m, ws)) (encodeNNF Vq q psi) ->
+              T.DepRel.In (q', (Name.Orig m, ws)) (encode Vq q psi) ->
               NSet.In m (fnames psi)) /\
           (forall (q q' : T.Pkg.t) m (ws : T.VSet.t),
               T.DepRel.In (q', (Name.Orig m, ws)) (encodeNNFneg Vq q psi) ->
@@ -1940,9 +1940,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           + intros n i0 q' m ws H; exact (IHa1 _ _ _ _ H).
       Qed.
 
-      Lemma encodeNNF_agree_aux : forall Vq Vq' psi,
+      Lemma encode_agree_aux : forall Vq Vq' psi,
           (forall m, NSet.In m (fnames psi) -> Vq m = Vq' m) ->
-          (forall p, encodeNNF Vq p psi = encodeNNF Vq' p psi) /\
+          (forall p, encode Vq p psi = encode Vq' p psi) /\
           (forall p, encodeNNFneg Vq p psi = encodeNNFneg Vq' p psi) /\
           (forall n i, encodeDisj Vq n i psi = encodeDisj Vq' n i psi) /\
           (forall n i, encodeConjNeg Vq n i psi = encodeConjNeg Vq' n i psi).
@@ -1993,8 +1993,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         split; intros [p [psi [Hd He]]]; exists p, psi; split; try exact Hd;
           assert (Hf : forall m, NSet.In m (fnames psi) -> Vq m = Vq' m)
             by (intros m Hm; apply Hag, mem_depNames; exists p, psi; auto);
-          [rewrite <- (proj1 (encodeNNF_agree_aux Vq Vq' psi Hf))
-          | rewrite (proj1 (encodeNNF_agree_aux Vq Vq' psi Hf))]; exact He.
+          [rewrite <- (proj1 (encode_agree_aux Vq Vq' psi Hf))
+          | rewrite (proj1 (encode_agree_aux Vq Vq' psi Hf))]; exact He.
       Qed.
 
       Fixpoint negNames (psi : Formula) : NSet.t :=
@@ -2005,9 +2005,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         | FNeg psi' => fnames psi'
         end.
 
-      Lemma encodeNNF_agreeNeg_aux : forall Vq Vq' psi,
+      Lemma encode_agreeNeg_aux : forall Vq Vq' psi,
           (forall m, NSet.In m (negNames psi) -> Vq m = Vq' m) ->
-          (forall p, encodeNNF Vq p psi = encodeNNF Vq' p psi) /\
+          (forall p, encode Vq p psi = encode Vq' p psi) /\
           (forall n i, encodeDisj Vq n i psi = encodeDisj Vq' n i psi).
       Proof.
         intros Vq Vq' psi;
@@ -2031,7 +2031,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                 exact Hm).
           destruct (IHa Ha) as [IHa1 _]; destruct (IHb Hb) as [_ IHb2];
             split; intros; simpl; rewrite IHa1, IHb2; reflexivity.
-        - destruct (encodeNNF_agree_aux Vq Vq' psi' Hag) as (_ & Hn & _ & _);
+        - destruct (encode_agree_aux Vq Vq' psi' Hag) as (_ & Hn & _ & _);
             split; intros; simpl; apply Hn.
       Qed.
 
@@ -2043,7 +2043,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         intros Vq Vq' D Hag; apply T.DepRel.ext; intro d.
         rewrite !mem_reduceDepsBy.
         split; intros [p [psi [Hd He]]]; exists p, psi; split; try exact Hd;
-          destruct (encodeNNF_agreeNeg_aux Vq Vq' psi (fun m => Hag p psi m Hd))
+          destruct (encode_agreeNeg_aux Vq Vq' psi (fun m => Hag p psi m Hd))
             as [E _]; [rewrite <- E | rewrite E]; exact He.
       Qed.
 
@@ -2112,9 +2112,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           + intros n i q H; simpl in H; exact (IHa1 _ _ H).
       Qed.
 
-      Lemma encodeNNF_dependee_synthetic_aux : forall Vq (psi : Formula),
+      Lemma encode_dependee_synthetic_aux : forall Vq (psi : Formula),
           (forall (p : T.Pkg.t) (d : T.DepElt.t),
-              T.DepRel.In d (encodeNNF Vq p psi) ->
+              T.DepRel.In d (encode Vq p psi) ->
               T.PkgSet.Subset (syntheticPkgs (fst (snd d)))
                 (arisingPkgs p psi)) /\
           (forall (p : T.Pkg.t) (d : T.DepElt.t),
@@ -2193,7 +2193,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         apply mem_instNames; right; apply mem_depNames; exists q, psi.
         split; [exact Hq |].
         exact (proj1
-            (encodeNNF_dependee_orig_aux (C.versions R) psi) _ _ _ _ He).
+            (encode_dependee_orig_aux (C.versions R) psi) _ _ _ _ He).
       Qed.
 
       Lemma versions_reduceReal_bot : forall R D (n : N.t),
@@ -2301,11 +2301,11 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             [exact Hq | exact Hn].
       Qed.
 
-      Lemma encodeNNF_agreeOwn_aux : forall Vq Vq' psi,
+      Lemma encode_agreeOwn_aux : forall Vq Vq' psi,
           ((forall m, NSet.In m (ownNegNames psi) -> Vq m = Vq' m) ->
            forall (q : T.Pkg.t) n (v : Version.t) (d : T.Dependees.t),
-             T.DepRel.In ((Name.Orig n, v), d) (encodeNNF Vq q psi) ->
-             T.DepRel.In ((Name.Orig n, v), d) (encodeNNF Vq' q psi)) /\
+             T.DepRel.In ((Name.Orig n, v), d) (encode Vq q psi) ->
+             T.DepRel.In ((Name.Orig n, v), d) (encode Vq' q psi)) /\
           ((forall m, NSet.In m (ownNegNamesNeg psi) -> Vq m = Vq' m) ->
            forall (q : T.Pkg.t) n (v : Version.t) (d : T.Dependees.t),
              T.DepRel.In ((Name.Orig n, v), d) (encodeNNFneg Vq q psi) ->
@@ -2327,10 +2327,10 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           + apply SOed.add_in in H; apply SOed.add_in.
             destruct H as [H | H]; [left; exact H | exfalso].
             apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [assert (E := proj1 (proj2 (encodeNNF_depender_orig_aux Vq psiL))
+              [assert (E := proj1 (proj2 (encode_depender_orig_aux Vq psiL))
                               _ _ _ _ H)
               | assert (E := proj2 (proj2 (proj2
-                               (encodeNNF_depender_orig_aux Vq psiR)))
+                               (encode_depender_orig_aux Vq psiR)))
                               _ _ _ _ _ H)];
               discriminate E.
         - destruct IHa as [IHa1 IHa2]; destruct IHb as [IHb1 IHb2]; split;
@@ -2338,10 +2338,10 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           + apply SOed.add_in in H; apply SOed.add_in.
             destruct H as [H | H]; [left; exact H | exfalso].
             apply T.DepRel.union_spec in H; destruct H as [H | H];
-              [assert (E := proj1 (encodeNNF_depender_orig_aux Vq psiL)
+              [assert (E := proj1 (encode_depender_orig_aux Vq psiL)
                               _ _ _ _ H)
               | assert (E := proj1 (proj2 (proj2
-                               (encodeNNF_depender_orig_aux Vq psiR)))
+                               (encode_depender_orig_aux Vq psiR)))
                               _ _ _ _ _ H)];
               discriminate E.
           + apply T.DepRel.union_spec in H; apply T.DepRel.union_spec.
@@ -2362,9 +2362,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         intros Vq Vq' D n v Hag; apply T.dependees_ext; intro h.
         rewrite !mem_reduceDepsBy.
         split; intros [p [psi [Hd He]]]; exists p, psi; split; try exact Hd.
-        - exact (proj1 (encodeNNF_agreeOwn_aux Vq Vq' psi)
+        - exact (proj1 (encode_agreeOwn_aux Vq Vq' psi)
                    (fun m Hx => Hag p psi m Hd Hx) _ _ _ _ He).
-        - exact (proj1 (encodeNNF_agreeOwn_aux Vq' Vq psi)
+        - exact (proj1 (encode_agreeOwn_aux Vq' Vq psi)
                    (fun m Hx => eq_sym (Hag p psi m Hd Hx)) _ _ _ _ He).
       Qed.
 
@@ -2377,7 +2377,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         rewrite !mem_reduceDepsBy.
         split.
         - intros [p [psi [Hd He]]].
-          assert (E := proj1 (encodeNNF_depender_orig_aux Vq psi) _ _ _ _ He).
+          assert (E := proj1 (encode_depender_orig_aux Vq psi) _ _ _ _ He).
           destruct p as [pn pv]; unfold embedPkg in E; injection E as -> ->.
           exists (m, v), psi; split; [| exact He].
           apply DepRelFibred.mem_tailFibre; auto.
@@ -2423,7 +2423,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         intros R D n; apply T.dependees_empty_iff; intros h H.
         apply mem_reduceDeps in H.
         destruct H as [[pn pv] [psi [_ He]]].
-        assert (E := proj1 (encodeNNF_depender_orig_aux (C.versions R) psi)
+        assert (E := proj1 (encode_depender_orig_aux (C.versions R) psi)
                        _ _ _ _ He).
         unfold embedPkg in E; discriminate.
       Qed.
@@ -2436,7 +2436,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       Proof.
         intros R D chis [p [h Hd]].
         apply mem_reduceDeps in Hd; destruct Hd as [r [chi [HD He]]].
-        pose proof (proj1 (encodeNNF_dependee_synthetic_aux (C.versions R) chi)
+        pose proof (proj1 (encode_dependee_synthetic_aux (C.versions R) chi)
                       (embedPkg r) (p, (Name.Disjunct chis, h)) He) as Hsub.
         cbn [fst snd] in Hsub.
         apply T.VSet.ext; intro w.
@@ -2456,9 +2456,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
 
       Lemma encodeDisj_alt : forall Vq (psi : Formula) (n : Name.t) (i0 j : nat)
                                     (chi : Formula) (d : T.Dependees.t),
-          List.nth_error (disjSpine psi) j = Some chi ->
+          List.nth_error (spine psi) j = Some chi ->
           T.DepRel.In ((n, Version.Idx (i0 + j)), d)
-            (encodeNNF Vq (n, Version.Idx (i0 + j)) chi) ->
+            (encode Vq (n, Version.Idx (i0 + j)) chi) ->
           T.DepRel.In ((n, Version.Idx (i0 + j)), d) (encodeDisj Vq n i0 psi).
       Proof.
         intros Vq psi;
@@ -2482,9 +2482,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       Lemma encodeConjNeg_alt : forall Vq (psi : Formula) (n : Name.t)
                                        (i0 j : nat) (chi : Formula)
                                        (d : T.Dependees.t),
-          List.nth_error (negConjSpine psi) j = Some chi ->
+          List.nth_error (negSpine psi) j = Some chi ->
           T.DepRel.In ((n, Version.Idx (i0 + j)), d)
-            (encodeNNF Vq (n, Version.Idx (i0 + j)) chi) ->
+            (encode Vq (n, Version.Idx (i0 + j)) chi) ->
           T.DepRel.In ((n, Version.Idx (i0 + j)), d)
             (encodeConjNeg Vq n i0 psi).
       Proof.
@@ -2513,16 +2513,16 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                 (arisingPkgs p psi) ->
               List.nth_error chis i = Some chi ->
               T.DepRel.In ((Name.Disjunct chis, Version.Idx i), d)
-                (encodeNNF Vq (Name.Disjunct chis, Version.Idx i) chi) ->
+                (encode Vq (Name.Disjunct chis, Version.Idx i) chi) ->
               T.DepRel.In ((Name.Disjunct chis, Version.Idx i), d)
-                (encodeNNF Vq p psi)) /\
+                (encode Vq p psi)) /\
           (forall (p : T.Pkg.t) (chis : list Formula) (i : nat) (chi : Formula)
                   (d : T.Dependees.t),
               T.PkgSet.In (Name.Disjunct chis, Version.Idx i)
                 (arisingNeg p psi) ->
               List.nth_error chis i = Some chi ->
               T.DepRel.In ((Name.Disjunct chis, Version.Idx i), d)
-                (encodeNNF Vq (Name.Disjunct chis, Version.Idx i) chi) ->
+                (encode Vq (Name.Disjunct chis, Version.Idx i) chi) ->
               T.DepRel.In ((Name.Disjunct chis, Version.Idx i), d)
                 (encodeNNFneg Vq p psi)) /\
           (forall (n : Name.t) (i0 : nat) (chis : list Formula) (i : nat)
@@ -2531,7 +2531,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                 (arisingDisj n i0 psi) ->
               List.nth_error chis i = Some chi ->
               T.DepRel.In ((Name.Disjunct chis, Version.Idx i), d)
-                (encodeNNF Vq (Name.Disjunct chis, Version.Idx i) chi) ->
+                (encode Vq (Name.Disjunct chis, Version.Idx i) chi) ->
               T.DepRel.In ((Name.Disjunct chis, Version.Idx i), d)
                 (encodeDisj Vq n i0 psi)) /\
           (forall (n : Name.t) (i0 : nat) (chis : list Formula) (i : nat)
@@ -2540,7 +2540,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                 (arisingConjNeg n i0 psi) ->
               List.nth_error chis i = Some chi ->
               T.DepRel.In ((Name.Disjunct chis, Version.Idx i), d)
-                (encodeNNF Vq (Name.Disjunct chis, Version.Idx i) chi) ->
+                (encode Vq (Name.Disjunct chis, Version.Idx i) chi) ->
               T.DepRel.In ((Name.Disjunct chis, Version.Idx i), d)
                 (encodeConjNeg Vq n i0 psi)).
       Proof.
@@ -2564,7 +2564,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                 simpl in Hg; [left | right].
               -- injection Hg as <-; exact Hd.
               -- exact (encodeConjNeg_alt Vq psiR
-                          (Name.Disjunct (FNeg psiL :: negConjSpine psiR))
+                          (Name.Disjunct (FNeg psiL :: negSpine psiR))
                           1 j chi d Hg Hd).
             * apply T.PkgSet.union_spec in H; destruct H as [H | H];
                 [left; exact (IHa2 _ _ _ _ _ H Hg Hd)
@@ -2590,7 +2590,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                 simpl in Hg; [left | right].
               -- injection Hg as <-; exact Hd.
               -- exact (encodeDisj_alt Vq psiR
-                          (Name.Disjunct (psiL :: disjSpine psiR))
+                          (Name.Disjunct (psiL :: spine psiR))
                           1 j chi d Hg Hd).
             * apply T.PkgSet.union_spec in H; destruct H as [H | H];
                 [left; exact (IHa1 _ _ _ _ _ H Hg Hd)
@@ -2617,15 +2617,15 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           + intros n i0 chis i chi d H Hg Hd; exact (IHa1 _ _ _ _ _ H Hg Hd).
       Qed.
 
-      Lemma encodeNNF_alt_aux : forall Vq (psi : Formula),
+      Lemma encode_alt_aux : forall Vq (psi : Formula),
           (forall (q : T.Pkg.t) (chis : list Formula) (i : nat)
                   (d : T.Dependees.t),
               T.DepRel.In ((Name.Disjunct chis, Version.Idx i), d)
-                (encodeNNF Vq q psi) ->
+                (encode Vq q psi) ->
               q = (Name.Disjunct chis, Version.Idx i) \/
               (exists chi, List.nth_error chis i = Some chi /\
                          T.DepRel.In ((Name.Disjunct chis, Version.Idx i), d)
-                           (encodeNNF Vq
+                           (encode Vq
                               (Name.Disjunct chis, Version.Idx i) chi))) /\
           (forall (q : T.Pkg.t) (chis : list Formula) (i : nat)
                   (d : T.Dependees.t),
@@ -2634,7 +2634,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
               q = (Name.Disjunct chis, Version.Idx i) \/
               (exists chi, List.nth_error chis i = Some chi /\
                          T.DepRel.In ((Name.Disjunct chis, Version.Idx i), d)
-                           (encodeNNF Vq
+                           (encode Vq
                               (Name.Disjunct chis, Version.Idx i) chi))) /\
           (forall (n : Name.t) (i0 : nat) (chis : list Formula) (i : nat)
                   (d : T.Dependees.t),
@@ -2642,14 +2642,14 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                 (encodeDisj Vq n i0 psi) ->
               (n = Name.Disjunct chis /\
                exists j chi, i = i0 + j /\
-                           List.nth_error (disjSpine psi) j = Some chi /\
+                           List.nth_error (spine psi) j = Some chi /\
                            T.DepRel.In ((Name.Disjunct chis, Version.Idx i), d)
-                             (encodeNNF Vq
+                             (encode Vq
                                 (Name.Disjunct chis, Version.Idx i) chi))
               \/
               (exists chi, List.nth_error chis i = Some chi /\
                          T.DepRel.In ((Name.Disjunct chis, Version.Idx i), d)
-                           (encodeNNF Vq
+                           (encode Vq
                               (Name.Disjunct chis, Version.Idx i) chi))) /\
           (forall (n : Name.t) (i0 : nat) (chis : list Formula) (i : nat)
                   (d : T.Dependees.t),
@@ -2657,14 +2657,14 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
                 (encodeConjNeg Vq n i0 psi) ->
               (n = Name.Disjunct chis /\
                exists j chi, i = i0 + j /\
-                           List.nth_error (negConjSpine psi) j = Some chi /\
+                           List.nth_error (negSpine psi) j = Some chi /\
                            T.DepRel.In ((Name.Disjunct chis, Version.Idx i), d)
-                             (encodeNNF Vq
+                             (encode Vq
                                 (Name.Disjunct chis, Version.Idx i) chi))
               \/
               (exists chi, List.nth_error chis i = Some chi /\
                          T.DepRel.In ((Name.Disjunct chis, Version.Idx i), d)
-                           (encodeNNF Vq
+                           (encode Vq
                               (Name.Disjunct chis, Version.Idx i) chi))).
       Proof.
         intros Vq psi;
@@ -2800,7 +2800,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           T.dependees (reduceDeps R D) (Name.Disjunct chis, i) =
           match disjAlt chis i with
           | Some chi =>
-              T.dependees (encodeNNF (C.versions R) (Name.Disjunct chis, i) chi)
+              T.dependees (encode (C.versions R) (Name.Disjunct chis, i) chi)
                 (Name.Disjunct chis, i)
           | None => T.DependeesSet.empty
           end.
@@ -2818,7 +2818,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         apply T.dependees_ext; intro h; rewrite mem_reduceDeps.
         split.
         - intros [q [psi' [_ He]]].
-          destruct (proj1 (encodeNNF_alt_aux (C.versions R) psi') _ _ _ _ He)
+          destruct (proj1 (encode_alt_aux (C.versions R) psi') _ _ _ _ He)
             as [Eq | [chi' [Hg' Hin]]].
           + destruct q as [qn qv]; unfold embedPkg in Eq; simpl in Eq;
               discriminate.
@@ -2844,25 +2844,25 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         - exact Hx.
       Qed.
 
-      Lemma disjSpine_negNames : forall psiR chi m,
-          List.In chi (disjSpine psiR) -> NSet.In m (negNames chi) ->
+      Lemma spine_negNames : forall psiR chi m,
+          List.In chi (spine psiR) -> NSet.In m (negNames chi) ->
           NSet.In m (negNames psiR).
       Proof.
         induction psiR
           as [o vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
-          intros chi m Hg Hx; cbn [disjSpine] in Hg;
+          intros chi m Hg Hx; cbn [spine] in Hg;
           try (destruct Hg as [<- | []]; exact Hx).
         destruct Hg as [<- | Hg]; cbn [negNames]; apply NSet.union_spec;
           [left; exact Hx | right; exact (IHb _ _ Hg Hx)].
       Qed.
 
-      Lemma negConjSpine_negNames : forall psiR chi m,
-          List.In chi (negConjSpine psiR) -> NSet.In m (negNames chi) ->
+      Lemma negSpine_negNames : forall psiR chi m,
+          List.In chi (negSpine psiR) -> NSet.In m (negNames chi) ->
           NSet.In m (fnames psiR).
       Proof.
         induction psiR
           as [o vs | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
-          intros chi m Hg Hx; cbn [negConjSpine] in Hg;
+          intros chi m Hg Hx; cbn [negSpine] in Hg;
           try (destruct Hg as [<- | []]; exact Hx).
         destruct Hg as [<- | Hg]; cbn [fnames]; apply NSet.union_spec;
           [left; exact Hx | right; exact (IHb _ _ Hg Hx)].
@@ -2903,7 +2903,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             * apply mem_idxPkgs in H; destruct H as [k [_ E]].
               injection E as -> _; destruct Hg as [<- | Hg];
                 [left; exact Hx
-                | right; exact (negConjSpine_negNames _ _ _ Hg Hx)].
+                | right; exact (negSpine_negNames _ _ _ Hg Hx)].
             * left; exact (IHa2 _ _ _ _ _ H Hg Hx).
             * right; exact (IHb4 _ _ _ _ _ _ H Hg Hx).
           + intros n i chis v chi m H Hg Hx; simpl in H; cbn [negNames].
@@ -2925,7 +2925,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
             * apply mem_idxPkgs in H; destruct H as [k [_ E]].
               injection E as -> _; destruct Hg as [<- | Hg];
                 [left; exact Hx
-                | right; exact (disjSpine_negNames _ _ _ Hg Hx)].
+                | right; exact (spine_negNames _ _ _ Hg Hx)].
             * left; exact (IHa1 _ _ _ _ _ H Hg Hx).
             * right; exact (IHb3 _ _ _ _ _ _ H Hg Hx).
           + intros p chis v chi m H Hg Hx; simpl in H; cbn [fnames].
@@ -2961,7 +2961,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           T.dependees (reduceDepsBy Vq D) (Name.Disjunct chis, i) =
           match disjAlt chis i with
           | Some chi =>
-              T.dependees (encodeNNF Vq (Name.Disjunct chis, i) chi)
+              T.dependees (encode Vq (Name.Disjunct chis, i) chi)
                 (Name.Disjunct chis, i)
           | None => T.DependeesSet.empty
           end.
@@ -2977,7 +2977,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         apply T.dependees_ext; intro h; rewrite mem_reduceDepsBy.
         split.
         - intros [q [psi' [_ He]]].
-          destruct (proj1 (encodeNNF_alt_aux Vq psi') _ _ _ _ He)
+          destruct (proj1 (encode_alt_aux Vq psi') _ _ _ _ He)
             as [Eq | [chi' [Hg' Hin]]].
           + destruct q as [qn qv]; unfold embedPkg in Eq; simpl in Eq;
               discriminate.
@@ -3008,7 +3008,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         assert (Hg : List.In chi chis).
         { destruct i as [v | k |]; cbn [disjAlt] in Eg; try discriminate.
           exact (nth_error_In _ _ Eg). }
-        rewrite (proj1 (encodeNNF_agreeNeg_aux (C.versions R) Vq chi
+        rewrite (proj1 (encode_agreeNeg_aux (C.versions R) Vq chi
                           (fun x Hx =>
                              eq_sym (HVq p psi x HD
                                        (proj1 (arisingPkgs_negNames_aux psi)

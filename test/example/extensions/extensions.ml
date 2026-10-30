@@ -603,7 +603,7 @@ module Package_formula = struct
       | R.Name.Orig _, R.Version.Bot -> R.T.DependeesSet.empty
       | R.Name.Disjunct fs, i -> (
           match L.disjAlt fs i with
-          | Some g -> R.T.dependees (R.encodeNNF (M.C.versions r) p g) p
+          | Some g -> R.T.dependees (R.encode (M.C.versions r) p g) p
           | None -> R.T.DependeesSet.empty)
       | R.Name.Orig _, R.Version.Idx _ -> unasked ())
 
@@ -692,7 +692,7 @@ module Variable_formula = struct
           match PF.Reduction.Lookup.disjAlt fs i with
           | Some g ->
               R.T.dependees
-                (PF.Reduction.encodeNNF (R.liftOracle yx (M.C.versions r)) p g)
+                (PF.Reduction.encode (R.liftOracle yx (M.C.versions r)) p g)
                 p
           | None -> R.T.DependeesSet.empty)
       | R.Name.Orig (E.Inl _), _ -> unasked ())

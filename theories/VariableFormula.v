@@ -861,7 +861,7 @@ Module VariableFormula (N V : UsualOrderedType)
         apply PF.Reduction.mem_reduceDeps in H.
         destruct H as [p [g [Hg He]]].
         assert (E := proj1
-                       (PF.Reduction.Lookup.encodeNNF_depender_orig_aux _ g)
+                       (PF.Reduction.Lookup.encode_depender_orig_aux _ g)
                        _ _ _ _ He).
         apply mem_liftDeps in Hg; destruct Hg as [[m v] [psi [_ Ep]]].
         injection Ep as -> _.
@@ -885,7 +885,7 @@ Module VariableFormula (N V : UsualOrderedType)
           match PF.Reduction.Lookup.disjAlt chis i with
           | Some chi =>
               T.dependees
-                (PF.Reduction.encodeNNF (liftOracle Y_x (C.versions R))
+                (PF.Reduction.encode (liftOracle Y_x (C.versions R))
                    (Name.Disjunct chis, i) chi)
                 (Name.Disjunct chis, i)
           | None => T.DependeesSet.empty
@@ -896,7 +896,7 @@ Module VariableFormula (N V : UsualOrderedType)
         destruct (PF.Reduction.Lookup.disjAlt chis i) as [chi |];
           [| reflexivity].
         f_equal.
-        refine (proj1 (PF.Reduction.Lookup.encodeNNF_agree_aux _ _ chi _) _).
+        refine (proj1 (PF.Reduction.Lookup.encode_agree_aux _ _ chi _) _).
         intros n _; apply versions_liftReal.
       Qed.
 
