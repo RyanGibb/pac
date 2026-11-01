@@ -74,19 +74,19 @@ module Make (Encoding : Encoding.S) = struct
     (* keyed by the names read rather than by the package reading them, so
        packages that read the same names share one set *)
     repo_of : (string list, Np.RealPackageSet.t) Hashtbl.t;
-    vcache : (Np.Nm.name, Np.Vs.version list) Hashtbl.t;
+    vcache : (Np.Name.name, Np.Version.version list) Hashtbl.t;
     (* the optional-dependency verdict, keyed by what decides it *)
     opt_keep : (string * string, bool) Hashtbl.t;
     (* each package's directories, as far as the solver has looked: the
        intermediates its granular node and its directories point to, and the
        directory each of its links resolves into *)
-    dirs : ((string * string) * string, Np.Nm.name list) Hashtbl.t;
+    dirs : ((string * string) * string, Np.Name.name list) Hashtbl.t;
     (* the links resolving into each directory *)
-    links_into : (Np.Nm.name, Np.Nm.name) Hashtbl.t;
+    links_into : (Np.Name.name, Np.Name.name) Hashtbl.t;
     raw_tbl : (string * string, P.dep list) Hashtbl.t;
     (* the directories reading each descriptor, as far as the solver has
        looked *)
-    desc_dirs : (Np.Nm.name, Np.Nm.name) Hashtbl.t;
+    desc_dirs : (Np.Name.name, Np.Name.name) Hashtbl.t;
   }
 
   let create ar root =
@@ -210,14 +210,14 @@ module Make (Encoding : Encoding.S) = struct
 
   let own_dependencies st p = List.map (fun d -> (p, d)) (dependencies st p)
 
-  let desc_name st p (m : string * string) : Np.Nm.name option =
+  let desc_name st p (m : string * string) : Np.Name.name option =
     match
       List.find_opt
         (fun (d : Np.coq_Dependency) -> d.Np.d_dir = fst m)
         (active_dependencies st p)
     with
     | Some { Np.d_name; Np.d_desc = Some s; _ } when d_name = snd m ->
-        Some (Np.Nm.Desc (fst m, d_name, s))
+        Some (Np.Name.Desc (fst m, d_name, s))
     | _ -> None
 
   let own_peer_dependencies st p =
@@ -331,37 +331,37 @@ module Make (Encoding : Encoding.S) = struct
      versions only grow (versions_intermediate_mono), which the resolver
      contract allows, so they are asked afresh each time rather than held;
      every other name's versions are fixed once asked. *)
-  let grows st (n : Np.Nm.name) =
+  let grows st (n : Np.Name.name) =
     match n with
-    | Np.Nm.Intermediate (k, _, _) -> k = (fst st.root, fst st.root)
+    | Np.Name.Intermediate (k, _, _) -> k = (fst st.root, fst st.root)
     | _ -> false
 
-  let versions st (n : Np.Nm.name) : Np.Vs.version list =
+  let versions st (n : Np.Name.name) : Np.Version.version list =
     let answer () =
       match n with
-      | Np.Nm.Granular _ -> T.VSet.elements (R.versions (gran_sub_inst st) n)
-      | Np.Nm.Intermediate (k, v, m) ->
+      | Np.Name.Granular _ -> T.VSet.elements (R.versions (gran_sub_inst st) n)
+      | Np.Name.Intermediate (k, v, m) ->
           T.VSet.elements (R.versions (int_sub_inst st (snd k, v) m) n)
-      | Np.Nm.Sight (k, v, a) ->
+      | Np.Name.Sight (k, v, a) ->
           T.VSet.elements (R.versions (sight_sub_inst st (snd k, v) a) n)
-      | Np.Nm.Link (k, v, m, u, a) ->
+      | Np.Name.Link (k, v, m, u, a) ->
           T.VSet.elements
             (R.versions (link_sub_inst st (snd k, v) (snd m, u) a) n)
-      | Np.Nm.Desc (_, t, _) ->
+      | Np.Name.Desc (_, t, _) ->
           T.VSet.elements (R.versions (desc_sub_inst st t) n)
     in
     if grows st n then answer () else Tbl.memo st.vcache n answer
 
   let holder st ((k, v) : (string * string) * string) (a : string) :
-      Np.Nm.name option =
+      Np.Name.name option =
     let p = (snd k, v) in
     R.holderName (holder_sub_inst st p p) (k, v) a
 
-  let record_dir st (m : Np.Nm.name) =
+  let record_dir st (m : Np.Name.name) =
     match m with
-    | Np.Nm.Intermediate (k, v, d) ->
+    | Np.Name.Intermediate (k, v, d) ->
         let l = Tbl.find_list st.dirs (k, v) in
-        if not (List.exists (fun x -> Np.Nm.compare x m = E.Eq) l) then begin
+        if not (List.exists (fun x -> Np.Name.compare x m = E.Eq) l) then begin
           Hashtbl.replace st.dirs (k, v) (m :: l);
           match desc_name st (snd k, v) d with
           | Some x -> Hashtbl.add st.desc_dirs x m
@@ -369,11 +369,11 @@ module Make (Encoding : Encoding.S) = struct
         end
     | _ -> ()
 
-  let desc_dirs st (x : Np.Nm.name) = Hashtbl.find_all st.desc_dirs x
+  let desc_dirs st (x : Np.Name.name) = Hashtbl.find_all st.desc_dirs x
 
-  let record_link st (l : Np.Nm.name) =
+  let record_link st (l : Np.Name.name) =
     match l with
-    | Np.Nm.Link (k, v, _, _, a) -> (
+    | Np.Name.Link (k, v, _, _, a) -> (
         match holder st (k, v) a with
         | None -> ()
         | Some h ->
@@ -381,7 +381,7 @@ module Make (Encoding : Encoding.S) = struct
             if
               not
                 (List.exists
-                   (fun x -> Np.Nm.compare x l = E.Eq)
+                   (fun x -> Np.Name.compare x l = E.Eq)
                    (Hashtbl.find_all st.links_into h))
             then Hashtbl.add st.links_into h l)
     | _ -> ()
@@ -389,11 +389,11 @@ module Make (Encoding : Encoding.S) = struct
   let dependees st (s : T.Package.t) : T.Dependee.t list =
     let hs =
       match s with
-      | Np.Nm.Granular (k, _), Np.Vs.Orig v ->
+      | Np.Name.Granular (k, _), Np.Version.Orig v ->
           R.dependees (pkg_sub_inst st (snd k, v)) s
-      | Np.Nm.Intermediate (k, v, m), Np.Vs.Orig u ->
+      | Np.Name.Intermediate (k, v, m), Np.Version.Orig u ->
           R.dependees (peer_sub_inst st (snd k, v) m u) s
-      | Np.Nm.Link (k, v, m, u, _), _ ->
+      | Np.Name.Link (k, v, m, u, _), _ ->
           R.dependees (holder_sub_inst st (snd k, v) (snd m, u)) s
       | _ -> T.DependeeSet.empty
     in
@@ -405,6 +405,6 @@ module Make (Encoding : Encoding.S) = struct
       hs;
     hs
 
-  let links_into st (h : Np.Nm.name) = Hashtbl.find_all st.links_into h
+  let links_into st (h : Np.Name.name) = Hashtbl.find_all st.links_into h
   let dirs st p = Tbl.find_list st.dirs p
 end

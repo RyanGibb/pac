@@ -45,13 +45,13 @@ module Make (Encoding : Encoding.S) = struct
       ((string * string) * Cg.Site.t, Cg.DependencyRecord.t option) Hashtbl.t;
     (* the tagged list, not just the untagged one, has to be memoized:
        PubGrub asks a name for its versions at every propagation step *)
-    pg_vers : (Cg.Reduction.NPlus.t, PVersion.t list) Hashtbl.t;
+    pg_vers : (Cg.Reduction.Name.t, PVersion.t list) Hashtbl.t;
     (* at each decision PubGrub's dependency_incomps asks for the
        dependencies of the decided version's neighbours, once per
        dependency, to widen each incompatibility's range *)
     pg_deps :
-      ( Cg.Reduction.NPlus.t * Cg.Reduction.VPlus.t,
-        (Cg.Reduction.NPlus.t * PG.Ranges.t) list )
+      ( Cg.Reduction.Name.t * Cg.Reduction.Version.t,
+        (Cg.Reduction.Name.t * PG.Ranges.t) list )
       Hashtbl.t;
   }
 
@@ -190,20 +190,20 @@ module Make (Encoding : Encoding.S) = struct
 
   (* one branch per versions_lookup{Root,Granular,FeatP,Slot,Decision,Cls},
      each filling in the components its theorem names and nothing else *)
-  let versions st (tn : Cg.Reduction.NPlus.t) : Cg.Reduction.VPlus.t list =
+  let versions st (tn : Cg.Reduction.Name.t) : Cg.Reduction.Version.t list =
     let call i = T.VSet.elements (Cg.Reduction.versions i tn) in
     let e = empty_inst st in
     match tn with
-    | Cg.Reduction.NPlus.CRoot -> call e
-    | Cg.Reduction.NPlus.CGran (n, _) ->
+    | Cg.Reduction.Name.CRoot -> call e
+    | Cg.Reduction.Name.CGran (n, _) ->
         call { e with inst_real = name_set st n }
-    | Cg.Reduction.NPlus.CFeatP (n, f, _) ->
+    | Cg.Reduction.Name.CFeatP (n, f, _) ->
         let supp = support_at st n f in
         call { e with inst_real = name_set st n; inst_support = supp }
-    | Cg.Reduction.NPlus.CSlot (_, _, d)
-    | Cg.Reduction.NPlus.CDec (_, _, _, d, _) ->
+    | Cg.Reduction.Name.CSlot (_, _, d)
+    | Cg.Reduction.Name.CDec (_, _, _, d, _) ->
         call { e with inst_real = name_set st (Cg.sName d) }
-    | Cg.Reduction.NPlus.CCls l ->
+    | Cg.Reduction.Name.CCls l ->
         (* Lookup.claimants and LinksRelFibred.headFibre at l, over the
            declarers loaded so far: the answer may only grow
            (versions_cls_mono) *)
@@ -226,12 +226,12 @@ module Make (Encoding : Encoding.S) = struct
     in
     let e = empty_inst st in
     match p with
-    | Cg.Reduction.NPlus.CRoot, _ -> call e
-    | Cg.Reduction.NPlus.CGran (n, _), Cg.Reduction.VPlus.WOrig v ->
+    | Cg.Reduction.Name.CRoot, _ -> call e
+    | Cg.Reduction.Name.CGran (n, _), Cg.Reduction.Version.WOrig v ->
         let rw = fibres_of st (n, v) in
         List.iter (fun m -> ignore (name_versions st m)) rw.r_reads;
         call { e with inst_slots = rw.r_slots; inst_links = rw.r_links }
-    | Cg.Reduction.NPlus.CFeatP (n, _, _), Cg.Reduction.VPlus.WOrig v ->
+    | Cg.Reduction.Name.CFeatP (n, _, _), Cg.Reduction.Version.WOrig v ->
         let rw = fibres_of st (n, v) in
         List.iter (fun m -> ignore (name_versions st m)) rw.r_reads;
         call
@@ -241,8 +241,8 @@ module Make (Encoding : Encoding.S) = struct
             inst_fdefs = rw.r_fdefs;
             inst_slots = rw.r_slots;
           }
-    | ( (Cg.Reduction.NPlus.CSlot _ | Cg.Reduction.NPlus.CDec _),
-        Cg.Reduction.VPlus.WClass _ ) ->
+    | ( (Cg.Reduction.Name.CSlot _ | Cg.Reduction.Name.CDec _),
+        Cg.Reduction.Version.WClass _ ) ->
         call e
     | _, _ -> []
 
@@ -262,11 +262,11 @@ module Make (Encoding : Encoding.S) = struct
      ranks the versions a dependency admits and not their granularity
      classes, and which one the ranked walk lands on depends on what is
      already activated, which only choose can see. *)
-  let tag st (tn : Cg.Reduction.NPlus.t) (w : Cg.Reduction.VPlus.t) : PVersion.t
+  let tag st (tn : Cg.Reduction.Name.t) (w : Cg.Reduction.Version.t) : PVersion.t
       =
     match (tn, w) with
-    | ( (Cg.Reduction.NPlus.CGran (n, _) | Cg.Reduction.NPlus.CFeatP (n, _, _)),
-        Cg.Reduction.VPlus.WOrig v ) ->
+    | ( (Cg.Reduction.Name.CGran (n, _) | Cg.Reduction.Name.CFeatP (n, _, _)),
+        Cg.Reduction.Version.WOrig v ) ->
         { PVersion.msrv = msrv_fits st (n, v); v = w }
     | _ -> { PVersion.msrv = true; v = w }
 
@@ -277,7 +277,7 @@ module Make (Encoding : Encoding.S) = struct
      built by pg_dependencies with of_list from a loaded declarer's own *)
   let pg_versions st tn =
     match tn with
-    | Cg.Reduction.NPlus.CCls _ -> List.map (tag st tn) (versions st tn)
+    | Cg.Reduction.Name.CCls _ -> List.map (tag st tn) (versions st tn)
     | _ ->
         Tbl.memo st.pg_vers tn (fun () -> List.map (tag st tn) (versions st tn))
 

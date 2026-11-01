@@ -5,7 +5,7 @@ module type SEARCH = sig
     type t = {
       pos : int;
       v : T.DMA.Deb.Reduction.Version.t;
-      tgt : (string * T.DMA.coq_NameArch) option;
+      tgt : (string * T.DMA.coq_ReducedQualifier) option;
     }
 
     val compare : t -> t -> int
@@ -136,7 +136,7 @@ module Make (S : SEARCH) = struct
      the foo:any of a Multi-Arch: allowed package and the foo:b
      pseudo-package's entry for each version of b's own foo (ParseProvides,
      deblistparser.cc), and a sibling's (sibling_provides). *)
-  let provides_count ((m, y) : string * DMA.coq_NameArch) w (a : DMA.Deb.Atom.t)
+  let provides_count ((m, y) : string * DMA.coq_ReducedQualifier) w (a : DMA.Deb.Atom.t)
       =
     let n = fst (fst a) in
     match y with
@@ -206,7 +206,7 @@ module Make (S : SEARCH) = struct
     | _ -> false
 
   (* the literal a solution reads is still unassigned *)
-  let live_at st ~pkgvar ((n, y) : string * DMA.coq_NameArch) w =
+  let live_at st ~pkgvar ((n, y) : string * DMA.coq_ReducedQualifier) w =
     match y with
     | DMA.QAArch b ->
         if pkgvar then not (Hashtbl.mem st.pdead (n, b))
@@ -577,7 +577,7 @@ module Make (S : SEARCH) = struct
         | _ -> None)
 
   let negation st ~assigned n (pv : PVersion.t) : rejection list =
-    let ver ((m, y) : string * DMA.coq_NameArch) w =
+    let ver ((m, y) : string * DMA.coq_ReducedQualifier) w =
       match y with DMA.QAArch b -> [ `Ver ((m, b), w) ] | _ -> []
     in
     let of_atom a =

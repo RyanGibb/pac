@@ -351,13 +351,13 @@ Module Visibility (N V : UsualOrderedType).
       rewrite SOppp.add_in, PackageSet.filter_spec', privb_iff; reflexivity.
     Qed.
 
-    Module NP := PairUOT N Package.
-    Module VNP := TripleUOT V N Package.
-    Module NVNP := PairUOT N VNP.
-    Module NVN := TripleUOT N V N.
-    Module NPF := UOTCompareFacts NP.
-    Module NVNPF := UOTCompareFacts NVNP.
-    Module NVNF := UOTCompareFacts NVN.
+    Module OccurrenceName := PairUOT N Package.
+    Module IntermediateNameTail := TripleUOT V N Package.
+    Module IntermediateName := PairUOT N IntermediateNameTail.
+    Module AgreementName := TripleUOT N V N.
+    Module NPF := UOTCompareFacts OccurrenceName.
+    Module NVNPF := UOTCompareFacts IntermediateName.
+    Module NVNF := UOTCompareFacts AgreementName.
     #[local] Hint Rewrite NPF.compare_eq_iff NVNPF.compare_eq_iff
       NVNF.compare_eq_iff : cmp_vis.
     #[local] Hint Extern 1 => cmp_by NPF.compare_antisym : cmp_vis.
@@ -386,11 +386,11 @@ Module Visibility (N V : UsualOrderedType).
         | Eq =>
             match x, y with
             | Occurrence n1 q1, Occurrence n2 q2 =>
-                NP.compare (n1, q1) (n2, q2)
+                OccurrenceName.compare (n1, q1) (n2, q2)
             | Intermediate n1 v1 m1 q1, Intermediate n2 v2 m2 q2 =>
-                NVNP.compare (n1, (v1, (m1, q1))) (n2, (v2, (m2, q2)))
+                IntermediateName.compare (n1, (v1, (m1, q1))) (n2, (v2, (m2, q2)))
             | Agreement n1 v1 m1, Agreement n2 v2 m2 =>
-                NVN.compare (n1, (v1, m1)) (n2, (v2, m2))
+                AgreementName.compare (n1, (v1, m1)) (n2, (v2, m2))
             | _, _ => Eq
             end
         | c => c

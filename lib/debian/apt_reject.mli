@@ -7,7 +7,7 @@ module type SEARCH = sig
     type t = {
       pos : int;
       v : T.DMA.Deb.Reduction.Version.t;
-      tgt : (string * T.DMA.coq_NameArch) option;
+      tgt : (string * T.DMA.coq_ReducedQualifier) option;
     }
 
     val compare : t -> t -> int
@@ -93,7 +93,7 @@ module Make (S : SEARCH) : sig
   val deferred : state -> DMA.Deb.Atom.t -> bool
 
   val live_at :
-    state -> pkgvar:bool -> string * DMA.coq_NameArch -> string -> bool
+    state -> pkgvar:bool -> string * DMA.coq_ReducedQualifier -> string -> bool
 
   val solutions : state -> assigned option -> DMA.Deb.Atom.t -> int
   val installed_at : assigned:assigned -> DMA.Package.t -> bool

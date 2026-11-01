@@ -21,13 +21,13 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
       (cs : list (list (A * bool))) : Prop :=
     forall c, List.In c cs -> ClauseSat sigma c.
 
-  Module LitOT := PairUOT X BoolOT.
-  Module ClauseOT := TripleUOT LitOT LitOT LitOT.
+  Module LiteralOT := PairUOT X BoolOT.
+  Module ClauseOT := TripleUOT LiteralOT LiteralOT LiteralOT.
 
-  Definition lits (c : ClauseOT.t) : list LitOT.t :=
+  Definition lits (c : ClauseOT.t) : list LiteralOT.t :=
     fst c :: fst (snd c) :: snd (snd c) :: nil.
 
-  Definition cnf (cs : list ClauseOT.t) : list (list LitOT.t) :=
+  Definition cnf (cs : list ClauseOT.t) : list (list LiteralOT.t) :=
     List.map lits cs.
 
   Module Encoding.
@@ -195,7 +195,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
   Module Reduction.
     Module XF := UOTCompareFacts X.
     Module BF := UOTCompareFacts BoolOT.
-    Module LF := UOTCompareFacts LitOT.
+    Module LF := UOTCompareFacts LiteralOT.
     Module CF := UOTCompareFacts ClauseOT.
     #[local] Hint Rewrite XF.compare_eq_iff BF.compare_eq_iff LF.compare_eq_iff
       CF.compare_eq_iff : cmp_cplx.
@@ -243,7 +243,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
       Inductive version : Type :=
       | Eps
       | Truth (b : bool)
-      | Lit (l : LitOT.t).
+      | Lit (l : LiteralOT.t).
       Definition t := version.
 
       Definition rank (x : t) : nat :=
@@ -253,7 +253,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
         match Nat.compare (rank x) (rank y) with
         | Eq => match x, y with
                 | Truth a, Truth b => BoolOT.compare a b
-                | Lit a, Lit b => LitOT.compare a b
+                | Lit a, Lit b => LiteralOT.compare a b
                 | _, _ => Eq
                 end
         | c => c
@@ -398,11 +398,11 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
       apply assignment_spec; assumption.
     Qed.
 
-    Definition litSatb (sigma : X.t -> bool) (l : LitOT.t) : bool :=
+    Definition litSatb (sigma : X.t -> bool) (l : LiteralOT.t) : bool :=
       Bool.eqb (sigma (fst l)) (snd l).
 
     Definition firstSatisfied (sigma : X.t -> bool) (c : ClauseOT.t)
-      : LitOT.t :=
+      : LiteralOT.t :=
       if litSatb sigma (fst c) then fst c
       else if litSatb sigma (fst (snd c)) then fst (snd c)
       else snd (snd c).

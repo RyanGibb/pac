@@ -1044,7 +1044,7 @@ module Npm_placement = struct
     | R.Name.Loc (l, a) -> Format.fprintf f "<%s,%s>" (path l) a
     | R.Name.Walk (l, a) -> Format.fprintf f "<%s⇑%s>" (path l) a
 
-  let occ = function M.Occ.Proj -> "R" | M.Occ.Reg (m, v) -> m ^ "@" ^ v
+  let occ = function M.Occupant.Proj -> "R" | M.Occupant.Reg (m, v) -> m ^ "@" ^ v
 
   let pp_version f = function
     | R.Version.Occ x -> str f (occ x)
@@ -1089,8 +1089,8 @@ module Npm_placement = struct
     { i with M.inst_real = M.RealPackageSet.empty; inst_deps = []; inst_rootDeps = [] }
 
   let occ_inst = function
-    | M.Occ.Proj -> { bare with M.inst_rootDeps = i.M.inst_rootDeps }
-    | M.Occ.Reg (m, v) ->
+    | M.Occupant.Proj -> { bare with M.inst_rootDeps = i.M.inst_rootDeps }
+    | M.Occupant.Reg (m, v) ->
         {
           bare with
           M.inst_deps = List.filter (fun (p, _) -> p = (m, v)) i.M.inst_deps;
@@ -1104,7 +1104,7 @@ module Npm_placement = struct
          (fun (e : M.coq_Edge) ->
            if e.M.e_dir = a then Some e.M.e_name else None)
          (List.concat_map edges_of
-            (M.Occ.Proj :: List.map (fun (m, v) -> M.Occ.Reg (m, v)) repo)))
+            (M.Occupant.Proj :: List.map (fun (m, v) -> M.Occupant.Reg (m, v)) repo)))
 
   let key_inst a =
     {
@@ -1122,7 +1122,7 @@ module Npm_placement = struct
   let versions n =
     R.Reduced.VSet.elements
       (match n with
-      | R.Name.Root -> R.Reduced.VSet.singleton (R.Version.Occ M.Occ.Proj)
+      | R.Name.Root -> R.Reduced.VSet.singleton (R.Version.Occ M.Occupant.Proj)
       | R.Name.Loc (_, a) | R.Name.Walk (_, a) ->
           R.versions (L.nameInst (key_inst a)) d n)
 

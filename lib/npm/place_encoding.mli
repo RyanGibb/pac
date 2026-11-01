@@ -36,7 +36,7 @@ module type S = sig
 
   (* a location, stored deepest key first, as a lock's packages key *)
   val lock_path : string list -> string
-  val occ_compare : Npl.Occ.t -> Npl.Occ.t -> int
+  val occ_compare : Npl.Occupant.t -> Npl.Occupant.t -> int
 
   (* The orders of the extracted Name and Version, restated in OCaml;
      PAC_NPM_CHECKCMP compares every comparison against the extracted one. *)

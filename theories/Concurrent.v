@@ -105,10 +105,10 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         intros u2 Hu2; apply granEqb_iff; apply H; assumption.
     Qed.
 
-    Module NG := PairUOT N G.
-    Module NVN := TripleUOT N V N.
-    Module NGF := UOTCompareFacts NG.
-    Module NVNF := UOTCompareFacts NVN.
+    Module GranularName := PairUOT N G.
+    Module IntermediateName := TripleUOT N V N.
+    Module NGF := UOTCompareFacts GranularName.
+    Module NVNF := UOTCompareFacts IntermediateName.
     #[local] Hint Rewrite NGF.compare_eq_iff NVNF.compare_eq_iff : cmp_conc.
     #[local] Hint Extern 1 => cmp_by NGF.compare_antisym : cmp_conc.
     #[local] Hint Extern 1 => cmp_by NVNF.compare_antisym : cmp_conc.
@@ -123,11 +123,11 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
 
       Definition compare (x y : t) : comparison :=
         match x, y with
-        | Granular n1 w1, Granular n2 w2 => NG.compare (n1, w1) (n2, w2)
+        | Granular n1 w1, Granular n2 w2 => GranularName.compare (n1, w1) (n2, w2)
         | Granular _ _, Intermediate _ _ _ => Lt
         | Intermediate _ _ _, Granular _ _ => Gt
         | Intermediate n1 v1 m1, Intermediate n2 v2 m2 =>
-            NVN.compare (n1, (v1, m1)) (n2, (v2, m2))
+            IntermediateName.compare (n1, (v1, m1)) (n2, (v2, m2))
         end.
 
       Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.

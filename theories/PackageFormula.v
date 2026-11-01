@@ -82,7 +82,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
   #[local] Hint Extern 1 => cmp_by NF.compare_antisym : cmp_pkgf.
   #[local] Hint Extern 1 => cmp_by NF.compare_lt_trans : cmp_pkgf.
 
-  Module FComp <: ComparableType.
+  Module PackageFormulaComp <: ComparableType.
     Definition t := Formula.
     Definition rank (psi : Formula) : nat :=
       match psi with
@@ -146,15 +146,15 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       - exact (lex_lt_trans compare_eq_iff (IHa _ _) (IHb _ _) H1 H2).
       - exact (IHa _ _ H1 H2).
     Qed.
-  End FComp.
-  Module FOT := UOTFromCompare FComp.
+  End PackageFormulaComp.
+  Module PackageFormulaOT := UOTFromCompare PackageFormulaComp.
 
-  Module Dependee := FOT.
+  Module Dependee := PackageFormulaOT.
   Module DependencyElt := PairUOT Package Dependee.
   Module DependencyRel := FSetUOT DependencyElt.
-  Module PackageFormulaSet := FSetUOT FOT.
+  Module PackageFormulaSet := FSetUOT PackageFormulaOT.
 
-  Module SOfd := SetOps FOT DependencyElt PackageFormulaSet DependencyRel.
+  Module SOfd := SetOps PackageFormulaOT DependencyElt PackageFormulaSet DependencyRel.
   Definition depEdges (q : Package.t) (psis : PackageFormulaSet.t) : DependencyRel.t :=
     SOfd.map (fun psi => (q, psi)) psis.
 
@@ -169,9 +169,9 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
 
   Module Reduction.
     Module DepF := UOTCompareFacts Source.Dependee.
-    Module FList := ListComp FComp.
-    Module FListOT := UOTFromCompare FList.
-    Module FListF := UOTCompareFacts FListOT.
+    Module SpineComp := ListComp PackageFormulaComp.
+    Module SpineOT := UOTFromCompare SpineComp.
+    Module FListF := UOTCompareFacts SpineOT.
     #[local] Hint Rewrite DepF.compare_eq_iff FListF.compare_eq_iff : cmp_pkgf.
     #[local] Hint Extern 1 => cmp_by DepF.compare_antisym : cmp_pkgf.
     #[local] Hint Extern 1 => cmp_by FListF.compare_antisym : cmp_pkgf.
@@ -189,7 +189,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         | Orig n1, Orig n2 => N.compare n1 n2
         | Orig _, Disjunct _ => Lt
         | Disjunct _, Orig _ => Gt
-        | Disjunct chis1, Disjunct chis2 => FListOT.compare chis1 chis2
+        | Disjunct chis1, Disjunct chis2 => SpineOT.compare chis1 chis2
         end.
 
       Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.

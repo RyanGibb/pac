@@ -12,7 +12,7 @@ End ArchParam.
 Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Module A := AP.A.
 
-  Inductive NameArch : Type :=
+  Inductive ReducedQualifier : Type :=
   | QAArch (alpha : A.t)
   | QAExact (alpha : A.t)
   | QAAny
@@ -23,8 +23,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   #[local] Hint Extern 1 => cmp_by AF.compare_antisym : cmp_debma.
   #[local] Hint Extern 1 => cmp_by AF.compare_lt_trans : cmp_debma.
 
-  Module NameArchComp <: ComparableType.
-    Definition t := NameArch.
+  Module ReducedQualifierComp <: ComparableType.
+    Definition t := ReducedQualifier.
     Definition compare (x y : t) : comparison :=
       match x, y with
       | QAArch a1, QAArch a2 => A.compare a1 a2
@@ -45,10 +45,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Lemma compare_lt_trans : forall x y z,
         compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
     Proof. cmp_lt_trans cmp_debma. Qed.
-  End NameArchComp.
-  Module NameArchOT := UOTFromCompare NameArchComp.
+  End ReducedQualifierComp.
+  Module ReducedQualifierOT := UOTFromCompare ReducedQualifierComp.
 
-  Module QualifiedName := PairUOT N NameArchOT.
+  Module QualifiedName := PairUOT N ReducedQualifierOT.
   Module NF := UOTCompareFacts N.
   Module MG <: NameGroup QualifiedName.
     Definition groupEq (m n : QualifiedName.t) : bool :=
@@ -80,7 +80,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
   End MG.
 
-  Lemma groupEq_iff : forall (m n : N.t) (y y' : NameArch),
+  Lemma groupEq_iff : forall (m n : N.t) (y y' : ReducedQualifier),
       MG.groupEq (m, y) (n, y') = true <-> m = n.
   Proof.
     intros m n y y'; unfold MG.groupEq; cbn [fst].
@@ -109,7 +109,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   | MASame
   | MAAllowed.
 
-  Module MCComp <: ComparableType.
+  Module ClassComp <: ComparableType.
     Definition t := MAClass.
     Definition compare (x y : t) : comparison :=
       match x, y with
@@ -125,13 +125,13 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Lemma compare_lt_trans : forall x y z,
         compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
     Proof. cmp_lt_trans cmp_debma. Qed.
-  End MCComp.
-  Module MCOT := UOTFromCompare MCComp.
+  End ClassComp.
+  Module ClassOT := UOTFromCompare ClassComp.
 
-  Module ClassElt := PairUOT Package MCOT.
+  Module ClassElt := PairUOT Package ClassOT.
   Module ClassRel := FSetUOT ClassElt.
 
-  Module ClassRelFibred := FibredRel Package MCOT ClassElt ClassRel.
+  Module ClassRelFibred := FibredRel Package ClassOT ClassElt ClassRel.
   Definition classOf (mu : ClassRel.t) (p : Package.t) : MAClass :=
     match ClassRel.min_elt (ClassRelFibred.tailFibre mu p) with
     | Some e => snd e
@@ -144,7 +144,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   | QNative
   | QExact (alpha : A.t).
 
-  Module QualComp <: ComparableType.
+  Module ArchitectureQualifierComp <: ComparableType.
     Definition t := Qual.
     Definition compare (x y : t) : comparison :=
       match x, y with
@@ -166,10 +166,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Lemma compare_lt_trans : forall x y z,
         compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
     Proof. cmp_lt_trans cmp_debma. Qed.
-  End QualComp.
-  Module QualOT := UOTFromCompare QualComp.
+  End ArchitectureQualifierComp.
+  Module ArchitectureQualifierOT := UOTFromCompare ArchitectureQualifierComp.
 
-  Module Atom := TripleUOT N QualOT Deb.Ver.FOT.
+  Module Atom := TripleUOT N ArchitectureQualifierOT Deb.Ver.VersionFormulaOT.
 
   Definition aname (a : Atom.t) : N.t := fst a.
   Definition aqual (a : Atom.t) : Qual := fst (snd a).
@@ -186,7 +186,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Module DependencyElt := PairUOT Package Clause.
   Module DependencyRel := FSetUOT DependencyElt.
 
-  Module Provided := PairUOT N Deb.DTOT.
+  Module Provided := PairUOT N Deb.ProvidedVersionOT.
   Module ProvidesElt := PairUOT Package Provided.
   Module ProvidesRel := FSetUOT ProvidesElt.
 
@@ -434,7 +434,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       cbn beta; setoid_rewrite SOccf.mem_ofList; reflexivity.
     Qed.
 
-    Lemma provElt_eq : forall (p p' : Package.t) (m m' : N.t) (y y' : NameArch)
+    Lemma provElt_eq : forall (p p' : Package.t) (m m' : N.t) (y y' : ReducedQualifier)
         (v v' : Deb.DTop),
         (embedPkg p, ((m, y), v)) = (embedPkg p', ((m', y'), v')) ->
         p = p' /\ m = m' /\ y = y' /\ v = v'.
@@ -1058,7 +1058,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Module NSet := FSetUOT N.
       Module PackageSetFibred := FibredRel NArchitecture V Package PackageSet.
       Module PackageSetKeyPreimage := PreimageOfKeys N Package NSet PackageSet.
-      Module ProvidesRelFibred := FibredLabelledRel Package N Deb.DTOT ProvidesElt ProvidesRel.
+      Module ProvidesRelFibred := FibredLabelledRel Package N Deb.ProvidedVersionOT ProvidesElt ProvidesRel.
       Module ProvidesRelKeyPreimage := PreimageOfKeys N ProvidesElt NSet ProvidesRel.
       Module DependencyRelFibred := FibredRel Package Clause DependencyElt DependencyRel.
       Module ConflictRelFibred := FibredRel Package Atom ConflictElt ConflictRel.
@@ -1299,7 +1299,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Qed.
 
       Lemma reduceProv_node : forall I ns I'
-          (q : Deb.Package.t) (m : N.t) (y : NameArch) v,
+          (q : Deb.Package.t) (m : N.t) (y : ReducedQualifier) v,
           ProvSubInst I ns I' -> NSet.In m ns ->
           (Deb.ProvidesRel.In (q, ((m, y), v))
              (reduceProv (inst_real I) (inst_prov I) (inst_cls I)) <->
@@ -1427,7 +1427,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           rewrite (implConfOf_pkg mu p); exact He.
       Qed.
 
-      Lemma match_name : forall R Pi mu (p : Package.t) (m : N.t) (y : NameArch) phi,
+      Lemma match_name : forall R Pi mu (p : Package.t) (m : N.t) (y : ReducedQualifier) phi,
           PackageSet.In p R ->
           Deb.Match (reduceProv R Pi mu) (embedPkg p) ((m, y), phi) ->
           m = pname p \/ exists v, ProvidesRel.In (p, (m, v)) Pi.
@@ -1730,7 +1730,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Qed.
 
       Theorem versions_lookupOrig_pseudo :
-        forall I (n : N.t) (y : NameArch),
+        forall I (n : N.t) (y : ReducedQualifier),
           (forall b, y <> QAArch b) ->
           Deb.Reduction.versions (reduceInst I)
             (Deb.Reduction.Name.Orig (n, y)) =
@@ -1912,7 +1912,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Qed.
 
       Theorem dependees_lookupDisjunct :
-        forall I (alpha : A.t) Al (m : N.t) (y : NameArch)
+        forall I (alpha : A.t) Al (m : N.t) (y : ReducedQualifier)
                (phi : Deb.Ver.Formula),
           Deb.Reduction.dependees (reduceInst I)
             (Deb.Reduction.Name.Disjunct (reduceClause alpha Al),
@@ -1946,7 +1946,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Proof. intros; reflexivity. Qed.
 
       Theorem dependees_lookupSoft :
-        forall I (alpha : A.t) Al (m : N.t) (y : NameArch)
+        forall I (alpha : A.t) Al (m : N.t) (y : ReducedQualifier)
                (phi : Deb.Ver.Formula),
           Deb.Reduction.dependees (reduceInst I)
             (Deb.Reduction.Name.Soft (reduceClause alpha Al),

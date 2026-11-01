@@ -440,7 +440,7 @@ Definition kC : NpmS.SourceName.t := (npmC, npmC).
 Definition kX : NpmS.SourceName.t := (npmX, npmC).
 
 Definition npmShow (h : NpmS.Reduced.Dependee.t)
-  : NpmS.Nm.t * list NpmS.Vs.t :=
+  : NpmS.Name.t * list NpmS.Version.t :=
   (fst h, NpmS.Reduced.VSet.elements (snd h)).
 
 Definition npmDeps (I : NpmS.Inst) (s : NpmS.Reduced.Package.t) :=
@@ -486,31 +486,31 @@ Definition npmInstOvr : NpmS.Inst :=
 
 Example npm_versions_computes :
   NpmS.Reduced.VSet.elements
-    (NpmS.Reduction.versions npmInst (NpmS.Nm.Granular kC 2))
-  = NpmS.Vs.Orig 2 :: nil.
+    (NpmS.Reduction.versions npmInst (NpmS.Name.Granular kC 2))
+  = NpmS.Version.Orig 2 :: nil.
 Proof. reflexivity. Qed.
 
 Example npm_entry_edges_computes :
-  npmDeps npmInst (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
-  = (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1 :: nil)
-    :: (NpmS.Nm.Intermediate kA 1 kC,
-        NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: nil) :: nil.
+  npmDeps npmInst (NpmS.Name.Granular kA 1, NpmS.Version.Orig 1)
+  = (NpmS.Name.Intermediate kA 1 kB, NpmS.Version.Orig 1 :: nil)
+    :: (NpmS.Name.Intermediate kA 1 kC,
+        NpmS.Version.Orig 2 :: NpmS.Version.Orig 3 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
 Example npm_slot_versions_computes :
   NpmS.Reduced.VSet.elements
-    (NpmS.Reduction.versions npmInst (NpmS.Nm.Intermediate kA 1 kC))
-  = NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: nil.
+    (NpmS.Reduction.versions npmInst (NpmS.Name.Intermediate kA 1 kC))
+  = NpmS.Version.Orig 2 :: NpmS.Version.Orig 3 :: nil.
 Proof. reflexivity. Qed.
 
 (* the directory reads B's descriptor too, which every directory with it
    shares *)
 Example npm_peer_edge_computes :
-  npmDeps npmInst (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1)
-  = (NpmS.Nm.Granular kB 1, NpmS.Vs.Orig 1 :: nil)
-    :: (NpmS.Nm.Link kA 1 kB 1 npmC,
-        NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: nil)
-    :: (NpmS.Nm.Desc npmB npmB 1, NpmS.Vs.Orig 1 :: nil) :: nil.
+  npmDeps npmInst (NpmS.Name.Intermediate kA 1 kB, NpmS.Version.Orig 1)
+  = (NpmS.Name.Granular kB 1, NpmS.Version.Orig 1 :: nil)
+    :: (NpmS.Name.Link kA 1 kB 1 npmC,
+        NpmS.Version.Orig 1 :: NpmS.Version.Orig 2 :: nil)
+    :: (NpmS.Name.Desc npmB npmB 1, NpmS.Version.Orig 1 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
 (* The root A has no directory for C, but installs one for B's peer, or
@@ -518,8 +518,8 @@ Proof. reflexivity. Qed.
 Example npm_auto_versions_computes :
   NpmS.Reduced.VSet.elements
     (NpmS.Reduction.versions npmInstAuto
-       (NpmS.Nm.Intermediate kA 1 kC))
-  = NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: NpmS.Vs.Bot :: nil.
+       (NpmS.Name.Intermediate kA 1 kC))
+  = NpmS.Version.Orig 1 :: NpmS.Version.Orig 2 :: NpmS.Version.Orig 3 :: NpmS.Version.Bot :: nil.
 Proof. reflexivity. Qed.
 
 (* the same peer, one the root may not install (p_root false, as for a
@@ -531,39 +531,39 @@ Definition npmInstExt : NpmS.Inst :=
 
 Example npm_ext_versions_computes :
   NpmS.Reduced.VSet.elements
-    (NpmS.Reduction.versions npmInstExt (NpmS.Nm.Intermediate kA 1 kC))
-  = NpmS.Vs.Bot :: nil.
+    (NpmS.Reduction.versions npmInstExt (NpmS.Name.Intermediate kA 1 kC))
+  = NpmS.Version.Bot :: nil.
 Proof. reflexivity. Qed.
 
 Example npm_auto_edge_computes :
-  npmDeps npmInstAuto (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1)
-  = (NpmS.Nm.Granular kB 1, NpmS.Vs.Orig 1 :: nil)
-    :: (NpmS.Nm.Link kA 1 kB 1 npmC,
-        NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: nil)
-    :: (NpmS.Nm.Desc npmB npmB 1, NpmS.Vs.Orig 1 :: nil) :: nil.
+  npmDeps npmInstAuto (NpmS.Name.Intermediate kA 1 kB, NpmS.Version.Orig 1)
+  = (NpmS.Name.Granular kB 1, NpmS.Version.Orig 1 :: nil)
+    :: (NpmS.Name.Link kA 1 kB 1 npmC,
+        NpmS.Version.Orig 1 :: NpmS.Version.Orig 2 :: nil)
+    :: (NpmS.Name.Desc npmB npmB 1, NpmS.Version.Orig 1 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
 Example npm_link_holder_computes :
-  npmDeps npmInst (NpmS.Nm.Link kA 1 kB 1 npmC, NpmS.Vs.Orig 2)
-  = (NpmS.Nm.Intermediate kA 1 kC, NpmS.Vs.Orig 2 :: nil)
-    :: (NpmS.Nm.Sight kB 1 npmC, NpmS.Vs.Orig 2 :: NpmS.Vs.Free :: nil)
+  npmDeps npmInst (NpmS.Name.Link kA 1 kB 1 npmC, NpmS.Version.Orig 2)
+  = (NpmS.Name.Intermediate kA 1 kC, NpmS.Version.Orig 2 :: nil)
+    :: (NpmS.Name.Sight kB 1 npmC, NpmS.Version.Orig 2 :: NpmS.Version.Free :: nil)
     :: nil.
 Proof. reflexivity. Qed.
 
 (* the same peer, optional: the root's C may be left empty, and the link
    at Bot reads it so *)
 Example npm_optional_edge_computes :
-  npmDeps npmInstOpt (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1)
-  = (NpmS.Nm.Granular kB 1, NpmS.Vs.Orig 1 :: nil)
-    :: (NpmS.Nm.Link kA 1 kB 1 npmC,
-        NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: NpmS.Vs.Bot :: nil)
-    :: (NpmS.Nm.Desc npmB npmB 1, NpmS.Vs.Orig 1 :: nil) :: nil.
+  npmDeps npmInstOpt (NpmS.Name.Intermediate kA 1 kB, NpmS.Version.Orig 1)
+  = (NpmS.Name.Granular kB 1, NpmS.Version.Orig 1 :: nil)
+    :: (NpmS.Name.Link kA 1 kB 1 npmC,
+        NpmS.Version.Orig 1 :: NpmS.Version.Orig 2 :: NpmS.Version.Bot :: nil)
+    :: (NpmS.Name.Desc npmB npmB 1, NpmS.Version.Orig 1 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
 Example npm_optional_bot_computes :
-  npmDeps npmInstOpt (NpmS.Nm.Link kA 1 kB 1 npmC, NpmS.Vs.Bot)
-  = (NpmS.Nm.Intermediate kA 1 kC, NpmS.Vs.Bot :: nil)
-    :: (NpmS.Nm.Sight kB 1 npmC, NpmS.Vs.Bot :: NpmS.Vs.Free :: nil) :: nil.
+  npmDeps npmInstOpt (NpmS.Name.Link kA 1 kB 1 npmC, NpmS.Version.Bot)
+  = (NpmS.Name.Intermediate kA 1 kC, NpmS.Version.Bot :: nil)
+    :: (NpmS.Name.Sight kB 1 npmC, NpmS.Version.Bot :: NpmS.Version.Free :: nil) :: nil.
 Proof. reflexivity. Qed.
 
 (* B@1 peers on C and depends on D@1, which peers on C too: B's copy holds
@@ -582,14 +582,14 @@ Definition npmInstChain : NpmS.Inst :=
 
 Example npm_peer_local_computes :
   NpmS.Reduced.VSet.elements
-    (NpmS.Reduction.versions npmInstChain (NpmS.Nm.Intermediate kB 1 kC))
+    (NpmS.Reduction.versions npmInstChain (NpmS.Name.Intermediate kB 1 kC))
   = nil.
 Proof. reflexivity. Qed.
 
 Example npm_chain_computes :
-  npmDeps npmInstChain (NpmS.Nm.Link kB 1 kD 1 npmC, NpmS.Vs.Orig 2)
-  = (NpmS.Nm.Sight kB 1 npmC, NpmS.Vs.Orig 2 :: nil)
-    :: (NpmS.Nm.Sight kD 1 npmC, NpmS.Vs.Orig 2 :: NpmS.Vs.Free :: nil)
+  npmDeps npmInstChain (NpmS.Name.Link kB 1 kD 1 npmC, NpmS.Version.Orig 2)
+  = (NpmS.Name.Sight kB 1 npmC, NpmS.Version.Orig 2 :: nil)
+    :: (NpmS.Name.Sight kD 1 npmC, NpmS.Version.Orig 2 :: NpmS.Version.Free :: nil)
     :: nil.
 Proof. reflexivity. Qed.
 
@@ -602,13 +602,13 @@ Definition npmInstSelf : NpmS.Inst :=
 
 Example npm_self_versions_computes :
   NpmS.Reduced.VSet.elements
-    (NpmS.Reduction.versions npmInstSelf (NpmS.Nm.Link kB 1 kD 1 npmB))
-  = NpmS.Vs.Orig 1 :: nil.
+    (NpmS.Reduction.versions npmInstSelf (NpmS.Name.Link kB 1 kD 1 npmB))
+  = NpmS.Version.Orig 1 :: nil.
 Proof. reflexivity. Qed.
 
 Example npm_self_computes :
-  npmDeps npmInstSelf (NpmS.Nm.Link kB 1 kD 1 npmB, NpmS.Vs.Orig 1)
-  = (NpmS.Nm.Sight kD 1 npmB, NpmS.Vs.Orig 1 :: NpmS.Vs.Free :: nil) :: nil.
+  npmDeps npmInstSelf (NpmS.Name.Link kB 1 kD 1 npmB, NpmS.Version.Orig 1)
+  = (NpmS.Name.Sight kD 1 npmB, NpmS.Version.Orig 1 :: NpmS.Version.Free :: nil) :: nil.
 Proof. reflexivity. Qed.
 
 (* B@1 depends on D@1, which peers on C: B, not the root, neither holds
@@ -622,38 +622,38 @@ Definition npmInstSkip : NpmS.Inst :=
 
 Example npm_skip_computes :
   NpmS.Reduced.VSet.elements
-    (NpmS.Reduction.versions npmInstSkip (NpmS.Nm.Link kB 1 kD 1 npmC))
+    (NpmS.Reduction.versions npmInstSkip (NpmS.Name.Link kB 1 kD 1 npmC))
   = nil.
 Proof. reflexivity. Qed.
 
 Example npm_skip_versions_computes :
   NpmS.Reduced.VSet.elements
-    (NpmS.Reduction.versions npmInstSkip (NpmS.Nm.Intermediate kB 1 kC))
+    (NpmS.Reduction.versions npmInstSkip (NpmS.Name.Intermediate kB 1 kC))
   = nil.
 Proof. reflexivity. Qed.
 
 Example npm_root_peer_computes :
-  npmDeps npmInstRootPeer (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
-  = (NpmS.Nm.Intermediate kA 1 kC, NpmS.Vs.Orig 1 :: NpmS.Vs.Orig 2 :: nil)
-    :: (NpmS.Nm.Intermediate kA 1 kC,
-        NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: nil) :: nil.
+  npmDeps npmInstRootPeer (NpmS.Name.Granular kA 1, NpmS.Version.Orig 1)
+  = (NpmS.Name.Intermediate kA 1 kC, NpmS.Version.Orig 1 :: NpmS.Version.Orig 2 :: nil)
+    :: (NpmS.Name.Intermediate kA 1 kC,
+        NpmS.Version.Orig 2 :: NpmS.Version.Orig 3 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
 Example npm_root_peer_optional_computes :
-  npmDeps npmInstRootPeerOpt (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
-  = npmDeps npmInstRootPeer (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1).
+  npmDeps npmInstRootPeerOpt (NpmS.Name.Granular kA 1, NpmS.Version.Orig 1)
+  = npmDeps npmInstRootPeer (NpmS.Name.Granular kA 1, NpmS.Version.Orig 1).
 Proof. reflexivity. Qed.
 
 Example npm_root_peer_optional_bare_computes :
-  npmDeps npmInstRootPeerOptBare (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
-  = (NpmS.Nm.Intermediate kA 1 kB, NpmS.Vs.Orig 1 :: nil) :: nil.
+  npmDeps npmInstRootPeerOptBare (NpmS.Name.Granular kA 1, NpmS.Version.Orig 1)
+  = (NpmS.Name.Intermediate kA 1 kB, NpmS.Version.Orig 1 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
 Example npm_alias_computes :
-  npmDeps npmInstAlias (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
-  = (NpmS.Nm.Intermediate kA 1 kC,
-     NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: nil)
-    :: (NpmS.Nm.Intermediate kA 1 kX, NpmS.Vs.Orig 1 :: nil) :: nil.
+  npmDeps npmInstAlias (NpmS.Name.Granular kA 1, NpmS.Version.Orig 1)
+  = (NpmS.Name.Intermediate kA 1 kC,
+     NpmS.Version.Orig 2 :: NpmS.Version.Orig 3 :: nil)
+    :: (NpmS.Name.Intermediate kA 1 kX, NpmS.Version.Orig 1 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
 (* B@1 depends on C in [2,4) and peers on C in [1,3) (a peer with
@@ -667,31 +667,31 @@ Definition npmInstDp : NpmS.Inst :=
 
 Example npm_dp_link_computes :
   NpmS.Reduced.VSet.elements
-    (NpmS.Reduction.versions npmInstDp (NpmS.Nm.Link kA 1 kB 1 npmC))
-  = NpmS.Vs.Orig 2 :: NpmS.Vs.Bot :: nil.
+    (NpmS.Reduction.versions npmInstDp (NpmS.Name.Link kA 1 kB 1 npmC))
+  = NpmS.Version.Orig 2 :: NpmS.Version.Bot :: nil.
 Proof. reflexivity. Qed.
 
 Example npm_dp_offered_computes :
-  npmDeps npmInstDp (NpmS.Nm.Link kA 1 kB 1 npmC, NpmS.Vs.Orig 2)
-  = (NpmS.Nm.Intermediate kA 1 kC, NpmS.Vs.Orig 2 :: nil)
-    :: (NpmS.Nm.Intermediate kB 1 kC, NpmS.Vs.Bot :: nil)
-    :: (NpmS.Nm.Sight kB 1 npmC, NpmS.Vs.Orig 2 :: NpmS.Vs.Free :: nil)
+  npmDeps npmInstDp (NpmS.Name.Link kA 1 kB 1 npmC, NpmS.Version.Orig 2)
+  = (NpmS.Name.Intermediate kA 1 kC, NpmS.Version.Orig 2 :: nil)
+    :: (NpmS.Name.Intermediate kB 1 kC, NpmS.Version.Bot :: nil)
+    :: (NpmS.Name.Sight kB 1 npmC, NpmS.Version.Orig 2 :: NpmS.Version.Free :: nil)
     :: nil.
 Proof. reflexivity. Qed.
 
 Example npm_dp_own_computes :
-  npmDeps npmInstDp (NpmS.Nm.Link kA 1 kB 1 npmC, NpmS.Vs.Bot)
-  = (NpmS.Nm.Intermediate kA 1 kC, NpmS.Vs.Bot :: nil)
-    :: (NpmS.Nm.Intermediate kB 1 kC,
-        NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: nil)
-    :: (NpmS.Nm.Sight kB 1 npmC,
-        NpmS.Vs.Orig 2 :: NpmS.Vs.Orig 3 :: NpmS.Vs.Free :: nil)
+  npmDeps npmInstDp (NpmS.Name.Link kA 1 kB 1 npmC, NpmS.Version.Bot)
+  = (NpmS.Name.Intermediate kA 1 kC, NpmS.Version.Bot :: nil)
+    :: (NpmS.Name.Intermediate kB 1 kC,
+        NpmS.Version.Orig 2 :: NpmS.Version.Orig 3 :: nil)
+    :: (NpmS.Name.Sight kB 1 npmC,
+        NpmS.Version.Orig 2 :: NpmS.Version.Orig 3 :: NpmS.Version.Free :: nil)
     :: nil.
 Proof. reflexivity. Qed.
 
 Example npm_override_computes :
-  npmDeps npmInstOvr (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
-  = (NpmS.Nm.Intermediate kA 1 kC, NpmS.Vs.Orig 3 :: nil) :: nil.
+  npmDeps npmInstOvr (NpmS.Name.Granular kA 1, NpmS.Version.Orig 1)
+  = (NpmS.Name.Intermediate kA 1 kC, NpmS.Version.Orig 3 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
 Definition npmInstOvrAlias (o : list (nat * NpmS.Range)) : NpmS.Inst :=
@@ -700,14 +700,14 @@ Definition npmInstOvrAlias (o : list (nat * NpmS.Range)) : NpmS.Inst :=
 
 Example npm_override_key_computes :
   npmDeps (npmInstOvrAlias ((npmX, npmEq 1) :: nil))
-    (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
-  = (NpmS.Nm.Intermediate kA 1 (npmX, npmX), NpmS.Vs.Orig 1 :: nil) :: nil.
+    (NpmS.Name.Granular kA 1, NpmS.Version.Orig 1)
+  = (NpmS.Name.Intermediate kA 1 (npmX, npmX), NpmS.Version.Orig 1 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
 Example npm_override_target_computes :
   npmDeps (npmInstOvrAlias ((npmC, npmEq 3) :: nil))
-    (NpmS.Nm.Granular kA 1, NpmS.Vs.Orig 1)
-  = (NpmS.Nm.Intermediate kA 1 kX, NpmS.Vs.Orig 1 :: nil) :: nil.
+    (NpmS.Name.Granular kA 1, NpmS.Version.Orig 1)
+  = (NpmS.Name.Intermediate kA 1 kX, NpmS.Version.Orig 1 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
 Module NpmPreVM <: SemverMatch Nat_as_OT.
@@ -750,14 +750,14 @@ Definition nplInst : NplS.Inst :=
 
 Example npl_edges :
   List.map (fun e => (NplS.e_dir e, NplS.e_name e, NplS.e_optional e))
-    (NplS.edgesOf nplInst NplS.Occ.Proj) =
+    (NplS.edgesOf nplInst NplS.Occupant.Proj) =
   (npmX, npmB, false) :: (npmC, npmC, true) :: nil.
 Proof. reflexivity. Qed.
 
 Example npl_key :
   NplS.Pl.VSet.elements
     (NplS.Pl.Source.versions (NplS.Reduction.placeRepo nplInst) npmX) =
-  NplS.Occ.Reg npmB 1 :: nil.
+  NplS.Occupant.Reg npmB 1 :: nil.
 Proof. reflexivity. Qed.
 
 Definition nplInstOvr (o : list (nat * NplS.Range)) : NplS.Inst :=
@@ -768,16 +768,16 @@ Definition nplInstOvr (o : list (nat * NplS.Range)) : NplS.Inst :=
     (NplS.MkDep npmX npmB ((NplS.COp OpEq 2 :: nil) :: nil) false false :: nil)
     nil.
 
-Definition nplAccepts (I : NplS.Inst) : list (list NplS.Occ.t) :=
+Definition nplAccepts (I : NplS.Inst) : list (list NplS.Occupant.t) :=
   List.map (fun e => NplS.Pl.VSet.elements (NplS.Reduction.accepts I e))
-    (NplS.edgesOf I NplS.Occ.Proj).
+    (NplS.edgesOf I NplS.Occupant.Proj).
 
 Example npl_override_key :
   nplAccepts (nplInstOvr ((npmX, (NplS.COp OpEq 1 :: nil) :: nil) :: nil)) =
-  (NplS.Occ.Reg npmX 1 :: nil) :: nil.
+  (NplS.Occupant.Reg npmX 1 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
 Example npl_override_target :
   nplAccepts (nplInstOvr ((npmB, (NplS.COp OpEq 1 :: nil) :: nil) :: nil)) =
-  (NplS.Occ.Reg npmB 2 :: nil) :: nil.
+  (NplS.Occupant.Reg npmB 2 :: nil) :: nil.
 Proof. reflexivity. Qed.

@@ -51,7 +51,7 @@ module Make () = struct
      dependency, so the same node is asked for over and over.  A run over a
      name whose versions grow could take in one listed later, so there the
      versions are handed over as points. *)
-  let dependencies st cache n (u : Np.Vs.version) =
+  let dependencies st cache n (u : Np.Version.version) =
     Pac_common.Tbl.memo cache (n, u) (fun () ->
         List.map
           (fun ((m, vs) : T.Dependee.t) ->
@@ -152,7 +152,7 @@ module Make () = struct
   let check_answer st root_n (root : string * string) sol =
     let versions m = T.VSet.ofList (Lookup.versions st m) in
     let dependees p = T.DependeeSet.ofList (Lookup.dependees st p) in
-    let q = T.rootQuery (root_n, Np.Vs.Orig (snd root)) in
+    let q = T.rootQuery (root_n, Np.Version.Orig (snd root)) in
     match T.check versions dependees q (T.PackageSet.ofList sol) with
     | None -> ()
     | Some f ->
@@ -168,7 +168,7 @@ module Make () = struct
     let h = Order.hooks order st in
     (* dependencies' memo, whose size is the lookup count the answer reports *)
     let asked = Hashtbl.create 65536 in
-    let root_n = Np.Nm.Granular ((fst root, fst root), snd root) in
+    let root_n = Np.Name.Granular ((fst root, fst root), snd root) in
     (* Where a name's versions are fixed, a depender's block of versions may
        run up to the next listed one, as [runs] does for a dependee's, so
        ranges stay few. *)
@@ -176,7 +176,7 @@ module Make () = struct
     let r =
       PG.solve ?next:h.Pac_common.Order.next ?choose:h.Pac_common.Order.choose
         ~dense ~vers:(Lookup.versions st) ~deps:(dependencies st asked)
-        [ (root_n, PG.Ranges.of_list [ Np.Vs.Orig (snd root) ]) ]
+        [ (root_n, PG.Ranges.of_list [ Np.Version.Orig (snd root) ]) ]
     in
     h.Pac_common.Order.finish ();
     let r =

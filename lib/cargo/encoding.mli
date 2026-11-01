@@ -28,20 +28,20 @@ module type S = sig
   val msrv_ok : string -> string option -> bool
   val granularity_of : string -> string
   val fset_of : string list -> Cg.FSet.t
-  val xentry : Cargo_parse.fentry -> Cg.FEntry.t
+  val xentry : Cargo_parse.fentry -> Cg.FeatureEntry.t
   val slots_of : root:bool -> Cargo_parse.ver -> Cargo_parse.dep list
   val slot_data : Cargo_parse.dep -> Cg.DependencyRecord.t
   val site_key : Cargo_parse.dep -> Cg.Site.t
 
   module PName : sig
-    type t = Cg.Reduction.NPlus.t
+    type t = Cg.Reduction.Name.t
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit
   end
 
   module PVersion : sig
-    type t = { msrv : bool; v : Cg.Reduction.VPlus.t }
+    type t = { msrv : bool; v : Cg.Reduction.Version.t }
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit

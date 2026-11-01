@@ -78,7 +78,7 @@ module Make (AP : Tables.ARCH) = struct
      provider of (m, x) is either a group member of m (reals, implicit group
      / explicit-qualifier / foreign / :any provides) or a declared provider
      of m. *)
-  let sel_preimages_uncached tables (mn : string * DMA.coq_NameArch) =
+  let sel_preimages_uncached tables (mn : string * DMA.coq_ReducedQualifier) =
     let m = fst mn in
     let r_ma = ma_group_of_names tables [ m ] in
     let pi_decl = ma_prov_of_names tables [ m ] in
@@ -257,7 +257,7 @@ module Make (AP : Tables.ARCH) = struct
       type t = {
         pos : int;
         v : DMA.Deb.Reduction.Version.t;
-        tgt : (string * DMA.coq_NameArch) option;
+        tgt : (string * DMA.coq_ReducedQualifier) option;
       }
 
       (* A selector candidate as the package it installs: RefReal names no

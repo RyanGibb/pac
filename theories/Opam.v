@@ -216,7 +216,7 @@ Module Opam (N V X Y E : UsualOrderedType).
     #[local] Hint Extern 1 => cmp_by NF.compare_lt_trans : cmp_opam.
     #[local] Hint Extern 1 => cmp_by VF'.compare_lt_trans : cmp_opam.
 
-    Module TName.
+    Module Name.
       Inductive name : Type :=
       | Root
       | Real (n : N.t)
@@ -244,10 +244,10 @@ Module Opam (N V X Y E : UsualOrderedType).
       Lemma compare_lt_trans : forall x y z,
           compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
       Proof. cmp_lt_trans cmp_opam. Qed.
-    End TName.
-    Module TNOT := UOTFromCompare TName.
+    End Name.
+    Module NameOT := UOTFromCompare Name.
 
-    Module TVer.
+    Module Version.
       Inductive version : Type :=
       | RV (v : V.t)
       | UnitV
@@ -275,20 +275,20 @@ Module Opam (N V X Y E : UsualOrderedType).
       Lemma compare_lt_trans : forall x y z,
           compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
       Proof. cmp_lt_trans cmp_opam. Qed.
-    End TVer.
-    Module TVOT := UOTFromCompare TVer.
+    End Version.
+    Module VersionOT := UOTFromCompare Version.
 
-    Module PF := PackageFormula TNOT TVOT.
+    Module PF := PackageFormula NameOT VersionOT.
 
     Definition embedPkg (p : Package.t) : PF.Package.t :=
-      (TName.Real (fst p), TVer.RV (snd p)).
-    Definition rootPkg : PF.Package.t := (TName.Root, TVer.UnitV).
+      (Name.Real (fst p), Version.RV (snd p)).
+    Definition rootPkg : PF.Package.t := (Name.Root, Version.UnitV).
 
     Module SOpt := SetOps Package PF.Package PackageSet PF.PackageSet.
     Definition embedSet (S : PackageSet.t) : PF.PackageSet.t :=
       SOpt.map embedPkg S.
 
-    Module SOvv := SetOps V TVOT VSet PF.VSet.
+    Module SOvv := SetOps V VersionOT VSet PF.VSet.
 
     Definition pinOKb (Pins : PackageSet.t) (p : Package.t) : bool :=
       PackageSet.for_all
@@ -310,7 +310,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         (inst_real I).
 
     Definition PTrue : PF.Formula :=
-      PF.FAtom TName.Root (PF.VSet.singleton TVer.UnitV).
+      PF.FAtom Name.Root (PF.VSet.singleton Version.UnitV).
 
     Definition srcVersions (sigma : Valuation) (I : Inst) (n : N.t)
       : VSet.t :=
@@ -318,11 +318,11 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Definition versSetBy (Vq : N.t -> VSet.t) (n : N.t) (phi : VFormula)
       : PF.VSet.t :=
-      SOvv.map TVer.RV (VSet.filter (fun v => vfHolds phi v) (Vq n)).
+      SOvv.map Version.RV (VSet.filter (fun v => vfHolds phi v) (Vq n)).
 
     Fixpoint encR (Vq : N.t -> VSet.t) (g : RFormula) : PF.Formula :=
       match g with
-      | RAtom n phi => PF.FAtom (TName.Real n) (versSetBy Vq n phi)
+      | RAtom n phi => PF.FAtom (Name.Real n) (versSetBy Vq n phi)
       | RAnd a b => PF.FConj (encR Vq a) (encR Vq b)
       | ROr a b => PF.FDisj (encR Vq b) (encR Vq a)
       end.
@@ -357,7 +357,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       if defTrue sigma (fst (snd nc))
       then
         PF.FNeg
-          (PF.FAtom (TName.Real (fst nc))
+          (PF.FAtom (Name.Real (fst nc))
              (confVS Vq p (fst nc) (snd (snd nc))))
       else PTrue.
 
@@ -370,30 +370,30 @@ Module Opam (N V X Y E : UsualOrderedType).
       SOcf.filterMap
         (fun '(q, k) =>
            if Package.eq_dec q p
-           then Some (PF.FAtom (TName.Cls k)
-                        (PF.VSet.singleton (TVer.NV (fst p))))
+           then Some (PF.FAtom (Name.Cls k)
+                        (PF.VSet.singleton (Version.NV (fst p))))
            else None)
         cls.
 
     Module SOcp := SetOps ConflictClassElt PF.Package ConflictClassRel PF.PackageSet.
     Definition clsPkg (qk : ConflictClassElt.t) : PF.Package.t :=
-      (TName.Cls (snd qk), TVer.NV (fst (fst qk))).
+      (Name.Cls (snd qk), Version.NV (fst (fst qk))).
 
     Definition clsPkgs (cls : ConflictClassRel.t) : PF.PackageSet.t :=
       SOcp.map clsPkg cls.
 
-    Module SOcv := SetOps ConflictClassElt TVOT ConflictClassRel PF.VSet.
+    Module SOcv := SetOps ConflictClassElt VersionOT ConflictClassRel PF.VSet.
     Definition clsVersions (cls : ConflictClassRel.t) (k : N.t) : PF.VSet.t :=
       SOcv.filterMap
         (fun '(q, k') =>
-           if N.eq_dec k' k then Some (TVer.NV (fst q)) else None)
+           if N.eq_dec k' k then Some (Version.NV (fst q)) else None)
         cls.
 
     Definition pindForm (Vq : N.t -> VSet.t) (nvu : Package.t * Y.t)
       : PF.Formula :=
       PF.FNeg
-        (PF.FAtom (TName.Real (fst (fst nvu)))
-           (SOvv.map TVer.RV
+        (PF.FAtom (Name.Real (fst (fst nvu)))
+           (SOvv.map Version.RV
               (VSet.remove (snd (fst nvu)) (Vq (fst (fst nvu)))))).
 
     Definition pindForms (Vq : N.t -> VSet.t) (I : Inst) (p : Package.t)
@@ -412,12 +412,12 @@ Module Opam (N V X Y E : UsualOrderedType).
     Definition dependeesBy (sigma : Valuation) (Vq : N.t -> VSet.t)
         (I : Inst) (q : PF.Package.t) : PackageFormulaSet.t :=
       match q with
-      | (TName.Real n, TVer.RV v) =>
+      | (Name.Real n, Version.RV v) =>
           PackageFormulaSet.union (SOlf.ofList (depForms sigma Vq I (n, v)))
             (PackageFormulaSet.union (SOlf.ofList (cflForms sigma Vq I (n, v)))
                (PackageFormulaSet.union (clsForms (inst_cls I) (n, v))
                   (SOlf.ofList (pindForms Vq I (n, v)))))
-      | (TName.Root, TVer.UnitV) => PackageFormulaSet.singleton (rootForm sigma Vq I)
+      | (Name.Root, Version.UnitV) => PackageFormulaSet.singleton (rootForm sigma Vq I)
       | _ => PackageFormulaSet.empty
       end.
 
@@ -425,12 +425,12 @@ Module Opam (N V X Y E : UsualOrderedType).
       : PackageFormulaSet.t :=
       let R := effRepo sigma I in dependeesBy sigma (Source.versions R) I q.
 
-    Definition versions (sigma : Valuation) (I : Inst) (m : TName.t)
+    Definition versions (sigma : Valuation) (I : Inst) (m : Name.t)
       : PF.VSet.t :=
       match m with
-      | TName.Root => PF.VSet.singleton TVer.UnitV
-      | TName.Real n => SOvv.map TVer.RV (srcVersions sigma I n)
-      | TName.Cls k => clsVersions (inst_cls I) k
+      | Name.Root => PF.VSet.singleton Version.UnitV
+      | Name.Real n => SOvv.map Version.RV (srcVersions sigma I n)
+      | Name.Cls k => clsVersions (inst_cls I) k
       end.
 
     Definition reduceReal (sigma : Valuation) (I : Inst) : PF.PackageSet.t :=
@@ -454,7 +454,7 @@ Module Opam (N V X Y E : UsualOrderedType).
     Module SOtp := SetOps PF.Package Package PF.PackageSet PackageSet.
     Definition tryInvPkg (q : PF.Package.t) : option Package.t :=
       match q with
-      | (TName.Real n, TVer.RV v) => Some (n, v)
+      | (Name.Real n, Version.RV v) => Some (n, v)
       | _ => None
       end.
 
@@ -463,7 +463,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Lemma mem_versSetBy : forall Vq n phi u,
         PF.VSet.In u (versSetBy Vq n phi) <->
-        exists v, u = TVer.RV v /\ VSet.In v (Vq n) /\
+        exists v, u = Version.RV v /\ VSet.In v (Vq n) /\
                   vfHolds phi v = true.
     Proof.
       intros Vq n phi u; unfold versSetBy; rewrite SOvv.mem_map.
@@ -482,7 +482,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Lemma mem_opamResolution : forall S' n v,
         PackageSet.In (n, v) (opamResolution S') <->
-        PF.PackageSet.In (TName.Real n, TVer.RV v) S'.
+        PF.PackageSet.In (Name.Real n, Version.RV v) S'.
     Proof.
       intros S' n v; unfold opamResolution; rewrite SOtp.mem_filterMap.
       split.
@@ -490,14 +490,14 @@ Module Opam (N V X Y E : UsualOrderedType).
           destruct o as [| m | k]; destruct u as [w | | m'];
           simpl in Hf; try discriminate.
         injection Hf as -> ->; exact Hm.
-      - intro H; exists (TName.Real n, TVer.RV v); split;
+      - intro H; exists (Name.Real n, Version.RV v); split;
           [exact H | reflexivity].
     Qed.
 
     Lemma mem_clsPkgs : forall cls q,
         PF.PackageSet.In q (clsPkgs cls) <->
         exists n v k, ConflictClassRel.In ((n, v), k) cls /\
-                      q = (TName.Cls k, TVer.NV n).
+                      q = (Name.Cls k, Version.NV n).
     Proof.
       intros cls q; unfold clsPkgs; rewrite SOcp.mem_map; split.
       - intros [[[n v] k] [Hm ->]]; exists n, v, k; split;
@@ -509,7 +509,7 @@ Module Opam (N V X Y E : UsualOrderedType).
     Lemma mem_clsSel : forall cls S q,
         PF.PackageSet.In q (clsSel cls S) <->
         exists n v k, PackageSet.In (n, v) S /\ ConflictClassRel.In ((n, v), k) cls /\
-                      q = (TName.Cls k, TVer.NV n).
+                      q = (Name.Cls k, Version.NV n).
     Proof.
       intros cls S q; unfold clsSel; rewrite SOcp.mem_map; split.
       - intros [[[n v] k] [Hm ->]]; apply ConflictClassRel.filter_spec' in Hm;
@@ -525,7 +525,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Lemma mem_clsVersions : forall cls k w,
         PF.VSet.In w (clsVersions cls k) <->
-        exists n v, ConflictClassRel.In ((n, v), k) cls /\ w = TVer.NV n.
+        exists n v, ConflictClassRel.In ((n, v), k) cls /\ w = Version.NV n.
     Proof.
       intros cls k w; unfold clsVersions; rewrite SOcv.mem_filterMap.
       split.
@@ -574,7 +574,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         (exists p, PackageSet.In p (effRepo sigma I) /\ q = embedPkg p) \/
         q = rootPkg \/
         (exists n v k, ConflictClassRel.In ((n, v), k) (inst_cls I) /\
-                       q = (TName.Cls k, TVer.NV n)).
+                       q = (Name.Cls k, Version.NV n)).
     Proof.
       intros sigma I q; unfold reduceReal, embedSet.
       rewrite !PF.PackageSet.union_spec, PF.PackageSet.singleton_spec,
@@ -586,7 +586,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         PF.PackageSet.In q (coreResolution cls S) <->
         (exists p, PackageSet.In p S /\ q = embedPkg p) \/ q = rootPkg \/
         (exists n v k, PackageSet.In (n, v) S /\ ConflictClassRel.In ((n, v), k) cls /\
-                       q = (TName.Cls k, TVer.NV n)).
+                       q = (Name.Cls k, Version.NV n)).
     Proof.
       intros cls S q; unfold coreResolution, embedSet.
       rewrite !PF.PackageSet.union_spec, PF.PackageSet.singleton_spec,
@@ -595,7 +595,7 @@ Module Opam (N V X Y E : UsualOrderedType).
     Qed.
 
     Lemma mem_coreResolution_real : forall cls S n v,
-        PF.PackageSet.In (TName.Real n, TVer.RV v) (coreResolution cls S) <->
+        PF.PackageSet.In (Name.Real n, Version.RV v) (coreResolution cls S) <->
         PackageSet.In (n, v) S.
     Proof.
       intros cls S n v; rewrite mem_coreResolution; split.
@@ -617,7 +617,7 @@ Module Opam (N V X Y E : UsualOrderedType).
        coreResolution, so version uniqueness splits three ways rather than
        nine. *)
     Lemma coreResolution_at_root : forall cls S v,
-        PF.PackageSet.In (TName.Root, v) (coreResolution cls S) -> v = TVer.UnitV.
+        PF.PackageSet.In (Name.Root, v) (coreResolution cls S) -> v = Version.UnitV.
     Proof.
       intros cls S v H; apply mem_coreResolution in H.
       destruct H as [[[m w] [_ He]] | [He | [n [v' [k [_ [_ He]]]]]]];
@@ -626,8 +626,8 @@ Module Opam (N V X Y E : UsualOrderedType).
     Qed.
 
     Lemma coreResolution_at_real : forall cls S n u,
-        PF.PackageSet.In (TName.Real n, u) (coreResolution cls S) ->
-        exists v, u = TVer.RV v /\ PackageSet.In (n, v) S.
+        PF.PackageSet.In (Name.Real n, u) (coreResolution cls S) ->
+        exists v, u = Version.RV v /\ PackageSet.In (n, v) S.
     Proof.
       intros cls S n u H; apply mem_coreResolution in H.
       destruct H as [[[m w] [Hp He]] | [He | [n' [v' [k [_ [_ He]]]]]]];
@@ -637,8 +637,8 @@ Module Opam (N V X Y E : UsualOrderedType).
     Qed.
 
     Lemma coreResolution_at_cls : forall cls S k w,
-        PF.PackageSet.In (TName.Cls k, w) (coreResolution cls S) ->
-        exists n v, w = TVer.NV n /\ PackageSet.In (n, v) S /\
+        PF.PackageSet.In (Name.Cls k, w) (coreResolution cls S) ->
+        exists n v, w = Version.NV n /\ PackageSet.In (n, v) S /\
                     ConflictClassRel.In ((n, v), k) cls.
     Proof.
       intros cls S k w H; apply mem_coreResolution in H.
@@ -652,7 +652,7 @@ Module Opam (N V X Y E : UsualOrderedType).
     Lemma PTrue_sat : forall S',
         PF.PackageSet.In rootPkg S' -> PF.Satisfies S' PTrue.
     Proof.
-      intros S' Hr; exists TVer.UnitV; split;
+      intros S' Hr; exists Version.UnitV; split;
         [apply PF.VSet.singleton_spec; reflexivity | exact Hr].
     Qed.
 
@@ -670,7 +670,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         + intros [v [Hv Hh]].
           assert (Hvq := HV _ _ Hv).
           apply mem_opamResolution in Hv.
-          exists (TVer.RV v); split; [| exact Hv].
+          exists (Version.RV v); split; [| exact Hv].
           apply mem_versSetBy; exists v; split;
             [reflexivity | split; [exact Hvq | exact Hh]].
       - rewrite IHa, IHb; reflexivity.
@@ -727,14 +727,14 @@ Module Opam (N V X Y E : UsualOrderedType).
     Qed.
 
     Lemma mem_dependees_real : forall sigma Vq I n v psi,
-        PackageFormulaSet.In psi (dependeesBy sigma Vq I (TName.Real n, TVer.RV v)) <->
+        PackageFormulaSet.In psi (dependeesBy sigma Vq I (Name.Real n, Version.RV v)) <->
         (exists d, In ((n, v), d) (inst_dep I) /\
                     psi = encodeOF sigma Vq d) \/
         (exists nc, In ((n, v), nc) (inst_cfl I) /\
                     psi = cflForm sigma Vq (n, v) nc) \/
         (exists k, ConflictClassRel.In ((n, v), k) (inst_cls I) /\
-                   psi = PF.FAtom (TName.Cls k)
-                         (PF.VSet.singleton (TVer.NV n))) \/
+                   psi = PF.FAtom (Name.Cls k)
+                         (PF.VSet.singleton (Version.NV n))) \/
         (PackageSet.In (n, v) (inst_pins I) /\
          exists nvu, In ((n, v), nvu) (inst_pind I) /\
                      psi = pindForm Vq nvu).
@@ -860,7 +860,7 @@ Module Opam (N V X Y E : UsualOrderedType).
           exists (n, (c, phi)); auto. }
         unfold cflForm in Hs; cbn [fst snd] in Hs; rewrite Hg in Hs.
         cbn [PF.Satisfies] in Hs; apply Hs; clear Hs.
-        exists (TVer.RV v); split; [| apply mem_opamResolution; exact Hv].
+        exists (Version.RV v); split; [| apply mem_opamResolution; exact Hv].
         unfold confVS.
         destruct (N.eq_dec (fst (pn, pv)) n) as [E | _];
           [contradiction Hne; symmetry; exact E |].
@@ -871,22 +871,22 @@ Module Opam (N V X Y E : UsualOrderedType).
         assert (Hcl : forall m w,
                    PackageSet.In (m, w) (opamResolution S) ->
                    ConflictClassRel.In ((m, w), k) (inst_cls I) ->
-                   PF.PackageSet.In (TName.Cls k, TVer.NV m) S).
+                   PF.PackageSet.In (Name.Cls k, Version.NV m) S).
         { intros m w Hm Hmk.
           assert (Hs : PF.Satisfies S
-                         (PF.FAtom (TName.Cls k)
-                            (PF.VSet.singleton (TVer.NV m)))).
+                         (PF.FAtom (Name.Cls k)
+                            (PF.VSet.singleton (Version.NV m)))).
           { apply (Hdeps _ _ _ Hm); unfold dependees.
             apply mem_dependees_real; right; right; left.
             exists k; split; [exact Hmk | reflexivity]. }
           destruct Hs as [v [Hv Hin]].
           apply PF.VSet.singleton_spec in Hv; subst v; exact Hin. }
-        assert (E := PF.res_version_unique _ _ _ _ HR (TName.Cls k)
+        assert (E := PF.res_version_unique _ _ _ _ HR (Name.Cls k)
                        _ _ (Hcl _ _ Hp Hpk) (Hcl _ _ Hq Hqk)).
         injection E as ->.
         apply mem_opamResolution in Hp, Hq.
         assert (E := PF.res_version_unique _ _ _ _ HR
-                       (TName.Real qn) _ _ Hp Hq).
+                       (Name.Real qn) _ _ Hp Hq).
         injection E as ->; reflexivity.
       - intros [pn pv] Hp Hpin n v u Hpind v' Hv'.
         assert (Hs : PF.Satisfies S
@@ -897,7 +897,7 @@ Module Opam (N V X Y E : UsualOrderedType).
         unfold pindForm in Hs; simpl in Hs.
         destruct (V.eq_dec v' v) as [E | NE]; [exact E |].
         exfalso; apply Hs.
-        exists (TVer.RV v'); split;
+        exists (Version.RV v'); split;
           [| apply mem_opamResolution; exact Hv'].
         apply SOvv.mem_map; exists v'; split; [| reflexivity].
         apply VSet.remove_spec; split;
@@ -905,7 +905,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       - intros n v v' Hv Hv'.
         apply mem_opamResolution in Hv, Hv'.
         assert (E := PF.res_version_unique _ _ _ _ HR
-                       (TName.Real n) _ _ Hv Hv').
+                       (Name.Real n) _ _ Hv Hv').
         injection E as ->; reflexivity.
       - split; apply (encodeOF_correct sigma _ _ HV Hroot);
           [exact Hquery | exact Hinv].
@@ -959,7 +959,7 @@ Module Opam (N V X Y E : UsualOrderedType).
                      (ex_intro _ v
                         (conj Hm (conj (fun E => Hne (eq_sym E)) Hh)))).
           * cbn [PF.Satisfies].
-            exists (TVer.NV pn); split;
+            exists (Version.NV pn); split;
               [apply PF.VSet.singleton_spec; reflexivity |].
             apply mem_coreResolution; right; right.
             exists pn, pv, k; split;
@@ -1206,8 +1206,8 @@ Module Opam (N V X Y E : UsualOrderedType).
       Qed.
 
       Theorem versions_lookupOrig : forall sigma I n,
-          versions sigma I (TName.Real n) =
-          versions sigma (nameSubInst I n) (TName.Real n).
+          versions sigma I (Name.Real n) =
+          versions sigma (nameSubInst I n) (Name.Real n).
       Proof.
         intros sigma I n; simpl; symmetry.
         rewrite (srcVersions_subInst_agree sigma I (nameSubInst I n)
@@ -1221,7 +1221,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       Lemma clsVersions_reduceReal : forall cls R k v,
           (forall q k', ConflictClassRel.In (q, k') cls -> PackageSet.In q R) ->
           PF.VSet.In v (clsVersions cls k) <->
-          exists n, v = TVer.NV n /\
+          exists n, v = Version.NV n /\
             Cls.Reduction.Reduced.VSet.In (Cls.Reduction.Version.Name n)
               (Cls.Reduction.Reduced.versions (Cls.Reduction.reduceReal R cls)
                  (Cls.Reduction.Name.Cls k)).
@@ -1241,8 +1241,8 @@ Module Opam (N V X Y E : UsualOrderedType).
       Qed.
 
       Theorem versions_lookupClass : forall sigma I k,
-          versions sigma I (TName.Cls k) =
-          versions sigma (classSubInst I k) (TName.Cls k).
+          versions sigma I (Name.Cls k) =
+          versions sigma (classSubInst I k) (Name.Cls k).
       Proof.
         intros sigma I k; symmetry; cbn [versions classSubInst inst_cls].
         assert (HD : forall q k', ConflictClassRel.In (q, k') (inst_cls I) ->
@@ -1260,8 +1260,8 @@ Module Opam (N V X Y E : UsualOrderedType).
 
       Lemma versions_class_mono : forall sigma I' I k,
           ConflictClassRel.Subset (inst_cls I') (inst_cls I) ->
-          PF.VSet.Subset (versions sigma I' (TName.Cls k))
-            (versions sigma I (TName.Cls k)).
+          PF.VSet.Subset (versions sigma I' (Name.Cls k))
+            (versions sigma I (Name.Cls k)).
       Proof.
         intros sigma I' I k HC v; cbn [versions]; rewrite !mem_clsVersions.
         intros [n [u [Hp ->]]]; exists n, u; split;
@@ -1388,7 +1388,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       Lemma dependees_negNames : forall sigma Vq I q psi m,
           PackageFormulaSet.In psi (dependeesBy sigma Vq I q) ->
           PF.Reduction.NSet.In m (PF.Reduction.Lookup.negNames psi) ->
-          exists n, m = TName.Real n.
+          exists n, m = Name.Real n.
       Proof.
         intros sigma Vq I [o u] psi m Hf Hx.
         assert (HT : ~ PF.Reduction.NSet.In m
@@ -1422,7 +1422,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
       Lemma dependees_core : forall sigma I Vq q,
           PF.PackageSet.In q (reduceReal sigma I) ->
-          (forall m, Vq (TName.Real m) = versions sigma I (TName.Real m)) ->
+          (forall m, Vq (Name.Real m) = versions sigma I (Name.Real m)) ->
           PF.Reduction.Reduced.dependees
             (PF.Reduction.reduceDeps (reduceReal sigma I) (reduceDeps sigma I))
             (PF.Reduction.Name.Orig (fst q),
@@ -1447,7 +1447,7 @@ Module Opam (N V X Y E : UsualOrderedType).
 
       Theorem dependees_lookupOrigCore : forall sigma I Vq n v,
           PackageSet.In (n, v) (effRepo sigma I) ->
-          (forall m, Vq (TName.Real m) = versions sigma I (TName.Real m)) ->
+          (forall m, Vq (Name.Real m) = versions sigma I (Name.Real m)) ->
           PF.Reduction.Reduced.dependees
             (PF.Reduction.reduceDeps (reduceReal sigma I) (reduceDeps sigma I))
             (PF.Reduction.embedPkg (embedPkg (n, v))) =
@@ -1464,7 +1464,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       Qed.
 
       Theorem dependees_lookupRootCore : forall sigma I Vq,
-          (forall m, Vq (TName.Real m) = versions sigma I (TName.Real m)) ->
+          (forall m, Vq (Name.Real m) = versions sigma I (Name.Real m)) ->
           PF.Reduction.Reduced.dependees
             (PF.Reduction.reduceDeps (reduceReal sigma I) (reduceDeps sigma I))
             (PF.Reduction.embedPkg rootPkg) =
@@ -1481,7 +1481,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       Theorem dependees_lookupClassCore : forall sigma I k n,
           PF.Reduction.Reduced.dependees
             (PF.Reduction.reduceDeps (reduceReal sigma I) (reduceDeps sigma I))
-            (PF.Reduction.Name.Orig (TName.Cls k),
+            (PF.Reduction.Name.Orig (Name.Cls k),
              PF.Reduction.Version.Orig n) =
           PF.Reduction.Reduced.DependeeSet.empty.
       Proof.
@@ -1501,7 +1501,7 @@ Module Opam (N V X Y E : UsualOrderedType).
       Theorem dependees_lookupDisjunctCore : forall sigma I I' Vq q chis i,
           PF.PackageSet.In q (reduceReal sigma I) ->
           dependees sigma I' q = dependees sigma I q ->
-          (forall m, Vq (TName.Real m) = versions sigma I (TName.Real m)) ->
+          (forall m, Vq (Name.Real m) = versions sigma I (Name.Real m)) ->
           PF.Reduction.Reduced.PackageSet.In (PF.Reduction.Name.Disjunct chis, i)
             (PF.Reduction.reduceReal (PF.PackageSet.singleton q)
                (PF.depEdges q (dependees sigma I' q))) ->
@@ -1556,45 +1556,45 @@ Module Opam (N V X Y E : UsualOrderedType).
           (exists v, PackageSet.In (n, v) (effRepo sigma I)) \/
           (exists p h,
               PF.Reduction.Reduced.DependencyRel.In
-                (p, (PF.Reduction.Name.Orig (TName.Real n), h))
+                (p, (PF.Reduction.Name.Orig (Name.Real n), h))
                 (PF.Reduction.reduceDeps (reduceReal sigma I)
                    (reduceDeps sigma I))) ->
           PF.Reduction.Reduced.versions
             (PF.Reduction.reduceReal (reduceReal sigma I) (reduceDeps sigma I))
-            (PF.Reduction.Name.Orig (TName.Real n)) =
+            (PF.Reduction.Name.Orig (Name.Real n)) =
           PF.Reduction.Reduced.VSet.add PF.Reduction.Version.Bot
             (PF.Reduction.embedVS
-               (versions sigma (nameSubInst I n) (TName.Real n))).
+               (versions sigma (nameSubInst I n) (Name.Real n))).
       Proof.
         intros sigma I n H; rewrite <- versions_lookupOrig; apply versions_core.
         destruct H as [[v Hv] | H]; [left | right; exact H].
-        exists (TVer.RV v); apply mem_reduceReal; left; exists (n, v); split;
+        exists (Version.RV v); apply mem_reduceReal; left; exists (n, v); split;
           [exact Hv | reflexivity].
       Qed.
 
       Theorem versions_lookupRootCore : forall sigma I,
           PF.Reduction.Reduced.versions
             (PF.Reduction.reduceReal (reduceReal sigma I) (reduceDeps sigma I))
-            (PF.Reduction.Name.Orig TName.Root) =
+            (PF.Reduction.Name.Orig Name.Root) =
           PF.Reduction.Reduced.VSet.add PF.Reduction.Version.Bot
-            (PF.Reduction.embedVS (versions sigma I TName.Root)).
+            (PF.Reduction.embedVS (versions sigma I Name.Root)).
       Proof.
-        intros sigma I; apply versions_core; left; exists TVer.UnitV.
+        intros sigma I; apply versions_core; left; exists Version.UnitV.
         apply mem_reduceReal; right; left; reflexivity.
       Qed.
 
       Theorem versions_lookupClassCore : forall sigma I k,
           (exists p h,
               PF.Reduction.Reduced.DependencyRel.In
-                (p, (PF.Reduction.Name.Orig (TName.Cls k), h))
+                (p, (PF.Reduction.Name.Orig (Name.Cls k), h))
                 (PF.Reduction.reduceDeps (reduceReal sigma I)
                    (reduceDeps sigma I))) ->
           PF.Reduction.Reduced.versions
             (PF.Reduction.reduceReal (reduceReal sigma I) (reduceDeps sigma I))
-            (PF.Reduction.Name.Orig (TName.Cls k)) =
+            (PF.Reduction.Name.Orig (Name.Cls k)) =
           PF.Reduction.Reduced.VSet.add PF.Reduction.Version.Bot
             (PF.Reduction.embedVS
-               (versions sigma (classSubInst I k) (TName.Cls k))).
+               (versions sigma (classSubInst I k) (Name.Cls k))).
       Proof.
         intros sigma I k H; rewrite <- versions_lookupClass; apply versions_core.
         right; exact H.

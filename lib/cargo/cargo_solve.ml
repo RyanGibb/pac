@@ -24,10 +24,10 @@ module Make () = struct
   module L = Lookups.Make (Encoding)
   module Pick = Pick.Make (Encoding) (L)
 
-  let decode st (sol : (Cg.Reduction.NPlus.t * PVersion.t) list) : result =
+  let decode st (sol : (Cg.Reduction.Name.t * PVersion.t) list) : result =
     let sol =
       List.map
-        (fun ((tn, { PVersion.v; _ }) : Cg.Reduction.NPlus.t * PVersion.t) ->
+        (fun ((tn, { PVersion.v; _ }) : Cg.Reduction.Name.t * PVersion.t) ->
           (tn, v))
         sol
     in
@@ -78,7 +78,7 @@ module Make () = struct
       lookups = L.dependency_lookups st;
     }
 
-  let check_answer st (sol : (Cg.Reduction.NPlus.t * PVersion.t) list) =
+  let check_answer st (sol : (Cg.Reduction.Name.t * PVersion.t) list) =
     let s =
       T.PackageSet.ofList (List.map (fun (tn, { PVersion.v; _ }) -> (tn, v)) sol)
     in
@@ -88,7 +88,7 @@ module Make () = struct
     in
     let dependees p = T.DependeeSet.ofList (L.dependees st p) in
     let root =
-      T.rootQuery (Cg.Reduction.NPlus.CRoot, Cg.Reduction.VPlus.WUnit)
+      T.rootQuery (Cg.Reduction.Name.CRoot, Cg.Reduction.Version.WUnit)
     in
     match T.check versions dependees root s with
     | None -> ()
@@ -113,9 +113,9 @@ module Make () = struct
     let st = L.create ar root ~features ~rustv in
     let query =
       [
-        ( Cg.Reduction.NPlus.CRoot,
+        ( Cg.Reduction.Name.CRoot,
           PG.Ranges.of_list
-            [ L.tag st Cg.Reduction.NPlus.CRoot Cg.Reduction.VPlus.WUnit ] );
+            [ L.tag st Cg.Reduction.Name.CRoot Cg.Reduction.Version.WUnit ] );
       ]
     in
     let module O = Order.Make (Pick.Driver (struct
@@ -143,7 +143,7 @@ module Make () = struct
                (fun ((m, vs) : T.Dependee.t) ->
                  (m, List.map (L.tag st m) (T.VSet.elements vs)))
                (L.dependees st (tn, v)))
-           [ Cg.Reduction.NPlus.CRoot ])
+           [ Cg.Reduction.Name.CRoot ])
     in
     let stats = Archive.stats ar in
     {

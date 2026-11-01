@@ -10,7 +10,7 @@ module Make
     val pk : t
   end) :
     Order.DRIVER
-      with type name = Encoding.Cg.Reduction.NPlus.t
+      with type name = Encoding.Cg.Reduction.Name.t
        and type version = Encoding.PVersion.t
        and type selection = Encoding.PG.selection
 end

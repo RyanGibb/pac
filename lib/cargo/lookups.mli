@@ -40,12 +40,12 @@ module Make (Encoding : Encoding.S) : sig
      a second site with the same ask as one before it, which the slot rule
      merged into that one's slot. *)
   val site_data : state -> string * string -> Cg.Site.t -> Cg.DependencyRecord.t option
-  val tag : state -> Cg.Reduction.NPlus.t -> Cg.Reduction.VPlus.t -> PVersion.t
-  val pg_versions : state -> Cg.Reduction.NPlus.t -> PVersion.t list
+  val tag : state -> Cg.Reduction.Name.t -> Cg.Reduction.Version.t -> PVersion.t
+  val pg_versions : state -> Cg.Reduction.Name.t -> PVersion.t list
 
   val pg_dependencies :
     state ->
-    Cg.Reduction.NPlus.t ->
+    Cg.Reduction.Name.t ->
     PVersion.t ->
-    (Cg.Reduction.NPlus.t * PG.Ranges.t) list
+    (Cg.Reduction.Name.t * PG.Ranges.t) list
 end

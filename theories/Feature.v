@@ -57,8 +57,8 @@ Module Feature (N V F : UsualOrderedType).
           SupportRel.In (p, f) support }.
 
   Module Reduction.
-    Module NFPair := PairUOT N F.
-    Module NFF := UOTCompareFacts NFPair.
+    Module FeaturePackageName := PairUOT N F.
+    Module NFF := UOTCompareFacts FeaturePackageName.
     Module NF := UOTCompareFacts N.
     #[local] Hint Rewrite NFF.compare_eq_iff NF.compare_eq_iff : cmp_feat.
     #[local] Hint Extern 1 => cmp_by NFF.compare_antisym : cmp_feat.
@@ -77,7 +77,7 @@ Module Feature (N V F : UsualOrderedType).
         | Orig n1, Orig n2 => N.compare n1 n2
         | Orig _, FeatPkg _ _ => Lt
         | FeatPkg _ _, Orig _ => Gt
-        | FeatPkg n1 f1, FeatPkg n2 f2 => NFPair.compare (n1, f1) (n2, f2)
+        | FeatPkg n1 f1, FeatPkg n2 f2 => FeaturePackageName.compare (n1, f1) (n2, f2)
         end.
 
       Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.

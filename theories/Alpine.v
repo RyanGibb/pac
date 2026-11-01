@@ -46,14 +46,14 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     end.
 
   Module VF := UOTCompareFacts V.
-  Module OV := PairUOT OpOT V.
-  Module OVF := UOTCompareFacts OV.
+  Module ComparisonConstraint := PairUOT ComparisonOperatorOT V.
+  Module OVF := UOTCompareFacts ComparisonConstraint.
   #[local] Hint Rewrite OVF.compare_eq_iff VF.compare_eq_iff : cmp_alp.
   #[local] Hint Extern 1 => cmp_by OVF.compare_antisym : cmp_alp.
   #[local] Hint Extern 1 => cmp_by VF.compare_antisym : cmp_alp.
   #[local] Hint Extern 1 => cmp_by OVF.compare_lt_trans : cmp_alp.
   #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_alp.
-  Module ConstrComp <: ComparableType.
+  Module ConstraintComp <: ComparableType.
     Definition t := Constr.
     Definition rank (zeta : Constr) : nat :=
       match zeta with
@@ -64,7 +64,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       match Nat.compare (rank x) (rank y) with
       | Eq =>
           match x, y with
-          | COp o1 c1, COp o2 c2 => OV.compare (o1, c1) (o2, c2)
+          | COp o1 c1, COp o2 c2 => ComparisonConstraint.compare (o1, c1) (o2, c2)
           | CPrefix c1, CPrefix c2 => V.compare c1 c2
           | CGtPrefix c1, CGtPrefix c2 => V.compare c1 c2
           | CLtPrefix c1, CLtPrefix c2 => V.compare c1 c2
@@ -80,17 +80,17 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Lemma compare_lt_trans : forall x y z,
         compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
     Proof. cmp_lt_trans cmp_alp. Qed.
-  End ConstrComp.
-  Module ConstrOT := UOTFromCompare ConstrComp.
+  End ConstraintComp.
+  Module ConstraintOT := UOTFromCompare ConstraintComp.
 
-  Module Atom := PairUOT N ConstrOT.
+  Module Atom := PairUOT N ConstraintOT.
   Module AtomF := UOTCompareFacts Atom.
 
   Inductive Dep : Type :=
   | DPos (a : Atom.t)
   | DNeg (a : Atom.t).
 
-  Module DepComp <: ComparableType.
+  Module DependencyAtomComp <: ComparableType.
     Definition t := Dep.
     Definition rank (d : Dep) : nat :=
       match d with DPos _ => 0 | DNeg _ => 1 end.
@@ -114,17 +114,17 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Lemma compare_lt_trans : forall x y z,
         compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
     Proof. cmp_lt_trans cmp_alp. Qed.
-  End DepComp.
-  Module DepOT := UOTFromCompare DepComp.
+  End DependencyAtomComp.
+  Module DependencyAtomOT := UOTFromCompare DependencyAtomComp.
 
-  Module DependencyElt := PairUOT Package DepOT.
+  Module DependencyElt := PairUOT Package DependencyAtomOT.
   Module DependencyRel := FSetUOT DependencyElt.
 
   Inductive PTag : Type :=
   | PVer (u : V.t)
   | PBare.
 
-  Module PTagComp <: ComparableType.
+  Module ProvidedVersionComp <: ComparableType.
     Definition t := PTag.
     Definition compare (x y : t) : comparison :=
       match x, y with
@@ -140,18 +140,18 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Lemma compare_lt_trans : forall x y z,
         compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
     Proof. cmp_lt_trans cmp_alp. Qed.
-  End PTagComp.
-  Module PTagOT := UOTFromCompare PTagComp.
+  End ProvidedVersionComp.
+  Module ProvidedVersionOT := UOTFromCompare ProvidedVersionComp.
 
-  Module Provided := PairUOT N PTagOT.
+  Module Provided := PairUOT N ProvidedVersionOT.
   Module ProvidesElt := PairUOT Package Provided.
   Module ProvidesRel := FSetUOT ProvidesElt.
 
-  Module ConditionSet := FSetUOT DepOT.
+  Module ConditionSet := FSetUOT DependencyAtomOT.
   Module InstallIfRuleElt := PairUOT Package ConditionSet.AsUOT.
   Module InstallIfRuleRel := FSetUOT InstallIfRuleElt.
 
-  Module WorldSet := FSetUOT DepOT.
+  Module WorldSet := FSetUOT DependencyAtomOT.
 
   Module PriorityElt := PairUOT Package Nat_as_OT.
   Module PriorityRel := FSetUOT PriorityElt.
@@ -269,8 +269,8 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
   Module Reduct (D : Designation).
     Module NF := UOTCompareFacts N.
-    Module PV := PairUOT Package V.
-    Module PVF := UOTCompareFacts PV.
+    Module ProvidesVersion := PairUOT Package V.
+    Module PVF := UOTCompareFacts ProvidesVersion.
     #[local] Hint Rewrite NF.compare_eq_iff PVF.compare_eq_iff : cmp_alp.
     #[local] Hint Extern 1 => cmp_by NF.compare_antisym : cmp_alp.
     #[local] Hint Extern 1 => cmp_by PVF.compare_antisym : cmp_alp.
@@ -315,7 +315,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         | Eq =>
             match x, y with
             | Orig v1, Orig v2 => V.compare v1 v2
-            | Prov p1 v1, Prov p2 v2 => PV.compare (p1, v1) (p2, v2)
+            | Prov p1 v1, Prov p2 v2 => ProvidesVersion.compare (p1, v1) (p2, v2)
             | _, _ => Eq
             end
         | c => c
@@ -333,8 +333,8 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     Module PF := PackageFormula NameOT VersionOT.
 
-    Module DependencyRelFibred := FibredRel Package DepOT DependencyElt DependencyRel.
-    Module ProvidesRelFibred := FibredLabelledRel Package N PTagOT ProvidesElt ProvidesRel.
+    Module DependencyRelFibred := FibredRel Package DependencyAtomOT DependencyElt DependencyRel.
+    Module ProvidesRelFibred := FibredLabelledRel Package N ProvidedVersionOT ProvidesElt ProvidesRel.
 
     Module SOpw := SetOps Package VersionOT PackageSet PF.VSet.
     Module SOrw := SetOps ProvidesElt VersionOT ProvidesRel PF.VSet.
@@ -465,10 +465,10 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     Definition rootPkg : PF.Package.t := (Name.Root, Version.UnitV).
 
     Module PackageFormulaSet := PF.PackageFormulaSet.
-    Module SOdf := SetOps DependencyElt PF.FOT DependencyRel PackageFormulaSet.
-    Module SOrf := SetOps ProvidesElt PF.FOT ProvidesRel PackageFormulaSet.
-    Module SOtf := SetOps InstallIfRuleElt PF.FOT InstallIfRuleRel PackageFormulaSet.
-    Module SOwf := SetOps DepOT PF.FOT WorldSet PackageFormulaSet.
+    Module SOdf := SetOps DependencyElt PF.PackageFormulaOT DependencyRel PackageFormulaSet.
+    Module SOrf := SetOps ProvidesElt PF.PackageFormulaOT ProvidesRel PackageFormulaSet.
+    Module SOtf := SetOps InstallIfRuleElt PF.PackageFormulaOT InstallIfRuleRel PackageFormulaSet.
+    Module SOwf := SetOps DependencyAtomOT PF.PackageFormulaOT WorldSet PackageFormulaSet.
     Definition dependees (I : Inst) (q : PF.Package.t) : PackageFormulaSet.t :=
       match q with
       | (Name.Root, Version.UnitV) => SOwf.map (encDep I) (inst_world I)
@@ -1295,7 +1295,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
                intro Hs; apply PF.satisfiesb_iff in Hs; congruence.
             -- right; apply Hiff, (Ht zn zv B Ht0).
                intros c Hc.
-               destruct (DepOT.eq_dec c (DPos a)) as [He | Hne].
+               destruct (DependencyAtomOT.eq_dec c (DPos a)) as [He | Hne].
                ++ subst c; destruct a as [ma cta]; cbn [MatchCond].
                   apply match_attachAt; exists (n0, v0).
                   split; [exact Hp | exact Hatt].
@@ -1518,8 +1518,8 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         - intros e He; destruct (ProvidesRel.empty_spec He).
       Qed.
 
-      Module SOwn := SetOps DepOT N WorldSet NSet.
-      Module SOan := SetOps DepOT N ConditionSet NSet.
+      Module SOwn := SetOps DependencyAtomOT N WorldSet NSet.
+      Module SOan := SetOps DependencyAtomOT N ConditionSet NSet.
       Module SOtn := SetOps InstallIfRuleElt N InstallIfRuleRel NSet.
 
       Definition condNames (B : ConditionSet.t) : NSet.t :=

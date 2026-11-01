@@ -50,7 +50,7 @@ Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (PM : SemverMatch V).
   (* An ecosystem that keys its dependencies on the requirement itself
      carries a range inside a set element, which wants an order on the
      syntax; the two list layers take theirs from ListComp. *)
-  Module CtComp <: ComparableType.
+  Module ComparatorComp <: ComparableType.
     Definition t := Comparator.
     Definition rank (ct : t) : nat :=
       match ct with CAny => 0 | COp _ _ => 1 end.
@@ -60,7 +60,7 @@ Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (PM : SemverMatch V).
       | Eq =>
           match x, y with
           | COp o1 c1, COp o2 c2 =>
-              lex (OpComp.compare o1 o2) (V.compare c1 c2)
+              lex (ComparisonOperatorComp.compare o1 o2) (V.compare c1 c2)
           | _, _ => Eq
           end
       | c => c
@@ -70,7 +70,7 @@ Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (PM : SemverMatch V).
     Proof.
       intros x y; destruct x as [| o1 c1], y as [| o2 c2]; cbn;
         try (split; intro H; congruence).
-      rewrite lex_eq_iff, OpComp.compare_eq_iff, VCF.compare_eq_iff.
+      rewrite lex_eq_iff, ComparisonOperatorComp.compare_eq_iff, VCF.compare_eq_iff.
       split;
         [intros [-> ->]; reflexivity | intro H; injection H as -> ->; auto].
     Qed.
@@ -79,7 +79,7 @@ Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (PM : SemverMatch V).
     Proof.
       intros x y; destruct x as [| o1 c1], y as [| o2 c2]; cbn;
         try reflexivity.
-      rewrite lex_opp, OpComp.compare_antisym, VCF.compare_antisym;
+      rewrite lex_opp, ComparisonOperatorComp.compare_antisym, VCF.compare_antisym;
         reflexivity.
     Qed.
 
@@ -88,12 +88,12 @@ Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (PM : SemverMatch V).
     Proof.
       intros x y z; destruct x as [| o1 c1], y as [| o2 c2], z as [| o3 c3];
         cbn; intros H1 H2; try congruence.
-      exact (lex_lt_trans OpComp.compare_eq_iff
-               (OpComp.compare_lt_trans _ _ _) (VCF.compare_lt_trans _ _ _)
+      exact (lex_lt_trans ComparisonOperatorComp.compare_eq_iff
+               (ComparisonOperatorComp.compare_lt_trans _ _ _) (VCF.compare_lt_trans _ _ _)
                H1 H2).
     Qed.
-  End CtComp.
-  Module CsComp := ListComp CtComp.
-  Module RgComp := ListComp CsComp.
-  Module RangeOT := UOTFromCompare RgComp.
+  End ComparatorComp.
+  Module ComparatorSetComp := ListComp ComparatorComp.
+  Module RangeComp := ListComp ComparatorSetComp.
+  Module RangeOT := UOTFromCompare RangeComp.
 End Semver.

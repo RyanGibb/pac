@@ -8,7 +8,7 @@ module Make (Place_encoding : Place_encoding.S) = struct
   type edge = {
     e : Npl.coq_Edge;
     acc : Pl.VSet.t;
-    accepts : Npl.Occ.t list;
+    accepts : Npl.Occupant.t list;
     id : int;
   }
 
@@ -18,7 +18,7 @@ module Make (Place_encoding : Place_encoding.S) = struct
     ovr : (string * Npl.coq_Range) list;
     depth : int;
     dnat : E.nat;
-    edge_tbl : (Npl.Occ.t, edge list) Hashtbl.t;
+    edge_tbl : (Npl.Occupant.t, edge list) Hashtbl.t;
     acc_tbl : (string * Npl.coq_Range, int * Pl.VSet.t) Hashtbl.t;
     repo_at : (string, Npl.RealPackageSet.t) Hashtbl.t;
     repo_of : (string list, Npl.RealPackageSet.t) Hashtbl.t;
@@ -56,10 +56,10 @@ module Make (Place_encoding : Place_encoding.S) = struct
   (* The project, which only the root holds, is not the registry's package
      of its name even at its version: arborist loads devDependencies for the
      top node alone. *)
-  let meta st (x : Npl.Occ.t) =
+  let meta st (x : Npl.Occupant.t) =
     match x with
-    | Npl.Occ.Proj -> A.root_meta st.ar
-    | Npl.Occ.Reg (m, v) -> A.meta st.ar (m, v.IVer.s)
+    | Npl.Occupant.Proj -> A.root_meta st.ar
+    | Npl.Occupant.Reg (m, v) -> A.meta st.ar (m, v.IVer.s)
 
   let repo_at st (n : string) : Npl.RealPackageSet.t =
     Tbl.memo st.repo_at n (fun () ->
@@ -104,7 +104,7 @@ module Make (Place_encoding : Place_encoding.S) = struct
   (* The occupant's sub-instance for its edges: its package's manifest.  The
      versions that decide whether each optional dependency can be met are
      real_at's, at the package it names once overridden. *)
-  let occ_inst st (x : Npl.Occ.t) : Npl.coq_Inst =
+  let occ_inst st (x : Npl.Occupant.t) : Npl.coq_Inst =
     let ds, rs =
       match meta st x with
       | None -> ([], [])
@@ -112,13 +112,13 @@ module Make (Place_encoding : Place_encoding.S) = struct
           (List.map (xdep st.ar) v.P.v_deps, List.map (xpeer st.ar) v.P.v_peers)
     in
     match x with
-    | Npl.Occ.Proj ->
+    | Npl.Occupant.Proj ->
         {
           (mk_inst st ~repo:Npl.RealPackageSet.empty ~deps:[] ~peers:[]) with
           Npl.inst_rootDeps = ds;
           inst_rootPeers = rs;
         }
-    | Npl.Occ.Reg (m, v) ->
+    | Npl.Occupant.Reg (m, v) ->
         mk_inst st ~repo:Npl.RealPackageSet.empty
           ~deps:(List.map (fun d -> ((m, v), d)) ds)
           ~peers:(List.map (fun r -> ((m, v), r)) rs)
@@ -144,7 +144,7 @@ module Make (Place_encoding : Place_encoding.S) = struct
      atom constrains already lists every package the atom accepts: every
      version set handed to the solver holds exact versions, as the resolver
      contract asks. *)
-  let edges st (x : Npl.Occ.t) : edge list =
+  let edges st (x : Npl.Occupant.t) : edge list =
     Tbl.memo st.edge_tbl x (fun () ->
         List.map
           (fun (e : Npl.coq_Edge) ->
@@ -189,7 +189,7 @@ module Make (Place_encoding : Place_encoding.S) = struct
 
   let versions st (n : PName.t) : PVersion.t list =
     match n with
-    | R.Name.Root -> [ R.Version.Occ Npl.Occ.Proj ]
+    | R.Name.Root -> [ R.Version.Occ Npl.Occupant.Proj ]
     | R.Name.Loc (l, a) | R.Name.Walk (l, a) -> (
         let g = List.length (key_names st a) in
         (* a location's versions read only the key and whether it is above
@@ -214,7 +214,7 @@ module Make (Place_encoding : Place_encoding.S) = struct
      some edges. *)
   type part = Atom of string list * string * int * bool * bool
 
-  let atom_parts st (lam : string list) (x : Npl.Occ.t) =
+  let atom_parts st (lam : string list) (x : Npl.Occupant.t) =
     List.map
       (fun (ed : edge) ->
         let e = ed.e in

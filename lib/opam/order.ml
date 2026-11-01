@@ -31,7 +31,7 @@ let spine_positions ar (n : string) (v : string) : (string, int) Hashtbl.t =
 
 let rec form_names acc (f : PF.coq_Formula) =
   match f with
-  | PF.FAtom (Red.TName.Real m, _) -> m :: acc
+  | PF.FAtom (Red.Name.Real m, _) -> m :: acc
   | PF.FAtom (_, _) -> acc
   | PF.FConj (a, b) | PF.FDisj (a, b) -> form_names (form_names acc a) b
   | PF.FNeg a -> form_names acc a
@@ -51,7 +51,7 @@ let spine_rank tbl (m : PFR.Name.t) : int option =
     | None, a -> a
   in
   match m with
-  | PFR.Name.Orig (Red.TName.Real s) -> Hashtbl.find_opt tbl s
+  | PFR.Name.Orig (Red.Name.Real s) -> Hashtbl.find_opt tbl s
   | PFR.Name.Disjunct fs ->
       List.fold_left
         (fun a f -> List.fold_left best a (form_names [] f))
@@ -59,7 +59,7 @@ let spine_rank tbl (m : PFR.Name.t) : int option =
   | _ -> None
 
 let walkable (m : PFR.Name.t) =
-  match m with PFR.Name.Orig (Red.TName.Cls _) -> false | _ -> true
+  match m with PFR.Name.Orig (Red.Name.Cls _) -> false | _ -> true
 
 (* 0install's [decider] (solver_core.ml): walk the roles already selected
    depth-first from the root, each one's dependencies in the order they
@@ -89,7 +89,7 @@ let zero_install ar query st ~touch =
         (L.dependees st (tn, pv.PVersion.v))
     in
     match (tn, pv.PVersion.v) with
-    | PFR.Name.Orig (Red.TName.Real n), PFR.Version.Orig (Red.TVer.RV v) ->
+    | PFR.Name.Orig (Red.Name.Real n), PFR.Version.Orig (Red.Version.RV v) ->
         let tbl =
           match Hashtbl.find_opt order_cache (n, v) with
           | Some t -> t
@@ -105,7 +105,7 @@ let zero_install ar query st ~touch =
         |> List.map snd
     (* the root's dependencies are the query, in the order opam hands it
        on *)
-    | PFR.Name.Orig Red.TName.Root, _ ->
+    | PFR.Name.Orig Red.Name.Root, _ ->
         let rank m =
           match spine_rank query_positions m with
           | Some i -> i
@@ -132,7 +132,7 @@ let zero_install ar query st ~touch =
         | PG.Decided v -> List.fold_left visit seen (requirements n v)
     in
     try
-      ignore (visit NameSet.empty (PFR.Name.Orig Red.TName.Root));
+      ignore (visit NameSet.empty (PFR.Name.Orig Red.Name.Root));
       (* nothing on the walk is open: leave the solver's own choice,
          absence last *)
       L.defer_bot ~assigned open_names

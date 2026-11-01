@@ -19,7 +19,7 @@ Module Virtual (N V : UsualOrderedType).
   #[local] Hint Extern 1 => cmp_by VF.compare_antisym : cmp_virt.
   #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_virt.
 
-  Module VTComp <: ComparableType.
+  Module ProvidedVersionComp <: ComparableType.
     Definition t := VTop.
     Definition compare (x y : t) : comparison :=
       match x, y with
@@ -38,10 +38,10 @@ Module Virtual (N V : UsualOrderedType).
     Lemma compare_lt_trans : forall x y z,
         compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
     Proof. cmp_lt_trans cmp_virt. Qed.
-  End VTComp.
-  Module VTOT := UOTFromCompare VTComp.
+  End ProvidedVersionComp.
+  Module ProvidedVersionOT := UOTFromCompare ProvidedVersionComp.
 
-  Module Provided := PairUOT N VTOT.
+  Module Provided := PairUOT N ProvidedVersionOT.
   Module ProvidesElt := PairUOT Package Provided.
   Module ProvidesRel := FSetUOT ProvidesElt.
 
@@ -100,8 +100,8 @@ Module Virtual (N V : UsualOrderedType).
 
   Module Reduction.
 
-    Module PkgN := PairUOT Package N.
-    Module PkgNF := UOTCompareFacts PkgN.
+    Module SelectorName := PairUOT Package N.
+    Module PkgNF := UOTCompareFacts SelectorName.
     Module NF := UOTCompareFacts N.
     #[local] Hint Rewrite PkgNF.compare_eq_iff NF.compare_eq_iff : cmp_virt.
     #[local] Hint Extern 1 => cmp_by PkgNF.compare_antisym : cmp_virt.
@@ -120,7 +120,7 @@ Module Virtual (N V : UsualOrderedType).
         | Orig n1, Orig n2 => N.compare n1 n2
         | Orig _, Selector _ _ => Lt
         | Selector _ _, Orig _ => Gt
-        | Selector p1 m1, Selector p2 m2 => PkgN.compare (p1, m1) (p2, m2)
+        | Selector p1 m1, Selector p2 m2 => SelectorName.compare (p1, m1) (p2, m2)
         end.
 
       Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
@@ -134,8 +134,8 @@ Module Virtual (N V : UsualOrderedType).
       Proof. cmp_lt_trans cmp_virt. Qed.
     End Name.
 
-    Module NV := PairUOT N V.
-    Module NVF := UOTCompareFacts NV.
+    Module ProviderVersion := PairUOT N V.
+    Module NVF := UOTCompareFacts ProviderVersion.
     #[local] Hint Rewrite NVF.compare_eq_iff : cmp_virt.
     #[local] Hint Extern 1 => cmp_by NVF.compare_antisym : cmp_virt.
     #[local] Hint Extern 1 => cmp_by NVF.compare_lt_trans : cmp_virt.
@@ -151,7 +151,7 @@ Module Virtual (N V : UsualOrderedType).
         | Orig v1, Orig v2 => V.compare v1 v2
         | Orig _, Provider _ _ => Lt
         | Provider _ _, Orig _ => Gt
-        | Provider n1 w1, Provider n2 w2 => NV.compare (n1, w1) (n2, w2)
+        | Provider n1 w1, Provider n2 w2 => ProviderVersion.compare (n1, w1) (n2, w2)
         end.
 
       Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
@@ -955,7 +955,7 @@ Module Virtual (N V : UsualOrderedType).
     Qed.
 
     Module Lookup.
-      Module ProvidesRelFibred := FibredLabelledRel Package N VTOT ProvidesElt ProvidesRel.
+      Module ProvidesRelFibred := FibredLabelledRel Package N ProvidedVersionOT ProvidesElt ProvidesRel.
       Lemma prov_nodeFibre : forall Pi n vs,
           Prov (ProvidesRelFibred.nodeFibre Pi n) n vs <-> Prov Pi n vs.
       Proof.

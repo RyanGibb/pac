@@ -19,8 +19,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Module PackageF := PairUOT Package F.
   Module SupportRel := FSetUOT PackageF.
 
-  Module NFPair := PairUOT N F.
-  Module NFF := UOTCompareFacts NFPair.
+  Module DependeeFeatureEntry := PairUOT N F.
+  Module NFF := UOTCompareFacts DependeeFeatureEntry.
   Module NF := UOTCompareFacts N.
   Module FF := UOTCompareFacts F.
   #[local] Hint Rewrite NFF.compare_eq_iff NF.compare_eq_iff
@@ -32,7 +32,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   #[local] Hint Extern 1 => cmp_by NF.compare_lt_trans : cmp_cargo.
   #[local] Hint Extern 1 => cmp_by FF.compare_lt_trans : cmp_cargo.
 
-  Module FEntry.
+  Module FeatureEntry.
     Inductive fentry : Type :=
     | EFeat (f : F.t)
     | EDep (a : N.t)
@@ -52,9 +52,9 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           | EFeat f1, EFeat f2 => F.compare f1 f2
           | EDep a1, EDep a2 => N.compare a1 a2
           | EDepFeat a1 f1, EDepFeat a2 f2 =>
-              NFPair.compare (a1, f1) (a2, f2)
+              DependeeFeatureEntry.compare (a1, f1) (a2, f2)
           | EWeakFeat a1 f1, EWeakFeat a2 f2 =>
-              NFPair.compare (a1, f1) (a2, f2)
+              DependeeFeatureEntry.compare (a1, f1) (a2, f2)
           | _, _ => Eq
           end
       | c => c
@@ -69,10 +69,10 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Lemma compare_lt_trans : forall x y z,
         compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
     Proof. cmp_lt_trans cmp_cargo. Qed.
-  End FEntry.
-  Module FEntryOT := UOTFromCompare FEntry.
+  End FeatureEntry.
+  Module FeatureEntryOT := UOTFromCompare FeatureEntry.
 
-  Module FeatureDefinitionElt := PairUOT PackageF FEntryOT.
+  Module FeatureDefinitionElt := PairUOT PackageF FeatureEntryOT.
   Module FeatureDefinitionRel := FSetUOT FeatureDefinitionElt.
 
   Module Kind.
@@ -143,9 +143,9 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Definition Activated (FDefs : FeatureDefinitionRel.t) (fs : FSet.t) (p : Package.t)
       (a : N.t) : Prop :=
     exists f, FSet.In f fs /\
-      (FeatureDefinitionRel.In ((p, f), FEntry.EDep a) FDefs \/
-       (exists f', FeatureDefinitionRel.In ((p, f), FEntry.EDepFeat a f') FDefs) \/
-       (exists f', FeatureDefinitionRel.In ((p, f), FEntry.EWeakFeat a f') FDefs)).
+      (FeatureDefinitionRel.In ((p, f), FeatureEntry.EDep a) FDefs \/
+       (exists f', FeatureDefinitionRel.In ((p, f), FeatureEntry.EDepFeat a f') FDefs) \/
+       (exists f', FeatureDefinitionRel.In ((p, f), FeatureEntry.EWeakFeat a f') FDefs)).
 
   Definition slotRequests (d : DependencyRecord.t) (dflt : F.t) : FSet.t :=
     if sDefault d then FSet.add dflt (sReqFeats d) else sReqFeats d.
@@ -180,11 +180,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           FSet.Subset (slotRequests d (inst_default I)) fs'
     ; res_feat_closure :
         (forall p fs f f', FeaturedSet.In (p, fs) FS -> FSet.In f fs ->
-         FeatureDefinitionRel.In ((p, f), FEntry.EFeat f') (inst_fdefs I) ->
+         FeatureDefinitionRel.In ((p, f), FeatureEntry.EFeat f') (inst_fdefs I) ->
          FSet.In f' fs) /\
         (forall p fs f a f', FeaturedSet.In (p, fs) FS -> FSet.In f fs ->
-         (FeatureDefinitionRel.In ((p, f), FEntry.EDepFeat a f') (inst_fdefs I) \/
-          FeatureDefinitionRel.In ((p, f), FEntry.EWeakFeat a f') (inst_fdefs I)) ->
+         (FeatureDefinitionRel.In ((p, f), FeatureEntry.EDepFeat a f') (inst_fdefs I) \/
+          FeatureDefinitionRel.In ((p, f), FeatureEntry.EWeakFeat a f') (inst_fdefs I)) ->
          forall d u, SlotRel.In (p, d) (inst_slots I) -> sAlias d = a ->
          ParentRel.In ((p, sSite d), u) pi ->
          forall fs', FeaturedSet.In ((sName d, u), fs') FS ->
@@ -225,9 +225,9 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Module VF := UOTCompareFacts V.
     Module SlotName := TripleUOT N G DependencyRecord.
     Module SlotNameF := UOTCompareFacts SlotName.
-    Module FDTail := TripleUOT F DependencyRecord F.
-    Module DecName := TripleUOT N G FDTail.
-    Module DecNameF := UOTCompareFacts DecName.
+    Module DecisionNameTail := TripleUOT F DependencyRecord F.
+    Module DecisionName := TripleUOT N G DecisionNameTail.
+    Module DecNameF := UOTCompareFacts DecisionName.
     #[local] Hint Rewrite GF.compare_eq_iff VF.compare_eq_iff
       SlotNameF.compare_eq_iff DecNameF.compare_eq_iff : cmp_cargo.
     #[local] Hint Extern 1 => cmp_by GF.compare_antisym : cmp_cargo.
@@ -298,18 +298,18 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       destruct (Package.eq_dec q p); intuition congruence.
     Qed.
 
-    Definition entryFeatD (e : FEntry.t) : option (N.t * F.t) :=
+    Definition entryFeatD (e : FeatureEntry.t) : option (N.t * F.t) :=
       match e with
-      | FEntry.EDepFeat a f' => Some (a, f')
-      | FEntry.EWeakFeat a f' => Some (a, f')
+      | FeatureEntry.EDepFeat a f' => Some (a, f')
+      | FeatureEntry.EWeakFeat a f' => Some (a, f')
       | _ => None
       end.
 
-    Definition entryActivates (e : FEntry.t) : option N.t :=
+    Definition entryActivates (e : FeatureEntry.t) : option N.t :=
       match e with
-      | FEntry.EDep a => Some a
-      | FEntry.EDepFeat a _ => Some a
-      | FEntry.EWeakFeat a _ => Some a
+      | FeatureEntry.EDep a => Some a
+      | FeatureEntry.EDepFeat a _ => Some a
+      | FeatureEntry.EWeakFeat a _ => Some a
       | _ => None
       end.
 
@@ -420,10 +420,10 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         rewrite PkgEqb.eqb_refl, SiteEqb.eqb_refl, Hact, Hreq; reflexivity.
     Qed.
 
-    Module NGPair := PairUOT N G.
-    Module NFGTrip := TripleUOT N F G.
-    Module NGF := UOTCompareFacts NGPair.
-    Module NFGF := UOTCompareFacts NFGTrip.
+    Module GranularName := PairUOT N G.
+    Module FeaturePackageName := TripleUOT N F G.
+    Module NGF := UOTCompareFacts GranularName.
+    Module NFGF := UOTCompareFacts FeaturePackageName.
     Module GEqb := UOTEqb G.
     Module FEqb := UOTEqb F.
     #[local] Hint Rewrite NGF.compare_eq_iff NFGF.compare_eq_iff : cmp_cargo.
@@ -432,7 +432,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     #[local] Hint Extern 1 => cmp_by NGF.compare_lt_trans : cmp_cargo.
     #[local] Hint Extern 1 => cmp_by NFGF.compare_lt_trans : cmp_cargo.
 
-    Module NPlus.
+    Module Name.
       Inductive name : Type :=
       | CRoot
       | CGran (n : N.t) (w : G.t)
@@ -452,13 +452,13 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         match Nat.compare (rank x) (rank y) with
         | Eq =>
             match x, y with
-            | CGran n1 g1, CGran n2 g2 => NGPair.compare (n1, g1) (n2, g2)
+            | CGran n1 g1, CGran n2 g2 => GranularName.compare (n1, g1) (n2, g2)
             | CFeatP n1 f1 g1, CFeatP n2 f2 g2 =>
-                NFGTrip.compare (n1, (f1, g1)) (n2, (f2, g2))
+                FeaturePackageName.compare (n1, (f1, g1)) (n2, (f2, g2))
             | CSlot n1 v1 a1, CSlot n2 v2 a2 =>
                 SlotName.compare (n1, (v1, a1)) (n2, (v2, a2))
             | CDec n1 v1 f1 a1 t1, CDec n2 v2 f2 a2 t2 =>
-                DecName.compare (n1, (v1, (f1, (a1, t1))))
+                DecisionName.compare (n1, (v1, (f1, (a1, t1))))
                   (n2, (v2, (f2, (a2, t2))))
             | CCls l1, CCls l2 => N.compare l1 l2
             | _, _ => Eq
@@ -475,19 +475,19 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       Lemma compare_lt_trans : forall x y z,
           compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
       Proof. cmp_lt_trans cmp_cargo. Qed.
-    End NPlus.
-    Module NPOT := UOTFromCompare NPlus.
-    Module NPOTF := UOTCompareFacts NPOT.
+    End Name.
+    Module NameOT := UOTFromCompare Name.
+    Module NPOTF := UOTCompareFacts NameOT.
     #[local] Hint Rewrite NPOTF.compare_eq_iff : cmp_cargo.
     #[local] Hint Extern 1 => cmp_by NPOTF.compare_antisym : cmp_cargo.
     #[local] Hint Extern 1 => cmp_by NPOTF.compare_lt_trans : cmp_cargo.
 
-    Module VPlus.
+    Module Version.
       Inductive version : Type :=
       | WUnit
       | WOrig (v : V.t)
       | WClass (w : G.t)
-      | WName (n : NPlus.t).
+      | WName (n : Name.t).
       Definition t := version.
 
       Definition rank (x : t) : nat :=
@@ -501,7 +501,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             match x, y with
             | WOrig v1, WOrig v2 => V.compare v1 v2
             | WClass g1, WClass g2 => G.compare g1 g2
-            | WName n1, WName n2 => NPOT.compare n1 n2
+            | WName n1, WName n2 => NameOT.compare n1 n2
             | _, _ => Eq
             end
         | c => c
@@ -516,12 +516,12 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       Lemma compare_lt_trans : forall x y z,
           compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
       Proof. cmp_lt_trans cmp_cargo. Qed.
-    End VPlus.
-    Module VPOT := UOTFromCompare VPlus.
+    End Version.
+    Module VersionOT := UOTFromCompare Version.
 
     (* Its core shared, so that the conflict class package calculus at the core's own
        sorts states its lookups over this T. *)
-    Module ClsT := ConflictClass NPOT VPOT.
+    Module ClsT := ConflictClass NameOT VersionOT.
     Module Reduced := ClsT.Source.
 
     Module SOvp := SetOps V Reduced.Package VSet Reduced.PackageSet.
@@ -530,14 +530,14 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Module SOslp := SetOps SlotElt Reduced.Package SlotRel Reduced.PackageSet.
     Module SOfp := SetOps FeatureDefinitionElt Reduced.Package FeatureDefinitionRel Reduced.PackageSet.
     Module SOlp := SetOps LinksElt Reduced.Package LinksRel Reduced.PackageSet.
-    Module SOvv := SetOps V VPOT VSet Reduced.VSet.
+    Module SOvv := SetOps V VersionOT VSet Reduced.VSet.
 
     Definition gransOf (g : V.t -> G.t) (vs : VSet.t) : Reduced.VSet.t :=
-      SOvv.map (fun u => VPlus.WClass (g u)) vs.
+      SOvv.map (fun u => Version.WClass (g u)) vs.
 
     Definition inGran (g : V.t -> G.t) (w : G.t) (vs : VSet.t) : Reduced.VSet.t :=
       SOvv.filterMap
-        (fun u => if GEqb.eqb (g u) w then Some (VPlus.WOrig u) else None) vs.
+        (fun u => if GEqb.eqb (g u) w then Some (Version.WOrig u) else None) vs.
 
     Definition SlotOwned (g : V.t -> G.t) (Slots : SlotRel.t) (r : Package.t)
         (n : N.t) (w : G.t) (d : DependencyRecord.t) : Prop :=
@@ -551,21 +551,21 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         entryFeatD e = Some (sAlias d, f') /\
         SlotRel.In ((n, v), d) Slots /\ slotActive r (n, v) d = true.
 
-    Definition rootPkg : Reduced.Package.t := (NPlus.CRoot, VPlus.WUnit).
+    Definition rootPkg : Reduced.Package.t := (Name.CRoot, Version.WUnit).
 
     Definition granReal (g : V.t -> G.t) (R : PackageSet.t) : Reduced.PackageSet.t :=
-      SOpp.map (fun '(n, v) => (NPlus.CGran n (g v), VPlus.WOrig v)) R.
+      SOpp.map (fun '(n, v) => (Name.CGran n (g v), Version.WOrig v)) R.
 
     Definition featReal (g : V.t -> G.t) (support : SupportRel.t)
       : Reduced.PackageSet.t :=
       SOsp.map (fun '((n, v), f) =>
-          (NPlus.CFeatP n f (g v), VPlus.WOrig v)) support.
+          (Name.CFeatP n f (g v), Version.WOrig v)) support.
 
     Definition slotReal (g : V.t -> G.t) (R : PackageSet.t) (Slots : SlotRel.t)
         (r : Package.t) : Reduced.PackageSet.t :=
       SOslp.unionMap (fun '((n, v), d) =>
           if slotActive r (n, v) d
-          then SOvp.map (fun u => (NPlus.CSlot n (g v) d, VPlus.WClass (g u)))
+          then SOvp.map (fun u => (Name.CSlot n (g v) d, Version.WClass (g u)))
                  (evalReq R (sName d) (sRange d))
           else Reduced.PackageSet.empty)
         Slots.
@@ -578,7 +578,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           | Some (a, f') =>
               SOslp.unionMap (fun '(_, d) =>
                   SOvp.map (fun u =>
-                      (NPlus.CDec n (g v) f d f', VPlus.WClass (g u)))
+                      (Name.CDec n (g v) f d f', Version.WClass (g u)))
                     (evalReq R (sName d) (sRange d)))
                 (slotsAt Slots r (n, v) a)
           | None => Reduced.PackageSet.empty
@@ -589,7 +589,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       : Reduced.PackageSet.t :=
       SOlp.filterMap (fun '((n, v), l) =>
           if PackageSet.mem (n, v) R
-          then Some (NPlus.CCls l, VPlus.WName (NPlus.CGran n (g v)))
+          then Some (Name.CCls l, Version.WName (Name.CGran n (g v)))
           else None)
         Links.
 
@@ -609,37 +609,37 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Definition linkRel (g : V.t -> G.t) (Links : LinksRel.t)
       : ClsT.ConflictClassRel.t :=
       SOlc.map (fun '((n, v), l) =>
-          ((NPlus.CGran n (g v), VPlus.WOrig v), NPlus.CCls l))
+          ((Name.CGran n (g v), Version.WOrig v), Name.CCls l))
         Links.
 
-    Module SOlv := SetOps LinksElt VPOT LinksRel Reduced.VSet.
-    Module SOpv2 := SetOps Package VPOT PackageSet Reduced.VSet.
-    Module SOspv := SetOps PackageF VPOT SupportRel Reduced.VSet.
+    Module SOlv := SetOps LinksElt VersionOT LinksRel Reduced.VSet.
+    Module SOpv2 := SetOps Package VersionOT PackageSet Reduced.VSet.
+    Module SOspv := SetOps PackageF VersionOT SupportRel Reduced.VSet.
     Module SOsh := SetOps SlotElt Reduced.Dependee SlotRel Reduced.DependeeSet.
     Module SOfh := SetOps FeatureDefinitionElt Reduced.Dependee FeatureDefinitionRel Reduced.DependeeSet.
     Module SOlh := SetOps LinksElt Reduced.Dependee LinksRel Reduced.DependeeSet.
     Module SOfsh := SetOps F Reduced.Dependee FSet Reduced.DependeeSet.
 
-    Definition versions (I : Inst) (m : NPlus.t) : Reduced.VSet.t :=
+    Definition versions (I : Inst) (m : Name.t) : Reduced.VSet.t :=
       match m with
-      | NPlus.CRoot => Reduced.VSet.singleton VPlus.WUnit
-      | NPlus.CGran n w =>
+      | Name.CRoot => Reduced.VSet.singleton Version.WUnit
+      | Name.CGran n w =>
           SOpv2.filterMap (fun '(n', v) =>
               if andb (NEqb.eqb n' n) (GEqb.eqb (inst_gran I v) w)
-              then Some (VPlus.WOrig v) else None)
+              then Some (Version.WOrig v) else None)
             (inst_real I)
-      | NPlus.CFeatP n f w =>
+      | Name.CFeatP n f w =>
           SOspv.filterMap (fun '((n', v), f0) =>
               if andb (andb (NEqb.eqb n' n) (FEqb.eqb f0 f))
                    (GEqb.eqb (inst_gran I v) w)
-              then Some (VPlus.WOrig v) else None)
+              then Some (Version.WOrig v) else None)
             (inst_support I)
-      | NPlus.CSlot _ _ d | NPlus.CDec _ _ _ d _ =>
+      | Name.CSlot _ _ d | Name.CDec _ _ _ d _ =>
           gransOf (inst_gran I) (evalReq (inst_real I) (sName d) (sRange d))
-      | NPlus.CCls l =>
+      | Name.CCls l =>
           SOlv.filterMap (fun '((n, v), l') =>
               if andb (NEqb.eqb l' l) (PackageSet.mem (n, v) (inst_real I))
-              then Some (VPlus.WName (NPlus.CGran n (inst_gran I v))) else
+              then Some (Version.WName (Name.CGran n (inst_gran I v))) else
                 None)
             (inst_links I)
       end.
@@ -647,51 +647,51 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Definition dependeesBy (Vq : N.t -> VSet.t) (I : Inst) (p : Reduced.Package.t)
       : Reduced.DependeeSet.t :=
       match p with
-      | (NPlus.CRoot, VPlus.WUnit) =>
+      | (Name.CRoot, Version.WUnit) =>
           let '(n, v) := inst_root I in
           Reduced.DependeeSet.add
-            (NPlus.CGran n (inst_gran I v), Reduced.VSet.singleton (VPlus.WOrig v))
+            (Name.CGran n (inst_gran I v), Reduced.VSet.singleton (Version.WOrig v))
             (SOfsh.map (fun f =>
-                 (NPlus.CFeatP n f (inst_gran I v),
-                  Reduced.VSet.singleton (VPlus.WOrig v)))
+                 (Name.CFeatP n f (inst_gran I v),
+                  Reduced.VSet.singleton (Version.WOrig v)))
                (inst_rootFeats I))
-      | (NPlus.CGran n w, VPlus.WOrig v) =>
+      | (Name.CGran n w, Version.WOrig v) =>
           Reduced.DependeeSet.union
             (SOsh.filterMap (fun '(q, d) =>
                  if andb (PkgEqb.eqb q (n, v))
                       (andb (slotActive (inst_root I) (n, v) d)
                          (negb (sOptional d)))
-                 then Some (NPlus.CSlot n (inst_gran I v) d,
+                 then Some (Name.CSlot n (inst_gran I v) d,
                             gransOf (inst_gran I)
                               (evalReqBy Vq (sName d) (sRange d)))
                  else None)
                (inst_slots I))
             (SOlh.filterMap (fun '(q, l) =>
                  if PkgEqb.eqb q (n, v)
-                 then Some (NPlus.CCls l,
-                            Reduced.VSet.singleton (VPlus.WName (NPlus.CGran n w)))
+                 then Some (Name.CCls l,
+                            Reduced.VSet.singleton (Version.WName (Name.CGran n w)))
                  else None)
                (inst_links I))
-      | (NPlus.CFeatP n f _, VPlus.WOrig v) =>
+      | (Name.CFeatP n f _, Version.WOrig v) =>
           Reduced.DependeeSet.add
-            (NPlus.CGran n (inst_gran I v), Reduced.VSet.singleton (VPlus.WOrig v))
+            (Name.CGran n (inst_gran I v), Reduced.VSet.singleton (Version.WOrig v))
             (SOfh.unionMap (fun '(((n', v'), f0), e) =>
                  if negb (andb (PkgEqb.eqb (n', v') (n, v)) (FEqb.eqb f0 f))
                  then Reduced.DependeeSet.empty
                  else
                    Reduced.DependeeSet.union
                      (match e with
-                      | FEntry.EFeat f2 =>
+                      | FeatureEntry.EFeat f2 =>
                           Reduced.DependeeSet.singleton
-                            (NPlus.CFeatP n f2 (inst_gran I v),
-                             Reduced.VSet.singleton (VPlus.WOrig v))
+                            (Name.CFeatP n f2 (inst_gran I v),
+                             Reduced.VSet.singleton (Version.WOrig v))
                       | _ => Reduced.DependeeSet.empty
                       end)
                      (Reduced.DependeeSet.union
                         (match entryActivates e with
                          | Some a =>
                              SOsh.map (fun '(_, d) =>
-                                 (NPlus.CSlot n (inst_gran I v) d,
+                                 (Name.CSlot n (inst_gran I v) d,
                                   gransOf (inst_gran I)
                                     (evalReqBy Vq (sName d) (sRange d))))
                                (slotsAt (inst_slots I) (inst_root I) (n, v) a)
@@ -700,27 +700,27 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                         (match entryFeatD e with
                          | Some (a, f') =>
                              SOsh.map (fun '(_, d) =>
-                                 (NPlus.CDec n (inst_gran I v) f d f',
+                                 (Name.CDec n (inst_gran I v) f d f',
                                   gransOf (inst_gran I)
                                     (evalReqBy Vq (sName d) (sRange d))))
                                (slotsAt (inst_slots I) (inst_root I) (n, v) a)
                          | None => Reduced.DependeeSet.empty
                          end)))
                (inst_fdefs I))
-      | (NPlus.CSlot _ _ d, VPlus.WClass w) =>
+      | (Name.CSlot _ _ d, Version.WClass w) =>
           Reduced.DependeeSet.add
-            (NPlus.CGran (sName d) w,
+            (Name.CGran (sName d) w,
              inGran (inst_gran I) w (evalReqBy Vq (sName d) (sRange d)))
             (SOfsh.map (fun f =>
-                 (NPlus.CFeatP (sName d) f w,
+                 (Name.CFeatP (sName d) f w,
                   inGran (inst_gran I) w
                     (evalReqBy Vq (sName d) (sRange d))))
                (slotRequests d (inst_default I)))
-      | (NPlus.CDec n w0 _ d f', VPlus.WClass w) =>
+      | (Name.CDec n w0 _ d f', Version.WClass w) =>
           Reduced.DependeeSet.add
-            (NPlus.CSlot n w0 d, Reduced.VSet.singleton (VPlus.WClass w))
+            (Name.CSlot n w0 d, Reduced.VSet.singleton (Version.WClass w))
             (Reduced.DependeeSet.singleton
-               (NPlus.CFeatP (sName d) f' w,
+               (Name.CFeatP (sName d) f' w,
                 inGran (inst_gran I) w
                   (evalReqBy Vq (sName d) (sRange d))))
       | _ => Reduced.DependeeSet.empty
@@ -742,14 +742,14 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
     Lemma mem_gransOf : forall g vs v,
         Reduced.VSet.In v (gransOf g vs) <->
-        exists u, VSet.In u vs /\ v = VPlus.WClass (g u).
+        exists u, VSet.In u vs /\ v = Version.WClass (g u).
     Proof.
       intros g vs v; unfold gransOf; rewrite SOvv.mem_map; reflexivity.
     Qed.
 
     Lemma mem_inGran : forall g w vs v,
         Reduced.VSet.In v (inGran g w vs) <->
-        exists u, VSet.In u vs /\ g u = w /\ v = VPlus.WOrig u.
+        exists u, VSet.In u vs /\ g u = w /\ v = Version.WOrig u.
     Proof.
       intros g w vs v; unfold inGran; rewrite SOvv.mem_filterMap_if.
       cbn beta; setoid_rewrite GEqb.eqb_true_iff; reflexivity.
@@ -758,7 +758,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Lemma mem_granReal : forall g R p,
         Reduced.PackageSet.In p (granReal g R) <->
         exists n v, PackageSet.In (n, v) R /\
-          p = (NPlus.CGran n (g v), VPlus.WOrig v).
+          p = (Name.CGran n (g v), Version.WOrig v).
     Proof.
       intros g R p; unfold granReal; rewrite SOpp.mem_map; split.
       - intros [[n v] [HR He]]; cbn beta iota in He.
@@ -770,7 +770,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Lemma mem_featReal : forall g support p,
         Reduced.PackageSet.In p (featReal g support) <->
         exists n v f, SupportRel.In ((n, v), f) support /\
-          p = (NPlus.CFeatP n f (g v), VPlus.WOrig v).
+          p = (Name.CFeatP n f (g v), Version.WOrig v).
     Proof.
       intros g support p; unfold featReal; rewrite SOsp.mem_map; split.
       - intros [[[n v] f] [HR He]]; cbn beta iota in He.
@@ -784,7 +784,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         exists n v d u, SlotRel.In ((n, v), d) Slots /\
           slotActive r (n, v) d = true /\
           VSet.In u (evalReq R (sName d) (sRange d)) /\
-          p = (NPlus.CSlot n (g v) d, VPlus.WClass (g u)).
+          p = (Name.CSlot n (g v) d, Version.WClass (g u)).
     Proof.
       intros g R Slots r p; unfold slotReal.
       rewrite SOslp.mem_unionMap; split.
@@ -806,7 +806,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           SlotRel.In ((n, v), d) Slots /\ sAlias d = a /\
           slotActive r (n, v) d = true /\
           VSet.In u (evalReq R (sName d) (sRange d)) /\
-          p = (NPlus.CDec n (g v) f d f', VPlus.WClass (g u)).
+          p = (Name.CDec n (g v) f d f', Version.WClass (g u)).
     Proof.
       intros g R FDefs Slots r p; unfold decReal.
       rewrite SOfp.mem_unionMap; split.
@@ -830,7 +830,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Lemma mem_clsReal : forall g R Links p,
         Reduced.PackageSet.In p (clsReal g R Links) <->
         exists n v l, LinksRel.In ((n, v), l) Links /\ PackageSet.In (n, v) R /\
-          p = (NPlus.CCls l, VPlus.WName (NPlus.CGran n (g v))).
+          p = (Name.CCls l, Version.WName (Name.CGran n (g v))).
     Proof.
       intros g R Links p; unfold clsReal; rewrite SOlp.mem_filterMap; split.
       - intros [[[n v] l] [Hl He]]; cbn beta iota in He.
@@ -844,7 +844,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Lemma mem_linkRel : forall g Links q k,
         ClsT.ConflictClassRel.In (q, k) (linkRel g Links) <->
         exists n v l, LinksRel.In ((n, v), l) Links /\
-          q = (NPlus.CGran n (g v), VPlus.WOrig v) /\ k = NPlus.CCls l.
+          q = (Name.CGran n (g v), Version.WOrig v) /\ k = Name.CCls l.
     Proof.
       intros g Links q k; unfold linkRel; rewrite SOlc.mem_map; split.
       - intros [[[n v] l] [Hl He]]; cbn beta iota in He.
@@ -874,24 +874,24 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       forall I m v',
         Reduced.PackageSet.In (m, v') (reduceReal I) <->
         match m with
-        | NPlus.CRoot => v' = VPlus.WUnit
-        | NPlus.CGran n w =>
-            exists v, v' = VPlus.WOrig v /\ PackageSet.In (n, v) (inst_real I) /\
+        | Name.CRoot => v' = Version.WUnit
+        | Name.CGran n w =>
+            exists v, v' = Version.WOrig v /\ PackageSet.In (n, v) (inst_real I) /\
               w = inst_gran I v
-        | NPlus.CFeatP n f w =>
-            exists v, v' = VPlus.WOrig v /\
+        | Name.CFeatP n f w =>
+            exists v, v' = Version.WOrig v /\
               SupportRel.In ((n, v), f) (inst_support I) /\ w = inst_gran I v
-        | NPlus.CSlot n w d =>
+        | Name.CSlot n w d =>
             SlotOwned (inst_gran I) (inst_slots I) (inst_root I) n w d /\
             exists u, VSet.In u (evalReq (inst_real I) (sName d) (sRange d)) /\
-              v' = VPlus.WClass (inst_gran I u)
-        | NPlus.CDec n w f d f' =>
+              v' = Version.WClass (inst_gran I u)
+        | Name.CDec n w f d f' =>
             DecOwned (inst_gran I) (inst_fdefs I) (inst_slots I) (inst_root I)
               n w f d f' /\
             exists u, VSet.In u (evalReq (inst_real I) (sName d) (sRange d)) /\
-              v' = VPlus.WClass (inst_gran I u)
-        | NPlus.CCls l =>
-            exists n v, v' = VPlus.WName (NPlus.CGran n (inst_gran I v)) /\
+              v' = Version.WClass (inst_gran I u)
+        | Name.CCls l =>
+            exists n v, v' = Version.WName (Name.CGran n (inst_gran I v)) /\
               LinksRel.In ((n, v), l) (inst_links I) /\
               PackageSet.In (n, v) (inst_real I)
         end.
@@ -916,8 +916,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Lemma mem_versions_cls : forall I l u,
-        Reduced.VSet.In u (versions I (NPlus.CCls l))
-        <-> exists n v, u = VPlus.WName (NPlus.CGran n (inst_gran I v)) /\
+        Reduced.VSet.In u (versions I (Name.CCls l))
+        <-> exists n v, u = Version.WName (Name.CGran n (inst_gran I v)) /\
           LinksRel.In ((n, v), l) (inst_links I) /\
             PackageSet.In (n, v) (inst_real I).
     Proof.
@@ -934,22 +934,22 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Lemma versions_cls_reduceReal :
       forall I l v,
         Reduced.VSet.In v
-          (versions I (NPlus.CCls l)) <->
-        exists n, v = VPlus.WName n /\
+          (versions I (Name.CCls l)) <->
+        exists n, v = Version.WName n /\
           ClsT.Reduction.Reduced.VSet.In (ClsT.Reduction.Version.Name n)
             (ClsT.Reduction.Reduced.versions
                (ClsT.Reduction.reduceReal
                   (granReal (inst_gran I) (inst_real I))
                   (linkRel (inst_gran I) (inst_links I)))
-               (ClsT.Reduction.Name.Cls (NPlus.CCls l))).
+               (ClsT.Reduction.Name.Cls (Name.CCls l))).
     Proof.
       intros I l u.
       rewrite mem_versions_cls, ClsT.Reduction.Lookup.versions_cls.
       split.
       - intros [n [v [-> [Hl Em]]]].
-        exists (NPlus.CGran n (inst_gran I v)); split; [reflexivity |].
+        exists (Name.CGran n (inst_gran I v)); split; [reflexivity |].
         apply ClsT.Reduction.Lookup.SOpv.mem_map.
-        exists (NPlus.CGran n (inst_gran I v), VPlus.WOrig v);
+        exists (Name.CGran n (inst_gran I v), Version.WOrig v);
           split; [| reflexivity].
         apply ClsT.Reduction.Lookup.mem_inClass; split.
         + apply mem_granReal; exists n, v; split; [exact Em | reflexivity].
@@ -987,11 +987,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
     Definition Inert (p : Reduced.Package.t) : Prop :=
       match p with
-      | (NPlus.CRoot, VPlus.WUnit) => False
-      | (NPlus.CGran _ _, VPlus.WOrig _) => False
-      | (NPlus.CFeatP _ _ _, VPlus.WOrig _) => False
-      | (NPlus.CSlot _ _ _, VPlus.WClass _) => False
-      | (NPlus.CDec _ _ _ _ _, VPlus.WClass _) => False
+      | (Name.CRoot, Version.WUnit) => False
+      | (Name.CGran _ _, Version.WOrig _) => False
+      | (Name.CFeatP _ _ _, Version.WOrig _) => False
+      | (Name.CSlot _ _ _, Version.WClass _) => False
+      | (Name.CDec _ _ _ _ _, Version.WClass _) => False
       | _ => True
       end.
 
@@ -1009,9 +1009,9 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         Reduced.DependeeSet.In h
           (dependees (MkInst R Slots FDefs Links support g dflt (rn, rv)
                         rootFeats) rootPkg) <->
-        h = (NPlus.CGran rn (g rv), Reduced.VSet.singleton (VPlus.WOrig rv)) \/
+        h = (Name.CGran rn (g rv), Reduced.VSet.singleton (Version.WOrig rv)) \/
         exists f, FSet.In f rootFeats /\
-          h = (NPlus.CFeatP rn f (g rv), Reduced.VSet.singleton (VPlus.WOrig rv)).
+          h = (Name.CFeatP rn f (g rv), Reduced.VSet.singleton (Version.WOrig rv)).
     Proof.
       intros; cbn [dependees dependeesBy rootPkg inst_gran inst_root
                    inst_rootFeats].
@@ -1024,15 +1024,15 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Lemma mem_depBy_gran :
       forall Vq I n w v h,
         Reduced.DependeeSet.In h
-          (dependeesBy Vq I (NPlus.CGran n w, VPlus.WOrig v)) <->
+          (dependeesBy Vq I (Name.CGran n w, Version.WOrig v)) <->
         ((exists d, SlotRel.In ((n, v), d) (inst_slots I) /\
             slotActive (inst_root I) (n, v) d = true /\
             sOptional d = false /\
-            h = (NPlus.CSlot n (inst_gran I v) d,
+            h = (Name.CSlot n (inst_gran I v) d,
                  gransOf (inst_gran I) (evalReqBy Vq (sName d) (sRange d)))) \/
          (exists l, LinksRel.In ((n, v), l) (inst_links I) /\
-            h = (NPlus.CCls l,
-                 Reduced.VSet.singleton (VPlus.WName (NPlus.CGran n w))))).
+            h = (Name.CCls l,
+                 Reduced.VSet.singleton (Version.WName (Name.CGran n w))))).
     Proof.
       intros; cbn [dependeesBy].
       rewrite Reduced.DependeeSet.union_spec, SOsh.mem_filterMap,
@@ -1054,16 +1054,16 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Lemma mem_dep_gran :
       forall I n w v h,
         Reduced.DependeeSet.In h
-          (dependees I (NPlus.CGran n w, VPlus.WOrig v)) <->
+          (dependees I (Name.CGran n w, Version.WOrig v)) <->
         ((exists d, SlotRel.In ((n, v), d) (inst_slots I) /\
             slotActive (inst_root I) (n, v) d = true /\
             sOptional d = false /\
-            h = (NPlus.CSlot n (inst_gran I v) d,
+            h = (Name.CSlot n (inst_gran I v) d,
                  gransOf (inst_gran I)
                    (evalReq (inst_real I) (sName d) (sRange d)))) \/
          (exists l, LinksRel.In ((n, v), l) (inst_links I) /\
-            h = (NPlus.CCls l,
-                 Reduced.VSet.singleton (VPlus.WName (NPlus.CGran n w))))).
+            h = (Name.CCls l,
+                 Reduced.VSet.singleton (Version.WName (Name.CGran n w))))).
     Proof.
       intros; unfold dependees; apply mem_depBy_gran.
     Qed.
@@ -1071,23 +1071,23 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Lemma mem_depBy_featP :
       forall Vq I n f w v h,
         Reduced.DependeeSet.In h
-          (dependeesBy Vq I (NPlus.CFeatP n f w, VPlus.WOrig v)) <->
+          (dependeesBy Vq I (Name.CFeatP n f w, Version.WOrig v)) <->
         (h =
-           (NPlus.CGran n (inst_gran I v), Reduced.VSet.singleton (VPlus.WOrig v)) \/
+           (Name.CGran n (inst_gran I v), Reduced.VSet.singleton (Version.WOrig v)) \/
          exists e, FeatureDefinitionRel.In (((n, v), f), e) (inst_fdefs I) /\
-           ((exists f', e = FEntry.EFeat f' /\
-               h = (NPlus.CFeatP n f' (inst_gran I v),
-                    Reduced.VSet.singleton (VPlus.WOrig v))) \/
+           ((exists f', e = FeatureEntry.EFeat f' /\
+               h = (Name.CFeatP n f' (inst_gran I v),
+                    Reduced.VSet.singleton (Version.WOrig v))) \/
             (exists a d, entryActivates e = Some a /\
                SlotRel.In ((n, v), d) (inst_slots I) /\ sAlias d = a /\
                slotActive (inst_root I) (n, v) d = true /\
-               h = (NPlus.CSlot n (inst_gran I v) d,
+               h = (Name.CSlot n (inst_gran I v) d,
                     gransOf (inst_gran I)
                       (evalReqBy Vq (sName d) (sRange d)))) \/
             (exists a f' d, entryFeatD e = Some (a, f') /\
                SlotRel.In ((n, v), d) (inst_slots I) /\ sAlias d = a /\
                slotActive (inst_root I) (n, v) d = true /\
-               h = (NPlus.CDec n (inst_gran I v) f d f',
+               h = (Name.CDec n (inst_gran I v) f d f',
                     gransOf (inst_gran I)
                       (evalReqBy Vq (sName d) (sRange d)))))).
     Proof.
@@ -1139,23 +1139,23 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Lemma mem_dep_featP :
       forall I n f w v h,
         Reduced.DependeeSet.In h
-          (dependees I (NPlus.CFeatP n f w, VPlus.WOrig v)) <->
+          (dependees I (Name.CFeatP n f w, Version.WOrig v)) <->
         (h =
-           (NPlus.CGran n (inst_gran I v), Reduced.VSet.singleton (VPlus.WOrig v)) \/
+           (Name.CGran n (inst_gran I v), Reduced.VSet.singleton (Version.WOrig v)) \/
          exists e, FeatureDefinitionRel.In (((n, v), f), e) (inst_fdefs I) /\
-           ((exists f', e = FEntry.EFeat f' /\
-               h = (NPlus.CFeatP n f' (inst_gran I v),
-                    Reduced.VSet.singleton (VPlus.WOrig v))) \/
+           ((exists f', e = FeatureEntry.EFeat f' /\
+               h = (Name.CFeatP n f' (inst_gran I v),
+                    Reduced.VSet.singleton (Version.WOrig v))) \/
             (exists a d, entryActivates e = Some a /\
                SlotRel.In ((n, v), d) (inst_slots I) /\ sAlias d = a /\
                slotActive (inst_root I) (n, v) d = true /\
-               h = (NPlus.CSlot n (inst_gran I v) d,
+               h = (Name.CSlot n (inst_gran I v) d,
                     gransOf (inst_gran I)
                       (evalReq (inst_real I) (sName d) (sRange d)))) \/
             (exists a f' d, entryFeatD e = Some (a, f') /\
                SlotRel.In ((n, v), d) (inst_slots I) /\ sAlias d = a /\
                slotActive (inst_root I) (n, v) d = true /\
-               h = (NPlus.CDec n (inst_gran I v) f d f',
+               h = (Name.CDec n (inst_gran I v) f d f',
                     gransOf (inst_gran I)
                       (evalReq (inst_real I) (sName d) (sRange d)))))).
     Proof. intros; unfold dependees; apply mem_depBy_featP. Qed.
@@ -1163,11 +1163,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Lemma mem_depBy_slot :
       forall Vq I n w d w' h,
         Reduced.DependeeSet.In h
-          (dependeesBy Vq I (NPlus.CSlot n w d, VPlus.WClass w')) <->
-        h = (NPlus.CGran (sName d) w',
+          (dependeesBy Vq I (Name.CSlot n w d, Version.WClass w')) <->
+        h = (Name.CGran (sName d) w',
              inGran (inst_gran I) w' (evalReqBy Vq (sName d) (sRange d))) \/
         exists f, FSet.In f (slotRequests d (inst_default I)) /\
-          h = (NPlus.CFeatP (sName d) f w',
+          h = (Name.CFeatP (sName d) f w',
                inGran (inst_gran I) w' (evalReqBy Vq (sName d) (sRange d))).
     Proof.
       intros; cbn [dependeesBy].
@@ -1177,12 +1177,12 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Lemma mem_dep_slot :
       forall I n w d w' h,
         Reduced.DependeeSet.In h
-          (dependees I (NPlus.CSlot n w d, VPlus.WClass w')) <->
-        h = (NPlus.CGran (sName d) w',
+          (dependees I (Name.CSlot n w d, Version.WClass w')) <->
+        h = (Name.CGran (sName d) w',
              inGran (inst_gran I) w'
                (evalReq (inst_real I) (sName d) (sRange d))) \/
         exists f, FSet.In f (slotRequests d (inst_default I)) /\
-          h = (NPlus.CFeatP (sName d) f w',
+          h = (Name.CFeatP (sName d) f w',
                inGran (inst_gran I) w'
                  (evalReq (inst_real I) (sName d) (sRange d))).
     Proof. intros; unfold dependees; apply mem_depBy_slot. Qed.
@@ -1190,9 +1190,9 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Lemma mem_depBy_dec :
       forall Vq I n w f d f' w' h,
         Reduced.DependeeSet.In h
-          (dependeesBy Vq I (NPlus.CDec n w f d f', VPlus.WClass w')) <->
-        h = (NPlus.CSlot n w d, Reduced.VSet.singleton (VPlus.WClass w')) \/
-        h = (NPlus.CFeatP (sName d) f' w',
+          (dependeesBy Vq I (Name.CDec n w f d f', Version.WClass w')) <->
+        h = (Name.CSlot n w d, Reduced.VSet.singleton (Version.WClass w')) \/
+        h = (Name.CFeatP (sName d) f' w',
              inGran (inst_gran I) w' (evalReqBy Vq (sName d) (sRange d))).
     Proof.
       intros; cbn [dependeesBy].
@@ -1203,9 +1203,9 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Lemma mem_dep_dec :
       forall I n w f d f' w' h,
         Reduced.DependeeSet.In h
-          (dependees I (NPlus.CDec n w f d f', VPlus.WClass w')) <->
-        h = (NPlus.CSlot n w d, Reduced.VSet.singleton (VPlus.WClass w')) \/
-        h = (NPlus.CFeatP (sName d) f' w',
+          (dependees I (Name.CDec n w f d f', Version.WClass w')) <->
+        h = (Name.CSlot n w d, Reduced.VSet.singleton (Version.WClass w')) \/
+        h = (Name.CFeatP (sName d) f' w',
              inGran (inst_gran I) w'
                (evalReq (inst_real I) (sName d) (sRange d))).
     Proof. intros; unfold dependees; apply mem_depBy_dec. Qed.
@@ -1213,20 +1213,20 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Definition cargoResolution (S : Reduced.PackageSet.t) : PackageSet.t :=
       SOtp.filterMap (fun '(m, u) =>
           match m, u with
-          | NPlus.CGran n _, VPlus.WOrig v => Some (n, v)
+          | Name.CGran n _, Version.WOrig v => Some (n, v)
           | _, _ => None
           end)
         S.
 
     Lemma mem_cargoResolution : forall S n v,
         PackageSet.In (n, v) (cargoResolution S) <->
-        exists w, Reduced.PackageSet.In (NPlus.CGran n w, VPlus.WOrig v) S.
+        exists w, Reduced.PackageSet.In (Name.CGran n w, Version.WOrig v) S.
     Proof.
       intros S n v; unfold cargoResolution; rewrite SOtp.mem_filterMap; split.
       - intros [[m u] [Hin He]]; cbn beta iota in He.
         destruct m; try discriminate; destruct u; try discriminate.
         injection He as -> ->; exists w; exact Hin.
-      - intros [w Hin]; exists (NPlus.CGran n w, VPlus.WOrig v); split;
+      - intros [w Hin]; exists (Name.CGran n w, Version.WOrig v); split;
           [exact Hin | reflexivity].
     Qed.
 
@@ -1234,7 +1234,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Definition featsAt (S : Reduced.PackageSet.t) (p : Package.t) : FSet.t :=
       SOtf.filterMap (fun '(m, u) =>
           match m, u with
-          | NPlus.CFeatP n f _, VPlus.WOrig v =>
+          | Name.CFeatP n f _, Version.WOrig v =>
               if PkgEqb.eqb (n, v) p then Some f else None
           | _, _ => None
           end)
@@ -1242,14 +1242,14 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
     Lemma mem_featsAt : forall S n v f,
         FSet.In f (featsAt S (n, v)) <->
-        exists w, Reduced.PackageSet.In (NPlus.CFeatP n f w, VPlus.WOrig v) S.
+        exists w, Reduced.PackageSet.In (Name.CFeatP n f w, Version.WOrig v) S.
     Proof.
       intros S n v f; unfold featsAt; rewrite SOtf.mem_filterMap; split.
       - intros [[m u] [Hin He]]; cbn beta iota in He.
         destruct m; try discriminate; destruct u; try discriminate.
         rewrite if_some_iff, PkgEqb.eqb_true_iff in He.
         destruct He as [[= -> ->] ->]; exists w; exact Hin.
-      - intros [w Hin]; exists (NPlus.CFeatP n f w, VPlus.WOrig v); split;
+      - intros [w Hin]; exists (Name.CFeatP n f w, Version.WOrig v); split;
           [exact Hin | cbn beta iota].
         rewrite PkgEqb.eqb_refl; reflexivity.
     Qed.
@@ -1272,7 +1272,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Definition versionsAt (S : Reduced.PackageSet.t) (n : N.t) (w : G.t) : VSet.t :=
       SOtv2.filterMap (fun '(m, v) =>
           match m, v with
-          | NPlus.CGran n' w', VPlus.WOrig u =>
+          | Name.CGran n' w', Version.WOrig u =>
               if andb (NEqb.eqb n' n) (GEqb.eqb w' w) then Some u else None
           | _, _ => None
           end)
@@ -1280,7 +1280,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
     Lemma mem_versionsAt : forall S n w u,
         VSet.In u (versionsAt S n w) <->
-        Reduced.PackageSet.In (NPlus.CGran n w, VPlus.WOrig u) S.
+        Reduced.PackageSet.In (Name.CGran n w, Version.WOrig u) S.
     Proof.
       intros S n w u; unfold versionsAt; rewrite SOtv2.mem_filterMap; split.
       - intros [[m v] [Hin He]]; cbn beta iota in He.
@@ -1288,7 +1288,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         rewrite if_some_iff, andb_true_iff, NEqb.eqb_true_iff, GEqb.eqb_true_iff
           in He.
         destruct He as [[-> ->] ->]; exact Hin.
-      - intro Hin; exists (NPlus.CGran n w, VPlus.WOrig u); split;
+      - intro Hin; exists (Name.CGran n w, Version.WOrig u); split;
           [exact Hin | cbn beta iota].
         rewrite NEqb.eqb_refl, GEqb.eqb_refl; reflexivity.
     Qed.
@@ -1298,7 +1298,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Definition parents (I : Inst) (S : Reduced.PackageSet.t) : ParentRel.t :=
       SOtpar.unionMap (fun '(m, v') =>
           match m, v' with
-          | NPlus.CSlot n w d, VPlus.WClass w' =>
+          | Name.CSlot n w d, Version.WClass w' =>
               SOvpar.unionMap (fun v =>
                   if andb (SlotRel.mem ((n, v), d) (inst_slots I))
                        (andb (slotActive (inst_root I) (n, v) d)
@@ -1316,13 +1316,13 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
     Lemma mem_parents : forall I S n v k u,
         ParentRel.In (((n, v), k), u) (parents I S) <->
-        exists w w' d, Reduced.PackageSet.In (NPlus.CSlot n w d, VPlus.WClass w') S /\
-          Reduced.PackageSet.In (NPlus.CGran n w, VPlus.WOrig v) S /\
+        exists w w' d, Reduced.PackageSet.In (Name.CSlot n w d, Version.WClass w') S /\
+          Reduced.PackageSet.In (Name.CGran n w, Version.WOrig v) S /\
           SlotRel.In ((n, v), d) (inst_slots I) /\ sSite d = k /\
           slotActive (inst_root I) (n, v) d = true /\
           (sOptional d = false \/
            Activated (inst_fdefs I) (featsAt S (n, v)) (n, v) (sAlias d)) /\
-          Reduced.PackageSet.In (NPlus.CGran (sName d) w', VPlus.WOrig u) S.
+          Reduced.PackageSet.In (Name.CGran (sName d) w', Version.WOrig u) S.
     Proof.
       intros I S n v k u; unfold parents.
       rewrite SOtpar.mem_unionMap; split.
@@ -1342,7 +1342,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         + apply mem_versionsAt; exact Hv0.
         + apply mem_versionsAt; exact Hu'.
       - intros [w [w' [d [Hslot [Hown [Hs [Ha [Hact [Hreq Hcr]]]]]]]]].
-        exists (NPlus.CSlot n w d, VPlus.WClass w'); split;
+        exists (Name.CSlot n w d, Version.WClass w'); split;
           [exact Hslot | cbn beta iota].
         apply SOvpar.mem_unionMap; exists v; split;
           [apply mem_versionsAt; exact Hown | cbn beta iota].
@@ -1364,28 +1364,28 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       cbn [inst_slots] in Hsite.
       destruct Hres as [Hsub Hroot Hdep Huniq].
       assert (A1 : forall n w v,
-          Reduced.PackageSet.In (NPlus.CGran n w, VPlus.WOrig v) S ->
+          Reduced.PackageSet.In (Name.CGran n w, Version.WOrig v) S ->
           PackageSet.In (n, v) R /\ w = g v).
       { intros n w v Hin; apply Hsub, real_shape in Hin.
         destruct Hin as [v' [E [HR ->]]]; injection E as <-; auto. }
       assert (A2 : forall n f w v,
-          Reduced.PackageSet.In (NPlus.CFeatP n f w, VPlus.WOrig v) S ->
+          Reduced.PackageSet.In (Name.CFeatP n f w, Version.WOrig v) S ->
           SupportRel.In ((n, v), f) support /\ w = g v).
       { intros n f w v Hin; apply Hsub, real_shape in Hin.
         destruct Hin as [v' [E [Hsp ->]]]; injection E as <-; auto. }
       assert (A3 : forall n w d w',
-          Reduced.PackageSet.In (NPlus.CSlot n w d, VPlus.WClass w') S ->
+          Reduced.PackageSet.In (Name.CSlot n w d, Version.WClass w') S ->
           exists u, VSet.In u (evalReq R (sName d) (sRange d)) /\ g u = w').
       { intros n w d w' Hin; apply Hsub, real_shape in Hin.
         destruct Hin as [_ [u [Hu E]]]; injection E as ->; eauto. }
       assert (A5 : forall n f w u u',
-          Reduced.PackageSet.In (NPlus.CFeatP n f w, VPlus.WOrig u') S ->
-          Reduced.PackageSet.In (NPlus.CGran n w, VPlus.WOrig u) S -> u' = u).
+          Reduced.PackageSet.In (Name.CFeatP n f w, Version.WOrig u') S ->
+          Reduced.PackageSet.In (Name.CGran n w, Version.WOrig u) S -> u' = u).
       { intros n f w u u' Hf Hc.
         destruct (A2 _ _ _ _ Hf) as [Hsp Egr]; subst w.
         assert (Hed : Reduced.DependencyRel.In
-            ((NPlus.CFeatP n f (g u'), VPlus.WOrig u'),
-             (NPlus.CGran n (g u'), Reduced.VSet.singleton (VPlus.WOrig u')))
+            ((Name.CFeatP n f (g u'), Version.WOrig u'),
+             (Name.CGran n (g u'), Reduced.VSet.singleton (Version.WOrig u')))
             (reduceDeps
                (MkInst R Slots FDefs Links support g dflt (rn, rv) rootFeats))).
         { apply mem_reduceDeps; split; [exact (Hsub _ Hf) |].
@@ -1399,8 +1399,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       - intros [n v] Hp; apply mem_cargoResolution in Hp; destruct Hp as [w Hp].
         exact (proj1 (A1 _ _ _ Hp)).
       - assert (Hed : Reduced.DependencyRel.In
-            (rootPkg, (NPlus.CGran rn (g rv),
-                         Reduced.VSet.singleton (VPlus.WOrig rv)))
+            (rootPkg, (Name.CGran rn (g rv),
+                         Reduced.VSet.singleton (Version.WOrig rv)))
             (reduceDeps
                (MkInst R Slots FDefs Links support g dflt (rn, rv) rootFeats))).
         { apply mem_reduceDeps; split; [exact (Hsub _ Hroot) |].
@@ -1421,7 +1421,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         apply mem_cargoResolution in Hp; destruct Hp as [w0 Hp].
         destruct (A1 _ _ _ Hp) as [_ Egr0]; subst w0.
         assert (Achain : forall w,
-            Reduced.PackageSet.In (NPlus.CSlot n (g v) d, VPlus.WClass w) S ->
+            Reduced.PackageSet.In (Name.CSlot n (g v) d, Version.WClass w) S ->
             exists u, ParentRel.In (((n, v), sSite d), u)
                         (parents
                            (MkInst R Slots FDefs Links support g dflt (rn, rv)
@@ -1435,8 +1435,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           destruct (A3 _ _ _ _ Hslot) as [u0 [Hu0 Egr]].
           subst w.
           assert (Hed : Reduced.DependencyRel.In
-              ((NPlus.CSlot n (g v) d, VPlus.WClass (g u0)),
-               (NPlus.CGran (sName d) (g u0),
+              ((Name.CSlot n (g v) d, Version.WClass (g u0)),
+               (Name.CGran (sName d) (g u0),
                 inGran g (g u0) (evalReq R (sName d) (sRange d))))
               (reduceDeps
                  (MkInst R Slots FDefs Links support g dflt (rn, rv)
@@ -1458,8 +1458,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           - intros fs' Hfs'; apply mem_features in Hfs';
               destruct Hfs' as [_ ->]; intros f Hf.
             assert (Hef : Reduced.DependencyRel.In
-                ((NPlus.CSlot n (g v) d, VPlus.WClass (g u0)),
-                 (NPlus.CFeatP (sName d) f (g u0),
+                ((Name.CSlot n (g v) d, Version.WClass (g u0)),
+                 (Name.CFeatP (sName d) f (g u0),
                   inGran g (g u0) (evalReq R (sName d) (sRange d))))
                 (reduceDeps
                    (MkInst R Slots FDefs Links support g dflt (rn, rv)
@@ -1475,8 +1475,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             apply mem_featsAt; exists (g u0); exact Hw'S. }
         destruct Hopt as [Hno | Hacted].
         + assert (Hed : Reduced.DependencyRel.In
-              ((NPlus.CGran n (g v), VPlus.WOrig v),
-               (NPlus.CSlot n (g v) d,
+              ((Name.CGran n (g v), Version.WOrig v),
+               (Name.CSlot n (g v) d,
                 gransOf g (evalReq R (sName d) (sRange d))))
               (reduceDeps
                  (MkInst R Slots FDefs Links support g dflt (rn, rv)
@@ -1492,16 +1492,16 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           assert (Hea : exists e', FeatureDefinitionRel.In (((n, v), f), e') FDefs /\
               entryActivates e' = Some (sAlias d)).
           { destruct Hent as [He | [[f' He] | [f' He]]].
-            - exists (FEntry.EDep (sAlias d)); split;
+            - exists (FeatureEntry.EDep (sAlias d)); split;
                 [exact He | reflexivity].
-            - exists (FEntry.EDepFeat (sAlias d) f'); split;
+            - exists (FeatureEntry.EDepFeat (sAlias d) f'); split;
                 [exact He | reflexivity].
-            - exists (FEntry.EWeakFeat (sAlias d) f'); split;
+            - exists (FeatureEntry.EWeakFeat (sAlias d) f'); split;
                 [exact He | reflexivity]. }
           destruct Hea as [e' [He' Ea]].
           assert (Hed : Reduced.DependencyRel.In
-              ((NPlus.CFeatP n f (g v), VPlus.WOrig v),
-               (NPlus.CSlot n (g v) d,
+              ((Name.CFeatP n f (g v), Version.WOrig v),
+               (Name.CSlot n (g v) d,
                 gransOf g (evalReq R (sName d) (sRange d))))
               (reduceDeps
                  (MkInst R Slots FDefs Links support g dflt (rn, rv)
@@ -1518,13 +1518,13 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           apply mem_featsAt in Hf; destruct Hf as [w Hf].
           destruct (A2 _ _ _ _ Hf) as [_ Egr]; subst w.
           assert (Hed : Reduced.DependencyRel.In
-              ((NPlus.CFeatP n f (g v), VPlus.WOrig v),
-               (NPlus.CFeatP n f0 (g v), Reduced.VSet.singleton (VPlus.WOrig v)))
+              ((Name.CFeatP n f (g v), Version.WOrig v),
+               (Name.CFeatP n f0 (g v), Reduced.VSet.singleton (Version.WOrig v)))
               (reduceDeps
                  (MkInst R Slots FDefs Links support g dflt (rn, rv)
                     rootFeats))).
           { apply mem_reduceDeps; split; [exact (Hsub _ Hf) |].
-            apply mem_dep_featP; right; exists (FEntry.EFeat f0);
+            apply mem_dep_featP; right; exists (FeatureEntry.EFeat f0);
               split; [exact He |].
             left; exists f0; split; reflexivity. }
           destruct (Hdep _ Hf _ _ Hed) as [w [Hw HwS]].
@@ -1538,9 +1538,9 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           assert (He' : exists e', FeatureDefinitionRel.In (((n, v), f), e') FDefs /\
               entryFeatD e' = Some (sAlias d, f')).
           { destruct Hent as [He | He].
-            - exists (FEntry.EDepFeat (sAlias d) f'); split;
+            - exists (FeatureEntry.EDepFeat (sAlias d) f'); split;
                 [exact He | reflexivity].
-            - exists (FEntry.EWeakFeat (sAlias d) f'); split;
+            - exists (FeatureEntry.EWeakFeat (sAlias d) f'); split;
                 [exact He | reflexivity]. }
           destruct He' as [e' [He' Ee]].
           apply mem_parents in Hpi;
@@ -1549,8 +1549,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           assert (d2 = d) by exact (Hsite (n, v) d2 d Hs2 Hd Ha2); subst d2.
           destruct (A1 _ _ _ Hcr2) as [_ ->].
           assert (Hed : Reduced.DependencyRel.In
-              ((NPlus.CFeatP n f (g v), VPlus.WOrig v),
-               (NPlus.CDec n (g v) f d f',
+              ((Name.CFeatP n f (g v), Version.WOrig v),
+               (Name.CDec n (g v) f d f',
                 gransOf g (evalReq R (sName d) (sRange d))))
               (reduceDeps
                  (MkInst R Slots FDefs Links support g dflt (rn, rv)
@@ -1562,9 +1562,9 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           destruct (Hdep _ Hf _ _ Hed) as [w [Hw HwS]].
           apply mem_gransOf in Hw; destruct Hw as [u1 [Hu1 ->]].
           assert (Hpin : Reduced.DependencyRel.In
-              ((NPlus.CDec n (g v) f d f', VPlus.WClass (g u1)),
-               (NPlus.CSlot n (g v) d,
-                Reduced.VSet.singleton (VPlus.WClass (g u1))))
+              ((Name.CDec n (g v) f d f', Version.WClass (g u1)),
+               (Name.CSlot n (g v) d,
+                Reduced.VSet.singleton (Version.WClass (g u1))))
               (reduceDeps
                  (MkInst R Slots FDefs Links support g dflt (rn, rv)
                     rootFeats))).
@@ -1573,8 +1573,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           destruct (Hdep _ HwS _ _ Hpin) as [w [Hx HxS]].
           apply Reduced.VSet.singleton_spec in Hx; subst w.
           assert (Hdel : Reduced.DependencyRel.In
-              ((NPlus.CDec n (g v) f d f', VPlus.WClass (g u1)),
-               (NPlus.CFeatP (sName d) f' (g u1),
+              ((Name.CDec n (g v) f d f', Version.WClass (g u1)),
+               (Name.CFeatP (sName d) f' (g u1),
                 inGran g (g u1) (evalReq R (sName d) (sRange d))))
               (reduceDeps
                  (MkInst R Slots FDefs Links support g dflt (rn, rv)
@@ -1583,7 +1583,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             apply mem_dep_dec; right; reflexivity. }
           destruct (Hdep _ HwS _ _ Hdel) as [w [Hy HyS]].
           apply mem_inGran in Hy; destruct Hy as [u2 [Hu2 [Hgu2 ->]]].
-          assert (Egr : VPlus.WClass w2' = VPlus.WClass (g u1))
+          assert (Egr : Version.WClass w2' = Version.WClass (g u1))
             by exact (Huniq _ _ _ Hslot2 HxS).
           injection Egr as Egr; subst w2'.
           assert (u2 = u) by (apply (A5 (sName d) f' (g u1)); assumption).
@@ -1597,18 +1597,18 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         destruct (A1 _ _ _ Hp) as [HpR Egp]; subst grp.
         destruct (A1 _ _ _ Hq) as [HqR Egq]; subst grq.
         assert (Hep : Reduced.DependencyRel.In
-            ((NPlus.CGran pn (g pv), VPlus.WOrig pv),
-             (NPlus.CCls l,
-              Reduced.VSet.singleton (VPlus.WName (NPlus.CGran pn (g pv)))))
+            ((Name.CGran pn (g pv), Version.WOrig pv),
+             (Name.CCls l,
+              Reduced.VSet.singleton (Version.WName (Name.CGran pn (g pv)))))
             (reduceDeps
                (MkInst R Slots FDefs Links support g dflt (rn, rv) rootFeats))).
         { apply mem_reduceDeps; split; [exact (Hsub _ Hp) |].
           apply mem_dep_gran; right; exists l; split;
             [exact Hlp | reflexivity]. }
         assert (Heq : Reduced.DependencyRel.In
-            ((NPlus.CGran qn (g qv), VPlus.WOrig qv),
-             (NPlus.CCls l,
-              Reduced.VSet.singleton (VPlus.WName (NPlus.CGran qn (g qv)))))
+            ((Name.CGran qn (g qv), Version.WOrig qv),
+             (Name.CCls l,
+              Reduced.VSet.singleton (Version.WName (Name.CGran qn (g qv)))))
             (reduceDeps
                (MkInst R Slots FDefs Links support g dflt (rn, rv) rootFeats))).
         { apply mem_reduceDeps; split; [exact (Hsub _ Hq) |].
@@ -1631,8 +1631,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       - intros fs Hfs; apply mem_features in Hfs;
           destruct Hfs as [_ ->]; intros f Hf.
         assert (Hed : Reduced.DependencyRel.In
-            (rootPkg, (NPlus.CFeatP rn f (g rv),
-                     Reduced.VSet.singleton (VPlus.WOrig rv)))
+            (rootPkg, (Name.CFeatP rn f (g rv),
+                     Reduced.VSet.singleton (Version.WOrig rv)))
             (reduceDeps
                (MkInst R Slots FDefs Links support g dflt (rn, rv) rootFeats))).
         { apply mem_reduceDeps; split; [exact (Hsub _ Hroot) |].
@@ -1669,13 +1669,13 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
     Definition wFeats (g : V.t -> G.t) (FS : FeaturedSet.t) : Reduced.PackageSet.t :=
       SOfw2.unionMap (fun '((n, v), fs) =>
-          SOfsp.map (fun f => (NPlus.CFeatP n f (g v), VPlus.WOrig v)) fs)
+          SOfsp.map (fun f => (Name.CFeatP n f (g v), Version.WOrig v)) fs)
         FS.
 
     Lemma mem_wFeats : forall g FS p,
         Reduced.PackageSet.In p (wFeats g FS) <->
         exists n v fs f, FeaturedSet.In ((n, v), fs) FS /\ FSet.In f fs /\
-          p = (NPlus.CFeatP n f (g v), VPlus.WOrig v).
+          p = (Name.CFeatP n f (g v), Version.WOrig v).
     Proof.
       intros g FS p; unfold wFeats; rewrite SOfw2.mem_unionMap; split.
       - intros [[[n v] fs] [Hin Hx]]; cbn beta iota in Hx.
@@ -1692,7 +1692,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       SOparp.unionMap (fun '(((n, v), k), u) =>
           if parentsb FDefs Slots r S FS (n, v) k
           then SOslp.map (fun '(_, d) =>
-                   (NPlus.CSlot n (g v) d, VPlus.WClass (g u)))
+                   (Name.CSlot n (g v) d, Version.WClass (g u)))
                  (slotsAtKey Slots r (n, v) k)
           else Reduced.PackageSet.empty)
         pi.
@@ -1703,7 +1703,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           parentsb FDefs Slots r S FS (n, v) k = true /\
           SlotRel.In ((n, v), d) Slots /\ sSite d = k /\
           slotActive r (n, v) d = true /\
-          p = (NPlus.CSlot n (g v) d, VPlus.WClass (g u)).
+          p = (Name.CSlot n (g v) d, Version.WClass (g u)).
     Proof.
       intros g FDefs Slots r S FS pi p; unfold wSlots.
       rewrite SOparp.mem_unionMap; split.
@@ -1730,7 +1730,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                                 (NEqb.eqb a' (siteAlias k)))
                           (FSet.mem f (fsAt FS (n, v)))
                      then SOslp.map (fun '(_, d) =>
-                              (NPlus.CDec n (g v) f d f', VPlus.WClass (g u)))
+                              (Name.CDec n (g v) f d f', Version.WClass (g u)))
                             (slotsAtKey Slots r (n, v) k)
                      else Reduced.PackageSet.empty
                  | None => Reduced.PackageSet.empty
@@ -1748,7 +1748,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           FSet.In f (fsAt FS (n, v)) /\
           SlotRel.In ((n, v), d) Slots /\ sSite d = k /\
           slotActive r (n, v) d = true /\
-          p = (NPlus.CDec n (g v) f d f', VPlus.WClass (g u)).
+          p = (Name.CDec n (g v) f d f', Version.WClass (g u)).
     Proof.
       intros g FDefs Slots r S FS pi p; unfold wDecs.
       rewrite SOparp.mem_unionMap; split.
@@ -1812,23 +1812,23 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         Reduced.PackageSet.In (m, v')
           (coreResolution I S FS pi) <->
         match m with
-        | NPlus.CRoot => v' = VPlus.WUnit
-        | NPlus.CGran n w =>
-            exists v, v' = VPlus.WOrig v /\ PackageSet.In (n, v) S /\
+        | Name.CRoot => v' = Version.WUnit
+        | Name.CGran n w =>
+            exists v, v' = Version.WOrig v /\ PackageSet.In (n, v) S /\
               w = inst_gran I v
-        | NPlus.CFeatP n f w =>
-            exists v fs, v' = VPlus.WOrig v /\ FeaturedSet.In ((n, v), fs) FS /\
+        | Name.CFeatP n f w =>
+            exists v fs, v' = Version.WOrig v /\ FeaturedSet.In ((n, v), fs) FS /\
               FSet.In f fs /\ w = inst_gran I v
-        | NPlus.CSlot n w d =>
-            exists v u, v' = VPlus.WClass (inst_gran I u) /\
+        | Name.CSlot n w d =>
+            exists v u, v' = Version.WClass (inst_gran I u) /\
               w = inst_gran I v /\
               ParentRel.In (((n, v), sSite d), u) pi /\
               parentsb (inst_fdefs I) (inst_slots I) (inst_root I) S FS (n, v)
                 (sSite d) = true /\
               SlotRel.In ((n, v), d) (inst_slots I) /\
               slotActive (inst_root I) (n, v) d = true
-        | NPlus.CDec n w f d f' =>
-            exists v u e, v' = VPlus.WClass (inst_gran I u) /\
+        | Name.CDec n w f d f' =>
+            exists v u e, v' = Version.WClass (inst_gran I u) /\
               w = inst_gran I v /\
               ParentRel.In (((n, v), sSite d), u) pi /\
               parentsb (inst_fdefs I) (inst_slots I) (inst_root I) S FS (n, v)
@@ -1838,8 +1838,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
               FeatureDefinitionRel.In (((n, v), f), e) (inst_fdefs I) /\
               entryFeatD e = Some (sAlias d, f') /\
               FSet.In f (fsAt FS (n, v))
-        | NPlus.CCls l =>
-            exists n v, v' = VPlus.WName (NPlus.CGran n (inst_gran I v)) /\
+        | Name.CCls l =>
+            exists n v, v' = Version.WName (Name.CGran n (inst_gran I v)) /\
               LinksRel.In ((n, v), l) (inst_links I) /\ PackageSet.In (n, v) S
         end.
     Proof.
@@ -1965,7 +1965,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                exfalso; exact (Reduced.DependeeSet.empty_spec Hh)).
         + apply mem_dep_root in Hh.
           destruct Hh as [He | [f [Hf He]]]; injection He as E1 E2;
-            subst m vs; exists (VPlus.WOrig rv);
+            subst m vs; exists (Version.WOrig rv);
             (split; [apply Reduced.VSet.singleton_spec; reflexivity |]);
             apply core_shape.
           * exists rv; repeat split; exact Hroot.
@@ -1979,11 +1979,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             injection He as E1 E2; subst m vs.
           * destruct (Hpick _ _ _ HS Hd Hact (or_introl Hopt))
               as [u [Hpi [Eb [Hu [Hname Hss]]]]].
-            exists (VPlus.WClass (g u)); split.
+            exists (Version.WClass (g u)); split.
             { apply mem_gransOf; exists u; split;
                 [exact Hu | reflexivity]. }
             apply core_shape; exists v0, u; repeat split; assumption.
-          * exists (VPlus.WName (NPlus.CGran n (g v0))); split;
+          * exists (Version.WName (Name.CGran n (g v0))); split;
               [apply Reduced.VSet.singleton_spec; reflexivity |].
             apply core_shape; exists n, v0; repeat split; assumption.
         + apply mem_dep_featP in Hh.
@@ -1995,12 +1995,12 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           assert (HS : PackageSet.In (n, v0) S) by exact (Hdom _ _ Hfs).
           destruct Hh as [He | [e0 [Hfd Hcase]]].
           * injection He as E1 E2; subst m vs.
-            exists (VPlus.WOrig v0); split;
+            exists (Version.WOrig v0); split;
               [apply Reduced.VSet.singleton_spec; reflexivity |].
             apply core_shape; exists v0; repeat split; exact HS.
           * destruct Hcase as [[f1 [Ee He]] | [Hcase | Hcase]].
             -- injection He as E1 E2; subst m vs e0.
-               exists (VPlus.WOrig v0); split;
+               exists (Version.WOrig v0); split;
                  [apply Reduced.VSet.singleton_spec; reflexivity |].
                apply core_shape; exists v0, fs; repeat split;
                  [exact Hfs | exact (Hfsame _ _ _ _ Hfs Hf Hfd)].
@@ -2014,7 +2014,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                    injection Ea as Ea; subst a0; eauto. }
                destruct (Hpick _ _ _ HS Hd Hact (or_intror Hactd))
                  as [u [Hpi [Eb [Hu [Hname Hss]]]]].
-               exists (VPlus.WClass (g u)); split.
+               exists (Version.WClass (g u)); split.
                { apply mem_gransOf; exists u; split;
                    [exact Hu | reflexivity]. }
                apply core_shape; exists v0, u; repeat split; assumption.
@@ -2029,7 +2029,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                    injection Ea as Ea1 Ea2; subst a0 feat0; eauto. }
                destruct (Hpick _ _ _ HS Hd Hact (or_intror Hactd))
                  as [u [Hpi [Eb [Hu [Hname Hss]]]]].
-               exists (VPlus.WClass (g u)); split.
+               exists (Version.WClass (g u)); split.
                { apply mem_gransOf; exists u; split;
                    [exact Hu | reflexivity]. }
                apply core_shape; exists v0, u, e0; repeat split;
@@ -2044,7 +2044,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           assert (Ed : d' = d) by exact (Hsite (n, v) d' d Hd' Hd Ha').
           subst d'.
           destruct Hcase as [He | [f0 [Hf0 He]]]; injection He as E1 E2;
-            subst m vs; exists (VPlus.WOrig u);
+            subst m vs; exists (Version.WOrig u);
             (split; [apply mem_inGran; exists u; auto |]); apply core_shape.
           * exists u; repeat split; assumption.
           * exists u, (fsAt FS (sName d, u)); repeat split; try assumption;
@@ -2061,16 +2061,16 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           assert (Ed : d' = d) by exact (Hsite (n, v) d' d Hd' Hd Ha').
           subst d'.
           destruct Hcase as [He | He]; injection He as E1 E2; subst m vs.
-          * exists (VPlus.WClass (g u)); split;
+          * exists (Version.WClass (g u)); split;
               [apply Reduced.VSet.singleton_spec; reflexivity |].
             apply core_shape; exists v, u; repeat split; assumption.
-          * exists (VPlus.WOrig u); split; [apply mem_inGran; exists u; auto |].
+          * exists (Version.WOrig u); split; [apply mem_inGran; exists u; auto |].
             apply core_shape; exists u, (fsAt FS (sName d, u));
               repeat split; try assumption; [exact (HfsAt _ Hname) |].
             assert (Hor :
-                FeatureDefinitionRel.In (((n, v), f), FEntry.EDepFeat (sAlias d) f')
+                FeatureDefinitionRel.In (((n, v), f), FeatureEntry.EDepFeat (sAlias d) f')
                   FDefs \/
-                FeatureDefinitionRel.In (((n, v), f), FEntry.EWeakFeat (sAlias d) f')
+                FeatureDefinitionRel.In (((n, v), f), FeatureEntry.EWeakFeat (sAlias d) f')
                   FDefs).
             { destruct e as [f0 | a0 | a0 feat0 | a0 feat0];
                 cbn [entryFeatD] in Ee2; try discriminate;
@@ -2118,10 +2118,10 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Module Lookup.
       Theorem versions_reduceRealRoot :
         forall I v,
-          Reduced.PackageSet.In (NPlus.CRoot, v)
+          Reduced.PackageSet.In (Name.CRoot, v)
             (reduceReal I) <->
           Reduced.VSet.In v
-            (versions I NPlus.CRoot).
+            (versions I Name.CRoot).
       Proof.
         intros; rewrite real_shape; cbn [versions].
         rewrite Reduced.VSet.singleton_spec; reflexivity.
@@ -2129,11 +2129,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
       Theorem versions_reduceRealGranular :
         forall I n w v,
-          Reduced.PackageSet.In (NPlus.CGran n w, v)
+          Reduced.PackageSet.In (Name.CGran n w, v)
             (reduceReal I) <->
           Reduced.VSet.In v
             (versions I
-               (NPlus.CGran n w)).
+               (Name.CGran n w)).
       Proof.
         intros I n w u; rewrite real_shape; cbn [versions].
         rewrite SOpv2.mem_filterMap; split.
@@ -2148,11 +2148,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
       Theorem versions_reduceRealFeatP :
         forall I n f w v,
-          Reduced.PackageSet.In (NPlus.CFeatP n f w, v)
+          Reduced.PackageSet.In (Name.CFeatP n f w, v)
             (reduceReal I) <->
           Reduced.VSet.In v
             (versions I
-               (NPlus.CFeatP n f w)).
+               (Name.CFeatP n f w)).
       Proof.
         intros I n f w u; rewrite real_shape; cbn [versions].
         rewrite SOspv.mem_filterMap; split.
@@ -2168,11 +2168,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       Theorem versions_reduceRealSlot :
         forall I n w d v,
           SlotOwned (inst_gran I) (inst_slots I) (inst_root I) n w d ->
-          Reduced.PackageSet.In (NPlus.CSlot n w d, v)
+          Reduced.PackageSet.In (Name.CSlot n w d, v)
             (reduceReal I) <->
           Reduced.VSet.In v
             (versions I
-               (NPlus.CSlot n w d)).
+               (Name.CSlot n w d)).
       Proof.
         intros I n w d v Ho; rewrite real_shape; cbn [versions].
         rewrite mem_gransOf; tauto.
@@ -2182,11 +2182,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         forall I n w f d f' v,
           DecOwned (inst_gran I) (inst_fdefs I) (inst_slots I) (inst_root I)
             n w f d f' ->
-          Reduced.PackageSet.In (NPlus.CDec n w f d f', v)
+          Reduced.PackageSet.In (Name.CDec n w f d f', v)
             (reduceReal I) <->
           Reduced.VSet.In v
             (versions I
-               (NPlus.CDec n w f d f')).
+               (Name.CDec n w f d f')).
       Proof.
         intros I n w f d f' v Ho; rewrite real_shape; cbn [versions].
         rewrite mem_gransOf; tauto.
@@ -2194,11 +2194,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
       Theorem versions_reduceRealCls :
         forall I l v,
-          Reduced.PackageSet.In (NPlus.CCls l, v)
+          Reduced.PackageSet.In (Name.CCls l, v)
             (reduceReal I) <->
           Reduced.VSet.In v
             (versions I
-               (NPlus.CCls l)).
+               (Name.CCls l)).
       Proof. intros; rewrite real_shape, mem_versions_cls; reflexivity. Qed.
 
       Theorem dependees_reduceDeps :
@@ -2317,22 +2317,22 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
       Theorem versions_lookupRoot :
         forall I,
-          versions I NPlus.CRoot =
+          versions I Name.CRoot =
           versions
             (MkInst PackageSet.empty SlotRel.empty FeatureDefinitionRel.empty LinksRel.empty
                SupportRel.empty (inst_gran I) (inst_default I) (inst_root I)
                (inst_rootFeats I))
-            NPlus.CRoot.
+            Name.CRoot.
       Proof. reflexivity. Qed.
 
       Theorem versions_lookupGranular :
         forall I n w,
-          versions I (NPlus.CGran n w) =
+          versions I (Name.CGran n w) =
           versions
             (MkInst (Source.namePreimage (inst_real I) (NSet.singleton n))
                SlotRel.empty FeatureDefinitionRel.empty LinksRel.empty SupportRel.empty
                (inst_gran I) (inst_default I) (inst_root I) (inst_rootFeats I))
-            (NPlus.CGran n w).
+            (Name.CGran n w).
       Proof.
         intros; cbn [versions inst_real inst_gran];
           apply Reduced.VSet.ext; intro u; symmetry.
@@ -2345,13 +2345,13 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
       Theorem versions_lookupFeatP :
         forall I n f w,
-          versions I (NPlus.CFeatP n f w) =
+          versions I (Name.CFeatP n f w) =
           versions
             (MkInst (Source.namePreimage (inst_real I) (NSet.singleton n))
                SlotRel.empty FeatureDefinitionRel.empty LinksRel.empty
                (supportAt (inst_support I) n f)
                (inst_gran I) (inst_default I) (inst_root I) (inst_rootFeats I))
-            (NPlus.CFeatP n f w).
+            (Name.CFeatP n f w).
       Proof.
         intros; cbn [versions inst_support inst_gran];
           apply Reduced.VSet.ext; intro u; symmetry.
@@ -2365,12 +2365,12 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
       Theorem versions_lookupSlot :
         forall I n w d,
-          versions I (NPlus.CSlot n w d) =
+          versions I (Name.CSlot n w d) =
           versions
             (MkInst (Source.namePreimage (inst_real I) (NSet.singleton (sName d)))
                SlotRel.empty FeatureDefinitionRel.empty LinksRel.empty SupportRel.empty
                (inst_gran I) (inst_default I) (inst_root I) (inst_rootFeats I))
-            (NPlus.CSlot n w d).
+            (Name.CSlot n w d).
       Proof.
         intros I n w d; cbn [versions inst_real inst_gran].
         rewrite evalReq_namePreimage;
@@ -2379,12 +2379,12 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
       Theorem versions_lookupDecision :
         forall I n w f d f',
-          versions I (NPlus.CDec n w f d f') =
+          versions I (Name.CDec n w f d f') =
           versions
             (MkInst (Source.namePreimage (inst_real I) (NSet.singleton (sName d)))
                SlotRel.empty FeatureDefinitionRel.empty LinksRel.empty SupportRel.empty
                (inst_gran I) (inst_default I) (inst_root I) (inst_rootFeats I))
-            (NPlus.CDec n w f d f').
+            (Name.CDec n w f d f').
       Proof.
         intros I n w f d f'; cbn [versions inst_real inst_gran].
         rewrite evalReq_namePreimage;
@@ -2394,7 +2394,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       Lemma granReal_claimants : forall g R Links l,
           granReal g (claimants R Links l) =
           ClsT.Reduction.Lookup.inClass (granReal g R) (linkRel g Links)
-            (NPlus.CCls l).
+            (Name.CCls l).
       Proof.
         intros; apply Reduced.PackageSet.ext; intro x.
         rewrite ClsT.Reduction.Lookup.mem_inClass, !mem_granReal.
@@ -2412,7 +2412,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
       Lemma linkRel_headFibre : forall g Links l,
           linkRel g (LinksRelFibred.headFibre Links l) =
-          ClsT.Reduction.Lookup.classRelAt (linkRel g Links) (NPlus.CCls l).
+          ClsT.Reduction.Lookup.classRelAt (linkRel g Links) (Name.CCls l).
       Proof.
         intros; apply ClsT.ConflictClassRel.ext; intros [q k].
         rewrite ClsT.Reduction.Lookup.mem_classRelAt, !mem_linkRel.
@@ -2427,13 +2427,13 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
       Theorem versions_lookupCls :
         forall I l,
-          versions I (NPlus.CCls l) =
+          versions I (Name.CCls l) =
           versions
             (MkInst (claimants (inst_real I) (inst_links I) l) SlotRel.empty
                FeatureDefinitionRel.empty (LinksRelFibred.headFibre (inst_links I) l)
                SupportRel.empty
                (inst_gran I) (inst_default I) (inst_root I) (inst_rootFeats I))
-            (NPlus.CCls l).
+            (Name.CCls l).
       Proof.
         intros; apply Reduced.VSet.ext; intro w.
         rewrite !versions_cls_reduceReal; cbn [inst_real inst_links inst_gran].
@@ -2446,8 +2446,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           PackageSet.Subset (inst_real I') (inst_real I) ->
           LinksRel.Subset (inst_links I') (inst_links I) ->
           (forall v, inst_gran I' v = inst_gran I v) ->
-          Reduced.VSet.Subset (versions I' (NPlus.CCls l))
-            (versions I (NPlus.CCls l)).
+          Reduced.VSet.Subset (versions I' (Name.CCls l))
+            (versions I (Name.CCls l)).
       Proof.
         intros I' I l HR HL Hg w; rewrite !mem_versions_cls.
         intros [n [v [-> [Hl Hv]]]]; exists n, v.
@@ -2469,11 +2469,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             Reduced.DependeeSet.In h
               (dependeesBy Vq
                  (MkInst R Slots FDefs Links support g dflt r rootFeats)
-                 (NPlus.CGran n w, VPlus.WOrig v)) ->
+                 (Name.CGran n w, Version.WOrig v)) ->
             Reduced.DependeeSet.In h
               (dependeesBy Vq'
                  (MkInst R' Slots' FDefs' Links' support' g dflt r rootFeats')
-                 (NPlus.CGran n w, VPlus.WOrig v)).
+                 (Name.CGran n w, Version.WOrig v)).
       Proof.
         intros * HS Hev HL h Hh.
         apply mem_depBy_gran in Hh; apply mem_depBy_gran.
@@ -2498,11 +2498,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             Reduced.DependeeSet.In h
               (dependeesBy Vq
                  (MkInst R Slots FDefs Links support g dflt r rootFeats)
-                 (NPlus.CFeatP n f w, VPlus.WOrig v)) ->
+                 (Name.CFeatP n f w, Version.WOrig v)) ->
             Reduced.DependeeSet.In h
               (dependeesBy Vq'
                  (MkInst R' Slots' FDefs' Links' support' g dflt r rootFeats')
-                 (NPlus.CFeatP n f w, VPlus.WOrig v)).
+                 (Name.CFeatP n f w, Version.WOrig v)).
       Proof.
         intros * HS Hev HF h Hh.
         apply mem_depBy_featP in Hh; apply mem_depBy_featP.
@@ -2532,10 +2532,10 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           (forall l, LinksRel.In ((n, v), l) Links <->
              LinksRel.In ((n, v), l) Links') ->
           dependeesBy Vq (MkInst R Slots FDefs Links support g dflt r rootFeats)
-            (NPlus.CGran n w, VPlus.WOrig v) =
+            (Name.CGran n w, Version.WOrig v) =
           dependeesBy Vq'
             (MkInst R' Slots' FDefs' Links' support' g dflt r rootFeats')
-            (NPlus.CGran n w, VPlus.WOrig v).
+            (Name.CGran n w, Version.WOrig v).
       Proof.
         intros * HS Hev HL; apply Reduced.DependeeSet.ext; intro h; split.
         - apply dep_gran_mono;
@@ -2558,10 +2558,10 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           (forall e, FeatureDefinitionRel.In (((n, v), f), e) FDefs <->
              FeatureDefinitionRel.In (((n, v), f), e) FDefs') ->
           dependeesBy Vq (MkInst R Slots FDefs Links support g dflt r rootFeats)
-            (NPlus.CFeatP n f w, VPlus.WOrig v) =
+            (Name.CFeatP n f w, Version.WOrig v) =
           dependeesBy Vq'
             (MkInst R' Slots' FDefs' Links' support' g dflt r rootFeats')
-            (NPlus.CFeatP n f w, VPlus.WOrig v).
+            (Name.CFeatP n f w, Version.WOrig v).
       Proof.
         intros * HS Hev HF; apply Reduced.DependeeSet.ext; intro h; split.
         - apply dep_featP_mono;
@@ -2596,13 +2596,13 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         forall I n w v Vq,
           (forall m, NSet.In m (reads (inst_slots I) (n, v)) ->
              Vq m = Source.versions (inst_real I) m) ->
-          dependees I (NPlus.CGran n w, VPlus.WOrig v) =
+          dependees I (Name.CGran n w, Version.WOrig v) =
           dependeesBy Vq
             (MkInst PackageSet.empty (SlotRelFibred.tailFibre (inst_slots I) (n, v))
                FeatureDefinitionRel.empty (LinksRelFibred.tailFibre (inst_links I) (n, v))
                SupportRel.empty
                (inst_gran I) (inst_default I) (inst_root I) (inst_rootFeats I))
-            (NPlus.CGran n w, VPlus.WOrig v).
+            (Name.CGran n w, Version.WOrig v).
       Proof.
         intros [R Slots FDefs Links support g dflt r rootFeats] n w v Vq HVq.
         cbn [inst_real inst_slots inst_links inst_gran inst_default inst_root
@@ -2618,14 +2618,14 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         forall I n f w v Vq,
           (forall m, NSet.In m (reads (inst_slots I) (n, v)) ->
              Vq m = Source.versions (inst_real I) m) ->
-          dependees I (NPlus.CFeatP n f w, VPlus.WOrig v) =
+          dependees I (Name.CFeatP n f w, Version.WOrig v) =
           dependeesBy Vq
             (MkInst PackageSet.empty
                (SlotRelFibred.tailFibre (inst_slots I) (n, v))
                (fdefFibre (inst_fdefs I) (n, v)) LinksRel.empty
                (SupportRelFibred.tailFibre (inst_support I) (n, v))
                (inst_gran I) (inst_default I) (inst_root I) (inst_rootFeats I))
-            (NPlus.CFeatP n f w, VPlus.WOrig v).
+            (Name.CFeatP n f w, Version.WOrig v).
       Proof.
         intros [R Slots FDefs Links support g dflt r rootFeats] n f w v Vq HVq.
         cbn [inst_real inst_support inst_fdefs inst_slots inst_gran inst_default
@@ -2640,12 +2640,12 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       Theorem dependees_lookupSlot :
         forall I n w d w' Vq,
           Vq (sName d) = Source.versions (inst_real I) (sName d) ->
-          dependees I (NPlus.CSlot n w d, VPlus.WClass w') =
+          dependees I (Name.CSlot n w d, Version.WClass w') =
           dependeesBy Vq
             (MkInst PackageSet.empty SlotRel.empty FeatureDefinitionRel.empty LinksRel.empty
                SupportRel.empty (inst_gran I) (inst_default I) (inst_root I)
                (inst_rootFeats I))
-            (NPlus.CSlot n w d, VPlus.WClass w').
+            (Name.CSlot n w d, Version.WClass w').
       Proof.
         intros I n w d w' Vq HVq.
         unfold dependees; cbn [dependeesBy inst_gran inst_default].
@@ -2655,12 +2655,12 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       Theorem dependees_lookupDecision :
         forall I n w f d f' w' Vq,
           Vq (sName d) = Source.versions (inst_real I) (sName d) ->
-          dependees I (NPlus.CDec n w f d f', VPlus.WClass w') =
+          dependees I (Name.CDec n w f d f', Version.WClass w') =
           dependeesBy Vq
             (MkInst PackageSet.empty SlotRel.empty FeatureDefinitionRel.empty LinksRel.empty
                SupportRel.empty (inst_gran I) (inst_default I) (inst_root I)
                (inst_rootFeats I))
-            (NPlus.CDec n w f d f', VPlus.WClass w').
+            (Name.CDec n w f d f', Version.WClass w').
       Proof.
         intros I n w f d f' w' Vq HVq.
         unfold dependees; cbn [dependeesBy inst_gran].

@@ -67,18 +67,18 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
          Feat.AdditionalDependencyRel.In (((n, v), f), (m, (vs, fs))) Da).
 
   Module Reduction.
-    Module OrigName := PairUOT N G.
-    Module OrigNameF := UOTCompareFacts OrigName.
-    Module FeatName := TripleUOT N F G.
-    Module FeatNameF := UOTCompareFacts FeatName.
-    Module InterName := TripleUOT N V N.
-    Module InterNameF := UOTCompareFacts InterName.
-    Module InterFTail := TripleUOT V N F.
-    Module InterFName := PairUOT N InterFTail.
-    Module InterFNameF := UOTCompareFacts InterFName.
-    Module InterATail := TripleUOT F N F.
-    Module InterAName := TripleUOT N V InterATail.
-    Module InterANameF := UOTCompareFacts InterAName.
+    Module GranularOriginalName := PairUOT N G.
+    Module OrigNameF := UOTCompareFacts GranularOriginalName.
+    Module GranularFeaturePackageName := TripleUOT N F G.
+    Module FeatNameF := UOTCompareFacts GranularFeaturePackageName.
+    Module IntermediateName := TripleUOT N V N.
+    Module InterNameF := UOTCompareFacts IntermediateName.
+    Module ParameterisedIntermediateNameTail := TripleUOT V N F.
+    Module ParameterisedIntermediateName := PairUOT N ParameterisedIntermediateNameTail.
+    Module InterFNameF := UOTCompareFacts ParameterisedIntermediateName.
+    Module AdditionalIntermediateNameTail := TripleUOT F N F.
+    Module AdditionalIntermediateName := TripleUOT N V AdditionalIntermediateNameTail.
+    Module InterANameF := UOTCompareFacts AdditionalIntermediateName.
     #[local] Hint Rewrite OrigNameF.compare_eq_iff FeatNameF.compare_eq_iff
       InterNameF.compare_eq_iff InterFNameF.compare_eq_iff
       InterANameF.compare_eq_iff : cmp_fconc.
@@ -105,23 +105,23 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       Definition compare (x y : t) : comparison :=
         match x, y with
         | GranularOrig n1 w1, GranularOrig n2 w2 =>
-            OrigName.compare (n1, w1) (n2, w2)
+            GranularOriginalName.compare (n1, w1) (n2, w2)
         | GranularOrig _ _, _ => Lt
         | GranularFeatPkg _ _ _, GranularOrig _ _ => Gt
         | GranularFeatPkg n1 f1 w1, GranularFeatPkg n2 f2 w2 =>
-            FeatName.compare (n1, (f1, w1)) (n2, (f2, w2))
+            GranularFeaturePackageName.compare (n1, (f1, w1)) (n2, (f2, w2))
         | GranularFeatPkg _ _ _, _ => Lt
         | Intermediate n1 v1 m1, Intermediate n2 v2 m2 =>
-            InterName.compare (n1, (v1, m1)) (n2, (v2, m2))
+            IntermediateName.compare (n1, (v1, m1)) (n2, (v2, m2))
         | Intermediate _ _ _, GranularOrig _ _ => Gt
         | Intermediate _ _ _, GranularFeatPkg _ _ _ => Gt
         | Intermediate _ _ _, _ => Lt
         | IntermediateF n1 v1 m1 f1, IntermediateF n2 v2 m2 f2 =>
-            InterFName.compare (n1, (v1, (m1, f1))) (n2, (v2, (m2, f2)))
+            ParameterisedIntermediateName.compare (n1, (v1, (m1, f1))) (n2, (v2, (m2, f2)))
         | IntermediateF _ _ _ _, IntermediateA _ _ _ _ _ => Lt
         | IntermediateF _ _ _ _, _ => Gt
         | IntermediateA n1 v1 f1 m1 g1, IntermediateA n2 v2 f2 m2 g2 =>
-            InterAName.compare (n1, (v1, (f1, (m1, g1))))
+            AdditionalIntermediateName.compare (n1, (v1, (f1, (m1, g1))))
               (n2, (v2, (f2, (m2, g2))))
         | IntermediateA _ _ _ _ _, _ => Gt
         end.

@@ -65,7 +65,7 @@ end
 
 module L :
     module type of
-      Package_formula.Make (Red.TNOT) (Red.TVOT) (PF) (PVersion)
+      Package_formula.Make (Red.NameOT) (Red.VersionOT) (PF) (PVersion)
         (struct
           let pp_name = pp_name
         end)

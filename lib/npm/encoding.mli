@@ -25,14 +25,14 @@ module type S = sig
   val xrange : Npm_version.range -> Np.coq_Range
 
   module PName : sig
-    type t = Np.Nm.name
+    type t = Np.Name.name
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit
   end
 
   module PVersion : sig
-    type t = Np.Vs.version
+    type t = Np.Version.version
 
     val compare : t -> t -> int
     val equal : t -> t -> bool

@@ -467,9 +467,9 @@ Module Placement (N V : UsualOrderedType).
      index built once looks each location up instead.  It keeps a location's
      every version, so it agrees with occupants on any layout, not only one
      with a version per location. *)
-  Module LocKey := PairUOT Location N.
-  Module LocKeyOrig := OrdersAlt.Backport_OT LocKey.
-  Module LocMap := FMapAVL.Make LocKeyOrig.
+  Module LocationName := PairUOT Location N.
+  Module LocationNameBackport := OrdersAlt.Backport_OT LocationName.
+  Module LocMap := FMapAVL.Make LocationNameBackport.
   Module LocMapF := FMapFacts.WFacts_fun LocMap.E LocMap.
 
   Definition occupantsIx (ix : LocMap.t VSet.t) (l : Location.t) (a : N.t)
@@ -491,11 +491,11 @@ Module Placement (N V : UsualOrderedType).
 
   Lemma occupantsIx_add : forall ix l' a' vs l a,
       occupantsIx (LocMap.add (l', a') vs ix) l a =
-      if LocKey.eq_dec (l', a') (l, a) then vs else occupantsIx ix l a.
+      if LocationName.eq_dec (l', a') (l, a) then vs else occupantsIx ix l a.
   Proof.
     intros ix l' a' vs l a; unfold occupantsIx; rewrite LocMapF.add_o.
     destruct (LocMap.E.eq_dec (l', a') (l, a)) as [E | NE],
-      (LocKey.eq_dec (l', a') (l, a)) as [E' | NE'];
+      (LocationName.eq_dec (l', a') (l, a)) as [E' | NE'];
       [reflexivity | destruct (NE' E) | destruct (NE E') | reflexivity].
   Qed.
 
@@ -514,7 +514,7 @@ Module Placement (N V : UsualOrderedType).
     { induction xs as [| [l' [a' v']] xs IH]; intro ix;
         cbn [List.fold_left List.In]; [tauto |].
       rewrite IH, occupantsIx_add.
-      destruct (LocKey.eq_dec (l', a') (l, a)) as [E | NE].
+      destruct (LocationName.eq_dec (l', a') (l, a)) as [E | NE].
       - injection E as -> ->; rewrite VSet.add_spec.
         split; [intros [[-> | H] | H]; auto |].
         intros [H | [E | H]]; auto; injection E as ->; auto.
@@ -789,10 +789,9 @@ Module Placement (N V : UsualOrderedType).
     End Shallow.
     Module ShallowOT := UOTFromCompare Shallow.
 
-    Module PN := PairUOT Location N.
-    Module SV := PairUOT ShallowOT V.
-    Module PNF := UOTCompareFacts PN.
-    Module SVF := UOTCompareFacts SV.
+    Module FoundVersion := PairUOT ShallowOT V.
+    Module PNF := UOTCompareFacts LocationName.
+    Module SVF := UOTCompareFacts FoundVersion.
     Module VF := UOTCompareFacts V.
     #[local] Hint Rewrite PNF.compare_eq_iff SVF.compare_eq_iff
       VF.compare_eq_iff : cmp_plc.
@@ -816,8 +815,8 @@ Module Placement (N V : UsualOrderedType).
       Definition compare (x y : t) : comparison :=
         match Nat.compare (rank x) (rank y) with
         | Eq => match x, y with
-                | Loc l1 a1, Loc l2 a2 => PN.compare (l1, a1) (l2, a2)
-                | Walk l1 a1, Walk l2 a2 => PN.compare (l1, a1) (l2, a2)
+                | Loc l1 a1, Loc l2 a2 => LocationName.compare (l1, a1) (l2, a2)
+                | Walk l1 a1, Walk l2 a2 => LocationName.compare (l1, a1) (l2, a2)
                 | _, _ => Eq
                 end
         | c => c
@@ -848,7 +847,7 @@ Module Placement (N V : UsualOrderedType).
         match Nat.compare (rank x) (rank y) with
         | Eq => match x, y with
                 | Occ v1, Occ v2 => V.compare v1 v2
-                | Found l1 v1, Found l2 v2 => SV.compare (l1, v1) (l2, v2)
+                | Found l1 v1, Found l2 v2 => FoundVersion.compare (l1, v1) (l2, v2)
                 | _, _ => Eq
                 end
         | c => c

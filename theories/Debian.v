@@ -57,7 +57,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   #[local] Hint Extern 1 => cmp_by VF.compare_antisym : cmp_deb.
   #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_deb.
 
-  Module DTComp <: ComparableType.
+  Module ProvidedVersionComp <: ComparableType.
     Definition t := DTop.
     Definition compare (x y : t) : comparison :=
       match x, y with
@@ -73,16 +73,16 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Lemma compare_lt_trans : forall x y z,
         compare x y = Lt -> compare y z = Lt -> compare x z = Lt.
     Proof. cmp_lt_trans cmp_deb. Qed.
-  End DTComp.
+  End ProvidedVersionComp.
 
-  Module FEqb := UOTEqb Ver.FOT.
+  Module FEqb := UOTEqb Ver.VersionFormulaOT.
   Definition vtMatchb (v : DTop) (phi : Ver.Formula) : bool :=
     match v with
     | DTVal u => Ver.satisfiesb u phi
     | DTTop => FEqb.eqb phi Ver.FTop
     end.
 
-  Module Atom := PairUOT N Ver.FOT.
+  Module Atom := PairUOT N Ver.VersionFormulaOT.
 
   Definition aname (a : Atom.t) : N.t := fst a.
   Definition aform (a : Atom.t) : Ver.Formula := snd a.
@@ -98,8 +98,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   Module DependencyElt := PairUOT Package Clause.
   Module DependencyRel := FSetUOT DependencyElt.
 
-  Module DTOT := UOTFromCompare DTComp.
-  Module Provided := PairUOT N DTOT.
+  Module ProvidedVersionOT := UOTFromCompare ProvidedVersionComp.
+  Module Provided := PairUOT N ProvidedVersionOT.
   Module ProvidesElt := PairUOT Package Provided.
   Module ProvidesRel := FSetUOT ProvidesElt.
 
@@ -216,8 +216,8 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       Proof. cmp_lt_trans cmp_deb. Qed.
     End Name.
 
-    Module NV2 := PairUOT N V.
-    Module NV2F := UOTCompareFacts NV2.
+    Module ProviderVersion := PairUOT N V.
+    Module NV2F := UOTCompareFacts ProviderVersion.
     #[local] Hint Rewrite NV2F.compare_eq_iff : cmp_deb.
     #[local] Hint Extern 1 => cmp_by NV2F.compare_antisym : cmp_deb.
     #[local] Hint Extern 1 => cmp_by NV2F.compare_lt_trans : cmp_deb.
@@ -239,7 +239,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         | Atom _, Orig _ => Gt
         | Atom a1, Atom a2 => Atom.compare a1 a2
         | Atom _, _ => Lt
-        | Ref m1 w1, Ref m2 w2 => NV2.compare (m1, w1) (m2, w2)
+        | Ref m1 w1, Ref m2 w2 => ProviderVersion.compare (m1, w1) (m2, w2)
         | Ref _ _, Orig _ => Gt
         | Ref _ _, Atom _ => Gt
         | Ref _ _, _ => Lt
@@ -327,7 +327,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Definition confNames (R : PackageSet.t) (Pi : ProvidesRel.t) (a : Atom.t) : NSet.t :=
       SOrn.filterMap (fun q => if matchb Pi q a then Some (fst q) else None) R.
 
-    Module ProvidesRelFibred := FibredLabelledRel Package N DTOT ProvidesElt ProvidesRel.
+    Module ProvidesRelFibred := FibredLabelledRel Package N ProvidedVersionOT ProvidesElt ProvidesRel.
     Module SOnd := SetOps N Reduced.Dependee NSet Reduced.DependeeSet.
     Definition confEdges (R : PackageSet.t) (Pi : ProvidesRel.t) (p : Package.t) (a : Atom.t)
         (e : bool) : Reduced.DependeeSet.t :=

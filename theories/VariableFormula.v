@@ -78,7 +78,7 @@ Module VariableFormula (N V : UsualOrderedType)
     - exfalso; apply Hnn, satisfiesb_false_iff; exact E.
   Qed.
 
-  Module VariableComparison := TripleUOT X OpOT Y.
+  Module VariableComparison := TripleUOT X ComparisonOperatorOT Y.
   Module XOYF := UOTCompareFacts VariableComparison.
   Module NF := UOTCompareFacts N.
   Module VSF := UOTCompareFacts VSet.AsUOT.
@@ -86,7 +86,7 @@ Module VariableFormula (N V : UsualOrderedType)
   #[local] Hint Extern 1 => cmp_by NF.compare_antisym : cmp_varf.
   #[local] Hint Extern 1 => cmp_by NF.compare_lt_trans : cmp_varf.
 
-  Module FComp <: ComparableType.
+  Module VariableFormulaComp <: ComparableType.
     Definition t := Formula.
     Definition rank (psi : Formula) : nat :=
       match psi with
@@ -156,10 +156,10 @@ Module VariableFormula (N V : UsualOrderedType)
       - exact (IHa _ _ H1 H2).
       - exact (XOYF.compare_lt_trans _ _ _ H1 H2).
     Qed.
-  End FComp.
-  Module FOT := UOTFromCompare FComp.
+  End VariableFormulaComp.
+  Module VariableFormulaOT := UOTFromCompare VariableFormulaComp.
 
-  Module Dependee := FOT.
+  Module Dependee := VariableFormulaOT.
   Module DependencyElt := PairUOT Package Dependee.
   Module DependencyRel := FSetUOT DependencyElt.
   Module YSet := FSetUOT Y.

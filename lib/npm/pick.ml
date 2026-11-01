@@ -14,8 +14,8 @@ struct
      avoid, and no public packument carries the other two. *)
   let rank ar (n : string) (c : PVersion.t) : bool * bool * bool =
     match c with
-    | Np.Vs.Bot | Np.Vs.Free -> (true, true, true)
-    | Np.Vs.Orig v -> (
+    | Np.Version.Bot | Np.Version.Free -> (true, true, true)
+    | Np.Version.Orig v -> (
         match A.meta ar (n, v) with
         | Some m -> A.ver_rank ar m
         | None -> (true, true, true))
@@ -40,7 +40,7 @@ struct
     | Some l -> (
         match A.meta ar (n, l) with
         | Some m when A.ver_rank ar m = (true, true, true) ->
-            List.find_opt (PVersion.equal (Np.Vs.Orig l)) cands
+            List.find_opt (PVersion.equal (Np.Version.Orig l)) cands
         | _ -> None)
     | None -> None
 
@@ -50,13 +50,13 @@ struct
   let pick_in st (t : string) (rg : Np.coq_Range) : string option =
     let pool =
       List.filter_map
-        (fun u -> if Np.rgHolds rg u then Some (Np.Vs.Orig u) else None)
+        (fun u -> if Np.rgHolds rg u then Some (Np.Version.Orig u) else None)
         (A.versions_of (L.archive st) t)
     in
     match pool with
     | [] -> None
     | pool -> (
         match pick (L.archive st) t pool with
-        | Np.Vs.Orig u -> Some u
-        | Np.Vs.Bot | Np.Vs.Free -> None)
+        | Np.Version.Orig u -> Some u
+        | Np.Version.Bot | Np.Version.Free -> None)
 end

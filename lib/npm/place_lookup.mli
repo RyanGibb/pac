@@ -10,7 +10,7 @@ module Make (Place_encoding : Place_encoding.S) : sig
   type edge = {
     e : Npl.coq_Edge;
     acc : Pl.VSet.t;
-    accepts : Npl.Occ.t list;
+    accepts : Npl.Occupant.t list;
     id : int;
   }
 
@@ -19,8 +19,8 @@ module Make (Place_encoding : Place_encoding.S) : sig
   val create : depth:int -> Archive.t -> string * string -> t
   val archive : t -> Archive.t
   val depth : t -> int
-  val meta : t -> Npl.Occ.t -> Npm_parse.ver option
-  val edges : t -> Npl.Occ.t -> edge list
+  val meta : t -> Npl.Occupant.t -> Npm_parse.ver option
+  val edges : t -> Npl.Occupant.t -> edge list
   val versions : t -> PName.t -> PVersion.t list
 
   (* what one part of a name's dependees reads, so that the solve converts

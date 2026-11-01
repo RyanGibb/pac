@@ -93,7 +93,7 @@ module type S = sig
     (bool * DMA.Deb.Reduction.Name.t * DMA.Deb.Atom.t list) list
 
   val sat : DMA.Deb.Ver.coq_Formula -> string -> bool
-  val pp_mname : Format.formatter -> string * DMA.coq_NameArch -> unit
+  val pp_mname : Format.formatter -> string * DMA.coq_ReducedQualifier -> unit
   val pp_atom : Format.formatter -> DMA.Deb.Atom.t -> unit
 
   module PName : sig

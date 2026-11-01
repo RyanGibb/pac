@@ -38,7 +38,7 @@ struct
   type assigned = PName.t -> PG.selection
 
   let decided (assigned : assigned) n =
-    match assigned n with PG.Decided (Np.Vs.Orig u) -> Some u | _ -> None
+    match assigned n with PG.Decided (Np.Version.Orig u) -> Some u | _ -> None
 
   (* a package's edges in the order npm meets them, by name in its
      collation (build-ideal-tree.js:997, 1428) *)
@@ -75,7 +75,7 @@ struct
         (L.peer_dependencies st q)
     and hold key =
       if not (Hashtbl.mem held key) then (
-        let u = decided assigned (Np.Nm.Intermediate (k, v, key)) in
+        let u = decided assigned (Np.Name.Intermediate (k, v, key)) in
         Hashtbl.replace held key u;
         if root then Option.iter (fun u -> peers_of (snd key, u)) u)
     in
@@ -98,7 +98,7 @@ struct
           (fun (d : Np.coq_Dependency) ->
             let okey = (d.Np.d_dir, d.Np.d_name) in
             let w =
-              match decided assigned (Np.Nm.Intermediate (key, u, okey)) with
+              match decided assigned (Np.Name.Intermediate (key, u, okey)) with
               | Some w -> Some w
               | None -> Pick.pick_in st d.Np.d_name d.Np.d_range
             in
@@ -147,7 +147,7 @@ struct
      is one of [cands]. *)
   let replace st ~assigned k v (m : string * string) cands c =
     let t = snd m in
-    let holds rg = function Np.Vs.Orig u -> Np.rgHolds rg u | _ -> false in
+    let holds rg = function Np.Version.Orig u -> Np.rgHolds rg u | _ -> false in
     let takes_over into x =
       List.exists (PVersion.equal x) cands
       && List.for_all (fun r -> holds r x) into
@@ -158,7 +158,7 @@ struct
         if holds rg c then c
         else
           match Pick.pick_in st t rg with
-          | Some u when takes_over into (Np.Vs.Orig u) -> Np.Vs.Orig u
+          | Some u when takes_over into (Np.Version.Orig u) -> Np.Version.Orig u
           | _ -> c
       in
       (rg :: into, c)
@@ -341,9 +341,9 @@ struct
 
   let dir_of (n : PName.t) =
     match n with
-    | Np.Nm.Intermediate (_, _, m) -> fst m
-    | Np.Nm.Granular (k, _) -> fst k
-    | Np.Nm.Sight (_, _, a) | Np.Nm.Link (_, _, _, _, a) | Np.Nm.Desc (a, _, _)
+    | Np.Name.Intermediate (_, _, m) -> fst m
+    | Np.Name.Granular (k, _) -> fst k
+    | Np.Name.Sight (_, _, a) | Np.Name.Link (_, _, _, _, a) | Np.Name.Desc (a, _, _)
       ->
         a
 
@@ -389,10 +389,10 @@ struct
         | n :: _ -> (
             match (n, assigned n, open_link o ~assigned n) with
             | _, _, Some l -> Some (l, x)
-            | Np.Nm.Intermediate (_, _, m), PG.Decided (Np.Vs.Orig u), None ->
+            | Np.Name.Intermediate (_, _, m), PG.Decided (Np.Version.Orig u), None ->
                 settle o x m u;
                 Hashtbl.replace x.seen (fst m) ();
-                Hashtbl.replace o.made n (Np.Vs.Orig u);
+                Hashtbl.replace o.made n (Np.Version.Orig u);
                 advance o ~assigned
             | _, PG.Decided _, None ->
                 Hashtbl.replace x.seen (dir_of n) ();
@@ -412,17 +412,17 @@ struct
         sync o ~assigned
     | _ -> ()
 
-  let is_granular (n, _) = match n with Np.Nm.Granular _ -> true | _ -> false
-  let is_link (n, _) = match n with Np.Nm.Link _ -> true | _ -> false
+  let is_granular (n, _) = match n with Np.Name.Granular _ -> true | _ -> false
+  let is_link (n, _) = match n with Np.Name.Link _ -> true | _ -> false
 
   (* A link whose value is already settled, which the replay has no
      directory for: it reads its holder's sight, or its holder's copy is
      decided, or it has no holder, offering the copy itself or nothing. *)
   let eager o ~assigned (n, _) =
     match n with
-    | Np.Nm.Link (k, v, _, _, a) -> (
+    | Np.Name.Link (k, v, _, _, a) -> (
         match L.holder o.st (k, v) a with
-        | None | Some (Np.Nm.Sight _) -> true
+        | None | Some (Np.Name.Sight _) -> true
         | Some h -> ( match assigned h with PG.Decided _ -> true | _ -> false))
     | _ -> false
 
@@ -461,7 +461,7 @@ struct
   let reused at (m : string * string) cands =
     let found c =
       match (at, c) with
-      | Some x, Np.Vs.Orig u -> (
+      | Some x, Np.Version.Orig u -> (
           match resolve x (fst m) with
           | Some y -> y.key = m && y.ver = u
           | None -> false)
@@ -491,20 +491,20 @@ struct
      does. *)
   let choose_link o ~assigned n (k, v) a cands =
     let st = o.st in
-    let origs = List.filter (fun c -> c <> Np.Vs.Bot) cands in
-    let bot = List.mem Np.Vs.Bot cands in
-    let fallback () = if bot then Np.Vs.Bot else List.hd cands in
+    let origs = List.filter (fun c -> c <> Np.Version.Bot) cands in
+    let bot = List.mem Np.Version.Bot cands in
+    let fallback () = if bot then Np.Version.Bot else List.hd cands in
     match L.holder st (k, v) a with
     | None -> fallback ()
     | Some h -> (
         match (h, assigned h) with
         | _, PG.Decided x -> if List.mem x cands then x else fallback ()
-        | Np.Nm.Sight _, PG.Entailed r -> (
+        | Np.Name.Sight _, PG.Entailed r -> (
             match List.filter (fun x -> PG.Ranges.contains x r) origs with
             | x :: _ -> x
             | [] -> fallback ())
-        | Np.Nm.Sight _, PG.Unselected -> fallback ()
-        | Np.Nm.Intermediate (_, _, m), sel -> (
+        | Np.Name.Sight _, PG.Unselected -> fallback ()
+        | Np.Name.Intermediate (_, _, m), sel -> (
             let inside = List.filter (within assigned h) origs in
             let others =
               List.filter (fun l -> PName.compare l n <> 0) (L.links_into st h)
@@ -515,7 +515,7 @@ struct
                 inside
             in
             match (sel, inside) with
-            | PG.Unselected, _ when bot -> Np.Vs.Bot
+            | PG.Unselected, _ when bot -> Np.Version.Bot
             | _, [] -> fallback ()
             | _ ->
                 fill o ~assigned n k v m
@@ -527,17 +527,17 @@ struct
      links agree on, and Bot only when they agree on none. *)
   let choose o ~assigned (n : PName.t) (cands : PVersion.t list) : PVersion.t =
     match n with
-    | Np.Nm.Granular _ | Np.Nm.Desc _ -> greatest cands
-    | Np.Nm.Intermediate (k, v, m) ->
+    | Np.Name.Granular _ | Np.Name.Desc _ -> greatest cands
+    | Np.Name.Intermediate (k, v, m) ->
         let c = fill o ~assigned n k v m cands in
         o.decided <- (n, c) :: o.decided;
         c
-    | Np.Nm.Link (k, v, _, _, a) -> choose_link o ~assigned n (k, v) a cands
-    | Np.Nm.Sight _ -> (
-        if L.links_into o.st n = [] && List.mem Np.Vs.Free cands then Np.Vs.Free
+    | Np.Name.Link (k, v, _, _, a) -> choose_link o ~assigned n (k, v) a cands
+    | Np.Name.Sight _ -> (
+        if L.links_into o.st n = [] && List.mem Np.Version.Free cands then Np.Version.Free
         else
           match List.filter is_orig cands with
-          | [] -> if List.mem Np.Vs.Bot cands then Np.Vs.Bot else List.hd cands
+          | [] -> if List.mem Np.Version.Bot cands then Np.Version.Bot else List.hd cands
           | l -> greatest l)
 
   let hooks : (L.t, PName.t, PG.selection, PVersion.t) Pac_common.Order.driver =

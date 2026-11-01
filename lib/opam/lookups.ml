@@ -348,9 +348,9 @@ let depexts_of rho ar (reals : (string * string) list) : string list =
 
 let pp_name fmt (n : PFR.Name.t) =
   match n with
-  | PFR.Name.Orig Red.TName.Root -> Format.fprintf fmt "root"
-  | PFR.Name.Orig (Red.TName.Real n) -> Format.fprintf fmt "%s" n
-  | PFR.Name.Orig (Red.TName.Cls k) -> Format.fprintf fmt "conflict-class:%s" k
+  | PFR.Name.Orig Red.Name.Root -> Format.fprintf fmt "root"
+  | PFR.Name.Orig (Red.Name.Real n) -> Format.fprintf fmt "%s" n
+  | PFR.Name.Orig (Red.Name.Cls k) -> Format.fprintf fmt "conflict-class:%s" k
   | PFR.Name.Disjunct _ -> Format.fprintf fmt "<disj>"
 
 (* PubGrub decides the greatest candidate, so preference lives here: a
@@ -376,15 +376,15 @@ module PVersion = struct
 
   let pp fmt (x : t) =
     match x.v with
-    | PFR.Version.Orig (Red.TVer.RV v) -> Format.fprintf fmt "%s" v
-    | PFR.Version.Orig Red.TVer.UnitV -> Format.fprintf fmt "()"
-    | PFR.Version.Orig (Red.TVer.NV n) -> Format.fprintf fmt "%s" n
+    | PFR.Version.Orig (Red.Version.RV v) -> Format.fprintf fmt "%s" v
+    | PFR.Version.Orig Red.Version.UnitV -> Format.fprintf fmt "()"
+    | PFR.Version.Orig (Red.Version.NV n) -> Format.fprintf fmt "%s" n
     | PFR.Version.Idx i -> Format.fprintf fmt "z%d" (Ot.nat_int i)
     | PFR.Version.Bot -> Format.fprintf fmt "⊥"
 end
 
 module L =
-  Package_formula.Make (Red.TNOT) (Red.TVOT) (PF) (PVersion)
+  Package_formula.Make (Red.NameOT) (Red.VersionOT) (PF) (PVersion)
     (struct
       let pp_name = pp_name
     end)
@@ -393,24 +393,24 @@ module PG = L.PG
 
 let tag ar (tn : PFR.Name.t) (tv : PFR.Version.t) : PVersion.t =
   match (tn, tv) with
-  | PFR.Name.Orig (Red.TName.Real n), PFR.Version.Orig (Red.TVer.RV v) ->
+  | PFR.Name.Orig (Red.Name.Real n), PFR.Version.Orig (Red.Version.RV v) ->
       { PVersion.avoid = avoided ar n v; v = tv }
   | _ -> { PVersion.avoid = false; v = tv }
 
 (* the encoder reads this at the names a formula negates, all of which
    the depender's dependees have loaded; a class package's versions are
    its declarers among the names loaded so far, and so are never held *)
-let oracle rho ar (tn : Red.TName.t) : PF.VSet.t =
+let oracle rho ar (tn : Red.Name.t) : PF.VSet.t =
   match tn with
-  | Red.TName.Real m -> Red.versions rho (name_inst ar m) tn
-  | Red.TName.Root -> PF.VSet.singleton Red.TVer.UnitV
-  | Red.TName.Cls k -> Red.versions rho (class_inst ar k) tn
+  | Red.Name.Real m -> Red.versions rho (name_inst ar m) tn
+  | Red.Name.Root -> PF.VSet.singleton Red.Version.UnitV
+  | Red.Name.Cls k -> Red.versions rho (class_inst ar k) tn
 
 let lookups rho ar : L.t =
   L.create
-    ~root:(Red.TName.Root, Red.TVer.UnitV)
+    ~root:(Red.Name.Root, Red.Version.UnitV)
     ~tag:(tag ar) ~oracle:(oracle rho ar)
-    ~volatile:(function Red.TName.Cls _ -> true | _ -> false)
+    ~volatile:(function Red.Name.Cls _ -> true | _ -> false)
     ()
 
 (* Lookup.dependeesBy_lookupOrig: a package's dependees read each name
@@ -424,12 +424,12 @@ let touch rho ar query st =
   in
   fun ((tn, tv) : T.Package.t) ->
     match (tn, tv) with
-    | PFR.Name.Orig Red.TName.Root, _ ->
+    | PFR.Name.Orig Red.Name.Root, _ ->
         L.process st Red.rootPkg (fun () ->
             Red.PackageFormulaSet.elements
               (Red.dependees rho (root_inst ar query) Red.rootPkg))
-    | PFR.Name.Orig (Red.TName.Real n), PFR.Version.Orig (Red.TVer.RV v) ->
-        let q = (Red.TName.Real n, Red.TVer.RV v) in
+    | PFR.Name.Orig (Red.Name.Real n), PFR.Version.Orig (Red.Version.RV v) ->
+        let q = (Red.Name.Real n, Red.Version.RV v) in
         L.process st q (fun () ->
             Red.PackageFormulaSet.elements
               (Red.dependeesBy rho src_versions (pkg_inst ar (n, v)) q))

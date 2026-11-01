@@ -25,24 +25,24 @@ module Make (Encoding : Encoding.S) : sig
 
   (* the descriptor p's directory m reads, as the calculus's slotOf finds
      its dependency: the first active one of the directory *)
-  val desc_name : t -> string * string -> string * string -> Np.Nm.name option
-  val versions : t -> Np.Nm.name -> Np.Vs.version list
+  val desc_name : t -> string * string -> string * string -> Np.Name.name option
+  val versions : t -> Np.Name.name -> Np.Version.version list
 
   (* whether a name's versions may grow after it was first asked *)
-  val grows : t -> Np.Nm.name -> bool
+  val grows : t -> Np.Name.name -> bool
 
   (* where the copy k at v offers its name a: its sight where it peers on a
      itself, else its own directory; none where it offers itself or
      nothing *)
-  val holder : t -> (string * string) * string -> string -> Np.Nm.name option
+  val holder : t -> (string * string) * string -> string -> Np.Name.name option
 
   (* the directories opened so far that read descriptor x *)
-  val desc_dirs : t -> Np.Nm.name -> Np.Nm.name list
+  val desc_dirs : t -> Np.Name.name -> Np.Name.name list
   val dependees : t -> T.Package.t -> T.Dependee.t list
 
   (* the links, opened so far, whose holder shows the name in directory h *)
-  val links_into : t -> Np.Nm.name -> Np.Nm.name list
+  val links_into : t -> Np.Name.name -> Np.Name.name list
 
   (* the directories of p's copy the solver has opened so far *)
-  val dirs : t -> (string * string) * string -> Np.Nm.name list
+  val dirs : t -> (string * string) * string -> Np.Name.name list
 end

@@ -6,7 +6,7 @@ Create Rewrite HintDb cmp_vers.
 
 Inductive CmpOp : Type := OpGe | OpGt | OpLe | OpLt | OpEq | OpNe.
 
-Module OpComp <: ComparableType.
+Module ComparisonOperatorComp <: ComparableType.
   Definition t := CmpOp.
   Definition rank (o : CmpOp) : nat :=
     match o with
@@ -26,8 +26,8 @@ Module OpComp <: ComparableType.
   Lemma compare_lt_trans : forall o1 o2 o3,
       compare o1 o2 = Lt -> compare o2 o3 = Lt -> compare o1 o3 = Lt.
   Proof. cmp_lt_trans cmp_vers. Qed.
-End OpComp.
-Module OpOT := UOTFromCompare OpComp.
+End ComparisonOperatorComp.
+Module ComparisonOperatorOT := UOTFromCompare ComparisonOperatorComp.
 
 Definition cmpOpEvalBy {A} (cmp : A -> A -> comparison)
     (op : CmpOp) (x c : A) : bool :=
@@ -114,7 +114,7 @@ Module Versions (N V : UsualOrderedType).
     reflexivity.
   Qed.
 
-  Module FComp <: ComparableType.
+  Module VersionFormulaComp <: ComparableType.
     Definition t := Formula.
     Definition rank (phi : Formula) : nat :=
       match phi with
@@ -128,7 +128,7 @@ Module Versions (N V : UsualOrderedType).
           | FConj a1 b1, FConj a2 b2 => lex (compare a1 a2) (compare b1 b2)
           | FDisj a1 b1, FDisj a2 b2 => lex (compare a1 a2) (compare b1 b2)
           | FCmp o1 c1, FCmp o2 c2 =>
-              lex (OpComp.compare o1 o2) (V.compare c1 c2)
+              lex (ComparisonOperatorComp.compare o1 o2) (V.compare c1 c2)
           | _, _ => Eq
           end
       | c => c
@@ -139,7 +139,7 @@ Module Versions (N V : UsualOrderedType).
       intros x; induction x as [ | | a IHa b IHb | a IHa b IHb | o c ];
         intros y; destruct y; simpl; try (split; intro H; congruence).
       1,2: rewrite lex_eq_iff, IHa, IHb.
-      3: rewrite lex_eq_iff, OpComp.compare_eq_iff, VF.compare_eq_iff.
+      3: rewrite lex_eq_iff, ComparisonOperatorComp.compare_eq_iff, VF.compare_eq_iff.
       all: split;
         [intros [-> ->]; reflexivity | intro H; injection H as -> ->; auto].
     Qed.
@@ -151,7 +151,7 @@ Module Versions (N V : UsualOrderedType).
         intros y; destruct y; simpl; try reflexivity.
       - rewrite lex_opp, IHa, IHb; reflexivity.
       - rewrite lex_opp, IHa, IHb; reflexivity.
-      - rewrite lex_opp, OpComp.compare_antisym, VF.compare_antisym;
+      - rewrite lex_opp, ComparisonOperatorComp.compare_antisym, VF.compare_antisym;
           reflexivity.
     Qed.
 
@@ -164,14 +164,14 @@ Module Versions (N V : UsualOrderedType).
         try congruence.
       - exact (lex_lt_trans compare_eq_iff (IHa _ _) (IHb _ _) H1 H2).
       - exact (lex_lt_trans compare_eq_iff (IHa _ _) (IHb _ _) H1 H2).
-      - exact (lex_lt_trans OpComp.compare_eq_iff
-                 (OpComp.compare_lt_trans _ _ _) (VF.compare_lt_trans _ _ _)
+      - exact (lex_lt_trans ComparisonOperatorComp.compare_eq_iff
+                 (ComparisonOperatorComp.compare_lt_trans _ _ _) (VF.compare_lt_trans _ _ _)
                  H1 H2).
     Qed.
-  End FComp.
-  Module FOT := UOTFromCompare FComp.
+  End VersionFormulaComp.
+  Module VersionFormulaOT := UOTFromCompare VersionFormulaComp.
 
-  Module Dependee := PairUOT N FOT.
+  Module Dependee := PairUOT N VersionFormulaOT.
   Module DependencyElt := PairUOT Package Dependee.
   Module DependencyRel := FSetUOT DependencyElt.
 
@@ -222,7 +222,7 @@ Module Versions (N V : UsualOrderedType).
     Qed.
 
     Module Lookup.
-      Module DependencyRelFibred := FibredLabelledRel Package N FOT DependencyElt DependencyRel.
+      Module DependencyRelFibred := FibredLabelledRel Package N VersionFormulaOT DependencyElt DependencyRel.
       Module DependencyRelKeys := RelKeys N DependencyElt DependencyRel.
       Module PackageSetPreimage := Preimage Package PackageSet.
 

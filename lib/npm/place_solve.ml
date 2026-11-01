@@ -17,10 +17,10 @@ module Make () = struct
      spanning adjacent versions of one stretch stays exact. *)
   let same_stretch (a : PVersion.t) (b : PVersion.t) =
     match (a, b) with
-    | R.Version.Occ (Npl.Occ.Reg (m, _)), R.Version.Occ (Npl.Occ.Reg (m', _)) ->
+    | R.Version.Occ (Npl.Occupant.Reg (m, _)), R.Version.Occ (Npl.Occupant.Reg (m', _)) ->
         String.equal m m'
-    | ( R.Version.Found (l, Npl.Occ.Reg (m, _)),
-        R.Version.Found (l', Npl.Occ.Reg (m', _)) ) ->
+    | ( R.Version.Found (l, Npl.Occupant.Reg (m, _)),
+        R.Version.Found (l', Npl.Occupant.Reg (m', _)) ) ->
         String.equal m m' && l = l'
     | _ -> false
 
@@ -112,7 +112,7 @@ module Make () = struct
      every path from the root reaches through an omitted edge
      (calc-dep-flags.js, and Node.shouldOmit), so an omitted edge is not
      followed. *)
-  let edges ~dev ~optional st (x : Npl.Occ.t) : Npl.coq_Edge list =
+  let edges ~dev ~optional st (x : Npl.Occupant.t) : Npl.coq_Edge list =
     let omitted (e : Npl.coq_Edge) =
       if e.Npl.e_peer then optional && e.Npl.e_optional
       else
@@ -140,8 +140,8 @@ module Make () = struct
           (List.filter_map
              (fun (l, (a, x)) ->
                match x with
-               | Npl.Occ.Reg (m, v) -> Some (a :: l, (m, v.IVer.s))
-               | Npl.Occ.Proj -> None)
+               | Npl.Occupant.Reg (m, v) -> Some (a :: l, (m, v.IVer.s))
+               | Npl.Occupant.Proj -> None)
              (Pl.LayoutRel.elements
                 (Npl.Reduction.reachableOf (edges ~dev ~optional st) root
                    (R.placementResolution (T.PackageSet.ofList sol)))));
@@ -152,7 +152,7 @@ module Make () = struct
   let check_answer st sol =
     let versions m = T.VSet.ofList (L.versions st m) in
     let dependees p = T.DependeeSet.ofList (L.dependees st p) in
-    let q = T.rootQuery (R.Name.Root, R.Version.Occ Npl.Occ.Proj) in
+    let q = T.rootQuery (R.Name.Root, R.Version.Occ Npl.Occupant.Proj) in
     match T.check versions dependees q (T.PackageSet.ofList sol) with
     | None -> ()
     | Some f ->
@@ -173,7 +173,7 @@ module Make () = struct
       PG.solve ?next:h.Pac_common.Order.next ?choose:h.Pac_common.Order.choose
         ~dense:(fun _ -> same_stretch)
         ~vers:(L.versions st) ~deps:(dependencies st asked)
-        [ (R.Name.Root, PG.Ranges.of_list [ R.Version.Occ Npl.Occ.Proj ]) ]
+        [ (R.Name.Root, PG.Ranges.of_list [ R.Version.Occ Npl.Occupant.Proj ]) ]
     in
     h.Pac_common.Order.finish ();
     let r =

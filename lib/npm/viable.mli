@@ -3,7 +3,7 @@ module Make
     (L : module type of Lookup.Make (Encoding)) : sig
   open Encoding
 
-  val is_orig : Np.Vs.version -> bool
+  val is_orig : Np.Version.version -> bool
   val within : (PName.t -> PG.selection) -> PName.t -> PVersion.t -> bool
 
   (* A link, its holder's directory and the copy's sight are one version

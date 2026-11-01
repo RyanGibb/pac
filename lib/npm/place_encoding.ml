@@ -31,7 +31,7 @@ module type S = sig
 
   val xrange : Npm_version.range -> Npl.coq_Range
   val lock_path : string list -> string
-  val occ_compare : Npl.Occ.t -> Npl.Occ.t -> int
+  val occ_compare : Npl.Occupant.t -> Npl.Occupant.t -> int
 
   module PName : sig
     type t = R.Name.t
@@ -125,12 +125,12 @@ module Make () = struct
     if check && c <> Ot.r2c (slow a b) then failwith ("order mismatch: " ^ name);
     c
 
-  let occ_compare (x : Npl.Occ.t) (y : Npl.Occ.t) =
+  let occ_compare (x : Npl.Occupant.t) (y : Npl.Occupant.t) =
     match (x, y) with
-    | Npl.Occ.Proj, Npl.Occ.Proj -> 0
-    | Npl.Occ.Proj, Npl.Occ.Reg _ -> -1
-    | Npl.Occ.Reg _, Npl.Occ.Proj -> 1
-    | Npl.Occ.Reg (m, v), Npl.Occ.Reg (m', v') -> (
+    | Npl.Occupant.Proj, Npl.Occupant.Proj -> 0
+    | Npl.Occupant.Proj, Npl.Occupant.Reg _ -> -1
+    | Npl.Occupant.Reg _, Npl.Occupant.Proj -> 1
+    | Npl.Occupant.Reg (m, v), Npl.Occupant.Reg (m', v') -> (
         match String.compare m m' with 0 -> IVer.compare v v' | c -> c)
 
   module PName = struct
@@ -181,8 +181,8 @@ module Make () = struct
     let equal a b = compare a b = 0
 
     let pp_occ fmt = function
-      | Npl.Occ.Proj -> Format.fprintf fmt "project"
-      | Npl.Occ.Reg (m, v) -> Format.fprintf fmt "%s@%s" m v.IVer.s
+      | Npl.Occupant.Proj -> Format.fprintf fmt "project"
+      | Npl.Occupant.Reg (m, v) -> Format.fprintf fmt "%s@%s" m v.IVer.s
 
     let pp fmt (v : t) =
       match v with

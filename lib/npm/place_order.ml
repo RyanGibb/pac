@@ -40,15 +40,15 @@ struct
 
   (* npm-pick-manifest's sort criteria above semver: not deprecated and
      engines-compatible together, then engines, then not deprecated *)
-  let rank ar (x : Npl.Occ.t) : bool * bool * bool =
+  let rank ar (x : Npl.Occupant.t) : bool * bool * bool =
     match x with
-    | Npl.Occ.Proj -> (true, true, true)
-    | Npl.Occ.Reg (m, v) -> (
+    | Npl.Occupant.Proj -> (true, true, true)
+    | Npl.Occupant.Reg (m, v) -> (
         match A.meta ar (m, v.IVer.s) with
         | Some mt -> A.ver_rank ar mt
         | None -> (true, true, true))
 
-  let best ar (cands : Npl.Occ.t list) : Npl.Occ.t =
+  let best ar (cands : Npl.Occupant.t list) : Npl.Occupant.t =
     match cands with
     | [] -> invalid_arg "best"
     | c :: cs ->
@@ -60,11 +60,11 @@ struct
 
   (* dist-tags.latest first, when it passes those criteria, as
      npm-pick-manifest's fast path takes it *)
-  let tagged ar (cands : Npl.Occ.t list) : Npl.Occ.t option =
+  let tagged ar (cands : Npl.Occupant.t list) : Npl.Occupant.t option =
     List.find_opt
       (function
-        | Npl.Occ.Proj -> false
-        | Npl.Occ.Reg (m, v) -> (
+        | Npl.Occupant.Proj -> false
+        | Npl.Occupant.Reg (m, v) -> (
             A.loaded_latest ar m = Some v.IVer.s
             &&
             match A.meta ar (m, v.IVer.s) with
@@ -80,9 +80,9 @@ struct
      (build-ideal-tree.js #loadPeerSet), each at the version already decided
      for it or else npm's pick for its range.  Their accepted sets on a,
      which a pick for the walk from l should meet. *)
-  let peer_set st ~assigned l a : Npl.Occ.t list list =
+  let peer_set st ~assigned l a : Npl.Occupant.t list list =
     let seen = Hashtbl.create 16 in
-    let rec go at (y : Npl.Occ.t) =
+    let rec go at (y : Npl.Occupant.t) =
       if Hashtbl.mem seen y then []
       else begin
         Hashtbl.replace seen y ();
@@ -114,7 +114,7 @@ struct
       end
     in
     match
-      match l with [] -> Some Npl.Occ.Proj | _ -> occupant ~assigned l
+      match l with [] -> Some Npl.Occupant.Proj | _ -> occupant ~assigned l
     with
     | Some y -> go (Some l) y
     | None -> []
@@ -161,7 +161,7 @@ struct
         | [] -> Pac_common.Order.greatest PVersion.compare cands
         | _ -> (
             let u = pick (L.archive st) offered in
-            let wants (y : Npl.Occ.t) =
+            let wants (y : Npl.Occupant.t) =
               let es = L.edges st y in
               let peers = List.exists (fun ed -> is_peer ed && key ed = a) es in
               let dep = List.find_opt (fun ed -> is_dep ed && key ed = a) es in

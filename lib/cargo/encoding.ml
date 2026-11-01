@@ -26,20 +26,20 @@ module type S = sig
   val msrv_ok : string -> string option -> bool
   val granularity_of : string -> string
   val fset_of : string list -> Cg.FSet.t
-  val xentry : Cargo_parse.fentry -> Cg.FEntry.t
+  val xentry : Cargo_parse.fentry -> Cg.FeatureEntry.t
   val slots_of : root:bool -> Cargo_parse.ver -> Cargo_parse.dep list
   val slot_data : Cargo_parse.dep -> Cg.DependencyRecord.t
   val site_key : Cargo_parse.dep -> Cg.Site.t
 
   module PName : sig
-    type t = Cg.Reduction.NPlus.t
+    type t = Cg.Reduction.Name.t
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit
   end
 
   module PVersion : sig
-    type t = { msrv : bool; v : Cg.Reduction.VPlus.t }
+    type t = { msrv : bool; v : Cg.Reduction.Version.t }
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit
@@ -140,11 +140,11 @@ module Make () = struct
 
   let fset_of = Cg.FSet.ofList
 
-  let xentry : P.fentry -> Cg.FEntry.t = function
-    | P.FFeat f -> Cg.FEntry.EFeat f
-    | P.FDep a -> Cg.FEntry.EDep a
-    | P.FDepFeat (a, f) -> Cg.FEntry.EDepFeat (a, f)
-    | P.FWeakFeat (a, f) -> Cg.FEntry.EWeakFeat (a, f)
+  let xentry : P.fentry -> Cg.FeatureEntry.t = function
+    | P.FFeat f -> Cg.FeatureEntry.EFeat f
+    | P.FDep a -> Cg.FeatureEntry.EDep a
+    | P.FDepFeat (a, f) -> Cg.FeatureEntry.EDepFeat (a, f)
+    | P.FWeakFeat (a, f) -> Cg.FeatureEntry.EWeakFeat (a, f)
 
   (* one slot per manifest site -- SiteFunctional -- where the site is
      (cfg, kind, alias): the tables a manifest offers are maps, so two
@@ -246,39 +246,39 @@ module Make () = struct
             (Cg.sRange d)))
 
   module PName = struct
-    type t = Cg.Reduction.NPlus.t
+    type t = Cg.Reduction.Name.t
 
-    let compare a b = Ot.r2c (Cg.Reduction.NPlus.compare a b)
+    let compare a b = Ot.r2c (Cg.Reduction.Name.compare a b)
 
     let pp fmt (tn : t) =
       match tn with
-      | Cg.Reduction.NPlus.CRoot -> Format.fprintf fmt "root"
-      | Cg.Reduction.NPlus.CGran (n, gr) -> Format.fprintf fmt "%s@%s" n gr
-      | Cg.Reduction.NPlus.CFeatP (n, f, gr) ->
+      | Cg.Reduction.Name.CRoot -> Format.fprintf fmt "root"
+      | Cg.Reduction.Name.CGran (n, gr) -> Format.fprintf fmt "%s@%s" n gr
+      | Cg.Reduction.Name.CFeatP (n, f, gr) ->
           Format.fprintf fmt "%s/%s@%s" n f gr
-      | Cg.Reduction.NPlus.CSlot (n, gr, d) ->
+      | Cg.Reduction.Name.CSlot (n, gr, d) ->
           Format.fprintf fmt "%s@%s->%a%a" n gr pp_site (Cg.sSite d) pp_req d
-      | Cg.Reduction.NPlus.CDec (n, gr, f, d, feat) ->
+      | Cg.Reduction.Name.CDec (n, gr, f, d, feat) ->
           Format.fprintf fmt "<%s@%s/%s=>%a%a/%s>" n gr f pp_site (Cg.sSite d)
             pp_req d feat
-      | Cg.Reduction.NPlus.CCls l -> Format.fprintf fmt "links:%s" l
+      | Cg.Reduction.Name.CCls l -> Format.fprintf fmt "links:%s" l
   end
 
   module PVersion = struct
-    type t = { msrv : bool; v : Cg.Reduction.VPlus.t }
+    type t = { msrv : bool; v : Cg.Reduction.Version.t }
 
     let compare a b =
       match (a.msrv, b.msrv) with
       | false, true -> -1
       | true, false -> 1
-      | _ -> Ot.r2c (Cg.Reduction.VPlus.compare a.v b.v)
+      | _ -> Ot.r2c (Cg.Reduction.Version.compare a.v b.v)
 
     let pp fmt ({ v; _ } : t) =
       match v with
-      | Cg.Reduction.VPlus.WUnit -> Format.fprintf fmt "()"
-      | Cg.Reduction.VPlus.WOrig x -> Format.fprintf fmt "%s" x
-      | Cg.Reduction.VPlus.WClass gr -> Format.fprintf fmt "granularity:%s" gr
-      | Cg.Reduction.VPlus.WName n -> PName.pp fmt n
+      | Cg.Reduction.Version.WUnit -> Format.fprintf fmt "()"
+      | Cg.Reduction.Version.WOrig x -> Format.fprintf fmt "%s" x
+      | Cg.Reduction.Version.WClass gr -> Format.fprintf fmt "granularity:%s" gr
+      | Cg.Reduction.Version.WName n -> PName.pp fmt n
   end
 
   module PG = Pubgrub.Make (PName) (PVersion)

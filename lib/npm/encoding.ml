@@ -28,14 +28,14 @@ module type S = sig
   val xrange : Npm_version.range -> Np.coq_Range
 
   module PName : sig
-    type t = Np.Nm.name
+    type t = Np.Name.name
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit
   end
 
   module PVersion : sig
-    type t = Np.Vs.version
+    type t = Np.Version.version
 
     val compare : t -> t -> int
     val equal : t -> t -> bool
@@ -69,9 +69,9 @@ module Make () = struct
     List.map (fun cs -> List.map xcomp cs) rg
 
   module PName = struct
-    type t = Np.Nm.name
+    type t = Np.Name.name
 
-    let compare a b = Ot.r2c (Np.Nm.compare a b)
+    let compare a b = Ot.r2c (Np.Name.compare a b)
 
     let pp_key fmt ((a, t) : string * string) =
       if a = t then Format.fprintf fmt "%s" a
@@ -79,26 +79,26 @@ module Make () = struct
 
     let pp fmt (n : t) =
       match n with
-      | Np.Nm.Granular (k, w) -> Format.fprintf fmt "%a@%s" pp_key k w
-      | Np.Nm.Intermediate (k, v, m) ->
+      | Np.Name.Granular (k, w) -> Format.fprintf fmt "%a@%s" pp_key k w
+      | Np.Name.Intermediate (k, v, m) ->
           Format.fprintf fmt "<%a@%s=>%a>" pp_key k v pp_key m
-      | Np.Nm.Sight (k, v, a) -> Format.fprintf fmt "<%a@%s^%s>" pp_key k v a
-      | Np.Nm.Link (k, v, m, u, a) ->
+      | Np.Name.Sight (k, v, a) -> Format.fprintf fmt "<%a@%s^%s>" pp_key k v a
+      | Np.Name.Link (k, v, m, u, a) ->
           Format.fprintf fmt "<%a@%s=>%a@%s^%s>" pp_key k v pp_key m u a
-      | Np.Nm.Desc (a, t, s) -> Format.fprintf fmt "<%a@%s>" pp_key (a, t) s
+      | Np.Name.Desc (a, t, s) -> Format.fprintf fmt "<%a@%s>" pp_key (a, t) s
   end
 
   module PVersion = struct
-    type t = Np.Vs.version
+    type t = Np.Version.version
 
-    let compare a b = Ot.r2c (Np.Vs.compare a b)
+    let compare a b = Ot.r2c (Np.Version.compare a b)
     let equal a b = compare a b = 0
 
     let pp fmt (v : t) =
       match v with
-      | Np.Vs.Orig v -> Format.fprintf fmt "%s" v
-      | Np.Vs.Bot -> Format.fprintf fmt "⊥"
-      | Np.Vs.Free -> Format.fprintf fmt "∗"
+      | Np.Version.Orig v -> Format.fprintf fmt "%s" v
+      | Np.Version.Bot -> Format.fprintf fmt "⊥"
+      | Np.Version.Free -> Format.fprintf fmt "∗"
   end
 
   module PG = Pubgrub.Make (PName) (PVersion)
