@@ -129,7 +129,7 @@ module Conflict_class = struct
 
   let pp_name f = function
     | R.Name.Orig n -> str f n
-    | R.Name.Cls k -> Format.fprintf f "<%s>" k
+    | R.Name.Class k -> Format.fprintf f "<%s>" k
 
   let pp_version f = function
     | R.Version.Orig v -> str f v
@@ -158,7 +158,7 @@ module Conflict_class = struct
           R.Reduced.versions
             (R.reduceReal (L.PackageSetFibred.tailFibre r m) M.ConflictClassRel.empty)
             n
-      | R.Name.Cls k ->
+      | R.Name.Class k ->
           R.Reduced.versions (R.reduceReal (L.inClass r om k) (L.classRelAt om k)) n)
 
   let dependees = function
@@ -169,7 +169,7 @@ module Conflict_class = struct
                 (L.DependencyRelFibred.tailFibre d (n, v))
                 (L.ConflictClassRelFibred.tailFibre om (n, v)))
              p)
-    | R.Name.Cls _, _ -> []
+    | R.Name.Class _, _ -> []
     | R.Name.Orig _, R.Version.Name _ -> unasked ()
 
   let real = R.Reduced.PackageSet.elements (R.reduceReal r om)
@@ -302,7 +302,7 @@ module Peer = struct
   module M = E.PeerDependency (S) (S) (S)
   module R = M.Reduction
   module L = R.Lookup
-  module CR = M.Conc.Reduction
+  module CR = M.Concurrent.Reduction
 
   type name = R.Name.t
   type version = R.Version.t
@@ -622,7 +622,7 @@ module Variable_formula = struct
   end
 
   module M = E.VariableFormula (S) (S) (X) (S)
-  module PF = M.PF
+  module PF = M.FormulaCalculus
   module R = M.Reduction
   module L = R.Lookup
 
@@ -794,7 +794,7 @@ end
 
 module Concurrent_features = struct
   module M = E.ConcurrentFeature (S) (S) (S) (S)
-  module F = M.Feat
+  module F = M.Feature
   module R = M.Reduction
   module L = R.Lookup
 
@@ -1029,7 +1029,7 @@ module Npm_placement = struct
         let sameCore = String.equal
       end)
 
-  module R = M.Pl.Reduction
+  module R = M.Placement.Reduction
   module L = M.Reduction.Lookup
 
   type name = R.Name.t
@@ -1144,8 +1144,8 @@ module Npm_placement = struct
     packages "layout"
       (List.map
          (fun (l, (a, x)) -> path (a :: l) ^ " " ^ occ x)
-         (M.Pl.LayoutRel.elements
-            (M.Pl.reachable (M.Reduction.tr i)
+         (M.Placement.LayoutRel.elements
+            (M.Placement.reachable (M.Reduction.tr i)
                (R.placementResolution (R.Reduced.PackageSet.ofList s)))))
 end
 

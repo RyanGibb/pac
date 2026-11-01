@@ -7,22 +7,22 @@ module Make (S : Apt_reject.SEARCH) = struct
     type nonrec state = state
     type nonrec name = name
     type version = PVersion.t
-    type atom = DMA.Deb.Atom.t
+    type atom = DMA.Debian.Atom.t
     type nonrec assigned = assigned
     type nonrec rejection = rejection
 
     let kind : name -> Work_heap.kind = function
-      | DMA.Deb.Reduction.Name.Orig _ -> Package
-      | DMA.Deb.Reduction.Name.Disjunct _ -> Hard
-      | DMA.Deb.Reduction.Name.Soft _ -> Soft
-      | DMA.Deb.Reduction.Name.Selector _ -> Alternative
+      | DMA.Debian.Reduction.Name.Orig _ -> Package
+      | DMA.Debian.Reduction.Name.Disjunct _ -> Hard
+      | DMA.Debian.Reduction.Name.Soft _ -> Soft
+      | DMA.Debian.Reduction.Name.Selector _ -> Alternative
 
     let clause_atoms = function
-      | DMA.Deb.Reduction.Name.Disjunct aset | DMA.Deb.Reduction.Name.Soft aset
+      | DMA.Debian.Reduction.Name.Disjunct aset | DMA.Debian.Reduction.Name.Soft aset
         ->
           (* as ordered_clauses counts them *)
-          Some (DMA.Deb.AtomSet.elements (DMA.Deb.clauseAtoms aset))
-      | DMA.Deb.Reduction.Name.Selector a ->
+          Some (DMA.Debian.AtomSet.elements (DMA.Debian.clauseAtoms aset))
+      | DMA.Debian.Reduction.Name.Selector a ->
           (* a one-alternative Depends has no disjunct package: the selector
              itself is the work item *)
           Some [ a ]
@@ -42,17 +42,17 @@ module Make (S : Apt_reject.SEARCH) = struct
             | None -> false)
         | _ -> false
       in
-      match cands_of (DMA.Deb.Reduction.Name.Selector a) with
+      match cands_of (DMA.Debian.Reduction.Name.Selector a) with
       | [] ->
           List.exists
             (fun (_, w) -> sat (snd a) w && at (fst a) w)
-            (orig_versions (DMA.Deb.Reduction.Name.Orig (fst a)))
+            (orig_versions (DMA.Debian.Reduction.Name.Orig (fst a)))
       | cs ->
           List.exists
             (fun (pv : PVersion.t) ->
               match pv.PVersion.v with
-              | DMA.Deb.Reduction.Version.RefReal w -> at (fst a) w
-              | DMA.Deb.Reduction.Version.Ref (m, w) -> at m w
+              | DMA.Debian.Reduction.Version.RefReal w -> at (fst a) w
+              | DMA.Debian.Reduction.Version.Ref (m, w) -> at m w
               | _ -> false)
             cs
 
@@ -63,8 +63,8 @@ module Make (S : Apt_reject.SEARCH) = struct
 
     let at_pkg f n (pv : PVersion.t) =
       match (n, pv.PVersion.v) with
-      | ( DMA.Deb.Reduction.Name.Orig (m, DMA.QAArch b),
-          DMA.Deb.Reduction.Version.Orig v ) ->
+      | ( DMA.Debian.Reduction.Name.Orig (m, DMA.QAArch b),
+          DMA.Debian.Reduction.Version.Orig v ) ->
           f ((m, b), v)
       | _ -> []
 
@@ -83,8 +83,8 @@ module Make (S : Apt_reject.SEARCH) = struct
 
     let registered st n (pv : PVersion.t) =
       match (n, pv.PVersion.v) with
-      | ( DMA.Deb.Reduction.Name.Orig (m, DMA.QAArch b),
-          DMA.Deb.Reduction.Version.Orig v ) ->
+      | ( DMA.Debian.Reduction.Name.Orig (m, DMA.QAArch b),
+          DMA.Debian.Reduction.Version.Orig v ) ->
           register st ((m, b), v)
       | _ -> ([], [])
 
@@ -92,23 +92,23 @@ module Make (S : Apt_reject.SEARCH) = struct
        package var of a deferred alternative *)
     let continuation n (pv : PVersion.t) =
       match (n, pv.PVersion.v) with
-      | ( (DMA.Deb.Reduction.Name.Disjunct _ | DMA.Deb.Reduction.Name.Soft _),
-          DMA.Deb.Reduction.Version.Atom a ) ->
+      | ( (DMA.Debian.Reduction.Name.Disjunct _ | DMA.Debian.Reduction.Name.Soft _),
+          DMA.Debian.Reduction.Version.Atom a ) ->
           [ alt_name a ]
       | _ -> []
 
     let forced_to st n (pv : PVersion.t) =
       match (n, pv.PVersion.v) with
-      | DMA.Deb.Reduction.Name.Disjunct _, DMA.Deb.Reduction.Version.Atom a ->
+      | DMA.Debian.Reduction.Name.Disjunct _, DMA.Debian.Reduction.Version.Atom a ->
           Some (alt_name a)
-      | DMA.Deb.Reduction.Name.Selector a, DMA.Deb.Reduction.Version.RefReal _
-      | DMA.Deb.Reduction.Name.Selector a, DMA.Deb.Reduction.Version.Ref _ ->
+      | DMA.Debian.Reduction.Name.Selector a, DMA.Debian.Reduction.Version.RefReal _
+      | DMA.Debian.Reduction.Name.Selector a, DMA.Debian.Reduction.Version.Ref _ ->
           if deferred st a then
             Some
               (match pv.PVersion.v with
-              | DMA.Deb.Reduction.Version.Ref (m, _) ->
-                  DMA.Deb.Reduction.Name.Orig m
-              | _ -> DMA.Deb.Reduction.Name.Orig (fst a))
+              | DMA.Debian.Reduction.Version.Ref (m, _) ->
+                  DMA.Debian.Reduction.Name.Orig m
+              | _ -> DMA.Debian.Reduction.Name.Orig (fst a))
           else None
       | _ -> None
 
@@ -117,22 +117,22 @@ module Make (S : Apt_reject.SEARCH) = struct
        all along *)
     let version_of st n (pv : PVersion.t) =
       match (n, pv.PVersion.v) with
-      | DMA.Deb.Reduction.Name.Selector a, DMA.Deb.Reduction.Version.RefReal w
+      | DMA.Debian.Reduction.Name.Selector a, DMA.Debian.Reduction.Version.RefReal w
         when not (deferred st a) ->
-          let on = DMA.Deb.Reduction.Name.Orig (fst a) in
-          Some (on, tag on (DMA.Deb.Reduction.Version.Orig w))
-      | DMA.Deb.Reduction.Name.Selector a, DMA.Deb.Reduction.Version.Ref (m, w)
+          let on = DMA.Debian.Reduction.Name.Orig (fst a) in
+          Some (on, tag on (DMA.Debian.Reduction.Version.Orig w))
+      | DMA.Debian.Reduction.Name.Selector a, DMA.Debian.Reduction.Version.Ref (m, w)
         when not (deferred st a) ->
-          let on = DMA.Deb.Reduction.Name.Orig m in
-          Some (on, tag on (DMA.Deb.Reduction.Version.Orig w))
+          let on = DMA.Debian.Reduction.Name.Orig m in
+          Some (on, tag on (DMA.Debian.Reduction.Version.Orig w))
       | _ -> None
 
     let installs n (pv : PVersion.t) =
       match (n, pv.PVersion.v) with
-      | ( (DMA.Deb.Reduction.Name.Disjunct _ | DMA.Deb.Reduction.Name.Soft _),
-          DMA.Deb.Reduction.Version.Atom a ) -> (
+      | ( (DMA.Debian.Reduction.Name.Disjunct _ | DMA.Debian.Reduction.Name.Soft _),
+          DMA.Debian.Reduction.Version.Atom a ) -> (
           match alt_name a with
-          | DMA.Deb.Reduction.Name.Orig _ as on -> (
+          | DMA.Debian.Reduction.Name.Orig _ as on -> (
               match
                 List.filter_map
                   (fun (c, w) -> if sat (snd a) w then Some c else None)
@@ -172,12 +172,12 @@ module Make (S : Apt_reject.SEARCH) = struct
     keep
       (fun (pv : PVersion.t) ->
         match (n, pv.PVersion.v) with
-        | _, DMA.Deb.Reduction.Version.Atom a ->
+        | _, DMA.Debian.Reduction.Version.Atom a ->
             solutions st (Some assigned) a > 0
-        | DMA.Deb.Reduction.Name.Selector a, DMA.Deb.Reduction.Version.RefReal w
+        | DMA.Debian.Reduction.Name.Selector a, DMA.Debian.Reduction.Version.RefReal w
           ->
             live_pkg (fst a) w
-        | _, DMA.Deb.Reduction.Version.Ref (m, w) -> live_pkg m w
+        | _, DMA.Debian.Reduction.Version.Ref (m, w) -> live_pkg m w
         | _ -> true)
       cands
 
@@ -195,17 +195,17 @@ module Make (S : Apt_reject.SEARCH) = struct
         keep
           (fun (pv : PVersion.t) ->
             match pv.PVersion.v with
-            | DMA.Deb.Reduction.Version.RefReal w -> sat (snd na) w
+            | DMA.Debian.Reduction.Version.RefReal w -> sat (snd na) w
             (* an explicit :b has no real candidate: b's own package is a
                Ref, providing the name at its version *)
-            | DMA.Deb.Reduction.Version.Ref ((m, DMA.QAArch _), w)
+            | DMA.Debian.Reduction.Version.Ref ((m, DMA.QAArch _), w)
               when String.equal m (fst (fst na))
                    &&
                    match snd (fst na) with
                    | DMA.QAExact _ -> true
                    | _ -> false ->
                 sat (snd na) w
-            | DMA.Deb.Reduction.Version.Ref ((m, DMA.QAArch b), w) -> (
+            | DMA.Debian.Reduction.Version.Ref ((m, DMA.QAArch b), w) -> (
                 match stanza ((m, b), w) with
                 | Some stz ->
                     provides_matching stz (fst (fst na)) (snd na) <> []
@@ -228,10 +228,10 @@ module Make (S : Apt_reject.SEARCH) = struct
      would compare its atom set. *)
   let admits_bot ~assigned tn =
     match tn with
-    | DMA.Deb.Reduction.Name.Orig _ -> (
+    | DMA.Debian.Reduction.Name.Orig _ -> (
         match assigned tn with
         | PG.Entailed r ->
-            PG.Ranges.contains (tag tn DMA.Deb.Reduction.Version.Bot) r
+            PG.Ranges.contains (tag tn DMA.Debian.Reduction.Version.Bot) r
         | _ -> false)
     | _ -> false
 

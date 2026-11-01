@@ -150,7 +150,7 @@ let default_opam_version = "2.5.2"
 
 module Op = E.Opam (Ot.Str) (OVerOT) (Ot.Str) (OVerOT) (Ot.Str)
 module Red = Op.Reduction
-module PF = Red.PF
+module PF = Red.PackageFormula
 module PFR = PF.Reduction
 module T = PFR.Reduced
 
@@ -350,7 +350,7 @@ let pp_name fmt (n : PFR.Name.t) =
   match n with
   | PFR.Name.Orig Red.Name.Root -> Format.fprintf fmt "root"
   | PFR.Name.Orig (Red.Name.Real n) -> Format.fprintf fmt "%s" n
-  | PFR.Name.Orig (Red.Name.Cls k) -> Format.fprintf fmt "conflict-class:%s" k
+  | PFR.Name.Orig (Red.Name.Class k) -> Format.fprintf fmt "conflict-class:%s" k
   | PFR.Name.Disjunct _ -> Format.fprintf fmt "<disj>"
 
 (* PubGrub decides the greatest candidate, so preference lives here: a
@@ -404,13 +404,13 @@ let oracle rho ar (tn : Red.Name.t) : PF.VSet.t =
   match tn with
   | Red.Name.Real m -> Red.versions rho (name_inst ar m) tn
   | Red.Name.Root -> PF.VSet.singleton Red.Version.UnitV
-  | Red.Name.Cls k -> Red.versions rho (class_inst ar k) tn
+  | Red.Name.Class k -> Red.versions rho (class_inst ar k) tn
 
 let lookups rho ar : L.t =
   L.create
     ~root:(Red.Name.Root, Red.Version.UnitV)
     ~tag:(tag ar) ~oracle:(oracle rho ar)
-    ~volatile:(function Red.Name.Cls _ -> true | _ -> false)
+    ~volatile:(function Red.Name.Class _ -> true | _ -> false)
     ()
 
 (* Lookup.dependeesBy_lookupOrig: a package's dependees read each name

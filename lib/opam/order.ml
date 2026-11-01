@@ -59,7 +59,7 @@ let spine_rank tbl (m : PFR.Name.t) : int option =
   | _ -> None
 
 let walkable (m : PFR.Name.t) =
-  match m with PFR.Name.Orig (Red.Name.Cls _) -> false | _ -> true
+  match m with PFR.Name.Orig (Red.Name.Class _) -> false | _ -> true
 
 (* 0install's [decider] (solver_core.ml): walk the roles already selected
    depth-first from the root, each one's dependencies in the order they

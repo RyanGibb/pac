@@ -32,7 +32,7 @@ module Op :
         (Pac_common.Ot.Str)
 
 module Red = Op.Reduction
-module PF = Red.PF
+module PF = Red.PackageFormula
 module PFR = PF.Reduction
 module T = PFR.Reduced
 

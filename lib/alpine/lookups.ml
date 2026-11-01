@@ -32,8 +32,8 @@ module type S = sig
     val designation : Alp.ConditionSet.t -> Alp.Atom.t option
   end
 
-  module Red : module type of Alp.Reduct (FirstDesignation)
-  module PF = Red.PF
+  module Red : module type of Alp.ReductionUnder (FirstDesignation)
+  module PF = Red.PackageFormula
   module PFR = PF.Reduction
 
   type archive
@@ -94,8 +94,8 @@ module Make () : S = struct
       | None -> first_pos key
   end
 
-  module Red = Alp.Reduct (FirstDesignation)
-  module PF = Red.PF
+  module Red = Alp.ReductionUnder (FirstDesignation)
+  module PF = Red.PackageFormula
   module PFR = PF.Reduction
   module T = PFR.Reduced
 

@@ -1,5 +1,9 @@
-From PackageCalculus Require Import Prelude Core Versions Conflict Visibility
-  Debian DebianMA Opam Cargo Alpine Npm Placement NpmPlacement Smoke.
+From PackageCalculus Require Import Prelude Core VersionFormula Conflict
+  Visibility Debian MultiarchDebian Opam Cargo Alpine Npm Placement
+  NpmPlacement.
+(* Smoke's instances are named after their functors, so importing it would
+   shadow the functors extracted below. *)
+From PackageCalculus Require Smoke.
 From Stdlib Require Import Extraction ExtrOcamlBasic.
 
 Extraction Language OCaml.
@@ -20,6 +24,8 @@ Set Warnings "-extraction-opaque-accessed".
 Extraction Inline lex.
 
 Extraction "pac_extraction.ml"
-  Smoke.C Smoke.Ver Smoke.Cfl Smoke.Conc Smoke.Peer Smoke.Vis
-  Smoke.Feat Smoke.Virt Smoke.PkgF Smoke.VarF Smoke.CF Smoke.Op Smoke.Cgo Smoke.Alp
-  Debian DebianMA Opam Cargo Alpine Npm Placement NpmPlacement.
+  Smoke.Core Smoke.VersionFormula Smoke.Conflict Smoke.Concurrent
+  Smoke.PeerDependency Smoke.Visibility Smoke.Feature Smoke.Virtual
+  Smoke.PackageFormula Smoke.VariableFormula Smoke.ConcurrentFeature
+  Smoke.Opam Smoke.Cargo Smoke.Alpine
+  Debian MultiarchDebian Opam Cargo Alpine Npm Placement NpmPlacement.

@@ -1,16 +1,16 @@
 From Stdlib Require Import MSets List Bool.
-From PackageCalculus Require Import Prelude Core Versions Semver Concurrent
+From PackageCalculus Require Import Prelude Core VersionFormula Semver Concurrent
   NpmCommon.
 
 Create HintDb cmp_npm.
 Create Rewrite HintDb cmp_npm.
 
-Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
+Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
   (* Module application is generative, so the concurrent instance is the
      only one: every set keyed by source names goes through C. *)
   Module SourceName := PairUOT N N.
-  Module Conc := Concurrent SourceName V V.
-  Module Source := Conc.Source.
+  Module Concurrent := Concurrent SourceName V V.
+  Module Source := Concurrent.Source.
   Module Package := Source.Package.
   Module PackageSet := Source.PackageSet.
   Module VSet := Source.VSet.
@@ -149,14 +149,14 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Module SOwt := SetOps VersionOT Reduced.Package Reduced.VSet Reduced.PackageSet.
   Module SOhd := SetOps Reduced.Dependee Reduced.DependencyElt Reduced.DependeeSet Reduced.DependencyRel.
   Module SOqd := SetOps Reduced.Package Reduced.DependencyElt Reduced.PackageSet Reduced.DependencyRel.
-  Module SOtp := SetOps Reduced.Package Conc.ParentElt Reduced.PackageSet Conc.ParentRel.
+  Module SOtp := SetOps Reduced.Package Concurrent.ParentElt Reduced.PackageSet Concurrent.ParentRel.
   Module SOpt := SetOps Package Reduced.Package PackageSet Reduced.PackageSet.
   Module SOkt := SetOps SourceName Reduced.Package SourceNameSet Reduced.PackageSet.
   Module SOvt := SetOps V Reduced.Package VSet Reduced.PackageSet.
   Module SOat := SetOps N Reduced.Package NSet Reduced.PackageSet.
 
-  Module Sv := Semver V VSet PM.
-  Include Sv.
+  Module Semver := Semver V VSet SemverMatch.
+  Include Semver.
 
   Record Dependency : Type := MkDep
     { d_dir : N.t
@@ -436,11 +436,11 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         [apply mem_realVersions; exact Hb | reflexivity].
   Qed.
 
-  Definition Installs (S : PackageSet.t) (pi : Conc.ParentRel.t)
+  Definition Installs (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
       (q : Package.t) (k : SourceName.t) (u : V.t) : Prop :=
-    PackageSet.In (k, u) S /\ Conc.ParentRel.In ((k, u), q) pi.
+    PackageSet.In (k, u) S /\ Concurrent.ParentRel.In ((k, u), q) pi.
 
-  Definition Shows (I : Inst) (S : PackageSet.t) (pi : Conc.ParentRel.t)
+  Definition Shows (I : Inst) (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
       (sg : Package.t -> N.t -> option V.t) (q : Package.t) (n : N.t) (w : V.t)
     : Prop :=
     if chains I q n then sg q n = Some w
@@ -453,7 +453,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     forall theta, In (p_c, theta) (inst_peers I) -> p_name theta = n ->
       VSet.In w (peerCandsAt I (base q) theta).
 
-  Definition ReadBelow (I : Inst) (S : PackageSet.t) (pi : Conc.ParentRel.t)
+  Definition ReadBelow (I : Inst) (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
       (c : Package.t) (n : N.t) : Prop :=
     exists a'' m'' u'', Installs S pi c (a'', m'') u'' /\
       NSet.In n (peerNames I (m'', u'')).
@@ -474,7 +474,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Definition sightCands (I : Inst) (p_c : RealPackage.t) (n : N.t) : VSet.t :=
     VSet.union (sightCandsL I n (peerDependenciesAt I p_c)) (slotCands I p_c n).
 
-  Definition Offers (I : Inst) (S : PackageSet.t) (pi : Conc.ParentRel.t)
+  Definition Offers (I : Inst) (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
       (sg : Package.t -> N.t -> option V.t) (q c : Package.t) (n : N.t) (w : V.t)
     : Prop :=
     Shows I S pi sg q n w \/
@@ -482,7 +482,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
      Installs S pi c (slotKey I (base c) n) w).
 
   Record IsResolution (I : Inst)
-      (S : PackageSet.t) (pi : Conc.ParentRel.t)
+      (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
       (sg : Package.t -> N.t -> option V.t) : Prop :=
     { res_available : forall q, PackageSet.In q S -> Available I q
     ; res_root_mem : PackageSet.In (rootPkg I) S
@@ -500,7 +500,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         forall u, Installs S pi q (slotKey I (base q) a) u ->
           VSet.In u (slotCands I (base q) a)
     ; res_parent_closure :
-        forall a' m' u q, Conc.ParentRel.In (((a', m'), u), q) pi ->
+        forall a' m' u q, Concurrent.ParentRel.In (((a', m'), u), q) pi ->
           PackageSet.In ((a', m'), u) S /\ PackageSet.In q S /\
           SourceNameSet.In (a', m') (childKeys I q)
     ; res_root_dirs :
@@ -569,7 +569,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         forall u, Installs S pi (rootPkg I) (peerKeyAt I (inst_root I) theta) u ->
           VSet.In u (peerCandsAt I (inst_root I) theta) }.
 
-  Definition SightRead (I : Inst) (S : PackageSet.t) (pi : Conc.ParentRel.t)
+  Definition SightRead (I : Inst) (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
       (sg : Package.t -> N.t -> option V.t) : Prop :=
     forall c n w, sg c n = Some w ->
       chains I c n = true /\ ReadBelow I S pi c n.
@@ -1593,7 +1593,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         injection H as <- <-; reflexivity.
     Qed.
 
-    Definition parents (S : Reduced.PackageSet.t) : Conc.ParentRel.t :=
+    Definition parents (S : Reduced.PackageSet.t) : Concurrent.ParentRel.t :=
       SOtp.filterMap
         (fun p => match p with
                   | (Name.Intermediate k v m, Version.Orig u) =>
@@ -1605,7 +1605,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         S.
 
     Lemma mem_parents : forall S c q,
-        Conc.ParentRel.In (c, q) (parents S) <->
+        Concurrent.ParentRel.In (c, q) (parents S) <->
         Reduced.PackageSet.In
           (Name.Intermediate (fst q) (snd q) (fst c), Version.Orig (snd c)) S /\
         Reduced.PackageSet.In (embedPkg q) S.
@@ -2171,7 +2171,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           dp I ((a', m'), u) (p_name theta) = false ->
         exists w,
           PackageSet.In (peerKeyAt I (m, v) theta, w) (npmResolution S) /\
-          Conc.ParentRel.In
+          Concurrent.ParentRel.In
             ((peerKeyAt I (m, v) theta, w), ((a, m), v)) (parents S) /\
           VSet.In w (peerCandsAt I (m, v) theta).
     Proof.
@@ -2393,25 +2393,25 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       exists w; exact Hi.
     Qed.
 
-    Definition installsb (S : PackageSet.t) (pi : Conc.ParentRel.t)
+    Definition installsb (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
         (q : Package.t) (k : SourceName.t) (u : V.t) : bool :=
-      andb (PackageSet.mem (k, u) S) (Conc.ParentRel.mem ((k, u), q) pi).
+      andb (PackageSet.mem (k, u) S) (Concurrent.ParentRel.mem ((k, u), q) pi).
 
     Lemma installsb_iff : forall S pi q k u,
         installsb S pi q k u = true <-> Installs S pi q k u.
     Proof.
       intros S pi q k u; unfold installsb, Installs.
-      rewrite Bool.andb_true_iff, PackageSet.mem_spec, Conc.ParentRel.mem_spec.
+      rewrite Bool.andb_true_iff, PackageSet.mem_spec, Concurrent.ParentRel.mem_spec.
       reflexivity.
     Qed.
 
-    Definition instNode (S : PackageSet.t) (pi : Conc.ParentRel.t)
+    Definition instNode (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
         (p : Package.t) (k : SourceName.t) (u : V.t) : option Reduced.Package.t :=
       if installsb S pi p k u
       then Some (Name.Intermediate (fst p) (snd p) k, Version.Orig u)
       else None.
 
-    Definition ownAt (I : Inst) (S : PackageSet.t) (pi : Conc.ParentRel.t)
+    Definition ownAt (I : Inst) (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
         (q : Package.t) '((_, m) as k : SourceName.t) : option V.t :=
       List.find (installsb S pi q k)
         (VSet.elements (realVersions (inst_real I) m)).
@@ -2443,7 +2443,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         apply installsb_iff in Hi; rewrite Hi in E; discriminate E.
     Qed.
 
-    Definition showsAt (I : Inst) (S : PackageSet.t) (pi : Conc.ParentRel.t)
+    Definition showsAt (I : Inst) (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
         (sg : Package.t -> N.t -> option V.t) (q : Package.t) (n : N.t)
       : option V.t :=
       if chains I q n then sg q n
@@ -2473,7 +2473,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         + intros [].
     Qed.
 
-    Definition readb (I : Inst) (S : PackageSet.t) (pi : Conc.ParentRel.t)
+    Definition readb (I : Inst) (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
         (c : Package.t) (a : N.t) : bool :=
       SourceNameSet.exists_ (fun '((_, m) as k) =>
           VSet.exists_ (fun u =>
@@ -2502,13 +2502,13 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
               [apply installsb_iff; exact Hi | apply NSet.mem_spec; exact Ha].
     Qed.
 
-    Definition sightVal (I : Inst) (S : PackageSet.t) (pi : Conc.ParentRel.t)
+    Definition sightVal (I : Inst) (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
         (sg : Package.t -> N.t -> option V.t) (c : Package.t) (n : N.t) : Version.t :=
       if andb (chains I c n) (readb I S pi c n)
       then match sg c n with Some w => Version.Orig w | None => Version.Bot end
       else Version.Free.
 
-    Definition linkVal (I : Inst) (S : PackageSet.t) (pi : Conc.ParentRel.t)
+    Definition linkVal (I : Inst) (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
         (sg : Package.t -> N.t -> option V.t) (q : Package.t) (n : N.t) : Version.t :=
       match showsAt I S pi sg q n with
       | Some w => Version.Orig w
@@ -2568,14 +2568,14 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
             repeat split; try reflexivity; exact (Hneed Hs0).
     Qed.
 
-    Definition absentNode (I : Inst) (S : PackageSet.t) (pi : Conc.ParentRel.t)
+    Definition absentNode (I : Inst) (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
         (p : Package.t) '((a, _) as k : SourceName.t) : option Reduced.Package.t :=
       if andb (canBeAbsent I p a)
            (match ownAt I S pi p k with Some _ => false | None => true end)
       then Some (Name.Intermediate (fst p) (snd p) k, Version.Bot)
       else None.
 
-    Definition descNode (I : Inst) (S : PackageSet.t) (pi : Conc.ParentRel.t)
+    Definition descNode (I : Inst) (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
         (q : Package.t) '((a, m) as k : SourceName.t) (u : V.t) : option Reduced.Package.t :=
       if installsb S pi q k u
       then match slotOf I (base q) a with
@@ -2620,7 +2620,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Definition coreResolution (I : Inst) (S : PackageSet.t)
-        (pi : Conc.ParentRel.t) (sg : Package.t -> N.t -> option V.t)
+        (pi : Concurrent.ParentRel.t) (sg : Package.t -> N.t -> option V.t)
       : Reduced.PackageSet.t :=
       Reduced.PackageSet.union (embedSet S)
         (Reduced.PackageSet.union
@@ -3879,7 +3879,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         parents (coreResolution I S pi sg) = pi.
     Proof.
       intros I S pi sg Hres.
-      apply Conc.ParentRel.ext; intros [[m u] [k v]].
+      apply Concurrent.ParentRel.ext; intros [[m u] [k v]].
       rewrite mem_parents, !mem_coreResolution; cbn [fst snd]; split.
       - intros [[[k' [v' [_ He]]] |
                  [[[pk pv] [a' [m' [u' [_ [_ [_ [Hi He]]]]]]]] |

@@ -40,7 +40,7 @@ Definition cmpOpEvalBy {A} (cmp : A -> A -> comparison)
   | OpNe => match cmp x c with Eq => false | _ => true end
   end.
 
-Module Versions (N V : UsualOrderedType).
+Module VersionFormula (N V : UsualOrderedType).
   Module Source := Core N V.
   Module Package := Source.Package.
   Module PackageSet := Source.PackageSet.
@@ -321,4 +321,4 @@ Module Versions (N V : UsualOrderedType).
 
     End Lookup.
   End Reduction.
-End Versions.
+End VersionFormula.

@@ -4,14 +4,14 @@ From PackageCalculus Require Import Prelude Core Semver ConflictClass.
 Create HintDb cmp_cargo.
 Create Rewrite HintDb cmp_cargo.
 
-Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
+Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : SemverMatch V).
   Module Source := Core N V.
   Module Package := Source.Package.
   Module PackageSet := Source.PackageSet.
   Module VSet := Source.VSet.
 
-  Module Sv := Semver V VSet PM.
-  Include Sv.
+  Module Semver := Semver V VSet SemverMatch.
+  Include Semver.
 
   Module FSet := FSetUOT F.
   Module Featured := PairUOT Package FSet.AsUOT.
@@ -97,7 +97,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   End Kind.
   Module KindOT := UOTFromCompare Kind.
 
-  Module CfgTail := PairUOT CfgS Src.
+  Module CfgTail := PairUOT Cfg DependencySource.
   Module RequestedFeaturesTail := PairUOT FSet.AsUOT CfgTail.
   Module DefaultTail := PairUOT BoolOT RequestedFeaturesTail.
   Module OptionalTail := PairUOT BoolOT DefaultTail.
@@ -118,10 +118,10 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     fst (snd (snd (snd (snd (snd d))))).
   Definition sReqFeats (d : DependencyRecord.t) : FSet.t :=
     fst (snd (snd (snd (snd (snd (snd d)))))).
-  Definition sCfg (d : DependencyRecord.t) : CfgS.t :=
+  Definition sCfg (d : DependencyRecord.t) : Cfg.t :=
     fst (snd (snd (snd (snd (snd (snd (snd d))))))).
 
-  Module SiteTail := PairUOT KindOT CfgS.
+  Module SiteTail := PairUOT KindOT Cfg.
   Module Site := PairUOT N SiteTail.
   Definition sSite (d : DependencyRecord.t) : Site.t :=
     (sAlias d, (sKind d, sCfg d)).
@@ -521,8 +521,8 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
     (* Its core shared, so that the conflict class package calculus at the core's own
        sorts states its lookups over this T. *)
-    Module ClsT := ConflictClass NameOT VersionOT.
-    Module Reduced := ClsT.Source.
+    Module ConflictClass := ConflictClass NameOT VersionOT.
+    Module Reduced := ConflictClass.Source.
 
     Module SOvp := SetOps V Reduced.Package VSet Reduced.PackageSet.
     Module SOpp := SetOps Package Reduced.Package PackageSet Reduced.PackageSet.
@@ -605,9 +605,9 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                        (inst_slots I) (inst_root I))
                     (clsReal (inst_gran I) (inst_real I) (inst_links I)))))).
 
-    Module SOlc := SetOps LinksElt ClsT.ConflictClassElt LinksRel ClsT.ConflictClassRel.
+    Module SOlc := SetOps LinksElt ConflictClass.ConflictClassElt LinksRel ConflictClass.ConflictClassRel.
     Definition linkRel (g : V.t -> G.t) (Links : LinksRel.t)
-      : ClsT.ConflictClassRel.t :=
+      : ConflictClass.ConflictClassRel.t :=
       SOlc.map (fun '((n, v), l) =>
           ((Name.CGran n (g v), Version.WOrig v), Name.CCls l))
         Links.
@@ -842,7 +842,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Lemma mem_linkRel : forall g Links q k,
-        ClsT.ConflictClassRel.In (q, k) (linkRel g Links) <->
+        ConflictClass.ConflictClassRel.In (q, k) (linkRel g Links) <->
         exists n v l, LinksRel.In ((n, v), l) Links /\
           q = (Name.CGran n (g v), Version.WOrig v) /\ k = Name.CCls l.
     Proof.
@@ -936,27 +936,27 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         Reduced.VSet.In v
           (versions I (Name.CCls l)) <->
         exists n, v = Version.WName n /\
-          ClsT.Reduction.Reduced.VSet.In (ClsT.Reduction.Version.Name n)
-            (ClsT.Reduction.Reduced.versions
-               (ClsT.Reduction.reduceReal
+          ConflictClass.Reduction.Reduced.VSet.In (ConflictClass.Reduction.Version.Name n)
+            (ConflictClass.Reduction.Reduced.versions
+               (ConflictClass.Reduction.reduceReal
                   (granReal (inst_gran I) (inst_real I))
                   (linkRel (inst_gran I) (inst_links I)))
-               (ClsT.Reduction.Name.Cls (Name.CCls l))).
+               (ConflictClass.Reduction.Name.Class (Name.CCls l))).
     Proof.
       intros I l u.
-      rewrite mem_versions_cls, ClsT.Reduction.Lookup.versions_cls.
+      rewrite mem_versions_cls, ConflictClass.Reduction.Lookup.versions_cls.
       split.
       - intros [n [v [-> [Hl Em]]]].
         exists (Name.CGran n (inst_gran I v)); split; [reflexivity |].
-        apply ClsT.Reduction.Lookup.SOpv.mem_map.
+        apply ConflictClass.Reduction.Lookup.SOpv.mem_map.
         exists (Name.CGran n (inst_gran I v), Version.WOrig v);
           split; [| reflexivity].
-        apply ClsT.Reduction.Lookup.mem_inClass; split.
+        apply ConflictClass.Reduction.Lookup.mem_inClass; split.
         + apply mem_granReal; exists n, v; split; [exact Em | reflexivity].
         + apply mem_linkRel; exists n, v, l; repeat split; exact Hl.
-      - intros [m [-> Hn]]; apply ClsT.Reduction.Lookup.SOpv.mem_map in Hn.
+      - intros [m [-> Hn]]; apply ConflictClass.Reduction.Lookup.SOpv.mem_map in Hn.
         destruct Hn as [q [Hq E]]; injection E as ->.
-        apply ClsT.Reduction.Lookup.mem_inClass in Hq; destruct Hq as [Hq Hc].
+        apply ConflictClass.Reduction.Lookup.mem_inClass in Hq; destruct Hq as [Hq Hc].
         apply mem_linkRel in Hc; destruct Hc as [n [v [l' [Hl [-> Ek]]]]].
         injection Ek as <-.
         apply mem_granReal in Hq; destruct Hq as [n' [v' [HR E]]].
@@ -2393,11 +2393,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
       Lemma granReal_claimants : forall g R Links l,
           granReal g (claimants R Links l) =
-          ClsT.Reduction.Lookup.inClass (granReal g R) (linkRel g Links)
+          ConflictClass.Reduction.Lookup.inClass (granReal g R) (linkRel g Links)
             (Name.CCls l).
       Proof.
         intros; apply Reduced.PackageSet.ext; intro x.
-        rewrite ClsT.Reduction.Lookup.mem_inClass, !mem_granReal.
+        rewrite ConflictClass.Reduction.Lookup.mem_inClass, !mem_granReal.
         split.
         - intros [n [v [Hc ->]]]; apply mem_claimants in Hc.
           destruct Hc as [HR Hl]; split.
@@ -2412,10 +2412,10 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
 
       Lemma linkRel_headFibre : forall g Links l,
           linkRel g (LinksRelFibred.headFibre Links l) =
-          ClsT.Reduction.Lookup.classRelAt (linkRel g Links) (Name.CCls l).
+          ConflictClass.Reduction.Lookup.classRelAt (linkRel g Links) (Name.CCls l).
       Proof.
-        intros; apply ClsT.ConflictClassRel.ext; intros [q k].
-        rewrite ClsT.Reduction.Lookup.mem_classRelAt, !mem_linkRel.
+        intros; apply ConflictClass.ConflictClassRel.ext; intros [q k].
+        rewrite ConflictClass.Reduction.Lookup.mem_classRelAt, !mem_linkRel.
         split.
         - intros [n [v [l' [Hl [-> ->]]]]].
           apply LinksRelFibred.mem_headFibre in Hl; destruct Hl as [Hl ->].
@@ -2438,7 +2438,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         intros; apply Reduced.VSet.ext; intro w.
         rewrite !versions_cls_reduceReal; cbn [inst_real inst_links inst_gran].
         rewrite granReal_claimants,
-          linkRel_headFibre, <- ClsT.Reduction.Lookup.versions_lookupClass.
+          linkRel_headFibre, <- ConflictClass.Reduction.Lookup.versions_lookupClass.
         reflexivity.
       Qed.
 

@@ -1,5 +1,5 @@
 From Stdlib Require Import MSets Lia PeanoNat.
-From PackageCalculus Require Import Prelude Core Versions.
+From PackageCalculus Require Import Prelude Core VersionFormula.
 
 Create HintDb cmp_deb.
 Create Rewrite HintDb cmp_deb.
@@ -41,9 +41,9 @@ Module TrivialGroup (N : UsualOrderedType) <: NameGroup N.
   Qed.
 End TrivialGroup.
 
-Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
-  Module Ver := Versions N V.
-  Module Source := Ver.Source.
+Module Debian (N V : UsualOrderedType) (NameGroup : NameGroup N).
+  Module VersionFormula := VersionFormula N V.
+  Module Source := VersionFormula.Source.
   Module Package := Source.Package.
   Module PackageSet := Source.PackageSet.
   Module VSet := Source.VSet.
@@ -75,17 +75,17 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Proof. cmp_lt_trans cmp_deb. Qed.
   End ProvidedVersionComp.
 
-  Module VersionFormulaEqb := UOTEqb Ver.VersionFormulaOT.
-  Definition vtMatchb (v : DTop) (phi : Ver.Formula) : bool :=
+  Module VersionFormulaEqb := UOTEqb VersionFormula.VersionFormulaOT.
+  Definition vtMatchb (v : DTop) (phi : VersionFormula.Formula) : bool :=
     match v with
-    | DTVal u => Ver.satisfiesb u phi
-    | DTTop => VersionFormulaEqb.eqb phi Ver.FTop
+    | DTVal u => VersionFormula.satisfiesb u phi
+    | DTTop => VersionFormulaEqb.eqb phi VersionFormula.FTop
     end.
 
-  Module Atom := PairUOT N Ver.VersionFormulaOT.
+  Module Atom := PairUOT N VersionFormula.VersionFormulaOT.
 
   Definition aname (a : Atom.t) : N.t := fst a.
-  Definition aform (a : Atom.t) : Ver.Formula := snd a.
+  Definition aform (a : Atom.t) : VersionFormula.Formula := snd a.
 
   Module AtomSet := FSetUOT Atom.
   Module Clause := ListUOT Atom.
@@ -109,7 +109,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
 
   Definition Match (Pi : ProvidesRel.t) '((m, u) : Package.t) '((n, phi) : Atom.t)
       : Prop :=
-    (m = n /\ Ver.satisfiesb u phi = true) \/
+    (m = n /\ VersionFormula.satisfiesb u phi = true) \/
     (exists v, ProvidesRel.In ((m, u), (n, v)) Pi /\ vtMatchb v phi = true).
 
   Module NEqb := UOTEqb N.
@@ -117,7 +117,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
 
   Definition matchb (Pi : ProvidesRel.t) (q : Package.t) (a : Atom.t) : bool :=
     orb
-      (andb (NEqb.eqb (fst q) (aname a)) (Ver.satisfiesb (snd q) (aform a)))
+      (andb (NEqb.eqb (fst q) (aname a)) (VersionFormula.satisfiesb (snd q) (aform a)))
       (ProvidesRel.exists_ (fun '(p, (m, v)) =>
            andb (PackageEqb.eqb p q)
              (andb (NEqb.eqb m (aname a)) (vtMatchb v (aform a))))
@@ -164,7 +164,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         forall n v, PackageSet.In (n, v) S ->
         forall a e, ConflictRel.In ((n, v), (a, e)) (inst_conf I) ->
         ~ exists m u, PackageSet.In (m, u) S /\ (m, u) <> (n, v) /\
-            (e = true -> NG.groupEq m n = false) /\
+            (e = true -> NameGroup.groupEq m n = false) /\
             Match (inst_prov I) (m, u) a
     ; res_version_unique : Source.VersionUnique S }.
 
@@ -271,7 +271,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       SOvw.map Version.Orig vs.
 
     Definition evalAt (R : PackageSet.t) (a : Atom.t) : VSet.t :=
-      Ver.eval (aform a) (Source.versions R (aname a)).
+      VersionFormula.eval (aform a) (Source.versions R (aname a)).
 
     Definition provb (Pi : ProvidesRel.t) (a : Atom.t) : bool :=
       ProvidesRel.exists_ (fun '(_, (m, v)) =>
@@ -316,7 +316,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Definition allClauses (D Dopt : DependencyRel.t) : DependencyRel.t := DependencyRel.union D Dopt.
 
     Definition exemptb (e : bool) (m n : N.t) : bool :=
-      andb e (NG.groupEq m n).
+      andb e (NameGroup.groupEq m n).
 
     Definition complementVS (R : PackageSet.t) (Pi : ProvidesRel.t) (a : Atom.t) (m : N.t)
       : Reduced.VSet.t :=
@@ -455,7 +455,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Definition reduceDeps (I : Inst) : Reduced.DependencyRel.t :=
       SOse.unionMap (fun p => depEdges p (dependees I p)) (reduceReal I).
 
-    Lemma provb_iff : forall Pi (n : N.t) (phi : Ver.Formula),
+    Lemma provb_iff : forall Pi (n : N.t) (phi : VersionFormula.Formula),
         provb Pi (n, phi) = true <->
         exists q v, ProvidesRel.In (q, (n, v)) Pi /\ vtMatchb v phi = true.
     Proof.
@@ -472,7 +472,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         rewrite NEqb.eqb_refl; cbn [andb]; exact Hm.
     Qed.
 
-    Lemma mem_us : forall R Pi (n : N.t) (phi : Ver.Formula) u',
+    Lemma mem_us : forall R Pi (n : N.t) (phi : VersionFormula.Formula) u',
         Reduced.VSet.In u' (us R Pi (n, phi)) <->
         (exists u, VSet.In u (evalAt R (n, phi)) /\ u' = Version.RefReal u) \/
         (exists m w v, ProvidesRel.In ((m, w), (n, v)) Pi /\
@@ -559,7 +559,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       intros [u [HR Hm]]; exists (m, u); auto.
     Qed.
 
-    Lemma matchb_nodeFibre : forall Pi q (n : N.t) (phi : Ver.Formula),
+    Lemma matchb_nodeFibre : forall Pi q (n : N.t) (phi : VersionFormula.Formula),
         matchb (ProvidesRelFibred.nodeFibre Pi n) q (n, phi) = matchb Pi q (n, phi).
     Proof.
       intros Pi q n phi; unfold matchb; f_equal.
@@ -810,7 +810,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
            y = (Name.Soft A, versionsSoft A)) \/
         (exists a e m, ConflictRel.In ((n, v), (a, e)) (inst_conf I) /\
            NSet.In m (confNames (inst_real I) (inst_prov I) a) /\ m <> n /\
-           (e = true -> NG.groupEq m n = false) /\
+           (e = true -> NameGroup.groupEq m n = false) /\
            y = (Name.Orig m, complementVS (inst_real I) (inst_prov I) a m)).
     Proof.
       intros I n v y; cbn [dependees].
@@ -882,7 +882,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Proof. intros; apply SOde.singleton_in. Qed.
 
     Lemma dependees_selector_real_spec :
-      forall I (n : N.t) (phi : Ver.Formula) (u : V.t) y,
+      forall I (n : N.t) (phi : VersionFormula.Formula) (u : V.t) y,
         Reduced.DependeeSet.In y
           (dependees I (Name.Selector (n, phi), Version.RefReal u)) <->
         y = (Name.Orig n, Reduced.VSet.singleton (Version.Orig u)).
@@ -938,7 +938,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
             exists (an, u); split.
             { apply mem_debianResolution; exact Hdv2S. }
             { left; cbn [aname aform fst snd]; split; [reflexivity |].
-              unfold evalAt, Ver.eval in Hu; apply VSet.filter_spec' in Hu.
+              unfold evalAt, VersionFormula.eval in Hu; apply VSet.filter_spec' in Hu.
               destruct Hu as [_ Hh]; exact Hh. }
           + assert (Hedge2 : Reduced.DependeeSet.In
                 (Name.Orig m0, Reduced.VSet.singleton (Version.Orig u0))
@@ -966,7 +966,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           exists (an, u); split.
           { apply mem_debianResolution; exact HdvS. }
           { left; cbn [aname aform fst snd]; split; [reflexivity |].
-            unfold evalAt, Ver.eval in Hu; apply VSet.filter_spec' in Hu.
+            unfold evalAt, VersionFormula.eval in Hu; apply VSet.filter_spec' in Hu.
             destruct Hu as [_ Hh]; exact Hh. } }
       constructor.
       - intros p Hp.
@@ -1086,7 +1086,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       AtomSet.min_elt (satAtoms Pi S A).
 
     Definition rmatchb (q : Package.t) (a : Atom.t) : bool :=
-      andb (NEqb.eqb (fst q) (aname a)) (Ver.satisfiesb (snd q) (aform a)).
+      andb (NEqb.eqb (fst q) (aname a)) (VersionFormula.satisfiesb (snd q) (aform a)).
 
     Definition chosenVersion '((m, w) : Package.t) (a : Atom.t) : Version.t :=
       if rmatchb (m, w) a then Version.RefReal w else Version.Ref m w.
@@ -1293,12 +1293,12 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           Reduced.VSet.In (chosenVersion q a) (us (inst_real I) (inst_prov I) a)).
       { intros [m qv] [an af] HqS HM.
         unfold chosenVersion, rmatchb; cbn [aname aform fst snd].
-        destruct (andb (NEqb.eqb m an) (Ver.satisfiesb qv af)) eqn:Hr;
+        destruct (andb (NEqb.eqb m an) (VersionFormula.satisfiesb qv af)) eqn:Hr;
           apply mem_us.
         - apply andb_prop in Hr; destruct Hr as [Hn Hh].
           apply NEqb.eqb_true_iff in Hn as ->.
           left; exists qv; split; [| reflexivity].
-          unfold evalAt, Ver.eval; cbn [aname aform fst snd].
+          unfold evalAt, VersionFormula.eval; cbn [aname aform fst snd].
           apply VSet.filter_spec'.
           split; [| exact Hh].
           apply Source.mem_versions.
@@ -1340,7 +1340,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           exists (Version.Orig qv); split.
           + unfold embedVS; apply SOvw.mem_map;
               exists qv; split; [| reflexivity].
-            unfold evalAt, Ver.eval; apply VSet.filter_spec'.
+            unfold evalAt, VersionFormula.eval; apply VSet.filter_spec'.
             split; [| exact Hh].
             apply Source.mem_versions.
             rewrite <- Hfq.
@@ -1458,7 +1458,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           subst w0.
           unfold chosenVersion, rmatchb in Hout; cbn [fst snd] in Hout.
           destruct (andb (NEqb.eqb qn0 (aname a0))
-                      (Ver.satisfiesb qv0 (aform a0)))
+                      (VersionFormula.satisfiesb qv0 (aform a0)))
             eqn:Hr.
           * destruct a0 as [an0 af0].
             apply dependees_selector_real_spec in Hout.
@@ -1504,14 +1504,14 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
         intro H; apply PackageSetFibred.mem_tailFibre; split; [exact H | reflexivity].
       Qed.
 
-      Lemma evalAt_tailFibre : forall R (n : N.t) (phi : Ver.Formula),
+      Lemma evalAt_tailFibre : forall R (n : N.t) (phi : VersionFormula.Formula),
           evalAt (PackageSetFibred.tailFibre R n) (n, phi) = evalAt R (n, phi).
       Proof.
         intros R n phi; unfold evalAt.
         rewrite versions_tailFibre; reflexivity.
       Qed.
 
-      Lemma provb_nodeFibre : forall Pi (n : N.t) (phi : Ver.Formula),
+      Lemma provb_nodeFibre : forall Pi (n : N.t) (phi : VersionFormula.Formula),
           provb (ProvidesRelFibred.nodeFibre Pi n) (n, phi) = provb Pi (n, phi).
       Proof.
         intros Pi n phi; unfold provb.
@@ -1522,7 +1522,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           [exact Hin | apply NEqb.eqb_true_iff; exact Hn].
       Qed.
 
-      Lemma us_filter : forall R Pi (n : N.t) (phi : Ver.Formula),
+      Lemma us_filter : forall R Pi (n : N.t) (phi : VersionFormula.Formula),
           us (PackageSetFibred.tailFibre R n) (ProvidesRelFibred.nodeFibre Pi n) (n, phi) =
           us R Pi (n, phi).
       Proof.
@@ -1536,7 +1536,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
           [exact Hin | apply NEqb.eqb_true_iff; exact Hn].
       Qed.
 
-      Lemma dependee_filter : forall R Pi (n : N.t) (phi : Ver.Formula),
+      Lemma dependee_filter : forall R Pi (n : N.t) (phi : VersionFormula.Formula),
           dependee (PackageSetFibred.tailFibre R n) (ProvidesRelFibred.nodeFibre Pi n)
             (n, phi) =
           dependee R Pi (n, phi).
@@ -1566,7 +1566,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       Definition provPreimage (Pi : ProvidesRel.t) (ns : NSet.t) : ProvidesRel.t :=
         ProvidesRelKeyPreimage.ofKeys ProvidesRelFibred.node ns Pi.
 
-      Lemma evalAt_namePreimage : forall R ns (n : N.t) (phi : Ver.Formula),
+      Lemma evalAt_namePreimage : forall R ns (n : N.t) (phi : VersionFormula.Formula),
           NSet.In n ns ->
           evalAt (Source.namePreimage R ns) (n, phi) = evalAt R (n, phi).
       Proof.
@@ -1585,7 +1585,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       Qed.
 
       Lemma provb_union_restrict :
-        forall Pi ns (p : Package.t) (n : N.t) (phi : Ver.Formula),
+        forall Pi ns (p : Package.t) (n : N.t) (phi : VersionFormula.Formula),
           NSet.In n ns ->
           provb (ProvidesRel.union (provPreimage Pi ns) (ProvidesRelFibred.tailFibre Pi p))
             (n, phi)
@@ -1601,7 +1601,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       Qed.
 
       Lemma us_union_restrict :
-        forall R Pi ns (p : Package.t) (n : N.t) (phi : Ver.Formula),
+        forall R Pi ns (p : Package.t) (n : N.t) (phi : VersionFormula.Formula),
           NSet.In n ns ->
           us (Source.namePreimage R ns)
             (ProvidesRel.union (provPreimage Pi ns) (ProvidesRelFibred.tailFibre Pi p))
@@ -1620,7 +1620,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       Qed.
 
       Lemma dependee_union_restrict :
-        forall R Pi ns (p : Package.t) (n : N.t) (phi : Ver.Formula),
+        forall R Pi ns (p : Package.t) (n : N.t) (phi : VersionFormula.Formula),
           NSet.In n ns ->
           dependee (Source.namePreimage R ns)
             (ProvidesRel.union (provPreimage Pi ns) (ProvidesRelFibred.tailFibre Pi p))
@@ -1858,7 +1858,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       Proof. intros; reflexivity. Qed.
 
       Theorem dependees_lookupDisjunct :
-        forall I (A : Clause.t) (n : N.t) (phi : Ver.Formula),
+        forall I (A : Clause.t) (n : N.t) (phi : VersionFormula.Formula),
           dependees I (Name.Disjunct A, Version.Atom (n, phi)) =
           dependees
             (MkInst (PackageSetFibred.tailFibre (inst_real I) n) DependencyRel.empty DependencyRel.empty
@@ -1874,7 +1874,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       Proof. intros; reflexivity. Qed.
 
       Theorem dependees_lookupSoft :
-        forall I (A : Clause.t) (n : N.t) (phi : Ver.Formula),
+        forall I (A : Clause.t) (n : N.t) (phi : VersionFormula.Formula),
           dependees I (Name.Soft A, Version.Atom (n, phi)) =
           dependees
             (MkInst (PackageSetFibred.tailFibre (inst_real I) n) DependencyRel.empty DependencyRel.empty
@@ -1886,7 +1886,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       Qed.
 
       Theorem versions_lookupSelector :
-        forall I (n : N.t) (phi : Ver.Formula),
+        forall I (n : N.t) (phi : VersionFormula.Formula),
           versions I (Name.Selector (n, phi)) =
           versions
             (MkInst (PackageSetFibred.tailFibre (inst_real I) n) DependencyRel.empty DependencyRel.empty
@@ -1898,7 +1898,7 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       Qed.
 
       Theorem dependees_lookupSelector :
-        forall I (n : N.t) (phi : Ver.Formula) (v : Version.t),
+        forall I (n : N.t) (phi : VersionFormula.Formula) (v : Version.t),
           dependees I (Name.Selector (n, phi), v) =
           match v with
           | Version.Ref m w =>

@@ -1,5 +1,5 @@
 From Stdlib Require Import MSets List Bool.
-From PackageCalculus Require Import Prelude Versions.
+From PackageCalculus Require Import Prelude VersionFormula.
 
 Module Type SemverMatch (V : UsualOrderedType).
   Parameter isPre : V.t -> bool.
@@ -9,7 +9,7 @@ End SemverMatch.
 (* The version set is a parameter rather than built here because module
    application is generative: an ecosystem evaluates ranges into the same
    set instance its calculus already uses. *)
-Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (PM : SemverMatch V).
+Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (SemverMatch : SemverMatch V).
   Module VSetSpecs := SetSpecs V VSet.
   Module VCompareFacts := UOTCompareFacts V.
 
@@ -27,11 +27,11 @@ Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (PM : SemverMatch V).
     end.
 
   Definition csAdmits (cs : CompSet) (v : V.t) : bool :=
-    orb (negb (PM.isPre v))
+    orb (negb (SemverMatch.isPre v))
       (existsb (fun ct =>
            match ct with
            | CAny => false
-           | COp _ c => andb (PM.isPre c) (PM.sameCore v c)
+           | COp _ c => andb (SemverMatch.isPre c) (SemverMatch.sameCore v c)
            end) cs).
 
   Definition csHolds (cs : CompSet) (v : V.t) : bool :=

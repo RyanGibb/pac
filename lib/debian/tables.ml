@@ -16,7 +16,7 @@ end
 
 module type S = sig
   module APx : sig
-    module A : sig
+    module Architecture : sig
       type t = string
 
       val compare : t -> t -> Pac.comparison
@@ -28,7 +28,7 @@ module type S = sig
   end
 
   module DMA :
-      module type of Pac.DebianMA (Pac_common.Ot.Str) (DebVersionOT) (APx)
+      module type of Pac.MultiarchDebian (Pac_common.Ot.Str) (DebVersionOT) (APx)
 
   type nstanza = {
     npkg : DMA.Package.t;
@@ -36,7 +36,7 @@ module type S = sig
     raw_deps : string list;
     raw_recs : string list;
     mutable nclauses : (DMA.Atom.t list list * DMA.Atom.t list list) option;
-    nprovs : (string * DMA.Deb.coq_DTop) list;
+    nprovs : (string * DMA.Debian.coq_DTop) list;
     nconfs : DMA.Atom.t list;
     ness : bool;
     nimp : bool;
@@ -54,10 +54,10 @@ module type S = sig
   val stanza : tables -> DMA.Package.t -> nstanza option
   val versions_of : tables -> string * string -> string list
   val group_members : tables -> string -> (string * string) list
-  val providers : tables -> string -> (DMA.Package.t * DMA.Deb.coq_DTop) list
+  val providers : tables -> string -> (DMA.Package.t * DMA.Debian.coq_DTop) list
   val dependers : tables -> string -> DMA.Package.t list
   val conflicters : tables -> string -> DMA.Package.t list
-  val atom_pos : DMA.Deb.Clause.t -> DMA.Deb.Atom.t -> int
+  val atom_pos : DMA.Debian.Clause.t -> DMA.Debian.Atom.t -> int
   val build_tables : recommends:bool -> Deb_packages.stanza list -> tables
   val obsolete : tables -> nstanza -> bool
   val deps_of : nstanza -> DMA.Atom.t list list
@@ -66,14 +66,14 @@ module type S = sig
   val ordered_clauses :
     tables ->
     DMA.Package.t ->
-    (bool * DMA.Deb.Reduction.Name.t * DMA.Deb.Atom.t list) list
+    (bool * DMA.Debian.Reduction.Name.t * DMA.Debian.Atom.t list) list
 
-  val sat : DMA.Deb.Ver.coq_Formula -> string -> bool
+  val sat : DMA.Debian.VersionFormula.coq_Formula -> string -> bool
   val pp_mname : Format.formatter -> string * DMA.coq_ReducedQualifier -> unit
-  val pp_atom : Format.formatter -> DMA.Deb.Atom.t -> unit
+  val pp_atom : Format.formatter -> DMA.Debian.Atom.t -> unit
 
   module PName : sig
-    type t = DMA.Deb.Reduction.Name.t
+    type t = DMA.Debian.Reduction.Name.t
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit
@@ -83,7 +83,7 @@ end
 
 module Make (AP : ARCH) : S = struct
   module APx = struct
-    module A = struct
+    module Architecture = struct
       include Pac_common.Ot.Str
 
       let enum = AP.arches
@@ -92,15 +92,15 @@ module Make (AP : ARCH) : S = struct
     let native = AP.native
   end
 
-  module DMA = E.DebianMA (Pac_common.Ot.Str) (DebVersionOT) (APx)
+  module DMA = E.MultiarchDebian (Pac_common.Ot.Str) (DebVersionOT) (APx)
 
   let formula_of_constr = function
-    | None -> DMA.Deb.Ver.FTop
-    | Some (DF.Ge, v) -> DMA.Deb.Ver.FCmp (E.OpGe, v)
-    | Some (DF.Gt, v) -> DMA.Deb.Ver.FCmp (E.OpGt, v)
-    | Some (DF.Le, v) -> DMA.Deb.Ver.FCmp (E.OpLe, v)
-    | Some (DF.Lt, v) -> DMA.Deb.Ver.FCmp (E.OpLt, v)
-    | Some (DF.Eq, v) -> DMA.Deb.Ver.FCmp (E.OpEq, v)
+    | None -> DMA.Debian.VersionFormula.FTop
+    | Some (DF.Ge, v) -> DMA.Debian.VersionFormula.FCmp (E.OpGe, v)
+    | Some (DF.Gt, v) -> DMA.Debian.VersionFormula.FCmp (E.OpGt, v)
+    | Some (DF.Le, v) -> DMA.Debian.VersionFormula.FCmp (E.OpLe, v)
+    | Some (DF.Lt, v) -> DMA.Debian.VersionFormula.FCmp (E.OpLt, v)
+    | Some (DF.Eq, v) -> DMA.Debian.VersionFormula.FCmp (E.OpEq, v)
 
   let qual_of = function
     | DF.Unqual -> DMA.QUnq
@@ -111,7 +111,7 @@ module Make (AP : ARCH) : S = struct
   let matom_of (a : DF.atom) : DMA.Atom.t =
     (a.name, (qual_of a.aqual, formula_of_constr a.constr))
 
-  let dtop_of = function Some v -> DMA.Deb.DTVal v | None -> DMA.Deb.DTTop
+  let dtop_of = function Some v -> DMA.Debian.DTVal v | None -> DMA.Debian.DTTop
 
   type nstanza = {
     npkg : DMA.Package.t;
@@ -119,7 +119,7 @@ module Make (AP : ARCH) : S = struct
     raw_deps : string list;
     raw_recs : string list;
     mutable nclauses : (DMA.Atom.t list list * DMA.Atom.t list list) option;
-    nprovs : (string * DMA.Deb.coq_DTop) list;
+    nprovs : (string * DMA.Debian.coq_DTop) list;
     nconfs : DMA.Atom.t list;
     ness : bool;
     nimp : bool;
@@ -166,7 +166,7 @@ module Make (AP : ARCH) : S = struct
     versions_table : (string * string, string list) Hashtbl.t;
     stanza_table : (DMA.Package.t, nstanza) Hashtbl.t;
     group_table : (string, (string * string) list) Hashtbl.t;
-    providers_table : (string, (DMA.Package.t * DMA.Deb.coq_DTop) list) Hashtbl.t;
+    providers_table : (string, (DMA.Package.t * DMA.Debian.coq_DTop) list) Hashtbl.t;
   }
 
   type tables = {
@@ -184,7 +184,7 @@ module Make (AP : ARCH) : S = struct
        and by the rejection cascade *)
     oc_cache :
       ( DMA.Package.t,
-        (bool * DMA.Deb.Reduction.Name.t * DMA.Deb.Atom.t list) list )
+        (bool * DMA.Debian.Reduction.Name.t * DMA.Debian.Atom.t list) list )
       Hashtbl.t;
   }
 
@@ -207,10 +207,10 @@ module Make (AP : ARCH) : S = struct
   let parse_relations fields =
     List.map (List.map matom_of) (DF.parse_depends_fields fields)
 
-  let atom_pos (alts : DMA.Deb.Clause.t) a =
+  let atom_pos (alts : DMA.Debian.Clause.t) a =
     let rec go i = function
       | [] -> max_int
-      | b :: bs -> if DMA.Deb.Atom.eq_dec b a then i else go (i + 1) bs
+      | b :: bs -> if DMA.Debian.Atom.eq_dec b a then i else go (i + 1) bs
     in
     go 0 alts
 
@@ -350,7 +350,7 @@ module Make (AP : ARCH) : S = struct
      resolves because a selector in turn exists only where a Provides
      matches the atom. *)
   let ordered_clauses tables (p : DMA.Package.t) :
-      (bool * DMA.Deb.Reduction.Name.t * DMA.Deb.Atom.t list) list =
+      (bool * DMA.Debian.Reduction.Name.t * DMA.Debian.Atom.t list) list =
     match Hashtbl.find_opt tables.oc_cache p with
     | Some r -> r
     | None ->
@@ -366,29 +366,29 @@ module Make (AP : ARCH) : S = struct
                 let ma = DMA.Reduction.reduceClause b alts in
                 ( opt,
                   synth ma,
-                  DMA.Deb.AtomSet.elements (DMA.Deb.clauseAtoms ma) )
+                  DMA.Debian.AtomSet.elements (DMA.Debian.clauseAtoms ma) )
               in
               List.map
                 (fun alts ->
-                  mk false (fun s -> DMA.Deb.Reduction.Name.Disjunct s) alts)
+                  mk false (fun s -> DMA.Debian.Reduction.Name.Disjunct s) alts)
                 (deps_of stz)
               @ List.map
                   (fun alts ->
-                    mk true (fun s -> DMA.Deb.Reduction.Name.Soft s) alts)
+                    mk true (fun s -> DMA.Debian.Reduction.Name.Soft s) alts)
                   (recs_of stz)
         in
         Hashtbl.add tables.oc_cache p r;
         r
 
-  let sat f w = DMA.Deb.Ver.satisfiesb w f
+  let sat f w = DMA.Debian.VersionFormula.satisfiesb w f
 
-  let pp_formula fmt (f : DMA.Deb.Ver.coq_Formula) =
+  let pp_formula fmt (f : DMA.Debian.VersionFormula.coq_Formula) =
     let rec go fmt = function
-      | DMA.Deb.Ver.FTop -> Format.fprintf fmt "T"
-      | DMA.Deb.Ver.FBot -> Format.fprintf fmt "F"
-      | DMA.Deb.Ver.FConj (a, b) -> Format.fprintf fmt "(%a & %a)" go a go b
-      | DMA.Deb.Ver.FDisj (a, b) -> Format.fprintf fmt "(%a | %a)" go a go b
-      | DMA.Deb.Ver.FCmp (op, v) ->
+      | DMA.Debian.VersionFormula.FTop -> Format.fprintf fmt "T"
+      | DMA.Debian.VersionFormula.FBot -> Format.fprintf fmt "F"
+      | DMA.Debian.VersionFormula.FConj (a, b) -> Format.fprintf fmt "(%a & %a)" go a go b
+      | DMA.Debian.VersionFormula.FDisj (a, b) -> Format.fprintf fmt "(%a | %a)" go a go b
+      | DMA.Debian.VersionFormula.FCmp (op, v) ->
           let ops =
             match op with
             | E.OpGe -> ">="
@@ -412,15 +412,15 @@ module Make (AP : ARCH) : S = struct
   let pp_atom fmt (m, f) = Format.fprintf fmt "%a (%a)" pp_mname m pp_formula f
 
   module PName = struct
-    type t = DMA.Deb.Reduction.Name.t
+    type t = DMA.Debian.Reduction.Name.t
 
-    let compare a b = Pac_common.Ot.r2c (DMA.Deb.Reduction.NameOT.compare a b)
+    let compare a b = Pac_common.Ot.r2c (DMA.Debian.Reduction.NameOT.compare a b)
 
     let pp fmt = function
-      | DMA.Deb.Reduction.Name.Orig m -> pp_mname fmt m
-      | DMA.Deb.Reduction.Name.Disjunct _ -> Format.fprintf fmt "<alts>"
-      | DMA.Deb.Reduction.Name.Soft _ -> Format.fprintf fmt "<rec>"
-      | DMA.Deb.Reduction.Name.Selector a ->
+      | DMA.Debian.Reduction.Name.Orig m -> pp_mname fmt m
+      | DMA.Debian.Reduction.Name.Disjunct _ -> Format.fprintf fmt "<alts>"
+      | DMA.Debian.Reduction.Name.Soft _ -> Format.fprintf fmt "<rec>"
+      | DMA.Debian.Reduction.Name.Selector a ->
           Format.fprintf fmt "<sel %a>" pp_atom a
 
     (* [pp] abbreviates a clause, which the explanations print; the core
@@ -432,9 +432,9 @@ module Make (AP : ARCH) : S = struct
           pp_atom
       in
       match n with
-      | DMA.Deb.Reduction.Name.Disjunct a ->
+      | DMA.Debian.Reduction.Name.Disjunct a ->
           Format.fprintf fmt "<alts %a>" alts a
-      | DMA.Deb.Reduction.Name.Soft a -> Format.fprintf fmt "<rec %a>" alts a
+      | DMA.Debian.Reduction.Name.Soft a -> Format.fprintf fmt "<rec %a>" alts a
       | _ -> pp fmt n
   end
 end

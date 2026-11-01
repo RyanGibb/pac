@@ -13,7 +13,7 @@ Module Type AbsentNames (N : UsualOrderedType).
   Parameter hasAbsent : N.t -> bool.
 End AbsentNames.
 
-Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
+Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
   Module Source := Core N V.
   Module Package := Source.Package.
   Module PackageSet := Source.PackageSet.
@@ -271,7 +271,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       Reduced.PackageSet.ofList (List.map (fun i => (n, Version.Idx i)) (List.seq 0 k)).
 
     Definition absentVS (m : N.t) (ws : Reduced.VSet.t) : Reduced.VSet.t :=
-      if Ab.hasAbsent m then Reduced.VSet.add Version.Bot ws else ws.
+      if AbsentNames.hasAbsent m then Reduced.VSet.add Version.Bot ws else ws.
 
     Definition complementVS (Vq : N.t -> VSet.t) (m : N.t) (vs : VSet.t)
       : Reduced.VSet.t :=
@@ -407,7 +407,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Module SOnt := SetOps N Reduced.Package NSet Reduced.PackageSet.
     Definition absentPkgs (ns : NSet.t) : Reduced.PackageSet.t :=
       SOnt.filterMap (fun n =>
-          if Ab.hasAbsent n then Some (Name.Orig n, Version.Bot) else None) ns.
+          if AbsentNames.hasAbsent n then Some (Name.Orig n, Version.Bot) else None) ns.
 
     Module SOpt := SetOps Package Reduced.Package PackageSet Reduced.PackageSet.
     Module SOet := SetOps DependencyElt Reduced.Package DependencyRel Reduced.PackageSet.
@@ -451,7 +451,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
 
     Lemma mem_complementVS : forall Vq m vs (v : Version.t),
         Reduced.VSet.In v (complementVS Vq m vs) <->
-        (v = Version.Bot /\ Ab.hasAbsent m = true) \/
+        (v = Version.Bot /\ AbsentNames.hasAbsent m = true) \/
         exists u, VSet.In u (Vq m) /\ ~ VSet.In u vs /\ v = Version.Orig u.
     Proof.
       intros Vq m vs v.
@@ -463,7 +463,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           destruct Hu as [Hu Hnv]; exists u; auto.
         - intros [u [Hu [Hnv ->]]]; exists u; split; [| reflexivity].
           apply VSet.diff_spec; split; assumption. }
-      unfold complementVS, absentVS; destruct (Ab.hasAbsent m).
+      unfold complementVS, absentVS; destruct (AbsentNames.hasAbsent m).
       - rewrite SOvv.add_in, Hd; split; intros [H | H];
           [left; split; [exact H | reflexivity] | right; exact H
           | left; exact (proj1 H) | right; exact H].
@@ -496,11 +496,11 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
 
     Lemma mem_absentPkgs : forall ns (p : Reduced.Package.t),
         Reduced.PackageSet.In p (absentPkgs ns) <->
-        exists n, NSet.In n ns /\ Ab.hasAbsent n = true /\
+        exists n, NSet.In n ns /\ AbsentNames.hasAbsent n = true /\
                   p = (Name.Orig n, Version.Bot).
     Proof.
       intros ns p; unfold absentPkgs; rewrite SOnt.mem_filterMap; split.
-      - intros [n [Hn Hf]]; destruct (Ab.hasAbsent n) eqn:Ha;
+      - intros [n [Hn Hf]]; destruct (AbsentNames.hasAbsent n) eqn:Ha;
           [| discriminate Hf].
         injection Hf as <-; exists n; auto.
       - intros [n [Hn [Ha ->]]]; exists n; split; [exact Hn |].
@@ -512,7 +512,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         (exists p, PackageSet.In p R /\ p' = embedPkg p) \/
         (exists p psi, DependencyRel.In (p, psi) D /\
                      Reduced.PackageSet.In p' (arisingPkgs (embedPkg p) psi)) \/
-        (exists n, NSet.In n (instNames R D) /\ Ab.hasAbsent n = true /\
+        (exists n, NSet.In n (instNames R D) /\ AbsentNames.hasAbsent n = true /\
                    p' = (Name.Orig n, Version.Bot)).
     Proof.
       intros R D p'; unfold reduceReal.
@@ -654,7 +654,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
 
     Definition AgreesOn (S : Reduced.PackageSet.t) (ps : PackageSet.t) : Prop :=
       forall m v,
-        (Ab.hasAbsent m = true \/
+        (AbsentNames.hasAbsent m = true \/
          exists u, Reduced.PackageSet.In (Name.Orig m, Version.Orig u) S) ->
         (PackageSet.In (m, v) ps <->
          Reduced.PackageSet.In (Name.Orig m, Version.Orig v) S).
@@ -1250,7 +1250,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         (exists p, PackageSet.In p S /\ p' = embedPkg p) \/
         (exists p psi, DependencyRel.In (p, psi) D /\ PackageSet.In p S /\
                      Reduced.PackageSet.In p' (witnessSet S psi)) \/
-        (exists n, NSet.In n (instNames R D) /\ Ab.hasAbsent n = true /\
+        (exists n, NSet.In n (instNames R D) /\ AbsentNames.hasAbsent n = true /\
                    (forall u, ~ PackageSet.In (n, u) S) /\
                    p' = (Name.Orig n, Version.Bot)).
     Proof.
@@ -1439,10 +1439,10 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         (S : Reduced.PackageSet.t),
         (forall p, PackageSet.In p S_Psi -> Reduced.PackageSet.In (embedPkg p) S) ->
         (forall m u, PackageSet.In (m, u) S_Psi -> VSet.In u (Vq m)) ->
-        (forall m, NSet.In m ns -> Ab.hasAbsent m = true ->
+        (forall m, NSet.In m ns -> AbsentNames.hasAbsent m = true ->
            (forall u, ~ PackageSet.In (m, u) S_Psi) ->
            Reduced.PackageSet.In (Name.Orig m, Version.Bot) S) ->
-        (forall m, NSet.In m ns -> Ab.hasAbsent m = false ->
+        (forall m, NSet.In m ns -> AbsentNames.hasAbsent m = false ->
            exists u, PackageSet.In (m, u) S_Psi) ->
         (forall chis i, Reduced.PackageSet.In (Name.Disjunct chis, Version.Idx i) S ->
            exists chi, List.nth_error chis i = Some chi /\
@@ -1499,7 +1499,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           split; [exact (HVq m u Hu) | split; [| reflexivity]].
           intro Huv; apply Hns; exists u; auto.
         - assert (Hnone := proj1 (Source.hasNameb_false S_Psi m) E).
-          destruct (Ab.hasAbsent m) eqn:Ha.
+          destruct (AbsentNames.hasAbsent m) eqn:Ha.
           + exists Version.Bot; split;
               [apply mem_complementVS; left; split; [reflexivity | exact Ha] |].
             exact (Hbot m Hm Ha Hnone).
@@ -1722,7 +1722,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     Theorem formula_calculus_completeness :
       forall (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t) (S : PackageSet.t),
         IsResolution R D r S ->
-        (forall m, NSet.In m (depNames D) -> Ab.hasAbsent m = false ->
+        (forall m, NSet.In m (depNames D) -> AbsentNames.hasAbsent m = false ->
            exists u, PackageSet.In (m, u) S) ->
         Reduced.IsResolution (reduceReal R D) (reduceDeps R D) (embedPkg r)
           (coreResolution R D S).
@@ -1736,7 +1736,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           VSet.In u (Source.versions R m)).
       { intros m u Hu; apply Source.mem_versions; apply Hsub; exact Hu. }
       assert (Hbot : forall m, NSet.In m (depNames D) ->
-          Ab.hasAbsent m = true -> (forall u, ~ PackageSet.In (m, u) S) ->
+          AbsentNames.hasAbsent m = true -> (forall u, ~ PackageSet.In (m, u) S) ->
           Reduced.PackageSet.In (Name.Orig m, Version.Bot) (coreResolution R D S)).
       { intros m Hm Ha Hnone; apply mem_coreResolution; right; right.
         exists m; split; [apply mem_instNames; right; exact Hm |]; auto. }
@@ -2221,7 +2221,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           PackageSet.In (m, u) R ->
           (exists p h, Reduced.DependencyRel.In (p, (Name.Orig n, h)) (reduceDeps R D)) \/
           n = m ->
-          Ab.hasAbsent n = true ->
+          AbsentNames.hasAbsent n = true ->
           Reduced.versions (reduceReal R D) (Name.Orig n) =
           Reduced.VSet.add Version.Bot
             (Reduced.versions (reduceReal (PackageSetFibred.tailFibre R n) DependencyRel.empty)
@@ -2251,7 +2251,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       Qed.
 
       Theorem versions_lookupOrigPresent : forall R D (n : N.t),
-          Ab.hasAbsent n = false ->
+          AbsentNames.hasAbsent n = false ->
           Reduced.versions (reduceReal R D) (Name.Orig n) =
           embedVS (Source.versions (PackageSetFibred.tailFibre R n) n).
       Proof.
@@ -3025,8 +3025,8 @@ Module AllAbsent (N : UsualOrderedType) <: AbsentNames N.
 End AllAbsent.
 
 Module PackageFormula (N V : UsualOrderedType).
-  Module Ab := AllAbsent N.
-  Include FormulaCalculus N V Ab.
+  Module Absent := AllAbsent N.
+  Include FormulaCalculus N V Absent.
 
   Theorem package_formula_completeness :
     forall (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t) (S : PackageSet.t),

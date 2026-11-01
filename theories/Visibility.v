@@ -5,13 +5,13 @@ Create HintDb cmp_vis.
 Create Rewrite HintDb cmp_vis.
 
 Module Visibility (N V : UsualOrderedType).
-  Module Conc := Concurrent N V V.
-  Module Source := Conc.Source.
+  Module Concurrent := Concurrent N V V.
+  Module Source := Concurrent.Source.
   Module Package := Source.Package.
   Module PackageSet := Source.PackageSet.
   Module VSet := Source.VSet.
-  Module ParentElt := Conc.ParentElt.
-  Module ParentRel := Conc.ParentRel.
+  Module ParentElt := Concurrent.ParentElt.
+  Module ParentRel := Concurrent.ParentRel.
 
   Module PublicDependencyElt := PairUOT Package N.
   Module PublicDependencyRel := FSetUOT PublicDependencyElt.
@@ -50,7 +50,7 @@ Module Visibility (N V : UsualOrderedType).
   Record IsResolution
       (R : PackageSet.t) (D : Source.DependencyRel.t) (pub : PublicDependencyRel.t) (r : Package.t)
       (S : PackageSet.t) (pi : ParentRel.t) : Prop :=
-    { res_concurrent : Conc.IsResolution R D (fun v => v) r S pi
+    { res_concurrent : Concurrent.IsResolution R D (fun v => v) r S pi
     ; res_version_visibility :
         forall p, PackageSet.In p S ->
         forall (n : N.t) (v v' : V.t),
@@ -812,8 +812,8 @@ Module Visibility (N V : UsualOrderedType).
         reflexivity.
     Qed.
 
-    Module SOdpp := Conc.Reduction.SOdpp.
-    Module SOvpp := Conc.Reduction.SOvpp.
+    Module SOdpp := Concurrent.Reduction.SOdpp.
+    Module SOvpp := Concurrent.Reduction.SOvpp.
     Definition parents (R : PackageSet.t) (D : Source.DependencyRel.t) (pub : PublicDependencyRel.t)
         (r : Package.t) (S : Reduced.PackageSet.t) : ParentRel.t :=
       SOdpp.unionMap (fun '((n, v), (m, vs)) =>
@@ -1290,7 +1290,7 @@ Module Visibility (N V : UsualOrderedType).
 
     Theorem visibility_retraction : forall R D pub r S pi,
         IsResolution R D pub r S pi -> OriginVisibility D pub r S pi ->
-        Conc.ParentDependency D pi ->
+        Concurrent.ParentDependency D pi ->
         visibilityResolution R D pub r (coreResolution R D pub r S pi) = S /\
         parents R D pub r (coreResolution R D pub r S pi) = pi.
     Proof.
@@ -1302,7 +1302,7 @@ Module Visibility (N V : UsualOrderedType).
         rewrite (parents_coreResolution_iff R D pub r S pi Hres).
         split; [intros [H _]; exact H | intro H].
         split; [exact H | split; [exact (Hdep _ _ _ _ H) | apply Hvis]].
-        exact (proj2 (Conc.res_parent_subset _ _ _ _ _ _
+        exact (proj2 (Concurrent.res_parent_subset _ _ _ _ _ _
                         (res_concurrent _ _ _ _ _ _ Hres) _ _ H)).
     Qed.
 

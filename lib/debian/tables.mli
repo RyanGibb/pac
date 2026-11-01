@@ -16,7 +16,7 @@ type stats = { names : int; versions : int }
    the architectures *)
 module type S = sig
   module APx : sig
-    module A : sig
+    module Architecture : sig
       type t = string
 
       val compare : t -> t -> Pac.comparison
@@ -28,7 +28,7 @@ module type S = sig
   end
 
   module DMA :
-      module type of Pac.DebianMA (Pac_common.Ot.Str) (DebVersionOT) (APx)
+      module type of Pac.MultiarchDebian (Pac_common.Ot.Str) (DebVersionOT) (APx)
 
   (* Normalized stanza: apt rewrites arch:all packages to the native arch
      and downgrades all+same to no (arch:all content is arch-invariant).
@@ -40,7 +40,7 @@ module type S = sig
     raw_deps : string list;
     raw_recs : string list;
     mutable nclauses : (DMA.Atom.t list list * DMA.Atom.t list list) option;
-    nprovs : (string * DMA.Deb.coq_DTop) list;
+    nprovs : (string * DMA.Debian.coq_DTop) list;
     nconfs : DMA.Atom.t list;
     (* apt ranks the providers claiming a name by these *)
     ness : bool;
@@ -71,7 +71,7 @@ module type S = sig
 
   (* the packages declaring a Provides of [name], each at the version it
      provides *)
-  val providers : tables -> string -> (DMA.Package.t * DMA.Deb.coq_DTop) list
+  val providers : tables -> string -> (DMA.Package.t * DMA.Debian.coq_DTop) list
 
   (* who names [name] in a Depends or Pre-Depends, and who in a Conflicts or
      Breaks, by the bare name as written *)
@@ -81,7 +81,7 @@ module type S = sig
   (* the alternative's position in the clause being decided, which is what
      PVersion.compare ranks on; max_int for an atom the clause does not list,
      which cannot arise for a name introduced from that clause *)
-  val atom_pos : DMA.Deb.Clause.t -> DMA.Deb.Atom.t -> int
+  val atom_pos : DMA.Debian.Clause.t -> DMA.Debian.Atom.t -> int
   val build_tables : recommends:bool -> Deb_packages.stanza list -> tables
   val obsolete : tables -> nstanza -> bool
   val deps_of : nstanza -> DMA.Atom.t list list
@@ -90,14 +90,14 @@ module type S = sig
   val ordered_clauses :
     tables ->
     DMA.Package.t ->
-    (bool * DMA.Deb.Reduction.Name.t * DMA.Deb.Atom.t list) list
+    (bool * DMA.Debian.Reduction.Name.t * DMA.Debian.Atom.t list) list
 
-  val sat : DMA.Deb.Ver.coq_Formula -> string -> bool
+  val sat : DMA.Debian.VersionFormula.coq_Formula -> string -> bool
   val pp_mname : Format.formatter -> string * DMA.coq_ReducedQualifier -> unit
-  val pp_atom : Format.formatter -> DMA.Deb.Atom.t -> unit
+  val pp_atom : Format.formatter -> DMA.Debian.Atom.t -> unit
 
   module PName : sig
-    type t = DMA.Deb.Reduction.Name.t
+    type t = DMA.Debian.Reduction.Name.t
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit

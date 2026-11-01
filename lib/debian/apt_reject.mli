@@ -6,7 +6,7 @@ module type SEARCH = sig
   module PVersion : sig
     type t = {
       pos : int;
-      v : T.DMA.Deb.Reduction.Version.t;
+      v : T.DMA.Debian.Reduction.Version.t;
       tgt : (string * T.DMA.coq_ReducedQualifier) option;
     }
 
@@ -26,20 +26,20 @@ module type SEARCH = sig
   val tables : T.tables
 
   val tag :
-    T.DMA.Deb.Reduction.Name.t -> T.DMA.Deb.Reduction.Version.t -> PVersion.t
+    T.DMA.Debian.Reduction.Name.t -> T.DMA.Debian.Reduction.Version.t -> PVersion.t
 
-  val cands_of : T.DMA.Deb.Reduction.Name.t -> PVersion.t list
+  val cands_of : T.DMA.Debian.Reduction.Name.t -> PVersion.t list
 
   val dependees_of :
-    T.DMA.Deb.Reduction.Name.t ->
-    T.DMA.Deb.Reduction.Version.t ->
-    (T.DMA.Deb.Reduction.Name.t * PVersion.t list) list
+    T.DMA.Debian.Reduction.Name.t ->
+    T.DMA.Debian.Reduction.Version.t ->
+    (T.DMA.Debian.Reduction.Name.t * PVersion.t list) list
 
-  val has_ref : T.DMA.Deb.Reduction.Name.t -> bool
+  val has_ref : T.DMA.Debian.Reduction.Name.t -> bool
 
   val free_of :
-    assigned:(T.DMA.Deb.Reduction.Name.t -> PG.selection) ->
-    T.DMA.Deb.Reduction.Name.t ->
+    assigned:(T.DMA.Debian.Reduction.Name.t -> PG.selection) ->
+    T.DMA.Debian.Reduction.Name.t ->
     PVersion.t list ->
     PVersion.t list
 
@@ -50,7 +50,7 @@ module Make (S : SEARCH) : sig
   open S
   open T
 
-  type name = DMA.Deb.Reduction.Name.t
+  type name = DMA.Debian.Reduction.Name.t
   type assigned = name -> PG.selection
 
   (* apt's Reject propagation (Solver::Propagate, solver3.cc), which PubGrub
@@ -75,27 +75,27 @@ module Make (S : SEARCH) : sig
 
   (* the atoms clauses on [name] were narrowed to by folding, each with the
      depender whose clause it was, the latest first *)
-  val narrowings : state -> name -> (DMA.Package.t * DMA.Deb.Atom.t) list
+  val narrowings : state -> name -> (DMA.Package.t * DMA.Debian.Atom.t) list
   val stanza : DMA.Package.t -> nstanza option
 
   (* the declared Provides of [n] that meet the formula *)
   val provides_matching :
     nstanza ->
     string ->
-    DMA.Deb.Ver.coq_Formula ->
-    (string * DMA.Deb.coq_DTop) list
+    DMA.Debian.VersionFormula.coq_Formula ->
+    (string * DMA.Debian.coq_DTop) list
 
   (* whether the package, a Multi-Arch: foreign one of the atom's name, meets
      it from another architecture *)
-  val sibling_provides : DMA.Package.t -> nstanza -> DMA.Deb.Atom.t -> bool
-  val alt_name : DMA.Deb.Atom.t -> name
+  val sibling_provides : DMA.Package.t -> nstanza -> DMA.Debian.Atom.t -> bool
+  val alt_name : DMA.Debian.Atom.t -> name
   val orig_versions : name -> (PVersion.t * string) list
-  val deferred : state -> DMA.Deb.Atom.t -> bool
+  val deferred : state -> DMA.Debian.Atom.t -> bool
 
   val live_at :
     state -> pkgvar:bool -> string * DMA.coq_ReducedQualifier -> string -> bool
 
-  val solutions : state -> assigned option -> DMA.Deb.Atom.t -> int
+  val solutions : state -> assigned option -> DMA.Debian.Atom.t -> int
   val installed_at : assigned:assigned -> DMA.Package.t -> bool
   val assign : state -> assigned:assigned -> rejection list -> rejection list
   val conflicts : state -> assigned:assigned -> DMA.Package.t -> rejection list
@@ -111,13 +111,13 @@ module Make (S : SEARCH) : sig
   val register :
     state ->
     DMA.Package.t ->
-    (name, DMA.Deb.Atom.t) Work_heap.clause list
-    * (name, DMA.Deb.Atom.t) Work_heap.clause list
+    (name, DMA.Debian.Atom.t) Work_heap.clause list
+    * (name, DMA.Debian.Atom.t) Work_heap.clause list
 
   val head :
     state ->
     assigned:assigned ->
-    DMA.Deb.Atom.t list ->
+    DMA.Debian.Atom.t list ->
     (name, PVersion.t) Work_heap.unit_head option
 
   val negation :

@@ -24,7 +24,7 @@ module type S = sig
   module Npl :
       module type of Pac.NpmPlacement (Pac_common.Ot.Str) (IVerOT) (IPM)
 
-  module Pl = Npl.Pl
+  module Pl = Npl.Placement
   module R = Pl.Reduction
   module T = R.Reduced
   module Lk = Npl.Reduction.Lookup
@@ -86,7 +86,7 @@ module Make () = struct
   end
 
   module Npl = E.NpmPlacement (Ot.Str) (IVerOT) (IPM)
-  module Pl = Npl.Pl
+  module Pl = Npl.Placement
   module R = Pl.Reduction
   module T = R.Reduced
   module Lk = Npl.Reduction.Lookup

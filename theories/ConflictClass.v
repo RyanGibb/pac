@@ -35,15 +35,15 @@ Module ConflictClass (N V : UsualOrderedType).
     Module Name.
       Inductive name : Type :=
       | Orig (n : N.t)
-      | Cls (k : N.t).
+      | Class (k : N.t).
       Definition t := name.
 
       Definition compare (x y : t) : comparison :=
         match x, y with
         | Orig n1, Orig n2 => N.compare n1 n2
-        | Orig _, Cls _ => Lt
-        | Cls _, Orig _ => Gt
-        | Cls k1, Cls k2 => N.compare k1 k2
+        | Orig _, Class _ => Lt
+        | Class _, Orig _ => Gt
+        | Class k1, Class k2 => N.compare k1 k2
         end.
 
       Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
@@ -99,14 +99,14 @@ Module ConflictClass (N V : UsualOrderedType).
     Definition classPkgs (ps : PackageSet.t) (Om : ConflictClassRel.t) : Reduced.PackageSet.t :=
       SOit.filterMap (fun '(q, k) =>
           if PackageSet.mem q ps
-          then Some (Name.Cls k, Version.Name (fst q))
+          then Some (Name.Class k, Version.Name (fst q))
           else None)
         Om.
 
     Lemma mem_classPkgs : forall ps Om (p : Reduced.Package.t),
         Reduced.PackageSet.In p (classPkgs ps Om) <->
         exists n v k, ConflictClassRel.In ((n, v), k) Om /\ PackageSet.In (n, v) ps /\
-          p = (Name.Cls k, Version.Name n).
+          p = (Name.Class k, Version.Name n).
     Proof.
       intros ps Om p; unfold classPkgs; rewrite SOit.mem_filterMap.
       split.
@@ -127,7 +127,7 @@ Module ConflictClass (N V : UsualOrderedType).
         Reduced.PackageSet.In p' (reduceReal R Om) <->
         (exists p, PackageSet.In p R /\ p' = embedPkg p) \/
         (exists n v k, ConflictClassRel.In ((n, v), k) Om /\ PackageSet.In (n, v) R /\
-           p' = (Name.Cls k, Version.Name n)).
+           p' = (Name.Class k, Version.Name n)).
     Proof.
       intros; unfold reduceReal, embedSet.
       rewrite Reduced.PackageSet.union_spec, SOpt.mem_map, mem_classPkgs; reflexivity.
@@ -142,7 +142,7 @@ Module ConflictClass (N V : UsualOrderedType).
     Definition classEdges (Om : ConflictClassRel.t) : Reduced.DependencyRel.t :=
       SOitd.map (fun '(q, k) =>
           (embedPkg q,
-           (Name.Cls k, Reduced.VSet.singleton (Version.Name (fst q)))))
+           (Name.Class k, Reduced.VSet.singleton (Version.Name (fst q)))))
         Om.
 
     Definition reduceDeps (D : Source.DependencyRel.t) (Om : ConflictClassRel.t) : Reduced.DependencyRel.t :=
@@ -165,7 +165,7 @@ Module ConflictClass (N V : UsualOrderedType).
         Reduced.DependencyRel.In y (classEdges Om) <->
         exists n v k, ConflictClassRel.In ((n, v), k) Om /\
           y = (embedPkg (n, v),
-               (Name.Cls k, Reduced.VSet.singleton (Version.Name n))).
+               (Name.Class k, Reduced.VSet.singleton (Version.Name n))).
     Proof.
       intros Om y; unfold classEdges; rewrite SOitd.mem_map.
       split.
@@ -181,7 +181,7 @@ Module ConflictClass (N V : UsualOrderedType).
            y = (embedPkg p, (Name.Orig n, embedVS vs))) \/
         (exists n v k, ConflictClassRel.In ((n, v), k) Om /\
            y = (embedPkg (n, v),
-                (Name.Cls k, Reduced.VSet.singleton (Version.Name n)))).
+                (Name.Class k, Reduced.VSet.singleton (Version.Name n)))).
     Proof.
       intros; unfold reduceDeps.
       rewrite Reduced.DependencyRel.union_spec, mem_origEdges, mem_classEdges;
@@ -238,11 +238,11 @@ Module ConflictClass (N V : UsualOrderedType).
       assert (Hcls : forall q k,
                  PackageSet.In q (conflictClassResolution S) ->
                  ConflictClassRel.In (q, k) Om ->
-                 Reduced.PackageSet.In (Name.Cls k, Version.Name (fst q)) S).
+                 Reduced.PackageSet.In (Name.Class k, Version.Name (fst q)) S).
       { intros [n v] k Hq Hc; apply mem_conflictClassResolution in Hq.
         assert (Hd : Reduced.DependencyRel.In
                        (embedPkg (n, v),
-                        (Name.Cls k, Reduced.VSet.singleton (Version.Name n)))
+                        (Name.Class k, Reduced.VSet.singleton (Version.Name n)))
                        (reduceDeps D Om))
           by (apply mem_reduceDeps; right; exists n, v, k;
               split; [exact Hc | reflexivity]).
@@ -271,7 +271,7 @@ Module ConflictClass (N V : UsualOrderedType).
         + exact Hvu.
       - intros k [pn pv] [qn qv] Hp Hq Hpk Hqk.
         assert (E : Version.Name pn = Version.Name qn)
-          by exact (Huniq (Name.Cls k) _ _ (Hcls _ k Hp Hpk) (Hcls _ k Hq Hqk)).
+          by exact (Huniq (Name.Class k) _ _ (Hcls _ k Hp Hpk) (Hcls _ k Hq Hqk)).
         injection E as <-.
         rewrite (Hvu pn pv qv Hp Hq); reflexivity.
     Qed.
@@ -361,7 +361,7 @@ Module ConflictClass (N V : UsualOrderedType).
 
       Module SOpv := SetOps Package VersionOT PackageSet Reduced.VSet.
       Lemma versions_cls : forall R Om (k : N.t),
-          Reduced.versions (reduceReal R Om) (Name.Cls k) =
+          Reduced.versions (reduceReal R Om) (Name.Class k) =
           SOpv.map (fun q => Version.Name (fst q)) (inClass R Om k).
       Proof.
         intros R Om k; apply Reduced.VSet.ext; intro w.
@@ -421,9 +421,9 @@ Module ConflictClass (N V : UsualOrderedType).
       Qed.
 
       Theorem versions_lookupClass : forall R Om (k : N.t),
-          Reduced.versions (reduceReal R Om) (Name.Cls k) =
+          Reduced.versions (reduceReal R Om) (Name.Class k) =
           Reduced.versions (reduceReal (inClass R Om k) (classRelAt Om k))
-            (Name.Cls k).
+            (Name.Class k).
       Proof.
         intros R Om k; rewrite !versions_cls; f_equal.
         apply PackageSet.ext; intro q.
@@ -432,7 +432,7 @@ Module ConflictClass (N V : UsualOrderedType).
 
       Theorem dependees_lookupClass :
         forall D Om (k : N.t) (n : Version.t),
-          Reduced.dependees (reduceDeps D Om) (Name.Cls k, n) =
+          Reduced.dependees (reduceDeps D Om) (Name.Class k, n) =
           Reduced.DependeeSet.empty.
       Proof.
         intros D Om k n; apply Reduced.dependees_empty_iff; intros h H.
