@@ -755,7 +755,9 @@ pkgcache.cc): xunq exists only at i386:
   loaded: 17 names, 18 versions
 
 :native is an explicit qualifier of the native architecture: xnat:i386
-needs xforn:native, and xforn is foreign but only at i386:
+needs xforn:native, and xforn is foreign but only at i386.  The parser
+reads :native as the native architecture's explicit qualifier, as apt
+rewrites it at parse time (deblistparser.cc):
 
   $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.multiarch xnat:i386
   unsatisfiable:
