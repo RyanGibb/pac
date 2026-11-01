@@ -5,10 +5,10 @@ Create HintDb cmp_cplx.
 Create Rewrite HintDb cmp_cplx.
 
 Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
-  Module C := Core N V.
-  Module Pkg := C.Pkg.
-  Module PkgSet := C.PkgSet.
-  Module VSet := C.VSet.
+  Module Source := Core N V.
+  Module Pkg := Source.Pkg.
+  Module PkgSet := Source.PkgSet.
+  Module VSet := Source.VSet.
 
   Definition LitSat {A : Type} (sigma : A -> bool) (l : A * bool) : Prop :=
     sigma (fst l) = snd l.
@@ -34,7 +34,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
     Module VF := UOTCompareFacts V.
     Module SOp := SetOps Pkg Pkg PkgSet PkgSet.
     Module SOv := SetOps V V VSet VSet.
-    Module SOd := SetOps C.DepElt C.DepElt C.DepRel C.DepRel.
+    Module SOd := SetOps Source.DepElt Source.DepElt Source.DepRel Source.DepRel.
 
     Definition ltb (v v' : V.t) : bool :=
       match V.compare v v' with Lt => true | _ => false end.
@@ -51,25 +51,25 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
       List.map (fun v => ((n, v), true))
         (List.filter (fun v => PkgSet.mem (n, v) R) (VSet.elements vs)).
 
-    Definition depClauses (R : PkgSet.t) (D : C.DepRel.t)
+    Definition depClauses (R : PkgSet.t) (D : Source.DepRel.t)
       : list (list (Pkg.t * bool)) :=
-      List.map (fun '(p, (n, vs)) => depClause R p n vs) (C.DepRel.elements D).
+      List.map (fun '(p, (n, vs)) => depClause R p n vs) (Source.DepRel.elements D).
 
     Definition uniqueClauses (R : PkgSet.t) : list (list (Pkg.t * bool)) :=
       List.flat_map
         (fun p =>
            List.map (fun v' => (p, false) :: ((fst p, v'), false) :: nil)
              (List.filter (ltb (snd p))
-                (VSet.elements (C.versions R (fst p)))))
+                (VSet.elements (Source.versions R (fst p)))))
         (PkgSet.elements R).
 
-    Definition satEncoding (R : PkgSet.t) (D : C.DepRel.t) (r : Pkg.t)
+    Definition satEncoding (R : PkgSet.t) (D : Source.DepRel.t) (r : Pkg.t)
       : list (list (Pkg.t * bool)) :=
       ((r, true) :: nil) :: depClauses R D ++ uniqueClauses R.
 
     Lemma in_depClauses : forall R D c,
         List.In c (depClauses R D) <->
-        exists p n vs, C.DepRel.In (p, (n, vs)) D /\ c = depClause R p n vs.
+        exists p n vs, Source.DepRel.In (p, (n, vs)) D /\ c = depClause R p n vs.
     Proof.
       intros R D c; unfold depClauses; rewrite List.in_map_iff.
       split.
@@ -106,7 +106,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
       - intros [[n v] [Hp Hc]]; apply List.in_map_iff in Hc.
         destruct Hc as [v' [<- Hv']]; cbn [fst snd] in Hv' |- *.
         apply List.filter_In in Hv'; destruct Hv' as [Hv' Hlt].
-        apply SOv.elements_in, C.mem_versions in Hv'.
+        apply SOv.elements_in, Source.mem_versions in Hv'.
         exists n, v, v'.
         split; [apply SOp.elements_in; exact Hp |].
         split; [exact Hv' |].
@@ -115,14 +115,14 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
         exists (n, v); split; [apply SOp.elements_in; exact Hv |].
         apply List.in_map_iff; exists v'; split; [reflexivity |].
         apply List.filter_In; split;
-          [apply SOv.elements_in, C.mem_versions; exact Hv'
+          [apply SOv.elements_in, Source.mem_versions; exact Hv'
           | apply ltb_lt; exact Hlt].
     Qed.
 
     Theorem sat_encoding_soundness : forall R D r (sigma : Pkg.t -> bool),
         PkgSet.In r R ->
         CnfSat sigma (satEncoding R D r) ->
-        C.IsResolution R D r (PkgSet.filter sigma R).
+        Source.IsResolution R D r (PkgSet.filter sigma R).
     Proof.
       intros R D r sigma Hr Hsat.
       assert (Hin : forall p, PkgSet.In p (PkgSet.filter sigma R) <->
@@ -163,7 +163,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
     Qed.
 
     Theorem sat_encoding_completeness : forall R D r S,
-        C.IsResolution R D r S ->
+        Source.IsResolution R D r S ->
         CnfSat (fun p => PkgSet.mem p S) (satEncoding R D r).
     Proof.
       intros R D r S [Hsub Hroot Hdep Huniq] c Hc.
@@ -272,42 +272,42 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
 
     Module NameOT := UOTFromCompare Name.
     Module VersionOT := UOTFromCompare Version.
-    Module T := Core NameOT VersionOT.
+    Module Reduced := Core NameOT VersionOT.
 
-    Definition root : T.Pkg.t := (Name.Root, Version.Eps).
+    Definition root : Reduced.Pkg.t := (Name.Root, Version.Eps).
 
-    Definition clauseReal (c : ClauseOT.t) : list T.Pkg.t :=
+    Definition clauseReal (c : ClauseOT.t) : list Reduced.Pkg.t :=
       List.flat_map
         (fun l => (Name.Var (fst l), Version.Truth true) ::
                   (Name.Var (fst l), Version.Truth false) ::
                   (Name.Clause c, Version.Lit l) :: nil)
         (lits c).
 
-    Definition reduceReal (cs : list ClauseOT.t) : T.PkgSet.t :=
-      T.PkgSet.ofList (root :: List.flat_map clauseReal cs).
+    Definition reduceReal (cs : list ClauseOT.t) : Reduced.PkgSet.t :=
+      Reduced.PkgSet.ofList (root :: List.flat_map clauseReal cs).
 
-    Definition litVersions (c : ClauseOT.t) : T.VSet.t :=
-      T.VSet.ofList (List.map Version.Lit (lits c)).
+    Definition litVersions (c : ClauseOT.t) : Reduced.VSet.t :=
+      Reduced.VSet.ofList (List.map Version.Lit (lits c)).
 
-    Definition clauseDeps (c : ClauseOT.t) : list T.DepElt.t :=
+    Definition clauseDeps (c : ClauseOT.t) : list Reduced.DepElt.t :=
       (root, (Name.Clause c, litVersions c)) ::
       List.map
         (fun l => ((Name.Clause c, Version.Lit l),
-                   (Name.Var (fst l), T.VSet.singleton (Version.Truth (snd l)))))
+                   (Name.Var (fst l), Reduced.VSet.singleton (Version.Truth (snd l)))))
         (lits c).
 
-    Definition reduceDeps (cs : list ClauseOT.t) : T.DepRel.t :=
-      T.DepRel.ofList (List.flat_map clauseDeps cs).
+    Definition reduceDeps (cs : list ClauseOT.t) : Reduced.DepRel.t :=
+      Reduced.DepRel.ofList (List.flat_map clauseDeps cs).
 
-    Lemma mem_reduceReal : forall cs (p : T.Pkg.t),
-        T.PkgSet.In p (reduceReal cs) <->
+    Lemma mem_reduceReal : forall cs (p : Reduced.Pkg.t),
+        Reduced.PkgSet.In p (reduceReal cs) <->
         p = root \/
         exists c l, List.In c cs /\ List.In l (lits c) /\
           ((exists b, p = (Name.Var (fst l), Version.Truth b)) \/
            p = (Name.Clause c, Version.Lit l)).
     Proof.
       intros cs p; unfold reduceReal.
-      rewrite T.PkgSet.mem_ofList; cbn [List.In]; rewrite List.in_flat_map.
+      rewrite Reduced.PkgSet.mem_ofList; cbn [List.In]; rewrite List.in_flat_map.
       split.
       - intros [<- | [c [Hc Hy]]]; [left; reflexivity | right].
         unfold clauseReal in Hy; apply List.in_flat_map in Hy.
@@ -323,25 +323,25 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
     Qed.
 
     Lemma mem_litVersions : forall c v,
-        T.VSet.In v (litVersions c) <->
+        Reduced.VSet.In v (litVersions c) <->
         exists l, List.In l (lits c) /\ v = Version.Lit l.
     Proof.
       intros c v; unfold litVersions.
-      rewrite T.VSet.mem_ofList, List.in_map_iff.
+      rewrite Reduced.VSet.mem_ofList, List.in_map_iff.
       split; intros [l [H1 H2]]; exists l; split; auto.
     Qed.
 
-    Lemma mem_reduceDeps : forall cs (e : T.DepElt.t),
-        T.DepRel.In e (reduceDeps cs) <->
+    Lemma mem_reduceDeps : forall cs (e : Reduced.DepElt.t),
+        Reduced.DepRel.In e (reduceDeps cs) <->
         exists c, List.In c cs /\
           (e = (root, (Name.Clause c, litVersions c)) \/
            exists l, List.In l (lits c) /\
              e = ((Name.Clause c, Version.Lit l),
                   (Name.Var (fst l),
-                   T.VSet.singleton (Version.Truth (snd l))))).
+                   Reduced.VSet.singleton (Version.Truth (snd l))))).
     Proof.
       intros cs e; unfold reduceDeps.
-      rewrite T.DepRel.mem_ofList, List.in_flat_map.
+      rewrite Reduced.DepRel.mem_ofList, List.in_flat_map.
       split.
       - intros [c [Hc He]]; exists c; split; [exact Hc |].
         unfold clauseDeps in He; destruct He as [<- | He]; [left; reflexivity |].
@@ -354,7 +354,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
     Qed.
 
     Theorem reduceDeps_functionalInName : forall cs,
-        T.FunctionalInName (reduceDeps cs).
+        Reduced.FunctionalInName (reduceDeps cs).
     Proof.
       intros cs p n vs1 vs2 H1 H2; apply mem_reduceDeps in H1, H2.
       unfold root in *.
@@ -363,23 +363,23 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
         congruence.
     Qed.
 
-    Definition assignment (S : T.PkgSet.t) (x : X.t) : bool :=
-      T.PkgSet.mem (Name.Var x, Version.Truth true) S.
+    Definition assignment (S : Reduced.PkgSet.t) (x : X.t) : bool :=
+      Reduced.PkgSet.mem (Name.Var x, Version.Truth true) S.
 
     Lemma assignment_spec : forall S x b,
-        T.VersionUnique S -> T.PkgSet.In (Name.Var x, Version.Truth b) S ->
+        Reduced.VersionUnique S -> Reduced.PkgSet.In (Name.Var x, Version.Truth b) S ->
         assignment S x = b.
     Proof.
       intros S x b Huniq Hin; unfold assignment.
-      destruct b; [apply T.PkgSet.mem_spec; exact Hin |].
-      destruct (T.PkgSet.mem (Name.Var x, Version.Truth true) S) eqn:E;
+      destruct b; [apply Reduced.PkgSet.mem_spec; exact Hin |].
+      destruct (Reduced.PkgSet.mem (Name.Var x, Version.Truth true) S) eqn:E;
         [| reflexivity].
-      apply T.PkgSet.mem_spec in E.
+      apply Reduced.PkgSet.mem_spec in E.
       discriminate (Huniq _ _ _ E Hin).
     Qed.
 
     Theorem three_sat_soundness : forall cs S,
-        T.IsResolution (reduceReal cs) (reduceDeps cs) root S ->
+        Reduced.IsResolution (reduceReal cs) (reduceDeps cs) root S ->
         CnfSat (assignment S) (cnf cs).
     Proof.
       intros cs S [_ Hroot Hdep Huniq] c Hc.
@@ -389,11 +389,11 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
       { apply mem_reduceDeps; exists c0; split; [exact Hc0 | left; reflexivity]. }
       apply mem_litVersions in Hw; destruct Hw as [l [Hl ->]].
       destruct (Hdep _ HwS (Name.Var (fst l))
-                  (T.VSet.singleton (Version.Truth (snd l))))
+                  (Reduced.VSet.singleton (Version.Truth (snd l))))
         as [w [Hw HwS']].
       { apply mem_reduceDeps; exists c0; split; [exact Hc0 |].
         right; exists l; split; [exact Hl | reflexivity]. }
-      apply T.VSet.singleton_spec in Hw; subst w.
+      apply Reduced.VSet.singleton_spec in Hw; subst w.
       exists l; split; [exact Hl |].
       apply assignment_spec; assumption.
     Qed.
@@ -434,8 +434,8 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
     Qed.
 
     Definition coreResolution (cs : list ClauseOT.t) (sigma : X.t -> bool)
-      : T.PkgSet.t :=
-      T.PkgSet.ofList
+      : Reduced.PkgSet.t :=
+      Reduced.PkgSet.ofList
         (root ::
          List.flat_map
            (fun c => (Name.Clause c, Version.Lit (firstSatisfied sigma c)) ::
@@ -445,8 +445,8 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
                        (lits c))
            cs).
 
-    Lemma mem_coreResolution : forall sigma cs (p : T.Pkg.t),
-        T.PkgSet.In p (coreResolution cs sigma) <->
+    Lemma mem_coreResolution : forall sigma cs (p : Reduced.Pkg.t),
+        Reduced.PkgSet.In p (coreResolution cs sigma) <->
         p = root \/
         exists c, List.In c cs /\
           (p = (Name.Clause c, Version.Lit (firstSatisfied sigma c)) \/
@@ -454,7 +454,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
              p = (Name.Var (fst l), Version.Truth (sigma (fst l)))).
     Proof.
       intros sigma cs p; unfold coreResolution.
-      rewrite T.PkgSet.mem_ofList; cbn [List.In]; rewrite List.in_flat_map.
+      rewrite Reduced.PkgSet.mem_ofList; cbn [List.In]; rewrite List.in_flat_map.
       split.
       - intros [<- | [c [Hc Hy]]]; [left; reflexivity | right].
         exists c; split; [exact Hc |].
@@ -469,7 +469,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
 
     Theorem three_sat_completeness : forall cs sigma,
         CnfSat sigma (cnf cs) ->
-        T.IsResolution (reduceReal cs) (reduceDeps cs) root
+        Reduced.IsResolution (reduceReal cs) (reduceDeps cs) root
           (coreResolution cs sigma).
     Proof.
       intros cs sigma Hsat; constructor.
@@ -495,7 +495,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
           { rewrite El; apply firstSatisfied_sat, Hsat.
             unfold cnf; apply List.in_map; exact Hc. }
           exists (Version.Truth (snd l)).
-          split; [apply T.VSet.singleton_spec; reflexivity |].
+          split; [apply Reduced.VSet.singleton_spec; reflexivity |].
           apply mem_coreResolution; right; exists c; split; [exact Hc |].
           right; exists l; split; [exact Hl |].
           assert (Et : Version.Truth (sigma (fst l)) = Version.Truth (snd l))
@@ -510,7 +510,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
 
     Theorem three_sat_correct : forall cs,
         (exists sigma, CnfSat sigma (cnf cs)) <->
-        exists S, T.IsResolution (reduceReal cs) (reduceDeps cs) root S.
+        exists S, Reduced.IsResolution (reduceReal cs) (reduceDeps cs) root S.
     Proof.
       intro cs; split.
       - intros [sigma Hs]; exists (coreResolution cs sigma).

@@ -41,10 +41,10 @@ Definition cmpOpEvalBy {A} (cmp : A -> A -> comparison)
   end.
 
 Module Versions (N V : UsualOrderedType).
-  Module C := Core N V.
-  Module Pkg := C.Pkg.
-  Module PkgSet := C.PkgSet.
-  Module VSet := C.VSet.
+  Module Source := Core N V.
+  Module Pkg := Source.Pkg.
+  Module PkgSet := Source.PkgSet.
+  Module VSet := Source.VSet.
 
   Inductive Formula : Type :=
   | FTop
@@ -184,16 +184,16 @@ Module Versions (N V : UsualOrderedType).
         forall (n : N.t) (phi : Formula),
           DepRel.In (p, (n, phi)) D ->
           exists v, Satisfies v phi /\ PkgSet.In (n, v) S
-    ; res_version_unique : C.VersionUnique S }.
+    ; res_version_unique : Source.VersionUnique S }.
 
   Module Reduction.
-    Module SOvd := SetOps DepElt C.DepElt DepRel C.DepRel.
-    Definition reduce (R : PkgSet.t) (D : DepRel.t) : C.DepRel.t :=
-      SOvd.map (fun '(p, (m, phi)) => (p, (m, eval phi (C.versions R m)))) D.
+    Module SOvd := SetOps DepElt Source.DepElt DepRel Source.DepRel.
+    Definition reduce (R : PkgSet.t) (D : DepRel.t) : Source.DepRel.t :=
+      SOvd.map (fun '(p, (m, phi)) => (p, (m, eval phi (Source.versions R m)))) D.
 
     Lemma mem_reduce : forall R D (p : Pkg.t) (n : N.t) (vs : VSet.t),
-        C.DepRel.In (p, (n, vs)) (reduce R D) <->
-        exists phi, DepRel.In (p, (n, phi)) D /\ vs = eval phi (C.versions R n).
+        Source.DepRel.In (p, (n, vs)) (reduce R D) <->
+        exists phi, DepRel.In (p, (n, phi)) D /\ vs = eval phi (Source.versions R n).
     Proof.
       intros R D p n vs; unfold reduce; rewrite SOvd.mem_map.
       split.
@@ -205,12 +205,12 @@ Module Versions (N V : UsualOrderedType).
     Qed.
 
     Theorem version_formula_correct : forall R D r S,
-        C.IsResolution R (reduce R D) r S <-> IsResolution R D r S.
+        Source.IsResolution R (reduce R D) r S <-> IsResolution R D r S.
     Proof.
       intros R D r S; split; intros [Hsub Hroot Hdep Huniq]; constructor;
         try assumption.
       - intros p Hp m phi HD.
-        destruct (Hdep p Hp m (eval phi (C.versions R m))) as [v [Hv HvS]].
+        destruct (Hdep p Hp m (eval phi (Source.versions R m))) as [v [Hv HvS]].
         + apply mem_reduce; exists phi; split; [exact HD | reflexivity].
         + apply mem_eval in Hv; exists v; split; [apply Hv | exact HvS].
       - intros p Hp m ws Hmem.
@@ -218,7 +218,7 @@ Module Versions (N V : UsualOrderedType).
         destruct (Hdep p Hp m phi HD) as [v [Hv HvS]].
         exists v; split; [| exact HvS].
         apply mem_eval; split; [| exact Hv].
-        apply C.mem_versions, Hsub; exact HvS.
+        apply Source.mem_versions, Hsub; exact HvS.
     Qed.
 
     Module Lookup.
@@ -231,11 +231,11 @@ Module Versions (N V : UsualOrderedType).
 
       Lemma versions_realPreimage : forall R Dp n,
           (exists q phi, DepRel.In (q, (n, phi)) Dp) ->
-          C.versions (realPreimage R Dp) n = C.versions R n.
+          Source.versions (realPreimage R Dp) n = Source.versions R n.
       Proof.
         intros R Dp m [q [phi He]].
         apply VSet.ext; intro v.
-        rewrite !C.mem_versions; unfold realPreimage.
+        rewrite !Source.mem_versions; unfold realPreimage.
         rewrite PkgPreimage.mem_preimage.
         split.
         - intros [H _]; exact H.
@@ -245,10 +245,10 @@ Module Versions (N V : UsualOrderedType).
       Qed.
 
       Lemma dependees_fibre : forall R D (p : Pkg.t),
-          C.dependees (reduce R D) p =
-          C.dependees (reduce R (DepRelFibred.tailFibre D p)) p.
+          Source.dependees (reduce R D) p =
+          Source.dependees (reduce R (DepRelFibred.tailFibre D p)) p.
       Proof.
-        intros R D p; apply C.dependees_ext; intros [n vs]; rewrite !mem_reduce.
+        intros R D p; apply Source.dependees_ext; intros [n vs]; rewrite !mem_reduce.
         split; intros [phi [HD ->]]; exists phi; split; try reflexivity.
         - apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
         - exact (DepRelFibred.tailFibre_subset _ _ _ HD).
@@ -257,7 +257,7 @@ Module Versions (N V : UsualOrderedType).
       Lemma reduce_realPreimage : forall R Dp,
           reduce (realPreimage R Dp) Dp = reduce R Dp.
       Proof.
-        intros R Dp; apply C.DepRel.ext; intros [q [n vs]].
+        intros R Dp; apply Source.DepRel.ext; intros [q [n vs]].
         rewrite !mem_reduce.
         split; intros [phi [HD ->]]; exists phi; split;
           [exact HD | | exact HD |];
@@ -268,16 +268,16 @@ Module Versions (N V : UsualOrderedType).
 
       Module PkgFibred := FibredRel N V Pkg PkgSet.
       Theorem versions_lookup : forall R (n : N.t),
-          C.versions R n = C.versions (PkgFibred.tailFibre R n) n.
+          Source.versions R n = Source.versions (PkgFibred.tailFibre R n) n.
       Proof.
-        intros R n; apply C.versions_ext; intro v.
+        intros R n; apply Source.versions_ext; intro v.
         rewrite PkgFibred.mem_tailFibre; tauto.
       Qed.
 
       Theorem dependees_lookup : forall R D (p : Pkg.t),
         let Dp := DepRelFibred.tailFibre D p in
-        C.dependees (reduce R D) p =
-        C.dependees (reduce (realPreimage R Dp) Dp) p.
+        Source.dependees (reduce R D) p =
+        Source.dependees (reduce (realPreimage R Dp) Dp) p.
       Proof.
         intros R D p; cbv zeta;
           rewrite reduce_realPreimage; apply dependees_fibre.
@@ -296,7 +296,7 @@ Module Versions (N V : UsualOrderedType).
         - intros [d HD]; exists (q, d); split; [exact HD | reflexivity].
       Qed.
 
-      Module SOpcd := SetOps Pkg C.DepElt PkgSet C.DepRel.
+      Module SOpcd := SetOps Pkg Source.DepElt PkgSet Source.DepRel.
       Corollary reduce_glue : forall R D,
           reduce R D =
           SOpcd.unionMap
@@ -304,7 +304,7 @@ Module Versions (N V : UsualOrderedType).
                              (DepRelFibred.tailFibre D p))
             (tails D).
       Proof.
-        intros R D; apply C.DepRel.ext; intros [q [n ws]].
+        intros R D; apply Source.DepRel.ext; intros [q [n ws]].
         rewrite SOpcd.mem_unionMap, mem_reduce.
         split.
         - intros [phi [HD ->]].

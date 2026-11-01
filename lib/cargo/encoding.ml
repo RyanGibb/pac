@@ -20,7 +20,7 @@ module type S = sig
           (Pac_common.Ot.Str)
           (PM)
 
-  module T = Cg.Reduction.T
+  module T = Cg.Reduction.Reduced
 
   val root_feats : Cargo_parse.ver -> Cargo_query.features -> string list
   val msrv_ok : string -> string option -> bool
@@ -66,7 +66,7 @@ module Make () = struct
   end
 
   module Cg = E.Cargo (Ot.Str) (CVerOT) (Ot.Str) (CVerOT) (Ot.Str) (Ot.Str) (PM)
-  module T = Cg.Reduction.T
+  module T = Cg.Reduction.Reduced
 
   (* rootFeats.  Under All, every key of the root's feature table, as
      Cargo.lock is resolved with every feature (resolve_with_registry,

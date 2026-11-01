@@ -18,7 +18,7 @@ module Make
         end) =
 struct
   module PFR = PF.Reduction
-  module T = PFR.T
+  module T = PFR.Reduced
 
   let r2c = Pac_common.Ot.r2c
 

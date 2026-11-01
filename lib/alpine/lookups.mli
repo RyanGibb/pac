@@ -72,7 +72,7 @@ module type S = sig
   module PG = L.PG
 
   val lookups : archive -> L.t
-  val touch : archive -> P.dep list -> L.t -> PFR.T.Pkg.t -> unit
+  val touch : archive -> P.dep list -> L.t -> PFR.Reduced.Pkg.t -> unit
 end
 
 (* generative, since each application holds the designations of the one

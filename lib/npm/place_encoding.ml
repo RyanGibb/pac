@@ -26,7 +26,7 @@ module type S = sig
 
   module Pl = Npl.Pl
   module R = Pl.Reduction
-  module T = R.T
+  module T = R.Reduced
   module Lk = Npl.Reduction.Lookup
 
   val xrange : Npm_version.range -> Npl.coq_Range
@@ -88,7 +88,7 @@ module Make () = struct
   module Npl = E.NpmPlacement (Ot.Str) (IVerOT) (IPM)
   module Pl = Npl.Pl
   module R = Pl.Reduction
-  module T = R.T
+  module T = R.Reduced
   module Lk = Npl.Reduction.Lookup
 
   (* Npl's ranges are its own type, as each application of Semver makes one *)

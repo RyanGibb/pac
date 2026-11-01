@@ -13,9 +13,9 @@ Module Type ApkVerMatch (V : UsualOrderedType).
 End ApkVerMatch.
 
 Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
-  Module C := Core N V.
-  Module Pkg := C.Pkg.
-  Module PkgSet := C.PkgSet.
+  Module Source := Core N V.
+  Module Pkg := Source.Pkg.
+  Module PkgSet := Source.PkgSet.
   Module NEqb := UOTEqb N.
   Module PkgEqb := UOTEqb Pkg.
 
@@ -1849,10 +1849,10 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Qed.
 
       Lemma versions_reduceReal : forall I n,
-          PF.C.versions (reduceReal I) (Name.Orig n) = versions I n.
+          PF.Source.versions (reduceReal I) (Name.Orig n) = versions I n.
       Proof.
         intros I n; apply PF.VSet.ext; intro w.
-        rewrite PF.C.mem_versions, reduceReal_coreResolution; unfold versions.
+        rewrite PF.Source.mem_versions, reduceReal_coreResolution; unfold versions.
         rewrite mem_versionsAt; split.
         - intro H; apply coreResolution_at_orig in H.
           destruct H as [[v [Hv ->]] | [q [u [Hprov [Hq ->]]]]];
@@ -1863,11 +1863,11 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Qed.
 
       Lemma versions_reduceReal_root : forall I,
-          PF.C.versions (reduceReal I) Name.Root =
+          PF.Source.versions (reduceReal I) Name.Root =
           PF.VSet.singleton Version.UnitV.
       Proof.
         intro I; apply PF.VSet.ext; intro w.
-        rewrite PF.C.mem_versions, PF.VSet.singleton_spec.
+        rewrite PF.Source.mem_versions, PF.VSet.singleton_spec.
         split;
           [apply coreResolution_at_root | intros ->; apply root_reduceReal].
       Qed.
@@ -1889,11 +1889,11 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           PF.PkgSet.In q (reduceReal I) ->
           Vq Name.Root = PF.VSet.singleton Version.UnitV ->
           (forall m, Vq (Name.Orig m) = versions I m) ->
-          PF.Reduction.T.dependees
+          PF.Reduction.Reduced.dependees
             (PF.Reduction.reduceDeps (reduceReal I) (reduceDeps I))
             (PF.Reduction.Name.Orig (fst q),
              PF.Reduction.Version.Orig (snd q)) =
-          PF.Reduction.T.dependees
+          PF.Reduction.Reduced.dependees
             (PF.Reduction.reduceDepsBy Vq (PF.depEdges q (dependees I q)))
             (PF.Reduction.Name.Orig (fst q),
              PF.Reduction.Version.Orig (snd q)).
@@ -1911,10 +1911,10 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           PkgSet.In (n, v) (inst_real I) ->
           Vq Name.Root = PF.VSet.singleton Version.UnitV ->
           (forall m, Vq (Name.Orig m) = versions I m) ->
-          PF.Reduction.T.dependees
+          PF.Reduction.Reduced.dependees
             (PF.Reduction.reduceDeps (reduceReal I) (reduceDeps I))
             (PF.Reduction.embedPkg (embedPkg (n, v))) =
-          PF.Reduction.T.dependees
+          PF.Reduction.Reduced.dependees
             (PF.Reduction.reduceDepsBy Vq
                (PF.depEdges (embedPkg (n, v))
                   (dependees (pkgSubInst I (n, v)) (embedPkg (n, v)))))
@@ -1928,10 +1928,10 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Theorem dependees_lookupRootCore : forall I Vq,
           Vq Name.Root = PF.VSet.singleton Version.UnitV ->
           (forall m, Vq (Name.Orig m) = versions I m) ->
-          PF.Reduction.T.dependees
+          PF.Reduction.Reduced.dependees
             (PF.Reduction.reduceDeps (reduceReal I) (reduceDeps I))
             (PF.Reduction.embedPkg rootPkg) =
-          PF.Reduction.T.dependees
+          PF.Reduction.Reduced.dependees
             (PF.Reduction.reduceDepsBy Vq
                (PF.depEdges rootPkg (dependees (rootSubInst I) rootPkg)))
             (PF.Reduction.embedPkg rootPkg).
@@ -1945,10 +1945,10 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           PkgSet.In (n, v) (inst_real I) ->
           Vq Name.Root = PF.VSet.singleton Version.UnitV ->
           (forall m, Vq (Name.Orig m) = versions I m) ->
-          PF.Reduction.T.dependees
+          PF.Reduction.Reduced.dependees
             (PF.Reduction.reduceDeps (reduceReal I) (reduceDeps I))
             (PF.Reduction.embedPkg (Name.Orig m, Version.Prov (n, v) u)) =
-          PF.Reduction.T.dependees
+          PF.Reduction.Reduced.dependees
             (PF.Reduction.reduceDepsBy Vq
                (PF.depEdges (Name.Orig m, Version.Prov (n, v) u)
                   (dependees I' (Name.Orig m, Version.Prov (n, v) u))))
@@ -1968,13 +1968,13 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           dependees I' q = dependees I q ->
           Vq Name.Root = PF.VSet.singleton Version.UnitV ->
           (forall m, Vq (Name.Orig m) = versions I m) ->
-          PF.Reduction.T.PkgSet.In (PF.Reduction.Name.Disjunct fs, i)
+          PF.Reduction.Reduced.PkgSet.In (PF.Reduction.Name.Disjunct fs, i)
             (PF.Reduction.reduceReal (PF.PkgSet.singleton q)
                (PF.depEdges q (dependees I' q))) ->
-          PF.Reduction.T.dependees
+          PF.Reduction.Reduced.dependees
             (PF.Reduction.reduceDeps (reduceReal I) (reduceDeps I))
             (PF.Reduction.Name.Disjunct fs, i) =
-          PF.Reduction.T.dependees
+          PF.Reduction.Reduced.dependees
             (PF.Reduction.reduceDepsBy Vq (PF.depEdges q (dependees I' q)))
             (PF.Reduction.Name.Disjunct fs, i).
       Proof.
@@ -1994,13 +1994,13 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Lemma versions_core : forall I n,
           (exists v, PF.PkgSet.In (n, v) (reduceReal I)) \/
           (exists p h,
-              PF.Reduction.T.DepRel.In (p, (PF.Reduction.Name.Orig n, h))
+              PF.Reduction.Reduced.DepRel.In (p, (PF.Reduction.Name.Orig n, h))
                 (PF.Reduction.reduceDeps (reduceReal I) (reduceDeps I))) ->
-          PF.Reduction.T.versions
+          PF.Reduction.Reduced.versions
             (PF.Reduction.reduceReal (reduceReal I) (reduceDeps I))
             (PF.Reduction.Name.Orig n) =
-          PF.Reduction.T.VSet.add PF.Reduction.Version.Bot
-            (PF.Reduction.embedVS (PF.C.versions (reduceReal I) n)).
+          PF.Reduction.Reduced.VSet.add PF.Reduction.Version.Bot
+            (PF.Reduction.embedVS (PF.Source.versions (reduceReal I) n)).
       Proof.
         intros I n Hreach.
         destruct Hreach as [[v Hv] | Hreach];
@@ -2009,20 +2009,20 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           | rewrite (PF.Reduction.Lookup.versions_lookupOrig _ _ _ _ n
                        (root_reduceReal I) (or_introl Hreach) eq_refl)];
           rewrite PF.Reduction.Lookup.versions_reduceReal_bot;
-          do 2 f_equal; apply PF.C.versions_ext; intro u;
+          do 2 f_equal; apply PF.Source.versions_ext; intro u;
           rewrite PF.Reduction.Lookup.PkgFibred.mem_tailFibre; tauto.
       Qed.
 
       Theorem versions_lookupOrigCore : forall I n,
           (exists v, PkgSet.In (n, v) (inst_real I)) \/
           (exists p h,
-              PF.Reduction.T.DepRel.In
+              PF.Reduction.Reduced.DepRel.In
                 (p, (PF.Reduction.Name.Orig (Name.Orig n), h))
                 (PF.Reduction.reduceDeps (reduceReal I) (reduceDeps I))) ->
-          PF.Reduction.T.versions
+          PF.Reduction.Reduced.versions
             (PF.Reduction.reduceReal (reduceReal I) (reduceDeps I))
             (PF.Reduction.Name.Orig (Name.Orig n)) =
-          PF.Reduction.T.VSet.add PF.Reduction.Version.Bot
+          PF.Reduction.Reduced.VSet.add PF.Reduction.Version.Bot
             (PF.Reduction.embedVS (versions (nameSubInst I n) n)).
       Proof.
         intros I n H; rewrite <- versions_lookupOrig, <- versions_reduceReal.
@@ -2034,10 +2034,10 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       Qed.
 
       Theorem versions_lookupRootCore : forall I,
-          PF.Reduction.T.versions
+          PF.Reduction.Reduced.versions
             (PF.Reduction.reduceReal (reduceReal I) (reduceDeps I))
             (PF.Reduction.Name.Orig Name.Root) =
-          PF.Reduction.T.VSet.add PF.Reduction.Version.Bot
+          PF.Reduction.Reduced.VSet.add PF.Reduction.Version.Bot
             (PF.Reduction.embedVS (PF.VSet.singleton Version.UnitV)).
       Proof.
         intro I; rewrite <- (versions_reduceReal_root I); apply versions_core.
@@ -2054,7 +2054,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     Corollary alpine_core_soundness : forall I S,
         WfInstallIf I ->
-        PF.Reduction.T.IsResolution
+        PF.Reduction.Reduced.IsResolution
           (PF.Reduction.reduceReal (reduceReal I) (reduceDeps I))
           (PF.Reduction.reduceDeps (reduceReal I) (reduceDeps I))
           (PF.Reduction.embedPkg rootPkg) S ->
@@ -2068,7 +2068,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     Corollary alpine_core_completeness : forall I S,
         WfProvides I -> IsResolution I S ->
-        PF.Reduction.T.IsResolution
+        PF.Reduction.Reduced.IsResolution
           (PF.Reduction.reduceReal (reduceReal I) (reduceDeps I))
           (PF.Reduction.reduceDeps (reduceReal I) (reduceDeps I))
           (PF.Reduction.embedPkg rootPkg)

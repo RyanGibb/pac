@@ -212,8 +212,8 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     Definition kindb (peer optional : bool) (e : Edge) : bool :=
       andb (Bool.eqb (e_peer e) peer) (Bool.eqb (e_optional e) optional).
 
-    Module SOpd := SetOps Pl.Pkg Pl.C.DepElt Pl.PkgSet Pl.C.DepRel.
-    Definition edgeRel (I : Inst) (peer optional : bool) : Pl.C.DepRel.t :=
+    Module SOpd := SetOps Pl.Pkg Pl.Source.DepElt Pl.PkgSet Pl.Source.DepRel.
+    Definition edgeRel (I : Inst) (peer optional : bool) : Pl.Source.DepRel.t :=
       SOpd.unionMap (fun p =>
           SOpd.ofList
             (List.map (fun e => (p, (e_dir e, accepts I e)))
@@ -221,7 +221,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         (occs I).
 
     Lemma mem_edgeRel : forall I peer optional a' o n vs,
-        Pl.C.DepRel.In ((a', o), (n, vs)) (edgeRel I peer optional) <->
+        Pl.Source.DepRel.In ((a', o), (n, vs)) (edgeRel I peer optional) <->
         Pl.PkgSet.In (a', o) (occs I) /\
         exists e, In e (edgesOf I o) /\ e_peer e = peer /\
           e_optional e = optional /\
@@ -306,17 +306,17 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
 
     (* Placement's Reduction is named in full: an alias of it inside this
        functor trips a kernel anomaly when the functor is applied. *)
-    Definition reduceReal (I : Inst) (depth : nat) : Pl.Reduction.T.PkgSet.t :=
+    Definition reduceReal (I : Inst) (depth : nat) : Pl.Reduction.Reduced.PkgSet.t :=
       Pl.Reduction.reduceReal (tr I) depth.
 
-    Definition reduceDeps (I : Inst) (depth : nat) : Pl.Reduction.T.DepRel.t :=
+    Definition reduceDeps (I : Inst) (depth : nat) : Pl.Reduction.Reduced.DepRel.t :=
       Pl.Reduction.reduceDeps (tr I) depth.
 
-    Definition rootPkg (I : Inst) : Pl.Reduction.T.Pkg.t :=
+    Definition rootPkg (I : Inst) : Pl.Reduction.Reduced.Pkg.t :=
       Pl.Reduction.rootPkg (tr I).
 
     Theorem npm_placement_soundness : forall I depth S,
-        Pl.Reduction.T.IsResolution (reduceReal I depth) (reduceDeps I depth)
+        Pl.Reduction.Reduced.IsResolution (reduceReal I depth) (reduceDeps I depth)
           (rootPkg I) S ->
         IsResolution I
           (Pl.reachable (tr I) (Pl.Reduction.placementResolution S)) /\
@@ -336,7 +336,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
         (root, Occ.Proj) L.
 
     Theorem reachableOf_reachable : forall I depth S edges,
-        Pl.Reduction.T.IsResolution (reduceReal I depth) (reduceDeps I depth)
+        Pl.Reduction.Reduced.IsResolution (reduceReal I depth) (reduceDeps I depth)
           (rootPkg I) S ->
         edges Occ.Proj = edgesOf I Occ.Proj ->
         (forall l a o,
@@ -366,7 +366,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Theorem npm_placement_soundness_of : forall I depth S edges,
-        Pl.Reduction.T.IsResolution (reduceReal I depth) (reduceDeps I depth)
+        Pl.Reduction.Reduced.IsResolution (reduceReal I depth) (reduceDeps I depth)
           (rootPkg I) S ->
         edges Occ.Proj = edgesOf I Occ.Proj ->
         (forall l a o,
@@ -384,7 +384,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
 
     Theorem npm_placement_completeness : forall I depth L,
         IsResolution I L -> Pl.Depth depth L ->
-        Pl.Reduction.T.IsResolution (reduceReal I depth) (reduceDeps I depth)
+        Pl.Reduction.Reduced.IsResolution (reduceReal I depth) (reduceDeps I depth)
           (rootPkg I) (Pl.Reduction.coreResolution (tr I) depth L).
     Proof.
       intros I depth L H Hd; apply Pl.Reduction.placement_completeness;
@@ -408,9 +408,9 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
           (KeySet.In (a, m) (keysOf I) /\ RepoSet.In (m, v) (inst_real I)).
 
       Lemma keyVersions_agree : forall I' I a, AgreesAtKey I' I a ->
-          Pl.C.versions (placeRepo I') a = Pl.C.versions (placeRepo I) a.
+          Pl.Source.versions (placeRepo I') a = Pl.Source.versions (placeRepo I) a.
       Proof.
-        intros I' I a H; apply Pl.C.versions_ext; intro o.
+        intros I' I a H; apply Pl.Source.versions_ext; intro o.
         rewrite !mem_placeRepo; split; intros [m [v [-> Hk]]];
           exists m, v; split; try reflexivity; apply H; exact Hk.
       Qed.
@@ -422,17 +422,17 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
 
       Definition nameInst (I : Inst) : Pl.Inst :=
         {| Pl.inst_real := placeRepo I
-         ; Pl.inst_deps := Pl.C.DepRel.empty
-         ; Pl.inst_peers := Pl.C.DepRel.empty
-         ; Pl.inst_optDeps := Pl.C.DepRel.empty
-         ; Pl.inst_optPeers := Pl.C.DepRel.empty
+         ; Pl.inst_deps := Pl.Source.DepRel.empty
+         ; Pl.inst_peers := Pl.Source.DepRel.empty
+         ; Pl.inst_optDeps := Pl.Source.DepRel.empty
+         ; Pl.inst_optPeers := Pl.Source.DepRel.empty
          ; Pl.inst_root := rootOcc I |}.
 
       Theorem versions_lookupLoc : forall I I' depth l a,
           Pl.Reduction.Lookup.Reached (tr I) depth
             (Pl.Reduction.Name.Loc l a) ->
           AgreesAtKey I' I a ->
-          Pl.Reduction.T.versions (reduceReal I depth)
+          Pl.Reduction.Reduced.versions (reduceReal I depth)
             (Pl.Reduction.Name.Loc l a) =
           Pl.Reduction.versions (nameInst I') depth (Pl.Reduction.Name.Loc l a).
       Proof.
@@ -449,7 +449,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
           Pl.Reduction.Lookup.Reached (tr I) depth
             (Pl.Reduction.Name.Walk l a) ->
           AgreesAtKey I' I a ->
-          Pl.Reduction.T.versions (reduceReal I depth)
+          Pl.Reduction.Reduced.versions (reduceReal I depth)
             (Pl.Reduction.Name.Walk l a) =
           Pl.Reduction.versions (nameInst I') depth
             (Pl.Reduction.Name.Walk l a).
@@ -476,10 +476,10 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
           Pl.Reduction.Lookup.Reached (tr I) depth
             (Pl.Reduction.Name.Loc l a) ->
           SubAtKey I' I a ->
-          Pl.Reduction.T.VSet.Subset
+          Pl.Reduction.Reduced.VSet.Subset
             (Pl.Reduction.versions (nameInst I') depth
                (Pl.Reduction.Name.Loc l a))
-            (Pl.Reduction.T.versions (reduceReal I depth)
+            (Pl.Reduction.Reduced.versions (reduceReal I depth)
                (Pl.Reduction.Name.Loc l a)).
       Proof.
         intros I I' depth l a H Ha w.
@@ -494,10 +494,10 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
           Pl.Reduction.Lookup.Reached (tr I) depth
             (Pl.Reduction.Name.Walk l a) ->
           SubAtKey I' I a ->
-          Pl.Reduction.T.VSet.Subset
+          Pl.Reduction.Reduced.VSet.Subset
             (Pl.Reduction.versions (nameInst I') depth
                (Pl.Reduction.Name.Walk l a))
-            (Pl.Reduction.T.versions (reduceReal I depth)
+            (Pl.Reduction.Reduced.versions (reduceReal I depth)
                (Pl.Reduction.Name.Walk l a)).
       Proof.
         intros I I' depth l a H Ha w.
@@ -509,24 +509,24 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Definition atomOf (l : Pl.Path.t) (e : Edge) (vs : Pl.VSet.t)
-          : Pl.Reduction.T.Dependees.t :=
+          : Pl.Reduction.Reduced.Dependees.t :=
         (Pl.Reduction.Name.Walk l (e_dir e),
          Pl.Reduction.optAccept (e_optional e) (Pl.land (e_peer e) l) vs).
 
       Definition edgeAtom (I : Inst) (l : Pl.Path.t) (e : Edge)
-          : Pl.Reduction.T.Dependees.t :=
+          : Pl.Reduction.Reduced.Dependees.t :=
         atomOf l e (accepts I e).
 
-      Module SOhh := SetOps Pl.Reduction.T.Dependees Pl.Reduction.T.Dependees
-        Pl.Reduction.T.DependeesSet Pl.Reduction.T.DependeesSet.
+      Module SOhh := SetOps Pl.Reduction.Reduced.Dependees Pl.Reduction.Reduced.Dependees
+        Pl.Reduction.Reduced.DependeesSet Pl.Reduction.Reduced.DependeesSet.
       Definition occAtoms (I : Inst) (l : Pl.Path.t) (o : Occ.t)
-          : Pl.Reduction.T.DependeesSet.t :=
+          : Pl.Reduction.Reduced.DependeesSet.t :=
         SOhh.ofList (List.map (edgeAtom I l) (edgesOf I o)).
 
       Lemma edgeAtoms_tr : forall I a' o l, Pl.PkgSet.In (a', o) (occs I) ->
           Pl.Reduction.edgeAtoms (tr I) (a', o) l = occAtoms I l o.
       Proof.
-        intros I a' o l Hp; apply Pl.Reduction.T.DependeesSet.ext; intro h.
+        intros I a' o l Hp; apply Pl.Reduction.Reduced.DependeesSet.ext; intro h.
         rewrite Pl.Reduction.mem_edgeAtoms; unfold occAtoms.
         rewrite SOhh.mem_ofList, in_map_iff; split.
         - intros [peer [optional [n [vs [HE ->]]]]];
@@ -541,16 +541,16 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Theorem dependees_lookupWalk : forall I depth l a w,
-          Pl.Reduction.T.PkgSet.In (Pl.Reduction.Name.Walk l a, w)
+          Pl.Reduction.Reduced.PkgSet.In (Pl.Reduction.Name.Walk l a, w)
             (reduceReal I depth) ->
-          Pl.Reduction.T.dependees (reduceDeps I depth)
+          Pl.Reduction.Reduced.dependees (reduceDeps I depth)
             (Pl.Reduction.Name.Walk l a, w) =
           Pl.Reduction.dependees
             {| Pl.inst_real := Pl.PkgSet.empty
-             ; Pl.inst_deps := Pl.C.DepRel.empty
-             ; Pl.inst_peers := Pl.C.DepRel.empty
-             ; Pl.inst_optDeps := Pl.C.DepRel.empty
-             ; Pl.inst_optPeers := Pl.C.DepRel.empty
+             ; Pl.inst_deps := Pl.Source.DepRel.empty
+             ; Pl.inst_peers := Pl.Source.DepRel.empty
+             ; Pl.inst_optDeps := Pl.Source.DepRel.empty
+             ; Pl.inst_optPeers := Pl.Source.DepRel.empty
              ; Pl.inst_root := Pl.inst_root (tr I) |}
             (Pl.Reduction.Name.Walk l a, w).
       Proof.
@@ -559,9 +559,9 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Theorem dependees_lookupAbsent : forall I depth l a,
-          Pl.Reduction.T.dependees (reduceDeps I depth)
+          Pl.Reduction.Reduced.dependees (reduceDeps I depth)
             (Pl.Reduction.Name.Loc l a, Pl.Reduction.Version.Bot) =
-          Pl.Reduction.T.DependeesSet.empty.
+          Pl.Reduction.Reduced.DependeesSet.empty.
       Proof. intros; apply Pl.Reduction.Lookup.dependees_lookupAbsent. Qed.
 
       Definition AgreesAtName (I' I : Inst) (m : N.t) : Prop :=
@@ -617,7 +617,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Lemma dependees_occAtomsRoot : forall I depth,
-          Pl.Reduction.T.dependees (reduceDeps I depth) (rootPkg I) =
+          Pl.Reduction.Reduced.dependees (reduceDeps I depth) (rootPkg I) =
           occAtoms I nil Occ.Proj.
       Proof.
         intros I depth; unfold reduceDeps, rootPkg.
@@ -627,14 +627,14 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
           exact (edgeAtoms_tr I (inst_root I) Occ.Proj nil
                    (proj2 (Pl.PkgSet.add_spec _ _ _) (or_introl eq_refl))).
         - apply Pl.Reduction.mem_reduceReal; split; [exact Logic.I |].
-          apply Pl.Reduction.T.VSet.singleton_spec; reflexivity.
+          apply Pl.Reduction.Reduced.VSet.singleton_spec; reflexivity.
       Qed.
 
       Lemma dependees_occAtomsOcc : forall I depth l a o,
-          Pl.Reduction.T.PkgSet.In
+          Pl.Reduction.Reduced.PkgSet.In
             (Pl.Reduction.Name.Loc l a, Pl.Reduction.Version.Occ o)
             (reduceReal I depth) ->
-          Pl.Reduction.T.dependees (reduceDeps I depth)
+          Pl.Reduction.Reduced.dependees (reduceDeps I depth)
             (Pl.Reduction.Name.Loc l a, Pl.Reduction.Version.Occ o) =
           occAtoms I (a :: l) o.
       Proof.
@@ -721,7 +721,7 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Theorem dependees_lookupRoot : forall I depth,
-          Pl.Reduction.T.dependees (reduceDeps I depth) (rootPkg I) =
+          Pl.Reduction.Reduced.dependees (reduceDeps I depth) (rootPkg I) =
           Pl.Reduction.dependees
             (tr (MkInst
                    (RepoSet.filter
@@ -748,11 +748,11 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
       Qed.
 
       Theorem dependees_lookupOcc : forall I depth l a m v,
-          Pl.Reduction.T.PkgSet.In
+          Pl.Reduction.Reduced.PkgSet.In
             (Pl.Reduction.Name.Loc l a,
              Pl.Reduction.Version.Occ (Occ.Reg m v))
             (reduceReal I depth) ->
-          Pl.Reduction.T.dependees (reduceDeps I depth)
+          Pl.Reduction.Reduced.dependees (reduceDeps I depth)
             (Pl.Reduction.Name.Loc l a,
              Pl.Reduction.Version.Occ (Occ.Reg m v)) =
           Pl.Reduction.dependees

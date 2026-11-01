@@ -34,7 +34,7 @@ module Op :
 module Red = Op.Reduction
 module PF = Red.PF
 module PFR = PF.Reduction
-module T = PFR.T
+module T = PFR.Reduced
 
 type request = {
   (* the valuation reads only the query's names, not their versions *)

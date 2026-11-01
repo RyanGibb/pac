@@ -95,9 +95,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Module Deb := Debian QN V MG.
 
   Module NA := PairUOT N A.
-  Module C := Core NA V.
-  Module Pkg := C.Pkg.
-  Module PkgSet := C.PkgSet.
+  Module Source := Core NA V.
+  Module Pkg := Source.Pkg.
+  Module PkgSet := Source.PkgSet.
 
   Definition pname (p : Pkg.t) : N.t := fst (fst p).
   Definition parch (p : Pkg.t) : A.t := snd (fst p).
@@ -248,14 +248,14 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         alpha <> alpha' ->
         classOf (inst_cls I) ((n, alpha), v) = MASame /\
         classOf (inst_cls I) ((n, alpha'), u) = MASame /\ v = u
-    ; res_version_unique : C.VersionUnique S }.
+    ; res_version_unique : Source.VersionUnique S }.
 
   Module Reduction.
-    Definition embedPkg (p : Pkg.t) : Deb.Ver.C.Pkg.t :=
+    Definition embedPkg (p : Pkg.t) : Deb.Ver.Source.Pkg.t :=
       ((pname p, QAArch (parch p)), pver p).
 
-    Module SOmr := SetOps Pkg Deb.Ver.C.Pkg PkgSet Deb.Ver.C.PkgSet.
-    Definition reduceReal (R : PkgSet.t) : Deb.Ver.C.PkgSet.t :=
+    Module SOmr := SetOps Pkg Deb.Ver.Source.Pkg PkgSet Deb.Ver.Source.PkgSet.
+    Definition reduceReal (R : PkgSet.t) : Deb.Ver.Source.PkgSet.t :=
       SOmr.map embedPkg R.
 
     Definition reduceAtom (alpha : A.t) (a : Atom.t) : Deb.Atom.t :=
@@ -365,7 +365,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         (reduceConf (inst_real I) (inst_conf I) (inst_cls I))
         (embedPkg (inst_root I)).
 
-    Definition tryInvPkg (p : Deb.Ver.C.Pkg.t) : option Pkg.t :=
+    Definition tryInvPkg (p : Deb.Ver.Source.Pkg.t) : option Pkg.t :=
       match p with
       | ((n, QAArch b), v) => Some ((n, b), v)
       | _ => None
@@ -377,7 +377,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         cbn [fst snd]; reflexivity.
     Qed.
 
-    Lemma tryInvPkg_some : forall (q : Deb.Ver.C.Pkg.t) (p : Pkg.t),
+    Lemma tryInvPkg_some : forall (q : Deb.Ver.Source.Pkg.t) (p : Pkg.t),
         tryInvPkg q = Some p -> embedPkg p = q.
     Proof.
       intros [[n [b | b | |]] v] p H; cbn [tryInvPkg] in H; try discriminate.
@@ -385,8 +385,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         cbn [fst snd]; reflexivity.
     Qed.
 
-    Module SOpre := SetOps Deb.Ver.C.Pkg Pkg Deb.Ver.C.PkgSet PkgSet.
-    Definition debianMAResolution (S : Deb.Ver.C.PkgSet.t) : PkgSet.t :=
+    Module SOpre := SetOps Deb.Ver.Source.Pkg Pkg Deb.Ver.Source.PkgSet PkgSet.
+    Definition debianMAResolution (S : Deb.Ver.Source.PkgSet.t) : PkgSet.t :=
       SOpre.filterMap tryInvPkg S.
 
     Lemma embedPkg_injective : forall p q, embedPkg p = embedPkg q -> p = q.
@@ -394,7 +394,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
     Lemma mem_debianMAResolution : forall S q,
         PkgSet.In q (debianMAResolution S) <->
-          Deb.Ver.C.PkgSet.In (embedPkg q) S.
+          Deb.Ver.Source.PkgSet.In (embedPkg q) S.
     Proof.
       unfold debianMAResolution.
       exact (SOpre.mem_filterMap_inv tryInvPkg embedPkg tryInvPkg_embed
@@ -758,7 +758,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     Lemma declConfOf_name : forall (p : Pkg.t) (a : Atom.t)
-        (q : Deb.Ver.C.Pkg.t) (ea : Deb.Atom.t) (e : bool),
+        (q : Deb.Ver.Source.Pkg.t) (ea : Deb.Atom.t) (e : bool),
         List.In (q, (ea, e)) (declConfOf (p, a)) ->
         fst (fst ea) = aname a.
     Proof.
@@ -910,7 +910,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         exact (Hvu (m, QAArch ar) v v' Hv Hv').
     Qed.
 
-    Definition coreResolution (S : PkgSet.t) : Deb.Ver.C.PkgSet.t :=
+    Definition coreResolution (S : PkgSet.t) : Deb.Ver.Source.PkgSet.t :=
       reduceReal S.
 
     Theorem debian_ma_completeness : forall I S,
@@ -1029,7 +1029,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     Corollary debian_ma_core_soundness : forall I S,
-        Deb.Reduction.T.IsResolution
+        Deb.Reduction.Reduced.IsResolution
           (Deb.Reduction.reduceReal (reduceInst I))
           (Deb.Reduction.reduceDeps (reduceInst I))
           (Deb.Reduction.embedPkg (embedPkg (inst_root I))) S ->
@@ -1043,7 +1043,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
     Corollary debian_ma_core_completeness : forall I S,
         IsResolution I S ->
-        Deb.Reduction.T.IsResolution
+        Deb.Reduction.Reduced.IsResolution
           (Deb.Reduction.reduceReal (reduceInst I))
           (Deb.Reduction.reduceDeps (reduceInst I))
           (Deb.Reduction.embedPkg (embedPkg (inst_root I)))
@@ -1247,11 +1247,11 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           PkgSet.Subset Rs R ->
           (forall q, PkgSet.In q R ->
              (pname q, QAArch (parch q)) = n -> PkgSet.In q Rs) ->
-          Deb.C.versions (reduceReal Rs) n =
-          Deb.C.versions (reduceReal R) n.
+          Deb.Source.versions (reduceReal Rs) n =
+          Deb.Source.versions (reduceReal R) n.
       Proof.
         intros R Rs n Hsub Hcov; apply Deb.VSet.ext; intro v.
-        rewrite !Deb.C.mem_versions, !mem_reduceReal.
+        rewrite !Deb.Source.mem_versions, !mem_reduceReal.
         split; intros [q [HqR Hq]]; exists q; (split; [| exact Hq]).
         - exact (Hsub _ HqR).
         - apply Hcov; [exact HqR | exact (f_equal fst (eq_sym Hq))].
@@ -1360,8 +1360,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           intros q HqR Hq.
           assert (Hq2 : pname q = m) by exact (f_equal fst Hq).
           apply (Hcr q HqR); rewrite Hq2; exact Hm. }
-        apply Deb.Reduction.T.VSet.ext; intro u'; unfold Deb.Reduction.us.
-        rewrite !Deb.Reduction.T.VSet.union_spec, Hev.
+        apply Deb.Reduction.Reduced.VSet.ext; intro u'; unfold Deb.Reduction.us.
+        rewrite !Deb.Reduction.Reduced.VSet.union_spec, Hev.
         apply or_iff_compat_l.
         apply Deb.Reduction.SOew.filterMap_restrict.
         - exact (reduceProv_mono _ _ _ _ (inst_cls I) Hr Hp).
@@ -1660,7 +1660,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             (reduceProv (inst_real I) (inst_prov I) (inst_cls I)) a' m.
       Proof.
         intros I ns Rr I' a' qn Hrr Hcr Hsl Hm Hqn.
-        apply Deb.Reduction.T.VSet.ext; intro w;
+        apply Deb.Reduction.Reduced.VSet.ext; intro w;
           rewrite !Deb.Reduction.mem_complementVS.
         apply or_iff_compat_l.
         split; intros [u [HR [Hmb Hw]]]; exists u;
@@ -1734,16 +1734,16 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           (forall b, y <> QAArch b) ->
           Deb.Reduction.versions (reduceInst I)
             (Deb.Reduction.Name.Orig (n, y)) =
-          Deb.Reduction.T.VSet.empty.
+          Deb.Reduction.Reduced.VSet.empty.
       Proof.
         intros I n y Hy; cbn [Deb.Reduction.versions reduceInst Deb.inst_real].
         destruct (Deb.VSet.is_empty
-                    (Deb.C.versions (reduceReal (inst_real I)) (n, y))) eqn:He;
+                    (Deb.Source.versions (reduceReal (inst_real I)) (n, y))) eqn:He;
           [reflexivity | exfalso].
         destruct (Deb.VSet.choose
-                    (Deb.C.versions (reduceReal (inst_real I)) (n, y)))
+                    (Deb.Source.versions (reduceReal (inst_real I)) (n, y)))
           as [v |] eqn:Hc.
-        - apply Deb.VSet.choose_spec1, Deb.C.mem_versions in Hc.
+        - apply Deb.VSet.choose_spec1, Deb.Source.mem_versions in Hc.
           destruct (reduceReal_arch (inst_real I) (n, y) v Hc) as [b Hb].
           exact (Hy b Hb).
         - apply Deb.VSet.choose_spec2, Deb.VSet.is_empty_spec in Hc.
@@ -1837,7 +1837,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         replace (Deb.Reduction.embedPkg (embedPkg p))
           with (Deb.Reduction.Name.Orig (pname p, QAArch (parch p)),
                 Deb.Reduction.Version.Orig (pver p)) by reflexivity.
-        apply Deb.Reduction.T.DependeesSet.ext; intro y.
+        apply Deb.Reduction.Reduced.DependeesSet.ext; intro y.
         rewrite !Deb.Reduction.dependees_orig_spec.
         cbn [reduceInst Deb.inst_real Deb.inst_deps Deb.inst_rec Deb.inst_prov
              Deb.inst_conf].

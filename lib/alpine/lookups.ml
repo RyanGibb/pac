@@ -67,7 +67,7 @@ module type S = sig
   module PG = L.PG
 
   val lookups : archive -> L.t
-  val touch : archive -> P.dep list -> L.t -> PFR.T.Pkg.t -> unit
+  val touch : archive -> P.dep list -> L.t -> PFR.Reduced.Pkg.t -> unit
 end
 
 module Make () : S = struct
@@ -97,7 +97,7 @@ module Make () : S = struct
   module Red = Alp.Reduct (FirstDesignation)
   module PF = Red.PF
   module PFR = PF.Reduction
-  module T = PFR.T
+  module T = PFR.Reduced
 
   let xconstr (c : P.constr) : Alp.coq_Constr =
     match c with

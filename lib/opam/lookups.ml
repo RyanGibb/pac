@@ -152,7 +152,7 @@ module Op = E.Opam (Ot.Str) (OVerOT) (Ot.Str) (OVerOT) (Ot.Str)
 module Red = Op.Reduction
 module PF = Red.PF
 module PFR = PF.Reduction
-module T = PFR.T
+module T = PFR.Reduced
 
 (* Debian 12 on x86_64, which the recorded baselines were taken on *)
 let default_platform =

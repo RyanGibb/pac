@@ -7,10 +7,10 @@ Create HintDb fc_mem.
 
 Module ConcurrentFeature (N V F G : UsualOrderedType).
   Module Feat := Feature N V F.
-  Module C := Feat.C.
-  Module Pkg := C.Pkg.
-  Module PkgSet := C.PkgSet.
-  Module VSet := C.VSet.
+  Module Source := Feat.Source.
+  Module Pkg := Source.Pkg.
+  Module PkgSet := Source.PkgSet.
+  Module VSet := Source.VSet.
 
   Module ParentElt := PairUOT Pkg Pkg.
   Module ParentRel := FSetUOT ParentElt.
@@ -138,10 +138,10 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
     End Name.
     Module NameOT := UOTFromCompare Name.
 
-    Module T := Core NameOT V.
+    Module Reduced := Core NameOT V.
 
-    Definition granularOf (g : V.t -> G.t) (q : Feat.Reduction.T.Pkg.t)
-        : T.Pkg.t :=
+    Definition granularOf (g : V.t -> G.t) (q : Feat.Reduction.Reduced.Pkg.t)
+        : Reduced.Pkg.t :=
       match q with
       | (Feat.Reduction.Name.Orig n, v) =>
           (Name.GranularOrig n (g v), v)
@@ -149,43 +149,43 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           (Name.GranularFeatPkg n f (g v), v)
       end.
 
-    Definition embedOrigPkg (g : V.t -> G.t) (p : Pkg.t) : T.Pkg.t :=
+    Definition embedOrigPkg (g : V.t -> G.t) (p : Pkg.t) : Reduced.Pkg.t :=
       let '(n, v) := p in (Name.GranularOrig n (g v), v).
 
-    Definition singVS (v : V.t) : T.VSet.t := T.VSet.singleton v.
+    Definition singVS (v : V.t) : Reduced.VSet.t := Reduced.VSet.singleton v.
 
-    Module SOvv := SetOps V V VSet T.VSet.
-    Definition embedVS (vs : VSet.t) : T.VSet.t :=
+    Module SOvv := SetOps V V VSet Reduced.VSet.
+    Definition embedVS (vs : VSet.t) : Reduced.VSet.t :=
       SOvv.map (fun v => v) vs.
 
     Module SOqp :=
-      SetOps Feat.Reduction.T.Pkg T.Pkg Feat.Reduction.T.PkgSet T.PkgSet.
+      SetOps Feat.Reduction.Reduced.Pkg Reduced.Pkg Feat.Reduction.Reduced.PkgSet Reduced.PkgSet.
     Definition granularReal (R : PkgSet.t) (support : Feat.SupportSet.t)
-        (g : V.t -> G.t) : T.PkgSet.t :=
+        (g : V.t -> G.t) : Reduced.PkgSet.t :=
       SOqp.map (granularOf g) (Feat.Reduction.reduceReal R support).
 
-    Module SOvp := SetOps V T.Pkg VSet T.PkgSet.
-    Module SOfp := SetOps Feat.FeatDepElt T.Pkg Feat.FeatDepRel T.PkgSet.
-    Definition fInterReal (Df : Feat.FeatDepRel.t) : T.PkgSet.t :=
+    Module SOvp := SetOps V Reduced.Pkg VSet Reduced.PkgSet.
+    Module SOfp := SetOps Feat.FeatDepElt Reduced.Pkg Feat.FeatDepRel Reduced.PkgSet.
+    Definition fInterReal (Df : Feat.FeatDepRel.t) : Reduced.PkgSet.t :=
       SOfp.unionMap (fun '((n, v), (m, (vs, _))) =>
           SOvp.map (fun u => (Name.Intermediate n v m, u)) vs)
         Df.
 
-    Module SOfsp := SetOps F T.Pkg Feat.FSet T.PkgSet.
-    Definition fInterFeatReal (Df : Feat.FeatDepRel.t) : T.PkgSet.t :=
+    Module SOfsp := SetOps F Reduced.Pkg Feat.FSet Reduced.PkgSet.
+    Definition fInterFeatReal (Df : Feat.FeatDepRel.t) : Reduced.PkgSet.t :=
       SOfp.unionMap (fun '((n, v), (m, (vs, fs))) =>
           SOvp.unionMap (fun u =>
               SOfsp.map (fun f => (Name.IntermediateF n v m f, u)) fs)
             vs)
         Df.
 
-    Module SOap := SetOps Feat.AddlDepElt T.Pkg Feat.AddlDepRel T.PkgSet.
-    Definition aInterReal (Da : Feat.AddlDepRel.t) : T.PkgSet.t :=
+    Module SOap := SetOps Feat.AddlDepElt Reduced.Pkg Feat.AddlDepRel Reduced.PkgSet.
+    Definition aInterReal (Da : Feat.AddlDepRel.t) : Reduced.PkgSet.t :=
       SOap.unionMap (fun '(((n, v), _), (m, (vs, _))) =>
           SOvp.map (fun u => (Name.Intermediate n v m, u)) vs)
         Da.
 
-    Definition aInterFeatReal (Da : Feat.AddlDepRel.t) : T.PkgSet.t :=
+    Definition aInterFeatReal (Da : Feat.AddlDepRel.t) : Reduced.PkgSet.t :=
       SOap.unionMap (fun '(((n, v), f), (m, (vs, fs))) =>
           SOvp.unionMap (fun u =>
               SOfsp.map (fun f' => (Name.IntermediateA n v f m f', u)) fs)
@@ -195,15 +195,15 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
     Definition reduceReal
         (R : PkgSet.t) (support : Feat.SupportSet.t)
         (Df : Feat.FeatDepRel.t) (Da : Feat.AddlDepRel.t)
-        (g : V.t -> G.t) : T.PkgSet.t :=
-      T.PkgSet.union (granularReal R support g)
-        (T.PkgSet.union (fInterReal Df)
-           (T.PkgSet.union (fInterFeatReal Df)
-              (T.PkgSet.union (aInterReal Da) (aInterFeatReal Da)))).
+        (g : V.t -> G.t) : Reduced.PkgSet.t :=
+      Reduced.PkgSet.union (granularReal R support g)
+        (Reduced.PkgSet.union (fInterReal Df)
+           (Reduced.PkgSet.union (fInterFeatReal Df)
+              (Reduced.PkgSet.union (aInterReal Da) (aInterFeatReal Da)))).
 
-    Module SOsd := SetOps Feat.PkgF T.DepElt Feat.SupportSet T.DepRel.
+    Module SOsd := SetOps Feat.PkgF Reduced.DepElt Feat.SupportSet Reduced.DepRel.
     Definition supportEdges (R : PkgSet.t) (support : Feat.SupportSet.t)
-        (g : V.t -> G.t) : T.DepRel.t :=
+        (g : V.t -> G.t) : Reduced.DepRel.t :=
       SOsd.filterMap (fun '((n, v), f) =>
           if PkgSet.mem (n, v) R
           then Some ((Name.GranularFeatPkg n f (g v), v),
@@ -211,17 +211,17 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           else None)
         support.
 
-    Module SOfd := SetOps Feat.FeatDepElt T.DepElt Feat.FeatDepRel T.DepRel.
+    Module SOfd := SetOps Feat.FeatDepElt Reduced.DepElt Feat.FeatDepRel Reduced.DepRel.
     Definition fDepToInterEdges (Df : Feat.FeatDepRel.t)
-        (g : V.t -> G.t) : T.DepRel.t :=
+        (g : V.t -> G.t) : Reduced.DepRel.t :=
       SOfd.map (fun '((n, v), (m, (vs, _))) =>
           ((Name.GranularOrig n (g v), v),
            (Name.Intermediate n v m, embedVS vs)))
         Df.
 
-    Module SOvd := SetOps V T.DepElt VSet T.DepRel.
+    Module SOvd := SetOps V Reduced.DepElt VSet Reduced.DepRel.
     Definition fInterToOrigEdges (Df : Feat.FeatDepRel.t)
-        (g : V.t -> G.t) : T.DepRel.t :=
+        (g : V.t -> G.t) : Reduced.DepRel.t :=
       SOfd.unionMap (fun '((n, v), (m, (vs, _))) =>
           SOvd.map (fun u =>
               ((Name.Intermediate n v m, u),
@@ -229,9 +229,9 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
             vs)
         Df.
 
-    Module SOfsd := SetOps F T.DepElt Feat.FSet T.DepRel.
+    Module SOfsd := SetOps F Reduced.DepElt Feat.FSet Reduced.DepRel.
     Definition fDepToInterFeatEdges (Df : Feat.FeatDepRel.t)
-        (g : V.t -> G.t) : T.DepRel.t :=
+        (g : V.t -> G.t) : Reduced.DepRel.t :=
       SOfd.unionMap (fun '((n, v), (m, (vs, fs))) =>
           SOfsd.map (fun f =>
               ((Name.GranularOrig n (g v), v),
@@ -240,7 +240,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         Df.
 
     Definition fInterToFeatEdges (Df : Feat.FeatDepRel.t)
-        (g : V.t -> G.t) : T.DepRel.t :=
+        (g : V.t -> G.t) : Reduced.DepRel.t :=
       SOfd.unionMap (fun '((n, v), (m, (vs, fs))) =>
           SOvd.unionMap (fun u =>
               SOfsd.map (fun f =>
@@ -250,7 +250,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
             vs)
         Df.
 
-    Definition fInterFeatToInterEdges (Df : Feat.FeatDepRel.t) : T.DepRel.t :=
+    Definition fInterFeatToInterEdges (Df : Feat.FeatDepRel.t) : Reduced.DepRel.t :=
       SOfd.unionMap (fun '((n, v), (m, (vs, fs))) =>
           SOfsd.unionMap (fun f =>
               SOvd.map (fun u =>
@@ -260,16 +260,16 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
             fs)
         Df.
 
-    Module SOad := SetOps Feat.AddlDepElt T.DepElt Feat.AddlDepRel T.DepRel.
+    Module SOad := SetOps Feat.AddlDepElt Reduced.DepElt Feat.AddlDepRel Reduced.DepRel.
     Definition aDepToInterEdges (Da : Feat.AddlDepRel.t)
-        (g : V.t -> G.t) : T.DepRel.t :=
+        (g : V.t -> G.t) : Reduced.DepRel.t :=
       SOad.map (fun '(((n, v), f), (m, (vs, _))) =>
           ((Name.GranularFeatPkg n f (g v), v),
            (Name.Intermediate n v m, embedVS vs)))
         Da.
 
     Definition aInterToOrigEdges (Da : Feat.AddlDepRel.t)
-        (g : V.t -> G.t) : T.DepRel.t :=
+        (g : V.t -> G.t) : Reduced.DepRel.t :=
       SOad.unionMap (fun '(((n, v), _), (m, (vs, _))) =>
           SOvd.map (fun u =>
               ((Name.Intermediate n v m, u),
@@ -278,7 +278,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         Da.
 
     Definition aDepToInterFeatEdges (Da : Feat.AddlDepRel.t)
-        (g : V.t -> G.t) : T.DepRel.t :=
+        (g : V.t -> G.t) : Reduced.DepRel.t :=
       SOad.unionMap (fun '(((n, v), f), (m, (vs, fs))) =>
           SOfsd.map (fun f' =>
               ((Name.GranularFeatPkg n f (g v), v),
@@ -287,7 +287,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         Da.
 
     Definition aInterToFeatEdges (Da : Feat.AddlDepRel.t)
-        (g : V.t -> G.t) : T.DepRel.t :=
+        (g : V.t -> G.t) : Reduced.DepRel.t :=
       SOad.unionMap (fun '(((n, v), f), (m, (vs, fs))) =>
           SOvd.unionMap (fun u =>
               SOfsd.map (fun f' =>
@@ -297,7 +297,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
             vs)
         Da.
 
-    Definition aInterFeatToInterEdges (Da : Feat.AddlDepRel.t) : T.DepRel.t :=
+    Definition aInterFeatToInterEdges (Da : Feat.AddlDepRel.t) : Reduced.DepRel.t :=
       SOad.unionMap (fun '(((n, v), f), (m, (vs, fs))) =>
           SOfsd.unionMap (fun f' =>
               SOvd.map (fun u =>
@@ -310,26 +310,26 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
     Definition reduceDeps
         (R : PkgSet.t) (support : Feat.SupportSet.t)
         (Df : Feat.FeatDepRel.t) (Da : Feat.AddlDepRel.t)
-        (g : V.t -> G.t) : T.DepRel.t :=
-      T.DepRel.union (supportEdges R support g)
-        (T.DepRel.union (fDepToInterEdges Df g)
-           (T.DepRel.union (fInterToOrigEdges Df g)
-              (T.DepRel.union (fDepToInterFeatEdges Df g)
-                 (T.DepRel.union (fInterToFeatEdges Df g)
-                    (T.DepRel.union (fInterFeatToInterEdges Df)
-                       (T.DepRel.union (aDepToInterEdges Da g)
-                          (T.DepRel.union (aInterToOrigEdges Da g)
-                             (T.DepRel.union (aDepToInterFeatEdges Da g)
-                                (T.DepRel.union (aInterToFeatEdges Da g)
+        (g : V.t -> G.t) : Reduced.DepRel.t :=
+      Reduced.DepRel.union (supportEdges R support g)
+        (Reduced.DepRel.union (fDepToInterEdges Df g)
+           (Reduced.DepRel.union (fInterToOrigEdges Df g)
+              (Reduced.DepRel.union (fDepToInterFeatEdges Df g)
+                 (Reduced.DepRel.union (fInterToFeatEdges Df g)
+                    (Reduced.DepRel.union (fInterFeatToInterEdges Df)
+                       (Reduced.DepRel.union (aDepToInterEdges Da g)
+                          (Reduced.DepRel.union (aInterToOrigEdges Da g)
+                             (Reduced.DepRel.union (aDepToInterFeatEdges Da g)
+                                (Reduced.DepRel.union (aInterToFeatEdges Da g)
                                    (aInterFeatToInterEdges Da)))))))))).
 
-    Lemma mem_embedVS : forall vs v, T.VSet.In v (embedVS vs) <-> VSet.In v vs.
+    Lemma mem_embedVS : forall vs v, Reduced.VSet.In v (embedVS vs) <-> VSet.In v vs.
     Proof.
       intros vs v; unfold embedVS.
       exact (SOvv.mem_map_inj (fun u => u) vs v (fun x y H => H)).
     Qed.
 
-    Lemma mem_singVS : forall v u, T.VSet.In u (singVS v) <-> u = v.
+    Lemma mem_singVS : forall v u, Reduced.VSet.In u (singVS v) <-> u = v.
     Proof. intros v u; exact (SOvv.singleton_in v u). Qed.
 
     (* The encodings are unions of map, unionMap and guarded filterMap over
@@ -381,13 +381,13 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
 
     Inductive RealMember (R : PkgSet.t) (support : Feat.SupportSet.t)
         (Df : Feat.FeatDepRel.t) (Da : Feat.AddlDepRel.t) (g : V.t -> G.t) :
-        T.Pkg.t -> Prop :=
+        Reduced.Pkg.t -> Prop :=
     | RealOrig : forall n v,
-        Feat.Reduction.T.PkgSet.In (Feat.Reduction.Name.Orig n, v)
+        Feat.Reduction.Reduced.PkgSet.In (Feat.Reduction.Name.Orig n, v)
           (Feat.Reduction.reduceReal R support) ->
         RealMember R support Df Da g (Name.GranularOrig n (g v), v)
     | RealFeatPkg : forall n f v,
-        Feat.Reduction.T.PkgSet.In (Feat.Reduction.Name.FeatPkg n f, v)
+        Feat.Reduction.Reduced.PkgSet.In (Feat.Reduction.Name.FeatPkg n f, v)
           (Feat.Reduction.reduceReal R support) ->
         RealMember R support Df Da g (Name.GranularFeatPkg n f (g v), v)
     | RealFInter : forall n v m vs fs u,
@@ -406,13 +406,13 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         RealMember R support Df Da g (Name.IntermediateA n v f m f', u).
     #[local] Hint Constructors RealMember : fc_mem.
 
-    Lemma mem_reduceReal : forall R support Df Da g (p : T.Pkg.t),
-        T.PkgSet.In p (reduceReal R support Df Da g) <->
+    Lemma mem_reduceReal : forall R support Df Da g (p : Reduced.Pkg.t),
+        Reduced.PkgSet.In p (reduceReal R support Df Da g) <->
         RealMember R support Df Da g p.
     Proof.
       intros R support Df Da g p; unfold reduceReal, granularReal,
         fInterReal, fInterFeatReal, aInterReal, aInterFeatReal.
-      rewrite !T.PkgSet.union_spec, SOqp.mem_map, !SOfp.mem_unionMap,
+      rewrite !Reduced.PkgSet.union_spec, SOqp.mem_map, !SOfp.mem_unionMap,
         !SOap.mem_unionMap.
       split.
       - intro H;
@@ -426,7 +426,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
        than positions in an eleven-way disjunction. *)
     Inductive EncodedEdge (R : PkgSet.t) (support : Feat.SupportSet.t)
         (Df : Feat.FeatDepRel.t) (Da : Feat.AddlDepRel.t) (g : V.t -> G.t) :
-        T.DepElt.t -> Prop :=
+        Reduced.DepElt.t -> Prop :=
     | EdgeSupport : forall n v f,
         Feat.SupportSet.In ((n, v), f) support -> PkgSet.In (n, v) R ->
         EncodedEdge R support Df Da g
@@ -489,8 +489,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
            (Name.Intermediate n v m, singVS u)).
     #[local] Hint Constructors EncodedEdge : fc_mem.
 
-    Lemma mem_reduceDeps : forall R support Df Da g (y : T.DepElt.t),
-        T.DepRel.In y (reduceDeps R support Df Da g) <->
+    Lemma mem_reduceDeps : forall R support Df Da g (y : Reduced.DepElt.t),
+        Reduced.DepRel.In y (reduceDeps R support Df Da g) <->
         EncodedEdge R support Df Da g y.
     Proof.
       intros R support Df Da g y; unfold reduceDeps, supportEdges,
@@ -498,7 +498,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         fInterToFeatEdges, fInterFeatToInterEdges, aDepToInterEdges,
         aInterToOrigEdges, aDepToInterFeatEdges, aInterToFeatEdges,
         aInterFeatToInterEdges.
-      rewrite !T.DepRel.union_spec, SOsd.mem_filterMap, SOfd.mem_map,
+      rewrite !Reduced.DepRel.union_spec, SOsd.mem_filterMap, SOfd.mem_map,
         !SOfd.mem_unionMap, SOad.mem_map, !SOad.mem_unionMap.
       split.
       - intro H;
@@ -507,15 +507,15 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       - destruct 1; pick_close.
     Qed.
 
-    Module SOtf := SetOps T.Pkg F T.PkgSet Feat.FSet.
+    Module SOtf := SetOps Reduced.Pkg F Reduced.PkgSet Feat.FSet.
     (* As in Feature: decode by scanning the resolution, so nothing here needs
        the feature universe to be enumerable. *)
     Definition featsOf (g : V.t -> G.t) (n : N.t) (v : V.t)
-        (S : T.PkgSet.t) : Feat.FSet.t :=
+        (S : Reduced.PkgSet.t) : Feat.FSet.t :=
       SOtf.filterMap (fun q =>
           match q with
           | (Name.GranularFeatPkg n' f w, v') =>
-              if T.Pkg.eq_dec (Name.GranularFeatPkg n' f w, v')
+              if Reduced.Pkg.eq_dec (Name.GranularFeatPkg n' f w, v')
                    (Name.GranularFeatPkg n f (g v), v)
               then Some f
               else None
@@ -523,9 +523,9 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           end)
         S.
 
-    Module SOts := SetOps T.Pkg Feat.Featured T.PkgSet Feat.FeaturedSet.
+    Module SOts := SetOps Reduced.Pkg Feat.Featured Reduced.PkgSet Feat.FeaturedSet.
     Definition concurrentFeatureResolution (g : V.t -> G.t)
-        (S : T.PkgSet.t) : Feat.FeaturedSet.t :=
+        (S : Reduced.PkgSet.t) : Feat.FeaturedSet.t :=
       SOts.filterMap (fun p' =>
           match p' with
           | (Name.GranularOrig n w, v) =>
@@ -535,10 +535,10 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         S.
 
     Module SOvpp := SetOps V ParentElt VSet ParentRel.
-    Definition parentsOf (S : T.PkgSet.t) (n : N.t) (v : V.t) (m : N.t)
+    Definition parentsOf (S : Reduced.PkgSet.t) (n : N.t) (v : V.t) (m : N.t)
         (vs : VSet.t) : ParentRel.t :=
       SOvpp.filterMap (fun u =>
-          if T.PkgSet.mem (Name.Intermediate n v m, u) S
+          if Reduced.PkgSet.mem (Name.Intermediate n v m, u) S
           then Some ((m, u), (n, v))
           else None)
         vs.
@@ -546,28 +546,28 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
     Module SOfpp := SetOps Feat.FeatDepElt ParentElt Feat.FeatDepRel ParentRel.
     Module SOapp := SetOps Feat.AddlDepElt ParentElt Feat.AddlDepRel ParentRel.
     Definition parents (Df : Feat.FeatDepRel.t) (Da : Feat.AddlDepRel.t)
-        (g : V.t -> G.t) (S : T.PkgSet.t) : ParentRel.t :=
+        (g : V.t -> G.t) (S : Reduced.PkgSet.t) : ParentRel.t :=
       ParentRel.union
         (SOfpp.unionMap (fun '((n, v), (m, (vs, _))) =>
-             if T.PkgSet.mem (Name.GranularOrig n (g v), v) S
+             if Reduced.PkgSet.mem (Name.GranularOrig n (g v), v) S
              then parentsOf S n v m vs
              else ParentRel.empty)
            Df)
         (SOapp.unionMap (fun '(((n, v), f), (m, (vs, _))) =>
-             if T.PkgSet.mem (Name.GranularFeatPkg n f (g v), v) S
+             if Reduced.PkgSet.mem (Name.GranularFeatPkg n f (g v), v) S
              then parentsOf S n v m vs
              else ParentRel.empty)
            Da).
 
     Lemma featsOf_spec : forall g n v S f,
         Feat.FSet.In f (featsOf g n v S) <->
-        T.PkgSet.In (Name.GranularFeatPkg n f (g v), v) S.
+        Reduced.PkgSet.In (Name.GranularFeatPkg n f (g v), v) S.
     Proof.
       intros g n v S f; unfold featsOf; rewrite SOtf.mem_filterMap.
       split.
       - intros [[[n' w | n' f' w | n' v' m | n' v' m f' | n' v' f' m f''] u]
                  [HS He]]; cbn beta iota in He; try discriminate.
-        destruct (T.Pkg.eq_dec (Name.GranularFeatPkg n' f' w, u)
+        destruct (Reduced.Pkg.eq_dec (Name.GranularFeatPkg n' f' w, u)
                     (Name.GranularFeatPkg n f' (g v), v)) as [E | NE];
           [| discriminate].
         injection He as <-; rewrite <- E; exact HS.
@@ -576,9 +576,9 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
     Qed.
 
     Lemma mem_concurrentFeatureResolution :
-      forall g (S : T.PkgSet.t) n v fs,
+      forall g (S : Reduced.PkgSet.t) n v fs,
         Feat.FeaturedSet.In ((n, v), fs) (concurrentFeatureResolution g S) <->
-        T.PkgSet.In (Name.GranularOrig n (g v), v) S /\ fs = featsOf g n v S.
+        Reduced.PkgSet.In (Name.GranularOrig n (g v), v) S /\ fs = featsOf g n v S.
     Proof.
       intros g S n v fs; unfold concurrentFeatureResolution;
         rewrite SOts.mem_filterMap.
@@ -595,23 +595,23 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
 
     Lemma mem_parentsOf : forall S n v m vs m' u n' v',
         ParentRel.In ((m', u), (n', v')) (parentsOf S n v m vs) <->
-        VSet.In u vs /\ T.PkgSet.In (Name.Intermediate n v m, u) S /\
+        VSet.In u vs /\ Reduced.PkgSet.In (Name.Intermediate n v m, u) S /\
         m' = m /\ n' = n /\ v' = v.
     Proof.
       intros S n v m vs m' u n' v'; unfold parentsOf.
-      rewrite SOvpp.mem_filterMap_if; setoid_rewrite T.PkgSet.mem_spec; split.
+      rewrite SOvpp.mem_filterMap_if; setoid_rewrite Reduced.PkgSet.mem_spec; split.
       - intros (u' & Hu & Hi & E); injection E as -> -> -> ->; auto.
       - intros (Hu & Hi & -> & -> & ->); exists u; auto.
     Qed.
 
-    Lemma mem_parents : forall Df Da g (S : T.PkgSet.t) m u n v,
+    Lemma mem_parents : forall Df Da g (S : Reduced.PkgSet.t) m u n v,
         ParentRel.In ((m, u), (n, v)) (parents Df Da g S) <->
-        T.PkgSet.In (Name.Intermediate n v m, u) S /\
+        Reduced.PkgSet.In (Name.Intermediate n v m, u) S /\
         ((exists vs fs, Feat.FeatDepRel.In ((n, v), (m, (vs, fs))) Df /\
-            VSet.In u vs /\ T.PkgSet.In (Name.GranularOrig n (g v), v) S) \/
+            VSet.In u vs /\ Reduced.PkgSet.In (Name.GranularOrig n (g v), v) S) \/
          (exists f vs fs, Feat.AddlDepRel.In (((n, v), f), (m, (vs, fs))) Da /\
             VSet.In u vs /\
-            T.PkgSet.In (Name.GranularFeatPkg n f (g v), v) S)).
+            Reduced.PkgSet.In (Name.GranularFeatPkg n f (g v), v) S)).
     Proof.
       intros Df Da g S m u n v; unfold parents.
       rewrite ParentRel.union_spec, SOfpp.mem_unionMap, SOapp.mem_unionMap.
@@ -619,7 +619,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       - intros [([[n' v'] [m' [vs fs]]] & HD & Hh)
                | ([[[n' v'] f] [m' [vs fs]]] & HA & Hh)];
           cbn beta iota in Hh; apply SOvpp.in_if_empty in Hh;
-          rewrite T.PkgSet.mem_spec, mem_parentsOf in Hh;
+          rewrite Reduced.PkgSet.mem_spec, mem_parentsOf in Hh;
           destruct Hh as (Hs & Hu & Hi & -> & -> & ->);
           (split; [exact Hi |]);
           [left; exists vs, fs | right; exists f, vs, fs]; auto.
@@ -627,26 +627,26 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           [left; exists ((n, v), (m, (vs, fs)))
           | right; exists (((n, v), f), (m, (vs, fs)))];
           (split; [assumption | cbn beta iota]);
-          apply SOvpp.in_if_empty; rewrite T.PkgSet.mem_spec, mem_parentsOf;
+          apply SOvpp.in_if_empty; rewrite Reduced.PkgSet.mem_spec, mem_parentsOf;
           repeat split; assumption.
     Qed.
 
     Lemma parent_closure_step :
-      forall RR D r g S P (q : T.Pkg.t) n v m vs fs (iF : F.t -> Name.t),
-        T.IsResolution RR D r S -> T.PkgSet.In q S ->
+      forall RR D r g S P (q : Reduced.Pkg.t) n v m vs fs (iF : F.t -> Name.t),
+        Reduced.IsResolution RR D r S -> Reduced.PkgSet.In q S ->
         (forall u, VSet.In u vs ->
-           T.PkgSet.In (Name.Intermediate n v m, u) S ->
+           Reduced.PkgSet.In (Name.Intermediate n v m, u) S ->
            ParentRel.In ((m, u), (n, v)) P) ->
-        T.DepRel.In (q, (Name.Intermediate n v m, embedVS vs)) D ->
+        Reduced.DepRel.In (q, (Name.Intermediate n v m, embedVS vs)) D ->
         (forall u, VSet.In u vs ->
-           T.DepRel.In ((Name.Intermediate n v m, u),
+           Reduced.DepRel.In ((Name.Intermediate n v m, u),
                         (Name.GranularOrig m (g u), singVS u)) D) ->
         (forall f, Feat.FSet.In f fs ->
-           T.DepRel.In (q, (iF f, embedVS vs)) D) ->
+           Reduced.DepRel.In (q, (iF f, embedVS vs)) D) ->
         (forall f u, Feat.FSet.In f fs -> VSet.In u vs ->
-           T.DepRel.In ((iF f, u), (Name.Intermediate n v m, singVS u)) D) ->
+           Reduced.DepRel.In ((iF f, u), (Name.Intermediate n v m, singVS u)) D) ->
         (forall f u, Feat.FSet.In f fs -> VSet.In u vs ->
-           T.DepRel.In ((iF f, u),
+           Reduced.DepRel.In ((iF f, u),
                         (Name.GranularFeatPkg m f (g u), singVS u)) D) ->
         exists u, VSet.In u vs /\
           (exists fs', Feat.FSet.Subset fs fs' /\
@@ -677,9 +677,9 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
     Theorem concurrent_feature_soundness :
       forall (R : PkgSet.t) (support : Feat.SupportSet.t)
              (Df : Feat.FeatDepRel.t) (Da : Feat.AddlDepRel.t)
-             (g : V.t -> G.t) (r : Pkg.t) (S : T.PkgSet.t),
+             (g : V.t -> G.t) (r : Pkg.t) (S : Reduced.PkgSet.t),
         (forall f, ~ Feat.SupportSet.In (r, f) support) ->
-        T.IsResolution (reduceReal R support Df Da g)
+        Reduced.IsResolution (reduceReal R support Df Da g)
           (reduceDeps R support Df Da g)
           (embedOrigPkg g r) S ->
         IsResolution R support Df Da g r
@@ -690,13 +690,13 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       destruct r as [rn rv].
       unfold embedOrigPkg in Hroot; simpl in Hroot.
       assert (HorigR : forall n v,
-                 T.PkgSet.In (Name.GranularOrig n (g v), v) S ->
+                 Reduced.PkgSet.In (Name.GranularOrig n (g v), v) S ->
                  PkgSet.In (n, v) R).
       { intros n v HS; pose proof (Hsub _ HS) as HF.
         apply mem_reduceReal in HF; inversion HF; subst.
         eapply Feat.Reduction.mem_reduceReal_orig; eassumption. }
       assert (HfeatSup : forall n f v,
-                 T.PkgSet.In
+                 Reduced.PkgSet.In
                    (Name.GranularFeatPkg n f (g v), v) S ->
                  Feat.SupportSet.In ((n, v), f) support /\ PkgSet.In (n, v) R).
       { intros n f v HS; pose proof (Hsub _ HS) as HF.
@@ -762,7 +762,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         exact (proj1 (HfeatSup n f v Hf)).
       - intros [m u] [n v] Hpi; apply mem_parents in Hpi.
         assert (Hin : forall n' v',
-                  T.PkgSet.In (Name.GranularOrig n' (g v'), v') S ->
+                  Reduced.PkgSet.In (Name.GranularOrig n' (g v'), v') S ->
                   exists fs, Feat.FeaturedSet.In ((n', v'), fs)
                                (concurrentFeatureResolution g S))
           by (intros n' v' HS; exists (featsOf g n' v' S);
@@ -802,17 +802,17 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       andb (inSb S_CF p)
         (andb (takenWithb S_CF fs (m, u)) (ParentRel.mem ((m, u), p) pi)).
 
-    Module SOsw := SetOps Feat.Featured T.Pkg Feat.FeaturedSet T.PkgSet.
+    Module SOsw := SetOps Feat.Featured Reduced.Pkg Feat.FeaturedSet Reduced.PkgSet.
     Definition coreResolution (Df : Feat.FeatDepRel.t) (Da : Feat.AddlDepRel.t)
         (g : V.t -> G.t) (S_CF : Feat.FeaturedSet.t) (pi : ParentRel.t) :
-        T.PkgSet.t :=
-      T.PkgSet.union
+        Reduced.PkgSet.t :=
+      Reduced.PkgSet.union
         (SOsw.map (fun '((n, v), _) => (Name.GranularOrig n (g v), v)) S_CF)
-        (T.PkgSet.union
+        (Reduced.PkgSet.union
            (SOsw.unionMap (fun '((n, v), fs) =>
                 SOfsp.map (fun f => (Name.GranularFeatPkg n f (g v), v)) fs)
               S_CF)
-           (T.PkgSet.union
+           (Reduced.PkgSet.union
               (SOfp.unionMap (fun '((n, v), (m, (vs, fs))) =>
                    SOvp.filterMap (fun u =>
                        if activeb S_CF pi (n, v) fs m u
@@ -820,7 +820,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
                        else None)
                      vs)
                  Df)
-              (T.PkgSet.union
+              (Reduced.PkgSet.union
                  (SOap.unionMap (fun '(((n, v), _), (m, (vs, fs))) =>
                       SOvp.filterMap (fun u =>
                           if activeb S_CF pi (n, v) fs m u
@@ -828,7 +828,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
                           else None)
                         vs)
                     Da)
-                 (T.PkgSet.union
+                 (Reduced.PkgSet.union
                     (SOfp.unionMap (fun '((n, v), (m, (vs, fs))) =>
                          SOfsp.unionMap (fun f =>
                              SOvp.filterMap (fun u =>
@@ -894,7 +894,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
 
     Inductive CoreMember (S_CF : Feat.FeaturedSet.t) (pi : ParentRel.t)
         (Df : Feat.FeatDepRel.t) (Da : Feat.AddlDepRel.t) (g : V.t -> G.t) :
-        T.Pkg.t -> Prop :=
+        Reduced.Pkg.t -> Prop :=
     | CoreOrig : forall n v fs,
         Feat.FeaturedSet.In ((n, v), fs) S_CF ->
         CoreMember S_CF pi Df Da g (Name.GranularOrig n (g v), v)
@@ -920,12 +920,12 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         CoreMember S_CF pi Df Da g (Name.IntermediateA n v f m f', u).
     #[local] Hint Constructors CoreMember : fc_mem.
 
-    Lemma mem_coreResolution : forall S_CF pi Df Da g (q : T.Pkg.t),
-        T.PkgSet.In q (coreResolution Df Da g S_CF pi) <->
+    Lemma mem_coreResolution : forall S_CF pi Df Da g (q : Reduced.Pkg.t),
+        Reduced.PkgSet.In q (coreResolution Df Da g S_CF pi) <->
         CoreMember S_CF pi Df Da g q.
     Proof.
       intros S_CF pi Df Da g q; unfold coreResolution.
-      rewrite !T.PkgSet.union_spec, SOsw.mem_map, SOsw.mem_unionMap,
+      rewrite !Reduced.PkgSet.union_spec, SOsw.mem_map, SOsw.mem_unionMap,
         !SOfp.mem_unionMap, !SOap.mem_unionMap.
       split.
       - intro H;
@@ -940,7 +940,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
              (g : V.t -> G.t) (r : Pkg.t)
              (S_CF : Feat.FeaturedSet.t) (pi : ParentRel.t),
         IsResolution R support Df Da g r S_CF pi ->
-        T.IsResolution (reduceReal R support Df Da g)
+        Reduced.IsResolution (reduceReal R support Df Da g)
           (reduceDeps R support Df Da g)
           (embedOrigPkg g r) (coreResolution Df Da g S_CF pi).
     Proof.
@@ -1152,11 +1152,11 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       Qed.
 
       Lemma reduceDeps_mono :
-        forall R R' support support' Df Df' Da Da' g (y : T.DepElt.t),
+        forall R R' support support' Df Df' Da Da' g (y : Reduced.DepElt.t),
           PkgSet.Subset R' R -> Feat.SupportSet.Subset support' support ->
           Feat.FeatDepRel.Subset Df' Df -> Feat.AddlDepRel.Subset Da' Da ->
-          T.DepRel.In y (reduceDeps R' support' Df' Da' g) ->
-          T.DepRel.In y (reduceDeps R support Df Da g).
+          Reduced.DepRel.In y (reduceDeps R' support' Df' Da' g) ->
+          Reduced.DepRel.In y (reduceDeps R support Df Da g).
       Proof.
         intros R R' support support' Df Df' Da Da' g y HR Hsup HDf HDa;
           revert y.
@@ -1185,13 +1185,13 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       Include GranularityFibre N V G Pkg PkgSet.
 
       Theorem versions_lookupGranularOrig : forall R support Df Da g n w,
-          T.versions (reduceReal R support Df Da g) (Name.GranularOrig n w) =
-          T.versions
+          Reduced.versions (reduceReal R support Df Da g) (Name.GranularOrig n w) =
+          Reduced.versions
             (reduceReal (granFibre g R n w) Feat.SupportSet.empty
                Feat.FeatDepRel.empty Feat.AddlDepRel.empty g)
             (Name.GranularOrig n w).
       Proof.
-        intros R support Df Da g n w; apply T.versions_ext; intro v.
+        intros R support Df Da g n w; apply Reduced.versions_ext; intro v.
         rewrite !mem_reduceReal.
         split; intro H; inversion H; subst; apply RealOrig;
           rewrite Feat.Reduction.mem_reduceReal_orig in *;
@@ -1200,15 +1200,15 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
 
       Module FeatDepRelFibred := Feat.Reduction.Lookup.FeatDepRelFibred.
       Theorem dependees_lookupGranularOrig : forall R support Df Da g n v,
-          T.dependees (reduceDeps R support Df Da g)
+          Reduced.dependees (reduceDeps R support Df Da g)
             (Name.GranularOrig n (g v), v) =
-          T.dependees
+          Reduced.dependees
             (reduceDeps PkgSet.empty Feat.SupportSet.empty
                (FeatDepRelFibred.tailFibre Df (n, v))
                Feat.AddlDepRel.empty g)
             (Name.GranularOrig n (g v), v).
       Proof.
-        intros R support Df Da g n v; apply T.dependees_ext; intros [m ws].
+        intros R support Df Da g n v; apply Reduced.dependees_ext; intros [m ws].
         split; [| apply reduceDeps_mono;
                   [apply PkgSet.empty_subset
                   | apply Feat.SupportSet.empty_subset
@@ -1228,15 +1228,15 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       Module SupportFibred := Feat.Reduction.Lookup.SupportFibred.
       Module AddlDepRelFibred := Feat.Reduction.Lookup.AddlDepRelFibred.
       Theorem versions_lookupGranularFeatPkg : forall R support Df Da g n f w,
-          T.versions (reduceReal R support Df Da g)
+          Reduced.versions (reduceReal R support Df Da g)
             (Name.GranularFeatPkg n f w) =
-          T.versions
+          Reduced.versions
             (reduceReal (granFibre g R n w)
                (Feat.Reduction.Lookup.supportFibre support n f)
                Feat.FeatDepRel.empty Feat.AddlDepRel.empty g)
             (Name.GranularFeatPkg n f w).
       Proof.
-        intros R support Df Da g n f w; apply T.versions_ext; intro v.
+        intros R support Df Da g n f w; apply Reduced.versions_ext; intro v.
         rewrite !mem_reduceReal.
         split; intro H; inversion H; subst; apply RealFeatPkg;
           rewrite Feat.Reduction.mem_reduceReal_featPkg in *;
@@ -1246,16 +1246,16 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
 
       Lemma dependees_lookupGranularFeatPkg_any :
         forall R support Df Da g n v f,
-          T.dependees (reduceDeps R support Df Da g)
+          Reduced.dependees (reduceDeps R support Df Da g)
             (Name.GranularFeatPkg n f (g v), v) =
-          T.dependees
+          Reduced.dependees
             (reduceDeps (PkgFibred.idFibre R (n, v))
                (SupportFibred.idFibre support ((n, v), f))
                Feat.FeatDepRel.empty
                (AddlDepRelFibred.tailFibre Da ((n, v), f)) g)
             (Name.GranularFeatPkg n f (g v), v).
       Proof.
-        intros R support Df Da g n v f; apply T.dependees_ext; intros [m ws].
+        intros R support Df Da g n v f; apply Reduced.dependees_ext; intros [m ws].
         split; [| apply reduceDeps_mono;
                   [apply PkgFibred.idFibre_subset
                   | apply SupportFibred.idFibre_subset
@@ -1277,11 +1277,11 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
 
       (* The membership premise is what collapses the fibres to singletons. *)
       Theorem dependees_lookupGranularFeatPkg : forall R support Df Da g n v f,
-          T.PkgSet.In (Name.GranularFeatPkg n f (g v), v)
+          Reduced.PkgSet.In (Name.GranularFeatPkg n f (g v), v)
             (reduceReal R support Df Da g) ->
-          T.dependees (reduceDeps R support Df Da g)
+          Reduced.dependees (reduceDeps R support Df Da g)
             (Name.GranularFeatPkg n f (g v), v) =
-          T.dependees
+          Reduced.dependees
             (reduceDeps (PkgSet.singleton (n, v))
                (Feat.SupportSet.singleton ((n, v), f))
                Feat.FeatDepRel.empty
@@ -1308,14 +1308,14 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       Qed.
 
       Theorem versions_lookupIntermediate : forall R support Df Da g n v m,
-          T.versions (reduceReal R support Df Da g) (Name.Intermediate n v m) =
-          T.versions
+          Reduced.versions (reduceReal R support Df Da g) (Name.Intermediate n v m) =
+          Reduced.versions
             (reduceReal PkgSet.empty Feat.SupportSet.empty
                (FeatDepRelFibred.endsFibre Df (n, v) m)
                (pkgNodeFibre Da (n, v) m) g)
             (Name.Intermediate n v m).
       Proof.
-        intros R support Df Da g n v m; apply T.versions_ext; intro u.
+        intros R support Df Da g n v m; apply Reduced.versions_ext; intro u.
         rewrite !mem_reduceReal.
         split; intro H; inversion H; subst.
         - eapply RealFInter; [| eassumption].
@@ -1336,16 +1336,16 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       Qed.
 
       Theorem dependees_lookupIntermediate : forall R support Df Da g n v m u,
-          T.dependees (reduceDeps R support Df Da g)
+          Reduced.dependees (reduceDeps R support Df Da g)
             (Name.Intermediate n v m, u) =
-          T.dependees
+          Reduced.dependees
             (reduceDeps PkgSet.empty Feat.SupportSet.empty
                (FeatDepRelFibred.endsFibre Df (n, v) m)
                (pkgNodeFibre Da (n, v) m) g)
             (Name.Intermediate n v m, u).
       Proof.
         intros R support Df Da g n v m u.
-        apply T.dependees_ext; intros [m' ws].
+        apply Reduced.dependees_ext; intros [m' ws].
         split; [| apply reduceDeps_mono;
                   [apply PkgSet.empty_subset
                   | apply Feat.SupportSet.empty_subset
@@ -1364,15 +1364,15 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       Qed.
 
       Theorem versions_lookupIntermediateF : forall R support Df Da g n v m f',
-          T.versions (reduceReal R support Df Da g)
+          Reduced.versions (reduceReal R support Df Da g)
             (Name.IntermediateF n v m f') =
-          T.versions
+          Reduced.versions
             (reduceReal PkgSet.empty Feat.SupportSet.empty
                (FeatDepRelFibred.endsFibre Df (n, v) m)
                Feat.AddlDepRel.empty g)
             (Name.IntermediateF n v m f').
       Proof.
-        intros R support Df Da g n v m f'; apply T.versions_ext; intro u.
+        intros R support Df Da g n v m f'; apply Reduced.versions_ext; intro u.
         rewrite !mem_reduceReal.
         split; intro H; inversion H; subst.
         - eapply RealFInterF; [| eassumption | eassumption].
@@ -1387,16 +1387,16 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
 
       Theorem dependees_lookupIntermediateF :
         forall R support Df Da g n v m f' u,
-          T.dependees (reduceDeps R support Df Da g)
+          Reduced.dependees (reduceDeps R support Df Da g)
             (Name.IntermediateF n v m f', u) =
-          T.dependees
+          Reduced.dependees
             (reduceDeps PkgSet.empty Feat.SupportSet.empty
                (FeatDepRelFibred.endsFibre Df (n, v) m)
                Feat.AddlDepRel.empty g)
             (Name.IntermediateF n v m f', u).
       Proof.
         intros R support Df Da g n v m f' u.
-        apply T.dependees_ext; intros [m' ws].
+        apply Reduced.dependees_ext; intros [m' ws].
         split; [| apply reduceDeps_mono;
                   [apply PkgSet.empty_subset
                   | apply Feat.SupportSet.empty_subset
@@ -1416,14 +1416,14 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
 
       Theorem versions_lookupIntermediateA :
         forall R support Df Da g n v f m f',
-          T.versions (reduceReal R support Df Da g)
+          Reduced.versions (reduceReal R support Df Da g)
             (Name.IntermediateA n v f m f') =
-          T.versions
+          Reduced.versions
             (reduceReal PkgSet.empty Feat.SupportSet.empty Feat.FeatDepRel.empty
                (AddlDepRelFibred.endsFibre Da ((n, v), f) m) g)
             (Name.IntermediateA n v f m f').
       Proof.
-        intros R support Df Da g n v f m f'; apply T.versions_ext; intro u.
+        intros R support Df Da g n v f m f'; apply Reduced.versions_ext; intro u.
         rewrite !mem_reduceReal.
         split; intro H; inversion H; subst.
         - eapply RealAInterA; [| eassumption | eassumption].
@@ -1438,15 +1438,15 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
 
       Theorem dependees_lookupIntermediateA :
         forall R support Df Da g n v f m f' u,
-          T.dependees (reduceDeps R support Df Da g)
+          Reduced.dependees (reduceDeps R support Df Da g)
             (Name.IntermediateA n v f m f', u) =
-          T.dependees
+          Reduced.dependees
             (reduceDeps PkgSet.empty Feat.SupportSet.empty Feat.FeatDepRel.empty
                (AddlDepRelFibred.endsFibre Da ((n, v), f) m) g)
             (Name.IntermediateA n v f m f', u).
       Proof.
         intros R support Df Da g n v f m f' u.
-        apply T.dependees_ext; intros [m' ws].
+        apply Reduced.dependees_ext; intros [m' ws].
         split; [| apply reduceDeps_mono;
                   [apply PkgSet.empty_subset
                   | apply Feat.SupportSet.empty_subset

@@ -23,7 +23,7 @@ module type S = sig
 
   module Np : module type of Pac.Npm (Pac_common.Ot.Str) (NVerOT) (PM)
   module R = Np.Reduction
-  module T = Np.T
+  module T = Np.Reduced
 
   val xrange : Npm_version.range -> Np.coq_Range
 
@@ -59,7 +59,7 @@ module Make () = struct
 
   module Np = E.Npm (Ot.Str) (NVerOT) (PM)
   module R = Np.Reduction
-  module T = Np.T
+  module T = Np.Reduced
 
   let xcomp : Npm_version.comparator -> Np.coq_Comparator = function
     | Npm_version.Any -> Np.CAny

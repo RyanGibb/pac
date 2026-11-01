@@ -99,18 +99,18 @@ module Make (AP : Tables.ARCH) = struct
     match n' with
     | DMA.Deb.Reduction.Name.Orig (n, DMA.QAArch b) ->
         let vs =
-          DMA.Deb.C.versions
+          DMA.Deb.Source.versions
             (DMA.Reduction.reduceReal (ma_real_at tables (n, b)))
             (n, DMA.QAArch b)
         in
-        if DMA.Deb.VSet.is_empty vs then DMA.Deb.Reduction.T.VSet.empty
+        if DMA.Deb.VSet.is_empty vs then DMA.Deb.Reduction.Reduced.VSet.empty
         else
-          DMA.Deb.Reduction.T.VSet.add DMA.Deb.Reduction.Version.Bot
+          DMA.Deb.Reduction.Reduced.VSet.add DMA.Deb.Reduction.Version.Bot
             (DMA.Deb.Reduction.embedVS vs)
     | DMA.Deb.Reduction.Name.Orig _ ->
         (* embedPkg introduces only QAArch names, so an explicit-qualifier,
            :any or group pseudo-name has no real package *)
-        DMA.Deb.Reduction.T.VSet.empty
+        DMA.Deb.Reduction.Reduced.VSet.empty
     | DMA.Deb.Reduction.Name.Disjunct aset ->
         DMA.Deb.Reduction.versionsDisj aset
     | DMA.Deb.Reduction.Name.Soft aset -> DMA.Deb.Reduction.versionsSoft aset
@@ -118,7 +118,7 @@ module Make (AP : Tables.ARCH) = struct
         let r, pi = sel_preimages sel_cache tables (fst a) in
         DMA.Deb.Reduction.us r pi a
 
-  let dependees sel_cache tables (s : DMA.Deb.Reduction.T.Pkg.t) =
+  let dependees sel_cache tables (s : DMA.Deb.Reduction.Reduced.Pkg.t) =
     match s with
     | ( DMA.Deb.Reduction.Name.Orig (n, DMA.QAArch b),
         DMA.Deb.Reduction.Version.Orig v ) ->
@@ -151,22 +151,22 @@ module Make (AP : Tables.ARCH) = struct
     | ( (DMA.Deb.Reduction.Name.Disjunct _ | DMA.Deb.Reduction.Name.Soft _),
         DMA.Deb.Reduction.Version.Atom a ) ->
         let r, pi = sel_preimages sel_cache tables (fst a) in
-        DMA.Deb.Reduction.T.DependeesSet.singleton
+        DMA.Deb.Reduction.Reduced.DependeesSet.singleton
           (DMA.Deb.Reduction.dependee r pi a)
     | DMA.Deb.Reduction.Name.Selector _, DMA.Deb.Reduction.Version.Ref (m, w) ->
-        DMA.Deb.Reduction.T.DependeesSet.singleton
+        DMA.Deb.Reduction.Reduced.DependeesSet.singleton
           ( DMA.Deb.Reduction.Name.Orig m,
-            DMA.Deb.Reduction.T.VSet.singleton
+            DMA.Deb.Reduction.Reduced.VSet.singleton
               (DMA.Deb.Reduction.Version.Orig w) )
     | DMA.Deb.Reduction.Name.Selector a, DMA.Deb.Reduction.Version.RefReal w ->
-        DMA.Deb.Reduction.T.DependeesSet.singleton
+        DMA.Deb.Reduction.Reduced.DependeesSet.singleton
           ( DMA.Deb.Reduction.Name.Orig (DMA.Deb.aname a),
-            DMA.Deb.Reduction.T.VSet.singleton
+            DMA.Deb.Reduction.Reduced.VSet.singleton
               (DMA.Deb.Reduction.Version.Orig w) )
     | _ ->
         (* every other shape is empty by dependees' catch-all, or, at a
            pseudo-name, because no reduced clause hangs there *)
-        DMA.Deb.Reduction.T.DependeesSet.empty
+        DMA.Deb.Reduction.Reduced.DependeesSet.empty
 
   (* apt's CompareProviders3 (apt-pkg/solver3.cc) sorts the candidates of one
      alternative and takes the first undecided one.  Resolving from an empty
@@ -242,10 +242,10 @@ module Make (AP : Tables.ARCH) = struct
      solve. *)
   module Search (I : sig
     val tables : tables
-    val versions : DMA.Deb.Reduction.Name.t -> DMA.Deb.Reduction.T.VSet.t
+    val versions : DMA.Deb.Reduction.Name.t -> DMA.Deb.Reduction.Reduced.VSet.t
 
     val dependencies :
-      DMA.Deb.Reduction.T.Pkg.t -> DMA.Deb.Reduction.T.DependeesSet.t
+      DMA.Deb.Reduction.Reduced.Pkg.t -> DMA.Deb.Reduction.Reduced.DependeesSet.t
   end) =
   struct
     module PVersion = struct
@@ -375,12 +375,12 @@ module Make (AP : Tables.ARCH) = struct
 
     let cands_of n =
       Pac_common.Tbl.memo cands_tbl n (fun () ->
-          List.map (tag n) (DMA.Deb.Reduction.T.VSet.elements (I.versions n)))
+          List.map (tag n) (DMA.Deb.Reduction.Reduced.VSet.elements (I.versions n)))
 
     let dependees_of n (v : DMA.Deb.Reduction.Version.t) =
-      DMA.Deb.Reduction.T.DependeesSet.elements (I.dependencies (n, v))
+      DMA.Deb.Reduction.Reduced.DependeesSet.elements (I.dependencies (n, v))
       |> List.map (fun (tn, tvs) ->
-          (tn, List.map (tag tn) (DMA.Deb.Reduction.T.VSet.elements tvs)))
+          (tn, List.map (tag tn) (DMA.Deb.Reduction.Reduced.VSet.elements tvs)))
 
     let has_ref n =
       List.exists
@@ -449,7 +449,7 @@ module Make (AP : Tables.ARCH) = struct
       let n, cs = root_cands q in
       (n, PG.Ranges.of_list cs)
 
-    module CT = DMA.Deb.Reduction.T
+    module CT = DMA.Deb.Reduction.Reduced
 
     (* the query has no root package: its names are the roots PubGrub is
        handed, each at the versions its range lists *)
@@ -475,7 +475,7 @@ module Make (AP : Tables.ARCH) = struct
 
     let decode sol =
       let s' =
-        DMA.Deb.Reduction.T.PkgSet.ofList
+        DMA.Deb.Reduction.Reduced.PkgSet.ofList
           (List.map (fun (n, (pv : PVersion.t)) -> (n, pv.PVersion.v)) sol)
       in
       List.map

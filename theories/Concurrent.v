@@ -5,23 +5,23 @@ Create HintDb cmp_conc.
 Create Rewrite HintDb cmp_conc.
 
 Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
-  Module C := Core N V.
-  Module Pkg := C.Pkg.
-  Module PkgSet := C.PkgSet.
-  Module VSet := C.VSet.
+  Module Source := Core N V.
+  Module Pkg := Source.Pkg.
+  Module PkgSet := Source.PkgSet.
+  Module VSet := Source.VSet.
 
   Module ParentElt := PairUOT Pkg Pkg.
   Module ParentRel := FSetUOT ParentElt.
 
   Record IsResolution
-      (R : PkgSet.t) (D : C.DepRel.t) (g : V.t -> G.t) (r : Pkg.t)
+      (R : PkgSet.t) (D : Source.DepRel.t) (g : V.t -> G.t) (r : Pkg.t)
       (S : PkgSet.t) (pi : ParentRel.t) : Prop :=
     { res_subset : PkgSet.Subset S R
     ; res_root_mem : PkgSet.In r S
     ; res_parent_closure :
         forall p, PkgSet.In p S ->
         forall (n : N.t) (vs : VSet.t),
-          C.DepRel.In (p, (n, vs)) D ->
+          Source.DepRel.In (p, (n, vs)) D ->
           exists v, VSet.In v vs /\
             PkgSet.In (n, v) S /\ ParentRel.In ((n, v), p) pi
     ; res_pi_functional :
@@ -33,9 +33,9 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     ; res_parent_subset :
         forall q p, ParentRel.In (q, p) pi -> PkgSet.In q S /\ PkgSet.In p S }.
 
-  Definition ParentDependency (D : C.DepRel.t) (pi : ParentRel.t) : Prop :=
+  Definition ParentDependency (D : Source.DepRel.t) (pi : ParentRel.t) : Prop :=
     forall m u n v, ParentRel.In ((m, u), (n, v)) pi ->
-      exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs.
+      exists vs, Source.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs.
 
   Module Reduction.
     Definition IsSplit (g : V.t -> G.t) (vs : VSet.t) : Prop :=
@@ -176,53 +176,53 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
 
     Module NameOT := UOTFromCompare Name.
     Module VersionOT := UOTFromCompare Version.
-    Module T := Core NameOT VersionOT.
+    Module Reduced := Core NameOT VersionOT.
 
-    Definition embedPkg (g : V.t -> G.t) (p : Pkg.t) : T.Pkg.t :=
+    Definition embedPkg (g : V.t -> G.t) (p : Pkg.t) : Reduced.Pkg.t :=
       (Name.Granular (fst p) (g (snd p)), Version.Orig (snd p)).
 
-    Module SOptp := SetOps Pkg T.Pkg PkgSet T.PkgSet.
-    Definition embedSet (g : V.t -> G.t) (R : PkgSet.t) : T.PkgSet.t :=
+    Module SOptp := SetOps Pkg Reduced.Pkg PkgSet Reduced.PkgSet.
+    Definition embedSet (g : V.t -> G.t) (R : PkgSet.t) : Reduced.PkgSet.t :=
       SOptp.map (embedPkg g) R.
 
-    Module SOvcv := SetOps V VersionOT VSet T.VSet.
-    Definition embedVS (vs : VSet.t) : T.VSet.t :=
+    Module SOvcv := SetOps V VersionOT VSet Reduced.VSet.
+    Definition embedVS (vs : VSet.t) : Reduced.VSet.t :=
       SOvcv.map Version.Orig vs.
 
-    Definition gransOfVS (g : V.t -> G.t) (vs : VSet.t) : T.VSet.t :=
+    Definition gransOfVS (g : V.t -> G.t) (vs : VSet.t) : Reduced.VSet.t :=
       SOvcv.map (fun u => Version.Gran (g u)) vs.
 
     Definition filterGran (g : V.t -> G.t) (w : V.t) (vs : VSet.t) : VSet.t :=
       VSet.filter (fun u => granEqb (g u) (g w)) vs.
 
-    Module SOvtp := SetOps V T.Pkg VSet T.PkgSet.
-    Module SOdtp := SetOps C.DepElt T.Pkg C.DepRel T.PkgSet.
-    Definition reduceReal (R : PkgSet.t) (D : C.DepRel.t) (g : V.t -> G.t) :
-        T.PkgSet.t :=
-      T.PkgSet.union (embedSet g R)
+    Module SOvtp := SetOps V Reduced.Pkg VSet Reduced.PkgSet.
+    Module SOdtp := SetOps Source.DepElt Reduced.Pkg Source.DepRel Reduced.PkgSet.
+    Definition reduceReal (R : PkgSet.t) (D : Source.DepRel.t) (g : V.t -> G.t) :
+        Reduced.PkgSet.t :=
+      Reduced.PkgSet.union (embedSet g R)
         (SOdtp.unionMap (fun '((n, v), (m, vs)) =>
              if isSplitb g vs
              then SOvtp.map (fun u =>
                       (Name.Intermediate n v m, Version.Gran (g u)))
                     vs
-             else T.PkgSet.empty)
+             else Reduced.PkgSet.empty)
            D).
 
-    Module SOvtd := SetOps V T.DepElt VSet T.DepRel.
-    Module SOdtd := SetOps C.DepElt T.DepElt C.DepRel T.DepRel.
-    Definition reduceDepsDirect (D : C.DepRel.t) (g : V.t -> G.t) :
-        T.DepRel.t :=
+    Module SOvtd := SetOps V Reduced.DepElt VSet Reduced.DepRel.
+    Module SOdtd := SetOps Source.DepElt Reduced.DepElt Source.DepRel Reduced.DepRel.
+    Definition reduceDepsDirect (D : Source.DepRel.t) (g : V.t -> G.t) :
+        Reduced.DepRel.t :=
       SOdtd.unionMap (fun '((n, v), (m, vs)) =>
           if isDirectb g vs
           then SOvtd.map (fun u =>
                    ((Name.Granular n (g v), Version.Orig v),
                     (Name.Granular m (g u), embedVS vs)))
                  vs
-          else T.DepRel.empty)
+          else Reduced.DepRel.empty)
         D.
 
-    Definition reduceDepsSplitEntry (D : C.DepRel.t) (g : V.t -> G.t) :
-        T.DepRel.t :=
+    Definition reduceDepsSplitEntry (D : Source.DepRel.t) (g : V.t -> G.t) :
+        Reduced.DepRel.t :=
       SOdtd.filterMap (fun '((n, v), (m, vs)) =>
           if isSplitb g vs
           then Some ((Name.Granular n (g v), Version.Orig v),
@@ -230,29 +230,29 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           else None)
         D.
 
-    Definition reduceDepsSplitFanout (D : C.DepRel.t) (g : V.t -> G.t) :
-        T.DepRel.t :=
+    Definition reduceDepsSplitFanout (D : Source.DepRel.t) (g : V.t -> G.t) :
+        Reduced.DepRel.t :=
       SOdtd.unionMap (fun '((n, v), (m, vs)) =>
           if isSplitb g vs
           then SOvtd.map (fun u =>
                    ((Name.Intermediate n v m, Version.Gran (g u)),
                     (Name.Granular m (g u), embedVS (filterGran g u vs))))
                  vs
-          else T.DepRel.empty)
+          else Reduced.DepRel.empty)
         D.
 
-    Definition reduceDepsEmpty (D : C.DepRel.t) (g : V.t -> G.t) : T.DepRel.t :=
+    Definition reduceDepsEmpty (D : Source.DepRel.t) (g : V.t -> G.t) : Reduced.DepRel.t :=
       SOdtd.filterMap (fun '((n, v), (m, vs)) =>
           if VSet.is_empty vs
           then Some ((Name.Granular n (g v), Version.Orig v),
-                     (Name.Intermediate n v m, T.VSet.empty))
+                     (Name.Intermediate n v m, Reduced.VSet.empty))
           else None)
         D.
 
-    Definition reduceDeps (D : C.DepRel.t) (g : V.t -> G.t) : T.DepRel.t :=
-      T.DepRel.union (reduceDepsDirect D g)
-        (T.DepRel.union (reduceDepsSplitEntry D g)
-           (T.DepRel.union (reduceDepsSplitFanout D g) (reduceDepsEmpty D g))).
+    Definition reduceDeps (D : Source.DepRel.t) (g : V.t -> G.t) : Reduced.DepRel.t :=
+      Reduced.DepRel.union (reduceDepsDirect D g)
+        (Reduced.DepRel.union (reduceDepsSplitEntry D g)
+           (Reduced.DepRel.union (reduceDepsSplitFanout D g) (reduceDepsEmpty D g))).
 
     Lemma mem_filterGran : forall g w vs u,
         VSet.In u (filterGran g w vs) <-> VSet.In u vs /\ g u = g w.
@@ -261,19 +261,19 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       rewrite VSet.filter_spec'.
       rewrite granEqb_iff; reflexivity.
     Qed.
-    Inductive ReducedPkg (R : PkgSet.t) (D : C.DepRel.t) (g : V.t -> G.t) :
-        T.Pkg.t -> Prop :=
+    Inductive ReducedPkg (R : PkgSet.t) (D : Source.DepRel.t) (g : V.t -> G.t) :
+        Reduced.Pkg.t -> Prop :=
     | PkgEmbed : forall n v, PkgSet.In (n, v) R ->
         ReducedPkg R D g (Name.Granular n (g v), Version.Orig v)
     | PkgIntermediate : forall n v m vs u,
-        C.DepRel.In ((n, v), (m, vs)) D -> IsSplit g vs -> VSet.In u vs ->
+        Source.DepRel.In ((n, v), (m, vs)) D -> IsSplit g vs -> VSet.In u vs ->
         ReducedPkg R D g (Name.Intermediate n v m, Version.Gran (g u)).
 
     Lemma mem_reduceReal : forall R D g q,
-        T.PkgSet.In q (reduceReal R D g) <-> ReducedPkg R D g q.
+        Reduced.PkgSet.In q (reduceReal R D g) <-> ReducedPkg R D g q.
     Proof.
       intros R D g q; unfold reduceReal, embedSet.
-      rewrite T.PkgSet.union_spec, SOptp.mem_map, SOdtp.mem_unionMap.
+      rewrite Reduced.PkgSet.union_spec, SOptp.mem_map, SOdtp.mem_unionMap.
       split.
       - intros [[[n v] [Hp ->]] | [[[n v] [m vs]] [HD Hh]]];
           [apply PkgEmbed; exact Hp |].
@@ -286,32 +286,32 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         apply SOdtp.in_if_empty; rewrite isSplitb_iff, SOvtp.mem_map; eauto.
     Qed.
 
-    Inductive ReducedEdge (D : C.DepRel.t) (g : V.t -> G.t) :
-        T.DepElt.t -> Prop :=
+    Inductive ReducedEdge (D : Source.DepRel.t) (g : V.t -> G.t) :
+        Reduced.DepElt.t -> Prop :=
     | EdgeDirect : forall n v m vs u,
-        C.DepRel.In ((n, v), (m, vs)) D -> IsDirect g vs -> VSet.In u vs ->
+        Source.DepRel.In ((n, v), (m, vs)) D -> IsDirect g vs -> VSet.In u vs ->
         ReducedEdge D g ((Name.Granular n (g v), Version.Orig v),
                          (Name.Granular m (g u), embedVS vs))
     | EdgeSplitEntry : forall n v m vs,
-        C.DepRel.In ((n, v), (m, vs)) D -> IsSplit g vs ->
+        Source.DepRel.In ((n, v), (m, vs)) D -> IsSplit g vs ->
         ReducedEdge D g ((Name.Granular n (g v), Version.Orig v),
                          (Name.Intermediate n v m, gransOfVS g vs))
     | EdgeSplitFanout : forall n v m vs u,
-        C.DepRel.In ((n, v), (m, vs)) D -> IsSplit g vs -> VSet.In u vs ->
+        Source.DepRel.In ((n, v), (m, vs)) D -> IsSplit g vs -> VSet.In u vs ->
         ReducedEdge D g ((Name.Intermediate n v m, Version.Gran (g u)),
                          (Name.Granular m (g u),
                           embedVS (filterGran g u vs)))
     | EdgeEmpty : forall n v m,
-        C.DepRel.In ((n, v), (m, VSet.empty)) D ->
+        Source.DepRel.In ((n, v), (m, VSet.empty)) D ->
         ReducedEdge D g ((Name.Granular n (g v), Version.Orig v),
-                         (Name.Intermediate n v m, T.VSet.empty)).
+                         (Name.Intermediate n v m, Reduced.VSet.empty)).
 
     Lemma mem_reduceDeps : forall D g y,
-        T.DepRel.In y (reduceDeps D g) <-> ReducedEdge D g y.
+        Reduced.DepRel.In y (reduceDeps D g) <-> ReducedEdge D g y.
     Proof.
       intros D g y; unfold reduceDeps, reduceDepsDirect, reduceDepsSplitEntry,
         reduceDepsSplitFanout, reduceDepsEmpty.
-      rewrite !T.DepRel.union_spec, !SOdtd.mem_unionMap, !SOdtd.mem_filterMap.
+      rewrite !Reduced.DepRel.union_spec, !SOdtd.mem_unionMap, !SOdtd.mem_filterMap.
       split.
       - intros [H | [H | [H | H]]]; destruct H as [[[n v] [m vs]] [HD H]];
           cbn beta iota in H.
@@ -340,7 +340,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
             reflexivity.
     Qed.
 
-    Definition tryInvPkg (g : V.t -> G.t) (p' : T.Pkg.t) : option Pkg.t :=
+    Definition tryInvPkg (g : V.t -> G.t) (p' : Reduced.Pkg.t) : option Pkg.t :=
       match p' with
       | (Name.Granular n w, Version.Orig v) =>
           if G.eq_dec w (g v) then Some (n, v) else None
@@ -353,7 +353,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       apply dec_refl.
     Qed.
 
-    Lemma tryInvPkg_some : forall g (p' : T.Pkg.t) (p : Pkg.t),
+    Lemma tryInvPkg_some : forall g (p' : Reduced.Pkg.t) (p : Pkg.t),
         tryInvPkg g p' = Some p -> embedPkg g p = p'.
     Proof.
       intros g [[n w | n v m] [v' | w']] p H; cbn [tryInvPkg] in H;
@@ -362,7 +362,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       injection H as <-; reflexivity.
     Qed.
 
-    Module SOtpp := SetOps T.Pkg Pkg T.PkgSet PkgSet.
+    Module SOtpp := SetOps Reduced.Pkg Pkg Reduced.PkgSet PkgSet.
     Lemma embedPkg_injective : forall g (p q : Pkg.t),
         embedPkg g p = embedPkg g q -> p = q.
     Proof.
@@ -371,60 +371,60 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
                  (tryInvPkg_embed g)).
     Qed.
 
-    Definition concurrentResolution (g : V.t -> G.t) (S : T.PkgSet.t)
+    Definition concurrentResolution (g : V.t -> G.t) (S : Reduced.PkgSet.t)
         : PkgSet.t :=
       SOtpp.filterMap (tryInvPkg g) S.
 
-    Lemma mem_concurrentResolution : forall g (S : T.PkgSet.t) (p : Pkg.t),
-        PkgSet.In p (concurrentResolution g S) <-> T.PkgSet.In (embedPkg g p) S.
+    Lemma mem_concurrentResolution : forall g (S : Reduced.PkgSet.t) (p : Pkg.t),
+        PkgSet.In p (concurrentResolution g S) <-> Reduced.PkgSet.In (embedPkg g p) S.
     Proof.
       intro g; unfold concurrentResolution.
       exact (SOtpp.mem_filterMap_inv (tryInvPkg g) (embedPkg g)
                (tryInvPkg_embed g) (tryInvPkg_some g)).
     Qed.
 
-    Definition piGuardb (g : V.t -> G.t) (S : T.PkgSet.t)
+    Definition piGuardb (g : V.t -> G.t) (S : Reduced.PkgSet.t)
         (n : N.t) (v : V.t) (m : N.t) (vs : VSet.t) (u : V.t) : bool :=
-      andb (T.PkgSet.mem (Name.Granular m (g u), Version.Orig u) S)
-        (andb (T.PkgSet.mem (Name.Granular n (g v), Version.Orig v) S)
+      andb (Reduced.PkgSet.mem (Name.Granular m (g u), Version.Orig u) S)
+        (andb (Reduced.PkgSet.mem (Name.Granular n (g v), Version.Orig v) S)
            (implb (isSplitb g vs)
               (VSet.exists_ (fun u0 =>
-                   andb (T.PkgSet.mem
+                   andb (Reduced.PkgSet.mem
                            (Name.Intermediate n v m, Version.Gran (g u0)) S)
                      (granEqb (g u) (g u0)))
                  vs))).
 
     Lemma piGuardb_iff : forall g S n v m vs u,
         piGuardb g S n v m vs u = true <->
-        T.PkgSet.In (Name.Granular m (g u), Version.Orig u) S /\
-        T.PkgSet.In (Name.Granular n (g v), Version.Orig v) S /\
+        Reduced.PkgSet.In (Name.Granular m (g u), Version.Orig u) S /\
+        Reduced.PkgSet.In (Name.Granular n (g v), Version.Orig v) S /\
         (IsSplit g vs ->
            exists u0, VSet.In u0 vs /\
-             T.PkgSet.In (Name.Intermediate n v m, Version.Gran (g u0)) S /\
+             Reduced.PkgSet.In (Name.Intermediate n v m, Version.Gran (g u0)) S /\
              g u = g u0).
     Proof.
       intros g S n v m vs u; unfold piGuardb.
-      rewrite !Bool.andb_true_iff, Bool.implb_true_iff, !T.PkgSet.mem_spec,
+      rewrite !Bool.andb_true_iff, Bool.implb_true_iff, !Reduced.PkgSet.mem_spec,
         isSplitb_iff.
       rewrite VSet.exists_spec'.
       split.
       - intros [H1 [H2 H3]]; repeat split; try assumption.
         intro Hs; destruct (H3 Hs) as [u0 [Hu0 Hb]].
         apply Bool.andb_true_iff in Hb; destruct Hb as [Hm Hg].
-        apply T.PkgSet.mem_spec in Hm.
+        apply Reduced.PkgSet.mem_spec in Hm.
         exists u0; repeat split; try assumption.
         exact (proj1 (granEqb_iff _ _) Hg).
       - intros [H1 [H2 H3]]; repeat split; try assumption.
         intro Hs; destruct (H3 Hs) as [u0 [Hu0 [Hm Hg]]].
         exists u0; split; [exact Hu0 |].
         apply Bool.andb_true_iff; split.
-        + apply T.PkgSet.mem_spec; exact Hm.
+        + apply Reduced.PkgSet.mem_spec; exact Hm.
         + apply granEqb_iff; exact Hg.
     Qed.
 
     Module SOvpp := SetOps V ParentElt VSet ParentRel.
-    Module SOdpp := SetOps C.DepElt ParentElt C.DepRel ParentRel.
-    Definition parents (D : C.DepRel.t) (g : V.t -> G.t) (S : T.PkgSet.t) :
+    Module SOdpp := SetOps Source.DepElt ParentElt Source.DepRel ParentRel.
+    Definition parents (D : Source.DepRel.t) (g : V.t -> G.t) (S : Reduced.PkgSet.t) :
         ParentRel.t :=
       SOdpp.unionMap (fun '((n, v), (m, vs)) =>
           SOvpp.filterMap (fun u =>
@@ -434,12 +434,12 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
 
     Lemma mem_parents : forall D g S m u n v,
         ParentRel.In ((m, u), (n, v)) (parents D g S) <->
-        exists vs, C.DepRel.In ((n, v), (m, vs)) D /\
+        exists vs, Source.DepRel.In ((n, v), (m, vs)) D /\
           VSet.In u vs /\
-          T.PkgSet.In (Name.Granular n (g v), Version.Orig v) S /\
-          T.PkgSet.In (Name.Granular m (g u), Version.Orig u) S /\
+          Reduced.PkgSet.In (Name.Granular n (g v), Version.Orig v) S /\
+          Reduced.PkgSet.In (Name.Granular m (g u), Version.Orig u) S /\
           (IsSplit g vs ->
-             T.PkgSet.In (Name.Intermediate n v m, Version.Gran (g u)) S).
+             Reduced.PkgSet.In (Name.Intermediate n v m, Version.Gran (g u)) S).
     Proof.
       intros D g S m u n v; unfold parents; rewrite SOdpp.mem_unionMap.
       split.
@@ -458,7 +458,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Lemma embedPkg_mem_reduceReal : forall g (p : Pkg.t) R D,
-        T.PkgSet.In (embedPkg g p) (reduceReal R D g) -> PkgSet.In p R.
+        Reduced.PkgSet.In (embedPkg g p) (reduceReal R D g) -> PkgSet.In p R.
     Proof.
       intros g [n v] R D H; apply mem_reduceReal in H.
       unfold embedPkg in H; cbn [fst snd] in H.
@@ -466,38 +466,38 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Lemma mem_reduceDeps_direct : forall D g n v m vs u,
-        C.DepRel.In ((n, v), (m, vs)) D -> IsDirect g vs -> VSet.In u vs ->
-        T.DepRel.In ((Name.Granular n (g v), Version.Orig v),
+        Source.DepRel.In ((n, v), (m, vs)) D -> IsDirect g vs -> VSet.In u vs ->
+        Reduced.DepRel.In ((Name.Granular n (g v), Version.Orig v),
                      (Name.Granular m (g u), embedVS vs))
           (reduceDeps D g).
     Proof. intros; apply mem_reduceDeps, EdgeDirect; assumption. Qed.
 
     Lemma mem_reduceDeps_split1 : forall D g n v m vs,
-        C.DepRel.In ((n, v), (m, vs)) D -> IsSplit g vs ->
-        T.DepRel.In ((Name.Granular n (g v), Version.Orig v),
+        Source.DepRel.In ((n, v), (m, vs)) D -> IsSplit g vs ->
+        Reduced.DepRel.In ((Name.Granular n (g v), Version.Orig v),
                      (Name.Intermediate n v m, gransOfVS g vs))
           (reduceDeps D g).
     Proof. intros; apply mem_reduceDeps, EdgeSplitEntry; assumption. Qed.
 
     Lemma mem_reduceDeps_split2 : forall D g n v m vs u,
-        C.DepRel.In ((n, v), (m, vs)) D -> IsSplit g vs -> VSet.In u vs ->
-        T.DepRel.In ((Name.Intermediate n v m, Version.Gran (g u)),
+        Source.DepRel.In ((n, v), (m, vs)) D -> IsSplit g vs -> VSet.In u vs ->
+        Reduced.DepRel.In ((Name.Intermediate n v m, Version.Gran (g u)),
                      (Name.Granular m (g u), embedVS (filterGran g u vs)))
           (reduceDeps D g).
     Proof. intros; apply mem_reduceDeps, EdgeSplitFanout; assumption. Qed.
 
     Lemma mem_reduceDeps_empty : forall D g n v m,
-        C.DepRel.In ((n, v), (m, VSet.empty)) D ->
-        T.DepRel.In ((Name.Granular n (g v), Version.Orig v),
-                     (Name.Intermediate n v m, T.VSet.empty))
+        Source.DepRel.In ((n, v), (m, VSet.empty)) D ->
+        Reduced.DepRel.In ((Name.Granular n (g v), Version.Orig v),
+                     (Name.Intermediate n v m, Reduced.VSet.empty))
           (reduceDeps D g).
     Proof. intros; apply mem_reduceDeps, EdgeEmpty; assumption. Qed.
 
     Theorem concurrent_soundness :
-      forall (R : PkgSet.t) (D : C.DepRel.t) (g : V.t -> G.t) (r : Pkg.t)
-             (S : T.PkgSet.t),
-        C.FunctionalInName D ->
-        T.IsResolution (reduceReal R D g) (reduceDeps D g) (embedPkg g r) S ->
+      forall (R : PkgSet.t) (D : Source.DepRel.t) (g : V.t -> G.t) (r : Pkg.t)
+             (S : Reduced.PkgSet.t),
+        Source.FunctionalInName D ->
+        Reduced.IsResolution (reduceReal R D g) (reduceDeps D g) (embedPkg g r) S ->
         IsResolution R D g r (concurrentResolution g S) (parents D g S).
     Proof.
       intros R D g r S Hfunc Hres.
@@ -527,7 +527,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
             unfold embedVS in Hcv; apply SOvcv.mem_map in Hcv;
               destruct Hcv as [u [Hu ->]].
             apply mem_filterGran in Hu; destruct Hu as [Hu Hgu].
-            assert (T.PkgSet.In (Name.Granular m (g u), Version.Orig u) S)
+            assert (Reduced.PkgSet.In (Name.Granular m (g u), Version.Orig u) S)
               as HuS
               by (rewrite Hgu; exact HcvS).
             exists u; split; [exact Hu | split].
@@ -547,7 +547,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
             unfold embedVS in Hcv; apply SOvcv.mem_map in Hcv;
               destruct Hcv as [u [Hu ->]].
             pose proof (Hdir u u0 Hu Hu0) as Hgu.
-            assert (T.PkgSet.In (Name.Granular m (g u), Version.Orig u) S)
+            assert (Reduced.PkgSet.In (Name.Granular m (g u), Version.Orig u) S)
               as HuS
               by (rewrite Hgu; exact HcvS).
             exists u; split; [exact Hu | split].
@@ -585,9 +585,9 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         split; apply mem_concurrentResolution; [exact HuS | exact HvS].
     Qed.
 
-    Definition coreResolution (D : C.DepRel.t) (g : V.t -> G.t)
-        (S : PkgSet.t) (pi : ParentRel.t) : T.PkgSet.t :=
-      T.PkgSet.union (SOptp.map (embedPkg g) S)
+    Definition coreResolution (D : Source.DepRel.t) (g : V.t -> G.t)
+        (S : PkgSet.t) (pi : ParentRel.t) : Reduced.PkgSet.t :=
+      Reduced.PkgSet.union (SOptp.map (embedPkg g) S)
         (SOdtp.unionMap (fun '((n, v), (m, vs)) =>
              if andb (isSplitb g vs) (PkgSet.mem (n, v) S)
              then SOvtp.filterMap (fun u =>
@@ -596,24 +596,24 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
                       then Some (Name.Intermediate n v m, Version.Gran (g u))
                       else None)
                     vs
-             else T.PkgSet.empty)
+             else Reduced.PkgSet.empty)
            D).
 
-    Inductive CorePkg (S : PkgSet.t) (pi : ParentRel.t) (D : C.DepRel.t)
-        (g : V.t -> G.t) : T.Pkg.t -> Prop :=
+    Inductive CorePkg (S : PkgSet.t) (pi : ParentRel.t) (D : Source.DepRel.t)
+        (g : V.t -> G.t) : Reduced.Pkg.t -> Prop :=
     | CoreGranular : forall n v, PkgSet.In (n, v) S ->
         CorePkg S pi D g (Name.Granular n (g v), Version.Orig v)
     | CoreIntermediate : forall n v m vs u,
-        C.DepRel.In ((n, v), (m, vs)) D -> PkgSet.In (n, v) S ->
+        Source.DepRel.In ((n, v), (m, vs)) D -> PkgSet.In (n, v) S ->
         IsSplit g vs -> PkgSet.In (m, u) S -> VSet.In u vs ->
         ParentRel.In ((m, u), (n, v)) pi ->
         CorePkg S pi D g (Name.Intermediate n v m, Version.Gran (g u)).
 
-    Lemma mem_coreResolution : forall S pi D g (q : T.Pkg.t),
-        T.PkgSet.In q (coreResolution D g S pi) <-> CorePkg S pi D g q.
+    Lemma mem_coreResolution : forall S pi D g (q : Reduced.Pkg.t),
+        Reduced.PkgSet.In q (coreResolution D g S pi) <-> CorePkg S pi D g q.
     Proof.
       intros S pi D g q; unfold coreResolution.
-      rewrite T.PkgSet.union_spec, SOptp.mem_map, SOdtp.mem_unionMap.
+      rewrite Reduced.PkgSet.union_spec, SOptp.mem_map, SOdtp.mem_unionMap.
       split.
       - intros [[[n v] [HpS ->]] | [[[n v] [m vs]] [HD Hh]]];
           [apply CoreGranular; exact HpS |].
@@ -634,23 +634,23 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
 
     Lemma mem_coreResolution_granular : forall S pi D g n v,
         PkgSet.In (n, v) S ->
-        T.PkgSet.In (Name.Granular n (g v), Version.Orig v)
+        Reduced.PkgSet.In (Name.Granular n (g v), Version.Orig v)
           (coreResolution D g S pi).
     Proof. intros; apply mem_coreResolution, CoreGranular; assumption. Qed.
 
     Lemma mem_coreResolution_intermediate : forall S pi D g n v m vs u,
-        C.DepRel.In ((n, v), (m, vs)) D -> PkgSet.In (n, v) S ->
+        Source.DepRel.In ((n, v), (m, vs)) D -> PkgSet.In (n, v) S ->
         IsSplit g vs -> PkgSet.In (m, u) S -> VSet.In u vs ->
         ParentRel.In ((m, u), (n, v)) pi ->
-        T.PkgSet.In (Name.Intermediate n v m, Version.Gran (g u))
+        Reduced.PkgSet.In (Name.Intermediate n v m, Version.Gran (g u))
           (coreResolution D g S pi).
     Proof. intros; apply mem_coreResolution; econstructor; eassumption. Qed.
 
     Theorem concurrent_completeness :
-      forall (R : PkgSet.t) (D : C.DepRel.t) (g : V.t -> G.t) (r : Pkg.t)
+      forall (R : PkgSet.t) (D : Source.DepRel.t) (g : V.t -> G.t) (r : Pkg.t)
              (S : PkgSet.t) (pi : ParentRel.t),
         IsResolution R D g r S pi ->
-        T.IsResolution (reduceReal R D g) (reduceDeps D g)
+        Reduced.IsResolution (reduceReal R D g) (reduceDeps D g)
           (embedPkg g r) (coreResolution D g S pi).
     Proof.
       intros R D g r S pi Hres.
@@ -711,7 +711,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Lemma coreResolution_granular_inv : forall S pi D g n v,
-        T.PkgSet.In (Name.Granular n (g v), Version.Orig v)
+        Reduced.PkgSet.In (Name.Granular n (g v), Version.Orig v)
           (coreResolution D g S pi) ->
         PkgSet.In (n, v) S.
     Proof.
@@ -720,7 +720,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Lemma coreResolution_intermediate_inv : forall S pi D g n v m w,
-        T.PkgSet.In (Name.Intermediate n v m, Version.Gran w)
+        Reduced.PkgSet.In (Name.Intermediate n v m, Version.Gran w)
           (coreResolution D g S pi) ->
         exists u, PkgSet.In (m, u) S /\ ParentRel.In ((m, u), (n, v)) pi /\
           g u = w.
@@ -734,7 +734,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         forall m u n v,
           ParentRel.In ((m, u), (n, v)) (parents D g (coreResolution D g S pi))
           <-> ParentRel.In ((m, u), (n, v)) pi /\
-              exists vs, C.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs.
+              exists vs, Source.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs.
     Proof.
       intros R D g r S pi [_ _ Hpc _ Hvg Hps] m u n v; rewrite mem_parents.
       split.
@@ -777,10 +777,10 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Module Lookup.
-      Lemma reduceDeps_mono : forall D D' g (y : T.DepElt.t),
-          C.DepRel.Subset D' D ->
-          T.DepRel.In y (reduceDeps D' g) ->
-          T.DepRel.In y (reduceDeps D g).
+      Lemma reduceDeps_mono : forall D D' g (y : Reduced.DepElt.t),
+          Source.DepRel.Subset D' D ->
+          Reduced.DepRel.In y (reduceDeps D' g) ->
+          Reduced.DepRel.In y (reduceDeps D g).
       Proof.
         intros D D' g y HD; revert y.
         unfold reduceDeps, reduceDepsDirect, reduceDepsSplitEntry,
@@ -793,16 +793,16 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       Qed.
 
       Module DepRelFibred :=
-        FibredLabelledRel Pkg N VSet.AsUOT C.DepElt C.DepRel.
+        FibredLabelledRel Pkg N VSet.AsUOT Source.DepElt Source.DepRel.
       Include GranularityFibre N V G Pkg PkgSet.
 
       Theorem versions_lookupGranular :
         forall R D g (n : N.t) (w : G.t),
-          T.versions (reduceReal R D g) (Name.Granular n w) =
-          T.versions (reduceReal (granFibre g R n w) C.DepRel.empty g)
+          Reduced.versions (reduceReal R D g) (Name.Granular n w) =
+          Reduced.versions (reduceReal (granFibre g R n w) Source.DepRel.empty g)
             (Name.Granular n w).
       Proof.
-        intros R D g n w; apply T.versions_ext; intro v.
+        intros R D g n w; apply Reduced.versions_ext; intro v.
         rewrite !mem_reduceReal.
         split; intro H; inversion H as [qn qv HR |]; subst; apply PkgEmbed.
         - apply mem_granFibre; auto.
@@ -810,11 +810,11 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       Qed.
 
       Theorem dependees_lookupGranular : forall D g n v,
-          T.dependees (reduceDeps D g) (Name.Granular n (g v), Version.Orig v) =
-          T.dependees (reduceDeps (DepRelFibred.tailFibre D (n, v)) g)
+          Reduced.dependees (reduceDeps D g) (Name.Granular n (g v), Version.Orig v) =
+          Reduced.dependees (reduceDeps (DepRelFibred.tailFibre D (n, v)) g)
             (Name.Granular n (g v), Version.Orig v).
       Proof.
-        intros D g n v; apply T.dependees_ext; intros [m ws].
+        intros D g n v; apply Reduced.dependees_ext; intros [m ws].
         split; [| apply reduceDeps_mono, DepRelFibred.tailFibre_subset].
         intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
         inversion H; subst;
@@ -824,20 +824,20 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       Qed.
 
       Theorem dependees_lookupGranularGran : forall D g n (w w' : G.t),
-          T.dependees (reduceDeps D g) (Name.Granular n w, Version.Gran w') =
-          T.DependeesSet.empty.
+          Reduced.dependees (reduceDeps D g) (Name.Granular n w, Version.Gran w') =
+          Reduced.DependeesSet.empty.
       Proof.
-        intros D g n w w'; apply T.dependees_empty_iff; intros [m ws] H.
+        intros D g n w w'; apply Reduced.dependees_empty_iff; intros [m ws] H.
         apply mem_reduceDeps in H; inversion H.
       Qed.
 
       Theorem versions_lookupIntermediate : forall R D g n v m,
-          T.versions (reduceReal R D g) (Name.Intermediate n v m) =
-          T.versions
+          Reduced.versions (reduceReal R D g) (Name.Intermediate n v m) =
+          Reduced.versions
             (reduceReal PkgSet.empty (DepRelFibred.endsFibre D (n, v) m) g)
             (Name.Intermediate n v m).
       Proof.
-        intros R D g n v m; apply T.versions_ext; intro w.
+        intros R D g n v m; apply Reduced.versions_ext; intro w.
         rewrite !mem_reduceReal.
         split; intro H; inversion H as [| n' v' m' vs u HD Hs Hu]; subst;
           apply (PkgIntermediate _ _ _ n v m vs u); try assumption.
@@ -847,12 +847,12 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       Qed.
 
       Theorem dependees_lookupIntermediate : forall D g n v m w,
-          T.dependees (reduceDeps D g)
+          Reduced.dependees (reduceDeps D g)
             (Name.Intermediate n v m, Version.Gran w) =
-          T.dependees (reduceDeps (DepRelFibred.endsFibre D (n, v) m) g)
+          Reduced.dependees (reduceDeps (DepRelFibred.endsFibre D (n, v) m) g)
             (Name.Intermediate n v m, Version.Gran w).
       Proof.
-        intros D g n v m w; apply T.dependees_ext; intros [m0 ws].
+        intros D g n v m w; apply Reduced.dependees_ext; intros [m0 ws].
         split; [| apply reduceDeps_mono, DepRelFibred.endsFibre_subset].
         intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
         inversion H as [| | n' v' m' vs u HD Hs Hu |]; subst.
@@ -862,11 +862,11 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       Qed.
 
       Theorem dependees_lookupIntermediateOrig : forall D g n v m u,
-          T.dependees (reduceDeps D g)
+          Reduced.dependees (reduceDeps D g)
             (Name.Intermediate n v m, Version.Orig u) =
-          T.DependeesSet.empty.
+          Reduced.DependeesSet.empty.
       Proof.
-        intros D g n v m u; apply T.dependees_empty_iff; intros [m0 ws] H.
+        intros D g n v m u; apply Reduced.dependees_empty_iff; intros [m0 ws] H.
         apply mem_reduceDeps in H; inversion H.
       Qed.
 
