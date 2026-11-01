@@ -1,5 +1,6 @@
 From Stdlib Require Import MSets List Bool.
-From PackageCalculus Require Import Prelude Core VersionFormula Semver Concurrent
+From PackageCalculus Require Import Prelude Core VersionFormula
+  Semver Concurrent
   NpmCommon.
 
 Create HintDb cmp_npm.
@@ -25,18 +26,24 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
   Module SightNameFacts := UOTCompareFacts SightName.
   Module LinkNameFacts := UOTCompareFacts LinkName.
   Module VFacts := UOTCompareFacts V.
-  #[local] Hint Rewrite PackageFacts.compare_eq_iff IntermediateNameFacts.compare_eq_iff
-    SightNameFacts.compare_eq_iff LinkNameFacts.compare_eq_iff VFacts.compare_eq_iff
+  #[local] Hint Rewrite PackageFacts.compare_eq_iff
+    IntermediateNameFacts.compare_eq_iff
+    SightNameFacts.compare_eq_iff LinkNameFacts.compare_eq_iff
+      VFacts.compare_eq_iff
     DescriptorNameFacts.compare_eq_iff : cmp_npm.
-  #[local] Hint Extern 1 => cmp_by DescriptorNameFacts.compare_antisym : cmp_npm.
-  #[local] Hint Extern 1 => cmp_by DescriptorNameFacts.compare_lt_trans : cmp_npm.
+  #[local] Hint Extern 1 =>
+    cmp_by DescriptorNameFacts.compare_antisym : cmp_npm.
+  #[local] Hint Extern 1 =>
+    cmp_by DescriptorNameFacts.compare_lt_trans : cmp_npm.
   #[local] Hint Extern 1 => cmp_by PackageFacts.compare_antisym : cmp_npm.
-  #[local] Hint Extern 1 => cmp_by IntermediateNameFacts.compare_antisym : cmp_npm.
+  #[local] Hint Extern 1 =>
+    cmp_by IntermediateNameFacts.compare_antisym : cmp_npm.
   #[local] Hint Extern 1 => cmp_by SightNameFacts.compare_antisym : cmp_npm.
   #[local] Hint Extern 1 => cmp_by LinkNameFacts.compare_antisym : cmp_npm.
   #[local] Hint Extern 1 => cmp_by VFacts.compare_antisym : cmp_npm.
   #[local] Hint Extern 1 => cmp_by PackageFacts.compare_lt_trans : cmp_npm.
-  #[local] Hint Extern 1 => cmp_by IntermediateNameFacts.compare_lt_trans : cmp_npm.
+  #[local] Hint Extern 1 =>
+    cmp_by IntermediateNameFacts.compare_lt_trans : cmp_npm.
   #[local] Hint Extern 1 => cmp_by SightNameFacts.compare_lt_trans : cmp_npm.
   #[local] Hint Extern 1 => cmp_by LinkNameFacts.compare_lt_trans : cmp_npm.
   #[local] Hint Extern 1 => cmp_by VFacts.compare_lt_trans : cmp_npm.
@@ -146,12 +153,20 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
   Module SOam := SetOps N NameOT NSet NameSet.
   Module SOvm := SetOps V NameOT VSet NameSet.
   Module SOmt := SetOps NameOT Reduced.Package NameSet Reduced.PackageSet.
-  Module SOwt := SetOps VersionOT Reduced.Package Reduced.VSet Reduced.PackageSet.
-  Module SOhd := SetOps Reduced.Dependee Reduced.DependencyElt Reduced.DependeeSet Reduced.DependencyRel.
-  Module SOqd := SetOps Reduced.Package Reduced.DependencyElt Reduced.PackageSet Reduced.DependencyRel.
-  Module SOtp := SetOps Reduced.Package Concurrent.ParentElt Reduced.PackageSet Concurrent.ParentRel.
+  Module SOwt :=
+    SetOps VersionOT Reduced.Package Reduced.VSet Reduced.PackageSet.
+  Module SOhd :=
+    SetOps Reduced.Dependee Reduced.DependencyElt Reduced.DependeeSet
+    Reduced.DependencyRel.
+  Module SOqd :=
+    SetOps Reduced.Package Reduced.DependencyElt Reduced.PackageSet
+    Reduced.DependencyRel.
+  Module SOtp :=
+    SetOps Reduced.Package Concurrent.ParentElt Reduced.PackageSet
+    Concurrent.ParentRel.
   Module SOpt := SetOps Package Reduced.Package PackageSet Reduced.PackageSet.
-  Module SOkt := SetOps SourceName Reduced.Package SourceNameSet Reduced.PackageSet.
+  Module SOkt :=
+    SetOps SourceName Reduced.Package SourceNameSet Reduced.PackageSet.
   Module SOvt := SetOps V Reduced.Package VSet Reduced.PackageSet.
   Module SOat := SetOps N Reduced.Package NSet Reduced.PackageSet.
 
@@ -181,7 +196,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     ; inst_ovr : list (N.t * Range)
     ; inst_root : RealPackage.t }.
 
-  Definition keysOfL {A : Type} (f : A -> SourceName.t) (l : list A) : SourceNameSet.t :=
+  Definition keysOfL {A : Type} (f : A -> SourceName.t) (l : list A) :
+      SourceNameSet.t :=
     SOkk.ofList (List.map f l).
 
   Lemma mem_keysOfL : forall (A : Type) (f : A -> SourceName.t) l k,
@@ -240,7 +256,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     | d :: l' => if NEqb.eqb (d_dir d) a then Some d else findDepL l' a
     end.
 
-  Definition slotOf (I : Inst) (p : RealPackage.t) (a : N.t) : option Dependency :=
+  Definition slotOf (I : Inst) (p : RealPackage.t) (a : N.t) :
+      option Dependency :=
     findDepL (dependenciesOf I p) a.
 
   Definition dirs (I : Inst) (p : RealPackage.t) : NSet.t :=
@@ -295,7 +312,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     apply mem_realVersions; exact Hv.
   Qed.
 
-  Definition peerDependenciesAt (I : Inst) (p : RealPackage.t) : list PeerDependency :=
+  Definition peerDependenciesAt (I : Inst) (p : RealPackage.t) :
+      list PeerDependency :=
     ownedBy p (inst_peers I).
 
   Definition peerNames (I : Inst) (p : RealPackage.t) : NSet.t :=
@@ -385,13 +403,15 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     orb (PackageEqb.eqb q (rootPkg I)) (NSet.mem n (dirs I (base q))).
 
   Definition chains (I : Inst) (q : Package.t) (n : N.t) : bool :=
-    andb (negb (PackageEqb.eqb q (rootPkg I))) (NSet.mem n (peerNames I (base q))).
+    andb (negb (PackageEqb.eqb q (rootPkg I)))
+      (NSet.mem n (peerNames I (base q))).
 
   Definition dp (I : Inst) (q : Package.t) (n : N.t) : bool :=
     andb (chains I q n) (NSet.mem n (dirs I (base q))).
 
   Definition canBeAbsent (I : Inst) (q : Package.t) (n : N.t) : bool :=
-    orb (andb (PackageEqb.eqb q (rootPkg I)) (negb (NSet.mem n (dirs I (base q)))))
+    orb (andb (PackageEqb.eqb q (rootPkg I))
+      (negb (NSet.mem n (dirs I (base q)))))
       (dp I q n).
 
   Definition selfb '(((a, m), _) : Package.t) (n : N.t) : bool :=
@@ -403,7 +423,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     then if NSet.mem a (dirs I (base q))
          then slotCands I (base q) a
          else if chains I q a then VSet.empty
-         else if andb (PackageEqb.eqb q (rootPkg I)) (NSet.mem a (rootPeerDirs I))
+         else if andb (PackageEqb.eqb q (rootPkg I))
+           (NSet.mem a (rootPeerDirs I))
               then realVersions (inst_real I) m
               else VSet.empty
     else VSet.empty.
@@ -417,7 +438,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
             (inst_peers I))).
 
   Definition Available (I : Inst) (q : Package.t) : Prop :=
-    SourceNameSet.In (fst q) (keysOf I) /\ RealPackageSet.In (base q) (inst_real I).
+    SourceNameSet.In (fst q) (keysOf I) /\
+      RealPackageSet.In (base q) (inst_real I).
 
   Definition realPkgs (I : Inst) : PackageSet.t :=
     SOkp.unionMap (fun '((_, m) as k) =>
@@ -448,12 +470,14 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     else if selfb q n then w = snd q
     else False.
 
-  Definition InPeerRanges (I : Inst) (q : Package.t) (p_c : RealPackage.t) (n : N.t)
+  Definition InPeerRanges (I : Inst) (q : Package.t)
+      (p_c : RealPackage.t) (n : N.t)
       (w : V.t) : Prop :=
     forall theta, In (p_c, theta) (inst_peers I) -> p_name theta = n ->
       VSet.In w (peerCandsAt I (base q) theta).
 
-  Definition ReadBelow (I : Inst) (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
+  Definition ReadBelow (I : Inst) (S : PackageSet.t)
+      (pi : Concurrent.ParentRel.t)
       (c : Package.t) (n : N.t) : Prop :=
     exists a'' m'' u'', Installs S pi c (a'', m'') u'' /\
       NSet.In n (peerNames I (m'', u'')).
@@ -475,7 +499,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     VSet.union (sightCandsL I n (peerDependenciesAt I p_c)) (slotCands I p_c n).
 
   Definition Offers (I : Inst) (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
-      (sg : Package.t -> N.t -> option V.t) (q c : Package.t) (n : N.t) (w : V.t)
+      (sg : Package.t -> N.t -> option V.t) (q c : Package.t)
+        (n : N.t) (w : V.t)
     : Prop :=
     Shows I S pi sg q n w \/
     (dp I c n = true /\ (forall w', ~ Shows I S pi sg q n w') /\
@@ -551,7 +576,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     ; res_sight_range :
         forall c n w, sg c n = Some w -> VSet.In w (sightCands I (base c) n)
     ; res_desc_unique :
-        forall q q' a' m' u u' d d' s, PackageSet.In q S -> PackageSet.In q' S ->
+        forall q q' a' m' u u' d d' s, PackageSet.In q S ->
+          PackageSet.In q' S ->
           Installs S pi q (a', m') u -> Installs S pi q' (a', m') u' ->
           slotOf I (base q) a' = Some d ->
           slotOf I (base q') a' = Some d' ->
@@ -569,7 +595,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         forall u, Installs S pi (rootPkg I) (peerKeyAt I (inst_root I) theta) u ->
           VSet.In u (peerCandsAt I (inst_root I) theta) }.
 
-  Definition SightRead (I : Inst) (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
+  Definition SightRead (I : Inst) (S : PackageSet.t)
+      (pi : Concurrent.ParentRel.t)
       (sg : Package.t -> N.t -> option V.t) : Prop :=
     forall c n w, sg c n = Some w ->
       chains I c n = true /\ ReadBelow I S pi c n.
@@ -579,12 +606,15 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     Definition embedPkg (q : Package.t) : Reduced.Package.t :=
       (Name.Granular (fst q) (snd q), Version.Orig (snd q)).
 
-    Definition embedVS (vs : VSet.t) : Reduced.VSet.t := SOvcv.map Version.Orig vs.
+    Definition embedVS (vs : VSet.t) : Reduced.VSet.t :=
+        SOvcv.map Version.Orig vs.
 
-    Definition embedSet (S : PackageSet.t) : Reduced.PackageSet.t := SOptp.map embedPkg S.
+    Definition embedSet (S : PackageSet.t) : Reduced.PackageSet.t :=
+        SOptp.map embedPkg S.
 
     Lemma mem_embedVS : forall vs v,
-        Reduced.VSet.In v (embedVS vs) <-> exists w, VSet.In w vs /\ v = Version.Orig w.
+        Reduced.VSet.In v (embedVS vs) <-> exists w, VSet.In w vs /\ v =
+          Version.Orig w.
     Proof. intros vs v; unfold embedVS; apply SOvcv.mem_map. Qed.
 
     Lemma orig_embedVS : forall vs w,
@@ -612,7 +642,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
              (slotCands I (base c) (p_name theta))
       else peerCandsAt I (base q) theta.
 
-    Definition peerOpt (I : Inst) (c : Package.t) (theta : PeerDependency) : bool :=
+    Definition peerOpt (I : Inst) (c : Package.t)
+        (theta : PeerDependency) : bool :=
       orb (p_optional theta) (dp I c (p_name theta)).
 
     Lemma peerCands_spec : forall I q c theta w,
@@ -645,20 +676,24 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
       then if VSet.mem (snd q) pc
            then Reduced.VSet.singleton (Version.Orig (snd q))
            else Reduced.VSet.empty
-      else if optional then Reduced.VSet.singleton Version.Bot else Reduced.VSet.empty.
+      else if optional then Reduced.VSet.singleton Version.Bot else
+        Reduced.VSet.empty.
 
     Lemma mem_linkCands : forall I q c theta v,
         Reduced.VSet.In v (linkCands I q c theta) <->
         (chains I q (p_name theta) = true /\
            ((v = Version.Bot /\ peerOpt I c theta = true) \/
-            exists w, VSet.In w (peerCands I q c theta) /\ v = Version.Orig w)) \/
+            exists w, VSet.In w (peerCands I q c theta) /\ v =
+              Version.Orig w)) \/
         (chains I q (p_name theta) = false /\ holds I q (p_name theta) = true /\
            ((v = Version.Bot /\ peerOpt I c theta = true /\
              canBeAbsent I q (p_name theta) = true) \/
-            exists w, VSet.In w (peerCands I q c theta) /\ v = Version.Orig w)) \/
+            exists w, VSet.In w (peerCands I q c theta) /\ v =
+              Version.Orig w)) \/
         (chains I q (p_name theta) = false /\ holds I q (p_name theta) = false /\
            selfb q (p_name theta) = true /\
-           VSet.In (snd q) (peerCands I q c theta) /\ v = Version.Orig (snd q)) \/
+           VSet.In (snd q) (peerCands I q c theta) /\ v =
+             Version.Orig (snd q)) \/
         (chains I q (p_name theta) = false /\ holds I q (p_name theta) = false /\
            selfb q (p_name theta) = false /\ peerOpt I c theta = true /\ v = Version.Bot).
     Proof.
@@ -725,7 +760,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     Qed.
 
     Lemma linkCands_bot : forall I q c theta,
-        Reduced.VSet.In Version.Bot (linkCands I q c theta) -> peerOpt I c theta = true.
+        Reduced.VSet.In Version.Bot (linkCands I q c theta) ->
+          peerOpt I c theta = true.
     Proof.
       intros I q c theta H; apply mem_linkCands in H.
       destruct H as [[_ [[_ Ho] | [w' [_ E]]]] |
@@ -811,7 +847,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         exists u, VSet.In u (childCands I (k, v) (a, m)) /\ w = Version.Orig u.
     Proof.
       intros I k v a m w; cbn [versions].
-      destruct (canBeAbsent I (k, v) a); rewrite ?Reduced.VSet.add_spec, mem_embedVS.
+      destruct (canBeAbsent I (k, v) a);
+        rewrite ?Reduced.VSet.add_spec, mem_embedVS.
       - split; [intros [E | H]; [left; split; [exact E | reflexivity] | right; exact H] |].
         intros [[E _] | H]; [left; exact E | right; exact H].
       - split; [intro H; right; exact H |].
@@ -819,7 +856,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     Qed.
 
     Lemma orig_versions_int : forall I k v a m u,
-        Reduced.VSet.In (Version.Orig u) (versions I (Name.Intermediate k v (a, m))) <->
+        Reduced.VSet.In (Version.Orig u)
+          (versions I (Name.Intermediate k v (a, m))) <->
         VSet.In u (childCands I (k, v) (a, m)).
     Proof.
       intros I k v a m u; rewrite versions_int; split.
@@ -830,7 +868,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     Lemma versions_gran_real : forall I (k : SourceName.t) (w : V.t),
         Reduced.VSet.In (Version.Orig w) (versions I (Name.Granular k w)).
     Proof.
-      intros I k w; cbn [versions]; apply Reduced.VSet.singleton_spec; reflexivity.
+      intros I k w; cbn [versions]; apply Reduced.VSet.singleton_spec;
+        reflexivity.
     Qed.
 
     Lemma childCands_chains : forall I q a m,
@@ -893,14 +932,16 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
       match v with
       | Version.Orig w =>
           if plainKey I (base q) n
-          then Reduced.VSet.add (Version.Orig w) (Reduced.VSet.singleton Version.Free)
+          then Reduced.VSet.add (Version.Orig w)
+            (Reduced.VSet.singleton Version.Free)
           else Reduced.VSet.singleton Version.Free
       | Version.Bot =>
           if dp I c n
           then Reduced.VSet.add Version.Free
                  (if plainKey I (base c) n
                   then embedVS (slotCands I (base c) n) else Reduced.VSet.empty)
-          else Reduced.VSet.add Version.Bot (Reduced.VSet.singleton Version.Free)
+          else Reduced.VSet.add Version.Bot
+            (Reduced.VSet.singleton Version.Free)
       | Version.Free => Reduced.VSet.singleton Version.Free
       end.
 
@@ -920,17 +961,20 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
            end
       else Reduced.DependeeSet.empty.
 
-    Definition ownSight (I : Inst) (q : Package.t) '((a, _) as k : SourceName.t) (u : V.t)
+    Definition ownSight (I : Inst) (q : Package.t)
+        '((a, _) as k : SourceName.t) (u : V.t)
       : Reduced.DependeeSet.t :=
       if andb (dp I q a) (SourceNameEqb.eqb k (slotKey I (base q) a))
       then Reduced.DependeeSet.singleton
              (Name.Sight (fst q) (snd q) a,
               if plainKey I (base q) a
-              then Reduced.VSet.add (Version.Orig u) (Reduced.VSet.singleton Version.Free)
+              then Reduced.VSet.add (Version.Orig u)
+                (Reduced.VSet.singleton Version.Free)
               else Reduced.VSet.singleton Version.Free)
       else Reduced.DependeeSet.empty.
 
-    Definition descEdges (I : Inst) (q : Package.t) '((a, m) : SourceName.t) (u : V.t)
+    Definition descEdges (I : Inst) (q : Package.t)
+        '((a, m) : SourceName.t) (u : V.t)
       : Reduced.DependeeSet.t :=
       match slotOf I (base q) a with
       | Some d =>
@@ -960,7 +1004,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
            end
       else Reduced.DependeeSet.empty.
 
-    Definition holderName (I : Inst) (q : Package.t) (n : N.t) : option Name.t :=
+    Definition holderName (I : Inst) (q : Package.t) (n : N.t) :
+        option Name.t :=
       if chains I q n then Some (Name.Sight (fst q) (snd q) n)
       else if holds I q n
       then Some (Name.Intermediate (fst q) (snd q) (slotKey I (base q) n))
@@ -970,14 +1015,17 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
       : Reduced.DependeeSet.t :=
       match p with
       | (Name.Granular k _, Version.Orig v) =>
-          Reduced.DependeeSet.union (entryEdges I (k, v)) (rootPeerEdges I (k, v))
+          Reduced.DependeeSet.union (entryEdges I (k, v))
+            (rootPeerEdges I (k, v))
       | (Name.Intermediate k v m, Version.Orig u) =>
-          Reduced.DependeeSet.add (Name.Granular m u, Reduced.VSet.singleton (Version.Orig u))
+          Reduced.DependeeSet.add
+            (Name.Granular m u, Reduced.VSet.singleton (Version.Orig u))
             (Reduced.DependeeSet.union (linkEdges I (k, v) m u)
                (Reduced.DependeeSet.union (ownSight I (k, v) m u)
                   (descEdges I (k, v) m u)))
       | (Name.Link k v m u n, w) =>
-          Reduced.DependeeSet.add (Name.Sight m u n, sightSet I (k, v) (m, u) n w)
+          Reduced.DependeeSet.add
+            (Name.Sight m u n, sightSet I (k, v) (m, u) n w)
             (Reduced.DependeeSet.union (holderEdges I (k, v) n w)
                (dpEdges I (m, u) n w))
       | _ => Reduced.DependeeSet.empty
@@ -1039,7 +1087,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
 
     Lemma sightSet_orig : forall I q c n w v,
         Reduced.VSet.In v (sightSet I q c n (Version.Orig w)) <->
-        v = Version.Free \/ (v = Version.Orig w /\ slotKey I (base q) n = (n, n)).
+        v = Version.Free \/
+          (v = Version.Orig w /\ slotKey I (base q) n = (n, n)).
     Proof.
       intros I q c n w v; unfold sightSet, plainKey.
       destruct (SourceNameEqb.eqb (slotKey I (base q) n) (n, n)) eqn:Hp.
@@ -1106,17 +1155,20 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         dp I q a = true /\ (a, m) = slotKey I (base q) a /\
         h = (Name.Sight (fst q) (snd q) a,
              if plainKey I (base q) a
-             then Reduced.VSet.add (Version.Orig u) (Reduced.VSet.singleton Version.Free)
+             then Reduced.VSet.add (Version.Orig u)
+               (Reduced.VSet.singleton Version.Free)
              else Reduced.VSet.singleton Version.Free).
     Proof.
       intros I q a m u h; unfold ownSight.
       destruct (dp I q a) eqn:Hd;
         destruct (SourceNameEqb.eqb (a, m) (slotKey I (base q) a)) eqn:Hk;
         cbn [andb]; rewrite ?SOhh.singleton_in; split.
-      - intro E; apply SourceNameEqb.eqb_true_iff in Hk; repeat split; assumption.
+      - intro E; apply SourceNameEqb.eqb_true_iff in Hk;
+          repeat split; assumption.
       - intros [_ [_ E]]; exact E.
       - intro H; destruct (SOhh.empty_in _ H).
-      - intros [_ [E _]]; rewrite <- E, SourceNameEqb.eqb_refl in Hk; discriminate Hk.
+      - intros [_ [E _]]; rewrite <- E, SourceNameEqb.eqb_refl in Hk;
+          discriminate Hk.
       - intro H; destruct (SOhh.empty_in _ H).
       - intros [E _]; discriminate E.
       - intro H; destruct (SOhh.empty_in _ H).
@@ -1183,7 +1235,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     Qed.
 
     Lemma dependees_int : forall I k v m u h,
-        Reduced.DependeeSet.In h (dependees I (Name.Intermediate k v m, Version.Orig u)) <->
+        Reduced.DependeeSet.In h
+          (dependees I (Name.Intermediate k v m, Version.Orig u)) <->
         h = (Name.Granular m u, Reduced.VSet.singleton (Version.Orig u)) \/
         Reduced.DependeeSet.In h (linkEdges I (k, v) m u) \/
         Reduced.DependeeSet.In h (ownSight I (k, v) m u) \/
@@ -1260,11 +1313,13 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
       match n with
       | Name.Granular k w => PackageSet.In (k, w) (realPkgs I)
       | Name.Intermediate k v m =>
-          PackageSet.In (k, v) (realPkgs I) /\ SourceNameSet.In m (childKeys I (k, v))
+          PackageSet.In (k, v) (realPkgs I) /\
+            SourceNameSet.In m (childKeys I (k, v))
       | Name.Sight ((_, m) as k) v a =>
           PackageSet.In (k, v) (realPkgs I) /\ NSet.In a (peerNames I (m, v))
       | Name.Link k v ((_, m) as k') u a =>
-          PackageSet.In (k, v) (realPkgs I) /\ SourceNameSet.In k' (childKeys I (k, v)) /\
+          PackageSet.In (k, v) (realPkgs I) /\
+            SourceNameSet.In k' (childKeys I (k, v)) /\
           VSet.In u (realVersions (inst_real I) m) /\
           NSet.In a (peerNames I (m, u))
       | Name.Desc a t s =>
@@ -1362,7 +1417,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
                 SOkt.unionMap (fun '((a, _) as k) =>
                     SOwt.map (fun v => (Name.Intermediate (fst p) (snd p) k, v))
                       (if canBeAbsent I p a
-                       then Reduced.VSet.add Version.Bot (embedVS (childCands I p k))
+                       then Reduced.VSet.add Version.Bot
+                         (embedVS (childCands I p k))
                        else embedVS (childCands I p k)))
                   (childKeys I p))
               (realPkgs I))
@@ -1398,17 +1454,20 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
 
     Lemma mem_reduceReal : forall I q,
         Reduced.PackageSet.In q (reduceReal I) <->
-        (exists (k : SourceName.t) (v : V.t), PackageSet.In (k, v) (realPkgs I) /\
+        (exists (k : SourceName.t) (v : V.t),
+          PackageSet.In (k, v) (realPkgs I) /\
            q = (Name.Granular k v, Version.Orig v)) \/
         (exists p a m v, PackageSet.In p (realPkgs I) /\
            SourceNameSet.In (a, m) (childKeys I p) /\
            ((v = Version.Bot /\ canBeAbsent I p a = true) \/
-            exists u, VSet.In u (childCands I p (a, m)) /\ v = Version.Orig u) /\
+            exists u, VSet.In u (childCands I p (a, m)) /\ v =
+              Version.Orig u) /\
            q = (Name.Intermediate (fst p) (snd p) (a, m), v)) \/
         (exists c n v, PackageSet.In c (realPkgs I) /\
            NSet.In n (peerNames I (base c)) /\
            (v = Version.Bot \/ v = Version.Free \/
-            exists w, VSet.In w (sightCands I (base c) n) /\ v = Version.Orig w) /\
+            exists w, VSet.In w (sightCands I (base c) n) /\ v =
+              Version.Orig w) /\
            q = (Name.Sight (fst c) (snd c) n, v)) \/
         (exists p a m u n w, PackageSet.In p (realPkgs I) /\
            SourceNameSet.In (a, m) (childKeys I p) /\
@@ -1427,14 +1486,18 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
                               then Reduced.VSet.add Version.Bot (embedVS (childCands I p (a, m)))
                               else embedVS (childCands I p (a, m))) <->
                  (x = Version.Bot /\ canBeAbsent I p a = true) \/
-                 exists u, VSet.In u (childCands I p (a, m)) /\ x = Version.Orig u)
+                 exists u, VSet.In u (childCands I p (a, m)) /\ x =
+                   Version.Orig u)
         by (intros [k v] a m x; exact (versions_int I k v a m x)).
       assert (Hsight : forall c n x,
-                 Reduced.VSet.In x (Reduced.VSet.add Version.Bot (Reduced.VSet.add Version.Free
+                 Reduced.VSet.In x
+                   (Reduced.VSet.add Version.Bot (Reduced.VSet.add Version.Free
                                 (embedVS (sightCands I (base c) n)))) <->
                  x = Version.Bot \/ x = Version.Free \/
-                 exists w, VSet.In w (sightCands I (base c) n) /\ x = Version.Orig w)
-        by (intros c n x; rewrite !Reduced.VSet.add_spec, mem_embedVS; reflexivity).
+                 exists w, VSet.In w (sightCands I (base c) n) /\ x =
+                   Version.Orig w)
+        by (intros c n x; rewrite !Reduced.VSet.add_spec, mem_embedVS;
+          reflexivity).
       split.
       - intros [H | [H | [H | [H | H]]]].
         + left; exact H.
@@ -1535,7 +1598,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         exact (conj Hp (conj Hm (conj Hx eq_refl))).
       - cbn [versions]; rewrite !Reduced.VSet.add_spec, mem_embedVS; exact Hy.
       - intro Hx; cbn [versions] in Hx.
-        rewrite !Reduced.VSet.add_spec, mem_embedVS in Hx; destruct Hn as [Hp Ha].
+        rewrite !Reduced.VSet.add_spec, mem_embedVS in Hx;
+          destruct Hn as [Hp Ha].
         right; right; left; exists ((a, m), v), n, x.
         exact (conj Hp (conj Ha (conj Hx eq_refl))).
       - exact Hy.
@@ -1549,7 +1613,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         split; [apply mem_descNames; exact Hn | split; [exact Hu | reflexivity]].
     Qed.
 
-    Definition depEdges (p : Reduced.Package.t) (hs : Reduced.DependeeSet.t) : Reduced.DependencyRel.t :=
+    Definition depEdges (p : Reduced.Package.t) (hs : Reduced.DependeeSet.t) :
+        Reduced.DependencyRel.t :=
       SOhd.map (fun h => (p, h)) hs.
 
     Definition reduceDeps (I : Inst) : Reduced.DependencyRel.t :=
@@ -1581,7 +1646,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
       SOtpp.filterMap tryInvPkg S.
 
     Lemma mem_npmResolution : forall S q,
-        PackageSet.In q (npmResolution S) <-> Reduced.PackageSet.In (embedPkg q) S.
+        PackageSet.In q (npmResolution S) <->
+          Reduced.PackageSet.In (embedPkg q) S.
     Proof.
       intros S q; unfold npmResolution; apply SOtpp.mem_filterMap_inv.
       - intros [k v]; unfold tryInvPkg, embedPkg; cbn [fst snd].
@@ -1619,18 +1685,22 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         split; [exact Hs | apply Reduced.PackageSet.mem_spec; exact Hm].
       - intros [H1 H2].
         exists (Name.Intermediate k v m, Version.Orig u); split; [exact H1 |].
-        apply if_some_iff; split; [apply Reduced.PackageSet.mem_spec; exact H2 |].
+        apply if_some_iff; split;
+          [apply Reduced.PackageSet.mem_spec; exact H2 |].
         reflexivity.
     Qed.
 
-    Definition isSightOf (c : Package.t) (a : N.t) (p : Reduced.Package.t) : bool :=
+    Definition isSightOf (c : Package.t) (a : N.t)
+        (p : Reduced.Package.t) : bool :=
       match p with
       | (Name.Sight k v b, Version.Orig _) =>
-          andb (SourceNameEqb.eqb k (fst c)) (andb (VEqb.eqb v (snd c)) (NEqb.eqb b a))
+          andb (SourceNameEqb.eqb k (fst c))
+            (andb (VEqb.eqb v (snd c)) (NEqb.eqb b a))
       | _ => false
       end.
 
-    Definition sight (S : Reduced.PackageSet.t) (c : Package.t) (a : N.t) : option V.t :=
+    Definition sight (S : Reduced.PackageSet.t) (c : Package.t) (a : N.t) :
+        option V.t :=
       match List.find (isSightOf c a) (Reduced.PackageSet.elements S) with
       | Some (_, Version.Orig w) => Some w
       | _ => None
@@ -1642,7 +1712,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     Proof.
       intros c a [[k w | k v m | k v b | k v m u b | b t s] [x | |]]; cbn [isSightOf];
         try discriminate.
-      rewrite !Bool.andb_true_iff, SourceNameEqb.eqb_true_iff, VEqb.eqb_true_iff,
+      rewrite !Bool.andb_true_iff, SourceNameEqb.eqb_true_iff,
+        VEqb.eqb_true_iff,
         NEqb.eqb_true_iff.
       intros [-> [-> ->]]; exists x; reflexivity.
     Qed.
@@ -1661,7 +1732,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
 
     Lemma sight_in : forall S c a w,
         Reduced.VersionUnique S ->
-        Reduced.PackageSet.In (Name.Sight (fst c) (snd c) a, Version.Orig w) S ->
+        Reduced.PackageSet.In
+          (Name.Sight (fst c) (snd c) a, Version.Orig w) S ->
         sight S c a = Some w.
     Proof.
       intros S c a w Hu Hin; unfold sight.
@@ -1697,7 +1769,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     Lemma dep_met : forall I S p h,
         Reduced.IsResolution (reduceReal I) (reduceDeps I) (embedRoot I) S ->
         Reduced.PackageSet.In p S -> Reduced.DependeeSet.In h (dependees I p) ->
-        exists v, Reduced.VSet.In v (snd h) /\ Reduced.PackageSet.In (fst h, v) S.
+        exists v, Reduced.VSet.In v (snd h) /\
+          Reduced.PackageSet.In (fst h, v) S.
     Proof.
       intros I S p [n vs] [Hsub _ Hdep _] Hs Hh.
       apply (Hdep p Hs n vs); apply mem_reduceDeps.
@@ -1710,7 +1783,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         Reduced.PackageSet.In (embedPkg (m, u)) S.
     Proof.
       intros I S k v m u Hres Hin.
-      destruct (dep_met I S _ (Name.Granular m u, Reduced.VSet.singleton (Version.Orig u))
+      destruct (dep_met I S _
+        (Name.Granular m u, Reduced.VSet.singleton (Version.Orig u))
                   Hres Hin) as [w [Hx HxS]].
       { cbn [dependees]; apply SOhh.add_in; left; reflexivity. }
       apply Reduced.VSet.singleton_spec in Hx; subst w; exact HxS.
@@ -1774,10 +1848,12 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
 
     Lemma link_selected : forall I S q a m u theta,
         Reduced.IsResolution (reduceReal I) (reduceDeps I) (embedRoot I) S ->
-        Reduced.PackageSet.In (Name.Intermediate (fst q) (snd q) (a, m), Version.Orig u) S ->
+        Reduced.PackageSet.In
+          (Name.Intermediate (fst q) (snd q) (a, m), Version.Orig u) S ->
         In ((m, u), theta) (inst_peers I) ->
         exists w, Reduced.VSet.In w (linkCands I q ((a, m), u) theta) /\
-          Reduced.PackageSet.In (Name.Link (fst q) (snd q) (a, m) u (p_name theta), w) S.
+          Reduced.PackageSet.In
+            (Name.Link (fst q) (snd q) (a, m) u (p_name theta), w) S.
     Proof.
       intros I S [k v] a m u theta Hres Hin Hr.
       destruct (dep_met I S _
@@ -1792,7 +1868,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
 
     Lemma link_in_cands : forall I S q a m u n w,
         Reduced.IsResolution (reduceReal I) (reduceDeps I) (embedRoot I) S ->
-        Reduced.PackageSet.In (Name.Intermediate (fst q) (snd q) (a, m), Version.Orig u) S ->
+        Reduced.PackageSet.In
+          (Name.Intermediate (fst q) (snd q) (a, m), Version.Orig u) S ->
         Reduced.PackageSet.In (Name.Link (fst q) (snd q) (a, m) u n, w) S ->
         forall theta, In ((m, u), theta) (inst_peers I) -> p_name theta = n ->
         Reduced.VSet.In w (linkCands I q ((a, m), u) theta).
@@ -1805,7 +1882,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     Lemma link_shows_iff : forall I S q a m u n v,
         Reduced.IsResolution (reduceReal I) (reduceDeps I) (embedRoot I) S ->
         Reduced.PackageSet.In (embedPkg q) S ->
-        Reduced.PackageSet.In (Name.Intermediate (fst q) (snd q) (a, m), Version.Orig u) S ->
+        Reduced.PackageSet.In
+          (Name.Intermediate (fst q) (snd q) (a, m), Version.Orig u) S ->
         NSet.In n (peerNames I (m, u)) ->
         Reduced.PackageSet.In (Name.Link (fst q) (snd q) (a, m) u n, v) S ->
         forall w,
@@ -1821,7 +1899,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
                      [[Hc [Hh [Hs [_ E]]]] | [Hc [Hh [Hs [_ E]]]]]]];
         rewrite Hc; [| rewrite Hh | rewrite Hh, Hs | rewrite Hh, Hs].
       - destruct (dep_met I S _
-                    (Name.Sight k v (p_name theta), Reduced.VSet.singleton x) Hres Hl)
+                    (Name.Sight k v (p_name theta),
+                      Reduced.VSet.singleton x) Hres Hl)
           as [y [Hy HyS]].
         { apply dependees_link; right; left; apply mem_holderEdges; left.
           split; [exact Hc | reflexivity]. }
@@ -1872,15 +1951,18 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
 
     Lemma sight_below : forall I S c a' m' u' n,
         Reduced.IsResolution (reduceReal I) (reduceDeps I) (embedRoot I) S ->
-        Reduced.PackageSet.In (Name.Intermediate (fst c) (snd c) (a', m'), Version.Orig u') S ->
+        Reduced.PackageSet.In
+          (Name.Intermediate (fst c) (snd c) (a', m'), Version.Orig u') S ->
         NSet.In n (peerNames I (m', u')) ->
         chains I c n = true ->
-        exists v, v <> Version.Free /\ Reduced.PackageSet.In (Name.Sight (fst c) (snd c) n, v) S.
+        exists v, v <> Version.Free /\
+          Reduced.PackageSet.In (Name.Sight (fst c) (snd c) n, v) S.
     Proof.
       intros I S [k v] a' m' u' n Hres Hc Ha Hch.
       apply mem_peerNames in Ha; destruct Ha as [theta [Hr <-]].
       destruct (link_selected I S (k, v) a' m' u' theta Hres Hc Hr) as [y [Hy Hl]].
-      destruct (dep_met I S _ (Name.Sight k v (p_name theta), Reduced.VSet.singleton y)
+      destruct (dep_met I S _
+        (Name.Sight k v (p_name theta), Reduced.VSet.singleton y)
                   Hres Hl) as [z [Hz HzS]].
       { apply dependees_link; right; left; apply mem_holderEdges; left.
         split; [exact Hch | reflexivity]. }
@@ -1910,19 +1992,23 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
       { intros q m u [_ Hu]; apply mem_parents in Hu; exact (proj1 Hu). }
       assert (Hlink : forall q a m u n,
                  Reduced.PackageSet.In
-                   (Name.Intermediate (fst q) (snd q) (a, m), Version.Orig u) S ->
+                   (Name.Intermediate (fst q) (snd q) (a, m),
+                     Version.Orig u) S ->
                  NSet.In n (peerNames I (m, u)) ->
                  exists x,
-                   Reduced.PackageSet.In (Name.Link (fst q) (snd q) (a, m) u n, x) S).
+                   Reduced.PackageSet.In
+                     (Name.Link (fst q) (snd q) (a, m) u n, x) S).
       { intros q a m u n Hi Hn; apply mem_peerNames in Hn.
         destruct Hn as [theta [Hr <-]].
         destruct (link_selected I S q a m u theta Hres Hi Hr) as [x [_ Hl]].
         exists x; exact Hl. }
       assert (Hxf : forall q a m u n x,
                  Reduced.PackageSet.In
-                   (Name.Intermediate (fst q) (snd q) (a, m), Version.Orig u) S ->
+                   (Name.Intermediate (fst q) (snd q) (a, m),
+                     Version.Orig u) S ->
                  NSet.In n (peerNames I (m, u)) ->
-                 Reduced.PackageSet.In (Name.Link (fst q) (snd q) (a, m) u n, x) S ->
+                 Reduced.PackageSet.In
+                   (Name.Link (fst q) (snd q) (a, m) u n, x) S ->
                  x <> Version.Free).
       { intros q a m u n x Hi Hn Hl E; subst x.
         apply mem_peerNames in Hn; destruct Hn as [theta [Hr Hn]].
@@ -1931,7 +2017,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
       constructor.
       - intros [k w] Hq; apply mem_npmResolution in Hq.
         apply mem_realPkgs.
-        exact (reduced_reduceReal I (Name.Granular k w) (Version.Orig w) (Hsub _ Hq)).
+        exact (reduced_reduceReal I (Name.Granular k w) (Version.Orig w)
+          (Hsub _ Hq)).
       - apply mem_npmResolution; exact Hroot.
       - intros p a' m' v v' H1 H2; apply Hint in H1; apply Hint in H2.
         pose proof (Huniq _ _ _ H1 H2) as He; injection He as ->; reflexivity.
@@ -1994,7 +2081,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
                   p_name theta = a -> VSet.In w (peerCands I q (m, u) theta))
           by (intros theta Hr Hn;
               exact (linkCands_orig I q (m, u) theta w
-                       (link_in_cands I S q a0 m0 u a (Version.Orig w) Hres Hmu Hl
+                       (link_in_cands I S q a0 m0 u a
+                         (Version.Orig w) Hres Hmu Hl
                           theta Hr Hn))).
         split.
         + intros theta Hr Hn; exact (proj1 (proj1 (peerCands_spec I q (m, u) theta w)
@@ -2085,7 +2173,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         destruct x as [w | |]; [| | contradiction Hf; reflexivity].
         + destruct (dep_met I S _
                       (Name.Intermediate m u (slotKey I (base (m, u)) a),
-                       Reduced.VSet.singleton Version.Bot) Hres Hl) as [z [Hz HzS]].
+                       Reduced.VSet.singleton Version.Bot) Hres Hl) as
+                         [z [Hz HzS]].
           { apply dependees_link; right; right; apply mem_dpEdges.
             split; [exact Hdp | left; exists w; split; reflexivity]. }
           apply Reduced.VSet.singleton_spec in Hz; subst z; split.
@@ -2110,8 +2199,10 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         destruct (dep_met I S _
                     (Name.Sight k v a,
                      if plainKey I (base (k, v)) a
-                     then Reduced.VSet.add (Version.Orig u) (Reduced.VSet.singleton Version.Free)
-                     else Reduced.VSet.singleton Version.Free) Hres Hi) as [z [Hz HzS]].
+                     then Reduced.VSet.add (Version.Orig u)
+                       (Reduced.VSet.singleton Version.Free)
+                     else Reduced.VSet.singleton Version.Free) Hres Hi) as
+                       [z [Hz HzS]].
         { apply dependees_int; right; right; left; apply mem_ownSight.
           split; [exact Hdp | split; [symmetry; exact Ek | reflexivity]]. }
         rewrite (Huniq _ _ _ HzS Hy) in Hz.
@@ -2121,7 +2212,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
           rewrite Reduced.VSet.add_spec, Reduced.VSet.singleton_spec in Hz.
           destruct Hz as [E | E]; [subst y | contradiction].
           split; [apply sight_in; [exact Huniq | exact Hy] | exact Hp].
-        + cbv iota in Hz; rewrite Reduced.VSet.singleton_spec in Hz; contradiction.
+        + cbv iota in Hz; rewrite Reduced.VSet.singleton_spec in Hz;
+            contradiction.
       - intros [[a0 m0] v] a w Hsg; apply sight_some, Hsub in Hsg.
         pose proof (reduced_reduceReal I _ _ Hsg) as Hn.
         apply Reduced.mem_versions in Hsg as Hw.
@@ -2137,11 +2229,13 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         { apply dependees_int; right; right; right; apply mem_descEdges.
           exists d, s; repeat split; assumption. }
         destruct (dep_met I S _
-                    (Name.Desc a' m' s, Reduced.VSet.singleton (Version.Orig u'))
+                    (Name.Desc a' m' s,
+                      Reduced.VSet.singleton (Version.Orig u'))
                     Hres Hi') as [z' [Hz' HzS']].
         { apply dependees_int; right; right; right; apply mem_descEdges.
           exists d', s; repeat split; assumption. }
-        apply Reduced.VSet.singleton_spec in Hz; apply Reduced.VSet.singleton_spec in Hz'.
+        apply Reduced.VSet.singleton_spec in Hz;
+          apply Reduced.VSet.singleton_spec in Hz'.
         subst z z'.
         pose proof (Huniq _ _ _ HzS HzS') as E; injection E as ->; reflexivity.
       - intros theta Hr Hopt.
@@ -2163,7 +2257,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         Reduced.IsResolution (reduceReal I) (reduceDeps I) (embedRoot I) S ->
         forall a m v a' m' u,
           Reduced.PackageSet.In (embedPkg ((a, m), v)) S ->
-          Reduced.PackageSet.In (Name.Intermediate (a, m) v (a', m'), Version.Orig u) S ->
+          Reduced.PackageSet.In
+            (Name.Intermediate (a, m) v (a', m'), Version.Orig u) S ->
         forall theta, In ((m', u), theta) (inst_peers I) ->
           p_optional theta = false ->
           chains I ((a, m), v) (p_name theta) = false ->
@@ -2230,11 +2325,13 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     Lemma rootPeer_childKeys : forall I theta,
         In (inst_root I, theta) (inst_peers I) ->
         peerActive I (inst_root I) theta = true ->
-        SourceNameSet.In (peerKeyAt I (inst_root I) theta) (childKeys I (rootPkg I)).
+        SourceNameSet.In (peerKeyAt I (inst_root I) theta)
+          (childKeys I (rootPkg I)).
     Proof.
       intros I theta Hr _; unfold peerKeyAt; rewrite <- (base_rootPkg I).
       apply slotKey_childKeys.
-      unfold childDirs; rewrite PackageEqb.eqb_refl; apply NSet.union_spec; right.
+      unfold childDirs; rewrite PackageEqb.eqb_refl;
+        apply NSet.union_spec; right.
       exact (peerDirs_peer I _ theta Hr).
     Qed.
 
@@ -2302,10 +2399,12 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     Qed.
 
     Lemma childCands_real : forall I q a m u,
-        VSet.In u (childCands I q (a, m)) -> PackageSet.In ((a, m), u) (realPkgs I).
+        VSet.In u (childCands I q (a, m)) ->
+          PackageSet.In ((a, m), u) (realPkgs I).
     Proof.
       intros I q a m u Hu; unfold childCands in Hu.
-      apply SOrv.in_if_empty in Hu as [Hk Hu]; apply SourceNameEqb.eqb_true_iff in Hk.
+      apply SOrv.in_if_empty in Hu as [Hk Hu];
+        apply SourceNameEqb.eqb_true_iff in Hk.
       apply mem_realPkgs; unfold Available, base; cbn [fst snd].
       destruct (NSet.mem a (dirs I (base q))) eqn:Hd.
       - apply NSet.mem_spec in Hd.
@@ -2401,12 +2500,14 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         installsb S pi q k u = true <-> Installs S pi q k u.
     Proof.
       intros S pi q k u; unfold installsb, Installs.
-      rewrite Bool.andb_true_iff, PackageSet.mem_spec, Concurrent.ParentRel.mem_spec.
+      rewrite Bool.andb_true_iff, PackageSet.mem_spec,
+        Concurrent.ParentRel.mem_spec.
       reflexivity.
     Qed.
 
     Definition instNode (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
-        (p : Package.t) (k : SourceName.t) (u : V.t) : option Reduced.Package.t :=
+        (p : Package.t) (k : SourceName.t) (u : V.t) :
+          option Reduced.Package.t :=
       if installsb S pi p k u
       then Some (Name.Intermediate (fst p) (snd p) k, Version.Orig u)
       else None.
@@ -2443,7 +2544,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         apply installsb_iff in Hi; rewrite Hi in E; discriminate E.
     Qed.
 
-    Definition showsAt (I : Inst) (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
+    Definition showsAt (I : Inst) (S : PackageSet.t)
+        (pi : Concurrent.ParentRel.t)
         (sg : Package.t -> N.t -> option V.t) (q : Package.t) (n : N.t)
       : option V.t :=
       if chains I q n then sg q n
@@ -2502,21 +2604,26 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
               [apply installsb_iff; exact Hi | apply NSet.mem_spec; exact Ha].
     Qed.
 
-    Definition sightVal (I : Inst) (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
-        (sg : Package.t -> N.t -> option V.t) (c : Package.t) (n : N.t) : Version.t :=
+    Definition sightVal (I : Inst) (S : PackageSet.t)
+        (pi : Concurrent.ParentRel.t)
+        (sg : Package.t -> N.t -> option V.t) (c : Package.t) (n : N.t) :
+          Version.t :=
       if andb (chains I c n) (readb I S pi c n)
       then match sg c n with Some w => Version.Orig w | None => Version.Bot end
       else Version.Free.
 
-    Definition linkVal (I : Inst) (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
-        (sg : Package.t -> N.t -> option V.t) (q : Package.t) (n : N.t) : Version.t :=
+    Definition linkVal (I : Inst) (S : PackageSet.t)
+        (pi : Concurrent.ParentRel.t)
+        (sg : Package.t -> N.t -> option V.t) (q : Package.t) (n : N.t) :
+          Version.t :=
       match showsAt I S pi sg q n with
       | Some w => Version.Orig w
       | None => Version.Bot
       end.
 
     Lemma linkVal_cands : forall I S pi sg q a m u theta,
-        IsResolution I S pi sg -> PackageSet.In q S -> Installs S pi q (a, m) u ->
+        IsResolution I S pi sg -> PackageSet.In q S ->
+          Installs S pi q (a, m) u ->
         In ((m, u), theta) (inst_peers I) ->
         Reduced.VSet.In (linkVal I S pi sg q (p_name theta))
           (linkCands I q ((a, m), u) theta).
@@ -2568,15 +2675,19 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
             repeat split; try reflexivity; exact (Hneed Hs0).
     Qed.
 
-    Definition absentNode (I : Inst) (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
-        (p : Package.t) '((a, _) as k : SourceName.t) : option Reduced.Package.t :=
+    Definition absentNode (I : Inst) (S : PackageSet.t)
+        (pi : Concurrent.ParentRel.t)
+        (p : Package.t) '((a, _) as k : SourceName.t) :
+          option Reduced.Package.t :=
       if andb (canBeAbsent I p a)
            (match ownAt I S pi p k with Some _ => false | None => true end)
       then Some (Name.Intermediate (fst p) (snd p) k, Version.Bot)
       else None.
 
-    Definition descNode (I : Inst) (S : PackageSet.t) (pi : Concurrent.ParentRel.t)
-        (q : Package.t) '((a, m) as k : SourceName.t) (u : V.t) : option Reduced.Package.t :=
+    Definition descNode (I : Inst) (S : PackageSet.t)
+        (pi : Concurrent.ParentRel.t)
+        (q : Package.t) '((a, m) as k : SourceName.t) (u : V.t) :
+          option Reduced.Package.t :=
       if installsb S pi q k u
       then match slotOf I (base q) a with
            | Some d =>
@@ -2664,7 +2775,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         Reduced.PackageSet.In q (coreResolution I S pi sg) <->
         (exists (k : SourceName.t) (v : V.t), PackageSet.In (k, v) S /\
            q = (Name.Granular k v, Version.Orig v)) \/
-        (exists p a m u, PackageSet.In p S /\ SourceNameSet.In (a, m) (childKeys I p) /\
+        (exists p a m u, PackageSet.In p S /\
+          SourceNameSet.In (a, m) (childKeys I p) /\
            VSet.In u (realVersions (inst_real I) m) /\
            Installs S pi p (a, m) u /\
            q = (Name.Intermediate (fst p) (snd p) (a, m), Version.Orig u)) \/
@@ -2675,10 +2787,12 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
            VSet.In u (realVersions (inst_real I) m) /\
            Installs S pi p (a, m) u /\ NSet.In n (peerNames I (m, u)) /\
            q = (Name.Link (fst p) (snd p) (a, m) u n, linkVal I S pi sg p n)) \/
-        (exists p a m, PackageSet.In p S /\ SourceNameSet.In (a, m) (childKeys I p) /\
+        (exists p a m, PackageSet.In p S /\
+          SourceNameSet.In (a, m) (childKeys I p) /\
            canBeAbsent I p a = true /\ ownAt I S pi p (a, m) = None /\
            q = (Name.Intermediate (fst p) (snd p) (a, m), Version.Bot)) \/
-        (exists p a m u d, PackageSet.In p S /\ SourceNameSet.In (a, m) (childKeys I p) /\
+        (exists p a m u d, PackageSet.In p S /\
+          SourceNameSet.In (a, m) (childKeys I p) /\
            VSet.In u (realVersions (inst_real I) m) /\
            Installs S pi p (a, m) u /\ slotOf I (base p) a = Some d /\
            d_name d = m /\ exists e, d_desc d = Some e /\
@@ -2768,7 +2882,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     Qed.
 
     Lemma sightVal_link : forall I S pi sg q a m u n,
-        IsResolution I S pi sg -> PackageSet.In q S -> Installs S pi q (a, m) u ->
+        IsResolution I S pi sg -> PackageSet.In q S ->
+          Installs S pi q (a, m) u ->
         NSet.In n (peerNames I (m, u)) ->
         Reduced.VSet.In (sightVal I S pi sg ((a, m), u) n)
           (sightSet I q ((a, m), u) n (linkVal I S pi sg q n)).
@@ -2837,7 +2952,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
       intros I S pi sg Hres.
       pose proof (res_available _ _ _ _ Hres) as Hsub.
       pose proof (res_slot_closure _ _ _ _ Hres) as Hslot.
-      assert (Hreal : forall q, PackageSet.In q S -> PackageSet.In q (realPkgs I))
+      assert (Hreal : forall q, PackageSet.In q S ->
+        PackageSet.In q (realPkgs I))
         by (intros q Hq; apply mem_realPkgs; exact (Hsub _ Hq)).
       assert (Hrv : forall p a m u, Installs S pi p (a, m) u ->
                  VSet.In u (realVersions (inst_real I) m)).
@@ -2851,7 +2967,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
       { intros [k v] Hq; apply mem_coreResolution; left.
         exists k, v; split; [exact Hq | reflexivity]. }
       assert (HcoreI : forall p k u, PackageSet.In p S -> Installs S pi p k u ->
-                 Reduced.PackageSet.In (Name.Intermediate (fst p) (snd p) k, Version.Orig u)
+                 Reduced.PackageSet.In
+                   (Name.Intermediate (fst p) (snd p) k, Version.Orig u)
                    (coreResolution I S pi sg)).
       { intros p [a m] u Hp Hi; apply mem_coreResolution; right; left.
         exists p, a, m, u.
@@ -2881,7 +2998,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
              [[[pk pv] [a [m [u [n [Hp [Hm [Hu [Hi [Ha ->]]]]]]]]]] |
               [[[pk pv] [a [m [Hp [Hm [Hl [Ho ->]]]]]]] |
                [[pk pv] [a [m [u [d [Hp [Hm [Hu [Hi [Hsl [Ht [e [He ->]]]]]]]]]]]]]]]]]];
-          cbn [fst snd] in *; apply Reduced.mem_versions; rewrite versions_reduceReal.
+          cbn [fst snd] in *; apply Reduced.mem_versions;
+            rewrite versions_reduceReal.
         + exact (versions_gran_real I k v).
         + exact (Hreal _ Hp).
         + apply orig_versions_int.
@@ -2987,7 +3105,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
                   rewrite Hs; unfold plainKey.
                   match goal with |- context [SourceNameEqb.eqb ?x ?y] =>
                     replace (SourceNameEqb.eqb x y) with true
-                      by (symmetry; apply SourceNameEqb.eqb_true_iff; exact Hplain)
+                      by (symmetry; apply SourceNameEqb.eqb_true_iff;
+                        exact Hplain)
                   end.
                   apply Reduced.VSet.add_spec; left; reflexivity.
                ++ match goal with |- context [plainKey ?i ?p ?b] =>
@@ -3070,7 +3189,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
                destruct (proj2 (res_peer_default _ _ _ _ Hres (pk, pv) Hp a m
                                   u Hi n Hdp) Hno)
                  as [u' [Hu' Hi']].
-               exists (Version.Orig u'); split; [apply orig_embedVS; exact Hu' |].
+               exists (Version.Orig u'); split;
+                 [apply orig_embedVS; exact Hu' |].
                exact (HcoreI ((a, m), u) _ u' (proj1 Hi) Hi').
         + cbn [dependees] in Hd; destruct (SOhh.empty_in _ Hd).
         + cbn [dependees] in Hd; destruct (SOhh.empty_in _ Hd).
@@ -3122,7 +3242,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         cbn [ReducedName] in Hn.
       - cbn [versions] in Hx.
         apply Reduced.VSet.singleton_spec in Hx; subst x.
-        rewrite dependees_gran in Hh; apply Reduced.DependeeSet.union_spec in Hh.
+        rewrite dependees_gran in Hh;
+          apply Reduced.DependeeSet.union_spec in Hh.
         destruct Hh as [Hh | Hh].
         + apply mem_entryEdges in Hh; destruct Hh as [a [Ha ->]].
           cbn [fst snd ReducedName]; split; [exact Hn |].
@@ -3242,13 +3363,15 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
       Definition twoPeers (I : Inst) (p p_c : RealPackage.t)
         : list (RealPackage.t * PeerDependency) :=
         List.filter
-          (fun q => orb (RealPackageEqb.eqb (fst q) p) (RealPackageEqb.eqb (fst q) p_c))
+          (fun q => orb (RealPackageEqb.eqb (fst q) p)
+            (RealPackageEqb.eqb (fst q) p_c))
           (inst_peers I).
 
       Definition twoDeps (I : Inst) (p p_c : RealPackage.t)
         : list (RealPackage.t * Dependency) :=
         List.filter
-          (fun q => orb (RealPackageEqb.eqb (fst q) p) (RealPackageEqb.eqb (fst q) p_c))
+          (fun q => orb (RealPackageEqb.eqb (fst q) p)
+            (RealPackageEqb.eqb (fst q) p_c))
           (inst_deps I).
 
       Definition peerDependenciesNamed (I : Inst) (n : N.t)
@@ -3262,7 +3385,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
           RealPackageSet.In p (repoPreimage I ns) <->
           RealPackageSet.In p (inst_real I) /\ NSet.In (fst p) ns.
       Proof.
-        intros I ns p; unfold repoPreimage; rewrite RealPackageSetSpecs.filter_spec'.
+        intros I ns p; unfold repoPreimage;
+          rewrite RealPackageSetSpecs.filter_spec'.
         rewrite NSet.mem_spec; reflexivity.
       Qed.
 
@@ -3310,7 +3434,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
           ownedBy p_c (twoPeers I p p_c) = ownedBy p_c (inst_peers I).
       Proof.
         intros I p p_c; unfold twoPeers; apply ownedBy_filter.
-        intros theta _; cbn [fst]; rewrite RealPackageEqb.eqb_refl, Bool.orb_true_r.
+        intros theta _; cbn [fst];
+          rewrite RealPackageEqb.eqb_refl, Bool.orb_true_r.
         reflexivity.
       Qed.
 
@@ -3514,10 +3639,12 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
       Qed.
 
       Theorem versions_lookupGranular : forall I a m w,
-          versions I (Name.Granular (a, m) w) = Reduced.VSet.singleton (Version.Orig w).
+          versions I (Name.Granular (a, m) w) =
+            Reduced.VSet.singleton (Version.Orig w).
       Proof. intros I a m w; reflexivity. Qed.
 
-      Definition intSubInst (I : Inst) (p : RealPackage.t) '((a, m) : SourceName.t) : Inst :=
+      Definition intSubInst (I : Inst) (p : RealPackage.t)
+          '((a, m) : SourceName.t) : Inst :=
         subInst I (NSet.add m (slotNames I p)) (ownDependencies I p)
           (peerDependenciesNamed I a).
 
@@ -3598,7 +3725,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         - right; exists u; split; [exact (Hcc _ Hu) | reflexivity].
       Qed.
 
-      Definition sightSubInst (I : Inst) (p_c : RealPackage.t) (a : N.t) : Inst :=
+      Definition sightSubInst (I : Inst) (p_c : RealPackage.t)
+          (a : N.t) : Inst :=
         subInst I (NSet.add a (slotNames I p_c)) (ownDependencies I p_c)
           (ownPeerDependencies I p_c).
 
@@ -3657,7 +3785,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         reflexivity.
       Qed.
 
-      Definition linkSubInst (I : Inst) (p p_c : RealPackage.t) (a : N.t) : Inst :=
+      Definition linkSubInst (I : Inst) (p p_c : RealPackage.t)
+          (a : N.t) : Inst :=
         subInst I (NSet.add a (NSet.union (slotNames I p) (slotNames I p_c)))
           (twoDeps I p p_c) (twoPeers I p p_c).
 
@@ -3929,7 +4058,8 @@ Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         exact (proj1 (readb_iff _ _ _ _ _ _ Hres) Hrd).
       - intros [Hsg [Hch Hrd]].
         apply sight_in;
-          [exact (Reduced.res_version_unique _ _ _ _ (npm_completeness _ _ _ _ Hres))
+          [exact (Reduced.res_version_unique _ _ _ _
+            (npm_completeness _ _ _ _ Hres))
           |].
         apply mem_coreResolution; right; right; left.
         exists (k, v), n; split.

@@ -7,7 +7,8 @@ Module NpmCommon (N V : UsualOrderedType) (VSet : SetsOn V).
   Module NEqb := UOTEqb N.
   Module RealPackageEqb := UOTEqb RealPackage.
 
-  Definition ownedBy {A : Type} (p : RealPackage.t) (l : list (RealPackage.t * A))
+  Definition ownedBy {A : Type} (p : RealPackage.t)
+      (l : list (RealPackage.t * A))
     : list A :=
     fold_right
       (fun q acc => if RealPackageEqb.eqb (fst q) p then snd q :: acc else acc)

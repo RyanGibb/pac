@@ -1,7 +1,9 @@
 From Stdlib Require Import MSets List.
-From PackageCalculus Require Import Prelude Core Complexity VersionFormula Semver
+From PackageCalculus Require Import Prelude Core Complexity
+  VersionFormula Semver
   Conflict ConflictClass Concurrent PeerDependency Visibility Feature
-  Virtual PackageFormula VariableFormula ConcurrentFeature Debian MultiarchDebian
+  Virtual PackageFormula VariableFormula ConcurrentFeature Debian
+    MultiarchDebian
   Opam Cargo Alpine Npm Placement NpmPlacement.
 
 Module Core := Core Nat_as_OT Nat_as_OT.
@@ -24,8 +26,10 @@ End BoolFinite.
 Module Feature := Feature Nat_as_OT Nat_as_OT BoolFinite.
 Module Virtual := Virtual Nat_as_OT Nat_as_OT.
 Module PackageFormula := PackageFormula Nat_as_OT Nat_as_OT.
-Module VariableFormula := VariableFormula Nat_as_OT Nat_as_OT BoolFinite Nat_as_OT.
-Module ConcurrentFeature := ConcurrentFeature Nat_as_OT Nat_as_OT BoolFinite Nat_as_OT.
+Module VariableFormula :=
+  VariableFormula Nat_as_OT Nat_as_OT BoolFinite Nat_as_OT.
+Module ConcurrentFeature :=
+  ConcurrentFeature Nat_as_OT Nat_as_OT BoolFinite Nat_as_OT.
 Module NatTrivialGroup := TrivialGroup Nat_as_OT.
 Module Debian := Debian Nat_as_OT Nat_as_OT NatTrivialGroup.
 
@@ -34,20 +38,24 @@ Module BoolArchitectureParameter <: ArchitectureParameter.
 
   Definition native : Architecture.t := false.
 End BoolArchitectureParameter.
-Module MultiarchDebian := MultiarchDebian Nat_as_OT Nat_as_OT BoolArchitectureParameter.
+Module MultiarchDebian :=
+  MultiarchDebian Nat_as_OT Nat_as_OT BoolArchitectureParameter.
 
 Example core_pkgSet_computes :
-  Core.PackageSet.mem (1, 2) (Core.PackageSet.add (1, 2) Core.PackageSet.empty) = true.
+  Core.PackageSet.mem (1, 2)
+    (Core.PackageSet.add (1, 2) Core.PackageSet.empty) = true.
 Proof. reflexivity. Qed.
 
 Example core_depRel_computes :
   Core.DependencyRel.mem (( (1, 2), (3, Core.VSet.singleton 4) ))
-    (Core.DependencyRel.add ((1, 2), (3, Core.VSet.singleton 4)) Core.DependencyRel.empty) = true.
+    (Core.DependencyRel.add ((1, 2), (3, Core.VSet.singleton 4))
+      Core.DependencyRel.empty) = true.
 Proof. reflexivity. Qed.
 
 Example core_merge_computes :
   Core.DependencyRel.cardinal
-    (Core.Merge.merge (Core.DependencyRel.add ((1, 2), (3, Core.VSet.singleton 4))
+    (Core.Merge.merge
+      (Core.DependencyRel.add ((1, 2), (3, Core.VSet.singleton 4))
                 (Core.DependencyRel.add ((1, 2), (3, Core.VSet.singleton 5))
                    Core.DependencyRel.empty))) = 1.
 Proof. reflexivity. Qed.
@@ -57,7 +65,8 @@ Definition ckR : Core.PackageSet.t :=
 
 Definition ckVS : Core.VSet.t := Core.VSet.ofList (1 :: 2 :: nil).
 
-Definition ckD : Core.DependencyRel.t := Core.DependencyRel.ofList (((0, 0), (1, ckVS)) :: nil).
+Definition ckD : Core.DependencyRel.t :=
+    Core.DependencyRel.ofList (((0, 0), (1, ckVS)) :: nil).
 
 Definition ckCheck (S : list (nat * nat)) : option Core.CheckFailure :=
   Core.check (Core.versions ckR) (Core.dependees ckD) (Core.rootQuery (0, 0))
@@ -91,55 +100,67 @@ Definition cxPhi : list Complexity.ClauseOT.t :=
   ((0, true), ((1, false), (2, true))) :: nil.
 
 Example complexity_reduceReal_computes :
-  Complexity.Reduction.Reduced.PackageSet.cardinal (Complexity.Reduction.reduceReal cxPhi) = 10.
+  Complexity.Reduction.Reduced.PackageSet.cardinal
+    (Complexity.Reduction.reduceReal cxPhi) = 10.
 Proof. reflexivity. Qed.
 
 Example complexity_reduceDeps_computes :
-  Complexity.Reduction.Reduced.DependencyRel.cardinal (Complexity.Reduction.reduceDeps cxPhi) = 4.
+  Complexity.Reduction.Reduced.DependencyRel.cardinal
+    (Complexity.Reduction.reduceDeps cxPhi) = 4.
 Proof. reflexivity. Qed.
 
 Definition cxR : Complexity.PackageSet.t :=
   Complexity.PackageSet.add (1, 1)
-    (Complexity.PackageSet.add (1, 2) (Complexity.PackageSet.add (2, 1) Complexity.PackageSet.empty)).
+    (Complexity.PackageSet.add (1, 2)
+      (Complexity.PackageSet.add (2, 1) Complexity.PackageSet.empty)).
 
 Definition cxD : Complexity.Source.DependencyRel.t :=
-  Complexity.Source.DependencyRel.add ((1, 1), (2, Complexity.VSet.singleton 1)) Complexity.Source.DependencyRel.empty.
+  Complexity.Source.DependencyRel.add ((1, 1), (2, Complexity.VSet.singleton 1))
+    Complexity.Source.DependencyRel.empty.
 
 Example complexity_satEncoding_computes :
   List.length (Complexity.Encoding.satEncoding cxR cxD (1, 1)) = 3.
 Proof. reflexivity. Qed.
 
-Definition verR : VersionFormula.PackageSet.t := VersionFormula.PackageSet.add (1, 2) VersionFormula.PackageSet.empty.
+Definition verR : VersionFormula.PackageSet.t :=
+    VersionFormula.PackageSet.add (1, 2) VersionFormula.PackageSet.empty.
 
 Definition verD : VersionFormula.DependencyRel.t :=
-  VersionFormula.DependencyRel.add ((1, 2), (1, VersionFormula.FTop)) VersionFormula.DependencyRel.empty.
+  VersionFormula.DependencyRel.add ((1, 2), (1, VersionFormula.FTop))
+    VersionFormula.DependencyRel.empty.
 
 Example versions_reduce_computes :
-  VersionFormula.Source.DependencyRel.cardinal (VersionFormula.Reduction.reduce verR verD) = 1.
+  VersionFormula.Source.DependencyRel.cardinal
+    (VersionFormula.Reduction.reduce verR verD) = 1.
 Proof. reflexivity. Qed.
 
 Example versions_realPreimage_computes :
-  VersionFormula.PackageSet.cardinal (VersionFormula.Reduction.Lookup.realPreimage verR verD) = 1.
+  VersionFormula.PackageSet.cardinal
+    (VersionFormula.Reduction.Lookup.realPreimage verR verD) = 1.
 Proof. reflexivity. Qed.
 
 Example packageFormula_reduceDeps_computes :
   PackageFormula.Reduction.Reduced.DependencyRel.cardinal
     (PackageFormula.Reduction.reduceDeps PackageFormula.PackageSet.empty
-       (PackageFormula.DependencyRel.add ((1, 2), PackageFormula.FAtom 3 (PackageFormula.VSet.singleton 4))
+       (PackageFormula.DependencyRel.add
+         ((1, 2), PackageFormula.FAtom 3 (PackageFormula.VSet.singleton 4))
           PackageFormula.DependencyRel.empty)) = 1.
 Proof. reflexivity. Qed.
 
 Example variableFormula_reduceDeps_computes :
   VariableFormula.Reduction.Reduced.DependencyRel.cardinal
-    (VariableFormula.Reduction.reduceDeps (fun _ => VariableFormula.YSet.singleton 0)
+    (VariableFormula.Reduction.reduceDeps
+      (fun _ => VariableFormula.YSet.singleton 0)
        VariableFormula.PackageSet.empty
-       (VariableFormula.DependencyRel.add ((1, 2), VariableFormula.FAtom 3 (VariableFormula.VSet.singleton 4))
+       (VariableFormula.DependencyRel.add
+         ((1, 2), VariableFormula.FAtom 3 (VariableFormula.VSet.singleton 4))
           VariableFormula.DependencyRel.empty)) = 1.
 Proof. reflexivity. Qed.
 
 Example feature_reduceDeps_computes :
   Feature.Reduction.Reduced.DependencyRel.cardinal
-    (Feature.Reduction.reduceDeps Feature.PackageSet.empty Feature.SupportRel.empty
+    (Feature.Reduction.reduceDeps Feature.PackageSet.empty
+      Feature.SupportRel.empty
        (Feature.ParameterisedDependencyRel.add
           ((1, 2), (3, (Feature.VSet.singleton 4, Feature.FSet.empty)))
           Feature.ParameterisedDependencyRel.empty)
@@ -150,63 +171,82 @@ Proof. reflexivity. Qed.
    instantiation, rather than in the C above. *)
 Definition conflictR : Conflict.Source.PackageSet.t :=
   Conflict.Source.PackageSet.add (1, 10)
-    (Conflict.Source.PackageSet.add (1, 11) (Conflict.Source.PackageSet.add (2, 20) Conflict.Source.PackageSet.empty)).
+    (Conflict.Source.PackageSet.add (1, 11)
+      (Conflict.Source.PackageSet.add (2, 20)
+      Conflict.Source.PackageSet.empty)).
 
 Example conflict_conflictResolution_retraction_computes :
   Conflict.Source.PackageSet.equal
-    (Conflict.Reduction.conflictResolution (Conflict.Reduction.embedSet conflictR))
+    (Conflict.Reduction.conflictResolution
+      (Conflict.Reduction.embedSet conflictR))
     conflictR = true.
 Proof. reflexivity. Qed.
 
 Example conflict_reduceReal_computes :
   Conflict.Reduction.Reduced.PackageSet.cardinal
     (Conflict.Reduction.reduceReal conflictR Conflict.Source.DependencyRel.empty
-       (Conflict.ConflictRel.add ((2, 20), (1, Conflict.Source.VSet.singleton 11))
+       (Conflict.ConflictRel.add
+         ((2, 20), (1, Conflict.Source.VSet.singleton 11))
           Conflict.ConflictRel.empty)) = 5.
 Proof. reflexivity. Qed.
 
 Definition clsR : ConflictClass.PackageSet.t :=
   ConflictClass.PackageSet.add (1, 10)
-    (ConflictClass.PackageSet.add (1, 11) (ConflictClass.PackageSet.add (2, 20) ConflictClass.PackageSet.empty)).
+    (ConflictClass.PackageSet.add (1, 11)
+      (ConflictClass.PackageSet.add (2, 20) ConflictClass.PackageSet.empty)).
 
 Definition clsOm : ConflictClass.ConflictClassRel.t :=
   ConflictClass.ConflictClassRel.add ((1, 10), 0)
     (ConflictClass.ConflictClassRel.add ((1, 11), 0)
-       (ConflictClass.ConflictClassRel.add ((2, 20), 0) ConflictClass.ConflictClassRel.empty)).
+       (ConflictClass.ConflictClassRel.add ((2, 20), 0)
+         ConflictClass.ConflictClassRel.empty)).
 
 Example conflictClass_excludes :
   ~ ConflictClass.ClassExclusion clsOm
-      (ConflictClass.PackageSet.add (1, 10) (ConflictClass.PackageSet.add (2, 20) ConflictClass.PackageSet.empty)).
+      (ConflictClass.PackageSet.add (1, 10)
+        (ConflictClass.PackageSet.add (2, 20) ConflictClass.PackageSet.empty)).
 Proof.
   intro H.
   assert (E : ((1, 10) : ConflictClass.Package.t) = (2, 20))
     by (apply (H 0);
-        first [apply ConflictClass.PackageSet.mem_spec | apply ConflictClass.ConflictClassRel.mem_spec];
+        first [apply ConflictClass.PackageSet.mem_spec |
+          apply ConflictClass.ConflictClassRel.mem_spec];
         reflexivity).
   discriminate E.
 Qed.
 
 Example conflictClass_reduction_excludes :
   forall S,
-    ConflictClass.Reduction.Reduced.IsResolution (ConflictClass.Reduction.reduceReal clsR clsOm)
-      (ConflictClass.Reduction.reduceDeps ConflictClass.Source.DependencyRel.empty clsOm)
+    ConflictClass.Reduction.Reduced.IsResolution
+      (ConflictClass.Reduction.reduceReal clsR clsOm)
+      (ConflictClass.Reduction.reduceDeps
+        ConflictClass.Source.DependencyRel.empty clsOm)
       (ConflictClass.Reduction.embedPkg (1, 10)) S ->
-    ~ ConflictClass.Reduction.Reduced.PackageSet.In (ConflictClass.Reduction.embedPkg (2, 20)) S.
+    ~ ConflictClass.Reduction.Reduced.PackageSet.In
+      (ConflictClass.Reduction.embedPkg (2, 20)) S.
 Proof.
   intros S [_ Hr Hdep Huniq] Hq.
   destruct (Hdep _ Hr (ConflictClass.Reduction.Name.Class 0)
-              (ConflictClass.Reduction.Reduced.VSet.singleton (ConflictClass.Reduction.Version.Name 1)))
-    as [w [Hw Hwr]]; [apply ConflictClass.Reduction.Reduced.DependencyRel.mem_spec; reflexivity |].
+              (ConflictClass.Reduction.Reduced.VSet.singleton
+                (ConflictClass.Reduction.Version.Name 1)))
+    as [w [Hw Hwr]];
+      [apply ConflictClass.Reduction.Reduced.DependencyRel.mem_spec;
+      reflexivity |].
   destruct (Hdep _ Hq (ConflictClass.Reduction.Name.Class 0)
-              (ConflictClass.Reduction.Reduced.VSet.singleton (ConflictClass.Reduction.Version.Name 2)))
-    as [w' [Hw' Hwq]]; [apply ConflictClass.Reduction.Reduced.DependencyRel.mem_spec; reflexivity |].
-  apply ConflictClass.Reduction.Reduced.VSet.singleton_spec in Hw, Hw'; subst w w'.
+              (ConflictClass.Reduction.Reduced.VSet.singleton
+                (ConflictClass.Reduction.Version.Name 2)))
+    as [w' [Hw' Hwq]];
+      [apply ConflictClass.Reduction.Reduced.DependencyRel.mem_spec;
+      reflexivity |].
+  apply ConflictClass.Reduction.Reduced.VSet.singleton_spec in Hw,
+    Hw'; subst w w'.
   discriminate (Huniq _ _ _ Hwr Hwq).
 Qed.
 
 Example conflictClass_reduceReal_computes :
   ConflictClass.Reduction.Reduced.VSet.cardinal
-    (ConflictClass.Reduction.Reduced.versions (ConflictClass.Reduction.reduceReal clsR clsOm)
+    (ConflictClass.Reduction.Reduced.versions
+      (ConflictClass.Reduction.reduceReal clsR clsOm)
        (ConflictClass.Reduction.Name.Class 0)) = 2.
 Proof. reflexivity. Qed.
 
@@ -218,7 +258,8 @@ Example conflictClass_retraction_computes :
 Proof. reflexivity. Qed.
 
 Definition debR : Debian.PackageSet.t :=
-  Debian.PackageSet.add (1, 10) (Debian.PackageSet.add (1, 11) Debian.PackageSet.empty).
+  Debian.PackageSet.add (1, 10)
+    (Debian.PackageSet.add (1, 11) Debian.PackageSet.empty).
 
 Definition debD : Debian.DependencyRel.t :=
   Debian.DependencyRel.add ((1, 10), ((1, Debian.VersionFormula.FTop) :: nil))
@@ -231,7 +272,8 @@ Definition debRec : Debian.DependencyRel.t :=
 Example debian_vers_computes :
   Debian.Reduction.Reduced.VSet.cardinal
     (Debian.Reduction.versions
-       (Debian.MkInst debR debD Debian.DependencyRel.empty Debian.ProvidesRel.empty Debian.ConflictRel.empty
+       (Debian.MkInst debR debD Debian.DependencyRel.empty
+         Debian.ProvidesRel.empty Debian.ConflictRel.empty
           (1, 10))
        (Debian.Reduction.Name.Orig 1)) = 3.
 Proof. reflexivity. Qed.
@@ -239,7 +281,8 @@ Proof. reflexivity. Qed.
 Example debian_dependees_computes :
   Debian.Reduction.Reduced.DependeeSet.cardinal
     (Debian.Reduction.dependees
-       (Debian.MkInst debR debD Debian.DependencyRel.empty Debian.ProvidesRel.empty Debian.ConflictRel.empty
+       (Debian.MkInst debR debD Debian.DependencyRel.empty
+         Debian.ProvidesRel.empty Debian.ConflictRel.empty
           (1, 10))
        (Debian.Reduction.Name.Orig 1, Debian.Reduction.Version.Orig 10)) = 1.
 Proof. reflexivity. Qed.
@@ -247,58 +290,70 @@ Proof. reflexivity. Qed.
 Example debian_soft_vers_computes :
   Debian.Reduction.Reduced.VSet.cardinal
     (Debian.Reduction.versions
-       (Debian.MkInst debR debD debRec Debian.ProvidesRel.empty Debian.ConflictRel.empty (1, 10))
-       (Debian.Reduction.Name.Soft ((2, Debian.VersionFormula.FTop) :: nil))) = 2.
+       (Debian.MkInst debR debD debRec Debian.ProvidesRel.empty
+         Debian.ConflictRel.empty (1, 10))
+       (Debian.Reduction.Name.Soft
+         ((2, Debian.VersionFormula.FTop) :: nil))) = 2.
 Proof. reflexivity. Qed.
 
 Example debian_soft_escape_computes :
   Debian.Reduction.Reduced.DependeeSet.cardinal
     (Debian.Reduction.dependees
-       (Debian.MkInst debR debD debRec Debian.ProvidesRel.empty Debian.ConflictRel.empty (1, 10))
+       (Debian.MkInst debR debD debRec Debian.ProvidesRel.empty
+         Debian.ConflictRel.empty (1, 10))
        (Debian.Reduction.Name.Soft ((2, Debian.VersionFormula.FTop) :: nil),
         Debian.Reduction.Version.Zero)) = 0.
 Proof. reflexivity. Qed.
 
 Definition maR : MultiarchDebian.PackageSet.t :=
   MultiarchDebian.PackageSet.add ((1, false), 10)
-    (MultiarchDebian.PackageSet.add ((1, true), 10) MultiarchDebian.PackageSet.empty).
+    (MultiarchDebian.PackageSet.add ((1, true), 10)
+      MultiarchDebian.PackageSet.empty).
 
 Example debianMA_reduceReal_computes :
-  MultiarchDebian.Debian.VersionFormula.Source.PackageSet.cardinal (MultiarchDebian.Reduction.reduceReal maR) = 2.
+  MultiarchDebian.Debian.VersionFormula.Source.PackageSet.cardinal
+    (MultiarchDebian.Reduction.reduceReal maR) = 2.
 Proof. reflexivity. Qed.
 
 Example debianMA_reduceConf_computes :
   MultiarchDebian.Debian.ConflictRel.cardinal
-    (MultiarchDebian.Reduction.reduceConf maR MultiarchDebian.ConflictRel.empty MultiarchDebian.ClassRel.empty) = 2.
+    (MultiarchDebian.Reduction.reduceConf maR MultiarchDebian.ConflictRel.empty
+      MultiarchDebian.ClassRel.empty) = 2.
 Proof. reflexivity. Qed.
 
 Definition visR : Visibility.PackageSet.t :=
-  Visibility.PackageSet.add (1, 1) (Visibility.PackageSet.add (2, 1) Visibility.PackageSet.empty).
+  Visibility.PackageSet.add (1, 1)
+    (Visibility.PackageSet.add (2, 1) Visibility.PackageSet.empty).
 
 Definition visD : Visibility.Source.DependencyRel.t :=
-  Visibility.Source.DependencyRel.add ((1, 1), (2, Visibility.VSet.singleton 1)) Visibility.Source.DependencyRel.empty.
+  Visibility.Source.DependencyRel.add ((1, 1), (2, Visibility.VSet.singleton 1))
+    Visibility.Source.DependencyRel.empty.
 
 Example visibility_reduceReal_computes :
   Visibility.Reduction.Reduced.PackageSet.cardinal
-    (Visibility.Reduction.reduceReal visR visD Visibility.PublicDependencyRel.empty (1, 1)) = 4.
+    (Visibility.Reduction.reduceReal visR visD
+      Visibility.PublicDependencyRel.empty (1, 1)) = 4.
 Proof. reflexivity. Qed.
 
 Example visibility_reduceDeps_computes :
   Visibility.Reduction.Reduced.DependencyRel.cardinal
-    (Visibility.Reduction.reduceDeps visR visD Visibility.PublicDependencyRel.empty (1, 1)) = 3.
+    (Visibility.Reduction.reduceDeps visR visD
+      Visibility.PublicDependencyRel.empty (1, 1)) = 3.
 Proof. reflexivity. Qed.
 
 Example visibility_sub_computes :
   Visibility.PackageSet.cardinal
     (Visibility.sub Visibility.PublicDependencyRel.empty
-       (Visibility.ParentRel.add ((2, 1), (1, 1)) Visibility.ParentRel.empty) (1, 1)) = 2.
+       (Visibility.ParentRel.add ((2, 1), (1, 1)) Visibility.ParentRel.empty)
+         (1, 1)) = 2.
 Proof. reflexivity. Qed.
 
 Module Opam := Opam Nat_as_OT Nat_as_OT BoolFinite Nat_as_OT Nat_as_OT.
 
 Definition opRho : Opam.Valuation := fun _ => Some 1.
 Definition opRepo : Opam.PackageSet.t :=
-  Opam.PackageSet.add (1, 10) (Opam.PackageSet.add (2, 20) Opam.PackageSet.empty).
+  Opam.PackageSet.add (1, 10)
+    (Opam.PackageSet.add (2, 20) Opam.PackageSet.empty).
 
 Definition opInst : Opam.Inst :=
   Opam.MkInst opRepo
@@ -314,7 +369,8 @@ Definition opInst : Opam.Inst :=
     (Opam.OFAtom 1 Opam.FlFalse Opam.VFTop).
 
 Example opam_reduceReal_computes :
-  Opam.Reduction.PackageFormula.PackageSet.cardinal (Opam.Reduction.reduceReal opRho opInst) = 3.
+  Opam.Reduction.PackageFormula.PackageSet.cardinal
+    (Opam.Reduction.reduceReal opRho opInst) = 3.
 Proof. reflexivity. Qed.
 
 Example opam_reduceDeps_computes :
@@ -324,12 +380,14 @@ Proof. reflexivity. Qed.
 
 Example opam_depexts_computes :
   Opam.ESet.elements
-    (Opam.depextsOf opRho opInst (Opam.PackageSet.add (2, 20) Opam.PackageSet.empty))
+    (Opam.depextsOf opRho opInst
+      (Opam.PackageSet.add (2, 20) Opam.PackageSet.empty))
   = 7 :: nil.
 Proof. reflexivity. Qed.
 
 Example opam_depexts_unselected :
-  Opam.depextsOf opRho opInst (Opam.PackageSet.add (1, 10) Opam.PackageSet.empty)
+  Opam.depextsOf opRho opInst
+    (Opam.PackageSet.add (1, 10) Opam.PackageSet.empty)
   = Opam.ESet.empty.
 Proof. reflexivity. Qed.
 
@@ -350,20 +408,25 @@ Proof. reflexivity. Qed.
 
 Example cargo_evalReq_computes :
   Cargo.VSet.cardinal
-    (Cargo.Reduction.evalReq (Cargo.PackageSet.add (0, 4) (Cargo.PackageSet.add (0, 6)
+    (Cargo.Reduction.evalReq
+      (Cargo.PackageSet.add (0, 4) (Cargo.PackageSet.add (0, 6)
        Cargo.PackageSet.empty)) 0 cgoAny) = 2.
 Proof. reflexivity. Qed.
 
 Example cargo_prerelease_excluded :
   Cargo.VSet.elements
-    (Cargo.Reduction.evalReq (Cargo.PackageSet.add (0, 4) (Cargo.PackageSet.add (0, 5)
-       Cargo.PackageSet.empty)) 0 ((Cargo.COp OpGe 4 :: nil) :: nil)) = 4 :: nil.
+    (Cargo.Reduction.evalReq
+      (Cargo.PackageSet.add (0, 4) (Cargo.PackageSet.add (0, 5)
+       Cargo.PackageSet.empty)) 0
+         ((Cargo.COp OpGe 4 :: nil) :: nil)) = 4 :: nil.
 Proof. reflexivity. Qed.
 
 Example cargo_prerelease_admitted :
   Cargo.VSet.elements
-    (Cargo.Reduction.evalReq (Cargo.PackageSet.add (0, 4) (Cargo.PackageSet.add (0, 5)
-       Cargo.PackageSet.empty)) 0 ((Cargo.COp OpGe 5 :: nil) :: nil)) = 5 :: nil.
+    (Cargo.Reduction.evalReq
+      (Cargo.PackageSet.add (0, 4) (Cargo.PackageSet.add (0, 5)
+       Cargo.PackageSet.empty)) 0
+         ((Cargo.COp OpGe 5 :: nil) :: nil)) = 5 :: nil.
 Proof. reflexivity. Qed.
 
 Module NatApkVersionMatch <: ApkVersionMatch Nat_as_OT.
@@ -375,21 +438,29 @@ Module Alpine := Alpine Nat_as_OT Nat_as_OT NatApkVersionMatch.
 Definition alpI : Alpine.Inst :=
   {| Alpine.inst_real :=
        Alpine.PackageSet.add (1, 10)
-         (Alpine.PackageSet.add (2, 20) (Alpine.PackageSet.add (3, 30) Alpine.PackageSet.empty))
+         (Alpine.PackageSet.add (2, 20)
+           (Alpine.PackageSet.add (3, 30) Alpine.PackageSet.empty))
    ; Alpine.inst_deps :=
-       Alpine.DependencyRel.add ((1, 10), Alpine.DPos (2, Alpine.COp OpGe 20)) Alpine.DependencyRel.empty
+       Alpine.DependencyRel.add ((1, 10), Alpine.DPos (2, Alpine.COp OpGe 20))
+         Alpine.DependencyRel.empty
    ; Alpine.inst_prov :=
        Alpine.ProvidesRel.add ((3, 30), (4, Alpine.PVer 5))
-         (Alpine.ProvidesRel.add ((2, 20), (6, Alpine.PBare)) Alpine.ProvidesRel.empty)
+         (Alpine.ProvidesRel.add ((2, 20), (6, Alpine.PBare))
+           Alpine.ProvidesRel.empty)
    ; Alpine.inst_installIf :=
-       Alpine.InstallIfRuleRel.add ((2, 20), Alpine.ConditionSet.add (Alpine.DPos (1, Alpine.CAny))
-                                (Alpine.ConditionSet.add (Alpine.DNeg (5, Alpine.CAny))
-                                   Alpine.ConditionSet.empty)) Alpine.InstallIfRuleRel.empty
-   ; Alpine.inst_world := Alpine.WorldSet.add (Alpine.DPos (1, Alpine.CAny)) Alpine.WorldSet.empty
+       Alpine.InstallIfRuleRel.add
+         ((2, 20), Alpine.ConditionSet.add (Alpine.DPos (1, Alpine.CAny))
+                                (Alpine.ConditionSet.add
+                                  (Alpine.DNeg (5, Alpine.CAny))
+                                   Alpine.ConditionSet.empty))
+                                     Alpine.InstallIfRuleRel.empty
+   ; Alpine.inst_world :=
+     Alpine.WorldSet.add (Alpine.DPos (1, Alpine.CAny)) Alpine.WorldSet.empty
    ; Alpine.inst_prio := Alpine.PriorityRel.empty |}.
 
 Example alpine_reduceReal_computes :
-  Alpine.Reduction.PackageFormula.PackageSet.cardinal (Alpine.Reduction.reduceReal alpI) = 5.
+  Alpine.Reduction.PackageFormula.PackageSet.cardinal
+    (Alpine.Reduction.reduceReal alpI) = 5.
 Proof. reflexivity. Qed.
 
 Example alpine_root_dependees_computes :
@@ -398,11 +469,13 @@ Example alpine_root_dependees_computes :
 Proof. reflexivity. Qed.
 
 Example alpine_installif_attaches :
-  Alpine.InstallIfRuleRel.cardinal (Alpine.Reduction.installIfFibre alpI (1, 10)) = 1.
+  Alpine.InstallIfRuleRel.cardinal
+    (Alpine.Reduction.installIfFibre alpI (1, 10)) = 1.
 Proof. reflexivity. Qed.
 
 Example alpine_versions_computes :
-  Alpine.Reduction.PackageFormula.VSet.cardinal (Alpine.Reduction.versions alpI 4) = 1.
+  Alpine.Reduction.PackageFormula.VSet.cardinal
+    (Alpine.Reduction.versions alpI 4) = 1.
 Proof. reflexivity. Qed.
 
 Module NpmSemverMatch <: SemverMatch Nat_as_OT.
@@ -519,7 +592,8 @@ Example npm_auto_versions_computes :
   Npm.Reduced.VSet.elements
     (Npm.Reduction.versions npmInstAuto
        (Npm.Name.Intermediate kA 1 kC))
-  = Npm.Version.Orig 1 :: Npm.Version.Orig 2 :: Npm.Version.Orig 3 :: Npm.Version.Bot :: nil.
+  = Npm.Version.Orig 1 :: Npm.Version.Orig 2 :: Npm.Version.Orig 3 ::
+    Npm.Version.Bot :: nil.
 Proof. reflexivity. Qed.
 
 (* the same peer, one the root may not install (p_root false, as for a
@@ -563,7 +637,8 @@ Proof. reflexivity. Qed.
 Example npm_optional_bot_computes :
   npmDeps npmInstOpt (Npm.Name.Link kA 1 kB 1 npmC, Npm.Version.Bot)
   = (Npm.Name.Intermediate kA 1 kC, Npm.Version.Bot :: nil)
-    :: (Npm.Name.Sight kB 1 npmC, Npm.Version.Bot :: Npm.Version.Free :: nil) :: nil.
+    :: (Npm.Name.Sight kB 1 npmC, Npm.Version.Bot :: Npm.Version.Free ::
+      nil) :: nil.
 Proof. reflexivity. Qed.
 
 (* B@1 peers on C and depends on D@1, which peers on C too: B's copy holds
@@ -608,7 +683,8 @@ Proof. reflexivity. Qed.
 
 Example npm_self_computes :
   npmDeps npmInstSelf (Npm.Name.Link kB 1 kD 1 npmB, Npm.Version.Orig 1)
-  = (Npm.Name.Sight kD 1 npmB, Npm.Version.Orig 1 :: Npm.Version.Free :: nil) :: nil.
+  = (Npm.Name.Sight kD 1 npmB, Npm.Version.Orig 1 :: Npm.Version.Free ::
+    nil) :: nil.
 Proof. reflexivity. Qed.
 
 (* B@1 depends on D@1, which peers on C: B, not the root, neither holds
@@ -634,7 +710,8 @@ Proof. reflexivity. Qed.
 
 Example npm_root_peer_computes :
   npmDeps npmInstRootPeer (Npm.Name.Granular kA 1, Npm.Version.Orig 1)
-  = (Npm.Name.Intermediate kA 1 kC, Npm.Version.Orig 1 :: Npm.Version.Orig 2 :: nil)
+  = (Npm.Name.Intermediate kA 1 kC, Npm.Version.Orig 1 ::
+    Npm.Version.Orig 2 :: nil)
     :: (Npm.Name.Intermediate kA 1 kC,
         Npm.Version.Orig 2 :: Npm.Version.Orig 3 :: nil) :: nil.
 Proof. reflexivity. Qed.
@@ -716,7 +793,8 @@ Module NpmPrereleaseSemverMatch <: SemverMatch Nat_as_OT.
     Nat.eqb (Nat.div a 2) (Nat.div b 2).
 End NpmPrereleaseSemverMatch.
 
-Module NpmPrerelease := PackageCalculus.Npm.Npm Nat_as_OT Nat_as_OT NpmPrereleaseSemverMatch.
+Module NpmPrerelease :=
+  PackageCalculus.Npm.Npm Nat_as_OT Nat_as_OT NpmPrereleaseSemverMatch.
 
 Definition npmPreRepo : NpmPrerelease.RealPackageSet.t :=
   fold_right NpmPrerelease.RealPackageSet.add NpmPrerelease.RealPackageSet.empty
@@ -724,13 +802,15 @@ Definition npmPreRepo : NpmPrerelease.RealPackageSet.t :=
 
 Example npm_prerelease_excluded :
   NpmPrerelease.VSet.elements
-    (NpmPrerelease.rangeEval ((NpmPrerelease.COp OpGe 4 :: NpmPrerelease.COp OpLt 8 :: nil) :: nil)
+    (NpmPrerelease.rangeEval
+      ((NpmPrerelease.COp OpGe 4 :: NpmPrerelease.COp OpLt 8 :: nil) :: nil)
        (NpmPrerelease.realVersions npmPreRepo npmC)) = 4 :: 6 :: nil.
 Proof. reflexivity. Qed.
 
 Example npm_prerelease_admitted :
   NpmPrerelease.VSet.elements
-    (NpmPrerelease.rangeEval ((NpmPrerelease.COp OpGe 5 :: NpmPrerelease.COp OpLt 8 :: nil) :: nil)
+    (NpmPrerelease.rangeEval
+      ((NpmPrerelease.COp OpGe 5 :: NpmPrerelease.COp OpLt 8 :: nil) :: nil)
        (NpmPrerelease.realVersions npmPreRepo npmC)) = 5 :: 6 :: nil.
 Proof. reflexivity. Qed.
 
@@ -740,44 +820,56 @@ Module NpmPlacement := NpmPlacement Nat_as_OT Nat_as_OT NpmSemverMatch.
    no version of 3 is in range, so that edge may find nothing. *)
 Definition nplInst : NpmPlacement.Inst :=
   NpmPlacement.MkInst
-    (fold_right NpmPlacement.RealPackageSet.add NpmPlacement.RealPackageSet.empty
+    (fold_right NpmPlacement.RealPackageSet.add
+      NpmPlacement.RealPackageSet.empty
        ((npmB, 1) :: (npmC, 1) :: nil))
     nil nil nil npmA
-    (NpmPlacement.MkDep npmX npmB ((NpmPlacement.COp OpEq 1 :: nil) :: nil) false false
-     :: NpmPlacement.MkDep npmC npmC ((NpmPlacement.COp OpEq 2 :: nil) :: nil) false true
+    (NpmPlacement.MkDep npmX npmB
+      ((NpmPlacement.COp OpEq 1 :: nil) :: nil) false false
+     :: NpmPlacement.MkDep npmC npmC
+       ((NpmPlacement.COp OpEq 2 :: nil) :: nil) false true
      :: nil)
     nil.
 
 Example npl_edges :
-  List.map (fun e => (NpmPlacement.e_dir e, NpmPlacement.e_name e, NpmPlacement.e_optional e))
+  List.map (fun e =>
+    (NpmPlacement.e_dir e, NpmPlacement.e_name e, NpmPlacement.e_optional e))
     (NpmPlacement.edgesOf nplInst NpmPlacement.Occupant.Proj) =
   (npmX, npmB, false) :: (npmC, npmC, true) :: nil.
 Proof. reflexivity. Qed.
 
 Example npl_key :
   NpmPlacement.Placement.VSet.elements
-    (NpmPlacement.Placement.Source.versions (NpmPlacement.Reduction.placeRepo nplInst) npmX) =
+    (NpmPlacement.Placement.Source.versions
+      (NpmPlacement.Reduction.placeRepo nplInst) npmX) =
   NpmPlacement.Occupant.Reg npmB 1 :: nil.
 Proof. reflexivity. Qed.
 
-Definition nplInstOvr (o : list (nat * NpmPlacement.Range)) : NpmPlacement.Inst :=
+Definition nplInstOvr (o : list (nat * NpmPlacement.Range)) :
+    NpmPlacement.Inst :=
   NpmPlacement.MkInst
-    (fold_right NpmPlacement.RealPackageSet.add NpmPlacement.RealPackageSet.empty
+    (fold_right NpmPlacement.RealPackageSet.add
+      NpmPlacement.RealPackageSet.empty
        ((npmB, 1) :: (npmB, 2) :: (npmX, 1) :: nil))
     nil nil o npmA
-    (NpmPlacement.MkDep npmX npmB ((NpmPlacement.COp OpEq 2 :: nil) :: nil) false false :: nil)
+    (NpmPlacement.MkDep npmX npmB ((NpmPlacement.COp OpEq 2 :: nil) :: nil)
+      false false :: nil)
     nil.
 
-Definition nplAccepts (I : NpmPlacement.Inst) : list (list NpmPlacement.Occupant.t) :=
-  List.map (fun e => NpmPlacement.Placement.VSet.elements (NpmPlacement.Reduction.accepts I e))
+Definition nplAccepts (I : NpmPlacement.Inst) :
+    list (list NpmPlacement.Occupant.t) :=
+  List.map (fun e =>
+    NpmPlacement.Placement.VSet.elements (NpmPlacement.Reduction.accepts I e))
     (NpmPlacement.edgesOf I NpmPlacement.Occupant.Proj).
 
 Example npl_override_key :
-  nplAccepts (nplInstOvr ((npmX, (NpmPlacement.COp OpEq 1 :: nil) :: nil) :: nil)) =
+  nplAccepts (nplInstOvr
+    ((npmX, (NpmPlacement.COp OpEq 1 :: nil) :: nil) :: nil)) =
   (NpmPlacement.Occupant.Reg npmX 1 :: nil) :: nil.
 Proof. reflexivity. Qed.
 
 Example npl_override_target :
-  nplAccepts (nplInstOvr ((npmB, (NpmPlacement.COp OpEq 1 :: nil) :: nil) :: nil)) =
+  nplAccepts (nplInstOvr
+    ((npmB, (NpmPlacement.COp OpEq 1 :: nil) :: nil) :: nil)) =
   (NpmPlacement.Occupant.Reg npmB 2 :: nil) :: nil.
 Proof. reflexivity. Qed.

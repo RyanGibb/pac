@@ -17,21 +17,25 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
 
   Record IsResolution
       (R : PackageSet.t) (support : Feature.SupportRel.t)
-      (Df : Feature.ParameterisedDependencyRel.t) (Da : Feature.AdditionalDependencyRel.t)
+      (Df : Feature.ParameterisedDependencyRel.t)
+        (Da : Feature.AdditionalDependencyRel.t)
       (g : V.t -> G.t) (r : Package.t)
       (S : Feature.FeaturedSet.t) (pi : ParentRel.t) : Prop :=
-    { res_subset : forall p fs, Feature.FeaturedSet.In (p, fs) S -> PackageSet.In p R
+    { res_subset : forall p fs, Feature.FeaturedSet.In (p, fs) S ->
+        PackageSet.In p R
     ; res_root_mem : Feature.FeaturedSet.In (r, Feature.FSet.empty) S
     ; res_parent_closure :
         (forall p fs_p, Feature.FeaturedSet.In (p, fs_p) S ->
-         forall n vs fs, Feature.ParameterisedDependencyRel.In (p, (n, (vs, fs))) Df ->
+         forall n vs fs,
+           Feature.ParameterisedDependencyRel.In (p, (n, (vs, fs))) Df ->
          exists v, VSet.In v vs /\
            (exists fs', Feature.FSet.Subset fs fs' /\
               Feature.FeaturedSet.In ((n, v), fs') S) /\
            ParentRel.In ((n, v), p) pi) /\
         (forall p fs_p, Feature.FeaturedSet.In (p, fs_p) S ->
          forall f, Feature.FSet.In f fs_p ->
-         forall n vs fs, Feature.AdditionalDependencyRel.In ((p, f), (n, (vs, fs))) Da ->
+         forall n vs fs,
+           Feature.AdditionalDependencyRel.In ((p, f), (n, (vs, fs))) Da ->
          exists v, VSet.In v vs /\
            (exists fs', Feature.FSet.Subset fs fs' /\
               Feature.FeaturedSet.In ((n, v), fs') S) /\
@@ -58,10 +62,12 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           (exists fs_p, Feature.FeaturedSet.In (p, fs_p) S) }.
 
   Definition ParentDependency (Df : Feature.ParameterisedDependencyRel.t)
-      (Da : Feature.AdditionalDependencyRel.t) (S : Feature.FeaturedSet.t) (pi : ParentRel.t)
+      (Da : Feature.AdditionalDependencyRel.t) (S : Feature.FeaturedSet.t)
+        (pi : ParentRel.t)
       : Prop :=
     forall m u n v, ParentRel.In ((m, u), (n, v)) pi ->
-      (exists vs fs, Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df) \/
+      (exists vs fs,
+        Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df) \/
       (exists fs_p f vs fs, Feature.FeaturedSet.In ((n, v), fs_p) S /\
          Feature.FSet.In f fs_p /\
          Feature.AdditionalDependencyRel.In (((n, v), f), (m, (vs, fs))) Da).
@@ -70,28 +76,45 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
     Module GranularOriginalName := PairUOT N G.
     Module GranularOriginalNameFacts := UOTCompareFacts GranularOriginalName.
     Module GranularFeaturePackageName := TripleUOT N F G.
-    Module GranularFeaturePackageNameFacts := UOTCompareFacts GranularFeaturePackageName.
+    Module GranularFeaturePackageNameFacts :=
+      UOTCompareFacts GranularFeaturePackageName.
     Module IntermediateName := TripleUOT N V N.
     Module IntermediateNameFacts := UOTCompareFacts IntermediateName.
     Module ParameterisedIntermediateNameTail := TripleUOT V N F.
-    Module ParameterisedIntermediateName := PairUOT N ParameterisedIntermediateNameTail.
-    Module ParameterisedIntermediateNameFacts := UOTCompareFacts ParameterisedIntermediateName.
+    Module ParameterisedIntermediateName :=
+      PairUOT N ParameterisedIntermediateNameTail.
+    Module ParameterisedIntermediateNameFacts :=
+      UOTCompareFacts ParameterisedIntermediateName.
     Module AdditionalIntermediateNameTail := TripleUOT F N F.
-    Module AdditionalIntermediateName := TripleUOT N V AdditionalIntermediateNameTail.
-    Module AdditionalIntermediateNameFacts := UOTCompareFacts AdditionalIntermediateName.
-    #[local] Hint Rewrite GranularOriginalNameFacts.compare_eq_iff GranularFeaturePackageNameFacts.compare_eq_iff
-      IntermediateNameFacts.compare_eq_iff ParameterisedIntermediateNameFacts.compare_eq_iff
+    Module AdditionalIntermediateName :=
+      TripleUOT N V AdditionalIntermediateNameTail.
+    Module AdditionalIntermediateNameFacts :=
+      UOTCompareFacts AdditionalIntermediateName.
+    #[local] Hint Rewrite GranularOriginalNameFacts.compare_eq_iff
+      GranularFeaturePackageNameFacts.compare_eq_iff
+      IntermediateNameFacts.compare_eq_iff
+        ParameterisedIntermediateNameFacts.compare_eq_iff
       AdditionalIntermediateNameFacts.compare_eq_iff : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by GranularOriginalNameFacts.compare_antisym : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by GranularFeaturePackageNameFacts.compare_antisym : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by IntermediateNameFacts.compare_antisym : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by ParameterisedIntermediateNameFacts.compare_antisym : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by AdditionalIntermediateNameFacts.compare_antisym : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by GranularOriginalNameFacts.compare_lt_trans : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by GranularFeaturePackageNameFacts.compare_lt_trans : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by IntermediateNameFacts.compare_lt_trans : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by ParameterisedIntermediateNameFacts.compare_lt_trans : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by AdditionalIntermediateNameFacts.compare_lt_trans : cmp_fconc.
+    #[local] Hint Extern 1 =>
+      cmp_by GranularOriginalNameFacts.compare_antisym : cmp_fconc.
+    #[local] Hint Extern 1 =>
+      cmp_by GranularFeaturePackageNameFacts.compare_antisym : cmp_fconc.
+    #[local] Hint Extern 1 =>
+      cmp_by IntermediateNameFacts.compare_antisym : cmp_fconc.
+    #[local] Hint Extern 1 =>
+      cmp_by ParameterisedIntermediateNameFacts.compare_antisym : cmp_fconc.
+    #[local] Hint Extern 1 =>
+      cmp_by AdditionalIntermediateNameFacts.compare_antisym : cmp_fconc.
+    #[local] Hint Extern 1 =>
+      cmp_by GranularOriginalNameFacts.compare_lt_trans : cmp_fconc.
+    #[local] Hint Extern 1 =>
+      cmp_by GranularFeaturePackageNameFacts.compare_lt_trans : cmp_fconc.
+    #[local] Hint Extern 1 =>
+      cmp_by IntermediateNameFacts.compare_lt_trans : cmp_fconc.
+    #[local] Hint Extern 1 =>
+      cmp_by ParameterisedIntermediateNameFacts.compare_lt_trans : cmp_fconc.
+    #[local] Hint Extern 1 =>
+      cmp_by AdditionalIntermediateNameFacts.compare_lt_trans : cmp_fconc.
 
     Module Name.
       Inductive name : Type :=
@@ -117,7 +140,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         | Intermediate _ _ _, GranularFeatPkg _ _ _ => Gt
         | Intermediate _ _ _, _ => Lt
         | IntermediateF n1 v1 m1 f1, IntermediateF n2 v2 m2 f2 =>
-            ParameterisedIntermediateName.compare (n1, (v1, (m1, f1))) (n2, (v2, (m2, f2)))
+            ParameterisedIntermediateName.compare (n1, (v1, (m1, f1)))
+              (n2, (v2, (m2, f2)))
         | IntermediateF _ _ _ _, IntermediateA _ _ _ _ _ => Lt
         | IntermediateF _ _ _ _, _ => Gt
         | IntermediateA n1 v1 f1 m1 g1, IntermediateA n2 v2 f2 m2 g2 =>
@@ -140,7 +164,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
 
     Module Reduced := Core NameOT V.
 
-    Definition granularOf (g : V.t -> G.t) (q : Feature.Reduction.Reduced.Package.t)
+    Definition granularOf (g : V.t -> G.t)
+        (q : Feature.Reduction.Reduced.Package.t)
         : Reduced.Package.t :=
       match q with
       | (Feature.Reduction.Name.Orig n, v) =>
@@ -149,7 +174,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           (Name.GranularFeatPkg n f (g v), v)
       end.
 
-    Definition embedOrigPkg (g : V.t -> G.t) (p : Package.t) : Reduced.Package.t :=
+    Definition embedOrigPkg (g : V.t -> G.t) (p : Package.t) :
+        Reduced.Package.t :=
       let '(n, v) := p in (Name.GranularOrig n (g v), v).
 
     Definition singVS (v : V.t) : Reduced.VSet.t := Reduced.VSet.singleton v.
@@ -159,33 +185,42 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       SOvv.map (fun v => v) vs.
 
     Module SOqp :=
-      SetOps Feature.Reduction.Reduced.Package Reduced.Package Feature.Reduction.Reduced.PackageSet Reduced.PackageSet.
+      SetOps Feature.Reduction.Reduced.Package Reduced.Package
+        Feature.Reduction.Reduced.PackageSet Reduced.PackageSet.
     Definition granularReal (R : PackageSet.t) (support : Feature.SupportRel.t)
         (g : V.t -> G.t) : Reduced.PackageSet.t :=
       SOqp.map (granularOf g) (Feature.Reduction.reduceReal R support).
 
     Module SOvp := SetOps V Reduced.Package VSet Reduced.PackageSet.
-    Module SOfp := SetOps Feature.ParameterisedDependencyElt Reduced.Package Feature.ParameterisedDependencyRel Reduced.PackageSet.
-    Definition fInterReal (Df : Feature.ParameterisedDependencyRel.t) : Reduced.PackageSet.t :=
+    Module SOfp :=
+      SetOps Feature.ParameterisedDependencyElt Reduced.Package
+      Feature.ParameterisedDependencyRel Reduced.PackageSet.
+    Definition fInterReal (Df : Feature.ParameterisedDependencyRel.t) :
+        Reduced.PackageSet.t :=
       SOfp.unionMap (fun '((n, v), (m, (vs, _))) =>
           SOvp.map (fun u => (Name.Intermediate n v m, u)) vs)
         Df.
 
     Module SOfsp := SetOps F Reduced.Package Feature.FSet Reduced.PackageSet.
-    Definition fInterFeatReal (Df : Feature.ParameterisedDependencyRel.t) : Reduced.PackageSet.t :=
+    Definition fInterFeatReal (Df : Feature.ParameterisedDependencyRel.t) :
+        Reduced.PackageSet.t :=
       SOfp.unionMap (fun '((n, v), (m, (vs, fs))) =>
           SOvp.unionMap (fun u =>
               SOfsp.map (fun f => (Name.IntermediateF n v m f, u)) fs)
             vs)
         Df.
 
-    Module SOap := SetOps Feature.AdditionalDependencyElt Reduced.Package Feature.AdditionalDependencyRel Reduced.PackageSet.
-    Definition aInterReal (Da : Feature.AdditionalDependencyRel.t) : Reduced.PackageSet.t :=
+    Module SOap :=
+      SetOps Feature.AdditionalDependencyElt Reduced.Package
+      Feature.AdditionalDependencyRel Reduced.PackageSet.
+    Definition aInterReal (Da : Feature.AdditionalDependencyRel.t) :
+        Reduced.PackageSet.t :=
       SOap.unionMap (fun '(((n, v), _), (m, (vs, _))) =>
           SOvp.map (fun u => (Name.Intermediate n v m, u)) vs)
         Da.
 
-    Definition aInterFeatReal (Da : Feature.AdditionalDependencyRel.t) : Reduced.PackageSet.t :=
+    Definition aInterFeatReal (Da : Feature.AdditionalDependencyRel.t) :
+        Reduced.PackageSet.t :=
       SOap.unionMap (fun '(((n, v), f), (m, (vs, fs))) =>
           SOvp.unionMap (fun u =>
               SOfsp.map (fun f' => (Name.IntermediateA n v f m f', u)) fs)
@@ -194,14 +229,17 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
 
     Definition reduceReal
         (R : PackageSet.t) (support : Feature.SupportRel.t)
-        (Df : Feature.ParameterisedDependencyRel.t) (Da : Feature.AdditionalDependencyRel.t)
+        (Df : Feature.ParameterisedDependencyRel.t)
+          (Da : Feature.AdditionalDependencyRel.t)
         (g : V.t -> G.t) : Reduced.PackageSet.t :=
       Reduced.PackageSet.union (granularReal R support g)
         (Reduced.PackageSet.union (fInterReal Df)
            (Reduced.PackageSet.union (fInterFeatReal Df)
               (Reduced.PackageSet.union (aInterReal Da) (aInterFeatReal Da)))).
 
-    Module SOsd := SetOps Feature.PackageF Reduced.DependencyElt Feature.SupportRel Reduced.DependencyRel.
+    Module SOsd :=
+      SetOps Feature.PackageF Reduced.DependencyElt Feature.SupportRel
+      Reduced.DependencyRel.
     Definition supportEdges (R : PackageSet.t) (support : Feature.SupportRel.t)
         (g : V.t -> G.t) : Reduced.DependencyRel.t :=
       SOsd.filterMap (fun '((n, v), f) =>
@@ -211,7 +249,9 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           else None)
         support.
 
-    Module SOfd := SetOps Feature.ParameterisedDependencyElt Reduced.DependencyElt Feature.ParameterisedDependencyRel Reduced.DependencyRel.
+    Module SOfd :=
+      SetOps Feature.ParameterisedDependencyElt Reduced.DependencyElt
+      Feature.ParameterisedDependencyRel Reduced.DependencyRel.
     Definition fDepToInterEdges (Df : Feature.ParameterisedDependencyRel.t)
         (g : V.t -> G.t) : Reduced.DependencyRel.t :=
       SOfd.map (fun '((n, v), (m, (vs, _))) =>
@@ -229,7 +269,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
             vs)
         Df.
 
-    Module SOfsd := SetOps F Reduced.DependencyElt Feature.FSet Reduced.DependencyRel.
+    Module SOfsd :=
+      SetOps F Reduced.DependencyElt Feature.FSet Reduced.DependencyRel.
     Definition fDepToInterFeatEdges (Df : Feature.ParameterisedDependencyRel.t)
         (g : V.t -> G.t) : Reduced.DependencyRel.t :=
       SOfd.unionMap (fun '((n, v), (m, (vs, fs))) =>
@@ -250,7 +291,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
             vs)
         Df.
 
-    Definition fInterFeatToInterEdges (Df : Feature.ParameterisedDependencyRel.t) : Reduced.DependencyRel.t :=
+    Definition fInterFeatToInterEdges
+        (Df : Feature.ParameterisedDependencyRel.t) : Reduced.DependencyRel.t :=
       SOfd.unionMap (fun '((n, v), (m, (vs, fs))) =>
           SOfsd.unionMap (fun f =>
               SOvd.map (fun u =>
@@ -260,7 +302,9 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
             fs)
         Df.
 
-    Module SOad := SetOps Feature.AdditionalDependencyElt Reduced.DependencyElt Feature.AdditionalDependencyRel Reduced.DependencyRel.
+    Module SOad :=
+      SetOps Feature.AdditionalDependencyElt Reduced.DependencyElt
+      Feature.AdditionalDependencyRel Reduced.DependencyRel.
     Definition aDepToInterEdges (Da : Feature.AdditionalDependencyRel.t)
         (g : V.t -> G.t) : Reduced.DependencyRel.t :=
       SOad.map (fun '(((n, v), f), (m, (vs, _))) =>
@@ -297,7 +341,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
             vs)
         Da.
 
-    Definition aInterFeatToInterEdges (Da : Feature.AdditionalDependencyRel.t) : Reduced.DependencyRel.t :=
+    Definition aInterFeatToInterEdges (Da : Feature.AdditionalDependencyRel.t) :
+        Reduced.DependencyRel.t :=
       SOad.unionMap (fun '(((n, v), f), (m, (vs, fs))) =>
           SOfsd.unionMap (fun f' =>
               SOvd.map (fun u =>
@@ -309,7 +354,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
 
     Definition reduceDeps
         (R : PackageSet.t) (support : Feature.SupportRel.t)
-        (Df : Feature.ParameterisedDependencyRel.t) (Da : Feature.AdditionalDependencyRel.t)
+        (Df : Feature.ParameterisedDependencyRel.t)
+          (Da : Feature.AdditionalDependencyRel.t)
         (g : V.t -> G.t) : Reduced.DependencyRel.t :=
       Reduced.DependencyRel.union (supportEdges R support g)
         (Reduced.DependencyRel.union (fDepToInterEdges Df g)
@@ -319,11 +365,14 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
                     (Reduced.DependencyRel.union (fInterFeatToInterEdges Df)
                        (Reduced.DependencyRel.union (aDepToInterEdges Da g)
                           (Reduced.DependencyRel.union (aInterToOrigEdges Da g)
-                             (Reduced.DependencyRel.union (aDepToInterFeatEdges Da g)
-                                (Reduced.DependencyRel.union (aInterToFeatEdges Da g)
+                             (Reduced.DependencyRel.union
+                               (aDepToInterFeatEdges Da g)
+                                (Reduced.DependencyRel.union
+                                  (aInterToFeatEdges Da g)
                                    (aInterFeatToInterEdges Da)))))))))).
 
-    Lemma mem_embedVS : forall vs v, Reduced.VSet.In v (embedVS vs) <-> VSet.In v vs.
+    Lemma mem_embedVS : forall vs v, Reduced.VSet.In v (embedVS vs) <->
+        VSet.In v vs.
     Proof.
       intros vs v; unfold embedVS.
       exact (SOvv.mem_map_inj (fun u => u) vs v (fun x y H => H)).
@@ -355,7 +404,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         try match goal with
             | H : (if ?b then _ else _) = Some _ |- _ =>
                 destruct b eqn:?; [| discriminate H]
-            | H : PackageSet.mem _ _ = true |- _ => apply PackageSet.mem_spec in H
+            | H : PackageSet.mem _ _ = true |- _ =>
+                apply PackageSet.mem_spec in H
             end).
 
     Ltac mem_close :=
@@ -380,28 +430,35 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
             | right; pick_close ].
 
     Inductive RealMember (R : PackageSet.t) (support : Feature.SupportRel.t)
-        (Df : Feature.ParameterisedDependencyRel.t) (Da : Feature.AdditionalDependencyRel.t) (g : V.t -> G.t) :
+        (Df : Feature.ParameterisedDependencyRel.t)
+          (Da : Feature.AdditionalDependencyRel.t) (g : V.t -> G.t) :
         Reduced.Package.t -> Prop :=
     | RealOrig : forall n v,
-        Feature.Reduction.Reduced.PackageSet.In (Feature.Reduction.Name.Orig n, v)
+        Feature.Reduction.Reduced.PackageSet.In
+          (Feature.Reduction.Name.Orig n, v)
           (Feature.Reduction.reduceReal R support) ->
         RealMember R support Df Da g (Name.GranularOrig n (g v), v)
     | RealFeatPkg : forall n f v,
-        Feature.Reduction.Reduced.PackageSet.In (Feature.Reduction.Name.FeatPkg n f, v)
+        Feature.Reduction.Reduced.PackageSet.In
+          (Feature.Reduction.Name.FeatPkg n f, v)
           (Feature.Reduction.reduceReal R support) ->
         RealMember R support Df Da g (Name.GranularFeatPkg n f (g v), v)
     | RealFInter : forall n v m vs fs u,
-        Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df -> VSet.In u vs ->
+        Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df ->
+          VSet.In u vs ->
         RealMember R support Df Da g (Name.Intermediate n v m, u)
     | RealFInterF : forall n v m vs fs u f,
-        Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df -> VSet.In u vs ->
+        Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df ->
+          VSet.In u vs ->
         Feature.FSet.In f fs ->
         RealMember R support Df Da g (Name.IntermediateF n v m f, u)
     | RealAInter : forall n v f m vs fs u,
-        Feature.AdditionalDependencyRel.In (((n, v), f), (m, (vs, fs))) Da -> VSet.In u vs ->
+        Feature.AdditionalDependencyRel.In (((n, v), f), (m, (vs, fs))) Da ->
+          VSet.In u vs ->
         RealMember R support Df Da g (Name.Intermediate n v m, u)
     | RealAInterA : forall n v f m vs fs u f',
-        Feature.AdditionalDependencyRel.In (((n, v), f), (m, (vs, fs))) Da -> VSet.In u vs ->
+        Feature.AdditionalDependencyRel.In (((n, v), f), (m, (vs, fs))) Da ->
+          VSet.In u vs ->
         Feature.FSet.In f' fs ->
         RealMember R support Df Da g (Name.IntermediateA n v f m f', u).
     #[local] Hint Constructors RealMember : fc_mem.
@@ -425,7 +482,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
        proofs invert on the depender, so the families must be named rather
        than positions in an eleven-way disjunction. *)
     Inductive EncodedEdge (R : PackageSet.t) (support : Feature.SupportRel.t)
-        (Df : Feature.ParameterisedDependencyRel.t) (Da : Feature.AdditionalDependencyRel.t) (g : V.t -> G.t) :
+        (Df : Feature.ParameterisedDependencyRel.t)
+          (Da : Feature.AdditionalDependencyRel.t) (g : V.t -> G.t) :
         Reduced.DependencyElt.t -> Prop :=
     | EdgeSupport : forall n v f,
         Feature.SupportRel.In ((n, v), f) support -> PackageSet.In (n, v) R ->
@@ -438,23 +496,27 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           ((Name.GranularOrig n (g v), v),
            (Name.Intermediate n v m, embedVS vs))
     | EdgeFInterToOrig : forall n v m vs fs u,
-        Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df -> VSet.In u vs ->
+        Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df ->
+          VSet.In u vs ->
         EncodedEdge R support Df Da g
           ((Name.Intermediate n v m, u),
            (Name.GranularOrig m (g u), singVS u))
     | EdgeFDepToInterFeat : forall n v m vs fs f,
-        Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df -> Feature.FSet.In f fs ->
+        Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df ->
+          Feature.FSet.In f fs ->
         EncodedEdge R support Df Da g
           ((Name.GranularOrig n (g v), v),
            (Name.IntermediateF n v m f, embedVS vs))
     | EdgeFInterToFeat : forall n v m vs fs u f,
-        Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df -> VSet.In u vs ->
+        Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df ->
+          VSet.In u vs ->
         Feature.FSet.In f fs ->
         EncodedEdge R support Df Da g
           ((Name.IntermediateF n v m f, u),
            (Name.GranularFeatPkg m f (g u), singVS u))
     | EdgeFInterFeatToInter : forall n v m vs fs f u,
-        Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df -> Feature.FSet.In f fs ->
+        Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df ->
+          Feature.FSet.In f fs ->
         VSet.In u vs ->
         EncodedEdge R support Df Da g
           ((Name.IntermediateF n v m f, u),
@@ -465,7 +527,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           ((Name.GranularFeatPkg n f (g v), v),
            (Name.Intermediate n v m, embedVS vs))
     | EdgeAInterToOrig : forall n v f m vs fs u,
-        Feature.AdditionalDependencyRel.In (((n, v), f), (m, (vs, fs))) Da -> VSet.In u vs ->
+        Feature.AdditionalDependencyRel.In (((n, v), f), (m, (vs, fs))) Da ->
+          VSet.In u vs ->
         EncodedEdge R support Df Da g
           ((Name.Intermediate n v m, u),
            (Name.GranularOrig m (g u), singVS u))
@@ -476,7 +539,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           ((Name.GranularFeatPkg n f (g v), v),
            (Name.IntermediateA n v f m f', embedVS vs))
     | EdgeAInterToFeat : forall n v f m vs fs u f',
-        Feature.AdditionalDependencyRel.In (((n, v), f), (m, (vs, fs))) Da -> VSet.In u vs ->
+        Feature.AdditionalDependencyRel.In (((n, v), f), (m, (vs, fs))) Da ->
+          VSet.In u vs ->
         Feature.FSet.In f' fs ->
         EncodedEdge R support Df Da g
           ((Name.IntermediateA n v f m f', u),
@@ -489,7 +553,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
            (Name.Intermediate n v m, singVS u)).
     #[local] Hint Constructors EncodedEdge : fc_mem.
 
-    Lemma mem_reduceDeps : forall R support Df Da g (y : Reduced.DependencyElt.t),
+    Lemma mem_reduceDeps :
+        forall R support Df Da g (y : Reduced.DependencyElt.t),
         Reduced.DependencyRel.In y (reduceDeps R support Df Da g) <->
         EncodedEdge R support Df Da g y.
     Proof.
@@ -498,7 +563,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         fInterToFeatEdges, fInterFeatToInterEdges, aDepToInterEdges,
         aInterToOrigEdges, aDepToInterFeatEdges, aInterToFeatEdges,
         aInterFeatToInterEdges.
-      rewrite !Reduced.DependencyRel.union_spec, SOsd.mem_filterMap, SOfd.mem_map,
+      rewrite !Reduced.DependencyRel.union_spec, SOsd.mem_filterMap,
+        SOfd.mem_map,
         !SOfd.mem_unionMap, SOad.mem_map, !SOad.mem_unionMap.
       split.
       - intro H;
@@ -523,7 +589,9 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           end)
         S.
 
-    Module SOts := SetOps Reduced.Package Feature.Featured Reduced.PackageSet Feature.FeaturedSet.
+    Module SOts :=
+      SetOps Reduced.Package Feature.Featured Reduced.PackageSet
+      Feature.FeaturedSet.
     Definition concurrentFeatureResolution (g : V.t -> G.t)
         (S : Reduced.PackageSet.t) : Feature.FeaturedSet.t :=
       SOts.filterMap (fun p' =>
@@ -535,7 +603,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         S.
 
     Module SOvpp := SetOps V ParentElt VSet ParentRel.
-    Definition parentsOf (S : Reduced.PackageSet.t) (n : N.t) (v : V.t) (m : N.t)
+    Definition parentsOf (S : Reduced.PackageSet.t) (n : N.t)
+        (v : V.t) (m : N.t)
         (vs : VSet.t) : ParentRel.t :=
       SOvpp.filterMap (fun u =>
           if Reduced.PackageSet.mem (Name.Intermediate n v m, u) S
@@ -543,9 +612,14 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           else None)
         vs.
 
-    Module SOfpp := SetOps Feature.ParameterisedDependencyElt ParentElt Feature.ParameterisedDependencyRel ParentRel.
-    Module SOapp := SetOps Feature.AdditionalDependencyElt ParentElt Feature.AdditionalDependencyRel ParentRel.
-    Definition parents (Df : Feature.ParameterisedDependencyRel.t) (Da : Feature.AdditionalDependencyRel.t)
+    Module SOfpp :=
+      SetOps Feature.ParameterisedDependencyElt ParentElt
+      Feature.ParameterisedDependencyRel ParentRel.
+    Module SOapp :=
+      SetOps Feature.AdditionalDependencyElt ParentElt
+      Feature.AdditionalDependencyRel ParentRel.
+    Definition parents (Df : Feature.ParameterisedDependencyRel.t)
+        (Da : Feature.AdditionalDependencyRel.t)
         (g : V.t -> G.t) (S : Reduced.PackageSet.t) : ParentRel.t :=
       ParentRel.union
         (SOfpp.unionMap (fun '((n, v), (m, (vs, _))) =>
@@ -577,8 +651,10 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
 
     Lemma mem_concurrentFeatureResolution :
       forall g (S : Reduced.PackageSet.t) n v fs,
-        Feature.FeaturedSet.In ((n, v), fs) (concurrentFeatureResolution g S) <->
-        Reduced.PackageSet.In (Name.GranularOrig n (g v), v) S /\ fs = featsOf g n v S.
+        Feature.FeaturedSet.In ((n, v), fs)
+          (concurrentFeatureResolution g S) <->
+        Reduced.PackageSet.In (Name.GranularOrig n (g v), v) S /\ fs =
+          featsOf g n v S.
     Proof.
       intros g S n v fs; unfold concurrentFeatureResolution;
         rewrite SOts.mem_filterMap.
@@ -599,7 +675,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         m' = m /\ n' = n /\ v' = v.
     Proof.
       intros S n v m vs m' u n' v'; unfold parentsOf.
-      rewrite SOvpp.mem_filterMap_if; setoid_rewrite Reduced.PackageSet.mem_spec; split.
+      rewrite SOvpp.mem_filterMap_if;
+        setoid_rewrite Reduced.PackageSet.mem_spec; split.
       - intros (u' & Hu & Hi & E); injection E as -> -> -> ->; auto.
       - intros (Hu & Hi & -> & -> & ->); exists u; auto.
     Qed.
@@ -607,9 +684,12 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
     Lemma mem_parents : forall Df Da g (S : Reduced.PackageSet.t) m u n v,
         ParentRel.In ((m, u), (n, v)) (parents Df Da g S) <->
         Reduced.PackageSet.In (Name.Intermediate n v m, u) S /\
-        ((exists vs fs, Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df /\
-            VSet.In u vs /\ Reduced.PackageSet.In (Name.GranularOrig n (g v), v) S) \/
-         (exists f vs fs, Feature.AdditionalDependencyRel.In (((n, v), f), (m, (vs, fs))) Da /\
+        ((exists vs fs,
+          Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df /\
+            VSet.In u vs /\
+              Reduced.PackageSet.In (Name.GranularOrig n (g v), v) S) \/
+         (exists f vs fs,
+           Feature.AdditionalDependencyRel.In (((n, v), f), (m, (vs, fs))) Da /\
             VSet.In u vs /\
             Reduced.PackageSet.In (Name.GranularFeatPkg n f (g v), v) S)).
     Proof.
@@ -627,12 +707,14 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           [left; exists ((n, v), (m, (vs, fs)))
           | right; exists (((n, v), f), (m, (vs, fs)))];
           (split; [assumption | cbn beta iota]);
-          apply SOvpp.in_if_empty; rewrite Reduced.PackageSet.mem_spec, mem_parentsOf;
+          apply SOvpp.in_if_empty;
+            rewrite Reduced.PackageSet.mem_spec, mem_parentsOf;
           repeat split; assumption.
     Qed.
 
     Lemma parent_closure_step :
-      forall RR D r g S P (q : Reduced.Package.t) n v m vs fs (iF : F.t -> Name.t),
+      forall RR D r g S P (q : Reduced.Package.t) n v m vs fs
+        (iF : F.t -> Name.t),
         Reduced.IsResolution RR D r S -> Reduced.PackageSet.In q S ->
         (forall u, VSet.In u vs ->
            Reduced.PackageSet.In (Name.Intermediate n v m, u) S ->
@@ -644,7 +726,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         (forall f, Feature.FSet.In f fs ->
            Reduced.DependencyRel.In (q, (iF f, embedVS vs)) D) ->
         (forall f u, Feature.FSet.In f fs -> VSet.In u vs ->
-           Reduced.DependencyRel.In ((iF f, u), (Name.Intermediate n v m, singVS u)) D) ->
+           Reduced.DependencyRel.In
+             ((iF f, u), (Name.Intermediate n v m, singVS u)) D) ->
         (forall f u, Feature.FSet.In f fs -> VSet.In u vs ->
            Reduced.DependencyRel.In ((iF f, u),
                         (Name.GranularFeatPkg m f (g u), singVS u)) D) ->
@@ -676,7 +759,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
 
     Theorem concurrent_feature_soundness :
       forall (R : PackageSet.t) (support : Feature.SupportRel.t)
-             (Df : Feature.ParameterisedDependencyRel.t) (Da : Feature.AdditionalDependencyRel.t)
+             (Df : Feature.ParameterisedDependencyRel.t)
+               (Da : Feature.AdditionalDependencyRel.t)
              (g : V.t -> G.t) (r : Package.t) (S : Reduced.PackageSet.t),
         (forall f, ~ Feature.SupportRel.In (r, f) support) ->
         Reduced.IsResolution (reduceReal R support Df Da g)
@@ -698,7 +782,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       assert (HfeatSup : forall n f v,
                  Reduced.PackageSet.In
                    (Name.GranularFeatPkg n f (g v), v) S ->
-                 Feature.SupportRel.In ((n, v), f) support /\ PackageSet.In (n, v) R).
+                 Feature.SupportRel.In ((n, v), f) support /\
+                   PackageSet.In (n, v) R).
       { intros n f v HS; pose proof (Hsub _ HS) as HF.
         apply mem_reduceReal in HF; inversion HF; subst.
         eapply Feature.Reduction.mem_reduceReal_featPkg; eassumption. }
@@ -792,7 +877,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       Feature.FeaturedSet.exists_ (fun '(q, _) => PackageEqb.eqb q p) S_CF.
 
     Definition takenWithb
-        (S_CF : Feature.FeaturedSet.t) (fs : Feature.FSet.t) (q : Package.t) : bool :=
+        (S_CF : Feature.FeaturedSet.t) (fs : Feature.FSet.t)
+          (q : Package.t) : bool :=
       Feature.FeaturedSet.exists_ (fun '(q', fs') =>
           andb (PackageEqb.eqb q' q) (Feature.FSet.subset fs fs'))
         S_CF.
@@ -802,8 +888,11 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       andb (inSb S_CF p)
         (andb (takenWithb S_CF fs (m, u)) (ParentRel.mem ((m, u), p) pi)).
 
-    Module SOsw := SetOps Feature.Featured Reduced.Package Feature.FeaturedSet Reduced.PackageSet.
-    Definition coreResolution (Df : Feature.ParameterisedDependencyRel.t) (Da : Feature.AdditionalDependencyRel.t)
+    Module SOsw :=
+      SetOps Feature.Featured Reduced.Package Feature.FeaturedSet
+      Reduced.PackageSet.
+    Definition coreResolution (Df : Feature.ParameterisedDependencyRel.t)
+        (Da : Feature.AdditionalDependencyRel.t)
         (g : V.t -> G.t) (S_CF : Feature.FeaturedSet.t) (pi : ParentRel.t) :
         Reduced.PackageSet.t :=
       Reduced.PackageSet.union
@@ -849,7 +938,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
                        Da))))).
 
     Lemma inSb_iff : forall S_CF p,
-        inSb S_CF p = true <-> exists fs_p, Feature.FeaturedSet.In (p, fs_p) S_CF.
+        inSb S_CF p = true <-> exists fs_p,
+          Feature.FeaturedSet.In (p, fs_p) S_CF.
     Proof.
       intros S_CF p; unfold inSb.
       rewrite Feature.FeaturedSet.exists_spec'.
@@ -876,7 +966,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       - intros [fs' [Hsub H]]; exists (q, fs'); split;
           [exact H | cbn beta iota].
         apply Bool.andb_true_iff; split;
-          [apply PackageEqb.eqb_refl | apply Feature.FSet.subset_spec; exact Hsub].
+          [apply PackageEqb.eqb_refl | apply Feature.FSet.subset_spec;
+            exact Hsub].
     Qed.
 
     Lemma activeb_iff : forall S_CF pi p fs m u,
@@ -893,7 +984,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
     Qed.
 
     Inductive CoreMember (S_CF : Feature.FeaturedSet.t) (pi : ParentRel.t)
-        (Df : Feature.ParameterisedDependencyRel.t) (Da : Feature.AdditionalDependencyRel.t) (g : V.t -> G.t) :
+        (Df : Feature.ParameterisedDependencyRel.t)
+          (Da : Feature.AdditionalDependencyRel.t) (g : V.t -> G.t) :
         Reduced.Package.t -> Prop :=
     | CoreOrig : forall n v fs,
         Feature.FeaturedSet.In ((n, v), fs) S_CF ->
@@ -902,15 +994,18 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         Feature.FeaturedSet.In ((n, v), fs) S_CF -> Feature.FSet.In f fs ->
         CoreMember S_CF pi Df Da g (Name.GranularFeatPkg n f (g v), v)
     | CoreFInter : forall n v m vs fs u,
-        Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df -> VSet.In u vs ->
+        Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df ->
+          VSet.In u vs ->
         activeb S_CF pi (n, v) fs m u = true ->
         CoreMember S_CF pi Df Da g (Name.Intermediate n v m, u)
     | CoreAInter : forall n v f m vs fs u,
-        Feature.AdditionalDependencyRel.In (((n, v), f), (m, (vs, fs))) Da -> VSet.In u vs ->
+        Feature.AdditionalDependencyRel.In (((n, v), f), (m, (vs, fs))) Da ->
+          VSet.In u vs ->
         activeb S_CF pi (n, v) fs m u = true ->
         CoreMember S_CF pi Df Da g (Name.Intermediate n v m, u)
     | CoreFInterF : forall n v m vs fs f u,
-        Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df -> Feature.FSet.In f fs ->
+        Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df ->
+          Feature.FSet.In f fs ->
         VSet.In u vs -> activeb S_CF pi (n, v) fs m u = true ->
         CoreMember S_CF pi Df Da g (Name.IntermediateF n v m f, u)
     | CoreAInterA : forall n v f m vs fs f' u,
@@ -936,7 +1031,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
 
     Theorem concurrent_feature_completeness :
       forall (R : PackageSet.t) (support : Feature.SupportRel.t)
-             (Df : Feature.ParameterisedDependencyRel.t) (Da : Feature.AdditionalDependencyRel.t)
+             (Df : Feature.ParameterisedDependencyRel.t)
+               (Da : Feature.AdditionalDependencyRel.t)
              (g : V.t -> G.t) (r : Package.t)
              (S_CF : Feature.FeaturedSet.t) (pi : ParentRel.t),
         IsResolution R support Df Da g r S_CF pi ->
@@ -1034,7 +1130,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         concurrentFeatureResolution g (coreResolution Df Da g S_CF pi) = S_CF.
     Proof.
       intros R support Df Da g r S_CF pi Hres.
-      assert (Hfeats : forall n v fs, Feature.FeaturedSet.In ((n, v), fs) S_CF ->
+      assert (Hfeats : forall n v fs,
+        Feature.FeaturedSet.In ((n, v), fs) S_CF ->
                  featsOf g n v (coreResolution Df Da g S_CF pi) = fs).
       { intros n v fs HS; apply Feature.FSet.ext; intro f.
         rewrite featsOf_spec, mem_coreResolution; split.
@@ -1067,10 +1164,12 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           ParentRel.In ((m, u), (n, v))
             (parents Df Da g (coreResolution Df Da g S_CF pi))
           <-> ParentRel.In ((m, u), (n, v)) pi /\
-          ((exists vs fs, Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df) \/
+          ((exists vs fs,
+            Feature.ParameterisedDependencyRel.In ((n, v), (m, (vs, fs))) Df) \/
            (exists fs_p f vs fs, Feature.FeaturedSet.In ((n, v), fs_p) S_CF /\
               Feature.FSet.In f fs_p /\
-              Feature.AdditionalDependencyRel.In (((n, v), f), (m, (vs, fs))) Da)).
+              Feature.AdditionalDependencyRel.In
+                (((n, v), f), (m, (vs, fs))) Da)).
     Proof.
       intros R support Df Da g r S_CF pi Hres m u n v; rewrite mem_parents.
       split.
@@ -1134,16 +1233,20 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
 
     Module Lookup.
       Module NEqb := UOTEqb N.
-      Definition pkgNodeFibre (Da : Feature.AdditionalDependencyRel.t) (p : Package.t) (m : N.t) :
+      Definition pkgNodeFibre (Da : Feature.AdditionalDependencyRel.t)
+          (p : Package.t) (m : N.t) :
           Feature.AdditionalDependencyRel.t :=
         Feature.AdditionalDependencyRel.filter
           (fun '((q, _), (m', _)) => andb (PackageEqb.eqb q p) (NEqb.eqb m' m))
           Da.
 
       Lemma mem_pkgNodeFibre :
-        forall Da (p q : Package.t) (f : F.t) (m m' : N.t) (d : Feature.DependeeTail.t),
-          Feature.AdditionalDependencyRel.In ((q, f), (m', d)) (pkgNodeFibre Da p m) <->
-          Feature.AdditionalDependencyRel.In ((q, f), (m', d)) Da /\ q = p /\ m' = m.
+        forall Da (p q : Package.t) (f : F.t) (m m' : N.t)
+          (d : Feature.DependeeTail.t),
+          Feature.AdditionalDependencyRel.In ((q, f), (m', d))
+            (pkgNodeFibre Da p m) <->
+          Feature.AdditionalDependencyRel.In ((q, f), (m', d)) Da /\ q =
+            p /\ m' = m.
       Proof.
         intros Da p q f m m' d; unfold pkgNodeFibre.
         rewrite Feature.AdditionalDependencyRel.filter_spec'; cbn beta iota.
@@ -1152,9 +1255,12 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       Qed.
 
       Lemma reduceDeps_mono :
-        forall R R' support support' Df Df' Da Da' g (y : Reduced.DependencyElt.t),
-          PackageSet.Subset R' R -> Feature.SupportRel.Subset support' support ->
-          Feature.ParameterisedDependencyRel.Subset Df' Df -> Feature.AdditionalDependencyRel.Subset Da' Da ->
+        forall R R' support support' Df Df' Da Da' g
+          (y : Reduced.DependencyElt.t),
+          PackageSet.Subset R' R ->
+            Feature.SupportRel.Subset support' support ->
+          Feature.ParameterisedDependencyRel.Subset Df' Df ->
+            Feature.AdditionalDependencyRel.Subset Da' Da ->
           Reduced.DependencyRel.In y (reduceDeps R' support' Df' Da' g) ->
           Reduced.DependencyRel.In y (reduceDeps R support Df Da g).
       Proof.
@@ -1185,10 +1291,12 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       Include GranularityFibre N V G Package PackageSet.
 
       Theorem versions_lookupGranularOrig : forall R support Df Da g n w,
-          Reduced.versions (reduceReal R support Df Da g) (Name.GranularOrig n w) =
+          Reduced.versions (reduceReal R support Df Da g)
+            (Name.GranularOrig n w) =
           Reduced.versions
             (reduceReal (granFibre g R n w) Feature.SupportRel.empty
-               Feature.ParameterisedDependencyRel.empty Feature.AdditionalDependencyRel.empty g)
+               Feature.ParameterisedDependencyRel.empty
+                 Feature.AdditionalDependencyRel.empty g)
             (Name.GranularOrig n w).
       Proof.
         intros R support Df Da g n w; apply Reduced.versions_ext; intro v.
@@ -1198,7 +1306,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           rewrite mem_granFibre in *; intuition.
       Qed.
 
-      Module ParameterisedDependencyRelFibred := Feature.Reduction.Lookup.ParameterisedDependencyRelFibred.
+      Module ParameterisedDependencyRelFibred :=
+        Feature.Reduction.Lookup.ParameterisedDependencyRelFibred.
       Theorem dependees_lookupGranularOrig : forall R support Df Da g n v,
           Reduced.dependees (reduceDeps R support Df Da g)
             (Name.GranularOrig n (g v), v) =
@@ -1208,7 +1317,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
                Feature.AdditionalDependencyRel.empty g)
             (Name.GranularOrig n (g v), v).
       Proof.
-        intros R support Df Da g n v; apply Reduced.dependees_ext; intros [m ws].
+        intros R support Df Da g n v; apply Reduced.dependees_ext;
+          intros [m ws].
         split; [| apply reduceDeps_mono;
                   [apply PackageSet.empty_subset
                   | apply Feature.SupportRel.empty_subset
@@ -1216,7 +1326,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
                   | apply Feature.AdditionalDependencyRel.empty_subset]].
         intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
         inversion H; subst.
-        - eapply EdgeFDepToInter; apply ParameterisedDependencyRelFibred.mem_tailFibre;
+        - eapply EdgeFDepToInter;
+            apply ParameterisedDependencyRelFibred.mem_tailFibre;
             split; [eassumption | reflexivity].
         - eapply EdgeFDepToInterFeat;
             [apply ParameterisedDependencyRelFibred.mem_tailFibre;
@@ -1226,14 +1337,16 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
 
       Module PackageSetFibred := Feature.Reduction.Lookup.PackageSetFibred.
       Module SupportRelFibred := Feature.Reduction.Lookup.SupportRelFibred.
-      Module AdditionalDependencyRelFibred := Feature.Reduction.Lookup.AdditionalDependencyRelFibred.
+      Module AdditionalDependencyRelFibred :=
+        Feature.Reduction.Lookup.AdditionalDependencyRelFibred.
       Theorem versions_lookupGranularFeatPkg : forall R support Df Da g n f w,
           Reduced.versions (reduceReal R support Df Da g)
             (Name.GranularFeatPkg n f w) =
           Reduced.versions
             (reduceReal (granFibre g R n w)
                (Feature.Reduction.Lookup.supportFibre support n f)
-               Feature.ParameterisedDependencyRel.empty Feature.AdditionalDependencyRel.empty g)
+               Feature.ParameterisedDependencyRel.empty
+                 Feature.AdditionalDependencyRel.empty g)
             (Name.GranularFeatPkg n f w).
       Proof.
         intros R support Df Da g n f w; apply Reduced.versions_ext; intro v.
@@ -1255,7 +1368,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
                (AdditionalDependencyRelFibred.tailFibre Da ((n, v), f)) g)
             (Name.GranularFeatPkg n f (g v), v).
       Proof.
-        intros R support Df Da g n v f; apply Reduced.dependees_ext; intros [m ws].
+        intros R support Df Da g n v f; apply Reduced.dependees_ext;
+          intros [m ws].
         split; [| apply reduceDeps_mono;
                   [apply PackageSetFibred.idFibre_subset
                   | apply SupportRelFibred.idFibre_subset
@@ -1266,8 +1380,10 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         - apply EdgeSupport;
             [apply SupportRelFibred.mem_idFibre;
                split; [eassumption | reflexivity]
-            | apply PackageSetFibred.mem_idFibre; split; [eassumption | reflexivity]].
-        - eapply EdgeADepToInter; apply AdditionalDependencyRelFibred.mem_tailFibre;
+            | apply PackageSetFibred.mem_idFibre; split;
+                [eassumption | reflexivity]].
+        - eapply EdgeADepToInter;
+            apply AdditionalDependencyRelFibred.mem_tailFibre;
             split; [eassumption | reflexivity].
         - eapply EdgeADepToInterFeat;
             [apply AdditionalDependencyRelFibred.mem_tailFibre;
@@ -1289,11 +1405,13 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
             (Name.GranularFeatPkg n f (g v), v).
       Proof.
         intros R support Df Da g n v f Hin.
-        assert (Feature.SupportRel.In ((n, v), f) support /\ PackageSet.In (n, v) R)
+        assert (Feature.SupportRel.In ((n, v), f) support /\
+          PackageSet.In (n, v) R)
           as [Hs HR].
         { apply mem_reduceReal in Hin; inversion Hin; subst.
           eapply Feature.Reduction.mem_reduceReal_featPkg; eassumption. }
-        assert (PackageSetFibred.idFibre R (n, v) = PackageSet.singleton (n, v)) as ER.
+        assert (PackageSetFibred.idFibre R (n, v) =
+          PackageSet.singleton (n, v)) as ER.
         { apply PackageSet.ext; intro x.
           rewrite PackageSetFibred.mem_idFibre, PackageSet.singleton_spec.
           split; [intros [_ E]; exact E
@@ -1301,14 +1419,16 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         assert (SupportRelFibred.idFibre support ((n, v), f)
                 = Feature.SupportRel.singleton ((n, v), f)) as ES.
         { apply Feature.SupportRel.ext; intro x.
-          rewrite SupportRelFibred.mem_idFibre, Feature.SupportRel.singleton_spec.
+          rewrite SupportRelFibred.mem_idFibre,
+            Feature.SupportRel.singleton_spec.
           split; [intros [_ E]; exact E
                  | intro E; split; [rewrite E; exact Hs | exact E]]. }
         rewrite dependees_lookupGranularFeatPkg_any, ER, ES; reflexivity.
       Qed.
 
       Theorem versions_lookupIntermediate : forall R support Df Da g n v m,
-          Reduced.versions (reduceReal R support Df Da g) (Name.Intermediate n v m) =
+          Reduced.versions (reduceReal R support Df Da g)
+            (Name.Intermediate n v m) =
           Reduced.versions
             (reduceReal PackageSet.empty Feature.SupportRel.empty
                (ParameterisedDependencyRelFibred.endsFibre Df (n, v) m)
@@ -1324,12 +1444,15 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         - eapply RealAInter; [| eassumption].
           apply mem_pkgNodeFibre; split; [eassumption | split; reflexivity].
         - match goal with
-          | Hx : Feature.ParameterisedDependencyRel.In _ (ParameterisedDependencyRelFibred.endsFibre _ _ _) |- _ =>
-              apply ParameterisedDependencyRelFibred.mem_endsFibre in Hx; destruct Hx as [Hx _]
+          | Hx : Feature.ParameterisedDependencyRel.In _
+              (ParameterisedDependencyRelFibred.endsFibre _ _ _) |- _ =>
+              apply ParameterisedDependencyRelFibred.mem_endsFibre in Hx;
+                destruct Hx as [Hx _]
           end.
           eapply RealFInter; eassumption.
         - match goal with
-          | Hx : Feature.AdditionalDependencyRel.In _ (pkgNodeFibre _ _ _) |- _ =>
+          | Hx : Feature.AdditionalDependencyRel.In _
+              (pkgNodeFibre _ _ _) |- _ =>
               apply mem_pkgNodeFibre in Hx; destruct Hx as [Hx _]
           end.
           eapply RealAInter; eassumption.
@@ -1379,8 +1502,10 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           apply ParameterisedDependencyRelFibred.mem_endsFibre;
             split; [eassumption | split; reflexivity].
         - match goal with
-          | Hx : Feature.ParameterisedDependencyRel.In _ (ParameterisedDependencyRelFibred.endsFibre _ _ _) |- _ =>
-              apply ParameterisedDependencyRelFibred.mem_endsFibre in Hx; destruct Hx as [Hx _]
+          | Hx : Feature.ParameterisedDependencyRel.In _
+              (ParameterisedDependencyRelFibred.endsFibre _ _ _) |- _ =>
+              apply ParameterisedDependencyRelFibred.mem_endsFibre in Hx;
+                destruct Hx as [Hx _]
           end.
           eapply RealFInterF; eassumption.
       Qed.
@@ -1419,19 +1544,23 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           Reduced.versions (reduceReal R support Df Da g)
             (Name.IntermediateA n v f m f') =
           Reduced.versions
-            (reduceReal PackageSet.empty Feature.SupportRel.empty Feature.ParameterisedDependencyRel.empty
+            (reduceReal PackageSet.empty Feature.SupportRel.empty
+              Feature.ParameterisedDependencyRel.empty
                (AdditionalDependencyRelFibred.endsFibre Da ((n, v), f) m) g)
             (Name.IntermediateA n v f m f').
       Proof.
-        intros R support Df Da g n v f m f'; apply Reduced.versions_ext; intro u.
+        intros R support Df Da g n v f m f';
+          apply Reduced.versions_ext; intro u.
         rewrite !mem_reduceReal.
         split; intro H; inversion H; subst.
         - eapply RealAInterA; [| eassumption | eassumption].
           apply AdditionalDependencyRelFibred.mem_endsFibre;
             split; [eassumption | split; reflexivity].
         - match goal with
-          | Hx : Feature.AdditionalDependencyRel.In _ (AdditionalDependencyRelFibred.endsFibre _ _ _) |- _ =>
-              apply AdditionalDependencyRelFibred.mem_endsFibre in Hx; destruct Hx as [Hx _]
+          | Hx : Feature.AdditionalDependencyRel.In _
+              (AdditionalDependencyRelFibred.endsFibre _ _ _) |- _ =>
+              apply AdditionalDependencyRelFibred.mem_endsFibre in Hx;
+                destruct Hx as [Hx _]
           end.
           eapply RealAInterA; eassumption.
       Qed.
@@ -1441,7 +1570,8 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           Reduced.dependees (reduceDeps R support Df Da g)
             (Name.IntermediateA n v f m f', u) =
           Reduced.dependees
-            (reduceDeps PackageSet.empty Feature.SupportRel.empty Feature.ParameterisedDependencyRel.empty
+            (reduceDeps PackageSet.empty Feature.SupportRel.empty
+              Feature.ParameterisedDependencyRel.empty
                (AdditionalDependencyRelFibred.endsFibre Da ((n, v), f) m) g)
             (Name.IntermediateA n v f m f', u).
       Proof.

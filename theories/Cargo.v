@@ -4,7 +4,8 @@ From PackageCalculus Require Import Prelude Core Semver ConflictClass.
 Create HintDb cmp_cargo.
 Create Rewrite HintDb cmp_cargo.
 
-Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : SemverMatch V).
+Module Cargo (N V F G Cfg DependencySource : UsualOrderedType)
+  (SemverMatch : SemverMatch V).
   Module Source := Core N V.
   Module Package := Source.Package.
   Module PackageSet := Source.PackageSet.
@@ -23,12 +24,15 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
   Module DependeeFeatureEntryFacts := UOTCompareFacts DependeeFeatureEntry.
   Module NFacts := UOTCompareFacts N.
   Module FFacts := UOTCompareFacts F.
-  #[local] Hint Rewrite DependeeFeatureEntryFacts.compare_eq_iff NFacts.compare_eq_iff
+  #[local] Hint Rewrite DependeeFeatureEntryFacts.compare_eq_iff
+    NFacts.compare_eq_iff
     FFacts.compare_eq_iff : cmp_cargo.
-  #[local] Hint Extern 1 => cmp_by DependeeFeatureEntryFacts.compare_antisym : cmp_cargo.
+  #[local] Hint Extern 1 =>
+    cmp_by DependeeFeatureEntryFacts.compare_antisym : cmp_cargo.
   #[local] Hint Extern 1 => cmp_by NFacts.compare_antisym : cmp_cargo.
   #[local] Hint Extern 1 => cmp_by FFacts.compare_antisym : cmp_cargo.
-  #[local] Hint Extern 1 => cmp_by DependeeFeatureEntryFacts.compare_lt_trans : cmp_cargo.
+  #[local] Hint Extern 1 =>
+    cmp_by DependeeFeatureEntryFacts.compare_lt_trans : cmp_cargo.
   #[local] Hint Extern 1 => cmp_by NFacts.compare_lt_trans : cmp_cargo.
   #[local] Hint Extern 1 => cmp_by FFacts.compare_lt_trans : cmp_cargo.
 
@@ -140,12 +144,15 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
     | _ => true
     end.
 
-  Definition Activated (FDefs : FeatureDefinitionRel.t) (fs : FSet.t) (p : Package.t)
+  Definition Activated (FDefs : FeatureDefinitionRel.t) (fs : FSet.t)
+      (p : Package.t)
       (a : N.t) : Prop :=
     exists f, FSet.In f fs /\
       (FeatureDefinitionRel.In ((p, f), FeatureEntry.EDep a) FDefs \/
-       (exists f', FeatureDefinitionRel.In ((p, f), FeatureEntry.EDepFeat a f') FDefs) \/
-       (exists f', FeatureDefinitionRel.In ((p, f), FeatureEntry.EWeakFeat a f') FDefs)).
+       (exists f', FeatureDefinitionRel.In
+         ((p, f), FeatureEntry.EDepFeat a f') FDefs) \/
+       (exists f', FeatureDefinitionRel.In
+         ((p, f), FeatureEntry.EWeakFeat a f') FDefs)).
 
   Definition slotRequests (d : DependencyRecord.t) (dflt : F.t) : FSet.t :=
     if sDefault d then FSet.add dflt (sReqFeats d) else sReqFeats d.
@@ -180,18 +187,22 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
           FSet.Subset (slotRequests d (inst_default I)) fs'
     ; res_feat_closure :
         (forall p fs f f', FeaturedSet.In (p, fs) FS -> FSet.In f fs ->
-         FeatureDefinitionRel.In ((p, f), FeatureEntry.EFeat f') (inst_fdefs I) ->
+         FeatureDefinitionRel.In ((p, f), FeatureEntry.EFeat f')
+           (inst_fdefs I) ->
          FSet.In f' fs) /\
         (forall p fs f a f', FeaturedSet.In (p, fs) FS -> FSet.In f fs ->
-         (FeatureDefinitionRel.In ((p, f), FeatureEntry.EDepFeat a f') (inst_fdefs I) \/
-          FeatureDefinitionRel.In ((p, f), FeatureEntry.EWeakFeat a f') (inst_fdefs I)) ->
+         (FeatureDefinitionRel.In ((p, f), FeatureEntry.EDepFeat a f')
+           (inst_fdefs I) \/
+          FeatureDefinitionRel.In ((p, f), FeatureEntry.EWeakFeat a f')
+            (inst_fdefs I)) ->
          forall d u, SlotRel.In (p, d) (inst_slots I) -> sAlias d = a ->
          ParentRel.In ((p, sSite d), u) pi ->
          forall fs', FeaturedSet.In ((sName d, u), fs') FS ->
          FSet.In f' fs')
     ; res_links_unique :
         forall p q l, PackageSet.In p S -> PackageSet.In q S ->
-        LinksRel.In (p, l) (inst_links I) -> LinksRel.In (q, l) (inst_links I) ->
+        LinksRel.In (p, l) (inst_links I) ->
+          LinksRel.In (q, l) (inst_links I) ->
         p = q
     ; res_fs_dom : forall p fs, FeaturedSet.In (p, fs) FS -> PackageSet.In p S
     ; res_fs_total : forall p, PackageSet.In p S ->
@@ -233,11 +244,13 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
     #[local] Hint Extern 1 => cmp_by GFacts.compare_antisym : cmp_cargo.
     #[local] Hint Extern 1 => cmp_by VFacts.compare_antisym : cmp_cargo.
     #[local] Hint Extern 1 => cmp_by SlotNameFacts.compare_antisym : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by DecisionNameFacts.compare_antisym : cmp_cargo.
+    #[local] Hint Extern 1 =>
+      cmp_by DecisionNameFacts.compare_antisym : cmp_cargo.
     #[local] Hint Extern 1 => cmp_by GFacts.compare_lt_trans : cmp_cargo.
     #[local] Hint Extern 1 => cmp_by VFacts.compare_lt_trans : cmp_cargo.
     #[local] Hint Extern 1 => cmp_by SlotNameFacts.compare_lt_trans : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by DecisionNameFacts.compare_lt_trans : cmp_cargo.
+    #[local] Hint Extern 1 =>
+      cmp_by DecisionNameFacts.compare_lt_trans : cmp_cargo.
 
     Module NEqb := UOTEqb N.
     Module PackageEqb := UOTEqb Package.
@@ -317,7 +330,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
       forall p d d', SlotRel.In (p, d) Slots -> SlotRel.In (p, d') Slots ->
       sSite d = sSite d' -> d = d'.
 
-    Definition activatedb (FDefs : FeatureDefinitionRel.t) (fs : FSet.t) (p : Package.t)
+    Definition activatedb (FDefs : FeatureDefinitionRel.t) (fs : FSet.t)
+        (p : Package.t)
         (a : N.t) : bool :=
       FeatureDefinitionRel.exists_ (fun '((q, f), e) =>
           andb (PackageEqb.eqb q p)
@@ -346,7 +360,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
           reflexivity.
     Qed.
 
-    Definition requiredb (FDefs : FeatureDefinitionRel.t) (fs : FSet.t) (p : Package.t)
+    Definition requiredb (FDefs : FeatureDefinitionRel.t) (fs : FSet.t)
+        (p : Package.t)
         (d : DependencyRecord.t) : bool :=
       orb (negb (sOptional d)) (activatedb FDefs fs p (sAlias d)).
 
@@ -426,11 +441,16 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
     Module FeaturePackageNameFacts := UOTCompareFacts FeaturePackageName.
     Module GEqb := UOTEqb G.
     Module FEqb := UOTEqb F.
-    #[local] Hint Rewrite GranularNameFacts.compare_eq_iff FeaturePackageNameFacts.compare_eq_iff : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by GranularNameFacts.compare_antisym : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by FeaturePackageNameFacts.compare_antisym : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by GranularNameFacts.compare_lt_trans : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by FeaturePackageNameFacts.compare_lt_trans : cmp_cargo.
+    #[local] Hint Rewrite GranularNameFacts.compare_eq_iff
+      FeaturePackageNameFacts.compare_eq_iff : cmp_cargo.
+    #[local] Hint Extern 1 =>
+      cmp_by GranularNameFacts.compare_antisym : cmp_cargo.
+    #[local] Hint Extern 1 =>
+      cmp_by FeaturePackageNameFacts.compare_antisym : cmp_cargo.
+    #[local] Hint Extern 1 =>
+      cmp_by GranularNameFacts.compare_lt_trans : cmp_cargo.
+    #[local] Hint Extern 1 =>
+      cmp_by FeaturePackageNameFacts.compare_lt_trans : cmp_cargo.
 
     Module Name.
       Inductive name : Type :=
@@ -526,16 +546,20 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
 
     Module SOvp := SetOps V Reduced.Package VSet Reduced.PackageSet.
     Module SOpp := SetOps Package Reduced.Package PackageSet Reduced.PackageSet.
-    Module SOsp := SetOps PackageF Reduced.Package SupportRel Reduced.PackageSet.
+    Module SOsp :=
+      SetOps PackageF Reduced.Package SupportRel Reduced.PackageSet.
     Module SOslp := SetOps SlotElt Reduced.Package SlotRel Reduced.PackageSet.
-    Module SOfp := SetOps FeatureDefinitionElt Reduced.Package FeatureDefinitionRel Reduced.PackageSet.
+    Module SOfp :=
+      SetOps FeatureDefinitionElt Reduced.Package FeatureDefinitionRel
+      Reduced.PackageSet.
     Module SOlp := SetOps LinksElt Reduced.Package LinksRel Reduced.PackageSet.
     Module SOvv := SetOps V VersionOT VSet Reduced.VSet.
 
     Definition gransOf (g : V.t -> G.t) (vs : VSet.t) : Reduced.VSet.t :=
       SOvv.map (fun u => Version.WClass (g u)) vs.
 
-    Definition inGran (g : V.t -> G.t) (w : G.t) (vs : VSet.t) : Reduced.VSet.t :=
+    Definition inGran (g : V.t -> G.t) (w : G.t) (vs : VSet.t) :
+        Reduced.VSet.t :=
       SOvv.filterMap
         (fun u => if GEqb.eqb (g u) w then Some (Version.WOrig u) else None) vs.
 
@@ -544,7 +568,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
       exists v, g v = w /\ SlotRel.In ((n, v), d) Slots /\
         slotActive r (n, v) d = true.
 
-    Definition DecOwned (g : V.t -> G.t) (FDefs : FeatureDefinitionRel.t) (Slots : SlotRel.t)
+    Definition DecOwned (g : V.t -> G.t) (FDefs : FeatureDefinitionRel.t)
+        (Slots : SlotRel.t)
         (r : Package.t) (n : N.t) (w : G.t) (f : F.t) (d : DependencyRecord.t)
         (f' : F.t) : Prop :=
       exists v e, g v = w /\ FeatureDefinitionRel.In (((n, v), f), e) FDefs /\
@@ -553,7 +578,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
 
     Definition rootPkg : Reduced.Package.t := (Name.CRoot, Version.WUnit).
 
-    Definition granReal (g : V.t -> G.t) (R : PackageSet.t) : Reduced.PackageSet.t :=
+    Definition granReal (g : V.t -> G.t) (R : PackageSet.t) :
+        Reduced.PackageSet.t :=
       SOpp.map (fun '(n, v) => (Name.CGran n (g v), Version.WOrig v)) R.
 
     Definition featReal (g : V.t -> G.t) (support : SupportRel.t)
@@ -570,7 +596,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
           else Reduced.PackageSet.empty)
         Slots.
 
-    Definition decReal (g : V.t -> G.t) (R : PackageSet.t) (FDefs : FeatureDefinitionRel.t)
+    Definition decReal (g : V.t -> G.t) (R : PackageSet.t)
+        (FDefs : FeatureDefinitionRel.t)
         (Slots : SlotRel.t) (r : Package.t)
       : Reduced.PackageSet.t :=
       SOfp.unionMap (fun '(((n, v), f), e) =>
@@ -605,7 +632,9 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
                        (inst_slots I) (inst_root I))
                     (clsReal (inst_gran I) (inst_real I) (inst_links I)))))).
 
-    Module SOlc := SetOps LinksElt ConflictClass.ConflictClassElt LinksRel ConflictClass.ConflictClassRel.
+    Module SOlc :=
+      SetOps LinksElt ConflictClass.ConflictClassElt LinksRel
+      ConflictClass.ConflictClassRel.
     Definition linkRel (g : V.t -> G.t) (Links : LinksRel.t)
       : ConflictClass.ConflictClassRel.t :=
       SOlc.map (fun '((n, v), l) =>
@@ -616,8 +645,11 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
     Module SOpv2 := SetOps Package VersionOT PackageSet Reduced.VSet.
     Module SOspv := SetOps PackageF VersionOT SupportRel Reduced.VSet.
     Module SOsh := SetOps SlotElt Reduced.Dependee SlotRel Reduced.DependeeSet.
-    Module SOfh := SetOps FeatureDefinitionElt Reduced.Dependee FeatureDefinitionRel Reduced.DependeeSet.
-    Module SOlh := SetOps LinksElt Reduced.Dependee LinksRel Reduced.DependeeSet.
+    Module SOfh :=
+      SetOps FeatureDefinitionElt Reduced.Dependee FeatureDefinitionRel
+      Reduced.DependeeSet.
+    Module SOlh :=
+      SetOps LinksElt Reduced.Dependee LinksRel Reduced.DependeeSet.
     Module SOfsh := SetOps F Reduced.Dependee FSet Reduced.DependeeSet.
 
     Definition versions (I : Inst) (m : Name.t) : Reduced.VSet.t :=
@@ -644,13 +676,15 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
             (inst_links I)
       end.
 
-    Definition dependeesBy (Vq : N.t -> VSet.t) (I : Inst) (p : Reduced.Package.t)
+    Definition dependeesBy (Vq : N.t -> VSet.t) (I : Inst)
+        (p : Reduced.Package.t)
       : Reduced.DependeeSet.t :=
       match p with
       | (Name.CRoot, Version.WUnit) =>
           let '(n, v) := inst_root I in
           Reduced.DependeeSet.add
-            (Name.CGran n (inst_gran I v), Reduced.VSet.singleton (Version.WOrig v))
+            (Name.CGran n (inst_gran I v),
+              Reduced.VSet.singleton (Version.WOrig v))
             (SOfsh.map (fun f =>
                  (Name.CFeatP n f (inst_gran I v),
                   Reduced.VSet.singleton (Version.WOrig v)))
@@ -669,12 +703,14 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
             (SOlh.filterMap (fun '(q, l) =>
                  if PackageEqb.eqb q (n, v)
                  then Some (Name.CCls l,
-                            Reduced.VSet.singleton (Version.WName (Name.CGran n w)))
+                            Reduced.VSet.singleton
+                              (Version.WName (Name.CGran n w)))
                  else None)
                (inst_links I))
       | (Name.CFeatP n f _, Version.WOrig v) =>
           Reduced.DependeeSet.add
-            (Name.CGran n (inst_gran I v), Reduced.VSet.singleton (Version.WOrig v))
+            (Name.CGran n (inst_gran I v),
+              Reduced.VSet.singleton (Version.WOrig v))
             (SOfh.unionMap (fun '(((n', v'), f0), e) =>
                  if negb (andb (PackageEqb.eqb (n', v') (n, v)) (FEqb.eqb f0 f))
                  then Reduced.DependeeSet.empty
@@ -726,14 +762,20 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
       | _ => Reduced.DependeeSet.empty
       end.
 
-    Definition dependees (I : Inst) (p : Reduced.Package.t) : Reduced.DependeeSet.t :=
+    Definition dependees (I : Inst) (p : Reduced.Package.t) :
+        Reduced.DependeeSet.t :=
       dependeesBy (Source.versions (inst_real I)) I p.
 
-    Module SOhe := SetOps Reduced.Dependee Reduced.DependencyElt Reduced.DependeeSet Reduced.DependencyRel.
-    Definition depEdges (p : Reduced.Package.t) (hs : Reduced.DependeeSet.t) : Reduced.DependencyRel.t :=
+    Module SOhe :=
+      SetOps Reduced.Dependee Reduced.DependencyElt Reduced.DependeeSet
+      Reduced.DependencyRel.
+    Definition depEdges (p : Reduced.Package.t) (hs : Reduced.DependeeSet.t) :
+        Reduced.DependencyRel.t :=
       SOhe.map (fun h => (p, h)) hs.
 
-    Module SOpe := SetOps Reduced.Package Reduced.DependencyElt Reduced.PackageSet Reduced.DependencyRel.
+    Module SOpe :=
+      SetOps Reduced.Package Reduced.DependencyElt Reduced.PackageSet
+      Reduced.DependencyRel.
     Definition reduceDeps (I : Inst) : Reduced.DependencyRel.t :=
       SOpe.unionMap (fun p =>
           depEdges p
@@ -857,14 +899,16 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
       forall I p,
         Reduced.PackageSet.In p
           (reduceReal I) <->
-        p = rootPkg \/ Reduced.PackageSet.In p (granReal (inst_gran I) (inst_real I)) \/
+        p = rootPkg \/
+          Reduced.PackageSet.In p (granReal (inst_gran I) (inst_real I)) \/
         Reduced.PackageSet.In p (featReal (inst_gran I) (inst_support I)) \/
         Reduced.PackageSet.In p
           (slotReal (inst_gran I) (inst_real I) (inst_slots I) (inst_root I)) \/
         Reduced.PackageSet.In p
           (decReal (inst_gran I) (inst_real I) (inst_fdefs I) (inst_slots I)
              (inst_root I)) \/
-        Reduced.PackageSet.In p (clsReal (inst_gran I) (inst_real I) (inst_links I)).
+        Reduced.PackageSet.In p
+          (clsReal (inst_gran I) (inst_real I) (inst_links I)).
     Proof.
       intros; unfold reduceReal; rewrite !Reduced.PackageSet.union_spec.
       rewrite Reduced.PackageSet.singleton_spec; reflexivity.
@@ -876,7 +920,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
         match m with
         | Name.CRoot => v' = Version.WUnit
         | Name.CGran n w =>
-            exists v, v' = Version.WOrig v /\ PackageSet.In (n, v) (inst_real I) /\
+            exists v, v' = Version.WOrig v /\
+              PackageSet.In (n, v) (inst_real I) /\
               w = inst_gran I v
         | Name.CFeatP n f w =>
             exists v, v' = Version.WOrig v /\
@@ -923,12 +968,14 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
     Proof.
       intros; cbn [versions]; rewrite SOlv.mem_filterMap; split.
       - intros [[[n v] l'] [Hl He]]; cbn beta iota in He.
-        rewrite if_some_iff, andb_true_iff, NEqb.eqb_true_iff, PackageSet.mem_spec
+        rewrite if_some_iff, andb_true_iff, NEqb.eqb_true_iff,
+          PackageSet.mem_spec
           in He.
         destruct He as [[-> HR] <-]; exists n, v; auto.
       - intros [n [v [-> [Hl HR]]]]; exists ((n, v), l); split;
           [exact Hl | cbn beta iota].
-        rewrite NEqb.eqb_refl, (proj2 (PackageSet.mem_spec _ _) HR); reflexivity.
+        rewrite NEqb.eqb_refl, (proj2 (PackageSet.mem_spec _ _) HR);
+          reflexivity.
     Qed.
 
     Lemma versions_cls_reduceReal :
@@ -936,7 +983,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
         Reduced.VSet.In v
           (versions I (Name.CCls l)) <->
         exists n, v = Version.WName n /\
-          ConflictClass.Reduction.Reduced.VSet.In (ConflictClass.Reduction.Version.Name n)
+          ConflictClass.Reduction.Reduced.VSet.In
+            (ConflictClass.Reduction.Version.Name n)
             (ConflictClass.Reduction.Reduced.versions
                (ConflictClass.Reduction.reduceReal
                   (granReal (inst_gran I) (inst_real I))
@@ -954,9 +1002,11 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
         apply ConflictClass.Reduction.Lookup.mem_inClass; split.
         + apply mem_granReal; exists n, v; split; [exact Em | reflexivity].
         + apply mem_linkRel; exists n, v, l; repeat split; exact Hl.
-      - intros [m [-> Hn]]; apply ConflictClass.Reduction.Lookup.SOpv.mem_map in Hn.
+      - intros [m [-> Hn]];
+          apply ConflictClass.Reduction.Lookup.SOpv.mem_map in Hn.
         destruct Hn as [q [Hq E]]; injection E as ->.
-        apply ConflictClass.Reduction.Lookup.mem_inClass in Hq; destruct Hq as [Hq Hc].
+        apply ConflictClass.Reduction.Lookup.mem_inClass in Hq;
+          destruct Hq as [Hq Hc].
         apply mem_linkRel in Hc; destruct Hc as [n [v [l' [Hl [-> Ek]]]]].
         injection Ek as <-.
         apply mem_granReal in Hq; destruct Hq as [n' [v' [HR E]]].
@@ -1011,7 +1061,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
                         rootFeats) rootPkg) <->
         h = (Name.CGran rn (g rv), Reduced.VSet.singleton (Version.WOrig rv)) \/
         exists f, FSet.In f rootFeats /\
-          h = (Name.CFeatP rn f (g rv), Reduced.VSet.singleton (Version.WOrig rv)).
+          h = (Name.CFeatP rn f (g rv),
+            Reduced.VSet.singleton (Version.WOrig rv)).
     Proof.
       intros; cbn [dependees dependeesBy rootPkg inst_gran inst_root
                    inst_rootFeats].
@@ -1073,7 +1124,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
         Reduced.DependeeSet.In h
           (dependeesBy Vq I (Name.CFeatP n f w, Version.WOrig v)) <->
         (h =
-           (Name.CGran n (inst_gran I v), Reduced.VSet.singleton (Version.WOrig v)) \/
+           (Name.CGran n (inst_gran I v),
+             Reduced.VSet.singleton (Version.WOrig v)) \/
          exists e, FeatureDefinitionRel.In (((n, v), f), e) (inst_fdefs I) /\
            ((exists f', e = FeatureEntry.EFeat f' /\
                h = (Name.CFeatP n f' (inst_gran I v),
@@ -1141,7 +1193,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
         Reduced.DependeeSet.In h
           (dependees I (Name.CFeatP n f w, Version.WOrig v)) <->
         (h =
-           (Name.CGran n (inst_gran I v), Reduced.VSet.singleton (Version.WOrig v)) \/
+           (Name.CGran n (inst_gran I v),
+             Reduced.VSet.singleton (Version.WOrig v)) \/
          exists e, FeatureDefinitionRel.In (((n, v), f), e) (inst_fdefs I) /\
            ((exists f', e = FeatureEntry.EFeat f' /\
                h = (Name.CFeatP n f' (inst_gran I v),
@@ -1269,7 +1322,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
     Qed.
 
     Module SOtv2 := SetOps Reduced.Package V Reduced.PackageSet VSet.
-    Definition versionsAt (S : Reduced.PackageSet.t) (n : N.t) (w : G.t) : VSet.t :=
+    Definition versionsAt (S : Reduced.PackageSet.t) (n : N.t)
+        (w : G.t) : VSet.t :=
       SOtv2.filterMap (fun '(m, v) =>
           match m, v with
           | Name.CGran n' w', Version.WOrig u =>
@@ -1293,7 +1347,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
         rewrite NEqb.eqb_refl, GEqb.eqb_refl; reflexivity.
     Qed.
 
-    Module SOtpar := SetOps Reduced.Package ParentElt Reduced.PackageSet ParentRel.
+    Module SOtpar :=
+      SetOps Reduced.Package ParentElt Reduced.PackageSet ParentRel.
     Module SOvpar := SetOps V ParentElt VSet ParentRel.
     Definition parents (I : Inst) (S : Reduced.PackageSet.t) : ParentRel.t :=
       SOtpar.unionMap (fun '(m, v') =>
@@ -1316,7 +1371,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
 
     Lemma mem_parents : forall I S n v k u,
         ParentRel.In (((n, v), k), u) (parents I S) <->
-        exists w w' d, Reduced.PackageSet.In (Name.CSlot n w d, Version.WClass w') S /\
+        exists w w' d,
+          Reduced.PackageSet.In (Name.CSlot n w d, Version.WClass w') S /\
           Reduced.PackageSet.In (Name.CGran n w, Version.WOrig v) S /\
           SlotRel.In ((n, v), d) (inst_slots I) /\ sSite d = k /\
           slotActive (inst_root I) (n, v) d = true /\
@@ -1489,7 +1545,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
         + destruct Hacted as [f [Hffs Hent]].
           apply mem_featsAt in Hffs; destruct Hffs as [w1 Hffs].
           destruct (A2 _ _ _ _ Hffs) as [_ Egr1]; subst w1.
-          assert (Hea : exists e', FeatureDefinitionRel.In (((n, v), f), e') FDefs /\
+          assert (Hea : exists e',
+            FeatureDefinitionRel.In (((n, v), f), e') FDefs /\
               entryActivates e' = Some (sAlias d)).
           { destruct Hent as [He | [[f' He] | [f' He]]].
             - exists (FeatureEntry.EDep (sAlias d)); split;
@@ -1519,7 +1576,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
           destruct (A2 _ _ _ _ Hf) as [_ Egr]; subst w.
           assert (Hed : Reduced.DependencyRel.In
               ((Name.CFeatP n f (g v), Version.WOrig v),
-               (Name.CFeatP n f0 (g v), Reduced.VSet.singleton (Version.WOrig v)))
+               (Name.CFeatP n f0 (g v),
+                 Reduced.VSet.singleton (Version.WOrig v)))
               (reduceDeps
                  (MkInst R Slots FDefs Links support g dflt (rn, rv)
                     rootFeats))).
@@ -1535,7 +1593,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
           apply mem_featsAt in Hf; destruct Hf as [w Hf].
           destruct (A2 _ _ _ _ Hf) as [_ Egr]; subst w.
           subst a.
-          assert (He' : exists e', FeatureDefinitionRel.In (((n, v), f), e') FDefs /\
+          assert (He' : exists e',
+            FeatureDefinitionRel.In (((n, v), f), e') FDefs /\
               entryFeatD e' = Some (sAlias d, f')).
           { destruct Hent as [He | He].
             - exists (FeatureEntry.EDepFeat (sAlias d) f'); split;
@@ -1663,11 +1722,14 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
         apply mem_cargoResolution; exists w; exact Hown.
     Qed.
 
-    Module SOfw2 := SetOps Featured Reduced.Package FeaturedSet Reduced.PackageSet.
+    Module SOfw2 :=
+      SetOps Featured Reduced.Package FeaturedSet Reduced.PackageSet.
     Module SOfsp := SetOps F Reduced.Package FSet Reduced.PackageSet.
-    Module SOparp := SetOps ParentElt Reduced.Package ParentRel Reduced.PackageSet.
+    Module SOparp :=
+      SetOps ParentElt Reduced.Package ParentRel Reduced.PackageSet.
 
-    Definition wFeats (g : V.t -> G.t) (FS : FeaturedSet.t) : Reduced.PackageSet.t :=
+    Definition wFeats (g : V.t -> G.t) (FS : FeaturedSet.t) :
+        Reduced.PackageSet.t :=
       SOfw2.unionMap (fun '((n, v), fs) =>
           SOfsp.map (fun f => (Name.CFeatP n f (g v), Version.WOrig v)) fs)
         FS.
@@ -1688,7 +1750,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
 
     Definition wSlots (g : V.t -> G.t) (FDefs : FeatureDefinitionRel.t)
         (Slots : SlotRel.t) (r : Package.t)
-        (S : PackageSet.t) (FS : FeaturedSet.t) (pi : ParentRel.t) : Reduced.PackageSet.t :=
+        (S : PackageSet.t) (FS : FeaturedSet.t) (pi : ParentRel.t) :
+          Reduced.PackageSet.t :=
       SOparp.unionMap (fun '(((n, v), k), u) =>
           if parentsb FDefs Slots r S FS (n, v) k
           then SOslp.map (fun '(_, d) =>
@@ -1720,7 +1783,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
 
     Definition wDecs (g : V.t -> G.t) (FDefs : FeatureDefinitionRel.t)
         (Slots : SlotRel.t) (r : Package.t)
-        (S : PackageSet.t) (FS : FeaturedSet.t) (pi : ParentRel.t) : Reduced.PackageSet.t :=
+        (S : PackageSet.t) (FS : FeaturedSet.t) (pi : ParentRel.t) :
+          Reduced.PackageSet.t :=
       SOparp.unionMap (fun '(((n, v), k), u) =>
           if parentsb FDefs Slots r S FS (n, v) k
           then SOfp.unionMap (fun '((q, f), e) =>
@@ -1804,7 +1868,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
         Reduced.PackageSet.In p (clsReal (inst_gran I) S (inst_links I)).
     Proof.
       intros; unfold coreResolution.
-      rewrite Reduced.PackageSet.add_spec, !Reduced.PackageSet.union_spec; reflexivity.
+      rewrite Reduced.PackageSet.add_spec, !Reduced.PackageSet.union_spec;
+        reflexivity.
     Qed.
 
     Lemma core_shape :
@@ -1817,7 +1882,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
             exists v, v' = Version.WOrig v /\ PackageSet.In (n, v) S /\
               w = inst_gran I v
         | Name.CFeatP n f w =>
-            exists v fs, v' = Version.WOrig v /\ FeaturedSet.In ((n, v), fs) FS /\
+            exists v fs, v' = Version.WOrig v /\
+              FeaturedSet.In ((n, v), fs) FS /\
               FSet.In f fs /\ w = inst_gran I v
         | Name.CSlot n w d =>
             exists v u, v' = Version.WClass (inst_gran I u) /\
@@ -2064,13 +2130,16 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
           * exists (Version.WClass (g u)); split;
               [apply Reduced.VSet.singleton_spec; reflexivity |].
             apply core_shape; exists v, u; repeat split; assumption.
-          * exists (Version.WOrig u); split; [apply mem_inGran; exists u; auto |].
+          * exists (Version.WOrig u); split;
+              [apply mem_inGran; exists u; auto |].
             apply core_shape; exists u, (fsAt FS (sName d, u));
               repeat split; try assumption; [exact (HfsAt _ Hname) |].
             assert (Hor :
-                FeatureDefinitionRel.In (((n, v), f), FeatureEntry.EDepFeat (sAlias d) f')
+                FeatureDefinitionRel.In
+                  (((n, v), f), FeatureEntry.EDepFeat (sAlias d) f')
                   FDefs \/
-                FeatureDefinitionRel.In (((n, v), f), FeatureEntry.EWeakFeat (sAlias d) f')
+                FeatureDefinitionRel.In
+                  (((n, v), f), FeatureEntry.EWeakFeat (sAlias d) f')
                   FDefs).
             { destruct e as [f0 | a0 | a0 feat0 | a0 feat0];
                 cbn [entryFeatD] in Ee2; try discriminate;
@@ -2226,8 +2295,10 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
       Qed.
 
       Module NSet := Source.NSet.
-      Module FeatureDefinitionRelPreimage := Preimage FeatureDefinitionElt FeatureDefinitionRel.
-      Module SlotRelFibred := FibredRel Package DependencyRecord SlotElt SlotRel.
+      Module FeatureDefinitionRelPreimage :=
+        Preimage FeatureDefinitionElt FeatureDefinitionRel.
+      Module SlotRelFibred :=
+        FibredRel Package DependencyRecord SlotElt SlotRel.
       Module LinksRelFibred := FibredRel Package N LinksElt LinksRel.
       Module SupportRelFibred := FibredRel Package F PackageF SupportRel.
       Module SOsn := SetOps SlotElt N SlotRel NSet.
@@ -2238,8 +2309,10 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
             andb (NEqb.eqb m n) (FEqb.eqb f' f))
           support.
 
-      Definition fdefFibre (FDefs : FeatureDefinitionRel.t) (p : Package.t) : FeatureDefinitionRel.t :=
-        FeatureDefinitionRelPreimage.preimage (fun x => fst (fst x)) (fun q => PackageEqb.eqb q p) FDefs.
+      Definition fdefFibre (FDefs : FeatureDefinitionRel.t) (p : Package.t) :
+          FeatureDefinitionRel.t :=
+        FeatureDefinitionRelPreimage.preimage (fun x => fst (fst x))
+          (fun q => PackageEqb.eqb q p) FDefs.
 
       Definition reads (Slots : SlotRel.t) (p : Package.t) : NSet.t :=
         NSet.add (fst p)
@@ -2271,7 +2344,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
           FeatureDefinitionRel.In ((q, f), e) (fdefFibre FDefs p) <->
           FeatureDefinitionRel.In ((q, f), e) FDefs /\ q = p.
       Proof.
-        intros; unfold fdefFibre; rewrite FeatureDefinitionRelPreimage.mem_preimage; cbn [fst].
+        intros; unfold fdefFibre;
+          rewrite FeatureDefinitionRelPreimage.mem_preimage; cbn [fst].
         rewrite PackageEqb.eqb_true_iff; reflexivity.
       Qed.
 
@@ -2279,7 +2353,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
           PackageSet.In q (claimants R Links l) <->
           PackageSet.In q R /\ LinksRel.In (q, l) Links.
       Proof.
-        intros; unfold claimants; rewrite PackageSet.filter_spec', LinksRel.mem_spec;
+        intros; unfold claimants;
+          rewrite PackageSet.filter_spec', LinksRel.mem_spec;
           reflexivity.
       Qed.
 
@@ -2319,7 +2394,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
         forall I,
           versions I Name.CRoot =
           versions
-            (MkInst PackageSet.empty SlotRel.empty FeatureDefinitionRel.empty LinksRel.empty
+            (MkInst PackageSet.empty SlotRel.empty FeatureDefinitionRel.empty
+              LinksRel.empty
                SupportRel.empty (inst_gran I) (inst_default I) (inst_root I)
                (inst_rootFeats I))
             Name.CRoot.
@@ -2330,13 +2406,15 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
           versions I (Name.CGran n w) =
           versions
             (MkInst (Source.namePreimage (inst_real I) (NSet.singleton n))
-               SlotRel.empty FeatureDefinitionRel.empty LinksRel.empty SupportRel.empty
+               SlotRel.empty FeatureDefinitionRel.empty LinksRel.empty
+                 SupportRel.empty
                (inst_gran I) (inst_default I) (inst_root I) (inst_rootFeats I))
             (Name.CGran n w).
       Proof.
         intros; cbn [versions inst_real inst_gran];
           apply Reduced.VSet.ext; intro u; symmetry.
-        apply SOpv2.filterMap_restrict; [apply Source.PackageSetKeyPreimage.ofKeys_subset |].
+        apply SOpv2.filterMap_restrict;
+          [apply Source.PackageSetKeyPreimage.ofKeys_subset |].
         intros [n' v] HR He; cbn beta iota in He.
         rewrite if_some_iff, andb_true_iff, NEqb.eqb_true_iff in He.
         destruct He as [[-> _] _]; apply Source.mem_namePreimage; split;
@@ -2367,8 +2445,10 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
         forall I n w d,
           versions I (Name.CSlot n w d) =
           versions
-            (MkInst (Source.namePreimage (inst_real I) (NSet.singleton (sName d)))
-               SlotRel.empty FeatureDefinitionRel.empty LinksRel.empty SupportRel.empty
+            (MkInst (Source.namePreimage (inst_real I)
+              (NSet.singleton (sName d)))
+               SlotRel.empty FeatureDefinitionRel.empty LinksRel.empty
+                 SupportRel.empty
                (inst_gran I) (inst_default I) (inst_root I) (inst_rootFeats I))
             (Name.CSlot n w d).
       Proof.
@@ -2381,8 +2461,10 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
         forall I n w f d f',
           versions I (Name.CDec n w f d f') =
           versions
-            (MkInst (Source.namePreimage (inst_real I) (NSet.singleton (sName d)))
-               SlotRel.empty FeatureDefinitionRel.empty LinksRel.empty SupportRel.empty
+            (MkInst (Source.namePreimage (inst_real I)
+              (NSet.singleton (sName d)))
+               SlotRel.empty FeatureDefinitionRel.empty LinksRel.empty
+                 SupportRel.empty
                (inst_gran I) (inst_default I) (inst_root I) (inst_rootFeats I))
             (Name.CDec n w f d f').
       Proof.
@@ -2393,7 +2475,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
 
       Lemma granReal_claimants : forall g R Links l,
           granReal g (claimants R Links l) =
-          ConflictClass.Reduction.Lookup.inClass (granReal g R) (linkRel g Links)
+          ConflictClass.Reduction.Lookup.inClass (granReal g R)
+            (linkRel g Links)
             (Name.CCls l).
       Proof.
         intros; apply Reduced.PackageSet.ext; intro x.
@@ -2412,7 +2495,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
 
       Lemma linkRel_headFibre : forall g Links l,
           linkRel g (LinksRelFibred.headFibre Links l) =
-          ConflictClass.Reduction.Lookup.classRelAt (linkRel g Links) (Name.CCls l).
+          ConflictClass.Reduction.Lookup.classRelAt (linkRel g Links)
+            (Name.CCls l).
       Proof.
         intros; apply ConflictClass.ConflictClassRel.ext; intros [q k].
         rewrite ConflictClass.Reduction.Lookup.mem_classRelAt, !mem_linkRel.
@@ -2430,7 +2514,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
           versions I (Name.CCls l) =
           versions
             (MkInst (claimants (inst_real I) (inst_links I) l) SlotRel.empty
-               FeatureDefinitionRel.empty (LinksRelFibred.headFibre (inst_links I) l)
+               FeatureDefinitionRel.empty
+                 (LinksRelFibred.headFibre (inst_links I) l)
                SupportRel.empty
                (inst_gran I) (inst_default I) (inst_root I) (inst_rootFeats I))
             (Name.CCls l).
@@ -2438,7 +2523,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
         intros; apply Reduced.VSet.ext; intro w.
         rewrite !versions_cls_reduceReal; cbn [inst_real inst_links inst_gran].
         rewrite granReal_claimants,
-          linkRel_headFibre, <- ConflictClass.Reduction.Lookup.versions_lookupClass.
+          linkRel_headFibre,
+            <- ConflictClass.Reduction.Lookup.versions_lookupClass.
         reflexivity.
       Qed.
 
@@ -2586,7 +2672,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
         forall I Vq,
           dependees I rootPkg =
           dependeesBy Vq
-            (MkInst PackageSet.empty SlotRel.empty FeatureDefinitionRel.empty LinksRel.empty
+            (MkInst PackageSet.empty SlotRel.empty FeatureDefinitionRel.empty
+              LinksRel.empty
                SupportRel.empty (inst_gran I) (inst_default I) (inst_root I)
                (inst_rootFeats I))
             rootPkg.
@@ -2598,8 +2685,10 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
              Vq m = Source.versions (inst_real I) m) ->
           dependees I (Name.CGran n w, Version.WOrig v) =
           dependeesBy Vq
-            (MkInst PackageSet.empty (SlotRelFibred.tailFibre (inst_slots I) (n, v))
-               FeatureDefinitionRel.empty (LinksRelFibred.tailFibre (inst_links I) (n, v))
+            (MkInst PackageSet.empty
+              (SlotRelFibred.tailFibre (inst_slots I) (n, v))
+               FeatureDefinitionRel.empty
+                 (LinksRelFibred.tailFibre (inst_links I) (n, v))
                SupportRel.empty
                (inst_gran I) (inst_default I) (inst_root I) (inst_rootFeats I))
             (Name.CGran n w, Version.WOrig v).
@@ -2642,7 +2731,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
           Vq (sName d) = Source.versions (inst_real I) (sName d) ->
           dependees I (Name.CSlot n w d, Version.WClass w') =
           dependeesBy Vq
-            (MkInst PackageSet.empty SlotRel.empty FeatureDefinitionRel.empty LinksRel.empty
+            (MkInst PackageSet.empty SlotRel.empty FeatureDefinitionRel.empty
+              LinksRel.empty
                SupportRel.empty (inst_gran I) (inst_default I) (inst_root I)
                (inst_rootFeats I))
             (Name.CSlot n w d, Version.WClass w').
@@ -2657,7 +2747,8 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType) (SemverMatch : Se
           Vq (sName d) = Source.versions (inst_real I) (sName d) ->
           dependees I (Name.CDec n w f d f', Version.WClass w') =
           dependeesBy Vq
-            (MkInst PackageSet.empty SlotRel.empty FeatureDefinitionRel.empty LinksRel.empty
+            (MkInst PackageSet.empty SlotRel.empty FeatureDefinitionRel.empty
+              LinksRel.empty
                SupportRel.empty (inst_gran I) (inst_default I) (inst_root I)
                (inst_rootFeats I))
             (Name.CDec n w f d f', Version.WClass w').

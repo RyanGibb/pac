@@ -34,7 +34,9 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
     Module VFacts := UOTCompareFacts V.
     Module SOp := SetOps Package Package PackageSet PackageSet.
     Module SOv := SetOps V V VSet VSet.
-    Module SOd := SetOps Source.DependencyElt Source.DependencyElt Source.DependencyRel Source.DependencyRel.
+    Module SOd :=
+      SetOps Source.DependencyElt Source.DependencyElt Source.DependencyRel
+      Source.DependencyRel.
 
     Definition ltb (v v' : V.t) : bool :=
       match V.compare v v' with Lt => true | _ => false end.
@@ -45,7 +47,8 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
       destruct (V.compare v v'); split; intro H; congruence.
     Qed.
 
-    Definition depClause (R : PackageSet.t) (p : Package.t) (n : N.t) (vs : VSet.t)
+    Definition depClause (R : PackageSet.t) (p : Package.t) (n : N.t)
+        (vs : VSet.t)
       : list (Package.t * bool) :=
       (p, false) ::
       List.map (fun v => ((n, v), true))
@@ -53,9 +56,11 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
 
     Definition depClauses (R : PackageSet.t) (D : Source.DependencyRel.t)
       : list (list (Package.t * bool)) :=
-      List.map (fun '(p, (n, vs)) => depClause R p n vs) (Source.DependencyRel.elements D).
+      List.map (fun '(p, (n, vs)) => depClause R p n vs)
+        (Source.DependencyRel.elements D).
 
-    Definition uniqueClauses (R : PackageSet.t) : list (list (Package.t * bool)) :=
+    Definition uniqueClauses (R : PackageSet.t) :
+        list (list (Package.t * bool)) :=
       List.flat_map
         (fun p =>
            List.map (fun v' => (p, false) :: ((fst p, v'), false) :: nil)
@@ -63,13 +68,15 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
                 (VSet.elements (Source.versions R (fst p)))))
         (PackageSet.elements R).
 
-    Definition satEncoding (R : PackageSet.t) (D : Source.DependencyRel.t) (r : Package.t)
+    Definition satEncoding (R : PackageSet.t) (D : Source.DependencyRel.t)
+        (r : Package.t)
       : list (list (Package.t * bool)) :=
       ((r, true) :: nil) :: depClauses R D ++ uniqueClauses R.
 
     Lemma in_depClauses : forall R D c,
         List.In c (depClauses R D) <->
-        exists p n vs, Source.DependencyRel.In (p, (n, vs)) D /\ c = depClause R p n vs.
+        exists p n vs, Source.DependencyRel.In (p, (n, vs)) D /\ c =
+          depClause R p n vs.
     Proof.
       intros R D c; unfold depClauses; rewrite List.in_map_iff.
       split.
@@ -93,7 +100,8 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
         split; [apply SOv.elements_in; exact Hv' | apply PackageSet.mem_spec; exact HR].
       - intros [Hv HR]; right; exists v; split; [reflexivity |].
         apply List.filter_In; split;
-          [apply SOv.elements_in; exact Hv | apply PackageSet.mem_spec; exact HR].
+          [apply SOv.elements_in;
+            exact Hv | apply PackageSet.mem_spec; exact HR].
     Qed.
 
     Lemma in_uniqueClauses : forall R c,
@@ -128,7 +136,8 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
       assert (Hin : forall p, PackageSet.In p (PackageSet.filter sigma R) <->
                               PackageSet.In p R /\ sigma p = true)
         by (intro p; apply PackageSet.filter_spec').
-      assert (Huc : forall n v v', PackageSet.In (n, v) R -> PackageSet.In (n, v') R ->
+      assert (Huc : forall n v v', PackageSet.In (n, v) R ->
+        PackageSet.In (n, v') R ->
                       V.lt v v' ->
                       sigma (n, v) = false \/ sigma (n, v') = false).
       { intros n v v' Hv Hv' Hlt.
@@ -197,7 +206,8 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
     Module BoolFacts := UOTCompareFacts BoolOT.
     Module LiteralFacts := UOTCompareFacts LiteralOT.
     Module ClauseFacts := UOTCompareFacts ClauseOT.
-    #[local] Hint Rewrite XFacts.compare_eq_iff BoolFacts.compare_eq_iff LiteralFacts.compare_eq_iff
+    #[local] Hint Rewrite XFacts.compare_eq_iff BoolFacts.compare_eq_iff
+      LiteralFacts.compare_eq_iff
       ClauseFacts.compare_eq_iff : cmp_cplx.
     #[local] Hint Extern 1 => cmp_by XFacts.compare_antisym : cmp_cplx.
     #[local] Hint Extern 1 => cmp_by XFacts.compare_lt_trans : cmp_cplx.
@@ -307,7 +317,8 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
            p = (Name.Clause c, Version.Lit l)).
     Proof.
       intros cs p; unfold reduceReal.
-      rewrite Reduced.PackageSet.mem_ofList; cbn [List.In]; rewrite List.in_flat_map.
+      rewrite Reduced.PackageSet.mem_ofList; cbn [List.In];
+        rewrite List.in_flat_map.
       split.
       - intros [<- | [c [Hc Hy]]]; [left; reflexivity | right].
         unfold clauseReal in Hy; apply List.in_flat_map in Hy.
@@ -367,12 +378,14 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
       Reduced.PackageSet.mem (Name.Var x, Version.Truth true) S.
 
     Lemma assignment_spec : forall S x b,
-        Reduced.VersionUnique S -> Reduced.PackageSet.In (Name.Var x, Version.Truth b) S ->
+        Reduced.VersionUnique S ->
+          Reduced.PackageSet.In (Name.Var x, Version.Truth b) S ->
         assignment S x = b.
     Proof.
       intros S x b Huniq Hin; unfold assignment.
       destruct b; [apply Reduced.PackageSet.mem_spec; exact Hin |].
-      destruct (Reduced.PackageSet.mem (Name.Var x, Version.Truth true) S) eqn:E;
+      destruct (Reduced.PackageSet.mem
+        (Name.Var x, Version.Truth true) S) eqn:E;
         [| reflexivity].
       apply Reduced.PackageSet.mem_spec in E.
       discriminate (Huniq _ _ _ E Hin).
@@ -454,7 +467,8 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
              p = (Name.Var (fst l), Version.Truth (sigma (fst l)))).
     Proof.
       intros sigma cs p; unfold coreResolution.
-      rewrite Reduced.PackageSet.mem_ofList; cbn [List.In]; rewrite List.in_flat_map.
+      rewrite Reduced.PackageSet.mem_ofList; cbn [List.In];
+        rewrite List.in_flat_map.
       split.
       - intros [<- | [c [Hc Hy]]]; [left; reflexivity | right].
         exists c; split; [exact Hc |].

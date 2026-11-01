@@ -135,11 +135,13 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     exists u, o = Occupant.Reg (e_name e) u /\
       VSet.In u (cands I (e_name e) (e_range e)).
 
-  Definition EdgeOk (I : Inst) (L : Placement.LayoutRel.t) (l : Placement.Location.t) (e : Edge)
+  Definition EdgeOk (I : Inst) (L : Placement.LayoutRel.t)
+      (l : Placement.Location.t) (e : Edge)
       : Prop :=
     match Placement.walk L l (e_dir e) with
     | None => e_optional e = true
-    | Some (l', o) => Placement.Suffix l' (Placement.land (e_peer e) l) /\ Sat I e o
+    | Some (l', o) =>
+        Placement.Suffix l' (Placement.land (e_peer e) l) /\ Sat I e o
     end.
 
   Module SOkk := SetOps SourceName SourceName SourceNameSet SourceNameSet.
@@ -154,7 +156,8 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
   Record IsResolution (I : Inst) (L : Placement.LayoutRel.t) : Prop :=
     { res_subset :
         forall l a o, Placement.LayoutRel.In (l, (a, o)) L ->
-        exists m v, o = Occupant.Reg m v /\ SourceNameSet.In (a, m) (keysOf I) /\
+        exists m v, o = Occupant.Reg m v /\
+          SourceNameSet.In (a, m) (keysOf I) /\
           RealPackageSet.In (m, v) (inst_real I)
     ; res_location_unique :
         forall l a o o', Placement.LayoutRel.In (l, (a, o)) L ->
@@ -168,16 +171,19 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         forall e, In e (edgesOf I o) -> EdgeOk I L (a :: l) e }.
 
   Module Reduction.
-    Module SOkp := SetOps SourceName Placement.Package SourceNameSet Placement.PackageSet.
+    Module SOkp :=
+      SetOps SourceName Placement.Package SourceNameSet Placement.PackageSet.
     Module SOvp := SetOps V Placement.Package VSet Placement.PackageSet.
     Definition placeRepo (I : Inst) : Placement.PackageSet.t :=
       SOkp.unionMap (fun '(a, m) =>
-          SOvp.map (fun v => (a, Occupant.Reg m v)) (realVersions (inst_real I) m))
+          SOvp.map (fun v => (a, Occupant.Reg m v))
+            (realVersions (inst_real I) m))
         (keysOf I).
 
     Lemma mem_placeRepo : forall I a o,
         Placement.PackageSet.In (a, o) (placeRepo I) <->
-        exists m v, o = Occupant.Reg m v /\ SourceNameSet.In (a, m) (keysOf I) /\
+        exists m v, o = Occupant.Reg m v /\
+          SourceNameSet.In (a, m) (keysOf I) /\
           RealPackageSet.In (m, v) (inst_real I).
     Proof.
       intros I a o; unfold placeRepo; rewrite SOkp.mem_unionMap; split.
@@ -190,13 +196,15 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         apply mem_realVersions; exact Hv.
     Qed.
 
-    Definition rootOcc (I : Inst) : Placement.Package.t := (inst_root I, Occupant.Proj).
+    Definition rootOcc (I : Inst) : Placement.Package.t :=
+        (inst_root I, Occupant.Proj).
 
     Definition occs (I : Inst) : Placement.PackageSet.t :=
       Placement.PackageSet.add (rootOcc I) (placeRepo I).
 
     Module SOvo := SetOps V OccupantOT VSet Placement.VSet.
-    Definition acceptsIn (m : N.t) (rg : Range) (vs : VSet.t) : Placement.VSet.t :=
+    Definition acceptsIn (m : N.t) (rg : Range) (vs : VSet.t) :
+        Placement.VSet.t :=
       SOvo.map (Occupant.Reg m) (rangeEval rg vs).
 
     Definition accepts (I : Inst) (e : Edge) : Placement.VSet.t :=
@@ -212,8 +220,11 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     Definition kindb (peer optional : bool) (e : Edge) : bool :=
       andb (Bool.eqb (e_peer e) peer) (Bool.eqb (e_optional e) optional).
 
-    Module SOpd := SetOps Placement.Package Placement.Source.DependencyElt Placement.PackageSet Placement.Source.DependencyRel.
-    Definition edgeRel (I : Inst) (peer optional : bool) : Placement.Source.DependencyRel.t :=
+    Module SOpd :=
+      SetOps Placement.Package Placement.Source.DependencyElt
+      Placement.PackageSet Placement.Source.DependencyRel.
+    Definition edgeRel (I : Inst) (peer optional : bool) :
+        Placement.Source.DependencyRel.t :=
       SOpd.unionMap (fun p =>
           SOpd.ofList
             (List.map (fun e => (p, (e_dir e, accepts I e)))
@@ -221,7 +232,8 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         (occs I).
 
     Lemma mem_edgeRel : forall I peer optional a' o n vs,
-        Placement.Source.DependencyRel.In ((a', o), (n, vs)) (edgeRel I peer optional) <->
+        Placement.Source.DependencyRel.In ((a', o), (n, vs))
+          (edgeRel I peer optional) <->
         Placement.PackageSet.In (a', o) (occs I) /\
         exists e, In e (edgesOf I o) /\ e_peer e = peer /\
           e_optional e = optional /\
@@ -256,7 +268,8 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
 
     Lemma edgeOk_meets : forall I L l e,
         EdgeOk I L l e <->
-        Placement.Meets L l (Placement.land (e_peer e) l) (e_dir e) (accepts I e)
+        Placement.Meets L l (Placement.land (e_peer e) l) (e_dir e)
+          (accepts I e)
           (e_optional e).
     Proof.
       intros I L l e; unfold EdgeOk, Placement.Meets, Placement.Resolves.
@@ -285,7 +298,8 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         + exact Hocc.
         + exact Htree.
         + exact (Hholds (rootOcc I) nil Hroot
-                   (proj2 (Placement.PackageSet.add_spec _ _ _) (or_introl eq_refl))).
+                   (proj2 (Placement.PackageSet.add_spec _ _ _)
+                     (or_introl eq_refl))).
         + intros l a o H; apply (Hholds (a, o) (a :: l) (Hdeps l a o H)).
           apply Placement.PackageSet.add_spec; right; exact (Hsub l (a, o) H).
       - intros [Havail Hocc Htree Hroot Hedges].
@@ -306,22 +320,27 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
 
     (* Placement's Reduction is named in full: an alias of it inside this
        functor trips a kernel anomaly when the functor is applied. *)
-    Definition reduceReal (I : Inst) (depth : nat) : Placement.Reduction.Reduced.PackageSet.t :=
+    Definition reduceReal (I : Inst) (depth : nat) :
+        Placement.Reduction.Reduced.PackageSet.t :=
       Placement.Reduction.reduceReal (tr I) depth.
 
-    Definition reduceDeps (I : Inst) (depth : nat) : Placement.Reduction.Reduced.DependencyRel.t :=
+    Definition reduceDeps (I : Inst) (depth : nat) :
+        Placement.Reduction.Reduced.DependencyRel.t :=
       Placement.Reduction.reduceDeps (tr I) depth.
 
     Definition rootPkg (I : Inst) : Placement.Reduction.Reduced.Package.t :=
       Placement.Reduction.rootPkg (tr I).
 
     Theorem npm_placement_soundness : forall I depth S,
-        Placement.Reduction.Reduced.IsResolution (reduceReal I depth) (reduceDeps I depth)
+        Placement.Reduction.Reduced.IsResolution (reduceReal I depth)
+          (reduceDeps I depth)
           (rootPkg I) S ->
         IsResolution I
-          (Placement.reachable (tr I) (Placement.Reduction.placementResolution S)) /\
+          (Placement.reachable (tr I)
+            (Placement.Reduction.placementResolution S)) /\
         Placement.Depth depth
-          (Placement.reachable (tr I) (Placement.Reduction.placementResolution S)).
+          (Placement.reachable (tr I)
+            (Placement.Reduction.placementResolution S)).
     Proof.
       intros I depth S H.
       destruct (Placement.Reduction.placement_soundness _ _ _ H) as [H1 H2].
@@ -336,20 +355,24 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         (root, Occupant.Proj) L.
 
     Theorem reachableOf_reachable : forall I depth S edges,
-        Placement.Reduction.Reduced.IsResolution (reduceReal I depth) (reduceDeps I depth)
+        Placement.Reduction.Reduced.IsResolution (reduceReal I depth)
+          (reduceDeps I depth)
           (rootPkg I) S ->
         edges Occupant.Proj = edgesOf I Occupant.Proj ->
         (forall l a o,
-           Placement.LayoutRel.In (l, (a, o)) (Placement.Reduction.placementResolution S) ->
+           Placement.LayoutRel.In (l, (a, o))
+             (Placement.Reduction.placementResolution S) ->
            edges o = edgesOf I o) ->
-        reachableOf edges (inst_root I) (Placement.Reduction.placementResolution S) =
+        reachableOf edges (inst_root I)
+          (Placement.Reduction.placementResolution S) =
         Placement.reachable (tr I) (Placement.Reduction.placementResolution S).
     Proof.
       intros I depth S edges H Htop Hocc; unfold reachableOf.
       change (inst_root I, Occupant.Proj) with (Placement.inst_root (tr I)).
       apply Placement.reachableBy_reachable.
       intros [a o] n Hp; cbn [snd]; unfold Placement.Edge.
-      assert (Hin : Placement.PackageSet.In (a, o) (occs I) /\ edges o = edgesOf I o).
+      assert (Hin : Placement.PackageSet.In (a, o) (occs I) /\ edges o =
+        edgesOf I o).
       { destruct Hp as [E | [l Hl]].
         - cbn in E; injection E as -> ->; split; [| exact Htop].
           apply Placement.PackageSet.add_spec; left; reflexivity.
@@ -366,14 +389,17 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     Qed.
 
     Theorem npm_placement_soundness_of : forall I depth S edges,
-        Placement.Reduction.Reduced.IsResolution (reduceReal I depth) (reduceDeps I depth)
+        Placement.Reduction.Reduced.IsResolution (reduceReal I depth)
+          (reduceDeps I depth)
           (rootPkg I) S ->
         edges Occupant.Proj = edgesOf I Occupant.Proj ->
         (forall l a o,
-           Placement.LayoutRel.In (l, (a, o)) (Placement.Reduction.placementResolution S) ->
+           Placement.LayoutRel.In (l, (a, o))
+             (Placement.Reduction.placementResolution S) ->
            edges o = edgesOf I o) ->
         IsResolution I
-          (reachableOf edges (inst_root I) (Placement.Reduction.placementResolution S))
+          (reachableOf edges (inst_root I)
+            (Placement.Reduction.placementResolution S))
         /\ Placement.Depth depth
           (reachableOf edges (inst_root I) (Placement.Reduction.placementResolution S)).
     Proof.
@@ -384,7 +410,8 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
 
     Theorem npm_placement_completeness : forall I depth L,
         IsResolution I L -> Placement.Depth depth L ->
-        Placement.Reduction.Reduced.IsResolution (reduceReal I depth) (reduceDeps I depth)
+        Placement.Reduction.Reduced.IsResolution (reduceReal I depth)
+          (reduceDeps I depth)
           (rootPkg I) (Placement.Reduction.coreResolution (tr I) depth L).
     Proof.
       intros I depth L H Hd; apply Placement.Reduction.placement_completeness;
@@ -404,11 +431,14 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
     Module Lookup.
       Definition AgreesAtKey (I' I : Inst) (a : N.t) : Prop :=
         forall m v,
-          (SourceNameSet.In (a, m) (keysOf I') /\ RealPackageSet.In (m, v) (inst_real I')) <->
-          (SourceNameSet.In (a, m) (keysOf I) /\ RealPackageSet.In (m, v) (inst_real I)).
+          (SourceNameSet.In (a, m) (keysOf I') /\
+            RealPackageSet.In (m, v) (inst_real I')) <->
+          (SourceNameSet.In (a, m) (keysOf I) /\
+            RealPackageSet.In (m, v) (inst_real I)).
 
       Lemma keyVersions_agree : forall I' I a, AgreesAtKey I' I a ->
-          Placement.Source.versions (placeRepo I') a = Placement.Source.versions (placeRepo I) a.
+          Placement.Source.versions (placeRepo I') a =
+            Placement.Source.versions (placeRepo I) a.
       Proof.
         intros I' I a H; apply Placement.Source.versions_ext; intro o.
         rewrite !mem_placeRepo; split; intros [m [v [-> Hk]]];
@@ -417,8 +447,10 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
 
       Definition SubAtKey (I' I : Inst) (a : N.t) : Prop :=
         forall m v,
-          SourceNameSet.In (a, m) (keysOf I') /\ RealPackageSet.In (m, v) (inst_real I') ->
-          SourceNameSet.In (a, m) (keysOf I) /\ RealPackageSet.In (m, v) (inst_real I).
+          SourceNameSet.In (a, m) (keysOf I') /\
+            RealPackageSet.In (m, v) (inst_real I') ->
+          SourceNameSet.In (a, m) (keysOf I) /\
+            RealPackageSet.In (m, v) (inst_real I).
 
       Definition nameInst (I : Inst) : Placement.Inst :=
         {| Placement.inst_real := placeRepo I
@@ -434,11 +466,13 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
           AgreesAtKey I' I a ->
           Placement.Reduction.Reduced.versions (reduceReal I depth)
             (Placement.Reduction.Name.Loc l a) =
-          Placement.Reduction.versions (nameInst I') depth (Placement.Reduction.Name.Loc l a).
+          Placement.Reduction.versions (nameInst I') depth
+            (Placement.Reduction.Name.Loc l a).
       Proof.
         intros I I' depth l a H Ha; unfold reduceReal.
         rewrite (Placement.Reduction.Lookup.versions_lookupLoc _ _ _ _ H).
-        unfold Placement.Reduction.versions, Placement.Reduction.Lookup.nameSubInst, nameInst,
+        unfold Placement.Reduction.versions,
+          Placement.Reduction.Lookup.nameSubInst, nameInst,
           tr, rootOcc; cbn [Placement.inst_real].
         rewrite Placement.Reduction.Lookup.versions_fibre,
           (keyVersions_agree _ _ _ Ha).
@@ -456,7 +490,8 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
       Proof.
         intros I I' depth l a H Ha; unfold reduceReal.
         rewrite (Placement.Reduction.Lookup.versions_lookupWalk _ _ _ _ H).
-        unfold Placement.Reduction.versions, Placement.Reduction.Lookup.nameSubInst, nameInst,
+        unfold Placement.Reduction.versions,
+          Placement.Reduction.Lookup.nameSubInst, nameInst,
           tr, rootOcc; cbn [Placement.inst_real].
         rewrite Placement.Reduction.Lookup.versions_fibre,
           (keyVersions_agree _ _ _ Ha).
@@ -508,25 +543,32 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         split; [exact (keyRepo_sub I' I a o Ha Hx) | reflexivity].
       Qed.
 
-      Definition atomOf (l : Placement.Location.t) (e : Edge) (vs : Placement.VSet.t)
+      Definition atomOf (l : Placement.Location.t) (e : Edge)
+          (vs : Placement.VSet.t)
           : Placement.Reduction.Reduced.Dependee.t :=
         (Placement.Reduction.Name.Walk l (e_dir e),
-         Placement.Reduction.optAccept (e_optional e) (Placement.land (e_peer e) l) vs).
+         Placement.Reduction.optAccept (e_optional e)
+           (Placement.land (e_peer e) l) vs).
 
       Definition edgeAtom (I : Inst) (l : Placement.Location.t) (e : Edge)
           : Placement.Reduction.Reduced.Dependee.t :=
         atomOf l e (accepts I e).
 
-      Module SOhh := SetOps Placement.Reduction.Reduced.Dependee Placement.Reduction.Reduced.Dependee
-        Placement.Reduction.Reduced.DependeeSet Placement.Reduction.Reduced.DependeeSet.
+      Module SOhh :=
+        SetOps Placement.Reduction.Reduced.Dependee
+        Placement.Reduction.Reduced.Dependee
+        Placement.Reduction.Reduced.DependeeSet
+          Placement.Reduction.Reduced.DependeeSet.
       Definition occAtoms (I : Inst) (l : Placement.Location.t) (o : Occupant.t)
           : Placement.Reduction.Reduced.DependeeSet.t :=
         SOhh.ofList (List.map (edgeAtom I l) (edgesOf I o)).
 
-      Lemma edgeAtoms_tr : forall I a' o l, Placement.PackageSet.In (a', o) (occs I) ->
+      Lemma edgeAtoms_tr : forall I a' o l,
+          Placement.PackageSet.In (a', o) (occs I) ->
           Placement.Reduction.edgeAtoms (tr I) (a', o) l = occAtoms I l o.
       Proof.
-        intros I a' o l Hp; apply Placement.Reduction.Reduced.DependeeSet.ext; intro h.
+        intros I a' o l Hp;
+          apply Placement.Reduction.Reduced.DependeeSet.ext; intro h.
         rewrite Placement.Reduction.mem_edgeAtoms; unfold occAtoms.
         rewrite SOhh.mem_ofList, in_map_iff; split.
         - intros [peer [optional [n [vs [HE ->]]]]];
@@ -541,7 +583,8 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
       Qed.
 
       Theorem dependees_lookupWalk : forall I depth l a w,
-          Placement.Reduction.Reduced.PackageSet.In (Placement.Reduction.Name.Walk l a, w)
+          Placement.Reduction.Reduced.PackageSet.In
+            (Placement.Reduction.Name.Walk l a, w)
             (reduceReal I depth) ->
           Placement.Reduction.Reduced.dependees (reduceDeps I depth)
             (Placement.Reduction.Name.Walk l a, w) =
@@ -560,9 +603,11 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
 
       Theorem dependees_lookupAbsent : forall I depth l a,
           Placement.Reduction.Reduced.dependees (reduceDeps I depth)
-            (Placement.Reduction.Name.Loc l a, Placement.Reduction.Version.Bot) =
+            (Placement.Reduction.Name.Loc l a,
+              Placement.Reduction.Version.Bot) =
           Placement.Reduction.Reduced.DependeeSet.empty.
-      Proof. intros; apply Placement.Reduction.Lookup.dependees_lookupAbsent. Qed.
+      Proof. intros;
+        apply Placement.Reduction.Lookup.dependees_lookupAbsent. Qed.
 
       Definition AgreesAtName (I' I : Inst) (m : N.t) : Prop :=
         forall u, RealPackageSet.In (m, u) (inst_real I') <->
@@ -617,25 +662,30 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
       Qed.
 
       Lemma dependees_occAtomsRoot : forall I depth,
-          Placement.Reduction.Reduced.dependees (reduceDeps I depth) (rootPkg I) =
+          Placement.Reduction.Reduced.dependees (reduceDeps I depth)
+            (rootPkg I) =
           occAtoms I nil Occupant.Proj.
       Proof.
         intros I depth; unfold reduceDeps, rootPkg.
         rewrite Placement.Reduction.dependees_reduceDeps.
-        - cbn [Placement.Reduction.rootPkg Placement.Reduction.dependees tr Placement.inst_root
+        - cbn [Placement.Reduction.rootPkg Placement.Reduction.dependees tr
+            Placement.inst_root
                  rootOcc snd].
           exact (edgeAtoms_tr I (inst_root I) Occupant.Proj nil
-                   (proj2 (Placement.PackageSet.add_spec _ _ _) (or_introl eq_refl))).
+                   (proj2 (Placement.PackageSet.add_spec _ _ _)
+                     (or_introl eq_refl))).
         - apply Placement.Reduction.mem_reduceReal; split; [exact Logic.I |].
           apply Placement.Reduction.Reduced.VSet.singleton_spec; reflexivity.
       Qed.
 
       Lemma dependees_occAtomsOcc : forall I depth l a o,
           Placement.Reduction.Reduced.PackageSet.In
-            (Placement.Reduction.Name.Loc l a, Placement.Reduction.Version.Occ o)
+            (Placement.Reduction.Name.Loc l a,
+              Placement.Reduction.Version.Occ o)
             (reduceReal I depth) ->
           Placement.Reduction.Reduced.dependees (reduceDeps I depth)
-            (Placement.Reduction.Name.Loc l a, Placement.Reduction.Version.Occ o) =
+            (Placement.Reduction.Name.Loc l a,
+              Placement.Reduction.Version.Occ o) =
           occAtoms I (a :: l) o.
       Proof.
         intros I depth l a o H; unfold reduceDeps.
@@ -650,7 +700,8 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
 
       Lemma mem_repoPreimage : forall I ns n u,
           RealPackageSet.In (n, u)
-            (RealPackageSet.filter (fun '(n', _) => List.existsb (NEqb.eqb n') ns)
+            (RealPackageSet.filter
+              (fun '(n', _) => List.existsb (NEqb.eqb n') ns)
                (inst_real I)) <->
           RealPackageSet.In (n, u) (inst_real I) /\ In n ns.
       Proof.
@@ -688,7 +739,8 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
               split; [reflexivity |].
             unfold edgesOf, edgesOfBy; apply in_or_app; left.
             apply in_map; exact Hin. }
-          apply VSet.ext; intro u; rewrite !mem_realVersions; exact (Ha _ Hm u). }
+          apply VSet.ext; intro u; rewrite !mem_realVersions;
+            exact (Ha _ Hm u). }
         symmetry; exact (occAtoms_parts I I' (realVersions (inst_real I'))
                            (fun _ => I') l o Hx
                            (fun e He => Ha _ (in_map e_name _ e He))).
@@ -721,7 +773,8 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
       Qed.
 
       Theorem dependees_lookupRoot : forall I depth,
-          Placement.Reduction.Reduced.dependees (reduceDeps I depth) (rootPkg I) =
+          Placement.Reduction.Reduced.dependees (reduceDeps I depth)
+            (rootPkg I) =
           Placement.Reduction.dependees
             (tr (MkInst
                    (RealPackageSet.filter
@@ -739,7 +792,8 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         end.
         transitivity (occAtoms I' nil Occupant.Proj).
         - symmetry;
-            apply (occAtoms_sub I' I (List.map e_name (edgesOf I Occupant.Proj)));
+            apply (occAtoms_sub I' I
+              (List.map e_name (edgesOf I Occupant.Proj)));
             [reflexivity | reflexivity | reflexivity | reflexivity
             | intros n Hn; exact Hn].
         - symmetry; exact (edgeAtoms_tr I' (inst_root I') Occupant.Proj nil
@@ -760,7 +814,8 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
                    (RealPackageSet.filter
                       (fun '(n, _) =>
                          List.existsb (NEqb.eqb n)
-                           (m :: List.map e_name (edgesOf I (Occupant.Reg m v))))
+                           (m :: List.map e_name
+                             (edgesOf I (Occupant.Reg m v))))
                       (inst_real I))
                    (List.filter
                       (fun '(p, d) =>
@@ -805,7 +860,8 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
         | |- _ = Placement.Reduction.dependees (tr ?J) _ => set (I' := J)
         end.
         assert (Hocc : Placement.PackageSet.In (a, Occupant.Reg m v) (occs I')).
-        { unfold occs; apply Placement.PackageSet.add_spec; right; apply mem_placeRepo.
+        { unfold occs; apply Placement.PackageSet.add_spec; right;
+            apply mem_placeRepo.
           exists m, v; split; [reflexivity |]; split.
           - apply (keysOf_sub I' I); [reflexivity | | | exact Hk].
             + intros d Hd E; injection E as Ea Em.
@@ -832,14 +888,16 @@ Module NpmPlacement (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
           - unfold I'; cbn [inst_real]; apply mem_repoPreimage.
             split; [exact Hr | left; reflexivity]. }
         transitivity (occAtoms I' (a :: l) (Occupant.Reg m v));
-          [| symmetry; exact (edgeAtoms_tr I' a (Occupant.Reg m v) (a :: l) Hocc)].
+          [| symmetry;
+            exact (edgeAtoms_tr I' a (Occupant.Reg m v) (a :: l) Hocc)].
         symmetry;
           apply (occAtoms_sub I' I
                    (m :: List.map e_name (edgesOf I (Occupant.Reg m v))));
           [reflexivity | reflexivity | | | intros n Hn; right; exact Hn].
         - unfold I'; cbn [activeDeps inst_deps].
           rewrite ownedBy_filter; [reflexivity |].
-          intros d _; cbn beta iota; rewrite RealPackageEqb.eqb_refl; reflexivity.
+          intros d _; cbn beta iota; rewrite RealPackageEqb.eqb_refl;
+            reflexivity.
         - unfold I'; cbn [declPeers inst_peers].
           rewrite ownedBy_filter; [reflexivity |].
           intros theta _; cbn beta iota; rewrite RealPackageEqb.eqb_refl;

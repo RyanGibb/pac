@@ -139,7 +139,8 @@ Module VersionFormula (N V : UsualOrderedType).
       intros x; induction x as [ | | a IHa b IHb | a IHa b IHb | o c ];
         intros y; destruct y; simpl; try (split; intro H; congruence).
       1,2: rewrite lex_eq_iff, IHa, IHb.
-      3: rewrite lex_eq_iff, ComparisonOperatorComp.compare_eq_iff, VFacts.compare_eq_iff.
+      3: rewrite lex_eq_iff, ComparisonOperatorComp.compare_eq_iff,
+        VFacts.compare_eq_iff.
       all: split;
         [intros [-> ->]; reflexivity | intro H; injection H as -> ->; auto].
     Qed.
@@ -151,7 +152,8 @@ Module VersionFormula (N V : UsualOrderedType).
         intros y; destruct y; simpl; try reflexivity.
       - rewrite lex_opp, IHa, IHb; reflexivity.
       - rewrite lex_opp, IHa, IHb; reflexivity.
-      - rewrite lex_opp, ComparisonOperatorComp.compare_antisym, VFacts.compare_antisym;
+      - rewrite lex_opp, ComparisonOperatorComp.compare_antisym,
+          VFacts.compare_antisym;
           reflexivity.
     Qed.
 
@@ -165,7 +167,8 @@ Module VersionFormula (N V : UsualOrderedType).
       - exact (lex_lt_trans compare_eq_iff (IHa _ _) (IHb _ _) H1 H2).
       - exact (lex_lt_trans compare_eq_iff (IHa _ _) (IHb _ _) H1 H2).
       - exact (lex_lt_trans ComparisonOperatorComp.compare_eq_iff
-                 (ComparisonOperatorComp.compare_lt_trans _ _ _) (VFacts.compare_lt_trans _ _ _)
+                 (ComparisonOperatorComp.compare_lt_trans _ _ _)
+                   (VFacts.compare_lt_trans _ _ _)
                  H1 H2).
     Qed.
   End VersionFormulaComp.
@@ -176,7 +179,8 @@ Module VersionFormula (N V : UsualOrderedType).
   Module DependencyRel := FSetUOT DependencyElt.
 
   Record IsResolution
-      (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t) (S : PackageSet.t) : Prop :=
+      (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t)
+        (S : PackageSet.t) : Prop :=
     { res_subset : PackageSet.Subset S R
     ; res_root_mem : PackageSet.In r S
     ; res_dep_closure :
@@ -187,13 +191,18 @@ Module VersionFormula (N V : UsualOrderedType).
     ; res_version_unique : Source.VersionUnique S }.
 
   Module Reduction.
-    Module SOvd := SetOps DependencyElt Source.DependencyElt DependencyRel Source.DependencyRel.
-    Definition reduce (R : PackageSet.t) (D : DependencyRel.t) : Source.DependencyRel.t :=
-      SOvd.map (fun '(p, (m, phi)) => (p, (m, eval phi (Source.versions R m)))) D.
+    Module SOvd :=
+      SetOps DependencyElt Source.DependencyElt DependencyRel
+      Source.DependencyRel.
+    Definition reduce (R : PackageSet.t) (D : DependencyRel.t) :
+        Source.DependencyRel.t :=
+      SOvd.map (fun '(p, (m, phi)) =>
+        (p, (m, eval phi (Source.versions R m)))) D.
 
     Lemma mem_reduce : forall R D (p : Package.t) (n : N.t) (vs : VSet.t),
         Source.DependencyRel.In (p, (n, vs)) (reduce R D) <->
-        exists phi, DependencyRel.In (p, (n, phi)) D /\ vs = eval phi (Source.versions R n).
+        exists phi, DependencyRel.In (p, (n, phi)) D /\ vs =
+          eval phi (Source.versions R n).
     Proof.
       intros R D p n vs; unfold reduce; rewrite SOvd.mem_map.
       split.
@@ -222,12 +231,16 @@ Module VersionFormula (N V : UsualOrderedType).
     Qed.
 
     Module Lookup.
-      Module DependencyRelFibred := FibredLabelledRel Package N VersionFormulaOT DependencyElt DependencyRel.
+      Module DependencyRelFibred :=
+        FibredLabelledRel Package N VersionFormulaOT DependencyElt
+        DependencyRel.
       Module DependencyRelKeys := RelKeys N DependencyElt DependencyRel.
       Module PackageSetPreimage := Preimage Package PackageSet.
 
-      Definition realPreimage (R : PackageSet.t) (Dp : DependencyRel.t) : PackageSet.t :=
-        PackageSetPreimage.preimage fst (DependencyRelKeys.hasKey DependencyRelFibred.node Dp) R.
+      Definition realPreimage (R : PackageSet.t) (Dp : DependencyRel.t) :
+          PackageSet.t :=
+        PackageSetPreimage.preimage fst
+          (DependencyRelKeys.hasKey DependencyRelFibred.node Dp) R.
 
       Lemma versions_realPreimage : forall R Dp n,
           (exists q phi, DependencyRel.In (q, (n, phi)) Dp) ->
@@ -248,9 +261,11 @@ Module VersionFormula (N V : UsualOrderedType).
           Source.dependees (reduce R D) p =
           Source.dependees (reduce R (DependencyRelFibred.tailFibre D p)) p.
       Proof.
-        intros R D p; apply Source.dependees_ext; intros [n vs]; rewrite !mem_reduce.
+        intros R D p; apply Source.dependees_ext; intros [n vs];
+          rewrite !mem_reduce.
         split; intros [phi [HD ->]]; exists phi; split; try reflexivity.
-        - apply DependencyRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
+        - apply DependencyRelFibred.mem_tailFibre; split;
+            [exact HD | reflexivity].
         - exact (DependencyRelFibred.tailFibre_subset _ _ _ HD).
       Qed.
 
@@ -268,7 +283,8 @@ Module VersionFormula (N V : UsualOrderedType).
 
       Module PackageSetFibred := FibredRel N V Package PackageSet.
       Theorem versions_lookup : forall R (n : N.t),
-          Source.versions R n = Source.versions (PackageSetFibred.tailFibre R n) n.
+          Source.versions R n =
+            Source.versions (PackageSetFibred.tailFibre R n) n.
       Proof.
         intros R n; apply Source.versions_ext; intro v.
         rewrite PackageSetFibred.mem_tailFibre; tauto.
@@ -296,11 +312,13 @@ Module VersionFormula (N V : UsualOrderedType).
         - intros [d HD]; exists (q, d); split; [exact HD | reflexivity].
       Qed.
 
-      Module SOpcd := SetOps Package Source.DependencyElt PackageSet Source.DependencyRel.
+      Module SOpcd :=
+        SetOps Package Source.DependencyElt PackageSet Source.DependencyRel.
       Corollary reduce_glue : forall R D,
           reduce R D =
           SOpcd.unionMap
-            (fun p => reduce (realPreimage R (DependencyRelFibred.tailFibre D p))
+            (fun p => reduce
+              (realPreimage R (DependencyRelFibred.tailFibre D p))
                              (DependencyRelFibred.tailFibre D p))
             (tails D).
       Proof.
@@ -311,7 +329,8 @@ Module VersionFormula (N V : UsualOrderedType).
           exists q; split; [apply mem_tails; eauto |].
           rewrite reduce_realPreimage, mem_reduce.
           exists phi; split; [| reflexivity].
-          apply DependencyRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
+          apply DependencyRelFibred.mem_tailFibre; split;
+            [exact HD | reflexivity].
         - intros [p [_ Hy]].
           rewrite reduce_realPreimage, mem_reduce in Hy.
           destruct Hy as [phi [Hf ->]].

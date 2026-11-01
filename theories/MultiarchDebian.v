@@ -9,7 +9,8 @@ Module Type ArchitectureParameter.
   Parameter native : Architecture.t.
 End ArchitectureParameter.
 
-Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : ArchitectureParameter).
+Module MultiarchDebian (N V : UsualOrderedType)
+  (ArchitectureParameter : ArchitectureParameter).
   Module Architecture := ArchitectureParameter.Architecture.
 
   Inductive ReducedQualifier : Type :=
@@ -20,8 +21,10 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
 
   Module ArchitectureFacts := UOTCompareFacts Architecture.
   #[local] Hint Rewrite ArchitectureFacts.compare_eq_iff : cmp_debma.
-  #[local] Hint Extern 1 => cmp_by ArchitectureFacts.compare_antisym : cmp_debma.
-  #[local] Hint Extern 1 => cmp_by ArchitectureFacts.compare_lt_trans : cmp_debma.
+  #[local] Hint Extern 1 =>
+    cmp_by ArchitectureFacts.compare_antisym : cmp_debma.
+  #[local] Hint Extern 1 =>
+    cmp_by ArchitectureFacts.compare_lt_trans : cmp_debma.
 
   Module ReducedQualifierComp <: ComparableType.
     Definition t := ReducedQualifier.
@@ -169,7 +172,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
   End ArchitectureQualifierComp.
   Module ArchitectureQualifierOT := UOTFromCompare ArchitectureQualifierComp.
 
-  Module Atom := TripleUOT N ArchitectureQualifierOT Debian.VersionFormula.VersionFormulaOT.
+  Module Atom :=
+    TripleUOT N ArchitectureQualifierOT Debian.VersionFormula.VersionFormulaOT.
 
   Definition aname (a : Atom.t) : N.t := fst a.
   Definition aqual (a : Atom.t) : Qual := fst (snd a).
@@ -199,7 +203,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
     (exists v, ProvidesRel.In (((m, alpha'), u), (n, v)) Pi /\
        Debian.vtMatchb v phi = true).
 
-  Definition MAMatch (Pi : ProvidesRel.t) (mu : ClassRel.t) (alpha : Architecture.t)
+  Definition MAMatch (Pi : ProvidesRel.t) (mu : ClassRel.t)
+      (alpha : Architecture.t)
       '((((m, alpha'), u) as q) : Package.t) '((n, (x, phi)) : Atom.t) : Prop :=
     BaseMatch Pi q n phi /\
     match x with
@@ -251,14 +256,19 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
     ; res_version_unique : Source.VersionUnique S }.
 
   Module Reduction.
-    Definition embedPkg (p : Package.t) : Debian.VersionFormula.Source.Package.t :=
+    Definition embedPkg (p : Package.t) :
+        Debian.VersionFormula.Source.Package.t :=
       ((pname p, QAArch (parch p)), pver p).
 
-    Module SOmr := SetOps Package Debian.VersionFormula.Source.Package PackageSet Debian.VersionFormula.Source.PackageSet.
-    Definition reduceReal (R : PackageSet.t) : Debian.VersionFormula.Source.PackageSet.t :=
+    Module SOmr :=
+      SetOps Package Debian.VersionFormula.Source.Package PackageSet
+      Debian.VersionFormula.Source.PackageSet.
+    Definition reduceReal (R : PackageSet.t) :
+        Debian.VersionFormula.Source.PackageSet.t :=
       SOmr.map embedPkg R.
 
-    Definition reduceAtom (alpha : Architecture.t) (a : Atom.t) : Debian.Atom.t :=
+    Definition reduceAtom (alpha : Architecture.t) (a : Atom.t) :
+        Debian.Atom.t :=
       ((aname a,
         match aqual a with
         | QUnq => QAArch alpha
@@ -267,7 +277,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
         | QAny => QAAny
         end), aform a).
 
-    Definition reduceClause (alpha : Architecture.t) (Al : Clause.t) : Debian.Clause.t :=
+    Definition reduceClause (alpha : Architecture.t) (Al : Clause.t) :
+        Debian.Clause.t :=
       List.map (reduceAtom alpha) Al.
 
     Lemma mem_reduceClause : forall alpha Al a',
@@ -278,13 +289,16 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
       rewrite List.in_map_iff; split; intros [a [Ha He]]; exists a; auto.
     Qed.
 
-    Module SOdp := SetOps DependencyElt Debian.DependencyElt DependencyRel Debian.DependencyRel.
+    Module SOdp :=
+      SetOps DependencyElt Debian.DependencyElt DependencyRel
+      Debian.DependencyRel.
     Definition reduceDeps (D : DependencyRel.t) : Debian.DependencyRel.t :=
       SOdp.map (fun c =>
           (embedPkg (fst c), reduceClause (parch (fst c)) (snd c)))
         D.
 
-    Definition reduceRec (Dopt : DependencyRel.t) : Debian.DependencyRel.t := reduceDeps Dopt.
+    Definition reduceRec (Dopt : DependencyRel.t) : Debian.DependencyRel.t :=
+        reduceDeps Dopt.
 
     Definition declProvOf (mu : ClassRel.t) (e : ProvidesElt.t) :
         list Debian.ProvidesElt.t :=
@@ -294,14 +308,16 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
       (embedPkg p, ((m, QAExact (parch p)), v))
         :: match classOf mu p with
            | MAForeign =>
-               List.map (fun b => (embedPkg p, ((m, QAArch b), v))) Architecture.enum
+               List.map (fun b => (embedPkg p, ((m, QAArch b), v)))
+                 Architecture.enum
            | MAAllowed =>
                (embedPkg p, ((m, QAAny), v))
                  :: (embedPkg p, ((m, QAArch (parch p)), v)) :: nil
            | _ => (embedPkg p, ((m, QAArch (parch p)), v)) :: nil
            end.
 
-    Definition implProvOf (mu : ClassRel.t) (p : Package.t) : list Debian.ProvidesElt.t :=
+    Definition implProvOf (mu : ClassRel.t) (p : Package.t) :
+        list Debian.ProvidesElt.t :=
       (embedPkg p, ((pname p, QAGroup), Debian.DTVal (pver p)))
         :: (embedPkg p, ((pname p, QAExact (parch p)), Debian.DTVal (pver p)))
         :: match classOf mu p with
@@ -315,10 +331,15 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
            | _ => nil
            end.
 
-    Module SOpv2 := SetOps ProvidesElt Debian.ProvidesElt ProvidesRel Debian.ProvidesRel.
-    Module SOppv := SetOps Debian.ProvidesElt Debian.ProvidesElt Debian.ProvidesRel Debian.ProvidesRel.
-    Module SOrpv := SetOps Package Debian.ProvidesElt PackageSet Debian.ProvidesRel.
-    Definition reduceProv (R : PackageSet.t) (Pi : ProvidesRel.t) (mu : ClassRel.t) :
+    Module SOpv2 :=
+      SetOps ProvidesElt Debian.ProvidesElt ProvidesRel Debian.ProvidesRel.
+    Module SOppv :=
+      SetOps Debian.ProvidesElt Debian.ProvidesElt Debian.ProvidesRel
+      Debian.ProvidesRel.
+    Module SOrpv :=
+      SetOps Package Debian.ProvidesElt PackageSet Debian.ProvidesRel.
+    Definition reduceProv (R : PackageSet.t) (Pi : ProvidesRel.t)
+        (mu : ClassRel.t) :
         Debian.ProvidesRel.t :=
       Debian.ProvidesRel.union
         (SOpv2.unionMap (fun e => SOppv.ofList (declProvOf mu e)) Pi)
@@ -334,25 +355,35 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
           (embedPkg p, (((n, QAGroup), phi), true))
             :: (embedPkg p, (((n, QAAny), phi), true))
             :: List.map
-              (fun b => (embedPkg p, (((n, QAArch b), phi), true))) Architecture.enum
-      | QNative => (embedPkg p, (((n, QAExact ArchitectureParameter.native), phi), true)) :: nil
+              (fun b => (embedPkg p, (((n, QAArch b), phi), true)))
+                Architecture.enum
+      | QNative => (embedPkg p,
+          (((n, QAExact ArchitectureParameter.native), phi), true)) :: nil
       | QExact b => (embedPkg p, (((n, QAExact b), phi), true)) :: nil
       | QAny => (embedPkg p, (((n, QAAny), phi), true)) :: nil
       end.
 
-    Definition implConfOf (mu : ClassRel.t) (p : Package.t) : Debian.ConflictElt.t :=
+    Definition implConfOf (mu : ClassRel.t) (p : Package.t) :
+        Debian.ConflictElt.t :=
       match classOf mu p with
       | MASame =>
           (embedPkg p,
-             (((pname p, QAGroup), Debian.VersionFormula.FCmp OpNe (pver p)), false))
+             (((pname p, QAGroup),
+               Debian.VersionFormula.FCmp OpNe (pver p)), false))
       | _ =>
-          (embedPkg p, (((pname p, QAGroup), Debian.VersionFormula.FTop), false))
+          (embedPkg p,
+            (((pname p, QAGroup), Debian.VersionFormula.FTop), false))
       end.
 
-    Module SOcf := SetOps ConflictElt Debian.ConflictElt ConflictRel Debian.ConflictRel.
-    Module SOccf := SetOps Debian.ConflictElt Debian.ConflictElt Debian.ConflictRel Debian.ConflictRel.
-    Module SOrcf := SetOps Package Debian.ConflictElt PackageSet Debian.ConflictRel.
-    Definition reduceConf (R : PackageSet.t) (G : ConflictRel.t) (mu : ClassRel.t) :
+    Module SOcf :=
+      SetOps ConflictElt Debian.ConflictElt ConflictRel Debian.ConflictRel.
+    Module SOccf :=
+      SetOps Debian.ConflictElt Debian.ConflictElt Debian.ConflictRel
+      Debian.ConflictRel.
+    Module SOrcf :=
+      SetOps Package Debian.ConflictElt PackageSet Debian.ConflictRel.
+    Definition reduceConf (R : PackageSet.t) (G : ConflictRel.t)
+        (mu : ClassRel.t) :
         Debian.ConflictRel.t :=
       Debian.ConflictRel.union
         (SOcf.unionMap (fun e => SOccf.ofList (declConfOf e)) G)
@@ -365,7 +396,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
         (reduceConf (inst_real I) (inst_conf I) (inst_cls I))
         (embedPkg (inst_root I)).
 
-    Definition tryInvPkg (p : Debian.VersionFormula.Source.Package.t) : option Package.t :=
+    Definition tryInvPkg (p : Debian.VersionFormula.Source.Package.t) :
+        option Package.t :=
       match p with
       | ((n, QAArch b), v) => Some ((n, b), v)
       | _ => None
@@ -377,7 +409,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
         cbn [fst snd]; reflexivity.
     Qed.
 
-    Lemma tryInvPkg_some : forall (q : Debian.VersionFormula.Source.Package.t) (p : Package.t),
+    Lemma tryInvPkg_some :
+        forall (q : Debian.VersionFormula.Source.Package.t) (p : Package.t),
         tryInvPkg q = Some p -> embedPkg p = q.
     Proof.
       intros [[n [b | b | |]] v] p H; cbn [tryInvPkg] in H; try discriminate.
@@ -385,8 +418,11 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
         cbn [fst snd]; reflexivity.
     Qed.
 
-    Module SOpre := SetOps Debian.VersionFormula.Source.Package Package Debian.VersionFormula.Source.PackageSet PackageSet.
-    Definition debianMAResolution (S : Debian.VersionFormula.Source.PackageSet.t) : PackageSet.t :=
+    Module SOpre :=
+      SetOps Debian.VersionFormula.Source.Package Package
+      Debian.VersionFormula.Source.PackageSet PackageSet.
+    Definition debianMAResolution
+        (S : Debian.VersionFormula.Source.PackageSet.t) : PackageSet.t :=
       SOpre.filterMap tryInvPkg S.
 
     Lemma embedPkg_injective : forall p q, embedPkg p = embedPkg q -> p = q.
@@ -420,7 +456,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
         (exists p, PackageSet.In p R /\ List.In y (implProvOf mu p)).
     Proof.
       intros R Pi mu y; unfold reduceProv.
-      rewrite Debian.ProvidesRel.union_spec, SOpv2.mem_unionMap, SOrpv.mem_unionMap.
+      rewrite Debian.ProvidesRel.union_spec, SOpv2.mem_unionMap,
+        SOrpv.mem_unionMap.
       cbn beta; setoid_rewrite SOppv.mem_ofList; reflexivity.
     Qed.
 
@@ -434,7 +471,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
       cbn beta; setoid_rewrite SOccf.mem_ofList; reflexivity.
     Qed.
 
-    Lemma provElt_eq : forall (p p' : Package.t) (m m' : N.t) (y y' : ReducedQualifier)
+    Lemma provElt_eq :
+        forall (p p' : Package.t) (m m' : N.t) (y y' : ReducedQualifier)
         (v v' : Debian.DTop),
         (embedPkg p, ((m, y), v)) = (embedPkg p', ((m', y'), v')) ->
         p = p' /\ m = m' /\ y = y' /\ v = v'.
@@ -525,7 +563,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
              BaseMatch Pi q n phi /\ (parch q = b \/ classOf mu q = MAForeign)
          | QAExact b => BaseMatch Pi q n phi /\ parch q = b
          | QAAny => BaseMatch Pi q n phi /\ classOf mu q = MAAllowed
-         | QAGroup => pname q = n /\ Debian.VersionFormula.satisfiesb (pver q) phi = true
+         | QAGroup => pname q = n /\
+             Debian.VersionFormula.satisfiesb (pver q) phi = true
          end).
     Proof.
       intros R Pi mu [[m b0] u] n y phi HqR; set (q := ((m, b0), u)) in *.
@@ -555,7 +594,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
           destruct HB as [[Hn Hv] | [v [HPi Hvt]]].
           * destruct Harch as [Hb | Hf].
             -- subst n b; left; split; [reflexivity | exact Hv].
-            -- subst n; right; exists (Debian.DTVal (pver q)); split; [| exact Hv].
+            -- subst n; right; exists (Debian.DTVal (pver q)); split;
+                 [| exact Hv].
                rewrite mem_reduceProv; right; exists q; split; [exact HqR |].
                apply in_implProvOf; exists (QAArch b); split;
                  [reflexivity | exact Hf].
@@ -646,7 +686,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
           * exists (embedPkg p), ((n, QAArch (parch q)), phi), true.
             split.
             -- right; right; apply in_map_iff.
-               exists (parch q); split; [reflexivity | apply Architecture.enum_complete].
+               exists (parch q); split;
+                 [reflexivity | apply Architecture.enum_complete].
             -- apply (proj2 (debMatch_char R Pi mu q n
                                (QAArch (parch q)) phi HqR)).
                split; [right; exists v; split; assumption | left; reflexivity].
@@ -665,12 +706,15 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
         + intros [q' [ea [e [Hce HM]]]].
           destruct Hce as [E | []].
           injection E as _ <- _.
-          exact (proj1 (debMatch_char R Pi mu q n (QAExact ArchitectureParameter.native)
+          exact (proj1
+            (debMatch_char R Pi mu q n (QAExact ArchitectureParameter.native)
                           phi HqR) HM).
         + intros H.
-          exists (embedPkg p), ((n, QAExact ArchitectureParameter.native), phi), true.
+          exists (embedPkg p),
+            ((n, QAExact ArchitectureParameter.native), phi), true.
           split; [left; reflexivity |].
-          exact (proj2 (debMatch_char R Pi mu q n (QAExact ArchitectureParameter.native)
+          exact (proj2
+            (debMatch_char R Pi mu q n (QAExact ArchitectureParameter.native)
                           phi HqR) H).
       - split.
         + intros [q' [ea [e [Hce HM]]]].
@@ -720,7 +764,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
       - split.
         + intro HM.
           destruct (proj1 (debMatch_char R Pi mu q (pname p) QAGroup
-                             (Debian.VersionFormula.FCmp OpNe (pver p)) HqR) HM) as [Hn Hv].
+                             (Debian.VersionFormula.FCmp OpNe (pver p)) HqR)
+                               HM) as [Hn Hv].
           split; [exact Hn | exact (proj1 (Hne _ _) Hv)].
         + intros [Hn Hv].
           apply (proj2 (debMatch_char R Pi mu q (pname p) QAGroup
@@ -758,7 +803,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
     Qed.
 
     Lemma declConfOf_name : forall (p : Package.t) (a : Atom.t)
-        (q : Debian.VersionFormula.Source.Package.t) (ea : Debian.Atom.t) (e : bool),
+        (q : Debian.VersionFormula.Source.Package.t)
+          (ea : Debian.Atom.t) (e : bool),
         List.In (q, (ea, e)) (declConfOf (p, a)) ->
         fst (fst ea) = aname a.
     Proof.
@@ -795,7 +841,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
     Proof.
       intros [R D Dopt Pi G mu r] S HT.
       destruct HT as [Hsub Hroot Hcc Hca Hvu].
-      cbn [reduceInst Debian.inst_real Debian.inst_deps Debian.inst_prov Debian.inst_conf
+      cbn [reduceInst Debian.inst_real Debian.inst_deps Debian.inst_prov
+        Debian.inst_conf
            Debian.inst_root inst_real inst_deps inst_prov inst_conf inst_cls
            inst_root] in Hsub, Hroot, Hcc, Hca.
       assert (HinR : forall q,
@@ -810,7 +857,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
       - rewrite mem_debianMAResolution; exact Hroot.
       - intros n alpha v HpS Al HAl; set (p := ((n, alpha), v)) in *.
         pose proof HpS as HpT; rewrite mem_debianMAResolution in HpT.
-        assert (Hd : Debian.DependencyRel.In (embedPkg p, reduceClause (parch p) Al)
+        assert (Hd :
+          Debian.DependencyRel.In (embedPkg p, reduceClause (parch p) Al)
                        (reduceDeps D)).
         { rewrite mem_reduceDeps; exists p, Al; split;
             [exact HAl | reflexivity]. }
@@ -910,7 +958,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
         exact (Hvu (m, QAArch ar) v v' Hv Hv').
     Qed.
 
-    Definition coreResolution (S : PackageSet.t) : Debian.VersionFormula.Source.PackageSet.t :=
+    Definition coreResolution (S : PackageSet.t) :
+        Debian.VersionFormula.Source.PackageSet.t :=
       reduceReal S.
 
     Theorem debian_ma_completeness : forall I S,
@@ -923,7 +972,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
       cbn [inst_real inst_deps inst_prov inst_conf inst_cls inst_root]
         in HSsub, HSroot, HScc, HSca, HSci.
       constructor;
-        cbn [reduceInst Debian.inst_real Debian.inst_deps Debian.inst_prov Debian.inst_conf
+        cbn [reduceInst Debian.inst_real Debian.inst_deps Debian.inst_prov
+          Debian.inst_conf
              Debian.inst_root inst_real inst_deps inst_prov inst_conf inst_cls
              inst_root].
       - exact (SOmr.map_mono _ _ _ _ HSsub (fun _ => eq_refl)).
@@ -953,7 +1003,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
         set (ph := (phn, phv)) in *.
         change ((pname q, QAArch (parch q), pver q) <> ph) in Hne.
         change (Debian.Match (reduceProv R Pi mu) (embedPkg q) ea) in HM.
-        change (x = true -> NameGroup.groupEq (fst (embedPkg q)) (fst ph) = false)
+        change (x = true ->
+          NameGroup.groupEq (fst (embedPkg q)) (fst ph) = false)
           in Hex.
         clearbody ph.
         rewrite mem_reduceConf in HaG.
@@ -1050,7 +1101,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
           (Debian.Reduction.coreResolution (reduceInst I) (coreResolution S)).
     Proof.
       intros I S H.
-      exact (Debian.Reduction.debian_completeness (reduceInst I) (coreResolution S)
+      exact (Debian.Reduction.debian_completeness (reduceInst I)
+        (coreResolution S)
                (debian_ma_completeness I S H)).
     Qed.
 
@@ -1058,25 +1110,37 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
       Module NSet := FSetUOT N.
       Module PackageSetFibred := FibredRel NArchitecture V Package PackageSet.
       Module PackageSetKeyPreimage := PreimageOfKeys N Package NSet PackageSet.
-      Module ProvidesRelFibred := FibredLabelledRel Package N Debian.ProvidedVersionOT ProvidesElt ProvidesRel.
-      Module ProvidesRelKeyPreimage := PreimageOfKeys N ProvidesElt NSet ProvidesRel.
-      Module DependencyRelFibred := FibredRel Package Clause DependencyElt DependencyRel.
-      Module ConflictRelFibred := FibredRel Package Atom ConflictElt ConflictRel.
-      Module ClassRelKeyPreimage := PreimageOfKeys Package ClassElt PackageSet ClassRel.
+      Module ProvidesRelFibred :=
+        FibredLabelledRel Package N Debian.ProvidedVersionOT ProvidesElt
+        ProvidesRel.
+      Module ProvidesRelKeyPreimage :=
+        PreimageOfKeys N ProvidesElt NSet ProvidesRel.
+      Module DependencyRelFibred :=
+        FibredRel Package Clause DependencyElt DependencyRel.
+      Module ConflictRelFibred :=
+        FibredRel Package Atom ConflictElt ConflictRel.
+      Module ClassRelKeyPreimage :=
+        PreimageOfKeys Package ClassElt PackageSet ClassRel.
 
-      Definition realAt (R : PackageSet.t) (n : N.t) (alpha : Architecture.t) : PackageSet.t :=
+      Definition realAt (R : PackageSet.t) (n : N.t) (alpha : Architecture.t) :
+          PackageSet.t :=
         PackageSetFibred.tailFibre R (n, alpha).
       Definition realPreimage (R : PackageSet.t) (ns : NSet.t) : PackageSet.t :=
         PackageSetKeyPreimage.ofKeys pname ns R.
-      Definition provPreimage (Pi : ProvidesRel.t) (ns : NSet.t) : ProvidesRel.t :=
+      Definition provPreimage (Pi : ProvidesRel.t) (ns : NSet.t) :
+          ProvidesRel.t :=
         ProvidesRelKeyPreimage.ofKeys ProvidesRelFibred.node ns Pi.
-      Definition provFibre (Pi : ProvidesRel.t) (p : Package.t) : ProvidesRel.t :=
+      Definition provFibre (Pi : ProvidesRel.t) (p : Package.t) :
+          ProvidesRel.t :=
         ProvidesRelFibred.tailFibre Pi p.
-      Definition depsFibre (D : DependencyRel.t) (p : Package.t) : DependencyRel.t :=
+      Definition depsFibre (D : DependencyRel.t) (p : Package.t) :
+          DependencyRel.t :=
         DependencyRelFibred.tailFibre D p.
-      Definition confFibre (G : ConflictRel.t) (p : Package.t) : ConflictRel.t :=
+      Definition confFibre (G : ConflictRel.t) (p : Package.t) :
+          ConflictRel.t :=
         ConflictRelFibred.tailFibre G p.
-      Definition clsPreimage (mu : ClassRel.t) (ps : PackageSet.t) : ClassRel.t :=
+      Definition clsPreimage (mu : ClassRel.t) (ps : PackageSet.t) :
+          ClassRel.t :=
         ClassRelKeyPreimage.ofKeys fst ps mu.
 
       Lemma mem_realAt : forall R (n : N.t) (alpha : Architecture.t) q,
@@ -1091,37 +1155,44 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
           PackageSet.In q (realPreimage R ns) <->
           PackageSet.In q R /\ NSet.In (pname q) ns.
       Proof.
-        intros R ns q; unfold realPreimage; apply PackageSetKeyPreimage.mem_ofKeys.
+        intros R ns q; unfold realPreimage;
+          apply PackageSetKeyPreimage.mem_ofKeys.
       Qed.
 
       Lemma mem_provPreimage : forall Pi ns (q : Package.t) (m : N.t) v,
           ProvidesRel.In (q, (m, v)) (provPreimage Pi ns) <->
           ProvidesRel.In (q, (m, v)) Pi /\ NSet.In m ns.
       Proof.
-        intros Pi ns q m v; unfold provPreimage; apply ProvidesRelKeyPreimage.mem_ofKeys.
+        intros Pi ns q m v; unfold provPreimage;
+          apply ProvidesRelKeyPreimage.mem_ofKeys.
       Qed.
 
       Lemma mem_provFibre : forall Pi (p q : Package.t) (m : N.t) v,
           ProvidesRel.In (q, (m, v)) (provFibre Pi p) <->
           ProvidesRel.In (q, (m, v)) Pi /\ q = p.
       Proof.
-        intros Pi p q m v; unfold provFibre; apply ProvidesRelFibred.mem_tailFibre.
+        intros Pi p q m v; unfold provFibre;
+          apply ProvidesRelFibred.mem_tailFibre.
       Qed.
 
       Lemma mem_depsFibre : forall D (p q : Package.t) Al,
-          DependencyRel.In (q, Al) (depsFibre D p) <-> DependencyRel.In (q, Al) D /\ q = p.
+          DependencyRel.In (q, Al) (depsFibre D p) <->
+            DependencyRel.In (q, Al) D /\ q = p.
       Proof.
-        intros D p q Al; unfold depsFibre; apply DependencyRelFibred.mem_tailFibre.
+        intros D p q Al; unfold depsFibre;
+          apply DependencyRelFibred.mem_tailFibre.
       Qed.
 
       Lemma mem_confFibre : forall G (p q : Package.t) a,
-          ConflictRel.In (q, a) (confFibre G p) <-> ConflictRel.In (q, a) G /\ q = p.
+          ConflictRel.In (q, a) (confFibre G p) <->
+            ConflictRel.In (q, a) G /\ q = p.
       Proof.
         intros G p q a; unfold confFibre; apply ConflictRelFibred.mem_tailFibre.
       Qed.
 
       Lemma mem_clsPreimage : forall mu ps e,
-          ClassRel.In e (clsPreimage mu ps) <-> ClassRel.In e mu /\ PackageSet.In (fst e) ps.
+          ClassRel.In e (clsPreimage mu ps) <-> ClassRel.In e mu /\
+            PackageSet.In (fst e) ps.
       Proof. intros mu ps e; unfold clsPreimage;
         apply ClassRelKeyPreimage.mem_ofKeys. Qed.
 
@@ -1175,7 +1246,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
               ProvidesRel.In (q, (m, v)) Pi -> classOf mu' q = classOf mu q) ->
           reduceProv R Pi mu' = reduceProv R Pi mu.
       Proof.
-        intros R Pi mu mu' H1 H2; apply Debian.ProvidesRel.ext; intro y; split; intro Hy.
+        intros R Pi mu mu' H1 H2; apply Debian.ProvidesRel.ext; intro y;
+          split; intro Hy.
         - exact (reduceProv_class_sub R Pi mu mu' H1 H2 y Hy).
         - refine (reduceProv_class_sub R Pi mu' mu _ _ y Hy);
             [intros p Hp; symmetry; exact (H1 p Hp)
@@ -1186,14 +1258,16 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
           (forall p, PackageSet.In p R -> classOf mu' p = classOf mu p) ->
           reduceConf R G mu' = reduceConf R G mu.
       Proof.
-        intros R G mu mu' H1; apply Debian.ConflictRel.ext; intro y; split; intro Hy.
+        intros R G mu mu' H1; apply Debian.ConflictRel.ext; intro y;
+          split; intro Hy.
         - exact (reduceConf_class_sub R G mu mu' H1 y Hy).
         - refine (reduceConf_class_sub R G mu' mu _ y Hy).
           intros p Hp; symmetry; exact (H1 p Hp).
       Qed.
 
       Module SOpo := SetOps ProvidesElt Package ProvidesRel PackageSet.
-      Definition provOwners (Pi : ProvidesRel.t) : PackageSet.t := SOpo.map fst Pi.
+      Definition provOwners (Pi : ProvidesRel.t) : PackageSet.t :=
+          SOpo.map fst Pi.
 
       Lemma mem_provOwners : forall Pi q,
           PackageSet.In q (provOwners Pi) <->
@@ -1205,7 +1279,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
           split; [exact He | reflexivity].
       Qed.
 
-      Definition provClsPreimage (mu : ClassRel.t) (Rp : PackageSet.t) (Pis : ProvidesRel.t) :
+      Definition provClsPreimage (mu : ClassRel.t) (Rp : PackageSet.t)
+          (Pis : ProvidesRel.t) :
           ClassRel.t :=
         clsPreimage mu (PackageSet.union Rp (provOwners Pis)).
 
@@ -1235,7 +1310,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
       Proof. intros R p; unfold reduceReal; apply SOmr.mem_map. Qed.
 
       Lemma reduceReal_arch : forall R (n : QualifiedName.t) (v : V.t),
-          Debian.PackageSet.In (n, v) (reduceReal R) -> exists b, snd n = QAArch b.
+          Debian.PackageSet.In (n, v) (reduceReal R) -> exists b,
+            snd n = QAArch b.
       Proof.
         intros R n v H; rewrite mem_reduceReal in H.
         destruct H as [q [_ Hq]]; exists (parch q).
@@ -1333,7 +1409,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
         unfold Debian.Reduction.provb.
         apply Debian.ProvidesRel.exists_restrict.
         - exact (reduceProv_mono _ _ _ _ (inst_cls I) Hr Hp).
-        - intros [q [mx v]] Hin Hb; cbn [Debian.aname Debian.aform fst snd] in Hb.
+        - intros [q [mx v]] Hin Hb;
+            cbn [Debian.aname Debian.aform fst snd] in Hb.
           apply andb_prop in Hb; destruct Hb as [Hn _].
           apply Debian.NEqb.eqb_true_iff in Hn as ->.
           apply (reduceProv_node I ns I' q m y v Hsl Hm); exact Hin.
@@ -1354,19 +1431,23 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
         assert (Hev : Debian.Reduction.evalAt (reduceReal Rr) ((m, y), phi)
                       = Debian.Reduction.evalAt (reduceReal (inst_real I))
                         ((m, y), phi)).
-        { unfold Debian.Reduction.evalAt; cbn [Debian.aname Debian.aform fst snd].
+        { unfold Debian.Reduction.evalAt;
+            cbn [Debian.aname Debian.aform fst snd].
           rewrite (versions_restrict (inst_real I) Rr (m, y) Hrr);
             [reflexivity |].
           intros q HqR Hq.
           assert (Hq2 : pname q = m) by exact (f_equal fst Hq).
           apply (Hcr q HqR); rewrite Hq2; exact Hm. }
-        apply Debian.Reduction.Reduced.VSet.ext; intro u'; unfold Debian.Reduction.us.
+        apply Debian.Reduction.Reduced.VSet.ext; intro u';
+          unfold Debian.Reduction.us.
         rewrite !Debian.Reduction.Reduced.VSet.union_spec, Hev.
         apply or_iff_compat_l.
         apply Debian.Reduction.SOew.filterMap_restrict.
         - exact (reduceProv_mono _ _ _ _ (inst_cls I) Hr Hp).
-        - intros [q [mx v]] Hin Hf; cbn [fst snd Debian.aname Debian.aform] in Hf.
-          rewrite if_some_iff, Bool.andb_true_iff, Debian.NEqb.eqb_true_iff in Hf.
+        - intros [q [mx v]] Hin Hf;
+            cbn [fst snd Debian.aname Debian.aform] in Hf.
+          rewrite if_some_iff, Bool.andb_true_iff,
+            Debian.NEqb.eqb_true_iff in Hf.
           destruct Hf as [[-> _] _].
           apply (reduceProv_node I ns I' q m y v Hsl Hm); exact Hin.
       Qed.
@@ -1407,7 +1488,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
       Qed.
 
       Lemma reduceConf_pkg : forall R G mu (p : Package.t) Rc Gs ea e,
-          PackageSet.Subset Rc R -> ConflictRel.Subset Gs G -> PackageSet.In p Rc ->
+          PackageSet.Subset Rc R -> ConflictRel.Subset Gs G ->
+            PackageSet.In p Rc ->
           (forall e, ConflictRel.In e G -> fst e = p -> ConflictRel.In e Gs) ->
           (Debian.ConflictRel.In (embedPkg p, (ea, e)) (reduceConf R G mu) <->
            Debian.ConflictRel.In (embedPkg p, (ea, e)) (reduceConf Rc Gs mu)).
@@ -1440,7 +1522,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
         destruct HM as [Hn _]; left; symmetry; exact Hn.
       Qed.
 
-      Lemma realPreimage_sub : forall R ns, PackageSet.Subset (realPreimage R ns) R.
+      Lemma realPreimage_sub : forall R ns,
+          PackageSet.Subset (realPreimage R ns) R.
       Proof.
         intros R ns q Hq; exact (proj1 (proj1 (mem_realPreimage R ns q) Hq)).
       Qed.
@@ -1488,7 +1571,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
       Module SOcn := SetOps DependencyElt N DependencyRel NSet.
       Definition atomNames (D : DependencyRel.t) (p : Package.t) : NSet.t :=
         SOcn.unionMap (fun c =>
-            if Package.eq_dec (fst c) p then clauseNames (snd c) else NSet.empty)
+            if Package.eq_dec (fst c) p then clauseNames (snd c)
+              else NSet.empty)
           D.
 
       Lemma mem_atomNames : forall D (p : Package.t) (m : N.t),
@@ -1534,7 +1618,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
       Qed.
 
       Module SOnn := SetOps N N NSet NSet.
-      Definition confRead (Pi : ProvidesRel.t) (G : ConflictRel.t) (p : Package.t) : NSet.t :=
+      Definition confRead (Pi : ProvidesRel.t) (G : ConflictRel.t)
+          (p : Package.t) : NSet.t :=
         SOnn.unionMap (fun n => NSet.add n (providerNames Pi n))
           (confAtomNames G p).
 
@@ -1548,11 +1633,13 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
           [apply NSet.add_spec in Hm'; exact Hm' | apply NSet.add_spec; exact Hm'].
       Qed.
 
-      Definition readNames (Pi : ProvidesRel.t) (D : DependencyRel.t) (G : ConflictRel.t) (p : Package.t)
+      Definition readNames (Pi : ProvidesRel.t) (D : DependencyRel.t)
+          (G : ConflictRel.t) (p : Package.t)
         : NSet.t :=
         NSet.union (atomNames D p) (confRead Pi G p).
 
-      Lemma reduceConf_confAtom : forall R G mu (p : Package.t) (ea : Debian.Atom.t) e,
+      Lemma reduceConf_confAtom :
+          forall R G mu (p : Package.t) (ea : Debian.Atom.t) e,
           Debian.ConflictRel.In (embedPkg p, (ea, e)) (reduceConf R G mu) ->
           NSet.In (fst (fst ea)) (confAtomNames G p).
       Proof.
@@ -1577,14 +1664,16 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
           ProvSubInst I ns I' -> NSet.In (fst (fst a')) ns ->
           Debian.matchb (reduceProv (inst_real I') (inst_prov I') (inst_cls I))
             q a' =
-          Debian.matchb (reduceProv (inst_real I) (inst_prov I) (inst_cls I)) q a'.
+          Debian.matchb
+            (reduceProv (inst_real I) (inst_prov I) (inst_cls I)) q a'.
       Proof.
         intros I ns I' q [[m y] phi] Hsl Hm; cbn [fst] in Hm.
         assert (Hsub := Hsl); destruct Hsub as [Hr [Hp _]].
         unfold Debian.matchb; f_equal.
         apply Debian.ProvidesRel.exists_restrict.
         - exact (reduceProv_mono _ _ _ _ (inst_cls I) Hr Hp).
-        - intros [q' [mx v]] Hin Hb; cbn [fst snd Debian.aname Debian.aform] in Hb.
+        - intros [q' [mx v]] Hin Hb;
+            cbn [fst snd Debian.aname Debian.aform] in Hb.
           apply andb_prop in Hb; destruct Hb as [Hq Hb].
           apply andb_prop in Hb; destruct Hb as [Hn _].
           apply Debian.PackageEqb.eqb_true_iff in Hq as ->.
@@ -1597,7 +1686,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
           (forall q, PackageSet.In q (inst_real I) -> NSet.In (pname q) ns ->
              PackageSet.In q Rr) ->
           ProvSubInst I ns I' -> NSet.In (fst (fst a')) ns ->
-          (forall (q : Package.t) v, ProvidesRel.In (q, (fst (fst a'), v)) (inst_prov I) ->
+          (forall (q : Package.t) v,
+            ProvidesRel.In (q, (fst (fst a'), v)) (inst_prov I) ->
                                   NSet.In (pname q) ns) ->
           Debian.Reduction.confNames (reduceReal Rr)
             (reduceProv (inst_real I') (inst_prov I') (inst_cls I)) a' =
@@ -1627,16 +1717,19 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
             [exact Hm | exact (Hpn q v Hin)].
       Qed.
 
-      Lemma confNames_inNs : forall R Pi mu ns (a' : Debian.Atom.t) (m : QualifiedName.t),
+      Lemma confNames_inNs :
+          forall R Pi mu ns (a' : Debian.Atom.t) (m : QualifiedName.t),
           NSet.In (fst (fst a')) ns ->
           (forall (q : Package.t) v, ProvidesRel.In (q, (fst (fst a'), v)) Pi ->
                                   NSet.In (pname q) ns) ->
           Debian.Reduction.NSet.In m
-            (Debian.Reduction.confNames (reduceReal R) (reduceProv R Pi mu) a') ->
+            (Debian.Reduction.confNames (reduceReal R)
+              (reduceProv R Pi mu) a') ->
           NSet.In (fst m) ns.
       Proof.
         intros R Pi mu ns [[m y] phi] qn Hm Hpn Hqn; cbn [fst] in Hm, Hpn.
-        apply Debian.Reduction.mem_confNames in Hqn; destruct Hqn as [u [HR Hmb]].
+        apply Debian.Reduction.mem_confNames in Hqn;
+          destruct Hqn as [u [HR Hmb]].
         rewrite mem_reduceReal in HR; destruct HR as [q [Hq Hqe]].
         assert (E : fst qn = pname q).
         { pose proof (f_equal fst Hqe) as E1; cbn [fst] in E1.
@@ -1692,7 +1785,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
           exists p0, Al; split; [exact HD | exact Heq].
       Qed.
 
-      Lemma reduceDeps_atomNames : forall D (p : Package.t) A (a' : Debian.Atom.t),
+      Lemma reduceDeps_atomNames :
+          forall D (p : Package.t) A (a' : Debian.Atom.t),
           Debian.DependencyRel.In (embedPkg p, A) (reduceDeps D) ->
           Debian.AtomSet.In a' (Debian.clauseAtoms A) ->
           NSet.In (fst (fst a')) (atomNames D p).
@@ -1713,11 +1807,13 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
             (Debian.Reduction.Name.Orig (n, QAArch alpha)) =
           Debian.Reduction.versions
             (Debian.MkInst (reduceReal (realAt (inst_real I) n alpha))
-               Debian.DependencyRel.empty Debian.DependencyRel.empty Debian.ProvidesRel.empty Debian.ConflictRel.empty
+               Debian.DependencyRel.empty Debian.DependencyRel.empty
+                 Debian.ProvidesRel.empty Debian.ConflictRel.empty
                (embedPkg (inst_root I)))
             (Debian.Reduction.Name.Orig (n, QAArch alpha)).
       Proof.
-        intros I n alpha; cbn [Debian.Reduction.versions reduceInst Debian.inst_real].
+        intros I n alpha;
+          cbn [Debian.Reduction.versions reduceInst Debian.inst_real].
         rewrite (versions_restrict (inst_real I) (realAt (inst_real I) n alpha)
                    (n, QAArch alpha));
           [reflexivity | |].
@@ -1736,9 +1832,11 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
             (Debian.Reduction.Name.Orig (n, y)) =
           Debian.Reduction.Reduced.VSet.empty.
       Proof.
-        intros I n y Hy; cbn [Debian.Reduction.versions reduceInst Debian.inst_real].
+        intros I n y Hy;
+          cbn [Debian.Reduction.versions reduceInst Debian.inst_real].
         destruct (Debian.VSet.is_empty
-                    (Debian.Source.versions (reduceReal (inst_real I)) (n, y))) eqn:He;
+                    (Debian.Source.versions (reduceReal (inst_real I))
+                      (n, y))) eqn:He;
           [reflexivity | exfalso].
         destruct (Debian.VSet.choose
                     (Debian.Source.versions (reduceReal (inst_real I)) (n, y)))
@@ -1764,7 +1862,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
                (reduceDeps (depsFibre (inst_deps I) p))
                (reduceRec (depsFibre (inst_rec I) p))
                (reduceProv Rp Pis Mp)
-               (reduceConf (PackageSet.singleton p) (confFibre (inst_conf I) p) Mp)
+               (reduceConf (PackageSet.singleton p)
+                 (confFibre (inst_conf I) p) Mp)
                (embedPkg (inst_root I)))
             (Debian.Reduction.embedPkg (embedPkg p)).
       Proof.
@@ -1779,7 +1878,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
                       (provFibre (inst_prov I) p)).
         set (Rc := PackageSet.singleton p).
         set (Gs := confFibre (inst_conf I) p).
-        assert (HRr : PackageSet.Subset Rr (inst_real I)) by apply realPreimage_sub.
+        assert (HRr : PackageSet.Subset Rr (inst_real I)) by apply
+          realPreimage_sub.
         assert (HcovR : forall q, PackageSet.In q (inst_real I) ->
                           NSet.In (pname q) ms ->
                           PackageSet.In q Rr) by apply realPreimage_cov.
@@ -1839,7 +1939,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
                 Debian.Reduction.Version.Orig (pver p)) by reflexivity.
         apply Debian.Reduction.Reduced.DependeeSet.ext; intro y.
         rewrite !Debian.Reduction.dependees_orig_spec.
-        cbn [reduceInst Debian.inst_real Debian.inst_deps Debian.inst_rec Debian.inst_prov
+        cbn [reduceInst Debian.inst_real Debian.inst_deps Debian.inst_rec
+          Debian.inst_prov
              Debian.inst_conf].
         change (reduceProv Rp Pis (inst_cls I))
           with (reduceProv (inst_real Ip) (inst_prov Ip) (inst_cls I)).
@@ -1920,7 +2021,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
           let Rs := realPreimage (inst_real I) (NSet.singleton m) in
           let Pis := provPreimage (inst_prov I) (NSet.singleton m) in
           Debian.Reduction.dependees
-            (Debian.MkInst (reduceReal Rs) Debian.DependencyRel.empty Debian.DependencyRel.empty
+            (Debian.MkInst (reduceReal Rs) Debian.DependencyRel.empty
+              Debian.DependencyRel.empty
                (reduceProv Rs Pis (provClsPreimage (inst_cls I) Rs Pis))
                Debian.ConflictRel.empty (embedPkg (inst_root I)))
             (Debian.Reduction.Name.Disjunct (reduceClause alpha Al),
@@ -1954,7 +2056,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
           let Rs := realPreimage (inst_real I) (NSet.singleton m) in
           let Pis := provPreimage (inst_prov I) (NSet.singleton m) in
           Debian.Reduction.dependees
-            (Debian.MkInst (reduceReal Rs) Debian.DependencyRel.empty Debian.DependencyRel.empty
+            (Debian.MkInst (reduceReal Rs) Debian.DependencyRel.empty
+              Debian.DependencyRel.empty
                (reduceProv Rs Pis (provClsPreimage (inst_cls I) Rs Pis))
                Debian.ConflictRel.empty (embedPkg (inst_root I)))
             (Debian.Reduction.Name.Soft (reduceClause alpha Al),
@@ -1973,13 +2076,15 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
       Qed.
 
       Theorem versions_lookupSelector :
-        forall I (alpha : Architecture.t) (m : N.t) (x : Qual) (phi : Debian.VersionFormula.Formula),
+        forall I (alpha : Architecture.t) (m : N.t) (x : Qual)
+          (phi : Debian.VersionFormula.Formula),
           Debian.Reduction.versions (reduceInst I)
             (Debian.Reduction.Name.Selector (reduceAtom alpha (m, (x, phi)))) =
           let Rs := realPreimage (inst_real I) (NSet.singleton m) in
           let Pis := provPreimage (inst_prov I) (NSet.singleton m) in
           Debian.Reduction.versions
-            (Debian.MkInst (reduceReal Rs) Debian.DependencyRel.empty Debian.DependencyRel.empty
+            (Debian.MkInst (reduceReal Rs) Debian.DependencyRel.empty
+              Debian.DependencyRel.empty
                (reduceProv Rs Pis (provClsPreimage (inst_cls I) Rs Pis))
                Debian.ConflictRel.empty (embedPkg (inst_root I)))
             (Debian.Reduction.Name.Selector (reduceAtom alpha (m, (x, phi)))).
@@ -1995,22 +2100,27 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
                          (realPreimage_sub _ _)
                          (realPreimage_cov _ _) (preimageProvSubInst I _) Hm).
         cbn [inst_real inst_prov] in Hus.
-        cbn [Debian.Reduction.versions reduceInst Debian.inst_real Debian.inst_prov].
+        cbn [Debian.Reduction.versions reduceInst Debian.inst_real
+          Debian.inst_prov].
         rewrite Hus; reflexivity.
       Qed.
 
       Theorem dependees_lookupSelector :
-        forall I (alpha : Architecture.t) (m : N.t) (x : Qual) (phi : Debian.VersionFormula.Formula)
+        forall I (alpha : Architecture.t) (m : N.t) (x : Qual)
+          (phi : Debian.VersionFormula.Formula)
                (w : Debian.Reduction.Version.t),
           Debian.Reduction.dependees (reduceInst I)
-            (Debian.Reduction.Name.Selector (reduceAtom alpha (m, (x, phi))), w) =
+            (Debian.Reduction.Name.Selector
+              (reduceAtom alpha (m, (x, phi))), w) =
           let Rs := realPreimage (inst_real I) (NSet.singleton m) in
           let Pis := provPreimage (inst_prov I) (NSet.singleton m) in
           Debian.Reduction.dependees
-            (Debian.MkInst (reduceReal Rs) Debian.DependencyRel.empty Debian.DependencyRel.empty
+            (Debian.MkInst (reduceReal Rs) Debian.DependencyRel.empty
+              Debian.DependencyRel.empty
                (reduceProv Rs Pis (provClsPreimage (inst_cls I) Rs Pis))
                Debian.ConflictRel.empty (embedPkg (inst_root I)))
-            (Debian.Reduction.Name.Selector (reduceAtom alpha (m, (x, phi))), w).
+            (Debian.Reduction.Name.Selector
+              (reduceAtom alpha (m, (x, phi))), w).
       Proof. intros I alpha m x phi w; destruct w; reflexivity. Qed.
 
     End Lookup.
@@ -2026,7 +2136,8 @@ Module MultiarchDebian (N V : UsualOrderedType) (ArchitectureParameter : Archite
     Corollary debian_ma_core_retraction : forall I S,
         debianMAResolution
           (Debian.Reduction.debianResolution
-             (Debian.Reduction.coreResolution (reduceInst I) (coreResolution S))) =
+             (Debian.Reduction.coreResolution (reduceInst I)
+               (coreResolution S))) =
                S.
     Proof.
       intros I S.

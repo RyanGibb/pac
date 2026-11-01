@@ -14,7 +14,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
   Module ParentRel := FSetUOT ParentElt.
 
   Record IsResolution
-      (R : PackageSet.t) (D : Source.DependencyRel.t) (g : V.t -> G.t) (r : Package.t)
+      (R : PackageSet.t) (D : Source.DependencyRel.t) (g : V.t -> G.t)
+        (r : Package.t)
       (S : PackageSet.t) (pi : ParentRel.t) : Prop :=
     { res_subset : PackageSet.Subset S R
     ; res_root_mem : PackageSet.In r S
@@ -29,11 +30,14 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           ParentRel.In ((n, v), p) pi -> ParentRel.In ((n, v'), p) pi -> v = v'
     ; res_version_granularity :
         forall (n : N.t) (v v' : V.t),
-          PackageSet.In (n, v) S -> PackageSet.In (n, v') S -> v <> v' -> g v <> g v'
+          PackageSet.In (n, v) S -> PackageSet.In (n, v') S -> v <>
+            v' -> g v <> g v'
     ; res_parent_subset :
-        forall q p, ParentRel.In (q, p) pi -> PackageSet.In q S /\ PackageSet.In p S }.
+        forall q p, ParentRel.In (q, p) pi -> PackageSet.In q S /\
+          PackageSet.In p S }.
 
-  Definition ParentDependency (D : Source.DependencyRel.t) (pi : ParentRel.t) : Prop :=
+  Definition ParentDependency (D : Source.DependencyRel.t)
+      (pi : ParentRel.t) : Prop :=
     forall m u n v, ParentRel.In ((m, u), (n, v)) pi ->
       exists vs, Source.DependencyRel.In ((n, v), (m, vs)) D /\ VSet.In u vs.
 
@@ -109,11 +113,16 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Module IntermediateName := TripleUOT N V N.
     Module GranularNameFacts := UOTCompareFacts GranularName.
     Module IntermediateNameFacts := UOTCompareFacts IntermediateName.
-    #[local] Hint Rewrite GranularNameFacts.compare_eq_iff IntermediateNameFacts.compare_eq_iff : cmp_conc.
-    #[local] Hint Extern 1 => cmp_by GranularNameFacts.compare_antisym : cmp_conc.
-    #[local] Hint Extern 1 => cmp_by IntermediateNameFacts.compare_antisym : cmp_conc.
-    #[local] Hint Extern 1 => cmp_by GranularNameFacts.compare_lt_trans : cmp_conc.
-    #[local] Hint Extern 1 => cmp_by IntermediateNameFacts.compare_lt_trans : cmp_conc.
+    #[local] Hint Rewrite GranularNameFacts.compare_eq_iff
+      IntermediateNameFacts.compare_eq_iff : cmp_conc.
+    #[local] Hint Extern 1 =>
+      cmp_by GranularNameFacts.compare_antisym : cmp_conc.
+    #[local] Hint Extern 1 =>
+      cmp_by IntermediateNameFacts.compare_antisym : cmp_conc.
+    #[local] Hint Extern 1 =>
+      cmp_by GranularNameFacts.compare_lt_trans : cmp_conc.
+    #[local] Hint Extern 1 =>
+      cmp_by IntermediateNameFacts.compare_lt_trans : cmp_conc.
 
     Module Name.
       Inductive name : Type :=
@@ -123,7 +132,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
 
       Definition compare (x y : t) : comparison :=
         match x, y with
-        | Granular n1 w1, Granular n2 w2 => GranularName.compare (n1, w1) (n2, w2)
+        | Granular n1 w1, Granular n2 w2 =>
+            GranularName.compare (n1, w1) (n2, w2)
         | Granular _ _, Intermediate _ _ _ => Lt
         | Intermediate _ _ _, Granular _ _ => Gt
         | Intermediate n1 v1 m1, Intermediate n2 v2 m2 =>
@@ -143,7 +153,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
 
     Module GFacts := UOTCompareFacts G.
     Module VFacts := UOTCompareFacts V.
-    #[local] Hint Rewrite GFacts.compare_eq_iff VFacts.compare_eq_iff : cmp_conc.
+    #[local] Hint Rewrite GFacts.compare_eq_iff
+      VFacts.compare_eq_iff : cmp_conc.
     #[local] Hint Extern 1 => cmp_by GFacts.compare_antisym : cmp_conc.
     #[local] Hint Extern 1 => cmp_by VFacts.compare_antisym : cmp_conc.
     #[local] Hint Extern 1 => cmp_by GFacts.compare_lt_trans : cmp_conc.
@@ -181,8 +192,10 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Definition embedPkg (g : V.t -> G.t) (p : Package.t) : Reduced.Package.t :=
       (Name.Granular (fst p) (g (snd p)), Version.Orig (snd p)).
 
-    Module SOptp := SetOps Package Reduced.Package PackageSet Reduced.PackageSet.
-    Definition embedSet (g : V.t -> G.t) (R : PackageSet.t) : Reduced.PackageSet.t :=
+    Module SOptp :=
+      SetOps Package Reduced.Package PackageSet Reduced.PackageSet.
+    Definition embedSet (g : V.t -> G.t) (R : PackageSet.t) :
+        Reduced.PackageSet.t :=
       SOptp.map (embedPkg g) R.
 
     Module SOvcv := SetOps V VersionOT VSet Reduced.VSet.
@@ -196,8 +209,11 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       VSet.filter (fun u => granEqb (g u) (g w)) vs.
 
     Module SOvtp := SetOps V Reduced.Package VSet Reduced.PackageSet.
-    Module SOdtp := SetOps Source.DependencyElt Reduced.Package Source.DependencyRel Reduced.PackageSet.
-    Definition reduceReal (R : PackageSet.t) (D : Source.DependencyRel.t) (g : V.t -> G.t) :
+    Module SOdtp :=
+      SetOps Source.DependencyElt Reduced.Package Source.DependencyRel
+      Reduced.PackageSet.
+    Definition reduceReal (R : PackageSet.t) (D : Source.DependencyRel.t)
+        (g : V.t -> G.t) :
         Reduced.PackageSet.t :=
       Reduced.PackageSet.union (embedSet g R)
         (SOdtp.unionMap (fun '((n, v), (m, vs)) =>
@@ -209,7 +225,9 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
            D).
 
     Module SOvtd := SetOps V Reduced.DependencyElt VSet Reduced.DependencyRel.
-    Module SOdtd := SetOps Source.DependencyElt Reduced.DependencyElt Source.DependencyRel Reduced.DependencyRel.
+    Module SOdtd :=
+      SetOps Source.DependencyElt Reduced.DependencyElt Source.DependencyRel
+      Reduced.DependencyRel.
     Definition reduceDepsDirect (D : Source.DependencyRel.t) (g : V.t -> G.t) :
         Reduced.DependencyRel.t :=
       SOdtd.unionMap (fun '((n, v), (m, vs)) =>
@@ -221,7 +239,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           else Reduced.DependencyRel.empty)
         D.
 
-    Definition reduceDepsSplitEntry (D : Source.DependencyRel.t) (g : V.t -> G.t) :
+    Definition reduceDepsSplitEntry (D : Source.DependencyRel.t)
+        (g : V.t -> G.t) :
         Reduced.DependencyRel.t :=
       SOdtd.filterMap (fun '((n, v), (m, vs)) =>
           if isSplitb g vs
@@ -230,7 +249,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           else None)
         D.
 
-    Definition reduceDepsSplitFanout (D : Source.DependencyRel.t) (g : V.t -> G.t) :
+    Definition reduceDepsSplitFanout (D : Source.DependencyRel.t)
+        (g : V.t -> G.t) :
         Reduced.DependencyRel.t :=
       SOdtd.unionMap (fun '((n, v), (m, vs)) =>
           if isSplitb g vs
@@ -241,7 +261,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           else Reduced.DependencyRel.empty)
         D.
 
-    Definition reduceDepsEmpty (D : Source.DependencyRel.t) (g : V.t -> G.t) : Reduced.DependencyRel.t :=
+    Definition reduceDepsEmpty (D : Source.DependencyRel.t) (g : V.t -> G.t) :
+        Reduced.DependencyRel.t :=
       SOdtd.filterMap (fun '((n, v), (m, vs)) =>
           if VSet.is_empty vs
           then Some ((Name.Granular n (g v), Version.Orig v),
@@ -249,10 +270,12 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           else None)
         D.
 
-    Definition reduceDeps (D : Source.DependencyRel.t) (g : V.t -> G.t) : Reduced.DependencyRel.t :=
+    Definition reduceDeps (D : Source.DependencyRel.t) (g : V.t -> G.t) :
+        Reduced.DependencyRel.t :=
       Reduced.DependencyRel.union (reduceDepsDirect D g)
         (Reduced.DependencyRel.union (reduceDepsSplitEntry D g)
-           (Reduced.DependencyRel.union (reduceDepsSplitFanout D g) (reduceDepsEmpty D g))).
+           (Reduced.DependencyRel.union (reduceDepsSplitFanout D g)
+             (reduceDepsEmpty D g))).
 
     Lemma mem_filterGran : forall g w vs u,
         VSet.In u (filterGran g w vs) <-> VSet.In u vs /\ g u = g w.
@@ -261,12 +284,14 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       rewrite VSet.filter_spec'.
       rewrite granEqb_iff; reflexivity.
     Qed.
-    Inductive ReducedPkg (R : PackageSet.t) (D : Source.DependencyRel.t) (g : V.t -> G.t) :
+    Inductive ReducedPkg (R : PackageSet.t) (D : Source.DependencyRel.t)
+        (g : V.t -> G.t) :
         Reduced.Package.t -> Prop :=
     | PkgEmbed : forall n v, PackageSet.In (n, v) R ->
         ReducedPkg R D g (Name.Granular n (g v), Version.Orig v)
     | PkgIntermediate : forall n v m vs u,
-        Source.DependencyRel.In ((n, v), (m, vs)) D -> IsSplit g vs -> VSet.In u vs ->
+        Source.DependencyRel.In ((n, v), (m, vs)) D -> IsSplit g vs ->
+          VSet.In u vs ->
         ReducedPkg R D g (Name.Intermediate n v m, Version.Gran (g u)).
 
     Lemma mem_reduceReal : forall R D g q,
@@ -289,7 +314,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Inductive ReducedEdge (D : Source.DependencyRel.t) (g : V.t -> G.t) :
         Reduced.DependencyElt.t -> Prop :=
     | EdgeDirect : forall n v m vs u,
-        Source.DependencyRel.In ((n, v), (m, vs)) D -> IsDirect g vs -> VSet.In u vs ->
+        Source.DependencyRel.In ((n, v), (m, vs)) D -> IsDirect g vs ->
+          VSet.In u vs ->
         ReducedEdge D g ((Name.Granular n (g v), Version.Orig v),
                          (Name.Granular m (g u), embedVS vs))
     | EdgeSplitEntry : forall n v m vs,
@@ -297,7 +323,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         ReducedEdge D g ((Name.Granular n (g v), Version.Orig v),
                          (Name.Intermediate n v m, gransOfVS g vs))
     | EdgeSplitFanout : forall n v m vs u,
-        Source.DependencyRel.In ((n, v), (m, vs)) D -> IsSplit g vs -> VSet.In u vs ->
+        Source.DependencyRel.In ((n, v), (m, vs)) D -> IsSplit g vs ->
+          VSet.In u vs ->
         ReducedEdge D g ((Name.Intermediate n v m, Version.Gran (g u)),
                          (Name.Granular m (g u),
                           embedVS (filterGran g u vs)))
@@ -311,7 +338,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Proof.
       intros D g y; unfold reduceDeps, reduceDepsDirect, reduceDepsSplitEntry,
         reduceDepsSplitFanout, reduceDepsEmpty.
-      rewrite !Reduced.DependencyRel.union_spec, !SOdtd.mem_unionMap, !SOdtd.mem_filterMap.
+      rewrite !Reduced.DependencyRel.union_spec, !SOdtd.mem_unionMap,
+        !SOdtd.mem_filterMap.
       split.
       - intros [H | [H | [H | H]]]; destruct H as [[[n v] [m vs]] [HD H]];
           cbn beta iota in H.
@@ -340,7 +368,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
             reflexivity.
     Qed.
 
-    Definition tryInvPkg (g : V.t -> G.t) (p' : Reduced.Package.t) : option Package.t :=
+    Definition tryInvPkg (g : V.t -> G.t) (p' : Reduced.Package.t) :
+        option Package.t :=
       match p' with
       | (Name.Granular n w, Version.Orig v) =>
           if G.eq_dec w (g v) then Some (n, v) else None
@@ -362,7 +391,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       injection H as <-; reflexivity.
     Qed.
 
-    Module SOtpp := SetOps Reduced.Package Package Reduced.PackageSet PackageSet.
+    Module SOtpp :=
+      SetOps Reduced.Package Package Reduced.PackageSet PackageSet.
     Lemma embedPkg_injective : forall g (p q : Package.t),
         embedPkg g p = embedPkg g q -> p = q.
     Proof.
@@ -375,8 +405,10 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         : PackageSet.t :=
       SOtpp.filterMap (tryInvPkg g) S.
 
-    Lemma mem_concurrentResolution : forall g (S : Reduced.PackageSet.t) (p : Package.t),
-        PackageSet.In p (concurrentResolution g S) <-> Reduced.PackageSet.In (embedPkg g p) S.
+    Lemma mem_concurrentResolution :
+        forall g (S : Reduced.PackageSet.t) (p : Package.t),
+        PackageSet.In p (concurrentResolution g S) <->
+          Reduced.PackageSet.In (embedPkg g p) S.
     Proof.
       intro g; unfold concurrentResolution.
       exact (SOtpp.mem_filterMap_inv (tryInvPkg g) (embedPkg g)
@@ -400,11 +432,13 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         Reduced.PackageSet.In (Name.Granular n (g v), Version.Orig v) S /\
         (IsSplit g vs ->
            exists u0, VSet.In u0 vs /\
-             Reduced.PackageSet.In (Name.Intermediate n v m, Version.Gran (g u0)) S /\
+             Reduced.PackageSet.In
+               (Name.Intermediate n v m, Version.Gran (g u0)) S /\
              g u = g u0).
     Proof.
       intros g S n v m vs u; unfold piGuardb.
-      rewrite !Bool.andb_true_iff, Bool.implb_true_iff, !Reduced.PackageSet.mem_spec,
+      rewrite !Bool.andb_true_iff, Bool.implb_true_iff,
+        !Reduced.PackageSet.mem_spec,
         isSplitb_iff.
       rewrite VSet.exists_spec'.
       split.
@@ -423,8 +457,10 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Module SOvpp := SetOps V ParentElt VSet ParentRel.
-    Module SOdpp := SetOps Source.DependencyElt ParentElt Source.DependencyRel ParentRel.
-    Definition parents (D : Source.DependencyRel.t) (g : V.t -> G.t) (S : Reduced.PackageSet.t) :
+    Module SOdpp :=
+      SetOps Source.DependencyElt ParentElt Source.DependencyRel ParentRel.
+    Definition parents (D : Source.DependencyRel.t) (g : V.t -> G.t)
+        (S : Reduced.PackageSet.t) :
         ParentRel.t :=
       SOdpp.unionMap (fun '((n, v), (m, vs)) =>
           SOvpp.filterMap (fun u =>
@@ -439,7 +475,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
           Reduced.PackageSet.In (Name.Granular n (g v), Version.Orig v) S /\
           Reduced.PackageSet.In (Name.Granular m (g u), Version.Orig u) S /\
           (IsSplit g vs ->
-             Reduced.PackageSet.In (Name.Intermediate n v m, Version.Gran (g u)) S).
+             Reduced.PackageSet.In
+               (Name.Intermediate n v m, Version.Gran (g u)) S).
     Proof.
       intros D g S m u n v; unfold parents; rewrite SOdpp.mem_unionMap.
       split.
@@ -458,7 +495,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Lemma embedPkg_mem_reduceReal : forall g (p : Package.t) R D,
-        Reduced.PackageSet.In (embedPkg g p) (reduceReal R D g) -> PackageSet.In p R.
+        Reduced.PackageSet.In (embedPkg g p) (reduceReal R D g) ->
+          PackageSet.In p R.
     Proof.
       intros g [n v] R D H; apply mem_reduceReal in H.
       unfold embedPkg in H; cbn [fst snd] in H.
@@ -466,7 +504,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Lemma mem_reduceDeps_direct : forall D g n v m vs u,
-        Source.DependencyRel.In ((n, v), (m, vs)) D -> IsDirect g vs -> VSet.In u vs ->
+        Source.DependencyRel.In ((n, v), (m, vs)) D -> IsDirect g vs ->
+          VSet.In u vs ->
         Reduced.DependencyRel.In ((Name.Granular n (g v), Version.Orig v),
                      (Name.Granular m (g u), embedVS vs))
           (reduceDeps D g).
@@ -480,7 +519,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Proof. intros; apply mem_reduceDeps, EdgeSplitEntry; assumption. Qed.
 
     Lemma mem_reduceDeps_split2 : forall D g n v m vs u,
-        Source.DependencyRel.In ((n, v), (m, vs)) D -> IsSplit g vs -> VSet.In u vs ->
+        Source.DependencyRel.In ((n, v), (m, vs)) D -> IsSplit g vs ->
+          VSet.In u vs ->
         Reduced.DependencyRel.In ((Name.Intermediate n v m, Version.Gran (g u)),
                      (Name.Granular m (g u), embedVS (filterGran g u vs)))
           (reduceDeps D g).
@@ -494,10 +534,12 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Proof. intros; apply mem_reduceDeps, EdgeEmpty; assumption. Qed.
 
     Theorem concurrent_soundness :
-      forall (R : PackageSet.t) (D : Source.DependencyRel.t) (g : V.t -> G.t) (r : Package.t)
+      forall (R : PackageSet.t) (D : Source.DependencyRel.t) (g : V.t -> G.t)
+        (r : Package.t)
              (S : Reduced.PackageSet.t),
         Source.FunctionalInName D ->
-        Reduced.IsResolution (reduceReal R D g) (reduceDeps D g) (embedPkg g r) S ->
+        Reduced.IsResolution (reduceReal R D g) (reduceDeps D g)
+          (embedPkg g r) S ->
         IsResolution R D g r (concurrentResolution g S) (parents D g S).
     Proof.
       intros R D g r S Hfunc Hres.
@@ -527,7 +569,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
             unfold embedVS in Hcv; apply SOvcv.mem_map in Hcv;
               destruct Hcv as [u [Hu ->]].
             apply mem_filterGran in Hu; destruct Hu as [Hu Hgu].
-            assert (Reduced.PackageSet.In (Name.Granular m (g u), Version.Orig u) S)
+            assert (Reduced.PackageSet.In
+              (Name.Granular m (g u), Version.Orig u) S)
               as HuS
               by (rewrite Hgu; exact HcvS).
             exists u; split; [exact Hu | split].
@@ -547,7 +590,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
             unfold embedVS in Hcv; apply SOvcv.mem_map in Hcv;
               destruct Hcv as [u [Hu ->]].
             pose proof (Hdir u u0 Hu Hu0) as Hgu.
-            assert (Reduced.PackageSet.In (Name.Granular m (g u), Version.Orig u) S)
+            assert (Reduced.PackageSet.In
+              (Name.Granular m (g u), Version.Orig u) S)
               as HuS
               by (rewrite Hgu; exact HcvS).
             exists u; split; [exact Hu | split].
@@ -599,7 +643,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
              else Reduced.PackageSet.empty)
            D).
 
-    Inductive CorePkg (S : PackageSet.t) (pi : ParentRel.t) (D : Source.DependencyRel.t)
+    Inductive CorePkg (S : PackageSet.t) (pi : ParentRel.t)
+        (D : Source.DependencyRel.t)
         (g : V.t -> G.t) : Reduced.Package.t -> Prop :=
     | CoreGranular : forall n v, PackageSet.In (n, v) S ->
         CorePkg S pi D g (Name.Granular n (g v), Version.Orig v)
@@ -610,7 +655,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         CorePkg S pi D g (Name.Intermediate n v m, Version.Gran (g u)).
 
     Lemma mem_coreResolution : forall S pi D g (q : Reduced.Package.t),
-        Reduced.PackageSet.In q (coreResolution D g S pi) <-> CorePkg S pi D g q.
+        Reduced.PackageSet.In q (coreResolution D g S pi) <->
+          CorePkg S pi D g q.
     Proof.
       intros S pi D g q; unfold coreResolution.
       rewrite Reduced.PackageSet.union_spec, SOptp.mem_map, SOdtp.mem_unionMap.
@@ -620,7 +666,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         cbn beta iota in Hh; apply SOdtp.in_if_empty in Hh as [Hg Hm].
         apply SOvtp.mem_filterMap_if in Hm; destruct Hm as [u [Hu [Hb ->]]].
         rewrite Bool.andb_true_iff, isSplitb_iff, PackageSet.mem_spec in Hg.
-        rewrite Bool.andb_true_iff, PackageSet.mem_spec, ParentRel.mem_spec in Hb.
+        rewrite Bool.andb_true_iff, PackageSet.mem_spec,
+          ParentRel.mem_spec in Hb.
         eapply CoreIntermediate; try eassumption; tauto.
       - destruct 1 as [n v HpS | n v m vs u HD Hnv Hs Hmu Hu Hpi];
           [left; exists (n, v); auto | right].
@@ -647,7 +694,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
     Proof. intros; apply mem_coreResolution; econstructor; eassumption. Qed.
 
     Theorem concurrent_completeness :
-      forall (R : PackageSet.t) (D : Source.DependencyRel.t) (g : V.t -> G.t) (r : Package.t)
+      forall (R : PackageSet.t) (D : Source.DependencyRel.t) (g : V.t -> G.t)
+        (r : Package.t)
              (S : PackageSet.t) (pi : ParentRel.t),
         IsResolution R D g r S pi ->
         Reduced.IsResolution (reduceReal R D g) (reduceDeps D g)
@@ -734,7 +782,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         forall m u n v,
           ParentRel.In ((m, u), (n, v)) (parents D g (coreResolution D g S pi))
           <-> ParentRel.In ((m, u), (n, v)) pi /\
-              exists vs, Source.DependencyRel.In ((n, v), (m, vs)) D /\ VSet.In u vs.
+              exists vs, Source.DependencyRel.In ((n, v), (m, vs)) D /\
+                VSet.In u vs.
     Proof.
       intros R D g r S pi [_ _ Hpc _ Hvg Hps] m u n v; rewrite mem_parents.
       split.
@@ -793,13 +842,15 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       Qed.
 
       Module DependencyRelFibred :=
-        FibredLabelledRel Package N VSet.AsUOT Source.DependencyElt Source.DependencyRel.
+        FibredLabelledRel Package N VSet.AsUOT Source.DependencyElt
+          Source.DependencyRel.
       Include GranularityFibre N V G Package PackageSet.
 
       Theorem versions_lookupGranular :
         forall R D g (n : N.t) (w : G.t),
           Reduced.versions (reduceReal R D g) (Name.Granular n w) =
-          Reduced.versions (reduceReal (granFibre g R n w) Source.DependencyRel.empty g)
+          Reduced.versions
+            (reduceReal (granFibre g R n w) Source.DependencyRel.empty g)
             (Name.Granular n w).
       Proof.
         intros R D g n w; apply Reduced.versions_ext; intro v.
@@ -810,8 +861,10 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       Qed.
 
       Theorem dependees_lookupGranular : forall D g n v,
-          Reduced.dependees (reduceDeps D g) (Name.Granular n (g v), Version.Orig v) =
-          Reduced.dependees (reduceDeps (DependencyRelFibred.tailFibre D (n, v)) g)
+          Reduced.dependees (reduceDeps D g)
+            (Name.Granular n (g v), Version.Orig v) =
+          Reduced.dependees
+            (reduceDeps (DependencyRelFibred.tailFibre D (n, v)) g)
             (Name.Granular n (g v), Version.Orig v).
       Proof.
         intros D g n v; apply Reduced.dependees_ext; intros [m ws].
@@ -820,11 +873,13 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
         inversion H; subst;
           [apply EdgeDirect | apply EdgeSplitEntry | apply EdgeEmpty];
           try assumption;
-          apply DependencyRelFibred.mem_tailFibre; (split; [assumption | reflexivity]).
+          apply DependencyRelFibred.mem_tailFibre;
+            (split; [assumption | reflexivity]).
       Qed.
 
       Theorem dependees_lookupGranularGran : forall D g n (w w' : G.t),
-          Reduced.dependees (reduceDeps D g) (Name.Granular n w, Version.Gran w') =
+          Reduced.dependees (reduceDeps D g)
+            (Name.Granular n w, Version.Gran w') =
           Reduced.DependeeSet.empty.
       Proof.
         intros D g n w w'; apply Reduced.dependees_empty_iff; intros [m ws] H.
@@ -834,7 +889,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       Theorem versions_lookupIntermediate : forall R D g n v m,
           Reduced.versions (reduceReal R D g) (Name.Intermediate n v m) =
           Reduced.versions
-            (reduceReal PackageSet.empty (DependencyRelFibred.endsFibre D (n, v) m) g)
+            (reduceReal PackageSet.empty
+              (DependencyRelFibred.endsFibre D (n, v) m) g)
             (Name.Intermediate n v m).
       Proof.
         intros R D g n v m; apply Reduced.versions_ext; intro w.
@@ -849,7 +905,8 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       Theorem dependees_lookupIntermediate : forall D g n v m w,
           Reduced.dependees (reduceDeps D g)
             (Name.Intermediate n v m, Version.Gran w) =
-          Reduced.dependees (reduceDeps (DependencyRelFibred.endsFibre D (n, v) m) g)
+          Reduced.dependees
+            (reduceDeps (DependencyRelFibred.endsFibre D (n, v) m) g)
             (Name.Intermediate n v m, Version.Gran w).
       Proof.
         intros D g n v m w; apply Reduced.dependees_ext; intros [m0 ws].

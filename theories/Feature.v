@@ -60,10 +60,13 @@ Module Feature (N V F : UsualOrderedType).
     Module FeaturePackageName := PairUOT N F.
     Module FeaturePackageNameFacts := UOTCompareFacts FeaturePackageName.
     Module NFacts := UOTCompareFacts N.
-    #[local] Hint Rewrite FeaturePackageNameFacts.compare_eq_iff NFacts.compare_eq_iff : cmp_feat.
-    #[local] Hint Extern 1 => cmp_by FeaturePackageNameFacts.compare_antisym : cmp_feat.
+    #[local] Hint Rewrite FeaturePackageNameFacts.compare_eq_iff
+      NFacts.compare_eq_iff : cmp_feat.
+    #[local] Hint Extern 1 =>
+      cmp_by FeaturePackageNameFacts.compare_antisym : cmp_feat.
     #[local] Hint Extern 1 => cmp_by NFacts.compare_antisym : cmp_feat.
-    #[local] Hint Extern 1 => cmp_by FeaturePackageNameFacts.compare_lt_trans : cmp_feat.
+    #[local] Hint Extern 1 =>
+      cmp_by FeaturePackageNameFacts.compare_lt_trans : cmp_feat.
     #[local] Hint Extern 1 => cmp_by NFacts.compare_lt_trans : cmp_feat.
 
     Module Name.
@@ -77,7 +80,8 @@ Module Feature (N V F : UsualOrderedType).
         | Orig n1, Orig n2 => N.compare n1 n2
         | Orig _, FeatPkg _ _ => Lt
         | FeatPkg _ _, Orig _ => Gt
-        | FeatPkg n1 f1, FeatPkg n2 f2 => FeaturePackageName.compare (n1, f1) (n2, f2)
+        | FeatPkg n1 f1, FeatPkg n2 f2 =>
+            FeaturePackageName.compare (n1, f1) (n2, f2)
         end.
 
       Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
@@ -107,7 +111,8 @@ Module Feature (N V F : UsualOrderedType).
     Definition embedSet (S : PackageSet.t) : Reduced.PackageSet.t :=
       SOpt.map embedPkg S.
 
-    Module SOst := SetOps PackageF Reduced.Package SupportRel Reduced.PackageSet.
+    Module SOst :=
+      SetOps PackageF Reduced.Package SupportRel Reduced.PackageSet.
     Definition featPkgReal (R : PackageSet.t)
         (support : SupportRel.t) : Reduced.PackageSet.t :=
       SOst.filterMap (fun '((n, v), f) =>
@@ -120,7 +125,8 @@ Module Feature (N V F : UsualOrderedType).
         : Reduced.PackageSet.t :=
       Reduced.PackageSet.union (embedSet R) (featPkgReal R support).
 
-    Module SOsd := SetOps PackageF Reduced.DependencyElt SupportRel Reduced.DependencyRel.
+    Module SOsd :=
+      SetOps PackageF Reduced.DependencyElt SupportRel Reduced.DependencyRel.
     Definition supportEdges (R : PackageSet.t)
         (support : SupportRel.t) : Reduced.DependencyRel.t :=
       SOsd.filterMap (fun '((n, v), f) =>
@@ -130,8 +136,11 @@ Module Feature (N V F : UsualOrderedType).
           else None)
         support.
 
-    Module SOfd := SetOps ParameterisedDependencyElt Reduced.DependencyElt ParameterisedDependencyRel Reduced.DependencyRel.
-    Definition featDepOrigEdges (Df : ParameterisedDependencyRel.t) : Reduced.DependencyRel.t :=
+    Module SOfd :=
+      SetOps ParameterisedDependencyElt Reduced.DependencyElt
+      ParameterisedDependencyRel Reduced.DependencyRel.
+    Definition featDepOrigEdges (Df : ParameterisedDependencyRel.t) :
+        Reduced.DependencyRel.t :=
       SOfd.filterMap (fun '(p, (n, (vs, fs))) =>
           if FSet.is_empty fs
           then Some (embedPkg p, (Name.Orig n, embedVS vs))
@@ -139,7 +148,8 @@ Module Feature (N V F : UsualOrderedType).
         Df.
 
     Module SOfsd := SetOps F Reduced.DependencyElt FSet Reduced.DependencyRel.
-    Definition featDepFeatPkgEdges (Df : ParameterisedDependencyRel.t) : Reduced.DependencyRel.t :=
+    Definition featDepFeatPkgEdges (Df : ParameterisedDependencyRel.t) :
+        Reduced.DependencyRel.t :=
       SOfd.unionMap (fun '(p, (n, (vs, fs))) =>
           if FSet.is_empty fs then Reduced.DependencyRel.empty
           else SOfsd.map (fun f =>
@@ -147,15 +157,19 @@ Module Feature (N V F : UsualOrderedType).
                  fs)
         Df.
 
-    Module SOad := SetOps AdditionalDependencyElt Reduced.DependencyElt AdditionalDependencyRel Reduced.DependencyRel.
-    Definition addlDepOrigEdges (Da : AdditionalDependencyRel.t) : Reduced.DependencyRel.t :=
+    Module SOad :=
+      SetOps AdditionalDependencyElt Reduced.DependencyElt
+      AdditionalDependencyRel Reduced.DependencyRel.
+    Definition addlDepOrigEdges (Da : AdditionalDependencyRel.t) :
+        Reduced.DependencyRel.t :=
       SOad.filterMap (fun '(((n, v), f), (m, (vs, fs))) =>
           if FSet.is_empty fs
           then Some ((Name.FeatPkg n f, v), (Name.Orig m, embedVS vs))
           else None)
         Da.
 
-    Definition addlDepFeatPkgEdges (Da : AdditionalDependencyRel.t) : Reduced.DependencyRel.t :=
+    Definition addlDepFeatPkgEdges (Da : AdditionalDependencyRel.t) :
+        Reduced.DependencyRel.t :=
       SOad.unionMap (fun '(((n, v), f), (m, (vs, fs))) =>
           if FSet.is_empty fs then Reduced.DependencyRel.empty
           else SOfsd.map (fun f' =>
@@ -165,14 +179,16 @@ Module Feature (N V F : UsualOrderedType).
         Da.
 
     Definition reduceDeps (R : PackageSet.t) (support : SupportRel.t)
-        (Df : ParameterisedDependencyRel.t) (Da : AdditionalDependencyRel.t) : Reduced.DependencyRel.t :=
+        (Df : ParameterisedDependencyRel.t) (Da : AdditionalDependencyRel.t) :
+          Reduced.DependencyRel.t :=
       Reduced.DependencyRel.union (supportEdges R support)
         (Reduced.DependencyRel.union (featDepOrigEdges Df)
            (Reduced.DependencyRel.union (featDepFeatPkgEdges Df)
               (Reduced.DependencyRel.union (addlDepOrigEdges Da)
                  (addlDepFeatPkgEdges Da)))).
 
-    Lemma mem_embedVS : forall vs v, Reduced.VSet.In v (embedVS vs) <-> VSet.In v vs.
+    Lemma mem_embedVS : forall vs v, Reduced.VSet.In v (embedVS vs) <->
+        VSet.In v vs.
     Proof.
       intros vs v; unfold embedVS.
       exact (SOvt.mem_map_inj (fun w => w) vs v (fun x y H => H)).
@@ -180,14 +196,16 @@ Module Feature (N V F : UsualOrderedType).
 
     Lemma mem_featPkgReal : forall R support q,
         Reduced.PackageSet.In q (featPkgReal R support) <->
-        exists n v f, SupportRel.In ((n, v), f) support /\ PackageSet.In (n, v) R /\
+        exists n v f, SupportRel.In ((n, v), f) support /\
+          PackageSet.In (n, v) R /\
           q = (Name.FeatPkg n f, v).
     Proof.
       intros R support q; unfold featPkgReal; rewrite SOst.mem_filterMap.
       split.
       - intros [[[n v] f] [Hs Hq]]; cbn beta iota in Hq.
         destruct (PackageSet.mem (n, v) R) eqn:Em; [| discriminate].
-        injection Hq as <-; apply PackageSet.mem_spec in Em; exists n, v, f; auto.
+        injection Hq as <-; apply PackageSet.mem_spec in Em;
+          exists n, v, f; auto.
       - intros [n [v [f [Hs [HR ->]]]]]; exists ((n, v), f).
         split; [exact Hs | cbn beta iota].
         apply PackageSet.mem_spec in HR; rewrite HR; reflexivity.
@@ -201,7 +219,8 @@ Module Feature (N V F : UsualOrderedType).
            q = (Name.FeatPkg n f, v)).
     Proof.
       intros R support q; unfold reduceReal, embedSet.
-      rewrite Reduced.PackageSet.union_spec, SOpt.mem_map, mem_featPkgReal; reflexivity.
+      rewrite Reduced.PackageSet.union_spec, SOpt.mem_map, mem_featPkgReal;
+        reflexivity.
     Qed.
 
     Lemma mem_reduceReal_orig : forall R support n v,
@@ -225,7 +244,8 @@ Module Feature (N V F : UsualOrderedType).
     Qed.
 
     Inductive EncodedEdge (R : PackageSet.t) (support : SupportRel.t)
-        (Df : ParameterisedDependencyRel.t) (Da : AdditionalDependencyRel.t) : Reduced.DependencyElt.t -> Prop :=
+        (Df : ParameterisedDependencyRel.t) (Da : AdditionalDependencyRel.t) :
+          Reduced.DependencyElt.t -> Prop :=
     | EdgeSupport : forall n v f,
         SupportRel.In ((n, v), f) support -> PackageSet.In (n, v) R ->
         EncodedEdge R support Df Da
@@ -256,7 +276,8 @@ Module Feature (N V F : UsualOrderedType).
       intros R support Df Da y; unfold reduceDeps, supportEdges,
         featDepOrigEdges, featDepFeatPkgEdges, addlDepOrigEdges,
         addlDepFeatPkgEdges.
-      rewrite !Reduced.DependencyRel.union_spec, SOsd.mem_filterMap, SOfd.mem_filterMap,
+      rewrite !Reduced.DependencyRel.union_spec, SOsd.mem_filterMap,
+        SOfd.mem_filterMap,
         SOfd.mem_unionMap, SOad.mem_filterMap, SOad.mem_unionMap.
       split.
       - intros [[[[n v] f] [Hs Hy]] | [[[[n v] [m [vs fs]]] [Hd Hy]]
@@ -299,11 +320,13 @@ Module Feature (N V F : UsualOrderedType).
        feature universe by membership in it: the two agree, but only this
        direction is defined when F is unbounded, as a package ecosystem's
        feature names are. *)
-    Definition featsOf (n : N.t) (v : V.t) (S : Reduced.PackageSet.t) : FSet.t :=
+    Definition featsOf (n : N.t) (v : V.t)
+        (S : Reduced.PackageSet.t) : FSet.t :=
       SOtf.filterMap (fun q =>
           match q with
           | (Name.FeatPkg n' f, v') =>
-              if Reduced.Package.eq_dec (Name.FeatPkg n' f, v') (Name.FeatPkg n f, v)
+              if Reduced.Package.eq_dec (Name.FeatPkg n' f, v')
+                (Name.FeatPkg n f, v)
               then Some f
               else None
           | _ => None
@@ -311,20 +334,23 @@ Module Feature (N V F : UsualOrderedType).
         S.
 
     Lemma featsOf_spec : forall n v S f,
-        FSet.In f (featsOf n v S) <-> Reduced.PackageSet.In (Name.FeatPkg n f, v) S.
+        FSet.In f (featsOf n v S) <->
+          Reduced.PackageSet.In (Name.FeatPkg n f, v) S.
     Proof.
       intros n v S f; unfold featsOf; rewrite SOtf.mem_filterMap.
       split.
       - intros [[[n' | n' f'] v'] [HS He]]; cbn beta iota in He;
           [discriminate |].
-        destruct (Reduced.Package.eq_dec (Name.FeatPkg n' f', v') (Name.FeatPkg n f', v))
+        destruct (Reduced.Package.eq_dec (Name.FeatPkg n' f', v')
+          (Name.FeatPkg n f', v))
           as [E | NE]; [| discriminate].
         injection He as <-; rewrite <- E; exact HS.
       - intro HS; exists (Name.FeatPkg n f, v);
           split; [exact HS | cbn beta iota; apply dec_refl].
     Qed.
 
-    Module SOts := SetOps Reduced.Package Featured Reduced.PackageSet FeaturedSet.
+    Module SOts :=
+      SetOps Reduced.Package Featured Reduced.PackageSet FeaturedSet.
     Definition featureResolution (S : Reduced.PackageSet.t) : FeaturedSet.t :=
       SOts.filterMap (fun p' =>
           match p' with
@@ -351,7 +377,8 @@ Module Feature (N V F : UsualOrderedType).
         (forall m f v, Reduced.PackageSet.In (Name.FeatPkg m f, v) S ->
            Reduced.PackageSet.In (Name.Orig m, v) S) ->
         Reduced.PackageSet.In q S ->
-        (fs = FSet.empty -> Reduced.DependencyRel.In (q, (Name.Orig n, embedVS vs)) D) ->
+        (fs = FSet.empty ->
+          Reduced.DependencyRel.In (q, (Name.Orig n, embedVS vs)) D) ->
         (forall f, FSet.is_empty fs = false -> FSet.In f fs ->
            Reduced.DependencyRel.In (q, (Name.FeatPkg n f, embedVS vs)) D) ->
         exists v, VSet.In v vs /\
@@ -379,7 +406,8 @@ Module Feature (N V F : UsualOrderedType).
 
     Theorem feature_soundness :
       forall (R : PackageSet.t) (support : SupportRel.t)
-             (Df : ParameterisedDependencyRel.t) (Da : AdditionalDependencyRel.t)
+             (Df : ParameterisedDependencyRel.t)
+               (Da : AdditionalDependencyRel.t)
              (r : Package.t) (S : Reduced.PackageSet.t),
         (forall f, ~ SupportRel.In (r, f) support) ->
         Reduced.IsResolution (reduceReal R support) (reduceDeps R support Df Da)
@@ -391,7 +419,8 @@ Module Feature (N V F : UsualOrderedType).
       destruct r as [rn rv].
       unfold embedPkg in Hroot; simpl in Hroot.
       assert (HorigR : forall n v,
-                 Reduced.PackageSet.In (Name.Orig n, v) S -> PackageSet.In (n, v) R)
+                 Reduced.PackageSet.In (Name.Orig n, v) S ->
+                   PackageSet.In (n, v) R)
         by (intros n v HS; exact (proj1 (mem_reduceReal_orig _ _ _ _)
                                     (Hsub _ HS))).
       assert (HfeatR : forall n f v,
@@ -447,7 +476,8 @@ Module Feature (N V F : UsualOrderedType).
         exact (proj1 (HfeatR _ _ _ Hf)).
     Qed.
 
-    Module SOsw := SetOps Featured Reduced.Package FeaturedSet Reduced.PackageSet.
+    Module SOsw :=
+      SetOps Featured Reduced.Package FeaturedSet Reduced.PackageSet.
     Module SOft := SetOps F Reduced.Package FSet Reduced.PackageSet.
     Definition coreResolution (S_f : FeaturedSet.t) : Reduced.PackageSet.t :=
       Reduced.PackageSet.union
@@ -480,7 +510,8 @@ Module Feature (N V F : UsualOrderedType).
 
     Theorem feature_completeness :
       forall (R : PackageSet.t) (support : SupportRel.t)
-             (Df : ParameterisedDependencyRel.t) (Da : AdditionalDependencyRel.t)
+             (Df : ParameterisedDependencyRel.t)
+               (Da : AdditionalDependencyRel.t)
              (r : Package.t) (S_f : FeaturedSet.t),
         IsResolution R support Df Da r S_f ->
         Reduced.IsResolution (reduceReal R support) (reduceDeps R support Df Da)
@@ -576,9 +607,11 @@ Module Feature (N V F : UsualOrderedType).
 
     Module Lookup.
       Lemma reduceDeps_mono :
-        forall R R' support support' Df Df' Da Da' (y : Reduced.DependencyElt.t),
+        forall R R' support support' Df Df' Da Da'
+          (y : Reduced.DependencyElt.t),
           PackageSet.Subset R' R -> SupportRel.Subset support' support ->
-          ParameterisedDependencyRel.Subset Df' Df -> AdditionalDependencyRel.Subset Da' Da ->
+          ParameterisedDependencyRel.Subset Df' Df ->
+            AdditionalDependencyRel.Subset Da' Da ->
           Reduced.DependencyRel.In y (reduceDeps R' support' Df' Da') ->
           Reduced.DependencyRel.In y (reduceDeps R support Df Da).
       Proof.
@@ -598,11 +631,13 @@ Module Feature (N V F : UsualOrderedType).
       Qed.
 
       Module ParameterisedDependencyRelFibred :=
-        FibredLabelledRel Package N DependeeTail ParameterisedDependencyElt ParameterisedDependencyRel.
+        FibredLabelledRel Package N DependeeTail ParameterisedDependencyElt
+          ParameterisedDependencyRel.
       Module PackageSetFibred := FibredRel N V Package PackageSet.
       Module SupportRelFibred := FibredRel Package F PackageF SupportRel.
       Module AdditionalDependencyRelFibred :=
-        FibredLabelledRel PackageF N DependeeTail AdditionalDependencyElt AdditionalDependencyRel.
+        FibredLabelledRel PackageF N DependeeTail AdditionalDependencyElt
+          AdditionalDependencyRel.
       Definition supportFibre (support : SupportRel.t) (n : N.t) (f : F.t)
           : SupportRel.t :=
         SupportRel.filter (fun '((m, _), g) =>
@@ -624,7 +659,8 @@ Module Feature (N V F : UsualOrderedType).
       Theorem versions_lookupOrig :
         forall R support n,
           Reduced.versions (reduceReal R support) (Name.Orig n) =
-          Reduced.versions (reduceReal (PackageSetFibred.tailFibre R n) SupportRel.empty)
+          Reduced.versions
+            (reduceReal (PackageSetFibred.tailFibre R n) SupportRel.empty)
             (Name.Orig n).
       Proof.
         intros R support n; apply Reduced.versions_ext; intro v.
@@ -659,7 +695,8 @@ Module Feature (N V F : UsualOrderedType).
       Theorem versions_lookupFeatPkg : forall R support n f,
           Reduced.versions (reduceReal R support) (Name.FeatPkg n f) =
           Reduced.versions
-            (reduceReal (PackageSetFibred.tailFibre R n) (supportFibre support n f))
+            (reduceReal (PackageSetFibred.tailFibre R n)
+              (supportFibre support n f))
             (Name.FeatPkg n f).
       Proof.
         intros R support n f; apply Reduced.versions_ext; intro v.
@@ -671,11 +708,13 @@ Module Feature (N V F : UsualOrderedType).
           Reduced.dependees (reduceDeps R support Df Da) (Name.FeatPkg n f, v) =
           Reduced.dependees
             (reduceDeps (PackageSetFibred.idFibre R (n, v))
-               (SupportRelFibred.idFibre support ((n, v), f)) ParameterisedDependencyRel.empty
+               (SupportRelFibred.idFibre support ((n, v), f))
+                 ParameterisedDependencyRel.empty
                (AdditionalDependencyRelFibred.tailFibre Da ((n, v), f)))
             (Name.FeatPkg n f, v).
       Proof.
-        intros R support Df Da n v f; apply Reduced.dependees_ext; intros [m ws].
+        intros R support Df Da n v f; apply Reduced.dependees_ext;
+          intros [m ws].
         split; [| apply reduceDeps_mono;
                   [apply PackageSetFibred.idFibre_subset
                   | apply SupportRelFibred.idFibre_subset
@@ -684,7 +723,8 @@ Module Feature (N V F : UsualOrderedType).
         intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
         inversion H; subst.
         - apply EdgeSupport;
-            [apply SupportRelFibred.mem_idFibre | apply PackageSetFibred.mem_idFibre];
+            [apply SupportRelFibred.mem_idFibre |
+              apply PackageSetFibred.mem_idFibre];
             (split; [eassumption | reflexivity]).
         - apply EdgeAddlOrig, AdditionalDependencyRelFibred.mem_tailFibre;
             split; [eassumption | reflexivity].
@@ -700,13 +740,15 @@ Module Feature (N V F : UsualOrderedType).
           Reduced.dependees (reduceDeps R support Df Da) (Name.FeatPkg n f, v) =
           Reduced.dependees
             (reduceDeps (PackageSet.singleton (n, v))
-               (SupportRel.singleton ((n, v), f)) ParameterisedDependencyRel.empty
+               (SupportRel.singleton ((n, v), f))
+                 ParameterisedDependencyRel.empty
                (AdditionalDependencyRelFibred.tailFibre Da ((n, v), f)))
             (Name.FeatPkg n f, v).
       Proof.
         intros R support Df Da n v f Hin.
         apply mem_reduceReal_featPkg in Hin; destruct Hin as [Hs HR].
-        assert (PackageSetFibred.idFibre R (n, v) = PackageSet.singleton (n, v)) as ER.
+        assert (PackageSetFibred.idFibre R (n, v) =
+          PackageSet.singleton (n, v)) as ER.
         { apply PackageSet.ext; intro x.
           rewrite PackageSetFibred.mem_idFibre, PackageSet.singleton_spec.
           split; [intros [_ E]; exact E

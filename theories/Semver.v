@@ -9,7 +9,8 @@ End SemverMatch.
 (* The version set is a parameter rather than built here because module
    application is generative: an ecosystem evaluates ranges into the same
    set instance its calculus already uses. *)
-Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (SemverMatch : SemverMatch V).
+Module Semver (V : UsualOrderedType) (VSet : SetsOn V)
+  (SemverMatch : SemverMatch V).
   Module VSetSpecs := SetSpecs V VSet.
   Module VCompareFacts := UOTCompareFacts V.
 
@@ -70,7 +71,8 @@ Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (SemverMatch : SemverMatc
     Proof.
       intros x y; destruct x as [| o1 c1], y as [| o2 c2]; cbn;
         try (split; intro H; congruence).
-      rewrite lex_eq_iff, ComparisonOperatorComp.compare_eq_iff, VCompareFacts.compare_eq_iff.
+      rewrite lex_eq_iff, ComparisonOperatorComp.compare_eq_iff,
+        VCompareFacts.compare_eq_iff.
       split;
         [intros [-> ->]; reflexivity | intro H; injection H as -> ->; auto].
     Qed.
@@ -79,7 +81,8 @@ Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (SemverMatch : SemverMatc
     Proof.
       intros x y; destruct x as [| o1 c1], y as [| o2 c2]; cbn;
         try reflexivity.
-      rewrite lex_opp, ComparisonOperatorComp.compare_antisym, VCompareFacts.compare_antisym;
+      rewrite lex_opp, ComparisonOperatorComp.compare_antisym,
+        VCompareFacts.compare_antisym;
         reflexivity.
     Qed.
 
@@ -89,7 +92,8 @@ Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (SemverMatch : SemverMatc
       intros x y z; destruct x as [| o1 c1], y as [| o2 c2], z as [| o3 c3];
         cbn; intros H1 H2; try congruence.
       exact (lex_lt_trans ComparisonOperatorComp.compare_eq_iff
-               (ComparisonOperatorComp.compare_lt_trans _ _ _) (VCompareFacts.compare_lt_trans _ _ _)
+               (ComparisonOperatorComp.compare_lt_trans _ _ _)
+                 (VCompareFacts.compare_lt_trans _ _ _)
                H1 H2).
     Qed.
   End ComparatorComp.

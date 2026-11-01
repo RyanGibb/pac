@@ -104,7 +104,8 @@ Module UOTCompareFacts (X : UsualOrderedType).
   Lemma compare_lt_trans : forall a b c,
       X.compare a b = Lt -> X.compare b c = Lt -> X.compare a c = Lt.
   Proof.
-    intros a b c A B; apply Facts.compare_lt_iff in A, B; apply Facts.compare_lt_iff.
+    intros a b c A B; apply Facts.compare_lt_iff in A, B;
+      apply Facts.compare_lt_iff.
     eapply StrictOrder_Transitive; eassumption.
   Qed.
 End UOTCompareFacts.

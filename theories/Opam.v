@@ -116,7 +116,8 @@ Module Opam (N V X Y E : UsualOrderedType).
     | ROr a b => rSat S a \/ rSat S b
     end.
 
-  Definition oSat (sigma : Valuation) (S : PackageSet.t) (d : OFormula) : Prop :=
+  Definition oSat (sigma : Valuation) (S : PackageSet.t)
+      (d : OFormula) : Prop :=
     forall g, redOF sigma d = Some g -> rSat S g.
 
   Module ConflictClassElt := ConflictClass.ConflictClassElt.
@@ -210,7 +211,8 @@ Module Opam (N V X Y E : UsualOrderedType).
   Module Reduction.
     Module NFacts := UOTCompareFacts N.
     Module VFacts := UOTCompareFacts V.
-    #[local] Hint Rewrite NFacts.compare_eq_iff VFacts.compare_eq_iff : cmp_opam.
+    #[local] Hint Rewrite NFacts.compare_eq_iff
+      VFacts.compare_eq_iff : cmp_opam.
     #[local] Hint Extern 1 => cmp_by NFacts.compare_antisym : cmp_opam.
     #[local] Hint Extern 1 => cmp_by VFacts.compare_antisym : cmp_opam.
     #[local] Hint Extern 1 => cmp_by NFacts.compare_lt_trans : cmp_opam.
@@ -284,7 +286,9 @@ Module Opam (N V X Y E : UsualOrderedType).
       (Name.Real (fst p), Version.RV (snd p)).
     Definition rootPkg : PackageFormula.Package.t := (Name.Root, Version.UnitV).
 
-    Module SOpt := SetOps Package PackageFormula.Package PackageSet PackageFormula.PackageSet.
+    Module SOpt :=
+      SetOps Package PackageFormula.Package PackageSet
+      PackageFormula.PackageSet.
     Definition embedSet (S : PackageSet.t) : PackageFormula.PackageSet.t :=
       SOpt.map embedPkg S.
 
@@ -310,7 +314,8 @@ Module Opam (N V X Y E : UsualOrderedType).
         (inst_real I).
 
     Definition PTrue : PackageFormula.Formula :=
-      PackageFormula.FAtom Name.Root (PackageFormula.VSet.singleton Version.UnitV).
+      PackageFormula.FAtom Name.Root
+        (PackageFormula.VSet.singleton Version.UnitV).
 
     Definition srcVersions (sigma : Valuation) (I : Inst) (n : N.t)
       : VSet.t :=
@@ -320,7 +325,8 @@ Module Opam (N V X Y E : UsualOrderedType).
       : PackageFormula.VSet.t :=
       SOvv.map Version.RV (VSet.filter (fun v => vfHolds phi v) (Vq n)).
 
-    Fixpoint encR (Vq : N.t -> VSet.t) (g : RFormula) : PackageFormula.Formula :=
+    Fixpoint encR (Vq : N.t -> VSet.t) (g : RFormula) :
+        PackageFormula.Formula :=
       match g with
       | RAtom n phi => PackageFormula.FAtom (Name.Real n) (versSetBy Vq n phi)
       | RAnd a b => PackageFormula.FConj (encR Vq a) (encR Vq b)
@@ -336,7 +342,8 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Definition confVS (Vq : N.t -> VSet.t) (p : Package.t) (n : N.t)
         (phi : VFormula) : PackageFormula.VSet.t :=
-      if N.eq_dec (fst p) n then PackageFormula.VSet.empty else versSetBy Vq n phi.
+      if N.eq_dec (fst p) n then PackageFormula.VSet.empty else
+        versSetBy Vq n phi.
 
     Module PackageFormulaSet := PackageFormula.PackageFormulaSet.
     Module NSet := Source.NSet.
@@ -365,8 +372,11 @@ Module Opam (N V X Y E : UsualOrderedType).
         (p : Package.t) : list PackageFormula.Formula :=
       List.map (cflForm sigma Vq p) (ownedBy p (inst_cfl I)).
 
-    Module SOcf := SetOps ConflictClassElt PackageFormula.Dependee ConflictClassRel PackageFormulaSet.
-    Definition clsForms (cls : ConflictClassRel.t) (p : Package.t) : PackageFormulaSet.t :=
+    Module SOcf :=
+      SetOps ConflictClassElt PackageFormula.Dependee ConflictClassRel
+      PackageFormulaSet.
+    Definition clsForms (cls : ConflictClassRel.t) (p : Package.t) :
+        PackageFormulaSet.t :=
       SOcf.filterMap
         (fun '(q, k) =>
            if Package.eq_dec q p
@@ -375,15 +385,20 @@ Module Opam (N V X Y E : UsualOrderedType).
            else None)
         cls.
 
-    Module SOcp := SetOps ConflictClassElt PackageFormula.Package ConflictClassRel PackageFormula.PackageSet.
+    Module SOcp :=
+      SetOps ConflictClassElt PackageFormula.Package ConflictClassRel
+      PackageFormula.PackageSet.
     Definition clsPkg (qk : ConflictClassElt.t) : PackageFormula.Package.t :=
       (Name.Class (snd qk), Version.NV (fst (fst qk))).
 
-    Definition clsPkgs (cls : ConflictClassRel.t) : PackageFormula.PackageSet.t :=
+    Definition clsPkgs (cls : ConflictClassRel.t) :
+        PackageFormula.PackageSet.t :=
       SOcp.map clsPkg cls.
 
-    Module SOcv := SetOps ConflictClassElt VersionOT ConflictClassRel PackageFormula.VSet.
-    Definition clsVersions (cls : ConflictClassRel.t) (k : N.t) : PackageFormula.VSet.t :=
+    Module SOcv :=
+      SetOps ConflictClassElt VersionOT ConflictClassRel PackageFormula.VSet.
+    Definition clsVersions (cls : ConflictClassRel.t) (k : N.t) :
+        PackageFormula.VSet.t :=
       SOcv.filterMap
         (fun '(q, k') =>
            if N.eq_dec k' k then Some (Version.NV (fst q)) else None)
@@ -407,7 +422,8 @@ Module Opam (N V X Y E : UsualOrderedType).
       PackageFormula.FConj (encodeOF sigma Vq (inst_query I))
         (encodeOF sigma Vq (inst_inv I)).
 
-    Module SOlf := SetOps Package PackageFormula.Dependee PackageSet PackageFormulaSet.
+    Module SOlf :=
+      SetOps Package PackageFormula.Dependee PackageSet PackageFormulaSet.
 
     Definition dependeesBy (sigma : Valuation) (Vq : N.t -> VSet.t)
         (I : Inst) (q : PackageFormula.Package.t) : PackageFormulaSet.t :=
@@ -417,11 +433,13 @@ Module Opam (N V X Y E : UsualOrderedType).
             (PackageFormulaSet.union (SOlf.ofList (cflForms sigma Vq I (n, v)))
                (PackageFormulaSet.union (clsForms (inst_cls I) (n, v))
                   (SOlf.ofList (pindForms Vq I (n, v)))))
-      | (Name.Root, Version.UnitV) => PackageFormulaSet.singleton (rootForm sigma Vq I)
+      | (Name.Root, Version.UnitV) =>
+          PackageFormulaSet.singleton (rootForm sigma Vq I)
       | _ => PackageFormulaSet.empty
       end.
 
-    Definition dependees (sigma : Valuation) (I : Inst) (q : PackageFormula.Package.t)
+    Definition dependees (sigma : Valuation) (I : Inst)
+        (q : PackageFormula.Package.t)
       : PackageFormulaSet.t :=
       let R := effRepo sigma I in dependeesBy sigma (Source.versions R) I q.
 
@@ -433,32 +451,44 @@ Module Opam (N V X Y E : UsualOrderedType).
       | Name.Class k => clsVersions (inst_cls I) k
       end.
 
-    Definition reduceReal (sigma : Valuation) (I : Inst) : PackageFormula.PackageSet.t :=
+    Definition reduceReal (sigma : Valuation) (I : Inst) :
+        PackageFormula.PackageSet.t :=
       PackageFormula.PackageSet.union (embedSet (effRepo sigma I))
-        (PackageFormula.PackageSet.union (PackageFormula.PackageSet.singleton rootPkg)
+        (PackageFormula.PackageSet.union
+          (PackageFormula.PackageSet.singleton rootPkg)
            (clsPkgs (inst_cls I))).
 
 
-    Module SOqd := SetOps PackageFormula.Package PackageFormula.DependencyElt PackageFormula.PackageSet PackageFormula.DependencyRel.
-    Definition reduceDeps (sigma : Valuation) (I : Inst) : PackageFormula.DependencyRel.t :=
+    Module SOqd :=
+      SetOps PackageFormula.Package PackageFormula.DependencyElt
+      PackageFormula.PackageSet PackageFormula.DependencyRel.
+    Definition reduceDeps (sigma : Valuation) (I : Inst) :
+        PackageFormula.DependencyRel.t :=
       SOqd.unionMap (fun q => PackageFormula.depEdges q (dependees sigma I q))
         (reduceReal sigma I).
 
-    Definition clsSel (cls : ConflictClassRel.t) (S : PackageSet.t) : PackageFormula.PackageSet.t :=
-      SOcp.map clsPkg (ConflictClassRel.filter (fun qk => PackageSet.mem (fst qk) S) cls).
+    Definition clsSel (cls : ConflictClassRel.t) (S : PackageSet.t) :
+        PackageFormula.PackageSet.t :=
+      SOcp.map clsPkg
+        (ConflictClassRel.filter (fun qk => PackageSet.mem (fst qk) S) cls).
 
-    Definition coreResolution (cls : ConflictClassRel.t) (S : PackageSet.t) : PackageFormula.PackageSet.t :=
+    Definition coreResolution (cls : ConflictClassRel.t) (S : PackageSet.t) :
+        PackageFormula.PackageSet.t :=
       PackageFormula.PackageSet.union (embedSet S)
-        (PackageFormula.PackageSet.union (PackageFormula.PackageSet.singleton rootPkg) (clsSel cls S)).
+        (PackageFormula.PackageSet.union
+          (PackageFormula.PackageSet.singleton rootPkg) (clsSel cls S)).
 
-    Module SOtp := SetOps PackageFormula.Package Package PackageFormula.PackageSet PackageSet.
+    Module SOtp :=
+      SetOps PackageFormula.Package Package
+      PackageFormula.PackageSet PackageSet.
     Definition tryInvPkg (q : PackageFormula.Package.t) : option Package.t :=
       match q with
       | (Name.Real n, Version.RV v) => Some (n, v)
       | _ => None
       end.
 
-    Definition opamResolution (S' : PackageFormula.PackageSet.t) : PackageSet.t :=
+    Definition opamResolution (S' : PackageFormula.PackageSet.t) :
+        PackageSet.t :=
       SOtp.filterMap tryInvPkg S'.
 
     Lemma mem_versSetBy : forall Vq n phi u,
@@ -508,7 +538,8 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Lemma mem_clsSel : forall cls S q,
         PackageFormula.PackageSet.In q (clsSel cls S) <->
-        exists n v k, PackageSet.In (n, v) S /\ ConflictClassRel.In ((n, v), k) cls /\
+        exists n v k, PackageSet.In (n, v) S /\
+          ConflictClassRel.In ((n, v), k) cls /\
                       q = (Name.Class k, Version.NV n).
     Proof.
       intros cls S q; unfold clsSel; rewrite SOcp.mem_map; split.
@@ -577,7 +608,8 @@ Module Opam (N V X Y E : UsualOrderedType).
                        q = (Name.Class k, Version.NV n)).
     Proof.
       intros sigma I q; unfold reduceReal, embedSet.
-      rewrite !PackageFormula.PackageSet.union_spec, PackageFormula.PackageSet.singleton_spec,
+      rewrite !PackageFormula.PackageSet.union_spec,
+        PackageFormula.PackageSet.singleton_spec,
         SOpt.mem_map, mem_clsPkgs.
       tauto.
     Qed.
@@ -585,17 +617,20 @@ Module Opam (N V X Y E : UsualOrderedType).
     Lemma mem_coreResolution : forall cls S q,
         PackageFormula.PackageSet.In q (coreResolution cls S) <->
         (exists p, PackageSet.In p S /\ q = embedPkg p) \/ q = rootPkg \/
-        (exists n v k, PackageSet.In (n, v) S /\ ConflictClassRel.In ((n, v), k) cls /\
+        (exists n v k, PackageSet.In (n, v) S /\
+          ConflictClassRel.In ((n, v), k) cls /\
                        q = (Name.Class k, Version.NV n)).
     Proof.
       intros cls S q; unfold coreResolution, embedSet.
-      rewrite !PackageFormula.PackageSet.union_spec, PackageFormula.PackageSet.singleton_spec,
+      rewrite !PackageFormula.PackageSet.union_spec,
+        PackageFormula.PackageSet.singleton_spec,
         SOpt.mem_map, mem_clsSel.
       tauto.
     Qed.
 
     Lemma mem_coreResolution_real : forall cls S n v,
-        PackageFormula.PackageSet.In (Name.Real n, Version.RV v) (coreResolution cls S) <->
+        PackageFormula.PackageSet.In (Name.Real n, Version.RV v)
+          (coreResolution cls S) <->
         PackageSet.In (n, v) S.
     Proof.
       intros cls S n v; rewrite mem_coreResolution; split.
@@ -617,7 +652,8 @@ Module Opam (N V X Y E : UsualOrderedType).
        coreResolution, so version uniqueness splits three ways rather than
        nine. *)
     Lemma coreResolution_at_root : forall cls S v,
-        PackageFormula.PackageSet.In (Name.Root, v) (coreResolution cls S) -> v = Version.UnitV.
+        PackageFormula.PackageSet.In (Name.Root, v) (coreResolution cls S) ->
+          v = Version.UnitV.
     Proof.
       intros cls S v H; apply mem_coreResolution in H.
       destruct H as [[[m w] [_ He]] | [He | [n [v' [k [_ [_ He]]]]]]];
@@ -650,7 +686,8 @@ Module Opam (N V X Y E : UsualOrderedType).
     Qed.
 
     Lemma PTrue_sat : forall S',
-        PackageFormula.PackageSet.In rootPkg S' -> PackageFormula.Satisfies S' PTrue.
+        PackageFormula.PackageSet.In rootPkg S' ->
+          PackageFormula.Satisfies S' PTrue.
     Proof.
       intros S' Hr; exists Version.UnitV; split;
         [apply PackageFormula.VSet.singleton_spec; reflexivity | exact Hr].
@@ -659,7 +696,8 @@ Module Opam (N V X Y E : UsualOrderedType).
     Lemma encR_correct : forall Vq S',
         (forall n v,
             PackageSet.In (n, v) (opamResolution S') -> VSet.In v (Vq n)) ->
-        forall g, PackageFormula.Satisfies S' (encR Vq g) <-> rSat (opamResolution S') g.
+        forall g, PackageFormula.Satisfies S' (encR Vq g) <->
+          rSat (opamResolution S') g.
     Proof.
       intros Vq S' HV.
       induction g as [n phi | a IHa b IHb | a IHa b IHb]; simpl.
@@ -727,7 +765,8 @@ Module Opam (N V X Y E : UsualOrderedType).
     Qed.
 
     Lemma mem_dependees_real : forall sigma Vq I n v psi,
-        PackageFormulaSet.In psi (dependeesBy sigma Vq I (Name.Real n, Version.RV v)) <->
+        PackageFormulaSet.In psi
+          (dependeesBy sigma Vq I (Name.Real n, Version.RV v)) <->
         (exists d, In ((n, v), d) (inst_dep I) /\
                     psi = encodeOF sigma Vq d) \/
         (exists nc, In ((n, v), nc) (inst_cfl I) /\
@@ -775,9 +814,11 @@ Module Opam (N V X Y E : UsualOrderedType).
       intros sigma I q psi; unfold reduceDeps; rewrite SOqd.mem_unionMap.
       split.
       - intros [q0 [Hq0 Hf]]; unfold PackageFormula.depEdges in Hf.
-        apply PackageFormula.SOfd.mem_map in Hf; mem_destruct; split; assumption.
+        apply PackageFormula.SOfd.mem_map in Hf; mem_destruct;
+          split; assumption.
       - intros [Hq Hf]; exists q; split; [exact Hq |].
-        unfold PackageFormula.depEdges; apply PackageFormula.SOfd.mem_map; exists psi; split;
+        unfold PackageFormula.depEdges; apply PackageFormula.SOfd.mem_map;
+          exists psi; split;
           [exact Hf | reflexivity].
     Qed.
 
@@ -793,7 +834,8 @@ Module Opam (N V X Y E : UsualOrderedType).
     Qed.
 
     Theorem opam_soundness : forall sigma I S,
-        PackageFormula.IsResolution (reduceReal sigma I) (reduceDeps sigma I) rootPkg S ->
+        PackageFormula.IsResolution (reduceReal sigma I) (reduceDeps sigma I)
+          rootPkg S ->
         IsResolution sigma I (opamResolution S).
     Proof.
       intros sigma I S HR.
@@ -816,7 +858,8 @@ Module Opam (N V X Y E : UsualOrderedType).
                  PackageFormula.PackageSet.In (embedPkg (n, v)) S).
       { intros n v Hnv; apply mem_opamResolution in Hnv; exact Hnv. }
       assert (Hroot := PackageFormula.res_root_mem _ _ _ _ HR).
-      assert (HrootR : PackageFormula.PackageSet.In rootPkg (reduceReal sigma I)).
+      assert (HrootR :
+        PackageFormula.PackageSet.In rootPkg (reduceReal sigma I)).
       { apply mem_reduceReal; right; left; reflexivity. }
       assert (Hdep : PackageFormula.DependencyRel.In (rootPkg, rootForm sigma
                        (srcVersions sigma I) I) (reduceDeps sigma I)).
@@ -829,7 +872,8 @@ Module Opam (N V X Y E : UsualOrderedType).
       destruct Hrootdep as [Hquery Hinv].
       assert (Hdeps : forall n v psi,
                  PackageSet.In (n, v) (opamResolution S) ->
-                 PackageFormulaSet.In psi (dependees sigma I (embedPkg (n, v))) ->
+                 PackageFormulaSet.In psi
+                   (dependees sigma I (embedPkg (n, v))) ->
                  PackageFormula.Satisfies S psi).
       { intros n v psi Hnv Hf.
         apply (PackageFormula.res_formula_closure _ _ _ _ HR _ (Hemb _ _ Hnv)).
@@ -913,7 +957,8 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Theorem opam_completeness : forall sigma I S,
         IsResolution sigma I S ->
-        PackageFormula.IsResolution (reduceReal sigma I) (reduceDeps sigma I) rootPkg
+        PackageFormula.IsResolution (reduceReal sigma I)
+          (reduceDeps sigma I) rootPkg
           (coreResolution (inst_cls I) S).
     Proof.
       intros sigma I S HR.
@@ -924,7 +969,8 @@ Module Opam (N V X Y E : UsualOrderedType).
                  VSet.In v (srcVersions sigma I n)).
       { intros n v Hm; rewrite opam_retraction in Hm.
         apply mem_srcVersions; exact (Hse _ Hm). }
-      assert (Hr : PackageFormula.PackageSet.In rootPkg (coreResolution (inst_cls I) S))
+      assert (Hr :
+        PackageFormula.PackageSet.In rootPkg (coreResolution (inst_cls I) S))
         by (apply mem_coreResolution; right; left; reflexivity).
       constructor.
       - intros q Hq; apply mem_coreResolution in Hq; apply mem_reduceReal.
@@ -996,11 +1042,14 @@ Module Opam (N V X Y E : UsualOrderedType).
 
     Corollary opam_core_soundness : forall sigma I S,
         PackageFormula.Reduction.Reduced.IsResolution
-          (PackageFormula.Reduction.reduceReal (reduceReal sigma I) (reduceDeps sigma I))
-          (PackageFormula.Reduction.reduceDeps (reduceReal sigma I) (reduceDeps sigma I))
+          (PackageFormula.Reduction.reduceReal (reduceReal sigma I)
+            (reduceDeps sigma I))
+          (PackageFormula.Reduction.reduceDeps (reduceReal sigma I)
+            (reduceDeps sigma I))
           (PackageFormula.Reduction.embedPkg rootPkg) S ->
         IsResolution sigma I
-          (opamResolution (PackageFormula.Reduction.packageFormulaResolution S)).
+          (opamResolution
+            (PackageFormula.Reduction.packageFormulaResolution S)).
     Proof.
       intros sigma I S H.
       exact (opam_soundness sigma I _
@@ -1010,8 +1059,10 @@ Module Opam (N V X Y E : UsualOrderedType).
     Corollary opam_core_completeness : forall sigma I S,
         IsResolution sigma I S ->
         PackageFormula.Reduction.Reduced.IsResolution
-          (PackageFormula.Reduction.reduceReal (reduceReal sigma I) (reduceDeps sigma I))
-          (PackageFormula.Reduction.reduceDeps (reduceReal sigma I) (reduceDeps sigma I))
+          (PackageFormula.Reduction.reduceReal (reduceReal sigma I)
+            (reduceDeps sigma I))
+          (PackageFormula.Reduction.reduceDeps (reduceReal sigma I)
+            (reduceDeps sigma I))
           (PackageFormula.Reduction.embedPkg rootPkg)
           (PackageFormula.Reduction.coreResolution (reduceReal sigma I)
              (reduceDeps sigma I) (coreResolution (inst_cls I) S)).
@@ -1028,7 +1079,8 @@ Module Opam (N V X Y E : UsualOrderedType).
                 (reduceDeps sigma I) (coreResolution (inst_cls I) S)))
         = S.
     Proof.
-      intros sigma I S; rewrite PackageFormula.Reduction.package_formula_retraction.
+      intros sigma I S;
+        rewrite PackageFormula.Reduction.package_formula_retraction.
       apply opam_retraction.
     Qed.
 
@@ -1052,7 +1104,8 @@ Module Opam (N V X Y E : UsualOrderedType).
              (listNames (fun nvu => NSet.singleton (fst (fst nvu)))
                 (ownedBy p (inst_pind I)))).
 
-      Definition clsFibre (cls : ConflictClassRel.t) (p : Package.t) : ConflictClassRel.t :=
+      Definition clsFibre (cls : ConflictClassRel.t) (p : Package.t) :
+          ConflictClassRel.t :=
         ConflictClassRel.filter
           (fun qk => if Package.eq_dec (fst qk) p then true else false) cls.
 
@@ -1124,7 +1177,8 @@ Module Opam (N V X Y E : UsualOrderedType).
         unfold srcVersions at 1.
         assert (E : effRepo sigma sl =
                     effRepo sigma
-                      (MkInst (Source.namePreimage (inst_real I) ns) (inst_dep I)
+                      (MkInst (Source.namePreimage (inst_real I) ns)
+                        (inst_dep I)
                          (inst_cfl I) (inst_cls I)
                          (inst_av I) (inst_depexts I)
                          (inst_pins I) (inst_pind I) (inst_query I)
@@ -1215,26 +1269,32 @@ Module Opam (N V X Y E : UsualOrderedType).
         apply NSet.singleton_spec; reflexivity.
       Qed.
 
-      Module SOcd := SetOps ConflictClassElt Package ConflictClassRel PackageSet.
-      Definition declarers (cls : ConflictClassRel.t) : PackageSet.t := SOcd.map fst cls.
+      Module SOcd :=
+        SetOps ConflictClassElt Package ConflictClassRel PackageSet.
+      Definition declarers (cls : ConflictClassRel.t) : PackageSet.t :=
+          SOcd.map fst cls.
 
       Lemma clsVersions_reduceReal : forall cls R k v,
           (forall q k', ConflictClassRel.In (q, k') cls -> PackageSet.In q R) ->
           PackageFormula.VSet.In v (clsVersions cls k) <->
           exists n, v = Version.NV n /\
-            ConflictClass.Reduction.Reduced.VSet.In (ConflictClass.Reduction.Version.Name n)
-              (ConflictClass.Reduction.Reduced.versions (ConflictClass.Reduction.reduceReal R cls)
+            ConflictClass.Reduction.Reduced.VSet.In
+              (ConflictClass.Reduction.Version.Name n)
+              (ConflictClass.Reduction.Reduced.versions
+                (ConflictClass.Reduction.reduceReal R cls)
                  (ConflictClass.Reduction.Name.Class k)).
       Proof.
         intros cls R k v HR.
         rewrite mem_clsVersions, ConflictClass.Reduction.Lookup.versions_cls.
         split.
         - intros [n [u [Hq ->]]]; exists n; split; [reflexivity |].
-          apply ConflictClass.Reduction.Lookup.SOpv.mem_map; exists (n, u); split;
+          apply ConflictClass.Reduction.Lookup.SOpv.mem_map;
+            exists (n, u); split;
             [apply ConflictClass.Reduction.Lookup.mem_inClass; split;
                [exact (HR _ _ Hq) | exact Hq]
             | reflexivity].
-        - intros [n [-> Hn]]; apply ConflictClass.Reduction.Lookup.SOpv.mem_map in Hn.
+        - intros [n [-> Hn]];
+            apply ConflictClass.Reduction.Lookup.SOpv.mem_map in Hn.
           destruct Hn as [[m u] [Hq E]]; injection E as ->.
           apply ConflictClass.Reduction.Lookup.mem_inClass in Hq.
           exists m, u; split; [exact (proj2 Hq) | reflexivity].
@@ -1251,9 +1311,11 @@ Module Opam (N V X Y E : UsualOrderedType).
               split; [exact H | reflexivity]).
         apply PackageFormula.VSet.ext; intro v.
         rewrite (clsVersions_reduceReal (inst_cls I) _ _ _ HD),
-          (ConflictClass.Reduction.Lookup.versions_lookupClass (declarers (inst_cls I))).
+          (ConflictClass.Reduction.Lookup.versions_lookupClass
+            (declarers (inst_cls I))).
         apply clsVersions_reduceReal; intros q k' H.
-        apply ConflictClass.Reduction.Lookup.mem_classRelAt in H; destruct H as [H ->].
+        apply ConflictClass.Reduction.Lookup.mem_classRelAt in H;
+          destruct H as [H ->].
         apply ConflictClass.Reduction.Lookup.mem_inClass; split;
           [exact (HD _ _ H) | exact H].
       Qed.
@@ -1308,7 +1370,8 @@ Module Opam (N V X Y E : UsualOrderedType).
           apply cflForm_agree, HVq; rewrite !NSet.union_spec; right; left.
           apply (listNames_in _ _ _ _ _ Hin), NSet.singleton_spec; reflexivity.
         - apply PackageFormulaSet.ext; intro psi; apply SOcf.filterMap_restrict.
-          + intros qk Hqk; apply ConflictClassRel.filter_spec' in Hqk; apply Hqk.
+          + intros qk Hqk;
+              apply ConflictClassRel.filter_spec' in Hqk; apply Hqk.
           + intros [q k] Hqk Hf; apply ConflictClassRel.filter_spec'.
             split; [exact Hqk |].
             cbn beta iota in Hf; cbn [fst].
@@ -1333,7 +1396,8 @@ Module Opam (N V X Y E : UsualOrderedType).
       Qed.
 
       Lemma versions_reduceReal : forall sigma I n,
-          PackageFormula.Source.versions (reduceReal sigma I) n = versions sigma I n.
+          PackageFormula.Source.versions (reduceReal sigma I) n =
+            versions sigma I n.
       Proof.
         intros sigma I m; apply PackageFormula.VSet.ext; intro u.
         rewrite PackageFormula.Source.mem_versions, mem_reduceReal.
@@ -1362,10 +1426,12 @@ Module Opam (N V X Y E : UsualOrderedType).
 
       Lemma reduceDeps_tailFibre : forall sigma I q,
           PackageFormula.PackageSet.In q (reduceReal sigma I) ->
-          PackageFormula.Reduction.Lookup.DependencyRelFibred.tailFibre (reduceDeps sigma I) q =
+          PackageFormula.Reduction.Lookup.DependencyRelFibred.tailFibre
+            (reduceDeps sigma I) q =
           PackageFormula.depEdges q (dependees sigma I q).
       Proof.
-        intros sigma I q Hq; apply PackageFormula.DependencyRel.ext; intros [q' psi].
+        intros sigma I q Hq; apply PackageFormula.DependencyRel.ext;
+          intros [q' psi].
         rewrite PackageFormula.Reduction.Lookup.DependencyRelFibred.mem_tailFibre, mem_reduceDeps.
         unfold PackageFormula.depEdges; rewrite PackageFormula.SOfd.mem_map.
         split.
@@ -1375,7 +1441,8 @@ Module Opam (N V X Y E : UsualOrderedType).
       Qed.
 
       Lemma negNames_encR : forall Vq g m,
-          ~ PackageFormula.Reduction.NSet.In m (PackageFormula.Reduction.Lookup.negNames (encR Vq g)).
+          ~ PackageFormula.Reduction.NSet.In m
+            (PackageFormula.Reduction.Lookup.negNames (encR Vq g)).
       Proof.
         intros Vq g m;
           induction g as [n phi | a IHa b IHb | a IHa b IHb];
@@ -1387,7 +1454,8 @@ Module Opam (N V X Y E : UsualOrderedType).
 
       Lemma dependees_negNames : forall sigma Vq I q psi m,
           PackageFormulaSet.In psi (dependeesBy sigma Vq I q) ->
-          PackageFormula.Reduction.NSet.In m (PackageFormula.Reduction.Lookup.negNames psi) ->
+          PackageFormula.Reduction.NSet.In m
+            (PackageFormula.Reduction.Lookup.negNames psi) ->
           exists n, m = Name.Real n.
       Proof.
         intros sigma Vq I [o u] psi m Hf Hx.
@@ -1396,13 +1464,17 @@ Module Opam (N V X Y E : UsualOrderedType).
           by apply PackageFormula.Reduction.NSet.empty_spec.
         assert (Henc : forall d,
                    ~ PackageFormula.Reduction.NSet.In m
-                       (PackageFormula.Reduction.Lookup.negNames (encodeOF sigma Vq d))).
+                       (PackageFormula.Reduction.Lookup.negNames
+                         (encodeOF sigma Vq d))).
         { intro d; unfold encodeOF.
           destruct (redOF sigma d); [apply negNames_encR | exact HT]. }
         destruct o as [| n' | k]; destruct u as [v | | n];
-          try (cbn [dependeesBy] in Hf; destruct (PackageFormulaSet.empty_spec Hf)).
-        - cbn [dependeesBy] in Hf; apply PackageFormulaSet.singleton_spec in Hf; subst psi.
-          unfold rootForm in Hx; cbn [PackageFormula.Reduction.Lookup.negNames] in Hx.
+          try (cbn [dependeesBy] in Hf;
+            destruct (PackageFormulaSet.empty_spec Hf)).
+        - cbn [dependeesBy] in Hf;
+            apply PackageFormulaSet.singleton_spec in Hf; subst psi.
+          unfold rootForm in Hx;
+            cbn [PackageFormula.Reduction.Lookup.negNames] in Hx.
           apply PackageFormula.Reduction.NSet.union_spec in Hx.
           destruct Hx as [Hx | Hx]; destruct (Henc _ Hx).
         - apply mem_dependees_real in Hf.
@@ -1411,30 +1483,37 @@ Module Opam (N V X Y E : UsualOrderedType).
           + destruct (Henc d Hx).
           + unfold cflForm in Hx; cbn [fst snd] in Hx.
             destruct (defTrue sigma c); [| destruct (HT Hx)].
-            cbn [PackageFormula.Reduction.Lookup.negNames PackageFormula.Reduction.fnames] in Hx.
-            apply PackageFormula.Reduction.NSet.singleton_spec in Hx; exists nc; exact Hx.
+            cbn [PackageFormula.Reduction.Lookup.negNames
+              PackageFormula.Reduction.fnames] in Hx.
+            apply PackageFormula.Reduction.NSet.singleton_spec in Hx;
+              exists nc; exact Hx.
           + destruct (PackageFormula.Reduction.NSet.empty_spec Hx).
           + unfold pindForm in Hx;
-              cbn [fst snd PackageFormula.Reduction.Lookup.negNames PackageFormula.Reduction.fnames]
+              cbn [fst snd PackageFormula.Reduction.Lookup.negNames
+                PackageFormula.Reduction.fnames]
               in Hx.
-            apply PackageFormula.Reduction.NSet.singleton_spec in Hx; exists n; exact Hx.
+            apply PackageFormula.Reduction.NSet.singleton_spec in Hx;
+              exists n; exact Hx.
       Qed.
 
       Lemma dependees_core : forall sigma I Vq q,
           PackageFormula.PackageSet.In q (reduceReal sigma I) ->
           (forall m, Vq (Name.Real m) = versions sigma I (Name.Real m)) ->
           PackageFormula.Reduction.Reduced.dependees
-            (PackageFormula.Reduction.reduceDeps (reduceReal sigma I) (reduceDeps sigma I))
+            (PackageFormula.Reduction.reduceDeps (reduceReal sigma I)
+              (reduceDeps sigma I))
             (PackageFormula.Reduction.Name.Orig (fst q),
              PackageFormula.Reduction.Version.Orig (snd q)) =
           PackageFormula.Reduction.Reduced.dependees
-            (PackageFormula.Reduction.reduceDepsBy Vq (PackageFormula.depEdges q (dependees sigma I q)))
+            (PackageFormula.Reduction.reduceDepsBy Vq
+              (PackageFormula.depEdges q (dependees sigma I q)))
             (PackageFormula.Reduction.Name.Orig (fst q),
              PackageFormula.Reduction.Version.Orig (snd q)).
       Proof.
         intros sigma I Vq [o u] Hq HVq; cbn [fst snd].
         rewrite
-          (PackageFormula.Reduction.Lookup.dependees_lookupOrigBy _ _ (versions sigma I))
+          (PackageFormula.Reduction.Lookup.dependees_lookupOrigBy _ _
+            (versions sigma I))
           by (intros n _; symmetry; apply versions_reduceReal).
         rewrite (reduceDeps_tailFibre sigma I (o, u) Hq).
         f_equal; apply PackageFormula.Reduction.Lookup.reduceDepsBy_agreeNeg.
@@ -1449,7 +1528,8 @@ Module Opam (N V X Y E : UsualOrderedType).
           PackageSet.In (n, v) (effRepo sigma I) ->
           (forall m, Vq (Name.Real m) = versions sigma I (Name.Real m)) ->
           PackageFormula.Reduction.Reduced.dependees
-            (PackageFormula.Reduction.reduceDeps (reduceReal sigma I) (reduceDeps sigma I))
+            (PackageFormula.Reduction.reduceDeps (reduceReal sigma I)
+              (reduceDeps sigma I))
             (PackageFormula.Reduction.embedPkg (embedPkg (n, v))) =
           PackageFormula.Reduction.Reduced.dependees
             (PackageFormula.Reduction.reduceDepsBy Vq
@@ -1466,11 +1546,13 @@ Module Opam (N V X Y E : UsualOrderedType).
       Theorem dependees_lookupRootCore : forall sigma I Vq,
           (forall m, Vq (Name.Real m) = versions sigma I (Name.Real m)) ->
           PackageFormula.Reduction.Reduced.dependees
-            (PackageFormula.Reduction.reduceDeps (reduceReal sigma I) (reduceDeps sigma I))
+            (PackageFormula.Reduction.reduceDeps (reduceReal sigma I)
+              (reduceDeps sigma I))
             (PackageFormula.Reduction.embedPkg rootPkg) =
           PackageFormula.Reduction.Reduced.dependees
             (PackageFormula.Reduction.reduceDepsBy Vq
-               (PackageFormula.depEdges rootPkg (dependees sigma (rootSubInst I) rootPkg)))
+               (PackageFormula.depEdges rootPkg
+                 (dependees sigma (rootSubInst I) rootPkg)))
             (PackageFormula.Reduction.embedPkg rootPkg).
       Proof.
         intros sigma I Vq HVq; rewrite <- dependees_lookupRoot.
@@ -1480,12 +1562,14 @@ Module Opam (N V X Y E : UsualOrderedType).
 
       Theorem dependees_lookupClassCore : forall sigma I k n,
           PackageFormula.Reduction.Reduced.dependees
-            (PackageFormula.Reduction.reduceDeps (reduceReal sigma I) (reduceDeps sigma I))
+            (PackageFormula.Reduction.reduceDeps (reduceReal sigma I)
+              (reduceDeps sigma I))
             (PackageFormula.Reduction.Name.Orig (Name.Class k),
              PackageFormula.Reduction.Version.Orig n) =
           PackageFormula.Reduction.Reduced.DependeeSet.empty.
       Proof.
-        intros sigma I k n; apply PackageFormula.Reduction.Reduced.dependees_empty_iff;
+        intros sigma I k n;
+          apply PackageFormula.Reduction.Reduced.dependees_empty_iff;
           intros h H.
         apply PackageFormula.Reduction.mem_reduceDeps in H.
         destruct H as [[pn pv] [psi [Hd He]]].
@@ -1502,18 +1586,23 @@ Module Opam (N V X Y E : UsualOrderedType).
           PackageFormula.PackageSet.In q (reduceReal sigma I) ->
           dependees sigma I' q = dependees sigma I q ->
           (forall m, Vq (Name.Real m) = versions sigma I (Name.Real m)) ->
-          PackageFormula.Reduction.Reduced.PackageSet.In (PackageFormula.Reduction.Name.Disjunct chis, i)
-            (PackageFormula.Reduction.reduceReal (PackageFormula.PackageSet.singleton q)
+          PackageFormula.Reduction.Reduced.PackageSet.In
+            (PackageFormula.Reduction.Name.Disjunct chis, i)
+            (PackageFormula.Reduction.reduceReal
+              (PackageFormula.PackageSet.singleton q)
                (PackageFormula.depEdges q (dependees sigma I' q))) ->
           PackageFormula.Reduction.Reduced.dependees
-            (PackageFormula.Reduction.reduceDeps (reduceReal sigma I) (reduceDeps sigma I))
+            (PackageFormula.Reduction.reduceDeps (reduceReal sigma I)
+              (reduceDeps sigma I))
             (PackageFormula.Reduction.Name.Disjunct chis, i) =
           PackageFormula.Reduction.Reduced.dependees
             (PackageFormula.Reduction.reduceDepsBy Vq (PackageFormula.depEdges q (dependees sigma I' q)))
             (PackageFormula.Reduction.Name.Disjunct chis, i).
       Proof.
         intros sigma I I' Vq q chis i Hq HI HVq Hin; rewrite HI in Hin |- *.
-        assert (Hsub : PackageFormula.DependencyRel.Subset (PackageFormula.depEdges q (dependees sigma I q))
+        assert (Hsub :
+          PackageFormula.DependencyRel.Subset
+          (PackageFormula.depEdges q (dependees sigma I q))
                          (reduceDeps sigma I)).
         { rewrite <- (reduceDeps_tailFibre sigma I q Hq).
           apply PackageFormula.Reduction.Lookup.DependencyRelFibred.tailFibre_subset. }
@@ -1527,24 +1616,30 @@ Module Opam (N V X Y E : UsualOrderedType).
       Qed.
 
       Lemma versions_core : forall sigma I n,
-          (exists v, PackageFormula.PackageSet.In (n, v) (reduceReal sigma I)) \/
+          (exists v, PackageFormula.PackageSet.In (n, v)
+            (reduceReal sigma I)) \/
           (exists p h,
-              PackageFormula.Reduction.Reduced.DependencyRel.In (p, (PackageFormula.Reduction.Name.Orig n, h))
+              PackageFormula.Reduction.Reduced.DependencyRel.In
+                (p, (PackageFormula.Reduction.Name.Orig n, h))
                 (PackageFormula.Reduction.reduceDeps (reduceReal sigma I)
                    (reduceDeps sigma I))) ->
           PackageFormula.Reduction.Reduced.versions
-            (PackageFormula.Reduction.reduceReal (reduceReal sigma I) (reduceDeps sigma I))
+            (PackageFormula.Reduction.reduceReal (reduceReal sigma I)
+              (reduceDeps sigma I))
             (PackageFormula.Reduction.Name.Orig n) =
-          PackageFormula.Reduction.Reduced.VSet.add PackageFormula.Reduction.Version.Bot
+          PackageFormula.Reduction.Reduced.VSet.add
+            PackageFormula.Reduction.Version.Bot
             (PackageFormula.Reduction.embedVS (versions sigma I n)).
       Proof.
         intros sigma I n Hreach.
         assert (Hr : PackageFormula.PackageSet.In rootPkg (reduceReal sigma I))
           by (apply mem_reduceReal; right; left; reflexivity).
         destruct Hreach as [[v Hv] | Hreach];
-          [rewrite (PackageFormula.Reduction.Lookup.versions_lookupOrig _ _ n v n Hv
+          [rewrite (PackageFormula.Reduction.Lookup.versions_lookupOrig
+            _ _ n v n Hv
                       (or_intror eq_refl) eq_refl)
-          | rewrite (PackageFormula.Reduction.Lookup.versions_lookupOrig _ _ _ _ n Hr
+          | rewrite (PackageFormula.Reduction.Lookup.versions_lookupOrig
+              _ _ _ _ n Hr
                        (or_introl Hreach) eq_refl)];
           rewrite PackageFormula.Reduction.Lookup.versions_reduceReal_bot;
           do 2 f_equal; rewrite <- versions_reduceReal;
@@ -1560,9 +1655,11 @@ Module Opam (N V X Y E : UsualOrderedType).
                 (PackageFormula.Reduction.reduceDeps (reduceReal sigma I)
                    (reduceDeps sigma I))) ->
           PackageFormula.Reduction.Reduced.versions
-            (PackageFormula.Reduction.reduceReal (reduceReal sigma I) (reduceDeps sigma I))
+            (PackageFormula.Reduction.reduceReal (reduceReal sigma I)
+              (reduceDeps sigma I))
             (PackageFormula.Reduction.Name.Orig (Name.Real n)) =
-          PackageFormula.Reduction.Reduced.VSet.add PackageFormula.Reduction.Version.Bot
+          PackageFormula.Reduction.Reduced.VSet.add
+            PackageFormula.Reduction.Version.Bot
             (PackageFormula.Reduction.embedVS
                (versions sigma (nameSubInst I n) (Name.Real n))).
       Proof.
@@ -1574,9 +1671,11 @@ Module Opam (N V X Y E : UsualOrderedType).
 
       Theorem versions_lookupRootCore : forall sigma I,
           PackageFormula.Reduction.Reduced.versions
-            (PackageFormula.Reduction.reduceReal (reduceReal sigma I) (reduceDeps sigma I))
+            (PackageFormula.Reduction.reduceReal (reduceReal sigma I)
+              (reduceDeps sigma I))
             (PackageFormula.Reduction.Name.Orig Name.Root) =
-          PackageFormula.Reduction.Reduced.VSet.add PackageFormula.Reduction.Version.Bot
+          PackageFormula.Reduction.Reduced.VSet.add
+            PackageFormula.Reduction.Version.Bot
             (PackageFormula.Reduction.embedVS (versions sigma I Name.Root)).
       Proof.
         intros sigma I; apply versions_core; left; exists Version.UnitV.
@@ -1590,9 +1689,11 @@ Module Opam (N V X Y E : UsualOrderedType).
                 (PackageFormula.Reduction.reduceDeps (reduceReal sigma I)
                    (reduceDeps sigma I))) ->
           PackageFormula.Reduction.Reduced.versions
-            (PackageFormula.Reduction.reduceReal (reduceReal sigma I) (reduceDeps sigma I))
+            (PackageFormula.Reduction.reduceReal (reduceReal sigma I)
+              (reduceDeps sigma I))
             (PackageFormula.Reduction.Name.Orig (Name.Class k)) =
-          PackageFormula.Reduction.Reduced.VSet.add PackageFormula.Reduction.Version.Bot
+          PackageFormula.Reduction.Reduced.VSet.add
+            PackageFormula.Reduction.Version.Bot
             (PackageFormula.Reduction.embedVS
                (versions sigma (classSubInst I k) (Name.Class k))).
       Proof.

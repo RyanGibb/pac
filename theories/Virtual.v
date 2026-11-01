@@ -89,10 +89,12 @@ Module Virtual (N V : UsualOrderedType).
     ; res_rho_functional :
         forall (m : N.t) (w : V.t) (m' : N.t) (w' : V.t) (n : N.t)
                (p : Package.t),
-          ProviderRel.In ((m, w), (n, p)) rho -> ProviderRel.In ((m', w'), (n, p)) rho ->
+          ProviderRel.In ((m, w), (n, p)) rho ->
+            ProviderRel.In ((m', w'), (n, p)) rho ->
           (m, w) = (m', w') }.
 
-  Definition ProviderDependency (D : Source.DependencyRel.t) (Pi : ProvidesRel.t)
+  Definition ProviderDependency (D : Source.DependencyRel.t)
+      (Pi : ProvidesRel.t)
       (rho : ProviderRel.t) : Prop :=
     forall m w n p, ProviderRel.In ((m, w), (n, p)) rho ->
       exists vs, Source.DependencyRel.In (p, (n, vs)) D /\
@@ -103,10 +105,13 @@ Module Virtual (N V : UsualOrderedType).
     Module SelectorName := PairUOT Package N.
     Module SelectorNameFacts := UOTCompareFacts SelectorName.
     Module NFacts := UOTCompareFacts N.
-    #[local] Hint Rewrite SelectorNameFacts.compare_eq_iff NFacts.compare_eq_iff : cmp_virt.
-    #[local] Hint Extern 1 => cmp_by SelectorNameFacts.compare_antisym : cmp_virt.
+    #[local] Hint Rewrite SelectorNameFacts.compare_eq_iff
+      NFacts.compare_eq_iff : cmp_virt.
+    #[local] Hint Extern 1 =>
+      cmp_by SelectorNameFacts.compare_antisym : cmp_virt.
     #[local] Hint Extern 1 => cmp_by NFacts.compare_antisym : cmp_virt.
-    #[local] Hint Extern 1 => cmp_by SelectorNameFacts.compare_lt_trans : cmp_virt.
+    #[local] Hint Extern 1 =>
+      cmp_by SelectorNameFacts.compare_lt_trans : cmp_virt.
     #[local] Hint Extern 1 => cmp_by NFacts.compare_lt_trans : cmp_virt.
 
     Module Name.
@@ -120,7 +125,8 @@ Module Virtual (N V : UsualOrderedType).
         | Orig n1, Orig n2 => N.compare n1 n2
         | Orig _, Selector _ _ => Lt
         | Selector _ _, Orig _ => Gt
-        | Selector p1 m1, Selector p2 m2 => SelectorName.compare (p1, m1) (p2, m2)
+        | Selector p1 m1, Selector p2 m2 =>
+            SelectorName.compare (p1, m1) (p2, m2)
         end.
 
       Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
@@ -137,8 +143,10 @@ Module Virtual (N V : UsualOrderedType).
     Module ProviderVersion := PairUOT N V.
     Module ProviderVersionFacts := UOTCompareFacts ProviderVersion.
     #[local] Hint Rewrite ProviderVersionFacts.compare_eq_iff : cmp_virt.
-    #[local] Hint Extern 1 => cmp_by ProviderVersionFacts.compare_antisym : cmp_virt.
-    #[local] Hint Extern 1 => cmp_by ProviderVersionFacts.compare_lt_trans : cmp_virt.
+    #[local] Hint Extern 1 =>
+      cmp_by ProviderVersionFacts.compare_antisym : cmp_virt.
+    #[local] Hint Extern 1 =>
+      cmp_by ProviderVersionFacts.compare_lt_trans : cmp_virt.
 
     Module Version.
       Inductive version : Type :=
@@ -151,7 +159,8 @@ Module Virtual (N V : UsualOrderedType).
         | Orig v1, Orig v2 => V.compare v1 v2
         | Orig _, Provider _ _ => Lt
         | Provider _ _, Orig _ => Gt
-        | Provider n1 w1, Provider n2 w2 => ProviderVersion.compare (n1, w1) (n2, w2)
+        | Provider n1 w1, Provider n2 w2 =>
+            ProviderVersion.compare (n1, w1) (n2, w2)
         end.
 
       Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
@@ -207,7 +216,8 @@ Module Virtual (N V : UsualOrderedType).
         rewrite NEqb.eqb_refl; cbn [andb]; apply memTopb_iff; exact Hm.
     Qed.
 
-    Module SOpp := SetOps ProvidesElt Reduced.Package ProvidesRel Reduced.PackageSet.
+    Module SOpp :=
+      SetOps ProvidesElt Reduced.Package ProvidesRel Reduced.PackageSet.
     Definition realProviderBlock (Pi : ProvidesRel.t) (p : Package.t) (n : N.t)
         (vs : VSet.t) : Reduced.PackageSet.t :=
       SOpp.filterMap (fun '(q, (n', v)) =>
@@ -255,8 +265,11 @@ Module Virtual (N V : UsualOrderedType).
       setoid_rewrite PackageSet.mem_spec; reflexivity.
     Qed.
 
-    Module SOdp := SetOps Source.DependencyElt Reduced.Package Source.DependencyRel Reduced.PackageSet.
-    Definition reduceReal (R : PackageSet.t) (D : Source.DependencyRel.t) (Pi : ProvidesRel.t) :
+    Module SOdp :=
+      SetOps Source.DependencyElt Reduced.Package Source.DependencyRel
+      Reduced.PackageSet.
+    Definition reduceReal (R : PackageSet.t) (D : Source.DependencyRel.t)
+        (Pi : ProvidesRel.t) :
         Reduced.PackageSet.t :=
       Reduced.PackageSet.union (embedSet R)
         (Reduced.PackageSet.union
@@ -269,16 +282,19 @@ Module Virtual (N V : UsualOrderedType).
                 else Reduced.PackageSet.empty)
               D)).
 
-    Inductive RealSpec (R : PackageSet.t) (D : Source.DependencyRel.t) (Pi : ProvidesRel.t)
+    Inductive RealSpec (R : PackageSet.t) (D : Source.DependencyRel.t)
+        (Pi : ProvidesRel.t)
         : Reduced.Package.t -> Prop :=
     | RealOrig : forall n v,
         PackageSet.In (n, v) R -> RealSpec R D Pi (Name.Orig n, Version.Orig v)
     | RealProvider : forall p n vs m w v,
-        Source.DependencyRel.In (p, (n, vs)) D -> ProvidesRel.In ((m, w), (n, v)) Pi ->
+        Source.DependencyRel.In (p, (n, vs)) D ->
+          ProvidesRel.In ((m, w), (n, v)) Pi ->
         MemTop v vs ->
         RealSpec R D Pi (Name.Selector p n, Version.Provider m w)
     | RealDirect : forall p n vs u,
-        Source.DependencyRel.In (p, (n, vs)) D -> Prov Pi n vs -> VSet.In u vs ->
+        Source.DependencyRel.In (p, (n, vs)) D -> Prov Pi n vs ->
+          VSet.In u vs ->
         PackageSet.In (n, u) R ->
         RealSpec R D Pi (Name.Selector p n, Version.Orig u).
 
@@ -329,7 +345,8 @@ Module Virtual (N V : UsualOrderedType).
            VSet.In u vs /\ PackageSet.In (n, u) R /\ u' = Version.Orig u).
     Proof.
       intros R Pi n vs u'; unfold selectorVersions.
-      rewrite Reduced.VSet.union_spec, SOpv.mem_filterMap, SOvv.mem_filterMap_if.
+      rewrite Reduced.VSet.union_spec, SOpv.mem_filterMap,
+        SOvv.mem_filterMap_if.
       cbn beta; setoid_rewrite PackageSet.mem_spec; apply or_iff_compat_r.
       split.
       - intros [[[m u] [n' v]] [Ht Hy]]; cbn [fst snd] in Hy.
@@ -342,7 +359,9 @@ Module Virtual (N V : UsualOrderedType).
           memTopb_iff; auto.
     Qed.
 
-    Module SOpd := SetOps ProvidesElt Reduced.DependencyElt ProvidesRel Reduced.DependencyRel.
+    Module SOpd :=
+      SetOps ProvidesElt Reduced.DependencyElt ProvidesRel
+      Reduced.DependencyRel.
     Definition depsProviderBlock (Pi : ProvidesRel.t) (p : Package.t) (n : N.t)
         (vs : VSet.t) : Reduced.DependencyRel.t :=
       SOpd.filterMap (fun '(q, (n', v)) =>
@@ -395,8 +414,11 @@ Module Virtual (N V : UsualOrderedType).
       setoid_rewrite PackageSet.mem_spec; reflexivity.
     Qed.
 
-    Module SOdd := SetOps Source.DependencyElt Reduced.DependencyElt Source.DependencyRel Reduced.DependencyRel.
-    Definition reduceDeps (R : PackageSet.t) (D : Source.DependencyRel.t) (Pi : ProvidesRel.t) :
+    Module SOdd :=
+      SetOps Source.DependencyElt Reduced.DependencyElt Source.DependencyRel
+      Reduced.DependencyRel.
+    Definition reduceDeps (R : PackageSet.t) (D : Source.DependencyRel.t)
+        (Pi : ProvidesRel.t) :
         Reduced.DependencyRel.t :=
       Reduced.DependencyRel.union
         (SOdd.filterMap (fun '(p, (n, vs)) =>
@@ -422,7 +444,8 @@ Module Virtual (N V : UsualOrderedType).
 
     (* Embedded packages are written as pairs of constructors so that
        inversion can tell the four kinds of edge apart by their source. *)
-    Inductive DepsSpec (R : PackageSet.t) (D : Source.DependencyRel.t) (Pi : ProvidesRel.t)
+    Inductive DepsSpec (R : PackageSet.t) (D : Source.DependencyRel.t)
+        (Pi : ProvidesRel.t)
         : Reduced.DependencyElt.t -> Prop :=
     | DepsOrig : forall pn pv n vs,
         Source.DependencyRel.In ((pn, pv), (n, vs)) D -> ~ Prov Pi n vs ->
@@ -434,13 +457,15 @@ Module Virtual (N V : UsualOrderedType).
           ((Name.Orig pn, Version.Orig pv),
            (Name.Selector (pn, pv) n, selectorVersions R Pi n vs))
     | DepsProvider : forall p n vs m w v,
-        Source.DependencyRel.In (p, (n, vs)) D -> ProvidesRel.In ((m, w), (n, v)) Pi ->
+        Source.DependencyRel.In (p, (n, vs)) D ->
+          ProvidesRel.In ((m, w), (n, v)) Pi ->
         MemTop v vs ->
         DepsSpec R D Pi
           ((Name.Selector p n, Version.Provider m w),
            (Name.Orig m, Reduced.VSet.singleton (Version.Orig w)))
     | DepsDirect : forall p n vs u,
-        Source.DependencyRel.In (p, (n, vs)) D -> Prov Pi n vs -> VSet.In u vs ->
+        Source.DependencyRel.In (p, (n, vs)) D -> Prov Pi n vs ->
+          VSet.In u vs ->
         PackageSet.In (n, u) R ->
         DepsSpec R D Pi
           ((Name.Selector p n, Version.Orig u),
@@ -450,7 +475,8 @@ Module Virtual (N V : UsualOrderedType).
         Reduced.DependencyRel.In y (reduceDeps R D Pi) <-> DepsSpec R D Pi y.
     Proof.
       intros R D Pi y; unfold reduceDeps.
-      rewrite !Reduced.DependencyRel.union_spec, !SOdd.mem_filterMap, !SOdd.mem_unionMap.
+      rewrite !Reduced.DependencyRel.union_spec, !SOdd.mem_filterMap,
+        !SOdd.mem_unionMap.
       split.
       - intros [([[pn pv] [n vs]] & HD & He)
                | [([[pn pv] [n vs]] & HD & He)
@@ -509,8 +535,10 @@ Module Virtual (N V : UsualOrderedType).
     Definition virtualResolution (S : Reduced.PackageSet.t) : PackageSet.t :=
       SOtp.filterMap tryInvPkg S.
 
-    Lemma mem_virtualResolution : forall (S : Reduced.PackageSet.t) (p : Package.t),
-        PackageSet.In p (virtualResolution S) <-> Reduced.PackageSet.In (embedPkg p) S.
+    Lemma mem_virtualResolution :
+        forall (S : Reduced.PackageSet.t) (p : Package.t),
+        PackageSet.In p (virtualResolution S) <->
+          Reduced.PackageSet.In (embedPkg p) S.
     Proof.
       unfold virtualResolution.
       exact (SOtp.mem_filterMap_inv tryInvPkg embedPkg tryInvPkg_embed
@@ -518,14 +546,16 @@ Module Virtual (N V : UsualOrderedType).
     Qed.
 
     Lemma embedPkg_mem_real : forall (p : Package.t) R D Pi,
-        Reduced.PackageSet.In (embedPkg p) (reduceReal R D Pi) -> PackageSet.In p R.
+        Reduced.PackageSet.In (embedPkg p) (reduceReal R D Pi) ->
+          PackageSet.In p R.
     Proof.
       intros [n v] R D Pi H; apply mem_reduceReal in H.
       cbn [embedPkg] in H; inversion H; assumption.
     Qed.
 
     Module SOpr := SetOps ProvidesElt ProviderElt ProvidesRel ProviderRel.
-    Definition rhoBlock (Pi : ProvidesRel.t) (S : Reduced.PackageSet.t) (p : Package.t)
+    Definition rhoBlock (Pi : ProvidesRel.t) (S : Reduced.PackageSet.t)
+        (p : Package.t)
         (n : N.t) (vs : VSet.t) : ProviderRel.t :=
       SOpr.filterMap (fun '(q, (n', v)) =>
           if andb (NEqb.eqb n' n)
@@ -539,7 +569,8 @@ Module Virtual (N V : UsualOrderedType).
         Pi.
 
     Lemma mem_rhoBlock :
-      forall Pi (S : Reduced.PackageSet.t) (p : Package.t) (n : N.t) (vs : VSet.t)
+      forall Pi (S : Reduced.PackageSet.t) (p : Package.t) (n : N.t)
+        (vs : VSet.t)
              (m : N.t) (w : V.t) (m' : N.t) (p' : Package.t),
         ProviderRel.In ((m, w), (m', p')) (rhoBlock Pi S p n vs) <->
         (exists v, ProvidesRel.In ((m, w), (n, v)) Pi /\ MemTop v vs /\
@@ -562,7 +593,8 @@ Module Virtual (N V : UsualOrderedType).
           memTopb_iff, !Reduced.PackageSet.mem_spec; auto 8.
     Qed.
 
-    Module SOdr := SetOps Source.DependencyElt ProviderElt Source.DependencyRel ProviderRel.
+    Module SOdr :=
+      SetOps Source.DependencyElt ProviderElt Source.DependencyRel ProviderRel.
     Definition providers (D : Source.DependencyRel.t) (Pi : ProvidesRel.t)
         (S : Reduced.PackageSet.t) : ProviderRel.t :=
       SOdr.unionMap (fun '(p, (n, vs)) => rhoBlock Pi S p n vs) D.
@@ -591,7 +623,8 @@ Module Virtual (N V : UsualOrderedType).
     Qed.
 
     Theorem virtual_soundness :
-      forall (R : PackageSet.t) (D : Source.DependencyRel.t) (Pi : ProvidesRel.t)
+      forall (R : PackageSet.t) (D : Source.DependencyRel.t)
+        (Pi : ProvidesRel.t)
              (r : Package.t) (S : Reduced.PackageSet.t),
         Reduced.IsResolution (reduceReal R D Pi) (reduceDeps R D Pi)
           (embedPkg r) S ->
@@ -602,7 +635,8 @@ Module Virtual (N V : UsualOrderedType).
                                 (n0 : N.t) v0 vs0,
           Source.DependencyRel.In (p0, (n0, vs0)) D ->
           ProvidesRel.In ((m0, u0), (n0, v0)) Pi -> MemTop v0 vs0 ->
-          Reduced.PackageSet.In (Name.Selector p0 n0, Version.Provider m0 u0) S ->
+          Reduced.PackageSet.In
+            (Name.Selector p0 n0, Version.Provider m0 u0) S ->
           Reduced.PackageSet.In (embedPkg (m0, u0)) S).
       { intros m0 u0 p0 n0 v0 vs0 HD HP HM HselS.
         assert (Hd3 : Reduced.DependencyRel.In
@@ -678,7 +712,8 @@ Module Virtual (N V : UsualOrderedType).
     Module PackageEqb := UOTEqb Package.
     Module SOkp := SetOps Package ProvidesElt PackageSet ProvidesRel.
     Definition rhoProviders (S_Pi : PackageSet.t) (rho : ProviderRel.t)
-        (Pi : ProvidesRel.t) (p : Package.t) (n : N.t) (vs : VSet.t) : PackageSet.t :=
+        (Pi : ProvidesRel.t) (p : Package.t) (n : N.t) (vs : VSet.t) :
+          PackageSet.t :=
       SOkp.filterExists
         (fun q '(q', (m, v)) =>
             andb (PackageEqb.eqb q' q)
@@ -776,7 +811,8 @@ Module Virtual (N V : UsualOrderedType).
            D).
 
     Inductive CoreSpec (D : Source.DependencyRel.t) (Pi : ProvidesRel.t)
-        (S_Pi : PackageSet.t) (rho : ProviderRel.t) : Reduced.Package.t -> Prop :=
+        (S_Pi : PackageSet.t) (rho : ProviderRel.t) :
+          Reduced.Package.t -> Prop :=
     | CoreOrig : forall n v,
         PackageSet.In (n, v) S_Pi ->
         CoreSpec D Pi S_Pi rho (Name.Orig n, Version.Orig v)
@@ -816,13 +852,16 @@ Module Virtual (N V : UsualOrderedType).
 
     Lemma mem_coreResolution_selector :
       forall D Pi S_Pi rho (p : Package.t) n vs,
-        PackageSet.In p S_Pi -> Source.DependencyRel.In (p, (n, vs)) D -> Prov Pi n vs ->
-        Reduced.PackageSet.In (Name.Selector p n, chooseSelector S_Pi rho Pi p n vs)
+        PackageSet.In p S_Pi -> Source.DependencyRel.In (p, (n, vs)) D ->
+          Prov Pi n vs ->
+        Reduced.PackageSet.In
+          (Name.Selector p n, chooseSelector S_Pi rho Pi p n vs)
           (coreResolution D Pi S_Pi rho).
     Proof. intros; apply mem_coreResolution; constructor; assumption. Qed.
 
     Theorem virtual_completeness :
-      forall (R : PackageSet.t) (D : Source.DependencyRel.t) (Pi : ProvidesRel.t)
+      forall (R : PackageSet.t) (D : Source.DependencyRel.t)
+        (Pi : ProvidesRel.t)
              (r : Package.t) (S_Pi : PackageSet.t) (rho : ProviderRel.t),
         Source.FunctionalInName D ->
         IsResolution R D Pi r S_Pi rho ->
@@ -955,27 +994,34 @@ Module Virtual (N V : UsualOrderedType).
     Qed.
 
     Module Lookup.
-      Module ProvidesRelFibred := FibredLabelledRel Package N ProvidedVersionOT ProvidesElt ProvidesRel.
+      Module ProvidesRelFibred :=
+        FibredLabelledRel Package N ProvidedVersionOT ProvidesElt ProvidesRel.
       Lemma prov_nodeFibre : forall Pi n vs,
           Prov (ProvidesRelFibred.nodeFibre Pi n) n vs <-> Prov Pi n vs.
       Proof.
         intros Pi n vs; unfold Prov; split.
         - intros [q [v [Hin Hm]]]; exists q, v;
-            split; [exact (ProvidesRelFibred.nodeFibre_subset _ _ _ Hin) | exact Hm].
+            split; [exact (ProvidesRelFibred.nodeFibre_subset _ _ _ Hin)
+              | exact Hm].
         - intros [q [v [Hin Hm]]]; exists q, v; split; [| exact Hm].
-          apply ProvidesRelFibred.mem_nodeFibre; split; [exact Hin | reflexivity].
+          apply ProvidesRelFibred.mem_nodeFibre; split;
+            [exact Hin | reflexivity].
       Qed.
 
       Module DependencyRelFibred :=
-        FibredLabelledRel Package N Source.VSet.AsUOT Source.DependencyElt Source.DependencyRel.
-      Module DependencyRelKeys := RelKeys N Source.DependencyElt Source.DependencyRel.
+        FibredLabelledRel Package N Source.VSet.AsUOT Source.DependencyElt
+          Source.DependencyRel.
+      Module DependencyRelKeys :=
+        RelKeys N Source.DependencyElt Source.DependencyRel.
       Definition hasDepNameb (Dp : Source.DependencyRel.t) (n : N.t) : bool :=
         DependencyRelKeys.hasKey DependencyRelFibred.node Dp n.
 
       Lemma hasDepNameb_iff : forall Dp n,
-          hasDepNameb Dp n = true <-> exists q vs, Source.DependencyRel.In (q, (n, vs)) Dp.
+          hasDepNameb Dp n = true <-> exists q vs,
+            Source.DependencyRel.In (q, (n, vs)) Dp.
       Proof.
-        intros Dp n; unfold hasDepNameb; rewrite DependencyRelKeys.hasKey_iff; split.
+        intros Dp n; unfold hasDepNameb;
+          rewrite DependencyRelKeys.hasKey_iff; split.
         - intros [[q [m vs]] [He Hm]]; cbn [DependencyRelFibred.node] in Hm;
             subst m; exists q, vs; exact He.
         - intros [q [vs He]]; exists (q, (n, vs));
@@ -983,7 +1029,8 @@ Module Virtual (N V : UsualOrderedType).
       Qed.
 
       Module PackageSetPreimage := Preimage Package PackageSet.
-      Definition realPreimage (R : PackageSet.t) (Dp : Source.DependencyRel.t) : PackageSet.t :=
+      Definition realPreimage (R : PackageSet.t) (Dp : Source.DependencyRel.t) :
+          PackageSet.t :=
         PackageSetPreimage.preimage fst (hasDepNameb Dp) R.
 
       Lemma mem_realPreimage : forall R Dp (n : N.t) (v : V.t),
@@ -992,11 +1039,13 @@ Module Virtual (N V : UsualOrderedType).
       Proof. intros R Dp n v; apply PackageSetPreimage.mem_preimage. Qed.
 
       Module ProvidesRelPreimage := Preimage ProvidesElt ProvidesRel.
-      Definition provPreimage (Pi : ProvidesRel.t) (Dp : Source.DependencyRel.t) :
+      Definition provPreimage (Pi : ProvidesRel.t)
+          (Dp : Source.DependencyRel.t) :
           ProvidesRel.t :=
         ProvidesRelPreimage.preimage ProvidesRelFibred.node (hasDepNameb Dp) Pi.
 
-      Lemma mem_provPreimage : forall Pi Dp (q : Package.t) (n : N.t) (v : VTop),
+      Lemma mem_provPreimage :
+          forall Pi Dp (q : Package.t) (n : N.t) (v : VTop),
           ProvidesRel.In (q, (n, v)) (provPreimage Pi Dp) <->
           ProvidesRel.In (q, (n, v)) Pi /\ hasDepNameb Dp n = true.
       Proof. intros Pi Dp q n v; apply ProvidesRelPreimage.mem_preimage. Qed.
@@ -1040,7 +1089,8 @@ Module Virtual (N V : UsualOrderedType).
       Theorem versions_lookupOrig : forall R D Pi (n : N.t),
           Reduced.versions (reduceReal R D Pi) (Name.Orig n) =
           Reduced.versions
-            (reduceReal (PackageSetFibred.tailFibre R n) Source.DependencyRel.empty
+            (reduceReal (PackageSetFibred.tailFibre R n)
+              Source.DependencyRel.empty
                ProvidesRel.empty)
             (Name.Orig n).
       Proof.
@@ -1054,24 +1104,30 @@ Module Virtual (N V : UsualOrderedType).
       Theorem dependees_lookupOrig : forall R D Pi (p : Package.t),
           let Dp := DependencyRelFibred.tailFibre D p in
           Reduced.dependees (reduceDeps R D Pi) (embedPkg p) =
-          Reduced.dependees (reduceDeps (realPreimage R Dp) Dp (provPreimage Pi Dp))
+          Reduced.dependees
+            (reduceDeps (realPreimage R Dp) Dp (provPreimage Pi Dp))
             (embedPkg p).
       Proof.
         intros R D Pi [pn pv]; cbv zeta; cbn [embedPkg].
-        assert (Hn : forall n vs, Source.DependencyRel.In ((pn, pv), (n, vs)) D ->
-                  hasDepNameb (DependencyRelFibred.tailFibre D (pn, pv)) n = true).
+        assert (Hn : forall n vs,
+          Source.DependencyRel.In ((pn, pv), (n, vs)) D ->
+                  hasDepNameb (DependencyRelFibred.tailFibre D
+                    (pn, pv)) n = true).
         { intros n vs HD; apply hasDepNameb_iff; exists (pn, pv), vs.
-          apply DependencyRelFibred.mem_tailFibre; split; [exact HD | reflexivity]. }
+          apply DependencyRelFibred.mem_tailFibre; split;
+            [exact HD | reflexivity]. }
         apply Reduced.dependees_ext; intros [m ws]; rewrite !mem_reduceDeps.
         split; intro H;
           inversion H as [pn1 pv1 n vs HD Hb | pn1 pv1 n vs HD Hb | |]; subst.
         - apply DepsOrig;
-            [apply DependencyRelFibred.mem_tailFibre; split; [exact HD | reflexivity]
+            [apply DependencyRelFibred.mem_tailFibre; split;
+              [exact HD | reflexivity]
             |].
           rewrite (prov_provPreimage Pi _ n vs (Hn _ _ HD)); exact Hb.
         - rewrite <- (selectorVersions_preimage R Pi _ n vs (Hn _ _ HD)).
           apply DepsSelector;
-            [apply DependencyRelFibred.mem_tailFibre; split; [exact HD | reflexivity]
+            [apply DependencyRelFibred.mem_tailFibre; split;
+              [exact HD | reflexivity]
             |].
           apply (prov_provPreimage Pi _ n vs (Hn _ _ HD)); exact Hb.
         - pose proof (DependencyRelFibred.tailFibre_subset _ _ _ HD) as HD'.
@@ -1088,7 +1144,8 @@ Module Virtual (N V : UsualOrderedType).
           Reduced.versions (reduceReal R D Pi) (Name.Selector p n) =
           Reduced.versions
             (reduceReal (PackageSetFibred.tailFibre R n)
-               (DependencyRelFibred.endsFibre D p n) (ProvidesRelFibred.nodeFibre Pi n))
+               (DependencyRelFibred.endsFibre D p n)
+                 (ProvidesRelFibred.nodeFibre Pi n))
             (Name.Selector p n).
       Proof.
         intros R D Pi p n; apply Reduced.versions_ext; intro w.
@@ -1099,12 +1156,14 @@ Module Virtual (N V : UsualOrderedType).
         - eapply RealProvider; [| | exact Hm].
           + apply DependencyRelFibred.mem_endsFibre;
               split; [exact HD | split; reflexivity].
-          + apply ProvidesRelFibred.mem_nodeFibre; split; [exact HP | reflexivity].
+          + apply ProvidesRelFibred.mem_nodeFibre; split;
+              [exact HP | reflexivity].
         - eapply RealDirect; [| | exact Hu |].
           + apply DependencyRelFibred.mem_endsFibre;
               split; [exact HD | split; reflexivity].
           + apply (proj2 (prov_nodeFibre _ _ _)); exact Hb.
-          + apply PackageSetFibred.mem_tailFibre; split; [exact HuR | reflexivity].
+          + apply PackageSetFibred.mem_tailFibre; split;
+              [exact HuR | reflexivity].
         - eapply RealProvider;
             [exact (DependencyRelFibred.endsFibre_subset _ _ _ _ HD)
             | exact (ProvidesRelFibred.nodeFibre_subset _ _ _ HP) | exact Hm].
@@ -1117,7 +1176,8 @@ Module Virtual (N V : UsualOrderedType).
       Theorem dependees_lookupSelector : forall R D Pi (p : Package.t) n v,
           Reduced.dependees (reduceDeps R D Pi) (Name.Selector p n, v) =
           Reduced.dependees
-            (reduceDeps (PackageSetFibred.tailFibre R n) (DependencyRelFibred.tailFibre D p)
+            (reduceDeps (PackageSetFibred.tailFibre R n)
+              (DependencyRelFibred.tailFibre D p)
                         (ProvidesRelFibred.nodeFibre Pi n))
             (Name.Selector p n, v).
       Proof.
@@ -1127,12 +1187,16 @@ Module Virtual (N V : UsualOrderedType).
           inversion H as [| | q n' vs m' u v' HD HP Hm
                          | q n' vs u HD Hb Hu HuR]; subst.
         - eapply DepsProvider; [| | exact Hm].
-          + apply DependencyRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
-          + apply ProvidesRelFibred.mem_nodeFibre; split; [exact HP | reflexivity].
+          + apply DependencyRelFibred.mem_tailFibre; split;
+              [exact HD | reflexivity].
+          + apply ProvidesRelFibred.mem_nodeFibre; split;
+              [exact HP | reflexivity].
         - eapply DepsDirect; [| | exact Hu |].
-          + apply DependencyRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
+          + apply DependencyRelFibred.mem_tailFibre; split;
+              [exact HD | reflexivity].
           + apply (proj2 (prov_nodeFibre _ _ _)); exact Hb.
-          + apply PackageSetFibred.mem_tailFibre; split; [exact HuR | reflexivity].
+          + apply PackageSetFibred.mem_tailFibre; split;
+              [exact HuR | reflexivity].
         - eapply DepsProvider;
             [exact (DependencyRelFibred.tailFibre_subset _ _ _ HD)
             | exact (ProvidesRelFibred.nodeFibre_subset _ _ _ HP) | exact Hm].

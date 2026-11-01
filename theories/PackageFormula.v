@@ -126,7 +126,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
           as [n1 vs1 | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
         intros y; destruct y as [n2 vs2 | a2 b2 | a2 b2 | a2]; simpl;
         try reflexivity.
-      - rewrite lex_opp, NFacts.compare_antisym, VSetFacts.compare_antisym; reflexivity.
+      - rewrite lex_opp, NFacts.compare_antisym, VSetFacts.compare_antisym;
+          reflexivity.
       - rewrite lex_opp, IHa, IHb; reflexivity.
       - rewrite lex_opp, IHa, IHb; reflexivity.
       - apply IHa.
@@ -140,7 +141,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
         intros y z; destruct y as [n2 vs2 | a2 b2 | a2 b2 | a2],
           z as [n3 vs3 | a3 b3 | a3 b3 | a3]; simpl; intros H1 H2;
         try congruence.
-      - exact (lex_lt_trans NFacts.compare_eq_iff (NFacts.compare_lt_trans _ _ _)
+      - exact (lex_lt_trans NFacts.compare_eq_iff
+          (NFacts.compare_lt_trans _ _ _)
                  (VSetFacts.compare_lt_trans _ _ _) H1 H2).
       - exact (lex_lt_trans compare_eq_iff (IHa _ _) (IHb _ _) H1 H2).
       - exact (lex_lt_trans compare_eq_iff (IHa _ _) (IHb _ _) H1 H2).
@@ -154,12 +156,15 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
   Module DependencyRel := FSetUOT DependencyElt.
   Module PackageFormulaSet := FSetUOT PackageFormulaOT.
 
-  Module SOfd := SetOps PackageFormulaOT DependencyElt PackageFormulaSet DependencyRel.
-  Definition depEdges (q : Package.t) (psis : PackageFormulaSet.t) : DependencyRel.t :=
+  Module SOfd :=
+    SetOps PackageFormulaOT DependencyElt PackageFormulaSet DependencyRel.
+  Definition depEdges (q : Package.t) (psis : PackageFormulaSet.t) :
+      DependencyRel.t :=
     SOfd.map (fun psi => (q, psi)) psis.
 
   Record IsResolution
-      (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t) (S : PackageSet.t) : Prop :=
+      (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t)
+        (S : PackageSet.t) : Prop :=
     { res_subset : PackageSet.Subset S R
     ; res_root_mem : PackageSet.In r S
     ; res_formula_closure :
@@ -172,7 +177,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
     Module SpineComp := ListComp PackageFormulaComp.
     Module SpineOT := UOTFromCompare SpineComp.
     Module SpineFacts := UOTCompareFacts SpineOT.
-    #[local] Hint Rewrite DependeeFacts.compare_eq_iff SpineFacts.compare_eq_iff : cmp_pkgf.
+    #[local] Hint Rewrite DependeeFacts.compare_eq_iff
+      SpineFacts.compare_eq_iff : cmp_pkgf.
     #[local] Hint Extern 1 => cmp_by DependeeFacts.compare_antisym : cmp_pkgf.
     #[local] Hint Extern 1 => cmp_by SpineFacts.compare_antisym : cmp_pkgf.
     #[local] Hint Extern 1 => cmp_by DependeeFacts.compare_lt_trans : cmp_pkgf.
@@ -205,7 +211,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
 
     Module VFacts := UOTCompareFacts V.
     Module NatFacts := UOTCompareFacts Nat_as_OT.
-    #[local] Hint Rewrite VFacts.compare_eq_iff NatFacts.compare_eq_iff : cmp_pkgf.
+    #[local] Hint Rewrite VFacts.compare_eq_iff
+      NatFacts.compare_eq_iff : cmp_pkgf.
     #[local] Hint Extern 1 => cmp_by VFacts.compare_antisym : cmp_pkgf.
     #[local] Hint Extern 1 => cmp_by NatFacts.compare_antisym : cmp_pkgf.
     #[local] Hint Extern 1 => cmp_by VFacts.compare_lt_trans : cmp_pkgf.
@@ -268,7 +275,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
       Reduced.VSet.ofList (List.map Version.Idx (List.seq 0 k)).
 
     Definition idxPkgs (n : Name.t) (k : nat) : Reduced.PackageSet.t :=
-      Reduced.PackageSet.ofList (List.map (fun i => (n, Version.Idx i)) (List.seq 0 k)).
+      Reduced.PackageSet.ofList
+        (List.map (fun i => (n, Version.Idx i)) (List.seq 0 k)).
 
     Definition absentVS (m : N.t) (ws : Reduced.VSet.t) : Reduced.VSet.t :=
       if AbsentNames.hasAbsent m then Reduced.VSet.add Version.Bot ws else ws.
@@ -293,7 +301,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
           Reduced.DependencyRel.union (encode Vq p psiL) (encode Vq p psiR)
       | FDisj psiL psiR =>
           let n := Name.Disjunct (psiL :: spine psiR) in
-          Reduced.DependencyRel.add (p, (n, idxSet (List.length (psiL :: spine psiR))))
+          Reduced.DependencyRel.add
+            (p, (n, idxSet (List.length (psiL :: spine psiR))))
             (Reduced.DependencyRel.union (encode Vq (n, Version.Idx 0) psiL)
                (encodeDisj Vq n 1 psiR))
       | FNeg psi' => encodeNNFneg Vq p psi'
@@ -302,7 +311,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
       : Reduced.DependencyRel.t :=
       match psi with
       | FAtom m vs =>
-          Reduced.DependencyRel.singleton ((n, Version.Idx i), (Name.Orig m, embedVS vs))
+          Reduced.DependencyRel.singleton
+            ((n, Version.Idx i), (Name.Orig m, embedVS vs))
       | FConj psiL psiR =>
           Reduced.DependencyRel.union (encode Vq (n, Version.Idx i) psiL)
             (encode Vq (n, Version.Idx i) psiR)
@@ -311,19 +321,23 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
             (encodeDisj Vq n (S i) psiR)
       | FNeg psi' => encodeNNFneg Vq (n, Version.Idx i) psi'
       end
-    with encodeNNFneg (Vq : N.t -> VSet.t) (p : Reduced.Package.t) (psi : Formula)
+    with encodeNNFneg (Vq : N.t -> VSet.t) (p : Reduced.Package.t)
+      (psi : Formula)
       : Reduced.DependencyRel.t :=
       match psi with
       | FAtom m vs =>
-          Reduced.DependencyRel.singleton (p, (Name.Orig m, complementVS Vq m vs))
+          Reduced.DependencyRel.singleton
+            (p, (Name.Orig m, complementVS Vq m vs))
       | FConj psiL psiR =>
           let n := Name.Disjunct (FNeg psiL :: negSpine psiR) in
           Reduced.DependencyRel.add
             (p, (n, idxSet (List.length (FNeg psiL :: negSpine psiR))))
-            (Reduced.DependencyRel.union (encodeNNFneg Vq (n, Version.Idx 0) psiL)
+            (Reduced.DependencyRel.union
+              (encodeNNFneg Vq (n, Version.Idx 0) psiL)
                (encodeConjNeg Vq n 1 psiR))
       | FDisj psiL psiR =>
-          Reduced.DependencyRel.union (encodeNNFneg Vq p psiL) (encodeNNFneg Vq p psiR)
+          Reduced.DependencyRel.union (encodeNNFneg Vq p psiL)
+            (encodeNNFneg Vq p psiR)
       | FNeg psi' => encode Vq p psi'
       end
     with encodeConjNeg (Vq : N.t -> VSet.t) (n : Name.t) (i : nat)
@@ -340,19 +354,22 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
       | FNeg psi' => encode Vq (n, Version.Idx i) psi'
       end.
 
-    Fixpoint arisingPkgs (p : Reduced.Package.t) (psi : Formula) : Reduced.PackageSet.t :=
+    Fixpoint arisingPkgs (p : Reduced.Package.t) (psi : Formula) :
+        Reduced.PackageSet.t :=
       match psi with
       | FAtom _ _ => Reduced.PackageSet.empty
       | FConj psiL psiR =>
           Reduced.PackageSet.union (arisingPkgs p psiL) (arisingPkgs p psiR)
       | FDisj psiL psiR =>
           let n := Name.Disjunct (psiL :: spine psiR) in
-          Reduced.PackageSet.union (idxPkgs n (List.length (psiL :: spine psiR)))
+          Reduced.PackageSet.union
+            (idxPkgs n (List.length (psiL :: spine psiR)))
             (Reduced.PackageSet.union (arisingPkgs (n, Version.Idx 0) psiL)
                (arisingDisj n 1 psiR))
       | FNeg psi' => arisingNeg p psi'
       end
-    with arisingDisj (n : Name.t) (i : nat) (psi : Formula) : Reduced.PackageSet.t :=
+    with arisingDisj (n : Name.t) (i : nat) (psi : Formula) :
+      Reduced.PackageSet.t :=
       match psi with
       | FAtom _ _ => Reduced.PackageSet.empty
       | FConj psiL psiR =>
@@ -363,7 +380,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
             (arisingDisj n (S i) psiR)
       | FNeg psi' => arisingNeg (n, Version.Idx i) psi'
       end
-    with arisingNeg (p : Reduced.Package.t) (psi : Formula) : Reduced.PackageSet.t :=
+    with arisingNeg (p : Reduced.Package.t) (psi : Formula) :
+      Reduced.PackageSet.t :=
       match psi with
       | FAtom _ _ => Reduced.PackageSet.empty
       | FConj psiL psiR =>
@@ -376,7 +394,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
           Reduced.PackageSet.union (arisingNeg p psiL) (arisingNeg p psiR)
       | FNeg psi' => arisingPkgs p psi'
       end
-    with arisingConjNeg (n : Name.t) (i : nat) (psi : Formula) : Reduced.PackageSet.t :=
+    with arisingConjNeg (n : Name.t) (i : nat) (psi : Formula) :
+      Reduced.PackageSet.t :=
       match psi with
       | FAtom _ _ => Reduced.PackageSet.empty
       | FConj psiL psiR =>
@@ -407,21 +426,28 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
     Module SOnt := SetOps N Reduced.Package NSet Reduced.PackageSet.
     Definition absentPkgs (ns : NSet.t) : Reduced.PackageSet.t :=
       SOnt.filterMap (fun n =>
-          if AbsentNames.hasAbsent n then Some (Name.Orig n, Version.Bot) else None) ns.
+          if AbsentNames.hasAbsent n then Some (Name.Orig n, Version.Bot)
+            else None) ns.
 
     Module SOpt := SetOps Package Reduced.Package PackageSet Reduced.PackageSet.
-    Module SOet := SetOps DependencyElt Reduced.Package DependencyRel Reduced.PackageSet.
-    Definition reduceReal (R : PackageSet.t) (D : DependencyRel.t) : Reduced.PackageSet.t :=
+    Module SOet :=
+      SetOps DependencyElt Reduced.Package DependencyRel Reduced.PackageSet.
+    Definition reduceReal (R : PackageSet.t) (D : DependencyRel.t) :
+        Reduced.PackageSet.t :=
       Reduced.PackageSet.union (SOpt.map embedPkg R)
         (Reduced.PackageSet.union
            (SOet.unionMap (fun '(p, psi) => arisingPkgs (embedPkg p) psi) D)
            (absentPkgs (instNames R D))).
 
-    Module SOed := SetOps DependencyElt Reduced.DependencyElt DependencyRel Reduced.DependencyRel.
-    Definition reduceDepsBy (Vq : N.t -> VSet.t) (D : DependencyRel.t) : Reduced.DependencyRel.t :=
+    Module SOed :=
+      SetOps DependencyElt Reduced.DependencyElt DependencyRel
+      Reduced.DependencyRel.
+    Definition reduceDepsBy (Vq : N.t -> VSet.t) (D : DependencyRel.t) :
+        Reduced.DependencyRel.t :=
       SOed.unionMap (fun '(p, psi) => encode Vq (embedPkg p) psi) D.
 
-    Definition reduceDeps (R : PackageSet.t) (D : DependencyRel.t) : Reduced.DependencyRel.t :=
+    Definition reduceDeps (R : PackageSet.t) (D : DependencyRel.t) :
+        Reduced.DependencyRel.t :=
       reduceDepsBy (Source.versions R) D.
 
     Lemma mem_idxSet : forall k v,
@@ -512,7 +538,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
         (exists p, PackageSet.In p R /\ p' = embedPkg p) \/
         (exists p psi, DependencyRel.In (p, psi) D /\
                      Reduced.PackageSet.In p' (arisingPkgs (embedPkg p) psi)) \/
-        (exists n, NSet.In n (instNames R D) /\ AbsentNames.hasAbsent n = true /\
+        (exists n, NSet.In n (instNames R D) /\
+          AbsentNames.hasAbsent n = true /\
                    p' = (Name.Orig n, Version.Bot)).
     Proof.
       intros R D p'; unfold reduceReal.
@@ -541,7 +568,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
     Lemma mem_reduceDeps : forall R D (d : Reduced.DependencyElt.t),
         Reduced.DependencyRel.In d (reduceDeps R D) <->
         exists p psi, DependencyRel.In (p, psi) D /\
-                    Reduced.DependencyRel.In d (encode (Source.versions R) (embedPkg p) psi).
+                    Reduced.DependencyRel.In d
+                      (encode (Source.versions R) (embedPkg p) psi).
     Proof. intros R D d; apply mem_reduceDepsBy. Qed.
 
     Definition tryInvPkg (p' : Reduced.Package.t) : option Package.t :=
@@ -565,11 +593,14 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
     Lemma embedPkg_injective : forall p q : Package.t,
         embedPkg p = embedPkg q -> p = q.
     Proof. exact (SOtp.emb_injective tryInvPkg embedPkg tryInvPkg_embed). Qed.
-    Definition packageFormulaResolution (S : Reduced.PackageSet.t) : PackageSet.t :=
+    Definition packageFormulaResolution (S : Reduced.PackageSet.t) :
+        PackageSet.t :=
       SOtp.filterMap tryInvPkg S.
 
-    Lemma mem_packageFormulaResolution : forall (S : Reduced.PackageSet.t) (p : Package.t),
-        PackageSet.In p (packageFormulaResolution S) <-> Reduced.PackageSet.In (embedPkg p) S.
+    Lemma mem_packageFormulaResolution :
+        forall (S : Reduced.PackageSet.t) (p : Package.t),
+        PackageSet.In p (packageFormulaResolution S) <->
+          Reduced.PackageSet.In (embedPkg p) S.
     Proof.
       unfold packageFormulaResolution.
       exact (SOtp.mem_filterMap_inv tryInvPkg embedPkg tryInvPkg_embed
@@ -581,13 +612,17 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
 
     Lemma arisingPkgs_name_classify_aux : forall psi : Formula,
         (forall (p : Reduced.Package.t) (n : Name.t) (v : Version.t),
-            Reduced.PackageSet.In (n, v) (arisingPkgs p psi) -> SyntheticName n) /\
+            Reduced.PackageSet.In (n, v) (arisingPkgs p psi) ->
+              SyntheticName n) /\
         (forall (p : Reduced.Package.t) (n : Name.t) (v : Version.t),
-            Reduced.PackageSet.In (n, v) (arisingNeg p psi) -> SyntheticName n) /\
+            Reduced.PackageSet.In (n, v) (arisingNeg p psi) ->
+              SyntheticName n) /\
         (forall (n' : Name.t) (i : nat) (n : Name.t) (v : Version.t),
-            Reduced.PackageSet.In (n, v) (arisingDisj n' i psi) -> SyntheticName n) /\
+            Reduced.PackageSet.In (n, v) (arisingDisj n' i psi) ->
+              SyntheticName n) /\
         (forall (n' : Name.t) (i : nat) (n : Name.t) (v : Version.t),
-            Reduced.PackageSet.In (n, v) (arisingConjNeg n' i psi) -> SyntheticName n).
+            Reduced.PackageSet.In (n, v) (arisingConjNeg n' i psi) ->
+              SyntheticName n).
     Proof.
       unfold SyntheticName;
         induction psi
@@ -634,7 +669,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
         + intros n' i n v H; exact (IHa1 _ _ _ H).
     Qed.
 
-    Lemma arisingPkgs_not_orig : forall (p : Reduced.Package.t) (psi : Formula) m v,
+    Lemma arisingPkgs_not_orig :
+        forall (p : Reduced.Package.t) (psi : Formula) m v,
         ~ Reduced.PackageSet.In (Name.Orig m, v) (arisingPkgs p psi).
     Proof.
       intros p psi m v H.
@@ -643,7 +679,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
     Qed.
 
     Lemma embedPkg_mem_reduceReal : forall (p : Package.t) R D,
-        Reduced.PackageSet.In (embedPkg p) (reduceReal R D) -> PackageSet.In p R.
+        Reduced.PackageSet.In (embedPkg p) (reduceReal R D) ->
+          PackageSet.In p R.
     Proof.
       intros [pn pv] R D H; apply mem_reduceReal in H.
       destruct H as [[q [HqR Hq]] | [[q [chi [_ Hy]]] | [n [_ [_ Hy]]]]].
@@ -665,18 +702,22 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
       intros S m v _; rewrite mem_packageFormulaResolution; reflexivity.
     Qed.
 
-    Lemma encode_satisfies : forall (R : Reduced.PackageSet.t) (D : Reduced.DependencyRel.t)
-                                    (r : Reduced.Package.t) (S : Reduced.PackageSet.t) ps,
+    Lemma encode_satisfies :
+        forall (R : Reduced.PackageSet.t) (D : Reduced.DependencyRel.t)
+                                    (r : Reduced.Package.t)
+                                      (S : Reduced.PackageSet.t) ps,
         Reduced.IsResolution R D r S -> AgreesOn S ps ->
         forall (Vq : N.t -> VSet.t) (q : Reduced.Package.t) (psi : Formula),
-          (forall d, Reduced.DependencyRel.In d (encode Vq q psi) -> Reduced.DependencyRel.In d D) ->
+          (forall d, Reduced.DependencyRel.In d (encode Vq q psi) ->
+            Reduced.DependencyRel.In d D) ->
           Reduced.PackageSet.In q S ->
           Satisfies ps psi.
     Proof.
       intros R D r S ps Hres HM Vq; destruct Hres as [Hsub Hroot Hdep Huniq].
       cut (forall psi : Formula,
         (forall q : Reduced.Package.t,
-            (forall d, Reduced.DependencyRel.In d (encode Vq q psi) -> Reduced.DependencyRel.In d D) ->
+            (forall d, Reduced.DependencyRel.In d (encode Vq q psi) ->
+              Reduced.DependencyRel.In d D) ->
             Reduced.PackageSet.In q S -> Satisfies ps psi) /\
         (forall q : Reduced.Package.t,
             (forall d, Reduced.DependencyRel.In d (encodeNNFneg Vq q psi) ->
@@ -690,7 +731,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
             Satisfies ps psi) /\
         (forall (n : Name.t) (i0 i : nat),
             (forall d,
-                Reduced.DependencyRel.In d (encodeConjNeg Vq n i0 psi) -> Reduced.DependencyRel.In d D) ->
+                Reduced.DependencyRel.In d (encodeConjNeg Vq n i0 psi) ->
+                  Reduced.DependencyRel.In d D) ->
             Reduced.PackageSet.In (n, Version.Idx i) S ->
             i0 <= i -> i < i0 + List.length (negSpine psi) ->
             ~ Satisfies ps psi)).
@@ -706,7 +748,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
         exists v; split; [exact Hv |].
         apply (HM m v); [right; exists v; exact HwS | exact HwS]. }
       assert (Hneg : forall (q : Reduced.Package.t) m vs,
-                 Reduced.DependencyRel.In (q, (Name.Orig m, complementVS Vq m vs)) D ->
+                 Reduced.DependencyRel.In
+                   (q, (Name.Orig m, complementVS Vq m vs)) D ->
                  Reduced.PackageSet.In q S ->
                  ~ Satisfies ps (FAtom m vs)).
       { intros q m vs Hd HqS.
@@ -827,7 +870,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
     Qed.
 
     Theorem package_formula_soundness :
-      forall (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t) (S : Reduced.PackageSet.t),
+      forall (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t)
+        (S : Reduced.PackageSet.t),
         Reduced.IsResolution (reduceReal R D) (reduceDeps R D) (embedPkg r) S ->
         IsResolution R D r (packageFormulaResolution S).
     Proof.
@@ -851,7 +895,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
     Qed.
 
     Lemma package_formula_soundness_agree :
-      forall (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t) (S : Reduced.PackageSet.t) ps,
+      forall (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t)
+        (S : Reduced.PackageSet.t) ps,
         Reduced.IsResolution (reduceReal R D) (reduceDeps R D) (embedPkg r) S ->
         AgreesOn S ps ->
         forall p psi, PackageSet.In p (packageFormulaResolution S) ->
@@ -873,7 +918,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
           if satisfiesb S chi then 0 else Datatypes.S (firstSatIdx S chis')
       end.
 
-    Fixpoint witnessSet (S : PackageSet.t) (psi : Formula) : Reduced.PackageSet.t :=
+    Fixpoint witnessSet (S : PackageSet.t) (psi : Formula) :
+        Reduced.PackageSet.t :=
       match psi with
       | FAtom _ _ => Reduced.PackageSet.empty
       | FConj psiL psiR =>
@@ -894,7 +940,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
           if satisfiesb S psiL then witnessSet S psiL else takenDisj S psiR
       | FNeg psi' => witnessSetNeg S psi'
       end
-    with witnessSetNeg (S : PackageSet.t) (psi : Formula) : Reduced.PackageSet.t :=
+    with witnessSetNeg (S : PackageSet.t) (psi : Formula) :
+      Reduced.PackageSet.t :=
       match psi with
       | FAtom _ _ => Reduced.PackageSet.empty
       | FConj psiL psiR =>
@@ -907,7 +954,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
           Reduced.PackageSet.union (witnessSetNeg S psiL) (witnessSetNeg S psiR)
       | FNeg psi' => witnessSet S psi'
       end
-    with takenConjNeg (S : PackageSet.t) (psi : Formula) : Reduced.PackageSet.t :=
+    with takenConjNeg (S : PackageSet.t) (psi : Formula) :
+      Reduced.PackageSet.t :=
       match psi with
       | FAtom _ _ => Reduced.PackageSet.empty
       | FConj psiL psiR =>
@@ -1036,12 +1084,14 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
         intros p Hy; simpl; rewrite Ea; exact Hy.
     Qed.
 
-    Definition coreResolution (R : PackageSet.t) (D : DependencyRel.t) (S : PackageSet.t)
+    Definition coreResolution (R : PackageSet.t) (D : DependencyRel.t)
+        (S : PackageSet.t)
       : Reduced.PackageSet.t :=
       Reduced.PackageSet.union (SOpt.map embedPkg S)
         (Reduced.PackageSet.union
            (SOet.unionMap (fun '(p, psi) =>
-                if PackageSet.mem p S then witnessSet S psi else Reduced.PackageSet.empty)
+                if PackageSet.mem p S then witnessSet S psi else
+                  Reduced.PackageSet.empty)
               D)
            (absentPkgs (Source.absentIn S (instNames R D)))).
 
@@ -1049,11 +1099,14 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
         (forall p : Reduced.Package.t,
             Reduced.PackageSet.Subset (witnessSet S psi) (arisingPkgs p psi)) /\
         (forall p : Reduced.Package.t,
-            Reduced.PackageSet.Subset (witnessSetNeg S psi) (arisingNeg p psi)) /\
+            Reduced.PackageSet.Subset (witnessSetNeg S psi)
+              (arisingNeg p psi)) /\
         (forall (n : Name.t) (i : nat),
-            Reduced.PackageSet.Subset (takenDisj S psi) (arisingDisj n i psi)) /\
+            Reduced.PackageSet.Subset (takenDisj S psi)
+              (arisingDisj n i psi)) /\
         (forall (n : Name.t) (i : nat),
-            Reduced.PackageSet.Subset (takenConjNeg S psi) (arisingConjNeg n i psi)).
+            Reduced.PackageSet.Subset (takenConjNeg S psi)
+              (arisingConjNeg n i psi)).
     Proof.
       intros S psi;
         induction psi
@@ -1062,7 +1115,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
           destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
         + intros p y; simpl; intro H;
-            apply Reduced.PackageSet.union_spec in H; apply Reduced.PackageSet.union_spec;
+            apply Reduced.PackageSet.union_spec in H;
+              apply Reduced.PackageSet.union_spec;
             destruct H as [H | H];
             [left; exact (IHa1 p _ H) | right; exact (IHb1 p _ H)].
         + intros p y; rewrite witnessSetNeg_conj_eq; intro H;
@@ -1077,7 +1131,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
               apply Reduced.PackageSet.union_spec;
               [right; exact (IHb4 _ _ _ H) | left; exact (IHa2 _ _ H)].
         + intros n i y; simpl; intro H;
-            apply Reduced.PackageSet.union_spec in H; apply Reduced.PackageSet.union_spec;
+            apply Reduced.PackageSet.union_spec in H;
+              apply Reduced.PackageSet.union_spec;
             destruct H as [H | H];
             [left; exact (IHa1 _ _ H) | right; exact (IHb1 _ _ H)].
         + intros n i y; rewrite takenConjNeg_conj_eq; simpl arisingConjNeg;
@@ -1098,7 +1153,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
               apply Reduced.PackageSet.union_spec;
               [left; exact (IHa1 _ _ H) | right; exact (IHb3 _ _ _ H)].
         + intros p y; simpl; intro H;
-            apply Reduced.PackageSet.union_spec in H; apply Reduced.PackageSet.union_spec;
+            apply Reduced.PackageSet.union_spec in H;
+              apply Reduced.PackageSet.union_spec;
             destruct H as [H | H];
             [left; exact (IHa2 p _ H) | right; exact (IHb2 p _ H)].
         + intros n i y; rewrite takenDisj_disj_eq; simpl arisingDisj;
@@ -1106,7 +1162,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
             apply Reduced.PackageSet.union_spec;
             [left; exact (IHa1 _ _ H) | right; exact (IHb3 _ _ _ H)].
         + intros n i y; simpl; intro H;
-            apply Reduced.PackageSet.union_spec in H; apply Reduced.PackageSet.union_spec;
+            apply Reduced.PackageSet.union_spec in H;
+              apply Reduced.PackageSet.union_spec;
             destruct H as [H | H];
             [left; exact (IHa2 _ _ H) | right; exact (IHb2 _ _ H)].
       - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4.
@@ -1128,13 +1185,15 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
             Reduced.PackageSet.In (Name.Disjunct chis, v) (witnessSet S psi) ->
             v = Version.Idx (firstSatIdx S chis)) /\
         (forall chis v,
-            Reduced.PackageSet.In (Name.Disjunct chis, v) (witnessSetNeg S psi) ->
+            Reduced.PackageSet.In (Name.Disjunct chis, v)
+              (witnessSetNeg S psi) ->
             v = Version.Idx (firstSatIdx S chis)) /\
         (forall chis v,
             Reduced.PackageSet.In (Name.Disjunct chis, v) (takenDisj S psi) ->
             v = Version.Idx (firstSatIdx S chis)) /\
         (forall chis v,
-            Reduced.PackageSet.In (Name.Disjunct chis, v) (takenConjNeg S psi) ->
+            Reduced.PackageSet.In (Name.Disjunct chis, v)
+              (takenConjNeg S psi) ->
             v = Version.Idx (firstSatIdx S chis)).
     Proof.
       intros S psi;
@@ -1188,13 +1247,17 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
 
     Lemma witnessSet_name_classify_aux : forall S psi,
         (forall (n : Name.t) (v : Version.t),
-            Reduced.PackageSet.In (n, v) (witnessSet S psi) -> SyntheticName n) /\
+            Reduced.PackageSet.In (n, v) (witnessSet S psi) ->
+              SyntheticName n) /\
         (forall (n : Name.t) (v : Version.t),
-            Reduced.PackageSet.In (n, v) (witnessSetNeg S psi) -> SyntheticName n) /\
+            Reduced.PackageSet.In (n, v) (witnessSetNeg S psi) ->
+              SyntheticName n) /\
         (forall (n : Name.t) (v : Version.t),
-            Reduced.PackageSet.In (n, v) (takenDisj S psi) -> SyntheticName n) /\
+            Reduced.PackageSet.In (n, v) (takenDisj S psi) ->
+              SyntheticName n) /\
         (forall (n : Name.t) (v : Version.t),
-            Reduced.PackageSet.In (n, v) (takenConjNeg S psi) -> SyntheticName n).
+            Reduced.PackageSet.In (n, v) (takenConjNeg S psi) ->
+              SyntheticName n).
     Proof.
       unfold SyntheticName; intros S psi;
         induction psi
@@ -1250,7 +1313,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
         (exists p, PackageSet.In p S /\ p' = embedPkg p) \/
         (exists p psi, DependencyRel.In (p, psi) D /\ PackageSet.In p S /\
                      Reduced.PackageSet.In p' (witnessSet S psi)) \/
-        (exists n, NSet.In n (instNames R D) /\ AbsentNames.hasAbsent n = true /\
+        (exists n, NSet.In n (instNames R D) /\
+          AbsentNames.hasAbsent n = true /\
                    (forall u, ~ PackageSet.In (n, u) S) /\
                    p' = (Name.Orig n, Version.Bot)).
     Proof.
@@ -1265,12 +1329,14 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
             [| exfalso; exact (SOpt.empty_in _ Hy)].
           exists q, chi; split; [exact He |];
             split; [apply PackageSet.mem_spec; exact E | exact Hy].
-        + right; right; apply Source.mem_absentIn in Hn; destruct Hn as [Hn Hnone].
+        + right; right; apply Source.mem_absentIn in Hn;
+            destruct Hn as [Hn Hnone].
           exists n; auto.
       - intros [H | [[q [chi [Hd [HqS Hy]]]] | [n [Hn [Ha [Hnone ->]]]]]];
           [left; exact H | |].
         + right; left; exists (q, chi); split; [exact Hd |].
-          apply PackageSet.mem_spec in HqS; cbn beta iota; rewrite HqS; exact Hy.
+          apply PackageSet.mem_spec in HqS; cbn beta iota;
+            rewrite HqS; exact Hy.
         + right; right; exists n; split; [| split; [exact Ha | reflexivity]].
           apply Source.mem_absentIn; auto.
     Qed.
@@ -1317,10 +1383,12 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
            Reduced.PackageSet.In (Name.Disjunct chis, Version.Idx i)
              (witnessSetNeg S psi) ->
            exists chi, List.nth_error chis i = Some chi /\ Satisfies S chi /\
-             Reduced.PackageSet.Subset (witnessSet S chi) (witnessSetNeg S psi)) /\
+             Reduced.PackageSet.Subset (witnessSet S chi)
+               (witnessSetNeg S psi)) /\
         (Satisfies S psi ->
          forall chis i,
-           Reduced.PackageSet.In (Name.Disjunct chis, Version.Idx i) (takenDisj S psi) ->
+           Reduced.PackageSet.In (Name.Disjunct chis, Version.Idx i)
+             (takenDisj S psi) ->
            exists chi, List.nth_error chis i = Some chi /\ Satisfies S chi /\
              Reduced.PackageSet.Subset (witnessSet S chi) (takenDisj S psi)) /\
         (~ Satisfies S psi ->
@@ -1437,14 +1505,16 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
     Lemma encode_dep_closure_aux :
       forall (S_Psi : PackageSet.t) (Vq : N.t -> VSet.t) (ns : NSet.t)
         (S : Reduced.PackageSet.t),
-        (forall p, PackageSet.In p S_Psi -> Reduced.PackageSet.In (embedPkg p) S) ->
+        (forall p, PackageSet.In p S_Psi ->
+          Reduced.PackageSet.In (embedPkg p) S) ->
         (forall m u, PackageSet.In (m, u) S_Psi -> VSet.In u (Vq m)) ->
         (forall m, NSet.In m ns -> AbsentNames.hasAbsent m = true ->
            (forall u, ~ PackageSet.In (m, u) S_Psi) ->
            Reduced.PackageSet.In (Name.Orig m, Version.Bot) S) ->
         (forall m, NSet.In m ns -> AbsentNames.hasAbsent m = false ->
            exists u, PackageSet.In (m, u) S_Psi) ->
-        (forall chis i, Reduced.PackageSet.In (Name.Disjunct chis, Version.Idx i) S ->
+        (forall chis i,
+          Reduced.PackageSet.In (Name.Disjunct chis, Version.Idx i) S ->
            exists chi, List.nth_error chis i = Some chi /\
              Satisfies S_Psi chi /\
              Reduced.PackageSet.Subset (witnessSet S_Psi chi) S) ->
@@ -1454,36 +1524,47 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
               ~ Reduced.PackageSet.In q0 S \/
               (Satisfies S_Psi psi /\
                  Reduced.PackageSet.Subset (witnessSet S_Psi psi) S) ->
-              forall (q : Reduced.Package.t) (n : NameOT.t) (ws : Reduced.VSet.t),
+              forall (q : Reduced.Package.t) (n : NameOT.t)
+                (ws : Reduced.VSet.t),
                 Reduced.DependencyRel.In (q, (n, ws)) (encode Vq q0 psi) ->
                 Reduced.PackageSet.In q S ->
-                exists v, Reduced.VSet.In v ws /\ Reduced.PackageSet.In (n, v) S) /\
+                exists v, Reduced.VSet.In v ws /\
+                  Reduced.PackageSet.In (n, v) S) /\
           (forall q0 : Reduced.Package.t,
               ~ Reduced.PackageSet.In q0 S \/
               (~ Satisfies S_Psi psi /\
                Reduced.PackageSet.Subset (witnessSetNeg S_Psi psi) S) ->
-              forall (q : Reduced.Package.t) (n : NameOT.t) (ws : Reduced.VSet.t),
-                Reduced.DependencyRel.In (q, (n, ws)) (encodeNNFneg Vq q0 psi) ->
+              forall (q : Reduced.Package.t) (n : NameOT.t)
+                (ws : Reduced.VSet.t),
+                Reduced.DependencyRel.In (q, (n, ws))
+                  (encodeNNFneg Vq q0 psi) ->
                 Reduced.PackageSet.In q S ->
-                exists v, Reduced.VSet.In v ws /\ Reduced.PackageSet.In (n, v) S) /\
+                exists v, Reduced.VSet.In v ws /\
+                  Reduced.PackageSet.In (n, v) S) /\
           (forall (n' : Name.t) (i0 : nat),
               (forall k chi, List.nth_error (spine psi) k = Some chi ->
                  ~ Reduced.PackageSet.In (n', Version.Idx (i0 + k)) S \/
                  (Satisfies S_Psi chi /\
                   Reduced.PackageSet.Subset (witnessSet S_Psi chi) S)) ->
-              forall (q : Reduced.Package.t) (n : NameOT.t) (ws : Reduced.VSet.t),
-                Reduced.DependencyRel.In (q, (n, ws)) (encodeDisj Vq n' i0 psi) ->
+              forall (q : Reduced.Package.t) (n : NameOT.t)
+                (ws : Reduced.VSet.t),
+                Reduced.DependencyRel.In (q, (n, ws))
+                  (encodeDisj Vq n' i0 psi) ->
                 Reduced.PackageSet.In q S ->
-                exists v, Reduced.VSet.In v ws /\ Reduced.PackageSet.In (n, v) S) /\
+                exists v, Reduced.VSet.In v ws /\
+                  Reduced.PackageSet.In (n, v) S) /\
           (forall (n' : Name.t) (i0 : nat),
               (forall k chi, List.nth_error (negSpine psi) k = Some chi ->
                  ~ Reduced.PackageSet.In (n', Version.Idx (i0 + k)) S \/
                  (Satisfies S_Psi chi /\
                   Reduced.PackageSet.Subset (witnessSet S_Psi chi) S)) ->
-              forall (q : Reduced.Package.t) (n : NameOT.t) (ws : Reduced.VSet.t),
-                Reduced.DependencyRel.In (q, (n, ws)) (encodeConjNeg Vq n' i0 psi) ->
+              forall (q : Reduced.Package.t) (n : NameOT.t)
+                (ws : Reduced.VSet.t),
+                Reduced.DependencyRel.In (q, (n, ws))
+                  (encodeConjNeg Vq n' i0 psi) ->
                 Reduced.PackageSet.In q S ->
-                exists v, Reduced.VSet.In v ws /\ Reduced.PackageSet.In (n, v) S).
+                exists v, Reduced.VSet.In v ws /\
+                  Reduced.PackageSet.In (n, v) S).
     Proof.
       intros S_Psi Vq ns S Hemb HVq Hbot Htot Hdisj psi.
       assert (Hneg : forall m vs,
@@ -1545,15 +1626,18 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
         destruct (IHa Hsa) as (IHa1 & IHa2 & IHa3 & IHa4);
           destruct (IHb Hsb) as (IHb1 & IHb2 & IHb3 & IHb4); split4.
         + intros q0 Hwit q n ws Henc Hqw.
-          apply Reduced.DependencyRel.union_spec in Henc; destruct Henc as [He | He].
+          apply Reduced.DependencyRel.union_spec in Henc;
+            destruct Henc as [He | He].
           * refine (IHa1 q0 _ q n ws He Hqw).
             destruct Hwit as [Hq0 | [Hsat Hsub']];
               [left; exact Hq0 | right; split; [exact (proj1 Hsat) |]];
-              intros p' Hy; apply Hsub', Reduced.PackageSet.union_spec; left; exact Hy.
+              intros p' Hy; apply Hsub', Reduced.PackageSet.union_spec;
+                left; exact Hy.
           * refine (IHb1 q0 _ q n ws He Hqw).
             destruct Hwit as [Hq0 | [Hsat Hsub']];
               [left; exact Hq0 | right; split; [exact (proj2 Hsat) |]];
-              intros p' Hy; apply Hsub', Reduced.PackageSet.union_spec; right; exact Hy.
+              intros p' Hy; apply Hsub', Reduced.PackageSet.union_spec;
+                right; exact Hy.
         + intros q0 Hwit q n ws Henc Hqw.
           apply SOed.add_in in Henc; destruct Henc as [He | He].
           * injection He as -> -> ->.
@@ -1567,7 +1651,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
                  [apply firstSatIdx_lt; discriminate | reflexivity].
             -- apply Hsub'; rewrite witnessSetNeg_conj_eq;
                  apply SOpt.add_in; left; reflexivity.
-          * apply Reduced.DependencyRel.union_spec in He; destruct He as [He | He].
+          * apply Reduced.DependencyRel.union_spec in He;
+              destruct He as [He | He].
             -- refine (IHa2 (Name.Disjunct (FNeg psiL :: negSpine psiR),
                              Version.Idx 0) _ q n ws He Hqw).
                destruct (Reduced.PackageSet.mem
@@ -1596,17 +1681,21 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
         + intros n' i0 Hspine q n ws Henc Hqw.
           assert (Hwit := Hspine 0 (FConj psiL psiR) eq_refl);
             replace (i0 + 0) with i0 in Hwit by lia.
-          apply Reduced.DependencyRel.union_spec in Henc; destruct Henc as [He | He].
+          apply Reduced.DependencyRel.union_spec in Henc;
+            destruct Henc as [He | He].
           * refine (IHa1 (n', Version.Idx i0) _ q n ws He Hqw).
             destruct Hwit as [Hq0 | [Hsat Hsub']];
               [left; exact Hq0 | right; split; [exact (proj1 Hsat) |]];
-              intros p' Hy; apply Hsub', Reduced.PackageSet.union_spec; left; exact Hy.
+              intros p' Hy; apply Hsub', Reduced.PackageSet.union_spec;
+                left; exact Hy.
           * refine (IHb1 (n', Version.Idx i0) _ q n ws He Hqw).
             destruct Hwit as [Hq0 | [Hsat Hsub']];
               [left; exact Hq0 | right; split; [exact (proj2 Hsat) |]];
-              intros p' Hy; apply Hsub', Reduced.PackageSet.union_spec; right; exact Hy.
+              intros p' Hy; apply Hsub', Reduced.PackageSet.union_spec;
+                right; exact Hy.
         + intros n' i0 Hspine q n ws Henc Hqw.
-          apply Reduced.DependencyRel.union_spec in Henc; destruct Henc as [He | He].
+          apply Reduced.DependencyRel.union_spec in Henc;
+            destruct Henc as [He | He].
           * refine (IHa2 (n', Version.Idx i0) _ q n ws He Hqw).
             assert (Hwit := Hspine 0 (FNeg psiL) eq_refl);
               replace (i0 + 0) with i0 in Hwit by lia.
@@ -1633,10 +1722,12 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
                  [apply firstSatIdx_lt; discriminate | reflexivity].
             -- apply Hsub'; rewrite witnessSet_disj_eq;
                  apply SOpt.add_in; left; reflexivity.
-          * apply Reduced.DependencyRel.union_spec in He; destruct He as [He | He].
+          * apply Reduced.DependencyRel.union_spec in He;
+              destruct He as [He | He].
             -- refine (IHa1 (Name.Disjunct (psiL :: spine psiR),
                              Version.Idx 0) _ q n ws He Hqw).
-               destruct (Reduced.PackageSet.mem (Name.Disjunct (psiL :: spine psiR),
+               destruct (Reduced.PackageSet.mem
+                 (Name.Disjunct (psiL :: spine psiR),
                                        Version.Idx 0) S) eqn:EM.
                ++ apply Reduced.PackageSet.mem_spec in EM.
                   destruct (Hdisj _ _ EM) as [chi [Hg [Hsg Hsub']]].
@@ -1649,7 +1740,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
                intros k chi Hg.
                assert (Hg' : List.nth_error (psiL :: spine psiR) (1 + k)
                              = Some chi) by exact Hg.
-               destruct (Reduced.PackageSet.mem (Name.Disjunct (psiL :: spine psiR),
+               destruct (Reduced.PackageSet.mem
+                 (Name.Disjunct (psiL :: spine psiR),
                                        Version.Idx (1 + k)) S) eqn:EM.
                ++ apply Reduced.PackageSet.mem_spec in EM.
                   destruct (Hdisj _ _ EM) as [chi' [Hg2 [Hsg Hsub']]].
@@ -1658,19 +1750,23 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
                ++ left; intro Hin; apply Reduced.PackageSet.mem_spec in Hin;
                     discriminate (eq_trans (eq_sym Hin) EM).
         + intros q0 Hwit q n ws Henc Hqw.
-          apply Reduced.DependencyRel.union_spec in Henc; destruct Henc as [He | He].
+          apply Reduced.DependencyRel.union_spec in Henc;
+            destruct Henc as [He | He].
           * refine (IHa2 q0 _ q n ws He Hqw).
             destruct Hwit as [Hq0 | [Hns Hsub']];
               [left; exact Hq0
               | right; split; [intro Ha; exact (Hns (or_introl Ha)) |]];
-              intros p' Hy; apply Hsub', Reduced.PackageSet.union_spec; left; exact Hy.
+              intros p' Hy; apply Hsub', Reduced.PackageSet.union_spec;
+                left; exact Hy.
           * refine (IHb2 q0 _ q n ws He Hqw).
             destruct Hwit as [Hq0 | [Hns Hsub']];
               [left; exact Hq0
               | right; split; [intro Hb; exact (Hns (or_intror Hb)) |]];
-              intros p' Hy; apply Hsub', Reduced.PackageSet.union_spec; right; exact Hy.
+              intros p' Hy; apply Hsub', Reduced.PackageSet.union_spec;
+                right; exact Hy.
         + intros n' i0 Hspine q n ws Henc Hqw.
-          apply Reduced.DependencyRel.union_spec in Henc; destruct Henc as [He | He].
+          apply Reduced.DependencyRel.union_spec in Henc;
+            destruct Henc as [He | He].
           * refine (IHa1 (n', Version.Idx i0) _ q n ws He Hqw).
             assert (Hwit := Hspine 0 psiL eq_refl);
               replace (i0 + 0) with i0 in Hwit by lia.
@@ -1683,17 +1779,20 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
         + intros n' i0 Hspine q n ws Henc Hqw.
           assert (Hwit := Hspine 0 (FNeg (FDisj psiL psiR)) eq_refl);
             replace (i0 + 0) with i0 in Hwit by lia.
-          apply Reduced.DependencyRel.union_spec in Henc; destruct Henc as [He | He].
+          apply Reduced.DependencyRel.union_spec in Henc;
+            destruct Henc as [He | He].
           * refine (IHa2 (n', Version.Idx i0) _ q n ws He Hqw).
             destruct Hwit as [Hq0 | [Hns Hsub']];
               [left; exact Hq0
               | right; split; [intro Ha; exact (Hns (or_introl Ha)) |]];
-              intros p' Hy; apply Hsub', Reduced.PackageSet.union_spec; left; exact Hy.
+              intros p' Hy; apply Hsub', Reduced.PackageSet.union_spec;
+                left; exact Hy.
           * refine (IHb2 (n', Version.Idx i0) _ q n ws He Hqw).
             destruct Hwit as [Hq0 | [Hns Hsub']];
               [left; exact Hq0
               | right; split; [intro Hb; exact (Hns (or_intror Hb)) |]];
-              intros p' Hy; apply Hsub', Reduced.PackageSet.union_spec; right; exact Hy.
+              intros p' Hy; apply Hsub', Reduced.PackageSet.union_spec;
+                right; exact Hy.
       - destruct (IHa Hsub) as (IHa1 & IHa2 & IHa3 & IHa4); split4.
         + intros q0 Hwit q n ws Henc Hqw.
           exact (IHa2 q0 Hwit q n ws Henc Hqw).
@@ -1720,7 +1819,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
     Qed.
 
     Theorem formula_calculus_completeness :
-      forall (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t) (S : PackageSet.t),
+      forall (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t)
+        (S : PackageSet.t),
         IsResolution R D r S ->
         (forall m, NSet.In m (depNames D) -> AbsentNames.hasAbsent m = false ->
            exists u, PackageSet.In (m, u) S) ->
@@ -1736,12 +1836,15 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
           VSet.In u (Source.versions R m)).
       { intros m u Hu; apply Source.mem_versions; apply Hsub; exact Hu. }
       assert (Hbot : forall m, NSet.In m (depNames D) ->
-          AbsentNames.hasAbsent m = true -> (forall u, ~ PackageSet.In (m, u) S) ->
-          Reduced.PackageSet.In (Name.Orig m, Version.Bot) (coreResolution R D S)).
+          AbsentNames.hasAbsent m = true ->
+            (forall u, ~ PackageSet.In (m, u) S) ->
+          Reduced.PackageSet.In (Name.Orig m, Version.Bot)
+            (coreResolution R D S)).
       { intros m Hm Ha Hnone; apply mem_coreResolution; right; right.
         exists m; split; [apply mem_instNames; right; exact Hm |]; auto. }
       assert (Horig : forall m v,
-          Reduced.PackageSet.In (Name.Orig m, Version.Orig v) (coreResolution R D S) ->
+          Reduced.PackageSet.In (Name.Orig m, Version.Orig v)
+            (coreResolution R D S) ->
           PackageSet.In (m, v) S).
       { intros m v Hv; apply mem_coreResolution in Hv.
         destruct Hv as [[[pn pv] [Hp Hpe]] | [[p [chi [_ [_ Hw]]]]
@@ -1810,17 +1913,25 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
         end.
 
       Lemma encode_depender_orig_aux : forall Vq psi,
-          (forall (q : Reduced.Package.t) m (v : Version.t) (d : Reduced.Dependee.t),
-              Reduced.DependencyRel.In ((Name.Orig m, v), d) (encode Vq q psi) ->
+          (forall (q : Reduced.Package.t) m (v : Version.t)
+            (d : Reduced.Dependee.t),
+              Reduced.DependencyRel.In ((Name.Orig m, v), d)
+                (encode Vq q psi) ->
               q = (Name.Orig m, v)) /\
-          (forall (q : Reduced.Package.t) m (v : Version.t) (d : Reduced.Dependee.t),
-              Reduced.DependencyRel.In ((Name.Orig m, v), d) (encodeNNFneg Vq q psi) ->
+          (forall (q : Reduced.Package.t) m (v : Version.t)
+            (d : Reduced.Dependee.t),
+              Reduced.DependencyRel.In ((Name.Orig m, v), d)
+                (encodeNNFneg Vq q psi) ->
               q = (Name.Orig m, v)) /\
-          (forall (n : Name.t) (i0 : nat) m (v : Version.t) (d : Reduced.Dependee.t),
-              Reduced.DependencyRel.In ((Name.Orig m, v), d) (encodeDisj Vq n i0 psi) ->
+          (forall (n : Name.t) (i0 : nat) m (v : Version.t)
+            (d : Reduced.Dependee.t),
+              Reduced.DependencyRel.In ((Name.Orig m, v), d)
+                (encodeDisj Vq n i0 psi) ->
               n = Name.Orig m) /\
-          (forall (n : Name.t) (i0 : nat) m (v : Version.t) (d : Reduced.Dependee.t),
-              Reduced.DependencyRel.In ((Name.Orig m, v), d) (encodeConjNeg Vq n i0 psi) ->
+          (forall (n : Name.t) (i0 : nat) m (v : Version.t)
+            (d : Reduced.Dependee.t),
+              Reduced.DependencyRel.In ((Name.Orig m, v), d)
+                (encodeConjNeg Vq n i0 psi) ->
               n = Name.Orig m).
       Proof.
         intros Vq psi;
@@ -1878,16 +1989,22 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
 
       Lemma encode_dependee_orig_aux : forall Vq psi,
           (forall (q q' : Reduced.Package.t) m (ws : Reduced.VSet.t),
-              Reduced.DependencyRel.In (q', (Name.Orig m, ws)) (encode Vq q psi) ->
+              Reduced.DependencyRel.In (q', (Name.Orig m, ws))
+                (encode Vq q psi) ->
               NSet.In m (fnames psi)) /\
           (forall (q q' : Reduced.Package.t) m (ws : Reduced.VSet.t),
-              Reduced.DependencyRel.In (q', (Name.Orig m, ws)) (encodeNNFneg Vq q psi) ->
+              Reduced.DependencyRel.In (q', (Name.Orig m, ws))
+                (encodeNNFneg Vq q psi) ->
               NSet.In m (fnames psi)) /\
-          (forall (n : Name.t) (i0 : nat) (q' : Reduced.Package.t) m (ws : Reduced.VSet.t),
-              Reduced.DependencyRel.In (q', (Name.Orig m, ws)) (encodeDisj Vq n i0 psi) ->
+          (forall (n : Name.t) (i0 : nat) (q' : Reduced.Package.t) m
+            (ws : Reduced.VSet.t),
+              Reduced.DependencyRel.In (q', (Name.Orig m, ws))
+                (encodeDisj Vq n i0 psi) ->
               NSet.In m (fnames psi)) /\
-          (forall (n : Name.t) (i0 : nat) (q' : Reduced.Package.t) m (ws : Reduced.VSet.t),
-              Reduced.DependencyRel.In (q', (Name.Orig m, ws)) (encodeConjNeg Vq n i0 psi) ->
+          (forall (n : Name.t) (i0 : nat) (q' : Reduced.Package.t) m
+            (ws : Reduced.VSet.t),
+              Reduced.DependencyRel.In (q', (Name.Orig m, ws))
+                (encodeConjNeg Vq n i0 psi) ->
               NSet.In m (fnames psi)).
       Proof.
         intros Vq psi;
@@ -2036,7 +2153,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
       Qed.
 
       Lemma reduceDepsBy_agreeNeg : forall Vq Vq' D,
-          (forall p psi m, DependencyRel.In (p, psi) D -> NSet.In m (negNames psi) ->
+          (forall p psi m, DependencyRel.In (p, psi) D ->
+            NSet.In m (negNames psi) ->
                          Vq m = Vq' m) ->
           reduceDepsBy Vq D = reduceDepsBy Vq' D.
       Proof.
@@ -2048,7 +2166,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
       Qed.
 
       Module PackageSetFibred := FibredRel N V Package PackageSet.
-      Module DependencyRelFibred := FibredRel Package Dependee DependencyElt DependencyRel.
+      Module DependencyRelFibred :=
+        FibredRel Package Dependee DependencyElt DependencyRel.
 
       Definition syntheticPkgs (n : Name.t) : Reduced.PackageSet.t :=
         match n with
@@ -2084,9 +2203,11 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
                 split; [exact Hi | reflexivity].
             * apply Reduced.PackageSet.union_spec in H; destruct H as [H | H];
                 [exact (IHa2 _ _ H) | exact (IHb4 _ _ _ H)].
-          + intros n i q H; simpl in H; apply Reduced.PackageSet.union_spec in H;
+          + intros n i q H; simpl in H;
+              apply Reduced.PackageSet.union_spec in H;
               destruct H as [H | H]; [exact (IHa1 _ _ H) | exact (IHb1 _ _ H)].
-          + intros n i q H; simpl in H; apply Reduced.PackageSet.union_spec in H;
+          + intros n i q H; simpl in H;
+              apply Reduced.PackageSet.union_spec in H;
               destruct H as [H | H];
               [exact (IHa2 _ _ H) | exact (IHb4 _ _ _ H)].
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
@@ -2100,10 +2221,12 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
                 [exact (IHa1 _ _ H) | exact (IHb3 _ _ _ H)].
           + intros p q H; simpl in H; apply Reduced.PackageSet.union_spec in H;
               destruct H as [H | H]; [exact (IHa2 _ _ H) | exact (IHb2 _ _ H)].
-          + intros n i q H; simpl in H; apply Reduced.PackageSet.union_spec in H;
+          + intros n i q H; simpl in H;
+              apply Reduced.PackageSet.union_spec in H;
               destruct H as [H | H];
               [exact (IHa1 _ _ H) | exact (IHb3 _ _ _ H)].
-          + intros n i q H; simpl in H; apply Reduced.PackageSet.union_spec in H;
+          + intros n i q H; simpl in H;
+              apply Reduced.PackageSet.union_spec in H;
               destruct H as [H | H]; [exact (IHa2 _ _ H) | exact (IHb2 _ _ H)].
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4.
           + intros p q H; simpl in H; exact (IHa2 _ _ H).
@@ -2137,8 +2260,10 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
             cbn [fst snd syntheticPkgs]; apply Reduced.PackageSet.empty_subset.
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
             destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
-          + intros p d H; simpl in H; apply Reduced.DependencyRel.union_spec in H;
-              intros z Hz; apply Reduced.PackageSet.union_spec; destruct H as [H | H];
+          + intros p d H; simpl in H;
+              apply Reduced.DependencyRel.union_spec in H;
+              intros z Hz; apply Reduced.PackageSet.union_spec;
+                destruct H as [H | H];
               [left; exact (IHa1 _ d H z Hz) | right; exact (IHb1 _ d H z Hz)].
           + intros p d H; simpl in H; rewrite SOed.add_in in H;
               destruct H as [-> | H].
@@ -2149,11 +2274,15 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
                 apply Reduced.PackageSet.union_spec; destruct H as [H | H];
                 [left; exact (IHa2 _ d H z Hz)
                 | right; exact (IHb4 _ _ d H z Hz)].
-          + intros n i d H; simpl in H; apply Reduced.DependencyRel.union_spec in H;
-              intros z Hz; apply Reduced.PackageSet.union_spec; destruct H as [H | H];
+          + intros n i d H; simpl in H;
+              apply Reduced.DependencyRel.union_spec in H;
+              intros z Hz; apply Reduced.PackageSet.union_spec;
+                destruct H as [H | H];
               [left; exact (IHa1 _ d H z Hz) | right; exact (IHb1 _ d H z Hz)].
-          + intros n i d H; simpl in H; apply Reduced.DependencyRel.union_spec in H;
-              intros z Hz; apply Reduced.PackageSet.union_spec; destruct H as [H | H];
+          + intros n i d H; simpl in H;
+              apply Reduced.DependencyRel.union_spec in H;
+              intros z Hz; apply Reduced.PackageSet.union_spec;
+                destruct H as [H | H];
               [left; exact (IHa2 _ d H z Hz)
               | right; exact (IHb4 _ _ d H z Hz)].
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
@@ -2167,15 +2296,21 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
                 apply Reduced.PackageSet.union_spec; destruct H as [H | H];
                 [left; exact (IHa1 _ d H z Hz)
                 | right; exact (IHb3 _ _ d H z Hz)].
-          + intros p d H; simpl in H; apply Reduced.DependencyRel.union_spec in H;
-              intros z Hz; apply Reduced.PackageSet.union_spec; destruct H as [H | H];
+          + intros p d H; simpl in H;
+              apply Reduced.DependencyRel.union_spec in H;
+              intros z Hz; apply Reduced.PackageSet.union_spec;
+                destruct H as [H | H];
               [left; exact (IHa2 _ d H z Hz) | right; exact (IHb2 _ d H z Hz)].
-          + intros n i d H; simpl in H; apply Reduced.DependencyRel.union_spec in H;
-              intros z Hz; apply Reduced.PackageSet.union_spec; destruct H as [H | H];
+          + intros n i d H; simpl in H;
+              apply Reduced.DependencyRel.union_spec in H;
+              intros z Hz; apply Reduced.PackageSet.union_spec;
+                destruct H as [H | H];
               [left; exact (IHa1 _ d H z Hz)
               | right; exact (IHb3 _ _ d H z Hz)].
-          + intros n i d H; simpl in H; apply Reduced.DependencyRel.union_spec in H;
-              intros z Hz; apply Reduced.PackageSet.union_spec; destruct H as [H | H];
+          + intros n i d H; simpl in H;
+              apply Reduced.DependencyRel.union_spec in H;
+              intros z Hz; apply Reduced.PackageSet.union_spec;
+                destruct H as [H | H];
               [left; exact (IHa2 _ d H z Hz) | right; exact (IHb2 _ d H z Hz)].
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4); split4.
           + intros p d H; simpl in H; exact (IHa2 _ d H).
@@ -2185,7 +2320,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
       Qed.
 
       Lemma reachable_instNames : forall R D (m : N.t),
-          (exists p h, Reduced.DependencyRel.In (p, (Name.Orig m, h)) (reduceDeps R D)) ->
+          (exists p h,
+            Reduced.DependencyRel.In (p, (Name.Orig m, h)) (reduceDeps R D)) ->
           NSet.In m (instNames R D).
       Proof.
         intros R D m [p [h Hd]]; apply mem_reduceDeps in Hd.
@@ -2197,7 +2333,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
       Qed.
 
       Lemma versions_reduceReal_bot : forall R D (n : N.t),
-          Reduced.VSet.add Version.Bot (Reduced.versions (reduceReal R D) (Name.Orig n)) =
+          Reduced.VSet.add Version.Bot
+            (Reduced.versions (reduceReal R D) (Name.Orig n)) =
           Reduced.VSet.add Version.Bot (embedVS (Source.versions R n)).
       Proof.
         intros R D n; apply Reduced.VSet.ext; intro w.
@@ -2219,12 +2356,14 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
       Theorem versions_lookupOrig :
         forall R D (m : N.t) (u : V.t) (n : N.t),
           PackageSet.In (m, u) R ->
-          (exists p h, Reduced.DependencyRel.In (p, (Name.Orig n, h)) (reduceDeps R D)) \/
+          (exists p h,
+            Reduced.DependencyRel.In (p, (Name.Orig n, h)) (reduceDeps R D)) \/
           n = m ->
           AbsentNames.hasAbsent n = true ->
           Reduced.versions (reduceReal R D) (Name.Orig n) =
           Reduced.VSet.add Version.Bot
-            (Reduced.versions (reduceReal (PackageSetFibred.tailFibre R n) DependencyRel.empty)
+            (Reduced.versions
+              (reduceReal (PackageSetFibred.tailFibre R n) DependencyRel.empty)
                (Name.Orig n)).
       Proof.
         intros R D m u n Hr Hreach Ha.
@@ -2292,7 +2431,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
 
       Lemma mem_ownNegDepNames : forall D (n : N.t),
           NSet.In n (ownNegDepNames D) <->
-          exists p psi, DependencyRel.In (p, psi) D /\ NSet.In n (ownNegNames psi).
+          exists p psi, DependencyRel.In (p, psi) D /\
+            NSet.In n (ownNegNames psi).
       Proof.
         intros D n; unfold ownNegDepNames; rewrite SOen.mem_unionMap.
         split.
@@ -2303,13 +2443,18 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
 
       Lemma encode_agreeOwn_aux : forall Vq Vq' psi,
           ((forall m, NSet.In m (ownNegNames psi) -> Vq m = Vq' m) ->
-           forall (q : Reduced.Package.t) n (v : Version.t) (d : Reduced.Dependee.t),
+           forall (q : Reduced.Package.t) n (v : Version.t)
+             (d : Reduced.Dependee.t),
              Reduced.DependencyRel.In ((Name.Orig n, v), d) (encode Vq q psi) ->
-             Reduced.DependencyRel.In ((Name.Orig n, v), d) (encode Vq' q psi)) /\
+             Reduced.DependencyRel.In ((Name.Orig n, v), d)
+               (encode Vq' q psi)) /\
           ((forall m, NSet.In m (ownNegNamesNeg psi) -> Vq m = Vq' m) ->
-           forall (q : Reduced.Package.t) n (v : Version.t) (d : Reduced.Dependee.t),
-             Reduced.DependencyRel.In ((Name.Orig n, v), d) (encodeNNFneg Vq q psi) ->
-             Reduced.DependencyRel.In ((Name.Orig n, v), d) (encodeNNFneg Vq' q psi)).
+           forall (q : Reduced.Package.t) n (v : Version.t)
+             (d : Reduced.Dependee.t),
+             Reduced.DependencyRel.In ((Name.Orig n, v), d)
+               (encodeNNFneg Vq q psi) ->
+             Reduced.DependencyRel.In ((Name.Orig n, v), d)
+               (encodeNNFneg Vq' q psi)).
       Proof.
         intros Vq Vq' psi;
           induction psi
@@ -2320,7 +2465,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
           unfold complementVS in H |- *; rewrite <- E; exact H.
         - destruct IHa as [IHa1 IHa2]; destruct IHb as [IHb1 IHb2]; split;
             intros Hag q n w d H; simpl in H |- *.
-          + apply Reduced.DependencyRel.union_spec in H; apply Reduced.DependencyRel.union_spec.
+          + apply Reduced.DependencyRel.union_spec in H;
+              apply Reduced.DependencyRel.union_spec.
             destruct H as [H | H]; [left | right];
               [refine (IHa1 _ _ _ _ _ H) | refine (IHb1 _ _ _ _ _ H)];
               intros m Hx; apply Hag; simpl; apply NSet.union_spec; tauto.
@@ -2344,7 +2490,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
                                (encode_depender_orig_aux Vq psiR)))
                               _ _ _ _ _ H)];
               discriminate E.
-          + apply Reduced.DependencyRel.union_spec in H; apply Reduced.DependencyRel.union_spec.
+          + apply Reduced.DependencyRel.union_spec in H;
+              apply Reduced.DependencyRel.union_spec.
             destruct H as [H | H]; [left | right];
               [refine (IHa2 _ _ _ _ _ H) | refine (IHb2 _ _ _ _ _ H)];
               intros m Hx; apply Hag; simpl; apply NSet.union_spec; tauto.
@@ -2370,7 +2517,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
 
       Lemma dependees_tailFibreBy : forall Vq D m v,
           Reduced.dependees (reduceDepsBy Vq D) (Name.Orig m, Version.Orig v) =
-          Reduced.dependees (reduceDepsBy Vq (DependencyRelFibred.tailFibre D (m, v)))
+          Reduced.dependees
+            (reduceDepsBy Vq (DependencyRelFibred.tailFibre D (m, v)))
             (Name.Orig m, Version.Orig v).
       Proof.
         intros Vq D m v; apply Reduced.dependees_ext; intro h.
@@ -2388,10 +2536,12 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
 
       Theorem dependees_lookupOrigBy : forall R D Vq n v,
           (forall m,
-             NSet.In m (ownNegDepNames (DependencyRelFibred.tailFibre D (n, v))) ->
+             NSet.In m (ownNegDepNames
+               (DependencyRelFibred.tailFibre D (n, v))) ->
              Vq m = Source.versions R m) ->
           Reduced.dependees (reduceDeps R D) (Name.Orig n, Version.Orig v) =
-          Reduced.dependees (reduceDepsBy Vq (DependencyRelFibred.tailFibre D (n, v)))
+          Reduced.dependees
+            (reduceDepsBy Vq (DependencyRelFibred.tailFibre D (n, v)))
             (Name.Orig n, Version.Orig v).
       Proof.
         intros R D Vq n v HVq; unfold reduceDeps.
@@ -2430,13 +2580,15 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
 
       Theorem versions_lookupDisjunct : forall R D (chis : list Formula),
           (exists p h,
-              Reduced.DependencyRel.In (p, (Name.Disjunct chis, h)) (reduceDeps R D)) ->
+              Reduced.DependencyRel.In (p, (Name.Disjunct chis, h))
+                (reduceDeps R D)) ->
           Reduced.versions (reduceReal R D) (Name.Disjunct chis) =
           idxSet (List.length chis).
       Proof.
         intros R D chis [p [h Hd]].
         apply mem_reduceDeps in Hd; destruct Hd as [r [chi [HD He]]].
-        pose proof (proj1 (encode_dependee_synthetic_aux (Source.versions R) chi)
+        pose proof (proj1
+          (encode_dependee_synthetic_aux (Source.versions R) chi)
                       (embedPkg r) (p, (Name.Disjunct chis, h)) He) as Hsub.
         cbn [fst snd] in Hsub.
         apply Reduced.VSet.ext; intro w.
@@ -2459,7 +2611,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
           List.nth_error (spine psi) j = Some chi ->
           Reduced.DependencyRel.In ((n, Version.Idx (i0 + j)), d)
             (encode Vq (n, Version.Idx (i0 + j)) chi) ->
-          Reduced.DependencyRel.In ((n, Version.Idx (i0 + j)), d) (encodeDisj Vq n i0 psi).
+          Reduced.DependencyRel.In ((n, Version.Idx (i0 + j)), d)
+            (encodeDisj Vq n i0 psi).
       Proof.
         intros Vq psi;
           induction psi
@@ -2507,7 +2660,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
       Qed.
 
       Lemma arisingPkgs_alt_aux : forall Vq (psi : Formula),
-          (forall (p : Reduced.Package.t) (chis : list Formula) (i : nat) (chi : Formula)
+          (forall (p : Reduced.Package.t) (chis : list Formula) (i : nat)
+            (chi : Formula)
                   (d : Reduced.Dependee.t),
               Reduced.PackageSet.In (Name.Disjunct chis, Version.Idx i)
                 (arisingPkgs p psi) ->
@@ -2516,7 +2670,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
                 (encode Vq (Name.Disjunct chis, Version.Idx i) chi) ->
               Reduced.DependencyRel.In ((Name.Disjunct chis, Version.Idx i), d)
                 (encode Vq p psi)) /\
-          (forall (p : Reduced.Package.t) (chis : list Formula) (i : nat) (chi : Formula)
+          (forall (p : Reduced.Package.t) (chis : list Formula) (i : nat)
+            (chi : Formula)
                   (d : Reduced.Dependee.t),
               Reduced.PackageSet.In (Name.Disjunct chis, Version.Idx i)
                 (arisingNeg p psi) ->
@@ -2551,13 +2706,15 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
             destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
           + intros p chis i chi d H Hg Hd; simpl in H; simpl;
-              apply Reduced.PackageSet.union_spec in H; apply Reduced.DependencyRel.union_spec;
+              apply Reduced.PackageSet.union_spec in H;
+                apply Reduced.DependencyRel.union_spec;
               destruct H as [H | H];
               [left; exact (IHa1 _ _ _ _ _ H Hg Hd)
               | right; exact (IHb1 _ _ _ _ _ H Hg Hd)].
           + intros p chis i chi d H Hg Hd; simpl in H; simpl.
             apply Reduced.PackageSet.union_spec in H; apply SOed.add_in;
-              destruct H as [H | H]; [| right; apply Reduced.DependencyRel.union_spec].
+              destruct H as [H | H];
+                [| right; apply Reduced.DependencyRel.union_spec].
             * apply mem_idxPkgs in H; destruct H as [j [_ H]];
                 injection H as H1 H2; subst chis; subst i; right;
                 apply Reduced.DependencyRel.union_spec; destruct j as [| j];
@@ -2570,12 +2727,14 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
                 [left; exact (IHa2 _ _ _ _ _ H Hg Hd)
                 | right; exact (IHb4 _ _ _ _ _ _ H Hg Hd)].
           + intros n i0 chis i chi d H Hg Hd; simpl in H; simpl;
-              apply Reduced.PackageSet.union_spec in H; apply Reduced.DependencyRel.union_spec;
+              apply Reduced.PackageSet.union_spec in H;
+                apply Reduced.DependencyRel.union_spec;
               destruct H as [H | H];
               [left; exact (IHa1 _ _ _ _ _ H Hg Hd)
               | right; exact (IHb1 _ _ _ _ _ H Hg Hd)].
           + intros n i0 chis i chi d H Hg Hd; simpl in H; simpl;
-              apply Reduced.PackageSet.union_spec in H; apply Reduced.DependencyRel.union_spec;
+              apply Reduced.PackageSet.union_spec in H;
+                apply Reduced.DependencyRel.union_spec;
               destruct H as [H | H];
               [left; exact (IHa2 _ _ _ _ _ H Hg Hd)
               | right; exact (IHb4 _ _ _ _ _ _ H Hg Hd)].
@@ -2583,7 +2742,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
             destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
           + intros p chis i chi d H Hg Hd; simpl in H; simpl.
             apply Reduced.PackageSet.union_spec in H; apply SOed.add_in;
-              destruct H as [H | H]; [| right; apply Reduced.DependencyRel.union_spec].
+              destruct H as [H | H];
+                [| right; apply Reduced.DependencyRel.union_spec].
             * apply mem_idxPkgs in H; destruct H as [j [_ H]];
                 injection H as H1 H2; subst chis; subst i; right;
                 apply Reduced.DependencyRel.union_spec; destruct j as [| j];
@@ -2596,17 +2756,20 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
                 [left; exact (IHa1 _ _ _ _ _ H Hg Hd)
                 | right; exact (IHb3 _ _ _ _ _ _ H Hg Hd)].
           + intros p chis i chi d H Hg Hd; simpl in H; simpl;
-              apply Reduced.PackageSet.union_spec in H; apply Reduced.DependencyRel.union_spec;
+              apply Reduced.PackageSet.union_spec in H;
+                apply Reduced.DependencyRel.union_spec;
               destruct H as [H | H];
               [left; exact (IHa2 _ _ _ _ _ H Hg Hd)
               | right; exact (IHb2 _ _ _ _ _ H Hg Hd)].
           + intros n i0 chis i chi d H Hg Hd; simpl in H; simpl;
-              apply Reduced.PackageSet.union_spec in H; apply Reduced.DependencyRel.union_spec;
+              apply Reduced.PackageSet.union_spec in H;
+                apply Reduced.DependencyRel.union_spec;
               destruct H as [H | H];
               [left; exact (IHa1 _ _ _ _ _ H Hg Hd)
               | right; exact (IHb3 _ _ _ _ _ _ H Hg Hd)].
           + intros n i0 chis i chi d H Hg Hd; simpl in H; simpl;
-              apply Reduced.PackageSet.union_spec in H; apply Reduced.DependencyRel.union_spec;
+              apply Reduced.PackageSet.union_spec in H;
+                apply Reduced.DependencyRel.union_spec;
               destruct H as [H | H];
               [left; exact (IHa2 _ _ _ _ _ H Hg Hd)
               | right; exact (IHb2 _ _ _ _ _ H Hg Hd)].
@@ -2624,7 +2787,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
                 (encode Vq q psi) ->
               q = (Name.Disjunct chis, Version.Idx i) \/
               (exists chi, List.nth_error chis i = Some chi /\
-                         Reduced.DependencyRel.In ((Name.Disjunct chis, Version.Idx i), d)
+                         Reduced.DependencyRel.In
+                           ((Name.Disjunct chis, Version.Idx i), d)
                            (encode Vq
                               (Name.Disjunct chis, Version.Idx i) chi))) /\
           (forall (q : Reduced.Package.t) (chis : list Formula) (i : nat)
@@ -2633,7 +2797,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
                 (encodeNNFneg Vq q psi) ->
               q = (Name.Disjunct chis, Version.Idx i) \/
               (exists chi, List.nth_error chis i = Some chi /\
-                         Reduced.DependencyRel.In ((Name.Disjunct chis, Version.Idx i), d)
+                         Reduced.DependencyRel.In
+                           ((Name.Disjunct chis, Version.Idx i), d)
                            (encode Vq
                               (Name.Disjunct chis, Version.Idx i) chi))) /\
           (forall (n : Name.t) (i0 : nat) (chis : list Formula) (i : nat)
@@ -2643,12 +2808,14 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
               (n = Name.Disjunct chis /\
                exists j chi, i = i0 + j /\
                            List.nth_error (spine psi) j = Some chi /\
-                           Reduced.DependencyRel.In ((Name.Disjunct chis, Version.Idx i), d)
+                           Reduced.DependencyRel.In
+                             ((Name.Disjunct chis, Version.Idx i), d)
                              (encode Vq
                                 (Name.Disjunct chis, Version.Idx i) chi))
               \/
               (exists chi, List.nth_error chis i = Some chi /\
-                         Reduced.DependencyRel.In ((Name.Disjunct chis, Version.Idx i), d)
+                         Reduced.DependencyRel.In
+                           ((Name.Disjunct chis, Version.Idx i), d)
                            (encode Vq
                               (Name.Disjunct chis, Version.Idx i) chi))) /\
           (forall (n : Name.t) (i0 : nat) (chis : list Formula) (i : nat)
@@ -2658,12 +2825,14 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
               (n = Name.Disjunct chis /\
                exists j chi, i = i0 + j /\
                            List.nth_error (negSpine psi) j = Some chi /\
-                           Reduced.DependencyRel.In ((Name.Disjunct chis, Version.Idx i), d)
+                           Reduced.DependencyRel.In
+                             ((Name.Disjunct chis, Version.Idx i), d)
                              (encode Vq
                                 (Name.Disjunct chis, Version.Idx i) chi))
               \/
               (exists chi, List.nth_error chis i = Some chi /\
-                         Reduced.DependencyRel.In ((Name.Disjunct chis, Version.Idx i), d)
+                         Reduced.DependencyRel.In
+                           ((Name.Disjunct chis, Version.Idx i), d)
                            (encode Vq
                               (Name.Disjunct chis, Version.Idx i) chi))).
       Proof.
@@ -2687,7 +2856,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
             simpl; apply SOed.singleton_in; subst d; reflexivity.
         - destruct IHa as (IHa1 & IHa2 & IHa3 & IHa4);
             destruct IHb as (IHb1 & IHb2 & IHb3 & IHb4); split4.
-          + intros q chis i d H; simpl in H; apply Reduced.DependencyRel.union_spec in H;
+          + intros q chis i d H; simpl in H;
+              apply Reduced.DependencyRel.union_spec in H;
               destruct H as [H | H];
               [exact (IHa1 _ _ _ _ H) | exact (IHb1 _ _ _ _ H)].
           + intros q chis i d H; simpl in H; apply SOed.add_in in H;
@@ -2703,7 +2873,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
                 split; [| exact Hin].
               simpl; exact Hg.
           + intros n i0 chis i d H; simpl in H;
-              apply Reduced.DependencyRel.union_spec in H; destruct H as [H | H].
+              apply Reduced.DependencyRel.union_spec in H;
+                destruct H as [H | H].
             * destruct (IHa1 _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
               injection Eq as Eq1 Eq2; subst n; left;
                 split; [reflexivity |].
@@ -2719,7 +2890,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
               simpl; apply Reduced.DependencyRel.union_spec; right;
                 exact H.
           + intros n i0 chis i d H; simpl in H;
-              apply Reduced.DependencyRel.union_spec in H; destruct H as [H | H].
+              apply Reduced.DependencyRel.union_spec in H;
+                destruct H as [H | H].
             * destruct (IHa2 _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
               injection Eq as Eq1 Eq2; subst n; left;
                 split; [reflexivity |].
@@ -2745,11 +2917,13 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
               injection Eq as Eq; right; exists chi; subst chis; subst i;
                 split; [| exact Hin].
               simpl; exact Hg.
-          + intros q chis i d H; simpl in H; apply Reduced.DependencyRel.union_spec in H;
+          + intros q chis i d H; simpl in H;
+              apply Reduced.DependencyRel.union_spec in H;
               destruct H as [H | H];
               [exact (IHa2 _ _ _ _ H) | exact (IHb2 _ _ _ _ H)].
           + intros n i0 chis i d H; simpl in H;
-              apply Reduced.DependencyRel.union_spec in H; destruct H as [H | H].
+              apply Reduced.DependencyRel.union_spec in H;
+                destruct H as [H | H].
             * destruct (IHa1 _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
               injection Eq as Eq1 Eq2; subst n; left;
                 split; [reflexivity |].
@@ -2761,7 +2935,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
               left; split; [exact Eq |]; exists (S j), chi;
                 split; [lia | split; [exact Hg | exact Hin]].
           + intros n i0 chis i d H; simpl in H;
-              apply Reduced.DependencyRel.union_spec in H; destruct H as [H | H].
+              apply Reduced.DependencyRel.union_spec in H;
+                destruct H as [H | H].
             * destruct (IHa2 _ _ _ _ H) as [Eq | Hex]; [| right; exact Hex].
               injection Eq as Eq1 Eq2; subst n; left;
                 split; [reflexivity |].
@@ -2800,7 +2975,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
           Reduced.dependees (reduceDeps R D) (Name.Disjunct chis, i) =
           match disjAlt chis i with
           | Some chi =>
-              Reduced.dependees (encode (Source.versions R) (Name.Disjunct chis, i) chi)
+              Reduced.dependees
+                (encode (Source.versions R) (Name.Disjunct chis, i) chi)
                 (Name.Disjunct chis, i)
           | None => Reduced.DependeeSet.empty
           end.
@@ -2870,19 +3046,23 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
 
       Lemma arisingPkgs_negNames_aux : forall psi : Formula,
           (forall (p : Reduced.Package.t) chis v chi m,
-              Reduced.PackageSet.In (Name.Disjunct chis, v) (arisingPkgs p psi) ->
+              Reduced.PackageSet.In (Name.Disjunct chis, v)
+                (arisingPkgs p psi) ->
               List.In chi chis -> NSet.In m (negNames chi) ->
               NSet.In m (negNames psi)) /\
           (forall (p : Reduced.Package.t) chis v chi m,
-              Reduced.PackageSet.In (Name.Disjunct chis, v) (arisingNeg p psi) ->
+              Reduced.PackageSet.In (Name.Disjunct chis, v)
+                (arisingNeg p psi) ->
               List.In chi chis -> NSet.In m (negNames chi) ->
               NSet.In m (fnames psi)) /\
           (forall (n : Name.t) (i : nat) chis v chi m,
-              Reduced.PackageSet.In (Name.Disjunct chis, v) (arisingDisj n i psi) ->
+              Reduced.PackageSet.In (Name.Disjunct chis, v)
+                (arisingDisj n i psi) ->
               List.In chi chis -> NSet.In m (negNames chi) ->
               NSet.In m (negNames psi)) /\
           (forall (n : Name.t) (i : nat) chis v chi m,
-              Reduced.PackageSet.In (Name.Disjunct chis, v) (arisingConjNeg n i psi) ->
+              Reduced.PackageSet.In (Name.Disjunct chis, v)
+                (arisingConjNeg n i psi) ->
               List.In chi chis -> NSet.In m (negNames chi) ->
               NSet.In m (fnames psi)).
       Proof.
@@ -2899,7 +3079,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
           + intros p chis v chi m H Hg Hx; simpl in H; cbn [fnames].
             apply NSet.union_spec.
             apply Reduced.PackageSet.union_spec in H; destruct H as [H | H];
-              [| apply Reduced.PackageSet.union_spec in H; destruct H as [H | H]].
+              [| apply Reduced.PackageSet.union_spec in H;
+                destruct H as [H | H]].
             * apply mem_idxPkgs in H; destruct H as [k [_ E]].
               injection E as -> _; destruct Hg as [<- | Hg];
                 [left; exact Hx
@@ -2921,7 +3102,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
           + intros p chis v chi m H Hg Hx; simpl in H; cbn [negNames].
             apply NSet.union_spec.
             apply Reduced.PackageSet.union_spec in H; destruct H as [H | H];
-              [| apply Reduced.PackageSet.union_spec in H; destruct H as [H | H]].
+              [| apply Reduced.PackageSet.union_spec in H;
+                destruct H as [H | H]].
             * apply mem_idxPkgs in H; destruct H as [k [_ E]].
               injection E as -> _; destruct Hg as [<- | Hg];
                 [left; exact Hx
@@ -2989,7 +3171,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (AbsentNames : AbsentNames N).
       Theorem dependees_lookupDisjunctBy : forall R D R' D' Vq chis i,
           DependencyRel.Subset D' D ->
           Reduced.PackageSet.In (Name.Disjunct chis, i) (reduceReal R' D') ->
-          (forall p psi m, DependencyRel.In (p, psi) D' -> NSet.In m (negNames psi) ->
+          (forall p psi m, DependencyRel.In (p, psi) D' ->
+            NSet.In m (negNames psi) ->
                          Vq m = Source.versions R m) ->
           Reduced.dependees (reduceDeps R D) (Name.Disjunct chis, i) =
           Reduced.dependees (reduceDepsBy Vq D') (Name.Disjunct chis, i).
@@ -3029,7 +3212,8 @@ Module PackageFormula (N V : UsualOrderedType).
   Include FormulaCalculus N V Absent.
 
   Theorem package_formula_completeness :
-    forall (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t) (S : PackageSet.t),
+    forall (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t)
+      (S : PackageSet.t),
       IsResolution R D r S ->
       Reduction.Reduced.IsResolution (Reduction.reduceReal R D)
         (Reduction.reduceDeps R D) (Reduction.embedPkg r)

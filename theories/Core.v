@@ -157,10 +157,12 @@ Module Core (N V : UsualOrderedType).
 
   Definition FunctionalInName (D : DependencyRel.t) : Prop :=
     forall (p : Package.t) (n : N.t) (vs vs' : VSet.t),
-      DependencyRel.In (p, (n, vs)) D -> DependencyRel.In (p, (n, vs')) D -> vs = vs'.
+      DependencyRel.In (p, (n, vs)) D ->
+        DependencyRel.In (p, (n, vs')) D -> vs = vs'.
 
   Record IsResolution
-      (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t) (S : PackageSet.t) : Prop :=
+      (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t)
+        (S : PackageSet.t) : Prop :=
     { res_subset : PackageSet.Subset S R
     ; res_root_mem : PackageSet.In r S
     ; res_dep_closure :
@@ -204,7 +206,8 @@ Module Core (N V : UsualOrderedType).
   Definition treeOf (S : PackageSet.t) : PackageTree.t :=
     PackageSet.fold PackageTree.add S PackageTree.empty.
 
-  Definition witness (t : PackageTree.t) '((n, vs) : Dependee.t) : option Package.t :=
+  Definition witness (t : PackageTree.t) '((n, vs) : Dependee.t) :
+      option Package.t :=
     match List.find (fun v => PackageTree.mem (n, v) t) (VSet.elements vs) with
     | Some v => Some (n, v)
     | None => None
@@ -231,8 +234,10 @@ Module Core (N V : UsualOrderedType).
         end
     end.
 
-  Fixpoint closureFailure (t : PackageTree.t) (dependees : Package.t -> DependeeSet.t)
-      (ps : list Package.t) : (Package.t * Dependee.t) + list (Package.t * Package.t) :=
+  Fixpoint closureFailure (t : PackageTree.t)
+      (dependees : Package.t -> DependeeSet.t)
+      (ps : list Package.t) :
+        (Package.t * Dependee.t) + list (Package.t * Package.t) :=
     match ps with
     | nil => inr nil
     | p :: ps' =>
@@ -246,7 +251,8 @@ Module Core (N V : UsualOrderedType).
         end
     end.
 
-  Fixpoint step (es : list (Package.t * Package.t)) (seen : PackageTree.t) (changed : bool)
+  Fixpoint step (es : list (Package.t * Package.t)) (seen : PackageTree.t)
+      (changed : bool)
     : PackageTree.t * bool :=
     match es with
     | nil => (seen, changed)
@@ -265,10 +271,12 @@ Module Core (N V : UsualOrderedType).
         if changed then closeUnder k es seen' else seen'
     end.
 
-  Definition queryWitnesses (t : PackageTree.t) (Q : DependeeSet.t) : PackageTree.t :=
+  Definition queryWitnesses (t : PackageTree.t) (Q : DependeeSet.t) :
+      PackageTree.t :=
     DependeeSet.fold
       (fun h acc =>
-         match witness t h with Some q => PackageTree.add q acc | None => acc end)
+         match witness t h with Some q => PackageTree.add q acc |
+           None => acc end)
       Q PackageTree.empty.
 
   Definition check (versions : N.t -> VSet.t)
@@ -335,7 +343,8 @@ Module Core (N V : UsualOrderedType).
       split; [intro H; exists p; auto | intros [q [-> H]]; exact H].
     Qed.
 
-    Lemma mem_tree : forall t p, PackageTree.mem p t = true <-> PackageTree.In p t.
+    Lemma mem_tree : forall t p, PackageTree.mem p t = true <->
+        PackageTree.In p t.
     Proof. intros t p; apply PackageTree.mem_spec. Qed.
 
     Lemma mem_tree_false : forall t p,
@@ -349,11 +358,14 @@ Module Core (N V : UsualOrderedType).
         PackageTree.In q (PackageTree.add p t) <-> q = p \/ PackageTree.In q t.
     Proof. intros t p q; apply PackageTree.add_spec. Qed.
 
-    Lemma mem_treeOf : forall S p, PackageTree.In p (treeOf S) <-> PackageSet.In p S.
+    Lemma mem_treeOf : forall S p, PackageTree.In p (treeOf S) <->
+        PackageSet.In p S.
     Proof.
-      intros S p; unfold treeOf; rewrite PackageSet.fold_spec, <- in_elements_pkg.
+      intros S p; unfold treeOf;
+        rewrite PackageSet.fold_spec, <- in_elements_pkg.
       assert (H : forall l t,
-          PackageTree.In p (List.fold_left (fun a e => PackageTree.add e a) l t) <->
+          PackageTree.In p
+            (List.fold_left (fun a e => PackageTree.add e a) l t) <->
           PackageTree.In p t \/ List.In p l).
       { induction l as [| a l IH]; intro t; cbn; [tauto |].
         rewrite IH, in_add_tree; split;
@@ -436,7 +448,8 @@ Module Core (N V : UsualOrderedType).
     Lemma adjacentFailure_unique : forall S,
         adjacentFailure (PackageSet.elements S) = None <-> VersionUnique S.
     Proof.
-      intro S; rewrite adjacentFailure_none by exact (PackageSet.elements_spec2 S).
+      intro S; rewrite adjacentFailure_none by exact
+        (PackageSet.elements_spec2 S).
       unfold VersionUnique; setoid_rewrite in_elements_pkg; reflexivity.
     Qed.
 
@@ -567,9 +580,11 @@ Module Core (N V : UsualOrderedType).
     Qed.
 
     Lemma step_card : forall es seen c,
-        PackageTree.cardinal seen <= PackageTree.cardinal (fst (step es seen c)) /\
+        PackageTree.cardinal seen <=
+          PackageTree.cardinal (fst (step es seen c)) /\
         (c = false -> snd (step es seen c) = true ->
-         PackageTree.cardinal seen < PackageTree.cardinal (fst (step es seen c))).
+         PackageTree.cardinal seen < PackageTree.cardinal
+           (fst (step es seen c))).
     Proof.
       intro es; induction es as [| [p q] es IH]; intros seen c; cbn.
       - split; [reflexivity | intros -> H; discriminate].
@@ -655,7 +670,8 @@ Module Core (N V : UsualOrderedType).
                            | Some q' => PackageTree.add q' a
                            | None => a
                            end) l acc) <->
-          PackageTree.In q acc \/ exists h, List.In h l /\ witness t h = Some q).
+          PackageTree.In q acc \/ exists h, List.In h l /\
+            witness t h = Some q).
       { induction l as [| h l IH]; intro acc; cbn.
         - split; [tauto | intros [H | [_ [[] _]]]; exact H].
         - rewrite IH; destruct (witness t h) as [q' |] eqn:E.
@@ -729,7 +745,8 @@ Module Core (N V : UsualOrderedType).
         destruct (witness_met t n vs v Hv HS) as [q ->]; reflexivity. }
     split.
     - destruct (subsetFailure versions S) eqn:Es; [discriminate |].
-      destruct (adjacentFailure (PackageSet.elements S)) eqn:Eu; [discriminate |].
+      destruct (adjacentFailure (PackageSet.elements S)) eqn:Eu;
+        [discriminate |].
       fold t; destruct (rootFailure t Q) eqn:Er; [discriminate |].
       destruct (closureFailure t dependees (PackageSet.elements S))
         as [[p h] | es] eqn:Ec; [discriminate |].
@@ -778,7 +795,8 @@ Module Core (N V : UsualOrderedType).
         assert (Hcl : forall p q, List.In (p, q) es -> PackageTree.In p seen ->
                       PackageTree.In q seen).
         { apply (closeUnder_closed S); [exact Hes | exact H0 | Lia.lia]. }
-        assert (Hall : forall p, Reached dependees Q S p -> PackageTree.In p seen).
+        assert (Hall : forall p, Reached dependees Q S p ->
+          PackageTree.In p seen).
         { intros p Hr; induction Hr as [n vs v HQn Hvs HS | p n vs v Hr IH Hd Hvs HS].
           - apply closeUnder_mono, mem_queryWitnesses.
             exists (n, vs); split; [exact HQn |].
@@ -895,7 +913,8 @@ Module Core (N V : UsualOrderedType).
     assert (HR : forall (n : N.t) (v : V.t),
                  PackageSet.In (n, v) R -> VSet.In v (versions R n))
       by (intros n v H; apply mem_versions; exact H).
-    assert (Hstep : forall p (n : N.t) (vs : VSet.t) (v : V.t), PackageSet.In p R ->
+    assert (Hstep : forall p (n : N.t) (vs : VSet.t) (v : V.t),
+      PackageSet.In p R ->
                     DependeeSet.In (n, vs) (dependees D p) -> VSet.In v vs ->
                     VSet.In v (versions R n) -> PackageSet.In (n, v) R)
       by (intros p n vs v _ _ _ H; apply mem_versions; exact H).
@@ -915,7 +934,8 @@ Module Core (N V : UsualOrderedType).
   Qed.
 
   Module Merge.
-    Definition mergedVS (D : DependencyRel.t) (p : Package.t) (n : N.t) : VSet.t :=
+    Definition mergedVS (D : DependencyRel.t) (p : Package.t)
+        (n : N.t) : VSet.t :=
       VSet.filter
         (fun v => DependencyRel.for_all
             (fun '(q, (m, vs)) =>
@@ -986,7 +1006,8 @@ Module Core (N V : UsualOrderedType).
           DependencyRel.add (q, (n, mergedVS D q n)) acc)
         D DependencyRel.empty.
 
-    Module SOdd := SetOps DependencyElt DependencyElt DependencyRel DependencyRel.
+    Module SOdd :=
+      SetOps DependencyElt DependencyElt DependencyRel DependencyRel.
     Lemma mem_merge : forall D p n vs,
         DependencyRel.In (p, (n, vs)) (merge D) <->
         (exists vs0, DependencyRel.In (p, (n, vs0)) D) /\ vs = mergedVS D p n.

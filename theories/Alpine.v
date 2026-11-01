@@ -32,8 +32,10 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
     | CAny => true
     | COp op c => cmpOpEvalBy V.compare op v c
     | CPrefix c => ApkVersionMatch.prefix v c
-    | CGtPrefix c => orb (cmpOpEvalBy V.compare OpGt v c) (ApkVersionMatch.prefix v c)
-    | CLtPrefix c => orb (cmpOpEvalBy V.compare OpLt v c) (ApkVersionMatch.prefix v c)
+    | CGtPrefix c =>
+        orb (cmpOpEvalBy V.compare OpGt v c) (ApkVersionMatch.prefix v c)
+    | CLtPrefix c =>
+        orb (cmpOpEvalBy V.compare OpLt v c) (ApkVersionMatch.prefix v c)
     | CHash c => ApkVersionMatch.hash v c
     end.
 
@@ -48,10 +50,13 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
   Module VFacts := UOTCompareFacts V.
   Module ComparisonConstraint := PairUOT ComparisonOperatorOT V.
   Module ComparisonConstraintFacts := UOTCompareFacts ComparisonConstraint.
-  #[local] Hint Rewrite ComparisonConstraintFacts.compare_eq_iff VFacts.compare_eq_iff : cmp_alp.
-  #[local] Hint Extern 1 => cmp_by ComparisonConstraintFacts.compare_antisym : cmp_alp.
+  #[local] Hint Rewrite ComparisonConstraintFacts.compare_eq_iff
+    VFacts.compare_eq_iff : cmp_alp.
+  #[local] Hint Extern 1 =>
+    cmp_by ComparisonConstraintFacts.compare_antisym : cmp_alp.
   #[local] Hint Extern 1 => cmp_by VFacts.compare_antisym : cmp_alp.
-  #[local] Hint Extern 1 => cmp_by ComparisonConstraintFacts.compare_lt_trans : cmp_alp.
+  #[local] Hint Extern 1 =>
+    cmp_by ComparisonConstraintFacts.compare_lt_trans : cmp_alp.
   #[local] Hint Extern 1 => cmp_by VFacts.compare_lt_trans : cmp_alp.
   Module ConstraintComp <: ComparableType.
     Definition t := Constr.
@@ -64,7 +69,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
       match Nat.compare (rank x) (rank y) with
       | Eq =>
           match x, y with
-          | COp o1 c1, COp o2 c2 => ComparisonConstraint.compare (o1, c1) (o2, c2)
+          | COp o1 c1, COp o2 c2 =>
+              ComparisonConstraint.compare (o1, c1) (o2, c2)
           | CPrefix c1, CPrefix c2 => V.compare c1 c2
           | CGtPrefix c1, CGtPrefix c2 => V.compare c1 c2
           | CLtPrefix c1, CLtPrefix c2 => V.compare c1 c2
@@ -170,7 +176,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
     (exists q u, ProvidesRel.In (q, (n, PVer u)) (inst_prov I) /\
        PackageSet.In q S /\ constrMatch zeta u = true) \/
     (bareMatch zeta = true /\
-     exists q, ProvidesRel.In (q, (n, PBare)) (inst_prov I) /\ PackageSet.In q S).
+     exists q, ProvidesRel.In (q, (n, PBare)) (inst_prov I) /\
+       PackageSet.In q S).
 
   Definition HasPriority (I : Inst) (q : Package.t) : Prop :=
     exists prio, PriorityRel.In (q, prio) (inst_prio I) /\ prio <> 0.
@@ -184,7 +191,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
     (exists q u, ProvidesRel.In (q, (n, PVer u)) (inst_prov I) /\
        PackageSet.In q S /\ constrMatch zeta u = true) \/
     (bareMatch zeta = true /\
-     exists q, ProvidesRel.In (q, (n, PBare)) (inst_prov I) /\ PackageSet.In q S /\
+     exists q, ProvidesRel.In (q, (n, PBare)) (inst_prov I) /\
+       PackageSet.In q S /\
        Selectable I q).
 
   Definition MatchDep (I : Inst) (S : PackageSet.t) (d : Dep) : Prop :=
@@ -206,7 +214,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
     { res_subset : PackageSet.Subset S (inst_real I)
     ; res_world : forall d, WorldSet.In d (inst_world I) -> MatchDep I S d
     ; res_dep_closure :
-        forall p d, PackageSet.In p S -> DependencyRel.In (p, d) (inst_deps I) ->
+        forall p d, PackageSet.In p S ->
+          DependencyRel.In (p, d) (inst_deps I) ->
         MatchDep I S d
     ; res_claim_unique :
         forall n p q, PackageSet.In p S -> PackageSet.In q S ->
@@ -271,11 +280,14 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
     Module NFacts := UOTCompareFacts N.
     Module ProvidesVersion := PairUOT Package V.
     Module ProvidesVersionFacts := UOTCompareFacts ProvidesVersion.
-    #[local] Hint Rewrite NFacts.compare_eq_iff ProvidesVersionFacts.compare_eq_iff : cmp_alp.
+    #[local] Hint Rewrite NFacts.compare_eq_iff
+      ProvidesVersionFacts.compare_eq_iff : cmp_alp.
     #[local] Hint Extern 1 => cmp_by NFacts.compare_antisym : cmp_alp.
-    #[local] Hint Extern 1 => cmp_by ProvidesVersionFacts.compare_antisym : cmp_alp.
+    #[local] Hint Extern 1 =>
+      cmp_by ProvidesVersionFacts.compare_antisym : cmp_alp.
     #[local] Hint Extern 1 => cmp_by NFacts.compare_lt_trans : cmp_alp.
-    #[local] Hint Extern 1 => cmp_by ProvidesVersionFacts.compare_lt_trans : cmp_alp.
+    #[local] Hint Extern 1 =>
+      cmp_by ProvidesVersionFacts.compare_lt_trans : cmp_alp.
 
     Module Name.
       Inductive name : Type :=
@@ -315,7 +327,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
         | Eq =>
             match x, y with
             | Orig v1, Orig v2 => V.compare v1 v2
-            | Prov p1 v1, Prov p2 v2 => ProvidesVersion.compare (p1, v1) (p2, v2)
+            | Prov p1 v1, Prov p2 v2 =>
+                ProvidesVersion.compare (p1, v1) (p2, v2)
             | _, _ => Eq
             end
         | c => c
@@ -333,12 +346,15 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
 
     Module PackageFormula := PackageFormula NameOT VersionOT.
 
-    Module DependencyRelFibred := FibredRel Package DependencyAtomOT DependencyElt DependencyRel.
-    Module ProvidesRelFibred := FibredLabelledRel Package N ProvidedVersionOT ProvidesElt ProvidesRel.
+    Module DependencyRelFibred :=
+      FibredRel Package DependencyAtomOT DependencyElt DependencyRel.
+    Module ProvidesRelFibred :=
+      FibredLabelledRel Package N ProvidedVersionOT ProvidesElt ProvidesRel.
 
     Module SOpw := SetOps Package VersionOT PackageSet PackageFormula.VSet.
     Module SOrw := SetOps ProvidesElt VersionOT ProvidesRel PackageFormula.VSet.
-    Definition versionsAt (I : Inst) (n : N.t) (zeta : Constr) : PackageFormula.VSet.t :=
+    Definition versionsAt (I : Inst) (n : N.t) (zeta : Constr) :
+        PackageFormula.VSet.t :=
       PackageFormula.VSet.union
         (SOpw.filterMap
            (fun p =>
@@ -375,7 +391,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
     Definition bareProvL (I : Inst) (n : N.t) : list Package.t :=
       PackageSet.elements (bareProvSet I n).
 
-    Definition encPos (I : Inst) (n : N.t) (zeta : Constr) : PackageFormula.Formula :=
+    Definition encPos (I : Inst) (n : N.t) (zeta : Constr) :
+        PackageFormula.Formula :=
       let base := PackageFormula.FAtom (Name.Orig n) (versionsAt I n zeta) in
       if bareMatch zeta
       then
@@ -403,7 +420,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
     Definition selectableb (I : Inst) (q : Package.t) : bool :=
       orb (hasPriorityb I q) (worldNamesb I (fst q)).
 
-    Definition encReq (I : Inst) (n : N.t) (zeta : Constr) : PackageFormula.Formula :=
+    Definition encReq (I : Inst) (n : N.t) (zeta : Constr) :
+        PackageFormula.Formula :=
       let base := PackageFormula.FAtom (Name.Orig n) (versionsAt I n zeta) in
       if bareMatch zeta
       then
@@ -459,17 +477,27 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
     Definition installIfForm (I : Inst) (p : Package.t) (B : ConditionSet.t) :
         PackageFormula.Formula :=
       fold_right
-        (fun a psi => PackageFormula.FDisj (PackageFormula.FNeg (encCond I a)) psi)
+        (fun a psi =>
+          PackageFormula.FDisj (PackageFormula.FNeg (encCond I a)) psi)
         (encPos I (fst p) CAny) (ConditionSet.elements (condRest B)).
 
     Definition rootPkg : PackageFormula.Package.t := (Name.Root, Version.UnitV).
 
     Module PackageFormulaSet := PackageFormula.PackageFormulaSet.
-    Module SOdf := SetOps DependencyElt PackageFormula.PackageFormulaOT DependencyRel PackageFormulaSet.
-    Module SOrf := SetOps ProvidesElt PackageFormula.PackageFormulaOT ProvidesRel PackageFormulaSet.
-    Module SOtf := SetOps InstallIfRuleElt PackageFormula.PackageFormulaOT InstallIfRuleRel PackageFormulaSet.
-    Module SOwf := SetOps DependencyAtomOT PackageFormula.PackageFormulaOT WorldSet PackageFormulaSet.
-    Definition dependees (I : Inst) (q : PackageFormula.Package.t) : PackageFormulaSet.t :=
+    Module SOdf :=
+      SetOps DependencyElt PackageFormula.PackageFormulaOT DependencyRel
+      PackageFormulaSet.
+    Module SOrf :=
+      SetOps ProvidesElt PackageFormula.PackageFormulaOT ProvidesRel
+      PackageFormulaSet.
+    Module SOtf :=
+      SetOps InstallIfRuleElt PackageFormula.PackageFormulaOT InstallIfRuleRel
+      PackageFormulaSet.
+    Module SOwf :=
+      SetOps DependencyAtomOT PackageFormula.PackageFormulaOT WorldSet
+      PackageFormulaSet.
+    Definition dependees (I : Inst) (q : PackageFormula.Package.t) :
+        PackageFormulaSet.t :=
       match q with
       | (Name.Root, Version.UnitV) => SOwf.map (encDep I) (inst_world I)
       | (Name.Orig n, Version.Orig v) =>
@@ -496,12 +524,17 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
       | _ => PackageFormulaSet.empty
       end.
 
-    Module SOpp := SetOps Package PackageFormula.Package PackageSet PackageFormula.PackageSet.
-    Module SOrq := SetOps ProvidesElt PackageFormula.Package ProvidesRel PackageFormula.PackageSet.
+    Module SOpp :=
+      SetOps Package PackageFormula.Package PackageSet
+      PackageFormula.PackageSet.
+    Module SOrq :=
+      SetOps ProvidesElt PackageFormula.Package ProvidesRel
+      PackageFormula.PackageSet.
     Definition embedPkg (p : Package.t) : PackageFormula.Package.t :=
       (Name.Orig (fst p), Version.Orig (snd p)).
 
-    Definition provPkgs (I : Inst) (S : PackageSet.t) : PackageFormula.PackageSet.t :=
+    Definition provPkgs (I : Inst) (S : PackageSet.t) :
+        PackageFormula.PackageSet.t :=
       SOrq.filterMap
         (fun '(q, (m, tg)) =>
            match tg with
@@ -517,21 +550,28 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
         (PackageFormula.PackageSet.union (SOpp.map embedPkg (inst_real I))
            (provPkgs I (inst_real I))).
 
-    Module SOqd := SetOps PackageFormula.Package PackageFormula.DependencyElt PackageFormula.PackageSet PackageFormula.DependencyRel.
+    Module SOqd :=
+      SetOps PackageFormula.Package PackageFormula.DependencyElt
+      PackageFormula.PackageSet PackageFormula.DependencyRel.
 
     Definition reduceDeps (I : Inst) : PackageFormula.DependencyRel.t :=
-      SOqd.unionMap (fun q => PackageFormula.depEdges q (dependees I q)) (reduceReal I).
+      SOqd.unionMap (fun q => PackageFormula.depEdges q (dependees I q))
+        (reduceReal I).
 
     Definition tryInvPkg (q : PackageFormula.Package.t) : option Package.t :=
       match q with
       | (Name.Orig n, Version.Orig v) => Some (n, v)
       | _ => None
       end.
-    Module SOqp := SetOps PackageFormula.Package Package PackageFormula.PackageSet PackageSet.
-    Definition alpineResolution (S' : PackageFormula.PackageSet.t) : PackageSet.t :=
+    Module SOqp :=
+      SetOps PackageFormula.Package Package
+      PackageFormula.PackageSet PackageSet.
+    Definition alpineResolution (S' : PackageFormula.PackageSet.t) :
+        PackageSet.t :=
       SOqp.filterMap tryInvPkg S'.
 
-    Definition coreResolution (I : Inst) (S : PackageSet.t) : PackageFormula.PackageSet.t :=
+    Definition coreResolution (I : Inst) (S : PackageSet.t) :
+        PackageFormula.PackageSet.t :=
       PackageFormula.PackageSet.add rootPkg
         (PackageFormula.PackageSet.union (SOpp.map embedPkg S) (provPkgs I S)).
 
@@ -561,7 +601,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
            w = Version.Prov q u).
     Proof.
       intros I n zeta w; unfold versionsAt.
-      rewrite PackageFormula.VSet.union_spec, SOpw.mem_filterMap_if, SOrw.mem_filterMap.
+      rewrite PackageFormula.VSet.union_spec, SOpw.mem_filterMap_if,
+        SOrw.mem_filterMap.
       split.
       - intros [[[m v] [Hm [Hb ->]]] | [[q [m tg]] [Hm Hf]]].
         + cbn [fst snd] in Hb.
@@ -688,7 +729,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
            PackageSet.In q S /\ p' = (Name.Orig m, Version.Prov q u)).
     Proof.
       intros I S p'; unfold coreResolution.
-      rewrite PackageFormula.PackageSet.add_spec, PackageFormula.PackageSet.union_spec, SOpp.mem_map,
+      rewrite PackageFormula.PackageSet.add_spec,
+        PackageFormula.PackageSet.union_spec, SOpp.mem_map,
         mem_provPkgs.
       reflexivity.
     Qed.
@@ -712,7 +754,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
        coreResolution, so the callers name the branch they mean rather than
        its position. *)
     Lemma coreResolution_at_root : forall I S v,
-        PackageFormula.PackageSet.In (Name.Root, v) (coreResolution I S) -> v = Version.UnitV.
+        PackageFormula.PackageSet.In (Name.Root, v) (coreResolution I S) -> v =
+          Version.UnitV.
     Proof.
       intros I S v H; apply mem_coreResolution in H.
       unfold embedPkg, rootPkg in H.
@@ -734,7 +777,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
     Qed.
 
     Lemma coreResolution_embed : forall I S p,
-        PackageFormula.PackageSet.In (embedPkg p) (coreResolution I S) <-> PackageSet.In p S.
+        PackageFormula.PackageSet.In (embedPkg p) (coreResolution I S) <->
+          PackageSet.In p S.
     Proof.
       intros I S [n v]; split.
       - intro H; apply coreResolution_at_orig in H.
@@ -744,7 +788,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
     Qed.
 
     Lemma coreResolution_prov : forall I S m q u,
-        PackageFormula.PackageSet.In (Name.Orig m, Version.Prov q u) (coreResolution I S) <->
+        PackageFormula.PackageSet.In (Name.Orig m, Version.Prov q u)
+          (coreResolution I S) <->
         ProvidesRel.In (q, (m, PVer u)) (inst_prov I) /\ PackageSet.In q S.
     Proof.
       intros I S m q u; split.
@@ -757,14 +802,16 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
 
     Lemma mem_reduceDeps : forall I p psi,
         PackageFormula.DependencyRel.In (p, psi) (reduceDeps I) <->
-        PackageFormula.PackageSet.In p (reduceReal I) /\ PackageFormulaSet.In psi (dependees I p).
+        PackageFormula.PackageSet.In p (reduceReal I) /\
+          PackageFormulaSet.In psi (dependees I p).
     Proof.
       intros I p psi; unfold reduceDeps; rewrite SOqd.mem_unionMap.
       split.
       - intros [q [Hq Hf]]; unfold PackageFormula.depEdges in Hf.
         apply PackageFormula.SOfd.mem_map in Hf; mem_destruct; auto.
       - intros [Hy Hf]; exists p; split; [exact Hy |].
-        unfold PackageFormula.depEdges; apply PackageFormula.SOfd.mem_map; exists psi; split;
+        unfold PackageFormula.depEdges; apply PackageFormula.SOfd.mem_map;
+          exists psi; split;
           [exact Hf | reflexivity].
     Qed.
 
@@ -790,7 +837,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
         + intros [H | [q0 [[<- | Hq0] Hm]]].
           * right; left; exact H.
           * left; exists (Version.Orig (snd q)); split;
-              [apply PackageFormula.VSet.singleton_spec; reflexivity | exact Hm].
+              [apply PackageFormula.VSet.singleton_spec;
+                reflexivity | exact Hm].
           * right; right; exists q0; auto.
     Qed.
 
@@ -822,7 +870,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
         (exists v, PackageFormula.VSet.In v (versionsAt I n zeta) /\
            PackageFormula.PackageSet.In (Name.Orig n, v) S') \/
         (bareMatch zeta = true /\
-         exists q, PackageSet.In q (bareProvSet I n) /\ selectableb I q = true /\
+         exists q, PackageSet.In q (bareProvSet I n) /\
+           selectableb I q = true /\
            PackageFormula.PackageSet.In (embedPkg q) S').
     Proof.
       intros I S' n zeta; unfold encReq; cbv zeta.
@@ -841,7 +890,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
     Lemma hasPriorityb_spec : forall I q,
         hasPriorityb I q = true <-> HasPriority I q.
     Proof.
-      intros I q; unfold hasPriorityb, HasPriority; rewrite PriorityRel.exists_spec'.
+      intros I q; unfold hasPriorityb, HasPriority;
+        rewrite PriorityRel.exists_spec'.
       split.
       - intros [[q' k] [Hin Hb]]; cbn in Hb.
         apply Bool.andb_true_iff in Hb; destruct Hb as [Hq Hk].
@@ -869,9 +919,11 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
     Lemma satisfies_negFold : forall I S' l (base : PackageFormula.Formula),
         PackageFormula.Satisfies S'
           (fold_right
-             (fun c f => PackageFormula.FDisj (PackageFormula.FNeg (encCond I c)) f)
+             (fun c f => PackageFormula.FDisj
+               (PackageFormula.FNeg (encCond I c)) f)
              base l) <->
-        (exists c, List.In c l /\ ~ PackageFormula.Satisfies S' (encCond I c)) \/
+        (exists c, List.In c l /\
+          ~ PackageFormula.Satisfies S' (encCond I c)) \/
         PackageFormula.Satisfies S' base.
     Proof.
       intros I S' l base; induction l as [| a l IH]; cbn.
@@ -908,9 +960,11 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
       rewrite reduceReal_coreResolution, coreResolution_embed in H; exact H.
     Qed.
 
-    Lemma root_reduceReal : forall I, PackageFormula.PackageSet.In rootPkg (reduceReal I).
+    Lemma root_reduceReal : forall I,
+        PackageFormula.PackageSet.In rootPkg (reduceReal I).
     Proof.
-      intro I; unfold reduceReal; apply PackageFormula.PackageSet.add_spec; left; reflexivity.
+      intro I; unfold reduceReal; apply PackageFormula.PackageSet.add_spec;
+        left; reflexivity.
     Qed.
 
     Lemma prov_selected : forall I S' m q u,
@@ -951,11 +1005,13 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
                      (PackageFormula.FAtom (Name.Orig m)
                         (PackageFormula.VSet.singleton (Version.Prov (n, v) u)))
                      (dependees I (embedPkg (n, v)))).
-      { cbn [dependees embedPkg fst snd]; apply PackageFormulaSet.union_spec; right.
+      { cbn [dependees embedPkg fst snd];
+          apply PackageFormulaSet.union_spec; right.
         apply PackageFormulaSet.union_spec; left.
         apply SOrf.mem_filterMap.
         exists ((n, v), (m, PVer u)); split; [| reflexivity].
-        apply ProvidesRelFibred.mem_tailFibre; split; [exact Hprov | reflexivity]. }
+        apply ProvidesRelFibred.mem_tailFibre; split;
+          [exact Hprov | reflexivity]. }
       assert (Hd : PackageFormula.DependencyRel.In
                      (embedPkg (n, v),
                       PackageFormula.FAtom (Name.Orig m)
@@ -974,7 +1030,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
          (exists v, PackageSet.In (n, v) (alpineResolution S') /\
             constrMatch zeta v = true) \/
          (exists q u, ProvidesRel.In (q, (n, PVer u)) (inst_prov I) /\
-            PackageSet.In q (alpineResolution S') /\ constrMatch zeta u = true)).
+            PackageSet.In q (alpineResolution S') /\
+              constrMatch zeta u = true)).
     Proof.
       intros I S' n zeta Hres.
       assert (Hsub := PackageFormula.res_subset _ _ _ _ Hres).
@@ -1071,7 +1128,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
         assert (Hf : PackageFormulaSet.In (encDep I d) (dependees I rootPkg)).
         { cbn [dependees rootPkg].
           apply SOwf.mem_map; exists d; split; [exact Hd | reflexivity]. }
-        assert (Hdep : PackageFormula.DependencyRel.In (rootPkg, encDep I d) (reduceDeps I)).
+        assert (Hdep :
+          PackageFormula.DependencyRel.In (rootPkg, encDep I d) (reduceDeps I)).
         { apply mem_reduceDeps; split; [apply root_reduceReal | exact Hf]. }
         assert (Hs := Hclo _ Hroot _ Hdep).
         destruct d as [[m zeta] | [m zeta]]; cbn [MatchDep].
@@ -1082,10 +1140,13 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
         destruct p as [np vp].
         assert (Hf : PackageFormulaSet.In (encDep I d)
                        (dependees I (embedPkg (np, vp)))).
-        { cbn [dependees embedPkg fst snd]; apply PackageFormulaSet.union_spec; left.
+        { cbn [dependees embedPkg fst snd];
+            apply PackageFormulaSet.union_spec; left.
           apply SOdf.mem_map; exists ((np, vp), d); split; [| reflexivity].
-          apply DependencyRelFibred.mem_tailFibre; split; [exact Hdep0 | reflexivity]. }
-        assert (Hdep : PackageFormula.DependencyRel.In (embedPkg (np, vp), encDep I d)
+          apply DependencyRelFibred.mem_tailFibre; split;
+            [exact Hdep0 | reflexivity]. }
+        assert (Hdep :
+          PackageFormula.DependencyRel.In (embedPkg (np, vp), encDep I d)
                          (reduceDeps I)).
         { apply mem_reduceDeps; split; [apply Hsub; exact Hp | exact Hf]. }
         assert (Hs := Hclo _ Hp _ Hdep).
@@ -1138,10 +1199,12 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
         assert (Hf : PackageFormulaSet.In (installIfForm I z B)
                        (dependees I (embedPkg p))).
         { destruct p as [np vp]; cbn [dependees embedPkg fst snd].
-          apply PackageFormulaSet.union_spec; right; apply PackageFormulaSet.union_spec; right.
+          apply PackageFormulaSet.union_spec; right;
+            apply PackageFormulaSet.union_spec; right.
           apply SOtf.mem_map; exists (z, B); split;
             [exact Hfib | reflexivity]. }
-        assert (Hdep : PackageFormula.DependencyRel.In (embedPkg p, installIfForm I z B)
+        assert (Hdep :
+          PackageFormula.DependencyRel.In (embedPkg p, installIfForm I z B)
                          (reduceDeps I)).
         { apply mem_reduceDeps; split; [apply Hsub; exact HpS | exact Hf]. }
         assert (Hs := Hclo _ HpS _ Hdep).
@@ -1162,7 +1225,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
     Lemma base_coreResolution : forall I S n zeta,
         PackageSet.Subset S (inst_real I) ->
         ((exists w, PackageFormula.VSet.In w (versionsAt I n zeta) /\
-            PackageFormula.PackageSet.In (Name.Orig n, w) (coreResolution I S)) <->
+            PackageFormula.PackageSet.In (Name.Orig n, w)
+              (coreResolution I S)) <->
          (exists v, PackageSet.In (n, v) S /\ constrMatch zeta v = true) \/
          (exists q u, ProvidesRel.In (q, (n, PVer u)) (inst_prov I) /\
             PackageSet.In q S /\ constrMatch zeta u = true)).
@@ -1234,7 +1298,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
       assert (Hcond : forall c,
                  PackageFormula.Satisfies (coreResolution I S) (encCond I c) <->
                                 MatchCond I S c).
-      { intros [[n zeta] | [n zeta]]; cbn [encCond MatchCond PackageFormula.Satisfies];
+      { intros [[n zeta] | [n zeta]];
+          cbn [encCond MatchCond PackageFormula.Satisfies];
           rewrite (Hiff n zeta); reflexivity. }
       constructor.
       - intros [[| n] w] Hy.
@@ -1259,7 +1324,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
         + destruct p as [n0 v0].
           cbn [dependees embedPkg fst snd] in Hf.
           apply PackageFormulaSet.union_spec in Hf; destruct Hf as [Hf | Hf];
-            [| apply PackageFormulaSet.union_spec in Hf; destruct Hf as [Hf | Hf]].
+            [| apply PackageFormulaSet.union_spec in Hf;
+              destruct Hf as [Hf | Hf]].
           * apply SOdf.mem_map in Hf; destruct Hf as [[p' d] [Hin ->]].
             apply DependencyRelFibred.mem_tailFibre in Hin.
             destruct Hin as [Hin ->].
@@ -1282,10 +1348,12 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
           * apply SOtf.mem_map in Hf; destruct Hf as [[[zn zv] B] [Hfib ->]].
             apply mem_installIfFibre in Hfib.
             destruct Hfib as [Ht0 Hatt]; unfold attachDesignation in Hatt.
-            destruct (Designation.designation B) as [a |] eqn:Edes; [| discriminate].
+            destruct (Designation.designation B) as [a |] eqn:Edes;
+              [| discriminate].
             apply satisfies_installIfForm.
             destruct (ConditionSet.exists_
-                        (fun b => negb (PackageFormula.satisfiesb (coreResolution I S)
+                        (fun b => negb
+                          (PackageFormula.satisfiesb (coreResolution I S)
                                           (encCond I b)))
                         (condRest B)) eqn:Ee.
             -- apply ConditionSet.exists_spec' in Ee.
@@ -1305,12 +1373,14 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
                       [exact Hc | exact Hne]. }
                   assert (Hbt : PackageFormula.satisfiesb (coreResolution I S)
                                   (encCond I c) = true).
-                  { destruct (PackageFormula.satisfiesb (coreResolution I S) (encCond I c))
+                  { destruct (PackageFormula.satisfiesb (coreResolution I S)
+                      (encCond I c))
                       eqn:Eb; [reflexivity |].
                     exfalso.
                     assert (Hex : ConditionSet.exists_
                                     (fun b =>
-                                       negb (PackageFormula.satisfiesb (coreResolution I S)
+                                       negb (PackageFormula.satisfiesb
+                                         (coreResolution I S)
                                                (encCond I b)))
                                     (condRest B) = true).
                     { apply ConditionSet.exists_spec'; exists c; split;
@@ -1435,7 +1505,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
       Qed.
 
       Definition subInst (I : Inst) (ns : NSet.t) (deps : DependencyRel.t)
-          (ownProv : ProvidesRel.t) (installIf : InstallIfRuleRel.t) (world : WorldSet.t)
+          (ownProv : ProvidesRel.t) (installIf : InstallIfRuleRel.t)
+            (world : WorldSet.t)
         : Inst :=
         {| inst_real := repoPreimage I ns
          ; inst_deps := deps
@@ -1502,7 +1573,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
       Theorem dependees_lookupProv : forall I m n v u,
           dependees I (Name.Orig m, Version.Prov (n, v) u) =
           PackageFormulaSet.singleton
-            (PackageFormula.FAtom (Name.Orig n) (PackageFormula.VSet.singleton (Version.Orig v))).
+            (PackageFormula.FAtom (Name.Orig n)
+              (PackageFormula.VSet.singleton (Version.Orig v))).
       Proof. reflexivity. Qed.
 
       Definition nameSubInst (I : Inst) (n : N.t) : Inst :=
@@ -1602,9 +1674,11 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
       Lemma negFold_agree : forall I I' l base,
           (forall c, List.In c l -> encCond I' c = encCond I c) ->
           fold_right
-            (fun c f => PackageFormula.FDisj (PackageFormula.FNeg (encCond I' c)) f) base l =
+            (fun c f => PackageFormula.FDisj
+              (PackageFormula.FNeg (encCond I' c)) f) base l =
           fold_right
-            (fun c f => PackageFormula.FDisj (PackageFormula.FNeg (encCond I c)) f) base l.
+            (fun c f => PackageFormula.FDisj
+              (PackageFormula.FNeg (encCond I c)) f) base l.
       Proof.
         intros I I' l base H; induction l as [| c l IH]; cbn.
         - reflexivity.
@@ -1697,7 +1771,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
              (installIfFibre I p)).
 
       Lemma dep_pkgNames : forall I p d,
-          DependencyRel.In (p, d) (DependencyRelFibred.tailFibre (inst_deps I) p) ->
+          DependencyRel.In (p, d)
+            (DependencyRelFibred.tailFibre (inst_deps I) p) ->
           NSet.In (depName d) (pkgNames I p).
       Proof.
         intros I p d H; unfold pkgNames; apply NSet.union_spec; left.
@@ -1755,7 +1830,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
         cbn [dependees embedPkg fst snd].
         rewrite Hfib.
         cbn [pkgSubInst subInst inst_deps inst_prov].
-        rewrite !PackageFormulaSet.union_spec, !SOdf.mem_map, !SOrf.mem_filterMap,
+        rewrite !PackageFormulaSet.union_spec, !SOdf.mem_map,
+          !SOrf.mem_filterMap,
           !SOtf.mem_map.
         apply or_iff; [| apply or_iff].
         - split.
@@ -1769,7 +1845,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
             apply DependencyRelFibred.mem_tailFibre in Hin.
             destruct Hin as [Hin ->].
             assert (Hfb : DependencyRel.In ((n, v), d)
-                            (DependencyRelFibred.tailFibre (inst_deps I) (n, v))).
+                            (DependencyRelFibred.tailFibre
+                              (inst_deps I) (n, v))).
             { apply DependencyRelFibred.mem_tailFibre; split;
                 [exact Hin | reflexivity]. }
             exists ((n, v), d); split.
@@ -1849,10 +1926,12 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
       Qed.
 
       Lemma versions_reduceReal : forall I n,
-          PackageFormula.Source.versions (reduceReal I) (Name.Orig n) = versions I n.
+          PackageFormula.Source.versions (reduceReal I) (Name.Orig n) =
+            versions I n.
       Proof.
         intros I n; apply PackageFormula.VSet.ext; intro w.
-        rewrite PackageFormula.Source.mem_versions, reduceReal_coreResolution; unfold versions.
+        rewrite PackageFormula.Source.mem_versions, reduceReal_coreResolution;
+          unfold versions.
         rewrite mem_versionsAt; split.
         - intro H; apply coreResolution_at_orig in H.
           destruct H as [[v [Hv ->]] | [q [u [Hprov [Hq ->]]]]];
@@ -1867,14 +1946,16 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
           PackageFormula.VSet.singleton Version.UnitV.
       Proof.
         intro I; apply PackageFormula.VSet.ext; intro w.
-        rewrite PackageFormula.Source.mem_versions, PackageFormula.VSet.singleton_spec.
+        rewrite PackageFormula.Source.mem_versions,
+          PackageFormula.VSet.singleton_spec.
         split;
           [apply coreResolution_at_root | intros ->; apply root_reduceReal].
       Qed.
 
       Lemma reduceDeps_tailFibre : forall I q,
           PackageFormula.PackageSet.In q (reduceReal I) ->
-          PackageFormula.Reduction.Lookup.DependencyRelFibred.tailFibre (reduceDeps I) q =
+          PackageFormula.Reduction.Lookup.DependencyRelFibred.tailFibre
+            (reduceDeps I) q =
           PackageFormula.depEdges q (dependees I q).
       Proof.
         intros I q Hq; apply PackageFormula.DependencyRel.ext; intros [q' f].
@@ -1894,7 +1975,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
             (PackageFormula.Reduction.Name.Orig (fst q),
              PackageFormula.Reduction.Version.Orig (snd q)) =
           PackageFormula.Reduction.Reduced.dependees
-            (PackageFormula.Reduction.reduceDepsBy Vq (PackageFormula.depEdges q (dependees I q)))
+            (PackageFormula.Reduction.reduceDepsBy Vq
+              (PackageFormula.depEdges q (dependees I q)))
             (PackageFormula.Reduction.Name.Orig (fst q),
              PackageFormula.Reduction.Version.Orig (snd q)).
       Proof.
@@ -1933,7 +2015,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
             (PackageFormula.Reduction.embedPkg rootPkg) =
           PackageFormula.Reduction.Reduced.dependees
             (PackageFormula.Reduction.reduceDepsBy Vq
-               (PackageFormula.depEdges rootPkg (dependees (rootSubInst I) rootPkg)))
+               (PackageFormula.depEdges rootPkg
+                 (dependees (rootSubInst I) rootPkg)))
             (PackageFormula.Reduction.embedPkg rootPkg).
       Proof.
         intros I Vq HR HO; rewrite <- dependees_lookupRoot.
@@ -1947,12 +2030,14 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
           (forall m, Vq (Name.Orig m) = versions I m) ->
           PackageFormula.Reduction.Reduced.dependees
             (PackageFormula.Reduction.reduceDeps (reduceReal I) (reduceDeps I))
-            (PackageFormula.Reduction.embedPkg (Name.Orig m, Version.Prov (n, v) u)) =
+            (PackageFormula.Reduction.embedPkg
+              (Name.Orig m, Version.Prov (n, v) u)) =
           PackageFormula.Reduction.Reduced.dependees
             (PackageFormula.Reduction.reduceDepsBy Vq
                (PackageFormula.depEdges (Name.Orig m, Version.Prov (n, v) u)
                   (dependees I' (Name.Orig m, Version.Prov (n, v) u))))
-            (PackageFormula.Reduction.embedPkg (Name.Orig m, Version.Prov (n, v) u)).
+            (PackageFormula.Reduction.embedPkg
+              (Name.Orig m, Version.Prov (n, v) u)).
       Proof.
         intros I I' Vq m n v u Hprov Hq HR HO.
         rewrite (dependees_lookupProv I' m n v u),
@@ -1968,18 +2053,23 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
           dependees I' q = dependees I q ->
           Vq Name.Root = PackageFormula.VSet.singleton Version.UnitV ->
           (forall m, Vq (Name.Orig m) = versions I m) ->
-          PackageFormula.Reduction.Reduced.PackageSet.In (PackageFormula.Reduction.Name.Disjunct fs, i)
-            (PackageFormula.Reduction.reduceReal (PackageFormula.PackageSet.singleton q)
+          PackageFormula.Reduction.Reduced.PackageSet.In
+            (PackageFormula.Reduction.Name.Disjunct fs, i)
+            (PackageFormula.Reduction.reduceReal
+              (PackageFormula.PackageSet.singleton q)
                (PackageFormula.depEdges q (dependees I' q))) ->
           PackageFormula.Reduction.Reduced.dependees
             (PackageFormula.Reduction.reduceDeps (reduceReal I) (reduceDeps I))
             (PackageFormula.Reduction.Name.Disjunct fs, i) =
           PackageFormula.Reduction.Reduced.dependees
-            (PackageFormula.Reduction.reduceDepsBy Vq (PackageFormula.depEdges q (dependees I' q)))
+            (PackageFormula.Reduction.reduceDepsBy Vq
+              (PackageFormula.depEdges q (dependees I' q)))
             (PackageFormula.Reduction.Name.Disjunct fs, i).
       Proof.
         intros I I' Vq q fs i Hq HI HR HO Hin; rewrite HI in Hin |- *.
-        assert (Hsub : PackageFormula.DependencyRel.Subset (PackageFormula.depEdges q (dependees I q))
+        assert (Hsub :
+          PackageFormula.DependencyRel.Subset
+          (PackageFormula.depEdges q (dependees I q))
                          (reduceDeps I)).
         { rewrite <- (reduceDeps_tailFibre I q Hq).
           apply PackageFormula.Reduction.Lookup.DependencyRelFibred.tailFibre_subset. }
@@ -1994,17 +2084,22 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
       Lemma versions_core : forall I n,
           (exists v, PackageFormula.PackageSet.In (n, v) (reduceReal I)) \/
           (exists p h,
-              PackageFormula.Reduction.Reduced.DependencyRel.In (p, (PackageFormula.Reduction.Name.Orig n, h))
-                (PackageFormula.Reduction.reduceDeps (reduceReal I) (reduceDeps I))) ->
+              PackageFormula.Reduction.Reduced.DependencyRel.In
+                (p, (PackageFormula.Reduction.Name.Orig n, h))
+                (PackageFormula.Reduction.reduceDeps (reduceReal I)
+                  (reduceDeps I))) ->
           PackageFormula.Reduction.Reduced.versions
             (PackageFormula.Reduction.reduceReal (reduceReal I) (reduceDeps I))
             (PackageFormula.Reduction.Name.Orig n) =
-          PackageFormula.Reduction.Reduced.VSet.add PackageFormula.Reduction.Version.Bot
-            (PackageFormula.Reduction.embedVS (PackageFormula.Source.versions (reduceReal I) n)).
+          PackageFormula.Reduction.Reduced.VSet.add
+            PackageFormula.Reduction.Version.Bot
+            (PackageFormula.Reduction.embedVS
+              (PackageFormula.Source.versions (reduceReal I) n)).
       Proof.
         intros I n Hreach.
         destruct Hreach as [[v Hv] | Hreach];
-          [rewrite (PackageFormula.Reduction.Lookup.versions_lookupOrig _ _ n v n Hv
+          [rewrite (PackageFormula.Reduction.Lookup.versions_lookupOrig
+            _ _ n v n Hv
                       (or_intror eq_refl) eq_refl)
           | rewrite (PackageFormula.Reduction.Lookup.versions_lookupOrig _ _ _ _ n
                        (root_reduceReal I) (or_introl Hreach) eq_refl)];
@@ -2018,11 +2113,13 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
           (exists p h,
               PackageFormula.Reduction.Reduced.DependencyRel.In
                 (p, (PackageFormula.Reduction.Name.Orig (Name.Orig n), h))
-                (PackageFormula.Reduction.reduceDeps (reduceReal I) (reduceDeps I))) ->
+                (PackageFormula.Reduction.reduceDeps (reduceReal I)
+                  (reduceDeps I))) ->
           PackageFormula.Reduction.Reduced.versions
             (PackageFormula.Reduction.reduceReal (reduceReal I) (reduceDeps I))
             (PackageFormula.Reduction.Name.Orig (Name.Orig n)) =
-          PackageFormula.Reduction.Reduced.VSet.add PackageFormula.Reduction.Version.Bot
+          PackageFormula.Reduction.Reduced.VSet.add
+            PackageFormula.Reduction.Version.Bot
             (PackageFormula.Reduction.embedVS (versions (nameSubInst I n) n)).
       Proof.
         intros I n H; rewrite <- versions_lookupOrig, <- versions_reduceReal.
@@ -2037,8 +2134,10 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
           PackageFormula.Reduction.Reduced.versions
             (PackageFormula.Reduction.reduceReal (reduceReal I) (reduceDeps I))
             (PackageFormula.Reduction.Name.Orig Name.Root) =
-          PackageFormula.Reduction.Reduced.VSet.add PackageFormula.Reduction.Version.Bot
-            (PackageFormula.Reduction.embedVS (PackageFormula.VSet.singleton Version.UnitV)).
+          PackageFormula.Reduction.Reduced.VSet.add
+            PackageFormula.Reduction.Version.Bot
+            (PackageFormula.Reduction.embedVS
+              (PackageFormula.VSet.singleton Version.UnitV)).
       Proof.
         intro I; rewrite <- (versions_reduceReal_root I); apply versions_core.
         left; exists Version.UnitV; exact (root_reduceReal I).
@@ -2059,7 +2158,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
           (PackageFormula.Reduction.reduceDeps (reduceReal I) (reduceDeps I))
           (PackageFormula.Reduction.embedPkg rootPkg) S ->
         IsResolution I
-          (alpineResolution (PackageFormula.Reduction.packageFormulaResolution S)).
+          (alpineResolution
+            (PackageFormula.Reduction.packageFormulaResolution S)).
     Proof.
       intros I S Hwf H.
       exact (alpine_soundness I _ Hwf
@@ -2083,7 +2183,8 @@ Module Alpine (N V : UsualOrderedType) (ApkVersionMatch : ApkVersionMatch V).
     Corollary alpine_core_retraction : forall I S,
         alpineResolution
           (PackageFormula.Reduction.packageFormulaResolution
-             (PackageFormula.Reduction.coreResolution (reduceReal I) (reduceDeps I)
+             (PackageFormula.Reduction.coreResolution (reduceReal I)
+               (reduceDeps I)
                 (coreResolution I S)))
         = S.
     Proof.
