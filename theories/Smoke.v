@@ -167,8 +167,8 @@ Example feature_reduceDeps_computes :
        Feature.AdditionalDependencyRel.empty) = 1.
 Proof. reflexivity. Qed.
 
-(* Built in Conflict.C, the core instance living inside the Conflict
-   instantiation, rather than in the C above. *)
+(* Built in Conflict.Source, the core instance living inside the Conflict
+   instantiation, rather than in the Core above. *)
 Definition conflictR : Conflict.Source.PackageSet.t :=
   Conflict.Source.PackageSet.add (1, 10)
     (Conflict.Source.PackageSet.add (1, 11)

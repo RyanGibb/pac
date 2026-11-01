@@ -186,7 +186,7 @@ Module Core (N V : UsualOrderedType).
 
   Definition CheckFailure := CheckFailure Package.t Dependee.t.
 
-  (* PkgSet is a sorted list, so a membership test walks it; the check asks
+  (* PackageSet is a sorted list, so a membership test walks it; the check asks
      one per dependee version, which a tree answers in logarithmic time. *)
   Module PackageTree := MSetRBT.Make Package.
   Module PackageTreeProperties := WPropertiesOn Package PackageTree.

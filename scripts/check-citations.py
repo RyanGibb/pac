@@ -4,7 +4,7 @@ theories/ does not define.
 
 A comment cites a Rocq name when it writes a qualified path whose head is a
 theories/ module or a driver's alias of one (Lookup.versions_lookupOrig,
-Red.versions, DMA.Deb.vtMatchb), a name the Rocq naming scheme alone produces
+Red.versions, DMA.Debian.vtMatchb), a name the Rocq naming scheme alone produces
 (snake prefix, camel suffix: dependees_reduceDepsInert), a name after
 Lemma/Theorem/Definition, or a file X.v.  A trailing * is a prefix glob and
 must match at least one name.  Only comments are read, so the extracted code
@@ -73,7 +73,7 @@ def rocq_names():
                     in_ind = False
         mine |= names
         names |= before
-        # Include Sv, where Module Sv := Semver.Make ...: Semver's names are Npm's.
+        # Include Semver, where Module Semver := Semver ...: Semver's names are Npm's.
         includes[f[:-2]] = [modal.get(i, i) for i in incl]
     for _ in range(len(byfile)):
         for f, inc in includes.items():
@@ -212,7 +212,7 @@ def comments(path, s):
 
 def aliases(prefixes, files):
     """Driver-side module aliases of theories/ modules (module DMA =
-    E.DebianMA), each mapped to the theories/ file it lands in, if one."""
+    E.MultiarchDebian), each mapped to the theories/ file it lands in, if one."""
     out = {}
     pat = re.compile(r"\bmodule\s+([A-Z]\w*)\s*=\s*([A-Z][\w.]*)")
     changed = True

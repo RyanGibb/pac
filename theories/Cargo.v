@@ -540,7 +540,7 @@ Module Cargo (N V F G Cfg DependencySource : UsualOrderedType)
     Module VersionOT := UOTFromCompare Version.
 
     (* Its core shared, so that the conflict class package calculus at the core's own
-       sorts states its lookups over this T. *)
+       sorts states its lookups over this Reduced. *)
     Module ConflictClass := ConflictClass NameOT VersionOT.
     Module Reduced := ConflictClass.Source.
 

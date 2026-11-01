@@ -11,7 +11,7 @@ Module Placement (N V : UsualOrderedType).
   Module PackageSet := Source.PackageSet.
   Module VSet := Source.VSet.
 
-  (* A path is stored deepest name first, so a location's parent is its tail. *)
+  (* A location is stored deepest name first, so its parent is its tail. *)
   Module Location := ListUOT N.
   Module LayoutElt := PairUOT Location Package.
   Module LayoutRel := FSetUOT LayoutElt.

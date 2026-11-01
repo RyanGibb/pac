@@ -7,8 +7,8 @@ module AVerOT : sig
   val eq_dec : t -> t -> bool
 end
 
-(* ApkVerMatch: the two constraints a version order cannot express.  Both take
-   the candidate version first and the constraint's operand second. *)
+(* ApkVersionMatch: the two constraints a version order cannot express.  Both
+   take the candidate version first and the constraint's operand second. *)
 module PM : sig
   val prefix : string -> string -> bool
   val hash : string -> string -> bool

@@ -8,7 +8,7 @@ Create Rewrite HintDb cmp_npm.
 
 Module Npm (N V : UsualOrderedType) (SemverMatch : SemverMatch V).
   (* Module application is generative, so the concurrent instance is the
-     only one: every set keyed by source names goes through C. *)
+     only one: every set keyed by source names goes through Source. *)
   Module SourceName := PairUOT N N.
   Module Concurrent := Concurrent SourceName V V.
   Module Source := Concurrent.Source.

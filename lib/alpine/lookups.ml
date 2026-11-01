@@ -84,7 +84,7 @@ module Make () : S = struct
     Hashtbl.create 4096
 
   (* the fallback keeps designation total on sets with a positive condition,
-     discharging designation_spec, which is trusted, as ApkVerMatch's
+     discharging designation_spec, which is trusted, as ApkVersionMatch's
      prefix/hash are *)
   module FirstDesignation = struct
     let designation (conds : Alp.ConditionSet.t) : Alp.Atom.t option =
