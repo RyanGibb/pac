@@ -14,5 +14,6 @@ module Make
      range admits.  The replay rebuilds that tree from the solver's
      decisions, so next names the directory npm resolves next and choose
      picks what npm would put there.  [`Pubgrub] leaves both to PubGrub. *)
-  val hooks : (L.t, PName.t, PG.selection, PVersion.t) Pac_common.Order.driver
+  val hooks :
+    (L.t, PName.t, Resolver.selection, PVersion.t) Pac_common.Order.driver
 end

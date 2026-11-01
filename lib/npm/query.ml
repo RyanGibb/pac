@@ -1,7 +1,5 @@
-module P = Npm_parse
-
 let ( let* ) = Result.bind
-let starts = P.starts
+let starts = Npm_parse.starts
 
 (* /^(?:git[+])?[a-z]+:/i *)
 let is_url s =
@@ -57,7 +55,7 @@ let name_ok n =
   && String.trim n = n
   && (not
         (List.mem (String.lowercase_ascii n) [ "node_modules"; "favicon.ico" ]))
-  && (P.uri_safe n
+  && (Npm_parse.uri_safe n
      ||
      match String.index_opt n '/' with
      | Some i when starts "@" n ->
@@ -66,8 +64,8 @@ let name_ok n =
          && (not (String.contains pkg '/'))
          && pkg <> ""
          && (not (starts "." pkg))
-         && P.uri_safe (String.sub n 1 (i - 1))
-         && P.uri_safe pkg
+         && Npm_parse.uri_safe (String.sub n 1 (i - 1))
+         && Npm_parse.uri_safe pkg
      | _ -> false)
 
 (* The key and the raw spec: the name ends at the first @ past a scope's
@@ -86,19 +84,19 @@ let spec_of (arg : string) : (string * string) option =
   in
   if is_url arg || is_git arg || is_path name_part || not (name_ok name_part)
   then None
-  else if P.is_alias raw then
+  else if Npm_parse.is_alias raw then
     (* fromAlias: the aliased spec is read again, and must be a named registry
        spec and not itself an alias *)
-    match P.split_alias raw with
+    match Npm_parse.split_alias raw with
     | Some (t, rg)
       when name_ok t
-           && (not (P.is_alias rg))
-           && (not (P.unresolvable rg))
-           && P.spec_of_string rg <> None ->
+           && (not (Npm_parse.is_alias rg))
+           && (not (Npm_parse.unresolvable rg))
+           && Npm_parse.spec_of_string rg <> None ->
         Some (name_part, raw)
     | _ -> None
-  else if is_url raw || is_path raw || P.has_sub raw "/" then None
-  else if P.spec_of_string raw = None then None
+  else if is_url raw || is_path raw || Npm_parse.has_sub raw "/" then None
+  else if Npm_parse.spec_of_string raw = None then None
   else Some (name_part, raw)
 
 (* arborist's addRmPkgDeps.add, lib/add-rm-pkg-deps.js, for a request with
@@ -108,7 +106,7 @@ let spec_of (arg : string) : (string * string) option =
    the name, and an optional entry is mirrored into dependencies. *)
 let add_to (pkg : Yojson.Safe.t) ((name, raw) : string * string) : Yojson.Safe.t
     =
-  let member = P.member and assoc_of = P.assoc_of in
+  let member = Npm_parse.member and assoc_of = Npm_parse.assoc_of in
   let has f = List.mem_assoc name (assoc_of (member f pkg)) in
   let field =
     List.find_opt has
@@ -131,7 +129,7 @@ let add_to (pkg : Yojson.Safe.t) ((name, raw) : string * string) : Yojson.Safe.t
     if List.mem "peerDependencies" drop then "peerDependenciesMeta" :: drop
     else drop
   in
-  let set = P.set in
+  let set = Npm_parse.set in
   let fields =
     List.map
       (fun (k, v) ->
@@ -174,15 +172,15 @@ let not_registry s =
 let classify ar s : ([ `Plain | `Tagged ] * (string * string), string) result =
   match spec_of s with
   | None -> not_registry s
-  | Some (k, r) when P.is_alias r || r = "*" -> Ok (`Plain, (k, r))
+  | Some (k, r) when Npm_parse.is_alias r || r = "*" -> Ok (`Plain, (k, r))
   | Some (k, r) -> (
       let r' = String.trim r in
       match Archive.dist_tag ar k r' with
       | Some v -> Ok (`Tagged, (k, v))
       | None -> (
-          match P.spec_of_string r with
-          | Some (P.Tag _) -> Error (s ^ ": no such dist-tag")
-          | Some (P.Range _ | P.Star) -> Ok (`Plain, (k, r))
+          match Npm_parse.spec_of_string r with
+          | Some (Npm_parse.Tag _) -> Error (s ^ ": no such dist-tag")
+          | Some (Npm_parse.Range _ | Npm_parse.Star) -> Ok (`Plain, (k, r))
           | None -> not_registry s))
 
 (* arborist's #add resolves a tag to its version only after an await, so
@@ -205,7 +203,7 @@ let resolve_specs ar specs =
   Ok (only `Plain @ only `Tagged)
 
 let dependee_name (k, r) =
-  match P.split_alias r with Some (t, _) -> t | None -> k
+  match Npm_parse.split_alias r with Some (t, _) -> t | None -> k
 
 (* npm fetches each spec's packument while building the tree, and E404s
    on a name the registry lacks rather than resolving without it *)
@@ -225,7 +223,7 @@ let check_published ar specs =
    reads overrides and Berry alone resolutions.  Any entry refuses, whether
    or not it would change an answer. *)
 let shared_root ar pkg : (unit, string) result =
-  let entries f = P.assoc_of (P.member f pkg) in
+  let entries f = Npm_parse.assoc_of (Npm_parse.member f pkg) in
   let deps =
     List.concat_map
       (fun f -> List.map fst (entries f))
@@ -233,7 +231,8 @@ let shared_root ar pkg : (unit, string) result =
   in
   let optional k =
     match
-      P.member "optional" (P.member k (P.member "peerDependenciesMeta" pkg))
+      Npm_parse.member "optional"
+        (Npm_parse.member k (Npm_parse.member "peerDependenciesMeta" pkg))
     with
     | `Bool b -> b
     | _ -> false
@@ -260,16 +259,16 @@ let shared_root ar pkg : (unit, string) result =
 (* arborist names a root with no name by its directory, which is no part
    of the query; "." is a name no registry package can have *)
 let root_of ar pkg =
-  let str k = match P.member k pkg with `String s -> s | _ -> "" in
+  let str k = match Npm_parse.member k pkg with `String s -> s | _ -> "" in
   let name = match str "name" with "" -> "." | n -> n in
   match
-    P.ver_of ~reading:(Archive.reading ar) ~reject:(Archive.reject ar)
+    Npm_parse.ver_of ~reading:(Archive.reading ar) ~reject:(Archive.reject ar)
       ~root:true (str "version") pkg
   with
-  | Some v -> Ok { v with P.v_name = name }
+  | Some v -> Ok { v with Npm_parse.v_name = name }
   | None -> Error "not a package.json"
 
-let root ar (args : string list) : (P.ver, string) result =
+let root ar (args : string list) : (Npm_parse.ver, string) result =
   let paths, specs = List.partition is_manifest_arg args in
   let* pkg = manifest paths in
   let* () = shared_root ar pkg in

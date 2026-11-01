@@ -1,5 +1,4 @@
 module type S = sig
-  module E = Pac
   module Ot = Pac_common.Ot
 
   module IVer : sig
@@ -21,46 +20,45 @@ module type S = sig
     val sameCore : IVer.t -> IVer.t -> bool
   end
 
-  module Npl :
+  module NpmPlacement :
       module type of Pac.NpmPlacement (Pac_common.Ot.Str) (IVerOT) (IPM)
 
-  module Pl = Npl.Placement
-  module R = Pl.Reduction
-  module T = R.Reduced
-  module Lk = Npl.Reduction.Lookup
+  module Placement = NpmPlacement.Placement
+  module Reduction = Placement.Reduction
+  module Reduced = Reduction.Reduced
+  module ReductionLookup = NpmPlacement.Reduction.Lookup
 
-  val xrange : Npm_version.range -> Npl.coq_Range
+  val xrange : Npm_version.range -> NpmPlacement.coq_Range
   val lock_path : string list -> string
-  val occ_compare : Npl.Occupant.t -> Npl.Occupant.t -> int
+  val occ_compare : NpmPlacement.Occupant.t -> NpmPlacement.Occupant.t -> int
 
   module PName : sig
-    type t = R.Name.t
+    type t = Reduction.Name.t
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit
   end
 
   module PVersion : sig
-    type t = R.Version.t
+    type t = Reduction.Version.t
 
     val compare : t -> t -> int
     val equal : t -> t -> bool
     val pp : Format.formatter -> t -> unit
   end
 
-  module PG : module type of Pubgrub.Make (PName) (PVersion)
+  module Resolver : module type of Pubgrub.Make (PName) (PVersion)
 end
 
 module Make () = struct
-  module E = Pac
   module Ot = Pac_common.Ot
-  module SV = Version.Semver
+  module Semver = Version.Semver
 
   (* every set of occupants and every walk's versions compares versions of
      one name over and over, and the npm reading's comparator looks each
      string's parse up in a bounded table at every comparison *)
   module IVer = struct
-    type t = { s : string; p : SV.t }
+    type t = { s : string; p : Semver.t }
 
     let tbl : (string, t) Hashtbl.t = Hashtbl.create 65536
 
@@ -68,35 +66,35 @@ module Make () = struct
       match Hashtbl.find_opt tbl s with
       | Some v -> v
       | None ->
-          let v = { s; p = SV.Loose.parse s } in
+          let v = { s; p = Semver.Loose.parse s } in
           Hashtbl.add tbl s v;
           v
 
     let compare (a : t) (b : t) =
-      if a == b || String.equal a.s b.s then 0 else SV.precedence a.p b.p
+      if a == b || String.equal a.s b.s then 0 else Semver.precedence a.p b.p
   end
 
   module IVerOT = Ot.Make (IVer)
 
   module IPM = struct
-    let isPre (v : IVer.t) = v.IVer.p.SV.pre <> []
+    let isPre (v : IVer.t) = v.IVer.p.Semver.pre <> []
 
     let sameCore (a : IVer.t) (b : IVer.t) =
-      SV.same_core_parsed a.IVer.p b.IVer.p
+      Semver.same_core_parsed a.IVer.p b.IVer.p
   end
 
-  module Npl = E.NpmPlacement (Ot.Str) (IVerOT) (IPM)
-  module Pl = Npl.Placement
-  module R = Pl.Reduction
-  module T = R.Reduced
-  module Lk = Npl.Reduction.Lookup
+  module NpmPlacement = Pac.NpmPlacement (Ot.Str) (IVerOT) (IPM)
+  module Placement = NpmPlacement.Placement
+  module Reduction = Placement.Reduction
+  module Reduced = Reduction.Reduced
+  module ReductionLookup = NpmPlacement.Reduction.Lookup
 
-  (* Npl's ranges are its own type, as each application of Semver makes one *)
-  let xcomp : Npm_version.comparator -> Npl.coq_Comparator = function
-    | Npm_version.Any -> Npl.CAny
-    | Npm_version.Cmp (o, c) -> Npl.COp (Encoding.xop o, IVer.make c)
+  (* NpmPlacement's ranges are its own type, as each application of Semver makes one *)
+  let xcomp : Npm_version.comparator -> NpmPlacement.coq_Comparator = function
+    | Npm_version.Any -> NpmPlacement.CAny
+    | Npm_version.Cmp (o, c) -> NpmPlacement.COp (Encoding.xop o, IVer.make c)
 
-  let xrange (rg : Npm_version.range) : Npl.coq_Range =
+  let xrange (rg : Npm_version.range) : NpmPlacement.coq_Range =
     List.map (fun cs -> List.map xcomp cs) rg
 
   (* a location is stored deepest key first, as the calculus stores it *)
@@ -125,73 +123,74 @@ module Make () = struct
     if check && c <> Ot.r2c (slow a b) then failwith ("order mismatch: " ^ name);
     c
 
-  let occ_compare (x : Npl.Occupant.t) (y : Npl.Occupant.t) =
+  let occ_compare (x : NpmPlacement.Occupant.t) (y : NpmPlacement.Occupant.t) =
     match (x, y) with
-    | Npl.Occupant.Proj, Npl.Occupant.Proj -> 0
-    | Npl.Occupant.Proj, Npl.Occupant.Reg _ -> -1
-    | Npl.Occupant.Reg _, Npl.Occupant.Proj -> 1
-    | Npl.Occupant.Reg (m, v), Npl.Occupant.Reg (m', v') -> (
+    | NpmPlacement.Occupant.Proj, NpmPlacement.Occupant.Proj -> 0
+    | NpmPlacement.Occupant.Proj, NpmPlacement.Occupant.Reg _ -> -1
+    | NpmPlacement.Occupant.Reg _, NpmPlacement.Occupant.Proj -> 1
+    | NpmPlacement.Occupant.Reg (m, v), NpmPlacement.Occupant.Reg (m', v') -> (
         match String.compare m m' with 0 -> IVer.compare v v' | c -> c)
 
   module PName = struct
-    type t = R.Name.t
+    type t = Reduction.Name.t
 
     let rank = function
-      | R.Name.Root -> 0
-      | R.Name.Loc _ -> 1
-      | R.Name.Walk _ -> 2
+      | Reduction.Name.Root -> 0
+      | Reduction.Name.Loc _ -> 1
+      | Reduction.Name.Walk _ -> 2
 
     let fast (a : t) (b : t) =
       match (a, b) with
-      | R.Name.Loc (l1, a1), R.Name.Loc (l2, a2)
-      | R.Name.Walk (l1, a1), R.Name.Walk (l2, a2) -> (
+      | Reduction.Name.Loc (l1, a1), Reduction.Name.Loc (l2, a2)
+      | Reduction.Name.Walk (l1, a1), Reduction.Name.Walk (l2, a2) -> (
           match path_compare l1 l2 with 0 -> String.compare a1 a2 | c -> c)
       | _ -> Int.compare (rank a) (rank b)
 
-    let compare = checked "name" fast R.NameOT.compare
+    let compare = checked "name" fast Reduction.NameOT.compare
 
     let pp fmt (n : t) =
       let p l = match l with [] -> "ε" | _ -> path_string l in
       match n with
-      | R.Name.Root -> Format.fprintf fmt "<ε>"
-      | R.Name.Loc (l, a) -> Format.fprintf fmt "<%s,%s>" (p l) a
-      | R.Name.Walk (l, a) -> Format.fprintf fmt "<%s⇑%s>" (p l) a
+      | Reduction.Name.Root -> Format.fprintf fmt "<ε>"
+      | Reduction.Name.Loc (l, a) -> Format.fprintf fmt "<%s,%s>" (p l) a
+      | Reduction.Name.Walk (l, a) -> Format.fprintf fmt "<%s⇑%s>" (p l) a
   end
 
   module PVersion = struct
-    type t = R.Version.t
+    type t = Reduction.Version.t
 
     let rank = function
-      | R.Version.Occ _ -> 0
-      | R.Version.Found _ -> 1
-      | R.Version.Bot -> 2
+      | Reduction.Version.Occ _ -> 0
+      | Reduction.Version.Found _ -> 1
+      | Reduction.Version.Bot -> 2
 
     (* a shallower location is greater *)
     let fast (a : t) (b : t) =
       match (a, b) with
-      | R.Version.Occ x, R.Version.Occ y -> occ_compare x y
-      | R.Version.Found (l1, x), R.Version.Found (l2, y) -> (
+      | Reduction.Version.Occ x, Reduction.Version.Occ y -> occ_compare x y
+      | Reduction.Version.Found (l1, x), Reduction.Version.Found (l2, y) -> (
           match Int.compare (List.length l2) (List.length l1) with
           | 0 -> (
               match path_compare l1 l2 with 0 -> occ_compare x y | c -> c)
           | c -> c)
       | _ -> Int.compare (rank a) (rank b)
 
-    let compare = checked "version" fast R.VersionOT.compare
+    let compare = checked "version" fast Reduction.VersionOT.compare
     let equal a b = compare a b = 0
 
     let pp_occ fmt = function
-      | Npl.Occupant.Proj -> Format.fprintf fmt "project"
-      | Npl.Occupant.Reg (m, v) -> Format.fprintf fmt "%s@%s" m v.IVer.s
+      | NpmPlacement.Occupant.Proj -> Format.fprintf fmt "project"
+      | NpmPlacement.Occupant.Reg (m, v) ->
+          Format.fprintf fmt "%s@%s" m v.IVer.s
 
     let pp fmt (v : t) =
       match v with
-      | R.Version.Occ x -> pp_occ fmt x
-      | R.Version.Found ([], x) -> Format.fprintf fmt "(ε,%a)" pp_occ x
-      | R.Version.Found (l, x) ->
+      | Reduction.Version.Occ x -> pp_occ fmt x
+      | Reduction.Version.Found ([], x) -> Format.fprintf fmt "(ε,%a)" pp_occ x
+      | Reduction.Version.Found (l, x) ->
           Format.fprintf fmt "(%s,%a)" (path_string l) pp_occ x
-      | R.Version.Bot -> Format.fprintf fmt "⊥"
+      | Reduction.Version.Bot -> Format.fprintf fmt "⊥"
   end
 
-  module PG = Pubgrub.Make (PName) (PVersion)
+  module Resolver = Pubgrub.Make (PName) (PVersion)
 end

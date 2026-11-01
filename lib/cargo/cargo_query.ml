@@ -1,6 +1,3 @@
-module P = Cargo_parse
-module T = Cargo_toml
-
 exception Refused of string
 
 let refuse fmt = Printf.ksprintf (fun s -> raise (Refused s)) fmt
@@ -33,36 +30,36 @@ let rust_trim s =
   let i = left 0 in
   String.sub s i (right i i - i)
 
-type root = { ver : P.ver; self_patch : bool; msrv_pref : bool }
+type root = { ver : Cargo_parse.ver; self_patch : bool; msrv_pref : bool }
 type features = All | Named of { feats : string list; default : bool }
 
 let describe = function
-  | T.Str _ -> "a string"
-  | T.Int _ -> "an integer"
-  | T.Float _ -> "a float"
-  | T.Bool _ -> "a boolean"
-  | T.Date _ -> "a date"
-  | T.Arr _ -> "an array"
-  | T.Tbl _ -> "a table"
-  | T.ATbl _ -> "an array of tables"
+  | Cargo_toml.Str _ -> "a string"
+  | Cargo_toml.Int _ -> "an integer"
+  | Cargo_toml.Float _ -> "a float"
+  | Cargo_toml.Bool _ -> "a boolean"
+  | Cargo_toml.Date _ -> "a date"
+  | Cargo_toml.Arr _ -> "an array"
+  | Cargo_toml.Tbl _ -> "a table"
+  | Cargo_toml.ATbl _ -> "an array of tables"
 
 let str where = function
-  | T.Str s -> s
-  | T.Tbl { fields; _ } when List.mem_assoc "workspace" fields ->
+  | Cargo_toml.Str s -> s
+  | Cargo_toml.Tbl { fields; _ } when List.mem_assoc "workspace" fields ->
       refuse "%s inherits from a workspace, which a lone manifest has not got"
         where
   | v -> refuse "%s is %s, not a string" where (describe v)
 
 let bool where = function
-  | T.Bool b -> b
+  | Cargo_toml.Bool b -> b
   | v -> refuse "%s is %s, not a boolean" where (describe v)
 
 let strings where = function
-  | T.Arr l -> List.map (str where) l
+  | Cargo_toml.Arr l -> List.map (str where) l
   | v -> refuse "%s is %s, not an array" where (describe v)
 
 let table where = function
-  | T.Tbl t -> t.T.fields
+  | Cargo_toml.Tbl t -> t.Cargo_toml.fields
   | v -> refuse "%s is %s, not a table" where (describe v)
 
 let get k fields = List.assoc_opt k fields
@@ -108,11 +105,13 @@ let package_name n =
   n
 
 (* dep_to_dependency, for the one source the index form has *)
-let dep_of ~kind ~cfg ~where (alias, v) : P.dep =
+let dep_of ~kind ~cfg ~where (alias, v) : Cargo_parse.dep =
   let alias = package_name alias in
   let where = Printf.sprintf "%s.%s" where alias in
   let fields =
-    match v with T.Str r -> [ ("version", T.Str r) ] | v -> table where v
+    match v with
+    | Cargo_toml.Str r -> [ ("version", Cargo_toml.Str r) ]
+    | v -> table where v
   in
   List.iter
     (fun (k, _) ->
@@ -172,7 +171,7 @@ let dep_of ~kind ~cfg ~where (alias, v) : P.dep =
     | None, None -> true
   in
   {
-    P.d_alias = alias;
+    Cargo_parse.d_alias = alias;
     d_name =
       (match get "package" fields with
       | Some p -> package_name (str (where ^ ".package") p)
@@ -190,11 +189,11 @@ let dep_of ~kind ~cfg ~where (alias, v) : P.dep =
 
 let kinds =
   [
-    ("dependencies", P.Normal);
-    ("dev-dependencies", P.Dev);
-    ("dev_dependencies", P.Dev);
-    ("build-dependencies", P.Build);
-    ("build_dependencies", P.Build);
+    ("dependencies", Cargo_parse.Normal);
+    ("dev-dependencies", Cargo_parse.Dev);
+    ("dev_dependencies", Cargo_parse.Dev);
+    ("build-dependencies", Cargo_parse.Build);
+    ("build_dependencies", Cargo_parse.Build);
   ]
 
 let deps_of ~cfg ~prefix fields =
@@ -285,7 +284,7 @@ let self_patch_of doc name =
             (fun (k, v) ->
               let e = table (Printf.sprintf "patch.%s.%s" reg k) v in
               match e with
-              | [ ("path", T.Str ("." | "./")) ] when k = name -> ()
+              | [ ("path", Cargo_toml.Str ("." | "./")) ] when k = name -> ()
               | _ ->
                   refuse
                     "[patch.%s] %s: the only patch modelled maps the root's \
@@ -303,7 +302,8 @@ let rust_version r =
 
 let of_manifest (path : string) : root =
   let doc =
-    try (T.of_file path).T.fields with T.Error e -> refuse "%s: %s" path e
+    try (Cargo_toml.of_file path).Cargo_toml.fields
+    with Cargo_toml.Error e -> refuse "%s: %s" path e
   in
   List.iter
     (fun (k, _) ->
@@ -350,10 +350,10 @@ let of_manifest (path : string) : root =
     | Some f ->
         List.map
           (fun (k, es) ->
-            (k, List.map P.entry_of (strings ("features." ^ k) es)))
+            (k, List.map Cargo_parse.entry_of (strings ("features." ^ k) es)))
           (table "features" f)
   in
-  if not (P.feature_map_ok deps declared) then
+  if not (Cargo_parse.feature_map_ok deps declared) then
     refuse
       "%s: [features] is not a table cargo accepts: every entry names a \
        feature, an optional dependency (dep:), or a dependency's feature"
@@ -362,19 +362,19 @@ let of_manifest (path : string) : root =
   {
     ver =
       {
-        P.v_name = name;
+        Cargo_parse.v_name = name;
         v_vers = vers;
         v_deps = deps;
-        v_feats = P.with_implicit_features deps declared;
+        v_feats = Cargo_parse.with_implicit_features deps declared;
         v_links = Option.map (str "package.links") (get "links" pkg);
-        v_default_declared = List.mem_assoc P.default_feature declared;
+        v_default_declared = List.mem_assoc Cargo_parse.default_feature declared;
         v_msrv = Option.map rust_version (get "rust-version" pkg);
       };
     self_patch;
     msrv_pref = resolver >= 3;
   }
 
-let crate (r : root) = (r.ver.P.v_name, r.ver.P.v_vers)
+let crate (r : root) = (r.ver.Cargo_parse.v_name, r.ver.Cargo_parse.v_vers)
 
 let features_of_flags (r : root) (flags : string list) ~(no_default : bool) :
     features =
@@ -396,11 +396,12 @@ let features_of_flags (r : root) (flags : string list) ~(no_default : bool) :
              modelled"
             f
         else if
-          (not (List.mem_assoc f r.ver.P.v_feats))
-          || (f = P.default_feature && not r.ver.P.v_default_declared)
+          (not (List.mem_assoc f r.ver.Cargo_parse.v_feats))
+          || f = Cargo_parse.default_feature
+             && not r.ver.Cargo_parse.v_default_declared
         then
           refuse "the package `%s v%s` does not have the feature `%s`"
-            r.ver.P.v_name r.ver.P.v_vers f)
+            r.ver.Cargo_parse.v_name r.ver.Cargo_parse.v_vers f)
       feats;
     Named { feats; default = not no_default }
 
@@ -412,4 +413,5 @@ let toolchain (r : root) ~(installed : string option) : string option =
           t)
     installed;
   if not r.msrv_pref then None
-  else match r.ver.P.v_msrv with Some m -> Some m | None -> installed
+  else
+    match r.ver.Cargo_parse.v_msrv with Some m -> Some m | None -> installed

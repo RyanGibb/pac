@@ -1,19 +1,19 @@
 (* What the replay reads of a solve: the tables, the candidate order PubGrub
    decides by and what its partial solution says. *)
 module type SEARCH = sig
-  module T : Tables.S
+  module Tables : Tables.S
 
   module PVersion : sig
     type t = {
       pos : int;
-      v : T.DMA.Debian.Reduction.Version.t;
-      tgt : (string * T.DMA.coq_ReducedQualifier) option;
+      v : Tables.MultiarchDebian.Debian.Reduction.Version.t;
+      tgt : (string * Tables.MultiarchDebian.coq_ReducedQualifier) option;
     }
 
     val compare : t -> t -> int
   end
 
-  module PG : sig
+  module Resolver : sig
     module Ranges : sig
       type t
 
@@ -23,25 +23,27 @@ module type SEARCH = sig
     type selection = Unselected | Entailed of Ranges.t | Decided of PVersion.t
   end
 
-  val tables : T.tables
+  val tables : Tables.tables
 
   val tag :
-    T.DMA.Debian.Reduction.Name.t ->
-    T.DMA.Debian.Reduction.Version.t ->
+    Tables.MultiarchDebian.Debian.Reduction.Name.t ->
+    Tables.MultiarchDebian.Debian.Reduction.Version.t ->
     PVersion.t
 
-  val cands_of : T.DMA.Debian.Reduction.Name.t -> PVersion.t list
+  val cands_of :
+    Tables.MultiarchDebian.Debian.Reduction.Name.t -> PVersion.t list
 
   val dependees_of :
-    T.DMA.Debian.Reduction.Name.t ->
-    T.DMA.Debian.Reduction.Version.t ->
-    (T.DMA.Debian.Reduction.Name.t * PVersion.t list) list
+    Tables.MultiarchDebian.Debian.Reduction.Name.t ->
+    Tables.MultiarchDebian.Debian.Reduction.Version.t ->
+    (Tables.MultiarchDebian.Debian.Reduction.Name.t * PVersion.t list) list
 
-  val has_ref : T.DMA.Debian.Reduction.Name.t -> bool
+  val has_ref : Tables.MultiarchDebian.Debian.Reduction.Name.t -> bool
 
   val free_of :
-    assigned:(T.DMA.Debian.Reduction.Name.t -> PG.selection) ->
-    T.DMA.Debian.Reduction.Name.t ->
+    assigned:
+      (Tables.MultiarchDebian.Debian.Reduction.Name.t -> Resolver.selection) ->
+    Tables.MultiarchDebian.Debian.Reduction.Name.t ->
     PVersion.t list ->
     PVersion.t list
 
@@ -50,10 +52,10 @@ end
 
 module Make (S : SEARCH) : sig
   open S
-  open T
+  open Tables
 
-  type name = DMA.Debian.Reduction.Name.t
-  type assigned = name -> PG.selection
+  type name = MultiarchDebian.Debian.Reduction.Name.t
+  type assigned = name -> Resolver.selection
 
   (* apt's Reject propagation (Solver::Propagate, solver3.cc), which PubGrub
      learns only on deciding the package: a package is rejected once a hard
@@ -70,57 +72,75 @@ module Make (S : SEARCH) : sig
 
   (* one queue entry of the cascade: a version var or a package var
      assigned false, whose propagation waits for its turn *)
-  type rejection = [ `Ver of DMA.Package.t | `Pkg of string * string ]
+  type rejection =
+    [ `Ver of MultiarchDebian.Package.t | `Pkg of string * string ]
 
   val create_state : unit -> state
   val forget_rejections : state -> unit
 
   (* the atoms clauses on [name] were narrowed to by folding, each with the
      depender whose clause it was, the latest first *)
-  val narrowings : state -> name -> (DMA.Package.t * DMA.Debian.Atom.t) list
-  val stanza : DMA.Package.t -> nstanza option
+  val narrowings :
+    state ->
+    name ->
+    (MultiarchDebian.Package.t * MultiarchDebian.Debian.Atom.t) list
+
+  val stanza : MultiarchDebian.Package.t -> nstanza option
 
   (* the declared Provides of [n] that meet the formula *)
   val provides_matching :
     nstanza ->
     string ->
-    DMA.Debian.VersionFormula.coq_Formula ->
-    (string * DMA.Debian.coq_DTop) list
+    MultiarchDebian.Debian.VersionFormula.coq_Formula ->
+    (string * MultiarchDebian.Debian.coq_DTop) list
 
   (* whether the package, a Multi-Arch: foreign one of the atom's name, meets
      it from another architecture *)
-  val sibling_provides : DMA.Package.t -> nstanza -> DMA.Debian.Atom.t -> bool
-  val alt_name : DMA.Debian.Atom.t -> name
+  val sibling_provides :
+    MultiarchDebian.Package.t ->
+    nstanza ->
+    MultiarchDebian.Debian.Atom.t ->
+    bool
+
+  val alt_name : MultiarchDebian.Debian.Atom.t -> name
   val orig_versions : name -> (PVersion.t * string) list
-  val deferred : state -> DMA.Debian.Atom.t -> bool
+  val deferred : state -> MultiarchDebian.Debian.Atom.t -> bool
 
   val live_at :
-    state -> pkgvar:bool -> string * DMA.coq_ReducedQualifier -> string -> bool
+    state ->
+    pkgvar:bool ->
+    string * MultiarchDebian.coq_ReducedQualifier ->
+    string ->
+    bool
 
-  val solutions : state -> assigned option -> DMA.Debian.Atom.t -> int
-  val installed_at : assigned:assigned -> DMA.Package.t -> bool
+  val solutions :
+    state -> assigned option -> MultiarchDebian.Debian.Atom.t -> int
+
+  val installed_at : assigned:assigned -> MultiarchDebian.Package.t -> bool
   val assign : state -> assigned:assigned -> rejection list -> rejection list
-  val conflicts : state -> assigned:assigned -> DMA.Package.t -> rejection list
+
+  val conflicts :
+    state -> assigned:assigned -> MultiarchDebian.Package.t -> rejection list
 
   val group_conflicts :
-    state -> assigned:assigned -> DMA.Package.t -> rejection list
+    state -> assigned:assigned -> MultiarchDebian.Package.t -> rejection list
 
   val conflicted_by :
-    state -> assigned:assigned -> DMA.Package.t -> rejection list
+    state -> assigned:assigned -> MultiarchDebian.Package.t -> rejection list
 
   val propagate :
     state -> assigned:assigned -> rejection -> rejection list * name list
 
   val register :
     state ->
-    DMA.Package.t ->
-    (name, DMA.Debian.Atom.t) Work_heap.clause list
-    * (name, DMA.Debian.Atom.t) Work_heap.clause list
+    MultiarchDebian.Package.t ->
+    (name, MultiarchDebian.Debian.Atom.t) Work_heap.clause list
+    * (name, MultiarchDebian.Debian.Atom.t) Work_heap.clause list
 
   val head :
     state ->
     assigned:assigned ->
-    DMA.Debian.Atom.t list ->
+    MultiarchDebian.Debian.Atom.t list ->
     (name, PVersion.t) Work_heap.unit_head option
 
   val negation :

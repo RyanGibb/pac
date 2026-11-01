@@ -1,5 +1,3 @@
-module E = Pac
-module DF = Deb_packages
 module Args = Apt_args
 
 type answer = {
@@ -9,24 +7,24 @@ type answer = {
 }
 
 module Make (AP : Tables.ARCH) = struct
-  module T = Tables.Make (AP)
-  include T
+  module Tables = Tables.Make (AP)
+  include Tables
 
   let ma_real_at tables (n, b) =
-    DMA.PackageSet.ofList
+    MultiarchDebian.PackageSet.ofList
       (List.map (fun v -> ((n, b), v)) (versions_of tables (n, b)))
 
   (* Every group member at any arch: foreign provides and group provides
      come from any member, so name preimages must span the whole group. *)
   let ma_group_of_names tables ns =
-    DMA.PackageSet.ofList
+    MultiarchDebian.PackageSet.ofList
       (List.concat_map
          (fun n ->
            List.map (fun (b, v) -> ((n, b), v)) (group_members tables n))
          ns)
 
   let ma_prov_of_names tables ns =
-    DMA.ProvidesRel.ofList
+    MultiarchDebian.ProvidesRel.ofList
       (List.concat_map
          (fun n -> List.map (fun (q, vt) -> (q, (n, vt))) (providers tables n))
          ns)
@@ -35,27 +33,28 @@ module Make (AP : Tables.ARCH) = struct
   let fibre tables p ~none f = Option.fold ~none ~some:f (stanza tables p)
 
   let ma_prov_of_pkg tables p =
-    fibre tables p ~none:DMA.ProvidesRel.empty (fun stz ->
-        DMA.ProvidesRel.ofList
+    fibre tables p ~none:MultiarchDebian.ProvidesRel.empty (fun stz ->
+        MultiarchDebian.ProvidesRel.ofList
           (List.map (fun (m, vt) -> (p, (m, vt))) stz.nprovs))
 
   let ma_deps_of_pkg tables p =
-    fibre tables p ~none:DMA.DependencyRel.empty (fun stz ->
-        DMA.DependencyRel.ofList
+    fibre tables p ~none:MultiarchDebian.DependencyRel.empty (fun stz ->
+        MultiarchDebian.DependencyRel.ofList
           (List.map (fun alts -> (p, alts)) (deps_of stz)))
 
   let ma_recs_of_pkg tables p =
-    fibre tables p ~none:DMA.DependencyRel.empty (fun stz ->
-        DMA.DependencyRel.ofList
+    fibre tables p ~none:MultiarchDebian.DependencyRel.empty (fun stz ->
+        MultiarchDebian.DependencyRel.ofList
           (List.map (fun alts -> (p, alts)) (recs_of stz)))
 
   let ma_conf_of_pkg tables p =
-    fibre tables p ~none:DMA.ConflictRel.empty (fun stz ->
-        DMA.ConflictRel.ofList (List.map (fun ma -> (p, ma)) stz.nconfs))
+    fibre tables p ~none:MultiarchDebian.ConflictRel.empty (fun stz ->
+        MultiarchDebian.ConflictRel.ofList
+          (List.map (fun ma -> (p, ma)) stz.nconfs))
 
   (* classOf defaults to MANo, so a package with no stanza needs no entry. *)
   let classes_of tables pkgs =
-    DMA.ClassRel.ofList
+    MultiarchDebian.ClassRel.ofList
       (List.filter_map
          (fun p ->
            Option.map (fun (stz : nstanza) -> (p, stz.ncls)) (stanza tables p))
@@ -63,7 +62,7 @@ module Make (AP : Tables.ARCH) = struct
 
   let atom_names_of tables p =
     fibre tables p ~none:[] (fun stz ->
-        List.concat_map (List.map DMA.aname) (deps_of stz))
+        List.concat_map (List.map MultiarchDebian.aname) (deps_of stz))
 
   (* The base names p's conflicts can land on: its own, bearing the implicit
      group exclusion, each negative's, and the names of their declared
@@ -71,7 +70,8 @@ module Make (AP : Tables.ARCH) = struct
   let conflict_names tables p =
     let names =
       fst (fst p)
-      :: fibre tables p ~none:[] (fun stz -> List.map DMA.aname stz.nconfs)
+      :: fibre tables p ~none:[] (fun stz ->
+          List.map MultiarchDebian.aname stz.nconfs)
     in
     List.concat_map
       (fun m -> m :: List.map (fun (q, _) -> fst (fst q)) (providers tables m))
@@ -81,16 +81,18 @@ module Make (AP : Tables.ARCH) = struct
      provider of (m, x) is either a group member of m (reals, implicit group
      / explicit-qualifier / foreign / :any provides) or a declared provider
      of m. *)
-  let sel_preimages_uncached tables (mn : string * DMA.coq_ReducedQualifier) =
+  let sel_preimages_uncached tables
+      (mn : string * MultiarchDebian.coq_ReducedQualifier) =
     let m = fst mn in
     let r_ma = ma_group_of_names tables [ m ] in
     let pi_decl = ma_prov_of_names tables [ m ] in
     let cls =
       classes_of tables
-        (DMA.PackageSet.elements r_ma
-        @ List.map fst (DMA.ProvidesRel.elements pi_decl))
+        (MultiarchDebian.PackageSet.elements r_ma
+        @ List.map fst (MultiarchDebian.ProvidesRel.elements pi_decl))
     in
-    (DMA.Reduction.reduceReal r_ma, DMA.Reduction.reduceProv r_ma pi_decl cls)
+    ( MultiarchDebian.Reduction.reduceReal r_ma,
+      MultiarchDebian.Reduction.reduceProv r_ma pi_decl cls )
 
   (* the preimages depend on the name alone, and every atom on a name --
      each version constraint a depender writes is another selector -- asks
@@ -99,86 +101,94 @@ module Make (AP : Tables.ARCH) = struct
     Pac_common.Tbl.memo sel_cache mn (fun () ->
         sel_preimages_uncached tables mn)
 
-  let versions sel_cache tables (n' : DMA.Debian.Reduction.Name.t) =
+  let versions sel_cache tables (n' : MultiarchDebian.Debian.Reduction.Name.t) =
     match n' with
-    | DMA.Debian.Reduction.Name.Orig (n, DMA.QAArch b) ->
+    | MultiarchDebian.Debian.Reduction.Name.Orig (n, MultiarchDebian.QAArch b)
+      ->
         let vs =
-          DMA.Debian.Source.versions
-            (DMA.Reduction.reduceReal (ma_real_at tables (n, b)))
-            (n, DMA.QAArch b)
+          MultiarchDebian.Debian.Source.versions
+            (MultiarchDebian.Reduction.reduceReal (ma_real_at tables (n, b)))
+            (n, MultiarchDebian.QAArch b)
         in
-        if DMA.Debian.VSet.is_empty vs then
-          DMA.Debian.Reduction.Reduced.VSet.empty
+        if MultiarchDebian.Debian.VSet.is_empty vs then
+          MultiarchDebian.Debian.Reduction.Reduced.VSet.empty
         else
-          DMA.Debian.Reduction.Reduced.VSet.add DMA.Debian.Reduction.Version.Bot
-            (DMA.Debian.Reduction.embedVS vs)
-    | DMA.Debian.Reduction.Name.Orig _ ->
+          MultiarchDebian.Debian.Reduction.Reduced.VSet.add
+            MultiarchDebian.Debian.Reduction.Version.Bot
+            (MultiarchDebian.Debian.Reduction.embedVS vs)
+    | MultiarchDebian.Debian.Reduction.Name.Orig _ ->
         (* embedPkg introduces only QAArch names, so an explicit-qualifier,
            :any or group pseudo-name has no real package *)
-        DMA.Debian.Reduction.Reduced.VSet.empty
-    | DMA.Debian.Reduction.Name.Disjunct aset ->
-        DMA.Debian.Reduction.versionsDisj aset
-    | DMA.Debian.Reduction.Name.Soft aset ->
-        DMA.Debian.Reduction.versionsSoft aset
-    | DMA.Debian.Reduction.Name.Selector a ->
+        MultiarchDebian.Debian.Reduction.Reduced.VSet.empty
+    | MultiarchDebian.Debian.Reduction.Name.Disjunct aset ->
+        MultiarchDebian.Debian.Reduction.versionsDisj aset
+    | MultiarchDebian.Debian.Reduction.Name.Soft aset ->
+        MultiarchDebian.Debian.Reduction.versionsSoft aset
+    | MultiarchDebian.Debian.Reduction.Name.Selector a ->
         let r, pi = sel_preimages sel_cache tables (fst a) in
-        DMA.Debian.Reduction.us r pi a
+        MultiarchDebian.Debian.Reduction.us r pi a
 
-  let dependees sel_cache tables (s : DMA.Debian.Reduction.Reduced.Package.t) =
+  let dependees sel_cache tables
+      (s : MultiarchDebian.Debian.Reduction.Reduced.Package.t) =
     match s with
-    | ( DMA.Debian.Reduction.Name.Orig (n, DMA.QAArch b),
-        DMA.Debian.Reduction.Version.Orig v ) ->
+    | ( MultiarchDebian.Debian.Reduction.Name.Orig (n, MultiarchDebian.QAArch b),
+        MultiarchDebian.Debian.Reduction.Version.Orig v ) ->
         let p = ((n, b), v) in
         let m = atom_names_of tables p @ conflict_names tables p in
         let r_ma = ma_group_of_names tables m in
         (* p itself joins the reduceProv carrier so its implicit provides
            (group pseudo-name, foreign/:any names) are visible to matchb *)
-        let r_pi = DMA.PackageSet.add p r_ma in
+        let r_pi = MultiarchDebian.PackageSet.add p r_ma in
         let pi_decl =
-          DMA.ProvidesRel.union
+          MultiarchDebian.ProvidesRel.union
             (ma_prov_of_names tables m)
             (ma_prov_of_pkg tables p)
         in
         let pi_cls =
           classes_of tables
-            (DMA.PackageSet.elements r_pi
-            @ List.map fst (DMA.ProvidesRel.elements pi_decl))
+            (MultiarchDebian.PackageSet.elements r_pi
+            @ List.map fst (MultiarchDebian.ProvidesRel.elements pi_decl))
         in
-        DMA.Debian.Reduction.dependees
+        MultiarchDebian.Debian.Reduction.dependees
           {
-            DMA.Debian.inst_real = DMA.Reduction.reduceReal r_ma;
-            inst_deps = DMA.Reduction.reduceDeps (ma_deps_of_pkg tables p);
-            inst_rec = DMA.Reduction.reduceRec (ma_recs_of_pkg tables p);
-            inst_prov = DMA.Reduction.reduceProv r_pi pi_decl pi_cls;
+            MultiarchDebian.Debian.inst_real =
+              MultiarchDebian.Reduction.reduceReal r_ma;
+            inst_deps =
+              MultiarchDebian.Reduction.reduceDeps (ma_deps_of_pkg tables p);
+            inst_rec =
+              MultiarchDebian.Reduction.reduceRec (ma_recs_of_pkg tables p);
+            inst_prov = MultiarchDebian.Reduction.reduceProv r_pi pi_decl pi_cls;
             inst_conf =
-              DMA.Reduction.reduceConf
-                (DMA.PackageSet.singleton p)
+              MultiarchDebian.Reduction.reduceConf
+                (MultiarchDebian.PackageSet.singleton p)
                 (ma_conf_of_pkg tables p) pi_cls;
             (* dependees never reads the root, so any package fills it *)
-            inst_root = DMA.Reduction.embedPkg p;
+            inst_root = MultiarchDebian.Reduction.embedPkg p;
           }
           s
-    | ( (DMA.Debian.Reduction.Name.Disjunct _ | DMA.Debian.Reduction.Name.Soft _),
-        DMA.Debian.Reduction.Version.Atom a ) ->
+    | ( ( MultiarchDebian.Debian.Reduction.Name.Disjunct _
+        | MultiarchDebian.Debian.Reduction.Name.Soft _ ),
+        MultiarchDebian.Debian.Reduction.Version.Atom a ) ->
         let r, pi = sel_preimages sel_cache tables (fst a) in
-        DMA.Debian.Reduction.Reduced.DependeeSet.singleton
-          (DMA.Debian.Reduction.dependee r pi a)
-    | ( DMA.Debian.Reduction.Name.Selector _,
-        DMA.Debian.Reduction.Version.Ref (m, w) ) ->
-        DMA.Debian.Reduction.Reduced.DependeeSet.singleton
-          ( DMA.Debian.Reduction.Name.Orig m,
-            DMA.Debian.Reduction.Reduced.VSet.singleton
-              (DMA.Debian.Reduction.Version.Orig w) )
-    | ( DMA.Debian.Reduction.Name.Selector a,
-        DMA.Debian.Reduction.Version.RefReal w ) ->
-        DMA.Debian.Reduction.Reduced.DependeeSet.singleton
-          ( DMA.Debian.Reduction.Name.Orig (DMA.Debian.aname a),
-            DMA.Debian.Reduction.Reduced.VSet.singleton
-              (DMA.Debian.Reduction.Version.Orig w) )
+        MultiarchDebian.Debian.Reduction.Reduced.DependeeSet.singleton
+          (MultiarchDebian.Debian.Reduction.dependee r pi a)
+    | ( MultiarchDebian.Debian.Reduction.Name.Selector _,
+        MultiarchDebian.Debian.Reduction.Version.Ref (m, w) ) ->
+        MultiarchDebian.Debian.Reduction.Reduced.DependeeSet.singleton
+          ( MultiarchDebian.Debian.Reduction.Name.Orig m,
+            MultiarchDebian.Debian.Reduction.Reduced.VSet.singleton
+              (MultiarchDebian.Debian.Reduction.Version.Orig w) )
+    | ( MultiarchDebian.Debian.Reduction.Name.Selector a,
+        MultiarchDebian.Debian.Reduction.Version.RefReal w ) ->
+        MultiarchDebian.Debian.Reduction.Reduced.DependeeSet.singleton
+          ( MultiarchDebian.Debian.Reduction.Name.Orig
+              (MultiarchDebian.Debian.aname a),
+            MultiarchDebian.Debian.Reduction.Reduced.VSet.singleton
+              (MultiarchDebian.Debian.Reduction.Version.Orig w) )
     | _ ->
         (* every other shape is empty by dependees' catch-all, or, at a
            pseudo-name, because no reduced clause hangs there *)
-        DMA.Debian.Reduction.Reduced.DependeeSet.empty
+        MultiarchDebian.Debian.Reduction.Reduced.DependeeSet.empty
 
   (* apt's CompareProviders3 (apt-pkg/solver3.cc) sorts the candidates of one
      alternative and takes the first undecided one.  Resolving from an empty
@@ -212,7 +222,7 @@ module Make (AP : Tables.ARCH) = struct
           let c = Int.compare b.pprio a.pprio in
           if c <> 0 then c else String.compare b.pkgname a.pkgname
 
-  let pref_of_pkg tables (p : DMA.Package.t) =
+  let pref_of_pkg tables (p : MultiarchDebian.Package.t) =
     let (n, b), _ = p in
     let nat = String.equal b AP.native in
     match stanza tables p with
@@ -229,7 +239,7 @@ module Make (AP : Tables.ARCH) = struct
           pess = false;
           pimp = false;
           pnat = nat;
-          pprio = DF.priority_lowest;
+          pprio = Deb_packages.priority_lowest;
           pkgname = n;
         }
 
@@ -238,7 +248,8 @@ module Make (AP : Tables.ARCH) = struct
      first by whether each is in n's group, where foo:amd64 and foo:i386 tie
      whichever architecture asks for foo, and then by pref, which takes the
      native one. *)
-  let provider_compare tables n ((pk, _) as p : DMA.Package.t) ((qk, _) as q) =
+  let provider_compare tables n ((pk, _) as p : MultiarchDebian.Package.t)
+      ((qk, _) as q) =
     if pk = qk then Version.Debian.compare (snd p) (snd q)
     else
       let c =
@@ -256,11 +267,12 @@ module Make (AP : Tables.ARCH) = struct
     val tables : tables
 
     val versions :
-      DMA.Debian.Reduction.Name.t -> DMA.Debian.Reduction.Reduced.VSet.t
+      MultiarchDebian.Debian.Reduction.Name.t ->
+      MultiarchDebian.Debian.Reduction.Reduced.VSet.t
 
     val dependencies :
-      DMA.Debian.Reduction.Reduced.Package.t ->
-      DMA.Debian.Reduction.Reduced.DependeeSet.t
+      MultiarchDebian.Debian.Reduction.Reduced.Package.t ->
+      MultiarchDebian.Debian.Reduction.Reduced.DependeeSet.t
   end) =
   struct
     module PVersion = struct
@@ -271,17 +283,20 @@ module Make (AP : Tables.ARCH) = struct
          None for every one that is not a selector's. *)
       type t = {
         pos : int;
-        v : DMA.Debian.Reduction.Version.t;
-        tgt : (string * DMA.coq_ReducedQualifier) option;
+        v : MultiarchDebian.Debian.Reduction.Version.t;
+        tgt : (string * MultiarchDebian.coq_ReducedQualifier) option;
       }
 
       (* A selector candidate as the package it installs: RefReal names no
          package, so it is a version of the dependee itself. *)
       let sel_pkg (pv : t) =
         match (pv.tgt, pv.v) with
-        | Some (n, DMA.QAArch b), DMA.Debian.Reduction.Version.RefReal w ->
+        | ( Some (n, MultiarchDebian.QAArch b),
+            MultiarchDebian.Debian.Reduction.Version.RefReal w ) ->
             Some ((n, b), w)
-        | Some _, DMA.Debian.Reduction.Version.Ref ((m, DMA.QAArch c), w) ->
+        | ( Some _,
+            MultiarchDebian.Debian.Reduction.Version.Ref
+              ((m, MultiarchDebian.QAArch c), w) ) ->
             Some ((m, c), w)
         | _ -> None
 
@@ -297,27 +312,28 @@ module Make (AP : Tables.ARCH) = struct
          disjunct. *)
       let compare (a : t) (b : t) =
         let fallback () =
-          Pac_common.Ot.r2c (DMA.Debian.Reduction.VersionOT.compare a.v b.v)
+          Pac_common.Ot.r2c
+            (MultiarchDebian.Debian.Reduction.VersionOT.compare a.v b.v)
         in
         match (a.v, b.v) with
-        | ( DMA.Debian.Reduction.Version.Orig x,
-            DMA.Debian.Reduction.Version.Orig y ) ->
+        | ( MultiarchDebian.Debian.Reduction.Version.Orig x,
+            MultiarchDebian.Debian.Reduction.Version.Orig y ) ->
             Version.Debian.compare x y
-        | ( DMA.Debian.Reduction.Version.Atom _,
-            DMA.Debian.Reduction.Version.Atom _ ) ->
+        | ( MultiarchDebian.Debian.Reduction.Version.Atom _,
+            MultiarchDebian.Debian.Reduction.Version.Atom _ ) ->
             (* leftmost alternative first: lower position = greater version *)
             let c = Stdlib.compare b.pos a.pos in
             if c <> 0 then c else fallback ()
-        | DMA.Debian.Reduction.Version.Zero, DMA.Debian.Reduction.Version.Atom _
-          ->
+        | ( MultiarchDebian.Debian.Reduction.Version.Zero,
+            MultiarchDebian.Debian.Reduction.Version.Atom _ ) ->
             -1
-        | DMA.Debian.Reduction.Version.Atom _, DMA.Debian.Reduction.Version.Zero
-          ->
+        | ( MultiarchDebian.Debian.Reduction.Version.Atom _,
+            MultiarchDebian.Debian.Reduction.Version.Zero ) ->
             1
-        | ( ( DMA.Debian.Reduction.Version.RefReal _
-            | DMA.Debian.Reduction.Version.Ref _ ),
-            ( DMA.Debian.Reduction.Version.RefReal _
-            | DMA.Debian.Reduction.Version.Ref _ ) ) -> (
+        | ( ( MultiarchDebian.Debian.Reduction.Version.RefReal _
+            | MultiarchDebian.Debian.Reduction.Version.Ref _ ),
+            ( MultiarchDebian.Debian.Reduction.Version.RefReal _
+            | MultiarchDebian.Debian.Reduction.Version.Ref _ ) ) -> (
             (* a RefReal and its package's own provide are one version to
                apt, and the fallback puts the RefReal first *)
             match (a.tgt, sel_pkg a, sel_pkg b) with
@@ -329,33 +345,35 @@ module Make (AP : Tables.ARCH) = struct
 
       let pp fmt ({ v; _ } : t) =
         match v with
-        | DMA.Debian.Reduction.Version.Orig v -> Format.fprintf fmt "%s" v
-        | DMA.Debian.Reduction.Version.Atom a ->
+        | MultiarchDebian.Debian.Reduction.Version.Orig v ->
+            Format.fprintf fmt "%s" v
+        | MultiarchDebian.Debian.Reduction.Version.Atom a ->
             Format.fprintf fmt "alt:%a" pp_atom a
-        | DMA.Debian.Reduction.Version.Ref (m, w) ->
+        | MultiarchDebian.Debian.Reduction.Version.Ref (m, w) ->
             Format.fprintf fmt "ref:%a=%s" pp_mname m w
-        | DMA.Debian.Reduction.Version.RefReal w ->
+        | MultiarchDebian.Debian.Reduction.Version.RefReal w ->
             Format.fprintf fmt "real:%s" w
-        | DMA.Debian.Reduction.Version.Zero -> Format.fprintf fmt "0"
-        | DMA.Debian.Reduction.Version.Bot -> Format.fprintf fmt "⊥"
+        | MultiarchDebian.Debian.Reduction.Version.Zero ->
+            Format.fprintf fmt "0"
+        | MultiarchDebian.Debian.Reduction.Version.Bot -> Format.fprintf fmt "⊥"
     end
 
     (* The clause position and the dependee are known only where the name is:
        a Disjunct or Soft name holds the clause its candidates are
        alternatives of, and no other name has Version.Atom candidates at all;
        a Selector holds the atom its candidates provide. *)
-    let tag (n' : DMA.Debian.Reduction.Name.t)
-        (v : DMA.Debian.Reduction.Version.t) : PVersion.t =
+    let tag (n' : MultiarchDebian.Debian.Reduction.Name.t)
+        (v : MultiarchDebian.Debian.Reduction.Version.t) : PVersion.t =
       match (n', v) with
-      | ( ( DMA.Debian.Reduction.Name.Disjunct aset
-          | DMA.Debian.Reduction.Name.Soft aset ),
-          DMA.Debian.Reduction.Version.Atom a ) ->
+      | ( ( MultiarchDebian.Debian.Reduction.Name.Disjunct aset
+          | MultiarchDebian.Debian.Reduction.Name.Soft aset ),
+          MultiarchDebian.Debian.Reduction.Version.Atom a ) ->
           { PVersion.pos = atom_pos aset a; v; tgt = None }
-      | DMA.Debian.Reduction.Name.Selector a, _ ->
+      | MultiarchDebian.Debian.Reduction.Name.Selector a, _ ->
           { PVersion.pos = 0; v; tgt = Some (fst a) }
       | _ -> { PVersion.pos = 0; v; tgt = None }
 
-    module PG = Pubgrub.Make (PName) (PVersion)
+    module Resolver = Pubgrub.Make (PName) (PVersion)
 
     let greatest = Pac_common.Order.greatest PVersion.compare
 
@@ -367,32 +385,33 @@ module Make (AP : Tables.ARCH) = struct
        not a need for it. *)
     let assigned_among ~assigned tn tvs =
       match assigned tn with
-      | PG.Unselected -> false
-      | PG.Decided u -> List.exists (fun v -> PVersion.compare u v = 0) tvs
-      | PG.Entailed r -> (
+      | Resolver.Unselected -> false
+      | Resolver.Decided u ->
+          List.exists (fun v -> PVersion.compare u v = 0) tvs
+      | Resolver.Entailed r -> (
           match tn with
-          | DMA.Debian.Reduction.Name.Selector _ -> false
+          | MultiarchDebian.Debian.Reduction.Name.Selector _ -> false
           | _ ->
               (not
-                 (PG.Ranges.contains
-                    (tag tn DMA.Debian.Reduction.Version.Bot)
+                 (Resolver.Ranges.contains
+                    (tag tn MultiarchDebian.Debian.Reduction.Version.Bot)
                     r))
-              && List.exists (fun v -> PG.Ranges.contains v r) tvs)
+              && List.exists (fun v -> Resolver.Ranges.contains v r) tvs)
 
     (* The back edge a selector candidate would add, already assigned:
        dependees sends Ref m w to (Orig m, Orig w) and RefReal w to
        (Orig (aname a), Orig w). *)
     let sel_assigned ~assigned a (pv : PVersion.t) =
       let at m w =
-        assigned_among ~assigned (DMA.Debian.Reduction.Name.Orig m)
+        assigned_among ~assigned (MultiarchDebian.Debian.Reduction.Name.Orig m)
           [
-            tag (DMA.Debian.Reduction.Name.Orig m)
-              (DMA.Debian.Reduction.Version.Orig w);
+            tag (MultiarchDebian.Debian.Reduction.Name.Orig m)
+              (MultiarchDebian.Debian.Reduction.Version.Orig w);
           ]
       in
       match pv.PVersion.v with
-      | DMA.Debian.Reduction.Version.Ref (m, w) -> at m w
-      | DMA.Debian.Reduction.Version.RefReal w -> at (fst a) w
+      | MultiarchDebian.Debian.Reduction.Version.Ref (m, w) -> at m w
+      | MultiarchDebian.Debian.Reduction.Version.RefReal w -> at (fst a) w
       | _ -> false
 
     let cands_tbl = Hashtbl.create 4096
@@ -400,20 +419,22 @@ module Make (AP : Tables.ARCH) = struct
     let cands_of n =
       Pac_common.Tbl.memo cands_tbl n (fun () ->
           List.map (tag n)
-            (DMA.Debian.Reduction.Reduced.VSet.elements (I.versions n)))
+            (MultiarchDebian.Debian.Reduction.Reduced.VSet.elements
+               (I.versions n)))
 
-    let dependees_of n (v : DMA.Debian.Reduction.Version.t) =
-      DMA.Debian.Reduction.Reduced.DependeeSet.elements (I.dependencies (n, v))
+    let dependees_of n (v : MultiarchDebian.Debian.Reduction.Version.t) =
+      MultiarchDebian.Debian.Reduction.Reduced.DependeeSet.elements
+        (I.dependencies (n, v))
       |> List.map (fun (tn, tvs) ->
           ( tn,
-            List.map (tag tn) (DMA.Debian.Reduction.Reduced.VSet.elements tvs)
-          ))
+            List.map (tag tn)
+              (MultiarchDebian.Debian.Reduction.Reduced.VSet.elements tvs) ))
 
     let has_ref n =
       List.exists
         (fun (pv : PVersion.t) ->
           match pv.PVersion.v with
-          | DMA.Debian.Reduction.Version.Ref _ -> true
+          | MultiarchDebian.Debian.Reduction.Version.Ref _ -> true
           | _ -> false)
         (cands_of n)
 
@@ -428,23 +449,23 @@ module Make (AP : Tables.ARCH) = struct
             assigned_among ~assigned tn tvs
             ||
             match tn with
-            | DMA.Debian.Reduction.Name.Selector a ->
+            | MultiarchDebian.Debian.Reduction.Name.Selector a ->
                 List.exists (sel_assigned ~assigned a) tvs
             | _ -> false)
           (dependees_of n pv.PVersion.v)
       in
       match n with
-      | DMA.Debian.Reduction.Name.Selector a ->
+      | MultiarchDebian.Debian.Reduction.Name.Selector a ->
           List.filter (sel_assigned ~assigned a) cands
-      | DMA.Debian.Reduction.Name.Disjunct _ | DMA.Debian.Reduction.Name.Soft _
-        ->
+      | MultiarchDebian.Debian.Reduction.Name.Disjunct _
+      | MultiarchDebian.Debian.Reduction.Name.Soft _ ->
           List.filter alt_assigned cands
       | _ -> []
 
     module Replay = Order.Make (struct
-      module T = T
+      module Tables = Tables
       module PVersion = PVersion
-      module PG = PG
+      module Resolver = Resolver
 
       let tables = I.tables
       let tag = tag
@@ -457,7 +478,7 @@ module Make (AP : Tables.ARCH) = struct
 
     let dependencies n (pv : PVersion.t) =
       List.map
-        (fun (tn, tvs) -> (tn, PG.Ranges.of_list tvs))
+        (fun (tn, tvs) -> (tn, Resolver.Ranges.of_list tvs))
         (dependees_of n pv.PVersion.v)
 
     (* Ranges.full would admit ⊥, which PubGrub then picks, so a bare query
@@ -466,51 +487,53 @@ module Make (AP : Tables.ARCH) = struct
     let root_cands (n, acc) =
       let accepted (pv : PVersion.t) =
         match (pv.PVersion.v, acc) with
-        | DMA.Debian.Reduction.Version.Orig _, Args.Any -> true
-        | DMA.Debian.Reduction.Version.Orig w, Args.Only x -> String.equal w x
+        | MultiarchDebian.Debian.Reduction.Version.Orig _, Args.Any -> true
+        | MultiarchDebian.Debian.Reduction.Version.Orig w, Args.Only x ->
+            String.equal w x
         | _ -> false
       in
-      ( DMA.Debian.Reduction.Name.Orig n,
-        List.filter accepted (cands_of (DMA.Debian.Reduction.Name.Orig n)) )
+      ( MultiarchDebian.Debian.Reduction.Name.Orig n,
+        List.filter accepted
+          (cands_of (MultiarchDebian.Debian.Reduction.Name.Orig n)) )
 
     let root q =
       let n, cs = root_cands q in
-      (n, PG.Ranges.of_list cs)
+      (n, Resolver.Ranges.of_list cs)
 
-    module CT = DMA.Debian.Reduction.Reduced
+    module Reduced = MultiarchDebian.Debian.Reduction.Reduced
 
     (* the query has no root package: its names are the roots PubGrub is
        handed, each at the versions its range lists *)
     let check query sol =
       let s =
-        CT.PackageSet.ofList
+        Reduced.PackageSet.ofList
           (List.map (fun (n, (pv : PVersion.t)) -> (n, pv.PVersion.v)) sol)
       in
       let q =
-        CT.DependeeSet.ofList
+        Reduced.DependeeSet.ofList
           (List.map
              (fun x ->
                let n, cs = root_cands x in
-               (n, CT.VSet.ofList (List.map (fun pv -> pv.PVersion.v) cs)))
+               (n, Reduced.VSet.ofList (List.map (fun pv -> pv.PVersion.v) cs)))
              query)
       in
-      match CT.check I.versions I.dependencies q s with
+      match Reduced.check I.versions I.dependencies q s with
       | None -> ()
       | Some f ->
           Pac_common.Check.fail ~pp_name:PName.pp
             ~pp_version:(fun n fmt v -> PVersion.pp fmt (tag n v))
-            ~elements:CT.VSet.elements f
+            ~elements:Reduced.VSet.elements f
 
     let decode sol =
       let s' =
-        DMA.Debian.Reduction.Reduced.PackageSet.ofList
+        MultiarchDebian.Debian.Reduction.Reduced.PackageSet.ofList
           (List.map (fun (n, (pv : PVersion.t)) -> (n, pv.PVersion.v)) sol)
       in
       List.map
         (fun ((n, b), v) -> (n, b, v))
-        (DMA.PackageSet.elements
-           (DMA.Reduction.debianMAResolution
-              (DMA.Debian.Reduction.debianResolution s')))
+        (MultiarchDebian.PackageSet.elements
+           (MultiarchDebian.Reduction.debianMAResolution
+              (MultiarchDebian.Debian.Reduction.debianResolution s')))
 
     (* apt enqueues the requested packages as it walks its package table
        (FromDepCache, apt-pkg/solver3.cc): bucket by bucket of sHash, the
@@ -529,11 +552,11 @@ module Make (AP : Tables.ARCH) = struct
         !h mod 196613
       in
       let key ((n, y), _) =
-        let b = match y with DMA.QAArch b -> b | _ -> "" in
+        let b = match y with MultiarchDebian.QAArch b -> b | _ -> "" in
         (bucket n, String.length n, n, not (String.equal b AP.native), b)
       in
       List.map
-        (fun ((m, _) as q) -> (DMA.Debian.Reduction.Name.Orig m, q))
+        (fun ((m, _) as q) -> (MultiarchDebian.Debian.Reduction.Name.Orig m, q))
         query
       |> List.stable_sort (fun (_, a) (_, b) -> compare (key a) (key b))
       |> List.map fst
@@ -541,12 +564,13 @@ module Make (AP : Tables.ARCH) = struct
     let run ~debug ~check:checked ~order query =
       let h = Replay.hooks order (request query) in
       let r =
-        PG.solve ?next:h.Pac_common.Order.next ?choose:h.Pac_common.Order.choose
-          ~vers:cands_of ~deps:dependencies (List.map root query)
+        Resolver.solve ?next:h.Pac_common.Order.next
+          ?choose:h.Pac_common.Order.choose ~vers:cands_of ~deps:dependencies
+          (List.map root query)
       in
       h.Pac_common.Order.finish ();
       match r with
-      | Error inc -> Error (fun ppf -> PG.explain_incompatibility ppf inc)
+      | Error inc -> Error (fun ppf -> Resolver.explain_incompatibility ppf inc)
       | Ok sol ->
           if debug then (
             Format.printf "raw solution (%d):@." (List.length sol);
@@ -566,7 +590,7 @@ module Make (AP : Tables.ARCH) = struct
     (* selector preimages by name, asked for again by every depender and by
        the rejection cascade *)
     let sel_cache = Hashtbl.create 4096 in
-    let module S = Search (struct
+    let module Search = Search (struct
       let tables = tables
       let versions = versions sel_cache tables
 
@@ -574,17 +598,20 @@ module Make (AP : Tables.ARCH) = struct
         Pac_common.Tbl.memo looked_up p (fun () -> dependees sel_cache tables p)
     end) in
     let query =
-      List.map (fun ((n, b), acc) -> ((n, DMA.QAArch b), acc)) query
+      List.map (fun ((n, b), acc) -> ((n, MultiarchDebian.QAArch b), acc)) query
     in
-    let r = S.run ~debug ~check ~order query in
+    let r = Search.run ~debug ~check ~order query in
     let lookups = Hashtbl.length looked_up in
     let r = Result.map (fun (pkgs, nodes) -> { pkgs; nodes; lookups }) r in
     let core () =
-      Pac_common.Core.print ~pp_name:PName.pp_core ~pp_version:S.PVersion.pp
-        (Pac_common.Core.walk ~versions:S.cands_of
-           ~dependees:(fun (n, (pv : S.PVersion.t)) ->
-             S.dependees_of n pv.S.PVersion.v)
-           (List.map (fun (n, _) -> DMA.Debian.Reduction.Name.Orig n) query))
+      Pac_common.Core.print ~pp_name:PName.pp_core
+        ~pp_version:Search.PVersion.pp
+        (Pac_common.Core.walk ~versions:Search.cands_of
+           ~dependees:(fun (n, (pv : Search.PVersion.t)) ->
+             Search.dependees_of n pv.Search.PVersion.v)
+           (List.map
+              (fun (n, _) -> MultiarchDebian.Debian.Reduction.Name.Orig n)
+              query))
     in
     (r, core)
 end
@@ -602,7 +629,7 @@ type result = {
 (* a parse the entry may be written from carries its bytes' digests *)
 type source =
   | Entry of in_channel
-  | Parsed of DF.stanza list * int * string list option
+  | Parsed of Deb_packages.stanza list * int * string list option
 
 (* A cache entry holds the parsed index, its drop count and the tables
    built with no version named; a query naming a version cuts the other
@@ -650,14 +677,15 @@ let solve_files ~debug ~check ~order ~recommends ~strict_pinning ~native ~cache
     let dropped = ref 0 in
     let reject () = incr dropped in
     let index, digests =
-      if not settled then (List.concat_map (DF.parse_file ~reject) paths, None)
+      if not settled then
+        (List.concat_map (Deb_packages.parse_file ~reject) paths, None)
       else
         let bytes =
           List.map
             (fun p -> In_channel.with_open_bin p In_channel.input_all)
             paths
         in
-        ( List.concat_map (DF.parse_string ~reject) bytes,
+        ( List.concat_map (Deb_packages.parse_string ~reject) bytes,
           Some (List.map Digest.string bytes) )
     in
     Parsed (index, !dropped, digests)
@@ -666,7 +694,7 @@ let solve_files ~debug ~check ~order ~recommends ~strict_pinning ~native ~cache
     List.sort_uniq String.compare
       (native
       :: List.filter_map
-           (fun (st : DF.stanza) ->
+           (fun (st : Deb_packages.stanza) ->
              if st.architecture = "all" then None else Some st.architecture)
            index)
   in
@@ -675,13 +703,13 @@ let solve_files ~debug ~check ~order ~recommends ~strict_pinning ~native ~cache
       let arches = arches
       let native = native
     end in
-    let module M = Make (AP) in
+    let module Solver = Make (AP) in
     match
       match source with
       | Entry ic ->
           Option.map
             (fun (index, dropped, e) ->
-              (index, dropped, Some (e : M.eager), None))
+              (index, dropped, Some (e : Solver.eager), None))
             (Pac_common.Cache.value ic)
       | Parsed (index, dropped, digests) -> Some (index, dropped, None, digests)
     with
@@ -692,10 +720,10 @@ let solve_files ~debug ~check ~order ~recommends ~strict_pinning ~native ~cache
             let unnamed = (not strict_pinning) || Hashtbl.length named = 0 in
             let tables =
               match eager with
-              | Some e when unnamed -> M.of_eager e
+              | Some e when unnamed -> Solver.of_eager e
               | _ ->
                   let tables =
-                    M.build_tables ~recommends
+                    Solver.build_tables ~recommends
                       (if strict_pinning then
                          Args.pin_candidates ~native ~named index
                        else index)
@@ -705,14 +733,14 @@ let solve_files ~debug ~check ~order ~recommends ~strict_pinning ~native ~cache
                       Pac_common.Cache.store f (fun oc ->
                           Marshal.to_channel oc (ds, arches) [];
                           Marshal.to_channel oc
-                            (index, dropped, M.eager tables)
+                            (index, dropped, Solver.eager tables)
                             [])
                   | _ -> ());
                   tables
             in
             let t_parse = Unix.gettimeofday () -. t0 in
-            let answer, core = M.solve ~debug ~check ~order tables query in
-            let { Tables.names; versions } = M.stats tables in
+            let answer, core = Solver.solve ~debug ~check ~order tables query in
+            let { Tables.names; versions } = Solver.stats tables in
             {
               answer;
               core;

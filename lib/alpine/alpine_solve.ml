@@ -8,23 +8,29 @@ type stats = Lookups.stats = {
 
 module Make () = struct
   open Lookups
-  module Lk = Make ()
-  include Lk
-  module Order = Order.Make (Lk)
+  module Lookups = Make ()
+  include Lookups
+  module Order = Order.Make (Lookups)
 
   type result = { pkgs : (string * string) list; nodes : int; lookups : int }
 
   let solve ?(debug = false) ?(check = false) ?(order = `Tool) (ar : archive)
-      (world : P.dep list) :
+      (world : Apk_parse.dep list) :
       (result, Pac_common.Report.explanation) Stdlib.result * (unit -> unit) =
     Pubgrub.set_debug debug;
     let st = lookups ar in
     let touch = touch ar world st in
     let r =
-      L.solve st ~check ~touch (Order.hooks order ar)
+      FormulaLookups.solve st ~check ~touch (Order.hooks order ar)
       |> Result.map (fun (s_pf, nodes) ->
-          let pkgs = Alp.PackageSet.elements (Red.alpineResolution s_pf) in
-          { pkgs = List.sort compare pkgs; nodes; lookups = L.lookups st })
+          let pkgs =
+            Alpine.PackageSet.elements (Reduction.alpineResolution s_pf)
+          in
+          {
+            pkgs = List.sort compare pkgs;
+            nodes;
+            lookups = FormulaLookups.lookups st;
+          })
     in
-    (r, fun () -> L.core st ~touch)
+    (r, fun () -> FormulaLookups.core st ~touch)
 end

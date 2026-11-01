@@ -21,7 +21,7 @@ let sanitize ar (query : (string * Opam_parse.vc) list) =
     | (name, c) :: rest -> (
         let name = fuzzy name in
         let vs = versions_of ar name in
-        if List.exists (Op.vfHolds (xvc c)) vs then go ((name, c) :: acc) rest
+        if List.exists (Opam.vfHolds (xvc c)) vs then go ((name, c) :: acc) rest
         else
           match c with
           | Opam_parse.VCmp (o, w) when vs <> [] ->
@@ -60,18 +60,20 @@ let solve ?(debug = false) ?(check = false) ?(order = `Tool)
   let st = lookups rho ar in
   let touch = touch rho ar query st in
   let r =
-    L.solve st ~check ~touch (Order.hooks order (ar, query, st, touch))
+    FormulaLookups.solve st ~check ~touch
+      (Order.hooks order (ar, query, st, touch))
     |> Result.map (fun (s_pf, nodes) ->
         (* the package formula's packages decode to opam's through the
             second of the two layers the reduction composes *)
         let reals =
-          List.sort compare (Op.PackageSet.elements (Red.opamResolution s_pf))
+          List.sort compare
+            (Opam.PackageSet.elements (Reduction.opamResolution s_pf))
         in
         {
           reals;
           nodes;
-          lookups = L.lookups st;
+          lookups = FormulaLookups.lookups st;
           depexts = depexts_of rho ar reals;
         })
   in
-  (r, fun () -> L.core st ~touch)
+  (r, fun () -> FormulaLookups.core st ~touch)

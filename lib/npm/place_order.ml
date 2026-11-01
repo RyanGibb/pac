@@ -1,15 +1,13 @@
-module A = Archive
-
 module Make
     (Place_encoding : Place_encoding.S)
     (L : module type of Place_lookup.Make (Place_encoding)) =
 struct
   open Place_encoding
 
-  type assigned = PName.t -> PG.selection
+  type assigned = PName.t -> Resolver.selection
 
   let decided (assigned : assigned) n =
-    match assigned n with PG.Decided v -> Some v | _ -> None
+    match assigned n with Resolver.Decided v -> Some v | _ -> None
 
   (* the location itself and each one above it, deepest first *)
   let rec ups l = l :: (match l with [] -> [] | _ :: t -> ups t)
@@ -19,8 +17,8 @@ struct
     match l with
     | [] -> None
     | a :: t -> (
-        match decided assigned (R.Name.Loc (t, a)) with
-        | Some (R.Version.Occ x) -> Some x
+        match decided assigned (Reduction.Name.Loc (t, a)) with
+        | Some (Reduction.Version.Occ x) -> Some x
         | _ -> None)
 
   (* where the walk from l for a lands in the partial layout, reading an
@@ -28,27 +26,27 @@ struct
   let visible ~assigned l a =
     List.find_map
       (fun l' ->
-        match decided assigned (R.Name.Loc (l', a)) with
-        | Some (R.Version.Occ x) -> Some (l', x)
+        match decided assigned (Reduction.Name.Loc (l', a)) with
+        | Some (Reduction.Version.Occ x) -> Some (l', x)
         | _ -> None)
       (ups l)
 
   let mem v cands = List.exists (PVersion.equal v) cands
-  let is_dep (ed : L.edge) = not ed.L.e.Npl.e_peer
-  let is_peer (ed : L.edge) = ed.L.e.Npl.e_peer
-  let key (ed : L.edge) = ed.L.e.Npl.e_dir
+  let is_dep (ed : L.edge) = not ed.L.e.NpmPlacement.e_peer
+  let is_peer (ed : L.edge) = ed.L.e.NpmPlacement.e_peer
+  let key (ed : L.edge) = ed.L.e.NpmPlacement.e_dir
 
   (* npm-pick-manifest's sort criteria above semver: not deprecated and
      engines-compatible together, then engines, then not deprecated *)
-  let rank ar (x : Npl.Occupant.t) : bool * bool * bool =
+  let rank ar (x : NpmPlacement.Occupant.t) : bool * bool * bool =
     match x with
-    | Npl.Occupant.Proj -> (true, true, true)
-    | Npl.Occupant.Reg (m, v) -> (
-        match A.meta ar (m, v.IVer.s) with
-        | Some mt -> A.ver_rank ar mt
+    | NpmPlacement.Occupant.Proj -> (true, true, true)
+    | NpmPlacement.Occupant.Reg (m, v) -> (
+        match Archive.meta ar (m, v.IVer.s) with
+        | Some mt -> Archive.ver_rank ar mt
         | None -> (true, true, true))
 
-  let best ar (cands : Npl.Occupant.t list) : Npl.Occupant.t =
+  let best ar (cands : NpmPlacement.Occupant.t list) : NpmPlacement.Occupant.t =
     match cands with
     | [] -> invalid_arg "best"
     | c :: cs ->
@@ -60,15 +58,16 @@ struct
 
   (* dist-tags.latest first, when it passes those criteria, as
      npm-pick-manifest's fast path takes it *)
-  let tagged ar (cands : Npl.Occupant.t list) : Npl.Occupant.t option =
+  let tagged ar (cands : NpmPlacement.Occupant.t list) :
+      NpmPlacement.Occupant.t option =
     List.find_opt
       (function
-        | Npl.Occupant.Proj -> false
-        | Npl.Occupant.Reg (m, v) -> (
-            A.loaded_latest ar m = Some v.IVer.s
+        | NpmPlacement.Occupant.Proj -> false
+        | NpmPlacement.Occupant.Reg (m, v) -> (
+            Archive.loaded_latest ar m = Some v.IVer.s
             &&
-            match A.meta ar (m, v.IVer.s) with
-            | Some mt -> A.ver_rank ar mt = (true, true, true)
+            match Archive.meta ar (m, v.IVer.s) with
+            | Some mt -> Archive.ver_rank ar mt = (true, true, true)
             | None -> false))
       cands
 
@@ -80,9 +79,9 @@ struct
      (build-ideal-tree.js #loadPeerSet), each at the version already decided
      for it or else npm's pick for its range.  Their accepted sets on a,
      which a pick for the walk from l should meet. *)
-  let peer_set st ~assigned l a : Npl.Occupant.t list list =
+  let peer_set st ~assigned l a : NpmPlacement.Occupant.t list list =
     let seen = Hashtbl.create 16 in
-    let rec go at (y : Npl.Occupant.t) =
+    let rec go at (y : NpmPlacement.Occupant.t) =
       if Hashtbl.mem seen y then []
       else begin
         Hashtbl.replace seen y ();
@@ -91,9 +90,9 @@ struct
             let x =
               match
                 Option.bind at (fun l ->
-                    decided assigned (R.Name.Walk (l, key ed)))
+                    decided assigned (Reduction.Name.Walk (l, key ed)))
               with
-              | Some (R.Version.Found (_, x)) -> Some x
+              | Some (Reduction.Version.Found (_, x)) -> Some x
               | _ ->
                   if ed.L.accepts = [] then None
                   else Some (pick (L.archive st) ed.L.accepts)
@@ -104,7 +103,9 @@ struct
                 match
                   List.filter
                     (fun (p : L.edge) ->
-                      is_peer p && key p = a && not p.L.e.Npl.e_optional)
+                      is_peer p
+                      && key p = a
+                      && not p.L.e.NpmPlacement.e_optional)
                     (L.edges st x)
                 with
                 | [] -> []
@@ -114,7 +115,9 @@ struct
       end
     in
     match
-      match l with [] -> Some Npl.Occupant.Proj | _ -> occupant ~assigned l
+      match l with
+      | [] -> Some NpmPlacement.Occupant.Proj
+      | _ -> occupant ~assigned l
     with
     | Some y -> go (Some l) y
     | None -> []
@@ -130,10 +133,12 @@ struct
   let choose_walk st ~assigned l a cands =
     let keep =
       match visible ~assigned l a with
-      | Some (l', x) when mem (R.Version.Found (l', x)) cands ->
-          Some (R.Version.Found (l', x))
+      | Some (l', x) when mem (Reduction.Version.Found (l', x)) cands ->
+          Some (Reduction.Version.Found (l', x))
       | Some _ -> None
-      | None -> if mem R.Version.Bot cands then Some R.Version.Bot else None
+      | None ->
+          if mem Reduction.Version.Bot cands then Some Reduction.Version.Bot
+          else None
     in
     match keep with
     | Some v -> v
@@ -141,7 +146,7 @@ struct
         let offered =
           List.sort_uniq occ_compare
             (List.filter_map
-               (function R.Version.Found (_, x) -> Some x | _ -> None)
+               (function Reduction.Version.Found (_, x) -> Some x | _ -> None)
                cands)
         in
         let offered =
@@ -161,7 +166,7 @@ struct
         | [] -> Pac_common.Order.greatest PVersion.compare cands
         | _ -> (
             let u = pick (L.archive st) offered in
-            let wants (y : Npl.Occupant.t) =
+            let wants (y : NpmPlacement.Occupant.t) =
               let es = L.edges st y in
               let peers = List.exists (fun ed -> is_peer ed && key ed = a) es in
               let dep = List.find_opt (fun ed -> is_dep ed && key ed = a) es in
@@ -170,7 +175,7 @@ struct
             let rec climb best = function
               | [] -> best
               | lv :: rest -> (
-                  match decided assigned (R.Name.Loc (lv, a)) with
+                  match decided assigned (Reduction.Name.Loc (lv, a)) with
                   | Some _ -> best
                   | None -> (
                       let peers, dep =
@@ -190,19 +195,19 @@ struct
                             best
                         | _ ->
                             let best =
-                              if mem (R.Version.Found (lv, u)) cands then
-                                Some lv
+                              if mem (Reduction.Version.Found (lv, u)) cands
+                              then Some lv
                               else best
                             in
                             climb best rest))
             in
             match climb None (ups l) with
-            | Some lv -> R.Version.Found (lv, u)
+            | Some lv -> Reduction.Version.Found (lv, u)
             | None -> Pac_common.Order.greatest PVersion.compare cands))
 
   let choose st ~assigned (n : PName.t) (cands : PVersion.t list) : PVersion.t =
     match n with
-    | R.Name.Walk (l, a) -> choose_walk st ~assigned l a cands
+    | Reduction.Name.Walk (l, a) -> choose_walk st ~assigned l a cands
     | _ -> Pac_common.Order.greatest PVersion.compare cands
 
   (* npm's queue (#buildDepStep): the depender shallowest in node_modules,
@@ -211,9 +216,9 @@ struct
   let name_rank tbl (n : PName.t) =
     Pac_common.Tbl.memo tbl n (fun () ->
         match n with
-        | R.Name.Walk (l, a) | R.Name.Loc (l, a) ->
+        | Reduction.Name.Walk (l, a) | Reduction.Name.Loc (l, a) ->
             (List.length l, lock_path l, a)
-        | R.Name.Root -> (-1, "", ""))
+        | Reduction.Name.Root -> (-1, "", ""))
 
   let before tbl n m =
     let d, p, a = name_rank tbl n and d', p', a' = name_rank tbl m in
@@ -245,7 +250,8 @@ struct
           match !current with
           | Some l ->
               List.filter
-                (function R.Name.Walk (l', _), _ -> l' = l | _ -> false)
+                (function
+                  | Reduction.Name.Walk (l', _), _ -> l' = l | _ -> false)
                 open_names
           | None -> []
         in
@@ -253,13 +259,14 @@ struct
         | Some n -> n
         | None -> (
             match least tbl open_names with
-            | Some (R.Name.Walk (l, _) as n) ->
+            | Some (Reduction.Name.Walk (l, _) as n) ->
                 current := Some l;
                 n
             | Some n -> n
             | None -> fst (List.hd open_names)))
 
-  let hooks : (L.t, PName.t, PG.selection, PVersion.t) Pac_common.Order.driver =
+  let hooks :
+      (L.t, PName.t, Resolver.selection, PVersion.t) Pac_common.Order.driver =
    fun order st ->
     match order with
     | `Tool ->

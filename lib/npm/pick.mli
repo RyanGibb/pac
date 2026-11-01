@@ -6,5 +6,5 @@ module Make
   val pick : Archive.t -> string -> PVersion.t list -> PVersion.t
 
   (* npm's pick for a range over every published version of a name *)
-  val pick_in : L.t -> string -> Np.coq_Range -> string option
+  val pick_in : L.t -> string -> Npm.coq_Range -> string option
 end

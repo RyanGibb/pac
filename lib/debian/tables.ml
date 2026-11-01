@@ -1,7 +1,4 @@
-module E = Pac
-module DF = Deb_packages
-
-module DebVersionOT = Pac_common.Ot.Make (struct
+module DebianVersionOT = Pac_common.Ot.Make (struct
   type t = string
 
   let compare = Version.Debian.compare
@@ -27,18 +24,20 @@ module type S = sig
     val native : string
   end
 
-  module DMA :
+  module MultiarchDebian :
       module type of
-        Pac.MultiarchDebian (Pac_common.Ot.Str) (DebVersionOT) (APx)
+        Pac.MultiarchDebian (Pac_common.Ot.Str) (DebianVersionOT) (APx)
 
   type nstanza = {
-    npkg : DMA.Package.t;
-    ncls : DMA.coq_MAClass;
+    npkg : MultiarchDebian.Package.t;
+    ncls : MultiarchDebian.coq_MAClass;
     raw_deps : string list;
     raw_recs : string list;
-    mutable nclauses : (DMA.Atom.t list list * DMA.Atom.t list list) option;
-    nprovs : (string * DMA.Debian.coq_DTop) list;
-    nconfs : DMA.Atom.t list;
+    mutable nclauses :
+      (MultiarchDebian.Atom.t list list * MultiarchDebian.Atom.t list list)
+      option;
+    nprovs : (string * MultiarchDebian.Debian.coq_DTop) list;
+    nconfs : MultiarchDebian.Atom.t list;
     ness : bool;
     nimp : bool;
     nprio : int;
@@ -52,29 +51,43 @@ module type S = sig
   val eager : tables -> eager
   val of_eager : eager -> tables
   val stats : tables -> stats
-  val stanza : tables -> DMA.Package.t -> nstanza option
+  val stanza : tables -> MultiarchDebian.Package.t -> nstanza option
   val versions_of : tables -> string * string -> string list
   val group_members : tables -> string -> (string * string) list
-  val providers : tables -> string -> (DMA.Package.t * DMA.Debian.coq_DTop) list
-  val dependers : tables -> string -> DMA.Package.t list
-  val conflicters : tables -> string -> DMA.Package.t list
-  val atom_pos : DMA.Debian.Clause.t -> DMA.Debian.Atom.t -> int
+
+  val providers :
+    tables ->
+    string ->
+    (MultiarchDebian.Package.t * MultiarchDebian.Debian.coq_DTop) list
+
+  val dependers : tables -> string -> MultiarchDebian.Package.t list
+  val conflicters : tables -> string -> MultiarchDebian.Package.t list
+
+  val atom_pos :
+    MultiarchDebian.Debian.Clause.t -> MultiarchDebian.Debian.Atom.t -> int
+
   val build_tables : recommends:bool -> Deb_packages.stanza list -> tables
   val obsolete : tables -> nstanza -> bool
-  val deps_of : nstanza -> DMA.Atom.t list list
-  val recs_of : nstanza -> DMA.Atom.t list list
+  val deps_of : nstanza -> MultiarchDebian.Atom.t list list
+  val recs_of : nstanza -> MultiarchDebian.Atom.t list list
 
   val ordered_clauses :
     tables ->
-    DMA.Package.t ->
-    (bool * DMA.Debian.Reduction.Name.t * DMA.Debian.Atom.t list) list
+    MultiarchDebian.Package.t ->
+    (bool
+    * MultiarchDebian.Debian.Reduction.Name.t
+    * MultiarchDebian.Debian.Atom.t list)
+    list
 
-  val sat : DMA.Debian.VersionFormula.coq_Formula -> string -> bool
-  val pp_mname : Format.formatter -> string * DMA.coq_ReducedQualifier -> unit
-  val pp_atom : Format.formatter -> DMA.Debian.Atom.t -> unit
+  val sat : MultiarchDebian.Debian.VersionFormula.coq_Formula -> string -> bool
+
+  val pp_mname :
+    Format.formatter -> string * MultiarchDebian.coq_ReducedQualifier -> unit
+
+  val pp_atom : Format.formatter -> MultiarchDebian.Debian.Atom.t -> unit
 
   module PName : sig
-    type t = DMA.Debian.Reduction.Name.t
+    type t = MultiarchDebian.Debian.Reduction.Name.t
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit
@@ -93,37 +106,45 @@ module Make (AP : ARCH) : S = struct
     let native = AP.native
   end
 
-  module DMA = E.MultiarchDebian (Pac_common.Ot.Str) (DebVersionOT) (APx)
+  module MultiarchDebian =
+    Pac.MultiarchDebian (Pac_common.Ot.Str) (DebianVersionOT) (APx)
 
   let formula_of_constr = function
-    | None -> DMA.Debian.VersionFormula.FTop
-    | Some (DF.Ge, v) -> DMA.Debian.VersionFormula.FCmp (E.OpGe, v)
-    | Some (DF.Gt, v) -> DMA.Debian.VersionFormula.FCmp (E.OpGt, v)
-    | Some (DF.Le, v) -> DMA.Debian.VersionFormula.FCmp (E.OpLe, v)
-    | Some (DF.Lt, v) -> DMA.Debian.VersionFormula.FCmp (E.OpLt, v)
-    | Some (DF.Eq, v) -> DMA.Debian.VersionFormula.FCmp (E.OpEq, v)
+    | None -> MultiarchDebian.Debian.VersionFormula.FTop
+    | Some (Deb_packages.Ge, v) ->
+        MultiarchDebian.Debian.VersionFormula.FCmp (Pac.OpGe, v)
+    | Some (Deb_packages.Gt, v) ->
+        MultiarchDebian.Debian.VersionFormula.FCmp (Pac.OpGt, v)
+    | Some (Deb_packages.Le, v) ->
+        MultiarchDebian.Debian.VersionFormula.FCmp (Pac.OpLe, v)
+    | Some (Deb_packages.Lt, v) ->
+        MultiarchDebian.Debian.VersionFormula.FCmp (Pac.OpLt, v)
+    | Some (Deb_packages.Eq, v) ->
+        MultiarchDebian.Debian.VersionFormula.FCmp (Pac.OpEq, v)
 
   let qual_of = function
-    | DF.Unqual -> DMA.QUnq
-    | DF.AnyArch -> DMA.QAny
-    | DF.NativeArch -> DMA.QNative
-    | DF.ExplicitArch a -> DMA.QExact a
+    | Deb_packages.Unqual -> MultiarchDebian.QUnq
+    | Deb_packages.AnyArch -> MultiarchDebian.QAny
+    | Deb_packages.NativeArch -> MultiarchDebian.QNative
+    | Deb_packages.ExplicitArch a -> MultiarchDebian.QExact a
 
-  let matom_of (a : DF.atom) : DMA.Atom.t =
+  let matom_of (a : Deb_packages.atom) : MultiarchDebian.Atom.t =
     (a.name, (qual_of a.aqual, formula_of_constr a.constr))
 
   let dtop_of = function
-    | Some v -> DMA.Debian.DTVal v
-    | None -> DMA.Debian.DTTop
+    | Some v -> MultiarchDebian.Debian.DTVal v
+    | None -> MultiarchDebian.Debian.DTTop
 
   type nstanza = {
-    npkg : DMA.Package.t;
-    ncls : DMA.coq_MAClass;
+    npkg : MultiarchDebian.Package.t;
+    ncls : MultiarchDebian.coq_MAClass;
     raw_deps : string list;
     raw_recs : string list;
-    mutable nclauses : (DMA.Atom.t list list * DMA.Atom.t list list) option;
-    nprovs : (string * DMA.Debian.coq_DTop) list;
-    nconfs : DMA.Atom.t list;
+    mutable nclauses :
+      (MultiarchDebian.Atom.t list list * MultiarchDebian.Atom.t list list)
+      option;
+    nprovs : (string * MultiarchDebian.Debian.coq_DTop) list;
+    nconfs : MultiarchDebian.Atom.t list;
     ness : bool;
     nimp : bool;
     nprio : int;
@@ -133,15 +154,15 @@ module Make (AP : ARCH) : S = struct
 
   (* ~recommends false is the --no-install-recommends reading: the Rec
      instance is empty, so every soft disjunct is empty and unreachable. *)
-  let normalize ~recommends (st : DF.stanza) : nstanza =
+  let normalize ~recommends (st : Deb_packages.stanza) : nstanza =
     let _, arch = Apt_args.stanza_key ~native:AP.native st in
     let ncls =
       match st.multi_arch with
-      | Some "foreign" -> DMA.MAForeign
-      | Some "same" when st.architecture = "all" -> DMA.MANo
-      | Some "same" -> DMA.MASame
-      | Some "allowed" -> DMA.MAAllowed
-      | _ -> DMA.MANo
+      | Some "foreign" -> MultiarchDebian.MAForeign
+      | Some "same" when st.architecture = "all" -> MultiarchDebian.MANo
+      | Some "same" -> MultiarchDebian.MASame
+      | Some "allowed" -> MultiarchDebian.MAAllowed
+      | _ -> MultiarchDebian.MANo
     in
     {
       npkg = ((st.package, arch), st.version);
@@ -151,7 +172,7 @@ module Make (AP : ARCH) : S = struct
       nclauses = None;
       nprovs =
         List.map
-          (fun (pr : DF.provide) -> (pr.pname, dtop_of pr.pversion))
+          (fun (pr : Deb_packages.provide) -> (pr.pname, dtop_of pr.pversion))
           st.provides;
       nconfs = List.map matom_of st.conflicts;
       (* apt's cache generator marks the package named apt Essential and
@@ -167,10 +188,12 @@ module Make (AP : ARCH) : S = struct
 
   type eager = {
     versions_table : (string * string, string list) Hashtbl.t;
-    stanza_table : (DMA.Package.t, nstanza) Hashtbl.t;
+    stanza_table : (MultiarchDebian.Package.t, nstanza) Hashtbl.t;
     group_table : (string, (string * string) list) Hashtbl.t;
     providers_table :
-      (string, (DMA.Package.t * DMA.Debian.coq_DTop) list) Hashtbl.t;
+      ( string,
+        (MultiarchDebian.Package.t * MultiarchDebian.Debian.coq_DTop) list )
+      Hashtbl.t;
   }
 
   type tables = {
@@ -179,16 +202,19 @@ module Make (AP : ARCH) : S = struct
        Conflicts or Breaks, by the bare name as written: the watch lists
        apt's Reject propagation walks, built from the field text alone, so
        no clause is parsed for them; only the tool order asks *)
-    rev_dep_table : (string, DMA.Package.t list) Hashtbl.t Lazy.t;
-    rev_conf_table : (string, DMA.Package.t list) Hashtbl.t Lazy.t;
+    rev_dep_table : (string, MultiarchDebian.Package.t list) Hashtbl.t Lazy.t;
+    rev_conf_table : (string, MultiarchDebian.Package.t list) Hashtbl.t Lazy.t;
     (* the binaries each source name builds, for apt's obsolescence test,
        likewise asked for by the tool order alone *)
     source_table : (string, nstanza list) Hashtbl.t Lazy.t;
     (* a package's clauses in field order, asked for again by every depender
        and by the rejection cascade *)
     oc_cache :
-      ( DMA.Package.t,
-        (bool * DMA.Debian.Reduction.Name.t * DMA.Debian.Atom.t list) list )
+      ( MultiarchDebian.Package.t,
+        (bool
+        * MultiarchDebian.Debian.Reduction.Name.t
+        * MultiarchDebian.Debian.Atom.t list)
+        list )
       Hashtbl.t;
   }
 
@@ -209,12 +235,13 @@ module Make (AP : ARCH) : S = struct
   let conflicters tables n = find_list (Lazy.force tables.rev_conf_table) n
 
   let parse_relations fields =
-    List.map (List.map matom_of) (DF.parse_depends_fields fields)
+    List.map (List.map matom_of) (Deb_packages.parse_depends_fields fields)
 
-  let atom_pos (alts : DMA.Debian.Clause.t) a =
+  let atom_pos (alts : MultiarchDebian.Debian.Clause.t) a =
     let rec go i = function
       | [] -> max_int
-      | b :: bs -> if DMA.Debian.Atom.eq_dec b a then i else go (i + 1) bs
+      | b :: bs ->
+          if MultiarchDebian.Debian.Atom.eq_dec b a then i else go (i + 1) bs
     in
     go 0 alts
 
@@ -264,7 +291,7 @@ module Make (AP : ARCH) : S = struct
     let c = Hashtbl.create 4096 in
     Hashtbl.iter
       (fun p (stz : nstanza) ->
-        List.iter (fun a -> push c (DMA.aname a) p) stz.nconfs)
+        List.iter (fun a -> push c (MultiarchDebian.aname a) p) stz.nconfs)
       stanza_table;
     c
 
@@ -290,7 +317,7 @@ module Make (AP : ARCH) : S = struct
      read as one version with both stanzas' Provides, in the stanza as in
      providers_table; its Depends, Recommends and Conflicts are the later
      stanza's. *)
-  let build_tables ~recommends (index : DF.stanza list) : tables =
+  let build_tables ~recommends (index : Deb_packages.stanza list) : tables =
     let versions_table = Hashtbl.create 65536
     and stanza_table = Hashtbl.create 65536
     and group_table = Hashtbl.create 65536
@@ -353,8 +380,11 @@ module Make (AP : ARCH) : S = struct
      item, when it has one, is the alternative's selector, which the caller
      resolves because a selector in turn exists only where a Provides
      matches the atom. *)
-  let ordered_clauses tables (p : DMA.Package.t) :
-      (bool * DMA.Debian.Reduction.Name.t * DMA.Debian.Atom.t list) list =
+  let ordered_clauses tables (p : MultiarchDebian.Package.t) :
+      (bool
+      * MultiarchDebian.Debian.Reduction.Name.t
+      * MultiarchDebian.Debian.Atom.t list)
+      list =
     match Hashtbl.find_opt tables.oc_cache p with
     | Some r -> r
     | None ->
@@ -367,67 +397,74 @@ module Make (AP : ARCH) : S = struct
                  a clause by its atom set (Debian.dependees): a | a, or
                  a (>= 1.0) | a (>= 1.00), is one atom, a direct edge *)
               let mk opt synth alts =
-                let ma = DMA.Reduction.reduceClause b alts in
+                let ma = MultiarchDebian.Reduction.reduceClause b alts in
                 ( opt,
                   synth ma,
-                  DMA.Debian.AtomSet.elements (DMA.Debian.clauseAtoms ma) )
+                  MultiarchDebian.Debian.AtomSet.elements
+                    (MultiarchDebian.Debian.clauseAtoms ma) )
               in
               List.map
                 (fun alts ->
-                  mk false (fun s -> DMA.Debian.Reduction.Name.Disjunct s) alts)
+                  mk false
+                    (fun s -> MultiarchDebian.Debian.Reduction.Name.Disjunct s)
+                    alts)
                 (deps_of stz)
               @ List.map
                   (fun alts ->
-                    mk true (fun s -> DMA.Debian.Reduction.Name.Soft s) alts)
+                    mk true
+                      (fun s -> MultiarchDebian.Debian.Reduction.Name.Soft s)
+                      alts)
                   (recs_of stz)
         in
         Hashtbl.add tables.oc_cache p r;
         r
 
-  let sat f w = DMA.Debian.VersionFormula.satisfiesb w f
+  let sat f w = MultiarchDebian.Debian.VersionFormula.satisfiesb w f
 
-  let pp_formula fmt (f : DMA.Debian.VersionFormula.coq_Formula) =
+  let pp_formula fmt (f : MultiarchDebian.Debian.VersionFormula.coq_Formula) =
     let rec go fmt = function
-      | DMA.Debian.VersionFormula.FTop -> Format.fprintf fmt "T"
-      | DMA.Debian.VersionFormula.FBot -> Format.fprintf fmt "F"
-      | DMA.Debian.VersionFormula.FConj (a, b) ->
+      | MultiarchDebian.Debian.VersionFormula.FTop -> Format.fprintf fmt "T"
+      | MultiarchDebian.Debian.VersionFormula.FBot -> Format.fprintf fmt "F"
+      | MultiarchDebian.Debian.VersionFormula.FConj (a, b) ->
           Format.fprintf fmt "(%a & %a)" go a go b
-      | DMA.Debian.VersionFormula.FDisj (a, b) ->
+      | MultiarchDebian.Debian.VersionFormula.FDisj (a, b) ->
           Format.fprintf fmt "(%a | %a)" go a go b
-      | DMA.Debian.VersionFormula.FCmp (op, v) ->
+      | MultiarchDebian.Debian.VersionFormula.FCmp (op, v) ->
           let ops =
             match op with
-            | E.OpGe -> ">="
-            | E.OpGt -> ">>"
-            | E.OpLe -> "<="
-            | E.OpLt -> "<<"
-            | E.OpEq -> "="
-            | E.OpNe -> "!="
+            | Pac.OpGe -> ">="
+            | Pac.OpGt -> ">>"
+            | Pac.OpLe -> "<="
+            | Pac.OpLt -> "<<"
+            | Pac.OpEq -> "="
+            | Pac.OpNe -> "!="
           in
           Format.fprintf fmt "%s %s" ops v
     in
     go fmt f
 
   let pp_qarch fmt = function
-    | DMA.QAArch a -> Format.fprintf fmt "%s" a
-    | DMA.QAExact a -> Format.fprintf fmt "<%s>" a
-    | DMA.QAAny -> Format.fprintf fmt "any"
-    | DMA.QAGroup -> Format.fprintf fmt "<group>"
+    | MultiarchDebian.QAArch a -> Format.fprintf fmt "%s" a
+    | MultiarchDebian.QAExact a -> Format.fprintf fmt "<%s>" a
+    | MultiarchDebian.QAAny -> Format.fprintf fmt "any"
+    | MultiarchDebian.QAGroup -> Format.fprintf fmt "<group>"
 
   let pp_mname fmt (n, y) = Format.fprintf fmt "%s:%a" n pp_qarch y
   let pp_atom fmt (m, f) = Format.fprintf fmt "%a (%a)" pp_mname m pp_formula f
 
   module PName = struct
-    type t = DMA.Debian.Reduction.Name.t
+    type t = MultiarchDebian.Debian.Reduction.Name.t
 
     let compare a b =
-      Pac_common.Ot.r2c (DMA.Debian.Reduction.NameOT.compare a b)
+      Pac_common.Ot.r2c (MultiarchDebian.Debian.Reduction.NameOT.compare a b)
 
     let pp fmt = function
-      | DMA.Debian.Reduction.Name.Orig m -> pp_mname fmt m
-      | DMA.Debian.Reduction.Name.Disjunct _ -> Format.fprintf fmt "<alts>"
-      | DMA.Debian.Reduction.Name.Soft _ -> Format.fprintf fmt "<rec>"
-      | DMA.Debian.Reduction.Name.Selector a ->
+      | MultiarchDebian.Debian.Reduction.Name.Orig m -> pp_mname fmt m
+      | MultiarchDebian.Debian.Reduction.Name.Disjunct _ ->
+          Format.fprintf fmt "<alts>"
+      | MultiarchDebian.Debian.Reduction.Name.Soft _ ->
+          Format.fprintf fmt "<rec>"
+      | MultiarchDebian.Debian.Reduction.Name.Selector a ->
           Format.fprintf fmt "<sel %a>" pp_atom a
 
     (* [pp] abbreviates a clause, which the explanations print; the core
@@ -439,9 +476,10 @@ module Make (AP : ARCH) : S = struct
           pp_atom
       in
       match n with
-      | DMA.Debian.Reduction.Name.Disjunct a ->
+      | MultiarchDebian.Debian.Reduction.Name.Disjunct a ->
           Format.fprintf fmt "<alts %a>" alts a
-      | DMA.Debian.Reduction.Name.Soft a -> Format.fprintf fmt "<rec %a>" alts a
+      | MultiarchDebian.Debian.Reduction.Name.Soft a ->
+          Format.fprintf fmt "<rec %a>" alts a
       | _ -> pp fmt n
   end
 end

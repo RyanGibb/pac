@@ -1,15 +1,14 @@
-module E = Pac
 module Ot = Pac_common.Ot
 
-let xop : Npm_version.op -> E.cmpOp = function
-  | Npm_version.Ge -> E.OpGe
-  | Npm_version.Gt -> E.OpGt
-  | Npm_version.Le -> E.OpLe
-  | Npm_version.Lt -> E.OpLt
-  | Npm_version.Eq -> E.OpEq
+let xop : Npm_version.op -> Pac.cmpOp = function
+  | Npm_version.Ge -> Pac.OpGe
+  | Npm_version.Gt -> Pac.OpGt
+  | Npm_version.Le -> Pac.OpLe
+  | Npm_version.Lt -> Pac.OpLt
+  | Npm_version.Eq -> Pac.OpEq
 
 module type S = sig
-  module NVerOT : sig
+  module NpmVersionOT : sig
     type t = string
 
     val compare : t -> t -> Pac.comparison
@@ -21,32 +20,32 @@ module type S = sig
     val sameCore : string -> string -> bool
   end
 
-  module Np : module type of Pac.Npm (Pac_common.Ot.Str) (NVerOT) (PM)
-  module R = Np.Reduction
-  module T = Np.Reduced
+  module Npm : module type of Pac.Npm (Pac_common.Ot.Str) (NpmVersionOT) (PM)
+  module Reduction = Npm.Reduction
+  module Reduced = Npm.Reduced
 
-  val xrange : Npm_version.range -> Np.coq_Range
+  val xrange : Npm_version.range -> Npm.coq_Range
 
   module PName : sig
-    type t = Np.Name.name
+    type t = Npm.Name.name
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit
   end
 
   module PVersion : sig
-    type t = Np.Version.version
+    type t = Npm.Version.version
 
     val compare : t -> t -> int
     val equal : t -> t -> bool
     val pp : Format.formatter -> t -> unit
   end
 
-  module PG : module type of Pubgrub.Make (PName) (PVersion)
+  module Resolver : module type of Pubgrub.Make (PName) (PVersion)
 end
 
 module Make () = struct
-  module NVerOT = Ot.Make (struct
+  module NpmVersionOT = Ot.Make (struct
     type t = string
 
     let compare = Npm_version.compare
@@ -57,21 +56,21 @@ module Make () = struct
     let sameCore = Npm_version.same_core
   end
 
-  module Np = E.Npm (Ot.Str) (NVerOT) (PM)
-  module R = Np.Reduction
-  module T = Np.Reduced
+  module Npm = Pac.Npm (Ot.Str) (NpmVersionOT) (PM)
+  module Reduction = Npm.Reduction
+  module Reduced = Npm.Reduced
 
-  let xcomp : Npm_version.comparator -> Np.coq_Comparator = function
-    | Npm_version.Any -> Np.CAny
-    | Npm_version.Cmp (o, c) -> Np.COp (xop o, c)
+  let xcomp : Npm_version.comparator -> Npm.coq_Comparator = function
+    | Npm_version.Any -> Npm.CAny
+    | Npm_version.Cmp (o, c) -> Npm.COp (xop o, c)
 
-  let xrange (rg : Npm_version.range) : Np.coq_Range =
+  let xrange (rg : Npm_version.range) : Npm.coq_Range =
     List.map (fun cs -> List.map xcomp cs) rg
 
   module PName = struct
-    type t = Np.Name.name
+    type t = Npm.Name.name
 
-    let compare a b = Ot.r2c (Np.Name.compare a b)
+    let compare a b = Ot.r2c (Npm.Name.compare a b)
 
     let pp_key fmt ((a, t) : string * string) =
       if a = t then Format.fprintf fmt "%s" a
@@ -79,27 +78,27 @@ module Make () = struct
 
     let pp fmt (n : t) =
       match n with
-      | Np.Name.Granular (k, w) -> Format.fprintf fmt "%a@%s" pp_key k w
-      | Np.Name.Intermediate (k, v, m) ->
+      | Npm.Name.Granular (k, w) -> Format.fprintf fmt "%a@%s" pp_key k w
+      | Npm.Name.Intermediate (k, v, m) ->
           Format.fprintf fmt "<%a@%s=>%a>" pp_key k v pp_key m
-      | Np.Name.Sight (k, v, a) -> Format.fprintf fmt "<%a@%s^%s>" pp_key k v a
-      | Np.Name.Link (k, v, m, u, a) ->
+      | Npm.Name.Sight (k, v, a) -> Format.fprintf fmt "<%a@%s^%s>" pp_key k v a
+      | Npm.Name.Link (k, v, m, u, a) ->
           Format.fprintf fmt "<%a@%s=>%a@%s^%s>" pp_key k v pp_key m u a
-      | Np.Name.Desc (a, t, s) -> Format.fprintf fmt "<%a@%s>" pp_key (a, t) s
+      | Npm.Name.Desc (a, t, s) -> Format.fprintf fmt "<%a@%s>" pp_key (a, t) s
   end
 
   module PVersion = struct
-    type t = Np.Version.version
+    type t = Npm.Version.version
 
-    let compare a b = Ot.r2c (Np.Version.compare a b)
+    let compare a b = Ot.r2c (Npm.Version.compare a b)
     let equal a b = compare a b = 0
 
     let pp fmt (v : t) =
       match v with
-      | Np.Version.Orig v -> Format.fprintf fmt "%s" v
-      | Np.Version.Bot -> Format.fprintf fmt "⊥"
-      | Np.Version.Free -> Format.fprintf fmt "∗"
+      | Npm.Version.Orig v -> Format.fprintf fmt "%s" v
+      | Npm.Version.Bot -> Format.fprintf fmt "⊥"
+      | Npm.Version.Free -> Format.fprintf fmt "∗"
   end
 
-  module PG = Pubgrub.Make (PName) (PVersion)
+  module Resolver = Pubgrub.Make (PName) (PVersion)
 end

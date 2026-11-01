@@ -1,37 +1,36 @@
-module P = Npm_parse
-module A = Archive
 module Tbl = Pac_common.Tbl
 
 module Make (Place_encoding : Place_encoding.S) = struct
   open Place_encoding
 
   type edge = {
-    e : Npl.coq_Edge;
-    acc : Pl.VSet.t;
-    accepts : Npl.Occupant.t list;
+    e : NpmPlacement.coq_Edge;
+    acc : Placement.VSet.t;
+    accepts : NpmPlacement.Occupant.t list;
     id : int;
   }
 
   type t = {
-    ar : A.t;
+    ar : Archive.t;
     root : string * string;
-    ovr : (string * Npl.coq_Range) list;
+    ovr : (string * NpmPlacement.coq_Range) list;
     depth : int;
-    dnat : E.nat;
-    edge_tbl : (Npl.Occupant.t, edge list) Hashtbl.t;
-    acc_tbl : (string * Npl.coq_Range, int * Pl.VSet.t) Hashtbl.t;
-    repo_at : (string, Npl.RealPackageSet.t) Hashtbl.t;
-    repo_of : (string list, Npl.RealPackageSet.t) Hashtbl.t;
-    real_tbl : (string, Npl.VSet.t) Hashtbl.t;
+    dnat : Pac.nat;
+    edge_tbl : (NpmPlacement.Occupant.t, edge list) Hashtbl.t;
+    acc_tbl :
+      (string * NpmPlacement.coq_Range, int * Placement.VSet.t) Hashtbl.t;
+    repo_at : (string, NpmPlacement.RealPackageSet.t) Hashtbl.t;
+    repo_of : (string list, NpmPlacement.RealPackageSet.t) Hashtbl.t;
+    real_tbl : (string, NpmPlacement.VSet.t) Hashtbl.t;
     key_names : (string, string list) Hashtbl.t;
-    key_inst : (string, int * Pl.coq_Inst) Hashtbl.t;
+    key_inst : (string, int * Placement.coq_Inst) Hashtbl.t;
     vcache : (PName.t, int * PVersion.t list) Hashtbl.t;
   }
 
   let create ~depth ar root =
     let ovr =
-      match A.root_meta ar with
-      | Some v -> List.map (fun (n, rg) -> (n, xrange rg)) v.P.v_ovr
+      match Archive.root_meta ar with
+      | Some v -> List.map (fun (n, rg) -> (n, xrange rg)) v.Npm_parse.v_ovr
       | None -> []
     in
     {
@@ -56,43 +55,46 @@ module Make (Place_encoding : Place_encoding.S) = struct
   (* The project, which only the root holds, is not the registry's package
      of its name even at its version: arborist loads devDependencies for the
      top node alone. *)
-  let meta st (x : Npl.Occupant.t) =
+  let meta st (x : NpmPlacement.Occupant.t) =
     match x with
-    | Npl.Occupant.Proj -> A.root_meta st.ar
-    | Npl.Occupant.Reg (m, v) -> A.meta st.ar (m, v.IVer.s)
+    | NpmPlacement.Occupant.Proj -> Archive.root_meta st.ar
+    | NpmPlacement.Occupant.Reg (m, v) -> Archive.meta st.ar (m, v.IVer.s)
 
-  let repo_at st (n : string) : Npl.RealPackageSet.t =
+  let repo_at st (n : string) : NpmPlacement.RealPackageSet.t =
     Tbl.memo st.repo_at n (fun () ->
-        Npl.RealPackageSet.ofList
-          (List.map (fun v -> (n, IVer.make v)) (A.versions_of st.ar n)))
+        NpmPlacement.RealPackageSet.ofList
+          (List.map (fun v -> (n, IVer.make v)) (Archive.versions_of st.ar n)))
 
-  let repo_of st (ns : string list) : Npl.RealPackageSet.t =
+  let repo_of st (ns : string list) : NpmPlacement.RealPackageSet.t =
     let ns = List.sort_uniq String.compare ns in
     Tbl.memo st.repo_of ns (fun () ->
-        Npl.RealPackageSet.unions (List.map (repo_at st) ns))
+        NpmPlacement.RealPackageSet.unions (List.map (repo_at st) ns))
 
   (* Dist-tags and npm's reading of "*" shape the range handed to the
      calculus, as in the npm reading. *)
-  let xdep ar (d : P.dep) : Npl.coq_Dependency =
+  let xdep ar (d : Npm_parse.dep) : NpmPlacement.coq_Dependency =
     {
-      Npl.d_dir = d.P.d_dir;
-      d_name = d.P.d_name;
-      d_range = xrange (Lookup.spec_range ar d.P.d_name d.P.d_spec);
-      d_dev = d.P.d_dev;
-      d_optional = d.P.d_optional;
+      NpmPlacement.d_dir = d.Npm_parse.d_dir;
+      d_name = d.Npm_parse.d_name;
+      d_range =
+        xrange (Lookup.spec_range ar d.Npm_parse.d_name d.Npm_parse.d_spec);
+      d_dev = d.Npm_parse.d_dev;
+      d_optional = d.Npm_parse.d_optional;
     }
 
-  let xpeer ar (r : P.peer) : Npl.coq_PeerDependency =
+  let xpeer ar (r : Npm_parse.peer) : NpmPlacement.coq_PeerDependency =
     {
-      Npl.p_dir = r.P.p_name;
-      p_name = r.P.p_dependee_name;
-      p_range = xrange (Lookup.spec_range ar r.P.p_dependee_name r.P.p_spec);
-      p_optional = r.P.p_optional;
+      NpmPlacement.p_dir = r.Npm_parse.p_name;
+      p_name = r.Npm_parse.p_dependee_name;
+      p_range =
+        xrange
+          (Lookup.spec_range ar r.Npm_parse.p_dependee_name r.Npm_parse.p_spec);
+      p_optional = r.Npm_parse.p_optional;
     }
 
-  let mk_inst st ~repo ~deps ~peers : Npl.coq_Inst =
+  let mk_inst st ~repo ~deps ~peers : NpmPlacement.coq_Inst =
     {
-      Npl.inst_real = repo;
+      NpmPlacement.inst_real = repo;
       inst_deps = deps;
       inst_peers = peers;
       inst_ovr = st.ovr;
@@ -104,36 +106,40 @@ module Make (Place_encoding : Place_encoding.S) = struct
   (* The occupant's sub-instance for its edges: its package's manifest.  The
      versions that decide whether each optional dependency can be met are
      real_at's, at the package it names once overridden. *)
-  let occ_inst st (x : Npl.Occupant.t) : Npl.coq_Inst =
+  let occ_inst st (x : NpmPlacement.Occupant.t) : NpmPlacement.coq_Inst =
     let ds, rs =
       match meta st x with
       | None -> ([], [])
       | Some v ->
-          (List.map (xdep st.ar) v.P.v_deps, List.map (xpeer st.ar) v.P.v_peers)
+          ( List.map (xdep st.ar) v.Npm_parse.v_deps,
+            List.map (xpeer st.ar) v.Npm_parse.v_peers )
     in
     match x with
-    | Npl.Occupant.Proj ->
+    | NpmPlacement.Occupant.Proj ->
         {
-          (mk_inst st ~repo:Npl.RealPackageSet.empty ~deps:[] ~peers:[]) with
-          Npl.inst_rootDeps = ds;
+          (mk_inst st ~repo:NpmPlacement.RealPackageSet.empty ~deps:[] ~peers:[])
+          with
+          NpmPlacement.inst_rootDeps = ds;
           inst_rootPeers = rs;
         }
-    | Npl.Occupant.Reg (m, v) ->
-        mk_inst st ~repo:Npl.RealPackageSet.empty
+    | NpmPlacement.Occupant.Reg (m, v) ->
+        mk_inst st ~repo:NpmPlacement.RealPackageSet.empty
           ~deps:(List.map (fun d -> ((m, v), d)) ds)
           ~peers:(List.map (fun r -> ((m, v), r)) rs)
 
   (* An edge's accepted occupants read only the repository at the package it
      names, so they are computed once per package and range: acceptsIn over
      the name's versions, which are computed once per name. *)
-  let real_at st (n : string) : Npl.VSet.t =
-    Tbl.memo st.real_tbl n (fun () -> Npl.realVersions (repo_at st n) n)
+  let real_at st (n : string) : NpmPlacement.VSet.t =
+    Tbl.memo st.real_tbl n (fun () ->
+        NpmPlacement.realVersions (repo_at st n) n)
 
-  let accepted st (e : Npl.coq_Edge) : int * Pl.VSet.t =
-    let n = e.Npl.e_name in
-    Tbl.memo st.acc_tbl (n, e.Npl.e_range) (fun () ->
+  let accepted st (e : NpmPlacement.coq_Edge) : int * Placement.VSet.t =
+    let n = e.NpmPlacement.e_name in
+    Tbl.memo st.acc_tbl (n, e.NpmPlacement.e_range) (fun () ->
         ( Hashtbl.length st.acc_tbl,
-          Npl.Reduction.acceptsIn n e.Npl.e_range (real_at st n) ))
+          NpmPlacement.Reduction.acceptsIn n e.NpmPlacement.e_range
+            (real_at st n) ))
 
   let note_key st (k : string) (m : string) =
     let l = Tbl.find_list st.key_names k in
@@ -144,14 +150,14 @@ module Make (Place_encoding : Place_encoding.S) = struct
      atom constrains already lists every package the atom accepts: every
      version set handed to the solver holds exact versions, as the resolver
      contract asks. *)
-  let edges st (x : Npl.Occupant.t) : edge list =
+  let edges st (x : NpmPlacement.Occupant.t) : edge list =
     Tbl.memo st.edge_tbl x (fun () ->
         List.map
-          (fun (e : Npl.coq_Edge) ->
-            note_key st e.Npl.e_dir e.Npl.e_name;
+          (fun (e : NpmPlacement.coq_Edge) ->
+            note_key st e.NpmPlacement.e_dir e.NpmPlacement.e_name;
             let id, acc = accepted st e in
-            { e; acc; accepts = Pl.VSet.elements acc; id })
-          (Npl.edgesOfBy (real_at st) (occ_inst st x) x))
+            { e; acc; accepts = Placement.VSet.elements acc; id })
+          (NpmPlacement.edgesOfBy (real_at st) (occ_inst st x) x))
 
   let key_names st k = Tbl.find_list st.key_names k
 
@@ -161,21 +167,21 @@ module Make (Place_encoding : Place_encoding.S) = struct
      the driver's instance is the explored part of npm's rather than the
      whole.  A location's and a walk's versions then only grow, which the
      resolver contract allows. *)
-  let key_inst st (a : string) : Pl.coq_Inst =
+  let key_inst st (a : string) : Placement.coq_Inst =
     let ns = key_names st a in
     let g = List.length ns in
     match Hashtbl.find_opt st.key_inst a with
     | Some (g', i) when g' = g -> i
     | _ ->
         let i =
-          Lk.nameInst
+          ReductionLookup.nameInst
             {
               (mk_inst st ~repo:(repo_of st ns) ~deps:[] ~peers:[]) with
-              Npl.inst_rootDeps =
+              NpmPlacement.inst_rootDeps =
                 List.map
                   (fun m ->
                     {
-                      Npl.d_dir = a;
+                      NpmPlacement.d_dir = a;
                       d_name = m;
                       d_range = [];
                       d_dev = false;
@@ -189,21 +195,26 @@ module Make (Place_encoding : Place_encoding.S) = struct
 
   let versions st (n : PName.t) : PVersion.t list =
     match n with
-    | R.Name.Root -> [ R.Version.Occ Npl.Occupant.Proj ]
-    | R.Name.Loc (l, a) | R.Name.Walk (l, a) -> (
+    | Reduction.Name.Root ->
+        [ Reduction.Version.Occ NpmPlacement.Occupant.Proj ]
+    | Reduction.Name.Loc (l, a) | Reduction.Name.Walk (l, a) -> (
         let g = List.length (key_names st a) in
         (* a location's versions read only the key and whether it is above
            the bound, so locations share them *)
         let k =
           match n with
-          | R.Name.Loc _ ->
-              R.Name.Loc ((if List.length l < st.depth then [] else l), a)
+          | Reduction.Name.Loc _ ->
+              Reduction.Name.Loc
+                ((if List.length l < st.depth then [] else l), a)
           | _ -> n
         in
         match Hashtbl.find_opt st.vcache k with
         | Some (g', vs) when g' = g -> vs
         | _ ->
-            let vs = T.VSet.elements (R.versions (key_inst st a) st.dnat n) in
+            let vs =
+              Reduced.VSet.elements
+                (Reduction.versions (key_inst st a) st.dnat n)
+            in
             Hashtbl.replace st.vcache k (g, vs);
             vs)
 
@@ -214,26 +225,33 @@ module Make (Place_encoding : Place_encoding.S) = struct
      some edges. *)
   type part = Atom of string list * string * int * bool * bool
 
-  let atom_parts st (lam : string list) (x : Npl.Occupant.t) =
+  let atom_parts st (lam : string list) (x : NpmPlacement.Occupant.t) =
     List.map
       (fun (ed : edge) ->
         let e = ed.e in
-        ( Atom (lam, e.Npl.e_dir, ed.id, e.Npl.e_peer, e.Npl.e_optional),
-          fun () -> [ Lk.atomOf lam e ed.acc ] ))
+        ( Atom
+            ( lam,
+              e.NpmPlacement.e_dir,
+              ed.id,
+              e.NpmPlacement.e_peer,
+              e.NpmPlacement.e_optional ),
+          fun () -> [ ReductionLookup.atomOf lam e ed.acc ] ))
       (edges st x)
 
   let parts st (n : PName.t) (u : PVersion.t) :
-      (part * (unit -> T.Dependee.t list)) list option =
+      (part * (unit -> Reduced.Dependee.t list)) list option =
     match (n, u) with
-    | R.Name.Root, R.Version.Occ x -> Some (atom_parts st [] x)
-    | R.Name.Loc (l, a), R.Version.Occ x -> Some (atom_parts st (a :: l) x)
+    | Reduction.Name.Root, Reduction.Version.Occ x -> Some (atom_parts st [] x)
+    | Reduction.Name.Loc (l, a), Reduction.Version.Occ x ->
+        Some (atom_parts st (a :: l) x)
     | _ -> None
 
-  let dependees st (n, u) : T.Dependee.t list =
+  let dependees st (n, u) : Reduced.Dependee.t list =
     match parts st n u with
     | Some ps -> List.concat_map (fun (_, f) -> f ()) ps
     | None -> (
         match (n, u) with
-        | R.Name.Walk (l, a), w -> T.DependeeSet.elements (R.walkDeps l a w)
+        | Reduction.Name.Walk (l, a), w ->
+            Reduced.DependeeSet.elements (Reduction.walkDeps l a w)
         | _ -> [])
 end

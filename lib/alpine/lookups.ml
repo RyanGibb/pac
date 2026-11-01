@@ -1,9 +1,7 @@
-module E = Pac
-module P = Apk_parse
 module Ot = Pac_common.Ot
 module Tbl = Pac_common.Tbl
 
-module AVerOT = Ot.Make (struct
+module ApkVersionOT = Ot.Make (struct
   type t = string
 
   let compare = Apk_version.compare
@@ -14,10 +12,10 @@ module PM = struct
   let hash v c = Apk_version.hash_match v c
 end
 
-module Alp = E.Alpine (Ot.Str) (AVerOT) (PM)
+module Alpine = Pac.Alpine (Ot.Str) (ApkVersionOT) (PM)
 
-let first_pos (ds : Alp.coq_Dep list) : Alp.Atom.t option =
-  List.find_map (function Alp.DPos a -> Some a | Alp.DNeg _ -> None) ds
+let first_pos (ds : Alpine.coq_Dep list) : Alpine.Atom.t option =
+  List.find_map (function Alpine.DPos a -> Some a | Alpine.DNeg _ -> None) ds
 
 type stats = {
   names : int;
@@ -29,45 +27,68 @@ type stats = {
 
 module type S = sig
   module FirstDesignation : sig
-    val designation : Alp.ConditionSet.t -> Alp.Atom.t option
+    val designation : Alpine.ConditionSet.t -> Alpine.Atom.t option
   end
 
-  module Red : module type of Alp.ReductionUnder (FirstDesignation)
-  module PF = Red.PackageFormula
-  module PFR = PF.Reduction
+  module Reduction : module type of Alpine.ReductionUnder (FirstDesignation)
+  module PackageFormula = Reduction.PackageFormula
+  module PackageFormulaReduction = PackageFormula.Reduction
 
   type archive
 
   val stats : archive -> stats
   val load_index : string -> archive
-  val no_such_package : archive -> P.dep list -> string list
-  val lone_provider : PF.coq_Formula -> (string * string) option
-  val alt_at : PF.coq_Formula list -> Pac.nat -> (PF.coq_Formula * bool) option
-  val alt_rank : archive -> bool -> PF.coq_Formula -> int
+  val no_such_package : archive -> Apk_parse.dep list -> string list
+  val lone_provider : PackageFormula.coq_Formula -> (string * string) option
+
+  val alt_at :
+    PackageFormula.coq_Formula list ->
+    Pac.nat ->
+    (PackageFormula.coq_Formula * bool) option
+
+  val alt_rank : archive -> bool -> PackageFormula.coq_Formula -> int
 
   module PVersion : sig
-    type t = { pv : string option; rank : int; ord : int; v : PFR.Version.t }
+    type t = {
+      pv : string option;
+      rank : int;
+      ord : int;
+      v : PackageFormulaReduction.Version.t;
+    }
 
-    val v : t -> PFR.Version.t
+    val v : t -> PackageFormulaReduction.Version.t
     val bot : t
     val pp : Format.formatter -> t -> unit
     val compare : t -> t -> int
   end
 
-  val tag : archive -> PFR.Name.t -> PFR.Version.t -> PVersion.t
-  val pp_name : Format.formatter -> PFR.Name.t -> unit
+  val tag :
+    archive ->
+    PackageFormulaReduction.Name.t ->
+    PackageFormulaReduction.Version.t ->
+    PVersion.t
 
-  module L :
+  val pp_name : Format.formatter -> PackageFormulaReduction.Name.t -> unit
+
+  module FormulaLookups :
       module type of
-        Package_formula.Make (Red.NameOT) (Red.VersionOT) (PF) (PVersion)
+        Package_formula.Make (Reduction.NameOT) (Reduction.VersionOT)
+          (PackageFormula)
+          (PVersion)
           (struct
             let pp_name = pp_name
           end)
 
-  module PG = L.PG
+  module Resolver = FormulaLookups.Resolver
 
-  val lookups : archive -> L.t
-  val touch : archive -> P.dep list -> L.t -> PFR.Reduced.Package.t -> unit
+  val lookups : archive -> FormulaLookups.t
+
+  val touch :
+    archive ->
+    Apk_parse.dep list ->
+    FormulaLookups.t ->
+    PackageFormulaReduction.Reduced.Package.t ->
+    unit
 end
 
 module Make () : S = struct
@@ -80,45 +101,46 @@ module Make () : S = struct
      canonical where the set's own representation need not be.  The
      reduction takes the designation as a module, so the table is built
      with it. *)
-  let designations : (Alp.coq_Dep list, Alp.Atom.t) Hashtbl.t =
+  let designations : (Alpine.coq_Dep list, Alpine.Atom.t) Hashtbl.t =
     Hashtbl.create 4096
 
   (* the fallback keeps designation total on sets with a positive condition,
      discharging designation_spec, which is trusted, as ApkVersionMatch's
      prefix/hash are *)
   module FirstDesignation = struct
-    let designation (conds : Alp.ConditionSet.t) : Alp.Atom.t option =
-      let key = Alp.ConditionSet.elements conds in
+    let designation (conds : Alpine.ConditionSet.t) : Alpine.Atom.t option =
+      let key = Alpine.ConditionSet.elements conds in
       match Hashtbl.find_opt designations key with
       | Some _ as a -> a
       | None -> first_pos key
   end
 
-  module Red = Alp.ReductionUnder (FirstDesignation)
-  module PF = Red.PackageFormula
-  module PFR = PF.Reduction
-  module T = PFR.Reduced
+  module Reduction = Alpine.ReductionUnder (FirstDesignation)
+  module PackageFormula = Reduction.PackageFormula
+  module PackageFormulaReduction = PackageFormula.Reduction
+  module Reduced = PackageFormulaReduction.Reduced
 
-  let xconstr (c : P.constr) : Alp.coq_Constr =
+  let xconstr (c : Apk_parse.constr) : Alpine.coq_Constr =
     match c with
-    | P.Any -> Alp.CAny
-    | P.Op (Apk_version.Eq, v) -> Alp.COp (E.OpEq, v)
-    | P.Op (Apk_version.Lt, v) -> Alp.COp (E.OpLt, v)
-    | P.Op (Apk_version.Gt, v) -> Alp.COp (E.OpGt, v)
-    | P.Op (Apk_version.Le, v) -> Alp.COp (E.OpLe, v)
-    | P.Op (Apk_version.Ge, v) -> Alp.COp (E.OpGe, v)
-    | P.Op (Apk_version.Fuzzy, v) -> Alp.CPrefix v
-    | P.Op (Apk_version.Gt_fuzzy, v) -> Alp.CGtPrefix v
-    | P.Op (Apk_version.Lt_fuzzy, v) -> Alp.CLtPrefix v
-    | P.Op (Apk_version.Hash, v) -> Alp.CHash v
+    | Apk_parse.Any -> Alpine.CAny
+    | Apk_parse.Op (Apk_version.Eq, v) -> Alpine.COp (Pac.OpEq, v)
+    | Apk_parse.Op (Apk_version.Lt, v) -> Alpine.COp (Pac.OpLt, v)
+    | Apk_parse.Op (Apk_version.Gt, v) -> Alpine.COp (Pac.OpGt, v)
+    | Apk_parse.Op (Apk_version.Le, v) -> Alpine.COp (Pac.OpLe, v)
+    | Apk_parse.Op (Apk_version.Ge, v) -> Alpine.COp (Pac.OpGe, v)
+    | Apk_parse.Op (Apk_version.Fuzzy, v) -> Alpine.CPrefix v
+    | Apk_parse.Op (Apk_version.Gt_fuzzy, v) -> Alpine.CGtPrefix v
+    | Apk_parse.Op (Apk_version.Lt_fuzzy, v) -> Alpine.CLtPrefix v
+    | Apk_parse.Op (Apk_version.Hash, v) -> Alpine.CHash v
 
-  let xatom (d : P.dep) : Alp.Atom.t = (d.P.d_name, xconstr d.P.d_constr)
+  let xatom (d : Apk_parse.dep) : Alpine.Atom.t =
+    (d.Apk_parse.d_name, xconstr d.Apk_parse.d_constr)
 
-  let xdep (d : P.dep) : Alp.coq_Dep =
-    if d.P.d_neg then Alp.DNeg (xatom d) else Alp.DPos (xatom d)
+  let xdep (d : Apk_parse.dep) : Alpine.coq_Dep =
+    if d.Apk_parse.d_neg then Alpine.DNeg (xatom d) else Alpine.DPos (xatom d)
 
-  let ptag (v : string option) : Alp.coq_PTag =
-    match v with Some pv -> Alp.PVer pv | None -> Alp.PBare
+  let ptag (v : string option) : Alpine.coq_PTag =
+    match v with Some pv -> Alpine.PVer pv | None -> Alpine.PBare
 
   (* building the set is also where the rule's first-listed positive
      condition is offered to [FirstDesignation]; an earlier rule keeps the
@@ -126,10 +148,10 @@ module Make () : S = struct
      when it is read *)
   let condset_of ds =
     let conds = List.map xdep ds in
-    let cs = Alp.ConditionSet.ofList conds in
+    let cs = Alpine.ConditionSet.ofList conds in
     (match first_pos conds with
     | Some a ->
-        let key = Alp.ConditionSet.elements cs in
+        let key = Alpine.ConditionSet.elements cs in
         if not (Hashtbl.mem designations key) then
           Hashtbl.add designations key a
     | None -> ());
@@ -137,13 +159,13 @@ module Make () : S = struct
 
   type iif_rule = {
     pkg : string * string;
-    conds : Alp.ConditionSet.t;
-    designation : Alp.Atom.t;
+    conds : Alpine.ConditionSet.t;
+    designation : Alpine.Atom.t;
   }
 
   type archive = {
-    by_name : (string, P.pkg list) Hashtbl.t;
-    meta : (string * string, P.pkg) Hashtbl.t;
+    by_name : (string, Apk_parse.pkg list) Hashtbl.t;
+    meta : (string * string, Apk_parse.pkg) Hashtbl.t;
     providers : (string, ((string * string) * string option) list) Hashtbl.t;
     (* install-if rules by their designated condition's name: only a package
        bearing that name, or providing it, can carry the rule *)
@@ -175,7 +197,7 @@ module Make () : S = struct
   let load_index (path : string) : archive =
     let dropped = ref 0 and uninstallable = Hashtbl.create 16 in
     let pkgs =
-      P.parse_file
+      Apk_parse.parse_file
         ~reject:(fun () -> incr dropped)
         ~broken:(List.iter (fun n -> Hashtbl.replace uninstallable n ()))
         path
@@ -197,29 +219,36 @@ module Make () : S = struct
     in
     let iifs = ref [] in
     List.iter
-      (fun (p : P.pkg) ->
-        Tbl.push ar.by_name p.P.name p;
-        Hashtbl.replace ar.meta (p.P.name, p.P.version) p;
-        Hashtbl.replace ar.pos (p.P.name, p.P.version) ar.n_pkgs;
+      (fun (p : Apk_parse.pkg) ->
+        Tbl.push ar.by_name p.Apk_parse.name p;
+        Hashtbl.replace ar.meta (p.Apk_parse.name, p.Apk_parse.version) p;
+        Hashtbl.replace ar.pos (p.Apk_parse.name, p.Apk_parse.version) ar.n_pkgs;
         ar.n_pkgs <- ar.n_pkgs + 1;
         List.iter
-          (fun (pr : P.prov) ->
-            Tbl.push ar.providers pr.P.p_name
-              ((p.P.name, p.P.version), pr.P.p_ver);
+          (fun (pr : Apk_parse.prov) ->
+            Tbl.push ar.providers pr.Apk_parse.p_name
+              ((p.Apk_parse.name, p.Apk_parse.version), pr.Apk_parse.p_ver);
             ar.n_provs <- ar.n_provs + 1)
-          p.P.provides;
-        (match p.P.priority with
-        | Some k -> Hashtbl.replace ar.prio (p.P.name, p.P.version) k
+          p.Apk_parse.provides;
+        (match p.Apk_parse.priority with
+        | Some k ->
+            Hashtbl.replace ar.prio (p.Apk_parse.name, p.Apk_parse.version) k
         | None -> ());
-        if p.P.install_if <> [] then (
+        if p.Apk_parse.install_if <> [] then (
           ar.n_iif <- ar.n_iif + 1;
           (* a rule with no positive condition is left out, and nothing is
              lost -- apk reaches a rule only from an installed
              package bearing or providing a condition's name, which falsifies
              a negated condition unless it is the rule's own package *)
-          if List.exists (fun (d : P.dep) -> not d.P.d_neg) p.P.install_if then
+          if
+            List.exists
+              (fun (d : Apk_parse.dep) -> not d.Apk_parse.d_neg)
+              p.Apk_parse.install_if
+          then
             iifs :=
-              ((p.P.name, p.P.version), condset_of p.P.install_if) :: !iifs))
+              ( (p.Apk_parse.name, p.Apk_parse.version),
+                condset_of p.Apk_parse.install_if )
+              :: !iifs))
       pkgs;
     (* keyed only once every set has offered its designation, so the key a
        rule is filed under is the one [attachDesignation] will ask about *)
@@ -237,12 +266,12 @@ module Make () : S = struct
 
   let empty_inst =
     {
-      Alp.inst_real = Alp.PackageSet.empty;
-      inst_deps = Alp.DependencyRel.empty;
-      inst_prov = Alp.ProvidesRel.empty;
-      inst_installIf = Alp.InstallIfRuleRel.empty;
-      inst_world = Alp.WorldSet.empty;
-      inst_prio = Alp.PriorityRel.empty;
+      Alpine.inst_real = Alpine.PackageSet.empty;
+      inst_deps = Alpine.DependencyRel.empty;
+      inst_prov = Alpine.ProvidesRel.empty;
+      inst_installIf = Alpine.InstallIfRuleRel.empty;
+      inst_world = Alpine.WorldSet.empty;
+      inst_prio = Alpine.PriorityRel.empty;
     }
 
   (* repoPreimage and provPreimage, built from the archive's tables rather
@@ -258,7 +287,8 @@ module Make () : S = struct
     List.iter
       (fun n ->
         List.iter
-          (fun (p : P.pkg) -> repo := (p.P.name, p.P.version) :: !repo)
+          (fun (p : Apk_parse.pkg) ->
+            repo := (p.Apk_parse.name, p.Apk_parse.version) :: !repo)
           (versions_of ar n);
         List.iter
           (fun (owner, pv) ->
@@ -274,14 +304,19 @@ module Make () : S = struct
           | None -> None)
         !repo
     in
-    ( Alp.PackageSet.ofList !repo,
-      Alp.ProvidesRel.ofList !prov,
-      Alp.PriorityRel.ofList prio )
+    ( Alpine.PackageSet.ofList !repo,
+      Alpine.ProvidesRel.ofList !prov,
+      Alpine.PriorityRel.ofList prio )
 
   (* Lookup.nameSubInst *)
-  let name_inst ar (n : string) : Alp.coq_Inst =
+  let name_inst ar (n : string) : Alpine.coq_Inst =
     let repo, prov, prio = preimages_at ar [ n ] in
-    { empty_inst with Alp.inst_real = repo; inst_prov = prov; inst_prio = prio }
+    {
+      empty_inst with
+      Alpine.inst_real = repo;
+      inst_prov = prov;
+      inst_prio = prio;
+    }
 
   (* Lookup.installIfFibre: of the rules designating a name this package
      bears or provides, the ones whose designated condition it actually
@@ -289,18 +324,18 @@ module Make () : S = struct
      it heads and nothing else, so deciding it against an instance carrying
      just those entries is the whole archive's answer
      (attachAt_subInst). *)
-  let install_if_at ar ((n, v) : string * string) (own : Alp.ProvidesRel.t) :
+  let install_if_at ar ((n, v) : string * string) (own : Alpine.ProvidesRel.t) :
       iif_rule list =
-    let inst = { empty_inst with Alp.inst_prov = own } in
+    let inst = { empty_inst with Alpine.inst_prov = own } in
     let at = Tbl.find_list ar.iif_by_cond in
     let cands =
       List.fold_left
-        (fun acc ((_, (m, _)) : Alp.ProvidesElt.t) ->
+        (fun acc ((_, (m, _)) : Alpine.ProvidesElt.t) ->
           List.rev_append (at m) acc)
         (at n)
-        (Alp.ProvidesRel.elements own)
+        (Alpine.ProvidesRel.elements own)
     in
-    List.filter (fun r -> Red.attachAt inst (n, v) r.designation) cands
+    List.filter (fun r -> Reduction.attachAt inst (n, v) r.designation) cands
 
   (* Lookup.pkgSubInst: the package's own dependencies, provides entries
      and install-if rules, and the repository at the names those
@@ -308,16 +343,17 @@ module Make () : S = struct
      together with, per install-if rule the package carries, the rule's
      declaring name and the names of the conditions it did not designate,
      and the world, which names the providers without k: it lets be selected *)
-  let pkg_inst ar (world : P.dep list) ((n, v) : string * string) : Alp.coq_Inst
-      =
+  let pkg_inst ar (world : Apk_parse.dep list) ((n, v) : string * string) :
+      Alpine.coq_Inst =
     match Hashtbl.find_opt ar.meta (n, v) with
     | None -> empty_inst
     | Some m ->
         let own =
-          Alp.ProvidesRel.ofList
+          Alpine.ProvidesRel.ofList
             (List.map
-               (fun (pr : P.prov) -> ((n, v), (pr.P.p_name, ptag pr.P.p_ver)))
-               m.P.provides)
+               (fun (pr : Apk_parse.prov) ->
+                 ((n, v), (pr.Apk_parse.p_name, ptag pr.Apk_parse.p_ver)))
+               m.Apk_parse.provides)
         in
         let rules = install_if_at ar (n, v) own in
         let ns =
@@ -326,27 +362,30 @@ module Make () : S = struct
               fst r.pkg
               :: List.rev_append
                    (List.map
-                      (function Alp.DPos (m, _) | Alp.DNeg (m, _) -> m)
-                      (Alp.ConditionSet.elements (Red.condRest r.conds)))
+                      (function Alpine.DPos (m, _) | Alpine.DNeg (m, _) -> m)
+                      (Alpine.ConditionSet.elements
+                         (Reduction.condRest r.conds)))
                    acc)
-            (List.map (fun (d : P.dep) -> d.P.d_name) m.P.depends)
+            (List.map
+               (fun (d : Apk_parse.dep) -> d.Apk_parse.d_name)
+               m.Apk_parse.depends)
             rules
         in
         let repo, prov, prio = preimages_at ar ns in
         let deps =
-          Alp.DependencyRel.ofList
-            (List.map (fun d -> ((n, v), xdep d)) m.P.depends)
+          Alpine.DependencyRel.ofList
+            (List.map (fun d -> ((n, v), xdep d)) m.Apk_parse.depends)
         in
         {
-          Alp.inst_real = repo;
+          Alpine.inst_real = repo;
           inst_deps = deps;
-          inst_prov = Alp.ProvidesRel.union prov own;
+          inst_prov = Alpine.ProvidesRel.union prov own;
           inst_installIf =
-            Alp.InstallIfRuleRel.ofList
+            Alpine.InstallIfRuleRel.ofList
               (List.map (fun r -> (r.pkg, r.conds)) rules);
           (* apk also takes a k:-less one whose owner has a requirer
              (solver.c:381) *)
-          inst_world = Alp.WorldSet.ofList (List.map xdep world);
+          inst_world = Alpine.WorldSet.ofList (List.map xdep world);
           inst_prio = prio;
         }
 
@@ -355,24 +394,25 @@ module Make () : S = struct
      reads no part of the rule table.  The world is the query's
      arguments and nothing else: this resolves from an empty root rather
      than from an existing /etc/apk/world. *)
-  let root_inst ar (world : P.dep list) : Alp.coq_Inst =
+  let root_inst ar (world : Apk_parse.dep list) : Alpine.coq_Inst =
     let repo, prov, prio =
-      preimages_at ar (List.map (fun (d : P.dep) -> d.P.d_name) world)
+      preimages_at ar
+        (List.map (fun (d : Apk_parse.dep) -> d.Apk_parse.d_name) world)
     in
     {
       empty_inst with
-      Alp.inst_real = repo;
+      Alpine.inst_real = repo;
       inst_prov = prov;
-      inst_world = Alp.WorldSet.ofList (List.map xdep world);
+      inst_world = Alpine.WorldSet.ofList (List.map xdep world);
       inst_prio = prio;
     }
 
-  let no_such_package ar (world : P.dep list) : string list =
+  let no_such_package ar (world : Apk_parse.dep list) : string list =
     List.filter_map
-      (fun (d : P.dep) ->
-        let n = d.P.d_name in
+      (fun (d : Apk_parse.dep) ->
+        let n = d.Apk_parse.d_name in
         if
-          (not d.P.d_neg)
+          (not d.Apk_parse.d_neg)
           && versions_of ar n = []
           && providers_of ar n = []
           && not (Hashtbl.mem ar.uninstallable n)
@@ -380,31 +420,32 @@ module Make () : S = struct
         else None)
       world
 
-  let rec pp_formula depth fmt (f : PF.coq_Formula) =
+  let rec pp_formula depth fmt (f : PackageFormula.coq_Formula) =
     if depth <= 0 then Format.fprintf fmt "..."
     else
       match f with
-      | PF.FAtom (n, vs) ->
+      | PackageFormula.FAtom (n, vs) ->
           Format.fprintf fmt "%a{%d}" pp_alp_name n
-            (List.length (PF.VSet.elements vs))
-      | PF.FConj (a, b) ->
+            (List.length (PackageFormula.VSet.elements vs))
+      | PackageFormula.FConj (a, b) ->
           Format.fprintf fmt "(%a&%a)"
             (pp_formula (depth - 1))
             a
             (pp_formula (depth - 1))
             b
-      | PF.FDisj (a, b) ->
+      | PackageFormula.FDisj (a, b) ->
           Format.fprintf fmt "(%a|%a)"
             (pp_formula (depth - 1))
             a
             (pp_formula (depth - 1))
             b
-      | PF.FNeg a -> Format.fprintf fmt "!%a" (pp_formula (depth - 1)) a
+      | PackageFormula.FNeg a ->
+          Format.fprintf fmt "!%a" (pp_formula (depth - 1)) a
 
-  and pp_alp_name fmt (n : Red.Name.name) =
+  and pp_alp_name fmt (n : Reduction.Name.name) =
     match n with
-    | Red.Name.Root -> Format.fprintf fmt "@root"
-    | Red.Name.Orig s -> Format.fprintf fmt "%s" s
+    | Reduction.Name.Root -> Format.fprintf fmt "@root"
+    | Reduction.Name.Orig s -> Format.fprintf fmt "%s" s
 
   (* The rank an unversioned-provider disjunction's branches are compared
      on: the k: line where a provider carries one; [rank_unranked] below
@@ -434,29 +475,30 @@ module Make () : S = struct
      opens on an FNeg alternative and a negated dependency makes no
      disjunction at all, so an alternative naming a single package
      identifies a provider list. *)
-  let lone_provider (f : PF.coq_Formula) : (string * string) option =
+  let lone_provider (f : PackageFormula.coq_Formula) : (string * string) option
+      =
     match f with
-    | PF.FAtom (Red.Name.Orig m, vs) -> (
-        match PF.VSet.elements vs with
-        | [ Red.Version.Orig w ] -> Some (m, w)
+    | PackageFormula.FAtom (Reduction.Name.Orig m, vs) -> (
+        match PackageFormula.VSet.elements vs with
+        | [ Reduction.Version.Orig w ] -> Some (m, w)
         | _ -> None)
     | _ -> None
 
   (* The alternative a synthetic version selects, and whether it is the last
      one -- the last alternative is the only one that is not a provider. *)
-  let rec alt_at (fs : PF.coq_Formula list) (i : E.nat) :
-      (PF.coq_Formula * bool) option =
+  let rec alt_at (fs : PackageFormula.coq_Formula list) (i : Pac.nat) :
+      (PackageFormula.coq_Formula * bool) option =
     match (fs, i) with
-    | [ f ], E.O -> Some (f, true)
-    | f :: _, E.O -> Some (f, false)
-    | _ :: fs', E.S k -> alt_at fs' k
+    | [ f ], Pac.O -> Some (f, true)
+    | f :: _, Pac.O -> Some (f, false)
+    | _ :: fs', Pac.S k -> alt_at fs' k
     | [], _ -> None
 
-  let alt_rank ar (last : bool) (f : PF.coq_Formula) : int =
+  let alt_rank ar (last : bool) (f : PackageFormula.coq_Formula) : int =
     if last then
       match f with
-      | PF.FAtom (_, vs) ->
-          if PF.VSet.elements vs = [] then rank_none else rank_pkg
+      | PackageFormula.FAtom (_, vs) ->
+          if PackageFormula.VSet.elements vs = [] then rank_none else rank_pkg
       | _ -> rank_none
     else
       match lone_provider f with Some q -> prov_rank ar q | None -> rank_none
@@ -475,28 +517,46 @@ module Make () : S = struct
      agrees with any range's tags.  [bot] is greatest, so a name only a
      negated requirement reaches is left out. *)
   module PVersion = struct
-    type t = { pv : string option; rank : int; ord : int; v : PFR.Version.t }
+    type t = {
+      pv : string option;
+      rank : int;
+      ord : int;
+      v : PackageFormulaReduction.Version.t;
+    }
 
     let v (x : t) = x.v
-    let bot = { pv = None; rank = 0; ord = max_int; v = PFR.Version.Bot }
+
+    let bot =
+      {
+        pv = None;
+        rank = 0;
+        ord = max_int;
+        v = PackageFormulaReduction.Version.Bot;
+      }
 
     let pp fmt ({ v; _ } : t) =
       match v with
-      | PFR.Version.Orig Red.Version.UnitV -> Format.fprintf fmt "()"
-      | PFR.Version.Orig (Red.Version.Orig s) -> Format.fprintf fmt "%s" s
-      | PFR.Version.Orig (Red.Version.Prov ((n, w), pv)) ->
+      | PackageFormulaReduction.Version.Orig Reduction.Version.UnitV ->
+          Format.fprintf fmt "()"
+      | PackageFormulaReduction.Version.Orig (Reduction.Version.Orig s) ->
+          Format.fprintf fmt "%s" s
+      | PackageFormulaReduction.Version.Orig
+          (Reduction.Version.Prov ((n, w), pv)) ->
           Format.fprintf fmt "provided=%s(%s-%s)" pv n w
-      | PFR.Version.Idx i -> Format.fprintf fmt "%d" (Ot.nat_int i)
-      | PFR.Version.Bot -> Format.fprintf fmt "⊥"
+      | PackageFormulaReduction.Version.Idx i ->
+          Format.fprintf fmt "%d" (Ot.nat_int i)
+      | PackageFormulaReduction.Version.Bot -> Format.fprintf fmt "⊥"
 
     let compare a b =
       match (a.v, b.v) with
-      | PFR.Version.Idx _, PFR.Version.Idx _ ->
+      | ( PackageFormulaReduction.Version.Idx _,
+          PackageFormulaReduction.Version.Idx _ ) ->
           let c = Stdlib.compare a.rank b.rank in
           if c <> 0 then c
           else
             let c = Stdlib.compare b.ord a.ord in
-            if c <> 0 then c else -Ot.r2c (PFR.VersionOT.compare a.v b.v)
+            if c <> 0 then c
+            else -Ot.r2c (PackageFormulaReduction.VersionOT.compare a.v b.v)
       | _ -> (
           match (a.pv, b.pv) with
           | Some x, Some y ->
@@ -507,18 +567,24 @@ module Make () : S = struct
                 if c <> 0 then c
                 else
                   let c = Stdlib.compare b.ord a.ord in
-                  if c <> 0 then c else Ot.r2c (PFR.VersionOT.compare a.v b.v)
+                  if c <> 0 then c
+                  else
+                    Ot.r2c (PackageFormulaReduction.VersionOT.compare a.v b.v)
           | _ ->
-              let c = Ot.r2c (PFR.VersionOT.compare a.v b.v) in
+              let c =
+                Ot.r2c (PackageFormulaReduction.VersionOT.compare a.v b.v)
+              in
               if c <> 0 then c else Stdlib.compare a.rank b.rank)
   end
 
   let ord_of ar (q : string * string) : int =
     match Hashtbl.find_opt ar.pos q with Some i -> i | None -> max_int
 
-  let tag ar (tn : PFR.Name.t) (tv : PFR.Version.t) : PVersion.t =
+  let tag ar (tn : PackageFormulaReduction.Name.t)
+      (tv : PackageFormulaReduction.Version.t) : PVersion.t =
     match (tn, tv) with
-    | PFR.Name.Disjunct (f0 :: _ as fs), PFR.Version.Idx i
+    | ( PackageFormulaReduction.Name.Disjunct (f0 :: _ as fs),
+        PackageFormulaReduction.Version.Idx i )
       when lone_provider f0 <> None -> (
         match alt_at fs i with
         | None -> { PVersion.pv = None; rank = 0; ord = max_int; v = tv }
@@ -529,7 +595,8 @@ module Make () : S = struct
               | None -> max_int
             in
             { PVersion.pv = None; rank = alt_rank ar last f; ord; v = tv })
-    | _, PFR.Version.Orig (Red.Version.Prov (q, pv)) ->
+    | _, PackageFormulaReduction.Version.Orig (Reduction.Version.Prov (q, pv))
+      ->
         {
           PVersion.pv = Some pv;
           rank = prio_of ar q;
@@ -537,7 +604,8 @@ module Make () : S = struct
           v = tv;
         }
     (* a package claiming the name itself offers its own version there *)
-    | PFR.Name.Orig (Red.Name.Orig n), PFR.Version.Orig (Red.Version.Orig w) ->
+    | ( PackageFormulaReduction.Name.Orig (Reduction.Name.Orig n),
+        PackageFormulaReduction.Version.Orig (Reduction.Version.Orig w) ) ->
         {
           PVersion.pv = Some w;
           rank = prio_of ar (n, w);
@@ -546,55 +614,63 @@ module Make () : S = struct
         }
     | _ -> { PVersion.pv = None; rank = 0; ord = max_int; v = tv }
 
-  let pp_name fmt (n : PFR.Name.t) =
+  let pp_name fmt (n : PackageFormulaReduction.Name.t) =
     match n with
-    | PFR.Name.Orig m -> pp_alp_name fmt m
-    | PFR.Name.Disjunct fs ->
+    | PackageFormulaReduction.Name.Orig m -> pp_alp_name fmt m
+    | PackageFormulaReduction.Name.Disjunct fs ->
         Format.fprintf fmt "<%a>"
           (Format.pp_print_list
              ~pp_sep:(fun fmt () -> Format.fprintf fmt "|")
              (pp_formula 2))
           fs
 
-  module L =
-    Package_formula.Make (Red.NameOT) (Red.VersionOT) (PF) (PVersion)
+  module FormulaLookups =
+    Package_formula.Make (Reduction.NameOT) (Reduction.VersionOT)
+      (PackageFormula)
+      (PVersion)
       (struct
         let pp_name = pp_name
       end)
 
-  module PG = L.PG
+  module Resolver = FormulaLookups.Resolver
 
   (* Lookup.versions_lookupOrig: what the versions callback answers, before
      the tagging PubGrub sees -- the name's own versions and its provides.
      The encoder reads this at the names a formula negates: a negated
      requirement's complement ranges over the versions offered at the name,
      provides included. *)
-  let oracle ar (tn : Red.Name.name) : PF.VSet.t =
+  let oracle ar (tn : Reduction.Name.name) : PackageFormula.VSet.t =
     match tn with
-    | Red.Name.Orig n -> Red.versions (name_inst ar n) n
-    | Red.Name.Root -> PF.VSet.singleton Red.Version.UnitV
+    | Reduction.Name.Orig n -> Reduction.versions (name_inst ar n) n
+    | Reduction.Name.Root ->
+        PackageFormula.VSet.singleton Reduction.Version.UnitV
 
-  let lookups ar : L.t =
-    L.create
-      ~root:(Red.Name.Root, Red.Version.UnitV)
+  let lookups ar : FormulaLookups.t =
+    FormulaLookups.create
+      ~root:(Reduction.Name.Root, Reduction.Version.UnitV)
       ~tag:(tag ar) ~oracle:(oracle ar) ()
 
-  let dependees inst q = Red.PackageFormulaSet.elements (Red.dependees inst q)
+  let dependees inst q =
+    Reduction.PackageFormulaSet.elements (Reduction.dependees inst q)
 
-  let touch ar world st ((tn, tv) : T.Package.t) =
+  let touch ar world st ((tn, tv) : Reduced.Package.t) =
     match (tn, tv) with
-    | PFR.Name.Orig Red.Name.Root, PFR.Version.Orig Red.Version.UnitV ->
+    | ( PackageFormulaReduction.Name.Orig Reduction.Name.Root,
+        PackageFormulaReduction.Version.Orig Reduction.Version.UnitV ) ->
         (* Lookup.dependees_lookupRoot *)
-        L.process st Red.rootPkg (fun () ->
-            dependees (root_inst ar world) Red.rootPkg)
-    | PFR.Name.Orig (Red.Name.Orig n), PFR.Version.Orig (Red.Version.Orig v) ->
+        FormulaLookups.process st Reduction.rootPkg (fun () ->
+            dependees (root_inst ar world) Reduction.rootPkg)
+    | ( PackageFormulaReduction.Name.Orig (Reduction.Name.Orig n),
+        PackageFormulaReduction.Version.Orig (Reduction.Version.Orig v) ) ->
         (* Lookup.dependees_lookupOrig *)
-        let q = (Red.Name.Orig n, Red.Version.Orig v) in
-        L.process st q (fun () -> dependees (pkg_inst ar world (n, v)) q)
-    | ( PFR.Name.Orig (Red.Name.Orig m),
-        PFR.Version.Orig (Red.Version.Prov (q0, pv)) ) ->
+        let q = (Reduction.Name.Orig n, Reduction.Version.Orig v) in
+        FormulaLookups.process st q (fun () ->
+            dependees (pkg_inst ar world (n, v)) q)
+    | ( PackageFormulaReduction.Name.Orig (Reduction.Name.Orig m),
+        PackageFormulaReduction.Version.Orig (Reduction.Version.Prov (q0, pv)) )
+      ->
         (* Lookup.dependees_lookupProv: a provides reads no instance *)
-        let q = (Red.Name.Orig m, Red.Version.Prov (q0, pv)) in
-        L.process st q (fun () -> dependees empty_inst q)
+        let q = (Reduction.Name.Orig m, Reduction.Version.Prov (q0, pv)) in
+        FormulaLookups.process st q (fun () -> dependees empty_inst q)
     | _ -> ()
 end

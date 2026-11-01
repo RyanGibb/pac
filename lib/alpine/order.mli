@@ -1,8 +1,8 @@
 module Make (Lk : Lookups.S) : sig
   val hooks :
     ( Lk.archive,
-      Lk.PFR.Name.t,
-      Lk.PG.selection,
+      Lk.PackageFormulaReduction.Name.t,
+      Lk.Resolver.selection,
       Lk.PVersion.t )
     Pac_common.Order.driver
 end

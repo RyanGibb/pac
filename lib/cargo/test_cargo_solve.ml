@@ -23,8 +23,8 @@ let solve (m, features, installed) =
     Cargo_query.of_manifest (Printf.sprintf "%s/manifests/%s.toml" dir m)
   in
   let rustv = Cargo_query.toolchain root ~installed in
-  let module C = Cargo_solve.Make () in
-  let r = C.solve ~index:(dir ^ "/index") ~features ~rustv root in
+  let module Solver = Cargo_solve.Make () in
+  let r = Solver.solve ~index:(dir ^ "/index") ~features ~rustv root in
   match r.Cargo_solve.answer with
   | Error _ -> None
   | Ok a ->

@@ -1,5 +1,3 @@
-module A = Archive
-
 module Make
     (Encoding : Encoding.S)
     (L : module type of Lookup.Make (Encoding)) =
@@ -14,10 +12,10 @@ struct
      avoid, and no public packument carries the other two. *)
   let rank ar (n : string) (c : PVersion.t) : bool * bool * bool =
     match c with
-    | Np.Version.Bot | Np.Version.Free -> (true, true, true)
-    | Np.Version.Orig v -> (
-        match A.meta ar (n, v) with
-        | Some m -> A.ver_rank ar m
+    | Npm.Version.Bot | Npm.Version.Free -> (true, true, true)
+    | Npm.Version.Orig v -> (
+        match Archive.meta ar (n, v) with
+        | Some m -> Archive.ver_rank ar m
         | None -> (true, true, true))
 
   let best ar (n : string) (cands : PVersion.t list) : PVersion.t =
@@ -36,27 +34,27 @@ struct
      keeps is no shortcut (index.js:123).  Preference only: the tag is sought
      among [cands]. *)
   let tagged ar (n : string) (cands : PVersion.t list) : PVersion.t option =
-    match A.loaded_latest ar n with
+    match Archive.loaded_latest ar n with
     | Some l -> (
-        match A.meta ar (n, l) with
-        | Some m when A.ver_rank ar m = (true, true, true) ->
-            List.find_opt (PVersion.equal (Np.Version.Orig l)) cands
+        match Archive.meta ar (n, l) with
+        | Some m when Archive.ver_rank ar m = (true, true, true) ->
+            List.find_opt (PVersion.equal (Npm.Version.Orig l)) cands
         | _ -> None)
     | None -> None
 
   let pick ar (t : string) (cands : PVersion.t list) : PVersion.t =
     match tagged ar t cands with Some c -> c | None -> best ar t cands
 
-  let pick_in st (t : string) (rg : Np.coq_Range) : string option =
+  let pick_in st (t : string) (rg : Npm.coq_Range) : string option =
     let pool =
       List.filter_map
-        (fun u -> if Np.rgHolds rg u then Some (Np.Version.Orig u) else None)
-        (A.versions_of (L.archive st) t)
+        (fun u -> if Npm.rgHolds rg u then Some (Npm.Version.Orig u) else None)
+        (Archive.versions_of (L.archive st) t)
     in
     match pool with
     | [] -> None
     | pool -> (
         match pick (L.archive st) t pool with
-        | Np.Version.Orig u -> Some u
-        | Np.Version.Bot | Np.Version.Free -> None)
+        | Npm.Version.Orig u -> Some u
+        | Npm.Version.Bot | Npm.Version.Free -> None)
 end

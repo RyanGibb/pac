@@ -1,23 +1,23 @@
-module V = Version.Semver
+module Semver = Version.Semver
 
-let compare = V.Loose.compare
-let is_prerelease = V.Loose.is_prerelease
+let compare = Semver.Loose.compare
+let is_prerelease = Semver.Loose.is_prerelease
 
 let release (v : string) : string =
-  let p = V.Loose.parse v in
-  Printf.sprintf "%d.%d.%d" p.V.major p.V.minor p.V.patch
+  let p = Semver.Loose.parse v in
+  Printf.sprintf "%d.%d.%d" p.Semver.major p.Semver.minor p.Semver.patch
 
-let same_core = V.Loose.same_core
+let same_core = Semver.Loose.same_core
 
 type op = Ge | Gt | Le | Lt | Eq
 type comparator = Any | Cmp of op * string
 type comp_set = comparator list
 type range = comp_set list
-type comp = V.comp = Num of int | Star | Absent
+type comp = Semver.comp = Num of int | Star | Absent
 
-let vstr = V.vstr
-let parse_spec = V.Loose.parse_partial
-let num_or = V.num_or
+let vstr = Semver.vstr
+let parse_spec = Semver.Loose.parse_partial
+let num_or = Semver.num_or
 
 (* caret keeps the leftmost non-zero component: ^0.2.3 is <0.3.0 and
    ^0.0.3 is <0.0.4, which is why it cannot be written as a tilde.  [z]
@@ -266,7 +266,7 @@ let comp_match ct v =
       | Eq -> s = 0)
 
 let cs_admits cs v =
-  V.Loose.admits v
+  Semver.Loose.admits v
     (List.filter_map (function Any -> None | Cmp (_, c) -> Some c) cs)
 
 let cs_holds cs v =

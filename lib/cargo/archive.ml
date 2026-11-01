@@ -1,5 +1,3 @@
-module P = Cargo_parse
-
 (* The index as read so far: a crate is parsed when a sub-instance first
    reads its name, as cargo's sparse protocol fetches it.  Every other
    sub-instance is complete by construction, as it loads each name it reads
@@ -11,8 +9,8 @@ module P = Cargo_parse
 type t = {
   index : string;
   cache : string option;
-  crates : (string, P.ver list) Hashtbl.t;
-  entry : (string * string, P.ver) Hashtbl.t;
+  crates : (string, Cargo_parse.ver list) Hashtbl.t;
+  entry : (string * string, Cargo_parse.ver) Hashtbl.t;
   links_table : (string, (string * string) list) Hashtbl.t;
   mutable n_names : int;
   mutable n_vers : int;
@@ -58,7 +56,7 @@ let empty ?cache index =
    inside a comparator set that names a pre-release at the same release
    core, so no filtering is needed here; yanked versions are dropped by
    the parser instead, which is a repository fact rather than a policy. *)
-let load_name ar (n : string) : P.ver list =
+let load_name ar (n : string) : Cargo_parse.ver list =
   match Hashtbl.find_opt ar.crates n with
   | Some vs -> vs
   | None ->
@@ -74,30 +72,39 @@ let load_name ar (n : string) : P.ver list =
       ar.n_names <- ar.n_names + 1;
       ar.n_vers <- ar.n_vers + List.length vs;
       List.iter
-        (fun (v : P.ver) ->
-          Hashtbl.replace ar.entry (n, v.P.v_vers) v;
+        (fun (v : Cargo_parse.ver) ->
+          Hashtbl.replace ar.entry (n, v.Cargo_parse.v_vers) v;
           Option.iter
-            (fun l -> Pac_common.Tbl.push ar.links_table l (n, v.P.v_vers))
-            v.P.v_links)
+            (fun l ->
+              Pac_common.Tbl.push ar.links_table l (n, v.Cargo_parse.v_vers))
+            v.Cargo_parse.v_links)
         vs;
       vs
 
-let listed ar n = Sys.file_exists (P.crate_path ~index:ar.index n)
-let versions_of ar n = List.map (fun (v : P.ver) -> v.P.v_vers) (load_name ar n)
+let listed ar n = Sys.file_exists (Cargo_parse.crate_path ~index:ar.index n)
 
-let meta ar n v : P.ver option =
+let versions_of ar n =
+  List.map (fun (v : Cargo_parse.ver) -> v.Cargo_parse.v_vers) (load_name ar n)
+
+let meta ar n v : Cargo_parse.ver option =
   ignore (load_name ar n);
   Hashtbl.find_opt ar.entry (n, v)
 
-let install_root ar (v : P.ver) =
-  let n = v.P.v_name and u = v.P.v_vers in
-  let vs = List.filter (fun (w : P.ver) -> w.P.v_vers <> u) (load_name ar n) in
+let install_root ar (v : Cargo_parse.ver) =
+  let n = v.Cargo_parse.v_name and u = v.Cargo_parse.v_vers in
+  let vs =
+    List.filter
+      (fun (w : Cargo_parse.ver) -> w.Cargo_parse.v_vers <> u)
+      (load_name ar n)
+  in
   Hashtbl.replace ar.crates n (vs @ [ v ]);
   Hashtbl.replace ar.entry (n, u) v;
   Hashtbl.filter_map_inplace
     (fun _ ps ->
       match List.filter (( <> ) (n, u)) ps with [] -> None | ps -> Some ps)
     ar.links_table;
-  Option.iter (fun l -> Pac_common.Tbl.push ar.links_table l (n, u)) v.P.v_links
+  Option.iter
+    (fun l -> Pac_common.Tbl.push ar.links_table l (n, u))
+    v.Cargo_parse.v_links
 
 let link_preimage ar (l : string) = Pac_common.Tbl.find_list ar.links_table l

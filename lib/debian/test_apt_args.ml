@@ -1,5 +1,3 @@
-module A = Apt_args
-
 let fails = ref 0
 
 let check what ok =
@@ -44,10 +42,11 @@ let index =
   ]
 
 let elem arg =
-  A.query_element ~native:"amd64" ~arches:[ "amd64"; "i386" ]
-    ~located:(A.cache_names index) index arg
+  Apt_args.query_element ~native:"amd64" ~arches:[ "amd64"; "i386" ]
+    ~located:(Apt_args.cache_names index)
+    index arg
 
-let accepts = function A.Any -> "any" | A.Only v -> "=" ^ v
+let accepts = function Apt_args.Any -> "any" | Apt_args.Only v -> "=" ^ v
 
 let expect arg key acc =
   match elem arg with
@@ -70,71 +69,75 @@ let refused arg msg =
 
 let () =
   (* fnmatch(3) with FNM_CASEFOLD *)
-  check "fnmatch *" (A.fnmatch "1.*" "1.2");
-  check "fnmatch ?" (A.fnmatch "1.?" "1.2" && not (A.fnmatch "1.?" "1.23"));
+  check "fnmatch *" (Apt_args.fnmatch "1.*" "1.2");
+  check "fnmatch ?"
+    (Apt_args.fnmatch "1.?" "1.2" && not (Apt_args.fnmatch "1.?" "1.23"));
   check "fnmatch range"
-    (A.fnmatch "[a-c]x" "bx" && not (A.fnmatch "[a-c]x" "dx"));
-  check "fnmatch negated" (A.fnmatch "[!a]" "b" && not (A.fnmatch "[^a]" "a"));
-  check "fnmatch casefold" (A.fnmatch "ABC" "abc");
-  check "fnmatch escape" (A.fnmatch "a\\*" "a*" && not (A.fnmatch "a\\*" "ab"));
-  check "fnmatch open bracket" (A.fnmatch "[a" "[a");
+    (Apt_args.fnmatch "[a-c]x" "bx" && not (Apt_args.fnmatch "[a-c]x" "dx"));
+  check "fnmatch negated"
+    (Apt_args.fnmatch "[!a]" "b" && not (Apt_args.fnmatch "[^a]" "a"));
+  check "fnmatch casefold" (Apt_args.fnmatch "ABC" "abc");
+  check "fnmatch escape"
+    (Apt_args.fnmatch "a\\*" "a*" && not (Apt_args.fnmatch "a\\*" "ab"));
+  check "fnmatch open bracket" (Apt_args.fnmatch "[a" "[a");
   (* the pattern less its trailing '*' is a prefix, or a glob *)
-  check "version_matches exact" (A.version_matches "1.2" "1.2");
-  check "version_matches case" (A.version_matches "1.0A" "1.0a");
-  check "version_matches prefix" (A.version_matches "1.2*" "1.23");
+  check "version_matches exact" (Apt_args.version_matches "1.2" "1.2");
+  check "version_matches case" (Apt_args.version_matches "1.0A" "1.0a");
+  check "version_matches prefix" (Apt_args.version_matches "1.2*" "1.23");
   check "version_matches glob"
-    (A.version_matches "1.*2*" "1.2" && not (A.version_matches "1.*2*" "1.23"));
-  check "version_matches whole" (not (A.version_matches "1.2" "1.23"));
+    (Apt_args.version_matches "1.*2*" "1.2"
+    && not (Apt_args.version_matches "1.*2*" "1.23"));
+  check "version_matches whole" (not (Apt_args.version_matches "1.2" "1.23"));
   (* one element of apt-get install's arguments *)
-  expect "pinv" ("pinv", "amd64") A.Any;
-  expect "pinv=1" ("pinv", "amd64") (A.Only "1");
+  expect "pinv" ("pinv", "amd64") Apt_args.Any;
+  expect "pinv=1" ("pinv", "amd64") (Apt_args.Only "1");
   refused "pinv=3" "Version '3' for 'pinv' was not found";
-  expect "pinv=*" ("pinv", "amd64") (A.Only "2");
-  expect "pinv/candidate" ("pinv", "amd64") (A.Only "2");
-  expect "pinv=newest" ("pinv", "amd64") (A.Only "2");
+  expect "pinv=*" ("pinv", "amd64") (Apt_args.Only "2");
+  expect "pinv/candidate" ("pinv", "amd64") (Apt_args.Only "2");
+  expect "pinv=newest" ("pinv", "amd64") (Apt_args.Only "2");
   refused "pinv=installed"
     "Can't select installed version from package pinv as it is not installed";
   refused "pinv/stable" "Release 'stable' for 'pinv' was not found";
   refused "xunq=2" "Version '2' for 'xunq:i386' was not found";
-  expect "pinv/*" ("pinv", "amd64") (A.Only "2");
-  expect "pinglob=1.*2*" ("pinglob", "amd64") (A.Only "1.2");
-  expect "pinglob=1.2*" ("pinglob", "amd64") (A.Only "1.23");
-  expect "pinmix:all=1" ("pinmix", "amd64") (A.Only "1");
-  expect "pinmix:native" ("pinmix", "amd64") A.Any;
-  expect "pinself=5" ("pinself", "amd64") (A.Only "1");
-  expect "xunq" ("xunq", "i386") A.Any;
+  expect "pinv/*" ("pinv", "amd64") (Apt_args.Only "2");
+  expect "pinglob=1.*2*" ("pinglob", "amd64") (Apt_args.Only "1.2");
+  expect "pinglob=1.2*" ("pinglob", "amd64") (Apt_args.Only "1.23");
+  expect "pinmix:all=1" ("pinmix", "amd64") (Apt_args.Only "1");
+  expect "pinmix:native" ("pinmix", "amd64") Apt_args.Any;
+  expect "pinself=5" ("pinself", "amd64") (Apt_args.Only "1");
+  expect "xunq" ("xunq", "i386") Apt_args.Any;
   refused "nothere" "Unable to locate package nothere";
   refused "nothere=1" "Unable to locate package nothere";
   refused "dupvirt" "Package 'dupvirt' has no installation candidate";
   (* the string, not the order: 1.0 and 1.00 compare equal *)
-  expect "exv=1.00" ("exv", "amd64") (A.Only "1.00");
-  expect "exv=1.0" ("exv", "amd64") (A.Only "1.0");
+  expect "exv=1.00" ("exv", "amd64") (Apt_args.Only "1.00");
+  expect "exv=1.0" ("exv", "amd64") (Apt_args.Only "1.0");
   (* of two elements naming one package the later wins *)
   let q, named =
     Result.get_ok
-      (A.parse_query ~native:"amd64" ~arches:[ "amd64" ] index
+      (Apt_args.parse_query ~native:"amd64" ~arches:[ "amd64" ] index
          [ "pinv=2"; "pinglob"; "pinv=1"; "exv=1.00" ])
   in
   check "parse_query order"
     (q
     = [
-        (("pinglob", "amd64"), A.Any);
-        (("pinv", "amd64"), A.Only "1");
-        (("exv", "amd64"), A.Only "1.00");
+        (("pinglob", "amd64"), Apt_args.Any);
+        (("pinv", "amd64"), Apt_args.Only "1");
+        (("exv", "amd64"), Apt_args.Only "1.00");
       ]);
   check "parse_query named"
     (Hashtbl.find_opt named ("pinv", "amd64") = Some "1"
     && Hashtbl.length named = 2);
   check "parse_query refused"
     (Result.is_error
-       (A.parse_query ~native:"amd64" ~arches:[ "amd64" ] index
+       (Apt_args.parse_query ~native:"amd64" ~arches:[ "amd64" ] index
           [ "pinv"; "pinv=3" ]));
   (* the candidate: the newest, a named version, the first of two stanzas
      at one version *)
   let versions l =
     List.map (fun (s : Deb_packages.stanza) -> (s.package, s.version)) l
   in
-  let kept = A.pin_candidates ~native:"amd64" ~named index in
+  let kept = Apt_args.pin_candidates ~native:"amd64" ~named index in
   check "pin_candidates"
     (versions kept
     = [

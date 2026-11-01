@@ -1,5 +1,3 @@
-module P = Npm_parse
-
 type result = {
   installs : ((string * string) * string) list;
   tree : (((string * string) * string) * ((string * string) * string)) list;
@@ -24,13 +22,14 @@ module Make () = struct
      the same versions of this name, and the solver considers no others.  A
      few points cost less than asking for the name's versions, which the
      solver may never need. *)
-  let runs (all : PVersion.t list Lazy.t) (vs : PVersion.t list) : PG.Ranges.t =
-    if List.compare_length_with vs 32 <= 0 then PG.Ranges.of_list vs
+  let runs (all : PVersion.t list Lazy.t) (vs : PVersion.t list) :
+      Resolver.Ranges.t =
+    if List.compare_length_with vs 32 <= 0 then Resolver.Ranges.of_list vs
     else begin
       let inside = Hashtbl.create (List.length vs) in
       List.iter (fun v -> Hashtbl.replace inside v ()) vs;
       let close acc = function
-        | Some l -> PG.Ranges.union acc (PG.Ranges.higher_than l)
+        | Some l -> Resolver.Ranges.union acc (Resolver.Ranges.higher_than l)
         | None -> acc
       in
       let rec go acc lo = function
@@ -40,10 +39,12 @@ module Make () = struct
         | v :: rest -> (
             match lo with
             | Some l ->
-                go (PG.Ranges.union acc (PG.Ranges.between l v)) None rest
+                go
+                  (Resolver.Ranges.union acc (Resolver.Ranges.between l v))
+                  None rest
             | None -> go acc None rest)
       in
-      go PG.Ranges.empty None (Lazy.force all)
+      go Resolver.Ranges.empty None (Lazy.force all)
     end
 
   (* PubGrub widens each dependency's depender range by asking for the
@@ -51,22 +52,25 @@ module Make () = struct
      dependency, so the same node is asked for over and over.  A run over a
      name whose versions grow could take in one listed later, so there the
      versions are handed over as points. *)
-  let dependencies st cache n (u : Np.Version.version) =
+  let dependencies st cache n (u : Npm.Version.version) =
     Pac_common.Tbl.memo cache (n, u) (fun () ->
         List.map
-          (fun ((m, vs) : T.Dependee.t) ->
-            let vs = T.VSet.elements vs in
+          (fun ((m, vs) : Reduced.Dependee.t) ->
+            let vs = Reduced.VSet.elements vs in
             ( m,
-              if Lookup.grows st m then PG.Ranges.of_list vs
+              if Lookup.grows st m then Resolver.Ranges.of_list vs
               else runs (lazy (Lookup.versions st m)) vs ))
           (Lookup.dependees st (n, u)))
 
   let decode st ~lookups sol =
-    let s = T.PackageSet.ofList sol in
+    let s = Reduced.PackageSet.ofList sol in
     let read, dropped = Lookup.optional_verdicts st in
     {
-      installs = List.sort compare (Np.PackageSet.elements (R.npmResolution s));
-      tree = List.sort compare (Np.Concurrent.ParentRel.elements (R.parents s));
+      installs =
+        List.sort compare (Npm.PackageSet.elements (Reduction.npmResolution s));
+      tree =
+        List.sort compare
+          (Npm.Concurrent.ParentRel.elements (Reduction.parents s));
       nodes = List.length sol;
       lookups;
       optional_read = read;
@@ -99,7 +103,10 @@ module Make () = struct
     in
     let peers_on n a =
       match meta n with
-      | Some m -> List.exists (fun (q : P.peer) -> q.P.p_name = a) m.P.v_peers
+      | Some m ->
+          List.exists
+            (fun (q : Npm_parse.peer) -> q.Npm_parse.p_name = a)
+            m.Npm_parse.v_peers
       | None -> false
     in
     let rec shows seen p a =
@@ -121,18 +128,18 @@ module Make () = struct
         | None -> ()
         | Some m ->
             List.iter
-              (fun (d : P.dep) ->
+              (fun (d : Npm_parse.dep) ->
                 if
-                  (n = top || not d.P.d_dev)
-                  && (not (dev && d.P.d_dev))
-                  && not (optional && d.P.d_optional)
-                then List.iter keep (child n d.P.d_dir))
-              m.P.v_deps;
+                  (n = top || not d.Npm_parse.d_dev)
+                  && (not (dev && d.Npm_parse.d_dev))
+                  && not (optional && d.Npm_parse.d_optional)
+                then List.iter keep (child n d.Npm_parse.d_dir))
+              m.Npm_parse.v_deps;
             List.iter
-              (fun (q : P.peer) ->
-                if not (optional && q.P.p_optional) then
-                  List.iter keep (shows [] h q.P.p_name))
-              m.P.v_peers
+              (fun (q : Npm_parse.peer) ->
+                if not (optional && q.Npm_parse.p_optional) then
+                  List.iter keep (shows [] h q.Npm_parse.p_name))
+              m.Npm_parse.v_peers
       end
     in
     keep (top, top);
@@ -150,15 +157,17 @@ module Make () = struct
     }
 
   let check_answer st root_n (root : string * string) sol =
-    let versions m = T.VSet.ofList (Lookup.versions st m) in
-    let dependees p = T.DependeeSet.ofList (Lookup.dependees st p) in
-    let q = T.rootQuery (root_n, Np.Version.Orig (snd root)) in
-    match T.check versions dependees q (T.PackageSet.ofList sol) with
+    let versions m = Reduced.VSet.ofList (Lookup.versions st m) in
+    let dependees p = Reduced.DependeeSet.ofList (Lookup.dependees st p) in
+    let q = Reduced.rootQuery (root_n, Npm.Version.Orig (snd root)) in
+    match
+      Reduced.check versions dependees q (Reduced.PackageSet.ofList sol)
+    with
     | None -> ()
     | Some f ->
         Pac_common.Check.fail ~pp_name:PName.pp
           ~pp_version:(fun _ -> PVersion.pp)
-          ~elements:T.VSet.elements f
+          ~elements:Reduced.VSet.elements f
 
   let solve ?(debug = false) ?(check = false) ?(order = `Tool)
       ?(omit_dev = false) ?(omit_optional = false) ar (root : string * string) :
@@ -168,20 +177,21 @@ module Make () = struct
     let h = Order.hooks order st in
     (* dependencies' memo, whose size is the lookup count the answer reports *)
     let asked = Hashtbl.create 65536 in
-    let root_n = Np.Name.Granular ((fst root, fst root), snd root) in
+    let root_n = Npm.Name.Granular ((fst root, fst root), snd root) in
     (* Where a name's versions are fixed, a depender's block of versions may
        run up to the next listed one, as [runs] does for a dependee's, so
        ranges stay few. *)
     let dense n _ _ = not (Lookup.grows st n) in
     let r =
-      PG.solve ?next:h.Pac_common.Order.next ?choose:h.Pac_common.Order.choose
-        ~dense ~vers:(Lookup.versions st) ~deps:(dependencies st asked)
-        [ (root_n, PG.Ranges.of_list [ Np.Version.Orig (snd root) ]) ]
+      Resolver.solve ?next:h.Pac_common.Order.next
+        ?choose:h.Pac_common.Order.choose ~dense ~vers:(Lookup.versions st)
+        ~deps:(dependencies st asked)
+        [ (root_n, Resolver.Ranges.of_list [ Npm.Version.Orig (snd root) ]) ]
     in
     h.Pac_common.Order.finish ();
     let r =
       match r with
-      | Error inc -> Error (fun ppf -> PG.explain_incompatibility ppf inc)
+      | Error inc -> Error (fun ppf -> Resolver.explain_incompatibility ppf inc)
       | Ok sol ->
           if check then check_answer st root_n root sol;
           let r = decode st ~lookups:(Hashtbl.length asked) sol in
@@ -197,7 +207,8 @@ module Make () = struct
         Pac_common.Core.walk ~versions:(Lookup.versions st)
           ~dependees:(fun p ->
             List.map
-              (fun ((m, vs) : T.Dependee.t) -> (m, T.VSet.elements vs))
+              (fun ((m, vs) : Reduced.Dependee.t) ->
+                (m, Reduced.VSet.elements vs))
               (Lookup.dependees st p))
           [ root_n ]
       with

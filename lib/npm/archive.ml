@@ -1,5 +1,3 @@
-module P = Npm_parse
-
 exception Fetch_failed of string
 exception Reaches_root of string
 
@@ -13,7 +11,7 @@ let host_version (s : string) : string =
 type t = {
   cache : string;
   offline : bool;
-  reading : P.reading;
+  reading : Npm_parse.reading;
   (* The host npm-pick-manifest ranks engines against.  npm always has
      one, arborist passing process.version as nodeVersion and the CLI its
      own version as npmVersion, but nothing here can read a node that need
@@ -24,13 +22,13 @@ type t = {
      sides rank by different rules. *)
   node : string option;
   npm : string option;
-  pkgs : (string, P.ver list) Hashtbl.t;
+  pkgs : (string, Npm_parse.ver list) Hashtbl.t;
   latest : (string, string) Hashtbl.t;
   tags : (string, (string * string) list) Hashtbl.t;
-  entry : (string * string, P.ver) Hashtbl.t;
-  mutable root : P.ver option;
+  entry : (string * string, Npm_parse.ver) Hashtbl.t;
+  mutable root : Npm_parse.ver option;
   (* peer dependencies keyed by the directory they name *)
-  peer_by_name : (string, (string * string) * P.peer) Hashtbl.t;
+  peer_by_name : (string, (string * string) * Npm_parse.peer) Hashtbl.t;
   mutable n_names : int;
   mutable n_vers : int;
   mutable n_fetched : int;
@@ -131,7 +129,7 @@ let download ar n f =
   | `Fetched -> (
       (* a body that is no packument would be read back from the cache on
          every later run *)
-      match P.load ~reading:ar.reading ~reject:ignore tmp with
+      match Npm_parse.load ~reading:ar.reading ~reject:ignore tmp with
       | Ok _ ->
           Sys.rename tmp f;
           Some f
@@ -154,10 +152,12 @@ let fetch ar (n : string) : string option =
   else if ar.offline then None
   else download ar n f
 
-let tabulate ar (v : P.ver) =
-  let p = (v.P.v_name, v.P.v_vers) in
+let tabulate ar (v : Npm_parse.ver) =
+  let p = (v.Npm_parse.v_name, v.Npm_parse.v_vers) in
   Hashtbl.replace ar.entry p v;
-  List.iter (fun r -> Hashtbl.add ar.peer_by_name r.P.p_name (p, r)) v.P.v_peers
+  List.iter
+    (fun r -> Hashtbl.add ar.peer_by_name r.Npm_parse.p_name (p, r))
+    v.Npm_parse.v_peers
 
 let add_name ar n vs =
   Hashtbl.replace ar.pkgs n vs;
@@ -170,16 +170,16 @@ let add_name ar n vs =
    passes its own sub-key rather than failing it, so a package declaring
    a requirement we have no host for is ranked as though it declared
    none. *)
-let ver_engine_ok ar (v : P.ver) : bool =
+let ver_engine_ok ar (v : Npm_parse.ver) : bool =
   let ok host rg =
     match (host, rg) with
     | Some h, Some rg -> Npm_version.holds_pre h rg
     | _ -> true
   in
-  ok ar.node v.P.v_eng_node && ok ar.npm v.P.v_eng_npm
+  ok ar.node v.Npm_parse.v_eng_node && ok ar.npm v.Npm_parse.v_eng_npm
 
-let ver_rank ar (v : P.ver) : bool * bool * bool =
-  let nd = not v.P.v_deprecated and eng = ver_engine_ok ar v in
+let ver_rank ar (v : Npm_parse.ver) : bool * bool * bool =
+  let nd = not v.Npm_parse.v_deprecated and eng = ver_engine_ok ar v in
   (nd && eng, eng, nd)
 
 (* node-semver compares versions differing only in build metadata equal,
@@ -189,12 +189,12 @@ let ver_rank ar (v : P.ver) : bool * bool * bool =
    is all npm installs, so the only one kept.  A spec that is itself a
    version npm looks up by semver.clean's key, metadata stripped
    (index.js:108-111); here it is a range like any other. *)
-let one_per_precedence ar (latest : string option) (vs : P.ver list) =
-  let chosen (c : P.ver list) =
+let one_per_precedence ar (latest : string option) (vs : Npm_parse.ver list) =
+  let chosen (c : Npm_parse.ver list) =
     match
       List.find_opt
-        (fun (v : P.ver) ->
-          Some v.P.v_vers = latest && ver_rank ar v = (true, true, true))
+        (fun (v : Npm_parse.ver) ->
+          Some v.Npm_parse.v_vers = latest && ver_rank ar v = (true, true, true))
         c
     with
     | Some v -> v
@@ -204,7 +204,9 @@ let one_per_precedence ar (latest : string option) (vs : P.ver list) =
             if compare (ver_rank ar b) (ver_rank ar a) > 0 then b else a)
           (List.hd c) (List.tl c)
   in
-  let cmp (a : P.ver) (b : P.ver) = Npm_version.compare a.P.v_vers b.P.v_vers in
+  let cmp (a : Npm_parse.ver) (b : Npm_parse.ver) =
+    Npm_version.compare a.Npm_parse.v_vers b.Npm_parse.v_vers
+  in
   (* a stable sort keeps each class in packument order *)
   let rec dropped acc = function
     | [] -> acc
@@ -222,15 +224,17 @@ let one_per_precedence ar (latest : string option) (vs : P.ver list) =
   | d -> List.filter (fun v -> not (List.memq v d)) vs
 
 let read_packument ar n f =
-  match P.load ~reading:ar.reading ~reject:(reject ar) f with
+  match Npm_parse.load ~reading:ar.reading ~reject:(reject ar) f with
   | Error e -> raise (Fetch_failed (Printf.sprintf "reading %s: %s" f e))
   | Ok pk ->
-      Option.iter (Hashtbl.replace ar.latest n) pk.P.pk_latest;
-      Hashtbl.replace ar.tags n pk.P.pk_tags;
+      Option.iter (Hashtbl.replace ar.latest n) pk.Npm_parse.pk_latest;
+      Hashtbl.replace ar.tags n pk.Npm_parse.pk_tags;
       (* the name fetched under is authoritative: a manifest's own "name"
          is overwritten, not checked *)
-      one_per_precedence ar pk.P.pk_latest
-        (List.map (fun v -> { v with P.v_name = n }) pk.P.pk_vers)
+      one_per_precedence ar pk.Npm_parse.pk_latest
+        (List.map
+           (fun v -> { v with Npm_parse.v_name = n })
+           pk.Npm_parse.pk_vers)
 
 (* There is no cone pass: the transitive closure over every version of
    every dependency is most of the registry, so a packument is fetched
@@ -239,7 +243,7 @@ let read_packument ar n f =
    package already loaded -- an exit edge names the key its own
    intermediate carries, and a peer edge names a directory its own
    declarer asked for. *)
-let load_name ar (n : string) : P.ver list =
+let load_name ar (n : string) : Npm_parse.ver list =
   match Hashtbl.find_opt ar.pkgs n with
   | Some vs -> vs
   | None ->
@@ -251,7 +255,8 @@ let load_name ar (n : string) : P.ver list =
       ar.t_parse <- ar.t_parse +. (Unix.gettimeofday () -. t);
       vs
 
-let versions_of ar n = List.map (fun (v : P.ver) -> v.P.v_vers) (load_name ar n)
+let versions_of ar n =
+  List.map (fun (v : Npm_parse.ver) -> v.Npm_parse.v_vers) (load_name ar n)
 
 let dist_tag ar (n : string) (tag : string) : string option =
   ignore (load_name ar n);
@@ -261,17 +266,17 @@ let latest ar n =
   ignore (load_name ar n);
   Hashtbl.find_opt ar.latest n
 
-let add_root ~named ar (v : P.ver) : string * string =
+let add_root ~named ar (v : Npm_parse.ver) : string * string =
   ar.root <- Some v;
-  if named then add_name ar v.P.v_name [ v ]
+  if named then add_name ar v.Npm_parse.v_name [ v ]
   else begin
     ar.n_names <- ar.n_names + 1;
     ar.n_vers <- ar.n_vers + 1
   end;
-  (v.P.v_name, v.P.v_vers)
+  (v.Npm_parse.v_name, v.Npm_parse.v_vers)
 
 let root_meta ar = ar.root
-let meta ar p : P.ver option = Hashtbl.find_opt ar.entry p
+let meta ar p : Npm_parse.ver option = Hashtbl.find_opt ar.entry p
 let loaded_latest ar n = Hashtbl.find_opt ar.latest n
 let peers_naming ar n = Hashtbl.find_all ar.peer_by_name n
 
@@ -279,4 +284,4 @@ let engine_ok ar (p : string * string) : bool =
   match meta ar p with None -> true | Some v -> ver_engine_ok ar v
 
 let deprecated ar (p : string * string) : bool =
-  match meta ar p with None -> false | Some v -> v.P.v_deprecated
+  match meta ar p with None -> false | Some v -> v.Npm_parse.v_deprecated

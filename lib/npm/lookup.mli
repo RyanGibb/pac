@@ -13,36 +13,38 @@ module Make (Encoding : Encoding.S) : sig
 
   (* the range the calculus reads for an edge on directory a: the root's
      flat override on a when there is one *)
-  val effective : t -> string -> Np.coq_Range -> Np.coq_Range
-  val peer_dependencies : t -> string * string -> Np.coq_PeerDependency list
+  val effective : t -> string -> Npm.coq_Range -> Npm.coq_Range
+  val peer_dependencies : t -> string * string -> Npm.coq_PeerDependency list
 
   (* what the optional-dependency test read and what it abandoned, both in
      distinct (dependee name, range) pairs *)
   val optional_verdicts : t -> int * int
 
   (* p's dependencies, the root's override on each one's directory applied *)
-  val active_dependencies : t -> string * string -> Np.coq_Dependency list
+  val active_dependencies : t -> string * string -> Npm.coq_Dependency list
 
   (* the descriptor p's directory m reads, as the calculus's slotOf finds
      its dependency: the first active one of the directory *)
-  val desc_name : t -> string * string -> string * string -> Np.Name.name option
-  val versions : t -> Np.Name.name -> Np.Version.version list
+  val desc_name :
+    t -> string * string -> string * string -> Npm.Name.name option
+
+  val versions : t -> Npm.Name.name -> Npm.Version.version list
 
   (* whether a name's versions may grow after it was first asked *)
-  val grows : t -> Np.Name.name -> bool
+  val grows : t -> Npm.Name.name -> bool
 
   (* where the copy k at v offers its name a: its sight where it peers on a
      itself, else its own directory; none where it offers itself or
      nothing *)
-  val holder : t -> (string * string) * string -> string -> Np.Name.name option
+  val holder : t -> (string * string) * string -> string -> Npm.Name.name option
 
   (* the directories opened so far that read descriptor x *)
-  val desc_dirs : t -> Np.Name.name -> Np.Name.name list
-  val dependees : t -> T.Package.t -> T.Dependee.t list
+  val desc_dirs : t -> Npm.Name.name -> Npm.Name.name list
+  val dependees : t -> Reduced.Package.t -> Reduced.Dependee.t list
 
   (* the links, opened so far, whose holder shows the name in directory h *)
-  val links_into : t -> Np.Name.name -> Np.Name.name list
+  val links_into : t -> Npm.Name.name -> Npm.Name.name list
 
   (* the directories of p's copy the solver has opened so far *)
-  val dirs : t -> (string * string) * string -> Np.Name.name list
+  val dirs : t -> (string * string) * string -> Npm.Name.name list
 end

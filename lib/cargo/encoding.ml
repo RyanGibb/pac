@@ -1,7 +1,5 @@
 module type S = sig
-  module E = Pac
-
-  module CVerOT : sig
+  module CargoVersionOT : sig
     type t = string
 
     val compare : t -> t -> Pac.comparison
@@ -13,48 +11,46 @@ module type S = sig
     val sameCore : string -> string -> bool
   end
 
-  module Cg :
+  module Cargo :
       module type of
-        Pac.Cargo (Pac_common.Ot.Str) (CVerOT) (Pac_common.Ot.Str) (CVerOT)
+        Pac.Cargo (Pac_common.Ot.Str) (CargoVersionOT) (Pac_common.Ot.Str)
+          (CargoVersionOT)
           (Pac_common.Ot.Str)
           (Pac_common.Ot.Str)
           (PM)
 
-  module T = Cg.Reduction.Reduced
+  module Reduced = Cargo.Reduction.Reduced
 
   val root_feats : Cargo_parse.ver -> Cargo_query.features -> string list
   val msrv_ok : string -> string option -> bool
   val granularity_of : string -> string
-  val fset_of : string list -> Cg.FSet.t
-  val xentry : Cargo_parse.fentry -> Cg.FeatureEntry.t
+  val fset_of : string list -> Cargo.FSet.t
+  val xentry : Cargo_parse.fentry -> Cargo.FeatureEntry.t
   val slots_of : root:bool -> Cargo_parse.ver -> Cargo_parse.dep list
-  val slot_data : Cargo_parse.dep -> Cg.DependencyRecord.t
-  val site_key : Cargo_parse.dep -> Cg.Site.t
+  val slot_data : Cargo_parse.dep -> Cargo.DependencyRecord.t
+  val site_key : Cargo_parse.dep -> Cargo.Site.t
 
   module PName : sig
-    type t = Cg.Reduction.Name.t
+    type t = Cargo.Reduction.Name.t
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit
   end
 
   module PVersion : sig
-    type t = { msrv : bool; v : Cg.Reduction.Version.t }
+    type t = { msrv : bool; v : Cargo.Reduction.Version.t }
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit
   end
 
-  module PG : module type of Pubgrub.Make (PName) (PVersion)
+  module Resolver : module type of Pubgrub.Make (PName) (PVersion)
 end
 
 module Make () = struct
-  module E = Pac
-  module P = Cargo_parse
-  module Q = Cargo_query
   module Ot = Pac_common.Ot
 
-  module CVerOT = Ot.Make (struct
+  module CargoVersionOT = Ot.Make (struct
     type t = string
 
     let compare = Cargo_version.compare
@@ -65,8 +61,12 @@ module Make () = struct
     let sameCore = Cargo_version.same_core
   end
 
-  module Cg = E.Cargo (Ot.Str) (CVerOT) (Ot.Str) (CVerOT) (Ot.Str) (Ot.Str) (PM)
-  module T = Cg.Reduction.Reduced
+  module Cargo =
+    Pac.Cargo (Ot.Str) (CargoVersionOT) (Ot.Str) (CargoVersionOT) (Ot.Str)
+      (Ot.Str)
+      (PM)
+
+  module Reduced = Cargo.Reduction.Reduced
 
   (* rootFeats.  Under All, every key of the root's feature table, as
      Cargo.lock is resolved with every feature (resolve_with_registry,
@@ -75,10 +75,12 @@ module Make () = struct
      (members_with_features), so a transitive crate's unactivated optional
      dependencies stay out, as cargo's resolve_features skips them.  Named
      resolves afresh, so its versions can differ from the lock's. *)
-  let root_feats (m : P.ver) : Q.features -> string list = function
-    | Q.All -> List.map fst m.P.v_feats
-    | Q.Named { feats; default } ->
-        if default && m.P.v_default_declared then feats @ [ P.default_feature ]
+  let root_feats (m : Cargo_parse.ver) : Cargo_query.features -> string list =
+    function
+    | Cargo_query.All -> List.map fst m.Cargo_parse.v_feats
+    | Cargo_query.Named { feats; default } ->
+        if default && m.Cargo_parse.v_default_declared then
+          feats @ [ Cargo_parse.default_feature ]
         else feats
 
   (* cargo's RustVersion::is_compatible_with: the MSRV as a caret
@@ -112,18 +114,18 @@ module Make () = struct
       Printf.sprintf "0.%d.0" p.Cargo_version.minor
     else Printf.sprintf "0.0.%d" p.Cargo_version.patch
 
-  let xop : Cargo_version.op -> E.cmpOp = function
-    | Cargo_version.Ge -> E.OpGe
-    | Gt -> E.OpGt
-    | Le -> E.OpLe
-    | Lt -> E.OpLt
-    | Eq -> E.OpEq
+  let xop : Cargo_version.op -> Pac.cmpOp = function
+    | Cargo_version.Ge -> Pac.OpGe
+    | Gt -> Pac.OpGt
+    | Le -> Pac.OpLe
+    | Lt -> Pac.OpLt
+    | Eq -> Pac.OpEq
 
   (* a cargo requirement is a single comparator set -- the comma-separated
      conjunction -- which is also the unit the pre-release rule is scoped
      to; the empty set is "*", and admits no pre-release *)
-  let xreq (r : Cargo_version.req) : Cg.coq_Range =
-    [ List.map (fun (o, v) -> Cg.COp (xop o, v)) r ]
+  let xreq (r : Cargo_version.req) : Cargo.coq_Range =
+    [ List.map (fun (o, v) -> Cargo.COp (xop o, v)) r ]
 
   (* Build and normal edges share one feature-unified graph here.  Resolver
      v2 decouples them, and v3 inherits that, but cargo decouples in
@@ -133,45 +135,50 @@ module Make () = struct
      the only half of v3 that reaches version selection is the MSRV
      preference.  A dev edge counts from the root alone, which is
      slotActive's rule in the theory and not a choice made here. *)
-  let xkind : P.kind -> Cg.Kind.t = function
-    | P.Normal -> Cg.Kind.KNormal
-    | P.Build -> Cg.Kind.KBuild
-    | P.Dev -> Cg.Kind.KDev
+  let xkind : Cargo_parse.kind -> Cargo.Kind.t = function
+    | Cargo_parse.Normal -> Cargo.Kind.KNormal
+    | Cargo_parse.Build -> Cargo.Kind.KBuild
+    | Cargo_parse.Dev -> Cargo.Kind.KDev
 
-  let fset_of = Cg.FSet.ofList
+  let fset_of = Cargo.FSet.ofList
 
-  let xentry : P.fentry -> Cg.FeatureEntry.t = function
-    | P.FFeat f -> Cg.FeatureEntry.EFeat f
-    | P.FDep a -> Cg.FeatureEntry.EDep a
-    | P.FDepFeat (a, f) -> Cg.FeatureEntry.EDepFeat (a, f)
-    | P.FWeakFeat (a, f) -> Cg.FeatureEntry.EWeakFeat (a, f)
+  let xentry : Cargo_parse.fentry -> Cargo.FeatureEntry.t = function
+    | Cargo_parse.FFeat f -> Cargo.FeatureEntry.EFeat f
+    | Cargo_parse.FDep a -> Cargo.FeatureEntry.EDep a
+    | Cargo_parse.FDepFeat (a, f) -> Cargo.FeatureEntry.EDepFeat (a, f)
+    | Cargo_parse.FWeakFeat (a, f) -> Cargo.FeatureEntry.EWeakFeat (a, f)
 
   (* one slot per manifest site -- SiteFunctional -- where the site is
      (cfg, kind, alias): the tables a manifest offers are maps, so two
      records can only collide here if an index entry repeats a site, which
      no manifest can spell.  Conjoining the requirements and unioning the
      requested features is what that unreachable case gets. *)
-  let unify_site (ds : P.dep list) : P.dep =
+  let unify_site (ds : Cargo_parse.dep list) : Cargo_parse.dep =
     let d0 = List.hd ds in
     {
       d0 with
-      P.d_req = List.concat_map (fun (d : P.dep) -> d.P.d_req) ds;
+      Cargo_parse.d_req =
+        List.concat_map (fun (d : Cargo_parse.dep) -> d.Cargo_parse.d_req) ds;
       d_feats =
         List.sort_uniq String.compare
-          (List.concat_map (fun (d : P.dep) -> d.P.d_feats) ds);
-      d_optional = List.for_all (fun (d : P.dep) -> d.P.d_optional) ds;
-      d_default = List.exists (fun (d : P.dep) -> d.P.d_default) ds;
+          (List.concat_map
+             (fun (d : Cargo_parse.dep) -> d.Cargo_parse.d_feats)
+             ds);
+      d_optional =
+        List.for_all (fun (d : Cargo_parse.dep) -> d.Cargo_parse.d_optional) ds;
+      d_default =
+        List.exists (fun (d : Cargo_parse.dep) -> d.Cargo_parse.d_default) ds;
     }
 
-  let site_of (d : P.dep) : string * P.kind * string =
-    (d.P.d_alias, d.P.d_kind, d.P.d_cfg)
+  let site_of (d : Cargo_parse.dep) : string * Cargo_parse.kind * string =
+    (d.Cargo_parse.d_alias, d.Cargo_parse.d_kind, d.Cargo_parse.d_cfg)
 
   (* [ds] grouped by [key], in order of first appearance, each group merged *)
-  let group key merge (ds : P.dep list) : P.dep list =
+  let group key merge (ds : Cargo_parse.dep list) : Cargo_parse.dep list =
     let tbl = Hashtbl.create 16 in
     let order = ref [] in
     List.iter
-      (fun (d : P.dep) ->
+      (fun (d : Cargo_parse.dep) ->
         let k = key d in
         if not (Hashtbl.mem tbl k) then order := k :: !order;
         Pac_common.Tbl.push tbl k d)
@@ -187,53 +194,55 @@ module Make () = struct
      version active with nothing new to enable (activate, core/resolver/
      mod.rs), so they get one version, and are one slot here, at the first
      site.  A dev-dependency is active from the root alone. *)
-  let same_ask ~root (d : P.dep) =
-    if d.P.d_kind = P.Dev && not root then `Site (site_of d)
+  let same_ask ~root (d : Cargo_parse.dep) =
+    if d.Cargo_parse.d_kind = Cargo_parse.Dev && not root then `Site (site_of d)
     else
       `Ask
-        ( d.P.d_alias,
-          d.P.d_name,
-          d.P.d_req,
-          List.sort_uniq String.compare d.P.d_feats,
-          d.P.d_default,
-          d.P.d_optional )
+        ( d.Cargo_parse.d_alias,
+          d.Cargo_parse.d_name,
+          d.Cargo_parse.d_req,
+          List.sort_uniq String.compare d.Cargo_parse.d_feats,
+          d.Cargo_parse.d_default,
+          d.Cargo_parse.d_optional )
 
-  let slots_of ~root (v : P.ver) : P.dep list =
-    group (same_ask ~root) List.hd (group site_of unify_site v.P.v_deps)
+  let slots_of ~root (v : Cargo_parse.ver) : Cargo_parse.dep list =
+    group (same_ask ~root) List.hd
+      (group site_of unify_site v.Cargo_parse.v_deps)
 
-  let slot_data (d : P.dep) : Cg.DependencyRecord.t =
-    ( d.P.d_alias,
-      ( d.P.d_name,
-        ( xreq d.P.d_req,
-          ( xkind d.P.d_kind,
-            ( d.P.d_optional,
-              (d.P.d_default, (fset_of d.P.d_feats, (d.P.d_cfg, "registry"))) )
-          ) ) ) )
+  let slot_data (d : Cargo_parse.dep) : Cargo.DependencyRecord.t =
+    ( d.Cargo_parse.d_alias,
+      ( d.Cargo_parse.d_name,
+        ( xreq d.Cargo_parse.d_req,
+          ( xkind d.Cargo_parse.d_kind,
+            ( d.Cargo_parse.d_optional,
+              ( d.Cargo_parse.d_default,
+                ( fset_of d.Cargo_parse.d_feats,
+                  (d.Cargo_parse.d_cfg, "registry") ) ) ) ) ) ) )
 
-  let site_key (d : P.dep) : Cg.Site.t =
-    (d.P.d_alias, (xkind d.P.d_kind, d.P.d_cfg))
+  let site_key (d : Cargo_parse.dep) : Cargo.Site.t =
+    (d.Cargo_parse.d_alias, (xkind d.Cargo_parse.d_kind, d.Cargo_parse.d_cfg))
 
   (* a slot node is one manifest site, so its name has to spell the site
      out: bare alias for the plain [dependencies] record, and the kind or cfg
      that told the record apart otherwise *)
-  let pp_site fmt ((a, (k, cfg)) : Cg.Site.t) =
+  let pp_site fmt ((a, (k, cfg)) : Cargo.Site.t) =
     Format.fprintf fmt "%s%s%s" a
       (match k with
-      | Cg.Kind.KNormal -> ""
-      | Cg.Kind.KBuild -> "[build]"
-      | Cg.Kind.KDev -> "[dev]")
+      | Cargo.Kind.KNormal -> ""
+      | Cargo.Kind.KBuild -> "[build]"
+      | Cargo.Kind.KDev -> "[dev]")
       (if cfg = "" then "" else "[" ^ cfg ^ "]")
 
   (* the requirement a slot name carries, since versions of one granularity
      class may declare one site differently and so have distinct slots *)
-  let pp_req fmt (d : Cg.DependencyRecord.t) =
+  let pp_req fmt (d : Cargo.DependencyRecord.t) =
     let op = function
-      | E.OpGe -> ">="
-      | E.OpGt -> ">"
-      | E.OpLe -> "<="
-      | E.OpLt -> "<"
-      | E.OpEq -> "="
-      | E.OpNe -> "!="
+      | Pac.OpGe -> ">="
+      | Pac.OpGt -> ">"
+      | Pac.OpLe -> "<="
+      | Pac.OpLt -> "<"
+      | Pac.OpEq -> "="
+      | Pac.OpNe -> "!="
     in
     Format.fprintf fmt "(%s)"
       (String.concat "||"
@@ -241,45 +250,46 @@ module Make () = struct
             (fun cs ->
               String.concat ","
                 (List.map
-                   (function Cg.CAny -> "*" | Cg.COp (o, v) -> op o ^ v)
+                   (function Cargo.CAny -> "*" | Cargo.COp (o, v) -> op o ^ v)
                    cs))
-            (Cg.sRange d)))
+            (Cargo.sRange d)))
 
   module PName = struct
-    type t = Cg.Reduction.Name.t
+    type t = Cargo.Reduction.Name.t
 
-    let compare a b = Ot.r2c (Cg.Reduction.Name.compare a b)
+    let compare a b = Ot.r2c (Cargo.Reduction.Name.compare a b)
 
     let pp fmt (tn : t) =
       match tn with
-      | Cg.Reduction.Name.CRoot -> Format.fprintf fmt "root"
-      | Cg.Reduction.Name.CGran (n, gr) -> Format.fprintf fmt "%s@%s" n gr
-      | Cg.Reduction.Name.CFeatP (n, f, gr) ->
+      | Cargo.Reduction.Name.CRoot -> Format.fprintf fmt "root"
+      | Cargo.Reduction.Name.CGran (n, gr) -> Format.fprintf fmt "%s@%s" n gr
+      | Cargo.Reduction.Name.CFeatP (n, f, gr) ->
           Format.fprintf fmt "%s/%s@%s" n f gr
-      | Cg.Reduction.Name.CSlot (n, gr, d) ->
-          Format.fprintf fmt "%s@%s->%a%a" n gr pp_site (Cg.sSite d) pp_req d
-      | Cg.Reduction.Name.CDec (n, gr, f, d, feat) ->
-          Format.fprintf fmt "<%s@%s/%s=>%a%a/%s>" n gr f pp_site (Cg.sSite d)
-            pp_req d feat
-      | Cg.Reduction.Name.CCls l -> Format.fprintf fmt "links:%s" l
+      | Cargo.Reduction.Name.CSlot (n, gr, d) ->
+          Format.fprintf fmt "%s@%s->%a%a" n gr pp_site (Cargo.sSite d) pp_req d
+      | Cargo.Reduction.Name.CDec (n, gr, f, d, feat) ->
+          Format.fprintf fmt "<%s@%s/%s=>%a%a/%s>" n gr f pp_site
+            (Cargo.sSite d) pp_req d feat
+      | Cargo.Reduction.Name.CCls l -> Format.fprintf fmt "links:%s" l
   end
 
   module PVersion = struct
-    type t = { msrv : bool; v : Cg.Reduction.Version.t }
+    type t = { msrv : bool; v : Cargo.Reduction.Version.t }
 
     let compare a b =
       match (a.msrv, b.msrv) with
       | false, true -> -1
       | true, false -> 1
-      | _ -> Ot.r2c (Cg.Reduction.Version.compare a.v b.v)
+      | _ -> Ot.r2c (Cargo.Reduction.Version.compare a.v b.v)
 
     let pp fmt ({ v; _ } : t) =
       match v with
-      | Cg.Reduction.Version.WUnit -> Format.fprintf fmt "()"
-      | Cg.Reduction.Version.WOrig x -> Format.fprintf fmt "%s" x
-      | Cg.Reduction.Version.WClass gr -> Format.fprintf fmt "granularity:%s" gr
-      | Cg.Reduction.Version.WName n -> PName.pp fmt n
+      | Cargo.Reduction.Version.WUnit -> Format.fprintf fmt "()"
+      | Cargo.Reduction.Version.WOrig x -> Format.fprintf fmt "%s" x
+      | Cargo.Reduction.Version.WClass gr ->
+          Format.fprintf fmt "granularity:%s" gr
+      | Cargo.Reduction.Version.WName n -> PName.pp fmt n
   end
 
-  module PG = Pubgrub.Make (PName) (PVersion)
+  module Resolver = Pubgrub.Make (PName) (PVersion)
 end

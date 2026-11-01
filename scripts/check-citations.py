@@ -4,11 +4,11 @@ theories/ does not define.
 
 A comment cites a Rocq name when it writes a qualified path whose head is a
 theories/ module or a driver's alias of one (Lookup.versions_lookupOrig,
-Red.versions, DMA.Debian.vtMatchb), a name the Rocq naming scheme alone produces
-(snake prefix, camel suffix: dependees_reduceDepsInert), a name after
-Lemma/Theorem/Definition, or a file X.v.  A trailing * is a prefix glob and
-must match at least one name.  Only comments are read, so the extracted code
-itself is checked by the compiler, not here.
+Reduction.versions, MultiarchDebian.Debian.vtMatchb), a name the Rocq naming
+scheme alone produces (snake prefix, camel suffix: dependees_reduceDepsInert),
+a name after Lemma/Theorem/Definition, or a file X.v.  A trailing * is a
+prefix glob and must match at least one name.  Only comments are read, so the
+extracted code itself is checked by the compiler, not here.
 
 usage: check-citations.py [ROOT]   (ROOT defaults to the script's parent's parent)
 """
@@ -211,8 +211,8 @@ def comments(path, s):
 
 
 def aliases(prefixes, files):
-    """Driver-side module aliases of theories/ modules (module DMA =
-    E.MultiarchDebian), each mapped to the theories/ file it lands in, if one."""
+    """Driver-side module aliases of theories/ modules (module Reduction =
+    Opam.Reduction), each mapped to the theories/ file it lands in, if one."""
     out = {}
     pat = re.compile(r"\bmodule\s+([A-Z]\w*)\s*=\s*([A-Z][\w.]*)")
     changed = True

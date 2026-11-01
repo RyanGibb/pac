@@ -1,17 +1,17 @@
 module type SEARCH = sig
-  module T : Tables.S
+  module Tables : Tables.S
 
   module PVersion : sig
     type t = {
       pos : int;
-      v : T.DMA.Debian.Reduction.Version.t;
-      tgt : (string * T.DMA.coq_ReducedQualifier) option;
+      v : Tables.MultiarchDebian.Debian.Reduction.Version.t;
+      tgt : (string * Tables.MultiarchDebian.coq_ReducedQualifier) option;
     }
 
     val compare : t -> t -> int
   end
 
-  module PG : sig
+  module Resolver : sig
     module Ranges : sig
       type t
 
@@ -21,25 +21,27 @@ module type SEARCH = sig
     type selection = Unselected | Entailed of Ranges.t | Decided of PVersion.t
   end
 
-  val tables : T.tables
+  val tables : Tables.tables
 
   val tag :
-    T.DMA.Debian.Reduction.Name.t ->
-    T.DMA.Debian.Reduction.Version.t ->
+    Tables.MultiarchDebian.Debian.Reduction.Name.t ->
+    Tables.MultiarchDebian.Debian.Reduction.Version.t ->
     PVersion.t
 
-  val cands_of : T.DMA.Debian.Reduction.Name.t -> PVersion.t list
+  val cands_of :
+    Tables.MultiarchDebian.Debian.Reduction.Name.t -> PVersion.t list
 
   val dependees_of :
-    T.DMA.Debian.Reduction.Name.t ->
-    T.DMA.Debian.Reduction.Version.t ->
-    (T.DMA.Debian.Reduction.Name.t * PVersion.t list) list
+    Tables.MultiarchDebian.Debian.Reduction.Name.t ->
+    Tables.MultiarchDebian.Debian.Reduction.Version.t ->
+    (Tables.MultiarchDebian.Debian.Reduction.Name.t * PVersion.t list) list
 
-  val has_ref : T.DMA.Debian.Reduction.Name.t -> bool
+  val has_ref : Tables.MultiarchDebian.Debian.Reduction.Name.t -> bool
 
   val free_of :
-    assigned:(T.DMA.Debian.Reduction.Name.t -> PG.selection) ->
-    T.DMA.Debian.Reduction.Name.t ->
+    assigned:
+      (Tables.MultiarchDebian.Debian.Reduction.Name.t -> Resolver.selection) ->
+    Tables.MultiarchDebian.Debian.Reduction.Name.t ->
     PVersion.t list ->
     PVersion.t list
 
@@ -48,14 +50,14 @@ end
 
 module Make (S : SEARCH) = struct
   open S
-  open T
+  open Tables
 
-  type name = DMA.Debian.Reduction.Name.t
-  type assigned = name -> PG.selection
+  type name = MultiarchDebian.Debian.Reduction.Name.t
+  type assigned = name -> Resolver.selection
 
   type state = {
     (* version vars and package vars assigned false *)
-    vdead : (DMA.Package.t, unit) Hashtbl.t;
+    vdead : (MultiarchDebian.Package.t, unit) Hashtbl.t;
     pdead : (string * string, unit) Hashtbl.t;
     (* the solutions of a clause apt folded a later one into are the
        intersection, and Solve takes the first undecided of those: the
@@ -63,7 +65,10 @@ module Make (S : SEARCH) = struct
        fold is of the depender's own clause, so it holds only while the
        depender is installed; the name, which another depender may share,
        is keyed by that depender too. *)
-    narrowed : (name, DMA.Package.t * DMA.Debian.Atom.t) Hashtbl.t;
+    narrowed :
+      ( name,
+        MultiarchDebian.Package.t * MultiarchDebian.Debian.Atom.t )
+      Hashtbl.t;
     (* whether apt's cache has a Provides entry for a name at an arch *)
     provided : (string * string, bool) Hashtbl.t;
   }
@@ -81,26 +86,27 @@ module Make (S : SEARCH) = struct
     Hashtbl.reset st.pdead
 
   let narrowings st n = Hashtbl.find_all st.narrowed n
-  let stanza p = T.stanza tables p
+  let stanza p = Tables.stanza tables p
 
   let provides_matching (stz : nstanza) n f =
     List.filter
-      (fun (pn, vt) -> String.equal pn n && DMA.Debian.vtMatchb vt f)
+      (fun (pn, vt) ->
+        String.equal pn n && MultiarchDebian.Debian.vtMatchb vt f)
       stz.nprovs
 
   (* the alternative's own name in the encoding: its selector where a
      provider matches it, its dependee otherwise *)
   let alt_name a =
-    if has_ref (DMA.Debian.Reduction.Name.Selector a) then
-      DMA.Debian.Reduction.Name.Selector a
-    else DMA.Debian.Reduction.Name.Orig (fst a)
+    if has_ref (MultiarchDebian.Debian.Reduction.Name.Selector a) then
+      MultiarchDebian.Debian.Reduction.Name.Selector a
+    else MultiarchDebian.Debian.Reduction.Name.Orig (fst a)
 
   (* the real versions among a name's candidates *)
   let orig_versions n =
     List.filter_map
       (fun (pv : PVersion.t) ->
         match pv.PVersion.v with
-        | DMA.Debian.Reduction.Version.Orig w -> Some (pv, w)
+        | MultiarchDebian.Debian.Reduction.Version.Orig w -> Some (pv, w)
         | _ -> None)
       (cands_of n)
 
@@ -108,25 +114,25 @@ module Make (S : SEARCH) = struct
      own version (ListParser::NewProvides, pkgcachegen.cc), except through
      the every-architecture path a Multi-Arch: foreign package's Provides
      take, which has no such check: luit provides luit *)
-  let self_dropped (((m, _), w) as q : DMA.Package.t) n vt =
+  let self_dropped (((m, _), w) as q : MultiarchDebian.Package.t) n vt =
     String.equal m n
     && (match stanza q with
-      | Some stz -> stz.ncls <> DMA.MAForeign
+      | Some stz -> stz.ncls <> MultiarchDebian.MAForeign
       | None -> true)
     &&
     match vt with
-    | DMA.Debian.DTTop -> true
-    | DMA.Debian.DTVal u -> Version.Debian.compare u w = 0
+    | MultiarchDebian.Debian.DTTop -> true
+    | MultiarchDebian.Debian.DTVal u -> Version.Debian.compare u w = 0
 
   (* the entry a Multi-Arch: foreign foo gives foo at each other
      architecture (NewProvidesAllArch, pkgcachegen.cc), which skips its own *)
-  let sibling_provides (((m, b), _) : DMA.Package.t) (stz : nstanza)
-      (a : DMA.Debian.Atom.t) =
+  let sibling_provides (((m, b), _) : MultiarchDebian.Package.t) (stz : nstanza)
+      (a : MultiarchDebian.Debian.Atom.t) =
     String.equal m (fst (fst a))
-    && stz.ncls = DMA.MAForeign
+    && stz.ncls = MultiarchDebian.MAForeign
     &&
     match snd (fst a) with
-    | DMA.QAArch c -> not (String.equal b c)
+    | MultiarchDebian.QAArch c -> not (String.equal b c)
     | _ -> false
 
   (* apt's solution counts: an alternative's solutions are its dependee's
@@ -138,11 +144,11 @@ module Make (S : SEARCH) = struct
      the foo:any of a Multi-Arch: allowed package and the foo:b
      pseudo-package's entry for each version of b's own foo (ParseProvides,
      deblistparser.cc), and a sibling's (sibling_provides). *)
-  let provides_count ((m, y) : string * DMA.coq_ReducedQualifier) w
-      (a : DMA.Debian.Atom.t) =
+  let provides_count ((m, y) : string * MultiarchDebian.coq_ReducedQualifier) w
+      (a : MultiarchDebian.Debian.Atom.t) =
     let n = fst (fst a) in
     match y with
-    | DMA.QAArch b -> (
+    | MultiarchDebian.QAArch b -> (
         match stanza ((m, b), w) with
         | None -> 0
         | Some stz ->
@@ -154,7 +160,9 @@ module Make (S : SEARCH) = struct
             in
             let implicit =
               match snd (fst a) with
-              | (DMA.QAAny | DMA.QAExact _) when String.equal m n -> 1
+              | (MultiarchDebian.QAAny | MultiarchDebian.QAExact _)
+                when String.equal m n ->
+                  1
               | _ when sibling_provides ((m, b), w) stz a -> 1
               | _ -> 0
             in
@@ -163,12 +171,12 @@ module Make (S : SEARCH) = struct
 
   let allowed_of ~(assigned : assigned) n =
     match assigned n with
-    | PG.Unselected -> fun _ -> true
-    | PG.Decided u -> fun (pv : PVersion.t) -> PVersion.compare u pv = 0
-    | PG.Entailed r -> fun pv -> PG.Ranges.contains pv r
+    | Resolver.Unselected -> fun _ -> true
+    | Resolver.Decided u -> fun (pv : PVersion.t) -> PVersion.compare u pv = 0
+    | Resolver.Entailed r -> fun pv -> Resolver.Ranges.contains pv r
 
   let is_bot (pv : PVersion.t) =
-    pv.PVersion.v = DMA.Debian.Reduction.Version.Bot
+    pv.PVersion.v = MultiarchDebian.Debian.Reduction.Version.Bot
 
   (* n at b has an entry from a declared Provides that reaches b, or from a
      Multi-Arch: foreign n at another architecture, as provides_count counts
@@ -179,7 +187,7 @@ module Make (S : SEARCH) = struct
     | None ->
         let foreign q =
           match stanza q with
-          | Some stz -> stz.ncls = DMA.MAForeign
+          | Some stz -> stz.ncls = MultiarchDebian.MAForeign
           | None -> false
         in
         let p =
@@ -199,9 +207,9 @@ module Make (S : SEARCH) = struct
      the dependee's package var; any other atom's solutions are version vars.
      apt tests every version in its cache, those Strict-Pinning rejected
      included; this tests the candidates only. *)
-  let deferred st (a : DMA.Debian.Atom.t) =
+  let deferred st (a : MultiarchDebian.Debian.Atom.t) =
     match fst a with
-    | n, DMA.QAArch b ->
+    | n, MultiarchDebian.QAArch b ->
         (not (apt_provided st (n, b)))
         &&
         let vs = versions_of tables (n, b) in
@@ -209,9 +217,10 @@ module Make (S : SEARCH) = struct
     | _ -> false
 
   (* the literal a solution reads is still unassigned *)
-  let live_at st ~pkgvar ((n, y) : string * DMA.coq_ReducedQualifier) w =
+  let live_at st ~pkgvar
+      ((n, y) : string * MultiarchDebian.coq_ReducedQualifier) w =
     match y with
-    | DMA.QAArch b ->
+    | MultiarchDebian.QAArch b ->
         if pkgvar then not (Hashtbl.mem st.pdead (n, b))
         else not (Hashtbl.mem st.vdead ((n, b), w))
     | _ -> true
@@ -232,9 +241,9 @@ module Make (S : SEARCH) = struct
       | Some assigned when not pkgvar -> allowed_of ~assigned n
       | _ -> fun _ -> true
     in
-    match cands_of (DMA.Debian.Reduction.Name.Selector a) with
+    match cands_of (MultiarchDebian.Debian.Reduction.Name.Selector a) with
     | [] ->
-        let tn = DMA.Debian.Reduction.Name.Orig (fst a) in
+        let tn = MultiarchDebian.Debian.Reduction.Name.Orig (fst a) in
         let ok = allowed ~pkgvar tn in
         let sols =
           List.filter
@@ -248,17 +257,18 @@ module Make (S : SEARCH) = struct
            that, since deciding it to one provider leaves the others
            installable *)
         let ok ~pkgvar m w =
-          let on = DMA.Debian.Reduction.Name.Orig m in
-          allowed ~pkgvar on (tag on (DMA.Debian.Reduction.Version.Orig w))
+          let on = MultiarchDebian.Debian.Reduction.Name.Orig m in
+          allowed ~pkgvar on
+            (tag on (MultiarchDebian.Debian.Reduction.Version.Orig w))
           && live ~pkgvar m w
         in
         let reals, provs =
           List.fold_left
             (fun (r, p) (pv : PVersion.t) ->
               match pv.PVersion.v with
-              | DMA.Debian.Reduction.Version.RefReal w ->
+              | MultiarchDebian.Debian.Reduction.Version.RefReal w ->
                   ((if ok ~pkgvar (fst a) w then r + 1 else r), p)
-              | DMA.Debian.Reduction.Version.Ref (m, w) ->
+              | MultiarchDebian.Debian.Reduction.Version.Ref (m, w) ->
                   ( r,
                     if ok ~pkgvar:false m w then p + provides_count m w a else p
                   )
@@ -274,21 +284,24 @@ module Make (S : SEARCH) = struct
      matches it, and its dependee otherwise *)
   let clause_name opt g = function [ a ] when not opt -> alt_name a | _ -> g
 
-  let pkg_names (((n, _), _) as p : DMA.Package.t) =
+  let pkg_names (((n, _), _) as p : MultiarchDebian.Package.t) =
     n
     :: (match stanza p with Some stz -> List.map fst stz.nprovs | None -> [])
 
-  let orig_of (((n, b), _) : DMA.Package.t) =
-    DMA.Debian.Reduction.Name.Orig (n, DMA.QAArch b)
+  let orig_of (((n, b), _) : MultiarchDebian.Package.t) =
+    MultiarchDebian.Debian.Reduction.Name.Orig (n, MultiarchDebian.QAArch b)
 
-  let installed_at ~(assigned : assigned) (((_, _), v) as p : DMA.Package.t) =
+  let installed_at ~(assigned : assigned)
+      (((_, _), v) as p : MultiarchDebian.Package.t) =
     match assigned (orig_of p) with
-    | PG.Decided u -> u.PVersion.v = DMA.Debian.Reduction.Version.Orig v
+    | Resolver.Decided u ->
+        u.PVersion.v = MultiarchDebian.Debian.Reduction.Version.Orig v
     | _ -> false
 
-  type rejection = [ `Ver of DMA.Package.t | `Pkg of string * string ]
+  type rejection =
+    [ `Ver of MultiarchDebian.Package.t | `Pkg of string * string ]
 
-  let reject_ver st ~assigned out (x : DMA.Package.t) =
+  let reject_ver st ~assigned out (x : MultiarchDebian.Package.t) =
     if (not (Hashtbl.mem st.vdead x)) && not (installed_at ~assigned x) then (
       Hashtbl.replace st.vdead x ();
       out := `Ver x :: !out)
@@ -316,13 +329,15 @@ module Make (S : SEARCH) = struct
   (* what installing p assigns at once through its own Conflicts and Breaks:
      the versions its negatives exclude (the negative clause's solutions,
      rejected as its reason comes true) *)
-  let conflicts st ~assigned (((pkgname, _), v) as p : DMA.Package.t) =
+  let conflicts st ~assigned
+      (((pkgname, _), v) as p : MultiarchDebian.Package.t) =
     let out = ref [] in
     List.iter
       (fun (tn, tvs) ->
         if List.exists is_bot tvs then
           match tn with
-          | DMA.Debian.Reduction.Name.Orig (m, DMA.QAArch mb)
+          | MultiarchDebian.Debian.Reduction.Name.Orig
+              (m, MultiarchDebian.QAArch mb)
             when not (String.equal m pkgname) ->
               List.iter
                 (fun ((c : PVersion.t), w) ->
@@ -330,23 +345,25 @@ module Make (S : SEARCH) = struct
                   then reject_ver st ~assigned out ((m, mb), w))
                 (orig_versions tn)
           | _ -> ())
-      (dependees_of (orig_of p) (DMA.Debian.Reduction.Version.Orig v));
+      (dependees_of (orig_of p)
+         (MultiarchDebian.Debian.Reduction.Version.Orig v));
     List.rev !out
 
   (* apt's implicit Multi-Arch negatives (AddImplicitDepends,
      apt-pkg/pkgcachegen.cc:812-880): a version of foo:b conflicts with every
      other architecture's foo that has a version, or, if it is Multi-Arch:
      same, breaks those versions but its own *)
-  let group_reaches (((_, b), v) as p : DMA.Package.t) c w =
+  let group_reaches (((_, b), v) as p : MultiarchDebian.Package.t) c w =
     (not (String.equal b c))
     && ((match stanza p with
-          | Some stz -> stz.ncls <> DMA.MASame
+          | Some stz -> stz.ncls <> MultiarchDebian.MASame
           | None -> true)
        || Version.Debian.compare v w <> 0)
 
   (* what installing p assigns through its implicit negatives, which the
      cache appends to its dependencies after the Recommends *)
-  let group_conflicts st ~assigned (((n, _), _) as p : DMA.Package.t) =
+  let group_conflicts st ~assigned
+      (((n, _), _) as p : MultiarchDebian.Package.t) =
     let out = ref [] in
     List.iter
       (fun (c, w) ->
@@ -360,17 +377,18 @@ module Make (S : SEARCH) = struct
      version, or of the version p provides the name at (IsSatisfied over a
      PrvIterator: an unversioned Provides never meets a versioned
      negative). *)
-  let reaches (((pkgname, pb), v) as p : DMA.Package.t) (a : DMA.Atom.t) n =
-    String.equal (DMA.aname a) n
-    && (match DMA.aqual a with
-      | DMA.QUnq | DMA.QAny -> true
-      | DMA.QNative -> String.equal APx.native pb
-      | DMA.QExact c -> String.equal c pb)
+  let reaches (((pkgname, pb), v) as p : MultiarchDebian.Package.t)
+      (a : MultiarchDebian.Atom.t) n =
+    String.equal (MultiarchDebian.aname a) n
+    && (match MultiarchDebian.aqual a with
+      | MultiarchDebian.QUnq | MultiarchDebian.QAny -> true
+      | MultiarchDebian.QNative -> String.equal APx.native pb
+      | MultiarchDebian.QExact c -> String.equal c pb)
     &&
-    if String.equal n pkgname then sat (DMA.aform a) v
+    if String.equal n pkgname then sat (MultiarchDebian.aform a) v
     else
       match stanza p with
-      | Some stz -> provides_matching stz n (DMA.aform a) <> []
+      | Some stz -> provides_matching stz n (MultiarchDebian.aform a) <> []
       | None -> false
 
   (* what p's version var assigns as it propagates: the declarers of a
@@ -381,7 +399,8 @@ module Make (S : SEARCH) = struct
      apt-pkg/pkgcache.cc:757-790), and a declarer that is not MA:same
      already conflicts with its whole group implicitly: those implicit
      negatives, group_reaches, are what reaches p from its own group. *)
-  let conflicted_by st ~assigned (((pkgname, pb), v) as p : DMA.Package.t) =
+  let conflicted_by st ~assigned
+      (((pkgname, pb), v) as p : MultiarchDebian.Package.t) =
     (* by package, not version: under Strict-Pinning a package has one,
        and with it off the replay judges the first it meets, which moves
        the order and never an answer's validity *)
@@ -391,7 +410,7 @@ module Make (S : SEARCH) = struct
     List.iter
       (fun n ->
         List.iter
-          (fun (q : DMA.Package.t) ->
+          (fun (q : MultiarchDebian.Package.t) ->
             let qk = fst q in
             if
               (not (Hashtbl.mem seen qk))
@@ -434,7 +453,7 @@ module Make (S : SEARCH) = struct
     let watched (opt, _, atoms) =
       (not opt)
       && List.exists
-           (fun (a : DMA.Debian.Atom.t) ->
+           (fun (a : MultiarchDebian.Debian.Atom.t) ->
              List.mem (fst (fst a)) names && deferred st a = pkgvar)
            atoms
       && List.exists (fun a -> solutions st None a > 0) atoms
@@ -452,7 +471,7 @@ module Make (S : SEARCH) = struct
     List.iter
       (fun nm ->
         List.iter
-          (fun (r : DMA.Package.t) ->
+          (fun (r : MultiarchDebian.Package.t) ->
             let rk = fst r in
             if (not (Hashtbl.mem seen rk)) && not (Hashtbl.mem st.pdead rk) then (
               Hashtbl.replace seen rk ();
@@ -486,9 +505,10 @@ module Make (S : SEARCH) = struct
      name keeps the Depends' solutions.  Discover registers the folded
      clause's second half again on the version var, with its own solutions,
      so it propagates right after the package's own wave. *)
-  let conj ((n, f) : DMA.Debian.Atom.t) ((_, f') : DMA.Debian.Atom.t) :
-      DMA.Debian.Atom.t =
-    (n, DMA.Debian.VersionFormula.FConj (f, f'))
+  let conj ((n, f) : MultiarchDebian.Debian.Atom.t)
+      ((_, f') : MultiarchDebian.Debian.Atom.t) : MultiarchDebian.Debian.Atom.t
+      =
+    (n, MultiarchDebian.Debian.VersionFormula.FConj (f, f'))
 
   let overlap st a a' =
     match (deferred st a, deferred st a') with
@@ -509,7 +529,7 @@ module Make (S : SEARCH) = struct
       in
       match Hashtbl.find_opt earlier (opt, fst a) with
       | Some (eg, ea) when overlap st !ea a ->
-          if not (DMA.Debian.Atom.eq_dec !ea a) then (
+          if not (MultiarchDebian.Debian.Atom.eq_dec !ea a) then (
             ea := conj !ea a;
             Hashtbl.add st.narrowed eg (p, !ea));
           again := (opt, Some g, fun () -> [ a ]) :: !again;
@@ -548,14 +568,16 @@ module Make (S : SEARCH) = struct
   let head st ~assigned atoms =
     let one a =
       let h =
-        clause_name false (DMA.Debian.Reduction.Name.Disjunct atoms) [ a ]
+        clause_name false (MultiarchDebian.Debian.Reduction.Name.Disjunct atoms)
+          [ a ]
       in
       match h with
-      | DMA.Debian.Reduction.Name.Orig ((m, DMA.QAArch b) as mn)
+      | MultiarchDebian.Debian.Reduction.Name.Orig
+          ((m, MultiarchDebian.QAArch b) as mn)
         when not (deferred st a) ->
           (* the newest live version, which apt's sort of one package's
              versions puts first (CompareProviders3) *)
-          let on = DMA.Debian.Reduction.Name.Orig mn in
+          let on = MultiarchDebian.Debian.Reduction.Name.Orig mn in
           let live =
             List.filter_map
               (fun (pv, w) ->
@@ -582,36 +604,42 @@ module Make (S : SEARCH) = struct
         | _ -> None)
 
   let negation st ~assigned n (pv : PVersion.t) : rejection list =
-    let ver ((m, y) : string * DMA.coq_ReducedQualifier) w =
-      match y with DMA.QAArch b -> [ `Ver ((m, b), w) ] | _ -> []
+    let ver ((m, y) : string * MultiarchDebian.coq_ReducedQualifier) w =
+      match y with MultiarchDebian.QAArch b -> [ `Ver ((m, b), w) ] | _ -> []
     in
     let of_atom a =
       match head st ~assigned [ a ] with
       | Some
           {
-            Work_heap.solution = DMA.Debian.Reduction.Name.Orig (m, DMA.QAArch b);
+            Work_heap.solution =
+              MultiarchDebian.Debian.Reduction.Name.Orig
+                (m, MultiarchDebian.QAArch b);
             version_var = None;
           } ->
           [ `Pkg (m, b) ]
       | Some { version_var = Some (_, (ov : PVersion.t)); _ } -> (
           match ov.PVersion.v with
-          | DMA.Debian.Reduction.Version.Orig w -> ver (fst a) w
+          | MultiarchDebian.Debian.Reduction.Version.Orig w -> ver (fst a) w
           | _ -> [])
       | _ -> []
     in
     match (n, pv.PVersion.v) with
-    | DMA.Debian.Reduction.Name.Orig m, DMA.Debian.Reduction.Version.Orig w ->
+    | ( MultiarchDebian.Debian.Reduction.Name.Orig m,
+        MultiarchDebian.Debian.Reduction.Version.Orig w ) ->
         ver m w
-    | ( DMA.Debian.Reduction.Name.Selector a,
-        DMA.Debian.Reduction.Version.RefReal w ) ->
+    | ( MultiarchDebian.Debian.Reduction.Name.Selector a,
+        MultiarchDebian.Debian.Reduction.Version.RefReal w ) ->
         if deferred st a then
-          match fst a with m, DMA.QAArch b -> [ `Pkg (m, b) ] | _ -> []
+          match fst a with
+          | m, MultiarchDebian.QAArch b -> [ `Pkg (m, b) ]
+          | _ -> []
         else ver (fst a) w
-    | ( DMA.Debian.Reduction.Name.Selector _,
-        DMA.Debian.Reduction.Version.Ref (m, w) ) ->
+    | ( MultiarchDebian.Debian.Reduction.Name.Selector _,
+        MultiarchDebian.Debian.Reduction.Version.Ref (m, w) ) ->
         ver m w
-    | ( (DMA.Debian.Reduction.Name.Disjunct _ | DMA.Debian.Reduction.Name.Soft _),
-        DMA.Debian.Reduction.Version.Atom a ) ->
+    | ( ( MultiarchDebian.Debian.Reduction.Name.Disjunct _
+        | MultiarchDebian.Debian.Reduction.Name.Soft _ ),
+        MultiarchDebian.Debian.Reduction.Version.Atom a ) ->
         of_atom a
     | _ -> []
 end

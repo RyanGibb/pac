@@ -5,32 +5,36 @@ module Make (Lk : Lookups.S) = struct
 
   (* only installIfForm's disjuncts open on FNeg: encDep negates whole
      formulas *)
-  let is_install_if (tn : PFR.Name.t) =
-    match tn with PFR.Name.Disjunct (PF.FNeg _ :: _) -> true | _ -> false
+  let is_install_if (tn : PackageFormulaReduction.Name.t) =
+    match tn with
+    | PackageFormulaReduction.Name.Disjunct (PackageFormula.FNeg _ :: _) -> true
+    | _ -> false
 
   (* A range that still admits ⊥ is what a negated requirement leaves a
      name, not a need for it: the name may yet be absent, so the solution
      does not hold it. *)
   let assigned_among ~assigned tn tvs =
     match assigned tn with
-    | PG.Unselected -> false
-    | PG.Decided u -> List.exists (fun v -> PVersion.compare u v = 0) tvs
-    | PG.Entailed r ->
-        (not (PG.Ranges.contains PVersion.bot r))
-        && List.exists (fun v -> PG.Ranges.contains v r) tvs
+    | Resolver.Unselected -> false
+    | Resolver.Decided u -> List.exists (fun v -> PVersion.compare u v = 0) tvs
+    | Resolver.Entailed r ->
+        (not (Resolver.Ranges.contains PVersion.bot r))
+        && List.exists (fun v -> Resolver.Ranges.contains v r) tvs
 
-  let rec leaves ar (f : PF.coq_Formula) : (PFR.Name.t * PVersion.t list) list =
+  let rec leaves ar (f : PackageFormula.coq_Formula) :
+      (PackageFormulaReduction.Name.t * PVersion.t list) list =
     match f with
-    | PF.FAtom (m, vs) ->
-        let tn = PFR.Name.Orig m in
+    | PackageFormula.FAtom (m, vs) ->
+        let tn = PackageFormulaReduction.Name.Orig m in
         [
           ( tn,
             List.map
-              (fun w -> tag ar tn (PFR.Version.Orig w))
-              (PF.VSet.elements vs) );
+              (fun w -> tag ar tn (PackageFormulaReduction.Version.Orig w))
+              (PackageFormula.VSet.elements vs) );
         ]
-    | PF.FDisj (a, b) | PF.FConj (a, b) -> leaves ar a @ leaves ar b
-    | PF.FNeg _ -> []
+    | PackageFormula.FDisj (a, b) | PackageFormula.FConj (a, b) ->
+        leaves ar a @ leaves ar b
+    | PackageFormula.FNeg _ -> []
 
   (* apk never asserts a condition false: it installs the augmented package
      when all the conditions hold and otherwise does nothing at all.
@@ -40,31 +44,32 @@ module Make (Lk : Lookups.S) = struct
      it does -- free, constraining nothing, and to take the augmented
      package only when it falsifies none.  A negated condition's
      alternative is doubly negated (encCond). *)
-  let choose ar ~install_if ~assigned (tn : PFR.Name.t)
+  let choose ar ~install_if ~assigned (tn : PackageFormulaReduction.Name.t)
       (cands : PVersion.t list) =
     let held f =
       List.exists (fun (m, tvs) -> assigned_among ~assigned m tvs) (leaves ar f)
     in
     match tn with
-    | PFR.Name.Disjunct fs when install_if && is_install_if tn -> (
+    | PackageFormulaReduction.Name.Disjunct fs
+      when install_if && is_install_if tn -> (
         let alt (pv : PVersion.t) =
           match pv.PVersion.v with
-          | PFR.Version.Idx i -> alt_at fs i
+          | PackageFormulaReduction.Version.Idx i -> alt_at fs i
           | _ -> None
         in
         let free =
           List.filter
             (fun pv ->
               match alt pv with
-              | Some (PF.FNeg (PF.FNeg f), _) -> held f
-              | Some (PF.FNeg f, _) -> not (held f)
+              | Some (PackageFormula.FNeg (PackageFormula.FNeg f), _) -> held f
+              | Some (PackageFormula.FNeg f, _) -> not (held f)
               | _ -> false)
             cands
         and pos =
           List.filter_map
             (fun pv ->
               match alt pv with
-              | Some (PF.FNeg _, _) | None -> None
+              | Some (PackageFormula.FNeg _, _) | None -> None
               | Some (f, last) -> Some (alt_rank ar last f, pv))
             cands
         in
@@ -82,12 +87,13 @@ module Make (Lk : Lookups.S) = struct
        selecting a package assigns it every name it provides, so a later
        dependency on one of them is met by that package.  So a provider the
        solution already holds goes first, and the rank orders the rest. *)
-    | PFR.Name.Disjunct (f0 :: _ as fs) when lone_provider f0 <> None -> (
+    | PackageFormulaReduction.Name.Disjunct (f0 :: _ as fs)
+      when lone_provider f0 <> None -> (
         let taken =
           List.filter
             (fun (pv : PVersion.t) ->
               match pv.PVersion.v with
-              | PFR.Version.Idx i -> (
+              | PackageFormulaReduction.Version.Idx i -> (
                   match alt_at fs i with Some (f, _) -> held f | None -> false)
               | _ -> false)
             cands
@@ -103,7 +109,7 @@ module Make (Lk : Lookups.S) = struct
      Deferring it behind every other open name settles the rest of them;
      decided early, it asserts a condition false or installs its package
      before either is known to be needed. *)
-  let next = L.defer_bot ~last:is_install_if
+  let next = FormulaLookups.defer_bot ~last:is_install_if
 
   (* apk rerun on an installed set swaps a provider for a higher-ranked one
      and drops a package nothing needs, so both orders keep the rules that
@@ -111,7 +117,11 @@ module Make (Lk : Lookups.S) = struct
      package already provides kept for it, and install-if rules decided
      last. *)
   let hooks :
-      (archive, PFR.Name.t, PG.selection, PVersion.t) Pac_common.Order.driver =
+      ( archive,
+        PackageFormulaReduction.Name.t,
+        Resolver.selection,
+        PVersion.t )
+      Pac_common.Order.driver =
    fun order ar ->
     match order with
     | `Tool ->

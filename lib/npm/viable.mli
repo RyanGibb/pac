@@ -3,8 +3,8 @@ module Make
     (L : module type of Lookup.Make (Encoding)) : sig
   open Encoding
 
-  val is_orig : Np.Version.version -> bool
-  val within : (PName.t -> PG.selection) -> PName.t -> PVersion.t -> bool
+  val is_orig : Npm.Version.version -> bool
+  val within : (PName.t -> Resolver.selection) -> PName.t -> PVersion.t -> bool
 
   (* A link, its holder's directory and the copy's sight are one version
      wherever the sight is read, and each constraint between them is one
@@ -17,7 +17,7 @@ module Make
      [cands]. *)
   val viable :
     L.t ->
-    assigned:(PName.t -> PG.selection) ->
+    assigned:(PName.t -> Resolver.selection) ->
     PName.t ->
     PVersion.t list ->
     PVersion.t list

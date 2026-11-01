@@ -1,4 +1,4 @@
-module OVerOT : sig
+module OpamVersionOT : sig
   type t = string
 
   val compare : t -> t -> Pac.comparison
@@ -26,15 +26,16 @@ val meta_of : archive -> string -> string -> Opam_parse.pkg_meta
 val default_opam_version : string
 val default_platform : (string * string) list
 
-module Op :
+module Opam :
     module type of
-      Pac.Opam (Pac_common.Ot.Str) (OVerOT) (Pac_common.Ot.Str) (OVerOT)
+      Pac.Opam (Pac_common.Ot.Str) (OpamVersionOT) (Pac_common.Ot.Str)
+        (OpamVersionOT)
         (Pac_common.Ot.Str)
 
-module Red = Op.Reduction
-module PF = Red.PackageFormula
-module PFR = PF.Reduction
-module T = PFR.Reduced
+module Reduction = Opam.Reduction
+module PackageFormula = Reduction.PackageFormula
+module PackageFormulaReduction = PackageFormula.Reduction
+module Reduced = PackageFormulaReduction.Reduced
 
 type request = {
   (* the valuation reads only the query's names, not their versions *)
@@ -47,37 +48,39 @@ type request = {
 }
 
 val rho : request -> string -> string option
-val xvc : Opam_parse.vc -> Op.coq_VFormula
+val xvc : Opam_parse.vc -> Opam.coq_VFormula
 
 val depexts_of :
   (string -> string option) -> archive -> (string * string) list -> string list
 
-val pp_name : Format.formatter -> PFR.Name.t -> unit
+val pp_name : Format.formatter -> PackageFormulaReduction.Name.t -> unit
 
 module PVersion : sig
-  type t = { avoid : bool; v : PFR.Version.t }
+  type t = { avoid : bool; v : PackageFormulaReduction.Version.t }
 
-  val v : t -> PFR.Version.t
+  val v : t -> PackageFormulaReduction.Version.t
   val bot : t
   val compare : t -> t -> int
   val pp : Format.formatter -> t -> unit
 end
 
-module L :
+module FormulaLookups :
     module type of
-      Package_formula.Make (Red.NameOT) (Red.VersionOT) (PF) (PVersion)
+      Package_formula.Make (Reduction.NameOT) (Reduction.VersionOT)
+        (PackageFormula)
+        (PVersion)
         (struct
           let pp_name = pp_name
         end)
 
-module PG = L.PG
+module Resolver = FormulaLookups.Resolver
 
-val lookups : (string -> string option) -> archive -> L.t
+val lookups : (string -> string option) -> archive -> FormulaLookups.t
 
 val touch :
   (string -> string option) ->
   archive ->
   (string * Opam_parse.vc) list ->
-  L.t ->
-  T.Package.t ->
+  FormulaLookups.t ->
+  Reduced.Package.t ->
   unit

@@ -1,6 +1,3 @@
-module P = Cargo_parse
-module Q = Cargo_query
-
 type result = {
   crates : (string * string * string list) list;
   parents : (string * string * string * string * string) list;
@@ -21,18 +18,20 @@ type run = {
 module Make () = struct
   module Encoding = Encoding.Make ()
   open Encoding
-  module L = Lookups.Make (Encoding)
-  module Pick = Pick.Make (Encoding) (L)
+  module Lookups = Lookups.Make (Encoding)
+  module Pick = Pick.Make (Encoding) (Lookups)
 
-  let decode st (sol : (Cg.Reduction.Name.t * PVersion.t) list) : result =
+  let decode st (sol : (Cargo.Reduction.Name.t * PVersion.t) list) : result =
     let sol =
       List.map
-        (fun ((tn, { PVersion.v; _ }) : Cg.Reduction.Name.t * PVersion.t) ->
+        (fun ((tn, { PVersion.v; _ }) : Cargo.Reduction.Name.t * PVersion.t) ->
           (tn, v))
         sol
     in
-    let s = T.PackageSet.ofList sol in
-    let crates = Cg.PackageSet.elements (Cg.Reduction.cargoResolution s) in
+    let s = Reduced.PackageSet.ofList sol in
+    let crates =
+      Cargo.PackageSet.elements (Cargo.Reduction.cargoResolution s)
+    in
     (* the placeholder default the parser gives a crate declaring none
        keeps a depender's default-features request satisfiable; cargo
        records no such feature (dep_cache.rs, handle_default requires
@@ -40,31 +39,38 @@ module Make () = struct
        does, and the reported set follows *)
     let feats =
       List.map
-        (fun (((n, v), fs) : Cg.Featured.t) ->
-          let fs = Cg.FSet.elements fs in
-          match L.meta st n v with
-          | Some m when not m.P.v_default_declared ->
-              ((n, v), List.filter (fun f -> f <> P.default_feature) fs)
+        (fun (((n, v), fs) : Cargo.Featured.t) ->
+          let fs = Cargo.FSet.elements fs in
+          match Lookups.meta st n v with
+          | Some m when not m.Cargo_parse.v_default_declared ->
+              ( (n, v),
+                List.filter (fun f -> f <> Cargo_parse.default_feature) fs )
           | _ -> ((n, v), fs))
-        (Cg.FeaturedSet.elements (Cg.Reduction.features s))
+        (Cargo.FeaturedSet.elements (Cargo.Reduction.features s))
     in
     (* parents is the one decoder that reads the instance, and a
        lazy run has no global relation to hand it; the fibres of the
        crates it decodes are all it looks at, since it reads Slots and
        FDefs only at the owner a slot node names and keeps the node
        only when that owner is decoded *)
-    let fibres = List.map (L.slots_and_fdefs st) (L.root st :: crates) in
-    let slots = Cg.SlotRel.unions (List.map fst fibres) in
-    let fdefs = Cg.FeatureDefinitionRel.unions (List.map snd fibres) in
+    let fibres =
+      List.map (Lookups.slots_and_fdefs st) (Lookups.root st :: crates)
+    in
+    let slots = Cargo.SlotRel.unions (List.map fst fibres) in
+    let fdefs = Cargo.FeatureDefinitionRel.unions (List.map snd fibres) in
     let parents =
       List.map
-        (fun ((((n, v), k), u) : Cg.ParentElt.t) ->
-          match L.site_data st (n, v) k with
-          | Some sd -> (n, v, Cg.siteAlias k, Cg.sName sd, u)
-          | None -> (n, v, Cg.siteAlias k, Cg.siteAlias k, u))
-        (Cg.ParentRel.elements
-           (Cg.Reduction.parents
-              { (L.empty_inst st) with inst_fdefs = fdefs; inst_slots = slots }
+        (fun ((((n, v), k), u) : Cargo.ParentElt.t) ->
+          match Lookups.site_data st (n, v) k with
+          | Some sd -> (n, v, Cargo.siteAlias k, Cargo.sName sd, u)
+          | None -> (n, v, Cargo.siteAlias k, Cargo.siteAlias k, u))
+        (Cargo.ParentRel.elements
+           (Cargo.Reduction.parents
+              {
+                (Lookups.empty_inst st) with
+                inst_fdefs = fdefs;
+                inst_slots = slots;
+              }
               s))
     in
     {
@@ -75,76 +81,83 @@ module Make () = struct
           (List.sort compare crates);
       parents;
       nodes = List.length sol;
-      lookups = L.dependency_lookups st;
+      lookups = Lookups.dependency_lookups st;
     }
 
-  let check_answer st (sol : (Cg.Reduction.Name.t * PVersion.t) list) =
+  let check_answer st (sol : (Cargo.Reduction.Name.t * PVersion.t) list) =
     let s =
-      T.PackageSet.ofList
+      Reduced.PackageSet.ofList
         (List.map (fun (tn, { PVersion.v; _ }) -> (tn, v)) sol)
     in
     let versions tn =
-      T.VSet.ofList
-        (List.map (fun { PVersion.v; _ } -> v) (L.pg_versions st tn))
+      Reduced.VSet.ofList
+        (List.map (fun { PVersion.v; _ } -> v) (Lookups.pg_versions st tn))
     in
-    let dependees p = T.DependeeSet.ofList (L.dependees st p) in
+    let dependees p = Reduced.DependeeSet.ofList (Lookups.dependees st p) in
     let root =
-      T.rootQuery (Cg.Reduction.Name.CRoot, Cg.Reduction.Version.WUnit)
+      Reduced.rootQuery
+        (Cargo.Reduction.Name.CRoot, Cargo.Reduction.Version.WUnit)
     in
-    match T.check versions dependees root s with
+    match Reduced.check versions dependees root s with
     | None -> ()
     | Some f ->
         Pac_common.Check.fail ~pp_name:PName.pp
-          ~pp_version:(fun tn fmt w -> PVersion.pp fmt (L.tag st tn w))
-          ~elements:T.VSet.elements f
+          ~pp_version:(fun tn fmt w -> PVersion.pp fmt (Lookups.tag st tn w))
+          ~elements:Reduced.VSet.elements f
 
   let solve ?(debug = false) ?(check = false) ?(order = `Tool) ?cache ~index
-      ~features ~rustv (root : Q.root) : run =
+      ~features ~rustv (root : Cargo_query.root) : run =
     Pubgrub.set_debug debug;
     let ar = Archive.empty ?cache index in
     (* cargo's "no matching package named" is its own error, not a failed
        resolve, where the dependency is the root's: nothing else could have
        been chosen instead.  A crate further down is a version that fails. *)
     List.iter
-      (fun (d : P.dep) ->
-        if not (Archive.listed ar d.P.d_name) then
-          Q.refuse "no matching package named `%s` found" d.P.d_name)
-      root.Q.ver.P.v_deps;
-    Archive.install_root ar root.Q.ver;
-    let st = L.create ar root ~features ~rustv in
+      (fun (d : Cargo_parse.dep) ->
+        if not (Archive.listed ar d.Cargo_parse.d_name) then
+          Cargo_query.refuse "no matching package named `%s` found"
+            d.Cargo_parse.d_name)
+      root.Cargo_query.ver.Cargo_parse.v_deps;
+    Archive.install_root ar root.Cargo_query.ver;
+    let st = Lookups.create ar root ~features ~rustv in
     let query =
       [
-        ( Cg.Reduction.Name.CRoot,
-          PG.Ranges.of_list
-            [ L.tag st Cg.Reduction.Name.CRoot Cg.Reduction.Version.WUnit ] );
+        ( Cargo.Reduction.Name.CRoot,
+          Resolver.Ranges.of_list
+            [
+              Lookups.tag st Cargo.Reduction.Name.CRoot
+                Cargo.Reduction.Version.WUnit;
+            ] );
       ]
     in
-    let module O = Order.Make (Pick.Driver (struct
+    let module Order = Order.Make (Pick.Driver (struct
       let pk = Pick.create st
     end))
     in
-    let h = O.hooks order () in
+    let h = Order.hooks order () in
     let outcome =
-      PG.solve ?next:h.Pac_common.Order.next ?choose:h.Pac_common.Order.choose
-        ~vers:(L.pg_versions st) ~deps:(L.pg_dependencies st) query
+      Resolver.solve ?next:h.Pac_common.Order.next
+        ?choose:h.Pac_common.Order.choose ~vers:(Lookups.pg_versions st)
+        ~deps:(Lookups.pg_dependencies st)
+        query
     in
     h.Pac_common.Order.finish ();
     let answer =
       match outcome with
-      | Error inc -> Error (fun ppf -> PG.explain_incompatibility ppf inc)
+      | Error inc -> Error (fun ppf -> Resolver.explain_incompatibility ppf inc)
       | Ok sol ->
           if check then check_answer st sol;
           Ok (decode st sol)
     in
     let core () =
       Pac_common.Core.print ~pp_name:PName.pp ~pp_version:PVersion.pp
-        (Pac_common.Core.walk ~versions:(L.pg_versions st)
+        (Pac_common.Core.walk ~versions:(Lookups.pg_versions st)
            ~dependees:(fun (tn, { PVersion.v; _ }) ->
              List.map
-               (fun ((m, vs) : T.Dependee.t) ->
-                 (m, List.map (L.tag st m) (T.VSet.elements vs)))
-               (L.dependees st (tn, v)))
-           [ Cg.Reduction.Name.CRoot ])
+               (fun ((m, vs) : Reduced.Dependee.t) ->
+                 (m, List.map (Lookups.tag st m) (Reduced.VSet.elements vs)))
+               (Lookups.dependees st (tn, v)))
+           [ Cargo.Reduction.Name.CRoot ])
     in
     let stats = Archive.stats ar in
     {
@@ -158,7 +171,7 @@ module Make () = struct
     }
 end
 
-let reaches_registry_root (root : Q.root) (r : result) =
-  let rc = Q.crate root in
-  (not root.Q.self_patch)
+let reaches_registry_root (root : Cargo_query.root) (r : result) =
+  let rc = Cargo_query.crate root in
+  (not root.Cargo_query.self_patch)
   && List.exists (fun (n, u, _, t, w) -> (t, w) = rc && (n, u) <> rc) r.parents

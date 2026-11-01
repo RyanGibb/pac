@@ -1,10 +1,9 @@
-module E = Pac
 module Ot = Pac_common.Ot
 
 (* opam's OpamVersionCompare is Debian's ordering with no epoch *)
 let compare_version = Version.Debian.compare_no_epoch
 
-module OVerOT = Ot.Make (struct
+module OpamVersionOT = Ot.Make (struct
   type t = string
 
   let compare = compare_version
@@ -148,11 +147,13 @@ let avoided ar n v =
 
 let default_opam_version = "2.5.2"
 
-module Op = E.Opam (Ot.Str) (OVerOT) (Ot.Str) (OVerOT) (Ot.Str)
-module Red = Op.Reduction
-module PF = Red.PackageFormula
-module PFR = PF.Reduction
-module T = PFR.Reduced
+module Opam =
+  Pac.Opam (Ot.Str) (OpamVersionOT) (Ot.Str) (OpamVersionOT) (Ot.Str)
+
+module Reduction = Opam.Reduction
+module PackageFormula = Reduction.PackageFormula
+module PackageFormulaReduction = PackageFormula.Reduction
+module Reduced = PackageFormulaReduction.Reduced
 
 (* Debian 12 on x86_64, which the recorded baselines were taken on *)
 let default_platform =
@@ -203,36 +204,36 @@ let rho (rq : request) : string -> string option =
             | "name" -> Some owner
             | _ -> None))
 
-let xop : Opam_parse.op -> E.cmpOp = function
-  | Opam_parse.Ge -> E.OpGe
-  | Gt -> E.OpGt
-  | Le -> E.OpLe
-  | Lt -> E.OpLt
-  | Eq -> E.OpEq
-  | Ne -> E.OpNe
+let xop : Opam_parse.op -> Pac.cmpOp = function
+  | Opam_parse.Ge -> Pac.OpGe
+  | Gt -> Pac.OpGt
+  | Le -> Pac.OpLe
+  | Lt -> Pac.OpLt
+  | Eq -> Pac.OpEq
+  | Ne -> Pac.OpNe
 
-let rec xfilt : Opam_parse.filt -> Op.coq_Filter = function
-  | FT -> Op.FlTrue
-  | FF -> Op.FlFalse
-  | FCmp (o, x, y) -> Op.FlCmp (xop o, x, y)
-  | FDef x -> Op.FlDef x
-  | FAnd (a, b) -> Op.FlAnd (xfilt a, xfilt b)
-  | FOr (a, b) -> Op.FlOr (xfilt a, xfilt b)
-  | FNot a -> Op.FlNot (xfilt a)
+let rec xfilt : Opam_parse.filt -> Opam.coq_Filter = function
+  | FT -> Opam.FlTrue
+  | FF -> Opam.FlFalse
+  | FCmp (o, x, y) -> Opam.FlCmp (xop o, x, y)
+  | FDef x -> Opam.FlDef x
+  | FAnd (a, b) -> Opam.FlAnd (xfilt a, xfilt b)
+  | FOr (a, b) -> Opam.FlOr (xfilt a, xfilt b)
+  | FNot a -> Opam.FlNot (xfilt a)
 
-let rec xvc : Opam_parse.vc -> Op.coq_VFormula = function
-  | VTop -> Op.VFTop
-  | VCmp (o, s) -> Op.VFCmp (xop o, s)
-  | VAnd (a, b) -> Op.VFAnd (xvc a, xvc b)
-  | VOr (a, b) -> Op.VFOr (xvc a, xvc b)
+let rec xvc : Opam_parse.vc -> Opam.coq_VFormula = function
+  | VTop -> Opam.VFTop
+  | VCmp (o, s) -> Opam.VFCmp (xop o, s)
+  | VAnd (a, b) -> Opam.VFAnd (xvc a, xvc b)
+  | VOr (a, b) -> Opam.VFOr (xvc a, xvc b)
 
-let rec xoff : Opam_parse.off -> Op.coq_OFormula = function
-  | OAtom (n, g, c) -> Op.OFAtom (n, xfilt g, xvc c)
-  | OAnd (a, b) -> Op.OFAnd (xoff a, xoff b)
-  | OOr (a, b) -> Op.OFOr (xoff a, xoff b)
+let rec xoff : Opam_parse.off -> Opam.coq_OFormula = function
+  | OAtom (n, g, c) -> Opam.OFAtom (n, xfilt g, xvc c)
+  | OAnd (a, b) -> Opam.OFAnd (xoff a, xoff b)
+  | OOr (a, b) -> Opam.OFOr (xoff a, xoff b)
 
-let pkgset_of = Op.PackageSet.ofList
-let clsrel_of = Op.ConflictClassRel.ofList
+let pkgset_of = Opam.PackageSet.ofList
+let clsrel_of = Opam.ConflictClassRel.ofList
 
 let repo_and_avail ar (ns : string list) =
   let repo = ref [] and avl = ref [] in
@@ -250,24 +251,24 @@ let repo_and_avail ar (ns : string list) =
 
 (* an atom under a false guard, since the calculus spells no empty formula
    otherwise *)
-let empty_formula = Op.OFAtom ("", Op.FlFalse, Op.VFTop)
+let empty_formula = Opam.OFAtom ("", Opam.FlFalse, Opam.VFTop)
 
 let empty_inst =
   {
-    Op.inst_real = Op.PackageSet.empty;
+    Opam.inst_real = Opam.PackageSet.empty;
     inst_dep = [];
     inst_cfl = [];
-    inst_cls = Op.ConflictClassRel.empty;
+    inst_cls = Opam.ConflictClassRel.empty;
     inst_av = [];
     inst_depexts = [];
-    inst_pins = Op.PackageSet.empty;
+    inst_pins = Opam.PackageSet.empty;
     inst_pind = [];
     inst_query = empty_formula;
     inst_inv = empty_formula;
   }
 
 (* Lookup.declSubInst: (n, v)'s own declarations *)
-let pkg_inst ar (p : string * string) : Op.coq_Inst =
+let pkg_inst ar (p : string * string) : Opam.coq_Inst =
   let n, v = p in
   let m = meta_of ar n v in
   let dep_fibre =
@@ -289,7 +290,7 @@ let pkg_inst ar (p : string * string) : Op.coq_Inst =
   in
   {
     empty_inst with
-    Op.inst_dep = dep_fibre;
+    Opam.inst_dep = dep_fibre;
     inst_cfl = cfl_fibre;
     inst_cls = clsrel_of cls_fibre;
     inst_depexts = dxt_fibre;
@@ -301,14 +302,16 @@ let pkg_inst ar (p : string * string) : Op.coq_Inst =
    name's constraint admits.  The root's other conjunct is the switch
    invariant, which is empty here: nothing is installed and nothing is
    pinned. *)
-let root_inst ar (query : (string * Opam_parse.vc) list) : Op.coq_Inst =
+let root_inst ar (query : (string * Opam_parse.vc) list) : Opam.coq_Inst =
   let repo, avl = repo_and_avail ar (List.map fst query) in
   let gamma =
-    match List.map (fun (n, c) -> Op.OFAtom (n, Op.FlTrue, xvc c)) query with
+    match
+      List.map (fun (n, c) -> Opam.OFAtom (n, Opam.FlTrue, xvc c)) query
+    with
     | [] -> empty_formula
-    | a :: rest -> List.fold_left (fun f b -> Op.OFAnd (f, b)) a rest
+    | a :: rest -> List.fold_left (fun f b -> Opam.OFAnd (f, b)) a rest
   in
-  { empty_inst with Op.inst_real = repo; inst_av = avl; inst_query = gamma }
+  { empty_inst with Opam.inst_real = repo; inst_av = avl; inst_query = gamma }
 
 (* Lookup.classSubInst: a class package's versions are every declarer of
    the class, which no one package's declarations name, so this is built
@@ -316,16 +319,16 @@ let root_inst ar (query : (string * Opam_parse.vc) list) : Op.coq_Inst =
    allows this: its versions only grow (versions_class_mono), a class
    package has no dependees, and every range onto it is the claimant's own
    singleton, whose name has loaded since the claim is its edge. *)
-let class_inst ar (k : string) : Op.coq_Inst =
+let class_inst ar (k : string) : Opam.coq_Inst =
   {
     empty_inst with
-    Op.inst_cls = clsrel_of (List.map (fun q -> (q, k)) (class_members ar k));
+    Opam.inst_cls = clsrel_of (List.map (fun q -> (q, k)) (class_members ar k));
   }
 
 (* Lookup.nameSubInst *)
-let name_inst ar (n : string) : Op.coq_Inst =
+let name_inst ar (n : string) : Opam.coq_Inst =
   let repo, avl = repo_and_avail ar [ n ] in
-  { empty_inst with Op.inst_real = repo; inst_av = avl }
+  { empty_inst with Opam.inst_real = repo; inst_av = avl }
 
 (* The system packages a solution needs.  Depexts never reach the
    solver, so this runs once the resolution is fixed, on an instance
@@ -341,17 +344,20 @@ let depexts_of rho ar (reals : (string * string) list) : string list =
           (meta_of ar n v).Opam_parse.depexts)
       reals
   in
-  Op.ESet.elements
-    (Op.depextsOf rho
-       { empty_inst with Op.inst_depexts = dxt_entries }
+  Opam.ESet.elements
+    (Opam.depextsOf rho
+       { empty_inst with Opam.inst_depexts = dxt_entries }
        (pkgset_of reals))
 
-let pp_name fmt (n : PFR.Name.t) =
+let pp_name fmt (n : PackageFormulaReduction.Name.t) =
   match n with
-  | PFR.Name.Orig Red.Name.Root -> Format.fprintf fmt "root"
-  | PFR.Name.Orig (Red.Name.Real n) -> Format.fprintf fmt "%s" n
-  | PFR.Name.Orig (Red.Name.Class k) -> Format.fprintf fmt "conflict-class:%s" k
-  | PFR.Name.Disjunct _ -> Format.fprintf fmt "<disj>"
+  | PackageFormulaReduction.Name.Orig Reduction.Name.Root ->
+      Format.fprintf fmt "root"
+  | PackageFormulaReduction.Name.Orig (Reduction.Name.Real n) ->
+      Format.fprintf fmt "%s" n
+  | PackageFormulaReduction.Name.Orig (Reduction.Name.Class k) ->
+      Format.fprintf fmt "conflict-class:%s" k
+  | PackageFormulaReduction.Name.Disjunct _ -> Format.fprintf fmt "<disj>"
 
 (* PubGrub decides the greatest candidate, so preference lives here: a
    version flagged avoid-version or deprecated ranks below every unflagged
@@ -363,54 +369,63 @@ let pp_name fmt (n : PFR.Name.t) =
    stays total and agrees with any range's tags.  [bot] is greatest, so a
    name only a conflict reaches is left out. *)
 module PVersion = struct
-  type t = { avoid : bool; v : PFR.Version.t }
+  type t = { avoid : bool; v : PackageFormulaReduction.Version.t }
 
   let v (x : t) = x.v
-  let bot = { avoid = false; v = PFR.Version.Bot }
+  let bot = { avoid = false; v = PackageFormulaReduction.Version.Bot }
 
   let compare a b =
     match (a.avoid, b.avoid) with
     | true, false -> -1
     | false, true -> 1
-    | _ -> if a.v == b.v then 0 else Ot.r2c (PFR.VersionOT.compare a.v b.v)
+    | _ ->
+        if a.v == b.v then 0
+        else Ot.r2c (PackageFormulaReduction.VersionOT.compare a.v b.v)
 
   let pp fmt (x : t) =
     match x.v with
-    | PFR.Version.Orig (Red.Version.RV v) -> Format.fprintf fmt "%s" v
-    | PFR.Version.Orig Red.Version.UnitV -> Format.fprintf fmt "()"
-    | PFR.Version.Orig (Red.Version.NV n) -> Format.fprintf fmt "%s" n
-    | PFR.Version.Idx i -> Format.fprintf fmt "z%d" (Ot.nat_int i)
-    | PFR.Version.Bot -> Format.fprintf fmt "⊥"
+    | PackageFormulaReduction.Version.Orig (Reduction.Version.RV v) ->
+        Format.fprintf fmt "%s" v
+    | PackageFormulaReduction.Version.Orig Reduction.Version.UnitV ->
+        Format.fprintf fmt "()"
+    | PackageFormulaReduction.Version.Orig (Reduction.Version.NV n) ->
+        Format.fprintf fmt "%s" n
+    | PackageFormulaReduction.Version.Idx i ->
+        Format.fprintf fmt "z%d" (Ot.nat_int i)
+    | PackageFormulaReduction.Version.Bot -> Format.fprintf fmt "⊥"
 end
 
-module L =
-  Package_formula.Make (Red.NameOT) (Red.VersionOT) (PF) (PVersion)
+module FormulaLookups =
+  Package_formula.Make (Reduction.NameOT) (Reduction.VersionOT) (PackageFormula)
+    (PVersion)
     (struct
       let pp_name = pp_name
     end)
 
-module PG = L.PG
+module Resolver = FormulaLookups.Resolver
 
-let tag ar (tn : PFR.Name.t) (tv : PFR.Version.t) : PVersion.t =
+let tag ar (tn : PackageFormulaReduction.Name.t)
+    (tv : PackageFormulaReduction.Version.t) : PVersion.t =
   match (tn, tv) with
-  | PFR.Name.Orig (Red.Name.Real n), PFR.Version.Orig (Red.Version.RV v) ->
+  | ( PackageFormulaReduction.Name.Orig (Reduction.Name.Real n),
+      PackageFormulaReduction.Version.Orig (Reduction.Version.RV v) ) ->
       { PVersion.avoid = avoided ar n v; v = tv }
   | _ -> { PVersion.avoid = false; v = tv }
 
 (* the encoder reads this at the names a formula negates, all of which
    the depender's dependees have loaded; a class package's versions are
    its declarers among the names loaded so far, and so are never held *)
-let oracle rho ar (tn : Red.Name.t) : PF.VSet.t =
+let oracle rho ar (tn : Reduction.Name.t) : PackageFormula.VSet.t =
   match tn with
-  | Red.Name.Real m -> Red.versions rho (name_inst ar m) tn
-  | Red.Name.Root -> PF.VSet.singleton Red.Version.UnitV
-  | Red.Name.Class k -> Red.versions rho (class_inst ar k) tn
+  | Reduction.Name.Real m -> Reduction.versions rho (name_inst ar m) tn
+  | Reduction.Name.Root -> PackageFormula.VSet.singleton Reduction.Version.UnitV
+  | Reduction.Name.Class k -> Reduction.versions rho (class_inst ar k) tn
 
-let lookups rho ar : L.t =
-  L.create
-    ~root:(Red.Name.Root, Red.Version.UnitV)
+let lookups rho ar : FormulaLookups.t =
+  FormulaLookups.create
+    ~root:(Reduction.Name.Root, Reduction.Version.UnitV)
     ~tag:(tag ar) ~oracle:(oracle rho ar)
-    ~volatile:(function Red.Name.Class _ -> true | _ -> false)
+    ~volatile:(function Reduction.Name.Class _ -> true | _ -> false)
     ()
 
 (* Lookup.dependeesBy_lookupOrig: a package's dependees read each name
@@ -420,17 +435,18 @@ let touch rho ar query st =
   let memo = Hashtbl.create 1024 in
   let src_versions m =
     Pac_common.Tbl.memo memo m (fun () ->
-        Red.srcVersions rho (name_inst ar m) m)
+        Reduction.srcVersions rho (name_inst ar m) m)
   in
-  fun ((tn, tv) : T.Package.t) ->
+  fun ((tn, tv) : Reduced.Package.t) ->
     match (tn, tv) with
-    | PFR.Name.Orig Red.Name.Root, _ ->
-        L.process st Red.rootPkg (fun () ->
-            Red.PackageFormulaSet.elements
-              (Red.dependees rho (root_inst ar query) Red.rootPkg))
-    | PFR.Name.Orig (Red.Name.Real n), PFR.Version.Orig (Red.Version.RV v) ->
-        let q = (Red.Name.Real n, Red.Version.RV v) in
-        L.process st q (fun () ->
-            Red.PackageFormulaSet.elements
-              (Red.dependeesBy rho src_versions (pkg_inst ar (n, v)) q))
+    | PackageFormulaReduction.Name.Orig Reduction.Name.Root, _ ->
+        FormulaLookups.process st Reduction.rootPkg (fun () ->
+            Reduction.PackageFormulaSet.elements
+              (Reduction.dependees rho (root_inst ar query) Reduction.rootPkg))
+    | ( PackageFormulaReduction.Name.Orig (Reduction.Name.Real n),
+        PackageFormulaReduction.Version.Orig (Reduction.Version.RV v) ) ->
+        let q = (Reduction.Name.Real n, Reduction.Version.RV v) in
+        FormulaLookups.process st q (fun () ->
+            Reduction.PackageFormulaSet.elements
+              (Reduction.dependeesBy rho src_versions (pkg_inst ar (n, v)) q))
     | _ -> ()

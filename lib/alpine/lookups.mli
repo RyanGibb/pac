@@ -1,6 +1,4 @@
-module P = Apk_parse
-
-module AVerOT : sig
+module ApkVersionOT : sig
   type t = string
 
   val compare : t -> t -> Pac.comparison
@@ -14,7 +12,8 @@ module PM : sig
   val hash : string -> string -> bool
 end
 
-module Alp : module type of Pac.Alpine (Pac_common.Ot.Str) (AVerOT) (PM)
+module Alpine :
+    module type of Pac.Alpine (Pac_common.Ot.Str) (ApkVersionOT) (PM)
 
 type stats = {
   names : int;
@@ -26,12 +25,12 @@ type stats = {
 
 module type S = sig
   module FirstDesignation : sig
-    val designation : Alp.ConditionSet.t -> Alp.Atom.t option
+    val designation : Alpine.ConditionSet.t -> Alpine.Atom.t option
   end
 
-  module Red : module type of Alp.ReductionUnder (FirstDesignation)
-  module PF = Red.PackageFormula
-  module PFR = PF.Reduction
+  module Reduction : module type of Alpine.ReductionUnder (FirstDesignation)
+  module PackageFormula = Reduction.PackageFormula
+  module PackageFormulaReduction = PackageFormula.Reduction
 
   type archive
 
@@ -42,37 +41,60 @@ module type S = sig
      reports as "no such package" before it solves: it has nothing to select
      for them.  A package it will not install still names one, and a
      negated atom asks for nothing. *)
-  val no_such_package : archive -> P.dep list -> string list
-  val lone_provider : PF.coq_Formula -> (string * string) option
-  val alt_at : PF.coq_Formula list -> Pac.nat -> (PF.coq_Formula * bool) option
-  val alt_rank : archive -> bool -> PF.coq_Formula -> int
+  val no_such_package : archive -> Apk_parse.dep list -> string list
+  val lone_provider : PackageFormula.coq_Formula -> (string * string) option
+
+  val alt_at :
+    PackageFormula.coq_Formula list ->
+    Pac.nat ->
+    (PackageFormula.coq_Formula * bool) option
+
+  val alt_rank : archive -> bool -> PackageFormula.coq_Formula -> int
 
   module PVersion : sig
     (* [pv] is the version offered at the name being decided, absent for a
        version that is not a provider candidate at a name (the root, and a
        disjunction's positional [Idx]). *)
-    type t = { pv : string option; rank : int; ord : int; v : PFR.Version.t }
+    type t = {
+      pv : string option;
+      rank : int;
+      ord : int;
+      v : PackageFormulaReduction.Version.t;
+    }
 
-    val v : t -> PFR.Version.t
+    val v : t -> PackageFormulaReduction.Version.t
     val bot : t
     val pp : Format.formatter -> t -> unit
     val compare : t -> t -> int
   end
 
-  val tag : archive -> PFR.Name.t -> PFR.Version.t -> PVersion.t
-  val pp_name : Format.formatter -> PFR.Name.t -> unit
+  val tag :
+    archive ->
+    PackageFormulaReduction.Name.t ->
+    PackageFormulaReduction.Version.t ->
+    PVersion.t
 
-  module L :
+  val pp_name : Format.formatter -> PackageFormulaReduction.Name.t -> unit
+
+  module FormulaLookups :
       module type of
-        Package_formula.Make (Red.NameOT) (Red.VersionOT) (PF) (PVersion)
+        Package_formula.Make (Reduction.NameOT) (Reduction.VersionOT)
+          (PackageFormula)
+          (PVersion)
           (struct
             let pp_name = pp_name
           end)
 
-  module PG = L.PG
+  module Resolver = FormulaLookups.Resolver
 
-  val lookups : archive -> L.t
-  val touch : archive -> P.dep list -> L.t -> PFR.Reduced.Package.t -> unit
+  val lookups : archive -> FormulaLookups.t
+
+  val touch :
+    archive ->
+    Apk_parse.dep list ->
+    FormulaLookups.t ->
+    PackageFormulaReduction.Reduced.Package.t ->
+    unit
 end
 
 (* generative, since each application holds the designations of the one

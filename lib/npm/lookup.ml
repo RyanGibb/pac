@@ -1,6 +1,3 @@
-module E = Pac
-module P = Npm_parse
-module A = Archive
 module Tbl = Pac_common.Tbl
 
 (* npm-pick-manifest takes dist-tags.latest for the range "*" (or an empty
@@ -12,28 +9,29 @@ module Tbl = Pac_common.Tbl
 let star_range ar (t : string) (rg : Npm_version.range) : Npm_version.range =
   (* Berry reads * as semver does, so the shared reading admits no
      prerelease under it *)
-  if A.shared ar then rg
+  if Archive.shared ar then rg
   else
-    match A.latest ar t with
+    match Archive.latest ar t with
     | Some l
       when Npm_version.is_prerelease l
-           && Option.is_some (A.meta ar (t, l))
-           && (not (A.deprecated ar (t, l)))
-           && A.engine_ok ar (t, l) ->
+           && Option.is_some (Archive.meta ar (t, l))
+           && (not (Archive.deprecated ar (t, l)))
+           && Archive.engine_ok ar (t, l) ->
         rg @ [ [ Npm_version.Cmp (Npm_version.Eq, l) ] ]
     | _ -> rg
 
 (* npm-pick-manifest takes a dist-tag's version exactly, and a tag the
    packument lacks matches nothing (ETARGET) *)
-let spec_range ar (t : string) : P.spec -> Npm_version.range = function
-  | P.Tag g -> (
-      match A.dist_tag ar t g with
+let spec_range ar (t : string) : Npm_parse.spec -> Npm_version.range = function
+  | Npm_parse.Tag g -> (
+      match Archive.dist_tag ar t g with
       | Some v -> [ [ Npm_version.Cmp (Npm_version.Eq, v) ] ]
       | None -> [ [ Npm_version.Cmp (Npm_version.Lt, "0.0.0") ] ])
-  | P.Star -> star_range ar t [ [ Npm_version.Any ] ]
-  | P.Range rg -> rg
+  | Npm_parse.Star -> star_range ar t [ [ Npm_version.Any ] ]
+  | Npm_parse.Range rg -> rg
 
-let own_range ar (d : P.dep) = spec_range ar d.P.d_name d.P.d_spec
+let own_range ar (d : Npm_parse.dep) =
+  spec_range ar d.Npm_parse.d_name d.Npm_parse.d_spec
 
 module Make (Encoding : Encoding.S) = struct
   open Encoding
@@ -41,57 +39,57 @@ module Make (Encoding : Encoding.S) = struct
   (* The descriptor is the spec as written under the shared reading, where every
      dependency with it resolves to one version as in Yarn Berry's lockfile;
      npm resolves each dependency apart, so otherwise there is none. *)
-  let xdep ar (d : P.dep) : Np.coq_Dependency =
+  let xdep ar (d : Npm_parse.dep) : Npm.coq_Dependency =
     {
-      Np.d_dir = d.P.d_dir;
-      Np.d_name = d.P.d_name;
-      Np.d_range = xrange (own_range ar d);
-      Np.d_dev = d.P.d_dev;
-      Np.d_desc = (if A.shared ar then Some d.P.d_raw else None);
+      Npm.d_dir = d.Npm_parse.d_dir;
+      Npm.d_name = d.Npm_parse.d_name;
+      Npm.d_range = xrange (own_range ar d);
+      Npm.d_dev = d.Npm_parse.d_dev;
+      Npm.d_desc = (if Archive.shared ar then Some d.Npm_parse.d_raw else None);
     }
 
   (* a peer names a directory, and npm fetches the peer's range from the
      packument of that name *)
-  let xpeer ar (r : P.peer) : Np.coq_PeerDependency =
+  let xpeer ar (r : Npm_parse.peer) : Npm.coq_PeerDependency =
     {
-      Np.p_name = r.P.p_name;
-      Np.p_range = xrange (spec_range ar r.P.p_name r.P.p_spec);
+      Npm.p_name = r.Npm_parse.p_name;
+      Npm.p_range = xrange (spec_range ar r.Npm_parse.p_name r.Npm_parse.p_spec);
       (* need not be met, but what the declarer's depender shows it, its
          sight, its copy or itself, must be in range, as arborist checks
          whatever copy the declarer resolves to (edge.js:266-277) *)
-      Np.p_optional = r.P.p_optional;
-      Np.p_root = r.P.p_root;
+      Npm.p_optional = r.Npm_parse.p_optional;
+      Npm.p_root = r.Npm_parse.p_root;
     }
 
   type t = {
-    ar : A.t;
+    ar : Archive.t;
     root : string * string;
     ovr_raw : (string * Npm_version.range) list;
-    ovr : (string * Np.coq_Range) list;
-    dep_tbl : (string * string, Np.coq_Dependency list) Hashtbl.t;
-    peer_tbl : (string * string, Np.coq_PeerDependency list) Hashtbl.t;
-    repo_at : (string, Np.RealPackageSet.t) Hashtbl.t;
+    ovr : (string * Npm.coq_Range) list;
+    dep_tbl : (string * string, Npm.coq_Dependency list) Hashtbl.t;
+    peer_tbl : (string * string, Npm.coq_PeerDependency list) Hashtbl.t;
+    repo_at : (string, Npm.RealPackageSet.t) Hashtbl.t;
     (* keyed by the names read rather than by the package reading them, so
        packages that read the same names share one set *)
-    repo_of : (string list, Np.RealPackageSet.t) Hashtbl.t;
-    vcache : (Np.Name.name, Np.Version.version list) Hashtbl.t;
+    repo_of : (string list, Npm.RealPackageSet.t) Hashtbl.t;
+    vcache : (Npm.Name.name, Npm.Version.version list) Hashtbl.t;
     (* the optional-dependency verdict, keyed by what decides it *)
     opt_keep : (string * string, bool) Hashtbl.t;
     (* each package's directories, as far as the solver has looked: the
        intermediates its granular node and its directories point to, and the
        directory each of its links resolves into *)
-    dirs : ((string * string) * string, Np.Name.name list) Hashtbl.t;
+    dirs : ((string * string) * string, Npm.Name.name list) Hashtbl.t;
     (* the links resolving into each directory *)
-    links_into : (Np.Name.name, Np.Name.name) Hashtbl.t;
-    raw_tbl : (string * string, P.dep list) Hashtbl.t;
+    links_into : (Npm.Name.name, Npm.Name.name) Hashtbl.t;
+    raw_tbl : (string * string, Npm_parse.dep list) Hashtbl.t;
     (* the directories reading each descriptor, as far as the solver has
        looked *)
-    desc_dirs : (Np.Name.name, Np.Name.name) Hashtbl.t;
+    desc_dirs : (Npm.Name.name, Npm.Name.name) Hashtbl.t;
   }
 
   let create ar root =
     let ovr_raw =
-      match A.meta ar root with Some v -> v.P.v_ovr | None -> []
+      match Archive.meta ar root with Some v -> v.Npm_parse.v_ovr | None -> []
     in
     {
       ar;
@@ -113,47 +111,48 @@ module Make (Encoding : Encoding.S) = struct
   let archive st = st.ar
   let root st = st.root
 
-  let effective st (a : string) (rg : Np.coq_Range) : Np.coq_Range =
+  let effective st (a : string) (rg : Npm.coq_Range) : Npm.coq_Range =
     Option.value (List.assoc_opt a st.ovr) ~default:rg
 
   let peer_dependencies st p =
     Tbl.memo st.peer_tbl p (fun () ->
-        match A.meta st.ar p with
+        match Archive.meta st.ar p with
         | None -> []
-        | Some v -> List.map (xpeer st.ar) v.P.v_peers)
+        | Some v -> List.map (xpeer st.ar) v.Npm_parse.v_peers)
 
   (* The calculus keys the root's package by its name and version as it
      keys a registry package, so the registry's packages of the root's name
      are out of reach, and a sub-instance reading them is refused. *)
-  let repo_at st (n : string) : Np.RealPackageSet.t =
-    if n = fst st.root then raise (A.Reaches_root n);
+  let repo_at st (n : string) : Npm.RealPackageSet.t =
+    if n = fst st.root then raise (Archive.Reaches_root n);
     Tbl.memo st.repo_at n (fun () ->
-        Np.RealPackageSet.ofList
-          (List.map (fun v -> (n, v)) (A.versions_of st.ar n)))
+        Npm.RealPackageSet.ofList
+          (List.map (fun v -> (n, v)) (Archive.versions_of st.ar n)))
 
-  let repo_of st (ns : string list) : Np.RealPackageSet.t =
+  let repo_of st (ns : string list) : Npm.RealPackageSet.t =
     let ns = List.sort_uniq String.compare ns in
     Tbl.memo st.repo_of ns (fun () ->
-        Np.RealPackageSet.unions (List.map (repo_at st) ns))
+        Npm.RealPackageSet.unions (List.map (repo_at st) ns))
 
-  let mk_inst st ~repo ~deps ~peers : Np.coq_Inst =
+  let mk_inst st ~repo ~deps ~peers : Npm.coq_Inst =
     {
-      Np.inst_real = repo;
-      Np.inst_deps = deps;
-      Np.inst_peers = peers;
-      Np.inst_ovr = st.ovr;
-      Np.inst_root = st.root;
+      Npm.inst_real = repo;
+      Npm.inst_deps = deps;
+      Npm.inst_peers = peers;
+      Npm.inst_ovr = st.ovr;
+      Npm.inst_root = st.root;
     }
 
   (* the dependency the calculus reads, the root's flat override on its
      directory applied *)
-  let effective_dep st (d : Np.coq_Dependency) : Np.coq_Dependency =
-    Np.ovrDep (mk_inst st ~repo:Np.RealPackageSet.empty ~deps:[] ~peers:[]) d
+  let effective_dep st (d : Npm.coq_Dependency) : Npm.coq_Dependency =
+    Npm.ovrDep (mk_inst st ~repo:Npm.RealPackageSet.empty ~deps:[] ~peers:[]) d
 
   (* effective_dep's dependee name, read off the manifest's entry, whose
      range is not yet read *)
-  let effective_name st (d : P.dep) =
-    if List.mem_assoc d.P.d_dir st.ovr_raw then d.P.d_dir else d.P.d_name
+  let effective_name st (d : Npm_parse.dep) =
+    if List.mem_assoc d.Npm_parse.d_dir st.ovr_raw then d.Npm_parse.d_dir
+    else d.Npm_parse.d_name
 
   (* Whether some published version of the dependee name matches the range,
      as the calculus reads both: via the extracted rgHolds, and under the
@@ -161,19 +160,19 @@ module Make (Encoding : Encoding.S) = struct
      the "*" rewrite's engines test (star_range) evaluates in OCaml.  The
      repository read is the dependee name's alone, memoized per name in
      repo_at, so the check reuses whatever the sub-instances built. *)
-  let matches_published st (d : P.dep) : bool =
+  let matches_published st (d : Npm_parse.dep) : bool =
     let n = effective_name st d in
     let rg =
-      match List.assoc_opt d.P.d_dir st.ovr_raw with
+      match List.assoc_opt d.Npm_parse.d_dir st.ovr_raw with
       | Some rg -> rg
       | None -> own_range st.ar d
     in
     Tbl.memo st.opt_keep
       (n, Npm_version.string_of_range rg)
       (fun () ->
-        Np.VSet.exists_
-          (Np.rgHolds (xrange rg))
-          (Np.realVersions (repo_at st n) n))
+        Npm.VSet.exists_
+          (Npm.rgHolds (xrange rg))
+          (Npm.realVersions (repo_at st n) n))
 
   (* An optional dependency is abandoned only when no published version of
      its dependee name matches the range (ENOTARGET); npm's other grounds
@@ -183,8 +182,9 @@ module Make (Encoding : Encoding.S) = struct
      tested where a dependency is read, since testing at load time would
      resolve every optional dependee name eagerly.  The shared reading keeps
      it, as Yarn Berry fails on one no version matches (YN0082). *)
-  let dep_keep st (d : P.dep) : bool =
-    (not d.P.d_optional) || A.shared st.ar || matches_published st d
+  let dep_keep st (d : Npm_parse.dep) : bool =
+    (not d.Npm_parse.d_optional)
+    || Archive.shared st.ar || matches_published st d
 
   let optional_verdicts st =
     let dropped =
@@ -195,30 +195,30 @@ module Make (Encoding : Encoding.S) = struct
   (* p's dependencies as the manifest writes them, those the calculus reads *)
   let raw_deps st p =
     Tbl.memo st.raw_tbl p (fun () ->
-        match A.meta st.ar p with
+        match Archive.meta st.ar p with
         | None -> []
-        | Some v -> List.filter (dep_keep st) v.P.v_deps)
+        | Some v -> List.filter (dep_keep st) v.Npm_parse.v_deps)
 
   let dependencies st p =
     Tbl.memo st.dep_tbl p (fun () -> List.map (xdep st.ar) (raw_deps st p))
 
   let active_dependencies st p =
     List.filter_map
-      (fun (d : Np.coq_Dependency) ->
-        if (not d.Np.d_dev) || p = st.root then Some (effective_dep st d)
+      (fun (d : Npm.coq_Dependency) ->
+        if (not d.Npm.d_dev) || p = st.root then Some (effective_dep st d)
         else None)
       (dependencies st p)
 
   let own_dependencies st p = List.map (fun d -> (p, d)) (dependencies st p)
 
-  let desc_name st p (m : string * string) : Np.Name.name option =
+  let desc_name st p (m : string * string) : Npm.Name.name option =
     match
       List.find_opt
-        (fun (d : Np.coq_Dependency) -> d.Np.d_dir = fst m)
+        (fun (d : Npm.coq_Dependency) -> d.Npm.d_dir = fst m)
         (active_dependencies st p)
     with
-    | Some { Np.d_name; Np.d_desc = Some s; _ } when d_name = snd m ->
-        Some (Np.Name.Desc (fst m, d_name, s))
+    | Some { Npm.d_name; Npm.d_desc = Some s; _ } when d_name = snd m ->
+        Some (Npm.Name.Desc (fst m, d_name, s))
     | _ -> None
 
   let own_peer_dependencies st p =
@@ -227,22 +227,22 @@ module Make (Encoding : Encoding.S) = struct
   let slot_names st p =
     List.sort_uniq String.compare
       (List.map
-         (fun (d : Np.coq_Dependency) -> d.Np.d_name)
+         (fun (d : Npm.coq_Dependency) -> d.Npm.d_name)
          (active_dependencies st p))
 
   let peer_names_at st q =
     List.sort_uniq String.compare
       (List.map
-         (fun (r : Np.coq_PeerDependency) -> r.Np.p_name)
+         (fun (r : Npm.coq_PeerDependency) -> r.Npm.p_name)
          (peer_dependencies st q))
 
   let peer_dependencies_named st (n : string) =
-    List.map (fun (p, r) -> (p, xpeer st.ar r)) (A.peers_naming st.ar n)
+    List.map (fun (p, r) -> (p, xpeer st.ar r)) (Archive.peers_naming st.ar n)
 
   (* the granular versions lookup's sub-instance: the lookup reads no
      instance at a granular name *)
   let gran_sub_inst st =
-    mk_inst st ~repo:Np.RealPackageSet.empty ~deps:[] ~peers:[]
+    mk_inst st ~repo:Npm.RealPackageSet.empty ~deps:[] ~peers:[]
 
   (* the intermediate versions lookup's sub-instance: p's own dependencies,
      the peer dependencies naming the key's directory (p's own among them,
@@ -276,8 +276,8 @@ module Make (Encoding : Encoding.S) = struct
      otherwise dropping the peer (npm's _loadDeps), so outside it they are
      left out: no lookup reads them, and reading them would load packuments
      npm does not. *)
-  let dp_deps st q = if A.shared st.ar then own_dependencies st q else []
-  let dp_names st q = if A.shared st.ar then slot_names st q else []
+  let dp_deps st q = if Archive.shared st.ar then own_dependencies st q else []
+  let dp_names st q = if Archive.shared st.ar then slot_names st q else []
 
   (* the dependencies of a holder p and of its dependee q, whose peer with
      default reads its own *)
@@ -333,37 +333,40 @@ module Make (Encoding : Encoding.S) = struct
      versions only grow (versions_intermediate_mono), which the resolver
      contract allows, so they are asked afresh each time rather than held;
      every other name's versions are fixed once asked. *)
-  let grows st (n : Np.Name.name) =
+  let grows st (n : Npm.Name.name) =
     match n with
-    | Np.Name.Intermediate (k, _, _) -> k = (fst st.root, fst st.root)
+    | Npm.Name.Intermediate (k, _, _) -> k = (fst st.root, fst st.root)
     | _ -> false
 
-  let versions st (n : Np.Name.name) : Np.Version.version list =
+  let versions st (n : Npm.Name.name) : Npm.Version.version list =
     let answer () =
       match n with
-      | Np.Name.Granular _ -> T.VSet.elements (R.versions (gran_sub_inst st) n)
-      | Np.Name.Intermediate (k, v, m) ->
-          T.VSet.elements (R.versions (int_sub_inst st (snd k, v) m) n)
-      | Np.Name.Sight (k, v, a) ->
-          T.VSet.elements (R.versions (sight_sub_inst st (snd k, v) a) n)
-      | Np.Name.Link (k, v, m, u, a) ->
-          T.VSet.elements
-            (R.versions (link_sub_inst st (snd k, v) (snd m, u) a) n)
-      | Np.Name.Desc (_, t, _) ->
-          T.VSet.elements (R.versions (desc_sub_inst st t) n)
+      | Npm.Name.Granular _ ->
+          Reduced.VSet.elements (Reduction.versions (gran_sub_inst st) n)
+      | Npm.Name.Intermediate (k, v, m) ->
+          Reduced.VSet.elements
+            (Reduction.versions (int_sub_inst st (snd k, v) m) n)
+      | Npm.Name.Sight (k, v, a) ->
+          Reduced.VSet.elements
+            (Reduction.versions (sight_sub_inst st (snd k, v) a) n)
+      | Npm.Name.Link (k, v, m, u, a) ->
+          Reduced.VSet.elements
+            (Reduction.versions (link_sub_inst st (snd k, v) (snd m, u) a) n)
+      | Npm.Name.Desc (_, t, _) ->
+          Reduced.VSet.elements (Reduction.versions (desc_sub_inst st t) n)
     in
     if grows st n then answer () else Tbl.memo st.vcache n answer
 
   let holder st ((k, v) : (string * string) * string) (a : string) :
-      Np.Name.name option =
+      Npm.Name.name option =
     let p = (snd k, v) in
-    R.holderName (holder_sub_inst st p p) (k, v) a
+    Reduction.holderName (holder_sub_inst st p p) (k, v) a
 
-  let record_dir st (m : Np.Name.name) =
+  let record_dir st (m : Npm.Name.name) =
     match m with
-    | Np.Name.Intermediate (k, v, d) ->
+    | Npm.Name.Intermediate (k, v, d) ->
         let l = Tbl.find_list st.dirs (k, v) in
-        if not (List.exists (fun x -> Np.Name.compare x m = E.Eq) l) then begin
+        if not (List.exists (fun x -> Npm.Name.compare x m = Pac.Eq) l) then begin
           Hashtbl.replace st.dirs (k, v) (m :: l);
           match desc_name st (snd k, v) d with
           | Some x -> Hashtbl.add st.desc_dirs x m
@@ -371,11 +374,11 @@ module Make (Encoding : Encoding.S) = struct
         end
     | _ -> ()
 
-  let desc_dirs st (x : Np.Name.name) = Hashtbl.find_all st.desc_dirs x
+  let desc_dirs st (x : Npm.Name.name) = Hashtbl.find_all st.desc_dirs x
 
-  let record_link st (l : Np.Name.name) =
+  let record_link st (l : Npm.Name.name) =
     match l with
-    | Np.Name.Link (k, v, _, _, a) -> (
+    | Npm.Name.Link (k, v, _, _, a) -> (
         match holder st (k, v) a with
         | None -> ()
         | Some h ->
@@ -383,30 +386,30 @@ module Make (Encoding : Encoding.S) = struct
             if
               not
                 (List.exists
-                   (fun x -> Np.Name.compare x l = E.Eq)
+                   (fun x -> Npm.Name.compare x l = Pac.Eq)
                    (Hashtbl.find_all st.links_into h))
             then Hashtbl.add st.links_into h l)
     | _ -> ()
 
-  let dependees st (s : T.Package.t) : T.Dependee.t list =
+  let dependees st (s : Reduced.Package.t) : Reduced.Dependee.t list =
     let hs =
       match s with
-      | Np.Name.Granular (k, _), Np.Version.Orig v ->
-          R.dependees (pkg_sub_inst st (snd k, v)) s
-      | Np.Name.Intermediate (k, v, m), Np.Version.Orig u ->
-          R.dependees (peer_sub_inst st (snd k, v) m u) s
-      | Np.Name.Link (k, v, m, u, _), _ ->
-          R.dependees (holder_sub_inst st (snd k, v) (snd m, u)) s
-      | _ -> T.DependeeSet.empty
+      | Npm.Name.Granular (k, _), Npm.Version.Orig v ->
+          Reduction.dependees (pkg_sub_inst st (snd k, v)) s
+      | Npm.Name.Intermediate (k, v, m), Npm.Version.Orig u ->
+          Reduction.dependees (peer_sub_inst st (snd k, v) m u) s
+      | Npm.Name.Link (k, v, m, u, _), _ ->
+          Reduction.dependees (holder_sub_inst st (snd k, v) (snd m, u)) s
+      | _ -> Reduced.DependeeSet.empty
     in
-    let hs = T.DependeeSet.elements hs in
+    let hs = Reduced.DependeeSet.elements hs in
     List.iter
-      (fun ((m, _) : T.Dependee.t) ->
+      (fun ((m, _) : Reduced.Dependee.t) ->
         record_dir st m;
         record_link st m)
       hs;
     hs
 
-  let links_into st (h : Np.Name.name) = Hashtbl.find_all st.links_into h
+  let links_into st (h : Npm.Name.name) = Hashtbl.find_all st.links_into h
   let dirs st p = Tbl.find_list st.dirs p
 end

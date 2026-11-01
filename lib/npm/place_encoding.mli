@@ -1,5 +1,4 @@
 module type S = sig
-  module E = Pac
   module Ot = Pac_common.Ot
 
   (* A version with its parse, made once per distinct string, ordered as
@@ -24,38 +23,38 @@ module type S = sig
     val sameCore : IVer.t -> IVer.t -> bool
   end
 
-  module Npl :
+  module NpmPlacement :
       module type of Pac.NpmPlacement (Pac_common.Ot.Str) (IVerOT) (IPM)
 
-  module Pl = Npl.Placement
-  module R = Pl.Reduction
-  module T = R.Reduced
-  module Lk = Npl.Reduction.Lookup
+  module Placement = NpmPlacement.Placement
+  module Reduction = Placement.Reduction
+  module Reduced = Reduction.Reduced
+  module ReductionLookup = NpmPlacement.Reduction.Lookup
 
-  val xrange : Npm_version.range -> Npl.coq_Range
+  val xrange : Npm_version.range -> NpmPlacement.coq_Range
 
   (* a location, stored deepest key first, as a lock's packages key *)
   val lock_path : string list -> string
-  val occ_compare : Npl.Occupant.t -> Npl.Occupant.t -> int
+  val occ_compare : NpmPlacement.Occupant.t -> NpmPlacement.Occupant.t -> int
 
   (* The orders of the extracted Name and Version, restated in OCaml;
      PAC_NPM_CHECKCMP compares every comparison against the extracted one. *)
   module PName : sig
-    type t = R.Name.t
+    type t = Reduction.Name.t
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit
   end
 
   module PVersion : sig
-    type t = R.Version.t
+    type t = Reduction.Version.t
 
     val compare : t -> t -> int
     val equal : t -> t -> bool
     val pp : Format.formatter -> t -> unit
   end
 
-  module PG : module type of Pubgrub.Make (PName) (PVersion)
+  module Resolver : module type of Pubgrub.Make (PName) (PVersion)
 end
 
 (* generative, and applied by the placement reading alone, so that no

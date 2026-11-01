@@ -23,7 +23,7 @@ module Make
     val pp : Format.formatter -> t -> unit
   end
 
-  module PG : module type of Pubgrub.Make (Name) (P)
+  module Resolver : module type of Pubgrub.Make (Name) (P)
 
   type t
 
@@ -54,11 +54,11 @@ module Make
     touch:(PF.Reduction.Reduced.Package.t -> unit) ->
     PF.Reduction.Name.t ->
     P.t ->
-    (PF.Reduction.Name.t * PG.Ranges.t) list
+    (PF.Reduction.Name.t * Resolver.Ranges.t) list
 
   val defer_bot :
     ?last:(PF.Reduction.Name.t -> bool) ->
-    assigned:(PF.Reduction.Name.t -> PG.selection) ->
+    assigned:(PF.Reduction.Name.t -> Resolver.selection) ->
     (PF.Reduction.Name.t * int) list ->
     PF.Reduction.Name.t
 
@@ -74,6 +74,6 @@ module Make
     t ->
     check:bool ->
     touch:(PF.Reduction.Reduced.Package.t -> unit) ->
-    (Name.t, PG.selection, P.t) Pac_common.Order.hooks ->
+    (Name.t, Resolver.selection, P.t) Pac_common.Order.hooks ->
     (PF.PackageSet.t * int, Pac_common.Report.explanation) result
 end

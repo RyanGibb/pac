@@ -1,4 +1,4 @@
-module SS : Set.S with type elt = string
+module StringSet : Set.S with type elt = string
 
 type crate = string * string
 
@@ -7,15 +7,19 @@ type crate = string * string
    optional a turning on the feature a is already an entry of the table
    (Cargo_parse.with_implicit_features). *)
 val requirements :
-  Cargo_parse.ver -> all:bool -> SS.t -> bool -> SS.t * (string, SS.t) Hashtbl.t
+  Cargo_parse.ver ->
+  all:bool ->
+  StringSet.t ->
+  bool ->
+  StringSet.t * (string, StringSet.t) Hashtbl.t
 
 (* resolve_features: the dependencies a request enables, each with the
    features it asks of its dependee *)
 val enabled :
   root:bool ->
   Cargo_parse.ver ->
-  (string, SS.t) Hashtbl.t ->
-  (Cargo_parse.dep * SS.t) list
+  (string, StringSet.t) Hashtbl.t ->
+  (Cargo_parse.dep * StringSet.t) list
 
 type 'name step = Decide of 'name | Activated of crate | Skip
 

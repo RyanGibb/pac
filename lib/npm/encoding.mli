@@ -1,9 +1,7 @@
-module E = Pac
-
-val xop : Npm_version.op -> E.cmpOp
+val xop : Npm_version.op -> Pac.cmpOp
 
 module type S = sig
-  module NVerOT : sig
+  module NpmVersionOT : sig
     type t = string
 
     val compare : t -> t -> Pac.comparison
@@ -18,28 +16,28 @@ module type S = sig
     val sameCore : string -> string -> bool
   end
 
-  module Np : module type of Pac.Npm (Pac_common.Ot.Str) (NVerOT) (PM)
-  module R = Np.Reduction
-  module T = Np.Reduced
+  module Npm : module type of Pac.Npm (Pac_common.Ot.Str) (NpmVersionOT) (PM)
+  module Reduction = Npm.Reduction
+  module Reduced = Npm.Reduced
 
-  val xrange : Npm_version.range -> Np.coq_Range
+  val xrange : Npm_version.range -> Npm.coq_Range
 
   module PName : sig
-    type t = Np.Name.name
+    type t = Npm.Name.name
 
     val compare : t -> t -> int
     val pp : Format.formatter -> t -> unit
   end
 
   module PVersion : sig
-    type t = Np.Version.version
+    type t = Npm.Version.version
 
     val compare : t -> t -> int
     val equal : t -> t -> bool
     val pp : Format.formatter -> t -> unit
   end
 
-  module PG : module type of Pubgrub.Make (PName) (PVersion)
+  module Resolver : module type of Pubgrub.Make (PName) (PVersion)
 end
 
 (* generative, and applied by the npm command alone, so that no other

@@ -8,5 +8,6 @@ module Make
      walk keeps the copy the walk already reaches or places npm's pick at the
      shallowest level that takes it.  [`Pubgrub] leaves both to PubGrub, whose
      version order also hoists. *)
-  val hooks : (L.t, PName.t, PG.selection, PVersion.t) Pac_common.Order.driver
+  val hooks :
+    (L.t, PName.t, Resolver.selection, PVersion.t) Pac_common.Order.driver
 end

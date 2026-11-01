@@ -1,20 +1,20 @@
-module V = Version.Semver
+module Semver = Version.Semver
 
-type t = V.t = { major : int; minor : int; patch : int; pre : string list }
+type t = Semver.t = { major : int; minor : int; patch : int; pre : string list }
 
-let parse = V.Strict.parse
-let compare = V.Strict.compare
-let compare_parsed = V.Strict.compare_parsed
-let is_prerelease = V.Strict.is_prerelease
-let same_core = V.Strict.same_core
+let parse = Semver.Strict.parse
+let compare = Semver.Strict.compare
+let compare_parsed = Semver.Strict.compare_parsed
+let is_prerelease = Semver.Strict.is_prerelease
+let same_core = Semver.Strict.same_core
 
 type op = Ge | Gt | Le | Lt | Eq
 type req = (op * string) list
-type comp = V.comp = Num of int | Star | Absent
+type comp = Semver.comp = Num of int | Star | Absent
 
-let vstr = V.vstr
-let parse_spec = V.Strict.parse_partial
-let num_or = V.num_or
+let vstr = Semver.vstr
+let parse_spec = Semver.Strict.parse_partial
+let num_or = Semver.num_or
 
 let caret (ma, mi, pa, pre) =
   match ma with
@@ -93,8 +93,8 @@ let bounds (r : req) : req =
   List.concat_map
     (function
       | ((Ge | Lt), _) as c -> [ c ]
-      | ((Gt | Le) as o), v -> [ (o, V.Strict.top v) ]
-      | Eq, v -> [ (Ge, v); (Le, V.Strict.top v) ])
+      | ((Gt | Le) as o), v -> [ (o, Semver.Strict.top v) ]
+      | Eq, v -> [ (Ge, v); (Le, Semver.Strict.top v) ])
     r
 
 let comparator (s : string) : req =
@@ -117,7 +117,8 @@ let comparator (s : string) : req =
 let parse_req (s : string) : req =
   List.concat_map comparator (String.split_on_char ',' s)
 
-let admits (v : string) (r : req) : bool = V.Strict.admits v (List.map snd r)
+let admits (v : string) (r : req) : bool =
+  Semver.Strict.admits v (List.map snd r)
 
 let holds (v : string) (r : req) : bool =
   List.for_all

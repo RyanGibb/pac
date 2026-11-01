@@ -19,12 +19,12 @@ module Make (Encoding : Encoding.S) : sig
   (* the crate version's slots and feature definitions, which is all
      parents reads of it *)
   val slots_and_fdefs :
-    state -> string * string -> Cg.SlotRel.t * Cg.FeatureDefinitionRel.t
+    state -> string * string -> Cargo.SlotRel.t * Cargo.FeatureDefinitionRel.t
 
   (* the manifest record a slot name's dependency came from, for choose's
      walk over its candidates: the name carries the dependency but not the
      parsed requirement the comparator reads *)
-  val slot_dep : state -> Cg.DependencyRecord.t -> Cargo_parse.dep option
+  val slot_dep : state -> Cargo.DependencyRecord.t -> Cargo_parse.dep option
 
   (* how many (name, version) pairs PubGrub has asked the dependencies of *)
   val dependency_lookups : state -> int
@@ -32,8 +32,8 @@ module Make (Encoding : Encoding.S) : sig
   (* whether (n, v) fits the toolchain resolver v3 ranks against; every
      version does when there is none *)
   val msrv_fits : state -> string * string -> bool
-  val empty_inst : state -> Cg.coq_Inst
-  val dependees : state -> T.Package.t -> T.Dependee.t list
+  val empty_inst : state -> Cargo.coq_Inst
+  val dependees : state -> Reduced.Package.t -> Reduced.Dependee.t list
 
   (* the dependency the owner's fibre holds at a site, which is what a slot
      name carries: the order replay reads raw manifest records, which
@@ -41,14 +41,16 @@ module Make (Encoding : Encoding.S) : sig
      a second site with the same ask as one before it, which the slot rule
      merged into that one's slot. *)
   val site_data :
-    state -> string * string -> Cg.Site.t -> Cg.DependencyRecord.t option
+    state -> string * string -> Cargo.Site.t -> Cargo.DependencyRecord.t option
 
-  val tag : state -> Cg.Reduction.Name.t -> Cg.Reduction.Version.t -> PVersion.t
-  val pg_versions : state -> Cg.Reduction.Name.t -> PVersion.t list
+  val tag :
+    state -> Cargo.Reduction.Name.t -> Cargo.Reduction.Version.t -> PVersion.t
+
+  val pg_versions : state -> Cargo.Reduction.Name.t -> PVersion.t list
 
   val pg_dependencies :
     state ->
-    Cg.Reduction.Name.t ->
+    Cargo.Reduction.Name.t ->
     PVersion.t ->
-    (Cg.Reduction.Name.t * PG.Ranges.t) list
+    (Cargo.Reduction.Name.t * Resolver.Ranges.t) list
 end

@@ -8,9 +8,9 @@ module Make (Place_encoding : Place_encoding.S) : sig
      only the package it names, unlike npm's satisfiedBy.  [id] names the
      accepted set, shared by edges asking one range of one package. *)
   type edge = {
-    e : Npl.coq_Edge;
-    acc : Pl.VSet.t;
-    accepts : Npl.Occupant.t list;
+    e : NpmPlacement.coq_Edge;
+    acc : Placement.VSet.t;
+    accepts : NpmPlacement.Occupant.t list;
     id : int;
   }
 
@@ -19,8 +19,8 @@ module Make (Place_encoding : Place_encoding.S) : sig
   val create : depth:int -> Archive.t -> string * string -> t
   val archive : t -> Archive.t
   val depth : t -> int
-  val meta : t -> Npl.Occupant.t -> Npm_parse.ver option
-  val edges : t -> Npl.Occupant.t -> edge list
+  val meta : t -> NpmPlacement.Occupant.t -> Npm_parse.ver option
+  val edges : t -> NpmPlacement.Occupant.t -> edge list
   val versions : t -> PName.t -> PVersion.t list
 
   (* what one part of a name's dependees reads, so that the solve converts
@@ -33,7 +33,7 @@ module Make (Place_encoding : Place_encoding.S) : sig
     t ->
     PName.t ->
     PVersion.t ->
-    (part * (unit -> T.Dependee.t list)) list option
+    (part * (unit -> Reduced.Dependee.t list)) list option
 
-  val dependees : t -> PName.t * PVersion.t -> T.Dependee.t list
+  val dependees : t -> PName.t * PVersion.t -> Reduced.Dependee.t list
 end
