@@ -18,10 +18,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   | QAAny
   | QAGroup.
 
-  Module AF := UOTCompareFacts A.
-  #[local] Hint Rewrite AF.compare_eq_iff : cmp_debma.
-  #[local] Hint Extern 1 => cmp_by AF.compare_antisym : cmp_debma.
-  #[local] Hint Extern 1 => cmp_by AF.compare_lt_trans : cmp_debma.
+  Module ArchitectureFacts := UOTCompareFacts A.
+  #[local] Hint Rewrite ArchitectureFacts.compare_eq_iff : cmp_debma.
+  #[local] Hint Extern 1 => cmp_by ArchitectureFacts.compare_antisym : cmp_debma.
+  #[local] Hint Extern 1 => cmp_by ArchitectureFacts.compare_lt_trans : cmp_debma.
 
   Module ReducedQualifierComp <: ComparableType.
     Definition t := ReducedQualifier.
@@ -49,7 +49,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Module ReducedQualifierOT := UOTFromCompare ReducedQualifierComp.
 
   Module QualifiedName := PairUOT N ReducedQualifierOT.
-  Module NF := UOTCompareFacts N.
+  Module NFacts := UOTCompareFacts N.
   Module MG <: NameGroup QualifiedName.
     Definition groupEq (m n : QualifiedName.t) : bool :=
       match N.compare (fst m) (fst n) with Eq => true | _ => false end.
@@ -57,13 +57,13 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Proof.
       intro n; unfold groupEq.
       assert (H : N.compare (fst n) (fst n) = Eq)
-        by (apply NF.compare_eq_iff; reflexivity).
+        by (apply NFacts.compare_eq_iff; reflexivity).
       rewrite H; reflexivity.
     Qed.
     Lemma groupEq_sym : forall m n, groupEq m n = groupEq n m.
     Proof.
       intros m n; unfold groupEq.
-      rewrite (NF.compare_antisym (fst n) (fst m)).
+      rewrite (NFacts.compare_antisym (fst n) (fst m)).
       destruct (N.compare (fst n) (fst m)); reflexivity.
     Qed.
     Lemma groupEq_trans : forall m n o,
@@ -72,10 +72,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       intros m n o H1 H2; unfold groupEq in *.
       destruct (N.compare (fst m) (fst n)) eqn:E1; try discriminate.
       destruct (N.compare (fst n) (fst o)) eqn:E2; try discriminate.
-      apply NF.compare_eq_iff in E1; apply NF.compare_eq_iff in E2.
+      apply NFacts.compare_eq_iff in E1; apply NFacts.compare_eq_iff in E2.
       rewrite E1, E2.
       assert (H : N.compare (fst o) (fst o) = Eq)
-        by (apply NF.compare_eq_iff; reflexivity).
+        by (apply NFacts.compare_eq_iff; reflexivity).
       rewrite H; reflexivity.
     Qed.
   End MG.
@@ -85,11 +85,11 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   Proof.
     intros m n y y'; unfold MG.groupEq; cbn [fst].
     destruct (N.compare m n) eqn:E.
-    - apply NF.compare_eq_iff in E; split; intro; congruence.
+    - apply NFacts.compare_eq_iff in E; split; intro; congruence.
     - split; intro H; [discriminate |].
-      apply NF.compare_eq_iff in H; congruence.
+      apply NFacts.compare_eq_iff in H; congruence.
     - split; intro H; [discriminate |].
-      apply NF.compare_eq_iff in H; congruence.
+      apply NFacts.compare_eq_iff in H; congruence.
   Qed.
 
   Module Deb := Debian QualifiedName V MG.
@@ -1587,7 +1587,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         - intros [q' [mx v]] Hin Hb; cbn [fst snd Deb.aname Deb.aform] in Hb.
           apply andb_prop in Hb; destruct Hb as [Hq Hb].
           apply andb_prop in Hb; destruct Hb as [Hn _].
-          apply Deb.PkgEqb.eqb_true_iff in Hq as ->.
+          apply Deb.PackageEqb.eqb_true_iff in Hq as ->.
           apply Deb.NEqb.eqb_true_iff in Hn as ->.
           apply (reduceProv_node I ns I' q m y v Hsl Hm); exact Hin.
       Qed.

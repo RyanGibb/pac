@@ -20,17 +20,17 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
   Module SupportRel := FSetUOT PackageF.
 
   Module DependeeFeatureEntry := PairUOT N F.
-  Module NFF := UOTCompareFacts DependeeFeatureEntry.
-  Module NF := UOTCompareFacts N.
-  Module FF := UOTCompareFacts F.
-  #[local] Hint Rewrite NFF.compare_eq_iff NF.compare_eq_iff
-    FF.compare_eq_iff : cmp_cargo.
-  #[local] Hint Extern 1 => cmp_by NFF.compare_antisym : cmp_cargo.
-  #[local] Hint Extern 1 => cmp_by NF.compare_antisym : cmp_cargo.
-  #[local] Hint Extern 1 => cmp_by FF.compare_antisym : cmp_cargo.
-  #[local] Hint Extern 1 => cmp_by NFF.compare_lt_trans : cmp_cargo.
-  #[local] Hint Extern 1 => cmp_by NF.compare_lt_trans : cmp_cargo.
-  #[local] Hint Extern 1 => cmp_by FF.compare_lt_trans : cmp_cargo.
+  Module DependeeFeatureEntryFacts := UOTCompareFacts DependeeFeatureEntry.
+  Module NFacts := UOTCompareFacts N.
+  Module FFacts := UOTCompareFacts F.
+  #[local] Hint Rewrite DependeeFeatureEntryFacts.compare_eq_iff NFacts.compare_eq_iff
+    FFacts.compare_eq_iff : cmp_cargo.
+  #[local] Hint Extern 1 => cmp_by DependeeFeatureEntryFacts.compare_antisym : cmp_cargo.
+  #[local] Hint Extern 1 => cmp_by NFacts.compare_antisym : cmp_cargo.
+  #[local] Hint Extern 1 => cmp_by FFacts.compare_antisym : cmp_cargo.
+  #[local] Hint Extern 1 => cmp_by DependeeFeatureEntryFacts.compare_lt_trans : cmp_cargo.
+  #[local] Hint Extern 1 => cmp_by NFacts.compare_lt_trans : cmp_cargo.
+  #[local] Hint Extern 1 => cmp_by FFacts.compare_lt_trans : cmp_cargo.
 
   Module FeatureEntry.
     Inductive fentry : Type :=
@@ -221,26 +221,26 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         (sOptional d = false \/ Activated (inst_fdefs I) fs p (sAlias d)).
 
   Module Reduction.
-    Module GF := UOTCompareFacts G.
-    Module VF := UOTCompareFacts V.
+    Module GFacts := UOTCompareFacts G.
+    Module VFacts := UOTCompareFacts V.
     Module SlotName := TripleUOT N G DependencyRecord.
-    Module SlotNameF := UOTCompareFacts SlotName.
+    Module SlotNameFacts := UOTCompareFacts SlotName.
     Module DecisionNameTail := TripleUOT F DependencyRecord F.
     Module DecisionName := TripleUOT N G DecisionNameTail.
-    Module DecNameF := UOTCompareFacts DecisionName.
-    #[local] Hint Rewrite GF.compare_eq_iff VF.compare_eq_iff
-      SlotNameF.compare_eq_iff DecNameF.compare_eq_iff : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by GF.compare_antisym : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by VF.compare_antisym : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by SlotNameF.compare_antisym : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by DecNameF.compare_antisym : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by GF.compare_lt_trans : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by SlotNameF.compare_lt_trans : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by DecNameF.compare_lt_trans : cmp_cargo.
+    Module DecisionNameFacts := UOTCompareFacts DecisionName.
+    #[local] Hint Rewrite GFacts.compare_eq_iff VFacts.compare_eq_iff
+      SlotNameFacts.compare_eq_iff DecisionNameFacts.compare_eq_iff : cmp_cargo.
+    #[local] Hint Extern 1 => cmp_by GFacts.compare_antisym : cmp_cargo.
+    #[local] Hint Extern 1 => cmp_by VFacts.compare_antisym : cmp_cargo.
+    #[local] Hint Extern 1 => cmp_by SlotNameFacts.compare_antisym : cmp_cargo.
+    #[local] Hint Extern 1 => cmp_by DecisionNameFacts.compare_antisym : cmp_cargo.
+    #[local] Hint Extern 1 => cmp_by GFacts.compare_lt_trans : cmp_cargo.
+    #[local] Hint Extern 1 => cmp_by VFacts.compare_lt_trans : cmp_cargo.
+    #[local] Hint Extern 1 => cmp_by SlotNameFacts.compare_lt_trans : cmp_cargo.
+    #[local] Hint Extern 1 => cmp_by DecisionNameFacts.compare_lt_trans : cmp_cargo.
 
     Module NEqb := UOTEqb N.
-    Module PkgEqb := UOTEqb Package.
+    Module PackageEqb := UOTEqb Package.
     Module SiteEqb := UOTEqb Site.
 
     Definition evalReqBy (Vq : N.t -> VSet.t) (m : N.t) (rg : Range) : VSet.t :=
@@ -320,7 +320,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Definition activatedb (FDefs : FeatureDefinitionRel.t) (fs : FSet.t) (p : Package.t)
         (a : N.t) : bool :=
       FeatureDefinitionRel.exists_ (fun '((q, f), e) =>
-          andb (PkgEqb.eqb q p)
+          andb (PackageEqb.eqb q p)
             (andb (FSet.mem f fs)
                (match entryActivates e with
                 | Some a' => NEqb.eqb a' a
@@ -335,14 +335,14 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       rewrite FeatureDefinitionRel.exists_spec'.
       split.
       - intros [[[q f] e] [He Hb]]; cbn beta iota in Hb.
-        rewrite !andb_true_iff, PkgEqb.eqb_true_iff, FSet.mem_spec in Hb.
+        rewrite !andb_true_iff, PackageEqb.eqb_true_iff, FSet.mem_spec in Hb.
         destruct Hb as [-> [Hf Ha]]; exists f; split; [exact Hf |].
         destruct e; cbn in Ha; try discriminate;
           apply NEqb.eqb_true_iff in Ha; subst a; eauto.
       - intros [f [Hf He]]; apply FSet.mem_spec in Hf.
         destruct He as [He | [[f' He] | [f' He]]];
           (eexists; split; [exact He |]);
-          cbn [entryActivates]; rewrite PkgEqb.eqb_refl, Hf, NEqb.eqb_refl;
+          cbn [entryActivates]; rewrite PackageEqb.eqb_refl, Hf, NEqb.eqb_refl;
           reflexivity.
     Qed.
 
@@ -362,7 +362,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
        result stays computable, pinned by res_fs_functional in proofs. *)
     Definition fsAt (FS : FeaturedSet.t) (p : Package.t) : FSet.t :=
       match FeaturedSet.choose
-              (FeaturedSet.filter (fun '(q, _) => PkgEqb.eqb q p) FS)
+              (FeaturedSet.filter (fun '(q, _) => PackageEqb.eqb q p) FS)
       with
       | Some (_, fs) => fs
       | None => FSet.empty
@@ -375,16 +375,16 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
     Proof.
       intros FS p fs Hfun Hin; unfold fsAt.
       destruct (FeaturedSet.choose
-                  (FeaturedSet.filter (fun '(q, _) => PkgEqb.eqb q p) FS))
+                  (FeaturedSet.filter (fun '(q, _) => PackageEqb.eqb q p) FS))
         as [[q fs'] |] eqn:Hc.
       - apply FeaturedSet.choose_spec1 in Hc.
         apply FeaturedSet.filter_spec' in Hc; destruct Hc as [Hc Hq].
-        apply PkgEqb.eqb_true_iff in Hq; subst q.
+        apply PackageEqb.eqb_true_iff in Hq; subst q.
         exact (Hfun _ _ _ Hc Hin).
       - exfalso; apply FeaturedSet.choose_spec2 in Hc.
         apply (Hc (p, fs)).
         apply FeaturedSet.filter_spec'; split;
-          [exact Hin | apply PkgEqb.eqb_refl].
+          [exact Hin | apply PackageEqb.eqb_refl].
     Qed.
 
     Definition parentsb (FDefs : FeatureDefinitionRel.t) (Slots : SlotRel.t)
@@ -393,7 +393,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       : bool :=
       andb (PackageSet.mem q S)
         (SlotRel.exists_ (fun '(q', d) =>
-             andb (PkgEqb.eqb q' q)
+             andb (PackageEqb.eqb q' q)
                (andb (SiteEqb.eqb (sSite d) k)
                   (andb (slotActive r q' d)
                      (requiredb FDefs (fsAt FS q) q d))))
@@ -411,26 +411,26 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       rewrite andb_true_iff, PackageSet.mem_spec, SlotRel.exists_spec'.
       split.
       - intros [HS [[q' d] [Hd Hb]]]; cbn beta iota in Hb.
-        rewrite !andb_true_iff, PkgEqb.eqb_true_iff, SiteEqb.eqb_true_iff,
+        rewrite !andb_true_iff, PackageEqb.eqb_true_iff, SiteEqb.eqb_true_iff,
           requiredb_iff in Hb.
         destruct Hb as [-> Hb]; split; [exact HS |]; exists d; tauto.
       - intros [HS [d [Hd [<- [Hact Hreq]]]]]; split; [exact HS |].
         exists (q, d); split; [exact Hd | cbn beta iota].
         apply requiredb_iff in Hreq.
-        rewrite PkgEqb.eqb_refl, SiteEqb.eqb_refl, Hact, Hreq; reflexivity.
+        rewrite PackageEqb.eqb_refl, SiteEqb.eqb_refl, Hact, Hreq; reflexivity.
     Qed.
 
     Module GranularName := PairUOT N G.
     Module FeaturePackageName := TripleUOT N F G.
-    Module NGF := UOTCompareFacts GranularName.
-    Module NFGF := UOTCompareFacts FeaturePackageName.
+    Module GranularNameFacts := UOTCompareFacts GranularName.
+    Module FeaturePackageNameFacts := UOTCompareFacts FeaturePackageName.
     Module GEqb := UOTEqb G.
     Module FEqb := UOTEqb F.
-    #[local] Hint Rewrite NGF.compare_eq_iff NFGF.compare_eq_iff : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by NGF.compare_antisym : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by NFGF.compare_antisym : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by NGF.compare_lt_trans : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by NFGF.compare_lt_trans : cmp_cargo.
+    #[local] Hint Rewrite GranularNameFacts.compare_eq_iff FeaturePackageNameFacts.compare_eq_iff : cmp_cargo.
+    #[local] Hint Extern 1 => cmp_by GranularNameFacts.compare_antisym : cmp_cargo.
+    #[local] Hint Extern 1 => cmp_by FeaturePackageNameFacts.compare_antisym : cmp_cargo.
+    #[local] Hint Extern 1 => cmp_by GranularNameFacts.compare_lt_trans : cmp_cargo.
+    #[local] Hint Extern 1 => cmp_by FeaturePackageNameFacts.compare_lt_trans : cmp_cargo.
 
     Module Name.
       Inductive name : Type :=
@@ -477,10 +477,10 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       Proof. cmp_lt_trans cmp_cargo. Qed.
     End Name.
     Module NameOT := UOTFromCompare Name.
-    Module NPOTF := UOTCompareFacts NameOT.
-    #[local] Hint Rewrite NPOTF.compare_eq_iff : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by NPOTF.compare_antisym : cmp_cargo.
-    #[local] Hint Extern 1 => cmp_by NPOTF.compare_lt_trans : cmp_cargo.
+    Module NameOTFacts := UOTCompareFacts NameOT.
+    #[local] Hint Rewrite NameOTFacts.compare_eq_iff : cmp_cargo.
+    #[local] Hint Extern 1 => cmp_by NameOTFacts.compare_antisym : cmp_cargo.
+    #[local] Hint Extern 1 => cmp_by NameOTFacts.compare_lt_trans : cmp_cargo.
 
     Module Version.
       Inductive version : Type :=
@@ -658,7 +658,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       | (Name.CGran n w, Version.WOrig v) =>
           Reduced.DependeeSet.union
             (SOsh.filterMap (fun '(q, d) =>
-                 if andb (PkgEqb.eqb q (n, v))
+                 if andb (PackageEqb.eqb q (n, v))
                       (andb (slotActive (inst_root I) (n, v) d)
                          (negb (sOptional d)))
                  then Some (Name.CSlot n (inst_gran I v) d,
@@ -667,7 +667,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
                  else None)
                (inst_slots I))
             (SOlh.filterMap (fun '(q, l) =>
-                 if PkgEqb.eqb q (n, v)
+                 if PackageEqb.eqb q (n, v)
                  then Some (Name.CCls l,
                             Reduced.VSet.singleton (Version.WName (Name.CGran n w)))
                  else None)
@@ -676,7 +676,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           Reduced.DependeeSet.add
             (Name.CGran n (inst_gran I v), Reduced.VSet.singleton (Version.WOrig v))
             (SOfh.unionMap (fun '(((n', v'), f0), e) =>
-                 if negb (andb (PkgEqb.eqb (n', v') (n, v)) (FEqb.eqb f0 f))
+                 if negb (andb (PackageEqb.eqb (n', v') (n, v)) (FEqb.eqb f0 f))
                  then Reduced.DependeeSet.empty
                  else
                    Reduced.DependeeSet.union
@@ -1040,15 +1040,15 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       split.
       - intros [[[q d] [Hs He]] | [[q l] [Hl He]]]; cbn beta iota in He;
           rewrite if_some_iff in He.
-        + rewrite !andb_true_iff, PkgEqb.eqb_true_iff, negb_true_iff in He.
+        + rewrite !andb_true_iff, PackageEqb.eqb_true_iff, negb_true_iff in He.
           destruct He as [[-> [Ha Ho]] <-]; left; exists d; auto.
-        + rewrite PkgEqb.eqb_true_iff in He; destruct He as [-> <-].
+        + rewrite PackageEqb.eqb_true_iff in He; destruct He as [-> <-].
           right; exists l; auto.
       - intros [[d [Hs [Ha [Ho ->]]]] | [l [Hl ->]]].
         + left; exists ((n, v), d); split; [exact Hs | cbn beta iota].
-          rewrite PkgEqb.eqb_refl, Ha, Ho; reflexivity.
+          rewrite PackageEqb.eqb_refl, Ha, Ho; reflexivity.
         + right; exists ((n, v), l); split; [exact Hl | cbn beta iota].
-          rewrite PkgEqb.eqb_refl; reflexivity.
+          rewrite PackageEqb.eqb_refl; reflexivity.
     Qed.
 
     Lemma mem_dep_gran :
@@ -1097,10 +1097,10 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       - intros [Hh | [[[[n' v'] f0] e] [Hfd Hh]]].
         + left; exact Hh.
         + cbn beta iota in Hh.
-          destruct (negb (andb (PkgEqb.eqb (n', v') (n, v))
+          destruct (negb (andb (PackageEqb.eqb (n', v') (n, v))
                            (FEqb.eqb f0 f))) eqn:Ek;
             [exfalso; exact (Reduced.DependeeSet.empty_spec Hh) |].
-          rewrite negb_false_iff, andb_true_iff, PkgEqb.eqb_true_iff,
+          rewrite negb_false_iff, andb_true_iff, PackageEqb.eqb_true_iff,
             FEqb.eqb_true_iff in Ek; destruct Ek as [[= -> ->] ->].
           rewrite !Reduced.DependeeSet.union_spec in Hh.
           right; exists e; split; [exact Hfd |].
@@ -1121,7 +1121,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
             right; right; exists a, f', d; repeat split; assumption.
       - intros [Hh | [e [Hfd Hcase]]]; [left; exact Hh | right].
         exists (((n, v), f), e); split; [exact Hfd | cbn beta iota].
-        rewrite PkgEqb.eqb_refl, FEqb.eqb_refl; cbn [andb negb].
+        rewrite PackageEqb.eqb_refl, FEqb.eqb_refl; cbn [andb negb].
         rewrite !Reduced.DependeeSet.union_spec.
         destruct Hcase as [[f2 [-> ->]] | [Hc | Hc]].
         + left; cbn [entryActivates entryFeatD].
@@ -1235,7 +1235,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       SOtf.filterMap (fun '(m, u) =>
           match m, u with
           | Name.CFeatP n f _, Version.WOrig v =>
-              if PkgEqb.eqb (n, v) p then Some f else None
+              if PackageEqb.eqb (n, v) p then Some f else None
           | _, _ => None
           end)
         S.
@@ -1247,11 +1247,11 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
       intros S n v f; unfold featsAt; rewrite SOtf.mem_filterMap; split.
       - intros [[m u] [Hin He]]; cbn beta iota in He.
         destruct m; try discriminate; destruct u; try discriminate.
-        rewrite if_some_iff, PkgEqb.eqb_true_iff in He.
+        rewrite if_some_iff, PackageEqb.eqb_true_iff in He.
         destruct He as [[= -> ->] ->]; exists w; exact Hin.
       - intros [w Hin]; exists (Name.CFeatP n f w, Version.WOrig v); split;
           [exact Hin | cbn beta iota].
-        rewrite PkgEqb.eqb_refl; reflexivity.
+        rewrite PackageEqb.eqb_refl; reflexivity.
     Qed.
 
     Module SOpf := SetOps Package Featured PackageSet FeaturedSet.
@@ -1726,7 +1726,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           then SOfp.unionMap (fun '((q, f), e) =>
                  match entryFeatD e with
                  | Some (a', f') =>
-                     if andb (andb (PkgEqb.eqb q (n, v))
+                     if andb (andb (PackageEqb.eqb q (n, v))
                                 (NEqb.eqb a' (siteAlias k)))
                           (FSet.mem f (fsAt FS (n, v)))
                      then SOslp.map (fun '(_, d) =>
@@ -1758,7 +1758,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         cbn beta iota in Hx.
         destruct (entryFeatD e) as [[a' f'] |] eqn:Ee;
           [| exfalso; exact (SOslp.empty_in _ Hx)].
-        rewrite SOslp.in_if_empty, !andb_true_iff, PkgEqb.eqb_true_iff,
+        rewrite SOslp.in_if_empty, !andb_true_iff, PackageEqb.eqb_true_iff,
           NEqb.eqb_true_iff, FSet.mem_spec in Hx.
         destruct Hx as [[[-> ->] Em] Hx].
         apply SOslp.mem_map in Hx; destruct Hx as [[q d] [Hq ->]].
@@ -1769,7 +1769,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
         exists (((n, v), k), u); split; [exact Hin | cbn beta iota].
         rewrite Eb; apply SOfp.mem_unionMap.
         exists (((n, v), f), e); split; [exact Hf | cbn beta iota].
-        rewrite Ee, PkgEqb.eqb_refl, NEqb.eqb_refl,
+        rewrite Ee, PackageEqb.eqb_refl, NEqb.eqb_refl,
           (proj2 (FSet.mem_spec _ _) Em); cbn [andb].
         apply SOslp.mem_map; exists ((n, v), d); split;
           [apply mem_slotsAtKey; repeat split; assumption | reflexivity].
@@ -2239,7 +2239,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           support.
 
       Definition fdefFibre (FDefs : FeatureDefinitionRel.t) (p : Package.t) : FeatureDefinitionRel.t :=
-        FeatureDefinitionRelPreimage.preimage (fun x => fst (fst x)) (fun q => PkgEqb.eqb q p) FDefs.
+        FeatureDefinitionRelPreimage.preimage (fun x => fst (fst x)) (fun q => PackageEqb.eqb q p) FDefs.
 
       Definition reads (Slots : SlotRel.t) (p : Package.t) : NSet.t :=
         NSet.add (fst p)
@@ -2272,7 +2272,7 @@ Module Cargo (N V F G CfgS Src : UsualOrderedType) (PM : SemverMatch V).
           FeatureDefinitionRel.In ((q, f), e) FDefs /\ q = p.
       Proof.
         intros; unfold fdefFibre; rewrite FeatureDefinitionRelPreimage.mem_preimage; cbn [fst].
-        rewrite PkgEqb.eqb_true_iff; reflexivity.
+        rewrite PackageEqb.eqb_true_iff; reflexivity.
       Qed.
 
       Lemma mem_claimants : forall R Links l q,

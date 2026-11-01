@@ -56,19 +56,19 @@ Module Versions (N V : UsualOrderedType).
   Definition cmpOpEval (op : CmpOp) (v c : V.t) : bool :=
     cmpOpEvalBy V.compare op v c.
 
-  Module VF := UOTCompareFacts V.
+  Module VFacts := UOTCompareFacts V.
   Lemma cmpOpEval_ne_iff : forall v c, cmpOpEval OpNe v c = true <-> v <> c.
   Proof.
     intros v c; unfold cmpOpEval, cmpOpEvalBy.
     destruct (V.compare v c) eqn:Hc; split; intro H.
     - discriminate.
-    - apply VF.compare_eq_iff in Hc; contradiction.
+    - apply VFacts.compare_eq_iff in Hc; contradiction.
     - intro He; subst c;
-        rewrite (proj2 (VF.compare_eq_iff v v) eq_refl) in Hc;
+        rewrite (proj2 (VFacts.compare_eq_iff v v) eq_refl) in Hc;
         discriminate.
     - reflexivity.
     - intro He; subst c;
-        rewrite (proj2 (VF.compare_eq_iff v v) eq_refl) in Hc;
+        rewrite (proj2 (VFacts.compare_eq_iff v v) eq_refl) in Hc;
         discriminate.
     - reflexivity.
   Qed.
@@ -139,7 +139,7 @@ Module Versions (N V : UsualOrderedType).
       intros x; induction x as [ | | a IHa b IHb | a IHa b IHb | o c ];
         intros y; destruct y; simpl; try (split; intro H; congruence).
       1,2: rewrite lex_eq_iff, IHa, IHb.
-      3: rewrite lex_eq_iff, ComparisonOperatorComp.compare_eq_iff, VF.compare_eq_iff.
+      3: rewrite lex_eq_iff, ComparisonOperatorComp.compare_eq_iff, VFacts.compare_eq_iff.
       all: split;
         [intros [-> ->]; reflexivity | intro H; injection H as -> ->; auto].
     Qed.
@@ -151,7 +151,7 @@ Module Versions (N V : UsualOrderedType).
         intros y; destruct y; simpl; try reflexivity.
       - rewrite lex_opp, IHa, IHb; reflexivity.
       - rewrite lex_opp, IHa, IHb; reflexivity.
-      - rewrite lex_opp, ComparisonOperatorComp.compare_antisym, VF.compare_antisym;
+      - rewrite lex_opp, ComparisonOperatorComp.compare_antisym, VFacts.compare_antisym;
           reflexivity.
     Qed.
 
@@ -165,7 +165,7 @@ Module Versions (N V : UsualOrderedType).
       - exact (lex_lt_trans compare_eq_iff (IHa _ _) (IHb _ _) H1 H2).
       - exact (lex_lt_trans compare_eq_iff (IHa _ _) (IHb _ _) H1 H2).
       - exact (lex_lt_trans ComparisonOperatorComp.compare_eq_iff
-                 (ComparisonOperatorComp.compare_lt_trans _ _ _) (VF.compare_lt_trans _ _ _)
+                 (ComparisonOperatorComp.compare_lt_trans _ _ _) (VFacts.compare_lt_trans _ _ _)
                  H1 H2).
     Qed.
   End VersionFormulaComp.

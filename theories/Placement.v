@@ -350,7 +350,7 @@ Module Placement (N V : UsualOrderedType).
   Definition reachable (I : Inst) (L : LayoutRel.t) : LayoutRel.t :=
     reachN I L (S (LayoutRel.cardinal L)).
 
-  Module LP := MSetProperties.WPropertiesOn LayoutElt LayoutRel.
+  Module LayoutRelProperties := MSetProperties.WPropertiesOn LayoutElt LayoutRel.
 
   Lemma mem_reachStep : forall I L os o,
       LayoutRel.In o (reachStep I L os) <->
@@ -420,7 +420,7 @@ Module Placement (N V : UsualOrderedType).
         by (intro Hin; apply LayoutRel.mem_spec in Hin; congruence).
       assert (Hlt : LayoutRel.cardinal (reachN I L k) <
                     LayoutRel.cardinal (reachN I L (S k)))
-        by (eapply LP.subset_cardinal_lt;
+        by (eapply LayoutRelProperties.subset_cardinal_lt;
             [exact (reachN_chain I L k) | exact Ho | exact Hno]).
       lia.
     - left; apply reachN_stable; intros o Ho.
@@ -453,7 +453,7 @@ Module Placement (N V : UsualOrderedType).
           [exact Hs |].
         assert (Hc : LayoutRel.cardinal (reachN I L (S (LayoutRel.cardinal L))) <=
                      LayoutRel.cardinal L)
-          by (eapply LP.subset_cardinal; exact (reachN_in I L _)).
+          by (eapply LayoutRelProperties.subset_cardinal; exact (reachN_in I L _)).
         lia. }
       specialize (Hfix _ eq_refl).
       induction H as [n l' u He Hw | l a v n l' u _ IH He Hw];
@@ -470,7 +470,7 @@ Module Placement (N V : UsualOrderedType).
   Module LocationName := PairUOT Location N.
   Module LocationNameBackport := OrdersAlt.Backport_OT LocationName.
   Module LocMap := FMapAVL.Make LocationNameBackport.
-  Module LocMapF := FMapFacts.WFacts_fun LocMap.E LocMap.
+  Module LocMapFacts := FMapFacts.WFacts_fun LocMap.E LocMap.
 
   Definition occupantsIx (ix : LocMap.t VSet.t) (l : Location.t) (a : N.t)
       : VSet.t :=
@@ -493,7 +493,7 @@ Module Placement (N V : UsualOrderedType).
       occupantsIx (LocMap.add (l', a') vs ix) l a =
       if LocationName.eq_dec (l', a') (l, a) then vs else occupantsIx ix l a.
   Proof.
-    intros ix l' a' vs l a; unfold occupantsIx; rewrite LocMapF.add_o.
+    intros ix l' a' vs l a; unfold occupantsIx; rewrite LocMapFacts.add_o.
     destruct (LocMap.E.eq_dec (l', a') (l, a)) as [E | NE],
       (LocationName.eq_dec (l', a') (l, a)) as [E' | NE'];
       [reflexivity | destruct (NE' E) | destruct (NE E') | reflexivity].
@@ -522,7 +522,7 @@ Module Placement (N V : UsualOrderedType).
         intros [H | [E | H]]; auto; injection E as -> -> ->.
         destruct (NE eq_refl). }
     etransitivity; [exact (G _ _) |].
-    unfold occupantsIx at 1; rewrite LocMapF.empty_o.
+    unfold occupantsIx at 1; rewrite LocMapFacts.empty_o.
     split; [intros [H | H]; [destruct (VSet.empty_spec H) |] | intro H].
     - exists (l, (a, v)); split; [reflexivity | exact H].
     - right; destruct H as [y [<- H]]; exact H.
@@ -626,7 +626,7 @@ Module Placement (N V : UsualOrderedType).
         * intro o; rewrite Ht, LayoutRel.add_spec; cbn [List.In].
           destruct (LayoutElt.eq_dec o x) as [-> | Hox]; [tauto |].
           assert (x <> o) by congruence; tauto.
-        * rewrite (LP.add_cardinal_2 Hn) in Hc; cbn [length] in Hc; lia.
+        * rewrite (LayoutRelProperties.add_cardinal_2 Hn) in Hc; cbn [length] in Hc; lia.
   Qed.
 
   Section ReachableBy.
@@ -683,7 +683,7 @@ Module Placement (N V : UsualOrderedType).
     Proof.
       induction fuel as [| k IH]; intros seen todo Hinv Hc.
       - assert (Hle : LayoutRel.cardinal seen <= LayoutRel.cardinal L).
-        { apply LP.subset_cardinal; intros x Hx.
+        { apply LayoutRelProperties.subset_cardinal; intros x Hx.
           exact (reaches_in _ _ _ (proj1 Hinv _ Hx)). }
         destruct todo as [| x todo]; [| cbn [length] in Hc; lia].
         exact (reachW_done _ Hinv).
@@ -750,12 +750,12 @@ Module Placement (N V : UsualOrderedType).
         + intros x Hx; apply Hseen; exact Hx.
         + intros l a v x H Hn; exfalso; apply Hn, Ht; right.
           split; [apply Hseen; exact H | exact (@LayoutRel.empty_spec _)].
-      - rewrite LP.empty_cardinal in Hc; cbn [length] in Hc; lia.
+      - rewrite LayoutRelProperties.empty_cardinal in Hc; cbn [length] in Hc; lia.
     Qed.
   End ReachableBy.
 
   Module Reduction.
-    Module PathF := UOTCompareFacts Location.
+    Module LocationFacts := UOTCompareFacts Location.
 
     Module Shallow <: ComparableType.
       Definition t := Location.t.
@@ -764,7 +764,7 @@ Module Placement (N V : UsualOrderedType).
 
       Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
       Proof.
-        intros x y; unfold compare; rewrite lex_eq_iff, PathF.compare_eq_iff.
+        intros x y; unfold compare; rewrite lex_eq_iff, LocationFacts.compare_eq_iff.
         split; [tauto | intros ->; split;
                         [apply Nat.compare_eq_iff | ]; reflexivity].
       Qed.
@@ -773,7 +773,7 @@ Module Placement (N V : UsualOrderedType).
       Proof.
         intros x y; unfold compare.
         rewrite lex_opp, (Nat.compare_antisym (length y) (length x)).
-        f_equal; apply PathF.compare_antisym.
+        f_equal; apply LocationFacts.compare_antisym.
       Qed.
 
       Lemma compare_lt_trans : forall x y z,
@@ -784,23 +784,23 @@ Module Placement (N V : UsualOrderedType).
                  Location.compare (length x) (length y) (length z) x y z).
         - intros n m; rewrite Nat.compare_eq_iff; split; intro; congruence.
         - cbv beta; rewrite !Nat.compare_lt_iff; lia.
-        - apply PathF.compare_lt_trans.
+        - apply LocationFacts.compare_lt_trans.
       Qed.
     End Shallow.
     Module ShallowOT := UOTFromCompare Shallow.
 
     Module FoundVersion := PairUOT ShallowOT V.
-    Module PNF := UOTCompareFacts LocationName.
-    Module SVF := UOTCompareFacts FoundVersion.
-    Module VF := UOTCompareFacts V.
-    #[local] Hint Rewrite PNF.compare_eq_iff SVF.compare_eq_iff
-      VF.compare_eq_iff : cmp_plc.
-    #[local] Hint Extern 1 => cmp_by PNF.compare_antisym : cmp_plc.
-    #[local] Hint Extern 1 => cmp_by SVF.compare_antisym : cmp_plc.
-    #[local] Hint Extern 1 => cmp_by VF.compare_antisym : cmp_plc.
-    #[local] Hint Extern 1 => cmp_by PNF.compare_lt_trans : cmp_plc.
-    #[local] Hint Extern 1 => cmp_by SVF.compare_lt_trans : cmp_plc.
-    #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_plc.
+    Module LocationNameFacts := UOTCompareFacts LocationName.
+    Module FoundVersionFacts := UOTCompareFacts FoundVersion.
+    Module VFacts := UOTCompareFacts V.
+    #[local] Hint Rewrite LocationNameFacts.compare_eq_iff FoundVersionFacts.compare_eq_iff
+      VFacts.compare_eq_iff : cmp_plc.
+    #[local] Hint Extern 1 => cmp_by LocationNameFacts.compare_antisym : cmp_plc.
+    #[local] Hint Extern 1 => cmp_by FoundVersionFacts.compare_antisym : cmp_plc.
+    #[local] Hint Extern 1 => cmp_by VFacts.compare_antisym : cmp_plc.
+    #[local] Hint Extern 1 => cmp_by LocationNameFacts.compare_lt_trans : cmp_plc.
+    #[local] Hint Extern 1 => cmp_by FoundVersionFacts.compare_lt_trans : cmp_plc.
+    #[local] Hint Extern 1 => cmp_by VFacts.compare_lt_trans : cmp_plc.
 
     Module Name.
       Inductive name : Type :=

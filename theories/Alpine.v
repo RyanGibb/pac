@@ -17,7 +17,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
   Module Package := Source.Package.
   Module PackageSet := Source.PackageSet.
   Module NEqb := UOTEqb N.
-  Module PkgEqb := UOTEqb Package.
+  Module PackageEqb := UOTEqb Package.
 
   Inductive Constr : Type :=
   | CAny
@@ -45,14 +45,14 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
     | CPrefix _ | CGtPrefix _ | CHash _ => false
     end.
 
-  Module VF := UOTCompareFacts V.
+  Module VFacts := UOTCompareFacts V.
   Module ComparisonConstraint := PairUOT ComparisonOperatorOT V.
-  Module OVF := UOTCompareFacts ComparisonConstraint.
-  #[local] Hint Rewrite OVF.compare_eq_iff VF.compare_eq_iff : cmp_alp.
-  #[local] Hint Extern 1 => cmp_by OVF.compare_antisym : cmp_alp.
-  #[local] Hint Extern 1 => cmp_by VF.compare_antisym : cmp_alp.
-  #[local] Hint Extern 1 => cmp_by OVF.compare_lt_trans : cmp_alp.
-  #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_alp.
+  Module ComparisonConstraintFacts := UOTCompareFacts ComparisonConstraint.
+  #[local] Hint Rewrite ComparisonConstraintFacts.compare_eq_iff VFacts.compare_eq_iff : cmp_alp.
+  #[local] Hint Extern 1 => cmp_by ComparisonConstraintFacts.compare_antisym : cmp_alp.
+  #[local] Hint Extern 1 => cmp_by VFacts.compare_antisym : cmp_alp.
+  #[local] Hint Extern 1 => cmp_by ComparisonConstraintFacts.compare_lt_trans : cmp_alp.
+  #[local] Hint Extern 1 => cmp_by VFacts.compare_lt_trans : cmp_alp.
   Module ConstraintComp <: ComparableType.
     Definition t := Constr.
     Definition rank (zeta : Constr) : nat :=
@@ -84,7 +84,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
   Module ConstraintOT := UOTFromCompare ConstraintComp.
 
   Module Atom := PairUOT N ConstraintOT.
-  Module AtomF := UOTCompareFacts Atom.
+  Module AtomFacts := UOTCompareFacts Atom.
 
   Inductive Dep : Type :=
   | DPos (a : Atom.t)
@@ -104,9 +104,9 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           end
       | c => c
       end.
-    #[local] Hint Rewrite AtomF.compare_eq_iff : cmp_alp.
-    #[local] Hint Extern 1 => cmp_by AtomF.compare_antisym : cmp_alp.
-    #[local] Hint Extern 1 => cmp_by AtomF.compare_lt_trans : cmp_alp.
+    #[local] Hint Rewrite AtomFacts.compare_eq_iff : cmp_alp.
+    #[local] Hint Extern 1 => cmp_by AtomFacts.compare_antisym : cmp_alp.
+    #[local] Hint Extern 1 => cmp_by AtomFacts.compare_lt_trans : cmp_alp.
     Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
     Proof. cmp_eq_iff cmp_alp. Qed.
     Lemma compare_antisym : forall x y, compare y x = CompOpp (compare x y).
@@ -268,14 +268,14 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
   End LeastDesignation.
 
   Module Reduct (D : Designation).
-    Module NF := UOTCompareFacts N.
+    Module NFacts := UOTCompareFacts N.
     Module ProvidesVersion := PairUOT Package V.
-    Module PVF := UOTCompareFacts ProvidesVersion.
-    #[local] Hint Rewrite NF.compare_eq_iff PVF.compare_eq_iff : cmp_alp.
-    #[local] Hint Extern 1 => cmp_by NF.compare_antisym : cmp_alp.
-    #[local] Hint Extern 1 => cmp_by PVF.compare_antisym : cmp_alp.
-    #[local] Hint Extern 1 => cmp_by NF.compare_lt_trans : cmp_alp.
-    #[local] Hint Extern 1 => cmp_by PVF.compare_lt_trans : cmp_alp.
+    Module ProvidesVersionFacts := UOTCompareFacts ProvidesVersion.
+    #[local] Hint Rewrite NFacts.compare_eq_iff ProvidesVersionFacts.compare_eq_iff : cmp_alp.
+    #[local] Hint Extern 1 => cmp_by NFacts.compare_antisym : cmp_alp.
+    #[local] Hint Extern 1 => cmp_by ProvidesVersionFacts.compare_antisym : cmp_alp.
+    #[local] Hint Extern 1 => cmp_by NFacts.compare_lt_trans : cmp_alp.
+    #[local] Hint Extern 1 => cmp_by ProvidesVersionFacts.compare_lt_trans : cmp_alp.
 
     Module Name.
       Inductive name : Type :=
@@ -389,7 +389,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
     Definition hasPriorityb (I : Inst) (q : Package.t) : bool :=
       PriorityRel.exists_
-        (fun '(q', k) => andb (PkgEqb.eqb q' q) (negb (Nat.eqb k 0)))
+        (fun '(q', k) => andb (PackageEqb.eqb q' q) (negb (Nat.eqb k 0)))
         (inst_prio I).
 
     Definition worldNamesb (I : Inst) (m : N.t) : bool :=
@@ -425,7 +425,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       orb (andb (NEqb.eqb (fst p) (fst a)) (constrMatch (snd a) (snd p)))
         (ProvidesRel.exists_
            (fun '(q, (m, tg)) =>
-              andb (PkgEqb.eqb q p)
+              andb (PackageEqb.eqb q p)
                 (andb (NEqb.eqb m (fst a))
                    (match tg with
                     | PVer u => constrMatch (snd a) u
@@ -627,17 +627,17 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       split.
       - intros [[q [m tg]] [Hr Hb]]; cbn in Hb.
         apply Bool.andb_true_iff in Hb; destruct Hb as [Hq Hb].
-        apply PkgEqb.eqb_true_iff in Hq; subst q.
+        apply PackageEqb.eqb_true_iff in Hq; subst q.
         apply Bool.andb_true_iff in Hb; destruct Hb as [Hm Hb].
         apply NEqb.eqb_true_iff in Hm; subst m.
         destruct tg as [u |]; [left; eauto | right; eauto].
       - intros [[u [Hr Hc]] | [Hany Hr]].
         + exists (p, (fst a, PVer u)); split; [exact Hr | cbn].
-          rewrite (proj2 (PkgEqb.eqb_true_iff p p) eq_refl).
+          rewrite (proj2 (PackageEqb.eqb_true_iff p p) eq_refl).
           rewrite (proj2 (NEqb.eqb_true_iff (fst a) (fst a)) eq_refl).
           rewrite Hc; reflexivity.
         + exists (p, (fst a, PBare)); split; [exact Hr | cbn].
-          rewrite (proj2 (PkgEqb.eqb_true_iff p p) eq_refl).
+          rewrite (proj2 (PackageEqb.eqb_true_iff p p) eq_refl).
           rewrite (proj2 (NEqb.eqb_true_iff (fst a) (fst a)) eq_refl).
           rewrite Hany; reflexivity.
     Qed.
@@ -845,11 +845,11 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
       split.
       - intros [[q' k] [Hin Hb]]; cbn in Hb.
         apply Bool.andb_true_iff in Hb; destruct Hb as [Hq Hk].
-        apply PkgEqb.eqb_true_iff in Hq; subst q'.
+        apply PackageEqb.eqb_true_iff in Hq; subst q'.
         exists k; split; [exact Hin |].
         intro Hk0; subst k; discriminate Hk.
       - intros [k [Hin Hk]]; exists (q, k); split; [exact Hin | cbn].
-        rewrite (proj2 (PkgEqb.eqb_true_iff q q) eq_refl).
+        rewrite (proj2 (PackageEqb.eqb_true_iff q q) eq_refl).
         destruct k; [contradiction | reflexivity].
     Qed.
 
@@ -1368,7 +1368,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
 
       Definition provTouchb (I : Inst) (ns : NSet.t) (q : Package.t) : bool :=
         ProvidesRel.exists_
-          (fun '(q', (m, _)) => andb (PkgEqb.eqb q' q) (NSet.mem m ns))
+          (fun '(q', (m, _)) => andb (PackageEqb.eqb q' q) (NSet.mem m ns))
           (inst_prov I).
 
       Module PackageSetPreimage := Preimage Package PackageSet.
@@ -1397,11 +1397,11 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         split.
         - intros [[q' [m tg]] [Hr Hb]]; cbn in Hb.
           apply Bool.andb_true_iff in Hb; destruct Hb as [Hq Hm].
-          apply PkgEqb.eqb_true_iff in Hq; subst q'.
+          apply PackageEqb.eqb_true_iff in Hq; subst q'.
           apply NSet.mem_spec in Hm; eauto.
         - intros [m [tg [Hr Hm]]]; exists (q, (m, tg)); split;
             [exact Hr | cbn].
-          rewrite (proj2 (PkgEqb.eqb_true_iff q q) eq_refl).
+          rewrite (proj2 (PackageEqb.eqb_true_iff q q) eq_refl).
           rewrite (proj2 (NSet.mem_spec _ _) Hm); reflexivity.
       Qed.
 
@@ -1550,7 +1550,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
         - intros [q' k] H; apply mem_prioOf in H; exact (proj1 H).
         - intros [q' k] Hin Hb; cbn in Hb.
           apply Bool.andb_true_iff in Hb; destruct Hb as [Hq' _].
-          apply PkgEqb.eqb_true_iff in Hq'; subst q'.
+          apply PackageEqb.eqb_true_iff in Hq'; subst q'.
           apply mem_prioOf; split; assumption.
       Qed.
 
@@ -1651,7 +1651,7 @@ Module Alpine (N V : UsualOrderedType) (PM : ApkVerMatch V).
           apply mem_provPreimage in He; exact (proj1 He).
         - intros [q [m tg]] He Hb; cbn in Hb.
           apply Bool.andb_true_iff in Hb; destruct Hb as [Hq _].
-          apply PkgEqb.eqb_true_iff in Hq; subst q.
+          apply PackageEqb.eqb_true_iff in Hq; subst q.
           apply ProvidesRel.union_spec; left; exact (Hcov _ _ He).
       Qed.
 

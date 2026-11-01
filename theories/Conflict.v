@@ -24,10 +24,10 @@ Module Conflict (N V : UsualOrderedType).
           ~ (exists v, VSet.In v vs /\ PackageSet.In (n, v) S) }.
 
   Module Reduction.
-    Module VF := UOTCompareFacts V.
-    #[local] Hint Rewrite VF.compare_eq_iff : cmp_conf.
-    #[local] Hint Extern 1 => cmp_by VF.compare_antisym : cmp_conf.
-    #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_conf.
+    Module VFacts := UOTCompareFacts V.
+    #[local] Hint Rewrite VFacts.compare_eq_iff : cmp_conf.
+    #[local] Hint Extern 1 => cmp_by VFacts.compare_antisym : cmp_conf.
+    #[local] Hint Extern 1 => cmp_by VFacts.compare_lt_trans : cmp_conf.
 
     Module Version.
       Inductive version : Type :=

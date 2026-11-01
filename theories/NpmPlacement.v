@@ -10,10 +10,10 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
   Include NpmCommon N V VSet.
   Module SourceName := PairUOT N N.
   Module SourceNameSet := FSetUOT SourceName.
-  Module RPkgF := UOTCompareFacts RealPackage.
-  #[local] Hint Rewrite RPkgF.compare_eq_iff : cmp_npl.
-  #[local] Hint Extern 1 => cmp_by RPkgF.compare_antisym : cmp_npl.
-  #[local] Hint Extern 1 => cmp_by RPkgF.compare_lt_trans : cmp_npl.
+  Module RealPackageFacts := UOTCompareFacts RealPackage.
+  #[local] Hint Rewrite RealPackageFacts.compare_eq_iff : cmp_npl.
+  #[local] Hint Extern 1 => cmp_by RealPackageFacts.compare_antisym : cmp_npl.
+  #[local] Hint Extern 1 => cmp_by RealPackageFacts.compare_lt_trans : cmp_npl.
 
   Module Sv := Semver V VSet PM.
   Include Sv.
@@ -764,13 +764,13 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
                       (inst_real I))
                    (List.filter
                       (fun '(p, d) =>
-                         orb (RPkgEqb.eqb p (m, v))
+                         orb (RealPackageEqb.eqb p (m, v))
                            (andb (NEqb.eqb (d_dir d) a)
                               (NEqb.eqb (ovrName I (d_dir d) (d_name d)) m)))
                       (inst_deps I))
                    (List.filter
                       (fun '(p, theta) =>
-                         orb (RPkgEqb.eqb p (m, v))
+                         orb (RealPackageEqb.eqb p (m, v))
                            (andb (NEqb.eqb (p_dir theta) a)
                               (NEqb.eqb
                                  (ovrName I (p_dir theta) (p_name theta)) m)))
@@ -839,10 +839,10 @@ Module NpmPlacement (N V : UsualOrderedType) (PM : SemverMatch V).
           [reflexivity | reflexivity | | | intros n Hn; right; exact Hn].
         - unfold I'; cbn [activeDeps inst_deps].
           rewrite ownedBy_filter; [reflexivity |].
-          intros d _; cbn beta iota; rewrite RPkgEqb.eqb_refl; reflexivity.
+          intros d _; cbn beta iota; rewrite RealPackageEqb.eqb_refl; reflexivity.
         - unfold I'; cbn [declPeers inst_peers].
           rewrite ownedBy_filter; [reflexivity |].
-          intros theta _; cbn beta iota; rewrite RPkgEqb.eqb_refl;
+          intros theta _; cbn beta iota; rewrite RealPackageEqb.eqb_refl;
             reflexivity.
       Qed.
     End Lookup.

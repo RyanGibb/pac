@@ -217,7 +217,7 @@ Module Visibility (N V : UsualOrderedType).
     - apply IH, subStep_universe; exact Hacc.
   Qed.
 
-  Module PkgSetProps := MSetProperties.WPropertiesOn Package PackageSet.
+  Module PackageSetProperties := MSetProperties.WPropertiesOn Package PackageSet.
 
   Lemma subIter_grow : forall pub pi fuel acc,
       subStep pub pi (subIter pub pi fuel acc) = subIter pub pi fuel acc \/
@@ -237,7 +237,7 @@ Module Visibility (N V : UsualOrderedType).
         left; simpl; rewrite Hfix, (subIter_fix pub pi k acc Hfix); exact Hfix.
       + destruct (PackageSet.choose_nonempty _ He) as [x Hx].
         apply PackageSet.diff_spec in Hx; destruct Hx as [Hx1 Hx2].
-        pose proof (PkgSetProps.subset_cardinal_lt
+        pose proof (PackageSetProperties.subset_cardinal_lt
                       (subStep_incl pub pi acc) Hx1 Hx2) as Hlt.
         simpl; destruct (IH (subStep pub pi acc)) as [E | Hc];
           [left; exact E | right; lia].
@@ -255,13 +255,13 @@ Module Visibility (N V : UsualOrderedType).
                     (subIter pub pi (PackageSet.cardinal (subUniverse pi q))
                        (subBase pi q)) <=
                   PackageSet.cardinal (subUniverse pi q))
-      by (apply PkgSetProps.subset_cardinal, subIter_universe,
+      by (apply PackageSetProperties.subset_cardinal, subIter_universe,
             subBase_universe).
     assert (Hpos : 1 <= PackageSet.cardinal (subBase pi q)).
     { destruct (PackageSet.cardinal (subBase pi q)) eqn:Hcb; [| lia].
       exfalso.
       assert (PackageSet.Empty (subBase pi q)) as Hemp
-        by (apply PkgSetProps.cardinal_inv_1; exact Hcb).
+        by (apply PackageSetProperties.cardinal_inv_1; exact Hcb).
       apply (Hemp q), mem_subBase; left; reflexivity. }
     lia.
   Qed.
@@ -286,11 +286,11 @@ Module Visibility (N V : UsualOrderedType).
   Qed.
 
   Module Reduction.
-    Module PkgEqb := UOTEqb Package.
+    Module PackageEqb := UOTEqb Package.
 
     Definition privb (D : Source.DependencyRel.t) (pub : PublicDependencyRel.t) (p : Package.t) : bool :=
       Source.DependencyRel.exists_ (fun '(q, (n, _)) =>
-          andb (PkgEqb.eqb q p) (negb (PublicDependencyRel.mem (p, n) pub)))
+          andb (PackageEqb.eqb q p) (negb (PublicDependencyRel.mem (p, n) pub)))
         D.
 
     Lemma privb_iff : forall D pub p, privb D pub p = true <-> Priv D pub p.
@@ -300,13 +300,13 @@ Module Visibility (N V : UsualOrderedType).
       split.
       - intros [[q [n vs]] [He Hb]]; cbn beta iota in Hb.
         apply Bool.andb_true_iff in Hb; destruct Hb as [H1 H2].
-        apply PkgEqb.eqb_true_iff in H1 as ->.
+        apply PackageEqb.eqb_true_iff in H1 as ->.
         exists n, vs; split; [exact He |].
         apply Bool.negb_true_iff in H2.
         intro Hin; apply PublicDependencyRel.mem_spec in Hin; congruence.
       - intros [n [vs [He Hn]]]; exists (p, (n, vs)); split; [exact He |].
         cbn beta iota; apply Bool.andb_true_iff; split;
-          [apply PkgEqb.eqb_refl |].
+          [apply PackageEqb.eqb_refl |].
         apply Bool.negb_true_iff, Bool.not_true_iff_false.
         intro Hm; apply Hn, PublicDependencyRel.mem_spec; exact Hm.
     Qed.
@@ -317,25 +317,25 @@ Module Visibility (N V : UsualOrderedType).
 
     Definition carriedb (pub : PublicDependencyRel.t) (q : Package.t) (p : Package.t) (m : N.t)
         : bool :=
-      orb (PublicDependencyRel.mem (p, m) pub) (PkgEqb.eqb p q).
+      orb (PublicDependencyRel.mem (p, m) pub) (PackageEqb.eqb p q).
 
     Lemma carriedb_iff : forall pub q p m,
         carriedb pub q p m = true <-> Carried pub q p m.
     Proof.
       intros pub q p m; unfold carriedb, Carried.
-      rewrite Bool.orb_true_iff, PublicDependencyRel.mem_spec, PkgEqb.eqb_true_iff;
+      rewrite Bool.orb_true_iff, PublicDependencyRel.mem_spec, PackageEqb.eqb_true_iff;
         reflexivity.
     Qed.
 
     Definition isOriginb (D : Source.DependencyRel.t) (pub : PublicDependencyRel.t) (r : Package.t)
         (S : PackageSet.t) (q : Package.t) : bool :=
-      orb (PkgEqb.eqb q r) (andb (PackageSet.mem q S) (privb D pub q)).
+      orb (PackageEqb.eqb q r) (andb (PackageSet.mem q S) (privb D pub q)).
 
     Lemma isOriginb_iff : forall D pub r S q,
         isOriginb D pub r S q = true <-> IsOrigin D pub r S q.
     Proof.
       intros D pub r S q; unfold isOriginb, IsOrigin.
-      rewrite Bool.orb_true_iff, Bool.andb_true_iff, PkgEqb.eqb_true_iff,
+      rewrite Bool.orb_true_iff, Bool.andb_true_iff, PackageEqb.eqb_true_iff,
         PackageSet.mem_spec, privb_iff; reflexivity.
     Qed.
 
@@ -355,17 +355,17 @@ Module Visibility (N V : UsualOrderedType).
     Module IntermediateNameTail := TripleUOT V N Package.
     Module IntermediateName := PairUOT N IntermediateNameTail.
     Module AgreementName := TripleUOT N V N.
-    Module NPF := UOTCompareFacts OccurrenceName.
-    Module NVNPF := UOTCompareFacts IntermediateName.
-    Module NVNF := UOTCompareFacts AgreementName.
-    #[local] Hint Rewrite NPF.compare_eq_iff NVNPF.compare_eq_iff
-      NVNF.compare_eq_iff : cmp_vis.
-    #[local] Hint Extern 1 => cmp_by NPF.compare_antisym : cmp_vis.
-    #[local] Hint Extern 1 => cmp_by NVNPF.compare_antisym : cmp_vis.
-    #[local] Hint Extern 1 => cmp_by NVNF.compare_antisym : cmp_vis.
-    #[local] Hint Extern 1 => cmp_by NPF.compare_lt_trans : cmp_vis.
-    #[local] Hint Extern 1 => cmp_by NVNPF.compare_lt_trans : cmp_vis.
-    #[local] Hint Extern 1 => cmp_by NVNF.compare_lt_trans : cmp_vis.
+    Module OccurrenceNameFacts := UOTCompareFacts OccurrenceName.
+    Module IntermediateNameFacts := UOTCompareFacts IntermediateName.
+    Module AgreementNameFacts := UOTCompareFacts AgreementName.
+    #[local] Hint Rewrite OccurrenceNameFacts.compare_eq_iff IntermediateNameFacts.compare_eq_iff
+      AgreementNameFacts.compare_eq_iff : cmp_vis.
+    #[local] Hint Extern 1 => cmp_by OccurrenceNameFacts.compare_antisym : cmp_vis.
+    #[local] Hint Extern 1 => cmp_by IntermediateNameFacts.compare_antisym : cmp_vis.
+    #[local] Hint Extern 1 => cmp_by AgreementNameFacts.compare_antisym : cmp_vis.
+    #[local] Hint Extern 1 => cmp_by OccurrenceNameFacts.compare_lt_trans : cmp_vis.
+    #[local] Hint Extern 1 => cmp_by IntermediateNameFacts.compare_lt_trans : cmp_vis.
+    #[local] Hint Extern 1 => cmp_by AgreementNameFacts.compare_lt_trans : cmp_vis.
 
     Module Name.
       Inductive name : Type :=
@@ -459,7 +459,7 @@ Module Visibility (N V : UsualOrderedType).
         (origins : PackageSet.t) : Reduced.DependencyRel.t :=
       SOptd.unionMap (fun '(n, v) =>
           SOptd.filterMap (fun q =>
-              if andb (privb D pub (n, v)) (negb (PkgEqb.eqb q (n, v)))
+              if andb (privb D pub (n, v)) (negb (PackageEqb.eqb q (n, v)))
               then Some ((Name.Occurrence n q, v),
                          (Name.Occurrence n (n, v), Reduced.VSet.singleton v))
               else None)
@@ -607,12 +607,12 @@ Module Visibility (N V : UsualOrderedType).
       - intros [[n v] [HR Hh]]; cbn beta iota in Hh.
         apply SOptd.mem_filterMap_if in Hh; destruct Hh as [q [Hq [Hb ->]]].
         cbn beta in Hb; rewrite Bool.andb_true_iff, Bool.negb_true_iff,
-          PkgEqb.eqb_false_iff, privb_iff in Hb.
+          PackageEqb.eqb_false_iff, privb_iff in Hb.
         destruct Hb; exists n, v, q; auto.
       - intros (n & v & q & HR & Hq & Hpriv & Hne & ->).
         exists (n, v); split; [exact HR | cbn beta iota].
         apply SOptd.mem_filterMap_if; exists q; cbn beta.
-        rewrite Bool.andb_true_iff, Bool.negb_true_iff, PkgEqb.eqb_false_iff,
+        rewrite Bool.andb_true_iff, Bool.negb_true_iff, PackageEqb.eqb_false_iff,
           privb_iff; auto.
     Qed.
 

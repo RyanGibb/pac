@@ -31,7 +31,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
     List.map lits cs.
 
   Module Encoding.
-    Module VF := UOTCompareFacts V.
+    Module VFacts := UOTCompareFacts V.
     Module SOp := SetOps Package Package PackageSet PackageSet.
     Module SOv := SetOps V V VSet VSet.
     Module SOd := SetOps Source.DependencyElt Source.DependencyElt Source.DependencyRel Source.DependencyRel.
@@ -41,7 +41,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
 
     Lemma ltb_lt : forall v v', ltb v v' = true <-> V.lt v v'.
     Proof.
-      intros v v'; unfold ltb; rewrite <- VF.Facts.compare_lt_iff.
+      intros v v'; unfold ltb; rewrite <- VFacts.Facts.compare_lt_iff.
       destruct (V.compare v v'); split; intro H; congruence.
     Qed.
 
@@ -193,20 +193,20 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
   End Encoding.
 
   Module Reduction.
-    Module XF := UOTCompareFacts X.
-    Module BF := UOTCompareFacts BoolOT.
-    Module LF := UOTCompareFacts LiteralOT.
-    Module CF := UOTCompareFacts ClauseOT.
-    #[local] Hint Rewrite XF.compare_eq_iff BF.compare_eq_iff LF.compare_eq_iff
-      CF.compare_eq_iff : cmp_cplx.
-    #[local] Hint Extern 1 => cmp_by XF.compare_antisym : cmp_cplx.
-    #[local] Hint Extern 1 => cmp_by XF.compare_lt_trans : cmp_cplx.
-    #[local] Hint Extern 1 => cmp_by BF.compare_antisym : cmp_cplx.
-    #[local] Hint Extern 1 => cmp_by BF.compare_lt_trans : cmp_cplx.
-    #[local] Hint Extern 1 => cmp_by LF.compare_antisym : cmp_cplx.
-    #[local] Hint Extern 1 => cmp_by LF.compare_lt_trans : cmp_cplx.
-    #[local] Hint Extern 1 => cmp_by CF.compare_antisym : cmp_cplx.
-    #[local] Hint Extern 1 => cmp_by CF.compare_lt_trans : cmp_cplx.
+    Module XFacts := UOTCompareFacts X.
+    Module BoolFacts := UOTCompareFacts BoolOT.
+    Module LiteralFacts := UOTCompareFacts LiteralOT.
+    Module ClauseFacts := UOTCompareFacts ClauseOT.
+    #[local] Hint Rewrite XFacts.compare_eq_iff BoolFacts.compare_eq_iff LiteralFacts.compare_eq_iff
+      ClauseFacts.compare_eq_iff : cmp_cplx.
+    #[local] Hint Extern 1 => cmp_by XFacts.compare_antisym : cmp_cplx.
+    #[local] Hint Extern 1 => cmp_by XFacts.compare_lt_trans : cmp_cplx.
+    #[local] Hint Extern 1 => cmp_by BoolFacts.compare_antisym : cmp_cplx.
+    #[local] Hint Extern 1 => cmp_by BoolFacts.compare_lt_trans : cmp_cplx.
+    #[local] Hint Extern 1 => cmp_by LiteralFacts.compare_antisym : cmp_cplx.
+    #[local] Hint Extern 1 => cmp_by LiteralFacts.compare_lt_trans : cmp_cplx.
+    #[local] Hint Extern 1 => cmp_by ClauseFacts.compare_antisym : cmp_cplx.
+    #[local] Hint Extern 1 => cmp_by ClauseFacts.compare_lt_trans : cmp_cplx.
 
     Module Name.
       Inductive name : Type :=

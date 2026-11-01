@@ -10,8 +10,8 @@ End SemverMatch.
    application is generative: an ecosystem evaluates ranges into the same
    set instance its calculus already uses. *)
 Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (PM : SemverMatch V).
-  Module VSS := SetSpecs V VSet.
-  Module VCF := UOTCompareFacts V.
+  Module VSetSpecs := SetSpecs V VSet.
+  Module VCompareFacts := UOTCompareFacts V.
 
   Inductive Comparator : Type :=
   | CAny
@@ -45,7 +45,7 @@ Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (PM : SemverMatch V).
 
   Lemma mem_rangeEval : forall rg Vn v,
       VSet.In v (rangeEval rg Vn) <-> VSet.In v Vn /\ rgHolds rg v = true.
-  Proof. intros rg Vn v; apply VSS.filter_spec'. Qed.
+  Proof. intros rg Vn v; apply VSetSpecs.filter_spec'. Qed.
 
   (* An ecosystem that keys its dependencies on the requirement itself
      carries a range inside a set element, which wants an order on the
@@ -70,7 +70,7 @@ Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (PM : SemverMatch V).
     Proof.
       intros x y; destruct x as [| o1 c1], y as [| o2 c2]; cbn;
         try (split; intro H; congruence).
-      rewrite lex_eq_iff, ComparisonOperatorComp.compare_eq_iff, VCF.compare_eq_iff.
+      rewrite lex_eq_iff, ComparisonOperatorComp.compare_eq_iff, VCompareFacts.compare_eq_iff.
       split;
         [intros [-> ->]; reflexivity | intro H; injection H as -> ->; auto].
     Qed.
@@ -79,7 +79,7 @@ Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (PM : SemverMatch V).
     Proof.
       intros x y; destruct x as [| o1 c1], y as [| o2 c2]; cbn;
         try reflexivity.
-      rewrite lex_opp, ComparisonOperatorComp.compare_antisym, VCF.compare_antisym;
+      rewrite lex_opp, ComparisonOperatorComp.compare_antisym, VCompareFacts.compare_antisym;
         reflexivity.
     Qed.
 
@@ -89,7 +89,7 @@ Module Semver (V : UsualOrderedType) (VSet : SetsOn V) (PM : SemverMatch V).
       intros x y z; destruct x as [| o1 c1], y as [| o2 c2], z as [| o3 c3];
         cbn; intros H1 H2; try congruence.
       exact (lex_lt_trans ComparisonOperatorComp.compare_eq_iff
-               (ComparisonOperatorComp.compare_lt_trans _ _ _) (VCF.compare_lt_trans _ _ _)
+               (ComparisonOperatorComp.compare_lt_trans _ _ _) (VCompareFacts.compare_lt_trans _ _ _)
                H1 H2).
     Qed.
   End ComparatorComp.

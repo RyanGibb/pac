@@ -107,13 +107,13 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
 
     Module GranularName := PairUOT N G.
     Module IntermediateName := TripleUOT N V N.
-    Module NGF := UOTCompareFacts GranularName.
-    Module NVNF := UOTCompareFacts IntermediateName.
-    #[local] Hint Rewrite NGF.compare_eq_iff NVNF.compare_eq_iff : cmp_conc.
-    #[local] Hint Extern 1 => cmp_by NGF.compare_antisym : cmp_conc.
-    #[local] Hint Extern 1 => cmp_by NVNF.compare_antisym : cmp_conc.
-    #[local] Hint Extern 1 => cmp_by NGF.compare_lt_trans : cmp_conc.
-    #[local] Hint Extern 1 => cmp_by NVNF.compare_lt_trans : cmp_conc.
+    Module GranularNameFacts := UOTCompareFacts GranularName.
+    Module IntermediateNameFacts := UOTCompareFacts IntermediateName.
+    #[local] Hint Rewrite GranularNameFacts.compare_eq_iff IntermediateNameFacts.compare_eq_iff : cmp_conc.
+    #[local] Hint Extern 1 => cmp_by GranularNameFacts.compare_antisym : cmp_conc.
+    #[local] Hint Extern 1 => cmp_by IntermediateNameFacts.compare_antisym : cmp_conc.
+    #[local] Hint Extern 1 => cmp_by GranularNameFacts.compare_lt_trans : cmp_conc.
+    #[local] Hint Extern 1 => cmp_by IntermediateNameFacts.compare_lt_trans : cmp_conc.
 
     Module Name.
       Inductive name : Type :=
@@ -141,13 +141,13 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
       Proof. cmp_lt_trans cmp_conc. Qed.
     End Name.
 
-    Module GF := UOTCompareFacts G.
-    Module VF := UOTCompareFacts V.
-    #[local] Hint Rewrite GF.compare_eq_iff VF.compare_eq_iff : cmp_conc.
-    #[local] Hint Extern 1 => cmp_by GF.compare_antisym : cmp_conc.
-    #[local] Hint Extern 1 => cmp_by VF.compare_antisym : cmp_conc.
-    #[local] Hint Extern 1 => cmp_by GF.compare_lt_trans : cmp_conc.
-    #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_conc.
+    Module GFacts := UOTCompareFacts G.
+    Module VFacts := UOTCompareFacts V.
+    #[local] Hint Rewrite GFacts.compare_eq_iff VFacts.compare_eq_iff : cmp_conc.
+    #[local] Hint Extern 1 => cmp_by GFacts.compare_antisym : cmp_conc.
+    #[local] Hint Extern 1 => cmp_by VFacts.compare_antisym : cmp_conc.
+    #[local] Hint Extern 1 => cmp_by GFacts.compare_lt_trans : cmp_conc.
+    #[local] Hint Extern 1 => cmp_by VFacts.compare_lt_trans : cmp_conc.
 
     Module Version.
       Inductive version : Type :=

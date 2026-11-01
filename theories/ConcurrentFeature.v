@@ -68,30 +68,30 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
 
   Module Reduction.
     Module GranularOriginalName := PairUOT N G.
-    Module OrigNameF := UOTCompareFacts GranularOriginalName.
+    Module GranularOriginalNameFacts := UOTCompareFacts GranularOriginalName.
     Module GranularFeaturePackageName := TripleUOT N F G.
-    Module FeatNameF := UOTCompareFacts GranularFeaturePackageName.
+    Module GranularFeaturePackageNameFacts := UOTCompareFacts GranularFeaturePackageName.
     Module IntermediateName := TripleUOT N V N.
-    Module InterNameF := UOTCompareFacts IntermediateName.
+    Module IntermediateNameFacts := UOTCompareFacts IntermediateName.
     Module ParameterisedIntermediateNameTail := TripleUOT V N F.
     Module ParameterisedIntermediateName := PairUOT N ParameterisedIntermediateNameTail.
-    Module InterFNameF := UOTCompareFacts ParameterisedIntermediateName.
+    Module ParameterisedIntermediateNameFacts := UOTCompareFacts ParameterisedIntermediateName.
     Module AdditionalIntermediateNameTail := TripleUOT F N F.
     Module AdditionalIntermediateName := TripleUOT N V AdditionalIntermediateNameTail.
-    Module InterANameF := UOTCompareFacts AdditionalIntermediateName.
-    #[local] Hint Rewrite OrigNameF.compare_eq_iff FeatNameF.compare_eq_iff
-      InterNameF.compare_eq_iff InterFNameF.compare_eq_iff
-      InterANameF.compare_eq_iff : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by OrigNameF.compare_antisym : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by FeatNameF.compare_antisym : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by InterNameF.compare_antisym : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by InterFNameF.compare_antisym : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by InterANameF.compare_antisym : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by OrigNameF.compare_lt_trans : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by FeatNameF.compare_lt_trans : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by InterNameF.compare_lt_trans : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by InterFNameF.compare_lt_trans : cmp_fconc.
-    #[local] Hint Extern 1 => cmp_by InterANameF.compare_lt_trans : cmp_fconc.
+    Module AdditionalIntermediateNameFacts := UOTCompareFacts AdditionalIntermediateName.
+    #[local] Hint Rewrite GranularOriginalNameFacts.compare_eq_iff GranularFeaturePackageNameFacts.compare_eq_iff
+      IntermediateNameFacts.compare_eq_iff ParameterisedIntermediateNameFacts.compare_eq_iff
+      AdditionalIntermediateNameFacts.compare_eq_iff : cmp_fconc.
+    #[local] Hint Extern 1 => cmp_by GranularOriginalNameFacts.compare_antisym : cmp_fconc.
+    #[local] Hint Extern 1 => cmp_by GranularFeaturePackageNameFacts.compare_antisym : cmp_fconc.
+    #[local] Hint Extern 1 => cmp_by IntermediateNameFacts.compare_antisym : cmp_fconc.
+    #[local] Hint Extern 1 => cmp_by ParameterisedIntermediateNameFacts.compare_antisym : cmp_fconc.
+    #[local] Hint Extern 1 => cmp_by AdditionalIntermediateNameFacts.compare_antisym : cmp_fconc.
+    #[local] Hint Extern 1 => cmp_by GranularOriginalNameFacts.compare_lt_trans : cmp_fconc.
+    #[local] Hint Extern 1 => cmp_by GranularFeaturePackageNameFacts.compare_lt_trans : cmp_fconc.
+    #[local] Hint Extern 1 => cmp_by IntermediateNameFacts.compare_lt_trans : cmp_fconc.
+    #[local] Hint Extern 1 => cmp_by ParameterisedIntermediateNameFacts.compare_lt_trans : cmp_fconc.
+    #[local] Hint Extern 1 => cmp_by AdditionalIntermediateNameFacts.compare_lt_trans : cmp_fconc.
 
     Module Name.
       Inductive name : Type :=
@@ -786,15 +786,15 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
           apply mem_singVS in Hw; subst w; exact HwS.
     Qed.
 
-    Module PkgEqb := UOTEqb Package.
+    Module PackageEqb := UOTEqb Package.
 
     Definition inSb (S_CF : Feat.FeaturedSet.t) (p : Package.t) : bool :=
-      Feat.FeaturedSet.exists_ (fun '(q, _) => PkgEqb.eqb q p) S_CF.
+      Feat.FeaturedSet.exists_ (fun '(q, _) => PackageEqb.eqb q p) S_CF.
 
     Definition takenWithb
         (S_CF : Feat.FeaturedSet.t) (fs : Feat.FSet.t) (q : Package.t) : bool :=
       Feat.FeaturedSet.exists_ (fun '(q', fs') =>
-          andb (PkgEqb.eqb q' q) (Feat.FSet.subset fs fs'))
+          andb (PackageEqb.eqb q' q) (Feat.FSet.subset fs fs'))
         S_CF.
 
     Definition activeb (S_CF : Feat.FeaturedSet.t) (pi : ParentRel.t)
@@ -855,9 +855,9 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       rewrite Feat.FeaturedSet.exists_spec'.
       unfold Feat.FeaturedSet.Exists; split.
       - intros [[q fsq] [Hq Hb]]; cbn beta iota in Hb.
-        apply PkgEqb.eqb_true_iff in Hb as ->; exists fsq; exact Hq.
+        apply PackageEqb.eqb_true_iff in Hb as ->; exists fsq; exact Hq.
       - intros [fs_p H]; exists (p, fs_p); split;
-          [exact H | apply PkgEqb.eqb_refl].
+          [exact H | apply PackageEqb.eqb_refl].
     Qed.
 
     Lemma takenWithb_iff : forall S_CF fs q,
@@ -870,13 +870,13 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       unfold Feat.FeaturedSet.Exists; split.
       - intros [[q' fs'] [Hq Hb]]; cbn beta iota in Hb.
         apply Bool.andb_true_iff in Hb; destruct Hb as [Hb1 Hb2].
-        apply PkgEqb.eqb_true_iff in Hb1 as ->.
+        apply PackageEqb.eqb_true_iff in Hb1 as ->.
         apply Feat.FSet.subset_spec in Hb2.
         exists fs'; split; assumption.
       - intros [fs' [Hsub H]]; exists (q, fs'); split;
           [exact H | cbn beta iota].
         apply Bool.andb_true_iff; split;
-          [apply PkgEqb.eqb_refl | apply Feat.FSet.subset_spec; exact Hsub].
+          [apply PackageEqb.eqb_refl | apply Feat.FSet.subset_spec; exact Hsub].
     Qed.
 
     Lemma activeb_iff : forall S_CF pi p fs m u,
@@ -1137,7 +1137,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       Definition pkgNodeFibre (Da : Feat.AdditionalDependencyRel.t) (p : Package.t) (m : N.t) :
           Feat.AdditionalDependencyRel.t :=
         Feat.AdditionalDependencyRel.filter
-          (fun '((q, _), (m', _)) => andb (PkgEqb.eqb q p) (NEqb.eqb m' m))
+          (fun '((q, _), (m', _)) => andb (PackageEqb.eqb q p) (NEqb.eqb m' m))
           Da.
 
       Lemma mem_pkgNodeFibre :
@@ -1147,7 +1147,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
       Proof.
         intros Da p q f m m' d; unfold pkgNodeFibre.
         rewrite Feat.AdditionalDependencyRel.filter_spec'; cbn beta iota.
-        rewrite Bool.andb_true_iff, PkgEqb.eqb_true_iff, NEqb.eqb_true_iff.
+        rewrite Bool.andb_true_iff, PackageEqb.eqb_true_iff, NEqb.eqb_true_iff.
         tauto.
       Qed.
 

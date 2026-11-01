@@ -79,12 +79,12 @@ Module VariableFormula (N V : UsualOrderedType)
   Qed.
 
   Module VariableComparison := TripleUOT X ComparisonOperatorOT Y.
-  Module XOYF := UOTCompareFacts VariableComparison.
-  Module NF := UOTCompareFacts N.
-  Module VSF := UOTCompareFacts VSet.AsUOT.
-  #[local] Hint Rewrite NF.compare_eq_iff : cmp_varf.
-  #[local] Hint Extern 1 => cmp_by NF.compare_antisym : cmp_varf.
-  #[local] Hint Extern 1 => cmp_by NF.compare_lt_trans : cmp_varf.
+  Module VariableComparisonFacts := UOTCompareFacts VariableComparison.
+  Module NFacts := UOTCompareFacts N.
+  Module VSetFacts := UOTCompareFacts VSet.AsUOT.
+  #[local] Hint Rewrite NFacts.compare_eq_iff : cmp_varf.
+  #[local] Hint Extern 1 => cmp_by NFacts.compare_antisym : cmp_varf.
+  #[local] Hint Extern 1 => cmp_by NFacts.compare_lt_trans : cmp_varf.
 
   Module VariableFormulaComp <: ComparableType.
     Definition t := Formula.
@@ -117,14 +117,14 @@ Module VariableFormula (N V : UsualOrderedType)
            | x1 o1 y1];
         intros y; destruct y as [n2 vs2 | a2 b2 | a2 b2 | a2 | x2 o2 y2]; simpl;
         try (split; intro H; congruence).
-      - rewrite lex_eq_iff, NF.compare_eq_iff, VSF.compare_eq_iff;
+      - rewrite lex_eq_iff, NFacts.compare_eq_iff, VSetFacts.compare_eq_iff;
           split; intro H; [destruct H; congruence | injection H as -> ->; auto].
       - rewrite lex_eq_iff, IHa, IHb;
           split; intro H; [destruct H; congruence | injection H as -> ->; auto].
       - rewrite lex_eq_iff, IHa, IHb;
           split; intro H; [destruct H; congruence | injection H as -> ->; auto].
       - rewrite IHa; split; intro H; congruence.
-      - rewrite XOYF.compare_eq_iff; split; intro H; congruence.
+      - rewrite VariableComparisonFacts.compare_eq_iff; split; intro H; congruence.
     Qed.
 
     Lemma compare_antisym : forall x y, compare y x = CompOpp (compare x y).
@@ -134,11 +134,11 @@ Module VariableFormula (N V : UsualOrderedType)
            | x1 o1 y1];
         intros y; destruct y as [n2 vs2 | a2 b2 | a2 b2 | a2 | x2 o2 y2]; simpl;
         try reflexivity.
-      - rewrite lex_opp, NF.compare_antisym, VSF.compare_antisym; reflexivity.
+      - rewrite lex_opp, NFacts.compare_antisym, VSetFacts.compare_antisym; reflexivity.
       - rewrite lex_opp, IHa, IHb; reflexivity.
       - rewrite lex_opp, IHa, IHb; reflexivity.
       - apply IHa.
-      - apply XOYF.compare_antisym.
+      - apply VariableComparisonFacts.compare_antisym.
     Qed.
 
     Lemma compare_lt_trans : forall x y z,
@@ -149,12 +149,12 @@ Module VariableFormula (N V : UsualOrderedType)
         intros y z; destruct y as [n2 vs2 | a2 b2 | a2 b2 | a2 | x2 o2 y2],
           z as [n3 vs3 | a3 b3 | a3 b3 | a3 | x3 o3 y3]; simpl; intros H1 H2;
         try congruence.
-      - exact (lex_lt_trans NF.compare_eq_iff (NF.compare_lt_trans _ _ _)
-                 (VSF.compare_lt_trans _ _ _) H1 H2).
+      - exact (lex_lt_trans NFacts.compare_eq_iff (NFacts.compare_lt_trans _ _ _)
+                 (VSetFacts.compare_lt_trans _ _ _) H1 H2).
       - exact (lex_lt_trans compare_eq_iff (IHa _ _) (IHb _ _) H1 H2).
       - exact (lex_lt_trans compare_eq_iff (IHa _ _) (IHb _ _) H1 H2).
       - exact (IHa _ _ H1 H2).
-      - exact (XOYF.compare_lt_trans _ _ _ H1 H2).
+      - exact (VariableComparisonFacts.compare_lt_trans _ _ _ H1 H2).
     Qed.
   End VariableFormulaComp.
   Module VariableFormulaOT := UOTFromCompare VariableFormulaComp.

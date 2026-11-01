@@ -19,27 +19,27 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Module SightName := TripleUOT SourceName V N.
   Module LinkName := TripleUOT SourceName V SightName.
   Module DescriptorName := TripleUOT N N N.
-  Module NNNF := UOTCompareFacts DescriptorName.
-  Module PkgF := UOTCompareFacts Package.
-  Module KVKF := UOTCompareFacts IntermediateName.
-  Module KVNF := UOTCompareFacts SightName.
-  Module KVKVNF := UOTCompareFacts LinkName.
-  Module VF := UOTCompareFacts V.
-  #[local] Hint Rewrite PkgF.compare_eq_iff KVKF.compare_eq_iff
-    KVNF.compare_eq_iff KVKVNF.compare_eq_iff VF.compare_eq_iff
-    NNNF.compare_eq_iff : cmp_npm.
-  #[local] Hint Extern 1 => cmp_by NNNF.compare_antisym : cmp_npm.
-  #[local] Hint Extern 1 => cmp_by NNNF.compare_lt_trans : cmp_npm.
-  #[local] Hint Extern 1 => cmp_by PkgF.compare_antisym : cmp_npm.
-  #[local] Hint Extern 1 => cmp_by KVKF.compare_antisym : cmp_npm.
-  #[local] Hint Extern 1 => cmp_by KVNF.compare_antisym : cmp_npm.
-  #[local] Hint Extern 1 => cmp_by KVKVNF.compare_antisym : cmp_npm.
-  #[local] Hint Extern 1 => cmp_by VF.compare_antisym : cmp_npm.
-  #[local] Hint Extern 1 => cmp_by PkgF.compare_lt_trans : cmp_npm.
-  #[local] Hint Extern 1 => cmp_by KVKF.compare_lt_trans : cmp_npm.
-  #[local] Hint Extern 1 => cmp_by KVNF.compare_lt_trans : cmp_npm.
-  #[local] Hint Extern 1 => cmp_by KVKVNF.compare_lt_trans : cmp_npm.
-  #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_npm.
+  Module DescriptorNameFacts := UOTCompareFacts DescriptorName.
+  Module PackageFacts := UOTCompareFacts Package.
+  Module IntermediateNameFacts := UOTCompareFacts IntermediateName.
+  Module SightNameFacts := UOTCompareFacts SightName.
+  Module LinkNameFacts := UOTCompareFacts LinkName.
+  Module VFacts := UOTCompareFacts V.
+  #[local] Hint Rewrite PackageFacts.compare_eq_iff IntermediateNameFacts.compare_eq_iff
+    SightNameFacts.compare_eq_iff LinkNameFacts.compare_eq_iff VFacts.compare_eq_iff
+    DescriptorNameFacts.compare_eq_iff : cmp_npm.
+  #[local] Hint Extern 1 => cmp_by DescriptorNameFacts.compare_antisym : cmp_npm.
+  #[local] Hint Extern 1 => cmp_by DescriptorNameFacts.compare_lt_trans : cmp_npm.
+  #[local] Hint Extern 1 => cmp_by PackageFacts.compare_antisym : cmp_npm.
+  #[local] Hint Extern 1 => cmp_by IntermediateNameFacts.compare_antisym : cmp_npm.
+  #[local] Hint Extern 1 => cmp_by SightNameFacts.compare_antisym : cmp_npm.
+  #[local] Hint Extern 1 => cmp_by LinkNameFacts.compare_antisym : cmp_npm.
+  #[local] Hint Extern 1 => cmp_by VFacts.compare_antisym : cmp_npm.
+  #[local] Hint Extern 1 => cmp_by PackageFacts.compare_lt_trans : cmp_npm.
+  #[local] Hint Extern 1 => cmp_by IntermediateNameFacts.compare_lt_trans : cmp_npm.
+  #[local] Hint Extern 1 => cmp_by SightNameFacts.compare_lt_trans : cmp_npm.
+  #[local] Hint Extern 1 => cmp_by LinkNameFacts.compare_lt_trans : cmp_npm.
+  #[local] Hint Extern 1 => cmp_by VFacts.compare_lt_trans : cmp_npm.
 
   Module Name.
     Inductive name : Type :=
@@ -129,10 +129,10 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Module NameSet := FSetUOT NameOT.
 
   Module VEqb := UOTEqb V.
-  Module KeyEqb := UOTEqb SourceName.
-  Module PkgEqb := UOTEqb Package.
+  Module SourceNameEqb := UOTEqb SourceName.
+  Module PackageEqb := UOTEqb Package.
 
-  Module RSS := SetSpecs RealPackage RealPackageSet.
+  Module RealPackageSetSpecs := SetSpecs RealPackage RealPackageSet.
 
   Module SOkk := SetOps SourceName SourceName SourceNameSet SourceNameSet.
   Module SOnn := SetOps N N NSet NSet.
@@ -228,7 +228,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Proof. intros I d; unfold ovrDep; destruct (lookupOvr _ _); reflexivity. Qed.
 
   Definition depActive (I : Inst) (p : RealPackage.t) (d : Dependency) : bool :=
-    orb (negb (d_dev d)) (RPkgEqb.eqb p (inst_root I)).
+    orb (negb (d_dev d)) (RealPackageEqb.eqb p (inst_root I)).
 
   Definition dependenciesOf (I : Inst) (p : RealPackage.t) : list Dependency :=
     List.map (ovrDep I)
@@ -374,7 +374,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
   Qed.
 
   Definition childDirs (I : Inst) (q : Package.t) : NSet.t :=
-    if PkgEqb.eqb q (rootPkg I)
+    if PackageEqb.eqb q (rootPkg I)
     then NSet.union (dirs I (base q)) (peerDirs I)
     else dirs I (base q).
 
@@ -382,16 +382,16 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     SOnk.map (slotKey I (base q)) (childDirs I q).
 
   Definition holds (I : Inst) (q : Package.t) (n : N.t) : bool :=
-    orb (PkgEqb.eqb q (rootPkg I)) (NSet.mem n (dirs I (base q))).
+    orb (PackageEqb.eqb q (rootPkg I)) (NSet.mem n (dirs I (base q))).
 
   Definition chains (I : Inst) (q : Package.t) (n : N.t) : bool :=
-    andb (negb (PkgEqb.eqb q (rootPkg I))) (NSet.mem n (peerNames I (base q))).
+    andb (negb (PackageEqb.eqb q (rootPkg I))) (NSet.mem n (peerNames I (base q))).
 
   Definition dp (I : Inst) (q : Package.t) (n : N.t) : bool :=
     andb (chains I q n) (NSet.mem n (dirs I (base q))).
 
   Definition canBeAbsent (I : Inst) (q : Package.t) (n : N.t) : bool :=
-    orb (andb (PkgEqb.eqb q (rootPkg I)) (negb (NSet.mem n (dirs I (base q)))))
+    orb (andb (PackageEqb.eqb q (rootPkg I)) (negb (NSet.mem n (dirs I (base q)))))
       (dp I q n).
 
   Definition selfb '(((a, m), _) : Package.t) (n : N.t) : bool :=
@@ -399,11 +399,11 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
 
   Definition childCands (I : Inst) (q : Package.t)
       '((a, m) as k : SourceName.t) : VSet.t :=
-    if KeyEqb.eqb k (slotKey I (base q) a)
+    if SourceNameEqb.eqb k (slotKey I (base q) a)
     then if NSet.mem a (dirs I (base q))
          then slotCands I (base q) a
          else if chains I q a then VSet.empty
-         else if andb (PkgEqb.eqb q (rootPkg I)) (NSet.mem a (rootPeerDirs I))
+         else if andb (PackageEqb.eqb q (rootPkg I)) (NSet.mem a (rootPeerDirs I))
               then realVersions (inst_real I) m
               else VSet.empty
     else VSet.empty.
@@ -839,7 +839,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Proof.
       intros I q a m H Hd; unfold dp in Hd; rewrite H in Hd; cbn [andb] in Hd.
       unfold childCands; rewrite Hd, H.
-      destruct (KeyEqb.eqb (a, m) (slotKey I (base q) a)); reflexivity.
+      destruct (SourceNameEqb.eqb (a, m) (slotKey I (base q) a)); reflexivity.
     Qed.
 
     Lemma childCands_root_dirs : forall I a m v,
@@ -848,12 +848,12 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         NSet.In a (rootPeerDirs I).
     Proof.
       intros I a m v Hv Hnd; unfold childCands in Hv; rewrite base_rootPkg in Hv.
-      destruct (KeyEqb.eqb (a, m) (slotKey I (inst_root I) a));
+      destruct (SourceNameEqb.eqb (a, m) (slotKey I (inst_root I) a));
         [| destruct (SOrv.empty_in _ Hv)].
       destruct (NSet.mem a (dirs I (inst_root I))) eqn:Hd;
         [apply NSet.mem_spec in Hd; contradiction |].
       destruct (chains I (rootPkg I) a); [destruct (SOrv.empty_in _ Hv) |].
-      rewrite PkgEqb.eqb_refl in Hv; cbn [andb] in Hv.
+      rewrite PackageEqb.eqb_refl in Hv; cbn [andb] in Hv.
       destruct (NSet.mem a (rootPeerDirs I)) eqn:Hr;
         [apply NSet.mem_spec; exact Hr | destruct (SOrv.empty_in _ Hv)].
     Qed.
@@ -872,7 +872,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
 
     Definition rootPeerEdges (I : Inst) (q : Package.t)
       : Reduced.DependeeSet.t :=
-      if PkgEqb.eqb q (rootPkg I)
+      if PackageEqb.eqb q (rootPkg I)
       then depsOfL (fun theta =>
                (Name.Intermediate (fst q) (snd q) (peerKeyAt I (base q) theta),
                 embedVS (peerCandsAt I (base q) theta)))
@@ -886,7 +886,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         (peerDependenciesAt I (m, u)).
 
     Definition plainKey (I : Inst) (p : RealPackage.t) (a : N.t) : bool :=
-      KeyEqb.eqb (slotKey I p a) (a, a).
+      SourceNameEqb.eqb (slotKey I p a) (a, a).
 
     Definition sightSet (I : Inst) (q c : Package.t) (n : N.t) (v : Version.t)
       : Reduced.VSet.t :=
@@ -922,7 +922,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
 
     Definition ownSight (I : Inst) (q : Package.t) '((a, _) as k : SourceName.t) (u : V.t)
       : Reduced.DependeeSet.t :=
-      if andb (dp I q a) (KeyEqb.eqb k (slotKey I (base q) a))
+      if andb (dp I q a) (SourceNameEqb.eqb k (slotKey I (base q) a))
       then Reduced.DependeeSet.singleton
              (Name.Sight (fst q) (snd q) a,
               if plainKey I (base q) a
@@ -1005,7 +1005,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
                embedVS (peerCandsAt I (base q) theta)).
     Proof.
       intros I q h; unfold rootPeerEdges.
-      rewrite SOhh.in_if_empty, PkgEqb.eqb_true_iff, mem_depsOfL.
+      rewrite SOhh.in_if_empty, PackageEqb.eqb_true_iff, mem_depsOfL.
       unfold activePeers, peerDependenciesAt; split.
       - intros [Hq [theta [Hr He]]]; split; [exact Hq |].
         apply List.filter_In in Hr; destruct Hr as [Hr Hact]; exists theta.
@@ -1042,14 +1042,14 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         v = Version.Free \/ (v = Version.Orig w /\ slotKey I (base q) n = (n, n)).
     Proof.
       intros I q c n w v; unfold sightSet, plainKey.
-      destruct (KeyEqb.eqb (slotKey I (base q) n) (n, n)) eqn:Hp.
-      - apply KeyEqb.eqb_true_iff in Hp.
+      destruct (SourceNameEqb.eqb (slotKey I (base q) n) (n, n)) eqn:Hp.
+      - apply SourceNameEqb.eqb_true_iff in Hp.
         rewrite Reduced.VSet.add_spec, Reduced.VSet.singleton_spec; split.
         + intros [E | E]; [right; split; [exact E | exact Hp] | left; exact E].
         + intros [E | [E _]]; [right; exact E | left; exact E].
       - rewrite Reduced.VSet.singleton_spec; split; [intro E; left; exact E |].
         intros [E | [_ Hk]]; [exact E |].
-        rewrite Hk, KeyEqb.eqb_refl in Hp; discriminate Hp.
+        rewrite Hk, SourceNameEqb.eqb_refl in Hp; discriminate Hp.
     Qed.
 
     Lemma sightSet_bot : forall I q c n v,
@@ -1060,8 +1060,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Proof.
       intros I q c n v; unfold sightSet, plainKey.
       destruct (dp I c n) eqn:Hd.
-      - destruct (KeyEqb.eqb (slotKey I (base c) n) (n, n)) eqn:Hp.
-        + apply KeyEqb.eqb_true_iff in Hp.
+      - destruct (SourceNameEqb.eqb (slotKey I (base c) n) (n, n)) eqn:Hp.
+        + apply SourceNameEqb.eqb_true_iff in Hp.
           rewrite Reduced.VSet.add_spec, mem_embedVS; split.
           * intros [E | [u [Hu E]]]; [left; exact E |].
             right; right; split; [reflexivity |].
@@ -1073,7 +1073,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           * intros [E | H]; [left; exact E | destruct (SOvcv.empty_in _ H)].
           * intros [E | [[E _] | [_ [u [_ [_ Hk]]]]]];
               [left; exact E | discriminate E |].
-            rewrite Hk, KeyEqb.eqb_refl in Hp; discriminate Hp.
+            rewrite Hk, SourceNameEqb.eqb_refl in Hp; discriminate Hp.
       - rewrite Reduced.VSet.add_spec, Reduced.VSet.singleton_spec; split.
         + intros [E | E]; [right; left; split; [reflexivity | exact E] | left; exact E].
         + intros [E | [[_ E] | [E _]]]; [right; exact E | left; exact E | discriminate E].
@@ -1111,12 +1111,12 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Proof.
       intros I q a m u h; unfold ownSight.
       destruct (dp I q a) eqn:Hd;
-        destruct (KeyEqb.eqb (a, m) (slotKey I (base q) a)) eqn:Hk;
+        destruct (SourceNameEqb.eqb (a, m) (slotKey I (base q) a)) eqn:Hk;
         cbn [andb]; rewrite ?SOhh.singleton_in; split.
-      - intro E; apply KeyEqb.eqb_true_iff in Hk; repeat split; assumption.
+      - intro E; apply SourceNameEqb.eqb_true_iff in Hk; repeat split; assumption.
       - intros [_ [_ E]]; exact E.
       - intro H; destruct (SOhh.empty_in _ H).
-      - intros [_ [E _]]; rewrite <- E, KeyEqb.eqb_refl in Hk; discriminate Hk.
+      - intros [_ [E _]]; rewrite <- E, SourceNameEqb.eqb_refl in Hk; discriminate Hk.
       - intro H; destruct (SOhh.empty_in _ H).
       - intros [E _]; discriminate E.
       - intro H; destruct (SOhh.empty_in _ H).
@@ -1626,7 +1626,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Definition isSightOf (c : Package.t) (a : N.t) (p : Reduced.Package.t) : bool :=
       match p with
       | (Name.Sight k v b, Version.Orig _) =>
-          andb (KeyEqb.eqb k (fst c)) (andb (VEqb.eqb v (snd c)) (NEqb.eqb b a))
+          andb (SourceNameEqb.eqb k (fst c)) (andb (VEqb.eqb v (snd c)) (NEqb.eqb b a))
       | _ => false
       end.
 
@@ -1642,7 +1642,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Proof.
       intros c a [[k w | k v m | k v b | k v m u b | b t s] [x | |]]; cbn [isSightOf];
         try discriminate.
-      rewrite !Bool.andb_true_iff, KeyEqb.eqb_true_iff, VEqb.eqb_true_iff,
+      rewrite !Bool.andb_true_iff, SourceNameEqb.eqb_true_iff, VEqb.eqb_true_iff,
         NEqb.eqb_true_iff.
       intros [-> [-> ->]]; exists x; reflexivity.
     Qed.
@@ -1674,7 +1674,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         pose proof (List.find_none _ _ Hf _ (proj2 (SOtp.elements_in _ _) Hin))
           as E.
         cbn [isSightOf] in E.
-        rewrite KeyEqb.eqb_refl, VEqb.eqb_refl, NEqb.eqb_refl in E.
+        rewrite SourceNameEqb.eqb_refl, VEqb.eqb_refl, NEqb.eqb_refl in E.
         discriminate E.
     Qed.
 
@@ -1850,7 +1850,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Qed.
 
     Lemma dp_root : forall I n, dp I (rootPkg I) n = false.
-    Proof. intros I n; unfold dp, chains; rewrite PkgEqb.eqb_refl; reflexivity. Qed.
+    Proof. intros I n; unfold dp, chains; rewrite PackageEqb.eqb_refl; reflexivity. Qed.
 
     Lemma dp_chains : forall I q n, dp I q n = true -> chains I q n = true.
     Proof.
@@ -2059,7 +2059,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
             { apply dependees_int; right; right; left; apply mem_ownSight.
               split; [exact Hd | split; [symmetry; exact Ek | reflexivity]]. }
             rewrite (Huniq _ _ _ Hz2 Hy) in Hz3.
-            cbn [snd] in Hz3; unfold plainKey in Hz3; rewrite Hplain, KeyEqb.eqb_refl in Hz3.
+            cbn [snd] in Hz3; unfold plainKey in Hz3; rewrite Hplain, SourceNameEqb.eqb_refl in Hz3.
             cbv iota in Hz3; rewrite Reduced.VSet.add_spec, Reduced.VSet.singleton_spec in Hz3.
             destruct Hz3 as [E | E]; [injection E as E; subst u'' | discriminate E].
             split.
@@ -2116,8 +2116,8 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           split; [exact Hdp | split; [symmetry; exact Ek | reflexivity]]. }
         rewrite (Huniq _ _ _ HzS Hy) in Hz.
         cbn [snd] in Hz; unfold plainKey in Hz.
-        destruct (KeyEqb.eqb (slotKey I (base (k, v)) a) (a, a)) eqn:Hp.
-        + apply KeyEqb.eqb_true_iff in Hp; cbv iota in Hz.
+        destruct (SourceNameEqb.eqb (slotKey I (base (k, v)) a) (a, a)) eqn:Hp.
+        + apply SourceNameEqb.eqb_true_iff in Hp; cbv iota in Hz.
           rewrite Reduced.VSet.add_spec, Reduced.VSet.singleton_spec in Hz.
           destruct Hz as [E | E]; [subst y | contradiction].
           split; [apply sight_in; [exact Huniq | exact Hy] | exact Hp].
@@ -2212,7 +2212,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         NSet.In a (dirs I (base q)) -> NSet.In a (childDirs I q).
     Proof.
       intros I q a Ha; unfold childDirs.
-      destruct (PkgEqb.eqb q (rootPkg I)); [apply NSet.union_spec; left |];
+      destruct (PackageEqb.eqb q (rootPkg I)); [apply NSet.union_spec; left |];
         exact Ha.
     Qed.
 
@@ -2222,7 +2222,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Proof.
       intros I q n Hh Hp; unfold holds in Hh; unfold childDirs.
       apply Bool.orb_true_iff in Hh.
-      destruct (PkgEqb.eqb q (rootPkg I)) eqn:Hq.
+      destruct (PackageEqb.eqb q (rootPkg I)) eqn:Hq.
       - apply NSet.union_spec; right; exact Hp.
       - destruct Hh as [E | Hd]; [discriminate E | apply NSet.mem_spec; exact Hd].
     Qed.
@@ -2234,7 +2234,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
     Proof.
       intros I theta Hr _; unfold peerKeyAt; rewrite <- (base_rootPkg I).
       apply slotKey_childKeys.
-      unfold childDirs; rewrite PkgEqb.eqb_refl; apply NSet.union_spec; right.
+      unfold childDirs; rewrite PackageEqb.eqb_refl; apply NSet.union_spec; right.
       exact (peerDirs_peer I _ theta Hr).
     Qed.
 
@@ -2288,7 +2288,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         (exists q' theta, In (q', theta) (inst_peers I) /\ p_name theta = a).
     Proof.
       intros I q a Ha; unfold childDirs in Ha.
-      destruct (PkgEqb.eqb q (rootPkg I)); [| left; exact Ha].
+      destruct (PackageEqb.eqb q (rootPkg I)); [| left; exact Ha].
       apply NSet.union_spec in Ha; destruct Ha as [Ha | Ha]; [left; exact Ha |].
       right; exact (peerDirs_keysOf I a Ha).
     Qed.
@@ -2305,7 +2305,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         VSet.In u (childCands I q (a, m)) -> PackageSet.In ((a, m), u) (realPkgs I).
     Proof.
       intros I q a m u Hu; unfold childCands in Hu.
-      apply SOrv.in_if_empty in Hu as [Hk Hu]; apply KeyEqb.eqb_true_iff in Hk.
+      apply SOrv.in_if_empty in Hu as [Hk Hu]; apply SourceNameEqb.eqb_true_iff in Hk.
       apply mem_realPkgs; unfold Available, base; cbn [fst snd].
       destruct (NSet.mem a (dirs I (base q))) eqn:Hd.
       - apply NSet.mem_spec in Hd.
@@ -2332,7 +2332,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
       destruct (slotKey_dir I (base q) a') as [m' Hk']; rewrite Hk' in Hk.
       injection Hk as <- <-.
       assert (Hs : Installs S pi q (slotKey I (base q) a) u) by (rewrite Hk'; exact Hi).
-      unfold childCands; rewrite Hk', KeyEqb.eqb_refl.
+      unfold childCands; rewrite Hk', SourceNameEqb.eqb_refl.
       destruct (NSet.mem a (dirs I (base q))) eqn:Hsa.
       - apply NSet.mem_spec in Hsa.
         exact (res_slot_range _ _ _ _ Hres q Hp a Hsa u Hs).
@@ -2340,10 +2340,10 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         { exfalso; refine (res_peer_local _ _ _ _ Hres q Hp a Hch _ u Hs).
           unfold dp; rewrite Hch, Hsa; reflexivity. }
         unfold childDirs in Ha.
-        destruct (PkgEqb.eqb q (rootPkg I)) eqn:Hq.
+        destruct (PackageEqb.eqb q (rootPkg I)) eqn:Hq.
         + apply NSet.union_spec in Ha; destruct Ha as [Ha | Ha].
           * apply NSet.mem_spec in Ha; rewrite Ha in Hsa; discriminate Hsa.
-          * apply PkgEqb.eqb_true_iff in Hq; subst q.
+          * apply PackageEqb.eqb_true_iff in Hq; subst q.
             assert (Hr : NSet.In a (rootPeerDirs I)).
             { apply (res_root_dirs _ _ _ _ Hres _ _ u Hi).
               rewrite <- base_rootPkg; intro Hd; apply NSet.mem_spec in Hd.
@@ -2985,9 +2985,9 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
                   destruct (res_default_sight _ _ _ _ Hres (pk, pv) Hp a u Hdp Hrd Hi')
                     as [Hs Hplain].
                   rewrite Hs; unfold plainKey.
-                  match goal with |- context [KeyEqb.eqb ?x ?y] =>
-                    replace (KeyEqb.eqb x y) with true
-                      by (symmetry; apply KeyEqb.eqb_true_iff; exact Hplain)
+                  match goal with |- context [SourceNameEqb.eqb ?x ?y] =>
+                    replace (SourceNameEqb.eqb x y) with true
+                      by (symmetry; apply SourceNameEqb.eqb_true_iff; exact Hplain)
                   end.
                   apply Reduced.VSet.add_spec; left; reflexivity.
                ++ match goal with |- context [plainKey ?i ?p ?b] =>
@@ -3233,22 +3233,22 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
 
       Definition ownDependencies (I : Inst) (p : RealPackage.t)
         : list (RealPackage.t * Dependency) :=
-        List.filter (fun q => RPkgEqb.eqb (fst q) p) (inst_deps I).
+        List.filter (fun q => RealPackageEqb.eqb (fst q) p) (inst_deps I).
 
       Definition ownPeerDependencies (I : Inst) (p : RealPackage.t)
         : list (RealPackage.t * PeerDependency) :=
-        List.filter (fun q => RPkgEqb.eqb (fst q) p) (inst_peers I).
+        List.filter (fun q => RealPackageEqb.eqb (fst q) p) (inst_peers I).
 
       Definition twoPeers (I : Inst) (p p_c : RealPackage.t)
         : list (RealPackage.t * PeerDependency) :=
         List.filter
-          (fun q => orb (RPkgEqb.eqb (fst q) p) (RPkgEqb.eqb (fst q) p_c))
+          (fun q => orb (RealPackageEqb.eqb (fst q) p) (RealPackageEqb.eqb (fst q) p_c))
           (inst_peers I).
 
       Definition twoDeps (I : Inst) (p p_c : RealPackage.t)
         : list (RealPackage.t * Dependency) :=
         List.filter
-          (fun q => orb (RPkgEqb.eqb (fst q) p) (RPkgEqb.eqb (fst q) p_c))
+          (fun q => orb (RealPackageEqb.eqb (fst q) p) (RealPackageEqb.eqb (fst q) p_c))
           (inst_deps I).
 
       Definition peerDependenciesNamed (I : Inst) (n : N.t)
@@ -3262,7 +3262,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           RealPackageSet.In p (repoPreimage I ns) <->
           RealPackageSet.In p (inst_real I) /\ NSet.In (fst p) ns.
       Proof.
-        intros I ns p; unfold repoPreimage; rewrite RSS.filter_spec'.
+        intros I ns p; unfold repoPreimage; rewrite RealPackageSetSpecs.filter_spec'.
         rewrite NSet.mem_spec; reflexivity.
       Qed.
 
@@ -3289,28 +3289,28 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           ownedBy p (ownDependencies I p) = ownedBy p (inst_deps I).
       Proof.
         intros I p; unfold ownDependencies; apply ownedBy_filter.
-        intros d _; cbn [fst]; apply RPkgEqb.eqb_refl.
+        intros d _; cbn [fst]; apply RealPackageEqb.eqb_refl.
       Qed.
 
       Lemma ownPeerDependencies_id : forall I p,
           ownedBy p (ownPeerDependencies I p) = ownedBy p (inst_peers I).
       Proof.
         intros I p; unfold ownPeerDependencies; apply ownedBy_filter.
-        intros theta _; cbn [fst]; apply RPkgEqb.eqb_refl.
+        intros theta _; cbn [fst]; apply RealPackageEqb.eqb_refl.
       Qed.
 
       Lemma twoPeers_left : forall I p p_c,
           ownedBy p (twoPeers I p p_c) = ownedBy p (inst_peers I).
       Proof.
         intros I p p_c; unfold twoPeers; apply ownedBy_filter.
-        intros theta _; cbn [fst]; rewrite RPkgEqb.eqb_refl; reflexivity.
+        intros theta _; cbn [fst]; rewrite RealPackageEqb.eqb_refl; reflexivity.
       Qed.
 
       Lemma twoPeers_right : forall I p p_c,
           ownedBy p_c (twoPeers I p p_c) = ownedBy p_c (inst_peers I).
       Proof.
         intros I p p_c; unfold twoPeers; apply ownedBy_filter.
-        intros theta _; cbn [fst]; rewrite RPkgEqb.eqb_refl, Bool.orb_true_r.
+        intros theta _; cbn [fst]; rewrite RealPackageEqb.eqb_refl, Bool.orb_true_r.
         reflexivity.
       Qed.
 
@@ -3318,14 +3318,14 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           ownedBy p (twoDeps I p p_c) = ownedBy p (inst_deps I).
       Proof.
         intros I p p_c; unfold twoDeps; apply ownedBy_filter.
-        intros d _; cbn [fst]; rewrite RPkgEqb.eqb_refl; reflexivity.
+        intros d _; cbn [fst]; rewrite RealPackageEqb.eqb_refl; reflexivity.
       Qed.
 
       Lemma twoDeps_right : forall I p p_c,
           ownedBy p_c (twoDeps I p p_c) = ownedBy p_c (inst_deps I).
       Proof.
         intros I p p_c; unfold twoDeps; apply ownedBy_filter.
-        intros d _; cbn [fst]; rewrite RPkgEqb.eqb_refl, Bool.orb_true_r.
+        intros d _; cbn [fst]; rewrite RealPackageEqb.eqb_refl, Bool.orb_true_r.
         reflexivity.
       Qed.
 
@@ -3495,10 +3495,10 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         rewrite (slotKey_agree I ns deps prs (base q) a Hd).
         rewrite (dirs_agree I ns deps prs (base q) Hd).
         rewrite Hpa, Hch.
-        match goal with |- context [KeyEqb.eqb ?x ?y] => destruct (KeyEqb.eqb x y) end;
+        match goal with |- context [SourceNameEqb.eqb ?x ?y] => destruct (SourceNameEqb.eqb x y) end;
           destruct (chains I q a);
           destruct (NSet.mem a (dirs I (base q)));
-          destruct (andb (PkgEqb.eqb q (rootPkg I)) (NSet.mem a (rootPeerDirs I)));
+          destruct (andb (PackageEqb.eqb q (rootPkg I)) (NSet.mem a (rootPeerDirs I)));
           try reflexivity;
           first [apply slotCands_agree; assumption | apply realVersions_subInst; exact Hm].
       Qed.
@@ -3577,7 +3577,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           change (slotCands J') with (slotCands J).
           change (rootPkg J') with (rootPkg J).
           change (inst_real J') with (inst_real J).
-          match goal with |- context [KeyEqb.eqb ?x ?y] => destruct (KeyEqb.eqb x y) end;
+          match goal with |- context [SourceNameEqb.eqb ?x ?y] => destruct (SourceNameEqb.eqb x y) end;
             [| intros x Hx; exact Hx].
           destruct (NSet.mem a (dirs J (base (k, v))));
             [intros x Hx; exact Hx |].
@@ -3587,7 +3587,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           - unfold chains in E2; apply Bool.andb_true_iff in E2.
             destruct E2 as [E2 _]; apply Bool.negb_true_iff in E2.
             rewrite E2; intros x Hx; destruct (VSet.empty_spec Hx).
-          - destruct (PkgEqb.eqb (k, v) (rootPkg J)); cbn [andb];
+          - destruct (PackageEqb.eqb (k, v) (rootPkg J)); cbn [andb];
               [| intros x Hx; exact Hx].
             destruct (NSet.mem a (rootPeerDirs J')) eqn:E3;
               [rewrite (Hrp _ E3); intros x Hx; exact Hx |].
@@ -3762,7 +3762,7 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
           reflexivity.
         - unfold rootPeerEdges.
           change (rootPkg (subInst I _ _ _)) with (rootPkg I).
-          destruct (PkgEqb.eqb _ (rootPkg I)); [| reflexivity].
+          destruct (PackageEqb.eqb _ (rootPkg I)); [| reflexivity].
           unfold base; cbn [fst snd]; apply peerDeps_agree.
       Qed.
 

@@ -76,11 +76,11 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     - exfalso; apply Hnn, satisfiesb_false_iff; exact E.
   Qed.
 
-  Module NF := UOTCompareFacts N.
-  Module VSF := UOTCompareFacts VSet.AsUOT.
-  #[local] Hint Rewrite NF.compare_eq_iff : cmp_pkgf.
-  #[local] Hint Extern 1 => cmp_by NF.compare_antisym : cmp_pkgf.
-  #[local] Hint Extern 1 => cmp_by NF.compare_lt_trans : cmp_pkgf.
+  Module NFacts := UOTCompareFacts N.
+  Module VSetFacts := UOTCompareFacts VSet.AsUOT.
+  #[local] Hint Rewrite NFacts.compare_eq_iff : cmp_pkgf.
+  #[local] Hint Extern 1 => cmp_by NFacts.compare_antisym : cmp_pkgf.
+  #[local] Hint Extern 1 => cmp_by NFacts.compare_lt_trans : cmp_pkgf.
 
   Module PackageFormulaComp <: ComparableType.
     Definition t := Formula.
@@ -110,7 +110,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           as [n1 vs1 | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
         intros y; destruct y as [n2 vs2 | a2 b2 | a2 b2 | a2]; simpl;
         try (split; intro H; congruence).
-      - rewrite lex_eq_iff, NF.compare_eq_iff, VSF.compare_eq_iff;
+      - rewrite lex_eq_iff, NFacts.compare_eq_iff, VSetFacts.compare_eq_iff;
           split; intro H; [destruct H; congruence | injection H as -> ->; auto].
       - rewrite lex_eq_iff, IHa, IHb;
           split; intro H; [destruct H; congruence | injection H as -> ->; auto].
@@ -126,7 +126,7 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
           as [n1 vs1 | psiL IHa psiR IHb | psiL IHa psiR IHb | psi' IHa];
         intros y; destruct y as [n2 vs2 | a2 b2 | a2 b2 | a2]; simpl;
         try reflexivity.
-      - rewrite lex_opp, NF.compare_antisym, VSF.compare_antisym; reflexivity.
+      - rewrite lex_opp, NFacts.compare_antisym, VSetFacts.compare_antisym; reflexivity.
       - rewrite lex_opp, IHa, IHb; reflexivity.
       - rewrite lex_opp, IHa, IHb; reflexivity.
       - apply IHa.
@@ -140,8 +140,8 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
         intros y z; destruct y as [n2 vs2 | a2 b2 | a2 b2 | a2],
           z as [n3 vs3 | a3 b3 | a3 b3 | a3]; simpl; intros H1 H2;
         try congruence.
-      - exact (lex_lt_trans NF.compare_eq_iff (NF.compare_lt_trans _ _ _)
-                 (VSF.compare_lt_trans _ _ _) H1 H2).
+      - exact (lex_lt_trans NFacts.compare_eq_iff (NFacts.compare_lt_trans _ _ _)
+                 (VSetFacts.compare_lt_trans _ _ _) H1 H2).
       - exact (lex_lt_trans compare_eq_iff (IHa _ _) (IHb _ _) H1 H2).
       - exact (lex_lt_trans compare_eq_iff (IHa _ _) (IHb _ _) H1 H2).
       - exact (IHa _ _ H1 H2).
@@ -168,15 +168,15 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
     ; res_version_unique : Source.VersionUnique S }.
 
   Module Reduction.
-    Module DepF := UOTCompareFacts Source.Dependee.
+    Module DependeeFacts := UOTCompareFacts Source.Dependee.
     Module SpineComp := ListComp PackageFormulaComp.
     Module SpineOT := UOTFromCompare SpineComp.
-    Module FListF := UOTCompareFacts SpineOT.
-    #[local] Hint Rewrite DepF.compare_eq_iff FListF.compare_eq_iff : cmp_pkgf.
-    #[local] Hint Extern 1 => cmp_by DepF.compare_antisym : cmp_pkgf.
-    #[local] Hint Extern 1 => cmp_by FListF.compare_antisym : cmp_pkgf.
-    #[local] Hint Extern 1 => cmp_by DepF.compare_lt_trans : cmp_pkgf.
-    #[local] Hint Extern 1 => cmp_by FListF.compare_lt_trans : cmp_pkgf.
+    Module SpineFacts := UOTCompareFacts SpineOT.
+    #[local] Hint Rewrite DependeeFacts.compare_eq_iff SpineFacts.compare_eq_iff : cmp_pkgf.
+    #[local] Hint Extern 1 => cmp_by DependeeFacts.compare_antisym : cmp_pkgf.
+    #[local] Hint Extern 1 => cmp_by SpineFacts.compare_antisym : cmp_pkgf.
+    #[local] Hint Extern 1 => cmp_by DependeeFacts.compare_lt_trans : cmp_pkgf.
+    #[local] Hint Extern 1 => cmp_by SpineFacts.compare_lt_trans : cmp_pkgf.
 
     Module Name.
       Inductive name : Type :=
@@ -203,13 +203,13 @@ Module FormulaCalculus (N V : UsualOrderedType) (Ab : AbsentNames N).
       Proof. cmp_lt_trans cmp_pkgf. Qed.
     End Name.
 
-    Module VF := UOTCompareFacts V.
-    Module NatF := UOTCompareFacts Nat_as_OT.
-    #[local] Hint Rewrite VF.compare_eq_iff NatF.compare_eq_iff : cmp_pkgf.
-    #[local] Hint Extern 1 => cmp_by VF.compare_antisym : cmp_pkgf.
-    #[local] Hint Extern 1 => cmp_by NatF.compare_antisym : cmp_pkgf.
-    #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_pkgf.
-    #[local] Hint Extern 1 => cmp_by NatF.compare_lt_trans : cmp_pkgf.
+    Module VFacts := UOTCompareFacts V.
+    Module NatFacts := UOTCompareFacts Nat_as_OT.
+    #[local] Hint Rewrite VFacts.compare_eq_iff NatFacts.compare_eq_iff : cmp_pkgf.
+    #[local] Hint Extern 1 => cmp_by VFacts.compare_antisym : cmp_pkgf.
+    #[local] Hint Extern 1 => cmp_by NatFacts.compare_antisym : cmp_pkgf.
+    #[local] Hint Extern 1 => cmp_by VFacts.compare_lt_trans : cmp_pkgf.
+    #[local] Hint Extern 1 => cmp_by NatFacts.compare_lt_trans : cmp_pkgf.
 
     Module Version.
       Inductive version : Type :=

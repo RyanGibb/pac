@@ -14,10 +14,10 @@ Module Virtual (N V : UsualOrderedType).
   | VTVal (v : V.t)
   | VTTop.
 
-  Module VF := UOTCompareFacts V.
-  #[local] Hint Rewrite VF.compare_eq_iff : cmp_virt.
-  #[local] Hint Extern 1 => cmp_by VF.compare_antisym : cmp_virt.
-  #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_virt.
+  Module VFacts := UOTCompareFacts V.
+  #[local] Hint Rewrite VFacts.compare_eq_iff : cmp_virt.
+  #[local] Hint Extern 1 => cmp_by VFacts.compare_antisym : cmp_virt.
+  #[local] Hint Extern 1 => cmp_by VFacts.compare_lt_trans : cmp_virt.
 
   Module ProvidedVersionComp <: ComparableType.
     Definition t := VTop.
@@ -101,13 +101,13 @@ Module Virtual (N V : UsualOrderedType).
   Module Reduction.
 
     Module SelectorName := PairUOT Package N.
-    Module PkgNF := UOTCompareFacts SelectorName.
-    Module NF := UOTCompareFacts N.
-    #[local] Hint Rewrite PkgNF.compare_eq_iff NF.compare_eq_iff : cmp_virt.
-    #[local] Hint Extern 1 => cmp_by PkgNF.compare_antisym : cmp_virt.
-    #[local] Hint Extern 1 => cmp_by NF.compare_antisym : cmp_virt.
-    #[local] Hint Extern 1 => cmp_by PkgNF.compare_lt_trans : cmp_virt.
-    #[local] Hint Extern 1 => cmp_by NF.compare_lt_trans : cmp_virt.
+    Module SelectorNameFacts := UOTCompareFacts SelectorName.
+    Module NFacts := UOTCompareFacts N.
+    #[local] Hint Rewrite SelectorNameFacts.compare_eq_iff NFacts.compare_eq_iff : cmp_virt.
+    #[local] Hint Extern 1 => cmp_by SelectorNameFacts.compare_antisym : cmp_virt.
+    #[local] Hint Extern 1 => cmp_by NFacts.compare_antisym : cmp_virt.
+    #[local] Hint Extern 1 => cmp_by SelectorNameFacts.compare_lt_trans : cmp_virt.
+    #[local] Hint Extern 1 => cmp_by NFacts.compare_lt_trans : cmp_virt.
 
     Module Name.
       Inductive name : Type :=
@@ -135,10 +135,10 @@ Module Virtual (N V : UsualOrderedType).
     End Name.
 
     Module ProviderVersion := PairUOT N V.
-    Module NVF := UOTCompareFacts ProviderVersion.
-    #[local] Hint Rewrite NVF.compare_eq_iff : cmp_virt.
-    #[local] Hint Extern 1 => cmp_by NVF.compare_antisym : cmp_virt.
-    #[local] Hint Extern 1 => cmp_by NVF.compare_lt_trans : cmp_virt.
+    Module ProviderVersionFacts := UOTCompareFacts ProviderVersion.
+    #[local] Hint Rewrite ProviderVersionFacts.compare_eq_iff : cmp_virt.
+    #[local] Hint Extern 1 => cmp_by ProviderVersionFacts.compare_antisym : cmp_virt.
+    #[local] Hint Extern 1 => cmp_by ProviderVersionFacts.compare_lt_trans : cmp_virt.
 
     Module Version.
       Inductive version : Type :=
@@ -675,13 +675,13 @@ Module Virtual (N V : UsualOrderedType).
         reflexivity.
     Qed.
 
-    Module PkgEqb := UOTEqb Package.
+    Module PackageEqb := UOTEqb Package.
     Module SOkp := SetOps Package ProvidesElt PackageSet ProvidesRel.
     Definition rhoProviders (S_Pi : PackageSet.t) (rho : ProviderRel.t)
         (Pi : ProvidesRel.t) (p : Package.t) (n : N.t) (vs : VSet.t) : PackageSet.t :=
       SOkp.filterExists
         (fun q '(q', (m, v)) =>
-            andb (PkgEqb.eqb q' q)
+            andb (PackageEqb.eqb q' q)
               (andb (NEqb.eqb m n)
                  (andb (memTopb v vs) (ProviderRel.mem (q, (n, p)) rho))))
         Pi S_Pi.
@@ -697,12 +697,12 @@ Module Virtual (N V : UsualOrderedType).
       rewrite SOkp.mem_filterExists; apply and_iff_compat_l.
       split.
       - intros [[q' [m v]] [Ht Hb]]; cbn beta iota in Hb.
-        rewrite !Bool.andb_true_iff, PkgEqb.eqb_true_iff, NEqb.eqb_true_iff,
+        rewrite !Bool.andb_true_iff, PackageEqb.eqb_true_iff, NEqb.eqb_true_iff,
           memTopb_iff, ProviderRel.mem_spec in Hb.
         destruct Hb as (-> & -> & Hm & Hr); exists v; auto.
       - intros (v & Hm & HP & Hr).
         exists (q, (n, v)); split; [exact HP | cbn beta iota].
-        rewrite !Bool.andb_true_iff, PkgEqb.eqb_true_iff, NEqb.eqb_true_iff,
+        rewrite !Bool.andb_true_iff, PackageEqb.eqb_true_iff, NEqb.eqb_true_iff,
           memTopb_iff, ProviderRel.mem_spec; auto.
     Qed.
 

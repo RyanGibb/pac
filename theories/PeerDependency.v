@@ -27,11 +27,11 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
             VSet.In v vs }.
 
   Module Reduction.
-    Module PkgEqb := UOTEqb Package.
+    Module PackageEqb := UOTEqb Package.
     Module NEqb := UOTEqb N.
     Definition hasDepOnb (D : Source.DependencyRel.t) (p : Package.t) (n : N.t) : bool :=
       Source.DependencyRel.exists_ (fun '(q, (m, _)) =>
-          andb (PkgEqb.eqb q p) (NEqb.eqb m n))
+          andb (PackageEqb.eqb q p) (NEqb.eqb m n))
         D.
 
     Lemma hasDepOnb_iff : forall D (p : Package.t) (n : N.t),
@@ -40,11 +40,11 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
       intros D p m; unfold hasDepOnb; rewrite Source.DependencyRel.exists_spec'.
       split.
       - intros [[q [m' vs]] [He Hb]]; cbn [fst snd] in Hb.
-        rewrite Bool.andb_true_iff, PkgEqb.eqb_true_iff, NEqb.eqb_true_iff
+        rewrite Bool.andb_true_iff, PackageEqb.eqb_true_iff, NEqb.eqb_true_iff
           in Hb.
         destruct Hb as [-> ->]; eauto.
       - intros [vs He]; exists (p, (m, vs)); split; [exact He |].
-        cbn [fst snd]; rewrite PkgEqb.eqb_refl, NEqb.eqb_refl; reflexivity.
+        cbn [fst snd]; rewrite PackageEqb.eqb_refl, NEqb.eqb_refl; reflexivity.
     Qed.
 
     Module Reduced := Conc.Reduction.Reduced.
@@ -694,7 +694,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
 
       Definition dependsOnb (D : Source.DependencyRel.t) (p q : Package.t) : bool :=
         Source.DependencyRel.exists_ (fun '(p0, (m0, vs)) =>
-            andb (PkgEqb.eqb p0 p)
+            andb (PackageEqb.eqb p0 p)
               (andb (NEqb.eqb m0 (fst q)) (VSet.mem (snd q) vs)))
           D.
 
@@ -705,11 +705,11 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         intros D p m u; unfold dependsOnb; rewrite Source.DependencyRel.exists_spec'.
         split.
         - intros [[p0 [m0 vs]] [He Hb]]; cbn [fst snd] in Hb.
-          rewrite !Bool.andb_true_iff, PkgEqb.eqb_true_iff,
+          rewrite !Bool.andb_true_iff, PackageEqb.eqb_true_iff,
             NEqb.eqb_true_iff, VSet.mem_spec in Hb.
           destruct Hb as [-> [-> Hu]]; eauto.
         - intros [vs [He Hu]]; exists (p, (m, vs)); split; [exact He |].
-          cbn [fst snd]; rewrite PkgEqb.eqb_refl, NEqb.eqb_refl; cbn [andb].
+          cbn [fst snd]; rewrite PackageEqb.eqb_refl, NEqb.eqb_refl; cbn [andb].
           apply VSet.mem_spec; exact Hu.
       Qed.
 

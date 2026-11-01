@@ -187,7 +187,7 @@ Module Core (N V : UsualOrderedType).
   (* PkgSet is a sorted list, so a membership test walks it; the check asks
      one per dependee version, which a tree answers in logarithmic time. *)
   Module PackageTree := MSetRBT.Make Package.
-  Module PkgTreeP := WPropertiesOn Package PackageTree.
+  Module PackageTreeProperties := WPropertiesOn Package PackageTree.
 
   Definition subsetFailure (versions : N.t -> VSet.t) (S : PackageSet.t)
     : option Package.t :=
@@ -577,7 +577,7 @@ Module Core (N V : UsualOrderedType).
         apply Bool.andb_true_iff in E; destruct E as [_ Hq].
         apply Bool.negb_true_iff, mem_tree_false in Hq.
         destruct (IH (PackageTree.add q seen) true) as [Hle _].
-        rewrite (PkgTreeP.add_cardinal_2 Hq) in Hle.
+        rewrite (PackageTreeProperties.add_cardinal_2 Hq) in Hle.
         split; [| intros _ _]; Lia.lia.
     Qed.
 

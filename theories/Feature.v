@@ -58,13 +58,13 @@ Module Feature (N V F : UsualOrderedType).
 
   Module Reduction.
     Module FeaturePackageName := PairUOT N F.
-    Module NFF := UOTCompareFacts FeaturePackageName.
-    Module NF := UOTCompareFacts N.
-    #[local] Hint Rewrite NFF.compare_eq_iff NF.compare_eq_iff : cmp_feat.
-    #[local] Hint Extern 1 => cmp_by NFF.compare_antisym : cmp_feat.
-    #[local] Hint Extern 1 => cmp_by NF.compare_antisym : cmp_feat.
-    #[local] Hint Extern 1 => cmp_by NFF.compare_lt_trans : cmp_feat.
-    #[local] Hint Extern 1 => cmp_by NF.compare_lt_trans : cmp_feat.
+    Module FeaturePackageNameFacts := UOTCompareFacts FeaturePackageName.
+    Module NFacts := UOTCompareFacts N.
+    #[local] Hint Rewrite FeaturePackageNameFacts.compare_eq_iff NFacts.compare_eq_iff : cmp_feat.
+    #[local] Hint Extern 1 => cmp_by FeaturePackageNameFacts.compare_antisym : cmp_feat.
+    #[local] Hint Extern 1 => cmp_by NFacts.compare_antisym : cmp_feat.
+    #[local] Hint Extern 1 => cmp_by FeaturePackageNameFacts.compare_lt_trans : cmp_feat.
+    #[local] Hint Extern 1 => cmp_by NFacts.compare_lt_trans : cmp_feat.
 
     Module Name.
       Inductive name : Type :=

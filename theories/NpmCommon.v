@@ -5,12 +5,12 @@ Module NpmCommon (N V : UsualOrderedType) (VSet : SetsOn V).
   Module RealPackage := PairUOT N V.
   Module RealPackageSet := FSetUOT RealPackage.
   Module NEqb := UOTEqb N.
-  Module RPkgEqb := UOTEqb RealPackage.
+  Module RealPackageEqb := UOTEqb RealPackage.
 
   Definition ownedBy {A : Type} (p : RealPackage.t) (l : list (RealPackage.t * A))
     : list A :=
     fold_right
-      (fun q acc => if RPkgEqb.eqb (fst q) p then snd q :: acc else acc)
+      (fun q acc => if RealPackageEqb.eqb (fst q) p then snd q :: acc else acc)
       nil l.
 
   Lemma in_ownedBy : forall (A : Type) (l : list (RealPackage.t * A)) p a,
@@ -18,8 +18,8 @@ Module NpmCommon (N V : UsualOrderedType) (VSet : SetsOn V).
   Proof.
     intros A l p a; induction l as [| [q b] l IH]; simpl.
     - split; intros [].
-    - destruct (RPkgEqb.eqb q p) eqn:Hq.
-      + apply RPkgEqb.eqb_true_iff in Hq; subst q; simpl.
+    - destruct (RealPackageEqb.eqb q p) eqn:Hq.
+      + apply RealPackageEqb.eqb_true_iff in Hq; subst q; simpl.
         split.
         * intros [-> | H]; [left; reflexivity | right; apply IH; exact H].
         * intros [H | H]; [| right; apply IH; exact H].
@@ -27,7 +27,7 @@ Module NpmCommon (N V : UsualOrderedType) (VSet : SetsOn V).
       + rewrite IH; split; [intro H; right; exact H |].
         intros [H | H]; [| exact H].
         assert (q = p) by congruence; subst q.
-        rewrite RPkgEqb.eqb_refl in Hq; discriminate.
+        rewrite RealPackageEqb.eqb_refl in Hq; discriminate.
   Qed.
 
   Lemma ownedBy_filter : forall (A : Type) (l : list (RealPackage.t * A)) f p,
@@ -38,10 +38,10 @@ Module NpmCommon (N V : UsualOrderedType) (VSet : SetsOn V).
     intro H.
     assert (Htl : forall a, In (p, a) l -> f (p, a) = true)
       by (intros a Ha; apply H; right; exact Ha).
-    destruct (RPkgEqb.eqb q p) eqn:Hq.
-    - apply RPkgEqb.eqb_true_iff in Hq; subst q.
+    destruct (RealPackageEqb.eqb q p) eqn:Hq.
+    - apply RealPackageEqb.eqb_true_iff in Hq; subst q.
       rewrite (H b (or_introl eq_refl)); simpl.
-      rewrite RPkgEqb.eqb_refl, (IH Htl); reflexivity.
+      rewrite RealPackageEqb.eqb_refl, (IH Htl); reflexivity.
     - destruct (f (q, b)); simpl; rewrite ?Hq; exact (IH Htl).
   Qed.
 

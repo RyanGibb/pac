@@ -15,18 +15,18 @@ End NameGroup.
 Module TrivialGroup (N : UsualOrderedType) <: NameGroup N.
   Definition groupEq (m n : N.t) : bool :=
     match N.compare m n with Eq => true | _ => false end.
-  Module NGF := UOTCompareFacts N.
+  Module NFacts := UOTCompareFacts N.
 
   Lemma groupEq_refl : forall n, groupEq n n = true.
   Proof.
     intro n; unfold groupEq.
-    assert (H : N.compare n n = Eq) by (apply NGF.compare_eq_iff; reflexivity).
+    assert (H : N.compare n n = Eq) by (apply NFacts.compare_eq_iff; reflexivity).
     rewrite H; reflexivity.
   Qed.
   Lemma groupEq_sym : forall m n, groupEq m n = groupEq n m.
   Proof.
     intros m n; unfold groupEq.
-    rewrite (NGF.compare_antisym n m).
+    rewrite (NFacts.compare_antisym n m).
     destruct (N.compare n m); reflexivity.
   Qed.
   Lemma groupEq_trans : forall m n o,
@@ -35,8 +35,8 @@ Module TrivialGroup (N : UsualOrderedType) <: NameGroup N.
     intros m n o H1 H2; unfold groupEq in *.
     destruct (N.compare m n) eqn:E1; try discriminate.
     destruct (N.compare n o) eqn:E2; try discriminate.
-    apply NGF.compare_eq_iff in E1; apply NGF.compare_eq_iff in E2; subst.
-    assert (H : N.compare o o = Eq) by (apply NGF.compare_eq_iff; reflexivity).
+    apply NFacts.compare_eq_iff in E1; apply NFacts.compare_eq_iff in E2; subst.
+    assert (H : N.compare o o = Eq) by (apply NFacts.compare_eq_iff; reflexivity).
     rewrite H; reflexivity.
   Qed.
 End TrivialGroup.
@@ -52,10 +52,10 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
   | DTVal (v : V.t)
   | DTTop.
 
-  Module VF := UOTCompareFacts V.
-  #[local] Hint Rewrite VF.compare_eq_iff : cmp_deb.
-  #[local] Hint Extern 1 => cmp_by VF.compare_antisym : cmp_deb.
-  #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_deb.
+  Module VFacts := UOTCompareFacts V.
+  #[local] Hint Rewrite VFacts.compare_eq_iff : cmp_deb.
+  #[local] Hint Extern 1 => cmp_by VFacts.compare_antisym : cmp_deb.
+  #[local] Hint Extern 1 => cmp_by VFacts.compare_lt_trans : cmp_deb.
 
   Module ProvidedVersionComp <: ComparableType.
     Definition t := DTop.
@@ -75,11 +75,11 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     Proof. cmp_lt_trans cmp_deb. Qed.
   End ProvidedVersionComp.
 
-  Module FEqb := UOTEqb Ver.VersionFormulaOT.
+  Module VersionFormulaEqb := UOTEqb Ver.VersionFormulaOT.
   Definition vtMatchb (v : DTop) (phi : Ver.Formula) : bool :=
     match v with
     | DTVal u => Ver.satisfiesb u phi
-    | DTTop => FEqb.eqb phi Ver.FTop
+    | DTTop => VersionFormulaEqb.eqb phi Ver.FTop
     end.
 
   Module Atom := PairUOT N Ver.VersionFormulaOT.
@@ -113,13 +113,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     (exists v, ProvidesRel.In ((m, u), (n, v)) Pi /\ vtMatchb v phi = true).
 
   Module NEqb := UOTEqb N.
-  Module PkgEqb := UOTEqb Package.
+  Module PackageEqb := UOTEqb Package.
 
   Definition matchb (Pi : ProvidesRel.t) (q : Package.t) (a : Atom.t) : bool :=
     orb
       (andb (NEqb.eqb (fst q) (aname a)) (Ver.satisfiesb (snd q) (aform a)))
       (ProvidesRel.exists_ (fun '(p, (m, v)) =>
-           andb (PkgEqb.eqb p q)
+           andb (PackageEqb.eqb p q)
              (andb (NEqb.eqb m (aname a)) (vtMatchb v (aform a))))
          Pi).
 
@@ -135,13 +135,13 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
       + right; destruct e as [q' [n' v]]; cbn beta iota in Hb.
         apply andb_prop in Hb; destruct Hb as [Hq Hb].
         apply andb_prop in Hb; destruct Hb as [Hn Hm].
-        apply PkgEqb.eqb_true_iff in Hq as ->.
+        apply PackageEqb.eqb_true_iff in Hq as ->.
         apply NEqb.eqb_true_iff in Hn as ->.
         exists v; split; assumption.
     - intros [[He Hv] | [v [Hin Hm]]].
       + left; split; [apply NEqb.eqb_true_iff; exact He | exact Hv].
       + right; exists ((m, u), (n, v)); split; [exact Hin | cbn [fst snd]].
-        rewrite PkgEqb.eqb_refl, NEqb.eqb_refl; cbn [andb]; exact Hm.
+        rewrite PackageEqb.eqb_refl, NEqb.eqb_refl; cbn [andb]; exact Hm.
   Qed.
 
   Record Inst : Type := MkInst
@@ -169,21 +169,21 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     ; res_version_unique : Source.VersionUnique S }.
 
   Module Reduction.
-    Module AtomF := UOTCompareFacts Atom.
+    Module AtomFacts := UOTCompareFacts Atom.
 
-    Module NF := UOTCompareFacts N.
-    Module ClauseF := UOTCompareFacts Clause.
-    Module ConfEltF := UOTCompareFacts ConflictElt.
-    #[local] Hint Rewrite AtomF.compare_eq_iff NF.compare_eq_iff
-      ClauseF.compare_eq_iff ConfEltF.compare_eq_iff : cmp_deb.
-    #[local] Hint Extern 1 => cmp_by AtomF.compare_antisym : cmp_deb.
-    #[local] Hint Extern 1 => cmp_by NF.compare_antisym : cmp_deb.
-    #[local] Hint Extern 1 => cmp_by ClauseF.compare_antisym : cmp_deb.
-    #[local] Hint Extern 1 => cmp_by ConfEltF.compare_antisym : cmp_deb.
-    #[local] Hint Extern 1 => cmp_by AtomF.compare_lt_trans : cmp_deb.
-    #[local] Hint Extern 1 => cmp_by NF.compare_lt_trans : cmp_deb.
-    #[local] Hint Extern 1 => cmp_by ClauseF.compare_lt_trans : cmp_deb.
-    #[local] Hint Extern 1 => cmp_by ConfEltF.compare_lt_trans : cmp_deb.
+    Module NFacts := UOTCompareFacts N.
+    Module ClauseFacts := UOTCompareFacts Clause.
+    Module ConflictEltFacts := UOTCompareFacts ConflictElt.
+    #[local] Hint Rewrite AtomFacts.compare_eq_iff NFacts.compare_eq_iff
+      ClauseFacts.compare_eq_iff ConflictEltFacts.compare_eq_iff : cmp_deb.
+    #[local] Hint Extern 1 => cmp_by AtomFacts.compare_antisym : cmp_deb.
+    #[local] Hint Extern 1 => cmp_by NFacts.compare_antisym : cmp_deb.
+    #[local] Hint Extern 1 => cmp_by ClauseFacts.compare_antisym : cmp_deb.
+    #[local] Hint Extern 1 => cmp_by ConflictEltFacts.compare_antisym : cmp_deb.
+    #[local] Hint Extern 1 => cmp_by AtomFacts.compare_lt_trans : cmp_deb.
+    #[local] Hint Extern 1 => cmp_by NFacts.compare_lt_trans : cmp_deb.
+    #[local] Hint Extern 1 => cmp_by ClauseFacts.compare_lt_trans : cmp_deb.
+    #[local] Hint Extern 1 => cmp_by ConflictEltFacts.compare_lt_trans : cmp_deb.
 
     Module Name.
       Inductive name : Type :=
@@ -217,10 +217,10 @@ Module Debian (N V : UsualOrderedType) (NG : NameGroup N).
     End Name.
 
     Module ProviderVersion := PairUOT N V.
-    Module NV2F := UOTCompareFacts ProviderVersion.
-    #[local] Hint Rewrite NV2F.compare_eq_iff : cmp_deb.
-    #[local] Hint Extern 1 => cmp_by NV2F.compare_antisym : cmp_deb.
-    #[local] Hint Extern 1 => cmp_by NV2F.compare_lt_trans : cmp_deb.
+    Module ProviderVersionFacts := UOTCompareFacts ProviderVersion.
+    #[local] Hint Rewrite ProviderVersionFacts.compare_eq_iff : cmp_deb.
+    #[local] Hint Extern 1 => cmp_by ProviderVersionFacts.compare_antisym : cmp_deb.
+    #[local] Hint Extern 1 => cmp_by ProviderVersionFacts.compare_lt_trans : cmp_deb.
 
     Module Version.
       Inductive version : Type :=

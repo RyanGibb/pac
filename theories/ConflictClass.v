@@ -24,13 +24,13 @@ Module ConflictClass (N V : UsualOrderedType).
     ; res_class_exclusion : ClassExclusion Om S }.
 
   Module Reduction.
-    Module NF := UOTCompareFacts N.
-    Module VF := UOTCompareFacts V.
-    #[local] Hint Rewrite NF.compare_eq_iff VF.compare_eq_iff : cmp_cls.
-    #[local] Hint Extern 1 => cmp_by NF.compare_antisym : cmp_cls.
-    #[local] Hint Extern 1 => cmp_by VF.compare_antisym : cmp_cls.
-    #[local] Hint Extern 1 => cmp_by NF.compare_lt_trans : cmp_cls.
-    #[local] Hint Extern 1 => cmp_by VF.compare_lt_trans : cmp_cls.
+    Module NFacts := UOTCompareFacts N.
+    Module VFacts := UOTCompareFacts V.
+    #[local] Hint Rewrite NFacts.compare_eq_iff VFacts.compare_eq_iff : cmp_cls.
+    #[local] Hint Extern 1 => cmp_by NFacts.compare_antisym : cmp_cls.
+    #[local] Hint Extern 1 => cmp_by VFacts.compare_antisym : cmp_cls.
+    #[local] Hint Extern 1 => cmp_by NFacts.compare_lt_trans : cmp_cls.
+    #[local] Hint Extern 1 => cmp_by VFacts.compare_lt_trans : cmp_cls.
 
     Module Name.
       Inductive name : Type :=
