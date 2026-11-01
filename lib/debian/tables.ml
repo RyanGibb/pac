@@ -134,9 +134,9 @@ module Make (AP : ARCH) : S = struct
     let _, arch = Apt_args.stanza_key ~native:AP.native st in
     let ncls =
       match st.multi_arch with
+      | Some "foreign" -> DMA.MAForeign
       | Some "same" when st.architecture = "all" -> DMA.MANo
       | Some "same" -> DMA.MASame
-      | Some "foreign" -> DMA.MAForeign
       | Some "allowed" -> DMA.MAAllowed
       | _ -> DMA.MANo
     in

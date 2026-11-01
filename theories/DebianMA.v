@@ -105,8 +105,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
   Inductive MAClass : Type :=
   | MANo
-  | MASame
   | MAForeign
+  | MASame
   | MAAllowed.
 
   Module MCComp <: ComparableType.
@@ -114,8 +114,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Definition compare (x y : t) : comparison :=
       match x, y with
       | MANo, MANo => Eq | MANo, _ => Lt | _, MANo => Gt
-      | MASame, MASame => Eq | MASame, _ => Lt | _, MASame => Gt
       | MAForeign, MAForeign => Eq | MAForeign, _ => Lt | _, MAForeign => Gt
+      | MASame, MASame => Eq | MASame, _ => Lt | _, MASame => Gt
       | MAAllowed, MAAllowed => Eq
       end.
     Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
@@ -465,10 +465,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         + destruct (classOf mu p) eqn:Hc.
           * destruct H as [<- | []].
             exists (QAArch (parch p)); split; [reflexivity | left; reflexivity].
-          * destruct H as [<- | []].
-            exists (QAArch (parch p)); split; [reflexivity | left; reflexivity].
           * apply in_map_iff in H; destruct H as [b [<- _]].
             exists (QAArch b); split; [reflexivity | right; reflexivity].
+          * destruct H as [<- | []].
+            exists (QAArch (parch p)); split; [reflexivity | left; reflexivity].
           * destruct H as [<- | [<- | []]].
             -- exists QAAny; split; [reflexivity | reflexivity].
             -- exists (QAArch (parch p)); split;
@@ -478,9 +478,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         + right.
           destruct (classOf mu p) eqn:Hc.
           * destruct Hy as [<- | Hf]; [left; reflexivity | congruence].
-          * destruct Hy as [<- | Hf]; [left; reflexivity | congruence].
           * apply in_map_iff; exists b; split;
               [reflexivity | apply A.enum_complete].
+          * destruct Hy as [<- | Hf]; [left; reflexivity | congruence].
           * destruct Hy as [<- | Hf]; [right; left; reflexivity | congruence].
         + left; rewrite Hy; reflexivity.
         + right; rewrite Hy; left; reflexivity.
@@ -711,21 +711,21 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       - split.
         + intro HM.
           destruct (proj1 (debMatch_char R Pi mu q (pname p) QAGroup
-                             (Deb.Ver.FCmp OpNe (pver p)) HqR) HM) as [Hn Hv].
-          split; [exact Hn | exact (proj1 (Hne _ _) Hv)].
-        + intros [Hn Hv].
-          apply (proj2 (debMatch_char R Pi mu q (pname p) QAGroup
-                          (Deb.Ver.FCmp OpNe (pver p)) HqR)).
-          split; [exact Hn | exact (proj2 (Hne _ _) Hv)].
-      - split.
-        + intro HM.
-          destruct (proj1 (debMatch_char R Pi mu q (pname p) QAGroup
                              Deb.Ver.FTop HqR) HM) as [Hn _].
           split; [exact Hn | exact I].
         + intros [Hn _].
           apply (proj2 (debMatch_char R Pi mu q (pname p) QAGroup
                           Deb.Ver.FTop HqR)).
           split; [exact Hn | reflexivity].
+      - split.
+        + intro HM.
+          destruct (proj1 (debMatch_char R Pi mu q (pname p) QAGroup
+                             (Deb.Ver.FCmp OpNe (pver p)) HqR) HM) as [Hn Hv].
+          split; [exact Hn | exact (proj1 (Hne _ _) Hv)].
+        + intros [Hn Hv].
+          apply (proj2 (debMatch_char R Pi mu q (pname p) QAGroup
+                          (Deb.Ver.FCmp OpNe (pver p)) HqR)).
+          split; [exact Hn | exact (proj2 (Hne _ _) Hv)].
       - split.
         + intro HM.
           destruct (proj1 (debMatch_char R Pi mu q (pname p) QAGroup
