@@ -128,7 +128,8 @@ module Make (Encoding : Encoding.S) = struct
   let repo_at st (n : string) : Np.RealPackageSet.t =
     if n = fst st.root then raise (A.Reaches_root n);
     Tbl.memo st.repo_at n (fun () ->
-        Np.RealPackageSet.ofList (List.map (fun v -> (n, v)) (A.versions_of st.ar n)))
+        Np.RealPackageSet.ofList
+          (List.map (fun v -> (n, v)) (A.versions_of st.ar n)))
 
   let repo_of st (ns : string list) : Np.RealPackageSet.t =
     let ns = List.sort_uniq String.compare ns in
@@ -240,7 +241,8 @@ module Make (Encoding : Encoding.S) = struct
 
   (* the granular versions lookup's sub-instance: the lookup reads no
      instance at a granular name *)
-  let gran_sub_inst st = mk_inst st ~repo:Np.RealPackageSet.empty ~deps:[] ~peers:[]
+  let gran_sub_inst st =
+    mk_inst st ~repo:Np.RealPackageSet.empty ~deps:[] ~peers:[]
 
   (* the intermediate versions lookup's sub-instance: p's own dependencies,
      the peer dependencies naming the key's directory (p's own among them,

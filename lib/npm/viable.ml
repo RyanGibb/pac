@@ -17,11 +17,13 @@ struct
     (* what a link into a directory asks of it, when it cannot be Bot *)
     let binds l =
       match (l, assigned l) with
-      | _, PG.Decided (Np.Version.Orig w) -> Some (PVersion.equal (Np.Version.Orig w))
+      | _, PG.Decided (Np.Version.Orig w) ->
+          Some (PVersion.equal (Np.Version.Orig w))
       | Np.Name.Link (_, _, m, u, a), PG.Entailed r
         when not (PG.Ranges.contains Np.Version.Bot r) -> (
           match assigned (Np.Name.Sight (m, u, a)) with
-          | PG.Decided (Np.Version.Orig y) -> Some (PVersion.equal (Np.Version.Orig y))
+          | PG.Decided (Np.Version.Orig y) ->
+              Some (PVersion.equal (Np.Version.Orig y))
           | _ -> Some (fun x -> PG.Ranges.contains x r))
       | _ -> None
     in
@@ -34,7 +36,8 @@ struct
             let ok x =
               match x with
               | Np.Version.Bot ->
-                  within assigned s Np.Version.Bot || within assigned s Np.Version.Free
+                  within assigned s Np.Version.Bot
+                  || within assigned s Np.Version.Free
               | Np.Version.Orig _ ->
                   within assigned h x
                   && (within assigned s x || within assigned s Np.Version.Free)
@@ -43,8 +46,8 @@ struct
             let unopened =
               match assigned h with PG.Unselected -> true | _ -> false
             in
-            if unopened && List.mem Np.Version.Bot cands && ok Np.Version.Bot then
-              [ Np.Version.Bot ]
+            if unopened && List.mem Np.Version.Bot cands && ok Np.Version.Bot
+            then [ Np.Version.Bot ]
             else keep ok)
     | Np.Name.Intermediate (k, v, m) -> (
         (* one version per descriptor (the shared reading): what another

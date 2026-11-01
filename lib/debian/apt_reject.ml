@@ -24,7 +24,9 @@ module type SEARCH = sig
   val tables : T.tables
 
   val tag :
-    T.DMA.Debian.Reduction.Name.t -> T.DMA.Debian.Reduction.Version.t -> PVersion.t
+    T.DMA.Debian.Reduction.Name.t ->
+    T.DMA.Debian.Reduction.Version.t ->
+    PVersion.t
 
   val cands_of : T.DMA.Debian.Reduction.Name.t -> PVersion.t list
 
@@ -136,8 +138,8 @@ module Make (S : SEARCH) = struct
      the foo:any of a Multi-Arch: allowed package and the foo:b
      pseudo-package's entry for each version of b's own foo (ParseProvides,
      deblistparser.cc), and a sibling's (sibling_provides). *)
-  let provides_count ((m, y) : string * DMA.coq_ReducedQualifier) w (a : DMA.Debian.Atom.t)
-      =
+  let provides_count ((m, y) : string * DMA.coq_ReducedQualifier) w
+      (a : DMA.Debian.Atom.t) =
     let n = fst (fst a) in
     match y with
     | DMA.QAArch b -> (
@@ -165,7 +167,8 @@ module Make (S : SEARCH) = struct
     | PG.Decided u -> fun (pv : PVersion.t) -> PVersion.compare u pv = 0
     | PG.Entailed r -> fun pv -> PG.Ranges.contains pv r
 
-  let is_bot (pv : PVersion.t) = pv.PVersion.v = DMA.Debian.Reduction.Version.Bot
+  let is_bot (pv : PVersion.t) =
+    pv.PVersion.v = DMA.Debian.Reduction.Version.Bot
 
   (* n at b has an entry from a declared Provides that reaches b, or from a
      Multi-Arch: foreign n at another architecture, as provides_count counts
@@ -483,8 +486,8 @@ module Make (S : SEARCH) = struct
      name keeps the Depends' solutions.  Discover registers the folded
      clause's second half again on the version var, with its own solutions,
      so it propagates right after the package's own wave. *)
-  let conj ((n, f) : DMA.Debian.Atom.t) ((_, f') : DMA.Debian.Atom.t) : DMA.Debian.Atom.t
-      =
+  let conj ((n, f) : DMA.Debian.Atom.t) ((_, f') : DMA.Debian.Atom.t) :
+      DMA.Debian.Atom.t =
     (n, DMA.Debian.VersionFormula.FConj (f, f'))
 
   let overlap st a a' =
@@ -544,7 +547,9 @@ module Make (S : SEARCH) = struct
      package var then joins the queue at the back as the version pops. *)
   let head st ~assigned atoms =
     let one a =
-      let h = clause_name false (DMA.Debian.Reduction.Name.Disjunct atoms) [ a ] in
+      let h =
+        clause_name false (DMA.Debian.Reduction.Name.Disjunct atoms) [ a ]
+      in
       match h with
       | DMA.Debian.Reduction.Name.Orig ((m, DMA.QAArch b) as mn)
         when not (deferred st a) ->
@@ -595,12 +600,15 @@ module Make (S : SEARCH) = struct
       | _ -> []
     in
     match (n, pv.PVersion.v) with
-    | DMA.Debian.Reduction.Name.Orig m, DMA.Debian.Reduction.Version.Orig w -> ver m w
-    | DMA.Debian.Reduction.Name.Selector a, DMA.Debian.Reduction.Version.RefReal w ->
+    | DMA.Debian.Reduction.Name.Orig m, DMA.Debian.Reduction.Version.Orig w ->
+        ver m w
+    | ( DMA.Debian.Reduction.Name.Selector a,
+        DMA.Debian.Reduction.Version.RefReal w ) ->
         if deferred st a then
           match fst a with m, DMA.QAArch b -> [ `Pkg (m, b) ] | _ -> []
         else ver (fst a) w
-    | DMA.Debian.Reduction.Name.Selector _, DMA.Debian.Reduction.Version.Ref (m, w) ->
+    | ( DMA.Debian.Reduction.Name.Selector _,
+        DMA.Debian.Reduction.Version.Ref (m, w) ) ->
         ver m w
     | ( (DMA.Debian.Reduction.Name.Disjunct _ | DMA.Debian.Reduction.Name.Soft _),
         DMA.Debian.Reduction.Version.Atom a ) ->

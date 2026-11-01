@@ -147,7 +147,10 @@ struct
      is one of [cands]. *)
   let replace st ~assigned k v (m : string * string) cands c =
     let t = snd m in
-    let holds rg = function Np.Version.Orig u -> Np.rgHolds rg u | _ -> false in
+    let holds rg = function
+      | Np.Version.Orig u -> Np.rgHolds rg u
+      | _ -> false
+    in
     let takes_over into x =
       List.exists (PVersion.equal x) cands
       && List.for_all (fun r -> holds r x) into
@@ -343,8 +346,9 @@ struct
     match n with
     | Np.Name.Intermediate (_, _, m) -> fst m
     | Np.Name.Granular (k, _) -> fst k
-    | Np.Name.Sight (_, _, a) | Np.Name.Link (_, _, _, _, a) | Np.Name.Desc (a, _, _)
-      ->
+    | Np.Name.Sight (_, _, a)
+    | Np.Name.Link (_, _, _, _, a)
+    | Np.Name.Desc (a, _, _) ->
         a
 
   let is_open (assigned : assigned) n =
@@ -389,7 +393,9 @@ struct
         | n :: _ -> (
             match (n, assigned n, open_link o ~assigned n) with
             | _, _, Some l -> Some (l, x)
-            | Np.Name.Intermediate (_, _, m), PG.Decided (Np.Version.Orig u), None ->
+            | ( Np.Name.Intermediate (_, _, m),
+                PG.Decided (Np.Version.Orig u),
+                None ) ->
                 settle o x m u;
                 Hashtbl.replace x.seen (fst m) ();
                 Hashtbl.replace o.made n (Np.Version.Orig u);
@@ -412,7 +418,9 @@ struct
         sync o ~assigned
     | _ -> ()
 
-  let is_granular (n, _) = match n with Np.Name.Granular _ -> true | _ -> false
+  let is_granular (n, _) =
+    match n with Np.Name.Granular _ -> true | _ -> false
+
   let is_link (n, _) = match n with Np.Name.Link _ -> true | _ -> false
 
   (* A link whose value is already settled, which the replay has no
@@ -534,10 +542,13 @@ struct
         c
     | Np.Name.Link (k, v, _, _, a) -> choose_link o ~assigned n (k, v) a cands
     | Np.Name.Sight _ -> (
-        if L.links_into o.st n = [] && List.mem Np.Version.Free cands then Np.Version.Free
+        if L.links_into o.st n = [] && List.mem Np.Version.Free cands then
+          Np.Version.Free
         else
           match List.filter is_orig cands with
-          | [] -> if List.mem Np.Version.Bot cands then Np.Version.Bot else List.hd cands
+          | [] ->
+              if List.mem Np.Version.Bot cands then Np.Version.Bot
+              else List.hd cands
           | l -> greatest l)
 
   let hooks : (L.t, PName.t, PG.selection, PVersion.t) Pac_common.Order.driver =

@@ -125,7 +125,9 @@ struct
   let process st (q : PF.Package.t) (dependees : unit -> PF.coq_Formula list) =
     if not (Hashtbl.mem st.seen q) then begin
       Hashtbl.replace st.seen q ();
-      let d_q = PF.DependencyRel.ofList (List.map (fun f -> (q, f)) (dependees ())) in
+      let d_q =
+        PF.DependencyRel.ofList (List.map (fun f -> (q, f)) (dependees ()))
+      in
       record_deprel st (PFR.reduceDepsBy (oracle st) d_q);
       record_synthetic st (PFR.reduceReal (PF.PackageSet.singleton q) d_q)
     end

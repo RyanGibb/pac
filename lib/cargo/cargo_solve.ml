@@ -80,7 +80,8 @@ module Make () = struct
 
   let check_answer st (sol : (Cg.Reduction.Name.t * PVersion.t) list) =
     let s =
-      T.PackageSet.ofList (List.map (fun (tn, { PVersion.v; _ }) -> (tn, v)) sol)
+      T.PackageSet.ofList
+        (List.map (fun (tn, { PVersion.v; _ }) -> (tn, v)) sol)
     in
     let versions tn =
       T.VSet.ofList

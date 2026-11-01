@@ -156,10 +156,14 @@ module Conflict_class = struct
       (match n with
       | R.Name.Orig m ->
           R.Reduced.versions
-            (R.reduceReal (L.PackageSetFibred.tailFibre r m) M.ConflictClassRel.empty)
+            (R.reduceReal
+               (L.PackageSetFibred.tailFibre r m)
+               M.ConflictClassRel.empty)
             n
       | R.Name.Class k ->
-          R.Reduced.versions (R.reduceReal (L.inClass r om k) (L.classRelAt om k)) n)
+          R.Reduced.versions
+            (R.reduceReal (L.inClass r om k) (L.classRelAt om k))
+            n)
 
   let dependees = function
     | (R.Name.Orig n, R.Version.Orig v) as p ->
@@ -173,10 +177,15 @@ module Conflict_class = struct
     | R.Name.Orig _, R.Version.Name _ -> unasked ()
 
   let real = R.Reduced.PackageSet.elements (R.reduceReal r om)
-  let deps = rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps d om)
+
+  let deps =
+    rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements
+      (R.reduceDeps d om)
 
   let decode s =
-    pkgs (M.PackageSet.elements (R.conflictClassResolution (R.Reduced.PackageSet.ofList s)))
+    pkgs
+      (M.PackageSet.elements
+         (R.conflictClassResolution (R.Reduced.PackageSet.ofList s)))
 end
 
 module Conflict = struct
@@ -218,10 +227,15 @@ module Conflict = struct
     | _, R.Version.Bot -> []
 
   let real = R.Reduced.PackageSet.elements (R.reduceReal r d g)
-  let deps = rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps r d g)
+
+  let deps =
+    rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements
+      (R.reduceDeps r d g)
 
   let decode s =
-    pkgs (M.PackageSet.elements (R.conflictResolution (R.Reduced.PackageSet.ofList s)))
+    pkgs
+      (M.PackageSet.elements
+         (R.conflictResolution (R.Reduced.PackageSet.ofList s)))
 end
 
 module Concurrent = struct
@@ -270,7 +284,9 @@ module Concurrent = struct
     R.Reduced.VSet.elements
       (match n with
       | R.Name.Granular (m, w) ->
-          R.Reduced.versions (R.reduceReal (L.granFibre g r m w) M.Source.DependencyRel.empty g) n
+          R.Reduced.versions
+            (R.reduceReal (L.granFibre g r m w) M.Source.DependencyRel.empty g)
+            n
       | R.Name.Intermediate (m, v, o) ->
           R.Reduced.versions
             (R.reduceReal M.PackageSet.empty
@@ -282,15 +298,22 @@ module Concurrent = struct
     edges R.Reduced.VSet.elements R.Reduced.DependeeSet.elements
       (match p with
       | R.Name.Granular (n, _), R.Version.Orig v ->
-          R.Reduced.dependees (R.reduceDeps (L.DependencyRelFibred.tailFibre d (n, v)) g) p
+          R.Reduced.dependees
+            (R.reduceDeps (L.DependencyRelFibred.tailFibre d (n, v)) g)
+            p
       | R.Name.Intermediate (n, v, m), R.Version.Gran _ ->
-          R.Reduced.dependees (R.reduceDeps (L.DependencyRelFibred.endsFibre d (n, v) m) g) p
+          R.Reduced.dependees
+            (R.reduceDeps (L.DependencyRelFibred.endsFibre d (n, v) m) g)
+            p
       | R.Name.Granular _, R.Version.Gran _
       | R.Name.Intermediate _, R.Version.Orig _ ->
           R.Reduced.DependeeSet.empty)
 
   let real = R.Reduced.PackageSet.elements (R.reduceReal r d g)
-  let deps = rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps d g)
+
+  let deps =
+    rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements
+      (R.reduceDeps d g)
 
   let decode s =
     let s = R.Reduced.PackageSet.ofList s in
@@ -347,7 +370,9 @@ module Peer = struct
       (match p with
       | R.Name.Granular (n, _), R.Version.Orig v ->
           R.Reduced.dependees
-            (R.reduceDeps (L.DependencyRelFibred.tailFibre d (n, v)) M.PeerDependencyRel.empty g)
+            (R.reduceDeps
+               (L.DependencyRelFibred.tailFibre d (n, v))
+               M.PeerDependencyRel.empty g)
             p
       | R.Name.Intermediate (n, v, o), R.Version.Orig u ->
           R.Reduced.dependees
@@ -360,7 +385,10 @@ module Peer = struct
       | R.Name.Granular _, R.Version.Gran _ -> unasked ())
 
   let real = R.Reduced.PackageSet.elements (R.reduceReal r d th g)
-  let deps = rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps d th g)
+
+  let deps =
+    rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements
+      (R.reduceDeps d th g)
 
   let decode s =
     let s = R.Reduced.PackageSet.ofList s in
@@ -449,7 +477,10 @@ module Visibility = struct
       | R.Name.Agreement _ -> R.Reduced.DependeeSet.empty)
 
   let real = R.Reduced.PackageSet.elements (R.reduceReal r d pub rc)
-  let deps = rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps r d pub rc)
+
+  let deps =
+    rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements
+      (R.reduceDeps r d pub rc)
 
   let decode s =
     let s = R.Reduced.PackageSet.ofList s in
@@ -508,7 +539,9 @@ module Features = struct
             n
       | R.Name.FeatPkg (m, x) ->
           R.Reduced.versions
-            (R.reduceReal (L.PackageSetFibred.tailFibre r m) (L.supportFibre sup m x))
+            (R.reduceReal
+               (L.PackageSetFibred.tailFibre r m)
+               (L.supportFibre sup m x))
             n)
 
   let dependees ((n, v) as p) =
@@ -532,14 +565,16 @@ module Features = struct
   let real = R.Reduced.PackageSet.elements (R.reduceReal r sup)
 
   let deps =
-    rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps r sup df da)
+    rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements
+      (R.reduceDeps r sup df da)
 
   let decode s =
     packages "packages"
       (List.map
          (fun ((n, v), fs) ->
            Printf.sprintf "%s %s %s" n v (set (M.FSet.elements fs)))
-         (M.FeaturedSet.elements (R.featureResolution (R.Reduced.PackageSet.ofList s))))
+         (M.FeaturedSet.elements
+            (R.featureResolution (R.Reduced.PackageSet.ofList s))))
 end
 
 let spine form fs = "<" ^ String.concat " ∨ " (List.map form fs) ^ ">"
@@ -608,10 +643,15 @@ module Package_formula = struct
       | R.Name.Orig _, R.Version.Idx _ -> unasked ())
 
   let real = R.Reduced.PackageSet.elements (R.reduceReal r d)
-  let deps = rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps r d)
+
+  let deps =
+    rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements
+      (R.reduceDeps r d)
 
   let decode s =
-    pkgs (M.PackageSet.elements (R.packageFormulaResolution (R.Reduced.PackageSet.ofList s)))
+    pkgs
+      (M.PackageSet.elements
+         (R.packageFormulaResolution (R.Reduced.PackageSet.ofList s)))
 end
 
 module Variable_formula = struct
@@ -673,7 +713,8 @@ module Variable_formula = struct
             (R.embedVS (M.Source.versions (L.PackageSetFibred.tailFibre r m) m))
       | R.Name.Orig (E.Inr x) ->
           R.Reduced.versions
-            (R.reduceReal (L.valuesAt yx x) M.PackageSet.empty M.DependencyRel.empty)
+            (R.reduceReal (L.valuesAt yx x) M.PackageSet.empty
+               M.DependencyRel.empty)
             n
       | R.Name.Disjunct fs ->
           PF.Reduction.idxSet (Pac_common.Ot.int_nat (List.length fs)))
@@ -692,13 +733,18 @@ module Variable_formula = struct
           match PF.Reduction.Lookup.disjAlt fs i with
           | Some g ->
               R.Reduced.dependees
-                (PF.Reduction.encode (R.liftOracle yx (M.Source.versions r)) p g)
+                (PF.Reduction.encode
+                   (R.liftOracle yx (M.Source.versions r))
+                   p g)
                 p
           | None -> R.Reduced.DependeeSet.empty)
       | R.Name.Orig (E.Inl _), _ -> unasked ())
 
   let real = R.Reduced.PackageSet.elements (R.reduceReal yx r d)
-  let deps = rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps yx r d)
+
+  let deps =
+    rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements
+      (R.reduceDeps yx r d)
 
   let decode s =
     let s = R.Reduced.PackageSet.ofList s in
@@ -780,7 +826,10 @@ module Virtual = struct
       | R.Name.Orig _, R.Version.Provider _ -> unasked ())
 
   let real = R.Reduced.PackageSet.elements (R.reduceReal r d pi)
-  let deps = rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps r d pi)
+
+  let deps =
+    rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements
+      (R.reduceDeps r d pi)
 
   let decode s =
     let s = R.Reduced.PackageSet.ofList s in
@@ -865,13 +914,15 @@ module Concurrent_features = struct
       | R.Name.GranularOrig (m, w) ->
           R.Reduced.versions
             (R.reduceReal (L.granFibre g r m w) F.SupportRel.empty
-               F.ParameterisedDependencyRel.empty F.AdditionalDependencyRel.empty g)
+               F.ParameterisedDependencyRel.empty
+               F.AdditionalDependencyRel.empty g)
             n
       | R.Name.GranularFeatPkg (m, x, w) ->
           R.Reduced.versions
             (R.reduceReal (L.granFibre g r m w)
                (F.Reduction.Lookup.supportFibre sup m x)
-               F.ParameterisedDependencyRel.empty F.AdditionalDependencyRel.empty g)
+               F.ParameterisedDependencyRel.empty
+               F.AdditionalDependencyRel.empty g)
             n
       | R.Name.Intermediate (m, u, o) ->
           R.Reduced.versions
@@ -888,7 +939,8 @@ module Concurrent_features = struct
             n
       | R.Name.IntermediateA (m, u, x, o, _) ->
           R.Reduced.versions
-            (R.reduceReal M.PackageSet.empty F.SupportRel.empty F.ParameterisedDependencyRel.empty
+            (R.reduceReal M.PackageSet.empty F.SupportRel.empty
+               F.ParameterisedDependencyRel.empty
                (L.AdditionalDependencyRelFibred.endsFibre da ((m, u), x) o)
                g)
             n)
@@ -926,7 +978,8 @@ module Concurrent_features = struct
             p
       | R.Name.IntermediateA (m, u, x, o, _) ->
           R.Reduced.dependees
-            (R.reduceDeps M.PackageSet.empty F.SupportRel.empty F.ParameterisedDependencyRel.empty
+            (R.reduceDeps M.PackageSet.empty F.SupportRel.empty
+               F.ParameterisedDependencyRel.empty
                (L.AdditionalDependencyRelFibred.endsFibre da ((m, u), x) o)
                g)
             p)
@@ -934,7 +987,8 @@ module Concurrent_features = struct
   let real = R.Reduced.PackageSet.elements (R.reduceReal r sup df da g)
 
   let deps =
-    rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps r sup df da g)
+    rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements
+      (R.reduceDeps r sup df da g)
 
   let decode s =
     let s = R.Reduced.PackageSet.ofList s in
@@ -986,7 +1040,8 @@ module Placement = struct
             (("B", "1"), ("A", vs [ "1" ]));
             (("B", "1"), ("C", vs [ "2" ]));
           ];
-      inst_peers = M.Source.DependencyRel.ofList [ (("C", "2"), ("A", vs [ "1" ])) ];
+      inst_peers =
+        M.Source.DependencyRel.ofList [ (("C", "2"), ("A", vs [ "1" ])) ];
       inst_optDeps = M.Source.DependencyRel.empty;
       inst_optPeers = M.Source.DependencyRel.empty;
       inst_root = ("R", "1");
@@ -997,7 +1052,8 @@ module Placement = struct
   let versions n =
     R.Reduced.VSet.elements
       (match n with
-      | R.Name.Root -> R.Reduced.VSet.singleton (R.Version.Occ (snd i.M.inst_root))
+      | R.Name.Root ->
+          R.Reduced.VSet.singleton (R.Version.Occ (snd i.M.inst_root))
       | R.Name.Loc (_, a) | R.Name.Walk (_, a) ->
           R.versions (L.nameSubInst i a) d n)
 
@@ -1011,14 +1067,18 @@ module Placement = struct
       | R.Name.Walk (l, a), w -> R.walkDeps l a w)
 
   let real = R.Reduced.PackageSet.elements (R.reduceReal i d)
-  let deps = rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps i d)
+
+  let deps =
+    rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements
+      (R.reduceDeps i d)
 
   let decode s =
     packages "layout"
       (List.map
          (fun (l, (a, v)) -> path (a :: l) ^ " " ^ v)
          (M.LayoutRel.elements
-            (M.reachable i (R.placementResolution (R.Reduced.PackageSet.ofList s)))))
+            (M.reachable i
+               (R.placementResolution (R.Reduced.PackageSet.ofList s)))))
 end
 
 module Npm_placement = struct
@@ -1044,7 +1104,9 @@ module Npm_placement = struct
     | R.Name.Loc (l, a) -> Format.fprintf f "<%s,%s>" (path l) a
     | R.Name.Walk (l, a) -> Format.fprintf f "<%s⇑%s>" (path l) a
 
-  let occ = function M.Occupant.Proj -> "R" | M.Occupant.Reg (m, v) -> m ^ "@" ^ v
+  let occ = function
+    | M.Occupant.Proj -> "R"
+    | M.Occupant.Reg (m, v) -> m ^ "@" ^ v
 
   let pp_version f = function
     | R.Version.Occ x -> str f (occ x)
@@ -1086,7 +1148,12 @@ module Npm_placement = struct
     M.RealPackageSet.ofList (List.filter (fun (m, _) -> List.mem m ns) repo)
 
   let bare =
-    { i with M.inst_real = M.RealPackageSet.empty; inst_deps = []; inst_rootDeps = [] }
+    {
+      i with
+      M.inst_real = M.RealPackageSet.empty;
+      inst_deps = [];
+      inst_rootDeps = [];
+    }
 
   let occ_inst = function
     | M.Occupant.Proj -> { bare with M.inst_rootDeps = i.M.inst_rootDeps }
@@ -1104,7 +1171,8 @@ module Npm_placement = struct
          (fun (e : M.coq_Edge) ->
            if e.M.e_dir = a then Some e.M.e_name else None)
          (List.concat_map edges_of
-            (M.Occupant.Proj :: List.map (fun (m, v) -> M.Occupant.Reg (m, v)) repo)))
+            (M.Occupant.Proj
+            :: List.map (fun (m, v) -> M.Occupant.Reg (m, v)) repo)))
 
   let key_inst a =
     {
@@ -1132,13 +1200,15 @@ module Npm_placement = struct
       | R.Name.Root, R.Version.Occ x -> atoms [] x
       | R.Name.Loc (l, a), R.Version.Occ x -> atoms (a :: l) x
       | R.Name.Loc _, _ -> []
-      | R.Name.Walk (l, a), w -> R.Reduced.DependeeSet.elements (R.walkDeps l a w)
+      | R.Name.Walk (l, a), w ->
+          R.Reduced.DependeeSet.elements (R.walkDeps l a w)
       | R.Name.Root, _ -> unasked ())
 
   let real = R.Reduced.PackageSet.elements (M.Reduction.reduceReal i d)
 
   let deps =
-    rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (M.Reduction.reduceDeps i d)
+    rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements
+      (M.Reduction.reduceDeps i d)
 
   let decode s =
     packages "layout"

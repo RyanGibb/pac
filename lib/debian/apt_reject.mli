@@ -26,7 +26,9 @@ module type SEARCH = sig
   val tables : T.tables
 
   val tag :
-    T.DMA.Debian.Reduction.Name.t -> T.DMA.Debian.Reduction.Version.t -> PVersion.t
+    T.DMA.Debian.Reduction.Name.t ->
+    T.DMA.Debian.Reduction.Version.t ->
+    PVersion.t
 
   val cands_of : T.DMA.Debian.Reduction.Name.t -> PVersion.t list
 
@@ -103,7 +105,8 @@ module Make (S : SEARCH) : sig
   val group_conflicts :
     state -> assigned:assigned -> DMA.Package.t -> rejection list
 
-  val conflicted_by : state -> assigned:assigned -> DMA.Package.t -> rejection list
+  val conflicted_by :
+    state -> assigned:assigned -> DMA.Package.t -> rejection list
 
   val propagate :
     state -> assigned:assigned -> rejection -> rejection list * name list

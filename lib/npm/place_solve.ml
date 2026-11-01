@@ -17,7 +17,8 @@ module Make () = struct
      spanning adjacent versions of one stretch stays exact. *)
   let same_stretch (a : PVersion.t) (b : PVersion.t) =
     match (a, b) with
-    | R.Version.Occ (Npl.Occupant.Reg (m, _)), R.Version.Occ (Npl.Occupant.Reg (m', _)) ->
+    | ( R.Version.Occ (Npl.Occupant.Reg (m, _)),
+        R.Version.Occ (Npl.Occupant.Reg (m', _)) ) ->
         String.equal m m'
     | ( R.Version.Found (l, Npl.Occupant.Reg (m, _)),
         R.Version.Found (l', Npl.Occupant.Reg (m', _)) ) ->

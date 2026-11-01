@@ -18,8 +18,8 @@ module Make (S : Apt_reject.SEARCH) = struct
       | DMA.Debian.Reduction.Name.Selector _ -> Alternative
 
     let clause_atoms = function
-      | DMA.Debian.Reduction.Name.Disjunct aset | DMA.Debian.Reduction.Name.Soft aset
-        ->
+      | DMA.Debian.Reduction.Name.Disjunct aset
+      | DMA.Debian.Reduction.Name.Soft aset ->
           (* as ordered_clauses counts them *)
           Some (DMA.Debian.AtomSet.elements (DMA.Debian.clauseAtoms aset))
       | DMA.Debian.Reduction.Name.Selector a ->
@@ -92,17 +92,21 @@ module Make (S : Apt_reject.SEARCH) = struct
        package var of a deferred alternative *)
     let continuation n (pv : PVersion.t) =
       match (n, pv.PVersion.v) with
-      | ( (DMA.Debian.Reduction.Name.Disjunct _ | DMA.Debian.Reduction.Name.Soft _),
+      | ( ( DMA.Debian.Reduction.Name.Disjunct _
+          | DMA.Debian.Reduction.Name.Soft _ ),
           DMA.Debian.Reduction.Version.Atom a ) ->
           [ alt_name a ]
       | _ -> []
 
     let forced_to st n (pv : PVersion.t) =
       match (n, pv.PVersion.v) with
-      | DMA.Debian.Reduction.Name.Disjunct _, DMA.Debian.Reduction.Version.Atom a ->
+      | ( DMA.Debian.Reduction.Name.Disjunct _,
+          DMA.Debian.Reduction.Version.Atom a ) ->
           Some (alt_name a)
-      | DMA.Debian.Reduction.Name.Selector a, DMA.Debian.Reduction.Version.RefReal _
-      | DMA.Debian.Reduction.Name.Selector a, DMA.Debian.Reduction.Version.Ref _ ->
+      | ( DMA.Debian.Reduction.Name.Selector a,
+          DMA.Debian.Reduction.Version.RefReal _ )
+      | DMA.Debian.Reduction.Name.Selector a, DMA.Debian.Reduction.Version.Ref _
+        ->
           if deferred st a then
             Some
               (match pv.PVersion.v with
@@ -117,11 +121,13 @@ module Make (S : Apt_reject.SEARCH) = struct
        all along *)
     let version_of st n (pv : PVersion.t) =
       match (n, pv.PVersion.v) with
-      | DMA.Debian.Reduction.Name.Selector a, DMA.Debian.Reduction.Version.RefReal w
+      | ( DMA.Debian.Reduction.Name.Selector a,
+          DMA.Debian.Reduction.Version.RefReal w )
         when not (deferred st a) ->
           let on = DMA.Debian.Reduction.Name.Orig (fst a) in
           Some (on, tag on (DMA.Debian.Reduction.Version.Orig w))
-      | DMA.Debian.Reduction.Name.Selector a, DMA.Debian.Reduction.Version.Ref (m, w)
+      | ( DMA.Debian.Reduction.Name.Selector a,
+          DMA.Debian.Reduction.Version.Ref (m, w) )
         when not (deferred st a) ->
           let on = DMA.Debian.Reduction.Name.Orig m in
           Some (on, tag on (DMA.Debian.Reduction.Version.Orig w))
@@ -129,7 +135,8 @@ module Make (S : Apt_reject.SEARCH) = struct
 
     let installs n (pv : PVersion.t) =
       match (n, pv.PVersion.v) with
-      | ( (DMA.Debian.Reduction.Name.Disjunct _ | DMA.Debian.Reduction.Name.Soft _),
+      | ( ( DMA.Debian.Reduction.Name.Disjunct _
+          | DMA.Debian.Reduction.Name.Soft _ ),
           DMA.Debian.Reduction.Version.Atom a ) -> (
           match alt_name a with
           | DMA.Debian.Reduction.Name.Orig _ as on -> (
@@ -174,8 +181,8 @@ module Make (S : Apt_reject.SEARCH) = struct
         match (n, pv.PVersion.v) with
         | _, DMA.Debian.Reduction.Version.Atom a ->
             solutions st (Some assigned) a > 0
-        | DMA.Debian.Reduction.Name.Selector a, DMA.Debian.Reduction.Version.RefReal w
-          ->
+        | ( DMA.Debian.Reduction.Name.Selector a,
+            DMA.Debian.Reduction.Version.RefReal w ) ->
             live_pkg (fst a) w
         | _, DMA.Debian.Reduction.Version.Ref (m, w) -> live_pkg m w
         | _ -> true)

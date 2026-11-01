@@ -45,7 +45,9 @@ module Make
      the sub-instance the driver builds for it; a thunk, so a package asked
      about twice builds it once *)
   val process : t -> PF.Package.t -> (unit -> PF.coq_Formula list) -> unit
-  val dependees : t -> PF.Reduction.Reduced.Package.t -> PF.Reduction.Reduced.Dependee.t list
+
+  val dependees :
+    t -> PF.Reduction.Reduced.Package.t -> PF.Reduction.Reduced.Dependee.t list
 
   val dependencies :
     t ->

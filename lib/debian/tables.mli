@@ -28,7 +28,8 @@ module type S = sig
   end
 
   module DMA :
-      module type of Pac.MultiarchDebian (Pac_common.Ot.Str) (DebVersionOT) (APx)
+      module type of
+        Pac.MultiarchDebian (Pac_common.Ot.Str) (DebVersionOT) (APx)
 
   (* Normalized stanza: apt rewrites arch:all packages to the native arch
      and downgrades all+same to no (arch:all content is arch-invariant).

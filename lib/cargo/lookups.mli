@@ -18,7 +18,8 @@ module Make (Encoding : Encoding.S) : sig
 
   (* the crate version's slots and feature definitions, which is all
      parents reads of it *)
-  val slots_and_fdefs : state -> string * string -> Cg.SlotRel.t * Cg.FeatureDefinitionRel.t
+  val slots_and_fdefs :
+    state -> string * string -> Cg.SlotRel.t * Cg.FeatureDefinitionRel.t
 
   (* the manifest record a slot name's dependency came from, for choose's
      walk over its candidates: the name carries the dependency but not the
@@ -39,7 +40,9 @@ module Make (Encoding : Encoding.S) : sig
      slots_of has not merged, so the name is taken from the fibre.  None for
      a second site with the same ask as one before it, which the slot rule
      merged into that one's slot. *)
-  val site_data : state -> string * string -> Cg.Site.t -> Cg.DependencyRecord.t option
+  val site_data :
+    state -> string * string -> Cg.Site.t -> Cg.DependencyRecord.t option
+
   val tag : state -> Cg.Reduction.Name.t -> Cg.Reduction.Version.t -> PVersion.t
   val pg_versions : state -> Cg.Reduction.Name.t -> PVersion.t list
 

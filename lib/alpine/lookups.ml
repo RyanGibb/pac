@@ -274,7 +274,9 @@ module Make () : S = struct
           | None -> None)
         !repo
     in
-    (Alp.PackageSet.ofList !repo, Alp.ProvidesRel.ofList !prov, Alp.PriorityRel.ofList prio)
+    ( Alp.PackageSet.ofList !repo,
+      Alp.ProvidesRel.ofList !prov,
+      Alp.PriorityRel.ofList prio )
 
   (* Lookup.nameSubInst *)
   let name_inst ar (n : string) : Alp.coq_Inst =
@@ -293,8 +295,10 @@ module Make () : S = struct
     let at = Tbl.find_list ar.iif_by_cond in
     let cands =
       List.fold_left
-        (fun acc ((_, (m, _)) : Alp.ProvidesElt.t) -> List.rev_append (at m) acc)
-        (at n) (Alp.ProvidesRel.elements own)
+        (fun acc ((_, (m, _)) : Alp.ProvidesElt.t) ->
+          List.rev_append (at m) acc)
+        (at n)
+        (Alp.ProvidesRel.elements own)
     in
     List.filter (fun r -> Red.attachAt inst (n, v) r.designation) cands
 
@@ -330,14 +334,16 @@ module Make () : S = struct
         in
         let repo, prov, prio = preimages_at ar ns in
         let deps =
-          Alp.DependencyRel.ofList (List.map (fun d -> ((n, v), xdep d)) m.P.depends)
+          Alp.DependencyRel.ofList
+            (List.map (fun d -> ((n, v), xdep d)) m.P.depends)
         in
         {
           Alp.inst_real = repo;
           inst_deps = deps;
           inst_prov = Alp.ProvidesRel.union prov own;
           inst_installIf =
-            Alp.InstallIfRuleRel.ofList (List.map (fun r -> (r.pkg, r.conds)) rules);
+            Alp.InstallIfRuleRel.ofList
+              (List.map (fun r -> (r.pkg, r.conds)) rules);
           (* apk also takes a k:-less one whose owner has a requirer
              (solver.c:381) *)
           inst_world = Alp.WorldSet.ofList (List.map xdep world);

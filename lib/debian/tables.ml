@@ -28,7 +28,8 @@ module type S = sig
   end
 
   module DMA :
-      module type of Pac.MultiarchDebian (Pac_common.Ot.Str) (DebVersionOT) (APx)
+      module type of
+        Pac.MultiarchDebian (Pac_common.Ot.Str) (DebVersionOT) (APx)
 
   type nstanza = {
     npkg : DMA.Package.t;
@@ -111,7 +112,9 @@ module Make (AP : ARCH) : S = struct
   let matom_of (a : DF.atom) : DMA.Atom.t =
     (a.name, (qual_of a.aqual, formula_of_constr a.constr))
 
-  let dtop_of = function Some v -> DMA.Debian.DTVal v | None -> DMA.Debian.DTTop
+  let dtop_of = function
+    | Some v -> DMA.Debian.DTVal v
+    | None -> DMA.Debian.DTTop
 
   type nstanza = {
     npkg : DMA.Package.t;
@@ -166,7 +169,8 @@ module Make (AP : ARCH) : S = struct
     versions_table : (string * string, string list) Hashtbl.t;
     stanza_table : (DMA.Package.t, nstanza) Hashtbl.t;
     group_table : (string, (string * string) list) Hashtbl.t;
-    providers_table : (string, (DMA.Package.t * DMA.Debian.coq_DTop) list) Hashtbl.t;
+    providers_table :
+      (string, (DMA.Package.t * DMA.Debian.coq_DTop) list) Hashtbl.t;
   }
 
   type tables = {
@@ -386,8 +390,10 @@ module Make (AP : ARCH) : S = struct
     let rec go fmt = function
       | DMA.Debian.VersionFormula.FTop -> Format.fprintf fmt "T"
       | DMA.Debian.VersionFormula.FBot -> Format.fprintf fmt "F"
-      | DMA.Debian.VersionFormula.FConj (a, b) -> Format.fprintf fmt "(%a & %a)" go a go b
-      | DMA.Debian.VersionFormula.FDisj (a, b) -> Format.fprintf fmt "(%a | %a)" go a go b
+      | DMA.Debian.VersionFormula.FConj (a, b) ->
+          Format.fprintf fmt "(%a & %a)" go a go b
+      | DMA.Debian.VersionFormula.FDisj (a, b) ->
+          Format.fprintf fmt "(%a | %a)" go a go b
       | DMA.Debian.VersionFormula.FCmp (op, v) ->
           let ops =
             match op with
@@ -414,7 +420,8 @@ module Make (AP : ARCH) : S = struct
   module PName = struct
     type t = DMA.Debian.Reduction.Name.t
 
-    let compare a b = Pac_common.Ot.r2c (DMA.Debian.Reduction.NameOT.compare a b)
+    let compare a b =
+      Pac_common.Ot.r2c (DMA.Debian.Reduction.NameOT.compare a b)
 
     let pp fmt = function
       | DMA.Debian.Reduction.Name.Orig m -> pp_mname fmt m

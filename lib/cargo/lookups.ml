@@ -200,8 +200,8 @@ module Make (Encoding : Encoding.S) = struct
     | Cg.Reduction.Name.CFeatP (n, f, _) ->
         let supp = support_at st n f in
         call { e with inst_real = name_set st n; inst_support = supp }
-    | Cg.Reduction.Name.CSlot (_, _, d)
-    | Cg.Reduction.Name.CDec (_, _, _, d, _) ->
+    | Cg.Reduction.Name.CSlot (_, _, d) | Cg.Reduction.Name.CDec (_, _, _, d, _)
+      ->
         call { e with inst_real = name_set st (Cg.sName d) }
     | Cg.Reduction.Name.CCls l ->
         (* Lookup.claimants and LinksRelFibred.headFibre at l, over the
@@ -210,7 +210,8 @@ module Make (Encoding : Encoding.S) = struct
         let rs = Archive.link_preimage st.ar l in
         let links = Cg.LinksRel.ofList (List.map (fun q -> (q, l)) rs) in
         let repo =
-          Cg.PackageSet.ofList (List.filter (fun (n, v) -> meta st n v <> None) rs)
+          Cg.PackageSet.ofList
+            (List.filter (fun (n, v) -> meta st n v <> None) rs)
         in
         call { e with inst_real = repo; inst_links = links }
 
@@ -262,8 +263,8 @@ module Make (Encoding : Encoding.S) = struct
      ranks the versions a dependency admits and not their granularity
      classes, and which one the ranked walk lands on depends on what is
      already activated, which only choose can see. *)
-  let tag st (tn : Cg.Reduction.Name.t) (w : Cg.Reduction.Version.t) : PVersion.t
-      =
+  let tag st (tn : Cg.Reduction.Name.t) (w : Cg.Reduction.Version.t) :
+      PVersion.t =
     match (tn, w) with
     | ( (Cg.Reduction.Name.CGran (n, _) | Cg.Reduction.Name.CFeatP (n, _, _)),
         Cg.Reduction.Version.WOrig v ) ->
