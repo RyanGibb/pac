@@ -140,7 +140,7 @@ module Make (Encoding : Encoding.S) = struct
     Tbl.memo st.name_sets n (fun () ->
         Cargo.PackageSet.ofList (List.map (fun v -> (n, v)) (versions_of st n)))
 
-  (* the Vq the dependees lookups take, C.versions at a name: loaded
+  (* the Vq the dependees lookups take, Source.versions at a name: loaded
      whole, as name_set is *)
   let name_versions st (m : string) : Cargo.VSet.t =
     Tbl.memo st.name_versions m (fun () -> Cargo.VSet.ofList (versions_of st m))
