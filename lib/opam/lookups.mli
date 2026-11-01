@@ -79,5 +79,5 @@ val touch :
   archive ->
   (string * Opam_parse.vc) list ->
   L.t ->
-  T.Pkg.t ->
+  T.Package.t ->
   unit

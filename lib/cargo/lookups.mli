@@ -18,12 +18,12 @@ module Make (Encoding : Encoding.S) : sig
 
   (* the crate version's slots and feature definitions, which is all
      parents reads of it *)
-  val slots_and_fdefs : state -> string * string -> Cg.SlotRel.t * Cg.FDefRel.t
+  val slots_and_fdefs : state -> string * string -> Cg.SlotRel.t * Cg.FeatureDefinitionRel.t
 
   (* the manifest record a slot name's dependency came from, for choose's
      walk over its candidates: the name carries the dependency but not the
      parsed requirement the comparator reads *)
-  val slot_dep : state -> Cg.SlotData.t -> Cargo_parse.dep option
+  val slot_dep : state -> Cg.DependencyRecord.t -> Cargo_parse.dep option
 
   (* how many (name, version) pairs PubGrub has asked the dependencies of *)
   val dependency_lookups : state -> int
@@ -32,14 +32,14 @@ module Make (Encoding : Encoding.S) : sig
      version does when there is none *)
   val msrv_fits : state -> string * string -> bool
   val empty_inst : state -> Cg.coq_Inst
-  val dependees : state -> T.Pkg.t -> T.Dependees.t list
+  val dependees : state -> T.Package.t -> T.Dependee.t list
 
   (* the dependency the owner's fibre holds at a site, which is what a slot
      name carries: the order replay reads raw manifest records, which
      slots_of has not merged, so the name is taken from the fibre.  None for
      a second site with the same ask as one before it, which the slot rule
      merged into that one's slot. *)
-  val site_data : state -> string * string -> Cg.Site.t -> Cg.SlotData.t option
+  val site_data : state -> string * string -> Cg.Site.t -> Cg.DependencyRecord.t option
   val tag : state -> Cg.Reduction.NPlus.t -> Cg.Reduction.VPlus.t -> PVersion.t
   val pg_versions : state -> Cg.Reduction.NPlus.t -> PVersion.t list
 

@@ -7,18 +7,18 @@ module Make (Encoding : Encoding.S) = struct
 
   type fibres = {
     r_slots : Cg.SlotRel.t;
-    r_fdefs : Cg.FDefRel.t;
-    r_links : Cg.LinkRel.t;
-    r_supp : Cg.SupportSet.t;
+    r_fdefs : Cg.FeatureDefinitionRel.t;
+    r_links : Cg.LinksRel.t;
+    r_supp : Cg.SupportRel.t;
     r_reads : string list; (* own name plus its slots' dependee names *)
   }
 
   let empty_fibres n =
     {
       r_slots = Cg.SlotRel.empty;
-      r_fdefs = Cg.FDefRel.empty;
-      r_links = Cg.LinkRel.empty;
-      r_supp = Cg.SupportSet.empty;
+      r_fdefs = Cg.FeatureDefinitionRel.empty;
+      r_links = Cg.LinksRel.empty;
+      r_supp = Cg.SupportRel.empty;
       r_reads = [ n ];
     }
 
@@ -33,16 +33,16 @@ module Make (Encoding : Encoding.S) = struct
     rustv : string option;
     granularities : (string, string) Hashtbl.t;
     fibres : (string * string, fibres) Hashtbl.t;
-    dep_of_data : (Cg.SlotData.t, P.dep) Hashtbl.t;
-    name_sets : (string, Cg.PkgSet.t) Hashtbl.t;
+    dep_of_data : (Cg.DependencyRecord.t, P.dep) Hashtbl.t;
+    name_sets : (string, Cg.PackageSet.t) Hashtbl.t;
     name_versions : (string, Cg.VSet.t) Hashtbl.t;
     msrv : (string * string, bool) Hashtbl.t;
     (* a name's support pairs by feature, which support_at builds sets of *)
     support_pairs_at :
       (string, (string, ((string * string) * string) list) Hashtbl.t) Hashtbl.t;
-    supports : (string * string, Cg.SupportSet.t) Hashtbl.t;
+    supports : (string * string, Cg.SupportRel.t) Hashtbl.t;
     site_datas :
-      ((string * string) * Cg.Site.t, Cg.SlotData.t option) Hashtbl.t;
+      ((string * string) * Cg.Site.t, Cg.DependencyRecord.t option) Hashtbl.t;
     (* the tagged list, not just the untagged one, has to be memoized:
        PubGrub asks a name for its versions at every propagation step *)
     pg_vers : (Cg.Reduction.NPlus.t, PVersion.t list) Hashtbl.t;
@@ -107,16 +107,16 @@ module Make (Encoding : Encoding.S) = struct
                    ds)
             in
             let fdefs =
-              Cg.FDefRel.ofList
+              Cg.FeatureDefinitionRel.ofList
                 (List.concat_map
                    (fun (f, es) -> List.map (fun e -> ((p, f), xentry e)) es)
                    m.P.v_feats)
             in
-            let supp = Cg.SupportSet.ofList (support_pairs p m) in
+            let supp = Cg.SupportRel.ofList (support_pairs p m) in
             let links =
               match m.P.v_links with
-              | None -> Cg.LinkRel.empty
-              | Some l -> Cg.LinkRel.add (p, l) Cg.LinkRel.empty
+              | None -> Cg.LinksRel.empty
+              | Some l -> Cg.LinksRel.add (p, l) Cg.LinksRel.empty
             in
             {
               r_slots = slots;
@@ -132,9 +132,9 @@ module Make (Encoding : Encoding.S) = struct
     let r = fibres_of st p in
     (r.r_slots, r.r_fdefs)
 
-  let name_set st (n : string) : Cg.PkgSet.t =
+  let name_set st (n : string) : Cg.PackageSet.t =
     Tbl.memo st.name_sets n (fun () ->
-        Cg.PkgSet.ofList (List.map (fun v -> (n, v)) (versions_of st n)))
+        Cg.PackageSet.ofList (List.map (fun v -> (n, v)) (versions_of st n)))
 
   (* the Vq the dependees lookups take, C.versions at a name: loaded
      whole, as name_set is *)
@@ -154,7 +154,7 @@ module Make (Encoding : Encoding.S) = struct
      which versions_lookupFeatP reads -- from its versions' support pairs.
      Memoized for the same reason name_set is: load_name takes a name whole,
      so this cannot grow once it has been asked. *)
-  let support_at st (n : string) (f : string) : Cg.SupportSet.t =
+  let support_at st (n : string) (f : string) : Cg.SupportRel.t =
     Tbl.memo st.supports (n, f) (fun () ->
         let by_feature =
           Tbl.memo st.support_pairs_at n (fun () ->
@@ -170,18 +170,18 @@ module Make (Encoding : Encoding.S) = struct
                 (Archive.load_name st.ar n);
               h)
         in
-        Cg.SupportSet.ofList (Tbl.find_list by_feature f))
+        Cg.SupportRel.ofList (Tbl.find_list by_feature f))
 
   (* every lookup theorem carries the request (granularity, default, rc,
      rootFeats) whole, so its instance differs from this one only in the
      relations it names *)
   let empty_inst st : Cg.coq_Inst =
     {
-      Cg.inst_real = Cg.PkgSet.empty;
-      inst_support = Cg.SupportSet.empty;
-      inst_fdefs = Cg.FDefRel.empty;
+      Cg.inst_real = Cg.PackageSet.empty;
+      inst_support = Cg.SupportRel.empty;
+      inst_fdefs = Cg.FeatureDefinitionRel.empty;
       inst_slots = Cg.SlotRel.empty;
-      inst_links = Cg.LinkRel.empty;
+      inst_links = Cg.LinksRel.empty;
       inst_gran = granularity st;
       inst_default = P.default_feature;
       inst_root = st.rc;
@@ -204,13 +204,13 @@ module Make (Encoding : Encoding.S) = struct
     | Cg.Reduction.NPlus.CDec (_, _, _, d, _) ->
         call { e with inst_real = name_set st (Cg.sName d) }
     | Cg.Reduction.NPlus.CCls l ->
-        (* Lookup.claimants and LinkFibred.headFibre at l, over the
+        (* Lookup.claimants and LinksRelFibred.headFibre at l, over the
            declarers loaded so far: the answer may only grow
            (versions_cls_mono) *)
         let rs = Archive.link_preimage st.ar l in
-        let links = Cg.LinkRel.ofList (List.map (fun q -> (q, l)) rs) in
+        let links = Cg.LinksRel.ofList (List.map (fun q -> (q, l)) rs) in
         let repo =
-          Cg.PkgSet.ofList (List.filter (fun (n, v) -> meta st n v <> None) rs)
+          Cg.PackageSet.ofList (List.filter (fun (n, v) -> meta st n v <> None) rs)
         in
         call { e with inst_real = repo; inst_links = links }
 
@@ -220,9 +220,9 @@ module Make (Encoding : Encoding.S) = struct
      loaded before it answers, an optional slot's dependee too, so that which
      names are loaded, and so a links value's declarers so far, does not
      turn on which ranges the lookup evaluates. *)
-  let dependees st (p : T.Pkg.t) : T.Dependees.t list =
+  let dependees st (p : T.Package.t) : T.Dependee.t list =
     let call i =
-      T.DependeesSet.elements (Cg.Reduction.dependeesBy (name_versions st) i p)
+      T.DependeeSet.elements (Cg.Reduction.dependeesBy (name_versions st) i p)
     in
     let e = empty_inst st in
     match p with
@@ -284,7 +284,7 @@ module Make (Encoding : Encoding.S) = struct
   let pg_dependencies st tn ({ PVersion.v = w; _ } : PVersion.t) =
     Tbl.memo st.pg_deps (tn, w) (fun () ->
         List.map
-          (fun ((m, vs) : T.Dependees.t) ->
+          (fun ((m, vs) : T.Dependee.t) ->
             (m, PG.Ranges.of_list (List.map (tag st m) (T.VSet.elements vs))))
           (dependees st (tn, w)))
 end

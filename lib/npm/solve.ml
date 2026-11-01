@@ -54,7 +54,7 @@ module Make () = struct
   let dependencies st cache n (u : Np.Vs.version) =
     Pac_common.Tbl.memo cache (n, u) (fun () ->
         List.map
-          (fun ((m, vs) : T.Dependees.t) ->
+          (fun ((m, vs) : T.Dependee.t) ->
             let vs = T.VSet.elements vs in
             ( m,
               if Lookup.grows st m then PG.Ranges.of_list vs
@@ -62,10 +62,10 @@ module Make () = struct
           (Lookup.dependees st (n, u)))
 
   let decode st ~lookups sol =
-    let s = T.PkgSet.ofList sol in
+    let s = T.PackageSet.ofList sol in
     let read, dropped = Lookup.optional_verdicts st in
     {
-      installs = List.sort compare (Np.PkgSet.elements (R.npmResolution s));
+      installs = List.sort compare (Np.PackageSet.elements (R.npmResolution s));
       tree = List.sort compare (Np.Conc.ParentRel.elements (R.parents s));
       nodes = List.length sol;
       lookups;
@@ -151,9 +151,9 @@ module Make () = struct
 
   let check_answer st root_n (root : string * string) sol =
     let versions m = T.VSet.ofList (Lookup.versions st m) in
-    let dependees p = T.DependeesSet.ofList (Lookup.dependees st p) in
+    let dependees p = T.DependeeSet.ofList (Lookup.dependees st p) in
     let q = T.rootQuery (root_n, Np.Vs.Orig (snd root)) in
-    match T.check versions dependees q (T.PkgSet.ofList sol) with
+    match T.check versions dependees q (T.PackageSet.ofList sol) with
     | None -> ()
     | Some f ->
         Pac_common.Check.fail ~pp_name:PName.pp
@@ -197,7 +197,7 @@ module Make () = struct
         Pac_common.Core.walk ~versions:(Lookup.versions st)
           ~dependees:(fun p ->
             List.map
-              (fun ((m, vs) : T.Dependees.t) -> (m, T.VSet.elements vs))
+              (fun ((m, vs) : T.Dependee.t) -> (m, T.VSet.elements vs))
               (Lookup.dependees st p))
           [ root_n ]
       with

@@ -23,7 +23,7 @@ module Make () = struct
     let r =
       L.solve st ~check ~touch (Order.hooks order ar)
       |> Result.map (fun (s_pf, nodes) ->
-          let pkgs = Alp.PkgSet.elements (Red.alpineResolution s_pf) in
+          let pkgs = Alp.PackageSet.elements (Red.alpineResolution s_pf) in
           { pkgs = List.sort compare pkgs; nodes; lookups = L.lookups st })
     in
     (r, fun () -> L.core st ~touch)

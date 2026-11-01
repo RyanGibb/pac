@@ -53,7 +53,7 @@ module Make (S : SEARCH) = struct
 
   type state = {
     (* version vars and package vars assigned false *)
-    vdead : (DMA.Pkg.t, unit) Hashtbl.t;
+    vdead : (DMA.Package.t, unit) Hashtbl.t;
     pdead : (string * string, unit) Hashtbl.t;
     (* the solutions of a clause apt folded a later one into are the
        intersection, and Solve takes the first undecided of those: the
@@ -61,7 +61,7 @@ module Make (S : SEARCH) = struct
        fold is of the depender's own clause, so it holds only while the
        depender is installed; the name, which another depender may share,
        is keyed by that depender too. *)
-    narrowed : (name, DMA.Pkg.t * DMA.Deb.Atom.t) Hashtbl.t;
+    narrowed : (name, DMA.Package.t * DMA.Deb.Atom.t) Hashtbl.t;
     (* whether apt's cache has a Provides entry for a name at an arch *)
     provided : (string * string, bool) Hashtbl.t;
   }
@@ -106,7 +106,7 @@ module Make (S : SEARCH) = struct
      own version (ListParser::NewProvides, pkgcachegen.cc), except through
      the every-architecture path a Multi-Arch: foreign package's Provides
      take, which has no such check: luit provides luit *)
-  let self_dropped (((m, _), w) as q : DMA.Pkg.t) n vt =
+  let self_dropped (((m, _), w) as q : DMA.Package.t) n vt =
     String.equal m n
     && (match stanza q with
       | Some stz -> stz.ncls <> DMA.MAForeign
@@ -118,7 +118,7 @@ module Make (S : SEARCH) = struct
 
   (* the entry a Multi-Arch: foreign foo gives foo at each other
      architecture (NewProvidesAllArch, pkgcachegen.cc), which skips its own *)
-  let sibling_provides (((m, b), _) : DMA.Pkg.t) (stz : nstanza)
+  let sibling_provides (((m, b), _) : DMA.Package.t) (stz : nstanza)
       (a : DMA.Deb.Atom.t) =
     String.equal m (fst (fst a))
     && stz.ncls = DMA.MAForeign
@@ -271,21 +271,21 @@ module Make (S : SEARCH) = struct
      matches it, and its dependee otherwise *)
   let clause_name opt g = function [ a ] when not opt -> alt_name a | _ -> g
 
-  let pkg_names (((n, _), _) as p : DMA.Pkg.t) =
+  let pkg_names (((n, _), _) as p : DMA.Package.t) =
     n
     :: (match stanza p with Some stz -> List.map fst stz.nprovs | None -> [])
 
-  let orig_of (((n, b), _) : DMA.Pkg.t) =
+  let orig_of (((n, b), _) : DMA.Package.t) =
     DMA.Deb.Reduction.Name.Orig (n, DMA.QAArch b)
 
-  let installed_at ~(assigned : assigned) (((_, _), v) as p : DMA.Pkg.t) =
+  let installed_at ~(assigned : assigned) (((_, _), v) as p : DMA.Package.t) =
     match assigned (orig_of p) with
     | PG.Decided u -> u.PVersion.v = DMA.Deb.Reduction.Version.Orig v
     | _ -> false
 
-  type rejection = [ `Ver of DMA.Pkg.t | `Pkg of string * string ]
+  type rejection = [ `Ver of DMA.Package.t | `Pkg of string * string ]
 
-  let reject_ver st ~assigned out (x : DMA.Pkg.t) =
+  let reject_ver st ~assigned out (x : DMA.Package.t) =
     if (not (Hashtbl.mem st.vdead x)) && not (installed_at ~assigned x) then (
       Hashtbl.replace st.vdead x ();
       out := `Ver x :: !out)
@@ -313,7 +313,7 @@ module Make (S : SEARCH) = struct
   (* what installing p assigns at once through its own Conflicts and Breaks:
      the versions its negatives exclude (the negative clause's solutions,
      rejected as its reason comes true) *)
-  let conflicts st ~assigned (((pkgname, _), v) as p : DMA.Pkg.t) =
+  let conflicts st ~assigned (((pkgname, _), v) as p : DMA.Package.t) =
     let out = ref [] in
     List.iter
       (fun (tn, tvs) ->
@@ -334,7 +334,7 @@ module Make (S : SEARCH) = struct
      apt-pkg/pkgcachegen.cc:812-880): a version of foo:b conflicts with every
      other architecture's foo that has a version, or, if it is Multi-Arch:
      same, breaks those versions but its own *)
-  let group_reaches (((_, b), v) as p : DMA.Pkg.t) c w =
+  let group_reaches (((_, b), v) as p : DMA.Package.t) c w =
     (not (String.equal b c))
     && ((match stanza p with
           | Some stz -> stz.ncls <> DMA.MASame
@@ -343,7 +343,7 @@ module Make (S : SEARCH) = struct
 
   (* what installing p assigns through its implicit negatives, which the
      cache appends to its dependencies after the Recommends *)
-  let group_conflicts st ~assigned (((n, _), _) as p : DMA.Pkg.t) =
+  let group_conflicts st ~assigned (((n, _), _) as p : DMA.Package.t) =
     let out = ref [] in
     List.iter
       (fun (c, w) ->
@@ -357,7 +357,7 @@ module Make (S : SEARCH) = struct
      version, or of the version p provides the name at (IsSatisfied over a
      PrvIterator: an unversioned Provides never meets a versioned
      negative). *)
-  let reaches (((pkgname, pb), v) as p : DMA.Pkg.t) (a : DMA.Atom.t) n =
+  let reaches (((pkgname, pb), v) as p : DMA.Package.t) (a : DMA.Atom.t) n =
     String.equal (DMA.aname a) n
     && (match DMA.aqual a with
       | DMA.QUnq | DMA.QAny -> true
@@ -378,7 +378,7 @@ module Make (S : SEARCH) = struct
      apt-pkg/pkgcache.cc:757-790), and a declarer that is not MA:same
      already conflicts with its whole group implicitly: those implicit
      negatives, group_reaches, are what reaches p from its own group. *)
-  let conflicted_by st ~assigned (((pkgname, pb), v) as p : DMA.Pkg.t) =
+  let conflicted_by st ~assigned (((pkgname, pb), v) as p : DMA.Package.t) =
     (* by package, not version: under Strict-Pinning a package has one,
        and with it off the replay judges the first it meets, which moves
        the order and never an answer's validity *)
@@ -388,7 +388,7 @@ module Make (S : SEARCH) = struct
     List.iter
       (fun n ->
         List.iter
-          (fun (q : DMA.Pkg.t) ->
+          (fun (q : DMA.Package.t) ->
             let qk = fst q in
             if
               (not (Hashtbl.mem seen qk))
@@ -449,7 +449,7 @@ module Make (S : SEARCH) = struct
     List.iter
       (fun nm ->
         List.iter
-          (fun (r : DMA.Pkg.t) ->
+          (fun (r : DMA.Package.t) ->
             let rk = fst r in
             if (not (Hashtbl.mem seen rk)) && not (Hashtbl.mem st.pdead rk) then (
               Hashtbl.replace seen rk ();

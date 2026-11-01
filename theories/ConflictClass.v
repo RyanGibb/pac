@@ -6,20 +6,20 @@ Create Rewrite HintDb cmp_cls.
 
 Module ConflictClass (N V : UsualOrderedType).
   Module Source := Core N V.
-  Module Pkg := Source.Pkg.
-  Module PkgSet := Source.PkgSet.
+  Module Package := Source.Package.
+  Module PackageSet := Source.PackageSet.
   Module VSet := Source.VSet.
 
-  Module InClassElt := PairUOT Pkg N.
-  Module InClassRel := FSetUOT InClassElt.
+  Module ConflictClassElt := PairUOT Package N.
+  Module ConflictClassRel := FSetUOT ConflictClassElt.
 
-  Definition ClassExclusion (Om : InClassRel.t) (S : PkgSet.t) : Prop :=
-    forall (k : N.t) (p q : Pkg.t), PkgSet.In p S -> PkgSet.In q S ->
-      InClassRel.In (p, k) Om -> InClassRel.In (q, k) Om -> p = q.
+  Definition ClassExclusion (Om : ConflictClassRel.t) (S : PackageSet.t) : Prop :=
+    forall (k : N.t) (p q : Package.t), PackageSet.In p S -> PackageSet.In q S ->
+      ConflictClassRel.In (p, k) Om -> ConflictClassRel.In (q, k) Om -> p = q.
 
   Record IsResolution
-      (R : PkgSet.t) (D : Source.DepRel.t) (Om : InClassRel.t) (r : Pkg.t)
-      (S : PkgSet.t) : Prop :=
+      (R : PackageSet.t) (D : Source.DependencyRel.t) (Om : ConflictClassRel.t) (r : Package.t)
+      (S : PackageSet.t) : Prop :=
     { res_core : Source.IsResolution R D r S
     ; res_class_exclusion : ClassExclusion Om S }.
 
@@ -86,71 +86,71 @@ Module ConflictClass (N V : UsualOrderedType).
     Module VersionOT := UOTFromCompare Version.
     Module Reduced := Core NameOT VersionOT.
 
-    Definition embedPkg (p : Pkg.t) : Reduced.Pkg.t :=
+    Definition embedPkg (p : Package.t) : Reduced.Package.t :=
       (Name.Orig (fst p), Version.Orig (snd p)).
 
-    Module SOpt := SetOps Pkg Reduced.Pkg PkgSet Reduced.PkgSet.
-    Definition embedSet (S : PkgSet.t) : Reduced.PkgSet.t := SOpt.map embedPkg S.
+    Module SOpt := SetOps Package Reduced.Package PackageSet Reduced.PackageSet.
+    Definition embedSet (S : PackageSet.t) : Reduced.PackageSet.t := SOpt.map embedPkg S.
 
     Module SOvt := SetOps V VersionOT VSet Reduced.VSet.
     Definition embedVS (vs : VSet.t) : Reduced.VSet.t := SOvt.map Version.Orig vs.
 
-    Module SOit := SetOps InClassElt Reduced.Pkg InClassRel Reduced.PkgSet.
-    Definition classPkgs (ps : PkgSet.t) (Om : InClassRel.t) : Reduced.PkgSet.t :=
+    Module SOit := SetOps ConflictClassElt Reduced.Package ConflictClassRel Reduced.PackageSet.
+    Definition classPkgs (ps : PackageSet.t) (Om : ConflictClassRel.t) : Reduced.PackageSet.t :=
       SOit.filterMap (fun '(q, k) =>
-          if PkgSet.mem q ps
+          if PackageSet.mem q ps
           then Some (Name.Cls k, Version.Name (fst q))
           else None)
         Om.
 
-    Lemma mem_classPkgs : forall ps Om (p : Reduced.Pkg.t),
-        Reduced.PkgSet.In p (classPkgs ps Om) <->
-        exists n v k, InClassRel.In ((n, v), k) Om /\ PkgSet.In (n, v) ps /\
+    Lemma mem_classPkgs : forall ps Om (p : Reduced.Package.t),
+        Reduced.PackageSet.In p (classPkgs ps Om) <->
+        exists n v k, ConflictClassRel.In ((n, v), k) Om /\ PackageSet.In (n, v) ps /\
           p = (Name.Cls k, Version.Name n).
     Proof.
       intros ps Om p; unfold classPkgs; rewrite SOit.mem_filterMap.
       split.
       - intros [[[n v] k] [Hc Hy]]; cbn beta iota in Hy.
-        destruct (PkgSet.mem (n, v) ps) eqn:Hm; [| discriminate].
+        destruct (PackageSet.mem (n, v) ps) eqn:Hm; [| discriminate].
         injection Hy as <-.
         exists n, v, k; split; [exact Hc |].
-        split; [apply PkgSet.mem_spec; exact Hm | reflexivity].
+        split; [apply PackageSet.mem_spec; exact Hm | reflexivity].
       - intros [n [v [k [Hc [Hq ->]]]]].
         exists ((n, v), k); split; [exact Hc | cbn beta iota].
-        rewrite (proj2 (PkgSet.mem_spec _ _) Hq); reflexivity.
+        rewrite (proj2 (PackageSet.mem_spec _ _) Hq); reflexivity.
     Qed.
 
-    Definition reduceReal (R : PkgSet.t) (Om : InClassRel.t) : Reduced.PkgSet.t :=
-      Reduced.PkgSet.union (embedSet R) (classPkgs R Om).
+    Definition reduceReal (R : PackageSet.t) (Om : ConflictClassRel.t) : Reduced.PackageSet.t :=
+      Reduced.PackageSet.union (embedSet R) (classPkgs R Om).
 
-    Lemma mem_reduceReal : forall R Om (p' : Reduced.Pkg.t),
-        Reduced.PkgSet.In p' (reduceReal R Om) <->
-        (exists p, PkgSet.In p R /\ p' = embedPkg p) \/
-        (exists n v k, InClassRel.In ((n, v), k) Om /\ PkgSet.In (n, v) R /\
+    Lemma mem_reduceReal : forall R Om (p' : Reduced.Package.t),
+        Reduced.PackageSet.In p' (reduceReal R Om) <->
+        (exists p, PackageSet.In p R /\ p' = embedPkg p) \/
+        (exists n v k, ConflictClassRel.In ((n, v), k) Om /\ PackageSet.In (n, v) R /\
            p' = (Name.Cls k, Version.Name n)).
     Proof.
       intros; unfold reduceReal, embedSet.
-      rewrite Reduced.PkgSet.union_spec, SOpt.mem_map, mem_classPkgs; reflexivity.
+      rewrite Reduced.PackageSet.union_spec, SOpt.mem_map, mem_classPkgs; reflexivity.
     Qed.
 
-    Module SOdtd := SetOps Source.DepElt Reduced.DepElt Source.DepRel Reduced.DepRel.
-    Definition origEdges (D : Source.DepRel.t) : Reduced.DepRel.t :=
+    Module SOdtd := SetOps Source.DependencyElt Reduced.DependencyElt Source.DependencyRel Reduced.DependencyRel.
+    Definition origEdges (D : Source.DependencyRel.t) : Reduced.DependencyRel.t :=
       SOdtd.map (fun '(p, (n, vs)) => (embedPkg p, (Name.Orig n, embedVS vs)))
         D.
 
-    Module SOitd := SetOps InClassElt Reduced.DepElt InClassRel Reduced.DepRel.
-    Definition classEdges (Om : InClassRel.t) : Reduced.DepRel.t :=
+    Module SOitd := SetOps ConflictClassElt Reduced.DependencyElt ConflictClassRel Reduced.DependencyRel.
+    Definition classEdges (Om : ConflictClassRel.t) : Reduced.DependencyRel.t :=
       SOitd.map (fun '(q, k) =>
           (embedPkg q,
            (Name.Cls k, Reduced.VSet.singleton (Version.Name (fst q)))))
         Om.
 
-    Definition reduceDeps (D : Source.DepRel.t) (Om : InClassRel.t) : Reduced.DepRel.t :=
-      Reduced.DepRel.union (origEdges D) (classEdges Om).
+    Definition reduceDeps (D : Source.DependencyRel.t) (Om : ConflictClassRel.t) : Reduced.DependencyRel.t :=
+      Reduced.DependencyRel.union (origEdges D) (classEdges Om).
 
-    Lemma mem_origEdges : forall (D : Source.DepRel.t) (y : Reduced.DepElt.t),
-        Reduced.DepRel.In y (origEdges D) <->
-        exists p n vs, Source.DepRel.In (p, (n, vs)) D /\
+    Lemma mem_origEdges : forall (D : Source.DependencyRel.t) (y : Reduced.DependencyElt.t),
+        Reduced.DependencyRel.In y (origEdges D) <->
+        exists p n vs, Source.DependencyRel.In (p, (n, vs)) D /\
           y = (embedPkg p, (Name.Orig n, embedVS vs)).
     Proof.
       intros D y; unfold origEdges; rewrite SOdtd.mem_map.
@@ -161,9 +161,9 @@ Module ConflictClass (N V : UsualOrderedType).
         exists (p, (n, vs)); split; [exact HD | reflexivity].
     Qed.
 
-    Lemma mem_classEdges : forall Om (y : Reduced.DepElt.t),
-        Reduced.DepRel.In y (classEdges Om) <->
-        exists n v k, InClassRel.In ((n, v), k) Om /\
+    Lemma mem_classEdges : forall Om (y : Reduced.DependencyElt.t),
+        Reduced.DependencyRel.In y (classEdges Om) <->
+        exists n v k, ConflictClassRel.In ((n, v), k) Om /\
           y = (embedPkg (n, v),
                (Name.Cls k, Reduced.VSet.singleton (Version.Name n))).
     Proof.
@@ -175,20 +175,20 @@ Module ConflictClass (N V : UsualOrderedType).
         exists ((n, v), k); split; [exact Hc | reflexivity].
     Qed.
 
-    Lemma mem_reduceDeps : forall D Om (y : Reduced.DepElt.t),
-        Reduced.DepRel.In y (reduceDeps D Om) <->
-        (exists p n vs, Source.DepRel.In (p, (n, vs)) D /\
+    Lemma mem_reduceDeps : forall D Om (y : Reduced.DependencyElt.t),
+        Reduced.DependencyRel.In y (reduceDeps D Om) <->
+        (exists p n vs, Source.DependencyRel.In (p, (n, vs)) D /\
            y = (embedPkg p, (Name.Orig n, embedVS vs))) \/
-        (exists n v k, InClassRel.In ((n, v), k) Om /\
+        (exists n v k, ConflictClassRel.In ((n, v), k) Om /\
            y = (embedPkg (n, v),
                 (Name.Cls k, Reduced.VSet.singleton (Version.Name n)))).
     Proof.
       intros; unfold reduceDeps.
-      rewrite Reduced.DepRel.union_spec, mem_origEdges, mem_classEdges;
+      rewrite Reduced.DependencyRel.union_spec, mem_origEdges, mem_classEdges;
         reflexivity.
     Qed.
 
-    Definition tryInvPkg (p : Reduced.Pkg.t) : option Pkg.t :=
+    Definition tryInvPkg (p : Reduced.Package.t) : option Package.t :=
       match p with
       | (Name.Orig n, Version.Orig v) => Some (n, v)
       | _ => None
@@ -197,31 +197,31 @@ Module ConflictClass (N V : UsualOrderedType).
     Lemma tryInvPkg_embed : forall p, tryInvPkg (embedPkg p) = Some p.
     Proof. intros [n v]; reflexivity. Qed.
 
-    Lemma tryInvPkg_some : forall (p' : Reduced.Pkg.t) (p : Pkg.t),
+    Lemma tryInvPkg_some : forall (p' : Reduced.Package.t) (p : Package.t),
         tryInvPkg p' = Some p -> embedPkg p = p'.
     Proof.
       intros [[n | k] [v | q]] p H; simpl in H; try discriminate.
       injection H as <-; reflexivity.
     Qed.
 
-    Module SOtp := SetOps Reduced.Pkg Pkg Reduced.PkgSet PkgSet.
+    Module SOtp := SetOps Reduced.Package Package Reduced.PackageSet PackageSet.
     Lemma embedPkg_injective :
-      forall p q : Pkg.t, embedPkg p = embedPkg q -> p = q.
+      forall p q : Package.t, embedPkg p = embedPkg q -> p = q.
     Proof. exact (SOtp.emb_injective tryInvPkg embedPkg tryInvPkg_embed). Qed.
 
-    Definition conflictClassResolution (S : Reduced.PkgSet.t) : PkgSet.t :=
+    Definition conflictClassResolution (S : Reduced.PackageSet.t) : PackageSet.t :=
       SOtp.filterMap tryInvPkg S.
 
-    Lemma mem_conflictClassResolution : forall (S : Reduced.PkgSet.t) (p : Pkg.t),
-        PkgSet.In p (conflictClassResolution S) <-> Reduced.PkgSet.In (embedPkg p) S.
+    Lemma mem_conflictClassResolution : forall (S : Reduced.PackageSet.t) (p : Package.t),
+        PackageSet.In p (conflictClassResolution S) <-> Reduced.PackageSet.In (embedPkg p) S.
     Proof.
       unfold conflictClassResolution.
       exact (SOtp.mem_filterMap_inv tryInvPkg embedPkg tryInvPkg_embed
                tryInvPkg_some).
     Qed.
 
-    Lemma embedPkg_mem_real : forall (p : Pkg.t) R Om,
-        Reduced.PkgSet.In (embedPkg p) (reduceReal R Om) -> PkgSet.In p R.
+    Lemma embedPkg_mem_real : forall (p : Package.t) R Om,
+        Reduced.PackageSet.In (embedPkg p) (reduceReal R Om) -> PackageSet.In p R.
     Proof.
       intros p R Om H; apply mem_reduceReal in H.
       destruct H as [[q [HqR Hq]] | [n [v [k [_ [_ Hy]]]]]].
@@ -230,17 +230,17 @@ Module ConflictClass (N V : UsualOrderedType).
     Qed.
 
     Theorem conflict_class_soundness :
-      forall R D Om (r : Pkg.t) (S : Reduced.PkgSet.t),
+      forall R D Om (r : Package.t) (S : Reduced.PackageSet.t),
         Reduced.IsResolution (reduceReal R Om) (reduceDeps D Om) (embedPkg r) S ->
         IsResolution R D Om r (conflictClassResolution S).
     Proof.
       intros R D Om r S [Hsub Hroot Hdep Huniq].
       assert (Hcls : forall q k,
-                 PkgSet.In q (conflictClassResolution S) ->
-                 InClassRel.In (q, k) Om ->
-                 Reduced.PkgSet.In (Name.Cls k, Version.Name (fst q)) S).
+                 PackageSet.In q (conflictClassResolution S) ->
+                 ConflictClassRel.In (q, k) Om ->
+                 Reduced.PackageSet.In (Name.Cls k, Version.Name (fst q)) S).
       { intros [n v] k Hq Hc; apply mem_conflictClassResolution in Hq.
-        assert (Hd : Reduced.DepRel.In
+        assert (Hd : Reduced.DependencyRel.In
                        (embedPkg (n, v),
                         (Name.Cls k, Reduced.VSet.singleton (Version.Name n)))
                        (reduceDeps D Om))
@@ -259,7 +259,7 @@ Module ConflictClass (N V : UsualOrderedType).
           exact (embedPkg_mem_real p R Om (Hsub _ Hp)).
         + apply mem_conflictClassResolution; exact Hroot.
         + intros p Hp m vs HD; apply mem_conflictClassResolution in Hp.
-          assert (Hd : Reduced.DepRel.In (embedPkg p, (Name.Orig m, embedVS vs))
+          assert (Hd : Reduced.DependencyRel.In (embedPkg p, (Name.Orig m, embedVS vs))
                          (reduceDeps D Om))
             by (apply mem_reduceDeps; left; exists p, m, vs;
                 split; [exact HD | reflexivity]).
@@ -276,12 +276,12 @@ Module ConflictClass (N V : UsualOrderedType).
         rewrite (Hvu pn pv qv Hp Hq); reflexivity.
     Qed.
 
-    Definition coreResolution (Om : InClassRel.t) (S : PkgSet.t) :
-        Reduced.PkgSet.t :=
+    Definition coreResolution (Om : ConflictClassRel.t) (S : PackageSet.t) :
+        Reduced.PackageSet.t :=
       reduceReal S Om.
 
     Theorem conflict_class_completeness :
-      forall R D Om (r : Pkg.t) (S : PkgSet.t),
+      forall R D Om (r : Package.t) (S : PackageSet.t),
         IsResolution R D Om r S ->
         Reduced.IsResolution (reduceReal R Om) (reduceDeps D Om) (embedPkg r)
           (coreResolution Om S).
@@ -320,10 +320,10 @@ Module ConflictClass (N V : UsualOrderedType).
           injection (Hexcl k _ _ Hq Hq' Hc Hc') as -> _; congruence.
     Qed.
 
-    Theorem conflict_class_retraction : forall (S : PkgSet.t) Om,
+    Theorem conflict_class_retraction : forall (S : PackageSet.t) Om,
         conflictClassResolution (coreResolution Om S) = S.
     Proof.
-      intros S Om; apply PkgSet.ext; intro p.
+      intros S Om; apply PackageSet.ext; intro p.
       rewrite mem_conflictClassResolution; unfold coreResolution.
       split; [exact (embedPkg_mem_real p S Om) |].
       intro H; apply mem_reduceReal; left; exists p; split;
@@ -331,35 +331,35 @@ Module ConflictClass (N V : UsualOrderedType).
     Qed.
 
     Module Lookup.
-      Module DepRelFibred := FibredRel Pkg Source.Dependees Source.DepElt Source.DepRel.
-      Module InClassFibred := FibredRel Pkg N InClassElt InClassRel.
-      Module PkgFibred := FibredRel N V Pkg PkgSet.
+      Module DependencyRelFibred := FibredRel Package Source.Dependee Source.DependencyElt Source.DependencyRel.
+      Module ConflictClassRelFibred := FibredRel Package N ConflictClassElt ConflictClassRel.
+      Module PackageSetFibred := FibredRel N V Package PackageSet.
 
-      Module InClassPre := PreimageOfKeys InClassElt Pkg InClassRel PkgSet.
-      Definition inClass (R : PkgSet.t) (Om : InClassRel.t) (k : N.t) :
-          PkgSet.t :=
-        InClassPre.ofKeys (fun q => (q, k)) Om R.
+      Module ConflictClassRelKeyPreimage := PreimageOfKeys ConflictClassElt Package ConflictClassRel PackageSet.
+      Definition inClass (R : PackageSet.t) (Om : ConflictClassRel.t) (k : N.t) :
+          PackageSet.t :=
+        ConflictClassRelKeyPreimage.ofKeys (fun q => (q, k)) Om R.
 
-      Lemma mem_inClass : forall R Om (k : N.t) (q : Pkg.t),
-          PkgSet.In q (inClass R Om k) <->
-          PkgSet.In q R /\ InClassRel.In (q, k) Om.
-      Proof. intros; unfold inClass; apply InClassPre.mem_ofKeys. Qed.
+      Lemma mem_inClass : forall R Om (k : N.t) (q : Package.t),
+          PackageSet.In q (inClass R Om k) <->
+          PackageSet.In q R /\ ConflictClassRel.In (q, k) Om.
+      Proof. intros; unfold inClass; apply ConflictClassRelKeyPreimage.mem_ofKeys. Qed.
 
       Module NEqb := UOTEqb N.
-      Module ClassRelPre := Preimage InClassElt InClassRel.
-      Definition classRelAt (Om : InClassRel.t) (k : N.t) : InClassRel.t :=
-        ClassRelPre.preimage snd (fun k' => NEqb.eqb k' k) Om.
+      Module ConflictClassRelPreimage := Preimage ConflictClassElt ConflictClassRel.
+      Definition classRelAt (Om : ConflictClassRel.t) (k : N.t) : ConflictClassRel.t :=
+        ConflictClassRelPreimage.preimage snd (fun k' => NEqb.eqb k' k) Om.
 
-      Lemma mem_classRelAt : forall Om (k k' : N.t) (q : Pkg.t),
-          InClassRel.In (q, k') (classRelAt Om k) <->
-          InClassRel.In (q, k') Om /\ k' = k.
+      Lemma mem_classRelAt : forall Om (k k' : N.t) (q : Package.t),
+          ConflictClassRel.In (q, k') (classRelAt Om k) <->
+          ConflictClassRel.In (q, k') Om /\ k' = k.
       Proof.
-        intros; unfold classRelAt; rewrite ClassRelPre.mem_preimage;
+        intros; unfold classRelAt; rewrite ConflictClassRelPreimage.mem_preimage;
           cbn [snd].
         rewrite NEqb.eqb_true_iff; reflexivity.
       Qed.
 
-      Module SOpv := SetOps Pkg VersionOT PkgSet Reduced.VSet.
+      Module SOpv := SetOps Package VersionOT PackageSet Reduced.VSet.
       Lemma versions_cls : forall R Om (k : N.t),
           Reduced.versions (reduceReal R Om) (Name.Cls k) =
           SOpv.map (fun q => Version.Name (fst q)) (inClass R Om k).
@@ -376,7 +376,7 @@ Module ConflictClass (N V : UsualOrderedType).
 
       Theorem versions_lookupOrig : forall R Om (n : N.t),
           Reduced.versions (reduceReal R Om) (Name.Orig n) =
-          Reduced.versions (reduceReal (PkgFibred.tailFibre R n) InClassRel.empty)
+          Reduced.versions (reduceReal (PackageSetFibred.tailFibre R n) ConflictClassRel.empty)
             (Name.Orig n).
       Proof.
         intros R Om n; apply Reduced.versions_ext; intro w.
@@ -387,19 +387,19 @@ Module ConflictClass (N V : UsualOrderedType).
           unfold embedPkg in Hq; cbn [fst snd] in Hq.
           injection Hq as -> ->.
           left; exists (qn, qv); split;
-            [apply PkgFibred.mem_tailFibre; split; [exact HR | reflexivity]
+            [apply PackageSetFibred.mem_tailFibre; split; [exact HR | reflexivity]
             | reflexivity].
         - intros [[p [HR Hp]] | [m [u [k [Hc _]]]]].
-          + apply PkgFibred.tailFibre_subset in HR.
+          + apply PackageSetFibred.tailFibre_subset in HR.
             left; exists p; split; [exact HR | exact Hp].
-          + destruct (InClassRel.empty_spec Hc).
+          + destruct (ConflictClassRel.empty_spec Hc).
       Qed.
 
-      Theorem dependees_lookupOrig : forall D Om (p : Pkg.t),
+      Theorem dependees_lookupOrig : forall D Om (p : Package.t),
           Reduced.dependees (reduceDeps D Om) (embedPkg p) =
           Reduced.dependees
-            (reduceDeps (DepRelFibred.tailFibre D p)
-               (InClassFibred.tailFibre Om p))
+            (reduceDeps (DependencyRelFibred.tailFibre D p)
+               (ConflictClassRelFibred.tailFibre Om p))
             (embedPkg p).
       Proof.
         intros D Om p; apply Reduced.dependees_ext; intros [m ws].
@@ -408,15 +408,15 @@ Module ConflictClass (N V : UsualOrderedType).
         - intros [[q [n [vs [HD Hy]]]] | [qn [qv [k [Hc Hy]]]]].
           + assert (q = p) as -> by (apply embedPkg_injective; congruence).
             left; exists p, n, vs; split; [| exact Hy].
-            apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
+            apply DependencyRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
           + assert ((qn, qv) = p) as <-
               by (apply embedPkg_injective; congruence).
             right; exists qn, qv, k; split; [| exact Hy].
-            apply InClassFibred.mem_tailFibre; split; [exact Hc | reflexivity].
+            apply ConflictClassRelFibred.mem_tailFibre; split; [exact Hc | reflexivity].
         - intros [[q [n [vs [HD Hy]]]] | [qn [qv [k [Hc Hy]]]]].
-          + apply DepRelFibred.tailFibre_subset in HD.
+          + apply DependencyRelFibred.tailFibre_subset in HD.
             left; exists q, n, vs; split; [exact HD | exact Hy].
-          + apply InClassFibred.tailFibre_subset in Hc.
+          + apply ConflictClassRelFibred.tailFibre_subset in Hc.
             right; exists qn, qv, k; split; [exact Hc | exact Hy].
       Qed.
 
@@ -426,14 +426,14 @@ Module ConflictClass (N V : UsualOrderedType).
             (Name.Cls k).
       Proof.
         intros R Om k; rewrite !versions_cls; f_equal.
-        apply PkgSet.ext; intro q.
+        apply PackageSet.ext; intro q.
         rewrite !mem_inClass, mem_classRelAt; intuition.
       Qed.
 
       Theorem dependees_lookupClass :
         forall D Om (k : N.t) (n : Version.t),
           Reduced.dependees (reduceDeps D Om) (Name.Cls k, n) =
-          Reduced.DependeesSet.empty.
+          Reduced.DependeeSet.empty.
       Proof.
         intros D Om k n; apply Reduced.dependees_empty_iff; intros h H.
         apply mem_reduceDeps in H.

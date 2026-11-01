@@ -44,12 +44,12 @@ module Make
   (* [dependees] is PF.Reduction's dependees lookup at the package, read off
      the sub-instance the driver builds for it; a thunk, so a package asked
      about twice builds it once *)
-  val process : t -> PF.Pkg.t -> (unit -> PF.coq_Formula list) -> unit
-  val dependees : t -> PF.Reduction.Reduced.Pkg.t -> PF.Reduction.Reduced.Dependees.t list
+  val process : t -> PF.Package.t -> (unit -> PF.coq_Formula list) -> unit
+  val dependees : t -> PF.Reduction.Reduced.Package.t -> PF.Reduction.Reduced.Dependee.t list
 
   val dependencies :
     t ->
-    touch:(PF.Reduction.Reduced.Pkg.t -> unit) ->
+    touch:(PF.Reduction.Reduced.Package.t -> unit) ->
     PF.Reduction.Name.t ->
     P.t ->
     (PF.Reduction.Name.t * PG.Ranges.t) list
@@ -60,7 +60,7 @@ module Make
     (PF.Reduction.Name.t * int) list ->
     PF.Reduction.Name.t
 
-  val core : t -> touch:(PF.Reduction.Reduced.Pkg.t -> unit) -> unit
+  val core : t -> touch:(PF.Reduction.Reduced.Package.t -> unit) -> unit
 
   (* The core solution back through the proved decoder to the package
      formula's packages.  Reading the ecosystem's packages off the
@@ -71,7 +71,7 @@ module Make
   val solve :
     t ->
     check:bool ->
-    touch:(PF.Reduction.Reduced.Pkg.t -> unit) ->
+    touch:(PF.Reduction.Reduced.Package.t -> unit) ->
     (Name.t, PG.selection, P.t) Pac_common.Order.hooks ->
-    (PF.PkgSet.t * int, Pac_common.Report.explanation) result
+    (PF.PackageSet.t * int, Pac_common.Report.explanation) result
 end

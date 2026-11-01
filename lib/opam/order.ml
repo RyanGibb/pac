@@ -143,7 +143,7 @@ let zero_install ar query st ~touch =
    absence deferred, as for every reduction through the package
    formulas. *)
 let hooks :
-    ( archive * (string * Opam_parse.vc) list * L.t * (T.Pkg.t -> unit),
+    ( archive * (string * Opam_parse.vc) list * L.t * (T.Package.t -> unit),
       PFR.Name.t,
       PG.selection,
       PVersion.t )

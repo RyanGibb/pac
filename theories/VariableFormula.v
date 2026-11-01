@@ -7,8 +7,8 @@ Create Rewrite HintDb cmp_varf.
 Module VariableFormula (N V : UsualOrderedType)
     (X : FiniteUsualOrderedType) (Y : UsualOrderedType).
   Module Source := Core N V.
-  Module Pkg := Source.Pkg.
-  Module PkgSet := Source.PkgSet.
+  Module Package := Source.Package.
+  Module PackageSet := Source.PackageSet.
   Module VSet := Source.VSet.
 
   Inductive Formula : Type :=
@@ -21,20 +21,20 @@ Module VariableFormula (N V : UsualOrderedType)
   Definition opEvalY (op : CmpOp) (v y : Y.t) : bool :=
     cmpOpEvalBy Y.compare op v y.
 
-  Fixpoint Satisfies (S : PkgSet.t) (sigma : X.t -> Y.t) (psi : Formula) :
+  Fixpoint Satisfies (S : PackageSet.t) (sigma : X.t -> Y.t) (psi : Formula) :
       Prop :=
     match psi with
-    | FAtom n vs => exists v, VSet.In v vs /\ PkgSet.In (n, v) S
+    | FAtom n vs => exists v, VSet.In v vs /\ PackageSet.In (n, v) S
     | FConj psiL psiR => Satisfies S sigma psiL /\ Satisfies S sigma psiR
     | FDisj psiL psiR => Satisfies S sigma psiL \/ Satisfies S sigma psiR
     | FNeg psi' => ~ Satisfies S sigma psi'
     | FVarCmp x op y => opEvalY op (sigma x) y = true
     end.
 
-  Fixpoint satisfiesb (S : PkgSet.t) (sigma : X.t -> Y.t) (psi : Formula) :
+  Fixpoint satisfiesb (S : PackageSet.t) (sigma : X.t -> Y.t) (psi : Formula) :
       bool :=
     match psi with
-    | FAtom m vs => VSet.exists_ (fun v => PkgSet.mem (m, v) S) vs
+    | FAtom m vs => VSet.exists_ (fun v => PackageSet.mem (m, v) S) vs
     | FConj psiL psiR =>
         andb (satisfiesb S sigma psiL) (satisfiesb S sigma psiR)
     | FDisj psiL psiR => orb (satisfiesb S sigma psiL) (satisfiesb S sigma psiR)
@@ -51,7 +51,7 @@ Module VariableFormula (N V : UsualOrderedType)
       simpl.
     - rewrite VSet.exists_spec'.
       split; intros [v [Hv Hm]]; exists v; split; try assumption;
-        apply PkgSet.mem_spec; assumption.
+        apply PackageSet.mem_spec; assumption.
     - rewrite Bool.andb_true_iff, IHa, IHb; reflexivity.
     - rewrite Bool.orb_true_iff, IHa, IHb; reflexivity.
     - rewrite Bool.negb_true_iff; split.
@@ -78,8 +78,8 @@ Module VariableFormula (N V : UsualOrderedType)
     - exfalso; apply Hnn, satisfiesb_false_iff; exact E.
   Qed.
 
-  Module XOY := TripleUOT X OpOT Y.
-  Module XOYF := UOTCompareFacts XOY.
+  Module VariableComparison := TripleUOT X OpOT Y.
+  Module XOYF := UOTCompareFacts VariableComparison.
   Module NF := UOTCompareFacts N.
   Module VSF := UOTCompareFacts VSet.AsUOT.
   #[local] Hint Rewrite NF.compare_eq_iff : cmp_varf.
@@ -104,7 +104,7 @@ Module VariableFormula (N V : UsualOrderedType)
           | FDisj a1 b1, FDisj a2 b2 => lex (compare a1 a2) (compare b1 b2)
           | FNeg a1, FNeg a2 => compare a1 a2
           | FVarCmp x1 o1 y1, FVarCmp x2 o2 y2 =>
-              XOY.compare (x1, (o1, y1)) (x2, (o2, y2))
+              VariableComparison.compare (x1, (o1, y1)) (x2, (o2, y2))
           | _, _ => Eq
           end
       | c => c
@@ -159,19 +159,19 @@ Module VariableFormula (N V : UsualOrderedType)
   End FComp.
   Module FOT := UOTFromCompare FComp.
 
-  Module Dependees := FOT.
-  Module DepElt := PairUOT Pkg Dependees.
-  Module DepRel := FSetUOT DepElt.
+  Module Dependee := FOT.
+  Module DependencyElt := PairUOT Package Dependee.
+  Module DependencyRel := FSetUOT DependencyElt.
   Module YSet := FSetUOT Y.
 
   Record IsResolution
-      (Y_x : X.t -> YSet.t) (R : PkgSet.t) (D : DepRel.t) (r : Pkg.t)
-      (S : PkgSet.t) (sigma : X.t -> Y.t) : Prop :=
-    { res_subset : PkgSet.Subset S R
-    ; res_root_mem : PkgSet.In r S
+      (Y_x : X.t -> YSet.t) (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t)
+      (S : PackageSet.t) (sigma : X.t -> Y.t) : Prop :=
+    { res_subset : PackageSet.Subset S R
+    ; res_root_mem : PackageSet.In r S
     ; res_formula_closure :
-        forall p, PkgSet.In p S ->
-        forall psi : Formula, DepRel.In (p, psi) D -> Satisfies S sigma psi
+        forall p, PackageSet.In p S ->
+        forall psi : Formula, DependencyRel.In (p, psi) D -> Satisfies S sigma psi
     ; res_version_unique : Source.VersionUnique S
     ; res_assignment_mem : forall x, YSet.In (sigma x) (Y_x x) }.
 
@@ -191,9 +191,9 @@ Module VariableFormula (N V : UsualOrderedType)
     Module Version := PF.Reduction.Version.
     Module NSet := Source.NSet.
 
-    Definition liftPkg (p : Pkg.t) : PF.Pkg.t := (inl (fst p), inl (snd p)).
+    Definition liftPkg (p : Package.t) : PF.Package.t := (inl (fst p), inl (snd p)).
 
-    Definition embedPkg (p : Pkg.t) : Reduced.Pkg.t :=
+    Definition embedPkg (p : Package.t) : Reduced.Package.t :=
       PF.Reduction.embedPkg (liftPkg p).
 
     Module SOvl := SetOps V VY VSet PF.VSet.
@@ -220,18 +220,18 @@ Module VariableFormula (N V : UsualOrderedType)
       | FVarCmp x op y => PF.FAtom (inr x) (cmpVersionSet Y_x x op y)
       end.
 
-    Module SOyp := SetOps Y PF.Pkg YSet PF.PkgSet.
-    Definition varPkgs (Y_x : X.t -> YSet.t) : PF.PkgSet.t :=
+    Module SOyp := SetOps Y PF.Package YSet PF.PackageSet.
+    Definition varPkgs (Y_x : X.t -> YSet.t) : PF.PackageSet.t :=
       List.fold_right (fun x acc =>
-          PF.PkgSet.union (SOyp.map (fun y => (inr x, inr y)) (Y_x x)) acc)
-        PF.PkgSet.empty X.enum.
+          PF.PackageSet.union (SOyp.map (fun y => (inr x, inr y)) (Y_x x)) acc)
+        PF.PackageSet.empty X.enum.
 
-    Module SOpl := SetOps Pkg PF.Pkg PkgSet PF.PkgSet.
-    Definition liftReal (Y_x : X.t -> YSet.t) (R : PkgSet.t) : PF.PkgSet.t :=
-      PF.PkgSet.union (SOpl.map liftPkg R) (varPkgs Y_x).
+    Module SOpl := SetOps Package PF.Package PackageSet PF.PackageSet.
+    Definition liftReal (Y_x : X.t -> YSet.t) (R : PackageSet.t) : PF.PackageSet.t :=
+      PF.PackageSet.union (SOpl.map liftPkg R) (varPkgs Y_x).
 
-    Module SOdl := SetOps DepElt PF.DepElt DepRel PF.DepRel.
-    Definition liftDeps (Y_x : X.t -> YSet.t) (D : DepRel.t) : PF.DepRel.t :=
+    Module SOdl := SetOps DependencyElt PF.DependencyElt DependencyRel PF.DependencyRel.
+    Definition liftDeps (Y_x : X.t -> YSet.t) (D : DependencyRel.t) : PF.DependencyRel.t :=
       SOdl.map (fun e => (liftPkg (fst e), liftFormula Y_x (snd e))) D.
 
     Definition liftOracle (Y_x : X.t -> YSet.t) (Vq : N.t -> VSet.t)
@@ -241,16 +241,16 @@ Module VariableFormula (N V : UsualOrderedType)
       | inr x => SOyl.map inr (Y_x x)
       end.
 
-    Definition reduceReal (Y_x : X.t -> YSet.t) (R : PkgSet.t) (D : DepRel.t)
-      : Reduced.PkgSet.t :=
+    Definition reduceReal (Y_x : X.t -> YSet.t) (R : PackageSet.t) (D : DependencyRel.t)
+      : Reduced.PackageSet.t :=
       PF.Reduction.reduceReal (liftReal Y_x R) (liftDeps Y_x D).
 
     Definition reduceDepsBy (Y_x : X.t -> YSet.t) (Vq : N.t -> VSet.t)
-        (D : DepRel.t) : Reduced.DepRel.t :=
+        (D : DependencyRel.t) : Reduced.DependencyRel.t :=
       PF.Reduction.reduceDepsBy (liftOracle Y_x Vq) (liftDeps Y_x D).
 
-    Definition reduceDeps (Y_x : X.t -> YSet.t) (R : PkgSet.t) (D : DepRel.t)
-      : Reduced.DepRel.t :=
+    Definition reduceDeps (Y_x : X.t -> YSet.t) (R : PackageSet.t) (D : DependencyRel.t)
+      : Reduced.DependencyRel.t :=
       PF.Reduction.reduceDeps (liftReal Y_x R) (liftDeps Y_x D).
 
     Lemma mem_liftVS : forall vs u,
@@ -271,21 +271,21 @@ Module VariableFormula (N V : UsualOrderedType)
     Qed.
 
     Lemma mem_varPkgs : forall Y_x q,
-        PF.PkgSet.In q (varPkgs Y_x) <->
+        PF.PackageSet.In q (varPkgs Y_x) <->
         exists x y, YSet.In y (Y_x x) /\ q = (inr x, inr y).
     Proof.
       intros Y_x q; unfold varPkgs.
-      assert (H : forall l, PF.PkgSet.In q
+      assert (H : forall l, PF.PackageSet.In q
                     (List.fold_right (fun x acc =>
-                        PF.PkgSet.union
+                        PF.PackageSet.union
                           (SOyp.map (fun y => (inr x, inr y)) (Y_x x)) acc)
-                       PF.PkgSet.empty l) <->
+                       PF.PackageSet.empty l) <->
                   exists x y, List.In x l /\ YSet.In y (Y_x x) /\
                               q = (inr x, inr y)).
       { induction l as [| x0 l IH]; cbn [List.fold_right].
         - split; [intro Hq; destruct (SOyp.empty_in _ Hq) |].
           intros [x [y [[] _]]].
-        - rewrite PF.PkgSet.union_spec, SOyp.mem_map, IH; split.
+        - rewrite PF.PackageSet.union_spec, SOyp.mem_map, IH; split.
           + intros [[y [Hy ->]] | [x [y [Hx Hy]]]].
             * exists x0, y; split; [left; reflexivity | auto].
             * exists x, y; split; [right; exact Hx | exact Hy].
@@ -299,20 +299,20 @@ Module VariableFormula (N V : UsualOrderedType)
     Qed.
 
     Lemma mem_liftReal : forall Y_x R q,
-        PF.PkgSet.In q (liftReal Y_x R) <->
-        (exists n v, PkgSet.In (n, v) R /\ q = (inl n, inl v)) \/
+        PF.PackageSet.In q (liftReal Y_x R) <->
+        (exists n v, PackageSet.In (n, v) R /\ q = (inl n, inl v)) \/
         (exists x y, YSet.In y (Y_x x) /\ q = (inr x, inr y)).
     Proof.
       intros Y_x R q; unfold liftReal.
-      rewrite PF.PkgSet.union_spec, SOpl.mem_map, mem_varPkgs.
+      rewrite PF.PackageSet.union_spec, SOpl.mem_map, mem_varPkgs.
       apply or_iff_compat_r; split.
       - intros [[n v] [Hp ->]]; exists n, v; split; [exact Hp | reflexivity].
       - intros [n [v [Hp ->]]]; exists (n, v); split; [exact Hp | reflexivity].
     Qed.
 
     Lemma mem_liftDeps : forall Y_x D e,
-        PF.DepRel.In e (liftDeps Y_x D) <->
-        exists p psi, DepRel.In (p, psi) D /\
+        PF.DependencyRel.In e (liftDeps Y_x D) <->
+        exists p psi, DependencyRel.In (p, psi) D /\
           e = (liftPkg p, liftFormula Y_x psi).
     Proof.
       intros Y_x D e; unfold liftDeps; rewrite SOdl.mem_map; split.
@@ -348,7 +348,7 @@ Module VariableFormula (N V : UsualOrderedType)
       apply versions_liftReal.
     Qed.
 
-    Definition tryInvPkg (p' : Reduced.Pkg.t) : option Pkg.t :=
+    Definition tryInvPkg (p' : Reduced.Package.t) : option Package.t :=
       match p' with
       | (Name.Orig (inl m), Version.Orig (inl v)) => Some (m, v)
       | _ => None
@@ -357,7 +357,7 @@ Module VariableFormula (N V : UsualOrderedType)
     Lemma tryInvPkg_embed : forall p, tryInvPkg (embedPkg p) = Some p.
     Proof. intros [m v]; reflexivity. Qed.
 
-    Lemma tryInvPkg_some : forall (p' : Reduced.Pkg.t) (p : Pkg.t),
+    Lemma tryInvPkg_some : forall (p' : Reduced.Package.t) (p : Package.t),
         tryInvPkg p' = Some p -> embedPkg p = p'.
     Proof.
       intros [[[n' | x'] | chis] [[v' | v] | i |]] p H; cbn [tryInvPkg] in H;
@@ -365,21 +365,21 @@ Module VariableFormula (N V : UsualOrderedType)
       injection H as <-; reflexivity.
     Qed.
 
-    Module SOtp := SetOps Reduced.Pkg Pkg Reduced.PkgSet PkgSet.
-    Definition variableFormulaResolution (S : Reduced.PkgSet.t) : PkgSet.t :=
+    Module SOtp := SetOps Reduced.Package Package Reduced.PackageSet PackageSet.
+    Definition variableFormulaResolution (S : Reduced.PackageSet.t) : PackageSet.t :=
       SOtp.filterMap tryInvPkg S.
 
-    Lemma mem_variableFormulaResolution : forall (S : Reduced.PkgSet.t) (p : Pkg.t),
-        PkgSet.In p (variableFormulaResolution S) <->
-        Reduced.PkgSet.In (embedPkg p) S.
+    Lemma mem_variableFormulaResolution : forall (S : Reduced.PackageSet.t) (p : Package.t),
+        PackageSet.In p (variableFormulaResolution S) <->
+        Reduced.PackageSet.In (embedPkg p) S.
     Proof.
       unfold variableFormulaResolution.
       exact (SOtp.mem_filterMap_inv tryInvPkg embedPkg tryInvPkg_embed
                tryInvPkg_some).
     Qed.
 
-    Module SOty := SetOps Reduced.Pkg Y Reduced.PkgSet YSet.
-    Definition assignCand (S : Reduced.PkgSet.t) (x : X.t) : YSet.t :=
+    Module SOty := SetOps Reduced.Package Y Reduced.PackageSet YSet.
+    Definition assignCand (S : Reduced.PackageSet.t) (x : X.t) : YSet.t :=
       SOty.filterMap (fun p' =>
           match p' with
           | (Name.Orig (inr x'), Version.Orig (inr y)) =>
@@ -389,7 +389,7 @@ Module VariableFormula (N V : UsualOrderedType)
         S.
 
     Definition assignment (y0 : Y.t) (Y_x : X.t -> YSet.t)
-        (S : Reduced.PkgSet.t) (x : X.t) : Y.t :=
+        (S : Reduced.PackageSet.t) (x : X.t) : Y.t :=
       match YSet.min_elt (assignCand S x) with
       | Some y => y
       | None =>
@@ -401,7 +401,7 @@ Module VariableFormula (N V : UsualOrderedType)
 
     Lemma mem_assignCand : forall S x y,
         YSet.In y (assignCand S x) <->
-        Reduced.PkgSet.In (Name.Orig (inr x), Version.Orig (inr y)) S.
+        Reduced.PackageSet.In (Name.Orig (inr x), Version.Orig (inr y)) S.
     Proof.
       intros S x y; unfold assignCand; rewrite SOty.mem_filterMap.
       split.
@@ -417,7 +417,7 @@ Module VariableFormula (N V : UsualOrderedType)
 
     Lemma assignment_at : forall y0 Y_x S x y,
         Reduced.VersionUnique S ->
-        Reduced.PkgSet.In (Name.Orig (inr x), Version.Orig (inr y)) S ->
+        Reduced.PackageSet.In (Name.Orig (inr x), Version.Orig (inr y)) S ->
         assignment y0 Y_x S x = y.
     Proof.
       intros y0 Y_x S x y Huniq Hin; unfold assignment.
@@ -428,19 +428,19 @@ Module VariableFormula (N V : UsualOrderedType)
         exact (E y (proj2 (mem_assignCand S x y) Hin)).
     Qed.
 
-    Definition assignPkgs (sigma : X.t -> Y.t) : PF.PkgSet.t :=
-      List.fold_right (fun x acc => PF.PkgSet.add (inr x, inr (sigma x)) acc)
-        PF.PkgSet.empty X.enum.
+    Definition assignPkgs (sigma : X.t -> Y.t) : PF.PackageSet.t :=
+      List.fold_right (fun x acc => PF.PackageSet.add (inr x, inr (sigma x)) acc)
+        PF.PackageSet.empty X.enum.
 
     Lemma mem_assignPkgs : forall sigma q,
-        PF.PkgSet.In q (assignPkgs sigma) <->
+        PF.PackageSet.In q (assignPkgs sigma) <->
         exists x, q = (inr x, inr (sigma x)).
     Proof.
       intros sigma q; unfold assignPkgs.
-      assert (H : forall l, PF.PkgSet.In q
+      assert (H : forall l, PF.PackageSet.In q
                     (List.fold_right (fun x acc =>
-                        PF.PkgSet.add (inr x, inr (sigma x)) acc)
-                       PF.PkgSet.empty l) <->
+                        PF.PackageSet.add (inr x, inr (sigma x)) acc)
+                       PF.PackageSet.empty l) <->
                   exists x, List.In x l /\ q = (inr x, inr (sigma x))).
       { induction l as [| x0 l IH]; cbn [List.fold_right].
         - split; [intro Hq; destruct (SOyp.empty_in _ Hq) |].
@@ -456,15 +456,15 @@ Module VariableFormula (N V : UsualOrderedType)
       - intros [x ->]; exists x; split; [apply X.enum_complete | reflexivity].
     Qed.
 
-    Definition liftModel (S : PkgSet.t) (sigma : X.t -> Y.t) : PF.PkgSet.t :=
-      PF.PkgSet.union (SOpl.map liftPkg S) (assignPkgs sigma).
+    Definition liftModel (S : PackageSet.t) (sigma : X.t -> Y.t) : PF.PackageSet.t :=
+      PF.PackageSet.union (SOpl.map liftPkg S) (assignPkgs sigma).
 
     Lemma mem_liftModel_inl : forall S sigma m w,
-        PF.PkgSet.In (inl m, w) (liftModel S sigma) <->
-        exists v, w = inl v /\ PkgSet.In (m, v) S.
+        PF.PackageSet.In (inl m, w) (liftModel S sigma) <->
+        exists v, w = inl v /\ PackageSet.In (m, v) S.
     Proof.
       intros S sigma m w; unfold liftModel.
-      rewrite PF.PkgSet.union_spec, SOpl.mem_map, mem_assignPkgs; split.
+      rewrite PF.PackageSet.union_spec, SOpl.mem_map, mem_assignPkgs; split.
       - intros [[[m' v] [Hp E]] | [x E]]; [| discriminate E].
         unfold liftPkg in E; cbn [fst snd] in E; injection E as <- ->.
         exists v; split; [reflexivity | exact Hp].
@@ -473,10 +473,10 @@ Module VariableFormula (N V : UsualOrderedType)
     Qed.
 
     Lemma mem_liftModel_inr : forall S sigma x w,
-        PF.PkgSet.In (inr x, w) (liftModel S sigma) <-> w = inr (sigma x).
+        PF.PackageSet.In (inr x, w) (liftModel S sigma) <-> w = inr (sigma x).
     Proof.
       intros S sigma x w; unfold liftModel.
-      rewrite PF.PkgSet.union_spec, SOpl.mem_map, mem_assignPkgs; split.
+      rewrite PF.PackageSet.union_spec, SOpl.mem_map, mem_assignPkgs; split.
       - intros [[p [_ E]] | [x' E]]; [unfold liftPkg in E; discriminate E |].
         injection E as <- ->; reflexivity.
       - intros ->; right; exists x; reflexivity.
@@ -514,7 +514,7 @@ Module VariableFormula (N V : UsualOrderedType)
     Theorem variable_formula_soundness :
       forall (y0 : Y.t) (Y_x : X.t -> YSet.t),
         (forall x, exists y, YSet.In y (Y_x x)) ->
-        forall (R : PkgSet.t) (D : DepRel.t) (r : Pkg.t) (S : Reduced.PkgSet.t),
+        forall (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t) (S : Reduced.PackageSet.t),
           Reduced.IsResolution (reduceReal Y_x R D) (reduceDeps Y_x R D)
             (embedPkg r) S ->
           IsResolution Y_x R D r (variableFormulaResolution S)
@@ -524,8 +524,8 @@ Module VariableFormula (N V : UsualOrderedType)
       set (sigma := assignment y0 Y_x S).
       assert (Hres' := Hres); destruct Hres' as [Hsub Hroot Hdep Huniq].
       assert (Hreal : forall n w,
-                 Reduced.PkgSet.In (Name.Orig n, Version.Orig w) S ->
-                 PF.PkgSet.In (n, w) (liftReal Y_x R)).
+                 Reduced.PackageSet.In (Name.Orig n, Version.Orig w) S ->
+                 PF.PackageSet.In (n, w) (liftReal Y_x R)).
       { intros n w H.
         exact (PF.Reduction.embedPkg_mem_reduceReal (n, w) _ _ (Hsub _ H)). }
       assert (Hsig : forall x, YSet.In (sigma x) (Y_x x)).
@@ -585,14 +585,14 @@ Module VariableFormula (N V : UsualOrderedType)
       - exact Hsig.
     Qed.
 
-    Definition coreResolution (Y_x : X.t -> YSet.t) (R : PkgSet.t)
-        (D : DepRel.t) (S : PkgSet.t) (sigma : X.t -> Y.t) : Reduced.PkgSet.t :=
+    Definition coreResolution (Y_x : X.t -> YSet.t) (R : PackageSet.t)
+        (D : DependencyRel.t) (S : PackageSet.t) (sigma : X.t -> Y.t) : Reduced.PackageSet.t :=
       PF.Reduction.coreResolution (liftReal Y_x R) (liftDeps Y_x D)
         (liftModel S sigma).
 
     Theorem variable_formula_completeness :
-      forall (Y_x : X.t -> YSet.t) (R : PkgSet.t) (D : DepRel.t)
-             (r : Pkg.t) (S : PkgSet.t) (sigma : X.t -> Y.t),
+      forall (Y_x : X.t -> YSet.t) (R : PackageSet.t) (D : DependencyRel.t)
+             (r : Package.t) (S : PackageSet.t) (sigma : X.t -> Y.t),
         IsResolution Y_x R D r S sigma ->
         Reduced.IsResolution (reduceReal Y_x R D) (reduceDeps Y_x R D) (embedPkg r)
           (coreResolution Y_x R D S sigma).
@@ -631,7 +631,7 @@ Module VariableFormula (N V : UsualOrderedType)
           assignment y0 Y_x (coreResolution Y_x R D S sigma) x = sigma x.
     Proof.
       intros y0 Y_x S R D sigma; split.
-      { apply PkgSet.ext; intros [m v].
+      { apply PackageSet.ext; intros [m v].
         rewrite mem_variableFormulaResolution; unfold embedPkg, coreResolution.
         rewrite <- PF.Reduction.mem_packageFormulaResolution,
           PF.Reduction.package_formula_retraction.
@@ -658,8 +658,8 @@ Module VariableFormula (N V : UsualOrderedType)
     Qed.
 
     Module Lookup.
-      Module PkgFibred := FibredRel N V Pkg PkgSet.
-      Module DepRelFibred := FibredRel Pkg Dependees DepElt DepRel.
+      Module PackageSetFibred := FibredRel N V Package PackageSet.
+      Module DependencyRelFibred := FibredRel Package Dependee DependencyElt DependencyRel.
 
       Fixpoint ownNegNames (psi : Formula) : NSet.t :=
         match psi with
@@ -679,8 +679,8 @@ Module VariableFormula (N V : UsualOrderedType)
         | FVarCmp _ _ _ => NSet.empty
         end.
 
-      Module SOen := SetOps DepElt N DepRel NSet.
-      Definition ownNegDepNames (D : DepRel.t) : NSet.t :=
+      Module SOen := SetOps DependencyElt N DependencyRel NSet.
+      Definition ownNegDepNames (D : DependencyRel.t) : NSet.t :=
         SOen.unionMap (fun e => ownNegNames (snd e)) D.
 
       Definition valuesAt (Y_x : X.t -> YSet.t) (x : X.t) : X.t -> YSet.t :=
@@ -729,19 +729,19 @@ Module VariableFormula (N V : UsualOrderedType)
       Qed.
 
       Lemma liftDeps_tailFibre : forall Y_x D (m : N.t) (v : V.t),
-          PF.Reduction.Lookup.DepRelFibred.tailFibre (liftDeps Y_x D)
+          PF.Reduction.Lookup.DependencyRelFibred.tailFibre (liftDeps Y_x D)
             (inl m, inl v) =
-          liftDeps Y_x (DepRelFibred.tailFibre D (m, v)).
+          liftDeps Y_x (DependencyRelFibred.tailFibre D (m, v)).
       Proof.
-        intros Y_x D m v; apply PF.DepRel.ext; intros [p g].
-        rewrite PF.Reduction.Lookup.DepRelFibred.mem_tailFibre, !mem_liftDeps.
+        intros Y_x D m v; apply PF.DependencyRel.ext; intros [p g].
+        rewrite PF.Reduction.Lookup.DependencyRelFibred.mem_tailFibre, !mem_liftDeps.
         split.
         - intros [[[m' v'] [psi [Hd E]]] ->].
           unfold liftPkg in E; cbn [fst snd] in E; injection E as <- <- ->.
           exists (m, v), psi; split; [| reflexivity].
-          apply DepRelFibred.mem_tailFibre; split; [exact Hd | reflexivity].
+          apply DependencyRelFibred.mem_tailFibre; split; [exact Hd | reflexivity].
         - intros [p' [psi [Hd E]]].
-          apply DepRelFibred.mem_tailFibre in Hd; destruct Hd as [Hd ->].
+          apply DependencyRelFibred.mem_tailFibre in Hd; destruct Hd as [Hd ->].
           injection E as -> ->.
           split; [exists (m, v), psi; split; [exact Hd | reflexivity] |].
           reflexivity.
@@ -749,33 +749,33 @@ Module VariableFormula (N V : UsualOrderedType)
 
       Theorem versions_lookupOrig :
         forall Y_x R D (m : N.t) (u : V.t) (n : N.t),
-          PkgSet.In (m, u) R ->
+          PackageSet.In (m, u) R ->
           (exists p h,
-              Reduced.DepRel.In (p, (Name.Orig (inl n), h)) (reduceDeps Y_x R D)) \/
+              Reduced.DependencyRel.In (p, (Name.Orig (inl n), h)) (reduceDeps Y_x R D)) \/
           n = m ->
           Reduced.versions (reduceReal Y_x R D) (Name.Orig (inl n)) =
           Reduced.VSet.add Version.Bot
             (Reduced.versions
-               (reduceReal (fun _ => YSet.empty) (PkgFibred.tailFibre R n)
-                  DepRel.empty)
+               (reduceReal (fun _ => YSet.empty) (PackageSetFibred.tailFibre R n)
+                  DependencyRel.empty)
                (Name.Orig (inl n))).
       Proof.
         intros Y_x R D m u n Hr Hreach.
-        assert (Hr' : PF.PkgSet.In (inl m, inl u) (liftReal Y_x R))
+        assert (Hr' : PF.PackageSet.In (inl m, inl u) (liftReal Y_x R))
           by (apply mem_liftReal; left; exists m, u;
               split; [exact Hr | reflexivity]).
         unfold reduceReal; rewrite (PF.Reduction.Lookup.versions_lookupOrig
                                       _ _ (inl m) (inl u) (inl n) Hr').
         - rewrite !PF.Reduction.Lookup.versions_reduceReal_bot.
           do 2 f_equal; apply PF.Source.versions_ext; intro w.
-          rewrite PF.Reduction.Lookup.PkgFibred.mem_tailFibre, !mem_liftReal.
+          rewrite PF.Reduction.Lookup.PackageSetFibred.mem_tailFibre, !mem_liftReal.
           split.
           + intros [[[m' [v [Hp E]]] | [x [y [_ E]]]] _]; [| discriminate E].
             injection E as <- ->; left; exists n, v; split; [| reflexivity].
-            apply PkgFibred.mem_tailFibre; split; [exact Hp | reflexivity].
+            apply PackageSetFibred.mem_tailFibre; split; [exact Hp | reflexivity].
           + intros [[m' [v [Hp E]]] | [x [y [Hy _]]]];
               [| destruct (YSet.empty_spec Hy)].
-            apply PkgFibred.mem_tailFibre in Hp; destruct Hp as [Hp Hm].
+            apply PackageSetFibred.mem_tailFibre in Hp; destruct Hp as [Hp Hm].
             cbn [fst] in Hm; subst m'; injection E as ->.
             split; [left; exists n, v; split; [exact Hp | reflexivity] |].
             reflexivity.
@@ -785,7 +785,7 @@ Module VariableFormula (N V : UsualOrderedType)
 
       Theorem versions_lookupVar : forall Y_x R D (x : X.t),
           Reduced.versions (reduceReal Y_x R D) (Name.Orig (inr x)) =
-          Reduced.versions (reduceReal (valuesAt Y_x x) PkgSet.empty DepRel.empty)
+          Reduced.versions (reduceReal (valuesAt Y_x x) PackageSet.empty DependencyRel.empty)
             (Name.Orig (inr x)).
       Proof.
         intros Y_x R D x; unfold reduceReal.
@@ -793,7 +793,7 @@ Module VariableFormula (N V : UsualOrderedType)
           by reflexivity.
         f_equal; apply PF.VSet.ext; intro w.
         rewrite !PF.Source.mem_versions,
-          !PF.Reduction.Lookup.PkgFibred.mem_tailFibre, !mem_liftReal.
+          !PF.Reduction.Lookup.PackageSetFibred.mem_tailFibre, !mem_liftReal.
         split.
         - intros [[[m [v [_ E]]] | [x' [y [Hy E]]]] _]; [discriminate E |].
           injection E as <- ->; split; [| reflexivity].
@@ -801,7 +801,7 @@ Module VariableFormula (N V : UsualOrderedType)
           unfold valuesAt; destruct (X.eq_dec x x) as [_ | NE];
             [exact Hy | contradiction NE; reflexivity].
         - intros [[[m [v [Hv E]]] | [x' [y [Hy E]]]] _];
-            [destruct (PkgSet.empty_spec Hv) |].
+            [destruct (PackageSet.empty_spec Hv) |].
           injection E as <- ->; split; [| reflexivity].
           right; exists x, y; split; [| reflexivity].
           revert Hy; unfold valuesAt; destruct (X.eq_dec x x) as [_ | NE];
@@ -810,11 +810,11 @@ Module VariableFormula (N V : UsualOrderedType)
 
       Theorem dependees_lookupOrigBy : forall Y_x R D Vq n v,
           (forall m,
-             NSet.In m (ownNegDepNames (DepRelFibred.tailFibre D (n, v))) ->
+             NSet.In m (ownNegDepNames (DependencyRelFibred.tailFibre D (n, v))) ->
              Vq m = Source.versions R m) ->
           Reduced.dependees (reduceDeps Y_x R D)
             (Name.Orig (inl n), Version.Orig (inl v)) =
-          Reduced.dependees (reduceDepsBy Y_x Vq (DepRelFibred.tailFibre D (n, v)))
+          Reduced.dependees (reduceDepsBy Y_x Vq (DependencyRelFibred.tailFibre D (n, v)))
             (Name.Orig (inl n), Version.Orig (inl v)).
       Proof.
         intros Y_x R D Vq n v HVq; unfold reduceDeps, reduceDepsBy.
@@ -833,14 +833,14 @@ Module VariableFormula (N V : UsualOrderedType)
           Reduced.dependees
             (reduceDeps Y_x
                (Source.namePreimage R
-                  (ownNegDepNames (DepRelFibred.tailFibre D (n, v))))
-               (DepRelFibred.tailFibre D (n, v)))
+                  (ownNegDepNames (DependencyRelFibred.tailFibre D (n, v))))
+               (DependencyRelFibred.tailFibre D (n, v)))
             (Name.Orig (inl n), Version.Orig (inl v)).
       Proof.
         intros Y_x R D n v.
         rewrite (dependees_lookupOrigBy Y_x R D
                    (Source.versions (Source.namePreimage R
-                      (ownNegDepNames (DepRelFibred.tailFibre D (n, v)))))),
+                      (ownNegDepNames (DependencyRelFibred.tailFibre D (n, v)))))),
           reduceDeps_by by
           (intros m Hn; apply Source.versions_namePreimage; exact Hn).
         reflexivity.
@@ -848,14 +848,14 @@ Module VariableFormula (N V : UsualOrderedType)
 
       Theorem dependees_lookupAbsent : forall Y_x R D n,
           Reduced.dependees (reduceDeps Y_x R D) (Name.Orig (inl n), Version.Bot) =
-          Reduced.DependeesSet.empty.
+          Reduced.DependeeSet.empty.
       Proof.
         intros Y_x R D n; apply PF.Reduction.Lookup.dependees_lookupAbsent.
       Qed.
 
       Theorem dependees_lookupVar : forall Y_x R D x (y : Version.t),
           Reduced.dependees (reduceDeps Y_x R D) (Name.Orig (inr x), y) =
-          Reduced.DependeesSet.empty.
+          Reduced.DependeeSet.empty.
       Proof.
         intros Y_x R D x y; apply Reduced.dependees_empty_iff; intros h H.
         apply PF.Reduction.mem_reduceDeps in H.
@@ -870,7 +870,7 @@ Module VariableFormula (N V : UsualOrderedType)
       Qed.
 
       Theorem versions_lookupDisjunct : forall Y_x R D chis,
-          (exists p h, Reduced.DepRel.In (p, (Name.Disjunct chis, h))
+          (exists p h, Reduced.DependencyRel.In (p, (Name.Disjunct chis, h))
                          (reduceDeps Y_x R D)) ->
           Reduced.versions (reduceReal Y_x R D) (Name.Disjunct chis) =
           PF.Reduction.idxSet (List.length chis).
@@ -880,7 +880,7 @@ Module VariableFormula (N V : UsualOrderedType)
       Qed.
 
       Theorem dependees_lookupDisjunct : forall Y_x R D chis (i : Version.t),
-          Reduced.PkgSet.In (Name.Disjunct chis, i) (reduceReal Y_x R D) ->
+          Reduced.PackageSet.In (Name.Disjunct chis, i) (reduceReal Y_x R D) ->
           Reduced.dependees (reduceDeps Y_x R D) (Name.Disjunct chis, i) =
           match PF.Reduction.Lookup.disjAlt chis i with
           | Some chi =>
@@ -888,7 +888,7 @@ Module VariableFormula (N V : UsualOrderedType)
                 (PF.Reduction.encode (liftOracle Y_x (Source.versions R))
                    (Name.Disjunct chis, i) chi)
                 (Name.Disjunct chis, i)
-          | None => Reduced.DependeesSet.empty
+          | None => Reduced.DependeeSet.empty
           end.
       Proof.
         intros Y_x R D chis i H; unfold reduceDeps.
@@ -901,9 +901,9 @@ Module VariableFormula (N V : UsualOrderedType)
       Qed.
 
       Theorem dependees_lookupDisjunctBy : forall Y_x R D R' D' Vq chis i,
-          DepRel.Subset D' D ->
-          Reduced.PkgSet.In (Name.Disjunct chis, i) (reduceReal Y_x R' D') ->
-          (forall p psi m, DepRel.In (p, psi) D' ->
+          DependencyRel.Subset D' D ->
+          Reduced.PackageSet.In (Name.Disjunct chis, i) (reduceReal Y_x R' D') ->
+          (forall p psi m, DependencyRel.In (p, psi) D' ->
              PF.Reduction.NSet.In m
                (PF.Reduction.Lookup.negNames (liftFormula Y_x psi)) ->
              liftOracle Y_x Vq m = liftOracle Y_x (Source.versions R) m) ->

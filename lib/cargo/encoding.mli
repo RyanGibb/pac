@@ -30,7 +30,7 @@ module type S = sig
   val fset_of : string list -> Cg.FSet.t
   val xentry : Cargo_parse.fentry -> Cg.FEntry.t
   val slots_of : root:bool -> Cargo_parse.ver -> Cargo_parse.dep list
-  val slot_data : Cargo_parse.dep -> Cg.SlotData.t
+  val slot_data : Cargo_parse.dep -> Cg.DependencyRecord.t
   val site_key : Cargo_parse.dep -> Cg.Site.t
 
   module PName : sig

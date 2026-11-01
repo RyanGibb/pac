@@ -33,7 +33,7 @@ module Make (Place_encoding : Place_encoding.S) : sig
     t ->
     PName.t ->
     PVersion.t ->
-    (part * (unit -> T.Dependees.t list)) list option
+    (part * (unit -> T.Dependee.t list)) list option
 
-  val dependees : t -> PName.t * PVersion.t -> T.Dependees.t list
+  val dependees : t -> PName.t * PVersion.t -> T.Dependee.t list
 end

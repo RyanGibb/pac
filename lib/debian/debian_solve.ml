@@ -13,20 +13,20 @@ module Make (AP : Tables.ARCH) = struct
   include T
 
   let ma_real_at tables (n, b) =
-    DMA.PkgSet.ofList
+    DMA.PackageSet.ofList
       (List.map (fun v -> ((n, b), v)) (versions_of tables (n, b)))
 
   (* Every group member at any arch: foreign provides and group provides
      come from any member, so name preimages must span the whole group. *)
   let ma_group_of_names tables ns =
-    DMA.PkgSet.ofList
+    DMA.PackageSet.ofList
       (List.concat_map
          (fun n ->
            List.map (fun (b, v) -> ((n, b), v)) (group_members tables n))
          ns)
 
   let ma_prov_of_names tables ns =
-    DMA.Prov.ofList
+    DMA.ProvidesRel.ofList
       (List.concat_map
          (fun n -> List.map (fun (q, vt) -> (q, (n, vt))) (providers tables n))
          ns)
@@ -35,24 +35,24 @@ module Make (AP : Tables.ARCH) = struct
   let fibre tables p ~none f = Option.fold ~none ~some:f (stanza tables p)
 
   let ma_prov_of_pkg tables p =
-    fibre tables p ~none:DMA.Prov.empty (fun stz ->
-        DMA.Prov.ofList (List.map (fun (m, vt) -> (p, (m, vt))) stz.nprovs))
+    fibre tables p ~none:DMA.ProvidesRel.empty (fun stz ->
+        DMA.ProvidesRel.ofList (List.map (fun (m, vt) -> (p, (m, vt))) stz.nprovs))
 
   let ma_deps_of_pkg tables p =
-    fibre tables p ~none:DMA.Deps.empty (fun stz ->
-        DMA.Deps.ofList (List.map (fun alts -> (p, alts)) (deps_of stz)))
+    fibre tables p ~none:DMA.DependencyRel.empty (fun stz ->
+        DMA.DependencyRel.ofList (List.map (fun alts -> (p, alts)) (deps_of stz)))
 
   let ma_recs_of_pkg tables p =
-    fibre tables p ~none:DMA.Deps.empty (fun stz ->
-        DMA.Deps.ofList (List.map (fun alts -> (p, alts)) (recs_of stz)))
+    fibre tables p ~none:DMA.DependencyRel.empty (fun stz ->
+        DMA.DependencyRel.ofList (List.map (fun alts -> (p, alts)) (recs_of stz)))
 
   let ma_conf_of_pkg tables p =
-    fibre tables p ~none:DMA.Conf.empty (fun stz ->
-        DMA.Conf.ofList (List.map (fun ma -> (p, ma)) stz.nconfs))
+    fibre tables p ~none:DMA.ConflictRel.empty (fun stz ->
+        DMA.ConflictRel.ofList (List.map (fun ma -> (p, ma)) stz.nconfs))
 
   (* classOf defaults to MANo, so a package with no stanza needs no entry. *)
   let classes_of tables pkgs =
-    DMA.Cls.ofList
+    DMA.ClassRel.ofList
       (List.filter_map
          (fun p ->
            Option.map (fun (stz : nstanza) -> (p, stz.ncls)) (stanza tables p))
@@ -84,7 +84,7 @@ module Make (AP : Tables.ARCH) = struct
     let pi_decl = ma_prov_of_names tables [ m ] in
     let cls =
       classes_of tables
-        (DMA.PkgSet.elements r_ma @ List.map fst (DMA.Prov.elements pi_decl))
+        (DMA.PackageSet.elements r_ma @ List.map fst (DMA.ProvidesRel.elements pi_decl))
     in
     (DMA.Reduction.reduceReal r_ma, DMA.Reduction.reduceProv r_ma pi_decl cls)
 
@@ -118,7 +118,7 @@ module Make (AP : Tables.ARCH) = struct
         let r, pi = sel_preimages sel_cache tables (fst a) in
         DMA.Deb.Reduction.us r pi a
 
-  let dependees sel_cache tables (s : DMA.Deb.Reduction.Reduced.Pkg.t) =
+  let dependees sel_cache tables (s : DMA.Deb.Reduction.Reduced.Package.t) =
     match s with
     | ( DMA.Deb.Reduction.Name.Orig (n, DMA.QAArch b),
         DMA.Deb.Reduction.Version.Orig v ) ->
@@ -127,13 +127,13 @@ module Make (AP : Tables.ARCH) = struct
         let r_ma = ma_group_of_names tables m in
         (* p itself joins the reduceProv carrier so its implicit provides
            (group pseudo-name, foreign/:any names) are visible to matchb *)
-        let r_pi = DMA.PkgSet.add p r_ma in
+        let r_pi = DMA.PackageSet.add p r_ma in
         let pi_decl =
-          DMA.Prov.union (ma_prov_of_names tables m) (ma_prov_of_pkg tables p)
+          DMA.ProvidesRel.union (ma_prov_of_names tables m) (ma_prov_of_pkg tables p)
         in
         let pi_cls =
           classes_of tables
-            (DMA.PkgSet.elements r_pi @ List.map fst (DMA.Prov.elements pi_decl))
+            (DMA.PackageSet.elements r_pi @ List.map fst (DMA.ProvidesRel.elements pi_decl))
         in
         DMA.Deb.Reduction.dependees
           {
@@ -142,7 +142,7 @@ module Make (AP : Tables.ARCH) = struct
             inst_rec = DMA.Reduction.reduceRec (ma_recs_of_pkg tables p);
             inst_prov = DMA.Reduction.reduceProv r_pi pi_decl pi_cls;
             inst_conf =
-              DMA.Reduction.reduceConf (DMA.PkgSet.singleton p)
+              DMA.Reduction.reduceConf (DMA.PackageSet.singleton p)
                 (ma_conf_of_pkg tables p) pi_cls;
             (* dependees never reads the root, so any package fills it *)
             inst_root = DMA.Reduction.embedPkg p;
@@ -151,22 +151,22 @@ module Make (AP : Tables.ARCH) = struct
     | ( (DMA.Deb.Reduction.Name.Disjunct _ | DMA.Deb.Reduction.Name.Soft _),
         DMA.Deb.Reduction.Version.Atom a ) ->
         let r, pi = sel_preimages sel_cache tables (fst a) in
-        DMA.Deb.Reduction.Reduced.DependeesSet.singleton
+        DMA.Deb.Reduction.Reduced.DependeeSet.singleton
           (DMA.Deb.Reduction.dependee r pi a)
     | DMA.Deb.Reduction.Name.Selector _, DMA.Deb.Reduction.Version.Ref (m, w) ->
-        DMA.Deb.Reduction.Reduced.DependeesSet.singleton
+        DMA.Deb.Reduction.Reduced.DependeeSet.singleton
           ( DMA.Deb.Reduction.Name.Orig m,
             DMA.Deb.Reduction.Reduced.VSet.singleton
               (DMA.Deb.Reduction.Version.Orig w) )
     | DMA.Deb.Reduction.Name.Selector a, DMA.Deb.Reduction.Version.RefReal w ->
-        DMA.Deb.Reduction.Reduced.DependeesSet.singleton
+        DMA.Deb.Reduction.Reduced.DependeeSet.singleton
           ( DMA.Deb.Reduction.Name.Orig (DMA.Deb.aname a),
             DMA.Deb.Reduction.Reduced.VSet.singleton
               (DMA.Deb.Reduction.Version.Orig w) )
     | _ ->
         (* every other shape is empty by dependees' catch-all, or, at a
            pseudo-name, because no reduced clause hangs there *)
-        DMA.Deb.Reduction.Reduced.DependeesSet.empty
+        DMA.Deb.Reduction.Reduced.DependeeSet.empty
 
   (* apt's CompareProviders3 (apt-pkg/solver3.cc) sorts the candidates of one
      alternative and takes the first undecided one.  Resolving from an empty
@@ -200,7 +200,7 @@ module Make (AP : Tables.ARCH) = struct
           let c = Int.compare b.pprio a.pprio in
           if c <> 0 then c else String.compare b.pkgname a.pkgname
 
-  let pref_of_pkg tables (p : DMA.Pkg.t) =
+  let pref_of_pkg tables (p : DMA.Package.t) =
     let (n, b), _ = p in
     let nat = String.equal b AP.native in
     match stanza tables p with
@@ -226,7 +226,7 @@ module Make (AP : Tables.ARCH) = struct
      first by whether each is in n's group, where foo:amd64 and foo:i386 tie
      whichever architecture asks for foo, and then by pref, which takes the
      native one. *)
-  let provider_compare tables n ((pk, _) as p : DMA.Pkg.t) ((qk, _) as q) =
+  let provider_compare tables n ((pk, _) as p : DMA.Package.t) ((qk, _) as q) =
     if pk = qk then Version.Debian.compare (snd p) (snd q)
     else
       let c =
@@ -245,7 +245,7 @@ module Make (AP : Tables.ARCH) = struct
     val versions : DMA.Deb.Reduction.Name.t -> DMA.Deb.Reduction.Reduced.VSet.t
 
     val dependencies :
-      DMA.Deb.Reduction.Reduced.Pkg.t -> DMA.Deb.Reduction.Reduced.DependeesSet.t
+      DMA.Deb.Reduction.Reduced.Package.t -> DMA.Deb.Reduction.Reduced.DependeeSet.t
   end) =
   struct
     module PVersion = struct
@@ -378,7 +378,7 @@ module Make (AP : Tables.ARCH) = struct
           List.map (tag n) (DMA.Deb.Reduction.Reduced.VSet.elements (I.versions n)))
 
     let dependees_of n (v : DMA.Deb.Reduction.Version.t) =
-      DMA.Deb.Reduction.Reduced.DependeesSet.elements (I.dependencies (n, v))
+      DMA.Deb.Reduction.Reduced.DependeeSet.elements (I.dependencies (n, v))
       |> List.map (fun (tn, tvs) ->
           (tn, List.map (tag tn) (DMA.Deb.Reduction.Reduced.VSet.elements tvs)))
 
@@ -455,11 +455,11 @@ module Make (AP : Tables.ARCH) = struct
        handed, each at the versions its range lists *)
     let check query sol =
       let s =
-        CT.PkgSet.ofList
+        CT.PackageSet.ofList
           (List.map (fun (n, (pv : PVersion.t)) -> (n, pv.PVersion.v)) sol)
       in
       let q =
-        CT.DependeesSet.ofList
+        CT.DependeeSet.ofList
           (List.map
              (fun x ->
                let n, cs = root_cands x in
@@ -475,12 +475,12 @@ module Make (AP : Tables.ARCH) = struct
 
     let decode sol =
       let s' =
-        DMA.Deb.Reduction.Reduced.PkgSet.ofList
+        DMA.Deb.Reduction.Reduced.PackageSet.ofList
           (List.map (fun (n, (pv : PVersion.t)) -> (n, pv.PVersion.v)) sol)
       in
       List.map
         (fun ((n, b), v) -> (n, b, v))
-        (DMA.PkgSet.elements
+        (DMA.PackageSet.elements
            (DMA.Reduction.debianMAResolution
               (DMA.Deb.Reduction.debianResolution s')))
 

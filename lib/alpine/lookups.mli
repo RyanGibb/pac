@@ -26,7 +26,7 @@ type stats = {
 
 module type S = sig
   module FirstDesignation : sig
-    val designation : Alp.CondSet.t -> Alp.Atom.t option
+    val designation : Alp.ConditionSet.t -> Alp.Atom.t option
   end
 
   module Red : module type of Alp.Reduct (FirstDesignation)
@@ -72,7 +72,7 @@ module type S = sig
   module PG = L.PG
 
   val lookups : archive -> L.t
-  val touch : archive -> P.dep list -> L.t -> PFR.Reduced.Pkg.t -> unit
+  val touch : archive -> P.dep list -> L.t -> PFR.Reduced.Package.t -> unit
 end
 
 (* generative, since each application holds the designations of the one

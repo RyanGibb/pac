@@ -45,12 +45,12 @@ struct
     tag : PFR.Name.t -> PFR.Version.t -> P.t;
     oracle : N.t -> PF.VSet.t;
     volatile : N.t -> bool;
-    edges : (T.Pkg.t, T.DependeesSet.t) Hashtbl.t;
+    edges : (T.Package.t, T.DependeeSet.t) Hashtbl.t;
     synthetic_vers : (PFR.Name.t, P.t list) Hashtbl.t;
     original_vers : (N.t, P.t list) Hashtbl.t;
     oracle_memo : (N.t, PF.VSet.t) Hashtbl.t;
-    seen : (PF.Pkg.t, unit) Hashtbl.t;
-    deps : (T.Pkg.t, (PFR.Name.t * PG.Ranges.t) list) Hashtbl.t;
+    seen : (PF.Package.t, unit) Hashtbl.t;
+    deps : (T.Package.t, (PFR.Name.t * PG.Ranges.t) list) Hashtbl.t;
     mutable canon : PFR.Name.t NameMap.t;
   }
 
@@ -95,44 +95,44 @@ struct
      designating it, 1023 for Alpine's docs -- so inserting them one at a
      time into a sorted-list set is quadratic: group by source first and
      build each source's set in a single pass. *)
-  let record_deprel st (d : T.DepRel.t) =
+  let record_deprel st (d : T.DependencyRel.t) =
     let by_src = Hashtbl.create 64 in
     List.iter
-      (fun ((s, h) : T.DepElt.t) -> Tbl.push by_src s h)
-      (T.DepRel.elements d);
+      (fun ((s, h) : T.DependencyElt.t) -> Tbl.push by_src s h)
+      (T.DependencyRel.elements d);
     Hashtbl.iter
       (fun s hs ->
-        let fresh = T.DependeesSet.ofList hs in
+        let fresh = T.DependeeSet.ofList hs in
         Hashtbl.replace st.edges s
           (match Hashtbl.find_opt st.edges s with
-          | Some prev -> T.DependeesSet.union prev fresh
+          | Some prev -> T.DependeeSet.union prev fresh
           | None -> fresh))
       by_src
 
   (* Only the synthetic names the reduction introduces are harvested; an
      original name's versions are its lookup's, [versions]. *)
-  let record_synthetic st (r : T.PkgSet.t) =
+  let record_synthetic st (r : T.PackageSet.t) =
     List.iter
-      (fun ((tn, tv) : T.Pkg.t) ->
+      (fun ((tn, tv) : T.Package.t) ->
         match tn with
         | PFR.Name.Orig _ -> ()
         | _ ->
             let tv = st.tag tn tv in
             if not (List.mem tv (Tbl.find_list st.synthetic_vers tn)) then
               Tbl.push st.synthetic_vers tn tv)
-      (T.PkgSet.elements r)
+      (T.PackageSet.elements r)
 
-  let process st (q : PF.Pkg.t) (dependees : unit -> PF.coq_Formula list) =
+  let process st (q : PF.Package.t) (dependees : unit -> PF.coq_Formula list) =
     if not (Hashtbl.mem st.seen q) then begin
       Hashtbl.replace st.seen q ();
-      let d_q = PF.DepRel.ofList (List.map (fun f -> (q, f)) (dependees ())) in
+      let d_q = PF.DependencyRel.ofList (List.map (fun f -> (q, f)) (dependees ())) in
       record_deprel st (PFR.reduceDepsBy (oracle st) d_q);
-      record_synthetic st (PFR.reduceReal (PF.PkgSet.singleton q) d_q)
+      record_synthetic st (PFR.reduceReal (PF.PackageSet.singleton q) d_q)
     end
 
-  let dependees st (p : T.Pkg.t) : T.Dependees.t list =
+  let dependees st (p : T.Package.t) : T.Dependee.t list =
     match Hashtbl.find_opt st.edges p with
-    | Some hs -> T.DependeesSet.elements hs
+    | Some hs -> T.DependeeSet.elements hs
     | None -> []
 
   (* Every original name answers its versions and the absent one
@@ -161,7 +161,7 @@ struct
     Tbl.memo st.deps p (fun () ->
         touch p;
         List.map
-          (fun ((m, vs) : T.Dependees.t) ->
+          (fun ((m, vs) : T.Dependee.t) ->
             let m = intern st m in
             (m, PG.Ranges.of_list (List.map (st.tag m) (T.VSet.elements vs))))
           (dependees st p))
@@ -229,16 +229,16 @@ struct
            let p = (tn, P.v pv) in
            touch p;
            List.map
-             (fun ((m, vs) : T.Dependees.t) ->
+             (fun ((m, vs) : T.Dependee.t) ->
                (m, List.map (st.tag m) (T.VSet.elements vs)))
              (dependees st p))
          [ PFR.Name.Orig (fst st.root) ])
 
-  let check st ~touch (core : T.PkgSet.t) =
+  let check st ~touch (core : T.PackageSet.t) =
     let versions tn = T.VSet.ofList (List.map P.v (versions st tn)) in
     let dependees p =
       touch p;
-      T.DependeesSet.ofList (dependees st p)
+      T.DependeeSet.ofList (dependees st p)
     in
     let root =
       T.rootQuery (PFR.Name.Orig (fst st.root), PFR.Version.Orig (snd st.root))
@@ -252,7 +252,7 @@ struct
 
   let solve st ~check:checked ~touch
       (h : (Name.t, PG.selection, P.t) Pac_common.Order.hooks) :
-      (PF.PkgSet.t * int, Pac_common.Report.explanation) result =
+      (PF.PackageSet.t * int, Pac_common.Report.explanation) result =
     let root = PFR.Name.Orig (fst st.root) in
     let r =
       PG.solve ?next:h.Pac_common.Order.next ?choose:h.Pac_common.Order.choose
@@ -264,7 +264,7 @@ struct
     | Error inc -> Error (fun ppf -> PG.explain_incompatibility ppf inc)
     | Ok sol ->
         let core =
-          T.PkgSet.ofList (List.map (fun (tn, pv) -> (tn, P.v pv)) sol)
+          T.PackageSet.ofList (List.map (fun (tn, pv) -> (tn, P.v pv)) sol)
         in
         if checked then check st ~touch core;
         Ok (PFR.packageFormulaResolution core, List.length sol)

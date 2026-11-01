@@ -29,7 +29,7 @@ type stats = {
 
 module type S = sig
   module FirstDesignation : sig
-    val designation : Alp.CondSet.t -> Alp.Atom.t option
+    val designation : Alp.ConditionSet.t -> Alp.Atom.t option
   end
 
   module Red : module type of Alp.Reduct (FirstDesignation)
@@ -67,7 +67,7 @@ module type S = sig
   module PG = L.PG
 
   val lookups : archive -> L.t
-  val touch : archive -> P.dep list -> L.t -> PFR.Reduced.Pkg.t -> unit
+  val touch : archive -> P.dep list -> L.t -> PFR.Reduced.Package.t -> unit
 end
 
 module Make () : S = struct
@@ -87,8 +87,8 @@ module Make () : S = struct
      discharging designation_spec, which is trusted, as ApkVerMatch's
      prefix/hash are *)
   module FirstDesignation = struct
-    let designation (conds : Alp.CondSet.t) : Alp.Atom.t option =
-      let key = Alp.CondSet.elements conds in
+    let designation (conds : Alp.ConditionSet.t) : Alp.Atom.t option =
+      let key = Alp.ConditionSet.elements conds in
       match Hashtbl.find_opt designations key with
       | Some _ as a -> a
       | None -> first_pos key
@@ -126,10 +126,10 @@ module Make () : S = struct
      when it is read *)
   let condset_of ds =
     let conds = List.map xdep ds in
-    let cs = Alp.CondSet.ofList conds in
+    let cs = Alp.ConditionSet.ofList conds in
     (match first_pos conds with
     | Some a ->
-        let key = Alp.CondSet.elements cs in
+        let key = Alp.ConditionSet.elements cs in
         if not (Hashtbl.mem designations key) then
           Hashtbl.add designations key a
     | None -> ());
@@ -137,7 +137,7 @@ module Make () : S = struct
 
   type iif_rule = {
     pkg : string * string;
-    conds : Alp.CondSet.t;
+    conds : Alp.ConditionSet.t;
     designation : Alp.Atom.t;
   }
 
@@ -237,12 +237,12 @@ module Make () : S = struct
 
   let empty_inst =
     {
-      Alp.inst_real = Alp.PkgSet.empty;
-      inst_deps = Alp.Deps.empty;
-      inst_prov = Alp.Prov.empty;
-      inst_installIf = Alp.InstallIf.empty;
-      inst_world = Alp.WSet.empty;
-      inst_prio = Alp.Prio.empty;
+      Alp.inst_real = Alp.PackageSet.empty;
+      inst_deps = Alp.DependencyRel.empty;
+      inst_prov = Alp.ProvidesRel.empty;
+      inst_installIf = Alp.InstallIfRuleRel.empty;
+      inst_world = Alp.WorldSet.empty;
+      inst_prio = Alp.PriorityRel.empty;
     }
 
   (* repoPreimage and provPreimage, built from the archive's tables rather
@@ -274,7 +274,7 @@ module Make () : S = struct
           | None -> None)
         !repo
     in
-    (Alp.PkgSet.ofList !repo, Alp.Prov.ofList !prov, Alp.Prio.ofList prio)
+    (Alp.PackageSet.ofList !repo, Alp.ProvidesRel.ofList !prov, Alp.PriorityRel.ofList prio)
 
   (* Lookup.nameSubInst *)
   let name_inst ar (n : string) : Alp.coq_Inst =
@@ -287,14 +287,14 @@ module Make () : S = struct
      it heads and nothing else, so deciding it against an instance carrying
      just those entries is the whole archive's answer
      (attachAt_subInst). *)
-  let install_if_at ar ((n, v) : string * string) (own : Alp.Prov.t) :
+  let install_if_at ar ((n, v) : string * string) (own : Alp.ProvidesRel.t) :
       iif_rule list =
     let inst = { empty_inst with Alp.inst_prov = own } in
     let at = Tbl.find_list ar.iif_by_cond in
     let cands =
       List.fold_left
-        (fun acc ((_, (m, _)) : Alp.ProvElt.t) -> List.rev_append (at m) acc)
-        (at n) (Alp.Prov.elements own)
+        (fun acc ((_, (m, _)) : Alp.ProvidesElt.t) -> List.rev_append (at m) acc)
+        (at n) (Alp.ProvidesRel.elements own)
     in
     List.filter (fun r -> Red.attachAt inst (n, v) r.designation) cands
 
@@ -310,7 +310,7 @@ module Make () : S = struct
     | None -> empty_inst
     | Some m ->
         let own =
-          Alp.Prov.ofList
+          Alp.ProvidesRel.ofList
             (List.map
                (fun (pr : P.prov) -> ((n, v), (pr.P.p_name, ptag pr.P.p_ver)))
                m.P.provides)
@@ -323,24 +323,24 @@ module Make () : S = struct
               :: List.rev_append
                    (List.map
                       (function Alp.DPos (m, _) | Alp.DNeg (m, _) -> m)
-                      (Alp.CondSet.elements (Red.condRest r.conds)))
+                      (Alp.ConditionSet.elements (Red.condRest r.conds)))
                    acc)
             (List.map (fun (d : P.dep) -> d.P.d_name) m.P.depends)
             rules
         in
         let repo, prov, prio = preimages_at ar ns in
         let deps =
-          Alp.Deps.ofList (List.map (fun d -> ((n, v), xdep d)) m.P.depends)
+          Alp.DependencyRel.ofList (List.map (fun d -> ((n, v), xdep d)) m.P.depends)
         in
         {
           Alp.inst_real = repo;
           inst_deps = deps;
-          inst_prov = Alp.Prov.union prov own;
+          inst_prov = Alp.ProvidesRel.union prov own;
           inst_installIf =
-            Alp.InstallIf.ofList (List.map (fun r -> (r.pkg, r.conds)) rules);
+            Alp.InstallIfRuleRel.ofList (List.map (fun r -> (r.pkg, r.conds)) rules);
           (* apk also takes a k:-less one whose owner has a requirer
              (solver.c:381) *)
-          inst_world = Alp.WSet.ofList (List.map xdep world);
+          inst_world = Alp.WorldSet.ofList (List.map xdep world);
           inst_prio = prio;
         }
 
@@ -357,7 +357,7 @@ module Make () : S = struct
       empty_inst with
       Alp.inst_real = repo;
       inst_prov = prov;
-      inst_world = Alp.WSet.ofList (List.map xdep world);
+      inst_world = Alp.WorldSet.ofList (List.map xdep world);
       inst_prio = prio;
     }
 
@@ -573,9 +573,9 @@ module Make () : S = struct
       ~root:(Red.Name.Root, Red.Version.UnitV)
       ~tag:(tag ar) ~oracle:(oracle ar) ()
 
-  let dependees inst q = Red.FSet.elements (Red.dependees inst q)
+  let dependees inst q = Red.PackageFormulaSet.elements (Red.dependees inst q)
 
-  let touch ar world st ((tn, tv) : T.Pkg.t) =
+  let touch ar world st ((tn, tv) : T.Package.t) =
     match (tn, tv) with
     | PFR.Name.Orig Red.Name.Root, PFR.Version.Orig Red.Version.UnitV ->
         (* Lookup.dependees_lookupRoot *)

@@ -82,7 +82,7 @@ module Make () = struct
     let indices = Hashtbl.create 65536 in
     let conv hs =
       List.map
-        (fun ((m, vs) : T.Dependees.t) ->
+        (fun ((m, vs) : T.Dependee.t) ->
           ( m,
             runs
               (lazy
@@ -142,18 +142,18 @@ module Make () = struct
                match x with
                | Npl.Occ.Reg (m, v) -> Some (a :: l, (m, v.IVer.s))
                | Npl.Occ.Proj -> None)
-             (Pl.Layout.elements
+             (Pl.LayoutRel.elements
                 (Npl.Reduction.reachableOf (edges ~dev ~optional st) root
-                   (R.placementResolution (T.PkgSet.ofList sol)))));
+                   (R.placementResolution (T.PackageSet.ofList sol)))));
       nodes = List.length sol;
       lookups;
     }
 
   let check_answer st sol =
     let versions m = T.VSet.ofList (L.versions st m) in
-    let dependees p = T.DependeesSet.ofList (L.dependees st p) in
+    let dependees p = T.DependeeSet.ofList (L.dependees st p) in
     let q = T.rootQuery (R.Name.Root, R.Version.Occ Npl.Occ.Proj) in
-    match T.check versions dependees q (T.PkgSet.ofList sol) with
+    match T.check versions dependees q (T.PackageSet.ofList sol) with
     | None -> ()
     | Some f ->
         Pac_common.Check.fail ~pp_name:PName.pp
@@ -194,7 +194,7 @@ module Make () = struct
         Pac_common.Core.walk ~versions:(L.versions st)
           ~dependees:(fun p ->
             List.map
-              (fun ((m, vs) : T.Dependees.t) -> (m, T.VSet.elements vs))
+              (fun ((m, vs) : T.Dependee.t) -> (m, T.VSet.elements vs))
               (L.dependees st p))
           [ R.Name.Root ]
       with

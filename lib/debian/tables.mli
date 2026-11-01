@@ -35,7 +35,7 @@ module type S = sig
      Its Depends and Recommends clauses are still the raw field text, and
      are parsed once, on the first sub-instance that reads them. *)
   type nstanza = {
-    npkg : DMA.Pkg.t;
+    npkg : DMA.Package.t;
     ncls : DMA.coq_MAClass;
     raw_deps : string list;
     raw_recs : string list;
@@ -61,7 +61,7 @@ module type S = sig
   val eager : tables -> eager
   val of_eager : eager -> tables
   val stats : tables -> stats
-  val stanza : tables -> DMA.Pkg.t -> nstanza option
+  val stanza : tables -> DMA.Package.t -> nstanza option
 
   (* the versions of the package [(name, arch)] *)
   val versions_of : tables -> string * string -> string list
@@ -71,12 +71,12 @@ module type S = sig
 
   (* the packages declaring a Provides of [name], each at the version it
      provides *)
-  val providers : tables -> string -> (DMA.Pkg.t * DMA.Deb.coq_DTop) list
+  val providers : tables -> string -> (DMA.Package.t * DMA.Deb.coq_DTop) list
 
   (* who names [name] in a Depends or Pre-Depends, and who in a Conflicts or
      Breaks, by the bare name as written *)
-  val dependers : tables -> string -> DMA.Pkg.t list
-  val conflicters : tables -> string -> DMA.Pkg.t list
+  val dependers : tables -> string -> DMA.Package.t list
+  val conflicters : tables -> string -> DMA.Package.t list
 
   (* the alternative's position in the clause being decided, which is what
      PVersion.compare ranks on; max_int for an atom the clause does not list,
@@ -89,7 +89,7 @@ module type S = sig
 
   val ordered_clauses :
     tables ->
-    DMA.Pkg.t ->
+    DMA.Package.t ->
     (bool * DMA.Deb.Reduction.Name.t * DMA.Deb.Atom.t list) list
 
   val sat : DMA.Deb.Ver.coq_Formula -> string -> bool

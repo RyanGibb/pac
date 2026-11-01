@@ -65,7 +65,7 @@ let solve ?(debug = false) ?(check = false) ?(order = `Tool)
         (* the package formula's packages decode to opam's through the
             second of the two layers the reduction composes *)
         let reals =
-          List.sort compare (Op.PkgSet.elements (Red.opamResolution s_pf))
+          List.sort compare (Op.PackageSet.elements (Red.opamResolution s_pf))
         in
         {
           reals;

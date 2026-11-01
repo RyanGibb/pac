@@ -38,7 +38,7 @@ module Make (Encoding : Encoding.S) : sig
 
   (* the directories opened so far that read descriptor x *)
   val desc_dirs : t -> Np.Nm.name -> Np.Nm.name list
-  val dependees : t -> T.Pkg.t -> T.Dependees.t list
+  val dependees : t -> T.Package.t -> T.Dependee.t list
 
   (* the links, opened so far, whose holder shows the name in directory h *)
   val links_into : t -> Np.Nm.name -> Np.Nm.name list

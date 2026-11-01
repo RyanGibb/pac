@@ -6,8 +6,8 @@ Create Rewrite HintDb cmp_cplx.
 
 Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
   Module Source := Core N V.
-  Module Pkg := Source.Pkg.
-  Module PkgSet := Source.PkgSet.
+  Module Package := Source.Package.
+  Module PackageSet := Source.PackageSet.
   Module VSet := Source.VSet.
 
   Definition LitSat {A : Type} (sigma : A -> bool) (l : A * bool) : Prop :=
@@ -32,9 +32,9 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
 
   Module Encoding.
     Module VF := UOTCompareFacts V.
-    Module SOp := SetOps Pkg Pkg PkgSet PkgSet.
+    Module SOp := SetOps Package Package PackageSet PackageSet.
     Module SOv := SetOps V V VSet VSet.
-    Module SOd := SetOps Source.DepElt Source.DepElt Source.DepRel Source.DepRel.
+    Module SOd := SetOps Source.DependencyElt Source.DependencyElt Source.DependencyRel Source.DependencyRel.
 
     Definition ltb (v v' : V.t) : bool :=
       match V.compare v v' with Lt => true | _ => false end.
@@ -45,31 +45,31 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
       destruct (V.compare v v'); split; intro H; congruence.
     Qed.
 
-    Definition depClause (R : PkgSet.t) (p : Pkg.t) (n : N.t) (vs : VSet.t)
-      : list (Pkg.t * bool) :=
+    Definition depClause (R : PackageSet.t) (p : Package.t) (n : N.t) (vs : VSet.t)
+      : list (Package.t * bool) :=
       (p, false) ::
       List.map (fun v => ((n, v), true))
-        (List.filter (fun v => PkgSet.mem (n, v) R) (VSet.elements vs)).
+        (List.filter (fun v => PackageSet.mem (n, v) R) (VSet.elements vs)).
 
-    Definition depClauses (R : PkgSet.t) (D : Source.DepRel.t)
-      : list (list (Pkg.t * bool)) :=
-      List.map (fun '(p, (n, vs)) => depClause R p n vs) (Source.DepRel.elements D).
+    Definition depClauses (R : PackageSet.t) (D : Source.DependencyRel.t)
+      : list (list (Package.t * bool)) :=
+      List.map (fun '(p, (n, vs)) => depClause R p n vs) (Source.DependencyRel.elements D).
 
-    Definition uniqueClauses (R : PkgSet.t) : list (list (Pkg.t * bool)) :=
+    Definition uniqueClauses (R : PackageSet.t) : list (list (Package.t * bool)) :=
       List.flat_map
         (fun p =>
            List.map (fun v' => (p, false) :: ((fst p, v'), false) :: nil)
              (List.filter (ltb (snd p))
                 (VSet.elements (Source.versions R (fst p)))))
-        (PkgSet.elements R).
+        (PackageSet.elements R).
 
-    Definition satEncoding (R : PkgSet.t) (D : Source.DepRel.t) (r : Pkg.t)
-      : list (list (Pkg.t * bool)) :=
+    Definition satEncoding (R : PackageSet.t) (D : Source.DependencyRel.t) (r : Package.t)
+      : list (list (Package.t * bool)) :=
       ((r, true) :: nil) :: depClauses R D ++ uniqueClauses R.
 
     Lemma in_depClauses : forall R D c,
         List.In c (depClauses R D) <->
-        exists p n vs, Source.DepRel.In (p, (n, vs)) D /\ c = depClause R p n vs.
+        exists p n vs, Source.DependencyRel.In (p, (n, vs)) D /\ c = depClause R p n vs.
     Proof.
       intros R D c; unfold depClauses; rewrite List.in_map_iff.
       split.
@@ -82,7 +82,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
 
     Lemma in_depClause_pos : forall R p n vs (v : V.t),
         List.In ((n, v), true) (depClause R p n vs) <->
-        VSet.In v vs /\ PkgSet.In (n, v) R.
+        VSet.In v vs /\ PackageSet.In (n, v) R.
     Proof.
       intros R p n vs v; unfold depClause; cbn [List.In].
       rewrite List.in_map_iff.
@@ -90,15 +90,15 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
       - intros [E | [v' [E Hv']]]; [discriminate E |].
         injection E as <-.
         apply List.filter_In in Hv'; destruct Hv' as [Hv' HR].
-        split; [apply SOv.elements_in; exact Hv' | apply PkgSet.mem_spec; exact HR].
+        split; [apply SOv.elements_in; exact Hv' | apply PackageSet.mem_spec; exact HR].
       - intros [Hv HR]; right; exists v; split; [reflexivity |].
         apply List.filter_In; split;
-          [apply SOv.elements_in; exact Hv | apply PkgSet.mem_spec; exact HR].
+          [apply SOv.elements_in; exact Hv | apply PackageSet.mem_spec; exact HR].
     Qed.
 
     Lemma in_uniqueClauses : forall R c,
         List.In c (uniqueClauses R) <->
-        exists n v v', PkgSet.In (n, v) R /\ PkgSet.In (n, v') R /\
+        exists n v v', PackageSet.In (n, v) R /\ PackageSet.In (n, v') R /\
           V.lt v v' /\ c = ((n, v), false) :: ((n, v'), false) :: nil.
     Proof.
       intros R c; unfold uniqueClauses; rewrite List.in_flat_map.
@@ -119,16 +119,16 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
           | apply ltb_lt; exact Hlt].
     Qed.
 
-    Theorem sat_encoding_soundness : forall R D r (sigma : Pkg.t -> bool),
-        PkgSet.In r R ->
+    Theorem sat_encoding_soundness : forall R D r (sigma : Package.t -> bool),
+        PackageSet.In r R ->
         CnfSat sigma (satEncoding R D r) ->
-        Source.IsResolution R D r (PkgSet.filter sigma R).
+        Source.IsResolution R D r (PackageSet.filter sigma R).
     Proof.
       intros R D r sigma Hr Hsat.
-      assert (Hin : forall p, PkgSet.In p (PkgSet.filter sigma R) <->
-                              PkgSet.In p R /\ sigma p = true)
-        by (intro p; apply PkgSet.filter_spec').
-      assert (Huc : forall n v v', PkgSet.In (n, v) R -> PkgSet.In (n, v') R ->
+      assert (Hin : forall p, PackageSet.In p (PackageSet.filter sigma R) <->
+                              PackageSet.In p R /\ sigma p = true)
+        by (intro p; apply PackageSet.filter_spec').
+      assert (Huc : forall n v v', PackageSet.In (n, v) R -> PackageSet.In (n, v') R ->
                       V.lt v v' ->
                       sigma (n, v) = false \/ sigma (n, v') = false).
       { intros n v v' Hv Hv' Hlt.
@@ -153,7 +153,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
           injection E as <- <-.
           apply List.filter_In in Hv; destruct Hv as [Hv HR].
           exists v; split; [apply SOv.elements_in; exact Hv |].
-          apply Hin; split; [apply PkgSet.mem_spec; exact HR | exact Hls].
+          apply Hin; split; [apply PackageSet.mem_spec; exact HR | exact Hls].
       - intros n v v' Hv Hv'; apply Hin in Hv, Hv'.
         destruct Hv as [HvR Hvs], Hv' as [Hv'R Hv's].
         destruct (V.compare_spec v v') as [E | L | G]; [exact E | |];
@@ -164,26 +164,26 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
 
     Theorem sat_encoding_completeness : forall R D r S,
         Source.IsResolution R D r S ->
-        CnfSat (fun p => PkgSet.mem p S) (satEncoding R D r).
+        CnfSat (fun p => PackageSet.mem p S) (satEncoding R D r).
     Proof.
       intros R D r S [Hsub Hroot Hdep Huniq] c Hc.
       destruct Hc as [<- | Hc].
       - exists (r, true); split; [left; reflexivity |].
-        apply PkgSet.mem_spec; exact Hroot.
+        apply PackageSet.mem_spec; exact Hroot.
       - apply List.in_app_or in Hc; destruct Hc as [Hc | Hc].
         + apply in_depClauses in Hc; destruct Hc as [p [n [vs [HD ->]]]].
-          destruct (PkgSet.mem p S) eqn:Ep.
-          * apply PkgSet.mem_spec in Ep.
+          destruct (PackageSet.mem p S) eqn:Ep.
+          * apply PackageSet.mem_spec in Ep.
             destruct (Hdep p Ep n vs HD) as [v [Hv HvS]].
             exists ((n, v), true); split.
             -- apply in_depClause_pos; split; [exact Hv | apply Hsub; exact HvS].
-            -- apply PkgSet.mem_spec; exact HvS.
+            -- apply PackageSet.mem_spec; exact HvS.
           * exists (p, false); split; [left; reflexivity | exact Ep].
         + apply in_uniqueClauses in Hc.
           destruct Hc as [n [v [v' [_ [_ [Hlt ->]]]]]].
-          destruct (PkgSet.mem (n, v) S) eqn:E1;
-            [destruct (PkgSet.mem (n, v') S) eqn:E2 |].
-          * exfalso; apply PkgSet.mem_spec in E1, E2.
+          destruct (PackageSet.mem (n, v) S) eqn:E1;
+            [destruct (PackageSet.mem (n, v') S) eqn:E2 |].
+          * exfalso; apply PackageSet.mem_spec in E1, E2.
             rewrite (Huniq n v v' E1 E2) in Hlt.
             exact (StrictOrder_Irreflexive v' Hlt).
           * exists ((n, v'), false); split;
@@ -274,40 +274,40 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
     Module VersionOT := UOTFromCompare Version.
     Module Reduced := Core NameOT VersionOT.
 
-    Definition root : Reduced.Pkg.t := (Name.Root, Version.Eps).
+    Definition root : Reduced.Package.t := (Name.Root, Version.Eps).
 
-    Definition clauseReal (c : ClauseOT.t) : list Reduced.Pkg.t :=
+    Definition clauseReal (c : ClauseOT.t) : list Reduced.Package.t :=
       List.flat_map
         (fun l => (Name.Var (fst l), Version.Truth true) ::
                   (Name.Var (fst l), Version.Truth false) ::
                   (Name.Clause c, Version.Lit l) :: nil)
         (lits c).
 
-    Definition reduceReal (cs : list ClauseOT.t) : Reduced.PkgSet.t :=
-      Reduced.PkgSet.ofList (root :: List.flat_map clauseReal cs).
+    Definition reduceReal (cs : list ClauseOT.t) : Reduced.PackageSet.t :=
+      Reduced.PackageSet.ofList (root :: List.flat_map clauseReal cs).
 
     Definition litVersions (c : ClauseOT.t) : Reduced.VSet.t :=
       Reduced.VSet.ofList (List.map Version.Lit (lits c)).
 
-    Definition clauseDeps (c : ClauseOT.t) : list Reduced.DepElt.t :=
+    Definition clauseDeps (c : ClauseOT.t) : list Reduced.DependencyElt.t :=
       (root, (Name.Clause c, litVersions c)) ::
       List.map
         (fun l => ((Name.Clause c, Version.Lit l),
                    (Name.Var (fst l), Reduced.VSet.singleton (Version.Truth (snd l)))))
         (lits c).
 
-    Definition reduceDeps (cs : list ClauseOT.t) : Reduced.DepRel.t :=
-      Reduced.DepRel.ofList (List.flat_map clauseDeps cs).
+    Definition reduceDeps (cs : list ClauseOT.t) : Reduced.DependencyRel.t :=
+      Reduced.DependencyRel.ofList (List.flat_map clauseDeps cs).
 
-    Lemma mem_reduceReal : forall cs (p : Reduced.Pkg.t),
-        Reduced.PkgSet.In p (reduceReal cs) <->
+    Lemma mem_reduceReal : forall cs (p : Reduced.Package.t),
+        Reduced.PackageSet.In p (reduceReal cs) <->
         p = root \/
         exists c l, List.In c cs /\ List.In l (lits c) /\
           ((exists b, p = (Name.Var (fst l), Version.Truth b)) \/
            p = (Name.Clause c, Version.Lit l)).
     Proof.
       intros cs p; unfold reduceReal.
-      rewrite Reduced.PkgSet.mem_ofList; cbn [List.In]; rewrite List.in_flat_map.
+      rewrite Reduced.PackageSet.mem_ofList; cbn [List.In]; rewrite List.in_flat_map.
       split.
       - intros [<- | [c [Hc Hy]]]; [left; reflexivity | right].
         unfold clauseReal in Hy; apply List.in_flat_map in Hy.
@@ -331,8 +331,8 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
       split; intros [l [H1 H2]]; exists l; split; auto.
     Qed.
 
-    Lemma mem_reduceDeps : forall cs (e : Reduced.DepElt.t),
-        Reduced.DepRel.In e (reduceDeps cs) <->
+    Lemma mem_reduceDeps : forall cs (e : Reduced.DependencyElt.t),
+        Reduced.DependencyRel.In e (reduceDeps cs) <->
         exists c, List.In c cs /\
           (e = (root, (Name.Clause c, litVersions c)) \/
            exists l, List.In l (lits c) /\
@@ -341,7 +341,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
                    Reduced.VSet.singleton (Version.Truth (snd l))))).
     Proof.
       intros cs e; unfold reduceDeps.
-      rewrite Reduced.DepRel.mem_ofList, List.in_flat_map.
+      rewrite Reduced.DependencyRel.mem_ofList, List.in_flat_map.
       split.
       - intros [c [Hc He]]; exists c; split; [exact Hc |].
         unfold clauseDeps in He; destruct He as [<- | He]; [left; reflexivity |].
@@ -363,18 +363,18 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
         congruence.
     Qed.
 
-    Definition assignment (S : Reduced.PkgSet.t) (x : X.t) : bool :=
-      Reduced.PkgSet.mem (Name.Var x, Version.Truth true) S.
+    Definition assignment (S : Reduced.PackageSet.t) (x : X.t) : bool :=
+      Reduced.PackageSet.mem (Name.Var x, Version.Truth true) S.
 
     Lemma assignment_spec : forall S x b,
-        Reduced.VersionUnique S -> Reduced.PkgSet.In (Name.Var x, Version.Truth b) S ->
+        Reduced.VersionUnique S -> Reduced.PackageSet.In (Name.Var x, Version.Truth b) S ->
         assignment S x = b.
     Proof.
       intros S x b Huniq Hin; unfold assignment.
-      destruct b; [apply Reduced.PkgSet.mem_spec; exact Hin |].
-      destruct (Reduced.PkgSet.mem (Name.Var x, Version.Truth true) S) eqn:E;
+      destruct b; [apply Reduced.PackageSet.mem_spec; exact Hin |].
+      destruct (Reduced.PackageSet.mem (Name.Var x, Version.Truth true) S) eqn:E;
         [| reflexivity].
-      apply Reduced.PkgSet.mem_spec in E.
+      apply Reduced.PackageSet.mem_spec in E.
       discriminate (Huniq _ _ _ E Hin).
     Qed.
 
@@ -434,8 +434,8 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
     Qed.
 
     Definition coreResolution (cs : list ClauseOT.t) (sigma : X.t -> bool)
-      : Reduced.PkgSet.t :=
-      Reduced.PkgSet.ofList
+      : Reduced.PackageSet.t :=
+      Reduced.PackageSet.ofList
         (root ::
          List.flat_map
            (fun c => (Name.Clause c, Version.Lit (firstSatisfied sigma c)) ::
@@ -445,8 +445,8 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
                        (lits c))
            cs).
 
-    Lemma mem_coreResolution : forall sigma cs (p : Reduced.Pkg.t),
-        Reduced.PkgSet.In p (coreResolution cs sigma) <->
+    Lemma mem_coreResolution : forall sigma cs (p : Reduced.Package.t),
+        Reduced.PackageSet.In p (coreResolution cs sigma) <->
         p = root \/
         exists c, List.In c cs /\
           (p = (Name.Clause c, Version.Lit (firstSatisfied sigma c)) \/
@@ -454,7 +454,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
              p = (Name.Var (fst l), Version.Truth (sigma (fst l)))).
     Proof.
       intros sigma cs p; unfold coreResolution.
-      rewrite Reduced.PkgSet.mem_ofList; cbn [List.In]; rewrite List.in_flat_map.
+      rewrite Reduced.PackageSet.mem_ofList; cbn [List.In]; rewrite List.in_flat_map.
       split.
       - intros [<- | [c [Hc Hy]]]; [left; reflexivity | right].
         exists c; split; [exact Hc |].

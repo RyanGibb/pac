@@ -48,10 +48,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   End NameArchComp.
   Module NameArchOT := UOTFromCompare NameArchComp.
 
-  Module QN := PairUOT N NameArchOT.
+  Module QualifiedName := PairUOT N NameArchOT.
   Module NF := UOTCompareFacts N.
-  Module MG <: NameGroup QN.
-    Definition groupEq (m n : QN.t) : bool :=
+  Module MG <: NameGroup QualifiedName.
+    Definition groupEq (m n : QualifiedName.t) : bool :=
       match N.compare (fst m) (fst n) with Eq => true | _ => false end.
     Lemma groupEq_refl : forall n, groupEq n n = true.
     Proof.
@@ -92,16 +92,16 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       apply NF.compare_eq_iff in H; congruence.
   Qed.
 
-  Module Deb := Debian QN V MG.
+  Module Deb := Debian QualifiedName V MG.
 
-  Module NA := PairUOT N A.
-  Module Source := Core NA V.
-  Module Pkg := Source.Pkg.
-  Module PkgSet := Source.PkgSet.
+  Module NArchitecture := PairUOT N A.
+  Module Source := Core NArchitecture V.
+  Module Package := Source.Package.
+  Module PackageSet := Source.PackageSet.
 
-  Definition pname (p : Pkg.t) : N.t := fst (fst p).
-  Definition parch (p : Pkg.t) : A.t := snd (fst p).
-  Definition pver (p : Pkg.t) : V.t := snd p.
+  Definition pname (p : Package.t) : N.t := fst (fst p).
+  Definition parch (p : Package.t) : A.t := snd (fst p).
+  Definition pver (p : Package.t) : V.t := snd p.
 
   Inductive MAClass : Type :=
   | MANo
@@ -128,12 +128,12 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
   End MCComp.
   Module MCOT := UOTFromCompare MCComp.
 
-  Module ClsElt := PairUOT Pkg MCOT.
-  Module Cls := FSetUOT ClsElt.
+  Module ClassElt := PairUOT Package MCOT.
+  Module ClassRel := FSetUOT ClassElt.
 
-  Module ClsFibred := FibredRel Pkg MCOT ClsElt Cls.
-  Definition classOf (mu : Cls.t) (p : Pkg.t) : MAClass :=
-    match Cls.min_elt (ClsFibred.tailFibre mu p) with
+  Module ClassRelFibred := FibredRel Package MCOT ClassElt ClassRel.
+  Definition classOf (mu : ClassRel.t) (p : Package.t) : MAClass :=
+    match ClassRel.min_elt (ClassRelFibred.tailFibre mu p) with
     | Some e => snd e
     | None => MANo
     end.
@@ -183,24 +183,24 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       AtomSet.In a (clauseAtoms Al) <-> List.In a Al.
   Proof. intros Al a; apply AtomSet.mem_ofList. Qed.
 
-  Module ClauseElt := PairUOT Pkg Clause.
-  Module Deps := FSetUOT ClauseElt.
+  Module DependencyElt := PairUOT Package Clause.
+  Module DependencyRel := FSetUOT DependencyElt.
 
   Module Provided := PairUOT N Deb.DTOT.
-  Module ProvElt := PairUOT Pkg Provided.
-  Module Prov := FSetUOT ProvElt.
+  Module ProvidesElt := PairUOT Package Provided.
+  Module ProvidesRel := FSetUOT ProvidesElt.
 
-  Module ConfElt := PairUOT Pkg Atom.
-  Module Conf := FSetUOT ConfElt.
+  Module ConflictElt := PairUOT Package Atom.
+  Module ConflictRel := FSetUOT ConflictElt.
 
-  Definition BaseMatch (Pi : Prov.t) '(((m, alpha'), u) : Pkg.t)
+  Definition BaseMatch (Pi : ProvidesRel.t) '(((m, alpha'), u) : Package.t)
       (n : N.t) (phi : Deb.Ver.Formula) : Prop :=
     (m = n /\ Deb.Ver.satisfiesb u phi = true) \/
-    (exists v, Prov.In (((m, alpha'), u), (n, v)) Pi /\
+    (exists v, ProvidesRel.In (((m, alpha'), u), (n, v)) Pi /\
        Deb.vtMatchb v phi = true).
 
-  Definition MAMatch (Pi : Prov.t) (mu : Cls.t) (alpha : A.t)
-      '((((m, alpha'), u) as q) : Pkg.t) '((n, (x, phi)) : Atom.t) : Prop :=
+  Definition MAMatch (Pi : ProvidesRel.t) (mu : ClassRel.t) (alpha : A.t)
+      '((((m, alpha'), u) as q) : Package.t) '((n, (x, phi)) : Atom.t) : Prop :=
     BaseMatch Pi q n phi /\
     match x with
     | QUnq => alpha' = alpha \/ classOf mu q = MAForeign
@@ -209,8 +209,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     | QAny => classOf mu q = MAAllowed
     end.
 
-  Definition MAConfMatch (Pi : Prov.t) (mu : Cls.t)
-      '((((m, alpha'), u) as q) : Pkg.t) '((n, (x, phi)) : Atom.t) : Prop :=
+  Definition MAConfMatch (Pi : ProvidesRel.t) (mu : ClassRel.t)
+      '((((m, alpha'), u) as q) : Package.t) '((n, (x, phi)) : Atom.t) : Prop :=
     BaseMatch Pi q n phi /\
     match x with
     | QUnq => True
@@ -220,42 +220,42 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     end.
 
   Record Inst : Type := MkInst
-    { inst_real : PkgSet.t
-    ; inst_deps : Deps.t
-    ; inst_rec : Deps.t
-    ; inst_prov : Prov.t
-    ; inst_conf : Conf.t
-    ; inst_cls : Cls.t
-    ; inst_root : Pkg.t }.
+    { inst_real : PackageSet.t
+    ; inst_deps : DependencyRel.t
+    ; inst_rec : DependencyRel.t
+    ; inst_prov : ProvidesRel.t
+    ; inst_conf : ConflictRel.t
+    ; inst_cls : ClassRel.t
+    ; inst_root : Package.t }.
 
-  Record IsResolution (I : Inst) (S : PkgSet.t) : Prop :=
-    { res_subset : PkgSet.Subset S (inst_real I)
-    ; res_root_mem : PkgSet.In (inst_root I) S
+  Record IsResolution (I : Inst) (S : PackageSet.t) : Prop :=
+    { res_subset : PackageSet.Subset S (inst_real I)
+    ; res_root_mem : PackageSet.In (inst_root I) S
     ; res_dep_closure :
-        forall n alpha v, PkgSet.In ((n, alpha), v) S ->
-        forall Al, Deps.In (((n, alpha), v), Al) (inst_deps I) ->
+        forall n alpha v, PackageSet.In ((n, alpha), v) S ->
+        forall Al, DependencyRel.In (((n, alpha), v), Al) (inst_deps I) ->
         exists a, List.In a Al /\
-          exists q, PkgSet.In q S /\
+          exists q, PackageSet.In q S /\
             MAMatch (inst_prov I) (inst_cls I) alpha q a
     ; res_conflict_avoidance :
-        forall n alpha v, PkgSet.In ((n, alpha), v) S ->
-        forall a, Conf.In (((n, alpha), v), a) (inst_conf I) ->
-        ~ exists m alpha' u, PkgSet.In ((m, alpha'), u) S /\ m <> n /\
+        forall n alpha v, PackageSet.In ((n, alpha), v) S ->
+        forall a, ConflictRel.In (((n, alpha), v), a) (inst_conf I) ->
+        ~ exists m alpha' u, PackageSet.In ((m, alpha'), u) S /\ m <> n /\
             MAConfMatch (inst_prov I) (inst_cls I) ((m, alpha'), u) a
     ; res_lockstep :
         forall n alpha v alpha' u,
-        PkgSet.In ((n, alpha), v) S -> PkgSet.In ((n, alpha'), u) S ->
+        PackageSet.In ((n, alpha), v) S -> PackageSet.In ((n, alpha'), u) S ->
         alpha <> alpha' ->
         classOf (inst_cls I) ((n, alpha), v) = MASame /\
         classOf (inst_cls I) ((n, alpha'), u) = MASame /\ v = u
     ; res_version_unique : Source.VersionUnique S }.
 
   Module Reduction.
-    Definition embedPkg (p : Pkg.t) : Deb.Ver.Source.Pkg.t :=
+    Definition embedPkg (p : Package.t) : Deb.Ver.Source.Package.t :=
       ((pname p, QAArch (parch p)), pver p).
 
-    Module SOmr := SetOps Pkg Deb.Ver.Source.Pkg PkgSet Deb.Ver.Source.PkgSet.
-    Definition reduceReal (R : PkgSet.t) : Deb.Ver.Source.PkgSet.t :=
+    Module SOmr := SetOps Package Deb.Ver.Source.Package PackageSet Deb.Ver.Source.PackageSet.
+    Definition reduceReal (R : PackageSet.t) : Deb.Ver.Source.PackageSet.t :=
       SOmr.map embedPkg R.
 
     Definition reduceAtom (alpha : A.t) (a : Atom.t) : Deb.Atom.t :=
@@ -278,16 +278,16 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       rewrite List.in_map_iff; split; intros [a [Ha He]]; exists a; auto.
     Qed.
 
-    Module SOdp := SetOps ClauseElt Deb.ClauseElt Deps Deb.Deps.
-    Definition reduceDeps (D : Deps.t) : Deb.Deps.t :=
+    Module SOdp := SetOps DependencyElt Deb.DependencyElt DependencyRel Deb.DependencyRel.
+    Definition reduceDeps (D : DependencyRel.t) : Deb.DependencyRel.t :=
       SOdp.map (fun c =>
           (embedPkg (fst c), reduceClause (parch (fst c)) (snd c)))
         D.
 
-    Definition reduceRec (Dopt : Deps.t) : Deb.Deps.t := reduceDeps Dopt.
+    Definition reduceRec (Dopt : DependencyRel.t) : Deb.DependencyRel.t := reduceDeps Dopt.
 
-    Definition declProvOf (mu : Cls.t) (e : ProvElt.t) :
-        list Deb.ProvElt.t :=
+    Definition declProvOf (mu : ClassRel.t) (e : ProvidesElt.t) :
+        list Deb.ProvidesElt.t :=
       let p := fst e in
       let m := fst (snd e) in
       let v := snd (snd e) in
@@ -301,7 +301,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
            | _ => (embedPkg p, ((m, QAArch (parch p)), v)) :: nil
            end.
 
-    Definition implProvOf (mu : Cls.t) (p : Pkg.t) : list Deb.ProvElt.t :=
+    Definition implProvOf (mu : ClassRel.t) (p : Package.t) : list Deb.ProvidesElt.t :=
       (embedPkg p, ((pname p, QAGroup), Deb.DTVal (pver p)))
         :: (embedPkg p, ((pname p, QAExact (parch p)), Deb.DTVal (pver p)))
         :: match classOf mu p with
@@ -315,16 +315,16 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
            | _ => nil
            end.
 
-    Module SOpv2 := SetOps ProvElt Deb.ProvElt Prov Deb.Prov.
-    Module SOppv := SetOps Deb.ProvElt Deb.ProvElt Deb.Prov Deb.Prov.
-    Module SOrpv := SetOps Pkg Deb.ProvElt PkgSet Deb.Prov.
-    Definition reduceProv (R : PkgSet.t) (Pi : Prov.t) (mu : Cls.t) :
-        Deb.Prov.t :=
-      Deb.Prov.union
+    Module SOpv2 := SetOps ProvidesElt Deb.ProvidesElt ProvidesRel Deb.ProvidesRel.
+    Module SOppv := SetOps Deb.ProvidesElt Deb.ProvidesElt Deb.ProvidesRel Deb.ProvidesRel.
+    Module SOrpv := SetOps Package Deb.ProvidesElt PackageSet Deb.ProvidesRel.
+    Definition reduceProv (R : PackageSet.t) (Pi : ProvidesRel.t) (mu : ClassRel.t) :
+        Deb.ProvidesRel.t :=
+      Deb.ProvidesRel.union
         (SOpv2.unionMap (fun e => SOppv.ofList (declProvOf mu e)) Pi)
         (SOrpv.unionMap (fun p => SOppv.ofList (implProvOf mu p)) R).
 
-    Definition declConfOf (e : ConfElt.t) : list Deb.ConfElt.t :=
+    Definition declConfOf (e : ConflictElt.t) : list Deb.ConflictElt.t :=
       let p := fst e in
       let a := snd e in
       let n := aname a in
@@ -340,7 +340,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       | QAny => (embedPkg p, (((n, QAAny), phi), true)) :: nil
       end.
 
-    Definition implConfOf (mu : Cls.t) (p : Pkg.t) : Deb.ConfElt.t :=
+    Definition implConfOf (mu : ClassRel.t) (p : Package.t) : Deb.ConflictElt.t :=
       match classOf mu p with
       | MASame =>
           (embedPkg p,
@@ -349,12 +349,12 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           (embedPkg p, (((pname p, QAGroup), Deb.Ver.FTop), false))
       end.
 
-    Module SOcf := SetOps ConfElt Deb.ConfElt Conf Deb.Conf.
-    Module SOccf := SetOps Deb.ConfElt Deb.ConfElt Deb.Conf Deb.Conf.
-    Module SOrcf := SetOps Pkg Deb.ConfElt PkgSet Deb.Conf.
-    Definition reduceConf (R : PkgSet.t) (G : Conf.t) (mu : Cls.t) :
-        Deb.Conf.t :=
-      Deb.Conf.union
+    Module SOcf := SetOps ConflictElt Deb.ConflictElt ConflictRel Deb.ConflictRel.
+    Module SOccf := SetOps Deb.ConflictElt Deb.ConflictElt Deb.ConflictRel Deb.ConflictRel.
+    Module SOrcf := SetOps Package Deb.ConflictElt PackageSet Deb.ConflictRel.
+    Definition reduceConf (R : PackageSet.t) (G : ConflictRel.t) (mu : ClassRel.t) :
+        Deb.ConflictRel.t :=
+      Deb.ConflictRel.union
         (SOcf.unionMap (fun e => SOccf.ofList (declConfOf e)) G)
         (SOrcf.map (implConfOf mu) R).
 
@@ -365,7 +365,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         (reduceConf (inst_real I) (inst_conf I) (inst_cls I))
         (embedPkg (inst_root I)).
 
-    Definition tryInvPkg (p : Deb.Ver.Source.Pkg.t) : option Pkg.t :=
+    Definition tryInvPkg (p : Deb.Ver.Source.Package.t) : option Package.t :=
       match p with
       | ((n, QAArch b), v) => Some ((n, b), v)
       | _ => None
@@ -377,7 +377,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         cbn [fst snd]; reflexivity.
     Qed.
 
-    Lemma tryInvPkg_some : forall (q : Deb.Ver.Source.Pkg.t) (p : Pkg.t),
+    Lemma tryInvPkg_some : forall (q : Deb.Ver.Source.Package.t) (p : Package.t),
         tryInvPkg q = Some p -> embedPkg p = q.
     Proof.
       intros [[n [b | b | |]] v] p H; cbn [tryInvPkg] in H; try discriminate.
@@ -385,16 +385,16 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         cbn [fst snd]; reflexivity.
     Qed.
 
-    Module SOpre := SetOps Deb.Ver.Source.Pkg Pkg Deb.Ver.Source.PkgSet PkgSet.
-    Definition debianMAResolution (S : Deb.Ver.Source.PkgSet.t) : PkgSet.t :=
+    Module SOpre := SetOps Deb.Ver.Source.Package Package Deb.Ver.Source.PackageSet PackageSet.
+    Definition debianMAResolution (S : Deb.Ver.Source.PackageSet.t) : PackageSet.t :=
       SOpre.filterMap tryInvPkg S.
 
     Lemma embedPkg_injective : forall p q, embedPkg p = embedPkg q -> p = q.
     Proof. exact (SOpre.emb_injective tryInvPkg embedPkg tryInvPkg_embed). Qed.
 
     Lemma mem_debianMAResolution : forall S q,
-        PkgSet.In q (debianMAResolution S) <->
-          Deb.Ver.Source.PkgSet.In (embedPkg q) S.
+        PackageSet.In q (debianMAResolution S) <->
+          Deb.Ver.Source.PackageSet.In (embedPkg q) S.
     Proof.
       unfold debianMAResolution.
       exact (SOpre.mem_filterMap_inv tryInvPkg embedPkg tryInvPkg_embed
@@ -402,8 +402,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     Lemma mem_reduceDeps : forall D y,
-        Deb.Deps.In y (reduceDeps D) <->
-        exists p Al, Deps.In (p, Al) D /\
+        Deb.DependencyRel.In y (reduceDeps D) <->
+        exists p Al, DependencyRel.In (p, Al) D /\
           y = (embedPkg p, reduceClause (parch p) Al).
     Proof.
       intros D y; unfold reduceDeps; rewrite SOdp.mem_map.
@@ -415,26 +415,26 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     Lemma mem_reduceProv : forall R Pi mu y,
-        Deb.Prov.In y (reduceProv R Pi mu) <->
-        (exists e, Prov.In e Pi /\ List.In y (declProvOf mu e)) \/
-        (exists p, PkgSet.In p R /\ List.In y (implProvOf mu p)).
+        Deb.ProvidesRel.In y (reduceProv R Pi mu) <->
+        (exists e, ProvidesRel.In e Pi /\ List.In y (declProvOf mu e)) \/
+        (exists p, PackageSet.In p R /\ List.In y (implProvOf mu p)).
     Proof.
       intros R Pi mu y; unfold reduceProv.
-      rewrite Deb.Prov.union_spec, SOpv2.mem_unionMap, SOrpv.mem_unionMap.
+      rewrite Deb.ProvidesRel.union_spec, SOpv2.mem_unionMap, SOrpv.mem_unionMap.
       cbn beta; setoid_rewrite SOppv.mem_ofList; reflexivity.
     Qed.
 
     Lemma mem_reduceConf : forall R G mu y,
-        Deb.Conf.In y (reduceConf R G mu) <->
-        (exists e, Conf.In e G /\ List.In y (declConfOf e)) \/
-        (exists p, PkgSet.In p R /\ y = implConfOf mu p).
+        Deb.ConflictRel.In y (reduceConf R G mu) <->
+        (exists e, ConflictRel.In e G /\ List.In y (declConfOf e)) \/
+        (exists p, PackageSet.In p R /\ y = implConfOf mu p).
     Proof.
       intros R G mu y; unfold reduceConf.
-      rewrite Deb.Conf.union_spec, SOcf.mem_unionMap, SOrcf.mem_map.
+      rewrite Deb.ConflictRel.union_spec, SOcf.mem_unionMap, SOrcf.mem_map.
       cbn beta; setoid_rewrite SOccf.mem_ofList; reflexivity.
     Qed.
 
-    Lemma provElt_eq : forall (p p' : Pkg.t) (m m' : N.t) (y y' : NameArch)
+    Lemma provElt_eq : forall (p p' : Package.t) (m m' : N.t) (y y' : NameArch)
         (v v' : Deb.DTop),
         (embedPkg p, ((m, y), v)) = (embedPkg p', ((m', y'), v')) ->
         p = p' /\ m = m' /\ y = y' /\ v = v'.
@@ -448,7 +448,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       exact (conj (embedPkg_injective _ _ Hp) (conj Hm (conj Hy Hv))).
     Qed.
 
-    Lemma in_declProvOf : forall mu (p : Pkg.t) (m : N.t) v e,
+    Lemma in_declProvOf : forall mu (p : Package.t) (m : N.t) v e,
         List.In e (declProvOf mu (p, (m, v))) <->
         exists y, e = (embedPkg p, ((m, y), v)) /\
           match y with
@@ -487,7 +487,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         + contradiction.
     Qed.
 
-    Lemma in_implProvOf : forall mu (p : Pkg.t) e,
+    Lemma in_implProvOf : forall mu (p : Package.t) e,
         List.In e (implProvOf mu p) <->
         exists y, e = (embedPkg p, ((pname p, y), Deb.DTVal (pver p))) /\
           match y with
@@ -518,7 +518,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     Lemma debMatch_char : forall R Pi mu q n y phi,
-        PkgSet.In q R ->
+        PackageSet.In q R ->
         (Deb.Match (reduceProv R Pi mu) (embedPkg q) ((n, y), phi) <->
          match y with
          | QAArch b =>
@@ -592,7 +592,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Qed.
 
     Lemma match_transfer : forall R Pi mu alpha a q,
-        PkgSet.In q R ->
+        PackageSet.In q R ->
         (MAMatch Pi mu alpha q a <->
          Deb.Match (reduceProv R Pi mu) (embedPkg q) (reduceAtom alpha a)).
     Proof.
@@ -611,8 +611,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           (debMatch_char R Pi mu q n (QAExact b) phi HqR)).
     Qed.
 
-    Lemma conf_transfer : forall R Pi mu (p : Pkg.t) a q,
-        PkgSet.In q R ->
+    Lemma conf_transfer : forall R Pi mu (p : Package.t) a q,
+        PackageSet.In q R ->
         ((exists q' ea e, List.In (q', (ea, e)) (declConfOf (p, a)) /\
             Deb.Match (reduceProv R Pi mu) (embedPkg q) ea) <->
          MAConfMatch Pi mu q a).
@@ -685,8 +685,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                           phi HqR) H).
     Qed.
 
-    Lemma impl_conf_transfer : forall R Pi mu (p q : Pkg.t),
-        PkgSet.In q R ->
+    Lemma impl_conf_transfer : forall R Pi mu (p q : Package.t),
+        PackageSet.In q R ->
         (Deb.Match (reduceProv R Pi mu) (embedPkg q)
            (fst (snd (implConfOf mu p))) <->
          (pname q = pname p /\
@@ -757,8 +757,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       apply in_map_iff in H; destruct H as [b' [E _]]; congruence.
     Qed.
 
-    Lemma declConfOf_name : forall (p : Pkg.t) (a : Atom.t)
-        (q : Deb.Ver.Source.Pkg.t) (ea : Deb.Atom.t) (e : bool),
+    Lemma declConfOf_name : forall (p : Package.t) (a : Atom.t)
+        (q : Deb.Ver.Source.Package.t) (ea : Deb.Atom.t) (e : bool),
         List.In (q, (ea, e)) (declConfOf (p, a)) ->
         fst (fst ea) = aname a.
     Proof.
@@ -771,7 +771,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       injection E as _ E2 _; rewrite <- E2; reflexivity.
     Qed.
 
-    Lemma implConfOf_atomName : forall mu (p : Pkg.t),
+    Lemma implConfOf_atomName : forall mu (p : Package.t),
         fst (fst (snd (implConfOf mu p))) = (pname p, QAGroup).
     Proof.
       intros mu p; unfold implConfOf; destruct (classOf mu p); reflexivity.
@@ -799,7 +799,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
            Deb.inst_root inst_real inst_deps inst_prov inst_conf inst_cls
            inst_root] in Hsub, Hroot, Hcc, Hca.
       assert (HinR : forall q,
-                 PkgSet.In q (debianMAResolution S) -> PkgSet.In q R).
+                 PackageSet.In q (debianMAResolution S) -> PackageSet.In q R).
       { intros q Hq.
         rewrite mem_debianMAResolution in Hq.
         apply Hsub in Hq; unfold reduceReal in Hq.
@@ -810,7 +810,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       - rewrite mem_debianMAResolution; exact Hroot.
       - intros n alpha v HpS Al HAl; set (p := ((n, alpha), v)) in *.
         pose proof HpS as HpT; rewrite mem_debianMAResolution in HpT.
-        assert (Hd : Deb.Deps.In (embedPkg p, reduceClause (parch p) Al)
+        assert (Hd : Deb.DependencyRel.In (embedPkg p, reduceClause (parch p) Al)
                        (reduceDeps D)).
         { rewrite mem_reduceDeps; exists p, Al; split;
             [exact HAl | reflexivity]. }
@@ -832,7 +832,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         pose proof (declConfOf_pkg p a c1 c2 c3 Hce) as Hf; subst c1.
         pose proof (declConfOf_flag p a (embedPkg p) c2 c3 Hce) as Hx;
           subst c3.
-        assert (HceG : Deb.Conf.In (embedPkg p, (c2, true)) (reduceConf R G mu)).
+        assert (HceG : Deb.ConflictRel.In (embedPkg p, (c2, true)) (reduceConf R G mu)).
         { rewrite mem_reduceConf; left; exists (p, a); split;
             [exact HG | exact Hce]. }
         apply (Hca (pname p, QAArch (parch p)) (pver p) HpT c2 true HceG).
@@ -855,12 +855,12 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         assert (Hpq : embedPkg q <> embedPkg p).
         { intro E; apply Harch; unfold embedPkg, p, q in E; cbn in E;
             injection E; intros; congruence. }
-        assert (HinCp : Deb.Conf.In
+        assert (HinCp : Deb.ConflictRel.In
                           (embedPkg p, (fst (snd (implConfOf mu p)), false))
                           (reduceConf R G mu)).
         { rewrite mem_reduceConf; right; exists p; split;
             [exact HpR | symmetry; apply implConfOf_flag]. }
-        assert (HinCq : Deb.Conf.In
+        assert (HinCq : Deb.ConflictRel.In
                           (embedPkg q, (fst (snd (implConfOf mu q)), false))
                           (reduceConf R G mu)).
         { rewrite mem_reduceConf; right; exists q; split;
@@ -910,7 +910,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         exact (Hvu (m, QAArch ar) v v' Hv Hv').
     Qed.
 
-    Definition coreResolution (S : PkgSet.t) : Deb.Ver.Source.PkgSet.t :=
+    Definition coreResolution (S : PackageSet.t) : Deb.Ver.Source.PackageSet.t :=
       reduceReal S.
 
     Theorem debian_ma_completeness : forall I S,
@@ -998,7 +998,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           unfold pname, parch, pver in Hnm, Hcm; cbn [fst snd] in Hnm, Hcm.
           destruct (A.eq_dec qa pa) as [Ea | Ea].
           * subst qa.
-            assert (Hin2 : PkgSet.In ((qn, pa), pv) S)
+            assert (Hin2 : PackageSet.In ((qn, pa), pv) S)
               by (rewrite Hnm; exact Hp1S).
             pose proof (HSvu (qn, pa) qv pv HqS Hin2) as Hvv.
             apply Hqp; congruence.
@@ -1056,80 +1056,80 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
 
     Module Lookup.
       Module NSet := FSetUOT N.
-      Module PkgFibred := FibredRel NA V Pkg PkgSet.
-      Module PkgPreimage := PreimageOfKeys N Pkg NSet PkgSet.
-      Module ProvFibred := FibredLabelledRel Pkg N Deb.DTOT ProvElt Prov.
-      Module ProvPreimage := PreimageOfKeys N ProvElt NSet Prov.
-      Module DepsFibred := FibredRel Pkg Clause ClauseElt Deps.
-      Module ConfFibred := FibredRel Pkg Atom ConfElt Conf.
-      Module ClsPreimage := PreimageOfKeys Pkg ClsElt PkgSet Cls.
+      Module PackageSetFibred := FibredRel NArchitecture V Package PackageSet.
+      Module PackageSetKeyPreimage := PreimageOfKeys N Package NSet PackageSet.
+      Module ProvidesRelFibred := FibredLabelledRel Package N Deb.DTOT ProvidesElt ProvidesRel.
+      Module ProvidesRelKeyPreimage := PreimageOfKeys N ProvidesElt NSet ProvidesRel.
+      Module DependencyRelFibred := FibredRel Package Clause DependencyElt DependencyRel.
+      Module ConflictRelFibred := FibredRel Package Atom ConflictElt ConflictRel.
+      Module ClassRelKeyPreimage := PreimageOfKeys Package ClassElt PackageSet ClassRel.
 
-      Definition realAt (R : PkgSet.t) (n : N.t) (alpha : A.t) : PkgSet.t :=
-        PkgFibred.tailFibre R (n, alpha).
-      Definition realPreimage (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
-        PkgPreimage.ofKeys pname ns R.
-      Definition provPreimage (Pi : Prov.t) (ns : NSet.t) : Prov.t :=
-        ProvPreimage.ofKeys ProvFibred.node ns Pi.
-      Definition provFibre (Pi : Prov.t) (p : Pkg.t) : Prov.t :=
-        ProvFibred.tailFibre Pi p.
-      Definition depsFibre (D : Deps.t) (p : Pkg.t) : Deps.t :=
-        DepsFibred.tailFibre D p.
-      Definition confFibre (G : Conf.t) (p : Pkg.t) : Conf.t :=
-        ConfFibred.tailFibre G p.
-      Definition clsPreimage (mu : Cls.t) (ps : PkgSet.t) : Cls.t :=
-        ClsPreimage.ofKeys fst ps mu.
+      Definition realAt (R : PackageSet.t) (n : N.t) (alpha : A.t) : PackageSet.t :=
+        PackageSetFibred.tailFibre R (n, alpha).
+      Definition realPreimage (R : PackageSet.t) (ns : NSet.t) : PackageSet.t :=
+        PackageSetKeyPreimage.ofKeys pname ns R.
+      Definition provPreimage (Pi : ProvidesRel.t) (ns : NSet.t) : ProvidesRel.t :=
+        ProvidesRelKeyPreimage.ofKeys ProvidesRelFibred.node ns Pi.
+      Definition provFibre (Pi : ProvidesRel.t) (p : Package.t) : ProvidesRel.t :=
+        ProvidesRelFibred.tailFibre Pi p.
+      Definition depsFibre (D : DependencyRel.t) (p : Package.t) : DependencyRel.t :=
+        DependencyRelFibred.tailFibre D p.
+      Definition confFibre (G : ConflictRel.t) (p : Package.t) : ConflictRel.t :=
+        ConflictRelFibred.tailFibre G p.
+      Definition clsPreimage (mu : ClassRel.t) (ps : PackageSet.t) : ClassRel.t :=
+        ClassRelKeyPreimage.ofKeys fst ps mu.
 
       Lemma mem_realAt : forall R (n : N.t) (alpha : A.t) q,
-          PkgSet.In q (realAt R n alpha) <->
-          PkgSet.In q R /\ fst q = (n, alpha).
+          PackageSet.In q (realAt R n alpha) <->
+          PackageSet.In q R /\ fst q = (n, alpha).
       Proof.
         intros R n alpha [[qn qb] qv]; unfold realAt.
-        rewrite PkgFibred.mem_tailFibre; cbn [fst]; reflexivity.
+        rewrite PackageSetFibred.mem_tailFibre; cbn [fst]; reflexivity.
       Qed.
 
       Lemma mem_realPreimage : forall R ns q,
-          PkgSet.In q (realPreimage R ns) <->
-          PkgSet.In q R /\ NSet.In (pname q) ns.
+          PackageSet.In q (realPreimage R ns) <->
+          PackageSet.In q R /\ NSet.In (pname q) ns.
       Proof.
-        intros R ns q; unfold realPreimage; apply PkgPreimage.mem_ofKeys.
+        intros R ns q; unfold realPreimage; apply PackageSetKeyPreimage.mem_ofKeys.
       Qed.
 
-      Lemma mem_provPreimage : forall Pi ns (q : Pkg.t) (m : N.t) v,
-          Prov.In (q, (m, v)) (provPreimage Pi ns) <->
-          Prov.In (q, (m, v)) Pi /\ NSet.In m ns.
+      Lemma mem_provPreimage : forall Pi ns (q : Package.t) (m : N.t) v,
+          ProvidesRel.In (q, (m, v)) (provPreimage Pi ns) <->
+          ProvidesRel.In (q, (m, v)) Pi /\ NSet.In m ns.
       Proof.
-        intros Pi ns q m v; unfold provPreimage; apply ProvPreimage.mem_ofKeys.
+        intros Pi ns q m v; unfold provPreimage; apply ProvidesRelKeyPreimage.mem_ofKeys.
       Qed.
 
-      Lemma mem_provFibre : forall Pi (p q : Pkg.t) (m : N.t) v,
-          Prov.In (q, (m, v)) (provFibre Pi p) <->
-          Prov.In (q, (m, v)) Pi /\ q = p.
+      Lemma mem_provFibre : forall Pi (p q : Package.t) (m : N.t) v,
+          ProvidesRel.In (q, (m, v)) (provFibre Pi p) <->
+          ProvidesRel.In (q, (m, v)) Pi /\ q = p.
       Proof.
-        intros Pi p q m v; unfold provFibre; apply ProvFibred.mem_tailFibre.
+        intros Pi p q m v; unfold provFibre; apply ProvidesRelFibred.mem_tailFibre.
       Qed.
 
-      Lemma mem_depsFibre : forall D (p q : Pkg.t) Al,
-          Deps.In (q, Al) (depsFibre D p) <-> Deps.In (q, Al) D /\ q = p.
+      Lemma mem_depsFibre : forall D (p q : Package.t) Al,
+          DependencyRel.In (q, Al) (depsFibre D p) <-> DependencyRel.In (q, Al) D /\ q = p.
       Proof.
-        intros D p q Al; unfold depsFibre; apply DepsFibred.mem_tailFibre.
+        intros D p q Al; unfold depsFibre; apply DependencyRelFibred.mem_tailFibre.
       Qed.
 
-      Lemma mem_confFibre : forall G (p q : Pkg.t) a,
-          Conf.In (q, a) (confFibre G p) <-> Conf.In (q, a) G /\ q = p.
+      Lemma mem_confFibre : forall G (p q : Package.t) a,
+          ConflictRel.In (q, a) (confFibre G p) <-> ConflictRel.In (q, a) G /\ q = p.
       Proof.
-        intros G p q a; unfold confFibre; apply ConfFibred.mem_tailFibre.
+        intros G p q a; unfold confFibre; apply ConflictRelFibred.mem_tailFibre.
       Qed.
 
       Lemma mem_clsPreimage : forall mu ps e,
-          Cls.In e (clsPreimage mu ps) <-> Cls.In e mu /\ PkgSet.In (fst e) ps.
+          ClassRel.In e (clsPreimage mu ps) <-> ClassRel.In e mu /\ PackageSet.In (fst e) ps.
       Proof. intros mu ps e; unfold clsPreimage;
-        apply ClsPreimage.mem_ofKeys. Qed.
+        apply ClassRelKeyPreimage.mem_ofKeys. Qed.
 
       Lemma reduceProv_class_sub : forall R Pi mu mu',
-          (forall p, PkgSet.In p R -> classOf mu' p = classOf mu p) ->
-          (forall (q : Pkg.t) (m : N.t) v,
-              Prov.In (q, (m, v)) Pi -> classOf mu' q = classOf mu q) ->
-          Deb.Prov.Subset (reduceProv R Pi mu') (reduceProv R Pi mu).
+          (forall p, PackageSet.In p R -> classOf mu' p = classOf mu p) ->
+          (forall (q : Package.t) (m : N.t) v,
+              ProvidesRel.In (q, (m, v)) Pi -> classOf mu' q = classOf mu q) ->
+          Deb.ProvidesRel.Subset (reduceProv R Pi mu') (reduceProv R Pi mu).
       Proof.
         intros R Pi mu mu' H1 H2 y Hy.
         rewrite mem_reduceProv in Hy |- *.
@@ -1143,8 +1143,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Qed.
 
       Lemma reduceConf_class_sub : forall R G mu mu',
-          (forall p, PkgSet.In p R -> classOf mu' p = classOf mu p) ->
-          Deb.Conf.Subset (reduceConf R G mu') (reduceConf R G mu).
+          (forall p, PackageSet.In p R -> classOf mu' p = classOf mu p) ->
+          Deb.ConflictRel.Subset (reduceConf R G mu') (reduceConf R G mu).
       Proof.
         intros R G mu mu' H1 y Hy; rewrite mem_reduceConf in Hy |- *.
         destruct Hy as [[e [He Hl]] | [p0 [Hp0 Hl]]].
@@ -1155,13 +1155,13 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Qed.
 
       Lemma classOf_clsPreimage : forall mu ps p,
-          PkgSet.In p ps -> classOf (clsPreimage mu ps) p = classOf mu p.
+          PackageSet.In p ps -> classOf (clsPreimage mu ps) p = classOf mu p.
       Proof.
         intros mu ps p Hp; unfold classOf.
-        assert (E : ClsFibred.tailFibre (clsPreimage mu ps) p
-                    = ClsFibred.tailFibre mu p).
-        { apply Cls.ext; intros [q c].
-          rewrite !ClsFibred.mem_tailFibre, mem_clsPreimage; cbn [fst].
+        assert (E : ClassRelFibred.tailFibre (clsPreimage mu ps) p
+                    = ClassRelFibred.tailFibre mu p).
+        { apply ClassRel.ext; intros [q c].
+          rewrite !ClassRelFibred.mem_tailFibre, mem_clsPreimage; cbn [fst].
           split.
           - intros [[Hm _] Hq]; split; assumption.
           - intros [Hm Hq]; split; [split; [exact Hm |] | exact Hq].
@@ -1170,12 +1170,12 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Qed.
 
       Lemma reduceProv_class : forall R Pi mu mu',
-          (forall p, PkgSet.In p R -> classOf mu' p = classOf mu p) ->
-          (forall (q : Pkg.t) (m : N.t) v,
-              Prov.In (q, (m, v)) Pi -> classOf mu' q = classOf mu q) ->
+          (forall p, PackageSet.In p R -> classOf mu' p = classOf mu p) ->
+          (forall (q : Package.t) (m : N.t) v,
+              ProvidesRel.In (q, (m, v)) Pi -> classOf mu' q = classOf mu q) ->
           reduceProv R Pi mu' = reduceProv R Pi mu.
       Proof.
-        intros R Pi mu mu' H1 H2; apply Deb.Prov.ext; intro y; split; intro Hy.
+        intros R Pi mu mu' H1 H2; apply Deb.ProvidesRel.ext; intro y; split; intro Hy.
         - exact (reduceProv_class_sub R Pi mu mu' H1 H2 y Hy).
         - refine (reduceProv_class_sub R Pi mu' mu _ _ y Hy);
             [intros p Hp; symmetry; exact (H1 p Hp)
@@ -1183,21 +1183,21 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Qed.
 
       Lemma reduceConf_class : forall R G mu mu',
-          (forall p, PkgSet.In p R -> classOf mu' p = classOf mu p) ->
+          (forall p, PackageSet.In p R -> classOf mu' p = classOf mu p) ->
           reduceConf R G mu' = reduceConf R G mu.
       Proof.
-        intros R G mu mu' H1; apply Deb.Conf.ext; intro y; split; intro Hy.
+        intros R G mu mu' H1; apply Deb.ConflictRel.ext; intro y; split; intro Hy.
         - exact (reduceConf_class_sub R G mu mu' H1 y Hy).
         - refine (reduceConf_class_sub R G mu' mu _ y Hy).
           intros p Hp; symmetry; exact (H1 p Hp).
       Qed.
 
-      Module SOpo := SetOps ProvElt Pkg Prov PkgSet.
-      Definition provOwners (Pi : Prov.t) : PkgSet.t := SOpo.map fst Pi.
+      Module SOpo := SetOps ProvidesElt Package ProvidesRel PackageSet.
+      Definition provOwners (Pi : ProvidesRel.t) : PackageSet.t := SOpo.map fst Pi.
 
       Lemma mem_provOwners : forall Pi q,
-          PkgSet.In q (provOwners Pi) <->
-          exists (m : N.t) v, Prov.In (q, (m, v)) Pi.
+          PackageSet.In q (provOwners Pi) <->
+          exists (m : N.t) v, ProvidesRel.In (q, (m, v)) Pi.
       Proof.
         intros Pi q; unfold provOwners; rewrite SOpo.mem_map; split.
         - intros [[q' [m v]] [He ->]]; exists m, v; exact He.
@@ -1205,37 +1205,37 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           split; [exact He | reflexivity].
       Qed.
 
-      Definition provClsPreimage (mu : Cls.t) (Rp : PkgSet.t) (Pis : Prov.t) :
-          Cls.t :=
-        clsPreimage mu (PkgSet.union Rp (provOwners Pis)).
+      Definition provClsPreimage (mu : ClassRel.t) (Rp : PackageSet.t) (Pis : ProvidesRel.t) :
+          ClassRel.t :=
+        clsPreimage mu (PackageSet.union Rp (provOwners Pis)).
 
       Lemma reduceProv_provClsPreimage : forall Rp Pis mu,
           reduceProv Rp Pis (provClsPreimage mu Rp Pis) = reduceProv Rp Pis mu.
       Proof.
         intros Rp Pis mu; apply reduceProv_class.
         - intros p Hp; apply classOf_clsPreimage.
-          apply PkgSet.union_spec; left; exact Hp.
+          apply PackageSet.union_spec; left; exact Hp.
         - intros q m v He; apply classOf_clsPreimage.
-          apply PkgSet.union_spec; right; apply mem_provOwners.
+          apply PackageSet.union_spec; right; apply mem_provOwners.
           exists m, v; exact He.
       Qed.
 
       Lemma reduceConf_provClsPreimage : forall Rc Gs mu Rp Pis,
-          PkgSet.Subset Rc Rp ->
+          PackageSet.Subset Rc Rp ->
           reduceConf Rc Gs (provClsPreimage mu Rp Pis) = reduceConf Rc Gs mu.
       Proof.
         intros Rc Gs mu Rp Pis Hsub; apply reduceConf_class.
         intros p Hp; apply classOf_clsPreimage.
-        apply PkgSet.union_spec; left; exact (Hsub _ Hp).
+        apply PackageSet.union_spec; left; exact (Hsub _ Hp).
       Qed.
 
       Lemma mem_reduceReal : forall R p,
-          Deb.PkgSet.In p (reduceReal R) <->
-          exists q : Pkg.t, PkgSet.In q R /\ p = embedPkg q.
+          Deb.PackageSet.In p (reduceReal R) <->
+          exists q : Package.t, PackageSet.In q R /\ p = embedPkg q.
       Proof. intros R p; unfold reduceReal; apply SOmr.mem_map. Qed.
 
-      Lemma reduceReal_arch : forall R (n : QN.t) (v : V.t),
-          Deb.PkgSet.In (n, v) (reduceReal R) -> exists b, snd n = QAArch b.
+      Lemma reduceReal_arch : forall R (n : QualifiedName.t) (v : V.t),
+          Deb.PackageSet.In (n, v) (reduceReal R) -> exists b, snd n = QAArch b.
       Proof.
         intros R n v H; rewrite mem_reduceReal in H.
         destruct H as [q [_ Hq]]; exists (parch q).
@@ -1243,10 +1243,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         rewrite Hf; reflexivity.
       Qed.
 
-      Lemma versions_restrict : forall R Rs (n : QN.t),
-          PkgSet.Subset Rs R ->
-          (forall q, PkgSet.In q R ->
-             (pname q, QAArch (parch q)) = n -> PkgSet.In q Rs) ->
+      Lemma versions_restrict : forall R Rs (n : QualifiedName.t),
+          PackageSet.Subset Rs R ->
+          (forall q, PackageSet.In q R ->
+             (pname q, QAArch (parch q)) = n -> PackageSet.In q Rs) ->
           Deb.Source.versions (reduceReal Rs) n =
           Deb.Source.versions (reduceReal R) n.
       Proof.
@@ -1258,17 +1258,17 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Qed.
 
       Definition ProvSubInst (I : Inst) (ns : NSet.t) (I' : Inst) : Prop :=
-        PkgSet.Subset (inst_real I') (inst_real I) /\
-        Prov.Subset (inst_prov I') (inst_prov I) /\
-        (forall q, PkgSet.In q (inst_real I) -> NSet.In (pname q) ns ->
-           PkgSet.In q (inst_real I')) /\
-        (forall (q : Pkg.t) (m : N.t) v,
-            Prov.In (q, (m, v)) (inst_prov I) -> NSet.In m ns ->
-            Prov.In (q, (m, v)) (inst_prov I')).
+        PackageSet.Subset (inst_real I') (inst_real I) /\
+        ProvidesRel.Subset (inst_prov I') (inst_prov I) /\
+        (forall q, PackageSet.In q (inst_real I) -> NSet.In (pname q) ns ->
+           PackageSet.In q (inst_real I')) /\
+        (forall (q : Package.t) (m : N.t) v,
+            ProvidesRel.In (q, (m, v)) (inst_prov I) -> NSet.In m ns ->
+            ProvidesRel.In (q, (m, v)) (inst_prov I')).
 
 
-      Lemma declProvOf_shape : forall mu (p0 : Pkg.t) (m0 : N.t) v0
-          (q : Deb.Pkg.t) (n : QN.t) v,
+      Lemma declProvOf_shape : forall mu (p0 : Package.t) (m0 : N.t) v0
+          (q : Deb.Package.t) (n : QualifiedName.t) v,
           List.In (q, (n, v)) (declProvOf mu (p0, (m0, v0))) ->
           q = embedPkg p0 /\ fst n = m0.
       Proof.
@@ -1277,8 +1277,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         injection E as -> -> _; split; reflexivity.
       Qed.
 
-      Lemma implProvOf_shape : forall mu (p0 : Pkg.t)
-          (q : Deb.Pkg.t) (n : QN.t) v,
+      Lemma implProvOf_shape : forall mu (p0 : Package.t)
+          (q : Deb.Package.t) (n : QualifiedName.t) v,
           List.In (q, (n, v)) (implProvOf mu p0) ->
           q = embedPkg p0 /\ fst n = pname p0.
       Proof.
@@ -1288,8 +1288,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Qed.
 
       Lemma reduceProv_mono : forall R Rp Pi Pis mu,
-          PkgSet.Subset Rp R -> Prov.Subset Pis Pi ->
-          Deb.Prov.Subset (reduceProv Rp Pis mu) (reduceProv R Pi mu).
+          PackageSet.Subset Rp R -> ProvidesRel.Subset Pis Pi ->
+          Deb.ProvidesRel.Subset (reduceProv Rp Pis mu) (reduceProv R Pi mu).
       Proof.
         intros R Rp Pi Pis mu Hr Hp y Hy.
         rewrite mem_reduceProv in Hy |- *.
@@ -1299,11 +1299,11 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Qed.
 
       Lemma reduceProv_node : forall I ns I'
-          (q : Deb.Pkg.t) (m : N.t) (y : NameArch) v,
+          (q : Deb.Package.t) (m : N.t) (y : NameArch) v,
           ProvSubInst I ns I' -> NSet.In m ns ->
-          (Deb.Prov.In (q, ((m, y), v))
+          (Deb.ProvidesRel.In (q, ((m, y), v))
              (reduceProv (inst_real I) (inst_prov I) (inst_cls I)) <->
-           Deb.Prov.In (q, ((m, y), v))
+           Deb.ProvidesRel.In (q, ((m, y), v))
              (reduceProv (inst_real I') (inst_prov I') (inst_cls I))).
       Proof.
         intros I ns I' q m y v [Hr [Hp [Hcr Hcp]]] Hm.
@@ -1331,7 +1331,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         intros I ns I' [[m y] phi] Hsl Hm; cbn [fst] in Hm.
         assert (Hsub := Hsl); destruct Hsub as [Hr [Hp _]].
         unfold Deb.Reduction.provb.
-        apply Deb.Prov.exists_restrict.
+        apply Deb.ProvidesRel.exists_restrict.
         - exact (reduceProv_mono _ _ _ _ (inst_cls I) Hr Hp).
         - intros [q [mx v]] Hin Hb; cbn [Deb.aname Deb.aform fst snd] in Hb.
           apply andb_prop in Hb; destruct Hb as [Hn _].
@@ -1340,9 +1340,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Qed.
 
       Lemma us_restrict : forall I ns Rr I' (a' : Deb.Atom.t),
-          PkgSet.Subset Rr (inst_real I) ->
-          (forall q, PkgSet.In q (inst_real I) -> NSet.In (pname q) ns ->
-             PkgSet.In q Rr) ->
+          PackageSet.Subset Rr (inst_real I) ->
+          (forall q, PackageSet.In q (inst_real I) -> NSet.In (pname q) ns ->
+             PackageSet.In q Rr) ->
           ProvSubInst I ns I' -> NSet.In (fst (fst a')) ns ->
           Deb.Reduction.us (reduceReal Rr)
             (reduceProv (inst_real I') (inst_prov I') (inst_cls I)) a' =
@@ -1372,9 +1372,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Qed.
 
       Lemma dependee_restrict : forall I ns Rr I' (a' : Deb.Atom.t),
-          PkgSet.Subset Rr (inst_real I) ->
-          (forall q, PkgSet.In q (inst_real I) -> NSet.In (pname q) ns ->
-             PkgSet.In q Rr) ->
+          PackageSet.Subset Rr (inst_real I) ->
+          (forall q, PackageSet.In q (inst_real I) -> NSet.In (pname q) ns ->
+             PackageSet.In q Rr) ->
           ProvSubInst I ns I' -> NSet.In (fst (fst a')) ns ->
           Deb.Reduction.dependee (reduceReal Rr)
             (reduceProv (inst_real I') (inst_prov I') (inst_cls I)) a' =
@@ -1396,8 +1396,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Qed.
 
       Lemma reduceConf_mono : forall R Rc G Gs mu,
-          PkgSet.Subset Rc R -> Conf.Subset Gs G ->
-          Deb.Conf.Subset (reduceConf Rc Gs mu) (reduceConf R G mu).
+          PackageSet.Subset Rc R -> ConflictRel.Subset Gs G ->
+          Deb.ConflictRel.Subset (reduceConf Rc Gs mu) (reduceConf R G mu).
       Proof.
         intros R Rc G Gs mu Hr Hg y Hy.
         rewrite mem_reduceConf in Hy |- *.
@@ -1406,11 +1406,11 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           | right; exists p0; split; [exact (Hr _ Hp0) | exact Hl]].
       Qed.
 
-      Lemma reduceConf_pkg : forall R G mu (p : Pkg.t) Rc Gs ea e,
-          PkgSet.Subset Rc R -> Conf.Subset Gs G -> PkgSet.In p Rc ->
-          (forall e, Conf.In e G -> fst e = p -> Conf.In e Gs) ->
-          (Deb.Conf.In (embedPkg p, (ea, e)) (reduceConf R G mu) <->
-           Deb.Conf.In (embedPkg p, (ea, e)) (reduceConf Rc Gs mu)).
+      Lemma reduceConf_pkg : forall R G mu (p : Package.t) Rc Gs ea e,
+          PackageSet.Subset Rc R -> ConflictRel.Subset Gs G -> PackageSet.In p Rc ->
+          (forall e, ConflictRel.In e G -> fst e = p -> ConflictRel.In e Gs) ->
+          (Deb.ConflictRel.In (embedPkg p, (ea, e)) (reduceConf R G mu) <->
+           Deb.ConflictRel.In (embedPkg p, (ea, e)) (reduceConf Rc Gs mu)).
       Proof.
         intros R G mu p Rc Gs ea e Hr Hg Hin Hown.
         split; [| exact (reduceConf_mono R Rc G Gs mu Hr Hg _)].
@@ -1427,10 +1427,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           rewrite (implConfOf_pkg mu p); exact He.
       Qed.
 
-      Lemma match_name : forall R Pi mu (p : Pkg.t) (m : N.t) (y : NameArch) phi,
-          PkgSet.In p R ->
+      Lemma match_name : forall R Pi mu (p : Package.t) (m : N.t) (y : NameArch) phi,
+          PackageSet.In p R ->
           Deb.Match (reduceProv R Pi mu) (embedPkg p) ((m, y), phi) ->
-          m = pname p \/ exists v, Prov.In (p, (m, v)) Pi.
+          m = pname p \/ exists v, ProvidesRel.In (p, (m, v)) Pi.
       Proof.
         intros R Pi mu [[n0 b0] u] m y phi HpR HM.
         apply (debMatch_char R Pi mu _ m y phi HpR) in HM.
@@ -1440,19 +1440,19 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         destruct HM as [Hn _]; left; symmetry; exact Hn.
       Qed.
 
-      Lemma realPreimage_sub : forall R ns, PkgSet.Subset (realPreimage R ns) R.
+      Lemma realPreimage_sub : forall R ns, PackageSet.Subset (realPreimage R ns) R.
       Proof.
         intros R ns q Hq; exact (proj1 (proj1 (mem_realPreimage R ns q) Hq)).
       Qed.
 
       Lemma realPreimage_cov : forall R ns q,
-          PkgSet.In q R -> NSet.In (pname q) ns ->
-          PkgSet.In q (realPreimage R ns).
+          PackageSet.In q R -> NSet.In (pname q) ns ->
+          PackageSet.In q (realPreimage R ns).
       Proof. intros R ns q H1 H2; apply mem_realPreimage; split;
         assumption. Qed.
 
       Lemma provPreimage_sub : forall Pi ns,
-        Prov.Subset (provPreimage Pi ns) Pi.
+        ProvidesRel.Subset (provPreimage Pi ns) Pi.
       Proof.
         intros Pi ns [q [m v]] He;
           exact (proj1 (proj1 (mem_provPreimage Pi ns q m v) He)).
@@ -1485,46 +1485,46 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           split; solve [exact Ha | symmetry; exact Hm].
       Qed.
 
-      Module SOcn := SetOps ClauseElt N Deps NSet.
-      Definition atomNames (D : Deps.t) (p : Pkg.t) : NSet.t :=
+      Module SOcn := SetOps DependencyElt N DependencyRel NSet.
+      Definition atomNames (D : DependencyRel.t) (p : Package.t) : NSet.t :=
         SOcn.unionMap (fun c =>
-            if Pkg.eq_dec (fst c) p then clauseNames (snd c) else NSet.empty)
+            if Package.eq_dec (fst c) p then clauseNames (snd c) else NSet.empty)
           D.
 
-      Lemma mem_atomNames : forall D (p : Pkg.t) (m : N.t),
+      Lemma mem_atomNames : forall D (p : Package.t) (m : N.t),
           NSet.In m (atomNames D p) <->
-          exists Al, Deps.In (p, Al) D /\ NSet.In m (clauseNames Al).
+          exists Al, DependencyRel.In (p, Al) D /\ NSet.In m (clauseNames Al).
       Proof.
         intros D p m; unfold atomNames; rewrite SOcn.mem_unionMap_dec.
         split; [intros [[q Al] [Hc [Hq Hm]]]; cbn in Hq; subst q; eauto |].
         intros [Al [Hc Hm]]; exists (p, Al); auto.
       Qed.
 
-      Module SOpn := SetOps ProvElt N Prov NSet.
-      Definition providerNames (Pi : Prov.t) (n : N.t) : NSet.t :=
+      Module SOpn := SetOps ProvidesElt N ProvidesRel NSet.
+      Definition providerNames (Pi : ProvidesRel.t) (n : N.t) : NSet.t :=
         SOpn.filterMap (fun e =>
             if N.eq_dec (fst (snd e)) n then Some (pname (fst e)) else None) Pi.
 
       Lemma mem_providerNames : forall Pi (n m : N.t),
           NSet.In m (providerNames Pi n) <->
-          exists q v, Prov.In (q, (n, v)) Pi /\ pname q = m.
+          exists q v, ProvidesRel.In (q, (n, v)) Pi /\ pname q = m.
       Proof.
         intros Pi n m; unfold providerNames; rewrite SOpn.mem_filterMap_dec.
         split; [intros [[q [m0 v]] [He [Hm ->]]]; cbn in Hm; subst m0; eauto |].
         intros [q [v [He <-]]]; exists (q, (n, v)); auto.
       Qed.
 
-      Module SOgn := SetOps ConfElt N Conf NSet.
-      Definition confAtomNames (G : Conf.t) (p : Pkg.t) : NSet.t :=
+      Module SOgn := SetOps ConflictElt N ConflictRel NSet.
+      Definition confAtomNames (G : ConflictRel.t) (p : Package.t) : NSet.t :=
         NSet.add (pname p)
           (SOgn.unionMap (fun e =>
-               if Pkg.eq_dec (fst e) p then NSet.singleton (aname (snd e))
+               if Package.eq_dec (fst e) p then NSet.singleton (aname (snd e))
                else NSet.empty)
              G).
 
-      Lemma mem_confAtomNames : forall G (p : Pkg.t) (m : N.t),
+      Lemma mem_confAtomNames : forall G (p : Package.t) (m : N.t),
           NSet.In m (confAtomNames G p) <->
-          m = pname p \/ exists a, Conf.In (p, a) G /\ m = aname a.
+          m = pname p \/ exists a, ConflictRel.In (p, a) G /\ m = aname a.
       Proof.
         intros G p m; unfold confAtomNames.
         rewrite NSet.add_spec, SOgn.mem_unionMap_dec.
@@ -1534,11 +1534,11 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Qed.
 
       Module SOnn := SetOps N N NSet NSet.
-      Definition confRead (Pi : Prov.t) (G : Conf.t) (p : Pkg.t) : NSet.t :=
+      Definition confRead (Pi : ProvidesRel.t) (G : ConflictRel.t) (p : Package.t) : NSet.t :=
         SOnn.unionMap (fun n => NSet.add n (providerNames Pi n))
           (confAtomNames G p).
 
-      Lemma mem_confRead : forall Pi G (p : Pkg.t) (m : N.t),
+      Lemma mem_confRead : forall Pi G (p : Package.t) (m : N.t),
           NSet.In m (confRead Pi G p) <->
           exists n, NSet.In n (confAtomNames G p) /\
                     (m = n \/ NSet.In m (providerNames Pi n)).
@@ -1548,12 +1548,12 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           [apply NSet.add_spec in Hm'; exact Hm' | apply NSet.add_spec; exact Hm'].
       Qed.
 
-      Definition readNames (Pi : Prov.t) (D : Deps.t) (G : Conf.t) (p : Pkg.t)
+      Definition readNames (Pi : ProvidesRel.t) (D : DependencyRel.t) (G : ConflictRel.t) (p : Package.t)
         : NSet.t :=
         NSet.union (atomNames D p) (confRead Pi G p).
 
-      Lemma reduceConf_confAtom : forall R G mu (p : Pkg.t) (ea : Deb.Atom.t) e,
-          Deb.Conf.In (embedPkg p, (ea, e)) (reduceConf R G mu) ->
+      Lemma reduceConf_confAtom : forall R G mu (p : Package.t) (ea : Deb.Atom.t) e,
+          Deb.ConflictRel.In (embedPkg p, (ea, e)) (reduceConf R G mu) ->
           NSet.In (fst (fst ea)) (confAtomNames G p).
       Proof.
         intros R G mu p ea e H; rewrite mem_reduceConf in H.
@@ -1572,7 +1572,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           exact (f_equal fst Hn).
       Qed.
 
-      Lemma matchb_node_restrict : forall I ns I' (q : Deb.Pkg.t)
+      Lemma matchb_node_restrict : forall I ns I' (q : Deb.Package.t)
           (a' : Deb.Atom.t),
           ProvSubInst I ns I' -> NSet.In (fst (fst a')) ns ->
           Deb.matchb (reduceProv (inst_real I') (inst_prov I') (inst_cls I))
@@ -1582,7 +1582,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         intros I ns I' q [[m y] phi] Hsl Hm; cbn [fst] in Hm.
         assert (Hsub := Hsl); destruct Hsub as [Hr [Hp _]].
         unfold Deb.matchb; f_equal.
-        apply Deb.Prov.exists_restrict.
+        apply Deb.ProvidesRel.exists_restrict.
         - exact (reduceProv_mono _ _ _ _ (inst_cls I) Hr Hp).
         - intros [q' [mx v]] Hin Hb; cbn [fst snd Deb.aname Deb.aform] in Hb.
           apply andb_prop in Hb; destruct Hb as [Hq Hb].
@@ -1593,11 +1593,11 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Qed.
 
       Lemma confNames_restrict : forall I ns Rr I' (a' : Deb.Atom.t),
-          PkgSet.Subset Rr (inst_real I) ->
-          (forall q, PkgSet.In q (inst_real I) -> NSet.In (pname q) ns ->
-             PkgSet.In q Rr) ->
+          PackageSet.Subset Rr (inst_real I) ->
+          (forall q, PackageSet.In q (inst_real I) -> NSet.In (pname q) ns ->
+             PackageSet.In q Rr) ->
           ProvSubInst I ns I' -> NSet.In (fst (fst a')) ns ->
-          (forall (q : Pkg.t) v, Prov.In (q, (fst (fst a'), v)) (inst_prov I) ->
+          (forall (q : Package.t) v, ProvidesRel.In (q, (fst (fst a'), v)) (inst_prov I) ->
                                   NSet.In (pname q) ns) ->
           Deb.Reduction.confNames (reduceReal Rr)
             (reduceProv (inst_real I') (inst_prov I') (inst_cls I)) a' =
@@ -1627,9 +1627,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             [exact Hm | exact (Hpn q v Hin)].
       Qed.
 
-      Lemma confNames_inNs : forall R Pi mu ns (a' : Deb.Atom.t) (m : QN.t),
+      Lemma confNames_inNs : forall R Pi mu ns (a' : Deb.Atom.t) (m : QualifiedName.t),
           NSet.In (fst (fst a')) ns ->
-          (forall (q : Pkg.t) v, Prov.In (q, (fst (fst a'), v)) Pi ->
+          (forall (q : Package.t) v, ProvidesRel.In (q, (fst (fst a'), v)) Pi ->
                                   NSet.In (pname q) ns) ->
           Deb.Reduction.NSet.In m
             (Deb.Reduction.confNames (reduceReal R) (reduceProv R Pi mu) a') ->
@@ -1648,10 +1648,10 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
       Qed.
 
       Lemma complementVS_restrict : forall I ns Rr I' (a' : Deb.Atom.t)
-          (m : QN.t),
-          PkgSet.Subset Rr (inst_real I) ->
-          (forall q, PkgSet.In q (inst_real I) -> NSet.In (pname q) ns ->
-             PkgSet.In q Rr) ->
+          (m : QualifiedName.t),
+          PackageSet.Subset Rr (inst_real I) ->
+          (forall q, PackageSet.In q (inst_real I) -> NSet.In (pname q) ns ->
+             PackageSet.In q Rr) ->
           ProvSubInst I ns I' -> NSet.In (fst (fst a')) ns ->
           NSet.In (fst m) ns ->
           Deb.Reduction.complementVS (reduceReal Rr)
@@ -1677,9 +1677,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           rewrite <- E; exact Hqn.
       Qed.
 
-      Lemma reduceDeps_fibre : forall D (p : Pkg.t) A,
-          Deb.Deps.In (embedPkg p, A) (reduceDeps D) <->
-          Deb.Deps.In (embedPkg p, A) (reduceDeps (depsFibre D p)).
+      Lemma reduceDeps_fibre : forall D (p : Package.t) A,
+          Deb.DependencyRel.In (embedPkg p, A) (reduceDeps D) <->
+          Deb.DependencyRel.In (embedPkg p, A) (reduceDeps (depsFibre D p)).
       Proof.
         intros D p A; rewrite !mem_reduceDeps; split.
         - intros [p0 [Al [HD Heq]]].
@@ -1692,8 +1692,8 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           exists p0, Al; split; [exact HD | exact Heq].
       Qed.
 
-      Lemma reduceDeps_atomNames : forall D (p : Pkg.t) A (a' : Deb.Atom.t),
-          Deb.Deps.In (embedPkg p, A) (reduceDeps D) ->
+      Lemma reduceDeps_atomNames : forall D (p : Package.t) A (a' : Deb.Atom.t),
+          Deb.DependencyRel.In (embedPkg p, A) (reduceDeps D) ->
           Deb.AtomSet.In a' (Deb.clauseAtoms A) ->
           NSet.In (fst (fst a')) (atomNames D p).
       Proof.
@@ -1713,7 +1713,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             (Deb.Reduction.Name.Orig (n, QAArch alpha)) =
           Deb.Reduction.versions
             (Deb.MkInst (reduceReal (realAt (inst_real I) n alpha))
-               Deb.Deps.empty Deb.Deps.empty Deb.Prov.empty Deb.Conf.empty
+               Deb.DependencyRel.empty Deb.DependencyRel.empty Deb.ProvidesRel.empty Deb.ConflictRel.empty
                (embedPkg (inst_root I)))
             (Deb.Reduction.Name.Orig (n, QAArch alpha)).
       Proof.
@@ -1750,13 +1750,13 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           congruence.
       Qed.
 
-      Theorem dependees_lookupOrig : forall I (p : Pkg.t),
-          PkgSet.In p (inst_real I) ->
+      Theorem dependees_lookupOrig : forall I (p : Package.t),
+          PackageSet.In p (inst_real I) ->
           Deb.Reduction.dependees (reduceInst I)
             (Deb.Reduction.embedPkg (embedPkg p)) =
           let ms := readNames (inst_prov I) (inst_deps I) (inst_conf I) p in
-          let Rp := PkgSet.add p (realPreimage (inst_real I) ms) in
-          let Pis := Prov.union (provPreimage (inst_prov I) ms)
+          let Rp := PackageSet.add p (realPreimage (inst_real I) ms) in
+          let Pis := ProvidesRel.union (provPreimage (inst_prov I) ms)
                        (provFibre (inst_prov I) p) in
           let Mp := provClsPreimage (inst_cls I) Rp Pis in
           Deb.Reduction.dependees
@@ -1764,30 +1764,30 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
                (reduceDeps (depsFibre (inst_deps I) p))
                (reduceRec (depsFibre (inst_rec I) p))
                (reduceProv Rp Pis Mp)
-               (reduceConf (PkgSet.singleton p) (confFibre (inst_conf I) p) Mp)
+               (reduceConf (PackageSet.singleton p) (confFibre (inst_conf I) p) Mp)
                (embedPkg (inst_root I)))
             (Deb.Reduction.embedPkg (embedPkg p)).
       Proof.
         intros I p HpR; cbv zeta.
         rewrite reduceProv_provClsPreimage, reduceConf_provClsPreimage
-          by (intros q Hq; apply PkgSet.singleton_spec in Hq;
-              apply PkgSet.add_spec; left; exact Hq).
+          by (intros q Hq; apply PackageSet.singleton_spec in Hq;
+              apply PackageSet.add_spec; left; exact Hq).
         set (ms := readNames (inst_prov I) (inst_deps I) (inst_conf I) p).
         set (Rr := realPreimage (inst_real I) ms).
-        set (Rp := PkgSet.add p Rr).
-        set (Pis := Prov.union (provPreimage (inst_prov I) ms)
+        set (Rp := PackageSet.add p Rr).
+        set (Pis := ProvidesRel.union (provPreimage (inst_prov I) ms)
                       (provFibre (inst_prov I) p)).
-        set (Rc := PkgSet.singleton p).
+        set (Rc := PackageSet.singleton p).
         set (Gs := confFibre (inst_conf I) p).
-        assert (HRr : PkgSet.Subset Rr (inst_real I)) by apply realPreimage_sub.
-        assert (HcovR : forall q, PkgSet.In q (inst_real I) ->
+        assert (HRr : PackageSet.Subset Rr (inst_real I)) by apply realPreimage_sub.
+        assert (HcovR : forall q, PackageSet.In q (inst_real I) ->
                           NSet.In (pname q) ms ->
-                          PkgSet.In q Rr) by apply realPreimage_cov.
-        assert (HRp : PkgSet.Subset Rp (inst_real I)).
-        { intros q Hq; apply PkgSet.add_spec in Hq;
+                          PackageSet.In q Rr) by apply realPreimage_cov.
+        assert (HRp : PackageSet.Subset Rp (inst_real I)).
+        { intros q Hq; apply PackageSet.add_spec in Hq;
             destruct Hq as [-> | Hq]; [exact HpR | exact (HRr _ Hq)]. }
-        assert (HPis : Prov.Subset Pis (inst_prov I)).
-        { intros [q [m v]] He; apply Prov.union_spec in He;
+        assert (HPis : ProvidesRel.Subset Pis (inst_prov I)).
+        { intros [q [m v]] He; apply ProvidesRel.union_spec in He;
             destruct He as [He | He];
             [ exact (proj1 (proj1 (mem_provPreimage (inst_prov I) ms q m v) He))
             | exact
@@ -1797,37 +1797,37 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         assert (Hsl : ProvSubInst I ms Ip).
         { unfold ProvSubInst, Ip; cbn [inst_real inst_prov]; repeat split;
             [ exact HRp | exact HPis
-            | intros q Hq Hn; apply PkgSet.add_spec; right;
+            | intros q Hq Hn; apply PackageSet.add_spec; right;
               exact (HcovR q Hq Hn)
-            | intros q m v He Hn; apply Prov.union_spec; left;
+            | intros q m v He Hn; apply ProvidesRel.union_spec; left;
               apply mem_provPreimage; split; [exact He | exact Hn] ]. }
-        assert (Hinp : PkgSet.In p Rc)
-          by (apply PkgSet.singleton_spec; reflexivity).
-        assert (HRc : PkgSet.Subset Rc (inst_real I)).
-        { intros q Hq; apply PkgSet.singleton_spec in Hq; rewrite Hq;
+        assert (Hinp : PackageSet.In p Rc)
+          by (apply PackageSet.singleton_spec; reflexivity).
+        assert (HRc : PackageSet.Subset Rc (inst_real I)).
+        { intros q Hq; apply PackageSet.singleton_spec in Hq; rewrite Hq;
            exact HpR. }
-        assert (HGs : Conf.Subset Gs (inst_conf I)).
+        assert (HGs : ConflictRel.Subset Gs (inst_conf I)).
         { intros [q a0] He;
             exact (proj1 (proj1 (mem_confFibre (inst_conf I) p q a0) He)). }
-        assert (Hown : forall e, Conf.In e (inst_conf I) -> fst e = p ->
-                       Conf.In e Gs).
+        assert (Hown : forall e, ConflictRel.In e (inst_conf I) -> fst e = p ->
+                       ConflictRel.In e Gs).
         { intros [q a0] He Hq; cbn [fst] in Hq; apply mem_confFibre; split;
             [exact He | exact Hq]. }
         assert (Hatom : forall an,
                    NSet.In an (atomNames (inst_deps I) p) -> NSet.In an ms)
           by (intros an Ha; apply NSet.union_spec; left; exact Ha).
         assert (Hcn : forall (ea : Deb.Atom.t) e,
-                   Deb.Conf.In (embedPkg p, (ea, e))
+                   Deb.ConflictRel.In (embedPkg p, (ea, e))
                      (reduceConf (inst_real I) (inst_conf I) (inst_cls I)) ->
                    NSet.In (fst (fst ea)) ms).
         { intros ea e Hg; apply NSet.union_spec; right; apply mem_confRead.
           exists (fst (fst ea)); split;
             [exact (reduceConf_confAtom _ _ _ p ea e Hg) | left; reflexivity]. }
         assert (Hcp : forall (ea : Deb.Atom.t) e,
-                   Deb.Conf.In (embedPkg p, (ea, e))
+                   Deb.ConflictRel.In (embedPkg p, (ea, e))
                      (reduceConf (inst_real I) (inst_conf I) (inst_cls I)) ->
-                   forall (q : Pkg.t) v,
-                     Prov.In (q, (fst (fst ea), v)) (inst_prov I) ->
+                   forall (q : Package.t) v,
+                     ProvidesRel.In (q, (fst (fst ea), v)) (inst_prov I) ->
                      NSet.In (pname q) ms).
         { intros ea e Hg q v Hin; apply NSet.union_spec; right.
           apply mem_confRead; exists (fst (fst ea)); split;
@@ -1837,7 +1837,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         replace (Deb.Reduction.embedPkg (embedPkg p))
           with (Deb.Reduction.Name.Orig (pname p, QAArch (parch p)),
                 Deb.Reduction.Version.Orig (pver p)) by reflexivity.
-        apply Deb.Reduction.Reduced.DependeesSet.ext; intro y.
+        apply Deb.Reduction.Reduced.DependeeSet.ext; intro y.
         rewrite !Deb.Reduction.dependees_orig_spec.
         cbn [reduceInst Deb.inst_real Deb.inst_deps Deb.inst_rec Deb.inst_prov
              Deb.inst_conf].
@@ -1878,7 +1878,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
         - intros [[A [HA Hcase]] |
                   [[A [HA Hy]] |
                    [a0 [e [qn [Hg [Hqn [Hne [Hx Hy]]]]]]]]].
-          + assert (HA' : Deb.Deps.In (embedPkg p, A)
+          + assert (HA' : Deb.DependencyRel.In (embedPkg p, A)
                             (reduceDeps (inst_deps I)))
               by exact (proj2 (reduceDeps_fibre (inst_deps I) p A) HA).
             left; exists A; split; [exact HA' |].
@@ -1892,7 +1892,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
             * right; split; [exact Hcard | exact Hy].
           + right; left; exists A; split;
               [exact (proj2 (reduceDeps_fibre (inst_rec I) p A) HA) | exact Hy].
-          + assert (Hg' : Deb.Conf.In (embedPkg p, (a0, e))
+          + assert (Hg' : Deb.ConflictRel.In (embedPkg p, (a0, e))
                             (reduceConf (inst_real I) (inst_conf I)
                                (inst_cls I)))
               by exact (proj2 (reduceConf_pkg _ _ _ p Rc Gs a0 e HRc HGs Hinp
@@ -1920,9 +1920,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           let Rs := realPreimage (inst_real I) (NSet.singleton m) in
           let Pis := provPreimage (inst_prov I) (NSet.singleton m) in
           Deb.Reduction.dependees
-            (Deb.MkInst (reduceReal Rs) Deb.Deps.empty Deb.Deps.empty
+            (Deb.MkInst (reduceReal Rs) Deb.DependencyRel.empty Deb.DependencyRel.empty
                (reduceProv Rs Pis (provClsPreimage (inst_cls I) Rs Pis))
-               Deb.Conf.empty (embedPkg (inst_root I)))
+               Deb.ConflictRel.empty (embedPkg (inst_root I)))
             (Deb.Reduction.Name.Disjunct (reduceClause alpha Al),
              Deb.Reduction.Version.Atom ((m, y), phi)).
       Proof.
@@ -1954,9 +1954,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           let Rs := realPreimage (inst_real I) (NSet.singleton m) in
           let Pis := provPreimage (inst_prov I) (NSet.singleton m) in
           Deb.Reduction.dependees
-            (Deb.MkInst (reduceReal Rs) Deb.Deps.empty Deb.Deps.empty
+            (Deb.MkInst (reduceReal Rs) Deb.DependencyRel.empty Deb.DependencyRel.empty
                (reduceProv Rs Pis (provClsPreimage (inst_cls I) Rs Pis))
-               Deb.Conf.empty (embedPkg (inst_root I)))
+               Deb.ConflictRel.empty (embedPkg (inst_root I)))
             (Deb.Reduction.Name.Soft (reduceClause alpha Al),
              Deb.Reduction.Version.Atom ((m, y), phi)).
       Proof.
@@ -1979,9 +1979,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           let Rs := realPreimage (inst_real I) (NSet.singleton m) in
           let Pis := provPreimage (inst_prov I) (NSet.singleton m) in
           Deb.Reduction.versions
-            (Deb.MkInst (reduceReal Rs) Deb.Deps.empty Deb.Deps.empty
+            (Deb.MkInst (reduceReal Rs) Deb.DependencyRel.empty Deb.DependencyRel.empty
                (reduceProv Rs Pis (provClsPreimage (inst_cls I) Rs Pis))
-               Deb.Conf.empty (embedPkg (inst_root I)))
+               Deb.ConflictRel.empty (embedPkg (inst_root I)))
             (Deb.Reduction.Name.Selector (reduceAtom alpha (m, (x, phi)))).
       Proof.
         intros I alpha m x phi; cbv zeta.
@@ -2007,9 +2007,9 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
           let Rs := realPreimage (inst_real I) (NSet.singleton m) in
           let Pis := provPreimage (inst_prov I) (NSet.singleton m) in
           Deb.Reduction.dependees
-            (Deb.MkInst (reduceReal Rs) Deb.Deps.empty Deb.Deps.empty
+            (Deb.MkInst (reduceReal Rs) Deb.DependencyRel.empty Deb.DependencyRel.empty
                (reduceProv Rs Pis (provClsPreimage (inst_cls I) Rs Pis))
-               Deb.Conf.empty (embedPkg (inst_root I)))
+               Deb.ConflictRel.empty (embedPkg (inst_root I)))
             (Deb.Reduction.Name.Selector (reduceAtom alpha (m, (x, phi))), w).
       Proof. intros I alpha m x phi w; destruct w; reflexivity. Qed.
 
@@ -2018,7 +2018,7 @@ Module DebianMA (N V : UsualOrderedType) (AP : ArchParam).
     Theorem debian_ma_retraction : forall S,
         debianMAResolution (coreResolution S) = S.
     Proof.
-      intro S; apply PkgSet.ext; intro q.
+      intro S; apply PackageSet.ext; intro q.
       rewrite mem_debianMAResolution; unfold coreResolution, reduceReal.
       exact (SOmr.mem_map_inj _ _ _ embedPkg_injective).
     Qed.

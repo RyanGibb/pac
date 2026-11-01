@@ -68,15 +68,15 @@ module Make (S : SEARCH) : sig
 
   (* one queue entry of the cascade: a version var or a package var
      assigned false, whose propagation waits for its turn *)
-  type rejection = [ `Ver of DMA.Pkg.t | `Pkg of string * string ]
+  type rejection = [ `Ver of DMA.Package.t | `Pkg of string * string ]
 
   val create_state : unit -> state
   val forget_rejections : state -> unit
 
   (* the atoms clauses on [name] were narrowed to by folding, each with the
      depender whose clause it was, the latest first *)
-  val narrowings : state -> name -> (DMA.Pkg.t * DMA.Deb.Atom.t) list
-  val stanza : DMA.Pkg.t -> nstanza option
+  val narrowings : state -> name -> (DMA.Package.t * DMA.Deb.Atom.t) list
+  val stanza : DMA.Package.t -> nstanza option
 
   (* the declared Provides of [n] that meet the formula *)
   val provides_matching :
@@ -87,7 +87,7 @@ module Make (S : SEARCH) : sig
 
   (* whether the package, a Multi-Arch: foreign one of the atom's name, meets
      it from another architecture *)
-  val sibling_provides : DMA.Pkg.t -> nstanza -> DMA.Deb.Atom.t -> bool
+  val sibling_provides : DMA.Package.t -> nstanza -> DMA.Deb.Atom.t -> bool
   val alt_name : DMA.Deb.Atom.t -> name
   val orig_versions : name -> (PVersion.t * string) list
   val deferred : state -> DMA.Deb.Atom.t -> bool
@@ -96,21 +96,21 @@ module Make (S : SEARCH) : sig
     state -> pkgvar:bool -> string * DMA.coq_NameArch -> string -> bool
 
   val solutions : state -> assigned option -> DMA.Deb.Atom.t -> int
-  val installed_at : assigned:assigned -> DMA.Pkg.t -> bool
+  val installed_at : assigned:assigned -> DMA.Package.t -> bool
   val assign : state -> assigned:assigned -> rejection list -> rejection list
-  val conflicts : state -> assigned:assigned -> DMA.Pkg.t -> rejection list
+  val conflicts : state -> assigned:assigned -> DMA.Package.t -> rejection list
 
   val group_conflicts :
-    state -> assigned:assigned -> DMA.Pkg.t -> rejection list
+    state -> assigned:assigned -> DMA.Package.t -> rejection list
 
-  val conflicted_by : state -> assigned:assigned -> DMA.Pkg.t -> rejection list
+  val conflicted_by : state -> assigned:assigned -> DMA.Package.t -> rejection list
 
   val propagate :
     state -> assigned:assigned -> rejection -> rejection list * name list
 
   val register :
     state ->
-    DMA.Pkg.t ->
+    DMA.Package.t ->
     (name, DMA.Deb.Atom.t) Work_heap.clause list
     * (name, DMA.Deb.Atom.t) Work_heap.clause list
 

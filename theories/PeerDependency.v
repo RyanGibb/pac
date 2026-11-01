@@ -4,40 +4,40 @@ From PackageCalculus Require Import Prelude Concurrent.
 Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
   Module Conc := Concurrent N V G.
   Module Source := Conc.Source.
-  Module Pkg := Source.Pkg.
-  Module PkgSet := Source.PkgSet.
+  Module Package := Source.Package.
+  Module PackageSet := Source.PackageSet.
   Module VSet := Source.VSet.
   Module ParentElt := Conc.ParentElt.
   Module ParentRel := Conc.ParentRel.
 
-  Module PeerElt := PairUOT Pkg Source.Dependees.
-  Module PeerRel := FSetUOT PeerElt.
+  Module PeerDependencyElt := PairUOT Package Source.Dependee.
+  Module PeerDependencyRel := FSetUOT PeerDependencyElt.
   Record IsResolution
-      (R : PkgSet.t) (D : Source.DepRel.t) (Th : PeerRel.t)
-      (g : V.t -> G.t) (r : Pkg.t)
-      (S : PkgSet.t) (pi : ParentRel.t) : Prop :=
+      (R : PackageSet.t) (D : Source.DependencyRel.t) (Th : PeerDependencyRel.t)
+      (g : V.t -> G.t) (r : Package.t)
+      (S : PackageSet.t) (pi : ParentRel.t) : Prop :=
     { res_concurrent : Conc.IsResolution R D g r S pi
     ; res_peer_satisfaction :
-        forall p, PkgSet.In p S ->
+        forall p, PackageSet.In p S ->
         forall (n : N.t) (vs : VSet.t),
-          PeerRel.In (p, (n, vs)) Th ->
+          PeerDependencyRel.In (p, (n, vs)) Th ->
           forall q, ParentRel.In (p, q) pi ->
-          forall (us : VSet.t), Source.DepRel.In (q, (n, us)) D ->
+          forall (us : VSet.t), Source.DependencyRel.In (q, (n, us)) D ->
           forall v, VSet.In v us -> ParentRel.In ((n, v), q) pi ->
             VSet.In v vs }.
 
   Module Reduction.
-    Module PkgEqb := UOTEqb Pkg.
+    Module PkgEqb := UOTEqb Package.
     Module NEqb := UOTEqb N.
-    Definition hasDepOnb (D : Source.DepRel.t) (p : Pkg.t) (n : N.t) : bool :=
-      Source.DepRel.exists_ (fun '(q, (m, _)) =>
+    Definition hasDepOnb (D : Source.DependencyRel.t) (p : Package.t) (n : N.t) : bool :=
+      Source.DependencyRel.exists_ (fun '(q, (m, _)) =>
           andb (PkgEqb.eqb q p) (NEqb.eqb m n))
         D.
 
-    Lemma hasDepOnb_iff : forall D (p : Pkg.t) (n : N.t),
-        hasDepOnb D p n = true <-> exists vs, Source.DepRel.In (p, (n, vs)) D.
+    Lemma hasDepOnb_iff : forall D (p : Package.t) (n : N.t),
+        hasDepOnb D p n = true <-> exists vs, Source.DependencyRel.In (p, (n, vs)) D.
     Proof.
-      intros D p m; unfold hasDepOnb; rewrite Source.DepRel.exists_spec'.
+      intros D p m; unfold hasDepOnb; rewrite Source.DependencyRel.exists_spec'.
       split.
       - intros [[q [m' vs]] [He Hb]]; cbn [fst snd] in Hb.
         rewrite Bool.andb_true_iff, PkgEqb.eqb_true_iff, NEqb.eqb_true_iff
@@ -52,42 +52,42 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     Module Version := Conc.Reduction.Version.
     Module SOvtp := Conc.Reduction.SOvtp.
 
-    Module SOetp := SetOps PeerElt Reduced.Pkg PeerRel Reduced.PkgSet.
-    Definition peerReals (D : Source.DepRel.t) (Th : PeerRel.t)
-        (n : N.t) (v : V.t) (o : N.t) (u : V.t) : Reduced.PkgSet.t :=
+    Module SOetp := SetOps PeerDependencyElt Reduced.Package PeerDependencyRel Reduced.PackageSet.
+    Definition peerReals (D : Source.DependencyRel.t) (Th : PeerDependencyRel.t)
+        (n : N.t) (v : V.t) (o : N.t) (u : V.t) : Reduced.PackageSet.t :=
       SOetp.unionMap (fun '(q, (m, ws)) =>
-          if Pkg.eq_dec q (o, u)
+          if Package.eq_dec q (o, u)
           then if hasDepOnb D (n, v) m
                then SOvtp.map (fun w =>
                         (Name.Intermediate n v m, Version.Orig w))
                       ws
-               else Reduced.PkgSet.empty
-          else Reduced.PkgSet.empty)
+               else Reduced.PackageSet.empty
+          else Reduced.PackageSet.empty)
         Th.
 
-    Definition peerRealsOfVS (D : Source.DepRel.t) (Th : PeerRel.t)
-        (n : N.t) (v : V.t) (o : N.t) (us : VSet.t) : Reduced.PkgSet.t :=
+    Definition peerRealsOfVS (D : Source.DependencyRel.t) (Th : PeerDependencyRel.t)
+        (n : N.t) (v : V.t) (o : N.t) (us : VSet.t) : Reduced.PackageSet.t :=
       SOvtp.unionMap (peerReals D Th n v o) us.
 
     Module SOdtp := Conc.Reduction.SOdtp.
-    Definition reduceRealIntermediate (D : Source.DepRel.t) : Reduced.PkgSet.t :=
+    Definition reduceRealIntermediate (D : Source.DependencyRel.t) : Reduced.PackageSet.t :=
       SOdtp.unionMap (fun '((n, v), (m, vs)) =>
           SOvtp.map (fun u => (Name.Intermediate n v m, Version.Orig u)) vs)
         D.
 
-    Definition reduceRealPeer (D : Source.DepRel.t) (Th : PeerRel.t) : Reduced.PkgSet.t :=
+    Definition reduceRealPeer (D : Source.DependencyRel.t) (Th : PeerDependencyRel.t) : Reduced.PackageSet.t :=
       SOdtp.unionMap (fun '((n, v), (o, us)) => peerRealsOfVS D Th n v o us) D.
 
-    Definition reduceReal (R : PkgSet.t) (D : Source.DepRel.t) (Th : PeerRel.t)
-        (g : V.t -> G.t) : Reduced.PkgSet.t :=
-      Reduced.PkgSet.union (Conc.Reduction.embedSet g R)
-        (Reduced.PkgSet.union (reduceRealIntermediate D) (reduceRealPeer D Th)).
+    Definition reduceReal (R : PackageSet.t) (D : Source.DependencyRel.t) (Th : PeerDependencyRel.t)
+        (g : V.t -> G.t) : Reduced.PackageSet.t :=
+      Reduced.PackageSet.union (Conc.Reduction.embedSet g R)
+        (Reduced.PackageSet.union (reduceRealIntermediate D) (reduceRealPeer D Th)).
 
-    Module SOetd := SetOps PeerElt Reduced.DepElt PeerRel Reduced.DepRel.
-    Definition peerEdges (D : Source.DepRel.t) (Th : PeerRel.t)
-        (n : N.t) (v : V.t) (o : N.t) (u : V.t) : Reduced.DepRel.t :=
+    Module SOetd := SetOps PeerDependencyElt Reduced.DependencyElt PeerDependencyRel Reduced.DependencyRel.
+    Definition peerEdges (D : Source.DependencyRel.t) (Th : PeerDependencyRel.t)
+        (n : N.t) (v : V.t) (o : N.t) (u : V.t) : Reduced.DependencyRel.t :=
       SOetd.filterMap (fun '(q, (m, ws)) =>
-          if Pkg.eq_dec q (o, u)
+          if Package.eq_dec q (o, u)
           then if hasDepOnb D (n, v) m
                then Some ((Name.Intermediate n v o, Version.Orig u),
                           (Name.Intermediate n v m,
@@ -97,20 +97,20 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         Th.
 
     Module SOvtd := Conc.Reduction.SOvtd.
-    Definition peerEdgesOfVS (D : Source.DepRel.t) (Th : PeerRel.t)
-        (n : N.t) (v : V.t) (o : N.t) (us : VSet.t) : Reduced.DepRel.t :=
+    Definition peerEdgesOfVS (D : Source.DependencyRel.t) (Th : PeerDependencyRel.t)
+        (n : N.t) (v : V.t) (o : N.t) (us : VSet.t) : Reduced.DependencyRel.t :=
       SOvtd.unionMap (peerEdges D Th n v o) us.
 
     Module SOdtd := Conc.Reduction.SOdtd.
-    Definition reduceDepsDepToInt (D : Source.DepRel.t) (g : V.t -> G.t) :
-        Reduced.DepRel.t :=
+    Definition reduceDepsDepToInt (D : Source.DependencyRel.t) (g : V.t -> G.t) :
+        Reduced.DependencyRel.t :=
       SOdtd.map (fun '((n, v), (m, vs)) =>
           ((Name.Granular n (g v), Version.Orig v),
            (Name.Intermediate n v m, Conc.Reduction.embedVS vs)))
         D.
 
-    Definition reduceDepsIntToDep (D : Source.DepRel.t) (g : V.t -> G.t) :
-        Reduced.DepRel.t :=
+    Definition reduceDepsIntToDep (D : Source.DependencyRel.t) (g : V.t -> G.t) :
+        Reduced.DependencyRel.t :=
       SOdtd.unionMap (fun '((n, v), (m, vs)) =>
           SOvtd.map (fun u =>
               ((Name.Intermediate n v m, Version.Orig u),
@@ -118,23 +118,23 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
             vs)
         D.
 
-    Definition reduceDepsPeer (D : Source.DepRel.t) (Th : PeerRel.t) : Reduced.DepRel.t :=
+    Definition reduceDepsPeer (D : Source.DependencyRel.t) (Th : PeerDependencyRel.t) : Reduced.DependencyRel.t :=
       SOdtd.unionMap (fun '((n, v), (o, us)) => peerEdgesOfVS D Th n v o us) D.
 
-    Definition reduceDeps (D : Source.DepRel.t) (Th : PeerRel.t) (g : V.t -> G.t) :
-        Reduced.DepRel.t :=
-      Reduced.DepRel.union (reduceDepsDepToInt D g)
-        (Reduced.DepRel.union (reduceDepsIntToDep D g) (reduceDepsPeer D Th)).
+    Definition reduceDeps (D : Source.DependencyRel.t) (Th : PeerDependencyRel.t) (g : V.t -> G.t) :
+        Reduced.DependencyRel.t :=
+      Reduced.DependencyRel.union (reduceDepsDepToInt D g)
+        (Reduced.DependencyRel.union (reduceDepsIntToDep D g) (reduceDepsPeer D Th)).
 
     Module SOdpp := Conc.Reduction.SOdpp.
     Module SOvpp := Conc.Reduction.SOvpp.
-    Definition parents (D : Source.DepRel.t) (g : V.t -> G.t) (S : Reduced.PkgSet.t) :
+    Definition parents (D : Source.DependencyRel.t) (g : V.t -> G.t) (S : Reduced.PackageSet.t) :
         ParentRel.t :=
       SOdpp.unionMap (fun '((n, v), (m, vs)) =>
           SOvpp.filterMap (fun u =>
-              if andb (Reduced.PkgSet.mem
+              if andb (Reduced.PackageSet.mem
                          (Name.Intermediate n v m, Version.Orig u) S)
-                   (Reduced.PkgSet.mem
+                   (Reduced.PackageSet.mem
                       (Name.Granular n (g v), Version.Orig v) S)
               then Some ((m, u), (n, v))
               else None)
@@ -143,27 +143,27 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
 
     Lemma mem_parents : forall D g S m u n v,
         ParentRel.In ((m, u), (n, v)) (parents D g S) <->
-        exists vs, Source.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs /\
-          Reduced.PkgSet.In (Name.Granular n (g v), Version.Orig v) S /\
-          Reduced.PkgSet.In (Name.Intermediate n v m, Version.Orig u) S.
+        exists vs, Source.DependencyRel.In ((n, v), (m, vs)) D /\ VSet.In u vs /\
+          Reduced.PackageSet.In (Name.Granular n (g v), Version.Orig v) S /\
+          Reduced.PackageSet.In (Name.Intermediate n v m, Version.Orig u) S.
     Proof.
       intros D g S m u n v; unfold parents; rewrite SOdpp.mem_unionMap.
       split.
       - intros [[[n' v'] [m' vs]] [HeD Hh]]; cbn beta iota in Hh.
         apply SOvpp.mem_filterMap_if in Hh; destruct Hh as [u' [Hu [Hb E]]].
         injection E as <- <- <- <-.
-        rewrite Bool.andb_true_iff, !Reduced.PkgSet.mem_spec in Hb.
+        rewrite Bool.andb_true_iff, !Reduced.PackageSet.mem_spec in Hb.
         exists vs; intuition.
       - intros (vs & HD & Hu & HvS & HuS).
         exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
         apply SOvpp.mem_filterMap_if; exists u.
-        rewrite Bool.andb_true_iff, !Reduced.PkgSet.mem_spec; repeat split; auto.
+        rewrite Bool.andb_true_iff, !Reduced.PackageSet.mem_spec; repeat split; auto.
     Qed.
 
     Lemma mem_reduceRealIntermediate : forall D p,
-        Reduced.PkgSet.In p (reduceRealIntermediate D) <->
+        Reduced.PackageSet.In p (reduceRealIntermediate D) <->
         exists n v m vs u,
-          Source.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs /\
+          Source.DependencyRel.In ((n, v), (m, vs)) D /\ VSet.In u vs /\
           p = (Name.Intermediate n v m, Version.Orig u).
     Proof.
       intros D p; unfold reduceRealIntermediate; rewrite SOdtp.mem_unionMap.
@@ -177,15 +177,15 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Lemma mem_peerReals : forall D Th n v o u p,
-        Reduced.PkgSet.In p (peerReals D Th n v o u) <->
+        Reduced.PackageSet.In p (peerReals D Th n v o u) <->
         exists m ws w,
-          PeerRel.In ((o, u), (m, ws)) Th /\ hasDepOnb D (n, v) m = true /\
+          PeerDependencyRel.In ((o, u), (m, ws)) Th /\ hasDepOnb D (n, v) m = true /\
           VSet.In w ws /\ p = (Name.Intermediate n v m, Version.Orig w).
     Proof.
       intros D Th n v o u p; unfold peerReals; rewrite SOetp.mem_unionMap.
       split.
       - intros [[q [m ws]] [HtTh Hh]]; cbn beta iota in Hh.
-        destruct (Pkg.eq_dec q (o, u)) as [-> | NE];
+        destruct (Package.eq_dec q (o, u)) as [-> | NE];
           [| destruct (SOvtp.empty_in _ Hh)].
         destruct (hasDepOnb D (n, v) m) eqn:Hb;
           [| destruct (SOvtp.empty_in _ Hh)].
@@ -197,9 +197,9 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Lemma mem_peerRealsOfVS : forall D Th n v o us p,
-        Reduced.PkgSet.In p (peerRealsOfVS D Th n v o us) <->
+        Reduced.PackageSet.In p (peerRealsOfVS D Th n v o us) <->
         exists u m ws w,
-          VSet.In u us /\ PeerRel.In ((o, u), (m, ws)) Th /\
+          VSet.In u us /\ PeerDependencyRel.In ((o, u), (m, ws)) Th /\
           hasDepOnb D (n, v) m = true /\ VSet.In w ws /\
           p = (Name.Intermediate n v m, Version.Orig w).
     Proof.
@@ -215,10 +215,10 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Lemma mem_reduceRealPeer : forall D Th p,
-        Reduced.PkgSet.In p (reduceRealPeer D Th) <->
+        Reduced.PackageSet.In p (reduceRealPeer D Th) <->
         exists n v o us u m ws w,
-          Source.DepRel.In ((n, v), (o, us)) D /\ VSet.In u us /\
-          PeerRel.In ((o, u), (m, ws)) Th /\ hasDepOnb D (n, v) m = true /\
+          Source.DependencyRel.In ((n, v), (o, us)) D /\ VSet.In u us /\
+          PeerDependencyRel.In ((o, u), (m, ws)) Th /\ hasDepOnb D (n, v) m = true /\
           VSet.In w ws /\ p = (Name.Intermediate n v m, Version.Orig w).
     Proof.
       intros D Th p; unfold reduceRealPeer; rewrite SOdtp.mem_unionMap.
@@ -234,24 +234,24 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Module SOptp := Conc.Reduction.SOptp.
-    Inductive ReducedPkg (R : PkgSet.t) (D : Source.DepRel.t) (Th : PeerRel.t)
-        (g : V.t -> G.t) : Reduced.Pkg.t -> Prop :=
-    | PkgEmbed : forall n v, PkgSet.In (n, v) R ->
+    Inductive ReducedPkg (R : PackageSet.t) (D : Source.DependencyRel.t) (Th : PeerDependencyRel.t)
+        (g : V.t -> G.t) : Reduced.Package.t -> Prop :=
+    | PkgEmbed : forall n v, PackageSet.In (n, v) R ->
         ReducedPkg R D Th g (Name.Granular n (g v), Version.Orig v)
     | PkgIntermediate : forall n v m vs u,
-        Source.DepRel.In ((n, v), (m, vs)) D -> VSet.In u vs ->
+        Source.DependencyRel.In ((n, v), (m, vs)) D -> VSet.In u vs ->
         ReducedPkg R D Th g (Name.Intermediate n v m, Version.Orig u)
     | PkgPeer : forall n v m vs o us u ws w,
-        Source.DepRel.In ((n, v), (m, vs)) D ->
-        Source.DepRel.In ((n, v), (o, us)) D -> VSet.In u us ->
-        PeerRel.In ((o, u), (m, ws)) Th -> VSet.In w ws ->
+        Source.DependencyRel.In ((n, v), (m, vs)) D ->
+        Source.DependencyRel.In ((n, v), (o, us)) D -> VSet.In u us ->
+        PeerDependencyRel.In ((o, u), (m, ws)) Th -> VSet.In w ws ->
         ReducedPkg R D Th g (Name.Intermediate n v m, Version.Orig w).
 
     Lemma mem_reduceReal : forall R D Th g q,
-        Reduced.PkgSet.In q (reduceReal R D Th g) <-> ReducedPkg R D Th g q.
+        Reduced.PackageSet.In q (reduceReal R D Th g) <-> ReducedPkg R D Th g q.
     Proof.
       intros R D Th g q; unfold reduceReal, Conc.Reduction.embedSet.
-      rewrite !Reduced.PkgSet.union_spec, SOptp.mem_map,
+      rewrite !Reduced.PackageSet.union_spec, SOptp.mem_map,
         mem_reduceRealIntermediate, mem_reduceRealPeer.
       split.
       - intros [[[n v] [Hp ->]] | [H | H]].
@@ -270,9 +270,9 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         eauto 20.
     Qed.
 
-    Lemma embedPkg_mem_reduceReal : forall g (p : Pkg.t) R D Th,
-        Reduced.PkgSet.In (Conc.Reduction.embedPkg g p) (reduceReal R D Th g) ->
-        PkgSet.In p R.
+    Lemma embedPkg_mem_reduceReal : forall g (p : Package.t) R D Th,
+        Reduced.PackageSet.In (Conc.Reduction.embedPkg g p) (reduceReal R D Th g) ->
+        PackageSet.In p R.
     Proof.
       intros g [n v] R D Th H; apply mem_reduceReal in H.
       unfold Conc.Reduction.embedPkg in H; cbn [fst snd] in H.
@@ -280,9 +280,9 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Lemma mem_reduceDepsDepToInt : forall D g y,
-        Reduced.DepRel.In y (reduceDepsDepToInt D g) <->
+        Reduced.DependencyRel.In y (reduceDepsDepToInt D g) <->
         exists n v m vs,
-          Source.DepRel.In ((n, v), (m, vs)) D /\
+          Source.DependencyRel.In ((n, v), (m, vs)) D /\
           y = ((Name.Granular n (g v), Version.Orig v),
                (Name.Intermediate n v m, Conc.Reduction.embedVS vs)).
     Proof.
@@ -295,9 +295,9 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Lemma mem_reduceDepsIntToDep : forall D g y,
-        Reduced.DepRel.In y (reduceDepsIntToDep D g) <->
+        Reduced.DependencyRel.In y (reduceDepsIntToDep D g) <->
         exists n v m vs u,
-          Source.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs /\
+          Source.DependencyRel.In ((n, v), (m, vs)) D /\ VSet.In u vs /\
           y = ((Name.Intermediate n v m, Version.Orig u),
                (Name.Granular m (g u),
                 Reduced.VSet.singleton (Version.Orig u))).
@@ -313,16 +313,16 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Lemma mem_peerEdges : forall D Th n v o u y,
-        Reduced.DepRel.In y (peerEdges D Th n v o u) <->
+        Reduced.DependencyRel.In y (peerEdges D Th n v o u) <->
         exists m ws,
-          PeerRel.In ((o, u), (m, ws)) Th /\ hasDepOnb D (n, v) m = true /\
+          PeerDependencyRel.In ((o, u), (m, ws)) Th /\ hasDepOnb D (n, v) m = true /\
           y = ((Name.Intermediate n v o, Version.Orig u),
                (Name.Intermediate n v m, Conc.Reduction.embedVS ws)).
     Proof.
       intros D Th n v o u y; unfold peerEdges; rewrite SOetd.mem_filterMap.
       split.
       - intros [[q [m ws]] [HtTh Hh]]; cbn beta iota in Hh.
-        destruct (Pkg.eq_dec q (o, u)) as [-> | NE]; [| discriminate].
+        destruct (Package.eq_dec q (o, u)) as [-> | NE]; [| discriminate].
         destruct (hasDepOnb D (n, v) m) eqn:Hb; [| discriminate].
         injection Hh as <-.
         exists m, ws; repeat split; assumption.
@@ -332,9 +332,9 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Lemma mem_peerEdgesOfVS : forall D Th n v o us y,
-        Reduced.DepRel.In y (peerEdgesOfVS D Th n v o us) <->
+        Reduced.DependencyRel.In y (peerEdgesOfVS D Th n v o us) <->
         exists u m ws,
-          VSet.In u us /\ PeerRel.In ((o, u), (m, ws)) Th /\
+          VSet.In u us /\ PeerDependencyRel.In ((o, u), (m, ws)) Th /\
           hasDepOnb D (n, v) m = true /\
           y = ((Name.Intermediate n v o, Version.Orig u),
                (Name.Intermediate n v m, Conc.Reduction.embedVS ws)).
@@ -351,10 +351,10 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Lemma mem_reduceDepsPeer : forall D Th y,
-        Reduced.DepRel.In y (reduceDepsPeer D Th) <->
+        Reduced.DependencyRel.In y (reduceDepsPeer D Th) <->
         exists n v o us u m ws,
-          Source.DepRel.In ((n, v), (o, us)) D /\ VSet.In u us /\
-          PeerRel.In ((o, u), (m, ws)) Th /\ hasDepOnb D (n, v) m = true /\
+          Source.DependencyRel.In ((n, v), (o, us)) D /\ VSet.In u us /\
+          PeerDependencyRel.In ((o, u), (m, ws)) Th /\ hasDepOnb D (n, v) m = true /\
           y = ((Name.Intermediate n v o, Version.Orig u),
                (Name.Intermediate n v m, Conc.Reduction.embedVS ws)).
     Proof.
@@ -370,31 +370,31 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         exists u, m, ws; repeat split; assumption.
     Qed.
 
-    Inductive ReducedEdge (D : Source.DepRel.t) (Th : PeerRel.t) (g : V.t -> G.t) :
-        Reduced.DepElt.t -> Prop :=
+    Inductive ReducedEdge (D : Source.DependencyRel.t) (Th : PeerDependencyRel.t) (g : V.t -> G.t) :
+        Reduced.DependencyElt.t -> Prop :=
     | EdgeDepToInt : forall n v m vs,
-        Source.DepRel.In ((n, v), (m, vs)) D ->
+        Source.DependencyRel.In ((n, v), (m, vs)) D ->
         ReducedEdge D Th g
           ((Name.Granular n (g v), Version.Orig v),
            (Name.Intermediate n v m, Conc.Reduction.embedVS vs))
     | EdgeIntToDep : forall n v m vs u,
-        Source.DepRel.In ((n, v), (m, vs)) D -> VSet.In u vs ->
+        Source.DependencyRel.In ((n, v), (m, vs)) D -> VSet.In u vs ->
         ReducedEdge D Th g
           ((Name.Intermediate n v m, Version.Orig u),
            (Name.Granular m (g u), Reduced.VSet.singleton (Version.Orig u)))
     | EdgePeer : forall n v m vs o us u ws,
-        Source.DepRel.In ((n, v), (m, vs)) D ->
-        Source.DepRel.In ((n, v), (o, us)) D -> VSet.In u us ->
-        PeerRel.In ((o, u), (m, ws)) Th ->
+        Source.DependencyRel.In ((n, v), (m, vs)) D ->
+        Source.DependencyRel.In ((n, v), (o, us)) D -> VSet.In u us ->
+        PeerDependencyRel.In ((o, u), (m, ws)) Th ->
         ReducedEdge D Th g
           ((Name.Intermediate n v o, Version.Orig u),
            (Name.Intermediate n v m, Conc.Reduction.embedVS ws)).
 
     Lemma mem_reduceDeps : forall D Th g y,
-        Reduced.DepRel.In y (reduceDeps D Th g) <-> ReducedEdge D Th g y.
+        Reduced.DependencyRel.In y (reduceDeps D Th g) <-> ReducedEdge D Th g y.
     Proof.
       intros D Th g y; unfold reduceDeps.
-      rewrite !Reduced.DepRel.union_spec, mem_reduceDepsDepToInt,
+      rewrite !Reduced.DependencyRel.union_spec, mem_reduceDepsDepToInt,
         mem_reduceDepsIntToDep, mem_reduceDepsPeer.
       split.
       - intros [H | [H | H]].
@@ -414,26 +414,26 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Lemma mem_reduceDeps_dep_to_int : forall D Th g n v m vs,
-        Source.DepRel.In ((n, v), (m, vs)) D ->
-        Reduced.DepRel.In ((Name.Granular n (g v), Version.Orig v),
+        Source.DependencyRel.In ((n, v), (m, vs)) D ->
+        Reduced.DependencyRel.In ((Name.Granular n (g v), Version.Orig v),
                      (Name.Intermediate n v m, Conc.Reduction.embedVS vs))
           (reduceDeps D Th g).
     Proof. intros; apply mem_reduceDeps, EdgeDepToInt; assumption. Qed.
 
     Lemma mem_reduceDeps_int_to_dep : forall D Th g n v m vs u,
-        Source.DepRel.In ((n, v), (m, vs)) D -> VSet.In u vs ->
-        Reduced.DepRel.In ((Name.Intermediate n v m, Version.Orig u),
+        Source.DependencyRel.In ((n, v), (m, vs)) D -> VSet.In u vs ->
+        Reduced.DependencyRel.In ((Name.Intermediate n v m, Version.Orig u),
                      (Name.Granular m (g u),
                       Reduced.VSet.singleton (Version.Orig u)))
           (reduceDeps D Th g).
     Proof. intros; apply mem_reduceDeps; eapply EdgeIntToDep; eassumption. Qed.
 
     Lemma mem_reduceDeps_peer : forall D Th g n v o us m ws u,
-        Source.DepRel.In ((n, v), (o, us)) D ->
+        Source.DependencyRel.In ((n, v), (o, us)) D ->
         VSet.In u us ->
-        PeerRel.In ((o, u), (m, ws)) Th ->
-        (exists vs, Source.DepRel.In ((n, v), (m, vs)) D) ->
-        Reduced.DepRel.In ((Name.Intermediate n v o, Version.Orig u),
+        PeerDependencyRel.In ((o, u), (m, ws)) Th ->
+        (exists vs, Source.DependencyRel.In ((n, v), (m, vs)) D) ->
+        Reduced.DependencyRel.In ((Name.Intermediate n v o, Version.Orig u),
                      (Name.Intermediate n v m, Conc.Reduction.embedVS ws))
           (reduceDeps D Th g).
     Proof.
@@ -443,8 +443,8 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
 
     Module SOvcv := Conc.Reduction.SOvcv.
     Theorem peer_soundness :
-      forall (R : PkgSet.t) (D : Source.DepRel.t) (Th : PeerRel.t)
-             (g : V.t -> G.t) (r : Pkg.t) (S : Reduced.PkgSet.t),
+      forall (R : PackageSet.t) (D : Source.DependencyRel.t) (Th : PeerDependencyRel.t)
+             (g : V.t -> G.t) (r : Package.t) (S : Reduced.PackageSet.t),
         Reduced.IsResolution (reduceReal R D Th g) (reduceDeps D Th g)
           (Conc.Reduction.embedPkg g r) S ->
         IsResolution R D Th g r (Conc.Reduction.concurrentResolution g S)
@@ -510,70 +510,70 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         injection He as <-; exact Hw.
     Qed.
 
-    Definition coreResolution (D : Source.DepRel.t) (g : V.t -> G.t)
-        (S : PkgSet.t) (pi : ParentRel.t) : Reduced.PkgSet.t :=
-      Reduced.PkgSet.union (SOptp.map (Conc.Reduction.embedPkg g) S)
+    Definition coreResolution (D : Source.DependencyRel.t) (g : V.t -> G.t)
+        (S : PackageSet.t) (pi : ParentRel.t) : Reduced.PackageSet.t :=
+      Reduced.PackageSet.union (SOptp.map (Conc.Reduction.embedPkg g) S)
         (SOdtp.unionMap (fun '((n, v), (m, vs)) =>
-             if PkgSet.mem (n, v) S
+             if PackageSet.mem (n, v) S
              then SOvtp.filterMap (fun u =>
-                      if andb (PkgSet.mem (m, u) S)
+                      if andb (PackageSet.mem (m, u) S)
                            (ParentRel.mem ((m, u), (n, v)) pi)
                       then Some (Name.Intermediate n v m, Version.Orig u)
                       else None)
                     vs
-             else Reduced.PkgSet.empty)
+             else Reduced.PackageSet.empty)
            D).
 
-    Inductive CorePkg (S : PkgSet.t) (pi : ParentRel.t) (D : Source.DepRel.t)
-        (g : V.t -> G.t) : Reduced.Pkg.t -> Prop :=
-    | CoreGranular : forall n v, PkgSet.In (n, v) S ->
+    Inductive CorePkg (S : PackageSet.t) (pi : ParentRel.t) (D : Source.DependencyRel.t)
+        (g : V.t -> G.t) : Reduced.Package.t -> Prop :=
+    | CoreGranular : forall n v, PackageSet.In (n, v) S ->
         CorePkg S pi D g (Name.Granular n (g v), Version.Orig v)
     | CoreIntermediate : forall n v m vs u,
-        Source.DepRel.In ((n, v), (m, vs)) D -> PkgSet.In (n, v) S ->
-        PkgSet.In (m, u) S -> VSet.In u vs ->
+        Source.DependencyRel.In ((n, v), (m, vs)) D -> PackageSet.In (n, v) S ->
+        PackageSet.In (m, u) S -> VSet.In u vs ->
         ParentRel.In ((m, u), (n, v)) pi ->
         CorePkg S pi D g (Name.Intermediate n v m, Version.Orig u).
 
-    Lemma mem_coreResolution : forall S pi D g (q : Reduced.Pkg.t),
-        Reduced.PkgSet.In q (coreResolution D g S pi) <-> CorePkg S pi D g q.
+    Lemma mem_coreResolution : forall S pi D g (q : Reduced.Package.t),
+        Reduced.PackageSet.In q (coreResolution D g S pi) <-> CorePkg S pi D g q.
     Proof.
       intros S pi D g q; unfold coreResolution.
-      rewrite Reduced.PkgSet.union_spec, SOptp.mem_map, SOdtp.mem_unionMap.
+      rewrite Reduced.PackageSet.union_spec, SOptp.mem_map, SOdtp.mem_unionMap.
       split.
       - intros [[[n v] [HpS ->]] | [[[n v] [m vs]] [HD Hh]]];
           [apply CoreGranular; exact HpS |].
         cbn beta iota in Hh; apply SOdtp.in_if_empty in Hh as [Hnv Hm].
         apply SOvtp.mem_filterMap_if in Hm; destruct Hm as [u [Hu [Hb ->]]].
-        rewrite PkgSet.mem_spec in Hnv.
-        rewrite Bool.andb_true_iff, PkgSet.mem_spec, ParentRel.mem_spec in Hb.
+        rewrite PackageSet.mem_spec in Hnv.
+        rewrite Bool.andb_true_iff, PackageSet.mem_spec, ParentRel.mem_spec in Hb.
         eapply CoreIntermediate; try eassumption; tauto.
       - destruct 1 as [n v HpS | n v m vs u HD Hnv Hmu Hu Hpi];
           [left; exists (n, v); auto | right].
         exists ((n, v), (m, vs)); split; [exact HD | cbn beta iota].
         apply SOdtp.in_if_empty; rewrite SOvtp.mem_filterMap_if.
-        rewrite PkgSet.mem_spec; split; [exact Hnv |]; exists u.
-        rewrite Bool.andb_true_iff, PkgSet.mem_spec, ParentRel.mem_spec.
+        rewrite PackageSet.mem_spec; split; [exact Hnv |]; exists u.
+        rewrite Bool.andb_true_iff, PackageSet.mem_spec, ParentRel.mem_spec.
         repeat split; auto.
     Qed.
 
     Lemma mem_coreResolution_granular : forall S pi D g n v,
-        PkgSet.In (n, v) S ->
-        Reduced.PkgSet.In (Name.Granular n (g v), Version.Orig v)
+        PackageSet.In (n, v) S ->
+        Reduced.PackageSet.In (Name.Granular n (g v), Version.Orig v)
           (coreResolution D g S pi).
     Proof. intros; apply mem_coreResolution, CoreGranular; assumption. Qed.
 
     Lemma mem_coreResolution_intermediate : forall S pi D g n v m vs u,
-        Source.DepRel.In ((n, v), (m, vs)) D -> PkgSet.In (n, v) S ->
-        PkgSet.In (m, u) S -> VSet.In u vs ->
+        Source.DependencyRel.In ((n, v), (m, vs)) D -> PackageSet.In (n, v) S ->
+        PackageSet.In (m, u) S -> VSet.In u vs ->
         ParentRel.In ((m, u), (n, v)) pi ->
-        Reduced.PkgSet.In (Name.Intermediate n v m, Version.Orig u)
+        Reduced.PackageSet.In (Name.Intermediate n v m, Version.Orig u)
           (coreResolution D g S pi).
     Proof. intros; apply mem_coreResolution; econstructor; eassumption. Qed.
 
     Theorem peer_completeness :
-      forall (R : PkgSet.t) (D : Source.DepRel.t) (Th : PeerRel.t)
-             (g : V.t -> G.t) (r : Pkg.t)
-             (S : PkgSet.t) (pi : ParentRel.t),
+      forall (R : PackageSet.t) (D : Source.DependencyRel.t) (Th : PeerDependencyRel.t)
+             (g : V.t -> G.t) (r : Package.t)
+             (S : PackageSet.t) (pi : ParentRel.t),
         IsResolution R D Th g r S pi ->
         Reduced.IsResolution (reduceReal R D Th g) (reduceDeps D Th g)
           (Conc.Reduction.embedPkg g r) (coreResolution D g S pi).
@@ -623,7 +623,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     Lemma concurrentResolution_coreResolution : forall S pi D g,
         Conc.Reduction.concurrentResolution g (coreResolution D g S pi) = S.
     Proof.
-      intros S pi D g; apply PkgSet.ext; intros [n v].
+      intros S pi D g; apply PackageSet.ext; intros [n v].
       rewrite Conc.Reduction.mem_concurrentResolution, mem_coreResolution.
       unfold Conc.Reduction.embedPkg; cbn [fst snd].
       split; [intro H; inversion H; assumption | apply CoreGranular].
@@ -634,7 +634,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
         forall m u n v,
           ParentRel.In ((m, u), (n, v)) (parents D g (coreResolution D g S pi))
           <-> ParentRel.In ((m, u), (n, v)) pi /\
-              exists vs, Source.DepRel.In ((n, v), (m, vs)) D /\ VSet.In u vs.
+              exists vs, Source.DependencyRel.In ((n, v), (m, vs)) D /\ VSet.In u vs.
     Proof.
       intros R D Th g r S pi [[_ _ _ _ _ Hps] _] m u n v; rewrite mem_parents.
       split.
@@ -664,10 +664,10 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
     Qed.
 
     Module Lookup.
-      Lemma reduceDeps_mono : forall D D' Th Th' g (y : Reduced.DepElt.t),
-          Source.DepRel.Subset D' D -> PeerRel.Subset Th' Th ->
-          Reduced.DepRel.In y (reduceDeps D' Th' g) ->
-          Reduced.DepRel.In y (reduceDeps D Th g).
+      Lemma reduceDeps_mono : forall D D' Th Th' g (y : Reduced.DependencyElt.t),
+          Source.DependencyRel.Subset D' D -> PeerDependencyRel.Subset Th' Th ->
+          Reduced.DependencyRel.In y (reduceDeps D' Th' g) ->
+          Reduced.DependencyRel.In y (reduceDeps D Th g).
       Proof.
         intros D D' Th Th' g y HD HTh; revert y.
         unfold reduceDeps, reduceDepsDepToInt, reduceDepsIntToDep,
@@ -681,7 +681,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
           intro u; unfold peerEdges.
           apply SOetd.filterMap_mono; [exact HTh |].
           intros [q [m ws]] z Hz; cbn beta iota in Hz |- *.
-          destruct (Pkg.eq_dec q (o, u)); [| discriminate Hz].
+          destruct (Package.eq_dec q (o, u)); [| discriminate Hz].
           destruct (hasDepOnb D' (n, v) m) eqn:Hb; [| discriminate Hz].
           apply hasDepOnb_iff in Hb; destruct Hb as [ws0 Hb].
           assert (hasDepOnb D (n, v) m = true) as Hb'
@@ -689,20 +689,20 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
           rewrite Hb'; exact Hz.
       Qed.
 
-      Module DepRelFibred := FibredRel Pkg Source.Dependees Source.DepElt Source.DepRel.
-      Module PeerRelFibred := FibredRel Pkg Source.Dependees PeerElt PeerRel.
+      Module DependencyRelFibred := FibredRel Package Source.Dependee Source.DependencyElt Source.DependencyRel.
+      Module PeerDependencyRelFibred := FibredRel Package Source.Dependee PeerDependencyElt PeerDependencyRel.
 
-      Definition dependsOnb (D : Source.DepRel.t) (p q : Pkg.t) : bool :=
-        Source.DepRel.exists_ (fun '(p0, (m0, vs)) =>
+      Definition dependsOnb (D : Source.DependencyRel.t) (p q : Package.t) : bool :=
+        Source.DependencyRel.exists_ (fun '(p0, (m0, vs)) =>
             andb (PkgEqb.eqb p0 p)
               (andb (NEqb.eqb m0 (fst q)) (VSet.mem (snd q) vs)))
           D.
 
-      Lemma dependsOnb_iff : forall D (p : Pkg.t) (m : N.t) (u : V.t),
+      Lemma dependsOnb_iff : forall D (p : Package.t) (m : N.t) (u : V.t),
           dependsOnb D p (m, u) = true <->
-          exists vs, Source.DepRel.In (p, (m, vs)) D /\ VSet.In u vs.
+          exists vs, Source.DependencyRel.In (p, (m, vs)) D /\ VSet.In u vs.
       Proof.
-        intros D p m u; unfold dependsOnb; rewrite Source.DepRel.exists_spec'.
+        intros D p m u; unfold dependsOnb; rewrite Source.DependencyRel.exists_spec'.
         split.
         - intros [[p0 [m0 vs]] [He Hb]]; cbn [fst snd] in Hb.
           rewrite !Bool.andb_true_iff, PkgEqb.eqb_true_iff,
@@ -713,21 +713,21 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
           apply VSet.mem_spec; exact Hu.
       Qed.
 
-      Definition peersOfDeps (D : Source.DepRel.t) (Th : PeerRel.t) (p : Pkg.t)
-          (o : N.t) : PeerRel.t :=
-        PeerRel.filter (fun '(q, (o', _)) =>
+      Definition peersOfDeps (D : Source.DependencyRel.t) (Th : PeerDependencyRel.t) (p : Package.t)
+          (o : N.t) : PeerDependencyRel.t :=
+        PeerDependencyRel.filter (fun '(q, (o', _)) =>
             andb (NEqb.eqb o' o) (dependsOnb D p q))
           Th.
 
       Lemma mem_peersOfDeps :
-        forall D Th (p : Pkg.t) (m : N.t) (u : V.t) (o o' : N.t)
+        forall D Th (p : Package.t) (m : N.t) (u : V.t) (o o' : N.t)
                (ws : VSet.t),
-          PeerRel.In ((m, u), (o', ws)) (peersOfDeps D Th p o) <->
-          PeerRel.In ((m, u), (o', ws)) Th /\ o' = o /\
-          (exists vs, Source.DepRel.In (p, (m, vs)) D /\ VSet.In u vs).
+          PeerDependencyRel.In ((m, u), (o', ws)) (peersOfDeps D Th p o) <->
+          PeerDependencyRel.In ((m, u), (o', ws)) Th /\ o' = o /\
+          (exists vs, Source.DependencyRel.In (p, (m, vs)) D /\ VSet.In u vs).
       Proof.
         intros D Th p m u o o' ws; unfold peersOfDeps.
-        rewrite PeerRel.filter_spec'; cbn beta iota.
+        rewrite PeerDependencyRel.filter_spec'; cbn beta iota.
         rewrite Bool.andb_true_iff, NEqb.eqb_true_iff, dependsOnb_iff.
         tauto.
       Qed.
@@ -737,7 +737,7 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
           Reduced.versions (reduceReal R D Th g) (Name.Granular n w) =
           Reduced.versions
             (reduceReal (Conc.Reduction.Lookup.granFibre g R n w)
-               Source.DepRel.empty PeerRel.empty g)
+               Source.DependencyRel.empty PeerDependencyRel.empty g)
             (Name.Granular n w).
       Proof.
         intros R D Th g n w; apply Reduced.versions_ext; intro v.
@@ -751,23 +751,23 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
           Reduced.dependees (reduceDeps D Th g)
             (Name.Granular n (g v), Version.Orig v) =
           Reduced.dependees
-            (reduceDeps (DepRelFibred.tailFibre D (n, v)) PeerRel.empty g)
+            (reduceDeps (DependencyRelFibred.tailFibre D (n, v)) PeerDependencyRel.empty g)
             (Name.Granular n (g v), Version.Orig v).
       Proof.
         intros D Th g n v; apply Reduced.dependees_ext; intros [m ws].
         split; [| intro H; exact (reduceDeps_mono _ _ _ _ _ _
-                    (DepRelFibred.tailFibre_subset _ _)
-                    (PeerRel.empty_subset _) H)].
+                    (DependencyRelFibred.tailFibre_subset _ _)
+                    (PeerDependencyRel.empty_subset _) H)].
         intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
         inversion H as [n' v' m' vs HD | |]; subst.
-        apply EdgeDepToInt, DepRelFibred.mem_tailFibre.
+        apply EdgeDepToInt, DependencyRelFibred.mem_tailFibre.
         split; [exact HD | reflexivity].
       Qed.
 
       Theorem versions_lookupIntermediate : forall R D Th g n v o,
           Reduced.versions (reduceReal R D Th g) (Name.Intermediate n v o) =
           Reduced.versions
-            (reduceReal PkgSet.empty (DepRelFibred.tailFibre D (n, v))
+            (reduceReal PackageSet.empty (DependencyRelFibred.tailFibre D (n, v))
                (peersOfDeps D Th (n, v) o) g)
             (Name.Intermediate n v o).
       Proof.
@@ -777,16 +777,16 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
           inversion H as [| n' v' m' vs u HD Hu
                           | n' v' m' vs2 o' us u ws w HD2 HD Hu HTh Hw]; subst.
         - apply (PkgIntermediate _ _ _ _ n v o vs u); [| exact Hu].
-          apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
+          apply DependencyRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
         - apply (PkgPeer _ _ _ _ n v o vs2 o' us u ws w); try assumption.
-          + apply DepRelFibred.mem_tailFibre; split; [exact HD2 | reflexivity].
-          + apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
+          + apply DependencyRelFibred.mem_tailFibre; split; [exact HD2 | reflexivity].
+          + apply DependencyRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
           + apply mem_peersOfDeps; split; [exact HTh |].
             split; [reflexivity | exists us; split; [exact HD | exact Hu]].
-        - apply DepRelFibred.mem_tailFibre in HD as [HD _].
+        - apply DependencyRelFibred.mem_tailFibre in HD as [HD _].
           apply (PkgIntermediate _ _ _ _ n v o vs u); assumption.
-        - apply DepRelFibred.mem_tailFibre in HD as [HD _].
-          apply DepRelFibred.mem_tailFibre in HD2 as [HD2 _].
+        - apply DependencyRelFibred.mem_tailFibre in HD as [HD _].
+          apply DependencyRelFibred.mem_tailFibre in HD2 as [HD2 _].
           apply mem_peersOfDeps in HTh as [HTh _].
           apply (PkgPeer _ _ _ _ n v o vs2 o' us u ws w); assumption.
       Qed.
@@ -795,29 +795,29 @@ Module PeerDependency (N V : UsualOrderedType) (G : UsualOrderedType).
           Reduced.dependees (reduceDeps D Th g)
             (Name.Intermediate n v o, Version.Orig u) =
           Reduced.dependees
-            (reduceDeps (DepRelFibred.tailFibre D (n, v))
-                        (PeerRelFibred.tailFibre Th (o, u)) g)
+            (reduceDeps (DependencyRelFibred.tailFibre D (n, v))
+                        (PeerDependencyRelFibred.tailFibre Th (o, u)) g)
             (Name.Intermediate n v o, Version.Orig u).
       Proof.
         intros D Th g n v o u; apply Reduced.dependees_ext; intros [m ws].
         split; [| intro H; exact (reduceDeps_mono _ _ _ _ _ _
-                    (DepRelFibred.tailFibre_subset _ _)
-                    (PeerRelFibred.tailFibre_subset _ _) H)].
+                    (DependencyRelFibred.tailFibre_subset _ _)
+                    (PeerDependencyRelFibred.tailFibre_subset _ _) H)].
         intro H; apply mem_reduceDeps in H; apply mem_reduceDeps.
         inversion H as [| n' v' m' vs' u' HD Hu
                         | qn qv m' vs2 o' us0 u0 ws' HD2 HD1 Hu0 HTh]; subst.
         - apply (EdgeIntToDep _ _ _ n v o vs' u); [| exact Hu].
-          apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
+          apply DependencyRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
         - apply (EdgePeer _ _ _ n v m' vs2 o us0 u ws'); [| | exact Hu0 |].
-          + apply DepRelFibred.mem_tailFibre; split; [exact HD2 | reflexivity].
-          + apply DepRelFibred.mem_tailFibre; split; [exact HD1 | reflexivity].
-          + apply PeerRelFibred.mem_tailFibre; split; [exact HTh | reflexivity].
+          + apply DependencyRelFibred.mem_tailFibre; split; [exact HD2 | reflexivity].
+          + apply DependencyRelFibred.mem_tailFibre; split; [exact HD1 | reflexivity].
+          + apply PeerDependencyRelFibred.mem_tailFibre; split; [exact HTh | reflexivity].
       Qed.
 
       Theorem dependees_lookupIntermediateGran : forall D Th g n v o (w : G.t),
           Reduced.dependees (reduceDeps D Th g)
             (Name.Intermediate n v o, Version.Gran w) =
-          Reduced.DependeesSet.empty.
+          Reduced.DependeeSet.empty.
       Proof.
         intros D Th g n v o w; apply Reduced.dependees_empty_iff; intros [m ws] H.
         apply mem_reduceDeps in H; inversion H.

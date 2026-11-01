@@ -31,7 +31,7 @@ module type S = sig
       module type of Pac.DebianMA (Pac_common.Ot.Str) (DebVersionOT) (APx)
 
   type nstanza = {
-    npkg : DMA.Pkg.t;
+    npkg : DMA.Package.t;
     ncls : DMA.coq_MAClass;
     raw_deps : string list;
     raw_recs : string list;
@@ -51,12 +51,12 @@ module type S = sig
   val eager : tables -> eager
   val of_eager : eager -> tables
   val stats : tables -> stats
-  val stanza : tables -> DMA.Pkg.t -> nstanza option
+  val stanza : tables -> DMA.Package.t -> nstanza option
   val versions_of : tables -> string * string -> string list
   val group_members : tables -> string -> (string * string) list
-  val providers : tables -> string -> (DMA.Pkg.t * DMA.Deb.coq_DTop) list
-  val dependers : tables -> string -> DMA.Pkg.t list
-  val conflicters : tables -> string -> DMA.Pkg.t list
+  val providers : tables -> string -> (DMA.Package.t * DMA.Deb.coq_DTop) list
+  val dependers : tables -> string -> DMA.Package.t list
+  val conflicters : tables -> string -> DMA.Package.t list
   val atom_pos : DMA.Deb.Clause.t -> DMA.Deb.Atom.t -> int
   val build_tables : recommends:bool -> Deb_packages.stanza list -> tables
   val obsolete : tables -> nstanza -> bool
@@ -65,7 +65,7 @@ module type S = sig
 
   val ordered_clauses :
     tables ->
-    DMA.Pkg.t ->
+    DMA.Package.t ->
     (bool * DMA.Deb.Reduction.Name.t * DMA.Deb.Atom.t list) list
 
   val sat : DMA.Deb.Ver.coq_Formula -> string -> bool
@@ -114,7 +114,7 @@ module Make (AP : ARCH) : S = struct
   let dtop_of = function Some v -> DMA.Deb.DTVal v | None -> DMA.Deb.DTTop
 
   type nstanza = {
-    npkg : DMA.Pkg.t;
+    npkg : DMA.Package.t;
     ncls : DMA.coq_MAClass;
     raw_deps : string list;
     raw_recs : string list;
@@ -164,9 +164,9 @@ module Make (AP : ARCH) : S = struct
 
   type eager = {
     versions_table : (string * string, string list) Hashtbl.t;
-    stanza_table : (DMA.Pkg.t, nstanza) Hashtbl.t;
+    stanza_table : (DMA.Package.t, nstanza) Hashtbl.t;
     group_table : (string, (string * string) list) Hashtbl.t;
-    providers_table : (string, (DMA.Pkg.t * DMA.Deb.coq_DTop) list) Hashtbl.t;
+    providers_table : (string, (DMA.Package.t * DMA.Deb.coq_DTop) list) Hashtbl.t;
   }
 
   type tables = {
@@ -175,15 +175,15 @@ module Make (AP : ARCH) : S = struct
        Conflicts or Breaks, by the bare name as written: the watch lists
        apt's Reject propagation walks, built from the field text alone, so
        no clause is parsed for them; only the tool order asks *)
-    rev_dep_table : (string, DMA.Pkg.t list) Hashtbl.t Lazy.t;
-    rev_conf_table : (string, DMA.Pkg.t list) Hashtbl.t Lazy.t;
+    rev_dep_table : (string, DMA.Package.t list) Hashtbl.t Lazy.t;
+    rev_conf_table : (string, DMA.Package.t list) Hashtbl.t Lazy.t;
     (* the binaries each source name builds, for apt's obsolescence test,
        likewise asked for by the tool order alone *)
     source_table : (string, nstanza list) Hashtbl.t Lazy.t;
     (* a package's clauses in field order, asked for again by every depender
        and by the rejection cascade *)
     oc_cache :
-      ( DMA.Pkg.t,
+      ( DMA.Package.t,
         (bool * DMA.Deb.Reduction.Name.t * DMA.Deb.Atom.t list) list )
       Hashtbl.t;
   }
@@ -349,7 +349,7 @@ module Make (AP : ARCH) : S = struct
      item, when it has one, is the alternative's selector, which the caller
      resolves because a selector in turn exists only where a Provides
      matches the atom. *)
-  let ordered_clauses tables (p : DMA.Pkg.t) :
+  let ordered_clauses tables (p : DMA.Package.t) :
       (bool * DMA.Deb.Reduction.Name.t * DMA.Deb.Atom.t list) list =
     match Hashtbl.find_opt tables.oc_cache p with
     | Some r -> r

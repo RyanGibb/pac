@@ -231,8 +231,8 @@ let rec xoff : Opam_parse.off -> Op.coq_OFormula = function
   | OAnd (a, b) -> Op.OFAnd (xoff a, xoff b)
   | OOr (a, b) -> Op.OFOr (xoff a, xoff b)
 
-let pkgset_of = Op.PkgSet.ofList
-let clsrel_of = Op.ClsRel.ofList
+let pkgset_of = Op.PackageSet.ofList
+let clsrel_of = Op.ConflictClassRel.ofList
 
 let repo_and_avail ar (ns : string list) =
   let repo = ref [] and avl = ref [] in
@@ -254,13 +254,13 @@ let empty_formula = Op.OFAtom ("", Op.FlFalse, Op.VFTop)
 
 let empty_inst =
   {
-    Op.inst_real = Op.PkgSet.empty;
+    Op.inst_real = Op.PackageSet.empty;
     inst_dep = [];
     inst_cfl = [];
-    inst_cls = Op.ClsRel.empty;
+    inst_cls = Op.ConflictClassRel.empty;
     inst_av = [];
     inst_depexts = [];
-    inst_pins = Op.PkgSet.empty;
+    inst_pins = Op.PackageSet.empty;
     inst_pind = [];
     inst_query = empty_formula;
     inst_inv = empty_formula;
@@ -422,15 +422,15 @@ let touch rho ar query st =
     Pac_common.Tbl.memo memo m (fun () ->
         Red.srcVersions rho (name_inst ar m) m)
   in
-  fun ((tn, tv) : T.Pkg.t) ->
+  fun ((tn, tv) : T.Package.t) ->
     match (tn, tv) with
     | PFR.Name.Orig Red.TName.Root, _ ->
         L.process st Red.rootPkg (fun () ->
-            Red.FSet.elements
+            Red.PackageFormulaSet.elements
               (Red.dependees rho (root_inst ar query) Red.rootPkg))
     | PFR.Name.Orig (Red.TName.Real n), PFR.Version.Orig (Red.TVer.RV v) ->
         let q = (Red.TName.Real n, Red.TVer.RV v) in
         L.process st q (fun () ->
-            Red.FSet.elements
+            Red.PackageFormulaSet.elements
               (Red.dependeesBy rho src_versions (pkg_inst ar (n, v)) q))
     | _ -> ()

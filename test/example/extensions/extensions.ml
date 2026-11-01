@@ -138,15 +138,15 @@ module Conflict_class = struct
   let vs l = M.VSet.ofList l
 
   let r =
-    M.PkgSet.ofList
+    M.PackageSet.ofList
       [ ("A", "1"); ("B", "1"); ("B", "2"); ("C", "1"); ("D", "1") ]
 
   let d =
-    M.Source.DepRel.ofList
+    M.Source.DependencyRel.ofList
       [ (("A", "1"), ("B", vs [ "1"; "2" ])); (("A", "1"), ("C", vs [ "1" ])) ]
 
   let om =
-    M.InClassRel.ofList
+    M.ConflictClassRel.ofList
       [ (("B", "1"), "k"); (("C", "1"), "k"); (("D", "1"), "k") ]
 
   let root = R.embedPkg ("A", "1")
@@ -156,27 +156,27 @@ module Conflict_class = struct
       (match n with
       | R.Name.Orig m ->
           R.Reduced.versions
-            (R.reduceReal (L.PkgFibred.tailFibre r m) M.InClassRel.empty)
+            (R.reduceReal (L.PackageSetFibred.tailFibre r m) M.ConflictClassRel.empty)
             n
       | R.Name.Cls k ->
           R.Reduced.versions (R.reduceReal (L.inClass r om k) (L.classRelAt om k)) n)
 
   let dependees = function
     | (R.Name.Orig n, R.Version.Orig v) as p ->
-        edges R.Reduced.VSet.elements R.Reduced.DependeesSet.elements
+        edges R.Reduced.VSet.elements R.Reduced.DependeeSet.elements
           (R.Reduced.dependees
              (R.reduceDeps
-                (L.DepRelFibred.tailFibre d (n, v))
-                (L.InClassFibred.tailFibre om (n, v)))
+                (L.DependencyRelFibred.tailFibre d (n, v))
+                (L.ConflictClassRelFibred.tailFibre om (n, v)))
              p)
     | R.Name.Cls _, _ -> []
     | R.Name.Orig _, R.Version.Name _ -> unasked ()
 
-  let real = R.Reduced.PkgSet.elements (R.reduceReal r om)
-  let deps = rel R.Reduced.VSet.elements R.Reduced.DepRel.elements (R.reduceDeps d om)
+  let real = R.Reduced.PackageSet.elements (R.reduceReal r om)
+  let deps = rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps d om)
 
   let decode s =
-    pkgs (M.PkgSet.elements (R.conflictClassResolution (R.Reduced.PkgSet.ofList s)))
+    pkgs (M.PackageSet.elements (R.conflictClassResolution (R.Reduced.PackageSet.ofList s)))
 end
 
 module Conflict = struct
@@ -195,33 +195,33 @@ module Conflict = struct
     | R.Version.Orig v -> str f v
     | R.Version.Bot -> str f "⊥"
 
-  let r = M.PkgSet.ofList [ ("A", "1"); ("B", "1"); ("B", "2") ]
-  let d = M.Source.DepRel.empty
+  let r = M.PackageSet.ofList [ ("A", "1"); ("B", "1"); ("B", "2") ]
+  let d = M.Source.DependencyRel.empty
   let g = M.ConflictRel.ofList [ (("A", "1"), ("B", M.VSet.ofList [ "2" ])) ]
   let root = R.embedPkg ("A", "1")
 
   let versions n =
     R.Reduced.VSet.elements
       (R.Reduced.VSet.add R.Version.Bot
-         (R.embedVS (M.Source.versions (L.PkgFibred.tailFibre r n) n)))
+         (R.embedVS (M.Source.versions (L.PackageSetFibred.tailFibre r n) n)))
 
   let dependees = function
     | (n, R.Version.Orig v) as p ->
         let gp = L.ConflictRelFibred.tailFibre g (n, v) in
-        edges R.Reduced.VSet.elements R.Reduced.DependeesSet.elements
+        edges R.Reduced.VSet.elements R.Reduced.DependeeSet.elements
           (R.Reduced.dependees
              (R.reduceDeps
                 (M.Source.namePreimage r (L.conflictNames gp))
-                (L.DepRelFibred.tailFibre d (n, v))
+                (L.DependencyRelFibred.tailFibre d (n, v))
                 gp)
              p)
     | _, R.Version.Bot -> []
 
-  let real = R.Reduced.PkgSet.elements (R.reduceReal r d g)
-  let deps = rel R.Reduced.VSet.elements R.Reduced.DepRel.elements (R.reduceDeps r d g)
+  let real = R.Reduced.PackageSet.elements (R.reduceReal r d g)
+  let deps = rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps r d g)
 
   let decode s =
-    pkgs (M.PkgSet.elements (R.conflictResolution (R.Reduced.PkgSet.ofList s)))
+    pkgs (M.PackageSet.elements (R.conflictResolution (R.Reduced.PackageSet.ofList s)))
 end
 
 module Concurrent = struct
@@ -244,7 +244,7 @@ module Concurrent = struct
   let vs l = M.VSet.ofList l
 
   let r =
-    M.PkgSet.ofList
+    M.PackageSet.ofList
       [
         ("A", "1.0.0");
         ("B", "1.0.0");
@@ -256,7 +256,7 @@ module Concurrent = struct
       ]
 
   let d =
-    M.Source.DepRel.ofList
+    M.Source.DependencyRel.ofList
       [
         (("A", "1.0.0"), ("B", vs [ "1.0.0" ]));
         (("A", "1.0.0"), ("C", vs [ "1.0.0" ]));
@@ -270,31 +270,31 @@ module Concurrent = struct
     R.Reduced.VSet.elements
       (match n with
       | R.Name.Granular (m, w) ->
-          R.Reduced.versions (R.reduceReal (L.granFibre g r m w) M.Source.DepRel.empty g) n
+          R.Reduced.versions (R.reduceReal (L.granFibre g r m w) M.Source.DependencyRel.empty g) n
       | R.Name.Intermediate (m, v, o) ->
           R.Reduced.versions
-            (R.reduceReal M.PkgSet.empty
-               (L.DepRelFibred.endsFibre d (m, v) o)
+            (R.reduceReal M.PackageSet.empty
+               (L.DependencyRelFibred.endsFibre d (m, v) o)
                g)
             n)
 
   let dependees p =
-    edges R.Reduced.VSet.elements R.Reduced.DependeesSet.elements
+    edges R.Reduced.VSet.elements R.Reduced.DependeeSet.elements
       (match p with
       | R.Name.Granular (n, _), R.Version.Orig v ->
-          R.Reduced.dependees (R.reduceDeps (L.DepRelFibred.tailFibre d (n, v)) g) p
+          R.Reduced.dependees (R.reduceDeps (L.DependencyRelFibred.tailFibre d (n, v)) g) p
       | R.Name.Intermediate (n, v, m), R.Version.Gran _ ->
-          R.Reduced.dependees (R.reduceDeps (L.DepRelFibred.endsFibre d (n, v) m) g) p
+          R.Reduced.dependees (R.reduceDeps (L.DependencyRelFibred.endsFibre d (n, v) m) g) p
       | R.Name.Granular _, R.Version.Gran _
       | R.Name.Intermediate _, R.Version.Orig _ ->
-          R.Reduced.DependeesSet.empty)
+          R.Reduced.DependeeSet.empty)
 
-  let real = R.Reduced.PkgSet.elements (R.reduceReal r d g)
-  let deps = rel R.Reduced.VSet.elements R.Reduced.DepRel.elements (R.reduceDeps d g)
+  let real = R.Reduced.PackageSet.elements (R.reduceReal r d g)
+  let deps = rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps d g)
 
   let decode s =
-    let s = R.Reduced.PkgSet.ofList s in
-    pkgs (M.PkgSet.elements (R.concurrentResolution g s));
+    let s = R.Reduced.PackageSet.ofList s in
+    pkgs (M.PackageSet.elements (R.concurrentResolution g s));
     parents (M.ParentRel.elements (R.parents d g s))
 end
 
@@ -315,14 +315,14 @@ module Peer = struct
   let vs l = M.VSet.ofList l
 
   let r =
-    M.PkgSet.ofList
+    M.PackageSet.ofList
       [ ("A", "1"); ("B", "1"); ("C", "1"); ("C", "2"); ("C", "3") ]
 
   let d =
-    M.Source.DepRel.ofList
+    M.Source.DependencyRel.ofList
       [ (("A", "1"), ("B", vs [ "1" ])); (("A", "1"), ("C", vs [ "2"; "3" ])) ]
 
-  let th = M.PeerRel.ofList [ (("B", "1"), ("C", vs [ "1"; "2" ])) ]
+  let th = M.PeerDependencyRel.ofList [ (("B", "1"), ("C", vs [ "1"; "2" ])) ]
   let root = CR.embedPkg g ("A", "1")
 
   let versions n =
@@ -332,39 +332,39 @@ module Peer = struct
           R.Reduced.versions
             (R.reduceReal
                (CR.Lookup.granFibre g r m w)
-               M.Source.DepRel.empty M.PeerRel.empty g)
+               M.Source.DependencyRel.empty M.PeerDependencyRel.empty g)
             n
       | R.Name.Intermediate (m, v, o) ->
           R.Reduced.versions
-            (R.reduceReal M.PkgSet.empty
-               (L.DepRelFibred.tailFibre d (m, v))
+            (R.reduceReal M.PackageSet.empty
+               (L.DependencyRelFibred.tailFibre d (m, v))
                (L.peersOfDeps d th (m, v) o)
                g)
             n)
 
   let dependees p =
-    edges R.Reduced.VSet.elements R.Reduced.DependeesSet.elements
+    edges R.Reduced.VSet.elements R.Reduced.DependeeSet.elements
       (match p with
       | R.Name.Granular (n, _), R.Version.Orig v ->
           R.Reduced.dependees
-            (R.reduceDeps (L.DepRelFibred.tailFibre d (n, v)) M.PeerRel.empty g)
+            (R.reduceDeps (L.DependencyRelFibred.tailFibre d (n, v)) M.PeerDependencyRel.empty g)
             p
       | R.Name.Intermediate (n, v, o), R.Version.Orig u ->
           R.Reduced.dependees
             (R.reduceDeps
-               (L.DepRelFibred.tailFibre d (n, v))
-               (L.PeerRelFibred.tailFibre th (o, u))
+               (L.DependencyRelFibred.tailFibre d (n, v))
+               (L.PeerDependencyRelFibred.tailFibre th (o, u))
                g)
             p
-      | R.Name.Intermediate _, R.Version.Gran _ -> R.Reduced.DependeesSet.empty
+      | R.Name.Intermediate _, R.Version.Gran _ -> R.Reduced.DependeeSet.empty
       | R.Name.Granular _, R.Version.Gran _ -> unasked ())
 
-  let real = R.Reduced.PkgSet.elements (R.reduceReal r d th g)
-  let deps = rel R.Reduced.VSet.elements R.Reduced.DepRel.elements (R.reduceDeps d th g)
+  let real = R.Reduced.PackageSet.elements (R.reduceReal r d th g)
+  let deps = rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps d th g)
 
   let decode s =
-    let s = R.Reduced.PkgSet.ofList s in
-    pkgs (M.PkgSet.elements (CR.concurrentResolution g s));
+    let s = R.Reduced.PackageSet.ofList s in
+    pkgs (M.PackageSet.elements (CR.concurrentResolution g s));
     parents (M.ParentRel.elements (R.parents d g s))
 end
 
@@ -389,11 +389,11 @@ module Visibility = struct
   let vs l = M.VSet.ofList l
 
   let r =
-    M.PkgSet.ofList
+    M.PackageSet.ofList
       [ ("A", "1"); ("B", "1"); ("C", "1"); ("C", "2"); ("D", "1"); ("E", "1") ]
 
   let d =
-    M.Source.DepRel.ofList
+    M.Source.DependencyRel.ofList
       [
         (("A", "1"), ("B", vs [ "1" ]));
         (("A", "1"), ("C", vs [ "1"; "2" ]));
@@ -404,7 +404,7 @@ module Visibility = struct
       ]
 
   let pub =
-    M.PubRel.ofList
+    M.PublicDependencyRel.ofList
       [
         (("A", "1"), "B");
         (("A", "1"), "C");
@@ -423,37 +423,37 @@ module Visibility = struct
       | R.Name.Intermediate (m, v, o, _) -> R.embedVS (L.depRange d (m, v) o)
       | R.Name.Agreement (m, v, o) ->
           R.Reduced.versions
-            (R.reduceReal M.PkgSet.empty
-               (L.DepFibred.endsFibre d (m, v) o)
-               M.PubRel.empty rc)
+            (R.reduceReal M.PackageSet.empty
+               (L.DependencyRelFibred.endsFibre d (m, v) o)
+               M.PublicDependencyRel.empty rc)
             n)
 
   let dependees ((n, v) as p) =
-    edges R.Reduced.VSet.elements R.Reduced.DependeesSet.elements
+    edges R.Reduced.VSet.elements R.Reduced.DependeeSet.elements
       (match n with
       | R.Name.Occurrence (m, q) ->
           R.Reduced.dependees
             (R.reduceDeps
-               (M.PkgSet.singleton (m, v))
-               (L.DepFibred.tailFibre d (m, v))
-               (L.PubFibred.tailFibre pub (m, v))
+               (M.PackageSet.singleton (m, v))
+               (L.DependencyRelFibred.tailFibre d (m, v))
+               (L.PublicDependencyRelFibred.tailFibre pub (m, v))
                q)
             p
       | R.Name.Intermediate (m, u, _, q) ->
           R.Reduced.dependees
-            (R.reduceDeps M.PkgSet.empty
-               (L.DepFibred.tailFibre d (m, u))
-               (L.PubFibred.tailFibre pub (m, u))
+            (R.reduceDeps M.PackageSet.empty
+               (L.DependencyRelFibred.tailFibre d (m, u))
+               (L.PublicDependencyRelFibred.tailFibre pub (m, u))
                q)
             p
-      | R.Name.Agreement _ -> R.Reduced.DependeesSet.empty)
+      | R.Name.Agreement _ -> R.Reduced.DependeeSet.empty)
 
-  let real = R.Reduced.PkgSet.elements (R.reduceReal r d pub rc)
-  let deps = rel R.Reduced.VSet.elements R.Reduced.DepRel.elements (R.reduceDeps r d pub rc)
+  let real = R.Reduced.PackageSet.elements (R.reduceReal r d pub rc)
+  let deps = rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps r d pub rc)
 
   let decode s =
-    let s = R.Reduced.PkgSet.ofList s in
-    pkgs (M.PkgSet.elements (R.visibilityResolution r d pub rc s));
+    let s = R.Reduced.PackageSet.ofList s in
+    pkgs (M.PackageSet.elements (R.visibilityResolution r d pub rc s));
     parents (M.ParentRel.elements (R.parents r d pub rc s))
 end
 
@@ -476,13 +476,13 @@ module Features = struct
   let dep n v fs = (n, (M.VSet.ofList v, M.FSet.ofList fs))
 
   let r =
-    M.PkgSet.ofList
+    M.PackageSet.ofList
       [ ("A", "1"); ("B", "1"); ("C", "1"); ("D", "1"); ("E", "1"); ("F", "1") ]
 
-  let sup = M.SupportSet.ofList [ (("D", "1"), "α"); (("D", "1"), "β") ]
+  let sup = M.SupportRel.ofList [ (("D", "1"), "α"); (("D", "1"), "β") ]
 
   let df =
-    M.FeatDepRel.ofList
+    M.ParameterisedDependencyRel.ofList
       [
         (("A", "1"), dep "B" [ "1" ] []);
         (("A", "1"), dep "C" [ "1" ] []);
@@ -491,7 +491,7 @@ module Features = struct
       ]
 
   let da =
-    M.AddlDepRel.ofList
+    M.AdditionalDependencyRel.ofList
       [
         ((("D", "1"), "α"), dep "E" [ "1" ] []);
         ((("D", "1"), "β"), dep "F" [ "1" ] []);
@@ -504,42 +504,42 @@ module Features = struct
       (match n with
       | R.Name.Orig m ->
           R.Reduced.versions
-            (R.reduceReal (L.PkgFibred.tailFibre r m) M.SupportSet.empty)
+            (R.reduceReal (L.PackageSetFibred.tailFibre r m) M.SupportRel.empty)
             n
       | R.Name.FeatPkg (m, x) ->
           R.Reduced.versions
-            (R.reduceReal (L.PkgFibred.tailFibre r m) (L.supportFibre sup m x))
+            (R.reduceReal (L.PackageSetFibred.tailFibre r m) (L.supportFibre sup m x))
             n)
 
   let dependees ((n, v) as p) =
-    edges R.Reduced.VSet.elements R.Reduced.DependeesSet.elements
+    edges R.Reduced.VSet.elements R.Reduced.DependeeSet.elements
       (match n with
       | R.Name.Orig m ->
           R.Reduced.dependees
-            (R.reduceDeps M.PkgSet.empty M.SupportSet.empty
-               (L.FeatDepRelFibred.tailFibre df (m, v))
-               M.AddlDepRel.empty)
+            (R.reduceDeps M.PackageSet.empty M.SupportRel.empty
+               (L.ParameterisedDependencyRelFibred.tailFibre df (m, v))
+               M.AdditionalDependencyRel.empty)
             p
       | R.Name.FeatPkg (m, x) ->
           R.Reduced.dependees
             (R.reduceDeps
-               (M.PkgSet.singleton (m, v))
-               (M.SupportSet.singleton ((m, v), x))
-               M.FeatDepRel.empty
-               (L.AddlDepRelFibred.tailFibre da ((m, v), x)))
+               (M.PackageSet.singleton (m, v))
+               (M.SupportRel.singleton ((m, v), x))
+               M.ParameterisedDependencyRel.empty
+               (L.AdditionalDependencyRelFibred.tailFibre da ((m, v), x)))
             p)
 
-  let real = R.Reduced.PkgSet.elements (R.reduceReal r sup)
+  let real = R.Reduced.PackageSet.elements (R.reduceReal r sup)
 
   let deps =
-    rel R.Reduced.VSet.elements R.Reduced.DepRel.elements (R.reduceDeps r sup df da)
+    rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps r sup df da)
 
   let decode s =
     packages "packages"
       (List.map
          (fun ((n, v), fs) ->
            Printf.sprintf "%s %s %s" n v (set (M.FSet.elements fs)))
-         (M.FeaturedSet.elements (R.featureResolution (R.Reduced.PkgSet.ofList s))))
+         (M.FeaturedSet.elements (R.featureResolution (R.Reduced.PackageSet.ofList s))))
 end
 
 let spine form fs = "<" ^ String.concat " ∨ " (List.map form fs) ^ ">"
@@ -571,10 +571,10 @@ module Package_formula = struct
     | R.Version.Bot -> str f "⊥"
 
   let dep n vs = M.FAtom (n, M.VSet.ofList vs)
-  let r = M.PkgSet.ofList [ ("A", "1"); ("B", "1"); ("B", "2"); ("C", "1") ]
+  let r = M.PackageSet.ofList [ ("A", "1"); ("B", "1"); ("B", "2"); ("C", "1") ]
 
   let d =
-    M.DepRel.ofList
+    M.DependencyRel.ofList
       [
         ( ("A", "1"),
           M.FDisj
@@ -589,29 +589,29 @@ module Package_formula = struct
       (match n with
       | R.Name.Orig m ->
           R.Reduced.VSet.add R.Version.Bot
-            (R.embedVS (M.Source.versions (L.PkgFibred.tailFibre r m) m))
+            (R.embedVS (M.Source.versions (L.PackageSetFibred.tailFibre r m) m))
       | R.Name.Disjunct fs -> R.idxSet (Pac_common.Ot.int_nat (List.length fs)))
 
   let dependees p =
-    edges R.Reduced.VSet.elements R.Reduced.DependeesSet.elements
+    edges R.Reduced.VSet.elements R.Reduced.DependeeSet.elements
       (match p with
       | R.Name.Orig m, R.Version.Orig v ->
-          let dp = L.DepRelFibred.tailFibre d (m, v) in
+          let dp = L.DependencyRelFibred.tailFibre d (m, v) in
           R.Reduced.dependees
             (R.reduceDeps (M.Source.namePreimage r (L.ownNegDepNames dp)) dp)
             p
-      | R.Name.Orig _, R.Version.Bot -> R.Reduced.DependeesSet.empty
+      | R.Name.Orig _, R.Version.Bot -> R.Reduced.DependeeSet.empty
       | R.Name.Disjunct fs, i -> (
           match L.disjAlt fs i with
           | Some g -> R.Reduced.dependees (R.encode (M.Source.versions r) p g) p
-          | None -> R.Reduced.DependeesSet.empty)
+          | None -> R.Reduced.DependeeSet.empty)
       | R.Name.Orig _, R.Version.Idx _ -> unasked ())
 
-  let real = R.Reduced.PkgSet.elements (R.reduceReal r d)
-  let deps = rel R.Reduced.VSet.elements R.Reduced.DepRel.elements (R.reduceDeps r d)
+  let real = R.Reduced.PackageSet.elements (R.reduceReal r d)
+  let deps = rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps r d)
 
   let decode s =
-    pkgs (M.PkgSet.elements (R.packageFormulaResolution (R.Reduced.PkgSet.ofList s)))
+    pkgs (M.PackageSet.elements (R.packageFormulaResolution (R.Reduced.PackageSet.ofList s)))
 end
 
 module Variable_formula = struct
@@ -652,10 +652,10 @@ module Variable_formula = struct
     | R.Version.Bot -> str f "⊥"
 
   let yx x = M.YSet.ofList (if x = "os" then [ "linux"; "macos" ] else [])
-  let r = M.PkgSet.ofList [ ("A", "1"); ("B", "1") ]
+  let r = M.PackageSet.ofList [ ("A", "1"); ("B", "1") ]
 
   let d =
-    M.DepRel.ofList
+    M.DependencyRel.ofList
       [
         ( ("A", "1"),
           M.FDisj
@@ -670,39 +670,39 @@ module Variable_formula = struct
       (match n with
       | R.Name.Orig (E.Inl m) ->
           R.Reduced.VSet.add R.Version.Bot
-            (R.embedVS (M.Source.versions (L.PkgFibred.tailFibre r m) m))
+            (R.embedVS (M.Source.versions (L.PackageSetFibred.tailFibre r m) m))
       | R.Name.Orig (E.Inr x) ->
           R.Reduced.versions
-            (R.reduceReal (L.valuesAt yx x) M.PkgSet.empty M.DepRel.empty)
+            (R.reduceReal (L.valuesAt yx x) M.PackageSet.empty M.DependencyRel.empty)
             n
       | R.Name.Disjunct fs ->
           PF.Reduction.idxSet (Pac_common.Ot.int_nat (List.length fs)))
 
   let dependees p =
-    edges R.Reduced.VSet.elements R.Reduced.DependeesSet.elements
+    edges R.Reduced.VSet.elements R.Reduced.DependeeSet.elements
       (match p with
       | R.Name.Orig (E.Inl m), R.Version.Orig (E.Inl v) ->
-          let dp = L.DepRelFibred.tailFibre d (m, v) in
+          let dp = L.DependencyRelFibred.tailFibre d (m, v) in
           R.Reduced.dependees
             (R.reduceDeps yx (M.Source.namePreimage r (L.ownNegDepNames dp)) dp)
             p
       | R.Name.Orig (E.Inl _), R.Version.Bot | R.Name.Orig (E.Inr _), _ ->
-          R.Reduced.DependeesSet.empty
+          R.Reduced.DependeeSet.empty
       | R.Name.Disjunct fs, i -> (
           match PF.Reduction.Lookup.disjAlt fs i with
           | Some g ->
               R.Reduced.dependees
                 (PF.Reduction.encode (R.liftOracle yx (M.Source.versions r)) p g)
                 p
-          | None -> R.Reduced.DependeesSet.empty)
+          | None -> R.Reduced.DependeeSet.empty)
       | R.Name.Orig (E.Inl _), _ -> unasked ())
 
-  let real = R.Reduced.PkgSet.elements (R.reduceReal yx r d)
-  let deps = rel R.Reduced.VSet.elements R.Reduced.DepRel.elements (R.reduceDeps yx r d)
+  let real = R.Reduced.PackageSet.elements (R.reduceReal yx r d)
+  let deps = rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps yx r d)
 
   let decode s =
-    let s = R.Reduced.PkgSet.ofList s in
-    pkgs (M.PkgSet.elements (R.variableFormulaResolution s));
+    let s = R.Reduced.PackageSet.ofList s in
+    pkgs (M.PackageSet.elements (R.variableFormulaResolution s));
     Printf.printf "assignment: os = %s\n" (R.assignment "linux" yx s "os")
 end
 
@@ -728,11 +728,11 @@ module Virtual = struct
   let vs l = M.VSet.ofList l
 
   let r =
-    M.PkgSet.ofList
+    M.PackageSet.ofList
       [ ("A", "1"); ("B", "1"); ("C", "1"); ("E", "1"); ("F", "1") ]
 
   let d =
-    M.Source.DepRel.ofList
+    M.Source.DependencyRel.ofList
       [ (("A", "1"), ("D", vs [ "1" ])); (("A", "1"), ("E", vs [ "1" ])) ]
 
   let pi =
@@ -751,45 +751,45 @@ module Virtual = struct
       | R.Name.Orig m ->
           R.Reduced.versions
             (R.reduceReal
-               (L.PkgFibred.tailFibre r m)
-               M.Source.DepRel.empty M.ProvidesRel.empty)
+               (L.PackageSetFibred.tailFibre r m)
+               M.Source.DependencyRel.empty M.ProvidesRel.empty)
             n
       | R.Name.Selector (q, m) ->
           R.Reduced.versions
             (R.reduceReal
-               (L.PkgFibred.tailFibre r m)
-               (L.DepRelFibred.endsFibre d q m)
-               (L.ProvFibred.nodeFibre pi m))
+               (L.PackageSetFibred.tailFibre r m)
+               (L.DependencyRelFibred.endsFibre d q m)
+               (L.ProvidesRelFibred.nodeFibre pi m))
             n)
 
   let dependees p =
-    edges R.Reduced.VSet.elements R.Reduced.DependeesSet.elements
+    edges R.Reduced.VSet.elements R.Reduced.DependeeSet.elements
       (match p with
       | R.Name.Orig n, R.Version.Orig v ->
-          let dp = L.DepRelFibred.tailFibre d (n, v) in
+          let dp = L.DependencyRelFibred.tailFibre d (n, v) in
           R.Reduced.dependees
             (R.reduceDeps (L.realPreimage r dp) dp (L.provPreimage pi dp))
             p
       | R.Name.Selector (q, m), _ ->
           R.Reduced.dependees
             (R.reduceDeps
-               (L.PkgFibred.tailFibre r m)
-               (L.DepRelFibred.tailFibre d q)
-               (L.ProvFibred.nodeFibre pi m))
+               (L.PackageSetFibred.tailFibre r m)
+               (L.DependencyRelFibred.tailFibre d q)
+               (L.ProvidesRelFibred.nodeFibre pi m))
             p
       | R.Name.Orig _, R.Version.Provider _ -> unasked ())
 
-  let real = R.Reduced.PkgSet.elements (R.reduceReal r d pi)
-  let deps = rel R.Reduced.VSet.elements R.Reduced.DepRel.elements (R.reduceDeps r d pi)
+  let real = R.Reduced.PackageSet.elements (R.reduceReal r d pi)
+  let deps = rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps r d pi)
 
   let decode s =
-    let s = R.Reduced.PkgSet.ofList s in
-    pkgs (M.PkgSet.elements (R.virtualResolution s));
+    let s = R.Reduced.PackageSet.ofList s in
+    pkgs (M.PackageSet.elements (R.virtualResolution s));
     packages "providers"
       (List.map
          (fun ((m, u), (n, (p, v))) ->
            Printf.sprintf "%s %s for %s <- %s %s" m u n p v)
-         (M.RhoRel.elements (R.providers d pi s)))
+         (M.ProviderRel.elements (R.providers d pi s)))
 end
 
 module Concurrent_features = struct
@@ -818,7 +818,7 @@ module Concurrent_features = struct
   let dep n v fs = (n, (M.VSet.ofList v, F.FSet.ofList fs))
 
   let r =
-    M.PkgSet.ofList
+    M.PackageSet.ofList
       [
         ("A", "1");
         ("B", "1");
@@ -830,7 +830,7 @@ module Concurrent_features = struct
       ]
 
   let sup =
-    F.SupportSet.ofList
+    F.SupportRel.ofList
       [
         (("D", "1"), "α");
         (("D", "2"), "α");
@@ -842,7 +842,7 @@ module Concurrent_features = struct
       ]
 
   let df =
-    F.FeatDepRel.ofList
+    F.ParameterisedDependencyRel.ofList
       [
         (("A", "1"), dep "B" [ "1" ] []);
         (("A", "1"), dep "C" [ "1" ] []);
@@ -851,7 +851,7 @@ module Concurrent_features = struct
       ]
 
   let da =
-    F.AddlDepRel.ofList
+    F.AdditionalDependencyRel.ofList
       [
         ((("D", "1"), "α"), dep "F" [ "1" ] [ "γ" ]);
         ((("D", "1"), "β"), dep "F" [ "1" ] [ "δ" ]);
@@ -864,80 +864,80 @@ module Concurrent_features = struct
       (match n with
       | R.Name.GranularOrig (m, w) ->
           R.Reduced.versions
-            (R.reduceReal (L.granFibre g r m w) F.SupportSet.empty
-               F.FeatDepRel.empty F.AddlDepRel.empty g)
+            (R.reduceReal (L.granFibre g r m w) F.SupportRel.empty
+               F.ParameterisedDependencyRel.empty F.AdditionalDependencyRel.empty g)
             n
       | R.Name.GranularFeatPkg (m, x, w) ->
           R.Reduced.versions
             (R.reduceReal (L.granFibre g r m w)
                (F.Reduction.Lookup.supportFibre sup m x)
-               F.FeatDepRel.empty F.AddlDepRel.empty g)
+               F.ParameterisedDependencyRel.empty F.AdditionalDependencyRel.empty g)
             n
       | R.Name.Intermediate (m, u, o) ->
           R.Reduced.versions
-            (R.reduceReal M.PkgSet.empty F.SupportSet.empty
-               (L.FeatDepRelFibred.endsFibre df (m, u) o)
+            (R.reduceReal M.PackageSet.empty F.SupportRel.empty
+               (L.ParameterisedDependencyRelFibred.endsFibre df (m, u) o)
                (L.pkgNodeFibre da (m, u) o)
                g)
             n
       | R.Name.IntermediateF (m, u, o, _) ->
           R.Reduced.versions
-            (R.reduceReal M.PkgSet.empty F.SupportSet.empty
-               (L.FeatDepRelFibred.endsFibre df (m, u) o)
-               F.AddlDepRel.empty g)
+            (R.reduceReal M.PackageSet.empty F.SupportRel.empty
+               (L.ParameterisedDependencyRelFibred.endsFibre df (m, u) o)
+               F.AdditionalDependencyRel.empty g)
             n
       | R.Name.IntermediateA (m, u, x, o, _) ->
           R.Reduced.versions
-            (R.reduceReal M.PkgSet.empty F.SupportSet.empty F.FeatDepRel.empty
-               (L.AddlDepRelFibred.endsFibre da ((m, u), x) o)
+            (R.reduceReal M.PackageSet.empty F.SupportRel.empty F.ParameterisedDependencyRel.empty
+               (L.AdditionalDependencyRelFibred.endsFibre da ((m, u), x) o)
                g)
             n)
 
   let dependees ((n, v) as p) =
-    edges R.Reduced.VSet.elements R.Reduced.DependeesSet.elements
+    edges R.Reduced.VSet.elements R.Reduced.DependeeSet.elements
       (match n with
       | R.Name.GranularOrig (m, _) ->
           R.Reduced.dependees
-            (R.reduceDeps M.PkgSet.empty F.SupportSet.empty
-               (L.FeatDepRelFibred.tailFibre df (m, v))
-               F.AddlDepRel.empty g)
+            (R.reduceDeps M.PackageSet.empty F.SupportRel.empty
+               (L.ParameterisedDependencyRelFibred.tailFibre df (m, v))
+               F.AdditionalDependencyRel.empty g)
             p
       | R.Name.GranularFeatPkg (m, x, _) ->
           R.Reduced.dependees
             (R.reduceDeps
-               (M.PkgSet.singleton (m, v))
-               (F.SupportSet.singleton ((m, v), x))
-               F.FeatDepRel.empty
-               (L.AddlDepRelFibred.tailFibre da ((m, v), x))
+               (M.PackageSet.singleton (m, v))
+               (F.SupportRel.singleton ((m, v), x))
+               F.ParameterisedDependencyRel.empty
+               (L.AdditionalDependencyRelFibred.tailFibre da ((m, v), x))
                g)
             p
       | R.Name.Intermediate (m, u, o) ->
           R.Reduced.dependees
-            (R.reduceDeps M.PkgSet.empty F.SupportSet.empty
-               (L.FeatDepRelFibred.endsFibre df (m, u) o)
+            (R.reduceDeps M.PackageSet.empty F.SupportRel.empty
+               (L.ParameterisedDependencyRelFibred.endsFibre df (m, u) o)
                (L.pkgNodeFibre da (m, u) o)
                g)
             p
       | R.Name.IntermediateF (m, u, o, _) ->
           R.Reduced.dependees
-            (R.reduceDeps M.PkgSet.empty F.SupportSet.empty
-               (L.FeatDepRelFibred.endsFibre df (m, u) o)
-               F.AddlDepRel.empty g)
+            (R.reduceDeps M.PackageSet.empty F.SupportRel.empty
+               (L.ParameterisedDependencyRelFibred.endsFibre df (m, u) o)
+               F.AdditionalDependencyRel.empty g)
             p
       | R.Name.IntermediateA (m, u, x, o, _) ->
           R.Reduced.dependees
-            (R.reduceDeps M.PkgSet.empty F.SupportSet.empty F.FeatDepRel.empty
-               (L.AddlDepRelFibred.endsFibre da ((m, u), x) o)
+            (R.reduceDeps M.PackageSet.empty F.SupportRel.empty F.ParameterisedDependencyRel.empty
+               (L.AdditionalDependencyRelFibred.endsFibre da ((m, u), x) o)
                g)
             p)
 
-  let real = R.Reduced.PkgSet.elements (R.reduceReal r sup df da g)
+  let real = R.Reduced.PackageSet.elements (R.reduceReal r sup df da g)
 
   let deps =
-    rel R.Reduced.VSet.elements R.Reduced.DepRel.elements (R.reduceDeps r sup df da g)
+    rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps r sup df da g)
 
   let decode s =
-    let s = R.Reduced.PkgSet.ofList s in
+    let s = R.Reduced.PackageSet.ofList s in
     packages "packages"
       (List.map
          (fun ((n, v), fs) ->
@@ -976,9 +976,9 @@ module Placement = struct
   let i =
     {
       M.inst_real =
-        M.PkgSet.ofList [ ("A", "1"); ("B", "1"); ("C", "1"); ("C", "2") ];
+        M.PackageSet.ofList [ ("A", "1"); ("B", "1"); ("C", "1"); ("C", "2") ];
       inst_deps =
-        M.Source.DepRel.ofList
+        M.Source.DependencyRel.ofList
           [
             (("R", "1"), ("A", vs [ "1" ]));
             (("R", "1"), ("B", vs [ "1" ]));
@@ -986,9 +986,9 @@ module Placement = struct
             (("B", "1"), ("A", vs [ "1" ]));
             (("B", "1"), ("C", vs [ "2" ]));
           ];
-      inst_peers = M.Source.DepRel.ofList [ (("C", "2"), ("A", vs [ "1" ])) ];
-      inst_optDeps = M.Source.DepRel.empty;
-      inst_optPeers = M.Source.DepRel.empty;
+      inst_peers = M.Source.DependencyRel.ofList [ (("C", "2"), ("A", vs [ "1" ])) ];
+      inst_optDeps = M.Source.DependencyRel.empty;
+      inst_optPeers = M.Source.DependencyRel.empty;
       inst_root = ("R", "1");
     }
 
@@ -1002,23 +1002,23 @@ module Placement = struct
           R.versions (L.nameSubInst i a) d n)
 
   let dependees p =
-    edges R.Reduced.VSet.elements R.Reduced.DependeesSet.elements
+    edges R.Reduced.VSet.elements R.Reduced.DependeeSet.elements
       (match p with
       | R.Name.Root, _ -> R.dependees (L.occSubInst i i.M.inst_root) p
       | R.Name.Loc (_, a), R.Version.Occ v ->
           R.dependees (L.occSubInst i (a, v)) p
-      | R.Name.Loc _, _ -> R.Reduced.DependeesSet.empty
+      | R.Name.Loc _, _ -> R.Reduced.DependeeSet.empty
       | R.Name.Walk (l, a), w -> R.walkDeps l a w)
 
-  let real = R.Reduced.PkgSet.elements (R.reduceReal i d)
-  let deps = rel R.Reduced.VSet.elements R.Reduced.DepRel.elements (R.reduceDeps i d)
+  let real = R.Reduced.PackageSet.elements (R.reduceReal i d)
+  let deps = rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (R.reduceDeps i d)
 
   let decode s =
     packages "layout"
       (List.map
          (fun (l, (a, v)) -> path (a :: l) ^ " " ^ v)
-         (M.Layout.elements
-            (M.reachable i (R.placementResolution (R.Reduced.PkgSet.ofList s)))))
+         (M.LayoutRel.elements
+            (M.reachable i (R.placementResolution (R.Reduced.PackageSet.ofList s)))))
 end
 
 module Npm_placement = struct
@@ -1067,7 +1067,7 @@ module Npm_placement = struct
 
   let i =
     {
-      M.inst_real = M.RepoSet.ofList repo;
+      M.inst_real = M.RealPackageSet.ofList repo;
       inst_deps = [ (("a", "1"), dep "b" "b" "2") ];
       inst_peers = [];
       inst_ovr = [];
@@ -1083,10 +1083,10 @@ module Npm_placement = struct
      the repository at the package it names, and a key's versions off the
      packages the edges alias to it *)
   let only ns =
-    M.RepoSet.ofList (List.filter (fun (m, _) -> List.mem m ns) repo)
+    M.RealPackageSet.ofList (List.filter (fun (m, _) -> List.mem m ns) repo)
 
   let bare =
-    { i with M.inst_real = M.RepoSet.empty; inst_deps = []; inst_rootDeps = [] }
+    { i with M.inst_real = M.RealPackageSet.empty; inst_deps = []; inst_rootDeps = [] }
 
   let occ_inst = function
     | M.Occ.Proj -> { bare with M.inst_rootDeps = i.M.inst_rootDeps }
@@ -1132,21 +1132,21 @@ module Npm_placement = struct
       | R.Name.Root, R.Version.Occ x -> atoms [] x
       | R.Name.Loc (l, a), R.Version.Occ x -> atoms (a :: l) x
       | R.Name.Loc _, _ -> []
-      | R.Name.Walk (l, a), w -> R.Reduced.DependeesSet.elements (R.walkDeps l a w)
+      | R.Name.Walk (l, a), w -> R.Reduced.DependeeSet.elements (R.walkDeps l a w)
       | R.Name.Root, _ -> unasked ())
 
-  let real = R.Reduced.PkgSet.elements (M.Reduction.reduceReal i d)
+  let real = R.Reduced.PackageSet.elements (M.Reduction.reduceReal i d)
 
   let deps =
-    rel R.Reduced.VSet.elements R.Reduced.DepRel.elements (M.Reduction.reduceDeps i d)
+    rel R.Reduced.VSet.elements R.Reduced.DependencyRel.elements (M.Reduction.reduceDeps i d)
 
   let decode s =
     packages "layout"
       (List.map
          (fun (l, (a, x)) -> path (a :: l) ^ " " ^ occ x)
-         (M.Pl.Layout.elements
+         (M.Pl.LayoutRel.elements
             (M.Pl.reachable (M.Reduction.tr i)
-               (R.placementResolution (R.Reduced.PkgSet.ofList s)))))
+               (R.placementResolution (R.Reduced.PackageSet.ofList s)))))
 end
 
 let examples : (string * (module EXAMPLE)) list =

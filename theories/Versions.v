@@ -42,8 +42,8 @@ Definition cmpOpEvalBy {A} (cmp : A -> A -> comparison)
 
 Module Versions (N V : UsualOrderedType).
   Module Source := Core N V.
-  Module Pkg := Source.Pkg.
-  Module PkgSet := Source.PkgSet.
+  Module Package := Source.Package.
+  Module PackageSet := Source.PackageSet.
   Module VSet := Source.VSet.
 
   Inductive Formula : Type :=
@@ -171,29 +171,29 @@ Module Versions (N V : UsualOrderedType).
   End FComp.
   Module FOT := UOTFromCompare FComp.
 
-  Module Dependees := PairUOT N FOT.
-  Module DepElt := PairUOT Pkg Dependees.
-  Module DepRel := FSetUOT DepElt.
+  Module Dependee := PairUOT N FOT.
+  Module DependencyElt := PairUOT Package Dependee.
+  Module DependencyRel := FSetUOT DependencyElt.
 
   Record IsResolution
-      (R : PkgSet.t) (D : DepRel.t) (r : Pkg.t) (S : PkgSet.t) : Prop :=
-    { res_subset : PkgSet.Subset S R
-    ; res_root_mem : PkgSet.In r S
+      (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t) (S : PackageSet.t) : Prop :=
+    { res_subset : PackageSet.Subset S R
+    ; res_root_mem : PackageSet.In r S
     ; res_dep_closure :
-        forall p, PkgSet.In p S ->
+        forall p, PackageSet.In p S ->
         forall (n : N.t) (phi : Formula),
-          DepRel.In (p, (n, phi)) D ->
-          exists v, Satisfies v phi /\ PkgSet.In (n, v) S
+          DependencyRel.In (p, (n, phi)) D ->
+          exists v, Satisfies v phi /\ PackageSet.In (n, v) S
     ; res_version_unique : Source.VersionUnique S }.
 
   Module Reduction.
-    Module SOvd := SetOps DepElt Source.DepElt DepRel Source.DepRel.
-    Definition reduce (R : PkgSet.t) (D : DepRel.t) : Source.DepRel.t :=
+    Module SOvd := SetOps DependencyElt Source.DependencyElt DependencyRel Source.DependencyRel.
+    Definition reduce (R : PackageSet.t) (D : DependencyRel.t) : Source.DependencyRel.t :=
       SOvd.map (fun '(p, (m, phi)) => (p, (m, eval phi (Source.versions R m)))) D.
 
-    Lemma mem_reduce : forall R D (p : Pkg.t) (n : N.t) (vs : VSet.t),
-        Source.DepRel.In (p, (n, vs)) (reduce R D) <->
-        exists phi, DepRel.In (p, (n, phi)) D /\ vs = eval phi (Source.versions R n).
+    Lemma mem_reduce : forall R D (p : Package.t) (n : N.t) (vs : VSet.t),
+        Source.DependencyRel.In (p, (n, vs)) (reduce R D) <->
+        exists phi, DependencyRel.In (p, (n, phi)) D /\ vs = eval phi (Source.versions R n).
     Proof.
       intros R D p n vs; unfold reduce; rewrite SOvd.mem_map.
       split.
@@ -222,42 +222,42 @@ Module Versions (N V : UsualOrderedType).
     Qed.
 
     Module Lookup.
-      Module DepRelFibred := FibredLabelledRel Pkg N FOT DepElt DepRel.
-      Module DepKeys := RelKeys N DepElt DepRel.
-      Module PkgPreimage := Preimage Pkg PkgSet.
+      Module DependencyRelFibred := FibredLabelledRel Package N FOT DependencyElt DependencyRel.
+      Module DependencyRelKeys := RelKeys N DependencyElt DependencyRel.
+      Module PackageSetPreimage := Preimage Package PackageSet.
 
-      Definition realPreimage (R : PkgSet.t) (Dp : DepRel.t) : PkgSet.t :=
-        PkgPreimage.preimage fst (DepKeys.hasKey DepRelFibred.node Dp) R.
+      Definition realPreimage (R : PackageSet.t) (Dp : DependencyRel.t) : PackageSet.t :=
+        PackageSetPreimage.preimage fst (DependencyRelKeys.hasKey DependencyRelFibred.node Dp) R.
 
       Lemma versions_realPreimage : forall R Dp n,
-          (exists q phi, DepRel.In (q, (n, phi)) Dp) ->
+          (exists q phi, DependencyRel.In (q, (n, phi)) Dp) ->
           Source.versions (realPreimage R Dp) n = Source.versions R n.
       Proof.
         intros R Dp m [q [phi He]].
         apply VSet.ext; intro v.
         rewrite !Source.mem_versions; unfold realPreimage.
-        rewrite PkgPreimage.mem_preimage.
+        rewrite PackageSetPreimage.mem_preimage.
         split.
         - intros [H _]; exact H.
         - intro H; split; [exact H |].
-          apply DepKeys.hasKey_iff.
+          apply DependencyRelKeys.hasKey_iff.
           exists (q, (m, phi)); split; [exact He | reflexivity].
       Qed.
 
-      Lemma dependees_fibre : forall R D (p : Pkg.t),
+      Lemma dependees_fibre : forall R D (p : Package.t),
           Source.dependees (reduce R D) p =
-          Source.dependees (reduce R (DepRelFibred.tailFibre D p)) p.
+          Source.dependees (reduce R (DependencyRelFibred.tailFibre D p)) p.
       Proof.
         intros R D p; apply Source.dependees_ext; intros [n vs]; rewrite !mem_reduce.
         split; intros [phi [HD ->]]; exists phi; split; try reflexivity.
-        - apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
-        - exact (DepRelFibred.tailFibre_subset _ _ _ HD).
+        - apply DependencyRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
+        - exact (DependencyRelFibred.tailFibre_subset _ _ _ HD).
       Qed.
 
       Lemma reduce_realPreimage : forall R Dp,
           reduce (realPreimage R Dp) Dp = reduce R Dp.
       Proof.
-        intros R Dp; apply Source.DepRel.ext; intros [q [n vs]].
+        intros R Dp; apply Source.DependencyRel.ext; intros [q [n vs]].
         rewrite !mem_reduce.
         split; intros [phi [HD ->]]; exists phi; split;
           [exact HD | | exact HD |];
@@ -266,16 +266,16 @@ Module Versions (N V : UsualOrderedType).
                 | exists q, phi; exact HD].
       Qed.
 
-      Module PkgFibred := FibredRel N V Pkg PkgSet.
+      Module PackageSetFibred := FibredRel N V Package PackageSet.
       Theorem versions_lookup : forall R (n : N.t),
-          Source.versions R n = Source.versions (PkgFibred.tailFibre R n) n.
+          Source.versions R n = Source.versions (PackageSetFibred.tailFibre R n) n.
       Proof.
         intros R n; apply Source.versions_ext; intro v.
-        rewrite PkgFibred.mem_tailFibre; tauto.
+        rewrite PackageSetFibred.mem_tailFibre; tauto.
       Qed.
 
-      Theorem dependees_lookup : forall R D (p : Pkg.t),
-        let Dp := DepRelFibred.tailFibre D p in
+      Theorem dependees_lookup : forall R D (p : Package.t),
+        let Dp := DependencyRelFibred.tailFibre D p in
         Source.dependees (reduce R D) p =
         Source.dependees (reduce (realPreimage R Dp) Dp) p.
       Proof.
@@ -283,12 +283,12 @@ Module Versions (N V : UsualOrderedType).
           rewrite reduce_realPreimage; apply dependees_fibre.
       Qed.
 
-      Module SOdp := SetOps DepElt Pkg DepRel PkgSet.
-      Definition tails (D : DepRel.t) : PkgSet.t :=
+      Module SOdp := SetOps DependencyElt Package DependencyRel PackageSet.
+      Definition tails (D : DependencyRel.t) : PackageSet.t :=
         SOdp.map (fun '(q, _) => q) D.
 
-      Lemma mem_tails : forall D (q : Pkg.t),
-          PkgSet.In q (tails D) <-> exists d, DepRel.In (q, d) D.
+      Lemma mem_tails : forall D (q : Package.t),
+          PackageSet.In q (tails D) <-> exists d, DependencyRel.In (q, d) D.
       Proof.
         intros D q; unfold tails; rewrite SOdp.mem_map.
         split.
@@ -296,26 +296,26 @@ Module Versions (N V : UsualOrderedType).
         - intros [d HD]; exists (q, d); split; [exact HD | reflexivity].
       Qed.
 
-      Module SOpcd := SetOps Pkg Source.DepElt PkgSet Source.DepRel.
+      Module SOpcd := SetOps Package Source.DependencyElt PackageSet Source.DependencyRel.
       Corollary reduce_glue : forall R D,
           reduce R D =
           SOpcd.unionMap
-            (fun p => reduce (realPreimage R (DepRelFibred.tailFibre D p))
-                             (DepRelFibred.tailFibre D p))
+            (fun p => reduce (realPreimage R (DependencyRelFibred.tailFibre D p))
+                             (DependencyRelFibred.tailFibre D p))
             (tails D).
       Proof.
-        intros R D; apply Source.DepRel.ext; intros [q [n ws]].
+        intros R D; apply Source.DependencyRel.ext; intros [q [n ws]].
         rewrite SOpcd.mem_unionMap, mem_reduce.
         split.
         - intros [phi [HD ->]].
           exists q; split; [apply mem_tails; eauto |].
           rewrite reduce_realPreimage, mem_reduce.
           exists phi; split; [| reflexivity].
-          apply DepRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
+          apply DependencyRelFibred.mem_tailFibre; split; [exact HD | reflexivity].
         - intros [p [_ Hy]].
           rewrite reduce_realPreimage, mem_reduce in Hy.
           destruct Hy as [phi [Hf ->]].
-          apply DepRelFibred.mem_tailFibre in Hf; destruct Hf as [HD _].
+          apply DependencyRelFibred.mem_tailFibre in Hf; destruct Hf as [HD _].
           exists phi; split; [exact HD | reflexivity].
       Qed.
 

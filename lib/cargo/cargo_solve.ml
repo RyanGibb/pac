@@ -31,8 +31,8 @@ module Make () = struct
           (tn, v))
         sol
     in
-    let s = T.PkgSet.ofList sol in
-    let crates = Cg.PkgSet.elements (Cg.Reduction.cargoResolution s) in
+    let s = T.PackageSet.ofList sol in
+    let crates = Cg.PackageSet.elements (Cg.Reduction.cargoResolution s) in
     (* the placeholder default the parser gives a crate declaring none
        keeps a depender's default-features request satisfiable; cargo
        records no such feature (dep_cache.rs, handle_default requires
@@ -55,7 +55,7 @@ module Make () = struct
        only when that owner is decoded *)
     let fibres = List.map (L.slots_and_fdefs st) (L.root st :: crates) in
     let slots = Cg.SlotRel.unions (List.map fst fibres) in
-    let fdefs = Cg.FDefRel.unions (List.map snd fibres) in
+    let fdefs = Cg.FeatureDefinitionRel.unions (List.map snd fibres) in
     let parents =
       List.map
         (fun ((((n, v), k), u) : Cg.ParentElt.t) ->
@@ -80,13 +80,13 @@ module Make () = struct
 
   let check_answer st (sol : (Cg.Reduction.NPlus.t * PVersion.t) list) =
     let s =
-      T.PkgSet.ofList (List.map (fun (tn, { PVersion.v; _ }) -> (tn, v)) sol)
+      T.PackageSet.ofList (List.map (fun (tn, { PVersion.v; _ }) -> (tn, v)) sol)
     in
     let versions tn =
       T.VSet.ofList
         (List.map (fun { PVersion.v; _ } -> v) (L.pg_versions st tn))
     in
-    let dependees p = T.DependeesSet.ofList (L.dependees st p) in
+    let dependees p = T.DependeeSet.ofList (L.dependees st p) in
     let root =
       T.rootQuery (Cg.Reduction.NPlus.CRoot, Cg.Reduction.VPlus.WUnit)
     in
@@ -140,7 +140,7 @@ module Make () = struct
         (Pac_common.Core.walk ~versions:(L.pg_versions st)
            ~dependees:(fun (tn, { PVersion.v; _ }) ->
              List.map
-               (fun ((m, vs) : T.Dependees.t) ->
+               (fun ((m, vs) : T.Dependee.t) ->
                  (m, List.map (L.tag st m) (T.VSet.elements vs)))
                (L.dependees st (tn, v)))
            [ Cg.Reduction.NPlus.CRoot ])

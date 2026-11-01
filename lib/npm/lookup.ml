@@ -70,10 +70,10 @@ module Make (Encoding : Encoding.S) = struct
     ovr : (string * Np.coq_Range) list;
     dep_tbl : (string * string, Np.coq_Dependency list) Hashtbl.t;
     peer_tbl : (string * string, Np.coq_PeerDependency list) Hashtbl.t;
-    repo_at : (string, Np.RepoSet.t) Hashtbl.t;
+    repo_at : (string, Np.RealPackageSet.t) Hashtbl.t;
     (* keyed by the names read rather than by the package reading them, so
        packages that read the same names share one set *)
-    repo_of : (string list, Np.RepoSet.t) Hashtbl.t;
+    repo_of : (string list, Np.RealPackageSet.t) Hashtbl.t;
     vcache : (Np.Nm.name, Np.Vs.version list) Hashtbl.t;
     (* the optional-dependency verdict, keyed by what decides it *)
     opt_keep : (string * string, bool) Hashtbl.t;
@@ -125,15 +125,15 @@ module Make (Encoding : Encoding.S) = struct
   (* The calculus keys the root's package by its name and version as it
      keys a registry package, so the registry's packages of the root's name
      are out of reach, and a sub-instance reading them is refused. *)
-  let repo_at st (n : string) : Np.RepoSet.t =
+  let repo_at st (n : string) : Np.RealPackageSet.t =
     if n = fst st.root then raise (A.Reaches_root n);
     Tbl.memo st.repo_at n (fun () ->
-        Np.RepoSet.ofList (List.map (fun v -> (n, v)) (A.versions_of st.ar n)))
+        Np.RealPackageSet.ofList (List.map (fun v -> (n, v)) (A.versions_of st.ar n)))
 
-  let repo_of st (ns : string list) : Np.RepoSet.t =
+  let repo_of st (ns : string list) : Np.RealPackageSet.t =
     let ns = List.sort_uniq String.compare ns in
     Tbl.memo st.repo_of ns (fun () ->
-        Np.RepoSet.unions (List.map (repo_at st) ns))
+        Np.RealPackageSet.unions (List.map (repo_at st) ns))
 
   let mk_inst st ~repo ~deps ~peers : Np.coq_Inst =
     {
@@ -147,7 +147,7 @@ module Make (Encoding : Encoding.S) = struct
   (* the dependency the calculus reads, the root's flat override on its
      directory applied *)
   let effective_dep st (d : Np.coq_Dependency) : Np.coq_Dependency =
-    Np.ovrDep (mk_inst st ~repo:Np.RepoSet.empty ~deps:[] ~peers:[]) d
+    Np.ovrDep (mk_inst st ~repo:Np.RealPackageSet.empty ~deps:[] ~peers:[]) d
 
   (* effective_dep's dependee name, read off the manifest's entry, whose
      range is not yet read *)
@@ -240,7 +240,7 @@ module Make (Encoding : Encoding.S) = struct
 
   (* the granular versions lookup's sub-instance: the lookup reads no
      instance at a granular name *)
-  let gran_sub_inst st = mk_inst st ~repo:Np.RepoSet.empty ~deps:[] ~peers:[]
+  let gran_sub_inst st = mk_inst st ~repo:Np.RealPackageSet.empty ~deps:[] ~peers:[]
 
   (* the intermediate versions lookup's sub-instance: p's own dependencies,
      the peer dependencies naming the key's directory (p's own among them,
@@ -386,7 +386,7 @@ module Make (Encoding : Encoding.S) = struct
             then Hashtbl.add st.links_into h l)
     | _ -> ()
 
-  let dependees st (s : T.Pkg.t) : T.Dependees.t list =
+  let dependees st (s : T.Package.t) : T.Dependee.t list =
     let hs =
       match s with
       | Np.Nm.Granular (k, _), Np.Vs.Orig v ->
@@ -395,11 +395,11 @@ module Make (Encoding : Encoding.S) = struct
           R.dependees (peer_sub_inst st (snd k, v) m u) s
       | Np.Nm.Link (k, v, m, u, _), _ ->
           R.dependees (holder_sub_inst st (snd k, v) (snd m, u)) s
-      | _ -> T.DependeesSet.empty
+      | _ -> T.DependeeSet.empty
     in
-    let hs = T.DependeesSet.elements hs in
+    let hs = T.DependeeSet.elements hs in
     List.iter
-      (fun ((m, _) : T.Dependees.t) ->
+      (fun ((m, _) : T.Dependee.t) ->
         record_dir st m;
         record_link st m)
       hs;

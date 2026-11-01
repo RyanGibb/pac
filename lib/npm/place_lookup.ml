@@ -20,9 +20,9 @@ module Make (Place_encoding : Place_encoding.S) = struct
     dnat : E.nat;
     edge_tbl : (Npl.Occ.t, edge list) Hashtbl.t;
     acc_tbl : (string * Npl.coq_Range, int * Pl.VSet.t) Hashtbl.t;
-    repo_at : (string, Npl.RepoSet.t) Hashtbl.t;
-    repo_of : (string list, Npl.RepoSet.t) Hashtbl.t;
-    real_tbl : (string, Npl.VS.t) Hashtbl.t;
+    repo_at : (string, Npl.RealPackageSet.t) Hashtbl.t;
+    repo_of : (string list, Npl.RealPackageSet.t) Hashtbl.t;
+    real_tbl : (string, Npl.VSet.t) Hashtbl.t;
     key_names : (string, string list) Hashtbl.t;
     key_inst : (string, int * Pl.coq_Inst) Hashtbl.t;
     vcache : (PName.t, int * PVersion.t list) Hashtbl.t;
@@ -61,15 +61,15 @@ module Make (Place_encoding : Place_encoding.S) = struct
     | Npl.Occ.Proj -> A.root_meta st.ar
     | Npl.Occ.Reg (m, v) -> A.meta st.ar (m, v.IVer.s)
 
-  let repo_at st (n : string) : Npl.RepoSet.t =
+  let repo_at st (n : string) : Npl.RealPackageSet.t =
     Tbl.memo st.repo_at n (fun () ->
-        Npl.RepoSet.ofList
+        Npl.RealPackageSet.ofList
           (List.map (fun v -> (n, IVer.make v)) (A.versions_of st.ar n)))
 
-  let repo_of st (ns : string list) : Npl.RepoSet.t =
+  let repo_of st (ns : string list) : Npl.RealPackageSet.t =
     let ns = List.sort_uniq String.compare ns in
     Tbl.memo st.repo_of ns (fun () ->
-        Npl.RepoSet.unions (List.map (repo_at st) ns))
+        Npl.RealPackageSet.unions (List.map (repo_at st) ns))
 
   (* Dist-tags and npm's reading of "*" shape the range handed to the
      calculus, as in the npm reading. *)
@@ -114,19 +114,19 @@ module Make (Place_encoding : Place_encoding.S) = struct
     match x with
     | Npl.Occ.Proj ->
         {
-          (mk_inst st ~repo:Npl.RepoSet.empty ~deps:[] ~peers:[]) with
+          (mk_inst st ~repo:Npl.RealPackageSet.empty ~deps:[] ~peers:[]) with
           Npl.inst_rootDeps = ds;
           inst_rootPeers = rs;
         }
     | Npl.Occ.Reg (m, v) ->
-        mk_inst st ~repo:Npl.RepoSet.empty
+        mk_inst st ~repo:Npl.RealPackageSet.empty
           ~deps:(List.map (fun d -> ((m, v), d)) ds)
           ~peers:(List.map (fun r -> ((m, v), r)) rs)
 
   (* An edge's accepted occupants read only the repository at the package it
      names, so they are computed once per package and range: acceptsIn over
      the name's versions, which are computed once per name. *)
-  let real_at st (n : string) : Npl.VS.t =
+  let real_at st (n : string) : Npl.VSet.t =
     Tbl.memo st.real_tbl n (fun () -> Npl.realVersions (repo_at st n) n)
 
   let accepted st (e : Npl.coq_Edge) : int * Pl.VSet.t =
@@ -223,17 +223,17 @@ module Make (Place_encoding : Place_encoding.S) = struct
       (edges st x)
 
   let parts st (n : PName.t) (u : PVersion.t) :
-      (part * (unit -> T.Dependees.t list)) list option =
+      (part * (unit -> T.Dependee.t list)) list option =
     match (n, u) with
     | R.Name.Root, R.Version.Occ x -> Some (atom_parts st [] x)
     | R.Name.Loc (l, a), R.Version.Occ x -> Some (atom_parts st (a :: l) x)
     | _ -> None
 
-  let dependees st (n, u) : T.Dependees.t list =
+  let dependees st (n, u) : T.Dependee.t list =
     match parts st n u with
     | Some ps -> List.concat_map (fun (_, f) -> f ()) ps
     | None -> (
         match (n, u) with
-        | R.Name.Walk (l, a), w -> T.DependeesSet.elements (R.walkDeps l a w)
+        | R.Name.Walk (l, a), w -> T.DependeeSet.elements (R.walkDeps l a w)
         | _ -> [])
 end

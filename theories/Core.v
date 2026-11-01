@@ -18,65 +18,65 @@ Arguments CheckReached {P H}.
 (* Module application is generative: two instantiations of Core at equal
    parameters have incompatible types. Instantiate once and share. *)
 Module Core (N V : UsualOrderedType).
-  Module Pkg := PairUOT N V.
-  Module PkgSet := FSetUOT Pkg.
+  Module Package := PairUOT N V.
+  Module PackageSet := FSetUOT Package.
   Module VSet := FSetUOT V.
-  Module Dependees := PairUOT N VSet.AsUOT.
-  Module DependeesSet := FSetUOT Dependees.
-  Module DepElt := PairUOT Pkg Dependees.
-  Module DepRel := FSetUOT DepElt.
+  Module Dependee := PairUOT N VSet.AsUOT.
+  Module DependeeSet := FSetUOT Dependee.
+  Module DependencyElt := PairUOT Package Dependee.
+  Module DependencyRel := FSetUOT DependencyElt.
 
-  Definition dependees (D : DepRel.t) (p : Pkg.t) : DependeesSet.t :=
-    DepRel.fold (fun '(q, h) acc =>
-        if Pkg.eq_dec q p then DependeesSet.add h acc else acc)
-      D DependeesSet.empty.
+  Definition dependees (D : DependencyRel.t) (p : Package.t) : DependeeSet.t :=
+    DependencyRel.fold (fun '(q, h) acc =>
+        if Package.eq_dec q p then DependeeSet.add h acc else acc)
+      D DependeeSet.empty.
 
-  Module SOdh := SetOps DepElt Dependees DepRel DependeesSet.
-  Lemma mem_dependees : forall D (p : Pkg.t) (h : Dependees.t),
-      DependeesSet.In h (dependees D p) <-> DepRel.In (p, h) D.
+  Module SOdh := SetOps DependencyElt Dependee DependencyRel DependeeSet.
+  Lemma mem_dependees : forall D (p : Package.t) (h : Dependee.t),
+      DependeeSet.In h (dependees D p) <-> DependencyRel.In (p, h) D.
   Proof.
     intros D p h; unfold dependees.
     rewrite (SOdh.in_fold _
-      (fun e => if Pkg.eq_dec (fst e) p
-                then DependeesSet.singleton (snd e) else DependeesSet.empty)).
+      (fun e => if Package.eq_dec (fst e) p
+                then DependeeSet.singleton (snd e) else DependeeSet.empty)).
     2:{ intros [q d] a y; simpl; pose proof (SOdh.empty_in y).
-        destruct (Pkg.eq_dec q p); rewrite ?SOdh.add_in, ?SOdh.singleton_in;
+        destruct (Package.eq_dec q p); rewrite ?SOdh.add_in, ?SOdh.singleton_in;
           tauto. }
     pose proof (SOdh.empty_in h) as E0; split.
     - intros [H | [[q d] [HeD He]]]; [tauto | simpl in He].
-      destruct (Pkg.eq_dec q p) as [-> | _]; [| tauto].
+      destruct (Package.eq_dec q p) as [-> | _]; [| tauto].
       apply SOdh.singleton_in in He; subst d; exact HeD.
     - intro H; right; exists (p, h); simpl.
       rewrite dec_refl, SOdh.singleton_in; auto.
   Qed.
 
-  Lemma dependees_ext : forall D D' (p : Pkg.t),
-      (forall h, DepRel.In (p, h) D <-> DepRel.In (p, h) D') ->
+  Lemma dependees_ext : forall D D' (p : Package.t),
+      (forall h, DependencyRel.In (p, h) D <-> DependencyRel.In (p, h) D') ->
       dependees D p = dependees D' p.
   Proof.
-    intros D D' p H; apply DependeesSet.ext; intro h.
+    intros D D' p H; apply DependeeSet.ext; intro h.
     rewrite !mem_dependees; exact (H h).
   Qed.
 
-  Lemma dependees_empty_iff : forall D (p : Pkg.t),
-      dependees D p = DependeesSet.empty <->
-      forall h, ~ DepRel.In (p, h) D.
+  Lemma dependees_empty_iff : forall D (p : Package.t),
+      dependees D p = DependeeSet.empty <->
+      forall h, ~ DependencyRel.In (p, h) D.
   Proof.
     intros D p; split.
     - intros He h Hin; rewrite <- mem_dependees, He in Hin.
-      exact (DependeesSet.empty_spec Hin).
-    - intro H; apply DependeesSet.ext; intro h.
+      exact (DependeeSet.empty_spec Hin).
+    - intro H; apply DependeeSet.ext; intro h.
       rewrite mem_dependees; split;
         [intro Hin; destruct (H h Hin) | intro Hin;
-         destruct (DependeesSet.empty_spec Hin)].
+         destruct (DependeeSet.empty_spec Hin)].
   Qed.
 
-  Module SOpv := SetOps Pkg V PkgSet VSet.
-  Definition versions (R : PkgSet.t) (n : N.t) : VSet.t :=
+  Module SOpv := SetOps Package V PackageSet VSet.
+  Definition versions (R : PackageSet.t) (n : N.t) : VSet.t :=
     SOpv.filterMap (fun '(m, v) => if N.eq_dec m n then Some v else None) R.
 
   Lemma mem_versions : forall R (n : N.t) (v : V.t),
-      VSet.In v (versions R n) <-> PkgSet.In (n, v) R.
+      VSet.In v (versions R n) <-> PackageSet.In (n, v) R.
   Proof.
     intros R n v; unfold versions; rewrite SOpv.mem_filterMap.
     split.
@@ -88,7 +88,7 @@ Module Core (N V : UsualOrderedType).
   Qed.
 
   Lemma versions_ext : forall R R' (n : N.t),
-      (forall v, PkgSet.In (n, v) R <-> PkgSet.In (n, v) R') ->
+      (forall v, PackageSet.In (n, v) R <-> PackageSet.In (n, v) R') ->
       versions R n = versions R' n.
   Proof.
     intros R R' n H; apply VSet.ext; intro v.
@@ -97,13 +97,13 @@ Module Core (N V : UsualOrderedType).
 
   Module NSet := FSetUOT N.
 
-  Definition hasNameb (S : PkgSet.t) (n : N.t) : bool :=
-    PkgSet.exists_ (fun p => if N.eq_dec (fst p) n then true else false) S.
+  Definition hasNameb (S : PackageSet.t) (n : N.t) : bool :=
+    PackageSet.exists_ (fun p => if N.eq_dec (fst p) n then true else false) S.
 
   Lemma hasNameb_true : forall S n,
-      hasNameb S n = true <-> exists v, PkgSet.In (n, v) S.
+      hasNameb S n = true <-> exists v, PackageSet.In (n, v) S.
   Proof.
-    intros S n; unfold hasNameb; rewrite PkgSet.exists_spec'.
+    intros S n; unfold hasNameb; rewrite PackageSet.exists_spec'.
     split.
     - intros [[m v] [Hm Ht]]; cbn [fst] in Ht.
       destruct (N.eq_dec m n) as [-> | ]; [| discriminate].
@@ -113,7 +113,7 @@ Module Core (N V : UsualOrderedType).
   Qed.
 
   Lemma hasNameb_false : forall S n,
-      hasNameb S n = false <-> forall v, ~ PkgSet.In (n, v) S.
+      hasNameb S n = false <-> forall v, ~ PackageSet.In (n, v) S.
   Proof.
     intros S n; split.
     - intros E v Hv.
@@ -124,25 +124,25 @@ Module Core (N V : UsualOrderedType).
       apply hasNameb_true in E; destruct E as [v Hv]; destruct (Hnone v Hv).
   Qed.
 
-  Definition absentIn (S : PkgSet.t) (ns : NSet.t) : NSet.t :=
+  Definition absentIn (S : PackageSet.t) (ns : NSet.t) : NSet.t :=
     NSet.filter (fun n => negb (hasNameb S n)) ns.
 
   Lemma mem_absentIn : forall S ns n,
       NSet.In n (absentIn S ns) <->
-      NSet.In n ns /\ forall v, ~ PkgSet.In (n, v) S.
+      NSet.In n ns /\ forall v, ~ PackageSet.In (n, v) S.
   Proof.
     intros S ns n; unfold absentIn; rewrite NSet.filter_spec'.
     rewrite Bool.negb_true_iff, hasNameb_false; reflexivity.
   Qed.
 
-  Module PkgPreimage := PreimageOfKeys N Pkg NSet PkgSet.
-  Definition namePreimage (R : PkgSet.t) (ns : NSet.t) : PkgSet.t :=
-    PkgPreimage.ofKeys fst ns R.
+  Module PackageSetKeyPreimage := PreimageOfKeys N Package NSet PackageSet.
+  Definition namePreimage (R : PackageSet.t) (ns : NSet.t) : PackageSet.t :=
+    PackageSetKeyPreimage.ofKeys fst ns R.
 
   Lemma mem_namePreimage : forall R ns n v,
-      PkgSet.In (n, v) (namePreimage R ns) <->
-      PkgSet.In (n, v) R /\ NSet.In n ns.
-  Proof. intros R ns n v; apply PkgPreimage.mem_ofKeys. Qed.
+      PackageSet.In (n, v) (namePreimage R ns) <->
+      PackageSet.In (n, v) R /\ NSet.In n ns.
+  Proof. intros R ns n v; apply PackageSetKeyPreimage.mem_ofKeys. Qed.
 
   Lemma versions_namePreimage : forall R ns n,
       NSet.In n ns -> versions (namePreimage R ns) n = versions R n.
@@ -151,73 +151,73 @@ Module Core (N V : UsualOrderedType).
     rewrite mem_namePreimage; cbn [fst]; tauto.
   Qed.
 
-  Definition VersionUnique (S : PkgSet.t) : Prop :=
+  Definition VersionUnique (S : PackageSet.t) : Prop :=
     forall (n : N.t) (v v' : V.t),
-      PkgSet.In (n, v) S -> PkgSet.In (n, v') S -> v = v'.
+      PackageSet.In (n, v) S -> PackageSet.In (n, v') S -> v = v'.
 
-  Definition FunctionalInName (D : DepRel.t) : Prop :=
-    forall (p : Pkg.t) (n : N.t) (vs vs' : VSet.t),
-      DepRel.In (p, (n, vs)) D -> DepRel.In (p, (n, vs')) D -> vs = vs'.
+  Definition FunctionalInName (D : DependencyRel.t) : Prop :=
+    forall (p : Package.t) (n : N.t) (vs vs' : VSet.t),
+      DependencyRel.In (p, (n, vs)) D -> DependencyRel.In (p, (n, vs')) D -> vs = vs'.
 
   Record IsResolution
-      (R : PkgSet.t) (D : DepRel.t) (r : Pkg.t) (S : PkgSet.t) : Prop :=
-    { res_subset : PkgSet.Subset S R
-    ; res_root_mem : PkgSet.In r S
+      (R : PackageSet.t) (D : DependencyRel.t) (r : Package.t) (S : PackageSet.t) : Prop :=
+    { res_subset : PackageSet.Subset S R
+    ; res_root_mem : PackageSet.In r S
     ; res_dep_closure :
-        forall p, PkgSet.In p S ->
+        forall p, PackageSet.In p S ->
         forall (n : N.t) (vs : VSet.t),
-          DepRel.In (p, (n, vs)) D ->
-          exists v, VSet.In v vs /\ PkgSet.In (n, v) S
+          DependencyRel.In (p, (n, vs)) D ->
+          exists v, VSet.In v vs /\ PackageSet.In (n, v) S
     ; res_version_unique : VersionUnique S }.
 
-  Inductive Reached (dependees : Pkg.t -> DependeesSet.t) (Q : DependeesSet.t)
-      (S : PkgSet.t) : Pkg.t -> Prop :=
+  Inductive Reached (dependees : Package.t -> DependeeSet.t) (Q : DependeeSet.t)
+      (S : PackageSet.t) : Package.t -> Prop :=
   | reached_query : forall (n : N.t) (vs : VSet.t) (v : V.t),
-      DependeesSet.In (n, vs) Q -> VSet.In v vs -> PkgSet.In (n, v) S ->
+      DependeeSet.In (n, vs) Q -> VSet.In v vs -> PackageSet.In (n, v) S ->
       Reached dependees Q S (n, v)
   | reached_dependee : forall p (n : N.t) (vs : VSet.t) (v : V.t),
-      Reached dependees Q S p -> DependeesSet.In (n, vs) (dependees p) ->
-      VSet.In v vs -> PkgSet.In (n, v) S -> Reached dependees Q S (n, v).
+      Reached dependees Q S p -> DependeeSet.In (n, vs) (dependees p) ->
+      VSet.In v vs -> PackageSet.In (n, v) S -> Reached dependees Q S (n, v).
 
-  Definition rootQuery '((n, v) : Pkg.t) : DependeesSet.t :=
-    DependeesSet.singleton (n, VSet.singleton v).
+  Definition rootQuery '((n, v) : Package.t) : DependeeSet.t :=
+    DependeeSet.singleton (n, VSet.singleton v).
 
-  Definition CheckFailure := CheckFailure Pkg.t Dependees.t.
+  Definition CheckFailure := CheckFailure Package.t Dependee.t.
 
   (* PkgSet is a sorted list, so a membership test walks it; the check asks
      one per dependee version, which a tree answers in logarithmic time. *)
-  Module PkgTree := MSetRBT.Make Pkg.
-  Module PkgTreeP := WPropertiesOn Pkg PkgTree.
+  Module PackageTree := MSetRBT.Make Package.
+  Module PkgTreeP := WPropertiesOn Package PackageTree.
 
-  Definition subsetFailure (versions : N.t -> VSet.t) (S : PkgSet.t)
-    : option Pkg.t :=
+  Definition subsetFailure (versions : N.t -> VSet.t) (S : PackageSet.t)
+    : option Package.t :=
     List.find (fun '(n, v) => negb (VSet.mem v (versions n)))
-      (PkgSet.elements S).
+      (PackageSet.elements S).
 
-  Fixpoint adjacentFailure (l : list Pkg.t) : option Pkg.t :=
+  Fixpoint adjacentFailure (l : list Package.t) : option Package.t :=
     match l with
     | (n, _) :: (((m, w) :: _) as l') =>
         if N.eq_dec n m then Some (m, w) else adjacentFailure l'
     | _ => None
     end.
 
-  Definition treeOf (S : PkgSet.t) : PkgTree.t :=
-    PkgSet.fold PkgTree.add S PkgTree.empty.
+  Definition treeOf (S : PackageSet.t) : PackageTree.t :=
+    PackageSet.fold PackageTree.add S PackageTree.empty.
 
-  Definition witness (t : PkgTree.t) '((n, vs) : Dependees.t) : option Pkg.t :=
-    match List.find (fun v => PkgTree.mem (n, v) t) (VSet.elements vs) with
+  Definition witness (t : PackageTree.t) '((n, vs) : Dependee.t) : option Package.t :=
+    match List.find (fun v => PackageTree.mem (n, v) t) (VSet.elements vs) with
     | Some v => Some (n, v)
     | None => None
     end.
 
-  Definition rootFailure (t : PkgTree.t) (Q : DependeesSet.t)
-    : option Dependees.t :=
+  Definition rootFailure (t : PackageTree.t) (Q : DependeeSet.t)
+    : option Dependee.t :=
     List.find
       (fun h => match witness t h with Some _ => false | None => true end)
-      (DependeesSet.elements Q).
+      (DependeeSet.elements Q).
 
-  Fixpoint edgesOf (t : PkgTree.t) (hs : list Dependees.t)
-    : Dependees.t + list Pkg.t :=
+  Fixpoint edgesOf (t : PackageTree.t) (hs : list Dependee.t)
+    : Dependee.t + list Package.t :=
     match hs with
     | nil => inr nil
     | h :: hs' =>
@@ -231,12 +231,12 @@ Module Core (N V : UsualOrderedType).
         end
     end.
 
-  Fixpoint closureFailure (t : PkgTree.t) (dependees : Pkg.t -> DependeesSet.t)
-      (ps : list Pkg.t) : (Pkg.t * Dependees.t) + list (Pkg.t * Pkg.t) :=
+  Fixpoint closureFailure (t : PackageTree.t) (dependees : Package.t -> DependeeSet.t)
+      (ps : list Package.t) : (Package.t * Dependee.t) + list (Package.t * Package.t) :=
     match ps with
     | nil => inr nil
     | p :: ps' =>
-        match edgesOf t (DependeesSet.elements (dependees p)) with
+        match edgesOf t (DependeeSet.elements (dependees p)) with
         | inl h => inl (p, h)
         | inr qs =>
             match closureFailure t dependees ps' with
@@ -246,18 +246,18 @@ Module Core (N V : UsualOrderedType).
         end
     end.
 
-  Fixpoint step (es : list (Pkg.t * Pkg.t)) (seen : PkgTree.t) (changed : bool)
-    : PkgTree.t * bool :=
+  Fixpoint step (es : list (Package.t * Package.t)) (seen : PackageTree.t) (changed : bool)
+    : PackageTree.t * bool :=
     match es with
     | nil => (seen, changed)
     | (p, q) :: es' =>
-        if andb (PkgTree.mem p seen) (negb (PkgTree.mem q seen))
-        then step es' (PkgTree.add q seen) true
+        if andb (PackageTree.mem p seen) (negb (PackageTree.mem q seen))
+        then step es' (PackageTree.add q seen) true
         else step es' seen changed
     end.
 
-  Fixpoint closeUnder (fuel : nat) (es : list (Pkg.t * Pkg.t))
-      (seen : PkgTree.t) : PkgTree.t :=
+  Fixpoint closeUnder (fuel : nat) (es : list (Package.t * Package.t))
+      (seen : PackageTree.t) : PackageTree.t :=
     match fuel with
     | O => seen
     | Datatypes.S k =>
@@ -265,33 +265,33 @@ Module Core (N V : UsualOrderedType).
         if changed then closeUnder k es seen' else seen'
     end.
 
-  Definition queryWitnesses (t : PkgTree.t) (Q : DependeesSet.t) : PkgTree.t :=
-    DependeesSet.fold
+  Definition queryWitnesses (t : PackageTree.t) (Q : DependeeSet.t) : PackageTree.t :=
+    DependeeSet.fold
       (fun h acc =>
-         match witness t h with Some q => PkgTree.add q acc | None => acc end)
-      Q PkgTree.empty.
+         match witness t h with Some q => PackageTree.add q acc | None => acc end)
+      Q PackageTree.empty.
 
   Definition check (versions : N.t -> VSet.t)
-      (dependees : Pkg.t -> DependeesSet.t) (Q : DependeesSet.t)
-      (S : PkgSet.t) : option CheckFailure :=
+      (dependees : Package.t -> DependeeSet.t) (Q : DependeeSet.t)
+      (S : PackageSet.t) : option CheckFailure :=
     match subsetFailure versions S with
     | Some p => Some (CheckSubset p)
     | None =>
-        match adjacentFailure (PkgSet.elements S) with
+        match adjacentFailure (PackageSet.elements S) with
         | Some p => Some (CheckVersionUnique p)
         | None =>
             let t := treeOf S in
             match rootFailure t Q with
             | Some h => Some (CheckRootMem h)
             | None =>
-                match closureFailure t dependees (PkgSet.elements S) with
+                match closureFailure t dependees (PackageSet.elements S) with
                 | inl (p, h) => Some (CheckDepClosure p h)
                 | inr es =>
                     let seen :=
-                      closeUnder (PkgSet.cardinal S + 1) es
+                      closeUnder (PackageSet.cardinal S + 1) es
                         (queryWitnesses t Q) in
-                    match List.find (fun p => negb (PkgTree.mem p seen))
-                            (PkgSet.elements S) with
+                    match List.find (fun p => negb (PackageTree.mem p seen))
+                            (PackageSet.elements S) with
                     | Some p => Some (CheckReached p)
                     | None => None
                     end
@@ -311,7 +311,7 @@ Module Core (N V : UsualOrderedType).
     Qed.
 
     Lemma in_elements_pkg : forall S p,
-        List.In p (PkgSet.elements S) <-> PkgSet.In p S.
+        List.In p (PackageSet.elements S) <-> PackageSet.In p S.
     Proof. intros S p; apply SOpv.elements_in. Qed.
 
     Lemma in_elements_vset : forall vs v,
@@ -322,48 +322,48 @@ Module Core (N V : UsualOrderedType).
     Qed.
 
     Lemma in_elements_hset : forall hs h,
-        List.In h (DependeesSet.elements hs) <-> DependeesSet.In h hs.
+        List.In h (DependeeSet.elements hs) <-> DependeeSet.In h hs.
     Proof.
-      intros hs h; rewrite <- DependeesSet.elements_spec1, SetoidList.InA_alt.
+      intros hs h; rewrite <- DependeeSet.elements_spec1, SetoidList.InA_alt.
       split; [intro H; exists h; auto | intros [g [-> H]]; exact H].
     Qed.
 
     Lemma in_elements_tree : forall t p,
-        List.In p (PkgTree.elements t) <-> PkgTree.In p t.
+        List.In p (PackageTree.elements t) <-> PackageTree.In p t.
     Proof.
-      intros t p; rewrite <- PkgTree.elements_spec1, SetoidList.InA_alt.
+      intros t p; rewrite <- PackageTree.elements_spec1, SetoidList.InA_alt.
       split; [intro H; exists p; auto | intros [q [-> H]]; exact H].
     Qed.
 
-    Lemma mem_tree : forall t p, PkgTree.mem p t = true <-> PkgTree.In p t.
-    Proof. intros t p; apply PkgTree.mem_spec. Qed.
+    Lemma mem_tree : forall t p, PackageTree.mem p t = true <-> PackageTree.In p t.
+    Proof. intros t p; apply PackageTree.mem_spec. Qed.
 
     Lemma mem_tree_false : forall t p,
-        PkgTree.mem p t = false <-> ~ PkgTree.In p t.
+        PackageTree.mem p t = false <-> ~ PackageTree.In p t.
     Proof.
-      intros t p; rewrite <- mem_tree; destruct (PkgTree.mem p t);
+      intros t p; rewrite <- mem_tree; destruct (PackageTree.mem p t);
         split; congruence.
     Qed.
 
     Lemma in_add_tree : forall t p q,
-        PkgTree.In q (PkgTree.add p t) <-> q = p \/ PkgTree.In q t.
-    Proof. intros t p q; apply PkgTree.add_spec. Qed.
+        PackageTree.In q (PackageTree.add p t) <-> q = p \/ PackageTree.In q t.
+    Proof. intros t p q; apply PackageTree.add_spec. Qed.
 
-    Lemma mem_treeOf : forall S p, PkgTree.In p (treeOf S) <-> PkgSet.In p S.
+    Lemma mem_treeOf : forall S p, PackageTree.In p (treeOf S) <-> PackageSet.In p S.
     Proof.
-      intros S p; unfold treeOf; rewrite PkgSet.fold_spec, <- in_elements_pkg.
+      intros S p; unfold treeOf; rewrite PackageSet.fold_spec, <- in_elements_pkg.
       assert (H : forall l t,
-          PkgTree.In p (List.fold_left (fun a e => PkgTree.add e a) l t) <->
-          PkgTree.In p t \/ List.In p l).
+          PackageTree.In p (List.fold_left (fun a e => PackageTree.add e a) l t) <->
+          PackageTree.In p t \/ List.In p l).
       { induction l as [| a l IH]; intro t; cbn; [tauto |].
         rewrite IH, in_add_tree; split;
           [intros [[-> | H] | H]; auto | intros [H | [-> | H]]; auto]. }
-      rewrite H; pose proof (PkgTree.empty_spec (a := p)); tauto.
+      rewrite H; pose proof (PackageTree.empty_spec (a := p)); tauto.
     Qed.
 
     Lemma witness_some : forall t (n : N.t) (vs : VSet.t) q,
         witness t (n, vs) = Some q ->
-        exists v, q = (n, v) /\ VSet.In v vs /\ PkgTree.In (n, v) t.
+        exists v, q = (n, v) /\ VSet.In v vs /\ PackageTree.In (n, v) t.
     Proof.
       intros t n vs q; unfold witness; cbn beta iota.
       destruct (List.find _ _) as [v |] eqn:E; [| discriminate].
@@ -374,7 +374,7 @@ Module Core (N V : UsualOrderedType).
 
     Lemma witness_none : forall t (n : N.t) (vs : VSet.t),
         witness t (n, vs) = None ->
-        forall v, VSet.In v vs -> ~ PkgTree.In (n, v) t.
+        forall v, VSet.In v vs -> ~ PackageTree.In (n, v) t.
     Proof.
       intros t n vs; unfold witness; cbn beta iota.
       destruct (List.find _ _) as [v |] eqn:E; [discriminate |].
@@ -384,7 +384,7 @@ Module Core (N V : UsualOrderedType).
     Qed.
 
     Lemma witness_met : forall t (n : N.t) (vs : VSet.t) (v : V.t),
-        VSet.In v vs -> PkgTree.In (n, v) t ->
+        VSet.In v vs -> PackageTree.In (n, v) t ->
         exists q, witness t (n, vs) = Some q.
     Proof.
       intros t n vs v Hv Ht; destruct (witness t (n, vs)) as [q |] eqn:E;
@@ -392,7 +392,7 @@ Module Core (N V : UsualOrderedType).
       destruct (witness_none t n vs E v Hv Ht).
     Qed.
 
-    Lemma adjacentFailure_none : forall l, Sorted Pkg.lt l ->
+    Lemma adjacentFailure_none : forall l, Sorted Package.lt l ->
         adjacentFailure l = None <->
         (forall (n : N.t) (v v' : V.t),
             List.In (n, v) l -> List.In (n, v') l -> v = v').
@@ -434,9 +434,9 @@ Module Core (N V : UsualOrderedType).
     Qed.
 
     Lemma adjacentFailure_unique : forall S,
-        adjacentFailure (PkgSet.elements S) = None <-> VersionUnique S.
+        adjacentFailure (PackageSet.elements S) = None <-> VersionUnique S.
     Proof.
-      intro S; rewrite adjacentFailure_none by exact (PkgSet.elements_spec2 S).
+      intro S; rewrite adjacentFailure_none by exact (PackageSet.elements_spec2 S).
       unfold VersionUnique; setoid_rewrite in_elements_pkg; reflexivity.
     Qed.
 
@@ -475,7 +475,7 @@ Module Core (N V : UsualOrderedType).
 
     Lemma closureFailure_inl : forall t dependees ps p h,
         closureFailure t dependees ps = inl (p, h) ->
-        List.In p ps /\ DependeesSet.In h (dependees p) /\ witness t h = None.
+        List.In p ps /\ DependeeSet.In h (dependees p) /\ witness t h = None.
     Proof.
       intros t dependees ps; induction ps as [| p0 ps IH]; intros p h; cbn;
         [discriminate |].
@@ -492,10 +492,10 @@ Module Core (N V : UsualOrderedType).
 
     Lemma closureFailure_inr : forall t dependees ps es,
         closureFailure t dependees ps = inr es ->
-        (forall p h, List.In p ps -> DependeesSet.In h (dependees p) ->
+        (forall p h, List.In p ps -> DependeeSet.In h (dependees p) ->
          exists q, witness t h = Some q /\ List.In (p, q) es) /\
         (forall p q, List.In (p, q) es ->
-         exists h, DependeesSet.In h (dependees p) /\ witness t h = Some q).
+         exists h, DependeeSet.In h (dependees p) /\ witness t h = Some q).
     Proof.
       intros t dependees ps; induction ps as [| p0 ps IH]; intros es; cbn.
       - intro H; injection H as <-; split; [intros _ _ [] | intros _ _ []].
@@ -527,17 +527,17 @@ Module Core (N V : UsualOrderedType).
     Qed.
 
     Lemma step_mono : forall es seen c x,
-        PkgTree.In x seen -> PkgTree.In x (fst (step es seen c)).
+        PackageTree.In x seen -> PackageTree.In x (fst (step es seen c)).
     Proof.
       intro es; induction es as [| [p q] es IH]; intros seen c x Hx; cbn;
         [exact Hx |].
       destruct (andb _ _); apply IH; [apply in_add_tree; right |]; exact Hx.
     Qed.
 
-    Lemma step_sound : forall (P : Pkg.t -> Prop) es seen c,
+    Lemma step_sound : forall (P : Package.t -> Prop) es seen c,
         (forall p q, List.In (p, q) es -> P p -> P q) ->
-        (forall x, PkgTree.In x seen -> P x) ->
-        forall x, PkgTree.In x (fst (step es seen c)) -> P x.
+        (forall x, PackageTree.In x seen -> P x) ->
+        forall x, PackageTree.In x (fst (step es seen c)) -> P x.
     Proof.
       intros P es; induction es as [| [p q] es IH]; intros seen c Hes Hs;
         cbn; [exact Hs |].
@@ -553,7 +553,7 @@ Module Core (N V : UsualOrderedType).
         snd (step es seen c) = false ->
         c = false /\ fst (step es seen c) = seen /\
         (forall p q, List.In (p, q) es ->
-         PkgTree.In p seen -> PkgTree.In q seen).
+         PackageTree.In p seen -> PackageTree.In q seen).
     Proof.
       intro es; induction es as [| [p q] es IH]; intros seen c; cbn.
       - intros ->; split; [reflexivity | split; [reflexivity | intros _ _ []]].
@@ -567,39 +567,39 @@ Module Core (N V : UsualOrderedType).
     Qed.
 
     Lemma step_card : forall es seen c,
-        PkgTree.cardinal seen <= PkgTree.cardinal (fst (step es seen c)) /\
+        PackageTree.cardinal seen <= PackageTree.cardinal (fst (step es seen c)) /\
         (c = false -> snd (step es seen c) = true ->
-         PkgTree.cardinal seen < PkgTree.cardinal (fst (step es seen c))).
+         PackageTree.cardinal seen < PackageTree.cardinal (fst (step es seen c))).
     Proof.
       intro es; induction es as [| [p q] es IH]; intros seen c; cbn.
       - split; [reflexivity | intros -> H; discriminate].
       - destruct (andb _ _) eqn:E; [| exact (IH seen c)].
         apply Bool.andb_true_iff in E; destruct E as [_ Hq].
         apply Bool.negb_true_iff, mem_tree_false in Hq.
-        destruct (IH (PkgTree.add q seen) true) as [Hle _].
+        destruct (IH (PackageTree.add q seen) true) as [Hle _].
         rewrite (PkgTreeP.add_cardinal_2 Hq) in Hle.
         split; [| intros _ _]; Lia.lia.
     Qed.
 
-    Lemma nodup_tree : forall t, List.NoDup (PkgTree.elements t).
+    Lemma nodup_tree : forall t, List.NoDup (PackageTree.elements t).
     Proof.
-      intro t; pose proof (PkgTree.elements_spec2w t) as H.
+      intro t; pose proof (PackageTree.elements_spec2w t) as H.
       induction H as [| x l Hx _ IH]; constructor; [| exact IH].
       intro Hin; apply Hx; apply SetoidList.In_InA; [exact eq_equivalence |].
       exact Hin.
     Qed.
 
-    Lemma cardinal_within : forall (t : PkgTree.t) S,
-        (forall x, PkgTree.In x t -> PkgSet.In x S) ->
-        PkgTree.cardinal t <= PkgSet.cardinal S.
+    Lemma cardinal_within : forall (t : PackageTree.t) S,
+        (forall x, PackageTree.In x t -> PackageSet.In x S) ->
+        PackageTree.cardinal t <= PackageSet.cardinal S.
     Proof.
-      intros t S H; rewrite PkgTree.cardinal_spec, PkgSet.cardinal_spec.
+      intros t S H; rewrite PackageTree.cardinal_spec, PackageSet.cardinal_spec.
       apply List.NoDup_incl_length; [apply nodup_tree |].
       intros x Hx; apply in_elements_pkg, H, in_elements_tree; exact Hx.
     Qed.
 
     Lemma closeUnder_mono : forall fuel es seen x,
-        PkgTree.In x seen -> PkgTree.In x (closeUnder fuel es seen).
+        PackageTree.In x seen -> PackageTree.In x (closeUnder fuel es seen).
     Proof.
       intro fuel; induction fuel as [| k IH]; intros es seen x Hx; cbn;
         [exact Hx |].
@@ -608,10 +608,10 @@ Module Core (N V : UsualOrderedType).
       destruct c; [apply IH |]; exact Hm.
     Qed.
 
-    Lemma closeUnder_sound : forall (P : Pkg.t -> Prop) fuel es seen,
+    Lemma closeUnder_sound : forall (P : Package.t -> Prop) fuel es seen,
         (forall p q, List.In (p, q) es -> P p -> P q) ->
-        (forall x, PkgTree.In x seen -> P x) ->
-        forall x, PkgTree.In x (closeUnder fuel es seen) -> P x.
+        (forall x, PackageTree.In x seen -> P x) ->
+        forall x, PackageTree.In x (closeUnder fuel es seen) -> P x.
     Proof.
       intros P fuel; induction fuel as [| k IH]; intros es seen Hes Hs; cbn;
         [exact Hs |].
@@ -621,17 +621,17 @@ Module Core (N V : UsualOrderedType).
     Qed.
 
     Lemma closeUnder_closed : forall S fuel es seen,
-        (forall p q, List.In (p, q) es -> PkgSet.In q S) ->
-        (forall x, PkgTree.In x seen -> PkgSet.In x S) ->
-        PkgSet.cardinal S < PkgTree.cardinal seen + fuel ->
+        (forall p q, List.In (p, q) es -> PackageSet.In q S) ->
+        (forall x, PackageTree.In x seen -> PackageSet.In x S) ->
+        PackageSet.cardinal S < PackageTree.cardinal seen + fuel ->
         forall p q, List.In (p, q) es ->
-        PkgTree.In p (closeUnder fuel es seen) ->
-        PkgTree.In q (closeUnder fuel es seen).
+        PackageTree.In p (closeUnder fuel es seen) ->
+        PackageTree.In q (closeUnder fuel es seen).
     Proof.
       intros S fuel; induction fuel as [| k IH]; intros es seen Hes Hs Hc.
       - pose proof (cardinal_within seen S Hs); Lia.lia.
       - cbn.
-        pose proof (step_sound (fun x => PkgSet.In x S) es seen false
+        pose proof (step_sound (fun x => PackageSet.In x S) es seen false
                       (fun p q Hin _ => Hes p q Hin) Hs) as Hst.
         pose proof (step_card es seen false) as [_ Hlt].
         pose proof (step_false es seen false) as Hf.
@@ -643,19 +643,19 @@ Module Core (N V : UsualOrderedType).
     Qed.
 
     Lemma mem_queryWitnesses : forall t Q q,
-        PkgTree.In q (queryWitnesses t Q) <->
-        exists h, DependeesSet.In h Q /\ witness t h = Some q.
+        PackageTree.In q (queryWitnesses t Q) <->
+        exists h, DependeeSet.In h Q /\ witness t h = Some q.
     Proof.
-      intros t Q q; unfold queryWitnesses; rewrite DependeesSet.fold_spec.
+      intros t Q q; unfold queryWitnesses; rewrite DependeeSet.fold_spec.
       setoid_rewrite <- in_elements_hset.
       assert (H : forall l acc,
-          PkgTree.In q
+          PackageTree.In q
             (List.fold_left
                (fun a h => match witness t h with
-                           | Some q' => PkgTree.add q' a
+                           | Some q' => PackageTree.add q' a
                            | None => a
                            end) l acc) <->
-          PkgTree.In q acc \/ exists h, List.In h l /\ witness t h = Some q).
+          PackageTree.In q acc \/ exists h, List.In h l /\ witness t h = Some q).
       { induction l as [| h l IH]; intro acc; cbn.
         - split; [tauto | intros [H | [_ [[] _]]]; exact H].
         - rewrite IH; destruct (witness t h) as [q' |] eqn:E.
@@ -676,16 +676,16 @@ Module Core (N V : UsualOrderedType).
               -- left; exact H.
               -- subst h'; rewrite E in Hw; discriminate.
               -- right; exists h'; split; [exact Hh' | exact Hw]. }
-      rewrite H; pose proof (PkgTree.empty_spec (a := q)); split;
+      rewrite H; pose proof (PackageTree.empty_spec (a := q)); split;
         [intros [? | ?]; tauto | intro; right; assumption].
     Qed.
 
     Lemma reached_in : forall dependees Q S p,
-        Reached dependees Q S p -> PkgSet.In p S.
+        Reached dependees Q S p -> PackageSet.In p S.
     Proof. intros dependees Q S p H; destruct H; assumption. Qed.
 
     Lemma witness_unique : forall S (n : N.t) (vs : VSet.t) (v : V.t) q,
-        VersionUnique S -> PkgSet.In (n, v) S ->
+        VersionUnique S -> PackageSet.In (n, v) S ->
         witness (treeOf S) (n, vs) = Some q -> q = (n, v).
     Proof.
       intros S n vs v q Hu Hv Hw; apply witness_some in Hw.
@@ -696,19 +696,19 @@ Module Core (N V : UsualOrderedType).
 
   Theorem check_spec : forall versions dependees Q S,
       check versions dependees Q S = None <->
-      (forall (n : N.t) (v : V.t), PkgSet.In (n, v) S -> VSet.In v (versions n)) /\
+      (forall (n : N.t) (v : V.t), PackageSet.In (n, v) S -> VSet.In v (versions n)) /\
       VersionUnique S /\
-      (forall (n : N.t) (vs : VSet.t), DependeesSet.In (n, vs) Q ->
-       exists v, VSet.In v vs /\ PkgSet.In (n, v) S) /\
-      (forall p, PkgSet.In p S ->
-       forall (n : N.t) (vs : VSet.t), DependeesSet.In (n, vs) (dependees p) ->
-       exists v, VSet.In v vs /\ PkgSet.In (n, v) S) /\
-      (forall p, PkgSet.In p S -> Reached dependees Q S p).
+      (forall (n : N.t) (vs : VSet.t), DependeeSet.In (n, vs) Q ->
+       exists v, VSet.In v vs /\ PackageSet.In (n, v) S) /\
+      (forall p, PackageSet.In p S ->
+       forall (n : N.t) (vs : VSet.t), DependeeSet.In (n, vs) (dependees p) ->
+       exists v, VSet.In v vs /\ PackageSet.In (n, v) S) /\
+      (forall p, PackageSet.In p S -> Reached dependees Q S p).
   Proof.
     intros versions dependees Q S; unfold check.
     set (t := treeOf S).
     assert (Hsub : subsetFailure versions S = None <->
-                   forall (n : N.t) (v : V.t), PkgSet.In (n, v) S ->
+                   forall (n : N.t) (v : V.t), PackageSet.In (n, v) S ->
                    VSet.In v (versions n)).
     { unfold subsetFailure; rewrite find_none_iff; split.
       - intros H n v Hin; apply in_elements_pkg in Hin; specialize (H _ Hin).
@@ -716,8 +716,8 @@ Module Core (N V : UsualOrderedType).
       - intros H [n v] Hin; apply in_elements_pkg in Hin.
         apply Bool.negb_false_iff, VSet.mem_spec, H; exact Hin. }
     assert (Hroot : rootFailure t Q = None <->
-                    forall (n : N.t) (vs : VSet.t), DependeesSet.In (n, vs) Q ->
-                    exists v, VSet.In v vs /\ PkgSet.In (n, v) S).
+                    forall (n : N.t) (vs : VSet.t), DependeeSet.In (n, vs) Q ->
+                    exists v, VSet.In v vs /\ PackageSet.In (n, v) S).
     { unfold rootFailure; rewrite find_none_iff; split.
       - intros H n vs Hin; apply in_elements_hset in Hin; specialize (H _ Hin).
         destruct (witness t (n, vs)) as [q |] eqn:E; [| discriminate].
@@ -729,9 +729,9 @@ Module Core (N V : UsualOrderedType).
         destruct (witness_met t n vs v Hv HS) as [q ->]; reflexivity. }
     split.
     - destruct (subsetFailure versions S) eqn:Es; [discriminate |].
-      destruct (adjacentFailure (PkgSet.elements S)) eqn:Eu; [discriminate |].
+      destruct (adjacentFailure (PackageSet.elements S)) eqn:Eu; [discriminate |].
       fold t; destruct (rootFailure t Q) eqn:Er; [discriminate |].
-      destruct (closureFailure t dependees (PkgSet.elements S))
+      destruct (closureFailure t dependees (PackageSet.elements S))
         as [[p h] | es] eqn:Ec; [discriminate |].
       destruct (List.find _ _) as [p |] eqn:Ef; [discriminate |].
       intros _.
@@ -758,27 +758,27 @@ Module Core (N V : UsualOrderedType).
     - intros [Hv [Hu [HQ [Hclo Hreach]]]].
       rewrite (proj2 Hsub Hv), (proj2 (adjacentFailure_unique S) Hu).
       fold t; rewrite (proj2 Hroot HQ).
-      destruct (closureFailure t dependees (PkgSet.elements S))
+      destruct (closureFailure t dependees (PackageSet.elements S))
         as [[p h] | es] eqn:Ec.
       + apply closureFailure_inl in Ec; destruct Ec as [Hp [Hd Hw]].
         destruct h as [n vs]; apply in_elements_pkg in Hp.
         destruct (Hclo p Hp n vs Hd) as [v [Hvs HS]].
         apply mem_treeOf in HS; destruct (witness_none t n vs Hw v Hvs HS).
       + destruct (closureFailure_inr _ _ _ _ Ec) as [Hc1 Hc2].
-        assert (Hes : forall p q, List.In (p, q) es -> PkgSet.In q S).
+        assert (Hes : forall p q, List.In (p, q) es -> PackageSet.In q S).
         { intros p q Hin; destruct (Hc2 p q Hin) as [[n vs] [_ Hw]].
           apply witness_some in Hw; destruct Hw as [v [-> [_ Ht]]].
           apply mem_treeOf; exact Ht. }
-        assert (H0 : forall x, PkgTree.In x (queryWitnesses t Q) ->
-                     PkgSet.In x S).
+        assert (H0 : forall x, PackageTree.In x (queryWitnesses t Q) ->
+                     PackageSet.In x S).
         { intros x Hx; apply mem_queryWitnesses in Hx.
           destruct Hx as [[n vs] [_ Hw]]; apply witness_some in Hw.
           destruct Hw as [v [-> [_ Ht]]]; apply mem_treeOf; exact Ht. }
         set (seen := closeUnder _ es (queryWitnesses t Q)).
-        assert (Hcl : forall p q, List.In (p, q) es -> PkgTree.In p seen ->
-                      PkgTree.In q seen).
+        assert (Hcl : forall p q, List.In (p, q) es -> PackageTree.In p seen ->
+                      PackageTree.In q seen).
         { apply (closeUnder_closed S); [exact Hes | exact H0 | Lia.lia]. }
-        assert (Hall : forall p, Reached dependees Q S p -> PkgTree.In p seen).
+        assert (Hall : forall p, Reached dependees Q S p -> PackageTree.In p seen).
         { intros p Hr; induction Hr as [n vs v HQn Hvs HS | p n vs v Hr IH Hd Hvs HS].
           - apply closeUnder_mono, mem_queryWitnesses.
             exists (n, vs); split; [exact HQn |].
@@ -797,22 +797,22 @@ Module Core (N V : UsualOrderedType).
   Qed.
 
   Theorem check_resolution : forall R D versions dependees Q S,
-      (forall p h, PkgSet.In p R ->
-       DepRel.In (p, h) D <-> DependeesSet.In h (dependees p)) ->
-      (forall (n : N.t) (vs : VSet.t) (v : V.t), DependeesSet.In (n, vs) Q ->
-       VSet.In v vs -> VSet.In v (versions n) -> PkgSet.In (n, v) R) ->
-      (forall p (n : N.t) (vs : VSet.t) (v : V.t), PkgSet.In p R ->
-       DependeesSet.In (n, vs) (dependees p) -> VSet.In v vs ->
-       VSet.In v (versions n) -> PkgSet.In (n, v) R) ->
+      (forall p h, PackageSet.In p R ->
+       DependencyRel.In (p, h) D <-> DependeeSet.In h (dependees p)) ->
+      (forall (n : N.t) (vs : VSet.t) (v : V.t), DependeeSet.In (n, vs) Q ->
+       VSet.In v vs -> VSet.In v (versions n) -> PackageSet.In (n, v) R) ->
+      (forall p (n : N.t) (vs : VSet.t) (v : V.t), PackageSet.In p R ->
+       DependeeSet.In (n, vs) (dependees p) -> VSet.In v vs ->
+       VSet.In v (versions n) -> PackageSet.In (n, v) R) ->
       check versions dependees Q S = None ->
-      PkgSet.Subset S R /\
-      (forall (n : N.t) (vs : VSet.t), DependeesSet.In (n, vs) Q ->
-       exists v, VSet.In v vs /\ PkgSet.In (n, v) S) /\
-      (forall r, PkgSet.In r S -> IsResolution R D r S).
+      PackageSet.Subset S R /\
+      (forall (n : N.t) (vs : VSet.t), DependeeSet.In (n, vs) Q ->
+       exists v, VSet.In v vs /\ PackageSet.In (n, v) S) /\
+      (forall r, PackageSet.In r S -> IsResolution R D r S).
   Proof.
     intros R D versions dependees Q S HD HQ Hstep Hc.
     apply check_spec in Hc; destruct Hc as [Hv [Hu [Hroot [Hclo Hreach]]]].
-    assert (Hsub : PkgSet.Subset S R).
+    assert (Hsub : PackageSet.Subset S R).
     { intros p Hp; specialize (Hreach p Hp); clear Hp.
       induction Hreach as [n vs v Hn Hvs HS | p n vs v _ IH Hd Hvs HS].
       - exact (HQ n vs v Hn Hvs (Hv n v HS)).
@@ -824,22 +824,22 @@ Module Core (N V : UsualOrderedType).
   Qed.
 
   Theorem check_iff : forall R D versions dependees r S,
-      (forall p h, PkgSet.In p R ->
-       DepRel.In (p, h) D <-> DependeesSet.In h (dependees p)) ->
-      (forall (n : N.t) (v : V.t), PkgSet.In (n, v) R -> VSet.In v (versions n)) ->
-      (forall p (n : N.t) (vs : VSet.t) (v : V.t), PkgSet.In p R ->
-       DependeesSet.In (n, vs) (dependees p) -> VSet.In v vs ->
-       VSet.In v (versions n) -> PkgSet.In (n, v) R) ->
-      PkgSet.In r R ->
+      (forall p h, PackageSet.In p R ->
+       DependencyRel.In (p, h) D <-> DependeeSet.In h (dependees p)) ->
+      (forall (n : N.t) (v : V.t), PackageSet.In (n, v) R -> VSet.In v (versions n)) ->
+      (forall p (n : N.t) (vs : VSet.t) (v : V.t), PackageSet.In p R ->
+       DependeeSet.In (n, vs) (dependees p) -> VSet.In v vs ->
+       VSet.In v (versions n) -> PackageSet.In (n, v) R) ->
+      PackageSet.In r R ->
       check versions dependees (rootQuery r) S = None <->
       IsResolution R D r S /\
-      (forall p, PkgSet.In p S -> Reached dependees (rootQuery r) S p).
+      (forall p, PackageSet.In p S -> Reached dependees (rootQuery r) S p).
   Proof.
     intros R D versions dependees [rn rv] S HD HR Hstep Hr.
     assert (Hq : forall (n : N.t) (vs : VSet.t),
-               DependeesSet.In (n, vs) (rootQuery (rn, rv)) ->
+               DependeeSet.In (n, vs) (rootQuery (rn, rv)) ->
                n = rn /\ forall v, VSet.In v vs <-> v = rv).
-    { intros n vs H; cbn [rootQuery] in H; apply DependeesSet.singleton_spec in H.
+    { intros n vs H; cbn [rootQuery] in H; apply DependeeSet.singleton_spec in H.
       injection H as -> ->; split; [reflexivity |].
       intro v; apply VSet.singleton_spec. }
     split.
@@ -849,7 +849,7 @@ Module Core (N V : UsualOrderedType).
       + destruct Hc as [_ [_ Hres]]; split; [| exact Hreach].
         apply Hres.
         destruct (Hroot rn (VSet.singleton rv)) as [v [Hv HS]];
-          [apply DependeesSet.singleton_spec; reflexivity |].
+          [apply DependeeSet.singleton_spec; reflexivity |].
         apply VSet.singleton_spec in Hv; subst v; exact HS.
       + intros n vs v Hn Hvs _; destruct (Hq n vs Hn) as [-> Hvs'].
         apply Hvs' in Hvs; subst v; exact Hr.
@@ -864,9 +864,9 @@ Module Core (N V : UsualOrderedType).
   Qed.
 
   Theorem check_agree : forall versions dependees versions' dependees' Q S,
-      (forall (n : N.t) (v : V.t), PkgSet.In (n, v) S ->
+      (forall (n : N.t) (v : V.t), PackageSet.In (n, v) S ->
        VSet.In v (versions' n) -> VSet.In v (versions n)) ->
-      (forall p, PkgSet.In p S -> dependees' p = dependees p) ->
+      (forall p, PackageSet.In p S -> dependees' p = dependees p) ->
       check versions' dependees' Q S = None ->
       check versions dependees Q S = None.
   Proof.
@@ -886,24 +886,24 @@ Module Core (N V : UsualOrderedType).
   Corollary check_iff_sets : forall R D r S,
       check (versions R) (dependees D) (rootQuery r) S = None <->
       IsResolution R D r S /\
-      (forall p, PkgSet.In p S -> Reached (dependees D) (rootQuery r) S p).
+      (forall p, PackageSet.In p S -> Reached (dependees D) (rootQuery r) S p).
   Proof.
     intros R D [rn rv] S.
-    assert (HD : forall p h, PkgSet.In p R ->
-                 DepRel.In (p, h) D <-> DependeesSet.In h (dependees D p))
+    assert (HD : forall p h, PackageSet.In p R ->
+                 DependencyRel.In (p, h) D <-> DependeeSet.In h (dependees D p))
       by (intros p h _; rewrite mem_dependees; reflexivity).
     assert (HR : forall (n : N.t) (v : V.t),
-                 PkgSet.In (n, v) R -> VSet.In v (versions R n))
+                 PackageSet.In (n, v) R -> VSet.In v (versions R n))
       by (intros n v H; apply mem_versions; exact H).
-    assert (Hstep : forall p (n : N.t) (vs : VSet.t) (v : V.t), PkgSet.In p R ->
-                    DependeesSet.In (n, vs) (dependees D p) -> VSet.In v vs ->
-                    VSet.In v (versions R n) -> PkgSet.In (n, v) R)
+    assert (Hstep : forall p (n : N.t) (vs : VSet.t) (v : V.t), PackageSet.In p R ->
+                    DependeeSet.In (n, vs) (dependees D p) -> VSet.In v vs ->
+                    VSet.In v (versions R n) -> PackageSet.In (n, v) R)
       by (intros p n vs v _ _ _ H; apply mem_versions; exact H).
     split.
     - intro Hc; pose proof Hc as Hc'; apply check_spec in Hc'.
       destruct Hc' as [Hv [_ [Hroot _]]].
       destruct (Hroot rn (VSet.singleton rv)) as [v [Hvs HS]];
-        [apply DependeesSet.singleton_spec; reflexivity |].
+        [apply DependeeSet.singleton_spec; reflexivity |].
       apply VSet.singleton_spec in Hvs; subst v.
       refine (proj1 (check_iff R D _ _ (rn, rv) S HD HR Hstep _) Hc).
       apply mem_versions, Hv; exact HS.
@@ -915,42 +915,42 @@ Module Core (N V : UsualOrderedType).
   Qed.
 
   Module Merge.
-    Definition mergedVS (D : DepRel.t) (p : Pkg.t) (n : N.t) : VSet.t :=
+    Definition mergedVS (D : DependencyRel.t) (p : Package.t) (n : N.t) : VSet.t :=
       VSet.filter
-        (fun v => DepRel.for_all
+        (fun v => DependencyRel.for_all
             (fun '(q, (m, vs)) =>
-                      if Pkg.eq_dec q p
+                      if Package.eq_dec q p
                       then if N.eq_dec m n then VSet.mem v vs else true
                       else true)
             D)
-        (DepRel.fold (fun '(q, (m, vs)) acc =>
-             if Pkg.eq_dec q p
+        (DependencyRel.fold (fun '(q, (m, vs)) acc =>
+             if Package.eq_dec q p
              then if N.eq_dec m n then VSet.union vs acc else acc
              else acc)
            D VSet.empty).
 
-    Module SOdv := SetOps DepElt V DepRel VSet.
+    Module SOdv := SetOps DependencyElt V DependencyRel VSet.
     Lemma mergedVS_union_spec : forall D p n v,
         VSet.In v
-          (DepRel.fold (fun '(q, (m, vs)) acc =>
-               if Pkg.eq_dec q p
+          (DependencyRel.fold (fun '(q, (m, vs)) acc =>
+               if Package.eq_dec q p
                then if N.eq_dec m n then VSet.union vs acc else acc
                else acc)
              D VSet.empty) <->
-        exists vs, DepRel.In (p, (n, vs)) D /\ VSet.In v vs.
+        exists vs, DependencyRel.In (p, (n, vs)) D /\ VSet.In v vs.
     Proof.
       intros D p n v.
       rewrite (SOdv.in_fold _
-        (fun e => if Pkg.eq_dec (fst e) p
+        (fun e => if Package.eq_dec (fst e) p
                   then if N.eq_dec (fst (snd e)) n
                        then snd (snd e) else VSet.empty
                   else VSet.empty)).
       2:{ intros [q [m vs]] a y; simpl; pose proof (SOdv.empty_in y).
-          destruct (Pkg.eq_dec q p); [destruct (N.eq_dec m n) |];
+          destruct (Package.eq_dec q p); [destruct (N.eq_dec m n) |];
             rewrite ?VSet.union_spec; tauto. }
       pose proof (SOdv.empty_in v) as E0; split.
       - intros [H | [[q [m vs]] [HeD He]]]; [tauto | simpl in He].
-        destruct (Pkg.eq_dec q p) as [-> | _];
+        destruct (Package.eq_dec q p) as [-> | _];
           [destruct (N.eq_dec m n) as [-> | _] |]; [| tauto | tauto].
         exists vs; split; assumption.
       - intros [vs [HD Hv]].
@@ -959,13 +959,13 @@ Module Core (N V : UsualOrderedType).
 
     Lemma mem_mergedVS : forall D p n v,
         VSet.In v (mergedVS D p n) <->
-        (exists vs, DepRel.In (p, (n, vs)) D) /\
-        (forall vs, DepRel.In (p, (n, vs)) D -> VSet.In v vs).
+        (exists vs, DependencyRel.In (p, (n, vs)) D) /\
+        (forall vs, DependencyRel.In (p, (n, vs)) D -> VSet.In v vs).
     Proof.
       intros D p n v; unfold mergedVS.
       rewrite VSet.filter_spec'.
       rewrite mergedVS_union_spec.
-      rewrite DepRel.for_all_spec'.
+      rewrite DependencyRel.for_all_spec'.
       split.
       - intros [[vs [HD Hv]] Hall].
         split; [exists vs; exact HD |].
@@ -976,24 +976,24 @@ Module Core (N V : UsualOrderedType).
         split.
         + exists vs0; split; [exact H0 | apply Hall; exact H0].
         + intros [q [m vs]] He; simpl.
-          destruct (Pkg.eq_dec q p) as [-> | NE]; [| reflexivity].
+          destruct (Package.eq_dec q p) as [-> | NE]; [| reflexivity].
           destruct (N.eq_dec m n) as [-> | NE]; [| reflexivity].
           apply VSet.mem_spec; apply Hall; exact He.
     Qed.
 
-    Definition merge (D : DepRel.t) : DepRel.t :=
-      DepRel.fold (fun '(q, (n, _)) acc =>
-          DepRel.add (q, (n, mergedVS D q n)) acc)
-        D DepRel.empty.
+    Definition merge (D : DependencyRel.t) : DependencyRel.t :=
+      DependencyRel.fold (fun '(q, (n, _)) acc =>
+          DependencyRel.add (q, (n, mergedVS D q n)) acc)
+        D DependencyRel.empty.
 
-    Module SOdd := SetOps DepElt DepElt DepRel DepRel.
+    Module SOdd := SetOps DependencyElt DependencyElt DependencyRel DependencyRel.
     Lemma mem_merge : forall D p n vs,
-        DepRel.In (p, (n, vs)) (merge D) <->
-        (exists vs0, DepRel.In (p, (n, vs0)) D) /\ vs = mergedVS D p n.
+        DependencyRel.In (p, (n, vs)) (merge D) <->
+        (exists vs0, DependencyRel.In (p, (n, vs0)) D) /\ vs = mergedVS D p n.
     Proof.
       intros D p n vs; unfold merge.
       rewrite (SOdd.in_fold _
-        (fun e => DepRel.singleton
+        (fun e => DependencyRel.singleton
                     (fst e, (fst (snd e), mergedVS D (fst e) (fst (snd e)))))).
       2:{ intros [q [m ws]] a y; simpl.
           rewrite SOdd.add_in, SOdd.singleton_in; tauto. }

@@ -28,7 +28,7 @@ module type S = sig
   val fset_of : string list -> Cg.FSet.t
   val xentry : Cargo_parse.fentry -> Cg.FEntry.t
   val slots_of : root:bool -> Cargo_parse.ver -> Cargo_parse.dep list
-  val slot_data : Cargo_parse.dep -> Cg.SlotData.t
+  val slot_data : Cargo_parse.dep -> Cg.DependencyRecord.t
   val site_key : Cargo_parse.dep -> Cg.Site.t
 
   module PName : sig
@@ -201,7 +201,7 @@ module Make () = struct
   let slots_of ~root (v : P.ver) : P.dep list =
     group (same_ask ~root) List.hd (group site_of unify_site v.P.v_deps)
 
-  let slot_data (d : P.dep) : Cg.SlotData.t =
+  let slot_data (d : P.dep) : Cg.DependencyRecord.t =
     ( d.P.d_alias,
       ( d.P.d_name,
         ( xreq d.P.d_req,
@@ -226,7 +226,7 @@ module Make () = struct
 
   (* the requirement a slot name carries, since versions of one granularity
      class may declare one site differently and so have distinct slots *)
-  let pp_req fmt (d : Cg.SlotData.t) =
+  let pp_req fmt (d : Cg.DependencyRecord.t) =
     let op = function
       | E.OpGe -> ">="
       | E.OpGt -> ">"
