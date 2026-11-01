@@ -754,10 +754,10 @@ pkgcache.cc): xunq exists only at i386:
   encoded solution: 3 core nodes (3 lookups)
   loaded: 17 names, 18 versions
 
-:native is an explicit qualifier of the native architecture: xnat:i386
-needs xforn:native, and xforn is foreign but only at i386.  The parser
-reads :native as the native architecture's explicit qualifier, as apt
-rewrites it at parse time (deblistparser.cc):
+:native is not a qualifier of its own: the parser reads xforn:native as
+xforn:amd64, the native architecture, as apt rewrites it at parse time
+(deblistparser.cc).  xnat:i386 needs xforn:native, and xforn is foreign
+but only at i386:
 
   $ untimed ../../../bin/main.exe debian --check --order=pubgrub --native amd64 Packages.multiarch xnat:i386
   unsatisfiable:
