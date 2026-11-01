@@ -125,7 +125,7 @@ module Make (AP : ARCH) : S = struct
   let qual_of = function
     | Deb_packages.Unqual -> MultiarchDebian.QUnq
     | Deb_packages.AnyArch -> MultiarchDebian.QAny
-    | Deb_packages.NativeArch -> MultiarchDebian.QNative
+    | Deb_packages.NativeArch -> MultiarchDebian.QExact APx.native
     | Deb_packages.ExplicitArch a -> MultiarchDebian.QExact a
 
   let matom_of (a : Deb_packages.atom) : MultiarchDebian.Atom.t =

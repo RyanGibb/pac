@@ -382,7 +382,6 @@ module Make (S : SEARCH) = struct
     String.equal (MultiarchDebian.aname a) n
     && (match MultiarchDebian.aqual a with
       | MultiarchDebian.QUnq | MultiarchDebian.QAny -> true
-      | MultiarchDebian.QNative -> String.equal APx.native pb
       | MultiarchDebian.QExact c -> String.equal c pb)
     &&
     if String.equal n pkgname then sat (MultiarchDebian.aform a) v

@@ -144,7 +144,6 @@ Module MultiarchDebian (N V : UsualOrderedType)
   Inductive Qual : Type :=
   | QUnq
   | QAny
-  | QNative
   | QExact (alpha : Architecture.t).
 
   Module ArchitectureQualifierComp <: ComparableType.
@@ -157,9 +156,6 @@ Module MultiarchDebian (N V : UsualOrderedType)
       | QAny, QAny => Eq
       | QAny, _ => Lt
       | _, QAny => Gt
-      | QNative, QNative => Eq
-      | QNative, _ => Lt
-      | _, QNative => Gt
       | QExact a1, QExact a2 => Architecture.compare a1 a2
       end.
     Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
@@ -209,7 +205,6 @@ Module MultiarchDebian (N V : UsualOrderedType)
     BaseMatch Pi q n phi /\
     match x with
     | QUnq => alpha' = alpha \/ classOf mu q = MAForeign
-    | QNative => alpha' = ArchitectureParameter.native
     | QExact alpha'' => alpha' = alpha''
     | QAny => classOf mu q = MAAllowed
     end.
@@ -219,7 +214,6 @@ Module MultiarchDebian (N V : UsualOrderedType)
     BaseMatch Pi q n phi /\
     match x with
     | QUnq => True
-    | QNative => alpha' = ArchitectureParameter.native
     | QExact alpha'' => alpha' = alpha''
     | QAny => classOf mu q = MAAllowed
     end.
@@ -272,7 +266,6 @@ Module MultiarchDebian (N V : UsualOrderedType)
       ((aname a,
         match aqual a with
         | QUnq => QAArch alpha
-        | QNative => QAExact ArchitectureParameter.native
         | QExact alpha' => QAExact alpha'
         | QAny => QAAny
         end), aform a).
@@ -357,8 +350,6 @@ Module MultiarchDebian (N V : UsualOrderedType)
             :: List.map
               (fun b => (embedPkg p, (((n, QAArch b), phi), true)))
                 Architecture.enum
-      | QNative => (embedPkg p,
-          (((n, QAExact ArchitectureParameter.native), phi), true)) :: nil
       | QExact b => (embedPkg p, (((n, QAExact b), phi), true)) :: nil
       | QAny => (embedPkg p, (((n, QAAny), phi), true)) :: nil
       end.
@@ -639,14 +630,11 @@ Module MultiarchDebian (N V : UsualOrderedType)
       intros R Pi mu alpha [n [x phi]] [[m b0] u] HqR.
       unfold MAMatch, reduceAtom; cbn [aname aqual aform fst snd].
       set (q := ((m, b0), u)) in *.
-      destruct x as [ | | | b].
+      destruct x as [ | | b].
       - exact (iff_sym
           (debMatch_char R Pi mu q n (QAArch alpha) phi HqR)).
       - exact (iff_sym
           (debMatch_char R Pi mu q n QAAny phi HqR)).
-      - exact (iff_sym
-          (debMatch_char R Pi mu q n (QAExact ArchitectureParameter.native) phi
-             HqR)).
       - exact (iff_sym
           (debMatch_char R Pi mu q n (QAExact b) phi HqR)).
     Qed.
@@ -660,7 +648,7 @@ Module MultiarchDebian (N V : UsualOrderedType)
       intros R Pi mu p [n [x phi]] [[m b0] u] HqR.
       unfold MAConfMatch, declConfOf; cbn [fst snd aname aqual aform].
       set (q := ((m, b0), u)) in *.
-      destruct x as [ | | | b].
+      destruct x as [ | | b].
       - split.
         + intros [q' [ea [e [Hce HM]]]].
           split; [| exact I].
@@ -702,20 +690,6 @@ Module MultiarchDebian (N V : UsualOrderedType)
           split; [left; reflexivity |].
           exact (proj2 (debMatch_char R Pi mu q n QAAny phi
                           HqR) H).
-      - split.
-        + intros [q' [ea [e [Hce HM]]]].
-          destruct Hce as [E | []].
-          injection E as _ <- _.
-          exact (proj1
-            (debMatch_char R Pi mu q n (QAExact ArchitectureParameter.native)
-                          phi HqR) HM).
-        + intros H.
-          exists (embedPkg p),
-            ((n, QAExact ArchitectureParameter.native), phi), true.
-          split; [left; reflexivity |].
-          exact (proj2
-            (debMatch_char R Pi mu q n (QAExact ArchitectureParameter.native)
-                          phi HqR) H).
       - split.
         + intros [q' [ea [e [Hce HM]]]].
           destruct Hce as [E | []].
@@ -786,7 +760,7 @@ Module MultiarchDebian (N V : UsualOrderedType)
         List.In (q, (ea, e)) (declConfOf (p, a)) -> q = embedPkg p.
     Proof.
       intros p a q ea e H; unfold declConfOf in H; cbn [fst snd] in H.
-      destruct (aqual a) as [ | | | b]; simpl in H;
+      destruct (aqual a) as [ | | b]; simpl in H;
         repeat (destruct H as [E | H]; [congruence |]);
         try contradiction.
       apply in_map_iff in H; destruct H as [b' [E _]]; congruence.
@@ -796,7 +770,7 @@ Module MultiarchDebian (N V : UsualOrderedType)
         List.In (q, (ea, e)) (declConfOf (p, a)) -> e = true.
     Proof.
       intros p a q ea e H; unfold declConfOf in H; cbn [fst snd] in H.
-      destruct (aqual a) as [ | | | b]; simpl in H;
+      destruct (aqual a) as [ | | b]; simpl in H;
         repeat (destruct H as [E | H]; [congruence |]);
         try contradiction.
       apply in_map_iff in H; destruct H as [b' [E _]]; congruence.
@@ -809,7 +783,7 @@ Module MultiarchDebian (N V : UsualOrderedType)
         fst (fst ea) = aname a.
     Proof.
       intros p a q ea e H; unfold declConfOf in H; cbn [fst snd] in H.
-      destruct (aqual a) as [ | | | b]; simpl in H;
+      destruct (aqual a) as [ | | b]; simpl in H;
         repeat (destruct H as [E | H];
                 [injection E as _ E2 _; rewrite <- E2; reflexivity |]);
         try contradiction.
