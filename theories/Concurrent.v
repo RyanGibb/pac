@@ -794,7 +794,7 @@ Module Concurrent (N V : UsualOrderedType) (G : UsualOrderedType).
 
       Module DepRelFibred :=
         FibredLabelledRel Pkg N VSet.AsUOT C.DepElt C.DepRel.
-      Include GranFibre N V G Pkg PkgSet.
+      Include GranularityFibre N V G Pkg PkgSet.
 
       Theorem versions_lookupGranular :
         forall R D g (n : N.t) (w : G.t),

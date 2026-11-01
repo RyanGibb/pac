@@ -2486,16 +2486,16 @@ Module Npm (N V : UsualOrderedType) (PM : SemverMatch V).
         readb I S pi c n = true <-> ReadBelow I S pi c n.
     Proof.
       intros I S pi sg c n Hres; unfold readb, ReadBelow.
-      rewrite SOkp.SSA.exists_spec'; split.
+      rewrite SOkp.ASpecs.exists_spec'; split.
       - intros [[a'' m''] [_ H]]; cbn beta iota in H.
-        apply SOvp.SSA.exists_spec' in H.
+        apply SOvp.ASpecs.exists_spec' in H.
         destruct H as [u [_ H]]; apply Bool.andb_true_iff in H.
         destruct H as [Hi Ha]; apply installsb_iff in Hi.
         apply NSet.mem_spec in Ha; exists a'', m'', u; split; assumption.
       - intros [a'' [m'' [u [Hi Ha]]]]; exists (a'', m''); split.
         + exact (proj2 (proj2
                    (res_parent_closure _ _ _ _ Hres _ _ _ _ (proj2 Hi)))).
-        + cbn beta iota; apply SOvp.SSA.exists_spec'; exists u; split.
+        + cbn beta iota; apply SOvp.ASpecs.exists_spec'; exists u; split.
           * apply mem_realVersions.
             exact (proj2 (res_available _ _ _ _ Hres _ (proj1 Hi))).
           * apply Bool.andb_true_iff; split;

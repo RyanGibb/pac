@@ -41,7 +41,7 @@ Module Complexity (N V : UsualOrderedType) (X : UsualOrderedType).
 
     Lemma ltb_lt : forall v v', ltb v v' = true <-> V.lt v v'.
     Proof.
-      intros v v'; unfold ltb; rewrite <- VF.F.compare_lt_iff.
+      intros v v'; unfold ltb; rewrite <- VF.Facts.compare_lt_iff.
       destruct (V.compare v v'); split; intro H; congruence.
     Qed.
 

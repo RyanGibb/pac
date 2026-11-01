@@ -1182,7 +1182,7 @@ Module ConcurrentFeature (N V F G : UsualOrderedType).
         - apply SOad.unionMap_mono; [exact HDa | intros x z Hz; exact Hz].
       Qed.
 
-      Include GranFibre N V G Pkg PkgSet.
+      Include GranularityFibre N V G Pkg PkgSet.
 
       Theorem versions_lookupGranularOrig : forall R support Df Da g n w,
           T.versions (reduceReal R support Df Da g) (Name.GranularOrig n w) =

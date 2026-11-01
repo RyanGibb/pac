@@ -93,18 +93,18 @@ End UOTFromCompare.
 (* Three of OrderedTypeFacts' facts, restated with plain Logic.eq so that
    subst works on the results. *)
 Module UOTCompareFacts (X : UsualOrderedType).
-  Module F := OrderedTypeFacts X.
+  Module Facts := OrderedTypeFacts X.
 
   Lemma compare_eq_iff : forall a b, X.compare a b = Eq <-> a = b.
-  Proof. intros a b; exact (F.compare_eq_iff a b). Qed.
+  Proof. intros a b; exact (Facts.compare_eq_iff a b). Qed.
 
   Lemma compare_antisym : forall a b, X.compare b a = CompOpp (X.compare a b).
-  Proof. intros a b; exact (F.compare_antisym a b). Qed.
+  Proof. intros a b; exact (Facts.compare_antisym a b). Qed.
 
   Lemma compare_lt_trans : forall a b c,
       X.compare a b = Lt -> X.compare b c = Lt -> X.compare a c = Lt.
   Proof.
-    intros a b c A B; apply F.compare_lt_iff in A, B; apply F.compare_lt_iff.
+    intros a b c A B; apply Facts.compare_lt_iff in A, B; apply Facts.compare_lt_iff.
     eapply StrictOrder_Transitive; eassumption.
   Qed.
 End UOTCompareFacts.
@@ -250,16 +250,16 @@ End ListComp.
 (* ListComp over an element that is already a UOT, whose laws are stated
    through compare_spec and so have to be restated for ComparableType. *)
 Module ListUOT (X : UsualOrderedType) <: UsualOrderedType.
-  Module XF := UOTCompareFacts X.
+  Module XFacts := UOTCompareFacts X.
   Module XComp <: ComparableType.
     Definition t := X.t.
     Definition compare := X.compare.
-    Definition compare_eq_iff := XF.compare_eq_iff.
-    Definition compare_antisym := XF.compare_antisym.
-    Definition compare_lt_trans := XF.compare_lt_trans.
+    Definition compare_eq_iff := XFacts.compare_eq_iff.
+    Definition compare_antisym := XFacts.compare_antisym.
+    Definition compare_lt_trans := XFacts.compare_lt_trans.
   End XComp.
-  Module LComp := ListComp XComp.
-  Include UOTFromCompare LComp.
+  Module XListComp := ListComp XComp.
+  Include UOTFromCompare XListComp.
 End ListUOT.
 
 (* Stdlib's pair-ordered-type functors build setoid eq; none preserves
@@ -322,14 +322,14 @@ Module PairUOT (A B : UsualOrderedType) <: UsualOrderedType.
 End PairUOT.
 
 Module TripleUOT (A B C : UsualOrderedType) <: UsualOrderedType.
-  Module BC := PairUOT B C.
-  Include PairUOT A BC.
+  Module Tail := PairUOT B C.
+  Include PairUOT A Tail.
 End TripleUOT.
 
 Module SumUOT (A B : UsualOrderedType) <: UsualOrderedType.
-  Module AF := UOTCompareFacts A.
-  Module BF := UOTCompareFacts B.
-  Module Comp <: ComparableType.
+  Module AFacts := UOTCompareFacts A.
+  Module BFacts := UOTCompareFacts B.
+  Module SumComp <: ComparableType.
     Definition t : Type := (A.t + B.t)%type.
     Definition compare (x y : t) : comparison :=
       match x, y with
@@ -342,14 +342,14 @@ Module SumUOT (A B : UsualOrderedType) <: UsualOrderedType.
     Lemma compare_eq_iff : forall x y, compare x y = Eq <-> x = y.
     Proof.
       intros [a | b] [a' | b']; cbn; try (split; intro H; congruence).
-      - rewrite AF.compare_eq_iff; split; congruence.
-      - rewrite BF.compare_eq_iff; split; congruence.
+      - rewrite AFacts.compare_eq_iff; split; congruence.
+      - rewrite BFacts.compare_eq_iff; split; congruence.
     Qed.
 
     Lemma compare_antisym : forall x y, compare y x = CompOpp (compare x y).
     Proof.
       intros [a | b] [a' | b']; cbn; try reflexivity;
-        [apply AF.compare_antisym | apply BF.compare_antisym].
+        [apply AFacts.compare_antisym | apply BFacts.compare_antisym].
     Qed.
 
     Lemma compare_lt_trans : forall x y z,
@@ -357,11 +357,11 @@ Module SumUOT (A B : UsualOrderedType) <: UsualOrderedType.
     Proof.
       intros [a | b] [a' | b'] [a'' | b'']; cbn; intros H1 H2;
         try congruence;
-        [exact (AF.compare_lt_trans _ _ _ H1 H2)
-        | exact (BF.compare_lt_trans _ _ _ H1 H2)].
+        [exact (AFacts.compare_lt_trans _ _ _ H1 H2)
+        | exact (BFacts.compare_lt_trans _ _ _ H1 H2)].
     Qed.
-  End Comp.
-  Include UOTFromCompare Comp.
+  End SumComp.
+  Include UOTFromCompare SumComp.
 End SumUOT.
 
 (* MSets makes the filter/exists_/for_all specs conditional on the
@@ -402,7 +402,7 @@ Module SetSpecs (E : UsualOrderedType) (S : SetsOn E).
   Qed.
 End SetSpecs.
 
-Module GranFibre (N V G : UsualOrderedType)
+Module GranularityFibre (N V G : UsualOrderedType)
     (P : UsualOrderedType with Definition t := (N.t * V.t)%type) (S : SetsOn P).
   Definition granFibre (g : V.t -> G.t) (R : S.t) (n : N.t) (w : G.t) : S.t :=
     S.filter (fun '(m, v) =>
@@ -418,7 +418,7 @@ Module GranFibre (N V G : UsualOrderedType)
     destruct (N.eq_dec m n) as [-> | NE]; [destruct (G.eq_dec (g u) w) |];
       intuition congruence.
   Qed.
-End GranFibre.
+End GranularityFibre.
 
 (* Building a sorted-list set by repeated add is quadratic, since every add
    walks the list. union, however, is a linear merge of two sorted lists, so
@@ -523,15 +523,15 @@ Module SetBuild (B : UsualOrderedType) (SB : SetsOn B).
 End SetBuild.
 
 Module FSetUOT (X : UsualOrderedType).
-  Module OTWL <: OrderedTypeWithLeibniz.
+  Module XLeibnizOT <: OrderedTypeWithLeibniz.
     Include X.
     Lemma eq_leibniz : forall x y, eq x y -> x = y.
     Proof. intros x y H; exact H. Qed.
-  End OTWL.
-  Module M := MSetList.MakeWithLeibniz OTWL.
-  Include M.
-  Include SetSpecs OTWL M.
-  Include SetBuild OTWL M.
+  End XLeibnizOT.
+  Module ListSet := MSetList.MakeWithLeibniz XLeibnizOT.
+  Include ListSet.
+  Include SetSpecs XLeibnizOT ListSet.
+  Include SetBuild XLeibnizOT ListSet.
 
   Lemma ext : forall s s' : t, (forall x, In x s <-> In x s') -> s = s'.
   Proof. intros s s' H; apply eq_leibniz; exact H. Qed.
@@ -598,45 +598,45 @@ Module FSetUOT (X : UsualOrderedType).
   End AsUOT.
 End FSetUOT.
 
-Module FibredRel (T H : UsualOrderedType)
+Module FibredRel (Tail Head : UsualOrderedType)
     (* the with-constraint exposes E's pair structure, so edges of an existing
        relation can be destructured here *)
-    (E : UsualOrderedType with Definition t := (T.t * H.t)%type)
+    (E : UsualOrderedType with Definition t := (Tail.t * Head.t)%type)
     (S : SetsOn E).
-  Module SS := SetSpecs E S.
+  Module Specs := SetSpecs E S.
 
-  Definition tail '((q, _) : E.t) : T.t := q.
+  Definition tail '((q, _) : E.t) : Tail.t := q.
 
-  Definition tailFibre (R : S.t) (t : T.t) : S.t :=
-    S.filter (fun e => if T.eq_dec (tail e) t then true else false) R.
+  Definition tailFibre (R : S.t) (t : Tail.t) : S.t :=
+    S.filter (fun e => if Tail.eq_dec (tail e) t then true else false) R.
 
-  Lemma mem_tailFibre : forall R (t q : T.t) (h : H.t),
+  Lemma mem_tailFibre : forall R (t q : Tail.t) (h : Head.t),
       S.In (q, h) (tailFibre R t) <-> S.In (q, h) R /\ q = t.
   Proof.
     intros R t q h; unfold tailFibre.
-    rewrite SS.filter_spec'.
+    rewrite Specs.filter_spec'.
     simpl.
-    destruct (T.eq_dec q t); intuition congruence.
+    destruct (Tail.eq_dec q t); intuition congruence.
   Qed.
 
-  Lemma tailFibre_subset : forall R (t : T.t), S.Subset (tailFibre R t) R.
+  Lemma tailFibre_subset : forall R (t : Tail.t), S.Subset (tailFibre R t) R.
   Proof.
     intros R t [q h] Hin; apply mem_tailFibre in Hin; destruct Hin as [Hin _];
       exact Hin.
   Qed.
 
-  Definition head '((_, h) : E.t) : H.t := h.
+  Definition head '((_, h) : E.t) : Head.t := h.
 
-  Definition headFibre (R : S.t) (h : H.t) : S.t :=
-    S.filter (fun e => if H.eq_dec (head e) h then true else false) R.
+  Definition headFibre (R : S.t) (h : Head.t) : S.t :=
+    S.filter (fun e => if Head.eq_dec (head e) h then true else false) R.
 
-  Lemma mem_headFibre : forall R (q : T.t) (h g : H.t),
+  Lemma mem_headFibre : forall R (q : Tail.t) (h g : Head.t),
       S.In (q, g) (headFibre R h) <-> S.In (q, g) R /\ g = h.
   Proof.
     intros R q h g; unfold headFibre.
-    rewrite SS.filter_spec'.
+    rewrite Specs.filter_spec'.
     simpl.
-    destruct (H.eq_dec g h); intuition congruence.
+    destruct (Head.eq_dec g h); intuition congruence.
   Qed.
 
   Definition idFibre (R : S.t) (x : E.t) : S.t :=
@@ -646,7 +646,7 @@ Module FibredRel (T H : UsualOrderedType)
       S.In y (idFibre R x) <-> S.In y R /\ y = x.
   Proof.
     intros R x y; unfold idFibre.
-    rewrite SS.filter_spec'.
+    rewrite Specs.filter_spec'.
     destruct (E.eq_dec y x); intuition congruence.
   Qed.
 
@@ -657,33 +657,33 @@ Module FibredRel (T H : UsualOrderedType)
   Qed.
 End FibredRel.
 
-Module FibredLabelledRel (T N L : UsualOrderedType)
-    (E : UsualOrderedType with Definition t := (T.t * (N.t * L.t))%type)
+Module FibredLabelledRel (Tail N L : UsualOrderedType)
+    (E : UsualOrderedType with Definition t := (Tail.t * (N.t * L.t))%type)
     (S : SetsOn E).
-  Module H := PairUOT N L.
-  Include FibredRel T H E S.
+  Module Head := PairUOT N L.
+  Include FibredRel Tail Head E S.
 
-  Definition ends '((q, (m, _)) : E.t) : (T.t * N.t)%type := (q, m).
+  Definition ends '((q, (m, _)) : E.t) : (Tail.t * N.t)%type := (q, m).
 
-  Definition endsFibre (R : S.t) (t : T.t) (m : N.t) : S.t :=
+  Definition endsFibre (R : S.t) (t : Tail.t) (m : N.t) : S.t :=
     S.filter (fun e => let '(q, m') := ends e in
-        if T.eq_dec q t
+        if Tail.eq_dec q t
         then if N.eq_dec m' m then true else false
         else false)
       R.
 
-  Lemma mem_endsFibre : forall R (t q : T.t) (m m' : N.t) (l : L.t),
+  Lemma mem_endsFibre : forall R (t q : Tail.t) (m m' : N.t) (l : L.t),
       S.In (q, (m', l)) (endsFibre R t m) <->
       S.In (q, (m', l)) R /\ q = t /\ m' = m.
   Proof.
     intros R t q m m' l; unfold endsFibre.
-    rewrite SS.filter_spec'.
+    rewrite Specs.filter_spec'.
     simpl.
-    destruct (T.eq_dec q t); [destruct (N.eq_dec m' m) |];
+    destruct (Tail.eq_dec q t); [destruct (N.eq_dec m' m) |];
       intuition congruence.
   Qed.
 
-  Lemma endsFibre_subset : forall R (t : T.t) (m : N.t),
+  Lemma endsFibre_subset : forall R (t : Tail.t) (m : N.t),
       S.Subset (endsFibre R t m) R.
   Proof.
     intros R t m [q [m' l]] Hin; apply mem_endsFibre in Hin;
@@ -695,11 +695,11 @@ Module FibredLabelledRel (T N L : UsualOrderedType)
   Definition nodeFibre (R : S.t) (m : N.t) : S.t :=
     S.filter (fun e => if N.eq_dec (node e) m then true else false) R.
 
-  Lemma mem_nodeFibre : forall R (q : T.t) (m m' : N.t) (l : L.t),
+  Lemma mem_nodeFibre : forall R (q : Tail.t) (m m' : N.t) (l : L.t),
       S.In (q, (m', l)) (nodeFibre R m) <-> S.In (q, (m', l)) R /\ m' = m.
   Proof.
     intros R q m m' l; unfold nodeFibre.
-    rewrite SS.filter_spec'.
+    rewrite Specs.filter_spec'.
     simpl.
     destruct (N.eq_dec m' m); intuition congruence.
   Qed.
@@ -712,7 +712,7 @@ Module FibredLabelledRel (T N L : UsualOrderedType)
 End FibredLabelledRel.
 
 Module Preimage (A : UsualOrderedType) (S : SetsOn A).
-  Module SS := SetSpecs A S.
+  Module Specs := SetSpecs A S.
 
   Section OfTest.
     Context {K : Type}.
@@ -723,7 +723,7 @@ Module Preimage (A : UsualOrderedType) (S : SetsOn A).
 
     Lemma mem_preimage : forall (s : S.t) (x : A.t),
         S.In x (preimage s) <-> S.In x s /\ test (key x) = true.
-    Proof. intros s x; unfold preimage; apply SS.filter_spec'. Qed.
+    Proof. intros s x; unfold preimage; apply Specs.filter_spec'. Qed.
 
     Lemma preimage_subset : forall s : S.t, S.Subset (preimage s) s.
     Proof. intros s x Hx; apply mem_preimage in Hx; exact (proj1 Hx). Qed.
@@ -752,7 +752,7 @@ End PreimageOfKeys.
 (* Asking the relation one key at a time is what keeps the preimage along it a
    semijoin; the key set it stands for is never built. *)
 Module RelKeys (K B : UsualOrderedType) (SB : SetsOn B).
-  Module SS := SetSpecs B SB.
+  Module Specs := SetSpecs B SB.
   Module KEqb := UOTEqb K.
 
   Definition hasKey (key : B.t -> K.t) (R : SB.t) (k : K.t) : bool :=
@@ -761,7 +761,7 @@ Module RelKeys (K B : UsualOrderedType) (SB : SetsOn B).
   Lemma hasKey_iff : forall key (R : SB.t) (k : K.t),
       hasKey key R k = true <-> exists e : B.t, SB.In e R /\ key e = k.
   Proof.
-    intros key R k; unfold hasKey; rewrite SS.exists_spec'.
+    intros key R k; unfold hasKey; rewrite Specs.exists_spec'.
     split; (intros [e [He Hk]]; exists e;
             split; [exact He | apply KEqb.eqb_true_iff; exact Hk]).
   Qed.
@@ -773,8 +773,8 @@ End RelKeys.
    to SetBuild, so each is one merge sort; [in_fold] remains the tool for
    hand-written folds that fit none of them. *)
 Module SetOps (A B : UsualOrderedType) (SA : SetsOn A) (SB : SetsOn B).
-  Module SSA := SetSpecs A SA.
-  Module SSB := SetSpecs B SB.
+  Module ASpecs := SetSpecs A SA.
+  Module BSpecs := SetSpecs B SB.
   Include SetBuild B SB.
 
   Lemma add_in : forall (x : B.t) (s : SB.t) (y : B.t),
@@ -937,7 +937,7 @@ Module SetOps (A B : UsualOrderedType) (SA : SetsOn A) (SB : SetsOn B).
       SA.In x s1 /\ exists y : B.t, SB.In y s2 /\ p x y = true.
   Proof.
     intros p s2 s1 x; unfold filterExists.
-    rewrite SSA.filter_spec', SSB.exists_spec'; reflexivity.
+    rewrite ASpecs.filter_spec', BSpecs.exists_spec'; reflexivity.
   Qed.
 
   Lemma filterMap_restrict : forall (f : A.t -> option B.t) (s s' : SA.t) y,
